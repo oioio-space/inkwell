@@ -2,7 +2,9 @@ package project
 
 import (
 	"errors"
+	"strings"
 	"testing"
+	"time"
 )
 
 // outsideEdit replaces main.typ as another program would and acknowledges it.
@@ -85,6 +87,43 @@ func TestReadTextAndNonText(t *testing.T) {
 	}
 	if got := onDisk(t, p); string(got) != "é\n" {
 		t.Errorf("on disk = %q", got)
+	}
+}
+
+// A write of what the file already holds leaves the file alone: nothing to replace, so nothing
+// to clobber if another program is saving it at that very moment.
+func TestWriteProjectionSkipsAnUnchangedFile(t *testing.T) {
+	p := create(t, newBase(t), "p")
+	if err := p.WriteProjection(MainFile, []byte("= a")); err != nil {
+		t.Fatal(err)
+	}
+	old := time.Date(2001, 1, 1, 0, 0, 0, 0, time.UTC)
+	if err := p.root.Chtimes(MainFile, old, old); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.WriteProjection(MainFile, []byte("= a")); err != nil {
+		t.Fatal(err)
+	}
+	info, err := p.root.Stat(MainFile)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !info.ModTime().Equal(old) {
+		t.Errorf("an identical write replaced the file (mtime %v)", info.ModTime())
+	}
+	if err := p.WriteProjection(MainFile, []byte("= b")); err != nil {
+		t.Fatal(err)
+	}
+	if got := string(onDisk(t, p)); got != "= b" {
+		t.Errorf("on disk = %q, want the new text", got)
+	}
+}
+
+// The webview tells a refused write from an outside edit (the notice asks the person) from any
+// other failure (a banner) by this wording of the error it receives: it is a contract.
+func TestErrExternalEditWording(t *testing.T) {
+	if got := ErrExternalEdit.Error(); !strings.Contains(got, "edited outside Inkwell") {
+		t.Errorf("ErrExternalEdit = %q, frontend/src/workspace isExternalEdit matches %q", got, "edited outside Inkwell")
 	}
 }
 

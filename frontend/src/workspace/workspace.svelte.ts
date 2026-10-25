@@ -32,6 +32,14 @@ const MAIN_FILE = "main.typ";
 const NAME_KEY = "inkwell.name";
 
 /** The open project and who is in it — the single source of UI state. */
+/**
+ * Whether Go refused a write because the file was edited outside Inkwell
+ * (`project.ErrExternalEdit`, whose message says so).
+ */
+export function isExternalEdit(err: unknown): boolean {
+  return err instanceof Error && err.message.includes("edited outside Inkwell");
+}
+
 class Workspace {
   peers = $state<string[]>([]);
   /** True while an invitation is being followed, until the inviting person's project is open. */
@@ -47,6 +55,8 @@ class Workspace {
   error = $state("");
   /** A project file edited outside Inkwell, waiting for "Import" or "Ignore"; null if none. */
   external = $state<string | null>(null);
+  /** True while the project file cannot be written (disk full, no permission...). */
+  projectionFailed = $state(false);
   /** True once the member list is full: this device signs no more, so edits stay local. */
   sealed = $state(false);
   handle = $state.raw<DocHandle<Doc> | undefined>();
@@ -114,9 +124,15 @@ class Workspace {
     if (this.#storage) {
       this.#projection = startProjection(handle, this.#storage, {
         name: MAIN_FILE,
-        // A refused write means the file was edited outside: the notice already asks the person.
-        onError: (err) =>
-          console.warn("projection:", err instanceof Error ? err.message : "failed"),
+        onError: (err) => {
+          console.warn("projection:", err instanceof Error ? err.message : "failed");
+          // A refused write means the file was edited outside: the notice already asks the person.
+          if (!isExternalEdit(err)) this.projectionFailed = true;
+        },
+        onWritten: () => {
+          this.projectionFailed = false;
+        },
+        retryable: (err) => !isExternalEdit(err),
       });
     }
   }

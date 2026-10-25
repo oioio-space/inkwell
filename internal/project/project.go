@@ -335,6 +335,9 @@ func (p *Project) WriteProjection(rel string, data []byte) error {
 	}
 	format.Body = string(data)
 	out := Encode(format)
+	if exists && hashOf(out) == recorded {
+		return nil // already what the file holds: no rewrite, so no window to clobber a concurrent edit
+	}
 	if err := store.WriteAtomic(p.root, rel, out, 0o600); err != nil {
 		return fmt.Errorf("project: write %s: %w", rel, err)
 	}
