@@ -1,4 +1,4 @@
-package tcp_test
+package frame_test
 
 import (
 	"bytes"
@@ -9,21 +9,21 @@ import (
 	"go.uber.org/goleak"
 
 	"github.com/oioio-space/inkwell/internal/transport"
-	"github.com/oioio-space/inkwell/internal/transport/tcp"
+	"github.com/oioio-space/inkwell/internal/transport/frame"
 )
 
 func TestMain(m *testing.M) { goleak.VerifyTestMain(m) }
 
-func TestReadFrameRejectsOversize(t *testing.T) {
-	// Announces 1 GiB; ReadFrame must refuse from the header alone.
+func TestReadRejectsOversize(t *testing.T) {
+	// Announces 1 GiB; Read must refuse from the header alone.
 	r := bytes.NewReader([]byte{0x40, 0, 0, 0})
-	got, err := tcp.ReadFrame(r, 1024)
+	got, err := frame.Read(r, 1024)
 	if !errors.Is(err, transport.ErrFrameTooLarge) {
-		t.Errorf("ReadFrame(1GiB header, limit 1024) = %v, %v; want ErrFrameTooLarge", got, err)
+		t.Errorf("Read(1GiB header, limit 1024) = %v, %v; want ErrFrameTooLarge", got, err)
 	}
 }
 
-func TestReadFrameTruncated(t *testing.T) {
+func TestReadTruncated(t *testing.T) {
 	tests := []struct {
 		name string
 		in   []byte
@@ -36,23 +36,23 @@ func TestReadFrameTruncated(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			if _, err := tcp.ReadFrame(bytes.NewReader(tc.in), 100); !errors.Is(err, tc.want) {
-				t.Errorf("ReadFrame(%x) error = %v, want %v", tc.in, err, tc.want)
+			if _, err := frame.Read(bytes.NewReader(tc.in), 100); !errors.Is(err, tc.want) {
+				t.Errorf("Read(%x) error = %v, want %v", tc.in, err, tc.want)
 			}
 		})
 	}
 }
 
-func TestFrameRoundTripSizes(t *testing.T) {
+func TestRoundTripSizes(t *testing.T) {
 	for _, size := range []int{0, 1, 1000, 64 << 10, 64<<10 + 1, 300 << 10} {
 		payload := bytes.Repeat([]byte{0xAB}, size)
 		var buf bytes.Buffer
-		if err := tcp.WriteFrame(&buf, payload); err != nil {
-			t.Fatalf("WriteFrame(%d bytes): %v", size, err)
+		if err := frame.Write(&buf, payload); err != nil {
+			t.Fatalf("Write(%d bytes): %v", size, err)
 		}
-		got, err := tcp.ReadFrame(&buf, size)
+		got, err := frame.Read(&buf, size)
 		if err != nil || !bytes.Equal(got, payload) {
-			t.Errorf("ReadFrame(%d bytes) = %d bytes, %v", size, len(got), err)
+			t.Errorf("Read(%d bytes) = %d bytes, %v", size, len(got), err)
 		}
 	}
 }
@@ -67,43 +67,43 @@ func (w *failWriter) Write(p []byte) (int, error) {
 	return len(p), nil
 }
 
-func TestWriteFrameErrors(t *testing.T) {
-	if err := tcp.WriteFrame(io.Discard, make([]byte, transport.MaxFrame+1)); !errors.Is(err, transport.ErrFrameTooLarge) {
-		t.Errorf("WriteFrame(MaxFrame+1) = %v, want ErrFrameTooLarge", err)
+func TestWriteErrors(t *testing.T) {
+	if err := frame.Write(io.Discard, make([]byte, transport.MaxFrame+1)); !errors.Is(err, transport.ErrFrameTooLarge) {
+		t.Errorf("Write(MaxFrame+1) = %v, want ErrFrameTooLarge", err)
 	}
 	for _, tc := range []struct {
 		name  string
 		size  int
 		after int
 	}{{"small", 10, 0}, {"large header", 100 << 10, 0}, {"large payload", 100 << 10, 1}} {
-		if err := tcp.WriteFrame(&failWriter{after: tc.after}, make([]byte, tc.size)); !errors.Is(err, io.ErrClosedPipe) {
-			t.Errorf("%s: WriteFrame() = %v, want ErrClosedPipe", tc.name, err)
+		if err := frame.Write(&failWriter{after: tc.after}, make([]byte, tc.size)); !errors.Is(err, io.ErrClosedPipe) {
+			t.Errorf("%s: Write() = %v, want ErrClosedPipe", tc.name, err)
 		}
 	}
 }
 
-func FuzzReadFrame(f *testing.F) {
+func FuzzRead(f *testing.F) {
 	f.Add([]byte{0, 0, 0, 3, 'a', 'b', 'c'}, 10)
 	f.Add([]byte{0xff, 0xff, 0xff, 0xff}, 1<<20)
 	f.Add([]byte{0, 0, 0, 0}, 0)
 	f.Add([]byte{0, 0, 0, 9, 1}, 100)
 	f.Fuzz(func(t *testing.T, in []byte, limit int) {
 		limit %= 1 << 20 // keep the fuzzer from asking for huge buffers
-		got, err := tcp.ReadFrame(bytes.NewReader(in), limit)
+		got, err := frame.Read(bytes.NewReader(in), limit)
 		if err != nil {
 			if got != nil {
-				t.Fatalf("ReadFrame returned data with error %v", err)
+				t.Fatalf("Read returned data with error %v", err)
 			}
 			return
 		}
 		if len(got) > limit || cap(got) > limit {
-			t.Fatalf("ReadFrame(limit %d) returned len %d cap %d", limit, len(got), cap(got))
+			t.Fatalf("Read(limit %d) returned len %d cap %d", limit, len(got), cap(got))
 		}
 		var buf bytes.Buffer
-		if err := tcp.WriteFrame(&buf, got); err != nil {
-			t.Fatalf("WriteFrame: %v", err)
+		if err := frame.Write(&buf, got); err != nil {
+			t.Fatalf("Write: %v", err)
 		}
-		back, err := tcp.ReadFrame(&buf, limit)
+		back, err := frame.Read(&buf, limit)
 		if err != nil || !bytes.Equal(back, got) {
 			t.Fatalf("round trip = %x, %v; want %x", back, err, got)
 		}

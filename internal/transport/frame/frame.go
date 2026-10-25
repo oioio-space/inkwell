@@ -1,4 +1,10 @@
-package tcp
+// Package frame reads and writes length-prefixed frames and bounds the memory
+// they may occupy, for transports that run over byte streams.
+//
+// A frame is a 4-byte big-endian length followed by the payload. Every
+// length comes from a peer and is hostile: [Read] checks it against a limit
+// before allocating, and [Budget] caps the bytes buffered across all peers.
+package frame
 
 import (
 	"encoding/binary"
@@ -20,11 +26,11 @@ const (
 	readChunk = 64 << 10
 )
 
-// WriteFrame writes payload to w as one frame: a 4-byte big-endian length
+// Write writes payload to w as one frame: a 4-byte big-endian length
 // followed by the payload. It returns [transport.ErrFrameTooLarge] if payload
 // exceeds [transport.MaxFrame]. Callers must serialise concurrent writes to
 // the same w.
-func WriteFrame(w io.Writer, payload []byte) error {
+func Write(w io.Writer, payload []byte) error {
 	if len(payload) > transport.MaxFrame {
 		return transport.ErrFrameTooLarge
 	}
@@ -33,40 +39,40 @@ func WriteFrame(w io.Writer, payload []byte) error {
 		binary.BigEndian.PutUint32(buf, uint32(len(payload))) // #nosec G115 -- bounded by MaxFrame above.
 		copy(buf[headerLen:], payload)
 		if _, err := w.Write(buf); err != nil {
-			return fmt.Errorf("tcp: write frame: %w", err)
+			return fmt.Errorf("frame: write frame: %w", err)
 		}
 		return nil
 	}
 	var hdr [headerLen]byte
 	binary.BigEndian.PutUint32(hdr[:], uint32(len(payload))) // #nosec G115 -- bounded by MaxFrame above.
 	if _, err := w.Write(hdr[:]); err != nil {
-		return fmt.Errorf("tcp: write frame header: %w", err)
+		return fmt.Errorf("frame: write frame header: %w", err)
 	}
 	if _, err := w.Write(payload); err != nil {
-		return fmt.Errorf("tcp: write frame payload: %w", err)
+		return fmt.Errorf("frame: write frame payload: %w", err)
 	}
 	return nil
 }
 
-// ReadFrame reads one frame from r. It reads the announced length first and
+// Read reads one frame from r. It reads the announced length first and
 // returns [transport.ErrFrameTooLarge] if it exceeds limit, before allocating
 // anything: no buffer larger than limit is ever allocated. A stream that ends
 // before the first byte gives [io.EOF]; one that ends inside a frame gives
 // [io.ErrUnexpectedEOF].
-func ReadFrame(r io.Reader, limit int) ([]byte, error) {
-	return readFrame(r, limit, nil)
+func Read(r io.Reader, limit int) ([]byte, error) {
+	return ReadReserve(r, limit, nil)
 }
 
-// readFrame is ReadFrame with a hook: reserve, if not nil, is called with the
+// ReadReserve is [Read] with a hook: reserve, if not nil, is called with the
 // payload size once it passed the limit check and before anything is
 // allocated; its error aborts the read.
-func readFrame(r io.Reader, limit int, reserve func(size int) error) ([]byte, error) {
+func ReadReserve(r io.Reader, limit int, reserve func(size int) error) ([]byte, error) {
 	var hdr [headerLen]byte
 	if _, err := io.ReadFull(r, hdr[:]); err != nil {
 		if errors.Is(err, io.EOF) {
 			return nil, io.EOF
 		}
-		return nil, fmt.Errorf("tcp: read frame header: %w", err)
+		return nil, fmt.Errorf("frame: read frame header: %w", err)
 	}
 	size := uint64(binary.BigEndian.Uint32(hdr[:]))
 	if limit < 0 || size > uint64(limit) {
@@ -91,7 +97,7 @@ func readFrame(r io.Reader, limit int, reserve func(size int) error) ([]byte, er
 			if errors.Is(err, io.EOF) {
 				err = io.ErrUnexpectedEOF
 			}
-			return nil, fmt.Errorf("tcp: read frame payload: %w", err)
+			return nil, fmt.Errorf("frame: read frame payload: %w", err)
 		}
 	}
 	return buf, nil

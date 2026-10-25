@@ -13,6 +13,7 @@ import (
 
 	"github.com/oioio-space/inkwell/internal/transport"
 	"github.com/oioio-space/inkwell/internal/transport/memnet"
+	"github.com/oioio-space/inkwell/internal/transport/transporttest"
 )
 
 func TestMain(m *testing.M) { goleak.VerifyTestMain(m) }
@@ -298,4 +299,16 @@ func TestCloseWakesBlockedRecv(t *testing.T) {
 			t.Errorf("blocked Recv() after Close = %v, want ErrClosed", err)
 		}
 	})
+}
+
+func TestContract(t *testing.T) {
+	transporttest.Run(t, func(t *testing.T) transporttest.Pair {
+		n := memnet.New(1, memnet.Faults{})
+		return transporttest.Pair{
+			A:       n.Join("a"),
+			B:       n.Join("b"),
+			Connect: func(testing.TB) { n.Link("a", "b") },
+			Cut:     func(testing.TB) { n.Partition("a", "b") },
+		}
+	}, transporttest.Options{Ordered: true, Synctest: true})
 }
