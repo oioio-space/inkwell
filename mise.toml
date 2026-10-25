@@ -269,6 +269,13 @@ wait
 description = "Draft a Conventional Commit message from the staged diff (OpenRouter, ZDR)"
 run = "./scripts/llm.sh commit-msg"
 
+[tasks."ci:triage"]
+description = "Failing items of the latest failed GitHub Actions run, reduced by a hosted model (saves Claude context)"
+run = """
+id=$(./scripts/ghx.sh run list --status failure -L 1 --json databaseId --jq '.[0].databaseId')
+./scripts/ghx.sh run view "$id" --log-failed | ./scripts/llm.sh triage
+"""
+
 [tasks."llm:triage"]
 description = "Reduce a long CI/test log (stdin) to its failing items (OpenRouter, ZDR)"
 run = "./scripts/llm.sh triage"

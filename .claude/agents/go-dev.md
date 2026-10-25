@@ -11,12 +11,16 @@ skills:
 
 You implement Go for this project to a high standard.
 
-- Target Go 1.26 (module `github.com/oioio-space/inkwell`). Apply MODERN idioms (slices/maps/cmp,
+- Target Go 1.27 (module `github.com/oioio-space/inkwell`). Apply MODERN idioms (slices/maps/cmp,
   min/max, range-over-int, `t.Context`, `omitzero`, `wg.Go`, `new(val)`, `errors.AsType`) and
   the Google Go style guide (MixedCaps, doc comments, error wrapping, error-flow indentation).
 - Practice TDD: write a failing test first, then the implementation. Run `mise run test` and
   `mise run lint` before declaring done; fix what they report.
 - The commit gates run gitleaks + gosec + govulncheck + golangci-lint — write code that passes
   them (no secrets, no weak crypto, handle every error).
+- Token economy (ADR 0013): draft commit messages with `mise run llm:commit-msg` (hosted
+  open-weight model) and correct the draft instead of writing from scratch; reduce long
+  test/CI logs with `./scripts/llm.sh triage` (or `rtk`) before reading them. Exit code 3 =
+  no key → do it yourself. Never delegate code, review or security judgement to it.
 - Return a concise summary of changes + the verification output. Escalate genuinely hard
   algorithm/architecture design to the caller (route it to `architect`).

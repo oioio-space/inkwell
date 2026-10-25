@@ -34,3 +34,6 @@ build/windows/nsis/MicrosoftEdgeWebview2Setup.exe
 build/linux/inkwell.desktop
 frontend/test-results/
 frontend/playwright-report/
+
+# Agent worktrees (Claude Code)
+.claude/worktrees/
