@@ -1,23 +1,33 @@
 package app_test
 
 import (
-	"context"
+	"crypto/ed25519"
+	"crypto/rand"
 	"net"
 	"slices"
+	"strconv"
+	"strings"
 	"testing"
 	"time"
 
 	"go.uber.org/goleak"
 
 	"github.com/oioio-space/inkwell/internal/app"
-	"github.com/oioio-space/inkwell/internal/transport/tcp"
+	"github.com/oioio-space/inkwell/internal/transport/p2p"
 )
 
 func TestMain(m *testing.M) { goleak.VerifyTestMain(m) }
 
-func newSession(t *testing.T) (*app.Session, *tcp.Node) {
+func newSession(t *testing.T) (*app.Session, *p2p.Node) {
 	t.Helper()
-	node := tcp.New(tcp.NewPeerID(), tcp.Options{})
+	_, key, err := ed25519.GenerateKey(rand.Reader)
+	if err != nil {
+		t.Fatal(err)
+	}
+	node, err := p2p.New(t.Context(), key, p2p.Options{})
+	if err != nil {
+		t.Fatal(err)
+	}
 	t.Cleanup(func() { _ = node.Close() })
 	return app.NewSession(node), node
 }
@@ -29,58 +39,117 @@ func TestLocalPeerStable(t *testing.T) {
 	}
 }
 
-func TestJoinRejectsBadAddress(t *testing.T) {
+func TestJoinRejectsBadInvitation(t *testing.T) {
 	s, _ := newSession(t)
-	for _, addr := range []string{"", "host", "a:99999", ":8080", "host:0", "host:http", "a b:80"} {
-		if _, err := s.Join(t.Context(), addr); err == nil {
-			t.Errorf("Join(%q) = nil, want an error", addr)
+	for _, text := range []string{"", "host", "192.168.1.20:7419", "/ip4/1.2.3.4/tcp/1", "a b"} {
+		if _, err := s.Join(t.Context(), text); err == nil {
+			t.Errorf("Join(%q) = nil, want an error", text)
 		}
 	}
 }
 
-func TestHostReturnsReachableAddrs(t *testing.T) {
+func TestJoinRejectsOwnInvitation(t *testing.T) {
 	s, _ := newSession(t)
-	addrs, err := s.Host(t.Context(), 0)
+	text, err := s.Host()
 	if err != nil {
-		t.Fatalf("Host(0) = %v", err)
+		t.Fatal(err)
 	}
-	if len(addrs) == 0 {
-		t.Fatal("Host(0) returned no address")
+	if _, err := s.Join(t.Context(), text); err == nil {
+		t.Error("Join(own invitation) = nil, want an error")
 	}
-	for _, a := range addrs {
-		host, port, err := net.SplitHostPort(a)
-		if err != nil || port == "0" || host == "" {
-			t.Errorf("Host(0) address %q is not a usable host:port", a)
+}
+
+func TestHostReturnsInvitation(t *testing.T) {
+	s, node := newSession(t)
+	text, err := s.Host()
+	if err != nil {
+		t.Fatalf("Host() = %v", err)
+	}
+	fields := strings.Fields(text)
+	if len(fields) == 0 {
+		t.Fatal("Host() returned an empty invitation")
+	}
+	for _, a := range fields {
+		if !strings.HasSuffix(a, "/p2p/"+string(node.Local())) {
+			t.Errorf("invitation address %q does not end with the host identity", a)
 		}
 	}
-	again, err := s.Host(t.Context(), 0)
-	if err != nil || !slices.Equal(again, addrs) {
-		t.Errorf("second Host(0) = %v, %v; want the same addresses %v", again, err, addrs)
+	if again, err := s.Host(); err != nil || again != text {
+		t.Errorf("second Host() = %q, %v; want the same invitation", again, err)
 	}
 }
 
 func TestJoinConnectsToHost(t *testing.T) {
 	host, _ := newSession(t)
 	guest, _ := newSession(t)
-	addrs, err := host.Host(t.Context(), 0)
+	text, err := host.Host()
 	if err != nil {
 		t.Fatal(err)
 	}
-	_, port, _ := net.SplitHostPort(addrs[0])
-	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
-	defer cancel()
-	peer, err := guest.Join(ctx, net.JoinHostPort("127.0.0.1", port))
+	peer, err := guest.Join(t.Context(), text)
 	if err != nil {
 		t.Fatalf("Join() = %v", err)
 	}
 	if peer != host.LocalPeer() {
 		t.Errorf("Join() = %q, want the host's identity %q", peer, host.LocalPeer())
 	}
-	again, err := guest.Join(ctx, net.JoinHostPort("127.0.0.1", port))
+	again, err := guest.Join(t.Context(), text)
 	if err != nil || again != peer {
 		t.Errorf("re-Join() = %q, %v; want %q, nil (already connected is fine)", again, err, peer)
 	}
-	if got := guest.Peers(); !slices.Equal(got, []string{host.LocalPeer()}) {
-		t.Errorf("guest.Peers() = %v, want [%s]", got, host.LocalPeer())
+	deadline := time.Now().Add(5 * time.Second)
+	for !slices.Equal(guest.Peers(), []string{host.LocalPeer()}) {
+		if time.Now().After(deadline) {
+			t.Fatalf("guest.Peers() = %v, want [%s]", guest.Peers(), host.LocalPeer())
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+func TestStartNodeFallsBackWhenPortBusy(t *testing.T) {
+	t.Setenv("INKWELL_HOME", t.TempDir())
+	home, err := app.OpenHome()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = home.Close() })
+
+	busy, err := net.ListenPacket("udp", ":0")
+	if err != nil {
+		t.Skipf("no UDP socket: %v", err)
+	}
+	t.Cleanup(func() { _ = busy.Close() })
+	port := busy.LocalAddr().(*net.UDPAddr).Port
+
+	node, err := app.StartNode(t.Context(), home, port)
+	if err != nil {
+		t.Fatalf("StartNode(busy port %d) = %v, want a fallback", port, err)
+	}
+	t.Cleanup(func() { _ = node.Close() })
+	for _, a := range node.Addrs() {
+		if strings.Contains(a, "/udp/"+strconv.Itoa(port)+"/") {
+			t.Errorf("node listens on the busy port: %s", a)
+		}
+	}
+}
+
+func TestStartNodeKeepsIdentity(t *testing.T) {
+	t.Setenv("INKWELL_HOME", t.TempDir())
+	var ids []string
+	for range 2 {
+		home, err := app.OpenHome()
+		if err != nil {
+			t.Fatal(err)
+		}
+		node, err := app.StartNode(t.Context(), home, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, string(node.Local()))
+		_ = node.Close()
+		_ = home.Close()
+	}
+	if ids[0] != ids[1] {
+		t.Errorf("identity changed between runs: %q then %q", ids[0], ids[1])
 	}
 }

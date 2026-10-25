@@ -21,7 +21,7 @@ flowchart LR
   subgraph G["Go (un seul binaire)"]
     BR["bridge<br/>Stream Wails « net » · bindings"]
     SES["session<br/>trust · identity · invite"]
-    TR["transport<br/>memnet · tcp · p2p (libp2p)"]
+    TR["transport<br/>memnet · frame · p2p (libp2p)"]
     ST["store · blob · project<br/>milestone (go-git)"]
     SC["sidecar · typst<br/>tinymist · typst"]
   end
@@ -48,9 +48,9 @@ colonne « Étape » dit quand.
 | Paquet | Responsabilité | Étape |
 |---|---|---|
 | `cmd/inkwell` | Point d'entrée : fenêtre Wails ; plus tard sous-commandes sans fenêtre (`export`, `join`) | 1 |
-| `internal/app` | Services Wails liés au frontend (`Session` : identité, inviter, rejoindre) ; la composition vit dans `cmd/inkwell` | 1 |
+| `internal/app` | Services Wails liés au frontend (`Session` : inviter, rejoindre une invitation ; démarrage du nœud réseau) ; la composition vit dans `cmd/inkwell` | 1 |
 | `internal/bridge` | Routeur Stream Wails `net` ↔ `Transport` (octets opaques, aucun port local — ADR 0009) | 1 |
-| `internal/transport` | Interface `Transport` (`Send`, `Recv`, `Peers`) ; `memnet` (simulation), `tcp` (étape 1), `p2p` (libp2p, étape 2) | 1 |
+| `internal/transport` | Interface `Transport` (`Send`, `Recv`, `Peers`) ; `memnet` (simulation), `p2p` (libp2p, étape 2) | 1 |
 | `internal/identity` | Clé Ed25519 par machine, empreinte prononçable (4 mots), groupes d'appareils | 2 |
 | `internal/invite` | Codes Wormhole (PAKE), acceptation d'un pair LAN | 2 |
 | `internal/trust` | Liste de membres signée (CRDT à ordre total Lamport → clé), rôles, révocation, vérification des lots signés | 2 |
@@ -60,6 +60,8 @@ colonne « Étape » dit quand.
 | `internal/typst` | Vente des paquets `@preview` dans `.typstdeps/`, polices, export PDF | 3 |
 | `internal/blob` | Magasin adressé par BLAKE3, quotas, échange sur flux libp2p dédié | 4 |
 | `internal/milestone` | Jalons go-git (projection lisible, jamais source de vérité) | 4 |
+| `internal/transport/frame` | Trames préfixées par leur longueur, bornées (octets venus d’un pair : fuzzé) | 2 |
+| `internal/transport/p2p` | Transport libp2p : QUIC + TCP/Noise, identité Ed25519, un flux sortant par pair | 2 |
 | `internal/transport/memnet` | Réseau en mémoire à fautes injectées, déterministe sous `testing/synctest` (ADR 0011) | 1 |
 | `frontend/` | Svelte 5 + Vite + TypeScript : CodeMirror, automerge-repo, adaptateur réseau vers le pont, simulation de convergence (Vitest), CSS Adwaita (ADR 0010) | 1 |
 | `build/` | Configuration Wails v3 (`config.yml`, Taskfiles par plateforme, icônes) | 1 |
@@ -68,6 +70,7 @@ colonne « Étape » dit quand.
 
 - `transport` n'importe rien d'interne. `trust` et `identity` n'importent pas `transport`.
 - `app` est le seul paquet qui connaît tous les autres ; aucun paquet n'importe `app`.
+- libp2p n’est importé que par `internal/transport/p2p`, wormhole-william que par `internal/invite` : `scripts/arch-check.sh` (tâche `arch`, dans `ci`) le vérifie.
 - Aucun code Go n'importe Automerge : la convergence se teste en TypeScript avec le vrai
   `automerge-repo` ; Go teste sa colle sur `transport/memnet` (ADR 0011).
 - Tout ce qui lit des octets venus d'un pair est fuzzé (`go test -fuzz`).

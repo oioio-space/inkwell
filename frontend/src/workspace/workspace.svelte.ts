@@ -14,8 +14,6 @@ import { type SocketLike, WailsNetworkAdapter } from "../net/WailsNetworkAdapter
 export type Doc = { text: string };
 export type Status = "alone" | "connecting" | "synced";
 
-/** Port offered first when inviting, so addresses are easy to read aloud. */
-const DEFAULT_PORT = 7419;
 const PROJECT_KEY = "inkwell.project";
 const NAME_KEY = "inkwell.name";
 
@@ -41,7 +39,8 @@ class Workspace {
   peers = $state<string[]>([]);
   myId = $state("");
   myName = $state(safeGet(NAME_KEY) ?? "");
-  hostAddrs = $state<string[]>([]);
+  /** The text to give to the person joining: opaque, copied and pasted as is. */
+  invitation = $state("");
   /** Display names of present people, by peer id (from presence). */
   names = $state<Record<string, string>>({});
   error = $state("");
@@ -101,21 +100,21 @@ class Workspace {
   async host(): Promise<void> {
     this.error = "";
     try {
-      this.hostAddrs = (await Session.Host(DEFAULT_PORT).catch(() => Session.Host(0))) ?? [];
+      this.invitation = await Session.Host();
     } catch (err) {
       this.error = t("error.host", { reason: String(err) });
     }
   }
 
-  /** Connects to the person at addr and opens their project. */
-  async join(addr: string): Promise<void> {
+  /** Connects using the invitation text and opens the inviting person's project. */
+  async join(invitation: string): Promise<void> {
     this.error = "";
     this.status = "connecting";
     try {
-      const peer = (await Session.Join(addr.trim())) as PeerId;
+      const peer = (await Session.Join(invitation.trim())) as PeerId;
       await this.open(await this.#projectOf(peer));
     } catch {
-      this.error = t("error.join", { addr: addr.trim() });
+      this.error = t("error.join");
     }
     this.status = this.peers.length > 0 ? "synced" : "alone";
   }

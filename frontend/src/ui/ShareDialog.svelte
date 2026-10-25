@@ -5,17 +5,17 @@ import { workspace } from "../workspace/workspace.svelte";
 let { open = $bindable(false) }: { open: boolean } = $props();
 let dialog: HTMLDialogElement | undefined = $state();
 let address = $state("");
-let copied = $state("");
+let copied = $state(false);
 
 $effect(() => {
   if (open && !dialog?.open) dialog?.showModal();
   if (!open && dialog?.open) dialog.close();
 });
 
-async function copy(addr: string) {
-  await navigator.clipboard.writeText(addr);
-  copied = addr;
-  setTimeout(() => (copied = ""), 1500);
+async function copy() {
+  await navigator.clipboard.writeText(workspace.invitation);
+  copied = true;
+  setTimeout(() => (copied = false), 1500);
 }
 
 async function join(e: SubmitEvent) {
@@ -46,14 +46,20 @@ async function join(e: SubmitEvent) {
       <span>{t("share.host.help")}</span>
       <button type="button" onclick={() => workspace.host()}>{t("share.host")}</button>
     </div>
-    {#each workspace.hostAddrs as addr (addr)}
-      <div class="row addr">
-        <code>{addr}</code>
-        <button type="button" class="flat" onclick={() => copy(addr)}>
-          {copied === addr ? t("share.copied") : t("share.copy")}
+    {#if workspace.invitation}
+      <div class="row">
+        <input
+          class="invitation"
+          readonly
+          aria-label={t("share.invitation")}
+          value={workspace.invitation}
+          onfocus={(e) => e.currentTarget.select()}
+        />
+        <button type="button" class="flat" onclick={copy}>
+          {copied ? t("share.copied") : t("share.copy")}
         </button>
       </div>
-    {/each}
+    {/if}
   </section>
 
   <form class="boxed" onsubmit={join}>
@@ -62,7 +68,6 @@ async function join(e: SubmitEvent) {
       <input
         bind:value={address}
         placeholder={t("share.join.placeholder")}
-        inputmode="url"
         spellcheck="false"
         required
       />
@@ -138,9 +143,11 @@ async function join(e: SubmitEvent) {
     color: inherit;
     font: 14px var(--font-ui);
   }
-  code {
-    font: 15px var(--font-mono);
-    user-select: all;
+  .invitation {
+    flex: 1 1 auto;
+    min-width: 0;
+    font: 13px var(--font-mono);
+    text-overflow: ellipsis;
   }
   button {
     min-height: 34px;

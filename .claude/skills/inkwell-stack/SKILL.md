@@ -41,6 +41,7 @@ check the pinned version in the repo, then write. Wails v3 is beta and APIs move
   `arraybuffer`). Go `Send` takes ownership of the slice — never reuse it after sending.
   No auto-reconnect: recreate in `onclose`. Frame ≤ 64 MB; JS→Go small frames are the slow
   direction → batch if needed. Request/response stays on bindings.
+- **libp2p dials need the peer ID**: a bare `ip:port` cannot be dialed (the secure channel authenticates the peer), so an invitation is the node's `/p2p/<id>` multiaddrs, opaque to the user. Only `internal/transport/p2p` imports libp2p (`scripts/arch-check.sh`). Two instances on one machine need distinct `INKWELL_HOME` (identity dir) or they are the same peer; port 7419 busy falls back to a free port.
 - **Linux = GTK4 / WebKitGTK 6.0** (Wails default; `-tags gtk3` is legacy, removed in v3.1).
   Fedora: `gtk4-devel webkitgtk6.0-devel`; Ubuntu 24.04: `libgtk-4-dev libwebkitgtk-6.0-dev`.
 - **TypeScript 6.x**, not 7: `svelte-check` requires `^5 || ^6` (ADR 0010).
