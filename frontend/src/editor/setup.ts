@@ -1,7 +1,7 @@
 import { automergeSyncPlugin } from "@automerge/automerge-codemirror";
 import type { DocHandle } from "@automerge/automerge-repo";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
-import { type EditorState, Prec } from "@codemirror/state";
+import { Compartment, type EditorState, type Extension, Prec } from "@codemirror/state";
 import {
   drawSelection,
   EditorView,
@@ -12,6 +12,7 @@ import {
 } from "@codemirror/view";
 import { t } from "../i18n";
 import { formatKeymap, type Lang } from "./format";
+import { languageExtension } from "./highlight";
 import { localHistoryOnly } from "./localHistory";
 import { type Person, presenceSync } from "./presence";
 import { remoteCursors } from "./remoteCursors";
@@ -28,13 +29,13 @@ const theme = EditorView.theme({
   },
   ".cm-scroller": { fontFamily: "var(--font-mono)", lineHeight: "1.75" },
   ".cm-content": { padding: "20px 28px 20px 0", caretColor: "var(--fg)" },
-  ".cm-line": { padding: "0 0 0 16px" },
+  "&.cm-editor .cm-line": { padding: "0 0 0 16px" },
   ".cm-gutters": {
     backgroundColor: "var(--view-bg)",
     color: "color-mix(in srgb, var(--fg) 45%, transparent)",
     border: "none",
   },
-  ".cm-lineNumbers .cm-gutterElement": { minWidth: "56px", padding: "0 0 0 0" },
+  "&.cm-editor .cm-lineNumbers .cm-gutterElement": { minWidth: "56px", padding: "0 0 0 0" },
   ".cm-activeLine": { backgroundColor: "rgb(53 132 228 / 7%)" },
   ".cm-activeLineGutter": { backgroundColor: "transparent", color: "var(--fg)" },
   ".cm-cursor, .cm-dropCursor": { borderLeftColor: "var(--fg)", borderLeftWidth: "2px" },
@@ -42,6 +43,15 @@ const theme = EditorView.theme({
     { backgroundColor: "rgb(53 132 228 / 22%)" },
   "&.cm-focused": { outline: "none" },
 });
+
+/**
+ * What depends on the file's language: its parser and colours, and the formatting keys (ahead
+ * of the default keymap, which binds Mod-i to "select parent syntax").
+ */
+export const forLang = (lang: Lang): Extension => [
+  languageExtension(lang),
+  Prec.high(keymap.of(formatKeymap(lang))),
+];
 
 /** The per-launch CSP nonce from index.html, so CodeMirror's <style> elements are allowed. */
 function cspNonce() {
@@ -65,8 +75,9 @@ export function createEditor(
   me: { id: string; name: string },
   onPeople?: (people: Person[]) => void,
   { lang = "plain", onState, onView }: EditorOptions = {},
-): { rename: (name: string) => void; destroy: () => void } {
+): { rename: (name: string) => void; setLang: (lang: Lang) => void; destroy: () => void } {
   let view: EditorView | undefined;
+  const language = new Compartment();
   const presence = presenceSync(handle, me, () => view, onPeople);
   view = new EditorView({
     parent,
@@ -80,8 +91,7 @@ export function createEditor(
       highlightActiveLine(),
       EditorView.lineWrapping,
       placeholder(t("editor.placeholder")),
-      // Ahead of the default keymap, which binds Mod-i to "select parent syntax".
-      Prec.high(keymap.of(formatKeymap(lang))),
+      language.of(forLang(lang)),
       keymap.of([...defaultKeymap, ...historyKeymap]),
       EditorView.contentAttributes.of({ "aria-label": t("editor.label") }),
       EditorView.updateListener.of((u) => {
@@ -98,6 +108,7 @@ export function createEditor(
   onState?.(view.state);
   return {
     rename: presence.rename,
+    setLang: (next) => view?.dispatch({ effects: language.reconfigure(forLang(next)) }),
     destroy: () => {
       presence.stop();
       view?.destroy();

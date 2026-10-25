@@ -21,14 +21,23 @@ import { safeGet, safeSet } from "../store/safeStorage";
 export type Doc = { text: string };
 export type Status = "alone" | "connecting" | "synced";
 
+/** What the header and the status bar say: it follows who is connected, never a stored flag. */
+export function statusOf(peerCount: number, joining: boolean): Status {
+  if (peerCount > 0) return "synced";
+  return joining ? "connecting" : "alone";
+}
+
 /** The projection of the document, in the project folder. */
 const MAIN_FILE = "main.typ";
 const NAME_KEY = "inkwell.name";
 
 /** The open project and who is in it — the single source of UI state. */
 class Workspace {
-  status = $state<Status>("alone");
   peers = $state<string[]>([]);
+  /** True while an invitation is being followed, until the inviting person's project is open. */
+  joining = $state(false);
+  /** Derived from `peers`, so the header and the people count cannot disagree. */
+  status = $derived(statusOf(this.peers.length, this.joining));
   myId = $state("");
   myName = $state(safeGet(NAME_KEY) ?? "");
   /** The invitation text to give to the person joining: opaque, copied and pasted as is. */
@@ -63,11 +72,9 @@ class Workspace {
     });
     adapter.on("peer-candidate", ({ peerId }) => {
       if (!this.peers.includes(peerId)) this.peers = [...this.peers, peerId];
-      this.status = "synced";
     });
     adapter.on("peer-disconnected", ({ peerId }) => {
       this.peers = this.peers.filter((p) => p !== peerId);
-      if (this.peers.length === 0) this.status = "alone";
     });
     adapter.onSealed(() => {
       this.sealed = true;
@@ -189,14 +196,15 @@ class Workspace {
   /** Connects using the invitation text and opens the inviting person's project. */
   async join(invitation: string): Promise<void> {
     this.error = "";
-    this.status = "connecting";
+    this.joining = true;
     try {
       const peer = (await Session.Join(invitation.trim())) as PeerId;
       await this.open(await this.#projectOf(peer));
     } catch {
       this.error = t("error.join");
+    } finally {
+      this.joining = false;
     }
-    this.status = this.peers.length > 0 ? "synced" : "alone";
   }
 
   /** Resolves with the project peer announced, waiting for its handshake if needed. */

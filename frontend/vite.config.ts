@@ -29,5 +29,7 @@ export default defineConfig({
     environment: "happy-dom",
     include: ["src/**/*.test.ts"],
     setupFiles: ["src/test-setup.ts"],
+    // tokens.test.ts reads the stylesheet as text.
+    css: { include: [/tokens\.css/] },
   },
 });

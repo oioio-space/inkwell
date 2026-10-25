@@ -18,11 +18,15 @@
     "@automerge/automerge-codemirror": "0.2.0",
     "@automerge/automerge-repo": "2.5.6",
     "@codemirror/commands": "6.11.1",
+    "@codemirror/lang-markdown": "6.5.2",
+    "@codemirror/language": "6.13.1",
     "@codemirror/state": "6.7.6",
     "@codemirror/view": "6.43.14",
+    "@lezer/highlight": "1.2.5",
     "@wailsio/runtime": "3.0.0-beta.34",
     "cbor-x": "1.6.7",
-    "codemirror": "6.0.2"
+    "codemirror": "6.0.2",
+    "codemirror-lang-typst": "0.6.0"
   },
   "devDependencies": {
     "@axe-core/playwright": "4.12.1",

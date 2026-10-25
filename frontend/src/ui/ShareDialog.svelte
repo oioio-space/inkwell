@@ -78,7 +78,7 @@ async function join(e: SubmitEvent) {
       />
     </label>
     <div class="row end">
-      <button type="submit" class="sug" disabled={workspace.status === "connecting"}>
+      <button type="submit" class="sug" disabled={workspace.joining}>
         {t("share.join")}
       </button>
     </div>
