@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"slices"
 	"strings"
@@ -70,16 +71,9 @@ func (s *opStore) load(signer trust.Signer, title string) (*trust.List, error) {
 // load picks does not depend on the file system. Temporary files left by an
 // interrupted save are removed.
 func (s *opStore) readAll() ([]trust.Op, error) {
-	d, err := s.root.Open(".")
+	entries, err := s.entries()
 	if err != nil {
-		return nil, fmt.Errorf("reading trust ops: %w", err)
-	}
-	entries, err := d.ReadDir(-1)
-	if cerr := d.Close(); err == nil {
-		err = cerr
-	}
-	if err != nil {
-		return nil, fmt.Errorf("reading trust ops: %w", err)
+		return nil, err
 	}
 	var ops []trust.Op
 	for _, e := range entries {
@@ -99,6 +93,15 @@ func (s *opStore) readAll() ([]trust.Op, error) {
 	}
 	slices.SortFunc(ops, func(a, b trust.Op) int { return cmp.Compare(a.Hash().String(), b.Hash().String()) })
 	return ops, nil
+}
+
+// entries lists the trust directory.
+func (s *opStore) entries() ([]fs.DirEntry, error) {
+	entries, err := fs.ReadDir(s.root.FS(), ".")
+	if err != nil {
+		return nil, fmt.Errorf("listing trust ops: %w", err)
+	}
+	return entries, nil
 }
 
 func (s *opStore) read(name string) (trust.Op, error) {
@@ -137,16 +140,9 @@ func (s *opStore) replace(ops []trust.Op) error {
 
 // clear removes every saved op.
 func (s *opStore) clear() error {
-	d, err := s.root.Open(".")
+	entries, err := s.entries()
 	if err != nil {
-		return fmt.Errorf("listing trust ops: %w", err)
-	}
-	entries, err := d.ReadDir(-1)
-	if cerr := d.Close(); err == nil {
-		err = cerr
-	}
-	if err != nil {
-		return fmt.Errorf("listing trust ops: %w", err)
+		return err
 	}
 	for _, e := range entries {
 		if e.IsDir() || (!strings.HasSuffix(e.Name(), opExt) && !strings.HasSuffix(e.Name(), tmpExt)) {
