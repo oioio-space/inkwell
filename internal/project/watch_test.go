@@ -71,6 +71,50 @@ func TestExternalEditNotified(t *testing.T) {
 	expect(t, got, MainFile)
 }
 
+// TestTruncateThenWriteIsOneEdit covers a writer that truncates the file and
+// writes it only after a pause longer than watchDebounce: the empty file in
+// between is not reported, and rewriting the same content is not news.
+func TestTruncateThenWriteIsOneEdit(t *testing.T) {
+	base := newBase(t)
+	p := create(t, base, "p")
+	if err := p.WriteProjection(MainFile, []byte("= A\n")); err != nil {
+		t.Fatal(err)
+	}
+	got := startWatch(t, p)
+	// Let Watch add its watches first: a file found empty by its initial check
+	// is reported at once (the writer cannot be mid-write if Inkwell was closed).
+	time.Sleep(watchDebounce)
+
+	f, err := base.OpenFile("p/main.typ", os.O_WRONLY|os.O_TRUNC, 0o600)
+	if err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(watchDebounce * 3 / 2)
+	if _, err := f.WriteString("= A\n"); err != nil {
+		t.Fatal(err)
+	}
+	if err := f.Close(); err != nil {
+		t.Fatal(err)
+	}
+	expectNothing(t, got, 4*watchDebounce)
+}
+
+// TestEmptiedFileIsReported checks that a file really emptied outside Inkwell
+// is still reported, one debounce later.
+func TestEmptiedFileIsReported(t *testing.T) {
+	base := newBase(t)
+	p := create(t, base, "p")
+	if err := p.WriteProjection(MainFile, []byte("= A\n")); err != nil {
+		t.Fatal(err)
+	}
+	got := startWatch(t, p)
+
+	if err := base.WriteFile("p/main.typ", nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	expect(t, got, MainFile)
+}
+
 // TestExternalEditViaRename covers editors that save by writing a temporary
 // file and renaming it over the original.
 func TestExternalEditViaRename(t *testing.T) {

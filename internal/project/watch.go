@@ -11,8 +11,9 @@ import (
 	"github.com/fsnotify/fsnotify"
 )
 
-// watchDebounce groups the bursts of events one save produces.
-const watchDebounce = 50 * time.Millisecond
+// watchDebounce groups the bursts of events one save produces, including a
+// formatter that rewrites the file many times in a row.
+const watchDebounce = 200 * time.Millisecond
 
 // Watch reports the owned files that are edited outside Inkwell until ctx is
 // done, then returns nil. onExternal(rel) is called from the watching
@@ -55,6 +56,10 @@ func (p *Project) Watch(ctx context.Context, onExternal func(rel string)) error 
 	}
 
 	dirty := map[string]bool{}
+	// A file found empty is looked at once more before it is reported: a writer
+	// that truncates then writes (os.WriteFile) shows an empty file in between,
+	// and a slow writer can leave it empty for longer than watchDebounce.
+	held := map[string]bool{}
 	timer := time.NewTimer(watchDebounce)
 	timer.Stop()
 	defer timer.Stop()
@@ -88,11 +93,29 @@ func (p *Project) Watch(ctx context.Context, onExternal func(rel string)) error 
 			return fmt.Errorf("project: watch %s: %w", p.dir, err)
 		case <-timer.C:
 			for _, rel := range slices.Sorted(maps.Keys(dirty)) {
+				if p.emptied(rel) && !held[rel] {
+					held[rel] = true
+					continue
+				}
+				delete(held, rel)
+				delete(dirty, rel)
 				p.check(rel, onExternal)
 			}
-			clear(dirty)
+			if len(dirty) > 0 {
+				timer.Reset(watchDebounce)
+			}
 		}
 	}
+}
+
+// emptied reports whether rel exists, is empty, and would be reported as an
+// external edit.
+func (p *Project) emptied(rel string) bool {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	current, exists, err := p.diskHash(rel)
+	return err == nil && exists && current == emptyHash &&
+		current != p.m.Files[rel] && current != p.notified[rel]
 }
 
 // check calls onExternal(rel) if the file on disk differs from what Inkwell

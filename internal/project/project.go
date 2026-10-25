@@ -348,6 +348,9 @@ func (p *Project) diskHash(rel string) (hash string, exists bool, err error) {
 	return hashOf(data), true, nil
 }
 
+// emptyHash is the hash of an empty file.
+var emptyHash = hashOf(nil)
+
 func hashOf(data []byte) string {
 	sum := sha256.Sum256(data)
 	return hex.EncodeToString(sum[:])
