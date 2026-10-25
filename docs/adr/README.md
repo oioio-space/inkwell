@@ -11,7 +11,7 @@ connaître la raison — pas pour le reste. Modèle : [`template.md`](template.m
 | [0002](0002-automerge-in-webview.md) | Automerge dans la webview, Go ne voit que des octets | acceptée, amendée par 0009, 0011 |
 | [0003](0003-wails-v3-cgo-native-builds.md) | Wails v3, cgo assumé, builds natifs par plateforme | acceptée |
 | [0004](0004-network-stack-libp2p.md) | Pile réseau maison : go-libp2p + wormhole-william derrière `Transport` | acceptée |
-| [0005](0005-trust-model-v1.md) | Modèle de confiance v1 : liste de membres signée | acceptée |
+| [0005](0005-trust-model-v1.md) | Modèle de confiance v1 : liste de membres signée | acceptée, amendée par 0017 |
 | [0006](0006-blobs-by-hash-vendored-packages.md) | Binaires adressés par BLAKE3, paquets Typst vendus | acceptée |
 | [0007](0007-testing-strategy.md) | Tests : simulation à graine, rejeu, fuzz, e2e | acceptée, amendée par 0011 |
 | [0008](0008-dependency-policy.md) | Dépendances épinglées, mises à jour proposées jamais fusionnées seules | acceptée |
@@ -20,3 +20,4 @@ connaître la raison — pas pour le reste. Modèle : [`template.md`](template.m
 | [0011](0011-simulation-without-automerge-go.md) | Simulation sans automerge-go | acceptée |
 | [0012](0012-license-mpl-2.md) | Licence MPL-2.0 | acceptée |
 | [0013](0013-model-routing-token-economy.md) | Routage des modèles : économie de tokens sans perte de qualité | acceptée |
+| [0017](0017-member-list-seniority.md) | Liste de membres : DAG signé, ancienneté stricte (amende 0005) | acceptée |
