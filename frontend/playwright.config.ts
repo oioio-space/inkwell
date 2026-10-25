@@ -23,6 +23,8 @@ const instance = (port: number) => ({
   // Each instance has its own identity directory, or both would be the same peer.
   env: {
     INKWELL_SERVER_PORT: String(port),
+    // No short codes: the tests never reach the public code server.
+    INKWELL_RENDEZVOUS: "off",
     INKWELL_HOME: resolve(e2eDir, String(port)),
     INKWELL_DOCS: join(docsRoot, String(port)),
   },

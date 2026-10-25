@@ -43,9 +43,11 @@ import (
 	"crypto/ed25519"
 	"errors"
 	"fmt"
+	"io"
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/libp2p/go-libp2p"
@@ -129,6 +131,11 @@ type Options struct {
 	// Port is the UDP port of QUIC and the TCP port of the fallback. Zero
 	// picks free ports.
 	Port int
+	// LAN starts the local network discovery (mDNS, service _inkwell._udp):
+	// the node announces its identity and addresses on the local network and
+	// lists the other nodes it sees (see [Node.Nearby]). If it cannot start,
+	// the node works without it ([Node.LANError]).
+	LAN bool
 	// RelayOnly hides the node's address from the other people: it refuses
 	// every connection that does not go through a relay (except to the
 	// relays themselves), never dials a direct address and does not hole
@@ -186,10 +193,21 @@ type Node struct {
 	relays    map[peer.ID]peer.AddrInfo
 	relayDown map[peer.ID]chan struct{}
 	notifee   *network.NotifyBundle
+	// found are the nodes seen by mDNS; under mu.
+	found map[peer.ID]nearbyEntry
+	// openTimer closes the stranger window, see SetOpen; under mu.
+	openTimer *time.Timer
+	// lobby is the handler of lobby requests.
+	lobby atomic.Pointer[LobbyHandler]
+	// lan is the mDNS service, if started.
+	lan io.Closer
 	// want is the set of peers to keep connected, and kick is closed and
 	// replaced to make their dial loops retry at once. Both under mu.
 	want map[peer.ID]*wanted
 	kick chan struct{}
+
+	lanErr    error
+	openUntil time.Time // under mu
 
 	local   transport.PeerID
 	queue   []queued
@@ -265,6 +283,7 @@ func New(ctx context.Context, key ed25519.PrivateKey, o Options) (*Node, error) 
 		budget:    frame.NewBudget(maxBuffered),
 		peers:     make(map[peer.ID]*peerState),
 		want:      make(map[peer.ID]*wanted),
+		found:     make(map[peer.ID]nearbyEntry),
 		kick:      make(chan struct{}),
 		relays:    relays,
 		relayDown: make(map[peer.ID]chan struct{}, len(relays)),
@@ -323,6 +342,7 @@ func New(ctx context.Context, key ed25519.PrivateKey, o Options) (*Node, error) 
 	}
 	h.Network().Notify(n.notifee)
 	h.SetStreamHandler(ProtocolSync, n.handleStream)
+	h.SetStreamHandler(ProtocolLobby, n.handleLobbyStream)
 	n.wg.Go(func() {
 		for _, p := range h.Network().Peers() { // connected before the subscription
 			n.onConnected(p)
@@ -340,6 +360,9 @@ func New(ctx context.Context, key ed25519.PrivateKey, o Options) (*Node, error) 
 	})
 	for _, ai := range relayList(relays) {
 		n.dialWG.Go(func() { n.keepRelay(ai, n.relayDown[ai.ID]) })
+	}
+	if o.LAN {
+		n.lanErr = n.startLAN()
 	}
 	stop := context.AfterFunc(ctx, func() { _ = n.Close() })
 	n.mu.Lock()
@@ -368,6 +391,11 @@ func newResourceManager() (network.ResourceManager, error) {
 				StreamsInbound:  maxSyncStreams,
 				StreamsOutbound: maxSyncStreams,
 			},
+			ProtocolLobby: {
+				Streams:         maxLobbyStreams,
+				StreamsInbound:  maxLobbyStreams,
+				StreamsOutbound: maxLobbyStreams,
+			},
 		},
 	}
 	cfg := limits.Build(scaling.Scale(memoryLimit, fdLimit))
@@ -384,13 +412,65 @@ func peerName(p peer.ID) (transport.PeerID, bool) {
 	return name, transport.ValidPeerID(name)
 }
 
-// admitted reports whether Options.Admit accepts p.
+// admitted reports whether p may connect: Options.Admit accepts it, or the
+// window opened by [Node.SetOpen] is open.
 func (n *Node) admitted(p peer.ID) bool {
-	if n.opts.Admit == nil {
-		return true
-	}
 	name, ok := peerName(p)
-	return ok && n.opts.Admit(name)
+	if !ok {
+		return false
+	}
+	return n.opts.Admit == nil || n.opts.Admit(name) || n.isOpen()
+}
+
+// isOpen reports whether the stranger window is open.
+func (n *Node) isOpen() bool {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return time.Now().Before(n.openUntil)
+}
+
+// SetOpen lets in any authenticated peer, member or not, until the given time,
+// instead of only the peers [Options.Admit] accepts: the invitation of a new
+// person needs a stranger to connect and speak to the lobby (see
+// [Node.HandleLobby]). A zero or past time closes the window, replacing any
+// earlier one. When it closes, the connections of the peers that
+// Options.Admit does not accept are closed. Without Options.Admit every peer
+// is admitted already and the window has no effect.
+func (n *Node) SetOpen(until time.Time) {
+	n.mu.Lock()
+	if n.closed {
+		n.mu.Unlock()
+		return
+	}
+	if n.openTimer != nil {
+		n.openTimer.Stop()
+		n.openTimer = nil
+	}
+	n.openUntil = until
+	if d := time.Until(until); d > 0 {
+		n.openTimer = time.AfterFunc(d, n.sweep)
+		n.mu.Unlock()
+		return
+	}
+	n.mu.Unlock()
+	n.sweep()
+}
+
+// sweep closes the connections of the peers that are no longer admitted.
+func (n *Node) sweep() {
+	n.mu.Lock()
+	if n.closed {
+		n.mu.Unlock()
+		return
+	}
+	n.wg.Add(1)
+	n.mu.Unlock()
+	defer n.wg.Done()
+	for _, p := range n.h.Network().Peers() {
+		if _, relay := n.relays[p]; !relay && !n.admitted(p) {
+			_ = n.h.Network().ClosePeer(p)
+		}
+	}
 }
 
 // Local returns the node's identity.
@@ -528,6 +608,9 @@ func (n *Node) Close() error {
 			n.stop()
 		}
 		n.closed = true
+		if n.openTimer != nil {
+			n.openTimer.Stop()
+		}
 		n.queue = nil
 		n.changedLocked()
 		n.mu.Unlock()
@@ -535,6 +618,9 @@ func (n *Node) Close() error {
 		n.cancel()
 		n.dialWG.Wait()
 		n.budget.Close()
+		if n.lan != nil {
+			_ = n.lan.Close()
+		}
 		_ = n.sub.Close()
 		_ = n.addrSub.Close()
 		n.h.Network().StopNotify(n.notifee)

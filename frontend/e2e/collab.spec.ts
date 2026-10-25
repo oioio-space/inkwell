@@ -48,7 +48,7 @@ test("two people type in the same file, see each other, and undo only their own 
   await alice.getByRole("button", { name: "Partager" }).click();
   await rename(alice, "Alice");
   await alice.getByRole("button", { name: "Inviter" }).click();
-  await expect(alice.getByLabel("Invitation", { exact: true })).toHaveValue(/\/p2p\//);
+  await expect(alice.getByLabel("Invitation", { exact: true })).toHaveValue(/^inkwell1:/);
   const invitation = await alice.getByLabel("Invitation", { exact: true }).inputValue();
   await alice.getByRole("button", { name: "Fermer" }).click();
 

@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 
 	"github.com/oioio-space/inkwell/internal/identity"
+	"github.com/oioio-space/inkwell/internal/invite"
 	"github.com/oioio-space/inkwell/internal/transport"
 	"github.com/oioio-space/inkwell/internal/transport/p2p"
 )
@@ -51,19 +52,41 @@ func StartNode(ctx context.Context, home *os.Root, port int) (*p2p.Node, error) 
 	if err != nil {
 		return nil, fmt.Errorf("loading identity: %w", err)
 	}
-	return startNode(ctx, dev, port, nil)
+	return startNode(ctx, dev, p2p.Options{Port: port})
 }
 
-func startNode(ctx context.Context, dev *identity.Device, port int, admit func(transport.PeerID) bool) (*p2p.Node, error) {
-	node, err := p2p.New(ctx, dev.Libp2pKey(), p2p.Options{Port: port, Admit: admit})
-	if err != nil && port != 0 {
-		node, err = p2p.New(ctx, dev.Libp2pKey(), p2p.Options{Admit: admit})
+func startNode(ctx context.Context, dev *identity.Device, o p2p.Options) (*p2p.Node, error) {
+	node, err := p2p.New(ctx, dev.Libp2pKey(), o)
+	if err != nil && o.Port != 0 {
+		o.Port = 0
+		node, err = p2p.New(ctx, dev.Libp2pKey(), o)
 	}
 	if err != nil {
 		return nil, fmt.Errorf("starting network: %w", err)
 	}
 	return node, nil
 }
+
+// Options tunes [Start]. The zero value is valid.
+type Options struct {
+	// Log receives the diagnostics, never payload bytes. Nil discards them.
+	Log *slog.Logger
+	// Title is the title of the project created on the first run.
+	Title string
+	// RendezvousURL is the Wormhole rendezvous server that carries the short
+	// codes: empty for the public magic-wormhole server, [NoCodes] for none.
+	RendezvousURL string
+	// Port is offered first to listen on; zero picks a free one.
+	Port int
+	// LAN turns the local network discovery on (the setting "Découverte sur
+	// le réseau local"): this device then announces itself on the local
+	// network and sees the others that are visible.
+	LAN bool
+}
+
+// NoCodes as [Options.RendezvousURL] turns the short codes off: invitations
+// are then the text only, and nothing is sent to a code server.
+const NoCodes = "off"
 
 // Runtime is a running node with the trust wiring of the local project.
 type Runtime struct {
@@ -76,34 +99,50 @@ type Runtime struct {
 	Repo transport.Transport
 
 	wiring *Wiring
-	store  *opStore
+	inv    *invites
 }
 
 // Start starts the node of the device stored in home and wires it to the local
-// project, created with title and this device as its admin on the first run.
-// Only the members of the project, the peers this user joins and, once
-// [Session.Host] has been called, the holders of the invitation can connect.
-// The project's member list is kept in home. Canceling ctx or calling
-// [Runtime.Close] stops everything; home may be closed once Start returns.
-func Start(ctx context.Context, home *os.Root, port int, title string, log *slog.Logger) (*Runtime, error) {
+// project, created with o.Title and this device as its admin on the first run.
+// Only the members of the project can connect, apart from the people who are
+// being invited (see [Session.Invite] and [Session.SetVisible]). The member
+// list of the project is kept in home, and so is the project the device joins.
+// Canceling ctx or calling [Runtime.Close] stops everything; home may be
+// closed once Start returns.
+func Start(ctx context.Context, home *os.Root, o Options) (*Runtime, error) {
 	dev, err := identity.LoadOrCreate(home)
 	if err != nil {
 		return nil, fmt.Errorf("loading identity: %w", err)
 	}
-	list, store, err := openProject(home, dev, title)
+	list, store, err := openProject(home, dev, o.Title)
 	if err != nil {
 		return nil, fmt.Errorf("opening project: %w", err)
 	}
-	adm := NewAdmission(list)
-	node, err := startNode(ctx, dev, port, adm.Admit)
+	mine, err := home.OpenRoot(".")
 	if err != nil {
-		return nil, errors.Join(err, store.close())
+		return nil, errors.Join(fmt.Errorf("opening identity directory: %w", err), store.close())
+	}
+	adm := NewAdmission(list)
+	node, err := startNode(ctx, dev, p2p.Options{Port: o.Port, Admit: adm.Admit, LAN: o.LAN})
+	if err != nil {
+		return nil, errors.Join(err, store.close(), mine.Close())
+	}
+	log := o.Log
+	if log == nil {
+		log = slog.New(slog.DiscardHandler)
 	}
 	w := Wire(ctx, node, dev, list, adm, WiringOptions{Log: log, Save: store.save})
-	return &Runtime{Node: node, Session: NewSession(node, WithAdmission(adm)), Repo: w.Repo(), wiring: w, store: store}, nil
+	var c carrier
+	if o.RendezvousURL != NoCodes {
+		c = invite.Wormhole{RendezvousURL: o.RendezvousURL}
+	}
+	inv := newInvites(ctx, node, w, dev, mine, list, store, c, log)
+	s := NewSession(node)
+	s.inv = inv
+	return &Runtime{Node: node, Session: s, Repo: w.Repo(), wiring: w, inv: inv}, nil
 }
 
 // Close stops the wiring and the node. It is idempotent.
 func (r *Runtime) Close() error {
-	return errors.Join(r.wiring.Close(), r.store.close())
+	return errors.Join(r.wiring.Close(), r.inv.close())
 }

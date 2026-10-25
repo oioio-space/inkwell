@@ -166,7 +166,6 @@ func TestRevokeDropsAndRefuses(t *testing.T) {
 		listA := newProject(t, devA)
 		a := join(t, net, devA, listA)
 		b := join(t, net, devB, fork(t, listA))
-		a.adm.OpenInvitation() // an open invitation must not readmit a revoked member
 		net.Link(a.id, b.id)
 		if _, err := a.w.Issue(trust.OpAdd, devB.Public(), trust.RoleWriter, "b"); err != nil {
 			t.Fatal(err)
@@ -192,7 +191,7 @@ func TestRevokeDropsAndRefuses(t *testing.T) {
 			t.Errorf("dropped %s, want B", got)
 		}
 		if a.adm.Admit(b.id) {
-			t.Error("Admit(revoked) = true, want false even with an open invitation")
+			t.Error("Admit(revoked) = true, want false")
 		}
 		if err := a.w.Repo().Send(t.Context(), b.id, []byte("late")); !errors.Is(err, transport.ErrUnknownPeer) {
 			t.Errorf("Send(revoked) = %v, want ErrUnknownPeer", err)
@@ -304,24 +303,6 @@ func TestAttestationsGossip(t *testing.T) {
 	})
 }
 
-func TestInvitationAdmitsJoiner(t *testing.T) {
-	synctest.Test(t, func(t *testing.T) {
-		net := memnet.New(1, memnet.Faults{})
-		host, guest := newDevice(t), newDevice(t)
-		a := join(t, net, host, newProject(t, host))
-		a.adm.OpenInvitation()
-		g := net.Join(p2p.IDFromKey(guest.Public()))
-		net.Link(a.id, g.Local())
-
-		if ev := next(t, a.w.Repo()); ev.Kind != transport.PeerUp || ev.Peer != g.Local() {
-			t.Fatalf("got %v from %s, want PeerUp of the guest", ev.Kind, ev.Peer)
-		}
-		if got := a.list.Role(guest.Public()); got != trust.RoleWriter {
-			t.Errorf("guest role = %v, want writer", got)
-		}
-	})
-}
-
 func TestAdmit(t *testing.T) {
 	admin, member, stranger := newDevice(t), newDevice(t), newDevice(t)
 	list := newProject(t, admin)
@@ -335,27 +316,59 @@ func TestAdmit(t *testing.T) {
 		t.Error("Admit(member) = false")
 	}
 	if adm.Admit(id(stranger)) || adm.Admit("not-a-key") {
-		t.Error("Admit(stranger) = true before any invitation")
-	}
-	adm.OpenInvitation()
-	if !adm.Admit(id(stranger)) {
-		t.Error("Admit(stranger) = false with an open invitation")
-	}
-	if adm.Admit("not-a-key") {
-		t.Error("Admit(not a key) = true")
+		t.Error("Admit(stranger) = true")
 	}
 	if _, err := list.Issue(admin, trust.OpRemove, member.Public(), 0, ""); err != nil {
 		t.Fatal(err)
 	}
-	adm2 := NewAdmission(list)
-	adm2.OpenInvitation()
-	if adm2.Admit(id(member)) {
-		t.Error("Admit(removed member) = true with an open invitation")
+	if adm.Admit(id(member)) {
+		t.Error("Admit(removed member) = true")
 	}
-	host := id(stranger)
-	adm3 := NewAdmission(list)
-	adm3.Invite(host, nil)
-	if !adm3.Admit(host) {
-		t.Error("Admit(invited host) = false")
-	}
+}
+
+func TestSwitchProject(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		net := memnet.New(1, memnet.Faults{})
+		me, old, other := newDevice(t), newDevice(t), newDevice(t)
+		oldList := newProject(t, old)
+		if _, err := oldList.Issue(old, trust.OpAdd, me.Public(), trust.RoleWriter, "me"); err != nil {
+			t.Fatal(err)
+		}
+		a := join(t, net, me, fork(t, oldList))
+		o := join(t, net, old, oldList)
+		net.Link(a.id, o.id)
+		if ev := next(t, a.w.Repo()); ev.Kind != transport.PeerUp || ev.Peer != o.id {
+			t.Fatalf("got %v from %s, want PeerUp of the old project's admin", ev.Kind, ev.Peer)
+		}
+
+		// The other project, which me joins, is administered by a device that is
+		// already connected but not yet a member for me.
+		newList := newProject(t, other)
+		if _, err := newList.Issue(other, trust.OpAdd, me.Public(), trust.RoleReader, "me"); err != nil {
+			t.Fatal(err)
+		}
+		x := join(t, net, other, newList)
+		net.Link(a.id, x.id)
+		nothing(t, a.w.Repo())
+
+		var saved []trust.Op
+		if err := a.w.SwitchProject(fork(t, newList), func(op trust.Op) error { saved = append(saved, op); return nil }); err != nil {
+			t.Fatal(err)
+		}
+		if ev := next(t, a.w.Repo()); ev.Kind != transport.PeerDown || ev.Peer != o.id {
+			t.Errorf("got %v from %s, want PeerDown of the old project's admin", ev.Kind, ev.Peer)
+		}
+		if ev := next(t, a.w.Repo()); ev.Kind != transport.PeerUp || ev.Peer != x.id {
+			t.Errorf("got %v from %s, want PeerUp of the new project's admin", ev.Kind, ev.Peer)
+		}
+		if err := a.w.Repo().Send(t.Context(), o.id, []byte("x")); !errors.Is(err, transport.ErrUnknownPeer) {
+			t.Errorf("Send to the old project's admin = %v, want ErrUnknownPeer", err)
+		}
+		if len(saved) != 0 {
+			t.Errorf("SwitchProject saved %d ops that were already stored", len(saved))
+		}
+		if a.adm.Admit(o.id) || !a.adm.Admit(x.id) {
+			t.Error("the admission did not follow the project")
+		}
+	})
 }
