@@ -114,13 +114,13 @@ export function replaceInProject(
     files: 0,
     unavailable: [],
   };
+  const { skipIn, ...rest } = opts;
   for (const file of results) {
     const handle = handleOf(file.path);
     if (!handle) {
       total.unavailable.push(file.path);
       continue;
     }
-    const { skipIn, ...rest } = opts;
     const perFile: ReplaceOptions = skipIn
       ? { ...rest, skip: (range) => skipIn(file.path, range) }
       : rest;

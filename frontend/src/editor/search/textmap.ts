@@ -48,7 +48,8 @@ function isMarkup(text: string, i: number, c: number): boolean {
   return !inside;
 }
 
-function isLowSurrogate(c: number): boolean {
+/** The second half of a surrogate pair: an offset there cuts a character in two. */
+export function isLowSurrogate(c: number): boolean {
   return c >= 0xdc00 && c <= 0xdfff;
 }
 

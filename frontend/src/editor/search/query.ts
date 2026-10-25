@@ -104,26 +104,25 @@ function wildcardToSource(p: string): { source: string; stars: number } {
   return { source: out, stars };
 }
 
+/** RegExp engine messages and how to say them in plain French. */
+const REGEX_ERRORS: ReadonlyArray<[RegExp, string]> = [
+  [/Unterminated group/i, "Parenthèse non fermée."],
+  [/Unmatched '\)'/i, "Parenthèse fermante sans parenthèse ouvrante."],
+  [/Nothing to repeat/i, "Un signe de répétition (*, + ou ?) n'a rien à répéter."],
+  [/Unterminated character class/i, "Crochet « [ » non fermé."],
+  [/at end of pattern/i, "L'expression ne peut pas finir par une barre oblique inverse."],
+  [/Range out of order/i, "Intervalle à l'envers entre crochets (par exemple z-a)."],
+  [/Invalid capture group name|Invalid group/i, "Groupe mal écrit."],
+  [/Invalid named|named capture/i, "Référence à un groupe qui n'existe pas."],
+  [/quantifier|numbers out of order/i, "Répétition {…} mal écrite."],
+  [/Lone quantifier brackets/i, "Accolade seule : faites-la précéder d'une barre oblique inverse."],
+  [/Invalid property name/i, "Nom de propriété Unicode inconnu."],
+  [/Invalid (unicode )?escape/i, "Séquence d'échappement inconnue."],
+];
+
 /** A regular-expression error, said in plain French. */
 function frenchError(message: string): string {
-  const rules: Array<[RegExp, string]> = [
-    [/Unterminated group/i, "Parenthèse non fermée."],
-    [/Unmatched '\)'/i, "Parenthèse fermante sans parenthèse ouvrante."],
-    [/Nothing to repeat/i, "Un signe de répétition (*, + ou ?) n'a rien à répéter."],
-    [/Unterminated character class/i, "Crochet « [ » non fermé."],
-    [/at end of pattern/i, "L'expression ne peut pas finir par une barre oblique inverse."],
-    [/Range out of order/i, "Intervalle à l'envers entre crochets (par exemple z-a)."],
-    [/Invalid capture group name|Invalid group/i, "Groupe mal écrit."],
-    [/Invalid named|named capture/i, "Référence à un groupe qui n'existe pas."],
-    [/quantifier|numbers out of order/i, "Répétition {…} mal écrite."],
-    [
-      /Lone quantifier brackets/i,
-      "Accolade seule : faites-la précéder d'une barre oblique inverse.",
-    ],
-    [/Invalid property name/i, "Nom de propriété Unicode inconnu."],
-    [/Invalid (unicode )?escape/i, "Séquence d'échappement inconnue."],
-  ];
-  for (const [re, fr] of rules) if (re.test(message)) return fr;
+  for (const [re, fr] of REGEX_ERRORS) if (re.test(message)) return fr;
   return "Expression incorrecte.";
 }
 

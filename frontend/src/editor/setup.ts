@@ -36,11 +36,11 @@ const theme = EditorView.theme({
     border: "none",
   },
   "&.cm-editor .cm-lineNumbers .cm-gutterElement": { minWidth: "56px", padding: "0 0 0 0" },
-  ".cm-activeLine": { backgroundColor: "rgb(53 132 228 / 7%)" },
+  ".cm-activeLine": { backgroundColor: "color-mix(in srgb, var(--accent-bg) 7%, transparent)" },
   ".cm-activeLineGutter": { backgroundColor: "transparent", color: "var(--fg)" },
   ".cm-cursor, .cm-dropCursor": { borderLeftColor: "var(--fg)", borderLeftWidth: "2px" },
   "&.cm-focused > .cm-scroller > .cm-selectionLayer .cm-selectionBackground, .cm-selectionBackground":
-    { backgroundColor: "rgb(53 132 228 / 22%)" },
+    { backgroundColor: "color-mix(in srgb, var(--accent-bg) 22%, transparent)" },
   "&.cm-focused": { outline: "none" },
 });
 

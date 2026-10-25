@@ -1,7 +1,7 @@
 import { next as A } from "@automerge/automerge";
 import { FileKind } from "../../store/files";
 import { type FindOptions, findAll, type Match, type Range } from "./find";
-import type { Matcher } from "./query";
+import { escapeRegex, type Matcher } from "./query";
 import { DEFAULT_LIMIT } from "./scan";
 
 /** A project file as the search sees it. `text()` is only ever called for text kinds. */
@@ -76,7 +76,7 @@ function globSource(glob: string): string {
         i++;
       } else re += "[^/]*";
     } else if (c === "?") re += "[^/]";
-    else re += c.replace(/[\\^$.+()[\]{}|/]/g, "\\$&");
+    else re += escapeRegex(c);
   }
   return re;
 }

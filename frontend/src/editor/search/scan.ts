@@ -1,5 +1,12 @@
 import type { Matcher } from "./query";
-import { buildView, originalEnd, originalStart, type TextView, viewIndexAt } from "./textmap";
+import {
+  buildView,
+  isLowSurrogate,
+  originalEnd,
+  originalStart,
+  type TextView,
+  viewIndexAt,
+} from "./textmap";
 
 /** One occurrence. Offsets are UTF-16 units into the original text (what CodeMirror uses). */
 export interface Match {
@@ -51,10 +58,6 @@ function regexFor(m: Matcher, indices: boolean): RegExp {
   }
   re.lastIndex = 0;
   return re;
-}
-
-function isLowSurrogate(c: number): boolean {
-  return c >= 0xdc00 && c <= 0xdfff;
 }
 
 /**
