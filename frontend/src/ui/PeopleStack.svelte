@@ -1,5 +1,6 @@
 <script lang="ts">
 import { t } from "../i18n";
+import { workspace } from "../workspace/workspace.svelte";
 import { personColor } from "./people";
 
 let { me, peers }: { me: { id: string; name: string }; peers: string[] } = $props();
@@ -8,7 +9,8 @@ const initial = (s: string) => s.trim().charAt(0).toUpperCase() || "?";
 
 <ul class="stack" aria-label={t("people.label", { count: peers.length + 1 })}>
   {#each peers as peer (peer)}
-    <li style:--who={personColor(peer)} title={peer}>{initial(peer)}</li>
+    {@const name = workspace.names[peer] ?? ""}
+    <li style:--who={personColor(peer)} title={name}>{initial(name)}</li>
   {/each}
   <li class="me" style:--who={personColor(me.id)} title={`${me.name} (${t("people.you")})`}>
     {initial(me.name)}

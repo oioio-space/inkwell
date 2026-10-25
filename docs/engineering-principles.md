@@ -40,7 +40,7 @@ un test ou une revue. Un principe sans preuve n'est qu'un vœu. Une exception ex
 | E/S fichier du projet uniquement via **`os.Root`** (anti-traversée `..` / liens) ; `--root` pour typst et tinymist | revue ; test d'évasion par lien symbolique |
 | Crypto standard uniquement (`crypto/ed25519`, `crypto/rand`, Noise via libp2p) ; comparaisons de secrets en temps constant | `gosec` (gate pre-commit) |
 | Serveurs locaux : `127.0.0.1`, port éphémère, jeton aléatoire, jamais logué | revue ; test d'accès sans jeton → refus |
-| Webview : CSP stricte (`default-src 'self'`), aucun contenu distant, aucun `eval` ; chaque message du pont validé et typé côté Go | test du pont ; inspiration [checklist sécurité Electron](https://www.electronjs.org/docs/latest/tutorial/security) |
+| Webview : CSP stricte (`default-src 'self'`, styles par **nonce par lancement** — `internal/app/csp.go` + `EditorView.cspNonce`, jamais `'unsafe-inline'` en production ; seul `'wasm-unsafe-eval'` pour Automerge), aucun contenu distant, aucun `eval` ; chaque message du pont validé et typé côté Go | test du pont ; inspiration [checklist sécurité Electron](https://www.electronjs.org/docs/latest/tutorial/security) |
 | Sidecars : hachage SHA-256 vérifié avant chaque lancement, timeouts, mort avec le parent | test d'altération du binaire → refus |
 | Moindre privilège : fichiers `0o600`/`0o700`, aucune élévation, aucune donnée de document dans les logs ou rapports de bug | revue ; `gosec` |
 | Chaîne d'approvisionnement : versions exactes, `govulncheck`, SBOM + `grype`, `gitleaks`, Dependabot sans auto-merge | gates `mise run ci` (ADR 0008) |

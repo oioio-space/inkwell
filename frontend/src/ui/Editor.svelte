@@ -2,7 +2,7 @@
 import type { DocHandle } from "@automerge/automerge-repo";
 import { untrack } from "svelte";
 import { createEditor } from "../editor/setup";
-import type { Doc } from "../workspace/workspace.svelte";
+import { type Doc, workspace } from "../workspace/workspace.svelte";
 
 let { handle, me }: { handle: DocHandle<Doc>; me: { id: string; name: string } } = $props();
 let host: HTMLDivElement;
@@ -11,7 +11,11 @@ let editor: ReturnType<typeof createEditor> | undefined;
 // Re-create the editor only when the document changes; a new name is broadcast instead.
 $effect(() => {
   const h = handle;
-  editor = untrack(() => createEditor(host, h, me));
+  editor = untrack(() =>
+    createEditor(host, h, me, (people) => {
+      workspace.names = Object.fromEntries(people.map((p) => [p.peerId, p.name]));
+    }),
+  );
   return () => editor?.destroy();
 });
 $effect(() => editor?.rename(me.name));

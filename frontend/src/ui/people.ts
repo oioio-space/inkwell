@@ -18,10 +18,15 @@ export type PersonColor = (typeof PERSON_COLORS)[number];
  * Colour is never the only cue: the name is always shown too (docs/ux-principles.md).
  */
 export function personColor(peerId: string): PersonColor {
+  return PERSON_COLORS[personIndex(peerId) - 1] as PersonColor;
+}
+
+/** The 1-based palette slot (1–8) of a peer, for CSS classes like `cm-who-3`. */
+export function personIndex(peerId: string): number {
   let hash = 0x811c9dc5;
   for (let i = 0; i < peerId.length; i++) {
     hash ^= peerId.charCodeAt(i);
     hash = Math.imul(hash, 0x01000193);
   }
-  return PERSON_COLORS[(hash >>> 0) % PERSON_COLORS.length] as PersonColor;
+  return ((hash >>> 0) % PERSON_COLORS.length) + 1;
 }

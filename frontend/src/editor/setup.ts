@@ -10,7 +10,7 @@ import {
   placeholder,
 } from "@codemirror/view";
 import { localHistoryOnly } from "./localHistory";
-import { presenceSync } from "./presence";
+import { type Person, presenceSync } from "./presence";
 import { remoteCursors } from "./remoteCursors";
 
 type Doc = { text: string };
@@ -24,18 +24,26 @@ const theme = EditorView.theme({
   "&.cm-focused": { outline: "none" },
 });
 
+/** The per-launch CSP nonce from index.html, so CodeMirror's <style> elements are allowed. */
+function cspNonce() {
+  const nonce = document.querySelector<HTMLMetaElement>('meta[name="csp-nonce"]')?.content;
+  return nonce && nonce !== "__CSP_NONCE__" ? EditorView.cspNonce.of(nonce) : [];
+}
+
 /** Creates the collaborative source editor for a project document. */
 export function createEditor(
   parent: HTMLElement,
   handle: DocHandle<Doc>,
   me: { id: string; name: string },
+  onPeople?: (people: Person[]) => void,
 ): { rename: (name: string) => void; destroy: () => void } {
   let view: EditorView | undefined;
-  const presence = presenceSync(handle, me, () => view);
+  const presence = presenceSync(handle, me, () => view, onPeople);
   view = new EditorView({
     parent,
     doc: handle.doc()?.text ?? "",
     extensions: [
+      cspNonce(),
       lineNumbers(),
       history(),
       localHistoryOnly,

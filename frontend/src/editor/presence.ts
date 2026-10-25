@@ -2,13 +2,15 @@ import { getCursor, getCursorPosition } from "@automerge/automerge";
 import { type DocHandle, Presence } from "@automerge/automerge-repo";
 import type { Extension } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
-import { personColor } from "../ui/people";
 import { type RemoteCursor, setRemoteCursors } from "./remoteCursors";
 
 type Doc = { text: string };
 
 /** What each person broadcasts: who they are and where their selection is. */
-export type CursorState = { name: string; color: string; anchor?: string; head?: string };
+export type CursorState = { name: string; anchor?: string; head?: string };
+
+/** A person currently present in the document. */
+export type Person = { peerId: string; name: string };
 
 const PATH = ["text"];
 
@@ -21,23 +23,25 @@ export function presenceSync(
   handle: DocHandle<Doc>,
   me: { id: string; name: string },
   getView: () => EditorView | undefined,
+  onPeople: (people: Person[]) => void = () => {},
 ): { extension: Extension; rename: (name: string) => void; stop: () => void } {
   const presence = new Presence<CursorState, Doc>({ handle });
-  presence.start({ initialState: { name: me.name, color: personColor(me.id) } });
+  presence.start({ initialState: { name: me.name } });
 
   const refresh = () => {
+    const states = Object.values(presence.getPeerStates().value);
+    onPeople(states.map((p) => ({ peerId: p.peerId, name: p.value.name })));
     const view = getView();
     const doc = handle.doc();
     if (!view || !doc) return;
     const cursors: RemoteCursor[] = [];
-    for (const peer of Object.values(presence.getPeerStates().value)) {
-      const { name, color, anchor, head } = peer.value;
+    for (const peer of states) {
+      const { name, anchor, head } = peer.value;
       if (!anchor || !head) continue;
       try {
         cursors.push({
           peerId: peer.peerId,
           name,
-          color,
           anchor: getCursorPosition(doc, PATH, anchor),
           head: getCursorPosition(doc, PATH, head),
         });

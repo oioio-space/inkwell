@@ -10,8 +10,8 @@ démontré (test, démo enregistrée ou tâche utilisateur chronométrée).
 
 - **Étape 0 — Fondations** : terminée. Squelette go-starter, gates verts, architecture, ADR,
   feuille de route, outillage IA.
-- **Étape 1 — Noyau** : critère de sortie démontré par un test de bout en bout (deux
-  instances réelles, Playwright) — reste la démonstration sur deux machines du LAN.
+- **Étape 1 — Noyau** : terminée — critère de sortie démontré en local par un test de bout
+  en bout (deux instances réelles, Playwright) et `mise run app:duo` (deux fenêtres).
   Plan : [docs/plans/2026-10-25-etape-1-noyau.md](docs/plans/2026-10-25-etape-1-noyau.md).
 
 ## Étape 0 — Fondations ✅
@@ -22,7 +22,7 @@ démontré (test, démo enregistrée ou tâche utilisateur chronométrée).
 - [x] Glossaire, principes UX, principes d'ingénierie (règle), questions ouvertes
 - [x] gopls MCP (`.mcp.json`), skill projet `inkwell-stack`, Dependabot
 
-## Étape 1 — Noyau
+## Étape 1 — Noyau ✅
 
 > Sortie : **deux personnes tapent dans le même fichier**, curseurs visibles.
 
@@ -34,7 +34,8 @@ démontré (test, démo enregistrée ou tâche utilisateur chronométrée).
 - [x] Undo local par opérations inverses validé (test unitaire + e2e)
 - [x] Simulation de convergence (ADR 0011) : 3 dépôts réels, coupures de lien à graine, 20 graines
 - [x] CI : GTK4, `fe:check`, build Linux, e2e Playwright/WebKit (deux instances en mode serveur)
-- [ ] Démonstration sur deux machines du LAN (`mise run app:build`, Inviter / Rejoindre)
+- [x] Démonstration locale à deux instances (`mise run e2e` automatisé, `mise run app:duo` à la main) —
+  le projet se teste sur une seule machine ; « deux réseaux » à l'étape 2 sera simulé localement
 
 ## Étape 2 — Réseau
 

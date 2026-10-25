@@ -42,6 +42,8 @@ class Workspace {
   myId = $state("");
   myName = $state(safeGet(NAME_KEY) ?? "");
   hostAddrs = $state<string[]>([]);
+  /** Display names of present people, by peer id (from presence). */
+  names = $state<Record<string, string>>({});
   error = $state("");
   handle = $state.raw<DocHandle<Doc> | undefined>();
 

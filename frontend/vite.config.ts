@@ -11,7 +11,7 @@ const devCsp = (): Plugin => ({
   transformIndexHtml: (html) =>
     html
       .replace("connect-src 'self'", "connect-src 'self' ws://127.0.0.1:* http://127.0.0.1:*")
-      .replace("style-src 'self'", "style-src 'self' 'unsafe-inline'"),
+      .replace("style-src 'self' 'nonce-__CSP_NONCE__'", "style-src 'self' 'unsafe-inline'"),
 });
 
 export default defineConfig({

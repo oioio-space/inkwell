@@ -33,7 +33,8 @@ func main() {
 			application.NewService(app.NewSession(node)),
 		},
 		Assets: application.AssetOptions{
-			Handler: application.AssetFileServerFS(inkwell.Assets),
+			Handler:    application.AssetFileServerFS(inkwell.Assets),
+			Middleware: app.CSPNonce(),
 		},
 		// Used only by `-tags server` builds (headless end-to-end tests): bound to
 		// loopback, port from INKWELL_SERVER_PORT.

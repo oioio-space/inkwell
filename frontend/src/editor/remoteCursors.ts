@@ -1,11 +1,11 @@
 import { type Extension, RangeSetBuilder, StateEffect, StateField } from "@codemirror/state";
 import { Decoration, type DecorationSet, EditorView, WidgetType } from "@codemirror/view";
+import { PERSON_COLORS, personIndex } from "../ui/people";
 
 /** Where another person's cursor is, already resolved to document offsets. */
 export interface RemoteCursor {
   peerId: string;
   name: string;
-  color: string;
   anchor: number;
   head: number;
 }
@@ -39,19 +39,19 @@ export const remoteCursorField = StateField.define<RemoteCursor[]>({
 class CaretWidget extends WidgetType {
   constructor(
     readonly name: string,
-    readonly color: string,
+    readonly slot: number,
   ) {
     super();
   }
   override eq(other: CaretWidget): boolean {
-    return other.name === this.name && other.color === this.color;
+    return other.name === this.name && other.slot === this.slot;
   }
   toDOM(): HTMLElement {
     const caret = document.createElement("span");
-    caret.className = "cm-remote-caret";
+    // Classes, not style attributes: the CSP forbids inline style attributes.
+    caret.className = `cm-remote-caret cm-who-${this.slot}`;
     // Decoration only: screen readers must read the document, not people's names in it.
     caret.setAttribute("aria-hidden", "true");
-    caret.style.setProperty("--who", this.color);
     const label = document.createElement("span");
     label.className = "cm-remote-name";
     label.textContent = this.name; // the name is always shown: colour is never the only cue
@@ -63,22 +63,20 @@ class CaretWidget extends WidgetType {
 const decorations = EditorView.decorations.compute([remoteCursorField], (state) => {
   const marks: { from: number; to: number; deco: Decoration }[] = [];
   for (const c of state.field(remoteCursorField)) {
+    const slot = personIndex(c.peerId);
     const from = Math.min(c.anchor, c.head);
     const to = Math.max(c.anchor, c.head);
     if (from < to) {
       marks.push({
         from,
         to,
-        deco: Decoration.mark({
-          class: "cm-remote-selection",
-          attributes: { style: `--who: ${c.color}` },
-        }),
+        deco: Decoration.mark({ class: `cm-remote-selection cm-who-${slot}` }),
       });
     }
     marks.push({
       from: c.head,
       to: c.head,
-      deco: Decoration.widget({ widget: new CaretWidget(c.name, c.color), side: 1 }),
+      deco: Decoration.widget({ widget: new CaretWidget(c.name, slot), side: 1 }),
     });
   }
   marks.sort((a, b) => a.from - b.from || a.to - b.to);
@@ -87,7 +85,12 @@ const decorations = EditorView.decorations.compute([remoteCursorField], (state) 
   return builder.finish() as DecorationSet;
 });
 
+const slots = Object.fromEntries(
+  PERSON_COLORS.map((color, i) => [`.cm-who-${i + 1}`, { "--who": color }]),
+);
+
 const theme = EditorView.baseTheme({
+  ...slots,
   ".cm-remote-selection": { backgroundColor: "color-mix(in srgb, var(--who) 25%, transparent)" },
   ".cm-remote-caret": {
     position: "relative",

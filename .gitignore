@@ -1,5 +1,5 @@
 # Build / release
-dist/
+/dist/
 # Root-anchored so it ignores only a top-level `go build` artifact, not cmd/inkwell/.
 /inkwell
 *.exe

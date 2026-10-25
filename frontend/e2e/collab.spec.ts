@@ -20,8 +20,16 @@ async function rename(p: Page, name: string) {
 test("two people type in the same file, see each other, and undo only their own text", async ({
   browser,
 }) => {
-  const alice = await (await browser.newContext({ locale: "fr-FR" })).newPage();
-  const bob = await (await browser.newContext({ locale: "fr-FR" })).newPage();
+  const alice = await (
+    await browser.newContext({ locale: "fr-FR", viewport: { width: 1100, height: 640 } })
+  ).newPage();
+  const bob = await (
+    await browser.newContext({
+      locale: "fr-FR",
+      viewport: { width: 1100, height: 640 },
+      colorScheme: "dark",
+    })
+  ).newPage();
   await alice.goto("http://127.0.0.1:18081/");
   await bob.goto("http://127.0.0.1:18082/");
   await expect(editor(alice)).toBeVisible();
@@ -54,6 +62,10 @@ test("two people type in the same file, see each other, and undo only their own 
   // Each sees the other's named caret.
   await expect(alice.locator(".cm-remote-name", { hasText: "Bob" })).toBeVisible();
   await expect(bob.locator(".cm-remote-name", { hasText: "Alice" })).toBeVisible();
+
+  // Visual record of the collaborative state (kept as test artifacts).
+  await alice.screenshot({ path: "test-results/alice.png" });
+  await bob.screenshot({ path: "test-results/bob.png" });
 
   // Bob's undo removes only Bob's words, everywhere.
   await bob.keyboard.press("ControlOrMeta+z");
