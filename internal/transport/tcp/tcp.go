@@ -9,7 +9,7 @@
 // currently 1) | peer ID, sent by both sides. A peer is announced with a
 // PeerUp only once its handshake is valid, and with exactly one PeerDown when
 // its link is lost. Frames are a 4-byte big-endian length followed by the
-// payload (see [WriteFrame] and [ReadFrame]), bounded by [transport.MaxFrame].
+// payload (see [frame.Write] and [frame.Read]), bounded by [transport.MaxFrame].
 //
 // When two peers connect to each other at the same time, both connections
 // complete and each side keeps the one initiated by the smaller PeerID. The
@@ -38,6 +38,7 @@ import (
 	"time"
 
 	"github.com/oioio-space/inkwell/internal/transport"
+	"github.com/oioio-space/inkwell/internal/transport/frame"
 )
 
 const (
@@ -133,7 +134,7 @@ type queued struct {
 type Node struct {
 	done   chan struct{} // closed by Close
 	wake   chan struct{} // capacity 1: "the queue may be non-empty"
-	budget *budget
+	budget *frame.Budget
 	peers  map[transport.PeerID]*peerConns
 	raw    map[net.Conn]struct{} // every open connection, handshaken or not
 	local  transport.PeerID
@@ -168,7 +169,7 @@ func New(local transport.PeerID, o Options) *Node {
 		opts:   o,
 		done:   make(chan struct{}),
 		wake:   make(chan struct{}, 1),
-		budget: newBudget(o.MaxBufferedBytes),
+		budget: frame.NewBudget(o.MaxBufferedBytes),
 		peers:  make(map[transport.PeerID]*peerConns),
 		raw:    make(map[net.Conn]struct{}),
 	}
@@ -321,10 +322,10 @@ func (n *Node) handshake(ctx context.Context, nc net.Conn) (transport.PeerID, er
 
 	hello := append([]byte(protoMagic), protoVersion)
 	hello = append(hello, n.local...)
-	if err := WriteFrame(nc, hello); err != nil {
+	if err := frame.Write(nc, hello); err != nil {
 		return "", fmt.Errorf("%w: %w", errHandshake, err)
 	}
-	got, err := ReadFrame(nc, maxHello)
+	got, err := frame.Read(nc, maxHello)
 	if err != nil {
 		return "", fmt.Errorf("%w: %w", errHandshake, err)
 	}
@@ -448,23 +449,23 @@ func (n *Node) readLoop(c *conn) {
 	}()
 	for {
 		var cost int
-		payload, err := readFrame(c.nc, transport.MaxFrame, func(size int) error {
+		payload, err := frame.ReadReserve(c.nc, transport.MaxFrame, func(size int) error {
 			cost = min(size+msgOverhead, n.opts.MaxBufferedBytes)
-			if !n.budget.acquire(cost) {
+			if !n.budget.Acquire(cost) {
 				cost = 0
 				return transport.ErrClosed
 			}
 			return nil
 		})
 		if err != nil {
-			n.budget.release(cost)
+			n.budget.Release(cost)
 			return
 		}
 		n.mu.Lock()
 		if ps := n.peers[c.peer]; ps != nil && ps.link == c && !n.closed {
 			n.pushLocked(transport.Event{Kind: transport.Message, Peer: c.peer, Payload: payload}, cost)
 		} else {
-			n.budget.release(cost)
+			n.budget.Release(cost)
 		}
 		n.mu.Unlock()
 	}
@@ -512,7 +513,7 @@ func (n *Node) Send(ctx context.Context, to transport.PeerID, payload []byte) er
 		return fmt.Errorf("tcp: send: %w", err)
 	}
 	stop := context.AfterFunc(ctx, func() { _ = c.nc.SetWriteDeadline(time.Now()) })
-	err := WriteFrame(c.nc, payload)
+	err := frame.Write(c.nc, payload)
 	stop()
 	if err != nil {
 		_ = c.nc.Close()
@@ -538,7 +539,7 @@ func (n *Node) Recv(ctx context.Context) (transport.Event, error) {
 			n.queue[0] = queued{}
 			n.queue = n.queue[1:]
 			n.mu.Unlock()
-			n.budget.release(q.cost)
+			n.budget.Release(q.cost)
 			return q.ev, nil
 		}
 		n.mu.Unlock()
@@ -571,7 +572,7 @@ func (n *Node) Close() error {
 	if !n.closed {
 		n.closed = true
 		close(n.done)
-		n.budget.close()
+		n.budget.Close()
 		n.queue = nil
 		for _, ln := range n.lns {
 			_ = ln.Close()

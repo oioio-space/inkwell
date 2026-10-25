@@ -55,28 +55,3 @@ func TestAcceptLoopStopsOnContext(t *testing.T) {
 		t.Fatal(err)
 	}
 }
-
-func TestBudget(t *testing.T) {
-	b := newBudget(100)
-	if !b.acquire(60) {
-		t.Fatal("acquire(60) failed")
-	}
-	got := make(chan bool)
-	go func() { got <- b.acquire(60) }()
-	select {
-	case <-got:
-		t.Fatal("acquire(60) returned before release")
-	case <-time.After(50 * time.Millisecond):
-	}
-	b.release(60)
-	if !<-got {
-		t.Error("acquire(60) failed after release")
-	}
-	go func() { got <- b.acquire(100) }()
-	time.Sleep(20 * time.Millisecond)
-	b.close()
-	if <-got {
-		t.Error("acquire succeeded on a closed budget")
-	}
-	b.release(0)
-}

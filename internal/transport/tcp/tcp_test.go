@@ -7,13 +7,17 @@ import (
 	"net"
 	"regexp"
 	"slices"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/google/go-cmp/cmp"
+	"go.uber.org/goleak"
 
 	"github.com/oioio-space/inkwell/internal/transport"
+	"github.com/oioio-space/inkwell/internal/transport/frame"
 	"github.com/oioio-space/inkwell/internal/transport/tcp"
+	"github.com/oioio-space/inkwell/internal/transport/transporttest"
 )
 
 const (
@@ -33,6 +37,8 @@ func newNode(t *testing.T, id transport.PeerID, o tcp.Options) (*tcp.Node, strin
 	}
 	return n, addr.String()
 }
+
+func TestMain(m *testing.M) { goleak.VerifyTestMain(m) }
 
 func recv(t *testing.T, n transport.Transport) transport.Event {
 	t.Helper()
@@ -57,68 +63,10 @@ func expectQuiet(t *testing.T, n transport.Transport) {
 
 func hello(id string) []byte { return append([]byte("INKW\x01"), id...) }
 
-func TestTwoNodesExchange(t *testing.T) {
+func TestOperationsAfterClose(t *testing.T) {
 	a, _ := newNode(t, "a", tcp.Options{})
-	b, addrB := newNode(t, "b", tcp.Options{})
-	peer, err := a.Dial(t.Context(), addrB)
-	if err != nil || peer != "b" {
-		t.Fatalf("Dial() = %q, %v; want b", peer, err)
-	}
-	if got, want := recv(t, a), (transport.Event{Kind: transport.PeerUp, Peer: "b"}); !cmp.Equal(got, want) {
-		t.Errorf("a first event: %v", cmp.Diff(want, got))
-	}
-	if got, want := recv(t, b), (transport.Event{Kind: transport.PeerUp, Peer: "a"}); !cmp.Equal(got, want) {
-		t.Errorf("b first event: %v", cmp.Diff(want, got))
-	}
-	if got, want := a.Peers(), []transport.PeerID{"b"}; !slices.Equal(got, want) {
-		t.Errorf("a.Peers() = %v, want %v", got, want)
-	}
-
-	big := make([]byte, 1<<20)
-	for i := range big {
-		big[i] = byte(i)
-	}
-	for _, p := range [][]byte{[]byte("hello"), {}, big} {
-		if err := a.Send(t.Context(), "b", p); err != nil {
-			t.Fatalf("Send(%d bytes): %v", len(p), err)
-		}
-		got := recv(t, b)
-		if got.Kind != transport.Message || got.Peer != "a" || !slices.Equal(got.Payload, p) {
-			t.Errorf("b got %v from %s with %d bytes, want Message from a with %d bytes", got.Kind, got.Peer, len(got.Payload), len(p))
-		}
-	}
-	if err := b.Send(t.Context(), "a", []byte("back")); err != nil {
-		t.Fatalf("Send back: %v", err)
-	}
-	if got := recv(t, a); string(got.Payload) != "back" || got.Peer != "b" {
-		t.Errorf("a got %q from %s, want back from b", got.Payload, got.Peer)
-	}
-}
-
-func TestSendErrors(t *testing.T) {
-	a, _ := newNode(t, "a", tcp.Options{})
-	if err := a.Send(t.Context(), "nobody", nil); !errors.Is(err, transport.ErrUnknownPeer) {
-		t.Errorf("Send(unknown) = %v, want ErrUnknownPeer", err)
-	}
-	if err := a.Send(t.Context(), "nobody", make([]byte, transport.MaxFrame+1)); !errors.Is(err, transport.ErrFrameTooLarge) {
-		t.Errorf("Send(too large) = %v, want ErrFrameTooLarge", err)
-	}
-	ctx, cancel := context.WithCancel(t.Context())
-	cancel()
-	if err := a.Send(ctx, "nobody", nil); !errors.Is(err, context.Canceled) {
-		t.Errorf("Send(canceled) = %v, want context.Canceled", err)
-	}
 	if err := a.Close(); err != nil {
 		t.Fatalf("Close: %v", err)
-	}
-	if err := a.Close(); err != nil {
-		t.Errorf("second Close: %v", err)
-	}
-	if err := a.Send(t.Context(), "b", nil); !errors.Is(err, transport.ErrClosed) {
-		t.Errorf("Send after Close = %v, want ErrClosed", err)
-	}
-	if _, err := a.Recv(t.Context()); !errors.Is(err, transport.ErrClosed) {
-		t.Errorf("Recv after Close = %v, want ErrClosed", err)
 	}
 	if _, err := a.Dial(t.Context(), "127.0.0.1:1"); !errors.Is(err, transport.ErrClosed) {
 		t.Errorf("Dial after Close = %v, want ErrClosed", err)
@@ -128,23 +76,12 @@ func TestSendErrors(t *testing.T) {
 	}
 }
 
-func TestCloseNotifiesPeer(t *testing.T) {
+func TestSendCanceledContext(t *testing.T) {
 	a, _ := newNode(t, "a", tcp.Options{})
-	b, addrB := newNode(t, "b", tcp.Options{})
-	if _, err := a.Dial(t.Context(), addrB); err != nil {
-		t.Fatal(err)
-	}
-	recv(t, a)
-	recv(t, b)
-	if err := a.Close(); err != nil {
-		t.Fatal(err)
-	}
-	if got, want := recv(t, b), (transport.Event{Kind: transport.PeerDown, Peer: "a"}); !cmp.Equal(got, want) {
-		t.Errorf("b event after a.Close: %v", cmp.Diff(want, got))
-	}
-	expectQuiet(t, b)
-	if got := b.Peers(); len(got) != 0 {
-		t.Errorf("b.Peers() = %v, want none", got)
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	if err := a.Send(ctx, "nobody", nil); !errors.Is(err, context.Canceled) {
+		t.Errorf("Send(canceled) = %v, want context.Canceled", err)
 	}
 }
 
@@ -159,7 +96,7 @@ func TestHandshakeRejectsSelf(t *testing.T) {
 }
 
 func TestHandshakeRejectsBadHello(t *testing.T) {
-	for name, frame := range map[string][]byte{
+	for name, hs := range map[string][]byte{
 		"bad magic":     append([]byte("XXXX\x01"), "peer"...),
 		"bad version":   append([]byte("INKW\x02"), "peer"...),
 		"empty peer":    []byte("INKW\x01"),
@@ -174,13 +111,13 @@ func TestHandshakeRejectsBadHello(t *testing.T) {
 				t.Fatal(err)
 			}
 			defer func() { _ = nc.Close() }()
-			if err := tcp.WriteFrame(nc, frame); err != nil {
+			if err := frame.Write(nc, hs); err != nil {
 				t.Fatal(err)
 			}
 			_ = nc.SetReadDeadline(time.Now().Add(wait))
 			// a answers with its own hello then hangs up; either way the read ends in an error.
 			for {
-				if _, err := tcp.ReadFrame(nc, 1<<10); err != nil {
+				if _, err := frame.Read(nc, 1<<10); err != nil {
 					break
 				}
 			}
@@ -199,7 +136,7 @@ func TestHandshakeTimeout(t *testing.T) {
 	_ = nc.SetReadDeadline(time.Now().Add(wait))
 	start := time.Now()
 	for {
-		if _, err := tcp.ReadFrame(nc, 1<<10); err != nil {
+		if _, err := frame.Read(nc, 1<<10); err != nil {
 			if ne, ok := errors.AsType[net.Error](err); ok && ne.Timeout() {
 				t.Fatalf("a did not hang up on a mute peer: %v", err)
 			}
@@ -336,10 +273,10 @@ func TestPeerDropMidFrameEmitsSinglePeerDown(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = nc.Close() }()
-	if err := tcp.WriteFrame(nc, hello("raw")); err != nil {
+	if err := frame.Write(nc, hello("raw")); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := tcp.ReadFrame(nc, 1<<10); err != nil {
+	if _, err := frame.Read(nc, 1<<10); err != nil {
 		t.Fatal(err)
 	}
 	if got, want := recv(t, a), (transport.Event{Kind: transport.PeerUp, Peer: "raw"}); !cmp.Equal(got, want) {
@@ -366,8 +303,8 @@ func TestOversizeFrameDropsPeer(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = nc.Close() }()
-	_ = tcp.WriteFrame(nc, hello("raw"))
-	_, _ = tcp.ReadFrame(nc, 1<<10)
+	_ = frame.Write(nc, hello("raw"))
+	_, _ = frame.Read(nc, 1<<10)
 	recv(t, a) // PeerUp
 	if _, err := nc.Write([]byte{0xff, 0xff, 0xff, 0xff}); err != nil {
 		t.Fatal(err)
@@ -397,15 +334,6 @@ func TestSendToDeadPeerFailsAndDropsLink(t *testing.T) {
 		t.Errorf("a event = %v %s, want PeerDown b", got.Kind, got.Peer)
 	}
 	expectQuiet(t, a)
-}
-
-func TestRecvHonorsContext(t *testing.T) {
-	a, _ := newNode(t, "a", tcp.Options{})
-	ctx, cancel := context.WithTimeout(t.Context(), 20*time.Millisecond)
-	defer cancel()
-	if _, err := a.Recv(ctx); !errors.Is(err, context.DeadlineExceeded) {
-		t.Errorf("Recv() = %v, want DeadlineExceeded", err)
-	}
 }
 
 func TestListenContextStopsAccepting(t *testing.T) {
@@ -461,49 +389,6 @@ func TestNewPeerID(t *testing.T) {
 	}
 }
 
-func TestBackpressureDoesNotLoseMessages(t *testing.T) {
-	a, _ := newNode(t, "a", tcp.Options{})
-	b, addrB := newNode(t, "b", tcp.Options{})
-	if _, err := a.Dial(t.Context(), addrB); err != nil {
-		t.Fatal(err)
-	}
-	recv(t, a)
-	recv(t, b)
-	const total = 300 // more than the queue bound, sent before b reads any
-	go func() {
-		for i := range total {
-			if err := a.Send(t.Context(), "b", []byte{byte(i), byte(i >> 8)}); err != nil {
-				return
-			}
-		}
-	}()
-	for i := range total {
-		got := recv(t, b)
-		if want := []byte{byte(i), byte(i >> 8)}; !slices.Equal(got.Payload, want) {
-			t.Fatalf("message %d = %v, want %v", i, got.Payload, want)
-		}
-	}
-}
-
-func TestRecvBlockedReturnsErrClosedAfterClose(t *testing.T) {
-	a := tcp.New("a", tcp.Options{})
-	res := make(chan error, 1)
-	go func() {
-		_, err := a.Recv(context.Background())
-		res <- err
-	}()
-	time.Sleep(50 * time.Millisecond)
-	_ = a.Close()
-	select {
-	case err := <-res:
-		if !errors.Is(err, transport.ErrClosed) {
-			t.Errorf("Recv() = %v, want ErrClosed", err)
-		}
-	case <-time.After(wait):
-		t.Fatal("Recv still blocked after Close")
-	}
-}
-
 // rawPeer connects to addr and completes the handshake claiming id.
 func rawPeer(t *testing.T, addr, id string) net.Conn {
 	t.Helper()
@@ -512,10 +397,10 @@ func rawPeer(t *testing.T, addr, id string) net.Conn {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = nc.Close() })
-	if err := tcp.WriteFrame(nc, hello(id)); err != nil {
+	if err := frame.Write(nc, hello(id)); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := tcp.ReadFrame(nc, 1<<10); err != nil {
+	if _, err := frame.Read(nc, 1<<10); err != nil {
 		t.Fatalf("raw handshake as %s: %v", id, err)
 	}
 	return nc
@@ -565,7 +450,7 @@ func TestMaxPeers(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = nc.Close() }()
-	_ = tcp.WriteFrame(nc, hello("p2"))
+	_ = frame.Write(nc, hello("p2"))
 	if !eofWithin(nc, 5*time.Second) {
 		t.Error("connection beyond MaxPeers was kept")
 	}
@@ -612,7 +497,7 @@ func TestLosingConnMessagesAreDroppedAndDisconnectKeepsLink(t *testing.T) {
 	recv(t, a)
 	recv(t, z)
 	evil := rawPeer(t, addrA, "z") // attacker claims to be z
-	if err := tcp.WriteFrame(evil, []byte("evil")); err != nil {
+	if err := frame.Write(evil, []byte("evil")); err != nil {
 		t.Fatal(err)
 	}
 	if err := z.Send(t.Context(), "a", []byte("good")); err != nil {
@@ -664,7 +549,7 @@ func TestStatsCountsFailedHandshakes(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = nc.Close() }()
-	_ = tcp.WriteFrame(nc, []byte("garbage"))
+	_ = frame.Write(nc, []byte("garbage"))
 	eofWithin(nc, 5*time.Second)
 	if s := a.Stats(); s.FailedHandshakes != 1 {
 		t.Errorf("Stats().FailedHandshakes = %d, want 1", s.FailedHandshakes)
@@ -684,8 +569,8 @@ func TestSendCanceledInterruptsWrite(t *testing.T) {
 		if err != nil {
 			return
 		}
-		_ = tcp.WriteFrame(nc, hello("slow"))
-		_, _ = tcp.ReadFrame(nc, 1<<10)
+		_ = frame.Write(nc, hello("slow"))
+		_, _ = frame.Read(nc, 1<<10)
 		accepted <- nc
 	}()
 	if _, err := a.Dial(t.Context(), ln.Addr().String()); err != nil {
@@ -748,4 +633,80 @@ func TestRedialAlreadyLinkedIsIdempotent(t *testing.T) {
 	if s := a.Stats(); s.Replaced != 0 {
 		t.Errorf("a.Stats().Replaced = %d, want 0", s.Replaced)
 	}
+}
+
+// cutProxy forwards TCP connections to target until Cut closes them all,
+// which loses a link the way a dead network would, without closing a node.
+type cutProxy struct {
+	ln    net.Listener
+	conns map[net.Conn]struct{}
+	wg    sync.WaitGroup
+	mu    sync.Mutex
+}
+
+func newCutProxy(t *testing.T, target string) *cutProxy {
+	t.Helper()
+	ln, err := net.Listen("tcp", loopback)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p := &cutProxy{ln: ln, conns: make(map[net.Conn]struct{})}
+	p.wg.Go(func() {
+		for {
+			down, err := ln.Accept()
+			if err != nil {
+				return
+			}
+			up, err := net.Dial("tcp", target)
+			if err != nil {
+				_ = down.Close()
+				continue
+			}
+			p.mu.Lock()
+			p.conns[down], p.conns[up] = struct{}{}, struct{}{}
+			p.mu.Unlock()
+			p.wg.Go(func() { pipe(down, up) })
+			p.wg.Go(func() { pipe(up, down) })
+		}
+	})
+	t.Cleanup(func() {
+		_ = ln.Close()
+		p.cut()
+		p.wg.Wait()
+	})
+	return p
+}
+
+// pipe copies src to dst, then closes both.
+func pipe(dst, src net.Conn) {
+	_, _ = io.Copy(dst, src)
+	_ = dst.Close()
+	_ = src.Close()
+}
+
+func (p *cutProxy) cut() {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	for c := range p.conns {
+		_ = c.Close()
+	}
+	clear(p.conns)
+}
+
+func TestContract(t *testing.T) {
+	transporttest.Run(t, func(t *testing.T) transporttest.Pair {
+		a, _ := newNode(t, "a", tcp.Options{})
+		b, addrB := newNode(t, "b", tcp.Options{})
+		proxy := newCutProxy(t, addrB)
+		return transporttest.Pair{
+			A: a,
+			B: b,
+			Connect: func(t testing.TB) {
+				if _, err := a.Dial(t.Context(), proxy.ln.Addr().String()); err != nil {
+					t.Errorf("Dial: %v", err)
+				}
+			},
+			Cut: func(testing.TB) { proxy.cut() },
+		}
+	}, transporttest.Options{Ordered: true})
 }
