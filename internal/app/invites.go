@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"os"
 	"slices"
 	"strings"
 	"sync"
@@ -96,7 +95,6 @@ type invites struct {
 	wiring  *Wiring
 	dev     *identity.Device
 	carrier carrier
-	home    *os.Root
 	log     *slog.Logger
 	ctx     context.Context
 	cancel  context.CancelFunc
@@ -119,11 +117,11 @@ type invites struct {
 }
 
 // newInvites starts the invitations of the project of list, stored in store.
-// home is kept open until [invites.close].
-func newInvites(ctx context.Context, node lobbyNode, w *Wiring, dev *identity.Device, home *os.Root, list *trust.List, store *opStore, c carrier, log *slog.Logger) *invites {
+// store is closed by [invites.close].
+func newInvites(ctx context.Context, node lobbyNode, w *Wiring, dev *identity.Device, list *trust.List, store *opStore, c carrier, log *slog.Logger) *invites {
 	ctx, cancel := context.WithCancel(ctx)
 	inv := &invites{
-		node: node, wiring: w, dev: dev, carrier: c, home: home, log: log,
+		node: node, wiring: w, dev: dev, carrier: c, log: log,
 		ctx: ctx, cancel: cancel, now: time.Now, store: store, list: list,
 		machine: identity.MachineName(),
 	}
@@ -350,27 +348,23 @@ func (inv *invites) joiner(name string) invite.Joiner {
 }
 
 // adopt moves this device to the project it joined: it stores its member
-// list, makes it the current one, and gives it to the wiring.
+// list in place of the previous one, and gives it to the wiring.
 func (inv *invites) adopt(j *invite.Joined) error {
 	if j.List.Project() == inv.currentList().Project() {
 		return nil // already there; the member lists converge by themselves
 	}
-	st, err := adoptProject(inv.home, j.List.Project(), j.List.Since(nil))
-	if err != nil {
+	// The genesis op goes first: an interruption leaves a valid, partial list.
+	if err := inv.store.replace(j.List.Since(nil)); err != nil {
 		return fmt.Errorf("join: %w", err)
 	}
-	if err := inv.wiring.SwitchProject(j.List, st.save); err != nil {
-		return errors.Join(fmt.Errorf("join: %w", err), st.close())
+	if err := inv.wiring.SwitchProject(j.List, inv.store.save); err != nil {
+		return fmt.Errorf("join: %w", err)
 	}
 	inv.mu.Lock()
-	old := inv.store
-	inv.store, inv.list = st, j.List
+	inv.list = j.List
 	inv.host = inv.newHost(j.List)
 	inv.hostUntil = time.Time{}
 	inv.mu.Unlock()
-	if err := old.close(); err != nil {
-		inv.log.Warn("closing the previous project", "err", err)
-	}
 	return nil
 }
 
@@ -424,8 +418,5 @@ func (inv *invites) close() error {
 	inv.node.HandleLobby(nil)
 	inv.cancel()
 	inv.wg.Wait()
-	inv.mu.Lock()
-	st := inv.store
-	inv.mu.Unlock()
-	return errors.Join(st.close(), inv.home.Close())
+	return inv.store.close()
 }

@@ -21,4 +21,5 @@ connaître la raison — pas pour le reste. Modèle : [`template.md`](template.m
 | [0012](0012-license-mpl-2.md) | Licence MPL-2.0 | acceptée |
 | [0013](0013-model-routing-token-economy.md) | Routage des modèles : économie de tokens sans perte de qualité | acceptée |
 | [0017](0017-member-list-seniority.md) | Liste de membres : DAG signé, ancienneté stricte (amende 0005) | acceptée |
+| [0018](0018-signed-heads-write-control.md) | Contrôle d'écriture par têtes signées | acceptée |
 | [0020](0020-storage-in-go-store-stream.md) | Stockage en Go par un Stream `store` : KV atomique et vérifié, dossier projet | acceptée |

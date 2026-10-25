@@ -6,6 +6,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"slices"
 	"sync"
 	"testing"
 	"testing/synctest"
@@ -102,7 +103,7 @@ func TestServeAnnouncesExistingPeers(t *testing.T) {
 		done := wait(func() { r.Serve(c) })
 
 		for _, peer := range []transport.PeerID{"b", "c"} {
-			if got := c.next(t); got.Kind != transport.PeerUp || got.Peer != peer {
+			if got := c.next(t); got.Kind != bridge.PeerUp || got.Peer != peer {
 				t.Errorf("announce = %+v, want PeerUp %s", got, peer)
 			}
 		}
@@ -123,12 +124,12 @@ func TestRouterForwardsBothWays(t *testing.T) {
 		synctest.Wait()
 
 		n.Link("a", "b")
-		if got := c.next(t); got.Kind != transport.PeerUp || got.Peer != "b" {
+		if got := c.next(t); got.Kind != bridge.PeerUp || got.Peer != "b" {
 			t.Fatalf("got %+v, want PeerUp b", got)
 		}
 
 		// webview -> peer
-		c.push(mustEncode(t, bridge.Envelope{Kind: transport.Message, Peer: "b", Payload: []byte("to b")}))
+		c.push(mustEncode(t, bridge.Envelope{Kind: bridge.Message, Peer: "b", Payload: []byte("to b")}))
 		ev, err := b.Recv(t.Context())
 		if err != nil {
 			t.Fatal(err)
@@ -147,12 +148,12 @@ func TestRouterForwardsBothWays(t *testing.T) {
 			t.Fatal(err)
 		}
 		got := c.next(t)
-		if got.Kind != transport.Message || got.Peer != "b" || !bytes.Equal(got.Payload, []byte("to js")) {
+		if got.Kind != bridge.Message || got.Peer != "b" || !bytes.Equal(got.Payload, []byte("to js")) {
 			t.Errorf("webview received %+v", got)
 		}
 
 		n.Partition("a", "b")
-		if got := c.next(t); got.Kind != transport.PeerDown || got.Peer != "b" {
+		if got := c.next(t); got.Kind != bridge.PeerDown || got.Peer != "b" {
 			t.Errorf("got %+v, want PeerDown b", got)
 		}
 
@@ -204,18 +205,18 @@ func TestMalformedFrameIsDroppedAndConnStaysOpen(t *testing.T) {
 		r := bridge.NewRouter(a, quietLogger())
 		c := newFakeConn(t)
 		done := wait(func() { r.Serve(c) })
-		if got := c.next(t); got.Kind != transport.PeerUp {
+		if got := c.next(t); got.Kind != bridge.PeerUp {
 			t.Fatalf("got %+v, want PeerUp", got)
 		}
 		if _, err := b.Recv(t.Context()); err != nil { // b's PeerUp
 			t.Fatal(err)
 		}
 
-		c.push([]byte{1, 3})                                                                      // truncated
-		c.push([]byte{2, 3, 1, 'b'})                                                              // unknown version
-		c.push(mustEncode(t, bridge.Envelope{Kind: transport.PeerUp, Peer: "b"}))                 // wrong direction
-		c.push(mustEncode(t, bridge.Envelope{Kind: transport.Message, Peer: "zz", Payload: nil})) // unknown peer
-		c.push(mustEncode(t, bridge.Envelope{Kind: transport.Message, Peer: "b", Payload: []byte("ok")}))
+		c.push([]byte{1, 3})                                                                   // truncated
+		c.push([]byte{2, 3, 1, 'b'})                                                           // unknown version
+		c.push(mustEncode(t, bridge.Envelope{Kind: bridge.PeerUp, Peer: "b"}))                 // wrong direction
+		c.push(mustEncode(t, bridge.Envelope{Kind: bridge.Message, Peer: "zz", Payload: nil})) // unknown peer
+		c.push(mustEncode(t, bridge.Envelope{Kind: bridge.Message, Peer: "b", Payload: []byte("ok")}))
 
 		ev, err := b.Recv(t.Context())
 		if err != nil {
@@ -245,7 +246,7 @@ func TestReattachReplacesConnAndReannounces(t *testing.T) {
 
 		old := newFakeConn(t)
 		oldDone := wait(func() { r.Serve(old) })
-		if got := old.next(t); got.Kind != transport.PeerUp {
+		if got := old.next(t); got.Kind != bridge.PeerUp {
 			t.Fatalf("old: got %+v, want PeerUp", got)
 		}
 		synctest.Wait() // Run has drained a's own PeerUp (sent to old)
@@ -255,7 +256,7 @@ func TestReattachReplacesConnAndReannounces(t *testing.T) {
 
 		fresh := newFakeConn(t)
 		freshDone := wait(func() { r.Serve(fresh) })
-		if got := fresh.next(t); got.Kind != transport.PeerUp || got.Peer != "b" {
+		if got := fresh.next(t); got.Kind != bridge.PeerUp || got.Peer != "b" {
 			t.Fatalf("fresh: got %+v, want PeerUp b", got)
 		}
 
@@ -263,7 +264,7 @@ func TestReattachReplacesConnAndReannounces(t *testing.T) {
 			t.Fatal(err)
 		}
 		var msg bridge.Envelope
-		for msg.Kind != transport.Message {
+		for msg.Kind != bridge.Message {
 			msg = fresh.next(t)
 		}
 		if !bytes.Equal(msg.Payload, []byte("after reload")) {
@@ -352,10 +353,10 @@ func TestServeAnnouncesBeforeRunForwards(t *testing.T) {
 	c := newFakeConn(t)
 	serveDone := wait(func() { r.Serve(c) })
 
-	if got := c.next(t); got.Kind != transport.PeerUp {
+	if got := c.next(t); got.Kind != bridge.PeerUp {
 		t.Errorf("first frame = %+v, want PeerUp", got)
 	}
-	if got := c.next(t); got.Kind != transport.PeerDown {
+	if got := c.next(t); got.Kind != bridge.PeerDown {
 		t.Errorf("second frame = %+v, want PeerDown", got)
 	}
 	cancel()
@@ -405,4 +406,165 @@ func (s *syncBuffer) bytes() []byte {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	return bytes.Clone(s.b.Bytes())
+}
+
+// enforcer is a memnet node that, like the app's wiring, signs attestations
+// and reports envelopes ahead of messages. It records, in order, what the
+// router asked of it.
+type enforcer struct {
+	*memnet.Node
+	mu      sync.Mutex
+	log     []string
+	refuse  error
+	notices []bridge.Envelope
+	feed    chan bridge.Envelope
+}
+
+var (
+	_ bridge.Attester = (*enforcer)(nil)
+	_ bridge.Source   = (*enforcer)(nil)
+)
+
+func (e *enforcer) Attest(_ context.Context, doc string, heads [][bridge.HashSize]byte) error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.log = append(e.log, "attest "+doc+" "+string(rune('0'+len(heads))))
+	return e.refuse
+}
+
+func (e *enforcer) Send(ctx context.Context, to transport.PeerID, p []byte) error {
+	e.mu.Lock()
+	e.log = append(e.log, "send "+string(p))
+	e.mu.Unlock()
+	return e.Node.Send(ctx, to, p)
+}
+
+func (e *enforcer) Notices() []bridge.Envelope { return e.notices }
+
+func (e *enforcer) RecvEnvelope(ctx context.Context) (bridge.Envelope, error) {
+	select {
+	case env := <-e.feed:
+		return env, nil
+	case <-ctx.Done():
+		return bridge.Envelope{}, ctx.Err()
+	}
+}
+
+func (e *enforcer) calls() []string {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return append([]string(nil), e.log...)
+}
+
+func heads1(doc string) []byte {
+	b, err := bridge.EncodeHeads(bridge.Heads{Doc: doc, Heads: [][bridge.HashSize]byte{{1}}})
+	if err != nil {
+		panic(err)
+	}
+	return b
+}
+
+func TestAttestRunsBeforeTheNextFrame(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		n := memnet.New(1, memnet.Faults{})
+		enf := &enforcer{Node: n.Join("a"), feed: make(chan bridge.Envelope, 4)}
+		n.Join("b")
+		n.Link("a", "b")
+		r := bridge.NewRouter(enf, quietLogger())
+		c := newFakeConn(t)
+		done := wait(func() { r.Serve(c) })
+		c.next(t) // PeerUp b
+
+		c.push(mustEncode(t, bridge.Envelope{Kind: bridge.Attest, Peer: "a", Payload: heads1("d1")}))
+		c.push(mustEncode(t, bridge.Envelope{Kind: bridge.Message, Peer: "b", Payload: []byte("sync")}))
+		synctest.Wait()
+
+		want := []string{"attest d1 1", "send sync"}
+		if got := enf.calls(); !slices.Equal(got, want) {
+			t.Errorf("calls = %q, want %q", got, want)
+		}
+		c.close()
+		<-done
+	})
+}
+
+func TestRefusedAttestKeepsServing(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		n := memnet.New(1, memnet.Faults{})
+		enf := &enforcer{Node: n.Join("a"), refuse: errors.New("reader"), feed: make(chan bridge.Envelope)}
+		n.Join("b")
+		n.Link("a", "b")
+		r := bridge.NewRouter(enf, quietLogger())
+		c := newFakeConn(t)
+		done := wait(func() { r.Serve(c) })
+		c.next(t)
+
+		c.push(mustEncode(t, bridge.Envelope{Kind: bridge.Attest, Peer: "a", Payload: heads1("d1")}))
+		c.push(mustEncode(t, bridge.Envelope{Kind: bridge.Message, Peer: "b", Payload: []byte("ephemeral")}))
+		synctest.Wait()
+
+		if got := enf.calls(); !slices.Equal(got, []string{"attest d1 1", "send ephemeral"}) {
+			t.Errorf("calls = %q, want the refused attest then the message", got)
+		}
+		c.close()
+		<-done
+	})
+}
+
+func TestAttestWithoutEnforcementAndWrongDirectionAreDropped(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		n := memnet.New(1, memnet.Faults{})
+		a := n.Join("a")
+		n.Join("b")
+		n.Link("a", "b")
+		r := bridge.NewRouter(a, quietLogger())
+		c := newFakeConn(t)
+		done := wait(func() { r.Serve(c) })
+		c.next(t)
+
+		c.push(mustEncode(t, bridge.Envelope{Kind: bridge.Attest, Peer: "a", Payload: heads1("d1")}))
+		c.push(mustEncode(t, bridge.Envelope{Kind: bridge.Attested, Peer: "b", Payload: heads1("d1")}))
+		c.push(mustEncode(t, bridge.Envelope{Kind: bridge.Revoked, Peer: "b"}))
+		c.push(mustEncode(t, bridge.Envelope{Kind: bridge.Sealed, Peer: "b"}))
+		synctest.Wait()
+		c.close()
+		<-done
+	})
+}
+
+func TestNoticesAndEnvelopesReachTheWebview(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		n := memnet.New(1, memnet.Faults{})
+		enf := &enforcer{Node: n.Join("a"), feed: make(chan bridge.Envelope, 4)}
+		n.Join("b")
+		n.Link("a", "b")
+		past := bridge.Envelope{Kind: bridge.Attested, Peer: "b", Payload: heads1("d1")}
+		enf.notices = []bridge.Envelope{past, {Kind: bridge.Sealed, Peer: "a"}}
+
+		r := bridge.NewRouter(enf, quietLogger())
+		c := newFakeConn(t)
+		ctx, cancel := context.WithCancel(t.Context())
+		runDone := wait(func() { _ = r.Run(ctx) })
+		serveDone := wait(func() { r.Serve(c) })
+
+		// On attach: the peers, then the state.
+		for _, want := range []bridge.Kind{bridge.PeerUp, bridge.Attested, bridge.Sealed} {
+			if got := c.next(t); got.Kind != want {
+				t.Fatalf("on attach got %v, want %v", got.Kind, want)
+			}
+		}
+		// Live envelopes keep their order.
+		enf.feed <- bridge.Envelope{Kind: bridge.Attested, Peer: "b", Payload: heads1("d2")}
+		enf.feed <- bridge.Envelope{Kind: bridge.Message, Peer: "b", Payload: []byte("m")}
+		enf.feed <- bridge.Envelope{Kind: bridge.Revoked, Peer: "b"}
+		for _, want := range []bridge.Kind{bridge.Attested, bridge.Message, bridge.Revoked} {
+			if got := c.next(t); got.Kind != want {
+				t.Fatalf("live got %v, want %v", got.Kind, want)
+			}
+		}
+		cancel()
+		<-runDone
+		c.close()
+		<-serveDone
+	})
 }

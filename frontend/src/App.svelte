@@ -4,6 +4,7 @@ import { t } from "./i18n";
 import Editor from "./ui/Editor.svelte";
 import ExternalChangeToast from "./ui/ExternalChangeToast.svelte";
 import HeaderBar from "./ui/HeaderBar.svelte";
+import SealedBanner from "./ui/SealedBanner.svelte";
 import ShareDialog from "./ui/ShareDialog.svelte";
 import { workspace } from "./workspace/workspace.svelte";
 
@@ -33,6 +34,7 @@ onMount(() => {
 </div>
 <ShareDialog bind:open={sharing} />
 <ExternalChangeToast />
+<SealedBanner />
 
 <style>
   .window {

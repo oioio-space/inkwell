@@ -1,6 +1,13 @@
 import { describe, expect, it } from "vitest";
 import vectors from "../../../internal/bridge/testdata/envelopes.json";
-import { decodeEnvelope, encodeEnvelope, Kind, MalformedEnvelope } from "./envelope";
+import {
+  decodeEnvelope,
+  decodeHeads,
+  encodeEnvelope,
+  encodeHeads,
+  Kind,
+  MalformedEnvelope,
+} from "./envelope";
 
 const hex = (b: Uint8Array) => Array.from(b, (x) => x.toString(16).padStart(2, "0")).join("");
 const unhex = (s: string) => Uint8Array.from(s.match(/../g) ?? [], (h) => Number.parseInt(h, 16));
@@ -22,11 +29,52 @@ describe("envelope golden vectors (shared with Go)", () => {
   }
 });
 
+describe("golden vectors cover every kind", () => {
+  it("has one vector per kind", () => {
+    const kinds = new Set(vectors.map((v) => v.kind));
+    expect([...kinds].sort()).toEqual(Object.keys(Kind).sort());
+  });
+});
+
+describe("heads payload", () => {
+  const h = {
+    doc: "doc1",
+    heads: ["01".repeat(32), "fe".repeat(32)],
+  };
+  it("round-trips and matches the Go vector", () => {
+    const v = vectors.find((x) => x.name === "attest two heads");
+    expect(hex(encodeHeads(h))).toBe(v?.payloadHex);
+    expect(decodeHeads(unhex(v?.payloadHex ?? ""))).toEqual(h);
+  });
+  it("keeps a multi-byte document name", () => {
+    expect(decodeHeads(encodeHeads({ doc: "é", heads: [] })).doc).toBe("é");
+  });
+  const bad: [string, () => unknown][] = [
+    ["empty document", () => encodeHeads({ doc: "", heads: [] })],
+    ["document too long", () => encodeHeads({ doc: "d".repeat(257), heads: [] })],
+    ["65 heads", () => encodeHeads({ doc: "d", heads: Array(65).fill("00".repeat(32)) })],
+    ["head not hex", () => encodeHeads({ doc: "d", heads: ["zz".repeat(32)] })],
+    ["head too short", () => encodeHeads({ doc: "d", heads: ["00"] })],
+    ["truncated", () => decodeHeads(unhex("00"))],
+    ["short head", () => decodeHeads(unhex(`000164${"00".repeat(31)}`))],
+    ["invalid UTF-8", () => decodeHeads(unhex("0001ff"))],
+  ];
+  for (const [name, fn] of bad) {
+    it(`rejects ${name}`, () => {
+      expect(fn).toThrow(MalformedEnvelope);
+    });
+  }
+});
+
 describe("decodeEnvelope rejects", () => {
   const cases: [string, string][] = [
     ["empty", ""],
     ["unknown version", "0203016161"],
-    ["unknown kind", "0109016161"],
+    ["unknown kind", "0108016161"],
+    ["attest without payload", "0104016161"],
+    ["attested with a short head", "0105016100016400"],
+    ["payload on Revoked", "010601616162"],
+    ["payload on Sealed", "010701616162"],
     ["truncated peer", "01030561"],
     ["empty peer", "010300"],
     ["control byte in peer", "0103010a"],

@@ -24,6 +24,8 @@ type Conn interface {
 // Create one with [NewRouter].
 type Router struct {
 	t   transport.Transport
+	src Source   // t, if it reports envelopes beyond transport events
+	att Attester // t, if it controls who may write
 	log *slog.Logger
 	cur *session // attached connection, nil if none
 	lim limiter
@@ -37,9 +39,14 @@ type session struct {
 	mu sync.Mutex
 }
 
-// NewRouter returns a router over t that logs to log.
+// NewRouter returns a router over t that logs to log. If t implements
+// [Source] the router relays its envelopes, and if it implements [Attester]
+// it signs the Attest envelopes of the webview; otherwise those are refused.
 func NewRouter(t transport.Transport, log *slog.Logger) *Router {
-	return &Router{t: t, log: log}
+	r := &Router{t: t, log: log}
+	r.src, _ = t.(Source)
+	r.att, _ = t.(Attester)
+	return r
 }
 
 func (r *Router) current() *session {
@@ -53,14 +60,26 @@ func (r *Router) current() *session {
 // and returns the error that ended it: ctx's, or the transport's.
 func (r *Router) Run(ctx context.Context) error {
 	for {
-		ev, err := r.t.Recv(ctx)
+		e, err := r.recv(ctx)
 		if err != nil {
 			return err
 		}
 		if s := r.current(); s != nil {
-			r.send(s, Envelope{Kind: ev.Kind, Peer: ev.Peer, Payload: ev.Payload})
+			r.send(s, e)
 		}
 	}
+}
+
+// recv returns the next envelope of the transport.
+func (r *Router) recv(ctx context.Context) (Envelope, error) {
+	if r.src != nil {
+		return r.src.RecvEnvelope(ctx)
+	}
+	ev, err := r.t.Recv(ctx)
+	if err != nil {
+		return Envelope{}, err
+	}
+	return Envelope{Kind: Kind(ev.Kind), Peer: ev.Peer, Payload: ev.Payload}, nil
 }
 
 // warn logs a rate-limited warning: at most one per second per msg, with the
@@ -94,8 +113,9 @@ func (r *Router) sendLocked(s *session, e Envelope) {
 }
 
 // Serve attaches c, replacing any previous connection (a page reload), sends
-// it a PeerUp for each currently connected peer, then relays its frames to
-// the transport until c fails or is replaced. Malformed frames and sends to
+// it a PeerUp for each currently connected peer and the current attestations
+// (see [Attester.Notices]), then relays its frames to the transport until c
+// fails or is replaced. Malformed frames and sends to
 // unknown peers are logged, never their payloads, and skipped. Serve detaches
 // c on return unless a newer connection already replaced it.
 func (r *Router) Serve(c Conn) {
@@ -115,7 +135,12 @@ func (r *Router) Serve(c Conn) {
 	}()
 
 	for _, p := range r.t.Peers() {
-		r.sendLocked(s, Envelope{Kind: transport.PeerUp, Peer: p})
+		r.sendLocked(s, Envelope{Kind: PeerUp, Peer: p})
+	}
+	if r.att != nil {
+		for _, e := range r.att.Notices() {
+			r.sendLocked(s, e)
+		}
 	}
 	s.mu.Unlock()
 	for {
@@ -131,12 +156,33 @@ func (r *Router) Serve(c Conn) {
 			r.warn("bridge: dropped frame", "bytes", len(b), "err", err)
 			continue
 		}
-		if e.Kind != transport.Message {
+		switch e.Kind {
+		case Message:
+			if err := r.t.Send(c.Context(), e.Peer, e.Payload); err != nil {
+				r.warn("bridge: send to peer", "peer", e.Peer, "err", err)
+			}
+		case Attest:
+			r.attest(c.Context(), e.Payload)
+		default:
 			r.warn("bridge: dropped frame from webview", "kind", e.Kind)
-			continue
 		}
-		if err := r.t.Send(c.Context(), e.Peer, e.Payload); err != nil {
-			r.warn("bridge: send to peer", "peer", e.Peer, "err", err)
-		}
+	}
+}
+
+// attest has the transport sign the heads in payload, a valid [Heads]
+// encoding. It runs before the next frame is read, so the attestation is
+// gossiped ahead of the repo frame that follows it.
+func (r *Router) attest(ctx context.Context, payload []byte) {
+	h, err := DecodeHeads(payload)
+	if err != nil {
+		r.warn("bridge: dropped attest", "err", err)
+		return
+	}
+	if r.att == nil {
+		r.warn("bridge: attest without enforcement")
+		return
+	}
+	if err := r.att.Attest(ctx, h.Doc, h.Heads); err != nil {
+		r.warn("bridge: attest refused", "err", err)
 	}
 }

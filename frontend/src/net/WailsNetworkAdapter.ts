@@ -1,3 +1,4 @@
+import { next as A } from "@automerge/automerge";
 import {
   type AutomergeUrl,
   isValidAutomergeUrl,
@@ -7,7 +8,15 @@ import {
   type PeerMetadata,
 } from "@automerge/automerge-repo";
 import { decode, encode } from "cbor-x";
-import { decodeEnvelope, encodeEnvelope, Kind, MalformedEnvelope } from "./envelope";
+import { Coverage } from "./coverage";
+import {
+  decodeEnvelope,
+  decodeHeads,
+  encodeEnvelope,
+  encodeHeads,
+  Kind,
+  MalformedEnvelope,
+} from "./envelope";
 
 /**
  * The part of the WebSocket API the adapter uses. The Wails `Stream("net")` object
@@ -43,6 +52,12 @@ export interface AdapterOptions {
  * An automerge-repo NetworkAdapter over the Wails bridge (ADR 0009). Go routes
  * opaque frames between machines; the repo handshake (arrive/welcome) travels
  * inside the payloads, so a peer becomes a candidate only once its repo answers.
+ *
+ * It also enforces who may write (ADR 0018). Before a sync message whose heads
+ * changed it asks Go to sign them (`Attest`, on the same stream, so the order is
+ * kept all the way to the other peers); and it lets a received sync message through
+ * only for the changes that the heads attested by current writers cover (see
+ * {@link Coverage}). What a reader forges therefore never reaches the Repo.
  */
 export class WailsNetworkAdapter extends NetworkAdapter {
   #open: () => SocketLike;
@@ -58,6 +73,13 @@ export class WailsNetworkAdapter extends NetworkAdapter {
     this.#resolveReady = resolve;
   });
   #closed = false;
+  #coverage = new Coverage();
+  /** Heads of the last sync message sent for each document. */
+  #lastHeads = new Map<string, string[]>();
+  /** Heads of the last attestation asked for each document. */
+  #attested = new Map<string, string[]>();
+  #sealed = false;
+  #sealedListeners: (() => void)[] = [];
 
   constructor(open: () => SocketLike, opts: AdapterOptions = {}) {
     super();
@@ -72,6 +94,26 @@ export class WailsNetworkAdapter extends NetworkAdapter {
 
   whenReady(): Promise<void> {
     return this.#readyPromise;
+  }
+
+  /** What write enforcement did so far: changes removed, messages dropped. */
+  get coverageStats(): Readonly<Coverage["stats"]> {
+    return this.#coverage.stats;
+  }
+
+  /**
+   * True once Go reported that the member list is full ("liste de membres saturée —
+   * créez un nouveau projet"): this device signs no more, so edits stop reaching
+   * the others.
+   */
+  get sealed(): boolean {
+    return this.#sealed;
+  }
+
+  /** Calls cb when the member list is reported full (at once if it already was). */
+  onSealed(cb: () => void): void {
+    this.#sealedListeners.push(cb);
+    if (this.#sealed) cb();
   }
 
   /** Calls cb whenever a peer announces its project. */
@@ -97,6 +139,7 @@ export class WailsNetworkAdapter extends NetworkAdapter {
   }
 
   send(message: Message): void {
+    this.#attest(message);
     this.#sendTo(message.targetId, message);
   }
 
@@ -140,12 +183,76 @@ export class WailsNetworkAdapter extends NetworkAdapter {
         this.#sendHandshake(peer, "arrive");
         return;
       case Kind.PeerDown:
+        this.#coverage.forgetPeer(peer);
         this.#projects.delete(peer);
         if (this.#announced.delete(peer)) this.emit("peer-disconnected", { peerId: peer });
         return;
       case Kind.Message:
         this.#receiveMessage(peer, env.payload);
+        return;
+      case Kind.Attested:
+        this.#receiveAttested(peer, env.payload);
+        return;
+      case Kind.Revoked:
+        this.#coverage.revoked(peer);
+        this.#reattest();
+        return;
+      case Kind.Sealed:
+        this.#sealed = true;
+        for (const cb of this.#sealedListeners) cb();
+        return;
     }
+  }
+
+  #receiveAttested(signer: string, payload: Uint8Array): void {
+    try {
+      const { doc, heads } = decodeHeads(payload);
+      this.#coverage.attested(signer, doc, heads);
+    } catch {
+      this.#opts.onDrop?.("undecodable attestation");
+    }
+  }
+
+  /**
+   * Asks Go to sign the heads of the sync message about to go out, unless they are
+   * the ones last attested. Go gossips the attestation before relaying the message.
+   */
+  #attest(message: Message): void {
+    const { type, documentId, data } = message;
+    if ((type !== "sync" && type !== "request") || !documentId || !data) return;
+    let heads: string[];
+    try {
+      heads = [...A.decodeSyncMessage(data).heads].sort();
+    } catch {
+      return; // the other side will not make sense of it either
+    }
+    if (heads.length === 0) return;
+    this.#lastHeads.set(documentId, heads);
+    if (sameHeads(this.#attested.get(documentId), heads)) return;
+    this.#sendAttest(documentId, heads);
+  }
+
+  /** After a revocation every writer vouches again for what it holds. */
+  #reattest(): void {
+    for (const [doc, heads] of this.#lastHeads) this.#sendAttest(doc, heads);
+  }
+
+  #sendAttest(doc: string, heads: string[]): void {
+    const socket = this.#socket;
+    if (!socket || !this.peerId) return;
+    let frame: Uint8Array;
+    try {
+      frame = encodeEnvelope({
+        kind: Kind.Attest,
+        peer: this.peerId,
+        payload: encodeHeads({ doc, heads }),
+      });
+    } catch {
+      this.#opts.onDrop?.("heads cannot be attested"); // e.g. more than 64 heads
+      return;
+    }
+    socket.send(frame);
+    this.#attested.set(doc, heads);
   }
 
   #receiveMessage(from: PeerId, payload: Uint8Array): void {
@@ -168,7 +275,12 @@ export class WailsNetworkAdapter extends NetworkAdapter {
         // An arrive is the first thing a peer says after its link came up. From a
         // peer already announced it means that peer started over while the old link
         // looked alive here: let the repo forget its sync state with it.
-        if (this.#announced.delete(from)) this.emit("peer-disconnected", { peerId: from });
+        if (this.#announced.delete(from)) {
+          this.emit("peer-disconnected", { peerId: from });
+          // Go never saw the old link go down, so it gossiped our attestations into
+          // the void: sign again, ahead of the sync messages of the new start.
+          this.#reattest();
+        }
         this.#sendHandshake(from, "welcome");
       }
       this.#announce(from, hs);
@@ -178,7 +290,24 @@ export class WailsNetworkAdapter extends NetworkAdapter {
       this.#opts.onDrop?.("message before handshake or for another peer");
       return;
     }
-    this.emit("message", msg as Message);
+    const checked = this.#enforce(msg as Message);
+    if (checked) this.emit("message", checked);
+  }
+
+  /**
+   * Keeps from a sync message only the changes that current writers' attestations
+   * cover. Other messages (cursors, presence, ...) are not changes: readers may
+   * send them.
+   */
+  #enforce(msg: Message): Message | undefined {
+    if (msg.type !== "sync" && msg.type !== "request") return msg;
+    const data =
+      msg.documentId && msg.data && this.#coverage.filter(msg.documentId, msg.senderId, msg.data);
+    if (!data) {
+      this.#opts.onDrop?.("sync message dropped");
+      return undefined;
+    }
+    return data === msg.data ? msg : { ...msg, data };
   }
 
   #sendHandshake(to: PeerId, type: Handshake["type"]): void {
@@ -207,4 +336,8 @@ export class WailsNetworkAdapter extends NetworkAdapter {
     if (!socket) return;
     socket.send(encodeEnvelope({ kind: Kind.Message, peer: to, payload: encode(value) }));
   }
+}
+
+function sameHeads(a: string[] | undefined, b: string[]): boolean {
+  return a !== undefined && a.length === b.length && a.every((h, i) => h === b[i]);
 }

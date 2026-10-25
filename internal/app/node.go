@@ -11,6 +11,7 @@ import (
 
 	"github.com/oioio-space/inkwell/internal/identity"
 	"github.com/oioio-space/inkwell/internal/invite"
+	"github.com/oioio-space/inkwell/internal/project"
 	"github.com/oioio-space/inkwell/internal/transport"
 	"github.com/oioio-space/inkwell/internal/transport/p2p"
 )
@@ -97,8 +98,9 @@ func startNode(ctx context.Context, dev *identity.Device, o p2p.Options) (*p2p.N
 type Options struct {
 	// Log receives the diagnostics, never payload bytes. Nil discards them.
 	Log *slog.Logger
-	// Title is the title of the project created on the first run.
-	Title string
+	// Project is the open project the node serves; it must stay open until
+	// [Runtime.Close]. It is required.
+	Project *project.Project
 	// RendezvousURL is the Wormhole rendezvous server that carries the short
 	// codes: empty for the public magic-wormhole server, [NoCodes] for none.
 	RendezvousURL string
@@ -128,32 +130,29 @@ type Runtime struct {
 	inv    *invites
 }
 
-// Start starts the node of the device stored in home and wires it to the local
-// project, created with o.Title and this device as its admin on the first run.
-// Only the members of the project can connect, apart from the people who are
-// being invited (see [Session.Invite] and [Session.SetVisible]). The member
-// list of the project is kept in home, and so is the project the device joins.
-// Canceling ctx or calling [Runtime.Close] stops everything; home may be
-// closed once Start returns.
+// Start starts the node of the device stored in home and wires it to the open
+// project o.Project, whose member list gets this device as its admin on the
+// first run. Only the members of the project can connect, apart from the
+// people who are being invited (see [Session.Invite] and [Session.SetVisible]).
+// The member list is kept in the project folder (.inkwell/trust), and so is
+// the project the device joins. Canceling ctx or calling [Runtime.Close] stops
+// everything; home may be closed once Start returns, and o.Project must stay
+// open until Close.
 func Start(ctx context.Context, home *os.Root, o Options) (*Runtime, error) {
 	dev, err := identity.LoadOrCreate(home)
 	if err != nil {
 		return nil, fmt.Errorf("loading identity: %w", err)
 	}
-	list, store, err := openProject(home, dev, o.Title)
+	list, store, err := openTrust(o.Project, dev)
 	if err != nil {
 		return nil, fmt.Errorf("opening project: %w", err)
-	}
-	mine, err := home.OpenRoot(".")
-	if err != nil {
-		return nil, errors.Join(fmt.Errorf("opening identity directory: %w", err), store.close())
 	}
 	adm := NewAdmission(list)
 	no := netOptions(o.Port)
 	no.Admit, no.LAN = adm.Admit, o.LAN
 	node, err := startNode(ctx, dev, no)
 	if err != nil {
-		return nil, errors.Join(err, store.close(), mine.Close())
+		return nil, errors.Join(err, store.close())
 	}
 	log := o.Log
 	if log == nil {
@@ -164,7 +163,7 @@ func Start(ctx context.Context, home *os.Root, o Options) (*Runtime, error) {
 	if o.RendezvousURL != NoCodes {
 		c = invite.Wormhole{RendezvousURL: o.RendezvousURL}
 	}
-	inv := newInvites(ctx, node, w, dev, mine, list, store, c, log)
+	inv := newInvites(ctx, node, w, dev, list, store, c, log)
 	s := NewSession(node)
 	s.inv = inv
 	return &Runtime{Node: node, Session: s, Repo: w.Repo(), wiring: w, inv: inv}, nil

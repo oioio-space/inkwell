@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/oioio-space/inkwell/internal/invite"
+	"github.com/oioio-space/inkwell/internal/project"
 	"github.com/oioio-space/inkwell/internal/transport"
 	"github.com/oioio-space/inkwell/internal/trust"
 )
@@ -45,21 +46,30 @@ func (m *memCarrier) Fetch(_ context.Context, code string) (invite.Ticket, error
 	return t, nil
 }
 
-// startRuntime starts a runtime on a new identity directory. Codes go through c.
-func startRuntime(t *testing.T, c carrier, lan bool) (*Runtime, *os.Root) {
+// dirs are what a runtime keeps on disk: the identity directory and the
+// project folder.
+type dirs struct {
+	home *os.Root
+	proj *project.Project
+}
+
+// startRuntime starts a runtime on a new identity directory and a new project.
+// Codes go through c.
+func startRuntime(t *testing.T, c carrier, lan bool) (*Runtime, dirs) {
 	t.Helper()
 	home, err := os.OpenRoot(t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = home.Close() })
-	rt, err := Start(t.Context(), home, Options{Title: "Mon livre", RendezvousURL: NoCodes, LAN: lan})
+	proj, _ := newProjectFolder(t)
+	rt, err := Start(t.Context(), home, Options{Project: proj, RendezvousURL: NoCodes, LAN: lan})
 	if err != nil {
 		t.Fatal(err)
 	}
 	rt.inv.carrier = c
 	t.Cleanup(func() { _ = rt.Close() })
-	return rt, home
+	return rt, dirs{home, proj}
 }
 
 func (r *Runtime) role(of *Runtime) trust.Role {
@@ -119,7 +129,7 @@ func TestSessionWithoutProject(t *testing.T) {
 
 func TestJoinByTicketText(t *testing.T) {
 	a, _ := startRuntime(t, nil, false)
-	b, bHome := startRuntime(t, nil, false)
+	b, bDirs := startRuntime(t, nil, false)
 
 	inv, err := a.Session.Invite("writer")
 	if err != nil {
@@ -175,7 +185,7 @@ func TestJoinByTicketText(t *testing.T) {
 	if err := b.Close(); err != nil {
 		t.Fatal(err)
 	}
-	again, err := Start(t.Context(), bHome, Options{Title: "autre", RendezvousURL: NoCodes})
+	again, err := Start(t.Context(), bDirs.home, Options{Project: bDirs.proj, RendezvousURL: NoCodes})
 	if err != nil {
 		t.Fatal(err)
 	}

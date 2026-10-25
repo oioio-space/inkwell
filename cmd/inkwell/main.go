@@ -37,9 +37,14 @@ func main() {
 		log.Error("opening identity directory", "err", err)
 		os.Exit(1)
 	}
+	proj, err := openProject()
+	if err != nil {
+		log.Error("opening project", "err", err)
+		os.Exit(1)
+	}
 	rt, err := app.Start(ctx, home, app.Options{
 		Log:           log,
-		Title:         "Inkwell",
+		Project:       proj,
 		Port:          app.DefaultPort,
 		LAN:           os.Getenv(lanEnv) == "1",
 		RendezvousURL: os.Getenv(rendezvousEnv),
@@ -53,11 +58,6 @@ func main() {
 	}
 	router := bridge.NewRouter(rt.Repo, log)
 
-	proj, err := openProject()
-	if err != nil {
-		log.Error("opening project", "err", err)
-		os.Exit(1)
-	}
 	if err := proj.Backup(time.Now(), backupsKept); err != nil {
 		log.Warn("backing up project", "err", err) // not fatal: the store still works
 	}
@@ -82,11 +82,11 @@ func main() {
 		},
 		OnShutdown: func() {
 			cancel()
+			if err := rt.Close(); err != nil { // before the project: it keeps files there
+				log.Warn("closing network", "err", err)
+			}
 			if err := proj.Close(); err != nil {
 				log.Warn("closing project", "err", err)
-			}
-			if err := rt.Close(); err != nil {
-				log.Warn("closing network", "err", err)
 			}
 		},
 	})

@@ -2,20 +2,35 @@ package app
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 
+	"github.com/oioio-space/inkwell/internal/project"
+	"github.com/oioio-space/inkwell/internal/store"
 	"github.com/oioio-space/inkwell/internal/trust"
 )
 
-func TestOpenProjectCreatesOnceAndReloads(t *testing.T) {
-	home, err := os.OpenRoot(t.TempDir())
+func newProjectFolder(t *testing.T) (*project.Project, string) {
+	t.Helper()
+	dir := t.TempDir()
+	base, err := os.OpenRoot(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = home.Close() })
+	t.Cleanup(func() { _ = base.Close() })
+	p, err := project.Create(base, "Mon livre", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = p.Close() })
+	return p, filepath.Join(dir, p.Dir())
+}
+
+func TestOpenTrustCreatesOnceAndReloads(t *testing.T) {
+	proj, folder := newProjectFolder(t)
 	dev, guest := newDevice(t), newDevice(t)
 
-	list, st, err := openProject(home, dev, "Mon livre")
+	list, st, err := openTrust(proj, dev)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -27,14 +42,14 @@ func TestOpenProjectCreatesOnceAndReloads(t *testing.T) {
 		t.Fatal(err)
 	}
 	// A save interrupted before its rename leaves a temporary file behind.
-	if err := writeFileAtomic(st.root, "junk.op.tmp", []byte("partial")); err != nil {
+	if err := store.WriteAtomic(st.root, "junk.op.tmp", []byte("partial"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if err := st.close(); err != nil {
 		t.Fatal(err)
 	}
 
-	again, st2, err := openProject(home, dev, "autre titre")
+	again, st2, err := openTrust(proj, dev)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,64 +61,71 @@ func TestOpenProjectCreatesOnceAndReloads(t *testing.T) {
 	if got := again.Role(dev.Public()); got != trust.RoleAdmin {
 		t.Errorf("creator role = %v, want admin", got)
 	}
-	entries, err := os.ReadDir(home.Name() + "/" + projectsDir)
-	if err != nil || len(entries) != 1 {
-		t.Errorf("projects = %v, %v; want exactly one", entries, err)
+
+	// The ops live in the project folder, and the interrupted save is swept.
+	entries, err := os.ReadDir(filepath.Join(folder, ".inkwell", trustDir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 2 {
+		t.Errorf("trust directory holds %d files, want the 2 ops: %v", len(entries), entries)
+	}
+	info, err := os.Stat(filepath.Join(folder, ".inkwell", trustDir, op.Hash().String()+opExt))
+	if err != nil || info.Mode().Perm() != 0o600 {
+		t.Errorf("op file = %v, %v; want mode 0600", info, err)
 	}
 }
 
-func TestCurrentProjectFollowsAdoption(t *testing.T) {
-	home, err := os.OpenRoot(t.TempDir())
+func TestOpenTrustRejectsForeignOps(t *testing.T) {
+	proj, _ := newProjectFolder(t)
+	dev, other := newDevice(t), newDevice(t)
+	_, st, err := openTrust(proj, dev)
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = home.Close() })
-	dev, admin := newDevice(t), newDevice(t)
-
-	own, st, err := openProject(home, dev, "mine")
+	// An op of another project, dropped into the folder.
+	foreign := newProject(t, other)
+	op, err := foreign.Issue(other, trust.OpAdd, dev.Public(), trust.RoleReader, "")
 	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.save(op); err != nil {
 		t.Fatal(err)
 	}
 	if err := st.close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, st2, err := openTrust(proj, dev); err == nil {
+		_ = st2.close()
+		t.Error("openTrust accepted an op of another project")
+	}
+}
+
+func TestReplaceSwitchesTheStoredProject(t *testing.T) {
+	proj, _ := newProjectFolder(t)
+	dev, admin := newDevice(t), newDevice(t)
+
+	_, st, err := openTrust(proj, dev)
+	if err != nil {
 		t.Fatal(err)
 	}
 	other := newProject(t, admin)
 	if _, err := other.Issue(admin, trust.OpAdd, dev.Public(), trust.RoleWriter, "me"); err != nil {
 		t.Fatal(err)
 	}
-	st, err = adoptProject(home, other.Project(), other.Since(nil))
-	if err != nil {
+	if err := st.replace(other.Since(nil)); err != nil {
 		t.Fatal(err)
 	}
 	if err := st.close(); err != nil {
 		t.Fatal(err)
 	}
 
-	again, st2, err := openProject(home, dev, "ignored")
+	again, st2, err := openTrust(proj, dev)
 	if err != nil {
 		t.Fatal(err)
 	}
+	t.Cleanup(func() { _ = st2.close() })
 	if again.Project() != other.Project() || again.Len() != 2 {
-		t.Errorf("reopened project %v with %d ops, want the adopted %v with 2", again.Project(), again.Len(), other.Project())
-	}
-	if err := st2.close(); err != nil {
-		t.Fatal(err)
-	}
-
-	// A current file that names nothing falls back to the first project by name.
-	if err := writeFileAtomic(home, currentFile, []byte("zz")); err != nil {
-		t.Fatal(err)
-	}
-	want := own.Project()
-	if other.Project().String() < want.String() {
-		want = other.Project()
-	}
-	fallback, st3, err := openProject(home, dev, "ignored")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = st3.close() })
-	if fallback.Project() != want {
-		t.Errorf("fallback project = %v, want %v, the first by name", fallback.Project(), want)
+		t.Errorf("reopened project %v with %d ops, want the replacement %v with 2", again.Project(), again.Len(), other.Project())
 	}
 }

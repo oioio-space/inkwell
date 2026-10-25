@@ -23,5 +23,6 @@
   "error.host": "Impossible d'inviter : {reason}",
   "external.message": "{name} a été modifié en dehors d'Inkwell",
   "external.import": "Importer",
-  "external.ignore": "Ignorer"
+  "external.ignore": "Ignorer",
+  "sealed.message": "Liste de membres saturée — créez un nouveau projet"
 }

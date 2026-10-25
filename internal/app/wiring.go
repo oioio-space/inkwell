@@ -11,6 +11,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/oioio-space/inkwell/internal/bridge"
 	"github.com/oioio-space/inkwell/internal/transport"
 	"github.com/oioio-space/inkwell/internal/transport/mux"
 	"github.com/oioio-space/inkwell/internal/transport/p2p"
@@ -57,6 +58,14 @@ func (a *Admission) Admit(id transport.PeerID) bool {
 
 // reset makes list the project whose members are admitted.
 func (a *Admission) reset(list *trust.List) { a.list.Store(list) }
+
+// wasMember reports whether key is, or ever was, the subject of an op of the
+// member list.
+func (a *Admission) wasMember(key ed25519.PublicKey) bool {
+	return slices.ContainsFunc(a.list.Load().Since(nil), func(op trust.Op) bool {
+		return op.Subject.Equal(key)
+	})
+}
 
 // dialTargets returns the peers worth keeping connected: the other members.
 func (a *Admission) dialTargets(self transport.PeerID) map[transport.PeerID][]string {
@@ -108,7 +117,7 @@ type WiringOptions struct {
 type Wiring struct {
 	raw      transport.Transport
 	signer   trust.Signer
-	list     *trust.List
+	lst      atomic.Pointer[trust.List] // replaced by SwitchProject
 	adm      *Admission
 	sync     *trust.Sync
 	att      attestStore
@@ -120,17 +129,20 @@ type Wiring struct {
 	repoCh   transport.Transport
 	trustCh  transport.Transport
 	attestCh transport.Transport
-	out      chan transport.Event // events for the bridge
+	out      chan bridge.Envelope // events for the bridge
 	cmds     chan func()          // run by the goroutine
 	stopped  chan struct{}        // closed when the goroutine has ended
 	up       map[transport.PeerID]struct{}
 	active   map[transport.PeerID]struct{} // under mu; written by the goroutine only
 	saved    map[trust.Hash]struct{}
+	pending  map[string][]trust.Hash // heads to sign once this device is known to be a writer
 	closeErr error
 	tick     time.Duration
 	nOps     int
 	mu       sync.Mutex
-	once     sync.Once
+	// sealedSent is set once the webview was told the list is sealed.
+	sealedSent bool
+	once       sync.Once
 }
 
 // Wire starts a Wiring over t, whose events it consumes: t must have no other
@@ -141,7 +153,6 @@ func Wire(ctx context.Context, t transport.Transport, s trust.Signer, list *trus
 	w := &Wiring{
 		raw:      t,
 		signer:   s,
-		list:     list,
 		adm:      adm,
 		sync:     trust.NewSync(list),
 		att:      attestStore{latest: make(map[attestKey]trust.Attestation)},
@@ -153,14 +164,16 @@ func Wire(ctx context.Context, t transport.Transport, s trust.Signer, list *trus
 		repoCh:   subs[chanRepo],
 		trustCh:  subs[chanTrust],
 		attestCh: subs[chanAttest],
-		out:      make(chan transport.Event, repoBuffer),
+		out:      make(chan bridge.Envelope, repoBuffer),
 		cmds:     make(chan func()),
 		stopped:  make(chan struct{}),
 		up:       make(map[transport.PeerID]struct{}),
 		active:   make(map[transport.PeerID]struct{}),
 		saved:    make(map[trust.Hash]struct{}),
+		pending:  make(map[string][]trust.Hash),
 		tick:     o.TickEvery,
 	}
+	w.lst.Store(list)
 	if w.log == nil {
 		w.log = slog.New(slog.DiscardHandler)
 	}
@@ -173,6 +186,9 @@ func Wire(ctx context.Context, t transport.Transport, s trust.Signer, list *trus
 	go w.run()
 	return w
 }
+
+// list returns the member list of the project.
+func (w *Wiring) list() *trust.List { return w.lst.Load() }
 
 // Repo returns the transport for the bridge: the repo channel, restricted to
 // the members. A peer is announced with a PeerUp once it is a member and is
@@ -213,7 +229,7 @@ func (w *Wiring) IssueWith(tmpl trust.Op) (trust.Op, error) {
 		err error
 	)
 	if derr := w.do(func() {
-		if op, err = w.list.IssueWith(w.signer, tmpl); err != nil {
+		if op, err = w.list().IssueWith(w.signer, tmpl); err != nil {
 			return
 		}
 		w.sendTrust(w.sync.Broadcast(op))
@@ -233,13 +249,16 @@ func (w *Wiring) SwitchProject(list *trust.List, save func(trust.Op) error) erro
 		for _, p := range w.activePeers() {
 			w.deactivate(p)
 		}
-		w.list, w.save = list, save
+		w.lst.Store(list)
+		w.save = save
 		w.sync = trust.NewSync(list)
-		w.att = attestStore{latest: make(map[attestKey]trust.Attestation)}
+		w.att.reset()
 		w.saved = make(map[trust.Hash]struct{})
 		for _, op := range list.Since(nil) {
 			w.saved[op.Hash()] = struct{}{}
 		}
+		clear(w.pending)
+		w.sealedSent = false
 		w.nOps = 0
 		w.adm.reset(list)
 		w.afterChange()
@@ -350,9 +369,9 @@ func (w *Wiring) onTrust(ev transport.Event) {
 // afterChange saves the new ops of the member list, forgets what became
 // invalid and keeps the members connected.
 func (w *Wiring) afterChange() {
-	if n := w.list.Len(); n != w.nOps {
+	if n := w.list().Len(); n != w.nOps {
 		w.nOps = n
-		ops := w.list.Since(nil)
+		ops := w.list().Since(nil)
 		for _, op := range ops {
 			h := op.Hash()
 			if _, done := w.saved[h]; done || w.save == nil {
@@ -364,11 +383,19 @@ func (w *Wiring) afterChange() {
 			}
 			w.saved[h] = struct{}{}
 		}
-		w.att.prune(func(a trust.Attestation) bool { return w.list.Verify(a) == nil })
+		for _, key := range w.att.prune(func(a trust.Attestation) bool { return w.list().Verify(a) == nil }) {
+			if id := p2p.IDFromKey(ed25519.PublicKey(key)); id != "" {
+				w.notify(bridge.Envelope{Kind: bridge.Revoked, Peer: id})
+			}
+		}
 		if wt, ok := w.raw.(Wanter); ok {
 			wt.Want(w.adm.dialTargets(w.raw.Local()))
 		}
 	}
+	if w.list().Sealed() {
+		w.announceSealed()
+	}
+	w.flushPending()
 	w.reconcile()
 }
 
@@ -435,8 +462,15 @@ func (w *Wiring) emit(ev transport.Event) {
 	if w.onEmit != nil {
 		w.onEmit(ev)
 	}
+	w.notify(bridge.Envelope{Kind: bridge.Kind(ev.Kind), Peer: ev.Peer, Payload: ev.Payload})
+}
+
+// notify queues an envelope for the bridge, unless the wiring stops first.
+// Envelopes come out in the order they went in, so an attestation reaches the
+// webview before the frames that follow it on the wire.
+func (w *Wiring) notify(e bridge.Envelope) {
 	select {
-	case w.out <- ev:
+	case w.out <- e:
 	case <-w.ctx.Done():
 	}
 }
@@ -452,7 +486,11 @@ func (w *Wiring) sendTrust(out []trust.Outbound) {
 // repoPort is the [transport.Transport] that [Wiring.Repo] returns.
 type repoPort Wiring
 
-var _ transport.Transport = (*repoPort)(nil)
+var (
+	_ transport.Transport = (*repoPort)(nil)
+	_ bridge.Source       = (*repoPort)(nil)
+	_ bridge.Attester     = (*repoPort)(nil)
+)
 
 func (p *repoPort) Local() transport.PeerID { return p.raw.Local() }
 
@@ -466,19 +504,60 @@ func (p *repoPort) Send(ctx context.Context, to transport.PeerID, payload []byte
 }
 
 func (p *repoPort) Recv(ctx context.Context) (transport.Event, error) {
+	for {
+		e, err := p.RecvEnvelope(ctx)
+		if err != nil {
+			return transport.Event{}, err
+		}
+		if e.Kind <= bridge.Message { // the attestation envelopes are for the bridge only
+			return transport.Event{Kind: transport.Kind(e.Kind), Peer: e.Peer, Payload: e.Payload}, nil
+		}
+	}
+}
+
+// RecvEnvelope is [Wiring.Repo]'s Recv with the bridge's own envelopes:
+// Attested, Revoked and Sealed come out in order with the messages (see
+// [bridge.Source]).
+func (p *repoPort) RecvEnvelope(ctx context.Context) (bridge.Envelope, error) {
 	select {
 	case <-p.stopped:
-		return transport.Event{}, transport.ErrClosed
+		return bridge.Envelope{}, transport.ErrClosed
 	default:
 	}
 	select {
-	case ev := <-p.out:
-		return ev, nil
+	case e := <-p.out:
+		return e, nil
 	case <-p.stopped:
-		return transport.Event{}, transport.ErrClosed
+		return bridge.Envelope{}, transport.ErrClosed
 	case <-ctx.Done():
-		return transport.Event{}, ctx.Err()
+		return bridge.Envelope{}, ctx.Err()
 	}
+}
+
+// Attest signs the heads of doc (see [Wiring.AttestHeads]); it makes the repo
+// transport a [bridge.Attester].
+func (p *repoPort) Attest(_ context.Context, doc string, heads [][bridge.HashSize]byte) error {
+	hs := make([]trust.Hash, len(heads))
+	for i, h := range heads {
+		hs[i] = h
+	}
+	return (*Wiring)(p).AttestHeads(doc, hs)
+}
+
+// Notices returns the attestations held and, if the list is sealed, the
+// Sealed envelope, for a webview that just attached.
+func (p *repoPort) Notices() []bridge.Envelope {
+	w := (*Wiring)(p)
+	var out []bridge.Envelope
+	for _, a := range w.att.all() {
+		if e, ok := attestedEnvelope(a); ok {
+			out = append(out, e)
+		}
+	}
+	if w.list().Sealed() {
+		out = append(out, w.sealedEnvelope())
+	}
+	return out
 }
 
 func (p *repoPort) Close() error { return (*Wiring)(p).Close() }
