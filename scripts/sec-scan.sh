@@ -19,7 +19,8 @@ if [[ "${1:-}" == "--staged" ]]; then
 fi
 
 # gosec: static analysis for insecure Go patterns.
-gosec -quiet ./...
+# Agent worktrees under .claude/ are nested checkouts with work in progress, not this module.
+gosec -quiet -exclude-dir=.claude ./...
 
 # govulncheck: only reports vulnerabilities reachable from this module's code.
 govulncheck ./...
