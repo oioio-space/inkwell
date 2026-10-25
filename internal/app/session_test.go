@@ -1,6 +1,7 @@
 package app_test
 
 import (
+	"context"
 	"crypto/ed25519"
 	"crypto/rand"
 	"net"
@@ -11,6 +12,7 @@ import (
 	"go.uber.org/goleak"
 
 	"github.com/oioio-space/inkwell/internal/app"
+	"github.com/oioio-space/inkwell/internal/transport"
 	"github.com/oioio-space/inkwell/internal/transport/p2p"
 )
 
@@ -82,5 +84,50 @@ func TestStartNodeKeepsIdentity(t *testing.T) {
 	}
 	if ids[0] != ids[1] {
 		t.Errorf("identity changed between runs: %q then %q", ids[0], ids[1])
+	}
+}
+
+// wantRecorder is a Network that records the last Want.
+type wantRecorder struct {
+	app.Network
+	local transport.PeerID
+	want  map[transport.PeerID][]string
+}
+
+func (w *wantRecorder) Local() transport.PeerID { return w.local }
+
+func (w *wantRecorder) Connect(context.Context, transport.PeerID, []string) error { return nil }
+
+func (w *wantRecorder) Want(p map[transport.PeerID][]string) { w.want = p }
+
+func TestStartNodeRelayOnlyNeedsARelay(t *testing.T) {
+	t.Setenv("INKWELL_HOME", t.TempDir())
+	t.Setenv("INKWELL_NET", "relay-only")
+	t.Setenv("INKWELL_RELAYS", "")
+	home, err := app.OpenHome()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = home.Close() })
+	for _, port := range []int{0, app.DefaultPort} {
+		node, err := app.StartNode(t.Context(), home, port)
+		if err == nil {
+			_ = node.Close()
+			t.Errorf("StartNode(port %d) with relay-only and no relay = nil, want an error (no silent direct mode)", port)
+		}
+	}
+}
+
+func TestStartNodeRejectsBadRelay(t *testing.T) {
+	t.Setenv("INKWELL_HOME", t.TempDir())
+	t.Setenv("INKWELL_RELAYS", "not-an-address")
+	home, err := app.OpenHome()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = home.Close() })
+	if node, err := app.StartNode(t.Context(), home, 0); err == nil {
+		_ = node.Close()
+		t.Error("StartNode(bad relay) = nil, want an error")
 	}
 }

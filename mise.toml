@@ -133,7 +133,7 @@ run = "./scripts/rtkx.sh ./scripts/lint.sh --staged"
 
 [tasks."lint:sh"]
 description = "Lint the bash hook scripts with shellcheck"
-run = "shellcheck -x --source-path=SCRIPTDIR .githooks/* .claude/hooks/*.sh .claude/hooks/lib/*.sh scripts/*.sh"
+run = "shellcheck -x --source-path=SCRIPTDIR .githooks/* .claude/hooks/*.sh .claude/hooks/lib/*.sh scripts/*.sh scripts/netsim/*.sh"
 
 [tasks."lint:yaml"]
 description = "Lint YAML config formatting with yamlfmt"
@@ -250,17 +250,30 @@ description = "Build the desktop app for this OS into bin/"
 depends = ["fe:install"]
 run = "wails3 task build"
 
-[tasks."e2e"]
-description = "End-to-end: two real instances (Wails server mode) driven by Playwright/WebKit"
+[tasks."e2e:build"]
+description = "Build what the end-to-end tests run: frontend, bin/inkwell-server, bin/inkwell-relay, the Playwright browser"
 depends = ["fe:install", "fe:bindings"]
 run = """
 (cd frontend && pnpm run build)
 go build -tags server -o bin/inkwell-server ./cmd/inkwell
+CGO_ENABLED=0 go build -o bin/inkwell-relay ./cmd/inkwell-relay
 cd frontend
+pnpm exec playwright install ${CI:+--with-deps} "${INKWELL_E2E_BROWSER:-$([ -n "${CI:-}" ] && echo webkit || echo chromium)}" >/dev/null
+"""
+
+[tasks."e2e"]
+description = "End-to-end: two real instances (Wails server mode) driven by Playwright; includes the relay killed and restarted"
+depends = ["e2e:build"]
+dir = "frontend"
+run = """
 browser="${INKWELL_E2E_BROWSER:-$([ -n "${CI:-}" ] && echo webkit || echo chromium)}"
-pnpm exec playwright install ${CI:+--with-deps} "$browser" >/dev/null
 INKWELL_E2E_BROWSER="$browser" pnpm exec playwright test
 """
+
+[tasks."e2e:netsim"]
+description = "Network simulation (Chromium; set INKWELL_E2E_BROWSER=chromium in CI), no root: two instances behind NATs (cone, symmetric) and a relay in network namespaces (scripts/netsim); skips with the reason when namespaces or nftables are unavailable (fails in CI)"
+depends = ["e2e:build"]
+run = "INKWELL_E2E_BROWSER=chromium ./scripts/netsim/run.sh"
 
 [tasks."app:duo"]
 description = "Run two isolated instances to try collaboration on one machine (Invite in one, paste the invitation in the other)"
