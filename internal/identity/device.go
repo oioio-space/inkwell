@@ -15,14 +15,14 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
+	"runtime"
 	"strings"
 	"unicode"
 )
 
 const (
-	keyFile    = "device.key"
-	keyTmpFile = "device.key.tmp"
-	pemType    = "PRIVATE KEY"
+	keyFile = "device.key"
+	pemType = "PRIVATE KEY"
 
 	maxMachineNameRunes = 40
 	fallbackMachineName = "machine"
@@ -60,7 +60,10 @@ func load(dir *os.Root) (*Device, error) {
 	if !info.Mode().IsRegular() {
 		return nil, fmt.Errorf("identity: %s is not a regular file", keyFile)
 	}
-	if perm := info.Mode().Perm(); perm&0o077 != 0 {
+	// Windows has no Unix permission bits: Go reports a synthetic 0o666 (or
+	// 0o444) for every file, so the check would always reject a valid key.
+	// There the key is protected by the profile directory's ACL instead.
+	if perm := info.Mode().Perm(); runtime.GOOS != "windows" && perm&0o077 != 0 {
 		return nil, fmt.Errorf("identity: %s has mode %04o, want 0600: readable by group or others", keyFile, perm)
 	}
 	if info.Size() > maxKeyFileBytes {
@@ -97,25 +100,33 @@ func create(dir *os.Root) (*Device, error) {
 	}
 	data := pem.EncodeToMemory(&pem.Block{Type: pemType, Bytes: der})
 
-	if err := writeAtomic(dir, data); err != nil {
+	err = install(dir, data)
+	if errors.Is(err, fs.ErrExist) {
+		// Another process created the key first: its key wins, ours is dropped.
+		return load(dir)
+	}
+	if err != nil {
 		return nil, err
 	}
 	return &Device{priv: priv}, nil
 }
 
-// writeAtomic writes data to a temporary file then renames it, so a crash
-// leaves either no key or a complete one.
-func writeAtomic(dir *os.Root, data []byte) (err error) {
-	if rmErr := dir.Remove(keyTmpFile); rmErr != nil && !errors.Is(rmErr, fs.ErrNotExist) {
-		return fmt.Errorf("identity: clear stale %s: %w", keyTmpFile, rmErr)
-	}
-	f, err := dir.OpenFile(keyTmpFile, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
+// install publishes data as device.key if and only if no such file exists,
+// returning an error wrapping [fs.ErrExist] otherwise. The content is written
+// and synced to a uniquely named temporary file first, then hard-linked to
+// the final name: link(2) fails atomically when the target exists (unlike
+// rename, which silently replaces it) and the key becomes visible only when
+// complete, so no reader or concurrent creator ever sees a partial or
+// overwritten key. The temporary name is removed in all cases.
+func install(dir *os.Root, data []byte) (err error) {
+	tmp := keyFile + "." + rand.Text() + ".tmp"
+	f, err := dir.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
-		return fmt.Errorf("identity: create %s: %w", keyTmpFile, err)
+		return fmt.Errorf("identity: create %s: %w", tmp, err)
 	}
 	defer func() {
-		if err != nil {
-			_ = dir.Remove(keyTmpFile)
+		if rmErr := dir.Remove(tmp); rmErr != nil && err == nil {
+			err = fmt.Errorf("identity: remove %s: %w", tmp, rmErr)
 		}
 	}()
 	if _, err = f.Write(data); err == nil {
@@ -125,10 +136,30 @@ func writeAtomic(dir *os.Root, data []byte) (err error) {
 		err = cerr
 	}
 	if err != nil {
-		return fmt.Errorf("identity: write %s: %w", keyTmpFile, err)
+		return fmt.Errorf("identity: write %s: %w", tmp, err)
 	}
-	if err = dir.Rename(keyTmpFile, keyFile); err != nil {
+	if err = dir.Link(tmp, keyFile); err != nil {
 		return fmt.Errorf("identity: install %s: %w", keyFile, err)
+	}
+	return syncDir(dir)
+}
+
+// syncDir flushes the directory entry of the new key. Windows cannot fsync a
+// directory handle, and NTFS journals metadata, so it is skipped there.
+func syncDir(dir *os.Root) error {
+	if runtime.GOOS == "windows" {
+		return nil
+	}
+	d, err := dir.Open(".")
+	if err != nil {
+		return fmt.Errorf("identity: open directory: %w", err)
+	}
+	err = d.Sync()
+	if cerr := d.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		return fmt.Errorf("identity: sync directory: %w", err)
 	}
 	return nil
 }
@@ -163,6 +194,17 @@ func MachineName() string {
 }
 
 func sanitizeMachineName(s string) string {
+	if s = CleanName(s); s == "" {
+		return fallbackMachineName
+	}
+	return s
+}
+
+// CleanName makes s safe to display as a name: it keeps only letters, digits
+// and " -_.[]", which drops control characters, bidirectional overrides and
+// isolates, zero-width and other invisible format characters; trims spaces;
+// and truncates to 40 runes. The result may be empty.
+func CleanName(s string) string {
 	s = strings.Map(func(r rune) rune {
 		if unicode.IsLetter(r) || unicode.IsDigit(r) || strings.ContainsRune(" -_.[]", r) {
 			return r
@@ -172,9 +214,6 @@ func sanitizeMachineName(s string) string {
 	s = strings.TrimSpace(s)
 	if r := []rune(s); len(r) > maxMachineNameRunes {
 		s = strings.TrimSpace(string(r[:maxMachineNameRunes]))
-	}
-	if s == "" {
-		return fallbackMachineName
 	}
 	return s
 }
