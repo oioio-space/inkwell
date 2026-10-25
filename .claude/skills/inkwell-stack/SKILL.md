@@ -36,8 +36,20 @@ check the pinned version in the repo, then write. Wails v3 is beta and APIs move
   assets), `gtk3`, `server` (no window, no cgo). Linux/macOS need cgo.
 - **Automerge has no UndoManager**: undo = local inverse ops; never rewrite history
   (`automerge-repo-undo-redo` warns it alters history).
-- **Bridge throughput is unmeasured** for Automerge in Wails: measure at étape 1 before
-  choosing bindings vs local WebSocket (token, `127.0.0.1`, constant-time compare).
+- **Bridge = Wails Streams** (ADR 0009): `app.HandleStream("net", h)` in Go,
+  `Stream("net")` from `@wailsio/runtime` in JS (WebSocket-like, `binaryType` defaults to
+  `arraybuffer`). Go `Send` takes ownership of the slice — never reuse it after sending.
+  No auto-reconnect: recreate in `onclose`. Frame ≤ 64 MB; JS→Go small frames are the slow
+  direction → batch if needed. Request/response stays on bindings.
+- **Linux = GTK4 / WebKitGTK 6.0** (Wails default; `-tags gtk3` is legacy, removed in v3.1).
+  Fedora: `gtk4-devel webkitgtk6.0-devel`; Ubuntu 24.04: `libgtk-4-dev libwebkitgtk-6.0-dev`.
+- **TypeScript 6.x**, not 7: `svelte-check` requires `^5 || ^6` (ADR 0010).
+- **Presence/cursors**: use automerge-repo's built-in `Presence` (2.5+) with Automerge
+  cursors (`getCursor` / `getCursorPosition`), never raw offsets.
+- **automerge-codemirror 0.2 does not mark remote changes out of history**: add a
+  `transactionExtender` that sets `Transaction.addToHistory.of(false)` on doc changes
+  without a `userEvent`, or undo will revert other people's text.
+- **No Go code imports Automerge** (ADR 0011): automerge-go is stale (2024, Automerge 2 core).
 - **Remote changes must be marked out of CodeMirror's history** so local undo stays local.
 - **Typst downloads packages at compile time**: always pass `--package-cache-path
   <project>/.typstdeps` and `--root <project>`; check tinymist's equivalent of `--root`.

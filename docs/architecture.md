@@ -19,7 +19,7 @@ flowchart LR
     CM <--> REPO
   end
   subgraph G["Go (un seul binaire)"]
-    BR["bridge<br/>bindings Wails · WS local à jeton"]
+    BR["bridge<br/>Stream Wails « net » · bindings"]
     SES["session<br/>trust · identity · invite"]
     TR["transport<br/>memnet · tcp · p2p (libp2p)"]
     ST["store · blob · project<br/>milestone (go-git)"]
@@ -49,7 +49,7 @@ colonne « Étape » dit quand.
 |---|---|---|
 | `cmd/inkwell` | Point d'entrée : fenêtre Wails ; plus tard sous-commandes sans fenêtre (`export`, `join`) | 1 |
 | `internal/app` | Racine de composition : câble les services, cycle de vie des fenêtres et projets | 1 |
-| `internal/bridge` | Services Wails d'octets opaques ; WebSocket `127.0.0.1` à jeton pour les gros flux | 1 |
+| `internal/bridge` | Routeur Stream Wails `net` ↔ `Transport` (octets opaques, aucun port local — ADR 0009) | 1 |
 | `internal/transport` | Interface `Transport` (`Send`, `Recv`, `Peers`) ; `memnet` (simulation), `tcp` (étape 1), `p2p` (libp2p, étape 2) | 1 |
 | `internal/identity` | Clé Ed25519 par machine, empreinte prononçable (4 mots), groupes d'appareils | 2 |
 | `internal/invite` | Codes Wormhole (PAKE), acceptation d'un pair LAN | 2 |
@@ -60,16 +60,16 @@ colonne « Étape » dit quand.
 | `internal/typst` | Vente des paquets `@preview` dans `.typstdeps/`, polices, export PDF | 3 |
 | `internal/blob` | Magasin adressé par BLAKE3, quotas, échange sur flux libp2p dédié | 4 |
 | `internal/milestone` | Jalons go-git (projection lisible, jamais source de vérité) | 4 |
-| `internal/sim` | Simulation déterministe à graine, oracle de convergence, rejeu d'historique | 5 (amorcée dès 1) |
-| `frontend/` | Vite + TypeScript : CodeMirror, automerge-repo, adaptateurs vers le pont, CSS Adwaita | 1 |
+| `internal/transport/memnet` | Réseau en mémoire à fautes injectées, déterministe sous `testing/synctest` (ADR 0011) | 1 |
+| `frontend/` | Svelte 5 + Vite + TypeScript : CodeMirror, automerge-repo, adaptateur réseau vers le pont, simulation de convergence (Vitest), CSS Adwaita (ADR 0010) | 1 |
 | `build/` | Configuration Wails v3 (`config.yml`, Taskfiles par plateforme, icônes) | 1 |
 
 ### Règles de dépendance
 
 - `transport` n'importe rien d'interne. `trust` et `identity` n'importent pas `transport`.
 - `app` est le seul paquet qui connaît tous les autres ; aucun paquet n'importe `app`.
-- `sim` pilote les vraies couches Go par-dessus `transport/memnet` et `automerge-go` ;
-  aucun code de production n'importe `sim`.
+- Aucun code Go n'importe Automerge : la convergence se teste en TypeScript avec le vrai
+  `automerge-repo` ; Go teste sa colle sur `transport/memnet` (ADR 0011).
 - Tout ce qui lit des octets venus d'un pair est fuzzé (`go test -fuzz`).
 
 ## Trois cohérences (du document)
@@ -83,8 +83,9 @@ colonne « Étape » dit quand.
 
 ## Sécurité des frontières
 
-- Serveurs locaux (pont WS, plan de données tinymist) : `127.0.0.1`, port éphémère, jeton
-  aléatoire comparé en temps constant, jamais journalisé.
+- Pont webview ↔ Go : Streams Wails, **aucun port local** (ADR 0009). Seuls serveurs
+  locaux restants (plan de données tinymist) : `127.0.0.1`, port éphémère, jeton aléatoire
+  comparé en temps constant, jamais journalisé.
 - Sidecars : hachage vérifié avant chaque lancement, `--root` sur le dossier projet,
   `context.WithTimeout`, relance bornée, mort avec le parent (job object sous Windows).
 - Réseau : Noise de bout en bout, chaque lot d'updates signé par son auteur, refusé si
@@ -92,6 +93,6 @@ colonne « Étape » dit quand.
 
 ## Plateformes et cgo
 
-Wails v3 (Linux/macOS) et `automerge-go` exigent cgo. Chaque plateforme est donc construite
+Wails v3 exige cgo sous Linux (GTK4 / WebKitGTK 6.0) et macOS. Chaque plateforme est donc construite
 **nativement** dans une matrice GitHub Actions, sans cross-compilation — voir
 [ADR 0003](adr/0003-wails-v3-cgo-native-builds.md).

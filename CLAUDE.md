@@ -37,15 +37,16 @@ concevoir ou de revoir quoi que ce soit ; une exception exige une ADR.
 
 **Invariants — ne jamais les violer sans nouvelle ADR :**
 
-- Le CRDT vit dans la webview ; Go ne transporte que des **octets opaques**. Aucun paquet
-  Go de production n'importe `automerge-go` (réservé à `internal/sim` et aux tests).
+- Le CRDT vit dans la webview ; Go ne transporte que des **octets opaques**. Aucun code Go
+  n'importe Automerge (ADR 0011) ; la convergence se teste en TypeScript.
 - Tout le réseau passe par l'interface `internal/transport.Transport` ; seul
   `internal/transport/p2p` importe libp2p.
 - Une seule source de vérité par chose : texte → Automerge, binaires → magasin BLAKE3,
   membres → liste signée, versions → go-git (projection).
 - Tout octet venu d'un pair est vérifié (signature, rôle) et son décodeur est fuzzé.
-- Serveurs locaux : `127.0.0.1`, port éphémère, jeton comparé en temps constant, jamais logué.
-- cgo est requis (Wails Linux/macOS, automerge-go) ; builds natifs par OS en CI (ADR 0003).
+- Pont webview ↔ Go = Streams Wails (aucun port local, ADR 0009). Autres serveurs locaux :
+  `127.0.0.1`, port éphémère, jeton comparé en temps constant, jamais logué.
+- cgo est requis par Wails (Linux GTK4/WebKitGTK 6.0, macOS) ; builds natifs par OS en CI (ADR 0003).
 - « pair » dans le code, « personne » dans l'UI ; zéro jargon dans l'interface (glossaire).
 - Un paquet = un rôle, créé à l'étape qui en a besoin — pas de paquet vide « pour plus tard ».
 

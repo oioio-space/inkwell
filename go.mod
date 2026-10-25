@@ -1,3 +1,3 @@
 module github.com/oioio-space/inkwell
 
-go 1.26
+go 1.27
