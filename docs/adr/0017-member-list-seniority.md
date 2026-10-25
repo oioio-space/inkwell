@@ -25,6 +25,8 @@ s'emballer (preuves de concept exécutables).
 Spécification complète : [plan trust-fold-v2](../plans/2026-10-25-trust-fold-v2.md).
 
 - Rangs statiques : créateur = 0, puis ordre d'admission ; on n'agit que sur plus jeune que soi.
+- L'absence d'un admin ne bloque jamais l'édition (elle ne dépend pas de la liste en ligne) ;
+  seule la gestion des personnes demande un admin présent.
 - Une coupe (retrait, rétrogradation) tue toute opération concurrente de sa cible, même après
   réadmission ; une révocation l'emporte sur une promotion concurrente.
 - Seuls des admins (dans le passé causal de l'op) peuvent écrire dans la liste.
@@ -35,7 +37,10 @@ Spécification complète : [plan trust-fold-v2](../plans/2026-10-25-trust-fold-v
 
 - Bien : convergence démontrable, coût en millisecondes, attaques de l'audit impossibles.
 - Moins bien, assumé :
-  - **le créateur ne peut pas être révoqué** — perte de son appareil = nouveau projet ;
+  - **personne ne peut révoquer le créateur contre son gré** ; en revanche il peut **passer la
+    main** (se retirer ou se rétrograder) dès qu'un autre admin existe — indispensable en
+    entreprise, où les gens partent. Perte de son appareil sans autre admin = nouveau projet,
+    d'où l'invitation insistante à nommer un second admin dès le premier partage ;
   - un ancien admin compromis peut **sceller** la liste par antidatage (déni de service qui
     échoue fermé, jamais une prise de contrôle) — réévaluer avec Keyhive ;
   - l'ancienneté survit à la rétrogradation.

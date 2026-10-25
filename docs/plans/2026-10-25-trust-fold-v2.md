@@ -244,3 +244,11 @@ Sources:
 - [Radicle protocol guide](https://radicle.xyz/guides/protocol)
 - [Radicle delegates and thresholds (HackMD)](https://hackmd.io/@radicle/SyrkZVxC9)
 - [Jacob et al., formal verification of local-first access control (arXiv 2604.23560)](https://arxiv.org/abs/2604.23560)
+
+## Amendement (25/10/2026, demande utilisateur) — passation du créateur
+
+Le créateur peut se retirer ou se rétrograder **lui-même** si au moins un autre admin existe
+dans le passé causal de l'opération ; sinon l'opération est ignorée (jamais zéro admin).
+Personne d'autre ne peut le couper. Son rang 0 subsiste (personne ne peut agir sur lui).
+Tests : `TestCreatorHandsOverToAnotherAdmin`, `TestCreatorCannotLeaveAlone`,
+`TestOthersCannotRemoveCreator`, et modèle de référence/invariants étendus.
