@@ -73,7 +73,7 @@ func Encode(e Envelope) ([]byte, error) {
 		return nil, err
 	}
 	b := make([]byte, 0, headerLen+len(e.Peer)+len(e.Payload))
-	b = append(b, version, byte(e.Kind), byte(len(e.Peer)))
+	b = append(b, version, byte(e.Kind), byte(len(e.Peer))) // #nosec G115 -- validate bounds Kind ≤ 3 and len(Peer) ≤ 64.
 	b = append(b, e.Peer...)
 	b = append(b, e.Payload...)
 	return b, nil

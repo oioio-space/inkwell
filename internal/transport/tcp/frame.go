@@ -72,7 +72,7 @@ func readFrame(r io.Reader, limit int, reserve func(size int) error) ([]byte, er
 	if limit < 0 || size > uint64(limit) {
 		return nil, transport.ErrFrameTooLarge
 	}
-	n := int(size)
+	n := int(size) // #nosec G115 -- size ≤ limit (an int) was checked just above.
 	if reserve != nil {
 		if err := reserve(n); err != nil {
 			return nil, err

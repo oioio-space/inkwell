@@ -23,7 +23,7 @@ golangci-lint = "2.15.0"
 gofumpt       = "latest"
 shellcheck    = "latest"
 gitleaks      = "latest"
-"go:github.com/securego/gosec/v2/cmd/gosec" = "latest"
+"go:github.com/securego/gosec/v2/cmd/gosec" = "2.30.0" # pinned: "latest" resolved differently locally and in CI
 "go:golang.org/x/vuln/cmd/govulncheck"      = "latest"
 # gopls also serves the Go MCP server (`gopls mcp`, wired in .mcp.json) for agents.
 "go:golang.org/x/tools/gopls"              = "latest"
