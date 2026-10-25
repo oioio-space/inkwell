@@ -61,8 +61,8 @@ colonne « Étape » dit quand.
 | `internal/blob` | Magasin adressé par BLAKE3, quotas, échange sur flux libp2p dédié | 4 |
 | `internal/milestone` | Jalons go-git (projection lisible, jamais source de vérité) | 4 |
 | `internal/transport/frame` | Trames préfixées par leur longueur, bornées (octets venus d’un pair : fuzzé) | 2 |
-| `internal/transport/p2p` | Transport libp2p : QUIC + TCP/Noise, identité Ed25519, un flux sortant par pair | 2 |
-| `internal/transport/memnet` | Réseau en mémoire à fautes injectées, déterministe sous `testing/synctest` (ADR 0011) | 1 |
+| `internal/transport/p2p` | Transport libp2p : QUIC + TCP/Noise, identité Ed25519, un flux sortant par pair ; `Node.Bulk()`, second transport sur `/inkwell/bulk/1.0.0` pour les blobs (ADR 0023) | 2 |
+| `internal/transport/memnet` | Réseau en mémoire à fautes injectées, déterministe sous `testing/synctest` (ADR 0011) ; voie « bulk » (`JoinBulk`) | 1 |
 | `frontend/` | Svelte 5 + Vite + TypeScript : CodeMirror, automerge-repo, adaptateur réseau vers le pont, simulation de convergence (Vitest), CSS Adwaita (ADR 0010) | 1 |
 | `build/` | Configuration Wails v3 (`config.yml`, Taskfiles par plateforme, icônes) | 1 |
 

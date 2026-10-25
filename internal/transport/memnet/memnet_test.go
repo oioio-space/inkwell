@@ -312,3 +312,160 @@ func TestContract(t *testing.T) {
 		}
 	}, transporttest.Options{Ordered: true, Synctest: true})
 }
+
+func TestContractBulk(t *testing.T) {
+	transporttest.Run(t, func(t *testing.T) transporttest.Pair {
+		n := memnet.New(1, memnet.Faults{})
+		return transporttest.Pair{
+			A:       n.JoinBulk("a"),
+			B:       n.JoinBulk("b"),
+			Connect: func(testing.TB) { n.Link("a", "b") },
+			Cut:     func(testing.TB) { n.Partition("a", "b") },
+		}
+	}, transporttest.Options{Ordered: true, Synctest: true})
+}
+
+// The two lanes of a peer share links and fate, not events: a message sent on
+// one lane comes out of the same lane of the other peer only.
+func TestBulkLaneIsSeparate(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		n := memnet.New(1, memnet.Faults{})
+		a, b := n.Join("a"), n.Join("b")
+		ab, bb := n.JoinBulk("a"), n.JoinBulk("b")
+		n.Link("a", "b")
+		for _, lane := range []transport.Transport{a, b, ab, bb} {
+			recvN(t, lane, 1) // the PeerUp each lane sees
+		}
+
+		if err := ab.Send(t.Context(), "b", []byte("bulk")); err != nil {
+			t.Fatal(err)
+		}
+		if err := a.Send(t.Context(), "b", []byte("sync")); err != nil {
+			t.Fatal(err)
+		}
+		if got := recvN(t, bb, 1)[0]; string(got.Payload) != "bulk" {
+			t.Errorf("bulk lane got %q, want bulk", got.Payload)
+		}
+		if got := recvN(t, b, 1)[0]; string(got.Payload) != "sync" {
+			t.Errorf("sync lane got %q, want sync", got.Payload)
+		}
+
+		n.Partition("a", "b")
+		for _, lane := range []transport.Transport{a, b, ab, bb} {
+			if got := recvN(t, lane, 1)[0]; got.Kind != transport.PeerDown {
+				t.Errorf("%s lane got %v, want PeerDown", lane.Local(), got.Kind)
+			}
+		}
+	})
+}
+
+// A bulk lane joined after the link is announced the peers already linked.
+func TestJoinBulkAnnouncesLinkedPeers(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		n := memnet.New(1, memnet.Faults{})
+		n.Join("a")
+		n.Join("b")
+		n.Link("a", "b")
+		late := n.JoinBulk("a")
+		if got, want := recvN(t, late, 1), []transport.Event{{Kind: transport.PeerUp, Peer: "b"}}; !cmp.Equal(got, want) {
+			t.Errorf("late bulk lane: %v", cmp.Diff(want, got))
+		}
+	})
+}
+
+// Closing one lane closes the peer: the other lane and the remote peers see it.
+func TestBulkCloseClosesPeer(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		n := memnet.New(1, memnet.Faults{})
+		a, b := n.Join("a"), n.Join("b")
+		ab := n.JoinBulk("a")
+		n.Link("a", "b")
+		recvN(t, a, 1)
+		recvN(t, b, 1)
+		recvN(t, ab, 1)
+
+		_ = ab.Close()
+		if _, err := a.Recv(t.Context()); !errors.Is(err, transport.ErrClosed) {
+			t.Errorf("sync lane Recv after the bulk lane closed = %v, want ErrClosed", err)
+		}
+		if got := recvN(t, b, 1)[0]; got.Kind != transport.PeerDown || got.Peer != "a" {
+			t.Errorf("b got %v from %s, want PeerDown from a", got.Kind, got.Peer)
+		}
+	})
+}
+
+// PRJ-19 on the in-memory network: a message of the sync lane arrives within
+// the network delay while 100 MB are in flight on the bulk lane. (The p2p
+// package measures the same on a simulated link and on the loopback.)
+func TestSyncLatencyDuringBulk(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		const maxDelay = 20 * time.Millisecond
+		n := memnet.New(1, memnet.Faults{MaxDelay: maxDelay})
+		a, b := n.Join("a"), n.Join("b")
+		bulkA, bulkB := n.JoinBulk("a"), n.JoinBulk("b")
+		n.Link("a", "b")
+		for _, lane := range []transport.Transport{a, b, bulkA, bulkB} {
+			recvN(t, lane, 1)
+		}
+
+		frame := make([]byte, 1<<20)
+		for range 100 { // 100 MB queued on the bulk lane
+			if err := bulkA.Send(t.Context(), "b", frame); err != nil {
+				t.Fatal(err)
+			}
+		}
+		sent := time.Now()
+		if err := a.Send(t.Context(), "b", []byte("ping")); err != nil {
+			t.Fatal(err)
+		}
+		got := recvN(t, b, 1)[0]
+		if string(got.Payload) != "ping" {
+			t.Fatalf("sync lane got %q, want ping", got.Payload)
+		}
+		if took := time.Since(sent); took > maxDelay {
+			t.Errorf("ping took %v behind 100 MB of bulk data, want at most %v", took, maxDelay)
+		}
+		if got := recvN(t, bulkB, 100); len(got) != 100 {
+			t.Errorf("bulk lane delivered %d frames, want 100", len(got))
+		}
+	})
+}
+
+// BenchmarkSyncLatencyDuringBulk is PRJ-19's benchmark on the in-memory
+// network: the cost of a sync-lane round with and without bulk traffic.
+func BenchmarkSyncLatencyDuringBulk(b *testing.B) {
+	for _, withBulk := range []bool{false, true} {
+		name := "idle"
+		if withBulk {
+			name = "bulk"
+		}
+		b.Run(name, func(b *testing.B) {
+			n := memnet.New(1, memnet.Faults{})
+			a, c := n.Join("a"), n.Join("b")
+			bulkA, bulkC := n.JoinBulk("a"), n.JoinBulk("b")
+			n.Link("a", "b")
+			ctx := b.Context()
+			for _, lane := range []transport.Transport{a, c, bulkA, bulkC} {
+				if _, err := lane.Recv(ctx); err != nil {
+					b.Fatal(err)
+				}
+			}
+			frame := make([]byte, 1<<20)
+			if withBulk {
+				for range 100 {
+					if err := bulkA.Send(ctx, "b", frame); err != nil {
+						b.Fatal(err)
+					}
+				}
+			}
+			for b.Loop() {
+				if err := a.Send(ctx, "b", []byte("ping")); err != nil {
+					b.Fatal(err)
+				}
+				if _, err := c.Recv(ctx); err != nil {
+					b.Fatal(err)
+				}
+			}
+		})
+	}
+}
