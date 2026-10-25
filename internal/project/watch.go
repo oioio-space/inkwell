@@ -51,10 +51,6 @@ func (p *Project) Watch(ctx context.Context, onExternal func(rel string)) error 
 			return fmt.Errorf("project: watch %s: %w", p.dir, err)
 		}
 	}
-	for _, rel := range owned { // after Add, so no edit falls between the two
-		p.check(rel, onExternal)
-	}
-
 	dirty := map[string]bool{}
 	// A file found empty is looked at once more before it is reported: a writer
 	// that truncates then writes (os.WriteFile) shows an empty file in between,
@@ -63,6 +59,15 @@ func (p *Project) Watch(ctx context.Context, onExternal func(rel string)) error 
 	timer := time.NewTimer(watchDebounce)
 	timer.Stop()
 	defer timer.Stop()
+
+	for _, rel := range owned { // after Add, so no edit falls between the two
+		if p.emptied(rel) {
+			dirty[rel], held[rel] = true, true
+			timer.Reset(watchDebounce)
+			continue
+		}
+		p.check(rel, onExternal)
+	}
 	for {
 		select {
 		case <-ctx.Done():
