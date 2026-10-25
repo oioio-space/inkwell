@@ -187,7 +187,7 @@ func TestCannotPromoteSenior(t *testing.T) {
 		k    OpKind
 		r    Role
 		name string
-	}{{OpSetRole, RoleAdmin, ""}, {OpAdd, RoleAdmin, ""}, {OpSetRole, RoleReader, "renamed"}, {OpAdd, RoleReader, ""}} {
+	}{{OpSetRole, RoleAdmin, ""}, {OpAdd, RoleAdmin, ""}, {OpSetRole, RoleReader, "renamed"}, {OpAdd, RoleReader, "renamed"}} {
 		if _, err := l.Issue(b, tc.k, a.Public(), tc.r, tc.name); !errors.Is(err, ErrOutranked) {
 			t.Errorf("Issue(b, kind %d role %v name %q on senior) = %v, want ErrOutranked", tc.k, tc.r, tc.name, err)
 		}
@@ -205,6 +205,31 @@ func TestCannotPromoteSenior(t *testing.T) {
 	mustIssue(t, l, b, OpAdd, c, RoleAdmin)
 	if _, err := l.Issue(c, OpRemove, b.Public(), 0, ""); !errors.Is(err, ErrOutranked) {
 		t.Errorf("Issue(remove a senior admin) = %v, want ErrOutranked", err)
+	}
+}
+
+// A junior may re-add, as a non-admin, a senior that is not admin (as it may
+// remove or demote it), but never grant it admin, rename it or regroup it.
+func TestJuniorMayReaddSeniorAsNonAdmin(t *testing.T) {
+	a, b := newSigner(1), newSigner(2)
+	l := project(t, a)
+	mustIssue(t, l, a, OpAdd, b, RoleAdmin)
+	mustIssue(t, l, a, OpRemove, a, 0) // hand-over: a is out, still senior to b.
+	wantRole(t, l, a, 0)
+	mustIssue(t, l, b, OpAdd, a, RoleWriter)
+	wantRole(t, l, a, RoleWriter)
+	if _, err := l.Issue(b, OpAdd, a.Public(), RoleAdmin, ""); !errors.Is(err, ErrOutranked) {
+		t.Errorf("Issue(b, grant admin to a senior) = %v, want ErrOutranked", err)
+	}
+	if _, err := l.IssueWith(b, Op{Kind: OpAdd, Subject: a.Public(), Role: RoleReader, Person: Hash{1}}); !errors.Is(err, ErrOutranked) {
+		t.Errorf("IssueWith(b, Add of a senior with a Person) = %v, want ErrOutranked", err)
+	}
+	// A senior that is still admin stays out of reach.
+	c := newSigner(3)
+	l2 := project(t, a)
+	mustIssue(t, l2, a, OpAdd, c, RoleAdmin)
+	if _, err := l2.Issue(c, OpAdd, a.Public(), RoleReader, ""); !errors.Is(err, ErrOutranked) {
+		t.Errorf("Issue(c, re-add of a senior admin) = %v, want ErrOutranked", err)
 	}
 }
 

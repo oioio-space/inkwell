@@ -136,6 +136,7 @@ type sweep struct {
 	base   map[string][]int // decided key → its surviving role ops, junior cuts excluded.
 	stands []bool
 	exc    map[int]bool // standing cuts by a junior on a senior (rule 2's exception).
+	inSet  bitset       // the positions of the ops being swept.
 }
 
 // sweep decides which ops of in (positions, in ≺ order, closed under
@@ -145,7 +146,9 @@ func (v *view) sweep(in []int) *sweep {
 		v: v, on: make(map[string][]int), by: make(map[string][]int), rank: make(map[string]int),
 		base: make(map[string][]int), stands: make([]bool, len(v.nodes)), exc: make(map[int]bool),
 	}
+	s.inSet = newBitset(len(v.nodes))
 	for _, i := range in {
+		s.inSet.set(i)
 		s.on[v.subj[i]] = append(s.on[v.subj[i]], i)
 		s.by[v.auth[i]] = append(s.by[v.auth[i]], i)
 	}
@@ -225,18 +228,27 @@ func (v *view) verdict(s *sweep, y string) (c cutInfo) {
 }
 
 // excCut reports whether a role op may target a senior key that is no longer
-// admin: a Remove, or a demotion that renames nobody. A grant never may.
+// admin: a Remove, or a SetRole or Add to a lower role that renames nobody
+// (and, for an Add, regroups no person). A grant never may.
 func (o Op) excCut() bool {
-	return o.Kind == OpRemove || (o.Kind == OpSetRole && o.Role < RoleAdmin && o.Name == "")
+	switch o.Kind {
+	case OpRemove:
+		return true
+	case OpSetRole:
+		return o.Role < RoleAdmin && o.Name == ""
+	case OpAdd:
+		return o.Role < RoleAdmin && o.Name == "" && o.Person == (Hash{})
+	}
+	return false
 }
 
 // decide judges the ops of y, now that every key senior to it is decided.
 func (s *sweep) decide(h *rankHeap, y string, cand, surv []int) {
 	v := s.v
 	cuts := slices.DeleteFunc(slices.Clone(cand), func(i int) bool { return v.nodes[i].grant() })
-	var exits []int // y's self-cuts that leave another admin in place.
+	var exits []int // y's self-cuts that stand: they leave another admin in place and no cut by another key is concurrent to them.
 	for _, k := range s.by[y] {
-		if v.isSelfCut(k) && v.selfCut(k).exit {
+		if v.isSelfCut(k) && v.selfCut(k).exit && !slices.ContainsFunc(cuts, func(c int) bool { return v.conc(k, c) }) {
 			exits = append(exits, k)
 		}
 	}
@@ -251,7 +263,7 @@ func (s *sweep) decide(h *rankHeap, y string, cand, surv []int) {
 		if slices.ContainsFunc(cuts, func(k int) bool { return v.conc(i, k) }) {
 			continue // rule 3b, cut by another key.
 		}
-		if !slices.Contains(exits, i) && slices.ContainsFunc(exits, func(k int) bool { return v.conc(i, k) }) {
+		if !slices.Contains(exits, i) && slices.ContainsFunc(exits, func(k int) bool { return v.conc(i, k) && !s.spared(i, k, y) }) {
 			continue // rule 3b, y's own exit.
 		}
 		if !v.adminAt(i, surv, self) {
@@ -376,4 +388,17 @@ func (s *sweep) members() []memberRec {
 		out = append(out, memberRec{m: m, pos: pos, last: run[len(run)-1]})
 	}
 	return out
+}
+
+// spared reports whether y's exit k spares its concurrent op i: some op by
+// another key in the swept set sees i but not k, so the others had accepted i
+// before y's exit was in play, and a backdated exit cannot take it back.
+func (s *sweep) spared(i, k int, y string) bool {
+	v := s.v
+	for j := i + 1; j < len(v.nodes); j++ {
+		if s.inSet.has(j) && v.auth[j] != y && v.anc[j].has(i) && !v.anc[j].has(k) {
+			return true
+		}
+	}
+	return false
 }

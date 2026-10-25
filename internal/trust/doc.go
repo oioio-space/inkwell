@@ -16,8 +16,8 @@
 //
 // [List.Apply] stores an op only if it is canonical and signed for the project,
 // its parents are stored (otherwise it waits in a bounded buffer that refuses
-// rather than evicts, and that only takes ops by keys already known to have
-// been made admin; [Sync] resends the others in causal order), its Lamport is 1 + the maximum of its parents', and its
+// rather than evicts, and that only takes ops by keys that are admins in the
+// current membership; [Sync] resends the others in causal order), its Lamport is 1 + the maximum of its parents', and its
 // author was granted admin in the op's causal past: the creator, or the subject
 // of an Add or SetRole with Role admin among the op's ancestors, effective or
 // not ([ErrUnknownAuthor] otherwise). Every op kind is admin-only, so readers
@@ -33,6 +33,20 @@
 // when an ex-admin flooded them (such an admin can still store backdated ops);
 // the application should then tell people to create a new project to manage
 // members again.
+//
+// Any consumer that gates document writes on [List.Role] or [List.Verify]
+// MUST also check [List.Sealed] and, when it is true, surface to the user
+// "liste de membres saturée — créez un nouveau projet": a sealed replica
+// cannot tell whether other replicas hold a different set, so its membership
+// may be stale. Role and Verify keep their signatures and do not report it.
+//
+// There is deliberately no per-author quota on the stored ops of keys that
+// were not standing admins when they were integrated. Such a quota would have
+// to refuse the op that exceeds it, and which op that is depends on arrival
+// order, so replicas would store different sets and diverge. Counting at
+// fold time instead is replica-independent, but the dead ops are already
+// stored and already count towards the 1024 that seal the list, so it would
+// not protect anything.
 //
 // # Fold rules (the specification)
 //
@@ -51,11 +65,13 @@
 //  2. Reach. A role op by y on another key x counts only if x is unranked or
 //     junior to y. An op on a senior is ignored: no one can cut, demote,
 //     re-promote or rename a senior while it is an admin. The one exception
-//     is a Remove, or a SetRole to a lower role that sets no Name, on a senior
-//     that is not admin at that op (rule 3(a) evaluated for the senior, from
-//     the ops of keys senior to it and its own): an admin that stepped down
-//     can be removed by a junior, the former creator included. A grant,
-//     a rename or an Add never counts on a senior. A key may act on itself,
+//     is a Remove, or a SetRole or an Add to a lower role that sets no Name
+//     (nor a Person), on a senior that is not admin at that op (rule 3(a)
+//     evaluated for the senior, from the ops of keys senior to it and its
+//     own): an admin that stepped down can be removed, demoted or re-added as
+//     a non-admin by a junior, the former creator included. A grant or a
+//     rename never counts on a senior, nor does an Add that names, regroups
+//     or grants. A key may act on itself,
 //     except that a cut of itself (a Remove, or a SetRole to a lower role)
 //     counts only if some admin other than that key exists in the membership
 //     computed from the ancestors of that op alone; otherwise it is ignored,
@@ -67,11 +83,19 @@
 //  3. Standing. An op o by y stands if and only if:
 //     (a) y is admin at o: among the role ops on y that o sees and that survive,
 //     the ≺-latest is a grant (Genesis stands by itself);
-//     (b) no standing cut on y by another key is concurrent to o, and neither is
-//     an exit of y unless o is an exit itself (an exit is a cut of y by y
-//     such that y is admin, along with another admin, in the membership of its
-//     ancestors; it ends y's career at that point, wherever it falls in ≺); and
+//     (b) no standing cut on y by another key is concurrent to o, and no exit
+//     of y is concurrent to o, unless o is an exit itself or is spared by
+//     that exit; and
 //     (c) rule 2 allows it.
+//     An exit is a cut of y by y such that y is admin, along with another
+//     admin, in the membership of its ancestors, and such that no standing
+//     cut on y by another key is concurrent to it (an exit that a senior's
+//     cut did not see is dead like any other op, and kills nothing). A
+//     standing exit ends y's career at that point, wherever it falls in ≺. It
+//     spares an op o of y concurrent to it when some op by a key other than y
+//     in the set being folded sees o but not the exit: the others had
+//     accepted o before the exit was in play, so a backdated exit, by a leaked
+//     key for instance, cannot erase it.
 //     An op that does not stand has no effect at all. By (b), what a revoked
 //     admin signs without having seen its cut is dead, even if it is later
 //     re-admitted. By (a), what it signs after seeing the cut is dead unless a
@@ -93,7 +117,8 @@
 //     comes first.
 //
 // Each rule about y's ops reads only ops by keys senior to y and y's own
-// ops, except what a self-cut says (honoured, exit), which reads the fold of
+// ops, except what a self-cut says and what spares an op from an exit (which
+// reads the set being folded, through its ancestor bitsets, in O(n/64)) (honoured, exit), which reads the fold of
 // its own ancestors, a strictly smaller set. A grant's position is greater
 // than its author's rank, because the author's own grant is one of its
 // ancestors. So one sweep over keys in rank order decides everything. Grants
