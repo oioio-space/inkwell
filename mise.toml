@@ -50,7 +50,6 @@ GOFLAGS = "-mod=readonly"
 COVER_MIN = "85"
 # Wails' own C code calls deprecated X11 helpers; silence that noise (not ours) in every cgo build.
 CGO_CFLAGS = "-O2 -Wno-deprecated-declarations"
-_.path = ["{{ env.HOME }}/go/bin"]
 
 # ── Hooks ─────────────────────────────────────────────────────────────────────
 [hooks]
