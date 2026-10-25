@@ -29,7 +29,8 @@ export type Op = (typeof Op)[keyof typeof Op];
 
 /**
  * Binary and InvalidText answer ReadProjection and FileInfo for a file that is not text: the
- * second carries the 1-based line of the first invalid byte as a u32.
+ * second carries the 1-based line of the first invalid byte as a u32. EditedOutside answers
+ * WriteProjection for a file changed outside Inkwell and not yet acknowledged.
  */
 export const Status = {
   OK: 0,
@@ -39,6 +40,7 @@ export const Status = {
   External: 4,
   Binary: 5,
   InvalidText: 6,
+  EditedOutside: 7,
 } as const;
 export type Status = (typeof Status)[keyof typeof Status];
 
@@ -130,7 +132,7 @@ export function encodeResponse(r: Response): Uint8Array {
 export function decodeResponse(b: Uint8Array): Response {
   if (b.length < 5) throw new ProtocolError("short response");
   const status = b[4] as number;
-  if (status > Status.InvalidText) throw new ProtocolError(`unknown status ${status}`);
+  if (status > Status.EditedOutside) throw new ProtocolError(`unknown status ${status}`);
   return { id: readU32(b, 0), status: status as Status, payload: b.subarray(5) };
 }
 

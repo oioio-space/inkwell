@@ -2,7 +2,6 @@ package project
 
 import (
 	"errors"
-	"strings"
 	"testing"
 	"time"
 )
@@ -116,14 +115,6 @@ func TestWriteProjectionSkipsAnUnchangedFile(t *testing.T) {
 	}
 	if got := string(onDisk(t, p)); got != "= b" {
 		t.Errorf("on disk = %q, want the new text", got)
-	}
-}
-
-// The webview tells a refused write from an outside edit (the notice asks the person) from any
-// other failure (a banner) by this wording of the error it receives: it is a contract.
-func TestErrExternalEditWording(t *testing.T) {
-	if got := ErrExternalEdit.Error(); !strings.Contains(got, "edited outside Inkwell") {
-		t.Errorf("ErrExternalEdit = %q, frontend/src/workspace isExternalEdit matches %q", got, "edited outside Inkwell")
 	}
 }
 

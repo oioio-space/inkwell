@@ -14,7 +14,7 @@ import {
 import { t } from "../i18n";
 import { type SocketLike, WailsNetworkAdapter } from "../net/WailsNetworkAdapter";
 import { type FileInfo, FileKind, type ProjectFile } from "../store/files";
-import { GoStorageAdapter } from "../store/GoStorageAdapter";
+import { ExternalEditError, GoStorageAdapter } from "../store/GoStorageAdapter";
 import { type Projection, startProjection } from "../store/projection";
 import { safeGet, safeSet } from "../store/safeStorage";
 
@@ -32,14 +32,6 @@ const MAIN_FILE = "main.typ";
 const NAME_KEY = "inkwell.name";
 
 /** The open project and who is in it — the single source of UI state. */
-/**
- * Whether Go refused a write because the file was edited outside Inkwell
- * (`project.ErrExternalEdit`, whose message says so).
- */
-export function isExternalEdit(err: unknown): boolean {
-  return err instanceof Error && err.message.includes("edited outside Inkwell");
-}
-
 class Workspace {
   peers = $state<string[]>([]);
   /** True while an invitation is being followed, until the inviting person's project is open. */
@@ -127,12 +119,12 @@ class Workspace {
         onError: (err) => {
           console.warn("projection:", err instanceof Error ? err.message : "failed");
           // A refused write means the file was edited outside: the notice already asks the person.
-          if (!isExternalEdit(err)) this.projectionFailed = true;
+          if (!(err instanceof ExternalEditError)) this.projectionFailed = true;
         },
         onWritten: () => {
           this.projectionFailed = false;
         },
-        retryable: (err) => !isExternalEdit(err),
+        retryable: (err) => !(err instanceof ExternalEditError),
       });
     }
   }

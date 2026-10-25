@@ -69,6 +69,7 @@ var storeStatuses = map[string]bridge.StoreStatus{
 	"OK": bridge.StatusOK, "NotFound": bridge.StatusNotFound, "Corrupt": bridge.StatusCorrupt,
 	"Error": bridge.StatusError, "External": bridge.StatusExternal,
 	"Binary": bridge.StatusBinary, "InvalidText": bridge.StatusInvalidText,
+	"EditedOutside": bridge.StatusEditedOutside,
 }
 
 func unhex(t *testing.T, s string) []byte {
@@ -313,7 +314,7 @@ func (s *fakeStorage) WriteProjection(rel string, data []byte) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if rel == "locked.typ" {
-		return errors.New("edited outside Inkwell")
+		return fmt.Errorf("project: %s: %w", rel, project.ErrExternalEdit)
 	}
 	s.files[rel] = bytes.Clone(data)
 	return nil
@@ -460,8 +461,8 @@ func TestStoreServerProjection(t *testing.T) {
 	if got := c.call(bridge.OpReadProjection, []string{"main.typ"}, ""); string(got.Payload) != "= Hi" {
 		t.Errorf("ReadProjection = %q", got.Payload)
 	}
-	if got := c.call(bridge.OpWriteProjection, []string{"locked.typ"}, "x"); got.Status != bridge.StatusError {
-		t.Errorf("WriteProjection(locked) = %d, want Error", got.Status)
+	if got := c.call(bridge.OpWriteProjection, []string{"locked.typ"}, "x"); got.Status != bridge.StatusEditedOutside {
+		t.Errorf("WriteProjection(locked) = %d, want EditedOutside", got.Status)
 	}
 	if got := c.call(bridge.OpAcknowledge, []string{"main.typ"}, ""); got.Status != bridge.StatusOK {
 		t.Errorf("Acknowledge = %d", got.Status)

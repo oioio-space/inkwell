@@ -92,10 +92,13 @@ const (
 	// StatusInvalidText means the project file is UTF-8 apart from invalid
 	// bytes; the payload is the 1-based line of the first one, as a u32.
 	StatusInvalidText
+	// StatusEditedOutside means a write was refused because the project file
+	// was edited outside Inkwell and the edit is not yet acknowledged.
+	StatusEditedOutside
 )
 
 // maxStatus is the last status a frame may carry.
-const maxStatus = StatusInvalidText
+const maxStatus = StatusEditedOutside
 
 // StoreRequest is one decoded request of the store stream.
 type StoreRequest struct {
@@ -491,6 +494,8 @@ func (s *StoreServer) respond(req StoreRequest, payload []byte, err error) Store
 		return StoreResponse{ID: req.ID, Status: StatusCorrupt}
 	case errors.Is(err, project.ErrBinary):
 		return StoreResponse{ID: req.ID, Status: StatusBinary}
+	case errors.Is(err, project.ErrExternalEdit):
+		return StoreResponse{ID: req.ID, Status: StatusEditedOutside}
 	}
 	if bad, ok := errors.AsType[*project.InvalidUTF8Error](err); ok {
 		line := binary.BigEndian.AppendUint32(nil, uint32(min(bad.Line, math.MaxUint32))) // #nosec G115 -- clamped.
