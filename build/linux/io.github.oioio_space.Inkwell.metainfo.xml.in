@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Template: scripts/pkg/stage.sh replaces @RELEASES@ with the <release> entries taken from
+     CHANGELOG.md (ADR 0025). Validate the result with `mise run pkg:lint`. -->
+<component type="desktop-application">
+  <id>io.github.oioio_space.Inkwell</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MPL-2.0</project_license>
+  <name>Inkwell</name>
+  <summary>Collaborative Typst and Markdown editor, no server</summary>
+  <summary xml:lang="fr">Éditeur collaboratif Typst et Markdown, sans serveur</summary>
+  <description>
+    <p>Inkwell is a text editor for documents written in Typst or Markdown, which several people can edit at the same time. There is no account and no server: the people who write together are connected directly, and each keeps a full copy of the project on their own computer.</p>
+    <p>Work continues offline and everything is merged when people meet again, without conflicts. Typst documents are compiled to PDF on your computer.</p>
+    <p xml:lang="fr">Inkwell est un éditeur de texte pour les documents écrits en Typst ou en Markdown, que plusieurs personnes peuvent modifier en même temps. Il n'y a ni compte ni serveur : les personnes qui écrivent ensemble sont connectées directement, et chacune garde une copie complète du projet sur son ordinateur.</p>
+    <p xml:lang="fr">Le travail continue hors connexion et tout est fusionné quand les personnes se retrouvent, sans conflit. Les documents Typst sont compilés en PDF sur votre ordinateur.</p>
+    <ul>
+      <li>Write together, with or without an Internet connection</li>
+      <li xml:lang="fr">Écrire ensemble, avec ou sans connexion à Internet</li>
+      <li>Typst, Markdown and CSV tables</li>
+      <li xml:lang="fr">Typst, Markdown et tableaux CSV</li>
+      <li>Your files stay ordinary files in your Documents folder</li>
+      <li xml:lang="fr">Vos fichiers restent de simples fichiers dans votre dossier Documents</li>
+    </ul>
+  </description>
+  <launchable type="desktop-id">io.github.oioio_space.Inkwell.desktop</launchable>
+  <provides>
+    <binary>inkwell</binary>
+    <mediatype>text/x-typst</mediatype>
+    <mediatype>text/markdown</mediatype>
+    <mediatype>text/csv</mediatype>
+  </provides>
+  <url type="homepage">https://github.com/oioio-space/inkwell</url>
+  <url type="bugtracker">https://github.com/oioio-space/inkwell/issues</url>
+  <developer id="io.github.oioio-space">
+    <name>oioio-space</name>
+  </developer>
+  <content_rating type="oars-1.1"/>
+  <branding>
+    <color type="primary" scheme_preference="light">#99c1f1</color>
+    <color type="primary" scheme_preference="dark">#1c71d8</color>
+  </branding>
+  <supports>
+    <control>keyboard</control>
+    <control>pointing</control>
+    <control>touch</control>
+  </supports>
+  <requires>
+    <display_length compare="ge">720</display_length>
+  </requires>
+  <releases>
+@RELEASES@
+  </releases>
+</component>

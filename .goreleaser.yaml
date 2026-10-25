@@ -1,17 +1,194 @@
+# goreleaser v2 — builds ONE architecture natively (cgo: GTK4 + WebKitGTK 6.0, ADR 0003) and
+# packages it. Run on each architecture's runner; .github/workflows/release.yml then assembles the
+# two outputs (checksums, cosign, GitHub Release). Locally: `mise run pkg:build`.
+# Decisions and sources: docs/adr/0025-versions-et-paquets.md.
+#
+# Split & merge (`--split`) is GoReleaser Pro only, so the OSS flow is: one `release --skip=publish`
+# per native runner, then a plain assembly job. The target is chosen from the machine that runs
+# it, never cross-compiled (cgo).
 version: 2
-project_name: "inkwell"
+project_name: inkwell
+dist: dist
+
+before:
+  hooks:
+    # Frontend (embedded in the executable), sidecars if the task exists, staged package files.
+    - ./scripts/pkg/prebuild.sh {{ .Version }} {{ .CommitDate }}
+
+# Two build entries, one per architecture; only the one that matches the machine runs (`skip` is
+# templated), so no cgo cross-compilation ever happens. A YAML anchor keeps them identical.
 builds:
-  - main: ./cmd/inkwell
-    binary: "inkwell"
-    env: ["CGO_ENABLED=0"]
-    goos: [linux, darwin, windows]
-    goarch: [amd64, arm64]
+  - &build
+    id: inkwell-amd64
+    main: ./cmd/inkwell
+    binary: inkwell
+    env:
+      - CGO_ENABLED=1
+    targets: [linux_amd64]
+    skip: '{{ ne .Runtime.Goarch "amd64" }}'
+    flags:
+      - -trimpath
+    tags:
+      - production
+    ldflags:
+      - -s -w
+      - -X github.com/oioio-space/inkwell/internal/version.Version={{ .Version }}
+      - -X github.com/oioio-space/inkwell/internal/version.Commit={{ .FullCommit }}
+      - -X github.com/oioio-space/inkwell/internal/version.Date={{ .CommitDate }}
+    mod_timestamp: "{{ .CommitTimestamp }}"
+  - <<: *build
+    id: inkwell-arm64
+    targets: [linux_arm64]
+    skip: '{{ ne .Runtime.Goarch "arm64" }}'
+
 archives:
-  - formats: [tar.gz]
-    format_overrides:
-      - goos: windows
-        formats: [zip]
+  - id: tarball
+    ids: [inkwell-amd64, inkwell-arm64]
+    formats: [tar.gz]
+    name_template: "inkwell_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files:
+      - LICENSE
+      - README.md
+      - CHANGELOG.md
+
+nfpms:
+  - id: linux
+    ids: [inkwell-amd64, inkwell-arm64]
+    package_name: inkwell
+    # inkwell_0.1.0-rc.1_amd64.deb and inkwell-0.1.0-rc.1.x86_64.rpm; "-" and not "~" so that the
+    # name survives GitHub's asset renaming (the package metadata still carries the "~").
+    file_name_template: >-
+      {{ .PackageName }}{{ if eq .Format "deb" }}_{{ .Version }}_{{ .Arch }}{{ else }}-{{ .Version }}.{{ if eq .Arch "amd64" }}x86_64{{ else }}aarch64{{ end }}{{ end }}
+    formats: [deb, rpm]
+    vendor: oioio-space
+    homepage: https://github.com/oioio-space/inkwell
+    # No personal address: the GitHub noreply form of the organisation (ADR 0025).
+    maintainer: oioio-space <oioio-space@users.noreply.github.com>
+    description: |-
+      Collaborative Typst and Markdown editor, without a server.
+       Inkwell lets several people write the same documents at the same time. They are
+       connected directly to each other; there is no account and no server, and every
+       person keeps a full copy of the project.
+    license: MPL-2.0
+    section: editors
+    priority: optional
+    bindir: /usr/bin
+    release: "1"
+    mtime: "{{ .CommitDate }}"
+    dependencies:
+      - libgtk-4-1
+      - libwebkitgtk-6.0-4
+    overrides:
+      rpm:
+        dependencies:
+          - gtk4
+          - webkitgtk6.0
+    contents:
+      - src: .task/stage/inkwell.1.gz
+        dst: /usr/share/man/man1/inkwell.1.gz
+        file_info:
+          mode: 0644
+      - src: build/linux/io.github.oioio_space.Inkwell.desktop
+        dst: /usr/share/applications/io.github.oioio_space.Inkwell.desktop
+        file_info:
+          mode: 0644
+      - src: .task/stage/io.github.oioio_space.Inkwell.metainfo.xml
+        dst: /usr/share/metainfo/io.github.oioio_space.Inkwell.metainfo.xml
+        file_info:
+          mode: 0644
+      - src: build/linux/mime/io.github.oioio_space.Inkwell.xml
+        dst: /usr/share/mime/packages/io.github.oioio_space.Inkwell.xml
+        file_info:
+          mode: 0644
+      # The icons are listed one by one, not as a "tree": a tree would also put the (shared)
+      # /usr/share/icons/hicolor directories in the package, with the file mode.
+      # Releases and pre-releases (-rc.N) have their own icon set (GNOME: a pre-release is striped).
+      - src: 'build/linux/icons{{ if contains .Version "-" }}-nightly{{ end }}/hicolor/16x16/apps/io.github.oioio_space.Inkwell.png'
+        dst: /usr/share/icons/hicolor/16x16/apps/io.github.oioio_space.Inkwell.png
+        file_info: &file
+          mode: 0644
+      - src: 'build/linux/icons{{ if contains .Version "-" }}-nightly{{ end }}/hicolor/24x24/apps/io.github.oioio_space.Inkwell.png'
+        dst: /usr/share/icons/hicolor/24x24/apps/io.github.oioio_space.Inkwell.png
+        file_info: *file
+      - src: 'build/linux/icons{{ if contains .Version "-" }}-nightly{{ end }}/hicolor/32x32/apps/io.github.oioio_space.Inkwell.png'
+        dst: /usr/share/icons/hicolor/32x32/apps/io.github.oioio_space.Inkwell.png
+        file_info: *file
+      - src: 'build/linux/icons{{ if contains .Version "-" }}-nightly{{ end }}/hicolor/48x48/apps/io.github.oioio_space.Inkwell.png'
+        dst: /usr/share/icons/hicolor/48x48/apps/io.github.oioio_space.Inkwell.png
+        file_info: *file
+      - src: 'build/linux/icons{{ if contains .Version "-" }}-nightly{{ end }}/hicolor/64x64/apps/io.github.oioio_space.Inkwell.png'
+        dst: /usr/share/icons/hicolor/64x64/apps/io.github.oioio_space.Inkwell.png
+        file_info: *file
+      - src: 'build/linux/icons{{ if contains .Version "-" }}-nightly{{ end }}/hicolor/128x128/apps/io.github.oioio_space.Inkwell.png'
+        dst: /usr/share/icons/hicolor/128x128/apps/io.github.oioio_space.Inkwell.png
+        file_info: *file
+      - src: 'build/linux/icons{{ if contains .Version "-" }}-nightly{{ end }}/hicolor/256x256/apps/io.github.oioio_space.Inkwell.png'
+        dst: /usr/share/icons/hicolor/256x256/apps/io.github.oioio_space.Inkwell.png
+        file_info: *file
+      - src: 'build/linux/icons{{ if contains .Version "-" }}-nightly{{ end }}/hicolor/512x512/apps/io.github.oioio_space.Inkwell.png'
+        dst: /usr/share/icons/hicolor/512x512/apps/io.github.oioio_space.Inkwell.png
+        file_info: *file
+      - src: 'build/linux/icons{{ if contains .Version "-" }}-nightly{{ end }}/hicolor/scalable/apps/io.github.oioio_space.Inkwell.svg'
+        dst: /usr/share/icons/hicolor/scalable/apps/io.github.oioio_space.Inkwell.svg
+        file_info: *file
+      - src: 'build/linux/icons{{ if contains .Version "-" }}-nightly{{ end }}/hicolor/symbolic/apps/io.github.oioio_space.Inkwell-symbolic.svg'
+        dst: /usr/share/icons/hicolor/symbolic/apps/io.github.oioio_space.Inkwell-symbolic.svg
+        file_info: *file
+      # The directory that only this package creates is owned by it, or rpm leaves it behind.
+      - dst: /usr/share/licenses/inkwell
+        type: dir
+        packager: rpm
+        file_info:
+          mode: 0755
+      - src: LICENSE
+        dst: /usr/share/licenses/inkwell/LICENSE
+        packager: rpm
+        file_info:
+          mode: 0644
+      - src: LICENSE
+        dst: /usr/share/doc/inkwell/copyright
+        packager: deb
+        file_info:
+          mode: 0644
+    scripts:
+      postinstall: build/linux/nfpm/scripts/postinstall.sh
+      postremove: build/linux/nfpm/scripts/postremove.sh
+    # Signed when a key is given (secret GPG_KEY in CI); unsigned, with a warning, otherwise.
+    rpm:
+      signature:
+        key_file: '{{ with index .Env "NFPM_KEY_FILE" }}{{ . }}{{ end }}'
+    deb:
+      signature:
+        key_file: '{{ with index .Env "NFPM_KEY_FILE" }}{{ . }}{{ end }}'
+        type: origin
+
 checksum:
-  name_template: checksums.txt
+  name_template: "checksums-{{ .Runtime.Goarch }}.txt"
+  algorithm: sha256
+
+# One SBOM (SPDX JSON, syft) per artifact: archive and packages.
+sboms:
+  - &sbom
+    id: sbom-archive
+    artifacts: archive
+    documents:
+      - "${artifact}.spdx.json"
+    cmd: syft
+    args: ["$artifact", "--output", "spdx-json=$document", "--quiet"]
+  - <<: *sbom
+    id: sbom-package
+    artifacts: package
+
+snapshot:
+  version_template: '{{ with index .Env "PKG_VERSION" }}{{ . }}{{ else }}{{ incpatch .Version }}-SNAPSHOT-{{ .ShortCommit }}{{ end }}'
+
+report_sizes: true
+
 changelog:
-  use: github-native
+  disable: true # the notes come from git-cliff (release.yml), not from GitHub's generator
+
+release:
+  draft: false
+  prerelease: auto
+  # The release is published by .github/workflows/release.yml, which assembles both architectures.
+  disable: true

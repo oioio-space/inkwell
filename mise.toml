@@ -38,7 +38,9 @@ gotestsum     = "latest"
 actionlint    = "latest"
 yamlfmt       = "latest"
 watchexec     = "latest"
-goreleaser    = "latest"
+goreleaser    = "2.18.0" # pinned: the release is reproducible (ADR 0025); nfpm is built in
+git-cliff     = "2.14.2" # CHANGELOG.md and release notes from Conventional Commits (ADR 0025)
+cosign        = "3.1.4"  # keyless signing in CI, and `pkg:verify` locally (ADR 0025)
 # Frontend toolchain (ADR 0010).
 node          = "24.22.1"
 pnpm          = "12.15.0"
@@ -132,7 +134,7 @@ run = "./scripts/rtkx.sh ./scripts/lint.sh --staged"
 
 [tasks."lint:sh"]
 description = "Lint the bash hook scripts with shellcheck"
-run = "shellcheck -x --source-path=SCRIPTDIR .githooks/* .claude/hooks/*.sh .claude/hooks/lib/*.sh scripts/*.sh scripts/netsim/*.sh"
+run = "shellcheck -x --source-path=SCRIPTDIR .githooks/* .claude/hooks/*.sh .claude/hooks/lib/*.sh scripts/*.sh scripts/netsim/*.sh scripts/pkg/*.sh scripts/pkgtest/*.sh"
 
 [tasks."lint:yaml"]
 description = "Lint YAML config formatting with yamlfmt"
@@ -174,15 +176,48 @@ run = "./scripts/arch-check.sh"
 
 [tasks.ci]
 description = "Everything CI must pass"
-depends = ["arch", "scan:secrets", "scan:code", "scan:sbom", "lint", "lint:sh", "lint:yaml", "lint:actions", "test:ci", "cover:check", "fe:check"]
+depends = ["arch", "scan:secrets", "scan:code", "scan:sbom", "lint", "lint:sh", "lint:yaml", "lint:actions", "pkg:lint", "test:ci", "cover:check", "fe:check"]
+
+# ── Versions and packages (ADR 0025) ──────────────────────────────────────────
+# The release is cut by a human: `mise run changelog:next`, `mise run changelog -- --tag vX.Y.Z`,
+# commit CHANGELOG.md, tag, push the tag; .github/workflows/release.yml does the rest.
+[tasks.changelog]
+description = "Regenerate CHANGELOG.md from the Conventional Commits (git-cliff); extra flags: -- --tag v0.1.0-rc.1"
+run = "git-cliff --output CHANGELOG.md"
+
+[tasks."changelog:next"]
+description = "The next SemVer version the Conventional Commits call for"
+run = "git-cliff --bumped-version"
+
+[tasks."fe:build"]
+description = "Build the frontend into frontend/dist (what the executable embeds)"
+depends = ["fe:install", "fe:bindings"]
+dir = "frontend"
+run = "pnpm run build"
+
+[tasks."pkg:build"]
+description = "Build the executable, tar.gz, .deb and .rpm of THIS machine's architecture into dist/ (goreleaser snapshot, no publish)"
+run = "./scripts/pkg/build.sh"
+
+[tasks."pkg:lint"]
+description = "Validate the desktop entry, the AppStream metadata and the MIME definition that the packages install"
+run = "./scripts/pkg/lint.sh"
+
+[tasks."pkg:test"]
+description = "Install the packages of dist/ on fresh Debian, Ubuntu and Fedora containers (podman) and check them (PKG-01…PKG-11); PKG_DISTROS=debian:13 limits it"
+run = "./scripts/pkgtest/run.sh"
+
+[tasks."pkg:verify"]
+description = "Verify the checksums, the cosign bundle and the SBOMs of a downloaded release (dir = first argument)"
+run = "./scripts/pkg/verify.sh"
 
 [tasks.release]
-description = "Cross-platform release build + publish (goreleaser)"
-run = "goreleaser release --clean"
+description = "Native build of one architecture, no publish: the CI release publishes after assembling both (goreleaser, ADR 0025)"
+run = "./scripts/pkg/build.sh --release"
 
 [tasks."release:snapshot"]
-description = "Local cross-platform build, no publish (goreleaser)"
-run = "goreleaser release --snapshot --clean"
+description = "Local package build, no publish (same as pkg:build)"
+run = "./scripts/pkg/build.sh"
 
 [tasks."tools:rtk"]
 description = "Best-effort install of rtk (token-optimized task output) — never blocks"
@@ -320,12 +355,15 @@ description = "Reduce a long CI/test log (stdin) to its failing items (OpenRoute
 run = "./scripts/llm.sh triage"
 
 [tasks.icons]
-description = "Render the app icon (build/icons/*.svg) to PNG, .ico and .icns"
+description = "Render the app icon (build/icons/*.svg) to PNG, .ico and .icns; the pre-release (nightly) tree too"
 dir = "frontend"
 depends = ["fe:install"]
 run = [
   "node scripts/render-icons.mjs",
+  "mkdir -p ../build/linux/icons-nightly/hicolor/scalable/apps ../build/linux/icons-nightly/hicolor/symbolic/apps",
   "cp ../build/icons/inkwell.svg ../build/linux/icons/hicolor/scalable/apps/io.github.oioio_space.Inkwell.svg",
+  "cp ../build/icons/inkwell-nightly.svg ../build/linux/icons-nightly/hicolor/scalable/apps/io.github.oioio_space.Inkwell.svg",
   "cp ../build/icons/inkwell-symbolic.svg ../build/linux/icons/hicolor/symbolic/apps/io.github.oioio_space.Inkwell-symbolic.svg",
+  "cp ../build/icons/inkwell-symbolic.svg ../build/linux/icons-nightly/hicolor/symbolic/apps/io.github.oioio_space.Inkwell-symbolic.svg",
   "cd .. && wails3 generate icons -input build/appicon.png -windowsfilename build/windows/icon.ico -macfilename build/darwin/icons.icns",
 ]

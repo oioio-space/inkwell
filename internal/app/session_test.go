@@ -15,9 +15,20 @@ import (
 	"github.com/oioio-space/inkwell/internal/app"
 	"github.com/oioio-space/inkwell/internal/transport"
 	"github.com/oioio-space/inkwell/internal/transport/p2p"
+	"github.com/oioio-space/inkwell/internal/version"
 )
 
 func TestMain(m *testing.M) { goleak.VerifyTestMain(m) }
+
+func TestAppVersionIsTheLinkedVersion(t *testing.T) {
+	s, _ := newSession(t)
+	if got, want := s.AppVersion(), version.Current(); got != want {
+		t.Errorf("AppVersion() = %+v, want %+v", got, want)
+	}
+	if s.AppVersion().Version == "" {
+		t.Error("AppVersion().Version is empty; the About dialog would show nothing")
+	}
+}
 
 func newSession(t *testing.T) (*app.Session, *p2p.Node) {
 	t.Helper()

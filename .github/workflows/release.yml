@@ -1,0 +1,274 @@
+# Release pipeline (docs/adr/0025-versions-et-paquets.md, docs/releasing.md).
+#
+#   tag vX.Y.Z or vX.Y.Z-rc.N  -> build both architectures natively, test the packages on fresh
+#                                 Debian, Ubuntu and Fedora, sign, publish a GitHub Release
+#                                 (a DRAFT, flagged pre-release, for -rc)
+#   manual run (workflow_dispatch) -> the same, as a DRY RUN: nothing is published or signed
+#                                 with cosign; the assets are kept as the "release-assets" artifact
+#
+# cgo (GTK4 + WebKitGTK 6.0) means no cross-compilation: amd64 builds on ubuntu-24.04, arm64 on the
+# native ubuntu-24.04-arm runner (free for PUBLIC repositories only: for a private one, point the
+# repository variable ARM64_RUNNER at a larger arm64 runner label).
+name: release
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+permissions:
+  contents: read
+env:
+  MISE_EXPERIMENTAL: true
+jobs:
+  version:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    permissions:
+      contents: read
+      actions: read
+    outputs:
+      version: ${{ steps.v.outputs.version }}
+      publish: ${{ steps.v.outputs.publish }}
+      prerelease: ${{ steps.v.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v6
+      - name: Version from the tag (SemVer), changelog section present
+        id: v
+        run: |
+          if [ "$GITHUB_REF_TYPE" = tag ]; then
+            tag="$GITHUB_REF_NAME"
+            re='^v(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)(-(alpha|beta|rc)\.[1-9][0-9]*)?$'
+            if ! [[ "$tag" =~ $re ]]; then
+              echo "::error::$tag is not vMAJOR.MINOR.PATCH, optionally with -alpha.N, -beta.N or -rc.N"
+              exit 1
+            fi
+            version="${tag#v}"
+            scripts/pkg/notes.sh "$version" >/dev/null
+            publish=true
+          else
+            version="0.0.0-dev.${GITHUB_SHA::7}"
+            publish=false
+          fi
+          case "$version" in *-*) prerelease=true ;; *) prerelease=false ;; esac
+          {
+            echo "version=$version"
+            echo "publish=$publish"
+            echo "prerelease=$prerelease"
+          } >>"$GITHUB_OUTPUT"
+          echo "Releasing $version (publish=$publish, prerelease=$prerelease)" >>"$GITHUB_STEP_SUMMARY"
+      # A tag is only cut on a commit whose CI is green: wait for it (the tag push starts its own run).
+      - name: The CI of this commit passed
+        if: steps.v.outputs.publish == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          for _ in $(seq 40); do
+            runs="$(gh run list --workflow ci.yml --commit "$GITHUB_SHA" --json status,conclusion --limit 50)"
+            if [ "$(jq '[.[] | select(.conclusion == "success")] | length' <<<"$runs")" -gt 0 ]; then
+              echo "CI is green on $GITHUB_SHA"
+              exit 0
+            fi
+            if [ "$(jq '[.[] | select(.status != "completed")] | length' <<<"$runs")" -eq 0 ]; then
+              echo "::error::no successful CI run for $GITHUB_SHA: fix it and tag again"
+              exit 1
+            fi
+            sleep 45
+          done
+          echo "::error::the CI of $GITHUB_SHA did not finish within 30 minutes"
+          exit 1
+  build:
+    needs: version
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ${{ vars.ARM64_RUNNER || 'ubuntu-24.04-arm' }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    env:
+      GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
+      GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0 # goreleaser reads the tags and the commit date
+      # Restored BEFORE mise-action (see ci.yml).
+      - name: Cache Go & tool caches
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cache/go-build
+            ~/go/pkg/mod
+          key: release-${{ runner.os }}-${{ runner.arch }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            release-${{ runner.os }}-${{ runner.arch }}-go-
+      - name: Install GTK4 / WebKitGTK 6.0 (build) and the desktop validators
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libgtk-4-dev libwebkitgtk-6.0-dev \
+            desktop-file-utils appstream libxml2-utils shared-mime-info groff
+      - uses: jdx/mise-action@v3
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/pnpm/store
+          key: ${{ runner.os }}-${{ runner.arch }}-pnpm-${{ hashFiles('frontend/pnpm-lock.yaml') }}
+          restore-keys: ${{ runner.os }}-${{ runner.arch }}-pnpm-
+      # Optional: without the secret the .deb and .rpm are simply not signed (docs/releasing.md).
+      - name: OpenPGP signing key for the .deb and .rpm
+        if: env.GPG_PRIVATE_KEY != ''
+        run: |
+          umask 077
+          printf '%s\n' "$GPG_PRIVATE_KEY" >"$RUNNER_TEMP/signing-key.asc"
+          {
+            echo "NFPM_KEY_FILE=$RUNNER_TEMP/signing-key.asc"
+            echo "NFPM_PASSPHRASE=$GPG_PASSPHRASE"
+          } >>"$GITHUB_ENV"
+          # The matching public key is published next to the packages.
+          export GNUPGHOME="$RUNNER_TEMP/gnupg"
+          mkdir -p "$GNUPGHOME"
+          gpg --batch --quiet --pinentry-mode loopback --passphrase "$GPG_PASSPHRASE" --import "$RUNNER_TEMP/signing-key.asc"
+          gpg --batch --quiet --armor --export >"$RUNNER_TEMP/inkwell-signing-key.asc"
+      - name: Without a signing key
+        if: env.GPG_PRIVATE_KEY == ''
+        run: echo "::notice::the secret GPG_PRIVATE_KEY is not set, so the .deb and .rpm are built unsigned"
+      - name: Package ${{ needs.version.outputs.version }} (${{ matrix.arch }})
+        env:
+          PKG_VERSION: ${{ needs.version.outputs.version }}
+        run: |
+          if [ "${{ needs.version.outputs.publish }}" = true ]; then
+            mise run release
+          else
+            mise run pkg:build
+          fi
+      - name: Validate what the packages install
+        run: mise run pkg:lint
+      - name: A previous package, for the upgrade test
+        run: scripts/pkg/build-prev.sh prev
+      - name: Collect the assets
+        run: |
+          mkdir -p assets
+          cp dist/*.deb dist/*.rpm dist/*.tar.gz dist/*.spdx.json assets/
+          if [ -f "$RUNNER_TEMP/inkwell-signing-key.asc" ]; then cp "$RUNNER_TEMP/inkwell-signing-key.asc" assets/; fi
+          {
+            echo "### Sizes ${{ matrix.arch }}"
+            echo '```'
+            du -k dist/inkwell-*/inkwell assets/*.deb assets/*.rpm assets/*.tar.gz
+            echo '```'
+          } >>"$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist-${{ matrix.arch }}
+          path: assets/
+          if-no-files-found: error
+          retention-days: 14
+      - uses: actions/upload-artifact@v4
+        with:
+          name: prev-${{ matrix.arch }}
+          path: prev/
+          if-no-files-found: error
+          retention-days: 3
+  # Fresh containers per distribution: install, dependencies, desktop integration, headless
+  # smoke test with the network cut, uninstall, upgrade, signatures (scripts/pkgtest, PKG-01…11).
+  test:
+    needs: [version, build]
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-24.04
+          - arch: arm64
+            runner: ${{ vars.ARM64_RUNNER || 'ubuntu-24.04-arm' }}
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/download-artifact@v5
+        with:
+          name: dist-${{ matrix.arch }}
+          path: dist
+      - uses: actions/download-artifact@v5
+        with:
+          name: prev-${{ matrix.arch }}
+          path: prev
+      - name: Install podman if the image has none
+        run: command -v podman >/dev/null || { sudo apt-get update -qq && sudo apt-get install -y -qq podman; }
+      - name: Install tests on Debian 13, Ubuntu 24.04 and Fedora 44 (${{ matrix.arch }})
+        run: |
+          pubkey=""
+          if [ -f dist/inkwell-signing-key.asc ]; then pubkey="$PWD/dist/inkwell-signing-key.asc"; fi
+          # Root podman: the runner user has no sub-uid range; the containers are throwaway.
+          sudo env "PATH=$PATH" PKG_DIST=dist PKG_PREV_DIST=prev PKG_PUBKEY="$pubkey" ./scripts/pkgtest/run.sh
+      - name: Keep the logs on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: pkgtest-logs-${{ matrix.arch }}
+          path: .task/pkgtest/*.log
+          retention-days: 7
+  publish:
+    needs: [version, build, test]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    permissions:
+      contents: write
+      id-token: write # cosign keyless signing
+    env:
+      VERSION: ${{ needs.version.outputs.version }}
+      PUBLISH: ${{ needs.version.outputs.publish }}
+      PRERELEASE: ${{ needs.version.outputs.prerelease }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v6
+      - uses: jdx/mise-action@v3
+        with:
+          install_args: cosign
+      - uses: actions/download-artifact@v5
+        with:
+          pattern: dist-*
+          path: parts
+      - name: Assemble both architectures (checksums, sizes)
+        run: scripts/pkg/assemble.sh parts release
+      - name: Compare the sizes with the previous release (alert above +10 %)
+        run: |
+          if gh release download --pattern sizes.txt --dir previous 2>/dev/null; then
+            scripts/pkg/sizes.sh previous/sizes.txt release/sizes.txt
+          else
+            echo "No previous release to compare the sizes with."
+          fi
+      - name: Sign the checksums with cosign (keyless, GitHub OIDC identity)
+        if: env.PUBLISH == 'true'
+        run: cosign sign-blob --yes --bundle release/checksums.txt.sigstore.json release/checksums.txt
+      - name: Verify the release like a user would
+        run: |
+          if [ "$PUBLISH" = true ]; then
+            scripts/pkg/verify.sh release "v$VERSION"
+          else
+            scripts/pkg/verify.sh release
+          fi
+      - name: Release notes from the changelog
+        if: env.PUBLISH == 'true'
+        run: scripts/pkg/notes.sh "$VERSION" >notes.md
+      - name: Create the GitHub Release (a draft for a pre-release)
+        if: env.PUBLISH == 'true'
+        run: |
+          flags=(--verify-tag --title "Inkwell $VERSION" --notes-file notes.md)
+          if [ "$PRERELEASE" = true ]; then flags+=(--draft --prerelease); else flags+=(--latest); fi
+          if gh release view "v$VERSION" >/dev/null 2>&1; then
+            gh release upload "v$VERSION" release/* --clobber
+          else
+            gh release create "v$VERSION" "${flags[@]}" release/*
+          fi
+      - name: Dry run, keep the assets
+        if: env.PUBLISH != 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-assets
+          path: release/
+          retention-days: 7

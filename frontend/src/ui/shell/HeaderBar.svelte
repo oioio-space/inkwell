@@ -19,6 +19,7 @@ let {
   onToggleSidebar,
   onToggleToolbar,
   onPreferences,
+  onAbout,
 }: {
   title: string;
   /** The file being edited, under the title. */
@@ -34,6 +35,7 @@ let {
   onToggleSidebar: () => void;
   onToggleToolbar: () => void;
   onPreferences: () => void;
+  onAbout: () => void;
 } = $props();
 
 let menuOpen = $state(false);
@@ -91,6 +93,17 @@ let menuOpen = $state(false);
           }}
         >
           <span>{t("menu.preferences")}</span>
+        </button>
+        <button
+          type="button"
+          class="mi"
+          role="menuitem"
+          onclick={() => {
+            close(false);
+            onAbout();
+          }}
+        >
+          <span>{t("menu.about")}</span>
         </button>
       {/snippet}
     </MenuButton>

@@ -33,8 +33,11 @@ jobs:
             ${{ runner.os }}-go-
       # Wails v3 builds on GTK4 / WebKitGTK 6.0 with cgo (ADR 0003, 0009) — needed before
       # mise installs the wails3 CLI and before any Go build.
-      - name: Install GTK4 / WebKitGTK 6.0
-        run: sudo apt-get update -qq && sudo apt-get install -y -qq libgtk-4-dev libwebkitgtk-6.0-dev
+      - name: Install GTK4 / WebKitGTK 6.0, and the validators of `mise run pkg:lint`
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq libgtk-4-dev libwebkitgtk-6.0-dev \
+            desktop-file-utils appstream libxml2-utils shared-mime-info groff
       - uses: jdx/mise-action@v3
       - name: Cache pnpm store
         uses: actions/cache@v4
@@ -103,19 +106,4 @@ jobs:
             frontend/test-results/
             .task/netsim/
           retention-days: 7
-  release:
-    needs: ci
-    if: startsWith(github.ref, 'refs/tags/v')
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    permissions:
-      contents: write
-    steps:
-      - uses: actions/checkout@v6
-        with:
-          fetch-depth: 0
-      - uses: jdx/mise-action@v3
-      - name: Release (goreleaser)
-        run: mise run release
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+  # The release itself is .github/workflows/release.yml (tags v*; ADR 0025).
