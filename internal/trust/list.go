@@ -29,6 +29,11 @@ type Member struct {
 	Person Hash
 	// SuspendedBy is the author of the suspension that holds, when Suspended.
 	SuspendedBy ed25519.PublicKey
+	// SuspendedOp is the hash of that suspension.
+	SuspendedOp Hash
+	// ResumedBy is the author of the resumption that ended the member's last
+	// suspension, if the ≺-last live suspension op is a resumption.
+	ResumedBy ed25519.PublicKey
 	// Role is the member's current role, kept while suspended.
 	Role Role
 	// Suspended reports whether the member is suspended (rule S2).
@@ -172,12 +177,13 @@ func (l *List) apply(op Op) ([]Op, error) {
 	return added, nil
 }
 
-// standingAdmin reports whether key is an admin in the current membership.
-// Only such keys get a slot in the pending buffer: a removed key cannot fill it.
+// standingAdmin reports whether key is an admin in the current membership, and
+// not suspended. Only such keys get a slot in the pending buffer: a removed or
+// suspended key cannot fill it.
 func (l *List) standingAdmin(key ed25519.PublicKey) bool {
 	v := l.current()
 	i, ok := v.memberAt[string(key)]
-	return ok && v.members[i].Role == RoleAdmin
+	return ok && v.members[i].Role == RoleAdmin && !v.members[i].Suspended
 }
 
 // prunePending starts a new generation and drops the buffered ops that are
@@ -286,6 +292,9 @@ func (l *List) IssueWith(s Signer, tmpl Op) (Op, error) {
 	if err != nil {
 		return Op{}, err
 	}
+	if err := l.wouldStand(op); err != nil {
+		return Op{}, err
+	}
 	if _, err := l.apply(op); err != nil {
 		return Op{}, err
 	}
@@ -312,7 +321,11 @@ func (l *List) IssueBatch(s Signer, tmpls []Op) ([]Op, error) {
 		return nil, ErrTooManyOps
 	}
 	v := l.current()
-	frontier := l.capPrev(v, string(s.Public()), string(tmpls[0].Subject))
+	subjects := make([]string, len(tmpls))
+	for i, t := range tmpls {
+		subjects[i] = string(t.Subject)
+	}
+	frontier := l.capPrev(v, string(s.Public()), subjects...)
 	prev, lamport := frontier, l.nextLamport(frontier)
 	ops := make([]Op, 0, len(tmpls))
 	for _, tmpl := range tmpls {
@@ -322,6 +335,9 @@ func (l *List) IssueBatch(s Signer, tmpls []Op) ([]Op, error) {
 		}
 		ops = append(ops, op)
 		prev, lamport = []Hash{op.Hash()}, op.Lamport+1
+	}
+	if err := l.wouldStand(ops...); err != nil {
+		return nil, err
 	}
 	for _, op := range ops {
 		if _, err := l.apply(op); err != nil {
@@ -354,6 +370,9 @@ func (l *List) build(v *view, s Signer, tmpl Op, prev []Hash, lamport uint64, se
 	if tmpl.Kind == OpAdd && tmpl.Person != (Hash{}) && slices.ContainsFunc(v.members, func(m Member) bool { return m.Suspended && m.Person == tmpl.Person }) {
 		return Op{}, ErrSuspended
 	}
+	if j, member := v.memberAt[subj]; member && v.members[j].Suspended && tmpl.Role == RoleAdmin && (tmpl.Kind == OpAdd || tmpl.Kind == OpSetRole) {
+		return Op{}, ErrSuspended // a suspended member must not be made admin: resume it first.
+	}
 	op := tmpl
 	op.Author = bytes.Clone(s.Public())
 	op.Subject = bytes.Clone(tmpl.Subject)
@@ -365,11 +384,29 @@ func (l *List) build(v *view, s Signer, tmpl Op, prev []Hash, lamport uint64, se
 		return Op{}, err
 	}
 	leaves := subj == me && (op.Kind == OpRemove || op.Role != RoleAdmin)
-	if leaves && !v.otherAdminSeenBy(seen, me) {
+	if leaves && (!v.otherAdminSeenBy(seen, me) || !v.otherActiveAdmin(me)) {
 		return Op{}, ErrLastAdmin
 	}
 	op.sign(s, l.id)
 	return op, nil
+}
+
+// wouldStand folds the list with ops added, without storing them, and returns
+// [ErrNotStanding] if one of them would not stand: an op the issuer signs must
+// take effect, not sit in the list as a dead op that spends the budget.
+func (l *List) wouldStand(ops ...Op) error {
+	trial := maps.Clone(l.ops)
+	for _, o := range ops {
+		h := o.Hash()
+		trial[h] = &node{op: o, hash: h}
+	}
+	v := fold(trial)
+	for _, o := range ops {
+		if !v.stands[v.index[o.Hash()]] {
+			return ErrNotStanding
+		}
+	}
+	return nil
 }
 
 // nextLamport returns the Lamport number of an op whose parents are prev.
@@ -381,7 +418,7 @@ func (l *List) nextLamport(prev []Hash) uint64 {
 	return n
 }
 
-// capPrev returns the parents of a new op by issuer on subject: the whole
+// capPrev returns the parents of a new op by issuer on subjects: the whole
 // frontier if it fits in MaxPrev. Otherwise heads that together cover, as far
 // as MaxPrev allows, the issuer's latest surviving grant (which also covers
 // every cut on the issuer, so the op stands) and every standing op by or on
@@ -390,7 +427,7 @@ func (l *List) nextLamport(prev []Hash) uint64 {
 // killed by it (rule 3b), undoing what it had decided. The remaining slots go
 // to the ≺-greatest heads, those that stand first so that dead floods do not
 // crowd them out.
-func (l *List) capPrev(v *view, issuer, subject string) []Hash {
+func (l *List) capPrev(v *view, issuer string, subjects ...string) []Hash {
 	heads := l.frontier()
 	if len(heads) <= MaxPrev {
 		return heads
@@ -408,9 +445,11 @@ func (l *List) capPrev(v *view, issuer, subject string) []Hash {
 	need := newBitset(len(v.nodes))
 	for i := range v.nodes {
 		exit := v.isSelfCut(i) && v.selfCut(i).exit
-		// A suspension of the issuer that the new op did not see would kill it (S3).
-		suspends := v.stands[i] && v.nodes[i].op.Kind == OpSuspend && v.subj[i] == issuer
-		if exit || suspends || (v.stands[i] && (v.auth[i] == subject || v.subj[i] == subject)) {
+		// A suspension of the issuer that the new op did not see would kill it (S3), and
+		// so would not seeing the resumption that lifted it (S2).
+		susp := v.stands[i] && v.nodes[i].op.suspension() && v.subj[i] == issuer
+		about := v.stands[i] && (slices.Contains(subjects, v.auth[i]) || slices.Contains(subjects, v.subj[i]))
+		if exit || susp || about {
 			need.set(i)
 		}
 	}
@@ -488,6 +527,7 @@ func (l *List) Members() []Member {
 		out[i] = m
 		out[i].Pub = bytes.Clone(m.Pub)
 		out[i].SuspendedBy = bytes.Clone(m.SuspendedBy)
+		out[i].ResumedBy = bytes.Clone(m.ResumedBy)
 	}
 	return out
 }

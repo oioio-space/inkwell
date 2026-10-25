@@ -127,15 +127,19 @@
 //   - S1. Reach. A suspension op by y on x counts only if x is unranked, junior
 //     to y, or senior but not admin at that op (the exception of rule 2, as
 //     for a Remove). Otherwise it is stored and has no effect.
-//   - S2. State. Keep the suspension ops on x that follow the ≺-latest
-//     surviving Remove of x by another key (so a removal followed by a
-//     readmission starts afresh). Drop a Resume concurrent to a Suspend of
-//     those: a cut beats a concurrent restoration, as in rule 4. x is
-//     suspended if the ≺-last op left is a Suspend. [Member.SuspendedBy] is
-//     its author.
+//   - S2. State. Keep the suspension ops on x that see every surviving
+//     Remove of x by a key senior to it (so a removal followed by a
+//     readmission starts afresh, and a suspension concurrent to the removal
+//     does not outlive it). A junior's suspension of a senior (S1's
+//     exception) is dropped if a surviving grant that it does not follow
+//     makes x admin again, as rule 4 drops a junior's cut: state and effect
+//     agree. Drop a Resume concurrent to a Suspend of those: a cut beats a
+//     concurrent restoration, as in rule 4. x is suspended if the ≺-last op
+//     left is a Suspend ([Member.SuspendedBy], [Member.SuspendedOp]), and
+//     [Member.ResumedBy] says who lifted it if it is a Resume.
 //   - S3. Effect on the list. An op o by y stands only if, in addition to
-//     rule 3, (a) y is not suspended at o, S2 computed on the ops that o
-//     sees; and (b) no standing Suspend on y by another key is concurrent to
+//     rule 3, (a) y is not suspended at o, S2 computed on the ops and the
+//     Removes that o sees (the same Removes as S2); and (b) no standing Suspend on y by another key is concurrent to
 //     o, which treats it as a cut: what y signs without having seen it is
 //     dead, even after a Resume, so a suspended admin cannot backdate. A
 //     self-cut that S3 kills is not an exit either. As for rule 2, the
@@ -146,6 +150,8 @@
 // it stays acyclic. [List.Verify] returns [ErrSuspended] for the attestation
 // of a suspended member, so the application stops trusting what it signs.
 // [List.IssueBatch] issues one op per device of a person, all or nothing.
+// Issue refuses to store an op that would not stand ([ErrNotStanding]), to
+// let the last active admin leave, and to make a suspended member admin.
 //
 // Each rule about y's ops reads only ops by keys senior to y and y's own
 // ops, except what a self-cut says and what spares an op from an exit (which

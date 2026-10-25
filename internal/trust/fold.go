@@ -327,11 +327,11 @@ func (v *view) adminAt(i int, surv, self []int) bool {
 	return last >= 0 && v.nodes[last].grant()
 }
 
-// liveSuspension applies S2 to q, the standing suspensions and resumptions of
-// one key in ≺ order: a resumption concurrent to a suspension of q is dropped,
-// and the key is suspended if the ≺-last op left is a suspension. It returns
-// the position of that suspension, or -1.
-func (v *view) liveSuspension(q []int) int {
+// lastLive applies S2 to q, the standing suspensions and resumptions of one
+// key in ≺ order: a resumption concurrent to a suspension of q is dropped. It
+// returns the ≺-last op left, or -1. The key is suspended if it is a
+// suspension.
+func (v *view) lastLive(q []int) int {
 	last := -1
 	for _, i := range q {
 		if v.nodes[i].op.Kind == OpResume && slices.ContainsFunc(q, func(j int) bool { return v.nodes[j].op.Kind == OpSuspend && v.conc(i, j) }) {
@@ -339,30 +339,32 @@ func (v *view) liveSuspension(q []int) int {
 		}
 		last = i
 	}
-	if last >= 0 && v.nodes[last].op.Kind == OpSuspend {
-		return last
-	}
-	return -1
+	return last
+}
+
+// followsRemoves reports whether the suspension op j sees every Remove among
+// roles (surviving role ops of the key, all by keys senior to it) that op
+// within sees; within < 0 means every one. A suspension that does not see a
+// removal does not outlive it.
+func (v *view) followsRemoves(j int, roles []int, within int) bool {
+	return !slices.ContainsFunc(roles, func(r int) bool {
+		return v.nodes[r].op.Kind == OpRemove && (within < 0 || v.anc[within].has(r)) && !v.anc[j].has(r)
+	})
 }
 
 // suspendedAt reports whether a key is suspended as op i sees it: S2 over the
 // ops of susp (its standing suspensions and resumptions by other keys) that i
-// sees and that follow the last Remove of the key by another key that i sees,
-// among roles, its surviving role ops.
+// sees and that see every Remove that i sees among roles, the surviving role
+// ops of the key by keys senior to it.
 func (v *view) suspendedAt(i int, roles, susp []int) bool {
-	rm := -1
-	for _, j := range roles {
-		if v.nodes[j].op.Kind == OpRemove && v.anc[i].has(j) {
-			rm = max(rm, j)
-		}
-	}
 	var q []int
 	for _, j := range susp {
-		if j > rm && v.anc[i].has(j) {
+		if v.anc[i].has(j) && v.followsRemoves(j, roles, i) {
 			q = append(q, j)
 		}
 	}
-	return v.liveSuspension(q) >= 0
+	k := v.lastLive(q)
+	return k >= 0 && v.nodes[k].op.Kind == OpSuspend
 }
 
 // otherAdminSeenBy reports whether an admin other than y exists in the
@@ -381,6 +383,14 @@ func (v *view) otherAdminSeenBy(heads []Hash, y string) bool {
 		}
 	}
 	return v.verdict(v.sweep(past), y).honoured
+}
+
+// otherActiveAdmin reports whether an admin other than y, and not suspended,
+// is a member now. An admin leaves only if one is left to run the list.
+func (v *view) otherActiveAdmin(y string) bool {
+	return slices.ContainsFunc(v.members, func(m Member) bool {
+		return m.Role == RoleAdmin && !m.Suspended && string(m.Pub) != y
+	})
 }
 
 // memberRec is a member with the data needed to order and reason about it.
@@ -446,20 +456,24 @@ func (s *sweep) members() []memberRec {
 		if x == v.creator {
 			pos = 0
 		}
-		rm := -1 // the last surviving Remove of x by another key.
-		for _, i := range l {
-			if v.nodes[i].op.Kind == OpRemove && v.auth[i] != x {
-				rm = i
-			}
-		}
+		// S2: the suspensions of x that see every surviving Remove of it, unless a
+		// junior's suspension of a senior that a surviving grant made admin again.
 		var q []int
 		for _, i := range s.susp[x] {
-			if s.stands[i] && i > rm {
-				q = append(q, i)
+			if !s.stands[i] || !v.followsRemoves(i, surv, -1) {
+				continue
 			}
+			if s.exc[i] && slices.ContainsFunc(surv, func(g int) bool { return v.nodes[g].grant() && !v.anc[i].has(g) }) {
+				continue
+			}
+			q = append(q, i)
 		}
-		if k := v.liveSuspension(q); k >= 0 {
-			m.Suspended, m.SuspendedBy = true, v.nodes[k].op.Author
+		if k := v.lastLive(q); k >= 0 {
+			if nd := v.nodes[k]; nd.op.Kind == OpSuspend {
+				m.Suspended, m.SuspendedBy, m.SuspendedOp = true, nd.op.Author, nd.hash
+			} else {
+				m.ResumedBy = nd.op.Author
+			}
 		}
 		out = append(out, memberRec{m: m, pos: pos, last: run[len(run)-1]})
 	}

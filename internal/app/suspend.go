@@ -3,12 +3,10 @@ package app
 import (
 	"bytes"
 	"cmp"
-	"slices"
 
 	"github.com/oioio-space/inkwell/internal/bridge"
 	"github.com/oioio-space/inkwell/internal/transport"
 	"github.com/oioio-space/inkwell/internal/transport/p2p"
-	"github.com/oioio-space/inkwell/internal/trust"
 )
 
 // rolesPayload returns the [bridge.Roles] payload describing the member list:
@@ -58,14 +56,13 @@ func (w *Wiring) selfSuspension() (by transport.PeerID, suspended bool) {
 	return "", false
 }
 
-// lastResumeBy returns the author of the latest resumption of this device, or
-// "" if there is none.
+// lastResumeBy returns the author of the resumption that lifted the suspension
+// of this device, or "" if there is none.
 func (w *Wiring) lastResumeBy() transport.PeerID {
 	self := w.signer.Public()
-	ops := w.list().Since(nil)
-	for _, op := range slices.Backward(ops) {
-		if op.Kind == trust.OpResume && op.Subject.Equal(self) {
-			return p2p.IDFromKey(op.Author)
+	for _, m := range w.list().Members() {
+		if m.Pub.Equal(self) {
+			return p2p.IDFromKey(m.ResumedBy)
 		}
 	}
 	return ""

@@ -53,6 +53,10 @@ var (
 	// to issue, is suspended, and when a device is added to a person one of
 	// whose devices is suspended.
 	ErrSuspended = errors.New("trust: suspended")
+	// ErrNotStanding is returned when an op to issue would be stored but would
+	// not stand in the fold, for instance because the frontier is too wide to
+	// name all the ops it must see.
+	ErrNotStanding = errors.New("trust: the op would have no effect")
 	// ErrNotWriter marks an attestation whose signer cannot write.
 	ErrNotWriter = errors.New("trust: signer is not a writer")
 	// ErrNoGenesis is returned when the list has not received its genesis yet.

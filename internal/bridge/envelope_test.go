@@ -90,6 +90,36 @@ func TestEnvelopeVectors(t *testing.T) {
 	}
 }
 
+// TestInvalidVectors checks that the frames of testdata/invalid.json, which
+// the TypeScript implementation must refuse too, are refused.
+func TestInvalidVectors(t *testing.T) {
+	raw, err := os.ReadFile("testdata/invalid.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var vectors []struct {
+		Name    string `json:"name"`
+		WireHex string `json:"wireHex"`
+	}
+	if err := json.Unmarshal(raw, &vectors); err != nil {
+		t.Fatal(err)
+	}
+	if len(vectors) == 0 {
+		t.Fatal("no invalid vectors")
+	}
+	for _, v := range vectors {
+		t.Run(v.Name, func(t *testing.T) {
+			wire, err := hex.DecodeString(v.WireHex)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := bridge.Decode(wire); !errors.Is(err, bridge.ErrMalformed) {
+				t.Errorf("Decode(%x) = %v, want ErrMalformed", wire, err)
+			}
+		})
+	}
+}
+
 func TestHeadsVector(t *testing.T) {
 	// The payload of the "attest two heads" vector.
 	want, err := hex.DecodeString("0004646f6331" + strings.Repeat("01", 32) + strings.Repeat("fe", 32))

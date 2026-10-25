@@ -66,20 +66,9 @@ func roleName(r trust.Role) string {
 	return ""
 }
 
-// receivedAt returns when op, which is stored, was received here: the time it
-// was persisted. It is the zero time if the op is not stored.
-func (s *opStore) receivedAt(op trust.Op) time.Time {
-	fi, err := s.root.Stat(op.Hash().String() + opExt)
-	if err != nil {
-		return time.Time{}
-	}
-	return fi.ModTime()
-}
-
 // people groups the members of the project by person.
 func (inv *invites) people() []Person {
-	list := inv.currentList()
-	members := list.Members()
+	members := inv.currentList().Members()
 	self := inv.dev.Public()
 	var out []Person
 	index := make(map[trust.Hash]int)
@@ -107,7 +96,7 @@ func (inv *invites) people() []Person {
 					p.SuspendedBy = o.Name
 				}
 			}
-			p.SuspendedAt = inv.suspendedAt(list, m)
+			p.SuspendedAt = inv.store.receivedAt(m.SuspendedOp)
 		}
 	}
 	return out
@@ -120,18 +109,6 @@ func roleLevel(name string) trust.Role {
 		return 0
 	}
 	return r
-}
-
-// suspendedAt returns when this device received the suspension of m: the
-// latest suspension of m by its suspender.
-func (inv *invites) suspendedAt(list *trust.List, m trust.Member) time.Time {
-	ops := list.Since(nil)
-	for _, op := range slices.Backward(ops) {
-		if op.Kind == trust.OpSuspend && op.Subject.Equal(m.Pub) && op.Author.Equal(m.SuspendedBy) {
-			return inv.store.receivedAt(op)
-		}
-	}
-	return time.Time{}
 }
 
 // devicesOf returns the members that are devices of the person who names: a
@@ -200,10 +177,18 @@ func (s *Session) Suspend(who string) error {
 }
 
 // Resume lets back the person who, on all its devices that are suspended. What
-// it wrote meanwhile is accepted again, with the same role as before.
+// it wrote meanwhile is accepted again, with the same role as before. Like
+// [Session.Suspend], it refuses a person one of whose devices is this one.
 func (s *Session) Resume(who string) error {
 	if s.inv == nil {
 		return errNoProject
+	}
+	devices, err := s.inv.devicesOf(who)
+	if err != nil {
+		return err
+	}
+	if slices.ContainsFunc(devices, func(m trust.Member) bool { return m.Pub.Equal(s.inv.dev.Public()) }) {
+		return errSelf // a sibling device that escaped the suspension must not lift it.
 	}
 	return s.inv.issueFor(who,
 		func(m trust.Member) bool { return m.Suspended },

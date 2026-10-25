@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest";
 import vectors from "../../../internal/bridge/testdata/envelopes.json";
+import invalid from "../../../internal/bridge/testdata/invalid.json";
 import {
   decodeEnvelope,
   decodeHeads,
@@ -28,6 +29,14 @@ describe("envelope golden vectors (shared with Go)", () => {
       expect(back.kind).toBe(env.kind);
       expect(back.peer).toBe(v.peer);
       expect(hex(back.payload)).toBe(v.payloadHex);
+    });
+  }
+});
+
+describe("invalid vectors (shared with Go)", () => {
+  for (const v of invalid) {
+    it(`rejects ${v.name}`, () => {
+      expect(() => decodeEnvelope(unhex(v.wireHex))).toThrow(MalformedEnvelope);
     });
   }
 });

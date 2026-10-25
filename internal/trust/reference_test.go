@@ -1,6 +1,7 @@
 package trust
 
 import (
+	"fmt"
 	"slices"
 	"testing"
 
@@ -103,44 +104,56 @@ func (m *refModel) suspOn(set []int, res refResult, x string, juniors bool) (out
 	return out
 }
 
-// liveSuspension applies S2 to q, ascending ≺ positions of suspensions and
-// resumptions of one key: a resumption concurrent to a suspension of q is
-// dropped, and the key is suspended if the ≺-last op left is a suspension. It
-// returns that op, or -1.
-func (m *refModel) liveSuspension(q []int) int {
-	last := -1
+// liveSuspension applies S2 to q, positions of suspensions and resumptions of
+// one key. It is a different formulation from the fold's, to check it: a
+// resumption survives if no suspension of q is concurrent to it; the key is
+// suspended iff no surviving resumption is ≺-after its ≺-last suspension; and
+// otherwise the ≺-last surviving resumption ended it. It returns the
+// suspension that holds, or -1, and the resumption that lifted it, or -1.
+func (m *refModel) liveSuspension(q []int) (suspension, resumption int) {
+	suspension, resumption = -1, -1
 	for _, i := range q {
-		beaten := false
-		for _, j := range q {
-			beaten = beaten || (m.nodes[i].op.Kind == OpResume && m.nodes[j].op.Kind == OpSuspend && m.concurrent(i, j))
-		}
-		if !beaten {
-			last = i
+		switch m.nodes[i].op.Kind {
+		case OpSuspend:
+			suspension = max(suspension, i)
+		case OpResume:
+			concurrentToSuspension := false
+			for _, j := range q {
+				concurrentToSuspension = concurrentToSuspension || (m.nodes[j].op.Kind == OpSuspend && m.concurrent(i, j))
+			}
+			if !concurrentToSuspension {
+				resumption = max(resumption, i)
+			}
 		}
 	}
-	if last >= 0 && m.nodes[last].op.Kind == OpSuspend {
-		return last
+	if resumption > suspension {
+		return -1, resumption
 	}
-	return -1
+	return suspension, -1
+}
+
+// followsRemoves reports whether the suspension op j sees every Remove of
+// roles that op within sees (every one if within < 0).
+func (m *refModel) followsRemoves(j int, roles []int, within int) bool {
+	for _, r := range roles {
+		if m.nodes[r].op.Kind == OpRemove && (within < 0 || m.sees(within, r)) && !m.sees(j, r) {
+			return false
+		}
+	}
+	return true
 }
 
 // suspendedAt reports whether the key with surviving role ops roles and
-// standing suspension ops susp is suspended as op i sees it: S2 on what i
-// sees, after the last Remove it sees.
+// standing suspension ops susp is suspended as op i sees it.
 func (m *refModel) suspendedAt(i int, roles, susp []int) bool {
-	rm := -1
-	for _, j := range roles {
-		if m.nodes[j].op.Kind == OpRemove && m.sees(i, j) {
-			rm = max(rm, j)
-		}
-	}
 	var q []int
 	for _, j := range susp {
-		if j > rm && m.sees(i, j) {
+		if m.sees(i, j) && m.followsRemoves(j, roles, i) {
 			q = append(q, j)
 		}
 	}
-	return m.liveSuspension(q) >= 0
+	k, _ := m.liveSuspension(q)
+	return k >= 0
 }
 
 // spared reports whether some op of set by a key other than y sees i but not
@@ -318,20 +331,21 @@ func (m *refModel) fold(set []int) refResult {
 			if x == m.creator {
 				pos = 0
 			}
-			rm := -1 // the last surviving Remove of x by another key.
-			for _, j := range l {
-				if m.nodes[j].op.Kind == OpRemove && m.author(j) != x {
-					rm = j
-				}
-			}
+			surv := m.survivors(m.othersOn(set, res, x))
 			var q []int
 			for _, j := range m.suspOn(set, res, x, true) {
-				if j > rm {
+				lapsed := false // a junior's suspension of a senior that a later grant undid.
+				for _, g := range surv {
+					lapsed = lapsed || (res.exc[j] && m.grant(g) && !m.sees(j, g))
+				}
+				if m.followsRemoves(j, surv, -1) && !lapsed {
 					q = append(q, j)
 				}
 			}
-			if k := m.liveSuspension(q); k >= 0 {
-				mem.Suspended, mem.SuspendedBy = true, m.nodes[k].op.Author
+			if k, r := m.liveSuspension(q); k >= 0 {
+				mem.Suspended, mem.SuspendedBy, mem.SuspendedOp = true, m.nodes[k].op.Author, m.nodes[k].hash
+			} else if r >= 0 {
+				mem.ResumedBy = m.nodes[r].op.Author
 			}
 			out = append(out, entry{mem, pos})
 		}
@@ -491,9 +505,44 @@ func TestFoldInvariants(t *testing.T) {
 				}
 			}
 		}
+		// A suspended member signs nothing that stands after its suspension.
+		for _, mem := range l.Members() {
+			if !mem.Suspended {
+				continue
+			}
+			k, ok := v.index[mem.SuspendedOp]
+			if !ok || string(m.nodes[k].op.Subject) != string(mem.Pub) {
+				rt.Fatalf("member %x: SuspendedOp is not a suspension of it", mem.Pub[:4])
+			}
+			if v.exc[k] {
+				continue // a junior's suspension of a senior changes nothing the senior decided (S3).
+			}
+			for i, standing := range v.stands {
+				if standing && i > k && m.author(i) == string(mem.Pub) {
+					rt.Fatalf("op %d of %x stands after its suspension %d\n%s", i, mem.Pub[:4], k, dump(v, testKeys()))
+				}
+			}
+		}
 		// While the creator has not stepped down it is an admin.
 		if !creatorLeft && l.Role(creator) != RoleAdmin {
 			rt.Fatalf("creator is %v though it never stepped down", l.Role(creator))
 		}
 	})
+}
+
+// dump describes the ops of v, for failure messages: position, kind, author
+// and subject as indexes in keys, role, parents, whether it stands.
+func dump(v *view, keys []*testSigner) string {
+	name := func(k []byte) int {
+		return slices.IndexFunc(keys, func(s *testSigner) bool { return string(s.Public()) == string(k) })
+	}
+	var out string
+	for i, nd := range v.nodes {
+		var prev []int
+		for _, p := range nd.op.Prev {
+			prev = append(prev, v.index[p])
+		}
+		out += fmt.Sprintf("%2d kind %d by %d on %d role %d prev %v stands %v exc %v\n", i, nd.op.Kind, name(nd.op.Author), name(nd.op.Subject), nd.op.Role, prev, v.stands[i], v.exc[i])
+	}
+	return out
 }

@@ -129,6 +129,33 @@ func TestFoldOrderIndependent(t *testing.T) {
 	})
 }
 
+// TestIssuedOpsStand checks that an op that IssueWith or IssueBatch returns
+// takes effect: the list never keeps a dead op for its issuer.
+func TestIssuedOpsStand(t *testing.T) {
+	keys := testKeys()
+	rapid.Check(t, func(rt *rapid.T) {
+		l, _ := genList(rt, keys)
+		kinds := []OpKind{OpAdd, OpSetRole, OpRemove, OpSuspend, OpResume}
+		draw := func(label string) Op {
+			return Op{
+				Kind:    rapid.SampledFrom(kinds).Draw(rt, label+"kind"),
+				Subject: rapid.SampledFrom(keys).Draw(rt, label+"subject").Public(),
+				Role:    rapid.SampledFrom([]Role{RoleAdmin, RoleWriter, RoleReader}).Draw(rt, label+"role"),
+			}
+		}
+		issuer := rapid.SampledFrom(keys).Draw(rt, "issuer")
+		if rapid.Bool().Draw(rt, "batch") {
+			if ops, err := l.IssueBatch(issuer, []Op{draw("a"), draw("b")}); err == nil {
+				wantStands(rt, l, ops...)
+			}
+			return
+		}
+		if op, err := l.IssueWith(issuer, draw("")); err == nil {
+			wantStands(rt, l, op)
+		}
+	})
+}
+
 // deliver applies ops in the given order, then resends them, as the sync
 // protocol does, until nothing new is stored: an op whose parents are missing
 // and whose author is unknown is refused rather than buffered.
