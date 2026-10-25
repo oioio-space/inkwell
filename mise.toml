@@ -269,6 +269,24 @@ browser="${INKWELL_E2E_BROWSER:-$([ -n "${CI:-}" ] && echo webkit || echo chromi
 INKWELL_E2E_BROWSER="$browser" pnpm exec playwright test
 """
 
+[tasks."e2e:webkit"]
+description = "End-to-end under WebKit, as CI runs it, on a machine where Playwright's WebKit does not run (Fedora): WebKit in the official Playwright container (podman), tests and instances on the host"
+depends = ["e2e:build"]
+dir = "frontend"
+run = """
+set -eu
+version=$(node -p "require('./package.json').devDependencies['@playwright/test']")
+port=${INKWELL_E2E_WS_PORT:-37123}
+name="inkwell-webkit-$port"
+podman rm -f "$name" >/dev/null 2>&1 || true
+podman run -d --rm --name "$name" --network host --ipc host --init \
+  "mcr.microsoft.com/playwright:v$version-noble" \
+  npx -y "playwright@$version" run-server --port "$port" --host 127.0.0.1 >/dev/null
+trap 'podman rm -f "$name" >/dev/null 2>&1 || true' EXIT
+for _ in $(seq 60); do (exec 3<>/dev/tcp/127.0.0.1/$port) 2>/dev/null && break; sleep 1; done
+INKWELL_E2E_BROWSER=webkit INKWELL_E2E_WS="ws://127.0.0.1:$port/" pnpm exec playwright test "$@"
+"""
+
 [tasks."e2e:netsim"]
 description = "Network simulation (Chromium; set INKWELL_E2E_BROWSER=chromium in CI), no root: two instances behind NATs (cone, symmetric) and a relay in network namespaces (scripts/netsim); skips with the reason when namespaces or nftables are unavailable (fails in CI)"
 depends = ["e2e:build"]
