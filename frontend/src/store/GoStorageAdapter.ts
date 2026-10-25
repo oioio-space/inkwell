@@ -1,6 +1,13 @@
 import type { Chunk, StorageAdapterInterface, StorageKey } from "@automerge/automerge-repo";
 import type { SocketLike } from "../net/WailsNetworkAdapter";
 import {
+  decodeFileInfo,
+  decodeFileList,
+  decodeInvalidLine,
+  type FileInfo,
+  type ProjectFile,
+} from "./files";
+import {
   decodeRange,
   decodeResponse,
   encodeRequest,
@@ -13,6 +20,18 @@ import {
 /** A storage request that Go refused or could not carry out. */
 export class StoreError extends Error {
   override name = "StoreError";
+}
+
+/** A project file that is not text Inkwell can edit: it is binary, or has invalid UTF-8 bytes. */
+export class NotTextError extends StoreError {
+  override name = "NotTextError";
+  constructor(
+    readonly reason: "binary" | "invalid-utf8",
+    /** For "invalid-utf8", the 1-based line of the first invalid byte. */
+    readonly line?: number,
+  ) {
+    super(reason === "binary" ? "file is not text" : `invalid UTF-8 at line ${line}`);
+  }
 }
 
 interface Pending {
@@ -80,12 +99,34 @@ export class GoStorageAdapter implements StorageAdapterInterface {
     expectOk(await this.#call(Op.WriteProjection, [name], textEncoder.encode(text)));
   }
 
-  /** Reads a project file as it is on disk; undefined if it does not exist. */
+  /**
+   * Reads a project file as it is on disk, as UTF-8 text with LF line ends whatever its own
+   * encoding; undefined if it does not exist. Rejects with {@link NotTextError} for a file that
+   * is not text.
+   */
   async readProjection(name: string): Promise<string | undefined> {
     const r = await this.#call(Op.ReadProjection, [name]);
     if (r.status === Status.NotFound) return undefined;
     expectOk(r);
     return textDecoder.decode(r.payload);
+  }
+
+  /** Lists the project's files (not Inkwell's own): folders first, then natural order. */
+  async listFiles(): Promise<ProjectFile[]> {
+    const r = await this.#call(Op.ListFiles, []);
+    expectOk(r);
+    return decodeFileList(r.payload);
+  }
+
+  /**
+   * How a project file is stored on disk (encoding, BOM, line ending), for the banner and the
+   * conversion offer; undefined if it does not exist. Rejects with {@link NotTextError}.
+   */
+  async fileInfo(name: string): Promise<FileInfo | undefined> {
+    const r = await this.#call(Op.FileInfo, [name]);
+    if (r.status === Status.NotFound) return undefined;
+    expectOk(r);
+    return decodeFileInfo(r.payload);
   }
 
   /** Tells Go the outside edit of `name` was dealt with, so Inkwell may write it again. */
@@ -176,6 +217,10 @@ function expectOk(r: Response): void {
 }
 
 function failure(r: Response): StoreError {
+  if (r.status === Status.Binary) return new NotTextError("binary");
+  if (r.status === Status.InvalidText) {
+    return new NotTextError("invalid-utf8", decodeInvalidLine(r.payload));
+  }
   if (r.status === Status.Error) return new StoreError(textDecoder.decode(r.payload));
   return new StoreError(`unexpected status ${r.status}`);
 }

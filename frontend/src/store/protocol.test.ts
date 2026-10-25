@@ -1,6 +1,15 @@
 import { describe, expect, it } from "vitest";
 import vectors from "../../../internal/bridge/testdata/storestream.json";
 import {
+  decodeFileInfo,
+  decodeFileList,
+  decodeInvalidLine,
+  Eol,
+  encodeFileInfo,
+  encodeFileList,
+  FileKind,
+} from "./files";
+import {
   decodeRange,
   decodeRequest,
   decodeResponse,
@@ -37,6 +46,17 @@ describe("store protocol golden vectors (shared with Go)", () => {
         };
         expect(hex(encodeResponse(resp))).toBe(v.wireHex);
         expect(decodeResponse(unhex(v.wireHex))).toEqual(resp);
+      } else if (v.type === "filelist") {
+        const files = (
+          v.files as { path: string; kind: string; size: number; main: boolean }[]
+        ).map((f) => ({ ...f, kind: FileKind[f.kind as keyof typeof FileKind] }));
+        expect(hex(encodeFileList(files))).toBe(v.wireHex);
+        expect(decodeFileList(unhex(v.wireHex))).toEqual(files);
+      } else if (v.type === "fileinfo") {
+        const i = v.info as { encoding: string; eol: string; bom: boolean; mixed: boolean };
+        const info = { ...i, eol: Eol[i.eol as keyof typeof Eol] };
+        expect(hex(encodeFileInfo(info))).toBe(v.wireHex);
+        expect(decodeFileInfo(unhex(v.wireHex))).toEqual(info);
       } else {
         const entries = (v.entries as { key: string[]; dataHex: string }[]).map((e) => ({
           key: e.key,
@@ -83,6 +103,46 @@ describe("decoders reject malformed frames", () => {
     ["trailing bytes", "0000000007"],
   ])("range: %s", (_name, wire) => {
     expect(() => decodeRange(unhex(wire))).toThrow(ProtocolError);
+  });
+});
+
+describe("file payload decoders reject what Go would", () => {
+  // One-entry list: version, count 1, then kind | flags | size u64 | path length u16 | path.
+  const one = (kind: string, flags: string, size: string, len: string, path: string) =>
+    `0100000001${kind}${flags}${size}${len}${path}`;
+  const zero = "0000000000000000";
+  it.each([
+    ["empty", ""],
+    ["bad version", "0200000000"],
+    ["count without entry", "0100000001"],
+    ["bad kind", one("63", "00", zero, "0001", "61")],
+    ["bad flags", one("01", "02", zero, "0001", "61")],
+    ["empty path", one("01", "00", zero, "0000", "")],
+    ["path past the end", one("01", "00", zero, "0005", "61")],
+    ["size over 2^53", one("01", "00", "0020000000000001", "0001", "61")],
+    ["invalid UTF-8 path", one("01", "00", zero, "0001", "ff")],
+    ["trailing bytes", "010000000009"],
+  ])("file list: %s", (_name, wire) => {
+    expect(() => decodeFileList(unhex(wire))).toThrow(ProtocolError);
+  });
+  it.each([
+    ["empty", ""],
+    ["bad version", "0200000161"],
+    ["bad flags", "0104000161"],
+    ["mixed as eol", "0100030161"],
+    ["short name", "0100000561"],
+    ["long name", "010000016162"],
+  ])("file info: %s", (_name, wire) => {
+    expect(() => decodeFileInfo(unhex(wire))).toThrow(ProtocolError);
+  });
+  it("invalid-text line", () => {
+    expect(decodeInvalidLine(unhex("00000103"))).toBe(259);
+    expect(() => decodeInvalidLine(unhex("0003"))).toThrow(ProtocolError);
+  });
+  it("decodes the new statuses", () => {
+    expect(decodeResponse(unhex("0000000605")).status).toBe(Status.Binary);
+    expect(decodeResponse(unhex("000000070600000003")).status).toBe(Status.InvalidText);
+    expect(() => decodeResponse(unhex("0000000107"))).toThrow(ProtocolError);
   });
 });
 

@@ -7,6 +7,10 @@
  *
  * Requests are answered one at a time, in order. Go also pushes a response with id 0 and
  * status External: the payload is a project file edited outside Inkwell.
+ *
+ * ReadProjection and WriteProjection always carry UTF-8 text with LF line ends; Go converts from
+ * and to the file's own encoding, BOM and line ending. ListFiles (no key) and FileInfo (the file
+ * name) return the versioned payloads defined below.
  */
 
 export const Op = {
@@ -18,10 +22,24 @@ export const Op = {
   WriteProjection: 6,
   ReadProjection: 7,
   Acknowledge: 8,
+  ListFiles: 9,
+  FileInfo: 10,
 } as const;
 export type Op = (typeof Op)[keyof typeof Op];
 
-export const Status = { OK: 0, NotFound: 1, Corrupt: 2, Error: 3, External: 4 } as const;
+/**
+ * Binary and InvalidText answer ReadProjection and FileInfo for a file that is not text: the
+ * second carries the 1-based line of the first invalid byte as a u32.
+ */
+export const Status = {
+  OK: 0,
+  NotFound: 1,
+  Corrupt: 2,
+  Error: 3,
+  External: 4,
+  Binary: 5,
+  InvalidText: 6,
+} as const;
 export type Status = (typeof Status)[keyof typeof Status];
 
 export interface Request {
@@ -112,7 +130,7 @@ export function encodeResponse(r: Response): Uint8Array {
 export function decodeResponse(b: Uint8Array): Response {
   if (b.length < 5) throw new ProtocolError("short response");
   const status = b[4] as number;
-  if (status > Status.External) throw new ProtocolError(`unknown status ${status}`);
+  if (status > Status.InvalidText) throw new ProtocolError(`unknown status ${status}`);
   return { id: readU32(b, 0), status: status as Status, payload: b.subarray(5) };
 }
 

@@ -275,19 +275,42 @@ func (p *Project) owned(rel string) (string, error) {
 	return h, nil
 }
 
-// ReadProjection returns the content of the owned file rel as it is on
-// disk, which may include edits made outside Inkwell.
+// ReadProjection returns the text of the owned file rel as it is on disk,
+// which may include edits made outside Inkwell, as the editor wants it: UTF-8
+// with LF line ends and without BOM. See [Project.ReadText] for the encoding
+// the file was found in. It returns [ErrBinary] or [ErrInvalidUTF8] for a file
+// that is not text.
 func (p *Project) ReadProjection(rel string) ([]byte, error) {
+	t, err := p.ReadText(rel)
+	if err != nil {
+		return nil, err
+	}
+	return []byte(t.Body), nil
+}
+
+// ReadText decodes the owned file rel: its text, and the encoding, BOM and line
+// ending [Project.WriteProjection] gives back to it.
+func (p *Project) ReadText(rel string) (Text, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if _, err := p.owned(rel); err != nil {
-		return nil, err
+		return Text{}, err
 	}
-	return readLimited(p.root, rel, store.MaxValue)
+	raw, err := readLimited(p.root, rel, store.MaxValue)
+	if err != nil {
+		return Text{}, err
+	}
+	t, err := Decode(raw)
+	if err != nil {
+		return Text{}, fmt.Errorf("project: %s: %w", rel, err)
+	}
+	return t, nil
 }
 
-// WriteProjection atomically replaces the owned file rel with data and records
-// its hash. It returns [ErrNotOwned] for a file project.json does not list
+// WriteProjection atomically replaces the owned file rel with the text data
+// (UTF-8, LF line ends) and records its hash. The file keeps the encoding, BOM
+// and line ending it had ([Encode]); a new file is UTF-8 without BOM, with the
+// line ending of the system. It returns [ErrNotOwned] for a file project.json does not list
 // and [ErrExternalEdit], leaving the file as is, if it was changed since the
 // last write and the change was not acknowledged.
 func (p *Project) WriteProjection(rel string, data []byte) error {
@@ -297,17 +320,25 @@ func (p *Project) WriteProjection(rel string, data []byte) error {
 	if err != nil {
 		return err
 	}
-	current, exists, err := p.diskHash(rel)
+	old, exists, err := p.readDisk(rel)
 	if err != nil {
 		return err
 	}
-	if exists && current != recorded {
+	if exists && hashOf(old) != recorded {
 		return fmt.Errorf("%w: %q", ErrExternalEdit, rel)
 	}
-	if err := store.WriteAtomic(p.root, rel, data, 0o600); err != nil {
+	format := Text{Encoding: EncodingUTF8, EOL: SystemEOL()}
+	if exists {
+		if prev, err := Decode(old); err == nil {
+			format = prev
+		}
+	}
+	format.Body = string(data)
+	out := Encode(format)
+	if err := store.WriteAtomic(p.root, rel, out, 0o600); err != nil {
 		return fmt.Errorf("project: write %s: %w", rel, err)
 	}
-	return p.record(rel, hashOf(data))
+	return p.record(rel, hashOf(out))
 }
 
 // Acknowledge records the current content of the owned file rel as seen, so
@@ -338,18 +369,28 @@ func (p *Project) record(rel, hash string) error {
 // diskHash returns the hex SHA-256 of rel on disk; exists is false (and the
 // hash empty) when the file is absent. The caller holds p.mu.
 func (p *Project) diskHash(rel string) (hash string, exists bool, err error) {
-	data, err := readLimited(p.root, rel, store.MaxValue)
-	if errors.Is(err, fs.ErrNotExist) {
-		return "", false, nil
-	}
-	if err != nil {
-		return "", false, fmt.Errorf("project: read %s: %w", rel, err)
+	data, exists, err := p.readDisk(rel)
+	if err != nil || !exists {
+		return "", false, err
 	}
 	return hashOf(data), true, nil
 }
 
 // emptyHash is the hash of an empty file.
 var emptyHash = hashOf(nil)
+
+// readDisk returns the bytes of rel on disk; exists is false when the file is
+// absent. The caller holds p.mu.
+func (p *Project) readDisk(rel string) (data []byte, exists bool, err error) {
+	data, err = readLimited(p.root, rel, store.MaxValue)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, false, nil
+	}
+	if err != nil {
+		return nil, false, fmt.Errorf("project: read %s: %w", rel, err)
+	}
+	return data, true, nil
+}
 
 func hashOf(data []byte) string {
 	sum := sha256.Sum256(data)

@@ -6,7 +6,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io/fs"
+	"maps"
 	"os"
 	"slices"
 	"strings"
@@ -14,6 +16,7 @@ import (
 	"testing"
 
 	"github.com/oioio-space/inkwell/internal/bridge"
+	"github.com/oioio-space/inkwell/internal/project"
 	"github.com/oioio-space/inkwell/internal/store"
 )
 
@@ -28,7 +31,19 @@ type storeVector struct {
 	PayloadHex string `json:"payloadHex"`
 	WireHex    string `json:"wireHex"`
 	Key        []string
-	Entries    []struct {
+	Files      []struct {
+		Path string `json:"path"`
+		Kind string `json:"kind"`
+		Size int64  `json:"size"`
+		Main bool   `json:"main"`
+	} `json:"files"`
+	Info *struct {
+		Encoding string `json:"encoding"`
+		EOL      string `json:"eol"`
+		BOM      bool   `json:"bom"`
+		Mixed    bool   `json:"mixed"`
+	} `json:"info"`
+	Entries []struct {
 		Key     []string `json:"key"`
 		DataHex string   `json:"dataHex"`
 	} `json:"entries"`
@@ -39,12 +54,21 @@ var storeOps = map[string]bridge.StoreOp{
 	"Load": bridge.OpLoad, "Save": bridge.OpSave, "Remove": bridge.OpRemove,
 	"LoadRange": bridge.OpLoadRange, "RemoveRange": bridge.OpRemoveRange,
 	"WriteProjection": bridge.OpWriteProjection, "ReadProjection": bridge.OpReadProjection,
-	"Acknowledge": bridge.OpAcknowledge,
+	"Acknowledge": bridge.OpAcknowledge, "ListFiles": bridge.OpListFiles, "FileInfo": bridge.OpFileInfo,
 }
+
+var fileKinds = map[string]project.Kind{
+	"typst": project.KindTypst, "markdown": project.KindMarkdown, "text": project.KindText,
+	"csv": project.KindCSV, "bib": project.KindBib, "image": project.KindImage, "pdf": project.KindPDF,
+	"data": project.KindData, "other": project.KindOther,
+}
+
+var eols = map[string]project.EOL{"LF": project.LF, "CRLF": project.CRLF, "CR": project.CR}
 
 var storeStatuses = map[string]bridge.StoreStatus{
 	"OK": bridge.StatusOK, "NotFound": bridge.StatusNotFound, "Corrupt": bridge.StatusCorrupt,
 	"Error": bridge.StatusError, "External": bridge.StatusExternal,
+	"Binary": bridge.StatusBinary, "InvalidText": bridge.StatusInvalidText,
 }
 
 func unhex(t *testing.T, s string) []byte {
@@ -65,7 +89,7 @@ func TestStoreVectors(t *testing.T) {
 	if err := json.Unmarshal(raw, &vectors); err != nil {
 		t.Fatal(err)
 	}
-	if len(vectors) < 8 {
+	if len(vectors) < 14 {
 		t.Fatalf("got %d vectors, want at least 8", len(vectors))
 	}
 	for _, v := range vectors {
@@ -108,6 +132,28 @@ func TestStoreVectors(t *testing.T) {
 				if err != nil || len(dec) != len(entries) || !slices.Equal(dec[0].Key, entries[0].Key) || !bytes.Equal(dec[0].Data, entries[0].Data) {
 					t.Errorf("DecodeRange = %+v, %v; want %+v", dec, err, entries)
 				}
+			case "filelist":
+				var files []project.File
+				for _, f := range v.Files {
+					files = append(files, project.File{Path: f.Path, Kind: fileKinds[f.Kind], Size: f.Size, Main: f.Main})
+				}
+				got, err := bridge.EncodeFileList(files)
+				if err != nil || !bytes.Equal(got, wire) {
+					t.Errorf("EncodeFileList = %x, %v; want %x", got, err, wire)
+				}
+				dec, err := bridge.DecodeFileList(wire)
+				if err != nil || !slices.Equal(dec, files) {
+					t.Errorf("DecodeFileList = %+v, %v; want %+v", dec, err, files)
+				}
+			case "fileinfo":
+				info := bridge.FileInfo{Encoding: v.Info.Encoding, EOL: eols[v.Info.EOL], BOM: v.Info.BOM, Mixed: v.Info.Mixed}
+				if got := bridge.EncodeFileInfo(info); !bytes.Equal(got, wire) {
+					t.Errorf("EncodeFileInfo = %x, want %x", got, wire)
+				}
+				dec, err := bridge.DecodeFileInfo(wire)
+				if err != nil || dec != info {
+					t.Errorf("DecodeFileInfo = %+v, %v; want %+v", dec, err, info)
+				}
 			default:
 				t.Fatalf("unknown vector type %q", v.Type)
 			}
@@ -126,7 +172,10 @@ func TestDecodeStoreRequestRejects(t *testing.T) {
 		{name: "short header", wire: []byte{0, 0, 0, 1, 1}},
 		{name: "id zero", wire: []byte{0, 0, 0, 0, 1, 1, 1, 'a'}},
 		{name: "unknown op 0", wire: []byte{0, 0, 0, 5, 0, 1, 1, 'a'}, id: 5},
-		{name: "unknown op 9", wire: []byte{0, 0, 0, 5, 9, 1, 1, 'a'}, id: 5},
+		{name: "unknown op 11", wire: []byte{0, 0, 0, 5, 11, 1, 1, 'a'}, id: 5},
+		{name: "list files with a key", wire: []byte{0, 0, 0, 5, 9, 1, 1, 'a'}, id: 5},
+		{name: "data on list files", wire: []byte{0, 0, 0, 5, 9, 0, 1}, id: 5},
+		{name: "file info without name", wire: []byte{0, 0, 0, 5, 10, 0}, id: 5},
 		{name: "no key count", wire: []byte{0, 0, 0, 5, 1}},
 		{name: "five components", wire: []byte{0, 0, 0, 5, 1, 5, 1, 'a', 1, 'b', 1, 'c', 1, 'd', 1, 'e'}, id: 5},
 		{name: "truncated component", wire: []byte{0, 0, 0, 5, 1, 1, 4, 'a'}, id: 5},
@@ -280,6 +329,30 @@ func (s *fakeStorage) ReadProjection(rel string) ([]byte, error) {
 	return data, nil
 }
 
+func (s *fakeStorage) ReadText(rel string) (project.Text, error) {
+	switch rel {
+	case "binary.typ":
+		return project.Text{}, fmt.Errorf("project: %s: %w", rel, project.ErrBinary)
+	case "bad.typ":
+		return project.Text{}, fmt.Errorf("project: %s: %w", rel, &project.InvalidUTF8Error{Line: 7})
+	}
+	body, err := s.ReadProjection(rel)
+	if err != nil {
+		return project.Text{}, err
+	}
+	return project.Text{Body: string(body), Encoding: project.EncodingWindows1252, EOL: project.Mixed, Dominant: project.CRLF}, nil
+}
+
+func (s *fakeStorage) List() ([]project.File, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	var out []project.File
+	for _, name := range slices.Sorted(maps.Keys(s.files)) {
+		out = append(out, project.File{Path: name, Kind: project.KindTypst, Size: int64(len(s.files[name])), Main: name == "main.typ"})
+	}
+	return out, nil
+}
+
 func (s *fakeStorage) Acknowledge(rel string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -398,6 +471,104 @@ func TestStoreServerProjection(t *testing.T) {
 	if !slices.Equal(st.acked, []string{"main.typ"}) {
 		t.Errorf("acknowledged = %v", st.acked)
 	}
+}
+
+func TestStoreServerFiles(t *testing.T) {
+	st, _ := newFakeStorage(t)
+	_, c, stop := startStore(t, st)
+	defer stop()
+
+	c.call(bridge.OpWriteProjection, []string{"main.typ"}, "= Hi")
+	got := c.call(bridge.OpListFiles, nil, "")
+	files, err := bridge.DecodeFileList(got.Payload)
+	if got.Status != bridge.StatusOK || err != nil || len(files) != 1 || files[0].Path != "main.typ" || !files[0].Main || files[0].Size != 4 {
+		t.Errorf("ListFiles = %d %+v, %v", got.Status, files, err)
+	}
+
+	got = c.call(bridge.OpFileInfo, []string{"main.typ"}, "")
+	info, err := bridge.DecodeFileInfo(got.Payload)
+	want := bridge.FileInfo{Encoding: project.EncodingWindows1252, EOL: project.CRLF, Mixed: true}
+	if got.Status != bridge.StatusOK || err != nil || info != want {
+		t.Errorf("FileInfo = %d %+v, %v; want %+v", got.Status, info, err, want)
+	}
+
+	if got := c.call(bridge.OpFileInfo, []string{"absent.typ"}, ""); got.Status != bridge.StatusNotFound {
+		t.Errorf("FileInfo(absent) = %d, want NotFound", got.Status)
+	}
+	if got := c.call(bridge.OpFileInfo, []string{"binary.typ"}, ""); got.Status != bridge.StatusBinary {
+		t.Errorf("FileInfo(binary) = %d, want Binary", got.Status)
+	}
+	got = c.call(bridge.OpFileInfo, []string{"bad.typ"}, "")
+	if got.Status != bridge.StatusInvalidText || !bytes.Equal(got.Payload, []byte{0, 0, 0, 7}) {
+		t.Errorf("FileInfo(invalid) = %d %x, want InvalidText with line 7", got.Status, got.Payload)
+	}
+}
+
+func TestDecodeFilesRejects(t *testing.T) {
+	for name, wire := range map[string][]byte{
+		"empty":               nil,
+		"bad version":         {2, 0, 0, 0, 0},
+		"count without entry": {1, 0, 0, 0, 1},
+		"bad kind":            {1, 0, 0, 0, 1, 99, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 'a'},
+		"bad flags":           {1, 0, 0, 0, 1, 1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 1, 'a'},
+		"empty path":          {1, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+		"path past the end":   {1, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5, 'a'},
+		"invalid UTF-8 path":  {1, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0xff},
+		"size over int64":     {1, 0, 0, 0, 1, 1, 0, 0x80, 0, 0, 0, 0, 0, 0, 0, 0, 1, 'a'},
+		"trailing bytes":      {1, 0, 0, 0, 0, 9},
+	} {
+		if _, err := bridge.DecodeFileList(wire); !errors.Is(err, bridge.ErrMalformed) {
+			t.Errorf("DecodeFileList(%s) error = %v, want ErrMalformed", name, err)
+		}
+	}
+	for name, wire := range map[string][]byte{
+		"empty":        nil,
+		"bad version":  {2, 0, 0, 1, 'a'},
+		"bad flags":    {1, 4, 0, 1, 'a'},
+		"mixed as eol": {1, 0, 3, 1, 'a'},
+		"short name":   {1, 0, 0, 5, 'a'},
+		"long name":    {1, 0, 0, 1, 'a', 'b'},
+	} {
+		if _, err := bridge.DecodeFileInfo(wire); !errors.Is(err, bridge.ErrMalformed) {
+			t.Errorf("DecodeFileInfo(%s) error = %v, want ErrMalformed", name, err)
+		}
+	}
+	if _, err := bridge.EncodeFileList([]project.File{{Path: ""}}); !errors.Is(err, bridge.ErrMalformed) {
+		t.Errorf("EncodeFileList(empty path) error = %v", err)
+	}
+	if _, err := bridge.EncodeFileList([]project.File{{Path: "a", Size: -1}}); !errors.Is(err, bridge.ErrMalformed) {
+		t.Errorf("EncodeFileList(negative size) error = %v", err)
+	}
+}
+
+func FuzzDecodeFiles(f *testing.F) {
+	f.Add([]byte{1, 0, 0, 0, 1, 1, 1, 0, 0, 0, 0, 0, 0, 0, 4, 0, 1, 'a'}, true)
+	f.Add([]byte{1, 3, 1, 3, 'a', 'b', 'c'}, false)
+	f.Fuzz(func(t *testing.T, b []byte, list bool) {
+		if list {
+			files, err := bridge.DecodeFileList(b)
+			if err != nil {
+				if !errors.Is(err, bridge.ErrMalformed) {
+					t.Fatalf("DecodeFileList(%x) error %v is not ErrMalformed", b, err)
+				}
+				return
+			}
+			if again, err := bridge.EncodeFileList(files); err != nil || !bytes.Equal(again, b) {
+				t.Fatalf("file list round trip of %x gave %x, %v", b, again, err)
+			}
+			return
+		}
+		info, err := bridge.DecodeFileInfo(b)
+		if err != nil {
+			if !errors.Is(err, bridge.ErrMalformed) {
+				t.Fatalf("DecodeFileInfo(%x) error %v is not ErrMalformed", b, err)
+			}
+			return
+		}
+		if again := bridge.EncodeFileInfo(info); !bytes.Equal(again, b) {
+			t.Fatalf("file info round trip of %x gave %x", b, again)
+		}
+	})
 }
 
 // TestStoreServerSequential: requests are answered in order, so a Load queued

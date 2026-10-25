@@ -6,8 +6,10 @@ import (
 	"fmt"
 	"io/fs"
 	"log/slog"
+	"math"
 	"sync"
 
+	"github.com/oioio-space/inkwell/internal/project"
 	"github.com/oioio-space/inkwell/internal/store"
 )
 
@@ -60,6 +62,13 @@ const (
 	OpReadProjection
 	// OpAcknowledge marks the external edit of the project file Key[0] as seen.
 	OpAcknowledge
+	// OpListFiles takes no key and returns the project's files, as a payload
+	// decoded by [DecodeFileList].
+	OpListFiles
+	// OpFileInfo returns how the project file Key[0] is stored on disk
+	// (encoding, BOM, line ending), as a payload decoded by [DecodeFileInfo].
+	// OpReadProjection and OpWriteProjection always speak UTF-8 with LF.
+	OpFileInfo
 )
 
 // StoreStatus is the outcome of a store request.
@@ -78,7 +87,15 @@ const (
 	// StatusExternal is pushed with id 0: the payload is the name of a
 	// project file that was edited outside Inkwell.
 	StatusExternal
+	// StatusBinary means the project file is not text and was not decoded.
+	StatusBinary
+	// StatusInvalidText means the project file is UTF-8 apart from invalid
+	// bytes; the payload is the 1-based line of the first one, as a u32.
+	StatusInvalidText
 )
+
+// maxStatus is the last status a frame may carry.
+const maxStatus = StatusInvalidText
 
 // StoreRequest is one decoded request of the store stream.
 type StoreRequest struct {
@@ -110,7 +127,11 @@ func (r StoreRequest) validate() error {
 		err = store.ValidKey(r.Key)
 	case OpLoadRange:
 		err = store.ValidPrefix(r.Key)
-	case OpWriteProjection, OpReadProjection, OpAcknowledge:
+	case OpListFiles:
+		if len(r.Key) != 0 {
+			err = fmt.Errorf("%d components, want 0", len(r.Key))
+		}
+	case OpWriteProjection, OpReadProjection, OpAcknowledge, OpFileInfo:
 		if len(r.Key) != 1 {
 			err = fmt.Errorf("%d components, want 1", len(r.Key))
 		} else {
@@ -205,7 +226,7 @@ func DecodeStoreRequest(b []byte) (StoreRequest, error) {
 
 // EncodeStoreResponse serializes r into a slice the caller may hand over.
 func EncodeStoreResponse(r StoreResponse) ([]byte, error) {
-	if r.Status > StatusExternal || len(r.Payload) > maxStoreWire-respHeaderLen {
+	if r.Status > maxStatus || len(r.Payload) > maxStoreWire-respHeaderLen {
 		return nil, fmt.Errorf("%w: response status %d, %d bytes", ErrMalformed, r.Status, len(r.Payload))
 	}
 	b := make([]byte, 0, respHeaderLen+len(r.Payload))
@@ -221,7 +242,7 @@ func DecodeStoreResponse(b []byte) (StoreResponse, error) {
 		return StoreResponse{}, fmt.Errorf("%w: response of %d bytes", ErrMalformed, len(b))
 	}
 	r := StoreResponse{ID: binary.BigEndian.Uint32(b), Status: StoreStatus(b[4]), Payload: b[respHeaderLen:]}
-	if r.Status > StatusExternal {
+	if r.Status > maxStatus {
 		return StoreResponse{}, fmt.Errorf("%w: status %d", ErrMalformed, r.Status)
 	}
 	return r, nil
@@ -280,6 +301,8 @@ func DecodeRange(b []byte) ([]store.Entry, error) {
 
 // Storage is what the store stream serves: a verified key-value store and
 // the project files Inkwell owns. [project.Project] implements it.
+// ReadProjection and WriteProjection exchange UTF-8 text with LF line ends;
+// ReadText says how the file is encoded on disk and List lists the folder.
 type Storage interface {
 	Load(key []string) ([]byte, error)
 	Save(key []string, data []byte) error
@@ -289,6 +312,8 @@ type Storage interface {
 	WriteProjection(rel string, data []byte) error
 	ReadProjection(rel string) ([]byte, error)
 	Acknowledge(rel string) error
+	ReadText(rel string) (project.Text, error)
+	List() ([]project.File, error)
 }
 
 // StoreServer serves one [Storage] to the webview over the store stream.
@@ -409,6 +434,10 @@ func (s *StoreServer) handle(req StoreRequest) StoreResponse {
 		err = s.st.WriteProjection(req.Key[0], req.Data)
 	case OpReadProjection:
 		payload, err = s.st.ReadProjection(req.Key[0])
+	case OpListFiles:
+		payload, err = s.listFiles()
+	case OpFileInfo:
+		payload, err = s.fileInfo(req.Key[0])
 	case OpAcknowledge:
 		if err = s.st.Acknowledge(req.Key[0]); err == nil {
 			s.mu.Lock()
@@ -417,6 +446,24 @@ func (s *StoreServer) handle(req StoreRequest) StoreResponse {
 		}
 	}
 	return s.respond(req, payload, err)
+}
+
+// listFiles runs OpListFiles.
+func (s *StoreServer) listFiles() ([]byte, error) {
+	files, err := s.st.List()
+	if err != nil {
+		return nil, err
+	}
+	return EncodeFileList(files)
+}
+
+// fileInfo runs OpFileInfo.
+func (s *StoreServer) fileInfo(rel string) ([]byte, error) {
+	t, err := s.st.ReadText(rel)
+	if err != nil {
+		return nil, err
+	}
+	return EncodeFileInfo(InfoOf(t)), nil
 }
 
 // loadRange runs OpLoadRange. Entries that could not be recovered are left
@@ -442,6 +489,12 @@ func (s *StoreServer) respond(req StoreRequest, payload []byte, err error) Store
 	case errors.Is(err, store.ErrCorrupt):
 		s.log.Warn("store stream: corrupt value", "op", req.Op, "key", req.Key)
 		return StoreResponse{ID: req.ID, Status: StatusCorrupt}
+	case errors.Is(err, project.ErrBinary):
+		return StoreResponse{ID: req.ID, Status: StatusBinary}
+	}
+	if bad, ok := errors.AsType[*project.InvalidUTF8Error](err); ok {
+		line := binary.BigEndian.AppendUint32(nil, uint32(min(bad.Line, math.MaxUint32))) // #nosec G115 -- clamped.
+		return StoreResponse{ID: req.ID, Status: StatusInvalidText, Payload: line}
 	}
 	s.log.Warn("store stream: request failed", "op", req.Op, "key", req.Key, "err", err)
 	return StoreResponse{ID: req.ID, Status: StatusError, Payload: []byte(shorten(err.Error()))}
