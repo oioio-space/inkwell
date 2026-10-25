@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { clear, docText, editor, open, pair, typeAtEnd } from "./helpers";
+import { ALICE_URL, BOB_URL } from "./ports";
 
 // FMT-29: A bolds a word while B types inside it. Both converge; the delimiters wrap the
 // word, extended by B's letter or not, and no letter is lost.
@@ -9,8 +10,8 @@ import { clear, docText, editor, open, pair, typeAtEnd } from "./helpers";
 test("FMT-29 one person bolds a word while the other types inside it: both converge, no letter lost", async ({
   browser,
 }) => {
-  const alice = await open(browser, "http://127.0.0.1:18081/");
-  const bob = await open(browser, "http://127.0.0.1:18082/");
+  const alice = await open(browser, ALICE_URL);
+  const bob = await open(browser, BOB_URL);
   await clear(alice);
   await clear(bob);
   await pair(alice, bob);

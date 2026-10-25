@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { clear, docText, editor, open, typeAtEnd } from "./helpers";
+import { ALICE_URL } from "./ports";
 
 // B6 search and replace. The engine (frontend/src/editor/search/) and the panel
 // (frontend/src/ui/search/SearchPanel.svelte) are covered by unit and component tests, SRC-01…22.
@@ -11,7 +12,7 @@ import { clear, docText, editor, open, typeAtEnd } from "./helpers";
 test.fixme("SRC-11 clicking a result in another file opens that file, selects the match and centres it", async ({
   browser,
 }) => {
-  const page = await open(browser, "http://127.0.0.1:18081/");
+  const page = await open(browser, ALICE_URL);
   await clear(page);
   await typeAtEnd(page, "début\nun mot à trouver\nfin");
 
@@ -32,7 +33,7 @@ test.fixme("SRC-11 clicking a result in another file opens that file, selects th
 test.fixme("SRC-20 keyboard in the app: Ctrl+F, Ctrl+H, Ctrl+Shift+F, Enter, Shift+Enter, F3/Shift+F3, F4/Shift+F4, Escape", async ({
   browser,
 }) => {
-  const page = await open(browser, "http://127.0.0.1:18081/");
+  const page = await open(browser, ALICE_URL);
   await clear(page);
   await typeAtEnd(page, "foo bar foo bar foo");
 

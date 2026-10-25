@@ -44,6 +44,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"net"
 	"slices"
 	"strings"
 	"sync"
@@ -241,6 +242,11 @@ func New(ctx context.Context, key ed25519.PrivateKey, o Options) (*Node, error) 
 	if o.Port < 0 || o.Port > 65535 {
 		return nil, fmt.Errorf("p2p: invalid port %d", o.Port)
 	}
+	if o.Port != 0 {
+		if err := portFree(o.Port); err != nil {
+			return nil, err
+		}
+	}
 	relays, err := parseRelays(o.Relays)
 	if err != nil {
 		return nil, err
@@ -301,7 +307,10 @@ func New(ctx context.Context, key ed25519.PrivateKey, o Options) (*Node, error) 
 		libp2p.Identity(priv),
 		libp2p.NoTransports,
 		libp2p.Transport(libp2pquic.NewTransport),
-		libp2p.Transport(tcp.NewTCPTransport),
+		// No SO_REUSEPORT: with it, a second Inkwell on the machine binds the same TCP port and
+		// the kernel spreads incoming connections between the two, so handshakes reach the
+		// wrong process. A busy port must fail the bind, so the caller falls back to a free one.
+		libp2p.Transport(tcp.NewTCPTransport, tcp.DisableReuseport()),
 		libp2p.Security(noise.ID, noise.New),
 		libp2p.DefaultMuxers,
 		libp2p.ListenAddrStrings(
@@ -671,4 +680,26 @@ func (n *Node) pushLocked(ev transport.Event, cost int) {
 func (n *Node) changedLocked() {
 	close(n.chg)
 	n.chg = make(chan struct{})
+}
+
+// ErrPortBusy reports that the port asked for is taken; [New] with Port 0 picks
+// a free one instead.
+var ErrPortBusy = errors.New("p2p: port busy")
+
+// portFree checks that port can be bound on TCP and UDP (IPv4) before libp2p
+// starts: libp2p fails a busy listen only after starting its services, and
+// does not stop all of them.
+func portFree(port int) error {
+	addr := fmt.Sprintf(":%d", port)
+	l, err := net.Listen("tcp4", addr)
+	if err != nil {
+		return fmt.Errorf("%w: tcp %d: %w", ErrPortBusy, port, err)
+	}
+	_ = l.Close()
+	c, err := net.ListenPacket("udp4", addr)
+	if err != nil {
+		return fmt.Errorf("%w: udp %d: %w", ErrPortBusy, port, err)
+	}
+	_ = c.Close()
+	return nil
 }

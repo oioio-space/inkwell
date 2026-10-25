@@ -5,6 +5,7 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"net"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -62,6 +63,44 @@ func TestStartNodeFallsBackWhenPortBusy(t *testing.T) {
 	for _, a := range node.Addrs() {
 		if strings.Contains(a, "/udp/"+strconv.Itoa(port)+"/") {
 			t.Errorf("node listens on the busy port: %s", a)
+		}
+	}
+}
+
+// TestSecondNodeDoesNotShareThePort starts two nodes on the same port, as two
+// Inkwell on one machine do: the second must listen elsewhere on TCP as well as
+// UDP. With SO_REUSEPORT the kernel let both bind the TCP port and spread
+// incoming connections between them, so handshakes reached the wrong process.
+func TestSecondNodeDoesNotShareThePort(t *testing.T) {
+	free, err := net.Listen("tcp", ":0")
+	if err != nil {
+		t.Skipf("no TCP socket: %v", err)
+	}
+	port := free.Addr().(*net.TCPAddr).Port
+	if err := free.Close(); err != nil {
+		t.Fatal(err)
+	}
+	start := func() []string {
+		t.Setenv("INKWELL_HOME", t.TempDir())
+		home, err := app.OpenHome()
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = home.Close() })
+		node, err := app.StartNode(t.Context(), home, port)
+		if err != nil {
+			t.Fatalf("StartNode(%d) = %v", port, err)
+		}
+		t.Cleanup(func() { _ = node.Close() })
+		return node.Addrs()
+	}
+	first := start()
+	if !slices.ContainsFunc(first, func(a string) bool { return strings.Contains(a, "/tcp/"+strconv.Itoa(port)) }) {
+		t.Skipf("first node did not get port %d (taken meanwhile): %v", port, first)
+	}
+	for _, a := range start() {
+		if strings.Contains(a, "/tcp/"+strconv.Itoa(port)) || strings.Contains(a, "/udp/"+strconv.Itoa(port)+"/") {
+			t.Errorf("second node listens on the first one's port: %s", a)
 		}
 	}
 }

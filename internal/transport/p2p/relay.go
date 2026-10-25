@@ -111,7 +111,10 @@ func RunRelay(ctx context.Context, key ed25519.PrivateKey, o RelayOptions) error
 		libp2p.Identity(priv),
 		libp2p.NoTransports,
 		libp2p.Transport(libp2pquic.NewTransport),
-		libp2p.Transport(tcp.NewTCPTransport),
+		// No SO_REUSEPORT: with it, a second Inkwell on the machine binds the same TCP port and
+		// the kernel spreads incoming connections between the two, so handshakes reach the
+		// wrong process. A busy port must fail the bind, so the caller falls back to a free one.
+		libp2p.Transport(tcp.NewTCPTransport, tcp.DisableReuseport()),
 		libp2p.Security(noise.ID, noise.New),
 		libp2p.DefaultMuxers,
 		libp2p.ListenAddrStrings(listen...),

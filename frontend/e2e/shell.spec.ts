@@ -1,10 +1,11 @@
 import AxeBuilder from "@axe-core/playwright";
 import { expect, type Page, test } from "@playwright/test";
 import { clear, editor, open } from "./helpers";
+import { ALICE_URL } from "./ports";
 
 // The Adwaita shell (task A4): keyboard, remembered layout, overflow, accessibility and the
 // reference screenshots. One instance is enough: nothing here needs a second person.
-const URL = "http://127.0.0.1:18081/";
+const URL = ALICE_URL;
 
 const toolbar = (p: Page) => p.getByRole("toolbar");
 const headingButton = (p: Page) => p.getByRole("button", { name: /Style de paragraphe/ });

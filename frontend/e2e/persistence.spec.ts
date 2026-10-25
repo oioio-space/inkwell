@@ -3,9 +3,10 @@ import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } fro
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { expect, type Page, test } from "@playwright/test";
+import { ALICE_PORT, SPARE_PORT, SPARE_URL } from "./ports";
 
-// Instance 18081 keeps its projects in <INKWELL_E2E_DOCS>/18081 (see playwright.config.ts).
-const PORT = 18081;
+// Alice's instance keeps its projects in <INKWELL_E2E_DOCS>/<ALICE_PORT> (see playwright.config.ts).
+const PORT = ALICE_PORT;
 const docsRoot = process.env.INKWELL_E2E_DOCS ?? "";
 const instanceDocs = join(docsRoot, String(PORT));
 
@@ -51,10 +52,10 @@ test("what is typed lands in main.typ and survives a fresh browser and a second 
   await expect.poll(() => docText(fresh), { timeout: 10_000 }).toBe(text);
 
   // A second process over the same project folder: what the first persisted is all it has.
-  const restarted = await startInstance(18083, instanceDocs);
+  const restarted = await startInstance(SPARE_PORT, instanceDocs);
   try {
     const again = await (await browser.newContext({ locale: "fr-FR" })).newPage();
-    await again.goto("http://127.0.0.1:18083/");
+    await again.goto(SPARE_URL);
     await expect(editor(again)).toBeVisible();
     await expect.poll(() => docText(again), { timeout: 10_000 }).toBe(text);
   } finally {
