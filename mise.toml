@@ -247,7 +247,7 @@ run = "wails3 task build"
 
 [tasks."e2e"]
 description = "End-to-end: two real instances (Wails server mode) driven by Playwright/WebKit"
-depends = ["fe:install"]
+depends = ["fe:install", "fe:bindings"]
 run = """
 (cd frontend && pnpm run build)
 go build -tags server -o bin/inkwell-server ./cmd/inkwell
