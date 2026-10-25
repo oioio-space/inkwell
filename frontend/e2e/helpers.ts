@@ -33,8 +33,8 @@ export async function open(browser: Browser, url: string, dark = false): Promise
 
 /**
  * Alice invites, Bob joins with the invitation text; both end up "Synchronisé".
- * The invitation only has addresses once the node has some (through a relay, after
- * its reservation), so asking is retried.
+ * Inviting is refused (the UI shows why) until the node has an address to put in the
+ * ticket (through a relay, after its reservation), so asking is retried.
  */
 export async function pair(alice: Page, bob: Page) {
   await alice.getByRole("button", { name: "Partager" }).click();

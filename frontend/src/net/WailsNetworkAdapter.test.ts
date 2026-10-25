@@ -98,6 +98,44 @@ describe("WailsNetworkAdapter", () => {
     expect(drops).toEqual(["unsupported version 9", "sender mismatch"]);
   });
 
+  it("treats an arrive from an announced peer as that peer coming back", async () => {
+    // The other side lost the link and began again while this one never saw it
+    // go down (a stale connection): the repo must start a new sync with it.
+    let socket: SocketLike | undefined;
+    const fake: SocketLike = {
+      binaryType: "",
+      send: () => {},
+      close: () => {},
+      onopen: null,
+      onclose: null,
+      onmessage: null,
+    };
+    const adapter = new WailsNetworkAdapter(() => {
+      socket = fake;
+      return fake;
+    });
+    const events: string[] = [];
+    adapter.on("peer-candidate", ({ peerId }) => events.push(`up:${peerId}`));
+    adapter.on("peer-disconnected", ({ peerId }) => events.push(`down:${peerId}`));
+    adapter.connect("me" as PeerId);
+    const arrive = encodeEnvelope({
+      kind: Kind.Message,
+      peer: "alice",
+      payload: encode({ type: "arrive", senderId: "alice", peerMetadata: {} }),
+    });
+    const welcome = encodeEnvelope({
+      kind: Kind.Message,
+      peer: "alice",
+      payload: encode({ type: "welcome", senderId: "alice", peerMetadata: {} }),
+    });
+    const deliver = (b: Uint8Array) =>
+      socket?.onmessage?.(new MessageEvent("message", { data: b.buffer }));
+    deliver(arrive);
+    deliver(welcome); // the answer to our own arrive: not a restart
+    deliver(arrive);
+    expect(events).toEqual(["up:alice", "down:alice", "up:alice"]);
+  });
+
   it("hands the host's project URL to a joining peer", async () => {
     const net = new SimNet(1);
     const host = peer(net, "host");

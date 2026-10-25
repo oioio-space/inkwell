@@ -164,7 +164,13 @@ export class WailsNetworkAdapter extends NetworkAdapter {
     }
     if (msg.type === "arrive" || msg.type === "welcome") {
       const hs = msg as Handshake;
-      if (hs.type === "arrive") this.#sendHandshake(from, "welcome");
+      if (hs.type === "arrive") {
+        // An arrive is the first thing a peer says after its link came up. From a
+        // peer already announced it means that peer started over while the old link
+        // looked alive here: let the repo forget its sync state with it.
+        if (this.#announced.delete(from)) this.emit("peer-disconnected", { peerId: from });
+        this.#sendHandshake(from, "welcome");
+      }
       this.#announce(from, hs);
       return;
     }

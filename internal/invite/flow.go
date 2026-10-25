@@ -32,7 +32,11 @@ const (
 var (
 	// ErrExpired is returned for a ticket past its expiry.
 	ErrExpired = errors.New("invite: ticket expired")
+	// ErrNoAddress is returned when the host has no address to put in a ticket
+	// yet (for instance a relay-only device before its relay reservation).
+	ErrNoAddress = errors.New("invite: this device has no address yet, try again in a moment (is the relay reachable?)")
 	// ErrTooMany is returned when too many tickets are outstanding.
+	// ErrTooMany is returned when too many invitations are open at once.
 	ErrTooMany = errors.New("invite: too many open invitations")
 	// ErrUnknownPerson is returned for a ticket meant for a person who is not a member.
 	ErrUnknownPerson = errors.New("invite: unknown person")
@@ -148,10 +152,14 @@ func (h *Host) Invite(role trust.Role, person *trust.Hash) (Ticket, error) {
 	if person != nil && !slices.ContainsFunc(h.cfg.List.Members(), func(m trust.Member) bool { return m.Person == *person }) {
 		return Ticket{}, ErrUnknownPerson
 	}
+	addrs := slices.Clone(h.cfg.Addrs())
+	if len(addrs) == 0 {
+		return Ticket{}, ErrNoAddress
+	}
 	t := Ticket{
 		Project: h.cfg.List.Project(),
 		Host:    h.cfg.Self,
-		Addrs:   slices.Clone(h.cfg.Addrs()),
+		Addrs:   addrs,
 		Role:    role,
 		Person:  person,
 	}

@@ -123,6 +123,7 @@ start_stack() {
     ip netns exec "$who" env \
       INKWELL_SERVER_PORT="${PORT[$who]}" \
       INKWELL_HOME="$dir/$who" \
+      INKWELL_DOCS="$dir/$who-docs" \
       INKWELL_RELAYS="$relay_addr" \
       "$app_bin" >"$dir/$who.log" 2>&1 &
     pids+=($!)

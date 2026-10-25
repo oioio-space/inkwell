@@ -87,6 +87,7 @@ test("a relay killed and restarted: both sides keep typing offline and converge"
     start(bin("inkwell-server"), [], {
       INKWELL_SERVER_PORT: String(port),
       INKWELL_HOME: join(dir, who),
+      INKWELL_DOCS: join(dir, `${who}-docs`),
       INKWELL_RELAYS: relay.addr,
       INKWELL_NET: "relay-only",
     });

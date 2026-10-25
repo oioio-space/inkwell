@@ -68,11 +68,17 @@ func StartNode(ctx context.Context, home *os.Root, port int) (*p2p.Node, error) 
 	if err != nil {
 		return nil, fmt.Errorf("loading identity: %w", err)
 	}
-	return startNode(ctx, dev, p2p.Options{
+	return startNode(ctx, dev, netOptions(port))
+}
+
+// netOptions returns the network options that come from the environment
+// (relays, relay-only mode) for a node listening on port.
+func netOptions(port int) p2p.Options {
+	return p2p.Options{
 		Port:      port,
 		Relays:    strings.FieldsFunc(os.Getenv(relaysEnv), func(r rune) bool { return r == ',' || r == ' ' }),
 		RelayOnly: os.Getenv(netEnv) == relayOnly,
-	})
+	}
 }
 
 func startNode(ctx context.Context, dev *identity.Device, o p2p.Options) (*p2p.Node, error) {
@@ -143,7 +149,9 @@ func Start(ctx context.Context, home *os.Root, o Options) (*Runtime, error) {
 		return nil, errors.Join(fmt.Errorf("opening identity directory: %w", err), store.close())
 	}
 	adm := NewAdmission(list)
-	node, err := startNode(ctx, dev, p2p.Options{Port: o.Port, Admit: adm.Admit, LAN: o.LAN})
+	no := netOptions(o.Port)
+	no.Admit, no.LAN = adm.Admit, o.LAN
+	node, err := startNode(ctx, dev, no)
 	if err != nil {
 		return nil, errors.Join(err, store.close(), mine.Close())
 	}
