@@ -39,6 +39,8 @@ démontré (test, démo enregistrée ou tâche utilisateur chronométrée).
 
 ## Étape 2 — Réseau
 
+Plan : [docs/plans/2026-10-25-etape-2-reseau.md](docs/plans/2026-10-25-etape-2-reseau.md) (12 tâches ; TCP supprimé dès la tâche 4 ; critère vérifié sur un seul PC).
+
 > Sortie : **hors ligne puis retour, sur deux réseaux différents**, sans perte.
 
 - [ ] `transport/p2p` : go-libp2p (QUIC, Noise, mDNS, hole punching, relais circuit v2)
