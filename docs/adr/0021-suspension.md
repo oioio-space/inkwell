@@ -146,6 +146,10 @@ Option 4.
 - aucune nouvelle voie d'écriture.
 
 **Moins bien, assumé :**
+- **Liste figée avec des admins suspendus.** Si deux admins partent en même temps pendant que
+  l'un d'eux suspend le dernier admin restant, il ne reste que des admins suspendus : la liste se
+  fige (comme deux départs concurrents, ADR 0017) et ce dernier admin **reste suspendu pour
+  toujours**, faute de quelqu'un pour le rétablir. L'écriture continue.
 - **Fenêtre de propagation.** Un suspendu qui cache l'op à un écrivain isolé lui fait accepter ses
   modifications, donc les fait accepter par tous. Elles restent attribuées et réversibles
   (« Revenir ») ; l'escalade est le retrait.

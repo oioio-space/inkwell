@@ -50,6 +50,10 @@ concevoir ou de revoir quoi que ce soit ; une exception exige une ADR.
 - « pair » dans le code, « personne » dans l'UI ; zéro jargon dans l'interface (glossaire).
 - Un paquet = un rôle, créé à l'étape qui en a besoin — pas de paquet vide « pour plus tard ».
 
+**Registre des exigences :** chaque demande de l'utilisatrice est dans `docs/exigences.md` (date, où, état) — l'y ajouter dès qu'elle arrive, le mettre à jour à chaque fusion.
+
+**Tester comme un humain :** toute modification d'interface passe par le skill `ux-walkthrough` (agent `ux-tester`) avant fusion et avant release.
+
 **Processus par étape :** `superpowers:brainstorming` → plan dans `docs/plans/` →
 TDD (`superpowers:test-driven-development`) → revue → cocher `PROGRESS.md` → démontrer
 le critère de sortie. Toute brique se recherche d'abord en ligne (règle research-first).
