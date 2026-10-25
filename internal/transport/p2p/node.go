@@ -19,10 +19,23 @@
 // connection is replaced by another one to the same peer, the stream is
 // reopened without any event.
 //
-//	n, err := p2p.New(ctx, key, p2p.Options{})
+// # Reachability
+//
+// With [Options.Relays], a node reserves a slot on a relay (see [RunRelay]),
+// which makes it reachable from any network. [Node.Want] keeps chosen peers
+// connected: it dials their last known addresses, then the address through the
+// relay, which does not depend on the peer's current network, retrying with a
+// backoff and at once when the node's own addresses change. A relayed link is
+// upgraded to a direct one by hole punching, and the sync stream follows it
+// without any event or lost frame ([Node.Links] tells which link a peer is on).
+// With [Options.RelayOnly], a node never exposes its address: it accepts and
+// dials circuits only.
+//
+//	n, err := p2p.New(ctx, key, p2p.Options{Relays: []string{relayAddr}})
 //	if err != nil { /* … */ }
 //	defer n.Close()
-//	err = n.Connect(ctx, peer, addrs) // addrs come from the peer's Addrs
+//	n.Want(map[transport.PeerID][]string{peer: lastKnownAddrs})
+//	err = n.Connect(ctx, peer, addrs) // or dial by hand; addrs come from the peer's Addrs
 package p2p
 
 import (
@@ -36,7 +49,6 @@ import (
 	"time"
 
 	"github.com/libp2p/go-libp2p"
-	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/event"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
@@ -48,6 +60,7 @@ import (
 	"github.com/libp2p/go-libp2p/p2p/security/noise"
 	libp2pquic "github.com/libp2p/go-libp2p/p2p/transport/quic"
 	"github.com/libp2p/go-libp2p/p2p/transport/tcp"
+	ma "github.com/multiformats/go-multiaddr"
 
 	"github.com/oioio-space/inkwell/internal/transport"
 	"github.com/oioio-space/inkwell/internal/transport/frame"
@@ -80,6 +93,11 @@ const (
 	// upTimeout bounds how long an inbound stream waits for its peer to be
 	// announced, before it is reset.
 	upTimeout = 30 * time.Second
+	// reorderWait bounds how long a new inbound stream waits for the one it
+	// replaces to be read to its end, before it is read anyway. It is long
+	// because a slow consumer holds the old stream up, and only a stalled
+	// sender should make it give up.
+	reorderWait = time.Minute
 	// msgOverhead is charged to the byte budget on top of each payload, so
 	// floods of tiny frames are bounded too.
 	msgOverhead = 64
@@ -99,9 +117,23 @@ type Options struct {
 	// extra is applied after the node's own libp2p options; tests use it to
 	// run on a simulated network.
 	extra []libp2p.Option
+	// rewrite, if not nil, rewrites the advertised addresses; tests use it to
+	// give a simulated node its public address.
+	rewrite func([]ma.Multiaddr) []ma.Multiaddr
+	// Relays are the relays to use, as multiaddrs ending in /p2p/<id>. With
+	// at least one, the node reserves a slot on them so that peers can reach
+	// it from any network, dials peers through them when it has no better
+	// address, and tries to upgrade relayed links to direct ones (hole
+	// punching) unless RelayOnly is set.
+	Relays []string
 	// Port is the UDP port of QUIC and the TCP port of the fallback. Zero
 	// picks free ports.
 	Port int
+	// RelayOnly hides the node's address from the other people: it refuses
+	// every connection that does not go through a relay (except to the
+	// relays themselves), never dials a direct address and does not hole
+	// punch. It needs at least one relay.
+	RelayOnly bool
 }
 
 // queued is an event with the byte budget to release once Recv returns it.
@@ -125,6 +157,12 @@ type peerState struct {
 	opening bool
 	// up: PeerUp was announced and PeerDown has not been yet.
 	up bool
+	// upgrading: a goroutine is moving the outbound stream to a direct
+	// connection.
+	upgrading bool
+	// inTail is closed when the last inbound stream of the peer is done; the
+	// next one waits for it to keep the messages in order.
+	inTail chan struct{}
 }
 
 // Node is a libp2p peer; it implements [transport.Transport].
@@ -145,6 +183,20 @@ type Node struct {
 	opts   Options
 	local  transport.PeerID
 	wg     sync.WaitGroup
+	// dialWG counts the goroutines that dial, which Close waits for before it
+	// closes the host: libp2p does not like to be closed under a dial.
+	dialWG sync.WaitGroup
+	// relays are the configured relays, never peers; circuit has the address
+	// prefix that leads through each of them. Both are read-only.
+	relays    map[peer.ID]peer.AddrInfo
+	circuit   []ma.Multiaddr
+	relayDown map[peer.ID]chan struct{}
+	addrSub   event.Subscription
+	notifee   *network.NotifyBundle
+	// want is the set of peers to keep connected, and kick is closed and
+	// replaced to make their dial loops retry at once. Both under mu.
+	want map[peer.ID]*wanted
+	kick chan struct{}
 
 	closeOnce sync.Once
 	closeErr  error
@@ -155,35 +207,29 @@ type Node struct {
 
 var _ transport.Transport = (*Node)(nil)
 
-// gate lets the connection gater consult Options.Admit once a peer is
-// authenticated; everything else is allowed.
-type gate struct {
-	*conngater.BasicConnectionGater
-	admit func(peer.ID) bool
-}
-
-func (g gate) InterceptSecured(_ network.Direction, p peer.ID, _ network.ConnMultiaddrs) bool {
-	return g.admit(p)
-}
-
 // New starts a node identified by key. Canceling ctx closes the node.
 //
 // The node listens on QUIC (IPv4 and IPv6) and TCP at o.Port. Its resources
 // are bounded: 64 peers' worth of connections, 4 sync streams per peer, 256
-// MiB of memory.
+// MiB of memory. It fails if o.Relays has an invalid address, or if
+// o.RelayOnly is set without a relay.
 func New(ctx context.Context, key ed25519.PrivateKey, o Options) (*Node, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
-	if len(key) != ed25519.PrivateKeySize {
-		return nil, fmt.Errorf("p2p: private key is %d bytes, want %d", len(key), ed25519.PrivateKeySize)
-	}
 	if o.Port < 0 || o.Port > 65535 {
 		return nil, fmt.Errorf("p2p: invalid port %d", o.Port)
 	}
-	priv, err := crypto.UnmarshalEd25519PrivateKey(key)
+	relays, err := parseRelays(o.Relays)
 	if err != nil {
-		return nil, fmt.Errorf("p2p: private key: %w", err)
+		return nil, err
+	}
+	if o.RelayOnly && len(relays) == 0 {
+		return nil, errors.New("p2p: RelayOnly needs at least one relay")
+	}
+	priv, err := privateKey(key)
+	if err != nil {
+		return nil, err
 	}
 	local, err := peer.IDFromPrivateKey(priv)
 	if err != nil {
@@ -210,13 +256,21 @@ func New(ctx context.Context, key ed25519.PrivateKey, o Options) (*Node, error) 
 	}
 
 	n := &Node{
-		local:  localName,
-		opts:   o,
-		done:   make(chan struct{}),
-		wake:   make(chan struct{}, 1),
-		chg:    make(chan struct{}),
-		budget: frame.NewBudget(maxBuffered),
-		peers:  make(map[peer.ID]*peerState),
+		local:     localName,
+		opts:      o,
+		done:      make(chan struct{}),
+		wake:      make(chan struct{}, 1),
+		chg:       make(chan struct{}),
+		budget:    frame.NewBudget(maxBuffered),
+		peers:     make(map[peer.ID]*peerState),
+		want:      make(map[peer.ID]*wanted),
+		kick:      make(chan struct{}),
+		relays:    relays,
+		relayDown: make(map[peer.ID]chan struct{}, len(relays)),
+	}
+	n.circuit = circuitPrefixes(relays)
+	for id := range relays {
+		n.relayDown[id] = make(chan struct{}, 1)
 	}
 	n.ctx, n.cancel = context.WithCancel(ctx)
 
@@ -234,9 +288,10 @@ func New(ctx context.Context, key ed25519.PrivateKey, o Options) (*Node, error) 
 		),
 		libp2p.ResourceManager(rm),
 		libp2p.ConnectionManager(cm),
-		libp2p.ConnectionGater(gate{BasicConnectionGater: base, admit: n.admitted}),
+		libp2p.ConnectionGater(gate{BasicConnectionGater: base, admit: n.admitted, relays: relays, relayOnly: o.RelayOnly}),
 		libp2p.DisableMetrics(),
 	}
+	opts = append(opts, reachabilityOptions(relays, o)...)
 	h, err := libp2p.New(append(opts, o.extra...)...)
 	if err != nil {
 		n.cancel()
@@ -253,6 +308,19 @@ func New(ctx context.Context, key ed25519.PrivateKey, o Options) (*Node, error) 
 		return nil, fmt.Errorf("p2p: subscribe: %w", err)
 	}
 	n.sub = sub
+	addrSub, err := h.EventBus().Subscribe(new(event.EvtLocalAddressesUpdated))
+	if err != nil {
+		n.cancel()
+		_ = sub.Close()
+		_ = h.Close()
+		return nil, fmt.Errorf("p2p: subscribe: %w", err)
+	}
+	n.addrSub = addrSub
+	n.notifee = &network.NotifyBundle{
+		ConnectedF:    func(_ network.Network, c network.Conn) { n.onConn(c) },
+		DisconnectedF: func(_ network.Network, c network.Conn) { n.onDisconn(c) },
+	}
+	h.Network().Notify(n.notifee)
 	h.SetStreamHandler(ProtocolSync, n.handleStream)
 	n.wg.Go(func() {
 		for _, p := range h.Network().Peers() { // connected before the subscription
@@ -264,6 +332,14 @@ func New(ctx context.Context, key ed25519.PrivateKey, o Options) (*Node, error) 
 			}
 		}
 	})
+	n.wg.Go(func() {
+		for range addrSub.Out() { // the network changed: retry now
+			n.kickAll()
+		}
+	})
+	for _, ai := range relayList(relays) {
+		n.dialWG.Go(func() { n.keepRelay(ai, n.relayDown[ai.ID]) })
+	}
 	stop := context.AfterFunc(ctx, func() { _ = n.Close() })
 	n.mu.Lock()
 	n.stop = stop
@@ -321,8 +397,13 @@ func (n *Node) Local() transport.PeerID { return n.local }
 
 // Addrs returns the addresses the node listens on, each ending with
 // /p2p/<id> so that it is enough to dial the node. Addresses of a wildcard
-// listener are expanded to each local interface.
+// listener are expanded to each local interface. With relays, the addresses
+// through them are included once a slot is reserved; in RelayOnly mode they
+// are the only ones, so there may be none yet.
 func (n *Node) Addrs() []string {
+	if len(n.h.Addrs()) == 0 { // none yet, in RelayOnly mode before a relay is reserved
+		return nil
+	}
 	mas, err := peer.AddrInfoToP2pAddrs(&peer.AddrInfo{ID: n.h.ID(), Addrs: n.h.Addrs()})
 	if err != nil {
 		return nil
@@ -379,14 +460,16 @@ func parseAddr(s string, id peer.ID) (*peer.AddrInfo, error) {
 	return ai, nil
 }
 
-// Drop closes the connections to peer and forgets what is known about it. It
-// is for revocation: revoke the peer in Options.Admit first, or it may
-// reconnect at once. The peer's PeerDown follows as for any lost link.
+// Drop closes the connections to peer and forgets what is known about it,
+// including that it was wanted (see [Node.Want]). It is for revocation: revoke
+// the peer in Options.Admit first, or it may reconnect at once. The peer's
+// PeerDown follows as for any lost link.
 func (n *Node) Drop(who transport.PeerID) {
 	id, ok := parseID(who)
 	if !ok || id == n.h.ID() {
 		return
 	}
+	n.unwant(id)
 	_ = n.h.Network().ClosePeer(id)
 	n.h.Peerstore().RemovePeer(id)
 	n.h.Peerstore().ClearAddrs(id)
@@ -449,8 +532,11 @@ func (n *Node) Close() error {
 		n.mu.Unlock()
 		close(n.done)
 		n.cancel()
+		n.dialWG.Wait()
 		n.budget.Close()
 		_ = n.sub.Close()
+		_ = n.addrSub.Close()
+		n.h.Network().StopNotify(n.notifee)
 		if err := n.h.Close(); err != nil {
 			n.closeErr = fmt.Errorf("p2p: close: %w", err)
 		}
