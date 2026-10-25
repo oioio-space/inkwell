@@ -1,5 +1,5 @@
-import type { Lang } from "./lang";
-import { graphemeCount } from "./position";
+import type { Lang } from "../format/lang";
+import { graphemeCount } from "../format/text";
 import { countPlainWords, stripMarkup } from "./words";
 
 /** Average silent reading speed in French, words per minute. */

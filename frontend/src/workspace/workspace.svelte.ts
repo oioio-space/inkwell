@@ -165,15 +165,19 @@ class Workspace {
     if (!name || !handle || !this.#storage) return;
     const text = await this.#storage.readProjection(name);
     if (text !== undefined) handle.change((d) => A.updateText(d, ["text"], text));
-    await this.#storage.acknowledge(name);
-    this.external = null;
-    await this.#projection?.flush(true);
+    await this.#settleExternal(name);
   }
 
   /** Keeps the document as it is: the file is written from it again, replacing the outside edit. */
   async ignoreExternal(): Promise<void> {
     const name = this.external;
-    if (!name || !this.#storage) return;
+    if (!name) return;
+    await this.#settleExternal(name);
+  }
+
+  /** The outside edit is dealt with: forget it and write the file from the document again. */
+  async #settleExternal(name: string): Promise<void> {
+    if (!this.#storage) return;
     await this.#storage.acknowledge(name);
     this.external = null;
     await this.#projection?.flush(true);

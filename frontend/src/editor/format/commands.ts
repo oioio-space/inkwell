@@ -5,6 +5,7 @@ import {
   type SelectionRange,
   type StateCommand,
   type Text,
+  type Transaction,
 } from "@codemirror/state";
 import { fenceAt, fencesUpTo, isInFence } from "./fence";
 import type { Lang } from "./lang";
@@ -165,7 +166,7 @@ function dispatchOutcomes(
   targets: Target[],
   outcomes: Outcome[],
   userEvent: string,
-  dispatch: (tr: ReturnType<EditorState["update"]>) => void,
+  dispatch: (tr: Transaction) => void,
 ): void {
   const changes: ChangeSpec[] = [];
   const ranges: SelectionRange[] = [];
@@ -227,16 +228,23 @@ export function toggleMark(lang: Lang, mark: Mark): StateCommand {
 
 // ── Blocks ──────────────────────────────────────────────────────────────────
 
+/**
+ * The first and last line numbers a range covers. A selection that ends at the very start of a
+ * line (after a triple click, say) does not take that line.
+ */
+function lineRange(doc: Text, range: SelectionRange): [number, number] {
+  const first = doc.lineAt(range.from).number;
+  const last = doc.lineAt(range.to);
+  const endsBefore = !range.empty && range.to === last.from && last.number > first;
+  return [first, endsBefore ? last.number - 1 : last.number];
+}
+
 /** Line numbers a block command acts on: every line the selections touch. */
 function selectedLines(state: EditorState): number[] {
   const lines = new Set<number>();
   for (const range of state.selection.ranges) {
-    const first = state.doc.lineAt(range.from);
-    let last = state.doc.lineAt(range.to);
-    if (!range.empty && range.to === last.from && last.number > first.number) {
-      last = state.doc.line(last.number - 1);
-    }
-    for (let n = first.number; n <= last.number; n++) lines.add(n);
+    const [first, last] = lineRange(state.doc, range);
+    for (let n = first; n <= last; n++) lines.add(n);
   }
   return [...lines].sort((a, b) => a - b);
 }
@@ -275,7 +283,7 @@ function codeBlockCommand(lang: Lang): StateCommand {
       const blank = head.text.trim() === "";
       const at = blank ? head.from : head.to;
       const insert = `${blank ? "" : "\n"}\`\`\`\n\n\`\`\``;
-      changes.push({ from: blank ? head.from : head.to, to: blank ? head.to : head.to, insert });
+      changes.push({ from: at, to: head.to, insert });
       slots.push(at + (blank ? 0 : 1) + 4);
     } else {
       for (const [first, last] of lineSpans(state, filled)) {
@@ -303,19 +311,17 @@ function codeBlockCommand(lang: Lang): StateCommand {
 function lineSpans(state: EditorState, ranges: readonly SelectionRange[]): [number, number][] {
   const spans: [number, number][] = [];
   for (const r of ranges) {
-    const first = state.doc.lineAt(r.from).number;
-    let last = state.doc.lineAt(r.to);
-    if (r.to === last.from && last.number > first) last = state.doc.line(last.number - 1);
+    const [first, last] = lineRange(state.doc, r);
     const prev = spans.at(-1);
-    if (prev && first <= prev[1]) prev[1] = Math.max(prev[1], last.number);
-    else spans.push([first, last.number]);
+    if (prev && first <= prev[1]) prev[1] = Math.max(prev[1], last);
+    else spans.push([first, last]);
   }
   return spans;
 }
 
 function unfence(
   state: EditorState,
-  dispatch: (tr: ReturnType<EditorState["update"]>) => void,
+  dispatch: (tr: Transaction) => void,
   open: number,
   close: number | null,
 ): boolean {
