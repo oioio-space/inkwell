@@ -35,5 +35,11 @@ build/linux/inkwell.desktop
 frontend/test-results/
 frontend/playwright-report/
 
+# Sidecar binaries are fetched at build time (mise run sidecar:fetch), never committed;
+# only the .gitkeep placeholders that keep `go:embed` buildable are tracked.
+!/internal/sidecar/bin/
+/internal/sidecar/bin/*/*
+!/internal/sidecar/bin/*/.gitkeep
+
 # Agent worktrees (Claude Code)
 .claude/worktrees/

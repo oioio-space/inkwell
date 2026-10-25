@@ -1,0 +1,132 @@
+package sidecar
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"os/exec"
+	"runtime"
+	"syscall"
+	"time"
+)
+
+// DefaultMaxOutput is the number of bytes of each of stdout and stderr that
+// [Run] keeps when [Spec.MaxOutput] is zero.
+const DefaultMaxOutput = 4 << 20
+
+// waitDelay bounds how long Run waits for the pipes of a child that exited
+// but left a descendant holding them.
+const waitDelay = 2 * time.Second
+
+// Spec describes one launch of a verified sidecar.
+type Spec struct {
+	// Stdin is the child's standard input; nil means none.
+	Stdin io.Reader
+	// Path is the executable, as returned by [Store.Resolve].
+	Path string
+	// Dir is the working directory; empty means the caller's.
+	Dir string
+	// Args are the arguments after the program name.
+	Args []string
+	// Env is the child's complete environment. The caller's environment is
+	// never inherited: a stray TYPST_* or proxy variable must not change a
+	// compilation.
+	Env []string
+	// MemoryLimit caps the child's address space, in bytes, on Linux; zero
+	// means no limit. Other systems ignore it.
+	MemoryLimit uint64
+	// MaxOutput is how many bytes of each of stdout and stderr are kept; the
+	// rest is read and dropped so the child never blocks. Zero means
+	// [DefaultMaxOutput].
+	MaxOutput int
+}
+
+// Output is what a finished child wrote and how it ended.
+type Output struct {
+	// Stdout and Stderr hold up to [Spec.MaxOutput] bytes each.
+	Stdout, Stderr []byte
+	// ExitCode is the exit status, or -1 when a signal ended the child.
+	ExitCode int
+	// Truncated is true when stdout or stderr was longer than MaxOutput.
+	Truncated bool
+}
+
+// Run starts the program, waits for it and returns what it wrote. A non-zero
+// exit status is reported in [Output.ExitCode], not as an error. When ctx ends
+// first, the child's whole process group is killed and Run returns ctx.Err()
+// with what was captured so far.
+func Run(ctx context.Context, spec Spec) (Output, error) {
+	if spec.Path == "" {
+		return Output{}, errors.New("sidecar: run: no executable")
+	}
+	if err := ctx.Err(); err != nil {
+		return Output{}, err
+	}
+	maxOut := spec.MaxOutput
+	if maxOut <= 0 {
+		maxOut = DefaultMaxOutput
+	}
+	stdout, stderr := &capped{max: maxOut}, &capped{max: maxOut}
+
+	cmd := exec.CommandContext(ctx, spec.Path, spec.Args...) // #nosec G204 -- Path comes from Store.Resolve, never from user input
+	cmd.Dir = spec.Dir
+	cmd.Env = append([]string{}, spec.Env...) // non-nil: an empty environment, not the caller's
+	cmd.Stdin = spec.Stdin
+	cmd.Stdout, cmd.Stderr = stdout, stderr
+	cmd.WaitDelay = waitDelay
+	setProcAttr(cmd)
+	cmd.Cancel = func() error { return signalGroup(cmd.Process.Pid, syscall.SIGKILL) }
+
+	// The parent-death signal follows the thread that forks the child.
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+	if err := cmd.Start(); err != nil {
+		return Output{}, fmt.Errorf("sidecar: start %s: %w", spec.Path, err)
+	}
+	if spec.MemoryLimit > 0 {
+		if err := limitMemory(cmd.Process.Pid, spec.MemoryLimit); err != nil {
+			_ = signalGroup(cmd.Process.Pid, syscall.SIGKILL)
+			_ = cmd.Wait()
+			return Output{}, fmt.Errorf("sidecar: limit memory of %s: %w", spec.Path, err)
+		}
+	}
+	waitErr := cmd.Wait()
+	// Whatever the child left behind in its group goes with it.
+	_ = signalGroup(cmd.Process.Pid, syscall.SIGKILL)
+
+	out := Output{
+		Stdout:    stdout.buf,
+		Stderr:    stderr.buf,
+		ExitCode:  cmd.ProcessState.ExitCode(),
+		Truncated: stdout.dropped || stderr.dropped,
+	}
+	if err := ctx.Err(); err != nil && out.ExitCode != 0 {
+		return out, err
+	}
+	if waitErr != nil {
+		if _, exited := errors.AsType[*exec.ExitError](waitErr); !exited {
+			return out, fmt.Errorf("sidecar: run %s: %w", spec.Path, waitErr)
+		}
+	}
+	return out, nil
+}
+
+// capped keeps the first max bytes written to it and counts the rest as
+// dropped, always reporting a full write so the child never blocks.
+type capped struct {
+	buf     []byte
+	max     int
+	dropped bool
+}
+
+func (c *capped) Write(p []byte) (int, error) {
+	room := c.max - len(c.buf)
+	if room > 0 {
+		c.buf = append(c.buf, p[:min(room, len(p))]...)
+	}
+	if len(p) > room {
+		c.dropped = true
+	}
+	return len(p), nil
+}

@@ -56,8 +56,10 @@ colonne « Étape » dit quand.
 | `internal/trust` | Liste de membres signée (CRDT à ordre total Lamport → clé), rôles, révocation, vérification des lots signés | 2 |
 | `internal/store` | État Automerge sur disque : KV atomique et vérifié sur `os.Root` (`WriteAtomic`, en-tête `IKV1`+SHA-256), quarantaine, sauvegardes par liens durs (ADR 0020) | 2 |
 | `internal/project` | Projet = dossier `<Documents>/Inkwell/<Titre>/` : `project.json`, projection `main.typ`, règle de propriété fsnotify, bac à sable `os.Root`, corbeille | 2 |
-| `internal/sidecar` | Binaires embarqués vérifiés SHA-256, supervision, backoff, arrêt avec le parent | 3 |
-| `internal/typst` | Vente des paquets `@preview` dans `.typstdeps/`, polices, export PDF | 3 |
+| `internal/sidecar` | `typst` et `tinymist` épinglés (`manifest.json`), embarqués compressés, extraits et revérifiés (SHA-256) avant chaque lancement ; `Run` (délai, mémoire, sortie bornés) et `Supervisor` (relance avec recul, groupe de processus, `Pdeathsig`) | 3 |
+| `internal/sidecar/fetch` | Téléchargement **à la construction** des archives épinglées ; importé par `cmd/sidecar-fetch` seul | 3 |
+| `internal/typst` | Compilation hors ligne (PDF, pages SVG, diagnostics, `query`, `Watch`), paquets `@preview` fournis + `.typstdeps/`, polices fournies, pièces jointes `pdf.attach` lues dans le PDF | 3 |
+| `cmd/sidecar-fetch` | `mise run sidecar:fetch` : prépare `internal/sidecar/bin/<os>_<arch>/*.gz` | 3 |
 | `internal/blob` | Magasin adressé par BLAKE3, quotas, échange sur flux libp2p dédié | 4 |
 | `internal/milestone` | Jalons go-git (projection lisible, jamais source de vérité) | 4 |
 | `internal/transport/frame` | Trames préfixées par leur longueur, bornées (octets venus d’un pair : fuzzé) | 2 |
@@ -73,6 +75,9 @@ colonne « Étape » dit quand.
 - libp2p n’est importé que par `internal/transport/p2p`, wormhole-william que par `internal/invite` : `scripts/arch-check.sh` (tâche `arch`, dans `ci`) le vérifie.
 - Aucun code Go n'importe Automerge : la convergence se teste en TypeScript avec le vrai
   `automerge-repo` ; Go teste sa colle sur `transport/memnet` (ADR 0011).
+- `internal/sidecar` et `internal/typst` n'importent ni `net`, ni `net/http`, ni `crypto/tls` ; seul
+  `cmd/sidecar-fetch` importe `internal/sidecar/fetch` : l'exécutable ne contient aucun code de
+  téléchargement (`scripts/arch-check.sh`). `typst` importe `sidecar`, jamais l'inverse.
 - Tout ce qui lit des octets venus d'un pair est fuzzé (`go test -fuzz`).
 
 ## Trois cohérences (du document)
@@ -90,7 +95,10 @@ colonne « Étape » dit quand.
   locaux restants (plan de données tinymist) : `127.0.0.1`, port éphémère, jeton aléatoire
   comparé en temps constant, jamais journalisé.
 - Sidecars : hachage vérifié avant chaque lancement, `--root` sur le dossier projet,
-  `context.WithTimeout`, relance bornée, mort avec le parent (job object sous Windows).
+  `context.WithTimeout`, mémoire (`RLIMIT_AS`) et sortie bornées, relance bornée, mort avec le
+  parent (`Pdeathsig` sous Linux ; macOS et Windows : voir le plan de l'étape 3), environnement
+  construit de zéro avec des proxys vers un port refusé (Typst n'a pas de mode hors ligne),
+  refus d'un projet dont un lien symbolique sort du dossier. Décision : [ADR 0024](adr/0024-sidecars-typst-tinymist.md).
 - Réseau : Noise de bout en bout, chaque lot d'updates signé par son auteur, refusé si
   l'auteur n'est pas membre en écriture.
 
