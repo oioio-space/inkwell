@@ -7,11 +7,19 @@
  *
  * Webview → Go sends Message (peer = recipient) and Attest (peer ignored). Go →
  * webview sends PeerUp, PeerDown, Message (peer = sender), Attested (peer = signer),
- * Revoked (peer = the revoked writer) and Sealed (peer = this device).
+ * Revoked (peer = the revoked writer), Sealed (peer = this device), Roles (peer = this
+ * device) and Suspended (peer = the admin who suspended or resumed this device).
  *
  * The payload of Attest and Attested is a document's heads:
  *
  *   len(doc) u16 big endian | doc (UTF-8) | heads, 32 bytes each
+ *
+ * The payload of Roles lists the devices of the project:
+ *
+ *   count u16 big endian | per device: len(peer) u8 | peer | role u8 (1 reader, 2 writer,
+ *   3 admin) | flags u8 (bit 0: suspended)
+ *
+ * The payload of Suspended is one byte: 1 if this device was suspended, 0 if it was let back.
  */
 
 export const Kind = {
@@ -22,6 +30,8 @@ export const Kind = {
   Attested: 5,
   Revoked: 6,
   Sealed: 7,
+  Roles: 8,
+  Suspended: 9,
 } as const;
 export type Kind = (typeof Kind)[keyof typeof Kind];
 
@@ -42,6 +52,8 @@ const HASH_BYTES = 32;
 /** Limits shared with Go (bridge.MaxDoc, bridge.MaxHeads). */
 export const MAX_DOC = 256;
 export const MAX_HEADS = 64;
+/** Bound of a Roles payload (bridge.MaxMembers). */
+export const MAX_MEMBERS = 1024;
 
 function validPeer(peer: string): boolean {
   if (peer.length === 0 || peer.length > MAX_PEER) return false;
@@ -55,7 +67,13 @@ function validPeer(peer: string): boolean {
 const KINDS: ReadonlySet<number> = new Set(Object.values(Kind));
 
 function carriesPayload(kind: Kind): boolean {
-  return kind === Kind.Message || kind === Kind.Attest || kind === Kind.Attested;
+  return (
+    kind === Kind.Message ||
+    kind === Kind.Attest ||
+    kind === Kind.Attested ||
+    kind === Kind.Roles ||
+    kind === Kind.Suspended
+  );
 }
 
 function carriesHeads(kind: Kind): boolean {
@@ -69,6 +87,8 @@ function check(kind: number, peer: string, payload: Uint8Array): asserts kind is
     throw new MalformedEnvelope("this kind carries no payload");
   }
   if (carriesHeads(kind as Kind)) decodeHeads(payload);
+  if (kind === Kind.Roles) decodeRoles(payload);
+  if (kind === Kind.Suspended) decodeSuspended(payload);
 }
 
 export function encodeEnvelope(e: Envelope): Uint8Array {
@@ -153,4 +173,61 @@ export function decodeHeads(b: Uint8Array): DocHeads {
     heads.push(bytesToHex(rest.subarray(i, i + HASH_BYTES)));
   }
   return { doc, heads };
+}
+
+/** The role of a device as Go numbers it (trust.Role). */
+export const RoleLevel = { reader: 1, writer: 2, admin: 3 } as const;
+export type RoleName = keyof typeof RoleLevel;
+
+/** One device of a Roles payload. */
+export interface MemberRole {
+  peer: string;
+  role: RoleName;
+  suspended: boolean;
+}
+
+const ROLE_NAMES: readonly (RoleName | undefined)[] = [undefined, "reader", "writer", "admin"];
+
+/** Serializes the payload of Roles. */
+export function encodeRoles(members: MemberRole[]): Uint8Array {
+  if (members.length > MAX_MEMBERS) throw new MalformedEnvelope("too many members");
+  const parts: number[] = [members.length >> 8, members.length & 0xff];
+  for (const m of members) {
+    if (!validPeer(m.peer)) throw new MalformedEnvelope("invalid peer id");
+    parts.push(m.peer.length);
+    for (let i = 0; i < m.peer.length; i++) parts.push(m.peer.charCodeAt(i));
+    parts.push(RoleLevel[m.role], m.suspended ? 1 : 0);
+  }
+  return Uint8Array.from(parts);
+}
+
+/** Parses the payload of Roles, strictly (same rules as Go). */
+export function decodeRoles(b: Uint8Array): MemberRole[] {
+  if (b.length < 2) throw new MalformedEnvelope("truncated roles");
+  const count = ((b[0] as number) << 8) | (b[1] as number);
+  if (count > MAX_MEMBERS) throw new MalformedEnvelope("too many members");
+  const out: MemberRole[] = [];
+  let at = 2;
+  for (let n = 0; n < count; n++) {
+    const len = b[at] as number | undefined;
+    if (len === undefined || at + 1 + len + 2 > b.length) {
+      throw new MalformedEnvelope("truncated member entry");
+    }
+    const peer = String.fromCharCode(...b.subarray(at + 1, at + 1 + len));
+    const role = ROLE_NAMES[b[at + 1 + len] as number];
+    const flags = b[at + 2 + len] as number;
+    if (!validPeer(peer) || role === undefined || (flags & ~1) !== 0) {
+      throw new MalformedEnvelope("invalid member entry");
+    }
+    out.push({ peer, role, suspended: (flags & 1) === 1 });
+    at += 3 + len;
+  }
+  if (at !== b.length) throw new MalformedEnvelope("trailing bytes");
+  return out;
+}
+
+/** Parses the payload of Suspended: true if this device was suspended, false if let back. */
+export function decodeSuspended(b: Uint8Array): boolean {
+  if (b.length !== 1 || (b[0] as number) > 1) throw new MalformedEnvelope("bad suspended payload");
+  return b[0] === 1;
 }

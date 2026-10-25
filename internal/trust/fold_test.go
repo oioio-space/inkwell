@@ -1,6 +1,7 @@
 package trust
 
 import (
+	"bytes"
 	"math/rand/v2"
 	"slices"
 	"testing"
@@ -59,7 +60,7 @@ func genDAG(rt *rapid.T, id ProjectID, genesis Op, keys []*testSigner) []Op {
 		}
 		author := authors[rapid.IntRange(0, len(authors)-1).Draw(rt, "author")]
 		op := Op{
-			Kind:    rapid.SampledFrom([]OpKind{OpAdd, OpAdd, OpSetRole, OpRemove, OpRemove}).Draw(rt, "kind"),
+			Kind:    rapid.SampledFrom([]OpKind{OpAdd, OpAdd, OpSetRole, OpRemove, OpRemove, OpSuspend, OpSuspend, OpResume}).Draw(rt, "kind"),
 			Subject: keys[rapid.IntRange(0, len(keys)-1).Draw(rt, "subject")].Public(),
 			Author:  author.Public(),
 			Role:    rapid.SampledFrom([]Role{RoleAdmin, RoleAdmin, RoleWriter, RoleReader}).Draw(rt, "role"),
@@ -73,8 +74,12 @@ func genDAG(rt *rapid.T, id ProjectID, genesis Op, keys []*testSigner) []Op {
 		for _, p := range prev {
 			op.Lamport = max(op.Lamport, byHash[p].Lamport+1)
 		}
-		if op.Kind == OpRemove {
-			op.Role, op.Name = 0, ""
+		if op.Kind == OpRemove || op.Kind == OpSuspend || op.Kind == OpResume {
+			op.Role, op.Name, op.Person = 0, "", Hash{}
+		}
+		if (op.Kind == OpSuspend || op.Kind == OpResume) && bytes.Equal(op.Subject, op.Author) {
+			// Nobody suspends itself: aim at the next key instead.
+			op.Subject = keys[(slices.IndexFunc(keys, func(k *testSigner) bool { return bytes.Equal(k.Public(), op.Author) })+1)%len(keys)].Public()
 		}
 		op.sign(author, id)
 		h := op.Hash()
@@ -120,6 +125,33 @@ func TestFoldOrderIndependent(t *testing.T) {
 			if ref.Len() != l.Len() || ref.Pending() != l.Pending() || ref.Sealed() != l.Sealed() {
 				rt.Fatalf("len/pending/sealed differ: %d/%d/%v vs %d/%d/%v", ref.Len(), ref.Pending(), ref.Sealed(), l.Len(), l.Pending(), l.Sealed())
 			}
+		}
+	})
+}
+
+// TestIssuedOpsStand checks that an op that IssueWith or IssueBatch returns
+// takes effect: the list never keeps a dead op for its issuer.
+func TestIssuedOpsStand(t *testing.T) {
+	keys := testKeys()
+	rapid.Check(t, func(rt *rapid.T) {
+		l, _ := genList(rt, keys)
+		kinds := []OpKind{OpAdd, OpSetRole, OpRemove, OpSuspend, OpResume}
+		draw := func(label string) Op {
+			return Op{
+				Kind:    rapid.SampledFrom(kinds).Draw(rt, label+"kind"),
+				Subject: rapid.SampledFrom(keys).Draw(rt, label+"subject").Public(),
+				Role:    rapid.SampledFrom([]Role{RoleAdmin, RoleWriter, RoleReader}).Draw(rt, label+"role"),
+			}
+		}
+		issuer := rapid.SampledFrom(keys).Draw(rt, "issuer")
+		if rapid.Bool().Draw(rt, "batch") {
+			if ops, err := l.IssueBatch(issuer, []Op{draw("a"), draw("b")}); err == nil {
+				wantStands(rt, l, ops...)
+			}
+			return
+		}
+		if op, err := l.IssueWith(issuer, draw("")); err == nil {
+			wantStands(rt, l, op)
 		}
 	})
 }

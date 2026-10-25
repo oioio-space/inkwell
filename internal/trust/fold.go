@@ -131,6 +131,7 @@ func (v *view) survivors(e []int) []int {
 type sweep struct {
 	v      *view
 	on     map[string][]int // subject → role ops on it, in ≺ order.
+	susp   map[string][]int // subject → suspensions and resumptions of it, in ≺ order.
 	by     map[string][]int // author → ops by it, in ≺ order.
 	rank   map[string]int
 	base   map[string][]int // decided key → its surviving role ops, junior cuts excluded.
@@ -143,13 +144,17 @@ type sweep struct {
 // ancestors) stand, visiting keys in rank order.
 func (v *view) sweep(in []int) *sweep {
 	s := &sweep{
-		v: v, on: make(map[string][]int), by: make(map[string][]int), rank: make(map[string]int),
+		v: v, on: make(map[string][]int), susp: make(map[string][]int), by: make(map[string][]int), rank: make(map[string]int),
 		base: make(map[string][]int), stands: make([]bool, len(v.nodes)), exc: make(map[int]bool),
 	}
 	s.inSet = newBitset(len(v.nodes))
 	for _, i := range in {
 		s.inSet.set(i)
-		s.on[v.subj[i]] = append(s.on[v.subj[i]], i)
+		if v.nodes[i].op.suspension() {
+			s.susp[v.subj[i]] = append(s.susp[v.subj[i]], i)
+		} else {
+			s.on[v.subj[i]] = append(s.on[v.subj[i]], i)
+		}
 		s.by[v.auth[i]] = append(s.by[v.auth[i]], i)
 	}
 	h := &rankHeap{{key: v.creator}}
@@ -227,12 +232,13 @@ func (v *view) verdict(s *sweep, y string) (c cutInfo) {
 	return c
 }
 
-// excCut reports whether a role op may target a senior key that is no longer
-// admin: a Remove, or a SetRole or Add to a lower role that renames nobody
-// (and, for an Add, regroups no person). A grant never may.
+// excCut reports whether an op may target a senior key that is no longer
+// admin: a Remove, a suspension or a resumption (S1), or a SetRole or Add to a
+// lower role that renames nobody (and, for an Add, regroups no person). A
+// grant never may.
 func (o Op) excCut() bool {
 	switch o.Kind {
-	case OpRemove:
+	case OpRemove, OpSuspend, OpResume:
 		return true
 	case OpSetRole:
 		return o.Role < RoleAdmin && o.Name == ""
@@ -246,9 +252,23 @@ func (o Op) excCut() bool {
 func (s *sweep) decide(h *rankHeap, y string, cand, surv []int) {
 	v := s.v
 	cuts := slices.DeleteFunc(slices.Clone(cand), func(i int) bool { return v.nodes[i].grant() })
+	var susp, suspends []int // standing suspensions and resumptions of y by other keys, and the suspensions among them.
+	for _, i := range s.susp[y] {
+		if s.stands[i] && !s.exc[i] {
+			susp = append(susp, i)
+			if v.nodes[i].op.Kind == OpSuspend {
+				suspends = append(suspends, i)
+			}
+		}
+	}
+	// dead is S3: y signs i while suspended, or without having seen a standing
+	// suspension of y by another key.
+	dead := func(i int) bool {
+		return slices.ContainsFunc(suspends, func(k int) bool { return v.conc(i, k) }) || v.suspendedAt(i, surv, susp)
+	}
 	var exits []int // y's self-cuts that stand: they leave another admin in place and no cut by another key is concurrent to them.
 	for _, k := range s.by[y] {
-		if v.isSelfCut(k) && v.selfCut(k).exit && !slices.ContainsFunc(cuts, func(c int) bool { return v.conc(k, c) }) {
+		if v.isSelfCut(k) && v.selfCut(k).exit && !slices.ContainsFunc(cuts, func(c int) bool { return v.conc(k, c) }) && !dead(k) {
 			exits = append(exits, k)
 		}
 	}
@@ -265,6 +285,9 @@ func (s *sweep) decide(h *rankHeap, y string, cand, surv []int) {
 		}
 		if !slices.Contains(exits, i) && slices.ContainsFunc(exits, func(k int) bool { return v.conc(i, k) && !s.spared(i, k, y) }) {
 			continue // rule 3b, y's own exit.
+		}
+		if dead(i) {
+			continue // S3.
 		}
 		if !v.adminAt(i, surv, self) {
 			continue // rule 3a.
@@ -304,6 +327,46 @@ func (v *view) adminAt(i int, surv, self []int) bool {
 	return last >= 0 && v.nodes[last].grant()
 }
 
+// lastLive applies S2 to q, the standing suspensions and resumptions of one
+// key in ≺ order: a resumption concurrent to a suspension of q is dropped. It
+// returns the ≺-last op left, or -1. The key is suspended if it is a
+// suspension.
+func (v *view) lastLive(q []int) int {
+	last := -1
+	for _, i := range q {
+		if v.nodes[i].op.Kind == OpResume && slices.ContainsFunc(q, func(j int) bool { return v.nodes[j].op.Kind == OpSuspend && v.conc(i, j) }) {
+			continue
+		}
+		last = i
+	}
+	return last
+}
+
+// followsRemoves reports whether the suspension op j sees every Remove among
+// roles (surviving role ops of the key, all by keys senior to it) that op
+// within sees; within < 0 means every one. A suspension that does not see a
+// removal does not outlive it.
+func (v *view) followsRemoves(j int, roles []int, within int) bool {
+	return !slices.ContainsFunc(roles, func(r int) bool {
+		return v.nodes[r].op.Kind == OpRemove && (within < 0 || v.anc[within].has(r)) && !v.anc[j].has(r)
+	})
+}
+
+// suspendedAt reports whether a key is suspended as op i sees it: S2 over the
+// ops of susp (its standing suspensions and resumptions by other keys) that i
+// sees and that see every Remove that i sees among roles, the surviving role
+// ops of the key by keys senior to it.
+func (v *view) suspendedAt(i int, roles, susp []int) bool {
+	var q []int
+	for _, j := range susp {
+		if v.anc[i].has(j) && v.followsRemoves(j, roles, i) {
+			q = append(q, j)
+		}
+	}
+	k := v.lastLive(q)
+	return k >= 0 && v.nodes[k].op.Kind == OpSuspend
+}
+
 // otherAdminSeenBy reports whether an admin other than y exists in the
 // membership of the ops reachable from heads.
 func (v *view) otherAdminSeenBy(heads []Hash, y string) bool {
@@ -320,6 +383,14 @@ func (v *view) otherAdminSeenBy(heads []Hash, y string) bool {
 		}
 	}
 	return v.verdict(v.sweep(past), y).honoured
+}
+
+// otherActiveAdmin reports whether an admin other than y, and not suspended,
+// is a member now. An admin leaves only if one is left to run the list.
+func (v *view) otherActiveAdmin(y string) bool {
+	return slices.ContainsFunc(v.members, func(m Member) bool {
+		return m.Role == RoleAdmin && !m.Suspended && string(m.Pub) != y
+	})
 }
 
 // memberRec is a member with the data needed to order and reason about it.
@@ -384,6 +455,25 @@ func (s *sweep) members() []memberRec {
 		m.Person = person
 		if x == v.creator {
 			pos = 0
+		}
+		// S2: the suspensions of x that see every surviving Remove of it, unless a
+		// junior's suspension of a senior that a surviving grant made admin again.
+		var q []int
+		for _, i := range s.susp[x] {
+			if !s.stands[i] || !v.followsRemoves(i, surv, -1) {
+				continue
+			}
+			if s.exc[i] && slices.ContainsFunc(surv, func(g int) bool { return v.nodes[g].grant() && !v.anc[i].has(g) }) {
+				continue
+			}
+			q = append(q, i)
+		}
+		if k := v.lastLive(q); k >= 0 {
+			if nd := v.nodes[k]; nd.op.Kind == OpSuspend {
+				m.Suspended, m.SuspendedBy, m.SuspendedOp = true, nd.op.Author, nd.hash
+			} else {
+				m.ResumedBy = nd.op.Author
+			}
 		}
 		out = append(out, memberRec{m: m, pos: pos, last: run[len(run)-1]})
 	}

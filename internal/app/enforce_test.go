@@ -247,8 +247,8 @@ func TestNoticesDescribeTheState(t *testing.T) {
 			t.Fatal(err)
 		}
 		notices := attester(t, a).Notices()
-		if len(notices) != 1 || notices[0].Kind != bridge.Attested || notices[0].Peer != a.id {
-			t.Errorf("Notices() = %+v, want the one attestation of A", notices)
+		if len(notices) != 2 || notices[0].Kind != bridge.Roles || notices[1].Kind != bridge.Attested || notices[1].Peer != a.id {
+			t.Errorf("Notices() = %+v, want the roles, then the one attestation of A", notices)
 		}
 	})
 }
@@ -272,8 +272,8 @@ func TestSealedStopsSigning(t *testing.T) {
 		m := join(t, net, dev, sealed(t, dev))
 
 		// The webview learns it when it attaches...
-		if n := attester(t, m).Notices(); len(n) != 1 || n[0].Kind != bridge.Sealed {
-			t.Errorf("Notices() = %+v, want the Sealed notice", n)
+		if n := attester(t, m).Notices(); len(n) != 2 || n[0].Kind != bridge.Roles || n[1].Kind != bridge.Sealed {
+			t.Errorf("Notices() = %+v, want the roles, then the Sealed notice", n)
 		}
 		// ...and live, once.
 		if e := nextEnvelope(t, m.w.Repo()); e.Kind != bridge.Sealed {

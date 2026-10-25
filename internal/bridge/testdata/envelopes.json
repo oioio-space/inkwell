@@ -89,5 +89,33 @@
     "peer": "k7f3",
     "payloadHex": "",
     "wireHex": "0107046b376633"
+  },
+  {
+    "name": "roles two members",
+    "kind": "Roles",
+    "peer": "k7f3",
+    "payloadHex": "0002057a7a2d397e030001610201",
+    "wireHex": "0108046b3766330002057a7a2d397e030001610201"
+  },
+  {
+    "name": "roles empty",
+    "kind": "Roles",
+    "peer": "k7f3",
+    "payloadHex": "0000",
+    "wireHex": "0108046b3766330000"
+  },
+  {
+    "name": "suspended",
+    "kind": "Suspended",
+    "peer": "k7f3",
+    "payloadHex": "01",
+    "wireHex": "0109046b37663301"
+  },
+  {
+    "name": "resumed",
+    "kind": "Suspended",
+    "peer": "k7f3",
+    "payloadHex": "00",
+    "wireHex": "0109046b37663300"
   }
 ]
