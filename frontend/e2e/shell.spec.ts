@@ -14,7 +14,7 @@ async function sample(p: Page) {
   await clear(p);
   await editor(p).click();
   await p.keyboard.type(
-    "= Plan de continuité\n\nAvant toute action, vérifier l'état de la *réplication*\net prévenir le responsable.\n\n+ Geler les écritures\n+ Promouvoir le réplica",
+    '= Plan de continuité <plan>\n\nAvant toute action, vérifier l\'état de la *réplication*\net prévenir le responsable, voir @plan.\n#raw("pg_ctl promote")\n+ Geler les écritures\n+ Promouvoir le réplica',
   );
   await expect(p.getByTestId("words")).toHaveText(/mots/);
 }
@@ -159,6 +159,94 @@ test("UI-07 the status bar hides the encoding for a UTF-8 file with LF line ends
   await clear(page);
 });
 
+/** Where the line numbers and the text start: what must not move when something opens. */
+const gutterGeometry = (p: Page) =>
+  p.evaluate(() => {
+    const box = (el: Element | null) => {
+      const r = el?.getBoundingClientRect();
+      return r ? { x: r.x, y: r.y, width: r.width, height: r.height } : null;
+    };
+    const number = document.querySelector(".cm-lineNumbers .cm-gutterElement:nth-child(2)");
+    return {
+      gutters: box(document.querySelector(".cm-gutters")),
+      number: box(number),
+      line: box(document.querySelector(".cm-line")),
+      align: number ? getComputedStyle(number).textAlign : "",
+      minWidth: number ? getComputedStyle(number).minWidth : "",
+    };
+  });
+
+test("UI-12 the line-number gutter keeps its geometry while a popover or a dialog is open", async ({
+  browser,
+}) => {
+  const page = await open(browser, URL);
+  await sample(page);
+  const before = await gutterGeometry(page);
+  // The 56 px column of the design; a lost theme would give CodeMirror's 20 px default.
+  expect(before.gutters?.width).toBe(56);
+  expect(before.minWidth).toBe("56px");
+  expect(before.align).toBe("right");
+
+  await headingButton(page).click();
+  await expect(page.getByRole("menu", { name: "Style de paragraphe" })).toBeVisible();
+  expect(await gutterGeometry(page)).toEqual(before);
+  await page.keyboard.press("Escape");
+
+  await page.getByRole("button", { name: /Insérer/ }).click();
+  await expect(page.getByRole("menu", { name: /Insérer/ })).toBeVisible();
+  expect(await gutterGeometry(page)).toEqual(before);
+  await page.keyboard.press("Escape");
+
+  await page.getByRole("button", { name: "Menu principal" }).click();
+  await page.getByRole("menuitem", { name: "Préférences" }).click();
+  await expect(page.getByRole("dialog", { name: "Préférences" })).toBeVisible();
+  expect(await gutterGeometry(page)).toEqual(before);
+  await page.keyboard.press("Escape");
+
+  await expect(page.getByRole("dialog", { name: "Préférences" })).toBeHidden();
+  expect(await gutterGeometry(page)).toEqual(before);
+  await clear(page);
+});
+
+/** The colour a CSS variable resolves to in the page. */
+const resolved = (p: Page, variable: string) =>
+  p.evaluate((name) => {
+    const probe = document.createElement("i");
+    probe.style.color = `var(${name})`;
+    document.body.append(probe);
+    const colour = getComputedStyle(probe).color;
+    probe.remove();
+    return colour;
+  }, variable);
+
+for (const dark of [false, true]) {
+  test(`UI-13 Typst source is coloured with the Adwaita palette, ${dark ? "dark" : "light"}`, async ({
+    browser,
+  }) => {
+    const page = await open(browser, URL, dark);
+    await sample(page);
+    // CodeMirror redraws the spans when the parser delivers its tree: poll until it settled.
+    const style = (text: string, prop: "color" | "fontWeight") =>
+      expect.poll(() =>
+        editor(page)
+          .locator(".cm-line span", { hasText: text })
+          .first()
+          .evaluate((el, p) => getComputedStyle(el)[p], prop),
+      );
+    const colour = async (text: string, variable: string) =>
+      style(text, "color").toBe(await resolved(page, variable));
+
+    await colour("continuité", "--hl-heading");
+    await style("continuité", "fontWeight").toBe("700");
+    await colour("<plan>", "--hl-label");
+    await colour("@plan", "--hl-label");
+    await colour('"pg_ctl promote"', "--hl-string");
+    await colour("raw", "--hl-function");
+    await style("réplication", "fontWeight").toBe("700");
+    await clear(page);
+  });
+}
+
 for (const dark of [false, true]) {
   test(`UI-06 ${dark ? "dark" : "light"} theme has no accessibility violation (WCAG A and AA)`, async ({
     browser,
@@ -199,14 +287,19 @@ test.describe("UI-11 reference screenshots", () => {
   test.skip(({ browserName }) => browserName !== "chromium", "baselines are made with Chromium");
 
   const shot = { maxDiffPixelRatio: 0.002 } as const;
-  // What depends on who else is connected, on a generated identity or on a blinking caret is
-  // hidden (through the CSSOM, which the page's CSP allows); the layout around it stays.
+  // What depends on who else is connected (the two instances stay paired with each other
+  // after the collaboration tests, so "Seul" or "Synchronisé" are both true here), on a
+  // generated identity, on a blinking caret or on an outside edit left by an earlier test
+  // (the "modified outside" toast) is hidden by a constructed stylesheet, which the page's CSP
+  // allows and which covers what appears later. The status itself is tested in unit tests
+  // (workspace.test.ts) and by the pairing helper.
   const hideVolatile = (p: Page) =>
     p.evaluate(() => {
-      const volatile = '[role="status"], .people, ul[aria-label$="document"], .cm-cursorLayer';
-      for (const el of document.querySelectorAll<HTMLElement>(volatile)) {
-        el.style.visibility = "hidden";
-      }
+      const sheet = new CSSStyleSheet();
+      sheet.replaceSync(
+        '[role="status"], .people, ul[aria-label$="document"], .cm-cursorLayer, [role="alert"] { visibility: hidden !important }',
+      );
+      document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
     });
   for (const dark of [false, true]) {
     const tag = dark ? "dark" : "light";
@@ -214,6 +307,9 @@ test.describe("UI-11 reference screenshots", () => {
       const page = await open(browser, URL, dark);
       await page.setViewportSize({ width: 1408, height: 868 });
       await sample(page);
+      // The file list is read from the project folder, a moment after the editor appears (the
+      // window polls every 4 s if the first read came too early).
+      await expect(page.getByText("principal", { exact: true })).toBeVisible({ timeout: 15_000 });
       // Keep the caret off the text under the menus and the pointer out of the way.
       await page.mouse.move(700, 600);
 

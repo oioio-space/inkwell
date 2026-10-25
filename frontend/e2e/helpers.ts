@@ -54,6 +54,14 @@ export async function pair(alice: Page, bob: Page) {
 
   await expect(alice.getByRole("status")).toHaveText(/Synchronisé/, { timeout: 60_000 });
   await expect(bob.getByRole("status")).toHaveText(/Synchronisé/, { timeout: 60_000 });
+
+  // The header and the status bar come from the same list of people: they never disagree.
+  for (const page of [alice, bob]) {
+    const bar = page.getByRole("contentinfo", { name: "Barre d'état" });
+    await expect(bar).toContainText("2 personnes");
+    await expect(bar).not.toContainText("Seul");
+    await expect(page.getByRole("status")).not.toHaveText(/Seul/);
+  }
 }
 
 /** Types at the end of the document. */

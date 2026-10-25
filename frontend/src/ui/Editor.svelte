@@ -11,11 +11,11 @@ let { handle, me, lang }: { handle: DocHandle<Doc>; me: { id: string; name: stri
 let host: HTMLDivElement;
 let editor: ReturnType<typeof createEditor> | undefined;
 
-// Re-create the editor only when the document or its language changes; a new name is
-// broadcast instead.
+// Re-create the editor only when the document changes; a new name or file language is
+// reconfigured in place (a Compartment), so the text, caret and undo history stay.
 $effect(() => {
   const h = handle;
-  const l = lang;
+  const l = untrack(() => lang);
   editor = untrack(() =>
     createEditor(
       host,
@@ -38,6 +38,7 @@ $effect(() => {
   };
 });
 $effect(() => editor?.rename(me.name));
+$effect(() => editor?.setLang(lang));
 </script>
 
 <div class="page" bind:this={host}></div>

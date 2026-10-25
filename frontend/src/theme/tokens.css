@@ -63,6 +63,23 @@
   --success: var(--p-green-4);
   --focus-ring: 2px solid color-mix(in srgb, var(--accent-bg) 75%, transparent);
 
+  /*
+   * Syntax colours of the source (the mockup's, in Adwaita's light and dark hues). Each one
+   * reaches 4.5:1 on the editor background in both themes (checked by tokens.test.ts); the
+   * mockup's green and comment grey are a little darker/lighter than #26a269 and #77767b
+   * where the text would otherwise fall under AA.
+   */
+  --hl-heading: light-dark(#1c71d8, #78aeed);
+  --hl-function: light-dark(#c64600, #ffa348);
+  --hl-string: light-dark(#1a7a4c, #57e389);
+  --hl-label: light-dark(#9141ac, #dc8add);
+  --hl-comment: light-dark(#6f6e74, #9a9996);
+  --hl-keyword: light-dark(#c01c28, #ff7b63);
+  --hl-number: light-dark(#8f5902, #f8e45c);
+  --hl-link: var(--accent);
+  --hl-raw: light-dark(#5e5c64, #c0bfbc);
+  --hl-marker: light-dark(#1c71d8, #78aeed);
+
   /* File-type marks (the symbolic outline stays neutral; only the inner mark is coloured) */
   --mark-typst: light-dark(#1a8f9e, #4fd0e0);
   --mark-markdown: light-dark(#3584e4, #78aeed);
