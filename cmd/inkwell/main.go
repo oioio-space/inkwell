@@ -15,15 +15,25 @@ import (
 	"github.com/oioio-space/inkwell/internal/app"
 	"github.com/oioio-space/inkwell/internal/bridge"
 	"github.com/oioio-space/inkwell/internal/transport"
-	"github.com/oioio-space/inkwell/internal/transport/tcp"
 )
 
 func main() {
 	log := slog.New(slog.NewTextHandler(os.Stderr, nil))
 	ctx, cancel := context.WithCancel(context.Background())
 
-	// Stage 1: plain TCP between trusted LAN peers; libp2p replaces it at stage 2.
-	node := tcp.New(tcp.NewPeerID(), tcp.Options{})
+	home, err := app.OpenHome()
+	if err != nil {
+		log.Error("opening identity directory", "err", err)
+		os.Exit(1)
+	}
+	node, err := app.StartNode(ctx, home, app.DefaultPort)
+	if err != nil {
+		log.Error("starting network", "err", err)
+		os.Exit(1)
+	}
+	if err := home.Close(); err != nil {
+		log.Warn("closing identity directory", "err", err)
+	}
 	router := bridge.NewRouter(node, log)
 
 	wails := application.New(application.Options{

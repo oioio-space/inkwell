@@ -6,7 +6,7 @@
 // interprets a payload; it only knows peers and bytes.
 //
 // Implementations live in sub-packages: memnet (in-memory, fault-injecting,
-// for tests and simulation), tcp (stage 1) and p2p (libp2p, stage 2).
+// for tests and simulation), frame (length-prefixed framing) and p2p (libp2p).
 //
 // Typical use, with a single consumer draining events:
 //

@@ -164,9 +164,13 @@ depends = ["sbom"]
 run = "./scripts/rtkx.sh grype sbom:sbom.cdx.json --fail-on high"
 
 
+[tasks.arch]
+description = "Dependency rules: libp2p only in transport/p2p, wormhole only in invite, no Go automerge"
+run = "./scripts/arch-check.sh"
+
 [tasks.ci]
 description = "Everything CI must pass"
-depends = ["scan:secrets", "scan:code", "scan:sbom", "lint", "lint:sh", "lint:yaml", "lint:actions", "test:ci", "cover:check", "fe:check"]
+depends = ["arch", "scan:secrets", "scan:code", "scan:sbom", "lint", "lint:sh", "lint:yaml", "lint:actions", "test:ci", "cover:check", "fe:check"]
 
 [tasks.release]
 description = "Cross-platform release build + publish (goreleaser)"
@@ -254,12 +258,12 @@ INKWELL_E2E_BROWSER="$browser" pnpm exec playwright test
 """
 
 [tasks."app:duo"]
-description = "Run two isolated instances to try collaboration on one machine (Invite in one, Join 127.0.0.1:7419 in the other)"
+description = "Run two isolated instances to try collaboration on one machine (Invite in one, paste the invitation in the other)"
 depends = ["app:build"]
 run = """
 for who in alice bob; do
   mkdir -p .task/duo/$who
-  XDG_DATA_HOME=$PWD/.task/duo/$who/data XDG_CACHE_HOME=$PWD/.task/duo/$who/cache ./bin/inkwell &
+  INKWELL_HOME=$PWD/.task/duo/$who/home XDG_DATA_HOME=$PWD/.task/duo/$who/data XDG_CACHE_HOME=$PWD/.task/duo/$who/cache ./bin/inkwell &
 done
 wait
 """

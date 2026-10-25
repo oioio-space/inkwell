@@ -1,3 +1,4 @@
+import { resolve } from "node:path";
 import { defineConfig, devices } from "@playwright/test";
 
 // Two real inkwell instances in Wails server mode (`-tags server`): same Go code, same
@@ -6,7 +7,11 @@ const browser = process.env.INKWELL_E2E_BROWSER ?? (process.env.CI ? "webkit" : 
 
 const instance = (port: number) => ({
   command: `../bin/inkwell-server`,
-  env: { INKWELL_SERVER_PORT: String(port) },
+  // Each instance has its own identity directory, or both would be the same peer.
+  env: {
+    INKWELL_SERVER_PORT: String(port),
+    INKWELL_HOME: resolve(import.meta.dirname, "../.task/e2e", String(port)),
+  },
   url: `http://127.0.0.1:${port}/health`,
   reuseExistingServer: false,
   timeout: 30_000,

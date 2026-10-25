@@ -27,7 +27,7 @@ démontré (test, démo enregistrée ou tâche utilisateur chronométrée).
 > Sortie : **deux personnes tapent dans le même fichier**, curseurs visibles.
 
 - [x] Squelette Wails v3 (beta.34, GTK4) + Svelte 5 / Vite / TS, Taskfile natif, piloté par mise
-- [x] `internal/transport` : interface `Transport` + `memnet` (fautes à graine, déterministe sous `synctest`) + `tcp` (bornes mémoire/connexions, audit sécurité appliqué)
+- [x] `internal/transport` : interface `Transport` + `memnet` (fautes à graine, déterministe sous `synctest`) + `tcp` (supprimé en étape 2 ; bornes mémoire/connexions, audit sécurité appliqué)
 - [x] `internal/bridge` : Streams Wails, aucun port local (ADR 0009) ; enveloppe binaire à vecteurs dorés partagés Go/TS, fuzzée
 - [x] Frontend : CodeMirror 6 + `automerge-repo` + `WailsNetworkAdapter` + `automerge-codemirror`
 - [x] Curseurs et sélections distants nommés (présence automerge-repo, curseurs Automerge)

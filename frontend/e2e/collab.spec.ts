@@ -38,13 +38,13 @@ test("two people type in the same file, see each other, and undo only their own 
   await alice.getByRole("button", { name: "Partager" }).click();
   await rename(alice, "Alice");
   await alice.getByRole("button", { name: "Inviter" }).click();
-  const address = (await alice.locator("dialog code").first().textContent())?.trim() ?? "";
-  expect(address).toMatch(/:\d+$/);
+  await expect(alice.getByLabel("Invitation", { exact: true })).toHaveValue(/\/p2p\//);
+  const invitation = await alice.getByLabel("Invitation", { exact: true }).inputValue();
   await alice.getByRole("button", { name: "Fermer" }).click();
 
   await bob.getByRole("button", { name: "Partager" }).click();
   await rename(bob, "Bob");
-  await bob.getByPlaceholder("192.168.1.20:7419").fill(address);
+  await bob.getByPlaceholder("Collez l'invitation ici").fill(invitation);
   await bob.getByRole("button", { name: "Rejoindre" }).click();
 
   await expect(alice.getByRole("status")).toHaveText(/Synchronisé/);
