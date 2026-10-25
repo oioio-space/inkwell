@@ -52,6 +52,8 @@ class Workspace {
   error = $state("");
   /** A project file edited outside Inkwell, waiting for "Import" or "Ignore"; null if none. */
   external = $state<string | null>(null);
+  /** True once the member list is full: this device signs no more, so edits stay local. */
+  sealed = $state(false);
   handle = $state.raw<DocHandle<Doc> | undefined>();
 
   #repo: Repo | undefined;
@@ -74,6 +76,9 @@ class Workspace {
     adapter.on("peer-disconnected", ({ peerId }) => {
       this.peers = this.peers.filter((p) => p !== peerId);
       if (this.peers.length === 0) this.status = "alone";
+    });
+    adapter.onSealed(() => {
+      this.sealed = true;
     });
     this.#adapter = adapter;
     const storage = new GoStorageAdapter(() => Stream("store") as unknown as SocketLike);

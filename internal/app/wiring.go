@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/ed25519"
 	"errors"
+	"fmt"
 	"log/slog"
 	"maps"
 	"slices"
@@ -11,6 +12,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/oioio-space/inkwell/internal/bridge"
 	"github.com/oioio-space/inkwell/internal/transport"
 	"github.com/oioio-space/inkwell/internal/transport/mux"
 	"github.com/oioio-space/inkwell/internal/transport/p2p"
@@ -35,7 +37,7 @@ const (
 // peers the user chose to join, and, while an invitation is open, anyone who
 // was never a member. It is safe for concurrent use.
 type Admission struct {
-	list    *trust.List
+	list    *trust.List                   // under mu: [Wiring.Adopt] replaces it
 	invited map[transport.PeerID][]string // peers joined by invitation → their addresses
 	known   map[string]struct{}           // keys that ever were the subject of an op
 	mu      sync.Mutex
@@ -62,9 +64,38 @@ func (a *Admission) Admit(id transport.PeerID) bool {
 	return ok
 }
 
+// current returns the member list of the project.
+func (a *Admission) current() *trust.List {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.list
+}
+
+// swap makes list the member list of the project, forgetting what was known of
+// the previous one.
+func (a *Admission) swap(list *trust.List) {
+	a.mu.Lock()
+	a.list = list
+	clear(a.known)
+	a.mu.Unlock()
+	a.learn(list.Since(nil))
+}
+
+// host returns the key of id if this user joined it by invitation.
+func (a *Admission) host(id transport.PeerID) (ed25519.PublicKey, bool) {
+	a.mu.Lock()
+	_, ok := a.invited[id]
+	a.mu.Unlock()
+	if !ok {
+		return nil, false
+	}
+	key, err := p2p.KeyFromID(id)
+	return key, err == nil
+}
+
 // allowed reports whether id is a member, or a peer this user joined.
 func (a *Admission) allowed(id transport.PeerID) bool {
-	if key, err := p2p.KeyFromID(id); err == nil && a.list.Role(key) > 0 {
+	if key, err := p2p.KeyFromID(id); err == nil && a.current().Role(key) > 0 {
 		return true
 	}
 	a.mu.Lock()
@@ -99,6 +130,15 @@ func (a *Admission) Invite(peer transport.PeerID, addrs []string) {
 	a.invited[peer] = slices.Clone(addrs)
 }
 
+// wasMember reports whether key is, or ever was, the subject of an op of the
+// member list.
+func (a *Admission) wasMember(key ed25519.PublicKey) bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	_, ok := a.known[string(key)]
+	return ok
+}
+
 // learn records the keys that ops are about.
 func (a *Admission) learn(ops []trust.Op) {
 	a.mu.Lock()
@@ -112,7 +152,7 @@ func (a *Admission) learn(ops []trust.Op) {
 // they are known at: the other members and the peers this user joined.
 func (a *Admission) dialTargets(self transport.PeerID) map[transport.PeerID][]string {
 	out := make(map[transport.PeerID][]string)
-	for _, m := range a.list.Members() {
+	for _, m := range a.current().Members() {
 		if id := p2p.IDFromKey(m.Pub); id != "" && id != self {
 			out[id] = nil
 		}
@@ -139,6 +179,9 @@ type WiringOptions struct {
 	Log *slog.Logger
 	// Save, if not nil, persists each new op of the member list.
 	Save func(trust.Op) error
+	// Reset, if not nil, forgets every saved op; [Wiring.Adopt] calls it when
+	// the device leaves its own project for another.
+	Reset func() error
 	// TickEvery is how often the member list is announced again; zero means 15 s.
 	TickEvery time.Duration
 
@@ -162,29 +205,33 @@ type WiringOptions struct {
 type Wiring struct {
 	raw      transport.Transport
 	signer   trust.Signer
-	list     *trust.List
+	lst      atomic.Pointer[trust.List] // replaced by Adopt
 	adm      *Admission
 	sync     *trust.Sync
 	att      attestStore
 	log      *slog.Logger
 	save     func(trust.Op) error
+	reset    func() error
 	onEmit   func(transport.Event)
 	ctx      context.Context
 	cancel   context.CancelFunc
 	repoCh   transport.Transport
 	trustCh  transport.Transport
 	attestCh transport.Transport
-	out      chan transport.Event // events for the bridge
+	out      chan bridge.Envelope // events for the bridge
 	cmds     chan func()          // run by the goroutine
 	stopped  chan struct{}        // closed when the goroutine has ended
 	up       map[transport.PeerID]struct{}
 	active   map[transport.PeerID]struct{} // under mu; written by the goroutine only
 	saved    map[trust.Hash]struct{}
+	pending  map[string][]trust.Hash // heads to sign once this device is known to be a writer
 	closeErr error
 	tick     time.Duration
 	nOps     int
 	mu       sync.Mutex
-	once     sync.Once
+	// sealedSent is set once the webview was told the list is sealed.
+	sealedSent bool
+	once       sync.Once
 }
 
 // Wire starts a Wiring over t, whose events it consumes: t must have no other
@@ -195,26 +242,28 @@ func Wire(ctx context.Context, t transport.Transport, s trust.Signer, list *trus
 	w := &Wiring{
 		raw:      t,
 		signer:   s,
-		list:     list,
 		adm:      adm,
 		sync:     trust.NewSync(list),
 		att:      attestStore{latest: make(map[attestKey]trust.Attestation)},
 		log:      o.Log,
 		save:     o.Save,
+		reset:    o.Reset,
 		onEmit:   o.onEmit,
 		ctx:      ctx,
 		cancel:   cancel,
 		repoCh:   subs[chanRepo],
 		trustCh:  subs[chanTrust],
 		attestCh: subs[chanAttest],
-		out:      make(chan transport.Event, repoBuffer),
+		out:      make(chan bridge.Envelope, repoBuffer),
 		cmds:     make(chan func()),
 		stopped:  make(chan struct{}),
 		up:       make(map[transport.PeerID]struct{}),
 		active:   make(map[transport.PeerID]struct{}),
 		saved:    make(map[trust.Hash]struct{}),
+		pending:  make(map[string][]trust.Hash),
 		tick:     o.TickEvery,
 	}
+	w.lst.Store(list)
 	if w.log == nil {
 		w.log = slog.New(slog.DiscardHandler)
 	}
@@ -227,6 +276,9 @@ func Wire(ctx context.Context, t transport.Transport, s trust.Signer, list *trus
 	go w.run()
 	return w
 }
+
+// list returns the member list of the project.
+func (w *Wiring) list() *trust.List { return w.lst.Load() }
 
 // Repo returns the transport for the bridge: the repo channel, restricted to
 // the members. A peer is announced with a PeerUp once it is a member and is
@@ -261,7 +313,7 @@ func (w *Wiring) Issue(k trust.OpKind, subject ed25519.PublicKey, r trust.Role, 
 		err error
 	)
 	if derr := w.do(func() {
-		if op, err = w.list.Issue(w.signer, k, subject, r, name); err != nil {
+		if op, err = w.list().Issue(w.signer, k, subject, r, name); err != nil {
 			return
 		}
 		w.sendTrust(w.sync.Broadcast(op))
@@ -270,6 +322,62 @@ func (w *Wiring) Issue(k trust.OpKind, subject ed25519.PublicKey, r trust.Role, 
 		return trust.Op{}, derr
 	}
 	return op, err
+}
+
+// ErrNotAlone is returned by [Wiring.Adopt] when this device already shares its
+// project with someone.
+var ErrNotAlone = errors.New("app: this device already belongs to a shared project")
+
+// Adopt makes this device join the project id, which the inviting host belongs
+// to: the member list starts empty and fills from the host. It only works while
+// this device is alone in a project of its own, and it replaces that project's
+// member list (the ops saved so far are forgotten). Adopting the project it
+// already has does nothing.
+//
+// TODO(Task 8): the ticket, whose redemption returns the ops of the project,
+// replaces this.
+func (w *Wiring) Adopt(id trust.ProjectID) error {
+	var err error
+	if derr := w.do(func() { err = w.adopt(id) }); derr != nil {
+		return derr
+	}
+	return err
+}
+
+func (w *Wiring) adopt(id trust.ProjectID) error {
+	cur := w.list()
+	if cur.Project() == id {
+		return nil
+	}
+	if cur.Len() != 1 || len(cur.Members()) != 1 {
+		return ErrNotAlone
+	}
+	if w.reset != nil {
+		if err := w.reset(); err != nil {
+			return fmt.Errorf("leaving the previous project: %w", err)
+		}
+	}
+	next := trust.New(id)
+	w.lst.Store(next)
+	w.adm.swap(next)
+	w.sync = trust.NewSync(next)
+	w.att.reset()
+	clear(w.saved)
+	w.nOps = 0
+	for _, p := range w.activePeers() {
+		w.sendTrust(w.sync.OnPeerUp(p))
+	}
+	w.afterChange()
+	return nil
+}
+
+// verify checks an attestation against the member list. While the list is
+// still empty, after Adopt, the host the user joined stands for the admin.
+func (w *Wiring) verify(a trust.Attestation) error {
+	if key, ok := w.adm.host(p2p.IDFromKey(a.Signer)); ok {
+		return w.list().VerifyTrusting(a, key)
+	}
+	return w.list().Verify(a)
 }
 
 // run is the goroutine of the wiring.
@@ -386,7 +494,7 @@ func (w *Wiring) admitInvitee(p transport.PeerID) {
 	if !ok {
 		return
 	}
-	op, err := w.list.Issue(w.signer, trust.OpAdd, key, trust.RoleWriter, "")
+	op, err := w.list().Issue(w.signer, trust.OpAdd, key, trust.RoleWriter, "")
 	if err != nil {
 		w.log.Debug("admitting invitee", "peer", p, "err", err)
 		return
@@ -398,9 +506,9 @@ func (w *Wiring) admitInvitee(p transport.PeerID) {
 // afterChange saves the new ops of the member list, forgets what became
 // invalid and keeps the members connected.
 func (w *Wiring) afterChange() {
-	if n := w.list.Len(); n != w.nOps {
+	if n := w.list().Len(); n != w.nOps {
 		w.nOps = n
-		ops := w.list.Since(nil)
+		ops := w.list().Since(nil)
 		w.adm.learn(ops)
 		for _, op := range ops {
 			h := op.Hash()
@@ -413,11 +521,19 @@ func (w *Wiring) afterChange() {
 			}
 			w.saved[h] = struct{}{}
 		}
-		w.att.prune(func(a trust.Attestation) bool { return w.list.Verify(a) == nil })
+		for _, key := range w.att.prune(func(a trust.Attestation) bool { return w.verify(a) == nil }) {
+			if id := p2p.IDFromKey(ed25519.PublicKey(key)); id != "" {
+				w.notify(bridge.Envelope{Kind: bridge.Revoked, Peer: id})
+			}
+		}
 		if wt, ok := w.raw.(Wanter); ok {
 			wt.Want(w.adm.dialTargets(w.raw.Local()))
 		}
 	}
+	if w.list().Sealed() {
+		w.announceSealed()
+	}
+	w.flushPending()
 	w.reconcile()
 }
 
@@ -484,8 +600,15 @@ func (w *Wiring) emit(ev transport.Event) {
 	if w.onEmit != nil {
 		w.onEmit(ev)
 	}
+	w.notify(bridge.Envelope{Kind: bridge.Kind(ev.Kind), Peer: ev.Peer, Payload: ev.Payload})
+}
+
+// notify queues an envelope for the bridge, unless the wiring stops first.
+// Envelopes come out in the order they went in, so an attestation reaches the
+// webview before the frames that follow it on the wire.
+func (w *Wiring) notify(e bridge.Envelope) {
 	select {
-	case w.out <- ev:
+	case w.out <- e:
 	case <-w.ctx.Done():
 	}
 }
@@ -501,7 +624,11 @@ func (w *Wiring) sendTrust(out []trust.Outbound) {
 // repoPort is the [transport.Transport] that [Wiring.Repo] returns.
 type repoPort Wiring
 
-var _ transport.Transport = (*repoPort)(nil)
+var (
+	_ transport.Transport = (*repoPort)(nil)
+	_ bridge.Source       = (*repoPort)(nil)
+	_ bridge.Attester     = (*repoPort)(nil)
+)
 
 func (p *repoPort) Local() transport.PeerID { return p.raw.Local() }
 
@@ -515,19 +642,60 @@ func (p *repoPort) Send(ctx context.Context, to transport.PeerID, payload []byte
 }
 
 func (p *repoPort) Recv(ctx context.Context) (transport.Event, error) {
+	for {
+		e, err := p.RecvEnvelope(ctx)
+		if err != nil {
+			return transport.Event{}, err
+		}
+		if e.Kind <= bridge.Message { // the attestation envelopes are for the bridge only
+			return transport.Event{Kind: transport.Kind(e.Kind), Peer: e.Peer, Payload: e.Payload}, nil
+		}
+	}
+}
+
+// RecvEnvelope is [Wiring.Repo]'s Recv with the bridge's own envelopes:
+// Attested, Revoked and Sealed come out in order with the messages (see
+// [bridge.Source]).
+func (p *repoPort) RecvEnvelope(ctx context.Context) (bridge.Envelope, error) {
 	select {
 	case <-p.stopped:
-		return transport.Event{}, transport.ErrClosed
+		return bridge.Envelope{}, transport.ErrClosed
 	default:
 	}
 	select {
-	case ev := <-p.out:
-		return ev, nil
+	case e := <-p.out:
+		return e, nil
 	case <-p.stopped:
-		return transport.Event{}, transport.ErrClosed
+		return bridge.Envelope{}, transport.ErrClosed
 	case <-ctx.Done():
-		return transport.Event{}, ctx.Err()
+		return bridge.Envelope{}, ctx.Err()
 	}
+}
+
+// Attest signs the heads of doc (see [Wiring.AttestHeads]); it makes the repo
+// transport a [bridge.Attester].
+func (p *repoPort) Attest(_ context.Context, doc string, heads [][bridge.HashSize]byte) error {
+	hs := make([]trust.Hash, len(heads))
+	for i, h := range heads {
+		hs[i] = h
+	}
+	return (*Wiring)(p).AttestHeads(doc, hs)
+}
+
+// Notices returns the attestations held and, if the list is sealed, the
+// Sealed envelope, for a webview that just attached.
+func (p *repoPort) Notices() []bridge.Envelope {
+	w := (*Wiring)(p)
+	var out []bridge.Envelope
+	for _, a := range w.att.all() {
+		if e, ok := attestedEnvelope(a); ok {
+			out = append(out, e)
+		}
+	}
+	if w.list().Sealed() {
+		out = append(out, w.sealedEnvelope())
+	}
+	return out
 }
 
 func (p *repoPort) Close() error { return (*Wiring)(p).Close() }

@@ -247,6 +247,20 @@ func (p *Project) SetRootURL(url string) error {
 	return nil
 }
 
+// OpenDir opens the directory name of .inkwell/, creating it (private to the
+// user) when missing, for code that keeps its own files there, such as the
+// member list in "trust". The caller closes the result before [Project.Close].
+func (p *Project) OpenDir(name string) (*os.Root, error) {
+	if err := p.inkwell.MkdirAll(name, 0o700); err != nil {
+		return nil, fmt.Errorf("project: create %s: %w", name, err)
+	}
+	r, err := p.inkwell.OpenRoot(name)
+	if err != nil {
+		return nil, fmt.Errorf("project: open %s: %w", name, err)
+	}
+	return r, nil
+}
+
 // Close releases the project folder. Stop [Project.Watch] first.
 func (p *Project) Close() error {
 	return errors.Join(p.inkwell.Close(), p.root.Close())

@@ -47,5 +47,47 @@
     "peer": "!~}{",
     "payloadHex": "ca",
     "wireHex": "010304217e7d7bca"
+  },
+  {
+    "name": "attest two heads",
+    "kind": "Attest",
+    "peer": "k7f3",
+    "payloadHex": "0004646f63310101010101010101010101010101010101010101010101010101010101010101fefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefe",
+    "wireHex": "0104046b3766330004646f63310101010101010101010101010101010101010101010101010101010101010101fefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefefe"
+  },
+  {
+    "name": "attest no heads",
+    "kind": "Attest",
+    "peer": "k7f3",
+    "payloadHex": "000164",
+    "wireHex": "0104046b376633000164"
+  },
+  {
+    "name": "attested one head",
+    "kind": "Attested",
+    "peer": "zz-9~",
+    "payloadHex": "001c344e4d4e6e6b4d684c386a5872644a396a616d533538504156645875000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
+    "wireHex": "0105057a7a2d397e001c344e4d4e6e6b4d684c386a5872644a396a616d533538504156645875000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f"
+  },
+  {
+    "name": "attested multibyte document",
+    "kind": "Attested",
+    "peer": "a",
+    "payloadHex": "0002c3a90707070707070707070707070707070707070707070707070707070707070707",
+    "wireHex": "010501610002c3a90707070707070707070707070707070707070707070707070707070707070707"
+  },
+  {
+    "name": "revoked",
+    "kind": "Revoked",
+    "peer": "k7f3",
+    "payloadHex": "",
+    "wireHex": "0106046b376633"
+  },
+  {
+    "name": "sealed",
+    "kind": "Sealed",
+    "peer": "k7f3",
+    "payloadHex": "",
+    "wireHex": "0107046b376633"
   }
 ]

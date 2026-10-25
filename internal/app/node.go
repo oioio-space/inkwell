@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 
 	"github.com/oioio-space/inkwell/internal/identity"
+	"github.com/oioio-space/inkwell/internal/project"
 	"github.com/oioio-space/inkwell/internal/transport"
 	"github.com/oioio-space/inkwell/internal/transport/p2p"
 )
@@ -79,18 +80,19 @@ type Runtime struct {
 	store  *opStore
 }
 
-// Start starts the node of the device stored in home and wires it to the local
-// project, created with title and this device as its admin on the first run.
-// Only the members of the project, the peers this user joins and, once
+// Start starts the node of the device stored in home and wires it to the open
+// project proj, whose member list gets this device as its admin on the first
+// run. Only the members of the project, the peers this user joins and, once
 // [Session.Host] has been called, the holders of the invitation can connect.
-// The project's member list is kept in home. Canceling ctx or calling
-// [Runtime.Close] stops everything; home may be closed once Start returns.
-func Start(ctx context.Context, home *os.Root, port int, title string, log *slog.Logger) (*Runtime, error) {
+// The member list is kept in the project folder (.inkwell/trust). Canceling
+// ctx or calling [Runtime.Close] stops everything; home may be closed once
+// Start returns, and proj must stay open until Close.
+func Start(ctx context.Context, home *os.Root, proj *project.Project, port int, log *slog.Logger) (*Runtime, error) {
 	dev, err := identity.LoadOrCreate(home)
 	if err != nil {
 		return nil, fmt.Errorf("loading identity: %w", err)
 	}
-	list, store, err := openProject(home, dev, title)
+	list, store, err := openTrust(proj, dev)
 	if err != nil {
 		return nil, fmt.Errorf("opening project: %w", err)
 	}
@@ -99,8 +101,8 @@ func Start(ctx context.Context, home *os.Root, port int, title string, log *slog
 	if err != nil {
 		return nil, errors.Join(err, store.close())
 	}
-	w := Wire(ctx, node, dev, list, adm, WiringOptions{Log: log, Save: store.save})
-	return &Runtime{Node: node, Session: NewSession(node, WithAdmission(adm)), Repo: w.Repo(), wiring: w, store: store}, nil
+	w := Wire(ctx, node, dev, list, adm, WiringOptions{Log: log, Save: store.save, Reset: store.clear})
+	return &Runtime{Node: node, Session: NewSession(node, WithAdmission(adm), WithAdopter(w)), Repo: w.Repo(), wiring: w, store: store}, nil
 }
 
 // Close stops the wiring and the node. It is idempotent.

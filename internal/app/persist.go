@@ -2,7 +2,6 @@ package app
 
 import (
 	"cmp"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"io"
@@ -10,93 +9,67 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/oioio-space/inkwell/internal/project"
+	"github.com/oioio-space/inkwell/internal/store"
 	"github.com/oioio-space/inkwell/internal/trust"
 )
 
-// TODO(Task 9): the store package replaces this file: trust ops move into the
-// project directory it manages, written by its atomic key-value store.
-
 const (
-	projectsDir = "projects"
-	trustDir    = "trust"
-	opExt       = ".op"
+	trustDir = "trust"
+	opExt    = ".op"
+	tmpExt   = ".tmp"
 )
 
 // opStore keeps the ops of one project's member list, one file per op named
-// after its hash, in <home>/projects/<ProjectID>/trust.
+// after its hash, in the project's .inkwell/trust directory. Files are
+// written with [store.WriteAtomic].
 type opStore struct{ root *os.Root }
 
-// openProject loads the local project of the device whose directory is home,
-// or creates it, titled title and signed by s, on the first run. It returns
-// the member list, filled with the ops found on disk, and the store that keeps
-// it. The caller closes the store.
-func openProject(home *os.Root, s trust.Signer, title string) (*trust.List, *opStore, error) {
-	if err := home.MkdirAll(projectsDir, 0o700); err != nil {
-		return nil, nil, fmt.Errorf("creating projects directory: %w", err)
-	}
-	id, found, err := firstProject(home)
+// openTrust loads the member list of project p, or creates it, titled like p
+// and signed by s, on the first run. It returns the list, filled with the ops
+// found on disk, and the store that keeps it. The caller closes the store.
+func openTrust(p *project.Project, s trust.Signer) (*trust.List, *opStore, error) {
+	root, err := p.OpenDir(trustDir)
 	if err != nil {
 		return nil, nil, err
 	}
-	var genesis *trust.Op
-	if !found {
-		g, gid := trust.Genesis(s, title, "")
-		id, genesis = gid, &g
-	}
-	dir := projectsDir + "/" + id.String() + "/" + trustDir
-	if err := home.MkdirAll(dir, 0o700); err != nil {
-		return nil, nil, fmt.Errorf("creating project directory: %w", err)
-	}
-	root, err := home.OpenRoot(dir)
-	if err != nil {
-		return nil, nil, fmt.Errorf("opening project directory: %w", err)
-	}
 	st := &opStore{root: root}
-	list, err := st.load(id, genesis)
+	list, err := st.load(s, p.Meta().Title)
 	if err != nil {
 		return nil, nil, errors.Join(err, root.Close())
 	}
 	return list, st, nil
 }
 
-// firstProject returns the first project directory of home, by name.
-func firstProject(home *os.Root) (trust.ProjectID, bool, error) {
-	d, err := home.Open(projectsDir)
+// load builds the member list from the stored ops. The project is the one
+// whose genesis op is stored; if there is none, load makes one, signed by
+// signer and titled title, and saves it.
+func (s *opStore) load(signer trust.Signer, title string) (*trust.List, error) {
+	ops, err := s.readAll()
 	if err != nil {
-		return trust.ProjectID{}, false, fmt.Errorf("listing projects: %w", err)
+		return nil, err
 	}
-	entries, err := d.ReadDir(-1)
-	if cerr := d.Close(); err == nil {
-		err = cerr
-	}
-	if err != nil {
-		return trust.ProjectID{}, false, fmt.Errorf("listing projects: %w", err)
-	}
-	names := make([]string, 0, len(entries))
-	for _, e := range entries {
-		if e.IsDir() {
-			names = append(names, e.Name())
-		}
-	}
-	slices.Sort(names)
-	for _, n := range names {
-		var id trust.ProjectID
-		if b, err := hex.DecodeString(n); err == nil && len(b) == len(id) {
-			copy(id[:], b)
-			return id, true, nil
-		}
-	}
-	return trust.ProjectID{}, false, nil
-}
-
-// load builds the list of project id from the stored ops, after saving
-// genesis if it is not nil.
-func (s *opStore) load(id trust.ProjectID, genesis *trust.Op) (*trust.List, error) {
-	if genesis != nil {
-		if err := s.save(*genesis); err != nil {
+	i := slices.IndexFunc(ops, func(o trust.Op) bool { return o.Kind == trust.OpGenesis })
+	if i < 0 {
+		g, _ := trust.Genesis(signer, title, "")
+		if err := s.save(g); err != nil {
 			return nil, err
 		}
+		ops, i = append(ops, g), len(ops)
 	}
+	list := trust.New(trust.ProjectID(ops[i].Hash()))
+	// Parents first: the Lamport number of an op exceeds those of its parents.
+	slices.SortStableFunc(ops, func(a, b trust.Op) int { return cmp.Compare(a.Lamport, b.Lamport) })
+	if _, err := list.ApplyAll(ops); err != nil {
+		return nil, fmt.Errorf("applying stored trust ops: %w", err)
+	}
+	return list, nil
+}
+
+// readAll returns the stored ops, sorted by hash so that the genesis op that
+// load picks does not depend on the file system. Temporary files left by an
+// interrupted save are removed.
+func (s *opStore) readAll() ([]trust.Op, error) {
 	d, err := s.root.Open(".")
 	if err != nil {
 		return nil, fmt.Errorf("reading trust ops: %w", err)
@@ -110,25 +83,22 @@ func (s *opStore) load(id trust.ProjectID, genesis *trust.Op) (*trust.List, erro
 	}
 	var ops []trust.Op
 	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(e.Name(), opExt) {
-			continue // also skips the temporary files of an interrupted save
+		switch {
+		case e.IsDir():
+		case strings.HasSuffix(e.Name(), tmpExt):
+			if err := s.root.Remove(e.Name()); err != nil {
+				return nil, fmt.Errorf("removing %s: %w", e.Name(), err)
+			}
+		case strings.HasSuffix(e.Name(), opExt):
+			op, err := s.read(e.Name())
+			if err != nil {
+				return nil, err
+			}
+			ops = append(ops, op)
 		}
-		op, err := s.read(e.Name())
-		if err != nil {
-			return nil, err
-		}
-		ops = append(ops, op)
 	}
-	// Parents first: the Lamport number of an op exceeds those of its parents.
-	slices.SortFunc(ops, func(a, b trust.Op) int { return cmp.Compare(a.Lamport, b.Lamport) })
-	list := trust.New(id)
-	if _, err := list.ApplyAll(ops); err != nil {
-		return nil, fmt.Errorf("applying stored trust ops: %w", err)
-	}
-	if list.Len() == 0 {
-		return nil, fmt.Errorf("project %s has no genesis op", id)
-	}
-	return list, nil
+	slices.SortFunc(ops, func(a, b trust.Op) int { return cmp.Compare(a.Hash().String(), b.Hash().String()) })
+	return ops, nil
 }
 
 func (s *opStore) read(name string) (trust.Op, error) {
@@ -150,9 +120,33 @@ func (s *opStore) read(name string) (trust.Op, error) {
 	return op, nil
 }
 
+// clear removes every saved op: the device leaves its project for another.
+func (s *opStore) clear() error {
+	d, err := s.root.Open(".")
+	if err != nil {
+		return fmt.Errorf("listing trust ops: %w", err)
+	}
+	entries, err := d.ReadDir(-1)
+	if cerr := d.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		return fmt.Errorf("listing trust ops: %w", err)
+	}
+	for _, e := range entries {
+		if e.IsDir() || (!strings.HasSuffix(e.Name(), opExt) && !strings.HasSuffix(e.Name(), tmpExt)) {
+			continue
+		}
+		if err := s.root.Remove(e.Name()); err != nil {
+			return fmt.Errorf("removing %s: %w", e.Name(), err)
+		}
+	}
+	return nil
+}
+
 // save writes op, which is then found again by the next load.
 func (s *opStore) save(op trust.Op) error {
-	if err := writeFileAtomic(s.root, op.Hash().String()+opExt, trust.Encode(op)); err != nil {
+	if err := store.WriteAtomic(s.root, op.Hash().String()+opExt, trust.Encode(op), 0o600); err != nil {
 		return fmt.Errorf("saving trust op: %w", err)
 	}
 	return nil
@@ -163,25 +157,4 @@ func (s *opStore) close() error {
 		return err
 	}
 	return nil
-}
-
-// writeFileAtomic replaces name in root by data, private to the user: a crash
-// leaves either the old file or the new one, never a partial one.
-func writeFileAtomic(root *os.Root, name string, data []byte) error {
-	tmp := name + ".tmp"
-	f, err := root.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
-	if err != nil {
-		return err
-	}
-	_, err = f.Write(data)
-	if err == nil {
-		err = f.Sync()
-	}
-	if cerr := f.Close(); err == nil {
-		err = cerr
-	}
-	if err != nil {
-		return errors.Join(err, root.Remove(tmp))
-	}
-	return root.Rename(tmp, name)
 }

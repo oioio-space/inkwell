@@ -299,3 +299,27 @@ func TestProjectionSymlinkEscape(t *testing.T) {
 		t.Errorf("file outside the project was modified: %q", got)
 	}
 }
+
+func TestOpenDir(t *testing.T) {
+	p := create(t, newBase(t), "Mon rapport")
+	r, err := p.OpenDir("trust")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = r.Close() })
+	info, err := os.Stat(r.Name())
+	if err != nil || !info.IsDir() || info.Mode().Perm() != 0o700 {
+		t.Errorf("OpenDir(trust) = %v, %v; want a private directory", info, err)
+	}
+	if want := filepath.Join(".inkwell", "trust"); !strings.HasSuffix(r.Name(), want) {
+		t.Errorf("OpenDir(trust) opened %s, want it below %s", r.Name(), want)
+	}
+	again, err := p.OpenDir("trust") // already there
+	if err != nil {
+		t.Fatalf("second OpenDir: %v", err)
+	}
+	_ = again.Close()
+	if _, err := p.OpenDir("../escape"); err == nil {
+		t.Error("OpenDir(../escape) = nil error, want a refusal")
+	}
+}

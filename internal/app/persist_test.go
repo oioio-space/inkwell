@@ -2,20 +2,35 @@ package app
 
 import (
 	"os"
+	"path/filepath"
 	"testing"
 
+	"github.com/oioio-space/inkwell/internal/project"
+	"github.com/oioio-space/inkwell/internal/store"
 	"github.com/oioio-space/inkwell/internal/trust"
 )
 
-func TestOpenProjectCreatesOnceAndReloads(t *testing.T) {
-	home, err := os.OpenRoot(t.TempDir())
+func newProjectFolder(t *testing.T) (*project.Project, string) {
+	t.Helper()
+	dir := t.TempDir()
+	base, err := os.OpenRoot(dir)
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = home.Close() })
+	t.Cleanup(func() { _ = base.Close() })
+	p, err := project.Create(base, "Mon livre", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = p.Close() })
+	return p, filepath.Join(dir, p.Dir())
+}
+
+func TestOpenTrustCreatesOnceAndReloads(t *testing.T) {
+	proj, folder := newProjectFolder(t)
 	dev, guest := newDevice(t), newDevice(t)
 
-	list, st, err := openProject(home, dev, "Mon livre")
+	list, st, err := openTrust(proj, dev)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -27,14 +42,14 @@ func TestOpenProjectCreatesOnceAndReloads(t *testing.T) {
 		t.Fatal(err)
 	}
 	// A save interrupted before its rename leaves a temporary file behind.
-	if err := writeFileAtomic(st.root, "junk.op.tmp", []byte("partial")); err != nil {
+	if err := store.WriteAtomic(st.root, "junk.op.tmp", []byte("partial"), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	if err := st.close(); err != nil {
 		t.Fatal(err)
 	}
 
-	again, st2, err := openProject(home, dev, "autre titre")
+	again, st2, err := openTrust(proj, dev)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -46,8 +61,42 @@ func TestOpenProjectCreatesOnceAndReloads(t *testing.T) {
 	if got := again.Role(dev.Public()); got != trust.RoleAdmin {
 		t.Errorf("creator role = %v, want admin", got)
 	}
-	entries, err := os.ReadDir(home.Name() + "/" + projectsDir)
-	if err != nil || len(entries) != 1 {
-		t.Errorf("projects = %v, %v; want exactly one", entries, err)
+
+	// The ops live in the project folder, and the interrupted save is swept.
+	entries, err := os.ReadDir(filepath.Join(folder, ".inkwell", trustDir))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(entries) != 2 {
+		t.Errorf("trust directory holds %d files, want the 2 ops: %v", len(entries), entries)
+	}
+	info, err := os.Stat(filepath.Join(folder, ".inkwell", trustDir, op.Hash().String()+opExt))
+	if err != nil || info.Mode().Perm() != 0o600 {
+		t.Errorf("op file = %v, %v; want mode 0600", info, err)
+	}
+}
+
+func TestOpenTrustRejectsForeignOps(t *testing.T) {
+	proj, _ := newProjectFolder(t)
+	dev, other := newDevice(t), newDevice(t)
+	_, st, err := openTrust(proj, dev)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// An op of another project, dropped into the folder.
+	foreign := newProject(t, other)
+	op, err := foreign.Issue(other, trust.OpAdd, dev.Public(), trust.RoleReader, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.save(op); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.close(); err != nil {
+		t.Fatal(err)
+	}
+	if _, st2, err := openTrust(proj, dev); err == nil {
+		_ = st2.close()
+		t.Error("openTrust accepted an op of another project")
 	}
 }

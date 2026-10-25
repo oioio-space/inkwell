@@ -23,5 +23,6 @@
   "error.host": "Could not invite: {reason}",
   "external.message": "{name} was changed outside Inkwell",
   "external.import": "Import",
-  "external.ignore": "Ignore"
+  "external.ignore": "Ignore",
+  "sealed.message": "Member list full — create a new project"
 }

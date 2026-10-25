@@ -1,11 +1,13 @@
 package app
 
 import (
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"strings"
 
 	"github.com/oioio-space/inkwell/internal/transport"
+	"github.com/oioio-space/inkwell/internal/trust"
 )
 
 const (
@@ -26,6 +28,39 @@ var errBadInvitation = errors.New("invalid invitation")
 // most maxInvitationAddrs are kept so the result always parses back.
 func invitation(addrs []string) string {
 	return strings.Join(addrs[:min(len(addrs), maxInvitationAddrs)], " ")
+}
+
+// projectPrefix introduces, in an invitation, the project the host belongs to:
+// "project:" and the 64 hexadecimal digits of its identity.
+const projectPrefix = "project:"
+
+// withProject adds the project to an invitation made by [invitation].
+func withProject(text string, id trust.ProjectID) string {
+	return text + " " + projectPrefix + id.String()
+}
+
+// cutProject separates the project from the addresses of an invitation text.
+// The project is nil when the text names none (the joiner then keeps its own).
+func cutProject(text string) (rest string, id *trust.ProjectID, err error) {
+	if len(text) > maxInvitationLen {
+		return "", nil, fmt.Errorf("%w: too long", errBadInvitation)
+	}
+	var others []string
+	for _, f := range strings.Fields(text) {
+		hexID, ok := strings.CutPrefix(f, projectPrefix)
+		if !ok {
+			others = append(others, f)
+			continue
+		}
+		var p trust.ProjectID
+		b, derr := hex.DecodeString(hexID)
+		if id != nil || derr != nil || len(b) != len(p) {
+			return "", nil, fmt.Errorf("%w: project", errBadInvitation)
+		}
+		copy(p[:], b)
+		id = &p
+	}
+	return strings.Join(others, " "), id, nil
 }
 
 // parseInvitation splits an invitation made by [invitation] into the identity

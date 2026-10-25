@@ -3,8 +3,11 @@
 // The webview speaks to Go over one Wails stream, [StreamName], whose frames
 // are binary [Envelope]s. A [Router] attaches the current stream connection to
 // the transport: frames from the webview are decoded and sent to the addressed
-// peer, and transport events are encoded and pushed to the webview. Payloads
-// are opaque; the bridge never interprets them.
+// peer, and transport events are encoded and pushed to the webview. The
+// payloads of messages are opaque; the bridge never interprets them. The
+// webview also asks the device to attest the heads of a document, and learns
+// who attested what, through the [Attester] and [Source] of the transport: Go
+// signs, the webview alone can read the documents (see [Kind]).
 //
 // Every frame from the webview is untrusted and decoded strictly.
 //
@@ -38,29 +41,34 @@ var ErrMalformed = errors.New("bridge: malformed envelope")
 
 // Envelope is one bridge frame.
 //
-// Towards Go only Kind [transport.Message] is accepted and Peer is the
-// destination. Towards the webview all kinds are sent and Peer is the peer
-// the event is about (the sender of a Message).
+// Towards Go only [Message] and [Attest] are accepted; Peer is the destination
+// of a Message. Towards the webview all kinds are sent and Peer is the peer
+// the event is about (the sender of a Message, the signer of an Attested).
 type Envelope struct {
 	// Peer is the remote peer.
 	Peer transport.PeerID
-	// Payload is the opaque message bytes; empty unless Kind is Message.
+	// Payload is the opaque message bytes of a Message, or the [Heads]
+	// encoding of an Attest or Attested; empty for the other kinds.
 	Payload []byte
 	// Kind says what the envelope reports.
-	Kind transport.Kind
+	Kind Kind
 }
 
 // validate checks the invariants shared by Encode and Decode.
 func (e Envelope) validate() error {
 	switch {
-	case e.Kind < transport.PeerUp || e.Kind > transport.Message:
+	case e.Kind < PeerUp || e.Kind > lastKind:
 		return fmt.Errorf("%w: kind %d", ErrMalformed, e.Kind)
 	case !transport.ValidPeerID(e.Peer):
 		return fmt.Errorf("%w: invalid peer", ErrMalformed)
-	case e.Kind != transport.Message && len(e.Payload) > 0:
+	case e.Kind != Message && e.Kind != Attest && e.Kind != Attested && len(e.Payload) > 0:
 		return fmt.Errorf("%w: payload on %v", ErrMalformed, e.Kind)
 	case len(e.Payload) > transport.MaxFrame:
 		return fmt.Errorf("%w: payload of %d bytes", ErrMalformed, len(e.Payload))
+	case e.Kind == Attest || e.Kind == Attested:
+		if _, err := DecodeHeads(e.Payload); err != nil {
+			return err
+		}
 	}
 	return nil
 }
@@ -73,7 +81,7 @@ func Encode(e Envelope) ([]byte, error) {
 		return nil, err
 	}
 	b := make([]byte, 0, headerLen+len(e.Peer)+len(e.Payload))
-	b = append(b, version, byte(e.Kind), byte(len(e.Peer))) // #nosec G115 -- validate bounds Kind ≤ 3 and len(Peer) ≤ 64.
+	b = append(b, version, byte(e.Kind), byte(len(e.Peer))) // #nosec G115 -- validate bounds Kind ≤ 7 and len(Peer) ≤ 64.
 	b = append(b, e.Peer...)
 	b = append(b, e.Payload...)
 	return b, nil
@@ -81,8 +89,8 @@ func Encode(e Envelope) ([]byte, error) {
 
 // Decode parses an envelope received from the webview. The returned Payload
 // aliases b. It returns an error wrapping [ErrMalformed] for an unknown
-// version or kind, a truncated or invalid peer, a payload on a non-Message
-// kind, or an oversized frame.
+// version or kind, a truncated or invalid peer, a payload on a kind that carries
+// none or an invalid [Heads] one, or an oversized frame.
 func Decode(b []byte) (Envelope, error) {
 	if len(b) > maxWire {
 		return Envelope{}, fmt.Errorf("%w: %d bytes", ErrMalformed, len(b))
@@ -98,7 +106,7 @@ func Decode(b []byte) (Envelope, error) {
 		return Envelope{}, fmt.Errorf("%w: truncated peer", ErrMalformed)
 	}
 	e := Envelope{
-		Kind:    transport.Kind(b[1]),
+		Kind:    Kind(b[1]),
 		Peer:    transport.PeerID(b[headerLen : headerLen+peerLen]),
 		Payload: b[headerLen+peerLen:],
 	}
