@@ -60,9 +60,9 @@ func linkOf(a, b transport.PeerID) link {
 // delivery is a delayed message, valid only for the link epoch it was sent on.
 type delivery struct {
 	due   time.Time
-	ev    transport.Event
-	to    transport.PeerID
 	l     link
+	to    transport.PeerID
+	ev    transport.Event
 	epoch uint64
 	seq   uint64
 }

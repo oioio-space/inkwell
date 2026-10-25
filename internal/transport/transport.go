@@ -85,11 +85,11 @@ func (k Kind) String() string {
 
 // Event is something that happened on a transport.
 type Event struct {
+	// Peer is the peer the event is about: the sender for a Message.
+	Peer PeerID
 	// Payload is the received bytes; set only when Kind is Message. The
 	// receiver owns it.
 	Payload []byte
-	// Peer is the peer the event is about: the sender for a Message.
-	Peer PeerID
 	// Kind says what happened.
 	Kind Kind
 }

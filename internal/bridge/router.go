@@ -25,8 +25,8 @@ type Conn interface {
 type Router struct {
 	t   transport.Transport
 	log *slog.Logger
-	lim limiter
 	cur *session // attached connection, nil if none
+	lim limiter
 	mu  sync.Mutex
 }
 

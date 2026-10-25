@@ -42,10 +42,10 @@ var ErrMalformed = errors.New("bridge: malformed envelope")
 // destination. Towards the webview all kinds are sent and Peer is the peer
 // the event is about (the sender of a Message).
 type Envelope struct {
-	// Payload is the opaque message bytes; empty unless Kind is Message.
-	Payload []byte
 	// Peer is the remote peer.
 	Peer transport.PeerID
+	// Payload is the opaque message bytes; empty unless Kind is Message.
+	Payload []byte
 	// Kind says what the envelope reports.
 	Kind transport.Kind
 }

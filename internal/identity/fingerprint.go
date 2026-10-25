@@ -89,11 +89,11 @@ type fpCall struct {
 // guards only the bookkeeping, never the Argon2 computation, so distinct keys
 // compute in parallel and concurrent callers of one key compute it once.
 type fingerprints struct {
-	mu       sync.Mutex
 	compute  func(ed25519.PublicKey) [fpWords]uint16
 	order    *list.List // front = most recently used; values are fpEntry
 	items    map[[ed25519.PublicKeySize]byte]*list.Element
 	inflight map[[ed25519.PublicKeySize]byte]*fpCall
+	mu       sync.Mutex
 }
 
 type fpEntry struct {

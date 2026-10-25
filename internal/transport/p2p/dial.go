@@ -35,9 +35,9 @@ const (
 // wanted is a peer the node keeps connected.
 type wanted struct {
 	cancel context.CancelFunc
+	id     peer.ID
 	// known are the last known addresses of the peer, under Node.mu.
 	known []ma.Multiaddr
-	id    peer.ID
 }
 
 var errNoAddress = errors.New("no address to dial")

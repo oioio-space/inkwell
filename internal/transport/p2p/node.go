@@ -147,8 +147,11 @@ type queued struct {
 type peerState struct {
 	out  network.Stream // the stream we write on; nil while none is open
 	wsem chan struct{}  // capacity 1: held while writing to out
-	name transport.PeerID
-	id   peer.ID
+	// inTail is closed when the last inbound stream of the peer is done; the
+	// next one waits for it to keep the messages in order.
+	inTail chan struct{}
+	name   transport.PeerID
+	id     peer.ID
 	// connected: libp2p has at least one connection to the peer.
 	connected bool
 	// admitted: Options.Admit accepted the peer when it connected.
@@ -160,46 +163,44 @@ type peerState struct {
 	// upgrading: a goroutine is moving the outbound stream to a direct
 	// connection.
 	upgrading bool
-	// inTail is closed when the last inbound stream of the peer is done; the
-	// next one waits for it to keep the messages in order.
-	inTail chan struct{}
 }
 
 // Node is a libp2p peer; it implements [transport.Transport].
 type Node struct {
-	h      host.Host
-	ctx    context.Context // canceled by Close
-	cancel context.CancelFunc
-	done   chan struct{}
-	wake   chan struct{} // capacity 1: "the queue may be non-empty"
+	h        host.Host
+	ctx      context.Context // canceled by Close
+	sub      event.Subscription
+	addrSub  event.Subscription
+	closeErr error
+	cancel   context.CancelFunc
+	done     chan struct{}
+	wake     chan struct{} // capacity 1: "the queue may be non-empty"
 	// chg is closed and replaced whenever a peerState changes, to wake the
 	// goroutines that wait for one.
 	chg    chan struct{}
 	budget *frame.Budget
 	peers  map[peer.ID]*peerState
-	sub    event.Subscription
 	stop   func() bool // stops the close-on-context-cancel hook; under mu
-	queue  []queued
-	opts   Options
-	local  transport.PeerID
-	wg     sync.WaitGroup
-	// dialWG counts the goroutines that dial, which Close waits for before it
-	// closes the host: libp2p does not like to be closed under a dial.
-	dialWG sync.WaitGroup
 	// relays are the configured relays, never peers; circuit has the address
 	// prefix that leads through each of them. Both are read-only.
 	relays    map[peer.ID]peer.AddrInfo
-	circuit   []ma.Multiaddr
 	relayDown map[peer.ID]chan struct{}
-	addrSub   event.Subscription
 	notifee   *network.NotifyBundle
 	// want is the set of peers to keep connected, and kick is closed and
 	// replaced to make their dial loops retry at once. Both under mu.
 	want map[peer.ID]*wanted
 	kick chan struct{}
 
+	local   transport.PeerID
+	queue   []queued
+	circuit []ma.Multiaddr
+	opts    Options
+	wg      sync.WaitGroup
+	// dialWG counts the goroutines that dial, which Close waits for before it
+	// closes the host: libp2p does not like to be closed under a dial.
+	dialWG sync.WaitGroup
+
 	closeOnce sync.Once
-	closeErr  error
 	mu        sync.Mutex
 	// closed is set by Close, under mu.
 	closed bool
