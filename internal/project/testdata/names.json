@@ -316,10 +316,31 @@
    "reason": "short_name"
   },
   {
-   "name": "8.3 short name with an extension",
-   "input": "PROGRA~1.txt",
+   "name": "8.3 alias of inkwell in lower case",
+   "input": "inkwel~1",
    "valid": false,
    "reason": "short_name"
+  },
+  {
+   "name": "8.3 alias of typstdeps, a second one",
+   "input": "TYPSTD~12",
+   "valid": false,
+   "reason": "short_name"
+  },
+  {
+   "name": "a short name of another file is a plain name",
+   "input": "PROGRA~1.txt",
+   "valid": true
+  },
+  {
+   "name": "a name with a tilde and a number is a plain name",
+   "input": "file~1.txt",
+   "valid": true
+  },
+  {
+   "name": "an alias with an extension is another file",
+   "input": "INKWEL~1.txt",
+   "valid": true
   },
   {
    "name": "8.3 short name of the repository folder",

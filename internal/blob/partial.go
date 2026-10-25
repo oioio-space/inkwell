@@ -169,6 +169,7 @@ func (d *download) put(offset uint64, data []byte) error {
 			d.have++
 		}
 	}
+	d.s.written(d.h.hex(), min(d.size, int64(d.have)*GroupSize))
 	d.unsynced += int64(len(data))
 	if d.unsynced >= syncEvery {
 		return d.flush()

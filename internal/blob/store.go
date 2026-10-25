@@ -33,6 +33,7 @@ import (
 	"io"
 	"io/fs"
 	"log/slog"
+	"math/bits"
 	"os"
 	"slices"
 	"strings"
@@ -126,6 +127,7 @@ type Store struct {
 	// while its partial file is on disk, so that stopped downloads still count.
 	used      int64
 	holds     map[string]int64
+	wrote     map[string]int64 // of each hold, the bytes on disk
 	mu        sync.Mutex
 	confirmed bool
 }
@@ -148,7 +150,7 @@ func Open(root *os.Root, o Options) (*Store, error) {
 	if o.FreeSpace == nil {
 		o.FreeSpace = func() (uint64, error) { return freeSpace(root.Name()) }
 	}
-	s := &Store{root: root, opt: o, log: o.Log, holds: map[string]int64{}}
+	s := &Store{root: root, opt: o, log: o.Log, holds: map[string]int64{}, wrote: map[string]int64{}}
 	if s.log == nil {
 		s.log = slog.New(slog.DiscardHandler)
 	}
@@ -202,6 +204,7 @@ func (s *Store) scan() error {
 		}
 		if info, err := e.Info(); err == nil && isHashName(e.Name()) && info.Mode().IsRegular() {
 			s.holds[e.Name()] = info.Size() // a download that was stopped: it keeps its share
+			s.wrote[e.Name()] = s.verifiedBytes(e.Name(), info.Size())
 		}
 	}
 	return nil
@@ -321,33 +324,53 @@ func (s *Store) hold(key string, size int64) error {
 	if size < 0 || size > s.opt.MaxFile {
 		return fmt.Errorf("%w: %d bytes, limit %d", ErrTooLarge, size, s.opt.MaxFile)
 	}
+	// The quota is checked and the hold set in one critical section, so that
+	// downloads asking at once cannot all see room for themselves.
 	s.mu.Lock()
-	others := int64(0)
+	var others, toCome int64
 	for k, n := range s.holds {
 		if k != key {
 			others += n
+			toCome += n - s.wrote[k] // what is on disk is out of the free space already
 		}
 	}
 	if need := s.used + others + size; need > s.opt.MaxProject && !s.confirmed {
 		s.mu.Unlock()
 		return &QuotaError{Need: need, Limit: s.opt.MaxProject}
 	}
+	prev, had := s.holds[key]
+	s.holds[key] = size
+	own := size - s.wrote[key]
 	s.mu.Unlock()
 	if free, ferr := s.opt.FreeSpace(); ferr != nil {
 		s.log.Debug("blob: free space unknown", "err", ferr)
-	} else if need := uint64(size) + uint64(bao.EncodedSize(int(size), groupLog, true)) + uint64(s.opt.Reserve) + uint64(others); free < need { // #nosec G115 -- sizes are within [0, MaxFile] and the holds are sums of them.
+	} else if need := uint64(max(own, 0)) + uint64(bao.EncodedSize(int(size), groupLog, true)) + uint64(s.opt.Reserve) + uint64(toCome); free < need { // #nosec G115 -- sizes are within [0, MaxFile], and the parts still to come are not negative.
+		s.mu.Lock()
+		if had {
+			s.holds[key] = prev
+		} else {
+			delete(s.holds, key)
+		}
+		s.mu.Unlock()
 		return fmt.Errorf("%w: %d bytes free, %d needed", ErrNoSpace, free, need)
 	}
-	s.mu.Lock()
-	s.holds[key] = size
-	s.mu.Unlock()
 	return nil
+}
+
+// written records that n bytes of the file held under key are on disk.
+func (s *Store) written(key string, n int64) {
+	s.mu.Lock()
+	if _, held := s.holds[key]; held {
+		s.wrote[key] = n
+	}
+	s.mu.Unlock()
 }
 
 // unhold gives back the room held under key.
 func (s *Store) unhold(key string) {
 	s.mu.Lock()
 	delete(s.holds, key)
+	delete(s.wrote, key)
 	s.mu.Unlock()
 }
 
@@ -653,4 +676,22 @@ func hashFromName(name string) (Hash, bool) {
 	}
 	h, err := ParseHash(hashPrefix + name)
 	return h, err == nil
+}
+
+// verifiedBytes returns how many bytes of the stopped download named name, of
+// size bytes, its map says are on disk.
+func (s *Store) verifiedBytes(name string, size int64) int64 {
+	raw, err := s.root.ReadFile(partialDir + "/" + name + ".map")
+	if err != nil {
+		return 0
+	}
+	bitmap, ok := parseMap(raw, size, groupsOf(size))
+	if !ok {
+		return 0
+	}
+	var groups int64
+	for _, b := range bitmap {
+		groups += int64(bits.OnesCount8(b))
+	}
+	return min(size, groups*GroupSize)
 }

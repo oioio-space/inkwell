@@ -89,19 +89,38 @@ func (p *Project) mkdir(dir string) error {
 	return nil
 }
 
+// errNoNative says the system has no single-call rename that refuses to
+// replace, or the file system does not support it.
+var errNoNative = errors.New("project: no native no-replace rename")
+
 // renameNoReplace moves the file src to dst, which must not exist, without ever
-// replacing something that appears there meanwhile: it links dst to src, which
-// fails if dst exists, then removes src. Where links are not supported it falls
-// back to a check followed by a rename.
+// replacing something that appears there meanwhile. It asks the system for a
+// rename that fails if dst exists (renameat2 on Linux, renameatx_np on macOS,
+// MoveFileEx on Windows) and, where that is not available, links and unlinks.
 func (p *Project) renameNoReplace(src, dst string) error {
+	err := p.renameNative(src, dst)
+	if !errors.Is(err, errNoNative) {
+		return err
+	}
+	return p.linkThenUnlink(src, dst)
+}
+
+// linkThenUnlink links dst to src, which fails if dst exists, then removes src.
+// If src cannot be removed, dst is removed again, so that the file is not left
+// with two names, which every later write would refuse. Where links are not
+// supported it falls back to a check followed by a rename.
+func (p *Project) linkThenUnlink(src, dst string) error {
 	err := p.root.Link(src, dst)
-	if err == nil {
-		if err := p.root.Remove(src); err != nil {
-			return fmt.Errorf("project: move %q: %w", src, err)
+	switch {
+	case err == nil:
+		if rerr := p.root.Remove(src); rerr != nil {
+			if derr := p.root.Remove(dst); derr != nil {
+				return fmt.Errorf("project: move %q: %w", src, errors.Join(rerr, derr))
+			}
+			return fmt.Errorf("project: move %q: %w", src, rerr)
 		}
 		return nil
-	}
-	if errors.Is(err, fs.ErrExist) {
+	case errors.Is(err, fs.ErrExist):
 		return err
 	}
 	if _, serr := p.root.Lstat(dst); serr == nil {

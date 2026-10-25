@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"errors"
 	"io/fs"
+	"os"
 	"runtime"
 	"slices"
 	"testing"
@@ -254,5 +255,63 @@ func TestWriteBlobChecksTheContent(t *testing.T) {
 		if e.Name() != ".inkwell" {
 			t.Errorf("stray file %q after a refused write", e.Name())
 		}
+	}
+}
+
+// If the link was made but the source cannot be removed, the link is undone:
+// the file is not left with two names.
+func TestLinkThenUnlinkRollsBack(t *testing.T) {
+	if runtime.GOOS == "windows" || os.Getuid() == 0 {
+		t.Skip("needs a folder that refuses removals, which root and Windows do not")
+	}
+	base := newBase(t)
+	p := create(t, base, "p")
+	if err := base.MkdirAll("p/ro", 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := base.MkdirAll("p/free", 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := base.WriteFile("p/ro/f", []byte("data"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := base.Chmod("p/ro", 0o500); err != nil { // the file can be linked from, not removed
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = base.Chmod("p/ro", 0o700) })
+
+	if err := p.linkThenUnlink("ro/f", "free/f"); err == nil {
+		t.Fatal("linkThenUnlink succeeded although the source cannot be removed")
+	}
+	if _, err := base.Lstat("p/free/f"); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("the link was left behind: %v", err)
+	}
+	if n := linkCount(t, base, "p/ro/f"); n != 1 {
+		t.Errorf("the file has %d names after the failed move, want 1", n)
+	}
+	if got, _ := base.ReadFile("p/ro/f"); string(got) != "data" {
+		t.Errorf("the source = %q", got)
+	}
+}
+
+// The native no-replace rename never replaces a file created at the target
+// between the check and the move.
+func TestRenameNoReplaceKeepsAFileCreatedMeanwhile(t *testing.T) {
+	base := newBase(t)
+	p := create(t, base, "p")
+	if err := base.WriteFile("p/src", []byte("src"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := base.WriteFile("p/dst", []byte("user"), 0o600); err != nil { // appears after the caller's check
+		t.Fatal(err)
+	}
+	if err := p.renameNoReplace("src", "dst"); !errors.Is(err, fs.ErrExist) {
+		t.Fatalf("renameNoReplace = %v, want ErrExist", err)
+	}
+	if got, _ := base.ReadFile("p/dst"); string(got) != "user" {
+		t.Errorf("dst = %q: the file created meanwhile was replaced", got)
+	}
+	if n := linkCount(t, base, "p/src"); n != 1 {
+		t.Errorf("src has %d names after a refused move", n)
 	}
 }

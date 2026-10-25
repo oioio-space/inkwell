@@ -220,6 +220,7 @@ func (p *Project) ApplyTree(entries []TreeEntry) (TreeResult, error) {
 
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	before := p.snapshotOwned()
 	next := map[string]string{} // owned file path -> ref
 	for _, e := range accepted {
 		if e.Type != NodeDir {
@@ -240,11 +241,12 @@ func (p *Project) ApplyTree(entries []TreeEntry) (TreeResult, error) {
 	for rel, recorded := range p.m.Files { // what left the tree and was never written
 		if _, listed := next[rel]; !listed && recorded == "" && rel != MainFile {
 			delete(p.m.Files, rel)
+			delete(p.claimed, rel)
 			delete(p.notified, rel)
 		}
 	}
 	p.m.Tree = next
-	errs = append(errs, p.saveLocked())
+	errs = append(errs, p.syncOwned(before))
 	select {
 	case p.treeChanged <- struct{}{}: // the watcher has new files to look at
 	default:
@@ -318,7 +320,9 @@ func (p *Project) moveRenamed(next map[string]string) []error {
 			continue
 		}
 		p.m.Files[dst] = p.m.Files[src]
+		p.claimed[dst] = p.claimed[src]
 		delete(p.m.Files, src)
+		delete(p.claimed, src)
 		delete(p.notified, src)
 	}
 	return errs
@@ -368,11 +372,15 @@ func (p *Project) WriteBlob(rel string, hash [32]byte, src io.Reader) error {
 	case err != nil:
 		return err
 	case exists && onDisk == hash:
-		if current != recorded {
+		// The file is that version already: from here on it follows the tree.
+		if current != recorded || p.claimed[rel] {
+			delete(p.claimed, rel)
 			return p.record(rel, current)
 		}
 		return nil
-	case exists && current != recorded:
+	case exists && (current != recorded || p.claimed[rel]):
+		// Changed outside Inkwell, or brought in by the user and not the version
+		// the tree lists: the user decides, a peer's file never replaces it.
 		return fmt.Errorf("%w: %q", ErrExternalEdit, rel)
 	}
 	if err := p.mkdir(path.Dir(rel)); err != nil {
@@ -412,6 +420,7 @@ func (p *Project) Claim(rel, sum string) error {
 	case !exists || current != sum:
 		return fmt.Errorf("project: %q changed while it was read", rel)
 	}
+	p.claimed[rel] = true
 	return p.record(rel, sum)
 }
 

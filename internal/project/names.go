@@ -48,8 +48,8 @@ const (
 	// ReasonReserved is a name git treats as its own: .git, in any case, at
 	// any depth.
 	ReasonReserved Reason = "reserved"
-	// ReasonShortName is a name that starts like an 8.3 short name of
-	// Windows, such as INKWEL~1, which can alias another file.
+	// ReasonShortName is the 8.3 short name of a reserved name, such as
+	// INKWEL~1 for .inkwell, which Windows resolves to it.
 	ReasonShortName Reason = "short_name"
 	// ReasonIgnorable is a name with a default-ignorable code point, which
 	// some file systems skip when comparing names: ".inkwe" + U+200C + "ll"
@@ -98,8 +98,8 @@ var reservedAtRoot = []string{".inkwell", ".typstdeps"}
 //     COM0 to COM9, LPT0 to LPT9, COM¹²³, LPT¹²³), whatever the case and
 //     with any extension: a device name is compared on the part before the
 //     first dot, in ASCII case, ignoring spaces before that dot;
-//   - not starting like an 8.3 short name, ^[^.]{1,6}~[0-9]+ ("INKWEL~1",
-//     "PROGRA~1.txt"), which Windows resolves to a longer name;
+//   - not the 8.3 short name of a reserved name, ^(inkwel|typstd|git)~[0-9]+$
+//     in any case ("INKWEL~1"), which Windows resolves to the reserved name;
 //   - no default-ignorable code point (zero-width joiners, soft hyphen,
 //     variation selectors, bidi controls, tag characters...), which some file
 //     systems ignore when comparing names;
@@ -133,8 +133,11 @@ func ValidateName(name string) error {
 	return nil
 }
 
-// shortName matches the start of an 8.3 short name.
-var shortName = regexp.MustCompile(`^[^.]{1,6}~[0-9]+`)
+// shortName matches the 8.3 short names Windows gives the reserved names:
+// INKWEL~1 for .inkwell, TYPSTD~1 for .typstdeps and the first three letters
+// of the repository folder's name with ~1, whatever the case and the number.
+// Other names that look like short names, such as file~1.txt, are plain names.
+var shortName = regexp.MustCompile(`(?i)^(inkwel|typstd|git)~[0-9]+$`)
 
 // ignorable reports whether r is a default-ignorable code point: Unicode's
 // Other_Default_Ignorable_Code_Point, the variation selectors and the format
