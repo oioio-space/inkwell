@@ -7,6 +7,7 @@ import {
   type LineScan,
   looksLikeUrl,
   type MarkSpec,
+  NONE,
   pairSpec,
   runSpec,
   type Span,
@@ -76,7 +77,6 @@ function scan(line: string): LineScan {
   return { spans: [...emphasis.spans, ...calls], verbatim };
 }
 
-const NONE = { lead: 0, trail: 0 };
 const LINK_PREFIX = /^#link\("(?:[^"\\]|\\.)*"\)\[/;
 
 const link: MarkSpec = {

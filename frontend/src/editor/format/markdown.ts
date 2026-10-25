@@ -7,6 +7,7 @@ import {
   type LineScan,
   looksLikeUrl,
   type MarkSpec,
+  NONE,
   runSpec,
   type Span,
   verbatimEnd,
@@ -77,7 +78,6 @@ function scan(line: string): LineScan {
   return { spans: [...emphasis.spans, ...links], verbatim };
 }
 
-const NONE = { lead: 0, trail: 0 };
 const LINK_TAIL = /\]\([^)]*\)$/;
 
 const link: MarkSpec = {

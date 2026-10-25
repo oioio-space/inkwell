@@ -1,4 +1,4 @@
-import { EditorSelection, type EditorState, type StateCommand } from "@codemirror/state";
+import { EditorSelection, type EditorState, type StateCommand, type Text } from "@codemirror/state";
 import type { Lang } from "./lang";
 import { markdownDest, markdownLabel } from "./markdown";
 import { syntaxOf } from "./support";
@@ -156,7 +156,7 @@ function renderMarkdown(
   a: InsertArgs,
   selected: string,
   rel: string,
-  doc: string,
+  doc: Text,
 ): Rendered | null {
   switch (item) {
     case "image": {
@@ -167,14 +167,13 @@ function renderMarkdown(
       if (!a.path || !a.rows || a.rows.length === 0) return null;
       return { text: csvToMarkdown(a.rows, rel), block: true };
     case "footnote": {
-      const used = [...doc.matchAll(/\[\^(\d+)\]/g)].map((m) => Number(m[1]));
+      const used = [...doc.toString().matchAll(/\[\^(\d+)\]/g)].map((m) => Number(m[1]));
       const n = Math.max(0, ...used) + 1;
       const ref = `[^${n}]`;
-      const gap = doc.endsWith("\n\n") ? "" : doc.endsWith("\n") ? "\n" : "\n\n";
       return {
         text: ref,
         block: false,
-        appendix: `${gap}${ref}: ${a.text ?? ""}`,
+        appendix: `${footnoteGap(doc)}${ref}: ${a.text ?? ""}`,
         caretInAppendix: !a.text,
       };
     }
@@ -197,12 +196,20 @@ function renderMarkdown(
   }
 }
 
+/** What separates a footnote definition from the end of the document: one blank line. */
+function footnoteGap(doc: Text): string {
+  const tail = doc.sliceString(Math.max(0, doc.length - 2));
+  if (tail.endsWith("\n\n")) return "";
+  if (tail.endsWith("\n")) return "\n";
+  return "\n\n";
+}
+
 function markdownTable(cols: number, rows: number): string {
   const row = `|${Array<string>(cols).fill("   ").join("|")}|`;
   return [
     row,
     `|${Array<string>(cols).fill(" --- ").join("|")}|`,
-    ...Array<string>(rows - 1 > 0 ? rows - 1 : 0).fill(row),
+    ...Array<string>(Math.max(0, rows - 1)).fill(row),
   ].join("\n");
 }
 
@@ -218,7 +225,7 @@ export function insert(lang: Lang, item: InsertItem, args: InsertArgs = {}): Sta
     const rendered =
       lang === "typst"
         ? renderTypst(item, args, selected, rel)
-        : renderMarkdown(item, args, selected, rel, state.doc.toString());
+        : renderMarkdown(item, args, selected, rel, state.doc);
     if (!rendered) return false;
     dispatch(place(state, rendered, item));
     return true;
