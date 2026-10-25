@@ -10,6 +10,8 @@ const instance = (port: number) => ({
   // Each instance has its own identity directory, or both would be the same peer.
   env: {
     INKWELL_SERVER_PORT: String(port),
+    // No short codes: the tests never reach the public code server.
+    INKWELL_RENDEZVOUS: "off",
     INKWELL_HOME: resolve(import.meta.dirname, "../.task/e2e", String(port)),
   },
   url: `http://127.0.0.1:${port}/health`,

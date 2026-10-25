@@ -17,6 +17,15 @@ import (
 	"github.com/oioio-space/inkwell/internal/transport"
 )
 
+const (
+	// lanEnv set to "1" turns on the local network discovery, until the
+	// settings screen has the setting "Découverte sur le réseau local".
+	lanEnv = "INKWELL_LAN"
+	// rendezvousEnv is the URL of the Wormhole rendezvous server that carries
+	// the short codes: unset for the public server, "off" for no codes.
+	rendezvousEnv = "INKWELL_RENDEZVOUS"
+)
+
 func main() {
 	log := slog.New(slog.NewTextHandler(os.Stderr, nil))
 	ctx, cancel := context.WithCancel(context.Background())
@@ -26,7 +35,13 @@ func main() {
 		log.Error("opening identity directory", "err", err)
 		os.Exit(1)
 	}
-	rt, err := app.Start(ctx, home, app.DefaultPort, "Inkwell", log)
+	rt, err := app.Start(ctx, home, app.Options{
+		Log:           log,
+		Title:         "Inkwell",
+		Port:          app.DefaultPort,
+		LAN:           os.Getenv(lanEnv) == "1",
+		RendezvousURL: os.Getenv(rendezvousEnv),
+	})
 	if err != nil {
 		log.Error("starting network", "err", err)
 		os.Exit(1)

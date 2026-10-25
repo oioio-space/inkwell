@@ -39,7 +39,7 @@ class Workspace {
   peers = $state<string[]>([]);
   myId = $state("");
   myName = $state(safeGet(NAME_KEY) ?? "");
-  /** The text to give to the person joining: opaque, copied and pasted as is. */
+  /** The invitation text to give to the person joining: opaque, copied and pasted as is. */
   invitation = $state("");
   /** Display names of present people, by peer id (from presence). */
   names = $state<Record<string, string>>({});
@@ -100,7 +100,7 @@ class Workspace {
   async host(): Promise<void> {
     this.error = "";
     try {
-      this.invitation = await Session.Host();
+      this.invitation = (await Session.Invite("writer")).text;
     } catch (err) {
       this.error = t("error.host", { reason: String(err) });
     }

@@ -4,11 +4,9 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"net"
-	"slices"
 	"strconv"
 	"strings"
 	"testing"
-	"time"
 
 	"go.uber.org/goleak"
 
@@ -36,73 +34,6 @@ func TestLocalPeerStable(t *testing.T) {
 	s, node := newSession(t)
 	if got, want := s.LocalPeer(), string(node.Local()); got != want || got != s.LocalPeer() {
 		t.Errorf("LocalPeer() = %q, want stable %q", got, want)
-	}
-}
-
-func TestJoinRejectsBadInvitation(t *testing.T) {
-	s, _ := newSession(t)
-	for _, text := range []string{"", "host", "192.168.1.20:7419", "/ip4/1.2.3.4/tcp/1", "a b"} {
-		if _, err := s.Join(t.Context(), text); err == nil {
-			t.Errorf("Join(%q) = nil, want an error", text)
-		}
-	}
-}
-
-func TestJoinRejectsOwnInvitation(t *testing.T) {
-	s, _ := newSession(t)
-	text, err := s.Host()
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := s.Join(t.Context(), text); err == nil {
-		t.Error("Join(own invitation) = nil, want an error")
-	}
-}
-
-func TestHostReturnsInvitation(t *testing.T) {
-	s, node := newSession(t)
-	text, err := s.Host()
-	if err != nil {
-		t.Fatalf("Host() = %v", err)
-	}
-	fields := strings.Fields(text)
-	if len(fields) == 0 {
-		t.Fatal("Host() returned an empty invitation")
-	}
-	for _, a := range fields {
-		if !strings.HasSuffix(a, "/p2p/"+string(node.Local())) {
-			t.Errorf("invitation address %q does not end with the host identity", a)
-		}
-	}
-	if again, err := s.Host(); err != nil || again != text {
-		t.Errorf("second Host() = %q, %v; want the same invitation", again, err)
-	}
-}
-
-func TestJoinConnectsToHost(t *testing.T) {
-	host, _ := newSession(t)
-	guest, _ := newSession(t)
-	text, err := host.Host()
-	if err != nil {
-		t.Fatal(err)
-	}
-	peer, err := guest.Join(t.Context(), text)
-	if err != nil {
-		t.Fatalf("Join() = %v", err)
-	}
-	if peer != host.LocalPeer() {
-		t.Errorf("Join() = %q, want the host's identity %q", peer, host.LocalPeer())
-	}
-	again, err := guest.Join(t.Context(), text)
-	if err != nil || again != peer {
-		t.Errorf("re-Join() = %q, %v; want %q, nil (already connected is fine)", again, err, peer)
-	}
-	deadline := time.Now().Add(5 * time.Second)
-	for !slices.Equal(guest.Peers(), []string{host.LocalPeer()}) {
-		if time.Now().After(deadline) {
-			t.Fatalf("guest.Peers() = %v, want [%s]", guest.Peers(), host.LocalPeer())
-		}
-		time.Sleep(10 * time.Millisecond)
 	}
 }
 

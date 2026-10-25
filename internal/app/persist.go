@@ -20,6 +20,8 @@ const (
 	projectsDir = "projects"
 	trustDir    = "trust"
 	opExt       = ".op"
+	// currentFile names the project this device works on: its ID in hexadecimal.
+	currentFile = "current"
 )
 
 // opStore keeps the ops of one project's member list, one file per op named
@@ -34,7 +36,7 @@ func openProject(home *os.Root, s trust.Signer, title string) (*trust.List, *opS
 	if err := home.MkdirAll(projectsDir, 0o700); err != nil {
 		return nil, nil, fmt.Errorf("creating projects directory: %w", err)
 	}
-	id, found, err := firstProject(home)
+	id, found, err := currentProject(home)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -57,6 +59,59 @@ func openProject(home *os.Root, s trust.Signer, title string) (*trust.List, *opS
 		return nil, nil, errors.Join(err, root.Close())
 	}
 	return list, st, nil
+}
+
+// currentProject returns the project this device works on: the one it joined
+// last, if home remembers it and still has it, otherwise the first project
+// directory of home, by name.
+func currentProject(home *os.Root) (trust.ProjectID, bool, error) {
+	if b, err := readSmall(home, currentFile); err == nil {
+		var id trust.ProjectID
+		if raw, err := hex.DecodeString(strings.TrimSpace(string(b))); err == nil && len(raw) == len(id) {
+			copy(id[:], raw)
+			if _, err := home.Stat(projectsDir + "/" + id.String() + "/" + trustDir); err == nil {
+				return id, true, nil
+			}
+		}
+	}
+	return firstProject(home)
+}
+
+// readSmall returns the content of a small file of root.
+func readSmall(root *os.Root, name string) ([]byte, error) {
+	f, err := root.Open(name)
+	if err != nil {
+		return nil, err
+	}
+	b, err := io.ReadAll(io.LimitReader(f, 256))
+	if cerr := f.Close(); err == nil {
+		err = cerr
+	}
+	return b, err
+}
+
+// adoptProject stores the ops of project id, which this device joined, in
+// home and makes it the current project. It returns the store that keeps it;
+// the caller closes the store.
+func adoptProject(home *os.Root, id trust.ProjectID, ops []trust.Op) (*opStore, error) {
+	dir := projectsDir + "/" + id.String() + "/" + trustDir
+	if err := home.MkdirAll(dir, 0o700); err != nil {
+		return nil, fmt.Errorf("creating project directory: %w", err)
+	}
+	root, err := home.OpenRoot(dir)
+	if err != nil {
+		return nil, fmt.Errorf("opening project directory: %w", err)
+	}
+	st := &opStore{root: root}
+	for _, op := range ops {
+		if err := st.save(op); err != nil {
+			return nil, errors.Join(err, root.Close())
+		}
+	}
+	if err := writeFileAtomic(home, currentFile, []byte(id.String())); err != nil {
+		return nil, errors.Join(fmt.Errorf("remembering the current project: %w", err), root.Close())
+	}
+	return st, nil
 }
 
 // firstProject returns the first project directory of home, by name.
