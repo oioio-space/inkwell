@@ -27,6 +27,7 @@ func OpenDocs() (*os.Root, error) {
 		}
 		dir = filepath.Join(docs, "Inkwell")
 	}
+	// #nosec G703 -- the path is the user's own choice (environment) or their Documents folder.
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, fmt.Errorf("creating %s: %w", dir, err)
 	}

@@ -48,6 +48,7 @@ func OpenHome() (*os.Root, error) {
 		}
 		dir = filepath.Join(base, "inkwell")
 	}
+	// #nosec G703 -- the path is the user's own choice (environment) or their config directory.
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return nil, fmt.Errorf("creating %s: %w", dir, err)
 	}

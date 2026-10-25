@@ -266,7 +266,7 @@ func DecodeRange(b []byte) ([]store.Entry, error) {
 			return nil, fmt.Errorf("%w: bad range entry", ErrMalformed)
 		}
 		n := binary.BigEndian.Uint32(rest)
-		if uint64(n) > uint64(len(rest)-4) {
+		if uint64(n) > uint64(len(rest)-4) { // #nosec G115 -- len(rest) >= 4 is checked just above.
 			return nil, fmt.Errorf("%w: truncated range entry", ErrMalformed)
 		}
 		out = append(out, store.Entry{Key: key, Data: rest[4 : 4+n]})

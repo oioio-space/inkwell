@@ -93,9 +93,9 @@ func (t Ticket) Text() string {
 		room -= 1 + len(short)
 		keep = append(keep, short)
 	}
-	raw = append(raw, byte(len(keep)))
+	raw = append(raw, byte(len(keep))) // #nosec G115 -- at most maxAddrs (16).
 	for _, a := range keep {
-		raw = append(raw, byte(len(a)))
+		raw = append(raw, byte(len(a))) // #nosec G115 -- at most maxAddrLen (255), checked above.
 		raw = append(raw, a...)
 	}
 	return textPrefix + b32.EncodeToString(raw)
@@ -114,7 +114,7 @@ func (t Ticket) encode(b []byte) []byte {
 	}
 	b = append(b, t.Secret[:]...)
 	b = binary.BigEndian.AppendUint64(b, uint64(max(t.Expires.Unix(), 0))) // #nosec G115 -- clamped at 0.
-	b = append(b, byte(len(t.Host)))
+	b = append(b, byte(len(t.Host)))                                       // #nosec G115 -- a valid PeerID (Text's contract) is about 52 bytes.
 	return append(b, t.Host...)
 }
 

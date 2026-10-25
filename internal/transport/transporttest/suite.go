@@ -161,7 +161,7 @@ func peerUpBothSides(t *testing.T, p Pair, _ Options) {
 func payload(n, seed int) []byte {
 	b := make([]byte, n)
 	for i := range b {
-		b[i] = byte(i*7 + seed)
+		b[i] = byte(i*7 + seed) // #nosec G115 -- wraps on purpose: a repeating test pattern.
 	}
 	return b
 }

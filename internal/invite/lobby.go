@@ -210,7 +210,7 @@ func appendStr(b []byte, s string) []byte {
 			s = s[:len(s)-1]
 		}
 	}
-	b = append(b, byte(len(s)))
+	b = append(b, byte(len(s))) // #nosec G115 -- cut to maxFieldLen (255) above.
 	return append(b, s...)
 }
 
