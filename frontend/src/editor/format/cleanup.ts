@@ -1,7 +1,7 @@
 import type { StateCommand } from "@codemirror/state";
 import { fencesUpTo, isInFence } from "./fence";
 import type { Lang } from "./lang";
-import { syntaxOf } from "./support";
+import { isFence, syntaxOf } from "./support";
 
 // After two people edit concurrently, a delimiter pair can be left around nothing: A bolds a
 // word, B deletes it, and `**` + `**` remain side by side. The rule is "empty pairs are
@@ -38,7 +38,7 @@ export function removeEmptyDelimiters(text: string, lang: Lang): string {
   const inFence = new Set<number>();
   let open = false;
   lines.forEach((l, i) => {
-    const fence = /^[ \t]{0,3}```/.test(l);
+    const fence = isFence(l);
     if (fence || open) inFence.add(i);
     if (fence) open = !open;
   });

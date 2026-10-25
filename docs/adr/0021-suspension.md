@@ -58,25 +58,44 @@ Option 4.
 
   La créatrice admin et les admins plus anciens sont hors d'atteinte : l'op est stockée, sans effet.
 - **S2 — état.**
-  - On retient les suspensions et reprises *debout* sur x, ≺-postérieures à son dernier `Remove`
-    survivant.
+  - On retient les suspensions et reprises *debout* sur x qui **voient** chaque `Remove` survivant
+    de x posé par une clé plus ancienne (et non pas seulement celles qui le suivent dans ≺) : une
+    suspension concurrente d'un retrait ne survit pas à la réadmission. S3(a) utilise le même
+    ensemble de `Remove`.
   - Une reprise concurrente d'une suspension est écartée : une coupe bat une remise concurrente
     (règle 4).
   - x est suspendu si la ≺-dernière op restante est une suspension.
   - Un retrait suivi d'une réadmission repart non suspendu (ACL-07).
+  - Une suspension d'un junior sur un senior (exception de S1) **tombe** dès qu'une attribution
+    admin survivante, qu'elle ne précède pas, remet x admin : l'état et l'effet concordent (les op
+    de x tiennent alors, et x n'est plus affiché suspendu).
 - **S3 — effet sur la liste.**
   - La règle 3(a) exige en plus « y non suspendu à o », calculé sur ce que o voit.
   - La règle 3(b) traite une suspension debout de y, posée par une autre clé, comme une coupe : tout
     ce que y signe sans l'avoir vue est mort, même après la reprise. C'est la parade à l'antidatage.
 - **Pas des op de rôle.** Rangs, rôles et `survivors` sont inchangés. Le balayage reste acyclique,
-  car les op sur y viennent de clés décidées avant y.
+  car les op sur y viennent de clés décidées avant y. Les suspensions d'un junior sur un senior
+  n'entrent que dans S2, jamais dans S3 : elles ne changent rien de ce que le senior décide.
 
 **API.**
-- Ajouts : `Member.Suspended`, `Member.SuspendedBy`, `List.Suspended(pub)`.
+- Ajouts : `Member.Suspended`, `Member.SuspendedBy`, `Member.SuspendedOp` (hachage de la suspension
+  qui tient), `Member.ResumedBy` (auteur de la reprise qui l'a levée), `List.Suspended(pub)`.
 - `List.Role` rend le rôle conservé (ACL-03).
 - `IssueWith` refuse :
   - un senior admin (`ErrOutranked`) ;
-  - l'ajout d'un appareil à une personne dont un appareil est suspendu (`ErrSuspended`).
+  - l'ajout d'un appareil à une personne dont un appareil est suspendu (`ErrSuspended`) ;
+  - une attribution du rôle admin à un membre suspendu (`ErrSuspended`) : on le reprend d'abord ;
+  - un auteur suspendu (`ErrSuspended`) : ce qu'il signerait serait mort ;
+  - un départ (retrait ou rétrogradation de soi) s'il ne reste aucun autre admin **non suspendu**
+    (`ErrLastAdmin`) : sinon le dernier admin actif partirait et la liste resterait figée.
+    Contrôle local, au moment de l'émission. Le pli ne change pas (`verdict` compte toujours les
+    admins suspendus) : un départ concurrent d'une suspension peut encore laisser seulement des
+    admins suspendus ; la liste est alors figée, comme pour des départs concurrents (ADR 0017), et
+    l'édition continue. Un changement du pli n'est pas nécessaire tant que la règle reste locale.
+  - une op qui ne tiendrait pas (`ErrNotStanding`) : `IssueWith` et `IssueBatch` replient la liste
+    avec l'op avant de la stocker, ce qui attrape un préfixe plafonné qui manque une op à voir.
+- `capPrev` couvre toutes les suspensions **et reprises** debout de l'émetteur, et les op debout de
+  **tous** les sujets d'un lot. Le tampon d'attente (`standingAdmin`) exclut les suspendus.
 
 **Transport (`internal/app`).**
 - Un suspendu reste admis à la connexion, mais en **lien restreint** :
@@ -90,8 +109,12 @@ Option 4.
   - un nouveau kind de pont, `Suspended` (Go → webview, avec l'auteur de l'op) ;
   - `attestHeads` garde les têtes dans `pending` et renvoie `ErrSuspended` ;
   - à la reprise, `flushPending` signe ces têtes et les diffuse.
-- L'heure affichée (« à 10:02 ») est l'heure locale de réception de l'op, notée à la persistance :
-  les op ne portent pas d'horloge (X-20).
+- L'heure affichée (« à 10:02 ») est l'heure locale de réception de l'op : les op ne portent pas
+  d'horloge (X-20). Elle est notée explicitement à la persistance, dans un fichier `<hachage>.rcv`
+  à côté de `<hachage>.op` (jamais l'heure de modification du fichier), une seule fois, et
+  retrouvée par `Member.SuspendedOp`. Rejoindre un projet note l'arrivée des op à ce moment-là.
+- `Session.Suspend` et `Session.Resume` refusent une personne dont un appareil est celui-ci : un
+  appareil frère qui a échappé à la suspension ne peut pas la lever.
 
 **Contrôle d'écriture.**
 - `List.Verify` renvoie `ErrSuspended`. `afterChange` élague alors les attestations du suspendu et
@@ -123,6 +146,10 @@ Option 4.
 - aucune nouvelle voie d'écriture.
 
 **Moins bien, assumé :**
+- **Liste figée avec des admins suspendus.** Si deux admins partent en même temps pendant que
+  l'un d'eux suspend le dernier admin restant, il ne reste que des admins suspendus : la liste se
+  fige (comme deux départs concurrents, ADR 0017) et ce dernier admin **reste suspendu pour
+  toujours**, faute de quelqu'un pour le rétablir. L'écriture continue.
 - **Fenêtre de propagation.** Un suspendu qui cache l'op à un écrivain isolé lui fait accepter ses
   modifications, donc les fait accepter par tous. Elles restent attribuées et réversibles
   (« Revenir ») ; l'escalade est le retrait.

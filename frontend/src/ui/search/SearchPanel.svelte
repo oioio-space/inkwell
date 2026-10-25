@@ -26,6 +26,7 @@ import {
   type HistoryEntry,
   loadHistory,
   pushHistory,
+  SCOPES,
   type Scope,
   type UiMode,
 } from "./history";
@@ -120,6 +121,8 @@ const spec = $derived<QuerySpec>({
 });
 const compiled = $derived(compileQuery(spec));
 const queryError = $derived(compiled.ok ? "" : compiled.error);
+/** Nothing to run: busy, empty or invalid query. */
+const cannotSearch = $derived(busy || query === "" || queryError !== "");
 const signature = $derived(JSON.stringify([spec, scope, filters]));
 
 $effect(() => {
@@ -130,6 +133,12 @@ const replaceOptions = (): ReplaceOptions => ({
   regex: mode === "regex",
   extended: mode === "normal" && extended,
 });
+
+/** The replace options for one file: its occurrences in a locked zone are left alone. */
+function fileReplaceOptions(path: string): ReplaceOptions {
+  if (!isLocked) return replaceOptions();
+  return { ...replaceOptions(), skip: (range) => isLocked(path, range) };
+}
 
 /** Where a hit is now, re-checked whenever `version` changes. */
 function locate(path: string, hit: Hit): ResolvedHit {
@@ -259,7 +268,8 @@ export const stepResult = step;
 
 /** Opens the panel the way Ctrl+F / Ctrl+H / Ctrl+Maj+F do. */
 export function open(kind: "file" | "replace" | "project"): void {
-  scope = kind === "project" ? "project" : scope === "project" ? "file" : scope;
+  if (kind === "project") scope = "project";
+  else if (scope === "project") scope = "file";
   if (kind === "replace" && canReplace) showReplace = true;
   field?.focus();
 }
@@ -296,10 +306,6 @@ async function copyLines(run: SearchRun) {
   }
 }
 
-function lockedFilter(path: string) {
-  return isLocked ? (range: { from: number; to: number }) => isLocked(path, range) : undefined;
-}
-
 function summary(replaced: number, locked: number, stale: number): string {
   const parts = [t("search.replaced", { count: replaced })];
   if (locked > 0) parts.push(t("search.locked", { count: locked }));
@@ -320,11 +326,7 @@ async function replaceOne() {
   const target = live[at];
   const handle = target ? handleOf?.(target.path) : undefined;
   if (!target || !handle) return;
-  const skip = lockedFilter(target.path);
-  const r = replaceAll(handle, [target.hit], replacement, {
-    ...replaceOptions(),
-    ...(skip ? { skip } : {}),
-  });
+  const r = replaceAll(handle, [target.hit], replacement, fileReplaceOptions(target.path));
   notice = summary(r.replaced, r.skippedLocked, r.skippedStale);
   runs = runs.slice(1);
   const fresh = await runSearch(undefined, true);
@@ -347,11 +349,12 @@ async function replaceEverything() {
   let locked = 0;
   let total = 0;
   for (const f of run.results.files) {
-    const skip = lockedFilter(f.path);
-    const lines = previewReplace(await textOf(f.path), f.hits, replacement, {
-      ...replaceOptions(),
-      ...(skip ? { skip } : {}),
-    });
+    const lines = previewReplace(
+      await textOf(f.path),
+      f.hits,
+      replacement,
+      fileReplaceOptions(f.path),
+    );
     for (const l of lines) {
       locked += l.locked;
       total += l.replaced;
@@ -384,8 +387,6 @@ function keydown(e: KeyboardEvent) {
     void step(e.shiftKey);
   }
 }
-
-const scopes: Scope[] = ["file", "selection", "project"];
 </script>
 
 <!-- svelte-ignore a11y_no_noninteractive_element_interactions -->
@@ -423,14 +424,14 @@ const scopes: Scope[] = ["file", "selection", "project"];
         autocomplete="off"
         spellcheck="false"
       />
-      <button type="button" class="btn" disabled={busy || query === "" || queryError !== ""} onclick={() => void replaceOne()}>{t("search.replace")}</button>
-      <button type="button" class="btn" disabled={busy || query === "" || queryError !== ""} onclick={() => void replaceEverything()}>{t("search.replaceAll")}</button>
+      <button type="button" class="btn" disabled={cannotSearch} onclick={() => void replaceOne()}>{t("search.replace")}</button>
+      <button type="button" class="btn" disabled={cannotSearch} onclick={() => void replaceEverything()}>{t("search.replaceAll")}</button>
     </div>
   {/if}
 
   <div class="row">
     <div class="seg" role="group" aria-label={t("search.scope.group")}>
-      {#each scopes as s (s)}
+      {#each SCOPES as s (s)}
         <button type="button" class:on={scope === s} aria-pressed={scope === s} onclick={() => (scope = s)}>{t(`search.scope.${s}`)}</button>
       {/each}
     </div>
@@ -450,7 +451,7 @@ const scopes: Scope[] = ["file", "selection", "project"];
       <button type="button" class="btn flat" onclick={() => (showReplace = true)}>{t("search.showReplace")}</button>
     {/if}
     <button type="button" class="btn flat" aria-expanded={historyOpen} onclick={() => (historyOpen = !historyOpen)}>{t("search.history")}</button>
-    <button type="button" class="btn suggested" disabled={busy || query === "" || queryError !== ""} onclick={() => void runSearch()}>{t("search.findAll")}</button>
+    <button type="button" class="btn suggested" disabled={cannotSearch} onclick={() => void runSearch()}>{t("search.findAll")}</button>
   </div>
 
   {#if historyOpen}
@@ -500,7 +501,7 @@ const scopes: Scope[] = ["file", "selection", "project"];
             <span class="count">{countLabel(run.results.total, run.results.files.length)}</span>
           </button>
           {#if i === 0 && run.results.total > 0}
-            <button type="button" class="btn flat" onclick={() => void runSearch(run)} disabled={busy || query === "" || queryError !== ""}>{t("search.within")}</button>
+            <button type="button" class="btn flat" onclick={() => void runSearch(run)} disabled={cannotSearch}>{t("search.within")}</button>
             <button type="button" class="btn flat" onclick={() => void copyLines(run)}>{t("search.copy")}</button>
           {/if}
         </div>

@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/oioio-space/inkwell/internal/project"
 	"github.com/oioio-space/inkwell/internal/store"
@@ -67,8 +68,8 @@ func TestOpenTrustCreatesOnceAndReloads(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(entries) != 2 {
-		t.Errorf("trust directory holds %d files, want the 2 ops: %v", len(entries), entries)
+	if len(entries) != 4 {
+		t.Errorf("trust directory holds %d files, want the 2 ops and when they arrived: %v", len(entries), entries)
 	}
 	info, err := os.Stat(filepath.Join(folder, ".inkwell", trustDir, op.Hash().String()+opExt))
 	if err != nil || info.Mode().Perm() != 0o600 {
@@ -98,6 +99,45 @@ func TestOpenTrustRejectsForeignOps(t *testing.T) {
 	if _, st2, err := openTrust(proj, dev); err == nil {
 		_ = st2.close()
 		t.Error("openTrust accepted an op of another project")
+	}
+}
+
+func TestArrivalIsNotedOnceAndRenewedByJoining(t *testing.T) {
+	proj, _ := newProjectFolder(t)
+	dev, guest := newDevice(t), newDevice(t)
+	list, st, err := openTrust(proj, dev)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st.close() })
+	op, err := list.Issue(dev, trust.OpAdd, guest.Public(), trust.RoleWriter, "guest")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := st.save(op); err != nil {
+		t.Fatal(err)
+	}
+	first := st.receivedAt(op.Hash())
+	if first.IsZero() {
+		t.Fatal("receivedAt() is zero after save")
+	}
+	time.Sleep(20 * time.Millisecond)
+	if err := st.save(op); err != nil {
+		t.Fatal(err)
+	}
+	if got := st.receivedAt(op.Hash()); !got.Equal(first) {
+		t.Errorf("receivedAt() = %v after saving again, want the first arrival %v", got, first)
+	}
+
+	// Joining another project stores its ops as they arrive now.
+	if err := st.replace(list.Since(nil)); err != nil {
+		t.Fatal(err)
+	}
+	if got := st.receivedAt(op.Hash()); !got.After(first) {
+		t.Errorf("receivedAt() = %v after joining, want after %v", got, first)
+	}
+	if got := st.receivedAt(trust.Hash{1}); !got.IsZero() {
+		t.Errorf("receivedAt(unknown op) = %v, want zero", got)
 	}
 }
 

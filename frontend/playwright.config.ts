@@ -47,7 +47,16 @@ export default defineConfig({
   // Chromium — override with INKWELL_E2E_BROWSER=webkit.
   projects: [
     browser === "webkit"
-      ? { name: "webkit", use: { ...devices["Desktop Safari"] } }
+      ? {
+          name: "webkit",
+          use: {
+            ...devices["Desktop Safari"],
+            // `mise run e2e:webkit`: WebKit runs in the Playwright container, the tests here.
+            ...(process.env.INKWELL_E2E_WS
+              ? { connectOptions: { wsEndpoint: process.env.INKWELL_E2E_WS } }
+              : {}),
+          },
+        }
       : { name: "chromium", use: { ...devices["Desktop Chrome"] } },
   ],
   webServer: [instance(ALICE_PORT), instance(BOB_PORT)],

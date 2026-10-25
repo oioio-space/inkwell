@@ -14,8 +14,39 @@ func sampleOps(t testing.TB) []Op {
 		t.Fatal(err)
 	}
 	mustIssue(t, l, a, OpSetRole, b, RoleReader)
+	mustIssue(t, l, a, OpSuspend, b, 0)
+	mustIssue(t, l, a, OpResume, b, 0)
 	mustIssue(t, l, a, OpRemove, b, 0)
 	return l.Since(nil)
+}
+
+func TestDecodeRejectsMalformedSuspension(t *testing.T) {
+	a, b := newSigner(1), newSigner(2)
+	l := project(t, a)
+	base := Op{Kind: OpSuspend, Author: a.Public(), Subject: b.Public(), Prev: l.Frontier(), Lamport: 1}
+	good := base
+	good.sign(a, l.Project())
+	if _, err := Decode(Encode(good)); err != nil {
+		t.Fatalf("Decode(valid suspension) = %v", err)
+	}
+	cases := map[string]func(*Op){
+		"on itself":    func(o *Op) { o.Subject = o.Author },
+		"with a role":  func(o *Op) { o.Role = RoleWriter },
+		"with a name":  func(o *Op) { o.Name = "x" },
+		"with person":  func(o *Op) { o.Person = Hash{1} },
+		"without prev": func(o *Op) { o.Prev, o.Lamport = nil, 0 },
+	}
+	for _, kind := range []OpKind{OpSuspend, OpResume} {
+		for name, mutate := range cases {
+			o := base
+			o.Kind = kind
+			mutate(&o)
+			o.sign(a, l.Project())
+			if _, err := Decode(Encode(o)); !errors.Is(err, ErrMalformed) {
+				t.Errorf("Decode(kind %d %s) = %v, want ErrMalformed", kind, name, err)
+			}
+		}
+	}
 }
 
 func TestEncodeDecodeRoundTrip(t *testing.T) {

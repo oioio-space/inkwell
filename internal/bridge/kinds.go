@@ -37,8 +37,17 @@ const (
 	// device signs no more, and the user must create a new project. Peer is
 	// the local device.
 	Sealed Kind = 7
+	// Roles (Go to webview) reports the member list: the role and the
+	// suspension of every device, so the webview knows who the admins are.
+	// Peer is the local device; Payload is a [MemberRole] list, see
+	// [EncodeRoles]. It is sent whenever the roles change.
+	Roles Kind = 8
+	// Suspended (Go to webview) reports a change of this device's own
+	// suspension: Peer is the admin who made it, and Payload is one byte, 1 if
+	// this device was suspended and 0 if it was let back.
+	Suspended Kind = 9
 
-	lastKind = Sealed
+	lastKind = Suspended
 )
 
 // String returns the name of k.
@@ -58,6 +67,10 @@ func (k Kind) String() string {
 		return "Revoked"
 	case Sealed:
 		return "Sealed"
+	case Roles:
+		return "Roles"
+	case Suspended:
+		return "Suspended"
 	}
 	return fmt.Sprintf("Kind(%d)", uint8(k))
 }
@@ -135,6 +148,84 @@ func DecodeHeads(b []byte) (Heads, error) {
 	return h, nil
 }
 
+// MaxMembers bounds the entries of a Roles payload: the member list holds at
+// most 1024 ops, so at most that many devices.
+const MaxMembers = 1024
+
+// MemberRole is one device in a Roles payload.
+type MemberRole struct {
+	// Peer is the device.
+	Peer transport.PeerID
+	// Role is 1 for a reader, 2 for a writer and 3 for an admin (the values of
+	// package trust's Role).
+	Role uint8
+	// Suspended reports whether the device is suspended.
+	Suspended bool
+}
+
+// flagSuspended is the only flag of a roles entry.
+const flagSuspended = 1
+
+// EncodeRoles serializes rs, the payload of a Roles envelope. Wire format:
+// count u16 big endian, then for each entry len(peer) u8 | peer | role u8 |
+// flags u8 (bit 0: suspended). It returns an error wrapping [ErrMalformed] if
+// rs breaks the limits.
+func EncodeRoles(rs []MemberRole) ([]byte, error) {
+	if len(rs) > MaxMembers {
+		return nil, fmt.Errorf("%w: %d members", ErrMalformed, len(rs))
+	}
+	b := binary.BigEndian.AppendUint16(make([]byte, 0, 2+len(rs)*8), uint16(len(rs))) // #nosec G115 -- bounded by MaxMembers.
+	for _, r := range rs {
+		if !transport.ValidPeerID(r.Peer) || r.Role < 1 || r.Role > 3 {
+			return nil, fmt.Errorf("%w: member entry", ErrMalformed)
+		}
+		var flags byte
+		if r.Suspended {
+			flags = flagSuspended
+		}
+		b = append(b, byte(len(r.Peer))) // #nosec G115 -- ValidPeerID bounds it to 64.
+		b = append(b, r.Peer...)
+		b = append(b, r.Role, flags)
+	}
+	return b, nil
+}
+
+// DecodeRoles parses an encoding of [EncodeRoles], strictly. It returns an
+// error wrapping [ErrMalformed] for a truncated or oversized list, an invalid
+// peer, an unknown role or flag, or trailing bytes.
+func DecodeRoles(b []byte) ([]MemberRole, error) {
+	if len(b) < 2 {
+		return nil, fmt.Errorf("%w: truncated roles", ErrMalformed)
+	}
+	n := int(binary.BigEndian.Uint16(b))
+	if n > MaxMembers {
+		return nil, fmt.Errorf("%w: %d members", ErrMalformed, n)
+	}
+	rest := b[2:]
+	var out []MemberRole
+	if n > 0 {
+		out = make([]MemberRole, 0, n)
+	}
+	for range n {
+		if len(rest) < 1 || len(rest) < 1+int(rest[0])+2 {
+			return nil, fmt.Errorf("%w: truncated member entry", ErrMalformed)
+		}
+		pl := int(rest[0])
+		r := MemberRole{Peer: transport.PeerID(rest[1 : 1+pl]), Role: rest[1+pl]}
+		flags := rest[2+pl]
+		rest = rest[3+pl:]
+		if !transport.ValidPeerID(r.Peer) || r.Role < 1 || r.Role > 3 || flags&^flagSuspended != 0 {
+			return nil, fmt.Errorf("%w: member entry", ErrMalformed)
+		}
+		r.Suspended = flags&flagSuspended != 0
+		out = append(out, r)
+	}
+	if len(rest) != 0 {
+		return nil, fmt.Errorf("%w: trailing bytes", ErrMalformed)
+	}
+	return out, nil
+}
+
 // Attester is implemented by a repo transport that controls who may write
 // (package app's wiring). A [Router] over such a transport turns the Attest
 // envelopes of the webview into calls to Attest and gives a newly attached
@@ -144,14 +235,15 @@ type Attester interface {
 	// the members, ahead of the repo frames sent afterwards. It fails if this
 	// device may not write, or may no longer sign.
 	Attest(ctx context.Context, doc string, heads [][HashSize]byte) error
-	// Notices returns the Attested and Sealed envelopes describing the
-	// current state, for a webview that just attached. It never blocks on
+	// Notices returns the Attested, Sealed, Roles and Suspended envelopes
+	// describing the current state, for a webview that just attached. It never blocks on
 	// the network.
 	Notices() []Envelope
 }
 
 // Source is implemented by a repo transport that reports more than
-// [transport.Event]s: its envelopes (Attested, Revoked, Sealed) are ordered
+// [transport.Event]s: its envelopes (Attested, Revoked, Sealed, Roles,
+// Suspended) are ordered
 // with the Message envelopes, so an attestation precedes the changes it
 // covers. [Router.Run] reads it instead of Recv.
 type Source interface {

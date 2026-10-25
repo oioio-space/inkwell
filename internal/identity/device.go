@@ -7,6 +7,7 @@
 package identity
 
 import (
+	"cmp"
 	"crypto/ed25519"
 	"crypto/rand"
 	"crypto/x509"
@@ -16,6 +17,7 @@ import (
 	"io/fs"
 	"os"
 	"runtime"
+	"slices"
 	"strings"
 	"unicode"
 )
@@ -71,7 +73,7 @@ func load(dir *os.Root) (*Device, error) {
 	}
 
 	buf := make([]byte, info.Size())
-	if _, err := f.ReadAt(buf, 0); err != nil && info.Size() > 0 {
+	if _, err := f.ReadAt(buf, 0); err != nil {
 		return nil, fmt.Errorf("identity: read %s: %w", keyFile, err)
 	}
 	block, _ := pem.Decode(buf)
@@ -183,7 +185,7 @@ func (d *Device) Sign(domain string, msg []byte) []byte {
 // Libp2pKey returns a copy of the private key. Its only legitimate use is to
 // build the transport node; never log, store or transmit it.
 func (d *Device) Libp2pKey() ed25519.PrivateKey {
-	return append(ed25519.PrivateKey(nil), d.priv...)
+	return slices.Clone(d.priv)
 }
 
 // MachineName returns the host name stripped of control and unusual
@@ -193,12 +195,7 @@ func MachineName() string {
 	return sanitizeMachineName(host)
 }
 
-func sanitizeMachineName(s string) string {
-	if s = CleanName(s); s == "" {
-		return fallbackMachineName
-	}
-	return s
-}
+func sanitizeMachineName(s string) string { return cmp.Or(CleanName(s), fallbackMachineName) }
 
 // CleanName makes s safe to display as a name: it keeps only letters, digits
 // and " -_.[]", which drops control characters, bidirectional overrides and

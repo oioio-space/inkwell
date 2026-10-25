@@ -5,7 +5,9 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 
@@ -30,6 +32,7 @@ type vector struct {
 var kinds = map[string]bridge.Kind{
 	"PeerUp": bridge.PeerUp, "PeerDown": bridge.PeerDown, "Message": bridge.Message,
 	"Attest": bridge.Attest, "Attested": bridge.Attested, "Revoked": bridge.Revoked, "Sealed": bridge.Sealed,
+	"Roles": bridge.Roles, "Suspended": bridge.Suspended,
 }
 
 func TestEnvelopeVectors(t *testing.T) {
@@ -87,6 +90,36 @@ func TestEnvelopeVectors(t *testing.T) {
 	}
 }
 
+// TestInvalidVectors checks that the frames of testdata/invalid.json, which
+// the TypeScript implementation must refuse too, are refused.
+func TestInvalidVectors(t *testing.T) {
+	raw, err := os.ReadFile("testdata/invalid.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	var vectors []struct {
+		Name    string `json:"name"`
+		WireHex string `json:"wireHex"`
+	}
+	if err := json.Unmarshal(raw, &vectors); err != nil {
+		t.Fatal(err)
+	}
+	if len(vectors) == 0 {
+		t.Fatal("no invalid vectors")
+	}
+	for _, v := range vectors {
+		t.Run(v.Name, func(t *testing.T) {
+			wire, err := hex.DecodeString(v.WireHex)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if _, err := bridge.Decode(wire); !errors.Is(err, bridge.ErrMalformed) {
+				t.Errorf("Decode(%x) = %v, want ErrMalformed", wire, err)
+			}
+		})
+	}
+}
+
 func TestHeadsVector(t *testing.T) {
 	// The payload of the "attest two heads" vector.
 	want, err := hex.DecodeString("0004646f6331" + strings.Repeat("01", 32) + strings.Repeat("fe", 32))
@@ -114,7 +147,8 @@ func filled(b byte) (h [bridge.HashSize]byte) {
 func TestKindString(t *testing.T) {
 	for k, want := range map[bridge.Kind]string{
 		bridge.PeerUp: "PeerUp", bridge.Attest: "Attest", bridge.Attested: "Attested",
-		bridge.Revoked: "Revoked", bridge.Sealed: "Sealed", 0: "Kind(0)",
+		bridge.Revoked: "Revoked", bridge.Sealed: "Sealed", bridge.Roles: "Roles", bridge.Suspended: "Suspended",
+		0: "Kind(0)",
 	} {
 		if got := k.String(); got != want {
 			t.Errorf("Kind(%d).String() = %q, want %q", uint8(k), got, want)
@@ -132,7 +166,20 @@ func TestDecodeRejects(t *testing.T) {
 		{name: "version 2", wire: []byte{2, 3, 1, 'a'}},
 		{name: "version 0", wire: []byte{0, 3, 1, 'a'}},
 		{name: "kind 0", wire: []byte{1, 0, 1, 'a'}},
-		{name: "kind 8", wire: []byte{1, 8, 1, 'a'}},
+		{name: "kind 10", wire: []byte{1, 10, 1, 'a'}},
+		{name: "roles without payload", wire: []byte{1, 8, 1, 'a'}},
+		{name: "roles truncated count", wire: []byte{1, 8, 1, 'a', 0}},
+		{name: "roles count without entries", wire: []byte{1, 8, 1, 'a', 0, 1}},
+		{name: "roles trailing byte", wire: []byte{1, 8, 1, 'a', 0, 0, 7}},
+		{name: "roles entry with role 0", wire: []byte{1, 8, 1, 'a', 0, 1, 1, 'p', 0, 0}},
+		{name: "roles entry with role 4", wire: []byte{1, 8, 1, 'a', 0, 1, 1, 'p', 4, 0}},
+		{name: "roles entry with unknown flag", wire: []byte{1, 8, 1, 'a', 0, 1, 1, 'p', 2, 2}},
+		{name: "roles entry with empty peer", wire: []byte{1, 8, 1, 'a', 0, 1, 0, 2, 0}},
+		{name: "roles entry with a space in the peer", wire: []byte{1, 8, 1, 'a', 0, 1, 1, ' ', 2, 0}},
+		{name: "roles entry truncated peer", wire: []byte{1, 8, 1, 'a', 0, 1, 5, 'p', 2, 0}},
+		{name: "suspended without payload", wire: []byte{1, 9, 1, 'a'}},
+		{name: "suspended with 2", wire: []byte{1, 9, 1, 'a', 2}},
+		{name: "suspended with two bytes", wire: []byte{1, 9, 1, 'a', 1, 1}},
 		{name: "attest without payload", wire: []byte{1, 4, 1, 'a'}},
 		{name: "attest empty document", wire: []byte{1, 4, 1, 'a', 0, 0}},
 		{name: "attest document too long", wire: []byte{1, 4, 1, 'a', 0, 5, 'd'}},
@@ -164,7 +211,9 @@ func TestEncodeRejects(t *testing.T) {
 		name string
 		env  bridge.Envelope
 	}{
-		{name: "bad kind", env: bridge.Envelope{Kind: 9, Peer: "a"}},
+		{name: "bad kind", env: bridge.Envelope{Kind: 10, Peer: "a"}},
+		{name: "suspended without payload", env: bridge.Envelope{Kind: bridge.Suspended, Peer: "a"}},
+		{name: "roles with a trailing byte", env: bridge.Envelope{Kind: bridge.Roles, Peer: "a", Payload: []byte{0, 0, 1}}},
 		{name: "attest without payload", env: bridge.Envelope{Kind: bridge.Attest, Peer: "a"}},
 		{name: "payload on Revoked", env: bridge.Envelope{Kind: bridge.Revoked, Peer: "a", Payload: []byte{1}}},
 		{name: "bad peer", env: bridge.Envelope{Kind: bridge.Message, Peer: "a b"}},
@@ -206,6 +255,9 @@ func FuzzDecode(f *testing.F) {
 	f.Add(append([]byte{1, 5, 1, 'a', 0, 1, 'd'}, make([]byte, 32)...))
 	f.Add([]byte{1, 6, 1, 'a'})
 	f.Add([]byte{1, 7, 1, 'a'})
+	f.Add([]byte{1, 8, 1, 'a', 0, 2, 1, 'p', 3, 1, 2, 'q', 'r', 1, 0})
+	f.Add([]byte{1, 9, 1, 'a', 1})
+	f.Add([]byte{1, 9, 1, 'a', 0})
 	f.Add([]byte{2, 3, 0})
 	f.Add([]byte{})
 	f.Fuzz(func(t *testing.T, b []byte) {
@@ -240,4 +292,64 @@ func TestMaxFrameFitsWailsLimit(t *testing.T) {
 	if !errors.Is(err, bridge.ErrMalformed) {
 		t.Errorf("Encode(MaxFrame+1 payload) = %v, want ErrMalformed", err)
 	}
+}
+
+func TestRolesRoundTrip(t *testing.T) {
+	in := []bridge.MemberRole{
+		{Peer: "k7f3", Role: 3},
+		{Peer: "zz-9~", Role: 2, Suspended: true},
+		{Peer: transport.PeerID(strings.Repeat("p", 64)), Role: 1},
+	}
+	b, err := bridge.EncodeRoles(in)
+	if err != nil {
+		t.Fatalf("EncodeRoles() = %v", err)
+	}
+	out, err := bridge.DecodeRoles(b)
+	if err != nil || !slices.Equal(in, out) {
+		t.Errorf("DecodeRoles(EncodeRoles(%+v)) = %+v, %v", in, out, err)
+	}
+	if b, err := bridge.EncodeRoles(nil); err != nil || !bytes.Equal(b, []byte{0, 0}) {
+		t.Errorf("EncodeRoles(nil) = %x, %v; want 0000", b, err)
+	}
+}
+
+func TestRolesLimits(t *testing.T) {
+	full := make([]bridge.MemberRole, bridge.MaxMembers)
+	for i := range full {
+		full[i] = bridge.MemberRole{Peer: transport.PeerID(fmt.Sprintf("p%d", i)), Role: 2}
+	}
+	b, err := bridge.EncodeRoles(full)
+	if err != nil {
+		t.Fatalf("EncodeRoles(%d members) = %v", len(full), err)
+	}
+	if _, err := bridge.DecodeRoles(b); err != nil {
+		t.Errorf("DecodeRoles(%d members) = %v", len(full), err)
+	}
+	if _, err := bridge.EncodeRoles(append(full, bridge.MemberRole{Peer: "extra", Role: 2})); !errors.Is(err, bridge.ErrMalformed) {
+		t.Errorf("EncodeRoles(%d members) = %v, want ErrMalformed", len(full)+1, err)
+	}
+	over := []byte{byte((bridge.MaxMembers + 1) >> 8), byte((bridge.MaxMembers + 1) & 0xff)}
+	if _, err := bridge.DecodeRoles(over); !errors.Is(err, bridge.ErrMalformed) {
+		t.Errorf("DecodeRoles(count %d) = %v, want ErrMalformed", bridge.MaxMembers+1, err)
+	}
+}
+
+func FuzzDecodeRoles(f *testing.F) {
+	f.Add([]byte{0, 0})
+	f.Add([]byte{0, 1, 1, 'p', 2, 1})
+	f.Add([]byte{0, 2, 1, 'p', 3, 0, 2, 'q', 'r', 1, 1})
+	f.Add([]byte{0xff, 0xff})
+	f.Fuzz(func(t *testing.T, b []byte) {
+		rs, err := bridge.DecodeRoles(b)
+		if err != nil {
+			if !errors.Is(err, bridge.ErrMalformed) {
+				t.Fatalf("DecodeRoles(%x) error %v is not ErrMalformed", b, err)
+			}
+			return
+		}
+		again, err := bridge.EncodeRoles(rs)
+		if err != nil || !bytes.Equal(again, b) {
+			t.Fatalf("round trip of %x = %x, %v", b, again, err)
+		}
+	})
 }

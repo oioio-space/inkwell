@@ -52,8 +52,7 @@ function pressed(item: BarItem): boolean | undefined {
   return "mark" in item.toggle ? marks.has(item.toggle.mark) : block === item.toggle.block;
 }
 
-const syntaxOf = (item: BarItem) => item.syntax[lang];
-const languageName = $derived(t(lang === "typst" ? "lang.typst" : "lang.markdown"));
+const languageName = $derived(t(`lang.${lang}`));
 </script>
 
 <div
@@ -71,7 +70,7 @@ const languageName = $derived(t(lang === "typst" ? "lang.typst" : "lang.markdown
       label={t(item.label)}
       icon={item.icon}
       glyph={item.glyph}
-      syntax={syntaxOf(item)}
+      syntax={item.syntax[lang]}
       shortcut={item.key ? shortcutLabel(item.key) : undefined}
       pressed={pressed(item)}
       onclick={() => run(item.command(lang))}
