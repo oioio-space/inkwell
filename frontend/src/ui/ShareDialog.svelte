@@ -1,6 +1,7 @@
 <script lang="ts">
 import { t } from "../i18n";
 import { workspace } from "../workspace/workspace.svelte";
+import Icon from "./icons/Icon.svelte";
 
 let { open = $bindable(false) }: { open: boolean } = $props();
 let dialog: HTMLDialogElement | undefined = $state();
@@ -28,23 +29,27 @@ async function join(e: SubmitEvent) {
 <dialog bind:this={dialog} onclose={() => (open = false)} aria-labelledby="share-title">
   <header>
     <h2 id="share-title">{t("share.title")}</h2>
-    <button type="button" class="flat" onclick={() => (open = false)}>{t("share.close")}</button>
+    <button type="button" class="close" aria-label={t("share.close")} onclick={() => (open = false)}>
+      <span class="disc"><Icon name="close" size={12} /></span>
+    </button>
   </header>
 
-  <label class="row">
-    <span>{t("share.name")}</span>
-    <input
-      value={workspace.myName}
-      maxlength="40"
-      autocomplete="nickname"
-      onchange={(e) => workspace.setName(e.currentTarget.value)}
-    />
+  <label class="boxed card name">
+    <span class="row">
+      <span>{t("share.name")}</span>
+      <input
+        value={workspace.myName}
+        maxlength="40"
+        autocomplete="nickname"
+        onchange={(e) => workspace.setName(e.currentTarget.value)}
+      />
+    </span>
   </label>
 
-  <section class="boxed">
+  <section class="boxed card">
     <div class="row">
       <span>{t("share.host.help")}</span>
-      <button type="button" onclick={() => workspace.host()}>{t("share.host")}</button>
+      <button type="button" class="btn" onclick={() => workspace.host()}>{t("share.host")}</button>
     </div>
     {#if workspace.invitation}
       <div class="row">
@@ -55,14 +60,14 @@ async function join(e: SubmitEvent) {
           value={workspace.invitation}
           onfocus={(e) => e.currentTarget.select()}
         />
-        <button type="button" class="flat" onclick={copy}>
+        <button type="button" class="btn flat" onclick={copy}>
           {copied ? t("share.copied") : t("share.copy")}
         </button>
       </div>
     {/if}
   </section>
 
-  <form class="boxed" onsubmit={join}>
+  <form class="boxed card" onsubmit={join}>
     <label class="row">
       <span>{t("share.join.help")}</span>
       <input
@@ -73,7 +78,7 @@ async function join(e: SubmitEvent) {
       />
     </label>
     <div class="row end">
-      <button type="submit" class="suggested" disabled={workspace.status === "connecting"}>
+      <button type="submit" class="sug" disabled={workspace.status === "connecting"}>
         {t("share.join")}
       </button>
     </div>
@@ -87,6 +92,7 @@ async function join(e: SubmitEvent) {
 
 <style>
   dialog {
+    box-sizing: border-box;
     width: min(480px, calc(100vw - 32px));
     padding: var(--space-4);
     border: 0;
@@ -101,20 +107,40 @@ async function join(e: SubmitEvent) {
     background: rgb(0 0 0 / 30%);
   }
   header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
+    position: relative;
+    display: grid;
+    place-items: center;
+    min-height: 34px;
     margin-bottom: var(--space-3);
   }
   h2 {
     margin: 0;
-    font: 700 18px/1.3 var(--font-ui);
+    font: 700 14.5px/1.3 var(--font-ui);
+  }
+  /* A 44 px target around a 26 px round button. */
+  .close {
+    position: absolute;
+    inset-inline-end: -10px;
+    display: grid;
+    place-items: center;
+    width: var(--target-min);
+    height: var(--target-min);
+    padding: 0;
+    border: 0;
+    background: transparent;
+    color: var(--fg);
+  }
+  .disc {
+    display: grid;
+    place-items: center;
+    width: 26px;
+    height: 26px;
+    border-radius: 50%;
+    background: var(--btn-bg);
   }
   .boxed {
+    display: block;
     margin: var(--space-3) 0;
-    border-radius: var(--radius);
-    background: var(--card-bg);
-    box-shadow: 0 0 0 1px var(--border);
   }
   .row {
     display: flex;
@@ -124,9 +150,6 @@ async function join(e: SubmitEvent) {
     min-height: var(--target-min);
     padding: var(--space-2) var(--space-3);
   }
-  .boxed > * + * {
-    border-top: 1px solid var(--border);
-  }
   .row > span {
     font-size: 14px;
   }
@@ -134,12 +157,13 @@ async function join(e: SubmitEvent) {
     justify-content: flex-end;
   }
   input {
+    box-sizing: border-box;
     flex: 0 1 220px;
-    min-height: 34px;
+    min-height: var(--target-min);
     padding: 0 var(--space-2);
     border: 0;
-    border-radius: var(--radius-small);
-    background: color-mix(in srgb, var(--fg) 8%, transparent);
+    border-radius: var(--radius-button);
+    background: var(--btn-bg);
     color: inherit;
     font: 14px var(--font-ui);
   }
@@ -149,25 +173,9 @@ async function join(e: SubmitEvent) {
     font: 13px var(--font-mono);
     text-overflow: ellipsis;
   }
-  button {
-    min-height: 34px;
-    padding: 0 var(--space-3);
-    border: 0;
-    border-radius: var(--radius-small);
-    background: color-mix(in srgb, var(--fg) 10%, transparent);
-    color: inherit;
-    font: 600 14px var(--font-ui);
-    cursor: pointer;
-  }
-  .flat {
-    background: transparent;
-  }
-  .suggested {
-    background: var(--accent);
-    color: var(--accent-fg);
-  }
-  button:disabled {
-    opacity: 0.5;
+  dialog :global(.btn),
+  dialog :global(.sug) {
+    min-height: var(--target-min);
   }
   .error {
     color: var(--warning);

@@ -5,8 +5,9 @@ import { syntaxOf } from "./support";
 import type { Block, Mark } from "./types";
 
 /**
- * The marks in force at the main selection. Nothing is reported inside code (block or
- * inline) or a formula: marks are not interpreted there. Marks never span lines.
+ * The marks in force at the main selection. Inside inline code only "code" is reported (so
+ * its button shows pressed); inside a code block or a formula nothing is: marks are not
+ * interpreted there. Marks never span lines.
  */
 export function activeMarks(state: EditorState, lang: Lang): Set<Mark> {
   const active = new Set<Mark>();
@@ -18,7 +19,11 @@ export function activeMarks(state: EditorState, lang: Lang): Set<Mark> {
   const from = Math.max(range.from, line.from) - line.from;
   const to = Math.min(range.to, line.to) - line.from;
   const scan = syntax.scan(line.text);
-  if (scan.verbatim.some(([a, b]) => a < from && to < b)) return active;
+  const inside = scan.verbatim.find(([a, b]) => a < from && to < b);
+  if (inside) {
+    if (line.text[inside[0]] === "`") active.add("code");
+    return active;
+  }
   for (const span of scan.spans) {
     if (span.open[1] <= from && to <= span.close[0]) active.add(span.mark);
   }
