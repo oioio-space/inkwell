@@ -1,9 +1,9 @@
 // @vitest-environment node
 import { next as A } from "@automerge/automerge";
-import { type DocHandle, type PeerId, Repo } from "@automerge/automerge-repo";
+import { type DocHandle, type DocumentId, type PeerId, Repo } from "@automerge/automerge-repo";
 import { encode } from "cbor-x";
 import { afterEach, describe, expect, it } from "vitest";
-import { encodeEnvelope, Kind } from "./envelope";
+import { decodeEnvelope, encodeEnvelope, Kind } from "./envelope";
 import { rng, SimNet } from "./simnet";
 import { type SocketLike, WailsNetworkAdapter } from "./WailsNetworkAdapter";
 
@@ -96,6 +96,87 @@ describe("WailsNetworkAdapter", () => {
       }),
     );
     expect(drops).toEqual(["unsupported version 9", "sender mismatch"]);
+  });
+
+  it("treats an arrive from an announced peer as that peer coming back", async () => {
+    // The other side lost the link and began again while this one never saw it
+    // go down (a stale connection): the repo must start a new sync with it.
+    let socket: SocketLike | undefined;
+    const fake: SocketLike = {
+      binaryType: "",
+      send: () => {},
+      close: () => {},
+      onopen: null,
+      onclose: null,
+      onmessage: null,
+    };
+    const adapter = new WailsNetworkAdapter(() => {
+      socket = fake;
+      return fake;
+    });
+    const events: string[] = [];
+    adapter.on("peer-candidate", ({ peerId }) => events.push(`up:${peerId}`));
+    adapter.on("peer-disconnected", ({ peerId }) => events.push(`down:${peerId}`));
+    adapter.connect("me" as PeerId);
+    const arrive = encodeEnvelope({
+      kind: Kind.Message,
+      peer: "alice",
+      payload: encode({ type: "arrive", senderId: "alice", peerMetadata: {} }),
+    });
+    const welcome = encodeEnvelope({
+      kind: Kind.Message,
+      peer: "alice",
+      payload: encode({ type: "welcome", senderId: "alice", peerMetadata: {} }),
+    });
+    const deliver = (b: Uint8Array) =>
+      socket?.onmessage?.(new MessageEvent("message", { data: b.buffer }));
+    deliver(arrive);
+    deliver(welcome); // the answer to our own arrive: not a restart
+    deliver(arrive);
+    expect(events).toEqual(["up:alice", "down:alice", "up:alice"]);
+  });
+
+  it("signs the held heads again when a peer starts over on a link Go never saw go down", async () => {
+    const sent: Uint8Array[] = [];
+    let socket: SocketLike | undefined;
+    const fake: SocketLike = {
+      binaryType: "",
+      send: (data) => sent.push(data as Uint8Array),
+      close: () => {},
+      onopen: null,
+      onclose: null,
+      onmessage: null,
+    };
+    const adapter = new WailsNetworkAdapter(() => {
+      socket = fake;
+      return fake;
+    });
+    adapter.connect("me" as PeerId);
+    const arrive = encodeEnvelope({
+      kind: Kind.Message,
+      peer: "alice",
+      payload: encode({ type: "arrive", senderId: "alice", peerMetadata: {} }),
+    });
+    const deliver = (b: Uint8Array) =>
+      socket?.onmessage?.(new MessageEvent("message", { data: b.buffer }));
+    const attests = () => sent.filter((f) => decodeEnvelope(f).kind === Kind.Attest).length;
+
+    deliver(arrive);
+    const doc = A.change(A.init<Doc>(), (d) => {
+      d.text = "x";
+    });
+    const [, data] = A.generateSyncMessage(doc, A.initSyncState());
+    adapter.send({
+      type: "sync",
+      senderId: "me" as PeerId,
+      targetId: "alice" as PeerId,
+      documentId: "doc" as DocumentId,
+      data: data as Uint8Array,
+    });
+    expect(attests()).toBe(1);
+
+    deliver(arrive); // alice started over: the attestation Go gossiped went nowhere
+    expect(attests()).toBe(2);
   });
 
   it("hands the host's project URL to a joining peer", async () => {

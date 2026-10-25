@@ -58,16 +58,12 @@ message de synchro est une suite d'octets opaques.
     couvertes ;
   - le graphe de couverture est gardé en mémoire (une entrée par modification couverte) ; la
     vérification d'un document complet coûte O(document) à la première synchro ;
-  - **transitoire (tâche 8)** : tant que le ticket ne porte pas les opérations du projet, un invité
-    adopte le `ProjectID` écrit dans le texte d'invitation (`Wiring.Adopt`) et, jusqu'à la
-    première opération reçue, tient l'hôte pour l'admin (`List.VerifyTrusting`). Un appareil qui
-    partage déjà son projet refuse d'en adopter un autre.
 
 ### Confirmation
 
 Go : vecteurs dorés des kinds (`internal/bridge/testdata/envelopes.json`, partagés avec TypeScript),
 `FuzzDecode`, `FuzzDecodeHeads`, `TestReaderCannotAttest`, `TestSealedStopsSigning`,
-`TestAdoptJoinsHostsProject`. TypeScript : scénarios nommés de simulation à 10 graines (lecteur
+`TestJoinByTicketText` (le joint vérifie la chaîne grâce aux opérations du Welcome). TypeScript : scénarios nommés de simulation à 10 graines (lecteur
 qui forge, fragment de document complet couvert ou non, écrivain révoqué hors ligne, nouveau pair
 après révocation) et e2e `collab.spec.ts`.
 

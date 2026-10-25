@@ -132,29 +132,6 @@ func DecodeAttestation(b []byte) (Attestation, error) {
 // saturée — créez un nouveau projet": a sealed list is frozen and may be
 // stale with respect to other replicas, and Verify does not report it.
 func (l *List) Verify(a Attestation) error {
-	if err := l.verifySigned(a); err != nil {
-		return err
-	}
-	if l.Role(a.Signer) < RoleWriter {
-		return ErrNotWriter
-	}
-	return nil
-}
-
-// VerifyTrusting is [List.Verify] for a replica that joins the project and
-// holds no op yet: until the first op arrives it takes host, the peer the user
-// chose to join, for the project's admin, and accepts its attestations on the
-// strength of their signature. Once the list holds an op, host has no special
-// standing and VerifyTrusting is Verify.
-func (l *List) VerifyTrusting(a Attestation, host ed25519.PublicKey) error {
-	if l.Len() > 0 || !bytes.Equal(a.Signer, host) {
-		return l.Verify(a)
-	}
-	return l.verifySigned(a)
-}
-
-// verifySigned checks that a belongs to this project and is correctly signed.
-func (l *List) verifySigned(a Attestation) error {
 	if a.Project != l.id {
 		return ErrWrongProject
 	}
@@ -163,6 +140,9 @@ func (l *List) verifySigned(a Attestation) error {
 	}
 	if !ed25519.Verify(a.Signer, signingMessage(domainAttest, a.body()), a.Sig[:]) {
 		return ErrBadSignature
+	}
+	if l.Role(a.Signer) < RoleWriter {
+		return ErrNotWriter
 	}
 	return nil
 }

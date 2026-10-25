@@ -100,3 +100,32 @@ func TestOpenTrustRejectsForeignOps(t *testing.T) {
 		t.Error("openTrust accepted an op of another project")
 	}
 }
+
+func TestReplaceSwitchesTheStoredProject(t *testing.T) {
+	proj, _ := newProjectFolder(t)
+	dev, admin := newDevice(t), newDevice(t)
+
+	_, st, err := openTrust(proj, dev)
+	if err != nil {
+		t.Fatal(err)
+	}
+	other := newProject(t, admin)
+	if _, err := other.Issue(admin, trust.OpAdd, dev.Public(), trust.RoleWriter, "me"); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.replace(other.Since(nil)); err != nil {
+		t.Fatal(err)
+	}
+	if err := st.close(); err != nil {
+		t.Fatal(err)
+	}
+
+	again, st2, err := openTrust(proj, dev)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = st2.close() })
+	if again.Project() != other.Project() || again.Len() != 2 {
+		t.Errorf("reopened project %v with %d ops, want the replacement %v with 2", again.Project(), again.Len(), other.Project())
+	}
+}

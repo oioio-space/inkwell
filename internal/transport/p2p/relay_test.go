@@ -140,3 +140,29 @@ func TestRunRelayRejectsBadInput(t *testing.T) {
 		})
 	}
 }
+
+// TestAddrsThroughALoopbackRelay: a node whose relay is not on a public address
+// (here the loopback interface) is still given an address through it once it
+// holds a slot, and another node dials that address alone.
+func TestAddrsThroughALoopbackRelay(t *testing.T) {
+	var quic []string
+	for _, a := range startRelay(t, p2p.RelayOptions{}) {
+		if strings.Contains(a, "/quic-v1/") {
+			quic = append(quic, a)
+		}
+	}
+	a := loopbackNode(t, 1, p2p.Options{Relays: quic, RelayOnly: true})
+	b := loopbackNode(t, 2, p2p.Options{Relays: quic, RelayOnly: true})
+	var circuit []string
+	deadline := time.Now().Add(wait)
+	for len(circuit) == 0 && time.Now().Before(deadline) {
+		time.Sleep(20 * time.Millisecond)
+		circuit = a.Addrs()
+	}
+	if len(circuit) == 0 || !strings.Contains(circuit[0], "/p2p-circuit/p2p/"+string(a.Local())) {
+		t.Fatalf("a.Addrs() = %v, want an address through the relay ending with a's identity", circuit)
+	}
+	if err := b.Connect(t.Context(), a.Local(), circuit); err != nil {
+		t.Fatalf("b.Connect(a, %v) = %v", circuit, err)
+	}
+}

@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/ed25519"
 	"errors"
-	"fmt"
 	"log/slog"
 	"maps"
 	"slices"
@@ -33,133 +32,49 @@ const (
 	repoBuffer = 64
 )
 
-// Admission decides which peers may connect: the members of the project, the
-// peers the user chose to join, and, while an invitation is open, anyone who
-// was never a member. It is safe for concurrent use.
+// Admission decides which peers may connect: the members of the project. A
+// stranger who must be let in to be admitted (a ticket, a request to join) is
+// the business of the node's open window (see p2p.Node.SetOpen), not of the
+// admission, so a stranger never counts as a peer of the project. It is safe
+// for concurrent use.
 type Admission struct {
-	list    *trust.List                   // under mu: [Wiring.Adopt] replaces it
-	invited map[transport.PeerID][]string // peers joined by invitation → their addresses
-	known   map[string]struct{}           // keys that ever were the subject of an op
-	mu      sync.Mutex
-	open    atomic.Bool
+	list atomic.Pointer[trust.List]
 }
 
 // NewAdmission returns the admission policy of the project whose member list
 // is list.
 func NewAdmission(list *trust.List) *Admission {
-	a := &Admission{list: list, invited: make(map[transport.PeerID][]string), known: make(map[string]struct{})}
-	a.learn(list.Since(nil))
+	a := &Admission{}
+	a.list.Store(list)
 	return a
 }
 
-// Admit reports whether peer id may connect. It is meant for p2p.Options.Admit.
-//
-// TODO(Task 8): the open invitation, which admits anyone who holds the host's
-// text, gives way to single-use tickets redeemed on the lobby protocol.
+// Admit reports whether peer id may connect: it is a member of the project. It
+// is meant for p2p.Options.Admit.
 func (a *Admission) Admit(id transport.PeerID) bool {
-	if a.allowed(id) {
-		return true
-	}
-	_, ok := a.invitee(id)
-	return ok
-}
-
-// current returns the member list of the project.
-func (a *Admission) current() *trust.List {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	return a.list
-}
-
-// swap makes list the member list of the project, forgetting what was known of
-// the previous one.
-func (a *Admission) swap(list *trust.List) {
-	a.mu.Lock()
-	a.list = list
-	clear(a.known)
-	a.mu.Unlock()
-	a.learn(list.Since(nil))
-}
-
-// host returns the key of id if this user joined it by invitation.
-func (a *Admission) host(id transport.PeerID) (ed25519.PublicKey, bool) {
-	a.mu.Lock()
-	_, ok := a.invited[id]
-	a.mu.Unlock()
-	if !ok {
-		return nil, false
-	}
 	key, err := p2p.KeyFromID(id)
-	return key, err == nil
+	return err == nil && a.list.Load().Role(key) > 0
 }
 
-// allowed reports whether id is a member, or a peer this user joined.
-func (a *Admission) allowed(id transport.PeerID) bool {
-	if key, err := p2p.KeyFromID(id); err == nil && a.current().Role(key) > 0 {
-		return true
-	}
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	_, ok := a.invited[id]
-	return ok
-}
-
-// invitee returns the key of id if the open invitation lets it in: it must not
-// be, nor have been, a member, so a revocation sticks.
-func (a *Admission) invitee(id transport.PeerID) (ed25519.PublicKey, bool) {
-	if !a.open.Load() {
-		return nil, false
-	}
-	key, err := p2p.KeyFromID(id)
-	if err != nil {
-		return nil, false
-	}
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	_, was := a.known[string(key)]
-	return key, !was
-}
-
-// OpenInvitation lets the holders of this machine's invitation connect.
-func (a *Admission) OpenInvitation() { a.open.Store(true) }
-
-// Invite admits peer, which this user joins at addrs.
-func (a *Admission) Invite(peer transport.PeerID, addrs []string) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	a.invited[peer] = slices.Clone(addrs)
-}
+// reset makes list the project whose members are admitted.
+func (a *Admission) reset(list *trust.List) { a.list.Store(list) }
 
 // wasMember reports whether key is, or ever was, the subject of an op of the
 // member list.
 func (a *Admission) wasMember(key ed25519.PublicKey) bool {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	_, ok := a.known[string(key)]
-	return ok
+	return slices.ContainsFunc(a.list.Load().Since(nil), func(op trust.Op) bool {
+		return op.Subject.Equal(key)
+	})
 }
 
-// learn records the keys that ops are about.
-func (a *Admission) learn(ops []trust.Op) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	for _, op := range ops {
-		a.known[string(op.Subject)] = struct{}{}
-	}
-}
-
-// dialTargets returns the peers worth keeping connected, with the addresses
-// they are known at: the other members and the peers this user joined.
+// dialTargets returns the peers worth keeping connected: the other members.
 func (a *Admission) dialTargets(self transport.PeerID) map[transport.PeerID][]string {
 	out := make(map[transport.PeerID][]string)
-	for _, m := range a.current().Members() {
+	for _, m := range a.list.Load().Members() {
 		if id := p2p.IDFromKey(m.Pub); id != "" && id != self {
 			out[id] = nil
 		}
 	}
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	maps.Copy(out, a.invited)
 	return out
 }
 
@@ -179,9 +94,6 @@ type WiringOptions struct {
 	Log *slog.Logger
 	// Save, if not nil, persists each new op of the member list.
 	Save func(trust.Op) error
-	// Reset, if not nil, forgets every saved op; [Wiring.Adopt] calls it when
-	// the device leaves its own project for another.
-	Reset func() error
 	// TickEvery is how often the member list is announced again; zero means 15 s.
 	TickEvery time.Duration
 
@@ -205,13 +117,12 @@ type WiringOptions struct {
 type Wiring struct {
 	raw      transport.Transport
 	signer   trust.Signer
-	lst      atomic.Pointer[trust.List] // replaced by Adopt
+	lst      atomic.Pointer[trust.List] // replaced by SwitchProject
 	adm      *Admission
 	sync     *trust.Sync
 	att      attestStore
 	log      *slog.Logger
 	save     func(trust.Op) error
-	reset    func() error
 	onEmit   func(transport.Event)
 	ctx      context.Context
 	cancel   context.CancelFunc
@@ -247,7 +158,6 @@ func Wire(ctx context.Context, t transport.Transport, s trust.Signer, list *trus
 		att:      attestStore{latest: make(map[attestKey]trust.Attestation)},
 		log:      o.Log,
 		save:     o.Save,
-		reset:    o.Reset,
 		onEmit:   o.onEmit,
 		ctx:      ctx,
 		cancel:   cancel,
@@ -308,12 +218,18 @@ func (w *Wiring) do(fn func()) error {
 // Issue creates and signs a member list op on behalf of this device (see
 // [trust.List.Issue]), and sends it to the members.
 func (w *Wiring) Issue(k trust.OpKind, subject ed25519.PublicKey, r trust.Role, name string) (trust.Op, error) {
+	return w.IssueWith(trust.Op{Kind: k, Subject: subject, Role: r, Name: name})
+}
+
+// IssueWith is like [Wiring.Issue] with the fields of the op taken from tmpl
+// (see [trust.List.IssueWith]); it can admit another device of a person.
+func (w *Wiring) IssueWith(tmpl trust.Op) (trust.Op, error) {
 	var (
 		op  trust.Op
 		err error
 	)
 	if derr := w.do(func() {
-		if op, err = w.list().Issue(w.signer, k, subject, r, name); err != nil {
+		if op, err = w.list().IssueWith(w.signer, tmpl); err != nil {
 			return
 		}
 		w.sendTrust(w.sync.Broadcast(op))
@@ -324,60 +240,29 @@ func (w *Wiring) Issue(k trust.OpKind, subject ed25519.PublicKey, r trust.Role, 
 	return op, err
 }
 
-// ErrNotAlone is returned by [Wiring.Adopt] when this device already shares its
-// project with someone.
-var ErrNotAlone = errors.New("app: this device already belongs to a shared project")
-
-// Adopt makes this device join the project id, which the inviting host belongs
-// to: the member list starts empty and fills from the host. It only works while
-// this device is alone in a project of its own, and it replaces that project's
-// member list (the ops saved so far are forgotten). Adopting the project it
-// already has does nothing.
-//
-// TODO(Task 8): the ticket, whose redemption returns the ops of the project,
-// replaces this.
-func (w *Wiring) Adopt(id trust.ProjectID) error {
-	var err error
-	if derr := w.do(func() { err = w.adopt(id) }); derr != nil {
-		return derr
-	}
-	return err
-}
-
-func (w *Wiring) adopt(id trust.ProjectID) error {
-	cur := w.list()
-	if cur.Project() == id {
-		return nil
-	}
-	if cur.Len() != 1 || len(cur.Members()) != 1 {
-		return ErrNotAlone
-	}
-	if w.reset != nil {
-		if err := w.reset(); err != nil {
-			return fmt.Errorf("leaving the previous project: %w", err)
+// SwitchProject makes list, a replica of another project, the project of the
+// wiring: the peers of the old project are announced down, and the connected
+// peers that are members of the new one are announced up. save persists the
+// new ops of list; the ops list holds now are taken as saved already.
+func (w *Wiring) SwitchProject(list *trust.List, save func(trust.Op) error) error {
+	return w.do(func() {
+		for _, p := range w.activePeers() {
+			w.deactivate(p)
 		}
-	}
-	next := trust.New(id)
-	w.lst.Store(next)
-	w.adm.swap(next)
-	w.sync = trust.NewSync(next)
-	w.att.reset()
-	clear(w.saved)
-	w.nOps = 0
-	for _, p := range w.activePeers() {
-		w.sendTrust(w.sync.OnPeerUp(p))
-	}
-	w.afterChange()
-	return nil
-}
-
-// verify checks an attestation against the member list. While the list is
-// still empty, after Adopt, the host the user joined stands for the admin.
-func (w *Wiring) verify(a trust.Attestation) error {
-	if key, ok := w.adm.host(p2p.IDFromKey(a.Signer)); ok {
-		return w.list().VerifyTrusting(a, key)
-	}
-	return w.list().Verify(a)
+		w.lst.Store(list)
+		w.save = save
+		w.sync = trust.NewSync(list)
+		w.att.reset()
+		w.saved = make(map[trust.Hash]struct{})
+		for _, op := range list.Since(nil) {
+			w.saved[op.Hash()] = struct{}{}
+		}
+		clear(w.pending)
+		w.sealedSent = false
+		w.nOps = 0
+		w.adm.reset(list)
+		w.afterChange()
+	})
 }
 
 // run is the goroutine of the wiring.
@@ -461,7 +346,6 @@ func (w *Wiring) onTrust(ev transport.Event) {
 	switch ev.Kind {
 	case transport.PeerUp:
 		w.up[ev.Peer] = struct{}{}
-		w.admitInvitee(ev.Peer)
 		w.reconcile()
 	case transport.PeerDown:
 		delete(w.up, ev.Peer)
@@ -482,34 +366,12 @@ func (w *Wiring) onTrust(ev transport.Event) {
 	}
 }
 
-// admitInvitee makes a member of a peer that the open invitation lets in, if
-// this device is an admin.
-//
-// TODO(Task 8): single-use tickets replace this automatic admission.
-func (w *Wiring) admitInvitee(p transport.PeerID) {
-	if w.adm.allowed(p) {
-		return
-	}
-	key, ok := w.adm.invitee(p)
-	if !ok {
-		return
-	}
-	op, err := w.list().Issue(w.signer, trust.OpAdd, key, trust.RoleWriter, "")
-	if err != nil {
-		w.log.Debug("admitting invitee", "peer", p, "err", err)
-		return
-	}
-	w.sendTrust(w.sync.Broadcast(op))
-	w.afterChange()
-}
-
 // afterChange saves the new ops of the member list, forgets what became
 // invalid and keeps the members connected.
 func (w *Wiring) afterChange() {
 	if n := w.list().Len(); n != w.nOps {
 		w.nOps = n
 		ops := w.list().Since(nil)
-		w.adm.learn(ops)
 		for _, op := range ops {
 			h := op.Hash()
 			if _, done := w.saved[h]; done || w.save == nil {
@@ -521,7 +383,7 @@ func (w *Wiring) afterChange() {
 			}
 			w.saved[h] = struct{}{}
 		}
-		for _, key := range w.att.prune(func(a trust.Attestation) bool { return w.verify(a) == nil }) {
+		for _, key := range w.att.prune(func(a trust.Attestation) bool { return w.list().Verify(a) == nil }) {
 			if id := p2p.IDFromKey(ed25519.PublicKey(key)); id != "" {
 				w.notify(bridge.Envelope{Kind: bridge.Revoked, Peer: id})
 			}
@@ -541,7 +403,7 @@ func (w *Wiring) afterChange() {
 // announces the new ones and drops the ones that are not allowed anymore.
 func (w *Wiring) reconcile() {
 	for _, p := range slices.Sorted(maps.Keys(w.up)) {
-		if !w.isActive(p) && w.adm.allowed(p) {
+		if !w.isActive(p) && w.adm.Admit(p) {
 			w.activate(p)
 		}
 	}
@@ -551,7 +413,7 @@ func (w *Wiring) reconcile() {
 	for _, p := range current {
 		if _, up := w.up[p]; !up {
 			w.deactivate(p)
-		} else if !w.adm.allowed(p) {
+		} else if !w.adm.Admit(p) {
 			w.deactivate(p)
 			w.drop(p)
 		}

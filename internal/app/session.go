@@ -12,8 +12,8 @@ import (
 	"github.com/oioio-space/inkwell/internal/trust"
 )
 
-// joinTimeout bounds how long Join waits for the remote handshake.
-const joinTimeout = 10 * time.Second
+// errNoProject is returned by the sessions that are not tied to a project.
+var errNoProject = errors.New("no project to invite to")
 
 // Network is what a Session needs from the transport: an identity, the
 // addresses where it can be reached and a way to reach another peer.
@@ -25,39 +25,16 @@ type Network interface {
 	Peers() []transport.PeerID
 }
 
-// Adopter is what joining an invitation needs to make this device a member of
-// the host's project ([Wiring.Adopt]).
-type Adopter interface {
-	Adopt(project trust.ProjectID) error
-}
-
 // Session is the Wails service behind "Partager": invite people or join an
 // invitation. Its exported methods are bound to the frontend.
 type Session struct {
-	net     Network
-	adm     *Admission
-	adopter Adopter
+	net Network
+	inv *invites
 }
 
-// SessionOption configures a [Session].
-type SessionOption func(*Session)
-
-// WithAdmission makes Host open the invitation of adm, and Join admit the
-// peer joined.
-func WithAdmission(adm *Admission) SessionOption { return func(s *Session) { s.adm = adm } }
-
-// WithAdopter makes Join move this device into the project named by the
-// invitation.
-func WithAdopter(a Adopter) SessionOption { return func(s *Session) { s.adopter = a } }
-
-// NewSession returns a session over n.
-func NewSession(n Network, opts ...SessionOption) *Session {
-	s := &Session{net: n}
-	for _, o := range opts {
-		o(s)
-	}
-	return s
-}
+// NewSession returns a session over n. It cannot invite or join; [Start]
+// makes the one that can.
+func NewSession(n Network) *Session { return &Session{net: n} }
 
 // LocalPeer returns this machine's peer identity.
 func (s *Session) LocalPeer() string { return string(s.net.Local()) }
@@ -72,57 +49,126 @@ func (s *Session) Peers() []string {
 	return out
 }
 
-// Host returns the invitation to give to the people who should join: an
-// opaque text that Join accepts. The node already listens (see [StartNode]),
-// so calling Host again returns the current addresses.
-//
-// The invitation names the project of the host, so that the guest joins it.
-// It stays open: whoever holds it can join and becomes a writer.
-// TODO(Task 8): single-use tickets replace this.
-func (s *Session) Host() (string, error) {
-	addrs := s.net.Addrs()
-	if len(addrs) == 0 {
-		return "", errors.New("host: this machine has no network address")
+// parseRole converts a role name of the frontend.
+func parseRole(s string) (trust.Role, error) {
+	switch s {
+	case "reader":
+		return trust.RoleReader, nil
+	case "writer":
+		return trust.RoleWriter, nil
+	case "admin":
+		return trust.RoleAdmin, nil
 	}
-	text := invitation(addrs)
-	if s.adm != nil {
-		s.adm.OpenInvitation()
-		text = withProject(text, s.adm.current().Project())
-	}
-	return text, nil
+	return 0, fmt.Errorf("unknown role %q", s)
 }
 
-// Join connects to the peer that made the invitation text and returns its
-// identity, so the caller can open that peer's project. Joining a peer that is
-// already connected succeeds and returns the same identity.
-//
-// The device moves into the project the invitation names, which only works
-// while it is alone in a project of its own ([Wiring.Adopt]); otherwise Join
-// fails and nothing changes.
-func (s *Session) Join(ctx context.Context, text string) (string, error) {
-	text, project, err := cutProject(text)
+// Invite issues an invitation for a new person with role ("reader",
+// "writer" or "admin"), valid for 15 minutes and for one person. It carries
+// the same ticket as a short code (when the code server answers) and as a
+// text to paste. Only an admin can invite.
+func (s *Session) Invite(role string) (Invitation, error) {
+	if s.inv == nil {
+		return Invitation{}, errNoProject
+	}
+	r, err := parseRole(role)
 	if err != nil {
-		return "", err
+		return Invitation{}, err
 	}
-	peer, addrs, err := parseInvitation(text)
+	return s.inv.invite(r, nil)
+}
+
+// InviteDevice is like [Session.Invite] for another device of the same person
+// as this one, which gets this device's role. Only an admin can invite.
+func (s *Session) InviteDevice() (Invitation, error) {
+	if s.inv == nil {
+		return Invitation{}, errNoProject
+	}
+	role, person, err := s.inv.myRoleAndPerson()
 	if err != nil {
-		return "", err
+		return Invitation{}, err
 	}
-	if peer == s.net.Local() {
-		return "", fmt.Errorf("%w: this is your own invitation", errBadInvitation)
+	return s.inv.invite(role, &person)
+}
+
+// Join uses an invitation, a code or a text, to join the project of the person
+// who made it, and returns that person's device identity, so that the caller
+// can open the project. The project then replaces the one this device had.
+func (s *Session) Join(ctx context.Context, codeOrText string) (string, error) {
+	if s.inv == nil {
+		return "", errNoProject
 	}
-	if project != nil && s.adopter != nil {
-		if err := s.adopter.Adopt(*project); err != nil {
-			return "", fmt.Errorf("join: %w", err)
-		}
+	peer, err := s.inv.join(ctx, codeOrText)
+	return string(peer), err
+}
+
+// SetVisible opens (or closes) the window "visible to join", for ten minutes:
+// the devices of the local network see this one and may ask to join; requests
+// wait in [Session.Requests]. Outside the window this device is not visible.
+func (s *Session) SetVisible(on bool) error {
+	if s.inv == nil {
+		return errNoProject
 	}
-	if s.adm != nil {
-		s.adm.Invite(peer, addrs)
+	s.inv.currentHost().SetVisible(on)
+	return nil
+}
+
+// Visible reports whether the window "visible to join" is open.
+func (s *Session) Visible() bool { return s.inv != nil && s.inv.currentHost().Visible() }
+
+// VisibleUntil returns when the window "visible to join" ends; the zero time
+// when it is closed.
+func (s *Session) VisibleUntil() time.Time {
+	if s.inv == nil || !s.inv.currentHost().Visible() {
+		return time.Time{}
 	}
-	ctx, cancel := context.WithTimeout(ctx, joinTimeout)
-	defer cancel()
-	if err := s.net.Connect(ctx, peer, addrs); err != nil {
-		return "", fmt.Errorf("join: %w", err)
+	return s.inv.currentHost().VisibleUntil()
+}
+
+// Nearby returns the visible devices of the local network, which offer a
+// project to join (see [Session.Ask]).
+func (s *Session) Nearby(ctx context.Context) []NearbyPerson {
+	if s.inv == nil {
+		return nil
 	}
-	return string(peer), nil
+	return s.inv.nearby(ctx)
+}
+
+// Ask asks the nearby device peer (see [Session.Nearby]) to let this device
+// join its project, under name, and waits for a person to answer. It returns
+// the identity of that device, like [Session.Join].
+func (s *Session) Ask(ctx context.Context, peer, name string) (string, error) {
+	if s.inv == nil {
+		return "", errNoProject
+	}
+	p, err := s.inv.ask(ctx, transport.PeerID(peer), name)
+	return string(p), err
+}
+
+// Requests returns the requests to join that wait for an answer.
+func (s *Session) Requests() []JoinRequest {
+	if s.inv == nil {
+		return nil
+	}
+	pending := s.inv.currentHost().Pending()
+	out := make([]JoinRequest, len(pending))
+	for i, p := range pending {
+		out[i] = JoinRequest{ID: p.ID, Peer: string(p.Peer), Name: p.Name, Fingerprint: p.Fingerprint}
+	}
+	return out
+}
+
+// Answer answers the request id: with a role ("reader", "writer" or "admin")
+// to let the person in with it, or with "refuse".
+func (s *Session) Answer(id int, decision string) error {
+	if s.inv == nil {
+		return errNoProject
+	}
+	if decision == "refuse" {
+		return s.inv.currentHost().Answer(id, false, 0)
+	}
+	r, err := parseRole(decision)
+	if err != nil {
+		return err
+	}
+	return s.inv.currentHost().Answer(id, true, r)
 }

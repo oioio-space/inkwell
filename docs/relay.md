@@ -128,6 +128,12 @@ under "Détails techniques").
   others through the relay only: it refuses every direct connection and does
   not hole punch. The relay still learns your address (it has to).
 
+Until the settings screen exists, the app reads its relays from the
+environment: `INKWELL_RELAYS` (addresses ending in `/p2p/<id>`, separated by
+commas or spaces) and `INKWELL_NET=relay-only` (the "hide my address" mode). An
+invalid combination, such as `relay-only` without a relay, stops the app at
+start instead of silently falling back to direct connections.
+
 ## Check that it works
 
 On another machine, with the relay's address `ADDR`:
@@ -138,6 +144,10 @@ On another machine, with the relay's address `ADDR`:
    "relais" at first, then a direct link a few seconds later if the routers
    allow it.
 
-To try everything on one machine, stage 2 adds `scripts/netsim` (network
-namespaces with NAT), which reproduces two home networks and a public relay
-without any second computer.
+To try everything on one machine, `mise run e2e:netsim` (`scripts/netsim`)
+builds two home networks behind NATs and a public relay out of network
+namespaces, with no root and no second computer, and checks hole punching
+(cone NAT), the relayed fallback (symmetric NAT), a 60 s outage and a change
+of network. It skips with the reason when the machine cannot (user namespaces
+or nftables unavailable). `mise run e2e` also kills and restarts a relay under
+two people typing, on the loopback interface.

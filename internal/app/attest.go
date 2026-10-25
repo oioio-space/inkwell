@@ -226,7 +226,7 @@ func (w *Wiring) onAttest(ev transport.Event) {
 // peers except from. A duplicate (same or older Seq) is not relayed, which
 // stops the gossip.
 func (w *Wiring) offerAttest(a trust.Attestation, from transport.PeerID) error {
-	if err := w.verify(a); err != nil {
+	if err := w.list().Verify(a); err != nil {
 		return err
 	}
 	if !w.att.add(a) {

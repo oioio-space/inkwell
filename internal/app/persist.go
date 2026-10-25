@@ -120,7 +120,22 @@ func (s *opStore) read(name string) (trust.Op, error) {
 	return op, nil
 }
 
-// clear removes every saved op: the device leaves its project for another.
+// replace makes ops, the member list of the project the device joins, the
+// saved ones in place of those of the project it leaves. ops come parents
+// first, as [trust.List.Since] returns them.
+func (s *opStore) replace(ops []trust.Op) error {
+	if err := s.clear(); err != nil {
+		return err
+	}
+	for _, op := range ops {
+		if err := s.save(op); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// clear removes every saved op.
 func (s *opStore) clear() error {
 	d, err := s.root.Open(".")
 	if err != nil {

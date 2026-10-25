@@ -306,6 +306,7 @@ func (n *Node) keepRelay(ai peer.AddrInfo, down <-chan struct{}) {
 		}
 
 		var wait time.Duration
+		n.setReserved(ai.ID, err == nil)
 		if err != nil {
 			healthy = false
 			wait = jitter(backoff)
@@ -325,11 +326,23 @@ func (n *Node) keepRelay(ai peer.AddrInfo, down <-chan struct{}) {
 			backoff = minBackoff
 		case <-down:
 			healthy = false
+			n.setReserved(ai.ID, false)
 		case <-n.ctx.Done():
 			t.Stop()
 			return
 		}
 		t.Stop()
+	}
+}
+
+// setReserved records whether relay holds a slot for this node.
+func (n *Node) setReserved(relay peer.ID, held bool) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	if held {
+		n.reserved[relay] = true
+	} else {
+		delete(n.reserved, relay)
 	}
 }
 

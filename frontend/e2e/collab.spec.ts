@@ -1,29 +1,5 @@
-import { expect, type Page, test } from "@playwright/test";
-
-const editor = (p: Page) => p.locator(".cm-content");
-
-/** The document text as typed, without remote-cursor name labels or the empty-page hint. */
-const docText = (p: Page) =>
-  editor(p).evaluate((el) => {
-    const copy = el.cloneNode(true) as HTMLElement;
-    for (const label of copy.querySelectorAll(".cm-remote-caret, .cm-placeholder")) label.remove();
-    // CodeMirror renders trailing spaces as NBSP and may insert zero-width breaks.
-    return copy.innerText.replace(/\u00a0/g, " ").replace(/[\u200b\u2060\n]/g, "");
-  });
-
-/** Starts from an empty document: the instances keep their project between tests and runs. */
-async function clear(p: Page) {
-  await editor(p).click();
-  await p.keyboard.press("ControlOrMeta+a");
-  await p.keyboard.press("Delete");
-  await expect.poll(() => docText(p)).toBe("");
-}
-
-async function rename(p: Page, name: string) {
-  const field = p.getByLabel(/Votre nom/);
-  await field.fill(name);
-  await field.blur();
-}
+import { expect, test } from "@playwright/test";
+import { clear, docText, editor, rename } from "./helpers";
 
 test("two people type in the same file, see each other, and undo only their own text", async ({
   browser,
@@ -48,7 +24,7 @@ test("two people type in the same file, see each other, and undo only their own 
   await alice.getByRole("button", { name: "Partager" }).click();
   await rename(alice, "Alice");
   await alice.getByRole("button", { name: "Inviter" }).click();
-  await expect(alice.getByLabel("Invitation", { exact: true })).toHaveValue(/\/p2p\//);
+  await expect(alice.getByLabel("Invitation", { exact: true })).toHaveValue(/^inkwell1:/);
   const invitation = await alice.getByLabel("Invitation", { exact: true }).inputValue();
   await alice.getByRole("button", { name: "Fermer" }).click();
 
