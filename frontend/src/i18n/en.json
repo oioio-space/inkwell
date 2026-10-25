@@ -20,5 +20,8 @@
   "people.you": "you",
   "people.label": "{count} person(s) in this document",
   "error.join": "Could not join. Check the invitation and that the other person clicked “Invite”.",
-  "error.host": "Could not invite: {reason}"
+  "error.host": "Could not invite: {reason}",
+  "external.message": "{name} was changed outside Inkwell",
+  "external.import": "Import",
+  "external.ignore": "Ignore"
 }

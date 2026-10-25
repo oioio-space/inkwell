@@ -1,0 +1,50 @@
+[
+  {
+    "name": "load of a two-part key",
+    "type": "request",
+    "id": 1, "op": "Load", "key": ["doc", "k"], "dataHex": "",
+    "wireHex": "00000001010203646f63016b"
+  },
+  {
+    "name": "save with binary data and a multi-byte id",
+    "type": "request",
+    "id": 258, "op": "Save", "key": ["a"], "dataHex": "00ff",
+    "wireHex": "000001020201016100ff"
+  },
+  {
+    "name": "load range of everything",
+    "type": "request",
+    "id": 7, "op": "LoadRange", "key": [], "dataHex": "",
+    "wireHex": "000000070400"
+  },
+  {
+    "name": "write projection",
+    "type": "request",
+    "id": 3, "op": "WriteProjection", "key": ["main.typ"], "dataHex": "3d2041",
+    "wireHex": "000000030601086d61696e2e7479703d2041"
+  },
+  {
+    "name": "ok response with payload",
+    "type": "response",
+    "id": 1, "status": "OK", "payloadHex": "6869",
+    "wireHex": "00000001006869"
+  },
+  {
+    "name": "not found response",
+    "type": "response",
+    "id": 9, "status": "NotFound", "payloadHex": "",
+    "wireHex": "0000000901"
+  },
+  {
+    "name": "external change push",
+    "type": "response",
+    "id": 0, "status": "External", "payloadHex": "6d61696e2e747970",
+    "wireHex": "00000000046d61696e2e747970"
+  },
+  {
+    "name": "range payload with one entry",
+    "type": "range",
+    "entries": [{"key": ["d", "k"], "dataHex": "76"}],
+    "wireHex": "00000001020164016b0000000176"
+  }
+]

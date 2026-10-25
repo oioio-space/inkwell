@@ -3,6 +3,7 @@ module github.com/oioio-space/inkwell
 go 1.27
 
 require (
+	github.com/fsnotify/fsnotify v1.10.1
 	github.com/google/go-cmp v0.7.0
 	github.com/libp2p/go-libp2p v0.51.0
 	github.com/marcopolo/simnet v0.0.7

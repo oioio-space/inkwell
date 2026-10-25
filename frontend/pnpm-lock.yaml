@@ -17,9 +17,6 @@ importers:
       '@automerge/automerge-repo':
         specifier: 2.5.6
         version: 2.5.6
-      '@automerge/automerge-repo-storage-indexeddb':
-        specifier: 2.5.6
-        version: 2.5.6
       '@codemirror/commands':
         specifier: 6.11.1
         version: 6.11.1
@@ -51,9 +48,6 @@ importers:
       '@tsconfig/svelte':
         specifier: 5.0.8
         version: 5.0.8
-      fake-indexeddb:
-        specifier: 6.2.6
-        version: 6.2.6
       happy-dom:
         specifier: 21.0.4
         version: 21.0.4
@@ -77,9 +71,6 @@ packages:
 
   '@automerge/automerge-codemirror@0.2.0':
     resolution: {integrity: sha512-GBNh4ESZHFNHZKLznf/2G2KdmBD+unEdk64+l621LsjIsJs6HBmQmO8RCY1v7vIq31kFyoVHNcBMGQOnLgy4GA==}
-
-  '@automerge/automerge-repo-storage-indexeddb@2.5.6':
-    resolution: {integrity: sha512-3349orECq2Mj3mo9q6f9ZeXwDkP3lAm6KaivP5+znUpv6Ze+IraE36DdL5GVdzIm+cXej0yWSOCQOalnTMPcQg==}
 
   '@automerge/automerge-repo@2.5.6':
     resolution: {integrity: sha512-ZXM6TOAwm192g3+zIxYvlB+Z3O00NP+psErOwvbSype8fFO+dhc8tB/jPwfZJqmn1ULUz5w7gssKEynwcYFRSA==}
@@ -494,10 +485,6 @@ packages:
     resolution: {integrity: sha512-KfYbmpRm0VbLjEvVa9yGwCi9GI34xvi7A/HXYWQO65CSD2u3MczUJSuwXKFIxlGsgBQizV9q5J9NHj4VG0n+pA==}
     engines: {node: '>=12.0.0'}
 
-  fake-indexeddb@6.2.6:
-    resolution: {integrity: sha512-ihhmr0KoET51jT8R4YhbUYuLLvr1qqO6INISygtN16i8loR8kAxtAUr4+EKHTSMjL+lggaAn4OC7DRqzrNgnuQ==}
-    engines: {node: '>=18'}
-
   fast-sha256@1.3.0:
     resolution: {integrity: sha512-n11RGP/lrWEFI/bWdygLxhI+pVeo1ZYIVwvvPkW7azl/rOy+F3HYRZ2K5zeE9mmkhQppyv9sQFx0JM9UabnpPQ==}
 
@@ -841,12 +828,6 @@ snapshots:
       '@codemirror/view': 6.43.14
       codemirror: 6.0.2
 
-  '@automerge/automerge-repo-storage-indexeddb@2.5.6':
-    dependencies:
-      '@automerge/automerge-repo': 2.5.6
-    transitivePeerDependencies:
-      - supports-color
-
   '@automerge/automerge-repo@2.5.6':
     dependencies:
       '@automerge/automerge': 3.5.0
@@ -1185,8 +1166,6 @@ snapshots:
   eventemitter3@5.0.4: {}
 
   expect-type@1.4.0: {}
-
-  fake-indexeddb@6.2.6: {}
 
   fast-sha256@1.3.0: {}
 
