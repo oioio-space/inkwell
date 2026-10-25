@@ -43,10 +43,8 @@ func (a Attestation) validate() error {
 	if len(a.Signer) != keyLen || a.Doc == "" || len(a.Doc) > MaxDoc || !utf8.ValidString(a.Doc) || len(a.Heads) > MaxHeads {
 		return fmt.Errorf("%w: attestation fields", ErrMalformed)
 	}
-	for i := 1; i < len(a.Heads); i++ {
-		if bytes.Compare(a.Heads[i-1][:], a.Heads[i][:]) >= 0 {
-			return fmt.Errorf("%w: heads not strictly ascending", ErrMalformed)
-		}
+	if !strictlyAscending(a.Heads) {
+		return fmt.Errorf("%w: heads not strictly ascending", ErrMalformed)
 	}
 	return nil
 }
@@ -73,7 +71,7 @@ func (a Attestation) body() []byte {
 // sorted and deduplicated.
 func NewAttestation(s Signer, project ProjectID, doc string, heads []Hash, seq uint64) (Attestation, error) {
 	hs := slices.Clone(heads)
-	slices.SortFunc(hs, func(a, b Hash) int { return bytes.Compare(a[:], b[:]) })
+	slices.SortFunc(hs, cmpHash)
 	hs = slices.Compact(hs)
 	a := Attestation{Project: project, Doc: doc, Heads: hs, Signer: bytes.Clone(s.Public()), Seq: seq}
 	if err := a.validate(); err != nil {
@@ -105,12 +103,7 @@ func DecodeAttestation(b []byte) (Attestation, error) {
 	if r.err == nil && n > MaxHeads {
 		return Attestation{}, fmt.Errorf("%w: too many heads", ErrMalformed)
 	}
-	if n > 0 && r.err == nil {
-		a.Heads = make([]Hash, n)
-		for i := range a.Heads {
-			a.Heads[i] = r.hash()
-		}
-	}
+	a.Heads = r.hashes(n)
 	copy(a.Sig[:], r.take(len(a.Sig)))
 	if r.err != nil {
 		return Attestation{}, r.err

@@ -3,6 +3,7 @@ package trust
 import (
 	"container/heap"
 	"maps"
+	"math/bits"
 	"slices"
 )
 
@@ -15,10 +16,33 @@ func (b bitset) has(i int) bool { return b[i/64]>>(i%64)&1 == 1 }
 
 func (b bitset) set(i int) { b[i/64] |= 1 << (i % 64) }
 
+func (b bitset) unset(i int) { b[i/64] &^= 1 << (i % 64) }
+
 func (b bitset) or(o bitset) {
 	for i := range o {
 		b[i] |= o[i]
 	}
+}
+
+func (b bitset) andNot(o bitset) {
+	for i := range o {
+		b[i] &^= o[i]
+	}
+}
+
+// positions returns the members of b, ascending.
+func (b bitset) positions() []int {
+	n := 0
+	for _, w := range b {
+		n += bits.OnesCount64(w)
+	}
+	out := make([]int, 0, n)
+	for i, w := range b {
+		for ; w != 0; w &= w - 1 {
+			out = append(out, i*64+bits.TrailingZeros64(w))
+		}
+	}
+	return out
 }
 
 // level orders the effects of a role op: Remove < reader < writer < admin.
@@ -204,13 +228,7 @@ func (v *view) selfCut(k int) cutInfo {
 	if c, ok := v.memo[k]; ok {
 		return c
 	}
-	past := make([]int, 0, k)
-	for j := range k {
-		if v.anc[k].has(j) {
-			past = append(past, j)
-		}
-	}
-	c := v.verdict(v.sweep(past), v.auth[k])
+	c := v.verdict(v.sweep(v.anc[k].positions()), v.auth[k])
 	v.memo[k] = c
 	return c
 }
@@ -376,13 +394,7 @@ func (v *view) otherAdminSeenBy(heads []Hash, y string) bool {
 		seen.or(v.anc[j])
 		seen.set(j)
 	}
-	var past []int
-	for j := range v.nodes {
-		if seen.has(j) {
-			past = append(past, j)
-		}
-	}
-	return v.verdict(v.sweep(past), y).honoured
+	return v.verdict(v.sweep(seen.positions()), y).honoured
 }
 
 // otherActiveAdmin reports whether an admin other than y, and not suspended,
