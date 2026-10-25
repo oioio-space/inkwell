@@ -28,9 +28,12 @@ import (
 )
 
 // MaxFrame is the largest payload a transport accepts or delivers, in bytes.
-// It matches the Wails stream frame limit so a payload that crossed the
-// network can always cross the bridge.
-const MaxFrame = 64 << 20
+//
+// Wails rejects stream frames above 64 MiB, and the bridge wraps each payload
+// in an envelope that adds a 3-byte header and a peer ID of at most
+// maxPeerIDLen (64) bytes. MaxFrame is 64 MiB minus those 67 bytes, so a
+// payload that crossed the network always fits one bridge frame.
+const MaxFrame = 64<<20 - 3 - maxPeerIDLen
 
 // maxPeerIDLen bounds a [PeerID] so it fits a one-byte length prefix.
 const maxPeerIDLen = 64

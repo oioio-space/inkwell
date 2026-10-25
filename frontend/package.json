@@ -1,0 +1,41 @@
+{
+  "name": "inkwell-frontend",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "license": "MPL-2.0",
+  "scripts": {
+    "dev": "vite",
+    "build:dev": "vite build --minify false --mode development && node scripts/keep-dist.mjs",
+    "build": "vite build --mode production && node scripts/keep-dist.mjs",
+    "check": "biome check . && svelte-check --tsconfig ./tsconfig.json && vitest run",
+    "fmt": "biome check --write .",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "dependencies": {
+    "@automerge/automerge": "3.5.0",
+    "@automerge/automerge-codemirror": "0.2.0",
+    "@automerge/automerge-repo": "2.5.6",
+    "@automerge/automerge-repo-storage-indexeddb": "2.5.6",
+    "@codemirror/commands": "6.11.1",
+    "@codemirror/state": "6.7.6",
+    "@codemirror/view": "6.43.14",
+    "@wailsio/runtime": "3.0.0-beta.34",
+    "cbor-x": "1.6.7",
+    "codemirror": "6.0.2"
+  },
+  "devDependencies": {
+    "@biomejs/biome": "2.5.15",
+    "@playwright/test": "1.64.1",
+    "@sveltejs/vite-plugin-svelte": "7.3.1",
+    "@tsconfig/svelte": "5.0.8",
+    "fake-indexeddb": "6.2.6",
+    "happy-dom": "21.0.4",
+    "svelte": "5.57.2",
+    "svelte-check": "4.7.7",
+    "typescript": "6.0.3",
+    "vite": "8.3.4",
+    "vitest": "5.0.5"
+  }
+}

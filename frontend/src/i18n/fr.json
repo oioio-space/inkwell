@@ -1,0 +1,23 @@
+{
+  "app.title": "Sans titre",
+  "status.alone": "Seul",
+  "status.connecting": "Connexion…",
+  "status.synced": "Synchronisé",
+  "status.offline": "Hors ligne — rien n'est perdu",
+  "share.button": "Partager",
+  "share.title": "Écrire à plusieurs",
+  "share.name": "Votre nom",
+  "share.host": "Inviter",
+  "share.host.help": "Donnez l'une de ces adresses à la personne qui vous rejoint.",
+  "share.copy": "Copier",
+  "share.copied": "Copié",
+  "share.join": "Rejoindre",
+  "share.join.placeholder": "192.168.1.20:7419",
+  "share.join.help": "Saisissez l'adresse donnée par la personne qui vous invite.",
+  "share.trust": "Réseau local de confiance uniquement : le chiffrement arrive dans la prochaine version.",
+  "share.close": "Fermer",
+  "people.you": "vous",
+  "people.label": "{count} personne(s) dans ce document",
+  "error.join": "Impossible de joindre {addr}. Vérifiez l'adresse et que l'autre personne a cliqué sur « Inviter ».",
+  "error.host": "Impossible d'inviter : {reason}"
+}

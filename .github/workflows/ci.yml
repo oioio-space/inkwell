@@ -13,7 +13,7 @@ env:
 jobs:
   ci:
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 25
     steps:
       - uses: actions/checkout@v6
         with:
@@ -31,8 +31,29 @@ jobs:
           key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
           restore-keys: |
             ${{ runner.os }}-go-
+      # Wails v3 builds on GTK4 / WebKitGTK 6.0 with cgo (ADR 0003, 0009) — needed before
+      # mise installs the wails3 CLI and before any Go build.
+      - name: Install GTK4 / WebKitGTK 6.0
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq libgtk-4-dev libwebkitgtk-6.0-dev
       - uses: jdx/mise-action@v3
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/pnpm/store
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('frontend/pnpm-lock.yaml') }}
+          restore-keys: ${{ runner.os }}-pnpm-
       - run: mise run ci
+      - name: Build the desktop app (Linux)
+        run: mise run app:build
+      - name: End-to-end (two instances, Playwright/WebKit)
+        run: mise run e2e
+      - name: Keep Playwright traces on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-traces
+          path: frontend/test-results/
+          retention-days: 7
       - name: Upload coverage to Codecov
         uses: codecov/codecov-action@v5
         with:

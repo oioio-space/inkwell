@@ -1,0 +1,13 @@
+# pnpm settings (ADR 0010 — supply chain): never install a version younger than 7 days,
+# exact versions only, and every dependency build script must be reviewed here.
+minimumReleaseAge: 10080
+# Must match the Wails Go module version pinned in go.mod / mise.toml exactly.
+minimumReleaseAgeExclude:
+  - "@wailsio/runtime"
+  # Security fix for GHSA-834v-8h66-3h79 (grype, high) — this exact version only.
+  - "happy-dom@21.0.4"
+saveExact: true
+strictDepBuilds: true
+allowBuilds:
+  # Optional native accelerator for cbor-x; the pure-JS path is enough.
+  cbor-extract: false

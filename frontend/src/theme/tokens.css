@@ -1,0 +1,87 @@
+/*
+ * Design tokens — three tiers (docs/ux-principles.md):
+ *   primitives (--p-*)  raw values, never used by components;
+ *   semantic   (--*)    meaning, light/dark via light-dark();
+ *   components          reference semantic tokens only.
+ * Palette follows libadwaita; people colours are Okabe-Ito (colour-blind safe).
+ */
+:root {
+  color-scheme: light dark;
+
+  /* Primitives — libadwaita palette */
+  --p-blue-3: #3584e4;
+  --p-blue-4: #1c71d8;
+  --p-light-1: #ffffff;
+  --p-light-2: #fafafb;
+  --p-light-3: #ebebed;
+  --p-dark-2: #36363a;
+  --p-dark-3: #2e2e32;
+  --p-dark-4: #222226;
+  --p-dark-5: #1d1d20;
+  --p-orange-3: #ff7800;
+  --p-green-4: #2ec27e;
+
+  /* Semantic */
+  --window-bg: light-dark(var(--p-light-2), var(--p-dark-4));
+  --view-bg: light-dark(var(--p-light-1), var(--p-dark-5));
+  --headerbar-bg: light-dark(var(--p-light-3), var(--p-dark-3));
+  --card-bg: light-dark(var(--p-light-1), var(--p-dark-2));
+  --fg: light-dark(rgb(0 0 6 / 80%), #ffffff);
+  --fg-dim: light-dark(rgb(0 0 6 / 55%), rgb(255 255 255 / 55%));
+  --border: light-dark(rgb(0 0 6 / 12%), rgb(255 255 255 / 12%));
+  --accent: light-dark(var(--p-blue-4), var(--p-blue-3));
+  --accent-fg: #ffffff;
+  --warning: var(--p-orange-3);
+  --success: var(--p-green-4);
+  --focus-ring: 2px solid color-mix(in srgb, var(--accent) 60%, transparent);
+
+  /* People — Okabe-Ito; the 8th (black) becomes a neutral grey to stay visible in dark mode */
+  --person-1: #e69f00;
+  --person-2: #56b4e9;
+  --person-3: #009e73;
+  --person-4: #f0e442;
+  --person-5: #0072b2;
+  --person-6: #d55e00;
+  --person-7: #cc79a7;
+  --person-8: #999999;
+
+  /* Type & shape */
+  --font-ui: "Adwaita Sans", "Inter", system-ui, sans-serif;
+  --font-mono: "Adwaita Mono", "JetBrains Mono", ui-monospace, monospace;
+  --radius: 12px;
+  --radius-small: 6px;
+  --target-min: 44px;
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 18px;
+  --duration: 200ms;
+}
+
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  :root {
+    --duration: 0ms;
+  }
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--window-bg);
+  color: var(--fg);
+  font: 15px / 1.5 var(--font-ui);
+  -webkit-font-smoothing: antialiased;
+}
+
+:focus-visible {
+  outline: var(--focus-ring);
+  outline-offset: 2px;
+}

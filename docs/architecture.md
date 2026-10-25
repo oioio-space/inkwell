@@ -48,7 +48,7 @@ colonne « Étape » dit quand.
 | Paquet | Responsabilité | Étape |
 |---|---|---|
 | `cmd/inkwell` | Point d'entrée : fenêtre Wails ; plus tard sous-commandes sans fenêtre (`export`, `join`) | 1 |
-| `internal/app` | Racine de composition : câble les services, cycle de vie des fenêtres et projets | 1 |
+| `internal/app` | Services Wails liés au frontend (`Session` : identité, inviter, rejoindre) ; la composition vit dans `cmd/inkwell` | 1 |
 | `internal/bridge` | Routeur Stream Wails `net` ↔ `Transport` (octets opaques, aucun port local — ADR 0009) | 1 |
 | `internal/transport` | Interface `Transport` (`Send`, `Recv`, `Peers`) ; `memnet` (simulation), `tcp` (étape 1), `p2p` (libp2p, étape 2) | 1 |
 | `internal/identity` | Clé Ed25519 par machine, empreinte prononçable (4 mots), groupes d'appareils | 2 |

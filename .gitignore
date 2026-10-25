@@ -21,3 +21,16 @@ mise.local.toml
 
 # IDE
 .idea/
+
+# Frontend & Wails (regenerable)
+frontend/node_modules/
+frontend/bindings/
+frontend/dist/*
+!frontend/dist/.gitkeep
+bin/
+.task/
+build/linux/appimage/build/
+build/windows/nsis/MicrosoftEdgeWebview2Setup.exe
+build/linux/inkwell.desktop
+frontend/test-results/
+frontend/playwright-report/

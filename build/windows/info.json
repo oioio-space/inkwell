@@ -1,0 +1,15 @@
+{
+	"fixed": {
+		"file_version": "0.1.0"
+	},
+	"info": {
+		"0409": {
+			"ProductVersion": "0.1.0",
+			"CompanyName": "oioio-space",
+			"FileDescription": "Éditeur collaboratif Typst",
+			"LegalCopyright": "© 2026, My Company",
+			"ProductName": "Inkwell",
+			"Comments": "This is a comment"
+		}
+	}
+}

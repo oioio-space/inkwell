@@ -1,0 +1,51 @@
+[
+  {
+    "name": "message with payload",
+    "kind": "Message",
+    "peer": "k7f3",
+    "payloadHex": "68656c6c6f",
+    "wireHex": "0103046b37663368656c6c6f"
+  },
+  {
+    "name": "message empty payload",
+    "kind": "Message",
+    "peer": "k7f3",
+    "payloadHex": "",
+    "wireHex": "0103046b376633"
+  },
+  {
+    "name": "message 64-byte peer",
+    "kind": "Message",
+    "peer": "pppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppppp",
+    "payloadHex": "00ff10",
+    "wireHex": "0103407070707070707070707070707070707070707070707070707070707070707070707070707070707070707070707070707070707070707070707070707070707000ff10"
+  },
+  {
+    "name": "message 1-byte peer binary payload",
+    "kind": "Message",
+    "peer": "a",
+    "payloadHex": "0001020304fffefd",
+    "wireHex": "010301610001020304fffefd"
+  },
+  {
+    "name": "peer up",
+    "kind": "PeerUp",
+    "peer": "k7f3",
+    "payloadHex": "",
+    "wireHex": "0101046b376633"
+  },
+  {
+    "name": "peer down",
+    "kind": "PeerDown",
+    "peer": "zz-9~",
+    "payloadHex": "",
+    "wireHex": "0102057a7a2d397e"
+  },
+  {
+    "name": "message printable punctuation peer",
+    "kind": "Message",
+    "peer": "!~}{",
+    "payloadHex": "ca",
+    "wireHex": "010304217e7d7bca"
+  }
+]

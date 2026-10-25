@@ -1,0 +1,23 @@
+{
+  "app.title": "Untitled",
+  "status.alone": "On your own",
+  "status.connecting": "Connecting…",
+  "status.synced": "In sync",
+  "status.offline": "Offline — nothing is lost",
+  "share.button": "Share",
+  "share.title": "Write together",
+  "share.name": "Your name",
+  "share.host": "Invite",
+  "share.host.help": "Give one of these addresses to the person joining you.",
+  "share.copy": "Copy",
+  "share.copied": "Copied",
+  "share.join": "Join",
+  "share.join.placeholder": "192.168.1.20:7419",
+  "share.join.help": "Enter the address the person inviting you gave you.",
+  "share.trust": "Trusted local network only: encryption arrives in the next version.",
+  "share.close": "Close",
+  "people.you": "you",
+  "people.label": "{count} person(s) in this document",
+  "error.join": "Could not reach {addr}. Check the address and that the other person clicked “Invite”.",
+  "error.host": "Could not invite: {reason}"
+}

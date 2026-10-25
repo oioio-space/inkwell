@@ -10,7 +10,9 @@ démontré (test, démo enregistrée ou tâche utilisateur chronométrée).
 
 - **Étape 0 — Fondations** : terminée. Squelette go-starter, gates verts, architecture, ADR,
   feuille de route, outillage IA.
-- **Prochaine : étape 1 — Noyau.** Plan à écrire (`docs/plans/`) avant tout code.
+- **Étape 1 — Noyau** : critère de sortie démontré par un test de bout en bout (deux
+  instances réelles, Playwright) — reste la démonstration sur deux machines du LAN.
+  Plan : [docs/plans/2026-10-25-etape-1-noyau.md](docs/plans/2026-10-25-etape-1-noyau.md).
 
 ## Étape 0 — Fondations ✅
 
@@ -24,14 +26,15 @@ démontré (test, démo enregistrée ou tâche utilisateur chronométrée).
 
 > Sortie : **deux personnes tapent dans le même fichier**, curseurs visibles.
 
-- [ ] Squelette Wails v3 épinglé (`build/`, `frontend/` Vite + TS, Taskfile) piloté par mise
-- [ ] `internal/transport` : interface `Transport` + `memnet` (fautes injectées, horloge virtuelle) + `tcp`
-- [ ] `internal/bridge` : octets opaques webview ↔ Go ; **mesure du débit** bindings vs WS local à jeton → ADR
-- [ ] Frontend : CodeMirror 6 + `automerge-repo` + `NetworkAdapter` vers le pont + `automerge-codemirror`
-- [ ] Curseurs et sélections distants (messages éphémères)
-- [ ] Undo local par opérations inverses (zone d'ombre n° 1) validé
-- [ ] Amorce `internal/sim` : 2 pairs, oracle de convergence, graine rejouable
-- [ ] CI : job frontend (lint, typecheck, tests) + build Wails Linux
+- [x] Squelette Wails v3 (beta.34, GTK4) + Svelte 5 / Vite / TS, Taskfile natif, piloté par mise
+- [x] `internal/transport` : interface `Transport` + `memnet` (fautes à graine, déterministe sous `synctest`) + `tcp` (bornes mémoire/connexions, audit sécurité appliqué)
+- [x] `internal/bridge` : Streams Wails, aucun port local (ADR 0009) ; enveloppe binaire à vecteurs dorés partagés Go/TS, fuzzée
+- [x] Frontend : CodeMirror 6 + `automerge-repo` + `WailsNetworkAdapter` + `automerge-codemirror`
+- [x] Curseurs et sélections distants nommés (présence automerge-repo, curseurs Automerge)
+- [x] Undo local par opérations inverses validé (test unitaire + e2e)
+- [x] Simulation de convergence (ADR 0011) : 3 dépôts réels, coupures de lien à graine, 20 graines
+- [x] CI : GTK4, `fe:check`, build Linux, e2e Playwright/WebKit (deux instances en mode serveur)
+- [ ] Démonstration sur deux machines du LAN (`mise run app:build`, Inviter / Rejoindre)
 
 ## Étape 2 — Réseau
 
@@ -89,3 +92,4 @@ démontré (test, démo enregistrée ou tâche utilisateur chronométrée).
 | Date | Changement |
 |------|------------|
 | 2026-10-25 | Bootstrap go-starter ; fondations : architecture, 8 ADR, glossaire, UX, roadmap, gopls MCP, Dependabot. |
+| 2026-10-25 | Étape 1 : transport (memnet, tcp), pont Streams, éditeur collaboratif Svelte/CodeMirror/Automerge, présence, undo local, e2e deux instances ; ADR 0009–0013. |

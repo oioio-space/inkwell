@@ -58,4 +58,19 @@ check the pinned version in the repo, then write. Wails v3 is beta and APIs move
   Wormhole code; say so after 10 s with no peer.
 - Fuzz every decoder of peer bytes (`go test -fuzz`); `pgregory.net/rapid` for properties.
 
+- **Biome on `.svelte`**: it cannot see template usage → `noUnusedImports/Variables` are
+  false positives and `--write` would DELETE used imports. They are off for `*.svelte`
+  (`frontend/biome.json`); never run Biome fixes on Svelte without svelte-check after.
+- **svelte-check needs `allowJs`** for components without `<script lang="ts">`.
+- **pnpm 12**: build scripts are reviewed in `pnpm-workspace.yaml` `allowBuilds`
+  (`pkg: false` to deny); `minimumReleaseAge` is 7 days — exempt only an exact version
+  for a security fix (`pkg@x.y.z`), with a comment.
+- **Wails bindings** are generated (`mise run fe:bindings`), gitignored, and imported as
+  `import { Session } from ".../internal/app/index"` (namespace export).
+- **Two instances on one machine**: WebKitGTK storage follows `XDG_DATA_HOME` →
+  `mise run app:duo`. **Headless e2e**: `-tags server` turns Streams into WebSockets;
+  `mise run e2e` drives two server instances with Playwright/WebKit.
+- **gosec** wants `// #nosec G404 -- reason`, not `//nolint`.
+- **cgo warnings** from Wails' X11 code are silenced via `CGO_CFLAGS` in `mise.toml`.
+
 When a trap is discovered, **add it here** in the same commit as the fix.

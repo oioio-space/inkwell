@@ -48,6 +48,8 @@ pnpm          = "12.15.0"
 GOFLAGS = "-mod=readonly"
 # Minimum test coverage enforced by `mise run cover:check` / CI (cmd/ excluded).
 COVER_MIN = "85"
+# Wails' own C code calls deprecated X11 helpers; silence that noise (not ours) in every cgo build.
+CGO_CFLAGS = "-O2 -Wno-deprecated-declarations"
 _.path = ["{{ env.HOME }}/go/bin"]
 
 # ── Hooks ─────────────────────────────────────────────────────────────────────
@@ -164,7 +166,7 @@ run = "./scripts/rtkx.sh grype sbom:sbom.cdx.json --fail-on high"
 
 [tasks.ci]
 description = "Everything CI must pass"
-depends = ["scan:secrets", "scan:code", "scan:sbom", "lint", "lint:sh", "lint:yaml", "lint:actions", "test:ci", "cover:check"]
+depends = ["scan:secrets", "scan:code", "scan:sbom", "lint", "lint:sh", "lint:yaml", "lint:actions", "test:ci", "cover:check", "fe:check"]
 
 [tasks.release]
 description = "Cross-platform release build + publish (goreleaser)"
@@ -208,6 +210,59 @@ run = "./scripts/install-hooks.sh"
 description = "One-shot bootstrap: install tools + wire git hooks (+ optional rtk)"
 depends = ["hooks:install", "tools:rtk"]
 run = "mise install"
+
+# ── Frontend & desktop app (ADR 0009, 0010) ───────────────────────────────────
+[tasks."fe:install"]
+description = "Install frontend dependencies from the lockfile (pnpm, age-gated)"
+dir = "frontend"
+run = "pnpm install --frozen-lockfile"
+
+[tasks."fe:bindings"]
+description = "Generate the TypeScript bindings for the Go services"
+run = "wails3 generate bindings -ts -i ./cmd/inkwell"
+
+[tasks."fe:check"]
+description = "Frontend gate: Biome, svelte-check, Vitest"
+depends = ["fe:install", "fe:bindings"]
+dir = "frontend"
+run = "pnpm run check"
+
+[tasks."fe:fmt"]
+description = "Format and fix the frontend with Biome"
+dir = "frontend"
+run = "pnpm run fmt"
+
+[tasks."app:dev"]
+description = "Run the desktop app with hot reload (wails3 dev)"
+run = "wails3 task dev"
+
+[tasks."app:build"]
+description = "Build the desktop app for this OS into bin/"
+depends = ["fe:install"]
+run = "wails3 task build"
+
+[tasks."e2e"]
+description = "End-to-end: two real instances (Wails server mode) driven by Playwright/WebKit"
+depends = ["fe:install"]
+run = """
+(cd frontend && pnpm run build)
+go build -tags server -o bin/inkwell-server ./cmd/inkwell
+cd frontend
+browser="${INKWELL_E2E_BROWSER:-$([ -n "${CI:-}" ] && echo webkit || echo chromium)}"
+pnpm exec playwright install ${CI:+--with-deps} "$browser" >/dev/null
+INKWELL_E2E_BROWSER="$browser" pnpm exec playwright test
+"""
+
+[tasks."app:duo"]
+description = "Run two isolated instances to try collaboration on one machine (Invite in one, Join 127.0.0.1:7419 in the other)"
+depends = ["app:build"]
+run = """
+for who in alice bob; do
+  mkdir -p .task/duo/$who
+  XDG_DATA_HOME=$PWD/.task/duo/$who/data XDG_CACHE_HOME=$PWD/.task/duo/$who/cache ./bin/inkwell &
+done
+wait
+"""
 
 # ── Hosted open-weight models (mechanical text only — see CLAUDE.md routing) ──
 [tasks."llm:commit-msg"]
