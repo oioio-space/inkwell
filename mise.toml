@@ -69,6 +69,11 @@ run = "./scripts/rtkx.sh go vet ./..."
 description = "Build all packages"
 run = "./scripts/rtkx.sh go build ./..."
 
+[tasks."relay:run"]
+description = "Run a circuit relay (cmd/inkwell-relay, pure Go), key in bin/relay.key (ignored by VCS); extra flags: mise run relay:run -- --print-addr"
+env = { CGO_ENABLED = "0" }
+run = "mkdir -p bin && go run ./cmd/inkwell-relay --key bin/relay.key"
+
 [tasks.align]
 description = "Reorder struct fields for optimal memory alignment (betteralign -apply)"
 run = "betteralign -apply ./... && gofumpt -w ."

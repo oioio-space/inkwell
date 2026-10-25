@@ -134,6 +134,9 @@ func TestNewRejectsBadInput(t *testing.T) {
 		{"canceled context", canceled, key(1), p2p.Options{}},
 		{"negative port", t.Context(), key(1), p2p.Options{Port: -1}},
 		{"port too large", t.Context(), key(1), p2p.Options{Port: 65536}},
+		{"relay only without a relay", t.Context(), key(1), p2p.Options{RelayOnly: true}},
+		{"relay that is not an address", t.Context(), key(1), p2p.Options{Relays: []string{"relay"}}},
+		{"relay without a transport address", t.Context(), key(1), p2p.Options{Relays: []string{"/p2p/" + string(idOf(key(9)))}}},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
