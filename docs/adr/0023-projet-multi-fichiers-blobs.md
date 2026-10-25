@@ -132,6 +132,30 @@ vecteurs dorés partagés.
   - les noms de périphériques Windows, avec ou sans extension et en ignorant la casse : CON, PRN,
     AUX, NUL, CLOCK$, CONIN$, CONOUT$, COM0 à COM9, LPT0 à LPT9, COM¹²³, LPT¹²³.
 - **Réservés à la racine :** `.inkwell` et `.typstdeps`.
+- **Alias refusés à tout niveau** (audit de sécurité) :
+  - `.git`, en toute casse : git le traite comme sien à tout niveau ;
+  - les noms qui commencent comme un nom court 8.3, `^[^.]{1,6}~[0-9]+` (`INKWEL~1`) ;
+  - les points de code ignorables par défaut d'Unicode (`.inkwe‌ll`, l'astuce de HFS+).
+- **Propriété :** une arborescence est la déclaration d'un pair. Go ne prend jamais un chemin qui
+  existe déjà sur le disque sauf si Inkwell y a écrit le fichier ; il ne déplace que des fichiers
+  réguliers qu'Inkwell a écrits et que personne n'a modifiés, jamais un dossier, et il refuse tout
+  chemin qui traverse un lien symbolique.
+- **Fichiers possédés :** un enregistrement par fichier (chemin, hash du dernier contenu écrit,
+  référence dans l'arborescence, « apporté par l'utilisateur ») dans un second magasin KV,
+  `.inkwell/owned/`, et non dans `project.json` : écrire un fichier coûte un petit enregistrement
+  atomique (0,13 ms à 10 000 fichiers, contre 76 ms pour la réécriture de 28 Mo). `project.json`
+  reste petit ; un ancien `project.json` qui contient `files` et `tree` est migré à l'ouverture.
+- **Chemin réservé par un pair :** un chemin que seule l'arborescence d'un pair possède, sans contenu
+  écrit par Inkwell, ne remplace jamais un fichier que l'utilisateur crée ensuite : c'est une
+  modification externe, que l'utilisateur tranche. Un fichier apporté par l'utilisateur
+  (`PutBlob`) n'est remplacé que par la version que l'arborescence liste pour ce contenu même.
+- **Alias 8.3 :** seuls les noms courts des noms réservés sont refusés
+  (`^(inkwel|typstd|git)~[0-9]+$`, toute casse) ; `file~1.txt` est un nom ordinaire.
+- **Déplacement :** `renameat2(RENAME_NOREPLACE)` sous Linux, `renameatx_np(RENAME_EXCL)` sous macOS,
+  `MoveFileEx` sans remplacement sous Windows ; lien puis suppression en repli, avec retour
+  arrière si la suppression échoue.
+- **Quota :** les téléchargements partiels gardent leur part du quota et de l'espace libre ; seul
+  ce qui reste à écrire est réservé sur le disque.
 - À l'admission, toute modification de l'index qui écrit un `name`, `hash`, `url` ou `type` invalide
   est **refusée par tous**. C'est une fonction pure de la valeur, dans la même chaîne d'admission que
   l'ADR 0022.
@@ -174,8 +198,11 @@ vecteurs dorés partagés.
   2. Une carte des groupes vérifiés est tenue à jour, avec un fsync périodique.
   3. À la fin : vérification BLAKE3 complète, `Rename` dans le magasin, puis projection.
 - **Tranche fausse :** elle est jetée et un autre pair est essayé. Après 3 fautes : `drop`, puis
-  journal de sécurité (PRJ-03). La racine Bao authentifie la longueur, donc une taille d'index
-  mensongère est détectée dès la première tranche.
+  journal de sécurité (PRJ-03). La racine Bao n'authentifie la longueur qu'avec la tranche qui
+  atteint la fin du fichier : un pair peut mentir sur la longueur dans l'en-tête d'une tranche
+  intérieure sans être détecté. Un désaccord avec la taille de l'index se règle donc en demandant
+  le dernier groupe du fichier tel que le pair le décrit : s'il se vérifie, l'index mentait
+  (`ErrSizeMismatch`, pas une faute du pair) ; sinon le pair est fautif.
 - **Quotas :**
   - 100 Mo par fichier (amende les 25 Mo de l'ADR 0006) ;
   - 2 Go par projet, au-delà desquels l'arrivant confirme avant de télécharger (PRJ-11) ;

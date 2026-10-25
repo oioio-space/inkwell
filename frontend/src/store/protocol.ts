@@ -10,7 +10,14 @@
  *
  * ReadProjection and WriteProjection always carry UTF-8 text with LF line ends; Go converts from
  * and to the file's own encoding, BOM and line ending. ListFiles (no key) and FileInfo (the file
- * name) return the versioned payloads defined below.
+ * path) return the versioned payloads defined below.
+ *
+ * The operations that name a project file (WriteProjection, ReadProjection, Acknowledge, FileInfo,
+ * PutBlob) take its path as the key, one component per folder, up to 32. Go refuses any path that
+ * is not portable (ADR 0023); the webview's own validator checks the names before it sends them.
+ *
+ * Tree and Referenced carry the payloads of ./tree.ts: the project tree the webview materialized
+ * from the index, and the hashes the index refers to. PutBlob answers with a blob info payload.
  */
 
 export const Op = {
@@ -24,13 +31,17 @@ export const Op = {
   Acknowledge: 8,
   ListFiles: 9,
   FileInfo: 10,
+  Tree: 11,
+  Referenced: 12,
+  PutBlob: 13,
 } as const;
 export type Op = (typeof Op)[keyof typeof Op];
 
 /**
  * Binary and InvalidText answer ReadProjection and FileInfo for a file that is not text: the
  * second carries the 1-based line of the first invalid byte as a u32. EditedOutside answers
- * WriteProjection for a file changed outside Inkwell and not yet acknowledged.
+ * WriteProjection for a file changed outside Inkwell and not yet acknowledged. TooLarge answers
+ * PutBlob for a file over the size limit of a blob: its payload is the limit in bytes, as a u64.
  */
 export const Status = {
   OK: 0,
@@ -41,6 +52,7 @@ export const Status = {
   Binary: 5,
   InvalidText: 6,
   EditedOutside: 7,
+  TooLarge: 8,
 } as const;
 export type Status = (typeof Status)[keyof typeof Status];
 
@@ -68,6 +80,16 @@ export class ProtocolError extends Error {
 
 const MAX_DEPTH = 4;
 const MAX_COMPONENT = 128;
+/** The operations that name a project file by a path in their key. */
+const PATH_OPS: ReadonlySet<number> = new Set([
+  Op.WriteProjection,
+  Op.ReadProjection,
+  Op.Acknowledge,
+  Op.FileInfo,
+  Op.PutBlob,
+]);
+const MAX_PATH_DEPTH = 32;
+const MAX_PATH_COMPONENT = 255;
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder("utf-8", { fatal: true });
 
@@ -76,6 +98,21 @@ export function validComponent(c: string): boolean {
   return (
     c.length > 0 && c.length <= MAX_COMPONENT && /^[A-Za-z0-9._-]+$/.test(c) && !/^\.\.?$/.test(c)
   );
+}
+
+/** A path key: 1 to 32 components of 1 to 255 UTF-8 bytes, none with a slash. */
+function appendPathKey(out: number[], key: string[]): void {
+  if (key.length === 0 || key.length > MAX_PATH_DEPTH) {
+    throw new ProtocolError(`path of ${key.length} components`);
+  }
+  out.push(key.length);
+  for (const c of key) {
+    const bytes = textEncoder.encode(c);
+    if (bytes.length === 0 || bytes.length > MAX_PATH_COMPONENT || c.includes("/")) {
+      throw new ProtocolError(`invalid path component of ${bytes.length} bytes`);
+    }
+    out.push(bytes.length, ...bytes);
+  }
 }
 
 function appendKey(out: number[], key: string[]): void {
@@ -99,7 +136,11 @@ export function encodeRequest(r: Request): Uint8Array {
     throw new ProtocolError("request id out of range");
   }
   const head: number[] = [...u32(r.id), r.op];
-  appendKey(head, r.key);
+  if (PATH_OPS.has(r.op)) appendPathKey(head, r.key);
+  else if (r.op === Op.Tree || r.op === Op.Referenced) {
+    if (r.key.length !== 0) throw new ProtocolError("Tree and Referenced take no key");
+    head.push(0);
+  } else appendKey(head, r.key);
   const out = new Uint8Array(head.length + r.data.length);
   out.set(head);
   out.set(r.data, head.length);
@@ -132,7 +173,7 @@ export function encodeResponse(r: Response): Uint8Array {
 export function decodeResponse(b: Uint8Array): Response {
   if (b.length < 5) throw new ProtocolError("short response");
   const status = b[4] as number;
-  if (status > Status.EditedOutside) throw new ProtocolError(`unknown status ${status}`);
+  if (status > Status.TooLarge) throw new ProtocolError(`unknown status ${status}`);
   return { id: readU32(b, 0), status: status as Status, payload: b.subarray(5) };
 }
 

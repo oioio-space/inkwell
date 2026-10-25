@@ -21,7 +21,9 @@ toujours. Typst télécharge ses paquets à la compilation, ce qui casse le hors
 
 Le document ne contient que des références `{path, hash: "blake3:…", size}`. Magasin par
 projet adressé par contenu, transfert à la demande sur un flux libp2p dédié, quota par
-fichier (25 Mo par défaut) et par projet ; bitswap seulement si l'essai le justifie.
+fichier (100 Mo ; les 25 Mo d'origine sont relevés par l'[ADR 0023](0023-projet-multi-fichiers-blobs.md))
+et par projet (2 Go, au-delà desquels l'arrivant confirme) ; bitswap seulement si l'essai le
+justifie.
 Les paquets `@preview/…` sont téléchargés à l'import dans `<projet>/.typstdeps/` et passés
 via `--package-cache-path` ; ce dossier se synchronise comme des blobs.
 
