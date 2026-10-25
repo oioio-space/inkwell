@@ -23,3 +23,6 @@ connaître la raison — pas pour le reste. Modèle : [`template.md`](template.m
 | [0017](0017-member-list-seniority.md) | Liste de membres : DAG signé, ancienneté stricte (amende 0005) | acceptée |
 | [0018](0018-signed-heads-write-control.md) | Contrôle d'écriture par têtes signées | acceptée |
 | [0020](0020-storage-in-go-store-stream.md) | Stockage en Go par un Stream `store` : KV atomique et vérifié, dossier projet | acceptée |
+| [0021](0021-suspension.md) | Suspension : déconnecter et laisser revenir (op signées) | proposée |
+| [0022](0022-zones-verrouillees.md) | Zones verrouillées : verrous dans le document, admission déterministe | proposée |
+| [0023](0023-projet-multi-fichiers-blobs.md) | Projet multi-fichiers : index à nœuds stables, blobs BLAKE3/Bao | proposée |
