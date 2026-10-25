@@ -58,7 +58,7 @@ colonne « Étape » dit quand.
 | `internal/project` | Projet = dossier `<Documents>/Inkwell/<Titre>/` : `project.json`, projection `main.typ`, règle de propriété fsnotify, bac à sable `os.Root`, corbeille | 2 |
 | `internal/sidecar` | Binaires embarqués vérifiés SHA-256, supervision, backoff, arrêt avec le parent | 3 |
 | `internal/typst` | Vente des paquets `@preview` dans `.typstdeps/`, polices, export PDF | 3 |
-| `internal/blob` | Magasin adressé par BLAKE3, quotas, échange sur flux libp2p dédié | 4 |
+| `internal/blob` | Magasin adressé par BLAKE3 avec arbre Bao externe (groupes de 16 Kio), quotas, reprise, ménage à 30 jours ; échange en tirage sur le flux `bulk` (ADR 0023) | 4 (avancé en T11/B4) |
 | `internal/milestone` | Jalons go-git (projection lisible, jamais source de vérité) | 4 |
 | `internal/transport/frame` | Trames préfixées par leur longueur, bornées (octets venus d’un pair : fuzzé) | 2 |
 | `internal/transport/p2p` | Transport libp2p : QUIC + TCP/Noise, identité Ed25519, un flux sortant par pair ; `Node.Bulk()`, second transport sur `/inkwell/bulk/1.0.0` pour les blobs (ADR 0023) | 2 |
