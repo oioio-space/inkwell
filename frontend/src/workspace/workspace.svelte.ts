@@ -13,8 +13,10 @@ import {
 } from "../../bindings/github.com/oioio-space/inkwell/internal/app/index";
 import { t } from "../i18n";
 import { type SocketLike, WailsNetworkAdapter } from "../net/WailsNetworkAdapter";
+import { type FileInfo, FileKind, type ProjectFile } from "../store/files";
 import { GoStorageAdapter } from "../store/GoStorageAdapter";
 import { type Projection, startProjection } from "../store/projection";
+import { safeGet, safeSet } from "../store/safeStorage";
 
 export type Doc = { text: string };
 export type Status = "alone" | "connecting" | "synced";
@@ -22,22 +24,6 @@ export type Status = "alone" | "connecting" | "synced";
 /** The projection of the document, in the project folder. */
 const MAIN_FILE = "main.typ";
 const NAME_KEY = "inkwell.name";
-
-function safeGet(key: string): string | null {
-  try {
-    return localStorage.getItem(key);
-  } catch {
-    return null;
-  }
-}
-
-function safeSet(key: string, value: string): void {
-  try {
-    localStorage.setItem(key, value);
-  } catch {
-    // Private mode or blocked storage: the session still works, it just won't remember.
-  }
-}
 
 /** The open project and who is in it — the single source of UI state. */
 class Workspace {
@@ -55,6 +41,12 @@ class Workspace {
   /** True once the member list is full: this device signs no more, so edits stay local. */
   sealed = $state(false);
   handle = $state.raw<DocHandle<Doc> | undefined>();
+  /** The file shown in the editor (today the project's main document). */
+  current = $state(MAIN_FILE);
+  /** The project's files, for the sidebar and the Insert menu. */
+  files = $state.raw<ProjectFile[]>([]);
+  /** How the current file is stored on disk; undefined until Go has written it. */
+  fileInfo = $state.raw<FileInfo | undefined>();
 
   #repo: Repo | undefined;
   #adapter: WailsNetworkAdapter | undefined;
@@ -119,6 +111,43 @@ class Workspace {
         onError: (err) =>
           console.warn("projection:", err instanceof Error ? err.message : "failed"),
       });
+    }
+  }
+
+  /** The key a project's remembered layout is filed under. */
+  get project(): string {
+    return this.handle?.url ?? "";
+  }
+
+  /** Reloads the file list; the main document always shows, even before its first write. */
+  async refreshFiles(): Promise<void> {
+    if (!this.#storage) return;
+    try {
+      const files = await this.#storage.listFiles();
+      this.files = files.some((f) => f.path === MAIN_FILE)
+        ? files
+        : [{ path: MAIN_FILE, kind: FileKind.typst, size: 0, main: true }, ...files];
+    } catch (err) {
+      console.warn("files:", err instanceof Error ? err.message : "failed");
+    }
+  }
+
+  /** Reloads how the current file is stored (encoding, line ending). */
+  async refreshInfo(): Promise<void> {
+    if (!this.#storage) return;
+    try {
+      this.fileInfo = await this.#storage.fileInfo(this.current);
+    } catch {
+      this.fileInfo = undefined;
+    }
+  }
+
+  /** The text of a project file as UTF-8 with LF; undefined if absent or not text. */
+  async readFile(path: string): Promise<string | undefined> {
+    try {
+      return await this.#storage?.readProjection(path);
+    } catch {
+      return undefined;
     }
   }
 
