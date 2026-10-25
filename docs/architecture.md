@@ -49,13 +49,13 @@ colonne « Étape » dit quand.
 |---|---|---|
 | `cmd/inkwell` | Point d'entrée : fenêtre Wails ; plus tard sous-commandes sans fenêtre (`export`, `join`) | 1 |
 | `internal/app` | Services Wails liés au frontend (`Session` : inviter, rejoindre une invitation ; démarrage du nœud réseau) ; la composition vit dans `cmd/inkwell` | 1 |
-| `internal/bridge` | Routeur Stream Wails `net` ↔ `Transport` (octets opaques, aucun port local — ADR 0009) | 1 |
+| `internal/bridge` | Routeur Stream Wails `net` ↔ `Transport` (octets opaques, aucun port local — ADR 0009) ; Stream `store` ↔ stockage et projection (ADR 0020) | 1 |
 | `internal/transport` | Interface `Transport` (`Send`, `Recv`, `Peers`) ; `memnet` (simulation), `p2p` (libp2p, étape 2) | 1 |
 | `internal/identity` | Clé Ed25519 par machine, empreinte prononçable (4 mots), groupes d'appareils | 2 |
 | `internal/invite` | Codes Wormhole (PAKE), acceptation d'un pair LAN | 2 |
 | `internal/trust` | Liste de membres signée (CRDT à ordre total Lamport → clé), rôles, révocation, vérification des lots signés | 2 |
-| `internal/store` | État Automerge sur disque (écritures atomiques `renameio`), sauvegardes, contrôle d'intégrité | 2 |
-| `internal/project` | Projet = dossier : index, règle de propriété fsnotify, bac à sable des E/S, corbeille | 2 |
+| `internal/store` | État Automerge sur disque : KV atomique et vérifié sur `os.Root` (`WriteAtomic`, en-tête `IKV1`+SHA-256), quarantaine, sauvegardes par liens durs (ADR 0020) | 2 |
+| `internal/project` | Projet = dossier `<Documents>/Inkwell/<Titre>/` : `project.json`, projection `main.typ`, règle de propriété fsnotify, bac à sable `os.Root`, corbeille | 2 |
 | `internal/sidecar` | Binaires embarqués vérifiés SHA-256, supervision, backoff, arrêt avec le parent | 3 |
 | `internal/typst` | Vente des paquets `@preview` dans `.typstdeps/`, polices, export PDF | 3 |
 | `internal/blob` | Magasin adressé par BLAKE3, quotas, échange sur flux libp2p dédié | 4 |

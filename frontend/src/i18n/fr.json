@@ -20,5 +20,8 @@
   "people.you": "vous",
   "people.label": "{count} personne(s) dans ce document",
   "error.join": "Impossible de rejoindre. Vérifiez l'invitation et que l'autre personne a cliqué sur « Inviter ».",
-  "error.host": "Impossible d'inviter : {reason}"
+  "error.host": "Impossible d'inviter : {reason}",
+  "external.message": "{name} a été modifié en dehors d'Inkwell",
+  "external.import": "Importer",
+  "external.ignore": "Ignorer"
 }

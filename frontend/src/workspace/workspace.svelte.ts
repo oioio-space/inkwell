@@ -1,3 +1,4 @@
+import { next as A } from "@automerge/automerge";
 import {
   type AutomergeUrl,
   type DocHandle,
@@ -5,16 +6,21 @@ import {
   type PeerId,
   Repo,
 } from "@automerge/automerge-repo";
-import { IndexedDBStorageAdapter } from "@automerge/automerge-repo-storage-indexeddb";
 import { Stream } from "@wailsio/runtime";
-import { Session } from "../../bindings/github.com/oioio-space/inkwell/internal/app/index";
+import {
+  Projects,
+  Session,
+} from "../../bindings/github.com/oioio-space/inkwell/internal/app/index";
 import { t } from "../i18n";
 import { type SocketLike, WailsNetworkAdapter } from "../net/WailsNetworkAdapter";
+import { GoStorageAdapter } from "../store/GoStorageAdapter";
+import { type Projection, startProjection } from "../store/projection";
 
 export type Doc = { text: string };
 export type Status = "alone" | "connecting" | "synced";
 
-const PROJECT_KEY = "inkwell.project";
+/** The projection of the document, in the project folder. */
+const MAIN_FILE = "main.typ";
 const NAME_KEY = "inkwell.name";
 
 function safeGet(key: string): string | null {
@@ -44,10 +50,14 @@ class Workspace {
   /** Display names of present people, by peer id (from presence). */
   names = $state<Record<string, string>>({});
   error = $state("");
+  /** A project file edited outside Inkwell, waiting for "Import" or "Ignore"; null if none. */
+  external = $state<string | null>(null);
   handle = $state.raw<DocHandle<Doc> | undefined>();
 
   #repo: Repo | undefined;
   #adapter: WailsNetworkAdapter | undefined;
+  #storage: GoStorageAdapter | undefined;
+  #projection: Projection | undefined;
 
   async start(): Promise<void> {
     const id = await Session.LocalPeer();
@@ -66,20 +76,25 @@ class Workspace {
       if (this.peers.length === 0) this.status = "alone";
     });
     this.#adapter = adapter;
+    const storage = new GoStorageAdapter(() => Stream("store") as unknown as SocketLike);
+    storage.onExternal((name) => {
+      if (name === MAIN_FILE) this.external = name;
+    });
+    this.#storage = storage;
     this.#repo = new Repo({
       peerId: id as PeerId,
       network: [adapter],
-      storage: new IndexedDBStorageAdapter("inkwell"),
+      storage,
       sharePolicy: async () => true,
     });
 
-    const saved = safeGet(PROJECT_KEY);
+    const saved = (await Projects.Current()).RootURL;
     if (saved && isValidAutomergeUrl(saved)) {
       try {
         await this.open(saved);
         return;
       } catch {
-        // The saved project is gone (storage cleared): start a fresh one.
+        // The saved document is gone from the project folder: start a fresh one.
       }
     }
     await this.open(this.#repo.create<Doc>({ text: "" }).url);
@@ -87,9 +102,40 @@ class Workspace {
 
   async open(url: AutomergeUrl): Promise<void> {
     if (!this.#repo) throw new Error("workspace not started");
-    this.handle = await this.#repo.find<Doc>(url);
+    const handle = await this.#repo.find<Doc>(url);
+    this.#projection?.stop();
+    this.handle = handle;
     this.#adapter?.setProject(url);
-    safeSet(PROJECT_KEY, url);
+    await Projects.SetRootURL(url);
+    if (this.#storage) {
+      this.#projection = startProjection(handle, this.#storage, {
+        name: MAIN_FILE,
+        // A refused write means the file was edited outside: the notice already asks the person.
+        onError: (err) =>
+          console.warn("projection:", err instanceof Error ? err.message : "failed"),
+      });
+    }
+  }
+
+  /** Takes the outside edit of main.typ into the document, then lets Inkwell write it again. */
+  async importExternal(): Promise<void> {
+    const name = this.external;
+    const handle = this.handle;
+    if (!name || !handle || !this.#storage) return;
+    const text = await this.#storage.readProjection(name);
+    if (text !== undefined) handle.change((d) => A.updateText(d, ["text"], text));
+    await this.#storage.acknowledge(name);
+    this.external = null;
+    await this.#projection?.flush(true);
+  }
+
+  /** Keeps the document as it is: the file is written from it again, replacing the outside edit. */
+  async ignoreExternal(): Promise<void> {
+    const name = this.external;
+    if (!name || !this.#storage) return;
+    await this.#storage.acknowledge(name);
+    this.external = null;
+    await this.#projection?.flush(true);
   }
 
   setName(name: string): void {

@@ -47,8 +47,8 @@ Plan : [docs/plans/2026-10-25-etape-2-reseau.md](docs/plans/2026-10-25-etape-2-r
 - [ ] `identity` : Ed25519 par machine, empreinte en 4 mots, groupes d'appareils
 - [ ] `invite` : code Wormhole + acceptation LAN (un inconnu ne voit que nom de machine et titre)
 - [ ] `trust` : liste de membres signée, rôles, révocation, lots signés
-- [ ] `store` : persistance Automerge atomique, sauvegardes horodatées, contrôle d'intégrité
-- [ ] `project` : index, projection `.typ` sur disque, règle de propriété fsnotify, bac à sable E/S
+- [x] `store` : persistance Automerge atomique, sauvegardes horodatées, contrôle d'intégrité
+- [x] `project` : index, projection `.typ` sur disque, règle de propriété fsnotify, bac à sable E/S
 - [ ] Relais libp2p auto-hébergeable en une commande
 - [ ] Panneau d'état (indicateur global, liste des pairs, type de lien)
 

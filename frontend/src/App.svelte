@@ -2,6 +2,7 @@
 import { onMount } from "svelte";
 import { t } from "./i18n";
 import Editor from "./ui/Editor.svelte";
+import ExternalChangeToast from "./ui/ExternalChangeToast.svelte";
 import HeaderBar from "./ui/HeaderBar.svelte";
 import ShareDialog from "./ui/ShareDialog.svelte";
 import { workspace } from "./workspace/workspace.svelte";
@@ -31,6 +32,7 @@ onMount(() => {
   </main>
 </div>
 <ShareDialog bind:open={sharing} />
+<ExternalChangeToast />
 
 <style>
   .window {

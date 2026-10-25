@@ -8,12 +8,14 @@ import (
 	"log/slog"
 	"os"
 	"strconv"
+	"time"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
 
 	"github.com/oioio-space/inkwell"
 	"github.com/oioio-space/inkwell/internal/app"
 	"github.com/oioio-space/inkwell/internal/bridge"
+	"github.com/oioio-space/inkwell/internal/project"
 	"github.com/oioio-space/inkwell/internal/transport"
 )
 
@@ -36,11 +38,22 @@ func main() {
 	}
 	router := bridge.NewRouter(rt.Repo, log)
 
+	proj, err := openProject()
+	if err != nil {
+		log.Error("opening project", "err", err)
+		os.Exit(1)
+	}
+	if err := proj.Backup(time.Now(), backupsKept); err != nil {
+		log.Warn("backing up project", "err", err) // not fatal: the store still works
+	}
+	storeServer := bridge.NewStoreServer(proj, log)
+
 	wails := application.New(application.Options{
 		Name:        "Inkwell",
 		Description: "Éditeur collaboratif Typst, sans serveur",
 		Services: []application.Service{
 			application.NewService(rt.Session),
+			application.NewService(app.NewProjects(proj)),
 		},
 		Assets: application.AssetOptions{
 			Handler:    application.AssetFileServerFS(inkwell.Assets),
@@ -54,12 +67,22 @@ func main() {
 		},
 		OnShutdown: func() {
 			cancel()
+			if err := proj.Close(); err != nil {
+				log.Warn("closing project", "err", err)
+			}
 			if err := rt.Close(); err != nil {
 				log.Warn("closing network", "err", err)
 			}
 		},
 	})
 	wails.HandleStream(bridge.StreamName, func(c *application.StreamConn) { router.Serve(c) })
+	wails.HandleStream(bridge.StoreStreamName, func(c *application.StreamConn) { storeServer.Serve(c) })
+
+	go func() {
+		if err := proj.Watch(ctx, storeServer.NotifyExternal); err != nil {
+			log.Error("watching project files", "err", err)
+		}
+	}()
 
 	go func() {
 		// Run only returns once ctx is cancelled or the network is closed; anything
@@ -82,6 +105,20 @@ func main() {
 		log.Error("inkwell stopped", "err", err)
 		os.Exit(1)
 	}
+}
+
+// backupsKept is how many project backups are kept (one per launch).
+const backupsKept = 10
+
+// openProject opens the most recent project in the user's Inkwell folder,
+// creating an untitled one on first launch.
+func openProject() (*project.Project, error) {
+	docs, err := app.OpenDocs()
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = docs.Close() }() // the project keeps its own handle
+	return app.OpenProject(docs)
 }
 
 // serverPort returns INKWELL_SERVER_PORT, or 8080 when unset or invalid.
