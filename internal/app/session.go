@@ -28,10 +28,24 @@ type Network interface {
 // invitation. Its exported methods are bound to the frontend.
 type Session struct {
 	net Network
+	adm *Admission
 }
 
+// SessionOption configures a [Session].
+type SessionOption func(*Session)
+
+// WithAdmission makes Host open the invitation of adm, and Join admit the
+// peer joined.
+func WithAdmission(adm *Admission) SessionOption { return func(s *Session) { s.adm = adm } }
+
 // NewSession returns a session over n.
-func NewSession(n Network) *Session { return &Session{net: n} }
+func NewSession(n Network, opts ...SessionOption) *Session {
+	s := &Session{net: n}
+	for _, o := range opts {
+		o(s)
+	}
+	return s
+}
 
 // LocalPeer returns this machine's peer identity.
 func (s *Session) LocalPeer() string { return string(s.net.Local()) }
@@ -50,12 +64,15 @@ func (s *Session) Peers() []string {
 // opaque text that Join accepts. The node already listens (see [StartNode]),
 // so calling Host again returns the current addresses.
 //
-// TODO(Task 7): the node admits every peer that has the invitation; the
-// signed member list restricts that.
+// The invitation stays open: whoever holds it can join and becomes a writer.
+// TODO(Task 8): single-use tickets replace this.
 func (s *Session) Host() (string, error) {
 	addrs := s.net.Addrs()
 	if len(addrs) == 0 {
 		return "", errors.New("host: this machine has no network address")
+	}
+	if s.adm != nil {
+		s.adm.OpenInvitation()
 	}
 	return invitation(addrs), nil
 }
@@ -70,6 +87,9 @@ func (s *Session) Join(ctx context.Context, text string) (string, error) {
 	}
 	if peer == s.net.Local() {
 		return "", fmt.Errorf("%w: this is your own invitation", errBadInvitation)
+	}
+	if s.adm != nil {
+		s.adm.Invite(peer, addrs)
 	}
 	ctx, cancel := context.WithTimeout(ctx, joinTimeout)
 	defer cancel()
