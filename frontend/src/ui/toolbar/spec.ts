@@ -1,7 +1,6 @@
 import type { StateCommand } from "@codemirror/state";
 import {
   type Block,
-  type InsertItem,
   insert,
   type Lang,
   langOf,
@@ -13,7 +12,10 @@ import {
 import type { MessageKey } from "../../i18n";
 import type { IconName } from "../icons/paths";
 
-/** What the formatting bar and its overflow menu know about each button. */
+/**
+ * What the formatting bar and its overflow menu know about each button. Each id is also the
+ * feature `supports()` is asked about (the formula and the table are insertions).
+ */
 export type BarId =
   | "bold"
   | "italic"
@@ -171,26 +173,9 @@ export const BAR_ITEMS: readonly BarItem[] = [
   },
 ];
 
-/** The feature `supports()` is asked about for each button (the formula is an insertion). */
-const FEATURE: Record<BarId, Mark | Block | InsertItem> = {
-  bold: "bold",
-  italic: "italic",
-  underline: "underline",
-  strike: "strike",
-  link: "link",
-  code: "code",
-  codeblock: "codeblock",
-  formula: "formula",
-  ul: "ul",
-  ol: "ol",
-  task: "task",
-  quote: "quote",
-  table: "table",
-};
-
 /** The buttons a language's bar shows: only what the format can write. */
 export function itemsFor(lang: Lang): BarItem[] {
-  return BAR_ITEMS.filter((item) => supports(lang, FEATURE[item.id]));
+  return BAR_ITEMS.filter((item) => supports(lang, item.id));
 }
 
 export const HEADINGS = ["h1", "h2", "h3", "h4"] as const;

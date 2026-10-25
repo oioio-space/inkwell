@@ -14,10 +14,12 @@ const ROWS = [
   ["paragraphs", "paragraphe", "stats.paragraphs"],
 ] as const;
 
+const number = new Intl.NumberFormat();
+
 const cell = (s: BaseStats | undefined, key: (typeof ROWS)[number][0]) =>
-  s ? new Intl.NumberFormat().format(s[key]) : "—";
+  s ? number.format(s[key]) : "—";
 const reading = (s: BaseStats | undefined) =>
-  s ? (s.readingMinutes === 0 ? "—" : count(s.readingMinutes, "minute")) : "—";
+  s && s.readingMinutes > 0 ? count(s.readingMinutes, "minute") : "—";
 </script>
 
 <table class="stats">
