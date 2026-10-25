@@ -63,6 +63,7 @@ Rien n'est « fait » sans tests verts et sans une passe `ux-walkthrough` réuss
 | U20 | 2026-10-25 | Tableur extrêmement pratique et performant, UX type Microsoft/Apple | B9 SHEET-* | 🔨 |
 | U21 | 2026-10-25 | Priorité : copier-coller, tirer une ligne (poignée), ajout/suppression de lignes | B9 | 🔨 |
 | U22 | 2026-10-25 | Tous les problèmes des CSV : séparateur, cellules qui le contiennent, recherche… | B9 CSV-EDGE-* | 🔨 |
+| U24 | 2026-10-25 | L'application s'affiche bien quel que soit le redimensionnement ; panneaux internes ajustables | A6 RSZ-* | ⏳ après la passe /simplify frontend |
 | U23 | 2026-10-25 | Coloration syntaxique (constat de revue) | A5 | ✅ |
 
 ## Livraison

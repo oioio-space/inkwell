@@ -64,6 +64,7 @@ follow the plan sections:
 - **S9, outside edits:** edit `main.typ` in another editor; save mode manual vs automatic.
 - **S10, Markdown and layout:** switch layout, preview, export.
 - **S11, presenting:** present, presenter view, follow the presenter.
+- **S13, resize:** shrink the window from 4K to 360 px, zoom to 200 %, and drag every panel handle (mouse and keyboard). Nothing may be cut off, overlap, or cause horizontal scrolling.
 - **S12, offline:** cut the network mid-edit (netsim or kill the relay) and come back.
 
 ## For every step, record
