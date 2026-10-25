@@ -15,13 +15,13 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0 # full history so `mise run scan:secrets` (gitleaks) can scan all commits
       # Restore Go caches BEFORE mise-action (go-installed tools create read-only
       # files; restoring after would fail with "Cannot open: File exists").
       - name: Cache Go & tool caches
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cache/go-build
@@ -35,9 +35,9 @@ jobs:
       # mise installs the wails3 CLI and before any Go build.
       - name: Install GTK4 / WebKitGTK 6.0
         run: sudo apt-get update -qq && sudo apt-get install -y -qq libgtk-4-dev libwebkitgtk-6.0-dev
-      - uses: jdx/mise-action@v3
+      - uses: jdx/mise-action@v4
       - name: Cache pnpm store
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.local/share/pnpm/store
           key: ${{ runner.os }}-pnpm-${{ hashFiles('frontend/pnpm-lock.yaml') }}
@@ -49,13 +49,13 @@ jobs:
         run: mise run e2e
       - name: Keep Playwright traces on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: playwright-traces
           path: frontend/test-results/
           retention-days: 7
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v5
+        uses: codecov/codecov-action@v7
         with:
           files: ./coverage.out
           fail_ci_if_error: false
@@ -68,9 +68,9 @@ jobs:
     env:
       INKWELL_E2E_BROWSER: chromium
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
       - name: Cache Go & tool caches
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cache/go-build
@@ -85,9 +85,9 @@ jobs:
       # Ubuntu 24.04 restricts unprivileged user namespaces with AppArmor.
       - name: Allow unprivileged user namespaces
         run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-      - uses: jdx/mise-action@v3
+      - uses: jdx/mise-action@v4
       - name: Cache pnpm store
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: ~/.local/share/pnpm/store
           key: ${{ runner.os }}-pnpm-${{ hashFiles('frontend/pnpm-lock.yaml') }}
@@ -96,7 +96,7 @@ jobs:
         run: mise run e2e:netsim
       - name: Keep Playwright traces and instance logs on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: netsim-traces
           path: |
@@ -111,10 +111,10 @@ jobs:
     permissions:
       contents: write
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
         with:
           fetch-depth: 0
-      - uses: jdx/mise-action@v3
+      - uses: jdx/mise-action@v4
       - name: Release (goreleaser)
         run: mise run release
         env:
