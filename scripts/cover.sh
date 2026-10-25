@@ -12,7 +12,7 @@ cd "$repo_root"
 # In --check mode reuse coverage.out if a prior task (test:ci) already produced it;
 # otherwise generate it. Plain mode always regenerates.
 if [[ "${1:-}" != "--check" || ! -f coverage.out ]]; then
-  go test -short -timeout=8m -covermode=atomic -coverprofile=coverage.out ./...
+  go test -short -timeout=8m -covermode=atomic -coverpkg=./... -coverprofile=coverage.out ./...
 fi
 
 # cmd/ mains are thin CLI wrappers (glue, not unit-tested logic) and examples/
