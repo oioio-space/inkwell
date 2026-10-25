@@ -5,6 +5,7 @@ import (
 	"cmp"
 	"crypto/ed25519"
 	"errors"
+	"iter"
 	"maps"
 	"math"
 	"math/bits"
@@ -206,10 +207,7 @@ func (l *List) hasAll(hs []Hash) bool {
 // the op's causal past, so every replica reaches the same verdict.
 func (l *List) integrate(op Op, h Hash) error {
 	if op.Kind != OpGenesis {
-		var top uint64
-		for _, p := range op.Prev {
-			top = max(top, l.ops[p].op.Lamport)
-		}
+		top := l.topLamport(op.Prev)
 		if top == math.MaxUint64 || op.Lamport != top+1 {
 			return ErrBadLamport
 		}
@@ -226,27 +224,51 @@ func (l *List) integrate(op Op, h Hash) error {
 	return nil
 }
 
+// topLamport returns the largest Lamport of the stored ops hs, 0 if hs is empty.
+func (l *List) topLamport(hs []Hash) uint64 {
+	var top uint64
+	for _, h := range hs {
+		top = max(top, l.ops[h].op.Lamport)
+	}
+	return top
+}
+
 // everAdmin reports whether key is the subject of a grant (the genesis, or an
 // Add or SetRole with Role admin) in the causal past formed by from, whether
 // or not that grant took effect. It is a cheap, order-independent filter: only
 // keys once made admin can make the list store their ops.
 func (l *List) everAdmin(key ed25519.PublicKey, from []Hash) bool {
-	seen := make(map[Hash]struct{})
-	stack := slices.Clone(from)
-	for len(stack) > 0 {
-		h := stack[len(stack)-1]
-		stack = stack[:len(stack)-1]
-		if _, dup := seen[h]; dup {
-			continue
-		}
-		seen[h] = struct{}{}
-		o := l.ops[h].op
-		if o.Role == RoleAdmin && bytes.Equal(o.Subject, key) { // a Remove has no Role.
+	for n := range l.past(from) {
+		if n.op.Role == RoleAdmin && bytes.Equal(n.op.Subject, key) { // a Remove has no Role.
 			return true
 		}
-		stack = append(stack, o.Prev...)
 	}
 	return false
+}
+
+// past yields, once each, the stored ops of from and their ancestors, in no
+// particular order. Hashes of from that are not stored are skipped.
+func (l *List) past(from []Hash) iter.Seq[*node] {
+	return func(yield func(*node) bool) {
+		seen := make(map[Hash]struct{})
+		stack := slices.Clone(from)
+		for len(stack) > 0 {
+			h := stack[len(stack)-1]
+			stack = stack[:len(stack)-1]
+			n, ok := l.ops[h]
+			if !ok {
+				continue
+			}
+			if _, dup := seen[h]; dup {
+				continue
+			}
+			seen[h] = struct{}{}
+			if !yield(n) {
+				return
+			}
+			stack = append(stack, n.op.Prev...)
+		}
+	}
 }
 
 // Issue creates, signs and applies an op of the given kind on behalf of s,
@@ -291,10 +313,7 @@ func (l *List) IssueWith(s Signer, tmpl Op) (Op, error) {
 	op.Author = bytes.Clone(s.Public())
 	op.Subject = bytes.Clone(tmpl.Subject)
 	op.Prev = l.capPrev(v, me, subj)
-	op.Lamport = 0
-	for _, p := range op.Prev {
-		op.Lamport = max(op.Lamport, l.ops[p].op.Lamport+1)
-	}
+	op.Lamport = l.topLamport(op.Prev) + 1 // Prev is never empty: the genesis is stored.
 	if tmpl.Kind == OpRemove {
 		op.Role, op.Person, op.Name = 0, Hash{}, ""
 	}
@@ -343,24 +362,25 @@ func (l *List) capPrev(v *view, issuer, subject string) []Hash {
 			need.set(i)
 		}
 	}
-	need.set(v.last[issuer])
-	covers := func(h Hash, n bitset) int { // how many bits of n the head covers.
+	grant := v.last[issuer]
+	need.set(grant)
+	covers := func(h Hash) int { // how many needed ops the head covers.
 		j := v.index[h]
 		c := 0
-		if n.has(j) {
+		if need.has(j) {
 			c++
 		}
-		for w := range n {
-			c += bits.OnesCount64(n[w] & v.anc[j][w])
+		for w := range need {
+			c += bits.OnesCount64(need[w] & v.anc[j][w])
 		}
 		return c
 	}
 	var prev []Hash
 	chosen := make(map[Hash]bool)
-	pick := func(n bitset, ok func(Hash) bool) bool {
+	pick := func(ok func(Hash) bool) bool {
 		best, bestGain := -1, 0
 		for i, h := range heads {
-			if g := covers(h, n); !chosen[h] && g > bestGain && ok(h) {
+			if g := covers(h); !chosen[h] && g > bestGain && ok(h) {
 				best, bestGain = i, g
 			}
 		}
@@ -370,18 +390,15 @@ func (l *List) capPrev(v *view, issuer, subject string) []Hash {
 		h := heads[best]
 		prev, chosen[h] = append(prev, h), true
 		j := v.index[h]
-		for w := range need {
-			need[w] &^= v.anc[j][w]
-		}
-		need[j/64] &^= 1 << (j % 64)
+		need.andNot(v.anc[j])
+		need.unset(j)
 		return true
 	}
-	grant := v.last[issuer]
-	pick(need, func(h Hash) bool { // the head covering the issuer's grant comes first.
+	pick(func(h Hash) bool { // the head covering the issuer's grant comes first.
 		j := v.index[h]
 		return j == grant || v.anc[j].has(grant)
 	})
-	for len(prev) < MaxPrev && pick(need, func(Hash) bool { return true }) {
+	for len(prev) < MaxPrev && pick(func(Hash) bool { return true }) {
 	}
 	for _, h := range heads {
 		if len(prev) == MaxPrev {
@@ -391,7 +408,7 @@ func (l *List) capPrev(v *view, issuer, subject string) []Hash {
 			prev = append(prev, h)
 		}
 	}
-	slices.SortFunc(prev, func(a, b Hash) int { return bytes.Compare(a[:], b[:]) })
+	slices.SortFunc(prev, cmpHash)
 	return prev
 }
 
@@ -451,7 +468,7 @@ func (l *List) Frontier() []Hash {
 
 func (l *List) frontier() []Hash {
 	hs := slices.Collect(maps.Keys(l.heads))
-	slices.SortFunc(hs, func(a, b Hash) int { return bytes.Compare(a[:], b[:]) })
+	slices.SortFunc(hs, cmpHash)
 	return hs
 }
 
@@ -462,19 +479,8 @@ func (l *List) Since(have []Hash) []Op {
 	l.mu.Lock()
 	defer l.mu.Unlock()
 	covered := make(map[Hash]struct{})
-	stack := slices.Clone(have)
-	for len(stack) > 0 {
-		h := stack[len(stack)-1]
-		stack = stack[:len(stack)-1]
-		n, ok := l.ops[h]
-		if !ok {
-			continue
-		}
-		if _, dup := covered[h]; dup {
-			continue
-		}
-		covered[h] = struct{}{}
-		stack = append(stack, n.op.Prev...)
+	for n := range l.past(have) {
+		covered[n.hash] = struct{}{}
 	}
 	var missing []*node
 	for h, n := range l.ops {
