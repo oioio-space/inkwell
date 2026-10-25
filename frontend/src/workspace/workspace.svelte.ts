@@ -14,7 +14,7 @@ import {
 import { t } from "../i18n";
 import { type SocketLike, WailsNetworkAdapter } from "../net/WailsNetworkAdapter";
 import { type FileInfo, FileKind, type ProjectFile } from "../store/files";
-import { GoStorageAdapter } from "../store/GoStorageAdapter";
+import { ExternalEditError, GoStorageAdapter } from "../store/GoStorageAdapter";
 import { type Projection, startProjection } from "../store/projection";
 import { safeGet, safeSet } from "../store/safeStorage";
 
@@ -47,6 +47,8 @@ class Workspace {
   error = $state("");
   /** A project file edited outside Inkwell, waiting for "Import" or "Ignore"; null if none. */
   external = $state<string | null>(null);
+  /** True while the project file cannot be written (disk full, no permission...). */
+  projectionFailed = $state(false);
   /** True once the member list is full: this device signs no more, so edits stay local. */
   sealed = $state(false);
   handle = $state.raw<DocHandle<Doc> | undefined>();
@@ -114,9 +116,15 @@ class Workspace {
     if (this.#storage) {
       this.#projection = startProjection(handle, this.#storage, {
         name: MAIN_FILE,
-        // A refused write means the file was edited outside: the notice already asks the person.
-        onError: (err) =>
-          console.warn("projection:", err instanceof Error ? err.message : "failed"),
+        onError: (err) => {
+          console.warn("projection:", err instanceof Error ? err.message : "failed");
+          // A refused write means the file was edited outside: the notice already asks the person.
+          if (!(err instanceof ExternalEditError)) this.projectionFailed = true;
+        },
+        onWritten: () => {
+          this.projectionFailed = false;
+        },
+        retryable: (err) => !(err instanceof ExternalEditError),
       });
     }
   }

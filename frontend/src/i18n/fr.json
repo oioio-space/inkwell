@@ -24,6 +24,7 @@
   "external.message": "{name} a été modifié en dehors d'Inkwell",
   "external.import": "Importer",
   "external.ignore": "Ignorer",
+  "projection.failed": "Le fichier du projet n'a pas pu être enregistré. Votre texte reste dans Inkwell, nouvel essai en cours.",
   "sealed.message": "Liste de membres saturée — créez un nouveau projet",
   "editor.label": "Texte du document",
   "editor.placeholder": "Commencez à écrire…",

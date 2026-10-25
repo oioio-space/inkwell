@@ -4,7 +4,7 @@ import { type DocHandle, type PeerId, Repo } from "@automerge/automerge-repo";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { FakeGoStore } from "./fakeStore";
 import { Eol, FileKind } from "./files";
-import { GoStorageAdapter, NotTextError, StoreError } from "./GoStorageAdapter";
+import { ExternalEditError, GoStorageAdapter, NotTextError } from "./GoStorageAdapter";
 import { Op } from "./protocol";
 
 type Doc = { text: string };
@@ -94,12 +94,11 @@ describe("GoStorageAdapter (StorageAdapterInterface conformance)", () => {
     expect(go.log).toEqual([]);
   });
 
-  it("turns a Go error into a StoreError with its reason", async () => {
+  it("turns a write refused after an outside edit into an ExternalEditError", async () => {
     const go = new FakeGoStore();
     go.locked.add("main.typ");
     const a = adapterOn(go);
-    await expect(a.writeProjection("main.typ", "x")).rejects.toThrow(StoreError);
-    await expect(a.writeProjection("main.typ", "x")).rejects.toThrow(/edited outside Inkwell/);
+    await expect(a.writeProjection("main.typ", "x")).rejects.toBeInstanceOf(ExternalEditError);
   });
 
   it("treats a damaged, unrecoverable value as missing, without leaking its content", async () => {

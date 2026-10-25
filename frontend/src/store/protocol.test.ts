@@ -142,7 +142,8 @@ describe("file payload decoders reject what Go would", () => {
   it("decodes the new statuses", () => {
     expect(decodeResponse(unhex("0000000605")).status).toBe(Status.Binary);
     expect(decodeResponse(unhex("000000070600000003")).status).toBe(Status.InvalidText);
-    expect(() => decodeResponse(unhex("0000000107"))).toThrow(ProtocolError);
+    expect(decodeResponse(unhex("0000000807")).status).toBe(Status.EditedOutside);
+    expect(() => decodeResponse(unhex("0000000108"))).toThrow(ProtocolError);
   });
 });
 

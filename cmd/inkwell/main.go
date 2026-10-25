@@ -94,7 +94,10 @@ func main() {
 	wails.HandleStream(bridge.StoreStreamName, func(c *application.StreamConn) { storeServer.Serve(c) })
 
 	go func() {
-		if err := proj.Watch(ctx, storeServer.NotifyExternal); err != nil {
+		if err := proj.Watch(ctx, func(rel string) {
+			log.Info("project file edited outside Inkwell", "file", rel)
+			storeServer.NotifyExternal(rel)
+		}); err != nil {
 			log.Error("watching project files", "err", err)
 		}
 	}()
