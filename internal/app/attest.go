@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/oioio-space/inkwell/internal/bridge"
+	"github.com/oioio-space/inkwell/internal/project"
 	"github.com/oioio-space/inkwell/internal/transport"
 	"github.com/oioio-space/inkwell/internal/transport/p2p"
 	"github.com/oioio-space/inkwell/internal/trust"
@@ -21,8 +22,9 @@ import (
 var ErrSealed = errors.New("app: member list sealed")
 
 // maxPending bounds the documents whose heads wait for this device to be
-// admitted.
-const maxPending = 64
+// admitted: one per text file of a project, so as many as its tree has nodes
+// (ADR 0023). Each holds only a few heads.
+const maxPending = project.MaxNodes
 
 // attestKey identifies the attestations that supersede each other: those of
 // one writer for one document.

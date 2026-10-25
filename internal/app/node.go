@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"github.com/oioio-space/inkwell/internal/identity"
 	"github.com/oioio-space/inkwell/internal/invite"
@@ -126,9 +127,14 @@ type Runtime struct {
 	// Repo is the transport for the bridge: the frames of the project's
 	// members only (see [Wiring.Repo]).
 	Repo transport.Transport
+	// Files is the storage the store stream serves: the project, its
+	// multi-file tree and its blobs (see [Files]).
+	Files *Files
 
 	wiring *Wiring
 	inv    *invites
+	cancel context.CancelFunc
+	files  sync.WaitGroup
 }
 
 // Start starts the node of the device stored in home and wires it to the open
@@ -160,6 +166,14 @@ func Start(ctx context.Context, home *os.Root, o Options) (*Runtime, error) {
 		log = slog.New(slog.DiscardHandler)
 	}
 	w := Wire(ctx, node, dev, list, adm, WiringOptions{Log: log, Save: store.save})
+	files, err := NewFiles(o.Project, node.Bulk(), FilesOptions{
+		Allowed: w.isActive, // an active member: connected, admitted, and not suspended
+		Drop:    w.drop,
+		Log:     log,
+	})
+	if err != nil {
+		return nil, errors.Join(err, w.Close(), store.close())
+	}
 	var c carrier
 	if o.RendezvousURL != NoCodes {
 		c = invite.Wormhole{RendezvousURL: o.RendezvousURL}
@@ -167,10 +181,19 @@ func Start(ctx context.Context, home *os.Root, o Options) (*Runtime, error) {
 	inv := newInvites(ctx, node, w, dev, list, store, c, log)
 	s := NewSession(node)
 	s.inv = inv
-	return &Runtime{Node: node, Session: s, Repo: w.Repo(), wiring: w, inv: inv}, nil
+	fctx, cancel := context.WithCancel(ctx)
+	r := &Runtime{Node: node, Session: s, Repo: w.Repo(), Files: files, wiring: w, inv: inv, cancel: cancel}
+	r.files.Go(func() {
+		if err := files.Run(fctx); fctx.Err() == nil && !errors.Is(err, transport.ErrClosed) {
+			log.Error("blob service stopped", "err", err)
+		}
+	})
+	return r, nil
 }
 
-// Close stops the wiring and the node. It is idempotent.
+// Close stops the blob service, the wiring and the node. It is idempotent.
 func (r *Runtime) Close() error {
-	return errors.Join(r.wiring.Close(), r.inv.close())
+	r.cancel()
+	r.files.Wait()
+	return errors.Join(r.wiring.Close(), r.inv.close(), r.Files.Close())
 }

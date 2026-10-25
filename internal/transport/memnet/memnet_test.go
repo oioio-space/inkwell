@@ -398,6 +398,10 @@ func TestBulkCloseClosesPeer(t *testing.T) {
 // the network delay while 100 MB are in flight on the bulk lane. (The p2p
 // package measures the same on a simulated link and on the loopback.)
 func TestSyncLatencyDuringBulk(t *testing.T) {
+	t.Run("PRJ-19 latency of the sync lane during 100 MB of bulk", runSyncLatencyDuringBulk)
+}
+
+func runSyncLatencyDuringBulk(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		const maxDelay = 20 * time.Millisecond
 		n := memnet.New(1, memnet.Faults{MaxDelay: maxDelay})

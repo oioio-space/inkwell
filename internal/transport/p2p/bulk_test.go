@@ -151,6 +151,10 @@ func latencies(t *testing.T) (idle, loaded []time.Duration, took time.Duration) 
 // PRJ-19: a message of the sync lane (the repo stream) is not held back by
 // 100 MB moving on the bulk lane.
 func TestRepoLatencyDuringBulk(t *testing.T) {
+	t.Run("PRJ-19 latency of the repo stream during 100 MB of bulk", runRepoLatencyDuringBulk)
+}
+
+func runRepoLatencyDuringBulk(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		idle, loaded, took := latencies(t)
 		if len(idle) < 10 || len(loaded) < 20 {

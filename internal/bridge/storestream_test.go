@@ -55,6 +55,7 @@ var storeOps = map[string]bridge.StoreOp{
 	"LoadRange": bridge.OpLoadRange, "RemoveRange": bridge.OpRemoveRange,
 	"WriteProjection": bridge.OpWriteProjection, "ReadProjection": bridge.OpReadProjection,
 	"Acknowledge": bridge.OpAcknowledge, "ListFiles": bridge.OpListFiles, "FileInfo": bridge.OpFileInfo,
+	"Tree": bridge.OpTree, "Referenced": bridge.OpReferenced, "PutBlob": bridge.OpPutBlob,
 }
 
 var fileKinds = map[string]project.Kind{
@@ -68,7 +69,7 @@ var eols = map[string]project.EOL{"LF": project.LF, "CRLF": project.CRLF, "CR": 
 var storeStatuses = map[string]bridge.StoreStatus{
 	"OK": bridge.StatusOK, "NotFound": bridge.StatusNotFound, "Corrupt": bridge.StatusCorrupt,
 	"Error": bridge.StatusError, "External": bridge.StatusExternal,
-	"Binary": bridge.StatusBinary, "InvalidText": bridge.StatusInvalidText,
+	"Binary": bridge.StatusBinary, "InvalidText": bridge.StatusInvalidText, "TooLarge": bridge.StatusTooLarge,
 }
 
 func unhex(t *testing.T, s string) []byte {
@@ -89,8 +90,8 @@ func TestStoreVectors(t *testing.T) {
 	if err := json.Unmarshal(raw, &vectors); err != nil {
 		t.Fatal(err)
 	}
-	if len(vectors) < 14 {
-		t.Fatalf("got %d vectors, want at least 8", len(vectors))
+	if len(vectors) < 24 {
+		t.Fatalf("got %d vectors, want at least 24", len(vectors))
 	}
 	for _, v := range vectors {
 		t.Run(v.Name, func(t *testing.T) {
@@ -154,6 +155,8 @@ func TestStoreVectors(t *testing.T) {
 				if err != nil || dec != info {
 					t.Errorf("DecodeFileInfo = %+v, %v; want %+v", dec, err, info)
 				}
+			case "tree", "treeresult", "referenced", "blobinfo":
+				checkTreeVector(t, raw, v, wire)
 			default:
 				t.Fatalf("unknown vector type %q", v.Type)
 			}
@@ -172,7 +175,7 @@ func TestDecodeStoreRequestRejects(t *testing.T) {
 		{name: "short header", wire: []byte{0, 0, 0, 1, 1}},
 		{name: "id zero", wire: []byte{0, 0, 0, 0, 1, 1, 1, 'a'}},
 		{name: "unknown op 0", wire: []byte{0, 0, 0, 5, 0, 1, 1, 'a'}, id: 5},
-		{name: "unknown op 11", wire: []byte{0, 0, 0, 5, 11, 1, 1, 'a'}, id: 5},
+		{name: "unknown op 14", wire: []byte{0, 0, 0, 5, 14, 1, 1, 'a'}, id: 5},
 		{name: "list files with a key", wire: []byte{0, 0, 0, 5, 9, 1, 1, 'a'}, id: 5},
 		{name: "data on list files", wire: []byte{0, 0, 0, 5, 9, 0, 1}, id: 5},
 		{name: "file info without name", wire: []byte{0, 0, 0, 5, 10, 0}, id: 5},
@@ -187,7 +190,14 @@ func TestDecodeStoreRequestRejects(t *testing.T) {
 		{name: "remove range without key", wire: []byte{0, 0, 0, 5, 5, 0}, id: 5},
 		{name: "data on load", wire: []byte{0, 0, 0, 5, 1, 1, 1, 'a', 9}, id: 5},
 		{name: "data on load range", wire: []byte{0, 0, 0, 5, 4, 0, 9}, id: 5},
-		{name: "projection with two components", wire: []byte{0, 0, 0, 5, 7, 2, 1, 'a', 1, 'b'}, id: 5},
+		{name: "projection with a parent component", wire: []byte{0, 0, 0, 5, 7, 2, 2, '.', '.', 1, 'b'}, id: 5},
+		{name: "projection of a reserved name", wire: []byte{0, 0, 0, 5, 7, 2, 1, 'a', 3, 'n', 'u', 'l'}, id: 5},
+		{name: "projection under .inkwell", wire: []byte{0, 0, 0, 5, 6, 2, 8, '.', 'i', 'n', 'k', 'w', 'e', 'l', 'l', 1, 'x'}, id: 5},
+		{name: "projection with an empty component", wire: []byte{0, 0, 0, 5, 7, 2, 1, 'a', 0}, id: 5},
+		{name: "put blob without a path", wire: []byte{0, 0, 0, 5, 13, 0}, id: 5},
+		{name: "tree with a key", wire: []byte{0, 0, 0, 5, 11, 1, 1, 'a'}, id: 5},
+		{name: "referenced with a key", wire: []byte{0, 0, 0, 5, 12, 1, 1, 'a'}, id: 5},
+		{name: "data on put blob", wire: []byte{0, 0, 0, 5, 13, 1, 1, 'a', 9}, id: 5},
 		{name: "projection without name", wire: []byte{0, 0, 0, 5, 7, 0}, id: 5},
 		{name: "oversized", wire: append([]byte{0, 0, 0, 5, 2, 1, 1, 'a'}, make([]byte, store.MaxValue+1)...), id: 5},
 	}
@@ -290,9 +300,11 @@ func FuzzDecodeRange(f *testing.F) {
 // fakeStorage is a real [store.KV] plus an in-memory set of project files.
 type fakeStorage struct {
 	*store.KV
-	files map[string][]byte
-	acked []string
-	mu    sync.Mutex
+	files      map[string][]byte
+	acked      []string
+	trees      [][]project.TreeEntry
+	referenced [][bridge.HashSize]byte
+	mu         sync.Mutex
 }
 
 func newFakeStorage(t *testing.T) (*fakeStorage, *os.Root) {
@@ -351,6 +363,38 @@ func (s *fakeStorage) List() ([]project.File, error) {
 		out = append(out, project.File{Path: name, Kind: project.KindTypst, Size: int64(len(s.files[name])), Main: name == "main.typ"})
 	}
 	return out, nil
+}
+
+func (s *fakeStorage) SetTree(entries []project.TreeEntry) (int, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.trees = append(s.trees, slices.Clone(entries))
+	rejected := 0
+	for _, e := range entries {
+		if project.ValidatePath(e.Path) != nil {
+			rejected++
+		}
+	}
+	return rejected, nil
+}
+
+func (s *fakeStorage) SetReferenced(hashes [][bridge.HashSize]byte) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.referenced = slices.Clone(hashes)
+	return nil
+}
+
+func (s *fakeStorage) PutBlob(rel string) ([bridge.HashSize]byte, int64, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	switch rel {
+	case "huge.bin":
+		return [bridge.HashSize]byte{}, 0, fmt.Errorf("put: %w", &bridge.TooLargeError{Limit: 100 << 20})
+	case "missing.bin":
+		return [bridge.HashSize]byte{}, 0, &fs.PathError{Op: "open", Path: rel, Err: fs.ErrNotExist}
+	}
+	return sha256.Sum256([]byte(rel)), int64(len(rel)), nil
 }
 
 func (s *fakeStorage) Acknowledge(rel string) error {

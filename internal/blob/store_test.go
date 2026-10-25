@@ -225,6 +225,10 @@ func (errReader) Read([]byte) (int, error) { return 0, errors.New("must not be r
 // PRJ-13: an image replaced on disk is a new blob; the old one stays until it
 // is no longer referenced.
 func TestReplacedBinaryIsANewBlob(t *testing.T) {
+	t.Run("PRJ-13 a replaced binary is a new hash", runReplacedBinaryIsANewBlob)
+}
+
+func runReplacedBinaryIsANewBlob(t *testing.T) {
 	s, _ := openStore(t, "", blob.Options{})
 	v1, v2 := testData(70_000, 20), testData(70_000, 21)
 	h1, err := s.PutBytes(v1)

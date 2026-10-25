@@ -81,14 +81,14 @@ func checkVector(t *testing.T, v nameVector, validate func(string) error) {
 func TestValidateNameVectors(t *testing.T) {
 	names, _, _ := loadNameVectors(t)
 	for _, v := range names {
-		t.Run(v.Name, func(t *testing.T) { checkVector(t, v, ValidateName) })
+		t.Run("PRJ-15 "+v.Name, func(t *testing.T) { checkVector(t, v, ValidateName) })
 	}
 }
 
 func TestValidatePathVectors(t *testing.T) {
 	_, paths, _ := loadNameVectors(t)
 	for _, v := range paths {
-		t.Run(v.Name, func(t *testing.T) { checkVector(t, v, ValidatePath) })
+		t.Run("PRJ-10 "+v.Name, func(t *testing.T) { checkVector(t, v, ValidatePath) })
 	}
 }
 
@@ -96,9 +96,11 @@ func TestValidatePathVectors(t *testing.T) {
 func TestCollisionKeyVectors(t *testing.T) {
 	_, _, keys := loadNameVectors(t)
 	for _, v := range keys {
-		if got := CollisionKey(v.Input); got != v.Key {
-			t.Errorf("CollisionKey(%q) = %q, want %q", v.Input, got, v.Key)
-		}
+		t.Run("PRJ-17 "+v.Input, func(t *testing.T) {
+			if got := CollisionKey(v.Input); got != v.Key {
+				t.Errorf("CollisionKey(%q) = %q, want %q", v.Input, got, v.Key)
+			}
+		})
 	}
 }
 

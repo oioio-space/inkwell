@@ -25,11 +25,32 @@ type ProjectInfo struct {
 // storage it reaches through the "store" stream. Its exported methods are
 // bound to the frontend.
 type Projects struct {
-	p *project.Project
+	p     *project.Project
+	files *Files
 }
 
-// NewProjects returns the service for the open project p.
-func NewProjects(p *project.Project) *Projects { return &Projects{p: p} }
+// NewProjects returns the service for the open project p. files, if not nil,
+// is the blob side of the project (see [Files]); without it the project has no
+// blobs to report.
+func NewProjects(p *project.Project, files *Files) *Projects { return &Projects{p: p, files: files} }
+
+// BlobProgress reports the files of the project that are not text: how many
+// the project lists, how many are here, and whether the rest is over the size
+// the project may take, which needs the user's agreement ([Projects.ConfirmBlobs]).
+func (s *Projects) BlobProgress() BlobStatus {
+	if s.files == nil {
+		return BlobStatus{}
+	}
+	return s.files.Status()
+}
+
+// ConfirmBlobs accepts a project over its size quota, after the user agreed to
+// download the rest.
+func (s *Projects) ConfirmBlobs() {
+	if s.files != nil {
+		s.files.Confirm()
+	}
+}
 
 // Current describes the open project.
 func (s *Projects) Current() ProjectInfo {

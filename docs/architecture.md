@@ -55,7 +55,7 @@ colonne « Étape » dit quand.
 | `internal/invite` | Codes Wormhole (PAKE), acceptation d'un pair LAN | 2 |
 | `internal/trust` | Liste de membres signée (CRDT à ordre total Lamport → clé), rôles, révocation, vérification des lots signés | 2 |
 | `internal/store` | État Automerge sur disque : KV atomique et vérifié sur `os.Root` (`WriteAtomic`, en-tête `IKV1`+SHA-256), quarantaine, sauvegardes par liens durs (ADR 0020) | 2 |
-| `internal/project` | Projet = dossier `<Documents>/Inkwell/<Titre>/` : `project.json`, projection `main.typ`, règle de propriété fsnotify, bac à sable `os.Root`, corbeille | 2 |
+| `internal/project` | Projet = dossier `<Documents>/Inkwell/<Titre>/` : `project.json`, projection `main.typ`, règle de propriété fsnotify, bac à sable `os.Root`, corbeille ; noms portables (`ValidateName`, `ValidatePath`) et arbre multi-fichiers (`ApplyTree`, `WriteBlob`, ADR 0023) | 2 |
 | `internal/sidecar` | Binaires embarqués vérifiés SHA-256, supervision, backoff, arrêt avec le parent | 3 |
 | `internal/typst` | Vente des paquets `@preview` dans `.typstdeps/`, polices, export PDF | 3 |
 | `internal/blob` | Magasin adressé par BLAKE3 avec arbre Bao externe (groupes de 16 Kio), quotas, reprise, ménage à 30 jours ; échange en tirage sur le flux `bulk` (ADR 0023) | 4 (avancé en T11/B4) |

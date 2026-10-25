@@ -2,7 +2,9 @@ package project
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"io/fs"
 	"maps"
 	"path/filepath"
 	"slices"
@@ -29,30 +31,46 @@ func (p *Project) Watch(ctx context.Context, onExternal func(rel string)) error 
 	}
 	defer func() { _ = w.Close() }()
 
-	p.mu.Lock()
-	owned := make([]string, 0, len(p.m.Files))
-	for rel := range p.m.Files {
-		owned = append(owned, rel)
-	}
-	p.mu.Unlock()
-	slices.Sort(owned)
-
 	// Watch the directories, not the files: editors replace a file by renaming
 	// another over it, which ends a watch on the old inode.
 	root := p.root.Name()
-	dirs := map[string]bool{}
-	for _, rel := range owned {
-		dir := filepath.Dir(filepath.Join(root, filepath.FromSlash(rel)))
-		if dirs[dir] {
-			continue
+	dirs := map[string]bool{}  // watched
+	known := map[string]bool{} // owned files looked at
+	// refresh watches the folders of the owned files it did not know, then looks
+	// at them, in that order so that no edit falls between the two. The owned
+	// files grow when a tree is applied (see ApplyTree). A folder that is gone
+	// is left for the next refresh.
+	refresh := func() error {
+		p.mu.Lock()
+		owned := slices.Sorted(maps.Keys(p.m.Files))
+		p.mu.Unlock()
+		var fresh []string
+		newDirs := map[string]bool{}
+		for _, rel := range owned {
+			dir := filepath.Dir(filepath.Join(root, filepath.FromSlash(rel)))
+			if !dirs[dir] {
+				switch err := w.Add(dir); {
+				case err == nil:
+					dirs[dir], newDirs[dir] = true, true
+				case !errors.Is(err, fs.ErrNotExist):
+					return fmt.Errorf("project: watch %s: %w", p.dir, err)
+				}
+			}
 		}
-		dirs[dir] = true
-		if err := w.Add(dir); err != nil {
-			return fmt.Errorf("project: watch %s: %w", p.dir, err)
+		for _, rel := range owned {
+			dir := filepath.Dir(filepath.Join(root, filepath.FromSlash(rel)))
+			if (!known[rel] && dirs[dir]) || newDirs[dir] {
+				fresh = append(fresh, rel)
+			}
+			known[rel] = known[rel] || dirs[dir]
 		}
+		for _, rel := range fresh {
+			p.check(rel, onExternal)
+		}
+		return nil
 	}
-	for _, rel := range owned { // after Add, so no edit falls between the two
-		p.check(rel, onExternal)
+	if err := refresh(); err != nil {
+		return err
 	}
 
 	dirty := map[string]bool{}
@@ -67,6 +85,10 @@ func (p *Project) Watch(ctx context.Context, onExternal func(rel string)) error 
 		select {
 		case <-ctx.Done():
 			return nil
+		case <-p.treeChanged:
+			if err := refresh(); err != nil {
+				return err
+			}
 		case ev, ok := <-w.Events:
 			if !ok {
 				return nil

@@ -291,3 +291,39 @@ func TestSealedStopsSigning(t *testing.T) {
 		noEnvelope(t, m.w.Repo()) // a single Sealed notice
 	})
 }
+
+// A guest whose admission is in flight keeps the heads of every document of a
+// project the size of the biggest tree (ADR 0023), and signs them all once it
+// is a writer.
+func TestPendingHeadsHoldAWholeIndex(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		net := memnet.New(1, memnet.Faults{})
+		devA, devB := newDevice(t), newDevice(t)
+		listA := newProject(t, devA)
+		a := join(t, net, devA, listA)
+		b := join(t, net, devB, fork(t, listA))
+		for _, m := range []*member{a, b} { // the bridge reads the attestations, as in the application
+			go func() {
+				for {
+					if _, err := m.w.Repo().Recv(t.Context()); err != nil {
+						return
+					}
+				}
+			}()
+		}
+		const docs = 1000 // more than the 64 of the first limit
+		for i := range docs {
+			if err := b.w.AttestHeads(fmt.Sprintf("doc%04d", i), []trust.Hash{{byte(i), byte(i >> 8)}}); err != nil {
+				t.Fatalf("AttestHeads %d: %v", i, err)
+			}
+		}
+		if _, err := a.w.Issue(trust.OpAdd, devB.Public(), trust.RoleWriter, "b"); err != nil {
+			t.Fatal(err)
+		}
+		net.Link(a.id, b.id)
+		synctest.Wait()
+		if got := len(b.w.Attestations()); got != docs {
+			t.Errorf("B signed %d documents once admitted, want all %d", got, docs)
+		}
+	})
+}
