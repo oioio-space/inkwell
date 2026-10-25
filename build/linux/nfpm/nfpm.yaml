@@ -12,8 +12,8 @@ priority: "extra"
 maintainer: ${GIT_COMMITTER_NAME} <${GIT_COMMITTER_EMAIL}>
 description: "Éditeur collaboratif Typst"
 vendor: "oioio-space"
-homepage: "https://wails.io"
-license: "MIT"
+homepage: "https://github.com/oioio-space/inkwell"
+license: "MPL-2.0"
 release: "1"
 
 contents:

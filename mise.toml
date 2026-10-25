@@ -300,3 +300,14 @@ id=$(./scripts/ghx.sh run list --status failure -L 1 --json databaseId --jq '.[0
 [tasks."llm:triage"]
 description = "Reduce a long CI/test log (stdin) to its failing items (OpenRouter, ZDR)"
 run = "./scripts/llm.sh triage"
+
+[tasks.icons]
+description = "Render the app icon (build/icons/*.svg) to PNG, .ico and .icns"
+dir = "frontend"
+depends = ["fe:install"]
+run = [
+  "node scripts/render-icons.mjs",
+  "cp ../build/icons/inkwell.svg ../build/linux/icons/hicolor/scalable/apps/io.github.oioio_space.Inkwell.svg",
+  "cp ../build/icons/inkwell-symbolic.svg ../build/linux/icons/hicolor/symbolic/apps/io.github.oioio_space.Inkwell-symbolic.svg",
+  "cd .. && wails3 generate icons -input build/appicon.png -windowsfilename build/windows/icon.ico -macfilename build/darwin/icons.icns",
+]
