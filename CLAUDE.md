@@ -24,11 +24,34 @@ mise run clean           # remove regenerable artifacts
 
 ## Architecture
 
-Module `github.com/oioio-space/inkwell` — <décrire ici l'architecture : packages, responsabilités,
-frontières. Remplir dès les premières briques ; ce paragraphe guide tous les agents.>
+Module `github.com/oioio-space/inkwell` — éditeur de bureau collaboratif Typst/Markdown,
+**sans serveur** (Wails v3 + CodeMirror 6 + Automerge + go-libp2p). Finalité :
+`docs/conception.pdf` ; feuille de route : `PROGRESS.md` (étapes 0→6, critère de sortie
+par étape). Détail : `docs/architecture.md` (paquets, règles de dépendance),
+`docs/adr/` (décisions — lire avant de remettre une frontière en cause),
+`docs/glossary.md`, `docs/ux-principles.md`, `docs/open-questions.md`.
 
-- Package racine : API de la bibliothèque. `cmd/inkwell` — CLI.
-- `internal/` — packages internes (créer par responsabilité, un package = un rôle).
+**Invariants — ne jamais les violer sans nouvelle ADR :**
+
+- Le CRDT vit dans la webview ; Go ne transporte que des **octets opaques**. Aucun paquet
+  Go de production n'importe `automerge-go` (réservé à `internal/sim` et aux tests).
+- Tout le réseau passe par l'interface `internal/transport.Transport` ; seul
+  `internal/transport/p2p` importe libp2p.
+- Une seule source de vérité par chose : texte → Automerge, binaires → magasin BLAKE3,
+  membres → liste signée, versions → go-git (projection).
+- Tout octet venu d'un pair est vérifié (signature, rôle) et son décodeur est fuzzé.
+- Serveurs locaux : `127.0.0.1`, port éphémère, jeton comparé en temps constant, jamais logué.
+- cgo est requis (Wails Linux/macOS, automerge-go) ; builds natifs par OS en CI (ADR 0003).
+- « pair » dans le code, « personne » dans l'UI ; zéro jargon dans l'interface (glossaire).
+- Un paquet = un rôle, créé à l'étape qui en a besoin — pas de paquet vide « pour plus tard ».
+
+**Processus par étape :** `superpowers:brainstorming` → plan dans `docs/plans/` →
+TDD (`superpowers:test-driven-development`) → revue → cocher `PROGRESS.md` → démontrer
+le critère de sortie. Toute brique se recherche d'abord en ligne (règle research-first).
+
+**Docs des briques** (skill `inkwell-stack`) : Wails v3 `https://v3.wails.io/llms.txt`,
+Automerge `https://automerge.org/llms.txt`, Go via **gopls MCP** (`.mcp.json` — suivre
+ses instructions : `go_workspace`, `go_package_api`, `go_diagnostics` après chaque édition).
 
 
 ## ⚡ Benchmark the hot path & prove perf changes
