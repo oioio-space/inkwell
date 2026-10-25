@@ -14,7 +14,7 @@ import {
 import { t } from "../i18n";
 import { type SocketLike, WailsNetworkAdapter } from "../net/WailsNetworkAdapter";
 import { type FileInfo, FileKind, type ProjectFile } from "../store/files";
-import { GoStorageAdapter } from "../store/GoStorageAdapter";
+import { ExternalEditError, GoStorageAdapter } from "../store/GoStorageAdapter";
 import { type Projection, startProjection } from "../store/projection";
 import { safeGet, safeSet } from "../store/safeStorage";
 
@@ -47,6 +47,8 @@ class Workspace {
   error = $state("");
   /** A project file edited outside Inkwell, waiting for "Import" or "Ignore"; null if none. */
   external = $state<string | null>(null);
+  /** True while the project file cannot be written (disk full, no permission...). */
+  projectionFailed = $state(false);
   /** True once the member list is full: this device signs no more, so edits stay local. */
   sealed = $state(false);
   handle = $state.raw<DocHandle<Doc> | undefined>();
@@ -114,9 +116,15 @@ class Workspace {
     if (this.#storage) {
       this.#projection = startProjection(handle, this.#storage, {
         name: MAIN_FILE,
-        // A refused write means the file was edited outside: the notice already asks the person.
-        onError: (err) =>
-          console.warn("projection:", err instanceof Error ? err.message : "failed"),
+        onError: (err) => {
+          console.warn("projection:", err instanceof Error ? err.message : "failed");
+          // A refused write means the file was edited outside: the notice already asks the person.
+          if (!(err instanceof ExternalEditError)) this.projectionFailed = true;
+        },
+        onWritten: () => {
+          this.projectionFailed = false;
+        },
+        retryable: (err) => !(err instanceof ExternalEditError),
       });
     }
   }
@@ -165,15 +173,19 @@ class Workspace {
     if (!name || !handle || !this.#storage) return;
     const text = await this.#storage.readProjection(name);
     if (text !== undefined) handle.change((d) => A.updateText(d, ["text"], text));
-    await this.#storage.acknowledge(name);
-    this.external = null;
-    await this.#projection?.flush(true);
+    await this.#settleExternal(name);
   }
 
   /** Keeps the document as it is: the file is written from it again, replacing the outside edit. */
   async ignoreExternal(): Promise<void> {
     const name = this.external;
-    if (!name || !this.#storage) return;
+    if (!name) return;
+    await this.#settleExternal(name);
+  }
+
+  /** The outside edit is dealt with: forget it and write the file from the document again. */
+  async #settleExternal(name: string): Promise<void> {
+    if (!this.#storage) return;
     await this.#storage.acknowledge(name);
     this.external = null;
     await this.#projection?.flush(true);

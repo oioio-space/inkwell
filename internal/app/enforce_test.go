@@ -247,8 +247,8 @@ func TestNoticesDescribeTheState(t *testing.T) {
 			t.Fatal(err)
 		}
 		notices := attester(t, a).Notices()
-		if len(notices) != 1 || notices[0].Kind != bridge.Attested || notices[0].Peer != a.id {
-			t.Errorf("Notices() = %+v, want the one attestation of A", notices)
+		if len(notices) != 2 || notices[0].Kind != bridge.Roles || notices[1].Kind != bridge.Attested || notices[1].Peer != a.id {
+			t.Errorf("Notices() = %+v, want the roles, then the one attestation of A", notices)
 		}
 	})
 }
@@ -272,8 +272,8 @@ func TestSealedStopsSigning(t *testing.T) {
 		m := join(t, net, dev, sealed(t, dev))
 
 		// The webview learns it when it attaches...
-		if n := attester(t, m).Notices(); len(n) != 1 || n[0].Kind != bridge.Sealed {
-			t.Errorf("Notices() = %+v, want the Sealed notice", n)
+		if n := attester(t, m).Notices(); len(n) != 2 || n[0].Kind != bridge.Roles || n[1].Kind != bridge.Sealed {
+			t.Errorf("Notices() = %+v, want the roles, then the Sealed notice", n)
 		}
 		// ...and live, once.
 		if e := nextEnvelope(t, m.w.Repo()); e.Kind != bridge.Sealed {
@@ -289,5 +289,41 @@ func TestSealedStopsSigning(t *testing.T) {
 			t.Errorf("a sealed list signed %v", got)
 		}
 		noEnvelope(t, m.w.Repo()) // a single Sealed notice
+	})
+}
+
+// A guest whose admission is in flight keeps the heads of every document of a
+// project the size of the biggest tree (ADR 0023), and signs them all once it
+// is a writer.
+func TestPendingHeadsHoldAWholeIndex(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		net := memnet.New(1, memnet.Faults{})
+		devA, devB := newDevice(t), newDevice(t)
+		listA := newProject(t, devA)
+		a := join(t, net, devA, listA)
+		b := join(t, net, devB, fork(t, listA))
+		for _, m := range []*member{a, b} { // the bridge reads the attestations, as in the application
+			go func() {
+				for {
+					if _, err := m.w.Repo().Recv(t.Context()); err != nil {
+						return
+					}
+				}
+			}()
+		}
+		const docs = 1000 // more than the 64 of the first limit
+		for i := range docs {
+			if err := b.w.AttestHeads(fmt.Sprintf("doc%04d", i), []trust.Hash{{byte(i), byte(i >> 8)}}); err != nil {
+				t.Fatalf("AttestHeads %d: %v", i, err)
+			}
+		}
+		if _, err := a.w.Issue(trust.OpAdd, devB.Public(), trust.RoleWriter, "b"); err != nil {
+			t.Fatal(err)
+		}
+		net.Link(a.id, b.id)
+		synctest.Wait()
+		if got := len(b.w.Attestations()); got != docs {
+			t.Errorf("B signed %d documents once admitted, want all %d", got, docs)
+		}
 	})
 }

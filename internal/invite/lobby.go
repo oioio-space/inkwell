@@ -20,6 +20,9 @@ const (
 
 	// maxFieldLen bounds the strings of a message (a one-byte length).
 	maxFieldLen = 255
+	// maxWelcomeOps bounds the ops of a Welcome: a member list holds at most
+	// 1024 ops.
+	maxWelcomeOps = 1024
 )
 
 // RequestKind says what a [Request] asks for.
@@ -140,9 +143,10 @@ func (r Reply) Encode() []byte {
 		b = appendStr(b, r.Machine)
 		b = appendStr(b, r.Title)
 	case ReplyWelcome:
-		b = binary.BigEndian.AppendUint16(b, uint16(min(len(r.RootURL), trust.MaxRootURL))) // #nosec G115 -- bounded.
-		b = append(b, r.RootURL[:min(len(r.RootURL), trust.MaxRootURL)]...)
-		b = binary.BigEndian.AppendUint16(b, uint16(len(r.Ops))) // #nosec G115 -- a list holds at most 1024 ops.
+		url := r.RootURL[:min(len(r.RootURL), trust.MaxRootURL)]
+		b = binary.BigEndian.AppendUint16(b, uint16(len(url))) // #nosec G115 -- bounded by MaxRootURL.
+		b = append(b, url...)
+		b = binary.BigEndian.AppendUint16(b, uint16(len(r.Ops))) // #nosec G115 -- a list holds at most maxWelcomeOps ops.
 		for _, op := range r.Ops {
 			enc := trust.Encode(op)
 			b = binary.BigEndian.AppendUint32(b, uint32(len(enc))) // #nosec G115 -- an op is at most MaxOpSize.
@@ -173,7 +177,7 @@ func DecodeReply(b []byte) (Reply, error) {
 		}
 		rep.RootURL = string(url)
 		n := r.u16()
-		if n > 1024 {
+		if n > maxWelcomeOps {
 			return Reply{}, fmt.Errorf("%w: %d ops", ErrMalformed, n)
 		}
 		for range n {

@@ -24,6 +24,7 @@
   "external.message": "{name} was changed outside Inkwell",
   "external.import": "Import",
   "external.ignore": "Ignore",
+  "projection.failed": "The project file could not be saved. Your text is safe in Inkwell, trying again.",
   "sealed.message": "Member list full — create a new project",
   "editor.label": "Document text",
   "editor.placeholder": "Start writing…",

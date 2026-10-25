@@ -242,18 +242,24 @@ function useKey(entry: Entry, key: string, close: (refocus?: boolean) => void) {
 const candidates = (entry: Entry) =>
   files.filter((f) => entry.kinds?.includes(f.kind)).sort((a, b) => a.path.localeCompare(b.path));
 
-const kindHint = (entry: Entry): MessageKey =>
-  entry.item === "include"
-    ? "insert.empty.typst"
-    : entry.item === "bibliography"
-      ? "insert.empty.bib"
-      : entry.item === "csvTable"
-        ? "insert.empty.csv"
-        : entry.item === "data"
-          ? "insert.empty.data"
-          : entry.item === "image" || entry.item === "figure"
-            ? "insert.empty.image"
-            : "insert.empty.any";
+/** What to say when the project has no file of the kind an item needs. */
+function kindHint(entry: Entry): MessageKey {
+  switch (entry.item) {
+    case "include":
+      return "insert.empty.typst";
+    case "bibliography":
+      return "insert.empty.bib";
+    case "csvTable":
+      return "insert.empty.csv";
+    case "data":
+      return "insert.empty.data";
+    case "image":
+    case "figure":
+      return "insert.empty.image";
+    default:
+      return "insert.empty.any";
+  }
+}
 </script>
 
 <MenuButton bind:open label={t("insert.menu")} width={520} align="start" onclose={reset}>

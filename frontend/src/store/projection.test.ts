@@ -102,6 +102,58 @@ describe("startProjection", () => {
     p.stop();
   });
 
+  it("tries a failed write again by itself, and says when it went through", async () => {
+    const sink = new Sink();
+    sink.failWith = new Error("disk full");
+    const errors: unknown[] = [];
+    let written = 0;
+    const h = repo.create<Doc>({ text: "a" });
+    const p = startProjection(h, sink, {
+      retryMs: 1000,
+      onError: (e) => errors.push(e),
+      onWritten: () => written++,
+    });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(errors).toHaveLength(1);
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(errors).toHaveLength(2); // still failing: tried again, not given up
+
+    sink.failWith = undefined;
+    await vi.advanceTimersByTimeAsync(1000);
+    expect(sink.writes).toEqual(["a"]);
+    expect(written).toBe(1);
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(errors).toHaveLength(2); // nothing left to retry
+    p.stop();
+  });
+
+  it("does not retry what is not retryable (a file edited outside waits for the person)", async () => {
+    const sink = new Sink();
+    sink.failWith = new Error("edited outside Inkwell");
+    const errors: unknown[] = [];
+    const h = repo.create<Doc>({ text: "a" });
+    const p = startProjection(h, sink, {
+      retryMs: 1000,
+      retryable: () => false,
+      onError: (e) => errors.push(e),
+    });
+    await vi.advanceTimersByTimeAsync(10_000);
+    expect(errors).toHaveLength(1);
+    p.stop();
+  });
+
+  it("stop() also cancels a retry", async () => {
+    const sink = new Sink();
+    sink.failWith = new Error("disk full");
+    const h = repo.create<Doc>({ text: "a" });
+    const p = startProjection(h, sink, { retryMs: 1000 });
+    await vi.advanceTimersByTimeAsync(0);
+    p.stop();
+    sink.failWith = undefined;
+    await vi.advanceTimersByTimeAsync(5000);
+    expect(sink.writes).toEqual([]);
+  });
+
   it("flush(true) rewrites an unchanged text, as after ignoring an outside edit", async () => {
     const sink = new Sink();
     const h = repo.create<Doc>({ text: "same" });

@@ -51,7 +51,7 @@ func (n *Node) onConnected(p peer.ID) {
 	}
 	ps := n.peers[p]
 	if ps == nil {
-		ps = &peerState{id: p, name: name, wsem: make(chan struct{}, 1)}
+		ps = &peerState{id: p, name: name, wsem: make(chan struct{}, 1), bulkSem: make(chan struct{}, 1)}
 		n.peers[p] = ps
 	}
 	ps.connected, ps.admitted = true, admitted
@@ -164,10 +164,27 @@ func (n *Node) settleLocked(ps *peerState) {
 	}
 	if ps.up {
 		ps.up = false
+		if ps.bulkOut != nil {
+			_ = ps.bulkOut.Reset()
+			ps.bulkOut = nil
+		}
 		n.h.ConnManager().Unprotect(ps.id, memberTag)
 		n.pushLocked(transport.Event{Kind: transport.PeerDown, Peer: ps.name}, 0)
 	}
 	n.changedLocked()
+}
+
+// handleBulkStream serves a bulk stream opened by a remote, or resets it if
+// the bulk lane is not in use.
+func (n *Node) handleBulkStream(s network.Stream) {
+	n.mu.Lock()
+	b := n.bulk
+	n.mu.Unlock()
+	if b == nil {
+		_ = s.Reset()
+		return
+	}
+	b.handle(s)
 }
 
 // handleStream serves a stream opened by a remote: it delivers its frames as

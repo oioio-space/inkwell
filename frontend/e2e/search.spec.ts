@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 import { clear, docText, editor, open, typeAtEnd } from "./helpers";
 import { ALICE_URL } from "./ports";
 

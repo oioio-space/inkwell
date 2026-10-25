@@ -97,7 +97,7 @@ export class FakeGoStore {
         return [Status.OK];
       case Op.WriteProjection:
         if (this.locked.has(path)) {
-          return [Status.Error, textEncoder.encode("project: file edited outside Inkwell")];
+          return [Status.EditedOutside];
         }
         this.files.set(path, req.data.slice());
         return [Status.OK];

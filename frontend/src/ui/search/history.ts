@@ -20,8 +20,9 @@ export const HISTORY_SIZE = 20;
 
 const key = (project: string) => `inkwell.search.history.${project}`;
 
-const MODES: readonly string[] = ["normal", "wildcard", "regex"];
-const SCOPES: readonly string[] = ["file", "selection", "project"];
+/** The search modes and scopes, in the order the panel shows them. */
+export const MODES: readonly UiMode[] = ["normal", "wildcard", "regex"];
+export const SCOPES: readonly Scope[] = ["file", "selection", "project"];
 
 /** Keeps only well-formed entries: the stored text is untrusted (another version, a hand edit). */
 function sanitize(raw: unknown): HistoryEntry | undefined {
@@ -31,7 +32,7 @@ function sanitize(raw: unknown): HistoryEntry | undefined {
   const flag = (k: string) => r[k] === true;
   return {
     query: r.query.slice(0, 500),
-    mode: MODES.includes(r.mode as string) ? (r.mode as UiMode) : "normal",
+    mode: MODES.includes(r.mode as UiMode) ? (r.mode as UiMode) : "normal",
     extended: flag("extended"),
     caseSensitive: flag("caseSensitive"),
     wholeWord: flag("wholeWord"),
@@ -39,7 +40,7 @@ function sanitize(raw: unknown): HistoryEntry | undefined {
     dotAll: flag("dotAll"),
     visibleText: flag("visibleText"),
     filters: typeof r.filters === "string" ? r.filters.slice(0, 200) : "",
-    scope: SCOPES.includes(r.scope as string) ? (r.scope as Scope) : "project",
+    scope: SCOPES.includes(r.scope as Scope) ? (r.scope as Scope) : "project",
   };
 }
 

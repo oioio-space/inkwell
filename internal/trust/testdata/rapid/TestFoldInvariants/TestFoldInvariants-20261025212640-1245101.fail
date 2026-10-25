@@ -1,0 +1,532 @@
+# 2026/10/25 21:26:40.346660 [TestFoldInvariants] [rapid] draw ops: 20
+# 2026/10/25 21:26:40.346728 [TestFoldInvariants] [rapid] draw views: 1
+# 2026/10/25 21:26:40.346747 [TestFoldInvariants] [rapid] draw base: 0
+# 2026/10/25 21:26:40.346791 [TestFoldInvariants] [rapid] draw author: 0
+# 2026/10/25 21:26:40.346806 [TestFoldInvariants] [rapid] draw kind: 0x2
+# 2026/10/25 21:26:40.346836 [TestFoldInvariants] [rapid] draw subject: 3
+# 2026/10/25 21:26:40.346851 [TestFoldInvariants] [rapid] draw role: 0x3
+# 2026/10/25 21:26:40.346870 [TestFoldInvariants] [rapid] draw name: ""
+# 2026/10/25 21:26:40.346891 [TestFoldInvariants] [rapid] draw person: trust.Hash{0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0}
+# 2026/10/25 21:26:40.347577 [TestFoldInvariants] [rapid] draw views: 2
+# 2026/10/25 21:26:40.347608 [TestFoldInvariants] [rapid] draw base: 1
+# 2026/10/25 21:26:40.347633 [TestFoldInvariants] [rapid] draw base: 0
+# 2026/10/25 21:26:40.347660 [TestFoldInvariants] [rapid] draw author: 0
+# 2026/10/25 21:26:40.347676 [TestFoldInvariants] [rapid] draw kind: 0x3
+# 2026/10/25 21:26:40.347694 [TestFoldInvariants] [rapid] draw subject: 0
+# 2026/10/25 21:26:40.347719 [TestFoldInvariants] [rapid] draw role: 0x2
+# 2026/10/25 21:26:40.347751 [TestFoldInvariants] [rapid] draw name: ""
+# 2026/10/25 21:26:40.348404 [TestFoldInvariants] [rapid] draw views: 1
+# 2026/10/25 21:26:40.348440 [TestFoldInvariants] [rapid] draw base: 0
+# 2026/10/25 21:26:40.348469 [TestFoldInvariants] [rapid] draw author: 0
+# 2026/10/25 21:26:40.348482 [TestFoldInvariants] [rapid] draw kind: 0x3
+# 2026/10/25 21:26:40.348498 [TestFoldInvariants] [rapid] draw subject: 0
+# 2026/10/25 21:26:40.348511 [TestFoldInvariants] [rapid] draw role: 0x3
+# 2026/10/25 21:26:40.348528 [TestFoldInvariants] [rapid] draw name: ""
+# 2026/10/25 21:26:40.349146 [TestFoldInvariants] [rapid] draw views: 1
+# 2026/10/25 21:26:40.349172 [TestFoldInvariants] [rapid] draw base: 0
+# 2026/10/25 21:26:40.349198 [TestFoldInvariants] [rapid] draw author: 0
+# 2026/10/25 21:26:40.349217 [TestFoldInvariants] [rapid] draw kind: 0x4
+# 2026/10/25 21:26:40.349235 [TestFoldInvariants] [rapid] draw subject: 0
+# 2026/10/25 21:26:40.349249 [TestFoldInvariants] [rapid] draw role: 0x3
+# 2026/10/25 21:26:40.349264 [TestFoldInvariants] [rapid] draw name: ""
+# 2026/10/25 21:26:40.349827 [TestFoldInvariants] [rapid] draw views: 1
+# 2026/10/25 21:26:40.349848 [TestFoldInvariants] [rapid] draw base: 1
+# 2026/10/25 21:26:40.349873 [TestFoldInvariants] [rapid] draw author: 0
+# 2026/10/25 21:26:40.349890 [TestFoldInvariants] [rapid] draw kind: 0x3
+# 2026/10/25 21:26:40.349923 [TestFoldInvariants] [rapid] draw subject: 0
+# 2026/10/25 21:26:40.349957 [TestFoldInvariants] [rapid] draw role: 0x3
+# 2026/10/25 21:26:40.349971 [TestFoldInvariants] [rapid] draw name: ""
+# 2026/10/25 21:26:40.350527 [TestFoldInvariants] [rapid] draw views: 1
+# 2026/10/25 21:26:40.350554 [TestFoldInvariants] [rapid] draw base: 0
+# 2026/10/25 21:26:40.350588 [TestFoldInvariants] [rapid] draw author: 0
+# 2026/10/25 21:26:40.350601 [TestFoldInvariants] [rapid] draw kind: 0x3
+# 2026/10/25 21:26:40.350617 [TestFoldInvariants] [rapid] draw subject: 0
+# 2026/10/25 21:26:40.350631 [TestFoldInvariants] [rapid] draw role: 0x3
+# 2026/10/25 21:26:40.350651 [TestFoldInvariants] [rapid] draw name: ""
+# 2026/10/25 21:26:40.351249 [TestFoldInvariants] [rapid] draw views: 1
+# 2026/10/25 21:26:40.351275 [TestFoldInvariants] [rapid] draw base: 0
+# 2026/10/25 21:26:40.351301 [TestFoldInvariants] [rapid] draw author: 0
+# 2026/10/25 21:26:40.351316 [TestFoldInvariants] [rapid] draw kind: 0x3
+# 2026/10/25 21:26:40.351330 [TestFoldInvariants] [rapid] draw subject: 0
+# 2026/10/25 21:26:40.351347 [TestFoldInvariants] [rapid] draw role: 0x3
+# 2026/10/25 21:26:40.351366 [TestFoldInvariants] [rapid] draw name: ""
+# 2026/10/25 21:26:40.351965 [TestFoldInvariants] [rapid] draw views: 1
+# 2026/10/25 21:26:40.351991 [TestFoldInvariants] [rapid] draw base: 1
+# 2026/10/25 21:26:40.352024 [TestFoldInvariants] [rapid] draw author: 1
+# 2026/10/25 21:26:40.352038 [TestFoldInvariants] [rapid] draw kind: 0x3
+# 2026/10/25 21:26:40.352056 [TestFoldInvariants] [rapid] draw subject: 3
+# 2026/10/25 21:26:40.352075 [TestFoldInvariants] [rapid] draw role: 0x1
+# 2026/10/25 21:26:40.352091 [TestFoldInvariants] [rapid] draw name: "n2"
+# 2026/10/25 21:26:40.352711 [TestFoldInvariants] [rapid] draw views: 2
+# 2026/10/25 21:26:40.352748 [TestFoldInvariants] [rapid] draw base: 5
+# 2026/10/25 21:26:40.352766 [TestFoldInvariants] [rapid] draw base: 4
+# 2026/10/25 21:26:40.352798 [TestFoldInvariants] [rapid] draw author: 0
+# 2026/10/25 21:26:40.352813 [TestFoldInvariants] [rapid] draw kind: 0x6
+# 2026/10/25 21:26:40.352827 [TestFoldInvariants] [rapid] draw subject: 0
+# 2026/10/25 21:26:40.352841 [TestFoldInvariants] [rapid] draw role: 0x2
+# 2026/10/25 21:26:40.352855 [TestFoldInvariants] [rapid] draw name: ""
+# 2026/10/25 21:26:40.353464 [TestFoldInvariants] [rapid] draw views: 1
+# 2026/10/25 21:26:40.353501 [TestFoldInvariants] [rapid] draw base: 2
+# 2026/10/25 21:26:40.353533 [TestFoldInvariants] [rapid] draw author: 0
+# 2026/10/25 21:26:40.353549 [TestFoldInvariants] [rapid] draw kind: 0x2
+# 2026/10/25 21:26:40.353564 [TestFoldInvariants] [rapid] draw subject: 1
+# 2026/10/25 21:26:40.353580 [TestFoldInvariants] [rapid] draw role: 0x1
+# 2026/10/25 21:26:40.353601 [TestFoldInvariants] [rapid] draw name: ""
+# 2026/10/25 21:26:40.353666 [TestFoldInvariants] [rapid] draw person: trust.Hash{0x7, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0}
+# 2026/10/25 21:26:40.354395 [TestFoldInvariants] [rapid] draw views: 1
+# 2026/10/25 21:26:40.354422 [TestFoldInvariants] [rapid] draw base: 8
+# 2026/10/25 21:26:40.354461 [TestFoldInvariants] [rapid] draw author: 0
+# 2026/10/25 21:26:40.354483 [TestFoldInvariants] [rapid] draw kind: 0x5
+# 2026/10/25 21:26:40.354497 [TestFoldInvariants] [rapid] draw subject: 4
+# 2026/10/25 21:26:40.354510 [TestFoldInvariants] [rapid] draw role: 0x3
+# 2026/10/25 21:26:40.354525 [TestFoldInvariants] [rapid] draw name: "n2"
+# 2026/10/25 21:26:40.355155 [TestFoldInvariants] [rapid] draw views: 1
+# 2026/10/25 21:26:40.355188 [TestFoldInvariants] [rapid] draw base: 1
+# 2026/10/25 21:26:40.355226 [TestFoldInvariants] [rapid] draw author: 1
+# 2026/10/25 21:26:40.355243 [TestFoldInvariants] [rapid] draw kind: 0x6
+# 2026/10/25 21:26:40.355261 [TestFoldInvariants] [rapid] draw subject: 1
+# 2026/10/25 21:26:40.355276 [TestFoldInvariants] [rapid] draw role: 0x3
+# 2026/10/25 21:26:40.355293 [TestFoldInvariants] [rapid] draw name: ""
+# 2026/10/25 21:26:40.355869 [TestFoldInvariants] [rapid] draw views: 1
+# 2026/10/25 21:26:40.355899 [TestFoldInvariants] [rapid] draw base: 4
+# 2026/10/25 21:26:40.355943 [TestFoldInvariants] [rapid] draw author: 0
+# 2026/10/25 21:26:40.355957 [TestFoldInvariants] [rapid] draw kind: 0x5
+# 2026/10/25 21:26:40.355976 [TestFoldInvariants] [rapid] draw subject: 2
+# 2026/10/25 21:26:40.355995 [TestFoldInvariants] [rapid] draw role: 0x2
+# 2026/10/25 21:26:40.356013 [TestFoldInvariants] [rapid] draw name: ""
+# 2026/10/25 21:26:40.356599 [TestFoldInvariants] [rapid] draw views: 2
+# 2026/10/25 21:26:40.356628 [TestFoldInvariants] [rapid] draw base: 2
+# 2026/10/25 21:26:40.356653 [TestFoldInvariants] [rapid] draw base: 4
+# 2026/10/25 21:26:40.356691 [TestFoldInvariants] [rapid] draw author: 1
+# 2026/10/25 21:26:40.356708 [TestFoldInvariants] [rapid] draw kind: 0x5
+# 2026/10/25 21:26:40.356725 [TestFoldInvariants] [rapid] draw subject: 0
+# 2026/10/25 21:26:40.356743 [TestFoldInvariants] [rapid] draw role: 0x2
+# 2026/10/25 21:26:40.356760 [TestFoldInvariants] [rapid] draw name: ""
+# 2026/10/25 21:26:40.357325 [TestFoldInvariants] [rapid] draw views: 1
+# 2026/10/25 21:26:40.357357 [TestFoldInvariants] [rapid] draw base: 3
+# 2026/10/25 21:26:40.357388 [TestFoldInvariants] [rapid] draw author: 0
+# 2026/10/25 21:26:40.357403 [TestFoldInvariants] [rapid] draw kind: 0x2
+# 2026/10/25 21:26:40.357422 [TestFoldInvariants] [rapid] draw subject: 1
+# 2026/10/25 21:26:40.357433 [TestFoldInvariants] [rapid] draw role: 0x2
+# 2026/10/25 21:26:40.357451 [TestFoldInvariants] [rapid] draw name: ""
+# 2026/10/25 21:26:40.357465 [TestFoldInvariants] [rapid] draw person: trust.Hash{0x7, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0, 0x0}
+# 2026/10/25 21:26:40.358069 [TestFoldInvariants] [rapid] draw views: 1
+# 2026/10/25 21:26:40.358109 [TestFoldInvariants] [rapid] draw base: 14
+# 2026/10/25 21:26:40.358148 [TestFoldInvariants] [rapid] draw author: 1
+# 2026/10/25 21:26:40.358173 [TestFoldInvariants] [rapid] draw kind: 0x5
+# 2026/10/25 21:26:40.358186 [TestFoldInvariants] [rapid] draw subject: 0
+# 2026/10/25 21:26:40.358201 [TestFoldInvariants] [rapid] draw role: 0x1
+# 2026/10/25 21:26:40.358216 [TestFoldInvariants] [rapid] draw name: "n2"
+# 2026/10/25 21:26:40.358849 [TestFoldInvariants] [rapid] draw views: 1
+# 2026/10/25 21:26:40.358880 [TestFoldInvariants] [rapid] draw base: 0
+# 2026/10/25 21:26:40.358934 [TestFoldInvariants] [rapid] draw author: 0
+# 2026/10/25 21:26:40.358949 [TestFoldInvariants] [rapid] draw kind: 0x4
+# 2026/10/25 21:26:40.358977 [TestFoldInvariants] [rapid] draw subject: 1
+# 2026/10/25 21:26:40.358998 [TestFoldInvariants] [rapid] draw role: 0x3
+# 2026/10/25 21:26:40.359013 [TestFoldInvariants] [rapid] draw name: ""
+# 2026/10/25 21:26:40.359626 [TestFoldInvariants] [rapid] draw views: 1
+# 2026/10/25 21:26:40.359648 [TestFoldInvariants] [rapid] draw base: 4
+# 2026/10/25 21:26:40.359674 [TestFoldInvariants] [rapid] draw author: 0
+# 2026/10/25 21:26:40.359692 [TestFoldInvariants] [rapid] draw kind: 0x4
+# 2026/10/25 21:26:40.359707 [TestFoldInvariants] [rapid] draw subject: 4
+# 2026/10/25 21:26:40.359722 [TestFoldInvariants] [rapid] draw role: 0x2
+# 2026/10/25 21:26:40.359739 [TestFoldInvariants] [rapid] draw name: "n1"
+# 2026/10/25 21:26:40.360395 [TestFoldInvariants] [rapid] draw views: 2
+# 2026/10/25 21:26:40.360423 [TestFoldInvariants] [rapid] draw base: 9
+# 2026/10/25 21:26:40.360451 [TestFoldInvariants] [rapid] draw base: 1
+# 2026/10/25 21:26:40.360483 [TestFoldInvariants] [rapid] draw author: 1
+# 2026/10/25 21:26:40.360497 [TestFoldInvariants] [rapid] draw kind: 0x6
+# 2026/10/25 21:26:40.360520 [TestFoldInvariants] [rapid] draw subject: 1
+# 2026/10/25 21:26:40.360532 [TestFoldInvariants] [rapid] draw role: 0x2
+# 2026/10/25 21:26:40.360550 [TestFoldInvariants] [rapid] draw name: "n1"
+# 2026/10/25 21:26:40.361199 [TestFoldInvariants] [rapid] draw views: 1
+# 2026/10/25 21:26:40.361220 [TestFoldInvariants] [rapid] draw base: 14
+# 2026/10/25 21:26:40.361257 [TestFoldInvariants] [rapid] draw author: 0
+# 2026/10/25 21:26:40.361271 [TestFoldInvariants] [rapid] draw kind: 0x4
+# 2026/10/25 21:26:40.361290 [TestFoldInvariants] [rapid] draw subject: 1
+# 2026/10/25 21:26:40.361308 [TestFoldInvariants] [rapid] draw role: 0x3
+# 2026/10/25 21:26:40.361393 [TestFoldInvariants] [rapid] draw name: ""
+# 2026/10/25 21:26:40.379821 [TestFoldInvariants] op 14 of cecc1507 stands after its suspension 12
+# 
+v0.4.8#15914134888815158854
+0x0
+0x9867f1f40f739
+0xc
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x38e38e38e38e4
+0x3
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x1
+0x0
+0x0
+0x1
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x38e38e38e38e4
+0x2
+0x0
+0x0
+0x0
+0x38e38e38e38e4
+0x2
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x38e38e38e38e4
+0x2
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x6b74f03291620
+0x3
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x1
+0x0
+0x0
+0x0
+0x6b74f03291620
+0x2
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x6b74f03291620
+0x2
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x38e38e38e38e4
+0x2
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x0
+0x1
+0x0
+0x0
+0x1
+0x6b74f03291620
+0x2
+0x0
+0x38e38e38e38e4
+0x3
+0x112b3025642ad5
+0x3
+0x1d0ac6a5ae92be
+0x3
+0x1d6ea1aeef6e2d
+0x11019b8f8e5d60
+0x1
+0xaa12d962c8c4f
+0x10551d72ee386b
+0x5
+0x15e975c552ad8e
+0x16bd0eab346717
+0x4
+0x1d9aba05217fee
+0x2c473a17921ba
+0x0
+0x13448ad04d24e0
+0x7
+0x133dd0897d313c
+0x1b41a979290629
+0x0
+0x1ee60d645407bf
+0x2
+0x1313e71d70ba7d
+0x1
+0x23d673b09ebc9
+0x12df4f723ce762
+0x0
+0xdfa82f553fcd1
+0x1229e5891c1164
+0x2
+0x18c651cddec29a
+0x8221dbcbed32a
+0x0
+0x1a494c97fd602a
+0x1
+0x123b9caac8fd0
+0x9c7321d838593
+0x1
+0xc29b95455e501
+0x3
+0x18b0e0916d8f60
+0x1
+0x3ca6f7c155d13
+0x2
+0x76d5a8d217cbb
+0x1764dea6082a8e
+0x0
+0xc614a9fbb8a5c
+0xdc9410967e614
+0x8
+0xf1f5f610c1758
+0x1160e2aaf71269
+0x0
+0x121962c7461ab5
+0x6
+0xd9a611fffdc6e
+0x19139028669e7d
+0x4
+0x1c7b4e43039477
+0x1
+0x1b5e636b07d832
+0x3
+0x42da12b86d2fd
+0x17403e14cdd8dc
+0x0
+0xb41fc09218ce5
+0xaeb00829f1d7
+0x1
+0xeb1aee685744e
+0x13f13bbbd811a
+0x1
+0xd3bbaabdcde00
+0x7
+0x0
+0xf483ec3cb8e24
+0x1
+0xb0f40bfbc3b62
+0x0
+0x1bea594decdc5d
+0x1
+0x0
+0x9ec21ea20a2b0
+0x0
+0x3
+0x190cd9ff03ad0d
+0x4
+0x0
+0x4947c7260da0a
+0x0
+0x1e49f97702450b
+0x5
+0x4
+0xed93ec9dd7dab
+0x2
+0x1ebaa96f229fca
+0x2
+0xfa240a85a9028
+0x1
+0xfc5da9f5c54aa
+0x1514ca11410d96
+0x1
+0x3e67a23db4fa7
+0x67463b7d82494
+0x2
+0x19a3adbb35ba71
+0x19efe855834409
+0x4
+0x1beaadac6089ee
+0x1878befa333e2d
+0x1
+0x19e9e464aad4e1
+0x6
+0x1694bf92f7567
+0x31c56fdaf5e3a
+0x0
+0x3cddfc189ec5e
+0x2
+0x30946f6e99780
+0x0
+0x6f68bd21f6e
+0x5d7fd53b6826b
+0x0
+0x6894f296afffe
+0x38fe535593745
+0x3
+0xd35b8a9a0044e
+0x1d70c4417b44c4
+0x0
+0x5f490efa092e0
+0x0
+0x70ce97e6067f
+0x5c50caf5030fc
+0x1
+0x9b70128d8116d
+0x2
+0x110283d2f9a5c
+0x0
+0xc43c0b17917f7
+0x2
+0x85f120f6b10d4
+0x13510d80a9f4f1
+0x0
+0x8bd8a9183b42b
+0x1eb426fa45d04d
+0xe
+0x15f0894a3e68ae
+0xc45d26cd46dff
+0x1
+0x7321427b66de7
+0x5
+0x129a29ab11f7d1
+0x1de01fac9063
+0x0
+0x7b19ecfad7dc6
+0x3
+0x1fcc9fc5ba0739
+0xffffffffffffffff
+0x188741edeef5ba
+0x12d675e4904068
+0x0
+0x1b706b45ce7b6
+0x4c1cc418b379c
+0x0
+0x60d13a037207f
+0x1fc3c07c53a316
+0xffffffffffffffff
+0x6d82be6e0302d
+0x4
+0x76a1eb181de8e
+0x1
+0x1
+0x0
+0x1
+0x163d6ef0d7fb38
+0x1
+0x10e98dbb670f93
+0xa5c8ae968dc62
+0x0
+0x64dcae9844f55
+0x7a6a6fe6ec7e8
+0x4
+0x1b4dc801eda8cd
+0x723e225f42f62
+0x0
+0x171faaee2c1b72
+0x4
+0x225dc309e16c7
+0x1fb5eb78fdeb69
+0xffffffffffffffff
+0x1ea351c1b973cf
+0x2
+0x18f4e2cd449751
+0x2
+0x12c368bba20605
+0x1aebafe2bd375a
+0x1
+0x8a3daa75692e4
+0x98f812744e319
+0x9
+0xe34c752e9c96d
+0x1e1069892e21a
+0x1
+0x16409ae6490d84
+0xd6e06d497d496
+0x1
+0x19dc4d9382ec0f
+0x7
+0x706390f1e4705
+0x1b5807e284f9bf
+0x1
+0xec1b1b9294aa9
+0x2
+0x16d899d7d071a6
+0x2
+0x159e742975c1b5
+0xda8cd38b4e8ed
+0x0
+0xe4bf937e929c5
+0xf2288892fe12f
+0xe
+0x16be4d3539f71c
+0x2
+0x0
+0x12d1c383f91b00
+0x3
+0x376faa2e4b249
+0x0
+0x1
+0x0
+0x0
+0xe52c7afebc0f1
+0x1

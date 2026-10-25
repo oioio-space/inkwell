@@ -7,6 +7,13 @@ const words = new Intl.Segmenter(undefined, { granularity: "word" });
 /** Segmenting a window keeps a 5 MB single-line file O(1) per query. */
 const WINDOW = 256;
 
+/** Number of user-perceived characters (grapheme clusters) in `s`. */
+export function graphemeCount(s: string): number {
+  let n = 0;
+  for (const _ of graphemes.segment(s)) n++;
+  return n;
+}
+
 /** The grapheme boundary at or before (dir -1) / at or after (dir 1) `offset` in `text`. */
 export function snapToGrapheme(text: string, offset: number, dir: -1 | 1): number {
   if (offset <= 0) return 0;

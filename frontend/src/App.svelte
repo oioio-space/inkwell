@@ -8,6 +8,7 @@ import AboutDialog, { type BuildInfo } from "./ui/AboutDialog.svelte";
 import Editor from "./ui/Editor.svelte";
 import ExternalChangeToast from "./ui/ExternalChangeToast.svelte";
 import { session } from "./ui/editorSession.svelte";
+import ProjectionBanner from "./ui/ProjectionBanner.svelte";
 import Preferences from "./ui/prefs/Preferences.svelte";
 import SealedBanner from "./ui/SealedBanner.svelte";
 import ShareDialog from "./ui/ShareDialog.svelte";
@@ -103,6 +104,7 @@ onMount(() => {
       />
     {/if}
     <SealedBanner />
+    <ProjectionBanner />
     <main>
       {#if workspace.handle}
         {#key workspace.handle.url}

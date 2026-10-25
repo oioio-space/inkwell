@@ -70,14 +70,14 @@ func main() {
 	if err := proj.Backup(time.Now(), backupsKept); err != nil {
 		log.Warn("backing up project", "err", err) // not fatal: the store still works
 	}
-	storeServer := bridge.NewStoreServer(proj, log)
+	storeServer := bridge.NewStoreServer(rt.Files, log)
 
 	wails := application.New(application.Options{
 		Name:        "Inkwell",
 		Description: "Éditeur collaboratif Typst, sans serveur",
 		Services: []application.Service{
 			application.NewService(rt.Session),
-			application.NewService(app.NewProjects(proj)),
+			application.NewService(app.NewProjects(proj, rt.Files)),
 		},
 		Assets: application.AssetOptions{
 			Handler:    application.AssetFileServerFS(inkwell.Assets),
@@ -106,7 +106,10 @@ func main() {
 	wails.HandleStream(bridge.StoreStreamName, func(c *application.StreamConn) { storeServer.Serve(c) })
 
 	go func() {
-		if err := proj.Watch(ctx, storeServer.NotifyExternal); err != nil {
+		if err := proj.Watch(ctx, func(rel string) {
+			log.Info("project file edited outside Inkwell", "file", rel)
+			storeServer.NotifyExternal(rel)
+		}); err != nil {
 			log.Error("watching project files", "err", err)
 		}
 	}()

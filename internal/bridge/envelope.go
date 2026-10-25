@@ -47,8 +47,9 @@ var ErrMalformed = errors.New("bridge: malformed envelope")
 type Envelope struct {
 	// Peer is the remote peer.
 	Peer transport.PeerID
-	// Payload is the opaque message bytes of a Message, or the [Heads]
-	// encoding of an Attest or Attested; empty for the other kinds.
+	// Payload is the opaque message bytes of a Message, the [Heads] encoding
+	// of an Attest or Attested, the [EncodeRoles] encoding of a Roles, or the
+	// byte of a Suspended; empty for the other kinds.
 	Payload []byte
 	// Kind says what the envelope reports.
 	Kind Kind
@@ -61,7 +62,7 @@ func (e Envelope) validate() error {
 		return fmt.Errorf("%w: kind %d", ErrMalformed, e.Kind)
 	case !transport.ValidPeerID(e.Peer):
 		return fmt.Errorf("%w: invalid peer", ErrMalformed)
-	case e.Kind != Message && e.Kind != Attest && e.Kind != Attested && len(e.Payload) > 0:
+	case !carriesPayload(e.Kind) && len(e.Payload) > 0:
 		return fmt.Errorf("%w: payload on %v", ErrMalformed, e.Kind)
 	case len(e.Payload) > transport.MaxFrame:
 		return fmt.Errorf("%w: payload of %d bytes", ErrMalformed, len(e.Payload))
@@ -69,8 +70,23 @@ func (e Envelope) validate() error {
 		if _, err := DecodeHeads(e.Payload); err != nil {
 			return err
 		}
+	case e.Kind == Roles:
+		if _, err := DecodeRoles(e.Payload); err != nil {
+			return err
+		}
+	case e.Kind == Suspended && (len(e.Payload) != 1 || e.Payload[0] > 1):
+		return fmt.Errorf("%w: suspended payload", ErrMalformed)
 	}
 	return nil
+}
+
+// carriesPayload reports whether envelopes of kind k have a payload.
+func carriesPayload(k Kind) bool {
+	switch k {
+	case Message, Attest, Attested, Roles, Suspended:
+		return true
+	}
+	return false
 }
 
 // Encode serializes e into a freshly allocated slice the caller may hand over
@@ -81,7 +97,7 @@ func Encode(e Envelope) ([]byte, error) {
 		return nil, err
 	}
 	b := make([]byte, 0, headerLen+len(e.Peer)+len(e.Payload))
-	b = append(b, version, byte(e.Kind), byte(len(e.Peer))) // #nosec G115 -- validate bounds Kind ≤ 7 and len(Peer) ≤ 64.
+	b = append(b, version, byte(e.Kind), byte(len(e.Peer))) // #nosec G115 -- validate bounds Kind ≤ lastKind and len(Peer) ≤ 64.
 	b = append(b, e.Peer...)
 	b = append(b, e.Payload...)
 	return b, nil

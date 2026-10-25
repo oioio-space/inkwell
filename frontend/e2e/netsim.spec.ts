@@ -1,7 +1,8 @@
 import { execFileSync } from "node:child_process";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
-import { type Browser, expect, type Page, test } from "@playwright/test";
+import type { Browser, Page } from "@playwright/test";
+import { expect, test } from "./fixtures";
 import { docText, open, pair, typeAtEnd } from "./helpers";
 
 // Driven by scripts/netsim/run.sh, which builds the network (two homes behind NATs and a

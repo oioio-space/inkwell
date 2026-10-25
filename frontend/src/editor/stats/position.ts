@@ -1,13 +1,5 @@
 import type { EditorState } from "@codemirror/state";
-
-const graphemes = new Intl.Segmenter(undefined, { granularity: "grapheme" });
-
-/** Number of user-perceived characters (grapheme clusters) in `s`. */
-export function graphemeCount(s: string): number {
-  let n = 0;
-  for (const _ of graphemes.segment(s)) n++;
-  return n;
-}
+import { graphemeCount } from "../format/text";
 
 export interface CursorPosition {
   /** 1-based line number. */

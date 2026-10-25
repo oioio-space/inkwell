@@ -29,7 +29,7 @@ func runChild(mode, dir string) error {
 	defer func() { _ = r.Close() }()
 	switch mode {
 	case "stall":
-		return writeAtomic(r, "value", bytes.Repeat([]byte("new"), 1<<16), 0o600, func() {
+		return writeAtomic(r, "value", bytes.NewReader(bytes.Repeat([]byte("new"), 1<<16)), 0o600, nil, func() {
 			_, _ = os.Stdout.WriteString(readyLine)
 			select {} // killed by the parent
 		})

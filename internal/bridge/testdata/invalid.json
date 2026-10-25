@@ -1,0 +1,62 @@
+[
+  {
+    "name": "roles without payload",
+    "wireHex": "01080161"
+  },
+  {
+    "name": "roles truncated count",
+    "wireHex": "0108016100"
+  },
+  {
+    "name": "roles count without entries",
+    "wireHex": "010801610001"
+  },
+  {
+    "name": "roles trailing byte",
+    "wireHex": "01080161000007"
+  },
+  {
+    "name": "roles entry with role 0",
+    "wireHex": "01080161000101700000"
+  },
+  {
+    "name": "roles entry with role 4",
+    "wireHex": "01080161000101700400"
+  },
+  {
+    "name": "roles entry with unknown flag",
+    "wireHex": "01080161000101700202"
+  },
+  {
+    "name": "roles entry with empty peer",
+    "wireHex": "010801610001000200"
+  },
+  {
+    "name": "roles entry with a space in the peer",
+    "wireHex": "01080161000101200200"
+  },
+  {
+    "name": "roles entry with a truncated peer",
+    "wireHex": "01080161000105700200"
+  },
+  {
+    "name": "roles with 1025 members",
+    "wireHex": "010801610401"
+  },
+  {
+    "name": "suspended without payload",
+    "wireHex": "01090161"
+  },
+  {
+    "name": "suspended with 2",
+    "wireHex": "0109016102"
+  },
+  {
+    "name": "suspended with two bytes",
+    "wireHex": "010901610101"
+  },
+  {
+    "name": "unknown kind 10",
+    "wireHex": "010a0161"
+  }
+]

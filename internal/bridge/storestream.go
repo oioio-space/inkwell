@@ -7,6 +7,7 @@ import (
 	"io/fs"
 	"log/slog"
 	"math"
+	"strings"
 	"sync"
 
 	"github.com/oioio-space/inkwell/internal/project"
@@ -32,6 +33,10 @@ const StoreStreamName = "store"
 // id is chosen by the webview (never 0) and echoed by the response. Requests
 // are processed one at a time in arrival order, so a Load sent after a Save
 // sees it. Go may also push a response with id 0 and [StatusExternal].
+//
+// The projection operations (and OpPutBlob) name a file of the project by its
+// path, one key component per folder, up to [project.MaxDepth] of them; the
+// others have storage keys of up to 4 components.
 const (
 	storeHeaderLen = 4 + 1 + 1
 	respHeaderLen  = 4 + 1
@@ -69,7 +74,29 @@ const (
 	// (encoding, BOM, line ending), as a payload decoded by [DecodeFileInfo].
 	// OpReadProjection and OpWriteProjection always speak UTF-8 with LF.
 	OpFileInfo
+	// OpTree takes no key; its Data is the project tree the webview
+	// materialized from the index, built by [EncodeTree]. Go projects it:
+	// folders, the text files it lists, and the visible copies of the blobs.
+	// The response payload is decoded by [DecodeTreeResult].
+	OpTree
+	// OpReferenced takes no key; its Data lists the hashes the index, the
+	// trash and the packages refer to, built by [EncodeReferenced]. Go serves
+	// those blobs to the members and keeps them.
+	OpReferenced
+	// OpPutBlob stores the project file named by the Key in the blob store
+	// and returns its hash and size, as a payload decoded by [DecodeBlobInfo]:
+	// how a file added from outside, or replaced on disk, gets a hash.
+	OpPutBlob
 )
+
+// isPathOp reports whether op names a project file by a path in its key.
+func isPathOp(op StoreOp) bool {
+	switch op {
+	case OpWriteProjection, OpReadProjection, OpAcknowledge, OpFileInfo, OpPutBlob:
+		return true
+	}
+	return false
+}
 
 // StoreStatus is the outcome of a store request.
 type StoreStatus uint8
@@ -92,10 +119,16 @@ const (
 	// StatusInvalidText means the project file is UTF-8 apart from invalid
 	// bytes; the payload is the 1-based line of the first one, as a u32.
 	StatusInvalidText
+	// StatusEditedOutside means a write was refused because the project file
+	// was edited outside Inkwell and the edit is not yet acknowledged.
+	StatusEditedOutside
+	// StatusTooLarge means the file is over the size limit of a blob; the
+	// payload is the limit in bytes, as a u64.
+	StatusTooLarge
 )
 
 // maxStatus is the last status a frame may carry.
-const maxStatus = StatusInvalidText
+const maxStatus = StatusTooLarge
 
 // StoreRequest is one decoded request of the store stream.
 type StoreRequest struct {
@@ -131,11 +164,11 @@ func (r StoreRequest) validate() error {
 		if len(r.Key) != 0 {
 			err = fmt.Errorf("%d components, want 0", len(r.Key))
 		}
-	case OpWriteProjection, OpReadProjection, OpAcknowledge, OpFileInfo:
-		if len(r.Key) != 1 {
-			err = fmt.Errorf("%d components, want 1", len(r.Key))
-		} else {
-			err = store.ValidKey(r.Key)
+	case OpWriteProjection, OpReadProjection, OpAcknowledge, OpFileInfo, OpPutBlob:
+		err = validPathKey(r.Key)
+	case OpTree, OpReferenced:
+		if len(r.Key) != 0 {
+			err = fmt.Errorf("%d components, want 0", len(r.Key))
 		}
 	default:
 		err = fmt.Errorf("op %d", r.Op)
@@ -145,12 +178,21 @@ func (r StoreRequest) validate() error {
 		return fmt.Errorf("%w: %w", ErrMalformed, err)
 	case r.ID == 0:
 		return fmt.Errorf("%w: request id 0", ErrMalformed)
-	case r.Op != OpSave && r.Op != OpWriteProjection && len(r.Data) > 0:
+	case r.Op != OpSave && r.Op != OpWriteProjection && r.Op != OpTree && r.Op != OpReferenced && len(r.Data) > 0:
 		return fmt.Errorf("%w: data on op %d", ErrMalformed, r.Op)
 	case len(r.Data) > store.MaxValue:
 		return fmt.Errorf("%w: %d bytes of data", ErrMalformed, len(r.Data))
 	}
 	return nil
+}
+
+// validPathKey checks a key that names a file of the project: one component
+// per folder, and a path that [project.ValidatePath] accepts.
+func validPathKey(key []string) error {
+	if len(key) == 0 || len(key) > project.MaxDepth {
+		return fmt.Errorf("%d components, want 1 to %d", len(key), project.MaxDepth)
+	}
+	return project.ValidatePath(strings.Join(key, "/"))
 }
 
 // EncodeStoreRequest serializes r. It returns an error wrapping
@@ -179,12 +221,12 @@ func appendKey(b []byte, key []string) []byte {
 }
 
 // parseKey reads nkey and the components from the front of b.
-func parseKey(b []byte) (key []string, rest []byte, err error) {
+func parseKey(b []byte, maxDepth int) (key []string, rest []byte, err error) {
 	if len(b) < 1 {
 		return nil, nil, errors.New("truncated key")
 	}
 	n := int(b[0])
-	if n > store.MaxDepth {
+	if n > maxDepth {
 		return nil, nil, fmt.Errorf("%d components", n)
 	}
 	b = b[1:]
@@ -213,7 +255,11 @@ func DecodeStoreRequest(b []byte) (StoreRequest, error) {
 		return StoreRequest{}, fmt.Errorf("%w: truncated header", ErrMalformed)
 	}
 	r := StoreRequest{ID: binary.BigEndian.Uint32(b), Op: StoreOp(b[4])}
-	key, rest, err := parseKey(b[5:])
+	maxDepth := store.MaxDepth
+	if isPathOp(r.Op) {
+		maxDepth = project.MaxDepth
+	}
+	key, rest, err := parseKey(b[5:], maxDepth)
 	if err != nil {
 		return StoreRequest{ID: r.ID}, fmt.Errorf("%w: %w", ErrMalformed, err)
 	}
@@ -282,7 +328,7 @@ func DecodeRange(b []byte) ([]store.Entry, error) {
 	b = b[4:]
 	var out []store.Entry
 	for range count {
-		key, rest, err := parseKey(b)
+		key, rest, err := parseKey(b, store.MaxDepth)
 		if err != nil || len(rest) < 4 {
 			return nil, fmt.Errorf("%w: bad range entry", ErrMalformed)
 		}
@@ -314,6 +360,14 @@ type Storage interface {
 	Acknowledge(rel string) error
 	ReadText(rel string) (project.Text, error)
 	List() ([]project.File, error)
+	// SetTree projects the project tree of the webview (see
+	// [project.Project.ApplyTree]) and returns how many entries it refused.
+	SetTree(entries []project.TreeEntry) (rejected int, err error)
+	// SetReferenced records the blobs the project refers to.
+	SetReferenced(hashes [][HashSize]byte) error
+	// PutBlob stores the project file rel in the blob store. It returns a
+	// [*TooLargeError] for a file over the limit of a blob.
+	PutBlob(rel string) (hash [HashSize]byte, size int64, err error)
 }
 
 // StoreServer serves one [Storage] to the webview over the store stream.
@@ -419,6 +473,7 @@ func (s *StoreServer) handle(req StoreRequest) StoreResponse {
 		payload []byte
 		err     error
 	)
+	rel := strings.Join(req.Key, "/") // for the operations that name a file
 	switch req.Op {
 	case OpLoad:
 		payload, err = s.st.Load(req.Key)
@@ -431,21 +486,58 @@ func (s *StoreServer) handle(req StoreRequest) StoreResponse {
 	case OpRemoveRange:
 		err = s.st.RemoveRange(req.Key)
 	case OpWriteProjection:
-		err = s.st.WriteProjection(req.Key[0], req.Data)
+		err = s.st.WriteProjection(rel, req.Data)
 	case OpReadProjection:
-		payload, err = s.st.ReadProjection(req.Key[0])
+		payload, err = s.st.ReadProjection(rel)
 	case OpListFiles:
 		payload, err = s.listFiles()
 	case OpFileInfo:
-		payload, err = s.fileInfo(req.Key[0])
+		payload, err = s.fileInfo(rel)
 	case OpAcknowledge:
-		if err = s.st.Acknowledge(req.Key[0]); err == nil {
+		if err = s.st.Acknowledge(rel); err == nil {
 			s.mu.Lock()
-			delete(s.pending, req.Key[0])
+			delete(s.pending, rel)
 			s.mu.Unlock()
+		}
+	case OpTree:
+		payload, err = s.setTree(req.Data)
+	case OpReferenced:
+		err = s.setReferenced(req.Data)
+	case OpPutBlob:
+		var (
+			hash [HashSize]byte
+			size int64
+		)
+		if hash, size, err = s.st.PutBlob(rel); err == nil {
+			payload = EncodeBlobInfo(hash, size)
 		}
 	}
 	return s.respond(req, payload, err)
+}
+
+// setTree runs OpTree.
+func (s *StoreServer) setTree(data []byte) ([]byte, error) {
+	entries, err := DecodeTree(data)
+	if err != nil {
+		return nil, err
+	}
+	rejected, err := s.st.SetTree(entries)
+	if err != nil {
+		return nil, err
+	}
+	if rejected > 0 {
+		s.log.Warn("store stream: tree entries refused", "rejected", rejected, "of", len(entries))
+	}
+	return EncodeTreeResult(rejected), nil
+}
+
+// setReferenced runs OpReferenced.
+func (s *StoreServer) setReferenced(data []byte) error {
+	hashes, err := DecodeReferenced(data)
+	if err != nil {
+		return err
+	}
+	return s.st.SetReferenced(hashes)
 }
 
 // listFiles runs OpListFiles.
@@ -491,6 +583,13 @@ func (s *StoreServer) respond(req StoreRequest, payload []byte, err error) Store
 		return StoreResponse{ID: req.ID, Status: StatusCorrupt}
 	case errors.Is(err, project.ErrBinary):
 		return StoreResponse{ID: req.ID, Status: StatusBinary}
+	case errors.Is(err, project.ErrExternalEdit):
+		return StoreResponse{ID: req.ID, Status: StatusEditedOutside}
+	case errors.Is(err, ErrMalformed):
+		return StoreResponse{ID: req.ID, Status: StatusError, Payload: []byte("malformed request")}
+	}
+	if tl, ok := errors.AsType[*TooLargeError](err); ok {
+		return StoreResponse{ID: req.ID, Status: StatusTooLarge, Payload: binary.BigEndian.AppendUint64(nil, uint64(max(tl.Limit, 0)))} // #nosec G115 -- clamped.
 	}
 	if bad, ok := errors.AsType[*project.InvalidUTF8Error](err); ok {
 		line := binary.BigEndian.AppendUint32(nil, uint32(min(bad.Line, math.MaxUint32))) // #nosec G115 -- clamped.

@@ -2,7 +2,7 @@ import { type ChildProcess, spawn } from "node:child_process";
 import { mkdtempSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { expect, test } from "@playwright/test";
+import { expect, test } from "./fixtures";
 import { docText, open, pair, typeAtEnd } from "./helpers";
 
 // A relay is killed and restarted (same key, same port) while two people, both in
@@ -100,7 +100,10 @@ test("a relay killed and restarted: both sides keep typing offline and converge"
   await pair(alice, bob);
 
   await typeAtEnd(alice, "avant ");
-  await expect(bob.locator(".cm-content")).toContainText("avant");
+  // Bob's page opens Alice's document once it has arrived through the relay (`repo.find`): the
+  // "Synchronisé" status only says the link is up. That first transfer is a network round trip,
+  // like the 30 s waits below, not an editor refresh.
+  await expect(bob.locator(".cm-content")).toContainText("avant", { timeout: 30_000 });
 
   // The relay goes away: the link between them cannot survive without it.
   await stop(relay.proc);

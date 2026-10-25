@@ -72,7 +72,7 @@ Plan : [docs/plans/2026-10-25-etape-2-reseau.md](docs/plans/2026-10-25-etape-2-r
 - [ ] Panneau Activité (par auteur, par séance), versions nommées (jalons go-git)
 - [ ] Diff « depuis ma dernière visite » (`@codemirror/merge`), minibar colorée par auteur
 - [ ] Undo par auteur, lecture seule, divergences signalées et réglables en deux clics
-- [ ] `blob` : magasin BLAKE3, quotas, échange libp2p
+- [ ] `blob` : magasin BLAKE3, quotas, échange libp2p (avancé en T11/B4, côté Go fait : magasin + Bao, flux `bulk`, quotas, reprise, ménage, arbre et noms validés ; reste : index et UI côté webview, ADR 0023)
 - [ ] Symboles, tableaux, images, encadrés, extraits, panneau Charte ; visionneuse PDF.js
 
 ## Étape 5 — Qualité

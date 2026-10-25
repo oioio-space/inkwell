@@ -2,7 +2,8 @@ import { type ChildProcess, spawn } from "node:child_process";
 import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
-import { expect, type Page, test } from "@playwright/test";
+import type { Page } from "@playwright/test";
+import { expect, test } from "./fixtures";
 import { ALICE_PORT, SPARE_PORT, SPARE_URL } from "./ports";
 
 // Alice's instance keeps its projects in <INKWELL_E2E_DOCS>/<ALICE_PORT> (see playwright.config.ts).
@@ -59,7 +60,9 @@ test("what is typed lands in main.typ and survives a fresh browser and a second 
     await expect(editor(again)).toBeVisible();
     await expect.poll(() => docText(again), { timeout: 10_000 }).toBe(text);
   } finally {
+    const exited = new Promise((r) => restarted.once("exit", r));
     restarted.kill("SIGTERM");
+    await exited; // its writes must not reach the next test
   }
 });
 

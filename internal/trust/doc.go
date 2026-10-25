@@ -4,7 +4,7 @@
 // # Model
 //
 // A project's members form a hash-DAG of signed [Op]s (Genesis, Add, SetRole,
-// Remove). Each op names in Prev the frontier its author had seen, carries a
+// Remove, Suspend, Resume). Each op names in Prev the frontier its author had seen, carries a
 // Lamport number (exactly 1 + the maximum of its parents, 0 for Genesis) and
 // is signed over the [ProjectID] and its canonical encoding (domain
 // "trust-op"). The ProjectID is the SHA-256 of the canonical Genesis op, so a
@@ -115,6 +115,43 @@
 //     hash of the op that admitted x if there is none. Members are listed in ≺
 //     order of that Add (of the admitting op if there is none), and the creator
 //     comes first.
+//
+// # Suspension (ADR 0021)
+//
+// A Suspend or Resume is an op like the others, by an admin and on another
+// key (a Suspend or Resume of its own author is [ErrMalformed] at decode). It
+// is not a role op: roles, ranks and the survivors of rule 4 do not change, so
+// a suspended member keeps its role and its rank. In rules S1 to S3, "suspension
+// ops on x" are the standing Suspends and Resumes on x by other keys.
+//
+//   - S1. Reach. A suspension op by y on x counts only if x is unranked, junior
+//     to y, or senior but not admin at that op (the exception of rule 2, as
+//     for a Remove). Otherwise it is stored and has no effect.
+//   - S2. State. Keep the suspension ops on x that see every surviving
+//     Remove of x by a key senior to it (so a removal followed by a
+//     readmission starts afresh, and a suspension concurrent to the removal
+//     does not outlive it). A junior's suspension of a senior (S1's
+//     exception) is dropped if a surviving grant that it does not follow
+//     makes x admin again, as rule 4 drops a junior's cut: state and effect
+//     agree. Drop a Resume concurrent to a Suspend of those: a cut beats a
+//     concurrent restoration, as in rule 4. x is suspended if the ≺-last op
+//     left is a Suspend ([Member.SuspendedBy], [Member.SuspendedOp]), and
+//     [Member.ResumedBy] says who lifted it if it is a Resume.
+//   - S3. Effect on the list. An op o by y stands only if, in addition to
+//     rule 3, (a) y is not suspended at o, S2 computed on the ops and the
+//     Removes that o sees (the same Removes as S2); and (b) no standing Suspend on y by another key is concurrent to
+//     o, which treats it as a cut: what y signs without having seen it is
+//     dead, even after a Resume, so a suspended admin cannot backdate. A
+//     self-cut that S3 kills is not an exit either. As for rule 2, the
+//     suspension ops of a junior on a senior (S1's exception) take part in
+//     S2 only: they change nothing that the senior itself decides.
+//
+// S1 to S3 read only ops by keys senior to y, like the rest of the sweep, so
+// it stays acyclic. [List.Verify] returns [ErrSuspended] for the attestation
+// of a suspended member, so the application stops trusting what it signs.
+// [List.IssueBatch] issues one op per device of a person, all or nothing.
+// Issue refuses to store an op that would not stand ([ErrNotStanding]), to
+// let the last active admin leave, and to make a suspended member admin.
 //
 // Each rule about y's ops reads only ops by keys senior to y and y's own
 // ops, except what a self-cut says and what spares an op from an exit (which
