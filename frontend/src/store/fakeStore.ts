@@ -1,5 +1,13 @@
 import type { SocketLike } from "../net/WailsNetworkAdapter";
 import {
+  Eol,
+  encodeFileInfo,
+  encodeFileList,
+  type FileInfo,
+  FileKind,
+  type ProjectFile,
+} from "./files";
+import {
   decodeRequest,
   type Entry,
   encodeRange,
@@ -24,6 +32,12 @@ export class FakeGoStore {
   readonly locked = new Set<string>();
   /** Keys (joined by "/") that load as damaged and unrecoverable. */
   readonly corrupt = new Set<string>();
+  /** How each file is stored on disk, when not UTF-8 with LF (see FileInfo). */
+  readonly info = new Map<string, FileInfo>();
+  /** Files that are binary: reading them answers Binary. */
+  readonly binary = new Set<string>();
+  /** Files with invalid UTF-8, by 1-based line of the first bad byte. */
+  readonly invalidText = new Map<string, number>();
   /** Every request received, in order: [op, key joined by "/"]. */
   readonly log: [number, string][] = [];
   #sockets = new Set<FakeSocket>();
@@ -60,7 +74,8 @@ export class FakeGoStore {
     const req = decodeRequest(frame);
     const path = req.key.join("/");
     this.log.push([req.op, path]);
-    if (!req.key.every(validComponent) || (req.key.length === 0 && req.op !== Op.LoadRange)) {
+    const keyless = req.op === Op.LoadRange || req.op === Op.ListFiles;
+    if (!req.key.every(validComponent) || (req.key.length === 0 && !keyless)) {
       return [Status.Error, textEncoder.encode("invalid key")];
     }
     switch (req.op) {
@@ -88,8 +103,20 @@ export class FakeGoStore {
         return [Status.OK];
       case Op.ReadProjection: {
         const f = this.files.get(path);
-        return f ? [Status.OK, f] : [Status.NotFound];
+        return this.#notText(path) ?? (f ? [Status.OK, f] : [Status.NotFound]);
       }
+      case Op.FileInfo:
+        if (!this.files.has(path)) return [Status.NotFound];
+        return (
+          this.#notText(path) ?? [
+            Status.OK,
+            encodeFileInfo(
+              this.info.get(path) ?? { encoding: "utf-8", eol: Eol.LF, bom: false, mixed: false },
+            ),
+          ]
+        );
+      case Op.ListFiles:
+        return [Status.OK, encodeFileList(this.#list())];
       case Op.Acknowledge:
         this.acknowledged.push(path);
         this.locked.delete(path);
@@ -97,6 +124,24 @@ export class FakeGoStore {
       default:
         return [Status.Error, textEncoder.encode("unknown op")];
     }
+  }
+
+  #notText(name: string): [Status, Uint8Array?] | undefined {
+    if (this.binary.has(name)) return [Status.Binary];
+    const line = this.invalidText.get(name);
+    if (line === undefined) return undefined;
+    return [Status.InvalidText, Uint8Array.from([0, 0, (line >> 8) & 0xff, line & 0xff])];
+  }
+
+  #list(): ProjectFile[] {
+    return [...this.files]
+      .sort(([a], [b]) => (a < b ? -1 : 1))
+      .map(([path, data]) => ({
+        path,
+        kind: path.endsWith(".typ") ? FileKind.typst : FileKind.text,
+        size: data.length,
+        main: path === "main.typ",
+      }));
   }
 
   #range(prefix: string[]): Entry[] {

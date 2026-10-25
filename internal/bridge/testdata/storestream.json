@@ -46,5 +46,11 @@
     "type": "range",
     "entries": [{"key": ["d", "k"], "dataHex": "76"}],
     "wireHex": "00000001020164016b0000000176"
-  }
+  },
+  {"name": "list files", "type": "request", "id": 4, "op": "ListFiles", "key": [], "dataHex": "", "wireHex": "000000040900"},
+  {"name": "file info", "type": "request", "id": 5, "op": "FileInfo", "key": ["main.typ"], "dataHex": "", "wireHex": "000000050a01086d61696e2e747970"},
+  {"name": "binary file response", "type": "response", "id": 6, "status": "Binary", "payloadHex": "", "wireHex": "0000000605"},
+  {"name": "invalid text response with its line", "type": "response", "id": 7, "status": "InvalidText", "payloadHex": "00000003", "wireHex": "000000070600000003"},
+  {"name": "file list payload", "type": "filelist", "files": [{"path": "chapters/ch1.typ", "kind": "typst", "size": 300, "main": false}, {"path": "main.typ", "kind": "typst", "size": 4, "main": true}], "wireHex": "01000000020100000000000000012c001063686170746572732f6368312e7479700101000000000000000400086d61696e2e747970"},
+  {"name": "file info payload", "type": "fileinfo", "info": {"encoding": "windows-1252", "eol": "CRLF", "bom": false, "mixed": true}, "wireHex": "0102010c77696e646f77732d31323532"}
 ]

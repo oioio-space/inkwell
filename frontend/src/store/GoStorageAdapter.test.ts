@@ -3,7 +3,8 @@ import { next as A } from "@automerge/automerge";
 import { type DocHandle, type PeerId, Repo } from "@automerge/automerge-repo";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { FakeGoStore } from "./fakeStore";
-import { GoStorageAdapter, StoreError } from "./GoStorageAdapter";
+import { Eol, FileKind } from "./files";
+import { GoStorageAdapter, NotTextError, StoreError } from "./GoStorageAdapter";
 import { Op } from "./protocol";
 
 type Doc = { text: string };
@@ -145,6 +146,45 @@ describe("project files", () => {
       Op.ReadProjection,
       Op.Acknowledge,
     ]);
+  });
+
+  it("lists the files and says how one is stored", async () => {
+    const go = new FakeGoStore();
+    const a = adapterOn(go);
+    await a.writeProjection("main.typ", "= A\n");
+    go.files.set("notes.txt", text("n"));
+    go.info.set("notes.txt", { encoding: "windows-1252", eol: Eol.CRLF, bom: false, mixed: true });
+    expect(await a.listFiles()).toEqual([
+      { path: "main.typ", kind: FileKind.typst, size: 4, main: true },
+      { path: "notes.txt", kind: FileKind.text, size: 1, main: false },
+    ]);
+    expect(await a.fileInfo("main.typ")).toEqual({
+      encoding: "utf-8",
+      eol: Eol.LF,
+      bom: false,
+      mixed: false,
+    });
+    expect(await a.fileInfo("notes.txt")).toMatchObject({ encoding: "windows-1252", mixed: true });
+    expect(await a.fileInfo("absent.typ")).toBeUndefined();
+  });
+
+  it("rejects a file that is not text, with the line of the bad byte", async () => {
+    const go = new FakeGoStore();
+    const a = adapterOn(go);
+    go.files.set("img.typ", text("x"));
+    go.files.set("bad.typ", text("x"));
+    go.binary.add("img.typ");
+    go.invalidText.set("bad.typ", 3);
+    await expect(a.readProjection("img.typ")).rejects.toMatchObject({
+      name: "NotTextError",
+      reason: "binary",
+    });
+    await expect(a.fileInfo("bad.typ")).rejects.toMatchObject({
+      name: "NotTextError",
+      reason: "invalid-utf8",
+      line: 3,
+    });
+    await expect(a.readProjection("bad.typ")).rejects.toBeInstanceOf(NotTextError);
   });
 
   it("delivers external-edit notices, including the ones pushed on attach", async () => {
