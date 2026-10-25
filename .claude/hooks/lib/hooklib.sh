@@ -10,6 +10,12 @@ HOOK_INPUT="$(cat)"
 # Consumed by sourcing hooks, not within this lib.
 # shellcheck disable=SC2034
 HOOK_PROJECT_DIR="${CLAUDE_PROJECT_DIR:-$(git rev-parse --show-toplevel 2>/dev/null || pwd)}"
+# The repository the tool call actually runs in: the payload's cwd (an agent's git
+# worktree, for instance), falling back to the project dir. Git-state checks (staged
+# diff, review marker) must use this, or a worktree commit is checked against main.
+# shellcheck disable=SC2034
+HOOK_REPO_DIR="$(printf '%s' "$HOOK_INPUT" | jq -r '.cwd // empty')"
+[[ -d "$HOOK_REPO_DIR" ]] || HOOK_REPO_DIR="$HOOK_PROJECT_DIR"
 
 # The command of a Bash tool call (empty for other tools).
 hook_cmd() { printf '%s' "$HOOK_INPUT" | jq -r '.tool_input.command // ""'; }

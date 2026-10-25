@@ -15,7 +15,7 @@ source "$(dirname "$0")/lib/hooklib.sh"
 
 hook_is_git_commit "$(hook_cmd)" || exit 0
 
-cd "$HOOK_PROJECT_DIR" 2>/dev/null || exit 0
+cd "$HOOK_REPO_DIR" 2>/dev/null || exit 0
 staged="$(git diff --cached --name-only 2>/dev/null || true)"
 [[ -n "$staged" ]] || exit 0
 

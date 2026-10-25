@@ -9,7 +9,7 @@ source "$(dirname "$0")/lib/hooklib.sh"
 
 hook_is_git_commit "$(hook_cmd)" || exit 0
 
-cd "$HOOK_PROJECT_DIR" 2>/dev/null || exit 0
+cd "$HOOK_REPO_DIR" 2>/dev/null || exit 0
 
 # Only fire when staged Go changes plausibly touch the public surface: an exported
 # declaration (func/type/const/var starting with a capital) or the CLI/flags. Keeps the

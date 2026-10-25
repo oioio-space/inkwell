@@ -15,7 +15,7 @@ cmd="$(hook_cmd)"
 hook_is_git_commit "$cmd" || exit 0
 case "$cmd" in *--no-verify*) exit 0 ;; esac # explicit bypass
 
-cd "$HOOK_PROJECT_DIR" || exit 0
+cd "$HOOK_REPO_DIR" || exit 0
 marker="$(git rev-parse --git-dir 2>/dev/null || echo .git)/claude-simplify-ok"
 staged_hash="$(git diff --cached | sha1sum | cut -d' ' -f1)"
 
