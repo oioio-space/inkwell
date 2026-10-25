@@ -14,6 +14,8 @@ import (
 	"slices"
 	"strings"
 
+	"lukechampine.com/blake3"
+
 	"github.com/oioio-space/inkwell/internal/store"
 )
 
@@ -199,11 +201,15 @@ func claim(seats map[string]seat, e TreeEntry) error {
 //   - a blob is listed in the result: its visible copy is a plain file that
 //     [Project.WriteBlob] writes once the blob is in the store;
 //   - a file that moved in the tree (same document or same hash, new path) is
-//     moved on disk, not written again.
+//     moved on disk, not written again, if Inkwell wrote it and it is
+//     unchanged.
 //
-// A file that left the tree is not deleted: Inkwell never removes what the
-// user may be reading; the trash of the project does. It returns an error only
-// for a failure of the disk, after doing as much as it could.
+// A tree is a claim of a peer, so it never gets a path that exists on disk
+// unless Inkwell wrote the file there: such an entry is refused with
+// [ErrTreeConflict], as is one under a symbolic link. Files and folders of the
+// user are never moved. A file that left the tree is not deleted, but its
+// ownership is dropped if Inkwell never wrote it. It returns an error only for
+// a failure of the disk, after doing as much as it could.
 func (p *Project) ApplyTree(entries []TreeEntry) (TreeResult, error) {
 	var res TreeResult
 	if len(entries) > MaxNodes {
@@ -220,20 +226,21 @@ func (p *Project) ApplyTree(entries []TreeEntry) (TreeResult, error) {
 			next[e.Path] = e.ref()
 		}
 	}
-	var errs []error
-	errs = append(errs, p.moveRenamed(next)...)
+	errs := p.moveRenamed(next)
 	for _, e := range accepted {
-		switch e.Type {
-		case NodeDir:
-			errs = append(errs, p.mkdir(e.Path))
-		case NodeText, NodeBlob:
-			errs = append(errs, p.mkdir(path.Dir(e.Path)))
-			if _, owned := p.m.Files[e.Path]; !owned {
-				p.m.Files[e.Path] = ""
-			}
-			if e.Type == NodeBlob {
-				res.Blobs = append(res.Blobs, e)
-			}
+		if err := p.apply(e); err != nil {
+			res.Rejected = append(res.Rejected, Rejection{Path: e.Path, Err: err})
+			delete(next, e.Path)
+			continue
+		}
+		if e.Type == NodeBlob {
+			res.Blobs = append(res.Blobs, e)
+		}
+	}
+	for rel, recorded := range p.m.Files { // what left the tree and was never written
+		if _, listed := next[rel]; !listed && recorded == "" && rel != MainFile {
+			delete(p.m.Files, rel)
+			delete(p.notified, rel)
 		}
 	}
 	p.m.Tree = next
@@ -245,20 +252,34 @@ func (p *Project) ApplyTree(entries []TreeEntry) (TreeResult, error) {
 	return res, errors.Join(errs...)
 }
 
-// mkdir creates the folder dir and those above it, under the project root.
-func (p *Project) mkdir(dir string) error {
-	if dir == "." || dir == "" {
-		return nil
+// apply makes the folder or the owned file of an accepted entry. The caller
+// holds p.mu.
+func (p *Project) apply(e TreeEntry) error {
+	if e.Type == NodeDir {
+		return p.mkdir(e.Path)
 	}
-	if err := p.root.MkdirAll(dir, 0o700); err != nil {
-		return fmt.Errorf("project: create folder: %w", err)
+	if _, owned := p.m.Files[e.Path]; !owned {
+		if _, err := p.lstatPath(e.Path); err == nil {
+			return fmt.Errorf("%w: a file is there already, not written by Inkwell", ErrTreeConflict)
+		} else if !errors.Is(err, fs.ErrNotExist) {
+			return err
+		}
+	}
+	if err := p.mkdir(path.Dir(e.Path)); err != nil {
+		return err
+	}
+	if _, owned := p.m.Files[e.Path]; !owned {
+		p.m.Files[e.Path] = ""
 	}
 	return nil
 }
 
 // moveRenamed moves on disk the owned files that the new tree lists at another
 // path: those whose content ref appears once in the old tree and once in the
-// new one, at different paths, with nothing in the way. The caller holds p.mu.
+// new one, at different paths, and that are safe to move: a regular file with
+// one name, written by Inkwell and unchanged since (its hash is the recorded
+// one), going to a path that is free and not owned. Folders are never moved.
+// The caller holds p.mu.
 func (p *Project) moveRenamed(next map[string]string) []error {
 	oldByRef, newByRef := map[string][]string{}, map[string][]string{}
 	for pth, ref := range p.m.Tree {
@@ -277,21 +298,23 @@ func (p *Project) moveRenamed(next map[string]string) []error {
 		if _, stillListed := next[src]; stillListed {
 			continue
 		}
-		if _, taken := p.m.Files[dst]; taken {
+		if _, taken := p.m.Files[dst]; taken || p.m.Files[src] == "" {
+			continue // dst is owned, or Inkwell never wrote src
+		}
+		if !p.unchanged(src) {
 			continue
 		}
-		if _, err := p.root.Lstat(src); err != nil {
-			continue // nothing on disk to move
-		}
-		if _, err := p.root.Lstat(dst); err == nil {
-			continue // something is there already: leave both
+		if _, err := p.lstatPath(dst); err == nil || !errors.Is(err, fs.ErrNotExist) {
+			continue // something is there already, or the path is not safe: leave both
 		}
 		if err := p.mkdir(path.Dir(dst)); err != nil {
 			errs = append(errs, err)
 			continue
 		}
-		if err := p.root.Rename(src, dst); err != nil {
-			errs = append(errs, fmt.Errorf("project: move %q: %w", src, err))
+		if err := p.renameNoReplace(src, dst); err != nil {
+			if !errors.Is(err, fs.ErrExist) {
+				errs = append(errs, fmt.Errorf("project: move %q: %w", src, err))
+			}
 			continue
 		}
 		p.m.Files[dst] = p.m.Files[src]
@@ -301,18 +324,36 @@ func (p *Project) moveRenamed(next map[string]string) []error {
 	return errs
 }
 
+// unchanged reports whether rel is a regular file with one name whose content
+// is what Inkwell last wrote there. The caller holds p.mu.
+func (p *Project) unchanged(rel string) bool {
+	recorded := p.m.Files[rel]
+	if recorded == "" {
+		return false
+	}
+	sum, exists, err := p.diskHash(rel)
+	return err == nil && exists && sum == recorded
+}
+
+// ErrBlobMismatch is returned by [Project.WriteBlob] when the content it was
+// given does not hash to the blob's hash.
+var ErrBlobMismatch = errors.New("project: content does not match the blob hash")
+
 // WriteBlob writes the visible copy of a blob: the file rel of the project
 // folder, which the current tree must list as the blob with this hash. The
-// copy is written with [store.WriteAtomic], never linked to the blob store, so
-// that an edit made outside Inkwell cannot damage the store. data must be the
-// blob's content: the caller has it verified.
+// copy is streamed from src with [store.WriteAtomicFrom] and checked against
+// hash on the way, so a 100 MB file is never held in memory and a wrong
+// content never appears in the folder. It is never linked to the blob store, so
+// that an edit made outside Inkwell cannot damage the store.
 //
 // A file that is already there with this content is left alone. One that was
 // changed outside Inkwell since the last write is not overwritten
-// ([ErrExternalEdit]) until [Project.Acknowledge]. It returns [ErrBlobMoved]
-// if the tree no longer lists the blob there, and [ErrNotOwned] or an
-// [ErrInvalidName] for a path that was never listed.
-func (p *Project) WriteBlob(rel string, hash [32]byte, data []byte) error {
+// ([ErrExternalEdit]) until [Project.Acknowledge]. It returns [ErrBlobMoved] if
+// the tree no longer lists the blob there, [ErrNotOwned] or an
+// [ErrInvalidName] for a path that was never listed, [ErrBlobMismatch] for a
+// wrong content, and [ErrLink] or [ErrHardLink] for a path that is not a plain
+// file.
+func (p *Project) WriteBlob(rel string, hash [32]byte, src io.Reader) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	recorded, err := p.owned(rel)
@@ -322,12 +363,11 @@ func (p *Project) WriteBlob(rel string, hash [32]byte, data []byte) error {
 	if p.m.Tree[rel] != (TreeEntry{Type: NodeBlob, Hash: hash}).ref() {
 		return fmt.Errorf("%w: %q", ErrBlobMoved, rel)
 	}
-	want := hashOf(data)
-	current, exists, err := p.diskHash(rel)
+	current, onDisk, exists, err := p.hashDisk(rel)
 	switch {
 	case err != nil:
 		return err
-	case exists && current == want:
+	case exists && onDisk == hash:
 		if current != recorded {
 			return p.record(rel, current)
 		}
@@ -338,10 +378,41 @@ func (p *Project) WriteBlob(rel string, hash [32]byte, data []byte) error {
 	if err := p.mkdir(path.Dir(rel)); err != nil {
 		return err
 	}
-	if err := store.WriteAtomic(p.root, rel, data, 0o600); err != nil {
+	b3, sha := blake3.New(32, nil), sha256.New()
+	check := func() error {
+		var got [32]byte
+		b3.Sum(got[:0])
+		if got != hash {
+			return ErrBlobMismatch
+		}
+		return nil
+	}
+	if err := store.WriteAtomicFrom(p.root, rel, io.TeeReader(src, io.MultiWriter(b3, sha)), 0o600, check); err != nil {
 		return fmt.Errorf("project: write %s: %w", rel, err)
 	}
-	return p.record(rel, want)
+	return p.record(rel, hex.EncodeToString(sha.Sum(nil)))
+}
+
+// Claim records the file rel as written by Inkwell, with the hex SHA-256 sum
+// that the caller has just computed from reading it: the user asked for this
+// file to join the project (see [Project.OpenFile]). A tree that lists the path
+// afterwards finds it owned, where a path the user already had is otherwise
+// refused. It fails if the file is not a plain file with that content, so that
+// a file changed since the read is not taken over.
+func (p *Project) Claim(rel, sum string) error {
+	if err := ValidatePath(rel); err != nil {
+		return fmt.Errorf("%w: %w", ErrNotOwned, err)
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	current, exists, err := p.diskHash(rel)
+	switch {
+	case err != nil:
+		return err
+	case !exists || current != sum:
+		return fmt.Errorf("project: %q changed while it was read", rel)
+	}
+	return p.record(rel, sum)
 }
 
 // BlobPaths returns the paths where the current tree lists the blob hash, in
@@ -361,12 +432,17 @@ func (p *Project) BlobPaths(hash [32]byte) []string {
 }
 
 // OpenFile opens the file rel of the project folder for reading, after
-// checking the path with [ValidatePath]. The file must be a regular file; the
-// caller closes it. It is how a file added from outside is read to be stored
-// as a blob.
+// checking the path with [ValidatePath]. The file must be a regular file with
+// one name, reached through no symbolic link; the caller closes it. It is how
+// a file added from outside is read to be stored as a blob.
 func (p *Project) OpenFile(rel string) (*os.File, fs.FileInfo, error) {
 	if err := ValidatePath(rel); err != nil {
 		return nil, nil, err
+	}
+	if exists, err := p.regular(rel); err != nil {
+		return nil, nil, err
+	} else if !exists {
+		return nil, nil, fmt.Errorf("project: %q: %w", rel, fs.ErrNotExist)
 	}
 	f, err := p.root.Open(rel)
 	if err != nil {
@@ -377,28 +453,40 @@ func (p *Project) OpenFile(rel string) (*os.File, fs.FileInfo, error) {
 		_ = f.Close()
 		return nil, nil, err
 	}
-	if !info.Mode().IsRegular() {
+	if !info.Mode().IsRegular() || hardLinks(info) > 1 { // swapped since the check
 		_ = f.Close()
-		return nil, nil, fmt.Errorf("project: %q is not a regular file", rel)
+		return nil, nil, fmt.Errorf("%w: %q", ErrNotRegular, rel)
 	}
 	return f, info, nil
 }
 
 // diskHash returns the hex SHA-256 of rel on disk without reading it into
 // memory, whatever its size; exists is false (and the hash empty) when the file
-// is absent. The caller holds p.mu.
+// is absent. The path must be a regular file with one name, through no
+// symbolic link. The caller holds p.mu.
 func (p *Project) diskHash(rel string) (hash string, exists bool, err error) {
+	hash, _, exists, err = p.hashDisk(rel)
+	return hash, exists, err
+}
+
+// hashDisk is [Project.diskHash] that also returns the BLAKE3 hash of the file,
+// the name of a blob, from the same pass.
+func (p *Project) hashDisk(rel string) (sum string, b3 [32]byte, exists bool, err error) {
+	if exists, err = p.regular(rel); err != nil || !exists {
+		return "", b3, false, err
+	}
 	f, err := p.root.Open(rel)
 	if errors.Is(err, fs.ErrNotExist) {
-		return "", false, nil
+		return "", b3, false, nil
 	}
 	if err != nil {
-		return "", false, fmt.Errorf("project: read %s: %w", rel, err)
+		return "", b3, false, fmt.Errorf("project: read %s: %w", rel, err)
 	}
 	defer func() { _ = f.Close() }() // read-only handle
-	h := sha256.New()
-	if _, err := io.Copy(h, f); err != nil {
-		return "", false, fmt.Errorf("project: read %s: %w", rel, err)
+	sha, hasher := sha256.New(), blake3.New(32, nil)
+	if _, err := io.Copy(io.MultiWriter(sha, hasher), f); err != nil {
+		return "", b3, false, fmt.Errorf("project: read %s: %w", rel, err)
 	}
-	return hex.EncodeToString(h.Sum(nil)), true, nil
+	hasher.Sum(b3[:0])
+	return hex.EncodeToString(sha.Sum(nil)), b3, true, nil
 }

@@ -132,6 +132,14 @@ vecteurs dorés partagés.
   - les noms de périphériques Windows, avec ou sans extension et en ignorant la casse : CON, PRN,
     AUX, NUL, CLOCK$, CONIN$, CONOUT$, COM0 à COM9, LPT0 à LPT9, COM¹²³, LPT¹²³.
 - **Réservés à la racine :** `.inkwell` et `.typstdeps`.
+- **Alias refusés à tout niveau** (audit de sécurité) :
+  - `.git`, en toute casse : git le traite comme sien à tout niveau ;
+  - les noms qui commencent comme un nom court 8.3, `^[^.]{1,6}~[0-9]+` (`INKWEL~1`) ;
+  - les points de code ignorables par défaut d'Unicode (`.inkwe‌ll`, l'astuce de HFS+).
+- **Propriété :** une arborescence est la déclaration d'un pair. Go ne prend jamais un chemin qui
+  existe déjà sur le disque sauf si Inkwell y a écrit le fichier ; il ne déplace que des fichiers
+  réguliers qu'Inkwell a écrits et que personne n'a modifiés, jamais un dossier, et il refuse tout
+  chemin qui traverse un lien symbolique.
 - À l'admission, toute modification de l'index qui écrit un `name`, `hash`, `url` ou `type` invalide
   est **refusée par tous**. C'est une fonction pure de la valeur, dans la même chaîne d'admission que
   l'ADR 0022.

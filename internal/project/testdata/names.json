@@ -304,6 +304,104 @@
    "reason": "device"
   },
   {
+   "name": "8.3 short name",
+   "input": "INKWEL~1",
+   "valid": false,
+   "reason": "short_name"
+  },
+  {
+   "name": "8.3 short name of typstdeps",
+   "input": "TYPSTD~1",
+   "valid": false,
+   "reason": "short_name"
+  },
+  {
+   "name": "8.3 short name with an extension",
+   "input": "PROGRA~1.txt",
+   "valid": false,
+   "reason": "short_name"
+  },
+  {
+   "name": "8.3 short name of the repository folder",
+   "input": "GIT~1",
+   "valid": false,
+   "reason": "short_name"
+  },
+  {
+   "name": "a tilde after seven characters is no short name",
+   "input": "abcdefg~1",
+   "valid": true
+  },
+  {
+   "name": "a tilde without digits is no short name",
+   "input": "a~b",
+   "valid": true
+  },
+  {
+   "name": "zero-width non-joiner",
+   "input": ".inkwe‌ll",
+   "valid": false,
+   "reason": "ignorable"
+  },
+  {
+   "name": "soft hyphen",
+   "input": "a­b",
+   "valid": false,
+   "reason": "ignorable"
+  },
+  {
+   "name": "word joiner",
+   "input": "a⁠b",
+   "valid": false,
+   "reason": "ignorable"
+  },
+  {
+   "name": "variation selector",
+   "input": "a️",
+   "valid": false,
+   "reason": "ignorable"
+  },
+  {
+   "name": "byte order mark",
+   "input": "﻿a",
+   "valid": false,
+   "reason": "ignorable"
+  },
+  {
+   "name": "bidi override",
+   "input": "a‮b",
+   "valid": false,
+   "reason": "ignorable"
+  },
+  {
+   "name": "tag character",
+   "input": "a󠁁",
+   "valid": false,
+   "reason": "ignorable"
+  },
+  {
+   "name": "Arabic number sign is not ignorable",
+   "input": "؀a",
+   "valid": true
+  },
+  {
+   "name": "the repository folder",
+   "input": ".git",
+   "valid": false,
+   "reason": "reserved"
+  },
+  {
+   "name": "the repository folder in capitals",
+   "input": ".GIT",
+   "valid": false,
+   "reason": "reserved"
+  },
+  {
+   "name": "an ignore file is a plain name",
+   "input": ".gitignore",
+   "valid": true
+  },
+  {
    "name": "invalid UTF-8",
    "inputHex": "61ff62",
    "valid": false,
@@ -465,6 +563,30 @@
    "input": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/b",
    "valid": false,
    "reason": "path_too_long"
+  },
+  {
+   "name": "repository folder below the root",
+   "input": "a/.git/config",
+   "valid": false,
+   "reason": "reserved"
+  },
+  {
+   "name": "repository folder at the root",
+   "input": ".git/config",
+   "valid": false,
+   "reason": "reserved"
+  },
+  {
+   "name": "short name below the root",
+   "input": "a/INKWEL~1/x",
+   "valid": false,
+   "reason": "short_name"
+  },
+  {
+   "name": "ignorable alias of inkwell",
+   "input": ".inkwe‌ll/x",
+   "valid": false,
+   "reason": "ignorable"
   }
  ],
  "keys": [

@@ -35,6 +35,9 @@ const (
 	maxBusy = 5
 	// maxBusyWait bounds the wait a Busy answer asks for.
 	maxBusyWait = 5 * time.Second
+	// maxServingPerPeer bounds the requests served at once for one peer, so
+	// that a member cannot hold every serving slot.
+	maxServingPerPeer = 2
 	// maxBusyReplies bounds the answers to a peer that asks more than we serve.
 	maxBusyReplies = 32
 )
@@ -90,6 +93,8 @@ type Service struct {
 	changed chan struct{}
 	serving int
 	busy    int
+	// servingBy counts the requests being served for each peer.
+	servingBy map[transport.PeerID]int
 }
 
 // reqKey identifies the one request a peer may have outstanding for a blob.
@@ -126,14 +131,15 @@ func NewService(t transport.Transport, store *Store, o ServiceOptions) (*Service
 	o.MaxServing = cmp.Or(o.MaxServing, defaultMaxServing)
 	v := &Service{
 		t: t, store: store, opt: o, log: o.Log,
-		slots:   make(chan struct{}, MaxTransfers),
-		up:      make(map[transport.PeerID]struct{}),
-		waiting: make(map[reqKey]*waiter),
-		calls:   make(map[Hash]*call),
-		faults:  make(map[transport.PeerID]int),
-		banned:  make(map[transport.PeerID]time.Time),
-		strikes: make(map[transport.PeerID]int),
-		changed: make(chan struct{}),
+		slots:     make(chan struct{}, MaxTransfers),
+		up:        make(map[transport.PeerID]struct{}),
+		waiting:   make(map[reqKey]*waiter),
+		calls:     make(map[Hash]*call),
+		faults:    make(map[transport.PeerID]int),
+		banned:    make(map[transport.PeerID]time.Time),
+		strikes:   make(map[transport.PeerID]int),
+		servingBy: make(map[transport.PeerID]int),
+		changed:   make(chan struct{}),
 	}
 	if v.log == nil {
 		v.log = slog.New(slog.DiscardHandler)
@@ -218,8 +224,9 @@ func (v *Service) handle(ctx context.Context, wg *sync.WaitGroup, peer transport
 		v.mu.Lock()
 		var reply Message
 		switch {
-		case v.serving < v.opt.MaxServing:
+		case v.serving < v.opt.MaxServing && v.servingBy[peer] < maxServingPerPeer:
 			v.serving++
+			v.servingBy[peer]++
 		case v.busy < maxBusyReplies:
 			v.busy++
 			reply = Busy{Hash: m.Hash, Retry: time.Second}
@@ -240,6 +247,9 @@ func (v *Service) handle(ctx context.Context, wg *sync.WaitGroup, peer transport
 		wg.Go(func() {
 			v.serve(ctx, peer, m)
 			v.mu.Lock()
+			if v.servingBy[peer]--; v.servingBy[peer] <= 0 {
+				delete(v.servingBy, peer)
+			}
 			v.serving--
 			v.mu.Unlock()
 		})
@@ -453,11 +463,10 @@ func (v *Service) fetch(ctx context.Context, ref Ref) (err error) {
 	if (ref.Size == 0) != (ref.Hash == emptyHash) {
 		return fmt.Errorf("%w: %d bytes announced for %v", ErrSizeMismatch, ref.Size, ref.Hash)
 	}
-	release, err := v.store.admit(ref.Size)
-	if err != nil {
+	if err := v.store.hold(ref.Hash.hex(), ref.Size); err != nil {
 		return err
 	}
-	defer release()
+	defer v.store.settle(ref.Hash) // the hold stays while a partial download is on disk
 	select {
 	case v.slots <- struct{}{}:
 		defer func() { <-v.slots }()
@@ -510,6 +519,9 @@ const (
 	stored
 	// complete: the slice is good and the range asked for is stored.
 	complete
+	// inconclusive: the slice's claim about the size could not be settled
+	// (the peer was busy, silent or did not have the file): nobody is blamed.
+	inconclusive
 )
 
 // pull receives the range [offset, offset+length) of d from the peers, trying
@@ -587,7 +599,7 @@ func (v *Service) exchange(ctx context.Context, d *download, st *fetchState, pee
 				return false, true, err
 			case verdict == complete:
 				return true, true, nil
-			case verdict == rejected:
+			case verdict == rejected, verdict == inconclusive:
 				return false, true, nil
 			}
 			// stored: a late answer; the one we asked for is still to come.
@@ -625,41 +637,66 @@ func (v *Service) accept(ctx context.Context, d *download, peer transport.PeerID
 		}
 		return stored, nil
 	}
-	if final || v.confirmSize(ctx, p, size) {
+	if final {
 		return rejected, fmt.Errorf("%w: the file has %d bytes, the index said %d", ErrSizeMismatch, size, d.size)
+	}
+	switch v.confirmSize(ctx, p, size) {
+	case proven:
+		return rejected, fmt.Errorf("%w: the file has %d bytes, the index said %d", ErrSizeMismatch, size, d.size)
+	case refuted:
+		v.misbehaved(peer, d.h, "length of the file not authentic")
+		return rejected, nil
 	}
 	if cerr := ctx.Err(); cerr != nil {
 		return rejected, cerr
 	}
-	v.misbehaved(peer, d.h, "length of the file not authentic")
-	return rejected, nil
+	v.strike(peer) // not blamed, but asked after the others from now on
+	return inconclusive, nil
 }
 
+// proof is what [Service.confirmSize] found out about a claimed file size.
+type proof int
+
+const (
+	// unproven: the peer did not settle it, by being busy, silent or
+	// without the file, or because a late answer came instead. An honest peer
+	// does all of these, so nobody is blamed for it.
+	unproven proof = iota
+	// proven: the last group verifies at the claimed size.
+	proven
+	// refuted: the peer's own answer contradicts its claim.
+	refuted
+)
+
 // confirmSize asks the peer of p for the last group of the file as it
-// describes it, of size bytes, and reports whether the answer verifies: then
-// size is the file's.
-func (v *Service) confirmSize(ctx context.Context, p *pending, size uint64) bool {
+// describes it, of size bytes. The answer is [proven] if that group verifies
+// and ends the file at size, [refuted] if the peer sends a slice that does not,
+// and [unproven] if it sends nothing usable, which proves nothing about it.
+func (v *Service) confirmSize(ctx context.Context, p *pending, size uint64) proof {
 	if size == 0 || size > maxOffset {
-		return false
+		return refuted // no file of ours is that big
 	}
 	offset := (size - 1) / GroupSize * GroupSize
 	if err := p.send(ctx, Want{Hash: p.key.hash, Offset: offset, Length: GroupSize}); err != nil {
-		return false
+		return unproven
 	}
 	for {
 		msg, err := p.next(ctx)
 		if err != nil {
-			return false
+			return unproven
 		}
 		m, ok := msg.(Slice)
 		if !ok {
-			return false
+			return unproven // Busy or Missing
 		}
 		if m.Offset != offset { // a late answer to the earlier request
 			continue
 		}
 		_, got, final, err := checkSlice(m, p.key.hash)
-		return err == nil && final && got == size
+		if err != nil || !final || got != size {
+			return refuted
+		}
+		return proven
 	}
 }
 

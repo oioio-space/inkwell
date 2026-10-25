@@ -473,6 +473,11 @@ var forgeries = map[string]func(s blob.Slice) blob.Message{
 		binary.LittleEndian.PutUint64(s.Bao, binary.LittleEndian.Uint64(s.Bao)+blob.GroupSize)
 		return s
 	},
+	"a lie of one byte about the length of the file": func(s blob.Slice) blob.Message {
+		s.Bao = slices.Clone(s.Bao)
+		binary.LittleEndian.PutUint64(s.Bao, binary.LittleEndian.Uint64(s.Bao)+1)
+		return s
+	},
 	"another range": func(s blob.Slice) blob.Message {
 		s.Offset += blob.GroupSize
 		return s
@@ -523,8 +528,11 @@ func TestForgedSliceRetriesOtherPeer(t *testing.T) {
 					t.Errorf("the forger was asked %d times, want once or twice", got)
 				}
 				wantEvents := 1
-				if name == "another blob" {
+				switch name {
+				case "another blob":
 					wantEvents = 0 // an answer about a blob we did not ask about is no answer: it times out
+				case "a lie about the length of the file":
+					wantEvents = 0 // the liar stays silent when asked to prove it: unproven, so not blamed
 				}
 				if got := b.log.security(); got != wantEvents {
 					t.Errorf("%d security events, want %d", got, wantEvents)
@@ -847,5 +855,76 @@ func TestLateAnswerIsNotAFault(t *testing.T) {
 		if got := b.log.security(); got != 0 {
 			t.Errorf("%d security events for a slow peer", got)
 		}
+	})
+}
+
+// One member cannot hold every serving slot: at most two of its requests are
+// served at once, the others are told to wait, and another member is served.
+func TestServingIsFairBetweenPeers(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		n := newNet(t)
+		a := n.join("a", blob.Options{}, blob.ServiceOptions{MaxServing: 8})
+		hx, hy := a.put(t, testData(blob.GroupSize, 1)), a.put(t, testData(blob.GroupSize, 2))
+		release := make(chan struct{})
+		var mu sync.Mutex
+		inFlight, peak := 0, 0
+		a.mu.Lock()
+		a.gate = func(h blob.Hash) {
+			if h != hx {
+				return
+			}
+			mu.Lock()
+			inFlight++
+			peak = max(peak, inFlight)
+			mu.Unlock()
+			<-release
+			mu.Lock()
+			inFlight--
+			mu.Unlock()
+		}
+		a.mu.Unlock()
+		greedy, modest := n.net.JoinBulk("greedy"), n.net.JoinBulk("modest")
+		n.link("a", "greedy")
+		n.link("a", "modest")
+		want := func(h blob.Hash) []byte {
+			b, _ := blob.Encode(blob.Want{Hash: h, Length: blob.GroupSize})
+			return b
+		}
+		for range 20 {
+			if err := greedy.Send(t.Context(), "a", want(hx)); err != nil {
+				t.Fatal(err)
+			}
+		}
+		synctest.Wait()
+		if err := modest.Send(t.Context(), "a", want(hy)); err != nil {
+			t.Fatal(err)
+		}
+		synctest.Wait()
+
+		mu.Lock()
+		held := inFlight
+		mu.Unlock()
+		if held > 2 || peak > 2 {
+			t.Errorf("%d requests of one peer served at once (peak %d), want at most 2", held, peak)
+		}
+		ctx, cancel := context.WithTimeout(t.Context(), time.Second)
+		defer cancel()
+		got := false
+		for !got {
+			ev, err := modest.Recv(ctx)
+			if err != nil {
+				break
+			}
+			if ev.Kind != transport.Message {
+				continue
+			}
+			m, _ := blob.Decode(ev.Payload)
+			_, got = m.(blob.Slice)
+		}
+		if !got {
+			t.Error("the second member was not served while the first held its slots")
+		}
+		close(release)
+		synctest.Wait()
 	})
 }

@@ -9,9 +9,12 @@ import (
 	"log/slog"
 	"math/rand/v2"
 	"os"
+	"runtime"
+	"runtime/debug"
 	"slices"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -319,8 +322,13 @@ func runQuotasAtArrival(t *testing.T) {
 		stored := st.Stored
 		time.Sleep(time.Minute)
 		synctest.Wait()
-		if got := b.files.Status().Stored; got != stored {
-			t.Errorf("%d more files arrived without the user's confirmation", got-stored)
+		// A download that was already waiting may use what is left under the quota,
+		// but the project never goes over it until the user agrees.
+		if got := b.files.Blobs().Used(); got > 3<<20 {
+			t.Errorf("the project holds %d bytes, over its quota of 3 MiB, without the user's confirmation", got)
+		}
+		if st := b.files.Status(); st.Stored < stored || st.Stored >= 5 || !st.NeedsConfirmation {
+			t.Errorf("Status = %+v after a minute, want still waiting for the user", st)
 		}
 
 		b.files.Confirm()
@@ -557,4 +565,150 @@ func TestNewFilesRequiresAllowed(t *testing.T) {
 	if _, err := NewFiles(proj, memnet.New(1, memnet.Faults{}).JoinBulk("a"), FilesOptions{}); err == nil {
 		t.Error("NewFiles without Allowed succeeded")
 	}
+}
+
+// SetReferenced replaces what the index refers to, but a blob just stored here
+// stays served until the index has caught up (and then it is in the list).
+func TestSetReferencedKeepsFreshBlobs(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		net := memnet.New(1, memnet.Faults{})
+		clock := time.Date(2026, 10, 25, 12, 0, 0, 0, time.UTC)
+		var mu sync.Mutex
+		now := func() time.Time { mu.Lock(); defer mu.Unlock(); return clock }
+		a := newFilesPeer(t, net, "a", FilesOptions{Blob: blob.Options{Now: now}})
+		fresh := a.addBlob(t, "fresh.bin", data(3000, 1))
+		other := blob.HashOf([]byte("other"))
+
+		if err := a.files.SetReferenced(nil); err != nil {
+			t.Fatal(err)
+		}
+		if !a.files.referenced(blob.Hash(fresh.Hash)) {
+			t.Error("a blob just stored was dropped by a SetReferenced that does not list it yet")
+		}
+		if a.files.referenced(other) {
+			t.Error("a blob nobody mentioned is referenced")
+		}
+		mu.Lock()
+		clock = clock.Add(2 * time.Hour)
+		mu.Unlock()
+		if a.files.referenced(blob.Hash(fresh.Hash)) {
+			t.Error("a blob the index never listed is still referenced after the grace period")
+		}
+		// Listed by the index, it stays for good.
+		fresh2 := a.addBlob(t, "fresh2.bin", data(3000, 2))
+		_ = a.files.SetReferenced([][bridge.HashSize]byte{fresh2.Hash})
+		mu.Lock()
+		clock = clock.Add(100 * time.Hour)
+		mu.Unlock()
+		if !a.files.referenced(blob.Hash(fresh2.Hash)) {
+			t.Error("a blob the index lists is not referenced")
+		}
+	})
+}
+
+// settled waits until the loop of p has written the visible copy of the blob h.
+func (p *filesPeer) settled(t *testing.T, h blob.Hash) {
+	t.Helper()
+	for range 500 {
+		p.files.mu.Lock()
+		done := p.files.done[h]
+		p.files.mu.Unlock()
+		if done {
+			return
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	t.Fatal("the loop never wrote the visible copy")
+}
+
+// The visible copy of a 40 MB blob is streamed from the store, not loaded.
+func TestMaterializeStreams(t *testing.T) {
+	if testing.Short() {
+		t.Skip("writes 40 MB")
+	}
+	net := memnet.New(1, memnet.Faults{})
+	a := newFilesPeer(t, net, "a", FilesOptions{})
+	content := data(40<<20, 3)
+	e := a.addBlob(t, "big.bin", content)
+	if _, err := a.files.SetTree([]project.TreeEntry{e}); err != nil {
+		t.Fatal(err)
+	}
+	a.settled(t, blob.Hash(e.Hash))
+	if err := a.base.Remove(a.proj.Dir() + "/big.bin"); err != nil {
+		t.Fatal(err)
+	}
+	// The heap must not grow by the size of the file: sample its peak while the
+	// copy is written, with a collector eager enough to drop the garbage.
+	defer debug.SetGCPercent(debug.SetGCPercent(10))
+	runtime.GC()
+	var base runtime.MemStats
+	runtime.ReadMemStats(&base)
+	var (
+		peak atomic.Uint64
+		stop = make(chan struct{})
+		done = make(chan struct{})
+	)
+	go func() {
+		defer close(done)
+		var m runtime.MemStats
+		for {
+			select {
+			case <-stop:
+				return
+			case <-time.After(200 * time.Microsecond):
+				runtime.ReadMemStats(&m)
+				peak.Store(max(peak.Load(), m.HeapAlloc))
+			}
+		}
+	}()
+	err := a.files.materialize(blob.Hash(e.Hash))
+	close(stop)
+	<-done
+	if err != nil {
+		t.Fatalf("materialize: %v", err)
+	}
+	if grew := int64(peak.Load()) - int64(base.HeapAlloc); grew > 20<<20 {
+		t.Errorf("the heap grew by %d MiB while a 40 MiB blob was written, want it streamed", grew>>20)
+	}
+	if got, err := a.read(t, "big.bin"); err != nil || !bytes.Equal(got, content) {
+		t.Fatalf("visible copy = %d bytes, %v", len(got), err)
+	}
+}
+
+// A rotten blob in the store is not shown: the copy is refused and the blob dropped.
+func TestMaterializeRefusesARottenBlob(t *testing.T) {
+	net := memnet.New(1, memnet.Faults{})
+	a := newFilesPeer(t, net, "a", FilesOptions{})
+	e := a.addBlob(t, "x.bin", data(50_000, 4))
+	if _, err := a.files.SetTree([]project.TreeEntry{e}); err != nil {
+		t.Fatal(err)
+	}
+	a.settled(t, blob.Hash(e.Hash))
+	if err := a.base.Remove(a.proj.Dir() + "/x.bin"); err != nil {
+		t.Fatal(err)
+	}
+	hexName := strings.TrimPrefix(blob.Hash(e.Hash).String(), "blake3:")
+	blobFile := a.proj.Dir() + "/.inkwell/blobs/" + hexName[:2] + "/" + hexName
+	if err := a.base.Chmod(blobFile, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.base.WriteFile(blobFile, data(50_000, 5), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := a.files.materialize(blob.Hash(e.Hash)); !errors.Is(err, blob.ErrCorrupt) {
+		t.Errorf("materialize of a rotten blob = %v, want ErrCorrupt", err)
+	}
+	if _, err := a.read(t, "x.bin"); err == nil {
+		t.Error("a rotten blob became visible")
+	}
+	if a.files.Blobs().Has(blob.Hash(e.Hash)) {
+		t.Error("the rotten blob is still stored")
+	}
+}
+
+// ADR 0021: a suspended member is refused the bulk lane. The seam is
+// FilesOptions.Allowed (TestAllowedGatesServing); what is missing is the
+// Admission that knows about suspension.
+func TestBulkLaneRefusedToSuspendedMember(t *testing.T) {
+	t.Skip("TODO ADR 0021 (t11-b3a-suspend, not merged): Wiring.isActive must say false for a suspended member; then drive Wire + Files with a suspend op and assert no slice is served")
 }

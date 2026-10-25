@@ -1,0 +1,111 @@
+package project
+
+import (
+	"errors"
+	"fmt"
+	"io/fs"
+	"path"
+	"strings"
+)
+
+var (
+	// ErrLink is returned for a path that goes through a symbolic link: Inkwell
+	// reads and writes only real files and folders of the project.
+	ErrLink = errors.New("project: path goes through a symbolic link")
+	// ErrHardLink is returned for a file that has another name elsewhere: what
+	// is read or written there would be read or written under that name too.
+	ErrHardLink = errors.New("project: file has several hard links")
+	// ErrNotRegular is returned for a path that is not a regular file.
+	ErrNotRegular = errors.New("project: not a regular file")
+)
+
+// lstatPath walks rel from the project folder, one component at a time, and
+// returns the Lstat of the last one. It returns [ErrLink] if any component is a
+// symbolic link, and an error wrapping [fs.ErrNotExist] if one is missing.
+// [os.Root] already keeps a path from leaving the project; this keeps it from
+// being redirected inside it.
+func (p *Project) lstatPath(rel string) (fs.FileInfo, error) {
+	var (
+		info fs.FileInfo
+		cur  string
+	)
+	parts := strings.Split(rel, "/")
+	for i, part := range parts {
+		cur = path.Join(cur, part)
+		var err error
+		if info, err = p.root.Lstat(cur); err != nil {
+			return nil, err
+		}
+		switch {
+		case info.Mode()&fs.ModeSymlink != 0:
+			return nil, fmt.Errorf("%w: %q", ErrLink, cur)
+		case i < len(parts)-1 && !info.IsDir():
+			return nil, fmt.Errorf("project: %q is not a folder", cur)
+		}
+	}
+	return info, nil
+}
+
+// regular checks that rel is a regular file with one name only, reached through
+// no link. exists is false, with no error, when the file or a folder above it is missing.
+func (p *Project) regular(rel string) (exists bool, err error) {
+	info, err := p.lstatPath(rel)
+	switch {
+	case errors.Is(err, fs.ErrNotExist):
+		return false, nil
+	case err != nil:
+		return false, err
+	case !info.Mode().IsRegular():
+		return true, fmt.Errorf("%w: %q", ErrNotRegular, rel)
+	case hardLinks(info) > 1:
+		return true, fmt.Errorf("%w: %q", ErrHardLink, rel)
+	}
+	return true, nil
+}
+
+// mkdir creates the folder dir and those above it, one at a time, refusing a
+// symbolic link or a file on the way.
+func (p *Project) mkdir(dir string) error {
+	if dir == "." || dir == "" {
+		return nil
+	}
+	cur := ""
+	for part := range strings.SplitSeq(dir, "/") {
+		cur = path.Join(cur, part)
+		info, err := p.root.Lstat(cur)
+		switch {
+		case errors.Is(err, fs.ErrNotExist):
+			if err := p.root.Mkdir(cur, 0o700); err != nil && !errors.Is(err, fs.ErrExist) {
+				return fmt.Errorf("project: create folder: %w", err)
+			}
+		case err != nil:
+			return fmt.Errorf("project: create folder: %w", err)
+		case info.Mode()&fs.ModeSymlink != 0:
+			return fmt.Errorf("%w: %q", ErrLink, cur)
+		case !info.IsDir():
+			return fmt.Errorf("project: %q is not a folder", cur)
+		}
+	}
+	return nil
+}
+
+// renameNoReplace moves the file src to dst, which must not exist, without ever
+// replacing something that appears there meanwhile: it links dst to src, which
+// fails if dst exists, then removes src. Where links are not supported it falls
+// back to a check followed by a rename.
+func (p *Project) renameNoReplace(src, dst string) error {
+	err := p.root.Link(src, dst)
+	if err == nil {
+		if err := p.root.Remove(src); err != nil {
+			return fmt.Errorf("project: move %q: %w", src, err)
+		}
+		return nil
+	}
+	if errors.Is(err, fs.ErrExist) {
+		return err
+	}
+	if _, serr := p.root.Lstat(dst); serr == nil {
+		return fs.ErrExist
+	}
+	return p.root.Rename(src, dst)
+}

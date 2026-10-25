@@ -85,7 +85,9 @@ type peer struct {
 	svc   *blob.Service
 	log   *logRecorder
 
-	mu      sync.Mutex
+	mu sync.Mutex
+	// gate, if set, is called when a request is being served, to hold it.
+	gate    func(blob.Hash)
 	refs    map[blob.Hash]bool
 	denied  map[transport.PeerID]bool
 	dropped []transport.PeerID
@@ -122,8 +124,13 @@ func (p *peer) start(t *testing.T, store *blob.Store, lane transport.Transport, 
 	t.Helper()
 	o.Referenced = func(h blob.Hash) bool {
 		p.mu.Lock()
-		defer p.mu.Unlock()
-		return p.refs[h]
+		gate := p.gate
+		ref := p.refs[h]
+		p.mu.Unlock()
+		if gate != nil {
+			gate(h)
+		}
+		return ref
 	}
 	o.Allowed = func(id transport.PeerID) bool {
 		p.mu.Lock()

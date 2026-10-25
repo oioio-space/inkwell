@@ -3,8 +3,10 @@ package project
 import (
 	"errors"
 	"fmt"
+	"regexp"
 	"slices"
 	"strings"
+	"unicode"
 	"unicode/utf8"
 
 	"golang.org/x/text/cases"
@@ -43,6 +45,16 @@ const (
 	ReasonTrailing Reason = "trailing"
 	// ReasonDevice is a Windows device name, with or without extension.
 	ReasonDevice Reason = "device"
+	// ReasonReserved is a name git treats as its own: .git, in any case, at
+	// any depth.
+	ReasonReserved Reason = "reserved"
+	// ReasonShortName is a name that starts like an 8.3 short name of
+	// Windows, such as INKWEL~1, which can alias another file.
+	ReasonShortName Reason = "short_name"
+	// ReasonIgnorable is a name with a default-ignorable code point, which
+	// some file systems skip when comparing names: ".inkwe" + U+200C + "ll"
+	// is ".inkwell" on HFS+.
+	ReasonIgnorable Reason = "ignorable"
 	// ReasonRootReserved is a path that starts with .inkwell or .typstdeps.
 	ReasonRootReserved Reason = "root_reserved"
 	// ReasonEmptyComponent is a path with an empty component: a leading,
@@ -85,7 +97,13 @@ var reservedAtRoot = []string{".inkwell", ".typstdeps"}
 //   - not a Windows device name (CON, PRN, AUX, NUL, CLOCK$, CONIN$, CONOUT$,
 //     COM0 to COM9, LPT0 to LPT9, COM¹²³, LPT¹²³), whatever the case and
 //     with any extension: a device name is compared on the part before the
-//     first dot, in ASCII case, ignoring spaces before that dot.
+//     first dot, in ASCII case, ignoring spaces before that dot;
+//   - not starting like an 8.3 short name, ^[^.]{1,6}~[0-9]+ ("INKWEL~1",
+//     "PROGRA~1.txt"), which Windows resolves to a longer name;
+//   - no default-ignorable code point (zero-width joiners, soft hyphen,
+//     variation selectors, bidi controls, tag characters...), which some file
+//     systems ignore when comparing names;
+//   - not .git, in any case: git treats it as its own at any depth.
 //
 // It returns a [*NameError] wrapping [ErrInvalidName], or nil. Whether a name
 // is reserved at the root of the project is a matter of [ValidatePath].
@@ -105,8 +123,34 @@ func ValidateName(name string) error {
 		return refuse(ReasonTrailing, name)
 	case isDevice(name):
 		return refuse(ReasonDevice, name)
+	case shortName.MatchString(name):
+		return refuse(ReasonShortName, name)
+	case strings.ContainsFunc(name, ignorable):
+		return refuse(ReasonIgnorable, name)
+	case CollisionKey(name) == ".git":
+		return refuse(ReasonReserved, name)
 	}
 	return nil
+}
+
+// shortName matches the start of an 8.3 short name.
+var shortName = regexp.MustCompile(`^[^.]{1,6}~[0-9]+`)
+
+// ignorable reports whether r is a default-ignorable code point: Unicode's
+// Other_Default_Ignorable_Code_Point, the variation selectors and the format
+// characters (Cf), less the few format characters that are not ignorable.
+func ignorable(r rune) bool {
+	switch {
+	case unicode.Is(unicode.Other_Default_Ignorable_Code_Point, r), unicode.Is(unicode.Variation_Selector, r):
+		return true
+	case !unicode.Is(unicode.Cf, r):
+		return false
+	case r >= 0xFFF9 && r <= 0xFFFB, r >= 0x13430 && r <= 0x13440: // interlinear annotation, Egyptian format controls
+		return false
+	case r >= 0x600 && r <= 0x605, r == 0x6DD, r == 0x70F, r == 0x890, r == 0x891, r == 0x8E2, r == 0x110BD, r == 0x110CD: // prepended concatenation marks
+		return false
+	}
+	return true
 }
 
 // forbiddenRune reports whether r may not appear in a name.

@@ -10,6 +10,8 @@ import (
 	"slices"
 	"strings"
 	"testing"
+
+	"lukechampine.com/blake3"
 )
 
 func text(path string) TreeEntry {
@@ -19,7 +21,7 @@ func text(path string) TreeEntry {
 func dir(path string) TreeEntry { return TreeEntry{Path: path, Type: NodeDir} }
 
 func blobEntry(path string, data []byte) TreeEntry {
-	return TreeEntry{Path: path, Type: NodeBlob, Hash: sha256.Sum256(data), Size: int64(len(data))}
+	return TreeEntry{Path: path, Type: NodeBlob, Hash: blake3.Sum256(data), Size: int64(len(data))}
 }
 
 func rejectedPaths(r TreeResult) []string {
@@ -105,7 +107,7 @@ func runApplyTreeCannotFollowSymlinkOut(t *testing.T) {
 	if err := base.Symlink(outside, "p/link"); err != nil {
 		t.Skip("no symbolic links:", err)
 	}
-	if _, err := p.ApplyTree([]TreeEntry{text("link/evil.typ")}); err == nil {
+	if res, err := p.ApplyTree([]TreeEntry{text("link/evil.typ")}); err == nil && len(res.Rejected) != 1 {
 		t.Error("ApplyTree through a link out of the project succeeded")
 	}
 	if err := p.WriteProjection("link/evil.typ", []byte("x")); err == nil {
@@ -239,7 +241,7 @@ func runWriteBlob(t *testing.T) {
 	if _, err := p.ApplyTree([]TreeEntry{e}); err != nil {
 		t.Fatal(err)
 	}
-	if err := p.WriteBlob(e.Path, e.Hash, data); err != nil {
+	if err := p.WriteBlob(e.Path, e.Hash, bytes.NewReader(data)); err != nil {
 		t.Fatalf("WriteBlob: %v", err)
 	}
 	got, err := base.ReadFile("p/img/a.png")
@@ -258,18 +260,18 @@ func runWriteBlob(t *testing.T) {
 		t.Errorf("visible copy has %d links, want 1 (never a hard link)", nlink)
 	}
 	// Written again with the same content: nothing to do.
-	if err := p.WriteBlob(e.Path, e.Hash, data); err != nil {
+	if err := p.WriteBlob(e.Path, e.Hash, bytes.NewReader(data)); err != nil {
 		t.Errorf("second WriteBlob: %v", err)
 	}
 	// Written for a path or a hash the tree does not list.
-	if err := p.WriteBlob("img/b.png", e.Hash, data); !errors.Is(err, ErrNotOwned) {
+	if err := p.WriteBlob("img/b.png", e.Hash, bytes.NewReader(data)); !errors.Is(err, ErrNotOwned) {
 		t.Errorf("WriteBlob at an unlisted path = %v, want ErrNotOwned", err)
 	}
 	other := sha256.Sum256([]byte("other"))
-	if err := p.WriteBlob(e.Path, other, data); !errors.Is(err, ErrBlobMoved) {
+	if err := p.WriteBlob(e.Path, other, bytes.NewReader(data)); !errors.Is(err, ErrBlobMoved) {
 		t.Errorf("WriteBlob of another hash = %v, want ErrBlobMoved", err)
 	}
-	if err := p.WriteBlob("../x.png", e.Hash, data); !errors.Is(err, ErrNotOwned) {
+	if err := p.WriteBlob("../x.png", e.Hash, bytes.NewReader(data)); !errors.Is(err, ErrNotOwned) {
 		t.Errorf("WriteBlob outside the project = %v, want ErrNotOwned", err)
 	}
 	// PRJ-13: the image is replaced on disk; Inkwell does not overwrite it.
@@ -277,7 +279,7 @@ func runWriteBlob(t *testing.T) {
 	if err := base.WriteFile("p/img/a.png", replaced, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	if err := p.WriteBlob(e.Path, e.Hash, data); !errors.Is(err, ErrExternalEdit) {
+	if err := p.WriteBlob(e.Path, e.Hash, bytes.NewReader(data)); !errors.Is(err, ErrExternalEdit) {
 		t.Errorf("WriteBlob over an external edit = %v, want ErrExternalEdit", err)
 	}
 	if got, _ := base.ReadFile("p/img/a.png"); !bytes.Equal(got, replaced) {
@@ -291,7 +293,7 @@ func runWriteBlob(t *testing.T) {
 	if _, err := p.ApplyTree([]TreeEntry{e2}); err != nil {
 		t.Fatal(err)
 	}
-	if err := p.WriteBlob(e2.Path, e2.Hash, replaced); err != nil {
+	if err := p.WriteBlob(e2.Path, e2.Hash, bytes.NewReader(replaced)); err != nil {
 		t.Errorf("WriteBlob of the replacement = %v, want it accepted: the file is already that", err)
 	}
 	if paths := p.BlobPaths(e2.Hash); !slices.Equal(paths, []string{"img/a.png"}) {
@@ -311,10 +313,10 @@ func TestWriteBlobLarge(t *testing.T) {
 	if _, err := p.ApplyTree([]TreeEntry{e}); err != nil {
 		t.Fatal(err)
 	}
-	if err := p.WriteBlob(e.Path, e.Hash, data); err != nil {
+	if err := p.WriteBlob(e.Path, e.Hash, bytes.NewReader(data)); err != nil {
 		t.Fatalf("WriteBlob: %v", err)
 	}
-	if err := p.WriteBlob(e.Path, e.Hash, data); err != nil {
+	if err := p.WriteBlob(e.Path, e.Hash, bytes.NewReader(data)); err != nil {
 		t.Errorf("second WriteBlob: %v", err)
 	}
 }
@@ -332,7 +334,7 @@ func TestApplyTreeMovesRenamedFiles(t *testing.T) {
 	if err := p.WriteProjection("ch1.typ", []byte("= One\n")); err != nil {
 		t.Fatal(err)
 	}
-	if err := p.WriteBlob(e.Path, e.Hash, img); err != nil {
+	if err := p.WriteBlob(e.Path, e.Hash, bytes.NewReader(img)); err != nil {
 		t.Fatal(err)
 	}
 

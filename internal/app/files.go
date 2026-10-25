@@ -3,8 +3,11 @@ package app
 import (
 	"cmp"
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"log/slog"
 	"maps"
 	"os"
@@ -27,6 +30,9 @@ const (
 	retryNoPeer = 30 * time.Second
 	// retryBroken is how long a blob that failed its checks waits.
 	retryBroken = 5 * time.Minute
+	// recentFor is how long a blob that was just stored here stays referenced
+	// without the index saying so: the time for the index to reach the webview.
+	recentFor = time.Hour
 	// gcEvery is how often the unreferenced blobs are looked for.
 	gcEvery = 24 * time.Hour
 )
@@ -77,17 +83,18 @@ type Files struct {
 	log       *slog.Logger
 
 	mu      sync.Mutex
-	refs    map[blob.Hash]struct{} // what the index refers to, trash and packages included
-	wanted  map[blob.Hash]blob.Ref // the blobs of the tree
-	paths   map[blob.Hash][]string // where the tree puts each
-	done    map[blob.Hash]bool     // visible copies written for the current paths
-	failed  map[blob.Hash]failure  // blobs not to ask for yet
-	refused map[blob.Hash]struct{} // blobs over the size limit: never asked for
-	flying  map[blob.Hash]struct{} // asked for now
-	paused  bool                   // the project is over its quota, waiting for the user
-	known   bool                   // the webview has said what it refers to
-	nextGC  time.Time              // when the unreferenced blobs are looked for next
-	wake    chan struct{}          // capacity 1: "something changed"
+	refs    map[blob.Hash]struct{}  // what the index refers to, trash and packages included
+	wanted  map[blob.Hash]blob.Ref  // the blobs of the tree
+	paths   map[blob.Hash][]string  // where the tree puts each
+	done    map[blob.Hash]bool      // visible copies written for the current paths
+	failed  map[blob.Hash]failure   // blobs not to ask for yet
+	refused map[blob.Hash]struct{}  // blobs over the size limit: never asked for
+	flying  map[blob.Hash]struct{}  // asked for now
+	paused  bool                    // the project is over its quota, waiting for the user
+	recent  map[blob.Hash]time.Time // blobs stored here, referenced until the index says so
+	known   bool                    // the webview has said what it refers to
+	nextGC  time.Time               // when the unreferenced blobs are looked for next
+	wake    chan struct{}           // capacity 1: "something changed"
 	now     func() time.Time
 	closing sync.Once
 }
@@ -121,6 +128,7 @@ func NewFiles(p *project.Project, bulk transport.Transport, o FilesOptions) (*Fi
 	f := &Files{
 		Project: p, blobs: store, blobsRoot: root, log: log,
 		refs:    map[blob.Hash]struct{}{},
+		recent:  map[blob.Hash]time.Time{},
 		wanted:  map[blob.Hash]blob.Ref{},
 		paths:   map[blob.Hash][]string{},
 		done:    map[blob.Hash]bool{},
@@ -165,8 +173,11 @@ func (f *Files) referenced(h blob.Hash) bool {
 	if _, ok := f.refs[h]; ok {
 		return true
 	}
-	_, ok := f.wanted[h]
-	return ok
+	if _, ok := f.wanted[h]; ok {
+		return true
+	}
+	until, ok := f.recent[h]
+	return ok && f.now().Before(until)
 }
 
 // poke wakes the loop of [Files.Run].
@@ -215,6 +226,9 @@ func (f *Files) SetReferenced(hashes [][bridge.HashSize]byte) error {
 	}
 	f.mu.Lock()
 	f.refs, f.known = refs, true
+	for h := range refs {
+		delete(f.recent, h) // the index has caught up
+	}
 	f.mu.Unlock()
 	f.poke()
 	return nil
@@ -230,7 +244,8 @@ func (f *Files) PutBlob(rel string) ([bridge.HashSize]byte, int64, error) {
 		return [bridge.HashSize]byte{}, 0, err
 	}
 	defer func() { _ = file.Close() }() // read-only handle
-	h, err := f.blobs.Put(file, info.Size())
+	sum := sha256.New()
+	h, err := f.blobs.Put(io.TeeReader(file, sum), info.Size())
 	if errors.Is(err, blob.ErrTooLarge) {
 		limit, _ := f.blobs.Limits()
 		return [bridge.HashSize]byte{}, 0, &bridge.TooLargeError{Limit: limit}
@@ -238,8 +253,13 @@ func (f *Files) PutBlob(rel string) ([bridge.HashSize]byte, int64, error) {
 	if err != nil {
 		return [bridge.HashSize]byte{}, 0, err
 	}
+	// The user asked for this file to join the project: it is Inkwell's from now
+	// on, so that the tree, which a peer writes, may list it.
+	if err := f.Claim(rel, hex.EncodeToString(sum.Sum(nil))); err != nil {
+		return [bridge.HashSize]byte{}, 0, err
+	}
 	f.mu.Lock()
-	f.refs[h] = struct{}{}
+	f.recent[h] = f.now().Add(recentFor)
 	f.mu.Unlock()
 	return h, info.Size(), nil
 }
@@ -393,21 +413,31 @@ func (f *Files) fetch(ctx context.Context, ref blob.Ref) {
 // tree gives it. A path whose file was edited outside Inkwell is left alone
 // and logged: the user decides.
 func (f *Files) materialize(h blob.Hash) error {
-	data, err := f.blobs.Get(h)
-	if err != nil {
-		return err
-	}
 	var errs []error
 	for _, rel := range f.BlobPaths(h) {
-		switch err := f.WriteBlob(rel, h, data); {
+		switch err := f.writeCopy(rel, h); {
 		case err == nil, errors.Is(err, project.ErrBlobMoved):
 		case errors.Is(err, project.ErrExternalEdit):
 			f.log.Warn("file edited outside Inkwell, not replaced", "path", rel)
+		case errors.Is(err, project.ErrBlobMismatch):
+			_ = f.blobs.Remove(h) // rotten on disk: let it be fetched again
+			errs = append(errs, blob.ErrCorrupt)
 		default:
 			errs = append(errs, err)
 		}
 	}
 	return errors.Join(errs...)
+}
+
+// writeCopy streams the stored blob h into the visible file rel; the project
+// checks the content against h as it goes, so nothing is held in memory.
+func (f *Files) writeCopy(rel string, h blob.Hash) error {
+	src, _, err := f.blobs.Reader(h)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = src.Close() }() // read-only handle
+	return f.WriteBlob(rel, h, src)
 }
 
 // collect removes the blobs that nothing has referenced for 30 days, once a day,

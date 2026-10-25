@@ -105,6 +105,7 @@ func (s *Store) gcPartials(referenced func(Hash) bool, maxAge time.Duration, now
 			continue
 		}
 		_ = s.root.Remove(name + ".map") // may be absent
+		s.unhold(h.hex())
 		freed += info.Size()
 		removed++
 	}

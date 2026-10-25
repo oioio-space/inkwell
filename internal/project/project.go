@@ -45,7 +45,7 @@ const (
 
 	inkwellDir      = ".inkwell"
 	manifestFile    = "project.json"
-	maxManifest     = 1 << 20
+	maxManifest     = 32 << 20 // 10000 nodes of 1 KiB paths, in Files and in Tree
 	maxFolderRunes  = 80
 	maxCollisions   = 1000
 	unsafeFolderRun = `/\:*?"<>|`
@@ -308,6 +308,11 @@ func (p *Project) ReadText(rel string) (Text, error) {
 	if _, err := p.owned(rel); err != nil {
 		return Text{}, err
 	}
+	if exists, err := p.regular(rel); err != nil {
+		return Text{}, err
+	} else if !exists {
+		return Text{}, fmt.Errorf("project: %s: %w", rel, fs.ErrNotExist)
+	}
 	raw, err := readLimited(p.root, rel, store.MaxValue)
 	if err != nil {
 		return Text{}, err
@@ -387,6 +392,9 @@ var emptyHash = hashOf(nil)
 // readDisk returns the bytes of rel on disk; exists is false when the file is
 // absent. The caller holds p.mu.
 func (p *Project) readDisk(rel string) (data []byte, exists bool, err error) {
+	if exists, err = p.regular(rel); err != nil || !exists {
+		return nil, false, err
+	}
 	data, err = readLimited(p.root, rel, store.MaxValue)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, false, nil

@@ -121,11 +121,13 @@ type Store struct {
 	root *os.Root
 	log  *slog.Logger
 	opt  Options
-	// used is the size of the stored blobs; reserved, that of the downloads
-	// in progress. Both are under mu.
-	used, reserved int64
-	mu             sync.Mutex
-	confirmed      bool
+	// used is the size of the stored blobs, under mu; holds is the size
+	// promised to the files being received, by key: a download keeps its hold
+	// while its partial file is on disk, so that stopped downloads still count.
+	used      int64
+	holds     map[string]int64
+	mu        sync.Mutex
+	confirmed bool
 }
 
 // Open opens the store in root, which it creates the layout in. The caller
@@ -146,7 +148,7 @@ func Open(root *os.Root, o Options) (*Store, error) {
 	if o.FreeSpace == nil {
 		o.FreeSpace = func() (uint64, error) { return freeSpace(root.Name()) }
 	}
-	s := &Store{root: root, opt: o, log: o.Log}
+	s := &Store{root: root, opt: o, log: o.Log, holds: map[string]int64{}}
 	if s.log == nil {
 		s.log = slog.New(slog.DiscardHandler)
 	}
@@ -196,6 +198,10 @@ func (s *Store) scan() error {
 	for _, e := range partials {
 		if strings.HasSuffix(e.Name(), tmpSuffix) {
 			_ = s.root.Remove(partialDir + "/" + e.Name())
+			continue
+		}
+		if info, err := e.Info(); err == nil && isHashName(e.Name()) && info.Mode().IsRegular() {
+			s.holds[e.Name()] = info.Size() // a download that was stopped: it keeps its share
 		}
 	}
 	return nil
@@ -305,32 +311,52 @@ func (s *Store) Plan(refs []Ref) Plan {
 	return p
 }
 
-// admit checks that a blob of size bytes may be stored and reserves room for it
-// until the returned release is called. It returns [ErrTooLarge],
-// [*QuotaError] or [ErrNoSpace].
-func (s *Store) admit(size int64) (release func(), err error) {
+// hold checks that a file of size bytes may be received and sets that room
+// aside under key until [Store.unhold]. The room counts against the project
+// quota and the free space, with every other hold, so that downloads that stop
+// half way keep their share and cannot add up past the quota. Holding again
+// under the same key replaces the hold. It returns [ErrTooLarge], [*QuotaError]
+// or [ErrNoSpace].
+func (s *Store) hold(key string, size int64) error {
 	if size < 0 || size > s.opt.MaxFile {
-		return nil, fmt.Errorf("%w: %d bytes, limit %d", ErrTooLarge, size, s.opt.MaxFile)
+		return fmt.Errorf("%w: %d bytes, limit %d", ErrTooLarge, size, s.opt.MaxFile)
 	}
 	s.mu.Lock()
-	if need := s.used + s.reserved + size; need > s.opt.MaxProject && !s.confirmed {
-		s.mu.Unlock()
-		return nil, &QuotaError{Need: need, Limit: s.opt.MaxProject}
+	others := int64(0)
+	for k, n := range s.holds {
+		if k != key {
+			others += n
+		}
 	}
-	s.reserved += size
+	if need := s.used + others + size; need > s.opt.MaxProject && !s.confirmed {
+		s.mu.Unlock()
+		return &QuotaError{Need: need, Limit: s.opt.MaxProject}
+	}
 	s.mu.Unlock()
-	release = func() {
-		s.mu.Lock()
-		s.reserved -= size
-		s.mu.Unlock()
-	}
 	if free, ferr := s.opt.FreeSpace(); ferr != nil {
 		s.log.Debug("blob: free space unknown", "err", ferr)
-	} else if need := uint64(size) + uint64(bao.EncodedSize(int(size), groupLog, true)) + uint64(s.opt.Reserve); free < need { // #nosec G115 -- size is within [0, MaxFile].
-		release()
-		return nil, fmt.Errorf("%w: %d bytes free, %d needed", ErrNoSpace, free, need)
+	} else if need := uint64(size) + uint64(bao.EncodedSize(int(size), groupLog, true)) + uint64(s.opt.Reserve) + uint64(others); free < need { // #nosec G115 -- sizes are within [0, MaxFile] and the holds are sums of them.
+		return fmt.Errorf("%w: %d bytes free, %d needed", ErrNoSpace, free, need)
 	}
-	return release, nil
+	s.mu.Lock()
+	s.holds[key] = size
+	s.mu.Unlock()
+	return nil
+}
+
+// unhold gives back the room held under key.
+func (s *Store) unhold(key string) {
+	s.mu.Lock()
+	delete(s.holds, key)
+	s.mu.Unlock()
+}
+
+// settle gives back the hold of the blob h unless a partial download of it is
+// on disk: the file is stored, or its download was discarded.
+func (s *Store) settle(h Hash) {
+	if _, err := s.root.Lstat(partialDir + "/" + h.hex()); err != nil {
+		s.unhold(h.hex())
+	}
 }
 
 // PutBytes stores data and returns its hash. See [Store.Put].
@@ -344,12 +370,12 @@ func (s *Store) PutBytes(data []byte) (Hash, error) {
 // than size, [*QuotaError] and [ErrNoSpace] (see [Store.Plan] and
 // [Store.Confirm] for the project quota).
 func (s *Store) Put(r io.Reader, size int64) (Hash, error) {
-	release, err := s.admit(size)
-	if err != nil {
+	id := "put-" + rand.Text()
+	if err := s.hold(id, size); err != nil {
 		return Hash{}, err
 	}
-	defer release()
-	name := partialDir + "/put-" + rand.Text()
+	defer s.unhold(id)
+	name := partialDir + "/" + id
 	f, err := s.root.OpenFile(name+tmpSuffix, os.O_RDWR|os.O_CREATE|os.O_EXCL, 0o600)
 	if err != nil {
 		return Hash{}, fmt.Errorf("blob: create temporary file: %w", err)
@@ -469,6 +495,26 @@ func (s *Store) Get(h Hash) ([]byte, error) {
 		return nil, ErrCorrupt
 	}
 	return data, nil
+}
+
+// Reader opens the stored blob h for reading and returns it with its size, to
+// stream a 100 MB file without holding it in memory. The content is not checked
+// here: the caller hashes it as it reads, against h. The caller closes the file.
+// It returns [ErrNotFound] for a blob that is not stored.
+func (s *Store) Reader(h Hash) (*os.File, int64, error) {
+	f, err := s.root.Open(blobPath(h))
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, 0, ErrNotFound
+	}
+	if err != nil {
+		return nil, 0, fmt.Errorf("blob: open %s: %w", h.short(), err)
+	}
+	info, err := f.Stat()
+	if err != nil {
+		_ = f.Close()
+		return nil, 0, fmt.Errorf("blob: stat %s: %w", h.short(), err)
+	}
+	return f, info.Size(), nil
 }
 
 // Remove deletes the blob h and its outboard tree. Removing a blob that is
