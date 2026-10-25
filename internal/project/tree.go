@@ -280,7 +280,7 @@ func (p *Project) apply(e TreeEntry) error {
 // path: those whose content ref appears once in the old tree and once in the
 // new one, at different paths, and that are safe to move: a regular file with
 // one name, written by Inkwell and unchanged since (its hash is the recorded
-// one), going to a path that is free and not owned. Folders are never moved.
+// one) and not claimed by the user, going to a path that is free and not owned. Folders are never moved.
 // The caller holds p.mu.
 func (p *Project) moveRenamed(next map[string]string) []error {
 	oldByRef, newByRef := map[string][]string{}, map[string][]string{}
@@ -303,8 +303,8 @@ func (p *Project) moveRenamed(next map[string]string) []error {
 		if _, taken := p.m.Files[dst]; taken || p.m.Files[src] == "" {
 			continue // dst is owned, or Inkwell never wrote src
 		}
-		if !p.unchanged(src) {
-			continue
+		if p.claimed[src] || !p.unchanged(src) {
+			continue // a claimed file is the user's: the tree's ref says nothing of its content
 		}
 		if _, err := p.lstatPath(dst); err == nil || !errors.Is(err, fs.ErrNotExist) {
 			continue // something is there already, or the path is not safe: leave both
