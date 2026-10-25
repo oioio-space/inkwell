@@ -208,3 +208,12 @@ run = "./scripts/install-hooks.sh"
 description = "One-shot bootstrap: install tools + wire git hooks (+ optional rtk)"
 depends = ["hooks:install", "tools:rtk"]
 run = "mise install"
+
+# ── Hosted open-weight models (mechanical text only — see CLAUDE.md routing) ──
+[tasks."llm:commit-msg"]
+description = "Draft a Conventional Commit message from the staged diff (OpenRouter, ZDR)"
+run = "./scripts/llm.sh commit-msg"
+
+[tasks."llm:triage"]
+description = "Reduce a long CI/test log (stdin) to its failing items (OpenRouter, ZDR)"
+run = "./scripts/llm.sh triage"

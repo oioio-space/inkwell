@@ -86,6 +86,7 @@ Each agent in `.claude/agents/` pins its own tier via frontmatter.
 
 | Task | Agent | Model / effort |
 |------|-------|----------------|
+| Commit-message draft, long-log triage, i18n translation draft | `scripts/llm.sh` (OpenRouter: DeepSeek V4.1 Flash / Mistral Large 4, ZDR — ADR 0013) | hosted open-weight |
 | Run checks (lint/test/ci/scan), trivial format fixes | `quality-runner` | Haiku / low |
 | Docs, PROGRESS.md, commit messages | `scribe` | Haiku / low |
 | Code/file search, fan-out, "where is X" | `explorer` (or built-in `Explore`) | Haiku / low |
@@ -94,7 +95,13 @@ Each agent in `.claude/agents/` pins its own tier via frontmatter.
 | Novel algorithm / architecture design | `architect` | Opus / high |
 | Deep security / vuln audit | `security-auditor` | Opus / high |
 
-Rule of thumb: mechanical → Haiku; writing/reviewing Go → Sonnet; novel algorithm design
+**Rule — token economy without quality loss:** cheapest tier that keeps quality; never
+re-read a file already in context; read logs through `rtk` / `llm.sh triage`, code through
+gopls MCP (`go_package_api`, `go_search`) rather than whole files. Hosted open-weight models
+(`scripts/llm.sh`, exit 3 → fall back to Haiku) take mechanical text only — never security,
+design or code review. No local models.
+
+Rule of thumb: mechanical → hosted open-weight or Haiku; writing/reviewing Go → Sonnet; novel algorithm design
 or security judgement → Opus. Never use Opus for what a cheaper tier handles at equal
 quality. Run independent sub-tasks in parallel.
 

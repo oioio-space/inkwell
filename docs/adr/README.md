@@ -19,3 +19,4 @@ connaître la raison — pas pour le reste. Modèle : [`template.md`](template.m
 | [0010](0010-frontend-toolchain.md) | Chaîne frontend : Svelte 5, Vite, TS, pnpm, Biome, Vitest | acceptée |
 | [0011](0011-simulation-without-automerge-go.md) | Simulation sans automerge-go | acceptée |
 | [0012](0012-license-mpl-2.md) | Licence MPL-2.0 | acceptée |
+| [0013](0013-model-routing-token-economy.md) | Routage des modèles : économie de tokens sans perte de qualité | acceptée |
