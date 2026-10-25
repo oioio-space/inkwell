@@ -231,25 +231,27 @@ func TestWrongProjectRejected(t *testing.T) {
 }
 
 func TestApplyOutOfOrderIsPendingThenIntegrated(t *testing.T) {
-	a, b := newSigner(1), newSigner(2)
+	a, b, c := newSigner(1), newSigner(2), newSigner(3)
 	src := project(t, a)
 	mustIssue(t, src, a, OpAdd, b, RoleWriter)
-	ops := src.Since(nil) // genesis, add
+	mustIssue(t, src, a, OpAdd, c, RoleReader)
+	ops := src.Since(nil) // genesis, add b, add c
 
 	l := New(src.Project())
-	if err := l.Apply(ops[1]); err != nil {
-		t.Fatal(err)
+	if err := l.Apply(ops[1]); !errors.Is(err, ErrUnknownAuthor) {
+		t.Errorf("Apply(op before the genesis) = %v, want ErrUnknownAuthor", err)
 	}
-	if l.Pending() != 1 || l.Len() != 0 {
-		t.Fatalf("pending=%d len=%d, want 1 and 0", l.Pending(), l.Len())
+	mustApply(t, l, ops[0])
+	mustApply(t, l, ops[2]) // by a known admin: buffered.
+	if l.Pending() != 1 || l.Len() != 1 {
+		t.Fatalf("pending=%d len=%d, want 1 and 1", l.Pending(), l.Len())
 	}
-	if err := l.Apply(ops[0]); err != nil {
-		t.Fatal(err)
-	}
-	if l.Pending() != 0 || l.Len() != 2 {
-		t.Errorf("pending=%d len=%d, want 0 and 2", l.Pending(), l.Len())
+	mustApply(t, l, ops[1])
+	if l.Pending() != 0 || l.Len() != 3 {
+		t.Errorf("pending=%d len=%d, want 0 and 3", l.Pending(), l.Len())
 	}
 	wantRole(t, l, b, RoleWriter)
+	wantRole(t, l, c, RoleReader)
 	if err := l.Apply(ops[1]); err != nil {
 		t.Errorf("Apply(duplicate) = %v, want nil", err)
 	}

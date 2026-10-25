@@ -130,9 +130,6 @@ func (l *List) Verify(a Attestation) error {
 	if a.Project != l.id {
 		return ErrWrongProject
 	}
-	if l.Sealed() {
-		return ErrTooManyOps
-	}
 	if err := a.validate(); err != nil {
 		return err
 	}

@@ -14,13 +14,13 @@ import (
 // O(n³) or worse and exists only to check the real fold.
 type refModel struct {
 	index   map[Hash]int
-	memo    map[int]bool
+	memo    map[int]cutInfo
 	creator string
 	nodes   []*node // in ≺ order.
 }
 
 func newRefModel(l *List) *refModel {
-	m := &refModel{index: map[Hash]int{}, memo: map[int]bool{}}
+	m := &refModel{index: map[Hash]int{}, memo: map[int]cutInfo{}}
 	for _, n := range l.ops {
 		m.nodes = append(m.nodes, n)
 	}
@@ -69,28 +69,48 @@ func (m *refModel) survivors(e []int) (out []int) {
 
 type refResult struct {
 	stands  map[int]bool
+	exc     map[int]bool // standing cuts by a junior on a senior.
 	rank    map[string]int
+	base    map[string][]int
 	members []Member
 }
 
 // othersOn returns the standing ops on x by other keys, in ≺ order.
-func (m *refModel) othersOn(set []int, stands map[int]bool, x string) (out []int) {
+func (m *refModel) othersOn(set []int, res refResult, x string) (out []int) {
 	for _, i := range set {
-		if m.subject(i) == x && m.author(i) != x && stands[i] {
+		if m.subject(i) == x && m.author(i) != x && res.stands[i] && !res.exc[i] {
 			out = append(out, i)
 		}
 	}
 	return out
 }
 
+func (m *refModel) selfCut(i int) bool { return m.subject(i) == m.author(i) && !m.grant(i) }
+
+// lastIs reports whether the ≺-latest op of l that i sees is a grant.
+func (m *refModel) lastIs(i int, l []int) bool {
+	last := -1
+	for _, j := range l {
+		if m.sees(i, j) && j > last {
+			last = j
+		}
+	}
+	return last >= 0 && m.grant(last)
+}
+
 // fold evaluates the rules on set, a downward-closed list of positions.
 func (m *refModel) fold(set []int) refResult {
-	res := refResult{stands: map[int]bool{}, rank: map[string]int{}}
+	res := refResult{stands: map[int]bool{}, exc: map[int]bool{}, rank: map[string]int{}, base: map[string][]int{}}
 	decide := func(y string, r int) {
 		res.rank[y] = r
-		e := m.othersOn(set, res.stands, y)
+		e := m.othersOn(set, res, y)
 		surv := m.survivors(e)
-		var self []int
+		var exits, self []int
+		for _, k := range set {
+			if m.author(k) == y && m.selfCut(k) && m.cutVerdict(k).exit {
+				exits = append(exits, k)
+			}
+		}
 		for _, i := range set {
 			if m.author(i) != y {
 				continue
@@ -106,25 +126,29 @@ func (m *refModel) fold(set []int) refResult {
 					killed = true
 				}
 			}
-			last := -1 // 3a: the ≺-latest surviving role op on y that i sees.
-			for _, j := range slices.Concat(surv, self) {
-				if m.sees(i, j) && j > last {
-					last = j
+			for _, k := range exits { // 3b: an exit of y concurrent to i.
+				if k != i && !slices.Contains(exits, i) && m.concurrent(i, k) {
+					killed = true
 				}
 			}
-			if killed || last < 0 || !m.grant(last) {
+			if killed || !m.lastIs(i, slices.Concat(surv, self)) { // 3a.
 				continue
 			}
 			if x := m.subject(i); x == y {
-				if y == m.creator && !m.grant(i) && !m.leaves(i) {
+				if m.selfCut(i) && !m.cutVerdict(i).honoured {
 					continue
 				}
 				self = append(self, i)
-			} else if _, senior := res.rank[x]; senior {
-				continue // 2: x is senior.
+			} else if _, senior := res.rank[x]; senior { // 2.
+				if !m.excCut(i) || m.lastIs(i, res.base[x]) {
+					continue
+				}
+				res.exc[i] = true
 			}
 			res.stands[i] = true
 		}
+		res.base[y] = slices.Concat(surv, self)
+		slices.Sort(res.base[y])
 	}
 	decide(m.creator, 0)
 	for { // 1: the next rank is the smallest pos of a surviving standing grant.
@@ -134,7 +158,7 @@ func (m *refModel) fold(set []int) refResult {
 			if _, done := res.rank[y]; done {
 				continue
 			}
-			for _, g := range m.survivors(m.othersOn(set, res.stands, y)) {
+			for _, g := range m.survivors(m.othersOn(set, res, y)) {
 				if m.grant(g) && (bestPos < 0 || g < bestPos) {
 					best, bestPos = y, g
 				}
@@ -158,13 +182,28 @@ func (m *refModel) fold(set []int) refResult {
 			continue
 		}
 		done[x] = true
-		var selfs []int
+		var selfs, juniors []int
 		for _, j := range set {
-			if m.subject(j) == x && m.author(j) == x && res.stands[j] {
-				selfs = append(selfs, j)
+			if m.subject(j) == x && res.stands[j] {
+				switch {
+				case m.author(j) == x:
+					selfs = append(selfs, j)
+				case res.exc[j]:
+					juniors = append(juniors, j)
+				}
 			}
 		}
-		l := slices.Concat(m.survivors(m.othersOn(set, res.stands, x)), selfs)
+		surv := m.survivors(m.othersOn(set, res, x))
+		l := slices.Concat(surv, selfs)
+		for _, c := range juniors {
+			beaten := false
+			for _, g := range surv {
+				beaten = beaten || (m.grant(g) && m.concurrent(c, g))
+			}
+			if !beaten {
+				l = append(l, c)
+			}
+		}
 		slices.Sort(l)
 		var mem Member
 		present, pos := false, 0
@@ -202,11 +241,12 @@ func (m *refModel) fold(set []int) refResult {
 	return res
 }
 
-// leaves reports whether the creator's cut of itself at i is honoured: another
-// admin exists in the fold of i's ancestors.
-func (m *refModel) leaves(i int) bool {
-	if d, ok := m.memo[i]; ok {
-		return d
+func (m *refModel) excCut(i int) bool { return m.nodes[i].op.excCut() }
+
+// cutVerdict judges the self-cut i on the fold of its ancestors alone.
+func (m *refModel) cutVerdict(i int) cutInfo {
+	if c, ok := m.memo[i]; ok {
+		return c
 	}
 	var past []int
 	for j := range i {
@@ -214,11 +254,20 @@ func (m *refModel) leaves(i int) bool {
 			past = append(past, j)
 		}
 	}
-	d := slices.ContainsFunc(m.fold(past).members, func(x Member) bool {
-		return x.Role == RoleAdmin && string(x.Pub) != m.creator
-	})
-	m.memo[i] = d
-	return d
+	var c cutInfo
+	mine := false
+	for _, x := range m.fold(past).members {
+		if x.Role == RoleAdmin {
+			if string(x.Pub) == m.author(i) {
+				mine = true
+			} else {
+				c.honoured = true
+			}
+		}
+	}
+	c.exit = c.honoured && mine
+	m.memo[i] = c
+	return c
 }
 
 func (m *refModel) all() []int {
@@ -258,7 +307,19 @@ func TestFoldInvariants(t *testing.T) {
 		v := l.current()
 		creator := keys[0].Public()
 
-		standingLeave := false
+		// regular returns the ops of y's role history that its seniors and itself made.
+		regular := func(y string) (others, selfs []int) {
+			for j, ok := range v.stands {
+				switch {
+				case !ok || m.subject(j) != y:
+				case m.author(j) == y:
+					selfs = append(selfs, j)
+				case !v.exc[j]:
+					others = append(others, j)
+				}
+			}
+			return others, selfs
+		}
 		seenRank := map[int]string{}
 		for y, r := range v.rank {
 			if other, dup := seenRank[r]; dup {
@@ -269,55 +330,54 @@ func TestFoldInvariants(t *testing.T) {
 		if v.rank[string(creator)] != 0 {
 			rt.Fatalf("creator rank = %d, want 0", v.rank[string(creator)])
 		}
+		creatorLeft := false
 		for i, ok := range v.stands {
 			if !ok {
 				continue
 			}
 			y, x := m.author(i), m.subject(i)
-			if x == string(creator) && y != x {
-				rt.Fatalf("op %d by another key on the creator stands", i)
-			}
-			if x != y { // every standing op on another key goes from a senior to a junior.
-				if ry, ok := v.rank[y]; !ok {
+			others, selfs := regular(y)
+			if x != y {
+				ry, ranked := v.rank[y]
+				if !ranked {
 					rt.Fatalf("op %d by the unranked key %x stands", i, y)
-				} else if rx, ranked := v.rank[x]; ranked && rx < ry {
-					rt.Fatalf("op %d by rank %d acts on senior rank %d", i, ry, rx)
 				}
-			}
-			var others, selfs []int
-			for j, jok := range v.stands {
-				switch {
-				case !jok || m.subject(j) != y:
-				case m.author(j) == y:
-					selfs = append(selfs, j)
-				default:
-					others = append(others, j)
-					if m.level(j) < int(RoleAdmin) && m.concurrent(i, j) {
-						rt.Fatalf("op %d stands though concurrent to the standing cut %d on its author", i, j)
+				if rx, senior := v.rank[x]; senior && rx < ry {
+					// Acting on a senior is a cut of a key that is no longer admin.
+					xo, xs := regular(x)
+					if !m.excCut(i) || m.lastIs(i, slices.Concat(m.survivors(xo), xs)) {
+						rt.Fatalf("op %d by rank %d acts on admin or by grant on senior rank %d", i, ry, rx)
 					}
 				}
 			}
 			if m.nodes[i].op.Kind == OpGenesis {
 				continue
 			}
-			last := -1
-			for _, j := range slices.Concat(m.survivors(others), selfs) {
-				if m.sees(i, j) && j > last {
-					last = j
+			for _, j := range others {
+				if m.level(j) < int(RoleAdmin) && m.concurrent(i, j) {
+					rt.Fatalf("op %d stands though concurrent to the standing cut %d on its author", i, j)
 				}
 			}
-			if last < 0 || !m.grant(last) {
+			iExits := m.selfCut(i) && m.cutVerdict(i).exit
+			for j, ok := range v.stands {
+				if ok && j != i && m.author(j) == y && m.selfCut(j) && m.cutVerdict(j).exit && !iExits && m.concurrent(i, j) {
+					rt.Fatalf("op %d stands though concurrent to its author's exit %d", i, j)
+				}
+			}
+			if !m.lastIs(i, slices.Concat(m.survivors(others), selfs)) {
 				rt.Fatalf("op %d stands though its author is not admin there", i)
 			}
-			if x == y && y == string(creator) && !m.grant(i) {
-				standingLeave = true
-				if !m.leaves(i) {
-					rt.Fatalf("creator left at op %d without having seen another admin", i)
+			if m.selfCut(i) {
+				if !m.cutVerdict(i).honoured {
+					rt.Fatalf("op %d left without having seen another admin", i)
+				}
+				if y == string(creator) {
+					creatorLeft = true
 				}
 			}
 		}
-		// The creator leaves only voluntarily, and while it stays there is an admin.
-		if !standingLeave && l.Role(creator) != RoleAdmin {
+		// While the creator has not stepped down it is an admin.
+		if !creatorLeft && l.Role(creator) != RoleAdmin {
 			rt.Fatalf("creator is %v though it never stepped down", l.Role(creator))
 		}
 	})

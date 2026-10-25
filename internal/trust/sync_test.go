@@ -255,9 +255,12 @@ func TestSyncHaveBudgetPerTick(t *testing.T) {
 	if n := answered("p"); n != 2 {
 		t.Errorf("answers after Tick = %d, want 2", n)
 	}
+	s.Tick()
+	answered("p")
+	s.OnPeerDown("p") // the budget is the peer's, not the connection's.
 	s.OnPeerUp("p")
-	if n := answered("p"); n != 2 {
-		t.Errorf("answers after OnPeerUp = %d, want 2", n)
+	if n := answered("p"); n != 0 {
+		t.Errorf("answers after a reconnection = %d, want 0", n)
 	}
 }
 

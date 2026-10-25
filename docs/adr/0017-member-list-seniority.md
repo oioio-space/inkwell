@@ -30,7 +30,11 @@ Spécification complète : [plan trust-fold-v2](../plans/2026-10-25-trust-fold-v
 - Une coupe (retrait, rétrogradation) tue toute opération concurrente de sa cible, même après
   réadmission ; une révocation l'emporte sur une promotion concurrente.
 - Seuls des admins (dans le passé causal de l'op) peuvent écrire dans la liste.
-- 1024 opérations : liste **scellée**, refus par défaut.
+- 1024 opérations : liste **scellée** ; seules les modifications de la liste de membres sont
+  refusées, la lecture des rôles et la vérification des attestations continuent (l'édition n'est
+  jamais bloquée).
+- Tout départ volontaire (retrait ou rétrogradation de soi) exige un autre admin dans le passé
+  causal de l'opération, et neutralise les opérations antidatées du partant.
 - Synchronisation : jamais d'annonce en réponse à une annonce, budget par pair.
 
 ### Conséquences
@@ -40,10 +44,18 @@ Spécification complète : [plan trust-fold-v2](../plans/2026-10-25-trust-fold-v
   - **personne ne peut révoquer le créateur contre son gré** ; en revanche il peut **passer la
     main** (se retirer ou se rétrograder) dès qu'un autre admin existe — indispensable en
     entreprise, où les gens partent. Perte de son appareil sans autre admin = nouveau projet,
-    d'où l'invitation insistante à nommer un second admin dès le premier partage ;
-  - un ancien admin compromis peut **sceller** la liste par antidatage (déni de service qui
-    échoue fermé, jamais une prise de contrôle) — réévaluer avec Keyhive ;
-  - l'ancienneté survit à la rétrogradation.
+    d'où l'invitation insistante à nommer un second admin dès le premier partage. Après la passation,
+    une fuite ultérieure de la clé de l'ancien créateur ne permet ni de prendre le contrôle ni
+    d'antidater : ses opérations concurrentes à son départ sont mortes ;
+  - un ancien admin compromis peut **sceller** la liste par antidatage : la gestion des membres
+    est alors gelée (jamais une prise de contrôle), l'édition continue, et les répliques peuvent
+    diverger sur la liste selon l'ordre d'arrivée — il faut recréer un projet pour gérer à
+    nouveau les membres ; l'interface doit le dire — réévaluer avec Keyhive ;
+  - l'ancienneté survit à la rétrogradation, mais un senior qui n'est plus admin (rétrogradé,
+    ou ancien créateur après passation) peut être retiré ou rétrogradé par un plus jeune admin ;
+    on ne peut jamais promouvoir ni renommer un senior ;
+  - des départs simultanés (le créateur et le dernier autre admin) peuvent ne laisser aucun
+    admin : la gestion des membres est gelée, l'édition non.
 
 ### Confirmation
 

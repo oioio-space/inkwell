@@ -37,7 +37,7 @@ type Outbound struct {
 // and reordering are tolerated: every op is relayed on arrival, and calling
 // [Sync.Tick] periodically re-announces the frontier so that anything lost is
 // resent. A Have is answered with Ops, never with a Have, and at most twice
-// per peer and Tick, so a peer cannot make the replicas echo each other or
+// per peer and Tick (the budget survives reconnections), so a peer cannot make the replicas echo each other or
 // amplify traffic; each side learns what it lacks from its own announcements.
 // A sealed list does not announce. A Sync is not safe for concurrent use.
 type Sync struct {
@@ -51,18 +51,16 @@ func NewSync(l *List) *Sync {
 	return &Sync{list: l, peers: make(map[transport.PeerID]struct{}), answered: make(map[transport.PeerID]int)}
 }
 
-// OnPeerUp registers p, resets its Have budget and announces our frontier to
+// OnPeerUp registers p and announces our frontier to
 // it, unless the list is sealed.
 func (s *Sync) OnPeerUp(p transport.PeerID) []Outbound {
 	s.peers[p] = struct{}{}
-	delete(s.answered, p)
 	return s.have(p)
 }
 
 // OnPeerDown forgets p.
 func (s *Sync) OnPeerDown(p transport.PeerID) {
 	delete(s.peers, p)
-	delete(s.answered, p)
 }
 
 // Tick re-announces our frontier to every peer (unless the list is sealed),
