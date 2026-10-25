@@ -19,6 +19,7 @@ const instance = (port: number) => ({
 
 export default defineConfig({
   testDir: "e2e",
+  testIgnore: "netsim.spec.ts", // needs network namespaces: `mise run e2e:netsim`
   fullyParallel: false,
   workers: 1,
   retries: process.env.CI ? 1 : 0,

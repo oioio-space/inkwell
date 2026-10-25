@@ -185,7 +185,9 @@ type Node struct {
 	// prefix that leads through each of them. Both are read-only.
 	relays    map[peer.ID]peer.AddrInfo
 	relayDown map[peer.ID]chan struct{}
-	notifee   *network.NotifyBundle
+	// reserved are the relays that currently hold a slot for this node, under mu.
+	reserved map[peer.ID]bool
+	notifee  *network.NotifyBundle
 	// want is the set of peers to keep connected, and kick is closed and
 	// replaced to make their dial loops retry at once. Both under mu.
 	want map[peer.ID]*wanted
@@ -268,6 +270,7 @@ func New(ctx context.Context, key ed25519.PrivateKey, o Options) (*Node, error) 
 		kick:      make(chan struct{}),
 		relays:    relays,
 		relayDown: make(map[peer.ID]chan struct{}, len(relays)),
+		reserved:  make(map[peer.ID]bool, len(relays)),
 	}
 	n.circuit = circuitPrefixes(relays)
 	for id := range relays {
@@ -399,13 +402,27 @@ func (n *Node) Local() transport.PeerID { return n.local }
 // Addrs returns the addresses the node listens on, each ending with
 // /p2p/<id> so that it is enough to dial the node. Addresses of a wildcard
 // listener are expanded to each local interface. With relays, the addresses
-// through them are included once a slot is reserved; in RelayOnly mode they
-// are the only ones, so there may be none yet.
+// through them are included once a slot is reserved, even when the relay is on
+// a private or loopback address; in RelayOnly mode they are the only ones, so
+// there may be none yet.
 func (n *Node) Addrs() []string {
-	if len(n.h.Addrs()) == 0 { // none yet, in RelayOnly mode before a relay is reserved
+	addrs := n.h.Addrs()
+	// AutoRelay only advertises relays on public addresses; a node whose relay
+	// is on a LAN (or the loopback interface) is still reachable through it,
+	// so the address is built here.
+	n.mu.Lock()
+	for id := range n.reserved {
+		for _, c := range circuitPrefixes(map[peer.ID]peer.AddrInfo{id: n.relays[id]}) {
+			if !slices.ContainsFunc(addrs, c.Equal) {
+				addrs = append(addrs, c)
+			}
+		}
+	}
+	n.mu.Unlock()
+	if len(addrs) == 0 { // none yet, in RelayOnly mode before a relay is reserved
 		return nil
 	}
-	mas, err := peer.AddrInfoToP2pAddrs(&peer.AddrInfo{ID: n.h.ID(), Addrs: n.h.Addrs()})
+	mas, err := peer.AddrInfoToP2pAddrs(&peer.AddrInfo{ID: n.h.ID(), Addrs: addrs})
 	if err != nil {
 		return nil
 	}

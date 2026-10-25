@@ -6,6 +6,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
+	"sync"
 	"time"
 
 	"github.com/oioio-space/inkwell/internal/transport"
@@ -22,16 +24,24 @@ type Network interface {
 	Addrs() []string
 	Connect(ctx context.Context, to transport.PeerID, addrs []string) error
 	Peers() []transport.PeerID
+	// Want keeps the given peers connected, redialing them after a network
+	// change or a relay restart.
+	Want(peers map[transport.PeerID][]string)
 }
 
 // Session is the Wails service behind "Partager": invite people or join an
 // invitation. Its exported methods are bound to the frontend.
 type Session struct {
 	net Network
+
+	mu     sync.Mutex
+	joined map[transport.PeerID][]string // peers to keep connected, with their invitation addresses
 }
 
 // NewSession returns a session over n.
-func NewSession(n Network) *Session { return &Session{net: n} }
+func NewSession(n Network) *Session {
+	return &Session{net: n, joined: make(map[transport.PeerID][]string)}
+}
 
 // LocalPeer returns this machine's peer identity.
 func (s *Session) LocalPeer() string { return string(s.net.Local()) }
@@ -62,7 +72,9 @@ func (s *Session) Host() (string, error) {
 
 // Join connects to the peer that made the invitation text and returns its
 // identity, so the caller can open that peer's project. Joining a peer that is
-// already connected succeeds and returns the same identity.
+// already connected succeeds and returns the same identity. The peer is then
+// kept connected: if the link drops (the other person went offline, a relay
+// restarted, this machine changed network), it is redialed until it answers.
 func (s *Session) Join(ctx context.Context, text string) (string, error) {
 	peer, addrs, err := parseInvitation(text)
 	if err != nil {
@@ -76,5 +88,10 @@ func (s *Session) Join(ctx context.Context, text string) (string, error) {
 	if err := s.net.Connect(ctx, peer, addrs); err != nil {
 		return "", fmt.Errorf("join: %w", err)
 	}
+	s.mu.Lock()
+	s.joined[peer] = addrs
+	want := maps.Clone(s.joined)
+	s.mu.Unlock()
+	s.net.Want(want)
 	return string(peer), nil
 }
