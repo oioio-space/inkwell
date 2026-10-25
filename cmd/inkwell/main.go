@@ -26,7 +26,7 @@ func main() {
 		log.Error("opening identity directory", "err", err)
 		os.Exit(1)
 	}
-	node, err := app.StartNode(ctx, home, app.DefaultPort)
+	rt, err := app.Start(ctx, home, app.DefaultPort, "Inkwell", log)
 	if err != nil {
 		log.Error("starting network", "err", err)
 		os.Exit(1)
@@ -34,13 +34,13 @@ func main() {
 	if err := home.Close(); err != nil {
 		log.Warn("closing identity directory", "err", err)
 	}
-	router := bridge.NewRouter(node, log)
+	router := bridge.NewRouter(rt.Repo, log)
 
 	wails := application.New(application.Options{
 		Name:        "Inkwell",
 		Description: "Éditeur collaboratif Typst, sans serveur",
 		Services: []application.Service{
-			application.NewService(app.NewSession(node)),
+			application.NewService(rt.Session),
 		},
 		Assets: application.AssetOptions{
 			Handler:    application.AssetFileServerFS(inkwell.Assets),
@@ -54,7 +54,7 @@ func main() {
 		},
 		OnShutdown: func() {
 			cancel()
-			if err := node.Close(); err != nil {
+			if err := rt.Close(); err != nil {
 				log.Warn("closing network", "err", err)
 			}
 		},
