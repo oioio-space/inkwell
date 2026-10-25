@@ -22,6 +22,8 @@ export default defineConfig({
   },
   build: { target: "es2023" },
   plugins: [svelte(), wails("./bindings"), devCsp()],
+  // Component tests mount the client build of Svelte, not the server one.
+  resolve: { conditions: process.env.VITEST ? ["browser"] : [] },
   test: {
     environment: "happy-dom",
     include: ["src/**/*.test.ts"],
