@@ -40,20 +40,22 @@ var (
 	ErrWrongProject = errors.New("trust: wrong project")
 	// ErrBadLamport marks an op whose Lamport is not 1 + the maximum of its parents.
 	ErrBadLamport = errors.New("trust: bad lamport")
-	// ErrUnknownAuthor marks an op whose author was never added in its causal past.
+	// ErrUnknownAuthor marks an op whose author was never granted admin in its causal past.
 	ErrUnknownAuthor = errors.New("trust: unknown author")
 	// ErrNotAdmin is returned when a signer without the admin role issues an op.
 	ErrNotAdmin = errors.New("trust: signer is not an admin")
-	// ErrLastAdmin is returned when an op would leave the project without admin.
+	// ErrLastAdmin is returned when the creator would remove or demote itself
+	// while no other admin exists.
 	ErrLastAdmin = errors.New("trust: would remove the last admin")
+	// ErrOutranked is returned when an op targets a key senior to its signer.
+	ErrOutranked = errors.New("trust: subject is senior to the signer")
 	// ErrNotWriter marks an attestation whose signer cannot write.
 	ErrNotWriter = errors.New("trust: signer is not a writer")
 	// ErrNoGenesis is returned when the list has not received its genesis yet.
 	ErrNoGenesis = errors.New("trust: genesis not received")
-	// ErrTooManyOps is returned when the list is full.
+	// ErrTooManyOps is returned when the list is sealed, or the buffer of ops
+	// waiting for their parents is full.
 	ErrTooManyOps = errors.New("trust: too many ops")
-	// ErrTooManyHeads is returned when the frontier exceeds MaxPrev.
-	ErrTooManyHeads = errors.New("trust: too many concurrent heads")
 )
 
 // Role is a member's permission level.

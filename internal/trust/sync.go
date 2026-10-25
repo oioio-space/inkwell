@@ -18,6 +18,9 @@ const (
 	// chunkBytes is the soft size at which an Ops message is split.
 	chunkBytes = 64 << 10
 
+	// haveBudget is how many Have messages of one peer are answered per Tick.
+	haveBudget = 2
+
 	msgHave = 1
 	msgOps  = 2
 )
@@ -33,28 +36,41 @@ type Outbound struct {
 // returns; it does no I/O, owns no goroutine and has no clock. Loss, duplication
 // and reordering are tolerated: every op is relayed on arrival, and calling
 // [Sync.Tick] periodically re-announces the frontier so that anything lost is
-// resent. A Sync is not safe for concurrent use.
+// resent. A Have is answered with Ops, never with a Have, and at most twice
+// per peer and Tick, so a peer cannot make the replicas echo each other or
+// amplify traffic; each side learns what it lacks from its own announcements.
+// A sealed list does not announce. A Sync is not safe for concurrent use.
 type Sync struct {
-	list  *List
-	peers map[transport.PeerID]struct{}
+	list     *List
+	peers    map[transport.PeerID]struct{}
+	answered map[transport.PeerID]int // Haves answered since the last Tick.
 }
 
 // NewSync returns a Sync that replicates l.
 func NewSync(l *List) *Sync {
-	return &Sync{list: l, peers: make(map[transport.PeerID]struct{})}
+	return &Sync{list: l, peers: make(map[transport.PeerID]struct{}), answered: make(map[transport.PeerID]int)}
 }
 
-// OnPeerUp registers p and announces our frontier to it.
+// OnPeerUp registers p, resets its Have budget and announces our frontier to
+// it, unless the list is sealed.
 func (s *Sync) OnPeerUp(p transport.PeerID) []Outbound {
 	s.peers[p] = struct{}{}
+	delete(s.answered, p)
 	return s.have(p)
 }
 
 // OnPeerDown forgets p.
-func (s *Sync) OnPeerDown(p transport.PeerID) { delete(s.peers, p) }
+func (s *Sync) OnPeerDown(p transport.PeerID) {
+	delete(s.peers, p)
+	delete(s.answered, p)
+}
 
-// Tick re-announces our frontier to every peer. Call it periodically.
+// Tick re-announces our frontier to every peer (unless the list is sealed),
+// resets the Have budgets and expires the old ops waiting for parents. Call it
+// periodically.
 func (s *Sync) Tick() []Outbound {
+	clear(s.answered)
+	s.list.prunePending()
 	var out []Outbound
 	for _, p := range s.sortedPeers() {
 		out = append(out, s.have(p)...)
@@ -74,17 +90,20 @@ func (s *Sync) OnMessage(from transport.PeerID, data []byte) ([]Outbound, error)
 		return nil, err
 	}
 	if kind == msgHave {
-		out := chunk(from, s.list.Since(have))
-		if slices.ContainsFunc(have, func(h Hash) bool { return !s.list.Has(h) }) {
-			out = append(out, s.have(from)...) // they know ops we lack: ask by announcing.
+		if s.answered[from] >= haveBudget {
+			return nil, nil
 		}
-		return out, nil
+		s.answered[from]++
+		return chunk(from, s.list.Since(have)), nil
 	}
 	added, err := s.list.ApplyAll(ops)
 	return s.relay(added, from), err
 }
 
 func (s *Sync) have(to transport.PeerID) []Outbound {
+	if s.list.Sealed() {
+		return nil
+	}
 	f := s.list.Frontier()
 	if len(f) > maxHave {
 		f = f[:maxHave]

@@ -106,7 +106,7 @@ func TestTwoAdminsRemoveEachOther(t *testing.T) {
 				mustIssue(t, lb, b, OpSetRole, b, RoleAdmin)
 			}
 			mustIssue(t, la, a, OpRemove, b, 0)
-			mustIssue(t, lb, b, OpRemove, a, 0)
+			forge(t, lb, b, OpRemove, a, 0) // Issue refuses: a is senior.
 
 			merge(t, la, lb)
 			for _, l := range []*List{la, lb} {
@@ -189,7 +189,7 @@ func TestLastAdminCannotLeave(t *testing.T) {
 	mustIssue(t, l, a, OpAdd, b, RoleAdmin)
 	lb := fork(t, l)
 	mustIssue(t, l, a, OpSetRole, b, RoleReader)
-	mustIssue(t, lb, b, OpSetRole, a, RoleReader)
+	forge(t, lb, b, OpSetRole, a, RoleReader) // Issue refuses: a is senior.
 	merge(t, l, lb)
 	admins := 0
 	for _, m := range l.Members() {
@@ -374,5 +374,8 @@ func TestTooManyOps(t *testing.T) {
 	}
 	if l.Len() != maxOps {
 		t.Errorf("Len() = %d, want %d", l.Len(), maxOps)
+	}
+	if !l.Sealed() {
+		t.Error("Sealed() = false, want true")
 	}
 }

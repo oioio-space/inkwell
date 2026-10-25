@@ -173,3 +173,108 @@ func TestSyncChunksLargeBatches(t *testing.T) {
 		t.Errorf("Len() = %d, want %d", peer.list.Len(), l.Len())
 	}
 }
+
+// haveMsg encodes a Have message announcing hs.
+func haveMsg(hs ...Hash) []byte {
+	b := []byte{msgHave, byte(len(hs) >> 8), byte(len(hs))}
+	for _, h := range hs {
+		b = append(b, h[:]...)
+	}
+	return b
+}
+
+func TestSyncNoAnnounceStorm(t *testing.T) {
+	a, b := newSigner(1), newSigner(2)
+	la := project(t, a)
+	mustIssue(t, la, a, OpAdd, b, RoleAdmin)
+	lb := fork(t, la)
+	for i := range 3 {
+		if _, err := la.Issue(a, OpAdd, key(50, i).Public(), RoleReader, ""); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := lb.Issue(b, OpAdd, key(51, i).Public(), RoleWriter, ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+	sa, sb := NewSync(la), NewSync(lb)
+	const A, B = transport.PeerID("A"), transport.PeerID("B")
+	queue := append(sa.OnPeerUp(B), sb.OnPeerUp(A)...) // one announcement each, no Tick.
+	msgs := 0
+	for ; len(queue) > 0 && msgs < 100; msgs++ {
+		m := queue[0]
+		queue = queue[1:]
+		var out []Outbound
+		if m.To == B {
+			out, _ = sb.OnMessage(A, m.Data)
+		} else {
+			out, _ = sa.OnMessage(B, m.Data)
+		}
+		queue = append(queue, out...)
+	}
+	if len(queue) > 0 || msgs > 6 {
+		t.Errorf("exchange took %d messages (%d left), want at most 6", msgs, len(queue))
+	}
+	if d := cmp.Diff(la.Members(), lb.Members()); d != "" {
+		t.Errorf("members differ:\n%s", d)
+	}
+	if d := cmp.Diff(la.Frontier(), lb.Frontier()); d != "" {
+		t.Errorf("frontiers differ:\n%s", d)
+	}
+}
+
+func TestSyncHaveNeverAnsweredWithHave(t *testing.T) {
+	s := NewSync(project(t, newSigner(1)))
+	out, err := s.OnMessage("p", haveMsg(Hash{9})) // a hash we do not know.
+	if err != nil || len(out) == 0 {
+		t.Fatalf("OnMessage(Have) = %d messages, %v; want the ops", len(out), err)
+	}
+	for _, m := range out {
+		if m.Data[0] != msgOps {
+			t.Errorf("answer has kind %d, want Ops (%d)", m.Data[0], msgOps)
+		}
+	}
+}
+
+func TestSyncHaveBudgetPerTick(t *testing.T) {
+	s := NewSync(project(t, newSigner(1)))
+	answered := func(p transport.PeerID) (n int) {
+		for range 10 {
+			if out, _ := s.OnMessage(p, haveMsg()); len(out) > 0 {
+				n++
+			}
+		}
+		return n
+	}
+	if n := answered("p"); n != 2 {
+		t.Errorf("answers to 10 Haves = %d, want 2", n)
+	}
+	if n := answered("q"); n != 2 {
+		t.Errorf("answers to a second peer = %d, want its own budget of 2", n)
+	}
+	s.Tick()
+	if n := answered("p"); n != 2 {
+		t.Errorf("answers after Tick = %d, want 2", n)
+	}
+	s.OnPeerUp("p")
+	if n := answered("p"); n != 2 {
+		t.Errorf("answers after OnPeerUp = %d, want 2", n)
+	}
+}
+
+func TestSyncSealedDoesNotAnnounce(t *testing.T) {
+	a := newSigner(1)
+	l := project(t, a)
+	if err := chain(t, l, a, maxOps-1); err != nil || !l.Sealed() {
+		t.Fatalf("chain = %v, Sealed() = %v", err, l.Sealed())
+	}
+	s := NewSync(l)
+	if out := s.OnPeerUp("p"); len(out) != 0 {
+		t.Errorf("OnPeerUp announced %d messages while sealed", len(out))
+	}
+	if out := s.Tick(); len(out) != 0 {
+		t.Errorf("Tick announced %d messages while sealed", len(out))
+	}
+	if out, _ := s.OnMessage("p", haveMsg()); len(out) == 0 {
+		t.Error("a sealed list must still answer a Have")
+	}
+}

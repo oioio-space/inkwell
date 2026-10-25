@@ -1,9 +1,8 @@
 package trust
 
 import (
-	"bytes"
+	"container/heap"
 	"maps"
-	"math"
 	"slices"
 )
 
@@ -22,92 +21,51 @@ func (b bitset) or(o bitset) {
 	}
 }
 
-// state is the membership produced by a sequence of ops.
-type state struct {
-	members []Member
-}
-
-func (s *state) find(pub []byte) int {
-	return slices.IndexFunc(s.members, func(m Member) bool { return bytes.Equal(m.Pub, pub) })
-}
-
-func (s *state) admins() (n int) {
-	for _, m := range s.members {
-		if m.Role == RoleAdmin {
-			n++
-		}
+// level orders the effects of a role op: Remove < reader < writer < admin.
+func (n *node) level() int {
+	if n.op.Kind == OpRemove {
+		return 0
 	}
-	return n
+	return int(n.op.Role)
 }
 
-func (s *state) isAdmin(pub []byte) bool {
-	i := s.find(pub)
-	return i >= 0 && s.members[i].Role == RoleAdmin
-}
+// grant reports whether the op makes its subject an admin.
+func (n *node) grant() bool { return n.level() == int(RoleAdmin) }
 
-// wouldEmptyAdmins reports whether applying tmpl (a Remove or SetRole) would
-// take the only admin away.
-func (s *state) wouldEmptyAdmins(tmpl Op) bool {
-	if tmpl.Kind != OpRemove && (tmpl.Kind != OpSetRole || tmpl.Role == RoleAdmin) {
-		return false
-	}
-	return s.isAdmin(tmpl.Subject) && s.admins() == 1
-}
-
-// step applies the membership effect of n. It returns false, leaving the
-// state unchanged, only when the op would leave the project without admin;
-// ops that do not apply (adding a member, removing a stranger) are no-ops.
-func (s *state) step(n *node) bool {
-	o := n.op
-	i := s.find(o.Subject)
-	switch o.Kind {
-	case OpGenesis:
-		s.members = append(s.members, Member{Pub: o.Subject, Role: RoleAdmin, Person: n.hash})
-	case OpAdd:
-		if i < 0 {
-			person := o.Person
-			if person == (Hash{}) {
-				person = n.hash
-			}
-			s.members = append(s.members, Member{Pub: o.Subject, Role: o.Role, Person: person, Name: o.Name})
-		}
-	case OpSetRole:
-		if i < 0 {
-			break
-		}
-		if s.wouldEmptyAdmins(o) {
-			return false
-		}
-		s.members[i].Role = o.Role
-		if o.Name != "" {
-			s.members[i].Name = o.Name
-		}
-	case OpRemove:
-		if i < 0 {
-			break
-		}
-		if s.wouldEmptyAdmins(o) {
-			return false
-		}
-		s.members = slices.Delete(s.members, i, i+1)
-	}
-	return true
-}
-
-// view is the result of folding a set of ops.
+// view is the result of folding the stored ops. Positions are indexes into
+// nodes, which is sorted by ≺.
 type view struct {
-	index map[Hash]int
-	nodes []*node // total order
-	anc   []bitset
-	state state
+	index    map[Hash]int
+	memo     map[int]bool // creator self-cut position → honoured.
+	rank     map[string]int
+	last     map[string]int // member key → position of its ≺-latest surviving role op.
+	memberAt map[string]int // member key → index in members.
+	creator  string
+	auth     []string // author key of each node.
+	subj     []string // subject key of each node.
+	nodes    []*node
+	anc      []bitset
+	stands   []bool
+	members  []Member
 }
 
-// passResult is the outcome of one sequential replay.
-type passResult struct {
-	first map[string]int // key → position of the op that first admitted it
-	live  []bool         // authorized in its causal past and not voided
-	eff   []bool         // live and applied (not blocked by the last-admin rule)
-	state state
+// rankEntry is a key waiting in the sweep's priority queue.
+type rankEntry struct {
+	key  string
+	rank int
+}
+
+type rankHeap []rankEntry
+
+func (h rankHeap) Len() int           { return len(h) }
+func (h rankHeap) Less(i, j int) bool { return h[i].rank < h[j].rank }
+func (h rankHeap) Swap(i, j int)      { h[i], h[j] = h[j], h[i] }
+func (h *rankHeap) Push(x any)        { *h = append(*h, x.(rankEntry)) }
+func (h *rankHeap) Pop() any {
+	old := *h
+	e := old[len(old)-1]
+	*h = old[:len(old)-1]
+	return e
 }
 
 // fold computes the deterministic membership of ops. See the package
@@ -115,106 +73,252 @@ type passResult struct {
 func fold(ops map[Hash]*node) *view {
 	nodes := slices.Collect(maps.Values(ops))
 	slices.SortFunc(nodes, cmpNodes)
-	v := &view{nodes: nodes, index: make(map[Hash]int, len(nodes)), anc: make([]bitset, len(nodes))}
-	for i, n := range nodes {
-		v.index[n.hash] = i
+	n := len(nodes)
+	v := &view{
+		nodes: nodes, index: make(map[Hash]int, n), anc: make([]bitset, n), memo: make(map[int]bool),
+		auth: make([]string, n), subj: make([]string, n),
+		rank: make(map[string]int), last: make(map[string]int), memberAt: make(map[string]int),
 	}
-	for i, n := range nodes {
-		v.anc[i] = newBitset(len(nodes))
-		for _, p := range n.op.Prev {
+	if n == 0 {
+		return v
+	}
+	for i, nd := range nodes {
+		v.index[nd.hash] = i
+		v.auth[i], v.subj[i] = string(nd.op.Author), string(nd.op.Subject)
+	}
+	for i, nd := range nodes {
+		v.anc[i] = newBitset(n)
+		for _, p := range nd.op.Prev {
 			j := v.index[p] // parents have a smaller Lamport, hence j < i.
 			v.anc[i].or(v.anc[j])
 			v.anc[i].set(j)
 		}
 	}
-	void := newBitset(len(nodes))
-	for {
-		res := v.pass(void)
-		if !v.addVoids(res, void) {
-			v.state = res.state
-			return v
+	v.creator = v.auth[0] // the genesis is the only op of Lamport 0.
+	all := make([]int, n)
+	for i := range all {
+		all[i] = i
+	}
+	s := v.sweep(all)
+	v.stands, v.rank = s.stands, s.rank
+	recs := s.members()
+	slices.SortFunc(recs, func(a, b memberRec) int { return a.pos - b.pos })
+	for _, r := range recs {
+		v.memberAt[string(r.m.Pub)] = len(v.members)
+		v.last[string(r.m.Pub)] = r.last
+		v.members = append(v.members, r.m)
+	}
+	return v
+}
+
+func (v *view) conc(i, j int) bool { return i != j && !v.anc[i].has(j) && !v.anc[j].has(i) }
+
+// survivors drops from e (standing role ops on one key by other keys, in ≺
+// order) those with a concurrent op of a lower level: a revocation beats a
+// concurrent grant.
+func (v *view) survivors(e []int) []int {
+	var out []int
+	for _, i := range e {
+		if !slices.ContainsFunc(e, func(j int) bool { return v.conc(i, j) && v.nodes[j].level() < v.nodes[i].level() }) {
+			out = append(out, i)
 		}
 	}
+	return out
 }
 
-func (v *view) concurrent(i, j int) bool {
-	return i != j && !v.anc[i].has(j) && !v.anc[j].has(i)
+// sweep is one evaluation of the fold rules over a downward-closed set of ops.
+type sweep struct {
+	v      *view
+	on     map[string][]int // subject → role ops on it, in ≺ order.
+	by     map[string][]int // author → ops by it, in ≺ order.
+	rank   map[string]int
+	stands []bool
 }
 
-// pass replays every op once in total order, judging each against its causal
-// past, and skipping the ops already known to be voided.
-func (v *view) pass(void bitset) passResult {
-	n := len(v.nodes)
-	res := passResult{first: make(map[string]int), live: make([]bool, n), eff: make([]bool, n)}
-	for i, nd := range v.nodes {
-		if void.has(i) || !v.authorized(i, res.eff) {
+// sweep decides which ops of in (positions, in ≺ order, closed under
+// ancestors) stand, visiting keys in rank order.
+func (v *view) sweep(in []int) *sweep {
+	s := &sweep{v: v, on: make(map[string][]int), by: make(map[string][]int), rank: make(map[string]int), stands: make([]bool, len(v.nodes))}
+	for _, i := range in {
+		s.on[v.subj[i]] = append(s.on[v.subj[i]], i)
+		s.by[v.auth[i]] = append(s.by[v.auth[i]], i)
+	}
+	h := &rankHeap{{key: v.creator}}
+	for h.Len() > 0 {
+		e := heap.Pop(h).(rankEntry)
+		y := e.key
+		if _, done := s.rank[y]; done {
 			continue
 		}
-		res.live[i] = true
-		known := res.state.find(nd.op.Subject) >= 0
-		if !res.state.step(nd) {
-			continue
+		var cand []int // standing ops on y by other keys, all by senior keys.
+		for _, i := range s.on[y] {
+			if v.auth[i] != y && s.stands[i] {
+				cand = append(cand, i)
+			}
 		}
-		res.eff[i] = true
-		if !known && res.state.find(nd.op.Subject) >= 0 {
-			res.first[string(nd.op.Subject)] = i
-		}
-	}
-	return res
-}
-
-// authorized reports whether op i's author is an admin in the fold of the
-// effective ops of i's causal past.
-func (v *view) authorized(i int, eff []bool) bool {
-	nd := v.nodes[i]
-	if nd.op.Kind == OpGenesis {
-		return true
-	}
-	var past state
-	for j := range i {
-		if v.anc[i].has(j) && eff[j] {
-			past.step(v.nodes[j])
-		}
-	}
-	return past.isAdmin(nd.op.Author)
-}
-
-// addVoids adds to void the ops voided by the live Removes of res and reports
-// whether void grew.
-func (v *view) addVoids(res passResult, void bitset) bool {
-	rank := func(key []byte) int {
-		if r, ok := res.first[string(key)]; ok {
-			return r
-		}
-		return math.MaxInt
-	}
-	grew := false
-	mark := func(j int) {
-		if !void.has(j) {
-			void.set(j)
-			grew = true
-		}
-	}
-	for i, ri := range v.nodes {
-		if !res.live[i] || ri.op.Kind != OpRemove {
-			continue
-		}
-		target := ri.op.Subject
-		for j, oj := range v.nodes {
-			if !v.concurrent(i, j) {
+		surv := v.survivors(cand)
+		if y != v.creator {
+			k := slices.IndexFunc(surv, func(i int) bool { return v.nodes[i].grant() })
+			if k < 0 {
+				continue // never ranked, for now.
+			}
+			if g := surv[k]; g > e.rank {
+				heap.Push(h, rankEntry{key: y, rank: g}) // its earliest grant was dropped.
 				continue
 			}
-			switch {
-			case bytes.Equal(oj.op.Author, target):
-				crossed := oj.op.Kind == OpRemove && bytes.Equal(oj.op.Subject, ri.op.Author)
-				if crossed && rank(target) < rank(ri.op.Author) {
-					continue // the older admin's Remove survives.
-				}
-				mark(j)
-			case (oj.op.Kind == OpAdd || oj.op.Kind == OpSetRole) && bytes.Equal(oj.op.Subject, target):
-				mark(j)
+		}
+		s.rank[y] = e.rank
+		s.decide(h, y, cand, surv)
+	}
+	return s
+}
+
+// decide judges the ops of y, now that every key senior to it is decided.
+func (s *sweep) decide(h *rankHeap, y string, cand, surv []int) {
+	v := s.v
+	cuts := slices.DeleteFunc(slices.Clone(cand), func(i int) bool { return v.nodes[i].grant() })
+	var self []int
+	for _, i := range s.by[y] {
+		nd := v.nodes[i]
+		if nd.op.Kind == OpGenesis {
+			s.stands[i] = true
+			self = append(self, i)
+			continue
+		}
+		if slices.ContainsFunc(cuts, func(k int) bool { return v.conc(i, k) }) {
+			continue // rule 3b.
+		}
+		if !v.adminAt(i, surv, self) {
+			continue // rule 3a.
+		}
+		x := v.subj[i]
+		if x == y {
+			if y == v.creator && !nd.grant() && !v.creatorMayLeave(i) {
+				continue
+			}
+			self = append(self, i)
+		} else if _, senior := s.rank[x]; senior {
+			continue // rule 2.
+		}
+		s.stands[i] = true
+		if x != y && nd.grant() {
+			heap.Push(h, rankEntry{key: x, rank: i})
+		}
+	}
+}
+
+// adminAt reports whether the ≺-latest of the ops of surv and self that op i
+// sees is a grant.
+func (v *view) adminAt(i int, surv, self []int) bool {
+	last := -1
+	for _, l := range [][]int{surv, self} {
+		for _, j := range l {
+			if v.anc[i].has(j) {
+				last = max(last, j)
 			}
 		}
 	}
-	return grew
+	return last >= 0 && v.nodes[last].grant()
+}
+
+// creatorMayLeave reports whether the creator's cut of itself at position i is
+// honoured: some other admin exists in the membership of i's ancestors alone.
+// The answer depends only on those ancestors, a strictly smaller set.
+func (v *view) creatorMayLeave(i int) bool {
+	if d, ok := v.memo[i]; ok {
+		return d
+	}
+	past := make([]int, 0, i)
+	for j := range i {
+		if v.anc[i].has(j) {
+			past = append(past, j)
+		}
+	}
+	d := v.sweep(past).otherAdmin()
+	v.memo[i] = d
+	return d
+}
+
+// otherAdminSeenBy reports whether an admin other than the creator exists in
+// the membership of the ops reachable from heads.
+func (v *view) otherAdminSeenBy(heads []Hash) bool {
+	seen := newBitset(len(v.nodes))
+	for _, h := range heads {
+		j := v.index[h]
+		seen.or(v.anc[j])
+		seen.set(j)
+	}
+	var past []int
+	for j := range v.nodes {
+		if seen.has(j) {
+			past = append(past, j)
+		}
+	}
+	return v.sweep(past).otherAdmin()
+}
+
+// memberRec is a member with the data needed to order and reason about it.
+type memberRec struct {
+	m    Member
+	pos  int // ≺ position that orders the member list.
+	last int // position of the ≺-latest surviving role op.
+}
+
+func (s *sweep) otherAdmin() bool {
+	return slices.ContainsFunc(s.members(), func(r memberRec) bool {
+		return r.m.Role == RoleAdmin && string(r.m.Pub) != s.v.creator
+	})
+}
+
+// members applies rule 5.
+func (s *sweep) members() []memberRec {
+	v := s.v
+	var out []memberRec
+	for x, on := range s.on {
+		var others, selfs []int
+		for _, i := range on {
+			switch {
+			case !s.stands[i]:
+			case v.auth[i] == x:
+				selfs = append(selfs, i)
+			default:
+				others = append(others, i)
+			}
+		}
+		l := slices.Concat(v.survivors(others), selfs)
+		slices.Sort(l)
+		if len(l) == 0 || v.nodes[l[len(l)-1]].op.Kind == OpRemove {
+			continue
+		}
+		// The run is what follows the latest surviving Remove.
+		run := l
+		for k := len(l) - 1; k >= 0; k-- {
+			if v.nodes[l[k]].op.Kind == OpRemove {
+				run = l[k+1:]
+				break
+			}
+		}
+		last := v.nodes[run[len(run)-1]]
+		m := Member{Pub: last.op.Subject, Role: last.op.Role}
+		pos := run[0]
+		person := v.nodes[run[0]].hash
+		for _, i := range run {
+			nd := v.nodes[i]
+			if nd.op.Kind != OpGenesis && nd.op.Kind != OpRemove && nd.op.Name != "" {
+				m.Name = nd.op.Name
+			}
+			if nd.op.Kind == OpAdd {
+				pos, person = i, nd.op.Person
+				if person == (Hash{}) {
+					person = nd.hash
+				}
+			}
+		}
+		m.Person = person
+		if x == v.creator {
+			pos = 0
+		}
+		out = append(out, memberRec{m: m, pos: pos, last: run[len(run)-1]})
+	}
+	return out
 }
