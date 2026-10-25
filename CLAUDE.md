@@ -31,6 +31,10 @@ par étape). Détail : `docs/architecture.md` (paquets, règles de dépendance),
 `docs/adr/` (décisions — lire avant de remettre une frontière en cause),
 `docs/glossary.md`, `docs/ux-principles.md`, `docs/open-questions.md`.
 
+**Règle : conception moderne, modulaire, performante et sécurisée.** Chaque principe a sa
+preuve (gate, test, revue) dans `docs/engineering-principles.md` — le lire avant de
+concevoir ou de revoir quoi que ce soit ; une exception exige une ADR.
+
 **Invariants — ne jamais les violer sans nouvelle ADR :**
 
 - Le CRDT vit dans la webview ; Go ne transporte que des **octets opaques**. Aucun paquet

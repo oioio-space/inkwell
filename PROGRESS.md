@@ -17,7 +17,7 @@ démontré (test, démo enregistrée ou tâche utilisateur chronométrée).
 - [x] Bootstrap go-starter (mise, hooks git, agents, skills, CI) — `mise run ci` vert
 - [x] Architecture cible et règles de dépendance — [docs/architecture.md](docs/architecture.md)
 - [x] Décisions consignées — [docs/adr/](docs/adr/)
-- [x] Glossaire, principes UX, questions ouvertes
+- [x] Glossaire, principes UX, principes d'ingénierie (règle), questions ouvertes
 - [x] gopls MCP (`.mcp.json`), skill projet `inkwell-stack`, Dependabot
 
 ## Étape 1 — Noyau
