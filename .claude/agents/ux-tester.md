@@ -2,8 +2,8 @@
 name: ux-tester
 description: Use PROACTIVELY before merging any UI change, after each wave, and before a release, to test inkwell as a person would. It plays personas through real task scenarios in the running app (two to three instances), judges each step with a cognitive walkthrough and Nielsen's heuristics while looking at every screenshot, and turns each defect into a failing e2e test, then a fix.
 tools: Read, Write, Edit, Bash, Grep, Glob
-model: opus
-effort: high
+model: sonnet
+effort: medium
 skills:
   - ux-walkthrough
 ---

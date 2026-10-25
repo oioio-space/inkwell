@@ -99,6 +99,8 @@ Each agent in `.claude/agents/` pins its own tier via frontmatter.
 | Novel algorithm / architecture design | `architect` | Opus / high |
 | Deep security / vuln audit | `security-auditor` | Opus / high |
 
+**Économie de tokens, pratique :** pousser avec `scripts/qpush.sh` (verdict seul) ; préciser `model:` à chaque agent lancé (Opus seulement pour sécurité/architecture) ; rapports courts ; textes mécaniques via `scripts/llm.sh`.
+
 **Rule — token economy without quality loss:** cheapest tier that keeps quality; never
 re-read a file already in context; read logs through `rtk` / `llm.sh triage`, code through
 gopls MCP (`go_package_api`, `go_search`) rather than whole files. Hosted open-weight models
