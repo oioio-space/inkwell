@@ -252,3 +252,14 @@ dans le passé causal de l'opération ; sinon l'opération est ignorée (jamais 
 Personne d'autre ne peut le couper. Son rang 0 subsiste (personne ne peut agir sur lui).
 Tests : `TestCreatorHandsOverToAnotherAdmin`, `TestCreatorCannotLeaveAlone`,
 `TestOthersCannotRemoveCreator`, et modèle de référence/invariants étendus.
+
+### Précision (même jour) — calcul et cas limite
+
+- Une passation du créateur `o` est retenue ssi `fold(ancêtres(o))` contient un autre admin :
+  récursion bien fondée sur des ensembles strictement plus petits, mémoïsée, coût (1 + c)
+  replis pour c passations. Après une passation retenue, les opérations du créateur sont
+  jugées par la règle 3a comme celles de tout le monde ; personne ne peut le réadmettre.
+- Invariant reformulé : « le créateur ne part que s'il a vu un autre admin » ; « personne
+  d'autre ne peut le couper ». Des départs concurrents peuvent laisser **zéro admin** : la
+  gestion des personnes se fige (refus par défaut) mais **l'édition continue** ; l'interface
+  avertit avant toute passation. Test : `TestConcurrentDeparturesMayFreezeMembership`.
