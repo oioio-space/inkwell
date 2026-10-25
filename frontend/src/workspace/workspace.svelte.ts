@@ -13,36 +13,31 @@ import {
 } from "../../bindings/github.com/oioio-space/inkwell/internal/app/index";
 import { t } from "../i18n";
 import { type SocketLike, WailsNetworkAdapter } from "../net/WailsNetworkAdapter";
+import { type FileInfo, FileKind, type ProjectFile } from "../store/files";
 import { GoStorageAdapter } from "../store/GoStorageAdapter";
 import { type Projection, startProjection } from "../store/projection";
+import { safeGet, safeSet } from "../store/safeStorage";
 
 export type Doc = { text: string };
 export type Status = "alone" | "connecting" | "synced";
+
+/** What the header and the status bar say: it follows who is connected, never a stored flag. */
+export function statusOf(peerCount: number, joining: boolean): Status {
+  if (peerCount > 0) return "synced";
+  return joining ? "connecting" : "alone";
+}
 
 /** The projection of the document, in the project folder. */
 const MAIN_FILE = "main.typ";
 const NAME_KEY = "inkwell.name";
 
-function safeGet(key: string): string | null {
-  try {
-    return localStorage.getItem(key);
-  } catch {
-    return null;
-  }
-}
-
-function safeSet(key: string, value: string): void {
-  try {
-    localStorage.setItem(key, value);
-  } catch {
-    // Private mode or blocked storage: the session still works, it just won't remember.
-  }
-}
-
 /** The open project and who is in it — the single source of UI state. */
 class Workspace {
-  status = $state<Status>("alone");
   peers = $state<string[]>([]);
+  /** True while an invitation is being followed, until the inviting person's project is open. */
+  joining = $state(false);
+  /** Derived from `peers`, so the header and the people count cannot disagree. */
+  status = $derived(statusOf(this.peers.length, this.joining));
   myId = $state("");
   myName = $state(safeGet(NAME_KEY) ?? "");
   /** The invitation text to give to the person joining: opaque, copied and pasted as is. */
@@ -55,6 +50,12 @@ class Workspace {
   /** True once the member list is full: this device signs no more, so edits stay local. */
   sealed = $state(false);
   handle = $state.raw<DocHandle<Doc> | undefined>();
+  /** The file shown in the editor (today the project's main document). */
+  current = $state(MAIN_FILE);
+  /** The project's files, for the sidebar and the Insert menu. */
+  files = $state.raw<ProjectFile[]>([]);
+  /** How the current file is stored on disk; undefined until Go has written it. */
+  fileInfo = $state.raw<FileInfo | undefined>();
 
   #repo: Repo | undefined;
   #adapter: WailsNetworkAdapter | undefined;
@@ -71,11 +72,9 @@ class Workspace {
     });
     adapter.on("peer-candidate", ({ peerId }) => {
       if (!this.peers.includes(peerId)) this.peers = [...this.peers, peerId];
-      this.status = "synced";
     });
     adapter.on("peer-disconnected", ({ peerId }) => {
       this.peers = this.peers.filter((p) => p !== peerId);
-      if (this.peers.length === 0) this.status = "alone";
     });
     adapter.onSealed(() => {
       this.sealed = true;
@@ -122,6 +121,43 @@ class Workspace {
     }
   }
 
+  /** The key a project's remembered layout is filed under. */
+  get project(): string {
+    return this.handle?.url ?? "";
+  }
+
+  /** Reloads the file list; the main document always shows, even before its first write. */
+  async refreshFiles(): Promise<void> {
+    if (!this.#storage) return;
+    try {
+      const files = await this.#storage.listFiles();
+      this.files = files.some((f) => f.path === MAIN_FILE)
+        ? files
+        : [{ path: MAIN_FILE, kind: FileKind.typst, size: 0, main: true }, ...files];
+    } catch (err) {
+      console.warn("files:", err instanceof Error ? err.message : "failed");
+    }
+  }
+
+  /** Reloads how the current file is stored (encoding, line ending). */
+  async refreshInfo(): Promise<void> {
+    if (!this.#storage) return;
+    try {
+      this.fileInfo = await this.#storage.fileInfo(this.current);
+    } catch {
+      this.fileInfo = undefined;
+    }
+  }
+
+  /** The text of a project file as UTF-8 with LF; undefined if absent or not text. */
+  async readFile(path: string): Promise<string | undefined> {
+    try {
+      return await this.#storage?.readProjection(path);
+    } catch {
+      return undefined;
+    }
+  }
+
   /** Takes the outside edit of main.typ into the document, then lets Inkwell write it again. */
   async importExternal(): Promise<void> {
     const name = this.external;
@@ -160,14 +196,15 @@ class Workspace {
   /** Connects using the invitation text and opens the inviting person's project. */
   async join(invitation: string): Promise<void> {
     this.error = "";
-    this.status = "connecting";
+    this.joining = true;
     try {
       const peer = (await Session.Join(invitation.trim())) as PeerId;
       await this.open(await this.#projectOf(peer));
     } catch {
       this.error = t("error.join");
+    } finally {
+      this.joining = false;
     }
-    this.status = this.peers.length > 0 ? "synced" : "alone";
   }
 
   /** Resolves with the project peer announced, waiting for its handshake if needed. */

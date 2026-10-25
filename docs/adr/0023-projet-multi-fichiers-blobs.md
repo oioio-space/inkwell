@@ -103,6 +103,22 @@ avec des vecteurs partagés avec Go.
 - **Plafonds :** 10 000 nœuds, profondeur 32. Au-delà, les nœuds sont ignorés par ordre d'id et
   signalés.
 
+### Suppression sur accord (B5, FM-05…FM-19)
+
+- `settings.deletion` vaut `"approval"` (par défaut) ou `"free"`. Il est modifiable par un admin
+  seulement.
+- `nodes[id].deletion = {by, at}` est une demande de suppression, qu'un écrivain peut poser.
+- Un admin la tranche :
+  - accepter pose `trashed` ;
+  - refuser écrit `decisions[id] = refused`.
+- En concurrence, le refus l'emporte : c'est la règle la plus prudente.
+- Avec `"approval"`, poser `trashed` exige la couverture d'un admin (admission, comme R1 de
+  l'ADR 0022). Avec `"free"`, un écrivain suffit.
+- La purge (« vider la corbeille ») retire le nœud de l'index ; elle est réservée aux admins. Le
+  document texte et l'historique restent ; un blob est gardé 30 jours.
+- Restaurer efface `trashed`. Un homonyme est suffixé (« (restauré) »), et un parent supprimé est
+  restauré avec son enfant.
+
 ### Noms portables (PRJ-10)
 
 Un seul validateur, en TS (création et admission) et en Go (projection, `FuzzValidateName`), avec des

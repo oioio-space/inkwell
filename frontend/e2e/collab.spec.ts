@@ -1,5 +1,6 @@
 import { expect, test } from "@playwright/test";
 import { clear, docText, editor, rename } from "./helpers";
+import { ALICE_URL, BOB_URL } from "./ports";
 
 test("two people type in the same file, see each other, and undo only their own text", async ({
   browser,
@@ -14,8 +15,8 @@ test("two people type in the same file, see each other, and undo only their own 
       colorScheme: "dark",
     })
   ).newPage();
-  await alice.goto("http://127.0.0.1:18081/");
-  await bob.goto("http://127.0.0.1:18082/");
+  await alice.goto(ALICE_URL);
+  await bob.goto(BOB_URL);
   await expect(editor(alice)).toBeVisible();
   await expect(editor(bob)).toBeVisible();
   await clear(alice);

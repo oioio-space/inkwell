@@ -31,6 +31,15 @@ func (p *Project) Watch(ctx context.Context, onExternal func(rel string)) error 
 	}
 	defer func() { _ = w.Close() }()
 
+	dirty := map[string]bool{}
+	// A file found empty is looked at once more before it is reported: a writer
+	// that truncates then writes (os.WriteFile) shows an empty file in between,
+	// and a slow writer can leave it empty for longer than watchDebounce.
+	held := map[string]bool{}
+	timer := time.NewTimer(watchDebounce)
+	timer.Stop()
+	defer timer.Stop()
+
 	// Watch the directories, not the files: editors replace a file by renaming
 	// another over it, which ends a watch on the old inode.
 	root := p.root.Name()
@@ -65,6 +74,11 @@ func (p *Project) Watch(ctx context.Context, onExternal func(rel string)) error 
 			known[rel] = known[rel] || dirs[dir]
 		}
 		for _, rel := range fresh {
+			if p.emptied(rel) {
+				dirty[rel], held[rel] = true, true
+				timer.Reset(watchDebounce)
+				continue
+			}
 			p.check(rel, onExternal)
 		}
 		return nil
@@ -72,15 +86,6 @@ func (p *Project) Watch(ctx context.Context, onExternal func(rel string)) error 
 	if err := refresh(); err != nil {
 		return err
 	}
-
-	dirty := map[string]bool{}
-	// A file found empty is looked at once more before it is reported: a writer
-	// that truncates then writes (os.WriteFile) shows an empty file in between,
-	// and a slow writer can leave it empty for longer than watchDebounce.
-	held := map[string]bool{}
-	timer := time.NewTimer(watchDebounce)
-	timer.Stop()
-	defer timer.Stop()
 	for {
 		select {
 		case <-ctx.Done():

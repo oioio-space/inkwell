@@ -1,19 +1,17 @@
 import { expect, test } from "@playwright/test";
 import { clear, docText, editor, open, pair, typeAtEnd } from "./helpers";
+import { ALICE_URL, BOB_URL } from "./ports";
 
 // FMT-29: A bolds a word while B types inside it. Both converge; the delimiters wrap the
 // word, extended by B's letter or not, and no letter is lost.
 //
-// The formatting commands live in frontend/src/editor/format/ (task A1) and are covered by unit
-// and property tests. They are not wired into the editor yet: the Ctrl+B shortcut and the bar
-// come with the Adwaita shell (task A4), and no test hook drives the commands from outside.
-// Until A4 lands this stays fixme; remove the `.fixme` then.
+// The commands are wired to Ctrl+B by the editor's keymap (task A4).
 
-test.fixme("FMT-29 one person bolds a word while the other types inside it: both converge, no letter lost", async ({
+test("FMT-29 one person bolds a word while the other types inside it: both converge, no letter lost", async ({
   browser,
 }) => {
-  const alice = await open(browser, "http://127.0.0.1:18081/");
-  const bob = await open(browser, "http://127.0.0.1:18082/");
+  const alice = await open(browser, ALICE_URL);
+  const bob = await open(browser, BOB_URL);
   await clear(alice);
   await clear(bob);
   await pair(alice, bob);
@@ -21,10 +19,11 @@ test.fixme("FMT-29 one person bolds a word while the other types inside it: both
   await typeAtEnd(alice, "un mot ici");
   await expect.poll(() => docText(bob)).toBe("un mot ici");
 
-  // Alice selects "mot" (double-click) while Bob puts a caret after "mo" and types "x".
-  await editor(alice)
-    .getByText("un mot ici")
-    .dblclick({ position: { x: 40, y: 8 } });
+  // Alice selects "mot" with the keyboard while Bob puts a caret after "mo" and types "x".
+  await editor(alice).click();
+  await alice.keyboard.press("ControlOrMeta+Home");
+  for (let i = 0; i < 3; i++) await alice.keyboard.press("ArrowRight");
+  for (let i = 0; i < 3; i++) await alice.keyboard.press("Shift+ArrowRight");
   await editor(bob).click();
   await bob.keyboard.press("ControlOrMeta+Home");
   for (let i = 0; i < 5; i++) await bob.keyboard.press("ArrowRight");

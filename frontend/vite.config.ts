@@ -22,8 +22,14 @@ export default defineConfig({
   },
   build: { target: "es2023" },
   plugins: [svelte(), wails("./bindings"), devCsp()],
+  // Component tests mount Svelte components in happy-dom: they need the browser build. Outside
+  // tests, leave Vite's default conditions alone (an empty list would drop "browser").
+  resolve: process.env.VITEST ? { conditions: ["browser"] } : undefined,
   test: {
     environment: "happy-dom",
     include: ["src/**/*.test.ts"],
+    setupFiles: ["src/test-setup.ts"],
+    // tokens.test.ts reads the stylesheet as text.
+    css: { include: [/tokens\.css/] },
   },
 });

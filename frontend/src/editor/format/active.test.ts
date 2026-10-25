@@ -63,11 +63,13 @@ describe("activeMarks", () => {
     expect(marks("*a* ⟨b *c*⟩", "typst")).toEqual([]);
   });
 
-  it("FMT-19 reports nothing inside code or a formula", () => {
-    expect(marks("`*a‸*`", "typst")).toEqual([]);
+  it("FMT-19 reports only code inside inline code, nothing in a formula or code block", () => {
+    expect(marks("`*a‸*`", "typst")).toEqual(["code"]);
+    expect(marks("*a `b‸` c*", "typst")).toEqual(["code"]);
+    expect(marks("`**a‸**`", "markdown")).toEqual(["code"]);
+    expect(marks("`a‸`", "markdown")).toEqual(["code"]);
     expect(marks("$ *a‸* $", "typst")).toEqual([]);
-    expect(marks("*a `b‸` c*", "typst")).toEqual([]);
-    expect(marks("`**a‸**`", "markdown")).toEqual([]);
+    expect(marks("$*a‸*$", "markdown")).toEqual([]);
     expect(marks("```\n**a‸**\n```", "markdown")).toEqual([]);
     expect(marks("```\n*a‸*\n```", "typst")).toEqual([]);
   });

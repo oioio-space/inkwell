@@ -1,6 +1,7 @@
 import { mkdirSync, mkdtempSync, readdirSync, rmSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { defineConfig, devices } from "@playwright/test";
+import { ALICE_PORT, BOB_PORT } from "./e2e/ports";
 
 // Each run gets fresh project folders (one per instance), shared with the workers through the
 // environment: the specs read what the instances write there.
@@ -49,5 +50,5 @@ export default defineConfig({
       ? { name: "webkit", use: { ...devices["Desktop Safari"] } }
       : { name: "chromium", use: { ...devices["Desktop Chrome"] } },
   ],
-  webServer: [instance(18081), instance(18082)],
+  webServer: [instance(ALICE_PORT), instance(BOB_PORT)],
 });
