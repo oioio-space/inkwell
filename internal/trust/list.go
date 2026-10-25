@@ -74,8 +74,8 @@ func (l *List) Project() ProjectID { return l.id }
 
 // Apply adds op to the list. It checks the structure and the signature
 // (bound to the project), then the op's parents: if some are unknown the op
-// waits in a bounded buffer, which only takes ops by keys already known to
-// have been made admin ([ErrUnknownAuthor] otherwise), refuses new ops when
+// waits in a bounded buffer, which only takes ops by keys that are admins in
+// the current membership ([ErrUnknownAuthor] otherwise), refuses new ops when
 // full ([ErrTooManyOps]) and forgets them after two [Sync.Tick]s, and is
 // integrated when they arrive. An integrated op must have a correct Lamport
 // and an author granted admin in its causal past ([ErrUnknownAuthor]). A
@@ -137,7 +137,7 @@ func (l *List) apply(op Op) ([]Op, error) {
 		return nil, ErrTooManyOps
 	}
 	if !l.hasAll(op.Prev) {
-		if !l.knownAdmin(op.Author) {
+		if !l.standingAdmin(op.Author) {
 			return nil, ErrUnknownAuthor // not worth a slot; Since resends it in causal order.
 		}
 		if len(l.pending) >= maxPending {
@@ -168,15 +168,12 @@ func (l *List) apply(op Op) ([]Op, error) {
 	return added, nil
 }
 
-// knownAdmin reports whether the stored ops grant admin to key (the genesis
-// included).
-func (l *List) knownAdmin(key ed25519.PublicKey) bool {
-	for _, n := range l.ops {
-		if n.op.Role == RoleAdmin && bytes.Equal(n.op.Subject, key) { // a Remove has no Role.
-			return true
-		}
-	}
-	return false
+// standingAdmin reports whether key is an admin in the current membership.
+// Only such keys get a slot in the pending buffer: a removed key cannot fill it.
+func (l *List) standingAdmin(key ed25519.PublicKey) bool {
+	v := l.current()
+	i, ok := v.memberAt[string(key)]
+	return ok && v.members[i].Role == RoleAdmin
 }
 
 // prunePending starts a new generation and drops the buffered ops that are
@@ -319,7 +316,8 @@ func (l *List) IssueWith(s Signer, tmpl Op) (Op, error) {
 // frontier if it fits in MaxPrev. Otherwise heads that together cover, as far
 // as MaxPrev allows, the issuer's latest surviving grant (which also covers
 // every cut on the issuer, so the op stands) and every standing op by or on
-// the subject. An uncovered op would be concurrent to the new op and could be
+// the subject and every exit (a stray exit would erase what it is concurrent
+// to, rule 3b). An uncovered op would be concurrent to the new op and could be
 // killed by it (rule 3b), undoing what it had decided. The remaining slots go
 // to the ≺-greatest heads, those that stand first so that dead floods do not
 // crowd them out.
@@ -340,7 +338,8 @@ func (l *List) capPrev(v *view, issuer, subject string) []Hash {
 	})
 	need := newBitset(len(v.nodes))
 	for i := range v.nodes {
-		if v.stands[i] && (v.auth[i] == subject || v.subj[i] == subject) {
+		exit := v.isSelfCut(i) && v.selfCut(i).exit
+		if exit || (v.stands[i] && (v.auth[i] == subject || v.subj[i] == subject)) {
 			need.set(i)
 		}
 	}

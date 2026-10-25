@@ -126,6 +126,11 @@ func DecodeAttestation(b []byte) (Attestation, error) {
 
 // Verify checks that a belongs to this project, is correctly signed, and that
 // its signer is currently a writer or an admin.
+//
+// A consumer that gates document writes on Verify MUST also check
+// [List.Sealed] and, when it is true, tell the user "liste de membres
+// saturée — créez un nouveau projet": a sealed list is frozen and may be
+// stale with respect to other replicas, and Verify does not report it.
 func (l *List) Verify(a Attestation) error {
 	if a.Project != l.id {
 		return ErrWrongProject

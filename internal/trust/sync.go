@@ -2,6 +2,7 @@ package trust
 
 import (
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"maps"
 	"slices"
@@ -81,7 +82,10 @@ func (s *Sync) Broadcast(ops ...Op) []Outbound { return s.relay(ops, "") }
 
 // OnMessage handles one message received from a peer. The returned messages
 // are valid even when err is not nil: an op that fails to apply does not stop the others.
-// A malformed message is an error and the caller may drop the peer.
+// err holds only the [ErrMalformed] failures, and the caller should drop a
+// peer only on those: the other refusals (an unknown author from out-of-order
+// delivery, a full buffer, a sealed list) can happen to an honest peer, and
+// [Sync] recovers from them by itself.
 func (s *Sync) OnMessage(from transport.PeerID, data []byte) ([]Outbound, error) {
 	kind, have, ops, err := decodeMessage(data)
 	if err != nil {
@@ -95,7 +99,23 @@ func (s *Sync) OnMessage(from transport.PeerID, data []byte) ([]Outbound, error)
 		return chunk(from, s.list.Since(have)), nil
 	}
 	added, err := s.list.ApplyAll(ops)
-	return s.relay(added, from), err
+	return s.relay(added, from), malformedOnly(err)
+}
+
+// malformedOnly keeps, among the errors joined in err by [List.ApplyAll], only
+// those that mark a malformed op.
+func malformedOnly(err error) error {
+	joined, ok := err.(interface{ Unwrap() []error }) //nolint:errorlint // ApplyAll joins its errors; a joined error is the only shape to split.
+	if !ok {
+		return err
+	}
+	var bad []error
+	for _, e := range joined.Unwrap() {
+		if errors.Is(e, ErrMalformed) {
+			bad = append(bad, e)
+		}
+	}
+	return errors.Join(bad...)
 }
 
 func (s *Sync) have(to transport.PeerID) []Outbound {

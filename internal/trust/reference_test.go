@@ -85,6 +85,17 @@ func (m *refModel) othersOn(set []int, res refResult, x string) (out []int) {
 	return out
 }
 
+// spared reports whether some op of set by a key other than y sees i but not
+// the exit k of y.
+func (m *refModel) spared(set []int, i, k int, y string) bool {
+	for _, j := range set {
+		if m.author(j) != y && m.sees(j, i) && !m.sees(j, k) {
+			return true
+		}
+	}
+	return false
+}
+
 func (m *refModel) selfCut(i int) bool { return m.subject(i) == m.author(i) && !m.grant(i) }
 
 // lastIs reports whether the ≺-latest op of l that i sees is a grant.
@@ -106,8 +117,15 @@ func (m *refModel) fold(set []int) refResult {
 		e := m.othersOn(set, res, y)
 		surv := m.survivors(e)
 		var exits, self []int
-		for _, k := range set {
-			if m.author(k) == y && m.selfCut(k) && m.cutVerdict(k).exit {
+		for _, k := range set { // an exit stands only if no standing cut on y is concurrent to it.
+			if m.author(k) != y || !m.selfCut(k) || !m.cutVerdict(k).exit {
+				continue
+			}
+			cut := false
+			for _, c := range e {
+				cut = cut || (m.level(c) < int(RoleAdmin) && m.concurrent(k, c))
+			}
+			if !cut {
 				exits = append(exits, k)
 			}
 		}
@@ -127,7 +145,7 @@ func (m *refModel) fold(set []int) refResult {
 				}
 			}
 			for _, k := range exits { // 3b: an exit of y concurrent to i.
-				if k != i && !slices.Contains(exits, i) && m.concurrent(i, k) {
+				if k != i && !slices.Contains(exits, i) && m.concurrent(i, k) && !m.spared(set, i, k, y) {
 					killed = true
 				}
 			}
@@ -360,7 +378,7 @@ func TestFoldInvariants(t *testing.T) {
 			}
 			iExits := m.selfCut(i) && m.cutVerdict(i).exit
 			for j, ok := range v.stands {
-				if ok && j != i && m.author(j) == y && m.selfCut(j) && m.cutVerdict(j).exit && !iExits && m.concurrent(i, j) {
+				if ok && j != i && m.author(j) == y && m.selfCut(j) && m.cutVerdict(j).exit && !iExits && m.concurrent(i, j) && !m.spared(m.all(), i, j, y) {
 					rt.Fatalf("op %d stands though concurrent to its author's exit %d", i, j)
 				}
 			}

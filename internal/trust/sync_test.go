@@ -150,6 +150,26 @@ func TestSyncRejectsGarbage(t *testing.T) {
 	}
 }
 
+// Out-of-order delivery is not the peer's fault: OnMessage reports only
+// malformed ops, never ErrUnknownAuthor.
+func TestSyncOutOfOrderIsNotAPeerError(t *testing.T) {
+	a, b := newSigner(1), newSigner(2)
+	src := project(t, a)
+	mustIssue(t, src, a, OpAdd, b, RoleAdmin)
+	ops := src.Since(nil) // genesis, then the Add of b.
+	mustIssue(t, src, b, OpAdd, newSigner(3), RoleWriter)
+	last := src.Since([]Hash{ops[1].Hash()})
+	s := NewSync(New(src.Project()))
+	for _, m := range chunk("p", last) { // b's op before b's grant: unknown author.
+		if _, err := s.OnMessage("p", m.Data); err != nil {
+			t.Errorf("OnMessage(op of an unknown author) = %v, want nil", err)
+		}
+	}
+	if s.list.Len() != 0 {
+		t.Errorf("Len() = %d, want 0", s.list.Len())
+	}
+}
+
 func TestSyncChunksLargeBatches(t *testing.T) {
 	a := newSigner(1)
 	l := project(t, a)
