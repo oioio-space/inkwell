@@ -68,7 +68,8 @@ export interface LangSyntax {
   prefix(block: Block, n: number): string;
 }
 
-const NONE = { lead: 0, trail: 0 };
+/** Nothing to peel: the selection wraps no delimiters. */
+export const NONE = { lead: 0, trail: 0 };
 
 // ── Mark specs ──────────────────────────────────────────────────────────────
 

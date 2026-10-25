@@ -30,3 +30,13 @@ tinymist, typst ou Wails déclenche le rejeu d'historique et la comparaison PDF 
 ### Confirmation
 
 `govulncheck`, `grype` (SBOM) et `gitleaks` en CI ; revue humaine de chaque PR Dependabot.
+
+## Plus d'informations
+
+Dépendances directes validées au titre de cette politique (versions exactes dans `go.mod`) :
+
+| Module | Version | Licence | Pourquoi | Notes de revue |
+|---|---|---|---|---|
+| `lukechampine.com/blake3` | v1.4.1 | MIT | Hash BLAKE3 et vérification Bao par groupes de 16 Kio (`internal/blob`, [ADR 0023](0023-projet-multi-fichiers-blobs.md)) | Un seul mainteneur ; v1.4.0 est retirée (`retract`), donc l'épinglage compte. Le sous-paquet `bao` n'est pas versionné à part. Seul `cpuid/v2` en dépendance. |
+| `golang.org/x/text` | v0.43.0 | BSD-3 | Normalisation NFC et pliage de casse des noms de fichiers (`internal/project/names.go`) | Équipe Go. |
+| `golang.org/x/sys` | v0.49.0 | BSD-3 | Espace disque libre avant un transfert (`internal/blob`) | Équipe Go. |

@@ -49,6 +49,14 @@ var (
 	ErrLastAdmin = errors.New("trust: would remove the last admin")
 	// ErrOutranked is returned when an op targets a key senior to its signer.
 	ErrOutranked = errors.New("trust: subject is senior to the signer")
+	// ErrSuspended is returned when the signer of an attestation, or of an op
+	// to issue, is suspended, and when a device is added to a person one of
+	// whose devices is suspended.
+	ErrSuspended = errors.New("trust: suspended")
+	// ErrNotStanding is returned when an op to issue would be stored but would
+	// not stand in the fold, for instance because the frontier is too wide to
+	// name all the ops it must see.
+	ErrNotStanding = errors.New("trust: the op would have no effect")
 	// ErrNotWriter marks an attestation whose signer cannot write.
 	ErrNotWriter = errors.New("trust: signer is not a writer")
 	// ErrNoGenesis is returned when the list has not received its genesis yet.
@@ -71,7 +79,8 @@ const (
 	RoleAdmin
 )
 
-func (r Role) valid() bool { return r >= RoleReader && r <= RoleAdmin }
+// Valid reports whether r is one of the roles a member can hold.
+func (r Role) Valid() bool { return r >= RoleReader && r <= RoleAdmin }
 
 // String returns the role's name, for logs.
 func (r Role) String() string {
@@ -93,6 +102,19 @@ type Hash [32]byte
 // String returns the hexadecimal form of h.
 func (h Hash) String() string { return hex.EncodeToString(h[:]) }
 
+// cmpHash orders hashes bytewise, the order of Prev, Heads and the frontier.
+func cmpHash(a, b Hash) int { return bytes.Compare(a[:], b[:]) }
+
+// strictlyAscending reports whether hs is sorted by [cmpHash] without duplicates.
+func strictlyAscending(hs []Hash) bool {
+	for i := 1; i < len(hs); i++ {
+		if cmpHash(hs[i-1], hs[i]) >= 0 {
+			return false
+		}
+	}
+	return true
+}
+
 // ProjectID identifies a project: the SHA-256 of its canonical Genesis op, so
 // it certifies itself.
 type ProjectID Hash
@@ -113,7 +135,17 @@ const (
 	OpSetRole
 	// OpRemove removes Subject.
 	OpRemove
+	// OpSuspend suspends Subject: its writes are refused until an OpResume.
+	// It keeps its role and its rank. Author and Subject differ, and Role,
+	// Person and Name are empty.
+	OpSuspend
+	// OpResume lets a suspended Subject back. Same fields as OpSuspend.
+	OpResume
 )
+
+// suspension reports whether the op is an OpSuspend or an OpResume. These are
+// not role ops: they change neither roles nor ranks.
+func (o Op) suspension() bool { return o.Kind == OpSuspend || o.Kind == OpResume }
 
 // Signer signs on behalf of one Ed25519 key. Sign must sign
 // "inkwell/<domain>/v1\x00" followed by msg, which is what this package
@@ -128,7 +160,7 @@ type Signer interface {
 // Op is one signed entry of the member list's hash-DAG.
 type Op struct {
 	// Name is the member's display name (Add, SetRole when non-empty) or the
-	// project title (Genesis).
+	// project title (Genesis); empty for the other kinds.
 	Name string
 	// RootURL is the automerge document URL of the project; Genesis only.
 	RootURL string
@@ -166,10 +198,8 @@ func (o Op) validate() error {
 	if len(o.Prev) > MaxPrev {
 		return fmt.Errorf("%w: too many parents", ErrMalformed)
 	}
-	for i := 1; i < len(o.Prev); i++ {
-		if bytes.Compare(o.Prev[i-1][:], o.Prev[i][:]) >= 0 {
-			return fmt.Errorf("%w: parents not strictly ascending", ErrMalformed)
-		}
+	if !strictlyAscending(o.Prev) {
+		return fmt.Errorf("%w: parents not strictly ascending", ErrMalformed)
 	}
 	switch o.Kind {
 	case OpGenesis:
@@ -178,16 +208,20 @@ func (o Op) validate() error {
 		}
 		return nil
 	case OpAdd:
-		if !o.Role.valid() {
+		if !o.Role.Valid() {
 			return fmt.Errorf("%w: role", ErrMalformed)
 		}
 	case OpSetRole:
-		if !o.Role.valid() || o.Person != (Hash{}) {
+		if !o.Role.Valid() || o.Person != (Hash{}) {
 			return fmt.Errorf("%w: setrole fields", ErrMalformed)
 		}
 	case OpRemove:
 		if o.Role != 0 || o.Person != (Hash{}) || o.Name != "" {
 			return fmt.Errorf("%w: remove fields", ErrMalformed)
+		}
+	case OpSuspend, OpResume:
+		if bytes.Equal(o.Author, o.Subject) || o.Role != 0 || o.Person != (Hash{}) || o.Name != "" {
+			return fmt.Errorf("%w: suspension fields", ErrMalformed)
 		}
 	default:
 		return fmt.Errorf("%w: kind", ErrMalformed)
@@ -287,6 +321,18 @@ func (r *reader) hash() (h Hash) {
 	return h
 }
 
+// hashes reads n hashes; it returns nil when n is 0 or the reader has failed.
+func (r *reader) hashes(n int) []Hash {
+	if n == 0 || r.err != nil {
+		return nil
+	}
+	hs := make([]Hash, n)
+	for i := range hs {
+		hs[i] = r.hash()
+	}
+	return hs
+}
+
 // Decode parses the canonical encoding of an op. It is strict: any deviation
 // from the canonical form, including trailing bytes, is [ErrMalformed]. The
 // signature is not checked; [List.Apply] does.
@@ -310,12 +356,7 @@ func Decode(b []byte) (Op, error) {
 	if r.err == nil && n > MaxPrev {
 		return Op{}, fmt.Errorf("%w: too many parents", ErrMalformed)
 	}
-	if n > 0 && r.err == nil {
-		o.Prev = make([]Hash, n)
-		for i := range o.Prev {
-			o.Prev[i] = r.hash()
-		}
-	}
+	o.Prev = r.hashes(n)
 	copy(o.Sig[:], r.take(len(o.Sig)))
 	if r.err != nil {
 		return Op{}, r.err

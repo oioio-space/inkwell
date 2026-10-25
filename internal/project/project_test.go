@@ -15,7 +15,7 @@ import (
 func TestMain(m *testing.M) { goleak.VerifyTestMain(m) }
 
 // newBase returns a root standing for <Documents>/Inkwell.
-func newBase(t *testing.T) *os.Root {
+func newBase(t testing.TB) *os.Root {
 	t.Helper()
 	base, err := os.OpenRoot(t.TempDir())
 	if err != nil {

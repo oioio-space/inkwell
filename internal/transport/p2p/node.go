@@ -19,6 +19,13 @@
 // connection is replaced by another one to the same peer, the stream is
 // reopened without any event.
 //
+// # Bulk lane
+//
+// [Node.Bulk] is a second [transport.Transport] on its own protocol,
+// [ProtocolBulk]: the same peers, announced at the same time, but separate
+// streams and queues, so that large transfers (package blob) never hold back
+// a message of the sync protocol.
+//
 // # Reachability
 //
 // With [Options.Relays], a node reserves a slot on a relay (see [RunRelay]),
@@ -158,8 +165,12 @@ type peerState struct {
 	// inTail is closed when the last inbound stream of the peer is done; the
 	// next one waits for it to keep the messages in order.
 	inTail chan struct{}
-	name   transport.PeerID
-	id     peer.ID
+	// The bulk lane's counterparts of out, wsem and inTail; see Bulk.
+	bulkOut  network.Stream
+	bulkSem  chan struct{}
+	bulkTail chan struct{}
+	name     transport.PeerID
+	id       peer.ID
 	// connected: libp2p has at least one connection to the peer.
 	connected bool
 	// admitted: Options.Admit accepted the peer when it connected.
@@ -200,6 +211,8 @@ type Node struct {
 	found map[peer.ID]nearbyEntry
 	// openTimer closes the stranger window, see SetOpen; under mu.
 	openTimer *time.Timer
+	// bulk is the bulk lane, once Bulk was called; under mu.
+	bulk *Bulk
 	// lobby is the handler of lobby requests.
 	lobby atomic.Pointer[LobbyHandler]
 	// lan is the mDNS service, if started.
@@ -354,6 +367,7 @@ func New(ctx context.Context, key ed25519.PrivateKey, o Options) (*Node, error) 
 	}
 	h.Network().Notify(n.notifee)
 	h.SetStreamHandler(ProtocolSync, n.handleStream)
+	h.SetStreamHandler(ProtocolBulk, n.handleBulkStream)
 	h.SetStreamHandler(ProtocolLobby, n.handleLobbyStream)
 	n.wg.Go(func() {
 		for _, p := range h.Network().Peers() { // connected before the subscription
@@ -402,6 +416,11 @@ func newResourceManager() (network.ResourceManager, error) {
 				Streams:         maxSyncStreams,
 				StreamsInbound:  maxSyncStreams,
 				StreamsOutbound: maxSyncStreams,
+			},
+			ProtocolBulk: {
+				Streams:         maxBulkStreams,
+				StreamsInbound:  maxBulkStreams,
+				StreamsOutbound: maxBulkStreams,
 			},
 			ProtocolLobby: {
 				Streams:         maxLobbyStreams,
@@ -638,6 +657,10 @@ func (n *Node) Close() error {
 			n.openTimer.Stop()
 		}
 		n.queue = nil
+		if n.bulk != nil {
+			n.bulk.queue = nil
+			n.bulk.budget.Close()
+		}
 		n.changedLocked()
 		n.mu.Unlock()
 		close(n.done)
@@ -664,10 +687,14 @@ func (n *Node) isClosed() bool {
 	return n.closed
 }
 
-// pushLocked queues an event for Recv, with the byte budget it holds.
+// pushLocked queues an event for Recv, with the byte budget it holds. The
+// announcements of peers are also queued for the bulk lane.
 func (n *Node) pushLocked(ev transport.Event, cost int) {
 	if n.closed {
 		return
+	}
+	if n.bulk != nil && (ev.Kind == transport.PeerUp || ev.Kind == transport.PeerDown) {
+		n.bulk.pushLocked(ev, 0)
 	}
 	n.queue = append(n.queue, queued{ev: ev, cost: cost})
 	select {

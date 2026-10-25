@@ -147,9 +147,14 @@ export class WailsNetworkAdapter extends NetworkAdapter {
     this.#closed = true;
     this.#socket?.close();
     this.#socket = undefined;
+    this.#disconnectAll();
+    this.emit("close");
+  }
+
+  /** Every announced peer is gone with the link: the repo forgets its sync state with them. */
+  #disconnectAll(): void {
     for (const peerId of this.#announced) this.emit("peer-disconnected", { peerId });
     this.#announced.clear();
-    this.emit("close");
   }
 
   #dial(): void {
@@ -162,8 +167,7 @@ export class WailsNetworkAdapter extends NetworkAdapter {
     socket.onmessage = (ev) => this.#receive(new Uint8Array(ev.data as ArrayBuffer));
     socket.onclose = () => {
       if (this.#socket !== socket) return;
-      for (const peerId of this.#announced) this.emit("peer-disconnected", { peerId });
-      this.#announced.clear();
+      this.#disconnectAll();
       if (!this.#closed) setTimeout(() => this.#dial(), this.#opts.reconnectDelayMs ?? 500);
     };
     this.#socket = socket;

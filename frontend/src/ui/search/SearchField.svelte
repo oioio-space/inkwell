@@ -1,6 +1,6 @@
 <script lang="ts">
 import { t } from "../../i18n";
-import type { UiMode } from "./history";
+import { MODES, type UiMode } from "./history";
 
 let {
   value = $bindable(""),
@@ -39,16 +39,6 @@ export function focus(select = true) {
   if (select) input?.select();
 }
 
-const modes: Array<{ id: UiMode; label: () => string; hint: () => string }> = [
-  { id: "normal", label: () => t("search.mode.normal"), hint: () => t("search.mode.normal.hint") },
-  {
-    id: "wildcard",
-    label: () => t("search.mode.wildcard"),
-    hint: () => t("search.mode.wildcard.hint"),
-  },
-  { id: "regex", label: () => t("search.mode.regex"), hint: () => t("search.mode.regex.hint") },
-];
-
 function keydown(e: KeyboardEvent) {
   if (e.key === "Enter") {
     e.preventDefault();
@@ -78,14 +68,14 @@ function keydown(e: KeyboardEvent) {
       onkeydown={keydown}
     />
     <div class="modes" role="group" aria-label={t("search.mode.group")}>
-      {#each modes as m (m.id)}
+      {#each MODES as m (m)}
         <button
           type="button"
-          class:on={mode === m.id}
-          aria-pressed={mode === m.id}
-          title={m.hint()}
-          onclick={() => (mode = m.id)}
-        >{m.label()}</button>
+          class:on={mode === m}
+          aria-pressed={mode === m}
+          title={t(`search.mode.${m}.hint`)}
+          onclick={() => (mode = m)}
+        >{t(`search.mode.${m}`)}</button>
       {/each}
     </div>
   </div>

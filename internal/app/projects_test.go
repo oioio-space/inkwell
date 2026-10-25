@@ -33,7 +33,7 @@ func TestOpenProjectCreatesThenReopens(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	svc := app.NewProjects(first)
+	svc := app.NewProjects(first, nil)
 	if got := svc.Current(); got.Title != "Sans titre" || got.RootURL != "" {
 		t.Errorf("Current() of a new project = %+v", got)
 	}
@@ -49,7 +49,7 @@ func TestOpenProjectCreatesThenReopens(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = again.Close() }()
-	if got := app.NewProjects(again).Current().RootURL; got != "automerge:2akvofn6bxdksK3uVG6qU6m9fyEP" {
+	if got := app.NewProjects(again, nil).Current().RootURL; got != "automerge:2akvofn6bxdksK3uVG6qU6m9fyEP" {
 		t.Errorf("RootURL after reopening = %q", got)
 	}
 	entries, _ := os.ReadDir(root.Name())
@@ -69,7 +69,7 @@ func TestSetRootURLRejects(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = p.Close() }()
-	svc := app.NewProjects(p)
+	svc := app.NewProjects(p, nil)
 	for _, url := range []string{"", "automerge:", "http://x", "automerge:a/b", "automerge:é", "automerge:" + string(make([]byte, 200))} {
 		if err := svc.SetRootURL(url); err == nil {
 			t.Errorf("SetRootURL(%q) = nil, want an error", url)

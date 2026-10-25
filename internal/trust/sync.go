@@ -123,9 +123,7 @@ func (s *Sync) have(to transport.PeerID) []Outbound {
 		return nil
 	}
 	f := s.list.Frontier()
-	if len(f) > maxHave {
-		f = f[:maxHave]
-	}
+	f = f[:min(len(f), maxHave)]
 	b := []byte{msgHave}
 	b = binary.BigEndian.AppendUint16(b, uint16(len(f))) // #nosec G115 -- bounded by maxHave.
 	for _, h := range f {
@@ -190,9 +188,7 @@ func decodeMessage(b []byte) (kind byte, have []Hash, ops []Op, err error) {
 		if n > maxHave {
 			return 0, nil, nil, fmt.Errorf("%w: too many hashes", ErrMalformed)
 		}
-		for range n {
-			have = append(have, r.hash())
-		}
+		have = r.hashes(n)
 	case msgOps:
 		for range n {
 			enc := r.take(r.u16())

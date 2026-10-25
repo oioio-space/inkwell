@@ -54,6 +54,10 @@ concevoir ou de revoir quoi que ce soit ; une exception exige une ADR.
 - « pair » dans le code, « personne » dans l'UI ; zéro jargon dans l'interface (glossaire).
 - Un paquet = un rôle, créé à l'étape qui en a besoin — pas de paquet vide « pour plus tard ».
 
+**Registre des exigences :** chaque demande de l'utilisatrice est dans `docs/exigences.md` (date, où, état) — l'y ajouter dès qu'elle arrive, le mettre à jour à chaque fusion.
+
+**Tester comme un humain :** toute modification d'interface passe par le skill `ux-walkthrough` (agent `ux-tester`) avant fusion et avant release.
+
 **Processus par étape :** `superpowers:brainstorming` → plan dans `docs/plans/` →
 TDD (`superpowers:test-driven-development`) → revue → cocher `PROGRESS.md` → démontrer
 le critère de sortie. Toute brique se recherche d'abord en ligne (règle research-first).
@@ -72,7 +76,7 @@ with no alloc/throughput regression. Hot-path packages carry `Benchmark…` test
 List them on the line below (space-separated package paths; read by
 `.claude/hooks/benchmark-context.sh` — keep the exact `HOT_PATHS:` prefix):
 
-HOT_PATHS:
+HOT_PATHS: internal/blob
 
 ## Research-first
 
@@ -98,6 +102,10 @@ Each agent in `.claude/agents/` pins its own tier via frontmatter.
 | Review a Go diff | `go-reviewer` | Sonnet / medium |
 | Novel algorithm / architecture design | `architect` | Opus / high |
 | Deep security / vuln audit | `security-auditor` | Opus / high |
+
+**Règle — router modèle ET effort pour chaque tâche** (agent, sous-tâche, skill, revue, audit) : le modèle le moins cher et l'effort le plus bas qui gardent la qualité, choisis explicitement à chaque lancement (`model:` + `effort:`). Défauts : mécanique → Haiku/`llm.sh`, effort low ; code, revue, simplify, UX → Sonnet, medium ; sécurité, architecture → Opus, high (xhigh seulement pour un audit final de release).
+
+**Économie de tokens, pratique :** pousser avec `scripts/qpush.sh` (verdict seul) ; préciser `model:` à chaque agent lancé (Opus seulement pour sécurité/architecture) ; rapports courts ; textes mécaniques via `scripts/llm.sh`.
 
 **Rule — token economy without quality loss:** cheapest tier that keeps quality; never
 re-read a file already in context; read logs through `rtk` / `llm.sh triage`, code through

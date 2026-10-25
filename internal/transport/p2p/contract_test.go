@@ -129,3 +129,16 @@ func newSimPair(t *testing.T) transporttest.Pair {
 func TestContract(t *testing.T) {
 	transporttest.Run(t, newSimPair, transporttest.Options{Ordered: true, Synctest: true})
 }
+
+// newSimBulkPair is newSimPair seen through the bulk lanes of the two nodes.
+func newSimBulkPair(t *testing.T) transporttest.Pair {
+	p := newSimPair(t)
+	a, _ := p.A.(*p2p.Node)
+	b, _ := p.B.(*p2p.Node)
+	p.A, p.B = a.Bulk(), b.Bulk()
+	return p
+}
+
+func TestContractBulk(t *testing.T) {
+	transporttest.Run(t, newSimBulkPair, transporttest.Options{Ordered: true, Synctest: true})
+}
