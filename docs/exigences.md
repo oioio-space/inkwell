@@ -24,6 +24,7 @@ Rien n'est « fait » sans tests verts et sans une passe `ux-walkthrough` réuss
 | W11 | 2026-10-25 | Tester l'interface comme un humain (interactions naturelles, défauts, manques) | skill `ux-walkthrough`, agent `ux-tester` | 🔨 skill créé |
 | W12 | 2026-10-25 | `/simplify` réel sur tout le code depuis le début | passes de rattrapage go-core, go-net, frontend ; règle mémoire | 🔨 |
 | W14 | 2026-10-25 | Toujours peser le modèle à utiliser (règle) : le moins cher à qualité égale, `model:` fixé à chaque agent | CLAUDE.md, mémoire | ✅ règle active |
+| W15 | 2026-10-25 | Router modèle **et** effort pour chaque tâche, sous-tâche ou skill (règle) | CLAUDE.md, mémoire | ✅ règle active |
 | W13 | 2026-10-25 | Noter toutes les demandes pour les reprendre | ce registre | ✅ |
 
 ## Réseau, droits, sécurité
