@@ -158,8 +158,11 @@ vecteurs dorés partagés.
   2. Une carte des groupes vérifiés est tenue à jour, avec un fsync périodique.
   3. À la fin : vérification BLAKE3 complète, `Rename` dans le magasin, puis projection.
 - **Tranche fausse :** elle est jetée et un autre pair est essayé. Après 3 fautes : `drop`, puis
-  journal de sécurité (PRJ-03). La racine Bao authentifie la longueur, donc une taille d'index
-  mensongère est détectée dès la première tranche.
+  journal de sécurité (PRJ-03). La racine Bao n'authentifie la longueur qu'avec la tranche qui
+  atteint la fin du fichier : un pair peut mentir sur la longueur dans l'en-tête d'une tranche
+  intérieure sans être détecté. Un désaccord avec la taille de l'index se règle donc en demandant
+  le dernier groupe du fichier tel que le pair le décrit : s'il se vérifie, l'index mentait
+  (`ErrSizeMismatch`, pas une faute du pair) ; sinon le pair est fautif.
 - **Quotas :**
   - 100 Mo par fichier (amende les 25 Mo de l'ADR 0006) ;
   - 2 Go par projet, au-delà desquels l'arrivant confirme avant de télécharger (PRJ-11) ;
