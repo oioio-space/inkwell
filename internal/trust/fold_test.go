@@ -110,9 +110,7 @@ func TestFoldOrderIndependent(t *testing.T) {
 			perm := slices.Clone(ops)
 			rng.Shuffle(len(perm), func(i, j int) { perm[i], perm[j] = perm[j], perm[i] })
 			l := New(ref.Project())
-			for _, o := range perm {
-				_ = l.Apply(o)
-			}
+			deliver(l, perm)
 			if d := cmp.Diff(ref.Members(), l.Members()); d != "" {
 				rt.Fatalf("members differ (-ref +perm):\n%s", d)
 			}
@@ -124,4 +122,19 @@ func TestFoldOrderIndependent(t *testing.T) {
 			}
 		}
 	})
+}
+
+// deliver applies ops in the given order, then resends them, as the sync
+// protocol does, until nothing new is stored: an op whose parents are missing
+// and whose author is unknown is refused rather than buffered.
+func deliver(l *List, ops []Op) {
+	for range len(ops) + 1 {
+		before := l.Len()
+		for _, o := range ops {
+			_ = l.Apply(o) // refused ops come back in the next round.
+		}
+		if l.Len() == before {
+			return
+		}
+	}
 }

@@ -295,11 +295,13 @@ func TestConcurrentDeparturesMayFreezeMembership(t *testing.T) {
 		check(t, lb)
 	})
 	t.Run("creatorAgainstItself", func(t *testing.T) {
+		// The creator's own concurrent Remove(b) is killed by its exit: b stays.
 		l := project(t, a)
 		base := mustIssue(t, l, a, OpAdd, b, RoleAdmin)
 		mustApply(t, l, craft(t, l, a, OpRemove, b, 0, "", h(base)))
 		mustApply(t, l, craft(t, l, a, OpRemove, a, 0, "", h(base)))
-		check(t, l)
+		wantRole(t, l, b, RoleAdmin)
+		wantRole(t, l, a, 0)
 	})
 }
 
@@ -477,20 +479,24 @@ func TestSealIsOrderIndependent(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for name, l := range map[string]*List{"floodFirst": l1, "revocationFirst": l2} {
+	// Sealing freezes membership only: reads and attestations carry on. Under
+	// an ex-admin flood the two replicas may differ on what they stored.
+	for name, tc := range map[string]struct {
+		l     *List
+		wantM Role
+	}{"floodFirst": {l1, RoleAdmin}, "revocationFirst": {l2, 0}} {
 		t.Run(name, func(t *testing.T) {
+			l := tc.l
 			if !l.Sealed() || l.Len() != maxOps {
 				t.Errorf("Sealed() = %v, Len() = %d, want sealed at %d", l.Sealed(), l.Len(), maxOps)
 			}
-			wantRole(t, l, a, 0)
-			if n := len(l.Members()); n != 0 {
-				t.Errorf("sealed list reports %d members", n)
-			}
+			wantRole(t, l, a, RoleAdmin)
+			wantRole(t, l, m, tc.wantM)
 			if _, err := l.Issue(a, OpAdd, m.Public(), RoleReader, ""); !errors.Is(err, ErrTooManyOps) {
 				t.Errorf("Issue = %v, want ErrTooManyOps", err)
 			}
-			if err := l.Verify(att); !errors.Is(err, ErrTooManyOps) {
-				t.Errorf("Verify = %v, want ErrTooManyOps", err)
+			if err := l.Verify(att); err != nil {
+				t.Errorf("Verify = %v, want nil: editing must go on", err)
 			}
 			if err := l.Apply(craft(t, l, a, OpAdd, m, RoleReader, "", l.Frontier())); !errors.Is(err, ErrTooManyOps) {
 				t.Errorf("Apply = %v, want ErrTooManyOps", err)

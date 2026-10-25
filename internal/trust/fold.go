@@ -36,7 +36,7 @@ func (n *node) grant() bool { return n.level() == int(RoleAdmin) }
 // nodes, which is sorted by ≺.
 type view struct {
 	index    map[Hash]int
-	memo     map[int]bool // creator self-cut position → honoured.
+	memo     map[int]cutInfo // self-cut position → verdict on its own ancestors.
 	rank     map[string]int
 	last     map[string]int // member key → position of its ≺-latest surviving role op.
 	memberAt map[string]int // member key → index in members.
@@ -46,6 +46,7 @@ type view struct {
 	nodes    []*node
 	anc      []bitset
 	stands   []bool
+	exc      map[int]bool // standing junior cuts on seniors.
 	members  []Member
 }
 
@@ -75,7 +76,7 @@ func fold(ops map[Hash]*node) *view {
 	slices.SortFunc(nodes, cmpNodes)
 	n := len(nodes)
 	v := &view{
-		nodes: nodes, index: make(map[Hash]int, n), anc: make([]bitset, n), memo: make(map[int]bool),
+		nodes: nodes, index: make(map[Hash]int, n), anc: make([]bitset, n), memo: make(map[int]cutInfo),
 		auth: make([]string, n), subj: make([]string, n),
 		rank: make(map[string]int), last: make(map[string]int), memberAt: make(map[string]int),
 	}
@@ -100,7 +101,7 @@ func fold(ops map[Hash]*node) *view {
 		all[i] = i
 	}
 	s := v.sweep(all)
-	v.stands, v.rank = s.stands, s.rank
+	v.stands, v.rank, v.exc = s.stands, s.rank, s.exc
 	recs := s.members()
 	slices.SortFunc(recs, func(a, b memberRec) int { return a.pos - b.pos })
 	for _, r := range recs {
@@ -132,13 +133,18 @@ type sweep struct {
 	on     map[string][]int // subject → role ops on it, in ≺ order.
 	by     map[string][]int // author → ops by it, in ≺ order.
 	rank   map[string]int
+	base   map[string][]int // decided key → its surviving role ops, junior cuts excluded.
 	stands []bool
+	exc    map[int]bool // standing cuts by a junior on a senior (rule 2's exception).
 }
 
 // sweep decides which ops of in (positions, in ≺ order, closed under
 // ancestors) stand, visiting keys in rank order.
 func (v *view) sweep(in []int) *sweep {
-	s := &sweep{v: v, on: make(map[string][]int), by: make(map[string][]int), rank: make(map[string]int), stands: make([]bool, len(v.nodes))}
+	s := &sweep{
+		v: v, on: make(map[string][]int), by: make(map[string][]int), rank: make(map[string]int),
+		base: make(map[string][]int), stands: make([]bool, len(v.nodes)), exc: make(map[int]bool),
+	}
 	for _, i := range in {
 		s.on[v.subj[i]] = append(s.on[v.subj[i]], i)
 		s.by[v.auth[i]] = append(s.by[v.auth[i]], i)
@@ -173,10 +179,67 @@ func (v *view) sweep(in []int) *sweep {
 	return s
 }
 
+// isSelfCut reports whether op i removes or demotes its own author.
+func (v *view) isSelfCut(i int) bool {
+	return v.subj[i] == v.auth[i] && !v.nodes[i].grant()
+}
+
+// cutInfo is the verdict on a self-cut, a function of its ancestors only.
+type cutInfo struct {
+	honoured bool // some admin other than the author exists in the ancestors' membership.
+	exit     bool // honoured, and the author is an admin there too.
+}
+
+// selfCut judges the self-cut at position k on the membership of its
+// ancestors alone, a strictly smaller set.
+func (v *view) selfCut(k int) cutInfo {
+	if c, ok := v.memo[k]; ok {
+		return c
+	}
+	past := make([]int, 0, k)
+	for j := range k {
+		if v.anc[k].has(j) {
+			past = append(past, j)
+		}
+	}
+	c := v.verdict(v.sweep(past), v.auth[k])
+	v.memo[k] = c
+	return c
+}
+
+// verdict reads the admins of s as seen by the key y.
+func (v *view) verdict(s *sweep, y string) (c cutInfo) {
+	mine := false
+	for _, r := range s.members() {
+		if r.m.Role != RoleAdmin {
+			continue
+		}
+		if string(r.m.Pub) == y {
+			mine = true
+		} else {
+			c.honoured = true
+		}
+	}
+	c.exit = c.honoured && mine
+	return c
+}
+
+// excCut reports whether a role op may target a senior key that is no longer
+// admin: a Remove, or a demotion that renames nobody. A grant never may.
+func (o Op) excCut() bool {
+	return o.Kind == OpRemove || (o.Kind == OpSetRole && o.Role < RoleAdmin && o.Name == "")
+}
+
 // decide judges the ops of y, now that every key senior to it is decided.
 func (s *sweep) decide(h *rankHeap, y string, cand, surv []int) {
 	v := s.v
 	cuts := slices.DeleteFunc(slices.Clone(cand), func(i int) bool { return v.nodes[i].grant() })
+	var exits []int // y's self-cuts that leave another admin in place.
+	for _, k := range s.by[y] {
+		if v.isSelfCut(k) && v.selfCut(k).exit {
+			exits = append(exits, k)
+		}
+	}
 	var self []int
 	for _, i := range s.by[y] {
 		nd := v.nodes[i]
@@ -186,25 +249,33 @@ func (s *sweep) decide(h *rankHeap, y string, cand, surv []int) {
 			continue
 		}
 		if slices.ContainsFunc(cuts, func(k int) bool { return v.conc(i, k) }) {
-			continue // rule 3b.
+			continue // rule 3b, cut by another key.
+		}
+		if !slices.Contains(exits, i) && slices.ContainsFunc(exits, func(k int) bool { return v.conc(i, k) }) {
+			continue // rule 3b, y's own exit.
 		}
 		if !v.adminAt(i, surv, self) {
 			continue // rule 3a.
 		}
 		x := v.subj[i]
 		if x == y {
-			if y == v.creator && !nd.grant() && !v.creatorMayLeave(i) {
+			if v.isSelfCut(i) && !v.selfCut(i).honoured {
 				continue
 			}
 			self = append(self, i)
 		} else if _, senior := s.rank[x]; senior {
-			continue // rule 2.
+			if !nd.op.excCut() || v.adminAt(i, s.base[x], nil) {
+				continue // rule 2.
+			}
+			s.exc[i] = true
 		}
 		s.stands[i] = true
 		if x != y && nd.grant() {
 			heap.Push(h, rankEntry{key: x, rank: i})
 		}
 	}
+	s.base[y] = slices.Concat(surv, self)
+	slices.Sort(s.base[y])
 }
 
 // adminAt reports whether the ≺-latest of the ops of surv and self that op i
@@ -221,27 +292,9 @@ func (v *view) adminAt(i int, surv, self []int) bool {
 	return last >= 0 && v.nodes[last].grant()
 }
 
-// creatorMayLeave reports whether the creator's cut of itself at position i is
-// honoured: some other admin exists in the membership of i's ancestors alone.
-// The answer depends only on those ancestors, a strictly smaller set.
-func (v *view) creatorMayLeave(i int) bool {
-	if d, ok := v.memo[i]; ok {
-		return d
-	}
-	past := make([]int, 0, i)
-	for j := range i {
-		if v.anc[i].has(j) {
-			past = append(past, j)
-		}
-	}
-	d := v.sweep(past).otherAdmin()
-	v.memo[i] = d
-	return d
-}
-
-// otherAdminSeenBy reports whether an admin other than the creator exists in
-// the membership of the ops reachable from heads.
-func (v *view) otherAdminSeenBy(heads []Hash) bool {
+// otherAdminSeenBy reports whether an admin other than y exists in the
+// membership of the ops reachable from heads.
+func (v *view) otherAdminSeenBy(heads []Hash, y string) bool {
 	seen := newBitset(len(v.nodes))
 	for _, h := range heads {
 		j := v.index[h]
@@ -254,7 +307,7 @@ func (v *view) otherAdminSeenBy(heads []Hash) bool {
 			past = append(past, j)
 		}
 	}
-	return v.sweep(past).otherAdmin()
+	return v.verdict(v.sweep(past), y).honoured
 }
 
 // memberRec is a member with the data needed to order and reason about it.
@@ -264,28 +317,30 @@ type memberRec struct {
 	last int // position of the ≺-latest surviving role op.
 }
 
-func (s *sweep) otherAdmin() bool {
-	return slices.ContainsFunc(s.members(), func(r memberRec) bool {
-		return r.m.Role == RoleAdmin && string(r.m.Pub) != s.v.creator
-	})
-}
-
 // members applies rule 5.
 func (s *sweep) members() []memberRec {
 	v := s.v
 	var out []memberRec
 	for x, on := range s.on {
-		var others, selfs []int
+		var others, selfs, juniors []int
 		for _, i := range on {
 			switch {
 			case !s.stands[i]:
 			case v.auth[i] == x:
 				selfs = append(selfs, i)
+			case s.exc[i]:
+				juniors = append(juniors, i)
 			default:
 				others = append(others, i)
 			}
 		}
-		l := slices.Concat(v.survivors(others), selfs)
+		surv := v.survivors(others)
+		l := slices.Concat(surv, selfs)
+		for _, c := range juniors { // a senior's concurrent grant beats a junior's cut.
+			if !slices.ContainsFunc(surv, func(g int) bool { return v.nodes[g].grant() && v.conc(c, g) }) {
+				l = append(l, c)
+			}
+		}
 		slices.Sort(l)
 		if len(l) == 0 || v.nodes[l[len(l)-1]].op.Kind == OpRemove {
 			continue

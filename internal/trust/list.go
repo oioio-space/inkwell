@@ -7,6 +7,7 @@ import (
 	"errors"
 	"maps"
 	"math"
+	"math/bits"
 	"slices"
 	"sync"
 )
@@ -73,8 +74,9 @@ func (l *List) Project() ProjectID { return l.id }
 
 // Apply adds op to the list. It checks the structure and the signature
 // (bound to the project), then the op's parents: if some are unknown the op
-// waits in a bounded buffer, which refuses new ops when full
-// ([ErrTooManyOps]) and forgets them after two [Sync.Tick]s, and is
+// waits in a bounded buffer, which only takes ops by keys already known to
+// have been made admin ([ErrUnknownAuthor] otherwise), refuses new ops when
+// full ([ErrTooManyOps]) and forgets them after two [Sync.Tick]s, and is
 // integrated when they arrive. An integrated op must have a correct Lamport
 // and an author granted admin in its causal past ([ErrUnknownAuthor]). A
 // sealed list refuses everything new ([ErrTooManyOps]). Applying a known op is
@@ -106,8 +108,9 @@ func (l *List) ApplyAll(ops []Op) ([]Op, error) {
 }
 
 // Sealed reports whether the list holds the maximum number of ops. A sealed
-// list stores nothing more and fails closed: Role and Members report nobody
-// and Issue, Apply and Verify return [ErrTooManyOps].
+// list stores nothing more, so membership can no longer change: Issue and
+// Apply return [ErrTooManyOps]. Role, Members and Verify keep answering from
+// the stored ops, so editing goes on.
 func (l *List) Sealed() bool {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -134,6 +137,9 @@ func (l *List) apply(op Op) ([]Op, error) {
 		return nil, ErrTooManyOps
 	}
 	if !l.hasAll(op.Prev) {
+		if !l.knownAdmin(op.Author) {
+			return nil, ErrUnknownAuthor // not worth a slot; Since resends it in causal order.
+		}
 		if len(l.pending) >= maxPending {
 			return nil, ErrTooManyOps // refuse rather than evict: the buffer cannot be flushed by a flood.
 		}
@@ -160,6 +166,17 @@ func (l *List) apply(op Op) ([]Op, error) {
 		}
 	}
 	return added, nil
+}
+
+// knownAdmin reports whether the stored ops grant admin to key (the genesis
+// included).
+func (l *List) knownAdmin(key ed25519.PublicKey) bool {
+	for _, n := range l.ops {
+		if n.op.Role == RoleAdmin && bytes.Equal(n.op.Subject, key) { // a Remove has no Role.
+			return true
+		}
+	}
+	return false
 }
 
 // prunePending starts a new generation and drops the buffered ops that are
@@ -245,10 +262,12 @@ func (l *List) Issue(s Signer, k OpKind, subject ed25519.PublicKey, r Role, name
 // Person taken from tmpl (Person lets an Add admit another device of an
 // existing person). The other fields are filled in. It returns
 // [ErrTooManyOps] if the list is sealed, [ErrNotAdmin] if s is not an admin,
-// [ErrOutranked] if the subject is senior to s (nobody but the creator can act
-// on the creator) and [ErrLastAdmin] if the creator would leave while no other
-// admin exists. Prev is the whole frontier, or, when it exceeds [MaxPrev],
-// the head covering the issuer's latest grant plus the newest other heads.
+// [ErrOutranked] if the subject is senior to s (a senior may only be removed
+// or demoted without a new name, and only once it is no longer admin) and
+// [ErrLastAdmin] if s would remove or demote itself while no other admin
+// exists. Prev is the whole frontier, or, when it exceeds [MaxPrev], the
+// heads covering the issuer's latest grant and the subject's ops, plus the
+// newest other heads that stand.
 func (l *List) IssueWith(s Signer, tmpl Op) (Op, error) {
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -262,17 +281,19 @@ func (l *List) IssueWith(s Signer, tmpl Op) (Op, error) {
 		return Op{}, ErrMalformed
 	}
 	v := l.current()
-	me := s.Public()
-	if i, ok := v.memberAt[string(me)]; !ok || v.members[i].Role != RoleAdmin {
+	me, subj := string(s.Public()), string(tmpl.Subject)
+	if i, ok := v.memberAt[me]; !ok || v.members[i].Role != RoleAdmin {
 		return Op{}, ErrNotAdmin
 	}
-	if r, ranked := v.rank[string(tmpl.Subject)]; ranked && string(tmpl.Subject) != string(me) && r < v.rank[string(me)] {
-		return Op{}, ErrOutranked
+	if r, ranked := v.rank[subj]; ranked && subj != me && r < v.rank[me] {
+		if i, member := v.memberAt[subj]; !tmpl.excCut() || (member && v.members[i].Role == RoleAdmin) {
+			return Op{}, ErrOutranked
+		}
 	}
 	op := tmpl
-	op.Author = bytes.Clone(me)
+	op.Author = bytes.Clone(s.Public())
 	op.Subject = bytes.Clone(tmpl.Subject)
-	op.Prev = l.capPrev(v, string(me))
+	op.Prev = l.capPrev(v, me, subj)
 	op.Lamport = 0
 	for _, p := range op.Prev {
 		op.Lamport = max(op.Lamport, l.ops[p].op.Lamport+1)
@@ -283,8 +304,8 @@ func (l *List) IssueWith(s Signer, tmpl Op) (Op, error) {
 	if err := op.validate(); err != nil {
 		return Op{}, err
 	}
-	leaves := string(me) == v.creator && string(op.Subject) == v.creator && (op.Kind == OpRemove || op.Role != RoleAdmin)
-	if leaves && !v.otherAdminSeenBy(op.Prev) {
+	leaves := subj == me && (op.Kind == OpRemove || op.Role != RoleAdmin)
+	if leaves && !v.otherAdminSeenBy(op.Prev, me) {
 		return Op{}, ErrLastAdmin
 	}
 	op.sign(s, l.id)
@@ -294,25 +315,80 @@ func (l *List) IssueWith(s Signer, tmpl Op) (Op, error) {
 	return op, nil
 }
 
-// capPrev returns the parents of a new op by issuer: the whole frontier if it
-// fits in MaxPrev. Otherwise the ≺-latest head covering the issuer's latest
-// surviving grant (which also covers every cut on the issuer, so the op
-// stands), plus the MaxPrev-1 ≺-greatest other heads.
-func (l *List) capPrev(v *view, issuer string) []Hash {
+// capPrev returns the parents of a new op by issuer on subject: the whole
+// frontier if it fits in MaxPrev. Otherwise heads that together cover, as far
+// as MaxPrev allows, the issuer's latest surviving grant (which also covers
+// every cut on the issuer, so the op stands) and every standing op by or on
+// the subject. An uncovered op would be concurrent to the new op and could be
+// killed by it (rule 3b), undoing what it had decided. The remaining slots go
+// to the ≺-greatest heads, those that stand first so that dead floods do not
+// crowd them out.
+func (l *List) capPrev(v *view, issuer, subject string) []Hash {
 	heads := l.frontier()
 	if len(heads) <= MaxPrev {
 		return heads
 	}
-	byPos := func(a, b Hash) int { return v.index[b] - v.index[a] } // ≺-greatest first.
-	slices.SortFunc(heads, byPos)
-	g := v.last[issuer]
-	cover := slices.IndexFunc(heads, func(h Hash) bool { return v.index[h] == g || v.anc[v.index[h]].has(g) })
-	prev := []Hash{heads[cover]}
-	for i, h := range heads {
+	slices.SortFunc(heads, func(a, b Hash) int {
+		ia, ib := v.index[a], v.index[b]
+		if sa, sb := v.stands[ia], v.stands[ib]; sa != sb {
+			if sa {
+				return -1
+			}
+			return 1
+		}
+		return ib - ia // ≺-greatest first.
+	})
+	need := newBitset(len(v.nodes))
+	for i := range v.nodes {
+		if v.stands[i] && (v.auth[i] == subject || v.subj[i] == subject) {
+			need.set(i)
+		}
+	}
+	need.set(v.last[issuer])
+	covers := func(h Hash, n bitset) int { // how many bits of n the head covers.
+		j := v.index[h]
+		c := 0
+		if n.has(j) {
+			c++
+		}
+		for w := range n {
+			c += bits.OnesCount64(n[w] & v.anc[j][w])
+		}
+		return c
+	}
+	var prev []Hash
+	chosen := make(map[Hash]bool)
+	pick := func(n bitset, ok func(Hash) bool) bool {
+		best, bestGain := -1, 0
+		for i, h := range heads {
+			if g := covers(h, n); !chosen[h] && g > bestGain && ok(h) {
+				best, bestGain = i, g
+			}
+		}
+		if best < 0 {
+			return false
+		}
+		h := heads[best]
+		prev, chosen[h] = append(prev, h), true
+		j := v.index[h]
+		for w := range need {
+			need[w] &^= v.anc[j][w]
+		}
+		need[j/64] &^= 1 << (j % 64)
+		return true
+	}
+	grant := v.last[issuer]
+	pick(need, func(h Hash) bool { // the head covering the issuer's grant comes first.
+		j := v.index[h]
+		return j == grant || v.anc[j].has(grant)
+	})
+	for len(prev) < MaxPrev && pick(need, func(Hash) bool { return true }) {
+	}
+	for _, h := range heads {
 		if len(prev) == MaxPrev {
 			break
 		}
-		if i != cover {
+		if !chosen[h] {
 			prev = append(prev, h)
 		}
 	}
@@ -320,14 +396,10 @@ func (l *List) capPrev(v *view, issuer string) []Hash {
 	return prev
 }
 
-// Role returns the current role of pub, or 0 for a non-member or if the list
-// is sealed.
+// Role returns the current role of pub, or 0 for a non-member.
 func (l *List) Role(pub ed25519.PublicKey) Role {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if l.sealed() {
-		return 0
-	}
 	v := l.current()
 	if i, ok := v.memberAt[string(pub)]; ok {
 		return v.members[i].Role
@@ -336,14 +408,10 @@ func (l *List) Role(pub ed25519.PublicKey) Role {
 }
 
 // Members returns a copy of the current members, the genesis author first and
-// the others in the order of their admission; it is empty if the list is
-// sealed.
+// the others in the order of their admission.
 func (l *List) Members() []Member {
 	l.mu.Lock()
 	defer l.mu.Unlock()
-	if l.sealed() {
-		return nil
-	}
 	ms := l.current().members
 	out := make([]Member, len(ms))
 	for i, m := range ms {
