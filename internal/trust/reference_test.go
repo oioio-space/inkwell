@@ -39,6 +39,12 @@ func (m *refModel) subject(i int) string { return string(m.nodes[i].op.Subject) 
 func (m *refModel) level(i int) int      { return m.nodes[i].level() }
 func (m *refModel) grant(i int) bool     { return m.level(i) == int(RoleAdmin) }
 
+// isRole reports whether op i is a role op (not a suspension or a resumption).
+func (m *refModel) isRole(i int) bool {
+	k := m.nodes[i].op.Kind
+	return k != OpSuspend && k != OpResume
+}
+
 // sees reports whether j is a strict ancestor of i.
 func (m *refModel) sees(i, j int) bool {
 	for _, p := range m.nodes[i].op.Prev {
@@ -78,11 +84,63 @@ type refResult struct {
 // othersOn returns the standing ops on x by other keys, in ≺ order.
 func (m *refModel) othersOn(set []int, res refResult, x string) (out []int) {
 	for _, i := range set {
-		if m.subject(i) == x && m.author(i) != x && res.stands[i] && !res.exc[i] {
+		if m.isRole(i) && m.subject(i) == x && m.author(i) != x && res.stands[i] && !res.exc[i] {
 			out = append(out, i)
 		}
 	}
 	return out
+}
+
+// suspOn returns the standing suspensions and resumptions of x by other keys
+// that the keys decided so far made, in ≺ order. With juniors, the cuts of a
+// junior key on a senior x count too.
+func (m *refModel) suspOn(set []int, res refResult, x string, juniors bool) (out []int) {
+	for _, i := range set {
+		if !m.isRole(i) && m.subject(i) == x && res.stands[i] && (juniors || !res.exc[i]) {
+			out = append(out, i)
+		}
+	}
+	return out
+}
+
+// liveSuspension applies S2 to q, ascending ≺ positions of suspensions and
+// resumptions of one key: a resumption concurrent to a suspension of q is
+// dropped, and the key is suspended if the ≺-last op left is a suspension. It
+// returns that op, or -1.
+func (m *refModel) liveSuspension(q []int) int {
+	last := -1
+	for _, i := range q {
+		beaten := false
+		for _, j := range q {
+			beaten = beaten || (m.nodes[i].op.Kind == OpResume && m.nodes[j].op.Kind == OpSuspend && m.concurrent(i, j))
+		}
+		if !beaten {
+			last = i
+		}
+	}
+	if last >= 0 && m.nodes[last].op.Kind == OpSuspend {
+		return last
+	}
+	return -1
+}
+
+// suspendedAt reports whether the key with surviving role ops roles and
+// standing suspension ops susp is suspended as op i sees it: S2 on what i
+// sees, after the last Remove it sees.
+func (m *refModel) suspendedAt(i int, roles, susp []int) bool {
+	rm := -1
+	for _, j := range roles {
+		if m.nodes[j].op.Kind == OpRemove && m.sees(i, j) {
+			rm = max(rm, j)
+		}
+	}
+	var q []int
+	for _, j := range susp {
+		if j > rm && m.sees(i, j) {
+			q = append(q, j)
+		}
+	}
+	return m.liveSuspension(q) >= 0
 }
 
 // spared reports whether some op of set by a key other than y sees i but not
@@ -116,9 +174,20 @@ func (m *refModel) fold(set []int) refResult {
 		res.rank[y] = r
 		e := m.othersOn(set, res, y)
 		surv := m.survivors(e)
+		susp := m.suspOn(set, res, y, false)
+		// dead is S3: y signs i while suspended, or without having seen a
+		// standing suspension of y by another key.
+		dead := func(i int) bool {
+			for _, k := range susp {
+				if m.nodes[k].op.Kind == OpSuspend && m.concurrent(i, k) {
+					return true
+				}
+			}
+			return m.suspendedAt(i, surv, susp)
+		}
 		var exits, self []int
 		for _, k := range set { // an exit stands only if no standing cut on y is concurrent to it.
-			if m.author(k) != y || !m.selfCut(k) || !m.cutVerdict(k).exit {
+			if m.author(k) != y || !m.selfCut(k) || !m.cutVerdict(k).exit || dead(k) {
 				continue
 			}
 			cut := false
@@ -149,7 +218,7 @@ func (m *refModel) fold(set []int) refResult {
 					killed = true
 				}
 			}
-			if killed || !m.lastIs(i, slices.Concat(surv, self)) { // 3a.
+			if killed || dead(i) || !m.lastIs(i, slices.Concat(surv, self)) { // 3a, S3.
 				continue
 			}
 			if x := m.subject(i); x == y {
@@ -202,7 +271,7 @@ func (m *refModel) fold(set []int) refResult {
 		done[x] = true
 		var selfs, juniors []int
 		for _, j := range set {
-			if m.subject(j) == x && res.stands[j] {
+			if m.isRole(j) && m.subject(j) == x && res.stands[j] {
 				switch {
 				case m.author(j) == x:
 					selfs = append(selfs, j)
@@ -248,6 +317,21 @@ func (m *refModel) fold(set []int) refResult {
 		if present {
 			if x == m.creator {
 				pos = 0
+			}
+			rm := -1 // the last surviving Remove of x by another key.
+			for _, j := range l {
+				if m.nodes[j].op.Kind == OpRemove && m.author(j) != x {
+					rm = j
+				}
+			}
+			var q []int
+			for _, j := range m.suspOn(set, res, x, true) {
+				if j > rm {
+					q = append(q, j)
+				}
+			}
+			if k := m.liveSuspension(q); k >= 0 {
+				mem.Suspended, mem.SuspendedBy = true, m.nodes[k].op.Author
 			}
 			out = append(out, entry{mem, pos})
 		}
@@ -329,7 +413,7 @@ func TestFoldInvariants(t *testing.T) {
 		regular := func(y string) (others, selfs []int) {
 			for j, ok := range v.stands {
 				switch {
-				case !ok || m.subject(j) != y:
+				case !ok || m.subject(j) != y || !m.isRole(j):
 				case m.author(j) == y:
 					selfs = append(selfs, j)
 				case !v.exc[j]:
@@ -337,6 +421,10 @@ func TestFoldInvariants(t *testing.T) {
 				}
 			}
 			return others, selfs
+		}
+		res := refResult{stands: map[int]bool{}, exc: v.exc}
+		for j, ok := range v.stands {
+			res.stands[j] = ok
 		}
 		seenRank := map[int]string{}
 		for y, r := range v.rank {
@@ -384,6 +472,15 @@ func TestFoldInvariants(t *testing.T) {
 			}
 			if !m.lastIs(i, slices.Concat(m.survivors(others), selfs)) {
 				rt.Fatalf("op %d stands though its author is not admin there", i)
+			}
+			susp := m.suspOn(m.all(), res, y, false)
+			for _, k := range susp {
+				if m.nodes[k].op.Kind == OpSuspend && m.concurrent(i, k) {
+					rt.Fatalf("op %d stands though concurrent to the standing suspension %d of its author", i, k)
+				}
+			}
+			if m.suspendedAt(i, m.survivors(others), susp) {
+				rt.Fatalf("op %d stands though its author is suspended there", i)
 			}
 			if m.selfCut(i) {
 				if !m.cutVerdict(i).honoured {

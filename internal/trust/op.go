@@ -49,6 +49,10 @@ var (
 	ErrLastAdmin = errors.New("trust: would remove the last admin")
 	// ErrOutranked is returned when an op targets a key senior to its signer.
 	ErrOutranked = errors.New("trust: subject is senior to the signer")
+	// ErrSuspended is returned when the signer of an attestation, or of an op
+	// to issue, is suspended, and when a device is added to a person one of
+	// whose devices is suspended.
+	ErrSuspended = errors.New("trust: suspended")
 	// ErrNotWriter marks an attestation whose signer cannot write.
 	ErrNotWriter = errors.New("trust: signer is not a writer")
 	// ErrNoGenesis is returned when the list has not received its genesis yet.
@@ -113,7 +117,17 @@ const (
 	OpSetRole
 	// OpRemove removes Subject.
 	OpRemove
+	// OpSuspend suspends Subject: its writes are refused until an OpResume.
+	// It keeps its role and its rank. Author and Subject differ, and Role,
+	// Person and Name are empty.
+	OpSuspend
+	// OpResume lets a suspended Subject back. Same fields as OpSuspend.
+	OpResume
 )
+
+// suspension reports whether the op is an OpSuspend or an OpResume. These are
+// not role ops: they change neither roles nor ranks.
+func (o Op) suspension() bool { return o.Kind == OpSuspend || o.Kind == OpResume }
 
 // Signer signs on behalf of one Ed25519 key. Sign must sign
 // "inkwell/<domain>/v1\x00" followed by msg, which is what this package
@@ -128,7 +142,7 @@ type Signer interface {
 // Op is one signed entry of the member list's hash-DAG.
 type Op struct {
 	// Name is the member's display name (Add, SetRole when non-empty) or the
-	// project title (Genesis).
+	// project title (Genesis); empty for the other kinds.
 	Name string
 	// RootURL is the automerge document URL of the project; Genesis only.
 	RootURL string
@@ -188,6 +202,10 @@ func (o Op) validate() error {
 	case OpRemove:
 		if o.Role != 0 || o.Person != (Hash{}) || o.Name != "" {
 			return fmt.Errorf("%w: remove fields", ErrMalformed)
+		}
+	case OpSuspend, OpResume:
+		if bytes.Equal(o.Author, o.Subject) || o.Role != 0 || o.Person != (Hash{}) || o.Name != "" {
+			return fmt.Errorf("%w: suspension fields", ErrMalformed)
 		}
 	default:
 		return fmt.Errorf("%w: kind", ErrMalformed)

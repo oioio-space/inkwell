@@ -125,7 +125,8 @@ func DecodeAttestation(b []byte) (Attestation, error) {
 }
 
 // Verify checks that a belongs to this project, is correctly signed, and that
-// its signer is currently a writer or an admin.
+// its signer is currently a writer or an admin ([ErrNotWriter] otherwise) and
+// not suspended ([ErrSuspended]).
 //
 // A consumer that gates document writes on Verify MUST also check
 // [List.Sealed] and, when it is true, tell the user "liste de membres
@@ -141,8 +142,15 @@ func (l *List) Verify(a Attestation) error {
 	if !ed25519.Verify(a.Signer, signingMessage(domainAttest, a.body()), a.Sig[:]) {
 		return ErrBadSignature
 	}
-	if l.Role(a.Signer) < RoleWriter {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	v := l.current()
+	i, ok := v.memberAt[string(a.Signer)]
+	switch {
+	case !ok || v.members[i].Role < RoleWriter:
 		return ErrNotWriter
+	case v.members[i].Suspended:
+		return ErrSuspended
 	}
 	return nil
 }

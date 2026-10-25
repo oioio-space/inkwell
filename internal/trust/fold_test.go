@@ -1,6 +1,7 @@
 package trust
 
 import (
+	"bytes"
 	"math/rand/v2"
 	"slices"
 	"testing"
@@ -59,7 +60,7 @@ func genDAG(rt *rapid.T, id ProjectID, genesis Op, keys []*testSigner) []Op {
 		}
 		author := authors[rapid.IntRange(0, len(authors)-1).Draw(rt, "author")]
 		op := Op{
-			Kind:    rapid.SampledFrom([]OpKind{OpAdd, OpAdd, OpSetRole, OpRemove, OpRemove}).Draw(rt, "kind"),
+			Kind:    rapid.SampledFrom([]OpKind{OpAdd, OpAdd, OpSetRole, OpRemove, OpRemove, OpSuspend, OpSuspend, OpResume}).Draw(rt, "kind"),
 			Subject: keys[rapid.IntRange(0, len(keys)-1).Draw(rt, "subject")].Public(),
 			Author:  author.Public(),
 			Role:    rapid.SampledFrom([]Role{RoleAdmin, RoleAdmin, RoleWriter, RoleReader}).Draw(rt, "role"),
@@ -73,8 +74,12 @@ func genDAG(rt *rapid.T, id ProjectID, genesis Op, keys []*testSigner) []Op {
 		for _, p := range prev {
 			op.Lamport = max(op.Lamport, byHash[p].Lamport+1)
 		}
-		if op.Kind == OpRemove {
-			op.Role, op.Name = 0, ""
+		if op.Kind == OpRemove || op.Kind == OpSuspend || op.Kind == OpResume {
+			op.Role, op.Name, op.Person = 0, "", Hash{}
+		}
+		if (op.Kind == OpSuspend || op.Kind == OpResume) && bytes.Equal(op.Subject, op.Author) {
+			// Nobody suspends itself: aim at the next key instead.
+			op.Subject = keys[(slices.IndexFunc(keys, func(k *testSigner) bool { return bytes.Equal(k.Public(), op.Author) })+1)%len(keys)].Public()
 		}
 		op.sign(author, id)
 		h := op.Hash()

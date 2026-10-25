@@ -107,7 +107,10 @@ func (w *Wiring) Attest(a trust.Attestation) error {
 // It fails with [trust.ErrNotWriter] for a reader or a removed member and with
 // [ErrSealed] once the member list is sealed. A device that the list does not
 // know yet, such as a guest whose admission is still in flight, is not refused:
-// the heads are kept and signed if it turns out to be a writer.
+// the heads are kept and signed if it turns out to be a writer. A suspended
+// device is refused with [trust.ErrSuspended] and keeps the heads as well: they
+// are signed and gossiped when it is let back, so that what it wrote offline
+// is accepted then.
 func (w *Wiring) AttestHeads(doc string, heads []trust.Hash) error {
 	var err error
 	if derr := w.do(func() { err = w.attestHeads(doc, heads) }); derr != nil {
@@ -123,15 +126,24 @@ func (w *Wiring) attestHeads(doc string, heads []trust.Hash) error {
 		w.announceSealed()
 		return ErrSealed
 	case role == 0 && !w.adm.wasMember(self):
-		if _, held := w.pending[doc]; held || len(w.pending) < maxPending {
-			w.pending[doc] = slices.Clone(heads)
-		}
+		w.keep(doc, heads)
 		return nil
 	case role < trust.RoleWriter:
 		return trust.ErrNotWriter
+	case w.list().Suspended(self):
+		w.keep(doc, heads)
+		return trust.ErrSuspended
 	}
 	delete(w.pending, doc)
 	return w.sign(doc, heads)
+}
+
+// keep remembers the heads of doc, to sign them later, unless too many
+// documents already wait.
+func (w *Wiring) keep(doc string, heads []trust.Hash) {
+	if _, held := w.pending[doc]; held || len(w.pending) < maxPending {
+		w.pending[doc] = slices.Clone(heads)
+	}
 }
 
 // sign attests heads as this device and offers the attestation.
@@ -148,7 +160,8 @@ func (w *Wiring) sign(doc string, heads []trust.Hash) error {
 }
 
 // flushPending signs the heads kept for the documents, once this device is
-// known to be a writer, and forgets them if it is a reader.
+// known to be a writer and is not suspended, and forgets them if it is a
+// reader.
 func (w *Wiring) flushPending() {
 	if len(w.pending) == 0 {
 		return
@@ -156,6 +169,9 @@ func (w *Wiring) flushPending() {
 	role := w.list().Role(w.signer.Public())
 	if role == 0 && !w.adm.wasMember(w.signer.Public()) {
 		return // still unknown
+	}
+	if w.list().Suspended(w.signer.Public()) {
+		return // they wait for the resume
 	}
 	pending := w.pending
 	w.pending = make(map[string][]trust.Hash)
