@@ -35,7 +35,10 @@ test("JOIN-3 a third person who joins receives everything, and the three converg
   await typeAtEnd(alice, before);
   await expect.poll(() => docText(bob)).toBe(before);
 
-  const carolApp = await startInstance(CAROL_PORT, mkdtempSync(join(tmpdir(), "inkwell-e2e-carol-")));
+  const carolApp = await startInstance(
+    CAROL_PORT,
+    mkdtempSync(join(tmpdir(), "inkwell-e2e-carol-")),
+  );
   try {
     const carol = await open(browser, `http://127.0.0.1:${CAROL_PORT}/`);
     await joinWith(alice, carol, "Carole");
