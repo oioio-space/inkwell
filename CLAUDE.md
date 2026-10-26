@@ -130,3 +130,9 @@ a **substantial** diff; a trivial diff is cleared inline:
 | `commit-vuln-review` | `security-auditor` (Opus) |
 | `commit-ergonomics-review` | `go-reviewer` (Sonnet) review → `go-dev` implement |
 | `commit-docs-review` | `scribe` (Haiku) README/PROGRESS sync |
+
+**Cohérence (règle) :** une fonctionnalité nouvelle s'intègre à l'existant, jamais en « verrue ». Elle doit :
+- réutiliser les composants, jetons et motifs Adwaita déjà présents (barre d'en-tête, panneaux à onglets, bannières, toasts, popovers) ;
+- reprendre le même vocabulaire et les mêmes raccourcis ;
+- trouver sa place dans un panneau ou un menu existant avant d'en créer un ;
+- passer une revue de cohérence visuelle (captures clair et sombre, comparées aux écrans voisins) avant la fusion.

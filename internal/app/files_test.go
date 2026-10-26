@@ -712,3 +712,30 @@ func TestMaterializeRefusesARottenBlob(t *testing.T) {
 func TestBulkLaneRefusedToSuspendedMember(t *testing.T) {
 	t.Skip("TODO ADR 0021 (t11-b3a-suspend, not merged): Wiring.isActive must say false for a suspended member; then drive Wire + Files with a suspend op and assert no slice is served")
 }
+
+// Both projection writes tell the preview: the webview writes through
+// WriteProjectionAt since the sync point moved to Go, and a missed notice left
+// the preview on its first, failed compilation.
+func TestProjectionWritesNotifyTheListener(t *testing.T) {
+	writes := map[string]func(*Files, string) error{
+		"WriteProjection": func(f *Files, rel string) error {
+			return f.WriteProjection(rel, []byte("= A"))
+		},
+		"WriteProjectionAt": func(f *Files, rel string) error {
+			return f.WriteProjectionAt(rel, []byte("= A"), nil)
+		},
+	}
+	for name, write := range writes {
+		t.Run(name, func(t *testing.T) {
+			p := newFilesPeer(t, memnet.New(1, memnet.Faults{}), "a", FilesOptions{})
+			var got []string
+			p.files.SetOnWrite(func(rel string) { got = append(got, rel) })
+			if err := write(p.files, project.MainFile); err != nil {
+				t.Fatal(err)
+			}
+			if want := []string{project.MainFile}; !slices.Equal(got, want) {
+				t.Errorf("%s(%q) notified %q, want %q", name, project.MainFile, got, want)
+			}
+		})
+	}
+}

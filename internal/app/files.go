@@ -185,6 +185,16 @@ func (f *Files) WriteProjection(rel string, data []byte) error {
 	return err
 }
 
+// WriteProjectionAt is [Files.WriteProjection] that also records the sync
+// point (see [project.Project.WriteProjectionAt]).
+func (f *Files) WriteProjectionAt(rel string, data, point []byte) error {
+	err := f.Project.WriteProjectionAt(rel, data, point)
+	if err == nil {
+		f.wrote(rel)
+	}
+	return err
+}
+
 // Close releases the blob store. Call it once [Files.Run] has returned.
 func (f *Files) Close() error {
 	var err error
