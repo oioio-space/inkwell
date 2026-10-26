@@ -55,8 +55,8 @@ Rien n'est « fait » sans tests verts et sans une passe `ux-walkthrough` réuss
 | U8 | 2026-10-25 | Enregistrement automatique **ou** manuel, au choix | B1 SAV-* | ✅ |
 | U9 | 2026-10-25 | Menu Insérer : pièces jointes PDF (`pdf.attach`), inclusions, références, toutes les possibilités, avec des libellés clairs | A1 FMT-22…26, A4 | ✅ insertion ; données réelles en C3 |
 | U10 | 2026-10-25 | Présentations : diapositives, vue présentateur (chronomètre, suivante, notes, commentaires) | C4 PRS-* | ⏳ |
-| U11 | 2026-10-25 | Bande de modifications dans la marge (style Git) | B2 HIS-* | ⏳ |
-| U12 | 2026-10-25 | Visualiser l'historique et les branches, revenir en arrière | B2 HIS-* | ⏳ |
+| U11 | 2026-10-25 | Bande de modifications dans la marge (style Git) | B2 HIS-* | 🧪 fait et testé : bande ancrée par curseurs Automerge, minicarte, par type ou par personne |
+| U12 | 2026-10-25 | Visualiser l'historique et les branches, revenir en arrière | B2 HIS-*, B2+ DIF-*, ZOOM-* | 🧪 tiroir Historique, différences lisibles, « Qui a écrit quoi », variantes, zoom du texte ; reste : onglet Commentaires (vide) et différences des autres fichiers (B5) |
 | U13 | 2026-10-25 | Gestionnaire de fichiers : ajouter, supprimer (sur accord), répliqué, historisé, restaurable | B5 FM-* | ⏳ |
 | U14 | 2026-10-25 | Recherche normale, joker, regex ; liste des lignes à la Notepad++ ; atteindre chaque résultat | B6 SRC-* | 🧪 moteur et panneau fusionnés ; branchement dans la coque à faire |
 | U15 | 2026-10-25 | Inclure des documents dans d'autres (Typst), liens internes, référencer un document | B7 LNK-* | ⏳ |

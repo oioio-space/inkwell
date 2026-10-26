@@ -338,7 +338,7 @@ describe("keymap", () => {
       "Mod-2",
       "Mod-3",
       "Mod-4",
-      "Mod-0",
+      "Mod-Alt-0",
     ]);
     const bindingFor = (key: string) => keys.find((k) => k.key === key)?.run;
     let state = parse("un ⟨mot⟩");

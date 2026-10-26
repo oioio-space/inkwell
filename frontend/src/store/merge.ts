@@ -310,18 +310,40 @@ function skippedOnly(skipped: Skipped[]): Integration {
   return { branch: [], merged: [], inserted: [], deleted: [], lines: 0, skipped };
 }
 
+/** What a change did, enough to take it back later: where it stands now and what it removed. */
+export type Taken = Pick<Integration, "merged" | "inserted" | "deleted">;
+
+/** One edit of the text: remove `remove` units at `at`, then put `put`. */
+export interface Edit {
+  at: number;
+  remove: number;
+  put: string;
+}
+
 /**
- * Takes an integration back: removes the text it added and puts back what it removed, as one
- * change. Text others typed since stays, even inside what was added.
+ * What the change from `before` to `after` did, as it stands at `after`: the text it added and the
+ * text it removed. Used to take one change back without touching what came after (DIF-08).
  */
-export function undoIntegration(handle: DocHandle<Doc>, done: Integration): void {
-  const doc = handle.doc();
-  if (!doc || done.merged.length === 0) return;
+export function changeBetween(doc: A.Doc<Doc>, before: A.Heads, after: A.Heads): Taken {
+  const old = before.length === 0 ? "" : A.view(doc, before).text;
+  const segs = follow(
+    original(old.length),
+    before.length === 0 ? A.diff(doc, [], after) : A.diff(doc, before, after),
+  );
+  return { merged: after, inserted: insertedOf(segs), deleted: deletedOf(segs, old) };
+}
+
+/**
+ * The edits that take a change back from the document as it is now: remove the text it added
+ * and put back what it removed. Text others typed since stays, even inside what was added.
+ */
+export function planUndo(doc: A.Doc<Doc>, done: Taken): Edit[] {
+  if (done.merged.length === 0) return [];
   const mergedText = A.view(doc, done.merged).text;
   const segs = follow(original(mergedText.length), A.diff(doc, done.merged, A.getHeads(doc)));
 
   // The surviving characters of each added span, and where each removed text goes back.
-  const edits: { at: number; remove: number; put: string }[] = [];
+  const edits: Edit[] = [];
   let pos = 0;
   for (const seg of segs) {
     const n = sizeOf(seg);
@@ -335,13 +357,31 @@ export function undoIntegration(handle: DocHandle<Doc>, done: Integration): void
     pos += n;
   }
   for (const d of done.deleted) edits.push({ at: where(segs, d.at), remove: 0, put: d.text });
-
-  if (edits.length === 0) return;
   // From the end; at one place, the removal first, then what is put back.
-  edits.sort((x, y) => y.at - x.at || y.remove - x.remove);
-  handle.change((d) => {
+  return edits.sort((x, y) => y.at - x.at || y.remove - x.remove);
+}
+
+/** The text after the edits (as {@link planUndo} orders them: from the end). */
+export function applyEdits(text: string, edits: readonly Edit[]): string {
+  let out = text;
+  for (const e of edits) out = out.slice(0, e.at) + e.put + out.slice(e.at + e.remove);
+  return out;
+}
+
+/**
+ * Takes an integration back: removes the text it added and puts back what it removed, as one
+ * change. Text others typed since stays, even inside what was added.
+ */
+export function undoIntegration(handle: DocHandle<Doc>, done: Taken, message?: string): void {
+  const doc = handle.doc();
+  if (!doc) return;
+  const edits = planUndo(doc, done);
+  if (edits.length === 0) return;
+  const apply: A.ChangeFn<Doc> = (d) => {
     for (const e of edits) A.splice(d, ["text"], e.at, e.remove, e.put);
-  });
+  };
+  if (message) handle.change(apply, { message });
+  else handle.change(apply);
 }
 
 /** Where the original position `at` stands in the text the segments describe. */

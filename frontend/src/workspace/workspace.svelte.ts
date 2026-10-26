@@ -11,6 +11,7 @@ import {
   Session,
 } from "../../bindings/github.com/oioio-space/inkwell/internal/app/index";
 import type { Span } from "../editor/external";
+import type { Meta } from "../history/types";
 import { t } from "../i18n";
 import { type SocketLike, WailsNetworkAdapter } from "../net/WailsNetworkAdapter";
 import { ExternalSync, type Notice } from "../store/externalSync";
@@ -20,7 +21,8 @@ import { type Projection, startProjection } from "../store/projection";
 import { safeGet, safeSet } from "../store/safeStorage";
 import { settings } from "../store/settings.svelte";
 
-export type Doc = { text: string };
+/** The project's text, and what the history keeps beside it (named versions, variants, actors). */
+export type Doc = { text: string; meta?: Meta };
 export type Status = "alone" | "connecting" | "synced";
 
 /** What the header and the status bar say: it follows who is connected, never a stored flag. */
@@ -80,6 +82,14 @@ class Workspace {
   /** True once the member list is full: this device signs no more, so edits stay local. */
   sealed = $state(false);
   handle = $state.raw<DocHandle<Doc> | undefined>();
+  /** A variant being edited instead of the main document (B2); undefined when the main one is. */
+  variant = $state.raw<DocHandle<Doc> | undefined>();
+  /** The document the editor shows: the variant if one is open, else the project's. */
+  get active(): DocHandle<Doc> | undefined {
+    return this.variant ?? this.handle;
+  }
+  /** Asked before Ctrl+Z undoes; the first to return true has used the key (see `undoWithKey`). */
+  keyUndoHooks: (() => boolean)[] = [];
   /** The file shown in the editor (today the project's main document). */
   current = $state(openedFile());
   /** The project's files, for the sidebar and the Insert menu. */
@@ -88,6 +98,10 @@ class Workspace {
   fileInfo = $state.raw<FileInfo | undefined>();
 
   #repo: Repo | undefined;
+  get repo(): Repo | undefined {
+    return this.#repo;
+  }
+
   #adapter: WailsNetworkAdapter | undefined;
   #storage: GoStorageAdapter | undefined;
   #projection: Projection | undefined;
@@ -142,6 +156,7 @@ class Workspace {
   async open(url: AutomergeUrl): Promise<void> {
     if (!this.#repo) throw new Error("workspace not started");
     const handle = await this.#repo.find<Doc>(url);
+    this.variant = undefined;
     this.#projection?.stop();
     this.#sync?.stop();
     this.#sync = undefined;
@@ -220,6 +235,7 @@ class Workspace {
 
   /** Ctrl+Z: takes the outside edit back if it is the last thing that happened to the text. */
   undoWithKey(): boolean {
+    if (this.keyUndoHooks.some((hook) => hook())) return true;
     if (!this.#sync?.canKeyUndo) return false;
     this.undoExternal();
     return true;

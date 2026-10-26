@@ -21,6 +21,8 @@ export default defineConfig({
     strictPort: true,
   },
   build: { target: "es2023" },
+  // Workers are ES modules too: the Automerge wasm loads with a top-level await.
+  worker: { format: "es" },
   plugins: [svelte(), wails("./bindings"), devCsp()],
   // Component tests mount Svelte components in happy-dom: they need the browser build. Outside
   // tests, leave Vite's default conditions alone (an empty list would drop "browser").

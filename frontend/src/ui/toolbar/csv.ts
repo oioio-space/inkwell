@@ -1,5 +1,5 @@
-/** Parses CSV text (RFC 4180: quoted cells, doubled quotes, newlines inside quotes). */
-export function parseCsv(text: string): string[][] {
+/** Parses CSV text (RFC 4180: quoted cells, doubled quotes, newlines inside quotes), `,` or another delimiter. */
+export function parseCsv(text: string, delimiter = ","): string[][] {
   const rows: string[][] = [];
   let row: string[] = [];
   let cell = "";
@@ -17,7 +17,7 @@ export function parseCsv(text: string): string[][] {
       }
     } else if (ch === '"' && cell === "") {
       quoted = true;
-    } else if (ch === ",") {
+    } else if (ch === delimiter) {
       row.push(cell);
       cell = "";
     } else if (ch === "\n" || ch === "\r") {

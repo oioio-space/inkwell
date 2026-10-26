@@ -17,6 +17,9 @@ import Editor from "./ui/Editor.svelte";
 import ExternalBanner from "./ui/ExternalBanner.svelte";
 import ExternalChangeToast from "./ui/ExternalChangeToast.svelte";
 import { session } from "./ui/editorSession.svelte";
+import HistoryBars from "./ui/history/HistoryBars.svelte";
+import HistoryDrawer from "./ui/history/HistoryDrawer.svelte";
+import { history } from "./ui/history/history.svelte";
 import NoticeToast from "./ui/NoticeToast.svelte";
 import ProjectionBanner from "./ui/ProjectionBanner.svelte";
 import Preferences from "./ui/prefs/Preferences.svelte";
@@ -175,6 +178,8 @@ onMount(() => {
       toolbarVisible={barVisible}
       canToggleToolbar={hasBar}
       {previewOpen}
+      historyOpen={history.open}
+      onToggleHistory={() => history.toggle()}
       onShare={() => (sharing = true)}
       onToggleSidebar={toggleSidebar}
       onToggleToolbar={toggleToolbar}
@@ -215,20 +220,22 @@ onMount(() => {
     {/if}
     <ProjectionBanner />
     <ExternalBanner />
+    <HistoryBars />
     <main>
       <div class="pane side-source">
-        {#if workspace.handle}
-          {#key workspace.handle.url}
+        {#if workspace.active}
+          {@const active = workspace.active}
+          {#key active.url}
             {#if showSheet}
               <Sheet
-                handle={workspace.handle}
+                handle={active}
                 {me}
                 path={workspace.current}
                 startOffset={sheetView.offset}
                 onshowtext={(offset) => sheetView.toText(offset)}
               />
             {:else}
-              <Editor handle={workspace.handle} {me} {lang} at={tabular ? sheetView.offset : undefined} />
+              <Editor handle={active} {me} {lang} at={tabular ? sheetView.offset : undefined} />
             {/if}
           {/key}
         {/if}
@@ -252,6 +259,7 @@ onMount(() => {
       />
     {/if}
   </div>
+  <HistoryDrawer />
 </div>
 <ShareDialog bind:open={sharing} />
 <Preferences bind:open={preferences} />

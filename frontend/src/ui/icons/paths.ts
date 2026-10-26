@@ -3,6 +3,8 @@
  * markup is constant (never built from input), so it is safe to render with `{@html}`.
  */
 export const ICONS = {
+  branch:
+    '<circle cx="4.5" cy="3.5" r="1.6"/><circle cx="4.5" cy="12.5" r="1.6"/><circle cx="11.5" cy="5" r="1.6"/><path d="M4.5 5.1v5.8M11.5 6.6c0 3-7 2-7 4.4"/>',
   side: '<rect x="1.5" y="2.5" width="13" height="11" rx="2.5"/><path d="M6 2.5v11"/>',
   menu: '<path d="M2.5 4h11M2.5 8h11M2.5 12h11"/>',
   plus: '<path d="M8 2.5v11M2.5 8h11"/>',
