@@ -29,3 +29,5 @@ connaître la raison — pas pour le reste. Modèle : [`template.md`](template.m
 | [0024](0024-sidecars-typst-tinymist.md) | Sidecars Typst : `typst` compile, `tinymist` sert l'éditeur ; récupérés à la construction, embarqués, vérifiés | acceptée |
 | [0025](0025-versions-et-paquets.md) | Versions SemVer par tags, paquets .deb/.rpm natifs par architecture, installés avant publication | acceptée |
 | [0026](0026-grille-csv.md) | Tableur CSV/TSV : grille Svelte maison virtualisée, texte Automerge pour seule source | proposée |
+| [0028](0028-performance-huge-files-and-wan.md) | Performance : paliers par taille, Automerge dans un Worker, très gros textes lus par Go, fragments et priorités sur le réseau | proposée |
+| [0029](0029-reliability.md) | Fiabilité : invariants de non-perte, pannes injectées (netem, LazyFS, disque plein), endurance, état de synchro honnête | proposée |
