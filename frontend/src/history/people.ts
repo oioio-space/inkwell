@@ -74,12 +74,16 @@ export const actorOf = (handle: DocHandle<HDoc>): string | undefined => {
  * Says, in the document, who this device is: its peer and its name, for its current actor. Done
  * once per actor and name; nothing is written when the claim is already right.
  */
-export function claimActor(handle: DocHandle<HDoc>, me: { id: string; name: string }): void {
+export function claimActor(
+  handle: DocHandle<HDoc>,
+  me: { id: string; name: string },
+  create = true,
+): void {
   const doc = handle.doc();
   if (!doc) return;
   const actor = A.getActorId(doc);
   const old = doc.meta?.actors?.[actor];
-  if (old && old.peer === me.id && old.name === me.name) return;
+  if (old ? old.peer === me.id && old.name === me.name : !create) return;
   handle.change(
     (d) => {
       d.meta ??= {};

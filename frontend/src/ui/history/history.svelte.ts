@@ -150,7 +150,12 @@ class HistoryState {
     if (!visit) saveVisit(handle.url, this.since);
 
     this.#analyzer = makeAnalyzer();
-    const onChange = () => this.#schedule();
+    // The device says who it is with its first edit, not before: opening a document writes
+    // nothing, and the claim saves in the same burst as the typing it belongs to.
+    const onChange = ({ patchInfo }: { patchInfo: { source: string } }) => {
+      if (patchInfo.source === "change") this.#claim(true);
+      this.#schedule();
+    };
     handle.on("change", onChange);
     this.#stop.push(() => handle.off("change", onChange), watchHeadings(handle));
     const leave = (e: Event) => {
@@ -167,8 +172,6 @@ class HistoryState {
     this.#stop.push(() => {
       workspace.keyUndoHooks = workspace.keyUndoHooks.filter((h) => h !== hook);
     });
-    // At once, before the person types: the write must not land in the middle of their typing.
-    this.#claim();
     void this.loadMembers();
     void this.refresh();
   }
@@ -185,13 +188,16 @@ class HistoryState {
     this.#seq++;
   }
 
-  /** Says in the document who this device is (once per actor and name); readers write nothing. */
-  #claim(): void {
+  /**
+   * Says in the document who this device is (once per actor and name); readers write nothing.
+   * Without `create`, only a claim already made is brought up to date (a new name).
+   */
+  #claim(create = false): void {
     const handle = this.#handle;
     // A document too big to edit is only read: nothing is written into it (ADR 0026).
     if (!handle || this.readOnly || !workspace.myId || tooBigToEdit(handle.doc()?.text.length ?? 0))
       return;
-    claimActor(handle, { id: workspace.myId, name: workspace.myName });
+    claimActor(handle, { id: workspace.myId, name: workspace.myName }, create);
   }
 
   /** The name changed: the document says it. */
