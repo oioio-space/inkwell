@@ -29,15 +29,26 @@ export class PublicWindows {
   readonly #api: PresentApi;
   readonly #host: PopupOpener;
   #popup: { close(): void; closed: boolean } | null = null;
+  #native = false;
 
   constructor(api: PresentApi, host: PopupOpener) {
     this.#api = api;
     this.#host = host;
   }
 
+  /**
+   * Whether this layer opened a public window that is still there. The roster of the stream also
+   * counts windows whose page is gone but whose connection has not timed out yet, so it cannot
+   * alone tell "close" from "open".
+   */
+  canClose(): boolean {
+    return this.#native || (this.#popup !== null && !this.#popup.closed);
+  }
+
   /** Opens the public window; false for a browser pop-up. */
   async open(): Promise<boolean> {
     const { Native } = await this.#api.Open();
+    this.#native = Native;
     if (Native) return true;
     if (!this.#popup || this.#popup.closed) {
       this.#popup = this.#host.open(
@@ -52,6 +63,7 @@ export class PublicWindows {
   async close(): Promise<void> {
     this.#popup?.close();
     this.#popup = null;
+    this.#native = false;
     await this.#api.Close();
   }
 }

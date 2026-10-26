@@ -120,6 +120,7 @@ type Preview struct {
 	srcGen     uint64             // counts source changes
 	seq        uint64             // counts compilations asked for; only the latest is delivered
 	cancel     context.CancelFunc // of the compilation running now
+	started    uint64             // the seq a compilation was started for: one per seq
 	win        window             // the pages the webview shows
 	editTime   time.Time          // when the webview says the document last changed
 	wroteAt    time.Time          // when the sources last changed on disk
@@ -247,10 +248,14 @@ func (p *Preview) docTimeLocked() time.Time {
 // fire starts the compilation the timer was waiting for.
 func (p *Preview) fire() {
 	p.mu.Lock()
-	if p.closed {
+	if p.closed || p.seq == p.started {
+		// A timer that was re-armed while its previous firing waited for the lock fires twice for
+		// one seq: the second must not start a second compilation, which would deliver the same
+		// seq again.
 		p.mu.Unlock()
 		return
 	}
+	p.started = p.seq
 	run := compilation{
 		seq: p.seq, srcGen: p.srcGen, win: p.win, date: p.docTimeLocked(),
 		reuse: p.cache.ok && p.cache.srcGen == p.srcGen, pageCount: p.cache.pageCount,

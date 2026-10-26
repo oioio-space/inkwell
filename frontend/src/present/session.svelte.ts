@@ -136,6 +136,11 @@ class PresentSession {
     this.publicOpen = true;
   }
 
+  /** The button of the public window: closes the one this page opened, else opens (or raises) it. */
+  togglePublic(): Promise<void> {
+    return this.publicOpen && this.#windows.canClose() ? this.closePublic() : this.openPublic();
+  }
+
   async closePublic(): Promise<void> {
     await this.#windows.close();
     this.publicOpen = false;

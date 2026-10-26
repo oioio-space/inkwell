@@ -68,19 +68,43 @@ func checkPresentFrame(b []byte) error {
 // learns that the public view was closed. It is stateless: a window that joins
 // late says "hello" and the others answer.
 type Present struct {
-	log   *slog.Logger
-	mu    sync.Mutex
-	conns map[*presentConn]struct{}
+	log    *slog.Logger
+	mu     sync.Mutex
+	conns  map[*presentConn]struct{}
+	nextID uint64 // joins so far: orders the windows by age
+}
+
+// evictOldestLocked drops the window that joined first. The caller holds h.mu.
+func (h *Present) evictOldestLocked() {
+	var oldest *presentConn
+	for pc := range h.conns {
+		if oldest == nil || pc.id < oldest.id {
+			oldest = pc
+		}
+	}
+	if oldest == nil {
+		return
+	}
+	delete(h.conns, oldest)
+	oldest.evicted.Store(true)
+	oldest.leave()
+	h.log.Warn("present stream: too many windows, the oldest was dropped")
 }
 
 // presentConn is one joined window. Frames for it queue in out and are written
 // by one goroutine, so that a slow window never delays the others.
 type presentConn struct {
-	c      bridge.Conn
-	out    chan []byte
-	queued atomic.Int64 // bytes in out
-	gone   chan struct{}
+	c       bridge.Conn
+	out     chan []byte
+	queued  atomic.Int64 // bytes in out
+	gone    chan struct{}
+	id      uint64 // join order
+	evicted atomic.Bool
+	left    sync.Once
 }
+
+// leave stops the writer of the window; it may be called more than once.
+func (pc *presentConn) leave() { pc.left.Do(func() { close(pc.gone) }) }
 
 // enqueue queues b for the window, or drops it (false) when the frames or the bytes waiting
 // are over the bounds. It never blocks.
@@ -113,10 +137,13 @@ func (h *Present) Serve(c bridge.Conn) {
 	pc := &presentConn{c: c, out: make(chan []byte, presentQueue), gone: make(chan struct{})}
 	h.mu.Lock()
 	if len(h.conns) >= maxPresentConns {
-		h.mu.Unlock()
-		h.log.Warn("present stream: too many windows, refused")
-		return
+		// A page that went away is only noticed when its connection times out, which can
+		// take a minute: refusing the newest window would lock a reloaded one out. The oldest
+		// window is the one most likely to be gone, so it makes room.
+		h.evictOldestLocked()
 	}
+	h.nextID++
+	pc.id = h.nextID
 	h.conns[pc] = struct{}{}
 	h.mu.Unlock()
 
@@ -127,7 +154,7 @@ func (h *Present) Serve(c bridge.Conn) {
 		h.mu.Lock()
 		delete(h.conns, pc)
 		h.mu.Unlock()
-		close(pc.gone)
+		pc.leave()
 		writer.Wait()
 		h.roster()
 	}()
@@ -136,6 +163,9 @@ func (h *Present) Serve(c bridge.Conn) {
 		b, err := c.Receive()
 		if err != nil {
 			return
+		}
+		if pc.evicted.Load() {
+			return // made room for a newer window: it is ended, not relayed
 		}
 		if err := checkPresentFrame(b); err != nil {
 			h.log.Warn("present stream: dropped frame", "bytes", len(b), "err", err)

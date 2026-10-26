@@ -42,6 +42,22 @@ describe("PublicWindows", () => {
     expect(calls.filter((c) => c.startsWith("popup"))).toHaveLength(2);
   });
 
+  it("PRS-31 a window this page did not open is not one it can close (a stale roster must not turn Open into Close)", async () => {
+    const browser = setup(false);
+    expect(browser.windows.canClose()).toBe(false);
+    await browser.windows.open();
+    expect(browser.windows.canClose()).toBe(true);
+    browser.popup.closed = true;
+    expect(browser.windows.canClose()).toBe(false);
+
+    const desktop = setup(true);
+    expect(desktop.windows.canClose()).toBe(false);
+    await desktop.windows.open();
+    expect(desktop.windows.canClose()).toBe(true);
+    await desktop.windows.close();
+    expect(desktop.windows.canClose()).toBe(false);
+  });
+
   it("closes both the pop-up and the native window", async () => {
     const { windows, calls, popup } = setup(false);
     await windows.open();

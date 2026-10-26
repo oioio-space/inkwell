@@ -74,7 +74,7 @@ function onKey(e: KeyboardEvent) {
       notesSize={session.notesSize}
       publicOpen={session.publicOpen}
       onExit={() => p.stop()}
-      onTogglePublic={() => void (session.publicOpen ? session.closePublic() : session.openPublic())}
+      onTogglePublic={() => void session.togglePublic()}
       onNotesSize={(n) => session.setNotesSize(n)}
     />
   {/if}

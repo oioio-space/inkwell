@@ -127,22 +127,23 @@ func TestPresentDropsWhatIsNotAFrame(t *testing.T) {
 	}
 }
 
-func TestPresentRefusesTooManyWindows(t *testing.T) {
+// A page that is gone is only noticed when its connection times out: the window past the limit
+// takes the place of the oldest instead of being locked out.
+func TestPresentMakesRoomForTheNewestWindow(t *testing.T) {
 	h := app.NewPresent(nil)
-	var first *previewConn
+	var conns []*previewConn
 	for i := range 6 {
 		c := join(t, h)
-		if i == 0 {
-			first = c
-		}
+		c.roster(t, i+1) // joined: the next one is younger
+		conns = append(conns, c)
 	}
-	first.roster(t, 6)
-	extra := newPreviewConn(t)
-	done := make(chan struct{})
-	go func() { defer close(done); h.Serve(extra) }()
-	select {
-	case <-done: // refused: Serve returned at once
-	case <-time.After(5 * time.Second):
-		t.Fatal("the seventh window was served")
+	first, second := conns[0], conns[1]
+	newest := join(t, h)
+	newest.roster(t, 6) // still six: the oldest left for it
+
+	first.ask(t, `{"type":"state","slide":9}`) // the dropped window is not relayed
+	newest.ask(t, `{"type":"state","slide":1}`)
+	if got := second.frame(t, "state"); got != `{"type":"state","slide":1}` {
+		t.Errorf("a window that stayed got %s, want the newest window's frame and not the dropped one's", got)
 	}
 }
