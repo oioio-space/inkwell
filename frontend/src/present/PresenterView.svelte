@@ -32,6 +32,10 @@ let {
 } = $props();
 
 const here = $derived(pages.get(p.page));
+
+// The editor behind is inert while a presentation shows: the keyboard starts here, at the top.
+let root: HTMLElement | undefined = $state();
+$effect(() => root?.focus({ preventScroll: true }));
 const nextPage = $derived(
   p.upcoming.kind === "end" ? undefined : pages.get(p.deck.pageOf(p.upcoming.pos)),
 );
@@ -60,11 +64,11 @@ function pace(): string {
 }
 </script>
 
-<section class="present" aria-label={t("present.label")} data-testid="presenter-view">
+<section class="present" aria-label={t("present.label")} data-testid="presenter-view" tabindex="-1" bind:this={root}>
   <header class="hb">
     <div class="start">
       <button type="button" class="fb lbl" onclick={click(onExit)} data-testid="present-exit">
-        <Icon name="back" />{t("present.exit")}
+        <Icon name="back" /><span class="txt">{t("present.exit")}</span>
       </button>
     </div>
     <div class="ttl" role="status" data-testid="pilot-status">
@@ -232,6 +236,9 @@ function pace(): string {
     background: var(--window-bg);
     color: var(--fg);
   }
+  .present:focus {
+    outline: none;
+  }
   .hb {
     box-sizing: border-box;
     display: grid;
@@ -383,6 +390,28 @@ function pace(): string {
     color: var(--success);
   }
   @media (max-width: 760px) {
+    /* The title gives way (it is cut with "…"), then the clock and the label of the exit button:
+       at 200 % zoom or in a narrow window nothing may overlap. */
+    .hb {
+      grid-template-columns: auto minmax(0, 1fr) auto;
+    }
+    .ttl {
+      min-width: 0;
+      overflow: hidden;
+      text-align: center;
+      text-overflow: ellipsis;
+    }
+    .clock {
+      display: none;
+    }
+    .txt {
+      position: absolute;
+      width: 1px;
+      height: 1px;
+      overflow: hidden;
+      clip-path: inset(50%);
+      white-space: nowrap;
+    }
     .body {
       grid-template-columns: 1fr;
       grid-auto-rows: minmax(0, 1fr);

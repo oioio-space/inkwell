@@ -182,7 +182,8 @@ onMount(() => {
 
 <svelte:window onkeydown={onKey} />
 
-<div class="window">
+<!-- A presentation covers the window: what is under it neither takes keys nor focus. -->
+<div class="window" inert={presenting}>
   {#if sidebarOpen}
     <Sidebar files={workspace.files} current={workspace.current} onOpen={() => session.focus()} />
   {/if}

@@ -77,6 +77,7 @@ Rien n'est « fait » sans tests verts et sans une passe `ux-walkthrough` réuss
 | U31 | 2026-10-26 | Toute fonctionnalité intégrée et cohérente (jamais une « verrue ») : très bon design UX/UI, beau et harmonieux partout | règle de conception ; revue de cohérence `ux-walkthrough` à chaque fusion d'interface | 🔨 règle active |
 | U32 | 2026-10-26 | Programme globalement très fiable : on doit pouvoir lui faire confiance | Q-REL (plan « Fiabilité et performance ») | ⏳ |
 | U33 | 2026-10-26 | Très performant, y compris par Internet (relais, NAT) et sur des fichiers texte énormes à afficher | Q-PERF (plan « Fiabilité et performance »), ADR à venir | 🔨 recherche |
+| U34 | 2026-10-26 | Parcours UX S11 (présenter) sur t11-c4-present : défauts de sévérité 3 et 4 corrigés avant fusion | `docs/ux/walkthrough-2026-10-26-present.md`, `frontend/e2e/ux/s11.spec.ts`, branche `t11-c4-ux` | 🧪 3 corrigés ; 9 mineurs (UX-S11-4 à 12) restent |
 | U23 | 2026-10-25 | Coloration syntaxique (constat de revue) | A5 | ✅ |
 
 ## Livraison
