@@ -121,8 +121,7 @@ type WiringOptions struct {
 type Wiring struct {
 	raw      transport.Transport
 	signer   trust.Signer
-	lst      atomic.Pointer[trust.List] // replaced by SwitchProject
-	adm      *Admission
+	adm      *Admission // holds the member list, replaced by SwitchProject
 	sync     *trust.Sync
 	att      attestStore
 	log      *slog.Logger
@@ -151,11 +150,11 @@ type Wiring struct {
 	sealedSent bool
 	// selfSuspended is whether this device is suspended, as the webview was told.
 	selfSuspended bool
-	once          sync.Once
 }
 
 // Wire starts a Wiring over t, whose events it consumes: t must have no other
-// reader. Canceling ctx or calling [Wiring.Close] stops it and closes t.
+// reader. adm then admits the members of list, and follows the project of
+// the wiring. Canceling ctx or calling [Wiring.Close] stops it and closes t.
 func Wire(ctx context.Context, t transport.Transport, s trust.Signer, list *trust.List, adm *Admission, o WiringOptions) *Wiring {
 	ctx, cancel := context.WithCancel(ctx)
 	subs := mux.Split(t, chanRepo, chanTrust, chanAttest)
@@ -179,11 +178,11 @@ func Wire(ctx context.Context, t transport.Transport, s trust.Signer, list *trus
 		up:       make(map[transport.PeerID]struct{}),
 		active:   make(map[transport.PeerID]struct{}),
 		full:     make(map[transport.PeerID]struct{}),
-		saved:    make(map[trust.Hash]struct{}),
+		saved:    savedOps(list),
 		pending:  make(map[string][]trust.Hash),
 		tick:     o.TickEvery,
 	}
-	w.lst.Store(list)
+	adm.reset(list)
 	w.rolesSent, w.selfSuspended = w.rolesPayload(), list.Suspended(s.Public()) // the webview learns them from Notices
 	if w.log == nil {
 		w.log = slog.New(slog.DiscardHandler)
@@ -191,15 +190,22 @@ func Wire(ctx context.Context, t transport.Transport, s trust.Signer, list *trus
 	if w.tick <= 0 {
 		w.tick = defaultTick
 	}
-	for _, op := range list.Since(nil) {
-		w.saved[op.Hash()] = struct{}{} // already persisted: it came from the store
-	}
 	go w.run()
 	return w
 }
 
+// savedOps returns the hashes of the ops list holds, which are persisted
+// already: they came from the store.
+func savedOps(list *trust.List) map[trust.Hash]struct{} {
+	saved := make(map[trust.Hash]struct{})
+	for _, op := range list.Since(nil) {
+		saved[op.Hash()] = struct{}{}
+	}
+	return saved
+}
+
 // list returns the member list of the project.
-func (w *Wiring) list() *trust.List { return w.lst.Load() }
+func (w *Wiring) list() *trust.List { return w.adm.list.Load() }
 
 // Repo returns the transport for the bridge: the repo channel, restricted to
 // the members that are not suspended. A peer is announced with a PeerUp once it
@@ -283,18 +289,14 @@ func (w *Wiring) SwitchProject(list *trust.List, save func(trust.Op) error) erro
 		for _, p := range w.linkedPeers() {
 			w.deactivate(p)
 		}
-		w.lst.Store(list)
+		w.adm.reset(list)
 		w.save = save
 		w.sync = trust.NewSync(list)
 		w.att.reset()
-		w.saved = make(map[trust.Hash]struct{})
-		for _, op := range list.Since(nil) {
-			w.saved[op.Hash()] = struct{}{}
-		}
+		w.saved = savedOps(list)
 		clear(w.pending)
 		w.sealedSent, w.selfSuspended, w.rolesSent = false, false, nil
 		w.nOps = 0
-		w.adm.reset(list)
 		w.afterChange()
 	})
 }
@@ -405,8 +407,7 @@ func (w *Wiring) onTrust(ev transport.Event) {
 func (w *Wiring) afterChange() {
 	if n := w.list().Len(); n != w.nOps {
 		w.nOps = n
-		ops := w.list().Since(nil)
-		for _, op := range ops {
+		for _, op := range w.list().Since(nil) {
 			h := op.Hash()
 			if _, done := w.saved[h]; done || w.save == nil {
 				continue

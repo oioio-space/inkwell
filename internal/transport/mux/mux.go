@@ -34,6 +34,9 @@ const (
 	// maxQueuedBytes bounds the payload bytes queued per channel. A single
 	// larger frame is still accepted when the queue is empty.
 	maxQueuedBytes = 32 << 20
+	// maxPooled bounds the send buffers kept for reuse: a bigger frame gets
+	// its own buffer, left to the garbage collector.
+	maxPooled = 64<<10 + Overhead
 )
 
 // muxer is the state shared by the sub-transports of one Split.
@@ -45,7 +48,8 @@ type muxer struct {
 	done   chan struct{} // closed when the reader has stopped
 	wake   chan struct{}
 	err    error
-	order  []*sub // subs in the order they were asked for
+	order  []*sub    // subs in the order they were asked for
+	bufs   sync.Pool // *[]byte send buffers, for frames of at most maxPooled bytes
 	once   sync.Once
 }
 
@@ -157,10 +161,23 @@ func (s *sub) Send(ctx context.Context, to transport.PeerID, payload []byte) err
 	if len(payload) > transport.MaxFrame-Overhead {
 		return transport.ErrFrameTooLarge
 	}
-	framed := make([]byte, Overhead+len(payload))
-	framed[0] = s.ch
-	copy(framed[Overhead:], payload)
-	return s.m.t.Send(ctx, to, framed)
+	if Overhead+len(payload) > maxPooled {
+		return s.m.t.Send(ctx, to, s.frame(make([]byte, 0, Overhead+len(payload)), payload))
+	}
+	// The underlying Send does not retain the frame, so its buffer is reused.
+	bp, _ := s.m.bufs.Get().(*[]byte)
+	if bp == nil {
+		bp = new([]byte)
+	}
+	*bp = s.frame((*bp)[:0], payload)
+	err := s.m.t.Send(ctx, to, *bp)
+	s.m.bufs.Put(bp)
+	return err
+}
+
+// frame appends the channel byte and payload to buf.
+func (s *sub) frame(buf, payload []byte) []byte {
+	return append(append(buf, s.ch), payload...)
 }
 
 // Recv returns the next event of this channel.

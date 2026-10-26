@@ -242,22 +242,20 @@ func (inv *invites) invite(role trust.Role, person *trust.Hash) (Invitation, err
 func (inv *invites) offer(t invite.Ticket) (string, error) {
 	ctx, cancel := context.WithDeadline(inv.ctx, t.Expires)
 	type result struct {
-		done <-chan error
 		err  error
 		code string
 	}
 	res := make(chan result, 1)
 	inv.wg.Go(func() {
+		defer cancel()
 		code, done, err := inv.carrier.Offer(ctx, t)
-		res <- result{done, err, code}
+		res <- result{err, code}
 		if err != nil {
-			cancel()
 			return
 		}
 		if err := <-done; err != nil { // nil once received
 			inv.log.Debug("code offer ended", "err", err)
 		}
-		cancel()
 	})
 	select {
 	case r := <-res:
@@ -296,19 +294,12 @@ func (inv *invites) join(ctx context.Context, codeOrText string) (transport.Peer
 	case t.Expired(inv.now()):
 		return "", invite.ErrExpired
 	}
-	defer inv.openForJoin()()
 	ctx, cancel := context.WithTimeout(ctx, redeemTimeout)
 	defer cancel()
-	if err := inv.node.Connect(ctx, t.Host, t.Addrs); err != nil {
-		return "", fmt.Errorf("join: %w", err)
-	}
-	joined, err := inv.joiner(identity.MachineName()).Redeem(ctx, t, inv.now())
+	err = inv.enter(ctx, t.Host, t.Addrs, func(ctx context.Context) (*invite.Joined, error) {
+		return inv.joiner(identity.MachineName()).Redeem(ctx, t, inv.now())
+	})
 	if err != nil {
-		inv.node.Drop(t.Host)
-		return "", fmt.Errorf("join: %w", err)
-	}
-	if err := inv.adopt(joined); err != nil {
-		inv.node.Drop(t.Host)
 		return "", err
 	}
 	return t.Host, nil
@@ -325,22 +316,35 @@ func (inv *invites) ask(ctx context.Context, peer transport.PeerID, name string)
 	addrs := nearby[i].Addrs
 	inv.joining.Lock()
 	defer inv.joining.Unlock()
-	defer inv.openForJoin()()
 	ctx, cancel := context.WithTimeout(ctx, invite.AskTimeout+redeemTimeout)
 	defer cancel()
-	if err := inv.node.Connect(ctx, peer, addrs); err != nil {
-		return "", fmt.Errorf("join: %w", err)
-	}
-	joined, err := inv.joiner(cmp.Or(identity.CleanName(name), identity.MachineName())).Ask(ctx, peer)
+	err := inv.enter(ctx, peer, addrs, func(ctx context.Context) (*invite.Joined, error) {
+		return inv.joiner(cmp.Or(identity.CleanName(name), identity.MachineName())).Ask(ctx, peer)
+	})
 	if err != nil {
-		inv.node.Drop(peer)
-		return "", fmt.Errorf("join: %w", err)
-	}
-	if err := inv.adopt(joined); err != nil {
-		inv.node.Drop(peer)
 		return "", err
 	}
 	return peer, nil
+}
+
+// enter connects to host, which this device lets in meanwhile, has it admit
+// this device with admit and moves to the project it joined. The connection
+// is dropped if that fails. The caller holds inv.joining.
+func (inv *invites) enter(ctx context.Context, host transport.PeerID, addrs []string, admit func(context.Context) (*invite.Joined, error)) error {
+	defer inv.openForJoin()()
+	if err := inv.node.Connect(ctx, host, addrs); err != nil {
+		return fmt.Errorf("join: %w", err)
+	}
+	joined, err := admit(ctx)
+	if err != nil {
+		inv.node.Drop(host)
+		return fmt.Errorf("join: %w", err)
+	}
+	if err := inv.adopt(joined); err != nil {
+		inv.node.Drop(host)
+		return err
+	}
+	return nil
 }
 
 func (inv *invites) joiner(name string) invite.Joiner {
