@@ -76,7 +76,7 @@ compris), si bien qu'aucun chemin n'écrit dans le document. Le seuil est relu �
 changement du texte : un fichier qui grossit dans la vue texte passe en lecture seule, un fichier
 qui rétrécit redevient modifiable. La vue texte (CodeMirror) n'est pas verrouillée : elle
 reste utilisable, mais un collage qui porterait le texte au-delà de 20 Mo reste hors de
-portée du document (limite d'Automerge, hors grille). Tests : `sheet.test.ts` (CSV-20),
+portée du document (limite d'Automerge, hors grille). Un seul seuil, `tooBigToEdit` (`store/limits.ts`), commande aussi la date du preview (`lastChangeSeconds` ne décode pas un changement de plus de 10 Mo : `capacity overflow`). Tests : `sheet.test.ts` (CSV-20),
 `e2e/sheet.spec.ts` (SHEET-BIG, fichier de 12 Mo dans une instance à part).
 
 ### Conséquences

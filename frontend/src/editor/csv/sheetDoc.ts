@@ -1,5 +1,6 @@
 import { next as A } from "@automerge/automerge";
 import type { DocHandle } from "@automerge/automerge-repo";
+import { MAX_EDITABLE_CHARS, tooBigToEdit } from "../../store/limits";
 import type { Dialect } from "./dialect";
 import { detectDialect } from "./dialect";
 import { CsvModel, windowOf } from "./model";
@@ -31,11 +32,7 @@ export function handlePort(handle: DocHandle<{ text: string }>): DocPort {
   };
 }
 
-/**
- * Automerge 3.5 panics on a text of about 20 MB (ADR 0026), so a file past this many characters
- * is only read: the sheet shows, sorts, filters, searches and copies it, and never writes.
- */
-export const MAX_EDITABLE_CHARS = 10 * 1024 * 1024;
+export { MAX_EDITABLE_CHARS };
 
 const END = "end";
 const START = "start";
@@ -91,7 +88,7 @@ export class SheetDoc {
 
   /** True when the text is too big to be edited (see {@link MAX_EDITABLE_CHARS}). */
   get tooBig(): boolean {
-    return this.model.text.length > MAX_EDITABLE_CHARS;
+    return tooBigToEdit(this.model.text.length);
   }
 
   /** Applies one user action (splices in the model's coordinates). */

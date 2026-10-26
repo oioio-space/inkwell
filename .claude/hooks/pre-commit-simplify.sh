@@ -22,22 +22,13 @@ staged_hash="$(git diff --cached | sha1sum | cut -d' ' -f1)"
 # Already approved for this exact staged content → let the commit through.
 [[ -f "$marker" && "$(cat "$marker")" == "$staged_hash" ]] && exit 0
 
-hook_emit_deny "STOP — run the full pre-commit review before committing.
-
-Address EVERY dimension below on the staged diff (the sibling commit-*-review hooks
-print each checklist). For a SUBSTANTIAL diff, delegate to the routed sub-agent and
-APPLY findings; a genuinely trivial diff may be cleared inline — but it must be a
-deliberate judgement, per dimension, not skipped:
-  • /simplify  — reuse / simplification / efficiency / altitude        (go-reviewer)
-  • secrets    — no leaked credentials/PII                              (security-auditor if ambiguous)
-  • vulns      — crypto/injection/authz/DoS/resources                  (security-auditor)
-  • style      — Google Go style-guide items linters miss              (go-reviewer)
-  • cleanup    — no regenerable artifacts staged                       (quality-runner)
-  • ergonomics — earned helpers for new exported API/CLI               (go-reviewer)
-  • docs       — README/PROGRESS + bench panel for user-facing changes (scribe)
-Re-stage anything the review edits (git add -u). Then record ONE approval for the
-current staged set and re-run the commit:
-     git diff --cached | sha1sum | cut -d' ' -f1 > \"$marker\"
-
-The commit stays blocked until the marker matches the staged diff. Record it ONLY
-after genuinely completing the review — the marker attests the work was done."
+# One short line, Go items only when Go is staged (the full checklists live in the skills).
+files="$(git diff --cached --name-only)"
+checks="/simplify (reuse, simplification, efficiency, altitude), secrets, no artifacts"
+if grep -q '\.go$' <<<"$files"; then
+  checks+=", Go style (scripts/style-checklist.md), vulns (vuln-guard)"
+  git diff --cached -U0 -- '*.go' | grep -qE '^\+(func|type|var|const) [A-Z]|^\+func \([^)]*\) [A-Z]' &&
+    checks+=", exported-API ergonomics"
+  grep -v '_test\.go$' <<<"$files" | grep -q '\.go$' && checks+=", README/PROGRESS if user-facing"
+fi
+hook_emit_deny "Review the staged diff first: ${checks}. Substantial Go → go-reviewer (Sonnet); trivial → inline. Then, in a separate call: git diff --cached | sha1sum | cut -d' ' -f1 > \"$marker\""

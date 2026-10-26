@@ -118,19 +118,16 @@ Rule of thumb: mechanical → hosted open-weight or Haiku; writing/reviewing Go 
 or security judgement → Opus. Never use Opus for what a cheaper tier handles at equal
 quality. Run independent sub-tasks in parallel.
 
-### Review-hook → agent routing
+### Revue avant commit
 
-The AI-review PreToolUse hooks (fire on `git commit`) name the cost-appropriate agent for
-a **substantial** diff; a trivial diff is cleared inline:
+Un seul hook (`pre-commit-simplify.sh`) bloque un commit tant que la revue n'est pas attestée. Il affiche une seule ligne : les points à vérifier, avec les points Go seulement si du Go est indexé. Les listes complètes sont dans les skills `go-style-guide`, `vuln-guard`, `secret-guard`, `simplify` et `helper-ergonomics`. Un gros diff Go va à `go-reviewer` (Sonnet) ; un petit diff se revoit dans la boucle principale.
 
-| Hook | Delegate to (tier) |
-|------|--------------------|
-| `commit-style-review` | `go-reviewer` (Sonnet) |
-| `commit-cleanup-review` | `quality-runner` (Haiku) |
-| `commit-secret-review` | `security-auditor` (Opus, only if ambiguous) |
-| `commit-vuln-review` | `security-auditor` (Opus) |
-| `commit-ergonomics-review` | `go-reviewer` (Sonnet) review → `go-dev` implement |
-| `commit-docs-review` | `scribe` (Haiku) README/PROGRESS sync |
+**Économie de tokens dans la boucle principale (Opus) :**
+- La boucle principale orchestre ; elle ne débogue pas, ne lit pas de journaux et ne résout pas de gros conflits. Tout cela va à un agent Sonnet ou Haiku.
+- Lire peu : `grep`, `head` ou `tail` ciblés, jamais un fichier entier quand quelques lignes suffisent.
+- Briefs d'agent courts ; rapports de 10 lignes au plus.
+- Réponses à l'utilisatrice brèves.
+- Ne jamais écrire le mot-clé de commit de git dans une commande qui n'en est pas une : les hooks se déclencheraient.
 
 **Cohérence (règle) :** une fonctionnalité nouvelle s'intègre à l'existant, jamais en « verrue ». Elle doit :
 - réutiliser les composants, jetons et motifs Adwaita déjà présents (barre d'en-tête, panneaux à onglets, bannières, toasts, popovers) ;
