@@ -5,5 +5,9 @@ import Banner from "./Banner.svelte";
 </script>
 
 {#if workspace.projectionFailed}
-  <Banner tone="warning" role="alert">{t("projection.failed")}</Banner>
+  <Banner tone="warning" role="alert">
+    {workspace.projectionReason
+      ? t("projection.failed.reason", { reason: workspace.projectionReason })
+      : t("projection.failed")}
+  </Banner>
 {/if}

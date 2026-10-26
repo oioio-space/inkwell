@@ -1,11 +1,13 @@
 <script lang="ts">
 import { onMount } from "svelte";
 import { Session } from "../bindings/github.com/oioio-space/inkwell/internal/app/index";
+import { markExternal } from "./editor/external";
 import { langOf } from "./editor/format";
 import { t } from "./i18n";
 import { settings } from "./store/settings.svelte";
 import AboutDialog, { type BuildInfo } from "./ui/AboutDialog.svelte";
 import Editor from "./ui/Editor.svelte";
+import ExternalBanner from "./ui/ExternalBanner.svelte";
 import ExternalChangeToast from "./ui/ExternalChangeToast.svelte";
 import { session } from "./ui/editorSession.svelte";
 import ProjectionBanner from "./ui/ProjectionBanner.svelte";
@@ -41,7 +43,38 @@ function toggleSidebar() {
   settings.setSidebarVisible(workspace.project, !sidebarOpen);
 }
 
+/** Not in the file yet: shown when saving with Ctrl+S, or when a write failed or has no file to go to. */
+const unsaved = $derived(
+  workspace.dirty &&
+    (settings.saveMode === "manual" ||
+      workspace.projectionFailed ||
+      workspace.notice?.kind === "deleted"),
+);
+
+$effect(() => {
+  document.title = `${unsaved ? "● " : ""}${t("app.title")} — ${workspace.current}`;
+});
+
+// The saving settings change while a write may be waiting (manual to automatic writes at once).
+$effect(() => {
+  void settings.saveMode;
+  void settings.saveDelay;
+  workspace.saveSettingsChanged();
+});
+
+// The lines brought in from the disk are tinted in the editor; the toast's "View" goes to them.
+$effect(() => {
+  const marks = workspace.marks;
+  const view = session.view;
+  if (view) markExternal(view, marks?.spans ?? null);
+});
+
 function onKey(e: KeyboardEvent) {
+  if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "s") {
+    e.preventDefault();
+    void workspace.save();
+    return;
+  }
   if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "t") {
     e.preventDefault();
     if (hasBar) toggleToolbar();
@@ -54,7 +87,7 @@ async function refresh() {
 
 // The file list and the encoding come from the project folder, which other programs change too.
 $effect(() => {
-  void workspace.external;
+  void workspace.notice;
   void refresh();
 });
 
@@ -81,6 +114,7 @@ onMount(() => {
     <HeaderBar
       title={t("app.title")}
       subtitle={workspace.current}
+      {unsaved}
       status={workspace.status}
       {me}
       peers={workspace.peers}
@@ -105,6 +139,7 @@ onMount(() => {
     {/if}
     <SealedBanner />
     <ProjectionBanner />
+    <ExternalBanner />
     <main>
       {#if workspace.handle}
         {#key workspace.handle.url}
@@ -118,6 +153,7 @@ onMount(() => {
       peerCount={workspace.peers.length}
       editorState={session.state}
       info={workspace.fileInfo}
+      {unsaved}
     />
   </div>
 </div>

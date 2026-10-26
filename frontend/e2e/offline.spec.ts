@@ -1,7 +1,8 @@
 import { type ChildProcess, spawn } from "node:child_process";
-import { mkdtempSync, rmSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { mainTypIn, readDisk } from "./disk";
 import { expect, test } from "./fixtures";
 import { docText, open, pair, typeAtEnd } from "./helpers";
 
@@ -115,6 +116,13 @@ test("a relay killed and restarted: both sides keep typing offline and converge"
   expect(await docText(alice)).not.toContain("bob-hors-ligne");
   expect(await docText(bob)).not.toContain("alice-hors-ligne");
 
+  // EXT-05: during the outage another program rewrites Alice's file, once it holds her words.
+  const aliceFile = () => mainTypIn(join(dir, "alice-docs"));
+  const bobFile = () => mainTypIn(join(dir, "bob-docs"));
+  await expect.poll(() => readDisk(aliceFile())).toContain("alice-hors-ligne ");
+  writeFileSync(aliceFile(), `${readDisk(aliceFile())}dehors-alice `);
+  await expect(alice.locator(".cm-content")).toContainText("dehors-alice", { timeout: 10_000 });
+
   // Same key, same port: the relay keeps its identity, so the people find it again.
   const restarted = Date.now();
   relay = await startRelay();
@@ -123,6 +131,16 @@ test("a relay killed and restarted: both sides keep typing offline and converge"
     await expect(p.locator(".cm-content")).toContainText("bob-hors-ligne", { timeout: 30_000 });
   }
   expect(Date.now() - restarted).toBeLessThan(30_000);
+  // Both people, and the program, are in the text of the three: and on both disks.
+  for (const p of [alice, bob]) {
+    await expect(p.locator(".cm-content")).toContainText("dehors-alice", { timeout: 30_000 });
+  }
+  for (const file of [aliceFile, bobFile]) {
+    await expect
+      .poll(() => readDisk(file()) ?? "", { timeout: 15_000 })
+      .toMatch(/alice-hors-ligne[\s\S]*bob-hors-ligne|bob-hors-ligne[\s\S]*alice-hors-ligne/);
+    expect(readDisk(file())).toContain("dehors-alice");
+  }
   await expect.poll(() => docText(alice)).toBe(await docText(bob));
-  await expect(alice.getByRole("status")).toHaveText(/Synchronisé/);
+  await expect(alice.getByRole("banner").getByRole("status")).toHaveText(/Synchronisé/);
 });

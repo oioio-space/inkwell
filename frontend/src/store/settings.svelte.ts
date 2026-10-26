@@ -34,21 +34,21 @@ const pick = <T extends string | number>(value: unknown, allowed: readonly T[], 
   allowed.includes(value as T) ? (value as T) : fallback;
 
 /**
- * Preferences and per-project layout, remembered in the webview. Their behaviour (saving,
- * outside changes) is wired by the persistence layer; this store only keeps the choices.
+ * Preferences and per-project layout, remembered in the webview. This store only keeps the
+ * choices; the workspace applies them (when the file is written, what an outside edit does).
  */
 class Settings {
   saveMode = $state<SaveMode>("auto");
   /** Seconds of quiet before an automatic save. */
-  saveDelay = $state<SaveDelay>(2);
-  externalPolicy = $state<ExternalPolicy>("ask");
+  saveDelay = $state<SaveDelay>(1);
+  externalPolicy = $state<ExternalPolicy>("import");
   #layout = $state<Record<string, Layout>>({});
 
   constructor() {
     const prefs = readJSON(PREFS_KEY);
     this.saveMode = pick(prefs.saveMode, ["auto", "manual"], "auto");
-    this.saveDelay = pick(prefs.saveDelay, SAVE_DELAYS, 2);
-    this.externalPolicy = pick(prefs.externalPolicy, ["ask", "import", "keep"], "ask");
+    this.saveDelay = pick(prefs.saveDelay, SAVE_DELAYS, 1);
+    this.externalPolicy = pick(prefs.externalPolicy, ["ask", "import", "keep"], "import");
     const layout = readJSON(LAYOUT_KEY);
     for (const [project, value] of Object.entries(layout)) {
       if (value && typeof value === "object") this.#layout[project] = value as Layout;
