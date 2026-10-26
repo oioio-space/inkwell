@@ -3,6 +3,7 @@ package sidecar
 import (
 	"fmt"
 	"io"
+	"net"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -107,6 +108,40 @@ func runHelper(mode string) int {
 		mib, _ := strconv.Atoi(arg)
 		sink = make([]byte, mib<<20)
 		fmt.Println("allocated", len(sink))
+		return 0
+	case "rlimits": // report the limits in force at startup, before any of our code ran
+		return reportLimits()
+	case "writefile": // arg is "path,MiB": write that much, report if it got through
+		path, mib, _ := strings.Cut(arg, ",")
+		n, _ := strconv.Atoi(mib)
+		f, err := os.Create(path)
+		if err != nil {
+			return 2
+		}
+		chunk := make([]byte, 1<<20)
+		for range n {
+			if _, err := f.Write(chunk); err != nil {
+				fmt.Println("write-failed")
+				return 3
+			}
+		}
+		fmt.Println("wrote-all")
+		return 0
+	case "flooddir": // write 1 MiB files into arg, forever
+		chunk := make([]byte, 1<<20)
+		for i := 0; ; i++ {
+			if err := os.WriteFile(fmt.Sprintf("%s/f%06d", arg, i), chunk, 0o600); err != nil {
+				return 2
+			}
+		}
+	case "dial": // try to reach the TCP address arg
+		conn, err := net.DialTimeout("tcp", arg, 2*time.Second)
+		if err != nil {
+			fmt.Println("unreachable")
+			return 0
+		}
+		_ = conn.Close()
+		fmt.Println("connected")
 		return 0
 	case "supervise-forever": // the parent that gets killed in the orphan test
 		return superviseForever()

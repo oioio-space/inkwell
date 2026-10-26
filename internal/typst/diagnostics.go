@@ -41,6 +41,7 @@ type Diagnostic struct {
 type limits struct {
 	maxDiagnostics int
 	maxMessage     int
+	maxInput       int // bytes of stderr looked at
 }
 
 var (
@@ -60,6 +61,9 @@ var (
 // It never keeps more than lim.maxDiagnostics, and reports when it dropped some.
 // Text that is not a diagnostic is ignored.
 func parseDiagnostics(stderr []byte, root, pkgs string, lim limits) (diags []Diagnostic, truncated bool) {
+	if lim.maxInput > 0 && len(stderr) > lim.maxInput {
+		stderr, truncated = stderr[:lim.maxInput], true
+	}
 	text := strings.ReplaceAll(string(stderr), "\r\n", "\n")
 	var last *Diagnostic
 	for line := range strings.SplitSeq(text, "\n") {
@@ -73,7 +77,8 @@ func parseDiagnostics(stderr []byte, root, pkgs string, lim limits) (diags []Dia
 			continue
 		}
 		// A message can span lines (panic("a\nb")): the next lines continue it.
-		if last != nil && line != "" {
+		// Bounded: a hostile document can print megabytes of them.
+		if last != nil && line != "" && len(last.Message) <= lim.maxMessage {
 			last.Message += "\n" + line
 		}
 	}

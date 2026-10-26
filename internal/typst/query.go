@@ -29,6 +29,11 @@ func (e *Engine) Query(ctx context.Context, p Project, main, selector string, op
 		return nil, err
 	}
 	o := applyOptions(opts)
+	release, err := e.acquire(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 	j, err := e.prepare(p, main)
 	if err != nil {
 		return nil, err
@@ -37,7 +42,7 @@ func (e *Engine) Query(ctx context.Context, p Project, main, selector string, op
 
 	runCtx, cancel := e.deadline(ctx)
 	defer cancel()
-	out, err := e.run(runCtx, j, e.args("query", j, o, "--format", "json", "--", filepath.ToSlash(j.main), selector), maxQueryBytes)
+	out, err := e.run(runCtx, j, e.args("query", j, o, "--format", "json", "--", filepath.ToSlash(j.main), selector), maxQueryBytes, "")
 	if err != nil {
 		if runCtx.Err() != nil {
 			return nil, ended(runCtx, e.cfg.Timeout)

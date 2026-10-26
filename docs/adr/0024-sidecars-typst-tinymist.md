@@ -50,6 +50,15 @@ exponentiel, abandon borné, `Pdeathsig` sous Linux (fil verrouillé).
 **Hors ligne par trois verrous :** cache de paquets complet (paquets fournis + `.typstdeps/`),
 environnement construit de zéro avec des proxys vers un port refusé, erreur claire (PRJ-14).
 
+**Durcissement (audit) :** Typst tourne dans un espace de noms réseau et utilisateur privé quand le
+système l'autorise (même `127.0.0.1` est injoignable ; repli sur les proxys refusés si les espaces de
+noms utilisateur sont interdits, mode journalisé et visible par `Engine.NetworkMode`). Les limites
+(`RLIMIT_AS`, `RLIMIT_FSIZE`) sont posées avant la première instruction du programme (un `sh` fait
+`ulimit` puis `exec`). Le dossier de sortie est surveillé pendant l'écriture et le groupe de processus
+est tué au-delà de `MaxOutput` ; les pages SVG demandées sont bornées (`--pages`, `WithPages`). Le
+nombre de compilations simultanées est borné (CPU). Parseur de diagnostics et pièces jointes bornés.
+macOS : pas d'espace de noms ni de limites mémoire/fichier (un profil `sandbox-exec` serait à ajouter).
+
 **Paquets fournis :** cmarker 0.1.10, touying 0.7.4, lilaq 0.6.0 (MIT) et leurs dépendances, dans git
 (0,5 Mo), SHA-256 épinglés. **lilaq plutôt que cetz-plot** : cetz/cetz-plot sont sous LGPL-3.0, lilaq et
 ses dépendances sous MIT. **Polices :** `--ignore-system-fonts` (pagination identique chez tous) ; Inter

@@ -400,7 +400,7 @@ func TestCompilePackages(t *testing.T) {
 			wg.Wait()
 		})
 
-		spy := newEngine(t, func(c *Config) { c.egressProxy = "http://" + ln.Addr().String() })
+		spy := newEngine(t, func(c *Config) { c.egressProxy, c.proxyOnly = "http://"+ln.Addr().String(), true })
 		p := writeProject(t, map[string]string{"main.typ": ghost})
 		if _, err := spy.Compile(t.Context(), p, "main.typ", WithFormats(FormatPDF)); !errors.Is(err, ErrMissingPackage) {
 			t.Fatalf("Compile = %v, want ErrMissingPackage", err)

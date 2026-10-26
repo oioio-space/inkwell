@@ -16,6 +16,9 @@ import (
 // PDF cannot turn a few kilobytes into gigabytes. A variable for the tests.
 var maxAttachmentBytes = 256 << 20
 
+// maxTotalAttachmentBytes bounds all the attachments of one PDF together.
+var maxTotalAttachmentBytes = 512 << 20
+
 const (
 	maxPDFObjects = 200_000
 	maxNesting    = 32
@@ -60,7 +63,10 @@ func Attachments(pdf []byte) ([]Attachment, error) {
 	if err != nil {
 		return nil, err
 	}
-	var out []Attachment
+	var (
+		out   []Attachment
+		total int
+	)
 	for _, num := range order {
 		spec := objs[num]
 		if spec.dict["Type"] != "/Filespec" {
@@ -69,6 +75,9 @@ func Attachments(pdf []byte) ([]Attachment, error) {
 		a, err := attachmentOf(spec, objs)
 		if err != nil {
 			return nil, fmt.Errorf("typst: attachment in object %d: %w", num, err)
+		}
+		if total += len(a.Data); total > maxTotalAttachmentBytes {
+			return nil, errors.New("typst: the attachments together are larger than the bound")
 		}
 		out = append(out, a)
 	}

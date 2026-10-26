@@ -2,6 +2,8 @@
 
 package sidecar
 
-// limitMemory is a no-op: RLIMIT_AS is only enforced on Linux. The timeout and
-// the output bounds still apply.
-func limitMemory(int, uint64) error { return nil }
+// withLimits does nothing: the memory and file size limits are only enforced
+// on Linux. The timeout, the output bounds and the directory watch still apply.
+func withLimits(spec Spec) (string, []string, error) {
+	return spec.Path, spec.Args, nil
+}

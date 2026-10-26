@@ -30,6 +30,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strconv"
 	"strings"
@@ -86,6 +87,12 @@ type Config struct {
 	MaxOutput int64
 	// MaxPages bounds the number of pages; default [DefaultMaxPages].
 	MaxPages int
+	// MaxConcurrent bounds the compilations running at once (each is one or two
+	// Typst processes); the others wait. Default: the number of CPUs.
+	MaxConcurrent int
+	// proxyOnly turns the network namespace off, for the test that watches the
+	// refused proxy.
+	proxyOnly bool
 	// MaxDiagnostics bounds the diagnostics kept; default [DefaultMaxDiagnostics].
 	MaxDiagnostics int
 }
@@ -133,6 +140,14 @@ type Option func(*options)
 type options struct {
 	timestamp time.Time
 	formats   Format
+	first     int // first page of SVG output, 0 = 1
+	last      int // last page of SVG output, 0 = as many as MaxPages
+}
+
+// WithPages renders only pages first to last (1-based, inclusive) as SVG, the
+// ones a viewer shows, instead of the whole document. The PDF is always whole.
+func WithPages(first, last int) Option {
+	return func(o *options) { o.first, o.last = first, last }
 }
 
 // WithFormats chooses the outputs; the default is FormatPDF | FormatSVG.
@@ -162,6 +177,8 @@ type Engine struct {
 	local string
 	proxy string
 	cfg   Config
+	sem   chan struct{}
+	noNet bool
 }
 
 // New returns an engine whose files live in cfg.CacheDir/typst, extracting the
@@ -184,13 +201,19 @@ func New(cfg Config) (*Engine, error) {
 	if cfg.MaxOutput <= 0 {
 		cfg.MaxOutput = DefaultMaxOutput
 	}
+	if cfg.MaxConcurrent <= 0 {
+		cfg.MaxConcurrent = runtime.NumCPU()
+	}
 	if cfg.MaxPages <= 0 {
 		cfg.MaxPages = DefaultMaxPages
 	}
 	if cfg.MaxDiagnostics <= 0 {
 		cfg.MaxDiagnostics = DefaultMaxDiagnostics
 	}
-	e := &Engine{cfg: cfg, store: cfg.Store, log: cfg.Logger, proxy: cmp.Or(cfg.egressProxy, deadProxy)}
+	e := &Engine{
+		cfg: cfg, store: cfg.Store, log: cfg.Logger, proxy: cmp.Or(cfg.egressProxy, deadProxy),
+		sem: make(chan struct{}, cfg.MaxConcurrent),
+	}
 	if e.log == nil {
 		e.log = slog.Default()
 	}
@@ -209,7 +232,29 @@ func New(cfg Config) (*Engine, error) {
 	if err := e.ensureCaches(); err != nil {
 		return nil, err
 	}
+	e.noNet = !cfg.proxyOnly && sidecar.NetworkIsolation()
+	e.log.Info("typst: offline", "network", e.NetworkMode())
 	return e, nil
+}
+
+// NetworkMode says how Typst is kept offline: "namespace" when it runs in a
+// private network namespace (not even the loopback is reachable), "proxy only"
+// when the system forbids that and only the refused proxy stands in the way.
+func (e *Engine) NetworkMode() string {
+	if e.noNet {
+		return "namespace"
+	}
+	return "proxy only"
+}
+
+// acquire waits for a free compilation slot.
+func (e *Engine) acquire(ctx context.Context) (release func(), err error) {
+	select {
+	case e.sem <- struct{}{}:
+		return func() { <-e.sem }, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
 }
 
 // ensureCaches verifies the bundled packages and fonts, repairing them.
@@ -416,11 +461,20 @@ func (e *Engine) args(sub string, j *job, o options, extra ...string) []string {
 }
 
 // run launches typst with the engine's limits.
-func (e *Engine) run(ctx context.Context, j *job, args []string, maxOut int) (sidecar.Output, error) {
-	return sidecar.Run(ctx, sidecar.Spec{
-		Path: j.typst, Args: args, Dir: j.root, Env: e.env(),
+//
+// The limits are in force from the first instruction of Typst. watch, if not
+// empty, is the folder Typst writes its output to: it is bounded to MaxOutput
+// as it grows (no single file may exceed it either), so that a document that
+// renders gigabytes is stopped long before the compilation ends.
+func (e *Engine) run(ctx context.Context, j *job, args []string, maxOut int, watch string) (sidecar.Output, error) {
+	spec := sidecar.Spec{
+		Path: j.typst, Args: args, Dir: j.root, Env: e.env(), NoNetwork: e.noNet,
 		MemoryLimit: e.cfg.MemoryLimit, MaxOutput: maxOut,
-	})
+	}
+	if watch != "" {
+		spec.WatchDir, spec.MaxDirBytes, spec.FileSizeLimit = watch, e.cfg.MaxOutput, uint64(e.cfg.MaxOutput) // #nosec G115 -- MaxOutput is positive
+	}
+	return sidecar.Run(ctx, spec)
 }
 
 // deadline derives the context of one compilation. When the timeout is what
@@ -451,6 +505,11 @@ func (e *Engine) Compile(ctx context.Context, p Project, main string, opts ...Op
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
+	release, err := e.acquire(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer release()
 	j, err := e.prepare(p, main)
 	if err != nil {
 		return nil, err
@@ -461,11 +520,24 @@ func (e *Engine) Compile(ctx context.Context, p Project, main string, opts ...Op
 		return nil, fmt.Errorf("typst: %w", err)
 	}
 	defer func() { _ = os.RemoveAll(out) }()
+	pdfDir, svgDir := filepath.Join(out, "pdf"), filepath.Join(out, "svg")
+	for _, d := range []string{pdfDir, svgDir} {
+		if err := os.Mkdir(d, 0o700); err != nil {
+			return nil, fmt.Errorf("typst: %w", err)
+		}
+	}
 
 	begin := time.Now()
 	runCtx, cancel := e.deadline(ctx)
 	defer cancel()
-	pdfPath, svgTemplate := filepath.Join(out, "out.pdf"), filepath.Join(out, "page-{0p}.svg")
+	pdfPath, svgTemplate := filepath.Join(pdfDir, "out.pdf"), filepath.Join(svgDir, "page-{0p}.svg")
+	// One page more than allowed, so that a document over the limit is noticed.
+	first := max(o.first, 1)
+	last := first + e.cfg.MaxPages
+	if o.last > 0 {
+		last = min(o.last, last-1)
+	}
+	pages := strconv.Itoa(first) + "-" + strconv.Itoa(last)
 	var (
 		wg           sync.WaitGroup
 		pdfOut, svgO sidecar.Output
@@ -473,12 +545,12 @@ func (e *Engine) Compile(ctx context.Context, p Project, main string, opts ...Op
 	)
 	if o.formats&FormatPDF != 0 {
 		wg.Go(func() {
-			pdfOut, pdfErr = e.run(runCtx, j, e.args("compile", j, o, "--format", "pdf", "--", filepath.ToSlash(j.main), pdfPath), maxStderr)
+			pdfOut, pdfErr = e.run(runCtx, j, e.args("compile", j, o, "--format", "pdf", "--", filepath.ToSlash(j.main), pdfPath), maxStderr, pdfDir)
 		})
 	}
 	if o.formats&FormatSVG != 0 {
 		wg.Go(func() {
-			svgO, svgE = e.run(runCtx, j, e.args("compile", j, o, "--format", "svg", "--", filepath.ToSlash(j.main), svgTemplate), maxStderr)
+			svgO, svgE = e.run(runCtx, j, e.args("compile", j, o, "--format", "svg", "--pages", pages, "--", filepath.ToSlash(j.main), svgTemplate), maxStderr, svgDir)
 		})
 	}
 	wg.Wait()
@@ -506,7 +578,7 @@ func (e *Engine) Compile(ctx context.Context, p Project, main string, opts ...Op
 		}
 	}
 	if o.formats&FormatSVG != 0 {
-		if res.Pages, err = e.readPages(out); err != nil {
+		if res.Pages, err = e.readPages(svgDir); err != nil {
 			return res, err
 		}
 	}
@@ -516,7 +588,7 @@ func (e *Engine) Compile(ctx context.Context, p Project, main string, opts ...Op
 // settle merges the diagnostics of the runs into res and turns a failed run
 // into the error to return.
 func (e *Engine) settle(res *Result, j *job, runs []sidecar.Output) error {
-	lim := limits{maxDiagnostics: e.cfg.MaxDiagnostics, maxMessage: maxMessage}
+	lim := limits{maxDiagnostics: e.cfg.MaxDiagnostics, maxMessage: maxMessage, maxInput: maxStderr}
 	var failed *sidecar.Output
 	for _, run := range runs {
 		diags, truncated := parseDiagnostics(run.Stderr, j.root, j.pkgPath, lim)
@@ -538,6 +610,10 @@ func (e *Engine) settle(res *Result, j *job, runs []sidecar.Output) error {
 
 // failure explains why typst exited abnormally.
 func failure(res *Result, run *sidecar.Output, memoryLimit uint64) error {
+	// SIGXFSZ (25 on Linux and macOS): a file grew past the size limit.
+	if run.OutputLimit || run.Signal == 25 {
+		return fmt.Errorf("%w: the output grew past the limit while it was being written", ErrOutputTooLarge)
+	}
 	stderr := string(run.Stderr)
 	if strings.Contains(stderr, "memory allocation of") && strings.Contains(stderr, "failed") {
 		return fmt.Errorf("%w (limit %d MiB)", ErrMemoryLimit, memoryLimit>>20)

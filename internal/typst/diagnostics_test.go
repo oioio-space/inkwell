@@ -3,6 +3,7 @@ package typst
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/google/go-cmp/cmp"
 )
@@ -68,7 +69,7 @@ func TestParseDiagnostics(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, truncated := parseDiagnostics([]byte(tt.in), root, pkgs, limits{maxDiagnostics: 200, maxMessage: 2000})
+			got, truncated := parseDiagnostics([]byte(tt.in), root, pkgs, limits{maxDiagnostics: 200, maxMessage: 2000, maxInput: maxStderr})
 			if truncated {
 				t.Error("truncated = true")
 			}
@@ -82,7 +83,7 @@ func TestParseDiagnostics(t *testing.T) {
 func TestParseDiagnosticsMissingPackage(t *testing.T) {
 	in := "main.typ:1:8: error: failed to download package (https://packages.typst.org/preview/ghost-1.2.3.tar.gz: Connection Failed: Connect error)\n" +
 		"main.typ:2:8: error: package not found (searched for /cache/local/mine/0.1.0)\n"
-	got, _ := parseDiagnostics([]byte(in), "/p", "/c", limits{maxDiagnostics: 10, maxMessage: 2000})
+	got, _ := parseDiagnostics([]byte(in), "/p", "/c", limits{maxDiagnostics: 10, maxMessage: 2000, maxInput: maxStderr})
 	if len(got) != 2 {
 		t.Fatalf("got %d diagnostics, want 2: %+v", len(got), got)
 	}
@@ -101,13 +102,13 @@ func TestParseDiagnosticsBounds(t *testing.T) {
 	for range 5000 {
 		sb.WriteString("main.typ:1:1: warning: w\n")
 	}
-	got, truncated := parseDiagnostics([]byte(sb.String()), "/p", "/c", limits{maxDiagnostics: 200, maxMessage: 2000})
+	got, truncated := parseDiagnostics([]byte(sb.String()), "/p", "/c", limits{maxDiagnostics: 200, maxMessage: 2000, maxInput: maxStderr})
 	if len(got) != 200 || !truncated {
 		t.Errorf("kept %d diagnostics, truncated=%v; want 200 and true", len(got), truncated)
 	}
 
 	long := "main.typ:1:1: error: " + strings.Repeat("x", 100000) + "\n" + strings.Repeat("more\n", 1000)
-	got, _ = parseDiagnostics([]byte(long), "/p", "/c", limits{maxDiagnostics: 200, maxMessage: 100})
+	got, _ = parseDiagnostics([]byte(long), "/p", "/c", limits{maxDiagnostics: 200, maxMessage: 100, maxInput: maxStderr})
 	if len(got) != 1 || len(got[0].Message) > 100+len("…") {
 		t.Errorf("message length = %d, want at most 100 plus an ellipsis", len(got[0].Message))
 	}
@@ -119,7 +120,7 @@ func FuzzParseDiagnostics(f *testing.F) {
 	f.Add(":::: error: \n\n\r\n")
 	f.Add("a:99999999999999999999:1: error: overflow\n")
 	f.Fuzz(func(t *testing.T, in string) {
-		got, _ := parseDiagnostics([]byte(in), "/p", "/c", limits{maxDiagnostics: 20, maxMessage: 64})
+		got, _ := parseDiagnostics([]byte(in), "/p", "/c", limits{maxDiagnostics: 20, maxMessage: 64, maxInput: maxStderr})
 		if len(got) > 20 {
 			t.Fatalf("%d diagnostics exceed the bound", len(got))
 		}
@@ -132,4 +133,18 @@ func FuzzParseDiagnostics(f *testing.F) {
 			}
 		}
 	})
+}
+
+// A hostile document can make Typst print megabytes of continuation lines
+// (assert(false, message: ...)); parsing them must stay linear.
+func TestParseDiagnosticsHostileStderr(t *testing.T) {
+	in := "main.typ:1:1: error: boom\n" + strings.Repeat("y\n", 8<<20) // 16 MiB
+	begin := time.Now()
+	got, _ := parseDiagnostics([]byte(in), "/p", "/c", limits{maxDiagnostics: 200, maxMessage: 2000, maxInput: maxStderr})
+	if took := time.Since(begin); took > time.Second {
+		t.Errorf("parsing 16 MiB took %v, want under 1s", took)
+	}
+	if len(got) != 1 || len(got[0].Message) > 2000+len("…") {
+		t.Fatalf("got %d diagnostics; want 1 with a bounded message", len(got))
+	}
 }

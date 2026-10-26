@@ -173,3 +173,21 @@ func FuzzAttachments(f *testing.F) {
 		}
 	})
 }
+
+func TestAttachmentsTotalBound(t *testing.T) {
+	oldOne, oldAll := maxAttachmentBytes, maxTotalAttachmentBytes
+	maxAttachmentBytes, maxTotalAttachmentBytes = 1<<20, 1500<<10
+	t.Cleanup(func() { maxAttachmentBytes, maxTotalAttachmentBytes = oldOne, oldAll })
+
+	one := bytes.Repeat([]byte("a"), 1000<<10) // each under the per-file bound
+	file := pdf(
+		filespec("a.bin", 3, ""), filespec("b.bin", 4, ""),
+		stream("/Type/EmbeddedFile", string(one)), stream("/Type/EmbeddedFile", string(one)),
+	)
+	if got, err := Attachments(file); err == nil {
+		t.Errorf("Attachments = %d files, nil; want an error past the total bound", len(got))
+	}
+	if got, err := Attachments(pdf(filespec("a.bin", 2, ""), stream("/Type/EmbeddedFile", string(one)))); err != nil || len(got) != 1 {
+		t.Errorf("a single attachment under both bounds: %v, %v", got, err)
+	}
+}
