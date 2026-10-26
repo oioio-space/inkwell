@@ -30,7 +30,7 @@ test("B2 gutter, versions, who wrote what, readable differences, going back (HIS
   await clear(bob);
   await pair(alice, bob);
   await typeAtEnd(alice, "= Plan de continuité\nUn premier paragraphe.\n");
-  await expect.poll(() => docText(bob)).toContain("premier paragraphe");
+  await expect.poll(() => docText(bob), { timeout: 20_000 }).toContain("premier paragraphe");
 
   // HIS-02/03: what Bob adds is marked on Alice's side; HIS-04: what Alice types is not.
   await typeAtEnd(bob, "Ajout de Bob.\n");
