@@ -1,6 +1,6 @@
 import { getCursor, getCursorPosition } from "@automerge/automerge";
 import { type DocHandle, Presence } from "@automerge/automerge-repo";
-import type { CursorState, Person } from "../../editor/presence";
+import { type CursorState, type Person, PRESENCE_TIMING } from "../../editor/presence";
 import type { Remote, SheetController } from "./sheet.svelte";
 
 type Doc = { text: string };
@@ -25,7 +25,7 @@ export function sheetPresence(
   stop: () => void;
 } {
   const presence = new Presence<CursorState, Doc>({ handle });
-  presence.start({ initialState: { name: me.name } });
+  presence.start({ initialState: { name: me.name }, ...PRESENCE_TIMING });
 
   const refresh = () => {
     const states = Object.values(presence.getPeerStates().value);

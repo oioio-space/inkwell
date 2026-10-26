@@ -6,6 +6,14 @@ import { type RemoteCursor, setRemoteCursors } from "./remoteCursors";
 
 type Doc = { text: string };
 
+/**
+ * How often a present device says so, and how long without news before the others forget it.
+ * The library's 15 s / 45 s leave a ghost cursor for most of a minute whenever the goodbye of a
+ * closing window does not get out (WebKit sometimes drops what is sent while the page goes away; a
+ * crash or a cut network never sends one). The ratio of three beats is the library's own.
+ */
+export const PRESENCE_TIMING = { heartbeatMs: 4000, peerTtlMs: 12_000 } as const;
+
 /** What each person broadcasts: who they are and where their selection is. */
 export type CursorState = { name: string; anchor?: string; head?: string };
 
@@ -26,7 +34,7 @@ export function presenceSync(
   onPeople: (people: Person[]) => void = () => {},
 ): { extension: Extension; rename: (name: string) => void; stop: () => void } {
   const presence = new Presence<CursorState, Doc>({ handle });
-  presence.start({ initialState: { name: me.name } });
+  presence.start({ initialState: { name: me.name }, ...PRESENCE_TIMING });
 
   const refresh = () => {
     const states = Object.values(presence.getPeerStates().value);

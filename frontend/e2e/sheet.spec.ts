@@ -19,10 +19,12 @@ import {
   openSheet,
   pasteInTextView,
   pick,
+  readClipboard,
   readText,
   rowHead,
   setClipboard,
   setText,
+  shot,
 } from "./sheetHelpers";
 
 // B9 — the spreadsheet. Everything here drives the real app (two real Inkwell instances) with
@@ -54,30 +56,21 @@ test.describe("copy, cut and paste (the user's first priority)", () => {
   test("SHEET-CLIP-01 copying a range puts TSV and an HTML table on the system clipboard", async ({
     browser,
   }) => {
-    const page = await openSheet(browser, ALICE_URL, { clipboard: true });
+    const page = await openSheet(browser, ALICE_URL);
     await setText(page, DATA);
     await range(page, 0, 0, 1, 1);
     await page.keyboard.press("ControlOrMeta+c");
     await expect.poll(() => clipboardText(page)).toBe("Pomme\t3\nPoire\t12");
-    const types = await page.evaluate(async () => {
-      const items = await navigator.clipboard.read();
-      const item = items[0];
-      if (!item) return {};
-      const html = item.types.includes("text/html")
-        ? await (await item.getType("text/html")).text()
-        : "";
-      return { types: item.types, html };
-    });
-    expect(types.types).toContain("text/html");
-    expect(types.html).toContain("<table>");
-    expect(types.html).toContain("<td>Poire</td>");
+    const { html } = await readClipboard(page);
+    expect(html).toContain("<table>");
+    expect(html).toContain("<td>Poire</td>");
     expect(cspErrors(page)).toEqual([]);
   });
 
   test("CSV-07 a 200 x 10 block from a spreadsheet extends the grid in one change; one undo removes it", async ({
     browser,
   }) => {
-    const page = await openSheet(browser, ALICE_URL, { clipboard: true });
+    const page = await openSheet(browser, ALICE_URL);
     await setText(page, DATA);
     const block = Array.from({ length: 200 }, (_, r) =>
       Array.from({ length: 10 }, (_, c) => `r${r}c${c}`).join("\t"),
@@ -102,7 +95,7 @@ test.describe("copy, cut and paste (the user's first priority)", () => {
   test("CSV-08 / CSV-09 paste a range over a smaller selection extends; HTML tables and values-only", async ({
     browser,
   }) => {
-    const page = await openSheet(browser, ALICE_URL, { clipboard: true });
+    const page = await openSheet(browser, ALICE_URL);
     await setText(page, DATA);
     await pick(page, 3, 2);
     await setClipboard(page, "a\tb\nc\td");
@@ -138,7 +131,7 @@ test.describe("copy, cut and paste (the user's first priority)", () => {
   test("one value over a range fills it; cut then paste moves the cells as one undo step", async ({
     browser,
   }) => {
-    const page = await openSheet(browser, ALICE_URL, { clipboard: true });
+    const page = await openSheet(browser, ALICE_URL);
     await setText(page, DATA);
     await range(page, 0, 1, 3, 1);
     await setClipboard(page, "9");
@@ -164,7 +157,7 @@ test.describe("copy, cut and paste (the user's first priority)", () => {
   test("CSV-22 copying a cell that looks like a formula neutralises it and says so", async ({
     browser,
   }) => {
-    const page = await openSheet(browser, ALICE_URL, { clipboard: true });
+    const page = await openSheet(browser, ALICE_URL);
     await setText(page, "a;b\n=1+1;-5\n+cmd;x\n");
     await range(page, 0, 0, 1, 1);
     await page.keyboard.press("ControlOrMeta+c");
@@ -177,7 +170,7 @@ test.describe("copy, cut and paste (the user's first priority)", () => {
   test("copying from the text view and pasting in the table lands in the right cells", async ({
     browser,
   }) => {
-    const page = await openSheet(browser, ALICE_URL, { clipboard: true });
+    const page = await openSheet(browser, ALICE_URL);
     await setText(page, DATA);
     await page.getByRole("button", { name: "Voir le texte" }).click();
     const content = page.locator(".cm-content");
@@ -641,7 +634,7 @@ test.describe("accessibility, security and looks (CSV-20)", () => {
         "Fruit;Quantité;Prix;Date\nPomme;3;1,50;2026-10-01\nPoire;12;2,25;2026-10-02\nCerise;7;10;2026-10-03\nFigue;1;4,2;2026-10-04\nPrune;24;3,1;2026-10-05\n",
       );
       await range(page, 1, 1, 3, 2);
-      await page.screenshot({ path: `${SHOTS}/sheet-selection-${dark ? "dark" : "light"}.png` });
+      await shot(page, `${SHOTS}/sheet-selection-${dark ? "dark" : "light"}.png`);
       await head(page, 1).hover();
       await head(page, 1)
         .getByRole("button", { name: /Filtrer la colonne/ })
@@ -651,11 +644,11 @@ test.describe("accessibility, security and looks (CSV-20)", () => {
       // are there (the column is not empty), just covered.
       await expect(cell(page, 0, 1)).toHaveText("3");
       await expect(cell(page, 4, 1)).toHaveText("24");
-      await page.screenshot({ path: `${SHOTS}/sheet-filter-${dark ? "dark" : "light"}.png` });
+      await shot(page, `${SHOTS}/sheet-filter-${dark ? "dark" : "light"}.png`);
       await page.keyboard.press("Escape");
       await cell(page, 2, 1).click({ button: "right" });
       await expect(page.getByRole("menu", { name: "Actions sur la sélection" })).toBeVisible();
-      await page.screenshot({ path: `${SHOTS}/sheet-context-${dark ? "dark" : "light"}.png` });
+      await shot(page, `${SHOTS}/sheet-context-${dark ? "dark" : "light"}.png`);
       await page.keyboard.press("Escape");
       expect(cspErrors(page)).toEqual([]);
     });
@@ -673,7 +666,7 @@ test.describe("a file too big to edit (SHEET-BIG)", () => {
     const docs = mkdtempSync(join(tmpdir(), "inkwell-e2e-big-"));
     const instance = await startInstance(SPARE_PORT, docs);
     try {
-      const page = await openSheet(browser, SPARE_URL, { clipboard: true });
+      const page = await openSheet(browser, SPARE_URL);
       const rows = 500_000; // about 12 MB
       const csv = `nom;qte;prix\n${Array.from({ length: rows }, (_, i) => `ligne ${i};${i % 97};${i},5`).join("\n")}\n`;
       // The project folder exists once the instance runs: another program writes the file.
@@ -925,8 +918,10 @@ test.describe("two people on one sheet (SHEET-MU)", () => {
     await bob.screenshot({ path: `${SHOTS}/sheet-presence-bob.png` });
     await range(bob, 0, 0, 0, 0);
     await expect(alice.locator(".tag", { hasText: "Bob" })).toBeVisible({ timeout: 10_000 });
-    // Alice goes: her rectangle goes.
-    await alice.close({ runBeforeUnload: true });
+    // Alice goes: her rectangle goes. A plain close runs pagehide, which says goodbye;
+    // runBeforeUnload leaves the page open in WebKit, so she would never have left.
+    await alice.close();
+    expect(alice.isClosed()).toBe(true);
     await expect(bob.locator(".cell.rem")).toHaveCount(0, { timeout: 20_000 });
   });
 
@@ -960,6 +955,7 @@ test.describe("two people on one sheet (SHEET-MU)", () => {
   test("SHEET-MU-02 delete a column vs an edit in it; paste vs typing; sort vs edit; fill vs edit", async ({
     browser,
   }) => {
+    test.slow(); // four scenarios on two instances: more than the 30 s default under WebKit
     const { alice, bob } = await both(browser);
     const type = async (p: Page, r: number, c: number, v: string) => {
       await pick(p, r, c);

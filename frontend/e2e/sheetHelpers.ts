@@ -12,7 +12,6 @@ export async function openSheet(
   url: string,
   opts: {
     dark?: boolean;
-    clipboard?: boolean;
     width?: number;
     height?: number;
     /** Preferences already chosen, as the Preferences dialog would store them. */
@@ -23,7 +22,10 @@ export async function openSheet(
     locale: "fr-FR",
     viewport: { width: opts.width ?? 1200, height: opts.height ?? 720 },
     colorScheme: opts.dark ? "dark" : "light",
-    permissions: opts.clipboard ? ["clipboard-read", "clipboard-write"] : [],
+    // Only Chromium has a permission to give (WebKit rejects the name): there, the app's own
+    // writes to the clipboard (a button) need it. Reading and writing for the tests goes through
+    // real copy and paste, in both.
+    permissions: browser.browserType().name() === "chromium" ? ["clipboard-write"] : [],
   });
   if (opts.settings)
     await context.addInitScript((value) => {
@@ -140,20 +142,80 @@ export async function drag(
   await p.mouse.up();
 }
 
-export const clipboardText = (p: Page) => p.evaluate(() => navigator.clipboard.readText());
-export const setClipboard = (p: Page, text: string, html?: string) =>
-  p.evaluate(
-    async ([t, h]) => {
-      const data: Record<string, Blob> = {
-        "text/plain": new Blob([t ?? ""], { type: "text/plain" }),
+/*
+ * The system clipboard, through real copy and paste: the Clipboard API needs a permission that
+ * only Chromium can be granted (WebKit has none), so these go through a scratch field and the
+ * keyboard, which is also what a person does. The field is removed afterwards.
+ */
+
+/** What a paste gives a page: the text and, when there is one, the HTML. */
+export async function readClipboard(p: Page): Promise<{ text: string; html: string }> {
+  await p.evaluate(() => {
+    const field = document.createElement("textarea");
+    field.id = "e2e-clipboard";
+    (window as unknown as { __was: unknown }).__was = document.activeElement;
+    field.addEventListener("paste", (e) => {
+      e.preventDefault();
+      const d = e.clipboardData;
+      (window as unknown as { __clip: unknown }).__clip = {
+        text: d?.getData("text/plain") ?? "",
+        html: d?.getData("text/html") ?? "",
       };
-      if (h) data["text/html"] = new Blob([h], { type: "text/html" });
-      await navigator.clipboard.write([new ClipboardItem(data)]);
+    });
+    document.body.append(field);
+    field.focus();
+  });
+  await p.keyboard.press("ControlOrMeta+v");
+  const got = await p.evaluate(() => {
+    document.getElementById("e2e-clipboard")?.remove();
+    (window as unknown as { __was?: HTMLElement }).__was?.focus();
+    const w = window as unknown as { __clip?: { text: string; html: string } };
+    const clip = w.__clip ?? { text: "", html: "" };
+    w.__clip = undefined;
+    return clip;
+  });
+  return got;
+}
+
+export const clipboardText = async (p: Page) => (await readClipboard(p)).text;
+
+/** Puts `text` (and `html`, if given) on the system clipboard. */
+export async function setClipboard(p: Page, text: string, html?: string): Promise<void> {
+  await p.evaluate(
+    ([t, h]) => {
+      const field = document.createElement("textarea");
+      field.id = "e2e-clipboard";
+      (window as unknown as { __was: unknown }).__was = document.activeElement;
+      field.value = "x";
+      field.addEventListener("copy", (e) => {
+        e.preventDefault();
+        e.clipboardData?.setData("text/plain", t ?? "");
+        if (h) e.clipboardData?.setData("text/html", h);
+      });
+      document.body.append(field);
+      field.focus();
+      field.select();
     },
     [text, html] as const,
   );
+  await p.keyboard.press("ControlOrMeta+c");
+  await p.evaluate(() => {
+    document.getElementById("e2e-clipboard")?.remove();
+    (window as unknown as { __was?: HTMLElement }).__was?.focus();
+  });
+}
 
 /** Content-Security-Policy violations seen by the page so far. */
 export const cspErrors = (p: Page) => (p as Page & { csp?: string[] }).csp ?? [];
 
 export const DATA = "Nom;Qté;Prix\nPomme;3;1,50\nPoire;12;2,25\nCerise;7;10\nFigue;1;4,2\n";
+
+/**
+ * A screenshot for the eye. Playwright's WebKit injects a stylesheet to take it, which the page's
+ * CSP refuses and logs: that is the tool, not the app, so it is not counted as a violation.
+ */
+export async function shot(p: Page, path: string): Promise<void> {
+  const seen = cspErrors(p).length;
+  await p.screenshot({ path });
+  cspErrors(p).length = seen;
+}
