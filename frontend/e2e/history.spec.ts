@@ -34,17 +34,17 @@ test("B2 gutter, versions, who wrote what, readable differences, going back (HIS
   // HIS-02/03: what Bob adds is marked on Alice's side; HIS-04: what Alice types is not.
   await typeAtEnd(bob, "Ajout de Bob.\n");
   await expect.poll(() => docText(alice)).toContain("Ajout de Bob");
-  await expect(alice.locator(".cm-change-gutter .cm-change").first()).toBeVisible({
+  await expect(alice.locator(".cm-changed").first()).toBeVisible({
     timeout: 15_000,
   });
-  const before = await alice.locator(".cm-change-gutter .cm-change").count();
+  const before = await alice.locator(".cm-changed").count();
   await typeAtEnd(alice, "Mot de Alice.\n");
   await expect.poll(() => docText(bob)).toContain("Mot de Alice");
   await alice.waitForTimeout(1200);
-  expect(await alice.locator(".cm-change-gutter .cm-change").count()).toBe(before);
+  expect(await alice.locator(".cm-changed").count()).toBe(before);
   await expect(alice.getByTestId("change-strip")).toContainText("Depuis votre dernière visite");
   await expect(alice.locator(".cm-minimap-tick").first()).toBeAttached();
-  await alice.locator(".cm-change-gutter .cm-change").first().hover();
+  await alice.locator(".cm-changed").first().hover();
   await shot(alice, "gutter", false);
   await alice.getByRole("radio", { name: "Par personne" }).click();
   await shot(alice, "gutter-person", false);

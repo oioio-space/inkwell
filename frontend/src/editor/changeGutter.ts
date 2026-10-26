@@ -1,11 +1,11 @@
+import { type EditorState, type Extension, StateEffect, StateField } from "@codemirror/state";
 import {
-  type EditorState,
-  type Extension,
-  RangeSet,
-  StateEffect,
-  StateField,
-} from "@codemirror/state";
-import { EditorView, GutterMarker, gutter, ViewPlugin, type ViewUpdate } from "@codemirror/view";
+  Decoration,
+  type DecorationSet,
+  EditorView,
+  ViewPlugin,
+  type ViewUpdate,
+} from "@codemirror/view";
 import { lineStarts } from "./external";
 
 export type ChangeKind = "added" | "modified" | "deleted";
@@ -31,38 +31,6 @@ export interface MarkSet {
 
 const setMarks = StateEffect.define<MarkSet | null>();
 
-class Marker extends GutterMarker {
-  constructor(
-    readonly kind: ChangeKind,
-    readonly person: number,
-    readonly colorBy: ColorBy,
-    readonly label: string,
-  ) {
-    super();
-  }
-  override eq(other: GutterMarker): boolean {
-    return (
-      other instanceof Marker &&
-      other.kind === this.kind &&
-      other.person === this.person &&
-      other.colorBy === this.colorBy &&
-      other.label === this.label
-    );
-  }
-  override toDOM(): Node {
-    const el = document.createElement("div");
-    // The spacer that gives the gutter its width draws nothing.
-    if (!this.label) return el;
-    el.className = `cm-change cm-change-${this.kind}`;
-    if (this.colorBy === "person")
-      el.style.setProperty("--change-color", `var(--person-${this.person})`);
-    el.title = this.label;
-    el.setAttribute("role", "img");
-    el.setAttribute("aria-label", this.label);
-    return el;
-  }
-}
-
 /** A mark with where it stands in the text now (the minimap reads these). */
 export interface Placed {
   kind: ChangeKind;
@@ -75,14 +43,14 @@ export interface Placed {
 
 interface State {
   placed: readonly Placed[];
-  set: RangeSet<GutterMarker>;
+  deco: DecorationSet;
 }
 
-const empty: State = { placed: [], set: RangeSet.empty };
+const empty: State = { placed: [], deco: Decoration.none };
 
 function build(state: EditorState, input: MarkSet): State {
   const placed: Placed[] = [];
-  const ranges: { from: number; marker: GutterMarker }[] = [];
+  const ranges: ReturnType<Decoration["range"]>[] = [];
   for (const m of input.marks) {
     const a = input.resolve(m.from);
     const b = input.resolve(m.to);
@@ -98,20 +66,23 @@ function build(state: EditorState, input: MarkSet): State {
       colorBy: input.colorBy,
       label: m.label,
     });
-    const marker = new Marker(m.kind, m.person, input.colorBy, m.label);
-    // One marker per line the change touches (B1's helper); a removal sits on the line where it was.
+    // The strip is a bar drawn in the margin of the line itself (a decoration of the line, not a
+    // gutter of its own: B1's marks of outside edits already ride on the gutters).
+    const mark = Decoration.line({
+      class: `cm-changed cm-changed-${m.kind}`,
+      attributes: {
+        title: m.label,
+        ...(input.colorBy === "person"
+          ? { style: `--change-color: var(--person-${m.person})` }
+          : {}),
+      },
+    });
+    // One bar per line the change touches (B1's helper); a removal sits on the line where it was.
     const starts =
       m.kind === "deleted" ? [state.doc.lineAt(from).from] : lineStarts(state, [{ from, to }]);
-    for (const at of starts) ranges.push({ from: at, marker });
+    for (const at of starts) ranges.push(mark.range(at));
   }
-  ranges.sort((x, y) => x.from - y.from);
-  return {
-    placed,
-    set: RangeSet.of(
-      ranges.map((r) => r.marker.range(r.from)),
-      true,
-    ),
-  };
+  return { placed, deco: Decoration.set(ranges, true) };
 }
 
 const field = StateField.define<State>({
@@ -122,7 +93,7 @@ const field = StateField.define<State>({
     }
     if (!tr.docChanged || value.placed.length === 0) return value;
     return {
-      set: value.set.map(tr.changes),
+      deco: value.deco.map(tr.changes),
       placed: value.placed.map((p) => ({
         ...p,
         from: tr.changes.mapPos(p.from, 1),
@@ -130,32 +101,34 @@ const field = StateField.define<State>({
       })),
     };
   },
+  provide: (f) => EditorView.decorations.from(f, (s) => s.deco),
 });
 
 const theme = EditorView.baseTheme({
-  // The strip takes no room of its own: it is drawn on the left edge of the line-number column,
-  // which keeps the 56 px of the design.
-  ".cm-change-gutter": { width: "0", minWidth: "0", marginRight: "0", overflow: "visible" },
-  ".cm-change-gutter .cm-gutterElement": { padding: "0", width: "0", position: "relative" },
-  ".cm-change": {
-    "--change-color": "var(--accent-bg)",
+  // The bar sits in the margin of the line, between the line numbers and the text: it takes no
+  // room of its own, so the line-number column keeps the 56 px of the design.
+  ".cm-line.cm-changed": { position: "relative", "--change-color": "var(--accent-bg)" },
+  ".cm-line.cm-changed::before": {
+    content: '""',
     position: "absolute",
-    left: "6px",
+    left: "4px",
     top: "0",
     bottom: "0",
     width: "4px",
     borderRadius: "2px",
     background: "var(--change-color)",
   },
-  ".cm-change-added": { "--change-color": "var(--success)" },
-  ".cm-change-modified": { "--change-color": "var(--accent-bg)" },
-  ".cm-change-deleted": {
-    "--change-color": "var(--destructive, #e01b24)",
-    background: "transparent",
+  ".cm-line.cm-changed-added": { "--change-color": "var(--success)" },
+  ".cm-line.cm-changed-modified": { "--change-color": "var(--accent-bg)" },
+  ".cm-line.cm-changed-deleted": { "--change-color": "var(--destructive)" },
+  ".cm-line.cm-changed-deleted::before": {
+    bottom: "auto",
     width: "0",
     height: "0",
     left: "5px",
-    bottom: "auto",
+    top: "7px",
+    borderRadius: "0",
+    background: "transparent",
     borderTop: "5px solid transparent",
     borderBottom: "5px solid transparent",
     borderLeft: "7px solid var(--change-color)",
@@ -183,7 +156,7 @@ const theme = EditorView.baseTheme({
   },
   ".cm-minimap-tick.cm-change-added": { "--change-color": "var(--success)" },
   ".cm-minimap-tick.cm-change-modified": { "--change-color": "var(--accent-bg)" },
-  ".cm-minimap-tick.cm-change-deleted": { "--change-color": "var(--destructive, #e01b24)" },
+  ".cm-minimap-tick.cm-change-deleted": { "--change-color": "var(--destructive)" },
 });
 
 /** Draws a tick per change in a strip along the scrollbar: where in the whole document they are. */
@@ -236,17 +209,8 @@ const minimap = ViewPlugin.fromClass(
   },
 );
 
-/** The change strip in the margin and the minimap on the scrollbar; give them marks with {@link showChanges}. */
-export const changeGutter: Extension = [
-  field,
-  gutter({
-    class: "cm-change-gutter",
-    markers: (v) => v.state.field(field).set,
-    initialSpacer: () => new Marker("added", 1, "type", ""),
-  }),
-  minimap,
-  theme,
-];
+/** The change bars in the margin and the minimap on the scrollbar; give them marks with {@link showChanges}. */
+export const changeGutter: Extension = [field, minimap, theme];
 
 /** Shows these changes (replacing the earlier ones); null clears them. */
 export function showChanges(view: EditorView, marks: MarkSet | null): void {

@@ -99,8 +99,8 @@ export function createEditor(
       : {}),
     extensions: [
       cspNonce(),
-      changeGutter,
       lineNumbers(),
+      changeGutter,
       history(),
       localHistoryOnly,
       drawSelection(),

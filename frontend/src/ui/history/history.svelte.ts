@@ -30,6 +30,7 @@ import {
   whatChanged,
 } from "../../history/versions";
 import { t } from "../../i18n";
+import { tooBigToEdit } from "../../store/limits";
 import { settings } from "../../store/settings.svelte";
 import { lastVisit, saveVisit } from "../../store/visit";
 import { workspace } from "../../workspace/workspace.svelte";
@@ -166,7 +167,9 @@ class HistoryState {
     this.#stop.push(() => {
       workspace.keyUndoHooks = workspace.keyUndoHooks.filter((h) => h !== hook);
     });
-    void this.loadMembers().then(() => this.#claim());
+    // At once, before the person types: the write must not land in the middle of their typing.
+    this.#claim();
+    void this.loadMembers();
     void this.refresh();
   }
 
@@ -185,7 +188,9 @@ class HistoryState {
   /** Says in the document who this device is (once per actor and name); readers write nothing. */
   #claim(): void {
     const handle = this.#handle;
-    if (!handle || this.readOnly || !workspace.myId) return;
+    // A document too big to edit is only read: nothing is written into it (ADR 0026).
+    if (!handle || this.readOnly || !workspace.myId || tooBigToEdit(handle.doc()?.text.length ?? 0))
+      return;
     claimActor(handle, { id: workspace.myId, name: workspace.myName });
   }
 
