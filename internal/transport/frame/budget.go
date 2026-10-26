@@ -8,13 +8,12 @@ type Budget struct {
 	cond   *sync.Cond
 	mu     sync.Mutex
 	avail  int
-	size   int
 	closed bool
 }
 
 // NewBudget returns a Budget of size bytes.
 func NewBudget(size int) *Budget {
-	b := &Budget{avail: size, size: size}
+	b := &Budget{avail: size}
 	b.cond = sync.NewCond(&b.mu)
 	return b
 }
