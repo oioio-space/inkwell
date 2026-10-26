@@ -1,6 +1,13 @@
 import type { SocketLike } from "../net/WailsNetworkAdapter";
 import { PreviewClient } from "./PreviewClient";
-import type { Anchor, Diagnostic, Failure, PreviewMessage, ResultMessage } from "./protocol";
+import type {
+  Anchor,
+  DeckData,
+  Diagnostic,
+  Failure,
+  PreviewMessage,
+  ResultMessage,
+} from "./protocol";
 import { pageImage } from "./svg";
 
 /** One page ready to show. An empty `src` is a page that could not be shown safely. */
@@ -43,6 +50,9 @@ export class PreviewModel {
   /** A mark to flash on the page after a jump from the source. */
   marker = $state.raw<{ page: number; y: number; id: number } | undefined>();
 
+  /** How the document divides into slides and steps, once asked for (see `wantDeck`). */
+  deck = $state.raw<DeckData | undefined>();
+
   errors = $derived(this.diagnostics.filter((d) => d.severity === "error").length);
   warnings = $derived(this.diagnostics.filter((d) => d.severity === "warning").length);
 
@@ -53,6 +63,7 @@ export class PreviewModel {
   #waiting: Waiter[] = [];
   #asked = "";
   #markerId = 0;
+  #deckWanted = false;
   #settle: ReturnType<typeof setTimeout> | undefined;
 
   start(open: () => SocketLike): void {
@@ -62,6 +73,21 @@ export class PreviewModel {
 
   stop(): void {
     this.#client?.stop();
+  }
+
+  /** The version of the sources the pages on screen were made from. */
+  get rev(): number {
+    return this.#okRev;
+  }
+
+  /**
+   * A presentation needs the slides and steps: they are asked for now and again after every
+   * successful compilation, until `wantDeck(false)`.
+   */
+  wantDeck(on: boolean): void {
+    this.#deckWanted = on;
+    if (on) this.#client?.deck();
+    else this.deck = undefined;
   }
 
   /**
@@ -89,6 +115,9 @@ export class PreviewModel {
       case "result":
         this.#result(m);
         return;
+      case "deck":
+        if (this.#deckWanted && m.deck) this.deck = m.deck;
+        return;
       case "anchors": {
         const waiters = this.#waiting.splice(0);
         for (const w of waiters) {
@@ -110,6 +139,7 @@ export class PreviewModel {
     this.failure = m.failure;
     if (m.failure) return; // the pages of the last good version stay on screen
     this.#okRev = m.rev;
+    if (this.#deckWanted) this.#client?.deck();
     this.pageCount = m.pageCount;
     const next = new Map(this.pages);
     m.pages.forEach((svg, i) => {

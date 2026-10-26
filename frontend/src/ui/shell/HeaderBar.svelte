@@ -24,6 +24,8 @@ let {
   onTogglePreview,
   onExport,
   onAbout,
+  canPresent = false,
+  onPresent = () => {},
 }: {
   title: string;
   /** The file being edited, under the title. */
@@ -47,6 +49,10 @@ let {
   /** "Exporter en PDF". */
   onExport: () => void;
   onAbout: () => void;
+  /** A Typst document can be presented. */
+  canPresent?: boolean;
+  /** "Présenter" (from the first slide), from this slide, or only as the audience view of this screen. */
+  onPresent?: (how: "start" | "here" | "public") => void;
 } = $props();
 
 let menuOpen = $state(false);
@@ -85,6 +91,18 @@ let menuOpen = $state(false);
     >
       <Icon name="eye" />
     </button>
+    {#if canPresent}
+      <button
+        type="button"
+        class="fb"
+        aria-label={t("present.start")}
+        title="{t('present.start')} ({shortcutLabel('F5')})"
+        data-testid="present-start"
+        onclick={() => onPresent("start")}
+      >
+        <Icon name="present" />
+      </button>
+    {/if}
     <PeopleStack {me} {peers} />
     <button type="button" class="sug" onclick={onShare}>{t("share.button")}</button>
     <MenuButton bind:open={menuOpen} label={t("menu.main")} name={t("menu.main")} align="end" width={300}>
@@ -119,6 +137,19 @@ let menuOpen = $state(false);
           <span>{t("menu.preview")}</span>
           <span class="tick" class:off={!previewOpen}><Icon name="check" size={14} /></span>
         </button>
+        {#if canPresent}
+          <button type="button" class="mi" role="menuitem" onclick={() => { close(false); onPresent("start"); }}>
+            <span>{t("present.start")}</span>
+            <span class="k">{shortcutLabel("F5")}</span>
+          </button>
+          <button type="button" class="mi" role="menuitem" onclick={() => { close(false); onPresent("here"); }}>
+            <span>{t("present.startHere")}</span>
+            <span class="k">{shortcutLabel("Shift-F5")}</span>
+          </button>
+          <button type="button" class="mi" role="menuitem" data-testid="present-as-public" onclick={() => { close(false); onPresent("public"); }}>
+            <span>{t("present.showPublic")}</span>
+          </button>
+        {/if}
         <button
           type="button"
           class="mi"

@@ -64,6 +64,11 @@ export class PreviewClient {
     this.#send({ op: "anchors" });
   }
 
+  /** Ask how the document divides into slides and steps; the answer arrives as a "deck" message. */
+  deck(): void {
+    this.#send({ op: "deck" });
+  }
+
   #send(req: PreviewRequest): void {
     if (!this.#ready || !this.#socket) return; // `view` and `edit` are repeated after opening
     try {
