@@ -67,7 +67,7 @@ jobs:
             echo "prerelease=$prerelease"
           } >>"$GITHUB_OUTPUT"
           echo "Releasing $version (publish=$publish, prerelease=$prerelease)" >>"$GITHUB_STEP_SUMMARY"
-      # A tag is only cut on a commit whose CI is green: wait for it (the tag push starts its own run).
+      # A tag is only cut on a commit whose CI is green: wait for it (the push of the commit to main ran it; on-main.sh made sure it is on main).
       - name: The CI of this commit passed
         if: steps.v.outputs.publish == 'true'
         env:

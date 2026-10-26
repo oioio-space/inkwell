@@ -2,6 +2,9 @@
 # Tests of the release scripts themselves (notes, assemble, sizes, verify, on-main, release-guard), on fake assets, with a
 # throwaway cosign key. Run by `mise run pkg:lint`. No network.
 set -euo pipefail
+# A git hook runs this with GIT_DIR and friends set: unset them, or the throwaway repos below
+# would commit into the real one.
+unset GIT_DIR GIT_WORK_TREE GIT_INDEX_FILE GIT_OBJECT_DIRECTORY GIT_COMMON_DIR
 
 cd "$(dirname "${BASH_SOURCE[0]}")/../.."
 work="$(mktemp -d)"
