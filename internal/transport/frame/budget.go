@@ -33,6 +33,17 @@ func (b *Budget) Acquire(n int) bool {
 	return true
 }
 
+// TryAcquire takes n bytes if they are free now and reports whether it did.
+func (b *Budget) TryAcquire(n int) bool {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if b.closed || b.avail < n {
+		return false
+	}
+	b.avail -= n
+	return true
+}
+
 // Release gives n bytes back.
 func (b *Budget) Release(n int) {
 	if n == 0 {
