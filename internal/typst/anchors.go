@@ -127,9 +127,11 @@ func finite(f float64) bool { return !math.IsNaN(f) && !math.IsInf(f, 0) }
 
 // clip cuts s after n characters.
 func clip(s string, n int) string {
-	r := []rune(s)
-	if len(r) <= n {
-		return s
+	for i := range s {
+		if n == 0 {
+			return s[:i]
+		}
+		n--
 	}
-	return string(r[:n])
+	return s
 }

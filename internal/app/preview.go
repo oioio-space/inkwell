@@ -369,6 +369,21 @@ type PreviewFailure struct {
 	Packages []string `json:"packages,omitzero"`
 }
 
+// failureKinds maps the errors of a compilation, in order, to their failure kind.
+var failureKinds = []struct {
+	err  error
+	kind string
+}{
+	{typst.ErrMissingPackage, FailPackage},
+	{typst.ErrInvalidMain, FailNoMain},
+	{typst.ErrTimeout, FailTimeout},
+	{typst.ErrMemoryLimit, FailMemory},
+	{typst.ErrOutputTooLarge, FailTooLarge},
+	{typst.ErrUnsafeProject, FailUnsafe},
+	{errUnavailable, FailUnavailable},
+	{typst.ErrIntegrity, FailUnavailable},
+}
+
 // failureOf maps the error of a compilation to what the webview shows.
 func failureOf(err error) *PreviewFailure {
 	if err == nil {
@@ -380,21 +395,10 @@ func failureOf(err error) *PreviewFailure {
 		}
 		return &PreviewFailure{Kind: FailErrors}
 	}
-	switch {
-	case errors.Is(err, typst.ErrMissingPackage):
-		return &PreviewFailure{Kind: FailPackage}
-	case errors.Is(err, typst.ErrInvalidMain):
-		return &PreviewFailure{Kind: FailNoMain}
-	case errors.Is(err, typst.ErrTimeout):
-		return &PreviewFailure{Kind: FailTimeout}
-	case errors.Is(err, typst.ErrMemoryLimit):
-		return &PreviewFailure{Kind: FailMemory}
-	case errors.Is(err, typst.ErrOutputTooLarge):
-		return &PreviewFailure{Kind: FailTooLarge}
-	case errors.Is(err, typst.ErrUnsafeProject):
-		return &PreviewFailure{Kind: FailUnsafe}
-	case errors.Is(err, errUnavailable), errors.Is(err, typst.ErrIntegrity):
-		return &PreviewFailure{Kind: FailUnavailable}
+	for _, f := range failureKinds {
+		if errors.Is(err, f.err) {
+			return &PreviewFailure{Kind: f.kind}
+		}
 	}
 	return &PreviewFailure{Kind: FailInternal}
 }

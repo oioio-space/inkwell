@@ -281,15 +281,12 @@
   "status.page": "Page {page} sur {total}",
   "menu.preview": "Aperçu",
   "menu.export": "Exporter en PDF…",
-  "menu.about": "À propos d'Inkwell",
   "export.done": "PDF enregistré : {path}",
   "export.errors": "Le document contient des erreurs : corrigez-les avant d'exporter.",
   "export.failed": "L'export du PDF a échoué.",
   "export.unavailable": "Le moteur de mise en page n'est pas disponible : l'export est impossible.",
-  "about.title": "À propos d'Inkwell",
   "about.offline": "Mise en page hors ligne",
   "about.network.namespace": "La mise en page tourne dans un espace isolé : elle ne peut joindre aucun réseau, pas même cet ordinateur.",
   "about.network.proxy": "La mise en page n'a aucun accès au réseau : Inkwell lui refuse toute connexion. Ce système n'autorise pas l'isolation renforcée.",
-  "about.network.unknown": "L'état de l'isolation réseau n'est pas disponible.",
-  "about.close": "Fermer"
+  "about.network.unknown": "L'état de l'isolation réseau n'est pas disponible."
 }

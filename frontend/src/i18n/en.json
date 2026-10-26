@@ -281,15 +281,12 @@
   "status.page": "Page {page} of {total}",
   "menu.preview": "Preview",
   "menu.export": "Export as PDF…",
-  "menu.about": "About Inkwell",
   "export.done": "PDF saved: {path}",
   "export.errors": "The document has errors: fix them before exporting.",
   "export.failed": "Exporting the PDF failed.",
   "export.unavailable": "The layout engine is not available: exporting is impossible.",
-  "about.title": "About Inkwell",
   "about.offline": "Offline layout",
   "about.network.namespace": "Layout runs in an isolated space: it cannot reach any network, not even this computer.",
   "about.network.proxy": "Layout has no network access: Inkwell refuses every connection it tries. This system does not allow the stronger isolation.",
-  "about.network.unknown": "The network isolation state is not available.",
-  "about.close": "Close"
+  "about.network.unknown": "The network isolation state is not available."
 }

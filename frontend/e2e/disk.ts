@@ -62,13 +62,17 @@ export async function holds(what: string, condition: () => boolean, ms: number):
   } while (Date.now() < end);
 }
 
-/** Whether the history Inkwell keeps in a project folder (`.inkwell`) already holds `text`. */
-export function historyHolds(projectDir: string, text: string): boolean {
+/**
+ * Whether the history Inkwell keeps in a project folder (`.inkwell`) was written since `since`
+ * (ms since the epoch). The files are compressed once a document is long, so what was typed
+ * cannot be searched for in them.
+ */
+export function historyWrittenSince(projectDir: string, since: number): boolean {
   const walk = (dir: string): boolean =>
     existsSync(dir) &&
     readdirSync(dir, { withFileTypes: true }).some((entry) => {
       const path = join(dir, entry.name);
-      return entry.isDirectory() ? walk(path) : readFileSync(path).includes(text);
+      return entry.isDirectory() ? walk(path) : statSync(path).mtimeMs >= since;
     });
   return walk(join(projectDir, ".inkwell"));
 }
