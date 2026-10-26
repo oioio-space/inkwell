@@ -118,10 +118,14 @@ func (s *Session) Visible() bool { return s.inv != nil && s.inv.currentHost().Vi
 // VisibleUntil returns when the window "visible to join" ends; the zero time
 // when it is closed.
 func (s *Session) VisibleUntil() time.Time {
-	if s.inv == nil || !s.inv.currentHost().Visible() {
+	if s.inv == nil {
 		return time.Time{}
 	}
-	return s.inv.currentHost().VisibleUntil()
+	h := s.inv.currentHost()
+	if !h.Visible() {
+		return time.Time{}
+	}
+	return h.VisibleUntil()
 }
 
 // Nearby returns the visible devices of the local network, which offer a

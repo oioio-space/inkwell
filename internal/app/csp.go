@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"crypto/rand"
 	"encoding/base64"
+	"maps"
 	"net/http"
 	"net/http/httptest"
 	"strconv"
@@ -39,9 +40,7 @@ func CSPNonce() func(http.Handler) http.Handler {
 				body = bytes.ReplaceAll(body, placeholder, nonce)
 				rec.Header().Set("Content-Length", strconv.Itoa(len(body)))
 			}
-			for k, v := range rec.Header() {
-				w.Header()[k] = v
-			}
+			maps.Copy(w.Header(), rec.Header())
 			w.WriteHeader(rec.Code)
 			_, _ = w.Write(body)
 		})
