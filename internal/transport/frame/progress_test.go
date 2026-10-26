@@ -38,7 +38,7 @@ func TestWriteProgressSlowLinkSucceeds(t *testing.T) {
 		go func() { defer close(done); drainSlowly(c2, 32<<10, time.Second, &got) }()
 
 		payload := bytes.Repeat([]byte("x"), 1<<20) // about 32 s at 32 KiB/s; idle is 5 s
-		if err := frame.WriteProgress(t.Context(), c1, 5*time.Second, payload); err != nil {
+		if err := frame.WriteProgress(t.Context(), c1, 5*time.Second, frame.MinRate, payload); err != nil {
 			t.Fatalf("WriteProgress(slow link) = %v, want nil", err)
 		}
 		_ = c1.Close()
@@ -56,7 +56,7 @@ func TestWriteProgressStall(t *testing.T) {
 		c1, c2 := net.Pipe()
 		defer func() { _ = c2.Close() }()
 		start := time.Now()
-		err := frame.WriteProgress(t.Context(), c1, 5*time.Second, make([]byte, 1<<20))
+		err := frame.WriteProgress(t.Context(), c1, 5*time.Second, frame.MinRate, make([]byte, 1<<20))
 		if !errors.Is(err, os.ErrDeadlineExceeded) {
 			t.Fatalf("WriteProgress(stalled) = %v, want a deadline error", err)
 		}
@@ -76,7 +76,7 @@ func TestWriteProgressCancel(t *testing.T) {
 		ctx, cancel := context.WithTimeout(t.Context(), time.Second)
 		defer cancel()
 		start := time.Now()
-		err := frame.WriteProgress(ctx, c1, time.Minute, make([]byte, 1<<20))
+		err := frame.WriteProgress(ctx, c1, time.Minute, frame.MinRate, make([]byte, 1<<20))
 		if err == nil {
 			t.Fatal("WriteProgress(canceled) = nil, want an error")
 		}
@@ -94,7 +94,7 @@ func (*deadlineBuffer) SetWriteDeadline(time.Time) error { return nil }
 
 func TestWriteProgressSmall(t *testing.T) {
 	var b deadlineBuffer
-	if err := frame.WriteProgress(t.Context(), &b, time.Second, []byte("hi")); err != nil {
+	if err := frame.WriteProgress(t.Context(), &b, time.Second, frame.MinRate, []byte("hi")); err != nil {
 		t.Fatal(err)
 	}
 	if want := []byte{0, 0, 0, 2, 'h', 'i'}; !bytes.Equal(b.Bytes(), want) {

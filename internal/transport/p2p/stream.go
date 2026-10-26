@@ -338,7 +338,7 @@ func (n *Node) Send(ctx context.Context, to transport.PeerID, payload []byte) er
 		return err
 	}
 
-	err = frame.WriteProgress(ctx, s, writeTimeout, payload)
+	err = frame.WriteProgress(ctx, s, writeTimeout, frame.MinRate, payload)
 	if err != nil {
 		return n.sendFailed(ctx, ps, s, to, err)
 	}

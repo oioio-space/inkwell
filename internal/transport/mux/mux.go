@@ -26,14 +26,21 @@
 // are served first but leave the fragments a quarter of the turns, so a large
 // message always finishes. A peer sends one large message at a time, in order.
 // Consequently a small message may overtake a large one sent earlier to the
-// same peer; the order of the small messages, and of the large ones, is kept.
+// same peer, but only one sent while the large one was being sent: a message
+// sent after the large Send returned never does. The order of the small
+// messages, and of the large ones, is kept.
 // Send returns when the last fragment is sent, so a deadline on the
 // underlying Send that counts progress, not size, is what lets a large
 // message cross a slow link.
 //
 // What a hostile peer sends costs memory only in proportion to the bytes it
-// really sent: at most one partial message per peer, 128 MiB in all; a
-// fragment that does not continue the message in progress ends it.
+// really sent: one partial message per peer, charged by capacity to the
+// budget of the transport (see [Reserver]) or else 128 MiB in all. A partial
+// message that makes no progress for 30 s is dropped; when the budget is
+// short, the one that progressed least recently is dropped, never the one
+// being received. A fragment that does not continue the message in progress
+// ends it. A send has a deadline for the whole message, in addition to the
+// one the transport applies to each fragment.
 package mux
 
 import (
@@ -72,7 +79,8 @@ type muxer struct {
 	partials map[transport.PeerID]*partial // reader goroutine only
 	order    []*sub                        // subs in the order they were asked for
 	bufs     sync.Pool                     // *[]byte send buffers, for frames of at most maxPooled bytes
-	held     int                           // bytes in partials; reader goroutine only
+	res      Reserver                      // t, if it has a budget
+	held     int                           // capacity of partials; reader goroutine only
 	msgID    atomic.Uint32
 	ngates   atomic.Int32 // len(gates), readable without gmu
 	gmu      sync.RWMutex // guards gates
@@ -108,6 +116,7 @@ func Split(t transport.Transport, channels ...byte) map[byte]transport.Transport
 		m.order = append(m.order, s)
 		out[c] = s
 	}
+	m.res, _ = t.(Reserver)
 	go m.run()
 	return out
 }
@@ -131,12 +140,17 @@ func (m *muxer) notify() { signal(m.wake) }
 func (m *muxer) run() {
 	defer close(m.done)
 	defer func() {
+		for peer := range m.partials {
+			m.drop(peer)
+		}
+	}()
+	defer func() {
 		for _, s := range m.order {
 			s.q.close()
 		}
 	}()
 	for {
-		ev, err := m.t.Recv(m.ctx)
+		ev, err := m.recv()
 		if err != nil {
 			return
 		}

@@ -15,6 +15,15 @@ import (
 // the deadline: the granularity at which progress is noticed.
 const progressChunk = 32 << 10
 
+const (
+	// WriteIdle is how long a write may go without progress.
+	WriteIdle = 20 * time.Second
+	// MinRate is the slowest sustained rate, in bytes per second, at which a
+	// write is still worth waiting for: about 128 kbit/s. A whole frame gets
+	// WriteIdle plus its length at this rate, however steadily it progresses.
+	MinRate = 16 << 10
+)
+
 // DeadlineWriter is a stream with write deadlines, such as a libp2p stream or
 // a [net.Conn].
 type DeadlineWriter interface {
@@ -25,15 +34,18 @@ type DeadlineWriter interface {
 // WriteProgress writes payload to w as one frame, like [Write], but bounds the
 // write by progress rather than by size: it fails only if no chunk was
 // written for idle, so a large frame on a slow link still completes as long
-// as bytes keep flowing. Canceling ctx interrupts a write in progress. It
+// as bytes keep flowing. A receiver that drips just inside idle is still cut
+// off: the whole frame gets idle plus len(payload)/minRate (bytes per second,
+// see [MinRate]). Canceling ctx interrupts a write in progress. It
 // returns [transport.ErrFrameTooLarge] if payload exceeds [transport.MaxFrame].
 // Like [Write], it must not run concurrently on the same w.
-func WriteProgress(ctx context.Context, w DeadlineWriter, idle time.Duration, payload []byte) error {
+func WriteProgress(ctx context.Context, w DeadlineWriter, idle time.Duration, minRate int, payload []byte) error {
 	if len(payload) > transport.MaxFrame {
 		return transport.ErrFrameTooLarge
 	}
 	// canceled and the deadline are updated under mu, so that re-arming the
 	// deadline can never undo the interruption a cancellation asked for.
+	last := time.Now().Add(idle + time.Duration(len(payload))*time.Second/time.Duration(max(minRate, 1)))
 	var (
 		mu       sync.Mutex
 		canceled bool
@@ -44,15 +56,21 @@ func WriteProgress(ctx context.Context, w DeadlineWriter, idle time.Duration, pa
 		if canceled {
 			return ctx.Err()
 		}
-		return w.SetWriteDeadline(time.Now().Add(idle))
+		return w.SetWriteDeadline(minTime(time.Now().Add(idle), last))
 	}
+	fin := make(chan struct{})
 	stop := context.AfterFunc(ctx, func() {
+		defer close(fin)
 		mu.Lock()
 		defer mu.Unlock()
 		canceled = true
 		_ = w.SetWriteDeadline(time.Now())
 	})
-	defer stop()
+	defer func() {
+		if !stop() { // the callback started: let it finish, it must not outlive us
+			<-fin
+		}
+	}()
 
 	if err := arm(); err != nil {
 		return fmt.Errorf("frame: arm write deadline: %w", err)
@@ -76,4 +94,11 @@ func WriteProgress(ctx context.Context, w DeadlineWriter, idle time.Duration, pa
 		rest = rest[n:]
 	}
 	return nil
+}
+
+func minTime(a, b time.Time) time.Time {
+	if b.Before(a) {
+		return b
+	}
+	return a
 }

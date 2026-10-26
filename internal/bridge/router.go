@@ -143,6 +143,14 @@ func (r *Router) Serve(c Conn) {
 		}
 	}
 	s.mu.Unlock()
+
+	// One sender per peer, so that a slow link delays only its own peer, and
+	// FIFO per peer: the mux serves small frames ahead of the fragments of a
+	// large one only if the router hands them over while it is being sent.
+	ctx, cancel := context.WithCancel(c.Context())
+	var wg sync.WaitGroup
+	defer func() { cancel(); wg.Wait() }()
+	outbox := make(map[transport.PeerID]chan []byte)
 	for {
 		b, err := c.Receive()
 		if err != nil {
@@ -158,13 +166,39 @@ func (r *Router) Serve(c Conn) {
 		}
 		switch e.Kind {
 		case Message:
-			if err := r.t.Send(c.Context(), e.Peer, e.Payload); err != nil {
-				r.warn("bridge: send to peer", "peer", e.Peer, "err", err)
+			q := outbox[e.Peer]
+			if q == nil {
+				q = make(chan []byte, outboxDepth)
+				outbox[e.Peer] = q
+				wg.Go(func() { r.sendTo(ctx, e.Peer, q) })
+			}
+			select {
+			case q <- e.Payload:
+			case <-ctx.Done():
+				return
 			}
 		case Attest:
 			r.attest(c.Context(), e.Payload)
 		default:
 			r.warn("bridge: dropped frame from webview", "kind", e.Kind)
+		}
+	}
+}
+
+// outboxDepth is how many messages wait for a peer before the router stops
+// reading the webview, which then waits in turn.
+const outboxDepth = 64
+
+// sendTo sends the payloads of q to peer, in order, until ctx is done.
+func (r *Router) sendTo(ctx context.Context, peer transport.PeerID, q <-chan []byte) {
+	for {
+		select {
+		case p := <-q:
+			if err := r.t.Send(ctx, peer, p); err != nil {
+				r.warn("bridge: send to peer", "peer", peer, "err", err)
+			}
+		case <-ctx.Done():
+			return
 		}
 	}
 }

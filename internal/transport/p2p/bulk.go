@@ -217,7 +217,7 @@ func (b *Bulk) Send(ctx context.Context, to transport.PeerID, payload []byte) er
 	if err != nil {
 		return err
 	}
-	err = frame.WriteProgress(ctx, s, writeTimeout, payload)
+	err = frame.WriteProgress(ctx, s, writeTimeout, frame.MinRate, payload)
 	if err != nil {
 		n.mu.Lock()
 		if ps.bulkOut == s {

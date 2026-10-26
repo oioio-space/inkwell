@@ -98,7 +98,7 @@ const (
 	// writeTimeout is how long a write may go without progress before it
 	// fails; it is re-armed each time a chunk of the frame is written, so the
 	// time a frame takes is not bounded, only its stalls are.
-	writeTimeout = 20 * time.Second
+	writeTimeout = frame.WriteIdle
 	// openTimeout bounds opening the outbound stream.
 	openTimeout = 15 * time.Second
 	// upTimeout bounds how long an inbound stream waits for its peer to be
@@ -643,6 +643,16 @@ func (n *Node) Peers() []transport.PeerID {
 	slices.Sort(peers)
 	return peers
 }
+
+// Reserve takes size bytes of the node's receive budget, the one that bounds
+// the events waiting for Recv, and reports whether they were free. The mux
+// that reassembles fragments above the node charges its partial messages
+// here, so that all memory held for incoming data counts against one budget.
+// Give them back with [Node.Unreserve].
+func (n *Node) Reserve(size int) bool { return n.budget.TryAcquire(size) }
+
+// Unreserve gives back bytes taken with [Node.Reserve].
+func (n *Node) Unreserve(size int) { n.budget.Release(size) }
 
 // Close disconnects every peer, stops the node and waits for its goroutines.
 // It is idempotent. Connected peers observe a PeerDown; this node's pending
