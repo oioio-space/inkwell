@@ -1,10 +1,13 @@
 package app
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/oioio-space/inkwell/internal/typst"
 )
@@ -117,5 +120,36 @@ func TestExportName(t *testing.T) {
 			t.Errorf("exportName(%q) = %q, want %q", in, got, want)
 		}
 		p.Close()
+	}
+}
+
+type countingCompiler struct {
+	Compiler
+	calls atomic.Int32
+}
+
+func (c *countingCompiler) Compile(context.Context, typst.Project, string, ...typst.Option) (*typst.Result, error) {
+	c.calls.Add(1)
+	return &typst.Result{}, nil
+}
+
+func (*countingCompiler) NetworkMode() string { return "fake" }
+
+// A timer re-armed while its previous firing waits for the lock fires twice for one seq (Serve
+// arms, a "view" request re-arms before the first firing runs). That must be one compilation: two
+// would deliver the same seq twice.
+func TestPRV32TwiceFiredTimerIsOneCompilation(t *testing.T) {
+	cc := &countingCompiler{}
+	p := NewPreview(PreviewOptions{Engine: cc, Root: t.TempDir(), Debounce: time.Hour})
+	p.mu.Lock()
+	p.armLocked(time.Hour)
+	p.armLocked(time.Hour) // the re-arm: one seq, two firings
+	p.mu.Unlock()
+	p.fire()
+	p.fire()
+	p.wg.Wait()
+	p.Close()
+	if got := cc.calls.Load(); got != 1 {
+		t.Errorf("%d compilations for one seq, want 1", got)
 	}
 }

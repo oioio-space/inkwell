@@ -345,8 +345,12 @@ func TestNotVisibleIsInvisible(t *testing.T) {
 	}
 	// Whatever mDNS shows, a host that is not visible answers no greeting.
 	time.Sleep(2 * time.Second)
-	if near := b.Session.Nearby(t.Context()); len(near) != 0 {
-		t.Errorf("Nearby() = %+v for a host that is not visible, want none", near)
+	// Other inkwell instances of the machine (a parallel test run, a running app) are on the same
+	// mDNS segment and may answer: only this host must be missing.
+	for _, n := range b.Session.Nearby(t.Context()) {
+		if n.Peer == a.Session.LocalPeer() {
+			t.Errorf("Nearby() = %+v lists a host that is not visible", n)
+		}
 	}
 	if _, err := b.Session.Ask(t.Context(), a.Session.LocalPeer(), "Bob"); err == nil {
 		t.Error("Ask() to a host that is not visible = nil")
