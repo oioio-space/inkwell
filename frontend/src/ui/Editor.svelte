@@ -6,8 +6,18 @@ import { createEditor } from "../editor/setup";
 import { type Doc, workspace } from "../workspace/workspace.svelte";
 import { session } from "./editorSession.svelte";
 
-let { handle, me, lang }: { handle: DocHandle<Doc>; me: { id: string; name: string }; lang: Lang } =
-  $props();
+let {
+  handle,
+  me,
+  lang,
+  at,
+}: {
+  handle: DocHandle<Doc>;
+  me: { id: string; name: string };
+  lang: Lang;
+  /** Where to put the caret when it opens (switching from a table's grid to its text). */
+  at?: number | undefined;
+} = $props();
 let host: HTMLDivElement;
 let editor: ReturnType<typeof createEditor> | undefined;
 
@@ -26,6 +36,7 @@ $effect(() => {
       },
       {
         lang: l,
+        ...(at !== undefined ? { at } : {}),
         onView: (view) => (session.view = view),
         onState: (state) => (session.state = state),
       },

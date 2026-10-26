@@ -9,6 +9,8 @@ import { session } from "./ui/editorSession.svelte";
 import Preferences from "./ui/prefs/Preferences.svelte";
 import SealedBanner from "./ui/SealedBanner.svelte";
 import ShareDialog from "./ui/ShareDialog.svelte";
+import Sheet from "./ui/sheet/Sheet.svelte";
+import { isTabular, sheetView } from "./ui/sheet/viewMode.svelte";
 import HeaderBar from "./ui/shell/HeaderBar.svelte";
 import Sidebar from "./ui/shell/Sidebar.svelte";
 import StatusBar from "./ui/shell/StatusBar.svelte";
@@ -21,6 +23,14 @@ let preferences = $state(false);
 const me = $derived({ id: workspace.myId, name: workspace.myName });
 
 const lang = $derived(langOf(workspace.current));
+/** A table file shows as a spreadsheet, unless the person asked for its text. */
+const tabular = $derived(isTabular(workspace.current));
+const showSheet = $derived(tabular && !sheetView.text);
+
+/** Back to the grid from the text view, on the cell under the caret. */
+function showTable() {
+  sheetView.toGrid(session.state?.selection.main.head);
+}
 /** Only Typst and Markdown have a formatting bar; csv, bib and txt are just the editor. */
 const barLanguage = $derived(barLang(workspace.current));
 const hasBar = $derived(barLanguage !== undefined);
@@ -94,20 +104,39 @@ onMount(() => {
       />
     {/if}
     <SealedBanner />
+    {#if tabular && sheetView.text}
+      <div class="viewbar">
+        <button type="button" class="fb lbl" data-sheet="table" onclick={showTable}>
+          {t("sheet.showTable")}
+        </button>
+      </div>
+    {/if}
     <main>
       {#if workspace.handle}
         {#key workspace.handle.url}
-          <Editor handle={workspace.handle} {me} {lang} />
+          {#if showSheet}
+            <Sheet
+              handle={workspace.handle}
+              {me}
+              path={workspace.current}
+              startOffset={sheetView.offset}
+              onshowtext={(offset) => sheetView.toText(offset)}
+            />
+          {:else}
+            <Editor handle={workspace.handle} {me} {lang} at={tabular ? sheetView.offset : undefined} />
+          {/if}
         {/key}
       {/if}
     </main>
-    <StatusBar
-      {lang}
-      status={workspace.status}
-      peerCount={workspace.peers.length}
-      editorState={session.state}
-      info={workspace.fileInfo}
-    />
+    {#if !showSheet}
+      <StatusBar
+        {lang}
+        status={workspace.status}
+        peerCount={workspace.peers.length}
+        editorState={session.state}
+        info={workspace.fileInfo}
+      />
+    {/if}
   </div>
 </div>
 <ShareDialog bind:open={sharing} />
@@ -129,5 +158,13 @@ onMount(() => {
   main {
     flex: 1;
     min-height: 0;
+  }
+  .viewbar {
+    display: flex;
+    align-items: center;
+    min-height: 40px;
+    padding: 3px 6px;
+    background: var(--headerbar-bg);
+    box-shadow: 0 1px var(--shade);
   }
 </style>
