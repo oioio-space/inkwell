@@ -26,9 +26,33 @@ fichiers restent dans l'artefact `release-assets`.
 
 | Réglage | Rôle | Si absent |
 |---|---|---|
-| variable `ARM64_RUNNER` | label d'un runner arm64 (dépôt **privé** : « larger runner » payant) | `ubuntu-24.04-arm`, gratuit seulement si le dépôt est public |
-| secret `GPG_PRIVATE_KEY` (armée) et `GPG_PASSPHRASE` | signature OpenPGP des `.deb` et `.rpm` ; la clé publique part avec la version | paquets non signés, avertissement dans le journal |
+| variable `ARM64_RUNNER` | label d'un runner arm64 de remplacement (utile tant que le dépôt est privé : « larger runner » payant) | `ubuntu-24.04-arm` (gratuit pour un dépôt public) |
+| secrets `GPG_PRIVATE_KEY` (armée) et `GPG_PASSPHRASE`, **de l'environnement `release`** | signature OpenPGP des `.deb` et `.rpm` ; la clé publique part avec la version | paquets non signés, avertissement dans le journal |
 | permissions Actions : lecture/écriture | `gh release create` | la publication échoue |
+
+### Environnement `release` et protection des tags (à créer avant la première version)
+
+La clé de signature ne doit être lisible que par un build de tag, relu par une personne.
+
+1. *Settings → Environments → New environment* : `release`.
+   - *Deployment branches and tags* : **Selected branches and tags** → ajouter la règle de tag `v*`.
+   - *Required reviewers* : le mainteneur (au moins une personne). Chaque job de build de `release.yml`
+     attend son approbation ; un essai à blanc (`workflow_dispatch`) n'utilise pas l'environnement.
+   - *Environment secrets* : `GPG_PRIVATE_KEY` et `GPG_PASSPHRASE`. **Pas** de secret de dépôt du même nom.
+2. *Settings → Rules → Rulesets → New tag ruleset* sur `v*` : *Restrict creations* (seuls les
+   mainteneurs), *Restrict updates* et *Restrict deletions* (un tag ne bouge ni ne disparaît),
+   *Require signed commits* si souhaité. Le workflow vérifie en plus (`scripts/pkg/on-main.sh`)
+   que le commit tagué est dans l'historique de `main`.
+3. *Settings → General → Releases* : activer **Immutable releases**. Une version publiée ne change
+   plus (ni fichiers, ni tag) ; le workflow refuse d'ailleurs d'écrire dans une version publiée
+   (`scripts/pkg/release-guard.sh`) : seul un brouillon (préversion `-rc.N`) reçoit des fichiers,
+   et une erreur de version se corrige en coupant la suivante.
+
+Dans le workflow, les secrets ne vont qu'à l'étape d'empaquetage (variables du pas, jamais
+`$GITHUB_ENV`) ; le fichier de clé est supprimé à la fin du pas. Aucun cache n'est restauré.
+Les actions sont épinglées sur un SHA de commit (commentaire de version) ; les outils de
+`mise.toml` sont versionnés et `mise.lock` en porte les sommes de contrôle (`mise lock`). `zizmor`
+(dans `mise run lint:actions`) vérifie ces règles.
 
 Créer la clé : `gpg --quick-generate-key "Inkwell releases <adresse>" rsa4096 sign 2y`, puis
 `gpg --armor --export-secret-keys <id>` dans le secret.
@@ -36,7 +60,7 @@ Créer la clé : `gpg --quick-generate-key "Inkwell releases <adresse>" rsa4096 
 ## Vérifier ce qu'on a téléchargé
 
 ```bash
-mise run pkg:verify ./dossier v0.1.0-rc.1     # sommes de contrôle, signature cosign (identité = ce dépôt), SBOM
+mise run pkg:verify ./dossier v0.1.0-rc.1     # sommes de contrôle, signature cosign (identité = ce dépôt, ce tag, un push), SBOM ; le tag est obligatoire
 sudo apt install ./inkwell_0.1.0-rc.1_amd64.deb   # ou : sudo dnf install ./inkwell-0.1.0-rc.1.x86_64.rpm
 inkwell --version
 ```

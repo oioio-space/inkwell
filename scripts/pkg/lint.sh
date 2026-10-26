@@ -49,6 +49,7 @@ EOF
 CHANGELOG="$work/CHANGELOG.md" scripts/pkg/stage.sh 0.2.0 2026-11-02 "$work/stable" >/dev/null
 CHANGELOG="$work/CHANGELOG.md" scripts/pkg/stage.sh 0.3.0-rc.1 2026-11-09 "$work/rc" >/dev/null
 CHANGELOG=/nonexistent scripts/pkg/stage.sh 0.1.0-rc.1 2026-10-26 "$work/empty" >/dev/null
+CHANGELOG="$work/CHANGELOG.md" scripts/pkg/stage.sh '0.4.0-rc.1"&<x' 2026-11-09 "$work/attr" >/dev/null
 for dir in stable rc empty; do
   appstreamcli validate --no-net --pedantic "$work/$dir/$app_id.metainfo.xml" >"$work/appstream.log" 2>&1 ||
     { cat "$work/appstream.log" >&2; bad "AppStream metadata ($dir) does not validate"; }
@@ -60,6 +61,8 @@ grep -q 'release version="0.3.0-rc.1" date="2026-11-09" type="development"' "$wo
   bad "stage.sh must add the pre-release on top, as a development release"
 # The pre-release comes first.
 [[ "$(grep -m1 '<release ' "$work/rc/$app_id.metainfo.xml")" == *'0.3.0-rc.1'* ]] || bad "the newest release must come first"
+xmllint --noout "$work/attr/$app_id.metainfo.xml" || bad "stage.sh does not escape the attributes (version) of the AppStream file"
+grep -q 'version="0.4.0-rc.1&quot;&amp;&lt;x"' "$work/attr/$app_id.metainfo.xml" || bad "stage.sh must escape quotes, & and < in attributes"
 zcat "$work/stable/inkwell.1.gz" >/dev/null || bad "the manual page is not valid gzip"
 
 # --- MIME definition: shared-mime-info itself must accept it -------------------------------------

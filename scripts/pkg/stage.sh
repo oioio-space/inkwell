@@ -30,10 +30,10 @@ if grep -qF "## [$version]" "$changelog"; then listed=1; fi
 releases="$(mktemp)"
 trap 'rm -f "$releases"' EXIT
 awk -v keep="$keep" -v cur="$version" -v curdate="$date" -v listed="$listed" '
-  function esc(s) { gsub(/&/, "\\&amp;", s); gsub(/</, "\\&lt;", s); gsub(/>/, "\\&gt;", s); return s }
+  function esc(s) { gsub(/&/, "\\&amp;", s); gsub(/</, "\\&lt;", s); gsub(/>/, "\\&gt;", s); gsub(/"/, "\\&quot;", s); return s }
   function kind(v) { return v ~ /-/ ? "development" : "stable" }
   function open(v, d) {
-    printf "    <release version=\"%s\" date=\"%s\" type=\"%s\">\n      <description>\n", v, d, kind(v)
+    printf "    <release version=\"%s\" date=\"%s\" type=\"%s\">\n      <description>\n", esc(v), esc(d), kind(v)
   }
   function shut() {
     if (!inrel) return

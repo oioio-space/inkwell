@@ -62,8 +62,8 @@ nfpms:
     formats: [deb, rpm]
     vendor: oioio-space
     homepage: https://github.com/oioio-space/inkwell
-    # No personal address: the GitHub noreply form of the organisation (ADR 0025).
-    maintainer: oioio-space <oioio-space@users.noreply.github.com>
+    # No personal address: the GitHub noreply address of the maintainer (ADR 0025).
+    maintainer: oioio-space <64966845+oioio-space@users.noreply.github.com>
     description: |-
       Collaborative Typst and Markdown editor, without a server.
        Inkwell lets several people write the same documents at the same time. They are

@@ -24,20 +24,19 @@ dist="${PKG_DIST:-dist}"
 work="$root/.task/pkgtest"
 mkdir -p "$work"
 
-native="$(uname -m)"
+[[ "$(uname -m)" == x86_64 ]] && native_arch=amd64 || native_arch=arm64
 case "${PKG_ARCH:-native}" in
-native) [[ $native == x86_64 ]] && want=amd64 || want=arm64 ;;
+native) want=$native_arch ;;
 amd64 | x86_64) want=amd64 ;;
 arm64 | aarch64) want=arm64 ;;
 *) echo "pkg:test: unknown PKG_ARCH=$PKG_ARCH" >&2; exit 64 ;;
 esac
 [[ $want == amd64 ]] && rpm_arch=x86_64 || rpm_arch=aarch64
-[[ $native == x86_64 ]] && native_arch=amd64 || native_arch=arm64
 
 command -v podman >/dev/null 2>&1 || { echo "pkg:test: podman is required" >&2; exit 2; }
 
 if [[ $want != "$native_arch" ]]; then
-  if [[ ! -e /proc/sys/fs/binfmt_misc/qemu-$([[ $want == arm64 ]] && echo aarch64 || echo x86_64) ]]; then
+  if [[ ! -e /proc/sys/fs/binfmt_misc/qemu-$rpm_arch ]]; then
     echo "skip: PKG_ARCH=$want on a $native_arch machine needs qemu-user-static (binfmt) and none is registered"
     echo "      (install qemu-user-static; the packages themselves must be built on a $want machine: cgo)"
     exit 0
@@ -45,8 +44,10 @@ if [[ $want != "$native_arch" ]]; then
 fi
 
 # --- the packages -----------------------------------------------------------------------------
-deb="$(find "$dist" -maxdepth 1 -name "inkwell_*_${want}.deb" | head -1)"
-rpm="$(find "$dist" -maxdepth 1 -name "inkwell-*.${rpm_arch}.rpm" | head -1)"
+find_deb() { find "$1" -maxdepth 1 -name "inkwell_*_${want}.deb" | head -1; }
+find_rpm() { find "$1" -maxdepth 1 -name "inkwell-*.${rpm_arch}.rpm" | head -1; }
+deb="$(find_deb "$dist")"
+rpm="$(find_rpm "$dist")"
 if [[ -z $deb || -z $rpm ]]; then
   echo "pkg:test: no $want .deb/.rpm in $dist/ — run \`mise run pkg:build\` on a $want machine first" >&2
   exit 2
@@ -99,8 +100,7 @@ if [[ -z ${PKG_PREV_DIST:-} ]]; then
   fi
   PKG_PREV_DIST="$raw"
 fi
-stage "$prev" "$(find "$PKG_PREV_DIST" -maxdepth 1 -name "inkwell_*_${want}.deb" | head -1)" \
-  "$(find "$PKG_PREV_DIST" -maxdepth 1 -name "inkwell-*.${rpm_arch}.rpm" | head -1)" "$pubkey"
+stage "$prev" "$(find_deb "$PKG_PREV_DIST")" "$(find_rpm "$PKG_PREV_DIST")" "$pubkey"
 prev_deb="$(basename "$(find "$prev" -maxdepth 1 -name '*.deb' | head -1)")"
 prev_rpm="$(basename "$(find "$prev" -maxdepth 1 -name '*.rpm' | head -1)")"
 

@@ -18,7 +18,7 @@ experimental = true
 # ── Tools ─────────────────────────────────────────────────────────────────────
 [tools]
 go            = "1.27.3"
-gh            = "latest"
+gh            = "2.95.0" # pinned: used by the release workflow (supply chain)
 golangci-lint = "2.15.0"
 gofumpt       = "latest"
 shellcheck    = "latest"
@@ -32,10 +32,11 @@ gitleaks      = "latest"
 # x/perf has no tagged releases — "latest" breaks mise's go-backend resolution; pin the pseudo-version.
 "go:golang.org/x/perf/cmd/benchstat"        = "v0.0.0-20260709024250-82a0b07e230d"
 "go:github.com/dkorunic/betteralign/cmd/betteralign" = "latest"
-syft          = "latest"
-grype         = "latest"
+syft          = "1.45.1" # pinned: the SBOM generator of the release
+grype         = "0.114.0"
 gotestsum     = "latest"
-actionlint    = "latest"
+actionlint    = "1.7.12"
+zizmor       = "1.31.1" # static analysis of the workflows (lint:actions)
 yamlfmt       = "latest"
 watchexec     = "latest"
 goreleaser    = "2.18.0" # pinned: the release is reproducible (ADR 0025); nfpm is built in
@@ -141,8 +142,8 @@ description = "Lint YAML config formatting with yamlfmt"
 run = "yamlfmt -lint .golangci.yml .github/workflows"
 
 [tasks."lint:actions"]
-description = "Lint GitHub Actions workflows with actionlint"
-run = "actionlint"
+description = "Lint GitHub Actions workflows with actionlint and zizmor (security: pinned actions, injection, secrets)"
+run = ["actionlint", "zizmor --offline --min-severity low .github/workflows"]
 
 [tasks."scan:secrets"]
 description = "Scan full git history for leaked secrets (gitleaks)"
@@ -208,7 +209,7 @@ description = "Install the packages of dist/ on fresh Debian, Ubuntu and Fedora 
 run = "./scripts/pkgtest/run.sh"
 
 [tasks."pkg:verify"]
-description = "Verify the checksums, the cosign bundle and the SBOMs of a downloaded release (dir = first argument)"
+description = "Verify the checksums, the cosign bundle and the SBOMs of a downloaded release (first argument: dir; second: its tag, required for a signed release)"
 run = "./scripts/pkg/verify.sh"
 
 [tasks.release]

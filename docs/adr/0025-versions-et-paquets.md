@@ -75,8 +75,8 @@ désinstallent proprement.
   et publie : goreleaser n'est pas utilisé pour publier (`release.disable: true`).
 - Les runners arm64 hébergés par GitHub sont **gratuits uniquement pour les dépôts publics**
   ([annonce du 7 août 2025](https://github.blog/changelog/2025-08-07-arm64-hosted-runners-for-public-repositories-are-now-generally-available/)).
-  **Le dépôt est privé aujourd'hui** : tant qu'il l'est, la variable de dépôt `ARM64_RUNNER`
-  doit désigner un runner arm64 payant (« larger runner »), sinon le job arm64 reste en attente.
+  Le dépôt va devenir public : `ubuntu-24.04-arm` est le défaut ; tant qu'il est privé, la
+  variable de dépôt `ARM64_RUNNER` doit désigner un runner arm64 payant (« larger runner »).
 - Les paquets sont décrits à un seul endroit, `.goreleaser.yaml` (nFPM intégré), avec leurs
   fichiers sources dans `build/linux/` : entrée de bureau
   `io.github.oioio_space.Inkwell.desktop`, AppStream (notes de version tirées du CHANGELOG par
@@ -85,8 +85,8 @@ désinstallent proprement.
   AppImage, Docker) sont supprimées : une seule source.
 - Installés dans `/usr/bin/inkwell` ; dépendances `libgtk-4-1`, `libwebkitgtk-6.0-4` (deb) et
   `gtk4`, `webkitgtk6.0` (rpm) ; licence MPL-2.0 ; mainteneur
-  `oioio-space <oioio-space@users.noreply.github.com>` (aucune adresse personnelle n'existe dans
-  le dépôt : à remplacer par une adresse de contact du projet).
+  `oioio-space <64966845+oioio-space@users.noreply.github.com>` (adresse noreply GitHub du
+  mainteneur : aucune adresse personnelle dans le dépôt).
 - Hook sidecars : `scripts/pkg/prebuild.sh` lance `mise run sidecar:fetch` s'il existe. La tâche
   doit récupérer les binaires de l'architecture de la machine, vérifier leur SHA-256 (ADR 0008)
   et les poser où `go:embed` les prend.

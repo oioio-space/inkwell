@@ -6,9 +6,12 @@
 #   manual run (workflow_dispatch) -> the same, as a DRY RUN: nothing is published or signed
 #                                 with cosign; the assets are kept as the "release-assets" artifact
 #
+# Signing: the OpenPGP key of the .deb and .rpm is a secret of the "release" environment, read by one
+# step of a published build only (see docs/releasing.md); cosign is keyless (the workflow's identity).
+#
 # cgo (GTK4 + WebKitGTK 6.0) means no cross-compilation: amd64 builds on ubuntu-24.04, arm64 on the
-# native ubuntu-24.04-arm runner (free for PUBLIC repositories only: for a private one, point the
-# repository variable ARM64_RUNNER at a larger arm64 runner label).
+# native ubuntu-24.04-arm runner (free for public repositories; the repository variable
+# ARM64_RUNNER overrides the label, e.g. a larger runner while the repository is private).
 name: release
 on:
   push:
@@ -33,7 +36,13 @@ jobs:
       publish: ${{ steps.v.outputs.publish }}
       prerelease: ${{ steps.v.outputs.prerelease }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+          fetch-depth: 0 # the tagged commit must be found in the history of main
+      - name: The tagged commit is on main
+        if: github.ref_type == 'tag'
+        run: scripts/pkg/on-main.sh "$GITHUB_SHA"
       - name: Version from the tag (SemVer), changelog section present
         id: v
         run: |
@@ -90,84 +99,77 @@ jobs:
             runner: ${{ vars.ARM64_RUNNER || 'ubuntu-24.04-arm' }}
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 60
+    # The signing secrets live in the "release" environment (tags v* only, a required reviewer:
+    # docs/releasing.md). A dry run is outside of it and cannot read them.
+    environment: ${{ needs.version.outputs.publish == 'true' && 'release' || '' }}
     env:
-      GPG_PRIVATE_KEY: ${{ secrets.GPG_PRIVATE_KEY }}
-      GPG_PASSPHRASE: ${{ secrets.GPG_PASSPHRASE }}
+      GORELEASER_CURRENT_TAG: ${{ needs.version.outputs.publish == 'true' && github.ref_name || '' }}
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
+          persist-credentials: false
           fetch-depth: 0 # goreleaser reads the tags and the commit date
-      # Restored BEFORE mise-action (see ci.yml).
-      - name: Cache Go & tool caches
-        uses: actions/cache@v4
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: release-${{ runner.os }}-${{ runner.arch }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            release-${{ runner.os }}-${{ runner.arch }}-go-
       - name: Install GTK4 / WebKitGTK 6.0 (build) and the desktop validators
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq libgtk-4-dev libwebkitgtk-6.0-dev \
             desktop-file-utils appstream libxml2-utils shared-mime-info groff
-      - uses: jdx/mise-action@v3
-      - name: Cache pnpm store
-        uses: actions/cache@v4
+      # No cache is restored in this workflow: what it builds is published, and a poisoned cache
+      # would end up in the packages.
+      - uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3.6.3
         with:
-          path: ~/.local/share/pnpm/store
-          key: ${{ runner.os }}-${{ runner.arch }}-pnpm-${{ hashFiles('frontend/pnpm-lock.yaml') }}
-          restore-keys: ${{ runner.os }}-${{ runner.arch }}-pnpm-
-      # Optional: without the secret the .deb and .rpm are simply not signed (docs/releasing.md).
-      - name: OpenPGP signing key for the .deb and .rpm
-        if: env.GPG_PRIVATE_KEY != ''
-        run: |
-          umask 077
-          printf '%s\n' "$GPG_PRIVATE_KEY" >"$RUNNER_TEMP/signing-key.asc"
-          {
-            echo "NFPM_KEY_FILE=$RUNNER_TEMP/signing-key.asc"
-            echo "NFPM_PASSPHRASE=$GPG_PASSPHRASE"
-          } >>"$GITHUB_ENV"
-          # The matching public key is published next to the packages.
-          export GNUPGHOME="$RUNNER_TEMP/gnupg"
-          mkdir -p "$GNUPGHOME"
-          gpg --batch --quiet --pinentry-mode loopback --passphrase "$GPG_PASSPHRASE" --import "$RUNNER_TEMP/signing-key.asc"
-          gpg --batch --quiet --armor --export >"$RUNNER_TEMP/inkwell-signing-key.asc"
-      - name: Without a signing key
-        if: env.GPG_PRIVATE_KEY == ''
-        run: echo "::notice::the secret GPG_PRIVATE_KEY is not set, so the .deb and .rpm are built unsigned"
+          cache: false
+      - name: Validate what the packages install
+        run: mise run pkg:lint
+      # The only step that sees the signing secrets, and only for a published release. The key
+      # file exists for the duration of the step; the previous package (upgrade test) is built
+      # here too so that it is signed the same way.
       - name: Package ${{ needs.version.outputs.version }} (${{ matrix.arch }})
         env:
           PKG_VERSION: ${{ needs.version.outputs.version }}
+          PUBLISH: ${{ needs.version.outputs.publish }}
+          GPG_PRIVATE_KEY: ${{ needs.version.outputs.publish == 'true' && secrets.GPG_PRIVATE_KEY || '' }}
+          GPG_PASSPHRASE: ${{ needs.version.outputs.publish == 'true' && secrets.GPG_PASSPHRASE || '' }}
         run: |
-          if [ "${{ needs.version.outputs.publish }}" = true ]; then
+          secrets_dir="$(mktemp -d)"
+          trap 'rm -rf "$secrets_dir"' EXIT
+          if [ -n "$GPG_PRIVATE_KEY" ]; then
+            umask 077
+            printf '%s\n' "$GPG_PRIVATE_KEY" >"$secrets_dir/signing-key.asc"
+            export NFPM_KEY_FILE="$secrets_dir/signing-key.asc" NFPM_PASSPHRASE="$GPG_PASSPHRASE"
+            # The matching public key is published next to the packages.
+            export GNUPGHOME="$secrets_dir/gnupg"
+            mkdir -p "$GNUPGHOME"
+            gpg --batch --quiet --pinentry-mode loopback --passphrase "$GPG_PASSPHRASE" --import "$NFPM_KEY_FILE"
+            mkdir -p pubkey
+            gpg --batch --quiet --armor --export >pubkey/inkwell-signing-key.asc
+          else
+            echo "::notice::no signing key (dry run, or the secret GPG_PRIVATE_KEY is not set in the release environment): the .deb and .rpm are built unsigned"
+          fi
+          if [ "$PUBLISH" = true ]; then
             mise run release
           else
             mise run pkg:build
           fi
-      - name: Validate what the packages install
-        run: mise run pkg:lint
-      - name: A previous package, for the upgrade test
-        run: scripts/pkg/build-prev.sh prev
+          scripts/pkg/build-prev.sh prev
       - name: Collect the assets
         run: |
           mkdir -p assets
           cp dist/*.deb dist/*.rpm dist/*.tar.gz dist/*.spdx.json assets/
-          if [ -f "$RUNNER_TEMP/inkwell-signing-key.asc" ]; then cp "$RUNNER_TEMP/inkwell-signing-key.asc" assets/; fi
+          if [ -f pubkey/inkwell-signing-key.asc ]; then cp pubkey/inkwell-signing-key.asc assets/; fi
           {
             echo "### Sizes ${{ matrix.arch }}"
             echo '```'
             du -k dist/inkwell-*/inkwell assets/*.deb assets/*.rpm assets/*.tar.gz
             echo '```'
           } >>"$GITHUB_STEP_SUMMARY"
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: dist-${{ matrix.arch }}
           path: assets/
           if-no-files-found: error
           retention-days: 14
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: prev-${{ matrix.arch }}
           path: prev/
@@ -188,12 +190,14 @@ jobs:
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 45
     steps:
-      - uses: actions/checkout@v6
-      - uses: actions/download-artifact@v5
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
         with:
           name: dist-${{ matrix.arch }}
           path: dist
-      - uses: actions/download-artifact@v5
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
         with:
           name: prev-${{ matrix.arch }}
           path: prev
@@ -207,7 +211,7 @@ jobs:
           sudo env "PATH=$PATH" PKG_DIST=dist PKG_PREV_DIST=prev PKG_PUBKEY="$pubkey" ./scripts/pkgtest/run.sh
       - name: Keep the logs on failure
         if: failure()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: pkgtest-logs-${{ matrix.arch }}
           path: .task/pkgtest/*.log
@@ -225,16 +229,19 @@ jobs:
       PRERELEASE: ${{ needs.version.outputs.prerelease }}
       GH_TOKEN: ${{ github.token }}
     steps:
-      - uses: actions/checkout@v6
-      - uses: jdx/mise-action@v3
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
-          install_args: cosign
-      - uses: actions/download-artifact@v5
+          persist-credentials: false
+      - uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3.6.3
+        with:
+          cache: false
+          install_args: cosign gh
+      - uses: actions/download-artifact@634f93cb2916e3fdff6788551b99b062d0335ce0 # v5.0.0
         with:
           pattern: dist-*
           path: parts
       - name: Assemble both architectures (checksums, sizes)
-        run: scripts/pkg/assemble.sh parts release
+        run: scripts/pkg/assemble.sh parts release "$VERSION"
       - name: Compare the sizes with the previous release (alert above +10 %)
         run: |
           if gh release download --pattern sizes.txt --dir previous 2>/dev/null; then
@@ -255,19 +262,22 @@ jobs:
       - name: Release notes from the changelog
         if: env.PUBLISH == 'true'
         run: scripts/pkg/notes.sh "$VERSION" >notes.md
+      # A published release is never touched again (docs/releasing.md: immutable releases): only a
+      # draft, or no release at all, can receive assets.
       - name: Create the GitHub Release (a draft for a pre-release)
         if: env.PUBLISH == 'true'
         run: |
-          flags=(--verify-tag --title "Inkwell $VERSION" --notes-file notes.md)
-          if [ "$PRERELEASE" = true ]; then flags+=(--draft --prerelease); else flags+=(--latest); fi
-          if gh release view "v$VERSION" >/dev/null 2>&1; then
+          state="$(scripts/pkg/release-guard.sh "v$VERSION")"
+          if [ "$state" = draft ]; then
             gh release upload "v$VERSION" release/* --clobber
           else
+            flags=(--verify-tag --title "Inkwell $VERSION" --notes-file notes.md)
+            if [ "$PRERELEASE" = true ]; then flags+=(--draft --prerelease); else flags+=(--latest); fi
             gh release create "v$VERSION" "${flags[@]}" release/*
           fi
       - name: Dry run, keep the assets
         if: env.PUBLISH != 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: release-assets
           path: release/
