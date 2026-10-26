@@ -64,9 +64,10 @@ test("S7 people: a role, disconnect Paul, let him back, and Léa as a reader", a
     await expect(rowOf(alice, "(vous)")).toBeVisible();
     await expect(alice.getByLabel("Rôle de Paul")).toHaveValue("writer");
     await alice.mouse.move(5, 5);
-    await expect(panel(alice)).toHaveScreenshot("people-admin-light.png", {
+    // One row, not the list: earlier specs add people to Alice's project.
+    await expect(rowOf(alice, "Paul")).toHaveScreenshot("people-admin-light.png", {
       maxDiffPixelRatio: 0.02,
-      mask: [panel(alice).locator(".avatar")], // colours come from random identities
+      mask: [rowOf(alice, "Paul").locator(".avatar")], // colours come from random identities
     });
 
     // ACL-08: Léa becomes a reader. She reads, she cannot type, and she is told why.
@@ -87,8 +88,9 @@ test("S7 people: a role, disconnect Paul, let him back, and Léa as a reader", a
       if (person === paul) {
         await person.mouse.move(5, 5);
         // Léa seen from Paul is only a machine name and a colour: not part of the reference.
-        await expect(panel(person)).toHaveScreenshot("people-writer-dark.png", {
-          mask: [panel(person).getByRole("listitem").last(), panel(person).locator(".avatar")],
+        // His own row only: other specs add people to the list.
+        await expect(rowOf(person, "(vous)")).toHaveScreenshot("people-writer-dark.png", {
+          mask: [rowOf(person, "(vous)").locator(".avatar")],
           maxDiffPixelRatio: 0.02,
         });
       }

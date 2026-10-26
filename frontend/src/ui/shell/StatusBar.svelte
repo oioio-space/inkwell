@@ -12,6 +12,7 @@ import Icon from "../icons/Icon.svelte";
 import EncodingMenu from "../popover/EncodingMenu.svelte";
 import MenuButton from "../popover/MenuButton.svelte";
 import StatsPopover from "../popover/StatsPopover.svelte";
+import ZoomMenu from "../popover/ZoomMenu.svelte";
 import { count } from "./count";
 import { whenIdle } from "./idle";
 
@@ -144,6 +145,7 @@ $effect(() => {
       {/if}
     {/snippet}
   </MenuButton>
+  <ZoomMenu />
   <EncodingMenu {info} />
   <span class="fb lang" data-testid="language">{language}</span>
 </footer>

@@ -17,6 +17,8 @@ let {
   toolbarVisible,
   canToggleToolbar,
   previewOpen,
+  historyOpen = false,
+  onToggleHistory = () => {},
   onShare,
   onPeople,
   onToggleSidebar,
@@ -42,6 +44,9 @@ let {
   canToggleToolbar: boolean;
   /** Whether the preview pane is shown. */
   previewOpen: boolean;
+  /** Whether the history drawer is shown. */
+  historyOpen?: boolean;
+  onToggleHistory?: () => void;
   onShare: () => void;
   /** Opens the « Personnes » panel. */
   onPeople: () => void;
@@ -108,6 +113,18 @@ let menuOpen = $state(false);
     {/if}
     <PeopleStack {me} {peers} onOpen={onPeople} />
     <button type="button" class="sug" onclick={onShare}>{t("share.button")}</button>
+    <button
+      type="button"
+      class="fb"
+      class:on={historyOpen}
+      aria-pressed={historyOpen}
+      aria-label={t(historyOpen ? "history.hide" : "history.show")}
+      title={t(historyOpen ? "history.hide" : "history.show")}
+      data-testid="history-toggle"
+      onclick={onToggleHistory}
+    >
+      <Icon name="branch" />
+    </button>
     <MenuButton bind:open={menuOpen} label={t("menu.main")} name={t("menu.main")} align="end" width={300}>
       {#snippet trigger()}<Icon name="menu" />{/snippet}
       {#snippet children({ close })}

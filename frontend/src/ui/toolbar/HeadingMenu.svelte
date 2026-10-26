@@ -48,7 +48,7 @@ const current = $derived(level ? t(`heading.${level}`) : t("heading.paragraph"))
     >
       <span>{t("heading.paragraph")}</span>
       {#if !level}<Icon name="check" />{/if}
-      <span class="k mono">{t("heading.paragraph.syntax")} · {shortcutLabel("Mod-0")}</span>
+      <span class="k mono">{t("heading.paragraph.syntax")} · {shortcutLabel("Mod-Alt-0")}</span>
     </button>
     <div class="sep"></div>
     {#each HEADINGS as h, i (h)}

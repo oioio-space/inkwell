@@ -19,7 +19,7 @@ const BINDINGS: [key: string, feature: Feature, command: (lang: Lang) => StateCo
   ["Mod-2", "h2", (l) => setBlock(l, "h2")],
   ["Mod-3", "h3", (l) => setBlock(l, "h3")],
   ["Mod-4", "h4", (l) => setBlock(l, "h4")],
-  ["Mod-0", "paragraph", (l) => setBlock(l, "paragraph")],
+  ["Mod-Alt-0", "paragraph", (l) => setBlock(l, "paragraph")],
 ];
 
 /**

@@ -11,6 +11,8 @@ import {
 } from "@codemirror/view";
 import { t } from "../i18n";
 import { amSync } from "./amSync";
+import { blameMarks } from "./blameMarks";
+import { changeGutter } from "./changeGutter";
 import { externalMarks } from "./external";
 import { formatKeymap, type Lang } from "./format";
 import { languageExtension } from "./highlight";
@@ -26,7 +28,8 @@ const theme = EditorView.theme({
     height: "100%",
     backgroundColor: "var(--view-bg)",
     color: "var(--fg)",
-    fontSize: "14px",
+    // The zoom of the text (50 to 300 %) is a setting of this device: a variable on the page.
+    fontSize: "calc(14px * var(--text-zoom, 1))",
   },
   ".cm-scroller": { fontFamily: "var(--font-mono)", lineHeight: "1.75" },
   ".cm-content": { padding: "20px 28px 20px 0", caretColor: "var(--fg)" },
@@ -61,7 +64,7 @@ const readOnlyFacets = (on: boolean): Extension =>
     : [];
 
 /** The per-launch CSP nonce from index.html, so CodeMirror's <style> elements are allowed. */
-function cspNonce() {
+export function cspNonce() {
   const nonce = document.querySelector<HTMLMetaElement>('meta[name="csp-nonce"]')?.content;
   return nonce && nonce !== "__CSP_NONCE__" ? EditorView.cspNonce.of(nonce) : [];
 }
@@ -111,6 +114,7 @@ export function createEditor(
     extensions: [
       cspNonce(),
       lineNumbers(),
+      changeGutter,
       history(),
       localHistoryOnly,
       drawSelection(),
@@ -122,6 +126,7 @@ export function createEditor(
       Prec.highest(keymap.of([{ key: "Mod-z", run: () => onUndoKey?.() ?? false }])),
       keymap.of([...defaultKeymap, ...historyKeymap]),
       externalMarks,
+      blameMarks(),
       EditorView.contentAttributes.of({ "aria-label": t("editor.label") }),
       EditorView.updateListener.of((u) => {
         if (u.docChanged || u.selectionSet) onState?.(u.state);

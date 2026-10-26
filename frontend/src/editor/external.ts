@@ -26,8 +26,8 @@ class ExternalGutterMarker extends GutterMarker {
 }
 const gutterMark = new ExternalGutterMarker();
 
-/** The start of each line the spans touch, in order, once. */
-function lineStarts(state: EditorState, spans: readonly Span[]): number[] {
+/** The start of each line the spans touch, in order, once (the change gutter reuses it). */
+export function lineStarts(state: EditorState, spans: readonly Span[]): number[] {
   const starts = new Set<number>();
   const { doc } = state;
   for (const span of spans) {

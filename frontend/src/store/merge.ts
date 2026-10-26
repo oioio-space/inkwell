@@ -1,6 +1,6 @@
 import { next as A } from "@automerge/automerge";
 import type { DocHandle } from "@automerge/automerge-repo";
-import { applyEdits } from "./chunked";
+import { applyEdits, type Edit, type EditOptions } from "./chunked";
 import { CHUNK_CHARS, chunksOf } from "./limits";
 import { contentOf, type Range } from "./spans";
 
@@ -166,7 +166,7 @@ function linesTouched(text: string, spans: Range[], points: number[]): number {
 }
 
 /** A stretch of the old text and the text that replaces it. */
-type Region = { from: number; to: number; text: string };
+export type Region = { from: number; to: number; text: string };
 
 /** The lines of `text`, each with its newline (the last one has none if the text does not end with one). */
 const linesOf = (text: string): string[] => text.match(/[^\n]*\n|[^\n]+/g) ?? [];
@@ -277,7 +277,7 @@ function anchored(
  * Line-level changes between two texts: the spans of `a` that `b` replaces, in order, found by
  * matching their lines ({@link sameLines}).
  */
-function lineRegions(a: string, b: string): Region[] {
+export function lineRegions(a: string, b: string): Region[] {
   const la = linesOf(a);
   const lb = linesOf(b);
   const same: [number, number][] = [];
@@ -391,18 +391,49 @@ function skippedOnly(skipped: Skipped[]): Integration {
   return { branch: [], merged: [], inserted: [], deleted: [], lines: 0, skipped };
 }
 
+/** What a change did, enough to take it back later: where it stands now and what it removed. */
+export type Taken = Pick<Integration, "merged" | "inserted" | "deleted">;
+
+/** Whether a stretch of the current text is not to be touched (a locked zone, ADR 0022). */
+export type Skip = (range: Range) => boolean;
+
 /**
- * Takes an integration back: removes the text it added and puts back what it removed, as one
- * change. Text others typed since stays, even inside what was added.
+ * What the change from `before` to `after` did, as it stands at `after`: the text it added and the
+ * text it removed. Used to take one change back without touching what came after (DIF-08).
  */
-export function undoIntegration(handle: DocHandle<Doc>, done: Integration): void {
-  const doc = handle.doc();
-  if (!doc || done.merged.length === 0) return;
+export function changeBetween(doc: A.Doc<Doc>, before: A.Heads, after: A.Heads): Taken {
+  const old = before.length === 0 ? "" : A.view(doc, before).text;
+  const segs = follow(original(old.length), A.diff(doc, before, after));
+  return { merged: after, inserted: insertedOf(segs), deleted: deletedOf(segs, old) };
+}
+
+/** Edits to apply to a text, from the end, and the ones a locked zone held back. */
+export interface Plan {
+  edits: Edit[];
+  skipped: Edit[];
+}
+
+/** Splits the edits by `skip`: the stretch an edit removes (or the point it puts text at) decides. */
+function guard(edits: Edit[], skip: Skip | undefined): Plan {
+  if (!skip) return { edits, skipped: [] };
+  const plan: Plan = { edits: [], skipped: [] };
+  for (const e of edits)
+    (skip({ from: e.at, to: e.at + e.remove }) ? plan.skipped : plan.edits).push(e);
+  return plan;
+}
+
+/**
+ * The edits that take a change back from the document as it is now: remove the text it added and
+ * put back what it removed. Text others typed since stays, even inside what was added. Edits that
+ * `skip` refuses are returned apart, to be offered as a suggestion.
+ */
+export function planUndo(doc: A.Doc<Doc>, done: Taken, skip?: Skip): Plan {
+  if (done.merged.length === 0) return { edits: [], skipped: [] };
   const mergedText = A.view(doc, done.merged).text;
   const segs = follow(original(mergedText.length), A.diff(doc, done.merged, A.getHeads(doc)));
 
   // The surviving characters of each added span, and where each removed text goes back.
-  const edits: { at: number; remove: number; put: string }[] = [];
+  const edits: Edit[] = [];
   let pos = 0;
   for (const seg of segs) {
     const n = sizeOf(seg);
@@ -416,11 +447,47 @@ export function undoIntegration(handle: DocHandle<Doc>, done: Integration): void
     pos += n;
   }
   for (const d of done.deleted) edits.push({ at: where(segs, d.at), remove: 0, put: d.text });
-
-  if (edits.length === 0) return;
   // From the end; at one place, the removal first, then what is put back.
-  edits.sort((x, y) => y.at - x.at || y.remove - x.remove);
-  applyEdits(handle, edits);
+  return guard(
+    edits.sort((x, y) => y.at - x.at || y.remove - x.remove),
+    skip,
+  );
+}
+
+/**
+ * The edits that turn `current` into `target`, by lines (the same regions as an outside edit, so a
+ * peer's typing elsewhere merges by line), from the end. `skip` holds back the regions of locked
+ * zones. Used to go back to a moment without rewriting the whole text.
+ */
+export function planRewrite(current: string, target: string, skip?: Skip): Plan {
+  const edits = lineRegions(current, target)
+    .map((r) => ({ at: r.from, remove: r.to - r.from, put: r.text }))
+    .reverse();
+  return guard(edits, skip);
+}
+
+/** The text after the edits (as the plans order them: from the end), without touching a document. */
+export function applyEditsToText(text: string, edits: readonly Edit[]): string {
+  let out = text;
+  for (const e of edits) out = out.slice(0, e.at) + e.put + out.slice(e.at + e.remove);
+  return out;
+}
+
+/**
+ * Takes an integration back: removes the text it added and puts back what it removed, as one
+ * change (cut in pieces when a big text goes back, ADR 0028 D3). Text others typed since stays,
+ * even inside what was added. Returns what `skip` held back.
+ */
+export function undoIntegration(
+  handle: DocHandle<Doc>,
+  done: Taken,
+  opts: EditOptions & { skip?: Skip } = {},
+): Edit[] {
+  const doc = handle.doc();
+  if (!doc) return [];
+  const { edits, skipped } = planUndo(doc, done, opts.skip);
+  if (edits.length > 0) applyEdits(handle, edits, ["text"], opts);
+  return skipped;
 }
 
 /**
