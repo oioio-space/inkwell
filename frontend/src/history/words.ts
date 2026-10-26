@@ -1,4 +1,5 @@
 /** Differences at the granularity of the word, with moves detected (DIF-01 to DIF-03). */
+import { lineRegions } from "../store/merge";
 
 export type OpKind = "eq" | "add" | "del";
 
@@ -107,7 +108,6 @@ function diffSeq<T>(a: readonly T[], b: readonly T[], maxD = 1000): Edit[] {
 
 const WORD = /[\p{L}\p{M}\p{N}_'’-]+|\s+|[^\p{L}\p{M}\p{N}\s]/gu;
 const tokens = (s: string): string[] => s.match(WORD) ?? [];
-const lines = (s: string): string[] => s.match(/[^\n]*\n|[^\n]+/g) ?? [];
 
 const isWord = (t: string) => /[\p{L}\p{N}]/u.test(t);
 
@@ -149,32 +149,28 @@ function wordOps(a: string, b: string): Op[] {
 }
 
 /**
- * The difference between two texts: first by lines (cheap, whatever the size), then by words
- * inside the lines that changed. Pure additions and removals are kept as they are.
+ * The difference between two texts: first the line regions that changed (the same ones an outside
+ * edit is integrated by, store/merge.ts, which also copes with files too big for a full
+ * comparison), then the words inside each region. What is the same between regions stays whole.
  */
 export function wordDiff(a: string, b: string): Op[] {
   if (a === b) return a ? [{ kind: "eq", text: a, a: 0, b: 0 }] : [];
-  const la = lines(a);
-  const lb = lines(b);
-  const edits = diffSeq(la, lb);
-  const lineOps = ops(la, lb, edits);
   const out: Op[] = [];
-  for (let i = 0; i < lineOps.length; i++) {
-    const op = lineOps[i] as Op;
-    const next = lineOps[i + 1];
-    if (op.kind === "del" && next?.kind === "add") {
-      // Lines replaced by lines: the words inside tell what really changed.
-      for (const w of wordOps(op.text, next.text)) {
-        out.push({ ...w, a: w.a + op.a, b: w.b + op.b });
-      }
-      i++;
-    } else if (op.kind === "add" && next?.kind === "del") {
-      for (const w of wordOps(next.text, op.text)) {
-        out.push({ ...w, a: w.a + next.a, b: w.b + op.b });
-      }
-      i++;
-    } else out.push(op);
+  let pa = 0;
+  let pb = 0;
+  for (const r of lineRegions(a, b)) {
+    if (r.from > pa) {
+      const text = a.slice(pa, r.from);
+      out.push({ kind: "eq", text, a: pa, b: pb });
+      pb += text.length;
+    }
+    for (const op of wordOps(a.slice(r.from, r.to), r.text)) {
+      out.push({ ...op, a: op.a + r.from, b: op.b + pb });
+    }
+    pb += r.text.length;
+    pa = r.to;
   }
+  if (pa < a.length) out.push({ kind: "eq", text: a.slice(pa), a: pa, b: pb });
   return underline(mergeRuns(out));
 }
 

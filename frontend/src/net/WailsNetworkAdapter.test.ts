@@ -3,7 +3,7 @@ import { next as A } from "@automerge/automerge";
 import { type DocHandle, type DocumentId, type PeerId, Repo } from "@automerge/automerge-repo";
 import { encode } from "cbor-x";
 import { afterEach, describe, expect, it } from "vitest";
-import { decodeEnvelope, encodeEnvelope, Kind } from "./envelope";
+import { decodeEnvelope, encodeEnvelope, encodeRoles, Kind } from "./envelope";
 import { rng, SimNet } from "./simnet";
 import { type SocketLike, WailsNetworkAdapter } from "./WailsNetworkAdapter";
 
@@ -96,6 +96,48 @@ describe("WailsNetworkAdapter", () => {
       }),
     );
     expect(drops).toEqual(["unsupported version 9", "sender mismatch"]);
+  });
+
+  it("PRS-63 knows the role of each member from what Go reports, and tells when it changes", () => {
+    let socket: SocketLike | undefined;
+    const fake: SocketLike = {
+      binaryType: "",
+      send: () => {},
+      close: () => {},
+      onopen: null,
+      onclose: null,
+      onmessage: null,
+    };
+    const drops: string[] = [];
+    const adapter = new WailsNetworkAdapter(
+      () => {
+        socket = fake;
+        return fake;
+      },
+      { onDrop: (r) => drops.push(r) },
+    );
+    let told = 0;
+    adapter.onRoles(() => told++);
+    adapter.connect("me" as PeerId);
+    const deliver = (b: Uint8Array) =>
+      socket?.onmessage?.(new MessageEvent("message", { data: b.buffer }));
+    expect(adapter.roleOf("bob")).toBeUndefined();
+    const roles = (members: Parameters<typeof encodeRoles>[0]) =>
+      encodeEnvelope({ kind: Kind.Roles, peer: "me", payload: encodeRoles(members) });
+    deliver(
+      roles([
+        { peer: "bob", role: "writer", suspended: false },
+        { peer: "eve", role: "reader", suspended: false },
+      ]),
+    );
+    expect(adapter.roleOf("bob")).toEqual({ peer: "bob", role: "writer", suspended: false });
+    expect(adapter.roleOf("eve")?.role).toBe("reader");
+    expect(adapter.roleOf("mallory")).toBeUndefined();
+    expect(told).toBe(1);
+    deliver(roles([{ peer: "bob", role: "reader", suspended: true }])); // a newer list replaces it
+    expect(adapter.roleOf("bob")).toEqual({ peer: "bob", role: "reader", suspended: true });
+    expect(adapter.roleOf("eve")).toBeUndefined();
+    expect(drops).toEqual([]);
   });
 
   it("treats an arrive from an announced peer as that peer coming back", async () => {

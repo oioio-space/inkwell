@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest";
 import { CsvModel } from "../../editor/csv/model";
 import { openCsv } from "../../editor/csv/open";
 import { type DocPort, MAX_EDITABLE_CHARS, SheetDoc } from "../../editor/csv/sheetDoc";
+import { MAX_GROWN_CHARS } from "../../store/limits";
 import { SheetController, type SheetOptions } from "./sheet.svelte";
 
 const DIALECT = { delimiter: ";", header: true, decimal: "," } as const;
@@ -128,13 +129,14 @@ describe("editing", () => {
     expect(text()).toBe(BASE);
   });
 
-  it("CSV-20 a file over 10 MB opens read-only on the Papa Parse index: it is read, never written", async () => {
+  it("CSV-20 PERF-02 a file past 2 Mi characters read from the disk opens read-only on the Papa Parse index: it is read, never written", async () => {
     const rows = Math.ceil(MAX_EDITABLE_CHARS / 22) + 1000;
     const text = `nom;qte;prix\n${Array.from({ length: rows }, (_, i) => `ligne ${i};${i % 97};${i},5`).join("\n")}\n`;
     expect(text.length).toBeGreaterThan(MAX_EDITABLE_CHARS);
     const model = await openCsv(text, { dialect: DIALECT });
     let changes = 0;
     const port: DocPort = {
+      fixed: true,
       text: () => text,
       change: () => void changes++,
       cursor: () => "",
@@ -144,7 +146,7 @@ describe("editing", () => {
     expect(sheet.rowCount).toBe(rows);
     expect(sheet.readOnly).toBe(true);
     expect(sheet.readOnlyText).toMatch(
-      /^Fichier trop grand pour l'édition à plusieurs \(1\d(,\d)? Mo\) : ouvert en lecture seule$/,
+      /^Fichier trop grand pour l'édition à plusieurs \(\d+(,\d)? Mo\) : ouvert en lecture seule$/,
     );
 
     // Editing, in every form, is refused and nothing reaches the document.
@@ -184,6 +186,25 @@ describe("editing", () => {
         true,
       ).hits,
     ).toHaveLength(1);
+  }, 30_000);
+
+  it("PERF-03 a table paste that would take the document past 4 Mi is refused before it is written, with the message", () => {
+    const text = `a;b\n${"x;y\n".repeat(Math.floor((MAX_GROWN_CHARS - 4) / 4))}`;
+    let changes = 0;
+    const port: DocPort = {
+      text: () => text,
+      change: () => void changes++,
+      cursor: () => "",
+      resolve: () => 0,
+    };
+    const sheet = new SheetController(new SheetDoc(port, new CsvModel(text, DIALECT)));
+    expect(sheet.readOnly).toBe(false); // 4 Mi or less in a document: still edited together
+    expect(sheet.doc.perform([{ pos: 0, del: 0, ins: "z".repeat(100) }])).toBe(false);
+    expect(changes).toBe(0);
+    expect(sheet.notice?.text).toMatch(/^Ce collage porterait le fichier à \d+(,\d)? Mo, au-delà/);
+    // Taking text out is never refused.
+    expect(sheet.doc.perform([{ pos: 0, del: 10, ins: "" }])).toBe(true);
+    expect(changes).toBe(1);
   }, 30_000);
 
   it("CSV-19 a locked cell refuses edit, paste and fill, and says why", () => {

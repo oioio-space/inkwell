@@ -2,14 +2,13 @@ import { next as A } from "@automerge/automerge";
 import type { DocHandle } from "@automerge/automerge-repo";
 import { t } from "../i18n";
 import { PERSON_COLORS, personIndex } from "../ui/people";
-import { actionMessage, type Claim, type HDoc } from "./types";
+import type { DeviceClaim } from "./log";
+import { actionMessage, type HDoc } from "./types";
 
 /** What the shell knows about people: the signed member list and who is present now. */
 export interface Directory {
-  /** This device's peer id. */
-  myPeer: string;
-  /** The Automerge actor this device writes under now: its edits are mine before any claim. */
-  myActor?: string;
+  /** The Automerge actors this device has written under (kept on this device only): the only ones that are mine. */
+  myActors?: ReadonlySet<string>;
   /** The name the member list gives to the person who owns this device, if it does. */
   nameOfPeer?: (peer: string) => string | undefined;
   /** Names announced by presence, by peer id. */
@@ -31,24 +30,27 @@ export interface Author {
 }
 
 /**
- * Who wrote what. Each device writes, for its own Automerge actor, which device it is and which
- * name it uses (`meta.actors`). That is a claim: nothing checks it, so the attribution is only as
- * true as that device's word, and the screen says so (« selon l'appareil de Marie », X-20). The
- * member list and presence give the name when they know the device.
+ * Who wrote what. Each device says, in a change of its own, which device it is and which name it
+ * uses. That is a claim, and the word of that device only: the screen says so (« selon l'appareil
+ * de Marie », X-20). A claim is read from the change's own actor, so nobody speaks for another.
+ * What is mine is decided here, locally, from the actors this device has used: no claim, however
+ * it names this device, can make an edit mine and hide it from my margin.
  */
-export function authorBook(doc: HDoc | undefined, dir: Directory): (actor: string) => Author {
-  const claims = doc?.meta?.actors ?? {};
+export function authorBook(
+  claims: Readonly<Record<string, DeviceClaim>> | undefined,
+  dir: Directory,
+): (actor: string) => Author {
+  const known = claims ?? {};
   const cache = new Map<string, Author>();
   return (actor) => {
     let a = cache.get(actor);
     if (a) return a;
-    const claim: Claim | undefined = claims[actor];
+    const claim: DeviceClaim | undefined = known[actor];
     const peer = claim?.peer;
-    // The name a person chose for themselves (live in presence, or written in the document)
-    // comes first: the member list only knows the name the machine gave when joining.
+    // The name the device gave itself; only without one, what presence or the member list know.
     const name =
-      (peer ? dir.present?.[peer] : undefined) ||
       claim?.name ||
+      (peer ? dir.present?.[peer] : undefined) ||
       (peer ? (dir.nameOfPeer?.(peer) ?? undefined) : undefined) ||
       t("history.someone");
     const index = personIndex(peer ?? actor);
@@ -58,7 +60,7 @@ export function authorBook(doc: HDoc | undefined, dir: Directory): (actor: strin
       index,
       color: PERSON_COLORS[index - 1] as string,
       peer,
-      mine: (peer !== undefined && peer === dir.myPeer) || actor === dir.myActor,
+      mine: dir.myActors?.has(actor) ?? false,
       known: claim !== undefined,
     };
     cache.set(actor, a);
@@ -73,25 +75,17 @@ export const actorOf = (handle: DocHandle<HDoc>): string | undefined => {
 };
 
 /**
- * Says, in the document, who this device is: its peer and its name, for its current actor. Done
- * once per actor and name; nothing is written when the claim is already right.
+ * Says, in a change of its own (it changes no text), who this device is: its peer and its name.
+ * Done once per actor and name; nothing is written when the claim is already right.
  */
 export function claimActor(
   handle: DocHandle<HDoc>,
   me: { id: string; name: string },
-  create = true,
+  known: DeviceClaim | undefined,
 ): void {
   const doc = handle.doc();
   if (!doc) return;
-  const actor = A.getActorId(doc);
-  const old = doc.meta?.actors?.[actor];
-  if (old ? old.peer === me.id && old.name === me.name : !create) return;
-  handle.change(
-    (d) => {
-      d.meta ??= {};
-      d.meta.actors ??= {};
-      d.meta.actors[actor] = { name: me.name, peer: me.id, at: Date.now() };
-    },
-    { message: actionMessage("claim", me.name) },
-  );
+  if (known && known.peer === me.id && known.name === me.name) return;
+  const message = actionMessage("claim", JSON.stringify({ name: me.name, peer: me.id }));
+  handle.update((d) => A.emptyChange(d, { message }));
 }

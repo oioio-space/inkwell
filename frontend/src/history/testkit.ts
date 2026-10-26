@@ -1,6 +1,6 @@
 import { next as A } from "@automerge/automerge";
 import { Repo } from "@automerge/automerge-repo";
-import type { HDoc } from "./types";
+import { actionMessage, type HDoc } from "./types";
 
 /** One device of a test: a real Automerge document with a fixed actor and a clock we control. */
 export class Device {
@@ -18,7 +18,7 @@ export class Device {
       ? A.clone(base, { actor })
       : A.change(A.init<HDoc>({ actor }), { time: clock }, (d) => {
           d.text = "";
-          d.meta = { actors: {}, versions: [], variants: [] };
+          d.meta = { versions: [], variants: [] };
         });
   }
 
@@ -52,12 +52,14 @@ export class Device {
     return this;
   }
 
+  /** The device says who it is, in a change of its own (as the app does). */
   claim(name: string, peer = `peer-${this.actor}`): this {
-    return this.edit((d) => {
-      d.meta ??= {};
-      d.meta.actors ??= {};
-      d.meta.actors[this.actor] = { name, peer, at: 0 };
+    this.clock += 1;
+    this.doc = A.emptyChange(this.doc, {
+      time: this.clock,
+      message: actionMessage("claim", JSON.stringify({ name, peer })),
     });
+    return this;
   }
 
   get heads(): string[] {

@@ -1,5 +1,6 @@
 import { next as A } from "@automerge/automerge";
 import type { Session } from "./log";
+import { type Piece, PieceList } from "./pieces";
 
 /** A stretch of the current text and the session that wrote it. */
 export interface Span {
@@ -32,37 +33,11 @@ export interface Blame {
 // The text is followed as a list of pieces: the stretches each session wrote and still there, and
 // zero-length markers where text was removed. Patches are applied to it session by session; no
 // intermediate text is ever built, so a document of several megabytes costs what its edits cost.
-interface Piece {
-  len: number;
-  s: number;
-  text: string;
-  replace: boolean;
-  /** A marker: text of session `owner` removed by session `by` at this point. */
-  del?: { by: number; owner: number };
-}
+// (This is not `follow` of store/merge.ts: that one tells inserted from original text, with no
+// author, no text and no markers, and is flat; here every piece has an owner and the list is in
+// blocks, so a rewrite of thirty thousand lines is not quadratic.)
 
-/** Index of the first piece that starts at or after `pos`; `afterMarkers`: past the markers there. */
-function indexAt(pieces: Piece[], pos: number, afterMarkers: boolean): number {
-  let acc = 0;
-  for (let i = 0; i < pieces.length; i++) {
-    const p = pieces[i] as Piece;
-    if (acc === pos && (p.len > 0 || !afterMarkers)) return i;
-    if (acc + p.len > pos) {
-      const k = pos - acc;
-      pieces.splice(
-        i,
-        1,
-        { ...p, len: k, text: p.text.slice(0, k) },
-        { ...p, len: p.len - k, text: p.text.slice(k) },
-      );
-      return i + 1;
-    }
-    acc += p.len;
-  }
-  return pieces.length;
-}
-
-function applyPatches(pieces: Piece[], patches: A.Patch[], s: number): void {
+function applyPatches(list: PieceList, patches: A.Patch[], s: number): void {
   let lastDelAt = -1;
   // The text just inserted: removing right after it, or inserting right where text was removed,
   // is a replacement (a modification), whichever patch comes first.
@@ -71,14 +46,19 @@ function applyPatches(pieces: Piece[], patches: A.Patch[], s: number): void {
     if (patch.path[0] !== "text") continue;
     // The whole text put in one go (not typed): everything before is gone, this is all new.
     if (patch.path.length === 1 && patch.action === "put" && typeof patch.value === "string") {
-      const gone = pieces.filter((p) => p.len > 0);
-      pieces.length = 0;
-      for (const p of gone) {
-        pieces.push({ len: 0, s, text: p.text, replace: false, del: { by: s, owner: p.s } });
-      }
+      const gone = list.toArray().filter((p) => p.len > 0);
+      list.clear();
+      const put: Piece[] = gone.map((p) => ({
+        len: 0,
+        s,
+        text: p.text,
+        replace: false,
+        del: { by: s, owner: p.s },
+      }));
       if (patch.value.length > 0) {
-        pieces.push({ len: patch.value.length, s, text: patch.value, replace: gone.length > 0 });
+        put.push({ len: patch.value.length, s, text: patch.value, replace: gone.length > 0 });
       }
+      for (const p of put) list.insert(list.locate(Number.MAX_SAFE_INTEGER, false), p);
       continue;
     }
     if (patch.path.length !== 2) continue;
@@ -87,31 +67,33 @@ function applyPatches(pieces: Piece[], patches: A.Patch[], s: number): void {
       const text = patch.value;
       if (text.length === 0) continue;
       const piece: Piece = { len: text.length, s, text, replace: at === lastDelAt };
-      pieces.splice(indexAt(pieces, at, true), 0, piece);
+      list.insert(list.locate(at, true), piece);
       lastIns = { piece, end: at + text.length };
     } else if (patch.action === "del") {
       const length = patch.length ?? 1;
-      const from = indexAt(pieces, at, true);
-      const to = indexAt(pieces, at + length, false);
-      const removed = pieces.slice(from, to).filter((p) => p.len > 0);
+      const from = list.locate(at, true);
+      const to = list.locate(at + length, false);
+      // What goes out, as markers: one per run of text of one owner.
       const markers: Piece[] = [];
+      const removed = list.replace(from, to, []);
       for (const p of removed) {
+        if (p.len === 0) continue;
         const last = markers.at(-1);
         if (last?.del && last.del.owner === p.s) last.text += p.text;
         else markers.push({ len: 0, s, text: p.text, replace: false, del: { by: s, owner: p.s } });
       }
-      pieces.splice(from, to - from, ...markers);
+      if (markers.length > 0) list.insert(list.locate(at, true), ...markers);
       if (lastIns && at === lastIns.end) lastIns.piece.replace = true;
       lastDelAt = at;
     }
   }
 }
 
-function summarize(pieces: readonly Piece[], sessions: readonly Session[]): Blame {
+function summarize(list: PieceList, sessions: readonly Session[]): Blame {
   const spans: Span[] = [];
   const deletions: Deletion[] = [];
   let pos = 0;
-  for (const p of pieces) {
+  for (const p of list.toArray()) {
     if (p.del) {
       deletions.push({ at: pos, text: p.text, by: p.del.by, owner: p.del.owner });
       continue;
@@ -141,7 +123,7 @@ export interface TrackOptions {
  * and only the new ones and the one still open are followed again.
  */
 export class Tracker {
-  #pieces: Piece[] = [];
+  #pieces = new PieceList();
   /** The sessions already followed, as (id, after) pairs. */
   #done: { id: string; after: string }[] = [];
 
@@ -162,7 +144,7 @@ export class Tracker {
     // Something earlier changed (rare): the sure way is to follow everything again.
     if (k < this.#done.length) {
       this.#done = [];
-      this.#pieces = [];
+      this.#pieces = new PieceList();
     }
     let t0 = performance.now();
     for (let i = this.#done.length; i < closed; i++) {
@@ -176,7 +158,7 @@ export class Tracker {
         t0 = performance.now();
       }
     }
-    const open = [...this.#pieces];
+    const open = this.#pieces.clone();
     const last = sessions[closed];
     if (last) applyPatches(open, A.diff(doc, last.before, last.after), closed);
     return summarize(open, sessions);
@@ -190,6 +172,18 @@ export function blameOf(
   opts?: TrackOptions,
 ): Promise<Blame> {
   return new Tracker().update(doc, sessions, opts);
+}
+
+export /** The first span that ends after `pos`. */
+function firstSpan(spans: readonly Span[], pos: number): number {
+  let lo = 0;
+  let hi = spans.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >> 1;
+    if ((spans[mid] as Span).to <= pos) lo = mid + 1;
+    else hi = mid;
+  }
+  return lo;
 }
 
 /** The session that wrote the character at `pos`, or -1. */

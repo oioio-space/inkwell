@@ -2,7 +2,7 @@ import { next as A } from "@automerge/automerge";
 import type { DocHandle } from "@automerge/automerge-repo";
 import { describe, expect, it } from "vitest";
 import { buildGraph } from "./graph";
-import { history, stepsOf, textAt } from "./log";
+import { claimsOf, history, stepsOf, textAt } from "./log";
 import { normalizeHeadings } from "./normalize";
 import { authorBook, claimActor } from "./people";
 import { memoryRepo } from "./testkit";
@@ -15,6 +15,7 @@ import {
   previewUndo,
   reopenVariant,
   revertTo,
+  TooBig,
   undoChange,
   undoRevert,
   whatChanged,
@@ -22,7 +23,7 @@ import {
 
 const make = (text: string): { repo: ReturnType<typeof memoryRepo>; h: DocHandle<HDoc> } => {
   const repo = memoryRepo();
-  const h = repo.create<HDoc>({ text, meta: { versions: [], variants: [], actors: {} } });
+  const h = repo.create<HDoc>({ text, meta: { versions: [], variants: [] } });
   return { repo, h };
 };
 
@@ -39,13 +40,13 @@ function remote(h: DocHandle<HDoc>, actor: string, edit: (d: HDoc) => void): voi
 describe("versions and going back (HIS-06 to HIS-08)", () => {
   it("HIS-06 a named version carries its name, its heads and its author's claim", () => {
     const { h } = make("un");
-    claimActor(h, { id: "peer-a", name: "Alice" });
+    claimActor(h, { id: "peer-a", name: "Alice" }, undefined);
     const v = nameVersion(h, "  Relecture DSI ", heads(h));
     // What another replica reads from the document: the name and who says they made it.
     const other = A.load<HDoc>(A.save(h.doc()));
     const entry = other.meta?.versions?.at(-1);
     expect(entry).toMatchObject({ name: "Relecture DSI", by: v.by });
-    expect(authorBook(other, { myPeer: "peer-b" })(entry?.by ?? "").name).toBe("Alice");
+    expect(authorBook(claimsOf(stepsOf(other)), {})(entry?.by ?? "").name).toBe("Alice");
     expect(history(other).at(-1)?.action).toEqual({ kind: "version", label: "Relecture DSI" });
   });
 
@@ -134,7 +135,7 @@ describe("variants (HIS-10 to HIS-13, HIS-17)", () => {
     const { variant, handle } = fork(repo, h, "V");
     handle.change((d) => A.splice(d, ["text"], 0, 0, "avant-variante\n"));
     h.change((d) => A.splice(d, ["text"], d.text.length, 0, "après-principale\n"));
-    expect(mergeVariant(h, handle, variant)).toBe(true);
+    expect(mergeVariant(h, handle, variant).merged).toBe(true);
     const text = h.doc().text;
     expect(text).toContain("avant-variante");
     expect(text).toContain("après-principale");
@@ -161,7 +162,7 @@ describe("variants (HIS-10 to HIS-13, HIS-17)", () => {
     mergeVariant(h, handle, variant);
     const once = h.doc().text;
     const heads1 = heads(h);
-    expect(mergeVariant(h, handle, variant)).toBe(false);
+    expect(mergeVariant(h, handle, variant).merged).toBe(false);
     expect(h.doc().text).toBe(once);
     expect(heads(h)).toEqual(heads1);
   });
@@ -266,4 +267,73 @@ describe("X-04 two people change the level of one heading", () => {
     expect(ha.doc().text).toBe("=== Titre\ncorps\n");
     expect(textAt(ha.doc(), heads(ha))).toBe(ha.doc().text);
   });
+});
+
+describe("the limits and the locked zones (ADR 0028, ADR 0022)", () => {
+  it("going back refuses a document past the limit, before touching it", () => {
+    const { h } = make("x".repeat(2 * 1024 * 1024 + 5));
+    const v = nameVersion(h, "V");
+    const heads0 = heads(h);
+    expect(() => revertTo(h, v.heads, "V")).toThrow(TooBig);
+    expect(heads(h)).toEqual(heads0);
+  }, 60_000);
+
+  it("going back refuses a result that would grow past the limit", () => {
+    const { h } = make("a");
+    const v = nameVersion(h, "V");
+    h.change((d) => A.splice(d, ["text"], 1, 0, "b".repeat(1000)));
+    // The version is small: going back shrinks, so it is allowed.
+    expect(revertTo(h, v.heads, "V")?.held).toBe(0);
+    expect(h.doc().text).toBe("a");
+  });
+
+  it("going back writes by line regions: a far-away line typed by someone else survives", () => {
+    const { h } = make("un\ndeux\ntrois\n");
+    const v = nameVersion(h, "V");
+    h.change((d) => A.splice(d, ["text"], 0, 0, "zéro\n"));
+    // Someone offline adds a line at the end while this device goes back.
+    const away = A.change(A.clone(h.doc(), { actor: "bb02" }), (d) =>
+      A.splice(d, ["text"], d.text.length, 0, "quatre\n"),
+    );
+    revertTo(h, v.heads, "V");
+    h.update((d) => A.merge(d, away));
+    // Only the line that was added goes; the line the other person added elsewhere stays.
+    expect(h.doc().text).toBe("un\ndeux\ntrois\nquatre\n");
+  });
+
+  it("a locked zone is left alone by going back, undoing and merging", () => {
+    const base = "avant\nZONE\naprès\n";
+    const { repo, h } = make(base);
+    const v = nameVersion(h, "V");
+    const zone = { from: base.indexOf("ZONE"), to: base.indexOf("ZONE") + 4 };
+    const skip = (r: { from: number; to: number }) =>
+      r.from < zone.to && r.to > zone.from - 1 && r.from >= zone.from - 1;
+    // Someone rewrites the locked word, and another line.
+    h.change((d) => A.updateText(d, ["text"], "AVANT\nZONE2\naprès\n"));
+    const reverted = revertTo(h, v.heads, "V", { skip });
+    expect(reverted?.held).toBeGreaterThan(0);
+    expect(h.doc().text.startsWith("avant\n")).toBe(true);
+    expect(h.doc().text).toContain("ZONE2");
+
+    const before = heads(h);
+    h.change((d) => A.splice(d, ["text"], 0, 0, "x"));
+    const done = whatChanged(h, before, heads(h)) as NonNullable<ReturnType<typeof whatChanged>>;
+    expect(undoChange(h, done, "x", { skip: () => true })).toBeGreaterThan(0);
+    expect(h.doc().text.startsWith("x")).toBe(true);
+
+    const { variant, handle } = fork(repo, h, "W");
+    handle.change((d) => A.splice(d, ["text"], 0, 0, "dans la variante\n"));
+    const merged = mergeVariant(h, handle, variant, { skip: () => true });
+    expect(merged.merged).toBe(true);
+    expect(merged.held.length).toBeGreaterThan(0);
+    expect(h.doc().text).not.toContain("dans la variante");
+  });
+
+  it("merging refuses a variant whose text would overflow the limit", () => {
+    const { repo, h } = make("a");
+    const { variant, handle } = fork(repo, h, "grosse");
+    handle.change((d) => A.splice(d, ["text"], 1, 0, "z".repeat(2 * 1024 * 1024 + 10)));
+    expect(() => mergeVariant(h, handle, variant)).toThrow(TooBig);
+    expect(h.doc().meta?.variants?.[0]?.state).toBe("open");
+  }, 60_000);
 });

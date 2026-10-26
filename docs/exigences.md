@@ -54,7 +54,7 @@ Rien n'est « fait » sans tests verts et sans une passe `ux-walkthrough` réuss
 | U7 | 2026-10-25 | Prendre en compte les modifications faites hors de l'interface | B1 EXT-* | 🧪 fait et testé pour `main.typ` (fusion à partir des têtes du dernier accord avec le disque, lignes marquées, Voir/Annuler) ; EXT-09 (renommage) et les autres fichiers texte attendent B4b/B5 ; zones verrouillées : crochet `skip` prêt (ADR 0022) |
 | U8 | 2026-10-25 | Enregistrement automatique **ou** manuel, au choix | B1 SAV-* | ✅ |
 | U9 | 2026-10-25 | Menu Insérer : pièces jointes PDF (`pdf.attach`), inclusions, références, toutes les possibilités, avec des libellés clairs | A1 FMT-22…26, A4 | ✅ insertion ; données réelles en C3 |
-| U10 | 2026-10-25 | Présentations : diapositives, vue présentateur (chronomètre, suivante, notes, commentaires) | C4 PRS-* | ⏳ |
+| U10 | 2026-10-25 | Présentations : diapositives, vue présentateur (chronomètre, suivante, notes, commentaires) | C4 PRS-* ; [plan](plans/2026-10-26-c4-present.md) : PRS-04 à 08, 10 à 13 faits ; PRS-01 à 03 et 09 non faits | ◐ |
 | U11 | 2026-10-25 | Bande de modifications dans la marge (style Git) | B2 HIS-* | 🧪 fait et testé : bande ancrée par curseurs Automerge, minicarte, par type ou par personne |
 | U12 | 2026-10-25 | Visualiser l'historique et les branches, revenir en arrière | B2 HIS-*, B2+ DIF-*, ZOOM-* | 🧪 tiroir Historique, différences lisibles, « Qui a écrit quoi », variantes, zoom du texte ; reste : onglet Commentaires (vide) et différences des autres fichiers (B5) |
 | U13 | 2026-10-25 | Gestionnaire de fichiers : ajouter, supprimer (sur accord), répliqué, historisé, restaurable | B5 FM-* | ⏳ |
@@ -71,12 +71,14 @@ Rien n'est « fait » sans tests verts et sans une passe `ux-walkthrough` réuss
 | U25 | 2026-10-26 | Tableur : séparateur selon l'extension (CSV/TSV/PSV) puis confirmé par détection ; lire tout fichier texte ordinaire ; icônes adaptées pour tous ces types | B9, B4b/B5 | 🧪 fusionné (B9), passe ux-walkthrough à faire |
 | U26 | 2026-10-26 | Types de fichiers modulaires : ajouter un type = ajouter un module (registre, éditeur chargé à la demande) | ADR 0027, B4b | 🔨 |
 | U27 | 2026-10-26 | Zoom du texte ; différences « comme Git » très claires : qui, quoi exactement, quand — simple et beau | B2+ DIF-*, ZOOM-* | 🔨 |
-| U28 | 2026-10-26 | Présentation : vue présentateur (suivante, notes, commentaires) et vue public (diapo seule) en deux fenêtres simultanées pour deux écrans ; public sur une machine, présentateur sur une autre en réseau, synchronisés | C4+ PRS-30…40 | ⏳ |
+| U28 | 2026-10-26 | Présentation : vue présentateur (suivante, notes, commentaires) et vue public (diapo seule) en deux fenêtres simultanées pour deux écrans ; public sur une machine, présentateur sur une autre en réseau, synchronisés | C4+ PRS-30…40 ; [plan](plans/2026-10-26-c4-present.md) : fait ; fenêtre public ordinaire, placée et mise en plein écran par la personne | ◐ |
 | U29 | 2026-10-26 | Tâches (TODO, FIXME…) dans les commentaires, retrouvées dans un panneau du projet, bien présentées | B10 TODO-* | ⏳ |
 | U30 | 2026-10-26 | Panneau de gauche : gestionnaire de fichiers **ou** sommaire cliquable des titres | B10 OUT-* | ⏳ |
 | U31 | 2026-10-26 | Toute fonctionnalité intégrée et cohérente (jamais une « verrue ») : très bon design UX/UI, beau et harmonieux partout | règle de conception ; revue de cohérence `ux-walkthrough` à chaque fusion d'interface | 🔨 règle active |
 | U32 | 2026-10-26 | Programme globalement très fiable : on doit pouvoir lui faire confiance | Q-REL (plan T11 « Fiabilité et performance », REL-01…20), [ADR 0029](adr/0029-reliability.md) | 🔨 conception proposée |
 | U33 | 2026-10-26 | Très performant, y compris par Internet (relais, NAT) et sur des fichiers texte énormes à afficher | Q-PERF (plan T11 « Fiabilité et performance », PERF-01…20), [ADR 0028](adr/0028-performance-huge-files-and-wan.md) | 🔨 conception proposée |
+| U34 | 2026-10-26 | Les fichiers de 0,5 à 2 Mi caractères restent modifiables, avec un bandeau discret de lenteur, jusqu'à l'arrivée du Worker Automerge (pas de lecture seule) | ADR 0028 D1, `store/limits.ts`, PERF-02..04 | 🔨 palier et bandeau faits |
+| U34 | 2026-10-26 | Présentation locale simple : une 2ᵉ fenêtre pour le public, que l'on agrandit en plein écran soi-même (pas de placement automatique) | C4, PRS-30/32 révisés | 🔨 |
 | U23 | 2026-10-25 | Coloration syntaxique (constat de revue) | A5 | ✅ |
 
 ## Livraison

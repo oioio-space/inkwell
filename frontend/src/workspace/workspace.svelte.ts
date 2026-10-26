@@ -17,6 +17,7 @@ import { type SocketLike, WailsNetworkAdapter } from "../net/WailsNetworkAdapter
 import { ExternalSync, type Notice } from "../store/externalSync";
 import { type FileInfo, FileKind, type ProjectFile } from "../store/files";
 import { ExternalEditError, GoStorageAdapter, NotTextError } from "../store/GoStorageAdapter";
+import { type SizeTier, sizeTier } from "../store/limits";
 import { type Projection, startProjection } from "../store/projection";
 import { safeGet, safeSet } from "../store/safeStorage";
 import { settings } from "../store/settings.svelte";
@@ -79,6 +80,8 @@ class Workspace {
   projectionFailed = $state(false);
   /** Why it cannot be written, as Go says it; empty if unknown. */
   projectionReason = $state("");
+  /** Counts the reports of the members' roles from Go, so that what depends on rights recomputes. */
+  rolesVersion = $state(0);
   /** True once the member list is full: this device signs no more, so edits stay local. */
   sealed = $state(false);
   handle = $state.raw<DocHandle<Doc> | undefined>();
@@ -90,6 +93,13 @@ class Workspace {
   }
   /** Asked before Ctrl+Z undoes; the first to return true has used the key (see `undoWithKey`). */
   keyUndoHooks: (() => boolean)[] = [];
+  /**
+   * A text too big to enter a document (ADR 0028): read from the disk as one plain string, shown
+   * read-only, in no Automerge document. An object, so each text is its own key.
+   */
+  big = $state.raw<{ text: string } | undefined>();
+  /** How big the open document is: "large" earns a discreet notice (ADR 0028 D1). */
+  tier = $state<SizeTier>("fluid");
   /** The file shown in the editor (today the project's main document). */
   current = $state(openedFile());
   /** The project's files, for the sidebar and the Insert menu. */
@@ -109,6 +119,7 @@ class Workspace {
   /** Outside edits Go reported before the project was open. */
   #early: string[] = [];
   #marksTimer: ReturnType<typeof setTimeout> | undefined;
+  #offSize: (() => void) | undefined;
 
   async start(): Promise<void> {
     const id = await Session.LocalPeer();
@@ -123,6 +134,9 @@ class Workspace {
     });
     adapter.on("peer-disconnected", ({ peerId }) => {
       this.peers = this.peers.filter((p) => p !== peerId);
+    });
+    adapter.onRoles(() => {
+      this.rolesVersion++;
     });
     adapter.onSealed(() => {
       this.sealed = true;
@@ -162,6 +176,8 @@ class Workspace {
     this.#sync = undefined;
     this.notice = null;
     this.handle = handle;
+    this.big = undefined;
+    this.#watchSize(handle);
     this.#adapter?.setProject(url);
     await Projects.SetRootURL(url);
     const storage = this.#storage;
@@ -179,6 +195,9 @@ class Workspace {
       policy: () => settings.externalPolicy,
       manual: () => settings.saveMode === "manual",
       onNotice: (notice) => this.#show(notice),
+      onBig: (text) => {
+        this.big = text === undefined ? undefined : { text };
+      },
       notText: (err) => (err instanceof NotTextError ? err : undefined),
       legacyKey: `inkwell.sync.${url}.${MAIN_FILE}`,
     });
@@ -203,6 +222,25 @@ class Workspace {
       retryable: (err) => !(err instanceof ExternalEditError),
     });
     for (const name of this.#early.splice(0)) sync.notify(name);
+  }
+
+  /** Keeps `tier` at the size of the open document, measured at most twice a second. */
+  #watchSize(handle: DocHandle<Doc>): void {
+    this.#offSize?.();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const measure = () => {
+      timer = undefined;
+      this.tier = sizeTier(handle.doc()?.text.length ?? 0);
+    };
+    const onChange = () => {
+      timer ??= setTimeout(measure, 500);
+    };
+    measure();
+    handle.on("change", onChange);
+    this.#offSize = () => {
+      clearTimeout(timer);
+      handle.off("change", onChange);
+    };
   }
 
   #show(notice: Notice | null): void {
@@ -306,6 +344,28 @@ class Workspace {
     } catch {
       return undefined;
     }
+  }
+
+  /**
+   * Whether `peer` may pilot a presentation: a writer or an admin of the signed member list, not
+   * suspended. A device the list does not name may not. This is the check every device makes on
+   * what it receives, so that a reader's messages never move anyone's slides.
+   */
+  canPilot(peer: string): boolean {
+    void this.rolesVersion;
+    const member = this.#adapter?.roleOf(peer);
+    return member !== undefined && member.role !== "reader" && !member.suspended;
+  }
+
+  /** Whether this device knows its role at all (Go has reported the member list). */
+  get rolesKnown(): boolean {
+    void this.rolesVersion;
+    return this.#adapter?.roleOf(this.myId) !== undefined;
+  }
+
+  /** The name to show for a device: the one it announced, else a neutral one. */
+  nameOf(peer: string): string {
+    return this.names[peer] ?? `Personne ${peer.slice(0, 4)}`;
   }
 
   setName(name: string): void {

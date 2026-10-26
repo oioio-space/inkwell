@@ -1,5 +1,7 @@
 import { next as A } from "@automerge/automerge";
 import type { DocHandle } from "@automerge/automerge-repo";
+import { applyEdits, type Edit, type EditOptions } from "./chunked";
+import { CHUNK_CHARS, chunksOf } from "./limits";
 import { contentOf, type Range } from "./spans";
 
 type Doc = { text: string };
@@ -164,50 +166,123 @@ function linesTouched(text: string, spans: Range[], points: number[]): number {
 }
 
 /** A stretch of the old text and the text that replaces it. */
-type Region = { from: number; to: number; text: string };
+export type Region = { from: number; to: number; text: string };
 
 /** The lines of `text`, each with its newline (the last one has none if the text does not end with one). */
 const linesOf = (text: string): string[] => text.match(/[^\n]*\n|[^\n]+/g) ?? [];
 
 /**
- * Line-level changes between two texts: the spans of `a` that `b` replaces, in order, found by a
- * longest common subsequence of lines (one single region past a million line pairs).
+ * Pairs of equal lines (indexes into `la` and `lb`, in order) that stay as they are between
+ * `la[a0..a1)` and `lb[b0..b1)`. The shared start and end are taken first; what is left is
+ * matched by a longest common subsequence when small (a million line pairs at most), else by
+ * anchoring on the lines that occur once on each side, in the longest order they keep, and
+ * matching what lies between anchors the same way. With no such anchor nothing is paired there:
+ * the stretch stays one coarse region, the last resort.
  */
-function lineRegions(a: string, b: string): Region[] {
+function sameLines(
+  la: string[],
+  lb: string[],
+  a0: number,
+  a1: number,
+  b0: number,
+  b1: number,
+  out: [number, number][],
+): void {
+  while (a0 < a1 && b0 < b1 && la[a0] === lb[b0]) out.push([a0++, b0++]);
+  let ta = a1;
+  let tb = b1;
+  while (a0 < ta && b0 < tb && la[ta - 1] === lb[tb - 1]) {
+    ta--;
+    tb--;
+  }
+  const n = ta - a0;
+  const m = tb - b0;
+  if (n > 0 && m > 0) {
+    if (n * m <= 1_000_000) {
+      const table = Array.from({ length: n + 1 }, () => new Uint32Array(m + 1));
+      const row = (i: number) => table[i] as Uint32Array;
+      for (let i = n - 1; i >= 0; i--) {
+        for (let j = m - 1; j >= 0; j--) {
+          row(i)[j] =
+            la[a0 + i] === lb[b0 + j]
+              ? (row(i + 1)[j + 1] as number) + 1
+              : Math.max(row(i + 1)[j] as number, row(i)[j + 1] as number);
+        }
+      }
+      for (let i = 0, j = 0; i < n && j < m; ) {
+        if (la[a0 + i] === lb[b0 + j]) out.push([a0 + i++, b0 + j++]);
+        else if ((row(i + 1)[j] as number) >= (row(i)[j + 1] as number)) i++;
+        else j++;
+      }
+    } else {
+      anchored(la, lb, a0, ta, b0, tb, out);
+    }
+  }
+  for (let k = ta; k < a1; k++) out.push([k, tb + (k - ta)]);
+}
+
+/** The anchoring of {@link sameLines}: lines unique on both sides, in their longest common order. */
+function anchored(
+  la: string[],
+  lb: string[],
+  a0: number,
+  a1: number,
+  b0: number,
+  b1: number,
+  out: [number, number][],
+): void {
+  const seenA = new Map<string, number>(); // line -> index, or -1 if it occurs again
+  for (let i = a0; i < a1; i++) {
+    const line = la[i] as string;
+    seenA.set(line, seenA.has(line) ? -1 : i);
+  }
+  const countB = new Map<string, number>();
+  for (let j = b0; j < b1; j++) countB.set(lb[j] as string, (countB.get(lb[j] as string) ?? 0) + 1);
+  const pairs: [number, number][] = []; // by position in b
+  for (let j = b0; j < b1; j++) {
+    const line = lb[j] as string;
+    const i = seenA.get(line);
+    if (i !== undefined && i >= 0 && countB.get(line) === 1) pairs.push([i, j]);
+  }
+  // Longest increasing run of `i` over the pairs (patience sorting).
+  const tails: number[] = [];
+  const prev: number[] = [];
+  for (const [k, [i]] of pairs.entries()) {
+    let lo = 0;
+    let hi = tails.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >> 1;
+      if ((pairs[tails[mid] as number] as [number, number])[0] < i) lo = mid + 1;
+      else hi = mid;
+    }
+    prev[k] = lo > 0 ? (tails[lo - 1] as number) : -1;
+    tails[lo] = k;
+  }
+  const chain: [number, number][] = [];
+  for (let k = tails.at(-1) ?? -1; k >= 0; k = prev[k] as number)
+    chain.push(pairs[k] as [number, number]);
+  chain.reverse();
+  let i0 = a0;
+  let j0 = b0;
+  for (const [i, j] of chain) {
+    sameLines(la, lb, i0, i, j0, j, out);
+    out.push([i, j]);
+    i0 = i + 1;
+    j0 = j + 1;
+  }
+  if (chain.length > 0) sameLines(la, lb, i0, a1, j0, b1, out);
+}
+
+/**
+ * Line-level changes between two texts: the spans of `a` that `b` replaces, in order, found by
+ * matching their lines ({@link sameLines}).
+ */
+export function lineRegions(a: string, b: string): Region[] {
   const la = linesOf(a);
   const lb = linesOf(b);
-  let head = 0;
-  while (head < la.length && head < lb.length && la[head] === lb[head]) head++;
-  let tail = 0;
-  while (
-    tail < la.length - head &&
-    tail < lb.length - head &&
-    la[la.length - 1 - tail] === lb[lb.length - 1 - tail]
-  ) {
-    tail++;
-  }
-  const n = la.length - head - tail;
-  const m = lb.length - head - tail;
-  // Pairs of equal lines (indexes from `head`) that stay as they are, ending with a sentinel.
   const same: [number, number][] = [];
-  if (n * m <= 1_000_000) {
-    const table = Array.from({ length: n + 1 }, () => new Uint32Array(m + 1));
-    const row = (i: number) => table[i] as Uint32Array;
-    for (let i = n - 1; i >= 0; i--) {
-      for (let j = m - 1; j >= 0; j--) {
-        row(i)[j] =
-          la[head + i] === lb[head + j]
-            ? (row(i + 1)[j + 1] as number) + 1
-            : Math.max(row(i + 1)[j] as number, row(i)[j + 1] as number);
-      }
-    }
-    for (let i = 0, j = 0; i < n && j < m; ) {
-      if (la[head + i] === lb[head + j]) same.push([i++, j++]);
-      else if ((row(i + 1)[j] as number) >= (row(i)[j + 1] as number)) i++;
-      else j++;
-    }
-  }
-  same.push([n, m]);
+  sameLines(la, lb, 0, la.length, 0, lb.length, same);
+  same.push([la.length, lb.length]);
 
   const offsets = [0];
   for (const line of la) offsets.push((offsets.at(-1) as number) + line.length);
@@ -217,9 +292,9 @@ function lineRegions(a: string, b: string): Region[] {
   for (const [si, sj] of same) {
     if (si > i || sj > j) {
       regions.push({
-        from: offsets[head + i] as number,
-        to: offsets[head + si] as number,
-        text: lb.slice(head + j, head + sj).join(""),
+        from: offsets[i] as number,
+        to: offsets[si] as number,
+        text: lb.slice(j, sj).join(""),
       });
     }
     i = si + 1;
@@ -274,11 +349,17 @@ export function integrate(
     apply = (d) => A.updateText(d, ["text"], text);
   }
 
+  const pieces = opts.skip ? undefined : growthPieces(baseText, text);
   let branch: A.Heads | undefined;
   handle.update((current) => {
-    const result = A.changeAt(current, base, apply);
-    branch = result.newHeads ?? undefined;
-    return result.newDoc;
+    let doc = current;
+    let heads = base;
+    for (const fn of pieces ?? [apply]) {
+      const result = A.changeAt(doc, heads, fn);
+      doc = result.newDoc;
+      if (result.newHeads) heads = branch = result.newHeads;
+    }
+    return doc;
   });
   if (!branch) return undefined;
   const after = handle.doc();
@@ -313,12 +394,8 @@ function skippedOnly(skipped: Skipped[]): Integration {
 /** What a change did, enough to take it back later: where it stands now and what it removed. */
 export type Taken = Pick<Integration, "merged" | "inserted" | "deleted">;
 
-/** One edit of the text: remove `remove` units at `at`, then put `put`. */
-export interface Edit {
-  at: number;
-  remove: number;
-  put: string;
-}
+/** Whether a stretch of the current text is not to be touched (a locked zone, ADR 0022). */
+export type Skip = (range: Range) => boolean;
 
 /**
  * What the change from `before` to `after` did, as it stands at `after`: the text it added and the
@@ -326,19 +403,32 @@ export interface Edit {
  */
 export function changeBetween(doc: A.Doc<Doc>, before: A.Heads, after: A.Heads): Taken {
   const old = before.length === 0 ? "" : A.view(doc, before).text;
-  const segs = follow(
-    original(old.length),
-    before.length === 0 ? A.diff(doc, [], after) : A.diff(doc, before, after),
-  );
+  const segs = follow(original(old.length), A.diff(doc, before, after));
   return { merged: after, inserted: insertedOf(segs), deleted: deletedOf(segs, old) };
 }
 
+/** Edits to apply to a text, from the end, and the ones a locked zone held back. */
+export interface Plan {
+  edits: Edit[];
+  skipped: Edit[];
+}
+
+/** Splits the edits by `skip`: the stretch an edit removes (or the point it puts text at) decides. */
+function guard(edits: Edit[], skip: Skip | undefined): Plan {
+  if (!skip) return { edits, skipped: [] };
+  const plan: Plan = { edits: [], skipped: [] };
+  for (const e of edits)
+    (skip({ from: e.at, to: e.at + e.remove }) ? plan.skipped : plan.edits).push(e);
+  return plan;
+}
+
 /**
- * The edits that take a change back from the document as it is now: remove the text it added
- * and put back what it removed. Text others typed since stays, even inside what was added.
+ * The edits that take a change back from the document as it is now: remove the text it added and
+ * put back what it removed. Text others typed since stays, even inside what was added. Edits that
+ * `skip` refuses are returned apart, to be offered as a suggestion.
  */
-export function planUndo(doc: A.Doc<Doc>, done: Taken): Edit[] {
-  if (done.merged.length === 0) return [];
+export function planUndo(doc: A.Doc<Doc>, done: Taken, skip?: Skip): Plan {
+  if (done.merged.length === 0) return { edits: [], skipped: [] };
   const mergedText = A.view(doc, done.merged).text;
   const segs = follow(original(mergedText.length), A.diff(doc, done.merged, A.getHeads(doc)));
 
@@ -358,11 +448,26 @@ export function planUndo(doc: A.Doc<Doc>, done: Taken): Edit[] {
   }
   for (const d of done.deleted) edits.push({ at: where(segs, d.at), remove: 0, put: d.text });
   // From the end; at one place, the removal first, then what is put back.
-  return edits.sort((x, y) => y.at - x.at || y.remove - x.remove);
+  return guard(
+    edits.sort((x, y) => y.at - x.at || y.remove - x.remove),
+    skip,
+  );
 }
 
-/** The text after the edits (as {@link planUndo} orders them: from the end). */
-export function applyEdits(text: string, edits: readonly Edit[]): string {
+/**
+ * The edits that turn `current` into `target`, by lines (the same regions as an outside edit, so a
+ * peer's typing elsewhere merges by line), from the end. `skip` holds back the regions of locked
+ * zones. Used to go back to a moment without rewriting the whole text.
+ */
+export function planRewrite(current: string, target: string, skip?: Skip): Plan {
+  const edits = lineRegions(current, target)
+    .map((r) => ({ at: r.from, remove: r.to - r.from, put: r.text }))
+    .reverse();
+  return guard(edits, skip);
+}
+
+/** The text after the edits (as the plans order them: from the end), without touching a document. */
+export function applyEditsToText(text: string, edits: readonly Edit[]): string {
   let out = text;
   for (const e of edits) out = out.slice(0, e.at) + e.put + out.slice(e.at + e.remove);
   return out;
@@ -370,18 +475,62 @@ export function applyEdits(text: string, edits: readonly Edit[]): string {
 
 /**
  * Takes an integration back: removes the text it added and puts back what it removed, as one
- * change. Text others typed since stays, even inside what was added.
+ * change (cut in pieces when a big text goes back, ADR 0028 D3). Text others typed since stays,
+ * even inside what was added. Returns what `skip` held back.
  */
-export function undoIntegration(handle: DocHandle<Doc>, done: Taken, message?: string): void {
+export function undoIntegration(
+  handle: DocHandle<Doc>,
+  done: Taken,
+  opts: EditOptions & { skip?: Skip } = {},
+): Edit[] {
   const doc = handle.doc();
-  if (!doc) return;
-  const edits = planUndo(doc, done);
-  if (edits.length === 0) return;
-  const apply: A.ChangeFn<Doc> = (d) => {
-    for (const e of edits) A.splice(d, ["text"], e.at, e.remove, e.put);
+  if (!doc) return [];
+  const { edits, skipped } = planUndo(doc, done, opts.skip);
+  if (edits.length > 0) applyEdits(handle, edits, ["text"], opts);
+  return skipped;
+}
+
+/**
+ * The file changes a lot of text at once (a file that was empty, a big paste or a rewrite in
+ * another program), so one change would hold it all (ADR 0028 D3). The edit is built from the
+ * line-level regions of {@link lineRegions}, as the locked-zone path does, so that two far-apart
+ * edits stay two edits and a peer's typing between them merges by line. Only a region that is
+ * itself over 64 Ki goes in changes of at most 64 Ki each; the others, in one. They come as
+ * functions to apply in turn from the end of the text, each on the branch the previous one made.
+ * Undefined when no region is that big: the finer edit of `updateText` does it. Past a million
+ * line pairs `lineRegions` itself falls back to one coarse region, the last resort.
+ */
+function growthPieces(baseText: string, text: string): A.ChangeFn<Doc>[] | undefined {
+  if (Math.max(text.length, baseText.length) <= CHUNK_CHARS) return undefined;
+  const regions = lineRegions(baseText, text);
+  if (!regions.some((r) => Math.max(r.to - r.from, r.text.length) > CHUNK_CHARS)) return undefined;
+  const pieces: A.ChangeFn<Doc>[] = [];
+  let small: Region[] = [];
+  const flush = () => {
+    if (small.length === 0) return;
+    const batch = small;
+    small = [];
+    pieces.push((d) => {
+      for (const r of batch) A.splice(d, ["text"], r.from, r.to - r.from, r.text);
+    });
   };
-  if (message) handle.change(apply, { message });
-  else handle.change(apply);
+  for (const r of regions.toReversed()) {
+    if (Math.max(r.to - r.from, r.text.length) <= CHUNK_CHARS) {
+      small.push(r);
+      continue;
+    }
+    flush();
+    let at = r.from;
+    const chunks = chunksOf(r.text);
+    // A region that only removes has no text to cut: one change.
+    for (const [i, piece] of (chunks.length > 0 ? chunks : [""]).entries()) {
+      const from = at;
+      at += piece.length;
+      pieces.push((d) => A.splice(d, ["text"], from, i === 0 ? r.to - r.from : 0, piece));
+    }
+  }
+  flush();
+  return pieces;
 }
 
 /** Where the original position `at` stands in the text the segments describe. */

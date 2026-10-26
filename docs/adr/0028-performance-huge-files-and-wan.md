@@ -110,6 +110,22 @@ Option D, en dix points.
   dans un `transactionFilter` CodeMirror : « Ce collage porterait le fichier à X Mo, au-delà de ce qui
   se modifie à plusieurs (2 Mo). » Une croissance venue d'un pair est appliquée (refuser casserait la
   convergence), puis le document passe en lecture seule chez soi avec le même message (REL-18).
+- **Plafond de la croissance venue d'un pair (décision, étape 2 réalisée).** Le plafond est posé
+  **dans la webview**, à l'adaptateur réseau, et pas dans Go : seule la webview lit Automerge
+  (ADR 0011), et `Coverage.filter` décode déjà chaque modification avant le `Repo` pour vérifier les
+  attestations. Il en tire, sans coût de plus, le nombre de caractères que la modification ajoute
+  (insertions moins suppressions) ; pour un fragment de document entier, la longueur du texte. Le
+  message est **retiré entièrement** si un fragment de document dépasse 4 Mi, ou si la somme nette
+  de ce que les pairs ont ajouté à ce document depuis le démarrage dépasse 4 Mi ; une modification
+  déjà comptée (renvoi après reconnexion) ne l'est pas deux fois, et une suppression rend la place.
+  Le plafond est donc de 4 Mi de croissance nette venue des pairs, au-delà de ce que le document
+  contenait au démarrage (au pire 8 Mi au total), et non « la longueur résultante » exacte, que
+  l'adaptateur ne connaît pas. Refuser des modifications fait diverger le pair fautif d'avec les
+  autres, ce qui est voulu : seul un écrivant signé peut en envoyer, et un client de cette version ne
+  produit jamais une telle croissance. **Limite connue :** `decodeChange` matérialise les opérations
+  d'une modification ; une modification forgée de très nombreuses opérations (compressée en RLE
+  en quelques octets) coûte sa mémoire avant d'être comptée. Seul le recyclage du Worker (D2, D9)
+  la borne ; avant lui, la confiance accordée aux écrivants signés est le garde-fou.
 - **Avant D2** (Automerge encore dans le fil d'affichage), le palier Grand s'arrête à **512 Ki** :
   100 ms de gel par lot reçu, au rythme de D7, est le pire que l'on accepte.
 
@@ -162,7 +178,8 @@ plus de 64 Mi est hors périmètre et le dit.
 
 Le multiplexeur (`internal/transport/mux`), qui reste opaque, change sur trois points :
 
-- **Fragmentation.** Toute charge de plus de 256 Kio part en fragments de 256 Kio. Le réassemblage est
+- **Fragmentation.** Toute charge de plus de 64 Kio part en fragments de **32 Kio** (mesure du
+  2026-10-26 : 256 Kio coûtent 2 s d'attente à 1 Mbit/s, contre un budget de 500 ms ; 32 Kio, 0,26 s). Le réassemblage est
   borné par `MaxFrame` et par le budget d'octets en file existant, et il est fuzzé.
 - **Deux classes.**
   - *Interactive* : présence, attestations, messages ≤ 64 Kio.

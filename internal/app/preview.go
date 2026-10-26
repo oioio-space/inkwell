@@ -66,6 +66,7 @@ const (
 type Compiler interface {
 	Compile(ctx context.Context, p typst.Project, main string, opts ...typst.Option) (*typst.Result, error)
 	Anchors(ctx context.Context, p typst.Project, main string, opts ...typst.Option) ([]typst.Anchor, error)
+	Deck(ctx context.Context, p typst.Project, main string, opts ...typst.Option) (*typst.Deck, error)
 	NetworkMode() string
 }
 
@@ -116,20 +117,22 @@ type Preview struct {
 	closed bool
 	timer  *time.Timer
 
-	srcGen    uint64             // counts source changes
-	seq       uint64             // counts compilations asked for; only the latest is delivered
-	cancel    context.CancelFunc // of the compilation running now
-	win       window             // the pages the webview shows
-	editTime  time.Time          // when the webview says the document last changed
-	wroteAt   time.Time          // when the sources last changed on disk
-	cur       *previewConn
-	last      []byte // the last result message, for a page that reloads
-	lastFirst int    // first page of last
-	lastPages int    // pages in last
-	lastCount int    // page count of last
-	cache     snapshot
-	anchors   anchorCache
-	asking    bool // an "anchors" request is being answered: a second one waits for that answer
+	srcGen     uint64             // counts source changes
+	seq        uint64             // counts compilations asked for; only the latest is delivered
+	cancel     context.CancelFunc // of the compilation running now
+	win        window             // the pages the webview shows
+	editTime   time.Time          // when the webview says the document last changed
+	wroteAt    time.Time          // when the sources last changed on disk
+	cur        *previewConn
+	last       []byte // the last result message, for a page that reloads
+	lastFirst  int    // first page of last
+	lastPages  int    // pages in last
+	lastCount  int    // page count of last
+	cache      snapshot
+	anchors    anchorCache
+	asking     bool // an "anchors" request is being answered: a second one waits for that answer
+	deck       deckCache
+	askingDeck bool // likewise for "deck"
 }
 
 // window is a range of pages, 1-based and inclusive.
@@ -148,6 +151,11 @@ type anchorCache struct {
 	srcGen uint64
 	list   []typst.Anchor
 	ok     bool
+}
+
+type deckCache struct {
+	srcGen uint64
+	deck   *typst.Deck
 }
 
 // NewPreview returns a preview of the project in o.Root. Nothing runs until the
@@ -337,7 +345,7 @@ var errUnavailable = errors.New("typst could not start")
 
 // PreviewMessage is a frame from Go on the preview stream, as JSON.
 type PreviewMessage struct {
-	// Type is "compiling" (a compilation started), "result" or "anchors".
+	// Type is "compiling" (a compilation started), "result", "anchors" or "deck".
 	Type string `json:"type"`
 	// Seq numbers the compilation; a higher Seq supersedes a lower one.
 	Seq uint64 `json:"seq,omitzero"`
@@ -358,6 +366,8 @@ type PreviewMessage struct {
 	Failure *PreviewFailure `json:"failure,omitzero"`
 	// Anchors answers an "anchors" request.
 	Anchors []typst.Anchor `json:"anchors,omitzero"`
+	// Deck answers a "deck" request: the slides and steps of the document.
+	Deck *typst.Deck `json:"deck,omitzero"`
 }
 
 // PreviewFailure explains why a compilation produced no document.
@@ -445,8 +455,9 @@ func (c *previewConn) send(log *slog.Logger, b []byte) {
 // previewRequest is a frame from the webview on the preview stream, as JSON.
 type previewRequest struct {
 	// Op is "view" (these pages are shown), "edit" (the document changed),
-	// "refresh" (compile again) or "anchors" (where the headings and
-	// paragraphs are, for the jumps).
+	// "refresh" (compile again), "anchors" (where the headings and
+	// paragraphs are, for the jumps) or "deck" (the slides and steps of a
+	// presentation, with their speaker notes).
 	Op string `json:"op"`
 	// First and Last are the pages shown, for "view".
 	First int `json:"first,omitzero"`
@@ -481,7 +492,7 @@ func decodePreviewRequest(b []byte) (previewRequest, error) {
 		if r.Time < 0 || r.Time > 1<<40 {
 			return previewRequest{}, fmt.Errorf("%w: time %d", errBadRequest, r.Time)
 		}
-	case "refresh", "anchors":
+	case "refresh", "anchors", "deck":
 	default:
 		return previewRequest{}, fmt.Errorf("%w: op %q", errBadRequest, r.Op)
 	}
@@ -562,6 +573,20 @@ func (p *Preview) handle(cur *previewConn, req previewRequest) {
 			}()
 			p.answerAnchors(cur, srcGen, date)
 		})
+	case "deck":
+		if p.askingDeck {
+			return
+		}
+		p.askingDeck = true
+		date, srcGen := p.docTimeLocked(), p.srcGen
+		p.wg.Go(func() {
+			defer func() {
+				p.mu.Lock()
+				p.askingDeck = false
+				p.mu.Unlock()
+			}()
+			p.answerDeck(cur, srcGen, date)
+		})
 	}
 }
 
@@ -598,6 +623,36 @@ func (p *Preview) answerAnchors(cur *previewConn, srcGen uint64, date time.Time)
 		} else {
 			p.mu.Lock()
 			p.anchors = anchorCache{srcGen: srcGen, list: msg.Anchors, ok: true}
+			p.mu.Unlock()
+		}
+	}
+	cur.send(p.log, encodeMessage(&msg))
+}
+
+// answerDeck sends the slides and steps of the sources as they are now. Rev
+// tells which version of the sources they describe, as for the pages.
+func (p *Preview) answerDeck(cur *previewConn, srcGen uint64, date time.Time) {
+	p.mu.Lock()
+	cached := p.deck
+	p.mu.Unlock()
+	msg := PreviewMessage{Type: "deck", Rev: srcGen}
+	if cached.deck != nil && cached.srcGen == srcGen {
+		msg.Deck = cached.deck
+	} else {
+		eng, err := p.engine()
+		if err == nil {
+			ctx, cancel := context.WithTimeout(p.ctx, anchorsTimeout)
+			defer cancel()
+			msg.Deck, err = eng.Deck(ctx, typst.Project{Root: p.opt.Root}, p.opt.Main, typst.WithTimestamp(date))
+		}
+		if p.ctx.Err() != nil {
+			return
+		}
+		if err != nil {
+			msg.Failure = failureOf(err)
+		} else {
+			p.mu.Lock()
+			p.deck = deckCache{srcGen: srcGen, deck: msg.Deck}
 			p.mu.Unlock()
 		}
 	}

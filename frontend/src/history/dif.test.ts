@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import { cellDiff } from "./csvdiff";
 import { attribute, compareTexts, entryDiff, hunksOf } from "./diffview";
 import { filterSessions, NO_FILTER, sectionsTouched } from "./filters";
-import { history, textAt } from "./log";
+import { claimsOf, history, stepsOf, textAt } from "./log";
 import { authorBook } from "./people";
 import { moveSections, stamp } from "./stamp";
 import { summarize } from "./summary";
@@ -47,7 +47,7 @@ describe("readable differences (DIF-01 to DIF-04)", () => {
       ["del", " Prévenir le responsable de permanence."],
       ["add", " Couper les accès externes."],
     ]);
-    const who = authorBook(alice.doc, { myPeer: "peer-aa01" })("bb02");
+    const who = authorBook(claimsOf(stepsOf(alice.doc)), { myActors: new Set(["aa01"]) })("bb02");
     const summary = summarize(before, after, e.ops, who.name);
     expect(summary.text).toBe(
       "Marie a supprimé 1 phrase dans « Bascule vers le site de secours » et ajouté 1 phrase dans « Étapes »",
@@ -102,7 +102,7 @@ describe("readable differences (DIF-01 to DIF-04)", () => {
     const sessions = history(alice.doc);
     const blame = await blameOf(alice.doc, sessions);
     const e = compareTexts(base, alice.doc.text, blame);
-    const who = (actor?: string) => authorBook(alice.doc, { myPeer: "x" })(actor ?? "?").name;
+    const who = (actor?: string) => authorBook(claimsOf(stepsOf(alice.doc)), {})(actor ?? "?").name;
     const changed = e.frags
       .filter((f) => f.kind !== "eq")
       .map((f) => [f.kind, f.text, who(f.actor)]);
@@ -134,7 +134,7 @@ describe("filters (DIF-06)", () => {
     paul.type("fin\n", paul.doc.text.length, 1);
     alice.sync(marie).sync(paul);
     const sessions = history(alice.doc);
-    const author = authorBook(alice.doc, { myPeer: "peer-aa01" });
+    const author = authorBook(claimsOf(stepsOf(alice.doc)), { myActors: new Set(["aa01"]) });
     const now = alice.clock * 1000 + 10_000_000_000 / 1000;
     const ctx = { author, now, doc: alice.doc };
 
@@ -187,7 +187,7 @@ describe("tables and clocks", () => {
     alice.type("trois", alice.doc.text.length, 5);
     const nowMs = (alice.clock + 600) * 1000;
     const sessions = history(alice.doc, nowMs);
-    const author = authorBook(alice.doc, { myPeer: "peer-aa01" });
+    const author = authorBook(claimsOf(stepsOf(alice.doc)), { myActors: new Set(["aa01"]) });
     const bySkew = sessions.filter((s) => s.skewed);
     expect(bySkew.length).toBeGreaterThan(0);
     const s = bySkew[0] as NonNullable<(typeof bySkew)[0]>;

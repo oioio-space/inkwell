@@ -1,6 +1,7 @@
 import { next as A } from "@automerge/automerge";
 import type { DocHandle } from "@automerge/automerge-repo";
-import { MAX_EDITABLE_CHARS, tooBigToEdit } from "../../store/limits";
+import { applyEdits } from "../../store/chunked";
+import { growthRefused, MAX_EDITABLE_CHARS, tooBigToEdit, tooBigToGrow } from "../../store/limits";
 import type { Dialect } from "./dialect";
 import { detectDialect } from "./dialect";
 import { CsvModel, windowOf } from "./model";
@@ -8,8 +9,13 @@ import type { Splice } from "./records";
 
 /** What the sheet needs from a document holding the CSV text: reads, one-change writes, anchors. */
 export interface DocPort {
+  /** The text is a plain string read from the disk, in no document: it is never written (ADR 0028). */
+  readonly fixed?: true;
   text(): string;
-  /** Applies all splices (non-overlapping, original coordinates) as ONE change. */
+  /**
+   * Applies all splices (non-overlapping, original coordinates) as ONE change; only an addition
+   * of more than 64 Ki characters goes in several (ADR 0028 D3).
+   */
   change(splices: readonly Splice[]): void;
   /** A stable anchor on the character at `pos`; follows concurrent edits. */
   cursor(pos: number): string;
@@ -22,13 +28,27 @@ export function handlePort(handle: DocHandle<{ text: string }>): DocPort {
   return {
     text: () => handle.doc()?.text ?? "",
     change(splices) {
-      handle.change((d) => {
-        for (const s of [...splices].sort((a, b) => b.pos - a.pos))
-          A.splice(d, path, s.pos, s.del, s.ins);
-      });
+      applyEdits(
+        handle,
+        [...splices]
+          .sort((a, b) => b.pos - a.pos)
+          .map((s) => ({ at: s.pos, remove: s.del, put: s.ins })),
+        path,
+      );
     },
     cursor: (pos) => A.getCursor(handle.doc(), path, pos),
     resolve: (c) => A.getCursorPosition(handle.doc(), path, c),
+  };
+}
+
+/** The port over a text read from the disk, in no document: it is read, never written. */
+export function plainPort(text: string): DocPort {
+  return {
+    fixed: true,
+    text: () => text,
+    change() {},
+    cursor: () => "",
+    resolve: () => 0,
   };
 }
 
@@ -61,6 +81,8 @@ export class SheetDoc {
     () => {};
   /** Called when a remote change moved text I wrote into another column. */
   onMoved: (col: number) => void = () => {};
+  /** Called with the size an action would have given the text, when the size gate refuses it. */
+  onRefused: (chars: number) => void = () => {};
 
   /**
    * Until this person edits or chooses, the dialect follows what arrives: an empty file has none
@@ -86,14 +108,24 @@ export class SheetDoc {
     return this.#redo.length > 0;
   }
 
-  /** True when the text is too big to be edited (see {@link MAX_EDITABLE_CHARS}). */
+  /**
+   * True when the text is too big to be edited: a text read from the disk past
+   * {@link MAX_EDITABLE_CHARS}, or a document that grew (through others) past what is edited together.
+   */
   get tooBig(): boolean {
-    return tooBigToEdit(this.model.text.length);
+    const chars = this.model.text.length;
+    return this.port.fixed ? tooBigToEdit(chars) : tooBigToGrow(chars);
   }
 
   /** Applies one user action (splices in the model's coordinates). */
   perform(splices: readonly Splice[], col?: number): boolean {
     if (splices.length === 0 || this.tooBig) return false;
+    const before = this.model.text.length;
+    const after = splices.reduce((n, s) => n + s.ins.length - s.del, before);
+    if (growthRefused(before, after)) {
+      this.onRefused(after);
+      return false;
+    }
     this.autoDialect = false;
     const entry = this.#apply(splices, col);
     this.#undo.push(entry);

@@ -1,5 +1,5 @@
 import type { Session } from "./log";
-import type { Blame, Span } from "./track";
+import { type Blame, firstSpan, type Span } from "./track";
 import { diffWithMoves, type Op, type OpKind } from "./words";
 
 /** A stretch of a diff, with whoever wrote (or removed) it. */
@@ -22,18 +22,6 @@ export interface Hunk {
   from: number;
   to: number;
   actors: string[];
-}
-
-/** The first span that ends after `pos`. */
-function firstSpan(spans: readonly Span[], pos: number): number {
-  let lo = 0;
-  let hi = spans.length;
-  while (lo < hi) {
-    const mid = (lo + hi) >> 1;
-    if ((spans[mid] as Span).to <= pos) lo = mid + 1;
-    else hi = mid;
-  }
-  return lo;
 }
 
 const normal = (s: string) => s.replace(/\s+/g, " ").trim();

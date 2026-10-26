@@ -40,3 +40,33 @@ export function saveVisit(doc: string, heads: string[], at = Date.now()): void {
   visits[doc] = { heads, at };
   safeSet(KEY, JSON.stringify(visits));
 }
+
+const ACTORS = "inkwell.actors";
+const KEEP_ACTORS = 200;
+
+function allActors(): Record<string, unknown> {
+  const raw = safeGet(ACTORS);
+  try {
+    const all: unknown = raw ? JSON.parse(raw) : {};
+    return all && typeof all === "object" ? (all as Record<string, unknown>) : {};
+  } catch {
+    return {};
+  }
+}
+
+/**
+ * The Automerge actors this device has written under in a document (a new one each time the page
+ * loads). They are kept here, on this device, and nowhere else: they alone are "mine", so no peer
+ * can make its edits pass for mine by what it writes in the document.
+ */
+export function myActors(doc: string): Set<string> {
+  const list = allActors()[doc];
+  return new Set(Array.isArray(list) ? list.filter((a): a is string => typeof a === "string") : []);
+}
+
+export function rememberActor(doc: string, actor: string): void {
+  const mine = myActors(doc);
+  if (mine.has(actor)) return;
+  mine.add(actor);
+  safeSet(ACTORS, JSON.stringify({ ...allActors(), [doc]: [...mine].slice(-KEEP_ACTORS) }));
+}

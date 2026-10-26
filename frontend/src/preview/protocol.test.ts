@@ -114,5 +114,47 @@ describe("preview protocol", () => {
     expect(text({ op: "edit", time: 1700000000 })).toBe('{"op":"edit","time":1700000000}');
     expect(text({ op: "refresh" })).toBe('{"op":"refresh"}');
     expect(text({ op: "anchors" })).toBe('{"op":"anchors"}');
+    expect(text({ op: "deck" })).toBe('{"op":"deck"}');
+  });
+
+  it("PRS-60 reads the slides and steps, and drops pages that make no sense", () => {
+    const m = parseMessage(
+      frame({
+        type: "deck",
+        rev: 4,
+        deck: {
+          minutes: 20,
+          pages: [
+            { slide: 1, step: 0 },
+            { slide: 2, step: 1, note: "dire", hidden: true },
+            { slide: 0, step: 0 },
+            { slide: 3, step: -1 },
+            "x",
+          ],
+        },
+      }),
+    );
+    if (m?.type !== "deck") throw new Error("not a deck");
+    expect(m.rev).toBe(4);
+    expect(m.deck).toEqual({
+      minutes: 20,
+      pages: [
+        { slide: 1, step: 0, hidden: false, note: "" },
+        { slide: 2, step: 1, hidden: true, note: "dire" },
+      ],
+    });
+  });
+
+  it("PRS-60 bounds a deck", () => {
+    const long = "x".repeat(40000); // one long note, shared: the bound is on each note, not on the sum
+    const pages = Array.from({ length: 5100 }, (_, i) => ({
+      slide: 1,
+      step: 0,
+      note: i === 0 ? long : "",
+    }));
+    const m = parseMessage(frame({ type: "deck", rev: 1, deck: { pages } }));
+    if (m?.type !== "deck" || !m.deck) throw new Error("no deck");
+    expect(m.deck.pages).toHaveLength(5000);
+    expect(m.deck.pages[0]?.note.length).toBe(16384);
   });
 });

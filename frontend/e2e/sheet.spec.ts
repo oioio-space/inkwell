@@ -1,4 +1,4 @@
-import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import AxeBuilder from "@axe-core/playwright";
@@ -663,9 +663,10 @@ test.describe("accessibility, security and looks (CSV-20)", () => {
 });
 
 test.describe("a file too big to edit (SHEET-BIG)", () => {
-  // Automerge panics on a text of about 20 MB (ADR 0026): past 10 MB the sheet only reads. The
-  // file is 12 MB, so it goes to its own instance, which leaves no history behind in the shared ones.
-  test("a 12 MB CSV opens read-only: view, sort, filter, search and copy work, editing does not", async ({
+  // PERF-02 (ADR 0028): a file of 12 MB is on the disk. It is too big to enter a document, so it
+  // is read from there as one plain string: no Automerge document ever holds it (that took more
+  // than 8 GB of memory). Its own instance leaves no history behind in the shared ones.
+  test("a 12 MB CSV on the disk opens read-only: view, sort, filter, search and copy work, editing does not", async ({
     browser,
   }) => {
     test.setTimeout(240_000);
@@ -675,9 +676,11 @@ test.describe("a file too big to edit (SHEET-BIG)", () => {
       const page = await openSheet(browser, SPARE_URL, { clipboard: true });
       const rows = 500_000; // about 12 MB
       const csv = `nom;qte;prix\n${Array.from({ length: rows }, (_, i) => `ligne ${i};${i % 97};${i},5`).join("\n")}\n`;
-      await pasteInTextView(page, csv);
-      await page.getByRole("button", { name: "Voir le tableau" }).click();
-      await expect(cell(page, 0, 0)).toBeVisible({ timeout: 60_000 });
+      // The project folder exists once the instance runs: another program writes the file.
+      await expect.poll(() => readdirSync(docs).filter((d) => !d.startsWith(".")).length).toBe(1);
+      const dir = join(docs, readdirSync(docs).filter((d) => !d.startsWith("."))[0] ?? "");
+      writeFileSync(join(dir, "main.typ"), csv);
+      await expect(cell(page, 0, 0)).toHaveText("ligne 0", { timeout: 120_000 });
 
       // Said clearly, and the toolbar's editing buttons are off.
       await expect(page.getByTestId("readonly")).toHaveText(
@@ -719,6 +722,34 @@ test.describe("a file too big to edit (SHEET-BIG)", () => {
       await page.getByRole("button", { name: "Trier de Z à A" }).click();
       await expect(cell(page, 0, 0)).toHaveText(`ligne ${rows - 1}`, { timeout: 30_000 });
       expect(cspErrors(page)).toEqual([]);
+    } finally {
+      await stopInstance(instance);
+      rmSync(docs, { recursive: true, force: true });
+    }
+  });
+
+  // Data loss guard: with "ask", a huge file that changes again and again must never be replaced
+  // by the small document the editor still holds.
+  test("under 'ask', a huge file on the disk is never written over", async ({ browser }) => {
+    test.setTimeout(120_000);
+    const docs = mkdtempSync(join(tmpdir(), "inkwell-e2e-big-"));
+    const instance = await startInstance(SPARE_PORT, docs);
+    try {
+      const page = await openSheet(browser, SPARE_URL, { settings: { externalPolicy: "ask" } });
+      const csv = (tag: string) =>
+        `nom;qte\n${Array.from({ length: 150_000 }, (_, i) => `ligne ${i};${tag}`).join("\n")}\n`;
+      await expect.poll(() => readdirSync(docs).filter((d) => !d.startsWith(".")).length).toBe(1);
+      const dir = join(docs, readdirSync(docs).filter((d) => !d.startsWith("."))[0] ?? "");
+      const file = join(dir, "main.typ");
+      const first = csv("a");
+      writeFileSync(file, first);
+      await expect(cell(page, 0, 0)).toHaveText("ligne 0", { timeout: 60_000 });
+      const second = csv("b");
+      writeFileSync(file, second);
+      await expect(cell(page, 0, 1)).toHaveText("b", { timeout: 60_000 });
+      // Longer than the autosave pause: the file is still the program's, byte for byte.
+      await page.waitForTimeout(4_000);
+      expect(readFileSync(file, "utf8")).toBe(second);
     } finally {
       await stopInstance(instance);
       rmSync(docs, { recursive: true, force: true });

@@ -4,6 +4,7 @@ import {
   analyze,
   HUGE_TEXT,
   inlineAnalyzer,
+  Superseded,
   tooCostly,
   type WorkerLike,
   workerAnalyzer,
@@ -79,5 +80,49 @@ describe("analysis in a worker", () => {
     expect(result.limited).toBe(true);
     expect(result.sessions).toEqual([]);
     expect(spawned).toBe(false);
+  });
+
+  it("keeps one job in flight and one pending: the jobs replaced meanwhile are dropped", async () => {
+    const sent: number[] = [];
+    const spawn = (): WorkerLike => {
+      const w = fakeWorker();
+      const post = w.postMessage.bind(w);
+      w.postMessage = (m) => {
+        sent.push((m as { id: number }).id);
+        post(m);
+      };
+      return w;
+    };
+    const a = new Device("aa01").type("un", 0);
+    const client = workerAnalyzer(spawn);
+    const first = client.analyze(a.doc, undefined);
+    a.type(" deux", 2, 1);
+    const second = client.analyze(a.doc, undefined);
+    a.type(" trois", 7, 1);
+    const third = client.analyze(a.doc, undefined);
+    await expect(second).rejects.toBeInstanceOf(Superseded);
+    const r1 = await first;
+    const r3 = await third;
+    expect(sent).toHaveLength(2);
+    expect(r3.blame.length).toBe(a.doc.text.length);
+    expect(r1.sessions.length).toBeGreaterThan(0);
+    client.dispose();
+  });
+
+  it("a job that takes too long ends the worker; the next one starts a new worker with everything", async () => {
+    let spawned = 0;
+    const hang = (): WorkerLike => {
+      spawned++;
+      const w: WorkerLike = { onmessage: null, onerror: null, terminate() {}, postMessage() {} };
+      queueMicrotask(() => w.onmessage?.({ data: { ready: true } }));
+      return w;
+    };
+    const a = new Device("aa01").type("texte", 0);
+    const client = workerAnalyzer(() => (spawned === 0 ? hang() : fakeWorker()), { timeoutMs: 30 });
+    await expect(client.analyze(a.doc, undefined)).rejects.toThrow(/too long|timeout/i);
+    const again = await client.analyze(a.doc, undefined);
+    expect(again.blame.length).toBe("texte".length);
+    expect(spawned).toBe(1);
+    client.dispose();
   });
 });

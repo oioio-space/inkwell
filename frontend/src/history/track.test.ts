@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import type { ChangeMark } from "../editor/changeGutter";
 import { analyze } from "./analysis";
 import { changeMarks, END, resolver, sinceHeads } from "./gutter";
-import { history, sessionsBefore, stepsOf } from "./log";
+import { claimsOf, history, sessionsBefore, stepsOf } from "./log";
 import { authorBook } from "./people";
 import { Device } from "./testkit";
 import { blameOf, sessionAt, Tracker } from "./track";
@@ -21,17 +21,18 @@ function setup() {
 
 const lineOf = (text: string, pos: number) => text.slice(0, pos).split("\n").length;
 
-async function marksFor(
-  alice: Device,
-  left: string[],
-  myPeer = "peer-aa01",
-): Promise<ChangeMark[]> {
+async function marksFor(alice: Device, left: string[]): Promise<ChangeMark[]> {
   const doc = alice.doc;
   const steps = stepsOf(doc);
   const sessions = history(doc);
   const blame = await blameOf(doc, sessions);
   const since = sessionsBefore(sessions, steps, left);
-  return changeMarks(doc, blame, since, authorBook(doc, { myPeer }));
+  return changeMarks(
+    doc,
+    blame,
+    since,
+    authorBook(claimsOf(stepsOf(doc)), { myActors: new Set(["aa01"]) }),
+  );
 }
 
 describe("change gutter since the last visit (HIS-01 to HIS-05)", () => {
@@ -70,7 +71,9 @@ describe("change gutter since the last visit (HIS-01 to HIS-05)", () => {
     bob.type("ajout\n", 0, 1);
     alice.sync(bob);
     const [mark] = await marksFor(alice, left);
-    const author = authorBook(alice.doc, { myPeer: "peer-aa01" })("bb02");
+    const author = authorBook(claimsOf(stepsOf(alice.doc)), { myActors: new Set(["aa01"]) })(
+      "bb02",
+    );
     expect(author.name).toBe("Marie");
     expect(mark?.person).toBe(author.index);
     const session = history(alice.doc).find((s) => s.actor === "bb02" && !s.action);
@@ -119,7 +122,7 @@ describe("change gutter since the last visit (HIS-01 to HIS-05)", () => {
       alice.doc,
       result.blame,
       result.sinceIdx,
-      authorBook(alice.doc, { myPeer: "peer-aa01" }),
+      authorBook(claimsOf(stepsOf(alice.doc)), { myActors: new Set(["aa01"]) }),
     );
     const text = alice.doc.text;
     const resolve = resolver(alice.doc);
@@ -181,4 +184,19 @@ describe("who wrote what (DIF-05)", () => {
     expect(blame.spans.map((s) => a.doc.text.slice(s.from, s.to))).toEqual(["un", " deux"]);
     expect(A.getHeads(a.doc)).toHaveLength(1);
   });
+
+  it("many scattered edits in one session do not cost a scan of the text for each (no quadratic cost)", async () => {
+    const lines = Array.from({ length: 30_000 }, (_, i) => `ligne ${i}`);
+    const a = new Device("aa01").type(`${lines.join("\n")}\n`, 0);
+    // One session rewrites every line: 30 000 patches, then 30 000 pieces to follow.
+    const edited = lines.map((l) => `${l} !`).join("\n");
+    const b = new Device("bb02", a.doc);
+    b.set(`${edited}\n`, 1);
+    a.sync(b);
+    const t0 = performance.now();
+    const blame = await blameOf(a.doc, history(a.doc));
+    const ms = performance.now() - t0;
+    expect(blame.length).toBe(a.doc.text.length);
+    expect(ms).toBeLessThan(4_000);
+  }, 120_000);
 });

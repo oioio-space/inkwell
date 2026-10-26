@@ -7,12 +7,16 @@ import { markExternal } from "./editor/external";
 import { langOf } from "./editor/format";
 import { t } from "./i18n";
 import type { SocketLike } from "./net/WailsNetworkAdapter";
+import PresentBanner from "./present/PresentBanner.svelte";
+import PresentHost from "./present/PresentHost.svelte";
+import { presentSession } from "./present/session.svelte";
 import { exportPdf, jumpFromCursor, jumpFromPage, jumpToProblem } from "./preview/actions";
 import { lastChangeSeconds } from "./preview/docTime";
 import Preview from "./preview/Preview.svelte";
 import { preview } from "./preview/preview.svelte";
 import { settings } from "./store/settings.svelte";
 import AboutDialog, { type BuildInfo } from "./ui/AboutDialog.svelte";
+import Banner from "./ui/Banner.svelte";
 import Editor from "./ui/Editor.svelte";
 import ExternalBanner from "./ui/ExternalBanner.svelte";
 import ExternalChangeToast from "./ui/ExternalChangeToast.svelte";
@@ -23,6 +27,7 @@ import { history } from "./ui/history/history.svelte";
 import NoticeToast from "./ui/NoticeToast.svelte";
 import ProjectionBanner from "./ui/ProjectionBanner.svelte";
 import Preferences from "./ui/prefs/Preferences.svelte";
+import ReadOnlyText from "./ui/ReadOnlyText.svelte";
 import SealedBanner from "./ui/SealedBanner.svelte";
 import ShareDialog from "./ui/ShareDialog.svelte";
 import Sheet from "./ui/sheet/Sheet.svelte";
@@ -58,9 +63,24 @@ function showTable() {
 /** Only Typst and Markdown have a formatting bar; csv, bib and txt are just the editor. */
 const barLanguage = $derived(barLang(workspace.current));
 const hasBar = $derived(barLanguage !== undefined);
-const barVisible = $derived(hasBar && settings.toolbarVisible(workspace.project));
+const barVisible = $derived(hasBar && !workspace.big && settings.toolbarVisible(workspace.project));
 const sidebarOpen = $derived(settings.sidebarVisible(workspace.project));
 const previewOpen = $derived(settings.previewVisible(workspace.project));
+/** Only a Typst document is presented: its pages are the slides. */
+const canPresent = $derived(lang === "typst");
+/** The presentation takes the preview's place: it is the one that asks Go for pages. */
+const presenting = $derived(presentSession.current !== undefined);
+
+function present(how: "start" | "here" | "public") {
+  if (!canPresent || presentSession.current) return;
+  if (how === "public") presentSession.start("public");
+  else presentSession.start("presenter", how === "here" ? { page: preview.currentPage || 1 } : {});
+}
+
+/** Back from a presentation: the caret goes to the slide that was on. */
+function leftPresentation(page: number) {
+  if (page > 0) void jumpFromPage(page, 0, 0);
+}
 
 function toggleToolbar() {
   settings.setToolbarVisible(workspace.project, !settings.toolbarVisible(workspace.project));
@@ -105,6 +125,11 @@ function onKey(e: KeyboardEvent) {
   if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "s") {
     e.preventDefault();
     void workspace.save();
+    return;
+  }
+  if (e.key === "F5" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    e.preventDefault();
+    present(e.shiftKey ? "here" : "start");
     return;
   }
   if ((e.ctrlKey || e.metaKey) && e.altKey && e.key.toLowerCase() === "j") {
@@ -162,7 +187,8 @@ onMount(() => {
 
 <svelte:window onkeydown={onKey} />
 
-<div class="window">
+<!-- A presentation covers the window: what is under it neither takes keys nor focus. -->
+<div class="window" inert={presenting}>
   {#if sidebarOpen}
     <Sidebar files={workspace.files} current={workspace.current} onOpen={() => session.focus()} />
   {/if}
@@ -187,6 +213,8 @@ onMount(() => {
       onTogglePreview={togglePreview}
       onExport={exportPdf}
       onAbout={() => (about = true)}
+      {canPresent}
+      onPresent={present}
     />
     {#if barVisible && session.state && barLanguage}
       <FormatBar
@@ -219,11 +247,29 @@ onMount(() => {
       </div>
     {/if}
     <ProjectionBanner />
+    {#if workspace.tier === "large" && !workspace.big}
+      <Banner role="status">{t("limit.slow")}</Banner>
+    {/if}
     <ExternalBanner />
+    <PresentBanner />
     <HistoryBars />
     <main>
       <div class="pane side-source">
-        {#if workspace.active}
+        {#if workspace.big}
+          {#key workspace.big}
+            {#if showSheet}
+              <Sheet
+                big={workspace.big}
+                {me}
+                path={workspace.current}
+                startOffset={sheetView.offset}
+                onshowtext={(offset) => sheetView.toText(offset)}
+              />
+            {:else}
+              <ReadOnlyText text={workspace.big.text} />
+            {/if}
+          {/key}
+        {:else if workspace.active}
           {@const active = workspace.active}
           {#key active.url}
             {#if showSheet}
@@ -240,7 +286,7 @@ onMount(() => {
           {/key}
         {/if}
       </div>
-      {#if previewOpen && !showSheet}
+      {#if previewOpen && !showSheet && !presenting && !workspace.big}
         <div class="pane side-preview">
           <Preview onSourceJump={jumpFromPage} onCursorJump={jumpFromCursor} />
         </div>
@@ -261,6 +307,7 @@ onMount(() => {
   </div>
   <HistoryDrawer />
 </div>
+<PresentHost onExit={leftPresentation} />
 <ShareDialog bind:open={sharing} />
 <Preferences bind:open={preferences} />
 <NoticeToast />

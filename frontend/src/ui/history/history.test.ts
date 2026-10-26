@@ -31,7 +31,7 @@ async function open(role: "writer" | "reader") {
   const repo = new Repo({});
   const handle = repo.create<HDoc>({
     text: "Un.\n",
-    meta: { actors: {}, versions: [], variants: [] },
+    meta: { versions: [], variants: [] },
   });
   handle.change((d) => A.splice(d, ["text"], 3, 0, "Deux.\n"));
   workspace.myId = "me";

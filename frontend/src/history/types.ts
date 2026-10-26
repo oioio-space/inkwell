@@ -28,18 +28,9 @@ export interface Variant {
   mergedHeads?: Heads;
 }
 
-/** What a device says about itself: which device (peer) it is and which name it writes under. */
-export interface Claim {
-  name: string;
-  peer: string;
-  at: number;
-}
-
 export interface Meta {
   versions?: Version[];
   variants?: Variant[];
-  /** Automerge actor id -> claim. Written by each device for its own actor only. */
-  actors?: Record<string, Claim>;
 }
 
 export interface HDoc {

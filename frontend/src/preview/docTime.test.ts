@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { next as A } from "@automerge/automerge";
 import { describe, expect, it } from "vitest";
-import { MAX_EDITABLE_CHARS } from "../store/limits";
+import { CHUNK_CHARS, chunksOf, MAX_GROWN_CHARS } from "../store/limits";
 import { lastChangeSeconds } from "./docTime";
 
 describe("lastChangeSeconds", () => {
@@ -13,11 +13,13 @@ describe("lastChangeSeconds", () => {
     expect(lastChangeSeconds(copy)).toBe(1_700_000_000); // another peer holding the same heads
   });
 
-  it("PRV-78 a text too big to edit is not decoded (Automerge panics on its change): 0", () => {
+  it("PRV-78 a text past what a document grows to is not decoded (Automerge panics on its change): 0", () => {
     let doc = A.from({ text: "" });
-    doc = A.change(doc, { time: 1_700_000_000 }, (d) =>
-      A.splice(d, ["text"], 0, 0, "a".repeat(MAX_EDITABLE_CHARS + 1)),
-    );
+    // Built in pieces, as the app does: a single change this big would cost gigabytes here.
+    for (const [i, piece] of chunksOf("a".repeat(MAX_GROWN_CHARS + 1)).entries())
+      doc = A.change(doc, { time: 1_700_000_000 }, (d) =>
+        A.splice(d, ["text"], i * CHUNK_CHARS, 0, piece),
+      );
     expect(lastChangeSeconds(doc)).toBe(0);
   }, 60_000);
 

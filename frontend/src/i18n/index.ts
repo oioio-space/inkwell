@@ -16,6 +16,13 @@ export function t(key: MessageKey, vars: Record<string, string | number> = {}): 
   return template.replace(/\{(\w+)\}/g, (_, name: string) => String(vars[name] ?? `{${name}}`));
 }
 
+const megabytes = new Intl.NumberFormat(lang, { maximumFractionDigits: 1 });
+
+/** A text of this many characters, as the "Mo" a message shows (1 Mo = 2^20 characters). */
+export function megabytesOf(chars: number): string {
+  return megabytes.format(chars / 2 ** 20);
+}
+
 /** The right plural of a message: `key.one` or `key.other`, with {count} filled in. */
 export function tn(
   base: string,

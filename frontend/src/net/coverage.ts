@@ -1,4 +1,5 @@
 import { next as A } from "@automerge/automerge";
+import { MAX_GROWN_CHARS } from "../store/limits";
 
 /** One change, reduced to what the coverage check needs. */
 interface ChangeInfo {
@@ -140,6 +141,16 @@ export class Coverage {
     repeated: 0,
   };
   #docs = new Map<string, DocCoverage>();
+  /** Characters the peers' covered changes added to each document's text since this start. */
+  #grown = new Map<string, number>();
+  /** The changes already counted in `#grown`, by document. */
+  #counted = new Map<string, Set<string>>();
+  readonly #maxChars: number;
+
+  /** `maxChars`: the most characters peers may add to a text (default: what a document grows to). */
+  constructor(maxChars: number = MAX_GROWN_CHARS) {
+    this.#maxChars = maxChars;
+  }
   #lastRewritten = new Map<string, Uint8Array>(); // peer + document → last message we had to cut
 
   /** `signer`, a current writer, attested `heads` of document `doc`. */
@@ -200,6 +211,35 @@ export class Coverage {
       this.stats.dropped++;
       return undefined;
     }
+    // A peer cannot make us hold a text past the limit (ADR 0028): what the covered chunks add
+    // to the text, counted over the session, stays under it; a deletion gives its room back.
+    // A whole document is judged by its own length; a change counts once, whatever number of
+    // times a peer sends it again.
+    const seen = this.#counted.get(doc) ?? new Set<string>();
+    let grew = 0;
+    let docChars = 0;
+    const fresh: string[] = [];
+    for (const [i, c] of chunks.entries()) {
+      if (!covered[i]) continue;
+      if (c.isDocument) {
+        docChars = Math.max(docChars, c.chars);
+        if (c.chars > this.#maxChars) grew = Number.POSITIVE_INFINITY;
+        continue;
+      }
+      const hash = c.changes[0]?.hash ?? "";
+      if (seen.has(hash)) continue;
+      fresh.push(hash);
+      grew += c.chars;
+    }
+    const total = Math.max(0, (this.#grown.get(doc) ?? 0) + grew);
+    if (grew > 0 && total > this.#maxChars) {
+      this.stats.dropped++;
+      return undefined;
+    }
+    for (const h of fresh) seen.add(h);
+    this.#counted.set(doc, seen);
+    // A document taken in is the text itself: what was counted before is part of it, not on top.
+    this.#grown.set(doc, Math.max(total, docChars));
     const heads = docs.withoutRejected(msg.heads);
     if (covered.every(Boolean) && heads === msg.heads) return data;
     const kept = chunks.filter((_, i) => covered[i]).map((c) => c.bytes);
@@ -230,6 +270,11 @@ interface Chunk {
   /** A whole-document chunk (several changes in one), which cannot be cut. */
   isDocument: boolean;
   changes: ChangeInfo[];
+  /**
+   * How many characters it adds to a text: inserts minus deletes of a change, or the length of
+   * the text of a whole document. Read from what was decoded for the check anyway.
+   */
+  chars: number;
 }
 
 /** The first four bytes of every Automerge chunk. */
@@ -265,8 +310,29 @@ function describeChunk(bytes: Uint8Array): Chunk {
   if (bytes[CHUNK_TYPE] === CHUNK_DOCUMENT) {
     const doc = A.load<unknown>(bytes);
     const changes = A.getChangesMetaSince(doc, []).map(({ hash, deps }) => ({ hash, deps }));
-    return { bytes, isDocument: true, changes };
+    const text = (doc as { text?: unknown }).text;
+    return { bytes, isDocument: true, changes, chars: typeof text === "string" ? text.length : 0 };
   }
-  const { hash, deps } = A.decodeChange(bytes);
-  return { bytes, isDocument: false, changes: [{ hash, deps }] };
+  const { hash, deps, ops } = A.decodeChange(bytes);
+  return { bytes, isDocument: false, changes: [{ hash, deps }], chars: opsChars(ops) };
+}
+
+/**
+ * How many UTF-16 units (what the editor counts) a decoded change adds to a text: its inserts at
+ * the length of the value they carry (Automerge keeps one op per character, an emoji being one
+ * op of two units), minus its deletes at one each (an op carries no value; a deleted emoji frees
+ * two units but counts one, so the tally errs on the side of caution).
+ */
+function opsChars(ops: readonly { action: string; insert?: boolean; value?: unknown }[]): number {
+  let chars = 0;
+  for (const op of ops) {
+    if (op.action === "del") chars--;
+    else if (op.insert) chars += typeof op.value === "string" ? op.value.length : 1;
+  }
+  return chars;
+}
+
+/** The characters (UTF-16 units) one encoded change adds to a text; negative if it removes more. */
+export function changeChars(change: Uint8Array): number {
+  return opsChars(A.decodeChange(change).ops);
 }

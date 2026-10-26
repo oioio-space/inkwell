@@ -132,19 +132,47 @@ export function sessionsOf(
   return out;
 }
 
-/**
- * Which person an actor is, for the grouping: the device it says it is (`meta.actors`), so a
- * person who reloads the page (a new actor each time) stays in the same session.
- */
-export function personOfDoc(doc: A.Doc<unknown>): (actor: string) => string {
-  const claims =
-    (doc as { meta?: { actors?: Record<string, { peer: string }> } }).meta?.actors ?? {};
-  return (actor) => claims[actor]?.peer ?? actor;
+/** What a device says about itself in a change of its own: who it is, and the name it writes under. */
+export interface DeviceClaim {
+  name: string;
+  peer: string;
 }
+
+const CLAIM_MAX = 80;
+
+/**
+ * The claims of the document, by actor. A claim is read from the message of a change, and a
+ * change belongs to one actor: nobody can make a claim in another actor's name. The newest wins
+ * (a person who renames). It stays what it is, the word of that device: nothing says it is true.
+ */
+export function claimsOf(steps: readonly Step[]): Record<string, DeviceClaim> {
+  const out: Record<string, DeviceClaim> = {};
+  for (const s of steps) {
+    const action = parseAction(s.message);
+    if (action?.kind !== "claim") continue;
+    try {
+      const v: unknown = JSON.parse(action.label);
+      const { name, peer } = v as { name?: unknown; peer?: unknown };
+      if (typeof name === "string" && typeof peer === "string") {
+        out[s.actor] = { name: name.slice(0, CLAIM_MAX), peer: peer.slice(0, CLAIM_MAX) };
+      }
+    } catch {
+      // Not a claim: ignored.
+    }
+  }
+  return out;
+}
+
+/** Which person an actor is, for the grouping: the device it says it is, so a reload stays in the session. */
+export const personOfClaims =
+  (claims: Readonly<Record<string, DeviceClaim>>) =>
+  (actor: string): string =>
+    claims[actor]?.peer ?? actor;
 
 /** The sessions of a document, oldest first. */
 export function history(doc: A.Doc<unknown>, now = Date.now()): Session[] {
-  return sessionsOf(stepsOf(doc), now, personOfDoc(doc));
+  const steps = stepsOf(doc);
+  return sessionsOf(steps, now, personOfClaims(claimsOf(steps)));
 }
 
 /** The text of the document at some heads (empty heads: the empty document). */

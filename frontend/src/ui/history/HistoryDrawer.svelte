@@ -136,6 +136,7 @@ const activity = $derived.by(() => {
         </p>
       {/if}
 
+      {#if history.notice}<p class="note" role="status" data-testid="history-notice">{history.notice}</p>{/if}
       {#if history.error}<p class="note" role="alert" data-testid="history-error">{t("history.error", { reason: history.error })}</p>{/if}
       <div
         class="list"

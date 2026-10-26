@@ -2,6 +2,7 @@
 import { next as A } from "@automerge/automerge";
 import { Repo } from "@automerge/automerge-repo";
 import { describe, expect, it } from "vitest";
+import { CHUNK_CHARS } from "./limits";
 import { integrate, undoIntegration } from "./merge";
 
 type Doc = { text: string };
@@ -99,4 +100,91 @@ describe("integrate (EXT-01..03, 12)", () => {
     expect(done?.skipped).toHaveLength(1);
     expect(done?.lines).toBe(0);
   });
+
+  it("PERF-04 a rewrite of the same size (150 Ki replaced by 150 Ki) is chunked by the region it changes, not by net growth", () => {
+    const old = "a".repeat(150 * 1024);
+    const h = open(`<${old}>`);
+    const base = heads(h);
+    const before = A.getAllChanges(h.doc()).length;
+    const fresh = "b".repeat(150 * 1024);
+    integrate(h, base, `<${fresh}>`);
+    expect(h.doc().text).toBe(`<${fresh}>`);
+    const added = A.getAllChanges(h.doc()).slice(before);
+    expect(added.length).toBeGreaterThanOrEqual(3);
+    for (const c of added) {
+      const inserted = A.decodeChange(c).ops.filter(
+        (op) => (op as { insert?: boolean }).insert,
+      ).length;
+      expect(inserted).toBeLessThanOrEqual(CHUNK_CHARS);
+    }
+  }, 30_000);
+
+  it("PERF-04 outside edits on the first and last line of a big file merge cleanly with a peer typing in the middle", () => {
+    const lines = Array.from({ length: 6000 }, (_, i) => `ligne numero ${i} du fichier`);
+    const base = `${lines.join("\n")}\n`;
+    expect(base.length).toBeGreaterThan(64 * 1024);
+    const h = open(base);
+    const heads0 = heads(h);
+    at(h, base.indexOf("ligne numero 3000 "), "[pair] ");
+    const outside = [...lines];
+    outside[0] = "PREMIERE LIGNE modifiee";
+    outside[5999] = "DERNIERE LIGNE modifiee";
+    integrate(h, heads0, `${outside.join("\n")}\n`);
+    const expected = [...outside];
+    expected[3000] = `[pair] ${lines[3000]}`;
+    expect(h.doc().text).toBe(`${expected.join("\n")}\n`);
+  }, 30_000);
+
+  it("PERF-04 a huge new block between two small edits is chunked, and the small edits still merge by line", () => {
+    const lines = Array.from({ length: 6000 }, (_, i) => `ligne numero ${i} du fichier`);
+    const base = `${lines.join("\n")}\n`;
+    const h = open(base);
+    const heads0 = heads(h);
+    at(h, base.indexOf("ligne numero 5000 "), "[pair] ");
+    const block = Array.from({ length: 8000 }, (_, i) => `ajout ${i} dans le fichier`);
+    const outside = [
+      "PREMIERE modifiee",
+      ...lines.slice(1, 3000),
+      ...block,
+      ...lines.slice(3000, 5999),
+      "DERNIERE modifiee",
+    ];
+    const before = A.getAllChanges(h.doc()).length;
+    integrate(h, heads0, `${outside.join("\n")}\n`);
+    const result = h.doc().text.split("\n");
+    expect(result[0]).toBe("PREMIERE modifiee");
+    expect(result).toContain(`[pair] ligne numero 5000 du fichier`);
+    expect(result.at(-2)).toBe("DERNIERE modifiee");
+    expect(result.filter((l) => l.startsWith("ajout "))).toHaveLength(8000);
+    for (const c of A.getAllChanges(h.doc()).slice(before)) {
+      const inserted = A.decodeChange(c).ops.filter(
+        (op) => (op as { insert?: boolean }).insert,
+      ).length;
+      expect(inserted).toBeLessThanOrEqual(CHUNK_CHARS);
+    }
+  }, 30_000);
+
+  it("PERF-04 a file that brings 100 Ki of new text comes in changes of at most 64 Ki, and what was typed meanwhile stays", () => {
+    const h = open("head\ntail\n");
+    const base = heads(h);
+    at(h, 0, "MINE "); // typed meanwhile
+    const lines = Array.from({ length: 12_000 }, (_, i) => `ligne ${i}`).join("\n");
+    const before = A.getAllChanges(h.doc()).length;
+    const done = integrate(h, base, `head\n${lines}\ntail\n`);
+    expect(h.doc().text).toBe(`MINE head\n${lines}\ntail\n`);
+    expect(lines.length).toBeGreaterThan(100 * 1024);
+    const added = A.getAllChanges(h.doc()).slice(before);
+    expect(added.length).toBeGreaterThanOrEqual(Math.ceil(lines.length / CHUNK_CHARS));
+    for (const c of added) {
+      const inserted = A.decodeChange(c).ops.filter(
+        (op) => (op as { insert?: boolean }).insert,
+      ).length;
+      expect(inserted).toBeLessThanOrEqual(CHUNK_CHARS);
+    }
+    // The file's own text is the document as of the integration's branch.
+    expect(A.view(h.doc(), done?.branch as A.Heads).text).toBe(`head\n${lines}\ntail\n`);
+    // Undo takes it all back in one step, and keeps the typing.
+    if (done) undoIntegration(h, done);
+    expect(h.doc().text).toBe("MINE head\ntail\n");
+  }, 30_000);
 });

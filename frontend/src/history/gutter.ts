@@ -2,7 +2,7 @@ import { next as A } from "@automerge/automerge";
 import type { ChangeMark } from "../editor/changeGutter";
 import { t } from "../i18n";
 import type { Author } from "./people";
-import type { Blame } from "./track";
+import { type Blame, firstSpan } from "./track";
 import { clock } from "./when";
 
 type Doc = { text: string };
@@ -72,10 +72,12 @@ export function changeMarks(
     if (!session || d.by < since || d.owner >= since) continue;
     const who = author(session.actor);
     if (who.mine) continue;
-    const near = blame.spans.find(
-      (sp) => sp.s === d.by && sp.replace && (sp.from === d.at || sp.to === d.at),
+    // A replacement that ends or starts right here: the removal is part of that modification.
+    const i = firstSpan(blame.spans, d.at);
+    const near = [blame.spans[i - 1], blame.spans[i]].some(
+      (sp) => sp && sp.s === d.by && sp.replace && (sp.from === d.at || sp.to === d.at),
     );
-    if (near) continue; // shown as a modification
+    if (near) continue;
     const cursor = cursorAt(doc, d.at);
     out.push({
       kind: "deleted",

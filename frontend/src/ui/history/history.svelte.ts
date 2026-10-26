@@ -1,5 +1,5 @@
 import { next as A } from "@automerge/automerge";
-import type { DocHandle } from "@automerge/automerge-repo";
+import { type AutomergeUrl, type DocHandle, isValidAutomergeUrl } from "@automerge/automerge-repo";
 import { Session as Backend } from "../../../bindings/github.com/oioio-space/inkwell/internal/app/index";
 import {
   type Analysis,
@@ -11,7 +11,7 @@ import {
 import { type Filters, filterSessions, NO_FILTER } from "../../history/filters";
 import { buildGraph, type Row } from "../../history/graph";
 import { sinceHeads } from "../../history/gutter";
-import type { Session } from "../../history/log";
+import type { DeviceClaim, Session } from "../../history/log";
 import { textAt } from "../../history/log";
 import { watchHeadings } from "../../history/normalize";
 import { type Author, authorBook, claimActor, type Directory } from "../../history/people";
@@ -25,14 +25,16 @@ import {
   type Reverted,
   reopenVariant,
   revertTo,
+  TooBig,
   undoChange,
   undoRevert,
   whatChanged,
 } from "../../history/versions";
 import { t } from "../../i18n";
 import { tooBigToEdit } from "../../store/limits";
+import type { Skip } from "../../store/merge";
 import { settings } from "../../store/settings.svelte";
-import { lastVisit, saveVisit } from "../../store/visit";
+import { lastVisit, myActors, rememberActor, saveVisit } from "../../store/visit";
 import { workspace } from "../../workspace/workspace.svelte";
 
 export type Tab = "history" | "comments" | "activity";
@@ -69,6 +71,9 @@ export type RowKey = string;
 /** Height of one row of the history list (the list is virtual). */
 export const ROW_HEIGHT = 64;
 
+/** Past this many characters, a failed worker is not replaced by work on the page. */
+const INLINE_MAX_CHARS = 100_000;
+
 /** How long a person pauses after an edit before the device says in the document who it is. */
 const CLAIM_PAUSE_MS = 2_000;
 
@@ -96,6 +101,13 @@ class HistoryState {
   /** Set while a person is naming a version or a variant. */
   naming = $state<{ kind: "version" | "variant"; heads: Heads } | undefined>();
   error = $state("");
+  /** What the last action could not do, in words (too big, held back by a locked zone, not found). */
+  notice = $state("");
+  /**
+   * Whether a stretch of the text is in a locked zone (ADR 0022): going back, undoing and merging
+   * leave those stretches alone. Set by the locks (B3) once they exist; none until then.
+   */
+  skip: Skip | undefined;
   /** The variant being edited in the editor, by name; empty for the main document. */
   variantName = $state("");
 
@@ -104,6 +116,8 @@ class HistoryState {
   #seq = 0;
   #timer: ReturnType<typeof setTimeout> | undefined;
   #claimTimer: ReturnType<typeof setTimeout> | undefined;
+  /** What this device last said about itself in the open document. */
+  #claimed: DeviceClaim | undefined;
   #stop: (() => void)[] = [];
   #lastRevert: Reverted | undefined;
 
@@ -132,17 +146,18 @@ class HistoryState {
   /** The signed list says this device's person only reads. */
   readOnly = $derived(this.members.some((m) => m.self && m.role === "reader"));
 
-  /** The actor of this device in the open document. */
-  myActor = $state("");
+  /** The actors this device has written under in the open document (kept on this device only). */
+  myActors = $state.raw<ReadonlySet<string>>(new Set());
+  /** The actor of this device now. */
+  myActor = "";
 
   directory: Directory = $derived({
-    myPeer: workspace.myId,
-    myActor: this.myActor,
+    myActors: this.myActors,
     nameOfPeer: (peer) => this.members.find((m) => m.peers.includes(peer))?.name || undefined,
     present: workspace.names,
   });
 
-  author = $derived(authorBook(this.doc, this.directory));
+  author = $derived(authorBook(this.analysis?.claims, this.directory));
 
   /** Starts following a document: its history, the marks since the last visit, the headings rule. */
   attach(handle: DocHandle<HDoc>): void {
@@ -152,6 +167,9 @@ class HistoryState {
     if (!doc) return;
     this.doc = doc;
     this.myActor = A.getActorId(doc);
+    rememberActor(handle.url, this.myActor);
+    this.myActors = myActors(handle.url);
+    this.#claimed = undefined;
     // First opening: the last visit is now, nothing is marked (HIS-01).
     const visit = lastVisit(handle.url);
     this.since = sinceHeads(doc, visit);
@@ -210,7 +228,10 @@ class HistoryState {
     // A document too big to edit is only read: nothing is written into it (ADR 0026).
     if (!handle || this.readOnly || !workspace.myId || tooBigToEdit(handle.doc()?.text.length ?? 0))
       return;
-    claimActor(handle, { id: workspace.myId, name: workspace.myName }, create);
+    const known = this.#claimed ?? this.analysis?.claims[this.myActor];
+    if (!known && !create) return;
+    claimActor(handle, { id: workspace.myId, name: workspace.myName }, known);
+    this.#claimed = { name: workspace.myName, peer: workspace.myId };
   }
 
   /** The name changed: the document says it. */
@@ -271,8 +292,9 @@ class HistoryState {
       this.error = "";
     } catch (err) {
       if (seq !== this.#seq) return;
-      // The worker failed: do the work here, in slices, rather than leave the screen empty.
-      if (this.#analyzer === analyzer) {
+      // The worker failed: a small document is analysed here, in slices, rather than leave the
+      // screen empty. A big one that did not finish in time is not tried again on the page.
+      if (this.#analyzer === analyzer && doc.text.length < INLINE_MAX_CHARS) {
         analyzer.dispose();
         this.#analyzer = inlineAnalyzer();
         this.#schedule();
@@ -326,7 +348,9 @@ class HistoryState {
       order: a.order,
       sessions: this.filtered.shown,
       versions: narrowed ? [] : (doc.meta?.versions ?? []).filter((v) => !v.auto),
-      variants: narrowed ? [] : (doc.meta?.variants ?? []),
+      variants: narrowed
+        ? []
+        : (doc.meta?.variants ?? []).filter((v) => isValidAutomergeUrl(v.url)),
       showAbandoned: this.showAbandoned,
     });
   });
@@ -394,9 +418,8 @@ class HistoryState {
 
   /** The main document and a variant, side by side. */
   async compareVariant(variant: Variant): Promise<void> {
-    const repo = workspace.repo;
-    if (!repo || !this.doc) return;
-    const handle = await repo.find<HDoc>(variant.url as never);
+    const handle = await this.#variantHandle(variant);
+    if (!handle || !this.doc) return;
     this.diff = {
       title: t("history.compare.variant", { name: variant.name }),
       before: this.doc.text,
@@ -449,6 +472,10 @@ class HistoryState {
   askRevert(heads: Heads, label: string): void {
     const handle = this.#handle;
     if (!handle || this.readOnly) return;
+    if (tooBigToEdit(handle.doc().text.length)) {
+      this.notice = t("history.refused");
+      return;
+    }
     const after = textAt(handle.doc(), heads);
     this.apply = {
       kind: "revert",
@@ -456,7 +483,11 @@ class HistoryState {
       before: handle.doc().text,
       after,
       confirm: () => {
-        this.#lastRevert = revertTo(handle, heads, label) ?? this.#lastRevert;
+        this.#try(() => {
+          const done = revertTo(handle, heads, label, this.#guarded());
+          if (done) this.#lastRevert = done;
+          return done?.held ?? 0;
+        });
         this.apply = undefined;
         this.diff = undefined;
         void this.refresh();
@@ -475,14 +506,51 @@ class HistoryState {
       kind: "undo",
       title: t("history.undo.title", { name: label }),
       before: handle.doc().text,
-      after: previewUndo(handle, done),
+      after: previewUndo(handle, done, this.#guarded()),
       confirm: () => {
-        undoChange(handle, done, label);
+        this.#try(() => undoChange(handle, done, label, this.#guarded()));
         this.apply = undefined;
         this.diff = undefined;
         void this.refresh();
       },
     };
+  }
+
+  #guarded(): { skip?: Skip } {
+    return this.skip ? { skip: this.skip } : {};
+  }
+
+  /** Runs a write; says in words when the size limits refused it, or a locked zone held some back. */
+  #try(write: () => number): void {
+    this.notice = "";
+    try {
+      const held = write();
+      if (held > 0) this.notice = t("history.held", { count: held });
+    } catch (err) {
+      if (err instanceof TooBig) this.notice = t("history.refused");
+      else throw err;
+    }
+  }
+
+  /**
+   * The document of a variant. Its address was written by a peer: it is checked before anything
+   * is fetched, and the wait is bounded.
+   */
+  async #variantHandle(variant: Variant): Promise<DocHandle<HDoc> | undefined> {
+    const repo = workspace.repo;
+    if (!repo) return undefined;
+    if (!isValidAutomergeUrl(variant.url)) {
+      this.notice = t("history.variant.missing");
+      return undefined;
+    }
+    try {
+      return await repo.find<HDoc>(variant.url as AutomergeUrl, {
+        signal: AbortSignal.timeout(15_000),
+      });
+    } catch {
+      this.notice = t("history.variant.missing");
+      return undefined;
+    }
   }
 
   /** Ctrl+Z takes back a « Revenir » when it was the last thing that happened. */
@@ -502,8 +570,9 @@ class HistoryState {
     const handle = this.#handle;
     const repo = workspace.repo;
     if (!handle || !repo || this.readOnly) return;
-    void repo.find<HDoc>(variant.url as never).then((v) => {
-      mergeVariant(handle, v, variant);
+    void this.#variantHandle(variant).then((v) => {
+      if (!v) return;
+      this.#try(() => mergeVariant(handle, v, variant, this.#guarded()).held.length);
       void this.refresh();
     });
   }
@@ -524,10 +593,9 @@ class HistoryState {
 
   /** Edits a variant in the editor instead of the main document. */
   async editVariant(variant: Variant): Promise<void> {
-    const repo = workspace.repo;
-    if (!repo) return;
-    const handle = await repo.find<HDoc>(variant.url as never);
-    claimActor(handle, { id: workspace.myId, name: workspace.myName });
+    const handle = await this.#variantHandle(variant);
+    if (!handle) return;
+    claimActor(handle, { id: workspace.myId, name: workspace.myName }, undefined);
     workspace.variant = handle as never;
     this.variantName = variant.name;
   }
