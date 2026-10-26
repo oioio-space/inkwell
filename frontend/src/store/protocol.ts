@@ -16,6 +16,12 @@
  * PutBlob) take its path as the key, one component per folder, up to 32. Go refuses any path that
  * is not portable (ADR 0023); the webview's own validator checks the names before it sends them.
  *
+ * WriteProjectionAt is WriteProjection that also records a sync point (opaque bytes) with the
+ * hash Go computes of what it writes: its data is point length u16 | point | text (see
+ * {@link encodeWriteAt}). ReadSyncPoint returns that point (NotFound if none). SetSyncPoint
+ * records its data as the point without writing the file (EditedOutside if the file changed). Acknowledge's data,
+ * if any, is the sync point to record with it; without data the file has none.
+ *
  * Tree and Referenced carry the payloads of ./tree.ts: the project tree the webview materialized
  * from the index, and the hashes the index refers to. PutBlob answers with a blob info payload.
  */
@@ -34,6 +40,9 @@ export const Op = {
   Tree: 11,
   Referenced: 12,
   PutBlob: 13,
+  WriteProjectionAt: 14,
+  ReadSyncPoint: 15,
+  SetSyncPoint: 16,
 } as const;
 export type Op = (typeof Op)[keyof typeof Op];
 
@@ -87,6 +96,9 @@ const PATH_OPS: ReadonlySet<number> = new Set([
   Op.Acknowledge,
   Op.FileInfo,
   Op.PutBlob,
+  Op.WriteProjectionAt,
+  Op.ReadSyncPoint,
+  Op.SetSyncPoint,
 ]);
 const MAX_PATH_DEPTH = 32;
 const MAX_PATH_COMPONENT = 255;
@@ -130,6 +142,24 @@ function u32(value: number): number[] {
 
 const readU32 = (b: Uint8Array, at: number): number =>
   new DataView(b.buffer, b.byteOffset, b.byteLength).getUint32(at);
+
+/** The data of a WriteProjectionAt request: the length of `point` as a u16, `point`, then `text`. */
+export function encodeWriteAt(point: Uint8Array, text: Uint8Array): Uint8Array {
+  if (point.length > 0xffff) throw new ProtocolError(`sync point of ${point.length} bytes`);
+  const out = new Uint8Array(2 + point.length + text.length);
+  out.set([point.length >>> 8, point.length & 0xff]);
+  out.set(point, 2);
+  out.set(text, 2 + point.length);
+  return out;
+}
+
+/** Splits the data of a WriteProjectionAt request. Only Go-side fakes and tests need it. */
+export function decodeWriteAt(data: Uint8Array): { point: Uint8Array; text: Uint8Array } {
+  if (data.length < 2) throw new ProtocolError("short write");
+  const n = ((data[0] as number) << 8) | (data[1] as number);
+  if (data.length < 2 + n) throw new ProtocolError("truncated sync point");
+  return { point: data.subarray(2, 2 + n), text: data.subarray(2 + n) };
+}
 
 export function encodeRequest(r: Request): Uint8Array {
   if (!Number.isInteger(r.id) || r.id <= 0 || r.id > 0xffffffff) {

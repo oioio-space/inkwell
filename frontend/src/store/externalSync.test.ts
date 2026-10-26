@@ -6,6 +6,7 @@ import { ExternalSync, type Notice, type SyncStorage } from "./externalSync";
 import { ExternalEditError, NotTextError } from "./GoStorageAdapter";
 import { type Projection, type ProjectionSink, startProjection } from "./projection";
 import type { ExternalPolicy } from "./settings.svelte";
+import { encodeSyncPoint } from "./syncPoint";
 
 type Doc = { text: string };
 
@@ -18,6 +19,8 @@ class Disk implements SyncStorage, ProjectionSink {
   edited = false;
   writes: string[] = [];
   acks = 0;
+  /** What Go records beside the file's hash: the point where the file and the document agree. */
+  point: string | undefined;
   constructor(text?: string) {
     this.text = text;
   }
@@ -25,14 +28,23 @@ class Disk implements SyncStorage, ProjectionSink {
     if (this.readError) throw this.readError;
     return this.text;
   }
-  async acknowledge(): Promise<void> {
+  async acknowledge(_name?: string, point?: string): Promise<void> {
     this.edited = false;
     this.acks++;
+    this.point = point;
   }
-  async writeProjection(_name: string, text: string): Promise<void> {
+  async setSyncPoint(_name: string, point: string): Promise<void> {
+    if (this.edited) throw new ExternalEditError();
+    this.point = point;
+  }
+  async readSyncPoint(): Promise<string | undefined> {
+    return this.point;
+  }
+  async writeProjection(_name: string, text: string, point?: string): Promise<void> {
     if (this.writeError) throw this.writeError;
     if (this.edited) throw new ExternalEditError();
     this.text = text;
+    this.point = point;
     this.writes.push(text);
   }
   /** A program writes the file. */
@@ -85,7 +97,6 @@ async function rig(
   projection = startProjection(h, disk, {
     schedule: () => (settings.manual ? undefined : settings.delay),
     known: settings.manual ? disk.text : undefined,
-    onWritten: (w) => sync.recordWritten(w),
     onDirty: (d) => dirty.push(d),
     onError: (e) => errors.push(e),
     retryable: (e) => !(e instanceof ExternalEditError),
@@ -392,7 +403,86 @@ describe("outside changes (EXT-*)", () => {
     expect(r.disk.text).toBe("a\n");
   });
 
+  /** One window of the project: its own sync and projection, over the shared disk and document. */
+  function openWindow(h: DocHandle<Doc>, disk: Disk, manual = false, legacyKey?: string) {
+    let projection: Projection | undefined;
+    const sync = new ExternalSync({
+      handle: h,
+      name: "main.typ",
+      storage: disk,
+      projection: () => projection,
+      policy: () => "import",
+      manual: () => manual,
+      onNotice: () => {},
+      ...(legacyKey ? { legacyKey } : {}),
+    });
+    projection = startProjection(h, disk, {
+      delayMs: 10,
+      ...(manual ? { schedule: () => undefined, known: disk.text } : {}),
+    });
+    return { sync, projection };
+  }
+
   it("the point of agreement survives a restart: a change made while closed is merged, not replaced", async () => {
+    const h = repo.create<Doc>({ text: "one\ntwo\n" });
+    const disk = new Disk();
+    const first = openWindow(h, disk);
+    await vi.advanceTimersByTimeAsync(50);
+    first.sync.stop();
+    first.projection.stop();
+    // Closed. Meanwhile I typed in another window of the document, and a program edited the file.
+    h.change((d) => A.splice(d, ["text"], 0, 0, "MINE "));
+    disk.edit("one\nTWO\n");
+    const second = openWindow(h, disk, true);
+    second.sync.notify("main.typ");
+    await vi.advanceTimersByTimeAsync(300);
+    expect(h.doc().text).toBe("MINE one\nTWO\n");
+  });
+
+  it("losing the browser's storage changes nothing: the point lives with the file", async () => {
+    const h = repo.create<Doc>({ text: "one\ntwo\n" });
+    const disk = new Disk();
+    const first = openWindow(h, disk);
+    await vi.advanceTimersByTimeAsync(50);
+    first.sync.stop();
+    first.projection.stop();
+    h.change((d) => A.splice(d, ["text"], 0, 0, "MINE "));
+    disk.edit("one\nTWO\n");
+    // A fresh webview: localStorage empty, or gone.
+    vi.stubGlobal("localStorage", {
+      getItem: () => null,
+      setItem: () => {
+        throw new Error("storage lost");
+      },
+      removeItem: () => {},
+    });
+    try {
+      const second = openWindow(h, disk, true, "inkwell.sync.test");
+      second.sync.notify("main.typ");
+      await vi.advanceTimersByTimeAsync(300);
+      expect(h.doc().text).toBe("MINE one\nTWO\n");
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("a second window on the same project gets the same result", async () => {
+    const h = repo.create<Doc>({ text: "one\ntwo\n" });
+    const disk = new Disk();
+    const one = openWindow(h, disk);
+    await vi.advanceTimersByTimeAsync(50);
+    // The second window opens later and has seen nothing of the first one's session; its person
+    // types (not saved yet: Ctrl+S mode) and then a program edits the file.
+    const two = openWindow(h, disk, true);
+    h.change((d) => A.splice(d, ["text"], 0, 0, "MINE "));
+    disk.edit("one\nTWO\n");
+    two.sync.notify("main.typ");
+    one.sync.notify("main.typ");
+    await vi.advanceTimersByTimeAsync(300);
+    expect(h.doc().text).toBe("MINE one\nTWO\n");
+  });
+
+  it("the older localStorage point is used once, then dropped", async () => {
     const store = new Map<string, string>();
     vi.stubGlobal("localStorage", {
       getItem: (k: string) => store.get(k) ?? null,
@@ -401,36 +491,16 @@ describe("outside changes (EXT-*)", () => {
     });
     try {
       const h = repo.create<Doc>({ text: "one\ntwo\n" });
-      const disk = new Disk();
-      const key = "inkwell.sync.test";
-      const mk = (): ExternalSync => {
-        let projection: Projection | undefined;
-        const sync = new ExternalSync({
-          handle: h,
-          name: "main.typ",
-          storage: disk,
-          projection: () => projection,
-          policy: () => "import",
-          manual: () => false,
-          onNotice: () => {},
-          persistKey: key,
-        });
-        projection = startProjection(h, disk, {
-          delayMs: 10,
-          onWritten: (w) => sync.recordWritten(w),
-        });
-        return sync;
-      };
-      const first = mk();
-      await vi.advanceTimersByTimeAsync(50);
-      first.stop();
-      // Closed. Meanwhile I typed in another window of the document, and a program edited the file.
+      const disk = new Disk("one\ntwo\n"); // Go has no point: it was never given one
+      store.set("inkwell.sync.test", encodeSyncPoint(A.getHeads(h.doc()), "one\ntwo\n"));
       h.change((d) => A.splice(d, ["text"], 0, 0, "MINE "));
+      const w = openWindow(h, disk, true, "inkwell.sync.test");
       disk.edit("one\nTWO\n");
-      const second = mk();
-      second.notify("main.typ");
+      w.sync.notify("main.typ");
       await vi.advanceTimersByTimeAsync(300);
       expect(h.doc().text).toBe("MINE one\nTWO\n");
+      expect(store.has("inkwell.sync.test")).toBe(false);
+      expect(disk.point).toBeDefined(); // Go has it now
     } finally {
       vi.unstubAllGlobals();
     }
@@ -439,31 +509,20 @@ describe("outside changes (EXT-*)", () => {
 
 describe("the saved point of agreement", () => {
   it("is forgotten when Inkwell's version is kept without writing, so a restart does not merge from it", async () => {
-    const store = new Map<string, string>();
-    vi.stubGlobal("localStorage", {
-      getItem: (k: string) => store.get(k) ?? null,
-      setItem: (k: string, v: string) => void store.set(k, v),
-      removeItem: (k: string) => void store.delete(k),
+    const h = repo.create<Doc>({ text: "one\n" });
+    const disk = new Disk("one\n");
+    disk.point = encodeSyncPoint(A.getHeads(h.doc()), "one\n");
+    const sync = new ExternalSync({
+      handle: h,
+      name: "main.typ",
+      storage: disk,
+      projection: () => undefined,
+      policy: () => "keep",
+      manual: () => true, // nothing is written until Ctrl+S
+      onNotice: () => {},
     });
-    try {
-      const h = repo.create<Doc>({ text: "one\n" });
-      const sync = new ExternalSync({
-        handle: h,
-        name: "main.typ",
-        storage: new Disk(),
-        projection: () => undefined,
-        policy: () => "keep",
-        manual: () => true, // nothing is written until Ctrl+S
-        onNotice: () => {},
-        persistKey: "inkwell.sync.test",
-      });
-      sync.recordWritten({ heads: A.getHeads(h.doc()), text: "one\n" });
-      expect(store.has("inkwell.sync.test")).toBe(true);
-      await sync.keepOurs();
-      expect(store.has("inkwell.sync.test")).toBe(false);
-    } finally {
-      vi.unstubAllGlobals();
-    }
+    await sync.keepOurs();
+    expect(disk.point).toBeUndefined();
   });
 });
 

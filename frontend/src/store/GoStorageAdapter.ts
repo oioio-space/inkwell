@@ -11,6 +11,7 @@ import {
   decodeRange,
   decodeResponse,
   encodeRequest,
+  encodeWriteAt,
   Op,
   ProtocolError,
   type Response,
@@ -102,9 +103,34 @@ export class GoStorageAdapter implements StorageAdapterInterface {
     expectOk(await this.#call(Op.RemoveRange, keyPrefix));
   }
 
-  /** Writes a project file (a projection of the document). Rejects if it was edited outside. */
-  async writeProjection(name: string, text: string): Promise<void> {
-    expectOk(await this.#call(Op.WriteProjection, [name], textEncoder.encode(text)));
+  /**
+   * Writes a project file (a projection of the document). Rejects if it was edited outside. With
+   * `point`, Go records it with the hash of what it wrote, in one record: the point where the
+   * file and the document agree (see ./syncPoint.ts).
+   */
+  async writeProjection(name: string, text: string, point?: string): Promise<void> {
+    if (point === undefined) {
+      expectOk(await this.#call(Op.WriteProjection, [name], textEncoder.encode(text)));
+      return;
+    }
+    const data = encodeWriteAt(textEncoder.encode(point), textEncoder.encode(text));
+    expectOk(await this.#call(Op.WriteProjectionAt, [name], data));
+  }
+
+  /**
+   * Records `point` for a file Inkwell has not written (it opened it in the Ctrl+S mode with the
+   * document equal to it). Rejects with {@link ExternalEditError} if the file changed since.
+   */
+  async setSyncPoint(name: string, point: string): Promise<void> {
+    expectOk(await this.#call(Op.SetSyncPoint, [name], textEncoder.encode(point)));
+  }
+
+  /** The point recorded with the file's hash by the last write or acknowledgement; undefined if none. */
+  async readSyncPoint(name: string): Promise<string | undefined> {
+    const r = await this.#call(Op.ReadSyncPoint, [name]);
+    if (r.status === Status.NotFound) return undefined;
+    expectOk(r);
+    return textDecoder.decode(r.payload);
   }
 
   /**
@@ -137,9 +163,14 @@ export class GoStorageAdapter implements StorageAdapterInterface {
     return decodeFileInfo(r.payload);
   }
 
-  /** Tells Go the outside edit of `name` was dealt with, so Inkwell may write it again. */
-  async acknowledge(name: string): Promise<void> {
-    expectOk(await this.#call(Op.Acknowledge, [name]));
+  /**
+   * Tells Go the outside edit of `name` was dealt with, so Inkwell may write it again. With
+   * `point`, Go records it with the hash of the file as it is now; without, the file has none.
+   */
+  async acknowledge(name: string, point?: string): Promise<void> {
+    expectOk(
+      await this.#call(Op.Acknowledge, [name], point ? textEncoder.encode(point) : undefined),
+    );
   }
 
   /** Calls `cb` with the name of each project file edited outside Inkwell. Returns an unsubscribe. */

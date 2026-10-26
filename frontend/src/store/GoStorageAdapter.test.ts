@@ -246,3 +246,39 @@ describe("with automerge-repo", () => {
     expect(reopened.doc()?.text.split("\n").length).toBe(31);
   });
 });
+
+describe("the sync point (kept by Go with the file's hash)", () => {
+  it("is recorded by a write, replaced by an acknowledgement, and cleared by a plain one", async () => {
+    const go = new FakeGoStore();
+    const a = adapterOn(go);
+    expect(await a.readSyncPoint("main.typ")).toBeUndefined();
+    await a.writeProjection("main.typ", "= Hi", '{"heads":["a"],"fingerprint":1}');
+    expect(str(go.files.get("main.typ"))).toBe("= Hi");
+    expect(await a.readSyncPoint("main.typ")).toBe('{"heads":["a"],"fingerprint":1}');
+    await a.acknowledge("main.typ", '{"heads":["b"],"fingerprint":2}');
+    expect(await a.readSyncPoint("main.typ")).toBe('{"heads":["b"],"fingerprint":2}');
+    await a.setSyncPoint("main.typ", '{"heads":["c"],"fingerprint":3}');
+    expect(await a.readSyncPoint("main.typ")).toBe('{"heads":["c"],"fingerprint":3}');
+    await a.acknowledge("main.typ");
+    expect(await a.readSyncPoint("main.typ")).toBeUndefined();
+  });
+
+  it("is refused for a file edited outside", async () => {
+    const go = new FakeGoStore();
+    go.locked.add("main.typ");
+    const a = adapterOn(go);
+    await expect(a.writeProjection("main.typ", "x", "{}")).rejects.toBeInstanceOf(
+      ExternalEditError,
+    );
+    await expect(a.setSyncPoint("main.typ", "{}")).rejects.toBeInstanceOf(ExternalEditError);
+  });
+
+  it("keeps the text intact when the point is empty or long", async () => {
+    const go = new FakeGoStore();
+    const a = adapterOn(go);
+    await a.writeProjection("main.typ", "é\n", "{}");
+    expect(str(go.files.get("main.typ"))).toBe("é\n");
+    await a.writeProjection("main.typ", "", `{"p":"${"x".repeat(5000)}"}`);
+    expect(str(go.files.get("main.typ"))).toBe("");
+  });
+});

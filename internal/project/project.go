@@ -20,6 +20,7 @@
 package project
 
 import (
+	"bytes"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
@@ -59,6 +60,9 @@ var (
 	// ErrExternalEdit is returned when writing a file that was changed from
 	// outside since Inkwell last wrote it, until [Project.Acknowledge].
 	ErrExternalEdit = errors.New("project: file edited outside Inkwell")
+	// ErrSyncPoint is returned for a sync point that is not JSON or is over
+	// [MaxSyncPoint] bytes.
+	ErrSyncPoint = errors.New("project: invalid sync point")
 )
 
 // Meta identifies a project.
@@ -103,6 +107,8 @@ type Project struct {
 	records   *store.KV
 	ownedRoot *os.Root
 	claimed   map[string]bool
+	// points holds the sync point of the files that have one (see ownedRec).
+	points map[string]json.RawMessage
 }
 
 // Create makes a new project folder named after title (made unique and safe
@@ -122,7 +128,7 @@ func Create(base *os.Root, title, rootURL string) (*Project, error) {
 	if err != nil {
 		return nil, fmt.Errorf("project: open %s: %w", dir, err)
 	}
-	p := &Project{dir: dir, root: root, notified: map[string]string{}, treeChanged: make(chan struct{}, 1), claimed: map[string]bool{}}
+	p := &Project{dir: dir, root: root, notified: map[string]string{}, treeChanged: make(chan struct{}, 1), claimed: map[string]bool{}, points: map[string]json.RawMessage{}}
 	p.m = manifest{
 		Meta:  Meta{ID: rand.Text(), Title: title, RootURL: rootURL},
 		Files: map[string]string{MainFile: ""},
@@ -141,7 +147,7 @@ func Open(base *os.Root, dir string) (*Project, error) {
 	if err != nil {
 		return nil, fmt.Errorf("project: open %s: %w", dir, err)
 	}
-	p := &Project{dir: dir, root: root, notified: map[string]string{}, treeChanged: make(chan struct{}, 1), claimed: map[string]bool{}}
+	p := &Project{dir: dir, root: root, notified: map[string]string{}, treeChanged: make(chan struct{}, 1), claimed: map[string]bool{}, points: map[string]json.RawMessage{}}
 	if err := p.initInkwell(false); err != nil {
 		_ = root.Close()
 		return nil, err
@@ -358,8 +364,22 @@ func (p *Project) ReadText(rel string) (Text, error) {
 // and line ending it had ([Encode]); a new file is UTF-8 without BOM, with the
 // line ending of the system. It returns [ErrNotOwned] for a file project.json does not list
 // and [ErrExternalEdit], leaving the file as is, if it was changed since the
-// last write and the change was not acknowledged.
+// last write and the change was not acknowledged. Any sync point of the file
+// is forgotten: see [Project.WriteProjectionAt].
 func (p *Project) WriteProjection(rel string, data []byte) error {
+	return p.WriteProjectionAt(rel, data, nil)
+}
+
+// WriteProjectionAt is [Project.WriteProjection] that also records point as
+// the sync point of the file, in the same record as the hash of what it wrote,
+// so that the two always describe the same bytes. point is opaque to Go (the
+// webview keeps the document's heads in it); nil means none. A point is
+// recorded even when the file already holds the bytes. It returns
+// [ErrSyncPoint] for a point that is not valid.
+func (p *Project) WriteProjectionAt(rel string, data, point []byte) error {
+	if err := checkSyncPoint(point); err != nil {
+		return err
+	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	recorded, err := p.owned(rel)
@@ -382,7 +402,11 @@ func (p *Project) WriteProjection(rel string, data []byte) error {
 	format.Body = string(data)
 	out := Encode(format)
 	if exists && hashOf(out) == recorded {
-		return nil // already what the file holds: no rewrite, so no window to clobber a concurrent edit
+		// Already what the file holds: no rewrite, so no window to clobber a concurrent edit.
+		if bytes.Equal(p.points[rel], point) {
+			return nil
+		}
+		return p.record(rel, recorded, point)
 	}
 	if err := p.mkdir(path.Dir(rel)); err != nil {
 		return err
@@ -390,13 +414,24 @@ func (p *Project) WriteProjection(rel string, data []byte) error {
 	if err := store.WriteAtomic(p.root, rel, out, 0o600); err != nil {
 		return fmt.Errorf("project: write %s: %w", rel, err)
 	}
-	return p.record(rel, hashOf(out))
+	return p.record(rel, hashOf(out), point)
 }
 
 // Acknowledge records the current content of the owned file rel as seen, so
 // the next [Project.WriteProjection] may replace it. Use it once the user has
-// imported or ignored an external edit.
+// imported or ignored an external edit. The sync point of the file is
+// forgotten: see [Project.AcknowledgeAt].
 func (p *Project) Acknowledge(rel string) error {
+	return p.AcknowledgeAt(rel, nil)
+}
+
+// AcknowledgeAt is [Project.Acknowledge] that also records point as the sync
+// point of the file, with the hash, in one record. It returns [ErrSyncPoint]
+// for a point that is not valid.
+func (p *Project) AcknowledgeAt(rel string, point []byte) error {
+	if err := checkSyncPoint(point); err != nil {
+		return err
+	}
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if _, err := p.owned(rel); err != nil {
@@ -406,14 +441,63 @@ func (p *Project) Acknowledge(rel string) error {
 	if err != nil {
 		return err
 	}
-	return p.record(rel, current)
+	return p.record(rel, current, point)
 }
 
-// record stores hash as the last seen content of rel and persists it. The
-// caller holds p.mu. A failed save is returned: the file is already
-// written, so the next start reports it as an external edit, which is safe.
-func (p *Project) record(rel, hash string) error {
+// SetSyncPoint records point as the sync point of the owned file rel without
+// touching the file or its recorded hash: how a session that opens a file it
+// does not write (save with Ctrl+S) says the document and the file agree. It
+// returns [ErrExternalEdit] if the file is no longer what the hash records, as
+// the point would then describe other bytes, and [ErrSyncPoint] for an empty
+// or invalid point.
+func (p *Project) SetSyncPoint(rel string, point []byte) error {
+	if len(point) == 0 {
+		return fmt.Errorf("%w: empty", ErrSyncPoint)
+	}
+	if err := checkSyncPoint(point); err != nil {
+		return err
+	}
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	recorded, err := p.owned(rel)
+	if err != nil {
+		return err
+	}
+	current, _, err := p.diskHash(rel)
+	if err != nil {
+		return err
+	}
+	if current != recorded {
+		return fmt.Errorf("%w: %q", ErrExternalEdit, rel)
+	}
+	if bytes.Equal(p.points[rel], point) {
+		return nil
+	}
+	return p.record(rel, recorded, point)
+}
+
+// SyncPoint returns the point recorded with the hash of the owned file rel, or
+// nil if there is none: where the document and the file last agreed.
+func (p *Project) SyncPoint(rel string) ([]byte, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if _, err := p.owned(rel); err != nil {
+		return nil, err
+	}
+	return bytes.Clone(p.points[rel]), nil
+}
+
+// record stores hash, with point (nil: none), as the last seen content of rel
+// and persists them in one record. The caller holds p.mu. A failed save is
+// returned: the file is already written, so the next start reports it as an
+// external edit, which is safe.
+func (p *Project) record(rel, hash string, point []byte) error {
 	p.m.Files[rel] = hash
+	if point == nil {
+		delete(p.points, rel)
+	} else {
+		p.points[rel] = bytes.Clone(point)
+	}
 	delete(p.notified, rel)
 	return p.saveOwned(rel)
 }

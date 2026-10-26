@@ -65,10 +65,12 @@ run = "gofumpt -w ."
 
 [tasks.vet]
 description = "go vet"
+depends = ["sidecar:fetch"]
 run = "./scripts/rtkx.sh go vet ./..."
 
 [tasks.build]
 description = "Build all packages"
+depends = ["sidecar:fetch"]
 run = "./scripts/rtkx.sh go build ./..."
 
 [tasks."relay:run"]
@@ -124,6 +126,7 @@ run = "./scripts/bench.sh compare"
 
 [tasks.cover]
 description = "Test coverage report (coverage.out + total %)"
+depends = ["sidecar:fetch"]
 run = "./scripts/cover.sh"
 
 [tasks."cover:check"]
@@ -133,6 +136,7 @@ run = "./scripts/cover.sh --check"
 
 [tasks.lint]
 description = "Google Go style-guide gate (gofmt + vet + golangci-lint + build)"
+depends = ["sidecar:fetch"]
 run = "./scripts/rtkx.sh ./scripts/lint.sh"
 
 [tasks."lint:staged"]
@@ -161,6 +165,7 @@ run = "./scripts/rtkx.sh gitleaks git --staged --redact"
 
 [tasks."scan:code"]
 description = "Code vuln scan: gosec (SAST) + govulncheck (reachable CVEs)"
+depends = ["sidecar:fetch"]
 run = "./scripts/sec-scan.sh"
 
 [tasks."scan:code:staged"]
@@ -269,6 +274,7 @@ run = "pnpm install --frozen-lockfile"
 
 [tasks."fe:bindings"]
 description = "Generate the TypeScript bindings for the Go services"
+depends = ["sidecar:fetch"]
 run = "wails3 generate bindings -ts -i ./cmd/inkwell"
 
 [tasks."fe:check"]
@@ -288,12 +294,12 @@ run = "wails3 task dev"
 
 [tasks."app:build"]
 description = "Build the desktop app for this OS into bin/"
-depends = ["fe:install"]
+depends = ["fe:install", "sidecar:fetch"]
 run = "wails3 task build"
 
 [tasks."e2e:build"]
 description = "Build what the end-to-end tests run: frontend, bin/inkwell-server, bin/inkwell-relay, the Playwright browser"
-depends = ["fe:install", "fe:bindings"]
+depends = ["fe:install", "fe:bindings", "sidecar:fetch"]
 run = """
 (cd frontend && pnpm run build)
 go build -tags server -o bin/inkwell-server ./cmd/inkwell
@@ -318,7 +324,8 @@ dir = "frontend"
 run = """
 set -eu
 version=$(node -p "require('./package.json').devDependencies['@playwright/test']")
-port=${INKWELL_E2E_WS_PORT:-37123}
+# a port per checkout (host network): concurrent worktrees must not share the server
+port=${INKWELL_E2E_WS_PORT:-$((37000 + $(printf %s "$PWD" | cksum | cut -d" " -f1) % 1000))}
 name="inkwell-webkit-$port"
 podman rm -f "$name" >/dev/null 2>&1 || true
 podman run -d --rm --name "$name" --network host --ipc host --init \

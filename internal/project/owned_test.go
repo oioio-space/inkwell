@@ -65,7 +65,7 @@ func BenchmarkRecord(b *testing.B) {
 	b.ReportAllocs()
 	for b.Loop() {
 		p.mu.Lock()
-		err := p.record("d/f00001.typ", "abc")
+		err := p.record("d/f00001.typ", "abc", nil)
 		p.mu.Unlock()
 		if err != nil {
 			b.Fatal(err)

@@ -1,9 +1,19 @@
 import { next as A } from "@automerge/automerge";
 import type { DocHandle } from "@automerge/automerge-repo";
+import { encodeSyncPoint } from "./syncPoint";
 
 /** Where the projection goes: the project's `.typ` file, written by Go. */
 export interface ProjectionSink {
-  writeProjection(name: string, text: string): Promise<void>;
+  /**
+   * Writes the file. `point` says where the document and the file now agree (see ./syncPoint.ts);
+   * Go keeps it with the hash of what it wrote, so the two always describe the same bytes.
+   */
+  writeProjection(name: string, text: string, point?: string): Promise<void>;
+  /**
+   * Records `point` for a file that was not written: at open, in the Ctrl+S mode, when the
+   * document equals the file. Go refuses it if the file changed since.
+   */
+  setSyncPoint?(name: string, point: string): Promise<void>;
 }
 
 /** What a successful write tells: the file now holds `text`, which the document had at `heads`. */
@@ -32,8 +42,7 @@ export interface ProjectionOptions {
   onError?: (err: unknown) => void;
   /**
    * Called after each successful write, so a failure shown to the person can be taken back. It
-   * says which text the file now holds and the heads the document had then: the point where the
-   * file and the document agree, which an outside edit is later merged from.
+   * says which text the file now holds and the heads the document had then.
    */
   onWritten?: (written: Written) => void;
   /** Called when the document starts or stops differing from the file. */
@@ -119,7 +128,7 @@ export function startProjection(
         if (text === last) continue;
         const heads = doc ? A.getHeads(doc) : [];
         try {
-          await sink.writeProjection(name, text);
+          await sink.writeProjection(name, text, encodeSyncPoint(heads, text));
           last = text;
           opts.onWritten?.({ text, heads });
           emitDirty();
@@ -157,10 +166,13 @@ export function startProjection(
   };
   handle.on("change", onChange);
   if (schedule() === undefined) {
-    // Nothing is written at open: the file keeps what it holds until the person saves.
+    // Nothing is written at open: the file keeps what it holds until the person saves. If the
+    // document is the file, that is where they agree; an outside edit is later merged from there.
     const doc = handle.doc();
     if (doc && last !== undefined && doc.text === last) {
-      opts.onWritten?.({ text: last, heads: A.getHeads(doc) });
+      void sink.setSyncPoint?.(name, encodeSyncPoint(A.getHeads(doc), last))?.catch(() => {
+        // The file changed since it was read: the outside edit is dealt with when it is notified.
+      });
     }
     emitDirty();
   } else {

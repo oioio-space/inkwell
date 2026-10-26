@@ -1,9 +1,10 @@
-import { type ChildProcess, spawn } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
 import { existsSync, mkdtempSync, readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures";
+import { signalOwned, spawnOwned } from "./own";
 import { ALICE_PORT, SPARE_PORT, SPARE_URL } from "./ports";
 
 // Alice's instance keeps its projects in <INKWELL_E2E_DOCS>/<ALICE_PORT> (see playwright.config.ts).
@@ -61,14 +62,14 @@ test("what is typed lands in main.typ and survives a fresh browser and a second 
     await expect.poll(() => docText(again), { timeout: 10_000 }).toBe(text);
   } finally {
     const exited = new Promise((r) => restarted.once("exit", r));
-    restarted.kill("SIGTERM");
+    signalOwned(restarted, "SIGTERM");
     await exited; // its writes must not reach the next test
   }
 });
 
 /** Starts another inkwell-server over `docs` and waits until it answers. */
 async function startInstance(port: number, docs: string): Promise<ChildProcess> {
-  const child = spawn(resolve(import.meta.dirname, "../../bin/inkwell-server"), [], {
+  const child = spawnOwned(resolve(import.meta.dirname, "../../bin/inkwell-server"), [], {
     env: {
       ...process.env,
       INKWELL_SERVER_PORT: String(port),
@@ -86,6 +87,6 @@ async function startInstance(port: number, docs: string): Promise<ChildProcess> 
     }
     await new Promise((r) => setTimeout(r, 100));
   }
-  child.kill("SIGKILL");
+  signalOwned(child, "SIGKILL");
   throw new Error(`instance on port ${port} did not start`);
 }

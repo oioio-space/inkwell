@@ -1,10 +1,12 @@
-import { type ChildProcess, spawn } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import { mainTypIn, readDisk } from "./disk";
 import { expect, test } from "./fixtures";
 import { docText, open, pair, typeAtEnd } from "./helpers";
+import { signalOwned, spawnOwned } from "./own";
+import { OFFLINE_ALICE_PORT, OFFLINE_BOB_PORT, RELAY_PORT } from "./ports";
 
 // A relay is killed and restarted (same key, same port) while two people, both in
 // relay-only mode, type. No root and no NAT: everything is on the loopback, so this
@@ -13,14 +15,13 @@ import { docText, open, pair, typeAtEnd } from "./helpers";
 // identity, is only known once it runs).
 
 const bin = (name: string) => resolve(import.meta.dirname, "../../bin", name);
-const RELAY_PORT = 17419;
-const ports = { alice: 18091, bob: 18092 };
+const ports = { alice: OFFLINE_ALICE_PORT, bob: OFFLINE_BOB_PORT };
 
 const children: ChildProcess[] = [];
 let dir = "";
 
 function start(path: string, args: string[], env: Record<string, string> = {}): ChildProcess {
-  const child = spawn(path, args, {
+  const child = spawnOwned(path, args, {
     env: { ...process.env, ...env },
     stdio: ["ignore", "pipe", "pipe"],
   });
@@ -66,7 +67,7 @@ async function waitHealthy(port: number) {
 async function stop(proc: ChildProcess) {
   if (proc.exitCode !== null || proc.signalCode !== null) return;
   const exited = new Promise((r) => proc.once("exit", r));
-  proc.kill("SIGTERM");
+  signalOwned(proc, "SIGTERM");
   await exited;
 }
 
@@ -75,7 +76,7 @@ test.beforeAll(() => {
 });
 
 test.afterAll(() => {
-  for (const c of children) c.kill("SIGKILL");
+  for (const c of children) signalOwned(c, "SIGKILL");
   rmSync(dir, { recursive: true, force: true });
 });
 

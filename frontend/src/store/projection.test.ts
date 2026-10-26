@@ -3,6 +3,7 @@ import { next as A } from "@automerge/automerge";
 import { Repo } from "@automerge/automerge-repo";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { PROJECTION_DELAY_MS, type ProjectionSink, startProjection } from "./projection";
+import { encodeSyncPoint } from "./syncPoint";
 
 type Doc = { text: string };
 
@@ -178,5 +179,47 @@ describe("startProjection", () => {
     type(h, "later");
     await vi.advanceTimersByTimeAsync(1000);
     expect(sink.writes).toEqual([]);
+  });
+});
+
+describe("the sync point", () => {
+  it("goes to the sink with each write, at the heads the text was read at", async () => {
+    const points: (string | undefined)[] = [];
+    const sink = new (class extends Sink {
+      override async writeProjection(name: string, text: string, point?: string) {
+        points.push(point);
+        await super.writeProjection(name, text);
+      }
+    })();
+    const h = repo.create<Doc>({ text: "a" });
+    const p = startProjection(h, sink);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(points).toEqual([encodeSyncPoint(A.getHeads(h.doc()), "a")]);
+    p.stop();
+  });
+
+  it("is recorded at open, without a write, when the document equals the file (Ctrl+S mode)", async () => {
+    const recorded: string[] = [];
+    const sink = Object.assign(new Sink(), {
+      setSyncPoint: async (_name: string, point: string) => void recorded.push(point),
+    });
+    const h = repo.create<Doc>({ text: "a" });
+    const p = startProjection(h, sink, { schedule: () => undefined, known: "a" });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(sink.writes).toEqual([]);
+    expect(recorded).toEqual([encodeSyncPoint(A.getHeads(h.doc()), "a")]);
+    p.stop();
+  });
+
+  it("is not recorded at open when the document differs from the file", async () => {
+    const recorded: string[] = [];
+    const sink = Object.assign(new Sink(), {
+      setSyncPoint: async (_name: string, point: string) => void recorded.push(point),
+    });
+    const h = repo.create<Doc>({ text: "b" });
+    const p = startProjection(h, sink, { schedule: () => undefined, known: "a" });
+    await vi.advanceTimersByTimeAsync(0);
+    expect(recorded).toEqual([]);
+    p.stop();
   });
 });
