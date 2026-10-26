@@ -109,7 +109,9 @@ func TestResetReconnectsAfterBackoff(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		nn := newNatNet(1)
 		relays := nn.relay(t, p2p.RelayOptions{})
-		a := nn.node(t, 1, p2p.Options{Relays: relays})
+		bID := idOf(key(2))
+		var revoked atomic.Bool
+		a := nn.node(t, 1, p2p.Options{Relays: relays, Admit: func(id transport.PeerID) bool { return !revoked.Load() || id != bID }})
 		b := nn.node(t, 2, p2p.Options{Relays: relays})
 		a.Want(map[transport.PeerID][]string{b.Local(): nil})
 		expectUp(t, a, b)
@@ -130,6 +132,7 @@ func TestResetReconnectsAfterBackoff(t *testing.T) {
 		expectEventWithin(t, b, transport.PeerUp, a.Local(), wait)
 
 		// Dropped (suspended, removed), it does not come back.
+		revoked.Store(true) // as the app does, first
 		a.Drop(b.Local())
 		expectEvent(t, a, transport.PeerDown, b.Local())
 		expectQuietFor(t, a, 3*time.Minute)
