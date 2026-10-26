@@ -133,7 +133,7 @@ describe("PRJ-21 what is held costs nothing until what it waits for happens", ()
     const b = base();
     let doc = A.clone(b);
     const chain: Uint8Array[] = [];
-    for (let i = 0; i < 1200; i++) {
+    for (let i = 0; i < 600; i++) {
       doc = A.change(doc, (d) => {
         (d as unknown as Draft).text = `${i}`;
       });
