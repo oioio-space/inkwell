@@ -101,12 +101,12 @@ run = "go run ./cmd/sidecar-fetch"
 [tasks.test]
 description = "Run tests (gotestsum, readable output)"
 depends = ["sidecar:fetch"]
-run = "./scripts/rtkx.sh gotestsum --format pkgname -- ./..."
+run = "./scripts/heavy.sh ./scripts/rtkx.sh gotestsum --format pkgname -- ./..."
 
 [tasks."test:ci"]
 description = "Run tests once, producing a JUnit report AND coverage.out"
 depends = ["sidecar:fetch"]
-run = "./scripts/rtkx.sh gotestsum --junitfile junit.xml --format pkgname -- -short -timeout=8m -covermode=atomic -coverpkg=./... -coverprofile=coverage.out ./..."
+run = "./scripts/heavy.sh ./scripts/rtkx.sh gotestsum --junitfile junit.xml --format pkgname -- -short -timeout=8m -covermode=atomic -coverpkg=./... -coverprofile=coverage.out ./..."
 
 [tasks."test:watch"]
 description = "Re-run tests on every file change (TDD loop)"
@@ -127,7 +127,7 @@ run = "./scripts/bench.sh compare"
 [tasks.cover]
 description = "Test coverage report (coverage.out + total %)"
 depends = ["sidecar:fetch"]
-run = "./scripts/cover.sh"
+run = "./scripts/heavy.sh ./scripts/cover.sh"
 
 [tasks."cover:check"]
 description = "Enforce minimum coverage (COVER_MIN); reuses coverage.out from test:ci"
@@ -314,7 +314,7 @@ depends = ["e2e:build"]
 dir = "frontend"
 run = """
 browser="${INKWELL_E2E_BROWSER:-$([ -n "${CI:-}" ] && echo webkit || echo chromium)}"
-INKWELL_E2E_BROWSER="$browser" pnpm exec playwright test
+INKWELL_E2E_BROWSER="$browser" ../scripts/heavy.sh pnpm exec playwright test
 """
 
 [tasks."e2e:webkit"]
@@ -333,13 +333,17 @@ podman run -d --rm --name "$name" --network host --ipc host --init \
   npx -y "playwright@$version" run-server --port "$port" --host 127.0.0.1 >/dev/null
 trap 'podman rm -f "$name" >/dev/null 2>&1 || true' EXIT
 for _ in $(seq 60); do (exec 3<>/dev/tcp/127.0.0.1/$port) 2>/dev/null && break; sleep 1; done
-INKWELL_E2E_BROWSER=webkit INKWELL_E2E_WS="ws://127.0.0.1:$port/" pnpm exec playwright test "$@"
+INKWELL_E2E_BROWSER=webkit INKWELL_E2E_WS="ws://127.0.0.1:$port/" ../scripts/heavy.sh pnpm exec playwright test "$@"
 """
+
+[tasks."mutate:go"]
+description = "Mutation testing of Go packages (gremlins), memory-capped: mise run mutate:go -- ./internal/trust"
+run = "./scripts/heavy.sh go run github.com/go-gremlins/gremlins/cmd/gremlins@v0.6.0 unleash --workers 4 --timeout-coefficient 3"
 
 [tasks."e2e:netsim"]
 description = "Network simulation (Chromium; set INKWELL_E2E_BROWSER=chromium in CI), no root: two instances behind NATs (cone, symmetric) and a relay in network namespaces (scripts/netsim); skips with the reason when namespaces or nftables are unavailable (fails in CI)"
 depends = ["e2e:build"]
-run = "INKWELL_E2E_BROWSER=chromium ./scripts/netsim/run.sh"
+run = "INKWELL_E2E_BROWSER=chromium ./scripts/heavy.sh ./scripts/netsim/run.sh"
 
 [tasks."app:duo"]
 description = "Run two isolated instances to try collaboration on one machine (Invite in one, paste the invitation in the other)"

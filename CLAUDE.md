@@ -21,6 +21,7 @@ mise run ci              # full gate = what CI runs (lint+test+scans)
 mise run bench:baseline  # then change code, then: mise run bench:compare (benchstat)
 mise run scan:code       # gosec + govulncheck | scan:secrets | scan:sbom (grype)
 mise run clean           # remove regenerable artifacts
+mise run mutate:go -- ./internal/trust   # mutation testing (gremlins), memory-capped
 ```
 
 ## Architecture
@@ -136,3 +137,11 @@ a **substantial** diff; a trivial diff is cleared inline:
 - reprendre le même vocabulaire et les mêmes raccourcis ;
 - trouver sa place dans un panneau ou un menu existant avant d'en créer un ;
 - passer une revue de cohérence visuelle (captures clair et sombre, comparées aux écrans voisins) avant la fusion.
+
+**Mémoire (règle) :** tout travail lourd passe par `scripts/heavy.sh` :
+- Concerne les tests Go, la couverture, les tests de bout en bout, netsim et le mutation testing (gremlins, Stryker).
+- Les tâches mise `test`, `test:ci`, `cover`, `e2e*` et `mutate:go` l'appellent déjà.
+- Au plus 2 tâches lourdes tournent en même temps sur la machine ; chacune est plafonnée à 8 Go, sans swap, dans son propre cgroup. Un dépassement tue la tâche seule, pas la session.
+- Pas plus de 4 agents en parallèle.
+- Le mutation testing se limite à 4 workers et à un paquet à la fois.
+- Deux plantages globaux faute de mémoire le 2026-10-26 sont à l'origine de cette règle.
