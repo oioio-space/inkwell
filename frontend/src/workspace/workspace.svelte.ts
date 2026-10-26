@@ -21,13 +21,14 @@ import { type SizeTier, sizeTier } from "../store/limits";
 import { type Projection, startProjection } from "../store/projection";
 import { safeGet, safeSet } from "../store/safeStorage";
 import { settings } from "../store/settings.svelte";
+import { accessOf, type Member } from "../ui/people/roster";
 
 /** The project's text, and what the history keeps beside it (named versions, variants, actors). */
 export type Doc = { text: string; meta?: Meta };
-export type Status = "alone" | "connecting" | "synced";
+export type Status = "alone" | "connecting" | "synced" | "suspended";
 
 /** What the header and the status bar say: it follows who is connected, never a stored flag. */
-export function statusOf(peerCount: number, joining: boolean): Status {
+export function statusOf(peerCount: number, joining: boolean): Exclude<Status, "suspended"> {
   if (peerCount > 0) return "synced";
   return joining ? "connecting" : "alone";
 }
@@ -62,7 +63,9 @@ class Workspace {
   /** True while an invitation is being followed, until the inviting person's project is open. */
   joining = $state(false);
   /** Derived from `peers`, so the header and the people count cannot disagree. */
-  status = $derived(statusOf(this.peers.length, this.joining));
+  status = $derived<Status>(
+    this.access === "suspended" ? "suspended" : statusOf(this.peers.length, this.joining),
+  );
   myId = $state("");
   myName = $state(safeGet(NAME_KEY) ?? "");
   /** The invitation text to give to the person joining: opaque, copied and pasted as is. */
@@ -73,6 +76,8 @@ class Workspace {
   #knownAtInvite = new Set<string>();
   /** Display names of present people, by peer id (from presence). */
   names = $state<Record<string, string>>({});
+  /** Every name heard since the start, kept when the person goes quiet (UX-S7-3). */
+  #heard: Record<string, string> = {};
   error = $state("");
   /** What happened to the project file outside Inkwell, for the toast or banner; null if nothing. */
   notice = $state.raw<Notice | null>(null);
@@ -86,6 +91,8 @@ class Workspace {
   projectionReason = $state("");
   /** Counts the reports of the members' roles from Go, so that what depends on rights recomputes. */
   rolesVersion = $state(0);
+  /** The people of the project with their roles and suspensions, as Go reports them. */
+  roster = $state.raw<Member[]>([]);
   /** True once the member list is full: this device signs no more, so edits stay local. */
   sealed = $state(false);
   handle = $state.raw<DocHandle<Doc> | undefined>();
@@ -111,6 +118,7 @@ class Workspace {
   /** How the current file is stored on disk; undefined until Go has written it. */
   fileInfo = $state.raw<FileInfo | undefined>();
 
+  #rosterTicket = 0;
   #repo: Repo | undefined;
   get repo(): Repo | undefined {
     return this.#repo;
@@ -141,6 +149,7 @@ class Workspace {
     });
     adapter.onRoles(() => {
       this.rolesVersion++;
+      void this.refreshRoster();
     });
     adapter.onSealed(() => {
       this.sealed = true;
@@ -361,6 +370,38 @@ class Workspace {
     return member !== undefined && member.role !== "reader" && !member.suspended;
   }
 
+  /**
+   * Why this device cannot edit: "reader" (its role), or "suspended" (an admin disconnected it);
+   * undefined when it can, or while Go has not yet said.
+   */
+  get access(): "reader" | "suspended" | undefined {
+    void this.rolesVersion;
+    const me = this.#adapter?.roleOf(this.myId);
+    return accessOf(me?.role, me?.suspended ?? false);
+  }
+
+  /**
+   * Whether this device may make an invitation: only an admin who is not disconnected may (Go
+   * refuses the others). True while Go has not said, so that a first project is never blocked.
+   */
+  get mayInvite(): boolean {
+    void this.rolesVersion;
+    const me = this.#adapter?.roleOf(this.myId);
+    return me === undefined || (me.role === "admin" && !me.suspended);
+  }
+
+  /** Asks Go for the people of the project (it changes when an admin acts, here or elsewhere). */
+  async refreshRoster(): Promise<void> {
+    const ticket = ++this.#rosterTicket;
+    try {
+      const list = ((await Session.Members()) ?? []) as unknown as Member[];
+      // Answers can cross: only the latest question may set the list.
+      if (ticket === this.#rosterTicket) this.roster = list;
+    } catch {
+      // Go does not answer (no project yet): the list stays as it was.
+    }
+  }
+
   /** Whether this device knows its role at all (Go has reported the member list). */
   get rolesKnown(): boolean {
     void this.rolesVersion;
@@ -369,7 +410,18 @@ class Workspace {
 
   /** The name to show for a device: the one it announced, else a neutral one. */
   nameOf(peer: string): string {
-    return this.names[peer] ?? `Personne ${peer.slice(0, 4)}`;
+    return this.knownName(peer) ?? `Personne ${peer.slice(0, 4)}`;
+  }
+
+  /** The name a device announced, now or earlier: someone let back in is not renamed. */
+  knownName(peer: string): string | undefined {
+    return this.names[peer] || this.#heard[peer] || undefined;
+  }
+
+  /** The people present, from presence: a name once heard is remembered when they leave. */
+  hearNames(people: readonly { peerId: string; name: string }[]): void {
+    this.names = Object.fromEntries(people.map((p) => [p.peerId, p.name]));
+    for (const p of people) if (p.name) this.#heard[p.peerId] = p.name;
   }
 
   setName(name: string): void {

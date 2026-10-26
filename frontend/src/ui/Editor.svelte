@@ -35,7 +35,7 @@ $effect(() => {
       h,
       me,
       (people) => {
-        workspace.names = Object.fromEntries(people.map((p) => [p.peerId, p.name]));
+        workspace.hearNames(people);
       },
       {
         lang: l,
@@ -62,6 +62,8 @@ $effect(() => {
 });
 $effect(() => editor?.rename(me.name));
 $effect(() => editor?.setLang(lang));
+// A reader, or a person who was disconnected, reads without being able to type.
+$effect(() => editor?.setReadOnly(workspace.access !== undefined));
 </script>
 
 <div class="page" bind:this={host}></div>

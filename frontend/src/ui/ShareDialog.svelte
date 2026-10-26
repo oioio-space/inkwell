@@ -48,8 +48,8 @@ async function join(e: SubmitEvent) {
 
   <section class="boxed card">
     <div class="row">
-      <span>{t("share.host.help")}</span>
-      <button type="button" class="btn" onclick={() => workspace.host()}>{t("share.host")}</button>
+      <span>{workspace.mayInvite ? t("share.host.help") : t("share.host.adminOnly")}</span>
+      <button type="button" class="btn" disabled={!workspace.mayInvite} onclick={() => workspace.host()}>{t("share.host")}</button>
     </div>
     {#if workspace.invitation && workspace.invitationUsed}
       <div class="row" role="status">

@@ -20,6 +20,7 @@ let {
   historyOpen = false,
   onToggleHistory = () => {},
   onShare,
+  onPeople,
   onToggleSidebar,
   onToggleToolbar,
   onPreferences,
@@ -47,6 +48,8 @@ let {
   historyOpen?: boolean;
   onToggleHistory?: () => void;
   onShare: () => void;
+  /** Opens the « Personnes » panel. */
+  onPeople: () => void;
   onToggleSidebar: () => void;
   onToggleToolbar: () => void;
   onPreferences: () => void;
@@ -108,7 +111,7 @@ let menuOpen = $state(false);
         <Icon name="present" />
       </button>
     {/if}
-    <PeopleStack {me} {peers} />
+    <PeopleStack {me} {peers} onOpen={onPeople} />
     <button type="button" class="sug" onclick={onShare}>{t("share.button")}</button>
     <button
       type="button"

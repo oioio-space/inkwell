@@ -3,10 +3,22 @@ import { t } from "../i18n";
 import { workspace } from "../workspace/workspace.svelte";
 import { personColor, personIndex } from "./people";
 
-let { me, peers }: { me: { id: string; name: string }; peers: string[] } = $props();
+let {
+  me,
+  peers,
+  onOpen,
+}: { me: { id: string; name: string }; peers: string[]; onOpen: () => void } = $props();
 const initial = (s: string) => s.trim().charAt(0).toUpperCase() || "?";
 </script>
 
+<button
+  type="button"
+  class="open"
+  aria-label={t("people.open")}
+  title={t("people.title")}
+  data-testid="people-open"
+  onclick={onOpen}
+>
 <ul class="stack" aria-label={t("people.label", { count: peers.length + 1 })}>
   {#each peers as peer (peer)}
     {@const name = workspace.names[peer] ?? ""}
@@ -21,8 +33,23 @@ const initial = (s: string) => s.trim().charAt(0).toUpperCase() || "?";
     {initial(me.name)}
   </li>
 </ul>
+</button>
 
 <style>
+  /* An avatar stack that is a button: no chrome of its own, the hover is the header bar's. */
+  .open {
+    display: flex;
+    align-items: center;
+    min-height: var(--target-bar);
+    padding: 0 6px;
+    border: 0;
+    border-radius: var(--radius-button);
+    background: transparent;
+    color: inherit;
+  }
+  .open:hover {
+    background: var(--btn-bg);
+  }
   .stack {
     display: flex;
     flex-direction: row-reverse;
