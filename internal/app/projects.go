@@ -10,7 +10,10 @@ import (
 // maxRootURL bounds the document URL the webview may record.
 const maxRootURL = 128
 
-var errBadRootURL = errors.New("invalid document URL")
+var (
+	errBadRootURL = errors.New("invalid document URL")
+	errNoOpener   = errors.New("this system cannot open files from here")
+)
 
 // ProjectInfo describes the open project to the webview.
 type ProjectInfo struct {
@@ -27,12 +30,34 @@ type ProjectInfo struct {
 type Projects struct {
 	p     *project.Project
 	files *Files
+	// open hands a file to the system; nil when the platform has no way to.
+	open func(path string) error
 }
 
 // NewProjects returns the service for the open project p. files, if not nil,
 // is the blob side of the project (see [Files]); without it the project has no
 // blobs to report.
 func NewProjects(p *project.Project, files *Files) *Projects { return &Projects{p: p, files: files} }
+
+// SetOpener sets how a file is handed to the system (the desktop shell's
+// "open", which runs the program the user chose for that kind of file). The
+// service lives in the app package, which does not import the window toolkit,
+// so the toolkit's function comes from main.
+func (s *Projects) SetOpener(open func(path string) error) { s.open = open }
+
+// OpenWithSystem opens the project file rel in the system's own program for it:
+// the way out for a file Inkwell does not edit (a PDF, a font, an archive).
+// Only a plain file of the project is ever handed over.
+func (s *Projects) OpenWithSystem(rel string) error {
+	if s.open == nil {
+		return errNoOpener
+	}
+	abs, err := s.p.FilePath(rel)
+	if err != nil {
+		return err
+	}
+	return s.open(abs)
+}
 
 // BlobProgress reports the files of the project that are not text: how many
 // the project lists, how many are here, and whether the rest is over the size

@@ -341,3 +341,25 @@ func TestStoreServerPathOperations(t *testing.T) {
 		t.Errorf("PutBlob(missing) status = %d, want NotFound", gone.Status)
 	}
 }
+
+// FM-02: a file dropped on the window arrives with its bytes; Go writes it as a
+// new file first and never over one that is there.
+func TestStoreServerPutBlobWithData(t *testing.T) {
+	st, _ := newFakeStorage(t)
+	_, c, stop := startStore(t, st)
+	defer stop()
+
+	resp := c.call(bridge.OpPutBlob, []string{"figs", "a.png"}, "\x89PNG\x00\x01")
+	if resp.Status != bridge.StatusOK {
+		t.Fatalf("PutBlob(with data) status = %d (%s)", resp.Status, resp.Payload)
+	}
+	if got := st.files["figs/a.png"]; string(got) != "\x89PNG\x00\x01" {
+		t.Errorf("storage got %q, want the bytes the webview sent", got)
+	}
+	if again := c.call(bridge.OpPutBlob, []string{"figs", "a.png"}, "other"); again.Status != bridge.StatusError {
+		t.Errorf("PutBlob over an existing file status = %d, want Error", again.Status)
+	}
+	if got := st.files["figs/a.png"]; string(got) != "\x89PNG\x00\x01" {
+		t.Errorf("the first file was replaced: %q", got)
+	}
+}

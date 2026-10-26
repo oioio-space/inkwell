@@ -199,7 +199,7 @@ func TestDecodeStoreRequestRejects(t *testing.T) {
 		{name: "put blob without a path", wire: []byte{0, 0, 0, 5, 13, 0}, id: 5},
 		{name: "tree with a key", wire: []byte{0, 0, 0, 5, 11, 1, 1, 'a'}, id: 5},
 		{name: "referenced with a key", wire: []byte{0, 0, 0, 5, 12, 1, 1, 'a'}, id: 5},
-		{name: "data on put blob", wire: []byte{0, 0, 0, 5, 13, 1, 1, 'a', 9}, id: 5},
+		{name: "data on read projection", wire: []byte{0, 0, 0, 5, 7, 1, 1, 'a', 9}, id: 5},
 		{name: "projection without name", wire: []byte{0, 0, 0, 5, 7, 0}, id: 5},
 		{name: "oversized", wire: append([]byte{0, 0, 0, 5, 2, 1, 1, 'a'}, make([]byte, store.MaxValue+1)...), id: 5},
 	}
@@ -416,6 +416,17 @@ func (s *fakeStorage) SetReferenced(hashes [][bridge.HashSize]byte) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.referenced = slices.Clone(hashes)
+	return nil
+}
+
+// AddFile makes fakeStorage a [bridge.FileAdder].
+func (s *fakeStorage) AddFile(rel string, data []byte) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.files[rel]; ok {
+		return fmt.Errorf("add %s: %w", rel, project.ErrExists)
+	}
+	s.files[rel] = bytes.Clone(data)
 	return nil
 }
 

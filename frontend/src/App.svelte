@@ -5,6 +5,7 @@ import { Session } from "../bindings/github.com/oioio-space/inkwell/internal/app
 import { looksTabular } from "./editor/csv/dialect";
 import { markExternal } from "./editor/external";
 import { langOf } from "./editor/format";
+import { resolve } from "./filetypes";
 import { t } from "./i18n";
 import type { SocketLike } from "./net/WailsNetworkAdapter";
 import { exportPdf, jumpFromCursor, jumpFromPage, jumpToProblem } from "./preview/actions";
@@ -13,10 +14,11 @@ import Preview from "./preview/Preview.svelte";
 import { preview } from "./preview/preview.svelte";
 import { settings } from "./store/settings.svelte";
 import AboutDialog, { type BuildInfo } from "./ui/AboutDialog.svelte";
-import Editor from "./ui/Editor.svelte";
 import ExternalBanner from "./ui/ExternalBanner.svelte";
 import ExternalChangeToast from "./ui/ExternalChangeToast.svelte";
 import { session } from "./ui/editorSession.svelte";
+import EditorPane from "./ui/files/EditorPane.svelte";
+import QuickOpen from "./ui/files/QuickOpen.svelte";
 import NoticeToast from "./ui/NoticeToast.svelte";
 import ProjectionBanner from "./ui/ProjectionBanner.svelte";
 import Preferences from "./ui/prefs/Preferences.svelte";
@@ -27,6 +29,7 @@ import { sheetView, showsSheet } from "./ui/sheet/viewMode.svelte";
 import HeaderBar from "./ui/shell/HeaderBar.svelte";
 import Sidebar from "./ui/shell/Sidebar.svelte";
 import StatusBar from "./ui/shell/StatusBar.svelte";
+import Toast from "./ui/Toast.svelte";
 import FormatBar from "./ui/toolbar/FormatBar.svelte";
 import { barLang } from "./ui/toolbar/spec";
 import { workspace } from "./workspace/workspace.svelte";
@@ -34,6 +37,7 @@ import { workspace } from "./workspace/workspace.svelte";
 let sharing = $state(false);
 let preferences = $state(false);
 let about = $state(false);
+let quickOpen = $state(false);
 let buildInfo = $state.raw<BuildInfo | undefined>();
 const me = $derived({ id: workspace.myId, name: workspace.myName });
 
@@ -47,6 +51,14 @@ const offerTable = $derived(
     looksTabular(workspace.handle?.doc()?.text ?? ""),
 );
 const showSheet = $derived(showsSheet(workspace.current));
+/** What the current file is: its name in the status bar, and whether words are counted. */
+const fileType = $derived(
+  resolve({
+    name: workspace.current,
+    override: workspace.runtime?.current?.ftype,
+    isText: workspace.runtime?.current ? workspace.runtime.current.type === "text" : true,
+  }),
+);
 
 /** Back to the grid from the text view, on the cell under the caret. */
 function showTable() {
@@ -102,6 +114,11 @@ function onKey(e: KeyboardEvent) {
   if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "s") {
     e.preventDefault();
     void workspace.save();
+    return;
+  }
+  if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "p") {
+    e.preventDefault();
+    quickOpen = true;
     return;
   }
   if ((e.ctrlKey || e.metaKey) && e.altKey && e.key.toLowerCase() === "j") {
@@ -161,7 +178,7 @@ onMount(() => {
 
 <div class="window">
   {#if sidebarOpen}
-    <Sidebar files={workspace.files} current={workspace.current} onOpen={() => session.focus()} />
+    <Sidebar runtime={workspace.runtime} onOpen={() => session.focus()} />
   {/if}
   <div class="column">
     <HeaderBar
@@ -217,9 +234,9 @@ onMount(() => {
     <ExternalBanner />
     <main>
       <div class="pane side-source">
-        {#if workspace.handle}
-          {#key workspace.handle.url}
-            {#if showSheet}
+        {#if workspace.runtime}
+          {#if showSheet && workspace.handle}
+            {#key workspace.handle.url}
               <Sheet
                 handle={workspace.handle}
                 {me}
@@ -227,10 +244,10 @@ onMount(() => {
                 startOffset={sheetView.offset}
                 onshowtext={(offset) => sheetView.toText(offset)}
               />
-            {:else}
-              <Editor handle={workspace.handle} {me} {lang} at={tabular ? sheetView.offset : undefined} />
-            {/if}
-          {/key}
+            {/key}
+          {:else}
+            <EditorPane {me} at={tabular ? sheetView.offset : undefined} />
+          {/if}
         {/if}
       </div>
       {#if previewOpen && !showSheet}
@@ -242,6 +259,8 @@ onMount(() => {
     {#if !showSheet}
       <StatusBar
         {lang}
+        typeLabel={t(fileType.label)}
+        showWords={fileType.wordCount !== "none"}
         status={workspace.status}
         peerCount={workspace.peers.length}
         editorState={session.state}
@@ -258,6 +277,22 @@ onMount(() => {
 <NoticeToast />
 <AboutDialog bind:open={about} info={buildInfo} />
 <ExternalChangeToast />
+{#if workspace.openFailed}
+  <Toast role="alert" onclose={() => (workspace.openFailed = null)}>
+    {t("blob.open.failed", { name: workspace.openFailed })}
+  </Toast>
+{/if}
+{#if workspace.runtime}
+  <QuickOpen
+    bind:open={quickOpen}
+    entries={workspace.runtime.tree.entries}
+    recent={workspace.runtime.openIds}
+    onopen={(id) => {
+      workspace.runtime?.openFile(id);
+      session.focus();
+    }}
+  />
+{/if}
 
 <style>
   .window {

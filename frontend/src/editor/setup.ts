@@ -74,6 +74,10 @@ export interface EditorOptions {
    * edit that was just taken in is taken back instead of the person's own last edit).
    */
   onUndoKey?: () => boolean;
+  /** Take the focus at creation (default). A file opened in the background does not. */
+  focus?: boolean;
+  /** More extensions, kept in a compartment of their own: a language loaded later. */
+  extra?: Extension;
 }
 
 /** Creates the collaborative source editor for a project document. */
@@ -82,10 +86,16 @@ export function createEditor(
   handle: DocHandle<Doc>,
   me: { id: string; name: string },
   onPeople?: (people: Person[]) => void,
-  { lang = "plain", onState, onView, onUndoKey, at }: EditorOptions = {},
-): { rename: (name: string) => void; setLang: (lang: Lang) => void; destroy: () => void } {
+  { lang = "plain", onState, onView, onUndoKey, at, focus = true, extra = [] }: EditorOptions = {},
+): {
+  rename: (name: string) => void;
+  setLang: (lang: Lang) => void;
+  setExtra: (extra: Extension) => void;
+  destroy: () => void;
+} {
   let view: EditorView | undefined;
   const language = new Compartment();
+  const more = new Compartment();
   const presence = presenceSync(handle, me, () => view, onPeople);
   const initial = handle.doc()?.text ?? "";
   view = new EditorView({
@@ -105,6 +115,7 @@ export function createEditor(
       placeholder(t("editor.placeholder")),
       language.of(forLang(lang)),
       Prec.highest(keymap.of([{ key: "Mod-z", run: () => onUndoKey?.() ?? false }])),
+      more.of(extra),
       keymap.of([...defaultKeymap, ...historyKeymap]),
       externalMarks,
       EditorView.contentAttributes.of({ "aria-label": t("editor.label") }),
@@ -117,12 +128,13 @@ export function createEditor(
       theme,
     ],
   });
-  view.focus();
+  if (focus) view.focus();
   onView?.(view);
   onState?.(view.state);
   return {
     rename: presence.rename,
     setLang: (next) => view?.dispatch({ effects: language.reconfigure(forLang(next)) }),
+    setExtra: (next) => view?.dispatch({ effects: more.reconfigure(next) }),
     destroy: () => {
       presence.stop();
       view?.destroy();

@@ -31,16 +31,35 @@ class DocCoverage {
   #open = new Set<string>(); // covered, dependencies still unknown
   #heads = new Map<string, string[]>(); // writer → attested heads, oldest first
   #rejected = new Map<string, string[]>(); // refused change → its dependencies, oldest first
+  // What admins vouch for (ADR 0022 R1): the same graph, from the heads of admins only. What an
+  // admin vouched for stays so when they are demoted, suspended or removed: nothing admitted is
+  // ever taken back after the fact.
+  #adminCovered = new Set<string>();
+  #adminOpen = new Set<string>();
 
-  attest(signer: string, heads: string[]): void {
+  attest(signer: string, heads: string[], admin = false): void {
     const kept = this.#heads.get(signer) ?? [];
     for (const h of heads) {
+      if (admin) this.#cover(h, this.#adminCovered, this.#adminOpen);
       if (kept.includes(h)) continue;
       kept.push(h);
       this.#cover(h);
     }
     if (kept.length > MAX_KEPT_HEADS) kept.splice(0, kept.length - MAX_KEPT_HEADS);
     this.#heads.set(signer, kept);
+  }
+
+  /** The heads already received from people who are admins now count as admin heads. */
+  promote(admins: ReadonlySet<string>): void {
+    for (const [signer, heads] of this.#heads) {
+      if (!admins.has(signer)) continue;
+      for (const h of heads) this.#cover(h, this.#adminCovered, this.#adminOpen);
+    }
+  }
+
+  /** True when the change is an attested head of an admin, or an ancestor of one. */
+  adminCovers(hash: string): boolean {
+    return this.#adminCovered.has(hash);
   }
 
   /** Forgets what `signer` attested; what only they covered is not covered anymore. */
@@ -64,8 +83,10 @@ class DocCoverage {
       added.push(c.hash);
     }
     for (const c of changes) {
-      if (!this.#open.delete(c.hash)) continue;
-      for (const d of c.deps) this.#cover(d);
+      if (this.#open.delete(c.hash)) for (const d of c.deps) this.#cover(d);
+      if (this.#adminOpen.delete(c.hash)) {
+        for (const d of c.deps) this.#cover(d, this.#adminCovered, this.#adminOpen);
+      }
     }
     for (const h of added) {
       if (!this.#covered.has(h)) this.#deps.delete(h); // never remember what is not covered
@@ -96,15 +117,15 @@ class DocCoverage {
     return heads.filter((h) => !this.#rejected.has(h));
   }
 
-  #cover(root: string): void {
+  #cover(root: string, covered = this.#covered, open = this.#open): void {
     const todo = [root];
     for (let h = todo.pop(); h !== undefined; h = todo.pop()) {
-      if (this.#covered.has(h)) continue;
-      this.#covered.add(h);
-      this.#rejected.delete(h); // a writer took it in after all
+      if (covered.has(h)) continue;
+      covered.add(h);
+      if (covered === this.#covered) this.#rejected.delete(h); // a writer took it in after all
       const deps = this.#deps.get(h);
       if (deps) todo.push(...deps);
-      else this.#open.add(h);
+      else open.add(h);
     }
   }
 }
@@ -132,6 +153,17 @@ export interface CoverageStats {
  * Ordering is the transport's job: an attestation reaches us before the changes it
  * covers, since Go forwards it ahead of the repo frames that follow it.
  */
+/**
+ * A check on top of coverage, for one document: the admission rules of a document whose changes
+ * mean something (the project index). It sees each covered change in order and refuses it with
+ * a reason, or lets it through; a document that arrives whole is judged as a whole.
+ */
+export interface DocValidator {
+  /** `adminCovered` says whether an admin vouches for the change with that hash. */
+  check(bytes: Uint8Array, adminCovered: (hash: string) => boolean): string | undefined;
+  checkDocument(doc: A.Doc<never>): string | undefined;
+}
+
 export class Coverage {
   readonly stats: CoverageStats = {
     removed: 0,
@@ -140,11 +172,27 @@ export class Coverage {
     repeated: 0,
   };
   #docs = new Map<string, DocCoverage>();
+  #validators = new Map<string, DocValidator>();
+  #admins: ReadonlySet<string> = new Set();
   #lastRewritten = new Map<string, Uint8Array>(); // peer + document → last message we had to cut
 
   /** `signer`, a current writer, attested `heads` of document `doc`. */
   attested(signer: string, doc: string, heads: string[]): void {
-    this.#doc(doc).attest(signer, heads);
+    this.#doc(doc).attest(signer, heads, this.#admins.has(signer));
+  }
+
+  /**
+   * The devices that are admins now (from the `Roles` notice). Their heads, received before or
+   * after, count as admin heads for the documents that have a validator.
+   */
+  setAdmins(admins: Iterable<string>): void {
+    this.#admins = new Set(admins);
+    for (const d of this.#docs.values()) d.promote(this.#admins);
+  }
+
+  /** Adds the admission rules of document `doc`, applied to what coverage lets through. */
+  setValidator(doc: string, validator: DocValidator): void {
+    this.#validators.set(doc, validator);
   }
 
   /** `signer` is not a writer anymore: their attestations are void. */
@@ -191,10 +239,11 @@ export class Coverage {
 
     const accepted = docs.admit(chunks.flatMap((c) => c.changes));
     const covered = chunks.map((c) => c.changes.every((x) => accepted.has(x.hash)));
+    const vetoed = this.#validate(doc, docs, chunks, covered);
     this.stats.removed += docs.reject(
       chunks
         .filter((_, i) => !covered[i])
-        .flatMap((c) => c.changes.filter((x) => !accepted.has(x.hash))),
+        .flatMap((c) => c.changes.filter((x) => !accepted.has(x.hash) || vetoed.has(c))),
     );
     if (chunks.some((c, i) => c.isDocument && !covered[i])) {
       this.stats.dropped++;
@@ -214,6 +263,27 @@ export class Coverage {
     return out;
   }
 
+  /**
+   * Runs the validator of `doc`, if it has one, on the chunks coverage let through, in order.
+   * Returns the chunks it refused, and marks them uncovered.
+   */
+  #validate(doc: string, docs: DocCoverage, chunks: Chunk[], covered: boolean[]): Set<Chunk> {
+    const vetoed = new Set<Chunk>();
+    const validator = this.#validators.get(doc);
+    if (!validator) return vetoed;
+    chunks.forEach((chunk, i) => {
+      if (!covered[i]) return;
+      const refusal = chunk.loaded
+        ? validator.checkDocument(chunk.loaded as A.Doc<never>)
+        : validator.check(chunk.bytes, (h) => docs.adminCovers(h));
+      if (refusal === undefined) return;
+      console.warn(`index change refused: ${refusal}`);
+      covered[i] = false;
+      vetoed.add(chunk);
+    });
+    return vetoed;
+  }
+
   #doc(doc: string): DocCoverage {
     let d = this.#docs.get(doc);
     if (!d) {
@@ -229,6 +299,8 @@ interface Chunk {
   bytes: Uint8Array;
   /** A whole-document chunk (several changes in one), which cannot be cut. */
   isDocument: boolean;
+  /** The document of a whole-document chunk, loaded to read its changes. */
+  loaded?: A.Doc<unknown>;
   changes: ChangeInfo[];
 }
 
@@ -265,7 +337,7 @@ function describeChunk(bytes: Uint8Array): Chunk {
   if (bytes[CHUNK_TYPE] === CHUNK_DOCUMENT) {
     const doc = A.load<unknown>(bytes);
     const changes = A.getChangesMetaSince(doc, []).map(({ hash, deps }) => ({ hash, deps }));
-    return { bytes, isDocument: true, changes };
+    return { bytes, isDocument: true, loaded: doc, changes };
   }
   const { hash, deps } = A.decodeChange(bytes);
   return { bytes, isDocument: false, changes: [{ hash, deps }] };

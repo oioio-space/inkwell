@@ -23,8 +23,11 @@ export interface Written {
 }
 
 export interface ProjectionOptions {
-  /** The project file to write. */
-  name?: string;
+  /**
+   * The project file to write; a function when the file can be renamed, asked again at each
+   * write.
+   */
+  name?: string | (() => string);
   /** Quiet time after the last change before writing. */
   delayMs?: number;
   /**
@@ -98,7 +101,8 @@ export function startProjection(
   sink: ProjectionSink,
   opts: ProjectionOptions = {},
 ): Projection {
-  const name = opts.name ?? "main.typ";
+  const given = opts.name;
+  const nameOf = typeof given === "function" ? given : () => given ?? "main.typ";
   const delay = opts.delayMs ?? PROJECTION_DELAY_MS;
   const schedule = opts.schedule ?? (() => delay);
   const retryMs = opts.retryMs ?? PROJECTION_RETRY_MS;
@@ -128,7 +132,7 @@ export function startProjection(
         if (text === last) continue;
         const heads = doc ? A.getHeads(doc) : [];
         try {
-          await sink.writeProjection(name, text, encodeSyncPoint(heads, text));
+          await sink.writeProjection(nameOf(), text, encodeSyncPoint(heads, text));
           last = text;
           opts.onWritten?.({ text, heads });
           emitDirty();
@@ -170,7 +174,7 @@ export function startProjection(
     // document is the file, that is where they agree; an outside edit is later merged from there.
     const doc = handle.doc();
     if (doc && last !== undefined && doc.text === last) {
-      void sink.setSyncPoint?.(name, encodeSyncPoint(A.getHeads(doc), last))?.catch(() => {
+      void sink.setSyncPoint?.(nameOf(), encodeSyncPoint(A.getHeads(doc), last))?.catch(() => {
         // The file changed since it was read: the outside edit is dealt with when it is notified.
       });
     }

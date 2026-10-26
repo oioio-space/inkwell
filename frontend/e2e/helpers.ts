@@ -1,6 +1,7 @@
 import { type Browser, expect, type Page } from "@playwright/test";
 
-export const editor = (p: Page) => p.locator(".cm-content");
+// Every file that was opened keeps its editor, hidden; the one shown is the one that is meant.
+export const editor = (p: Page) => p.locator(".page:not(.hidden) .cm-content");
 
 /** The document text as typed, without remote-cursor name labels. */
 export const docText = (p: Page) =>

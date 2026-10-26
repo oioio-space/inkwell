@@ -22,6 +22,8 @@ import { whenIdle } from "./idle";
  */
 let {
   lang,
+  typeLabel,
+  showWords = true,
   status,
   peerCount,
   editorState,
@@ -31,6 +33,10 @@ let {
   unsaved = false,
 }: {
   lang: Lang;
+  /** The name of the file's type, shown at the right (Typst, JSON, Log...). */
+  typeLabel?: string;
+  /** False for files in which counting words means nothing (code, logs, tables). */
+  showWords?: boolean;
   status: Status;
   /** People connected besides this one. */
   peerCount: number;
@@ -50,7 +56,7 @@ let computed = $state.raw<Stats | undefined>();
 
 const position = $derived(editorState ? cursorPosition(editorState) : { line: 1, column: 1 });
 const words = $derived(computed ? count(computed.words, "mot") : "…");
-const language = $derived(t(`lang.${lang}`));
+const language = $derived(typeLabel ?? t(`lang.${lang}`));
 const problemsName = $derived(
   preview.errors + preview.warnings === 0
     ? t("problems.none")
@@ -136,14 +142,16 @@ $effect(() => {
     <span class="fb unsaved" data-testid="unsaved" title={t("save.unsaved.hint")}>{t("save.unsaved")}</span>
   {/if}
   <span class="fb pos" data-testid="position">{t("status.position", { line: position.line, column: position.column })}</span>
-  <MenuButton bind:open={statsOpen} role="dialog" up align="end" label={t("stats.title")}>
-    {#snippet trigger()}<span data-testid="words">{words}</span>{/snippet}
-    {#snippet children()}
-      {#if computed}
-        <StatsPopover stats={computed} />
-      {/if}
-    {/snippet}
-  </MenuButton>
+  {#if showWords}
+    <MenuButton bind:open={statsOpen} role="dialog" up align="end" label={t("stats.title")}>
+      {#snippet trigger()}<span data-testid="words">{words}</span>{/snippet}
+      {#snippet children()}
+        {#if computed}
+          <StatsPopover stats={computed} />
+        {/if}
+      {/snippet}
+    </MenuButton>
+  {/if}
   <EncodingMenu {info} />
   <span class="fb lang" data-testid="language">{language}</span>
 </footer>

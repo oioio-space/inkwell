@@ -4,7 +4,11 @@ import { FileKind } from "../../store/files";
 import { FILE_MARKS, type FileMark } from "./paths";
 
 /** The icon of a project file by its kind, or of a folder. The kind is also its label. */
-let { kind, size = 16 }: { kind: FileKind | "folder"; size?: number } = $props();
+let {
+  kind,
+  mark: given,
+  size = 16,
+}: { kind?: FileKind | "folder"; mark?: FileMark; size?: number } = $props();
 
 const MARK: Record<FileKind | "folder", FileMark> = {
   [FileKind.other]: "other",
@@ -18,7 +22,7 @@ const MARK: Record<FileKind | "folder", FileMark> = {
   [FileKind.data]: "data",
   folder: "folder",
 };
-const mark = $derived(MARK[kind]);
+const mark = $derived<FileMark>(given ?? MARK[kind ?? FileKind.other]);
 </script>
 
 <svg
@@ -43,6 +47,13 @@ const mark = $derived(MARK[kind]);
     stroke-linejoin: round;
   }
   /* Only the inner mark is coloured; the outline stays neutral. */
+  .ico :global(.mk-code) {
+    stroke: var(--mark-code);
+  }
+  .ico :global(.mk-text) {
+    stroke: currentColor;
+    opacity: 0.7;
+  }
   .ico :global(.mk-typst) {
     stroke: var(--mark-typst);
   }

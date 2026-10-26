@@ -1,63 +1,68 @@
 <script lang="ts">
-import { SvelteSet } from "svelte/reactivity";
 import { t } from "../../i18n";
-import type { ProjectFile } from "../../store/files";
-import FileIcon from "../icons/FileIcon.svelte";
-import Icon from "../icons/Icon.svelte";
-import { buildTree, visibleNodes } from "./tree";
+import type { ProjectRuntime } from "../../project/runtime.svelte";
+import FileManager from "../files/FileManager.svelte";
 
-/** The project's files as a tree; folders fold, the main document is marked. */
+/**
+ * The left panel. Its views are tabs in the manner of an AdwViewSwitcher: the file manager is
+ * the first (« Fichiers »), and « Sommaire » and « Tâches » (plan B10) join it by adding an entry
+ * to `views`, not by changing the panel. Arrows move between tabs; the panel under the switcher
+ * is the selected one.
+ */
 let {
-  files,
-  current,
+  runtime,
   onOpen,
 }: {
-  files: readonly ProjectFile[];
-  current: string;
+  runtime: ProjectRuntime | undefined;
   onOpen: (path: string) => void;
 } = $props();
 
-const collapsed = new SvelteSet<string>();
-const nodes = $derived(visibleNodes(buildTree(files), collapsed));
+const views = [{ id: "files", label: "sidebar.title" as const }];
+let selected = $state("files");
 
-function toggle(path: string) {
-  if (collapsed.has(path)) collapsed.delete(path);
-  else collapsed.add(path);
+function onKey(e: KeyboardEvent) {
+  const i = views.findIndex((v) => v.id === selected);
+  const target: Record<string, number> = {
+    ArrowRight: i + 1,
+    ArrowLeft: i - 1,
+    Home: 0,
+    End: views.length - 1,
+  };
+  const at = target[e.key];
+  if (at === undefined) return;
+  const to = views[(at + views.length) % views.length];
+  if (!to) return;
+  e.preventDefault();
+  selected = to.id;
+  document.getElementById(`tab-${to.id}`)?.focus();
 }
 </script>
 
 <aside class="side" aria-label={t("sidebar.label")}>
-  <div class="head"><h2>{t("sidebar.title")}</h2></div>
-  <nav aria-label={t("sidebar.files")}>
-    <ul>
-      {#each nodes as node (node.path)}
-        <li style:--depth={node.depth}>
-          {#if node.type === "folder"}
-            {@const open = !collapsed.has(node.path)}
-            <button type="button" class="row folder" aria-expanded={open} onclick={() => toggle(node.path)}>
-              <span class="chev" class:open><Icon name="right" size={12} /></span>
-              <FileIcon kind="folder" />
-              <span class="name">{node.name}</span>
-            </button>
-          {:else}
-            <button
-              type="button"
-              class="row"
-              class:sel={node.path === current}
-              aria-current={node.path === current ? "page" : undefined}
-              data-path={node.path}
-              onclick={() => onOpen(node.path)}
-            >
-              <span class="chev spacer"></span>
-              <FileIcon kind={node.file.kind} />
-              <span class="name">{node.name}</span>
-              {#if node.file.main}<span class="tag">{t("sidebar.main")}</span>{/if}
-            </button>
-          {/if}
-        </li>
+  <div class="head">
+    <div class="switcher" role="tablist" aria-label={t("sidebar.label")}>
+      {#each views as v (v.id)}
+        <button
+          type="button"
+          id="tab-{v.id}"
+          class="tab"
+          role="tab"
+          aria-selected={selected === v.id}
+          aria-controls="panel-{v.id}"
+          tabindex={selected === v.id ? 0 : -1}
+          onclick={() => (selected = v.id)}
+          onkeydown={onKey}
+        >
+          {t(v.label)}
+        </button>
       {/each}
-    </ul>
-  </nav>
+    </div>
+  </div>
+  <div class="panel" id="panel-files" role="tabpanel" aria-labelledby="tab-files" hidden={selected !== "files"}>
+    {#if runtime}
+      <FileManager {runtime} onOpen={() => onOpen(runtime.currentPath)} />
+    {/if}
+  </div>
 </aside>
 
 <style>
@@ -76,75 +81,43 @@ function toggle(path: string) {
     height: 47px;
     flex: none;
   }
-  h2 {
-    margin: 0;
-    font: 700 14.5px/1 var(--font-ui);
-  }
-  nav {
-    flex: 1;
-    min-height: 0;
-    padding: 6px;
-    overflow-y: auto;
-  }
-  ul {
+  /* The switcher: a pill of tabs, the selected one raised, as in libadwaita's inline switcher. */
+  .switcher {
     display: flex;
-    flex-direction: column;
     gap: 2px;
-    margin: 0;
-    padding: 0;
-    list-style: none;
+    padding: 3px;
+    border-radius: var(--radius-button);
+    background: var(--btn-bg);
   }
-  .row {
-    box-sizing: border-box;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-    width: 100%;
-    height: 36px;
-    padding: 0 10px 0 calc(6px + var(--depth, 0) * 20px);
+  .tab {
+    min-width: 72px;
+    height: 28px;
+    padding: 0 14px;
     border: 0;
-    border-radius: var(--radius-small);
+    border-radius: calc(var(--radius-button) - 2px);
     background: transparent;
     color: inherit;
-    font: inherit;
-    text-align: start;
+    font: 700 13.5px/1 var(--font-ui);
     cursor: default;
   }
-  .row:hover {
+  .tab:hover {
     background: var(--hover-bg);
   }
-  .row.sel {
-    background: var(--selected-bg);
-    font-weight: 600;
+  .tab[aria-selected="true"] {
+    background: var(--view-bg);
+    box-shadow: var(--shadow-card);
   }
-  .name {
+  .tab:focus-visible {
+    outline: var(--focus-ring);
+    outline-offset: 1px;
+  }
+  .panel {
+    display: flex;
     flex: 1;
-    min-width: 0;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    flex-direction: column;
+    min-height: 0;
   }
-  .tag {
-    color: var(--fg-dim);
-    font-size: 12px;
-    font-weight: 400;
-  }
-  .row.sel .tag {
-    color: var(--fg);
-  }
-  .chev {
-    display: inline-grid;
-    place-items: center;
-    width: 12px;
-    color: var(--fg-dim);
-    transition: transform var(--duration);
-  }
-  .chev.open {
-    transform: rotate(90deg);
-  }
-  @media (prefers-reduced-motion: reduce) {
-    .chev {
-      transition: none;
-    }
+  .panel[hidden] {
+    display: none;
   }
 </style>

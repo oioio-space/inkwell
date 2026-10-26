@@ -1,8 +1,10 @@
+import type { next as A } from "@automerge/automerge";
 import {
   type AutomergeUrl,
   type DocHandle,
   isValidAutomergeUrl,
   type PeerId,
+  parseAutomergeUrl,
   Repo,
 } from "@automerge/automerge-repo";
 import { Stream } from "@wailsio/runtime";
@@ -12,7 +14,12 @@ import {
 } from "../../bindings/github.com/oioio-space/inkwell/internal/app/index";
 import type { Span } from "../editor/external";
 import { t } from "../i18n";
+import type { MemberRole } from "../net/envelope";
 import { type SocketLike, WailsNetworkAdapter } from "../net/WailsNetworkAdapter";
+import { IndexValidator } from "../project/admit";
+import { kindOfEntry } from "../project/kinds";
+import type { IndexDoc, Role } from "../project/model";
+import { ProjectRuntime } from "../project/runtime.svelte";
 import { ExternalSync, type Notice } from "../store/externalSync";
 import { type FileInfo, FileKind, type ProjectFile } from "../store/files";
 import { ExternalEditError, GoStorageAdapter, NotTextError } from "../store/GoStorageAdapter";
@@ -53,6 +60,13 @@ const NAME_KEY = "inkwell.name";
 /** How long the lines taken from the disk stay marked in the gutter. */
 const MARKS_MS = 60_000;
 
+/** What this device may do, from the member list; a writer until the list is known. */
+export function roleIn(roles: readonly MemberRole[], me: string): Role {
+  const mine = roles.find((m) => m.peer === me);
+  if (!mine) return "writer";
+  return mine.suspended ? "reader" : mine.role;
+}
+
 /** The open project and who is in it — the single source of UI state. */
 class Workspace {
   peers = $state<string[]>([]);
@@ -79,11 +93,14 @@ class Workspace {
   projectionReason = $state("");
   /** True once the member list is full: this device signs no more, so edits stay local. */
   sealed = $state(false);
-  handle = $state.raw<DocHandle<Doc> | undefined>();
-  /** The file shown in the editor (today the project's main document). */
-  current = $state(openedFile());
-  /** The project's files, for the sidebar and the Insert menu. */
-  files = $state.raw<ProjectFile[]>([]);
+  /** The root document of the project: the index, which also holds the main file's text. */
+  rootHandle = $state.raw<DocHandle<Doc> | undefined>();
+  /** The devices of the project and their roles, as Go reports them. */
+  roles = $state.raw<readonly MemberRole[]>([]);
+  /** The files of the open project: the index, the documents, the tree on disk. */
+  runtime = $state.raw<ProjectRuntime | undefined>();
+  /** The name of a file the system could not open, until the person dismisses the notice. */
+  openFailed = $state<string | null>(null);
   /** How the current file is stored on disk; undefined until Go has written it. */
   fileInfo = $state.raw<FileInfo | undefined>();
 
@@ -95,6 +112,33 @@ class Workspace {
   /** Outside edits Go reported before the project was open. */
   #early: string[] = [];
   #marksTimer: ReturnType<typeof setTimeout> | undefined;
+
+  /**
+   * The path of the file shown (the main file until a project is open). `?file=` names the file
+   * the single document stands for, in development and in the end-to-end tests of the sheet.
+   */
+  get current(): string {
+    const forced = openedFile();
+    if (forced !== MAIN_FILE) return forced;
+    return this.runtime?.currentPath ?? MAIN_FILE;
+  }
+
+  /** The document of the file shown, once it is loaded. */
+  get handle(): DocHandle<Doc> | undefined {
+    if (openedFile() !== MAIN_FILE) return this.rootHandle;
+    const id = this.runtime?.currentId;
+    void this.runtime?.ready;
+    return id ? this.runtime?.handleOf(id) : undefined;
+  }
+
+  /** The project's files, for the Insert menu and the formatting bar. */
+  get files(): ProjectFile[] {
+    const rt = this.runtime;
+    if (!rt) return [{ path: MAIN_FILE, kind: FileKind.typst, size: 0, main: true }];
+    return rt.tree.entries
+      .filter((e) => e.type !== "dir")
+      .map((e) => ({ path: e.path, kind: kindOfEntry(e), size: e.size, main: e.main }));
+  }
 
   async start(): Promise<void> {
     const id = await Session.LocalPeer();
@@ -112,6 +156,10 @@ class Workspace {
     });
     adapter.onSealed(() => {
       this.sealed = true;
+    });
+    adapter.onRoles((roles) => {
+      this.roles = roles;
+      this.runtime?.setRole(roleIn(roles, this.myId));
     });
     this.#adapter = adapter;
     const storage = new GoStorageAdapter(() => Stream("store") as unknown as SocketLike);
@@ -136,21 +184,53 @@ class Workspace {
         // The saved document is gone from the project folder: start a fresh one.
       }
     }
-    await this.open(this.#repo.create<Doc>({ text: "" }).url);
+    await this.open(this.#repo.create<IndexDoc>({ text: "" }).url);
   }
 
   async open(url: AutomergeUrl): Promise<void> {
-    if (!this.#repo) throw new Error("workspace not started");
-    const handle = await this.#repo.find<Doc>(url);
+    const repo = this.#repo;
+    const storage = this.#storage;
+    if (!repo || !storage) throw new Error("workspace not started");
+    // The rules for the index are in force before its first message can arrive.
+    const { documentId } = parseAutomergeUrl(url);
+    this.#adapter?.validate(
+      documentId,
+      new IndexValidator(() => {
+        try {
+          return repo.handles[documentId]?.doc() as A.Doc<IndexDoc> | undefined;
+        } catch {
+          return undefined;
+        }
+      }),
+    );
+    const root = await repo.find<IndexDoc>(url);
+    const handle = root as unknown as DocHandle<Doc>;
     this.#projection?.stop();
     this.#sync?.stop();
     this.#sync = undefined;
+    this.runtime?.stop();
     this.notice = null;
-    this.handle = handle;
+    this.rootHandle = handle;
     this.#adapter?.setProject(url);
     await Projects.SetRootURL(url);
-    const storage = this.#storage;
-    if (!storage) return;
+    // Every file but the main one is projected by the runtime; the main one by the sync below.
+    const runtime = new ProjectRuntime(root, {
+      repo,
+      storage,
+      me: () => ({ id: this.myId, name: this.myName }),
+      blobStatus: () => Projects.BlobProgress(),
+      confirmBlobs: () => Projects.ConfirmBlobs(),
+    });
+    runtime.onProjectionError = (_path, err) => {
+      console.warn("projection:", err instanceof Error ? err.message : "failed");
+      if (!(err instanceof ExternalEditError)) this.projectionFailed = true;
+    };
+    runtime.onProjectionWritten = () => {
+      this.projectionFailed = false;
+    };
+    runtime.setRole(roleIn(this.roles, this.myId));
+    this.runtime = runtime;
+    runtime.start();
     // Saving with Ctrl+S: the file keeps what it holds until asked, so dirty is known from it.
     const known =
       settings.saveMode === "manual"
@@ -245,29 +325,29 @@ class Workspace {
     this.notice = null;
   }
 
-  /** The key a project's remembered layout is filed under. */
-  get project(): string {
-    return this.handle?.url ?? "";
+  /** Hands a project file to the system's own program for it (a PDF, a font, an archive). */
+  async openWithSystem(path: string): Promise<void> {
+    try {
+      await Projects.OpenWithSystem(path);
+    } catch {
+      this.openFailed = path.slice(path.lastIndexOf("/") + 1);
+    }
   }
 
-  /** Reloads the file list; the main document always shows, even before its first write. */
+  /** The key a project's remembered layout is filed under. */
+  get project(): string {
+    return this.rootHandle?.url ?? "";
+  }
+
+  /** Looks for files in the project folder that the project does not have. */
   async refreshFiles(): Promise<void> {
-    if (!this.#storage) return;
-    try {
-      const files = await this.#storage.listFiles();
-      this.files = files.some((f) => f.path === MAIN_FILE)
-        ? files
-        : [{ path: MAIN_FILE, kind: FileKind.typst, size: 0, main: true }, ...files];
-    } catch (err) {
-      console.warn("files:", err instanceof Error ? err.message : "failed");
-    }
+    await this.runtime?.refreshUntracked();
   }
 
   /** Reloads how the current file is stored (encoding, line ending). */
   async refreshInfo(): Promise<void> {
     if (!this.#storage) return;
-    // Only the main document has a file on disk until B4 gives every file its own document.
-    if (this.current !== MAIN_FILE) {
+    if (this.runtime?.current?.type === "blob") {
       this.fileInfo = undefined;
       return;
     }

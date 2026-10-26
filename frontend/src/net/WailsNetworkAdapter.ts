@@ -8,14 +8,16 @@ import {
   type PeerMetadata,
 } from "@automerge/automerge-repo";
 import { decode, encode } from "cbor-x";
-import { Coverage } from "./coverage";
+import { Coverage, type DocValidator } from "./coverage";
 import {
   decodeEnvelope,
   decodeHeads,
+  decodeRoles,
   encodeEnvelope,
   encodeHeads,
   Kind,
   MalformedEnvelope,
+  type MemberRole,
 } from "./envelope";
 
 /**
@@ -80,6 +82,8 @@ export class WailsNetworkAdapter extends NetworkAdapter {
   #attested = new Map<string, string[]>();
   #sealed = false;
   #sealedListeners: (() => void)[] = [];
+  #roles: MemberRole[] = [];
+  #roleListeners: ((roles: readonly MemberRole[]) => void)[] = [];
 
   constructor(open: () => SocketLike, opts: AdapterOptions = {}) {
     super();
@@ -114,6 +118,25 @@ export class WailsNetworkAdapter extends NetworkAdapter {
   onSealed(cb: () => void): void {
     this.#sealedListeners.push(cb);
     if (this.#sealed) cb();
+  }
+
+  /** The devices of the project and their roles, as Go last reported them (empty until then). */
+  get roles(): readonly MemberRole[] {
+    return this.#roles;
+  }
+
+  /** Calls cb with the member list whenever it changes (at once if it is already known). */
+  onRoles(cb: (roles: readonly MemberRole[]) => void): void {
+    this.#roleListeners.push(cb);
+    if (this.#roles.length > 0) cb(this.#roles);
+  }
+
+  /**
+   * Adds the admission rules of one document (the project index) to write enforcement: changes
+   * that coverage lets through are judged by `validator` too, and may need an admin's vouching.
+   */
+  validate(doc: string, validator: DocValidator): void {
+    this.#coverage.setValidator(doc, validator);
   }
 
   /** Calls cb whenever a peer announces its project. */
@@ -205,7 +228,23 @@ export class WailsNetworkAdapter extends NetworkAdapter {
         this.#sealed = true;
         for (const cb of this.#sealedListeners) cb();
         return;
+      case Kind.Roles:
+        this.#receiveRoles(env.payload);
+        return;
     }
+  }
+
+  #receiveRoles(payload: Uint8Array): void {
+    try {
+      this.#roles = decodeRoles(payload);
+    } catch {
+      this.#opts.onDrop?.("undecodable roles");
+      return;
+    }
+    this.#coverage.setAdmins(
+      this.#roles.filter((m) => m.role === "admin" && !m.suspended).map((m) => m.peer),
+    );
+    for (const cb of this.#roleListeners) cb(this.#roles);
   }
 
   #receiveAttested(signer: string, payload: Uint8Array): void {
@@ -282,8 +321,7 @@ export class WailsNetworkAdapter extends NetworkAdapter {
         if (this.#announced.delete(from)) {
           this.emit("peer-disconnected", { peerId: from });
           // Go never saw the old link go down, so it gossiped our attestations into
-          // the void: sign again, ahead of the sync messages of the new start.
-          this.#reattest();
+          // the void: the announcement just below signs again, ahead of the new start.
         }
         this.#sendHandshake(from, "welcome");
       }
@@ -332,6 +370,11 @@ export class WailsNetworkAdapter extends NetworkAdapter {
     }
     if (this.#announced.has(peer)) return;
     this.#announced.add(peer);
+    // Go sent the attestations it holds when the link came up, which can be before the other
+    // side knows the member list well enough to take them (a person who just joined a project
+    // with many documents misses them, and drops every sync message). Now that its webview
+    // answers, vouch again for everything we hold, ahead of the messages that follow.
+    this.#reattest();
     this.emit("peer-candidate", { peerId: peer, peerMetadata: hs.peerMetadata ?? {} });
   }
 

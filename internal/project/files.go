@@ -82,13 +82,54 @@ const (
 	tmpSuffix    = ".tmp" // temporary files of store.WriteAtomic
 )
 
-var extKinds = map[string]Kind{
-	".typ": KindTypst, ".md": KindMarkdown, ".markdown": KindMarkdown, ".txt": KindText,
-	".csv": KindCSV, ".tsv": KindCSV, ".bib": KindBib, ".pdf": KindPDF,
-	".png": KindImage, ".jpg": KindImage, ".jpeg": KindImage, ".gif": KindImage,
-	".webp": KindImage, ".svg": KindImage, ".bmp": KindImage,
-	".json": KindData, ".yaml": KindData, ".yml": KindData, ".toml": KindData,
-	".xml": KindData, ".cbor": KindData,
+// kinds is the table that classifies a file by its name: the extension, then
+// the whole name for the files that have none (README, Makefile). Adding a kind
+// of file is adding a line. What the table does not know is sniffed
+// ([Project.looksLikeText]). The numeric [Kind]s are part of the store stream
+// protocol: the table maps onto them, it does not add any.
+var kinds = struct {
+	byExt  map[string]Kind
+	byName map[string]Kind
+}{
+	byExt: extTable(map[Kind][]string{
+		KindTypst:    {".typ"},
+		KindMarkdown: {".md", ".markdown"},
+		KindText: {
+			".txt", ".log", ".ini", ".conf", ".cfg", ".env", ".html", ".htm", ".css",
+			".js", ".mjs", ".ts", ".sh", ".bash", ".py", ".go", ".sql", ".rs", ".c", ".h",
+			".java", ".rb", ".php", ".lua", ".tex", ".diff", ".patch", ".properties",
+		},
+		KindCSV:   {".csv", ".tsv"},
+		KindBib:   {".bib"},
+		KindPDF:   {".pdf"},
+		KindImage: {".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".bmp"},
+		KindData:  {".json", ".yaml", ".yml", ".toml", ".xml", ".cbor"},
+	}),
+	byName: map[string]Kind{
+		"readme": KindText, "license": KindText, "licence": KindText, "changelog": KindText,
+		"authors": KindText, "makefile": KindText, "dockerfile": KindText,
+	},
+}
+
+// extTable turns kind -> extensions into extension -> kind.
+func extTable(groups map[Kind][]string) map[string]Kind {
+	out := map[string]Kind{}
+	for k, exts := range groups {
+		for _, e := range exts {
+			out[e] = k
+		}
+	}
+	return out
+}
+
+// classify gives the kind the table knows for a file name, and whether it knows.
+func classify(name string) (Kind, bool) {
+	base := strings.ToLower(path.Base(name))
+	if k, ok := kinds.byExt[path.Ext(base)]; ok {
+		return k, true
+	}
+	k, ok := kinds.byName[base]
+	return k, ok
 }
 
 // List returns the files of the project folder, not the folders: the main
@@ -173,7 +214,7 @@ func (p *Project) listSub(dir *os.Root, name, prefix string, depth int, out *[]F
 
 // kindOf classifies rel by its extension, else by its content.
 func (p *Project) kindOf(rel string) Kind {
-	if k, ok := extKinds[strings.ToLower(path.Ext(rel))]; ok {
+	if k, ok := classify(rel); ok {
 		return k
 	}
 	if p.looksLikeText(rel) {

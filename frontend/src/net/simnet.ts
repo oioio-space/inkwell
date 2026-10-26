@@ -4,6 +4,7 @@ import {
   decodeHeads,
   encodeEnvelope,
   encodeHeads,
+  encodeRoles,
   Kind,
 } from "./envelope";
 import type { SocketLike } from "./WailsNetworkAdapter";
@@ -21,7 +22,7 @@ export function rng(seed: number): () => number {
 }
 
 /** What a device may do in the simulated project, as in Go's member list. */
-export type Role = "writer" | "reader";
+export type Role = "admin" | "writer" | "reader";
 
 class SimSocket implements SocketLike {
   binaryType = "arraybuffer";
@@ -172,6 +173,20 @@ export class SimNet {
       this.#inFlight--;
       this.#sockets.get(to)?.deliver(Kind.Message, from, payload);
     }, 0);
+  }
+
+  /**
+   * Go tells each webview the member list: who is an admin, a writer or a reader. Devices not
+   * given a role are writers. Call it once the devices are attached, and again after a change.
+   */
+  announceRoles(): void {
+    const members = [...this.#sockets.keys()].map((peer) => ({
+      peer,
+      role: this.#roles.get(peer) ?? ("writer" as const),
+      suspended: false,
+    }));
+    const payload = encodeRoles(members);
+    for (const s of this.#sockets.values()) s.deliver(Kind.Roles, s.peer, payload);
   }
 
   /** Go signs the heads of a writer and gossips them; it refuses anyone else. */

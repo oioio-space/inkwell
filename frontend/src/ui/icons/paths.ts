@@ -63,6 +63,12 @@ export const ICONS = {
   zoomin: '<circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14M7 5v4M5 7h4"/>',
   zoomout: '<circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14M5 7h4"/>',
   caretdown: '<path d="M4.5 6.5l3.5 3.5 3.5-3.5" stroke-width="1.8"/>',
+  fileplus: '<path d="M3.5 1.5h6l3 3v10h-9z"/><path d="M9.5 1.5v3h3M8 7.5v4M6 9.5h4"/>',
+  folderplus: '<path d="M1.5 4.5V3h5l1.5 1.5h6.5v9h-13z"/><path d="M8 7v4M6 9h4"/>',
+  upload: '<path d="M8 10.5V2.5M4.8 5.5L8 2.3l3.2 3.2M2.5 10v3.5h11V10"/>',
+  trash: '<path d="M2.5 4.5h11M6 4.5V3h4v1.5M4 4.5l.7 9h6.6l.7-9M6.5 7v4.5M9.5 7v4.5"/>',
+  restore: '<path d="M3 8a5 5 0 1 0 1.6-3.7M3 2.5v3h3"/>',
+  inbox: '<path d="M1.8 9l1.6-5.5h9.2L14.2 9v4.5H1.8zM1.8 9h3.4l.8 1.6h4l.8-1.6h3.4"/>',
 } as const;
 
 export type IconName = keyof typeof ICONS;
@@ -81,6 +87,22 @@ export const FILE_MARKS = {
   data: `${DOC}<path d="M6.6 8.2c-.8 0-1 .4-1 1v.6c0 .4-.2.6-.6.8.4.2.6.4.6.8v.6c0 .6.2 1 1 1M9.4 8.2c.8 0 1 .4 1 1v.6c0 .4.2.6.6.8-.4.2-.6.4-.6.8v.6c0 .6-.2 1-1 1" class="mk-data" stroke-width="1.1"/>`,
   other: DOC,
   folder: ICONS.folder,
+  // Text that is not a document: a log has a column of times, a table of tabs has arrows.
+  log: `${DOC}<path d="M5.5 8.4h.01M7.2 8.4h3.3M5.5 10.6h.01M7.2 10.6h3.3M5.5 12.8h.01M7.2 12.8h2" class="mk-text" stroke-width="1.3"/>`,
+  tsv: `${DOC}<path d="M5.6 8.2h4.8M5.6 12.6h4.8M6.4 10.4h3.4M8.8 9.5l1 .9-1 .9" class="mk-csv" stroke-width="1.2"/>`,
+  json: `${DOC}<path d="M6.6 8.2c-.8 0-1 .4-1 1v.6c0 .4-.2.6-.6.8.4.2.6.4.6.8v.6c0 .6.2 1 1 1M9.4 8.2c.8 0 1 .4 1 1v.6c0 .4.2.6.6.8-.4.2-.6.4-.6.8v.6c0 .6-.2 1-1 1" class="mk-data" stroke-width="1.1"/>`,
+  yaml: `${DOC}<path d="M5.5 8.6h1.6M8.3 8.6h2.2M5.5 10.8h1.6M8.3 10.8h2.2M5.5 13h1.6M8.3 13h1.4" class="mk-data" stroke-width="1.2"/>`,
+  config: `${DOC}<path d="M5.4 8.6h5.2M7.6 7.8v1.6M5.4 12h5.2M9 11.2v1.6" class="mk-data" stroke-width="1.2"/>`,
+  xml: `${DOC}<path d="M7.1 8.4L5.4 10.5l1.7 2.1M9.1 8.4l1.7 2.1-1.7 2.1" class="mk-code" stroke-width="1.2"/>`,
+  code: `${DOC}<path d="M6.5 8.2l-1.3 2.2 1.3 2.2M9.5 8.2l1.3 2.2-1.3 2.2M8.7 7.8L7.3 13" class="mk-code" stroke-width="1.1"/>`,
+  js: `${DOC}<path d="M7.3 8v3.7c0 .8-.4 1.1-1.1 1.1M9.2 12.5c.4.3 1 .3 1.3 0 .4-.4 0-.9-.5-1.1-.5-.2-.8-.5-.5-1 .3-.4.9-.4 1.2-.1" class="mk-code" stroke-width="1.1"/>`,
+  ts: `${DOC}<path d="M5.3 8.2h3M6.8 8.2v4.6M9.4 12.5c.4.3 1 .3 1.3 0 .4-.4 0-.9-.5-1.1-.5-.2-.8-.5-.5-1 .3-.4.9-.4 1.2-.1" class="mk-code" stroke-width="1.1"/>`,
+  py: `${DOC}<path d="M5.6 8.3h3v2.2h-3zM7.4 10.5h3v2.2h-3z" class="mk-code" stroke-width="1.1"/>`,
+  go: `${DOC}<path d="M6.5 9.4a.9.9 0 1 0 .01 0M9.5 9.4a.9.9 0 1 0 .01 0M5.6 12.6h4.8" class="mk-code" stroke-width="1.1"/>`,
+  shell: `${DOC}<path d="M5.5 8.6l2 1.8-2 1.8M8.7 12.6h2.1" class="mk-code" stroke-width="1.2"/>`,
+  font: `${DOC}<path d="M5.6 12.8L8 7.9l2.4 4.9M6.6 11.1h2.8" class="mk-bib" stroke-width="1.2"/>`,
+  archive: `${DOC}<path d="M8 3v1.2M8 5.2v1.2M8 7.4v1.2M6.6 9.6h2.8v3H6.6z" class="mk-data" stroke-width="1.1"/>`,
+  binary: `${DOC}<path d="M6.2 8.3a.9 1.3 0 1 0 .01 0M9.8 8.3v4.4M9 9.1l.8-.8" opacity=".8" stroke-width="1.2"/>`,
 } as const;
 
 export type FileMark = keyof typeof FILE_MARKS;

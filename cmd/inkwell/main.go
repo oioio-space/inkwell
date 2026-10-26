@@ -83,12 +83,14 @@ func main() {
 	}
 	storeServer := bridge.NewStoreServer(rt.Files, log)
 
+	projects := app.NewProjects(proj, rt.Files)
+
 	wails = application.New(application.Options{
 		Name:        "Inkwell",
 		Description: "Éditeur collaboratif Typst, sans serveur",
 		Services: []application.Service{
 			application.NewService(rt.Session),
-			application.NewService(app.NewProjects(proj, rt.Files)),
+			application.NewService(projects),
 			application.NewService(app.NewPreviewService(rt.Preview)),
 		},
 		Assets: application.AssetOptions{
@@ -114,6 +116,7 @@ func main() {
 			}
 		},
 	})
+	projects.SetOpener(wails.Browser.OpenFile)
 	wails.HandleStream(bridge.StreamName, func(c *application.StreamConn) { router.Serve(c) })
 	wails.HandleStream(bridge.StoreStreamName, func(c *application.StreamConn) { storeServer.Serve(c) })
 	wails.HandleStream(app.PreviewStreamName, func(c *application.StreamConn) { rt.Preview.Serve(c) })

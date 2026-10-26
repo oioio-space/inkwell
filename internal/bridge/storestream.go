@@ -87,7 +87,10 @@ const (
 	OpReferenced
 	// OpPutBlob stores the project file named by the Key in the blob store
 	// and returns its hash and size, as a payload decoded by [DecodeBlobInfo]:
-	// how a file added from outside, or replaced on disk, gets a hash.
+	// how a file added from outside, or replaced on disk, gets a hash. Without
+	// Data the file is the one already in the project folder. With Data, the
+	// bytes of a file dropped on the window, Go first writes them there as a
+	// new file, which never replaces one ([FileAdder]).
 	OpPutBlob
 	// OpWriteProjectionAt is OpWriteProjection that also records a sync point
 	// with the hash it writes. Data is built by [EncodeWriteAt].
@@ -190,7 +193,7 @@ func (r StoreRequest) validate() error {
 		return fmt.Errorf("%w: %w", ErrMalformed, err)
 	case r.ID == 0:
 		return fmt.Errorf("%w: request id 0", ErrMalformed)
-	case r.Op != OpSave && r.Op != OpWriteProjection && r.Op != OpWriteProjectionAt && r.Op != OpSetSyncPoint && r.Op != OpAcknowledge && r.Op != OpTree && r.Op != OpReferenced && len(r.Data) > 0:
+	case r.Op != OpSave && r.Op != OpWriteProjection && r.Op != OpWriteProjectionAt && r.Op != OpSetSyncPoint && r.Op != OpAcknowledge && r.Op != OpTree && r.Op != OpReferenced && r.Op != OpPutBlob && len(r.Data) > 0:
 		return fmt.Errorf("%w: data on op %d", ErrMalformed, r.Op)
 	case len(r.Data) > store.MaxValue:
 		return fmt.Errorf("%w: %d bytes of data", ErrMalformed, len(r.Data))
@@ -389,6 +392,13 @@ type Storage interface {
 	PutBlob(rel string) (hash [HashSize]byte, size int64, err error)
 }
 
+// FileAdder is what a [Storage] offers to take the bytes of a file the user
+// dropped on the window: [project.Project.AddFile]. A storage without it
+// refuses OpPutBlob with data.
+type FileAdder interface {
+	AddFile(rel string, data []byte) error
+}
+
 // StoreServer serves one [Storage] to the webview over the store stream.
 // Create one with [NewStoreServer].
 type StoreServer struct {
@@ -540,6 +550,17 @@ func (s *StoreServer) handle(req StoreRequest) StoreResponse {
 			hash [HashSize]byte
 			size int64
 		)
+		if len(req.Data) > 0 {
+			adder, ok := s.st.(FileAdder)
+			if !ok {
+				err = errors.New("storage cannot add files")
+			} else {
+				err = adder.AddFile(rel, req.Data)
+			}
+		}
+		if err != nil {
+			break
+		}
 		if hash, size, err = s.st.PutBlob(rel); err == nil {
 			payload = EncodeBlobInfo(hash, size)
 		}

@@ -90,6 +90,7 @@
   --mark-image: light-dark(#e66100, #ffa348);
   --mark-pdf: light-dark(#e01b24, #f66151);
   --mark-data: light-dark(#a2680c, #f8e45c);
+  --mark-code: light-dark(#5865c9, #9db0ff);
 
   /* People — Okabe-Ito; the 8th (black) becomes a neutral grey to stay visible in dark mode */
   --person-1: #e69f00;

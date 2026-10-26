@@ -17,10 +17,32 @@ import {
   type Response,
   Status,
 } from "./protocol";
+import {
+  type BlobInfo,
+  decodeBlobInfo,
+  decodeTooLarge,
+  decodeTreeResult,
+  encodeReferenced,
+  encodeTree,
+  type TreeEntry,
+} from "./tree";
 
 /** A storage request that Go refused or could not carry out. */
 export class StoreError extends Error {
   override name = "StoreError";
+}
+
+/** A file over the size limit of a blob (100 MB, ADR 0023). */
+export class TooLargeError extends StoreError {
+  override name = "TooLargeError";
+  constructor(readonly limit: number) {
+    super(`file over the limit of ${limit} bytes`);
+  }
+}
+
+/** The key of a project file: one component per folder. */
+function pathKey(path: string): string[] {
+  return path.split("/");
 }
 
 /** A project file that is not text Inkwell can edit: it is binary, or has invalid UTF-8 bytes. */
@@ -110,11 +132,11 @@ export class GoStorageAdapter implements StorageAdapterInterface {
    */
   async writeProjection(name: string, text: string, point?: string): Promise<void> {
     if (point === undefined) {
-      expectOk(await this.#call(Op.WriteProjection, [name], textEncoder.encode(text)));
+      expectOk(await this.#call(Op.WriteProjection, pathKey(name), textEncoder.encode(text)));
       return;
     }
     const data = encodeWriteAt(textEncoder.encode(point), textEncoder.encode(text));
-    expectOk(await this.#call(Op.WriteProjectionAt, [name], data));
+    expectOk(await this.#call(Op.WriteProjectionAt, pathKey(name), data));
   }
 
   /**
@@ -122,12 +144,12 @@ export class GoStorageAdapter implements StorageAdapterInterface {
    * document equal to it). Rejects with {@link ExternalEditError} if the file changed since.
    */
   async setSyncPoint(name: string, point: string): Promise<void> {
-    expectOk(await this.#call(Op.SetSyncPoint, [name], textEncoder.encode(point)));
+    expectOk(await this.#call(Op.SetSyncPoint, pathKey(name), textEncoder.encode(point)));
   }
 
   /** The point recorded with the file's hash by the last write or acknowledgement; undefined if none. */
   async readSyncPoint(name: string): Promise<string | undefined> {
-    const r = await this.#call(Op.ReadSyncPoint, [name]);
+    const r = await this.#call(Op.ReadSyncPoint, pathKey(name));
     if (r.status === Status.NotFound) return undefined;
     expectOk(r);
     return textDecoder.decode(r.payload);
@@ -139,7 +161,7 @@ export class GoStorageAdapter implements StorageAdapterInterface {
    * is not text.
    */
   async readProjection(name: string): Promise<string | undefined> {
-    const r = await this.#call(Op.ReadProjection, [name]);
+    const r = await this.#call(Op.ReadProjection, pathKey(name));
     if (r.status === Status.NotFound) return undefined;
     expectOk(r);
     return textDecoder.decode(r.payload);
@@ -157,10 +179,40 @@ export class GoStorageAdapter implements StorageAdapterInterface {
    * conversion offer; undefined if it does not exist. Rejects with {@link NotTextError}.
    */
   async fileInfo(name: string): Promise<FileInfo | undefined> {
-    const r = await this.#call(Op.FileInfo, [name]);
+    const r = await this.#call(Op.FileInfo, pathKey(name));
     if (r.status === Status.NotFound) return undefined;
     expectOk(r);
     return decodeFileInfo(r.payload);
+  }
+
+  /**
+   * Gives Go the project tree the webview materialized from the index (ADR 0023). Go projects the
+   * folders and text files at once and brings in the blobs. Resolves with how many entries Go
+   * refused (hostile or colliding names).
+   */
+  async setTree(entries: TreeEntry[]): Promise<number> {
+    const r = await this.#call(Op.Tree, [], encodeTree(entries));
+    expectOk(r);
+    return decodeTreeResult(r.payload);
+  }
+
+  /** Tells Go which blobs the index refers to: only those are served and kept. */
+  async setReferenced(hashes: Uint8Array[]): Promise<void> {
+    expectOk(await this.#call(Op.Referenced, [], encodeReferenced(hashes)));
+  }
+
+  /**
+   * Stores the project file `path` in the blob store and gives it its hash: how a file added
+   * from outside, or replaced on disk, joins the project. Without `data` the file is the one
+   * already in the folder; with `data` (a file the person dropped on the window) Go first writes
+   * those bytes to the folder at `path`, refusing to replace a file that is there. Rejects with
+   * {@link TooLargeError} for a file over the limit of a blob.
+   */
+  async putBlob(path: string, data?: Uint8Array): Promise<BlobInfo> {
+    const r = await this.#call(Op.PutBlob, pathKey(path), data);
+    if (r.status === Status.TooLarge) throw new TooLargeError(decodeTooLarge(r.payload));
+    expectOk(r);
+    return decodeBlobInfo(r.payload);
   }
 
   /**
@@ -169,7 +221,11 @@ export class GoStorageAdapter implements StorageAdapterInterface {
    */
   async acknowledge(name: string, point?: string): Promise<void> {
     expectOk(
-      await this.#call(Op.Acknowledge, [name], point ? textEncoder.encode(point) : undefined),
+      await this.#call(
+        Op.Acknowledge,
+        pathKey(name),
+        point ? textEncoder.encode(point) : undefined,
+      ),
     );
   }
 

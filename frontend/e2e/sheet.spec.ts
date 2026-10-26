@@ -596,11 +596,15 @@ test.describe("switching to the text view (CSV-15)", () => {
     await pick(page, 2, 1);
     await page.getByRole("button", { name: "Voir le texte" }).click();
     // The caret is in the cell's text.
-    const line = await page.evaluate(() => {
-      const sel = document.getSelection();
-      return sel?.anchorNode?.parentElement?.closest(".cm-line")?.textContent ?? "";
-    });
-    expect(line).toBe("Cerise;77;10");
+    // (the text editor is a module loaded on demand: it appears a moment after the click)
+    await expect
+      .poll(() =>
+        page.evaluate(() => {
+          const sel = document.getSelection();
+          return sel?.anchorNode?.parentElement?.closest(".cm-line")?.textContent ?? "";
+        }),
+      )
+      .toBe("Cerise;77;10");
     await page.getByRole("button", { name: "Voir le tableau" }).click();
     await expect(grid(page)).toHaveAttribute("aria-activedescendant", "cell-2-1");
     await grid(page).focus();
