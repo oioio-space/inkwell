@@ -15,12 +15,39 @@ export interface Analysis {
   blame: Blame;
   /** How many sessions, from the oldest, were already there at the last visit. */
   sinceIdx: number;
+  /** The document is too big to follow who wrote what (see {@link BLAME_BUDGET}): no blame, no marks. */
+  limited: boolean;
 }
 
 /** What is sent back by a worker: the sessions are in `Analysis`, so the blame leaves them out. */
 export type Wire = Omit<Analysis, "blame"> & { blame: Omit<Blame, "sessions"> };
 
 const CAP = 20_000;
+
+/**
+ * Following who wrote what costs one diff per session, and a diff walks every operation of the
+ * document (about 150 ns each, deleted text included). Past this many operations times sessions
+ * (about 15 s of work), only the sessions are listed: the page stays light, and says so.
+ */
+export const BLAME_BUDGET = 100_000_000;
+
+/**
+ * A text this long (in characters) is not analysed at all: copying such a document into a worker
+ * and following it costs gigabytes (Automerge keeps about a hundred bytes per character).
+ */
+export const HUGE_TEXT = 1_000_000;
+
+/** What the screens get for a document too big to follow: no entries, no marks, and a note. */
+const tooBig = (doc: A.Doc<HDoc>): Analysis => ({
+  sessions: [],
+  order: [],
+  blame: { spans: [], deletions: [], sessions: [], length: doc.text.length },
+  sinceIdx: 0,
+  limited: true,
+});
+
+/** Whether following who wrote what would cost more than the budget. */
+export const tooCostly = (ops: number, sessions: number): boolean => ops * sessions > BLAME_BUDGET;
 
 /** Runs the analysis on `doc`. `since`: the heads of the last visit, or undefined for none. */
 export async function analyze(
@@ -31,7 +58,11 @@ export async function analyze(
 ): Promise<Analysis> {
   const steps = stepsOf(doc);
   const sessions = sessionsOf(steps, Date.now(), personOfDoc(doc));
-  const blame = await tracker.update(doc, sessions, opts);
+  const ops = steps.at(-1)?.maxOp ?? 0;
+  const limited = tooCostly(ops, sessions.length);
+  const blame: Blame = limited
+    ? { spans: [], deletions: [], sessions, length: doc.text.length }
+    : await tracker.update(doc, sessions, opts);
   // A removed text this long is not worth carrying: only a part of it is kept for matching.
   for (const d of blame.deletions) if (d.text.length > CAP) d.text = d.text.slice(0, CAP);
   return {
@@ -39,6 +70,7 @@ export async function analyze(
     order: steps.map((s) => s.hash),
     blame,
     sinceIdx: since ? sessionsBefore(sessions, steps, since) : sessions.length,
+    limited,
   };
 }
 
@@ -51,7 +83,11 @@ export interface Analyzer {
 /** On the calling thread: for tests and small documents. */
 export function inlineAnalyzer(): Analyzer {
   const tracker = new Tracker();
-  return { analyze: (doc, since) => analyze(doc, tracker, since), dispose() {} };
+  return {
+    analyze: (doc, since) =>
+      doc.text.length > HUGE_TEXT ? Promise.resolve(tooBig(doc)) : analyze(doc, tracker, since),
+    dispose() {},
+  };
 }
 
 /** The slice of the Worker interface the client needs. */
@@ -114,6 +150,7 @@ export function workerAnalyzer(spawn: () => WorkerLike): Analyzer {
 
   return {
     analyze(doc, since) {
+      if (doc.text.length > HUGE_TEXT) return Promise.resolve(tooBig(doc));
       const w = boot();
       const id = ++seq;
       // Only the latest request matters: the earlier ones are dropped by the caller's own order.

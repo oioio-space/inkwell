@@ -589,5 +589,6 @@
   "zoom.in": "Agrandir",
   "zoom.reset": "Taille normale (100 %)",
   "zoom.note": "De 50 % à 300 %. Ce réglage reste sur cet appareil et n'est pas partagé.",
-  "history.error": "Impossible de calculer l'historique pour l'instant ({reason})."
+  "history.error": "Impossible de calculer l'historique pour l'instant ({reason}).",
+  "history.limited": "Ce document est trop volumineux pour suivre qui a écrit quoi : la liste des moments reste disponible."
 }

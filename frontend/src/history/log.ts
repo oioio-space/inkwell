@@ -9,6 +9,8 @@ export interface Step {
   time: number;
   deps: Heads;
   message: string | null;
+  /** The number of operations in the document up to this change (its size, tombstones included). */
+  maxOp: number;
 }
 
 /** Several steps of one author with no pause over 10 minutes, or one action of Inkwell's own. */
@@ -53,6 +55,7 @@ export function stepsOf(doc: A.Doc<unknown>): Step[] {
       time: c.time * 1000,
       deps: c.deps,
       message: c.message,
+      maxOp: c.maxOp,
     };
   }
   return steps;

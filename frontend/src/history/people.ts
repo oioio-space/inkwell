@@ -42,10 +42,12 @@ export function authorBook(doc: HDoc | undefined, dir: Directory): (actor: strin
     if (a) return a;
     const claim: Claim | undefined = claims[actor];
     const peer = claim?.peer;
+    // The name a person chose for themselves (live in presence, or written in the document)
+    // comes first: the member list only knows the name the machine gave when joining.
     const name =
-      (peer ? (dir.nameOfPeer?.(peer) ?? undefined) : undefined) ||
-      claim?.name ||
       (peer ? dir.present?.[peer] : undefined) ||
+      claim?.name ||
+      (peer ? (dir.nameOfPeer?.(peer) ?? undefined) : undefined) ||
       t("history.someone");
     const index = personIndex(peer ?? actor);
     a = {

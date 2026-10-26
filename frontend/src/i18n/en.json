@@ -589,5 +589,6 @@
   "zoom.in": "Larger",
   "zoom.reset": "Normal size (100 %)",
   "zoom.note": "From 50 % to 300 %. This setting stays on this device and is not shared.",
-  "history.error": "Cannot work out the history right now ({reason})."
+  "history.error": "Cannot work out the history right now ({reason}).",
+  "history.limited": "This document is too big to follow who wrote what: the list of moments is still available."
 }

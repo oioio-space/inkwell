@@ -133,13 +133,17 @@ const field = StateField.define<State>({
 });
 
 const theme = EditorView.baseTheme({
-  ".cm-change-gutter": { width: "8px", marginRight: "2px" },
-  ".cm-change-gutter .cm-gutterElement": { padding: "0", display: "flex" },
+  // The strip takes no room of its own: it is drawn on the left edge of the line-number column,
+  // which keeps the 56 px of the design.
+  ".cm-change-gutter": { width: "0", minWidth: "0", marginRight: "0", overflow: "visible" },
+  ".cm-change-gutter .cm-gutterElement": { padding: "0", width: "0", position: "relative" },
   ".cm-change": {
     "--change-color": "var(--accent-bg)",
+    position: "absolute",
+    left: "6px",
+    top: "0",
+    bottom: "0",
     width: "4px",
-    height: "100%",
-    marginLeft: "2px",
     borderRadius: "2px",
     background: "var(--change-color)",
   },
@@ -150,11 +154,11 @@ const theme = EditorView.baseTheme({
     background: "transparent",
     width: "0",
     height: "0",
-    marginLeft: "1px",
+    left: "5px",
+    bottom: "auto",
     borderTop: "5px solid transparent",
     borderBottom: "5px solid transparent",
     borderLeft: "7px solid var(--change-color)",
-    alignSelf: "flex-start",
   },
   ".cm-minimap": {
     position: "absolute",

@@ -118,13 +118,16 @@ const activity = $derived.by(() => {
         </label>
       </div>
       <div class="toggles">
-        <label class="sw"><input type="checkbox" bind:checked={history.showWho} /> {t("history.who")}</label>
+        <label class="sw"><input type="checkbox" bind:checked={history.showWho} disabled={history.analysis?.limited} /> {t("history.who")}</label>
         <label class="sw"><input type="checkbox" bind:checked={history.showAbandoned} /> {t("history.abandoned")}</label>
         <span class="count" data-testid="history-count" role="status">
           {history.filtering ? t("history.counter", { shown: history.filtered.shown.length, total: history.filtered.total }) : tn("history.entries", history.filtered.total)}
         </span>
       </div>
-      {#if history.showWho}
+      {#if history.analysis?.limited}
+        <p class="note" data-testid="history-limited">{t("history.limited")}</p>
+      {/if}
+      {#if history.showWho && !history.analysis?.limited}
         <p class="legend" data-testid="who-legend">
           {#each history.people as p}
             <span class="chip"><span class="dot" style:background="var(--person-{history.legendIndex(p)})" aria-hidden="true"></span>{p}</span>

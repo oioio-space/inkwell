@@ -1,6 +1,13 @@
 import { next as A } from "@automerge/automerge";
 import { describe, expect, it } from "vitest";
-import { analyze, inlineAnalyzer, type WorkerLike, workerAnalyzer } from "./analysis";
+import {
+  analyze,
+  HUGE_TEXT,
+  inlineAnalyzer,
+  tooCostly,
+  type WorkerLike,
+  workerAnalyzer,
+} from "./analysis";
 import { Device } from "./testkit";
 import { Tracker } from "./track";
 import type { HDoc } from "./types";
@@ -48,5 +55,29 @@ describe("analysis in a worker", () => {
     const result = await workerAnalyzer(fakeWorker).analyze(loaded, undefined);
     expect(result.blame.length).toBe("texte reçu".length);
     expect(result.sinceIdx).toBe(result.sessions.length);
+  });
+
+  it("a document too big to follow lists its sessions and skips who-wrote-what", async () => {
+    // A 5 MB text once typed (its deleted characters still count) with 100 sessions after it.
+    expect(tooCostly(5_000_000, 100)).toBe(true);
+    // A page of notes with a long history is followed in full.
+    expect(tooCostly(20_000, 2_000)).toBe(false);
+    const a = new Device("aa01").type("texte", 0).type("!", 5, 3600);
+    const result = await inlineAnalyzer().analyze(a.doc, undefined);
+    expect(result.limited).toBe(false);
+    expect(result.blame.spans.length).toBeGreaterThan(0);
+  });
+
+  it("a huge text is not copied into a worker at all", async () => {
+    const huge = { text: "x".repeat(HUGE_TEXT + 1) } as A.Doc<HDoc>;
+    let spawned = false;
+    const client = workerAnalyzer(() => {
+      spawned = true;
+      return fakeWorker();
+    });
+    const result = await client.analyze(huge, undefined);
+    expect(result.limited).toBe(true);
+    expect(result.sessions).toEqual([]);
+    expect(spawned).toBe(false);
   });
 });

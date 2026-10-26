@@ -38,6 +38,10 @@ $effect(() => {
   const doc = history.doc;
   const handle = history.handle;
   if (!view || !a || !doc || !handle || workspace.variant) return;
+  if (a.limited) {
+    count = 0;
+    return;
+  }
   const marks = changeMarks(doc, a.blame, a.sinceIdx, history.author);
   count = marks.length;
   showChanges(view, { marks, colorBy: history.colorBy, resolve: resolver(handle.doc()) });
@@ -55,7 +59,7 @@ $effect(() => {
   const view = session.view;
   const a = history.analysis;
   if (!view) return;
-  if (!history.showWho || !a || !history.isCurrent() || workspace.variant) {
+  if (!history.showWho || !a || a.limited || !history.isCurrent() || workspace.variant) {
     showWritten(view, null);
     return;
   }
