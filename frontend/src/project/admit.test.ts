@@ -460,3 +460,26 @@ describe("security audit: whole documents, stamps, trashed folders, caps", () =>
     expect(judge(half, many(5000, "b"))).toBe("too many files");
   }, 120_000);
 });
+
+describe("every change an honest client makes is admitted, whatever came before", () => {
+  it("a refusal, then the purge of the file it was about (it deletes the decision too)", () => {
+    const base = project();
+    const t = idOf(base, "ch1.typ");
+    let doc = A.clone(base);
+    const steps: ((d: Index) => Index)[] = [
+      (d) => apply(d, ops.remove(d, view(d), ctx(bob), [t])), // a request
+      (d) => apply(d, ops.refuse(view(d), ctx(alice), [t])), // the decision
+      (d) => apply(d, ops.setDeletionMode(d, ctx(alice), "free")),
+      (d) => apply(d, ops.remove(d, view(d), ctx(alice), [t])), // in the trash
+      (d) => apply(d, ops.purge(d, view(d), ctx(alice), [t])), // gone, decision and all
+    ];
+    const validator = new IndexValidator(() => base);
+    for (const step of steps) {
+      const before = doc;
+      doc = step(doc);
+      for (const change of A.getChanges(before, doc)) {
+        expect(validator.check(change, () => true)).toBeUndefined();
+      }
+    }
+  });
+});

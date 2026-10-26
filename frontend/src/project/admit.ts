@@ -13,7 +13,6 @@ import {
   plainValue,
 } from "./model";
 import { MAX_DEPTH, validateName } from "./names";
-import { deletionMode } from "./ops";
 
 /**
  * Admission of the changes of the project index (ADR 0023, B5; same chain as ADR 0022).
@@ -172,353 +171,149 @@ export function checkDocument(doc: IndexDoc): Refusal {
   return undefined;
 }
 
-type Patch = A.Patch;
+type Op = ReturnType<typeof A.decodeChange>["ops"][number];
+type Decoded = ReturnType<typeof A.decodeChange>;
 
-/** What a verdict is made from (see {@link checkChange}). */
-export interface Judgement {
-  /** What the change did, from its dependencies to itself. */
-  forward: readonly Patch[];
-  /**
-   * True if the value at `path` (a top-level key, or a node of `nodes`) existed before the change,
-   * that is, if the change did not create it.
-   */
-  existedBefore: (...path: string[]) => boolean;
-  /** Whether an admin vouches for the change. */
-  admin: boolean;
-  /**
-   * The index as the change leaves it, read when a rule needs more than the patches say (a
-   * rename does not; a creation, a move, a deletion do). Never the receiver's current state: the
-   * dependencies of the change and the change itself.
-   */
-  after: () => IndexDoc;
-  /** A node the change created, as it left it. */
-  createdNode: (id: string) => IndexNode | undefined;
-  /** True if the index has more nodes than it may after the change. */
-  tooMany: () => boolean;
+/** What an object of the index document is, so that an operation on it can be read. */
+type Kind =
+  | { t: "root" }
+  | { t: "text" }
+  | { t: "nodes" }
+  | { t: "node"; id: string }
+  | { t: "stamp"; id: string; field: "trashed" | "deletion" }
+  | { t: "settings" }
+  | { t: "decisions" }
+  | { t: "decision"; id: string }
+  | { t: "packages" }
+  | { t: "package"; key: string };
+
+const ROOT: Kind = { t: "root" };
+
+/** What a new object made under `parent` at `key` is (undefined: nothing the index has). */
+function classify(parent: Kind | undefined, key: unknown): Kind | undefined {
+  if (parent === undefined || typeof key !== "string") return undefined;
+  switch (parent.t) {
+    case "root":
+      return key === "text"
+        ? { t: "text" }
+        : key === "nodes"
+          ? { t: "nodes" }
+          : key === "settings"
+            ? { t: "settings" }
+            : key === "decisions"
+              ? { t: "decisions" }
+              : key === "packages"
+                ? { t: "packages" }
+                : undefined;
+    case "nodes":
+      return isId(key) ? { t: "node", id: key } : undefined;
+    case "node":
+      return key === "trashed" || key === "deletion"
+        ? { t: "stamp", id: parent.id, field: key }
+        : undefined;
+    case "decisions":
+      return isId(key) ? { t: "decision", id: key } : undefined;
+    case "packages":
+      return isPackageKey(key) ? { t: "package", key } : undefined;
+    default:
+      return undefined;
+  }
 }
 
-const pathKey = (path: readonly unknown[]): string => path.join("\u0000");
+/** The value an operation writes, as plain data (a null is a set whose value is missing). */
+const valueWritten = (op: Op): unknown => (op.value === undefined ? null : op.value);
 
-/** Fields of an existing node whose new value the patches alone settle. */
-const PATCHED_FIELDS: ReadonlySet<string> = new Set(["name", "parent"]);
+/** Fields of the pieces a node and the sections are made of. */
+const STAMP_FIELDS: ReadonlySet<string> = new Set(["by", "at", "req"]);
+const DECISION_FIELDS: ReadonlySet<string> = new Set(["by", "at", "req", "verdict"]);
+const PACKAGE_FIELDS: ReadonlySet<string> = new Set(["hash", "size", "by", "at"]);
 
-/**
- * Checks the effect of one change. The rules:
- *
- * - names, urls, hashes, ids and shapes are always valid, and a file's type, url and author
- *   never change (PRJ-10, PRJ-15);
- * - `trashed` is a writer's act only when the project lets files go freely, an admin's
- *   otherwise, and the main file is never trashed (FM-14, FM-15, FM-18);
- * - a deletion request is a writer's act, lifting it is an admin's (under "approval");
- * - decisions, the main file, the deletion rule and the purge of a node are an admin's;
- * - a file is not moved or created into the trash, and the tree stays under its caps.
- *
- * A rule that needs an admin gives a reason that starts with {@link HOLD}: the change waits for
- * an admin's attestation instead of being refused. The verdict is a function of the change and
- * its own history, so replicas that get the same changes in any order agree.
- */
-export function checkChange(j: Judgement): Refusal {
-  const needAdmin = (what: string): Refusal =>
-    j.admin ? undefined : `${HOLD}${what} needs an admin`;
-  const existedBefore = j.existedBefore;
-  const written = new Map<string, unknown>();
-  const touched = new Map<string, Set<string>>();
-  const created = new Set<string>();
-  const purged = new Set<string>();
-  let sections = false;
-  for (const p of j.forward) {
-    if (p.action === "conflict") continue;
-    const [root, a, b] = p.path as [string, string?, string?];
-    if (typeof root !== "string" || !TOP_KEYS.has(root)) return `unknown key ${String(root)}`;
-    if (p.action === "put")
-      written.set(pathKey(p.path), plainValue((p as { value?: unknown }).value));
-    switch (root) {
-      case "text":
-        break;
-      case "schema":
-        if (existedBefore("schema")) return "schema is fixed";
-        if (j.after().schema !== 1) return "unknown schema";
-        break;
-      case "main": {
-        if (existedBefore("main")) {
-          const r = needAdmin("changing the main file");
-          if (r) return r;
-        }
-        sections = true;
-        break;
-      }
-      case "nodes": {
-        if (a === undefined) {
-          if (p.action !== "put" || existedBefore("nodes")) return "nodes replaced";
-          break;
-        }
-        if (!isId(a)) return "bad node id";
-        if (b === undefined) {
-          if (p.action === "del") {
-            const r = needAdmin("purging a file");
-            if (r) return r;
-            purged.add(a);
-          } else if (p.action === "put") {
-            if (existedBefore("nodes", a)) return "node replaced";
-            created.add(a);
-          } else return "bad node patch";
-          break;
-        }
-        if (!NODE_FIELDS.has(b)) return `unknown node field ${b}`;
-        const set = touched.get(a) ?? new Set<string>();
-        touched.set(a, set);
-        set.add(b);
-        break;
-      }
-      case "settings": {
-        if (existedBefore("settings")) {
-          const r = needAdmin("changing the deletion rule");
-          if (r) return r;
-        }
-        sections = true;
-        break;
-      }
-      case "decisions": {
-        if (existedBefore("decisions") || a !== undefined) {
-          const r = needAdmin("deciding on a request");
-          if (r) return r;
-        }
-        sections = true;
-        break;
-      }
-      case "packages":
-        if (p.action === "del") {
-          const r = needAdmin("removing a package");
-          if (r) return r;
-        }
-        sections = true;
-        break;
-    }
-  }
+/** The reason, once judged, of a change that must wait: for an admin, for what it builds on. */
+const waitsForAdmin = (what: string): string => `${HOLD}${what} needs an admin`;
 
-  // Shapes. A new node is read whole; an existing one by what was written into it, and whole
-  // only when a field the patches do not settle was written.
-  for (const id of created) {
-    const p = nodeProblem(id, j.createdNode(id));
-    if (p) return p;
-  }
-  for (const [id, fields] of touched) {
-    if (created.has(id) || purged.has(id) || fields.size === 0) continue;
-    let whole = false;
-    for (const f of fields) {
-      if (!PATCHED_FIELDS.has(f)) {
-        whole = true;
-        continue;
-      }
-      const v = written.get(pathKey(["nodes", id, f]));
-      if (f === "name" && (typeof v !== "string" || validateName(v) !== undefined)) {
-        return "invalid name";
-      }
-      if (f === "parent" && v !== null && !isId(v)) return "bad parent";
-    }
-    if (whole) {
-      const n = j.after().nodes?.[id];
-      const p = n ? nodeProblem(id, n) : undefined;
-      if (p) return p;
-    }
-  }
-  if (sections) {
-    const after = j.after();
-    if (
-      after.settings !== undefined &&
-      after.settings.deletion !== "approval" &&
-      after.settings.deletion !== "free"
-    ) {
-      return "bad settings";
-    }
-    for (const [id, v] of Object.entries(after.decisions ?? {})) {
-      if (!isId(id) || !decisionOk(v)) return "bad decision";
-    }
-    for (const [k, v] of Object.entries(after.packages ?? {})) {
-      if (!packageOk(k, v)) return "bad package";
-    }
-    if (after.main !== undefined && !isId(after.main)) return "bad main";
-  }
+/** Judgements that read the index at a change's own heads (a pass over the history). */
+const BUDGET = 8;
+/** Of them, per second: a hostile message cannot take the UI thread for more than this. */
+const BUDGET_PER_SECOND = 8;
+/** Judgements of that kind a whole document may take in one go (it arrives once, and whole). */
+const DOCUMENT_BUDGET = 512;
+/** Refused changes remembered, so that what builds on one is refused too. */
+const MAX_REFUSED = 20_000;
 
-  if (created.size > MAX_CREATE_PER_CHANGE) return "too many files in one change";
-  if (created.size > 0 && j.tooMany()) return "too many files";
-  for (const id of created) {
-    const n = j.createdNode(id);
-    if (n?.trashed || (n?.parent != null && inTrash(j.after(), n.parent))) {
-      return "a file is not created in the trash";
-    }
-  }
-
-  for (const [id, fields] of touched) {
-    if (purged.has(id)) continue; // purged in the same change
-    const fresh = created.has(id);
-    for (const f of fields) {
-      if (!fresh && (f === "type" || f === "url" || f === "by" || f === "at" || f === "who")) {
-        return `${f} of a file never changes`;
-      }
-      if (f === "parent" && !fresh) {
-        const after = j.after();
-        if (inTrash(after, after.nodes?.[id]?.parent ?? null)) {
-          return "a file is not moved into the trash";
-        }
-      }
-      if (f === "trashed") {
-        const after = j.after();
-        if (after.nodes?.[id]?.trashed && id === after.main) {
-          return "the main file cannot be trashed";
-        }
-        if (deletionMode(after) === "approval") {
-          const r = needAdmin("trashing a file");
-          if (r) return r;
-        }
-      }
-      if (f === "deletion") {
-        const after = j.after();
-        if (!after.nodes?.[id]?.deletion && deletionMode(after) === "approval") {
-          const r = needAdmin("lifting a deletion request");
-          if (r) return r;
-        }
-      }
-    }
-  }
-  return undefined;
-}
-
-/** True if the folder `parent`, or one above it, is in the trash. */
-function inTrash(doc: IndexDoc, parent: string | null): boolean {
-  let at = parent;
-  for (let i = 0; at !== null && i <= MAX_DEPTH + 1; i++) {
-    const n = doc.nodes?.[at];
-    if (!n) return false;
-    if (n.trashed) return true;
-    at = n.parent ?? null;
-  }
-  return false;
-}
-
-/** The part of an index a verdict reads: the small sections whole, the nodes one by one. */
-function lite(view: A.Doc<IndexDoc>): IndexDoc {
-  const v = view as unknown as Record<string, unknown>;
-  const out: Record<string, unknown> = {};
-  for (const k of ["schema", "main", "settings", "decisions", "packages"]) {
-    if (v[k] !== undefined) out[k] = plainValue(v[k]);
-  }
-  const nodes = v.nodes as Record<string, unknown> | undefined;
-  if (nodes !== undefined) {
-    const seen = new Map<string, unknown>();
-    out.nodes = new Proxy(
-      {},
-      {
-        get(_target, id) {
-          if (typeof id !== "string") return undefined;
-          if (!seen.has(id))
-            seen.set(id, nodes[id] === undefined ? undefined : plainValue(nodes[id]));
-          return seen.get(id);
-        },
-      },
-    );
-  }
-  return out as IndexDoc;
+/** Options of {@link IndexValidator}. */
+export interface ValidatorOptions {
+  /** The clock for the budget, in milliseconds (the browser's by default). */
+  now?: () => number;
 }
 
 /**
- * True if the change only makes nodes that are new (none of `unseen` was named before), and what
- * is inside them: every operation is the creation of a new node in the nodes map, or happens in
- * an object that the change itself made. Nothing a concurrent change did can have hidden any of
- * it.
- */
-function createsOnly(
-  work: A.Doc<IndexDoc>,
-  decoded: ReturnType<typeof A.decodeChange>,
-  unseen: ReadonlySet<string>,
-): boolean {
-  const nodesObj = A.getObjectId(work, "nodes");
-  if (nodesObj === null || unseen.size === 0) return false;
-  const made = new Set<string>();
-  decoded.ops.forEach((op, i) => {
-    if (op.action.startsWith("make")) made.add(`${decoded.startOp + i}@${decoded.actor}`);
-  });
-  return decoded.ops.every(
-    (op) =>
-      made.has(op.obj) ||
-      (op.obj === nodesObj &&
-        op.action.startsWith("make") &&
-        typeof op.key === "string" &&
-        unseen.has(op.key)),
-  );
-}
-
-/** A patch that sets the name of a node. */
-const isRename = (p: Patch): boolean =>
-  p.action === "put" && p.path.length === 3 && p.path[0] === "nodes" && p.path[2] === "name";
-
-/**
- * What the working copy says about the keys a change writes, read before the change is applied
- * (the copy is replaced by the application): which top-level sections and which of the nodes the
- * change names already existed.
- */
-function factsBefore(
-  work: A.Doc<IndexDoc>,
-  ops: readonly { obj: string; key?: unknown }[],
-): (...path: string[]) => boolean {
-  const root = work as unknown as Record<string, unknown>;
-  const sections = new Map<string, boolean>();
-  for (const k of ["schema", "main", "settings", "decisions", "packages", "nodes"]) {
-    sections.set(k, root[k] !== undefined);
-  }
-  const nodesObj = A.getObjectId(work, "nodes");
-  const nodes = root.nodes as Record<string, unknown> | undefined;
-  const had = new Set<string>();
-  if (nodesObj !== null) {
-    for (const op of ops) {
-      if (op.obj === nodesObj && typeof op.key === "string" && nodes?.[op.key] !== undefined) {
-        had.add(op.key);
-      }
-    }
-  }
-  return (...path) => {
-    const [top, id] = path;
-    if (top === undefined) return true;
-    if (id !== undefined) return top === "nodes" ? had.has(id) : true;
-    return sections.get(top) ?? true;
-  };
-}
-
-/** Most changes whose verdict is kept (held or refused); past it new ones wait, untouched. */
-const MAX_TRACKED = 100_000;
-
-/**
- * The state of the checks for one index document: a working copy of the changes seen, so that a
- * change is judged without waiting for the Repo, which applies messages later. Local changes
- * reach it through `source`, the Repo's own copy.
+ * The checks for one index document. A change is judged from its own operations and, for the few
+ * rules that need it, from the index as its own dependencies left it ({@link A.view}), never from
+ * the state the receiver happens to have reached: two replicas that get the same changes, honest
+ * or crafted, in any order give the same verdict on each. Nothing but the verdict decides:
+ * what is read is the change's operations (kind of object, key, value, what each replaces), and
+ * a change is applied to the working copy only once it is admitted, so refused or waiting changes
+ * cannot slow down or bend a later verdict.
  *
- * Every change is applied once to the one working copy, then judged on what it did
- * ({@link A.diff} between its dependencies and itself) and on the few nodes it touches, read at
- * its own dependencies and just after it ({@link A.view}), never against the state the receiver
- * happens to have reached: two replicas that get the same changes in any order agree. The cost
- * does not grow with the length of the history.
- *
- * The working copy also holds the changes that were refused or are held (a change cannot be
- * taken out of a document); their hashes are remembered, and whatever builds on one shares its
- * fate. Only a change judged fit is ever handed to the Repo.
+ * What waits (for an admin, for a change it builds on, for the budget) is told apart from what
+ * is refused for good by a reason that starts with {@link HOLD}; whoever holds the change judges
+ * it again when {@link resolved}, {@link hasBudget} or the admin's attestation says it may pass.
  */
 export class IndexValidator {
   #work: A.Doc<IndexDoc> | undefined;
   #source: () => A.Doc<IndexDoc> | undefined;
-  /** Changes that wait: hash → why. Judged again each time they are offered. */
-  #held = new Map<string, string>();
+  /** What each object of the working copy is. */
+  #objs = new Map<string, Kind>([["_root", ROOT]]);
+  /** Every node id the admitted changes name (purged ones too): an upper bound of the nodes. */
+  #ids = new Set<string>();
   /** Changes refused for good: hash → why. */
   #refused = new Map<string, string>();
-  /** Every node id any change seen so far names (refused and purged ones too). */
-  #ids = new Set<string>();
+  /** The hash of every change in the working copy (asking the document costs a pass over it). */
+  #hashes = new Set<string>();
+  #now: () => number;
+  #tokens = BUDGET;
+  #stamp: number;
+  #docTokens = 0;
 
-  constructor(source: () => A.Doc<IndexDoc> | undefined) {
+  constructor(source: () => A.Doc<IndexDoc> | undefined, opts: ValidatorOptions = {}) {
     this.#source = source;
+    this.#now = opts.now ?? (() => performance.now());
+    this.#stamp = this.#now();
   }
 
-  /** The heads of every change seen so far (refused ones included), sorted. */
+  /** The heads of the admitted changes, sorted. */
   heads(): string[] {
     return [...A.getHeads(this.#sync())].sort();
+  }
+
+  /** True once the change is in the working copy, or was refused: nothing waits on it any more. */
+  resolved(hash: string): boolean {
+    this.#sync();
+    return this.#refused.has(hash) || this.#hashes.has(hash);
+  }
+
+  /** True if a judgement that reads the history can be afforded now. */
+  hasBudget(): boolean {
+    this.#refill();
+    return this.#tokens >= 1;
+  }
+
+  #refill(): void {
+    const t = this.#now();
+    this.#tokens = Math.min(BUDGET, this.#tokens + ((t - this.#stamp) * BUDGET_PER_SECOND) / 1000);
+    this.#stamp = t;
+  }
+
+  /** Pays for a judgement that reads the history; false if the budget is spent. */
+  #spend(): boolean {
+    if (this.#docTokens > 0) {
+      this.#docTokens--;
+      return true;
+    }
+    this.#refill();
+    if (this.#tokens < 1) return false;
+    this.#tokens--;
+    return true;
   }
 
   /** Brings the working copy up to the Repo's own copy (local edits, and what the Repo applied). */
@@ -526,27 +321,82 @@ export class IndexValidator {
     const live = this.#source();
     if (!this.#work) {
       this.#work = live ? A.clone(live) : A.init<IndexDoc>();
-      this.#remember();
+      this.#hashes = new Set(A.getChangesMetaSince(this.#work, []).map((c) => c.hash));
+      this.#scan();
     } else if (live && !A.hasHeads(this.#work, A.getHeads(live))) {
+      const before = A.getHeads(this.#work);
       this.#work = A.merge(this.#work, A.clone(live));
-      this.#remember();
+      for (const c of A.getChangesMetaSince(this.#work, before)) this.#hashes.add(c.hash);
+      this.#scan();
     }
     return this.#work;
   }
 
-  /** Takes the ids of the nodes of the working copy into the ones seen. */
-  #remember(): void {
-    const nodes = (this.#work as { nodes?: object } | undefined)?.nodes;
-    for (const id of Object.keys(nodes ?? {})) this.#ids.add(id);
+  /** Reads what every object of the working copy is, from the document itself. */
+  #scan(): void {
+    const doc = this.#work as A.Doc<IndexDoc>;
+    const root = doc as unknown as Record<string, unknown>;
+    this.#objs = new Map([["_root", ROOT]]);
+    const put = (value: unknown, kind: Kind) => {
+      if (value === null || typeof value !== "object") return;
+      const id = A.getObjectId(value as A.Doc<unknown>);
+      if (id !== null) this.#objs.set(id, kind);
+    };
+    const text = A.getObjectId(doc, "text");
+    if (text !== null) this.#objs.set(text, { t: "text" });
+    const nodes = root.nodes as Record<string, Record<string, unknown>> | undefined;
+    if (nodes) {
+      put(nodes, { t: "nodes" });
+      for (const id of Object.keys(nodes)) {
+        this.#ids.add(id);
+        const node = nodes[id];
+        put(node, { t: "node", id });
+        for (const field of ["trashed", "deletion"] as const)
+          put(node?.[field], { t: "stamp", id, field });
+      }
+    }
+    put(root.settings, { t: "settings" });
+    const decisions = root.decisions as Record<string, unknown> | undefined;
+    if (decisions) {
+      put(decisions, { t: "decisions" });
+      for (const id of Object.keys(decisions)) put(decisions[id], { t: "decision", id });
+    }
+    const packages = root.packages as Record<string, unknown> | undefined;
+    if (packages) {
+      put(packages, { t: "packages" });
+      for (const key of Object.keys(packages)) put(packages[key], { t: "package", key });
+    }
+  }
+
+  /** Takes an admitted change into the working copy, and what it made into the objects known. */
+  #take(bytes: Uint8Array, decoded: Decoded): void {
+    this.#work = A.applyChanges(this.#sync(), [bytes])[0];
+    this.#hashes.add(decoded.hash);
+    decoded.ops.forEach((op, i) => {
+      if (!op.action.startsWith("make")) return;
+      const parent = op.obj === "_root" ? ROOT : this.#objs.get(op.obj);
+      const kind = classify(parent, op.key);
+      if (kind) this.#objs.set(`${decoded.startOp + i}@${decoded.actor}`, kind);
+      if (parent?.t === "nodes" && typeof op.key === "string") this.#ids.add(op.key);
+    });
+  }
+
+  #refuse(hash: string, why: string): string {
+    this.#refused.set(hash, why);
+    for (const h of this.#refused.keys()) {
+      if (this.#refused.size <= MAX_REFUSED) break;
+      this.#refused.delete(h);
+    }
+    return why;
   }
 
   /**
    * Judges one change. `adminCovered` is asked only when a rule needs it. The answer is
-   * undefined (admitted), a reason that starts with {@link HOLD} (wait: an admin has not vouched
-   * yet, or what it builds on is not here or not admitted), or a refusal for good.
+   * undefined (admitted), a reason that starts with {@link HOLD} (it waits: an admin has not
+   * vouched yet, what it builds on is not here, the budget is spent), or a refusal for good.
    */
   check(bytes: Uint8Array, adminCovered: (hash: string) => boolean): Refusal {
-    let decoded: ReturnType<typeof A.decodeChange>;
+    let decoded: Decoded;
     try {
       decoded = A.decodeChange(bytes);
     } catch {
@@ -555,152 +405,394 @@ export class IndexValidator {
     const { hash, deps } = decoded;
     const refused = this.#refused.get(hash);
     if (refused !== undefined) return refused;
-    let work = this.#sync();
-    if (!A.hasHeads(work, deps)) return `${HOLD}dependencies unknown`;
-    const known = A.hasHeads(work, [hash]);
-    if (known && !this.#held.has(hash)) return undefined; // judged fit before
+    const work = this.#sync();
+    if (this.#hashes.has(hash)) return undefined; // admitted before
+    const missing = deps.filter((d) => !this.#hashes.has(d));
     for (const d of deps) {
       const why = this.#refused.get(d);
-      if (why !== undefined) return this.#verdict(hash, `builds on a refused change (${why})`);
-      if (this.#held.has(d)) return this.#verdict(hash, `${HOLD}builds on a change that waits`);
+      if (why !== undefined) return this.#refuse(hash, `builds on a refused change (${why})`);
     }
-    // A change made on exactly what the working copy holds leaves it as the change's own state:
-    // its patches are what it did, and reading what it replaced costs nothing. Anything else
-    // (a change made concurrently with others) is read at its own heads, which costs a pass over
-    // the history, and is asked only for what a rule needs.
+    if (missing.length > 0) return `${HOLD}dependencies unknown`;
     const heads = A.getHeads(work);
-    const linear = !known && heads.length === deps.length && deps.every((d) => heads.includes(d));
-    if (!known && this.#held.size + this.#refused.size >= MAX_TRACKED) {
-      return `${HOLD}too many changes wait`;
-    }
-    const textObj = A.getObjectId(work, "text");
-    if (textObj && decoded.ops.length > 0 && decoded.ops.every((op) => op.obj === textObj)) {
-      // A burst of typing: every operation is in the text of the main file.
-      if (!known) this.#work = A.applyChanges(work, [bytes])[0];
-      return undefined;
-    }
-    const after = [...deps, hash];
-    let forward: Patch[] = [];
-    let existedBefore: (...path: string[]) => boolean;
-    let state: A.Doc<IndexDoc> | undefined;
-    let fresh = false; // a change that only creates nodes no other change has named
-    let unseen = new Set<string>();
-    if (linear) {
-      existedBefore = factsBefore(work, decoded.ops);
-      work = A.applyChanges(work, [bytes], {
-        patchCallback: (patches) => {
-          forward = patches;
-        },
-      })[0];
-      this.#work = work;
-      state = work;
-      unseen = this.#unseen(work, decoded);
-    } else {
-      let seen: Patch[] | undefined;
-      if (!known) {
-        work = A.applyChanges(work, [bytes], {
-          patchCallback: (patches) => {
-            seen = patches;
-          },
-        })[0];
-        this.#work = work;
-        unseen = this.#unseen(work, decoded);
-        fresh = createsOnly(work, decoded, unseen);
-      }
-      // What the application reported is the change's effect on the merged state, enough when
-      // nothing the change wrote can have been hidden by a concurrent write: it renames nodes, or
-      // it only creates nodes nobody else has named (what it writes is all new). Anything else
-      // is read exactly, between the change's own heads, which costs a pass over the history.
-      const cheap =
-        seen !== undefined &&
-        (fresh || (seen.length === decoded.ops.length && seen.every(isRename)));
-      forward = cheap && seen ? seen : A.diff(work, deps, after);
-      let undone: Map<string, Patch> | undefined;
-      existedBefore = (...path) => {
-        if (path[0] === "nodes" && path.length === 2 && unseen.has(path[1] as string)) return false;
-        if (!undone) {
-          undone = new Map();
-          for (const p of A.diff(work, after, deps)) {
-            const k = pathKey(p.path);
-            if (!undone.has(k)) undone.set(k, p);
-          }
-        }
-        const gone = undone;
-        // Created with its parent: the deletion is reported once, at the parent.
-        return !path.some((_, i) => gone.get(pathKey(path.slice(0, i + 1)))?.action === "del");
-      };
-    }
-    const pinned = work;
-    let liteAfter: IndexDoc | undefined;
-    const stateAfter = (): A.Doc<IndexDoc> => (state ??= A.view(pinned, after));
-    const named = this.#ids.size + unseen.size;
-    const verdict = checkChange({
-      forward,
-      existedBefore,
-      admin: adminCovered(hash),
-      after: () => {
-        liteAfter ??= lite(stateAfter());
-        return liteAfter;
-      },
-      createdNode: (id) => {
-        if (linear || fresh) {
-          const n = (pinned as { nodes?: Record<string, unknown> }).nodes?.[id];
-          return n === undefined ? undefined : (plainValue(n) as IndexNode);
-        }
-        liteAfter ??= lite(stateAfter());
-        return liteAfter.nodes?.[id];
-      },
-      // Nodes in the index after the change never exceed the ones ever named: only past that
-      // many is the exact count worth a pass over the history.
-      tooMany: () =>
-        named > MAX_NODES &&
-        Object.keys((stateAfter() as { nodes?: object }).nodes ?? {}).length > MAX_NODES,
-    });
-    for (const id of unseen) this.#ids.add(id);
-    return this.#verdict(hash, verdict);
-  }
-
-  /** The node ids the change names that no earlier change did. */
-  #unseen(work: A.Doc<IndexDoc>, decoded: ReturnType<typeof A.decodeChange>): Set<string> {
-    const out = new Set<string>();
-    const nodesObj = A.getObjectId(work, "nodes");
-    if (nodesObj === null) return out;
-    for (const op of decoded.ops) {
-      if (op.obj === nodesObj && typeof op.key === "string" && !this.#ids.has(op.key)) {
-        out.add(op.key);
-      }
-    }
-    return out;
-  }
-
-  /** Remembers the verdict on a change (a refusal for good, or that it waits). */
-  #verdict(hash: string, verdict: Refusal): Refusal {
-    if (verdict === undefined) {
-      this.#held.delete(hash);
-    } else if (verdict.startsWith(HOLD)) {
-      this.#held.set(hash, verdict);
-    } else {
-      this.#held.delete(hash);
-      this.#refused.set(hash, verdict);
-    }
+    const linear = heads.length === deps.length && deps.every((d) => heads.includes(d));
+    const verdict = this.#judge(decoded, work, linear, adminCovered(hash));
+    if (verdict === undefined) this.#take(bytes, decoded);
+    else if (!verdict.startsWith(HOLD)) this.#refuse(hash, verdict);
     return verdict;
   }
 
   /**
    * Judges a document that arrives whole: its shape, then each of its changes in causal order,
    * as if they had come one by one. It is admitted only if every change is; a change that waits
-   * makes the whole document wait.
+   * makes the whole document wait (what was admitted on the way stays admitted).
    */
   checkDocument(doc: A.Doc<IndexDoc>, adminCovered: (hash: string) => boolean): Refusal {
     const shape = checkDocument(plain(doc));
     if (shape !== undefined) return shape;
-    let waiting: Refusal;
-    for (const bytes of A.getAllChanges(doc)) {
-      const verdict = this.check(bytes, adminCovered);
-      if (verdict === undefined) continue;
-      if (!verdict.startsWith(HOLD)) return verdict;
-      waiting ??= verdict;
+    this.#docTokens = DOCUMENT_BUDGET;
+    try {
+      // In causal order, and again for what waited for a change that came later in the list.
+      let pending = A.getAllChanges(doc);
+      let waiting: Refusal;
+      for (let progress = true; progress && pending.length > 0; ) {
+        progress = false;
+        const rest: Uint8Array[] = [];
+        waiting = undefined;
+        for (const bytes of pending) {
+          const verdict = this.check(bytes, adminCovered);
+          if (verdict === undefined) progress = true;
+          else if (!verdict.startsWith(HOLD)) return verdict;
+          else {
+            rest.push(bytes);
+            waiting ??= verdict;
+          }
+        }
+        pending = rest;
+      }
+      return pending.length > 0 ? waiting : undefined;
+    } finally {
+      this.#docTokens = 0;
     }
-    return waiting;
+  }
+
+  /** The verdict on a change whose dependencies are all in the working copy. */
+  #judge(decoded: Decoded, work: A.Doc<IndexDoc>, linear: boolean, admin: boolean): Refusal {
+    const ops = decoded.ops;
+    const made = new Map<string, Kind>();
+    const kindOf = (obj: string): Kind | undefined =>
+      obj === "_root" ? ROOT : (made.get(obj) ?? this.#objs.get(obj));
+    // Typing in the main file: every operation is in its text.
+    if (ops.length > 0 && ops.every((op) => kindOf(op.obj)?.t === "text")) return undefined;
+
+    const needAdmin = (what: string): Refusal => (admin ? undefined : waitsForAdmin(what));
+    const created = new Map<string, Record<string, unknown>>();
+    const stamps = new Map<string, Record<string, unknown>>();
+    const decisions = new Map<string, Record<string, unknown>>();
+    const packages = new Map<string, Record<string, unknown>>();
+    /** Fields written into nodes that already existed, with the value (undefined: deleted). */
+    const touched = new Map<string, Map<string, unknown>>();
+    const purged = new Set<string>();
+    let setsMain: unknown;
+    let setsMode: unknown;
+    const madeStamps = new Set<string>();
+
+    for (let i = 0; i < ops.length; i++) {
+      const op = ops[i] as Op;
+      const obj = kindOf(op.obj);
+      if (obj === undefined) return "unknown object";
+      const isMake = op.action.startsWith("make");
+      const key = op.key;
+      const existed = op.pred.length > 0;
+      const fresh = made.has(op.obj);
+      const here = `${decoded.startOp + i}@${decoded.actor}`;
+      switch (obj.t) {
+        case "text":
+          break;
+        case "root": {
+          if (typeof key !== "string" || !TOP_KEYS.has(key)) return `unknown key ${String(key)}`;
+          switch (key) {
+            case "text":
+              if (op.action !== "makeText") return "bad text";
+              break;
+            case "schema":
+              if (existed) return "schema is fixed";
+              if (op.action !== "set" || valueWritten(op) !== 1) return "unknown schema";
+              break;
+            case "main":
+              if (existed) {
+                const gate = needAdmin("changing the main file");
+                if (gate) return gate;
+              }
+              if (op.action === "set") {
+                if (!isId(valueWritten(op))) return "bad main";
+                setsMain = valueWritten(op);
+              } else if (op.action !== "del") return "bad main";
+              break;
+            case "nodes":
+              if (op.action !== "makeMap" || existed) return "nodes replaced";
+              break;
+            case "settings":
+              if (existed) {
+                const gate = needAdmin("changing the deletion rule");
+                if (gate) return gate;
+              }
+              if (op.action !== "makeMap") return "bad settings";
+              break;
+            case "decisions":
+              if (existed) {
+                const gate = needAdmin("deciding on a request");
+                if (gate) return gate;
+              }
+              if (op.action !== "makeMap") return "bad decision";
+              break;
+            case "packages":
+              if (op.action === "del") {
+                const gate = needAdmin("removing a package");
+                if (gate) return gate;
+              }
+              if (op.action !== "makeMap" && op.action !== "del") return "bad package";
+              break;
+          }
+          break;
+        }
+        case "nodes": {
+          if (typeof key !== "string" || !isId(key)) return "bad node id";
+          if (isMake) {
+            if (op.action !== "makeMap") return "bad node patch";
+            if (existed) return "node replaced";
+            created.set(key, {});
+          } else if (op.action === "del") {
+            const r = needAdmin("purging a file");
+            if (r) return r;
+            purged.add(key);
+          } else return "bad node patch";
+          break;
+        }
+        case "node": {
+          if (typeof key !== "string" || !NODE_FIELDS.has(key)) return `unknown node field ${key}`;
+          const isStamp = key === "trashed" || key === "deletion";
+          if (isMake && !(isStamp && op.action === "makeMap")) {
+            return key === "name" ? "invalid name" : `bad ${key}`;
+          }
+          if (isMake) madeStamps.add(`${obj.id}/${key}`);
+          if (fresh) {
+            if (!isMake) (created.get(obj.id) as Record<string, unknown>)[key] = valueWritten(op);
+          } else {
+            const set = touched.get(obj.id) ?? new Map<string, unknown>();
+            touched.set(obj.id, set);
+            set.set(
+              key,
+              op.action === "del" ? undefined : isMake ? { stamp: true } : valueWritten(op),
+            );
+          }
+          break;
+        }
+        case "stamp": {
+          if (typeof key !== "string" || !STAMP_FIELDS.has(key) || isMake) return "bad stamp";
+          const slot = `${obj.id}/${obj.field}`;
+          const buf = stamps.get(slot) ?? {};
+          stamps.set(slot, buf);
+          if (op.action === "set") buf[key] = valueWritten(op);
+          if (!created.has(obj.id)) {
+            const set = touched.get(obj.id) ?? new Map<string, unknown>();
+            touched.set(obj.id, set);
+            if (!set.has(obj.field)) set.set(obj.field, { stamp: true });
+          }
+          break;
+        }
+        case "settings": {
+          if (!fresh) {
+            const gate = needAdmin("changing the deletion rule");
+            if (gate) return gate;
+          }
+          const v = valueWritten(op);
+          if (key !== "deletion" || op.action !== "set" || (v !== "approval" && v !== "free")) {
+            return "bad settings";
+          }
+          setsMode = v;
+          break;
+        }
+        case "decisions": {
+          const r = needAdmin("deciding on a request");
+          if (r) return r;
+          if (typeof key !== "string" || !isId(key)) return "bad decision";
+          if (op.action === "del") break; // the decision goes with the node it was about (a purge)
+          if (!isMake) return "bad decision";
+          decisions.set(key, {});
+          break;
+        }
+        case "decision": {
+          const r = needAdmin("deciding on a request");
+          if (r) return r;
+          if (typeof key !== "string" || !DECISION_FIELDS.has(key) || op.action !== "set") {
+            return "bad decision";
+          }
+          const buf = decisions.get(obj.id) ?? {};
+          decisions.set(obj.id, buf);
+          buf[key] = valueWritten(op);
+          break;
+        }
+        case "packages": {
+          if (op.action === "del") {
+            const r = needAdmin("removing a package");
+            if (r) return r;
+          } else if (!isMake || typeof key !== "string" || !isPackageKey(key)) return "bad package";
+          else packages.set(key, {});
+          break;
+        }
+        case "package": {
+          if (typeof key !== "string" || !PACKAGE_FIELDS.has(key) || op.action !== "set") {
+            return "bad package";
+          }
+          const buf = packages.get(obj.key) ?? {};
+          packages.set(obj.key, buf);
+          buf[key] = valueWritten(op);
+          break;
+        }
+      }
+      if (isMake) {
+        const kind = classify(op.obj === "_root" ? ROOT : kindOf(op.obj), key);
+        if (kind) made.set(here, kind);
+        else if (obj.t !== "text") return "bad value";
+      }
+    }
+
+    // Shapes: a new thing is read whole, an existing node by the fields written into it.
+    for (const [id, fields] of created) {
+      for (const f of ["trashed", "deletion"] as const) {
+        const buf = stamps.get(`${id}/${f}`);
+        if (buf) fields[f] = buf;
+      }
+      const p = nodeProblem(id, fields);
+      if (p) return p;
+    }
+    for (const [id, v] of decisions) {
+      if (!isId(id) || !decisionOk(v)) return "bad decision";
+    }
+    for (const [k, v] of packages) if (!packageOk(k, v)) return "bad package";
+    for (const [id, fields] of touched) {
+      if (purged.has(id)) continue;
+      for (const [f, v] of fields) {
+        if (f === "type" || f === "url" || f === "by" || f === "at" || f === "who") {
+          return `${f} of a file never changes`;
+        }
+        if (f === "name" && (typeof v !== "string" || validateName(v) !== undefined)) {
+          return "invalid name";
+        }
+        if (f === "parent" && v !== null && !isId(v)) return "bad parent";
+        if (f === "ftype" && !(typeof v === "string" && /^[a-z0-9-]{1,32}$/.test(v))) {
+          return "bad file type";
+        }
+        if (f === "size" && !(Number.isSafeInteger(v) && (v as number) >= 0)) return "bad size";
+        if (f === "hash" && !isHash(v)) return "bad hash";
+        if ((f === "trashed" || f === "deletion") && madeStamps.has(`${id}/${f}`)) {
+          const buf = stamps.get(`${id}/${f}`) ?? {};
+          if (!stampProblemFree(buf, f === "trashed")) {
+            return f === "trashed" ? "bad trash mark" : "bad deletion request";
+          }
+        }
+      }
+    }
+    for (const [slot, buf] of stamps) {
+      const id = slot.slice(0, slot.indexOf("/"));
+      const f = slot.slice(slot.indexOf("/") + 1) as "trashed" | "deletion";
+      if (created.has(id) || madeStamps.has(slot)) continue;
+      // fields written into a stamp that already existed: each must be well formed
+      if (
+        ("by" in buf && !isStamp({ by: buf.by, at: 0 })) ||
+        ("at" in buf && !isStamp({ by: "x", at: buf.at })) ||
+        ("req" in buf && !isId(buf.req))
+      ) {
+        return f === "trashed" ? "bad trash mark" : "bad deletion request";
+      }
+    }
+
+    if (created.size > MAX_CREATE_PER_CHANGE) return "too many files in one change";
+
+    // What follows reads the index as the change's dependencies left it.
+    const needsState =
+      created.size > 0 ||
+      [...touched.values()].some(
+        (f) =>
+          f.has("parent") ||
+          f.has("trashed") ||
+          f.has("deletion") ||
+          f.has("hash") ||
+          f.has("size"),
+      );
+    if (!needsState) return undefined;
+    let at: A.Doc<IndexDoc> | undefined;
+    const state = (): A.Doc<IndexDoc> | undefined => {
+      if (at) return at;
+      if (linear) {
+        at = work;
+        return at;
+      }
+      if (!this.#spend()) return undefined;
+      at = A.view(work, decoded.deps);
+      return at;
+    };
+    const root = (): Record<string, unknown> | undefined =>
+      state() as unknown as Record<string, unknown> | undefined;
+    const waiting = `${HOLD}budget`;
+    const nodeAt = (id: string): IndexNode | undefined => {
+      const r = root();
+      const n = (r?.nodes as Record<string, unknown> | undefined)?.[id];
+      return n === undefined ? undefined : (plainValue(n) as IndexNode);
+    };
+    /**
+     * True if the folder `parent`, or one above it, is in the trash after the change (undefined:
+     * the budget for reading the history is spent).
+     */
+    const inTrash = (parent: string | null): boolean | undefined => {
+      let cur = parent;
+      for (let i = 0; cur !== null && i <= MAX_DEPTH + 1; i++) {
+        const c = created.get(cur);
+        if (c) {
+          if (c.trashed) return true;
+          cur = (c.parent as string | null | undefined) ?? null;
+          continue;
+        }
+        if (state() === undefined) return undefined;
+        const n = nodeAt(cur);
+        if (!n) return false;
+        const t = touched.get(cur);
+        const trashedNow = t?.has("trashed") ? t.get("trashed") !== undefined : Boolean(n.trashed);
+        if (trashedNow) return true;
+        cur = t?.has("parent") ? ((t.get("parent") as string | null) ?? null) : (n.parent ?? null);
+      }
+      return false;
+    };
+
+    if (created.size > 0 && this.#ids.size + created.size > MAX_NODES) {
+      const r = root();
+      if (r === undefined) return waiting;
+      const count = Object.keys((r.nodes as object | undefined) ?? {}).length;
+      if (count + created.size > MAX_NODES) return "too many files";
+    }
+    for (const [id, n] of created) {
+      if (n.trashed) return "a file is not created in the trash";
+      const parent = (n.parent as string | null | undefined) ?? null;
+      if (parent !== null) {
+        const t = inTrash(parent);
+        if (t === undefined) return waiting;
+        if (t) return "a file is not created in the trash";
+      }
+      void id;
+    }
+    for (const [id, fields] of touched) {
+      if (purged.has(id)) continue;
+      if (fields.has("parent")) {
+        const t = inTrash((fields.get("parent") as string | null) ?? null);
+        if (t === undefined) return waiting;
+        if (t) return "a file is not moved into the trash";
+      }
+      if (fields.has("hash") || fields.has("size")) {
+        if (state() === undefined) return waiting;
+        const n = nodeAt(id);
+        if (n && n.type !== "blob") return "blob field on a non-blob node";
+      }
+      if (fields.has("trashed") || fields.has("deletion")) {
+        if (state() === undefined) return waiting;
+        const r = root() as Record<string, unknown>;
+        const mode =
+          setsMode ??
+          (plainValue(r.settings) as { deletion?: string } | undefined)?.deletion ??
+          "approval";
+        if (fields.has("trashed") && fields.get("trashed") !== undefined) {
+          const main = setsMain ?? plainValue(r.main);
+          if (id === main) return "the main file cannot be trashed";
+          if (mode === "approval") {
+            const need = needAdmin("trashing a file");
+            if (need) return need;
+          }
+        }
+        if (fields.has("deletion") && fields.get("deletion") === undefined && mode === "approval") {
+          const need = needAdmin("lifting a deletion request");
+          if (need) return need;
+        }
+      }
+    }
+    return undefined;
   }
 }

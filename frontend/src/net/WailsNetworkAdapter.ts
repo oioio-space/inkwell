@@ -82,6 +82,7 @@ export class WailsNetworkAdapter extends NetworkAdapter {
   #attested = new Map<string, string[]>();
   #sealed = false;
   #sealedListeners: (() => void)[] = [];
+  #budgetTimer: ReturnType<typeof setTimeout> | undefined;
   #roles: MemberRole[] = [];
   #roleListeners: ((roles: readonly MemberRole[]) => void)[] = [];
 
@@ -168,6 +169,7 @@ export class WailsNetworkAdapter extends NetworkAdapter {
 
   disconnect(): void {
     this.#closed = true;
+    clearTimeout(this.#budgetTimer);
     this.#socket?.close();
     this.#socket = undefined;
     this.#disconnectAll();
@@ -264,7 +266,16 @@ export class WailsNetworkAdapter extends NetworkAdapter {
    * now that an attestation or the roles changed.
    */
   #releaseHeld(): void {
-    for (const r of this.#coverage.releaseHeld()) {
+    const released = this.#coverage.releaseHeld();
+    // What waits for the budget of costly judgements is looked at again once it has come back.
+    if (this.#coverage.waitingForBudget && this.#budgetTimer === undefined) {
+      this.#budgetTimer = setTimeout(() => {
+        this.#budgetTimer = undefined;
+        this.#coverage.retryHeld();
+        this.#releaseHeld();
+      }, 1000);
+    }
+    for (const r of released) {
       this.emit("message", {
         type: "sync",
         senderId: r.from as PeerId,
@@ -353,6 +364,7 @@ export class WailsNetworkAdapter extends NetworkAdapter {
     }
     const checked = this.#enforce(msg as Message);
     if (checked) this.emit("message", checked);
+    this.#releaseHeld(); // what waited for the change that just went through
   }
 
   /**
