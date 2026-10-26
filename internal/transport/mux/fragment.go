@@ -290,7 +290,7 @@ func (m *muxer) drop(peer transport.PeerID) {
 func (m *muxer) expire() {
 	now := time.Now()
 	for peer, cur := range m.partials {
-		if now.Sub(cur.last) > partialTTL {
+		if now.Sub(cur.last) >= partialTTL {
 			m.drop(peer)
 		}
 	}
