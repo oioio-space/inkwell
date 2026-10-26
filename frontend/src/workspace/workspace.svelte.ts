@@ -77,6 +77,8 @@ class Workspace {
   projectionFailed = $state(false);
   /** Why it cannot be written, as Go says it; empty if unknown. */
   projectionReason = $state("");
+  /** Counts the reports of the members' roles from Go, so that what depends on rights recomputes. */
+  rolesVersion = $state(0);
   /** True once the member list is full: this device signs no more, so edits stay local. */
   sealed = $state(false);
   handle = $state.raw<DocHandle<Doc> | undefined>();
@@ -109,6 +111,9 @@ class Workspace {
     });
     adapter.on("peer-disconnected", ({ peerId }) => {
       this.peers = this.peers.filter((p) => p !== peerId);
+    });
+    adapter.onRoles(() => {
+      this.rolesVersion++;
     });
     adapter.onSealed(() => {
       this.sealed = true;
@@ -290,6 +295,28 @@ class Workspace {
     } catch {
       return undefined;
     }
+  }
+
+  /**
+   * Whether `peer` may pilot a presentation: a writer or an admin of the signed member list, not
+   * suspended. A device the list does not name may not. This is the check every device makes on
+   * what it receives, so that a reader's messages never move anyone's slides.
+   */
+  canPilot(peer: string): boolean {
+    void this.rolesVersion;
+    const member = this.#adapter?.roleOf(peer);
+    return member !== undefined && member.role !== "reader" && !member.suspended;
+  }
+
+  /** Whether this device knows its role at all (Go has reported the member list). */
+  get rolesKnown(): boolean {
+    void this.rolesVersion;
+    return this.#adapter?.roleOf(this.myId) !== undefined;
+  }
+
+  /** The name to show for a device: the one it announced, else a neutral one. */
+  nameOf(peer: string): string {
+    return this.names[peer] ?? `Personne ${peer.slice(0, 4)}`;
   }
 
   setName(name: string): void {

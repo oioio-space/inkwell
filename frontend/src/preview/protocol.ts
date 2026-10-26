@@ -58,20 +58,42 @@ export interface ResultMessage {
   failure?: Failure | undefined;
 }
 
+/** A compiled page seen as a slide of a presentation (Touying's pdfpc metadata). */
+export interface DeckPage {
+  /** 1-based slide number; the pages of one slide (`#pause`) share it. */
+  slide: number;
+  /** 0-based step of the slide this page shows. */
+  step: number;
+  hidden: boolean;
+  /** The speaker note written on the page; "" if none. */
+  note: string;
+}
+
+/** How the document divides into slides and steps; `pages` is empty for a document that is no Touying deck. */
+export interface DeckData {
+  pages: DeckPage[];
+  /** Planned duration of the talk in minutes; 0 if unset. */
+  minutes: number;
+}
+
 export type PreviewMessage =
   | { type: "compiling"; seq: number }
   | ResultMessage
-  | { type: "anchors"; anchors: Anchor[]; failure?: Failure | undefined };
+  | { type: "anchors"; anchors: Anchor[]; failure?: Failure | undefined }
+  | { type: "deck"; rev: number; deck?: DeckData | undefined; failure?: Failure | undefined };
 
 export type PreviewRequest =
   | { op: "view"; first: number; last: number }
   | { op: "edit"; time: number }
   | { op: "refresh" }
-  | { op: "anchors" };
+  | { op: "anchors" }
+  | { op: "deck" };
 
 /** What a frame may hold: bounds that keep a damaged frame from filling memory. */
 export const MAX_DIAGNOSTICS = 500;
 export const MAX_ANCHORS = 20_000;
+export const MAX_DECK_PAGES = 5000;
+export const MAX_NOTE = 16 << 10;
 export const MAX_PAGES = 64;
 export const MAX_PAGE_COUNT = 100_000;
 
@@ -131,6 +153,23 @@ function parseAnchor(v: unknown): Anchor | undefined {
   return { heading: v.heading === true, page, x: v.x, y: v.y, text: v.text };
 }
 
+function parseDeckPage(v: unknown): DeckPage | undefined {
+  if (!isObject(v)) return undefined;
+  const slide = int(v.slide, MAX_DECK_PAGES);
+  const step = int(v.step, MAX_DECK_PAGES);
+  if (!slide || step === undefined) return undefined;
+  const note = typeof v.note === "string" ? v.note.slice(0, MAX_NOTE) : "";
+  return { slide, step, hidden: v.hidden === true, note };
+}
+
+function parseDeck(v: unknown): DeckData | undefined {
+  if (!isObject(v)) return undefined;
+  return {
+    pages: list(v.pages, MAX_DECK_PAGES, parseDeckPage),
+    minutes: int(v.minutes, 24 * 60) ?? 0,
+  };
+}
+
 function list<T>(v: unknown, max: number, one: (x: unknown) => T | undefined): T[] {
   if (!Array.isArray(v)) return [];
   const out: T[] = [];
@@ -170,6 +209,13 @@ export function parseMessage(frame: Uint8Array | string): PreviewMessage | undef
         failure: parseFailure(v.failure),
       };
     }
+    case "deck":
+      return {
+        type: "deck",
+        rev: int(v.rev, Number.MAX_SAFE_INTEGER) ?? 0,
+        deck: parseDeck(v.deck),
+        failure: parseFailure(v.failure),
+      };
     case "anchors":
       return {
         type: "anchors",

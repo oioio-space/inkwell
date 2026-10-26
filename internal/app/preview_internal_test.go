@@ -54,6 +54,7 @@ func TestDecodePreviewRequest(t *testing.T) {
 		{"PRV-41 edit", `{"op":"edit","time":1700000000}`, previewRequest{Op: "edit", Time: 1700000000}},
 		{"PRV-41 refresh", `{"op":"refresh"}`, previewRequest{Op: "refresh"}},
 		{"PRV-41 anchors", `{"op":"anchors"}`, previewRequest{Op: "anchors"}},
+		{"PRV-41 deck", `{"op":"deck"}`, previewRequest{Op: "deck"}},
 	}
 	for _, tc := range ok {
 		t.Run(tc.name, func(t *testing.T) {

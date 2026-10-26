@@ -419,6 +419,7 @@ type fakeCompiler struct {
 	compile     func(ctx context.Context, call int) (*typst.Result, error)
 	calls       atomic.Int32
 	anchorCalls atomic.Int32
+	deckCalls   atomic.Int32
 	anchorGate  chan struct{} // when set, Anchors waits for it to be closed
 }
 
@@ -432,6 +433,11 @@ func (f *fakeCompiler) Anchors(context.Context, typst.Project, string, ...typst.
 		<-f.anchorGate
 	}
 	return []typst.Anchor{{Heading: true, Page: 1, X: 70, Y: 70, Text: "Titre"}}, nil
+}
+
+func (f *fakeCompiler) Deck(context.Context, typst.Project, string, ...typst.Option) (*typst.Deck, error) {
+	f.deckCalls.Add(1)
+	return &typst.Deck{Pages: []typst.DeckPage{{Slide: 1}, {Slide: 2}, {Slide: 2, Step: 1, Note: "dire"}}, Minutes: 20}, nil
 }
 
 func (f *fakeCompiler) NetworkMode() string { return "fake" }
@@ -560,6 +566,29 @@ func TestPreviewScheduling(t *testing.T) {
 		c.quiet(t, "anchors", 300*time.Millisecond)
 		if got := fc.anchorCalls.Load(); got != 1 {
 			t.Errorf("%d computations for 5 requests, want 1", got)
+		}
+	})
+
+	t.Run("PRV-37 the slides and steps are answered, and computed once per version", func(t *testing.T) {
+		fc := &fakeCompiler{compile: func(context.Context, int) (*typst.Result, error) { return okResult(3), nil }}
+		p := app.NewPreview(app.PreviewOptions{Engine: fc, Root: t.TempDir()})
+		t.Cleanup(p.Close)
+		c := attach(t, p)
+		c.ask(t, `{"op":"deck"}`)
+		m := c.message(t, "deck")
+		if m.Deck == nil || len(m.Deck.Pages) != 3 || m.Deck.Pages[2].Note != "dire" || m.Deck.Minutes != 20 {
+			t.Fatalf("deck = %+v", m.Deck)
+		}
+		c.ask(t, `{"op":"deck"}`)
+		c.message(t, "deck")
+		if got := fc.deckCalls.Load(); got != 1 {
+			t.Errorf("%d computations for the same sources, want 1", got)
+		}
+		p.Changed("main.typ")
+		c.ask(t, `{"op":"deck"}`)
+		c.message(t, "deck")
+		if got := fc.deckCalls.Load(); got != 2 {
+			t.Errorf("%d computations after a change, want 2", got)
 		}
 	})
 
