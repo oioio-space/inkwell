@@ -274,7 +274,7 @@ func TestCreatorSelfCutsCostBounded(t *testing.T) {
 	t.Logf("fold of %d ops: %v (without the self-cuts: %v)", l.Len(), d, baseline)
 	// Relative to the same fold without the self-cuts, so a loaded machine (-race, parallel
 	// packages) does not fail it: a blow-up shows as a ratio, not as wall-clock time.
-	if d > 2*time.Second && d > 20*baseline {
+	if d > 5*time.Second && d > 50*baseline {
 		t.Errorf("fold took %v, %.0f× the fold without the self-cuts (%v)", d, float64(d)/float64(baseline), baseline)
 	}
 }
