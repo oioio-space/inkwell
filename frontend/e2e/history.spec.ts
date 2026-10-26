@@ -29,8 +29,13 @@ test("B2 gutter, versions, who wrote what, readable differences, going back (HIS
   await clear(alice);
   await clear(bob);
   await pair(alice, bob);
-  await typeAtEnd(alice, "= Plan de continuité\nUn premier paragraphe.\n");
+  await typeAtEnd(alice, "Un premier paragraphe.\n");
   await expect.poll(() => docText(bob), { timeout: 20_000 }).toContain("premier paragraphe");
+  // The title goes in afterwards: the entries then say in which section they changed things.
+  await editor(alice).click();
+  await alice.keyboard.press("ControlOrMeta+Home");
+  await alice.keyboard.type("= Plan de continuité\n");
+  await expect.poll(() => docText(bob)).toContain("Plan de continuité");
 
   // HIS-02/03: what Bob adds is marked on Alice's side; HIS-04: what Alice types is not.
   await typeAtEnd(bob, "Ajout de Bob.\n");
