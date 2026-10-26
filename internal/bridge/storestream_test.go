@@ -55,6 +55,7 @@ var storeOps = map[string]bridge.StoreOp{
 	"LoadRange": bridge.OpLoadRange, "RemoveRange": bridge.OpRemoveRange,
 	"WriteProjection": bridge.OpWriteProjection, "ReadProjection": bridge.OpReadProjection,
 	"Acknowledge": bridge.OpAcknowledge, "ListFiles": bridge.OpListFiles, "FileInfo": bridge.OpFileInfo,
+	"WriteProjectionAt": bridge.OpWriteProjectionAt, "ReadSyncPoint": bridge.OpReadSyncPoint, "SetSyncPoint": bridge.OpSetSyncPoint,
 	"Tree": bridge.OpTree, "Referenced": bridge.OpReferenced, "PutBlob": bridge.OpPutBlob,
 }
 
@@ -176,7 +177,7 @@ func TestDecodeStoreRequestRejects(t *testing.T) {
 		{name: "short header", wire: []byte{0, 0, 0, 1, 1}},
 		{name: "id zero", wire: []byte{0, 0, 0, 0, 1, 1, 1, 'a'}},
 		{name: "unknown op 0", wire: []byte{0, 0, 0, 5, 0, 1, 1, 'a'}, id: 5},
-		{name: "unknown op 14", wire: []byte{0, 0, 0, 5, 14, 1, 1, 'a'}, id: 5},
+		{name: "unknown op 17", wire: []byte{0, 0, 0, 5, 17, 1, 1, 'a'}, id: 5},
 		{name: "list files with a key", wire: []byte{0, 0, 0, 5, 9, 1, 1, 'a'}, id: 5},
 		{name: "data on list files", wire: []byte{0, 0, 0, 5, 9, 0, 1}, id: 5},
 		{name: "file info without name", wire: []byte{0, 0, 0, 5, 10, 0}, id: 5},
@@ -303,6 +304,7 @@ type fakeStorage struct {
 	*store.KV
 	files      map[string][]byte
 	acked      []string
+	points     map[string][]byte
 	trees      [][]project.TreeEntry
 	referenced [][bridge.HashSize]byte
 	mu         sync.Mutex
@@ -319,7 +321,7 @@ func newFakeStorage(t *testing.T) (*fakeStorage, *os.Root) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	return &fakeStorage{KV: kv, files: map[string][]byte{}}, r
+	return &fakeStorage{KV: kv, files: map[string][]byte{}, points: map[string][]byte{}}, r
 }
 
 func (s *fakeStorage) WriteProjection(rel string, data []byte) error {
@@ -330,6 +332,37 @@ func (s *fakeStorage) WriteProjection(rel string, data []byte) error {
 	}
 	s.files[rel] = bytes.Clone(data)
 	return nil
+}
+
+func (s *fakeStorage) WriteProjectionAt(rel string, data, point []byte) error {
+	if err := s.WriteProjection(rel, data); err != nil {
+		return err
+	}
+	return s.AcknowledgeAt(rel, point)
+}
+
+func (s *fakeStorage) AcknowledgeAt(rel string, point []byte) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if point == nil {
+		delete(s.points, rel)
+	} else {
+		s.points[rel] = bytes.Clone(point)
+	}
+	return nil
+}
+
+func (s *fakeStorage) SetSyncPoint(rel string, point []byte) error {
+	if len(point) == 0 {
+		return fmt.Errorf("%w: empty", project.ErrSyncPoint)
+	}
+	return s.AcknowledgeAt(rel, point)
+}
+
+func (s *fakeStorage) SyncPoint(rel string) ([]byte, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	return s.points[rel], nil
 }
 
 func (s *fakeStorage) ReadProjection(rel string) ([]byte, error) {
@@ -402,6 +435,7 @@ func (s *fakeStorage) Acknowledge(rel string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	s.acked = append(s.acked, rel)
+	delete(s.points, rel)
 	return nil
 }
 

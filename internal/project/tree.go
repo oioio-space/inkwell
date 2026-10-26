@@ -375,7 +375,7 @@ func (p *Project) WriteBlob(rel string, hash [32]byte, src io.Reader) error {
 		// The file is that version already: from here on it follows the tree.
 		if current != recorded || p.claimed[rel] {
 			delete(p.claimed, rel)
-			return p.record(rel, current)
+			return p.record(rel, current, nil)
 		}
 		return nil
 	case exists && (current != recorded || p.claimed[rel]):
@@ -398,7 +398,7 @@ func (p *Project) WriteBlob(rel string, hash [32]byte, src io.Reader) error {
 	if err := store.WriteAtomicFrom(p.root, rel, io.TeeReader(src, io.MultiWriter(b3, sha)), 0o600, check); err != nil {
 		return fmt.Errorf("project: write %s: %w", rel, err)
 	}
-	return p.record(rel, hex.EncodeToString(sha.Sum(nil)))
+	return p.record(rel, hex.EncodeToString(sha.Sum(nil)), nil)
 }
 
 // Claim records the file rel as written by Inkwell, with the hex SHA-256 sum
@@ -421,7 +421,7 @@ func (p *Project) Claim(rel, sum string) error {
 		return fmt.Errorf("project: %q changed while it was read", rel)
 	}
 	p.claimed[rel] = true
-	return p.record(rel, sum)
+	return p.record(rel, sum, nil)
 }
 
 // BlobPaths returns the paths where the current tree lists the blob hash, in

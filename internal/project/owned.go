@@ -35,6 +35,21 @@ type ownedRec struct {
 	// no blob of the tree has been written there since: Inkwell does not
 	// replace it with a version a peer announces.
 	Claimed bool `json:"claimed,omitempty"`
+	// Point is where the document and the file last agreed, as the webview
+	// described it (see [Project.WriteProjectionAt]). It lives in the record
+	// of the hash it goes with, so a crash cannot separate them.
+	Point json.RawMessage `json:"point,omitzero"`
+}
+
+// MaxSyncPoint is the largest sync point, in bytes.
+const MaxSyncPoint = 8 << 10
+
+// checkSyncPoint accepts nil (no point) or JSON of at most [MaxSyncPoint] bytes.
+func checkSyncPoint(point []byte) error {
+	if point != nil && (len(point) > MaxSyncPoint || !json.Valid(point)) {
+		return fmt.Errorf("%w: %d bytes", ErrSyncPoint, len(point))
+	}
+	return nil
 }
 
 // ownedKey returns the key of the record of rel: the path is hashed, as a path
@@ -81,6 +96,9 @@ func (p *Project) loadOwned() error {
 		if r.Claimed {
 			p.claimed[r.Path] = true
 		}
+		if len(r.Point) > 0 && checkSyncPoint(r.Point) == nil {
+			p.points[r.Path] = r.Point
+		}
 	}
 	return nil
 }
@@ -88,7 +106,7 @@ func (p *Project) loadOwned() error {
 // saveOwned writes the record of rel from the state in memory. The caller holds
 // p.mu or owns p exclusively.
 func (p *Project) saveOwned(rel string) error {
-	data, err := json.Marshal(ownedRec{Path: rel, Hash: p.m.Files[rel], Ref: p.m.Tree[rel], Claimed: p.claimed[rel]})
+	data, err := json.Marshal(ownedRec{Path: rel, Hash: p.m.Files[rel], Ref: p.m.Tree[rel], Claimed: p.claimed[rel], Point: p.points[rel]})
 	if err != nil {
 		return fmt.Errorf("project: encode a record: %w", err)
 	}
@@ -100,6 +118,7 @@ func (p *Project) saveOwned(rel string) error {
 
 // forgetOwned deletes the record of rel.
 func (p *Project) forgetOwned(rel string) error {
+	delete(p.points, rel)
 	if err := p.records.Remove(ownedKey(rel)); err != nil && !errors.Is(err, store.ErrNotFound) {
 		return fmt.Errorf("project: remove a record: %w", err)
 	}

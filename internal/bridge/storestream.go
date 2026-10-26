@@ -65,7 +65,9 @@ const (
 	OpWriteProjection
 	// OpReadProjection returns the project file named by Key[0].
 	OpReadProjection
-	// OpAcknowledge marks the external edit of the project file Key[0] as seen.
+	// OpAcknowledge marks the external edit of the project file Key[0] as
+	// seen. Its Data, if any, is the sync point to record with it; without
+	// Data the file has none.
 	OpAcknowledge
 	// OpListFiles takes no key and returns the project's files, as a payload
 	// decoded by [DecodeFileList].
@@ -87,12 +89,22 @@ const (
 	// and returns its hash and size, as a payload decoded by [DecodeBlobInfo]:
 	// how a file added from outside, or replaced on disk, gets a hash.
 	OpPutBlob
+	// OpWriteProjectionAt is OpWriteProjection that also records a sync point
+	// with the hash it writes. Data is built by [EncodeWriteAt].
+	OpWriteProjectionAt
+	// OpReadSyncPoint returns the sync point recorded for the project file
+	// Key[0] (StatusNotFound if none): the opaque bytes the webview gave to
+	// OpWriteProjectionAt or OpAcknowledge.
+	OpReadSyncPoint
+	// OpSetSyncPoint records Data as the sync point of the project file Key[0]
+	// without writing it; refused (StatusEditedOutside) if the file changed.
+	OpSetSyncPoint
 )
 
 // isPathOp reports whether op names a project file by a path in its key.
 func isPathOp(op StoreOp) bool {
 	switch op {
-	case OpWriteProjection, OpReadProjection, OpAcknowledge, OpFileInfo, OpPutBlob:
+	case OpWriteProjection, OpReadProjection, OpAcknowledge, OpFileInfo, OpPutBlob, OpWriteProjectionAt, OpReadSyncPoint, OpSetSyncPoint:
 		return true
 	}
 	return false
@@ -164,7 +176,7 @@ func (r StoreRequest) validate() error {
 		if len(r.Key) != 0 {
 			err = fmt.Errorf("%d components, want 0", len(r.Key))
 		}
-	case OpWriteProjection, OpReadProjection, OpAcknowledge, OpFileInfo, OpPutBlob:
+	case OpWriteProjection, OpReadProjection, OpAcknowledge, OpFileInfo, OpPutBlob, OpWriteProjectionAt, OpReadSyncPoint, OpSetSyncPoint:
 		err = validPathKey(r.Key)
 	case OpTree, OpReferenced:
 		if len(r.Key) != 0 {
@@ -178,7 +190,7 @@ func (r StoreRequest) validate() error {
 		return fmt.Errorf("%w: %w", ErrMalformed, err)
 	case r.ID == 0:
 		return fmt.Errorf("%w: request id 0", ErrMalformed)
-	case r.Op != OpSave && r.Op != OpWriteProjection && r.Op != OpTree && r.Op != OpReferenced && len(r.Data) > 0:
+	case r.Op != OpSave && r.Op != OpWriteProjection && r.Op != OpWriteProjectionAt && r.Op != OpSetSyncPoint && r.Op != OpAcknowledge && r.Op != OpTree && r.Op != OpReferenced && len(r.Data) > 0:
 		return fmt.Errorf("%w: data on op %d", ErrMalformed, r.Op)
 	case len(r.Data) > store.MaxValue:
 		return fmt.Errorf("%w: %d bytes of data", ErrMalformed, len(r.Data))
@@ -356,8 +368,15 @@ type Storage interface {
 	LoadRange(prefix []string) ([]store.Entry, error)
 	RemoveRange(prefix []string) error
 	WriteProjection(rel string, data []byte) error
+	// WriteProjectionAt also records point (opaque; nil for none) with the hash.
+	WriteProjectionAt(rel string, data, point []byte) error
 	ReadProjection(rel string) ([]byte, error)
 	Acknowledge(rel string) error
+	AcknowledgeAt(rel string, point []byte) error
+	// SetSyncPoint records point without writing the file.
+	SetSyncPoint(rel string, point []byte) error
+	// SyncPoint returns the point recorded with the hash of rel, nil if none.
+	SyncPoint(rel string) ([]byte, error)
 	ReadText(rel string) (project.Text, error)
 	List() ([]project.File, error)
 	// SetTree projects the project tree of the webview (see
@@ -493,8 +512,21 @@ func (s *StoreServer) handle(req StoreRequest) StoreResponse {
 		payload, err = s.listFiles()
 	case OpFileInfo:
 		payload, err = s.fileInfo(rel)
+	case OpWriteProjectionAt:
+		err = s.writeAt(rel, req.Data)
+	case OpSetSyncPoint:
+		err = s.st.SetSyncPoint(rel, req.Data)
+	case OpReadSyncPoint:
+		if payload, err = s.st.SyncPoint(rel); err == nil && len(payload) == 0 {
+			err = fs.ErrNotExist
+		}
 	case OpAcknowledge:
-		if err = s.st.Acknowledge(rel); err == nil {
+		if len(req.Data) == 0 {
+			err = s.st.Acknowledge(rel)
+		} else {
+			err = s.st.AcknowledgeAt(rel, req.Data)
+		}
+		if err == nil {
 			s.mu.Lock()
 			delete(s.pending, rel)
 			s.mu.Unlock()
@@ -513,6 +545,43 @@ func (s *StoreServer) handle(req StoreRequest) StoreResponse {
 		}
 	}
 	return s.respond(req, payload, err)
+}
+
+// writeAt runs OpWriteProjectionAt.
+func (s *StoreServer) writeAt(rel string, data []byte) error {
+	point, text, err := DecodeWriteAt(data)
+	if err != nil {
+		return err
+	}
+	if len(point) == 0 {
+		point = nil
+	}
+	return s.st.WriteProjectionAt(rel, text, point)
+}
+
+// EncodeWriteAt builds the Data of an OpWriteProjectionAt request: the length
+// of point as a u16, point, then text. It returns an error wrapping
+// [ErrMalformed] if point does not fit a u16.
+func EncodeWriteAt(point, text []byte) ([]byte, error) {
+	if len(point) > math.MaxUint16 {
+		return nil, fmt.Errorf("%w: sync point of %d bytes", ErrMalformed, len(point))
+	}
+	b := binary.BigEndian.AppendUint16(make([]byte, 0, 2+len(point)+len(text)), uint16(len(point))) // #nosec G115 -- checked above.
+	b = append(b, point...)
+	return append(b, text...), nil
+}
+
+// DecodeWriteAt parses the Data built by [EncodeWriteAt]; the results alias
+// data. It returns an error wrapping [ErrMalformed] for a truncated one.
+func DecodeWriteAt(data []byte) (point, text []byte, err error) {
+	if len(data) < 2 {
+		return nil, nil, fmt.Errorf("%w: truncated write", ErrMalformed)
+	}
+	n := int(binary.BigEndian.Uint16(data))
+	if len(data)-2 < n {
+		return nil, nil, fmt.Errorf("%w: sync point of %d bytes in a frame of %d", ErrMalformed, n, len(data))
+	}
+	return data[2 : 2+n], data[2+n:], nil
 }
 
 // setTree runs OpTree.

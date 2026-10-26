@@ -1,9 +1,10 @@
 import { next as A } from "@automerge/automerge";
 import type { DocHandle } from "@automerge/automerge-repo";
 import { type Integration, integrate, type Range, type Skipped, undoIntegration } from "./merge";
-import type { Projection, Written } from "./projection";
-import { safeGet, safeRemove, safeSet } from "./safeStorage";
+import type { Projection } from "./projection";
+import { safeGet, safeRemove } from "./safeStorage";
 import type { ExternalPolicy } from "./settings.svelte";
+import { decodeSyncPoint, encodeSyncPoint, mergeHeads } from "./syncPoint";
 
 type Doc = { text: string };
 
@@ -31,8 +32,13 @@ export type Notice =
 export interface SyncStorage {
   /** The file as UTF-8 text with LF line ends; undefined if it is gone. Rejects if not text. */
   readProjection(name: string): Promise<string | undefined>;
-  /** Tells Go the outside edit was dealt with, so Inkwell may write the file again. */
-  acknowledge(name: string): Promise<void>;
+  /**
+   * Tells Go the outside edit was dealt with, so Inkwell may write the file again. With `point`,
+   * Go records it with the hash of the file as it is now; without, the file has no sync point.
+   */
+  acknowledge(name: string, point?: string): Promise<void>;
+  /** Where the document and the file last agreed, as recorded by Go with the file's hash. */
+  readSyncPoint(name: string): Promise<string | undefined>;
 }
 
 /** How a read that is not text failed (see NotTextError). */
@@ -61,43 +67,26 @@ export interface ExternalSyncOptions {
   skip?: ((name: string, range: Range) => boolean) | undefined;
   /** Quiet time before an outside change is read, so a burst of writes is one integration. */
   debounceMs?: number;
-  /** Where the point of agreement with the disk is kept between sessions; none: not kept. */
-  persistKey?: string;
-}
-
-/** A point where the file and the document agreed: the heads, and a fingerprint of the text there. */
-interface Base {
-  heads: A.Heads;
-  fingerprint: number;
+  /**
+   * Where an older version kept the point of agreement (localStorage). Used once if Go has none,
+   * then dropped: Go keeps the point with the file's hash now.
+   */
+  legacyKey?: string;
 }
 
 /** What the debounce waits after the last outside write. */
 export const EXTERNAL_DEBOUNCE_MS = 200;
 
-/** cyrb53: a quick 53-bit fingerprint, to tell whether the text at saved heads is the text saved. */
-function fingerprint(s: string): number {
-  let h1 = 0xdeadbeef;
-  let h2 = 0x41c6ce57;
-  for (let i = 0; i < s.length; i++) {
-    const ch = s.charCodeAt(i);
-    h1 = Math.imul(h1 ^ ch, 2654435761);
-    h2 = Math.imul(h2 ^ ch, 1597334677);
-  }
-  h1 = Math.imul(h1 ^ (h1 >>> 16), 2246822507) ^ Math.imul(h2 ^ (h2 >>> 13), 3266489909);
-  h2 = Math.imul(h2 ^ (h2 >>> 16), 2246822507) ^ Math.imul(h1 ^ (h1 >>> 13), 3266489909);
-  return 4294967296 * (2097151 & h2) + (h1 >>> 0);
-}
-
 /**
  * Brings the edits other programs make to the project file into the document (B1 EXT-*).
  *
- * The document remembers the heads where it and the file last agreed (a write of Inkwell's, or a
- * previous integration). An outside edit is made as of those heads and merged, so what the person
- * or others typed since stays. Bursts of writes are one integration; Go has already ignored the
+ * Go remembers the heads where the document and the file last agreed (a write of Inkwell's, or a
+ * previous integration), with the hash of the file there. An outside edit is made as of those
+ * heads and merged, so what the person or others typed since stays, whatever window or session
+ * typed it. Bursts of writes are one integration; Go has already ignored the
  * echo of Inkwell's own writes.
  */
 export class ExternalSync {
-  #base: Base | undefined;
   #timer: ReturnType<typeof setTimeout> | undefined;
   #chain: Promise<void> = Promise.resolve();
   #done: Integration | undefined;
@@ -114,13 +103,7 @@ export class ExternalSync {
 
   constructor(options: ExternalSyncOptions) {
     this.#o = options;
-    this.#base = this.#load();
     options.handle.on("change", this.#onChange);
-  }
-
-  /** The projection wrote `written`: the file and the document agree at those heads. */
-  recordWritten(written: Written): void {
-    this.#setBase(written.heads, written.text);
   }
 
   /** Go says `name` was edited (or removed) outside. */
@@ -168,7 +151,7 @@ export class ExternalSync {
       await this.#o.storage.acknowledge(this.#o.name);
       const projection = this.#o.projection();
       projection?.hold(false);
-      this.#forgetBase();
+      this.#dropLegacy();
       this.#o.onNotice(null);
       await projection?.flush(true);
     });
@@ -240,8 +223,9 @@ export class ExternalSync {
     await this.#o.storage.acknowledge(this.#o.name);
     const projection = this.#o.projection();
     projection?.hold(false);
-    // The file holds the outside text until Inkwell writes: the point of agreement is gone.
-    this.#forgetBase();
+    // The file holds the outside text until Inkwell writes: the point of agreement is gone (the
+    // acknowledgement above recorded none).
+    this.#dropLegacy();
     this.#o.onNotice(null);
     if (!this.#o.manual()) await projection?.flush(true);
   }
@@ -250,7 +234,7 @@ export class ExternalSync {
     const { handle, name, storage } = this.#o;
     const doc = handle.doc();
     if (!doc) return;
-    const base = this.#baseHeads(doc);
+    const base = mergeHeads(doc, await this.#readPoint());
     this.#own = true;
     let done: Integration | undefined;
     try {
@@ -260,11 +244,15 @@ export class ExternalSync {
     } finally {
       this.#own = false;
     }
-    await storage.acknowledge(name);
     const projection = this.#o.projection();
-    // The file holds `text` now. Its point of agreement with the document is the integration's own.
+    // The file holds `text` now. Its point of agreement with the document is the integration's own,
+    // recorded by Go with the hash of the file as it is at the acknowledgement.
     const heads = done && done.branch.length > 0 ? done.branch : base;
-    this.#setBase(heads, A.view(handle.doc() ?? doc, heads).text);
+    await storage.acknowledge(
+      name,
+      encodeSyncPoint(heads, A.view(handle.doc() ?? doc, heads).text),
+    );
+    this.#dropLegacy();
     projection?.adopt(text);
     if (done && (done.merged.length > 0 || done.skipped.length > 0)) {
       this.#done = done.merged.length > 0 ? done : undefined;
@@ -281,48 +269,20 @@ export class ExternalSync {
     if (!this.#o.manual()) await projection?.flush();
   }
 
-  /** The heads to merge from: the saved ones if they still give the text saved, else now. */
-  #baseHeads(doc: A.Doc<Doc>): A.Heads {
-    const base = this.#base;
-    if (base) {
-      try {
-        if (fingerprint(A.view(doc, base.heads).text) === base.fingerprint) return base.heads;
-      } catch {
-        // The heads are not in this document (another project's, or damaged): start from now.
-      }
+  /** The point Go recorded, else (once) the one an older version kept in localStorage. */
+  async #readPoint(): Promise<ReturnType<typeof decodeSyncPoint>> {
+    const { name, storage, legacyKey } = this.#o;
+    const recorded = decodeSyncPoint(await storage.readSyncPoint(name).catch(() => undefined));
+    if (recorded) {
+      this.#dropLegacy();
+      return recorded;
     }
-    return A.getHeads(doc);
+    return legacyKey ? decodeSyncPoint(safeGet(legacyKey)) : undefined;
   }
 
-  /** The file no longer agrees with the document: neither this session nor the next may merge from the old point. */
-  #forgetBase(): void {
-    this.#base = undefined;
-    const key = this.#o.persistKey;
+  /** The older localStorage copy is obsolete once Go holds the point, or the point is gone. */
+  #dropLegacy(): void {
+    const key = this.#o.legacyKey;
     if (key) safeRemove(key);
-  }
-
-  #setBase(heads: A.Heads, text: string): void {
-    this.#base = { heads, fingerprint: fingerprint(text) };
-    const key = this.#o.persistKey;
-    if (key) safeSet(key, JSON.stringify(this.#base));
-  }
-
-  #load(): Base | undefined {
-    const key = this.#o.persistKey;
-    const raw = key ? safeGet(key) : null;
-    if (!raw) return undefined;
-    try {
-      const value = JSON.parse(raw) as Partial<Base>;
-      if (
-        Array.isArray(value.heads) &&
-        value.heads.every((h) => typeof h === "string") &&
-        typeof value.fingerprint === "number"
-      ) {
-        return { heads: value.heads, fingerprint: value.fingerprint };
-      }
-    } catch {
-      // damaged: ignored, the next write records a new one
-    }
-    return undefined;
   }
 }

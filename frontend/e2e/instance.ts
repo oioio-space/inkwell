@@ -1,11 +1,12 @@
-import { type ChildProcess, spawn } from "node:child_process";
+import type { ChildProcess } from "node:child_process";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
+import { signalOwned, spawnOwned } from "./own";
 
 /** Starts another inkwell-server over the project folders in `docs` and waits until it answers. */
 export async function startInstance(port: number, docs: string): Promise<ChildProcess> {
-  const child = spawn(resolve(import.meta.dirname, "../../bin/inkwell-server"), [], {
+  const child = spawnOwned(resolve(import.meta.dirname, "../../bin/inkwell-server"), [], {
     env: {
       ...process.env,
       INKWELL_SERVER_PORT: String(port),
@@ -24,13 +25,13 @@ export async function startInstance(port: number, docs: string): Promise<ChildPr
     }
     await new Promise((r) => setTimeout(r, 100));
   }
-  child.kill("SIGKILL");
+  signalOwned(child, "SIGKILL");
   throw new Error(`instance on port ${port} did not start`);
 }
 
 /** Stops an instance and waits for it to be gone: its writes must not reach the next test. */
 export async function stopInstance(child: ChildProcess): Promise<void> {
   const exited = new Promise((r) => child.once("exit", r));
-  child.kill("SIGTERM");
+  signalOwned(child, "SIGTERM");
   await exited;
 }

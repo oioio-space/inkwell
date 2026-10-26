@@ -9,6 +9,7 @@ import {
 } from "./files";
 import {
   decodeRequest,
+  decodeWriteAt,
   type Entry,
   encodeRange,
   encodeResponse,
@@ -28,6 +29,8 @@ export class FakeGoStore {
   readonly values = new Map<string, Uint8Array>();
   readonly files = new Map<string, Uint8Array>();
   readonly acknowledged: string[] = [];
+  /** The sync point recorded with each file's hash, by name. */
+  readonly points = new Map<string, Uint8Array>();
   /** Names refused by writeProjection, as Go does for a file edited outside Inkwell. */
   readonly locked = new Set<string>();
   /** Keys (joined by "/") that load as damaged and unrecoverable. */
@@ -100,7 +103,23 @@ export class FakeGoStore {
           return [Status.EditedOutside];
         }
         this.files.set(path, req.data.slice());
+        this.points.delete(path);
         return [Status.OK];
+      case Op.WriteProjectionAt: {
+        if (this.locked.has(path)) return [Status.EditedOutside];
+        const { point, text } = decodeWriteAt(req.data);
+        this.files.set(path, text.slice());
+        this.points.set(path, point.slice());
+        return [Status.OK];
+      }
+      case Op.SetSyncPoint:
+        if (this.locked.has(path)) return [Status.EditedOutside];
+        this.points.set(path, req.data.slice());
+        return [Status.OK];
+      case Op.ReadSyncPoint: {
+        const point = this.points.get(path);
+        return point?.length ? [Status.OK, point] : [Status.NotFound];
+      }
       case Op.ReadProjection: {
         const f = this.files.get(path);
         return this.#notText(path) ?? (f ? [Status.OK, f] : [Status.NotFound]);
@@ -119,6 +138,8 @@ export class FakeGoStore {
         return [Status.OK, encodeFileList(this.#list())];
       case Op.Acknowledge:
         this.acknowledged.push(path);
+        if (req.data.length > 0) this.points.set(path, req.data.slice());
+        else this.points.delete(path);
         this.locked.delete(path);
         return [Status.OK];
       default:

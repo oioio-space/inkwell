@@ -165,7 +165,7 @@ class Workspace {
       manual: () => settings.saveMode === "manual",
       onNotice: (notice) => this.#show(notice),
       notText: (err) => (err instanceof NotTextError ? err : undefined),
-      persistKey: `inkwell.sync.${url}.${MAIN_FILE}`,
+      legacyKey: `inkwell.sync.${url}.${MAIN_FILE}`,
     });
     this.#sync = sync;
     this.#projection = startProjection(handle, storage, {
@@ -182,9 +182,8 @@ class Workspace {
         this.projectionFailed = true;
         this.projectionReason = err instanceof Error ? err.message : "";
       },
-      onWritten: (written) => {
+      onWritten: () => {
         this.projectionFailed = false;
-        sync.recordWritten(written);
       },
       retryable: (err) => !(err instanceof ExternalEditError),
     });
