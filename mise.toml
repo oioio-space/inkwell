@@ -176,7 +176,7 @@ run = "./scripts/sec-scan.sh --staged"
 
 [tasks.sbom]
 description = "Generate a CycloneDX SBOM (syft)"
-run = "syft scan dir:. -o cyclonedx-json=sbom.cdx.json -q"
+run = "syft scan dir:. --exclude './.claude/**' -o cyclonedx-json=sbom.cdx.json -q"
 
 [tasks."scan:sbom"]
 description = "Scan the SBOM for CVEs (grype) — fails on high/critical"
