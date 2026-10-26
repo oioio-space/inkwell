@@ -6,6 +6,9 @@
 #   scripts/llm.sh commit-msg          # Conventional Commit draft from the staged diff
 #   scripts/llm.sh triage < log.txt    # failing items only, from a long CI/test log
 #   scripts/llm.sh translate en < fr.json   # i18n JSON translation draft (keys kept)
+#   scripts/llm.sh summarize 15 < report    # a long report or log in at most N lines
+#   scripts/llm.sh prose < text.md          # French copy-edit: plain, short, same meaning
+#   scripts/llm.sh check                    # exit 0 when OpenRouter answers, 3 otherwise
 #
 # Needs OPENROUTER_API_KEY (put it in mise.local.toml [env] — gitignored — or your
 # shell profile, never in the repo). Exit 3 when unavailable: callers fall back to
@@ -54,8 +57,20 @@ case "${1:-}" in
     ask "$LLM_WRITING_MODEL" \
       "Translate the values of this i18n JSON into ${lang}. Keep keys, placeholders like {name} and JSON structure identical. Plain, friendly UI tone, no jargon. Output only JSON."
     ;;
+  summarize)
+    lines="${2:-15}"
+    ask "$LLM_MECHANICAL_MODEL" \
+      "Summarize this text in at most ${lines} lines. Keep every number, file path, test name, failure and decision exactly; drop narration. Output only the summary."
+    ;;
+  prose)
+    ask "$LLM_WRITING_MODEL" \
+      "Copy-edit this French text: plain words, short sentences, active voice, no jargon, same meaning and same Markdown structure. Do not add content. Output only the text."
+    ;;
+  check)
+    [[ "$(echo ping | ask "$LLM_MECHANICAL_MODEL" "Answer with the single word: pong" 2>/dev/null)" == *pong* ]] || exit 3
+    ;;
   *)
-    sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'
+    sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'
     exit 2
     ;;
 esac
