@@ -226,7 +226,17 @@ func (w *Wiring) Attestations() []trust.Attestation {
 
 // onAttest handles a frame of the attest channel: a gossiped attestation.
 func (w *Wiring) onAttest(ev transport.Event) {
-	if ev.Kind != transport.Message || !w.isActive(ev.Peer) {
+	if ev.Kind != transport.Message {
+		return
+	}
+	if !w.isActive(ev.Peer) {
+		// Not linked yet: a stranger is left alone, and a connected peer that may be about to
+		// become a member has its attestations kept (see [Wiring.hold]).
+		if _, connected := w.up[ev.Peer]; connected {
+			if a, err := trust.DecodeAttestation(ev.Payload); err == nil {
+				w.hold(ev.Peer, a)
+			}
+		}
 		return
 	}
 	a, err := trust.DecodeAttestation(ev.Payload)
@@ -272,5 +282,37 @@ func (w *Wiring) sendAttestations(p transport.PeerID) {
 func (w *Wiring) sendAttest(p transport.PeerID, data []byte) {
 	if err := w.attestCh.Send(w.ctx, p, data); err != nil && w.ctx.Err() == nil {
 		w.log.Debug("sending attestation", "peer", p, "err", err)
+	}
+}
+
+// maxHeld bounds the attestations kept for one connected peer that is not linked yet: a
+// stranger may connect and send, and must not crowd out the host of a guest.
+const maxHeld = 4 * maxPending
+
+// hold keeps a, replayed by a connected peer that is not linked yet, for [Wiring.releaseHeld].
+// A host replays its attestations as soon as it admits a guest, which still has to move to the
+// host's project (and learn who the members are) before it listens to the host: what the guest
+// dropped then would not be sent again, and it would join to an empty document. Nothing is
+// trusted before release: the attestation is verified against the list as it is then.
+func (w *Wiring) hold(p transport.PeerID, a trust.Attestation) {
+	byKey := w.held[p]
+	if byKey == nil {
+		byKey = make(map[attestKey]trust.Attestation)
+		w.held[p] = byKey
+	}
+	k := attestKey{a.Doc, string(a.Signer)}
+	if _, replaced := byKey[k]; replaced || len(byKey) < maxHeld {
+		byKey[k] = a
+	}
+}
+
+// releaseHeld offers the attestations kept for p, now linked, as if they had just arrived.
+func (w *Wiring) releaseHeld(p transport.PeerID) {
+	held := w.held[p]
+	delete(w.held, p)
+	for _, a := range held {
+		if err := w.offerAttest(a, p); err != nil {
+			w.log.Debug("held attestation", "peer", p, "err", err)
+		}
 	}
 }

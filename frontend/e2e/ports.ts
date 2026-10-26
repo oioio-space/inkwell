@@ -17,6 +17,9 @@ export const RELAY_PORT = base + 3;
 export const OFFLINE_ALICE_PORT = base + 4;
 export const OFFLINE_BOB_PORT = base + 5;
 
+/** The third person of a spec that joins a project after the second (JOIN-3). */
+export const CAROL_PORT = base + 6;
+
 export const ALICE_URL = `http://127.0.0.1:${ALICE_PORT}/`;
 export const BOB_URL = `http://127.0.0.1:${BOB_PORT}/`;
 export const SPARE_URL = `http://127.0.0.1:${SPARE_PORT}/`;
