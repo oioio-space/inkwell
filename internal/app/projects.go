@@ -2,6 +2,7 @@ package app
 
 import (
 	"errors"
+	"path/filepath"
 	"strings"
 
 	"github.com/oioio-space/inkwell/internal/project"
@@ -32,6 +33,8 @@ type Projects struct {
 	files *Files
 	// open hands a file to the system; nil when the platform has no way to.
 	open func(path string) error
+	// reveal shows a file in the system file manager, without running it.
+	reveal func(path string) error
 }
 
 // NewProjects returns the service for the open project p. files, if not nil,
@@ -39,24 +42,40 @@ type Projects struct {
 // blobs to report.
 func NewProjects(p *project.Project, files *Files) *Projects { return &Projects{p: p, files: files} }
 
-// SetOpener sets how a file is handed to the system (the desktop shell's
-// "open", which runs the program the user chose for that kind of file). The
-// service lives in the app package, which does not import the window toolkit,
-// so the toolkit's function comes from main.
-func (s *Projects) SetOpener(open func(path string) error) { s.open = open }
+// viewable lists the extensions whose system program only shows the file: documents, images,
+// fonts. A file comes from another person, so anything that could run (programs, scripts,
+// shortcuts, macro documents, SVG, which can carry script) is never handed over.
+var viewable = map[string]bool{
+	".pdf": true, ".png": true, ".jpg": true, ".jpeg": true, ".gif": true, ".webp": true,
+	".bmp": true, ".tif": true, ".tiff": true, ".ico": true, ".avif": true,
+	".ttf": true, ".otf": true, ".woff": true, ".woff2": true,
+	".doc": true, ".docx": true, ".odt": true, ".xls": true, ".xlsx": true, ".ods": true,
+	".ppt": true, ".pptx": true, ".odp": true,
+}
 
-// OpenWithSystem opens the project file rel in the system's own program for it:
-// the way out for a file Inkwell does not edit (a PDF, a font, an archive).
-// Only a plain file of the project is ever handed over.
+// SetOpener sets how a file is handed to the system: open runs the program the user chose for
+// that kind of file (only for [viewable] types), reveal shows the file in the file manager.
+// The service lives in the app package, which does not import the window toolkit, so the
+// toolkit's functions come from main.
+func (s *Projects) SetOpener(open, reveal func(path string) error) {
+	s.open, s.reveal = open, reveal
+}
+
+// OpenWithSystem opens the project file rel in the system's own program for it when it is only
+// viewed (a PDF, an image, a font, an office document); any other file is shown in the file
+// manager instead, never run. Only a plain file of the project is ever handed over.
 func (s *Projects) OpenWithSystem(rel string) error {
-	if s.open == nil {
+	if s.open == nil || s.reveal == nil {
 		return errNoOpener
 	}
 	abs, err := s.p.FilePath(rel)
 	if err != nil {
 		return err
 	}
-	return s.open(abs)
+	if viewable[strings.ToLower(filepath.Ext(abs))] {
+		return s.open(abs)
+	}
+	return s.reveal(abs)
 }
 
 // BlobProgress reports the files of the project that are not text: how many

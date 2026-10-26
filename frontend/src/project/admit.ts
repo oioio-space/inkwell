@@ -1,7 +1,15 @@
 import { next as A } from "@automerge/automerge";
 import { isValidAutomergeUrl } from "@automerge/automerge-repo";
-import { type IndexDoc, isHash, isId, isPackageKey, plain } from "./model";
-import { validateName } from "./names";
+import {
+  type IndexDoc,
+  isHash,
+  isId,
+  isPackageKey,
+  MAX_CREATE_PER_CHANGE,
+  MAX_NODES,
+  plain,
+} from "./model";
+import { MAX_DEPTH, validateName } from "./names";
 import { deletionMode } from "./ops";
 
 /**
@@ -166,7 +174,12 @@ type Patch = A.Patch;
  * - `trashed` is a writer's act only when the project lets files go freely, an admin's
  *   otherwise, and the main file is never trashed (FM-14, FM-15, FM-18);
  * - a deletion request is a writer's act, lifting it is an admin's (under "approval");
- * - decisions, the main file, the deletion rule and the purge of a node are an admin's.
+ * - decisions, the main file, the deletion rule and the purge of a node are an admin's;
+ * - a file is not moved or created into the trash, and the tree stays under its caps.
+ *
+ * `before` is the index as the change's own dependencies left it, never the receiver's current
+ * state: the verdict is a function of the change and its history alone, so replicas that get
+ * the same changes in any order agree.
  */
 export function checkChange(
   patches: readonly Patch[],
@@ -245,6 +258,16 @@ export function checkChange(
   const problem = checkSections(after, created, touched);
   if (problem) return problem;
 
+  if (created.size > MAX_CREATE_PER_CHANGE) return "too many files in one change";
+  if (created.size > 0 && Object.keys(after.nodes ?? {}).length > MAX_NODES) {
+    return "too many files";
+  }
+  for (const id of created) {
+    if (inTrash(after, after.nodes?.[id]?.parent ?? null)) {
+      return "a file is not created in the trash";
+    }
+  }
+
   for (const [id, fields] of touched) {
     const was = before.nodes?.[id];
     const now = after.nodes?.[id];
@@ -253,6 +276,9 @@ export function checkChange(
     for (const f of fields) {
       if (!fresh && (f === "type" || f === "url" || f === "by" || f === "at" || f === "who")) {
         return `${f} of a file never changes`;
+      }
+      if (f === "parent" && !fresh && inTrash(after, now.parent ?? null)) {
+        return "a file is not moved into the trash";
       }
       if (f === "trashed") {
         if (now.trashed && id === after.main) return "the main file cannot be trashed";
@@ -271,6 +297,18 @@ export function checkChange(
     if (after.nodes?.[id]?.trashed) return "a file is not created in the trash";
   }
   return undefined;
+}
+
+/** True if the folder `parent`, or one above it, is in the trash. */
+function inTrash(doc: IndexDoc, parent: string | null): boolean {
+  let at = parent;
+  for (let i = 0; at !== null && i <= MAX_DEPTH + 1; i++) {
+    const n = doc.nodes?.[at];
+    if (!n) return false;
+    if (n.trashed) return true;
+    at = n.parent ?? null;
+  }
+  return false;
 }
 
 /** The shape checks of everything the change touched. */
@@ -308,8 +346,12 @@ function checkSections(
 
 /**
  * The state of the checks for one index document: a shadow copy of what has been admitted, so
- * that a change is judged against the state it was made on without waiting for the Repo, which
- * applies messages later. Local changes reach it through `source`, the Repo's own copy.
+ * that a change is judged without waiting for the Repo, which applies messages later. Local
+ * changes reach it through `source`, the Repo's own copy.
+ *
+ * A change is judged against the index as its own dependencies left it ({@link A.view}), not
+ * against the shadow as it is now: what the receiver happens to hold already must not change
+ * the verdict, or two replicas could refuse different changes and never agree again.
  */
 export class IndexValidator {
   #shadow: A.Doc<IndexDoc> | undefined;
@@ -317,6 +359,11 @@ export class IndexValidator {
 
   constructor(source: () => A.Doc<IndexDoc> | undefined) {
     this.#source = source;
+  }
+
+  /** The heads of what has been admitted so far, sorted. */
+  heads(): string[] {
+    return [...A.getHeads(this.#sync())].sort();
   }
 
   /** Brings the shadow up to the Repo's own copy (local edits, and what the Repo applied). */
@@ -336,36 +383,62 @@ export class IndexValidator {
    * not admitted, and the sync protocol offers it again once they are here.
    */
   check(bytes: Uint8Array, adminCovered: (hash: string) => boolean): Refusal {
-    const shadow = this.#sync();
+    const judged = this.#judge(this.#sync(), bytes, adminCovered);
+    if (judged.refusal === undefined) this.#shadow = judged.next;
+    return judged.refusal;
+  }
+
+  /**
+   * Judges a document that arrives whole: its shape, then each of its changes in causal order,
+   * as if they had come one by one. All or nothing: the shadow takes the document only if every
+   * change is admitted.
+   */
+  checkDocument(doc: A.Doc<IndexDoc>, adminCovered: (hash: string) => boolean): Refusal {
+    const shape = checkDocument(plain(doc));
+    if (shape !== undefined) return shape;
+    let work = A.clone(this.#sync());
+    for (const bytes of A.getAllChanges(doc)) {
+      const judged = this.#judge(work, bytes, adminCovered);
+      if (judged.refusal !== undefined) return judged.refusal;
+      work = judged.next;
+    }
+    this.#shadow = work;
+    return undefined;
+  }
+
+  /** The verdict on one change over `shadow`, and the shadow with the change if admitted. */
+  #judge(
+    shadow: A.Doc<IndexDoc>,
+    bytes: Uint8Array,
+    adminCovered: (hash: string) => boolean,
+  ): { refusal: Refusal; next: A.Doc<IndexDoc> } {
     let decoded: ReturnType<typeof A.decodeChange>;
     try {
       decoded = A.decodeChange(bytes);
     } catch {
-      return "undecodable change";
+      return { refusal: "undecodable change", next: shadow };
     }
-    if (!A.hasHeads(shadow, decoded.deps)) return "dependencies unknown";
+    if (!A.hasHeads(shadow, decoded.deps)) {
+      return { refusal: "dependencies unknown", next: shadow };
+    }
+    if (A.hasHeads(shadow, [decoded.hash])) return { refusal: undefined, next: shadow };
     // A burst of typing: every operation is in the text of the main file.
     const textObj = A.getObjectId(shadow, "text");
     if (textObj && decoded.ops.length > 0 && decoded.ops.every((op) => op.obj === textObj)) {
-      this.#shadow = A.applyChanges(shadow, [bytes])[0];
-      return undefined;
+      return { refusal: undefined, next: A.applyChanges(shadow, [bytes])[0] };
     }
-    const trial = A.clone(shadow);
+    const heads = A.getHeads(shadow);
+    const linear =
+      heads.length === decoded.deps.length && decoded.deps.every((d) => heads.includes(d));
+    const before = linear ? shadow : A.view(shadow, decoded.deps);
     let patches: Patch[] = [];
-    const [after] = A.applyChanges(trial, [bytes], {
+    const [after] = A.applyChanges(A.clone(before), [bytes], {
       patchCallback: (p) => {
         patches = p;
       },
     });
-    const refusal = checkChange(patches, plain(shadow), plain(after), adminCovered(decoded.hash));
-    if (refusal === undefined) this.#shadow = after;
-    return refusal;
-  }
-
-  /** Judges a document that arrives whole, and takes it into the shadow if it is admitted. */
-  checkDocument(doc: A.Doc<IndexDoc>): Refusal {
-    const refusal = checkDocument(plain(doc));
-    if (refusal === undefined) this.#shadow = A.merge(this.#sync(), A.clone(doc));
-    return refusal;
+    const refusal = checkChange(patches, plain(before), plain(after), adminCovered(decoded.hash));
+    if (refusal !== undefined) return { refusal, next: shadow };
+    return { refusal: undefined, next: linear ? after : A.applyChanges(shadow, [bytes])[0] };
   }
 }

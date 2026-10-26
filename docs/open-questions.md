@@ -13,3 +13,4 @@ Reprises du document de conception. Une question tranchée devient une ADR et so
 | Cloisonner les compilations (Landlock : système de fichiers et réseau, Linux ≥ 6.7) | Ré-exécutable d'amorçage ; aujourd'hui : proxys refusés, `--root`, parcours des liens, limites | étape 5 |
 | Arrêt d'un sidecar quand Inkwell meurt sous macOS et Windows | Surveiller un tube / objet de tâche ; Linux a `Pdeathsig` | étape 6 |
 | Thèmes Touying au-delà de `simple`, touying 0.8.0 | Avec C4 (présentations) | étape 3 |
+| Auteur des marques « supprimé par » et des demandes de suppression : aujourd'hui non vérifié pour les changements relayés (l'attestation de l'auteur n'arrive pas toujours à qui rejoint) | Signature de la marque par l'appareil (Go signe, la webview vérifie) ; en attendant, la marque est indicative | étape 4 |

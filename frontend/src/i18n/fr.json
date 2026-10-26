@@ -586,6 +586,7 @@
   "kind.archive": "Archive",
   "kind.binary": "Fichier binaire",
   "blob.open": "Ouvrir avec l'application du système",
+  "blob.reveal": "Afficher dans le dossier",
   "blob.open.failed": "Le système n'a pas pu ouvrir {name}.",
   "blob.info": "{kind} · {size}",
   "blob.hint": "Il fait partie du projet et voyage avec lui, mais ne se modifie pas ici.",

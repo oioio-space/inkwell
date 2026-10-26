@@ -109,6 +109,9 @@ export type Role = "reader" | "writer" | "admin";
 /** The most nodes a tree may have; the ones past it, in id order, are ignored (ADR 0023). */
 export const MAX_NODES = 10000;
 
+/** The most files and folders one change may create (an import); admission refuses more. */
+export const MAX_CREATE_PER_CHANGE = 5000;
+
 const ID = /^[0-9a-f]{32}$/;
 const HASH = /^blake3:[0-9a-f]{64}$/;
 const PACKAGE_KEY = /^@preview\/[a-z0-9][a-z0-9_-]{0,63}:[0-9]+\.[0-9]+\.[0-9]+$/;

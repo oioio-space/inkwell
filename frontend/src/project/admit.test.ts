@@ -290,8 +290,12 @@ describe("the validator keeps in step with the document", () => {
     const bad = forge(A.clone(base), (d: never) => {
       loose(d).nodes[idOf(base, "ch1.typ")].name = imm("x/y");
     });
-    expect(new IndexValidator(() => undefined).checkDocument(bad)).toBe("invalid name");
-    expect(new IndexValidator(() => undefined).checkDocument(project())).toBeUndefined();
+    expect(new IndexValidator(() => undefined).checkDocument(bad, () => false)).toBe(
+      "invalid name",
+    );
+    expect(
+      new IndexValidator(() => undefined).checkDocument(project(), () => false),
+    ).toBeUndefined();
     expect(plain(bad).nodes).toBeDefined();
   });
 });
@@ -392,4 +396,67 @@ describe("ADR 0027 the type chosen for a file (ftype)", () => {
   it.each(["JSON", "a/b", "", "x".repeat(33), "../x"])("refuses %j", (bad) => {
     expect(retype(bad)).toBeDefined();
   });
+});
+
+describe("security audit: whole documents, stamps, trashed folders, caps", () => {
+  const msgDoc = (doc: Index) =>
+    A.encodeSyncMessage({ heads: A.getHeads(doc), need: [], have: [], changes: [A.save(doc)] });
+
+  it("HIGH a whole-document chunk is judged change by change: a writer's forged deletion is cut", () => {
+    const base = project();
+    const t = idOf(base, "ch1.typ");
+    const forged = forge(A.clone(base), (d: never) => {
+      loose(d).nodes[t].trashed = { by: imm("bob"), at: 1 };
+    });
+    const cov = new Coverage();
+    cov.setValidator("doc", new IndexValidator(() => A.clone(base)));
+    cov.attested("bob", "doc", A.getHeads(forged));
+    expect(cov.filter("doc", "bob", msgDoc(forged))).toBeUndefined();
+    expect(cov.stats.dropped).toBe(1);
+  });
+
+  it("HIGH a whole document of admitted changes passes, and an admin's deletion in it too", () => {
+    const base = project();
+    const t = idOf(base, "ch1.typ");
+    const renamed = apply(A.clone(base), ops.rename(view(base), ctx(bob), t, "intro.typ"));
+    const honest = apply(renamed, ops.remove(renamed, view(renamed), ctx(alice), [t]));
+    const cov = new Coverage();
+    cov.setValidator("doc", new IndexValidator(() => A.clone(base)));
+    cov.setAdmins(["alice"]);
+    cov.attested("alice", "doc", A.getHeads(honest));
+    const msg = msgDoc(honest);
+    expect(cov.filter("doc", "alice", msg)).toBe(msg);
+  });
+
+  it("MEDIUM a file is not moved into a trashed folder", () => {
+    let base = project();
+    const dir = idOf(base, "sub");
+    const f = idOf(base, "ch1.typ");
+    base = apply(base, ops.setDeletionMode(base, ctx(alice), "free"));
+    base = apply(base, ops.remove(base, view(base), ctx(alice), [dir]));
+    const into = edit((d) => {
+      d.nodes[f].parent = dir;
+    });
+    expect(judge(base, into)).toBe("a file is not moved into the trash");
+  });
+
+  it("MEDIUM the number of files is capped, in one change and in all", () => {
+    const base = project();
+    const many = (n: number, tag: string) => (doc: Index) =>
+      A.change(doc, ((d: Loose) => {
+        for (let i = 0; i < n; i++) {
+          d.nodes[`${tag}${String(i).padStart(32 - tag.length, "0")}`] = {
+            type: imm("dir"),
+            name: imm(`${tag}${i}`),
+            parent: null,
+            by: imm("bob"),
+            at: 1,
+          };
+        }
+      }) as never);
+    expect(judge(base, many(5001, "a"))).toBe("too many files in one change");
+    expect(judge(base, many(5000, "a"))).toBeUndefined();
+    const half = many(5000, "a")(A.clone(base));
+    expect(judge(half, many(5000, "b"))).toBe("too many files");
+  }, 120_000);
 });

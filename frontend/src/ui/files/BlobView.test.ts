@@ -27,4 +27,25 @@ describe("a file that is not text", () => {
     click(button);
     expect(open).toHaveBeenCalledOnce();
   });
+
+  it.each([
+    "setup.exe",
+    "run.bat",
+    "x.lnk",
+    "a.hta",
+    "b.scr",
+    "c.msi",
+    "d.jar",
+    "e.docm",
+    "f.sh",
+    "noext",
+  ])("never offers to run %s: it is shown in the folder instead", (name) => {
+    const open = vi.fn();
+    const host = render(BlobView, { name, size: 1, type: get("binary"), openWithSystem: open });
+    const button = host.querySelector("button") as HTMLButtonElement;
+    expect(button.textContent).not.toContain("Ouvrir");
+    expect(button.textContent?.trim()).toBe("Afficher dans le dossier");
+    click(button);
+    expect(open).toHaveBeenCalledOnce();
+  });
 });

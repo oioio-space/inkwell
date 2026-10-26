@@ -112,7 +112,11 @@ async function joinWith(alice: Page, other: Page, name: string) {
     throw new Error(`${String(err)}\n${why}`);
   }
   // The dialog closes by itself once the project is open.
-  await expect(other.getByRole("dialog")).toBeHidden({ timeout: 60_000 });
+  try {
+    await expect(other.getByRole("dialog")).toBeHidden({ timeout: 60_000 });
+  } catch (err) {
+    throw new Error(`${String(err)}\n${[...new Set(seen)].slice(0, 30).join("\n")}`);
+  }
 }
 
 /** Starts another inkwell-server on its own folders and waits until it answers. */

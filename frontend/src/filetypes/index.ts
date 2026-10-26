@@ -21,3 +21,4 @@ export {
   unregister,
 } from "./registry";
 export type * from "./types";
+export { isViewable } from "./viewable";

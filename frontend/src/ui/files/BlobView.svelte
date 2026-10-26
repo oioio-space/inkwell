@@ -1,5 +1,5 @@
 <script lang="ts">
-import type { FileType } from "../../filetypes";
+import { type FileType, isViewable } from "../../filetypes";
 import { t } from "../../i18n";
 import FileIcon from "../icons/FileIcon.svelte";
 import { formatSize } from "./explain";
@@ -28,7 +28,7 @@ let {
   <p class="info">{t("blob.info", { kind: t(type.label), size: formatSize(size) })}</p>
   <p class="hint">{t("blob.hint")}</p>
   {#if openWithSystem}
-    <button type="button" class="btn" onclick={openWithSystem}>{t("blob.open")}</button>
+    <button type="button" class="btn" onclick={openWithSystem}>{t(isViewable(name) ? "blob.open" : "blob.reveal")}</button>
   {/if}
 </section>
 

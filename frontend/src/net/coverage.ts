@@ -161,7 +161,8 @@ export interface CoverageStats {
 export interface DocValidator {
   /** `adminCovered` says whether an admin vouches for the change with that hash. */
   check(bytes: Uint8Array, adminCovered: (hash: string) => boolean): string | undefined;
-  checkDocument(doc: A.Doc<never>): string | undefined;
+  /** A whole document: judged change by change, in causal order, as if they came one by one. */
+  checkDocument(doc: A.Doc<never>, adminCovered: (hash: string) => boolean): string | undefined;
 }
 
 export class Coverage {
@@ -273,9 +274,10 @@ export class Coverage {
     if (!validator) return vetoed;
     chunks.forEach((chunk, i) => {
       if (!covered[i]) return;
+      const admin = (h: string) => docs.adminCovers(h);
       const refusal = chunk.loaded
-        ? validator.checkDocument(chunk.loaded as A.Doc<never>)
-        : validator.check(chunk.bytes, (h) => docs.adminCovers(h));
+        ? validator.checkDocument(chunk.loaded as A.Doc<never>, admin)
+        : validator.check(chunk.bytes, admin);
       if (refusal === undefined) return;
       console.warn(`index change refused: ${refusal}`);
       covered[i] = false;

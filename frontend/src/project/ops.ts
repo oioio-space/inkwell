@@ -6,6 +6,7 @@ import {
   imm,
   isHash,
   isId,
+  MAX_CREATE_PER_CHANGE,
   MAX_NODES,
   type NodeKind,
   newId,
@@ -200,6 +201,7 @@ export function create(
 ): Result {
   if (!canWrite(c)) return fail("forbidden");
   if (specs.length === 0) return fail("unchanged");
+  if (specs.length > MAX_CREATE_PER_CHANGE) return fail("limit");
   if (Object.keys(doc.nodes ?? {}).length + specs.length > MAX_NODES) return fail("limit");
   const ids = specs.map(() => newId());
   const taken = new Map<string | null, Set<string>>();
