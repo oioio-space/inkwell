@@ -4,6 +4,7 @@ import { type DocHandle, Repo } from "@automerge/automerge-repo";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ExternalSync, type Notice, type SyncStorage } from "./externalSync";
 import { ExternalEditError, NotTextError } from "./GoStorageAdapter";
+import { MAX_EDITABLE_CHARS } from "./limits";
 import { type Projection, type ProjectionSink, startProjection } from "./projection";
 import type { ExternalPolicy } from "./settings.svelte";
 import { encodeSyncPoint } from "./syncPoint";
@@ -60,6 +61,8 @@ interface Rig {
   sync: ExternalSync;
   projection: Projection;
   notices: (Notice | null)[];
+  /** What the sync said about a file too big to enter the document: its text, or undefined when it is back to normal. */
+  bigs: (string | undefined)[];
   dirty: boolean[];
   errors: unknown[];
   settings: { policy: ExternalPolicy; manual: boolean; delay: number };
@@ -80,6 +83,7 @@ async function rig(
   const disk = existing?.disk ?? new Disk(opts.manual ? text : undefined);
   const settings = { policy: "import" as ExternalPolicy, manual: false, delay: 1000, ...opts };
   const notices: (Notice | null)[] = [];
+  const bigs: (string | undefined)[] = [];
   const dirty: boolean[] = [];
   const errors: unknown[] = [];
   let projection: Projection | undefined;
@@ -91,6 +95,7 @@ async function rig(
     policy: () => settings.policy,
     manual: () => settings.manual,
     onNotice: (n) => notices.push(n),
+    onBig: (text) => bigs.push(text),
     notText: (err) => (err instanceof NotTextError ? err : undefined),
     skip: opts.skip ? (_name, range) => opts.skip?.(range) ?? false : undefined,
   });
@@ -109,6 +114,7 @@ async function rig(
     sync,
     projection,
     notices,
+    bigs,
     dirty,
     errors,
     settings,
@@ -230,6 +236,39 @@ describe("outside changes (EXT-*)", () => {
     r.sync.undo();
     expect(r.h.doc().text).toBe("a\nb\nc\n");
     expect(r.last()).toBeNull();
+  });
+
+  it("PERF-02 a file past 2 Mi is not put in the document: it is handed over to be read, and never overwritten", async () => {
+    const r = await rig("small\n");
+    const huge = `${"ligne\n".repeat(MAX_EDITABLE_CHARS / 6 + 10)}`;
+    r.disk.writes.length = 0;
+    await r.outside(huge);
+    expect(r.h.doc().text).toBe("small\n"); // Automerge never saw it
+    expect(r.bigs).toEqual([huge]);
+    expect(r.notices).toEqual([]); // no "merged" toast: nothing was integrated
+    expect(r.disk.acks).toBe(0); // the file is still the outside one, Inkwell does not write over it
+    r.type(5, "x");
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(r.disk.writes).toEqual([]);
+    expect(r.disk.text).toBe(huge);
+  });
+
+  it("PERF-02 the same file under 'ask' or 'keep' keeps the person's choice; only an integration is gated", async () => {
+    const r = await rig("small\n", { policy: "ask" });
+    await r.outside("ligne\n".repeat(MAX_EDITABLE_CHARS / 6 + 10));
+    expect(r.last()).toEqual({ kind: "ask", name: "main.typ" });
+    expect(r.bigs).toEqual([]);
+    await r.sync.integrateAsked();
+    expect(r.bigs).toHaveLength(1);
+    expect(r.h.doc().text).toBe("small\n");
+  });
+
+  it("PERF-02 once the file is small again it is integrated as usual and the big view goes away", async () => {
+    const r = await rig("small\n");
+    await r.outside("ligne\n".repeat(MAX_EDITABLE_CHARS / 6 + 10));
+    await r.outside("back\n");
+    expect(r.bigs.at(-1)).toBeUndefined();
+    expect(r.h.doc().text).toBe("back\n");
   });
 
   it("UX-S9-2 a change that only removed lines can be viewed and undone: its place is marked", async () => {

@@ -13,6 +13,7 @@ import Preview from "./preview/Preview.svelte";
 import { preview } from "./preview/preview.svelte";
 import { settings } from "./store/settings.svelte";
 import AboutDialog, { type BuildInfo } from "./ui/AboutDialog.svelte";
+import Banner from "./ui/Banner.svelte";
 import Editor from "./ui/Editor.svelte";
 import ExternalBanner from "./ui/ExternalBanner.svelte";
 import ExternalChangeToast from "./ui/ExternalChangeToast.svelte";
@@ -20,6 +21,7 @@ import { session } from "./ui/editorSession.svelte";
 import NoticeToast from "./ui/NoticeToast.svelte";
 import ProjectionBanner from "./ui/ProjectionBanner.svelte";
 import Preferences from "./ui/prefs/Preferences.svelte";
+import ReadOnlyText from "./ui/ReadOnlyText.svelte";
 import SealedBanner from "./ui/SealedBanner.svelte";
 import ShareDialog from "./ui/ShareDialog.svelte";
 import Sheet from "./ui/sheet/Sheet.svelte";
@@ -55,7 +57,7 @@ function showTable() {
 /** Only Typst and Markdown have a formatting bar; csv, bib and txt are just the editor. */
 const barLanguage = $derived(barLang(workspace.current));
 const hasBar = $derived(barLanguage !== undefined);
-const barVisible = $derived(hasBar && settings.toolbarVisible(workspace.project));
+const barVisible = $derived(hasBar && !workspace.big && settings.toolbarVisible(workspace.project));
 const sidebarOpen = $derived(settings.sidebarVisible(workspace.project));
 const previewOpen = $derived(settings.previewVisible(workspace.project));
 
@@ -214,10 +216,27 @@ onMount(() => {
       </div>
     {/if}
     <ProjectionBanner />
+    {#if workspace.tier === "large" && !workspace.big}
+      <Banner role="status">{t("limit.slow")}</Banner>
+    {/if}
     <ExternalBanner />
     <main>
       <div class="pane side-source">
-        {#if workspace.handle}
+        {#if workspace.big}
+          {#key workspace.big}
+            {#if showSheet}
+              <Sheet
+                big={workspace.big}
+                {me}
+                path={workspace.current}
+                startOffset={sheetView.offset}
+                onshowtext={(offset) => sheetView.toText(offset)}
+              />
+            {:else}
+              <ReadOnlyText text={workspace.big.text} />
+            {/if}
+          {/key}
+        {:else if workspace.handle}
           {#key workspace.handle.url}
             {#if showSheet}
               <Sheet
@@ -233,7 +252,7 @@ onMount(() => {
           {/key}
         {/if}
       </div>
-      {#if previewOpen && !showSheet}
+      {#if previewOpen && !showSheet && !workspace.big}
         <div class="pane side-preview">
           <Preview onSourceJump={jumpFromPage} onCursorJump={jumpFromCursor} />
         </div>

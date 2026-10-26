@@ -16,6 +16,7 @@ import { type SocketLike, WailsNetworkAdapter } from "../net/WailsNetworkAdapter
 import { ExternalSync, type Notice } from "../store/externalSync";
 import { type FileInfo, FileKind, type ProjectFile } from "../store/files";
 import { ExternalEditError, GoStorageAdapter, NotTextError } from "../store/GoStorageAdapter";
+import { type SizeTier, sizeTier } from "../store/limits";
 import { type Projection, startProjection } from "../store/projection";
 import { safeGet, safeSet } from "../store/safeStorage";
 import { settings } from "../store/settings.svelte";
@@ -80,6 +81,13 @@ class Workspace {
   /** True once the member list is full: this device signs no more, so edits stay local. */
   sealed = $state(false);
   handle = $state.raw<DocHandle<Doc> | undefined>();
+  /**
+   * A text too big to enter a document (ADR 0028): read from the disk as one plain string, shown
+   * read-only, in no Automerge document. An object, so each text is its own key.
+   */
+  big = $state.raw<{ text: string } | undefined>();
+  /** How big the open document is: "large" earns a discreet notice (ADR 0028 D1). */
+  tier = $state<SizeTier>("fluid");
   /** The file shown in the editor (today the project's main document). */
   current = $state(openedFile());
   /** The project's files, for the sidebar and the Insert menu. */
@@ -95,6 +103,7 @@ class Workspace {
   /** Outside edits Go reported before the project was open. */
   #early: string[] = [];
   #marksTimer: ReturnType<typeof setTimeout> | undefined;
+  #offSize: (() => void) | undefined;
 
   async start(): Promise<void> {
     const id = await Session.LocalPeer();
@@ -147,6 +156,8 @@ class Workspace {
     this.#sync = undefined;
     this.notice = null;
     this.handle = handle;
+    this.big = undefined;
+    this.#watchSize(handle);
     this.#adapter?.setProject(url);
     await Projects.SetRootURL(url);
     const storage = this.#storage;
@@ -164,6 +175,9 @@ class Workspace {
       policy: () => settings.externalPolicy,
       manual: () => settings.saveMode === "manual",
       onNotice: (notice) => this.#show(notice),
+      onBig: (text) => {
+        this.big = text === undefined ? undefined : { text };
+      },
       notText: (err) => (err instanceof NotTextError ? err : undefined),
       legacyKey: `inkwell.sync.${url}.${MAIN_FILE}`,
     });
@@ -188,6 +202,25 @@ class Workspace {
       retryable: (err) => !(err instanceof ExternalEditError),
     });
     for (const name of this.#early.splice(0)) sync.notify(name);
+  }
+
+  /** Keeps `tier` at the size of the open document, measured at most twice a second. */
+  #watchSize(handle: DocHandle<Doc>): void {
+    this.#offSize?.();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const measure = () => {
+      timer = undefined;
+      this.tier = sizeTier(handle.doc()?.text.length ?? 0);
+    };
+    const onChange = () => {
+      timer ??= setTimeout(measure, 500);
+    };
+    measure();
+    handle.on("change", onChange);
+    this.#offSize = () => {
+      clearTimeout(timer);
+      handle.off("change", onChange);
+    };
   }
 
   #show(notice: Notice | null): void {

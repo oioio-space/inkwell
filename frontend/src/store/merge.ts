@@ -1,5 +1,7 @@
 import { next as A } from "@automerge/automerge";
 import type { DocHandle } from "@automerge/automerge-repo";
+import { applyEdits } from "./chunked";
+import { CHUNK_CHARS, chunksOf } from "./limits";
 import { contentOf, type Range } from "./spans";
 
 type Doc = { text: string };
@@ -274,11 +276,17 @@ export function integrate(
     apply = (d) => A.updateText(d, ["text"], text);
   }
 
+  const pieces = opts.skip ? undefined : growthPieces(baseText, text);
   let branch: A.Heads | undefined;
   handle.update((current) => {
-    const result = A.changeAt(current, base, apply);
-    branch = result.newHeads ?? undefined;
-    return result.newDoc;
+    let doc = current;
+    let heads = base;
+    for (const fn of pieces ?? [apply]) {
+      const result = A.changeAt(doc, heads, fn);
+      doc = result.newDoc;
+      if (result.newHeads) heads = branch = result.newHeads;
+    }
+    return doc;
   });
   if (!branch) return undefined;
   const after = handle.doc();
@@ -339,8 +347,37 @@ export function undoIntegration(handle: DocHandle<Doc>, done: Integration): void
   if (edits.length === 0) return;
   // From the end; at one place, the removal first, then what is put back.
   edits.sort((x, y) => y.at - x.at || y.remove - x.remove);
-  handle.change((d) => {
-    for (const e of edits) A.splice(d, ["text"], e.at, e.remove, e.put);
+  applyEdits(handle, edits);
+}
+
+/**
+ * The file adds a lot of text to what the document said at the base (a file that was empty, a
+ * big paste in another program): that one region, in changes of at most 64 Ki each (ADR 0028 D3),
+ * as functions to apply in turn, each on the branch the previous one made. Otherwise undefined
+ * and the edit is the finer one of `updateText`, which keeps the typing of others around it.
+ */
+function growthPieces(baseText: string, text: string): A.ChangeFn<Doc>[] | undefined {
+  if (text.length - baseText.length <= CHUNK_CHARS) return undefined;
+  const room = Math.min(baseText.length, text.length);
+  let head = 0;
+  while (head < room && baseText.charCodeAt(head) === text.charCodeAt(head)) head++;
+  let tail = 0;
+  while (
+    tail < room - head &&
+    baseText.charCodeAt(baseText.length - 1 - tail) === text.charCodeAt(text.length - 1 - tail)
+  )
+    tail++;
+  // A surrogate pair is never cut: the shared start and end stop before a half.
+  const high = (i: number) => (text.charCodeAt(i) & 0xfc00) === 0xd800;
+  const low = (i: number) => (text.charCodeAt(i) & 0xfc00) === 0xdc00;
+  if (head > 0 && high(head - 1)) head--;
+  if (tail > 0 && low(text.length - tail)) tail--;
+  const remove = baseText.length - head - tail;
+  let at = head;
+  return chunksOf(text.slice(head, text.length - tail)).map((piece, i) => {
+    const from = at;
+    at += piece.length;
+    return (d) => A.splice(d, ["text"], from, i === 0 ? remove : 0, piece);
   });
 }
 

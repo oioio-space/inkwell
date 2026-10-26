@@ -2,6 +2,7 @@
 import { next as A } from "@automerge/automerge";
 import { Repo } from "@automerge/automerge-repo";
 import { describe, expect, it } from "vitest";
+import { CHUNK_CHARS } from "./limits";
 import { integrate, undoIntegration } from "./merge";
 
 type Doc = { text: string };
@@ -99,4 +100,28 @@ describe("integrate (EXT-01..03, 12)", () => {
     expect(done?.skipped).toHaveLength(1);
     expect(done?.lines).toBe(0);
   });
+
+  it("PERF-04 a file that brings 100 Ki of new text comes in changes of at most 64 Ki, and what was typed meanwhile stays", () => {
+    const h = open("head\ntail\n");
+    const base = heads(h);
+    at(h, 0, "MINE "); // typed meanwhile
+    const lines = Array.from({ length: 12_000 }, (_, i) => `ligne ${i}`).join("\n");
+    const before = A.getAllChanges(h.doc()).length;
+    const done = integrate(h, base, `head\n${lines}\ntail\n`);
+    expect(h.doc().text).toBe(`MINE head\n${lines}\ntail\n`);
+    expect(lines.length).toBeGreaterThan(100 * 1024);
+    const added = A.getAllChanges(h.doc()).slice(before);
+    expect(added.length).toBeGreaterThanOrEqual(Math.ceil(lines.length / CHUNK_CHARS));
+    for (const c of added) {
+      const inserted = A.decodeChange(c).ops.filter(
+        (op) => (op as { insert?: boolean }).insert,
+      ).length;
+      expect(inserted).toBeLessThanOrEqual(CHUNK_CHARS);
+    }
+    // The file's own text is the document as of the integration's branch.
+    expect(A.view(h.doc(), done?.branch as A.Heads).text).toBe(`head\n${lines}\ntail\n`);
+    // Undo takes it all back in one step, and keeps the typing.
+    if (done) undoIntegration(h, done);
+    expect(h.doc().text).toBe("MINE head\ntail\n");
+  }, 30_000);
 });

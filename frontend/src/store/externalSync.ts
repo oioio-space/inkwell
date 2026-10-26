@@ -1,5 +1,6 @@
 import { next as A } from "@automerge/automerge";
 import type { DocHandle } from "@automerge/automerge-repo";
+import { tooBigToEdit } from "./limits";
 import { type Integration, integrate, type Range, type Skipped, undoIntegration } from "./merge";
 import type { Projection } from "./projection";
 import { safeGet, safeRemove } from "./safeStorage";
@@ -57,6 +58,11 @@ export interface ExternalSyncOptions {
   /** True when Inkwell writes only on Ctrl+S: an integration is not written back at once. */
   manual: () => boolean;
   onNotice: (notice: Notice | null) => void;
+  /**
+   * The file is too big to enter the document (ADR 0028): called with its text, which is only
+   * read, and with undefined once the file is small again and taken in as usual.
+   */
+  onBig?: (text: string | undefined) => void;
   /** Whether `err` says the file is not text. */
   notText?: (err: unknown) => NotTextLike | undefined;
   /**
@@ -193,6 +199,7 @@ export class ExternalSync {
         return;
       }
       if (text === undefined) {
+        this.#o.onBig?.(undefined); // the file is gone: the document shows again
         projection?.hold(true); // the text stays in Inkwell; it is not written back unasked
         this.#problem = true;
         this.#o.onNotice({ kind: "deleted", name });
@@ -212,6 +219,13 @@ export class ExternalSync {
         await this.#keep();
         return;
       }
+      if (tooBigToEdit(text.length)) {
+        // Decided before Automerge sees a byte; the file stays as it is on the disk.
+        projection?.hold(true);
+        this.#o.onBig?.(text);
+        return;
+      }
+      this.#o.onBig?.(undefined);
       await this.#merge(text);
       const again = await storage.readProjection(name).catch(() => text);
       if (again === text) return;

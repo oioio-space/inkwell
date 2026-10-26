@@ -5,7 +5,7 @@ import { delimiterOf, type Start, startDialect } from "../../editor/csv/dialect"
 import { openCsv } from "../../editor/csv/open";
 import { patchWindow } from "../../editor/csv/patchWindow";
 import type { Delimiter } from "../../editor/csv/records";
-import { handlePort, SheetDoc } from "../../editor/csv/sheetDoc";
+import { type DocPort, handlePort, plainPort, SheetDoc } from "../../editor/csv/sheetDoc";
 import { t, tn } from "../../i18n";
 import { type Doc, workspace } from "../../workspace/workspace.svelte";
 import Icon from "../icons/Icon.svelte";
@@ -30,6 +30,7 @@ import { SheetController, type SheetOptions } from "./sheet.svelte";
  */
 let {
   handle,
+  big,
   me,
   path,
   readOnly = false,
@@ -37,7 +38,10 @@ let {
   startOffset,
   onshowtext,
 }: {
-  handle: DocHandle<Doc>;
+  /** The document holding the text; absent for a text too big for one (then `big`). */
+  handle?: DocHandle<Doc>;
+  /** A text read from the disk, in no document: the sheet only reads it (ADR 0028). */
+  big?: { text: string } | undefined;
   me: { id: string; name: string };
   path: string;
   readOnly?: boolean;
@@ -61,21 +65,24 @@ let presence: ReturnType<typeof sheetPresence> | undefined;
 // Open: parse (in a worker for big files), then build the sheet over the document.
 $effect(() => {
   const h = handle;
+  const b = big;
   const p = path;
   let alive = true;
   let off: (() => void) | undefined;
-  function start(c: SheetController, doc: DocHandle<Doc>) {
+  function start(c: SheetController, doc: DocHandle<Doc> | undefined) {
     const sheetDoc = c.doc;
     if (startOffset !== undefined) c.placeAtOffset(startOffset);
-    const onChange = ({ patches }: { patches: Parameters<typeof patchWindow>[0] }) =>
-      sheetDoc.receive(patchWindow(patches));
-    doc.on("change", onChange);
-    off = () => doc.off("change", onChange);
-    presence = sheetPresence(doc, me, c, (people) => {
-      workspace.names = Object.fromEntries(people.map((x) => [x.peerId, x.name]));
-      // While someone else has this file open, cells are written in the form that merges safely.
-      c.model.safeQuoting = people.length > 0;
-    });
+    if (doc) {
+      const onChange = ({ patches }: { patches: Parameters<typeof patchWindow>[0] }) =>
+        sheetDoc.receive(patchWindow(patches));
+      doc.on("change", onChange);
+      off = () => doc.off("change", onChange);
+      presence = sheetPresence(doc, me, c, (people) => {
+        workspace.names = Object.fromEntries(people.map((x) => [x.peerId, x.name]));
+        // While someone else has this file open, cells are written in the form that merges safely.
+        c.model.safeQuoting = people.length > 0;
+      });
+    }
     ctrl = c;
   }
   untrack(() => {
@@ -83,7 +90,10 @@ $effect(() => {
     failure = "";
     contradiction = undefined;
     ctrl = undefined;
-    const text = h.doc()?.text ?? "";
+    const text = b ? b.text : (h?.doc()?.text ?? "");
+    const key = b ?? h;
+    if (!key) return;
+    const port: DocPort = b ? plainPort(b.text) : handlePort(h as DocHandle<Doc>);
     const remembered = rememberedDelimiter(workspace.project, p);
     const opening = startDialect(p, text, remembered);
     contradiction = opening.contradiction;
@@ -94,7 +104,7 @@ $effect(() => {
       ...(fixed ? { prefer: fixed } : {}),
     };
     // Coming back from the text view: the same sheet document, so undo spans both views.
-    const kept = sessions.get(h);
+    const kept = sessions.get(key);
     if (kept) {
       kept.doc.rescan();
       start(kept, h);
@@ -108,14 +118,14 @@ $effect(() => {
     }).then(
       (model) => {
         if (!alive) return;
-        const sheetDoc = new SheetDoc(handlePort(h), model, hint);
+        const sheetDoc = new SheetDoc(port, model, hint);
         const made = new SheetController(sheetDoc, {
-          readOnly,
+          readOnly: readOnly || b !== undefined,
           onUndoKey: () => workspace.undoWithKey(),
           onDialect: (d) => rememberDelimiter(workspace.project, p, d.delimiter),
           ...(isLocked ? { isLocked } : {}),
         });
-        sessions.set(h, made);
+        sessions.set(key, made);
         start(made, h);
       },
       (err: unknown) => {
