@@ -49,3 +49,26 @@ export async function openWith(
   await expect(editor(page)).toBeVisible();
   return page;
 }
+
+/**
+ * Checks `condition` over a window of `ms` and fails as soon as it is false: for "nothing happens"
+ * assertions, which no single condition can wait for.
+ */
+export async function holds(what: string, condition: () => boolean, ms: number): Promise<void> {
+  const end = Date.now() + ms;
+  do {
+    expect(condition(), what).toBe(true);
+    await new Promise((r) => setTimeout(r, 50));
+  } while (Date.now() < end);
+}
+
+/** Whether the history Inkwell keeps in a project folder (`.inkwell`) already holds `text`. */
+export function historyHolds(projectDir: string, text: string): boolean {
+  const walk = (dir: string): boolean =>
+    existsSync(dir) &&
+    readdirSync(dir, { withFileTypes: true }).some((entry) => {
+      const path = join(dir, entry.name);
+      return entry.isDirectory() ? walk(path) : readFileSync(path).includes(text);
+    });
+  return walk(join(projectDir, ".inkwell"));
+}

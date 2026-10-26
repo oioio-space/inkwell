@@ -2,7 +2,7 @@ import { next as A } from "@automerge/automerge";
 import type { DocHandle } from "@automerge/automerge-repo";
 import { type Integration, integrate, type Range, type Skipped, undoIntegration } from "./merge";
 import type { Projection, Written } from "./projection";
-import { safeGet, safeSet } from "./safeStorage";
+import { safeGet, safeRemove, safeSet } from "./safeStorage";
 import type { ExternalPolicy } from "./settings.svelte";
 
 type Doc = { text: string };
@@ -168,7 +168,7 @@ export class ExternalSync {
       await this.#o.storage.acknowledge(this.#o.name);
       const projection = this.#o.projection();
       projection?.hold(false);
-      this.#base = undefined;
+      this.#forgetBase();
       this.#o.onNotice(null);
       await projection?.flush(true);
     });
@@ -241,7 +241,7 @@ export class ExternalSync {
     const projection = this.#o.projection();
     projection?.hold(false);
     // The file holds the outside text until Inkwell writes: the point of agreement is gone.
-    this.#base = undefined;
+    this.#forgetBase();
     this.#o.onNotice(null);
     if (!this.#o.manual()) await projection?.flush(true);
   }
@@ -292,6 +292,13 @@ export class ExternalSync {
       }
     }
     return A.getHeads(doc);
+  }
+
+  /** The file no longer agrees with the document: neither this session nor the next may merge from the old point. */
+  #forgetBase(): void {
+    this.#base = undefined;
+    const key = this.#o.persistKey;
+    if (key) safeRemove(key);
   }
 
   #setBase(heads: A.Heads, text: string): void {

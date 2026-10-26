@@ -1,7 +1,7 @@
 import { existsSync, statSync, unlinkSync, writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import type { Page } from "@playwright/test";
-import { docsRoot, mainTypIn, openWith, readDisk } from "./disk";
+import { docsRoot, historyHolds, holds, mainTypIn, openWith, readDisk } from "./disk";
 import { expect, test } from "./fixtures";
 import { clear, docText, editor, open, pair, typeAtEnd } from "./helpers";
 import { ALICE_PORT, ALICE_URL, BOB_PORT, BOB_URL } from "./ports";
@@ -44,7 +44,7 @@ test("SAV-01 automatic saving writes once after the pause, never while typing", 
     // Sixteen keys, 120 ms apart: two seconds of typing, no pause of a second anywhere.
     await page.keyboard.type("abcdefghijklmnop", { delay: 120 });
     await expect.poll(() => readDisk(aliceFile()), { timeout: 5_000 }).toBe("abcdefghijklmnop");
-    await page.waitForTimeout(1_500);
+    await holds("no second write", () => seen.length === 2, 1_500);
   } finally {
     clearInterval(watcher);
   }
@@ -57,8 +57,8 @@ test("SAV-02 SAV-04 saving with Ctrl+S: the file waits, the page says so, and sw
   const page = await openWith(browser, ALICE_URL, { saveMode: "manual" });
   const before = readDisk(aliceFile()) ?? "";
   await typeAtEnd(page, " manuel");
-  await page.waitForTimeout(2_500); // longer than any automatic pause
-  expect(readDisk(aliceFile())).toBe(before);
+  // For longer than any automatic pause, the file keeps what it had.
+  await holds("file untouched", () => readDisk(aliceFile()) === before, 2_500);
   await expect(page.getByTestId("unsaved")).toHaveText("Non enregistré");
   await expect(page.getByTestId("unsaved-dot")).toBeVisible();
   await expect(page).toHaveTitle(/^● /);
@@ -71,8 +71,7 @@ test("SAV-02 SAV-04 saving with Ctrl+S: the file waits, the page says so, and sw
 
   // Unsaved again; choosing "Automatiquement" in the preferences writes it without waiting.
   await typeAtEnd(page, " auto");
-  await page.waitForTimeout(1_500);
-  expect(readDisk(aliceFile())).toBe(`${before} manuel`);
+  await holds("file untouched", () => readDisk(aliceFile()) === `${before} manuel`, 1_500);
   await page.getByRole("button", { name: "Menu principal" }).click();
   await page.getByRole("menuitem", { name: "Préférences" }).click();
   await page.getByRole("radio", { name: "Automatiquement" }).click();
@@ -93,7 +92,9 @@ test("SAV-03 closing with unwritten changes loses nothing, asks nothing, and reo
     void d.dismiss();
   });
   // The store keeps the history a moment after each keystroke (automerge-repo's save debounce).
-  await page.waitForTimeout(600);
+  await expect
+    .poll(() => historyHolds(dirname(aliceFile()), " pas écrit"), { timeout: 5_000 })
+    .toBe(true);
   await page.reload();
   await expect(editor(page)).toBeVisible();
   await expect.poll(() => docText(page)).toBe(`${before} pas écrit`.replace(/\n/g, ""));
@@ -156,8 +157,9 @@ test("EXT-08 a file deleted outside: the text stays and comes back only on Recr�
   expect(await docText(page)).toBe("je reste");
 
   await typeAtEnd(page, "!");
-  await page.waitForTimeout(2_000);
-  expect(existsSync(file)).toBe(false); // typing does not bring it back
+  await expect(page.getByTestId("unsaved")).toBeVisible();
+  // Typing does not bring it back, however long the automatic pause.
+  await holds("file still gone", () => !existsSync(file), 2_000);
   await expect(page.getByTestId("unsaved")).toBeVisible();
 
   await banner.getByRole("button", { name: "Recréer" }).click();
@@ -209,7 +211,14 @@ test("X-16 the same file changed outside on both machines converges, with no wri
   const alice = await open(browser, ALICE_URL);
   const bob = await open(browser, BOB_URL);
   // The pages show what they have at once and load the stored history a moment later.
-  await alice.waitForTimeout(500);
+  for (const [page, file] of [
+    [alice, aliceFile],
+    [bob, bobFile],
+  ] as const) {
+    await expect
+      .poll(async () => (await docText(page)) === (readDisk(file()) ?? "").replace(/\n/g, ""))
+      .toBe(true);
+  }
   await clear(alice);
   await clear(bob);
   await pair(alice, bob);
@@ -229,8 +238,7 @@ test("X-16 the same file changed outside on both machines converges, with no wri
   // Quiet: neither disk is written again.
   const stamp = () => [statSync(aliceFile()).mtimeMs, statSync(bobFile()).mtimeMs];
   const settled = stamp();
-  await alice.waitForTimeout(3_500);
-  expect(stamp()).toEqual(settled);
+  await holds("no disk written", () => stamp().every((t, i) => t === settled[i]), 3_500);
   expect(readDisk(aliceFile())).toBe("L1 l2 L3");
   expect(readDisk(bobFile())).toBe("L1 l2 L3");
 });

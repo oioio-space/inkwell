@@ -163,6 +163,9 @@ function linesTouched(text: string, spans: Range[], points: number[]): number {
   return lines.size;
 }
 
+/** A stretch of the old text and the text that replaces it. */
+type Region = { from: number; to: number; text: string };
+
 /** The lines of `text`, each with its newline (the last one has none if the text does not end with one). */
 const linesOf = (text: string): string[] => text.match(/[^\n]*\n|[^\n]+/g) ?? [];
 
@@ -170,7 +173,7 @@ const linesOf = (text: string): string[] => text.match(/[^\n]*\n|[^\n]+/g) ?? []
  * Line-level changes between two texts: the spans of `a` that `b` replaces, in order, found by a
  * longest common subsequence of lines (one single region past a million line pairs).
  */
-function lineRegions(a: string, b: string): { from: number; to: number; text: string }[] {
+function lineRegions(a: string, b: string): Region[] {
   const la = linesOf(a);
   const lb = linesOf(b);
   let head = 0;
@@ -188,8 +191,8 @@ function lineRegions(a: string, b: string): { from: number; to: number; text: st
   // Pairs of equal lines (indexes from `head`) that stay as they are, ending with a sentinel.
   const same: [number, number][] = [];
   if (n * m <= 1_000_000) {
-    const row = (i: number) => table[i] as Uint32Array;
     const table = Array.from({ length: n + 1 }, () => new Uint32Array(m + 1));
+    const row = (i: number) => table[i] as Uint32Array;
     for (let i = n - 1; i >= 0; i--) {
       for (let j = m - 1; j >= 0; j--) {
         row(i)[j] =
@@ -208,7 +211,7 @@ function lineRegions(a: string, b: string): { from: number; to: number; text: st
 
   const offsets = [0];
   for (const line of la) offsets.push((offsets.at(-1) as number) + line.length);
-  const regions: { from: number; to: number; text: string }[] = [];
+  const regions: Region[] = [];
   let i = 0;
   let j = 0;
   for (const [si, sj] of same) {

@@ -437,6 +437,36 @@ describe("outside changes (EXT-*)", () => {
   });
 });
 
+describe("the saved point of agreement", () => {
+  it("is forgotten when Inkwell's version is kept without writing, so a restart does not merge from it", async () => {
+    const store = new Map<string, string>();
+    vi.stubGlobal("localStorage", {
+      getItem: (k: string) => store.get(k) ?? null,
+      setItem: (k: string, v: string) => void store.set(k, v),
+      removeItem: (k: string) => void store.delete(k),
+    });
+    try {
+      const h = repo.create<Doc>({ text: "one\n" });
+      const sync = new ExternalSync({
+        handle: h,
+        name: "main.typ",
+        storage: new Disk(),
+        projection: () => undefined,
+        policy: () => "keep",
+        manual: () => true, // nothing is written until Ctrl+S
+        onNotice: () => {},
+        persistKey: "inkwell.sync.test",
+      });
+      sync.recordWritten({ heads: A.getHeads(h.doc()), text: "one\n" });
+      expect(store.has("inkwell.sync.test")).toBe(true);
+      await sync.keepOurs();
+      expect(store.has("inkwell.sync.test")).toBe(false);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+});
+
 describe("locked zones (X-15)", () => {
   it("X-15 a change in a locked zone is set aside and told, the rest is integrated", async () => {
     const r = await rig("title\nlocked\nbody\n", {
