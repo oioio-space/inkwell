@@ -357,7 +357,7 @@ export function undoIntegration(handle: DocHandle<Doc>, done: Integration): void
  * and the edit is the finer one of `updateText`, which keeps the typing of others around it.
  */
 function growthPieces(baseText: string, text: string): A.ChangeFn<Doc>[] | undefined {
-  if (text.length - baseText.length <= CHUNK_CHARS) return undefined;
+  if (Math.max(text.length, baseText.length) <= CHUNK_CHARS) return undefined;
   const room = Math.min(baseText.length, text.length);
   let head = 0;
   while (head < room && baseText.charCodeAt(head) === text.charCodeAt(head)) head++;
@@ -373,6 +373,8 @@ function growthPieces(baseText: string, text: string): A.ChangeFn<Doc>[] | undef
   if (head > 0 && high(head - 1)) head--;
   if (tail > 0 && low(text.length - tail)) tail--;
   const remove = baseText.length - head - tail;
+  // The region that changes decides, not the net growth: a rewrite of the same size is as big.
+  if (Math.max(remove, text.length - head - tail) <= CHUNK_CHARS) return undefined;
   let at = head;
   return chunksOf(text.slice(head, text.length - tail)).map((piece, i) => {
     const from = at;

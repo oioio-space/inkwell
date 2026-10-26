@@ -1,16 +1,10 @@
 import { next as A } from "@automerge/automerge";
-// automerge-codemirror 0.2.0 (pinned) exports only its own plugin; the two pieces that turn a
-// peer's patches into editor changes are the same ones it uses. The package has no `exports` map.
-import { applyAmPatchesToCm } from "@automerge/automerge-codemirror/dist/amToCodemirror.js";
-import {
-  isReconcileTx,
-  reconcileAnnotationType,
-} from "@automerge/automerge-codemirror/dist/plugin.js";
 import type { DocHandle } from "@automerge/automerge-repo";
 import { EditorState, type Extension, type Transaction } from "@codemirror/state";
 import { type EditorView, ViewPlugin } from "@codemirror/view";
 import { applyEdits, type Edit } from "../store/chunked";
 import { growthRefused } from "../store/limits";
+import { applyAmPatchesToCm, isReconcileTx, reconcileAnnotationType } from "./amPatches";
 
 export { isReconcileTx, reconcileAnnotationType };
 

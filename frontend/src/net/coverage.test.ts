@@ -185,3 +185,64 @@ describe("Coverage.revoked", () => {
     expect(() => new Coverage().revoked("nobody")).not.toThrow();
   });
 });
+
+describe("Coverage.filter growth cap (ADR 0028)", () => {
+  /** A covered peer message carrying the changes `doc` has over `base`. */
+  function from(cov: Coverage, doc: A.Doc<Doc>, base: A.Doc<Doc>): Uint8Array | undefined {
+    cov.attested("w", "doc", A.getHeads(doc));
+    return cov.filter("doc", "p", message(A.getHeads(doc), newChanges(doc, base)));
+  }
+
+  it("drops a covered change that alone would take the text past the limit, before the Repo", () => {
+    const cov = new Coverage(100);
+    const big = typed(A.from<Doc>({ text: "" }), "x".repeat(150));
+    expect(from(cov, big, A.init())).toBeUndefined();
+    expect(cov.stats.dropped).toBe(1);
+  });
+
+  it("counts what several messages add: the second one that crosses the limit is dropped", () => {
+    const cov = new Coverage(100);
+    const root = A.from<Doc>({ text: "" });
+    const one = typed(root, "x".repeat(60));
+    const two = typed(one, "y".repeat(60));
+    expect(from(cov, one, A.init())).toBeDefined();
+    expect(from(cov, two, one)).toBeUndefined();
+  });
+
+  it("deletions give the room back: net growth is what counts", () => {
+    const cov = new Coverage(100);
+    const root = A.from<Doc>({ text: "" });
+    const one = typed(root, "x".repeat(60));
+    const cut = A.change(one, (d) => A.splice(d, ["text"], 0, 50, ""));
+    const two = typed(cut, "y".repeat(60));
+    expect(from(cov, one, A.init())).toBeDefined();
+    expect(from(cov, cut, one)).toBeDefined();
+    expect(from(cov, two, cut)).toBeDefined();
+  });
+
+  it("drops a whole-document fragment whose text is past the limit", () => {
+    const cov = new Coverage(100);
+    const doc = typed(A.from<Doc>({ text: "" }), "x".repeat(150));
+    cov.attested("w", "doc", A.getHeads(doc));
+    const msg = message(A.getHeads(doc), [A.save(doc)]);
+    expect(cov.filter("doc", "p", msg)).toBeUndefined();
+  });
+
+  it("a change or a document sent again after a reconnect is not counted twice", () => {
+    const cov = new Coverage(100);
+    const one = typed(A.from<Doc>({ text: "" }), "x".repeat(60));
+    expect(from(cov, one, A.init())).toBeDefined();
+    expect(from(cov, one, A.init())).toBeDefined(); // the same change again
+    const msg = message(A.getHeads(one), [A.save(one)]);
+    expect(cov.filter("doc", "p", msg)).toBeDefined();
+    expect(cov.filter("doc", "p", message(A.getHeads(one), [A.save(one)]))).toBeDefined();
+  });
+
+  it("an ordinary change is untouched by the default limit", () => {
+    const { honest } = setup();
+    const cov = new Coverage();
+    cov.attested("w", "doc", A.getHeads(honest));
+    const msg = message(A.getHeads(honest), newChanges(honest, A.init()));
+    expect(cov.filter("doc", "p", msg)).toBe(msg);
+  });
+});

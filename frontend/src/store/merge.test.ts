@@ -101,6 +101,24 @@ describe("integrate (EXT-01..03, 12)", () => {
     expect(done?.lines).toBe(0);
   });
 
+  it("PERF-04 a rewrite of the same size (150 Ki replaced by 150 Ki) is chunked by the region it changes, not by net growth", () => {
+    const old = "a".repeat(150 * 1024);
+    const h = open(`<${old}>`);
+    const base = heads(h);
+    const before = A.getAllChanges(h.doc()).length;
+    const fresh = "b".repeat(150 * 1024);
+    integrate(h, base, `<${fresh}>`);
+    expect(h.doc().text).toBe(`<${fresh}>`);
+    const added = A.getAllChanges(h.doc()).slice(before);
+    expect(added.length).toBeGreaterThanOrEqual(3);
+    for (const c of added) {
+      const inserted = A.decodeChange(c).ops.filter(
+        (op) => (op as { insert?: boolean }).insert,
+      ).length;
+      expect(inserted).toBeLessThanOrEqual(CHUNK_CHARS);
+    }
+  }, 30_000);
+
   it("PERF-04 a file that brings 100 Ki of new text comes in changes of at most 64 Ki, and what was typed meanwhile stays", () => {
     const h = open("head\ntail\n");
     const base = heads(h);

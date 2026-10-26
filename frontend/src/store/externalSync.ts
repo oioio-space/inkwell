@@ -157,6 +157,7 @@ export class ExternalSync {
       await this.#o.storage.acknowledge(this.#o.name);
       const projection = this.#o.projection();
       projection?.hold(false);
+      this.#o.onBig?.(undefined);
       this.#dropLegacy();
       this.#o.onNotice(null);
       await projection?.flush(true);
@@ -205,6 +206,18 @@ export class ExternalSync {
         this.#o.onNotice({ kind: "deleted", name });
         return;
       }
+      if (tooBigToEdit(text.length)) {
+        // Decided before the policy and before Automerge sees a byte: whatever "ask" or "keep"
+        // says, the file stays as it is on the disk and Inkwell does not write over it until the
+        // person chooses to ("Garder la version d'Inkwell").
+        projection?.hold(true);
+        this.#o.onBig?.(text);
+        if (this.#problem) {
+          this.#problem = false;
+          this.#o.onNotice(null);
+        }
+        return;
+      }
       projection?.hold(false);
       if (this.#problem) {
         this.#problem = false; // the file is back, or is text again
@@ -219,12 +232,6 @@ export class ExternalSync {
         await this.#keep();
         return;
       }
-      if (tooBigToEdit(text.length)) {
-        // Decided before Automerge sees a byte; the file stays as it is on the disk.
-        projection?.hold(true);
-        this.#o.onBig?.(text);
-        return;
-      }
       this.#o.onBig?.(undefined);
       await this.#merge(text);
       const again = await storage.readProjection(name).catch(() => text);
@@ -237,6 +244,7 @@ export class ExternalSync {
     await this.#o.storage.acknowledge(this.#o.name);
     const projection = this.#o.projection();
     projection?.hold(false);
+    this.#o.onBig?.(undefined); // the person chose the document over a file too big to read in
     // The file holds the outside text until Inkwell writes: the point of agreement is gone (the
     // acknowledgement above recorded none).
     this.#dropLegacy();

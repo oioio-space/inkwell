@@ -253,14 +253,39 @@ describe("outside changes (EXT-*)", () => {
     expect(r.disk.text).toBe(huge);
   });
 
-  it("PERF-02 the same file under 'ask' or 'keep' keeps the person's choice; only an integration is gated", async () => {
+  for (const policy of ["ask", "keep", "import"] as const) {
+    it(`PERF-02 under '${policy}', a huge file is never written over, however many times Go says it changed and whoever types`, async () => {
+      const r = await rig("small\n", { policy });
+      const huge = "ligne\n".repeat(MAX_EDITABLE_CHARS / 6 + 10);
+      r.disk.writes.length = 0;
+      await r.outside(huge);
+      await r.outside(huge); // a later notify must not drop the protection
+      await r.outside(huge);
+      expect(r.bigs.at(-1)).toBe(huge);
+      expect(r.h.doc().text).toBe("small\n");
+      r.type(5, "x"); // a peer's change or a keystroke: the autosave must hold off
+      await vi.advanceTimersByTimeAsync(10_000);
+      expect(r.disk.writes).toEqual([]);
+      expect(r.disk.text).toBe(huge);
+    });
+  }
+
+  it("PERF-02 'keep Inkwell's version' on a huge file leaves the big view and writes the document", async () => {
     const r = await rig("small\n", { policy: "ask" });
     await r.outside("ligne\n".repeat(MAX_EDITABLE_CHARS / 6 + 10));
-    expect(r.last()).toEqual({ kind: "ask", name: "main.typ" });
-    expect(r.bigs).toEqual([]);
-    await r.sync.integrateAsked();
-    expect(r.bigs).toHaveLength(1);
-    expect(r.h.doc().text).toBe("small\n");
+    await r.sync.keepOurs();
+    expect(r.bigs.at(-1)).toBeUndefined();
+    await vi.advanceTimersByTimeAsync(2_000);
+    expect(r.disk.text).toBe("small\n");
+  });
+
+  it("PERF-02 'recreate' after the huge file is deleted leaves the big view", async () => {
+    const r = await rig("small\n");
+    await r.outside("ligne\n".repeat(MAX_EDITABLE_CHARS / 6 + 10));
+    await r.outside(undefined);
+    expect(r.bigs.at(-1)).toBeUndefined();
+    await r.sync.recreate();
+    expect(r.bigs.at(-1)).toBeUndefined();
   });
 
   it("PERF-02 once the file is small again it is integrated as usual and the big view goes away", async () => {
