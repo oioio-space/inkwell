@@ -2,12 +2,15 @@ package app
 
 import (
 	"cmp"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"os"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/oioio-space/inkwell/internal/project"
 	"github.com/oioio-space/inkwell/internal/store"
@@ -17,6 +20,7 @@ import (
 const (
 	trustDir = "trust"
 	opExt    = ".op"
+	rcvExt   = ".rcv" // when this device received the op of the same name.
 	tmpExt   = ".tmp"
 )
 
@@ -70,16 +74,9 @@ func (s *opStore) load(signer trust.Signer, title string) (*trust.List, error) {
 // load picks does not depend on the file system. Temporary files left by an
 // interrupted save are removed.
 func (s *opStore) readAll() ([]trust.Op, error) {
-	d, err := s.root.Open(".")
+	entries, err := s.entries()
 	if err != nil {
-		return nil, fmt.Errorf("reading trust ops: %w", err)
-	}
-	entries, err := d.ReadDir(-1)
-	if cerr := d.Close(); err == nil {
-		err = cerr
-	}
-	if err != nil {
-		return nil, fmt.Errorf("reading trust ops: %w", err)
+		return nil, err
 	}
 	var ops []trust.Op
 	for _, e := range entries {
@@ -99,6 +96,15 @@ func (s *opStore) readAll() ([]trust.Op, error) {
 	}
 	slices.SortFunc(ops, func(a, b trust.Op) int { return cmp.Compare(a.Hash().String(), b.Hash().String()) })
 	return ops, nil
+}
+
+// entries lists the trust directory.
+func (s *opStore) entries() ([]fs.DirEntry, error) {
+	entries, err := fs.ReadDir(s.root.FS(), ".")
+	if err != nil {
+		return nil, fmt.Errorf("listing trust ops: %w", err)
+	}
+	return entries, nil
 }
 
 func (s *opStore) read(name string) (trust.Op, error) {
@@ -137,19 +143,12 @@ func (s *opStore) replace(ops []trust.Op) error {
 
 // clear removes every saved op.
 func (s *opStore) clear() error {
-	d, err := s.root.Open(".")
+	entries, err := s.entries()
 	if err != nil {
-		return fmt.Errorf("listing trust ops: %w", err)
-	}
-	entries, err := d.ReadDir(-1)
-	if cerr := d.Close(); err == nil {
-		err = cerr
-	}
-	if err != nil {
-		return fmt.Errorf("listing trust ops: %w", err)
+		return err
 	}
 	for _, e := range entries {
-		if e.IsDir() || (!strings.HasSuffix(e.Name(), opExt) && !strings.HasSuffix(e.Name(), tmpExt)) {
+		if e.IsDir() || (!strings.HasSuffix(e.Name(), opExt) && !strings.HasSuffix(e.Name(), rcvExt) && !strings.HasSuffix(e.Name(), tmpExt)) {
 			continue
 		}
 		if err := s.root.Remove(e.Name()); err != nil {
@@ -159,12 +158,32 @@ func (s *opStore) clear() error {
 	return nil
 }
 
-// save writes op, which is then found again by the next load.
+// save writes op, which is then found again by the next load, and notes when
+// it was received if that was not noted already.
 func (s *opStore) save(op trust.Op) error {
 	if err := store.WriteAtomic(s.root, op.Hash().String()+opExt, trust.Encode(op), 0o600); err != nil {
 		return fmt.Errorf("saving trust op: %w", err)
 	}
+	name := op.Hash().String() + rcvExt
+	if _, err := s.root.Stat(name); err == nil {
+		return nil
+	}
+	stamp := binary.BigEndian.AppendUint64(nil, uint64(time.Now().UnixNano())) // #nosec G115 -- the clock is after 1970.
+	if err := store.WriteAtomic(s.root, name, stamp, 0o600); err != nil {
+		return fmt.Errorf("noting the arrival of a trust op: %w", err)
+	}
 	return nil
+}
+
+// receivedAt returns when this device received the op with hash h: the time
+// noted when it was saved, which ops do not carry (they have no clock). It is
+// the zero time if the op was not saved here.
+func (s *opStore) receivedAt(h trust.Hash) time.Time {
+	b, err := s.root.ReadFile(h.String() + rcvExt)
+	if err != nil || len(b) != 8 {
+		return time.Time{}
+	}
+	return time.Unix(0, int64(binary.BigEndian.Uint64(b))) // #nosec G115 -- written from an int64.
 }
 
 func (s *opStore) close() error {

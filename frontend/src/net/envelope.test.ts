@@ -1,10 +1,14 @@
 import { describe, expect, it } from "vitest";
 import vectors from "../../../internal/bridge/testdata/envelopes.json";
+import invalid from "../../../internal/bridge/testdata/invalid.json";
 import {
   decodeEnvelope,
   decodeHeads,
+  decodeRoles,
+  decodeSuspended,
   encodeEnvelope,
   encodeHeads,
+  encodeRoles,
   Kind,
   MalformedEnvelope,
 } from "./envelope";
@@ -25,6 +29,14 @@ describe("envelope golden vectors (shared with Go)", () => {
       expect(back.kind).toBe(env.kind);
       expect(back.peer).toBe(v.peer);
       expect(hex(back.payload)).toBe(v.payloadHex);
+    });
+  }
+});
+
+describe("invalid vectors (shared with Go)", () => {
+  for (const v of invalid) {
+    it(`rejects ${v.name}`, () => {
+      expect(() => decodeEnvelope(unhex(v.wireHex))).toThrow(MalformedEnvelope);
     });
   }
 });
@@ -66,11 +78,69 @@ describe("heads payload", () => {
   }
 });
 
+describe("roles payload", () => {
+  const members = [
+    { peer: "zz-9~", role: "admin", suspended: false },
+    { peer: "a", role: "writer", suspended: true },
+  ] as const;
+  it("round-trips and matches the Go vector", () => {
+    const v = vectors.find((x) => x.name === "roles two members");
+    expect(hex(encodeRoles([...members]))).toBe(v?.payloadHex);
+    expect(decodeRoles(unhex(v?.payloadHex ?? ""))).toEqual(members);
+  });
+  it("decodes the empty list", () => {
+    expect(decodeRoles(unhex("0000"))).toEqual([]);
+  });
+  const bad: [string, () => unknown][] = [
+    ["empty", () => decodeRoles(unhex(""))],
+    ["truncated count", () => decodeRoles(unhex("00"))],
+    ["count without entries", () => decodeRoles(unhex("0001"))],
+    ["trailing byte", () => decodeRoles(unhex("000007"))],
+    ["role 0", () => decodeRoles(unhex("000101700000"))],
+    ["role 4", () => decodeRoles(unhex("000101700400"))],
+    ["unknown flag", () => decodeRoles(unhex("000101700202"))],
+    ["empty peer", () => decodeRoles(unhex("00010002" + "00"))],
+    ["space in peer", () => decodeRoles(unhex("0001012002" + "00"))],
+    ["truncated peer", () => decodeRoles(unhex("0001057002" + "00"))],
+    ["more than 1024 members", () => decodeRoles(unhex("0401"))],
+    ["encode: bad peer", () => encodeRoles([{ peer: "a b", role: "reader", suspended: false }])],
+    [
+      "encode: too many",
+      () => encodeRoles(Array(1025).fill({ peer: "a", role: "reader", suspended: false })),
+    ],
+  ];
+  for (const [name, fn] of bad) {
+    it(`rejects ${name}`, () => {
+      expect(fn).toThrow(MalformedEnvelope);
+    });
+  }
+});
+
+describe("suspended payload", () => {
+  it("reads suspended and resumed", () => {
+    expect(decodeSuspended(unhex("01"))).toBe(true);
+    expect(decodeSuspended(unhex("00"))).toBe(false);
+  });
+  for (const [name, payload] of [
+    ["empty", ""],
+    ["2", "02"],
+    ["two bytes", "0101"],
+  ] as const) {
+    it(`rejects ${name}`, () => {
+      expect(() => decodeSuspended(unhex(payload))).toThrow(MalformedEnvelope);
+    });
+  }
+});
+
 describe("decodeEnvelope rejects", () => {
   const cases: [string, string][] = [
     ["empty", ""],
     ["unknown version", "0203016161"],
-    ["unknown kind", "0108016161"],
+    ["unknown kind", "010a016161"],
+    ["roles without payload", "0108016161"],
+    ["roles with a trailing byte", "0108016161000007"],
+    ["suspended without payload", "0109016161"],
+    ["suspended with 2", "010901616102"],
     ["attest without payload", "0104016161"],
     ["attested with a short head", "0105016100016400"],
     ["payload on Revoked", "010601616162"],

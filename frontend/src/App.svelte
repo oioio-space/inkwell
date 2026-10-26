@@ -6,6 +6,7 @@ import { settings } from "./store/settings.svelte";
 import Editor from "./ui/Editor.svelte";
 import ExternalChangeToast from "./ui/ExternalChangeToast.svelte";
 import { session } from "./ui/editorSession.svelte";
+import ProjectionBanner from "./ui/ProjectionBanner.svelte";
 import Preferences from "./ui/prefs/Preferences.svelte";
 import SealedBanner from "./ui/SealedBanner.svelte";
 import ShareDialog from "./ui/ShareDialog.svelte";
@@ -111,6 +112,7 @@ onMount(() => {
         </button>
       </div>
     {/if}
+    <ProjectionBanner />
     <main>
       {#if workspace.handle}
         {#key workspace.handle.url}

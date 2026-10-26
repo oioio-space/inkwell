@@ -18,7 +18,12 @@ export function sheetPresence(
   me: { name: string },
   sheet: SheetController,
   onPeople: (people: Person[]) => void = () => {},
-): { rename: (name: string) => void; broadcast: () => void; stop: () => void } {
+): {
+  rename: (name: string) => void;
+  broadcast: () => void;
+  refresh: () => void;
+  stop: () => void;
+} {
   const presence = new Presence<CursorState, Doc>({ handle });
   presence.start({ initialState: { name: me.name } });
 
@@ -87,6 +92,7 @@ export function sheetPresence(
   return {
     rename: (name) => presence.broadcast("name", name),
     broadcast,
+    refresh,
     stop: () => {
       window.removeEventListener("pagehide", bye);
       presence.stop();

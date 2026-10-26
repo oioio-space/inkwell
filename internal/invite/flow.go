@@ -7,6 +7,7 @@ import (
 	"crypto/subtle"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 	"sync"
@@ -35,7 +36,6 @@ var (
 	// ErrNoAddress is returned when the host has no address to put in a ticket
 	// yet (for instance a relay-only device before its relay reservation).
 	ErrNoAddress = errors.New("invite: this device has no address yet, try again in a moment (is the relay reachable?)")
-	// ErrTooMany is returned when too many tickets are outstanding.
 	// ErrTooMany is returned when too many invitations are open at once.
 	ErrTooMany = errors.New("invite: too many open invitations")
 	// ErrUnknownPerson is returned for a ticket meant for a person who is not a member.
@@ -146,7 +146,7 @@ func (h *Host) Invite(role trust.Role, person *trust.Hash) (Ticket, error) {
 	if h.cfg.List.Role(h.cfg.SelfKey) != trust.RoleAdmin {
 		return Ticket{}, fmt.Errorf("invite: %w", trust.ErrNotAdmin)
 	}
-	if role < trust.RoleReader || role > trust.RoleAdmin {
+	if !role.Valid() {
 		return Ticket{}, fmt.Errorf("invite: role %d: %w", role, ErrMalformed)
 	}
 	if person != nil && !slices.ContainsFunc(h.cfg.List.Members(), func(m trust.Member) bool { return m.Person == *person }) {
@@ -201,9 +201,7 @@ func (h *Host) SetVisible(on bool) {
 		h.visible = h.cfg.Now().Add(VisibleFor)
 	} else {
 		h.visible = time.Time{}
-		for _, a := range h.asks {
-			declined = append(declined, a)
-		}
+		declined = slices.Collect(maps.Values(h.asks))
 	}
 	h.mu.Unlock()
 	for _, a := range declined {
@@ -244,7 +242,7 @@ func (h *Host) Pending() []Pending {
 
 // Answer accepts the request id with role, or refuses it.
 func (h *Host) Answer(id int, accept bool, role trust.Role) error {
-	if accept && (role < trust.RoleReader || role > trust.RoleAdmin) {
+	if accept && !role.Valid() {
 		return fmt.Errorf("invite: role %d: %w", role, ErrMalformed)
 	}
 	h.mu.Lock()
@@ -301,7 +299,7 @@ func (h *Host) Serve(ctx context.Context, from transport.PeerID, req []byte) ([]
 		if !h.Visible() {
 			return nil, false
 		}
-		return Reply{Kind: ReplyHello, Machine: h.cfg.Machine, Title: h.genesis().Name}.Encode(), true
+		return Reply{Kind: ReplyHello, Machine: h.cfg.Machine, Title: genesis(h.cfg.List.Since(nil)).Name}.Encode(), true
 	case KindAsk:
 		if !h.Visible() {
 			return nil, false
@@ -420,23 +418,23 @@ func (h *Host) admit(key ed25519.PublicKey, role trust.Role, person *trust.Hash,
 			return refuse(ReasonFailed)
 		}
 	}
-	g := h.genesis()
-	b := Reply{Kind: ReplyWelcome, RootURL: g.RootURL, Ops: h.cfg.List.Since(nil)}.Encode()
+	ops := h.cfg.List.Since(nil)
+	b := Reply{Kind: ReplyWelcome, RootURL: genesis(ops).RootURL, Ops: ops}.Encode()
 	if len(b) > MaxReply {
 		return refuse(ReasonTooLarge)
 	}
 	return b
 }
 
-// genesis returns the genesis op of the project.
-func (h *Host) genesis() trust.Op {
-	for _, op := range h.cfg.List.Since(nil) {
-		if op.Kind == trust.OpGenesis {
-			return op
-		}
+// genesis returns the genesis op among ops, or the zero op if there is none.
+func genesis(ops []trust.Op) trust.Op {
+	if i := slices.IndexFunc(ops, isGenesis); i >= 0 {
+		return ops[i]
 	}
 	return trust.Op{}
 }
+
+func isGenesis(op trust.Op) bool { return op.Kind == trust.OpGenesis }
 
 // Lobby is how a would-be member talks to a host it is connected to; it is
 // implemented by p2p.Node.
@@ -536,7 +534,7 @@ func (j Joiner) verify(rep Reply, host transport.PeerID, project *trust.ProjectI
 	if err != nil {
 		return nil, fmt.Errorf("invite: host key: %w", err)
 	}
-	i := slices.IndexFunc(rep.Ops, func(op trust.Op) bool { return op.Kind == trust.OpGenesis })
+	i := slices.IndexFunc(rep.Ops, isGenesis)
 	if i < 0 {
 		return nil, fmt.Errorf("%w: no genesis", ErrBadProject)
 	}

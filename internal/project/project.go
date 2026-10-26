@@ -29,6 +29,7 @@ import (
 	"io"
 	"io/fs"
 	"os"
+	"path"
 	"strings"
 	"sync"
 	"unicode"
@@ -44,7 +45,7 @@ const (
 
 	inkwellDir      = ".inkwell"
 	manifestFile    = "project.json"
-	maxManifest     = 1 << 20
+	maxManifest     = 32 << 20 // reading project.json as an older version wrote it, with its owned files
 	maxFolderRunes  = 80
 	maxCollisions   = 1000
 	unsafeFolderRun = `/\:*?"<>|`
@@ -73,9 +74,14 @@ type Meta struct {
 
 // manifest is the content of project.json.
 type manifest struct {
-	// Files maps each owned file to the hex SHA-256 of what Inkwell last
-	// wrote there; empty if it wrote nothing yet.
-	Files map[string]string `json:"files"`
+	// Files and Tree are what project.json held before the owned files had
+	// records of their own (see ownedRec). They are read to migrate an old
+	// project, and never written. In memory they map each owned file to the
+	// hex SHA-256 of what Inkwell last wrote there (empty if it wrote nothing
+	// yet), and each file of the last tree applied to what identifies its
+	// content.
+	Files map[string]string `json:"files,omitzero"`
+	Tree  map[string]string `json:"tree,omitzero"`
 	Meta
 }
 
@@ -90,6 +96,13 @@ type Project struct {
 	mu       sync.Mutex
 	m        manifest
 	notified map[string]string // file -> hash already reported as external
+	// treeChanged wakes [Project.Watch] when the owned files changed.
+	treeChanged chan struct{}
+	// owned holds one record per owned file (see ownedRec); claimed is the
+	// part of them the user brought in.
+	records   *store.KV
+	ownedRoot *os.Root
+	claimed   map[string]bool
 }
 
 // Create makes a new project folder named after title (made unique and safe
@@ -109,10 +122,11 @@ func Create(base *os.Root, title, rootURL string) (*Project, error) {
 	if err != nil {
 		return nil, fmt.Errorf("project: open %s: %w", dir, err)
 	}
-	p := &Project{dir: dir, root: root, notified: map[string]string{}}
+	p := &Project{dir: dir, root: root, notified: map[string]string{}, treeChanged: make(chan struct{}, 1), claimed: map[string]bool{}}
 	p.m = manifest{
 		Meta:  Meta{ID: rand.Text(), Title: title, RootURL: rootURL},
 		Files: map[string]string{MainFile: ""},
+		Tree:  map[string]string{},
 	}
 	if err := p.initInkwell(true); err != nil {
 		_ = root.Close()
@@ -127,7 +141,7 @@ func Open(base *os.Root, dir string) (*Project, error) {
 	if err != nil {
 		return nil, fmt.Errorf("project: open %s: %w", dir, err)
 	}
-	p := &Project{dir: dir, root: root, notified: map[string]string{}}
+	p := &Project{dir: dir, root: root, notified: map[string]string{}, treeChanged: make(chan struct{}, 1), claimed: map[string]bool{}}
 	if err := p.initInkwell(false); err != nil {
 		_ = root.Close()
 		return nil, err
@@ -148,38 +162,60 @@ func (p *Project) initInkwell(create bool) error {
 		return fmt.Errorf("project: open %s: %w", inkwellDir, err)
 	}
 	p.inkwell = ink
+	var legacyFiles, legacyTree map[string]string
 	if create {
 		err = p.saveLocked()
 	} else {
-		err = p.load()
+		legacyFiles, legacyTree, err = p.load()
 	}
 	if err == nil {
 		p.KV, err = store.Open(ink)
 	}
+	if err == nil {
+		err = p.openOwned()
+	}
+	switch {
+	case err != nil:
+	case create:
+		err = p.saveOwned(MainFile)
+	default:
+		if err = p.loadOwned(); err == nil {
+			err = p.migrateLegacy(legacyFiles, legacyTree)
+		}
+	}
 	if err != nil {
+		if p.ownedRoot != nil {
+			_ = p.ownedRoot.Close()
+		}
 		_ = ink.Close()
 		return err
 	}
 	return nil
 }
 
-func (p *Project) load() error {
+// load reads project.json and returns the owned files it still holds, from
+// before they had records of their own.
+func (p *Project) load() (files, tree map[string]string, err error) {
 	data, err := readLimited(p.inkwell, manifestFile, maxManifest)
 	if err != nil {
-		return fmt.Errorf("project: read %s: %w", manifestFile, err)
+		return nil, nil, fmt.Errorf("project: read %s: %w", manifestFile, err)
 	}
 	if err := json.Unmarshal(data, &p.m); err != nil {
-		return fmt.Errorf("project: decode %s: %w", manifestFile, err)
+		return nil, nil, fmt.Errorf("project: decode %s: %w", manifestFile, err)
 	}
-	if p.m.ID == "" || p.m.Files == nil {
-		return fmt.Errorf("project: %s is incomplete", manifestFile)
+	if p.m.ID == "" {
+		return nil, nil, fmt.Errorf("project: %s is incomplete", manifestFile)
 	}
-	return nil
+	files, tree = p.m.Files, p.m.Tree
+	p.m.Files, p.m.Tree = map[string]string{}, map[string]string{}
+	return files, tree, nil
 }
 
 // saveLocked writes project.json; the caller holds p.mu or owns p exclusively.
 func (p *Project) saveLocked() error {
-	data, err := json.MarshalIndent(p.m, "", "  ")
+	m := p.m
+	m.Files, m.Tree = nil, nil // they have records of their own
+	data, err := json.MarshalIndent(m, "", "  ")
 	if err != nil {
 		return fmt.Errorf("project: encode %s: %w", manifestFile, err)
 	}
@@ -263,11 +299,16 @@ func (p *Project) OpenDir(name string) (*os.Root, error) {
 
 // Close releases the project folder. Stop [Project.Watch] first.
 func (p *Project) Close() error {
-	return errors.Join(p.inkwell.Close(), p.root.Close())
+	return errors.Join(p.ownedRoot.Close(), p.inkwell.Close(), p.root.Close())
 }
 
-// owned returns the recorded hash of rel, or ErrNotOwned.
+// owned returns the recorded hash of rel, or ErrNotOwned. A path that is not
+// a valid project path is refused before anything else, so that no hostile
+// name ever reaches the disk.
 func (p *Project) owned(rel string) (string, error) {
+	if err := ValidatePath(rel); err != nil {
+		return "", fmt.Errorf("%w: %w", ErrNotOwned, err)
+	}
 	h, ok := p.m.Files[rel]
 	if !ok {
 		return "", fmt.Errorf("%w: %q", ErrNotOwned, rel)
@@ -295,6 +336,11 @@ func (p *Project) ReadText(rel string) (Text, error) {
 	defer p.mu.Unlock()
 	if _, err := p.owned(rel); err != nil {
 		return Text{}, err
+	}
+	if exists, err := p.regular(rel); err != nil {
+		return Text{}, err
+	} else if !exists {
+		return Text{}, fmt.Errorf("project: %s: %w", rel, fs.ErrNotExist)
 	}
 	raw, err := readLimited(p.root, rel, store.MaxValue)
 	if err != nil {
@@ -335,6 +381,12 @@ func (p *Project) WriteProjection(rel string, data []byte) error {
 	}
 	format.Body = string(data)
 	out := Encode(format)
+	if exists && hashOf(out) == recorded {
+		return nil // already what the file holds: no rewrite, so no window to clobber a concurrent edit
+	}
+	if err := p.mkdir(path.Dir(rel)); err != nil {
+		return err
+	}
 	if err := store.WriteAtomic(p.root, rel, out, 0o600); err != nil {
 		return fmt.Errorf("project: write %s: %w", rel, err)
 	}
@@ -363,17 +415,7 @@ func (p *Project) Acknowledge(rel string) error {
 func (p *Project) record(rel, hash string) error {
 	p.m.Files[rel] = hash
 	delete(p.notified, rel)
-	return p.saveLocked()
-}
-
-// diskHash returns the hex SHA-256 of rel on disk; exists is false (and the
-// hash empty) when the file is absent. The caller holds p.mu.
-func (p *Project) diskHash(rel string) (hash string, exists bool, err error) {
-	data, exists, err := p.readDisk(rel)
-	if err != nil || !exists {
-		return "", false, err
-	}
-	return hashOf(data), true, nil
+	return p.saveOwned(rel)
 }
 
 // emptyHash is the hash of an empty file.
@@ -382,6 +424,9 @@ var emptyHash = hashOf(nil)
 // readDisk returns the bytes of rel on disk; exists is false when the file is
 // absent. The caller holds p.mu.
 func (p *Project) readDisk(rel string) (data []byte, exists bool, err error) {
+	if exists, err = p.regular(rel); err != nil || !exists {
+		return nil, false, err
+	}
 	data, err = readLimited(p.root, rel, store.MaxValue)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, false, nil

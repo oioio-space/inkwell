@@ -22,10 +22,7 @@ $effect(() => {
   if (!open && dialog?.open) dialog.close();
 });
 
-const MODES: [SaveMode, "prefs.save.auto" | "prefs.save.manual"][] = [
-  ["auto", "prefs.save.auto"],
-  ["manual", "prefs.save.manual"],
-];
+const MODES: SaveMode[] = ["auto", "manual"];
 const POLICIES: ExternalPolicy[] = ["ask", "import", "keep"];
 
 function onChange(e: Event, set: (value: string) => void) {
@@ -53,14 +50,14 @@ function onChange(e: Event, set: (value: string) => void) {
     <div class="row">
       <span id="save-mode">{t("prefs.save.mode")}</span>
       <div class="tg" role="radiogroup" aria-labelledby="save-mode">
-        {#each MODES as [mode, label] (mode)}
+        {#each MODES as mode (mode)}
           <button
             type="button"
             role="radio"
             aria-checked={settings.saveMode === mode}
             onclick={() => settings.setSaveMode(mode)}
           >
-            {t(label)}
+            {t(`prefs.save.${mode}`)}
           </button>
         {/each}
       </div>

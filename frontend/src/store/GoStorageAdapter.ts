@@ -34,6 +34,14 @@ export class NotTextError extends StoreError {
   }
 }
 
+/** A write refused because the project file was edited outside Inkwell and not yet acknowledged. */
+export class ExternalEditError extends StoreError {
+  override name = "ExternalEditError";
+  constructor() {
+    super("file edited outside Inkwell");
+  }
+}
+
 interface Pending {
   resolve: (r: Response) => void;
   reject: (e: Error) => void;
@@ -221,6 +229,7 @@ function failure(r: Response): StoreError {
   if (r.status === Status.InvalidText) {
     return new NotTextError("invalid-utf8", decodeInvalidLine(r.payload));
   }
+  if (r.status === Status.EditedOutside) return new ExternalEditError();
   if (r.status === Status.Error) return new StoreError(textDecoder.decode(r.payload));
   return new StoreError(`unexpected status ${r.status}`);
 }

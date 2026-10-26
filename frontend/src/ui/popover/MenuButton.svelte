@@ -73,7 +73,9 @@ $effect(() => {
   const left = align === "start" ? host.left : host.right - box.width;
   const right = left + box.width;
   const over = right - (window.innerWidth - margin);
-  shift = over > 0 ? over : left < margin ? left - margin : 0;
+  if (over > 0) shift = over;
+  else if (left < margin) shift = left - margin;
+  else shift = 0;
   maxHeight = Math.max(
     160,
     up ? host.top - margin - 16 : window.innerHeight - host.bottom - margin - 16,
@@ -135,7 +137,7 @@ function outside(e: PointerEvent) {
     type="button"
     class={["fb", "lbl", triggerClass]}
     class:on={open}
-    aria-haspopup={role === "menu" ? "menu" : "dialog"}
+    aria-haspopup={role}
     aria-expanded={open}
     aria-label={name}
     {disabled}

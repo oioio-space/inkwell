@@ -15,6 +15,16 @@ export interface ProjectionOptions {
    * projection keeps going and writes again at the next change or {@link Projection.flush}.
    */
   onError?: (err: unknown) => void;
+  /** Called after each successful write, so a failure shown to the person can be taken back. */
+  onWritten?: () => void;
+  /**
+   * Whether a failed write is worth trying again by itself (a disk that was full, a file that was
+   * locked) rather than waiting for the next change. Default: yes. Not for a file edited
+   * outside, which stays refused until the person decides.
+   */
+  retryable?: (err: unknown) => boolean;
+  /** Wait before trying a failed write again. */
+  retryMs?: number;
 }
 
 export interface Projection {
@@ -26,6 +36,9 @@ export interface Projection {
   /** Stops following the document. */
   stop(): void;
 }
+
+/** How long a failed write waits before it is tried again. */
+export const PROJECTION_RETRY_MS = 5000;
 
 /** What the debounce waits after the last keystroke (UX: the file follows the text, never leads). */
 export const PROJECTION_DELAY_MS = 300;
@@ -46,6 +59,7 @@ export function startProjection(
   let running: Promise<void> | undefined;
   let again = false;
   let last: string | undefined;
+  const retryMs = opts.retryMs ?? PROJECTION_RETRY_MS;
 
   // Runs until no flush is pending. It yields first, so `running` is set before it can end.
   const drain = async (): Promise<void> => {
@@ -58,8 +72,13 @@ export function startProjection(
         try {
           await sink.writeProjection(name, text);
           last = text;
+          opts.onWritten?.();
         } catch (err) {
           opts.onError?.(err);
+          if (opts.retryable?.(err) ?? true) {
+            clearTimeout(timer);
+            timer = setTimeout(() => void flush(), retryMs);
+          }
           return;
         }
       }

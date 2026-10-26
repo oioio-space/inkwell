@@ -1,4 +1,4 @@
-import type { Lang } from "./lang";
+import type { Lang } from "../format/lang";
 
 /**
  * Word counting. Markup is stripped per language, then words are counted: a token is a

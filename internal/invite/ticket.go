@@ -173,7 +173,7 @@ func decodeTicket(raw []byte) (Ticket, error) {
 		return Ticket{}, fmt.Errorf("%w: expiry out of range", ErrMalformed)
 	}
 	t.Expires = time.Unix(int64(exp), 0).UTC() // #nosec G115 -- bounded above.
-	if t.Role < trust.RoleReader || t.Role > trust.RoleAdmin {
+	if !t.Role.Valid() {
 		return Ticket{}, fmt.Errorf("%w: role", ErrMalformed)
 	}
 	if t.Secret == [16]byte{} {

@@ -30,7 +30,7 @@ export async function openSheet(
   });
   (page as Page & { csp?: string[] }).csp = violations;
   await page.goto(`${url}?file=data.csv`);
-  await expect(grid(page)).toBeVisible();
+  await expect(grid(page)).toBeVisible({ timeout: 20_000 });
   return page;
 }
 

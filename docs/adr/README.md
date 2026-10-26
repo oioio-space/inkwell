@@ -26,4 +26,4 @@ connaître la raison — pas pour le reste. Modèle : [`template.md`](template.m
 | [0021](0021-suspension.md) | Suspension : déconnecter et laisser revenir (op signées) | proposée |
 | [0022](0022-zones-verrouillees.md) | Zones verrouillées : verrous dans le document, admission déterministe | proposée |
 | [0023](0023-projet-multi-fichiers-blobs.md) | Projet multi-fichiers : index à nœuds stables, blobs BLAKE3/Bao | proposée |
-| [0024](0024-grille-csv.md) | Tableur CSV/TSV : grille Svelte maison virtualisée, texte Automerge pour seule source | proposée |
+| [0026](0026-grille-csv.md) | Tableur CSV/TSV : grille Svelte maison virtualisée, texte Automerge pour seule source | proposée |

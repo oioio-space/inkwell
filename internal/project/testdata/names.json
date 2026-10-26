@@ -1,0 +1,663 @@
+{
+ "comment": "Golden vectors of ValidateName, ValidatePath and CollisionKey (ADR 0023), shared with the TypeScript validator. input is a JSON string; inputHex gives the raw UTF-8 bytes instead, for input JSON cannot carry. reason is the stable code of the NameError and is absent when valid.",
+ "names": [
+  {
+   "name": "plain",
+   "input": "chapter1.typ",
+   "valid": true
+  },
+  {
+   "name": "accents and a space inside",
+   "input": "Résumé final.md",
+   "valid": true
+  },
+  {
+   "name": "leading dot",
+   "input": ".gitignore",
+   "valid": true
+  },
+  {
+   "name": "leading space",
+   "input": " a",
+   "valid": true
+  },
+  {
+   "name": "reserved at the root of a path only, so valid as a name",
+   "input": ".inkwell",
+   "valid": true
+  },
+  {
+   "name": "device name as a prefix of a longer stem",
+   "input": "console.txt",
+   "valid": true
+  },
+  {
+   "name": "COM10 is not a device",
+   "input": "COM10",
+   "valid": true
+  },
+  {
+   "name": "superscript four is not a device",
+   "input": "COM⁴",
+   "valid": true
+  },
+  {
+   "name": "255 bytes",
+   "input": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "valid": true
+  },
+  {
+   "name": "255 bytes of multi-byte characters",
+   "input": "éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééa",
+   "valid": true
+  },
+  {
+   "name": "empty",
+   "input": "",
+   "valid": false,
+   "reason": "empty"
+  },
+  {
+   "name": "256 bytes",
+   "input": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "valid": false,
+   "reason": "too_long"
+  },
+  {
+   "name": "256 bytes of multi-byte characters",
+   "input": "éééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééééé",
+   "valid": false,
+   "reason": "too_long"
+  },
+  {
+   "name": "slash",
+   "input": "a/b",
+   "valid": false,
+   "reason": "bad_char"
+  },
+  {
+   "name": "backslash",
+   "input": "a\\b",
+   "valid": false,
+   "reason": "bad_char"
+  },
+  {
+   "name": "NUL",
+   "input": "a\u0000b",
+   "valid": false,
+   "reason": "bad_char"
+  },
+  {
+   "name": "tab",
+   "input": "a\tb",
+   "valid": false,
+   "reason": "bad_char"
+  },
+  {
+   "name": "newline",
+   "input": "a\nb",
+   "valid": false,
+   "reason": "bad_char"
+  },
+  {
+   "name": "unit separator",
+   "input": "a\u001fb",
+   "valid": false,
+   "reason": "bad_char"
+  },
+  {
+   "name": "DEL",
+   "input": "ab",
+   "valid": false,
+   "reason": "bad_char"
+  },
+  {
+   "name": "less than",
+   "input": "a<b",
+   "valid": false,
+   "reason": "bad_char"
+  },
+  {
+   "name": "greater than",
+   "input": "a>b",
+   "valid": false,
+   "reason": "bad_char"
+  },
+  {
+   "name": "colon",
+   "input": "a:b",
+   "valid": false,
+   "reason": "bad_char"
+  },
+  {
+   "name": "double quote",
+   "input": "a\"b",
+   "valid": false,
+   "reason": "bad_char"
+  },
+  {
+   "name": "pipe",
+   "input": "a|b",
+   "valid": false,
+   "reason": "bad_char"
+  },
+  {
+   "name": "question mark",
+   "input": "a?b",
+   "valid": false,
+   "reason": "bad_char"
+  },
+  {
+   "name": "star",
+   "input": "a*b",
+   "valid": false,
+   "reason": "bad_char"
+  },
+  {
+   "name": "drive letter",
+   "input": "C:",
+   "valid": false,
+   "reason": "bad_char"
+  },
+  {
+   "name": "dot",
+   "input": ".",
+   "valid": false,
+   "reason": "dot"
+  },
+  {
+   "name": "dot dot",
+   "input": "..",
+   "valid": false,
+   "reason": "dot"
+  },
+  {
+   "name": "trailing dot",
+   "input": "a.",
+   "valid": false,
+   "reason": "trailing"
+  },
+  {
+   "name": "trailing space",
+   "input": "a ",
+   "valid": false,
+   "reason": "trailing"
+  },
+  {
+   "name": "three dots",
+   "input": "...",
+   "valid": false,
+   "reason": "trailing"
+  },
+  {
+   "name": "CON",
+   "input": "CON",
+   "valid": false,
+   "reason": "device"
+  },
+  {
+   "name": "con in lower case",
+   "input": "con",
+   "valid": false,
+   "reason": "device"
+  },
+  {
+   "name": "Con with an extension",
+   "input": "Con.txt",
+   "valid": false,
+   "reason": "device"
+  },
+  {
+   "name": "con with several extensions",
+   "input": "con.tar.gz",
+   "valid": false,
+   "reason": "device"
+  },
+  {
+   "name": "CON before a space and an extension",
+   "input": "CON .txt",
+   "valid": false,
+   "reason": "device"
+  },
+  {
+   "name": "PRN",
+   "input": "PRN",
+   "valid": false,
+   "reason": "device"
+  },
+  {
+   "name": "AUX with an extension",
+   "input": "aux.md",
+   "valid": false,
+   "reason": "device"
+  },
+  {
+   "name": "NUL",
+   "input": "NUL",
+   "valid": false,
+   "reason": "device"
+  },
+  {
+   "name": "CLOCK$",
+   "input": "CLOCK$",
+   "valid": false,
+   "reason": "device"
+  },
+  {
+   "name": "CONIN$ with an extension",
+   "input": "conin$.txt",
+   "valid": false,
+   "reason": "device"
+  },
+  {
+   "name": "CONOUT$",
+   "input": "CONOUT$",
+   "valid": false,
+   "reason": "device"
+  },
+  {
+   "name": "COM0",
+   "input": "COM0",
+   "valid": false,
+   "reason": "device"
+  },
+  {
+   "name": "COM1 with an extension",
+   "input": "com1.txt",
+   "valid": false,
+   "reason": "device"
+  },
+  {
+   "name": "COM9",
+   "input": "COM9",
+   "valid": false,
+   "reason": "device"
+  },
+  {
+   "name": "LPT0",
+   "input": "LPT0",
+   "valid": false,
+   "reason": "device"
+  },
+  {
+   "name": "LPT9 with an extension",
+   "input": "lpt9.log",
+   "valid": false,
+   "reason": "device"
+  },
+  {
+   "name": "COM superscript one",
+   "input": "COM¹",
+   "valid": false,
+   "reason": "device"
+  },
+  {
+   "name": "COM superscript two with an extension",
+   "input": "com².txt",
+   "valid": false,
+   "reason": "device"
+  },
+  {
+   "name": "LPT superscript three",
+   "input": "LPT³",
+   "valid": false,
+   "reason": "device"
+  },
+  {
+   "name": "8.3 short name",
+   "input": "INKWEL~1",
+   "valid": false,
+   "reason": "short_name"
+  },
+  {
+   "name": "8.3 short name of typstdeps",
+   "input": "TYPSTD~1",
+   "valid": false,
+   "reason": "short_name"
+  },
+  {
+   "name": "8.3 alias of inkwell in lower case",
+   "input": "inkwel~1",
+   "valid": false,
+   "reason": "short_name"
+  },
+  {
+   "name": "8.3 alias of typstdeps, a second one",
+   "input": "TYPSTD~12",
+   "valid": false,
+   "reason": "short_name"
+  },
+  {
+   "name": "a short name of another file is a plain name",
+   "input": "PROGRA~1.txt",
+   "valid": true
+  },
+  {
+   "name": "a name with a tilde and a number is a plain name",
+   "input": "file~1.txt",
+   "valid": true
+  },
+  {
+   "name": "an alias with an extension is another file",
+   "input": "INKWEL~1.txt",
+   "valid": true
+  },
+  {
+   "name": "8.3 short name of the repository folder",
+   "input": "GIT~1",
+   "valid": false,
+   "reason": "short_name"
+  },
+  {
+   "name": "a tilde after seven characters is no short name",
+   "input": "abcdefg~1",
+   "valid": true
+  },
+  {
+   "name": "a tilde without digits is no short name",
+   "input": "a~b",
+   "valid": true
+  },
+  {
+   "name": "zero-width non-joiner",
+   "input": ".inkwe‌ll",
+   "valid": false,
+   "reason": "ignorable"
+  },
+  {
+   "name": "soft hyphen",
+   "input": "a­b",
+   "valid": false,
+   "reason": "ignorable"
+  },
+  {
+   "name": "word joiner",
+   "input": "a⁠b",
+   "valid": false,
+   "reason": "ignorable"
+  },
+  {
+   "name": "variation selector",
+   "input": "a️",
+   "valid": false,
+   "reason": "ignorable"
+  },
+  {
+   "name": "byte order mark",
+   "input": "﻿a",
+   "valid": false,
+   "reason": "ignorable"
+  },
+  {
+   "name": "bidi override",
+   "input": "a‮b",
+   "valid": false,
+   "reason": "ignorable"
+  },
+  {
+   "name": "tag character",
+   "input": "a󠁁",
+   "valid": false,
+   "reason": "ignorable"
+  },
+  {
+   "name": "Arabic number sign is not ignorable",
+   "input": "؀a",
+   "valid": true
+  },
+  {
+   "name": "the repository folder",
+   "input": ".git",
+   "valid": false,
+   "reason": "reserved"
+  },
+  {
+   "name": "the repository folder in capitals",
+   "input": ".GIT",
+   "valid": false,
+   "reason": "reserved"
+  },
+  {
+   "name": "an ignore file is a plain name",
+   "input": ".gitignore",
+   "valid": true
+  },
+  {
+   "name": "invalid UTF-8",
+   "inputHex": "61ff62",
+   "valid": false,
+   "reason": "bad_utf8"
+  },
+  {
+   "name": "overlong NUL",
+   "inputHex": "c080",
+   "valid": false,
+   "reason": "bad_utf8"
+  },
+  {
+   "name": "encoded surrogate",
+   "inputHex": "eda080",
+   "valid": false,
+   "reason": "bad_utf8"
+  },
+  {
+   "name": "truncated sequence",
+   "inputHex": "61e9",
+   "valid": false,
+   "reason": "bad_utf8"
+  }
+ ],
+ "paths": [
+  {
+   "name": "a file",
+   "input": "main.typ",
+   "valid": true
+  },
+  {
+   "name": "nested",
+   "input": "chapters/ch1.typ",
+   "valid": true
+  },
+  {
+   "name": "dot folder below the root",
+   "input": "src/.inkwell/x",
+   "valid": true
+  },
+  {
+   "name": "typstdeps below the root",
+   "input": "a/.typstdeps",
+   "valid": true
+  },
+  {
+   "name": "a font",
+   "input": "fonts/Inter Regular.ttf",
+   "valid": true
+  },
+  {
+   "name": "1023 bytes",
+   "input": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "valid": true
+  },
+  {
+   "name": "1024 bytes",
+   "input": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/b",
+   "valid": true
+  },
+  {
+   "name": "empty",
+   "input": "",
+   "valid": false,
+   "reason": "empty"
+  },
+  {
+   "name": "absolute",
+   "input": "/etc/passwd",
+   "valid": false,
+   "reason": "empty_component"
+  },
+  {
+   "name": "trailing slash",
+   "input": "a/",
+   "valid": false,
+   "reason": "empty_component"
+  },
+  {
+   "name": "double slash",
+   "input": "a//b",
+   "valid": false,
+   "reason": "empty_component"
+  },
+  {
+   "name": "parent",
+   "input": "../x",
+   "valid": false,
+   "reason": "dot"
+  },
+  {
+   "name": "parent in the middle",
+   "input": "a/../b",
+   "valid": false,
+   "reason": "dot"
+  },
+  {
+   "name": "current directory",
+   "input": "./a",
+   "valid": false,
+   "reason": "dot"
+  },
+  {
+   "name": "backslash",
+   "input": "a\\b",
+   "valid": false,
+   "reason": "bad_char"
+  },
+  {
+   "name": "windows drive",
+   "input": "C:/x",
+   "valid": false,
+   "reason": "bad_char"
+  },
+  {
+   "name": "device inside",
+   "input": "a/NUL.txt",
+   "valid": false,
+   "reason": "device"
+  },
+  {
+   "name": "device with a superscript inside",
+   "input": "a/com².txt",
+   "valid": false,
+   "reason": "device"
+  },
+  {
+   "name": "inkwell at the root",
+   "input": ".inkwell/project.json",
+   "valid": false,
+   "reason": "root_reserved"
+  },
+  {
+   "name": "inkwell alone at the root",
+   "input": ".inkwell",
+   "valid": false,
+   "reason": "root_reserved"
+  },
+  {
+   "name": "typstdeps at the root",
+   "input": ".typstdeps/preview/x",
+   "valid": false,
+   "reason": "root_reserved"
+  },
+  {
+   "name": "inkwell in another case",
+   "input": ".INKWELL/x",
+   "valid": false,
+   "reason": "root_reserved"
+  },
+  {
+   "name": "component of 256 bytes",
+   "input": "d/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+   "valid": false,
+   "reason": "too_long"
+  },
+  {
+   "name": "1025 bytes",
+   "input": "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/b",
+   "valid": false,
+   "reason": "path_too_long"
+  },
+  {
+   "name": "repository folder below the root",
+   "input": "a/.git/config",
+   "valid": false,
+   "reason": "reserved"
+  },
+  {
+   "name": "repository folder at the root",
+   "input": ".git/config",
+   "valid": false,
+   "reason": "reserved"
+  },
+  {
+   "name": "short name below the root",
+   "input": "a/INKWEL~1/x",
+   "valid": false,
+   "reason": "short_name"
+  },
+  {
+   "name": "ignorable alias of inkwell",
+   "input": ".inkwe‌ll/x",
+   "valid": false,
+   "reason": "ignorable"
+  }
+ ],
+ "keys": [
+  {
+   "input": "Notes.md",
+   "key": "notes.md"
+  },
+  {
+   "input": "notes.md",
+   "key": "notes.md"
+  },
+  {
+   "input": "NOTES.MD",
+   "key": "notes.md"
+  },
+  {
+   "input": "Café.md",
+   "key": "café.md"
+  },
+  {
+   "input": "Café.md",
+   "key": "café.md"
+  },
+  {
+   "input": "CAFÉ",
+   "key": "café"
+  },
+  {
+   "input": "Straße.txt",
+   "key": "strasse.txt"
+  },
+  {
+   "input": "STRASSE.TXT",
+   "key": "strasse.txt"
+  },
+  {
+   "input": "Ω",
+   "key": "ω"
+  },
+  {
+   "input": "Ω",
+   "key": "ω"
+  },
+  {
+   "input": "ﬁle",
+   "key": "file"
+  },
+  {
+   "input": "ǅ",
+   "key": "ǆ"
+  }
+ ]
+}

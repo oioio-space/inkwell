@@ -116,7 +116,11 @@ $effect(() => {
   };
 });
 
-$effect(() => presence?.rename(me.name));
+$effect(() => {
+  // Read the name first: with no presence yet, an optional call would read nothing and never rerun.
+  const name = me.name;
+  presence?.rename(name);
+});
 
 // The selection goes out on the presence channel, a moment after it stops moving.
 $effect(() => {
@@ -124,7 +128,11 @@ $effect(() => {
   if (!c) return;
   void c.ranges;
   void c.tick;
-  const timer = setTimeout(() => presence?.broadcast(), 40);
+  const timer = setTimeout(() => {
+    presence?.broadcast();
+    // The rows moved or arrived: where the others are on the grid may have changed too.
+    presence?.refresh();
+  }, 40);
   return () => clearTimeout(timer);
 });
 

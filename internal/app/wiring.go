@@ -109,7 +109,11 @@ type WiringOptions struct {
 //   - synchronizes the member list with the members ([trust.Sync]);
 //   - gossips the attestations of the writers and keeps the latest of each;
 //   - gives the bridge the frames of the repo channel, from members only;
-//   - drops a member as soon as it is revoked, and refuses it afterwards.
+//   - drops a member as soon as it is revoked, and refuses it afterwards;
+//   - keeps a suspended member on a restricted link: only the member list
+//     passes, in both directions, so that it learns about its suspension and
+//     its resumption (ADR 0021). A device that is itself suspended restricts
+//     all its links.
 //
 // A frame sent on a channel before another one, to the same peer, is handled
 // before it: an attestation is known when the changes it covers arrive.
@@ -117,8 +121,7 @@ type WiringOptions struct {
 type Wiring struct {
 	raw      transport.Transport
 	signer   trust.Signer
-	lst      atomic.Pointer[trust.List] // replaced by SwitchProject
-	adm      *Admission
+	adm      *Admission // holds the member list, replaced by SwitchProject
 	sync     *trust.Sync
 	att      attestStore
 	log      *slog.Logger
@@ -133,20 +136,25 @@ type Wiring struct {
 	cmds     chan func()          // run by the goroutine
 	stopped  chan struct{}        // closed when the goroutine has ended
 	up       map[transport.PeerID]struct{}
-	active   map[transport.PeerID]struct{} // under mu; written by the goroutine only
+	active   map[transport.PeerID]struct{} // under mu; written by the goroutine only: the linked peers, whose member list is synchronized
+	full     map[transport.PeerID]struct{} // under mu; written by the goroutine only: the active peers that are not restricted
 	saved    map[trust.Hash]struct{}
 	pending  map[string][]trust.Hash // heads to sign once this device is known to be a writer
 	closeErr error
-	tick     time.Duration
-	nOps     int
-	mu       sync.Mutex
+	// rolesSent is the last Roles payload sent to the bridge.
+	rolesSent []byte
+	tick      time.Duration
+	nOps      int
+	mu        sync.Mutex
 	// sealedSent is set once the webview was told the list is sealed.
 	sealedSent bool
-	once       sync.Once
+	// selfSuspended is whether this device is suspended, as the webview was told.
+	selfSuspended bool
 }
 
 // Wire starts a Wiring over t, whose events it consumes: t must have no other
-// reader. Canceling ctx or calling [Wiring.Close] stops it and closes t.
+// reader. adm then admits the members of list, and follows the project of
+// the wiring. Canceling ctx or calling [Wiring.Close] stops it and closes t.
 func Wire(ctx context.Context, t transport.Transport, s trust.Signer, list *trust.List, adm *Admission, o WiringOptions) *Wiring {
 	ctx, cancel := context.WithCancel(ctx)
 	subs := mux.Split(t, chanRepo, chanTrust, chanAttest)
@@ -169,31 +177,42 @@ func Wire(ctx context.Context, t transport.Transport, s trust.Signer, list *trus
 		stopped:  make(chan struct{}),
 		up:       make(map[transport.PeerID]struct{}),
 		active:   make(map[transport.PeerID]struct{}),
-		saved:    make(map[trust.Hash]struct{}),
+		full:     make(map[transport.PeerID]struct{}),
+		saved:    savedOps(list),
 		pending:  make(map[string][]trust.Hash),
 		tick:     o.TickEvery,
 	}
-	w.lst.Store(list)
+	adm.reset(list)
+	w.rolesSent, w.selfSuspended = w.rolesPayload(), list.Suspended(s.Public()) // the webview learns them from Notices
 	if w.log == nil {
 		w.log = slog.New(slog.DiscardHandler)
 	}
 	if w.tick <= 0 {
 		w.tick = defaultTick
 	}
-	for _, op := range list.Since(nil) {
-		w.saved[op.Hash()] = struct{}{} // already persisted: it came from the store
-	}
 	go w.run()
 	return w
 }
 
+// savedOps returns the hashes of the ops list holds, which are persisted
+// already: they came from the store.
+func savedOps(list *trust.List) map[trust.Hash]struct{} {
+	saved := make(map[trust.Hash]struct{})
+	for _, op := range list.Since(nil) {
+		saved[op.Hash()] = struct{}{}
+	}
+	return saved
+}
+
 // list returns the member list of the project.
-func (w *Wiring) list() *trust.List { return w.lst.Load() }
+func (w *Wiring) list() *trust.List { return w.adm.list.Load() }
 
 // Repo returns the transport for the bridge: the repo channel, restricted to
-// the members. A peer is announced with a PeerUp once it is a member and is
-// connected, and with a PeerDown when it stops being either; frames of other
-// peers never come out, and Send to them fails with [transport.ErrUnknownPeer].
+// the members that are not suspended. A peer is announced with a PeerUp once it
+// is a member, is not suspended and is connected, and with a PeerDown when it
+// stops being any of them (this device being suspended counts: it restricts
+// all its links); frames of other peers never come out, and Send to them fails
+// with [transport.ErrUnknownPeer].
 func (w *Wiring) Repo() transport.Transport { return (*repoPort)(w) }
 
 // Close stops the wiring and closes the underlying transport. It is idempotent.
@@ -240,27 +259,44 @@ func (w *Wiring) IssueWith(tmpl trust.Op) (trust.Op, error) {
 	return op, err
 }
 
+// IssueBatch issues the ops of tmpls on behalf of this device, all or nothing
+// (see [trust.List.IssueBatch]), and sends them to the members.
+func (w *Wiring) IssueBatch(tmpls []trust.Op) ([]trust.Op, error) {
+	var (
+		ops []trust.Op
+		err error
+	)
+	if derr := w.do(func() {
+		if ops, err = w.list().IssueBatch(w.signer, tmpls); err != nil {
+			return
+		}
+		for _, op := range ops {
+			w.sendTrust(w.sync.Broadcast(op))
+		}
+		w.afterChange()
+	}); derr != nil {
+		return nil, derr
+	}
+	return ops, err
+}
+
 // SwitchProject makes list, a replica of another project, the project of the
 // wiring: the peers of the old project are announced down, and the connected
 // peers that are members of the new one are announced up. save persists the
 // new ops of list; the ops list holds now are taken as saved already.
 func (w *Wiring) SwitchProject(list *trust.List, save func(trust.Op) error) error {
 	return w.do(func() {
-		for _, p := range w.activePeers() {
+		for _, p := range w.linkedPeers() {
 			w.deactivate(p)
 		}
-		w.lst.Store(list)
+		w.adm.reset(list)
 		w.save = save
 		w.sync = trust.NewSync(list)
 		w.att.reset()
-		w.saved = make(map[trust.Hash]struct{})
-		for _, op := range list.Since(nil) {
-			w.saved[op.Hash()] = struct{}{}
-		}
+		w.saved = savedOps(list)
 		clear(w.pending)
-		w.sealedSent = false
+		w.sealedSent, w.selfSuspended, w.rolesSent = false, false, nil
 		w.nOps = 0
-		w.adm.reset(list)
 		w.afterChange()
 	})
 }
@@ -351,7 +387,7 @@ func (w *Wiring) onTrust(ev transport.Event) {
 		delete(w.up, ev.Peer)
 		w.reconcile()
 	case transport.Message:
-		if !w.isActive(ev.Peer) {
+		if !w.isLinked(ev.Peer) {
 			return
 		}
 		out, err := w.sync.OnMessage(ev.Peer, ev.Payload)
@@ -371,8 +407,7 @@ func (w *Wiring) onTrust(ev transport.Event) {
 func (w *Wiring) afterChange() {
 	if n := w.list().Len(); n != w.nOps {
 		w.nOps = n
-		ops := w.list().Since(nil)
-		for _, op := range ops {
+		for _, op := range w.list().Since(nil) {
 			h := op.Hash()
 			if _, done := w.saved[h]; done || w.save == nil {
 				continue
@@ -391,6 +426,7 @@ func (w *Wiring) afterChange() {
 		if wt, ok := w.raw.(Wanter); ok {
 			wt.Want(w.adm.dialTargets(w.raw.Local()))
 		}
+		w.announceRoles()
 	}
 	if w.list().Sealed() {
 		w.announceSealed()
@@ -399,18 +435,18 @@ func (w *Wiring) afterChange() {
 	w.reconcile()
 }
 
-// reconcile makes the active peers those that are connected and allowed: it
-// announces the new ones and drops the ones that are not allowed anymore.
+// reconcile makes the linked peers those that are connected and allowed: it
+// links the new ones and drops the ones that are not allowed anymore. It then
+// opens the repo and attestation channels to the linked peers that may have
+// them, and closes them to the others: a suspended peer, or every peer if this
+// device is suspended.
 func (w *Wiring) reconcile() {
 	for _, p := range slices.Sorted(maps.Keys(w.up)) {
-		if !w.isActive(p) && w.adm.Admit(p) {
+		if !w.isLinked(p) && w.adm.Admit(p) {
 			w.activate(p)
 		}
 	}
-	w.mu.Lock()
-	current := slices.Sorted(maps.Keys(w.active))
-	w.mu.Unlock()
-	for _, p := range current {
+	for _, p := range w.linkedPeers() {
 		if _, up := w.up[p]; !up {
 			w.deactivate(p)
 		} else if !w.adm.Admit(p) {
@@ -418,34 +454,97 @@ func (w *Wiring) reconcile() {
 			w.drop(p)
 		}
 	}
+	for _, p := range w.linkedPeers() {
+		w.refresh(p)
+	}
 }
 
+// restricted reports whether the link to p carries the member list only.
+func (w *Wiring) restricted(p transport.PeerID) bool {
+	key, err := p2p.KeyFromID(p)
+	return err != nil || w.list().Suspended(key) || w.list().Suspended(w.signer.Public())
+}
+
+// activate links the connected member p. Its repo and attestation channels
+// open too unless the link is restricted.
 func (w *Wiring) activate(p transport.PeerID) {
+	open := !w.restricted(p)
 	w.mu.Lock()
 	w.active[p] = struct{}{}
+	if open {
+		w.full[p] = struct{}{}
+	}
 	w.mu.Unlock()
-	w.emit(transport.Event{Kind: transport.PeerUp, Peer: p})
+	if open {
+		w.emit(transport.Event{Kind: transport.PeerUp, Peer: p})
+	}
 	w.sendTrust(w.sync.OnPeerUp(p))
-	w.sendAttestations(p)
+	if open {
+		w.sendAttestations(p)
+	}
 }
 
+// refresh opens or closes the repo and attestation channels to the linked
+// peer p, after a suspension or a resumption.
+func (w *Wiring) refresh(p transport.PeerID) {
+	open := !w.restricted(p)
+	w.mu.Lock()
+	_, was := w.full[p]
+	switch {
+	case open && !was:
+		w.full[p] = struct{}{}
+	case !open && was:
+		delete(w.full, p)
+	}
+	w.mu.Unlock()
+	switch {
+	case open && !was:
+		w.emit(transport.Event{Kind: transport.PeerUp, Peer: p})
+		w.sendAttestations(p)
+	case !open && was:
+		w.emit(transport.Event{Kind: transport.PeerDown, Peer: p})
+	}
+}
+
+// deactivate unlinks p.
 func (w *Wiring) deactivate(p transport.PeerID) {
 	w.mu.Lock()
+	_, was := w.full[p]
 	delete(w.active, p)
+	delete(w.full, p)
 	w.mu.Unlock()
 	w.sync.OnPeerDown(p)
-	w.emit(transport.Event{Kind: transport.PeerDown, Peer: p})
+	if was {
+		w.emit(transport.Event{Kind: transport.PeerDown, Peer: p})
+	}
 }
 
+// isActive reports whether the repo and attestation channels are open to p.
 func (w *Wiring) isActive(p transport.PeerID) bool {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	_, ok := w.full[p]
+	return ok
+}
+
+// isLinked reports whether the member list is synchronized with p.
+func (w *Wiring) isLinked(p transport.PeerID) bool {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	_, ok := w.active[p]
 	return ok
 }
 
-// activePeers returns the active peers, sorted.
+// activePeers returns the peers that the repo and attestation channels are
+// open to, sorted.
 func (w *Wiring) activePeers() []transport.PeerID {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+	return slices.Sorted(maps.Keys(w.full))
+}
+
+// linkedPeers returns the peers the member list is synchronized with, sorted.
+func (w *Wiring) linkedPeers() []transport.PeerID {
 	w.mu.Lock()
 	defer w.mu.Unlock()
 	return slices.Sorted(maps.Keys(w.active))
@@ -516,8 +615,8 @@ func (p *repoPort) Recv(ctx context.Context) (transport.Event, error) {
 }
 
 // RecvEnvelope is [Wiring.Repo]'s Recv with the bridge's own envelopes:
-// Attested, Revoked and Sealed come out in order with the messages (see
-// [bridge.Source]).
+// Attested, Revoked, Sealed, Roles and Suspended come out in order with the
+// messages (see [bridge.Source]).
 func (p *repoPort) RecvEnvelope(ctx context.Context) (bridge.Envelope, error) {
 	select {
 	case <-p.stopped:
@@ -544,11 +643,18 @@ func (p *repoPort) Attest(_ context.Context, doc string, heads [][bridge.HashSiz
 	return (*Wiring)(p).AttestHeads(doc, hs)
 }
 
-// Notices returns the attestations held and, if the list is sealed, the
-// Sealed envelope, for a webview that just attached.
+// Notices returns the member roles, the suspension of this device if it is
+// suspended, the attestations held and, if the list is sealed, the Sealed
+// envelope, for a webview that just attached.
 func (p *repoPort) Notices() []bridge.Envelope {
 	w := (*Wiring)(p)
 	var out []bridge.Envelope
+	if payload := w.rolesPayload(); payload != nil {
+		out = append(out, bridge.Envelope{Kind: bridge.Roles, Peer: w.raw.Local(), Payload: payload})
+	}
+	if by, ok := w.selfSuspension(); ok {
+		out = append(out, suspendedEnvelope(by, true))
+	}
 	for _, a := range w.att.all() {
 		if e, ok := attestedEnvelope(a); ok {
 			out = append(out, e)
