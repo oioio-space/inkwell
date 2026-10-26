@@ -95,9 +95,10 @@ const (
 	connLow  = 32
 	connHigh = 64
 
-	// writeTimeout plus one second per writeRate bytes bounds each Send.
-	writeTimeout = 10 * time.Second
-	writeRate    = 1 << 20
+	// writeTimeout is how long a write may go without progress before it
+	// fails; it is re-armed each time a chunk of the frame is written, so the
+	// time a frame takes is not bounded, only its stalls are.
+	writeTimeout = 20 * time.Second
 	// openTimeout bounds opening the outbound stream.
 	openTimeout = 15 * time.Second
 	// upTimeout bounds how long an inbound stream waits for its peer to be

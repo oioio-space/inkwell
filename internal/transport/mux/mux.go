@@ -15,11 +15,31 @@
 // its messages. A frame for a channel nobody asked for, or without a channel
 // byte, is dropped. Every channel must be drained: a full queue stops the
 // reader, and with it every other channel, so that no frame is lost.
+//
+// # Large messages
+//
+// A payload of more than 64 KiB does not cross as one frame, which would hold
+// the link and delay everything behind it: it is cut into fragments of 32 KiB
+// and reassembled on arrival. The wire byte 0xFF is reserved for fragments, so
+// it cannot be a channel. Each fragment takes its turn after the interactive
+// frames (the messages of at most 64 KiB) that wait for the same peer, which
+// are served first but leave the fragments a quarter of the turns, so a large
+// message always finishes. A peer sends one large message at a time, in order.
+// Consequently a small message may overtake a large one sent earlier to the
+// same peer; the order of the small messages, and of the large ones, is kept.
+// Send returns when the last fragment is sent, so a deadline on the
+// underlying Send that counts progress, not size, is what lets a large
+// message cross a slow link.
+//
+// What a hostile peer sends costs memory only in proportion to the bytes it
+// really sent: at most one partial message per peer, 128 MiB in all; a
+// fragment that does not continue the message in progress ends it.
 package mux
 
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 
 	"github.com/oioio-space/inkwell/internal/transport"
 )
@@ -41,23 +61,30 @@ const (
 
 // muxer is the state shared by the sub-transports of one Split.
 type muxer struct {
-	t      transport.Transport
-	subs   map[byte]*sub
-	ctx    context.Context
-	cancel context.CancelFunc
-	done   chan struct{} // closed when the reader has stopped
-	wake   chan struct{}
-	err    error
-	order  []*sub    // subs in the order they were asked for
-	bufs   sync.Pool // *[]byte send buffers, for frames of at most maxPooled bytes
-	once   sync.Once
+	t        transport.Transport
+	subs     map[byte]*sub
+	ctx      context.Context
+	cancel   context.CancelFunc
+	done     chan struct{} // closed when the reader has stopped
+	wake     chan struct{}
+	err      error
+	gates    map[transport.PeerID]*gate    // peers with a large message being sent
+	partials map[transport.PeerID]*partial // reader goroutine only
+	order    []*sub                        // subs in the order they were asked for
+	bufs     sync.Pool                     // *[]byte send buffers, for frames of at most maxPooled bytes
+	held     int                           // bytes in partials; reader goroutine only
+	msgID    atomic.Uint32
+	ngates   atomic.Int32 // len(gates), readable without gmu
+	gmu      sync.RWMutex // guards gates
+	once     sync.Once
 }
 
 // Split returns a sub-transport for each of channels, over t. Sub-transports
 // share t: closing any of them closes t and so all of them. Split starts one
 // goroutine that reads t, which stops when t or a sub-transport is closed.
 // The caller must not use t's Recv afterwards; Send on t stays possible but
-// bypasses the channels. Duplicate channels are returned once.
+// bypasses the channels. Duplicate channels are returned once, and the reserved
+// channel 0xFF not at all.
 func Split(t transport.Transport, channels ...byte) map[byte]transport.Transport {
 	ctx, cancel := context.WithCancel(context.Background())
 	m := &muxer{
@@ -67,10 +94,13 @@ func Split(t transport.Transport, channels ...byte) map[byte]transport.Transport
 		cancel: cancel,
 		done:   make(chan struct{}),
 		wake:   make(chan struct{}, 1),
+
+		gates:    make(map[transport.PeerID]*gate),
+		partials: make(map[transport.PeerID]*partial),
 	}
 	out := make(map[byte]transport.Transport, len(channels))
 	for _, c := range channels {
-		if _, dup := m.subs[c]; dup {
+		if _, dup := m.subs[c]; dup || c == fragChannel {
 			continue
 		}
 		s := &sub{m: m, ch: c, q: newQueue(m.notify)}
@@ -111,6 +141,9 @@ func (m *muxer) run() {
 			return
 		}
 		if ev.Kind != transport.Message {
+			if ev.Kind == transport.PeerDown {
+				m.drop(ev.Peer)
+			}
 			for _, s := range m.order {
 				if !s.q.push(m.ctx, ev) {
 					return
@@ -119,6 +152,12 @@ func (m *muxer) run() {
 			continue
 		}
 		if len(ev.Payload) == 0 {
+			continue
+		}
+		if ev.Payload[0] == fragChannel {
+			if !m.reassemble(ev.Peer, ev.Payload) {
+				return
+			}
 			continue
 		}
 		s := m.subs[ev.Payload[0]]
@@ -156,23 +195,39 @@ func (s *sub) Local() transport.PeerID { return s.m.t.Local() }
 // Peers returns the peers of the underlying transport.
 func (s *sub) Peers() []transport.PeerID { return s.m.t.Peers() }
 
-// Send sends payload to peer to on this channel.
+// Send sends payload to peer to on this channel. A payload of more than 64 KiB
+// is sent as fragments, see the package documentation.
 func (s *sub) Send(ctx context.Context, to transport.PeerID, payload []byte) error {
 	if len(payload) > transport.MaxFrame-Overhead {
 		return transport.ErrFrameTooLarge
 	}
 	if Overhead+len(payload) > maxPooled {
-		return s.m.t.Send(ctx, to, s.frame(make([]byte, 0, Overhead+len(payload)), payload))
+		return s.sendFragmented(ctx, to, payload)
+	}
+	// A gate exists only while a large message goes to the peer: this frame
+	// then takes its turn ahead of the fragments.
+	if g := s.m.lease(to); g != nil {
+		defer s.m.unlease(to, g)
+		if err := g.acquire(ctx, false); err != nil {
+			return err
+		}
+		defer g.release()
 	}
 	// The underlying Send does not retain the frame, so its buffer is reused.
-	bp, _ := s.m.bufs.Get().(*[]byte)
-	if bp == nil {
-		bp = new([]byte)
-	}
+	bp := s.m.getBuf()
 	*bp = s.frame((*bp)[:0], payload)
 	err := s.m.t.Send(ctx, to, *bp)
 	s.m.bufs.Put(bp)
 	return err
+}
+
+// getBuf returns a pooled send buffer.
+func (m *muxer) getBuf() *[]byte {
+	bp, _ := m.bufs.Get().(*[]byte)
+	if bp == nil {
+		bp = new([]byte)
+	}
+	return bp
 }
 
 // frame appends the channel byte and payload to buf.

@@ -303,10 +303,11 @@ func (n *Node) outStream(ctx context.Context, p peer.ID) (*peerState, network.St
 }
 
 // Send writes payload to peer to as one frame. Writes to one peer are
-// serialised and each is bounded by 10 s plus one second per MiB; canceling
-// ctx interrupts a write in progress. A failed or interrupted write leaves
-// the stream in an unknown state, so it is replaced by a new one: the peer
-// stays up and later sends work, but the interrupted payload is lost.
+// serialised and a write fails only after writeTimeout without progress, so
+// a large frame on a slow link completes; canceling ctx interrupts a write in
+// progress. A failed or interrupted write leaves the stream in an unknown
+// state, so it is replaced by a new one: the peer stays up and later sends
+// work, but the interrupted payload is lost.
 func (n *Node) Send(ctx context.Context, to transport.PeerID, payload []byte) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -337,13 +338,7 @@ func (n *Node) Send(ctx context.Context, to transport.PeerID, payload []byte) er
 		return err
 	}
 
-	timeout := writeTimeout + time.Duration(len(payload))*time.Second/writeRate
-	if err := s.SetWriteDeadline(time.Now().Add(timeout)); err != nil {
-		return n.sendFailed(ctx, ps, s, to, err)
-	}
-	stop := context.AfterFunc(ctx, func() { _ = s.SetWriteDeadline(time.Now()) })
-	err = frame.Write(s, payload)
-	stop()
+	err = frame.WriteProgress(ctx, s, writeTimeout, payload)
 	if err != nil {
 		return n.sendFailed(ctx, ps, s, to, err)
 	}

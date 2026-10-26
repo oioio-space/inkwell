@@ -153,6 +153,9 @@ func FuzzSplitFrame(f *testing.F) {
 	f.Add([]byte{0x7f, 1, 2, 3})
 	f.Add([]byte{})
 	f.Fuzz(func(t *testing.T, frame []byte) {
+		if len(frame) > 0 && frame[0] == fragChannel {
+			t.Skip("fragments are covered by FuzzFragment")
+		}
 		synctest.Test(t, func(t *testing.T) {
 			raw, subs := pair(t, chRepo, chTrust)
 			repo, trust := subs[chRepo], subs[chTrust]
