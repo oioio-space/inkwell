@@ -2,7 +2,9 @@ package bridge_test
 
 import (
 	"context"
+	"fmt"
 	"slices"
+	"sync/atomic"
 	"testing"
 	"testing/synctest"
 
@@ -15,14 +17,20 @@ import (
 // link does.
 type gated struct {
 	transport.Transport
-	release chan struct{}
+	release  chan struct{}
+	canceled *atomic.Bool // set when a send to "slow" is interrupted
+	dropped  *atomic.Value
 }
+
+// Drop records the peer the router reset.
+func (g gated) Drop(who transport.PeerID) { g.dropped.Store(who) }
 
 func (g gated) Send(ctx context.Context, to transport.PeerID, p []byte) error {
 	if to == "slow" {
 		select {
 		case <-g.release:
 		case <-ctx.Done():
+			g.canceled.Store(true)
 			return ctx.Err()
 		}
 	}
@@ -38,7 +46,7 @@ func TestSlowPeerDoesNotBlockOthers(t *testing.T) {
 		a, slow, fast := n.Join("a"), n.Join("slow"), n.Join("fast")
 		n.Link("a", "slow")
 		n.Link("a", "fast")
-		g := gated{Transport: a, release: make(chan struct{})}
+		g := newGated(a)
 		r := bridge.NewRouter(g, quietLogger())
 		c := newFakeConn(t)
 		serveDone := wait(func() { r.Serve(c) })
@@ -81,4 +89,69 @@ func messages(t *testing.T, nd transport.Transport) []string {
 			out = append(out, string(ev.Payload))
 		}
 	}
+}
+
+func newGated(t transport.Transport) gated {
+	return gated{Transport: t, release: make(chan struct{}), canceled: new(atomic.Bool), dropped: new(atomic.Value)}
+}
+
+// TestFullQueueResetsThePeer: a peer that does not read fills its queue; the
+// router then drops the message and resets that peer instead of waiting,
+// which would stall every other peer.
+func TestFullQueueResetsThePeer(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		n := memnet.New(1, memnet.Faults{})
+		a, _, fast := n.Join("a"), n.Join("slow"), n.Join("fast")
+		n.Link("a", "slow")
+		n.Link("a", "fast")
+		g := newGated(a)
+		r := bridge.NewRouter(g, quietLogger())
+		c := newFakeConn(t)
+		serveDone := wait(func() { r.Serve(c) })
+		c.next(t)
+		c.next(t)
+
+		for i := range 200 { // far more than the queue holds
+			c.push(mustEncode(t, bridge.Envelope{Kind: bridge.Message, Peer: "slow", Payload: []byte(fmt.Sprint(i))}))
+		}
+		c.push(mustEncode(t, bridge.Envelope{Kind: bridge.Message, Peer: "fast", Payload: []byte("f1")}))
+		synctest.Wait()
+		if got := messages(t, fast); !slices.Equal(got, []string{"f1"}) {
+			t.Fatalf("fast received %q behind a full queue, want [f1]", got)
+		}
+		if who, _ := g.dropped.Load().(transport.PeerID); who != "slow" {
+			t.Errorf("Drop(%q), want the slow peer reset", who)
+		}
+		c.close()
+		<-serveDone
+	})
+}
+
+// TestPeerDownStopsItsSender: when a peer goes down, the send stuck on it is
+// interrupted.
+func TestPeerDownStopsItsSender(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		n := memnet.New(1, memnet.Faults{})
+		a := n.Join("a")
+		n.Join("slow")
+		n.Link("a", "slow")
+		g := newGated(a)
+		r := bridge.NewRouter(g, quietLogger())
+		c := newFakeConn(t)
+		ctx, cancel := context.WithCancel(t.Context())
+		runDone := wait(func() { _ = r.Run(ctx) })
+		serveDone := wait(func() { r.Serve(c) })
+		c.next(t) // PeerUp
+		c.push(mustEncode(t, bridge.Envelope{Kind: bridge.Message, Peer: "slow", Payload: []byte("x")}))
+		synctest.Wait()
+		n.Partition("a", "slow")
+		synctest.Wait()
+		if !g.canceled.Load() {
+			t.Error("the send to the peer that went down was not interrupted")
+		}
+		cancel()
+		<-runDone
+		c.close()
+		<-serveDone
+	})
 }
