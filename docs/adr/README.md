@@ -31,3 +31,4 @@ connaître la raison — pas pour le reste. Modèle : [`template.md`](template.m
 | [0026](0026-grille-csv.md) | Tableur CSV/TSV : grille Svelte maison virtualisée, texte Automerge pour seule source | proposée |
 | [0028](0028-performance-huge-files-and-wan.md) | Performance : paliers par taille, Automerge dans un Worker, très gros textes lus par Go, fragments et priorités sur le réseau | proposée |
 | [0029](0029-reliability.md) | Fiabilité : invariants de non-perte, pannes injectées (netem, LazyFS, disque plein), endurance, état de synchro honnête | proposée |
+| [0030](0030-decisions-signees-garde-structurelle.md) | Décisions d'admin dans un journal signé hors du CRDT ; garde structurelle de toute modification Automerge avant le `Repo` | proposée |
