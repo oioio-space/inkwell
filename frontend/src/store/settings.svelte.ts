@@ -8,6 +8,8 @@ export type ExternalPolicy = "ask" | "import" | "keep";
 export const SAVE_DELAYS = [1, 2, 5, 10] as const;
 export type SaveDelay = (typeof SAVE_DELAYS)[number];
 
+/** The window width from which the preview is shown by default (two panes need room). */
+const WIDE = 1000;
 const PREFS_KEY = "inkwell.settings";
 const LAYOUT_KEY = "inkwell.layout";
 
@@ -15,6 +17,7 @@ const LAYOUT_KEY = "inkwell.layout";
 interface Layout {
   toolbarHidden?: boolean;
   sidebarHidden?: boolean;
+  previewHidden?: boolean;
 }
 
 function readJSON(key: string): Record<string, unknown> {
@@ -84,6 +87,16 @@ class Settings {
 
   setSidebarVisible(project: string, visible: boolean): void {
     this.#setLayout(project, { sidebarHidden: !visible });
+  }
+
+  /** Shown unless the person hid it; a window too narrow for two panes starts without it. */
+  previewVisible(project: string): boolean {
+    const hidden = this.#layout[project]?.previewHidden;
+    return hidden === undefined ? window.innerWidth >= WIDE : !hidden;
+  }
+
+  setPreviewVisible(project: string, visible: boolean): void {
+    this.#setLayout(project, { previewHidden: !visible });
   }
 
   #setLayout(project: string, patch: Layout): void {

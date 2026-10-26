@@ -292,14 +292,15 @@ test.describe("UI-11 reference screenshots", () => {
   // What depends on who else is connected (the two instances stay paired with each other
   // after the collaboration tests, so "Seul" or "Synchronisé" are both true here), on a
   // generated identity, on a blinking caret or on an outside edit left by an earlier test
-  // (the "modified outside" toast) is hidden by a constructed stylesheet, which the page's CSP
+  // (the "modified outside" toast), or on how far the preview has got (its pages, the problems
+  // and the page number: tested in preview.spec.ts) is hidden by a constructed stylesheet, which the page's CSP
   // allows and which covers what appears later. The status itself is tested in unit tests
   // (workspace.test.ts) and by the pairing helper.
   const hideVolatile = (p: Page) =>
     p.evaluate(() => {
       const sheet = new CSSStyleSheet();
       sheet.replaceSync(
-        '[role="status"], .people, ul[aria-label$="document"], .cm-cursorLayer, [role="alert"] { visibility: hidden !important }',
+        '[role="status"], .people, ul[aria-label$="document"], .cm-cursorLayer, [role="alert"], [data-testid="pages"], [data-testid="preview-empty"], [data-testid="problems"], [data-testid="page-indicator"], [data-testid="zoom"], .busy, .notice { visibility: hidden !important }',
       );
       document.adoptedStyleSheets = [...document.adoptedStyleSheets, sheet];
     });

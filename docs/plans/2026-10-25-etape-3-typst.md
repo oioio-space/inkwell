@@ -247,7 +247,7 @@ d'où `ErrUnsafeProject`, par un parcours borné avant compilation.
 
 ## Ce qui reste (hors de ce commit)
 
-1. **C2 aperçu :** client LSP sur stdio vers `tinymist lsp` supervisé (`didChange` du texte Automerge,
+1. **C2 aperçu (fait sans LSP, voir PROGRESS.md) :** pages visibles par `Compile` + `WithPages`, saut par `typst eval` (`Engine.Anchors`), Stream `preview`. Reste : client LSP sur stdio vers `tinymist lsp` supervisé (`didChange` du texte Automerge,
    `tinymist.exportSvg`), pont vers l'iframe, saut source ↔ aperçu, « Page X sur Y ». `sidecar.Supervisor`
    et `tinymist` embarqué sont prêts ; `Watch` (recompilation complète par `typst`) sert de repli.
 2. **C3 :** appeler `Query` pour les clés `.bib` et les étiquettes.

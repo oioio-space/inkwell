@@ -15,10 +15,14 @@ let {
   sidebarOpen,
   toolbarVisible,
   canToggleToolbar,
+  previewOpen,
   onShare,
   onToggleSidebar,
   onToggleToolbar,
   onPreferences,
+  onTogglePreview,
+  onExport,
+  onAbout,
 }: {
   title: string;
   /** The file being edited, under the title. */
@@ -30,10 +34,16 @@ let {
   toolbarVisible: boolean;
   /** False for files that have no formatting bar. */
   canToggleToolbar: boolean;
+  /** Whether the preview pane is shown. */
+  previewOpen: boolean;
   onShare: () => void;
   onToggleSidebar: () => void;
   onToggleToolbar: () => void;
   onPreferences: () => void;
+  onTogglePreview: () => void;
+  /** "Exporter en PDF". */
+  onExport: () => void;
+  onAbout: () => void;
 } = $props();
 
 let menuOpen = $state(false);
@@ -61,6 +71,17 @@ let menuOpen = $state(false);
     <small>{subtitle}</small>
   </div>
   <div class="end">
+    <button
+      type="button"
+      class="fb"
+      class:on={previewOpen}
+      aria-pressed={previewOpen}
+      aria-label={t(previewOpen ? "preview.hide" : "preview.show")}
+      title={t(previewOpen ? "preview.hide" : "preview.show")}
+      onclick={onTogglePreview}
+    >
+      <Icon name="eye" />
+    </button>
     <PeopleStack {me} {peers} />
     <button type="button" class="sug" onclick={onShare}>{t("share.button")}</button>
     <MenuButton bind:open={menuOpen} label={t("menu.main")} name={t("menu.main")} align="end" width={300}>
@@ -79,8 +100,34 @@ let menuOpen = $state(false);
           >
             <span>{t("menu.toolbar")}</span>
             <span class="k">{shortcutLabel("Mod-Shift-t")}</span>
+            <span class="tick" class:off={!toolbarVisible}><Icon name="check" size={14} /></span>
           </button>
         {/if}
+        <button
+          type="button"
+          class="mi"
+          role="menuitemcheckbox"
+          aria-checked={previewOpen}
+          onclick={() => {
+            onTogglePreview();
+            close();
+          }}
+        >
+          <span>{t("menu.preview")}</span>
+          <span class="tick" class:off={!previewOpen}><Icon name="check" size={14} /></span>
+        </button>
+        <button
+          type="button"
+          class="mi"
+          role="menuitem"
+          onclick={() => {
+            close(false);
+            onExport();
+          }}
+        >
+          <span>{t("menu.export")}</span>
+        </button>
+        <div class="sep" role="separator"></div>
         <button
           type="button"
           class="mi"
@@ -91,6 +138,17 @@ let menuOpen = $state(false);
           }}
         >
           <span>{t("menu.preferences")}</span>
+        </button>
+        <button
+          type="button"
+          class="mi"
+          role="menuitem"
+          onclick={() => {
+            close(false);
+            onAbout();
+          }}
+        >
+          <span>{t("menu.about")}</span>
         </button>
       {/snippet}
     </MenuButton>
@@ -117,6 +175,16 @@ let menuOpen = $state(false);
   }
   .end {
     justify-content: flex-end;
+  }
+  .tick {
+    margin-inline-start: auto;
+    display: inline-flex;
+  }
+  .tick.off {
+    visibility: hidden;
+  }
+  .mi .k + .tick {
+    margin-inline-start: 8px;
   }
   .ttl {
     text-align: center;

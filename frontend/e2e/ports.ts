@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 
 // Each checkout gets its own block of four ports, so e2e runs in several worktrees (parallel
 // agents, or a second clone) never collide. INKWELL_E2E_PORT pins the base explicitly.
@@ -15,3 +15,7 @@ export const SPARE_PORT = base + 2;
 export const ALICE_URL = `http://127.0.0.1:${ALICE_PORT}/`;
 export const BOB_URL = `http://127.0.0.1:${BOB_PORT}/`;
 export const SPARE_URL = `http://127.0.0.1:${SPARE_PORT}/`;
+
+/** Where an instance saves "Exporter en PDF" (INKWELL_EXPORT_DIR, set by playwright.config.ts). */
+export const exportDir = (port: number) =>
+  join(process.env.INKWELL_E2E_DOCS ?? "", `export-${port}`);

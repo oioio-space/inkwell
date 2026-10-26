@@ -4,7 +4,9 @@ import (
 	"context"
 	"crypto/ed25519"
 	"crypto/rand"
+	"fmt"
 	"net"
+	"os"
 	"slices"
 	"strconv"
 	"strings"
@@ -17,7 +19,19 @@ import (
 	"github.com/oioio-space/inkwell/internal/transport/p2p"
 )
 
-func TestMain(m *testing.M) { goleak.VerifyTestMain(m) }
+func TestMain(m *testing.M) {
+	code := m.Run()
+	if engineDir != "" { // the Typst cache of preview_test.go
+		_ = os.RemoveAll(engineDir)
+	}
+	if code == 0 {
+		if err := goleak.Find(); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			code = 1
+		}
+	}
+	os.Exit(code)
+}
 
 func newSession(t *testing.T) (*app.Session, *p2p.Node) {
 	t.Helper()

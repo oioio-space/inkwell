@@ -26,6 +26,9 @@ const (
 	// rendezvousEnv is the URL of the Wormhole rendezvous server that carries
 	// the short codes: unset for the public server, "off" for no codes.
 	rendezvousEnv = "INKWELL_RENDEZVOUS"
+	// exportDirEnv, when set, is where "Exporter en PDF" saves without asking:
+	// for headless runs (end-to-end tests), where no dialog can open.
+	exportDirEnv = "INKWELL_EXPORT_DIR"
 )
 
 func main() {
@@ -42,12 +45,20 @@ func main() {
 		log.Error("opening project", "err", err)
 		os.Exit(1)
 	}
+	var wails *application.App // the export dialog needs the application, created below
+	choose := func(name string) (string, error) {
+		return wails.Dialog.SaveFile().SetFilename(name).AddFilter("PDF", "*.pdf").PromptForSingleSelection()
+	}
+	if dir := os.Getenv(exportDirEnv); dir != "" {
+		choose = app.DirChooser(dir)
+	}
 	rt, err := app.Start(ctx, home, app.Options{
 		Log:           log,
 		Project:       proj,
 		Port:          app.DefaultPort,
 		LAN:           os.Getenv(lanEnv) == "1",
 		RendezvousURL: os.Getenv(rendezvousEnv),
+		ExportChoose:  choose,
 	})
 	if err != nil {
 		log.Error("starting network", "err", err)
@@ -63,12 +74,13 @@ func main() {
 	}
 	storeServer := bridge.NewStoreServer(rt.Files, log)
 
-	wails := application.New(application.Options{
+	wails = application.New(application.Options{
 		Name:        "Inkwell",
 		Description: "Éditeur collaboratif Typst, sans serveur",
 		Services: []application.Service{
 			application.NewService(rt.Session),
 			application.NewService(app.NewProjects(proj, rt.Files)),
+			application.NewService(app.NewPreviewService(rt.Preview)),
 		},
 		Assets: application.AssetOptions{
 			Handler:    application.AssetFileServerFS(inkwell.Assets),
@@ -92,11 +104,13 @@ func main() {
 	})
 	wails.HandleStream(bridge.StreamName, func(c *application.StreamConn) { router.Serve(c) })
 	wails.HandleStream(bridge.StoreStreamName, func(c *application.StreamConn) { storeServer.Serve(c) })
+	wails.HandleStream(app.PreviewStreamName, func(c *application.StreamConn) { rt.Preview.Serve(c) })
 
 	go func() {
 		if err := proj.Watch(ctx, func(rel string) {
 			log.Info("project file edited outside Inkwell", "file", rel)
 			storeServer.NotifyExternal(rel)
+			rt.Preview.Changed(rel)
 		}); err != nil {
 			log.Error("watching project files", "err", err)
 		}

@@ -157,6 +157,11 @@ class Workspace {
     }
   }
 
+  /** Writes the document to the project folder now, if a write is still waiting for a pause in typing. */
+  async flushProjection(): Promise<void> {
+    await this.#projection?.flush();
+  }
+
   /** The text of a project file as UTF-8 with LF; undefined if absent or not text. */
   async readFile(path: string): Promise<string | undefined> {
     try {
