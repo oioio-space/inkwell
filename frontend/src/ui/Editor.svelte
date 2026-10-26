@@ -3,8 +3,11 @@ import type { DocHandle } from "@automerge/automerge-repo";
 import { untrack } from "svelte";
 import type { Lang } from "../editor/format";
 import { createEditor } from "../editor/setup";
+import { megabytesOf, t } from "../i18n";
+import { MAX_GROWN_CHARS } from "../store/limits";
 import { type Doc, workspace } from "../workspace/workspace.svelte";
 import { session } from "./editorSession.svelte";
+import { notice } from "./notice.svelte";
 
 let {
   handle,
@@ -40,6 +43,14 @@ $effect(() => {
         onView: (view) => (session.view = view),
         onState: (state) => (session.state = state),
         onUndoKey: () => workspace.undoWithKey(),
+        onRefused: (chars) =>
+          notice.show(
+            t("limit.pasteRefused", {
+              size: megabytesOf(chars),
+              max: megabytesOf(MAX_GROWN_CHARS),
+            }),
+            "alert",
+          ),
       },
     ),
   );

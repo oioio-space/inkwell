@@ -6,4 +6,7 @@ import type { SheetController } from "./sheet.svelte";
  * grid finds the same model, selection, sort, filter, zoom and undo stack, so Ctrl+Z walks
  * through the actions of both views. Dropped with the handle.
  */
-export const sessions = new WeakMap<DocHandle<{ text: string }>, SheetController>();
+export const sessions = new WeakMap<
+  DocHandle<{ text: string }> | { text: string },
+  SheetController
+>();

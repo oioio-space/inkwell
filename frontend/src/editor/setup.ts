@@ -1,7 +1,6 @@
-import { automergeSyncPlugin } from "@automerge/automerge-codemirror";
 import type { DocHandle } from "@automerge/automerge-repo";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
-import { Compartment, type EditorState, type Extension, Prec } from "@codemirror/state";
+import { Compartment, EditorState, type Extension, Prec } from "@codemirror/state";
 import {
   drawSelection,
   EditorView,
@@ -11,6 +10,7 @@ import {
   placeholder,
 } from "@codemirror/view";
 import { t } from "../i18n";
+import { amSync } from "./amSync";
 import { externalMarks } from "./external";
 import { formatKeymap, type Lang } from "./format";
 import { languageExtension } from "./highlight";
@@ -74,6 +74,8 @@ export interface EditorOptions {
    * edit that was just taken in is taken back instead of the person's own last edit).
    */
   onUndoKey?: () => boolean;
+  /** A local edit was refused by the size gate (ADR 0028): the text it would have made, in characters. */
+  onRefused?: (chars: number) => void;
 }
 
 /** Creates the collaborative source editor for a project document. */
@@ -82,7 +84,7 @@ export function createEditor(
   handle: DocHandle<Doc>,
   me: { id: string; name: string },
   onPeople?: (people: Person[]) => void,
-  { lang = "plain", onState, onView, onUndoKey, at }: EditorOptions = {},
+  { lang = "plain", onState, onView, onUndoKey, onRefused, at }: EditorOptions = {},
 ): { rename: (name: string) => void; setLang: (lang: Lang) => void; destroy: () => void } {
   let view: EditorView | undefined;
   const language = new Compartment();
@@ -111,7 +113,7 @@ export function createEditor(
       EditorView.updateListener.of((u) => {
         if (u.docChanged || u.selectionSet) onState?.(u.state);
       }),
-      automergeSyncPlugin({ handle, path: ["text"] }),
+      amSync({ handle, path: ["text"], ...(onRefused ? { onRefused } : {}) }),
       remoteCursors(),
       presence.extension,
       theme,
@@ -128,4 +130,35 @@ export function createEditor(
       view?.destroy();
     },
   };
+}
+
+/**
+ * A text too big for a document (ADR 0028), shown as it is: one plain string, no Automerge, no
+ * colours, read-only but selectable and copiable. CodeMirror keeps its lines in a balanced tree
+ * and only draws what is on screen, so a text of tens of megabytes scrolls smoothly.
+ */
+export function createReadOnlyEditor(
+  parent: HTMLElement,
+  text: string,
+  { onState, onView }: Pick<EditorOptions, "onState" | "onView"> = {},
+): { destroy: () => void } {
+  const view = new EditorView({
+    parent,
+    doc: text,
+    extensions: [
+      cspNonce(),
+      lineNumbers(),
+      EditorState.readOnly.of(true),
+      EditorView.lineWrapping,
+      keymap.of(defaultKeymap),
+      EditorView.contentAttributes.of({ "aria-label": t("editor.label"), "aria-readonly": "true" }),
+      EditorView.updateListener.of((u) => {
+        if (u.selectionSet) onState?.(u.state);
+      }),
+      theme,
+    ],
+  });
+  onView?.(view);
+  onState?.(view.state);
+  return { destroy: () => view.destroy() };
 }

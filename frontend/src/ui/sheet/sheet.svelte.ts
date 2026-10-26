@@ -29,7 +29,8 @@ import {
   type ViewSpec,
 } from "../../editor/csv/view";
 import { compileQuery, type QuerySpec } from "../../editor/search/query";
-import { lang, t } from "../../i18n";
+import { megabytesOf, t } from "../../i18n";
+import { MAX_GROWN_CHARS } from "../../store/limits";
 
 /** A cell of the grid: `r` counts data rows as displayed (after sort and filter), `c` columns. */
 export interface Pos {
@@ -94,7 +95,6 @@ const MIN_ZOOM = 0.5;
 const MAX_ZOOM = 2;
 
 const MAX_WIDTH = 5000;
-const megabytes = new Intl.NumberFormat(lang, { maximumFractionDigits: 1 });
 
 /** What an action tells the person (a toast with an optional way back). */
 export interface Notice {
@@ -152,6 +152,14 @@ export class SheetController {
     this.#recordsSeen = this.model.records;
     this.#scheduleProblems();
     doc.onChange = (w, remote) => this.#changed(w, remote);
+    doc.onRefused = (chars) => {
+      this.notice = {
+        text: t("limit.pasteRefused", {
+          size: megabytesOf(chars),
+          max: megabytesOf(MAX_GROWN_CHARS),
+        }),
+      };
+    };
     doc.onMoved = () => {
       this.notice = {
         text: t("sheet.lostEdit"),
@@ -180,7 +188,7 @@ export class SheetController {
   get readOnlyText(): string {
     this.tick;
     if (!this.doc.tooBig) return t("sheet.readOnly");
-    return t("sheet.tooBig", { size: megabytes.format(this.model.text.length / 2 ** 20) });
+    return t("limit.tooBig", { size: megabytesOf(this.model.text.length) });
   }
   /** Displayed data rows. */
   get rowCount(): number {
