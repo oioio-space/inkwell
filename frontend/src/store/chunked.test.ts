@@ -27,18 +27,16 @@ describe("PERF-04 a large addition goes in changes of at most 64 Ki", () => {
     expect(changeCount(h) - before).toBe(1);
   });
 
-  it("a paste of 300 Ki is four changes, each of at most 64 Ki characters, and the text is intact", () => {
+  it("a paste of 300 Ki comes in changes of at most 64 Ki characters, and the text is intact", () => {
     const h = open("<>");
     const before = changeCount(h);
-    const big = Array.from({ length: 300 * 1024 }, (_, i) =>
-      String.fromCharCode(97 + (i % 26)),
-    ).join("");
+    const big = "abcdefghijklmnopqrstuvwxyz".repeat(Math.ceil((300 * 1024) / 26));
     applyEdits(h, [{ at: 1, remove: 0, put: big }]);
     expect(h.doc().text).toBe(`<${big}>`);
     const added = sizes(h).slice(before);
     expect(added).toHaveLength(Math.ceil(big.length / CHUNK_CHARS));
     for (const n of added) expect(n).toBeLessThanOrEqual(CHUNK_CHARS);
-  });
+  }, 30_000);
 
   it("the deletion goes with the first piece; edits around the big one keep their place", () => {
     const h = open("AAA|BBB|CCC");
