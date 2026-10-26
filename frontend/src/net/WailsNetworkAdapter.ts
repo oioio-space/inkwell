@@ -12,10 +12,12 @@ import { Coverage } from "./coverage";
 import {
   decodeEnvelope,
   decodeHeads,
+  decodeRoles,
   encodeEnvelope,
   encodeHeads,
   Kind,
   MalformedEnvelope,
+  type MemberRole,
 } from "./envelope";
 
 /**
@@ -80,6 +82,8 @@ export class WailsNetworkAdapter extends NetworkAdapter {
   #attested = new Map<string, string[]>();
   #sealed = false;
   #sealedListeners: (() => void)[] = [];
+  #roles = new Map<string, MemberRole>();
+  #roleListeners: (() => void)[] = [];
 
   constructor(open: () => SocketLike, opts: AdapterOptions = {}) {
     super();
@@ -114,6 +118,19 @@ export class WailsNetworkAdapter extends NetworkAdapter {
   onSealed(cb: () => void): void {
     this.#sealedListeners.push(cb);
     if (this.#sealed) cb();
+  }
+
+  /**
+   * The role of a device in the member list that Go signed, undefined for a device it does not
+   * list (or before Go has said anything). Anything that depends on rights asks here.
+   */
+  roleOf(peer: string): MemberRole | undefined {
+    return this.#roles.get(peer);
+  }
+
+  /** Calls cb whenever Go reports the roles of the members (when they change). */
+  onRoles(cb: () => void): void {
+    this.#roleListeners.push(cb);
   }
 
   /** Calls cb whenever a peer announces its project. */
@@ -201,11 +218,24 @@ export class WailsNetworkAdapter extends NetworkAdapter {
         this.#coverage.revoked(peer);
         this.#reattest();
         return;
+      case Kind.Roles:
+        this.#receiveRoles(env.payload);
+        return;
       case Kind.Sealed:
         this.#sealed = true;
         for (const cb of this.#sealedListeners) cb();
         return;
     }
+  }
+
+  #receiveRoles(payload: Uint8Array): void {
+    try {
+      this.#roles = new Map(decodeRoles(payload).map((m) => [m.peer, m]));
+    } catch {
+      this.#opts.onDrop?.("undecodable roles");
+      return;
+    }
+    for (const cb of this.#roleListeners) cb();
   }
 
   #receiveAttested(signer: string, payload: Uint8Array): void {

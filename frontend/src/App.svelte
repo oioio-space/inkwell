@@ -7,6 +7,9 @@ import { markExternal } from "./editor/external";
 import { langOf } from "./editor/format";
 import { t } from "./i18n";
 import type { SocketLike } from "./net/WailsNetworkAdapter";
+import PresentBanner from "./present/PresentBanner.svelte";
+import PresentHost from "./present/PresentHost.svelte";
+import { presentSession } from "./present/session.svelte";
 import { exportPdf, jumpFromCursor, jumpFromPage, jumpToProblem } from "./preview/actions";
 import { lastChangeSeconds } from "./preview/docTime";
 import Preview from "./preview/Preview.svelte";
@@ -60,6 +63,21 @@ const hasBar = $derived(barLanguage !== undefined);
 const barVisible = $derived(hasBar && !workspace.big && settings.toolbarVisible(workspace.project));
 const sidebarOpen = $derived(settings.sidebarVisible(workspace.project));
 const previewOpen = $derived(settings.previewVisible(workspace.project));
+/** Only a Typst document is presented: its pages are the slides. */
+const canPresent = $derived(lang === "typst");
+/** The presentation takes the preview's place: it is the one that asks Go for pages. */
+const presenting = $derived(presentSession.current !== undefined);
+
+function present(how: "start" | "here" | "public") {
+  if (!canPresent || presentSession.current) return;
+  if (how === "public") presentSession.start("public");
+  else presentSession.start("presenter", how === "here" ? { page: preview.currentPage || 1 } : {});
+}
+
+/** Back from a presentation: the caret goes to the slide that was on. */
+function leftPresentation(page: number) {
+  if (page > 0) void jumpFromPage(page, 0, 0);
+}
 
 function toggleToolbar() {
   settings.setToolbarVisible(workspace.project, !settings.toolbarVisible(workspace.project));
@@ -104,6 +122,11 @@ function onKey(e: KeyboardEvent) {
   if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "s") {
     e.preventDefault();
     void workspace.save();
+    return;
+  }
+  if (e.key === "F5" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    e.preventDefault();
+    present(e.shiftKey ? "here" : "start");
     return;
   }
   if ((e.ctrlKey || e.metaKey) && e.altKey && e.key.toLowerCase() === "j") {
@@ -161,7 +184,8 @@ onMount(() => {
 
 <svelte:window onkeydown={onKey} />
 
-<div class="window">
+<!-- A presentation covers the window: what is under it neither takes keys nor focus. -->
+<div class="window" inert={presenting}>
   {#if sidebarOpen}
     <Sidebar files={workspace.files} current={workspace.current} onOpen={() => session.focus()} />
   {/if}
@@ -184,6 +208,8 @@ onMount(() => {
       onTogglePreview={togglePreview}
       onExport={exportPdf}
       onAbout={() => (about = true)}
+      {canPresent}
+      onPresent={present}
     />
     {#if barVisible && session.state && barLanguage}
       <FormatBar
@@ -220,6 +246,7 @@ onMount(() => {
       <Banner role="status">{t("limit.slow")}</Banner>
     {/if}
     <ExternalBanner />
+    <PresentBanner />
     <main>
       <div class="pane side-source">
         {#if workspace.big}
@@ -252,7 +279,7 @@ onMount(() => {
           {/key}
         {/if}
       </div>
-      {#if previewOpen && !showSheet && !workspace.big}
+      {#if previewOpen && !showSheet && !presenting && !workspace.big}
         <div class="pane side-preview">
           <Preview onSourceJump={jumpFromPage} onCursorJump={jumpFromCursor} />
         </div>
@@ -272,6 +299,7 @@ onMount(() => {
     {/if}
   </div>
 </div>
+<PresentHost onExit={leftPresentation} />
 <ShareDialog bind:open={sharing} />
 <Preferences bind:open={preferences} />
 <NoticeToast />

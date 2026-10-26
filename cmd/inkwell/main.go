@@ -82,6 +82,12 @@ func main() {
 		log.Warn("backing up project", "err", err) // not fatal: the store still works
 	}
 	storeServer := bridge.NewStoreServer(rt.Files, log)
+	windows := newWindowHost() // nil without native windows (the server build)
+	var winService app.Windows
+	if windows != nil {
+		winService = windows
+	}
+	presentHub := app.NewPresent(log)
 
 	wails = application.New(application.Options{
 		Name:        "Inkwell",
@@ -90,6 +96,7 @@ func main() {
 			application.NewService(rt.Session),
 			application.NewService(app.NewProjects(proj, rt.Files)),
 			application.NewService(app.NewPreviewService(rt.Preview)),
+			application.NewService(app.NewPresentService(winService)),
 		},
 		Assets: application.AssetOptions{
 			Handler:    application.AssetFileServerFS(inkwell.Assets),
@@ -117,6 +124,7 @@ func main() {
 	wails.HandleStream(bridge.StreamName, func(c *application.StreamConn) { router.Serve(c) })
 	wails.HandleStream(bridge.StoreStreamName, func(c *application.StreamConn) { storeServer.Serve(c) })
 	wails.HandleStream(app.PreviewStreamName, func(c *application.StreamConn) { rt.Preview.Serve(c) })
+	wails.HandleStream(app.PresentStreamName, func(c *application.StreamConn) { presentHub.Serve(c) })
 
 	go func() {
 		if err := proj.Watch(ctx, func(rel string) {
@@ -136,7 +144,7 @@ func main() {
 		}
 	}()
 
-	wails.Window.NewWithOptions(application.WebviewWindowOptions{
+	main := wails.Window.NewWithOptions(application.WebviewWindowOptions{
 		Title:     "Inkwell",
 		Width:     1280,
 		Height:    800,
@@ -144,11 +152,22 @@ func main() {
 		MinHeight: 480,
 		URL:       "/",
 	})
+	if windows != nil {
+		windows.bind(wails, main)
+	}
 
 	if err := wails.Run(); err != nil {
 		log.Error("inkwell stopped", "err", err)
 		os.Exit(1)
 	}
+}
+
+// windowHost is the desktop's windows for a presentation, which can only be
+// bound to the application once it and its main window exist. The server build
+// has none.
+type windowHost interface {
+	app.Windows
+	bind(*application.App, *application.WebviewWindow)
 }
 
 // backupsKept is how many project backups are kept (one per launch).

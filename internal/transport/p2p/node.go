@@ -95,9 +95,10 @@ const (
 	connLow  = 32
 	connHigh = 64
 
-	// writeTimeout plus one second per writeRate bytes bounds each Send.
-	writeTimeout = 10 * time.Second
-	writeRate    = 1 << 20
+	// writeTimeout is how long a write may go without progress before it
+	// fails; it is re-armed each time a chunk of the frame is written, so the
+	// time a frame takes is not bounded, only its stalls are.
+	writeTimeout = frame.WriteIdle
 	// openTimeout bounds opening the outbound stream.
 	openTimeout = 15 * time.Second
 	// upTimeout bounds how long an inbound stream waits for its peer to be
@@ -113,6 +114,19 @@ const (
 	msgOverhead = 64
 	// maxBuffered bounds the received bytes waiting for Recv, across peers.
 	maxBuffered = 256 << 20
+)
+
+// hold is the state of a peer that was reset.
+type hold struct {
+	until, last time.Time
+	backoff     time.Duration
+}
+
+const (
+	// minResetBackoff is how long a peer that was reset is kept out; it
+	// doubles at each reset within resetMemory of the last, up to maxBackoff.
+	minResetBackoff = 2 * time.Second
+	resetMemory     = 10 * time.Minute
 )
 
 // Options tunes a [Node]. The zero value listens on random ports and admits
@@ -220,6 +234,7 @@ type Node struct {
 	// want is the set of peers to keep connected, and kick is closed and
 	// replaced to make their dial loops retry at once. Both under mu.
 	want map[peer.ID]*wanted
+	held map[peer.ID]hold // the peers that were reset, see Reset; under mu
 	kick chan struct{}
 
 	lanErr    error
@@ -304,6 +319,7 @@ func New(ctx context.Context, key ed25519.PrivateKey, o Options) (*Node, error) 
 		budget:    frame.NewBudget(maxBuffered),
 		peers:     make(map[peer.ID]*peerState),
 		want:      make(map[peer.ID]*wanted),
+		held:      make(map[peer.ID]hold),
 		found:     make(map[peer.ID]nearbyEntry),
 		kick:      make(chan struct{}),
 		relays:    relays,
@@ -448,6 +464,9 @@ func peerName(p peer.ID) (transport.PeerID, bool) {
 func (n *Node) admitted(p peer.ID) bool {
 	name, ok := peerName(p)
 	if !ok {
+		return false
+	}
+	if n.isHeld(p) {
 		return false
 	}
 	return n.opts.Admit == nil || n.opts.Admit(name) || n.isOpen()
@@ -601,6 +620,42 @@ func (n *Node) Drop(who transport.PeerID) {
 	n.h.Peerstore().ClearAddrs(id)
 }
 
+// Reset closes the connections to peer like [Node.Drop], but does not ban it:
+// the peer stays wanted and known, and may reconnect, from either side, once
+// a backoff has passed. The backoff is 2 s, doubling at each reset within ten
+// minutes of the last one, up to a minute. It is for a peer that does not read
+// what it is sent, such as a slow link; use Drop for a suspended or removed
+// member. The peer's PeerDown follows.
+func (n *Node) Reset(who transport.PeerID) {
+	id, ok := parseID(who)
+	if !ok || id == n.h.ID() {
+		return
+	}
+	n.mu.Lock()
+	h := n.held[id]
+	now := time.Now()
+	h.backoff = resetBackoff(h, now)
+	h.until, h.last = now.Add(h.backoff), now
+	n.held[id] = h
+	n.mu.Unlock()
+	_ = n.h.Network().ClosePeer(id)
+}
+
+// resetBackoff is the backoff of the next reset of a peer that was reset as h.
+func resetBackoff(h hold, now time.Time) time.Duration {
+	if h.backoff == 0 || now.Sub(h.last) > resetMemory {
+		return minResetBackoff
+	}
+	return min(2*h.backoff, maxBackoff)
+}
+
+// isHeld reports whether p was reset and its backoff has not passed.
+func (n *Node) isHeld(p peer.ID) bool {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	return time.Now().Before(n.held[p].until)
+}
+
 // Recv returns the next event, blocking until one arrives, ctx is done or
 // the node is closed (then it returns [transport.ErrClosed]).
 func (n *Node) Recv(ctx context.Context) (transport.Event, error) {
@@ -642,6 +697,16 @@ func (n *Node) Peers() []transport.PeerID {
 	slices.Sort(peers)
 	return peers
 }
+
+// Reserve takes size bytes of the node's receive budget, the one that bounds
+// the events waiting for Recv, and reports whether they were free. The mux
+// that reassembles fragments above the node charges its partial messages
+// here, so that all memory held for incoming data counts against one budget.
+// Give them back with [Node.Unreserve].
+func (n *Node) Reserve(size int) bool { return n.budget.TryAcquire(size) }
+
+// Unreserve gives back bytes taken with [Node.Reserve].
+func (n *Node) Unreserve(size int) { n.budget.Release(size) }
 
 // Close disconnects every peer, stops the node and waits for its goroutines.
 // It is idempotent. Connected peers observe a PeerDown; this node's pending

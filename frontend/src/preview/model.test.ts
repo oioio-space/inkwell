@@ -100,6 +100,28 @@ describe("PreviewModel", () => {
     m.stop();
   });
 
+  it("PRS-61 asks for the deck while a presentation wants it, again after each compilation", () => {
+    const m = started();
+    const decks = () => last().sent.filter((r) => r.op === "deck");
+    m.receive(result({ rev: 1 }));
+    expect(decks()).toEqual([]); // nobody presents: no extra work for Go
+    m.wantDeck(true);
+    expect(decks()).toHaveLength(1);
+    m.receive(result({ seq: 2, rev: 2 }));
+    expect(decks()).toHaveLength(2);
+    m.receive({
+      type: "deck",
+      rev: 2,
+      deck: { pages: [{ slide: 1, step: 0, hidden: false, note: "" }], minutes: 0 },
+    });
+    expect(m.deck?.pages).toHaveLength(1);
+    m.wantDeck(false);
+    expect(m.deck).toBeUndefined();
+    m.receive(result({ seq: 3, rev: 3 }));
+    expect(decks()).toHaveLength(2);
+    m.stop();
+  });
+
   it("PRV-73 a page that cannot be shown safely is marked, not rendered", () => {
     const m = started();
     m.receive(result({ pageCount: 1, pages: ['<svg width="1pt" height="1pt"><script/></svg>'] }));
