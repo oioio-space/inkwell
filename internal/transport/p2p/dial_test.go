@@ -101,3 +101,37 @@ func TestRefusedPeerIsNotHammered(t *testing.T) {
 		}
 	})
 }
+
+// TestResetReconnectsAfterBackoff: a peer that was reset (it did not read) is
+// let back in after a short backoff that doubles on repeated resets, as long
+// as it is wanted; a dropped peer, in contrast, stays away.
+func TestResetReconnectsAfterBackoff(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		nn := newNatNet(1)
+		relays := nn.relay(t, p2p.RelayOptions{})
+		a := nn.node(t, 1, p2p.Options{Relays: relays})
+		b := nn.node(t, 2, p2p.Options{Relays: relays})
+		a.Want(map[transport.PeerID][]string{b.Local(): nil})
+		expectUp(t, a, b)
+
+		a.Reset(b.Local())
+		expectEvent(t, a, transport.PeerDown, b.Local())
+		expectEvent(t, b, transport.PeerDown, a.Local())
+		expectQuietFor(t, a, time.Second) // held back: no instant redial
+		expectEventWithin(t, a, transport.PeerUp, b.Local(), 20*time.Second)
+		expectEventWithin(t, b, transport.PeerUp, a.Local(), wait)
+
+		// A second reset right after waits longer.
+		a.Reset(b.Local())
+		expectEvent(t, a, transport.PeerDown, b.Local())
+		expectEvent(t, b, transport.PeerDown, a.Local())
+		expectQuietFor(t, a, 3*time.Second)
+		expectEventWithin(t, a, transport.PeerUp, b.Local(), 30*time.Second)
+		expectEventWithin(t, b, transport.PeerUp, a.Local(), wait)
+
+		// Dropped (suspended, removed), it does not come back.
+		a.Drop(b.Local())
+		expectEvent(t, a, transport.PeerDown, b.Local())
+		expectQuietFor(t, a, 3*time.Minute)
+	})
+}

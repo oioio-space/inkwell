@@ -52,9 +52,11 @@ type outbox struct {
 	cancel context.CancelFunc
 }
 
-// Dropper is implemented by a transport that can reset a peer: close its
-// connections so that the peer goes down and its sync starts afresh.
-type Dropper interface{ Drop(who transport.PeerID) }
+// Resetter is implemented by a transport that can reset a peer: close its
+// connections so that the peer goes down and its sync starts afresh, but
+// let it reconnect after a short backoff ([p2p.Node.Reset]), unlike a drop,
+// which is for a suspended or removed member.
+type Resetter interface{ Reset(who transport.PeerID) }
 
 // NewRouter returns a router over t that logs to log. If t implements
 // [Source] the router relays its envelopes, and if it implements [Attester]
@@ -201,7 +203,7 @@ const outboxDepth = 64
 
 // enqueue hands payload to the sender of peer, starting it if needed. It never
 // waits: if the queue is full, the message is dropped and the peer is reset
-// (see [Dropper]), so that the webview sees it go down and syncs again.
+// (see [Resetter]), so that the webview sees it go down and syncs again.
 func (r *Router) enqueue(s *session, peer transport.PeerID, payload []byte) {
 	s.omu.Lock()
 	o := s.out[peer]
@@ -217,8 +219,8 @@ func (r *Router) enqueue(s *session, peer transport.PeerID, payload []byte) {
 	default:
 		r.warn("bridge: peer does not read, resetting it", "peer", peer)
 		r.stopPeer(s, peer)
-		if d, ok := r.t.(Dropper); ok {
-			d.Drop(peer)
+		if d, ok := r.t.(Resetter); ok {
+			d.Reset(peer)
 		}
 	}
 }

@@ -22,8 +22,8 @@ type gated struct {
 	dropped  *atomic.Value
 }
 
-// Drop records the peer the router reset.
-func (g gated) Drop(who transport.PeerID) { g.dropped.Store(who) }
+// Reset records the peer the router reset.
+func (g gated) Reset(who transport.PeerID) { g.dropped.Store(who) }
 
 func (g gated) Send(ctx context.Context, to transport.PeerID, p []byte) error {
 	if to == "slow" {
@@ -120,7 +120,7 @@ func TestFullQueueResetsThePeer(t *testing.T) {
 			t.Fatalf("fast received %q behind a full queue, want [f1]", got)
 		}
 		if who, _ := g.dropped.Load().(transport.PeerID); who != "slow" {
-			t.Errorf("Drop(%q), want the slow peer reset", who)
+			t.Errorf("Reset(%q), want the slow peer reset", who)
 		}
 		c.close()
 		<-serveDone

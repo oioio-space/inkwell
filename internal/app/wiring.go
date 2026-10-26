@@ -589,7 +589,7 @@ var (
 	_ transport.Transport = (*repoPort)(nil)
 	_ bridge.Source       = (*repoPort)(nil)
 	_ bridge.Attester     = (*repoPort)(nil)
-	_ bridge.Dropper      = (*repoPort)(nil)
+	_ bridge.Resetter     = (*repoPort)(nil)
 )
 
 func (p *repoPort) Local() transport.PeerID { return p.raw.Local() }
@@ -603,8 +603,12 @@ func (p *repoPort) Send(ctx context.Context, to transport.PeerID, payload []byte
 	return p.repoCh.Send(ctx, to, payload)
 }
 
-// Drop resets peer, see [bridge.Dropper].
-func (p *repoPort) Drop(who transport.PeerID) { (*Wiring)(p).drop(who) }
+// Reset resets peer without banning it, see [bridge.Resetter].
+func (p *repoPort) Reset(who transport.PeerID) {
+	if r, ok := p.raw.(bridge.Resetter); ok {
+		r.Reset(who)
+	}
+}
 
 func (p *repoPort) Recv(ctx context.Context) (transport.Event, error) {
 	for {
