@@ -63,6 +63,12 @@
   --warning-bg: light-dark(#fdf3e1, rgb(255 194 82 / 14%));
   --info-bg: light-dark(#e3eefb, #2b4b73);
   --success: var(--p-green-4);
+  --destructive: light-dark(#c01c28, #ff7b63);
+  /* Differences in the history: added text on pale green, removed text struck on pale red. */
+  --diff-add-bg: light-dark(#d4f0df, rgb(87 227 137 / 22%));
+  --diff-add-fg: light-dark(#0b4a2a, #c6f7d9);
+  --diff-del-bg: light-dark(#fbd9d9, rgb(255 123 99 / 24%));
+  --diff-del-fg: light-dark(#7a0f18, #ffd0c7);
   --focus-ring: 2px solid color-mix(in srgb, var(--accent-bg) 75%, transparent);
 
   /*
