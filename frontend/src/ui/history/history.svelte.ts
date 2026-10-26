@@ -284,7 +284,7 @@ class HistoryState {
     const seq = ++this.#seq;
     this.busy = true;
     try {
-      const result = await analyzer.analyze(doc, this.since);
+      const result = await analyzer.analyze(doc, this.since, this.myActors);
       if (seq !== this.#seq) return;
       this.analysis = result;
       this.doc = doc;

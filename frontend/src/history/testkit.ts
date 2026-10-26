@@ -55,10 +55,14 @@ export class Device {
   /** The device says who it is, in a change of its own (as the app does). */
   claim(name: string, peer = `peer-${this.actor}`): this {
     this.clock += 1;
-    this.doc = A.emptyChange(this.doc, {
-      time: this.clock,
-      message: actionMessage("claim", JSON.stringify({ name, peer })),
-    });
+    this.doc = A.change(
+      this.doc,
+      { time: this.clock, message: actionMessage("claim", JSON.stringify({ name, peer })) },
+      (d) => {
+        d.meta ??= {};
+        d.meta.claimedAt = this.clock + Number.parseInt(this.actor, 16) / 1e6;
+      },
+    );
     return this;
   }
 

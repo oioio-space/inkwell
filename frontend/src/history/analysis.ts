@@ -4,7 +4,7 @@ import {
   claimsOf,
   type DeviceClaim,
   pastOf,
-  personOfClaims,
+  personOfMine,
   type Session,
   sessionsBefore,
   sessionsOf,
@@ -69,13 +69,14 @@ export async function analyze(
   doc: A.Doc<HDoc>,
   tracker: Tracker,
   since: Heads | undefined,
+  mine?: ReadonlySet<string>,
   opts?: TrackOptions,
 ): Promise<Analysis> {
   const steps = stepsOf(doc);
   // A session never spans the last visit: what came after it is told apart from what came before.
   const past = since ? pastOf(steps, since) : undefined;
   const claims = claimsOf(steps);
-  const sessions = sessionsOf(steps, Date.now(), personOfClaims(claims), past);
+  const sessions = sessionsOf(steps, Date.now(), personOfMine(mine), past);
   const ops = steps.at(-1)?.maxOp ?? 0;
   const limited = tooCostly(ops, sessions.length);
   const blame: Blame = limited
@@ -106,7 +107,11 @@ const JOB_MS = 30_000;
 
 /** Computes analyses, on this thread or in a worker; the host never has to know which. */
 export interface Analyzer {
-  analyze(doc: A.Doc<HDoc>, since: Heads | undefined): Promise<Analysis>;
+  analyze(
+    doc: A.Doc<HDoc>,
+    since: Heads | undefined,
+    mine?: ReadonlySet<string>,
+  ): Promise<Analysis>;
   dispose(): void;
 }
 
@@ -114,8 +119,10 @@ export interface Analyzer {
 export function inlineAnalyzer(): Analyzer {
   const tracker = new Tracker();
   return {
-    analyze: (doc, since) =>
-      doc.text.length > HUGE_TEXT ? Promise.resolve(tooBig(doc)) : analyze(doc, tracker, since),
+    analyze: (doc, since, mine) =>
+      doc.text.length > HUGE_TEXT
+        ? Promise.resolve(tooBig(doc))
+        : analyze(doc, tracker, since, mine),
     dispose() {},
   };
 }
@@ -145,6 +152,7 @@ export function workerAnalyzer(
   interface Job {
     doc: A.Doc<HDoc>;
     since: Heads | undefined;
+    mine: string[];
     resolve: (a: Analysis) => void;
     reject: (e: unknown) => void;
   }
@@ -179,7 +187,7 @@ export function workerAnalyzer(
       if (worker !== w || running?.id !== id) return;
       const changes = sent ? A.getChangesSince(job.doc, sent) : A.getAllChanges(job.doc);
       sent = A.getHeads(job.doc);
-      w.postMessage({ id, changes, since: job.since });
+      w.postMessage({ id, changes, since: job.since, mine: job.mine });
     });
   }
 
@@ -215,11 +223,11 @@ export function workerAnalyzer(
   }
 
   return {
-    analyze(doc, since) {
+    analyze(doc, since, mine) {
       if (doc.text.length > HUGE_TEXT) return Promise.resolve(tooBig(doc));
       return new Promise<Analysis>((resolve, reject) => {
         pending?.reject(new Superseded());
-        pending = { doc, since, resolve, reject };
+        pending = { doc, since, mine: [...(mine ?? [])], resolve, reject };
         next();
       });
     },

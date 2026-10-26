@@ -163,16 +163,24 @@ export function claimsOf(steps: readonly Step[]): Record<string, DeviceClaim> {
   return out;
 }
 
-/** Which person an actor is, for the grouping: the device it says it is, so a reload stays in the session. */
-export const personOfClaims =
-  (claims: Readonly<Record<string, DeviceClaim>>) =>
+/**
+ * Which person an actor is, for the grouping of steps into sessions. Only this device's own
+ * actors (the ones it kept) are known to be one person: a person who reloads the page stays in
+ * the same session. Any other actor is a person of its own: what a device says about itself is not
+ * enough to put its edits into someone else's session, nor into mine.
+ */
+export const personOfMine =
+  (mine: ReadonlySet<string> | undefined) =>
   (actor: string): string =>
-    claims[actor]?.peer ?? actor;
+    mine?.has(actor) ? "me" : actor;
 
 /** The sessions of a document, oldest first. */
-export function history(doc: A.Doc<unknown>, now = Date.now()): Session[] {
-  const steps = stepsOf(doc);
-  return sessionsOf(steps, now, personOfClaims(claimsOf(steps)));
+export function history(
+  doc: A.Doc<unknown>,
+  now = Date.now(),
+  mine?: ReadonlySet<string>,
+): Session[] {
+  return sessionsOf(stepsOf(doc), now, personOfMine(mine));
 }
 
 /** The text of the document at some heads (empty heads: the empty document). */

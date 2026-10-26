@@ -48,8 +48,12 @@ describe("sessions (B2)", () => {
     const a = new Device("aa01").type("un ", 0).claim("Marie", "peer-m");
     const b = new Device("aa02", a.doc).type("deux", 3).claim("Marie", "peer-m");
     a.sync(b);
-    const sessions = history(a.doc, b.clock * 1000);
+    const sessions = history(a.doc, b.clock * 1000, new Set(["aa01", "aa02"]));
     expect(sessions.filter((s) => !s.action)).toHaveLength(1);
+    // Another device that says it is the same person is not put in the session.
+    expect(history(a.doc, b.clock * 1000, new Set(["aa01"])).filter((s) => !s.action)).toHaveLength(
+      2,
+    );
   });
 
   it("an action of Inkwell's own is an entry of its own", () => {

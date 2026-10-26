@@ -9,6 +9,8 @@ interface Job {
   /** Changes the worker has not seen yet. */
   changes: Uint8Array[];
   since: Heads | undefined;
+  /** The actors of this device: they alone are one person in the grouping. */
+  mine: string[];
 }
 
 const scope = self as unknown as {
@@ -22,11 +24,11 @@ const tracker = new Tracker();
 let queue: Promise<void> = Promise.resolve();
 
 scope.onmessage = (e) => {
-  const { id, changes, since } = e.data;
+  const { id, changes, since, mine } = e.data;
   queue = queue.then(async () => {
     try {
       [doc] = A.applyChanges(doc, changes);
-      const result = await analyze(doc, tracker, since);
+      const result = await analyze(doc, tracker, since, new Set(mine));
       const { sessions, ...rest } = result.blame;
       void sessions;
       const wire: Wire = { ...result, blame: rest };

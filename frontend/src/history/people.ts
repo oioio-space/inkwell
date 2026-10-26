@@ -87,5 +87,12 @@ export function claimActor(
   if (!doc) return;
   if (known && known.peer === me.id && known.name === me.name) return;
   const message = actionMessage("claim", JSON.stringify({ name: me.name, peer: me.id }));
-  handle.update((d) => A.emptyChange(d, { message }));
+  // A change with no operation is not carried by every peer: the claim also stamps the time.
+  handle.change(
+    (d) => {
+      d.meta ??= {};
+      d.meta.claimedAt = Date.now();
+    },
+    { message },
+  );
 }

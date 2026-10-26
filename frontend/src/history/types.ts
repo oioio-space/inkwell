@@ -31,6 +31,8 @@ export interface Variant {
 export interface Meta {
   versions?: Version[];
   variants?: Variant[];
+  /** When a device last said who it is: gives the claim change something to write. */
+  claimedAt?: number;
 }
 
 export interface HDoc {

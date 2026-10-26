@@ -36,13 +36,13 @@ describe("who is who (X-20): claims are only as good as their author", () => {
     const mallory = new Device("bb02", alice.doc);
     // Mallory's change carries a claim: it is Mallory's, whatever peer it names.
     mallory.edit(
-      () => undefined,
+      (d) => {
+        d.meta ??= {};
+        d.meta.claimedAt = 12345;
+      },
       1,
       actionMessage("claim", JSON.stringify({ name: "Alice", peer: "peer-a" })),
     );
-    mallory.doc = A.emptyChange(mallory.doc, {
-      message: actionMessage("claim", JSON.stringify({ name: "Alice", peer: "peer-a" })),
-    });
     alice.sync(mallory);
     const claims = claimsOf(stepsOf(alice.doc));
     expect(claims.aa01).toEqual({ name: "Alice", peer: "peer-a" });
@@ -57,9 +57,14 @@ describe("who is who (X-20): claims are only as good as their author", () => {
     const alice = new Device("aa01").type("base\n", 0).claim("Alice", "peer-a");
     const left = alice.heads;
     const mallory = new Device("bb02", alice.doc);
-    mallory.doc = A.emptyChange(mallory.doc, {
-      message: actionMessage("claim", JSON.stringify({ name: "Alice", peer: "peer-a" })),
-    });
+    mallory.edit(
+      (d) => {
+        d.meta ??= {};
+        d.meta.claimedAt = 12345;
+      },
+      1,
+      actionMessage("claim", JSON.stringify({ name: "Alice", peer: "peer-a" })),
+    );
     mallory.type("injecté\n", mallory.doc.text.length, 1);
     alice.sync(mallory);
     const sessions = history(alice.doc);
