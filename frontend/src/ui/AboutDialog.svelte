@@ -1,4 +1,5 @@
 <script lang="ts">
+import { PreviewService } from "../../bindings/github.com/oioio-space/inkwell/internal/app/index";
 import { t } from "../i18n";
 import { session } from "./editorSession.svelte";
 import Icon from "./icons/Icon.svelte";
@@ -13,10 +14,37 @@ let dialog: HTMLDialogElement | undefined = $state();
 /** The product name is a brand, not a translated text. */
 const NAME = "Inkwell";
 
+/** How the layout engine is kept offline (the Typst sidecar's network mode); undefined while asking. */
+let mode = $state<string | undefined>();
+
 $effect(() => {
   if (open && !dialog?.open) dialog?.showModal();
   if (!open && dialog?.open) dialog.close();
 });
+
+$effect(() => {
+  if (!open) return;
+  mode = undefined;
+  let current = true;
+  PreviewService.NetworkMode()
+    .then((m) => {
+      if (current) mode = m;
+    })
+    .catch(() => {
+      if (current) mode = "";
+    });
+  return () => {
+    current = false;
+  };
+});
+
+const networkText = $derived(
+  mode === "namespace"
+    ? t("about.network.namespace")
+    : mode === "proxy only"
+      ? t("about.network.proxy")
+      : t("about.network.unknown"),
+);
 
 /** The short commit and the day, as "Révision 0123456, 2026-10-26"; empty when neither is known. */
 const build = $derived.by(() => {
@@ -49,6 +77,10 @@ const build = $derived.by(() => {
       {#if build}<p class="build">{build}</p>{/if}
     {/if}
     <p class="license">{t("about.license")}</p>
+    <section class="offline">
+      <h3>{t("about.offline")}</h3>
+      <p data-testid="network-mode" data-mode={mode ?? "…"}>{mode === undefined ? "…" : networkText}</p>
+    </section>
   </div>
 </dialog>
 
@@ -117,6 +149,20 @@ const build = $derived.by(() => {
   .build,
   .license {
     color: var(--fg-dim);
+    font-size: 13px;
+  }
+  .offline {
+    margin-top: 12px;
+    padding: 10px 12px;
+    border-radius: var(--radius);
+    background: var(--card-bg);
+    box-shadow: 0 0 0 1px var(--card-shade);
+  }
+  h3 {
+    margin: 0 0 4px;
+    font: 700 13px/1.3 var(--font-ui);
+  }
+  .offline p {
     font-size: 13px;
   }
   .version {

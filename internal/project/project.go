@@ -269,6 +269,11 @@ func Latest(base *os.Root) (string, error) {
 // Dir returns the project's folder name in its base.
 func (p *Project) Dir() string { return p.dir }
 
+// Path returns the project's folder as a path on disk, for a program that is
+// given the folder (the Typst compiler). Read files through the project, not
+// through this path, whenever the project decides what is allowed.
+func (p *Project) Path() string { return p.root.Name() }
+
 // Meta returns the project's identity.
 func (p *Project) Meta() Meta {
 	p.mu.Lock()

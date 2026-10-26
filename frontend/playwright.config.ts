@@ -28,6 +28,8 @@ const instance = (port: number) => ({
     INKWELL_RENDEZVOUS: "off",
     INKWELL_HOME: resolve(e2eDir, String(port)),
     INKWELL_DOCS: join(docsRoot, String(port)),
+    // "Exporter en PDF" cannot open a dialog in a headless run: it saves here, unasked.
+    INKWELL_EXPORT_DIR: join(docsRoot, `export-${port}`),
   },
   url: `http://127.0.0.1:${port}/health`,
   reuseExistingServer: false,

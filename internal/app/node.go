@@ -112,6 +112,9 @@ type Options struct {
 	// le réseau local"): this device then announces itself on the local
 	// network and sees the others that are visible.
 	LAN bool
+	// ExportChoose asks the person where to save an exported PDF (see
+	// [PreviewOptions.Choose]); nil turns the export off.
+	ExportChoose func(name string) (string, error)
 }
 
 // NoCodes as [Options.RendezvousURL] turns the short codes off: invitations
@@ -130,6 +133,8 @@ type Runtime struct {
 	// Files is the storage the store stream serves: the project, its
 	// multi-file tree and its blobs (see [Files]).
 	Files *Files
+	// Preview compiles the project and streams the result to the webview.
+	Preview *Preview
 
 	wiring *Wiring
 	inv    *invites
@@ -182,7 +187,14 @@ func Start(ctx context.Context, home *os.Root, o Options) (*Runtime, error) {
 	s := NewSession(node)
 	s.inv = inv
 	fctx, cancel := context.WithCancel(ctx)
-	r := &Runtime{Node: node, Session: s, Repo: w.Repo(), Files: files, wiring: w, inv: inv, cancel: cancel}
+	pv := NewPreview(PreviewOptions{
+		Root:   o.Project.Path(),
+		Title:  func() string { return o.Project.Meta().Title },
+		Choose: o.ExportChoose,
+		Log:    log,
+	})
+	files.SetOnWrite(pv.Changed)
+	r := &Runtime{Node: node, Session: s, Repo: w.Repo(), Files: files, Preview: pv, wiring: w, inv: inv, cancel: cancel}
 	r.files.Go(func() {
 		if err := files.Run(fctx); fctx.Err() == nil && !errors.Is(err, transport.ErrClosed) {
 			log.Error("blob service stopped", "err", err)
@@ -194,6 +206,7 @@ func Start(ctx context.Context, home *os.Root, o Options) (*Runtime, error) {
 // Close stops the blob service, the wiring and the node. It is idempotent.
 func (r *Runtime) Close() error {
 	r.cancel()
+	r.Preview.Close()
 	r.files.Wait()
 	return errors.Join(r.wiring.Close(), r.inv.close(), r.Files.Close())
 }

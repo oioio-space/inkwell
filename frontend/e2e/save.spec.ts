@@ -1,7 +1,7 @@
 import { existsSync, statSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname, join } from "node:path";
 import type { Page } from "@playwright/test";
-import { docsRoot, historyHolds, holds, mainTypIn, openWith, readDisk } from "./disk";
+import { docsRoot, historyWrittenSince, holds, mainTypIn, openWith, readDisk } from "./disk";
 import { expect, test } from "./fixtures";
 import { clear, docText, editor, open, pair, typeAtEnd } from "./helpers";
 import { ALICE_PORT, ALICE_URL, BOB_PORT, BOB_URL } from "./ports";
@@ -22,6 +22,16 @@ async function start(page: Page, text: string) {
   await clear(page);
   await typeAtEnd(page, text);
   await expect.poll(() => readDisk(aliceFile()), { timeout: 10_000 }).toBe(text);
+}
+
+/** The file has caught up with the document: a spec before this one may still be writing its last text. */
+async function fileCaughtUp(page: Page): Promise<string> {
+  await expect
+    .poll(async () => (readDisk(aliceFile()) ?? "").replace(/\n/g, "") === (await docText(page)), {
+      timeout: 10_000,
+    })
+    .toBe(true);
+  return readDisk(aliceFile()) ?? "";
 }
 
 const toast = (page: Page, text: string | RegExp) =>
@@ -83,7 +93,8 @@ test("SAV-03 closing with unwritten changes loses nothing, asks nothing, and reo
   browser,
 }) => {
   const page = await openWith(browser, ALICE_URL, { saveMode: "manual" });
-  const before = readDisk(aliceFile()) ?? "";
+  const before = await fileCaughtUp(page);
+  const typedAt = Date.now();
   await typeAtEnd(page, " pas écrit");
   await expect(page.getByTestId("unsaved")).toBeVisible();
   let asked = false;
@@ -93,7 +104,7 @@ test("SAV-03 closing with unwritten changes loses nothing, asks nothing, and reo
   });
   // The store keeps the history a moment after each keystroke (automerge-repo's save debounce).
   await expect
-    .poll(() => historyHolds(dirname(aliceFile()), " pas écrit"), { timeout: 5_000 })
+    .poll(() => historyWrittenSince(dirname(aliceFile()), typedAt), { timeout: 5_000 })
     .toBe(true);
   await page.reload();
   await expect(editor(page)).toBeVisible();

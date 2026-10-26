@@ -1,16 +1,23 @@
 <script lang="ts">
+import { Stream } from "@wailsio/runtime";
 import { onMount } from "svelte";
 import { Session } from "../bindings/github.com/oioio-space/inkwell/internal/app/index";
 import { looksTabular } from "./editor/csv/dialect";
 import { markExternal } from "./editor/external";
 import { langOf } from "./editor/format";
 import { t } from "./i18n";
+import type { SocketLike } from "./net/WailsNetworkAdapter";
+import { exportPdf, jumpFromCursor, jumpFromPage, jumpToProblem } from "./preview/actions";
+import { lastChangeSeconds } from "./preview/docTime";
+import Preview from "./preview/Preview.svelte";
+import { preview } from "./preview/preview.svelte";
 import { settings } from "./store/settings.svelte";
 import AboutDialog, { type BuildInfo } from "./ui/AboutDialog.svelte";
 import Editor from "./ui/Editor.svelte";
 import ExternalBanner from "./ui/ExternalBanner.svelte";
 import ExternalChangeToast from "./ui/ExternalChangeToast.svelte";
 import { session } from "./ui/editorSession.svelte";
+import NoticeToast from "./ui/NoticeToast.svelte";
 import ProjectionBanner from "./ui/ProjectionBanner.svelte";
 import Preferences from "./ui/prefs/Preferences.svelte";
 import SealedBanner from "./ui/SealedBanner.svelte";
@@ -50,6 +57,7 @@ const barLanguage = $derived(barLang(workspace.current));
 const hasBar = $derived(barLanguage !== undefined);
 const barVisible = $derived(hasBar && settings.toolbarVisible(workspace.project));
 const sidebarOpen = $derived(settings.sidebarVisible(workspace.project));
+const previewOpen = $derived(settings.previewVisible(workspace.project));
 
 function toggleToolbar() {
   settings.setToolbarVisible(workspace.project, !settings.toolbarVisible(workspace.project));
@@ -58,6 +66,10 @@ function toggleToolbar() {
 
 function toggleSidebar() {
   settings.setSidebarVisible(workspace.project, !sidebarOpen);
+}
+
+function togglePreview() {
+  settings.setPreviewVisible(workspace.project, !previewOpen);
 }
 
 /** Not in the file yet: shown when saving with Ctrl+S, or when a write failed or has no file to go to. */
@@ -92,6 +104,12 @@ function onKey(e: KeyboardEvent) {
     void workspace.save();
     return;
   }
+  if ((e.ctrlKey || e.metaKey) && e.altKey && e.key.toLowerCase() === "j") {
+    e.preventDefault();
+    if (!previewOpen) togglePreview();
+    void jumpFromCursor();
+    return;
+  }
   if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "t") {
     e.preventDefault();
     if (hasBar) toggleToolbar();
@@ -108,7 +126,22 @@ $effect(() => {
   void refresh();
 });
 
+// The preview dates the document by the last change the document itself records, so that every
+// person sees the same date; Go compiles after the text has been written to the project folder.
+$effect(() => {
+  const handle = workspace.handle;
+  if (!handle) return;
+  const note = () => {
+    const doc = handle.doc();
+    if (doc) preview.noteEdit(lastChangeSeconds(doc));
+  };
+  note();
+  handle.on("change", note);
+  return () => handle.off("change", note);
+});
+
 onMount(() => {
+  preview.start(() => Stream("preview") as unknown as SocketLike);
   void workspace.start().then(refresh);
   // The About dialog just stays without a version if Go does not answer.
   Session.AppVersion()
@@ -117,7 +150,10 @@ onMount(() => {
   const timer = setInterval(() => {
     if (!document.hidden) void refresh();
   }, 4000);
-  return () => clearInterval(timer);
+  return () => {
+    clearInterval(timer);
+    preview.stop();
+  };
 });
 </script>
 
@@ -138,10 +174,13 @@ onMount(() => {
       {sidebarOpen}
       toolbarVisible={barVisible}
       canToggleToolbar={hasBar}
+      {previewOpen}
       onShare={() => (sharing = true)}
       onToggleSidebar={toggleSidebar}
       onToggleToolbar={toggleToolbar}
       onPreferences={() => (preferences = true)}
+      onTogglePreview={togglePreview}
+      onExport={exportPdf}
       onAbout={() => (about = true)}
     />
     {#if barVisible && session.state && barLanguage}
@@ -177,20 +216,27 @@ onMount(() => {
     <ProjectionBanner />
     <ExternalBanner />
     <main>
-      {#if workspace.handle}
-        {#key workspace.handle.url}
-          {#if showSheet}
-            <Sheet
-              handle={workspace.handle}
-              {me}
-              path={workspace.current}
-              startOffset={sheetView.offset}
-              onshowtext={(offset) => sheetView.toText(offset)}
-            />
-          {:else}
-            <Editor handle={workspace.handle} {me} {lang} at={tabular ? sheetView.offset : undefined} />
-          {/if}
-        {/key}
+      <div class="pane side-source">
+        {#if workspace.handle}
+          {#key workspace.handle.url}
+            {#if showSheet}
+              <Sheet
+                handle={workspace.handle}
+                {me}
+                path={workspace.current}
+                startOffset={sheetView.offset}
+                onshowtext={(offset) => sheetView.toText(offset)}
+              />
+            {:else}
+              <Editor handle={workspace.handle} {me} {lang} at={tabular ? sheetView.offset : undefined} />
+            {/if}
+          {/key}
+        {/if}
+      </div>
+      {#if previewOpen && !showSheet}
+        <div class="pane side-preview">
+          <Preview onSourceJump={jumpFromPage} onCursorJump={jumpFromCursor} />
+        </div>
       {/if}
     </main>
     {#if !showSheet}
@@ -200,6 +246,8 @@ onMount(() => {
         peerCount={workspace.peers.length}
         editorState={session.state}
         info={workspace.fileInfo}
+        showPage={previewOpen}
+        onProblem={jumpToProblem}
         {unsaved}
       />
     {/if}
@@ -207,6 +255,7 @@ onMount(() => {
 </div>
 <ShareDialog bind:open={sharing} />
 <Preferences bind:open={preferences} />
+<NoticeToast />
 <AboutDialog bind:open={about} info={buildInfo} />
 <ExternalChangeToast />
 
@@ -223,8 +272,33 @@ onMount(() => {
     min-width: 0;
   }
   main {
+    position: relative;
+    display: flex;
     flex: 1;
     min-height: 0;
+    container-type: inline-size;
+  }
+  .pane {
+    min-width: 0;
+    min-height: 0;
+  }
+  .side-source {
+    flex: 1 1 0;
+    min-width: 280px;
+  }
+  .side-preview {
+    flex: 1 1 0;
+    min-width: 260px;
+    max-width: 55%;
+  }
+  /* Too narrow for two panes: the preview covers the source until it is hidden. */
+  @container (max-width: 560px) {
+    .side-preview {
+      position: absolute;
+      inset: 0;
+      max-width: none;
+      z-index: 5;
+    }
   }
   .viewbar {
     display: flex;

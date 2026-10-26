@@ -88,4 +88,4 @@ Rien n'est « fait » sans tests verts et sans une passe `ux-walkthrough` réuss
 | # | Question | Décision |
 |---|----------|----------|
 | Q1 | « peut-être » compte pour 1 ou 2 mots ? | 1 mot (comme Word et LibreOffice), à confirmer |
-| Q2 | Garder « Page X sur Y » dans la barre d'état ? | sans réponse ; gardé pour l'instant (C2) |
+| Q2 | Garder « Page X sur Y » dans la barre d'état ? | sans réponse ; gardé (C2 : « Page X sur Y » dans la barre d'état, quand l'aperçu est affiché) |

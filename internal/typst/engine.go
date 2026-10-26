@@ -578,7 +578,7 @@ func (e *Engine) Compile(ctx context.Context, p Project, main string, opts ...Op
 		}
 	}
 	if o.formats&FormatSVG != 0 {
-		if res.Pages, err = e.readPages(svgDir); err != nil {
+		if res.Pages, err = e.readPages(svgDir, first > 1); err != nil {
 			return res, err
 		}
 	}
@@ -645,7 +645,10 @@ func (e *Engine) readPDF(path string) ([]byte, error) {
 	return os.ReadFile(path) // #nosec G304 -- inside the engine's private temporary folder
 }
 
-func (e *Engine) readPages(dir string) ([]SVG, error) {
+// readPages reads the SVG pages Typst wrote. A window that starts after page 1
+// may lie past the end of the document (it just got shorter): no page is then
+// not an error.
+func (e *Engine) readPages(dir string, windowed bool) ([]SVG, error) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return nil, fmt.Errorf("typst: %w", err)
@@ -657,6 +660,9 @@ func (e *Engine) readPages(dir string) ([]SVG, error) {
 		}
 	}
 	slices.Sort(names) // the numbers are zero-padded
+	if len(names) == 0 && windowed {
+		return nil, nil
+	}
 	if len(names) == 0 {
 		return nil, errors.New("typst: no page was produced")
 	}

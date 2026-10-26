@@ -94,6 +94,7 @@ type Files struct {
 	recent  map[blob.Hash]time.Time // blobs stored here, referenced until the index says so
 	known   bool                    // the webview has said what it refers to
 	nextGC  time.Time               // when the unreferenced blobs are looked for next
+	onWrite func(rel string)        // told when a project file was written, see SetOnWrite
 	wake    chan struct{}           // capacity 1: "something changed"
 	now     func() time.Time
 	closing sync.Once
@@ -155,6 +156,35 @@ func NewFiles(p *project.Project, bulk transport.Transport, o FilesOptions) (*Fi
 	return f, nil
 }
 
+// SetOnWrite sets fn to be called after a text file of the project was written
+// from the document, with its path ("" when the whole tree changed): what the
+// preview recompiles on. fn runs on the caller's goroutine and must not block.
+func (f *Files) SetOnWrite(fn func(rel string)) {
+	f.mu.Lock()
+	f.onWrite = fn
+	f.mu.Unlock()
+}
+
+// wrote tells the listener that rel changed.
+func (f *Files) wrote(rel string) {
+	f.mu.Lock()
+	fn := f.onWrite
+	f.mu.Unlock()
+	if fn != nil {
+		fn(rel)
+	}
+}
+
+// WriteProjection writes the project file rel from the document (see
+// [project.Project.WriteProjection]) and tells the listener.
+func (f *Files) WriteProjection(rel string, data []byte) error {
+	err := f.Project.WriteProjection(rel, data)
+	if err == nil {
+		f.wrote(rel)
+	}
+	return err
+}
+
 // Close releases the blob store. Call it once [Files.Run] has returned.
 func (f *Files) Close() error {
 	var err error
@@ -213,6 +243,7 @@ func (f *Files) SetTree(entries []project.TreeEntry) (int, error) {
 	f.wanted, f.paths = wanted, paths
 	f.mu.Unlock()
 	f.poke()
+	f.wrote("")
 	return len(res.Rejected), err
 }
 

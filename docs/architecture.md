@@ -58,7 +58,8 @@ colonne « Étape » dit quand.
 | `internal/project` | Projet = dossier `<Documents>/Inkwell/<Titre>/` : `project.json`, projection `main.typ`, règle de propriété fsnotify, bac à sable `os.Root`, corbeille ; noms portables (`ValidateName`, `ValidatePath`) et arbre multi-fichiers (`ApplyTree`, `WriteBlob`, ADR 0023) | 2 |
 | `internal/sidecar` | `typst` et `tinymist` épinglés (`manifest.json`), embarqués compressés, extraits et revérifiés (SHA-256) avant chaque lancement ; `Run` (délai, mémoire, sortie bornés) et `Supervisor` (relance avec recul, groupe de processus, `Pdeathsig`) | 3 |
 | `internal/sidecar/fetch` | Téléchargement **à la construction** des archives épinglées ; importé par `cmd/sidecar-fetch` seul | 3 |
-| `internal/typst` | Compilation hors ligne (PDF, pages SVG, diagnostics, `query`, `Watch`), paquets `@preview` fournis + `.typstdeps/`, polices fournies, pièces jointes `pdf.attach` lues dans le PDF | 3 |
+| `internal/typst` | Compilation hors ligne (PDF, pages SVG, diagnostics, `query`, `Watch`, `PageCount`, `Anchors`), paquets `@preview` fournis + `.typstdeps/`, polices fournies, pièces jointes `pdf.attach` lues dans le PDF | 3 |
+| `internal/app` (aperçu) | `Preview` : recompile le projet (anti-rebond, compilation périmée annulée), envoie les pages visibles, le nombre de pages et les diagnostics par le Stream `preview` ; `PreviewService` : export PDF (boîte de dialogue côté Go) et mode réseau | 3 |
 | `cmd/sidecar-fetch` | `mise run sidecar:fetch` : prépare `internal/sidecar/bin/<os>_<arch>/*.gz` | 3 |
 | `internal/blob` | Magasin adressé par BLAKE3 avec arbre Bao externe (groupes de 16 Kio), quotas, reprise, ménage à 30 jours ; échange en tirage sur le flux `bulk` (ADR 0023) | 4 (avancé en T11/B4) |
 | `internal/milestone` | Jalons go-git (projection lisible, jamais source de vérité) | 4 |

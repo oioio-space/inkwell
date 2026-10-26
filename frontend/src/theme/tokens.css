@@ -58,6 +58,8 @@
   --accent: light-dark(var(--p-blue-text-light), var(--p-blue-text-dark));
   --accent-fg: #ffffff;
   --warning: light-dark(var(--p-warn-light), var(--p-warn-dark));
+  --error: light-dark(#c01c28, #ff7b63);
+  --error-bg: light-dark(#fce8e9, rgb(255 123 99 / 14%));
   --warning-bg: light-dark(#fdf3e1, rgb(255 194 82 / 14%));
   --info-bg: light-dark(#e3eefb, #2b4b73);
   --success: var(--p-green-4);
