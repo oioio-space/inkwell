@@ -315,6 +315,25 @@ describe("Pilot", () => {
     expect(b.asking).toBe(false);
   });
 
+  it("PRS-35 a takeover that is two epochs ahead after a split still wins when the network heals", () => {
+    // Counterexample found by the property below (seed 502897934): a pilots, c is cut off and takes
+    // over for b, then b takes over after c falls silent: b is at epoch 3, a still at epoch 1.
+    const net = new Net();
+    const [a, b, c] = [net.add("a"), net.add("b"), net.add("c")] as [Pilot, Pilot, Pilot];
+    a.take();
+    a.publish(show(1));
+    net.partition("c", "a");
+    net.advance(PILOT_TTL_MS + 1);
+    c.take();
+    net.advance(PILOT_TTL_MS + 1);
+    b.take();
+    net.heal();
+    for (const p of [a, b, c]) p.beat();
+    for (const p of [a, b, c]) p.beat();
+    expect([a, b, c].filter((p) => p.isPilot)).toHaveLength(1);
+    expect(new Set([a, b, c].map((p) => p.pilot)).size).toBe(1);
+  });
+
   it("PRS-35 whatever the order of takes and partitions, devices that hear each other agree on the pilot", () => {
     fc.assert(
       fc.property(

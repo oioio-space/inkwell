@@ -7,6 +7,13 @@ export const BEAT_MS = 2000;
 /** How long a request for the controls waits for an answer. */
 export const ASK_MS = 20_000;
 const MAX_REQUESTS = 8;
+/**
+ * How many epochs a claim may be ahead of a live pilot. Two sides of a split network each see a
+ * silent pilot and each take over in turn (one step per silence), so after healing the gap is
+ * the number of takeovers the other side did, not one. The window is wide enough for that and far
+ * too narrow for a single writer to send the largest epoch and lock everyone out.
+ */
+export const MAX_EPOCH_JUMP = 64;
 
 export interface PilotEnv {
   /** This device's peer id. */
@@ -253,10 +260,10 @@ export class Pilot {
 
   /** Whether the claim of `peer` at `epoch` is the one to follow; adopts it if so. */
   #accept(peer: string, epoch: number): boolean {
-    // Someone is there: a claim may be one epoch ahead, not more, or a single writer could send
-    // the largest epoch and nobody could ever take the controls again.
+    // Someone is there: a claim may be a few epochs ahead (a split network heals), not more, or a
+    // single writer could send the largest epoch and nobody could ever take the controls again.
     const live = this.pilot !== undefined && (this.isPilot || this.connected);
-    if (live && epoch > this.epoch + 1) return false;
+    if (live && epoch > this.epoch + MAX_EPOCH_JUMP) return false;
     const wins =
       this.pilot === undefined
         ? epoch >= this.epoch // nobody pilots: only an older claim than the last one is stale
