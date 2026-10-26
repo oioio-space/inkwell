@@ -2,21 +2,17 @@
  * The window layer of a presentation. The public view is a second window; how one opens depends on
  * where Inkwell runs, and the rest of the code does not care:
  *
- * - the desktop app asks Go (`PresentService`), which opens a native window and puts it on the
- *   other screen when there is one (fullscreen), or in an ordinary movable window when there is not;
+ * - the desktop app asks Go (`PresentService`), which opens an ordinary native window;
  * - the browser build (the end-to-end tests, `-tags server`) has no native window: Go says so and
  *   the page opens the same view, `/?view=public`, in a pop-up of its own.
+ *
+ * Neither guesses screens: the person drags the window to the one they want and makes it full
+ * screen there (see `fullscreen.ts`).
  */
-
-/** What Go says of the screens, as the bindings give it (`PresentLayout`). */
-export interface LayoutAnswer {
-  Native: boolean;
-  Dual: boolean;
-}
 
 /** The part of `PresentService` the layer uses. */
 export interface PresentApi {
-  Open(swapped: boolean): Promise<LayoutAnswer>;
+  Open(): Promise<{ Native: boolean }>;
   Close(): Promise<void>;
 }
 
@@ -24,13 +20,6 @@ export interface PresentApi {
 export interface PopupOpener {
   open(url: string, name: string, features: string): { close(): void; closed: boolean } | null;
   readonly location: { origin: string };
-}
-
-export interface OpenedPublic {
-  /** The public view has a screen of its own. */
-  dual: boolean;
-  /** A native window; false for a browser pop-up. */
-  native: boolean;
 }
 
 const PUBLIC_URL = "/?view=public";
@@ -46,10 +35,10 @@ export class PublicWindows {
     this.#host = host;
   }
 
-  /** Opens the public window, or moves it ("Échanger les écrans") if it is open. */
-  async open(swapped: boolean): Promise<OpenedPublic> {
-    const layout = await this.#api.Open(swapped);
-    if (layout.Native) return { dual: layout.Dual, native: true };
+  /** Opens the public window; false for a browser pop-up. */
+  async open(): Promise<boolean> {
+    const { Native } = await this.#api.Open();
+    if (Native) return true;
     if (!this.#popup || this.#popup.closed) {
       this.#popup = this.#host.open(
         `${this.#host.location.origin}${PUBLIC_URL}`,
@@ -57,7 +46,7 @@ export class PublicWindows {
         POPUP,
       );
     }
-    return { dual: false, native: false };
+    return false;
   }
 
   async close(): Promise<void> {

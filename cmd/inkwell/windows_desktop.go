@@ -14,74 +14,38 @@ import (
 // publicWindowName names the window of the public view.
 const publicWindowName = "inkwell-public"
 
-// newWindowHost returns the desktop's windows, for the presenter view in the
-// main window; [windowHost.bind] gives it the application and that window once
-// they exist. Placement is the window manager's to honour: Wayland lets no
-// program position its windows, so there the person drags the public window
-// themselves (and "Échanger les écrans" does not change where it lands).
+// newWindowHost returns the desktop's windows: an ordinary window for the audience, which the
+// person drags to the screen they want and makes full screen there (F11 or the button in it).
+// Inkwell does not guess screens.
 func newWindowHost() windowHost { return &wailsWindows{} }
 
-func (w *wailsWindows) bind(wails *application.App, main *application.WebviewWindow) {
-	w.app, w.main = wails, main
-}
+func (w *wailsWindows) bind(wails *application.App, _ *application.WebviewWindow) { w.app = wails }
 
 type wailsWindows struct {
-	app  *application.App
-	main *application.WebviewWindow
-
-	mu         sync.Mutex
-	public     *application.WebviewWindow
-	fullscreen bool // how the public window was created
+	app    *application.App
+	mu     sync.Mutex
+	public *application.WebviewWindow
 }
 
 var _ app.Windows = (*wailsWindows)(nil)
 
-func (w *wailsWindows) Screens() []app.Screen {
-	var out []app.Screen
-	for _, s := range w.app.Screen.GetAll() {
-		out = append(out, app.Screen{
-			ID: s.ID, Name: s.Name, Primary: s.IsPrimary,
-			X: s.Bounds.X, Y: s.Bounds.Y, Width: s.Bounds.Width, Height: s.Bounds.Height,
-		})
-	}
-	return out
-}
-
-func (w *wailsWindows) OpenPublic(p app.Placement) error {
+func (w *wailsWindows) OpenPublic() error {
 	w.mu.Lock()
 	defer w.mu.Unlock()
-	screen := w.app.Screen.GetByID(p.Screen)
-	if w.public != nil && w.fullscreen != p.Fullscreen {
-		w.public.Close() // frame and fullscreen are set at creation: start over
-		w.public = nil
-	}
 	if w.public != nil {
-		w.public.UnFullscreen()
-		if screen != nil {
-			w.public.SetScreen(screen)
-		}
-		if p.Fullscreen {
-			w.public.Fullscreen()
-		}
+		w.public.Focus()
 		return nil
 	}
-	opts := application.WebviewWindowOptions{
+	win := w.app.Window.NewWithOptions(application.WebviewWindowOptions{
 		Name:            publicWindowName,
 		Title:           "Inkwell",
 		URL:             "/?view=public",
-		Width:           p.Width,
-		Height:          p.Height,
+		Width:           960,
+		Height:          540,
 		MinWidth:        320,
 		MinHeight:       180,
-		Screen:          screen,
 		InitialPosition: application.WindowCentered,
-	}
-	if p.Fullscreen {
-		opts.Frameless = true
-		opts.StartState = application.WindowStateFullscreen
-		opts.Mac.DisableEscapeExitsFullscreen = true // Esc is a key of the presentation (macOS)
-	}
-	win := w.app.Window.NewWithOptions(opts)
+	})
 	win.OnWindowEvent(events.Common.WindowClosing, func(*application.WindowEvent) {
 		w.mu.Lock()
 		defer w.mu.Unlock()
@@ -89,24 +53,18 @@ func (w *wailsWindows) OpenPublic(p app.Placement) error {
 			w.public = nil
 		}
 	})
-	w.public, w.fullscreen = win, p.Fullscreen
-	return nil
-}
-
-func (w *wailsWindows) PlacePresenter(p app.Placement) error {
-	if screen := w.app.Screen.GetByID(p.Screen); screen != nil {
-		w.main.SetScreen(screen)
-		w.main.Maximise()
-	}
+	w.public = win
 	return nil
 }
 
 func (w *wailsWindows) ClosePublic() error {
+	// Closing runs the closing hook, which takes the lock: take the window out first, close it after.
 	w.mu.Lock()
-	defer w.mu.Unlock()
-	if w.public != nil {
-		w.public.Close()
-		w.public = nil
+	win := w.public
+	w.public = nil
+	w.mu.Unlock()
+	if win != nil {
+		win.Close()
 	}
 	return nil
 }

@@ -316,6 +316,25 @@ describe("Presentation over the network", () => {
     b.presentation.stop();
   });
 
+  it("PRS-38 a pilot demoted to reader mid-talk loses the controls when the roles are reported", () => {
+    const link = new Link();
+    const a = link.device("a");
+    const b = link.device("b");
+    a.presentation.start("presenter");
+    b.presentation.start("public");
+    press(a.presentation, "ArrowRight");
+    link.roles.set("a", "reader");
+    a.presentation.revalidate();
+    b.presentation.revalidate();
+    expect(a.presentation.isPilot).toBe(false);
+    expect(b.presentation.waiting).toBe(true);
+    expect(b.presentation.page).toBe(2); // the last slide stays
+    press(a.presentation, "ArrowRight");
+    expect(b.presentation.page).toBe(2);
+    a.presentation.stop();
+    b.presentation.stop();
+  });
+
   it("a presenter that leaves ends the presentation for the others", () => {
     const link = new Link();
     const a = link.device("a");

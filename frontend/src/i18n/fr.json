@@ -494,8 +494,7 @@
   "present.public.close": "Fermer la vue public",
   "present.public.title": "Vue public",
   "present.public.waiting": "En attente de la présentation…",
-  "present.public.hint": "Un seul écran : la vue public s'ouvre dans une fenêtre que vous pouvez déplacer.",
-  "present.swap": "Échanger les écrans",
+  "present.public.hint": "Placez la fenêtre sur l'écran voulu, puis F11 ou le bouton Plein écran ; Échap pour en sortir.",
   "present.laser": "Pointeur laser",
   "present.black": "Écran noir",
   "present.white": "Écran blanc",
@@ -505,5 +504,7 @@
   "present.banner.later": "Plus tard",
   "present.keys": "→ ← espace : avancer et reculer · B écran noir · W écran blanc · L laser · Échap : quitter",
   "present.notes.minus": "A−",
-  "present.notes.plus": "A+"
+  "present.notes.plus": "A+",
+  "present.fullscreen": "Plein écran",
+  "present.fullscreen.exit": "Quitter le plein écran"
 }

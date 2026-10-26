@@ -294,6 +294,11 @@ export class Presentation {
     return page;
   }
 
+  /** The members' rights changed: a pilot who may no longer pilot loses the controls. */
+  revalidate(): void {
+    this.#pilot.revalidate();
+  }
+
   /** A link went down: if it was the pilot's, the slide stays and says so. */
   peerGone(peer: string): void {
     this.#pilot.peerGone(peer);

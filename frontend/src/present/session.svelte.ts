@@ -29,9 +29,6 @@ class PresentSession {
   roster = $state(0);
   /** The public window is open on this machine. */
   publicOpen = $state(false);
-  /** The public view has a screen of its own. */
-  dual = $state(false);
-  swapped = $state(false);
   /** Someone else is presenting and this window is not in the presentation. */
   announced = $state.raw<{ peer: string; name: string } | undefined>();
   notesSize = $state(clampNotes(Number(safeGet(NOTES_KEY))));
@@ -135,20 +132,13 @@ class PresentSession {
   }
 
   async openPublic(): Promise<void> {
-    const opened = await this.#windows.open(this.swapped);
-    this.dual = opened.dual;
+    await this.#windows.open();
     this.publicOpen = true;
   }
 
   async closePublic(): Promise<void> {
     await this.#windows.close();
     this.publicOpen = false;
-  }
-
-  /** "Échanger les écrans". */
-  async swap(): Promise<void> {
-    this.swapped = !this.swapped;
-    await this.openPublic();
   }
 
   /** A− and A+ of the notes: remembered. */

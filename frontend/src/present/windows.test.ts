@@ -1,14 +1,14 @@
 import { describe, expect, it } from "vitest";
-import { type LayoutAnswer, PublicWindows } from "./windows";
+import { PublicWindows } from "./windows";
 
-function setup(answer: LayoutAnswer) {
+function setup(native: boolean) {
   const calls: string[] = [];
   const popup = { closed: false, close: () => (popup.closed = true) };
   const windows = new PublicWindows(
     {
-      Open: async (swapped) => {
-        calls.push(`open:${swapped}`);
-        return answer;
+      Open: async () => {
+        calls.push("open");
+        return { Native: native };
       },
       Close: async () => void calls.push("close"),
     },
@@ -24,33 +24,27 @@ function setup(answer: LayoutAnswer) {
 }
 
 describe("PublicWindows", () => {
-  it("PRS-30 on the desktop Go opens the window, and says whether it has a screen of its own", async () => {
-    const { windows, calls } = setup({ Native: true, Dual: true });
-    expect(await windows.open(false)).toEqual({ dual: true, native: true });
-    expect(await windows.open(true)).toEqual({ dual: true, native: true }); // swap
-    expect(calls).toEqual(["open:false", "open:true"]);
-  });
-
-  it("PRS-32 one screen: a movable window", async () => {
-    const { windows } = setup({ Native: true, Dual: false });
-    expect(await windows.open(false)).toEqual({ dual: false, native: true });
+  it("PRS-30 PRS-32 on the desktop Go opens an ordinary window, and no pop-up is made", async () => {
+    const { windows, calls } = setup(true);
+    expect(await windows.open()).toBe(true);
+    expect(calls).toEqual(["open"]);
   });
 
   it("PRS-32 in the browser build the same view opens as a pop-up, once", async () => {
-    const { windows, calls, popup } = setup({ Native: false, Dual: false });
-    expect(await windows.open(false)).toEqual({ dual: false, native: false });
-    await windows.open(false);
+    const { windows, calls, popup } = setup(false);
+    expect(await windows.open()).toBe(false);
+    await windows.open();
     expect(calls.filter((c) => c.startsWith("popup"))).toEqual([
       "popup:http://127.0.0.1:1/?view=public:inkwell-public",
     ]);
     popup.closed = true; // the person closed it: opening again makes a new one
-    await windows.open(false);
+    await windows.open();
     expect(calls.filter((c) => c.startsWith("popup"))).toHaveLength(2);
   });
 
   it("closes both the pop-up and the native window", async () => {
-    const { windows, calls, popup } = setup({ Native: false, Dual: false });
-    await windows.open(false);
+    const { windows, calls, popup } = setup(false);
+    await windows.open();
     await windows.close();
     expect(popup.closed).toBe(true);
     expect(calls.at(-1)).toBe("close");

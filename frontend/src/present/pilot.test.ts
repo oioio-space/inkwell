@@ -222,6 +222,79 @@ describe("Pilot", () => {
     expect(late.pilot).toBe("a");
   });
 
+  it("a writer cannot lock the others out with a huge epoch while a pilot is there", () => {
+    const net = new Net();
+    const [a, b] = [net.add("a"), net.add("b")] as [Pilot, Pilot];
+    net.add("w");
+    a.take();
+    a.publish(show(2));
+    b.receive("w", { t: "take", epoch: 2 ** 31 });
+    b.receive("w", { t: "state", epoch: 2 ** 31, seq: 0, slide: 9, step: 0, screen: "show" });
+    expect(b.pilot).toBe("a");
+    expect(b.view).toEqual(show(2));
+    b.receive("w", { t: "take", epoch: 2 }); // one step ahead is a fair claim
+    expect(b.pilot).toBe("w");
+    // Without a live pilot, a device arriving late takes whatever epoch is running.
+    const late = net.add("late");
+    late.receive("a", { t: "state", epoch: 7, seq: 3, slide: 4, step: 0, screen: "show" });
+    expect(late.pilot).toBe("a");
+    expect(late.epoch).toBe(7);
+  });
+
+  it("a give that jumps epochs is refused", () => {
+    const net = new Net();
+    const [a, b] = [net.add("a"), net.add("b")] as [Pilot, Pilot];
+    a.take();
+    a.publish(show(1));
+    b.receive("a", { t: "give", to: "a", epoch: 2 ** 30 });
+    expect(b.epoch).toBe(1);
+  });
+
+  it("laser, end and give from someone who may not pilot are ignored", () => {
+    const net = new Net();
+    const a = net.add("a");
+    const b = net.add("b");
+    a.take();
+    a.publish(show(3));
+    net.roles.set("a", "reader"); // demoted: what it says no longer counts
+    b.receive("a", { t: "laser", epoch: 1, x: 0.5, y: 0.5 });
+    expect(b.laser).toBeNull();
+    b.receive("a", { t: "end", epoch: 1 });
+    expect(b.pilot).toBe("a");
+    expect(b.ended).toBe(false);
+    b.receive("a", { t: "give", to: "b", epoch: 2 });
+    expect(b.pilot).toBe("a");
+  });
+
+  it("PRS-38 a pilot demoted or suspended mid-talk loses the controls, here and elsewhere", () => {
+    const net = new Net();
+    const [a, b] = [net.add("a"), net.add("b")] as [Pilot, Pilot];
+    a.take();
+    a.publish(show(5));
+    net.roles.set("a", "reader");
+    b.revalidate();
+    expect(b.pilot).toBeUndefined();
+    expect(b.view).toEqual(show(5)); // the last slide stays
+    a.revalidate(); // and the demoted pilot itself steps down
+    expect(a.isPilot).toBe(false);
+    a.publish(show(8));
+    expect(b.view).toEqual(show(5));
+    net.roles.set("b", "writer");
+    expect(b.take()).toBe(true);
+  });
+
+  it("revalidating drops the requests of people who may no longer hold the controls", () => {
+    const net = new Net();
+    const [a, b] = [net.add("a"), net.add("b")] as [Pilot, Pilot];
+    a.take();
+    b.ask();
+    expect(a.requests).toEqual(["b"]);
+    net.roles.set("b", "reader");
+    a.revalidate();
+    expect(a.requests).toEqual([]);
+    expect(a.isPilot).toBe(true);
+  });
+
   it("an old state never moves the slide back", () => {
     const net = new Net();
     const [a, b] = [net.add("a"), net.add("b")] as [Pilot, Pilot];

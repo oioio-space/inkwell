@@ -27,6 +27,12 @@ $effect(() => {
   if (p?.pendingPage !== undefined && preview.deck) p.resolvePage();
 });
 
+// Rights change (a writer demoted, a member suspended): whoever may no longer pilot loses the controls.
+$effect(() => {
+  void workspace.rolesVersion;
+  untrack(() => p?.revalidate());
+});
+
 // The public window shows what this one shows.
 $effect(() => {
   if (p) session.feed(p);
@@ -67,10 +73,8 @@ function onKey(e: KeyboardEvent) {
       pages={preview.pages}
       notesSize={session.notesSize}
       publicOpen={session.publicOpen}
-      dual={session.dual}
       onExit={() => p.stop()}
       onTogglePublic={() => void (session.publicOpen ? session.closePublic() : session.openPublic())}
-      onSwap={() => void session.swap()}
       onNotesSize={(n) => session.setNotesSize(n)}
     />
   {/if}

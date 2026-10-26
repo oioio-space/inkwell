@@ -18,20 +18,16 @@ let {
   pages,
   notesSize,
   publicOpen,
-  dual,
   onExit,
   onTogglePublic,
-  onSwap,
   onNotesSize,
 }: {
   p: Presentation;
   pages: ReadonlyMap<number, Page>;
   notesSize: number;
   publicOpen: boolean;
-  dual: boolean;
   onExit: () => void;
   onTogglePublic: () => void;
-  onSwap: () => void;
   onNotesSize: (size: number) => void;
 } = $props();
 
@@ -115,17 +111,12 @@ function pace(): string {
         class:on={publicOpen}
         aria-pressed={publicOpen}
         aria-label={t(publicOpen ? "present.public.close" : "present.public.open")}
-        title={t(publicOpen ? "present.public.close" : "present.public.open")}
+        title={publicOpen ? t("present.public.hint") : t("present.public.open")}
         data-testid="present-public"
         onclick={click(onTogglePublic)}
       >
         <Icon name="present" />
       </button>
-      {#if publicOpen && dual}
-        <button type="button" class="fb" aria-label={t("present.swap")} title={t("present.swap")} data-testid="present-swap" onclick={click(onSwap)}>
-          <Icon name="swap" />
-        </button>
-      {/if}
     </div>
   </header>
 

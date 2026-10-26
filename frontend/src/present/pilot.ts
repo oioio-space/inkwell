@@ -177,6 +177,26 @@ export class Pilot {
     }
   }
 
+  /**
+   * The rights of the members changed: whoever holds the controls and may no longer (demoted to
+   * reader, suspended) loses them at once, and the requests of such people lapse. The last slide stays.
+   */
+  revalidate(): void {
+    let changed = false;
+    if (this.pilot !== undefined && !this.#env.canPilot(this.pilot)) {
+      this.pilot = undefined;
+      this.laser = null;
+      this.connected = true;
+      changed = true;
+    }
+    const allowed = this.requests.filter((p) => this.#env.canPilot(p));
+    if (allowed.length !== this.requests.length) {
+      this.requests = allowed;
+      changed = true;
+    }
+    if (changed) this.#changed();
+  }
+
   /** A message from `from`, whose identity the transport vouches for. */
   receive(from: string, m: WireMessage): void {
     if (from === this.#env.me) return;
@@ -190,7 +210,7 @@ export class Pilot {
         this.#alive();
         return;
       case "laser":
-        if (from !== this.pilot || m.epoch !== this.epoch) return;
+        if (from !== this.pilot || m.epoch !== this.epoch || !this.#env.canPilot(from)) return;
         this.laser = m.x === null || m.y === null ? null : { x: m.x, y: m.y };
         this.#alive();
         return;
@@ -206,7 +226,8 @@ export class Pilot {
         this.#changed();
         return;
       case "give":
-        if (from !== this.pilot || m.epoch <= this.epoch || !this.#env.canPilot(m.to)) return;
+        if (from !== this.pilot || !this.#env.canPilot(from) || !this.#env.canPilot(m.to)) return;
+        if (m.epoch <= this.epoch || m.epoch > this.epoch + 1) return; // a hand-over is one step
         this.epoch = m.epoch;
         this.pilot = m.to;
         this.asking = false;
@@ -221,7 +242,7 @@ export class Pilot {
         this.#changed();
         return;
       case "end":
-        if (from !== this.pilot || m.epoch !== this.epoch) return;
+        if (from !== this.pilot || m.epoch !== this.epoch || !this.#env.canPilot(from)) return;
         this.pilot = undefined;
         this.laser = null;
         this.ended = true;
@@ -232,6 +253,10 @@ export class Pilot {
 
   /** Whether the claim of `peer` at `epoch` is the one to follow; adopts it if so. */
   #accept(peer: string, epoch: number): boolean {
+    // Someone is there: a claim may be one epoch ahead, not more, or a single writer could send
+    // the largest epoch and nobody could ever take the controls again.
+    const live = this.pilot !== undefined && (this.isPilot || this.connected);
+    if (live && epoch > this.epoch + 1) return false;
     const wins =
       this.pilot === undefined
         ? epoch >= this.epoch // nobody pilots: only an older claim than the last one is stale

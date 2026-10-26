@@ -62,7 +62,7 @@ export const ICONS = {
     '<rect x="1.5" y="2.5" width="13" height="9" rx="2"/><path d="M7 5l3 2-3 2zM5.5 14h5M8 11.5V14"/>',
   play: '<path d="M5 3l8 5-8 5z"/>',
   pause: '<path d="M5.5 3v10M10.5 3v10"/>',
-  swap: '<path d="M2.5 5.5h10M10 3l2.5 2.5L10 8M13.5 10.5h-10M6 8l-2.5 2.5L6 13"/>',
+  fullscreen: '<path d="M2.5 6V2.5H6M10 2.5h3.5V6M13.5 10v3.5H10M6 13.5H2.5V10"/>',
   undo: '<path d="M5.5 3.5L2.5 6.5l3 3M2.5 6.5h6.5a3.5 3.5 0 0 1 0 7H6"/>',
   redo: '<path d="M10.5 3.5l3 3-3 3M13.5 6.5H7a3.5 3.5 0 0 0 0 7h3"/>',
   zoomin: '<circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14M7 5v4M5 7h4"/>',

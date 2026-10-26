@@ -494,8 +494,7 @@
   "present.public.close": "Close the audience view",
   "present.public.title": "Audience view",
   "present.public.waiting": "Waiting for the presentation…",
-  "present.public.hint": "One screen only: the audience view opens in a window you can move.",
-  "present.swap": "Swap the screens",
+  "present.public.hint": "Drag the window to the screen you want, then F11 or the Full screen button; Esc leaves.",
   "present.laser": "Laser pointer",
   "present.black": "Black screen",
   "present.white": "White screen",
@@ -505,5 +504,7 @@
   "present.banner.later": "Later",
   "present.keys": "→ ← space: forward and back · B black screen · W white screen · L laser · Esc: leave",
   "present.notes.minus": "A−",
-  "present.notes.plus": "A+"
+  "present.notes.plus": "A+",
+  "present.fullscreen": "Full screen",
+  "present.fullscreen.exit": "Leave full screen"
 }

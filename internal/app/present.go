@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"sync"
+	"sync/atomic"
 
 	"github.com/oioio-space/inkwell/internal/bridge"
 )
@@ -26,6 +27,9 @@ const (
 	maxPresentConns = 6
 	// presentQueue is how many frames wait for a slow window before the next is dropped.
 	presentQueue = 256
+	// maxPresentQueueBytes bounds the bytes waiting for one window: 256 frames of 8 MiB
+	// would be 2 GiB, which a stuck window must never make this process hold.
+	maxPresentQueueBytes = 32 << 20
 	// maxPresentType bounds the length of a frame type.
 	maxPresentType = 16
 )
@@ -72,9 +76,27 @@ type Present struct {
 // presentConn is one joined window. Frames for it queue in out and are written
 // by one goroutine, so that a slow window never delays the others.
 type presentConn struct {
-	c    bridge.Conn
-	out  chan []byte
-	gone chan struct{}
+	c      bridge.Conn
+	out    chan []byte
+	queued atomic.Int64 // bytes in out
+	gone   chan struct{}
+}
+
+// enqueue queues b for the window, or drops it (false) when the frames or the bytes waiting
+// are over the bounds. It never blocks.
+func (pc *presentConn) enqueue(b []byte) bool {
+	n := int64(len(b))
+	if pc.queued.Add(n) > maxPresentQueueBytes {
+		pc.queued.Add(-n)
+		return false
+	}
+	select {
+	case pc.out <- b:
+		return true
+	default:
+		pc.queued.Add(-n)
+		return false
+	}
 }
 
 // NewPresent returns a hub that logs to log (nil discards).
@@ -128,6 +150,7 @@ func (h *Present) write(pc *presentConn) {
 	for {
 		select {
 		case b := <-pc.out:
+			pc.queued.Add(-int64(len(b)))
 			if err := pc.c.Send(b); err != nil {
 				h.log.Warn("present stream: send to window", "err", err)
 				return
@@ -138,17 +161,23 @@ func (h *Present) write(pc *presentConn) {
 	}
 }
 
-// relay queues b for every window but from; a window whose queue is full loses it.
+// relay queues b for every window but from; a window whose queue is full loses it. The frame
+// is handed over as it is to the last window and copied for the others, outside the lock.
 func (h *Present) relay(from *presentConn, b []byte) {
 	h.mu.Lock()
-	defer h.mu.Unlock()
+	to := make([]*presentConn, 0, len(h.conns))
 	for pc := range h.conns {
-		if pc == from {
-			continue
+		if pc != from {
+			to = append(to, pc)
 		}
-		select {
-		case pc.out <- bytes.Clone(b):
-		default:
+	}
+	h.mu.Unlock()
+	for i, pc := range to {
+		frame := b
+		if i < len(to)-1 {
+			frame = bytes.Clone(b)
+		}
+		if !pc.enqueue(frame) {
 			h.log.Warn("present stream: window too slow, frame dropped")
 		}
 	}
@@ -166,9 +195,6 @@ func (h *Present) roster() {
 		return // a fixed struct always encodes
 	}
 	for pc := range h.conns {
-		select {
-		case pc.out <- b:
-		default:
-		}
+		pc.enqueue(b)
 	}
 }

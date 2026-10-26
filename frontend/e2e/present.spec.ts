@@ -75,6 +75,18 @@ test("PRS-31 PRS-32 PRS-40 the public window follows the presenter, and shows on
   expect(await pub.locator("body").innerText()).not.toMatch(/Souriez|Notes|Commentaire/);
   await expect(pub.getByTestId("notes")).toHaveCount(0);
 
+  // The person puts the window where they want and makes it full screen: a button that shows while
+  // the mouse moves, and F11. At rest the window is the slide alone.
+  await pub.mouse.move(200, 200);
+  await pub.mouse.move(220, 210);
+  const full = pub.getByTestId("public-fullscreen");
+  await expect(full).toBeVisible();
+  await expect(full).toBeHidden({ timeout: 6_000 });
+  expect(await pub.locator("button").count()).toBe(0);
+  await pub.keyboard.press("F11");
+  await pub.keyboard.press("F11");
+  await expect(pub.getByTestId("stage")).toBeVisible();
+
   // PRS-31: a step in the presenter moves the public window, with nothing to do there.
   const before = await shown.getAttribute("src");
   const t0 = Date.now();

@@ -146,10 +146,11 @@ describe("preview protocol", () => {
   });
 
   it("PRS-60 bounds a deck", () => {
-    const pages = Array.from({ length: 9000 }, () => ({
+    const long = "x".repeat(40000); // one long note, shared: the bound is on each note, not on the sum
+    const pages = Array.from({ length: 5100 }, (_, i) => ({
       slide: 1,
       step: 0,
-      note: "x".repeat(40000),
+      note: i === 0 ? long : "",
     }));
     const m = parseMessage(frame({ type: "deck", rev: 1, deck: { pages } }));
     if (m?.type !== "deck" || !m.deck) throw new Error("no deck");
