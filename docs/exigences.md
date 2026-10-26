@@ -48,8 +48,8 @@ Rien n'est « fait » sans tests verts et sans une passe `ux-walkthrough` réuss
 | U4 | 2026-10-25 | Barre de mise en forme selon le type de fichier (titres, gras, souligné…) | A1, A4 | ✅ |
 | U5 | 2026-10-25 | Bloc de code **et** code en ligne | A1 FMT-14/16 | ✅ |
 | U6 | 2026-10-25 | Icônes par type de fichier dans la liste | A4 UI-08 | ✅ |
-| U7 | 2026-10-25 | Prendre en compte les modifications faites hors de l'interface | B1 EXT-* | ⏳ |
-| U8 | 2026-10-25 | Enregistrement automatique **ou** manuel, au choix | B1 SAV-* | 🧪 réglage présent, comportement à faire |
+| U7 | 2026-10-25 | Prendre en compte les modifications faites hors de l'interface | B1 EXT-* | 🧪 fait et testé pour `main.typ` (fusion à partir des têtes du dernier accord avec le disque, lignes marquées, Voir/Annuler) ; EXT-09 (renommage) et les autres fichiers texte attendent B4b/B5 ; zones verrouillées : crochet `skip` prêt (ADR 0022) |
+| U8 | 2026-10-25 | Enregistrement automatique **ou** manuel, au choix | B1 SAV-* | ✅ |
 | U9 | 2026-10-25 | Menu Insérer : pièces jointes PDF (`pdf.attach`), inclusions, références, toutes les possibilités, avec des libellés clairs | A1 FMT-22…26, A4 | ✅ insertion ; données réelles en C3 |
 | U10 | 2026-10-25 | Présentations : diapositives, vue présentateur (chronomètre, suivante, notes, commentaires) | C4 PRS-* | ⏳ |
 | U11 | 2026-10-25 | Bande de modifications dans la marge (style Git) | B2 HIS-* | ⏳ |

@@ -1,21 +1,17 @@
 #!/bin/sh
+# Runs after the files are installed (deb: postinst, rpm: %post): refresh the caches the desktop
+# reads, so the menu entry, the icon and the .typ association show at once. Every step is
+# optional and never fails the installation (a server has none of these tools).
+refresh() {
+  command -v "$1" >/dev/null 2>&1 || return 0
+  "$@" >/dev/null 2>&1 || true
+}
 
-# Update desktop database for .desktop file changes
-# This makes the application appear in application menus and registers its capabilities.
-if command -v update-desktop-database >/dev/null 2>&1; then
-  echo "Updating desktop database..."
-  update-desktop-database -q /usr/share/applications
-else
-  echo "Warning: update-desktop-database command not found. Desktop file may not be immediately recognized." >&2
+refresh update-desktop-database -q /usr/share/applications
+refresh update-mime-database /usr/share/mime
+# The icon cache only exists where something built it; keep it in step with the new icons.
+if [ -f /usr/share/icons/hicolor/icon-theme.cache ]; then
+  refresh gtk4-update-icon-cache -q -t -f /usr/share/icons/hicolor
+  refresh gtk-update-icon-cache -q -t -f /usr/share/icons/hicolor
 fi
-
-# Update MIME database for custom URL schemes (x-scheme-handler)
-# This ensures the system knows how to handle your custom protocols.
-if command -v update-mime-database >/dev/null 2>&1; then
-  echo "Updating MIME database..."
-  update-mime-database -n /usr/share/mime
-else
-  echo "Warning: update-mime-database command not found. Custom URL schemes may not be immediately recognized." >&2
-fi
-
 exit 0

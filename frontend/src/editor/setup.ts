@@ -11,6 +11,7 @@ import {
   placeholder,
 } from "@codemirror/view";
 import { t } from "../i18n";
+import { externalMarks } from "./external";
 import { formatKeymap, type Lang } from "./format";
 import { languageExtension } from "./highlight";
 import { localHistoryOnly } from "./localHistory";
@@ -66,6 +67,11 @@ export interface EditorOptions {
   onState?: (state: EditorState) => void;
   /** Called once with the view, so the shell can run commands on it and give it back focus. */
   onView?: (view: EditorView) => void;
+  /**
+   * Asked before the editor undoes with Ctrl+Z: return true to say the key was used (an outside
+   * edit that was just taken in is taken back instead of the person's own last edit).
+   */
+  onUndoKey?: () => boolean;
 }
 
 /** Creates the collaborative source editor for a project document. */
@@ -74,7 +80,7 @@ export function createEditor(
   handle: DocHandle<Doc>,
   me: { id: string; name: string },
   onPeople?: (people: Person[]) => void,
-  { lang = "plain", onState, onView }: EditorOptions = {},
+  { lang = "plain", onState, onView, onUndoKey }: EditorOptions = {},
 ): { rename: (name: string) => void; setLang: (lang: Lang) => void; destroy: () => void } {
   let view: EditorView | undefined;
   const language = new Compartment();
@@ -92,7 +98,9 @@ export function createEditor(
       EditorView.lineWrapping,
       placeholder(t("editor.placeholder")),
       language.of(forLang(lang)),
+      Prec.highest(keymap.of([{ key: "Mod-z", run: () => onUndoKey?.() ?? false }])),
       keymap.of([...defaultKeymap, ...historyKeymap]),
+      externalMarks,
       EditorView.contentAttributes.of({ "aria-label": t("editor.label") }),
       EditorView.updateListener.of((u) => {
         if (u.docChanged || u.selectionSet) onState?.(u.state);

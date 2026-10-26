@@ -1,5 +1,5 @@
 import { type ChildProcess, spawn } from "node:child_process";
-import { existsSync, mkdtempSync, readdirSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, mkdtempSync, readdirSync, readFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
 import type { Page } from "@playwright/test";
@@ -43,7 +43,7 @@ test("what is typed lands in main.typ and survives a fresh browser and a second 
   await expect(editor(page)).toBeVisible();
   await type(page, text);
 
-  // The projection follows the text, 300 ms after the last keystroke.
+  // The projection follows the text, one pause after the last keystroke.
   await expect.poll(onDisk, { timeout: 10_000 }).toBe(text);
 
   // A browser with no storage of its own gets the document back from Go, not from the browser.
@@ -64,35 +64,6 @@ test("what is typed lands in main.typ and survives a fresh browser and a second 
     restarted.kill("SIGTERM");
     await exited; // its writes must not reach the next test
   }
-});
-
-test("an edit of main.typ outside Inkwell is offered for import, or ignored", async ({
-  browser,
-}) => {
-  const mine = `= Mon texte ${Date.now()}`;
-  const page = await (await browser.newContext({ locale: "fr-FR" })).newPage();
-  await page.goto(`http://127.0.0.1:${PORT}/`);
-  await expect(editor(page)).toBeVisible();
-  await type(page, mine);
-  await expect.poll(onDisk, { timeout: 10_000 }).toBe(mine);
-
-  // Import: the outside text becomes the document.
-  const theirs = `= Édité ailleurs ${Date.now()}`;
-  writeFileSync(mainTyp(), theirs);
-  const toast = page.getByRole("alert");
-  await expect(toast).toContainText("main.typ a été modifié en dehors d'Inkwell");
-  await toast.getByRole("button", { name: "Importer" }).click();
-  await expect(toast).toBeHidden();
-  await expect.poll(() => docText(page)).toBe(theirs);
-  expect(onDisk()).toBe(theirs);
-
-  // Ignore: the document wins and the file is written from it again.
-  writeFileSync(mainTyp(), "= Autre modification");
-  await expect(toast).toBeVisible();
-  await toast.getByRole("button", { name: "Ignorer" }).click();
-  await expect(toast).toBeHidden();
-  await expect.poll(onDisk, { timeout: 10_000 }).toBe(theirs);
-  expect(await docText(page)).toBe(theirs);
 });
 
 /** Starts another inkwell-server over `docs` and waits until it answers. */

@@ -28,6 +28,7 @@ let {
   info,
   showPage = false,
   onProblem = () => {},
+  unsaved = false,
 }: {
   lang: Lang;
   status: Status;
@@ -39,6 +40,8 @@ let {
   showPage?: boolean;
   /** The person chose a problem in the list: go to its place. */
   onProblem?: (d: Diagnostic) => void;
+  /** The text is not in the file yet (saving with Ctrl+S, or a write that failed). */
+  unsaved?: boolean;
 } = $props();
 
 let statsOpen = $state(false);
@@ -129,6 +132,9 @@ $effect(() => {
       {t("status.page", { page: Math.max(1, preview.currentPage), total: preview.pageCount })}
     </span>
   {/if}
+  {#if unsaved}
+    <span class="fb unsaved" data-testid="unsaved" title={t("save.unsaved.hint")}>{t("save.unsaved")}</span>
+  {/if}
   <span class="fb pos" data-testid="position">{t("status.position", { line: position.line, column: position.column })}</span>
   <MenuButton bind:open={statsOpen} role="dialog" up align="end" label={t("stats.title")}>
     {#snippet trigger()}<span data-testid="words">{words}</span>{/snippet}
@@ -165,8 +171,14 @@ $effect(() => {
     font-variant-numeric: tabular-nums;
     opacity: 0.8;
   }
-  .bot :global(.fb.encoding) {
+  .bot :global(.fb.encoding),
+  .bot :global(.fb.unsaved) {
     opacity: 1;
+  }
+  .bot :global(.fb.unsaved) {
+    display: inline-flex;
+    align-items: center;
+    font-weight: 700;
   }
   .sp {
     flex: 1;

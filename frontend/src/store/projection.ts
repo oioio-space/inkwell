@@ -1,8 +1,15 @@
+import { next as A } from "@automerge/automerge";
 import type { DocHandle } from "@automerge/automerge-repo";
 
 /** Where the projection goes: the project's `.typ` file, written by Go. */
 export interface ProjectionSink {
   writeProjection(name: string, text: string): Promise<void>;
+}
+
+/** What a successful write tells: the file now holds `text`, which the document had at `heads`. */
+export interface Written {
+  text: string;
+  heads: A.Heads;
 }
 
 export interface ProjectionOptions {
@@ -11,12 +18,26 @@ export interface ProjectionOptions {
   /** Quiet time after the last change before writing. */
   delayMs?: number;
   /**
+   * How long to wait after a change before writing, or undefined to write only when asked
+   * ({@link Projection.flush}): the "save with Ctrl+S" mode. Read at each change, so the setting
+   * can change while the project is open. Default: `delayMs`.
+   */
+  schedule?: () => number | undefined;
+  /** What the file is known to hold at start, when it is not written then (save with Ctrl+S). */
+  known?: string | undefined;
+  /**
    * Called when a write fails, for instance because the file was edited outside Inkwell. The
    * projection keeps going and writes again at the next change or {@link Projection.flush}.
    */
   onError?: (err: unknown) => void;
-  /** Called after each successful write, so a failure shown to the person can be taken back. */
-  onWritten?: () => void;
+  /**
+   * Called after each successful write, so a failure shown to the person can be taken back. It
+   * says which text the file now holds and the heads the document had then: the point where the
+   * file and the document agree, which an outside edit is later merged from.
+   */
+  onWritten?: (written: Written) => void;
+  /** Called when the document starts or stops differing from the file. */
+  onDirty?: (dirty: boolean) => void;
   /**
    * Whether a failed write is worth trying again by itself (a disk that was full, a file that was
    * locked) rather than waiting for the next change. Default: yes. Not for a file edited
@@ -33,6 +54,20 @@ export interface Projection {
    * even then: the file may have changed on disk since.
    */
   flush(force?: boolean): Promise<void>;
+  /** True while the document differs from what the file holds. */
+  dirty(): boolean;
+  /**
+   * The save settings changed: a document that differs from the file is written at once if
+   * writing is now automatic; otherwise a write that was waiting is dropped or follows the new delay.
+   */
+  reschedule(): void;
+  /** The file now holds `text` (an outside edit that was merged): it is no longer to be written. */
+  adopt(text: string): void;
+  /**
+   * While held, nothing is written unless forced: the file was deleted outside and the person has
+   * not decided whether it comes back.
+   */
+  hold(on: boolean): void;
   /** Stops following the document. */
   stop(): void;
 }
@@ -45,8 +80,9 @@ export const PROJECTION_DELAY_MS = 300;
 
 /**
  * Keeps a `.typ` file in the project folder equal to the document's text: written once at
- * start, then {@link PROJECTION_DELAY_MS} after the last change, one write at a time.
- * Automerge stays the single source of truth; the file is a projection.
+ * start, then {@link PROJECTION_DELAY_MS} after the last change, one write at a time. With
+ * `schedule` returning undefined, it writes only when asked. Automerge stays the single source of
+ * truth; the file is a projection.
  */
 export function startProjection(
   handle: DocHandle<{ text: string }>,
@@ -55,11 +91,22 @@ export function startProjection(
 ): Projection {
   const name = opts.name ?? "main.typ";
   const delay = opts.delayMs ?? PROJECTION_DELAY_MS;
+  const schedule = opts.schedule ?? (() => delay);
+  const retryMs = opts.retryMs ?? PROJECTION_RETRY_MS;
   let timer: ReturnType<typeof setTimeout> | undefined;
   let running: Promise<void> | undefined;
   let again = false;
-  let last: string | undefined;
-  const retryMs = opts.retryMs ?? PROJECTION_RETRY_MS;
+  let last: string | undefined = opts.known;
+  let held = false;
+  let wasDirty = false;
+
+  const isDirty = () => (handle.doc()?.text ?? "") !== (last ?? "");
+  const emitDirty = () => {
+    const now = isDirty();
+    if (now === wasDirty) return;
+    wasDirty = now;
+    opts.onDirty?.(now);
+  };
 
   // Runs until no flush is pending. It yields first, so `running` is set before it can end.
   const drain = async (): Promise<void> => {
@@ -67,12 +114,15 @@ export function startProjection(
     try {
       while (again) {
         again = false;
-        const text = handle.doc()?.text ?? "";
+        const doc = handle.doc();
+        const text = doc?.text ?? "";
         if (text === last) continue;
+        const heads = doc ? A.getHeads(doc) : [];
         try {
           await sink.writeProjection(name, text);
           last = text;
-          opts.onWritten?.();
+          opts.onWritten?.({ text, heads });
+          emitDirty();
         } catch (err) {
           opts.onError?.(err);
           if (opts.retryable?.(err) ?? true) {
@@ -89,21 +139,48 @@ export function startProjection(
 
   const flush = (force = false): Promise<void> => {
     clearTimeout(timer);
+    if (held && !force) return Promise.resolve();
     if (force) last = undefined;
     again = true;
     running ??= drain();
     return running;
   };
 
-  const onChange = () => {
+  const arm = () => {
     clearTimeout(timer);
-    timer = setTimeout(() => void flush(), delay);
+    const wait = schedule();
+    if (wait !== undefined) timer = setTimeout(() => void flush(), wait);
+  };
+  const onChange = () => {
+    arm();
+    emitDirty();
   };
   handle.on("change", onChange);
-  void flush();
+  if (schedule() === undefined) {
+    // Nothing is written at open: the file keeps what it holds until the person saves.
+    const doc = handle.doc();
+    if (doc && last !== undefined && doc.text === last) {
+      opts.onWritten?.({ text: last, heads: A.getHeads(doc) });
+    }
+    emitDirty();
+  } else {
+    void flush();
+  }
 
   return {
     flush,
+    dirty: isDirty,
+    reschedule() {
+      if (schedule() !== undefined && isDirty()) void flush();
+      else arm();
+    },
+    adopt(text) {
+      last = text;
+      emitDirty();
+    },
+    hold(on) {
+      held = on;
+    },
     stop() {
       clearTimeout(timer);
       handle.off("change", onChange);

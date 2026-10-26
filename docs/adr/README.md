@@ -27,3 +27,4 @@ connaître la raison — pas pour le reste. Modèle : [`template.md`](template.m
 | [0022](0022-zones-verrouillees.md) | Zones verrouillées : verrous dans le document, admission déterministe | proposée |
 | [0023](0023-projet-multi-fichiers-blobs.md) | Projet multi-fichiers : index à nœuds stables, blobs BLAKE3/Bao | proposée |
 | [0024](0024-sidecars-typst-tinymist.md) | Sidecars Typst : `typst` compile, `tinymist` sert l'éditeur ; récupérés à la construction, embarqués, vérifiés | acceptée |
+| [0025](0025-versions-et-paquets.md) | Versions SemVer par tags, paquets .deb/.rpm natifs par architecture, installés avant publication | acceptée |

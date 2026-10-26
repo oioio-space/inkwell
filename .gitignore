@@ -43,3 +43,4 @@ frontend/playwright-report/
 
 # Agent worktrees (Claude Code)
 .claude/worktrees/
+/.playwright-mcp/

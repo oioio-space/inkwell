@@ -5,6 +5,7 @@ package main
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"os"
 	"strconv"
@@ -17,9 +18,13 @@ import (
 	"github.com/oioio-space/inkwell/internal/bridge"
 	"github.com/oioio-space/inkwell/internal/project"
 	"github.com/oioio-space/inkwell/internal/transport"
+	"github.com/oioio-space/inkwell/internal/version"
 )
 
 const (
+	// appID is the reverse-DNS identifier of the application on Linux: the name of the
+	// .desktop file, the AppStream component and the icons (ADR 0025).
+	appID = "io.github.oioio_space.Inkwell"
 	// lanEnv set to "1" turns on the local network discovery, until the
 	// settings screen has the setting "Découverte sur le réseau local".
 	lanEnv = "INKWELL_LAN"
@@ -32,6 +37,10 @@ const (
 )
 
 func main() {
+	if versionRequested(os.Args[1:]) {
+		fmt.Println(version.Current())
+		return
+	}
 	log := slog.New(slog.NewTextHandler(os.Stderr, nil))
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -89,6 +98,9 @@ func main() {
 		// Used only by `-tags server` builds (headless end-to-end tests): bound to
 		// loopback, port from INKWELL_SERVER_PORT.
 		Server: application.ServerOptions{Host: "127.0.0.1", Port: serverPort()},
+		// The id of the desktop entry and the icons (build/linux): the window manager matches
+		// the window with them through this id (Wayland app_id, X11 WM_CLASS).
+		Linux: application.LinuxOptions{ApplicationID: appID},
 		Mac: application.MacOptions{
 			ApplicationShouldTerminateAfterLastWindowClosed: true,
 		},

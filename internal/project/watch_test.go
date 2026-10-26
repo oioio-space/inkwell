@@ -191,3 +191,30 @@ func TestWatchIgnoresOtherFiles(t *testing.T) {
 	}
 	expectNothing(t, got, 6*watchDebounce)
 }
+
+// TestDeletedFileNotified checks that a file Inkwell wrote and that is removed
+// outside is reported once, and reported again after it came back and went.
+func TestDeletedFileNotified(t *testing.T) {
+	base := newBase(t)
+	p := create(t, base, "p")
+	if err := p.WriteProjection(MainFile, []byte("= A\n")); err != nil {
+		t.Fatal(err)
+	}
+	got := startWatch(t, p)
+
+	if err := base.Remove("p/main.typ"); err != nil {
+		t.Fatal(err)
+	}
+	expect(t, got, MainFile)
+	expectNothing(t, got, 4*watchDebounce)
+
+	// Back with the content Inkwell wrote: not news; a second deletion is.
+	if err := base.WriteFile("p/main.typ", []byte("= A\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	expectNothing(t, got, 4*watchDebounce)
+	if err := base.Remove("p/main.typ"); err != nil {
+		t.Fatal(err)
+	}
+	expect(t, got, MainFile)
+}
