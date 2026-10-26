@@ -39,6 +39,7 @@ $effect(() => {
         ...(at !== undefined ? { at } : {}),
         onView: (view) => (session.view = view),
         onState: (state) => (session.state = state),
+        onUndoKey: () => workspace.undoWithKey(),
       },
     ),
   );

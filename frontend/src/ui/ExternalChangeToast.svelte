@@ -1,9 +1,15 @@
 <script lang="ts">
-import { t } from "../i18n";
+import { revealExternal } from "../editor/external";
+import { t, tn } from "../i18n";
 import { workspace } from "../workspace/workspace.svelte";
+import { session } from "./editorSession.svelte";
 import Toast from "./Toast.svelte";
 
+/** How long the "taken in" toast stays: the lines remain marked, and Ctrl+Z still takes it back. */
+const SHOW_MS = 12_000;
+
 let busy = $state(false);
+const notice = $derived(workspace.notice);
 
 async function resolve(action: () => Promise<void>) {
   busy = true;
@@ -13,17 +19,40 @@ async function resolve(action: () => Promise<void>) {
     busy = false;
   }
 }
+
+function view() {
+  if (session.view) revealExternal(session.view);
+}
+
+// The toast that reports a done thing goes away by itself; one that asks waits for an answer.
+$effect(() => {
+  if (notice?.kind !== "merged") return;
+  const timer = setTimeout(() => workspace.dismissNotice(), SHOW_MS);
+  return () => clearTimeout(timer);
+});
 </script>
 
-{#if workspace.external}
-  <Toast role="alert">
-    {t("external.message", { name: workspace.external })}
+{#if notice?.kind === "merged"}
+  <Toast role="status" onclose={() => workspace.dismissNotice()}>
+    {notice.lines > 0 ? tn("external.merged", notice.lines) : t("external.locked")}
     {#snippet actions()}
-      <button type="button" class="fb lbl" disabled={busy} onclick={() => resolve(() => workspace.importExternal())}>
-        {t("external.import")}
+      {#if notice.ranges.length > 0}
+        <button type="button" class="fb lbl" onclick={view}>{t("external.view")}</button>
+        <button type="button" class="fb lbl" onclick={() => workspace.undoExternal()}>
+          {t("external.undo")}
+        </button>
+      {/if}
+    {/snippet}
+  </Toast>
+{:else if notice?.kind === "ask"}
+  <Toast role="alert">
+    {t("external.message", { name: notice.name })}
+    {#snippet actions()}
+      <button type="button" class="fb lbl" disabled={busy} onclick={() => resolve(() => workspace.integrateExternal())}>
+        {t("external.integrate")}
       </button>
-      <button type="button" class="fb lbl" disabled={busy} onclick={() => resolve(() => workspace.ignoreExternal())}>
-        {t("external.ignore")}
+      <button type="button" class="fb lbl" disabled={busy} onclick={() => resolve(() => workspace.keepOurs())}>
+        {t("external.keep")}
       </button>
     {/snippet}
   </Toast>

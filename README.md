@@ -19,11 +19,18 @@ document de conception de l'application à deux, dans l'application.*
 | Interface | Wails v3, CodeMirror 6, habillage Adwaita |
 | Collaboration | Automerge (`automerge-repo`, `automerge-codemirror`) dans la webview |
 | Réseau | go-libp2p (QUIC, Noise, mDNS, relais), codes Magic Wormhole |
-| Typst | tinymist (aperçu, LSP) et typst (export PDF) embarqués |
+| Typst | typst (compilation, export PDF) et tinymist (aperçu, LSP) embarqués, épinglés par SHA-256, hors ligne |
 | Historique | jalons go-git, binaires adressés par BLAKE3 |
 
 Détails : [docs/architecture.md](docs/architecture.md) · décisions : [docs/adr/](docs/adr/) ·
 finalité : [docs/conception.pdf](docs/conception.pdf).
+
+## Installer
+
+Chaque version est publiée en `.deb` (Debian 13, Ubuntu 24.04), `.rpm` (Fedora 44) et `.tar.gz`
+pour amd64 et arm64, signée et accompagnée de ses SBOM ; `inkwell --version` donne la version
+SemVer. Les versions, les paquets et leurs tests : [ADR 0025](docs/adr/0025-versions-et-paquets.md),
+procédure : [docs/releasing.md](docs/releasing.md), journal : [CHANGELOG.md](CHANGELOG.md).
 
 ## Développer
 
@@ -32,6 +39,7 @@ Tout passe par [mise](https://mise.jdx.dev) (outils épinglés + tâches) :
 ```bash
 mise run setup   # toolchain + hooks git
 mise run test    # tests        | mise run test:watch (TDD)
+mise run sidecar:fetch  # typst + tinymist de cette plate-forme (une fois ; `test` et `ci` le font)
 mise run ci      # le gate complet, identique à la CI GitHub Actions
 ```
 

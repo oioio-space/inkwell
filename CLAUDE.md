@@ -14,6 +14,7 @@ diff) — arm it only after genuinely completing the review; `--no-verify` bypas
 ```bash
 mise run setup           # bootstrap toolchain + wire git hooks
 mise run test            # unit tests        | mise run test:watch  (TDD)
+mise run sidecar:fetch   # typst + tinymist (SHA-256 épinglés, build-time) ; -- -target all
 mise run lint            # golangci-lint v2  | mise run fmt
 mise run cover:check     # coverage gate (COVER_MIN=85)
 mise run ci              # full gate = what CI runs (lint+test+scans)
@@ -46,6 +47,9 @@ concevoir ou de revoir quoi que ce soit ; une exception exige une ADR.
 - Tout octet venu d'un pair est vérifié (signature, rôle) et son décodeur est fuzzé.
 - Pont webview ↔ Go = Streams Wails (aucun port local, ADR 0009). Autres serveurs locaux :
   `127.0.0.1`, port éphémère, jeton comparé en temps constant, jamais logué.
+- Typst : jamais de téléchargement à l'exécution. `typst` et `tinymist` sont épinglés
+  (`internal/sidecar/manifest.json`), récupérés à la construction, embarqués et revérifiés (SHA-256)
+  avant chaque lancement ; paquets `@preview` fournis ou dans `.typstdeps/` (ADR 0024).
 - cgo est requis par Wails (Linux GTK4/WebKitGTK 6.0, macOS) ; builds natifs par OS en CI (ADR 0003).
 - « pair » dans le code, « personne » dans l'UI ; zéro jargon dans l'interface (glossaire).
 - Un paquet = un rôle, créé à l'étape qui en a besoin — pas de paquet vide « pour plus tard ».
@@ -72,7 +76,7 @@ with no alloc/throughput regression. Hot-path packages carry `Benchmark…` test
 List them on the line below (space-separated package paths; read by
 `.claude/hooks/benchmark-context.sh` — keep the exact `HOT_PATHS:` prefix):
 
-HOT_PATHS: internal/blob
+HOT_PATHS: internal/blob internal/transport/frame internal/transport/mux
 
 ## Research-first
 

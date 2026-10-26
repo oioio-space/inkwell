@@ -1,4 +1,3 @@
-import { next as A } from "@automerge/automerge";
 import {
   type AutomergeUrl,
   type DocHandle,
@@ -11,12 +10,15 @@ import {
   Projects,
   Session,
 } from "../../bindings/github.com/oioio-space/inkwell/internal/app/index";
+import type { Span } from "../editor/external";
 import { t } from "../i18n";
 import { type SocketLike, WailsNetworkAdapter } from "../net/WailsNetworkAdapter";
+import { ExternalSync, type Notice } from "../store/externalSync";
 import { type FileInfo, FileKind, type ProjectFile } from "../store/files";
-import { ExternalEditError, GoStorageAdapter } from "../store/GoStorageAdapter";
+import { ExternalEditError, GoStorageAdapter, NotTextError } from "../store/GoStorageAdapter";
 import { type Projection, startProjection } from "../store/projection";
 import { safeGet, safeSet } from "../store/safeStorage";
+import { settings } from "../store/settings.svelte";
 
 export type Doc = { text: string };
 export type Status = "alone" | "connecting" | "synced";
@@ -48,6 +50,9 @@ function openedFile(): string {
 }
 const NAME_KEY = "inkwell.name";
 
+/** How long the lines taken from the disk stay marked in the gutter. */
+const MARKS_MS = 60_000;
+
 /** The open project and who is in it — the single source of UI state. */
 class Workspace {
   peers = $state<string[]>([]);
@@ -62,10 +67,16 @@ class Workspace {
   /** Display names of present people, by peer id (from presence). */
   names = $state<Record<string, string>>({});
   error = $state("");
-  /** A project file edited outside Inkwell, waiting for "Import" or "Ignore"; null if none. */
-  external = $state<string | null>(null);
+  /** What happened to the project file outside Inkwell, for the toast or banner; null if nothing. */
+  notice = $state.raw<Notice | null>(null);
+  /** The lines the last outside edit brought in, for the gutter; cleared after a while. */
+  marks = $state.raw<{ id: number; spans: Span[] } | null>(null);
+  /** True while the document differs from the file on disk (always briefly, in automatic saving). */
+  dirty = $state(false);
   /** True while the project file cannot be written (disk full, no permission...). */
   projectionFailed = $state(false);
+  /** Why it cannot be written, as Go says it; empty if unknown. */
+  projectionReason = $state("");
   /** True once the member list is full: this device signs no more, so edits stay local. */
   sealed = $state(false);
   handle = $state.raw<DocHandle<Doc> | undefined>();
@@ -80,6 +91,10 @@ class Workspace {
   #adapter: WailsNetworkAdapter | undefined;
   #storage: GoStorageAdapter | undefined;
   #projection: Projection | undefined;
+  #sync: ExternalSync | undefined;
+  /** Outside edits Go reported before the project was open. */
+  #early: string[] = [];
+  #marksTimer: ReturnType<typeof setTimeout> | undefined;
 
   async start(): Promise<void> {
     const id = await Session.LocalPeer();
@@ -101,7 +116,8 @@ class Workspace {
     this.#adapter = adapter;
     const storage = new GoStorageAdapter(() => Stream("store") as unknown as SocketLike);
     storage.onExternal((name) => {
-      if (name === MAIN_FILE) this.external = name;
+      if (this.#sync) this.#sync.notify(name);
+      else this.#early.push(name);
     });
     this.#storage = storage;
     this.#repo = new Repo({
@@ -127,23 +143,107 @@ class Workspace {
     if (!this.#repo) throw new Error("workspace not started");
     const handle = await this.#repo.find<Doc>(url);
     this.#projection?.stop();
+    this.#sync?.stop();
+    this.#sync = undefined;
+    this.notice = null;
     this.handle = handle;
     this.#adapter?.setProject(url);
     await Projects.SetRootURL(url);
-    if (this.#storage) {
-      this.#projection = startProjection(handle, this.#storage, {
-        name: MAIN_FILE,
-        onError: (err) => {
-          console.warn("projection:", err instanceof Error ? err.message : "failed");
-          // A refused write means the file was edited outside: the notice already asks the person.
-          if (!(err instanceof ExternalEditError)) this.projectionFailed = true;
-        },
-        onWritten: () => {
-          this.projectionFailed = false;
-        },
-        retryable: (err) => !(err instanceof ExternalEditError),
-      });
-    }
+    const storage = this.#storage;
+    if (!storage) return;
+    // Saving with Ctrl+S: the file keeps what it holds until asked, so dirty is known from it.
+    const known =
+      settings.saveMode === "manual"
+        ? await storage.readProjection(MAIN_FILE).catch(() => undefined)
+        : undefined;
+    const sync = new ExternalSync({
+      handle,
+      name: MAIN_FILE,
+      storage,
+      projection: () => this.#projection,
+      policy: () => settings.externalPolicy,
+      manual: () => settings.saveMode === "manual",
+      onNotice: (notice) => this.#show(notice),
+      notText: (err) => (err instanceof NotTextError ? err : undefined),
+      persistKey: `inkwell.sync.${url}.${MAIN_FILE}`,
+    });
+    this.#sync = sync;
+    this.#projection = startProjection(handle, storage, {
+      name: MAIN_FILE,
+      schedule: () => (settings.saveMode === "manual" ? undefined : settings.saveDelay * 1000),
+      known,
+      onDirty: (dirty) => {
+        this.dirty = dirty;
+      },
+      onError: (err) => {
+        console.warn("projection:", err instanceof Error ? err.message : "failed");
+        // A refused write means the file was edited outside: the notice already asks the person.
+        if (err instanceof ExternalEditError) return;
+        this.projectionFailed = true;
+        this.projectionReason = err instanceof Error ? err.message : "";
+      },
+      onWritten: (written) => {
+        this.projectionFailed = false;
+        sync.recordWritten(written);
+      },
+      retryable: (err) => !(err instanceof ExternalEditError),
+    });
+    for (const name of this.#early.splice(0)) sync.notify(name);
+  }
+
+  #show(notice: Notice | null): void {
+    this.notice = notice;
+    if (notice?.kind !== "merged" || notice.ranges.length === 0) return;
+    this.marks = { id: notice.id, spans: notice.ranges };
+    clearTimeout(this.#marksTimer);
+    this.#marksTimer = setTimeout(() => {
+      this.marks = null;
+    }, MARKS_MS);
+  }
+
+  /** Writes the file now (Ctrl+S): in automatic saving too, at once instead of after the pause. */
+  async save(): Promise<void> {
+    if (this.notice?.kind === "deleted") return this.#sync?.recreate();
+    await this.#projection?.flush();
+  }
+
+  /** The save settings changed: apply them to what is waiting (manual to automatic writes at once). */
+  saveSettingsChanged(): void {
+    this.#projection?.reschedule();
+  }
+
+  /** Takes the last outside edit back: only what it brought in, not what others typed since. */
+  undoExternal(): void {
+    this.#sync?.undo();
+    clearTimeout(this.#marksTimer);
+    this.marks = null;
+  }
+
+  /** Ctrl+Z: takes the outside edit back if it is the last thing that happened to the text. */
+  undoWithKey(): boolean {
+    if (!this.#sync?.canKeyUndo) return false;
+    this.undoExternal();
+    return true;
+  }
+
+  /** "Ask" answered with "Integrate". */
+  integrateExternal(): Promise<void> {
+    return this.#sync?.integrateAsked() ?? Promise.resolve();
+  }
+
+  /** Keep Inkwell's version: the file is written from the document (at the next save in manual mode). */
+  keepOurs(): Promise<void> {
+    return this.#sync?.keepOurs() ?? Promise.resolve();
+  }
+
+  /** The file was deleted outside: write it again from the document. */
+  recreate(): Promise<void> {
+    return this.#sync?.recreate() ?? Promise.resolve();
+  }
+
+  /** Closes the toast or banner; what it said stays done. */
+  dismissNotice(): void {
+    this.notice = null;
   }
 
   /** The key a project's remembered layout is filed under. */
@@ -186,31 +286,6 @@ class Workspace {
     } catch {
       return undefined;
     }
-  }
-
-  /** Takes the outside edit of main.typ into the document, then lets Inkwell write it again. */
-  async importExternal(): Promise<void> {
-    const name = this.external;
-    const handle = this.handle;
-    if (!name || !handle || !this.#storage) return;
-    const text = await this.#storage.readProjection(name);
-    if (text !== undefined) handle.change((d) => A.updateText(d, ["text"], text));
-    await this.#settleExternal(name);
-  }
-
-  /** Keeps the document as it is: the file is written from it again, replacing the outside edit. */
-  async ignoreExternal(): Promise<void> {
-    const name = this.external;
-    if (!name) return;
-    await this.#settleExternal(name);
-  }
-
-  /** The outside edit is dealt with: forget it and write the file from the document again. */
-  async #settleExternal(name: string): Promise<void> {
-    if (!this.#storage) return;
-    await this.#storage.acknowledge(name);
-    this.external = null;
-    await this.#projection?.flush(true);
   }
 
   setName(name: string): void {

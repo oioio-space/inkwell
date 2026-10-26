@@ -1,0 +1,53 @@
+.TH INKWELL 1 "" "Inkwell" "User Commands"
+.SH NAME
+inkwell \- collaborative Typst and Markdown editor, without a server
+.SH SYNOPSIS
+.B inkwell
+.br
+.B inkwell
+.B \-\-version
+.SH DESCRIPTION
+.B Inkwell
+opens a window to write Typst or Markdown documents, alone or with other people.
+People who write together are connected directly to each other; there is no account
+and no server. Each person keeps a full copy of the project on their computer, edits
+continue offline, and they are merged when people meet again.
+.PP
+Inkwell takes no file argument: it opens the most recent project of the Inkwell folder
+in the Documents folder of the user, and creates one on first launch.
+.SH OPTIONS
+.TP
+.B \-\-version
+Print the version (SemVer), the commit and the build date, then exit.
+.SH ENVIRONMENT
+.TP
+.B INKWELL_DOCS
+Folder that holds the projects, instead of
+.IR Inkwell " in the Documents folder."
+.TP
+.B INKWELL_HOME
+Folder that holds the identity of the user (the keys), instead of
+.IR $XDG_CONFIG_HOME/inkwell .
+.TP
+.B INKWELL_LAN
+Set to
+.B 1
+to find other people on the local network.
+.TP
+.B INKWELL_RENDEZVOUS
+URL of the server that carries the short invitation codes; the word
+.B off
+turns the codes off.
+.SH FILES
+.TP
+.I ~/Documents/Inkwell/
+The projects. Their files are ordinary files; uninstalling Inkwell never touches them.
+.TP
+.I ~/.config/inkwell/
+The identity of the user.
+.SH SEE ALSO
+Typst, https://typst.app/docs/
+.PP
+Project home page, https://github.com/oioio-space/inkwell
+.SH LICENSE
+Mozilla Public License 2.0.

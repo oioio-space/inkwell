@@ -9,6 +9,7 @@ import { shortcutLabel } from "../toolbar/spec";
 let {
   title,
   subtitle,
+  unsaved = false,
   status,
   me,
   peers,
@@ -19,10 +20,13 @@ let {
   onToggleSidebar,
   onToggleToolbar,
   onPreferences,
+  onAbout,
 }: {
   title: string;
   /** The file being edited, under the title. */
   subtitle: string;
+  /** A dot before the file name: its text is not in the file yet. */
+  unsaved?: boolean;
   status: Status;
   me: { id: string; name: string };
   peers: string[];
@@ -34,6 +38,7 @@ let {
   onToggleSidebar: () => void;
   onToggleToolbar: () => void;
   onPreferences: () => void;
+  onAbout: () => void;
 } = $props();
 
 let menuOpen = $state(false);
@@ -58,7 +63,7 @@ let menuOpen = $state(false);
   </div>
   <div class="ttl">
     <h1>{title}</h1>
-    <small>{subtitle}</small>
+    <small>{#if unsaved}<span class="unsaved" data-testid="unsaved-dot" role="img" aria-label={t("save.unsaved")} title={t("save.unsaved")}></span>{/if}{subtitle}</small>
   </div>
   <div class="end">
     <PeopleStack {me} {peers} />
@@ -91,6 +96,17 @@ let menuOpen = $state(false);
           }}
         >
           <span>{t("menu.preferences")}</span>
+        </button>
+        <button
+          type="button"
+          class="mi"
+          role="menuitem"
+          onclick={() => {
+            close(false);
+            onAbout();
+          }}
+        >
+          <span>{t("menu.about")}</span>
         </button>
       {/snippet}
     </MenuButton>
@@ -131,6 +147,15 @@ let menuOpen = $state(false);
     display: block;
     color: var(--fg-dim);
     font-size: 12px;
+  }
+  .unsaved {
+    display: inline-block;
+    width: 8px;
+    height: 8px;
+    margin-inline-end: 6px;
+    border-radius: 50%;
+    background: var(--fg);
+    vertical-align: 0.5px;
   }
   .status {
     display: inline-flex;

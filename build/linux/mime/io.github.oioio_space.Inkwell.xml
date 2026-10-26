@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!-- Typst documents. Recent shared-mime-info versions already know text/x-typst; this
+     definition makes the file type exist on the older ones, and is harmless on the others. -->
+<mime-info xmlns="http://www.freedesktop.org/standards/shared-mime-info">
+  <mime-type type="text/x-typst">
+    <comment>Typst document</comment>
+    <comment xml:lang="fr">Document Typst</comment>
+    <sub-class-of type="text/plain"/>
+    <glob pattern="*.typ"/>
+  </mime-type>
+</mime-info>

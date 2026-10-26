@@ -1,0 +1,18 @@
+[Desktop Entry]
+Type=Application
+Version=1.5
+Name=Inkwell
+Name[fr]=Inkwell
+GenericName=Collaborative Typst editor
+GenericName[fr]=Éditeur collaboratif Typst
+Comment=Write documents together, without a server
+Comment[fr]=Écrire des documents à plusieurs, sans serveur
+Keywords=Typst;Markdown;CSV;collaboration;document;editor;
+Keywords[fr]=Typst;Markdown;CSV;collaboration;document;éditeur;
+Exec=inkwell
+Icon=io.github.oioio_space.Inkwell
+Terminal=false
+StartupNotify=true
+StartupWMClass=io.github.oioio_space.Inkwell
+Categories=Office;WordProcessor;TextEditor;
+MimeType=text/x-typst;text/markdown;text/csv;

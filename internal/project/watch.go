@@ -98,7 +98,7 @@ func (p *Project) Watch(ctx context.Context, onExternal func(rel string)) error 
 			if !ok {
 				return nil
 			}
-			if !ev.Has(fsnotify.Write) && !ev.Has(fsnotify.Create) && !ev.Has(fsnotify.Rename) {
+			if !ev.Has(fsnotify.Write) && !ev.Has(fsnotify.Create) && !ev.Has(fsnotify.Rename) && !ev.Has(fsnotify.Remove) {
 				continue
 			}
 			rel, err := filepath.Rel(root, ev.Name)
@@ -145,12 +145,30 @@ func (p *Project) emptied(rel string) bool {
 		current != p.m.Files[rel] && current != p.notified[rel]
 }
 
+// goneMark stands in p.notified for "reported as deleted": no content has this
+// hash form.
+const goneMark = "gone"
+
 // check calls onExternal(rel) if the file on disk differs from what Inkwell
-// last wrote and from what was already reported.
+// last wrote and from what was already reported, or if it is gone: a file
+// Inkwell wrote that is no longer there is reported once (the reader finds it
+// absent). A file Inkwell never wrote is not missed.
 func (p *Project) check(rel string, onExternal func(rel string)) {
 	p.mu.Lock()
 	current, exists, err := p.diskHash(rel)
-	report := err == nil && exists && current != p.m.Files[rel] && current != p.notified[rel]
+	recorded := p.m.Files[rel]
+	var report bool
+	switch {
+	case err != nil:
+	case exists:
+		report = current != recorded && current != p.notified[rel]
+		if !report && p.notified[rel] == goneMark {
+			delete(p.notified, rel) // back: a later deletion is news again
+		}
+	default:
+		report = recorded != "" && p.notified[rel] != goneMark
+		current = goneMark
+	}
 	if report {
 		p.notified[rel] = current
 	}
