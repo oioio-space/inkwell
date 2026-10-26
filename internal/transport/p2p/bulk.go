@@ -217,13 +217,7 @@ func (b *Bulk) Send(ctx context.Context, to transport.PeerID, payload []byte) er
 	if err != nil {
 		return err
 	}
-	timeout := writeTimeout + time.Duration(len(payload))*time.Second/writeRate
-	err = s.SetWriteDeadline(time.Now().Add(timeout))
-	if err == nil {
-		stop := context.AfterFunc(ctx, func() { _ = s.SetWriteDeadline(time.Now()) })
-		err = frame.Write(s, payload)
-		stop()
-	}
+	err = frame.WriteProgress(ctx, s, writeTimeout, frame.MinRate, payload)
 	if err != nil {
 		n.mu.Lock()
 		if ps.bulkOut == s {

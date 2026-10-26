@@ -162,7 +162,8 @@ plus de 64 Mi est hors périmètre et le dit.
 
 Le multiplexeur (`internal/transport/mux`), qui reste opaque, change sur trois points :
 
-- **Fragmentation.** Toute charge de plus de 256 Kio part en fragments de 256 Kio. Le réassemblage est
+- **Fragmentation.** Toute charge de plus de 64 Kio part en fragments de **32 Kio** (mesure du
+  2026-10-26 : 256 Kio coûtent 2 s d'attente à 1 Mbit/s, contre un budget de 500 ms ; 32 Kio, 0,26 s). Le réassemblage est
   borné par `MaxFrame` et par le budget d'octets en file existant, et il est fuzzé.
 - **Deux classes.**
   - *Interactive* : présence, attestations, messages ≤ 64 Kio.
