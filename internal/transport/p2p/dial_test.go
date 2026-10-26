@@ -138,3 +138,32 @@ func TestResetReconnectsAfterBackoff(t *testing.T) {
 		expectQuietFor(t, a, 3*time.Minute)
 	})
 }
+
+// TestWantAgainClearsResetHold: a peer that was reset, then dropped and wanted
+// again (a new pairing), is not kept out by the backoff of the earlier reset.
+func TestWantAgainClearsResetHold(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		nn := newNatNet(1)
+		relays := nn.relay(t, p2p.RelayOptions{})
+		a := nn.node(t, 1, p2p.Options{Relays: relays})
+		b := nn.node(t, 2, p2p.Options{Relays: relays})
+		a.Want(map[transport.PeerID][]string{b.Local(): nil})
+		expectUp(t, a, b)
+
+		// Three resets in a row: the hold grows to 8 s.
+		for i := range 3 {
+			a.Reset(b.Local())
+			expectEvent(t, a, transport.PeerDown, b.Local())
+			expectEvent(t, b, transport.PeerDown, a.Local())
+			if i < 2 {
+				expectEventWithin(t, a, transport.PeerUp, b.Local(), 30*time.Second)
+				expectEventWithin(t, b, transport.PeerUp, a.Local(), wait)
+			}
+		}
+
+		// The person is removed, then paired again: they come back at once.
+		a.Drop(b.Local())
+		a.Want(map[transport.PeerID][]string{b.Local(): nil})
+		expectEventWithin(t, a, transport.PeerUp, b.Local(), 3*time.Second)
+	})
+}
