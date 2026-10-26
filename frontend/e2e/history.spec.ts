@@ -27,6 +27,7 @@ test("B2 gutter, versions, who wrote what, readable differences, going back (HIS
   const alice = await open(browser, ALICE_URL);
   const bob = await open(browser, BOB_URL, true);
   await clear(alice);
+  await clear(bob);
   await pair(alice, bob);
   await typeAtEnd(alice, "= Plan de continuité\nUn premier paragraphe.\n");
   await expect.poll(() => docText(bob)).toContain("premier paragraphe");
@@ -118,6 +119,7 @@ test("B2 variants: branch, edit apart, merge (HIS-10, HIS-11, HIS-16)", async ({
   const alice = await open(browser, ALICE_URL);
   const bob = await open(browser, BOB_URL, true);
   await clear(alice);
+  await clear(bob);
   await pair(alice, bob);
   await typeAtEnd(alice, "= Texte commun\n");
   await expect.poll(() => docText(bob)).toContain("Texte commun");
