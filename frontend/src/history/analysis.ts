@@ -1,5 +1,5 @@
 import { next as A } from "@automerge/automerge";
-import { personOfDoc, type Session, sessionsBefore, sessionsOf, stepsOf } from "./log";
+import { pastOf, personOfDoc, type Session, sessionsBefore, sessionsOf, stepsOf } from "./log";
 import { type Blame, Tracker, type TrackOptions } from "./track";
 import type { HDoc, Heads } from "./types";
 
@@ -57,7 +57,9 @@ export async function analyze(
   opts?: TrackOptions,
 ): Promise<Analysis> {
   const steps = stepsOf(doc);
-  const sessions = sessionsOf(steps, Date.now(), personOfDoc(doc));
+  // A session never spans the last visit: what came after it is told apart from what came before.
+  const past = since ? pastOf(steps, since) : undefined;
+  const sessions = sessionsOf(steps, Date.now(), personOfDoc(doc), past);
   const ops = steps.at(-1)?.maxOp ?? 0;
   const limited = tooCostly(ops, sessions.length);
   const blame: Blame = limited

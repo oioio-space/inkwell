@@ -70,6 +70,8 @@ export function sessionsOf(
   steps: readonly Step[],
   now = Date.now(),
   personOf: (actor: string) => string = (actor) => actor,
+  /** Steps in the past of a point (the last visit): a session never spans it. */
+  past?: ReadonlySet<string>,
 ): Session[] {
   const out: Session[] = [];
   const timeOf = new Map<string, number>();
@@ -78,6 +80,7 @@ export function sessionsOf(
   const snapshot = (): Heads => [...heads].sort();
   let cur: Session | undefined;
   let curAction = false;
+  let lastHash = "";
   for (let i = 0; i < steps.length; i++) {
     const s = steps[i] as Step;
     const parsed = parseAction(s.message);
@@ -93,6 +96,7 @@ export function sessionsOf(
       !action &&
       !curAction &&
       personOf(cur.actor) === personOf(s.actor) &&
+      (!past || past.has(lastHash) === past.has(s.hash)) &&
       Math.max(0, s.time - cur.end) <= SESSION_GAP_MS;
     if (joins && cur) {
       cur.to = i;
@@ -122,6 +126,7 @@ export function sessionsOf(
     }
     for (const d of s.deps) heads.delete(d);
     heads.add(s.hash);
+    lastHash = s.hash;
   }
   if (cur) cur.after = snapshot();
   return out;

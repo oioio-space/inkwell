@@ -8,6 +8,8 @@ import { actionMessage, type Claim, type HDoc } from "./types";
 export interface Directory {
   /** This device's peer id. */
   myPeer: string;
+  /** The Automerge actor this device writes under now: its edits are mine before any claim. */
+  myActor?: string;
   /** The name the member list gives to the person who owns this device, if it does. */
   nameOfPeer?: (peer: string) => string | undefined;
   /** Names announced by presence, by peer id. */
@@ -56,7 +58,7 @@ export function authorBook(doc: HDoc | undefined, dir: Directory): (actor: strin
       index,
       color: PERSON_COLORS[index - 1] as string,
       peer,
-      mine: peer !== undefined && peer === dir.myPeer,
+      mine: (peer !== undefined && peer === dir.myPeer) || actor === dir.myActor,
       known: claim !== undefined,
     };
     cache.set(actor, a);

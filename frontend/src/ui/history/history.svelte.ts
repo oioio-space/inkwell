@@ -69,6 +69,9 @@ export type RowKey = string;
 /** Height of one row of the history list (the list is virtual). */
 export const ROW_HEIGHT = 64;
 
+/** How long a person pauses after an edit before the device says in the document who it is. */
+const CLAIM_PAUSE_MS = 2_000;
+
 const HIDDEN = new Set(["version", "variant", "merge", "claim"]);
 
 class HistoryState {
@@ -100,6 +103,7 @@ class HistoryState {
   #analyzer: Analyzer | undefined;
   #seq = 0;
   #timer: ReturnType<typeof setTimeout> | undefined;
+  #claimTimer: ReturnType<typeof setTimeout> | undefined;
   #stop: (() => void)[] = [];
   #lastRevert: Reverted | undefined;
 
@@ -128,8 +132,12 @@ class HistoryState {
   /** The signed list says this device's person only reads. */
   readOnly = $derived(this.members.some((m) => m.self && m.role === "reader"));
 
+  /** The actor of this device in the open document. */
+  myActor = $state("");
+
   directory: Directory = $derived({
     myPeer: workspace.myId,
+    myActor: this.myActor,
     nameOfPeer: (peer) => this.members.find((m) => m.peers.includes(peer))?.name || undefined,
     present: workspace.names,
   });
@@ -143,6 +151,7 @@ class HistoryState {
     const doc = handle.doc();
     if (!doc) return;
     this.doc = doc;
+    this.myActor = A.getActorId(doc);
     // First opening: the last visit is now, nothing is marked (HIS-01).
     const visit = lastVisit(handle.url);
     this.since = sinceHeads(doc, visit);
@@ -150,10 +159,13 @@ class HistoryState {
     if (!visit) saveVisit(handle.url, this.since);
 
     this.#analyzer = makeAnalyzer();
-    // The device says who it is with its first edit, not before: opening a document writes
-    // nothing, and the claim saves in the same burst as the typing it belongs to.
+    // The device says who it is once its person pauses after an edit, never while they type:
+    // opening a document writes nothing, and the claim never lands in the middle of typing.
     const onChange = ({ patchInfo }: { patchInfo: { source: string } }) => {
-      if (patchInfo.source === "change") this.#claim(true);
+      if (patchInfo.source === "change") {
+        clearTimeout(this.#claimTimer);
+        this.#claimTimer = setTimeout(() => this.#claim(true), CLAIM_PAUSE_MS);
+      }
       this.#schedule();
     };
     handle.on("change", onChange);
@@ -180,6 +192,7 @@ class HistoryState {
     this.#remember();
     for (const stop of this.#stop.splice(0)) stop();
     clearTimeout(this.#timer);
+    clearTimeout(this.#claimTimer);
     this.#analyzer?.dispose();
     this.#analyzer = undefined;
     this.#handle = undefined;

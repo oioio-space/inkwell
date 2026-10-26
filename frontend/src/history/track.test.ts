@@ -1,6 +1,7 @@
 import { next as A } from "@automerge/automerge";
 import { describe, expect, it } from "vitest";
 import type { ChangeMark } from "../editor/changeGutter";
+import { analyze } from "./analysis";
 import { changeMarks, END, resolver, sinceHeads } from "./gutter";
 import { history, sessionsBefore, stepsOf } from "./log";
 import { authorBook } from "./people";
@@ -102,6 +103,31 @@ describe("change gutter since the last visit (HIS-01 to HIS-05)", () => {
     const after = resolver(alice.doc)((mark as ChangeMark).from) as number;
     expect(alice.doc.text.slice(after, after + 4)).toBe("NEUF");
     expect(lineOf(alice.doc.text, after) - lineBefore).toBe(5);
+  });
+
+  it("HIS-01 a person's earlier typing, minutes before the last visit, is not marked as new", async () => {
+    const { alice, bob } = setup();
+    bob.type("avant mon départ\n", bob.doc.text.length, 1);
+    alice.sync(bob);
+    const left = alice.heads;
+    // Marie, the same person, goes on typing two minutes later: one session for the people, but
+    // the visit cuts it in two, so only what she wrote after it is marked.
+    bob.type("après mon départ\n", bob.doc.text.length, 120);
+    alice.sync(bob);
+    const result = await analyze(alice.doc, new Tracker(), left);
+    const marks = changeMarks(
+      alice.doc,
+      result.blame,
+      result.sinceIdx,
+      authorBook(alice.doc, { myPeer: "peer-aa01" }),
+    );
+    const text = alice.doc.text;
+    const resolve = resolver(alice.doc);
+    const marked = marks.map((m) =>
+      text.slice(resolve(m.from) as number, (resolve(m.to) as number) + 1),
+    );
+    expect(marked.join("")).toContain("après mon départ");
+    expect(marked.join("")).not.toContain("avant mon départ");
   });
 
   it("a removal at the very end uses the end cursor", async () => {
