@@ -1,0 +1,53 @@
+# git-cliff: CHANGELOG.md and the release notes, generated from the Conventional Commits
+# (ADR 0025). Never edit CHANGELOG.md by hand: `mise run changelog` rewrites it.
+#   mise run changelog                      # history so far, as "Unreleased"
+#   mise run changelog -- --tag v0.1.0-rc.1 # as it will read once that tag exists
+#   mise run changelog:next                 # the version the commits call for
+# Docs: https://git-cliff.org/docs/configuration
+
+[changelog]
+header = """
+# Changelog
+
+Toutes les évolutions notables d'Inkwell. Le format suit [Keep a Changelog](https://keepachangelog.com/fr/1.1.0/),
+les versions suivent [SemVer](https://semver.org/lang/fr/) et ce fichier est généré
+depuis les [Conventional Commits](https://www.conventionalcommits.org/fr/) (ADR 0025).
+
+"""
+body = """
+{% if version -%}
+## [{{ version | trim_start_matches(pat="v") }}] - {{ timestamp | date(format="%Y-%m-%d") }}
+{% else -%}
+## [Unreleased]
+{% endif -%}
+{% for group, commits in commits | group_by(attribute="group") %}
+### {{ group | upper_first }}
+{% for commit in commits %}
+- {% if commit.breaking %}**BREAKING** {% endif %}{% if commit.scope %}**{{ commit.scope }}:** {% endif %}{{ commit.message | upper_first }}
+{%- endfor %}
+{% endfor %}
+"""
+footer = ""
+trim = true
+
+[git]
+conventional_commits = true
+filter_unconventional = true
+split_commits = false
+protect_breaking_commits = true
+filter_commits = true
+tag_pattern = "v[0-9].*"
+sort_commits = "oldest"
+commit_parsers = [
+  { message = "^feat", group = "Features" },
+  { message = "^fix", group = "Bug fixes" },
+  { message = "^perf", group = "Performance" },
+  { message = "^(docs|test|ci|build|chore|style|refactor|revert)", skip = true },
+]
+
+[bump]
+# Before 1.0 (project format not frozen yet) a feature raises the minor and a breaking change
+# too; only 1.0.0 itself is a decision (docs/adr/0025).
+features_always_bump_minor = true
+breaking_always_bump_major = false
+initial_tag = "v0.1.0"
