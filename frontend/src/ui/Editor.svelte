@@ -28,6 +28,7 @@ $effect(() => {
         lang: l,
         onView: (view) => (session.view = view),
         onState: (state) => (session.state = state),
+        onUndoKey: () => workspace.undoWithKey(),
       },
     ),
   );
