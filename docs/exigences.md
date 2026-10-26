@@ -27,6 +27,7 @@ Rien n'est « fait » sans tests verts et sans une passe `ux-walkthrough` réuss
 | W15 | 2026-10-25 | Router modèle **et** effort pour chaque tâche, sous-tâche ou skill (règle) | CLAUDE.md, mémoire | ✅ règle active |
 | W16 | 2026-10-26 | Revue des tests unitaires : des tests utiles, qui couvrent tous les cas pertinents (pas « pour faire un test ») | mutation testing (gremlins, StrykerJS) + matrices de cas ; docs/quality/ | 🔨 |
 | W17 | 2026-10-26 | Vérifier en début de session ce qui peut être délégué à OpenRouter | hook SessionStart `openrouter-check.sh`, modes `summarize`/`prose`/`check` de llm.sh | ✅ (crédit OpenRouter épuisé au 2026-10-26 → repli Haiku) |
+| W18 | 2026-10-26 | Corriger les plantages mémoire (2 OOM globaux : mutant gremlins 8,7 Go dans `trust.test`, Chrome headless 3,4 Go, 7 agents en parallèle) | `scripts/heavy.sh` (cgroup 8 Go, 2 tâches lourdes max), tâches mise, règle CLAUDE.md | ✅ |
 | W13 | 2026-10-25 | Noter toutes les demandes pour les reprendre | ce registre | ✅ |
 
 ## Réseau, droits, sécurité
