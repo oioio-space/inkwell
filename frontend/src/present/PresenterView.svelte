@@ -43,7 +43,10 @@ const clock = $derived(
   new Date(p.now).toLocaleTimeString(lang, { hour: "2-digit", minute: "2-digit" }),
 );
 const elapsed = $derived(p.now >= 0 ? formatElapsed(p.stopwatch.elapsedMs()) : ""); // `now` ticks each second
-const step = $derived(p.pos.step);
+const counter = $derived(
+  t("present.slideOf", { n: p.index, count: p.deck.count }) +
+    (p.pos.step > 0 ? ` · ${t("present.step", { step: p.pos.step + 1 })}` : ""),
+);
 
 /** A click must not keep the focus: Space then goes to the slides, not to the button again. */
 const click = (fn: () => void) => (e: MouseEvent) => {
@@ -80,16 +83,16 @@ function pace(): string {
     <div class="end">
       <span class="timer" title={t("present.timer")}>
         <span class="time" data-testid="timer">{elapsed}</span>
-        {#if p.stopwatch.running}
-          <button type="button" class="fb" aria-label={t("present.timer.pause")} title={t("present.timer.pause")} onclick={click(() => p.stopwatch.pause())}>
+        {#if p.timerRunning}
+          <button type="button" class="fb" aria-label={t("present.timer.pause")} title={t("present.timer.pause")} onclick={click(() => p.pauseTimer())}>
             <Icon name="pause" />
           </button>
         {:else}
-          <button type="button" class="fb" aria-label={t("present.timer.start")} title={t("present.timer.start")} onclick={click(() => p.stopwatch.start())}>
+          <button type="button" class="fb" aria-label={t("present.timer.start")} title={t("present.timer.start")} onclick={click(() => p.startTimer())}>
             <Icon name="play" />
           </button>
         {/if}
-        <button type="button" class="fb" aria-label={t("present.timer.reset")} title={t("present.timer.reset")} onclick={click(() => p.stopwatch.reset())}>
+        <button type="button" class="fb" aria-label={t("present.timer.reset")} title={t("present.timer.reset")} onclick={click(() => p.resetTimer())}>
           <Icon name="undo" />
         </button>
       </span>
@@ -221,9 +224,7 @@ function pace(): string {
   </div>
 
   <footer class="foot">
-    <span data-testid="present-counter">
-      {t("present.slideOf", { n: p.index, count: p.deck.count })}{#if step > 0} · {t("present.step", { step: step + 1 })}{/if}
-    </span>
+    <span data-testid="present-counter">{counter}</span>
     {#if p.typed}<span class="typed" data-testid="present-typed">{t("present.goto", { n: p.typed })}</span>{/if}
     {#if p.pace}<span class="pace" data-pace={p.pace.kind} data-testid="present-pace">{pace()}</span>{/if}
     <span class="keys dim">{t("present.keys")}</span>

@@ -57,12 +57,12 @@ describe("Presentation on one machine", () => {
     const { presentation: p } = link.device("a");
     p.start("presenter");
     link.now += 60_000;
-    expect(p.stopwatch.running).toBe(false); // looking at the first slide does not start it
+    expect(p.timerRunning).toBe(false); // looking at the first slide does not start it
     press(p, "ArrowRight");
-    expect(p.stopwatch.running).toBe(true);
+    expect(p.timerRunning).toBe(true);
     link.now += 10 * 60_000; // 20 minutes over 3 slides: slide 2 should begin at 6 min 40
     expect(p.pace).toMatchObject({ kind: "behind" });
-    p.stopwatch.pause();
+    p.pauseTimer();
     expect(p.stopwatch.elapsedMs()).toBe(10 * 60_000);
     p.stop();
   });

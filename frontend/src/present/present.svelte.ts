@@ -59,6 +59,9 @@ export class Presentation {
   /** Seconds-resolution clock for the timer, refreshed once a second while presenting. */
   now = $state(0);
 
+  /** The timer is running (the stopwatch itself is not reactive). */
+  timerRunning = $state(false);
+
   readonly stopwatch: Stopwatch;
   #pos = $state<Pos>({ slide: 1, step: 0 });
   #screen = $state<ScreenMode>("show");
@@ -91,6 +94,21 @@ export class Presentation {
         this.#ver++;
       },
     );
+  }
+
+  startTimer(): void {
+    this.stopwatch.start();
+    this.timerRunning = this.stopwatch.running;
+  }
+
+  pauseTimer(): void {
+    this.stopwatch.pause();
+    this.timerRunning = this.stopwatch.running;
+  }
+
+  resetTimer(): void {
+    this.stopwatch.reset();
+    this.timerRunning = false;
   }
 
   // --- who pilots -------------------------------------------------------------------------
@@ -272,7 +290,7 @@ export class Presentation {
     this.#deps.preview.wantDeck(false);
     this.mode = "off";
     this.laserOn = false;
-    this.stopwatch.reset();
+    this.resetTimer();
     return page;
   }
 
@@ -372,7 +390,7 @@ export class Presentation {
         break;
     }
     this.#move(from, to);
-    if (a.kind === "next" && this.isPilot) this.stopwatch.startOnce();
+    if (a.kind === "next" && this.isPilot && !this.stopwatch.started) this.startTimer();
   }
 
   /** Whether this window's keys move the slide: the pilot's do, a browsing follower's move its own view. */
