@@ -1,4 +1,5 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { Session } from "../../bindings/github.com/oioio-space/inkwell/internal/app/index";
 import { statusOf, workspace } from "./workspace.svelte";
 
 // The Wails runtime dials its host on import; the status logic never needs it.
@@ -11,6 +12,30 @@ vi.mock("../../bindings/github.com/oioio-space/inkwell/internal/app/index", () =
 afterEach(() => {
   workspace.peers = [];
   workspace.joining = false;
+});
+
+describe("invitation", () => {
+  it("is marked used when a new person connects, and a fresh one replaces it", async () => {
+    const invite = vi
+      .fn()
+      .mockResolvedValueOnce({ text: "first" })
+      .mockResolvedValueOnce({ text: "second" });
+    (Session as unknown as { Invite: typeof invite }).Invite = invite;
+    workspace.peers = ["carol"];
+    await workspace.host();
+    expect(workspace.invitation).toBe("first");
+    expect(workspace.invitationUsed).toBe(false);
+
+    workspace.peerUp("carol"); // already there: not the person invited
+    expect(workspace.invitationUsed).toBe(false);
+    workspace.peerUp("bob");
+    expect(workspace.invitationUsed).toBe(true);
+
+    await workspace.host();
+    expect(workspace.invitation).toBe("second");
+    expect(workspace.invitationUsed).toBe(false);
+    workspace.invitation = "";
+  });
 });
 
 describe("status", () => {

@@ -158,6 +158,10 @@ type Options struct {
 	// lists the other nodes it sees (see [Node.Nearby]). If it cannot start,
 	// the node works without it ([Node.LANError]).
 	LAN bool
+	// LANService is the mDNS service name used instead of [MDNSService], to
+	// keep a group of nodes (tests) apart from the real network. Empty means
+	// [MDNSService].
+	LANService string
 	// RelayOnly hides the node's address from the other people: it refuses
 	// every connection that does not go through a relay (except to the
 	// relays themselves), never dials a direct address and does not hole
@@ -404,7 +408,7 @@ func New(ctx context.Context, key ed25519.PrivateKey, o Options) (*Node, error) 
 		n.dialWG.Go(func() { n.keepRelay(ai, n.relayDown[ai.ID]) })
 	}
 	if o.LAN {
-		n.lanErr = n.startLAN()
+		n.lanErr = n.startLAN(o.LANService)
 	}
 	stop := context.AfterFunc(ctx, func() { _ = n.Close() })
 	n.mu.Lock()

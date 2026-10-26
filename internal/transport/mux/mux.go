@@ -89,7 +89,8 @@ type muxer struct {
 
 // Split returns a sub-transport for each of channels, over t. Sub-transports
 // share t: closing any of them closes t and so all of them. Split starts one
-// goroutine that reads t, which stops when t or a sub-transport is closed.
+// goroutine that reads t, which stops when t or a sub-transport is closed; with
+// no channel it starts none and leaves t alone.
 // The caller must not use t's Recv afterwards; Send on t stays possible but
 // bypasses the channels. Duplicate channels are returned once, and the reserved
 // channel 0xFF not at all.
@@ -115,6 +116,10 @@ func Split(t transport.Transport, channels ...byte) map[byte]transport.Transport
 		m.subs[c] = s
 		m.order = append(m.order, s)
 		out[c] = s
+	}
+	if len(out) == 0 { // nothing to route, and no sub-transport to stop a reader
+		cancel()
+		return out
 	}
 	m.res, _ = t.(Reserver)
 	go m.run()

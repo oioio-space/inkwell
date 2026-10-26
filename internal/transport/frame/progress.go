@@ -43,18 +43,17 @@ func WriteProgress(ctx context.Context, w DeadlineWriter, idle time.Duration, mi
 	if len(payload) > transport.MaxFrame {
 		return transport.ErrFrameTooLarge
 	}
-	// canceled and the deadline are updated under mu, so that re-arming the
-	// deadline can never undo the interruption a cancellation asked for.
+	// The deadline is updated under mu, so that re-arming it can never undo
+	// the interruption a cancellation asked for.
 	last := time.Now().Add(idle + time.Duration(len(payload))*time.Second/time.Duration(max(minRate, 1)))
-	var (
-		mu       sync.Mutex
-		canceled bool
-	)
+	var mu sync.Mutex
 	arm := func() error {
 		mu.Lock()
 		defer mu.Unlock()
-		if canceled {
-			return ctx.Err()
+		// ctx.Err covers a cancellation whose callback has not run yet, and a
+		// writer that ignores deadlines: the context is checked before each chunk.
+		if err := ctx.Err(); err != nil {
+			return err
 		}
 		return w.SetWriteDeadline(minTime(time.Now().Add(idle), last))
 	}
@@ -63,7 +62,6 @@ func WriteProgress(ctx context.Context, w DeadlineWriter, idle time.Duration, mi
 		defer close(fin)
 		mu.Lock()
 		defer mu.Unlock()
-		canceled = true
 		_ = w.SetWriteDeadline(time.Now())
 	})
 	defer func() {

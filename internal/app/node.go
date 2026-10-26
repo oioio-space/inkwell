@@ -112,6 +112,9 @@ type Options struct {
 	// le réseau local"): this device then announces itself on the local
 	// network and sees the others that are visible.
 	LAN bool
+	// LANService is the mDNS service name, to keep a group of devices (tests)
+	// apart from the real network; empty means the usual one.
+	LANService string
 	// ExportChoose asks the person where to save an exported PDF (see
 	// [PreviewOptions.Choose]); nil turns the export off.
 	ExportChoose func(name string) (string, error)
@@ -161,7 +164,7 @@ func Start(ctx context.Context, home *os.Root, o Options) (*Runtime, error) {
 	}
 	adm := NewAdmission(list)
 	no := netOptions(o.Port)
-	no.Admit, no.LAN = adm.Admit, o.LAN
+	no.Admit, no.LAN, no.LANService = adm.Admit, o.LAN, o.LANService
 	node, err := startNode(ctx, dev, no)
 	if err != nil {
 		return nil, errors.Join(err, store.close())

@@ -157,8 +157,9 @@ func TestNearby(t *testing.T) {
 	if got := plain.Nearby(); len(got) != 0 || plain.LANError() != nil {
 		t.Errorf("a node without LAN: Nearby() = %v, LANError() = %v; want nothing", got, plain.LANError())
 	}
-	a := loopbackNode(t, 2, p2p.Options{LAN: true})
-	b := loopbackNode(t, 3, p2p.Options{LAN: true})
+	svc := testService()
+	a := loopbackNode(t, 2, p2p.Options{LAN: true, LANService: svc})
+	b := loopbackNode(t, 3, p2p.Options{LAN: true, LANService: svc})
 	if err := errors.Join(a.LANError(), b.LANError()); err != nil {
 		t.Skipf("mDNS is not available here: %v", err)
 	}

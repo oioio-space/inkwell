@@ -51,7 +51,12 @@ async function join(e: SubmitEvent) {
       <span>{t("share.host.help")}</span>
       <button type="button" class="btn" onclick={() => workspace.host()}>{t("share.host")}</button>
     </div>
-    {#if workspace.invitation}
+    {#if workspace.invitation && workspace.invitationUsed}
+      <div class="row" role="status">
+        <span>{t("share.used")}</span>
+        <button type="button" class="btn" onclick={() => workspace.host()}>{t("share.renew")}</button>
+      </div>
+    {:else if workspace.invitation}
       <div class="row">
         <input
           class="invitation"

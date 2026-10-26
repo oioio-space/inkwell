@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"crypto/rand"
 	"errors"
 	"os"
 	"strings"
@@ -46,6 +47,10 @@ func (m *memCarrier) Fetch(_ context.Context, code string) (invite.Ticket, error
 	return t, nil
 }
 
+// testLANService is an mDNS service name of this test run alone: the tests do
+// not see (or answer) the inkwell instances of the real network.
+var testLANService = "_ink" + rand.Text()[:12] + "._udp"
+
 // dirs are what a runtime keeps on disk: the identity directory and the
 // project folder.
 type dirs struct {
@@ -63,7 +68,7 @@ func startRuntime(t *testing.T, c carrier, lan bool) (*Runtime, dirs) {
 	}
 	t.Cleanup(func() { _ = home.Close() })
 	proj, _ := newProjectFolder(t)
-	rt, err := Start(t.Context(), home, Options{Project: proj, RendezvousURL: NoCodes, LAN: lan})
+	rt, err := Start(t.Context(), home, Options{Project: proj, RendezvousURL: NoCodes, LAN: lan, LANService: testLANService})
 	if err != nil {
 		t.Fatal(err)
 	}

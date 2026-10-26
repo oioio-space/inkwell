@@ -12,6 +12,8 @@
   "share.invitation": "Invitation",
   "share.copy": "Copier l'invitation",
   "share.copied": "Copié",
+  "share.used": "Cette invitation est déjà utilisée.",
+  "share.renew": "Créer une nouvelle invitation",
   "share.join": "Rejoindre",
   "share.join.placeholder": "Collez l'invitation ici",
   "share.join.help": "Collez l'invitation que la personne vous a donnée.",

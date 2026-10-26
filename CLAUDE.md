@@ -22,6 +22,7 @@ mise run bench:baseline  # then change code, then: mise run bench:compare (bench
 mise run scan:code       # gosec + govulncheck | scan:secrets | scan:sbom (grype)
 mise run clean           # remove regenerable artifacts
 mise run mutate:go -- ./internal/trust   # mutation testing (gremlins), memory-capped
+INKWELL_GOFLAGS=-exec=$PWD/scripts/memcap.sh mise run mutate:go -- ./internal/trust  # + per-test address-space cap (INKWELL_AS_LIMIT)
 ```
 
 ## Architecture
