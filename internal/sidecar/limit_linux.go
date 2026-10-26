@@ -14,9 +14,9 @@ const shell = "/bin/sh"
 // Setting them on a process that is already running leaves a window in which a
 // hostile document could already allocate or write past them.
 //
-// ulimit -v counts KiB. ulimit -f counts blocks of 512 bytes (dash, POSIX) or
-// 1024 bytes (bash): the file size limit is exact with dash and up to twice as
-// large with bash; the directory watch of [Spec.MaxDirBytes] is the exact bound.
+// ulimit -v counts KiB. ulimit -f counts blocks of 512 bytes, in dash and in
+// bash in sh mode alike (POSIX), so the file size limit is exact; the directory
+// watch of [Spec.MaxDirBytes] bounds the total.
 func withLimits(spec Spec) (path string, args []string, err error) {
 	if spec.MemoryLimit == 0 && spec.FileSizeLimit == 0 {
 		return spec.Path, spec.Args, nil

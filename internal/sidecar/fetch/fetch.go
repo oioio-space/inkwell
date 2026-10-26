@@ -139,9 +139,7 @@ func upToDate(out string, art sidecar.Artifact) bool {
 	if err != nil {
 		return false
 	}
-	h := sha256.New()
-	n, err := io.Copy(h, io.LimitReader(zr, art.Size+1))
-	return err == nil && n == art.Size && hex.EncodeToString(h.Sum(nil)) == art.SHA256
+	return sha256Exact(zr, art.Size) == art.SHA256
 }
 
 // archive returns the path of the verified archive in the download cache,
@@ -167,8 +165,14 @@ func hashOf(path string, size int64) string {
 		return ""
 	}
 	defer func() { _ = f.Close() }()
+	return sha256Exact(f, size)
+}
+
+// sha256Exact returns the SHA-256 of r when it holds exactly size bytes, else
+// "". It reads one byte more than size at most.
+func sha256Exact(r io.Reader, size int64) string {
 	h := sha256.New()
-	n, err := io.Copy(h, io.LimitReader(f, size+1))
+	n, err := io.Copy(h, io.LimitReader(r, size+1))
 	if err != nil || n != size {
 		return ""
 	}

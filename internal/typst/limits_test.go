@@ -7,6 +7,7 @@ import (
 	"errors"
 	"image"
 	"image/png"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -156,5 +157,13 @@ func TestCompileWaitsForASlotUntilCancelled(t *testing.T) {
 	}
 	if _, err := e.Query(ctx, p, "main.typ", "heading"); !errors.Is(err, context.DeadlineExceeded) {
 		t.Errorf("Query = %v, want the context's error while waiting", err)
+	}
+}
+
+// MaxConcurrent defaults to half the CPUs, and to at least one.
+func TestMaxConcurrentDefault(t *testing.T) {
+	e := newEngine(t, nil)
+	if got, want := cap(e.sem), max(1, runtime.NumCPU()/2); got != want {
+		t.Errorf("default MaxConcurrent = %d, want %d", got, want)
 	}
 }

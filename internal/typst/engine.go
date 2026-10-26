@@ -88,7 +88,7 @@ type Config struct {
 	// MaxPages bounds the number of pages; default [DefaultMaxPages].
 	MaxPages int
 	// MaxConcurrent bounds the compilations running at once (each is one or two
-	// Typst processes); the others wait. Default: the number of CPUs.
+	// Typst processes); the others wait. Default: half the number of CPUs, at least 1.
 	MaxConcurrent int
 	// proxyOnly turns the network namespace off, for the test that watches the
 	// refused proxy.
@@ -202,7 +202,7 @@ func New(cfg Config) (*Engine, error) {
 		cfg.MaxOutput = DefaultMaxOutput
 	}
 	if cfg.MaxConcurrent <= 0 {
-		cfg.MaxConcurrent = runtime.NumCPU()
+		cfg.MaxConcurrent = max(1, runtime.NumCPU()/2)
 	}
 	if cfg.MaxPages <= 0 {
 		cfg.MaxPages = DefaultMaxPages
