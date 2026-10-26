@@ -88,6 +88,7 @@ func (n *Node) Want(peers map[transport.PeerID][]string) {
 			w.known = known
 			continue
 		}
+		delete(n.held, id) // wanted anew (a new pairing): an earlier reset no longer keeps it out
 		ctx, cancel := context.WithCancel(n.ctx)
 		w := &wanted{id: id, known: known, cancel: cancel}
 		n.want[id] = w

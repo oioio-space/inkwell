@@ -619,6 +619,9 @@ func (n *Node) Drop(who transport.PeerID) {
 		return
 	}
 	n.unwant(id)
+	n.mu.Lock()
+	delete(n.held, id) // a removed peer is refused by Admit, not by an old backoff
+	n.mu.Unlock()
 	_ = n.h.Network().ClosePeer(id)
 	n.h.Peerstore().RemovePeer(id)
 	n.h.Peerstore().ClearAddrs(id)
