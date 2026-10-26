@@ -92,6 +92,25 @@ func (c *previewConn) message(t *testing.T, typ string) app.PreviewMessage {
 	}
 }
 
+// settle consumes the messages of type typ until none arrives for d: what is
+// left of the work the requests so far started.
+func (c *previewConn) settle(t *testing.T, typ string, d time.Duration) {
+	t.Helper()
+	timer := time.NewTimer(d)
+	defer timer.Stop()
+	for {
+		select {
+		case b := <-c.sent:
+			var m app.PreviewMessage
+			if err := json.Unmarshal(b, &m); err == nil && m.Type == typ {
+				timer.Reset(d)
+			}
+		case <-timer.C:
+			return
+		}
+	}
+}
+
 // quiet asserts that nothing of type typ arrives within d.
 func (c *previewConn) quiet(t *testing.T, typ string, d time.Duration) {
 	t.Helper()
@@ -508,6 +527,9 @@ func TestPreviewScheduling(t *testing.T) {
 		c := attach(t, p)
 		c.ask(t, `{"op":"view","first":1,"last":4}`)
 		c.message(t, "result")
+		// The compilation the attachment started and the one the window asked
+		// for may both answer: take the count once they have.
+		c.settle(t, "result", 150*time.Millisecond)
 		before := fc.calls.Load()
 		c.ask(t, `{"op":"view","first":2,"last":3}`) // held already
 		c.ask(t, `{"op":"view","first":5,"last":9}`) // past the end of a 3-page document
