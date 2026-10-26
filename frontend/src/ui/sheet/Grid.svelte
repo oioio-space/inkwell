@@ -6,7 +6,7 @@ import { t } from "../../i18n";
 import Icon from "../icons/Icon.svelte";
 import { personIndex } from "../people";
 import { gridKey } from "./keys";
-import type { SheetController } from "./sheet.svelte";
+import { fillExtent, type SheetController } from "./sheet.svelte";
 
 /**
  * The grid: rows and columns are virtual (only what is on screen exists in the page), so a
@@ -18,13 +18,11 @@ let {
   ctrl,
   oncontext,
   onfilter,
-  onshowtext,
   onfind,
 }: {
   ctrl: SheetController;
   oncontext: (x: number, y: number) => void;
   onfilter: (col: number, anchor: HTMLElement) => void;
-  onshowtext: () => void;
   onfind: (replace: boolean) => void;
 } = $props();
 
@@ -176,7 +174,7 @@ function cellClass(d: number, c: number): string {
   if (rc) out += ` ${rc}`;
   if (ctrl.typeOf(c) === "number") out += " num";
   if (ctrl.isLocked(d, c)) out += " locked";
-  if (ctrl.changed.has(`${ctrl.recordOf(d)}:${c}`)) out += " fresh";
+  if (ctrl.changed.size > 0 && ctrl.changed.has(`${ctrl.recordOf(d)}:${c}`)) out += " fresh";
   return out;
 }
 
@@ -383,14 +381,7 @@ function move(e: PointerEvent) {
   } else if (drag.kind === "fill") {
     const cell = pointerCell(e.clientX, e.clientY);
     if (!cell) return;
-    const p = ctrl.primary;
-    const dr = cell.r > p.r1 ? cell.r - p.r1 : cell.r < p.r0 ? cell.r - p.r0 : 0;
-    const dc = cell.c > p.c1 ? cell.c - p.c1 : cell.c < p.c0 ? cell.c - p.c0 : 0;
-    if (Math.abs(dr) >= Math.abs(dc) && dr !== 0)
-      fillTo = { ...p, r0: dr < 0 ? p.r0 + dr : p.r0, r1: dr > 0 ? p.r1 + dr : p.r1 };
-    else if (dc !== 0)
-      fillTo = { ...p, c0: dc < 0 ? p.c0 + dc : p.c0, c1: dc > 0 ? p.c1 + dc : p.c1 };
-    else fillTo = undefined;
+    fillTo = fillExtent(ctrl.primary, cell)?.range;
   }
 }
 
@@ -501,7 +492,6 @@ function keydown(e: KeyboardEvent) {
   const done = gridKey(ctrl, e, {
     pageRows: Math.max(1, Math.floor((viewH - topH) / rowH) - 1),
     zoomReset: () => ctrl.setZoom(1),
-    showText: onshowtext,
     openFind: onfind,
     openFilter: () => {
       const el = scroller?.querySelector<HTMLElement>(
@@ -581,6 +571,7 @@ const fillRect = $derived.by(() => {
 
 {#snippet cellView(d: number, c: number, frozenCell: boolean)}
   {@const ed = ctrl.editing}
+  {@const remote = remoteOf(d, c)}
   <div
     id="cell-{d}-{c}"
     class="cell {cellClass(d, c)}"
@@ -611,8 +602,8 @@ const fillRect = $derived.by(() => {
     {#if canFill && handleAt.r === d && handleAt.c === c && ctrl.ranges.length === 1}
       <span class="fill" data-fill title={t("sheet.fillHandle")}></span>
     {/if}
-    {#if remoteOf(d, c) && remoteOf(d, c)?.range.r0 === d && remoteOf(d, c)?.range.c0 === c}
-      <span class="tag who-{personIndex(remoteOf(d, c)?.peerId ?? '')}" aria-hidden="true">{remoteOf(d, c)?.name}</span>
+    {#if remote && remote.range.r0 === d && remote.range.c0 === c}
+      <span class="tag who-{personIndex(remote.peerId)}" aria-hidden="true">{remote.name}</span>
     {/if}
   </div>
 {/snippet}

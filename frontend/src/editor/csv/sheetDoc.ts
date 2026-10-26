@@ -31,6 +31,12 @@ export function handlePort(handle: DocHandle<{ text: string }>): DocPort {
   };
 }
 
+/**
+ * Automerge 3.5 panics on a text of about 20 MB (ADR 0026), so a file past this many characters
+ * is only read: the sheet shows, sorts, filters, searches and copies it, and never writes.
+ */
+export const MAX_EDITABLE_CHARS = 10 * 1024 * 1024;
+
 const END = "end";
 const START = "start";
 
@@ -70,7 +76,7 @@ export class SheetDoc {
   constructor(
     readonly port: DocPort,
     model?: CsvModel,
-    private readonly hint?: Dialect["delimiter"],
+    private readonly hint: { forced?: Dialect["delimiter"]; prefer?: Dialect["delimiter"] } = {},
   ) {
     this.model = model ?? new CsvModel(port.text());
     this.autoDialect = this.model.text === "" || this.model.text.length < 200_000;
@@ -83,9 +89,14 @@ export class SheetDoc {
     return this.#redo.length > 0;
   }
 
+  /** True when the text is too big to be edited (see {@link MAX_EDITABLE_CHARS}). */
+  get tooBig(): boolean {
+    return this.model.text.length > MAX_EDITABLE_CHARS;
+  }
+
   /** Applies one user action (splices in the model's coordinates). */
   perform(splices: readonly Splice[], col?: number): boolean {
-    if (splices.length === 0) return false;
+    if (splices.length === 0 || this.tooBig) return false;
     this.autoDialect = false;
     const entry = this.#apply(splices, col);
     this.#undo.push(entry);
@@ -142,7 +153,8 @@ export class SheetDoc {
     const next = this.port.text();
     if (next === this.model.text) return;
     this.model.reset(next);
-    if (!this.pinned) this.model.setDialect(detectDialect(next, this.hint));
+    if (!this.pinned)
+      this.model.setDialect(detectDialect(next, this.hint.forced, this.hint.prefer));
     this.autoDialect = false;
     this.onChange({ from: 0, to: 0, insLen: next.length }, false);
   }
@@ -154,7 +166,10 @@ export class SheetDoc {
     let w = window;
     if (this.autoDialect && !this.pinned && next.length < 200_000) {
       this.model.reset(next);
-      this.model.setDialect({ ...detectDialect(next, this.hint), quote: this.model.dialect.quote });
+      this.model.setDialect({
+        ...detectDialect(next, this.hint.forced, this.hint.prefer),
+        quote: this.model.dialect.quote,
+      });
       w = window ?? { from: 0, to: 0, insLen: next.length };
     } else if (w) this.model.update(next, w);
     else {
@@ -211,7 +226,7 @@ export class SheetDoc {
 
   #step(from: Undo[], to: Undo[]): boolean {
     const entry = from[from.length - 1];
-    if (!entry) return false;
+    if (!entry || this.tooBig) return false;
     const inv = this.#inverse(entry);
     if (!inv) {
       from.pop();

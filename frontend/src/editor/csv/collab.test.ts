@@ -10,7 +10,10 @@ const DIALECT = { delimiter: ",", header: true, decimal: "." } as const;
 /** One person: a real Automerge document and the sheet over it. */
 class Peer {
   sheet: SheetDoc;
-  constructor(public doc: A.Doc<D>) {
+  constructor(
+    public doc: A.Doc<D>,
+    safe = true,
+  ) {
     const port: DocPort = {
       text: () => this.doc.text,
       change: (splices) => {
@@ -23,7 +26,7 @@ class Peer {
       resolve: (c) => A.getCursorPosition(this.doc, ["text"], c),
     };
     const model = new CsvModel(doc.text, DIALECT);
-    model.safeQuoting = true;
+    model.safeQuoting = safe;
     this.sheet = new SheetDoc(port, model);
   }
   get text() {
@@ -92,6 +95,24 @@ describe("two people, one CSV", () => {
       }),
       { numRuns: 200 },
     );
+  }, 30_000);
+
+  it("CSV-04b minimal quoting cannot be made safe: a plain write before a quoted one splits the cell", () => {
+    // The same cell written by two people at once: Automerge keeps both inserts, in an order that
+    // follows the actor ids (nothing the writer controls). `x` then `"y,z"` is `x"y,z"`, which
+    // reads as two cells. Quoting only when needed therefore breaks one of the two orders.
+    const broken = (safe: boolean) =>
+      [["aa", "bb"] as const, ["bb", "aa"] as const].map(([actorA, actorB]) => {
+        const base = A.from<D>({ text: BASE }, { actor: "00" });
+        const a = new Peer(A.clone(base, { actor: actorA }), safe);
+        const b = new Peer(A.clone(base, { actor: actorB }), safe);
+        a.edit(1, 1, "x");
+        b.edit(1, 1, "y,z");
+        sync(a, b);
+        return new CsvModel(a.text, DIALECT).record(1).length !== 4;
+      });
+    expect(broken(false)).toContain(true);
+    expect(broken(true)).toEqual([false, false]);
   });
 
   it("CSV-05 a row inserted above does not move the edit of the person below", () => {

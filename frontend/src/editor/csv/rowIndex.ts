@@ -136,7 +136,6 @@ export class RowIndex {
         }
       }
     }
-    if (pos >= newLen && resync === this.count) resync = this.count;
     this.#splice(first, resync, fresh, freshCols, delta);
     this.length = newLen;
   }

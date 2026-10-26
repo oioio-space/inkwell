@@ -4,8 +4,6 @@ import Papa from "papaparse";
 export interface ParsedIndex {
   starts: Int32Array;
   cols: Uint16Array;
-  /** Parse problems Papa Parse noticed, by record (never fatal: nothing is repaired). */
-  problems: { row: number; message: string }[];
 }
 
 /**
@@ -24,7 +22,6 @@ export function papaIndex(
   let cols = new Uint16Array(cap);
   let n = 0;
   let prev = 0;
-  const problems: { row: number; message: string }[] = [];
   let lastReport = 0;
   let announced = false;
   Papa.parse<string[]>(text, {
@@ -46,10 +43,6 @@ export function papaIndex(
       cols[n] = Math.min(res.data.length, 0xffff);
       n++;
       prev = res.meta.cursor;
-      for (const e of res.errors) {
-        if (e.code !== "TooFewFields" && e.code !== "TooManyFields" && problems.length < 200)
-          problems.push({ row: n - 1, message: e.code });
-      }
       if (!announced && n >= 60) {
         announced = true;
         first?.({ starts: starts.slice(0, n), cols: cols.slice(0, n) });
@@ -64,5 +57,5 @@ export function papaIndex(
   // newline has no phantom record.
   while (n > 0 && (starts[n - 1] as number) >= text.length) n--;
   progress(1);
-  return { starts: starts.slice(0, n), cols: cols.slice(0, n), problems };
+  return { starts: starts.slice(0, n), cols: cols.slice(0, n) };
 }

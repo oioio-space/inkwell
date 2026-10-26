@@ -7,7 +7,19 @@ export const isTabular = (path: string): boolean => /\.(csv|tsv|psv|tab)$/i.test
  */
 class SheetView {
   text = $state(false);
+  /** Other files the person chose to open as a table (a `.txt` that looks like one). */
+  #asTable = $state.raw<ReadonlySet<string>>(new Set());
   offset = $state<number | undefined>();
+
+  /** Whether `path` is shown as a spreadsheet: a table file, or a text the person opened as one. */
+  tabular(path: string): boolean {
+    return isTabular(path) || this.#asTable.has(path);
+  }
+
+  openAsTable(path: string) {
+    this.#asTable = new Set([...this.#asTable, path]);
+    this.toGrid(undefined);
+  }
 
   toText(offset: number) {
     this.offset = offset;
@@ -21,3 +33,6 @@ class SheetView {
 }
 
 export const sheetView = new SheetView();
+
+/** A table shows as a spreadsheet, unless the person asked for its text. */
+export const showsSheet = (path: string): boolean => sheetView.tabular(path) && !sheetView.text;

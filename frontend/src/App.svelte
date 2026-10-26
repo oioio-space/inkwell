@@ -1,6 +1,7 @@
 <script lang="ts">
 import { onMount } from "svelte";
 import { Session } from "../bindings/github.com/oioio-space/inkwell/internal/app/index";
+import { looksTabular } from "./editor/csv/dialect";
 import { markExternal } from "./editor/external";
 import { langOf } from "./editor/format";
 import { t } from "./i18n";
@@ -15,7 +16,7 @@ import Preferences from "./ui/prefs/Preferences.svelte";
 import SealedBanner from "./ui/SealedBanner.svelte";
 import ShareDialog from "./ui/ShareDialog.svelte";
 import Sheet from "./ui/sheet/Sheet.svelte";
-import { isTabular, sheetView } from "./ui/sheet/viewMode.svelte";
+import { sheetView, showsSheet } from "./ui/sheet/viewMode.svelte";
 import HeaderBar from "./ui/shell/HeaderBar.svelte";
 import Sidebar from "./ui/shell/Sidebar.svelte";
 import StatusBar from "./ui/shell/StatusBar.svelte";
@@ -31,8 +32,14 @@ const me = $derived({ id: workspace.myId, name: workspace.myName });
 
 const lang = $derived(langOf(workspace.current));
 /** A table file shows as a spreadsheet, unless the person asked for its text. */
-const tabular = $derived(isTabular(workspace.current));
-const showSheet = $derived(tabular && !sheetView.text);
+const tabular = $derived(sheetView.tabular(workspace.current));
+/** A `.txt` that reads as a table is offered as one, never opened as one by itself. */
+const offerTable = $derived(
+  !tabular &&
+    /\.txt$/i.test(workspace.current) &&
+    looksTabular(workspace.handle?.doc()?.text ?? ""),
+);
+const showSheet = $derived(showsSheet(workspace.current));
 
 /** Back to the grid from the text view, on the cell under the caret. */
 function showTable() {
@@ -148,6 +155,18 @@ onMount(() => {
       />
     {/if}
     <SealedBanner />
+    {#if offerTable}
+      <div class="viewbar">
+        <button
+          type="button"
+          class="fb lbl"
+          data-sheet="open-table"
+          onclick={() => sheetView.openAsTable(workspace.current)}
+        >
+          {t("sheet.openAsTable")}
+        </button>
+      </div>
+    {/if}
     {#if tabular && sheetView.text}
       <div class="viewbar">
         <button type="button" class="fb lbl" data-sheet="table" onclick={showTable}>

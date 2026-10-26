@@ -84,10 +84,7 @@ function key(e: KeyboardEvent) {
   if (e.key === "Escape") {
     e.preventDefault();
     onclose();
-  } else if (e.key === "Enter") {
-    e.preventDefault();
-    go(at + (e.shiftKey ? -1 : 1));
-  } else if (e.key === "F3") {
+  } else if (e.key === "Enter" || e.key === "F3") {
     e.preventDefault();
     go(at + (e.shiftKey ? -1 : 1));
   }

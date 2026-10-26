@@ -1,3 +1,4 @@
+import { typstString as escapeTypst } from "../format/typst";
 import type { Dialect } from "./dialect";
 
 /**
@@ -6,10 +7,7 @@ import type { Dialect } from "./dialect";
  */
 export const CHART_PACKAGE = "@preview/lilaq:0.5.0";
 
-/** A Typst string literal. */
-export function typstString(s: string): string {
-  return `"${s.replaceAll("\\", "\\\\").replaceAll('"', '\\"').replaceAll("\n", "\\n")}"`;
-}
+const typstString = (s: string): string => `"${escapeTypst(s)}"`;
 
 const delimiterArg = (d: Dialect["delimiter"]) =>
   d === "," ? "" : `, delimiter: ${typstString(d)}`;

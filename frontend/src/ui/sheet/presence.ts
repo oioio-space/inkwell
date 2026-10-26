@@ -61,7 +61,8 @@ export function sheetPresence(
         // An anchor on text this replica has not received yet: skip until the next update.
       }
     }
-    sheet.remotes = remotes;
+    // Nobody else to show, nobody before: leave the list alone so the grid does not redraw.
+    if (remotes.length > 0 || sheet.remotes.length > 0) sheet.remotes = remotes;
   };
   for (const event of ["update", "snapshot", "goodbye", "pruning"] as const)
     presence.on(event, refresh);

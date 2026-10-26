@@ -10,7 +10,14 @@ export const rowHead = (p: Page, r: number) => p.locator(`[data-rowhead="${r}"]`
 export async function openSheet(
   browser: Browser,
   url: string,
-  opts: { dark?: boolean; clipboard?: boolean; width?: number; height?: number } = {},
+  opts: {
+    dark?: boolean;
+    clipboard?: boolean;
+    width?: number;
+    height?: number;
+    /** Preferences already chosen, as the Preferences dialog would store them. */
+    settings?: Record<string, unknown>;
+  } = {},
 ): Promise<Page> {
   const context = await browser.newContext({
     locale: "fr-FR",
@@ -18,6 +25,10 @@ export async function openSheet(
     colorScheme: opts.dark ? "dark" : "light",
     permissions: opts.clipboard ? ["clipboard-read", "clipboard-write"] : [],
   });
+  if (opts.settings)
+    await context.addInitScript((value) => {
+      localStorage.setItem("inkwell.settings", JSON.stringify(value));
+    }, opts.settings);
   const page = await context.newPage();
   const violations: string[] = [];
   page.on("console", (m) => {
@@ -78,6 +89,33 @@ export async function setText(p: Page, csv: string): Promise<void> {
   await p.getByRole("button", { name: "Voir le tableau" }).click();
   await expect(grid(p)).toBeVisible();
   if (csv) await expect(cell(p, 0, 0)).toBeVisible();
+}
+
+/**
+ * Replaces the whole file by `csv` with ONE paste in the text view (typing a big file takes
+ * forever), and leaves the caret at its start. The text view stays open.
+ */
+export async function pasteInTextView(p: Page, csv: string): Promise<void> {
+  await p.getByRole("button", { name: "Voir le texte" }).click();
+  const content = p.locator(".cm-content");
+  await content.click();
+  await p.keyboard.press("ControlOrMeta+a");
+  await p.keyboard.press("Delete");
+  await p.evaluate((text) => {
+    const dt = new DataTransfer();
+    dt.setData("text/plain", text);
+    document
+      .querySelector(".cm-content")
+      ?.dispatchEvent(
+        new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true }),
+      );
+  }, csv);
+  // The caret is at the end of what came in: wait for it to show, then go back to the start.
+  await expect(p.locator(".cm-line").first()).not.toBeEmpty({ timeout: 60_000 });
+  await p.keyboard.press("ControlOrMeta+Home");
+  await expect(p.locator(".cm-line").first()).toContainText(csv.slice(0, csv.indexOf("\n")), {
+    timeout: 60_000,
+  });
 }
 
 /** Clicks a cell and checks it is the active one. */

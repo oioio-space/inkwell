@@ -7,7 +7,6 @@ import {
   replacedValue,
 } from "../../editor/csv/cellSearch";
 import {
-  cellsOf,
   fromClipboard,
   neutralise,
   type Range,
@@ -30,12 +29,41 @@ import {
   type ViewSpec,
 } from "../../editor/csv/view";
 import { compileQuery, type QuerySpec } from "../../editor/search/query";
-import { t } from "../../i18n";
+import { lang, t } from "../../i18n";
 
 /** A cell of the grid: `r` counts data rows as displayed (after sort and filter), `c` columns. */
 export interface Pos {
   r: number;
   c: number;
+}
+
+/**
+ * Where a fill drag from the selection `from` to the cell `to` goes: in the direction of the
+ * larger move, `count` cells further. `range` is the selection once filled.
+ */
+export function fillExtent(
+  from: Range,
+  to: Pos,
+): { vertical: boolean; dir: 1 | -1; count: number; range: Range } | undefined {
+  const dRows = to.r > from.r1 ? to.r - from.r1 : to.r < from.r0 ? to.r - from.r0 : 0;
+  const dCols = to.c > from.c1 ? to.c - from.c1 : to.c < from.c0 ? to.c - from.c0 : 0;
+  if (dRows === 0 && dCols === 0) return undefined;
+  const vertical = Math.abs(dRows) >= Math.abs(dCols);
+  const move = vertical ? dRows : dCols;
+  const dir = move > 0 ? 1 : -1;
+  const count = Math.abs(move);
+  const range = vertical
+    ? {
+        ...from,
+        r0: dir === -1 ? from.r0 - count : from.r0,
+        r1: dir === 1 ? from.r1 + count : from.r1,
+      }
+    : {
+        ...from,
+        c0: dir === -1 ? from.c0 - count : from.c0,
+        c1: dir === 1 ? from.c1 + count : from.c1,
+      };
+  return { vertical, dir, count, range };
 }
 
 /** Another person's selection, already in grid coordinates. */
@@ -49,16 +77,24 @@ export interface SheetOptions {
   readOnly?: boolean;
   /** Record/column coordinates of a cell in a locked zone (ADR 0022). */
   isLocked?: (record: number, col: number) => boolean;
+  /**
+   * Asked before undoing: true says the key was used for something else (an outside edit that
+   * was just taken in is taken back instead of the person's own last action).
+   */
+  onUndoKey?: () => boolean;
+  /** The person set the dialect (separator, header, decimal) by hand. */
+  onDialect?: (dialect: Dialect) => void;
   now?: () => Date;
 }
 
-export const BASE_ROW = 28;
-export const BASE_COL = 140;
-export const BASE_HEADER_W = 52;
-export const MIN_ZOOM = 0.5;
-export const MAX_ZOOM = 2;
+const BASE_ROW = 28;
+const BASE_COL = 140;
+const BASE_HEADER_W = 52;
+const MIN_ZOOM = 0.5;
+const MAX_ZOOM = 2;
 
 const MAX_WIDTH = 5000;
+const megabytes = new Intl.NumberFormat(lang, { maximumFractionDigits: 1 });
 
 /** What an action tells the person (a toast with an optional way back). */
 export interface Notice {
@@ -137,7 +173,14 @@ export class SheetController {
     return this.model.dialect;
   }
   get readOnly(): boolean {
-    return this.opts.readOnly === true;
+    this.tick;
+    return this.opts.readOnly === true || this.doc.tooBig;
+  }
+  /** Why the sheet cannot be edited: the file is too big, or the person may only read. */
+  get readOnlyText(): string {
+    this.tick;
+    if (!this.doc.tooBig) return t("sheet.readOnly");
+    return t("sheet.tooBig", { size: megabytes.format(this.model.text.length / 2 ** 20) });
   }
   /** Displayed data rows. */
   get rowCount(): number {
@@ -150,12 +193,6 @@ export class SheetController {
   }
   colW(c: number): number {
     return Math.round((this.widths[c] ?? BASE_COL) * this.zoom);
-  }
-  /** Left edge of column c in the grid (after the row header). */
-  colX(c: number): number {
-    let x = 0;
-    for (let i = 0; i < c; i++) x += this.colW(i);
-    return x;
   }
   get filtered(): boolean {
     return this.view.filters.size > 0;
@@ -487,7 +524,7 @@ export class SheetController {
   startEdit(replace?: string, from: "cell" | "bar" = "cell") {
     const { r, c } = this.active;
     if (!this.canEdit(r, c)) {
-      this.#refuse(r, c);
+      this.#refuse();
       return;
     }
     const rec = this.recordOf(r);
@@ -578,8 +615,8 @@ export class SheetController {
     this.active = { r, c };
   }
 
-  #refuse(_d: number, _c: number) {
-    this.notice = { text: this.readOnly ? t("sheet.readOnly") : t("sheet.locked") };
+  #refuse() {
+    this.notice = { text: this.readOnly ? this.readOnlyText : t("sheet.locked") };
   }
 
   /** Enter and Tab outside an edit: the next cell, cycling inside a multi-cell selection. */
@@ -618,7 +655,7 @@ export class SheetController {
     col?: number,
   ): boolean {
     if (this.readOnly) {
-      this.#refuse(0, 0);
+      this.#refuse();
       return false;
     }
     let ok = items.filter((i) => !this.isLocked(i.r, i.c));
@@ -686,7 +723,7 @@ export class SheetController {
   /** Ctrl+; */
   insertToday() {
     const { r, c } = this.active;
-    if (!this.canEdit(r, c)) return this.#refuse(r, c);
+    if (!this.canEdit(r, c)) return this.#refuse();
     this.#write([{ r, c, value: today(this.opts.now?.() ?? new Date()) }]);
   }
 
@@ -695,12 +732,9 @@ export class SheetController {
    * direction of the larger move. Returns the range now selected.
    */
   fillHandle(from: Range, to: Pos): Range | undefined {
-    const dRows = to.r > from.r1 ? to.r - from.r1 : to.r < from.r0 ? to.r - from.r0 : 0;
-    const dCols = to.c > from.c1 ? to.c - from.c1 : to.c < from.c0 ? to.c - from.c0 : 0;
-    if (dRows === 0 && dCols === 0) return undefined;
-    const vertical = Math.abs(dRows) >= Math.abs(dCols);
-    const dir: 1 | -1 = (vertical ? dRows : dCols) > 0 ? 1 : -1;
-    const count = Math.abs(vertical ? dRows : dCols);
+    const extent = fillExtent(from, to);
+    if (!extent) return undefined;
+    const { vertical, dir, count, range } = extent;
     const decimal = this.model.dialect.decimal;
     const items: { r: number; c: number; value: string }[] = [];
     if (vertical) {
@@ -725,17 +759,6 @@ export class SheetController {
       }
     }
     if (!this.#write(items)) return undefined;
-    const range = vertical
-      ? {
-          ...from,
-          r0: dir === -1 ? from.r0 - count : from.r0,
-          r1: dir === 1 ? from.r1 + count : from.r1,
-        }
-      : {
-          ...from,
-          c0: dir === -1 ? from.c0 - count : from.c0,
-          c1: dir === 1 ? from.c1 + count : from.c1,
-        };
     this.active = { r: range.r0, c: range.c0 };
     this.ranges = [range];
     return range;
@@ -779,7 +802,7 @@ export class SheetController {
   }
 
   /** Reads clipboard data and pastes it, or asks first when it is big. Returns rows pasted. */
-  paste(data: { text?: string; html?: string }, valuesOnly = false): number {
+  paste(data: { text?: string; html?: string }): number {
     const rows = fromClipboard(data);
     if (!rows) return 0;
     const [h, w] = sizeOf(rows);
@@ -787,22 +810,22 @@ export class SheetController {
       this.pending = { rows, at: { ...this.active } };
       return 0;
     }
-    return this.#pasteRows(rows, valuesOnly);
+    return this.#pasteRows(rows);
   }
 
   confirmPaste(): number {
     const p = this.pending;
     this.pending = undefined;
-    return p ? this.#pasteRows(p.rows, false) : 0;
+    return p ? this.#pasteRows(p.rows) : 0;
   }
 
   cancelPaste() {
     this.pending = undefined;
   }
 
-  #pasteRows(rows: string[][], _valuesOnly: boolean): number {
+  #pasteRows(rows: string[][]): number {
     if (this.readOnly) {
-      this.#refuse(0, 0);
+      this.#refuse();
       return 0;
     }
     const p = this.primary;
@@ -827,7 +850,12 @@ export class SheetController {
         if (!dest.has(`${pos.r}:${pos.c}`)) items.push({ ...pos, value: "" });
     }
     this.#cut = undefined;
-    const maxC = Math.max(...items.map((i) => i.c));
+    let maxR = 0;
+    let maxC = 0;
+    for (const i of items) {
+      maxR = Math.max(maxR, i.r);
+      maxC = Math.max(maxC, i.c);
+    }
     const extra: Splice[] = [];
     if (maxC >= this.model.width) {
       const touched = new Set(items.map((i) => this.#recFor(i.r)));
@@ -835,14 +863,12 @@ export class SheetController {
     }
     const ok = this.#write(items, extra);
     if (!ok) return 0;
-    const last = items[items.length - 1] as { r: number; c: number };
     const range = {
       r0: p.r0,
       c0: p.c0,
-      r1: single ? p.r1 : Math.max(...items.map((i) => i.r)),
+      r1: single ? p.r1 : maxR,
       c1: single ? p.c1 : maxC,
     };
-    void last;
     this.#clamp();
     this.ranges = [range];
     this.active = { r: range.r0, c: range.c0 };
@@ -857,7 +883,7 @@ export class SheetController {
   }
 
   insertRows(where: "above" | "below" = "above") {
-    if (this.readOnly) return this.#refuse(0, 0);
+    if (this.readOnly) return this.#refuse();
     if (this.structureLocked) {
       this.notice = { text: t("sheet.viewLocked") };
       return;
@@ -872,7 +898,7 @@ export class SheetController {
   }
 
   insertCols(where: "left" | "right" = "left") {
-    if (this.readOnly) return this.#refuse(0, 0);
+    if (this.readOnly) return this.#refuse();
     const p = this.primary;
     const n = p.c1 - p.c0 + 1;
     const at = where === "left" ? p.c0 : p.c1 + 1;
@@ -883,7 +909,7 @@ export class SheetController {
   }
 
   deleteRows() {
-    if (this.readOnly) return this.#refuse(0, 0);
+    if (this.readOnly) return this.#refuse();
     const { first, n } = this.#selectedRows();
     const recs: number[] = [];
     for (let d = first; d < first + n && d < this.rowCount; d++) recs.push(this.recordOf(d));
@@ -904,7 +930,7 @@ export class SheetController {
   }
 
   deleteCols() {
-    if (this.readOnly) return this.#refuse(0, 0);
+    if (this.readOnly) return this.#refuse();
     const p = this.primary;
     if (this.doc.perform(this.model.deleteCols(p.c0, p.c1 - p.c0 + 1))) {
       this.select(this.active.r, Math.min(p.c0, this.colCount - 1));
@@ -956,8 +982,7 @@ export class SheetController {
   }
 
   clearSort() {
-    const { sort: _s, ...rest } = this.view;
-    this.setView({ ...rest, filters: this.view.filters });
+    this.setView({ filters: this.view.filters });
   }
 
   setFilter(col: number, filter: ColumnFilter | undefined) {
@@ -1018,21 +1043,28 @@ export class SheetController {
   ): { hits: CellHit[]; error?: string } {
     const compiled = compileQuery(spec);
     if (!compiled.ok) return { hits: [], error: compiled.error };
-    const cellScope: CellScope =
-      scope === "column"
-        ? { kind: "column", col: this.active.c }
-        : scope === "selection"
-          ? {
-              kind: "selection",
-              ranges: this.ranges.map((g) => ({
-                r0: this.recordOf(g.r0),
-                r1: this.recordOf(g.r1),
-                c0: g.c0,
-                c1: g.c1,
-              })),
-            }
-          : { kind: scope };
-    return { hits: findInCells(this.model, compiled.matcher, cellScope, { entireCell }) };
+    return {
+      hits: findInCells(this.model, compiled.matcher, this.#scopeOf(scope), { entireCell }),
+    };
+  }
+
+  #scopeOf(scope: "sheet" | "column" | "selection" | "headers"): CellScope {
+    switch (scope) {
+      case "column":
+        return { kind: "column", col: this.active.c };
+      case "selection":
+        return {
+          kind: "selection",
+          ranges: this.ranges.map((g) => ({
+            r0: this.recordOf(g.r0),
+            r1: this.recordOf(g.r1),
+            c0: g.c0,
+            c1: g.c1,
+          })),
+        };
+      default:
+        return { kind: scope };
+    }
   }
 
   /** Puts the selection on the cell of a hit; false when a filter hides its row. */
@@ -1053,7 +1085,7 @@ export class SheetController {
   /** Replaces in the given hits' cells, as one change. Locked cells are left alone and counted. */
   replaceHits(hits: readonly CellHit[], template: string, opts: ReplaceCellOptions = {}): number {
     if (this.readOnly) {
-      this.#refuse(0, 0);
+      this.#refuse();
       return 0;
     }
     const items = hits
@@ -1067,6 +1099,7 @@ export class SheetController {
   }
 
   setDialect(next: Dialect) {
+    this.opts.onDialect?.(next);
     this.doc.pinned = true;
     this.model.setDialect(next);
     this.#types.clear();
@@ -1089,6 +1122,7 @@ export class SheetController {
 
   undo(): boolean {
     this.editing = undefined;
+    if (this.opts.onUndoKey?.()) return true;
     const ok = this.doc.undo();
     if (!ok && this.doc.canUndo === false) this.notice = { text: t("sheet.nothingToUndo") };
     return ok;
@@ -1096,15 +1130,5 @@ export class SheetController {
 
   redo(): boolean {
     return this.doc.redo();
-  }
-
-  /** A copy of the selection as rows of cells in record coordinates (for tests and the menu). */
-  selectionCells(): string[][] {
-    return cellsOf(this.model, {
-      r0: this.recordOf(this.primary.r0),
-      r1: this.recordOf(this.primary.r1),
-      c0: this.primary.c0,
-      c1: this.primary.c1,
-    });
   }
 }

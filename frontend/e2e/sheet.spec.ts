@@ -1,8 +1,13 @@
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import AxeBuilder from "@axe-core/playwright";
 import type { Page } from "@playwright/test";
+import { docsRoot, mainTypIn, readDisk } from "./disk";
 import { expect, test } from "./fixtures";
 import { clear, open, pair } from "./helpers";
-import { ALICE_URL, BOB_URL } from "./ports";
+import { startInstance, stopInstance } from "./instance";
+import { ALICE_PORT, ALICE_URL, BOB_URL, SPARE_PORT, SPARE_URL } from "./ports";
 import {
   cell,
   clipboardText,
@@ -12,6 +17,7 @@ import {
   grid,
   head,
   openSheet,
+  pasteInTextView,
   pick,
   readText,
   rowHead,
@@ -641,6 +647,10 @@ test.describe("accessibility, security and looks (CSV-20)", () => {
         .getByRole("button", { name: /Filtrer la colonne/ })
         .click();
       await expect(page.getByRole("dialog", { name: /Filtrer la colonne/ })).toBeVisible();
+      // The numbers sit at the right edge of their column, under the menu in the picture: they
+      // are there (the column is not empty), just covered.
+      await expect(cell(page, 0, 1)).toHaveText("3");
+      await expect(cell(page, 4, 1)).toHaveText("24");
       await page.screenshot({ path: `${SHOTS}/sheet-filter-${dark ? "dark" : "light"}.png` });
       await page.keyboard.press("Escape");
       await cell(page, 2, 1).click({ button: "right" });
@@ -650,6 +660,70 @@ test.describe("accessibility, security and looks (CSV-20)", () => {
       expect(cspErrors(page)).toEqual([]);
     });
   }
+});
+
+test.describe("a file too big to edit (SHEET-BIG)", () => {
+  // Automerge panics on a text of about 20 MB (ADR 0026): past 10 MB the sheet only reads. The
+  // file is 12 MB, so it goes to its own instance, which leaves no history behind in the shared ones.
+  test("a 12 MB CSV opens read-only: view, sort, filter, search and copy work, editing does not", async ({
+    browser,
+  }) => {
+    test.setTimeout(240_000);
+    const docs = mkdtempSync(join(tmpdir(), "inkwell-e2e-big-"));
+    const instance = await startInstance(SPARE_PORT, docs);
+    try {
+      const page = await openSheet(browser, SPARE_URL, { clipboard: true });
+      const rows = 500_000; // about 12 MB
+      const csv = `nom;qte;prix\n${Array.from({ length: rows }, (_, i) => `ligne ${i};${i % 97};${i},5`).join("\n")}\n`;
+      await pasteInTextView(page, csv);
+      await page.getByRole("button", { name: "Voir le tableau" }).click();
+      await expect(cell(page, 0, 0)).toBeVisible({ timeout: 60_000 });
+
+      // Said clearly, and the toolbar's editing buttons are off.
+      await expect(page.getByTestId("readonly")).toHaveText(
+        /^Fichier trop grand pour l'édition à plusieurs \(1\d(,\d)? Mo\) : ouvert en lecture seule$/,
+      );
+      await expect(grid(page)).toHaveAttribute("aria-rowcount", String(rows + 1));
+      await expect(page.getByRole("button", { name: "Insérer une ligne" })).toBeDisabled();
+
+      // Editing is refused: typing, Enter on a cell, Delete.
+      await pick(page, 5, 0);
+      await page.keyboard.type("x");
+      await page.keyboard.press("Enter");
+      await page.keyboard.press("Delete");
+      await expect(cell(page, 5, 0)).toHaveText("ligne 5");
+      await expect(
+        page.getByRole("status").filter({ hasText: "Fichier trop grand" }),
+      ).toBeVisible();
+
+      // Copy.
+      await pick(page, 5, 0);
+      await page.keyboard.press("ControlOrMeta+c");
+      await expect.poll(() => clipboardText(page)).toBe("ligne 5");
+
+      // Search.
+      await grid(page).focus();
+      await page.keyboard.press("ControlOrMeta+f");
+      const find = page.getByRole("search", { name: "Chercher et remplacer dans les cellules" });
+      await find.getByPlaceholder("Chercher dans les cellules").fill("ligne 4242");
+      await expect(find.getByTestId("find-count")).toHaveText(/^1 sur \d+$/);
+      await page.keyboard.press("Escape");
+
+      // Filter, then sort.
+      await cell(page, 4, 1).click({ button: "right" });
+      await page.getByRole("menuitem", { name: "Filtrer par la valeur de cette cellule" }).click();
+      await expect(page.getByText(/Filtre actif/)).toBeVisible();
+      await expect(cell(page, 0, 1)).toHaveText("4");
+      await page.getByRole("button", { name: "Retirer le tri et le filtre" }).click();
+      await pick(page, 0, 2);
+      await page.getByRole("button", { name: "Trier de Z à A" }).click();
+      await expect(cell(page, 0, 0)).toHaveText(`ligne ${rows - 1}`, { timeout: 30_000 });
+      expect(cspErrors(page)).toEqual([]);
+    } finally {
+      await stopInstance(instance);
+      rmSync(docs, { recursive: true, force: true });
+    }
+  });
 });
 
 test.describe("performance in the real browser (SHEET-PERF)", () => {
@@ -678,23 +752,7 @@ test.describe("performance in the real browser (SHEET-PERF)", () => {
       ).join(";"),
     ).join("\n");
     const csv = `${header}\n${body}\n`;
-    await page.getByRole("button", { name: "Voir le texte" }).click();
-    const content = page.locator(".cm-content");
-    await content.click();
-    await page.keyboard.press("ControlOrMeta+a");
-    await page.keyboard.press("Delete");
-    await page.evaluate((text) => {
-      const dt = new DataTransfer();
-      dt.setData("text/plain", text);
-      document
-        .querySelector(".cm-content")
-        ?.dispatchEvent(
-          new ClipboardEvent("paste", { clipboardData: dt, bubbles: true, cancelable: true }),
-        );
-    }, csv);
-    await expect(page.locator(".cm-line").first()).toContainText("ligne", { timeout: 60_000 });
-    await page.keyboard.press("ControlOrMeta+Home");
-    await expect(page.locator(".cm-line").first()).toContainText("col0", { timeout: 60_000 });
+    await pasteInTextView(page, csv);
     const t0 = Date.now();
     await page.getByRole("button", { name: "Voir le tableau" }).click();
     await expect(cell(page, 0, 0)).toBeVisible({ timeout: 30_000 });
@@ -949,6 +1007,72 @@ test.describe("two people on one sheet (SHEET-MU)", () => {
   });
 
   test.fixme("SHEET-MU-04..07 roles, locked zones, suspension and history entries: need B3 (rights, ADR 0021/0022) and B2 (history); the sheet already refuses edits when `readOnly` / `isLocked` are given (unit tests CSV-18, CSV-19)", () => {});
-  test.fixme("CSV-14 a file edited outside Inkwell is merged and its cells highlighted: needs B1 (import of outside edits); remote changes already highlight their cells", () => {});
+  test("CSV-DIALECT a .csv that is really tab-separated says so, offers the choice, and remembers it", async ({
+    browser,
+  }) => {
+    const page = await openSheet(browser, ALICE_URL);
+    await setText(page, "nom\tqte\nA\t1\nB\t2\nC\t3\n");
+    await page.reload();
+    await expect(grid(page)).toBeVisible();
+    await expect(page.getByTestId("detected")).toHaveText(
+      /Séparateur détecté : tabulation \(l'extension indique virgule\)/,
+    );
+    await expect(cell(page, 0, 1)).toHaveText("1");
+    await page.getByRole("button", { name: "Séparer par tabulation" }).click();
+    await expect(page.getByTestId("detected")).toBeHidden();
+    await page.reload();
+    await expect(grid(page)).toBeVisible();
+    await expect(page.getByTestId("detected")).toBeHidden();
+    await expect(page.getByTestId("dialect")).toContainText("Tabulation");
+  });
+
+  test("CSV-14 a file edited outside Inkwell is merged, its cells highlighted; Ctrl+Z takes it back", async ({
+    browser,
+  }) => {
+    const page = await openSheet(browser, ALICE_URL, {
+      settings: { saveMode: "auto", saveDelay: 1, externalPolicy: "import" },
+    });
+    await setText(page, DATA);
+    // The file is made at the first save: the document is projected into it.
+    let file = "";
+    await expect
+      .poll(
+        () => {
+          try {
+            file = mainTypIn(join(docsRoot, String(ALICE_PORT)));
+          } catch {
+            return undefined;
+          }
+          return readDisk(file);
+        },
+        { timeout: 10_000 },
+      )
+      .toBe(DATA);
+
+    // My own edit first: the outside edit lands next to it, and both stay.
+    await pick(page, 0, 0);
+    await page.keyboard.type("Mine");
+    await page.keyboard.press("Enter");
+    writeFileSync(file, DATA.replace("Poire;12;2,25", "Poire;99;2,25"));
+    await expect(cell(page, 1, 1)).toHaveText("99");
+    await expect(cell(page, 1, 1)).toHaveClass(/fresh/);
+    await expect(cell(page, 2, 1)).not.toHaveClass(/fresh/);
+    await expect(cell(page, 0, 0)).toHaveText("Mine");
+    const toast = page.getByRole("status").filter({ hasText: "Modifié hors d'Inkwell" });
+    await expect(toast).toContainText("intégrée");
+
+    // "Voir" goes to the changed cell.
+    await pick(page, 3, 2);
+    await toast.getByRole("button", { name: "Voir" }).click();
+    await expect(grid(page)).toHaveAttribute("aria-activedescendant", "cell-1-1");
+
+    // The file follows what is in the document, and Ctrl+Z takes the outside edit back alone.
+    await expect.poll(() => readDisk(file), { timeout: 10_000 }).toContain("Poire;99;");
+    await undo(page);
+    await expect(cell(page, 1, 1)).toHaveText("12");
+    await expect(cell(page, 0, 0)).toHaveText("Mine");
+    await expect.poll(() => readDisk(file), { timeout: 10_000 }).toContain("Poire;12;");
+    expect(cspErrors(page)).toEqual([]);
+  });
   test.fixme("CSV-16 / CSV-17 Typst preview of `csv()` tables and charts: needs wave C (Typst sidecar and the plotting package); the code is generated and unit-tested", () => {});
 });

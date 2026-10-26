@@ -37,7 +37,6 @@ function mount(opts: SheetOptions = {}) {
     ctrl,
     oncontext: () => {},
     onfilter: () => {},
-    onshowtext: () => {},
     onfind: () => {},
   });
   return { ctrl, target };

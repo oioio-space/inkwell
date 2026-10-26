@@ -11,10 +11,10 @@ self.onmessage = (e: MessageEvent<{ text: string; delimiter: string }>) => {
       (done) => self.postMessage({ type: "progress", done }),
       (partial) => self.postMessage({ type: "first", ...partial }),
     );
-    self.postMessage(
-      { type: "done", starts: result.starts, cols: result.cols, problems: result.problems },
-      [result.starts.buffer, result.cols.buffer],
-    );
+    self.postMessage({ type: "done", starts: result.starts, cols: result.cols }, [
+      result.starts.buffer,
+      result.cols.buffer,
+    ]);
   } catch (err) {
     self.postMessage({
       type: "error",

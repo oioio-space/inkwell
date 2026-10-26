@@ -11,16 +11,18 @@ export interface Dialect {
   quote?: boolean | undefined;
 }
 
-/** A `.tsv` holds quotes as plain text: no cell is quoted unless the person turns it on. */
-export const quoteOf = (path: string): boolean => !path.toLowerCase().endsWith(".tsv");
+/** A `.tsv` or `.tab` holds quotes as plain text: no cell is quoted unless the person turns it on. */
+export const quoteOf = (path: string): boolean => !/\.(tsv|tab)$/i.test(path);
 
-/** The delimiter a file name suggests (.tsv: tab, .psv: pipe). */
+/** The delimiter a file name fixes (.tsv and .tab: tab, .psv: pipe); none for .csv and the rest. */
 export function delimiterOf(path: string): Delimiter | undefined {
-  const lower = path.toLowerCase();
-  if (lower.endsWith(".tsv")) return "\t";
-  if (lower.endsWith(".psv")) return "|";
+  if (/\.(tsv|tab)$/i.test(path)) return "\t";
+  if (/\.psv$/i.test(path)) return "|";
   return undefined;
 }
+
+/** What the extension says: the fixed delimiter, or the comma that `.csv` stands for. */
+export const expectedDelimiter = (path: string): Delimiter => delimiterOf(path) ?? ",";
 
 const SPACES = /[\s\u00a0\u202f]/g;
 const HAS_SPACE = /[\s\u00a0\u202f]/;
@@ -86,12 +88,19 @@ function sample(text: string, delim: string, max: number): string[][] {
   return rows;
 }
 
-/** Picks the delimiter that gives the most regular table, preferring `,` `;` tab `|` on ties. */
-function detectDelimiter(text: string): Delimiter {
-  let best: Delimiter = ",";
+/**
+ * The delimiter that gives the most regular table of two columns or more, or undefined when none
+ * does (a single column, prose). On a tie `prefer` wins, then `,` `;` tab `|` in that order.
+ */
+export function findDelimiter(text: string, prefer?: Delimiter): Delimiter | undefined {
+  const sep = /^sep=.\r?\n/.exec(text);
+  const body = sep ? text.slice(sep[0].length) : text;
+  const head = body.length > 200_000 ? body.slice(0, 200_000) : body;
+  const order = prefer ? [prefer, ...DELIMITERS.filter((d) => d !== prefer)] : DELIMITERS;
+  let best: Delimiter | undefined;
   let bestScore = 0;
-  for (const d of DELIMITERS) {
-    const rows = sample(text, d, 60).filter((r) => r.length > 1 || (r[0] ?? "") !== "");
+  for (const d of order) {
+    const rows = sample(head, d, 60).filter((r) => r.length > 1 || (r[0] ?? "") !== "");
     if (rows.length === 0) continue;
     const freq = new Map<number, number>();
     for (const r of rows) freq.set(r.length, (freq.get(r.length) ?? 0) + 1);
@@ -113,17 +122,53 @@ function detectDelimiter(text: string): Delimiter {
   return best;
 }
 
-/** Guesses delimiter, header and decimal separator from the start of the text. */
-export function detectDialect(text: string, hint?: Delimiter): Dialect {
+/** A text that reads as a table: worth offering as one (never forced). */
+export function looksTabular(text: string): boolean {
+  const d = findDelimiter(text);
+  if (!d) return false;
+  const rows = sample(text.slice(0, 200_000), d, 60).filter((r) => r.length > 1);
+  return rows.length >= 3;
+}
+
+/** What a file opens with: its dialect, and what the content says against the extension, if anything. */
+export interface Start {
+  dialect: Dialect;
+  contradiction?: { found: Delimiter; expected: Delimiter };
+}
+
+/**
+ * The dialect to open a file with. The extension gives the starting point, the content confirms
+ * it: `.tsv` is tab, `.psv` pipe, `.csv` the comma, or the semicolon of decimal-comma files, or
+ * whatever else detection finds. A table that is clearly written another way is read that way and
+ * reported as a `contradiction`. `remembered` is the person's earlier choice for this file.
+ */
+export function startDialect(path: string, text: string, remembered?: Delimiter): Start {
+  const quote = quoteOf(path) ? {} : { quote: false as const };
+  if (remembered) return { dialect: { ...detectDialect(text, remembered), ...quote } };
+  const expected = expectedDelimiter(path);
+  const found = findDelimiter(text, expected);
+  const dialect = { ...detectDialect(text, found ?? expected), ...quote };
+  const semicolonCsv = found === ";" && expected === "," && delimiterOf(path) === undefined;
+  const named = /\.(csv|tsv|tab|psv)$/i.test(path);
+  if (!named || !found || found === expected || semicolonCsv) return { dialect };
+  return { dialect, contradiction: { found, expected } };
+}
+
+/**
+ * Guesses delimiter, header and decimal separator from the start of the text. `forced` is the
+ * delimiter the person chose; `prefer` the one the extension suggests, which wins ties and
+ * stands in when nothing can be detected.
+ */
+export function detectDialect(text: string, forced?: Delimiter, prefer?: Delimiter): Dialect {
   // Excel's `sep=;` first line names the delimiter and is not part of the table.
   const sep = /^sep=(.)\r?\n/.exec(text);
   if (sep) {
     const d = sep[1] as string;
     const named = DELIMITERS.find((x) => x === d);
-    return detectDialect(text.slice(sep[0].length), named ?? hint);
+    return detectDialect(text.slice(sep[0].length), named ?? forced, prefer);
   }
   const head = text.length > 200_000 ? text.slice(0, 200_000) : text;
-  const delimiter = hint ?? detectDelimiter(head);
+  const delimiter = forced ?? findDelimiter(head, prefer) ?? prefer ?? ",";
   const rows = sample(head, delimiter, 200);
   let comma = 0;
   let dot = 0;

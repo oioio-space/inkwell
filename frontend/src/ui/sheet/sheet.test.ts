@@ -1,7 +1,8 @@
 import { next as A } from "@automerge/automerge";
 import { describe, expect, it } from "vitest";
 import { CsvModel } from "../../editor/csv/model";
-import { type DocPort, SheetDoc } from "../../editor/csv/sheetDoc";
+import { openCsv } from "../../editor/csv/open";
+import { type DocPort, MAX_EDITABLE_CHARS, SheetDoc } from "../../editor/csv/sheetDoc";
 import { SheetController, type SheetOptions } from "./sheet.svelte";
 
 const DIALECT = { delimiter: ";", header: true, decimal: "," } as const;
@@ -126,6 +127,64 @@ describe("editing", () => {
     expect(Array.from(sheet.rows ?? [])).toEqual([4, 3, 2, 1]);
     expect(text()).toBe(BASE);
   });
+
+  it("CSV-20 a file over 10 MB opens read-only on the Papa Parse index: it is read, never written", async () => {
+    const rows = Math.ceil(MAX_EDITABLE_CHARS / 22) + 1000;
+    const text = `nom;qte;prix\n${Array.from({ length: rows }, (_, i) => `ligne ${i};${i % 97};${i},5`).join("\n")}\n`;
+    expect(text.length).toBeGreaterThan(MAX_EDITABLE_CHARS);
+    const model = await openCsv(text, { dialect: DIALECT });
+    let changes = 0;
+    const port: DocPort = {
+      text: () => text,
+      change: () => void changes++,
+      cursor: () => "",
+      resolve: () => 0,
+    };
+    const sheet = new SheetController(new SheetDoc(port, model));
+    expect(sheet.rowCount).toBe(rows);
+    expect(sheet.readOnly).toBe(true);
+    expect(sheet.readOnlyText).toMatch(
+      /^Fichier trop grand pour l'édition à plusieurs \(1\d(,\d)? Mo\) : ouvert en lecture seule$/,
+    );
+
+    // Editing, in every form, is refused and nothing reaches the document.
+    sheet.select(5, 1);
+    sheet.startEdit("x");
+    expect(sheet.editing).toBeUndefined();
+    expect(sheet.notice?.text).toBe(sheet.readOnlyText);
+    sheet.paste({ text: "Z" });
+    sheet.clear();
+    sheet.insertRows();
+    sheet.deleteRows();
+    sheet.fillDown();
+    expect(sheet.doc.perform([{ pos: 0, del: 0, ins: "x" }])).toBe(false);
+    expect(changes).toBe(0);
+
+    // Reading works: view, copy, sort, filter, search.
+    expect(sheet.value(5, 0)).toBe("ligne 5");
+    sheet.select(5, 0);
+    expect(sheet.copyData()?.tsv).toBe("ligne 5");
+    sheet.sortBy(2, -1);
+    expect(sheet.value(0, 0)).toBe(`ligne ${rows - 1}`);
+    sheet.clearView();
+    sheet.setFilter(1, { values: new Set(["96"]) });
+    expect(sheet.rowCount).toBe(Math.floor((rows - 97) / 97) + 1);
+    sheet.clearView();
+    expect(
+      sheet.search(
+        {
+          text: "ligne 4242",
+          mode: "normal",
+          caseSensitive: false,
+          wholeWord: false,
+          ignoreAccents: false,
+          dotAll: false,
+        },
+        "sheet",
+        true,
+      ).hits,
+    ).toHaveLength(1);
+  }, 30_000);
 
   it("CSV-19 a locked cell refuses edit, paste and fill, and says why", () => {
     const { sheet, text } = open(BASE, { isLocked: (r) => r === 2 });

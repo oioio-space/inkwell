@@ -67,8 +67,17 @@ La grille `canvas` n'a pas été construite : le DOM virtualisé tient les cible
 Automerge 3.5.0 : un `splice` de texte coûte 8 ms sur 5 Mo et 14 ms sur 10 Mo ; sur 20 Mo
 le test échoue (`PanicError: splice range out of bounds`). **Un fichier de 50 Mo ne passe donc pas
 de bout en bout par le document**, quelle que soit la grille. Le modèle et la grille, eux, sont
-mesurés sur 132 Mo (tests de performance, `INKWELL_PERF=1`). À traiter en amont (découpage du
-texte, ou fichier de plus de 10 Mo ouvert en lecture seule).
+mesurés sur 132 Mo (tests de performance, `INKWELL_PERF=1`). **Décision :** un fichier de plus
+de 10 Mo (10 × 2^20 caractères du texte, `MAX_EDITABLE_CHARS`) s'ouvre en **lecture seule**, avec
+le message « Fichier trop grand pour l'édition à plusieurs (X Mo) : ouvert en lecture seule ».
+Voir, trier, filtrer, chercher et copier restent possibles (index Papa Parse, aucune écriture) ;
+toute modification est refusée au plus bas niveau (`SheetDoc.perform`, annuler et rétablir
+compris), si bien qu'aucun chemin n'écrit dans le document. Le seuil est relu à chaque
+changement du texte : un fichier qui grossit dans la vue texte passe en lecture seule, un fichier
+qui rétrécit redevient modifiable. La vue texte (CodeMirror) n'est pas verrouillée : elle
+reste utilisable, mais un collage qui porterait le texte au-delà de 20 Mo reste hors de
+portée du document (limite d'Automerge, hors grille). Tests : `sheet.test.ts` (CSV-20),
+`e2e/sheet.spec.ts` (SHEET-BIG, fichier de 12 Mo dans une instance à part).
 
 ### Conséquences
 
@@ -80,7 +89,30 @@ texte, ou fichier de plus de 10 Mo ouvert en lecture seule).
   fusionnent leurs textes bout à bout. Un morceau sans guillemets suivi d'un morceau entre
   guillemets (`a","`) casserait la cellule. Tant que d'autres personnes sont dans le fichier,
   chaque cellule écrite est donc entre guillemets (`"a"","` reste une seule cellule) ; seule,
-  la personne obtient les guillemets minimaux de la RFC 4180.
+  la personne obtient les guillemets minimaux de la RFC 4180. **Étudié, non retenu : des
+  guillemets minimaux sûrs.** Deux écritures simultanées d'une même cellule se concatènent
+  dans un ordre fixé par les identifiants d'acteur, que l'écrivain ne contrôle pas. Une
+  écriture simple suivie d'une écriture entre guillemets (`x` puis `"y,z"`) donne `x"y,z"`, que
+  tout lecteur (Typst compris) coupe en deux cellules ; l'inverse (`"y,z"x`) reste une cellule.
+  Il n'existe donc pas de règle « guillemets seulement si nécessaire » sûre : tout écrivain
+  doit pouvoir être celui qui précède, d'où le quotage systématique. Seule piste envisagée (non implémentée) : ancrer
+  l'insertion d'une valeur simple après l'ancien texte de la cellule pour qu'elle passe
+  toujours en second ; elle ne dit rien d'une cellule vide (même ancre, ordre libre) et repose sur
+  le départage interne d'Automerge. Le test `collab.test.ts` (CSV-04b) montre le contre-exemple
+  dans les deux ordres d'acteurs. Conséquence assumée : des octets en plus (guillemets) dans
+  les cellules écrites pendant qu'une autre personne est là ; le fichier reste valide et
+  relu à l'identique.
+- **Modifications hors d'Inkwell (B1)** : le texte d'un fichier tableau suit la même fusion que
+  le texte (`ExternalSync`). Les cellules touchées sont surlignées, « Voir » va à la première,
+  Ctrl+Z reprend d'abord l'intégration si rien n'a été écrit depuis. Tant que le projet n'a
+  qu'un document (B4), le fichier du disque est son `main.typ` : l'affichage en tableau
+  (`?file=data.csv`) n'y change rien. Test : `e2e/sheet.spec.ts` (CSV-14).
+- **Séparateur** : l'extension donne le point de départ (`.tsv` et `.tab` : tabulation sans
+  guillemets ; `.psv` : barre verticale ; `.csv` : virgule ou point-virgule, ou ce que la détection
+  trouve), le contenu le confirme. Un contenu qui contredit l'extension est lu tel qu'il est écrit
+  et signalé (« Séparateur détecté : tabulation (l'extension indique virgule) ») avec un choix en
+  un clic, retenu par fichier. Un `.txt` qui ressemble à un tableau se voit proposer « Ouvrir comme
+  tableau ? », jamais imposé. Tests : `extension.test.ts`, `e2e/sheet.spec.ts` (CSV-DIALECT).
 - Le tri appliqué au fichier ne déplace que les lignes qui changent de place (plus longue suite
   croissante) ; au-delà de 2 000 lignes déplacées c'est une seule modification.
 - Annuler est par personne et retrouve son texte par ancres sur les caractères voisins ; il refuse

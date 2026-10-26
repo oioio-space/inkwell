@@ -1,9 +1,10 @@
 <script lang="ts">
 import type { DocHandle } from "@automerge/automerge-repo";
 import { onDestroy, untrack } from "svelte";
-import { delimiterOf, detectDialect, quoteOf } from "../../editor/csv/dialect";
+import { delimiterOf, type Start, startDialect } from "../../editor/csv/dialect";
 import { openCsv } from "../../editor/csv/open";
 import { patchWindow } from "../../editor/csv/patchWindow";
+import type { Delimiter } from "../../editor/csv/records";
 import { handlePort, SheetDoc } from "../../editor/csv/sheetDoc";
 import { t, tn } from "../../i18n";
 import { type Doc, workspace } from "../../workspace/workspace.svelte";
@@ -17,6 +18,7 @@ import Grid from "./Grid.svelte";
 import type { MenuItem } from "./menu";
 import PasteDialog from "./PasteDialog.svelte";
 import { sheetPresence } from "./presence";
+import { rememberDelimiter, rememberedDelimiter } from "./remember";
 import SheetStatus from "./SheetStatus.svelte";
 import { sessions } from "./sessions";
 import { SheetController, type SheetOptions } from "./sheet.svelte";
@@ -48,6 +50,8 @@ let {
 let ctrl = $state.raw<SheetController | undefined>();
 let progress = $state(0);
 let failure = $state("");
+/** The content says another separator than the extension: the person is asked once. */
+let contradiction = $state<Start["contradiction"]>();
 let filter = $state<{ col: number; anchor: HTMLElement } | undefined>();
 let context = $state<{ x: number; y: number } | undefined>();
 let finding = $state<{ replace: boolean } | undefined>();
@@ -77,9 +81,18 @@ $effect(() => {
   untrack(() => {
     progress = 0;
     failure = "";
+    contradiction = undefined;
     ctrl = undefined;
     const text = h.doc()?.text ?? "";
-    const hint = delimiterOf(p);
+    const remembered = rememberedDelimiter(workspace.project, p);
+    const opening = startDialect(p, text, remembered);
+    contradiction = opening.contradiction;
+    // Rescans (coming back from the text view) keep the person's choice, else follow the content.
+    const fixed = delimiterOf(p);
+    const hint = {
+      ...(remembered ? { forced: remembered } : {}),
+      ...(fixed ? { prefer: fixed } : {}),
+    };
     // Coming back from the text view: the same sheet document, so undo spans both views.
     const kept = sessions.get(h);
     if (kept) {
@@ -88,7 +101,7 @@ $effect(() => {
       return;
     }
     void openCsv(text, {
-      dialect: { ...detectDialect(text, hint), ...(quoteOf(p) ? {} : { quote: false }) },
+      dialect: opening.dialect,
       onProgress: (d) => {
         if (alive) progress = d;
       },
@@ -98,6 +111,8 @@ $effect(() => {
         const sheetDoc = new SheetDoc(handlePort(h), model, hint);
         const made = new SheetController(sheetDoc, {
           readOnly,
+          onUndoKey: () => workspace.undoWithKey(),
+          onDialect: (d) => rememberDelimiter(workspace.project, p, d.delimiter),
           ...(isLocked ? { isLocked } : {}),
         });
         sessions.set(h, made);
@@ -148,6 +163,21 @@ $effect(() => {
 });
 
 onDestroy(() => presence?.stop());
+
+const DELIMITER_NAMES = {
+  ",": "sheet.delim.name.comma",
+  ";": "sheet.delim.name.semicolon",
+  "\t": "sheet.delim.name.tab",
+  "|": "sheet.delim.name.pipe",
+} as const;
+const delimiterName = (d: Delimiter): string => t(DELIMITER_NAMES[d]);
+
+/** The one-click answer to the banner: this separator, remembered for this file. */
+function chooseDelimiter(delimiter: Delimiter) {
+  contradiction = undefined;
+  if (ctrl) ctrl.setDialect({ ...ctrl.dialect, delimiter });
+  focusGrid();
+}
 
 const focusGrid = () => gridHost?.querySelector<HTMLElement>('[role="grid"]')?.focus();
 
@@ -510,15 +540,29 @@ const totalRows = $derived.by(() => {
         <button type="button" class="btn" onclick={() => ctrl?.clearView()}>{t("sheet.clearView")}</button>
       </div>
     {/if}
+    {#if contradiction}
+      {@const c = contradiction}
+      <div class="banner" data-testid="detected" aria-live="polite">
+        <span>{t("sheet.detected", { found: delimiterName(c.found), expected: delimiterName(c.expected) })}</span>
+        <span class="grow"></span>
+        <button type="button" class="btn" data-testid="use-expected" onclick={() => chooseDelimiter(c.expected)}>
+          {t("sheet.detected.use", { name: delimiterName(c.expected) })}
+        </button>
+        <button type="button" class="btn" data-testid="keep-found" onclick={() => chooseDelimiter(c.found)}>
+          {t("sheet.detected.use", { name: delimiterName(c.found) })}
+        </button>
+      </div>
+    {/if}
     {#if ctrl.readOnly}
-      <div class="banner" aria-live="polite">{t("sheet.readOnly")}</div>
+      <div class="banner" data-testid="readonly" aria-live="polite">
+        {ctrl.readOnlyText}
+      </div>
     {/if}
     <div class="host" bind:this={gridHost}>
       <Grid
         {ctrl}
         oncontext={(x, y) => (context = { x, y })}
         onfilter={(col, anchor) => (filter = { col, anchor })}
-        onshowtext={() => onshowtext(ctrl?.textOffset ?? 0)}
         onfind={(replace) => (finding = { replace })}
       />
       {#if finding}

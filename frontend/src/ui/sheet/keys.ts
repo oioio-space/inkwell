@@ -3,7 +3,6 @@ import type { SheetController } from "./sheet.svelte";
 export interface KeyHelpers {
   pageRows: number;
   zoomReset: () => void;
-  showText: () => void;
   openFilter: () => void;
   openContext: () => void;
   openFind: (replace: boolean) => void;

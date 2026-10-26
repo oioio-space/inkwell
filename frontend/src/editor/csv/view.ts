@@ -1,4 +1,4 @@
-import { columnType, parseNumber } from "./dialect";
+import { parseNumber } from "./dialect";
 import type { CsvModel } from "./model";
 
 /** A condition on a column's cells. Numbers use the file's decimal separator. */
@@ -23,9 +23,16 @@ const fold = (s: string) => s.normalize("NFD").replace(/\p{M}/gu, "").toLowerCas
 
 const collator = new Intl.Collator("fr", { numeric: true, sensitivity: "base" });
 
-function passes(value: string, f: ColumnFilter, decimal: "," | "."): boolean {
+/** A column filter ready to test rows: its text to find is folded once, not once per row. */
+interface Test {
+  col: number;
+  filter: ColumnFilter;
+  needle: string | undefined;
+}
+
+function passes(value: string, { filter: f, needle }: Test, decimal: "," | "."): boolean {
   if (f.values && !f.values.has(value)) return false;
-  if (f.contains && !fold(value).includes(fold(f.contains))) return false;
+  if (needle && !fold(value).includes(needle)) return false;
   if (f.cond) {
     const n = parseNumber(value, decimal);
     if (n === undefined) return false;
@@ -36,14 +43,6 @@ function passes(value: string, f: ColumnFilter, decimal: "," | "."): boolean {
     if (op === "between" && !(n >= Math.min(a, b ?? a) && n <= Math.max(a, b ?? a))) return false;
   }
   return true;
-}
-
-/** The type of a column from its first data rows. */
-export function typeOfColumn(model: CsvModel, col: number) {
-  const values: string[] = [];
-  const end = Math.min(model.records, model.dataStart + 200);
-  for (let r = model.dataStart; r < end; r++) values.push(model.value(r, col));
-  return columnType(values, model.dialect.decimal);
 }
 
 /**
@@ -57,11 +56,17 @@ export function buildView(model: CsvModel, spec: ViewSpec): Int32Array {
   for (let i = 0; i < total; i++) rows[i] = first + i;
   const decimal = model.dialect.decimal;
   if (spec.filters.size > 0) {
+    const tests = [...spec.filters].map(
+      ([col, filter]): Test => ({
+        col,
+        filter,
+        needle: filter.contains ? fold(filter.contains) : undefined,
+      }),
+    );
     const kept: number[] = [];
     next: for (let i = 0; i < total; i++) {
       const r = rows[i] as number;
-      for (const [col, f] of spec.filters)
-        if (!passes(model.value(r, col), f, decimal)) continue next;
+      for (const test of tests) if (!passes(model.value(r, test.col), test, decimal)) continue next;
       kept.push(r);
     }
     rows = Int32Array.from(kept);
