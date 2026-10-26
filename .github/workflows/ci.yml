@@ -42,6 +42,15 @@ jobs:
           path: ~/.local/share/pnpm/store
           key: ${{ runner.os }}-pnpm-${{ hashFiles('frontend/pnpm-lock.yaml') }}
           restore-keys: ${{ runner.os }}-pnpm-
+      # typst and tinymist (pinned in internal/sidecar/manifest.json) are fetched by
+      # `mise run sidecar:fetch`, a dependency of the test tasks; keep them between runs.
+      - name: Cache the sidecar binaries
+        uses: actions/cache@v4
+        with:
+          path: |
+            internal/sidecar/bin/**/*.gz
+            ~/.cache/inkwell/sidecar-dl
+          key: sidecars-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('internal/sidecar/manifest.json') }}
       - run: mise run ci
       - name: Build the desktop app (Linux)
         run: mise run app:build
@@ -103,8 +112,31 @@ jobs:
             frontend/test-results/
             .task/netsim/
           retention-days: 7
+  # typst and tinymist are shipped for arm64 too: the same tests on a native arm64 runner
+  # (the pinned archives are the aarch64 builds; nothing is cross-compiled or emulated).
+  sidecars-arm64:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 25
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+      - name: Cache the sidecar binaries
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            internal/sidecar/bin/**/*.gz
+            ~/.cache/inkwell/sidecar-dl
+          key: sidecars-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('internal/sidecar/manifest.json') }}
+      - name: Fetch the pinned sidecars (SHA-256 verified)
+        run: go run ./cmd/sidecar-fetch
+      - name: Sidecar and Typst tests (arm64)
+        run: go test -race -count=1 ./internal/sidecar/... ./internal/typst/... ./cmd/sidecar-fetch/...
   release:
-    needs: ci
+    needs: [ci, sidecars-arm64]
     if: startsWith(github.ref, 'refs/tags/v')
     runs-on: ubuntu-latest
     timeout-minutes: 15

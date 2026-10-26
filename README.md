@@ -19,7 +19,7 @@ document de conception de l'application à deux, dans l'application.*
 | Interface | Wails v3, CodeMirror 6, habillage Adwaita |
 | Collaboration | Automerge (`automerge-repo`, `automerge-codemirror`) dans la webview |
 | Réseau | go-libp2p (QUIC, Noise, mDNS, relais), codes Magic Wormhole |
-| Typst | tinymist (aperçu, LSP) et typst (export PDF) embarqués |
+| Typst | typst (compilation, export PDF) et tinymist (aperçu, LSP) embarqués, épinglés par SHA-256, hors ligne |
 | Historique | jalons go-git, binaires adressés par BLAKE3 |
 
 Détails : [docs/architecture.md](docs/architecture.md) · décisions : [docs/adr/](docs/adr/) ·
@@ -32,6 +32,7 @@ Tout passe par [mise](https://mise.jdx.dev) (outils épinglés + tâches) :
 ```bash
 mise run setup   # toolchain + hooks git
 mise run test    # tests        | mise run test:watch (TDD)
+mise run sidecar:fetch  # typst + tinymist de cette plate-forme (une fois ; `test` et `ci` le font)
 mise run ci      # le gate complet, identique à la CI GitHub Actions
 ```
 

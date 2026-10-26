@@ -57,11 +57,11 @@ Plan : [docs/plans/2026-10-25-etape-2-reseau.md](docs/plans/2026-10-25-etape-2-r
 > Sortie : **le premier document utile de bout en bout** — et ce document de conception
 > réécrit à deux dans l'app.
 
-- [ ] `sidecar` : tinymist et typst embarqués, SHA-256 vérifié, supervision, backoff
+- [x] `sidecar` : tinymist et typst embarqués, SHA-256 vérifié, supervision, backoff — [plan](docs/plans/2026-10-25-etape-3-typst.md), [ADR 0024](docs/adr/0024-sidecars-typst-tinymist.md)
 - [ ] Aperçu incrémental (iframe), saut source ↔ aperçu dans les deux sens
 - [ ] LSP via le pont : complétion, survol, diagnostics, formatage
-- [ ] Export PDF déterministe, polices embarquées
-- [ ] `typst` : vente des paquets `@preview` dans `.typstdeps/`, message clair si absent
+- [x] Export PDF déterministe, polices embarquées (`typst compile`, `pdf.attach` vérifié dans le PDF)
+- [x] `typst` : vente des paquets `@preview` dans `.typstdeps/`, message clair si absent (paquets fournis : cmarker, touying, lilaq)
 - [ ] Édition niveau 1 : barre contextuelle, titres, listes, paires, plan, blocs de code, orthographe webview
 - [ ] Explorateur de fichiers (états par fichier, fichier principal épinglé, corbeille)
 - [ ] Mode présentation plein écran + navigation
@@ -95,4 +95,5 @@ Plan : [docs/plans/2026-10-25-etape-2-reseau.md](docs/plans/2026-10-25-etape-2-r
 | Date | Changement |
 |------|------------|
 | 2026-10-25 | Bootstrap go-starter ; fondations : architecture, 8 ADR, glossaire, UX, roadmap, gopls MCP, Dependabot. |
+| 2026-10-25 | Étape 3 (C1, compilation de C2) : sidecars `typst`/`tinymist` épinglés, embarqués et supervisés ; `internal/typst` compile hors ligne (PDF, SVG, diagnostics, `query`, `Watch`). Reste : aperçu incrémental et LSP par `tinymist` (stdio), présentations. |
 | 2026-10-25 | Étape 1 : transport (memnet, tcp), pont Streams, éditeur collaboratif Svelte/CodeMirror/Automerge, présence, undo local, e2e deux instances ; ADR 0009–0013. |

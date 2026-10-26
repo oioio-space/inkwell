@@ -89,12 +89,18 @@ run = "go generate ./..."
 description = "Verify committed generated files match the generators (fails on drift)"
 run = "go generate ./... && git diff --exit-code"
 
+[tasks."sidecar:fetch"]
+description = "Download the pinned typst and tinymist releases (SHA-256 verified, idempotent) into internal/sidecar/bin for this platform; all platforms: mise run sidecar:fetch -- -target all"
+run = "go run ./cmd/sidecar-fetch"
+
 [tasks.test]
 description = "Run tests (gotestsum, readable output)"
+depends = ["sidecar:fetch"]
 run = "./scripts/rtkx.sh gotestsum --format pkgname -- ./..."
 
 [tasks."test:ci"]
 description = "Run tests once, producing a JUnit report AND coverage.out"
+depends = ["sidecar:fetch"]
 run = "./scripts/rtkx.sh gotestsum --junitfile junit.xml --format pkgname -- -short -timeout=8m -covermode=atomic -coverpkg=./... -coverprofile=coverage.out ./..."
 
 [tasks."test:watch"]
@@ -169,7 +175,7 @@ run = "./scripts/rtkx.sh grype sbom:sbom.cdx.json --fail-on high"
 
 
 [tasks.arch]
-description = "Dependency rules: libp2p only in transport/p2p, wormhole only in invite, no Go automerge"
+description = "Dependency rules: libp2p only in transport/p2p, wormhole only in invite, no Go automerge, no network code in sidecar/typst"
 run = "./scripts/arch-check.sh"
 
 [tasks.ci]

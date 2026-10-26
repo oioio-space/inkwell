@@ -1,5 +1,9 @@
 version: 2
 project_name: "inkwell"
+before:
+  hooks:
+    # The executables embed the pinned typst and tinymist of their platform.
+    - go run ./cmd/sidecar-fetch -target all
 builds:
   - main: ./cmd/inkwell
     binary: "inkwell"
