@@ -119,6 +119,51 @@ describe("integrate (EXT-01..03, 12)", () => {
     }
   }, 30_000);
 
+  it("PERF-04 outside edits on the first and last line of a big file merge cleanly with a peer typing in the middle", () => {
+    const lines = Array.from({ length: 6000 }, (_, i) => `ligne numero ${i} du fichier`);
+    const base = `${lines.join("\n")}\n`;
+    expect(base.length).toBeGreaterThan(64 * 1024);
+    const h = open(base);
+    const heads0 = heads(h);
+    at(h, base.indexOf("ligne numero 3000 "), "[pair] ");
+    const outside = [...lines];
+    outside[0] = "PREMIERE LIGNE modifiee";
+    outside[5999] = "DERNIERE LIGNE modifiee";
+    integrate(h, heads0, `${outside.join("\n")}\n`);
+    const expected = [...outside];
+    expected[3000] = `[pair] ${lines[3000]}`;
+    expect(h.doc().text).toBe(`${expected.join("\n")}\n`);
+  }, 30_000);
+
+  it("PERF-04 a huge new block between two small edits is chunked, and the small edits still merge by line", () => {
+    const lines = Array.from({ length: 6000 }, (_, i) => `ligne numero ${i} du fichier`);
+    const base = `${lines.join("\n")}\n`;
+    const h = open(base);
+    const heads0 = heads(h);
+    at(h, base.indexOf("ligne numero 5000 "), "[pair] ");
+    const block = Array.from({ length: 8000 }, (_, i) => `ajout ${i} dans le fichier`);
+    const outside = [
+      "PREMIERE modifiee",
+      ...lines.slice(1, 3000),
+      ...block,
+      ...lines.slice(3000, 5999),
+      "DERNIERE modifiee",
+    ];
+    const before = A.getAllChanges(h.doc()).length;
+    integrate(h, heads0, `${outside.join("\n")}\n`);
+    const result = h.doc().text.split("\n");
+    expect(result[0]).toBe("PREMIERE modifiee");
+    expect(result).toContain(`[pair] ligne numero 5000 du fichier`);
+    expect(result.at(-2)).toBe("DERNIERE modifiee");
+    expect(result.filter((l) => l.startsWith("ajout "))).toHaveLength(8000);
+    for (const c of A.getAllChanges(h.doc()).slice(before)) {
+      const inserted = A.decodeChange(c).ops.filter(
+        (op) => (op as { insert?: boolean }).insert,
+      ).length;
+      expect(inserted).toBeLessThanOrEqual(CHUNK_CHARS);
+    }
+  }, 30_000);
+
   it("PERF-04 a file that brings 100 Ki of new text comes in changes of at most 64 Ki, and what was typed meanwhile stays", () => {
     const h = open("head\ntail\n");
     const base = heads(h);
