@@ -28,3 +28,4 @@ connaître la raison — pas pour le reste. Modèle : [`template.md`](template.m
 | [0023](0023-projet-multi-fichiers-blobs.md) | Projet multi-fichiers : index à nœuds stables, blobs BLAKE3/Bao | proposée |
 | [0024](0024-sidecars-typst-tinymist.md) | Sidecars Typst : `typst` compile, `tinymist` sert l'éditeur ; récupérés à la construction, embarqués, vérifiés | acceptée |
 | [0025](0025-versions-et-paquets.md) | Versions SemVer par tags, paquets .deb/.rpm natifs par architecture, installés avant publication | acceptée |
+| [0026](0026-grille-csv.md) | Tableur CSV/TSV : grille Svelte maison virtualisée, texte Automerge pour seule source | proposée |

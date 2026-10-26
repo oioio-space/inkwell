@@ -67,6 +67,8 @@ export interface EditorOptions {
   onState?: (state: EditorState) => void;
   /** Called once with the view, so the shell can run commands on it and give it back focus. */
   onView?: (view: EditorView) => void;
+  /** Text offset of the caret at creation (opening the text view of a table at a cell). */
+  at?: number;
   /**
    * Asked before the editor undoes with Ctrl+Z: return true to say the key was used (an outside
    * edit that was just taken in is taken back instead of the person's own last edit).
@@ -80,14 +82,18 @@ export function createEditor(
   handle: DocHandle<Doc>,
   me: { id: string; name: string },
   onPeople?: (people: Person[]) => void,
-  { lang = "plain", onState, onView, onUndoKey }: EditorOptions = {},
+  { lang = "plain", onState, onView, onUndoKey, at }: EditorOptions = {},
 ): { rename: (name: string) => void; setLang: (lang: Lang) => void; destroy: () => void } {
   let view: EditorView | undefined;
   const language = new Compartment();
   const presence = presenceSync(handle, me, () => view, onPeople);
+  const initial = handle.doc()?.text ?? "";
   view = new EditorView({
     parent,
-    doc: handle.doc()?.text ?? "",
+    doc: initial,
+    ...(at !== undefined
+      ? { selection: { anchor: Math.max(0, Math.min(at, initial.length)) } }
+      : {}),
     extensions: [
       cspNonce(),
       lineNumbers(),

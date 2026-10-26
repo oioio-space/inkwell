@@ -31,6 +31,23 @@ export function statusOf(peerCount: number, joining: boolean): Status {
 
 /** The projection of the document, in the project folder. */
 const MAIN_FILE = "main.typ";
+
+/**
+ * Which file the editor area presents. Until the multi-file project (B4) opens a file per
+ * document, the single document stands for whichever file is named by `?file=` (a plain
+ * relative path): this is how a table is shown as a sheet in development and in the
+ * end-to-end tests. Without it, the main document.
+ */
+function openedFile(): string {
+  try {
+    const wanted = new URLSearchParams(globalThis.location?.search ?? "").get("file");
+    if (wanted && /^[\p{L}\p{N}_.-]+(\/[\p{L}\p{N}_.-]+)*$/u.test(wanted) && !wanted.includes(".."))
+      return wanted;
+  } catch {
+    // No location (a unit test): the main document.
+  }
+  return MAIN_FILE;
+}
 const NAME_KEY = "inkwell.name";
 
 /** How long the lines taken from the disk stay marked in the gutter. */
@@ -64,7 +81,7 @@ class Workspace {
   sealed = $state(false);
   handle = $state.raw<DocHandle<Doc> | undefined>();
   /** The file shown in the editor (today the project's main document). */
-  current = $state(MAIN_FILE);
+  current = $state(openedFile());
   /** The project's files, for the sidebar and the Insert menu. */
   files = $state.raw<ProjectFile[]>([]);
   /** How the current file is stored on disk; undefined until Go has written it. */
@@ -250,6 +267,11 @@ class Workspace {
   /** Reloads how the current file is stored (encoding, line ending). */
   async refreshInfo(): Promise<void> {
     if (!this.#storage) return;
+    // Only the main document has a file on disk until B4 gives every file its own document.
+    if (this.current !== MAIN_FILE) {
+      this.fileInfo = undefined;
+      return;
+    }
     try {
       this.fileInfo = await this.#storage.fileInfo(this.current);
     } catch {

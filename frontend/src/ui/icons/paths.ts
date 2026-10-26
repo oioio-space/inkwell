@@ -45,6 +45,20 @@ export const ICONS = {
   pagebreak: '<path d="M3.5 1.5v4h9v-4M3.5 14.5v-4h9v4"/><path d="M1.5 8h2M6 8h4M12.5 8h2"/>',
   gear: '<circle cx="8" cy="8" r="2.2"/><path d="M8 1.5v2M8 12.5v2M1.5 8h2M12.5 8h2M3.4 3.4l1.4 1.4M11.2 11.2l1.4 1.4M3.4 12.6l1.4-1.4M11.2 4.8l1.4-1.4"/>',
   folder: '<path d="M1.5 4.5V3h5l1.5 1.5h6.5v9h-13z"/>',
+  rowadd: '<rect x="1.5" y="8.5" width="13" height="5" rx="1.5"/><path d="M8 1.8v4.4M5.8 4h4.4"/>',
+  rowdel: '<rect x="1.5" y="8.5" width="13" height="5" rx="1.5"/><path d="M5.8 4h4.4"/>',
+  coladd: '<rect x="1.5" y="1.5" width="5" height="13" rx="1.5"/><path d="M12 5.8v4.4M9.8 8h4.4"/>',
+  coldel: '<rect x="1.5" y="1.5" width="5" height="13" rx="1.5"/><path d="M9.8 8h4.4"/>',
+  sortasc: '<path d="M4 13.5v-11M1.8 4.7L4 2.5l2.2 2.2M9 4h5M9 8h3.5M9 12h2"/>',
+  sortdesc: '<path d="M4 2.5v11M1.8 11.3L4 13.5l2.2-2.2M9 12h5M9 8h3.5M9 4h2"/>',
+  filter: '<path d="M2 3h12l-4.6 5.4V13l-2.8-1.4V8.4z"/>',
+  freeze:
+    '<rect x="1.5" y="2.5" width="13" height="11" rx="2"/><path d="M1.5 6.5h13M6 6.5v7" stroke-width="2.2"/>',
+  undo: '<path d="M5.5 3.5L2.5 6.5l3 3M2.5 6.5h6.5a3.5 3.5 0 0 1 0 7H6"/>',
+  redo: '<path d="M10.5 3.5l3 3-3 3M13.5 6.5H7a3.5 3.5 0 0 0 0 7h3"/>',
+  zoomin: '<circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14M7 5v4M5 7h4"/>',
+  zoomout: '<circle cx="7" cy="7" r="4.5"/><path d="M10.5 10.5L14 14M5 7h4"/>',
+  caretdown: '<path d="M4.5 6.5l3.5 3.5 3.5-3.5" stroke-width="1.8"/>',
 } as const;
 
 export type IconName = keyof typeof ICONS;

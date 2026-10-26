@@ -60,12 +60,12 @@ Rien n'est « fait » sans tests verts et sans une passe `ux-walkthrough` réuss
 | U16 | 2026-10-25 | Voir dans la liste des fichiers qui édite quoi | B7 PRS-21…26 | ⏳ |
 | U17 | 2026-10-25 | Liens vers images et fichiers marqués présents ou absents ; liens externes jamais testés (hors ligne) | B7 LNK-* | ⏳ |
 | U18 | 2026-10-25 | Choisir la mise en page des Markdown, prise en compte par l'aperçu | B8 MDL-* | ⏳ |
-| U19 | 2026-10-25 | Tableur CSV/TSV : édition complète, icônes, copier-coller facile, plusieurs Mo, graphiques dans Typst | B9 CSV-* | 🔨 |
-| U20 | 2026-10-25 | Tableur extrêmement pratique et performant, UX type Microsoft/Apple | B9 SHEET-* | 🔨 |
-| U21 | 2026-10-25 | Priorité : copier-coller, tirer une ligne (poignée), ajout/suppression de lignes | B9 | 🔨 |
-| U22 | 2026-10-25 | Tous les problèmes des CSV : séparateur, cellules qui le contiennent, recherche… | B9 CSV-EDGE-* | 🔨 |
+| U19 | 2026-10-25 | Tableur CSV/TSV : édition complète, icônes, copier-coller facile, plusieurs Mo, graphiques dans Typst | B9 CSV-* | 🧪 fusionné (B9), passe ux-walkthrough à faire |
+| U20 | 2026-10-25 | Tableur extrêmement pratique et performant, UX type Microsoft/Apple | B9 SHEET-* | 🧪 fusionné (B9), passe ux-walkthrough à faire |
+| U21 | 2026-10-25 | Priorité : copier-coller, tirer une ligne (poignée), ajout/suppression de lignes | B9 | 🧪 fusionné (B9), passe ux-walkthrough à faire |
+| U22 | 2026-10-25 | Tous les problèmes des CSV : séparateur, cellules qui le contiennent, recherche… | B9 CSV-EDGE-* | 🧪 fusionné (B9), passe ux-walkthrough à faire |
 | U24 | 2026-10-25 | L'application s'affiche bien quel que soit le redimensionnement ; panneaux internes ajustables | A6 RSZ-* | ⏳ après la passe /simplify frontend |
-| U25 | 2026-10-26 | Tableur : séparateur selon l'extension (CSV/TSV/PSV) puis confirmé par détection ; lire tout fichier texte ordinaire ; icônes adaptées pour tous ces types | B9, B4b/B5 | 🔨 |
+| U25 | 2026-10-26 | Tableur : séparateur selon l'extension (CSV/TSV/PSV) puis confirmé par détection ; lire tout fichier texte ordinaire ; icônes adaptées pour tous ces types | B9, B4b/B5 | 🧪 fusionné (B9), passe ux-walkthrough à faire |
 | U26 | 2026-10-26 | Types de fichiers modulaires : ajouter un type = ajouter un module (registre, éditeur chargé à la demande) | ADR 0027, B4b | 🔨 |
 | U27 | 2026-10-26 | Zoom du texte ; différences « comme Git » très claires : qui, quoi exactement, quand — simple et beau | B2+ DIF-*, ZOOM-* | 🔨 |
 | U28 | 2026-10-26 | Présentation : vue présentateur (suivante, notes, commentaires) et vue public (diapo seule) en deux fenêtres simultanées pour deux écrans ; public sur une machine, présentateur sur une autre en réseau, synchronisés | C4+ PRS-30…40 | ⏳ |

@@ -1,6 +1,7 @@
 <script lang="ts">
 import { onMount } from "svelte";
 import { Session } from "../bindings/github.com/oioio-space/inkwell/internal/app/index";
+import { looksTabular } from "./editor/csv/dialect";
 import { markExternal } from "./editor/external";
 import { langOf } from "./editor/format";
 import { t } from "./i18n";
@@ -14,6 +15,8 @@ import ProjectionBanner from "./ui/ProjectionBanner.svelte";
 import Preferences from "./ui/prefs/Preferences.svelte";
 import SealedBanner from "./ui/SealedBanner.svelte";
 import ShareDialog from "./ui/ShareDialog.svelte";
+import Sheet from "./ui/sheet/Sheet.svelte";
+import { sheetView, showsSheet } from "./ui/sheet/viewMode.svelte";
 import HeaderBar from "./ui/shell/HeaderBar.svelte";
 import Sidebar from "./ui/shell/Sidebar.svelte";
 import StatusBar from "./ui/shell/StatusBar.svelte";
@@ -28,6 +31,20 @@ let buildInfo = $state.raw<BuildInfo | undefined>();
 const me = $derived({ id: workspace.myId, name: workspace.myName });
 
 const lang = $derived(langOf(workspace.current));
+/** A table file shows as a spreadsheet, unless the person asked for its text. */
+const tabular = $derived(sheetView.tabular(workspace.current));
+/** A `.txt` that reads as a table is offered as one, never opened as one by itself. */
+const offerTable = $derived(
+  !tabular &&
+    /\.txt$/i.test(workspace.current) &&
+    looksTabular(workspace.handle?.doc()?.text ?? ""),
+);
+const showSheet = $derived(showsSheet(workspace.current));
+
+/** Back to the grid from the text view, on the cell under the caret. */
+function showTable() {
+  sheetView.toGrid(session.state?.selection.main.head);
+}
 /** Only Typst and Markdown have a formatting bar; csv, bib and txt are just the editor. */
 const barLanguage = $derived(barLang(workspace.current));
 const hasBar = $derived(barLanguage !== undefined);
@@ -138,23 +155,54 @@ onMount(() => {
       />
     {/if}
     <SealedBanner />
+    {#if offerTable}
+      <div class="viewbar">
+        <button
+          type="button"
+          class="fb lbl"
+          data-sheet="open-table"
+          onclick={() => sheetView.openAsTable(workspace.current)}
+        >
+          {t("sheet.openAsTable")}
+        </button>
+      </div>
+    {/if}
+    {#if tabular && sheetView.text}
+      <div class="viewbar">
+        <button type="button" class="fb lbl" data-sheet="table" onclick={showTable}>
+          {t("sheet.showTable")}
+        </button>
+      </div>
+    {/if}
     <ProjectionBanner />
     <ExternalBanner />
     <main>
       {#if workspace.handle}
         {#key workspace.handle.url}
-          <Editor handle={workspace.handle} {me} {lang} />
+          {#if showSheet}
+            <Sheet
+              handle={workspace.handle}
+              {me}
+              path={workspace.current}
+              startOffset={sheetView.offset}
+              onshowtext={(offset) => sheetView.toText(offset)}
+            />
+          {:else}
+            <Editor handle={workspace.handle} {me} {lang} at={tabular ? sheetView.offset : undefined} />
+          {/if}
         {/key}
       {/if}
     </main>
-    <StatusBar
-      {lang}
-      status={workspace.status}
-      peerCount={workspace.peers.length}
-      editorState={session.state}
-      info={workspace.fileInfo}
-      {unsaved}
-    />
+    {#if !showSheet}
+      <StatusBar
+        {lang}
+        status={workspace.status}
+        peerCount={workspace.peers.length}
+        editorState={session.state}
+        info={workspace.fileInfo}
+        {unsaved}
+      />
+    {/if}
   </div>
 </div>
 <ShareDialog bind:open={sharing} />
@@ -177,5 +225,13 @@ onMount(() => {
   main {
     flex: 1;
     min-height: 0;
+  }
+  .viewbar {
+    display: flex;
+    align-items: center;
+    min-height: 40px;
+    padding: 3px 6px;
+    background: var(--headerbar-bg);
+    box-shadow: 0 1px var(--shade);
   }
 </style>
