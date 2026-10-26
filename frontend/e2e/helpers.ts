@@ -32,20 +32,30 @@ export async function open(browser: Browser, url: string, dark = false): Promise
 }
 
 /**
- * Alice invites, Bob joins with the invitation text; both end up "Synchronisé".
- * Inviting is refused (the UI shows why) until the node has an address to put in the
- * ticket (through a relay, after its reservation), so asking is retried.
+ * Opens "Partager" on `host` (naming them `name`, if given), asks for an invitation and returns
+ * its text. An invitation works once, and the dialog keeps showing the last one after it is
+ * closed: a new one is awaited, never the stale one (a third person given the second's used
+ * invitation never connects). Asking is retried: the node refuses until it has an address to put
+ * in the ticket (through a relay, after its reservation).
  */
-export async function pair(alice: Page, bob: Page) {
-  await alice.getByRole("button", { name: "Partager" }).click();
-  await rename(alice, "Alice");
-  const invitation = alice.getByLabel("Invitation", { exact: true });
+export async function freshInvitation(host: Page, name?: string): Promise<string> {
+  await host.getByRole("button", { name: "Partager" }).click();
+  if (name) await rename(host, name);
+  const field = host.getByLabel("Invitation", { exact: true });
+  const stale = (await field.count()) > 0 ? await field.inputValue() : "";
   await expect(async () => {
-    await alice.getByRole("button", { name: "Inviter" }).click();
-    await expect(invitation).toHaveValue(/^inkwell1:/, { timeout: 1_000 });
+    await host.getByRole("button", { name: "Inviter" }).click();
+    await expect(field).toHaveValue(/^inkwell1:/, { timeout: 1_000 });
+    expect(await field.inputValue()).not.toBe(stale);
   }).toPass({ timeout: 60_000 });
-  const text = await invitation.inputValue();
-  await alice.getByRole("button", { name: "Fermer" }).click();
+  const text = await field.inputValue();
+  await host.getByRole("button", { name: "Fermer" }).click();
+  return text;
+}
+
+/** Alice invites, Bob joins with the invitation text; both end up "Synchronisé". */
+export async function pair(alice: Page, bob: Page) {
+  const text = await freshInvitation(alice, "Alice");
 
   await bob.getByRole("button", { name: "Partager" }).click();
   await rename(bob, "Bob");

@@ -139,7 +139,8 @@ type Wiring struct {
 	active   map[transport.PeerID]struct{} // under mu; written by the goroutine only: the linked peers, whose member list is synchronized
 	full     map[transport.PeerID]struct{} // under mu; written by the goroutine only: the active peers that are not restricted
 	saved    map[trust.Hash]struct{}
-	pending  map[string][]trust.Hash // heads to sign once this device is known to be a writer
+	pending  map[string][]trust.Hash                              // heads to sign once this device is known to be a writer
+	held     map[transport.PeerID]map[attestKey]trust.Attestation // replayed by connected peers not linked yet, verified when they are
 	closeErr error
 	// rolesSent is the last Roles payload sent to the bridge.
 	rolesSent []byte
@@ -180,6 +181,7 @@ func Wire(ctx context.Context, t transport.Transport, s trust.Signer, list *trus
 		full:     make(map[transport.PeerID]struct{}),
 		saved:    savedOps(list),
 		pending:  make(map[string][]trust.Hash),
+		held:     make(map[transport.PeerID]map[attestKey]trust.Attestation),
 		tick:     o.TickEvery,
 	}
 	adm.reset(list)
@@ -385,6 +387,7 @@ func (w *Wiring) onTrust(ev transport.Event) {
 		w.reconcile()
 	case transport.PeerDown:
 		delete(w.up, ev.Peer)
+		delete(w.held, ev.Peer)
 		w.reconcile()
 	case transport.Message:
 		if !w.isLinked(ev.Peer) {
@@ -481,6 +484,7 @@ func (w *Wiring) activate(p transport.PeerID) {
 	w.sendTrust(w.sync.OnPeerUp(p))
 	if open {
 		w.sendAttestations(p)
+		w.releaseHeld(p)
 	}
 }
 
@@ -501,6 +505,7 @@ func (w *Wiring) refresh(p transport.PeerID) {
 	case open && !was:
 		w.emit(transport.Event{Kind: transport.PeerUp, Peer: p})
 		w.sendAttestations(p)
+		w.releaseHeld(p)
 	case !open && was:
 		w.emit(transport.Event{Kind: transport.PeerDown, Peer: p})
 	}

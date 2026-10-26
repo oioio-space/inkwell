@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"slices"
+	"strconv"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -324,6 +325,62 @@ func TestPendingHeadsHoldAWholeIndex(t *testing.T) {
 		synctest.Wait()
 		if got := len(b.w.Attestations()); got != docs {
 			t.Errorf("B signed %d documents once admitted, want all %d", got, docs)
+		}
+	})
+}
+
+// A guest connects to its host before it moves to the host's project (invites.enter): the host
+// replays its attestations at once, while the guest is still in another project and listens to
+// nobody. The guest keeps them for the moment it switches; without them it drops the host's sync
+// messages and joins to an empty document until someone types (N5, JOIN-3).
+func TestGuestKeepsAttestationsReplayedBeforeItSwitchesProject(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		net := memnet.New(1, memnet.Faults{})
+		devA, devG := newDevice(t), newDevice(t)
+		listA := newProject(t, devA)
+		a := join(t, net, devA, listA)
+		g := join(t, net, devG, newProject(t, devG)) // alone in a project of its own
+
+		if err := attester(t, a).Attest(t.Context(), "doc", [][bridge.HashSize]byte{head("a1")}); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := a.w.Issue(trust.OpAdd, devG.Public(), trust.RoleWriter, "g"); err != nil {
+			t.Fatal(err)
+		}
+		net.Link(a.id, g.id)
+		synctest.Wait() // the host replays; the guest is not in the project yet
+
+		if err := g.w.SwitchProject(fork(t, listA), func(trust.Op) error { return nil }); err != nil {
+			t.Fatal(err)
+		}
+		synctest.Wait()
+		got := g.w.Attestations()
+		if len(got) != 1 || got[0].Doc != "doc" || got[0].Heads[0] != head("a1") {
+			t.Errorf("the guest holds %v, want the host's attestation of a1", got)
+		}
+	})
+}
+
+// A stranger that floods a guest with attestations fills its own share of what is kept, never the
+// host's.
+func TestHeldAttestationsAreBoundedPerPeer(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		dev := newDevice(t)
+		g := join(t, memnet.New(1, memnet.Faults{}), dev, newProject(t, dev))
+		host, stranger := transport.PeerID("host"), transport.PeerID("stranger")
+		if err := g.w.do(func() {
+			for i := range maxHeld + 10 {
+				g.w.hold(stranger, trust.Attestation{Doc: strconv.Itoa(i), Signer: []byte("s")})
+			}
+			g.w.hold(host, trust.Attestation{Doc: "doc", Signer: []byte("h")})
+			if n := len(g.w.held[stranger]); n != maxHeld {
+				t.Errorf("held for the stranger = %d, want %d", n, maxHeld)
+			}
+			if n := len(g.w.held[host]); n != 1 {
+				t.Errorf("held for the host = %d, want 1", n)
+			}
+		}); err != nil {
+			t.Fatal(err)
 		}
 	})
 }

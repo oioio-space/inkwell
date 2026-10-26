@@ -94,8 +94,8 @@ test("SAV-03 closing with unwritten changes loses nothing, asks nothing, and reo
 }) => {
   const page = await openWith(browser, ALICE_URL, { saveMode: "manual" });
   const before = await fileCaughtUp(page);
-  const typedAt = Date.now();
   await typeAtEnd(page, " pas écrit");
+  const typedAt = Date.now() - 50;
   await expect(page.getByTestId("unsaved")).toBeVisible();
   let asked = false;
   page.on("dialog", (d) => {

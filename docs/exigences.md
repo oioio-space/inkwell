@@ -38,7 +38,7 @@ Rien n'est « fait » sans tests verts et sans une passe `ux-walkthrough` réuss
 | N2 | 2026-10-25 | Un admin absent ne bloque jamais l'édition ; la créatrice peut transmettre | ADR 0017 | ✅ |
 | N3 | 2026-10-25 | Déconnecter quelqu'un et le laisser revenir | ADR 0021, B3 | 🧪 Go fusionné (audité) ; UI à faire |
 | N4 | 2026-10-25 | Zones verrouillées par les admins, que les autres ne peuvent pas modifier | ADR 0022, B3 LCK-* | ⏳ |
-| N5 | 2026-10-25 | Rejoindre un projet = recevoir tous les fichiers et dépendances | ADR 0023, B4 PRJ-* | 🔨 Go en correction d'audit ; TS à faire |
+| N5 | 2026-10-25 | Rejoindre un projet = recevoir tous les fichiers et dépendances | ADR 0023, B4 PRJ-*, e2e JOIN-3 (le 3e arrivant reçoit le texte : attestations rejouées avant l'adoption du projet, désormais gardées) | 🔨 Go en correction d'audit ; TS à faire |
 | N6 | 2026-10-25 | Gestion multi-utilisateur partout (y compris le tableur) | B9 SHEET-MU-*, toutes sections | 🔨 |
 
 ## Interface et édition
