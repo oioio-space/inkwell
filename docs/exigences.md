@@ -71,6 +71,9 @@ Rien n'est « fait » sans tests verts et sans une passe `ux-walkthrough` réuss
 | U28 | 2026-10-26 | Présentation : vue présentateur (suivante, notes, commentaires) et vue public (diapo seule) en deux fenêtres simultanées pour deux écrans ; public sur une machine, présentateur sur une autre en réseau, synchronisés | C4+ PRS-30…40 | ⏳ |
 | U29 | 2026-10-26 | Tâches (TODO, FIXME…) dans les commentaires, retrouvées dans un panneau du projet, bien présentées | B10 TODO-* | ⏳ |
 | U30 | 2026-10-26 | Panneau de gauche : gestionnaire de fichiers **ou** sommaire cliquable des titres | B10 OUT-* | ⏳ |
+| U31 | 2026-10-26 | Toute fonctionnalité intégrée et cohérente (jamais une « verrue ») : très bon design UX/UI, beau et harmonieux partout | règle de conception ; revue de cohérence `ux-walkthrough` à chaque fusion d'interface | 🔨 règle active |
+| U32 | 2026-10-26 | Programme globalement très fiable : on doit pouvoir lui faire confiance | Q-REL (plan « Fiabilité et performance ») | ⏳ |
+| U33 | 2026-10-26 | Très performant, y compris par Internet (relais, NAT) et sur des fichiers texte énormes à afficher | Q-PERF (plan « Fiabilité et performance »), ADR à venir | 🔨 recherche |
 | U23 | 2026-10-25 | Coloration syntaxique (constat de revue) | A5 | ✅ |
 
 ## Livraison
