@@ -171,26 +171,40 @@ export function materialize(
   const maxDepth = opts.maxDepth ?? MAX_DEPTH;
   const warnings: Warning[] = [];
   const raw = doc?.nodes ?? {};
-  let ids: string[] = [];
+  const ids: string[] = [];
   for (const id of Object.keys(raw).sort()) {
     if (validNode(id, raw[id])) ids.push(id);
     else warnings.push({ kind: "invalid", id });
   }
-  if (ids.length > maxNodes) {
-    warnings.push({ kind: "capped", count: ids.length - maxNodes });
-    ids = ids.slice(0, maxNodes);
-  }
+  // Over the cap nothing that exists is dropped (a file must never vanish because of the
+  // number of its neighbours): admission refuses the excess, the interface refuses new files
+  // and this says so.
+  if (ids.length > maxNodes) warnings.push({ kind: "capped", count: ids.length - maxNodes });
   const nodes = new Map(ids.map((id) => [id, raw[id] as IndexNode]));
 
-  // Parents: the root for a missing or non-folder parent.
+  // What is in the trash, by its own mark: a folder in the trash carries its whole subtree
+  // (the mark of each node), and a node without a mark stays visible wherever it is attached.
+  const trashMarks = new Map<string, Trashed>();
+  for (const [id, n] of nodes) {
+    const t = effectiveTrash(id, n, doc as IndexDoc, undefined);
+    if (t) trashMarks.set(id, t);
+  }
+
+  // Parents: the root for a missing or non-folder parent, or a trashed folder (for a node that
+  // is not itself in the trash).
   const parent = new Map<string, string | null>();
   const orphan = new Set<string>();
   const cycle = new Set<string>();
   for (const [id, n] of nodes) {
     const p = n.parent ?? null;
     if (p === null) parent.set(id, null);
-    else if (p !== id && nodes.get(p)?.type === "dir") parent.set(id, p);
-    else {
+    else if (
+      p !== id &&
+      nodes.get(p)?.type === "dir" &&
+      (trashMarks.has(id) || !trashMarks.has(p))
+    ) {
+      parent.set(id, p);
+    } else {
       parent.set(id, null);
       orphan.add(id);
     }
@@ -234,11 +248,7 @@ export function materialize(
     });
   }
 
-  const trashMarks = new Map<string, Trashed>();
-  for (const [id, n] of nodes) {
-    const t = effectiveTrash(id, n, doc as IndexDoc, mainId);
-    if (t) trashMarks.set(id, t);
-  }
+  if (mainId !== undefined) trashMarks.delete(mainId); // the main file is never in the trash
 
   const entries: Entry[] = [];
   const trash: TrashItem[] = [];
@@ -264,12 +274,7 @@ export function materialize(
   const visit = (parentId: string | null, prefix: string, depth: number): void => {
     const kids = children.get(parentId) ?? [];
     const live: string[] = [];
-    for (const id of kids) {
-      const n = nodes.get(id) as IndexNode;
-      const t = trashMarks.get(id);
-      if (t) trash.push(trashItem(id, n, t));
-      else live.push(id);
-    }
+    for (const id of kids) if (!trashMarks.has(id)) live.push(id);
     // Names: the smallest id of each group keeps its own.
     const taken = new Set<string>();
     const names = new Map<string, string>();
@@ -342,6 +347,12 @@ export function materialize(
   });
 
   visit(null, "", 1);
+  // The trash lists what was thrown away: the nodes whose folder is not in it too.
+  for (const [id, t] of trashMarks) {
+    const above = parent.get(id) ?? null;
+    if (above === null || !trashMarks.has(above))
+      trash.push(trashItem(id, nodes.get(id) as IndexNode, t));
+  }
   for (const item of trash) item.path = rawPath(item.id, shownName);
   trash.sort((a, b) => a.at - b.at || (a.id < b.id ? -1 : 1));
   entries.sort((a, b) => (a.path < b.path ? -1 : a.path > b.path ? 1 : 0));

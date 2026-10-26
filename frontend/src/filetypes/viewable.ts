@@ -21,13 +21,10 @@ const VIEWABLE = new Set([
   ".otf",
   ".woff",
   ".woff2",
-  ".doc",
   ".docx",
   ".odt",
-  ".xls",
   ".xlsx",
   ".ods",
-  ".ppt",
   ".pptx",
   ".odp",
 ]);

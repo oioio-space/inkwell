@@ -274,7 +274,7 @@ test("FM-05 FM-06 FM-07 FM-09 a writer asks, an admin answers, the trash keeps t
 
   // Alice refuses: the request goes, the refusal shows on the file.
   await alice.getByRole("button", { name: "Refuser" }).click();
-  await expect(item(bob, name)).toContainText("Suppression refusée par", { timeout: 30_000 });
+  await expect(item(bob, name)).toContainText("Suppression refusée (par", { timeout: 30_000 });
   await expect(alice.getByText(`demande à supprimer ${name}`)).toBeHidden();
 
   // Bob asks again while Alice is editing the file: she accepts, and the file goes to the trash.
@@ -294,14 +294,14 @@ test("FM-05 FM-06 FM-07 FM-09 a writer asks, an admin answers, the trash keeps t
   await editor(bob).click();
   await item(alice, name).click();
   await item(alice, name).press("Delete");
-  await expect(bob.getByText(`${name} a été mis à la corbeille par`)).toBeVisible({
+  await expect(bob.getByText(`${name} a été mis à la corbeille (`)).toBeVisible({
     timeout: 30_000,
   });
   await bob.keyboard.type("encore");
   await expect(bob.getByRole("button", { name: "Restaurer" })).toHaveCount(0); // a writer does not restore
   await showTrash(alice).click();
   await alice.getByRole("button", { name: `Restaurer ${name}` }).click();
-  await expect(bob.getByText(`${name} a été mis à la corbeille par`)).toBeHidden({
+  await expect(bob.getByText(`${name} a été mis à la corbeille (`)).toBeHidden({
     timeout: 30_000,
   });
 

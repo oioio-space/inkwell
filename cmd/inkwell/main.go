@@ -116,9 +116,9 @@ func main() {
 			}
 		},
 	})
-	projects.SetOpener(wails.Browser.OpenFile, func(path string) error {
+	projects.SetOpener(wails.Browser.OpenFile, app.RevealFile(func(path string) error {
 		return wails.Env.OpenFileManager(path, true)
-	})
+	}))
 	wails.HandleStream(bridge.StreamName, func(c *application.StreamConn) { router.Serve(c) })
 	wails.HandleStream(bridge.StoreStreamName, func(c *application.StreamConn) { storeServer.Serve(c) })
 	wails.HandleStream(app.PreviewStreamName, func(c *application.StreamConn) { rt.Preview.Serve(c) })

@@ -1,5 +1,24 @@
 import { next as A } from "@automerge/automerge";
 
+/**
+ * The start of the reason a validator gives for a change that must wait, not be refused: it needs
+ * an admin's attestation, or a change it builds on has not arrived or has not been admitted yet.
+ * Such a change is kept aside and judged again when roles or attestations change.
+ */
+export const HOLD = "hold: ";
+
+/** Held messages kept in all, and per sender: the oldest of the same sender go first. */
+const MAX_HELD = 128;
+const MAX_HELD_PER_SENDER = 16;
+
+/** What was cut out of a message for now: the chunks that wait, and the message they came in. */
+interface Held {
+  doc: string;
+  from: string;
+  msg: ReturnType<typeof A.decodeSyncMessage>;
+  chunks: Chunk[];
+}
+
 /** One change, reduced to what the coverage check needs. */
 interface ChangeInfo {
   hash: string;
@@ -31,6 +50,7 @@ class DocCoverage {
   #open = new Set<string>(); // covered, dependencies still unknown
   #heads = new Map<string, string[]>(); // writer → attested heads, oldest first
   #rejected = new Map<string, string[]>(); // refused change → its dependencies, oldest first
+  #waiting = new Set<string>(); // held changes: kept aside, not asked for again
   // What admins vouch for (ADR 0022 R1): the same graph, from the heads of admins only. What an
   // admin vouched for stays so when they are demoted, suspended or removed: nothing admitted is
   // ever taken back after the fact.
@@ -113,8 +133,26 @@ class DocCoverage {
    * refused must not make us ask for them, or answer it forever.
    */
   withoutRejected(heads: string[]): string[] {
-    if (this.#rejected.size === 0 || !heads.some((h) => this.#rejected.has(h))) return heads;
-    return heads.filter((h) => !this.#rejected.has(h));
+    const out = (h: string) => this.#rejected.has(h) || this.#waiting.has(h);
+    if (!heads.some(out)) return heads;
+    return heads.filter((h) => !out(h));
+  }
+
+  /**
+   * Marks changes as held: we have them aside and will judge them again, so a peer whose heads
+   * name them is not asked for them over and over.
+   */
+  wait(hashes: string[]): void {
+    for (const h of hashes) this.#waiting.add(h);
+    for (const h of this.#waiting) {
+      if (this.#waiting.size <= MAX_REJECTED) break;
+      this.#waiting.delete(h);
+    }
+  }
+
+  /** The changes are not held any more (delivered, or refused for good). */
+  unwait(hashes: string[]): void {
+    for (const h of hashes) this.#waiting.delete(h);
   }
 
   #cover(root: string, covered = this.#covered, open = this.#open): void {
@@ -176,10 +214,13 @@ export class Coverage {
   #validators = new Map<string, DocValidator>();
   #admins: ReadonlySet<string> = new Set();
   #lastRewritten = new Map<string, Uint8Array>(); // peer + document → last message we had to cut
+  #held: Held[] = [];
+  #heldDirty = false;
 
   /** `signer`, a current writer, attested `heads` of document `doc`. */
   attested(signer: string, doc: string, heads: string[]): void {
     this.#doc(doc).attest(signer, heads, this.#admins.has(signer));
+    this.#heldDirty = true;
   }
 
   /**
@@ -189,6 +230,7 @@ export class Coverage {
   setAdmins(admins: Iterable<string>): void {
     this.#admins = new Set(admins);
     for (const d of this.#docs.values()) d.promote(this.#admins);
+    this.#heldDirty = true;
   }
 
   /** Adds the admission rules of document `doc`, applied to what coverage lets through. */
@@ -240,7 +282,12 @@ export class Coverage {
 
     const accepted = docs.admit(chunks.flatMap((c) => c.changes));
     const covered = chunks.map((c) => c.changes.every((x) => accepted.has(x.hash)));
-    const vetoed = this.#validate(doc, docs, chunks, covered);
+    const waiting = new Set<Chunk>();
+    const vetoed = this.#validate(doc, docs, chunks, covered, waiting);
+    if (waiting.size > 0) {
+      this.#hold({ doc, from, msg, chunks: [...waiting] });
+      docs.wait([...waiting].flatMap((c) => c.changes.map((x) => x.hash)));
+    }
     this.stats.removed += docs.reject(
       chunks
         .filter((_, i) => !covered[i])
@@ -268,7 +315,13 @@ export class Coverage {
    * Runs the validator of `doc`, if it has one, on the chunks coverage let through, in order.
    * Returns the chunks it refused, and marks them uncovered.
    */
-  #validate(doc: string, docs: DocCoverage, chunks: Chunk[], covered: boolean[]): Set<Chunk> {
+  #validate(
+    doc: string,
+    docs: DocCoverage,
+    chunks: Chunk[],
+    covered: boolean[],
+    waiting: Set<Chunk>,
+  ): Set<Chunk> {
     const vetoed = new Set<Chunk>();
     const validator = this.#validators.get(doc);
     if (!validator) return vetoed;
@@ -279,11 +332,92 @@ export class Coverage {
         ? validator.checkDocument(chunk.loaded as A.Doc<never>, admin)
         : validator.check(chunk.bytes, admin);
       if (refusal === undefined) return;
-      console.warn(`index change refused: ${refusal}`);
       covered[i] = false;
+      if (refusal.startsWith(HOLD)) {
+        waiting.add(chunk); // kept aside, not refused: judged again when something changes
+        return;
+      }
+      console.warn(`index change refused: ${refusal}`);
       vetoed.add(chunk);
     });
     return vetoed;
+  }
+
+  #hold(entry: Held): void {
+    this.#held.push(entry);
+    const mine = this.#held.filter((h) => h.from === entry.from);
+    if (mine.length > MAX_HELD_PER_SENDER) {
+      this.#forget(this.#held.splice(this.#held.indexOf(mine[0] as Held), 1)[0]);
+    }
+    if (this.#held.length > MAX_HELD) this.#forget(this.#held.shift());
+  }
+
+  /** A held message that is dropped: its changes can be asked for again. */
+  #forget(h: Held | undefined): void {
+    if (h) this.#doc(h.doc).unwait(h.chunks.flatMap((c) => c.changes.map((x) => x.hash)));
+  }
+
+  /**
+   * Judges again what was held, now that roles or attestations may have changed, and returns the
+   * messages that can be delivered at last (only the chunks that now pass). What still waits
+   * stays; what is refused for good is forgotten. Call after {@link attested} and
+   * {@link setAdmins}.
+   */
+  releaseHeld(): { doc: string; from: string; data: Uint8Array }[] {
+    if (!this.#heldDirty || this.#held.length === 0) {
+      this.#heldDirty = false;
+      return [];
+    }
+    this.#heldDirty = false;
+    const out: { doc: string; from: string; data: Uint8Array }[] = [];
+    // In the order they were held (what builds on a change comes after it), again until nothing
+    // moves: a change that was admitted lets its dependents through.
+    let queue = this.#held;
+    for (let moved = true; moved && queue.length > 0; ) {
+      moved = false;
+      const next: Held[] = [];
+      for (const h of queue) {
+        const docs = this.#doc(h.doc);
+        const validator = this.#validators.get(h.doc);
+        const accepted = docs.admit(h.chunks.flatMap((c) => c.changes));
+        const admin = (hash: string) => docs.adminCovers(hash);
+        const ready: Chunk[] = [];
+        const waiting: Chunk[] = [];
+        for (const chunk of h.chunks) {
+          const hashes = chunk.changes.map((x) => x.hash);
+          if (!validator || !chunk.changes.every((x) => accepted.has(x.hash))) {
+            docs.unwait(hashes); // not covered any more
+            continue;
+          }
+          const refusal = chunk.loaded
+            ? validator.checkDocument(chunk.loaded as A.Doc<never>, admin)
+            : validator.check(chunk.bytes, admin);
+          if (refusal === undefined) {
+            ready.push(chunk);
+            docs.unwait(hashes);
+          } else if (refusal.startsWith(HOLD)) waiting.push(chunk);
+          else {
+            docs.unwait(hashes);
+            console.warn(`index change refused: ${refusal}`);
+            this.stats.removed += docs.reject(chunk.changes);
+          }
+        }
+        if (ready.length > 0) {
+          moved = true;
+          const heads = docs.withoutRejected(h.msg.heads);
+          const changes = ready.map((c) => c.bytes);
+          out.push({
+            doc: h.doc,
+            from: h.from,
+            data: A.encodeSyncMessage({ ...h.msg, heads, changes }),
+          });
+        }
+        if (waiting.length > 0) next.push({ ...h, chunks: waiting });
+      }
+      queue = next;
+    }
+    this.#held = queue;
+    return out;
   }
 
   #doc(doc: string): DocCoverage {

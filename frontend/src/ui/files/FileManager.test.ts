@@ -411,7 +411,9 @@ describe("FM-05 FM-06 FM-07 deleting on approval", () => {
     runtime.index.remove([id]);
     runtime.role = "admin";
     flushSync();
-    expect(text(host.querySelector(".requests"))).toMatch(/demande à supprimer ch2\.typ/);
+    expect(text(host.querySelector(".requests"))).toMatch(
+      /Une personne du projet demande à supprimer ch2\.typ/,
+    );
     click(buttonNamed(host, "Accepter") as HTMLElement);
     expect(rowOf(host, "ch2.typ")).toBeNull();
     expect(runtime.tree.trash.map((t) => t.name)).toEqual(["ch2.typ"]);
@@ -426,7 +428,7 @@ describe("FM-05 FM-06 FM-07 deleting on approval", () => {
     flushSync();
     click(buttonNamed(host, "Refuser") as HTMLElement);
     expect(host.querySelector(".requests")).toBeNull();
-    expect(text(rowOf(host, "ch2.typ"))).toContain("Suppression refusée par");
+    expect(text(rowOf(host, "ch2.typ"))).toContain("Suppression refusée (par");
     expect(rowOf(host, "ch2.typ")?.classList.contains("asked")).toBe(false);
   });
 });
@@ -445,7 +447,7 @@ describe("FM-12 the trash", () => {
     click(toggle);
     const region = host.querySelector('[role="region"]') as HTMLElement;
     expect(text(region)).toContain("a.md");
-    expect(text(region)).toContain("Supprimé par Alice");
+    expect(text(region)).toContain("Supprimé par Alice (non vérifié)");
     click(buttonNamed(region, "Restaurer a.md") as HTMLElement);
     expect(runtime.tree.byPath.has("a.md")).toBe(true);
 

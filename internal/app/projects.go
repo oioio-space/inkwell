@@ -49,8 +49,8 @@ var viewable = map[string]bool{
 	".pdf": true, ".png": true, ".jpg": true, ".jpeg": true, ".gif": true, ".webp": true,
 	".bmp": true, ".tif": true, ".tiff": true, ".ico": true, ".avif": true,
 	".ttf": true, ".otf": true, ".woff": true, ".woff2": true,
-	".doc": true, ".docx": true, ".odt": true, ".xls": true, ".xlsx": true, ".ods": true,
-	".ppt": true, ".pptx": true, ".odp": true,
+	".docx": true, ".odt": true, ".xlsx": true, ".ods": true,
+	".pptx": true, ".odp": true,
 }
 
 // SetOpener sets how a file is handed to the system: open runs the program the user chose for

@@ -16,6 +16,7 @@ import Toast from "../Toast.svelte";
 import ContextMenu, { type MenuItem } from "./ContextMenu.svelte";
 import { bringsFiles, bringsProjectFiles, collectDropped, fromList, INTERNAL_DRAG } from "./drop";
 import { explain, formatSize } from "./explain";
+import LimitNotice from "./LimitNotice.svelte";
 import NewFileDialog, { type Template } from "./NewFileDialog.svelte";
 import PurgeDialog from "./PurgeDialog.svelte";
 import ReceptionProgress from "./ReceptionProgress.svelte";
@@ -764,7 +765,7 @@ function purgeAll() {
     <ul class="requests" aria-label={t("files.deletion.requests", { count: pending.length })}>
       {#each pending as e (e.id)}
         <li>
-          <span class="ask">{t("files.deletion.request", { who: who(e.deletion?.by ?? ""), name: e.name })}</span>
+          <span class="ask">{t("files.deletion.request", { name: e.name })}</span>
           {#if isAdmin}
             <span class="btns">
               <button type="button" class="btn" onclick={() => result(runtime.index.accept([e.id]))}>
@@ -951,6 +952,7 @@ function purgeAll() {
     </nav>
   {/if}
 
+  <LimitNotice excess={tree.warnings.find((w) => w.kind === "capped")?.count ?? 0} />
   <ReceptionProgress {runtime} />
 
   {#if external}

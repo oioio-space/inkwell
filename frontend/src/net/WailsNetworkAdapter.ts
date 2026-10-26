@@ -244,6 +244,7 @@ export class WailsNetworkAdapter extends NetworkAdapter {
     this.#coverage.setAdmins(
       this.#roles.filter((m) => m.role === "admin" && !m.suspended).map((m) => m.peer),
     );
+    this.#releaseHeld();
     for (const cb of this.#roleListeners) cb(this.#roles);
   }
 
@@ -253,6 +254,24 @@ export class WailsNetworkAdapter extends NetworkAdapter {
       this.#coverage.attested(signer, doc, heads);
     } catch {
       this.#opts.onDrop?.("undecodable attestation");
+      return;
+    }
+    this.#releaseHeld();
+  }
+
+  /**
+   * Delivers what admission kept waiting (a change that needed an admin, or one it builds on),
+   * now that an attestation or the roles changed.
+   */
+  #releaseHeld(): void {
+    for (const r of this.#coverage.releaseHeld()) {
+      this.emit("message", {
+        type: "sync",
+        senderId: r.from as PeerId,
+        targetId: this.peerId as PeerId,
+        documentId: r.doc as Message["documentId"],
+        data: r.data,
+      } as Message);
     }
   }
 

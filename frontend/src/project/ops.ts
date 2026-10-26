@@ -372,8 +372,7 @@ export function remove(doc: IndexDoc, m: Materialized, c: OpContext, ids: string
       apply(d) {
         for (const it of trashed) {
           const req = m.byId.get(it.id)?.deletion?.req;
-          (d.nodes?.[it.id] as IndexNode).trashed =
-            req === undefined ? stamp(c) : { ...stamp(c), req: imm(req) };
+          trashSubtree(d, m, it.id, c, req);
         }
         for (const it of asked) {
           (d.nodes?.[it.id] as IndexNode).deletion = {
@@ -384,6 +383,25 @@ export function remove(doc: IndexDoc, m: Materialized, c: OpContext, ids: string
       },
     },
   };
+}
+
+/**
+ * Puts a file, or a folder and everything under it, in the trash: each node carries its own mark
+ * (a node without one stays visible, whatever the folder it was in), those already in the trash
+ * keeping theirs.
+ */
+function trashSubtree(
+  d: IndexDoc,
+  m: Materialized,
+  id: string,
+  c: OpContext,
+  req: string | undefined,
+): void {
+  for (const x of m.subtree(id)) {
+    if ((x !== id && m.trashed.has(x)) || x === m.mainId) continue; // the main file is never trashed
+    (d.nodes?.[x] as IndexNode).trashed =
+      req === undefined ? stamp(c) : { ...stamp(c), req: imm(req) };
+  }
 }
 
 /** An admin accepts the deletion request of a file: it goes to the trash. */
@@ -402,12 +420,7 @@ export function accept(m: Materialized, c: OpContext, ids: string[]): Result {
     plan: {
       message: message(c, "accept", items),
       apply(d) {
-        for (const it of items) {
-          (d.nodes?.[it.id] as IndexNode).trashed = {
-            ...stamp(c),
-            req: imm(reqs.get(it.id) as string),
-          };
-        }
+        for (const it of items) trashSubtree(d, m, it.id, c, reqs.get(it.id));
       },
     },
   };
@@ -482,7 +495,8 @@ export function restore(doc: IndexDoc, m: Materialized, c: OpContext, ids: strin
   const order: string[] = [];
   for (const id of ids) {
     if (!trashedIds.has(id)) return fail("not_found");
-    for (const x of [...hiddenAbove(id), id]) if (!order.includes(x)) order.push(x);
+    const below = m.subtree(id).filter((x) => trashedIds.has(x));
+    for (const x of [...hiddenAbove(id), ...below]) if (!order.includes(x)) order.push(x);
   }
   const tag = c.restoredTag ?? "restored";
   const renames = new Map<string, string>();

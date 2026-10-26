@@ -77,8 +77,8 @@ export type IndexDoc = {
  */
 export const imm = (s: string): string => new A.ImmutableString(s) as unknown as string;
 
-/** A string out of a document, whichever way it was written. */
-function plainValue(v: unknown): unknown {
+/** A value out of a document as plain data: strings are strings again. */
+export function plainValue(v: unknown): unknown {
   if (v instanceof A.ImmutableString) return v.toString();
   if (Array.isArray(v)) return v.map(plainValue);
   if (v === null || typeof v !== "object") return v;

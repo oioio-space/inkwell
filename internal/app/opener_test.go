@@ -62,7 +62,7 @@ func TestOpenWithSystemRunsNothingExecutable(t *testing.T) {
 		func(path string) error { revealed = append(revealed, filepath.Base(path)); return nil },
 	)
 	viewable := []string{"a.pdf", "B.PNG", "c.jpg", "d.woff2", "e.docx", "f.xlsx", "g.odt", "dir.v1.pdf"}
-	risky := []string{"a.exe", "b.bat", "c.lnk", "d.hta", "e.scr", "f.msi", "g.jar", "h.docm", "i.svg", "j.sh", "k.desktop", "noext", "l.pdf.exe", "m.cmd", "n.ps1", "o.js", "p.url"}
+	risky := []string{"a.exe", "b.bat", "c.lnk", "d.hta", "e.scr", "f.msi", "g.jar", "h.docm", "i.svg", "j.sh", "k.desktop", "noext", "l.pdf.exe", "m.cmd", "n.ps1", "o.js", "p.url", "q.doc", "r.xls", "s.ppt"}
 	for _, name := range append(append([]string{}, viewable...), risky...) {
 		if err := os.WriteFile(filepath.Join(root.Name(), p.Dir(), name), []byte("x"), 0o600); err != nil {
 			t.Fatal(err)

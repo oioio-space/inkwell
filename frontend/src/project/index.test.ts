@@ -1,7 +1,7 @@
 import { next as A } from "@automerge/automerge";
 import { describe, expect, it } from "vitest";
 import { materialize } from "./materialize";
-import { idFrom, plain } from "./model";
+import { idFrom, imm, plain } from "./model";
 import * as ops from "./ops";
 import {
   admin2,
@@ -218,16 +218,12 @@ describe("PRJ-06 PRJ-07 PRJ-08 PRJ-16 PRJ-17 concurrent edits of the tree", () =
     expect(e?.orphan).toBe(true);
   });
 
-  it("past the cap, nodes are ignored in id order and reported", () => {
+  it("past the cap no existing file is dropped; the excess is only reported", () => {
     let doc = newProject();
     for (let i = 0; i < 6; i++) doc = addText(doc, alice, `f${i}.typ`);
     const m = materialize(plain(doc), { maxNodes: 4 });
-    expect(m.entries).toHaveLength(4);
+    expect(m.entries).toHaveLength(7); // main.typ and the six files, all still there
     expect(m.warnings).toContainEqual({ kind: "capped", count: 3 });
-    const kept = Object.keys(plain(doc).nodes ?? {})
-      .sort()
-      .slice(0, 4);
-    expect(m.entries.map((e) => e.id).sort()).toEqual(kept);
   });
 
   it("PRJ-06 a file deleted while it is edited stays a document in the trash", () => {
@@ -475,5 +471,53 @@ describe("importing and duplicating", () => {
     const doc = addText(newProject(), alice, "a.typ");
     expect(ops.uniqueName(view(doc), null, "a.typ")).toBe("a (2).typ");
     expect(ops.uniqueName(view(doc), null, "z.typ")).toBe("z.typ");
+  });
+});
+
+describe("the trash of a folder carries its whole subtree", () => {
+  function tree() {
+    let doc = addDir(newProject(), alice, "d");
+    doc = addText(doc, alice, "f.typ", idOf(doc, "d"));
+    doc = addDir(doc, alice, "sub", idOf(doc, "d"));
+    doc = addText(doc, alice, "g.typ", idOf(doc, "d/sub"));
+    return doc;
+  }
+
+  it("trashing a folder marks every node under it, and the trash lists the folder only", () => {
+    let doc = tree();
+    const d = idOf(doc, "d");
+    doc = apply(doc, ops.remove(doc, view(doc), ctx(alice), [d]));
+    const marked = Object.entries(plain(doc).nodes ?? {}).filter(([, n]) => n.trashed);
+    expect(marked).toHaveLength(4);
+    expect(view(doc).trash.map((t) => t.id)).toEqual([d]);
+    expect(view(doc).trash[0]?.contents).toBe(3);
+    expect(paths(doc)).toEqual(["main.typ"]);
+  });
+
+  it("restoring the folder brings the whole subtree back; purging takes it all", () => {
+    let doc = tree();
+    const d = idOf(doc, "d");
+    doc = apply(doc, ops.remove(doc, view(doc), ctx(alice), [d]));
+    const restored = apply(A.clone(doc), ops.restore(doc, view(doc), ctx(alice), [d]));
+    expect(paths(restored)).toEqual(["d", "d/f.typ", "d/sub", "d/sub/g.typ", "main.typ"]);
+    const purged = apply(doc, ops.purge(doc, view(doc), ctx(alice), [d]));
+    expect(Object.keys(plain(purged).nodes ?? {})).toHaveLength(1);
+  });
+
+  it("a file that is not marked, under a trashed folder, shows at the root, flagged", () => {
+    const doc = tree();
+    const d = idOf(doc, "d");
+    const f = idOf(doc, "d/f.typ");
+    // A change made without knowing the folder was trashed: only the folder carries the mark.
+    const only = A.change(doc, (x) => {
+      const nodes = x.nodes as unknown as Record<string, Record<string, unknown>>;
+      (nodes[d as string] as Record<string, unknown>).trashed = {
+        by: imm("alice"),
+        at: 5,
+      };
+    });
+    const e = view(only).byId.get(f);
+    expect(e?.path).toBe("f.typ");
+    expect(e?.orphan).toBe(true);
   });
 });

@@ -39,6 +39,9 @@ describe("a file that is not text", () => {
     "e.docm",
     "f.sh",
     "noext",
+    "g.doc",
+    "h.xls",
+    "i.ppt",
   ])("never offers to run %s: it is shown in the folder instead", (name) => {
     const open = vi.fn();
     const host = render(BlobView, { name, size: 1, type: get("binary"), openWithSystem: open });

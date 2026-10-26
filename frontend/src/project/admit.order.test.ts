@@ -2,7 +2,7 @@
 import { next as A } from "@automerge/automerge";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { IndexValidator } from "./admit";
+import { HOLD, IndexValidator } from "./admit";
 import * as ops from "./ops";
 import { alice, apply, bob, ctx, type Index, newProject, textUrl, view } from "./testkit";
 
@@ -12,41 +12,47 @@ import { alice, apply, bob, ctx, type Index, newProject, textUrl, view } from ".
  * the same changes in any order end with the same index.
  */
 
-interface Branch {
-  changes: Uint8Array[];
-  /** The hashes of the changes an admin vouches for (the ones the admin made). */
-  admin: Set<string>;
-}
-
 /** The changes `doc` has beyond `base`, oldest first. */
 function since(base: Index, doc: Index): Uint8Array[] {
   return A.getChanges(base, doc);
 }
 
-/** What a replica holding `base` ends with when the changes arrive in `order`. */
+/**
+ * What a replica holding `base` ends with when the changes arrive in `order`: what it admitted,
+ * what it refused and what still waits. A change that waits is offered again after the others.
+ */
 function deliver(
   base: Index,
   changes: readonly Uint8Array[],
   admin: ReadonlySet<string>,
   order: readonly number[],
-): { heads: string[]; refused: string[] } {
+): { admitted: string[]; refused: string[]; held: string[] } {
   const validator = new IndexValidator(() => base);
   let pending = order.map((i) => changes[i] as Uint8Array);
+  const admitted: string[] = [];
   const refused: string[] = [];
   for (let progress = true; progress && pending.length > 0; ) {
     progress = false;
     const rest: Uint8Array[] = [];
     for (const bytes of pending) {
       const why = validator.check(bytes, (h) => admin.has(h));
-      if (why === "dependencies unknown") rest.push(bytes);
+      const hash = A.decodeChange(bytes).hash;
+      if (why === undefined) {
+        progress = true;
+        admitted.push(hash);
+      } else if (why.startsWith(HOLD)) rest.push(bytes);
       else {
         progress = true;
-        if (why !== undefined) refused.push(A.decodeChange(bytes).hash);
+        refused.push(hash);
       }
     }
     pending = rest;
   }
-  return { heads: validator.heads(), refused: refused.sort() };
+  return {
+    admitted: admitted.sort(),
+    refused: refused.sort(),
+    held: pending.map((b) => A.decodeChange(b).hash).sort(),
+  };
 }
 
 const permutations = <T>(xs: readonly T[]): T[][] =>

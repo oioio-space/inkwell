@@ -177,7 +177,7 @@ describe("FM-13 FM-14 FM-16 FM-18 rules of authority", () => {
     const forge = edit((d) => {
       d.nodes[t].trashed = { by: imm("bob"), at: 5 };
     });
-    expect(judge(base, forge, false)).toBe("trashing a file needs an admin");
+    expect(judge(base, forge, false)).toBe("hold: trashing a file needs an admin");
     expect(judge(base, forge, true)).toBeUndefined();
   });
 
@@ -234,7 +234,7 @@ describe("FM-13 FM-14 FM-16 FM-18 rules of authority", () => {
     const forge = edit((d) => {
       d.settings = { deletion: imm("free") };
     });
-    expect(judge(base, forge, false)).toBe("changing the deletion rule needs an admin");
+    expect(judge(base, forge, false)).toBe("hold: changing the deletion rule needs an admin");
     expect(judge(base, forge, true)).toBeUndefined();
   });
 
@@ -275,13 +275,13 @@ describe("the validator keeps in step with the document", () => {
     expect(validator.check(bytes, () => false)).toBeUndefined();
   });
 
-  it("a change whose dependencies are unknown is not admitted", () => {
+  it("a change whose dependencies are unknown waits, it is not refused", () => {
     const base = project();
     const first = A.change(A.clone(base), (d) => A.splice(d, ["text"], 0, 0, "a"));
     const second = A.change(A.clone(first), (d) => A.splice(d, ["text"], 1, 0, "b"));
     const validator = new IndexValidator(() => A.clone(base));
     expect(validator.check(A.getLastLocalChange(second) as Uint8Array, () => false)).toBe(
-      "dependencies unknown",
+      "hold: dependencies unknown",
     );
   });
 
@@ -435,7 +435,7 @@ describe("security audit: whole documents, stamps, trashed folders, caps", () =>
     base = apply(base, ops.setDeletionMode(base, ctx(alice), "free"));
     base = apply(base, ops.remove(base, view(base), ctx(alice), [dir]));
     const into = edit((d) => {
-      d.nodes[f].parent = dir;
+      d.nodes[f].parent = imm(dir);
     });
     expect(judge(base, into)).toBe("a file is not moved into the trash");
   });
