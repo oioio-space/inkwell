@@ -34,13 +34,14 @@ type nearbyEntry struct {
 	info peer.AddrInfo
 }
 
-// startLAN starts the mDNS service of the node. The node then announces its
+// startLAN starts the mDNS service of the node under the given service name
+// ([MDNSService] if empty). The node then announces its
 // identity and addresses on the local network and listens for the others
 // (the library cannot do one without the other). What an announcement gives
 // away is the identity and the addresses of the node and no more; whoever
 // connects still has to be admitted (see [Options.Admit] and [Node.SetOpen]).
-func (n *Node) startLAN() error {
-	svc := mdns.NewMdnsService(n.h, MDNSService, (*lanNotifee)(n))
+func (n *Node) startLAN(service string) error {
+	svc := mdns.NewMdnsService(n.h, cmp.Or(service, MDNSService), (*lanNotifee)(n))
 	if err := svc.Start(); err != nil {
 		_ = svc.Close()
 		return err

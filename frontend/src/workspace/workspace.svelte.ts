@@ -65,6 +65,10 @@ class Workspace {
   myName = $state(safeGet(NAME_KEY) ?? "");
   /** The invitation text to give to the person joining: opaque, copied and pasted as is. */
   invitation = $state("");
+  /** True once someone new connected after the invitation was made: it works once, so it is dead. */
+  invitationUsed = $state(false);
+  /** The people already connected when the invitation was made: none of them used it. */
+  #knownAtInvite = new Set<string>();
   /** Display names of present people, by peer id (from presence). */
   names = $state<Record<string, string>>({});
   error = $state("");
@@ -116,7 +120,7 @@ class Workspace {
       onDrop: (reason) => console.warn("bridge: dropped frame:", reason),
     });
     adapter.on("peer-candidate", ({ peerId }) => {
-      if (!this.peers.includes(peerId)) this.peers = [...this.peers, peerId];
+      this.peerUp(peerId);
     });
     adapter.on("peer-disconnected", ({ peerId }) => {
       this.peers = this.peers.filter((p) => p !== peerId);
@@ -357,10 +361,20 @@ class Workspace {
     safeSet(NAME_KEY, this.myName);
   }
 
+  /** Lists a connected person; a new one after the invitation was made means it was used. */
+  peerUp(peerId: string): void {
+    if (this.invitation && !this.#knownAtInvite.has(peerId)) this.invitationUsed = true;
+    if (!this.peers.includes(peerId)) this.peers = [...this.peers, peerId];
+  }
+
+  /** Makes a fresh invitation, replacing the last one (used or not). */
   async host(): Promise<void> {
     this.error = "";
     try {
+      const known = new Set(this.peers);
       this.invitation = (await Session.Invite("writer")).text;
+      this.#knownAtInvite = known;
+      this.invitationUsed = false;
     } catch (err) {
       this.error = t("error.host", { reason: String(err) });
     }

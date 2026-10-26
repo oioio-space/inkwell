@@ -48,7 +48,9 @@ pnpm          = "12.15.0"
 
 # ── Environment ───────────────────────────────────────────────────────────────
 [env]
-GOFLAGS = "-mod=readonly"
+# INKWELL_GOFLAGS adds flags to every go command run by a task (GOFLAGS has no quoting), e.g. a
+# per-test-binary address-space cap: INKWELL_GOFLAGS=-exec=$PWD/scripts/memcap.sh mise run mutate:go -- ./internal/trust
+GOFLAGS = "-mod=readonly {{ get_env(name='INKWELL_GOFLAGS', default='') }}"
 # Minimum test coverage enforced by `mise run cover:check` / CI (cmd/ excluded).
 COVER_MIN = "85"
 # Wails' own C code calls deprecated X11 helpers; silence that noise (not ours) in every cgo build.
