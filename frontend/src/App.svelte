@@ -1,9 +1,11 @@
 <script lang="ts">
 import { onMount } from "svelte";
+import { Session } from "../bindings/github.com/oioio-space/inkwell/internal/app/index";
 import { markExternal } from "./editor/external";
 import { langOf } from "./editor/format";
 import { t } from "./i18n";
 import { settings } from "./store/settings.svelte";
+import AboutDialog, { type BuildInfo } from "./ui/AboutDialog.svelte";
 import Editor from "./ui/Editor.svelte";
 import ExternalBanner from "./ui/ExternalBanner.svelte";
 import ExternalChangeToast from "./ui/ExternalChangeToast.svelte";
@@ -21,6 +23,8 @@ import { workspace } from "./workspace/workspace.svelte";
 
 let sharing = $state(false);
 let preferences = $state(false);
+let about = $state(false);
+let buildInfo = $state.raw<BuildInfo | undefined>();
 const me = $derived({ id: workspace.myId, name: workspace.myName });
 
 const lang = $derived(langOf(workspace.current));
@@ -89,6 +93,10 @@ $effect(() => {
 
 onMount(() => {
   void workspace.start().then(refresh);
+  // The About dialog just stays without a version if Go does not answer.
+  Session.AppVersion()
+    .then((info) => (buildInfo = info))
+    .catch(() => undefined);
   const timer = setInterval(() => {
     if (!document.hidden) void refresh();
   }, 4000);
@@ -117,6 +125,7 @@ onMount(() => {
       onToggleSidebar={toggleSidebar}
       onToggleToolbar={toggleToolbar}
       onPreferences={() => (preferences = true)}
+      onAbout={() => (about = true)}
     />
     {#if barVisible && session.state && barLanguage}
       <FormatBar
@@ -150,6 +159,7 @@ onMount(() => {
 </div>
 <ShareDialog bind:open={sharing} />
 <Preferences bind:open={preferences} />
+<AboutDialog bind:open={about} info={buildInfo} />
 <ExternalChangeToast />
 
 <style>

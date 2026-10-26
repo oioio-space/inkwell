@@ -1,0 +1,12 @@
+{
+  "schema": 1,
+  "packages": [
+    {"namespace": "preview", "name": "cmarker", "version": "0.1.10", "license": "MIT", "sha256": "7e5d7a0365aa1d32273bddb4511c62e47ab9d63093c905184ba04ca62064aafc"},
+    {"namespace": "preview", "name": "elembic", "version": "1.1.1", "license": "MIT OR Apache-2.0", "sha256": "e3a8ec6b2ad5f43d93ae31dd5742de7256c57719675636179cd818f26ca7bb88"},
+    {"namespace": "preview", "name": "lilaq", "version": "0.6.0", "license": "MIT", "sha256": "41e7839e9e4eaf5c0b5ec93f23d387233bce439fe226326b06c2fa01f2fc251f"},
+    {"namespace": "preview", "name": "tiptoe", "version": "0.4.0", "license": "MIT", "sha256": "1be772c335902a7554b5164a5a4145bfd886867ac1b26478b74d5e4bf9eb6b3f"},
+    {"namespace": "preview", "name": "touying", "version": "0.7.4", "license": "MIT", "sha256": "7ab85405a6327533f530ac70206721032e364c9ca900fabc324952ae0c0b528b"},
+    {"namespace": "preview", "name": "uniwarn", "version": "0.1.1", "license": "MIT", "sha256": "68247432dab1b165c16055411c0f0ec154a63d7fcf5ef0f65906269695d368ea"},
+    {"namespace": "preview", "name": "zero", "version": "0.6.1", "license": "MIT", "sha256": "87ffec0d591551ab5d1465c40582e4441876dd8f70ef88a2d577297f5977768f"}
+  ]
+}
