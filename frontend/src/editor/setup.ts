@@ -54,6 +54,12 @@ export const forLang = (lang: Lang): Extension => [
   Prec.high(keymap.of(formatKeymap(lang))),
 ];
 
+/** A reader or a disconnected person: the text can be read, selected and copied, not typed in. */
+const readOnlyFacets = (on: boolean): Extension =>
+  on
+    ? [EditorState.readOnly.of(true), EditorView.contentAttributes.of({ "aria-readonly": "true" })]
+    : [];
+
 /** The per-launch CSP nonce from index.html, so CodeMirror's <style> elements are allowed. */
 function cspNonce() {
   const nonce = document.querySelector<HTMLMetaElement>('meta[name="csp-nonce"]')?.content;
@@ -85,9 +91,15 @@ export function createEditor(
   me: { id: string; name: string },
   onPeople?: (people: Person[]) => void,
   { lang = "plain", onState, onView, onUndoKey, onRefused, at }: EditorOptions = {},
-): { rename: (name: string) => void; setLang: (lang: Lang) => void; destroy: () => void } {
+): {
+  rename: (name: string) => void;
+  setLang: (lang: Lang) => void;
+  setReadOnly: (on: boolean) => void;
+  destroy: () => void;
+} {
   let view: EditorView | undefined;
   const language = new Compartment();
+  const access = new Compartment();
   const presence = presenceSync(handle, me, () => view, onPeople);
   const initial = handle.doc()?.text ?? "";
   view = new EditorView({
@@ -106,6 +118,7 @@ export function createEditor(
       EditorView.lineWrapping,
       placeholder(t("editor.placeholder")),
       language.of(forLang(lang)),
+      access.of(readOnlyFacets(false)),
       Prec.highest(keymap.of([{ key: "Mod-z", run: () => onUndoKey?.() ?? false }])),
       keymap.of([...defaultKeymap, ...historyKeymap]),
       externalMarks,
@@ -125,6 +138,7 @@ export function createEditor(
   return {
     rename: presence.rename,
     setLang: (next) => view?.dispatch({ effects: language.reconfigure(forLang(next)) }),
+    setReadOnly: (on) => view?.dispatch({ effects: access.reconfigure(readOnlyFacets(on)) }),
     destroy: () => {
       presence.stop();
       view?.destroy();

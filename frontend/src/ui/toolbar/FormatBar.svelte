@@ -3,6 +3,7 @@ import type { EditorState, StateCommand } from "@codemirror/state";
 import { activeBlock, activeMarks, type Lang } from "../../editor/format";
 import { t } from "../../i18n";
 import type { ProjectFile } from "../../store/files";
+import { workspace } from "../../workspace/workspace.svelte";
 import Icon from "../icons/Icon.svelte";
 import MenuButton from "../popover/MenuButton.svelte";
 import BarButton from "./BarButton.svelte";
@@ -53,6 +54,8 @@ function pressed(item: BarItem): boolean | undefined {
 }
 
 const languageName = $derived(t(`lang.${lang}`));
+/** A reader, or a disconnected person: every button would do nothing, so none is offered. */
+const locked = $derived(workspace.access !== undefined);
 </script>
 
 <div
@@ -60,6 +63,8 @@ const languageName = $derived(t(`lang.${lang}`));
   role="toolbar"
   aria-label={t("fmt.bar", { language: languageName })}
   bind:clientWidth={width}
+  inert={locked}
+  class:locked
 >
   <HeadingMenu {lang} {block} {run} />
   <span class="gap"></span>
@@ -117,6 +122,9 @@ const languageName = $derived(t(`lang.${lang}`));
     box-shadow: 0 1px var(--shade);
     position: relative;
     z-index: 2;
+  }
+  .tb.locked {
+    opacity: 0.45;
   }
   .gap {
     width: 10px;

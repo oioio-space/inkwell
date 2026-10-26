@@ -78,7 +78,7 @@ $effect(() => {
       doc.on("change", onChange);
       off = () => doc.off("change", onChange);
       presence = sheetPresence(doc, me, c, (people) => {
-        workspace.names = Object.fromEntries(people.map((x) => [x.peerId, x.name]));
+        workspace.hearNames(people);
         // While someone else has this file open, cells are written in the form that merges safely.
         c.model.safeQuoting = people.length > 0;
       });

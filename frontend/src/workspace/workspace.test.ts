@@ -14,6 +14,18 @@ afterEach(() => {
   workspace.joining = false;
 });
 
+describe("names (UX-S7-3)", () => {
+  it("keeps the name of a person who is no longer present", () => {
+    workspace.hearNames([{ peerId: "paul", name: "Paul" }]);
+    expect(workspace.nameOf("paul")).toBe("Paul");
+    workspace.hearNames([]); // Paul went quiet: the list of people present no longer has him
+    expect(workspace.names.paul).toBeUndefined();
+    expect(workspace.nameOf("paul")).toBe("Paul");
+    expect(workspace.knownName("nobody")).toBeUndefined();
+    expect(workspace.nameOf("nobody")).toBe("Personne nobo");
+  });
+});
+
 describe("invitation", () => {
   it("is marked used when a new person connects, and a fresh one replaces it", async () => {
     const invite = vi

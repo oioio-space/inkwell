@@ -18,6 +18,7 @@ let {
   canToggleToolbar,
   previewOpen,
   onShare,
+  onPeople,
   onToggleSidebar,
   onToggleToolbar,
   onPreferences,
@@ -42,6 +43,8 @@ let {
   /** Whether the preview pane is shown. */
   previewOpen: boolean;
   onShare: () => void;
+  /** Opens the « Personnes » panel. */
+  onPeople: () => void;
   onToggleSidebar: () => void;
   onToggleToolbar: () => void;
   onPreferences: () => void;
@@ -103,7 +106,7 @@ let menuOpen = $state(false);
         <Icon name="present" />
       </button>
     {/if}
-    <PeopleStack {me} {peers} />
+    <PeopleStack {me} {peers} onOpen={onPeople} />
     <button type="button" class="sug" onclick={onShare}>{t("share.button")}</button>
     <MenuButton bind:open={menuOpen} label={t("menu.main")} name={t("menu.main")} align="end" width={300}>
       {#snippet trigger()}<Icon name="menu" />{/snippet}

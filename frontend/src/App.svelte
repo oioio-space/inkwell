@@ -23,6 +23,8 @@ import ExternalChangeToast from "./ui/ExternalChangeToast.svelte";
 import { session } from "./ui/editorSession.svelte";
 import NoticeToast from "./ui/NoticeToast.svelte";
 import ProjectionBanner from "./ui/ProjectionBanner.svelte";
+import AccessBanner from "./ui/people/AccessBanner.svelte";
+import PeopleDialog from "./ui/people/PeopleDialog.svelte";
 import Preferences from "./ui/prefs/Preferences.svelte";
 import ReadOnlyText from "./ui/ReadOnlyText.svelte";
 import SealedBanner from "./ui/SealedBanner.svelte";
@@ -37,6 +39,7 @@ import { barLang } from "./ui/toolbar/spec";
 import { workspace } from "./workspace/workspace.svelte";
 
 let sharing = $state(false);
+let people = $state(false);
 let preferences = $state(false);
 let about = $state(false);
 let buildInfo = $state.raw<BuildInfo | undefined>();
@@ -202,6 +205,7 @@ onMount(() => {
       canToggleToolbar={hasBar}
       {previewOpen}
       onShare={() => (sharing = true)}
+      onPeople={() => (people = true)}
       onToggleSidebar={toggleSidebar}
       onToggleToolbar={toggleToolbar}
       onPreferences={() => (preferences = true)}
@@ -222,6 +226,7 @@ onMount(() => {
       />
     {/if}
     <SealedBanner />
+    <AccessBanner />
     {#if offerTable}
       <div class="viewbar">
         <button
@@ -301,6 +306,7 @@ onMount(() => {
 </div>
 <PresentHost onExit={leftPresentation} />
 <ShareDialog bind:open={sharing} />
+<PeopleDialog bind:open={people} />
 <Preferences bind:open={preferences} />
 <NoticeToast />
 <AboutDialog bind:open={about} info={buildInfo} />
