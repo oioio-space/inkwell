@@ -154,13 +154,6 @@ type Runtime struct {
 // everything; home may be closed once Start returns, and o.Project must stay
 // open until Close.
 func Start(ctx context.Context, home *os.Root, o Options) (*Runtime, error) {
-	count, err := o.Project.RemoveSyncStates()
-	if err != nil {
-		return nil, fmt.Errorf("removing obsolete sync caches: %w", err)
-	}
-	if o.Log != nil {
-		o.Log.Info("removed obsolete sync caches", "directories", count)
-	}
 	dev, err := identity.LoadOrCreate(home)
 	if err != nil {
 		return nil, fmt.Errorf("loading identity: %w", err)

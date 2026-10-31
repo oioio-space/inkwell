@@ -85,10 +85,10 @@ it("6 overrides every storageId and throttles forty re-arrives", () => {
   vi.useFakeTimers();
   const x = setup();
   for (let i = 0; i < 40; i++) x.handshake();
-  expect(x.up).toHaveBeenCalledTimes(4);
+  expect(x.up).toHaveBeenCalledTimes(3);
   for (const [event] of x.up.mock.calls) expect(event.peerMetadata).toEqual({ isEphemeral: true });
   vi.advanceTimersByTime(20000);
-  expect(x.up).toHaveBeenCalledTimes(5);
+  expect(x.up).toHaveBeenCalledTimes(4);
   x.adapter.disconnect();
   vi.useRealTimers();
 });
@@ -187,6 +187,65 @@ it("presentation navigation survives session rewriting and shares the presence r
     vi.advanceTimersByTime(1000);
     send(130, { __present: { t: "hello" } });
     expect(x.messages).toHaveLength(129);
+  } finally {
+    x.adapter.disconnect();
+    vi.useRealTimers();
+  }
+});
+
+it("drops loading-document cursor bursts without cooldown", () => {
+  vi.useFakeTimers();
+  let ready = false;
+  const x = setup(() => ready);
+  try {
+    for (let count = 1; count <= 1000; count++)
+      x.deliver({
+        type: "ephemeral",
+        senderId: "peer",
+        targetId: "me",
+        documentId: "doc",
+        sessionId: "cursor",
+        count,
+        data: encode({ __presence: { type: "heartbeat" } }),
+      });
+    expect(x.down).not.toHaveBeenCalled();
+    expect(x.load).not.toHaveBeenCalled();
+    ready = true;
+    x.deliver({ type: "doc-unavailable", senderId: "peer", targetId: "me", documentId: "doc" });
+    expect(x.messages).toHaveLength(1);
+  } finally {
+    x.adapter.disconnect();
+    vi.useRealTimers();
+  }
+});
+
+it("PeerDown reconnect loops cannot refill admission budgets", () => {
+  vi.useFakeTimers();
+  const x = setup();
+  try {
+    const presence = (count: number) =>
+      x.deliver({
+        type: "ephemeral",
+        senderId: "peer",
+        targetId: "me",
+        documentId: "doc",
+        sessionId: "cursor",
+        count,
+        data: encode({ __presence: { type: "heartbeat" } }),
+      });
+    for (let i = 1; i <= 128; i++) presence(i);
+    for (let i = 0; i < 10; i++) {
+      const frame = encodeEnvelope({
+        kind: Kind.PeerDown,
+        peer: "peer",
+        payload: new Uint8Array(),
+      });
+      x.socket.onmessage?.(new MessageEvent("message", { data: frame.buffer }));
+      x.handshake();
+      presence(129 + i);
+    }
+    expect(x.up).toHaveBeenCalledTimes(3);
+    expect(x.messages).toHaveLength(128);
   } finally {
     x.adapter.disconnect();
     vi.useRealTimers();

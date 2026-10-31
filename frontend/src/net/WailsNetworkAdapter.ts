@@ -1,14 +1,13 @@
 import { next as A } from "@automerge/automerge";
 import {
   type AutomergeUrl,
-  isValidAutomergeUrl,
   type Message,
   NetworkAdapter,
   type PeerId,
   type PeerMetadata,
 } from "@automerge/automerge-repo";
 import { encode } from "cbor-x";
-import { Admission, parsePeerMessage } from "./admission";
+import { Admission, type Handshake, parsePeerMessage } from "./admission";
 import { Coverage } from "./coverage";
 import {
   decodeEnvelope,
@@ -33,14 +32,6 @@ export interface SocketLike {
   onclose: ((ev: Event) => unknown) | null;
   onmessage: ((ev: MessageEvent) => unknown) | null;
 }
-
-/** Repo-level handshake carried inside a Message payload; Go never sees it. */
-type Handshake = {
-  type: "arrive" | "welcome";
-  senderId: PeerId;
-  peerMetadata: PeerMetadata;
-  projectUrl?: AutomergeUrl;
-};
 
 export interface AdapterOptions {
   admitted?: (id: string) => boolean;
@@ -338,7 +329,7 @@ export class WailsNetworkAdapter extends NetworkAdapter {
     }
     if (msg.type === "arrive" || msg.type === "welcome") {
       const hs = msg as Handshake;
-      if (hs.type === "arrive" && this.#announced.has(from) && !this.#admission.arrive(from, hs)) {
+      if (hs.type === "arrive" && !this.#admission.arrive(from, hs)) {
         this.#drop("re-arrive rate");
         this.#schedulePending(from);
         return;
@@ -356,6 +347,7 @@ export class WailsNetworkAdapter extends NetworkAdapter {
       message = rewritten;
     }
     if (message.documentId && !(this.#opts.ready?.(message.documentId) ?? true)) {
+      if (message.type === "ephemeral") return;
       if (!this.#admission.hold(from, message)) {
         this.#drop("hold queue overflow");
         clearTimeout(this.#pendingTimers.get(from));
@@ -433,14 +425,14 @@ export class WailsNetworkAdapter extends NetworkAdapter {
     const hs: Handshake = {
       type,
       senderId: this.peerId,
-      peerMetadata: this.peerMetadata ?? {},
+      peerMetadata: { isEphemeral: true },
       ...(this.#projectUrl ? { projectUrl: this.#projectUrl } : {}),
     };
     this.#sendTo(to, hs);
   }
 
   #announce(peer: PeerId, hs: Handshake): void {
-    if (hs.projectUrl && isValidAutomergeUrl(hs.projectUrl)) {
+    if (hs.projectUrl) {
       this.#projects.set(peer, hs.projectUrl);
       for (const cb of this.#projectListeners) cb(hs.projectUrl, peer);
     }

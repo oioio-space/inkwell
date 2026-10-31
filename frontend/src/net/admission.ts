@@ -8,12 +8,14 @@ export type Handshake = {
   peerMetadata: { isEphemeral: true };
   projectUrl?: import("@automerge/automerge-repo").AutomergeUrl;
 };
+export const MAX_PROJECT_URL_LENGTH = 80;
 type Context = { from: string; me: string; announced: boolean; has: (id: string) => boolean };
 const plain = (v: unknown): v is Record<string, unknown> =>
   v !== null &&
   typeof v === "object" &&
   Object.getPrototypeOf(v) === Object.prototype &&
   !Object.hasOwn(v, "__proto__") &&
+  // cbor-x renames the dangerous key when decoding maps.
   !Object.hasOwn(v, "__proto_");
 const own = (v: Record<string, unknown>, k: string): unknown =>
   Object.hasOwn(v, k) ? v[k] : undefined;
@@ -60,7 +62,9 @@ export function parsePeerMessage(payload: Uint8Array, c: Context): Handshake | M
       const url = own(v, "projectUrl");
       if (
         url !== undefined &&
-        (typeof url !== "string" || url.length > 80 || !isValidAutomergeUrl(url))
+        (typeof url !== "string" ||
+          url.length > MAX_PROJECT_URL_LENGTH ||
+          !isValidAutomergeUrl(url))
       )
         return;
       return {
@@ -96,6 +100,10 @@ export function parsePeerMessage(payload: Uint8Array, c: Context): Handshake | M
     return;
   }
 }
+// Stage 1 bounds scope to 257 documents and hold to 4 messages per peer/document.
+// Use a fixed 4 × 256 = 1024 identity ceiling as well: membership/lifetime ids
+// are not bounded at this boundary. At capacity, reject rather than reset budgets.
+const MAX_PEERS = 1024;
 type Bucket = { tokens: number; at: number };
 type Peer = {
   ephemeral: Bucket;
@@ -106,7 +114,7 @@ type Peer = {
   queue: Message[];
   bytes: number;
 };
-/** Per authenticated peer budgets. Cooldowns intentionally outlive link resets. */
+/** Per authenticated peer budgets and cooldowns outlive link resets. */
 export class Admission {
   #peers = new Map<string, Peer>();
   #cooldowns = new Map<string, { until: number; delay: number }>();
@@ -116,9 +124,28 @@ export class Admission {
     private now: () => number = Date.now,
     private sessionId = "admission",
   ) {}
-  #peer(id: string): Peer {
+  #peer(id: string): Peer | undefined {
     let p = this.#peers.get(id);
     if (!p) {
+      if (this.#peers.size >= MAX_PEERS) {
+        const now = this.now();
+        // Map insertion order is oldest first. Only fully refilled buckets are
+        // equivalent to absent state: recreating one cannot refresh its budget.
+        for (const [oldId, old] of this.#peers) {
+          if (
+            old.queue.length ||
+            old.pending !== undefined ||
+            this.blocked(oldId) ||
+            old.ephemeral.tokens + (now - old.ephemeral.at) * 0.064 < 128 ||
+            old.arrive.tokens + (now - old.arrive.at) * (1 / 20000) < 3
+          )
+            continue;
+          this.#peers.delete(oldId);
+          this.#cooldowns.delete(oldId);
+          break;
+        }
+        if (this.#peers.size >= MAX_PEERS) return;
+      }
       p = {
         ephemeral: { tokens: 128, at: this.now() },
         arrive: { tokens: 3, at: this.now() },
@@ -145,7 +172,10 @@ export class Admission {
     return (this.#cooldowns.get(id)?.until ?? 0) > this.now();
   }
   forget(id: string): void {
-    this.#peers.delete(id);
+    const p = this.#peers.get(id);
+    if (!p) return;
+    p.pending = undefined;
+    this.reset(id);
   }
   clearQueues(): void {
     for (const p of this.#peers.values()) {
@@ -155,6 +185,7 @@ export class Admission {
   }
   ephemeral(id: string, msg: Message): Message | undefined {
     const p = this.#peer(id);
+    if (!p) return;
     const m = msg as Message & { sessionId: string; count: number };
     if (p.session === m.sessionId && m.count <= p.count) return;
     if (!this.#take(p.ephemeral, 128, 0.064)) return;
@@ -163,14 +194,14 @@ export class Admission {
     return { ...msg, sessionId: this.sessionId, count: ++this.#count } as unknown as Message;
   }
   arrive(id: string, hs: unknown): boolean {
-    const p = this.#peer(id);
     if (this.blocked(id)) return false;
+    const p = this.#peer(id);
+    if (!p) return false;
     if (!this.#take(p.arrive, 3, 1 / 20000)) {
       p.pending = hs;
       return false;
     }
     p.pending = undefined;
-    this.reset(id);
     return true;
   }
   pending(id: string): unknown {
@@ -178,12 +209,11 @@ export class Admission {
     if (!p?.pending || this.blocked(id) || !this.#take(p.arrive, 3, 1 / 20000)) return;
     const hs = p.pending;
     p.pending = undefined;
-    this.reset(id);
     return hs;
   }
   reset(id: string): void {
-    const p = this.#peer(id);
-    p.ephemeral = { tokens: 128, at: this.now() };
+    const p = this.#peers.get(id);
+    if (!p) return;
     delete p.session;
     p.count = 0;
     p.queue = [];
@@ -191,8 +221,9 @@ export class Admission {
   }
   hold(id: string, msg: Message): boolean {
     if (this.blocked(id)) return false;
-    const p = this.#peer(id),
-      bytes = msg.data?.byteLength ?? 0;
+    const p = this.#peer(id);
+    if (!p) return false;
+    const bytes = msg.data?.byteLength ?? 0;
     if (
       p.queue.filter((m) => m.documentId === msg.documentId).length >= 4 ||
       (p.queue.length > 0 && p.bytes + bytes > 8 * 1024 * 1024) ||
@@ -201,6 +232,8 @@ export class Admission {
       p.queue = [];
       p.bytes = 0;
       const delay = Math.min(600000, (this.#cooldowns.get(id)?.delay ?? 15000) * 2);
+      // Every cooldown belongs to a retained peer; only eligible peer eviction
+      // removes it, so this map shares the same 1024-entry bound.
       this.#cooldowns.set(id, { until: this.now() + delay, delay });
       return false;
     }
