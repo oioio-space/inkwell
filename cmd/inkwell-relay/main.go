@@ -31,13 +31,19 @@ import (
 )
 
 func main() {
+	os.Exit(exitCode(os.Args[1:], os.Stdout, os.Stderr))
+}
+
+// exitCode runs the relay until it fails or is interrupted and returns the
+// process exit status, printing a failure on stderr.
+func exitCode(args []string, stdout, stderr io.Writer) int {
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
-	err := run(ctx, os.Args[1:], os.Stdout, os.Stderr)
-	stop()
-	if err != nil {
-		fmt.Fprintln(os.Stderr, "inkwell-relay:", err)
-		os.Exit(1)
+	defer stop()
+	if err := run(ctx, args, stdout, stderr); err != nil {
+		_, _ = fmt.Fprintln(stderr, "inkwell-relay:", err)
+		return 1
 	}
+	return 0
 }
 
 // list is a flag that can be given several times, or with comma-separated

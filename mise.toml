@@ -17,6 +17,7 @@ experimental = true
 
 # ── Tools ─────────────────────────────────────────────────────────────────────
 [tools]
+jq            = "1.8.1" # pinned: JSON filtering in deadcode.sh and llm.sh
 go            = "1.27.3"
 gh            = "2.95.0" # pinned: used by the release workflow (supply chain)
 golangci-lint = "2.15.0"
@@ -51,7 +52,7 @@ pnpm          = "12.15.0"
 # INKWELL_GOFLAGS adds flags to every go command run by a task (GOFLAGS has no quoting), e.g. a
 # per-test-binary address-space cap: INKWELL_GOFLAGS=-exec=$PWD/scripts/memcap.sh mise run mutate:go -- ./internal/trust
 GOFLAGS = "-mod=readonly {{ get_env(name='INKWELL_GOFLAGS', default='') }}"
-# Minimum test coverage enforced by `mise run cover:check` / CI (cmd/ excluded).
+# Minimum per-package coverage; only the explicit cover.sh exemptions apply.
 COVER_MIN = "85"
 # Wails' own C code calls deprecated X11 helpers; silence that noise (not ours) in every cgo build.
 CGO_CFLAGS = "-O2 -Wno-deprecated-declarations"
@@ -127,7 +128,7 @@ description = "Run benchmarks and benchstat vs baseline (after optimizing)"
 run = "./scripts/bench.sh compare"
 
 [tasks.cover]
-description = "Test coverage report (coverage.out + total %)"
+description = "Test coverage profile + per-package 85% gate"
 depends = ["sidecar:fetch"]
 run = "./scripts/heavy.sh ./scripts/cover.sh"
 
@@ -188,9 +189,14 @@ run = "./scripts/rtkx.sh grype sbom:sbom.cdx.json --fail-on high"
 description = "Dependency rules: libp2p only in transport/p2p, wormhole only in invite, no Go automerge, no network code in sidecar/typst"
 run = "./scripts/arch-check.sh"
 
+[tasks.deadcode]
+description = "Audit unreachable exported functions (x/tools v0.51.0 pinned in go.mod)"
+depends = ["sidecar:fetch"]
+run = "./scripts/deadcode.sh"
+
 [tasks.ci]
 description = "Everything CI must pass"
-depends = ["arch", "scan:secrets", "scan:code", "scan:sbom", "lint", "lint:sh", "lint:yaml", "lint:actions", "pkg:lint", "test:ci", "cover:check", "fe:check"]
+depends = ["arch", "deadcode", "scan:secrets", "scan:code", "scan:sbom", "lint", "lint:sh", "lint:yaml", "lint:actions", "pkg:lint", "test:ci", "cover:check", "fe:check"]
 
 # ── Versions and packages (ADR 0025) ──────────────────────────────────────────
 # The release is cut by a human: `mise run changelog:next`, `mise run changelog -- --tag vX.Y.Z`,

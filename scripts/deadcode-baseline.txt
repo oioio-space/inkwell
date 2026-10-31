@@ -1,0 +1,19 @@
+# Audit lot 7: existing unreachable exported functions; remove as they are resolved.
+github.com/oioio-space/inkwell/internal/app.StartNode
+github.com/oioio-space/inkwell/internal/bridge.DecodeBlobInfo
+github.com/oioio-space/inkwell/internal/bridge.DecodeFileInfo
+github.com/oioio-space/inkwell/internal/bridge.DecodeFileList
+github.com/oioio-space/inkwell/internal/bridge.DecodeRange
+github.com/oioio-space/inkwell/internal/bridge.DecodeStoreResponse
+github.com/oioio-space/inkwell/internal/bridge.DecodeTreeResult
+github.com/oioio-space/inkwell/internal/bridge.EncodeReferenced
+github.com/oioio-space/inkwell/internal/bridge.EncodeStoreRequest
+github.com/oioio-space/inkwell/internal/bridge.EncodeTree
+github.com/oioio-space/inkwell/internal/bridge.EncodeWriteAt
+github.com/oioio-space/inkwell/internal/project.Convert
+github.com/oioio-space/inkwell/internal/sidecar.EventKind.String
+github.com/oioio-space/inkwell/internal/sidecar.Licenses
+github.com/oioio-space/inkwell/internal/sidecar.NewSupervisor
+github.com/oioio-space/inkwell/internal/sidecar.Supervisor.Restarts
+github.com/oioio-space/inkwell/internal/sidecar.Supervisor.Run
+github.com/oioio-space/inkwell/internal/typst.Attachments
