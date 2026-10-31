@@ -8,6 +8,8 @@ démontré (test, démo enregistrée ou tâche utilisateur chronométrée).
 
 ## État actuel
 
+- **Audit d'architecture (2026-10-31)** : référentiel, constats, décisions D1–D14, état des lots et
+  marche à suivre pour reprendre : [docs/plans/2026-10-31-architecture-audit.md](docs/plans/2026-10-31-architecture-audit.md).
 - **Étape 0 — Fondations** : terminée. Squelette go-starter, gates verts, architecture, ADR,
   feuille de route, outillage IA.
 - **Étape 1 — Noyau** : terminée — critère de sortie démontré en local par un test de bout

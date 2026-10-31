@@ -28,6 +28,9 @@ Rien n'est « fait » sans tests verts et sans une passe `ux-walkthrough` réuss
 | W16 | 2026-10-26 | Revue des tests unitaires : des tests utiles, qui couvrent tous les cas pertinents (pas « pour faire un test ») | mutation testing (gremlins, StrykerJS) + matrices de cas ; docs/quality/ | 🔨 |
 | W17 | 2026-10-26 | Vérifier en début de session ce qui peut être délégué à OpenRouter | hook SessionStart `openrouter-check.sh`, modes `summarize`/`prose`/`check` de llm.sh | ✅ (crédit OpenRouter épuisé au 2026-10-26 → repli Haiku) |
 | W18 | 2026-10-26 | Corriger les plantages mémoire (2 OOM globaux : mutant gremlins 8,7 Go dans `trust.test`, Chrome headless 3,4 Go, 7 agents en parallèle) | `scripts/heavy.sh` (cgroup 8 Go, 2 tâches lourdes max), tâches mise, règle CLAUDE.md | ✅ |
+| W19 | 2026-10-31 | Se placer en architecte : vérifier et réorganiser pour un code performant, conforme aux normes de l'industrie et aux design patterns ; planifier, corriger, continuer | [audit](plans/2026-10-31-architecture-audit.md) | 🔨 |
+| W20 | 2026-10-31 | Rien au hasard ni à l'intuition : chaque constat et chaque décision a une preuve, une règle et une gravité | référentiel de l'audit | ✅ en continu |
+| W21 | 2026-10-31 | Toujours répartir le travail entre les modèles, Claude et Codex, avec modèle et effort explicites | CLAUDE.md (routage) | ✅ en continu |
 | W13 | 2026-10-25 | Noter toutes les demandes pour les reprendre | ce registre | ✅ |
 
 ## Réseau, droits, sécurité
@@ -40,6 +43,8 @@ Rien n'est « fait » sans tests verts et sans une passe `ux-walkthrough` réuss
 | N4 | 2026-10-25 | Zones verrouillées par les admins, que les autres ne peuvent pas modifier | ADR 0022, B3 LCK-* | ⏳ |
 | N5 | 2026-10-25 | Rejoindre un projet = recevoir tous les fichiers et dépendances | ADR 0023, B4 PRJ-*, e2e JOIN-3 (le 3e arrivant reçoit le texte : attestations rejouées avant l'adoption du projet, désormais gardées) | 🔨 Go en correction d'audit ; TS à faire |
 | N6 | 2026-10-25 | Gestion multi-utilisateur partout (y compris le tableur) | B9 SHEET-MU-*, toutes sections | 🔨 |
+| N7 | 2026-10-31 | Modèle de menace byzantin complet : même une personne qui écrit, malveillante, ne doit jamais gêner les autres (lecteurs et pairs non attestés strictement bornés) | audit S1/S1b, ADR 0031 à rédiger | 🔨 |
+| N8 | 2026-10-31 | Fusionner tout de suite l'étape 1 (bornes dures à l'entrée de la webview, validation des messages) ; S1 reste Critique jusqu'à la garde ADR 0030 | audit S1, étape 1 | 🔨 |
 
 ## Interface et édition
 
