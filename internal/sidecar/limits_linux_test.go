@@ -14,3 +14,14 @@ func reportLimits() int {
 	fmt.Printf("as=%d fsize=%d\n", as.Cur, fsize.Cur)
 	return 0
 }
+
+// A malicious child must not be able to raise the inherited ceiling.
+func hardFileLimit() bool {
+	var limit syscall.Rlimit
+	if syscall.Getrlimit(syscall.RLIMIT_FSIZE, &limit) != nil || limit.Cur != limit.Max {
+		return false
+	}
+	limit.Cur++
+	limit.Max++
+	return syscall.Setrlimit(syscall.RLIMIT_FSIZE, &limit) != nil
+}

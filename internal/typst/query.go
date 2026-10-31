@@ -42,7 +42,7 @@ func (e *Engine) Query(ctx context.Context, p Project, main, selector string, op
 
 	runCtx, cancel := e.deadline(ctx)
 	defer cancel()
-	out, err := e.run(runCtx, j, e.args("query", j, o, "--format", "json", "--", filepath.ToSlash(j.main), selector), maxQueryBytes, "")
+	out, err := e.run(runCtx, j, e.args("query", j, o, "--format", "json", "--", filepath.ToSlash(j.main), selector), maxQueryBytes, "", 0, 0)
 	if err != nil {
 		if runCtx.Err() != nil {
 			return nil, ended(runCtx, e.cfg.Timeout)

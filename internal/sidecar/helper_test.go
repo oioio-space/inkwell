@@ -1,6 +1,7 @@
 package sidecar
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -127,6 +128,72 @@ func runHelper(mode string) int {
 		}
 		fmt.Println("wrote-all")
 		return 0
+	case "boundattack", "boundattack-child":
+		if !hardFileLimit() {
+			return 4
+		}
+		// Ignore SIGXFSZ so that both files reach their caps and every attempted
+		// escape runs even after a failed write. Also exercise a forked writer.
+		signal.Ignore(syscall.SIGXFSZ)
+		for range 20 {
+			for _, name := range []string{"a", "b", "undeclared"} {
+				f, err := os.OpenFile(arg+"/"+name, os.O_CREATE|os.O_WRONLY, 0o600)
+				if err == nil {
+					_ = f.Truncate(64 << 20)
+					_, _ = f.Write(make([]byte, 8<<20))
+					_ = f.Close()
+				}
+			}
+			_ = os.Mkdir(arg+"/sub", 0o700)
+			_ = os.Rename(arg+"/a", arg+"/renamed")
+			_ = os.Link(arg+"/a", arg+"/linked")
+			_ = os.Remove(arg + "/a")
+		}
+		if name == "boundattack" {
+			child := helperCmd("boundattack-child:" + arg)
+			if out, err := child.CombinedOutput(); err != nil {
+				fmt.Fprintf(os.Stderr, "descendant: %v: %s", err, out)
+				return 3
+			}
+		}
+		return 0
+	case "sparsemount":
+		for _, name := range []string{"a", "b"} {
+			f, err := os.OpenFile(arg+"/"+name, os.O_WRONLY, 0o600)
+			if err != nil {
+				return 2
+			}
+			err = f.Truncate(8 << 20)
+			_ = f.Close()
+			if err != nil {
+				return 3
+			}
+		}
+		return 0
+	case "fillmount":
+		chunk := make([]byte, 4096)
+		for _, name := range []string{"a", "b"} {
+			f, err := os.OpenFile(arg+"/"+name, os.O_CREATE|os.O_WRONLY, 0o600)
+			if err != nil {
+				return 2
+			}
+			for range 192 {
+				_, err = f.Write(chunk)
+				if dirBytes(arg) > 1<<20 {
+					return 3
+				}
+				if errors.Is(err, syscall.ENOSPC) {
+					_ = f.Close()
+					fmt.Println("ENOSPC")
+					return 0
+				}
+				if err != nil {
+					return 4
+				}
+			}
+			_ = f.Close()
+		}
+		return 5
 	case "flooddir": // write 1 MiB files into arg, forever
 		chunk := make([]byte, 1<<20)
 		for i := 0; ; i++ {

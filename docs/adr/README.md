@@ -9,7 +9,7 @@ connaître la raison — pas pour le reste. Modèle : [`template.md`](template.m
 |---|---|---|
 | [0001](0001-record-decisions-madr.md) | Consigner les décisions en MADR | acceptée |
 | [0002](0002-automerge-in-webview.md) | Automerge dans la webview, Go ne voit que des octets | acceptée, amendée par 0009, 0011 |
-| [0003](0003-wails-v3-cgo-native-builds.md) | Wails v3, cgo assumé, builds natifs par plateforme | acceptée |
+| [0003](0003-wails-v3-cgo-native-builds.md) | Wails v3, cgo assumé, builds natifs par plateforme ; [limites des sorties sidecar](../sidecar-platform-limits.md) | acceptée |
 | [0004](0004-network-stack-libp2p.md) | Pile réseau maison : go-libp2p + wormhole-william derrière `Transport` | acceptée |
 | [0005](0005-trust-model-v1.md) | Modèle de confiance v1 : liste de membres signée | acceptée, amendée par 0017 |
 | [0006](0006-blobs-by-hash-vendored-packages.md) | Binaires adressés par BLAKE3, paquets Typst vendus | acceptée |
@@ -32,3 +32,4 @@ connaître la raison — pas pour le reste. Modèle : [`template.md`](template.m
 | [0028](0028-performance-huge-files-and-wan.md) | Performance : paliers par taille, Automerge dans un Worker, très gros textes lus par Go, fragments et priorités sur le réseau | proposée |
 | [0029](0029-reliability.md) | Fiabilité : invariants de non-perte, pannes injectées (netem, LazyFS, disque plein), endurance, état de synchro honnête | proposée |
 | [0030](0030-decisions-signees-garde-structurelle.md) | Décisions d'admin dans un journal signé hors du CRDT ; garde structurelle de toute modification Automerge avant le `Repo` | proposée |
+| [0033](0033-sidecar-directory-bound.md) | F5 : tmpfs privé borné, vérification des sorties et repli Landlock à parts fixes (limite des fichiers creux documentée) | proposée |

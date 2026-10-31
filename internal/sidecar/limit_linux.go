@@ -16,7 +16,7 @@ const shell = "/bin/sh"
 //
 // ulimit -v counts KiB. ulimit -f counts blocks of 512 bytes, in dash and in
 // bash in sh mode alike (POSIX), so the file size limit is exact; the directory
-// watch of [Spec.MaxDirBytes] bounds the total.
+// bound uses exact byte limits via prlimit instead (see directoryLimits).
 func withLimits(spec Spec) (path string, args []string, err error) {
 	if spec.MemoryLimit == 0 && spec.FileSizeLimit == 0 {
 		return spec.Path, spec.Args, nil

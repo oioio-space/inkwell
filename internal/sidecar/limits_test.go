@@ -5,9 +5,9 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
-	"time"
 )
 
 // FINDING 4: the limits are in force from the first instruction of the
@@ -49,24 +49,29 @@ func TestRunFileSizeLimit(t *testing.T) {
 	}
 }
 
-// FINDING 2: a directory that grows past its bound gets the process killed.
+// The child deliberately ignores failed writes and tries creation, replacement,
+// and file growth repeatedly. No observation by the parent is needed for safety.
 func TestRunDirectoryBound(t *testing.T) {
 	dir := t.TempDir()
-	s := spec("flooddir:" + dir)
+	s := spec("boundattack:" + dir)
 	s.WatchDir, s.MaxDirBytes = dir, 8<<20
-	begin := time.Now()
-	out, err := Run(t.Context(), s)
-	if err != nil {
-		t.Fatal(err)
+	s.WriteFiles = []string{"a", "b"}
+	out, err := runWithoutMount(t.Context(), s)
+	if runtime.GOOS != "linux" {
+		if err == nil {
+			t.Fatal("bounded output must fail closed")
+		}
+		return
 	}
-	if !out.OutputLimit {
-		t.Errorf("OutputLimit = false after the child wrote past the bound (exit %d)", out.ExitCode)
+	if err != nil || out.ExitCode != 0 {
+		t.Fatalf("Run = %v, exit %d, stderr %q", err, out.ExitCode, out.Stderr)
 	}
-	if took := time.Since(begin); took > 10*time.Second {
-		t.Errorf("took %v", took)
+	if got := dirBytes(dir); got != s.MaxDirBytes {
+		t.Fatalf("directory holds %d, want exactly %d", got, s.MaxDirBytes)
 	}
-	if got := dirBytes(dir); got > 128<<20 {
-		t.Errorf("directory holds %d MiB, want the overshoot bounded", got>>20)
+	entries, err := os.ReadDir(dir)
+	if err != nil || len(entries) != 2 {
+		t.Fatalf("entries = %v, %v; want only the two declared files", entries, err)
 	}
 }
 
@@ -74,7 +79,14 @@ func TestRunDirectoryWithinBound(t *testing.T) {
 	dir := t.TempDir()
 	s := spec("writefile:" + filepath.Join(dir, "ok") + ",1")
 	s.WatchDir, s.MaxDirBytes = dir, 8<<20
+	s.WriteFiles = []string{"ok"}
 	out, err := Run(t.Context(), s)
+	if runtime.GOOS != "linux" {
+		if err == nil {
+			t.Fatal("bounded output must fail closed")
+		}
+		return
+	}
 	if err != nil || out.ExitCode != 0 || out.OutputLimit {
 		t.Fatalf("Run = %v exit %d limit %v, want a clean run", err, out.ExitCode, out.OutputLimit)
 	}
