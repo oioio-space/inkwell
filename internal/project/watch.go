@@ -31,59 +31,16 @@ func (p *Project) Watch(ctx context.Context, onExternal func(rel string)) error 
 	}
 	defer func() { _ = w.Close() }()
 
-	dirty := map[string]bool{}
-	// A file found empty is looked at once more before it is reported: a writer
-	// that truncates then writes (os.WriteFile) shows an empty file in between,
-	// and a slow writer can leave it empty for longer than watchDebounce.
-	held := map[string]bool{}
-	timer := time.NewTimer(watchDebounce)
-	timer.Stop()
-	defer timer.Stop()
-
-	// Watch the directories, not the files: editors replace a file by renaming
-	// another over it, which ends a watch on the old inode.
-	root := p.root.Name()
-	dirs := map[string]bool{}  // watched
-	known := map[string]bool{} // owned files looked at
-	// refresh watches the folders of the owned files it did not know, then looks
-	// at them, in that order so that no edit falls between the two. The owned
-	// files grow when a tree is applied (see ApplyTree). A folder that is gone
-	// is left for the next refresh.
-	refresh := func() error {
-		p.mu.Lock()
-		owned := slices.Sorted(maps.Keys(p.m.Files))
-		p.mu.Unlock()
-		var fresh []string
-		newDirs := map[string]bool{}
-		for _, rel := range owned {
-			dir := filepath.Dir(filepath.Join(root, filepath.FromSlash(rel)))
-			if !dirs[dir] {
-				switch err := w.Add(dir); {
-				case err == nil:
-					dirs[dir], newDirs[dir] = true, true
-				case !errors.Is(err, fs.ErrNotExist):
-					return fmt.Errorf("project: watch %s: %w", p.dir, err)
-				}
-			}
-		}
-		for _, rel := range owned {
-			dir := filepath.Dir(filepath.Join(root, filepath.FromSlash(rel)))
-			if (!known[rel] && dirs[dir]) || newDirs[dir] {
-				fresh = append(fresh, rel)
-			}
-			known[rel] = known[rel] || dirs[dir]
-		}
-		for _, rel := range fresh {
-			if p.emptied(rel) {
-				dirty[rel], held[rel] = true, true
-				timer.Reset(watchDebounce)
-				continue
-			}
-			p.check(rel, onExternal)
-		}
-		return nil
+	state := &watcher{
+		p: p, w: w, onExternal: onExternal,
+		root:  p.root.Name(),
+		dirty: map[string]bool{}, held: map[string]bool{},
+		dirs: map[string]bool{}, known: map[string]bool{},
+		timer: time.NewTimer(watchDebounce),
 	}
-	if err := refresh(); err != nil {
+	state.timer.Stop()
+	defer state.timer.Stop()
+	if err := state.refresh(); err != nil {
 		return err
 	}
 	for {
@@ -91,47 +48,110 @@ func (p *Project) Watch(ctx context.Context, onExternal func(rel string)) error 
 		case <-ctx.Done():
 			return nil
 		case <-p.treeChanged:
-			if err := refresh(); err != nil {
+			if err := state.refresh(); err != nil {
 				return err
 			}
 		case ev, ok := <-w.Events:
 			if !ok {
 				return nil
 			}
-			if !ev.Has(fsnotify.Write) && !ev.Has(fsnotify.Create) && !ev.Has(fsnotify.Rename) && !ev.Has(fsnotify.Remove) {
-				continue
-			}
-			rel, err := filepath.Rel(root, ev.Name)
-			if err != nil {
-				continue
-			}
-			rel = filepath.ToSlash(rel)
-			p.mu.Lock()
-			_, isOwned := p.m.Files[rel]
-			p.mu.Unlock()
-			if isOwned {
-				dirty[rel] = true
-				timer.Reset(watchDebounce)
-			}
+			state.onEvent(ev)
 		case err, ok := <-w.Errors:
 			if !ok {
 				return nil
 			}
 			return fmt.Errorf("project: watch %s: %w", p.dir, err)
-		case <-timer.C:
-			for _, rel := range slices.Sorted(maps.Keys(dirty)) {
-				if p.emptied(rel) && !held[rel] {
-					held[rel] = true
-					continue
-				}
-				delete(held, rel)
-				delete(dirty, rel)
-				p.check(rel, onExternal)
-			}
-			if len(dirty) > 0 {
-				timer.Reset(watchDebounce)
+		case <-state.timer.C:
+			state.flush()
+		}
+	}
+}
+
+// watcher keeps directory subscriptions and pending edits on the Watch goroutine.
+type watcher struct {
+	p                        *Project
+	w                        *fsnotify.Watcher
+	onExternal               func(string)
+	root                     string
+	dirty, held, dirs, known map[string]bool
+	timer                    *time.Timer
+}
+
+// refresh picks up newly owned files, retrying folders that were previously absent.
+func (s *watcher) refresh() error {
+	s.p.mu.Lock()
+	owned := slices.Sorted(maps.Keys(s.p.m.Files))
+	s.p.mu.Unlock()
+	var fresh []string
+	newDirs := map[string]bool{}
+	if err := s.watchDirs(owned, newDirs); err != nil {
+		return err
+	}
+	for _, rel := range owned {
+		dir := filepath.Dir(filepath.Join(s.root, filepath.FromSlash(rel)))
+		if (!s.known[rel] && s.dirs[dir]) || newDirs[dir] {
+			fresh = append(fresh, rel)
+		}
+		s.known[rel] = s.known[rel] || s.dirs[dir]
+	}
+	for _, rel := range fresh {
+		if s.p.emptied(rel) {
+			s.dirty[rel], s.held[rel] = true, true
+			s.timer.Reset(watchDebounce)
+			continue
+		}
+		s.p.check(rel, s.onExternal)
+	}
+	return nil
+}
+
+// watchDirs subscribes before refresh checks content, so edits cannot fall between them.
+func (s *watcher) watchDirs(owned []string, newDirs map[string]bool) error {
+	for _, rel := range owned {
+		dir := filepath.Dir(filepath.Join(s.root, filepath.FromSlash(rel)))
+		if !s.dirs[dir] {
+			switch err := s.w.Add(dir); {
+			case err == nil:
+				s.dirs[dir], newDirs[dir] = true, true
+			case !errors.Is(err, fs.ErrNotExist):
+				return fmt.Errorf("project: watch %s: %w", s.p.dir, err)
 			}
 		}
+	}
+	return nil
+}
+
+func (s *watcher) onEvent(ev fsnotify.Event) {
+	if !ev.Has(fsnotify.Write) && !ev.Has(fsnotify.Create) && !ev.Has(fsnotify.Rename) && !ev.Has(fsnotify.Remove) {
+		return
+	}
+	rel, err := filepath.Rel(s.root, ev.Name)
+	if err != nil {
+		return
+	}
+	rel = filepath.ToSlash(rel)
+	s.p.mu.Lock()
+	_, isOwned := s.p.m.Files[rel]
+	s.p.mu.Unlock()
+	if isOwned {
+		s.dirty[rel] = true
+		s.timer.Reset(watchDebounce)
+	}
+}
+
+// flush holds an empty edit for one extra debounce: writers may truncate before writing.
+func (s *watcher) flush() {
+	for _, rel := range slices.Sorted(maps.Keys(s.dirty)) {
+		if s.p.emptied(rel) && !s.held[rel] {
+			s.held[rel] = true
+			continue
+		}
+		delete(s.held, rel)
+		delete(s.dirty, rel)
+		s.p.check(rel, s.onExternal)
+	}
+	if len(s.dirty) > 0 {
+		s.timer.Reset(watchDebounce)
 	}
 }
 

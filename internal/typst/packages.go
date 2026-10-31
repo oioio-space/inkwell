@@ -341,9 +341,7 @@ func readArchive(archive []byte, visit func(name string, dir bool, r io.Reader) 
 	}
 	defer func() { _ = zr.Close() }()
 	tr := tar.NewReader(zr)
-	files, total := 0, int64(0)
-	dirs := map[string]bool{} // names used as directories
-	seen := map[string]bool{} // names of files
+	entries := archiveEntries{dirs: map[string]bool{}, seen: map[string]bool{}}
 	for {
 		h, err := tr.Next()
 		if errors.Is(err, io.EOF) {
@@ -355,51 +353,72 @@ func readArchive(archive []byte, visit func(name string, dir bool, r io.Reader) 
 		if h.Typeflag == tar.TypeXGlobalHeader {
 			continue
 		}
-		if h.Typeflag != tar.TypeReg && h.Typeflag != tar.TypeDir {
-			return fmt.Errorf("%w: %q is not a file or a directory", ErrUnsafeArchive, h.Name)
+		name, err := entries.validate(h)
+		if err != nil {
+			return err
 		}
-		name, ok := cleanMember(h.Name)
-		if !ok {
-			return fmt.Errorf("%w: bad name %q", ErrUnsafeArchive, h.Name)
+		if h.Typeflag == tar.TypeDir && name == "" {
+			continue // the package folder itself
 		}
-		if h.Typeflag == tar.TypeDir {
-			if name == "" {
-				continue // the package folder itself
-			}
-			if seen[name] {
-				return fmt.Errorf("%w: %q is both a file and a directory", ErrUnsafeArchive, name)
-			}
-			markDirs(dirs, name)
-			if err := visit(name, true, nil); err != nil {
-				return err
-			}
-			continue
+		var r io.Reader
+		if h.Typeflag == tar.TypeReg {
+			r = io.LimitReader(tr, h.Size)
 		}
-		files++
-		total += h.Size
-		switch {
-		case name == "":
-			return fmt.Errorf("%w: a file without a name", ErrUnsafeArchive)
-		case files > maxPackageFiles:
-			return fmt.Errorf("%w: more than %d files", ErrUnsafeArchive, maxPackageFiles)
-		case h.Size < 0 || h.Size > maxPackageFile:
-			return fmt.Errorf("%w: %q is larger than %d bytes", ErrUnsafeArchive, name, maxPackageFile)
-		case total > maxPackageTotal:
-			return fmt.Errorf("%w: more than %d bytes in all", ErrUnsafeArchive, maxPackageTotal)
-		case seen[name] || dirs[name]:
-			return fmt.Errorf("%w: %q appears twice", ErrUnsafeArchive, name)
-		}
-		for parent := path.Dir(name); parent != "."; parent = path.Dir(parent) {
-			if seen[parent] {
-				return fmt.Errorf("%w: %q is a file and a directory", ErrUnsafeArchive, parent)
-			}
-		}
-		seen[name] = true
-		markDirs(dirs, path.Dir(name))
-		if err := visit(name, false, io.LimitReader(tr, h.Size)); err != nil {
+		if err := visit(name, h.Typeflag == tar.TypeDir, r); err != nil {
 			return err
 		}
 	}
+}
+
+// archiveEntries accounts for file limits and names already used by an archive.
+type archiveEntries struct {
+	files      int
+	total      int64
+	dirs, seen map[string]bool
+}
+
+// validate checks an entry before the visitor can observe it.
+func (e *archiveEntries) validate(h *tar.Header) (string, error) {
+	if h.Typeflag != tar.TypeReg && h.Typeflag != tar.TypeDir {
+		return "", fmt.Errorf("%w: %q is not a file or a directory", ErrUnsafeArchive, h.Name)
+	}
+	name, ok := cleanMember(h.Name)
+	if !ok {
+		return "", fmt.Errorf("%w: bad name %q", ErrUnsafeArchive, h.Name)
+	}
+	if h.Typeflag == tar.TypeDir {
+		if name == "" {
+			return "", nil // the package folder itself
+		}
+		if e.seen[name] {
+			return "", fmt.Errorf("%w: %q is both a file and a directory", ErrUnsafeArchive, name)
+		}
+		markDirs(e.dirs, name)
+		return name, nil
+	}
+	e.files++
+	e.total += h.Size
+	switch {
+	case name == "":
+		return "", fmt.Errorf("%w: a file without a name", ErrUnsafeArchive)
+	case e.files > maxPackageFiles:
+		return "", fmt.Errorf("%w: more than %d files", ErrUnsafeArchive, maxPackageFiles)
+	case h.Size < 0 || h.Size > maxPackageFile:
+		return "", fmt.Errorf("%w: %q is larger than %d bytes", ErrUnsafeArchive, name, maxPackageFile)
+	case e.total > maxPackageTotal:
+		return "", fmt.Errorf("%w: more than %d bytes in all", ErrUnsafeArchive, maxPackageTotal)
+	case e.seen[name] || e.dirs[name]:
+		return "", fmt.Errorf("%w: %q appears twice", ErrUnsafeArchive, name)
+	}
+	for parent := path.Dir(name); parent != "."; parent = path.Dir(parent) {
+		if e.seen[parent] {
+			return "", fmt.Errorf("%w: %q is a file and a directory", ErrUnsafeArchive, parent)
+		}
+	}
+	e.seen[name] = true
+	markDirs(e.dirs, path.Dir(name))
+
+	return name, nil
 }
 
 // markDirs records name and its parents as directories.

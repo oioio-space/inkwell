@@ -207,20 +207,6 @@ func validPathKey(key []string) error {
 	return project.ValidatePath(strings.Join(key, "/"))
 }
 
-// EncodeStoreRequest serializes r. It returns an error wrapping
-// [ErrMalformed] if r is not a valid request. The webview has its own
-// encoder; this one serves tests and Go clients.
-func EncodeStoreRequest(r StoreRequest) ([]byte, error) {
-	if err := r.validate(); err != nil {
-		return nil, err
-	}
-	b := make([]byte, 0, storeHeaderLen+len(r.Data)+len(r.Key)*(1+store.MaxComponent))
-	b = binary.BigEndian.AppendUint32(b, r.ID)
-	b = append(b, byte(r.Op))
-	b = appendKey(b, r.Key)
-	return append(b, r.Data...), nil
-}
-
 // appendKey appends nkey and the length-prefixed components; the key has
 // been validated, so every length fits a byte.
 func appendKey(b []byte, key []string) []byte {
@@ -293,19 +279,6 @@ func EncodeStoreResponse(r StoreResponse) ([]byte, error) {
 	return append(b, r.Payload...), nil
 }
 
-// DecodeStoreResponse parses a frame from Go. The returned Payload aliases b.
-// The webview has its own decoder; this one serves tests and Go clients.
-func DecodeStoreResponse(b []byte) (StoreResponse, error) {
-	if len(b) < respHeaderLen || len(b) > maxStoreWire {
-		return StoreResponse{}, fmt.Errorf("%w: response of %d bytes", ErrMalformed, len(b))
-	}
-	r := StoreResponse{ID: binary.BigEndian.Uint32(b), Status: StoreStatus(b[4]), Payload: b[respHeaderLen:]}
-	if r.Status > maxStatus {
-		return StoreResponse{}, fmt.Errorf("%w: status %d", ErrMalformed, r.Status)
-	}
-	return r, nil
-}
-
 // EncodeRange serializes entries as the payload of an OpLoadRange response:
 // count u32, then per entry nkey u8 | components | len(data) u32 | data.
 // It returns an error wrapping [ErrMalformed] if the result would not fit a frame.
@@ -328,33 +301,6 @@ func EncodeRange(entries []store.Entry) ([]byte, error) {
 		b = append(b, e.Data...)
 	}
 	return b, nil
-}
-
-// DecodeRange parses the payload built by [EncodeRange]. The returned data
-// alias b. It returns an error wrapping [ErrMalformed] on any inconsistency.
-func DecodeRange(b []byte) ([]store.Entry, error) {
-	if len(b) < 4 {
-		return nil, fmt.Errorf("%w: truncated range", ErrMalformed)
-	}
-	count := binary.BigEndian.Uint32(b)
-	b = b[4:]
-	var out []store.Entry
-	for range count {
-		key, rest, err := parseKey(b, store.MaxDepth)
-		if err != nil || len(rest) < 4 {
-			return nil, fmt.Errorf("%w: bad range entry", ErrMalformed)
-		}
-		n := binary.BigEndian.Uint32(rest)
-		if uint64(n) > uint64(len(rest)-4) { // #nosec G115 -- len(rest) >= 4 is checked just above.
-			return nil, fmt.Errorf("%w: truncated range entry", ErrMalformed)
-		}
-		out = append(out, store.Entry{Key: key, Data: rest[4 : 4+n]})
-		b = rest[4+n:]
-	}
-	if len(b) != 0 {
-		return nil, fmt.Errorf("%w: %d trailing bytes", ErrMalformed, len(b))
-	}
-	return out, nil
 }
 
 // Storage is what the store stream serves: a verified key-value store and
@@ -557,18 +503,6 @@ func (s *StoreServer) writeAt(rel string, data []byte) error {
 		point = nil
 	}
 	return s.st.WriteProjectionAt(rel, text, point)
-}
-
-// EncodeWriteAt builds the Data of an OpWriteProjectionAt request: the length
-// of point as a u16, point, then text. It returns an error wrapping
-// [ErrMalformed] if point does not fit a u16.
-func EncodeWriteAt(point, text []byte) ([]byte, error) {
-	if len(point) > math.MaxUint16 {
-		return nil, fmt.Errorf("%w: sync point of %d bytes", ErrMalformed, len(point))
-	}
-	b := binary.BigEndian.AppendUint16(make([]byte, 0, 2+len(point)+len(text)), uint16(len(point))) // #nosec G115 -- checked above.
-	b = append(b, point...)
-	return append(b, text...), nil
 }
 
 // DecodeWriteAt parses the Data built by [EncodeWriteAt]; the results alias

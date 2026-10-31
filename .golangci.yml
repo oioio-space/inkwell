@@ -70,12 +70,6 @@ linters:
           - gocyclo
           - dupl
       # audit M3, lot 7: existing measured complexity, scoped to named functions.
-      - path: ^internal/project/watch\.go$
-        text: '^(cognitive|cyclomatic) complexity [0-9]+ of func `\(\*Project\)\.Watch` is high \(> 30\)$'
-        linters:
-          - gocognit
-          - gocyclo
-      # audit M3, lot 7: existing measured complexity, scoped to named functions.
       - path: ^internal/trust/fold\.go$
         text: '^cognitive complexity [0-9]+ of func `\(\*sweep\)\.(decide|members)` is high \(> 30\)$'
         linters:
@@ -83,16 +77,6 @@ linters:
       # audit M3, lot 7: existing measured complexity, scoped to named functions.
       - path: ^internal/trust/list\.go$
         text: '^(cognitive|cyclomatic) complexity [0-9]+ of func `\(\*List\)\.capPrev` is high \(> 30\)$'
-        linters:
-          - gocognit
-      # audit M3, lot 7: existing measured complexity, scoped to named functions.
-      - path: ^internal/typst/packages\.go$
-        text: '^(cognitive|cyclomatic) complexity [0-9]+ of func `readArchive` is high \(> 30\)$'
-        linters:
-          - gocognit
-      # audit M3, lot 7: existing measured complexity, scoped to named functions.
-      - path: ^internal/typst/watch\.go$
-        text: '^(cognitive|cyclomatic) complexity [0-9]+ of func `\(\*Engine\)\.Watch` is high \(> 30\)$'
         linters:
           - gocognit
       # audit M3, lot 7: existing measured complexity, scoped to named functions.

@@ -4,7 +4,6 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math"
-	"unicode/utf8"
 
 	"github.com/oioio-space/inkwell/internal/project"
 )
@@ -54,38 +53,6 @@ func EncodeFileList(files []project.File) ([]byte, error) {
 	return b, nil
 }
 
-// DecodeFileList parses the payload built by [EncodeFileList]. It returns an
-// error wrapping [ErrMalformed] on an unknown version or any inconsistency.
-func DecodeFileList(b []byte) ([]project.File, error) {
-	if len(b) < 5 || b[0] != filesVersion {
-		return nil, fmt.Errorf("%w: file list header", ErrMalformed)
-	}
-	count := binary.BigEndian.Uint32(b[1:])
-	b = b[5:]
-	var out []project.File
-	for range count {
-		if len(b) < 12 {
-			return nil, fmt.Errorf("%w: truncated file entry", ErrMalformed)
-		}
-		kind, flags := project.Kind(b[0]), b[1]
-		size := binary.BigEndian.Uint64(b[2:])
-		n := int(binary.BigEndian.Uint16(b[10:]))
-		b = b[12:]
-		if kind > project.KindData || flags&^flagMain != 0 || size > math.MaxInt64 ||
-			n == 0 || len(b) < n || !utf8.Valid(b[:n]) {
-			return nil, fmt.Errorf("%w: bad file entry", ErrMalformed)
-		}
-		out = append(out, project.File{
-			Path: string(b[:n]), Kind: kind, Size: int64(size), Main: flags&flagMain != 0, // #nosec G115 -- checked.
-		})
-		b = b[n:]
-	}
-	if len(b) != 0 {
-		return nil, fmt.Errorf("%w: %d trailing bytes", ErrMalformed, len(b))
-	}
-	return out, nil
-}
-
 // FileInfo says how a text file is stored on disk, for the banner and the
 // conversion offer. The webview itself always sees UTF-8 with LF.
 type FileInfo struct {
@@ -120,16 +87,4 @@ func EncodeFileInfo(i FileInfo) []byte {
 	}
 	b := []byte{filesVersion, flags, byte(i.EOL), byte(len(i.Encoding))} // #nosec G115 -- the encoding names are short.
 	return append(b, i.Encoding...)
-}
-
-// DecodeFileInfo parses the payload built by [EncodeFileInfo]. It returns an
-// error wrapping [ErrMalformed] on an unknown version or any inconsistency.
-func DecodeFileInfo(b []byte) (FileInfo, error) {
-	if len(b) < 4 || b[0] != filesVersion || b[1]&^(flagBOM|flagMixed) != 0 ||
-		project.EOL(b[2]) > project.CR || len(b) != 4+int(b[3]) {
-		return FileInfo{}, fmt.Errorf("%w: file info", ErrMalformed)
-	}
-	return FileInfo{
-		Encoding: string(b[4:]), EOL: project.EOL(b[2]), BOM: b[1]&flagBOM != 0, Mixed: b[1]&flagMixed != 0,
-	}, nil
 }

@@ -7,7 +7,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/oioio-space/inkwell/internal/project"
-	"github.com/oioio-space/inkwell/internal/store"
 )
 
 // TooLargeError is returned by [Storage.PutBlob] for a file over the size
@@ -32,49 +31,6 @@ const (
 
 // hashLen is the length of a blob hash in the tree and the referenced list.
 const hashLen = HashSize
-
-// EncodeTree serializes entries as the data of an OpTree request:
-//
-//	version u8 | count u32 | count × (type u8 | flags u8 | size u64 | len u16 | path | rlen u8 | ref)
-//
-// type is 0 for a folder, 1 for a text file and 2 for a blob; flags bit 0 is
-// Main; ref is the document URL of a text file, the 32 bytes of the hash of a
-// blob, and empty for a folder. It returns an error wrapping [ErrMalformed] if
-// an entry cannot be encoded or the result would not fit a frame. The webview
-// has its own encoder; this one serves tests and Go clients.
-func EncodeTree(entries []project.TreeEntry) ([]byte, error) {
-	size := 1 + 4
-	for _, e := range entries {
-		if err := checkTreeEntry(e); err != nil {
-			return nil, err
-		}
-		size += treeHead + len(e.Path) + 1 + refLen(e)
-	}
-	if size > store.MaxValue {
-		return nil, fmt.Errorf("%w: tree of %d bytes", ErrMalformed, size)
-	}
-	b := make([]byte, 0, size)
-	b = append(b, filesVersion)
-	b = binary.BigEndian.AppendUint32(b, uint32(len(entries))) // #nosec G115 -- bounded by the size check.
-	for _, e := range entries {
-		var flags byte
-		if e.Main {
-			flags |= flagTreeMain
-		}
-		b = append(b, byte(e.Type), flags)
-		b = binary.BigEndian.AppendUint64(b, uint64(e.Size))      // #nosec G115 -- checked ≥ 0.
-		b = binary.BigEndian.AppendUint16(b, uint16(len(e.Path))) // #nosec G115 -- checked ≤ MaxPathLen.
-		b = append(b, e.Path...)
-		b = append(b, byte(refLen(e))) // #nosec G115 -- checked ≤ 255.
-		switch e.Type {
-		case project.NodeText:
-			b = append(b, e.URL...)
-		case project.NodeBlob:
-			b = append(b, e.Hash[:]...)
-		}
-	}
-	return b, nil
-}
 
 func refLen(e project.TreeEntry) int {
 	switch e.Type {
@@ -168,34 +124,6 @@ func EncodeTreeResult(rejected int) []byte {
 	return binary.BigEndian.AppendUint32(b, uint32(min(rejected, math.MaxUint32))) // #nosec G115 -- clamped.
 }
 
-// DecodeTreeResult parses the payload built by [EncodeTreeResult].
-func DecodeTreeResult(b []byte) (rejected int, err error) {
-	if len(b) != 5 || b[0] != filesVersion {
-		return 0, fmt.Errorf("%w: tree result", ErrMalformed)
-	}
-	return int(binary.BigEndian.Uint32(b[1:])), nil
-}
-
-// EncodeReferenced serializes hashes as the data of an OpReferenced request:
-//
-//	version u8 | count u32 | count × hash (32 bytes)
-//
-// The hashes are those the project index refers to, with the trash and the
-// packages: what Go may serve to the members and must keep. It returns an
-// error wrapping [ErrMalformed] if the list would not fit a frame.
-func EncodeReferenced(hashes [][hashLen]byte) ([]byte, error) {
-	if 5+len(hashes)*hashLen > store.MaxValue {
-		return nil, fmt.Errorf("%w: %d referenced hashes", ErrMalformed, len(hashes))
-	}
-	b := make([]byte, 0, 5+len(hashes)*hashLen)
-	b = append(b, filesVersion)
-	b = binary.BigEndian.AppendUint32(b, uint32(len(hashes))) // #nosec G115 -- bounded by the size check.
-	for _, h := range hashes {
-		b = append(b, h[:]...)
-	}
-	return b, nil
-}
-
 // DecodeReferenced parses the data built by [EncodeReferenced].
 func DecodeReferenced(b []byte) ([][hashLen]byte, error) {
 	if len(b) < 5 || b[0] != filesVersion {
@@ -218,17 +146,4 @@ func DecodeReferenced(b []byte) ([][hashLen]byte, error) {
 func EncodeBlobInfo(hash [hashLen]byte, size int64) []byte {
 	b := append([]byte{filesVersion}, hash[:]...)
 	return binary.BigEndian.AppendUint64(b, uint64(max(size, 0))) // #nosec G115 -- clamped ≥ 0.
-}
-
-// DecodeBlobInfo parses the payload built by [EncodeBlobInfo].
-func DecodeBlobInfo(b []byte) (hash [hashLen]byte, size int64, err error) {
-	if len(b) != 1+hashLen+8 || b[0] != filesVersion {
-		return hash, 0, fmt.Errorf("%w: blob info", ErrMalformed)
-	}
-	copy(hash[:], b[1:])
-	n := binary.BigEndian.Uint64(b[1+hashLen:])
-	if n > math.MaxInt64 {
-		return hash, 0, fmt.Errorf("%w: blob size", ErrMalformed)
-	}
-	return hash, int64(n), nil // #nosec G115 -- checked.
 }
