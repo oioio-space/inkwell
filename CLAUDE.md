@@ -97,6 +97,7 @@ Each agent in `.claude/agents/` pins its own tier via frontmatter.
 | Task | Agent | Model / effort |
 |------|-------|----------------|
 | Commit-message draft, long-log triage, i18n translation draft | `scripts/llm.sh` (OpenRouter: DeepSeek V4.1 Flash / Mistral Large 4, ZDR — ADR 0013) | hosted open-weight |
+| Well-scoped implementation, bug investigation, second-opinion / adversarial review (no Claude tokens) | Codex plugin: `codex:codex-rescue` agent, `/codex:rescue`, `/codex:review`, `/codex:adversarial-review` | ChatGPT login by default; `--profile openrouter` once OpenRouter is credited. Claude still reviews before merge. |
 | Run checks (lint/test/ci/scan), trivial format fixes | `quality-runner` | Haiku / low |
 | Docs, PROGRESS.md, commit messages | `scribe` | Haiku / low |
 | Code/file search, fan-out, "where is X" | `explorer` (or built-in `Explore`) | Haiku / low |
@@ -105,7 +106,7 @@ Each agent in `.claude/agents/` pins its own tier via frontmatter.
 | Novel algorithm / architecture design | `architect` | Opus / high |
 | Deep security / vuln audit | `security-auditor` | Opus / high |
 
-**Règle — router modèle ET effort pour chaque tâche** (agent, sous-tâche, skill, revue, audit) : le modèle le moins cher et l'effort le plus bas qui gardent la qualité, choisis explicitement à chaque lancement (`model:` + `effort:`). Défauts : mécanique → Haiku/`llm.sh`, effort low ; code, revue, simplify, UX → Sonnet, medium ; sécurité, architecture → Opus, high (xhigh seulement pour un audit final de release).
+**Règle — router modèle ET effort pour chaque tâche** (agent, sous-tâche, skill, revue, audit) : le modèle le moins cher et l'effort le plus bas qui gardent la qualité, choisis explicitement à chaque lancement (`model:` + `effort:`). Défauts : mécanique → Haiku/`llm.sh`, effort low ; code, revue, simplify, UX → Sonnet, medium ; sécurité, architecture → Opus, high (xhigh seulement pour un audit final de release). **Même règle pour Codex** : chaque appel `/codex:*` ou `codex:codex-rescue` précise `--model` et `--effort` (mécanique → `--model spark`, `--effort low` ; `--profile openrouter-cheap` seulement en CLI `codex` ; code et revue → modèle par défaut, `--effort medium` ; diagnostic difficile → `--effort high`).
 
 **Économie de tokens, pratique :** pousser avec `scripts/qpush.sh` (verdict seul) ; préciser `model:` à chaque agent lancé (Opus seulement pour sécurité/architecture) ; rapports courts ; textes mécaniques via `scripts/llm.sh`.
 
