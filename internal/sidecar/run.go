@@ -9,6 +9,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -36,13 +37,19 @@ type Spec struct {
 	// never inherited: a stray TYPST_* or proxy variable must not change a
 	// compilation.
 	Env []string
-	// WatchDir, with MaxDirBytes, bounds what the child writes: when the files
-	// under WatchDir add up to more than MaxDirBytes the child's process group is
-	// killed and [Output.OutputLimit] is set. The check runs every 20 ms, so the
-	// overshoot is what the child writes in that time; FileSizeLimit caps each
-	// file from the first byte.
+	// WatchDir is an empty, private output directory. Linux prefers a private
+	// user/mount namespace with a size-limited tmpfs and verifies logical sizes
+	// before copying outputs out. If user namespaces/mounts are unavailable,
+	// Landlock and RLIMIT_FSIZE assign fixed per-file shares instead. The caller
+	// must not mutate the directory concurrently. Other OSes reject bounded runs.
+	// See docs/adr/0033-sidecar-directory-bound.md for sparse-file limitations.
 	WatchDir string
-	// MaxDirBytes is the bound for WatchDir; zero disables the watch.
+	// WriteFiles lists unique simple output names to precreate in WatchDir.
+	// File creation, removal, linking and renaming by the child are denied.
+	WriteFiles []string
+	// MaxDirBytes bounds exported logical bytes and private tmpfs allocation.
+	// Zero disables the bound. Sparse logical sizes inside tmpfs are verified
+	// after exit, not bounded in aggregate during execution.
 	MaxDirBytes int64
 	// MemoryLimit caps the child's address space, in bytes, on Linux; zero
 	// means no limit. Other systems ignore it. It is in force from the child's
@@ -73,8 +80,8 @@ type Output struct {
 	Signal int
 	// Truncated is true when stdout or stderr was longer than MaxOutput.
 	Truncated bool
-	// OutputLimit is true when the child was killed for writing more than
-	// [Spec.MaxDirBytes] under [Spec.WatchDir].
+	// OutputLimit reports a directory backstop kill or a failed bounded run
+	// with an output file at its kernel-enforced size cap.
 	OutputLimit bool
 	// Isolated is true when the child ran without network ([Spec.NoNetwork]).
 	Isolated bool
@@ -85,6 +92,10 @@ type Output struct {
 // first, the child's whole process group is killed and Run returns ctx.Err()
 // with what was captured so far.
 func Run(ctx context.Context, spec Spec) (Output, error) {
+	return run(ctx, spec, newDirectoryMount)
+}
+
+func run(ctx context.Context, spec Spec, prepareMount func(Spec) (*directoryMount, error)) (Output, error) {
 	if spec.Path == "" {
 		return Output{}, errors.New("sidecar: run: no executable")
 	}
@@ -97,9 +108,28 @@ func Run(ctx context.Context, spec Spec) (Output, error) {
 	}
 	stdout, stderr := &capped{max: maxOut}, &capped{max: maxOut}
 
+	originalSpec := spec
+	mount, err := prepareMount(spec)
+	if err != nil {
+		return Output{}, err
+	}
+	var prefix []string
+	if mount == nil {
+		spec, prefix, err = directoryLimits(spec)
+	} else {
+		defer mount.close()
+		spec.FileSizeLimit = 0 // exact byte cap is applied inside the mount wrapper
+	}
+	if err != nil {
+		return Output{}, err
+	}
 	path, args, err := withLimits(spec)
 	if err != nil {
 		return Output{}, err
+	}
+	if len(prefix) > 0 {
+		args = slices.Concat(prefix[1:], []string{path}, args)
+		path = prefix[0]
 	}
 	cmd := exec.CommandContext(ctx, path, args...) // #nosec G204 -- Path comes from Store.Resolve, never from user input
 	cmd.Dir = spec.Dir
@@ -112,6 +142,11 @@ func Run(ctx context.Context, spec Spec) (Output, error) {
 	if isolated {
 		isolate(cmd)
 	}
+	if mount != nil {
+		if err := mount.configure(cmd); err != nil {
+			return Output{}, err
+		}
+	}
 	cmd.Cancel = func() error { return signalGroup(cmd.Process.Pid, syscall.SIGKILL) }
 
 	// The parent-death signal follows the thread that forks the child.
@@ -119,6 +154,13 @@ func Run(ctx context.Context, spec Spec) (Output, error) {
 	defer runtime.UnlockOSThread()
 	if err := cmd.Start(); err != nil {
 		return Output{}, fmt.Errorf("sidecar: start %s: %w", spec.Path, err)
+	}
+	if mount != nil {
+		if err := mount.open(cmd.Process.Pid); err != nil {
+			_ = signalGroup(cmd.Process.Pid, syscall.SIGKILL)
+			_ = cmd.Wait()
+			return Output{}, err
+		}
 	}
 	var overflow atomic.Bool
 	stopWatch := watchDir(spec, cmd.Process.Pid, &overflow)
@@ -136,6 +178,16 @@ func Run(ctx context.Context, spec Spec) (Output, error) {
 		Isolated:  isolated,
 
 		OutputLimit: overflow.Load(),
+	}
+	if mount != nil {
+		out.OutputLimit = out.OutputLimit || mount.limitHit(out)
+		if err := mount.export(); err != nil {
+			out.OutputLimit = true
+			return out, err
+		}
+	} else {
+		out.OutputLimit = out.OutputLimit || directoryLimitHit(originalSpec, out)
+		cleanupEmptyOutputs(originalSpec)
 	}
 	if err := ctx.Err(); err != nil && out.ExitCode != 0 {
 		return out, err

@@ -475,13 +475,20 @@ func (e *Engine) args(sub string, j *job, o options, extra ...string) []string {
 // empty, is the folder Typst writes its output to: it is bounded to MaxOutput
 // as it grows (no single file may exceed it either), so that a document that
 // renders gigabytes is stopped long before the compilation ends.
-func (e *Engine) run(ctx context.Context, j *job, args []string, maxOut int, watch string) (sidecar.Output, error) {
+func (e *Engine) run(ctx context.Context, j *job, args []string, maxOut int, watch string, first, last int) (sidecar.Output, error) {
 	spec := sidecar.Spec{
 		Path: j.typst, Args: args, Dir: j.root, Env: e.env(), NoNetwork: e.noNet,
 		MemoryLimit: e.cfg.MemoryLimit, MaxOutput: maxOut,
 	}
 	if watch != "" {
 		spec.WatchDir, spec.MaxDirBytes, spec.FileSizeLimit = watch, e.cfg.MaxOutput, uint64(e.cfg.MaxOutput) // #nosec G115 -- MaxOutput is positive
+		spec.WriteFiles = []string{"out.pdf"}
+		if filepath.Base(watch) == "svg" {
+			spec.WriteFiles = nil
+			for page := first; page <= last; page++ {
+				spec.WriteFiles = append(spec.WriteFiles, fmt.Sprintf("page-%d.svg", page))
+			}
+		}
 	}
 	return sidecar.Run(ctx, spec)
 }
@@ -539,7 +546,7 @@ func (e *Engine) Compile(ctx context.Context, p Project, main string, opts ...Op
 	begin := time.Now()
 	runCtx, cancel := e.deadline(ctx)
 	defer cancel()
-	pdfPath, svgTemplate := filepath.Join(pdfDir, "out.pdf"), filepath.Join(svgDir, "page-{0p}.svg")
+	pdfPath, svgTemplate := filepath.Join(pdfDir, "out.pdf"), filepath.Join(svgDir, "page-{p}.svg")
 	// One page more than allowed, so that a document over the limit is noticed.
 	first := max(o.first, 1)
 	last := first + e.cfg.MaxPages
@@ -554,12 +561,12 @@ func (e *Engine) Compile(ctx context.Context, p Project, main string, opts ...Op
 	)
 	if o.formats&FormatPDF != 0 {
 		wg.Go(func() {
-			pdfOut, pdfErr = e.run(runCtx, j, e.args("compile", j, o, "--format", "pdf", "--", filepath.ToSlash(j.main), pdfPath), maxStderr, pdfDir)
+			pdfOut, pdfErr = e.run(runCtx, j, e.args("compile", j, o, "--format", "pdf", "--", filepath.ToSlash(j.main), pdfPath), maxStderr, pdfDir, 0, 0)
 		})
 	}
 	if o.formats&FormatSVG != 0 {
 		wg.Go(func() {
-			svgO, svgE = e.run(runCtx, j, e.args("compile", j, o, "--format", "svg", "--pages", pages, "--", filepath.ToSlash(j.main), svgTemplate), maxStderr, svgDir)
+			svgO, svgE = e.run(runCtx, j, e.args("compile", j, o, "--format", "svg", "--pages", pages, "--", filepath.ToSlash(j.main), svgTemplate), maxStderr, svgDir, first, last)
 		})
 	}
 	wg.Wait()
@@ -668,7 +675,17 @@ func (e *Engine) readPages(dir string, windowed bool) ([]SVG, error) {
 			names = append(names, ent.Name())
 		}
 	}
-	slices.Sort(names) // the numbers are zero-padded
+	// Output names use unpadded page numbers so the sandbox can declare them
+	// before compilation, independently of the final document page count.
+	slices.SortFunc(names, func(a, b string) int {
+		if len(a) < len(b) {
+			return -1
+		}
+		if len(a) > len(b) {
+			return 1
+		}
+		return strings.Compare(a, b)
+	})
 	if len(names) == 0 && windowed {
 		return nil, nil
 	}

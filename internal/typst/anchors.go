@@ -77,7 +77,7 @@ func (e *Engine) Anchors(ctx context.Context, p Project, main string, opts ...Op
 
 	runCtx, cancel := e.deadline(ctx)
 	defer cancel()
-	out, err := e.run(runCtx, j, e.args("eval", j, o, "--in", filepath.ToSlash(j.main), "--format", "json", "--", anchorsCode), maxAnchorOut, "")
+	out, err := e.run(runCtx, j, e.args("eval", j, o, "--in", filepath.ToSlash(j.main), "--format", "json", "--", anchorsCode), maxAnchorOut, "", 0, 0)
 	if err != nil {
 		if runCtx.Err() != nil {
 			return nil, ended(runCtx, e.cfg.Timeout)
