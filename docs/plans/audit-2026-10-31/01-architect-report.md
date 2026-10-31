@@ -36,6 +36,7 @@ Référentiel, seuils et barème : `docs/plans/2026-10-31-architecture-audit.md`
 ### ARC-C2 · Critique (remède documentaire) · trafic réseau d'invitation hors de `transport.Transport`
 - **Règle** : invariant `CLAUDE.md:45` (« Tout le réseau passe par l'interface `internal/transport.Transport` ») ; ADR 0004, titre et « Décision » (« go-libp2p + wormhole-william, **derrière** … `Transport` »).
 - **Preuve** : `internal/invite/wormhole.go:49` (`w.client().SendText`) et `:78` (`w.client().Receive`) parlent au serveur de rendez-vous et au relais Wormhole directement, derrière le type `invite.Wormhole` et pas derrière `transport.Transport`. Le référentiel se contredit : `docs/architecture.md:76` et `scripts/arch-check.sh:35-38` **autorisent** wormhole-william dans `internal/invite`.
+- **Suivi documentaire (31 octobre 2026)** : [ADR 0032](../../adr/0032-canal-invitation-wormhole.md) proposée, en attente d’acceptation ; invariant proposé reporté dans `CLAUDE.md` et `architecture.md`. Le texte passe par le serveur de rendez-vous, sans relais transit de fichiers (`wormhole.go:35-38`). La frontière du consommateur est `carrier` (`internal/app/invites.go:39-43`) ; `invite.Lobby` sert à l’admission libp2p, pas à Wormhole.
 - **Correctif proposé** : une ADR qui remplace ADR 0004 sur ce point, et la mise à jour de l'invariant. Options :
   - **a (recommandée)** : garder le code tel quel et reformuler. Le trafic **entre pairs** passe par `Transport`. Le canal de rendez-vous d'invitation (un texte unique, PAKE) est isolé dans `internal/invite`, derrière une petite interface du consommateur (`invite.Lobby`, `flow.go:441`).
   - b : envelopper Wormhole comme un `transport.Transport`. Mauvaise forme : Wormhole n'a ni `PeerID` ni flux continu, c'est un échange unique protégé par un code.
@@ -196,6 +197,7 @@ Référentiel, seuils et barème : `docs/plans/2026-10-31-architecture-audit.md`
   - le tableau des paquets omet `internal/transport/mux`, `internal/transport/transporttest` et `internal/version` ;
   - `:51` place la composition dans `cmd/inkwell`, alors que `app.Start` (`node.go:156`) compose ;
   - ADR 0004 décrit `Recv() <-chan Msg` alors que le code a `Recv(ctx) (Event, error)` (`transport.go`).
+- **Suivi documentaire (31 octobre 2026)** : `architecture.md` cite désormais `transport/mux`, `transport/transporttest` et `version`, et attribue la composition à `app.Start`. L’ADR 0004 donne les signatures actuelles, dont `Recv(ctx) (Event, error)`. L’ADR 0032 et les formulations du canal d’invitation restent proposées, en attente d’acceptation. Le contrôle supplémentaire ci-dessous et ARC-M5 restent hors de cette correction documentaire.
 - **Correctif proposé** : mettre la documentation à jour en même temps qu'ARC-C2 et ARC-M5.
 - **Test** : revue ; plus une ligne dans `arch-check.sh` qui compare `go list ./internal/...` aux paquets cités dans `architecture.md`.
 

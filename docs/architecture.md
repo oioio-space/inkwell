@@ -48,9 +48,12 @@ colonne « Étape » dit quand.
 | Paquet | Responsabilité | Étape |
 |---|---|---|
 | `cmd/inkwell` | Point d'entrée : fenêtre Wails ; plus tard sous-commandes sans fenêtre (`export`, `join`) | 1 |
-| `internal/app` | Services Wails liés au frontend (`Session` : inviter, rejoindre une invitation ; démarrage du nœud réseau) ; la composition vit dans `cmd/inkwell` | 1 |
+| `internal/app` | Services Wails liés au frontend (`Session` : inviter, rejoindre une invitation ; démarrage du nœud réseau) ; la composition est assurée par `app.Start` (`internal/app/node.go:156`), appelé depuis `cmd/inkwell` | 1 |
 | `internal/bridge` | Routeur Stream Wails `net` ↔ `Transport` (octets opaques, aucun port local — ADR 0009) ; Stream `store` ↔ stockage et projection (ADR 0020) | 1 |
 | `internal/transport` | Interface `Transport` (`Send`, `Recv`, `Peers`) ; `memnet` (simulation), `p2p` (libp2p, étape 2) | 1 |
+| `internal/transport/mux` | Sépare les canaux de synchronisation et fragmente les grands messages sur des sous-transports bornés | 2 |
+| `internal/transport/transporttest` | Contrat de comportement partagé par les tests des transports | 1 |
+| `internal/version` | Version, révision et date de construction affichées par le programme | 1 |
 | `internal/identity` | Clé Ed25519 par machine, empreinte prononçable (4 mots), groupes d'appareils | 2 |
 | `internal/invite` | Codes Wormhole (PAKE), acceptation d'un pair LAN | 2 |
 | `internal/trust` | Liste de membres signée (CRDT à ordre total Lamport → clé), rôles, révocation, vérification des lots signés | 2 |
@@ -73,7 +76,8 @@ colonne « Étape » dit quand.
 
 - `transport` n'importe rien d'interne. `trust` et `identity` n'importent pas `transport`.
 - `app` est le seul paquet qui connaît tous les autres ; aucun paquet n'importe `app`.
-- libp2p n’est importé que par `internal/transport/p2p`, wormhole-william que par `internal/invite` : `scripts/arch-check.sh` (tâche `arch`, dans `ci`) le vérifie.
+- **Proposition en attente d’acceptation de l’[ADR 0032](adr/0032-canal-invitation-wormhole.md)** : La synchronisation entre pairs passe par `internal/transport.Transport`. Le rendez-vous d'invitation Wormhole est un canal séparé, limité à un texte d'invitation et à `internal/invite` ; l'admission passe ensuite par `invite.Lobby` sur libp2p. Seul `internal/transport/p2p` importe libp2p ; seul `internal/invite` importe wormhole-william.
+  `scripts/arch-check.sh` (tâche `arch`, dans `ci`) vérifie les deux restrictions d’import, pas le contenu ni les délais du canal.
 - Aucun code Go n'importe Automerge : la convergence se teste en TypeScript avec le vrai
   `automerge-repo` ; Go teste sa colle sur `transport/memnet` (ADR 0011).
 - `internal/sidecar` et `internal/typst` n'importent ni `net`, ni `net/http`, ni `crypto/tls` ; seul
@@ -100,8 +104,9 @@ colonne « Étape » dit quand.
   parent (`Pdeathsig` sous Linux ; macOS et Windows : voir le plan de l'étape 3), environnement
   construit de zéro avec des proxys vers un port refusé (Typst n'a pas de mode hors ligne),
   refus d'un projet dont un lien symbolique sort du dossier. Décision : [ADR 0024](adr/0024-sidecars-typst-tinymist.md).
-- Réseau : Noise de bout en bout, chaque lot d'updates signé par son auteur, refusé si
-  l'auteur n'est pas membre en écriture.
+- Synchronisation libp2p : QUIC/TLS ou TCP/Noise de bout en bout, chaque lot d'updates signé par son auteur, refusé si
+  l'auteur n'est pas membre en écriture. Le rendez-vous Wormhole utilise PAKE, selon le
+  modèle de menace distinct proposé dans l’[ADR 0032](adr/0032-canal-invitation-wormhole.md).
 
 ## Plateformes et cgo
 
