@@ -1,11 +1,13 @@
-# Design v4: admission boundary and per-writer document chains (full Byzantine model)
+# Design v5: admission boundary and per-writer document chains (full Byzantine model)
 
-Author: architect (Opus), 2026-10-31. History: v1 → Codex review 1
+Original author: architect (Opus); revision 5: Codex, 2026-10-31. History: v1 → Codex review 1
 ([07-codex-design-review-1.md](07-codex-design-review-1.md)) → v2 → review 2
 ([08-codex-design-review-2.md](08-codex-design-review-2.md)) → v3 → review 3
-([10-codex-design-review-3.md](10-codex-design-review-3.md)) → **v4** (this file). The point-by-point
-answer to review 3 is the table "Changes after review 3" at the end; the user decisions this
-revision still needs are in §11. User decisions N7 (full Byzantine threat model) and N8 (merge
+([10-codex-design-review-3.md](10-codex-design-review-3.md)) → v4 → review 4
+([13-codex-design-review-4.md](13-codex-design-review-4.md)) → **v5** → **revision 6: "Périmètre final"
+(top section; it prevails over v5 where they differ, and the v5 paragraphs it replaces are marked → F-…)**. The point-by-point
+answer to review 4 is "Changes after review 4" below. N9 ratifies D-1..D-6 (§11);
+the ADR itself remains proposed pending acceptance. Historical change tables are not normative; v5 prevails. User decisions N7 (full Byzantine threat model) and N8 (merge
 Stage 1 now; S1 stays Critique until the ADR 0030 guard) are in `docs/exigences.md`. Decision
 record: [ADR 0031](../../adr/0031-frontiere-admission-chaines-documents.md) (proposed).
 
@@ -25,10 +27,295 @@ loss or crash; Majeur: measured impact; Mineur: no measured impact).
 
 Stage map: **Stage 1** merged (`ad2cf86`, `f2f1460`): bounds readers and unattested peers and keeps
 R1/ZZ-2. **Stage 2** = ADR 0030 (structural guard **and** decision journal) plus the additions this
-design requires of it (§7.1: actor-author binding G12, joint causal past, absorbing purge,
+design requires of it (§7.1: actor-author binding G12, joint causal past, post-erasure absorbing certificate,
 acknowledgements, fair scheduler, member-gated peer table). **Stage 3** = this file's Byzantine
 admission (§2-§6). Every Stage 1 residual is mapped to its closing stage in §7.2; what stays open
 after Stage 3 is graded in §9.
+
+## Périmètre final : faisable maintenant / recherche ouverte (revision 6)
+
+Architect (Opus), 2026-10-31: an independent review of v5 (Codex), checked against review 4 ([13](13-codex-design-review-4.md)),
+the sourced survey ([14](14-research-byzantine-solutions.md), rows 1-6), ADR 0030/0031, the
+audit rubric and the merged Stage 1 code. **This section prevails over §1-§11 where they differ**;
+the paragraphs it replaces carry a "→ F-…" marker. "Achievable now" means a known mechanism,
+buildable with the installed libraries under these assumptions: Ed25519/BLAKE3 hold, honest members
+eventually exchange what they hold, and standing admins are trusted (ADR 0017, §1). It is not a claim
+of implementation. User rule (2026-10-31): go as far as is achievable now, and grade the rest.
+
+**Probe, 2026-10-31** (Node 22, automerge 3.5.0 from `frontend/node_modules`, script outside the repo):
+(1) applying a second change with an `(actor, seq)` already held throws
+`duplicate seq 1 found for actor …`, so the split is real and G8 must run before apply;
+(2) `applyChanges(init(), held \ E)` over a filtered change set rebuilds the same state from the same
+set (0.7 ms for the toy case), and the rival branch then applies cleanly, so arbitration by rebuild
+is feasible; (3) `load(bytes, {actor})` then `change` gives that actor at `seq 1` with `author`
+undefined: an actor-only factory works and the `author` field is not needed.
+
+### F.0 Review of v5: kept, corrected, simplified
+
+| ID | v5 text | Verdict | Final contract | Guarantee |
+|---|---|---|---|---|
+| F-C1 | §5.2: ADR 0028 D1 growth cap "not found in `coverage.ts` on `main`" | **wrong** | the cap exists (`frontend/src/net/coverage.ts:311-330`, commit `7972fdd`); keep it and add the history limits of F-C2 | fact |
+| F-C2 | §5.2: ≤ 65,536 ops per job | **refuses honest edits** | `store/chunked.ts:44-64` batches small edits into one change and never splits `remove`: deleting a 2 Mi text is one change of 2 Mi `del` ops. **Local change factory splits every change at ≤ 65,536 ops** (inserts, deletes, batches, every document kind). Guard: one change ≤ 65,536 ops, one job = whole changes ≤ 16 MiB decompressed. Changes in `past(L_d)` (D-6 legacy) are exempt from the op cap and run under the 256 MiB Worker ceiling | ISO 25010 adequacy; same per-job memory bound |
+| F-C3 | §2.4: admitted set has no term for pre-upgrade ids | **gap** | add `∪ {d : legacy/<d> standing}`: existing variants keep their random ids (they cannot match the derived formula); admins are trusted and the journal bounds them (8 192 ops) | removes the "migration covers every variant" hand-wave of §7.3 |
+| F-S1 | §7.1 G12: `author` field, descriptor in `message`, `docNamespace`, two-clone factory, seq=1 check + causal binding | **simplify** | **ChangeSig** (M1): signed tuple, actor derived from (project, key, epoch), each change checked on its own | the Automerge hash commits actor and seq; only the key that derives the actor can sign; probe (3). Rival genesis, re-encoding and relay labelling fail as in v5, with one rule instead of three |
+| F-S2 | §2.2 contribution receipts `inkwell/contribution/v1` | **drop** | adoption is triggered locally by this device's first ChangeSig in a foreign listed document (M2) | no peer verifies a receipt (v5: "No assertion about H follows"); the persisted `adopt` op is the idempotency record |
+| F-S3 | §2.2 L3: `Slot` = prefix variant count + 1; prefix proofs fetched and retained for adoptions | **simplify** | L3: `Position` exact; `1 ≤ Slot ≤ Q(o)` and no earlier op on the chain with that Slot. Adoption checks the embedded e with L1, L4 and issuance-L5 only; no prefix fetch or retention | own ids ≤ distinct slots ≤ Q*; adoptions ≤ 1 per (adopter, author, slot): the bounds in §6 are unchanged |
+| F-S4 | §4 phases 3-4: coordinator, prepare, locks, votes, abort, certificate | **simplify** | **FinalAck finality** (M8): per-device durable commitment after the window, required set fixed by the purge, pure monotone predicate | an honest admin cannot sign a restore after its FinalAck (v5's lock, without an abort path); no coordinator to recover |
+| F-S5 | §7.1, §9: "no deterministic rule without consensus" for self-equivocation | **partly wrong** | true for a *leaderless* rule (Kleppmann 2022 §2.4). Standing admins are already trusted arbiters (ADR 0017), so an admin **arbitration** decision plus a deterministic rebuild (probe 2) is achievable now (M9, ERA's arbiter model, 14 rows 4-5) | turns a permanent split into convergence after one decision; the window stays a residual (F.2-R1) |
+| F-A1 | §5.2: DRR charges the delivering peer only | **improve** | after decoding, guard and apply cost is charged to the ChangeSig author; transfer stays charged to the peer (14 row 3) | an honest relay no longer pays for W's work |
+| F-A2 | §9: "paginated sender protocol" named but not specified | **specify** | **history pages** (M5) | only an activation blocker in v5 |
+| — | §1, Stage 1, §2.1 option (g), §2.3 G11, §2.5, §3, §5.1, §5.3-§5.6, §6, §8 | **kept** | — | review 4 closures stand |
+
+### F.1 Achievable now: mechanism, components, tests, stage
+
+Each test row in the tables names threshold / one past / recovery, per §8.2.
+
+**M1 — ChangeSig: actor bound to a key, every change signed by its author** (14 row 1: SSB feeds,
+Nostr NIP-01; Stage 2).
+- `actor = BLAKE3("inkwell/actor/v2" ‖ ProjectID ‖ key ‖ epoch)[:16]`. `epoch` is a random 16 B value
+  issued and persisted by Go at handle creation (`NewEpoch`). There is one epoch per handle generation,
+  and none is ever reused. A session that writes nothing leaves no actor in the document, and Go prunes
+  unused epochs at startup.
+- `ChangeSig = Ed25519(key, "inkwell/change/v1" ‖ ProjectID ‖ key ‖ epoch ‖ seq:u64 ‖ hash(c))`.
+  On the wire it is 152 B. Go stores ≈ 104 B per change, with key and epoch kept once per actor
+  under `repo/<doc>/sigs/`.
+- Only the local factory's outbound path calls the bridge kind `Sign`. It sends one batch per outgoing
+  sync message, in the slot used today by `#attest` (`WailsNetworkAdapter.ts:277`). No receive or relay
+  path calls it.
+- Go verifies signatures, batched per frame, before forwarding. It sends the verified tuples alongside
+  the frames (kind `Authored`) and never decodes Automerge (ADR 0011). The webview guard decodes the
+  header, recomputes the hash, and checks the actor derivation and the seq.
+- Authorization stays T10: heads attested by current writers (ADR 0018). Authorship is ChangeSig.
+  Both are required.
+- Exceptions: the byte-exact deterministic genesis G (ADR 0030 §3) and `past(L_d)` (D-6).
+- Two ChangeSigs with the same (key, epoch, seq) and different hashes are a ≈ 300 B equivocation proof.
+  Go can check it without Automerge, like Hypercore's two signed roots or a CT split view
+  (RFC 9162 §11.3).
+- Components: `internal/trust` (`ChangeSig` beside `Attestation`, strict `Decode`, `FuzzDecode`,
+  golden vectors shared with TS), `internal/app` (sign, verify, persist, gossip),
+  `internal/bridge` (`Sign`, `Authored`, `NewEpoch`), `frontend/src/net/authorship.ts`, and the actor
+  factory in the automerge-repo patch (`create`, `load`, `clone`, `import`, hydration).
+- Tests: A15 rewritten as follows.
+  - W's seq=1 under H's actor, in both orders → refused.
+  - W re-encodes a change, or forges H's actor and author while H relays and attests it → refused.
+  - Exact G is accepted; a modified G is refused.
+  - Legacy past is accepted; an unsigned descendant is refused.
+  - Run on 3 replicas in every order.
+  - B18: unsigned-change wait queue of 4 per author (the 5th evicts that author's oldest; drains when
+    the tuple arrives). Verification throughput is measured on a 100 000-change join and the budget is
+    set from that measurement.
+
+**M2 — Contribution = accepted signed change; adoption at first local co-edit** (14 row 2; Stage 3).
+- Trigger: this device's first ChangeSig in a document listed by another author.
+- Go persists `adopt(e)` before the change is published. After a crash, the change waits in the local
+  journal and the adoption is retried idempotently.
+- Relays never trigger it, by construction: they never produce a ChangeSig.
+- Tests:
+  - A3.
+  - Relay-only of 1 000 documents → 0 adoptions.
+  - Restart between adoption persistence and publication → one adoption, no lost edit.
+  - B6.
+
+**M3 — Per-writer listing chains, derived ids, G11, causal revocation, quotas on a frontier** (v5
+§2-§3 with F-S3 and F-C3; 14 row 5: causal revocation is achievable, ADR 0017 seniority is kept for
+the admin duel). `internal/listing` (imports `trust` only); `internal/app` composes `listing`, `trust`
+and `policy`. Tests A1, A2, A4-A8, B5-B7. Stage 3.
+
+**M4 — Structural guard G1-G10, per-change/per-job limits, Worker, permits, DRR** (v5 §5.2 with
+F-C1, F-C2 and F-A1; ADR 0030 §4-5; 14 row 3: bounds before decoding, isolation).
+- Locally, `store/chunked.ts` splits deletions and batches at 65,536 ops.
+- `frontend/src/net/guard.ts` and `ancestry.ts` run in a Worker (256 MiB, kill then join before
+  `Released`).
+- A streaming header parser stops at op 65,537 and at 16 MiB decompressed.
+- Tests:
+  - B11-B14.
+  - A 2 Mi-character honest delete lands as ≥ 32 changes and reloads.
+  - A remote 65,537-op change is refused before WASM.
+  - A legacy 2 Mi-op change loads under the Worker ceiling.
+  - ADR 0030 oracle: no exception, save → load passes.
+- Stage 2.
+
+**M5 — History pages for large histories** (F-A2; Stage 2).
+- When a receiver holds no copy of an admitted document, or refuses a sync message over the job bound
+  with a recoverable error, it sends `history-request {doc, haveHeads}`. This is a new adapter type,
+  validated by `Admission`, and only offered to peers that advertise the capability.
+- The sender answers with topologically ordered `history-page` messages from
+  `A.getChanges(A.view(doc, haveHeads ∩ known), doc)`. Each page is whole changes ≤ 16 MiB
+  decompressed (F-C2 guarantees a change fits).
+- The receiver runs each page through the guard, applies it, persists it, then requests the next.
+  Ordinary sync then finds equal heads.
+- Tests:
+  - 200 MiB of history with zero net text growth arrives in pages within the §5.2 peak-RSS formula.
+  - Restart mid-transfer resumes from the persisted heads.
+  - A peer without the capability gets an explicit recoverable error, never a crash.
+- This closes v5 §9 "oversized history sync" once those tests pass.
+
+**M6 — Residency and lifecycle patch** (v5 §5.3, kept). M1's actor factory and M9's rebuild use the
+same suspend/drain/generation machinery. Tests B8, B9, B16. Stage 2.
+
+**M7 — Storage lanes and pagination** (v5 §5.1, kept). `internal/bridge` store stream v2 and
+`GoStorageAdapter.ts`. Tests A10, B10, plus an H-1 probe (save then load > 64 MiB). Closes H-1.
+Stage 2.
+
+**M8 — Purge finality by FinalAck** (F-S4; 14 row 6: ERA finality, Autobase `signedLength`;
+Stage 2).
+- The logical purge stays reversible, as in v5 §4 phases 1-2: ≥ 30 days per generation g, durable,
+  and a clock rollback only delays it.
+- After the window, each admin device whose user has not restored first **persists, then publishes**
+  `FinalAck{d, g, hash(p), MemberFrontier, DecisionFrontier, Sig}`. From then on that device refuses
+  to sign `kept`/`trashed` for (d, g), and the UI says "effacement définitif engagé".
+- Required set R(p) = the admin devices standing in the member fold at `past(Members(p))`. It is fixed
+  by p.
+- **Final(d, g)** holds iff every r ∈ R(p) has a held FinalAck and p is the winning `doc/d` value in
+  the fold over the union of those FinalAcks' decision frontiers. This is a pure function of signed ops
+  and monotone: an ack is never withdrawn and its frontiers are fixed.
+- Once Final holds:
+  - a restore of (d, g) that is not in the past of some FinalAck is ignored everywhere, because a
+    finalised effect is not reverted (ERA);
+  - replay or adoption of d is refused;
+  - each holder writes an erase intent, fences, drains, removes the bytes, then marks done. All of it
+    is crash-resumable.
+- An absent device is removed, then the purge is re-issued: new generation, new window. There is no
+  coordinator, prepare, vote, abort or lock recovery.
+- Components: `internal/policy` (`FinalAck`, ≤ 96 (d, g) entries per op,
+  `.inkwell/policy/final/`), the erase intent in `internal/store`, blob GC in `internal/blob`.
+- Tests (A9 rewritten):
+  - restore on day 29 recovers identical bytes and heads;
+  - a FinalAck before day 30 is refused, also under clock rollback;
+  - after its own FinalAck a device refuses to restore;
+  - a pre-ack restore keeps Final false in every order;
+  - a restore by an admin promoted after p, concurrent with Final, is overridden identically on
+    3 replicas;
+  - crash between intent and removal resumes;
+  - a late save is refused;
+  - an absent admin blocks; removing it and re-issuing unblocks;
+  - blob GC follows Final.
+- B15': ≤ |R(p)| FinalAcks per (d, g); a duplicate is ignored; one naming unheld ops counts once they
+  are held.
+
+**M9 — Equivocation: detection, containment, admin arbitration with deterministic rebuild** (F-S5;
+14 row 4: detection by signed heads, ERA arbiter; Stage 3).
+- **Detection.**
+  - Guard G8 plus the M1 proof.
+  - Go gossips proofs on the trust channel, ≤ 1 per (key, epoch).
+  - On connect, peers exchange their proof sets before repository data, a split-view check after
+    RFC 9162 §11.3.
+- **Containment** (local, monotone):
+  - stop relaying that actor at seq ≥ k;
+  - refuse its not-yet-held changes at seq ≥ k;
+  - the UI names the person and offers removal (ADR 0021).
+- **Arbitration.**
+  - An admin decision `equiv/<actor>/<k> = <hash>` goes in the ADR 0030 journal: D1 standing,
+    D2 ≺-last when contested. The UI suggests the branch that more member devices have built on.
+  - Every replica computes E = changes of that actor at seq ≥ k on a losing branch, plus all their
+    descendants.
+  - It rebuilds `applyChanges(init(), held \ E)` (probe 2) through M6 suspend/drain and a new handle
+    generation with **fresh epochs**, so no honest actor reuses a seq.
+  - E goes to a local quarantine (Go, opaque, D-2 30 days).
+- **Recovery.**
+  - Each losing branch that holds non-W changes is admitted as
+    `RecoveryId = BLAKE3("inkwell/recovery/v1" ‖ d ‖ hash_lose)[:16]`, with G11 anchor `hash_lose`.
+    It is quota-neutral and enters the admitted set by the decision, like `kept`.
+  - At most one per member device per proof, since G8 lets a device hold only one branch.
+- Tests (A16):
+  - W sends c1 to R1 and c2 to R2; H builds on c1, J on c2; the admin picks c1.
+  - On 3 replicas in every order: identical heads, J's changes intact in `RecoveryId`, no exception,
+    and J's next edit uses a new actor.
+  - Contested decisions converge to the same ≺-last choice.
+  - The deciding admin cut concurrently → no data loss.
+  - Re-equivocation inside the recovery branch → its own proof.
+- Leaderless rules compared and rejected:
+  - excluding every branch at seq ≥ k: an early equivocation would evict all honest work built
+    since then;
+  - lowest hash wins: W picks or grinds the winner;
+  - most witnesses wins: colluders vote and the result is non-monotone;
+  - first seen (G8 alone): order-dependent, which is today's split.
+
+**M10 — D-3 detection and host disk floor** (14 row 3, within D-3; Stage 2).
+- Meter: the guard measures decompressed bytes and ops accepted per author per day, and Go persists
+  the counter. Admins are alerted at 256 MiB/day/author through the existing banner, and they suspend
+  (ADR 0021).
+- Floor: when free space on the project volume falls below max(1 GiB, 5 %), Go sends `DiskLow`. The
+  adapter then pauses remote ingest for **every** peer (hold, then reset with a "disk" cooldown).
+  Local edits keep saving into the reserve, and the alert names the top authors. Nothing is deleted
+  and no author is singled out, so this is not a cumulative per-author block (D-3).
+- Tests (B19): at the reserve + 1 B ingest continues; 1 B below it pauses ingest while a local edit
+  saves and reloads; freeing space resumes ingest within one poll; the alert fires at the threshold and
+  not one below it, once per author per day.
+
+**Kept from v5 unchanged:** M11 member-gated peer table and explicit disconnect on removal (§5.6,
+A14, Stage 2); M12 transport fairness, with per-peer reassembly and spill, router queues, credits and
+P = 2 permits (§5.2, B12-B14, Stage 2; `internal/transport/mux` is a hot path, so benchstat applies);
+M13 epochs and one adapter per Repo (§5.4-5.5, A12-A13).
+
+### F.2 Open research: graded residuals and the mitigation we implement
+
+| # | Residual | Grade (rubric) | Mitigation implemented | Why full resolution is not achievable now |
+|---|---|---|---|---|
+| R1 | W equivocates on **its own** `(actor, seq)`: replicas disagree until an admin arbitrates; honest work built on the losing branch leaves the main document (preserved in `RecoveryId`, not lost) | **Critique** (N7 / ADR 0031 determinism, during the window) — needs explicit acceptance | M1 compact proofs; M9 gossip-first detection, containment, alert, removal, admin arbitration, deterministic rebuild, recovery document | Automerge op ids are `(counter, actor)` (probe 1). A leaderless fix needs hash-based op ids (Kleppmann 2022 §3.3), a different CRDT encoding that Automerge 3.5 lacks and that has no demonstrated algorithm (14 row 4). The other route, finality before apply, needs Byzantine reliable broadcast with > 2/3 correct and quorum votes (Kleppmann §2.3.2), which contradicts offline editing (ERA §6) |
+| R2 | Cumulative disk growth through churn, by a standing writer | **Critique** (ASVS 5.0 V2.4.1) — accepted only by D-3 | F-C2 per-change/per-job bounds, M4 fairness, M10 meter + alert + host floor (no corruption; sync pauses instead), admin suspension | **Not a research gap**: a per-member cumulative quota with admin grants (like D-1) closes it (14 row 3); **user decision D-3** excludes it. Only the absolute "never hinder" with unbounded history on finite disk is open |
+| R3 | Erasure at a hostile or never-returning holder | outside the rubric (no rule can be met) | M8 on every honest device; UI: "effacé chez les personnes de confiance ; une copie déjà prise ne se reprend pas" | MLS (RFC 9420) and p2panda access-control exclude a global erasure guarantee (14 row 6) |
+| R4 | Erasure waits indefinitely while a device of R(p) is absent | **Mineur** (delay, no loss) | removal + re-issue (M8) | finality without an availability assumption is impossible (ERA §5-6) |
+| R5 | Concurrent admin decisions (duel): no neutral, immediate offline finality | **Mineur** | ADR 0017/0021 seniority, deterministic; ADR 0030 D2 "contesté" shown in the UI | neutrality + offline finality + no arbiter is open (ERA §6; MLS §14 leaves it to the application) |
+| R6 | A restore by an admin promoted after p, concurrent with Final, is overridden | **Mineur** (documented, consistent with D-4) | UI explains the override | it follows from fixing R(p) without a coordinator (F-S4) |
+| R7 | A standing admin arbitrates or purges maliciously | not a finding (ADR 0017, §1) | attributable signed decision | trusted role by design |
+| R8 | Adoption/attestation storage quadratic in writers; ChangeSig ≈ 104 B per change and join-time verification | **Mineur** until measured (Majeur if a measured budget is exceeded) | B18 measurement; bounded by Q* and §6 | measurement, not research |
+| R9 | Indivisible apply S_max | **Mineur** if B11 passes, otherwise Critique | per-change/per-job bounds, Worker, two-Repo escalation (§5.2) | measurement gate |
+
+Activation blockers (gates, not residuals): pre-upgrade co-edits stay **Critique** until step 3.4,
+and H-1 stays a hypothesis until step 2.1.
+
+### F.3 Final ordered plan (Stages 2 and 3)
+
+**Rules for every step:**
+- Each step merges alone, with its tests.
+- A feature stays behind a flag until its activation step.
+- Every merge runs compatibility tests plus **ZZ-1/ZZ-2**.
+- Heavy tests go through `scripts/heavy.sh`; `mux`, `frame` and `blob` changes are proven with
+  benchstat.
+- ADR 0030 §3 (index genesis) and §7 (B4b migration) follow ADR 0030's own track and are not
+  re-planned here.
+
+| Step | Content | Tests | Effect at merge |
+|---|---|---|---|
+| 2.0 | M11: member-gated router and peer table, explicit disconnect on removal | A14 | active; closes S1-R6 |
+| 2.1 | M7: store protocol v2 (request ids, lanes, Cancel/Released, pages ≤ 1 MiB) | A10 (store side), B10, H-1 probe | active (transparent); closes H-1 |
+| 2.2 | M12: per-peer reassembly + spill, router queues, DRR slices, credits | B13, B14, benchstat | active; S1-R5 measured |
+| 2.3 | `internal/policy` journal (ADR 0030 §2), member ops v2 (`Seen`, `SeenListing` encoding), joint causal past; entries `doc/`, `quota/`, `legacy/`, `equiv/` decoded and folded, inert; `Decide`/`Policy` bridge | fold property in every order, FuzzDecode, golden vectors, A9 (a)(b)(g) | inert |
+| 2.4 | M6: automerge-repo lifecycle + factory patch (generation checks, non-ready teardown, ready-only flush, actor factory **flag off**), suspend/drain residency | contract tests on 2.5.6, B8, B9, B16 | residency active |
+| 2.5a | F-C2: local factory splits changes at 65,536 ops (`store/chunked.ts`, sheet, merge) | 2 Mi delete and paste round-trip | active |
+| 2.5b | M4: guard G1-G10 in a Worker, header parser limits, permits Cancel/Released, webview DRR (keyed by peer) | B11, B12, F-C2 refusal tests, ADR 0030 oracle | active; S1-R1 closed except R1 |
+| 2.5c | M5: history pages (capability-negotiated) | M5 tests | active |
+| 2.6 | M1: ChangeSig, `Sign`/`Authored`/`NewEpoch`, guard check, G/legacy exceptions, G8 proofs + gossip; F-A1 author-charged DRR. Activation needs a `legacy/<d>` for every existing document and the capability on every peer | A15, B18 | flag `authored-changes`, on once preconditions pass |
+| 2.7 | M8: FinalAck, Final fold, erase intent, blob GC | A9 rewritten, B15' | active |
+| 2.8 | M10: per-author meter, alert, disk floor | B19 | active |
+| 3.1 | `internal/listing` (variant/adopt, F-S3, rule E, issuance-L5, SeenListing fold) | A1, A2, A4, A6, A7, B5, B6 | Go only, inert |
+| 3.2 | `List`/`Listed` bridge; Go admitted set (with F-C3) in **shadow** beside `scope.ts`; loader on 2.1 lanes | A10, A13, B7, shadow divergence counter | shadow |
+| 3.3 | Migration: `legacy/<d>` for every pre-upgrade document (D-6), version negotiation, read-only adapter for old peers | mixed-version refusal, legacy admission | inert |
+| 3.4 | **Single activation**: derived-id creation, Go admitted set authoritative, G11, M2 adoption at first co-edit, history rows | A3, A5, A8, ZZ-2 | active |
+| 3.5 | M9: `equiv/` arbitration, rebuild, quarantine, `RecoveryId` | A16 | active |
+| 3.6 | Retire `meta.variants` authority (presentation only); final gate A11 reconnect benchmark; audit S1 closed except accepted R1/R2 | A11, full §8 | done |
+
+### F.4 What the user must decide
+
+1. **Accept ADR 0030** (status `proposed`). Stage 2 is built on it, including the amendments listed in
+   ADR 0031: `Seen`/`SeenListing`, joint past, entries `doc/`, `quota/`, `legacy/`, `equiv/`, FinalAck,
+   ChangeSig in G8, guard limits.
+2. **Accept ADR 0031 revision 6** (status `proposée`). This includes the simplifications F-S1..F-S5
+   and the new admin duty of arbitrating a split (`equiv/`).
+3. **R1**: accept the self-equivocation window as an explicit Critique residual (admin arbitration
+   bounds it). No achievable alternative exists today.
+4. **R2**: either accept cumulative disk growth as a Critique residual under D-3, or amend D-3 to a
+   per-writer cumulative quota with admin grants, the only known closing mechanism.
+
+D-1..D-6 are not reopened.
+
+Sources added in revision 6: [14](14-research-byzantine-solutions.md) (rows 1-6, all sources dated
+there); Kleppmann, [*Making CRDTs Byzantine Fault Tolerant*](https://martin.kleppmann.com/papers/bft-crdt-papoc22.pdf)
+(PaPoC 2022) §2.3.1, §2.3.2, §2.4 and §3.3 (re-read 2026-10-31); ERA v2
+([arXiv 2601.22963](https://arxiv.org/html/2601.22963v2), 2026); RFC 9162 §11.3; Hypercore fork
+proofs ([hypercore-next#76](https://github.com/hypercore-protocol/hypercore-next/issues/76));
+the 2026-10-31 automerge 3.5.0 probe above.
 
 ## Stage 1 — scope as merged (decision N8, 2026-10-31)
 
@@ -198,7 +485,7 @@ writers, not against a standing malicious admin.
 |---|---|---|
 | Peer table gated by membership (§5.6) | which peers may hold any state in the webview | 2 |
 | Admission boundary (adapter) | which messages may make the Repo hold state, and how much, per peer | 1, extended in 2-3 |
-| Coverage T10 (ADR 0018), by author key with G12 | who wrote a change | exists; G12 in 2 |
+| Coverage T10 (ADR 0018), by author key with G12 | authorisation/coverage of changes, not proof of local editing | exists; G12 in 2 |
 | Structural guard G1-G10 (ADR 0030 §4) | whether a change is well formed (no panic, no divergence, save → load) | 2 |
 | Fair scheduler (§5.2, shared with ADR 0030 §5) | whose work runs next, how long, how much memory | 2 |
 | Anchor rule G11 (§2.3) | whether a change belongs to a listed document's lineage | 3 (in the guard module) |
@@ -222,7 +509,7 @@ otherwise. Its cumulative disk cost is a user decision (§11, D-3).
 | (d) actor ↔ key binding, attribute each `meta.variants` op | bounded with add-only schema | impossible | per-actor rules | depends | large |
 | (e) v3: per-writer chain; id = H(project, writer, kind, position, anchor); G11; freeze on equivocation | ≤ Q_w + 1 | impossible | anchored | **lost** (review 3, point 1: the freeze excludes them) | moderate |
 | (f) Codex review 3: id = H(project, writer, kind, position) **without** anchor; anchor signed and imposed by G11 | 1 per slot | impossible | anchored **only without equivocation**: two ops at one slot give one id with two anchors; which one G11 enforces depends on arrival order (the freeze rule retains the first conflicting op each peer saw) → replicas disagree on the document's admissible lineage | lost | moderate |
-| **(g) v4 = (e) + `adopt` ops + `Decisions` frontier (chosen)** | own ≤ Q_w; others may keep ≤ 1 branch per (adopter, slot) | impossible | anchored; one anchor per id, so G11 is a function of the id | **kept**: every co-editor adopts automatically | (e) + one op kind |
+| **(g) v5 = (e) + `adopt` ops + `Decisions` frontier (chosen)** | own ≤ Q*_w; others may keep ≤ 1 branch per (adopter, slot) | impossible | anchored; one anchor per id, so G11 is a function of the id | **kept**: every co-editor adopts automatically | (e) + one op kind |
 
 (f) is simpler only when nobody equivocates; under N7 it makes G11 order-dependent, so the anchor
 stays in the id. (g) adds one op kind and no new mechanism: an adoption is a listing op on the
@@ -238,7 +525,8 @@ Canonical binary, domain `inkwell/listing-op/v1`, Ed25519 over the **full tuple*
 | `Prev` | hash of the author's previous listing op, or empty for position 1 |
 | `Members` | member-list frontier seen by the author, non-empty, ≤ 64, strictly increasing |
 | `Decisions` | decision-journal frontier seen by the author (ADR 0030 §2), ≤ 64, strictly increasing, may be empty (review 3, point 12) |
-| `Position` | 1 + position of `Prev` (the chain is linear and numbered) |
+| `Position` | 1 + position of `Prev` (chain sequence, including adoptions) |
+| `Slot` | variant ordinal = 1 + number of variants in the prefix; absent on adopt |
 | `Kind` | `variant`, `adopt`; `node` reserved for the ADR 0023 index (16-byte `Node` field), **not implemented until needed** |
 | `Anchor` | `variant`: hash of the anchor change of the new document (32 B), §2.3 |
 | `Adopted` | `adopt`: the complete canonical bytes of another author's `variant` op (≤ 4.4 KiB) |
@@ -247,22 +535,32 @@ Canonical binary, domain `inkwell/listing-op/v1`, Ed25519 over the **full tuple*
 Size ≤ 2·64·32 + 200 B ≈ 4.3 KiB for a variant, ≤ 8.7 KiB for an adoption (typical ≈ 300 B /
 600 B). `Decode` strict, golden vectors shared with TS, `FuzzDecode`. **Document id** (never
 transmitted, always recomputed from a `variant` op, embedded or not):
-`DocId = BLAKE3("inkwell/doc/v1" ‖ Project ‖ Author ‖ Kind ‖ Position ‖ Anchor)[:16]`, rendered with
+`DocId = BLAKE3("inkwell/doc/v1" ‖ Project ‖ Author ‖ Kind ‖ Slot ‖ Anchor)[:16]`, rendered with
 automerge-repo's `binaryToDocumentId`. A writer cannot name another writer's document (aliasing),
-a foreign or arbitrary id (provenance), and each (author, position, anchor) yields one id.
+a foreign or arbitrary id (provenance), and each (author, variant slot, anchor) yields one id.
+
+→ F-S3 (no prefix arithmetic). **Separate slot from chain position (v5).** Interleaved adoptions must not move a writer’s
+variant quota into arbitrarily many document positions under equivocation. Hashing chain Position
+(v4) is rejected for that reason; hash the signed variant ordinal Slot instead. An embedded variant
+requires a verified causal prefix proving its ordinal and issuance quota (L2 fetches hashes, L3
+sequence/Slot arithmetic applies), but NOT current standing or absence of equivocation of that
+prefix. No unproved arbitrary Slot is accepted. Adoption deduplicates (foreign author, Slot),
+not chain Position. Freeze still uses chain Position. Retain referenced prefix proof hashes/ops
+under the adopter’s lifetime budget, deduplicated; branches are bounded by adopted slots × bounded
+prefix length. The draft wire format is not activated, so this changes no deployed ids.
 
 **Admission of an op** (pure function of the op and its causal past, like `List.integrate`):
 - L1 canonical, signed, for this project.
 - L2 `Prev`, `Members` and `Decisions` held; otherwise wait in a buffer **per author**, ≤ 4 ops,
   standing writers only; a fifth evicts that author's oldest, never another author's.
-- L3 `Position` exact.
+- L3 `Position` exact; for variant, `Slot` equals its prefix variant count + 1 (canonical u64).
 - L4 the author is a writer, not suspended, in the member list folded on `past(Members)` (ADR 0030 A4
   analogue with role ≥ writer).
 - L5 `variant`: the number of `variant` ops on the chain up to and including o is ≤ `Q(o)` (§2.5).
-  `adopt`: the embedded op e passes L1, L4 and L5 at its own frontiers (L2 waits for them),
+  `adopt`: the embedded op e passes L1, L4 and issuance-L5 at its own frontiers (L2 waits for them),
   `e.Author ≠ o.Author`, `e.Kind = variant`, and no earlier op on o's chain adopts the same
-  `(e.Author, e.Position)`. Chain checks (L2-L3) are **not** applied to e: an adoption must work
-  precisely when e's chain is frozen or dead.
+  `(e.Author, e.Slot)`. Prefix validity/Slot arithmetic is checked for e, but current chain standing is **not**:
+  adoption must work precisely when e’s chain is frozen or dead.
 
 **Equivocation (rule E).** Two admitted ops of the same author with the same `Position` (different
 hashes) form a proof. The author's chain is **frozen** at the smallest such position k: its own ops
@@ -271,26 +569,58 @@ the person, the escalation is removal (as ADR 0030 G8). Retention per author: it
 plus the two ops of the proof; ops arriving later at positions ≥ k are not stored — except as the
 `Adopted` payload of another writer's standing adoption, which carries its own copy.
 
-**Adoption (review 3, point 1).** A frozen or dead `variant` op stops standing, but the documents
-others co-edited must stay visible and recoverable. Rule: **a document stays admitted while some
-standing writer's chain adopts its op.** Go adopts automatically: when the fold makes a document
-d leave the admitted set by freeze (rule E), by revocation (§3) or by losing a quota grant (§2.5),
-and d ∈ `contrib` (the documents this device signed heads for, recorded by `attestHeads`,
-`internal/app/attest.go:124`, persisted in `.inkwell/listing/contrib`, ≤ admitted ids), and this
-device is a standing writer, Go signs `adopt(op(d))` once. Consequences:
-- No retroactive loss of co-edited content: a document H edited stays admitted on every replica
-  once H's adoption arrives; between the proof and the adoption it is shown "à confirmer" by its
-  holders (never deleted, §3), then "conservé par <personne>".
-- The adopter's quota is **untouched** (L5 counts `variant` ops only), so W cannot spend H's quota
-  by making H adopt.
-- A purge still wins: `Admitted` subtracts purged ids (§2.4); adoption never resurrects one.
-- Bounds: an adopter adopts ≤ 1 op per foreign (author, position), so the admitted ids derived from
-  W's signatures are ≤ (k − 1) + (writers − 1) × Q_W, each adoption attributable to its
-  adopter, whose own adoptions are ≤ Σ_{v ≠ adopter} Q_v. A colluder can keep one W branch per W
-  position alive; it signs for it.
-- Alternatives rejected: eager adoption on the first co-edit (no "à confirmer" window, but one op per
-  foreign document edited, ≈ W² ops in a busy project); copying the co-edited document into a new
-  variant of H (spends H's quota — W would hinder H — and breaks the link for other co-editors).
+→ F-S2 (receipts dropped; M2). **Contribution is not coverage (review 4, #1).** `attestHeads` (`attest.go:124`) and
+`WailsNetworkAdapter.ts:277,292` sign heads after relay too. They MUST NOT populate `contrib`.
+A contribution receipt is a separate domain `inkwell/contribution/v1`, signed by the local key,
+containing Project, id, local change hash and covered heads. It is emitted only after a local
+`change`/merge command produces a nonempty delta, G12 verifies that delta's author is this key,
+and its bytes are durably saved. Receive/load/relay/empty change never emits it. Go stores at most
+one receipt per (device, foreign author, slot), with the embedded variant op; no text in it.
+Go remains opaque to Automerge; the trusted local webview checks the delta, Go signs the typed
+receipt. A Byzantine device can claim its own contribution, but only consumes its own bounded
+adoption slots. No assertion about H follows from W's receipt.
+
+→ F-S1 (ChangeSig tuple, M1). **Cryptographic authorship is also distinct from relay coverage.** Every new non-genesis/non-legacy
+change c needs `AuthorshipSig = Ed25519(key, "inkwell/authored-change/v1" || ProjectID || hash(c))`.
+Only the local change factory may request this signature, after G12 self-check; a receive/relay path
+NEVER signs it. Hash(c) commits author, actor, descriptor, deps and operations. Guard requires this
+signature from c.author before accepting c, even if relay coverage T10 is complete. Otherwise H's
+automatic relay attestation would let W label its forged actor/author as H and obtain H's coverage.
+Authorship signatures travel as an opaque sidecar on the trust channel, bounded by the same per-job
+bytes/ops and missing-proof queue (4 per author); Go signs hashes, never decodes Automerge. Persist
+96 bytes (hash+signature) per authored change alongside history; fetch missing proofs before guard,
+not via an unbounded in-memory index. This lifetime disk cost is part of D-3's explicit residual.
+Contribution receipts are first-co-edit bookkeeping, not a substitute for every-change signatures.
+
+
+**Adoption persisted at first real co-edit (chosen in v5).** For a standing writer H's first local
+contribution to a foreign listed document, persist `adopt(e)` and the contribution receipt before
+acknowledging the edit as durable or publishing it. A crash before adoption keeps the edit in a
+local recovery journal; retry the same adoption idempotently on restart, then publish. No dependency
+on detecting disappearance, no temporary admission gap for a completed co-edit. Adoption is automatic
+(N9 D-5), quota-neutral for H, and never overrides a current logical purge or an erasure certificate.
+L5 for an embedded op uses **issuance-L5**: fold the joint causal closure of e's signed frontiers,
+count only grants valid in that closure. This is independent of later cuts. Ordinary variant standing
+still uses current standing grants (§2.5). Thus an op issued with a valid grant can be adopted when
+that grant later dies, while a 33rd op issued before any grant cannot. No reliance on a peer's claim
+that it once admitted e; e's frontiers and grant signatures are the proof. L2 fetches this proof.
+
+**Cost comparison (32 slots/writer, typical adoption 600 B; worst 8.7 KiB).** Deferred adoption
+(v4) stores receipts for every co-edit and detects loss on every fold; eager adoption stores the same
+maximum number of receipts plus one op earlier. If all W writers co-edit every other's 32 variants,
+both eventually require `32 W(W−1)` adoptions: W=10 → 2,880 (1.73 MB typical / 25.1 MB worst);
+W=100 → 316,800 (190 MB / 2.76 GB). With no orphaning deferred stores 0 adoption ops, eager stores
+that maximum; both retain contribution evidence. At 10% co-edit density these op/byte figures divide
+by ten. Eager removes a loss detector, its race and its confirmation window; selected for that
+simplification, without claiming less storage. Copying into H's quota is rejected (penalises H).
+
+**Lifetime bounds.** A grant later withdrawn cannot shrink history already adopted. Define
+`Q*_w = 32 + 32 × distinct causally valid grants ever issued to w` (bounded by the decision-journal
+limit, ADR 0030); current `Q(o)` is not a lifetime adoption bound. One adoption per
+(adopter, foreign author, slot), so ≤ Σ Q*_v per adopter, ≤ `(W−1) Σ Q*_v` globally.
+L5 forbids adopting one's own op, duplicate foreign slots or nesting an adoption. Eager adoptions consume
+chain positions too: retention bound is variant ops + adoption ops + two equivocation-proof ops,
+not Q alone. A colluder can preserve one rival branch per foreign slot, attributable to it.
 
 ### 2.3 Creating a document and the anchor rule (G11)
 
@@ -331,6 +661,7 @@ G11 is a function of c, `before(c)` and the fixed a, so it is identical everywhe
 `∪ {DocId(e) : e adopted by a standing adopt op}`
 `∪ {d : doc/d = kept standing, d derived from a held variant op}`
 `− {d : doc/d = purged standing (§4, logical phase)}`.
+→ F-C3: add `∪ {d : legacy/<d> standing}`, for pre-upgrade ids.
 
 Every term is a function of signed ops and decisions; every peer converges to the same set; no
 writer's ops can remove another writer's id (only its own, and co-edited ones survive by adoption).
@@ -390,56 +721,70 @@ as the purge stood locally, so an annulment arriving later found nothing to rest
   blob GC; disk grows for ever. Rejected.
 - (P-c) Fixed delay (erase T after local standing): a cut held offline longer than T still annuls
   after erasure; T trades safety for space without a bound. Rejected as the safety mechanism, kept
-  as an optional grace period.
+  as the mandatory N9 30-day recovery window, not proof of safety.
 - (P-d) **Two phases, erasure gated by causal stability (chosen)**, the CRDT notion of a causally
   stable operation (Baquero, Almeida, Shoker, *Pure operation-based replicated data types*, 2017):
   an operation is stable when no concurrent operation can still be delivered.
 
 **Semantics (amendments to ADR 0030, required in Stage 2, §7.1).**
-- **Absorbing purge.** For `doc/<id>` and `node/<id>`: a decision whose causal past holds a standing
-  `purged` for that key cannot change it (its entry for that key is ignored). Concurrency keeps
-  D2's order (`kept` > `trashed` > `purged`, refusal wins). So only an operation **concurrent** to the
-  purge p can annul it: a concurrent `kept`/`trashed`, or a concurrent cut of p's author (D1).
+- **Reversible logical purge.** Until physical erasure, sequential `kept`/`trashed` can
+  restore the document; concurrency keeps D2 (`kept` > `trashed` > `purged`). Only an
+  **erasure certificate**, issued after durable removal, is absorbing (D-4), not a purge decision.
 - **Joint causal past.** "o ∈ past(x)" follows links in both DAGs transitively: member ops reach
   decisions through `Seen`, decisions reach member ops through `Members`. A cut whose author's
   promotion op had seen p has seen p. (ADR 0030 D1 currently tests `o ∈ past(Seen(m))` only.)
-- **Acknowledgement.** Each admin device publishes `Ack = {Author, MemberFrontier, DecisionFrontier,
+- → F-S4 (FinalAck, M8). **Acknowledgement.** Each admin device publishes `Ack = {Author, MemberFrontier, DecisionFrontier,
   Sig}`, latest-wins per device, each new one including the previous (monotone), on the trust channel,
   persisted `.inkwell/policy/acks/<key>` (≤ 1 per admin device). An `Ack` counts only once every op
   its frontiers name is held. An honest client emits one when it holds a standing purge it has not
   acknowledged (debounced 60 s).
 
 **Phases (Go, `internal/policy` + store).**
-1. **Logical tombstone** (purge standing locally): the id leaves `Admitted`; the webview drops queued
-   messages, flushes and evicts the handle (ready-only rule, §5.3); bytes stay on disk; store writes
-   under `repo/<id>/` are still accepted (a save already engaged completes; nothing new comes since
-   the id is no longer synced). Annulment → the id returns with its bytes; sync resumes.
-2. **Stable**: p standing **and** every admin device standing in the current member fold has a
-   counted `Ack` whose joint past contains p **and** the optional grace period T_purge has elapsed
-   since p was first held (§11, D-2; 0 is safe).
-3. **Erasure** runs as a store-stream command, so it is ordered after any save already queued:
-   (a) append `id` to the persistent erased list (`.inkwell/purge/erased`, fsync), from which the store
-   refuses every later write under `repo/<id>/`; (b) remove the directory; (c) `SyncDir`. On restart,
-   a listed id whose directory still exists is removed again (idempotent).
+1. Logical purge: remove admission, suspend inputs and drain saves (§5.3); keep bytes and allow
+   restore by standing `kept`/`trashed`. A restored generation cancels all old purge timers/Acks.
+2. Recovery window: **30 days minimum** from durable first receipt of this purge generation on the
+   erasing device, persisted across restart (clock rollback delays, never accelerates). Every standing
+   admin device must acknowledge the current joint frontier including p. An absent/hostile device
+   blocks indefinitely until removed: 30 days is NOT an erasure deadline. A new purge after restore
+   starts a new generation and a new 30-day window.
+3. → F-S4 (FinalAck, M8) replaces phases 3-4. Erasure barrier: simple Acks are insufficient now that sequential restoration is allowed.
+   After the window, an admin coordinates a per-id, per-generation prepare on the trust channel.
+   Each standing admin device durably locks that key, supplies its complete member/decision frontier,
+   and votes only if p still wins; the coordinator fetches/folds their union. Votes bind the same
+   membership frontier, p and union frontier. A changed membership or restore invalidates prepare;
+   repeat, or abort and unlock. A locked honest device queues restore requests and requests abort;
+   it cannot issue unseen `kept` or conflicting prepare votes. The lock also defers
+   member promotions/cuts/suspensions that would change the participating admin set; request abort
+   before issuing such operations. Pre-vote operations are included in the union, so no honest
+   device can leave a hidden concurrent restoration/membership mutation behind its vote. Commit vs abort is durably serialized
+   by the coordinator's store command; a crash requires recovery of that outcome before unlocking.
+   No timeout unlock (would permit a stale commit). Coordinator loss can block erasure, not editing
+   of other documents; recover its durable outcome before unlocking. Do not claim that simply
+   removing a coordinator safely invalidates an unseen commit: administrative recovery requires
+   its outcome or a replacement agreement that fences the old coordinator before any new vote.
+   Restore remains available until the local erase transaction starts; if racing a commit, it either
+   aborts before erasure and restores, or receives the terminal erasure result. A remote UI shows
+   restoration pending until abort is confirmed, never claims success before that confirmation.
+4. At erasure commit, suspend/drain all local work for id, durably write an **erase intent** with the
+   unanimous prepare proof, fence writes, remove directory/blobs and SyncDir. A crash resumes the
+   intent before serving storage; never publishes a certificate while bytes still need erasure.
+   Only after durable removal publish the signed **definitive erasure certificate** (id, generation,
+   purge, prepare proof, eraser, signature). Other holders first drain and erase their own copy;
+   their completion acknowledgements distinguish project-wide erasure from this device's completion.
+   The intent fences late saves locally; the verified certificate prevents replay/adoption from
+   re-admitting this id globally. Certificate validity uses the unanimously bound member frontier; an honest prepare cannot
+   straddle an unacknowledged membership change. Once erasure is certified it is terminal even if
+   a later cut targets the eraser (N9 D-4); ordinary D1 revocation cannot resurrect erased bytes.
 
-**Why stability is sufficient (honest admins).** Any operation that could annul p is concurrent to p.
-(i) An op authored by a standing admin before its `Ack` is in that `Ack`'s frontiers, hence held and
-already folded. (ii) An op authored after its `Ack` has p in its joint past (an honest client's
-frontier only grows). (iii) An op of a device that is not standing stands later only if a standing
-admin re-admits it (let-back, ADR 0021): ops concurrent to that device's suspension or cut stay dead
-after the let-back (ADR 0030 test "décision d'un suspendu (morte même après la reprise)"). (iv) A
-future admin's ops contain its promotion, whose author had acknowledged p, hence p (joint past).
-A **malicious standing** admin can always author a concurrent op; that is admin power (§1) and the
-reason the UI shows "contenu effacé" rather than an empty document if it ever happens.
-
-**Liveness.** An admin device that never comes back blocks erasure (bytes kept, nothing lost); the
-UI lists it and an admin can remove the device, after which stability is recomputed.
-
-**Tombstone and replay.** Decisions are permanent (grow-only journal) and a purge is absorbing, so a
-replayed listing op (same hash) or adoption cannot re-admit the id, and no new op derives the same
-`DocId` (position consumed, anchor fixed). The listing op is kept (it numbers the chain). A purge
-does **not** return the position (lifetime quota); exhaustion is handled by grants (§2.5). The same
-two phases gate ADR 0023 blob GC for `node/<id> = purged`.
+**Alternatives after review 4.** Absorption at logical purge is simpler but violates N9's recovery
+window. Delay plus ordinary Acks permits a restore signed after an Ack to arrive after deletion.
+The selected short per-key prepare barrier closes that race for honest admins; it is not a consensus
+solution against malicious admins (trusted decisions, §1). Its locks and outcome recovery are required
+contracts, not existing implementation. Restoring on **day 29 even when all Acks arrived on day 1**
+must recover identical bytes/heads and cancel erasure after day 30. Restore after certificate is
+refused; an absent admin blocks erasure for years if necessary. The same protocol gates blob GC.
+Listing positions are never returned. Replay cannot undo a certificate. Store fencing is shared with
+§5.3, so a throttled/late save cannot recreate an erased directory.
 
 ## 5. Boundary in Stages 2-3 (deltas over Stage 1)
 
@@ -450,23 +795,37 @@ slots: four ids whose storage load is slow occupy every slot and H's document wa
 
 **Owner of an id**: `project` for the root and the index; `local` for documents this person opens;
 otherwise the author of the standing `variant` op, or, for an adopted document, its adopter.
+For lane bounds W counts lifetime writer-device identities including retired/cancel-pending owners
+(not just current membership), bounded by the 1,024-op member journal. A removed identity’s lane
+retains its one slot until Released; membership churn never resets it. At an epoch switch teardown
+old resources before creating replacement resources, rather than multiplying abandoned epochs.
 
-**Rules.**
-- One FIFO per owner, deduplicated per id, bounded by construction (an owner has ≤ its admitted
-  ids); lanes are served round robin.
-- **≤ 1 load in flight per lane**; no global cap on lanes (a global cap is what colluders saturate).
-  In flight ≤ number of lanes with work ≤ writers + 2.
-- **Effective cancellation of the wait.** The loader races each `find` against a per-load deadline
-  of 10 s and against the epoch/admission/peer re-checks; on any of them it releases the lane. The
-  underlying load cannot be cancelled (`Repo.js:477-480`) but is deduplicated per id
-  (`Repo.js:425-436`), so abandoned loads are ≤ admitted ids, each ≤ one non-ready handle.
-- **Shared storage stream.** Loads still pass the sequential store stream
-  (`GoStorageAdapter.ts:57`); with one load per lane, H's load waits behind at most one request of
-  each other lane, each ≤ one 64 MiB frame read (`storestream.go:293`). Measured by test B10;
-  per-document parallelism in the store stream is the escalation if B10 exceeds its threshold.
-- **Non-ready handles** are no longer capped separately: there is one per admitted id at most
-  (only admitted ids reach the Repo), so ≤ admitted ids × 66 KiB, and each is attributable to its
-  owner's lane.
+**Rules (v5).** One FIFO per owner, deduplicated per id. A load transaction owns a lane
+lease from scheduling through **underlying completion or confirmed cancellation**, not through a
+10 s `Promise.race`. At most one outstanding storage request (queued OR executing) per lane;
+a multipart transaction requests its next page only after its previous response. No second find is
+started while an abandoned transaction still holds the lease. At 10 s detach the UI waiter, mark
+cancel-pending, keep the lease and bounded handle; peer/admission/epoch removal does the same.
+Retry only after `Released(lane, generation)`; late results are discarded by generation checks.
+Ownership is fixed for the lease lifetime; opening an id or changing adopter cannot migrate a stuck
+request into another lane. Distinct abandoned slots ≤ lifetime owners with work, one per lane,
+and the old slot must be released before that owner gets a new one.
+
+**Actual storage scheduling required.** `GoStorageAdapter.ts:57` and Go currently process requests
+sequentially. Add lane/request/generation and Cancel/Released to the opaque store protocol, with
+one queued request per lane; Go dispatches round robin, one bounded page per turn, preserving FIFO
+for saves/loads of the same id and fencing erasure after its saves. Paginate LoadRange (≤ 1 MiB
+response/page) before enabling this path. A blocked syscall must not hold the dispatcher: one worker
+per lane (≤ writers + 2), independent responses demultiplexed by request id, no global worker pool
+that W can occupy. Cancellation removes queued work immediately; an executing uninterruptible I/O
+keeps that lane's lease until completion. H's worker dispatches within one dispatcher turn even if
+all W workers are stuck; no wall-clock disk-latency guarantee is claimed for failed shared hardware.
+
+Alternatives: releasing only the JS wait accumulates requests (rejected); keeping the lease alone
+bounds backlog but the sequential Go worker still blocks H (rejected); lane workers plus bounded
+pages and real request scheduling are selected. Go still sees opaque bytes/keys, no Automerge.
+Non-ready abandoned handles require the lifecycle cancellation contract in §5.3; they are NOT bounded
+by the currently admitted set. B8/B10 include repeated deadlines, admission removal and late resume.
 
 ### 5.2 Fair scheduling, preemption, and bounded queues (review 3, point 14)
 
@@ -492,15 +851,18 @@ turns with short, deadline-bounded holds, (4) bounds and charges the indivisible
 - **Credits.** The webview grants each peer 2 MiB of small-frame credit and returns it as its
   scheduler consumes; Go never sends beyond credit (receiver-driven flow control, as QUIC stream
   credit, RFC 9000 §4).
-- **Large-frame permits: P = 2, global, fair.** A completed large frame needs a permit to be
-  delivered: permits are granted in FIFO order of request, **at most one per peer**, held from the
-  first slice until the webview's `Done(peer, seq)` (sent after the guard and the apply, accepted or
-  refused), PeerDown, or a 30 s deadline (then the frame is dropped and the peer cooled down). A
-  released peer re-enters at the back. Holds cover local delivery and processing only, never
-  network transfer (the frame is already on disk), so a slow or stalled sender cannot sit on a
-  permit. With k colluders, an honest large frame waits ≤ ⌈k / 2⌉ turns of ≤ 30 s (typically the
-  apply time, ≤ S_max below). Codex's case "two peers occupy both permits" is impossible past one
-  turn each.
+- **Large-frame permits: P = 2 live allocations**, FIFO, ≤ 1 per peer. Tokens include project,
+  epoch and unique generation. States: free → delivering/processing → cancelling → released.
+  `Done` is accepted only after guard/apply ends and buffers are freed. PeerDown, 30 s expiry,
+  admission removal and epoch change send Cancel and stop slices, but **do not return the token**.
+  The owner cancels queued callbacks, waits for running work or terminates its isolated Worker,
+  drops buffers/reassembly, then sends `Released(token)`. Go reuses capacity only after this ack;
+  stale Done/Released cannot free a newer token. Worker death/join is release confirmation, not a
+  timer. An uninterruptible main-thread apply retains its token until return; therefore bounded
+  wait guarantees require the Worker and its bounded termination, delivered before activation.
+  Test k colluders: H is dispatched within ⌈k/2⌉ completed cancellation/service turns, each ≤30 s
+  plus measured Worker termination/join time. A failed release blocks that slot (observable error),
+  never permits a third live allocation. The same cancellation accounting covers small guard jobs.
 
 **Webview (Stage 2, one mechanism shared with the guard, ADR 0030 §5).**
 - Per-peer queues, bounded by the credit (2 MiB small) plus ≤ 1 large frame (permit holders only);
@@ -512,11 +874,24 @@ turns with short, deadline-bounded holds, (4) bounds and charges the indivisible
 - **Two classes** (as ADR 0028 D5): interactive (≤ 64 KiB) first; background guaranteed one turn in
   four.
 - **Guard work is preemptible** (it is our code: yield every 8 ms between changes); **the apply is
-  not**: S_max = apply time of the largest admissible message. Its bound comes from ADR 0028 D1:
-  before the Worker (ADR 0028 D2) a peer fragment is capped at the 512 Ki "Grand" ceiling
+  not**: S_max must be measured under both byte/operation and Worker limits below. ADR 0028 D1
+  alone supplies only a text ceiling:
+  as a display-size limit a peer fragment is capped at the 512 Ki "Grand" ceiling
   (`0028-performance-huge-files-and-wan.md:129`, target ≤ 100 ms of freeze), after it at 4 Mi, off
-  the display thread. The D1 growth cap is specified in ADR 0028 but not found in
-  `frontend/src/net/coverage.ts` on `main`: Stage 2 must land it before the fairness claim holds.
+  the display thread. → F-C1: the D1 growth cap **exists** (`frontend/src/net/coverage.ts:311-330`, commit `7972fdd`);
+  v5 said it was missing.
+- → F-C2 (cap per change; the local factory splits) and F-A2/M5 (history pages). **History/operation bound independent of text growth.** `coverage.ts:311,413` text-growth
+  accounting is insufficient. Before WASM decode, bound decompressed change bytes to 16 MiB per
+  job and counted operations to 65,536 per job (streaming parser, stop at +1); compressed bytes
+  remain ≤ MaxFrame. Bound retained job state to this allocation, including a million insert/delete
+  or overwrite ops with zero net text growth. Large honest histories use paginated application
+  bundles prepared by an upgraded sender, not splitting an existing sync message blindly; until
+  that protocol exists, oversized sync is refused with a recoverable explicit error and remains
+  Critique for availability (§9), not a claim of transparent support. Worker linear memory is
+  capped at 256 MiB; kill/join on overflow/deadline before releasing the permit. Each accepted
+  chunk is persisted before the next; per-id saves serialized. These are per-job bounds, never
+  lifetime rejection of a writer's history: N9 D-3 still means detect/alert at 256 MiB/day,
+  no automatic suspension or cumulative quota. Cumulative disk remains an explicit residual.
 - **Overflow** → reset that peer with a cooldown of 30 s doubling to 10 min, kept per member device
   across reconnects (map ≤ member devices, pruned when the device leaves the list). The reset is not
   "fresh": `endSync` keeps `#syncStates` (`DocSynchronizer.js:217-222`); retention ≤ lifetime peers ×
@@ -527,12 +902,15 @@ turns with short, deadline-bounded holds, (4) bounds and charges the indivisible
   (strong isolation, but a second Repo and document migration; kept as the escalation if test B11
   fails after the Worker).
 
-**Peak RSS (S1-R5).** Webview: P × MaxFrame × k_dec + members × (2 MiB credit + 1 MiB slice) +
-baseline, where k_dec (copies + decode) is measured by test B12; Go: members × (4 MiB reassembly +
+**Peak RSS (S1-R5).** Webview: P × (MaxFrame × k_dec + 256 MiB Worker allocation) +
+256 MiB resident-document Worker + members × (2 MiB credit + 1 MiB slice) + baseline.
+Use one resident Worker and at most P transient processing Workers; small jobs share these slots
+through the interactive scheduler. No additional Worker per queued peer. k_dec (JS copies/decode
+outside Worker memory) is measured by B12, not assumed; include Worker process overhead in baseline; Go: members × (4 MiB reassembly +
 8 MiB small queue) + P × MaxFrame (read back from disk for delivery). Every term is either per peer
 (attributable) or shared by fair turns.
 
-### 5.3 Residency without patching automerge-repo (review 3, point 9)
+### 5.3 Residency with suspension, save drain and lifecycle patch (review 4, point 9)
 
 v3 adopted a pnpm patch (P1) so that `removeFromCache` would evict non-ready handles. Review 3 showed
 that a patch limited to `removeFromCache` is insufficient: `removeFromCache` waits outside
@@ -541,29 +919,43 @@ load re-registers the synchronizer (`Repo.js:499`). An exact patch would need fo
 storage wait, identity check after every `await` in `#loadDocumentWithProgress`, non-ready branch in
 `removeFromCache`, ready filter in `flush`) and a lifecycle contract test per upstream release.
 
-**Alternatives.**
-- (R-a) The exact four-hunk patch above. Works; adds a maintained fork of the load path (ADR 0008
-  allows it, at a cost).
-- (R-b) **No patch (chosen)**: never evict a non-ready handle; bound them by the admitted set (§5.1);
-  evict ready handles only, through the public API, in a quiescent window.
-- (R-c) Upstream change first, then (R-b) → (R-a) if it lands: tracked, not relied upon.
+**Alternatives.** (R-b, v4) wait for natural one-second idle and keep non-ready handles:
+continuous writes prevent eviction and revoked handles accumulate. Rejected. (R-a, v5) explicit
+lifecycle cancellation plus save drain: selected. Worker recycling alone isolates memory but cannot
+prove persistence without the same drain. A maintained minimal automerge-repo patch is now required;
+no "no patch" claim. Required integration points (contract tests against pinned 2.5.6):
+- Every handle has a generation and a lifecycle lease. On eviction/removal suspend **all** inputs
+  (network, local edits, projection/import, loader) for that id; mark evicting synchronously before
+  awaiting anything. New input stays in its peer's bounded queue or is retried after reload; do not
+  reopen until teardown finishes. Select the LRU even under continuous writes.
+- Cancel throttled save callbacks, await every active save/compaction, flush the final frozen heads,
+  then await a per-id storage drain barrier. Snapshot saves/removes are FIFO for that id; no stale
+  callback can compact newer chunks after the barrier. Save failure retains the dirty handle and
+  reports failure; no silent unload. Memory overflow suspends admission of more work in that lane
+  or recycles its Worker after durable recovery, never discards unsaved edits.
+- Patch `#loadDocumentWithProgress` after every await (including Repo.js:499 registration) to check
+  generation/identity/admission; a cancelled load never registers a synchronizer or drains messages.
+  Patch `removeFromCache` to terminate non-ready handles without waiting/flush; `flush` ready-only;
+  unregister synchronizers, timers/listeners and bookkeeping for that generation. Confirm release
+  only when storage, callbacks and save work are drained or cancelled. Late storage responses are
+  ignored by request generation. Ready handles follow the same teardown, with final flush first.
+- Non-open resident ready docs: ≤16 and calibrated Σ numOps budget; reserve room for one bounded
+  incoming job before processing it. Worker 256 MiB ceiling plus termination bounds transient
+  memory; no claim that 16 arbitrary documents bounds bytes. Dirty-save failures are bounded by
+  the same Worker allocation and an explicit paused error state.
+- Non-ready handles: one per active lane lease, including **cancel-pending removed ids**, ≤ W+2;
+  one retired epoch may remain only until confirmed teardown; do not create a replacement Repo or
+  reuse its lane resources before release. Metadata for removed ids is purged after drain; durable
+  listing/proof retention has the separate lifetime bounds of §2.2. B8 tests thousands of removed
+  ids while storage is stuck: one abandoned handle per lane, no repeated allocation.
 
-**Rules (R-b).**
-- Resident = open documents ∪ an LRU of non-open **ready** documents. Interim budget (until the
-  Worker): count ≤ 16 and Σ `A.stats(doc).numOps` ≤ an op budget calibrated by test B9 (memory is
-  linear in ops, ADR 0028 constat 4, not in stored bytes: 241 B stored gave 309 KiB RSS in 09). With
-  the Worker (ADR 0028 D2, D9), the budget becomes the Worker's WASM linear memory, measured
-  directly, with recycling (terminate the Worker, reopen visible documents) as the hard bound.
-- **Eviction protocol** for a ready, non-open handle: (1) no `heads-changed` for ≥ 1 s and `ready`
-  observed in an earlier macrotask (so `Repo.js:499` and `:512` have run); (2) `await
-  repo.flush([id])` (ready, so `Repo.js:706` cannot throw); (3) re-check heads unchanged and still
-  not open; (4) `await repo.removeFromCache(id)` (ready, so `Repo.js:721` returns at once). The 1 s
-  idle window exceeds the save throttle, so no stale throttled save can run after eviction and
-  compact away newer chunks (`StorageSubsystem.js:215-239`).
-- A document evicted and spoken about again is reloaded by the Repo; reload work is charged to the
-  speaking peer in the scheduler (§5.2).
-- Non-ready handles: ≤ 1 per admitted id; they become ready when a holder answers, or stay
-  unavailable (≈ 66 KiB each, measured) and count in their owner's lane.
+An unavailable/failed find must tear down its non-ready handle before returning its lane lease;
+otherwise completed-but-unavailable finds would accumulate. Retry with per-id backoff in the same
+bounded lane, triggered by a holder announcement or user demand, not a tight polling loop.
+
+Suspension creates quiescence despite continuous arrivals; it is not an idle heuristic. After drain,
+reload resumes in the fair scheduler if still admitted; otherwise only an explicit restoration can
+re-admit. A 60 s invisible timeout initiates cancellation, never promises completion of stuck I/O.
 
 ### 5.4 Epochs, refusals
 
@@ -588,6 +980,9 @@ window (`internal/transport/p2p/node.go:476`) lock out a new member for ≈ 33 m
 - **Go (router)**: forward `Data`, `PeerUp` and `PeerDown` to the webview only for peers whose
   device is a current member in the `trust` fold; the invitation lobby uses the ADR 0032 channel,
   not the repo channel (to verify in step 2.0, test A14).
+- **Removal**: member-set updates explicitly disconnect the removed peer in Repo and cancel its
+  queued/active work; do not depend on a PeerDown that the router now filters out. Keep only its
+  cancellation lease until confirmed release.
 - **Webview**: `Admission` creates entries only for member devices (Go sends the member device set
   with the epoch); an entry and its cooldown are removed when the device leaves the list. Table size
   ≤ member devices; no eviction rule needed. Member devices are added by admins only (attributable,
@@ -599,23 +994,23 @@ window (`internal/transport/p2p/node.go:476`) lock out a new member for ≈ 33 m
 
 | State | Bound | Basis | Test |
 |---|---|---|---|
-| Ids a writer W can ever get admitted from its own chain | ≤ Q_W (+1 transiently, before the proof arrives) | positions, rule E | A2 |
-| Ids kept alive by adoption | ≤ 1 per (adopter, author, position); per adopter ≤ Σ_{v≠adopter} Q_v | L5 adopt | A3, B6 |
-| Admitted ids | ≤ 2 + Σ_w Q_w + adoptions + `kept` | §2.4 | A2-A7 |
-| Listing ops retained | per author: chain below the freeze + 2 (proof); ≤ 8.7 KiB each | rule E | A2 |
+| Ids a writer W can ever get admitted from its own chain | ≤ Q*_W (+1 transiently, before the proof arrives) | positions, rule E | A2 |
+| Ids kept alive by adoption | ≤ 1 per (adopter, author, slot); per adopter ≤ Σ_{v≠adopter} Q*_v | L5 adopt | A3, B6 |
+| Admitted ids | ≤ 2 + Σ_w Q*_w + adoptions + `kept` | §2.4 | A2-A7 |
+| Listing ops retained | per author: variants + adoptions below freeze + 2 proof ops; ≤8.7 KiB each | rule E | A2 |
 | Listing pending buffer | ≤ 4 per standing author, evicting only that author's | L2 | B5 |
-| Repo bookkeeping per id (`#hasRequested`, synchronizer, sync states) | ≤ admitted ids; sync states ≤ lifetime peers × admitted | only admitted ids reach the Repo | Stage 1 test 3 |
-| Non-ready handles | ≤ admitted ids (≈ 66 KiB each, measured) | §5.1 | B8 |
-| Loads in flight | ≤ 1 per lane; lanes ≤ writers + 2; lane wait ≤ 10 s | §5.1 | B10 |
+| Repo bookkeeping per id (`#hasRequested`, synchronizer, sync states) | active + cancel-pending generations; sync states ≤ lifetime peers × lifetime listed ids | only admitted ids reach the Repo | Stage 1 test 3 |
+| Non-ready handles | ≤ W+2 active/cancel-pending lane leases (≈66 KiB each before payload) | §5.1 | B8 |
+| Loads in flight | ≤1 underlying request per lane until Released; UI wait ≤10 s; lanes ≤W+2 | §5.1 | B10 |
 | Resident non-open documents | interim: ≤ 16 and Σ numOps ≤ calibrated budget; with the Worker: WASM budget + recycling | §5.3 | B9 |
 | Hold (Stage 1) | 4 per (peer, doc); 8 MiB + 1 frame per peer; no shared pool | Stage 1 | B3, B4 |
 | Go reassembly | 4 MiB in memory per member peer; above, one temp file ≤ MaxFrame per peer | §5.2 | B13 |
 | Go router queue | ≤ 8 MiB small + 1 large (on disk) per peer | §5.2 | B14 |
 | Webview queue | ≤ 2 MiB credit + 1 large (permit) per peer | §5.2 | B13 |
-| Large frames in delivery/processing | P = 2 global, ≤ 1 per peer, FIFO, ≤ 30 s hold | §5.2 | B12 |
-| Indivisible apply S_max | ≤ 512 Ki fragment before the Worker (target ≤ 100 ms), 4 Mi after, off-thread | ADR 0028 D1-D2 | B11 |
+| Large frames in delivery/processing | P=2 live allocations, ≤1/peer; 30 s initiates Cancel, reuse only after Released | §5.2 | B12 |
+| Indivisible apply S_max | per-job bytes/ops plus Worker 256 MiB ceiling; deadline/termination measured; text cap alone insufficient | §5.2, ADR 0028 D2 | B11 |
 | Scheduler | DRR, quantum 8 ms of measured cost; interactive first, background ≥ 1 in 4 | §5.2 | B11 |
-| Peak RSS over baseline | webview P × MaxFrame × k_dec + members × 3 MiB; Go members × 12 MiB + P × MaxFrame | §5.2 | B12 |
+| Peak RSS over baseline | webview P × (MaxFrame × k_dec + 256 MiB) + 256 MiB resident Worker + members × 3 MiB; Go members × 12 MiB + P × MaxFrame | §5.2 | B12 |
 | Ephemeral | 64/s, burst 128, 1 KiB, schema | Stage 1 | B1 |
 | Re-arrive | 3, then 1 per 20 s, one pending | Stage 1 | B2 |
 | Session keys | ≤ lifetime peers (one adapter per Repo, by identity) | §5.5 | A12 |
@@ -631,25 +1026,72 @@ window (`internal/transport/p2p/node.go:476`) lock out a new member for ≈ 33 m
 ADR 0030 as written admits a writer publishing two contents for one `(actor, seq)`, **including the
 actor of another member**, which splits another person's document
 (`0030-decisions-signees-garde-structurelle.md:333-341`). Stage 2 must add:
-1. **G12, actor ↔ author binding.** Honest clients create, load and clone every document with
-   `author = hex(fingerprint(device key))` (Automerge 3.5 `InitOptions.author`,
-   `implementation.d.ts:84-85`; the field is per change and hash-committed, 09 `author2.mjs`). The
-   guard requires: (a) every change carries an author that is the fingerprint of a member device;
-   (b) all changes of one actor carry the author of that actor's `seq 1` change, which is in
-   `before(c)` by G3, so the check is deterministic; (c) coverage T10 counts only an attestation signed
-   by the key whose fingerprint is `author(c)` (a missing one makes c wait, never refuses it). This
-   closes changes under another member's actor, the split of another's document by reusing its actor,
-   and the descendant that usurps an actor (G11 case 4).
+1. → superseded by F-S1 / M1 (ChangeSig). **G12, verifiable actor ↔ key from seq=1.** A first-seen binding is insufficient: W can
+   re-encode its first change with H's actor (review 4 Node probe). Each actor session carries in
+   its first change's canonical `message` a descriptor `{v:1, project, docNamespace, epoch}`.
+   `author = hex(Ed25519 public key)` (32 bytes, not an ambiguous display fingerprint);
+   `baseActor = BLAKE3("inkwell/actor/v1" || ProjectID || authorBytes || docNamespace || epoch)[:16]`.
+   Fields are fixed-size 32/32/32/16 bytes with domain separation; epoch is a fresh random 128-bit
+   nonce persisted before use, never reused for a restarted writing session. `docNamespace` is a
+   preallocated random 32-byte creation namespace committed in the anchor's message; root uses
+   ProjectID, index uses its deterministic creation context. This avoids circular dependence on
+   DocId (which includes anchor hash). Copies/forks preserve original changes' namespaces and
+   descriptors; their new changes use the new anchor's namespace. Merges keep those bindings,
+   and G11 limits the accepted histories; do not reinterpret copied changes under the target id.
+   Guard checks canonical descriptor, project, author key/membership/coverage AuthorshipSig (not relay T10), and the separate AuthorshipSig (§2.2), then
+   recomputes baseActor on **every seq=1** before recording anything. Later seq require that exact
+   descriptor/binding in their causal past (G3). `changeAt` generates a prefixed actor (09); native
+   changeAt is disabled for v5 writes: implement edit-at-version via view → fresh session clone.
+   No arbitrary prefixed actor exception. W changing author to W cannot match H's actor; W claiming
+   author H cannot supply H's signature. Two concurrent genèses must pass these checks independently.
+   T10 relays remain coverage, never contribution receipts or AuthorshipSig.
+   G12 waits for the real authorship sidecar; relay-signed heads cannot satisfy it.
+
+   **Proven writable load path (Automerge 3.5.0).** `load(bytes,{author})` ignores author without
+   patchCallback (AM:496–511); experiments also show loadIncremental may reset the actor/author.
+   Moreover setting author can randomise the actor. Use, in order:
+   `raw = A.load(bytes); authored = A.clone(raw,{author}); writable = A.clone(authored,{actor:baseActor})`.
+   For create use `A.clone(A.init({author}),{actor:baseActor})`; for view/fork use the same two clone
+   steps. Free temporary documents. Only the final writable is installed in the handle, never raw.
+   Patch Repo create/clone/import and storage hydration/DocHandle replacement to call this factory;
+   a wrapper in application code alone does not cover Repo's internal loading. Before publishing
+   each local delta assert decoded actor, author, descriptor and G12; fail closed on mismatch.
+   Probe run 2026-10-31, Node 22.23.1, installed 3.5.0, from `frontend`:
+   ```js
+   import * as A from "@automerge/automerge";
+   const actor="ab".repeat(16), author="cd".repeat(32);
+   const bytes=A.save(A.change(A.init(), d=>{d.x=1}));
+   const bad=A.change(A.load(bytes,{actor,author}),d=>{d.x=2});
+   const raw=A.load(bytes), authored=A.clone(raw,{author});
+   const good=A.change(A.clone(authored,{actor}),d=>{d.x=2});
+   for (const d of [bad,good]) {
+     const c=A.decodeChange(A.getLastLocalChange(d));
+     console.log(c.actor,c.author,c.seq);
+   }
+   ```
+   Output: bad actor `ab`×16, author undefined, seq 1; good same actor, author `cd`×32, seq 1.
+   This proves the factory path, not integration with Repo; A15 must cover reload/import/fork and
+   the next delta in real Repo before activation.
+
+   **Deterministic genesis exception (ADR 0030 §3, :182).** Only the byte-for-byte locally
+   recomputed index G (fixed project-derived a0, seq/startOp=1, time=0, deps=[], exact schema and
+   RootURL) is exempt from author/T10/actor derivation. Check hash and full canonical bytes;
+   never allow another unsigned change under a0, an empty-author descendant or a rival genesis.
+   This exception is separate from legacy history and consumes no contribution/adoption evidence.
+   Alternatives: first-seen actor→author mapping (v4) accepts both rival genèses and is rejected;
+   actor=hash(key,doc) without epoch reuses seq after reload and is rejected; hash with persisted
+   fresh session nonce and seq=1 descriptor is selected. Author-signature coverage is still required:
+   derivation alone authenticates no bytes.
 2. **Legacy history.** Changes without `author` are admitted only in `past(L_d)`, L_d being the heads
    of document d recorded once, at upgrade, in an admin decision `legacy/<d>` (pre-1.0 "version
    commune" clause of ADR 0030). User decision D-6.
-3. **Joint causal past, absorbing purge, acknowledgements, two-phase erasure** (§4), for `doc/` and
+3. **Joint causal past, post-erasure absorbing certificate, acknowledgements, two-phase erasure** (§4), for `doc/` and
    `node/` entries and for ADR 0023 blob GC.
 4. **Fair scheduler and Go delivery** (§5.2), as the single mechanism behind ADR 0030 §5, and the
    ADR 0028 D1 growth cap it relies on.
 5. **Member-gated peer table** (§5.6, S1-R6).
 
-**What stays open after Stage 2 and 3 — and stays Critique:** W equivocating on **its own**
+→ F-S5 / M9 and F.2-R1 (admin arbitration). **What stays open after Stage 2 and 3 — and stays Critique:** W equivocating on **its own**
 `(actor, seq)` splits any document W writes in, H's included. Without consensus no guard can choose
 deterministically (Kleppmann 2022, §2.3.1). With G12 the proof is non-repudiable (two attestations
 signed by W); honest peers stop relaying W's changes after the proof (monotone, affects only W); the
@@ -664,37 +1106,40 @@ case (§9).
 | S1-R1 writer panic, divergence, unreloadable document (Critique) | Stage 2, steps 2.2-2.3 | G1-G10 + containment; G12 for foreign actors; self-equivocation stays Critique (§7.1) |
 | S1-R2 slot exhaustion, rows hidden by deletion (Critique) | Stage 3, steps 3.1-3.6 | per-writer chains, no shared slots, fallback rows, adoption |
 | S1-R3 arbitrary or foreign ids (Majeur) | Stage 3, steps 3.1, 3.4-3.5 | derived ids, full signed tuple, G11 |
-| S1-R4 residency and bytes (Critique) | Stage 3, step 3.7 (interim), ADR 0028 D2/D9 (hard bound) | ready-only eviction, op budget, then WASM budget with recycling |
+| S1-R4 residency and bytes (Critique) | Stage 3 activation gate | suspend/drain eviction + cancelled-generation teardown + Worker ceiling |
 | S1-R5 peak RSS on large frames (Mineur until measured) | Stage 2, step 2.5 | per-peer reassembly + spill, router queues, fair permits; measured by B12 |
 | S1-R6 sybil ids fill the peer table (Critique) | Stage 2, step 2.0 | member-gated router and peer table |
 
 ### 7.3 Ordered implementation plan
 
-Stage 2 (ADR 0030, prerequisite of Stage 3):
-- 2.0 S1-R6: Go router forwards repo envelopes of member devices only; webview peer table keyed by
-  member devices (A14). Independent and small: first.
-- 2.1 ADR 0028 D1 peer-growth cap in coverage, if absent (prerequisite of S_max).
-- 2.2 Guard G1-G10 + containment (`frontend/src/net/guard.ts`, `ancestry.ts`); ADR 0030 T1-T7.
-- 2.3 G12 + coverage by author key + `legacy/<d>` decision (A15).
-- 2.4 `internal/session` (audit M5) → `internal/policy` journal, v2 `Seen`, joint causal past,
-  absorbing purge, `Ack`, two-phase erasure (A9, B15).
-- 2.5 Scheduler: webview DRR shared with the guard; Go per-peer reassembly with spill
-  (`internal/transport/mux`, a HOT_PATH: benchstat), router per-peer queues, DRR slices, credits,
-  permits (B11-B14).
+→ superseded by F.3.
 
-Stage 3 (this design):
-- 3.1 `internal/listing`: ops (`variant`, `adopt`), `Decisions` frontier, L1-L5, rule E, `DocId`
-  vectors shared with TS, `FuzzDecode` (A1, A2, A4, A7, B5, B6).
-- 3.2 `SeenListing` on member ops (A6).
-- 3.3 Bridge kinds `Listed`/`AttestRefused`; Go-owned admitted set replaces `scope.ts`; S3
-  attestation cap per signer ≤ admitted (B7).
-- 3.4 Fork flow: anchor change, `Session.List`, `import` with `docId`.
-- 3.5 G11 in the guard (A8).
-- 3.6 Automatic adoption from `contrib`; history fallback rows; "à confirmer" (A3, A5, A6).
-- 3.7 Loader lanes; residency (R-b) with the interim op budget; WASM budget once ADR 0028 D2 lands
-  (A10, B8-B10, B16).
-- 3.8 H-1 test (document stored above 64 MiB), paginated `LoadRange` if confirmed; repeated
-  reconnect benchmark (B17).
+Stage 2 (dependencies before consumers):
+- 2.0 Membership-gated router/peer removal (A14), explicit Repo disconnect even when the device
+  is no longer eligible for forwarded PeerDown; cancel queues and start release protocol.
+- 2.1 `internal/session` → policy journal, v2 Seen/joint past; implement `legacy/<d>` signed
+  decisions and capture/fetch legacy heads; purge recovery/barrier/certificates (A9, B15).
+- 2.2 G1-G10 containment; history/operation parser limits, Worker termination, permit Cancel/Released
+  and scheduler/store lane workers + pagination (B10-B14). Neither text growth nor JS timeout is
+  sufficient. Keep feature inactive until all dependency contracts pass.
+- 2.3 G12 factory + exact deterministic G exception + coverage by key; enable only after 2.1 legacy
+  snapshots are present and 2.2 Worker/cancellation is operational (A15).
+
+Stage 3:
+- 3.1 listing variant/adopt decoder, issuance-L5 vs standing-L5, lifetime bounds, SeenListing.
+- 3.2 bridge and contribution receipts, save-drain/generation patch, loader lane leases and tests;
+  compute new admitted set in shadow mode; legacy meta.variants remains authoritative meanwhile.
+- 3.3 **One activation gate** for derived-id creation, new admission, G11, contribution persistence
+  and automatic adoption. Before switching, admin legacy decisions/listing migration cover every
+  existing variant and any co-edit requiring adoption; peers negotiate support, reject a mixed
+  write session explicitly (older peers may stay read-only through a compatibility adapter).
+  Never create an id its receivers cannot admit or retire rows before adoption can preserve them.
+- 3.4 Retire meta.variants authority only after successful activation and convergent migration;
+  keep presentation/fallback rows. Residency hard bounds and H-1 pagination tests are prerequisites,
+  not post-activation repairs. Run A11 reconnect benchmark at final gate.
+
+Every merge, including inactive preparatory changes: compatibility tests plus **ZZ-2** (and ZZ-1).
+No partial merge activates a dependent feature. Stage numbers in older review tables are historical.
 
 ## 8. Tests
 
@@ -705,7 +1150,7 @@ Stage 3 (this design):
   3 restarts, 3 replicas, random orders → retained ops ≤ chain + 2, admitted own ids ≤ Q_w, freeze
   point identical everywhere, proof gossiped.
 - **A3** Equivocation after honest contribution (review 3, point 1): W lists d (position 2); H edits
-  d (attests); W sends a conflicting position-2 op to R3 and a conflicting position-1 op to R2 →
+  d (local contribution receipt and persisted adoption); W sends a conflicting position-2 op to R3 and a conflicting position-1 op to R2 →
   after convergence, on all 3 replicas, d is admitted (adopted by H), H's changes are present, W is
   frozen at 1, W's documents nobody co-edited are "à confirmer" on holders, H's quota is unchanged,
   H signed exactly one adoption; a second adoption of the same key is refused.
@@ -729,16 +1174,17 @@ Stage 3 (this design):
   G12, accepted without it (documents the ADR 0030 residual); 3 replicas, all orders.
 - **A9** Purge (review 3, point 13): (a) rogue admin purges, a concurrent cut arrives after the
   tombstone → the document returns with its bytes, never erased; (b) concurrent `kept` → returns;
-  (c) sequential `kept` after the purge → ignored (absorbing); (d) restart after the tombstone, after
+  (c) sequential `kept` on day 29, with all Acks on day 1 → restores identical heads/bytes; old timers never erase; after certificate → refused; (d) restart after the tombstone, after
   stability, and between the erased-list append and the removal → no premature erasure, removal
   idempotent; (e) a save queued before erasure completes; after erasure a late save is refused and the
-  directory is not recreated; (f) an absent admin device blocks erasure; removing it unblocks;
+  directory is not recreated; (f) an absent admin device blocks erasure; removing it before prepare unblocks; coordinator failure during prepare keeps locks until outcome recovery;
   (g) an admin promoted after all acknowledgements cuts the purger with a stale `Seen` → purge stands
   (joint past); (h) replayed listing op or adoption → no re-admission; (i) blob GC follows the same
   phases.
 - **A10** Loader (review 3, point 2): 40 hostile lanes with storage `load` blocked → H's lane starts
-  its `find` within one turn; lane deadline releases; underlying loads ≤ admitted ids; cancellation
-  after `await` (peer down, epoch change, id purged).
+  its underlying storage dispatch within one turn; 100 deadlines do not release the lease or
+  allocate a second request. Admission removed while blocked, then late response: zero registration,
+  delivery or new save, Released permits retry only for a still-admitted id.
 - **A11** Reconnect benchmark: real `Repo` over simnet with coverage, guard and transport, multi-actor
   random edits, 1 000/10 000/100 000 changes, ≥ 10 runs, median and IQR, `isEphemeral` vs persisted;
   keep `isEphemeral` unless the p50 reconnect of a 100 000-change document under the ADR 0028 WAN
@@ -747,8 +1193,11 @@ Stage 3 (this design):
 - **A13** Epochs: every delayed callback of §5.4, and refusal notices in transit, with a project switch
   in flight.
 - **A14** S1-R6: 2 000 stranger ids during an open invitation → 0 webview entries; a new member is
-  admitted at once; removing a device frees its entry and cooldown; the invitation still completes.
-- **A15** G12: changes under another member's actor refused in all orders; W's self-equivocation
+  admitted at once; removing a device frees its entry/cooldown, explicitly disconnects it from Repo and cancels/drains its work despite filtered PeerDown; late resume delivers nothing; the invitation still completes.
+- **A15** G12: two concurrent seq=1 genèses, one W change re-encoded under H actor,
+  delivered in both orders: W refused, H accepted; repeat create/load/import/clone and next edit
+  through real Repo factory; W forges H actor+author and H relays/attests it →
+  still refused without H AuthorshipSig; relayed-only heads never issue that signature; exact deterministic G accepted, modified G or unsigned descendant refused; W's self-equivocation
   produces a proof with two W attestations, W's later changes are no longer relayed, the split is
   documented (residual).
 
@@ -761,34 +1210,37 @@ Stage 3 (this design):
 | B3 | hold 4 per (peer, doc) | 4 held | 5th → that peer's queue dropped, cooldown 30 s; another peer's held messages intact | after 30 s the handshake is accepted and messages drain |
 | B4 | hold 8 MiB per peer (+1 frame when empty) | 8 MiB held; one 64 MiB frame alone held | +1 B → reset | cooldown 30, 60 … 600 s (cap), kept across reconnect, pruned when the device leaves |
 | B5 | listing buffer 4 per author | 4 waiting | 5th evicts that author's oldest; other authors untouched | when `Prev` arrives, drained in order |
-| B6 | adoption 1 per (adopter, author, position) | first adoption stands | second, same key → refused | — |
+| B6 | adoption 1 per (adopter, author, slot) | first adoption stands | second, same key → refused | — |
 | B7 | attestations per signer ≤ admitted | stored | non-admitted doc → `AttestRefused` | retried and accepted once the doc is admitted |
-| B8 | non-ready handles ≤ admitted | 300 admitted, absent documents → ≤ 300 handles, RSS ≤ 300 × 70 KiB | 50 000 invented ids → 0 handles | a holder answers → handles become ready |
-| B9 | resident non-open: 16, op budget | 16 resident | 17th → LRU evicted after 1 s idle; a document changed within 1 s or open is not | evicted, reloaded, changed, wait 2 × debounce, reload from storage → every change present; RSS per ready handle with synchronizer and 1-3 peers' sync states measured |
-| B10 | loader: 1 in flight per lane, 10 s wait | 1 in flight | a 2nd id of the same lane waits | deadline (fake clock) releases the lane; real storage: H's first load starts within (lanes × measured store service time) |
+| B8 | non-ready active + abandoned handles ≤W+2 | 300 absent ids, W lanes → ≤W+2 active/cancel-pending handles, measured RSS per lease | 50 000 invented ids → 0 handles | remove admission, repeat 1,000 ids then unblock: no stale registration; Released permits next queued id |
+| B9 | resident non-open: 16, op budget | 16 resident | 17th → suspend LRU inputs, drain saves, evict; continuous writes are suspended and drained before eviction; open documents have a separate Worker budget | evicted, reloaded, changed, wait 2 × debounce, reload from storage → every change present; RSS per ready handle with synchronizer and 1-3 peers' sync states measured |
+| B10 | loader: 1 in flight per lane, 10 s wait | 1 in flight | a 2nd id of the same lane waits | 100 repeated deadlines leave one underlying request/handle per lane; remove admission while blocked; H dispatches in one turn; unblock W late → no registration/delivery/save, Released then permits retry |
 | B11 | DRR quantum 8 ms, classes, S_max | 2 backlogged peers: shares 45-55 % over 10 s (real clock) | a 400 ms apply → that peer skipped until repaid | lone peer gets 100 %; interactive p99 ≤ 2 × baseline + S_max with 3 hostile peers sending small frames continuously and large frames |
-| B12 | permits P = 2, 1 per peer, 30 s | 2 peers served | 3rd waits; FIFO; one peer never holds 2 | release on `Done`, PeerDown, and at 30 s without `Done` (a peer that never completes); peak RSS ≤ baseline + P × MaxFrame × k_dec + members × 3 MiB, back to baseline + 10 % in 30 s |
+| B12 | permits P = 2, 1 per peer, 30 s | 2 peers served | 3rd waits; FIFO; one peer never holds 2 | at PeerDown/30 s mark cancelling; guard deliberately suspended: no third allocation until Released after Worker join; late Done ignored; peak RSS ≤ §5.2 formula, including processing/resident Workers, back to baseline + 10 % within 30 s after confirmed release, not merely expiry |
 | B13 | Go reassembly 4 MiB / spill; credit 2 MiB | 4 MiB in memory | 5 MiB → temp file; fast hostile and slow honest senders both complete; Go never sends beyond credit (spy) | temp file removed on completion, drop, PeerDown, 30 s TTL |
 | B14 | router queue 8 MiB small | 8 MiB queued | +1 B → that peer reset only | cooldown shared with the webview map |
 | B15 | acknowledgements | `Ack` counted when its frontiers are held | an older `Ack` → ignored; one naming unheld ops → not counted | counted when they arrive |
-| B16 | handle timeout 60 s; unload of invisible documents 60 s (ADR 0028 D9) | at 59 s still loaded | at 61 s unloaded | reopened on demand |
+| B16 | handle timeout 60 s; unload of invisible documents 60 s (ADR 0028 D9) | at 59 s still loaded | at 61 s teardown initiated, unload after drain; non-ready cancel-pending retains its lane until Released | late completion ignored after removal; reopen only after teardown if admitted |
 | B17 | reconnect cost | = A11 | — | — |
 
-## 9. Residual risks after Stage 3
+## 9. Residual risks and explicit activation blockers
+
+→ superseded by F.2.
 
 | Risk | Grade | Note |
 |---|---|---|
 | W's own `(actor, seq)` equivocation splits documents W writes in, H's included | **Critique** (review 3, point 3) | no deterministic rule without consensus; proof, no relay, removal, recovery by copy (§7.1); an ADR must decide whether to accept it or add a stabilisation step |
-| H-1: a document stored above 64 MiB cannot load (`LoadRange` in one frame, `storestream.go:293`) | hypothesis; Critique if demonstrated (data unavailable) | step 3.8; fix: paginated `LoadRange` |
-| Cumulative history growth by writing (insert/delete churn) | Majeur hypothesis, to measure | user decision D-3 |
-| Indivisible apply S_max | Mineur if B11 passes; Majeur otherwise | escalation: two Repos (§5.2) |
-| "à confirmer" between a freeze/death and the co-editor's adoption | Mineur | nothing deleted; admin `kept` |
-| Erasure blocked by an absent admin device | Mineur (disk only) | remove the device |
+| H-1: a document stored above 64 MiB cannot load (`LoadRange` in one frame, `storestream.go:293`) | hypothesis; Critique if demonstrated (data unavailable) | pagination now required before activation (§5.1/7.3); probe >64 MiB and reload |
+| Cumulative history/disk growth by churn | **Critique**, ASVS V2.4.1 residual under N9 D-3 | alerts do not bound disk; per-job ops/Worker bounds do not solve lifetime disk exhaustion; no Byzantine closure claim |
+| Oversized history sync until paginated sender protocol and Repo factory integration pass | **Critique**, availability/ADR 0030 | explicit activation blocker, B11/B12/A15; not solved by text caps |
+| Indivisible apply S_max | Mineur only if bounded B11 passes; Critique if no enforceable bound (ASVS V2.4.1) | escalation: two Repos (§5.2) |
+| Pre-upgrade co-edits not yet migrated | Critique until activation gate | migration/adoption before retiring legacy authority |
+| Erasure blocked by absent admin or prepared coordinator failure | Mineur (disk/recovery availability) | remove an absent device before prepare; prepared coordinator requires durable outcome recovery; no unsafe timer unlock |
 | Malicious standing admin annuls or erases | not a finding under N7 (admin power, ADR 0017) | UI "contenu effacé" |
-| Attestation memory quadratic in writers | Majeur if writers grow (watch) | measure with ADR 0028 endurance before raising Q |
-| Quota 32 is an assumption | — | D-1 |
+| Attestation/adoption memory quadratic in writers | Mineur until measured; Majeur only on measured budget overrun | measure with ADR 0028 endurance before raising Q |
+| Quota 32 is a ratified initial default | — | D-1, benchmark before changing |
 
-## 10. Where to enforce (boundary alternatives, amended in v4)
+## 10. Where to enforce (boundary alternatives, amended in v5)
 
 | Option | P1 | P2 | P3 | backpressure | R1 | §4 shapes | ADR 0011 | Maintenance |
 |---|---|---|---|---|---|---|---|---|
@@ -798,31 +1250,59 @@ Stage 3 (this design):
 | D (v1). boundary + session rewrite + storageId pinned | yes | yes | GC races pending saves | no | yes | yes | ok | none |
 | E (Codex 1). boundary + `isEphemeral` + small patch | yes | yes | by construction | with patch | yes | yes | ok | patch |
 | F (v3). E with patch P1 only | yes | yes | by construction | in the adapter | yes | yes | ok | patch insufficient as described (review 3, point 9) |
-| **G (v4, chosen)**: boundary (shapes, membership, ephemeral rewrite, hold, scheduler) + `isEphemeral` + **no patch** (ready-only eviction, non-ready handles bounded by the admitted set) | yes | yes | by construction | in the adapter and Go | yes | yes | ok | contract tests only |
+| G (v4, rejected): boundary (shapes, membership, ephemeral rewrite, hold, scheduler) + `isEphemeral` + **no patch** (ready-only eviction, non-ready handles bounded by the admitted set) | yes | yes | by construction | in the adapter and Go | yes | yes | ok | insufficient under continuous writes |
+
+**H (v5, chosen)**: boundary + isEphemeral + lifecycle/factory patch; suspended-input save drain,
+confirmed cancellation, Worker memory bound and real store lanes. Tests B8–B16/A15 are activation
+gates; no blanket Byzantine guarantee before those pass.
 
 Reconnect cost of `isEphemeral` (09, single-actor append workload, indicative only): +1.25 B and
 ≈ +2 µs per change per document per reconnect. Persisted state is lossy anyway in 2.5.6 (one
 throttle per storageId cancels other documents' saves, `throttle.js:80-104`). Re-checked by A11.
 
-## 11. Decisions still needed from the user
+## 11. Ratified user decisions (N9); ADR acceptance still pending
 
-- **D-1** Base quota 32 variants per writer and grant size 32 (assumption, `docs/open-questions.md`).
-- **D-2** Grace period T_purge before erasure, on top of stability. Proposal: 30 days (a recovery
-  window, as common trash bins); 0 is safe with stability.
-- **D-3** Cumulative history a writer adds by churn. Recommended: detect and escalate (history bytes
-  attributed by G12 per writer and per day, alert at 256 MiB/day naming the person, admin suspends).
-  Enforcing would delay honest peers' relays too, because a bundle cannot be split (09).
-- **D-4** Purge becomes irreversible (absorbing) for variants and nodes: a later `kept` no longer
-  undoes a purge; the trash stays the undoable step. Changes ADR 0030 D2 for sequential decisions.
-- **D-5** Automatic adoption of co-edited documents, without asking (recommended), or ask the person.
-- **D-6** Legacy author-less history: one admin decision `legacy/<d>` per document at upgrade, or a
-  reset of pre-1.0 projects.
+D-1: base quota 32 variants/writer (grants in steps of 32). D-2: recoverable for 30 days minimum,
+then erase only after every standing admin device acknowledges and the barrier completes; no maximum
+when one is absent. D-3: detect history growth and alert admins, no automatic cumulative blocking.
+D-4: irreversible **once erased**, not at logical purge. D-5: automatic co-editor adoption; v5
+persists it at first real co-edit as the equivalent preservation mechanism. D-6: one signed admin
+`legacy/<d>` decision per pre-upgrade document; no project reset. These choices are ratified, not
+questions to reopen. Only formal acceptance of ADR 0031 and treatment of the explicitly Critique
+self-equivocation residual need a user decision (→ F.4, which adds ADR 0030 and R2); implementation/measurement gates remain mandatory.
 
-Sources used in v4: Kleppmann, *Making CRDTs Byzantine Fault Tolerant* (PaPoC 2022, §2.3.1, §3.4);
+Sources carried from v4 (no new external-source claim): Kleppmann, *Making CRDTs Byzantine Fault Tolerant* (PaPoC 2022, §2.3.1, §3.4);
 Baquero, Almeida, Shoker, [*Pure Operation-Based Replicated Data Types*](https://arxiv.org/abs/1710.04469)
 (causal stability); Shreedhar and Varghese, [*Efficient Fair Queuing Using Deficit Round Robin*](https://iqua.ece.toronto.edu/baochun/ece1771f/papers/deficitrr.pdf)
 (IEEE/ACM ToN 1996); [RFC 9000 §4](https://www.rfc-editor.org/rfc/rfc9000#section-4) (receiver credit);
 automerge 3.5.0 `implementation.d.ts:84-85,387-390,627` (author, stats).
+
+## Changes after review 4 (Codex, [13-codex-design-review-4.md](13-codex-design-review-4.md))
+
+CLOSED below means **design contract**, not implementation or test execution. Audit rubric unchanged;
+N7 remains full Byzantine and N9 decisions are preserved. Any implementation/measurement gate failing
+keeps the associated risk open; no claim that S1 or Byzantine safety is implemented.
+
+| Review # | v5 disposition | Normative contract and verification |
+|---|---|---|
+| 1 | CLOSED design | §2.2 separate contribution receipt/relay coverage; eager adoption; signed variant Slot distinct from chain Position; issuance-L5 survives later grant removal, pre-grant op still invalid; A3/A7 plus relay-only → zero receipts/adoptions |
+| 2 | CLOSED design | §5.1 lease holds through underlying Released; one storage request/lane, real Go workers/pages; B10 repeated timeouts, then H, then late resume |
+| 3 | CLOSED design, integration gated | §7.1 derivation recomputed at seq=1, author-key AuthorshipSig distinct from relay T10, canonical namespace/epoch; A15 two concurrent genèses W/H with re-encoded H actor in both delivery orders → W refused, H accepted |
+| 4,5,6,7,8,11,12 | CLOSED retained | signed tuples, G11 ancestors, epochs/refusals, zero sync-state, adapter identity, repeated reconnect bench and causal grants retained |
+| 9 | CLOSED design | §5.3 suspend every input despite continuous writes, cancel throttle, drain compaction/flush; generation patch prevents late registration; B8/B9 removal + stuck I/O + unblock |
+| 10 | CLOSED design | B8/B10/B12/B16 assert beyond deadlines, admission removal, late resume and baseline recovery; 60 s is cancellation initiation for non-ready, not fictional unload |
+| 13 | CLOSED design | §4 reversible until erase, ≥30 days, per-generation barrier, certificate only after removal; A9 restore day29 even after early Acks; years-offline admin blocks |
+| 14 | CLOSED design, protocol gated | §5.2 Cancel/Released/Worker join before permit reuse; B12 suspended guard past30 s + PeerDown + late Done; zero-growth 65,536 ops pass, +1 rejected pre-WASM; 16 MiB decompressed threshold/+1; 256 MiB Worker kill then join; cumulative disk residual explicitly Critique |
+| 15 / order | CLOSED design | §7.3 dependencies first, atomic activation, ZZ-2 each merge; §11 and ADR ratified D-1..D-6 with status proposed; quantified eager/deferred comparison §2.2 |
+| Automerge blocker | CLOSED factory probe, integration unimplemented | §7.1 two-clone writable load path proven on installed version (direct load fails); real Repo contract mandatory, deterministic G exact exception; self-equivocation stays Critique |
+| S1-R6 follow-up | CLOSED design | A14 explicit disconnect/cancel on member removal despite PeerDown filtering |
+
+Additional contract checks: restart between contribution save/adoption persistence/publication (no
+lost edit or duplicate adoption); quota grant removal in all A7 orders; continuous inbound/local
+writes through B9 teardown (final heads survive reload); admission removal during storage await,
+compaction and guard yields (no late delivery, resurrection or new save); cancellation at 30 s and
+31/60/120 s keeps ≤2 live allocations; after unblocking, counters return to zero and H progresses.
+All thresholds in §5 are versioned operational defaults to benchmark, not measurements already made.
 
 ## Changes after review 3 (Codex, [10-codex-design-review-3.md](10-codex-design-review-3.md))
 
@@ -840,7 +1320,7 @@ automerge 3.5.0 `implementation.d.ts:84-85,387-390,627` (author, stats).
 | 10 | PARTIAL, Mineur: a concrete test per bound | table 8.2: threshold, overflow and recovery for every bound, including the 8 ms quantum, 60 s timeouts, announcement buffer, attestation cap, and RSS of ready handles with synchronizers | B1-B17 |
 | 11 | CLOSED | unchanged; repeated benchmark | A11 |
 | 12 | PARTIAL, Critique: L5 on "currently standing" grants | `Decisions` frontier in every listing op; L5 counts grants in `past(Decisions(o))` that stand in the fold; re-evaluated by the pure fold; co-edited documents adopted when a grant dies (§2.5) | A7 |
-| 13 | OPEN, Critique: erasure before annulment | logical tombstone, then erasure only when **stable**: every standing admin device's `Ack` contains the purge in its joint causal past, plus optional grace; absorbing purge; joint causal past; erased list before removal; proof of sufficiency (§4) | A9, B15 |
+| 13 | OPEN, Critique: erasure before annulment | logical tombstone, then erasure only when **stable**: every standing admin device's `Ack` contains the purge in its joint causal past, plus optional grace; post-erasure absorbing certificate; joint causal past; erased list before removal; proof of sufficiency (§4) | A9, B15 |
 | 14 | PARTIAL, Critique: no preemption of large frames, unbounded scheduler queues, two peers on two permits | network time decoupled from memory (per-peer reassembly, spill to disk); per-peer bounded queues in Go and the webview; DRR on measured cost; permits FIFO, ≤ 1 per peer, held only for local processing, 30 s deadline; S_max bounded by ADR 0028 D1-D2; peak RSS formula measured (§5.2) | B11-B14 |
 | 15 | PARTIAL, Mineur: ADR proposed; exact patch; compare anchor-less ids | ADR 0031 updated, still proposed; no patch to specify; option (f) anchor-less id compared and rejected: G11 would become order-dependent under equivocation (§2.1) | — |
 | S1-R6 | sybil ids fill the 1 024-entry table | member-gated router and peer table (§5.6) | A14 |

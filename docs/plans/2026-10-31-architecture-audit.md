@@ -129,8 +129,8 @@ Chaque décision cite sa raison ; une décision qui touche une frontière passe 
 | Étape 1 de l'admission (S1 partiel, S4, R1) et suites F1–F4 | ✅ fusionné ; S1 reste Critique (garde ADR 0030 à venir) ; PRS-37 a échoué 1 fois dans une suite e2e complète, taux à mesurer | fusions `ad2cf86`, `f2f1460` |
 | Révision byzantine de l'admission, ADR 0031 | 🔨 conception (architect) | `audit-2026-10-31/06-admission-design.md`, `docs/adr/0031-*.md` |
 | F3, plantage libp2p à la fermeture | ⏸ en pause : garde partielle non fusionnée ; reste l'ordre de fermeture et l'échec résiduel `dial_test.go:167` | worktree `agent-ae8725405086b99e0`, branche `fix/p2p-dial-panic` |
-| Conception byzantine v4 et décisions D-1 à D-6 (N9) | ✅ fusionné ; revue Codex n°4 à relancer (limite d'usage) | `0394270` |
-| F5, borne du dossier des sidecars indépendante du temps (Landlock + RLIMIT_FSIZE, sorties déclarées par `internal/typst`) | 🔨 Codex, interrompu par sa limite d'usage (reprise après 14 h 44) | branche `fix/f5-sidecar-dir-bound` |
+| Conception d'admission : v4, revue n°4, révision n°5 (Codex), recherche blockchain/BFT (`14-…`), périmètre final et ADR 0031 rév. 6 (Opus) | ✅ rédigé ; acceptation des ADR 0030, 0031, 0032, 0033 et des résiduels R1/R2 par l'utilisatrice attendue | `audit-2026-10-31/06-…`, `14-…` |
+| F5, borne du dossier des sidecars imposée par le noyau (tmpfs privé en espace de noms utilisateur, Landlock, RLIMIT_FSIZE ; ADR 0033 proposée) | ✅ fusionné | `3ac0348` |
 | M2, allocation de contexte dans `Wiring.poll` : −30,9 % (p = 0,001), 11 → 1 allocation | ✅ fusionné | `23ba0a0` |
 | m1, variables globales mutables vers la configuration (hors `sidecar`) | ✅ fusionné | `c29bf47` |
 | M1 | ✅ fusionné | `192d462` |
