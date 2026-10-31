@@ -15,7 +15,10 @@ export class Kit {
   #repos: Repo[] = [];
 
   peer(net: SimNet, id: string): TestPeer {
-    const adapter = new WailsNetworkAdapter(() => net.socket(id), { reconnectDelayMs: 5 });
+    const adapter = new WailsNetworkAdapter(() => net.socket(id), {
+      reconnectDelayMs: 5,
+      admitted: () => true,
+    });
     const repo = new Repo({
       peerId: id as PeerId,
       network: [adapter],

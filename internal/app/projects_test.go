@@ -76,3 +76,49 @@ func TestSetRootURLRejects(t *testing.T) {
 		}
 	}
 }
+
+// Cleanup completes before OpenProject returns a store to the webview.
+func TestOpenRemovesSyncStates(t *testing.T) {
+	root, err := os.OpenRoot(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		if err := root.Close(); err != nil {
+			t.Errorf("close root: %v", err)
+		}
+	})
+	p, err := app.OpenProject(root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, doc := range []string{"root", "variant"} {
+		if err := p.Save([]string{doc, "sync-state", "old-peer"}, []byte("old")); err != nil {
+			t.Fatal(err)
+		}
+		if err := p.Save([]string{doc, "snapshot", "keep"}, []byte("document")); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := p.Close(); err != nil {
+		t.Fatal(err)
+	}
+	for range 2 {
+		p, err = app.OpenProject(root)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, doc := range []string{"root", "variant"} {
+			entries, err := p.LoadRange([]string{doc, "sync-state"})
+			if err != nil || len(entries) != 0 {
+				t.Fatalf("sync states retained: %v %v", entries, err)
+			}
+			if _, err := p.Load([]string{doc, "snapshot", "keep"}); err != nil {
+				t.Fatal(err)
+			}
+		}
+		if err := p.Close(); err != nil {
+			t.Fatal(err)
+		}
+	}
+}

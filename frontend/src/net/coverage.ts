@@ -15,6 +15,29 @@ const MAX_REJECTED = 1024;
 const CHUNK_TYPE = 8;
 /** Chunk type of a whole document; 1 and 2 are a change and a compressed change. */
 const CHUNK_DOCUMENT = 0;
+/** Documents tracked at most (those a verified attestation names), and by one signer. */
+const MAX_DOCS = 10_000;
+const MAX_DOCS_PER_SIGNER = 1024;
+/** Rewritten-message digests kept: per peer, and over all peers. */
+const MAX_REWRITTEN_PER_PEER = 256;
+const MAX_REWRITTEN = 4096;
+
+/** Limits of a {@link Coverage}; the defaults are the constants above. */
+export interface CoverageLimits {
+  maxDocs?: number;
+  maxDocsPerSigner?: number;
+}
+
+/** A 64-bit-ish fingerprint (two FNV-1a passes and the length): enough to spot a repeat. */
+function digest(bytes: Uint8Array): string {
+  let a = 0x811c9dc5;
+  let b = 0x01000193;
+  for (const x of bytes) {
+    a = Math.imul(a ^ x, 0x01000193);
+    b = Math.imul(b ^ x, 0x85ebca6b);
+  }
+  return `${bytes.length}:${a >>> 0}:${b >>> 0}`;
+}
 
 /**
  * What the heads attested for one document cover. A change is covered when it is
@@ -42,6 +65,11 @@ class DocCoverage {
     }
     if (kept.length > MAX_KEPT_HEADS) kept.splice(0, kept.length - MAX_KEPT_HEADS);
     this.#heads.set(signer, kept);
+  }
+
+  /** Whether a writer still has attested heads for this document. */
+  get attested(): boolean {
+    return this.#heads.size > 0;
   }
 
   /** Forgets what `signer` attested; what only they covered is not covered anymore. */
@@ -146,28 +174,94 @@ export class Coverage {
   /** The changes already counted in `#grown`, by document. */
   #counted = new Map<string, Set<string>>();
   readonly #maxChars: number;
+  readonly #maxDocs: number;
+  readonly #maxDocsPerSigner: number;
+  /** Per peer, then per document: the digest of the last message we had to cut (insertion order). */
+  #lastRewritten = new Map<string, Map<string, string>>();
+  #rewrittenCount = 0;
+  /** The documents each signer attested, to bound what one signer can make us track. */
+  #bySigner = new Map<string, Set<string>>();
 
   /** `maxChars`: the most characters peers may add to a text (default: what a document grows to). */
-  constructor(maxChars: number = MAX_GROWN_CHARS) {
+  constructor(maxChars: number = MAX_GROWN_CHARS, limits: CoverageLimits = {}) {
     this.#maxChars = maxChars;
+    this.#maxDocs = limits.maxDocs ?? MAX_DOCS;
+    this.#maxDocsPerSigner = limits.maxDocsPerSigner ?? MAX_DOCS_PER_SIGNER;
   }
-  #lastRewritten = new Map<string, Uint8Array>(); // peer + document → last message we had to cut
 
-  /** `signer`, a current writer, attested `heads` of document `doc`. */
+  /** How much is kept, for tests and diagnostics. */
+  get size(): { docs: number; counted: number; grown: number; rewritten: number } {
+    return {
+      docs: this.#docs.size,
+      counted: this.#counted.size,
+      grown: this.#grown.size,
+      rewritten: this.#rewrittenCount,
+    };
+  }
+
+  /**
+   * `signer`, a current writer (Go verified the signature and the role), attested `heads` of
+   * document `doc`. Only here does a document get state; past the limits the attestation is not
+   * tracked (the changes it would cover are then refused, which is the safe side).
+   */
   attested(signer: string, doc: string, heads: string[]): void {
-    this.#doc(doc).attest(signer, heads);
+    const mine = this.#bySigner.get(signer) ?? new Set<string>();
+    if (!mine.has(doc)) {
+      if (mine.size >= this.#maxDocsPerSigner) return;
+      if (!this.#docs.has(doc) && this.#docs.size >= this.#maxDocs) return;
+    }
+    mine.add(doc);
+    this.#bySigner.set(signer, mine);
+    let d = this.#docs.get(doc);
+    if (!d) {
+      d = new DocCoverage();
+      this.#docs.set(doc, d);
+    }
+    d.attest(signer, heads);
   }
 
   /** `signer` is not a writer anymore: their attestations are void. */
   revoked(signer: string): void {
-    for (const d of this.#docs.values()) d.revoke(signer);
+    this.#bySigner.delete(signer);
+    for (const [name, d] of this.#docs) {
+      d.revoke(signer);
+      if (!d.attested) {
+        this.#docs.delete(name);
+        this.#grown.delete(name);
+        this.#counted.delete(name);
+      }
+    }
   }
 
   /** Forgets what is kept about `peer` (it disconnected: its sync state starts over). */
   forgetPeer(peer: string): void {
-    for (const key of this.#lastRewritten.keys()) {
-      if (key.startsWith(`${peer}\0`)) this.#lastRewritten.delete(key);
+    this.#rewrittenCount -= this.#lastRewritten.get(peer)?.size ?? 0;
+    this.#lastRewritten.delete(peer);
+  }
+
+  /** Remembers that `out` was the rewrite for (`peer`, `doc`); true if it was already the last one. */
+  #repeated(peer: string, doc: string, out: Uint8Array): boolean {
+    const fp = digest(out);
+    let mine = this.#lastRewritten.get(peer);
+    if (!mine) {
+      mine = new Map();
+      this.#lastRewritten.set(peer, mine);
     }
+    if (mine.get(doc) === fp) return true;
+    if (!mine.delete(doc)) this.#rewrittenCount++;
+    mine.set(doc, fp);
+    for (const old of mine.keys()) {
+      if (mine.size <= MAX_REWRITTEN_PER_PEER) break;
+      mine.delete(old);
+      this.#rewrittenCount--;
+    }
+    for (const [other, m] of this.#lastRewritten) {
+      if (this.#rewrittenCount <= MAX_REWRITTEN) break;
+      if (other === peer) continue;
+      this.#rewrittenCount -= m.size;
+      this.#lastRewritten.delete(other);
+    }
+    return false;
   }
 
   /**
@@ -190,7 +284,10 @@ export class Coverage {
       this.stats.dropped++;
       return undefined;
     }
-    const docs = this.#doc(doc);
+    // A document nobody attested has no state of ours: its changes are all uncovered, and what a
+    // stranger sends must not make us keep anything per document id.
+    const tracked = this.#docs.get(doc);
+    const docs = tracked ?? new DocCoverage();
     let chunks: Chunk[];
     try {
       chunks = msg.changes.flatMap(splitChunks).map(describeChunk);
@@ -215,7 +312,7 @@ export class Coverage {
     // to the text, counted over the session, stays under it; a deletion gives its room back.
     // A whole document is judged by its own length; a change counts once, whatever number of
     // times a peer sends it again.
-    const seen = this.#counted.get(doc) ?? new Set<string>();
+    const seen = tracked ? (this.#counted.get(doc) ?? new Set<string>()) : new Set<string>();
     let grew = 0;
     let docChars = 0;
     const fresh: string[] = [];
@@ -236,31 +333,21 @@ export class Coverage {
       this.stats.dropped++;
       return undefined;
     }
-    for (const h of fresh) seen.add(h);
-    this.#counted.set(doc, seen);
-    // A document taken in is the text itself: what was counted before is part of it, not on top.
-    this.#grown.set(doc, Math.max(total, docChars));
+    if (tracked) {
+      for (const h of fresh) seen.add(h);
+      this.#counted.set(doc, seen);
+      // A document taken in is the text itself: what was counted before is part of it, not on top.
+      this.#grown.set(doc, Math.max(total, docChars));
+    }
     const heads = docs.withoutRejected(msg.heads);
     if (covered.every(Boolean) && heads === msg.heads) return data;
     const kept = chunks.filter((_, i) => covered[i]).map((c) => c.bytes);
     const out = A.encodeSyncMessage({ ...msg, heads, changes: kept });
-    const key = `${from}\0${doc}`;
-    const last = this.#lastRewritten.get(key);
-    if (last && last.length === out.length && last.every((b, i) => b === out[i])) {
+    if (this.#repeated(from, doc, out)) {
       this.stats.repeated++;
       return undefined;
     }
-    this.#lastRewritten.set(key, out);
     return out;
-  }
-
-  #doc(doc: string): DocCoverage {
-    let d = this.#docs.get(doc);
-    if (!d) {
-      d = new DocCoverage();
-      this.#docs.set(doc, d);
-    }
-    return d;
   }
 }
 
