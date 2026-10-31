@@ -63,6 +63,7 @@ signalé par une seule source est revérifié par un autre modèle avant d'être
 | F1 | Majeur (fiabilité, à diagnostiquer) | ISO/IEC 25010 fiabilité ; un test doit être déterministe | `internal/app` `TestPreviewCompilesTheProject/PRV-10` : 1 échec dans `mise run test`, 3 succès isolés (2026-10-31) | à diagnostiquer (`superpowers:systematic-debugging`), sans le déclarer instable au jugé |
 | F3 | Critique (plantage) | ISO/IEC 25010 fiabilité | `internal/transport/p2p` `TestWantAgainClearsResetHold` : déréférencement de pointeur nul dans libp2p `swarm_dial.go:476`, 1 fois sur 6 ; indépendant du lot 2 (`p2p` n'importe pas `trust`) | `quality-runner`, à diagnostiquer |
 | F1 (suite) | Majeur | idem F1 | même famille : `PRV-32` (`preview_test.go:516`), 1 échec puis 5 succès sur 5 | `quality-runner` |
+| F5 | Majeur (sécurité, à corriger) | §4 sidecars bornés ; ASVS 5.0 V2.4.1 | `internal/sidecar` : la borne de taille du dossier surveillé est contrôlée par sondage ; sous charge, `TestRunDirectoryBound` (`limits_test.go:69`) voit 152 Mio écrits pour une marge de 128 Mio (pré-push du 2026-10-31, 1 échec sur 1 780) ; un Typst hostile peut donc dépasser la borne en proportion de la charge | CI ; à corriger par une borne non fondée sur le temps (RLIMIT_FSIZE, quota, ou écriture via un système de fichiers borné) |
 | F2 | Majeur (à prouver) | §3 concurrence : chaque goroutine a un propriétaire | `adopt` remplace le magasin de confiance pendant que la goroutine de `Wiring` peut sauvegarder ; risque d'écrire des opérations de l'ancien projet dans le nouveau. Après un échec de réouverture, le magasin reste fermé jusqu'au redémarrage | `architect`, à prouver par un test sous `-race` |
 | m1–m11 | Mineur | voir le rapport de l'architecte | variables globales servant de crochets de test, API sans appelant, tinymist embarqué (32,8 Mo) mais jamais lancé, `bridge.Storage` à 17 méthodes, doublons p2p, arrêt sans attente des goroutines, E/S hors `os.Root` dans typst | architect |
 
@@ -124,7 +125,7 @@ Chaque décision cite sa raison ; une décision qui touche une frontière passe 
 | Lot 1, gates | ✅ fusionné | `1e0abbe`, fusion `c47937e` |
 | Lot 2, C1 | ✅ fusionné | `4943dee`, fusion `4daba07` |
 | S2 + F2 | ✅ fusionné | `957cc3d`, fusion `c5e9a4d` |
-| Étape 1 de l'admission (S1 partiel, S4, R1) | 🔨 implémentation (Codex) | branche `fix/admission-stage1`, worktree `.claude/worktrees/stage1-admission` |
+| Étape 1 de l'admission (S1 partiel, S4, R1) | 🔨 correctifs : e2e ZZ-2 échoue 3/3 ; `present.spec.ts:166,256` échouent alors qu'ils passent 3/3 sur `main` (régression due à l'étape 1, piste : bornes des messages éphémères) | branche `fix/admission-stage1`, worktree `.claude/worktrees/stage1-admission` |
 | Révision byzantine de l'admission, ADR 0031 | 🔨 conception (architect) | `audit-2026-10-31/06-admission-design.md`, `docs/adr/0031-*.md` |
 | F3, plantage libp2p à la fermeture | 🔨 diagnostic ; correctif partiel non fusionné | branche `fix/p2p-dial-panic` |
 | F1, tests d'aperçu | 🔨 diagnostic | branche `fix/preview-determinism` |
