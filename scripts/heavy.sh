@@ -15,6 +15,15 @@ set -euo pipefail
 
 [[ $# -gt 0 ]] || { sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 
+# /tmp is a RAM-backed tmpfs: Go's link and test scratch goes to disk instead, and scratch
+# left by killed jobs (go-build*, gremlins-*) is removed once it is an hour old.
+if [[ -z "${CI:-}" ]]; then
+  export GOTMPDIR="${GOTMPDIR:-${XDG_CACHE_HOME:-$HOME/.cache}/inkwell/gotmp}"
+  mkdir -p "$GOTMPDIR"
+  find /tmp "$GOTMPDIR" -maxdepth 1 -mindepth 1 -user "$(id -u)" \
+    \( -name 'go-build*' -o -name 'gremlins-*' \) -mmin +60 -exec rm -rf {} + 2>/dev/null || true
+fi
+
 if [[ -n "${CI:-}" || -n "${INKWELL_HEAVY_HELD:-}" ]] || ! systemctl --user show-environment >/dev/null 2>&1; then
   exec "$@"
 fi
