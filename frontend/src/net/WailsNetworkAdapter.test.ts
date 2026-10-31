@@ -252,10 +252,15 @@ describe("WailsNetworkAdapter", () => {
     const handle = host.repo.create<Doc>({ text: "" });
     host.adapter.setProject(handle.url);
     const learned: string[] = [];
+    const removed: string[] = [];
+    const off = guest.adapter.onProject((url) => removed.push(url));
+    off();
+    off(); // disposing twice is harmless
     guest.adapter.onProject((url) => learned.push(url));
     net.link("host", "guest");
     await until(() => learned.length > 0);
     expect(learned[0]).toBe(handle.url);
+    expect(removed).toEqual([]);
   });
 });
 

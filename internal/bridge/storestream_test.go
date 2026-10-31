@@ -477,9 +477,9 @@ func (c *storeClient) call(op bridge.StoreOp, key []string, data string) bridge.
 	return resp
 }
 
-func startStore(t *testing.T, st bridge.Storage) (*bridge.StoreServer, *storeClient, func()) {
+func startStore(t *testing.T, st *fakeStorage) (*bridge.StoreServer, *storeClient, func()) {
 	t.Helper()
-	srv := bridge.NewStoreServer(st, quietLogger())
+	srv := bridge.NewStoreServer(st, st, st, quietLogger())
 	c := &storeClient{t: t, conn: newFakeConn(t)}
 	done := wait(func() { srv.Serve(c.conn) })
 	return srv, c, func() { c.conn.close(); <-done }
@@ -714,7 +714,7 @@ func TestStoreServerSkipsMalformed(t *testing.T) {
 
 func TestStoreServerExternalNotices(t *testing.T) {
 	st, _ := newFakeStorage(t)
-	srv := bridge.NewStoreServer(st, quietLogger())
+	srv := bridge.NewStoreServer(st, st, st, quietLogger())
 
 	srv.NotifyExternal("main.typ") // no webview yet: remembered
 
@@ -757,7 +757,7 @@ func TestStoreServerExternalNotices(t *testing.T) {
 
 func TestStoreServerReplacesConnection(t *testing.T) {
 	st, _ := newFakeStorage(t)
-	srv := bridge.NewStoreServer(st, quietLogger())
+	srv := bridge.NewStoreServer(st, st, st, quietLogger())
 	old := newFakeConn(t)
 	oldDone := wait(func() { srv.Serve(old) })
 	oc := &storeClient{t: t, conn: old}
@@ -795,5 +795,34 @@ func TestStoreServerRangeTooLarge(t *testing.T) {
 	}
 	if got := c.call(bridge.OpLoad, []string{"doc", "a"}, ""); got.Status != bridge.StatusOK || len(got.Payload) != len(chunk) {
 		t.Errorf("server unusable after an oversized range: %d, %d bytes", got.Status, len(got.Payload))
+	}
+}
+
+func TestStoreServerSeparatePorts(t *testing.T) {
+	kv, _ := newFakeStorage(t)
+	projection, _ := newFakeStorage(t)
+	tree, _ := newFakeStorage(t)
+	srv := bridge.NewStoreServer(struct{ bridge.KV }{kv}, struct{ bridge.Projection }{projection}, struct{ bridge.Tree }{tree}, quietLogger())
+	c := &storeClient{t: t, conn: newFakeConn(t)}
+	done := wait(func() { srv.Serve(c.conn) })
+	defer func() { c.conn.close(); <-done }()
+	if got := c.call(bridge.OpSave, []string{"doc", "snapshot", "h"}, "value"); got.Status != bridge.StatusOK {
+		t.Fatal(got)
+	}
+	if got := c.call(bridge.OpWriteProjection, []string{"main.typ"}, "text"); got.Status != bridge.StatusOK {
+		t.Fatal(got)
+	}
+	data, err := bridge.EncodeReferenced(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := c.call(bridge.OpReferenced, nil, string(data)); got.Status != bridge.StatusOK {
+		t.Fatal(got)
+	}
+	if _, err := kv.Load([]string{"doc", "snapshot", "h"}); err != nil {
+		t.Fatal(err)
+	}
+	if data, err := projection.ReadProjection("main.typ"); err != nil || string(data) != "text" {
+		t.Fatalf("projection: %q %v", data, err)
 	}
 }

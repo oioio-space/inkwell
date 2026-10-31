@@ -25,6 +25,8 @@ const waitDelay = 2 * time.Second
 
 // Spec describes one launch of a verified sidecar.
 type Spec struct {
+	// isolationProbe replaces the platform probe for this run in tests.
+	isolationProbe func() bool
 	// Stdin is the child's standard input; nil means none.
 	Stdin io.Reader
 	// Path is the executable, as returned by [Store.Resolve].
@@ -138,7 +140,7 @@ func run(ctx context.Context, spec Spec, prepareMount func(Spec) (*directoryMoun
 	cmd.Stdout, cmd.Stderr = stdout, stderr
 	cmd.WaitDelay = waitDelay
 	setProcAttr(cmd)
-	isolated := spec.NoNetwork && NetworkIsolation()
+	isolated := spec.NoNetwork && spec.networkIsolation()
 	if isolated {
 		isolate(cmd)
 	}
@@ -246,17 +248,18 @@ func dirBytes(dir string) int64 {
 	return total
 }
 
+func (s Spec) networkIsolation() bool {
+	if s.isolationProbe != nil {
+		return s.isolationProbe()
+	}
+	return NetworkIsolation()
+}
+
 // NetworkIsolation reports whether [Spec.NoNetwork] can be honoured on this
 // machine, probing once.
 func NetworkIsolation() bool {
-	if isolationOverride != nil {
-		return isolationOverride()
-	}
 	return probeIsolation()
 }
-
-// isolationOverride replaces the probe in tests.
-var isolationOverride func() bool
 
 // capped keeps the first max bytes written to it and counts the rest as
 // dropped, always reporting a full write so the child never blocks.

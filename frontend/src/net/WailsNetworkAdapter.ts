@@ -149,8 +149,11 @@ export class WailsNetworkAdapter extends NetworkAdapter {
   }
 
   /** Calls cb whenever a peer announces its project. */
-  onProject(cb: (url: AutomergeUrl, peer: PeerId) => void): void {
+  onProject(cb: (url: AutomergeUrl, peer: PeerId) => void): () => void {
     this.#projectListeners.push(cb);
+    return () => {
+      this.#projectListeners = this.#projectListeners.filter((listener) => listener !== cb);
+    };
   }
 
   /** The project a connected peer announced, if any. */

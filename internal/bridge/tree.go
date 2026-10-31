@@ -9,7 +9,7 @@ import (
 	"github.com/oioio-space/inkwell/internal/project"
 )
 
-// TooLargeError is returned by [Storage.PutBlob] for a file over the size
+// TooLargeError is returned by [Tree.PutBlob] for a file over the size
 // limit of a blob. The store stream answers it with [StatusTooLarge].
 type TooLargeError struct {
 	// Limit is the largest size accepted, in bytes.

@@ -143,6 +143,9 @@ type Wiring struct {
 	pending  map[string][]trust.Hash                              // heads to sign once this device is known to be a writer
 	held     map[transport.PeerID]map[attestKey]trust.Attestation // replayed by connected peers not linked yet, verified when they are
 	closeErr error
+
+	saveWarnedAt time.Time // zero while persistence is healthy
+
 	// fullSnapshot is immutable and published before membership notifications.
 	fullSnapshot atomic.Pointer[map[transport.PeerID]struct{}]
 
@@ -317,6 +320,7 @@ func (w *Wiring) AdoptProject(list *trust.List, persist func() error, save func(
 		w.sync = trust.NewSync[transport.PeerID](list)
 		w.att.reset()
 		w.saved = savedOps(list)
+		w.saveWarnedAt = time.Time{}
 		clear(w.pending)
 		w.sealedSent, w.selfSuspended, w.rolesSent = false, false, nil
 		w.nOps = 0
@@ -430,19 +434,29 @@ func (w *Wiring) onTrust(ev transport.Event) {
 // afterChange saves the new ops of the member list, forgets what became
 // invalid and keeps the members connected.
 func (w *Wiring) afterChange() {
-	if n := w.list().Len(); n != w.nOps {
-		w.nOps = n
+	// One ordered pass per change/tick; a failed save remains pending.
+	if w.save != nil && len(w.saved) < w.list().Len() {
 		for _, op := range w.list().Since(nil) {
 			h := op.Hash()
-			if _, done := w.saved[h]; done || w.save == nil {
+			if _, done := w.saved[h]; done {
 				continue
 			}
 			if err := w.save(op); err != nil {
-				w.log.Warn("saving trust op", "err", err)
-				continue
+				if now := time.Now(); w.saveWarnedAt.IsZero() || now.Sub(w.saveWarnedAt) >= time.Minute {
+					w.log.Warn("saving trust op", "err", err)
+					w.saveWarnedAt = now
+				}
+				break
 			}
 			w.saved[h] = struct{}{}
 		}
+	}
+	if !w.saveWarnedAt.IsZero() && len(w.saved) == w.list().Len() {
+		w.log.Info("saving trust ops recovered")
+		w.saveWarnedAt = time.Time{}
+	}
+	if n := w.list().Len(); n != w.nOps {
+		w.nOps = n
 		for _, key := range w.att.prune(func(a trust.Attestation) bool { return w.list().Verify(a) == nil }) {
 			if id := p2p.IDFromKey(ed25519.PublicKey(key)); id != "" {
 				w.notify(bridge.Envelope{Kind: bridge.Revoked, Peer: id})

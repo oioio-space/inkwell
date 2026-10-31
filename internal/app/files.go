@@ -62,7 +62,7 @@ type FilesOptions struct {
 }
 
 // Files is the multi-file side of the open project (ADR 0023): the
-// [bridge.Storage] that the store stream serves, which is the [project.Project]
+// storage that the store stream serves, which is the [project.Project]
 // plus the blob store, and the machinery that brings the files of the project
 // tree in.
 //
@@ -100,7 +100,11 @@ type Files struct {
 	closing sync.Once
 }
 
-var _ bridge.Storage = (*Files)(nil)
+var (
+	_ bridge.KV         = (*Files)(nil)
+	_ bridge.Projection = (*Files)(nil)
+	_ bridge.Tree       = (*Files)(nil)
+)
 
 // NewFiles opens the blob store of the project p, in .inkwell/blobs, and the
 // pull service over bulk, the bulk lane of the network node. It consumes the

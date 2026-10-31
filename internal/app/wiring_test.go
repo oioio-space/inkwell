@@ -1,13 +1,16 @@
 package app
 
 import (
+	"bytes"
 	"context"
 	"crypto/ed25519"
 	"crypto/sha256"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"slices"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -574,4 +577,86 @@ func TestMemberGateSnapshotSwap(t *testing.T) {
 			t.Fatal("revoked member accepted")
 		}
 	}
+}
+
+func TestTrustSaveRetriesInOrder(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		dev := newDevice(t)
+		members := []*identity.Device{newDevice(t), newDevice(t)}
+		list := newProject(t, dev)
+		var persisted, want []trust.Hash
+		var issueErr error
+		attempts, firstAttempts, firstSaved := 0, 0, 0
+		a := join(t, memnet.New(1, memnet.Faults{}), dev, list, WiringOptions{Save: func(op trust.Op) error {
+			attempts++
+			if attempts == 1 {
+				return errors.New("injected save failure")
+			}
+			persisted = append(persisted, op.Hash())
+			return nil
+		}})
+		if err := a.w.do(func() {
+			for _, member := range members {
+				if _, issueErr = list.Issue(dev, trust.OpAdd, member.Public(), trust.RoleWriter, "member"); issueErr != nil {
+					return
+				}
+			}
+			for _, op := range list.Since(nil)[1:] {
+				want = append(want, op.Hash())
+			}
+			a.w.afterChange()
+			firstAttempts, firstSaved = attempts, len(persisted)
+			a.w.afterChange() // unchanged list, as on the next tick
+			a.w.afterChange() // successful saves must not repeat
+		}); err != nil {
+			t.Fatal(err)
+		}
+		if issueErr != nil {
+			t.Fatal(issueErr)
+		}
+		if firstAttempts != 1 || firstSaved != 0 {
+			t.Errorf("first pass: %d attempts, %d saved", firstAttempts, firstSaved)
+		}
+		if attempts != 3 || !slices.Equal(persisted, want) {
+			t.Errorf("%d attempts persisted %v, want %v", attempts, persisted, want)
+		}
+	})
+}
+
+func TestTrustSaveWarningsAreBounded(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		dev := newDevice(t)
+		list := newProject(t, dev)
+		var logs bytes.Buffer
+		failing, attempts := true, 0
+		a := join(t, memnet.New(1, memnet.Faults{}), dev, list, WiringOptions{TickEvery: time.Second, Log: slog.New(slog.NewTextHandler(&logs, nil)), Save: func(trust.Op) error {
+			attempts++
+			if failing {
+				return errors.New("disk full")
+			}
+			return nil
+		}})
+		if err := a.w.do(func() {
+			if _, err := list.Issue(dev, trust.OpAdd, newDevice(t).Public(), trust.RoleWriter, "member"); err != nil {
+				t.Error(err)
+			}
+			a.w.afterChange()
+		}); err != nil {
+			t.Fatal(err)
+		}
+		time.Sleep(125 * time.Second)
+		synctest.Wait()
+		if attempts < 125 {
+			t.Fatalf("only %d retries", attempts)
+		}
+		if n := strings.Count(logs.String(), "level=WARN"); n != 3 {
+			t.Errorf("warnings = %d, want 3", n)
+		}
+		if err := a.w.do(func() { failing = false; a.w.afterChange(); a.w.afterChange() }); err != nil {
+			t.Fatal(err)
+		}
+		if n := strings.Count(logs.String(), "saving trust ops recovered"); n != 1 {
+			t.Errorf("recovery logs = %d, want 1", n)
+		}
+	})
 }
