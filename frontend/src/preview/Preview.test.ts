@@ -3,7 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, click, render } from "../ui/testkit.svelte";
 import Preview from "./Preview.svelte";
 import { preview } from "./preview.svelte";
-import { problem, result as makeResult, svgPage } from "./testkit";
+import { result as makeResult, problem, svgPage } from "./testkit";
 
 // The singleton survives tests; frames must keep increasing across fixtures too.
 let sequence = 0;
