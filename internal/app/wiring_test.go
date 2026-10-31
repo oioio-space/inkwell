@@ -5,6 +5,8 @@ import (
 	"crypto/sha256"
 	"errors"
 	"os"
+	"slices"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"testing/synctest"
@@ -369,6 +371,68 @@ func TestSwitchProject(t *testing.T) {
 		}
 		if a.adm.Admit(o.id) || !a.adm.Admit(x.id) {
 			t.Error("the admission did not follow the project")
+		}
+	})
+}
+
+// TestAdoptProjectNeverWritesTheOldProjectInTheNewStore parks a command of the
+// old project, an Issue, while the new project is persisted, and checks that it
+// runs after the switch: the new store holds only the new project's ops.
+func TestAdoptProjectNeverWritesTheOldProjectInTheNewStore(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		net := memnet.New(1, memnet.Faults{})
+		me, other := newDevice(t), newDevice(t)
+		proj, _ := newProjectFolder(t)
+		oldList, st, err := openTrust(proj, me)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = st.close() })
+		a := join(t, net, me, oldList, WiringOptions{Save: st.save})
+		newList := newProject(t, other)
+		if _, err := newList.Issue(other, trust.OpAdd, me.Public(), trust.RoleAdmin, "me"); err != nil {
+			t.Fatal(err)
+		}
+
+		own := len(newList.Since(nil)) // the wiring adopts newList and grows it.
+		var wg sync.WaitGroup
+		persist := func() error {
+			// Queued behind this command: it cannot run before the switch.
+			wg.Go(func() {
+				if _, err := a.w.Issue(trust.OpAdd, newDevice(t).Public(), trust.RoleReader, "x"); err != nil {
+					t.Error(err)
+				}
+			})
+			synctest.Wait()
+			return st.replace(newList.Since(nil))
+		}
+		if err := a.w.AdoptProject(newList, persist, st.save); err != nil {
+			t.Fatal(err)
+		}
+		wg.Wait()
+		ops, err := st.readAll()
+		if err != nil {
+			t.Fatal(err)
+		}
+		if slices.ContainsFunc(ops, func(o trust.Op) bool { return o.Hash() == oldList.Since(nil)[0].Hash() }) {
+			t.Error("the genesis op of the old project is in the new store")
+		}
+		list, err := buildList(ops)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if list.Project() != newList.Project() || len(ops) != own+1 {
+			t.Errorf("new store: project %v with %d ops, want %v with %d (its own plus the issued one)", list.Project(), len(ops), newList.Project(), own+1)
+		}
+
+		// A failure to persist keeps the project.
+		b := join(t, net, newDevice(t), newProject(t, me))
+		before := b.adm.list.Load().Project()
+		if err := b.w.AdoptProject(newList, func() error { return errInjected }, nil); !errors.Is(err, errInjected) {
+			t.Fatalf("AdoptProject() = %v, want the injected failure", err)
+		}
+		if got := b.adm.list.Load().Project(); got != before {
+			t.Errorf("project = %v after a failed persist, want %v", got, before)
 		}
 	})
 }

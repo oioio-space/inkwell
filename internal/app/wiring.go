@@ -287,7 +287,21 @@ func (w *Wiring) IssueBatch(tmpls []trust.Op) ([]trust.Op, error) {
 // peers that are members of the new one are announced up. save persists the
 // new ops of list; the ops list holds now are taken as saved already.
 func (w *Wiring) SwitchProject(list *trust.List, save func(trust.Op) error) error {
-	return w.do(func() {
+	return w.AdoptProject(list, nil, save)
+}
+
+// AdoptProject is [Wiring.SwitchProject] preceded by persist, which stores
+// list. Both run on the goroutine of the wiring, the one that calls the save
+// of the old project: none of its ops can be written once persist started. If
+// persist fails, the project is kept and its error is returned.
+func (w *Wiring) AdoptProject(list *trust.List, persist func() error, save func(trust.Op) error) error {
+	var perr error
+	if err := w.do(func() {
+		if persist != nil {
+			if perr = persist(); perr != nil {
+				return
+			}
+		}
 		for _, p := range w.linkedPeers() {
 			w.deactivate(p)
 		}
@@ -300,7 +314,10 @@ func (w *Wiring) SwitchProject(list *trust.List, save func(trust.Op) error) erro
 		w.sealedSent, w.selfSuspended, w.rolesSent = false, false, nil
 		w.nOps = 0
 		w.afterChange()
-	})
+	}); err != nil {
+		return err
+	}
+	return perr
 }
 
 // run is the goroutine of the wiring.

@@ -357,11 +357,20 @@ func (inv *invites) adopt(j *invite.Joined) error {
 	if j.List.Project() == inv.currentList().Project() {
 		return nil // already there; the member lists converge by themselves
 	}
-	// The genesis op goes first: an interruption leaves a valid, partial list.
-	if err := inv.store.replace(j.List.Since(nil)); err != nil {
-		return fmt.Errorf("join: %w", err)
+	// Stored on the goroutine of the wiring: an op of the old project cannot
+	// land in the new store. The genesis op goes first: an interruption leaves
+	// a valid, partial list.
+	persist := func() error {
+		err := inv.store.replace(j.List.Since(nil))
+		if errors.Is(err, errCommitted) {
+			// The new list is what the next open loads: follow it, whatever
+			// failed after the replacement took place.
+			inv.log.Warn("trust store replaced, with a follow-up failure", "err", err)
+			return nil
+		}
+		return err
 	}
-	if err := inv.wiring.SwitchProject(j.List, inv.store.save); err != nil {
+	if err := inv.wiring.AdoptProject(j.List, persist, inv.store.save); err != nil {
 		return fmt.Errorf("join: %w", err)
 	}
 	inv.mu.Lock()
