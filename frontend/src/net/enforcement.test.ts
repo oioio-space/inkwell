@@ -87,7 +87,7 @@ describe("un lecteur forge une modification", () => {
       // Ephemeral messages of a reader are not changes: they pass.
       await until(
         () => {
-          hr.broadcast({ cursor: seed }); // sent again until the peers are back
+          hr.broadcast({ __presence: { type: "update", channel: "anchor", value: String(seed) } }); // sent again until the peers are back
           return cursors.length > 0;
         },
         5000,
@@ -278,7 +278,7 @@ function wire() {
       socket = fake;
       return fake;
     },
-    { onDrop: (r) => drops.push(r) },
+    { onDrop: (r) => drops.push(r), admitted: () => true },
   );
   adapter.on("message", (m) => messages.push(m));
   adapter.connect("me" as PeerId);

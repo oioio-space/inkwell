@@ -7,7 +7,8 @@ import {
   type PeerId,
   type PeerMetadata,
 } from "@automerge/automerge-repo";
-import { decode, encode } from "cbor-x";
+import { encode } from "cbor-x";
+import { Admission, parsePeerMessage } from "./admission";
 import { Coverage } from "./coverage";
 import {
   decodeEnvelope,
@@ -42,6 +43,9 @@ type Handshake = {
 };
 
 export interface AdapterOptions {
+  admitted?: (id: string) => boolean;
+  ready?: (id: string) => boolean;
+  load?: (id: string) => void;
   /** Project document announced to peers (the host sets it; a joiner learns it). */
   projectUrl?: AutomergeUrl;
   /** Delay before reopening a socket that closed while connected. */
@@ -75,7 +79,27 @@ export class WailsNetworkAdapter extends NetworkAdapter {
     this.#resolveReady = resolve;
   });
   #closed = false;
+  #dropCounts = new Map<string, number>();
+  get admissionDrops(): ReadonlyMap<string, number> {
+    return this.#dropCounts;
+  }
+  #drop(reason: string): void {
+    this.#dropCounts.set(reason, (this.#dropCounts.get(reason) ?? 0) + 1);
+    this.#opts.onDrop?.(reason);
+  }
   #coverage = new Coverage();
+  #admission = new Admission(Date.now, Math.random().toString(36).slice(2, 15));
+  #pendingTimers = new Map<PeerId, ReturnType<typeof setTimeout>>();
+
+  scopeChanged(): void {
+    this.#admission.clearQueues();
+  }
+  drain(): void {
+    for (const peer of this.#announced) {
+      for (const msg of this.#admission.drain(peer, this.#opts.ready ?? (() => true)))
+        this.#deliver(msg);
+    }
+  }
   /** Heads of the last sync message sent for each document. */
   #lastHeads = new Map<string, string[]>();
   /** Heads of the last attestation asked for each document. */
@@ -156,6 +180,7 @@ export class WailsNetworkAdapter extends NetworkAdapter {
   }
 
   send(message: Message): void {
+    if (message.type === "ephemeral" && message.senderId !== this.peerId) return;
     this.#attest(message);
     this.#sendTo(message.targetId, message);
   }
@@ -171,6 +196,9 @@ export class WailsNetworkAdapter extends NetworkAdapter {
   /** Every announced peer is gone with the link: the repo forgets its sync state with them. */
   #disconnectAll(): void {
     for (const peerId of this.#announced) this.emit("peer-disconnected", { peerId });
+    for (const peer of this.#announced) this.#admission.forget(peer);
+    for (const timer of this.#pendingTimers.values()) clearTimeout(timer);
+    this.#pendingTimers.clear();
     this.#announced.clear();
   }
 
@@ -195,15 +223,19 @@ export class WailsNetworkAdapter extends NetworkAdapter {
     try {
       env = decodeEnvelope(frame);
     } catch (err) {
-      this.#opts.onDrop?.(err instanceof MalformedEnvelope ? err.message : "undecodable frame");
+      this.#drop(err instanceof MalformedEnvelope ? err.message : "undecodable frame");
       return;
     }
     const peer = env.peer as PeerId;
     switch (env.kind) {
       case Kind.PeerUp:
-        this.#sendHandshake(peer, "arrive");
+        if (this.#admission.blocked(peer)) this.#scheduleReset(peer);
+        else this.#sendHandshake(peer, "arrive");
         return;
       case Kind.PeerDown:
+        this.#admission.forget(peer);
+        clearTimeout(this.#pendingTimers.get(peer));
+        this.#pendingTimers.delete(peer);
         this.#coverage.forgetPeer(peer);
         this.#projects.delete(peer);
         if (this.#announced.delete(peer)) this.emit("peer-disconnected", { peerId: peer });
@@ -232,7 +264,7 @@ export class WailsNetworkAdapter extends NetworkAdapter {
     try {
       this.#roles = new Map(decodeRoles(payload).map((m) => [m.peer, m]));
     } catch {
-      this.#opts.onDrop?.("undecodable roles");
+      this.#drop("undecodable roles");
       return;
     }
     for (const cb of this.#roleListeners) cb();
@@ -243,7 +275,7 @@ export class WailsNetworkAdapter extends NetworkAdapter {
       const { doc, heads } = decodeHeads(payload);
       this.#coverage.attested(signer, doc, heads);
     } catch {
-      this.#opts.onDrop?.("undecodable attestation");
+      this.#drop("undecodable attestation");
     }
   }
 
@@ -282,7 +314,7 @@ export class WailsNetworkAdapter extends NetworkAdapter {
         payload: encodeHeads({ doc, heads }),
       });
     } catch {
-      this.#opts.onDrop?.("heads cannot be attested"); // e.g. more than 64 heads
+      this.#drop("heads cannot be attested"); // e.g. more than 64 heads
       return;
     }
     socket.send(frame);
@@ -290,40 +322,92 @@ export class WailsNetworkAdapter extends NetworkAdapter {
   }
 
   #receiveMessage(from: PeerId, payload: Uint8Array): void {
-    let msg: Handshake | Message;
-    try {
-      msg = decode(payload) as Handshake | Message;
-    } catch {
-      this.#opts.onDrop?.("undecodable payload");
+    const msg = parsePeerMessage(payload, {
+      from,
+      me: this.peerId ?? "",
+      announced: this.#announced.has(from),
+      has: this.#opts.admitted ?? (() => false),
+    });
+    if (!msg) {
+      this.#drop("invalid peer message");
       return;
     }
-    // A peer may only speak for itself: the sender id is the one Go authenticated
-    // at the transport layer, never what the payload claims.
-    if (msg.senderId !== from) {
-      this.#opts.onDrop?.("sender mismatch");
+    if (this.#admission.blocked(from)) {
+      this.#drop("reset cooldown");
       return;
     }
     if (msg.type === "arrive" || msg.type === "welcome") {
       const hs = msg as Handshake;
-      if (hs.type === "arrive") {
-        // An arrive is the first thing a peer says after its link came up. From a
-        // peer already announced it means that peer started over while the old link
-        // looked alive here: let the repo forget its sync state with it.
-        if (this.#announced.delete(from)) {
-          this.emit("peer-disconnected", { peerId: from });
-          // Go never saw the old link go down, so it gossiped our attestations into
-          // the void: sign again, ahead of the sync messages of the new start.
-          this.#reattest();
-        }
-        this.#sendHandshake(from, "welcome");
+      if (hs.type === "arrive" && this.#announced.has(from) && !this.#admission.arrive(from, hs)) {
+        this.#drop("re-arrive rate");
+        this.#schedulePending(from);
+        return;
       }
-      this.#announce(from, hs);
+      this.#acceptHandshake(from, hs);
       return;
     }
-    if (!this.#announced.has(from) || (msg as Message).targetId !== this.peerId) {
-      this.#opts.onDrop?.("message before handshake or for another peer");
+    let message = msg as Message;
+    if (message.type === "ephemeral") {
+      const rewritten = this.#admission.ephemeral(from, message);
+      if (!rewritten) {
+        this.#drop("ephemeral rate or count");
+        return;
+      }
+      message = rewritten;
+    }
+    if (message.documentId && !(this.#opts.ready?.(message.documentId) ?? true)) {
+      if (!this.#admission.hold(from, message)) {
+        this.#drop("hold queue overflow");
+        clearTimeout(this.#pendingTimers.get(from));
+        this.#pendingTimers.delete(from);
+        this.#scheduleReset(from);
+        if (this.#announced.delete(from)) this.emit("peer-disconnected", { peerId: from });
+        return;
+      }
+      this.#opts.load?.(message.documentId);
       return;
     }
+    this.#deliver(message);
+  }
+
+  #scheduleReset(from: PeerId): void {
+    if (this.#pendingTimers.has(from)) return;
+    this.#pendingTimers.set(
+      from,
+      setTimeout(() => {
+        this.#pendingTimers.delete(from);
+        this.#sendHandshake(from, "arrive");
+      }, this.#admission.retryAfter(from)),
+    );
+  }
+
+  #schedulePending(from: PeerId): void {
+    if (this.#pendingTimers.has(from)) return;
+    this.#pendingTimers.set(
+      from,
+      setTimeout(() => {
+        this.#pendingTimers.delete(from);
+        const hs = this.#admission.pending(from) as Handshake | undefined;
+        if (hs) this.#acceptHandshake(from, hs);
+      }, 20000),
+    );
+  }
+
+  #acceptHandshake(from: PeerId, hs: Handshake): void {
+    if (hs.type === "welcome" && this.#announced.has(from)) return;
+    this.#admission.reset(from);
+    if (hs.type === "arrive") {
+      if (this.#announced.delete(from)) {
+        this.emit("peer-disconnected", { peerId: from });
+        this.#coverage.forgetPeer(from);
+        this.#reattest();
+      }
+      this.#sendHandshake(from, "welcome");
+    }
+    this.#announce(from, hs);
+  }
+
+  #deliver(msg: Message): void {
     const checked = this.#enforce(msg as Message);
     if (checked) this.emit("message", checked);
   }
@@ -338,7 +422,7 @@ export class WailsNetworkAdapter extends NetworkAdapter {
     const data =
       msg.documentId && msg.data && this.#coverage.filter(msg.documentId, msg.senderId, msg.data);
     if (!data) {
-      this.#opts.onDrop?.("sync message dropped");
+      this.#drop("sync message dropped");
       return undefined;
     }
     return data === msg.data ? msg : { ...msg, data };
@@ -362,7 +446,7 @@ export class WailsNetworkAdapter extends NetworkAdapter {
     }
     if (this.#announced.has(peer)) return;
     this.#announced.add(peer);
-    this.emit("peer-candidate", { peerId: peer, peerMetadata: hs.peerMetadata ?? {} });
+    this.emit("peer-candidate", { peerId: peer, peerMetadata: { isEphemeral: true } });
   }
 
   #sendTo(to: PeerId, value: Handshake | Message): void {

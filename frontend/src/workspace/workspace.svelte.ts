@@ -1,6 +1,7 @@
 import {
   type AutomergeUrl,
   type DocHandle,
+  type DocumentId,
   isValidAutomergeUrl,
   type PeerId,
   Repo,
@@ -13,6 +14,8 @@ import {
 import type { Span } from "../editor/external";
 import type { Meta } from "../history/types";
 import { t } from "../i18n";
+import { AdmittedSet } from "../net/scope";
+import { shareAdmitted } from "../net/sharing";
 import { type SocketLike, WailsNetworkAdapter } from "../net/WailsNetworkAdapter";
 import { ExternalSync, type Notice } from "../store/externalSync";
 import { type FileInfo, FileKind, type ProjectFile } from "../store/files";
@@ -22,6 +25,8 @@ import { type Projection, startProjection } from "../store/projection";
 import { safeGet, safeSet } from "../store/safeStorage";
 import { settings } from "../store/settings.svelte";
 import { accessOf, type Member } from "../ui/people/roster";
+import { BootstrapLoader } from "./loader";
+import { observeVariantHeads } from "./observe";
 
 /** The project's text, and what the history keeps beside it (named versions, variants, actors). */
 export type Doc = { text: string; meta?: Meta };
@@ -119,6 +124,9 @@ class Workspace {
   fileInfo = $state.raw<FileInfo | undefined>();
 
   #rosterTicket = 0;
+  #admitted = new AdmittedSet();
+  #loader: BootstrapLoader | undefined;
+  #offAdmission: (() => void) | undefined;
   #repo: Repo | undefined;
   get repo(): Repo | undefined {
     return this.#repo;
@@ -139,6 +147,11 @@ class Workspace {
     if (!this.myName) this.setName(`Personne ${id.slice(0, 4)}`);
 
     const adapter = new WailsNetworkAdapter(() => Stream("net") as unknown as SocketLike, {
+      admitted: this.#admitted.has,
+      ready: (id) =>
+        Object.hasOwn(this.#repo?.handles ?? {}, id) &&
+        !!this.#repo?.handles[id as DocumentId]?.inState(["ready", "requesting", "unavailable"]),
+      load: (id) => this.#loader?.ensure(id),
       onDrop: (reason) => console.warn("bridge: dropped frame:", reason),
     });
     adapter.on("peer-candidate", ({ peerId }) => {
@@ -165,9 +178,25 @@ class Workspace {
       peerId: id as PeerId,
       network: [adapter],
       storage,
-      sharePolicy: async () => true,
+      isEphemeral: true,
+      shareConfig: shareAdmitted(this.#admitted),
     });
 
+    this.#loader = new BootstrapLoader(this.#repo, this.#admitted, () => adapter.drain());
+    let epoch = this.#admitted.epoch;
+    this.#admitted.onChange(() => {
+      if (epoch !== this.#admitted.epoch) {
+        adapter.scopeChanged();
+        epoch = this.#admitted.epoch;
+      }
+      this.#repo?.shareConfigChanged();
+      for (const id of this.#admitted.ids) this.#loader?.ensure(id);
+    });
+
+    observeVariantHeads(
+      () => this.handle,
+      () => this.#repo,
+    );
     const saved = (await Projects.Current()).RootURL;
     if (saved && isValidAutomergeUrl(saved)) {
       try {
@@ -182,7 +211,15 @@ class Workspace {
 
   async open(url: AutomergeUrl): Promise<void> {
     if (!this.#repo) throw new Error("workspace not started");
+    this.#offAdmission?.();
+    this.#admitted.setRoot(url);
+    const epoch = this.#admitted.epoch;
     const handle = await this.#repo.find<Doc>(url);
+    if (epoch !== this.#admitted.epoch) return;
+    const refresh = () => this.#admitted.refresh(handle.doc());
+    refresh();
+    handle.on("change", refresh);
+    this.#offAdmission = () => handle.off("change", refresh);
     this.variant = undefined;
     this.#projection?.stop();
     this.#sync?.stop();

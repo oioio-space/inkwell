@@ -1,3 +1,4 @@
+import { fileURLToPath } from "node:url";
 import { svelte } from "@sveltejs/vite-plugin-svelte";
 import wails from "@wailsio/runtime/plugins/vite";
 import type { Plugin } from "vite";
@@ -28,6 +29,9 @@ export default defineConfig({
   // tests, leave Vite's default conditions alone (an empty list would drop "browser").
   resolve: process.env.VITEST ? { conditions: ["browser"] } : undefined,
   test: {
+    // Worktrees may share node_modules, but cached transforms contain absolute binding paths.
+    // Keep them local so mocks and imports resolve to the same worktree's modules.
+    fsModuleCachePath: fileURLToPath(new URL("./test-results/.vitest-cache", import.meta.url)),
     environment: "happy-dom",
     include: ["src/**/*.test.ts"],
     setupFiles: ["src/test-setup.ts"],

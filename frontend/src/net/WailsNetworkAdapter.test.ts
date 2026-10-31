@@ -15,7 +15,10 @@ afterEach(async () => {
 });
 
 function peer(net: SimNet, id: string) {
-  const adapter = new WailsNetworkAdapter(() => net.socket(id), { reconnectDelayMs: 5 });
+  const adapter = new WailsNetworkAdapter(() => net.socket(id), {
+    reconnectDelayMs: 5,
+    admitted: () => true,
+  });
   const repo = new Repo({
     peerId: id as PeerId,
     network: [adapter],
@@ -82,7 +85,7 @@ describe("WailsNetworkAdapter", () => {
         socket = fake;
         return fake;
       },
-      { onDrop: (r) => drops.push(r) },
+      { onDrop: (r) => drops.push(r), admitted: () => true },
     );
     adapter.connect("me" as PeerId);
     const deliver = (b: Uint8Array) =>
@@ -95,7 +98,7 @@ describe("WailsNetworkAdapter", () => {
         payload: encode({ type: "arrive", senderId: "alice", peerMetadata: {} }),
       }),
     );
-    expect(drops).toEqual(["unsupported version 9", "sender mismatch"]);
+    expect(drops).toEqual(["unsupported version 9", "invalid peer message"]);
   });
 
   it("PRS-63 knows the role of each member from what Go reports, and tells when it changes", () => {
@@ -114,7 +117,7 @@ describe("WailsNetworkAdapter", () => {
         socket = fake;
         return fake;
       },
-      { onDrop: (r) => drops.push(r) },
+      { onDrop: (r) => drops.push(r), admitted: () => true },
     );
     let told = 0;
     adapter.onRoles(() => told++);

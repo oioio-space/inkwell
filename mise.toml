@@ -309,7 +309,7 @@ run = "wails3 task build"
 description = "Build what the end-to-end tests run: frontend, bin/inkwell-server, bin/inkwell-relay, the Playwright browser"
 depends = ["fe:install", "fe:bindings", "sidecar:fetch"]
 run = """
-(cd frontend && pnpm run build)
+(cd frontend && VITE_E2E_OBSERVE=1 pnpm run build)
 go build -tags server -o bin/inkwell-server ./cmd/inkwell
 CGO_ENABLED=0 go build -o bin/inkwell-relay ./cmd/inkwell-relay
 cd frontend

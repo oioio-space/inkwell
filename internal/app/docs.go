@@ -4,6 +4,7 @@ import (
 	"bufio"
 	"errors"
 	"fmt"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
@@ -90,5 +91,14 @@ func OpenProject(docs *os.Root) (*project.Project, error) {
 	if err != nil {
 		return nil, err
 	}
-	return project.Open(docs, dir)
+	p, err := project.Open(docs, dir)
+	if err != nil {
+		return nil, err
+	}
+	count, err := p.RemoveSyncStates()
+	if err != nil {
+		return nil, errors.Join(err, p.Close())
+	}
+	slog.Info("removed obsolete sync caches", "directories", count)
+	return p, nil
 }

@@ -1,7 +1,11 @@
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures";
-import { clear, docText, editor, open, pair, typeAtEnd } from "./helpers";
-import { ALICE_URL, BOB_URL } from "./ports";
+import { clear, docText, editor, freshInvitation, open, pair, rename, typeAtEnd } from "./helpers";
+import { startInstance, stopInstance } from "./instance";
+import { ALICE_URL, BOB_URL, CAROL_PORT } from "./ports";
 
 // B2: the margin strip, the history drawer, readable differences, variants and the text zoom,
 // with two real instances.
@@ -210,4 +214,97 @@ test("B2 text zoom: keys, indicator, kept per project, no sideways overflow (ZOO
   await page.reload();
   await expect(page.getByTestId("text-zoom")).toHaveText("300 %");
   await page.keyboard.press("ControlOrMeta+0");
+});
+
+async function variantHeads(page: Page, name: string): Promise<string[]> {
+  return page.evaluate((name) => {
+    const observe = (window as Window & { __inkwellVariantHeads?: (name: string) => string[] })
+      .__inkwellVariantHeads;
+    if (!observe)
+      throw new Error("variant heads observer missing; rebuild with VITE_E2E_OBSERVE=1");
+    return observe(name);
+  }, name);
+}
+const row = (p: Page, name: string) =>
+  p
+    .getByRole("listbox", { name: "Moments de l'historique" })
+    .getByRole("option", { name: new RegExp(`Variante « ${name} »`) });
+
+async function makeVariant(p: Page, name: string, text: string) {
+  await openDrawer(p);
+  await p
+    .getByRole("listbox", { name: "Moments de l'historique" })
+    .getByRole("option", { name: /Maintenant/ })
+    .click();
+  await p.getByRole("button", { name: "Créer une variante ici" }).click();
+  await p.getByLabel("Nom de la variante").fill(name);
+  await p.getByRole("button", { name: "Enregistrer" }).click();
+  await expect(row(p, name)).toBeVisible();
+  await row(p, name).click();
+  await p.getByRole("button", { name: "Modifier la variante" }).click();
+  await expect(p.getByText("Vous modifiez la variante")).toBeVisible();
+  await typeAtEnd(p, text);
+  await p.getByRole("button", { name: "Revenir au texte principal" }).click();
+}
+
+async function openVariant(p: Page, name: string) {
+  await openDrawer(p);
+  await expect(row(p, name)).toBeVisible({ timeout: 20_000 });
+  await row(p, name).click();
+  await p.getByRole("button", { name: "Modifier la variante" }).click();
+}
+
+test("ZZ-1 a variant created after pairing reaches the other person when opened (creator online)", async ({
+  browser,
+}) => {
+  const alice = await open(browser, ALICE_URL);
+  const bob = await open(browser, BOB_URL, true);
+  await clear(alice);
+  await clear(bob);
+  await pair(alice, bob);
+  await typeAtEnd(alice, "= Commun\n");
+  await expect.poll(() => docText(bob)).toContain("Commun");
+  await makeVariant(alice, "v-en-ligne", "Texte de la variante.\n");
+  await openVariant(bob, "v-en-ligne");
+  await expect.poll(() => docText(bob), { timeout: 20_000 }).toContain("Texte de la variante");
+});
+
+test("ZZ-2 a variant created by a person who then leaves is still available to the others", async ({
+  browser,
+}) => {
+  const alice = await open(browser, ALICE_URL);
+  const bob = await open(browser, BOB_URL, true);
+  await clear(alice);
+  await clear(bob);
+  await pair(alice, bob);
+  await typeAtEnd(alice, "= Commun\n");
+  await expect.poll(() => docText(bob)).toContain("Commun");
+  const carolApp = await startInstance(
+    CAROL_PORT,
+    mkdtempSync(join(tmpdir(), "inkwell-e2e-carol-")),
+  );
+  let stopped = false;
+  try {
+    const carol = await open(browser, `http://127.0.0.1:${CAROL_PORT}/`);
+    const text = await freshInvitation(alice);
+    await carol.getByRole("button", { name: "Partager" }).click();
+    await rename(carol, "Carole");
+    await carol.getByPlaceholder("Collez l'invitation ici").fill(text);
+    await carol.getByRole("button", { name: "Rejoindre" }).click();
+    await expect(carol.getByRole("status")).toHaveText(/Synchronisé/, { timeout: 60_000 });
+    await expect.poll(() => docText(carol), { timeout: 20_000 }).toContain("Commun");
+    await carol.keyboard.press("Escape");
+    await makeVariant(carol, "v-partie", "Variante de Carole.\n");
+    await openDrawer(bob);
+    await expect(row(bob, "v-partie")).toBeVisible({ timeout: 20_000 });
+    const heads = await variantHeads(carol, "v-partie");
+    expect(heads.length).toBeGreaterThan(0);
+    await expect.poll(() => variantHeads(bob, "v-partie"), { timeout: 20_000 }).toEqual(heads);
+    await stopInstance(carolApp);
+    stopped = true;
+    await openVariant(bob, "v-partie");
+    await expect.poll(() => docText(bob), { timeout: 20_000 }).toContain("Variante de Carole");
+  } finally {
+    if (!stopped) await stopInstance(carolApp);
+  }
 });
