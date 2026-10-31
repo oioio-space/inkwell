@@ -115,7 +115,10 @@ type Preview struct {
 	wg     sync.WaitGroup
 	mu     sync.Mutex
 	closed bool
-	timer  *time.Timer
+
+	// beforePublish is a test-only hook that pauses a result before publication.
+	beforePublish func(uint64)
+	timer         *time.Timer
 
 	srcGen     uint64             // counts source changes
 	seq        uint64             // counts compilations asked for; only the latest is delivered
@@ -125,6 +128,7 @@ type Preview struct {
 	editTime   time.Time          // when the webview says the document last changed
 	wroteAt    time.Time          // when the sources last changed on disk
 	cur        *previewConn
+	lastSeq    uint64 // sequence of the last result message
 	last       []byte // the last result message, for a page that reloads
 	lastFirst  int    // first page of last
 	lastPages  int    // pages in last
@@ -281,6 +285,9 @@ type compilation struct {
 // compile runs one compilation and delivers its result unless it was
 // superseded meanwhile.
 func (p *Preview) compile(ctx context.Context, run compilation) {
+	if ctx.Err() != nil {
+		return // replaced before the goroutine ran: do not start Typst for nobody
+	}
 	p.deliver(run.seq, mustJSON(PreviewMessage{Type: "compiling", Seq: run.seq}))
 	opts := []typst.Option{typst.WithPages(run.win.first, run.win.last), typst.WithTimestamp(run.date)}
 	if run.reuse {
@@ -328,10 +335,14 @@ func (p *Preview) compile(ctx context.Context, run compilation) {
 	if !run.reuse || err != nil { // else the PDF of these sources is still the one cached
 		p.cache = snap
 	}
+	p.lastSeq = run.seq
 	p.last, p.lastFirst, p.lastPages, p.lastCount = b, msg.First, len(msg.Pages), msg.PageCount
 	cur := p.cur
 	p.mu.Unlock()
-	cur.send(p.log, b)
+	if p.beforePublish != nil {
+		p.beforePublish(run.seq)
+	}
+	cur.sendSeq(p.log, b, run.seq)
 }
 
 // deliver sends b to the webview if seq is still the latest compilation.
@@ -343,7 +354,7 @@ func (p *Preview) deliver(seq uint64, b []byte) {
 	}
 	cur := p.cur
 	p.mu.Unlock()
-	cur.send(p.log, b)
+	cur.sendSeq(p.log, b, seq)
 }
 
 var errUnavailable = errors.New("typst could not start")
@@ -441,8 +452,9 @@ func encodeMessage(m *PreviewMessage) []byte {
 
 // previewConn is the webview attached to the preview stream.
 type previewConn struct {
-	c  bridge.Conn
-	mu sync.Mutex
+	c       bridge.Conn
+	mu      sync.Mutex
+	lastSeq uint64
 }
 
 // send writes one frame; a nil receiver (no webview attached) drops it.
@@ -452,6 +464,26 @@ func (c *previewConn) send(log *slog.Logger, b []byte) {
 	}
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	c.sendLocked(log, b)
+}
+
+// sendSeq writes a compilation frame unless a newer sequence was already sent.
+func (c *previewConn) sendSeq(log *slog.Logger, b []byte, seq uint64) {
+	if c == nil {
+		return
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	// Validate under the same lock as Send: an older publisher may have paused
+	// after releasing p.mu. Never hold p.mu across transport I/O.
+	if seq < c.lastSeq {
+		return
+	}
+	c.lastSeq = seq
+	c.sendLocked(log, b)
+}
+
+func (c *previewConn) sendLocked(log *slog.Logger, b []byte) {
 	if err := c.c.Send(bytes.Clone(b)); err != nil {
 		log.Warn("preview stream: send to webview", "err", err)
 	}
@@ -515,7 +547,7 @@ func (p *Preview) Serve(c bridge.Conn) {
 		return
 	}
 	p.cur = cur
-	last := p.last
+	last, lastSeq := p.last, p.lastSeq
 	if last == nil {
 		p.armLocked(0) // nothing shown yet: compile for the first time
 	}
@@ -528,7 +560,7 @@ func (p *Preview) Serve(c bridge.Conn) {
 		p.mu.Unlock()
 	}()
 	if last != nil {
-		cur.send(p.log, last)
+		cur.sendSeq(p.log, last, lastSeq)
 	}
 	for {
 		b, err := c.Receive()

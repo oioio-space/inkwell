@@ -14,6 +14,7 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"testing/synctest"
 	"time"
 
 	"github.com/oioio-space/inkwell/internal/app"
@@ -169,15 +170,18 @@ func TestPreviewCompilesTheProject(t *testing.T) {
 		c := attach(t, p)
 		c.ask(t, `{"op":"view","first":2,"last":3}`)
 
+		// The first compilation (pages 1 to 4) may finish before the window is known, and then
+		// already holds pages 2 and 3: the window is covered and nothing is compiled again. Either
+		// way, the result to check is the first one that holds both pages.
 		var m app.PreviewMessage
 		for {
 			m = c.message(t, "result")
-			if m.First == 2 {
-				break // the first compilation (pages 1 to 4) may arrive before the window is known
+			if m.Failure != nil || m.First <= 2 && m.First+len(m.Pages) > 3 {
+				break
 			}
 		}
-		if m.PageCount != 3 || len(m.Pages) != 2 || m.Failure != nil {
-			t.Fatalf("result = pages %d, %d svg, failure %v; want 3 pages, 2 svg, none", m.PageCount, len(m.Pages), m.Failure)
+		if m.PageCount != 3 || len(m.Pages) < 2 || m.Failure != nil {
+			t.Fatalf("result = pages %d, %d svg, failure %v; want 3 pages, 2+ svg, none", m.PageCount, len(m.Pages), m.Failure)
 		}
 		for i, svg := range m.Pages {
 			if !strings.HasPrefix(svg, "<svg") {
@@ -502,19 +506,25 @@ func TestPreviewScheduling(t *testing.T) {
 	})
 
 	t.Run("PRV-32 the pages in view are known without compiling again", func(t *testing.T) {
-		fc := &fakeCompiler{compile: func(context.Context, int) (*typst.Result, error) { return okResult(3), nil }}
-		p := app.NewPreview(app.PreviewOptions{Engine: fc, Root: t.TempDir()})
-		t.Cleanup(p.Close)
-		c := attach(t, p)
-		c.ask(t, `{"op":"view","first":1,"last":4}`)
-		c.message(t, "result")
-		before := fc.calls.Load()
-		c.ask(t, `{"op":"view","first":2,"last":3}`) // held already
-		c.ask(t, `{"op":"view","first":5,"last":9}`) // past the end of a 3-page document
-		c.quiet(t, "result", 300*time.Millisecond)
-		if got := fc.calls.Load(); got != before {
-			t.Errorf("%d compilations for windows the result already covers, want none", got-before)
-		}
+		// A bubble makes it deterministic: Wait returns once every goroutine is blocked, so the
+		// compilations the first window asked for (however many the scheduler ran) are all done
+		// before they are counted, whatever the load of the machine.
+		synctest.Test(t, func(t *testing.T) {
+			fc := &fakeCompiler{compile: func(context.Context, int) (*typst.Result, error) { return okResult(3), nil }}
+			p := app.NewPreview(app.PreviewOptions{Engine: fc, Root: t.TempDir()})
+			t.Cleanup(p.Close)
+			c := attach(t, p)
+			c.ask(t, `{"op":"view","first":1,"last":4}`)
+			synctest.Wait()
+			c.message(t, "result")
+			before := fc.calls.Load()
+			c.ask(t, `{"op":"view","first":2,"last":3}`) // held already
+			c.ask(t, `{"op":"view","first":5,"last":9}`) // past the end of a 3-page document
+			synctest.Wait()
+			if got := fc.calls.Load(); got != before {
+				t.Errorf("%d compilations for windows the result already covers, want none", got-before)
+			}
+		})
 	})
 
 	t.Run("PRV-33 Close stops a compilation in flight and leaves no goroutine", func(t *testing.T) {
