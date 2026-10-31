@@ -1,0 +1,25 @@
+goos: linux
+goarch: amd64
+pkg: github.com/oioio-space/inkwell/internal/app
+cpu: 13th Gen Intel(R) Core(TM) i7-1370P
+                 │ /tmp/claude-1000/bench/main-relay.txt │              new.txt               │
+                 │                sec/op                 │   sec/op     vs base               │
+Relay/Idle-20                                233.8n ± 3%   226.2n ± 3%  -3.25% (p=0.000 n=10)
+Relay/Message-20                             930.3n ± 4%   919.7n ± 1%  -1.14% (p=0.037 n=10)
+geomean                                      466.4n        456.2n       -2.20%
+
+                 │ /tmp/claude-1000/bench/main-relay.txt │               new.txt               │
+                 │                 B/op                  │    B/op     vs base                 │
+Relay/Idle-20                               0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=10) ¹
+Relay/Message-20                            48.00 ± 0%     48.00 ± 0%       ~ (p=1.000 n=10) ¹
+geomean                                                ²               +0.00%                ²
+¹ all samples are equal
+² summaries must be >0 to compute geomean
+
+                 │ /tmp/claude-1000/bench/main-relay.txt │               new.txt               │
+                 │               allocs/op               │ allocs/op   vs base                 │
+Relay/Idle-20                               0.000 ± 0%     0.000 ± 0%       ~ (p=1.000 n=10) ¹
+Relay/Message-20                            1.000 ± 0%     1.000 ± 0%       ~ (p=1.000 n=10) ¹
+geomean                                                ²               +0.00%                ²
+¹ all samples are equal
+² summaries must be >0 to compute geomean

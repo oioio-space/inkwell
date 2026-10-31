@@ -156,13 +156,13 @@ func (r *Router) Serve(c Conn) {
 		r.mu.Unlock()
 	}()
 
-	for _, p := range r.t.Peers() {
-		r.sendLocked(s, Envelope{Kind: PeerUp, Peer: p})
-	}
 	if r.att != nil {
 		for _, e := range r.att.Notices() {
 			r.sendLocked(s, e)
 		}
+	}
+	for _, p := range r.t.Peers() {
+		r.sendLocked(s, Envelope{Kind: PeerUp, Peer: p})
 	}
 	s.mu.Unlock()
 
@@ -241,6 +241,9 @@ func (r *Router) sendTo(ctx context.Context, peer transport.PeerID, q <-chan []b
 	for {
 		select {
 		case p := <-q:
+			if ctx.Err() != nil {
+				return
+			}
 			if err := r.t.Send(ctx, peer, p); err != nil {
 				r.warn("bridge: send to peer", "peer", peer, "err", err)
 			}

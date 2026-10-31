@@ -3,7 +3,14 @@ import { next as A } from "@automerge/automerge";
 import type { DocHandle, DocumentId, Message, PeerId } from "@automerge/automerge-repo";
 import { encode } from "cbor-x";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { decodeEnvelope, decodeHeads, encodeEnvelope, encodeHeads, Kind } from "./envelope";
+import {
+  decodeEnvelope,
+  decodeHeads,
+  encodeEnvelope,
+  encodeHeads,
+  encodeRoles,
+  Kind,
+} from "./envelope";
 import { rng, SimNet } from "./simnet";
 import { Kit, type TestPeer, until } from "./testkit";
 import { type SocketLike, WailsNetworkAdapter } from "./WailsNetworkAdapter";
@@ -289,6 +296,12 @@ function wire() {
   adapter.connect("me" as PeerId);
   const deliver = (b: Uint8Array) =>
     socket?.onmessage?.(new MessageEvent("message", { data: b.buffer }));
+  const rolesFrame = encodeEnvelope({
+    kind: Kind.Roles,
+    peer: "me",
+    payload: encodeRoles([{ peer: "peer", role: "writer", suspended: false }]),
+  });
+  socket?.onmessage?.(new MessageEvent("message", { data: rolesFrame.buffer }));
   const kinds = () => sent.map((f) => decodeEnvelope(f).kind);
   const handshake = (peer: string) => {
     deliver(encodeEnvelope({ kind: Kind.PeerUp, peer, payload: new Uint8Array() }));

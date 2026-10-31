@@ -220,18 +220,15 @@ export class WailsNetworkAdapter extends NetworkAdapter {
     const peer = env.peer as PeerId;
     switch (env.kind) {
       case Kind.PeerUp:
+        if (!this.#member(peer)) return;
         if (this.#admission.blocked(peer)) this.#scheduleReset(peer);
         else this.#sendHandshake(peer, "arrive");
         return;
       case Kind.PeerDown:
-        this.#admission.forget(peer);
-        clearTimeout(this.#pendingTimers.get(peer));
-        this.#pendingTimers.delete(peer);
-        this.#coverage.forgetPeer(peer);
-        this.#projects.delete(peer);
-        if (this.#announced.delete(peer)) this.emit("peer-disconnected", { peerId: peer });
+        this.#disconnectPeer(peer);
         return;
       case Kind.Message:
+        if (!this.#member(peer)) return;
         this.#receiveMessage(peer, env.payload);
         return;
       case Kind.Attested:
@@ -258,7 +255,29 @@ export class WailsNetworkAdapter extends NetworkAdapter {
       this.#drop("undecodable roles");
       return;
     }
+    const members = [...this.#roles.values()]
+      .filter((m) => !m.suspended && !this.#roles.get(this.peerId ?? "")?.suspended)
+      .map((m) => m.peer);
+    const memberSet = new Set(members);
+    for (const peer of new Set([...this.#announced, ...this.#pendingTimers.keys()])) {
+      if (!memberSet.has(peer)) this.#disconnectPeer(peer);
+    }
+    this.#admission.setMembers(members);
     for (const cb of this.#roleListeners) cb();
+  }
+
+  #member(peer: string): boolean {
+    const role = this.#roles.get(peer);
+    return role !== undefined && !role.suspended && !this.#roles.get(this.peerId ?? "")?.suspended;
+  }
+
+  #disconnectPeer(peer: PeerId): void {
+    this.#admission.forget(peer);
+    clearTimeout(this.#pendingTimers.get(peer));
+    this.#pendingTimers.delete(peer);
+    this.#coverage.forgetPeer(peer);
+    this.#projects.delete(peer);
+    if (this.#announced.delete(peer)) this.emit("peer-disconnected", { peerId: peer });
   }
 
   #receiveAttested(signer: string, payload: Uint8Array): void {
@@ -443,7 +462,7 @@ export class WailsNetworkAdapter extends NetworkAdapter {
 
   #sendTo(to: PeerId, value: Handshake | Message): void {
     const socket = this.#socket;
-    if (!socket) return;
+    if (!socket || !this.#member(to)) return;
     socket.send(encodeEnvelope({ kind: Kind.Message, peer: to, payload: encode(value) }));
   }
 }

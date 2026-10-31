@@ -90,6 +90,13 @@ describe("WailsNetworkAdapter", () => {
     adapter.connect("me" as PeerId);
     const deliver = (b: Uint8Array) =>
       socket?.onmessage?.(new MessageEvent("message", { data: b.buffer }));
+    deliver(
+      encodeEnvelope({
+        kind: Kind.Roles,
+        peer: "me",
+        payload: encodeRoles([{ peer: "mallory", role: "reader", suspended: false }]),
+      }),
+    );
     deliver(new Uint8Array([9, 9, 9]));
     deliver(
       encodeEnvelope({
@@ -175,6 +182,13 @@ describe("WailsNetworkAdapter", () => {
     });
     const deliver = (b: Uint8Array) =>
       socket?.onmessage?.(new MessageEvent("message", { data: b.buffer }));
+    deliver(
+      encodeEnvelope({
+        kind: Kind.Roles,
+        peer: "me",
+        payload: encodeRoles([{ peer: "alice", role: "writer", suspended: false }]),
+      }),
+    );
     deliver(arrive);
     deliver(welcome); // the answer to our own arrive: not a restart
     deliver(arrive);
@@ -206,6 +220,13 @@ describe("WailsNetworkAdapter", () => {
       socket?.onmessage?.(new MessageEvent("message", { data: b.buffer }));
     const attests = () => sent.filter((f) => decodeEnvelope(f).kind === Kind.Attest).length;
 
+    deliver(
+      encodeEnvelope({
+        kind: Kind.Roles,
+        peer: "me",
+        payload: encodeRoles([{ peer: "alice", role: "writer", suspended: false }]),
+      }),
+    );
     deliver(arrive);
     const doc = A.change(A.init<Doc>(), (d) => {
       d.text = "x";

@@ -2,7 +2,7 @@
 import { type PeerId, Repo } from "@automerge/automerge-repo";
 import { encode } from "cbor-x";
 import { expect, it, vi } from "vitest";
-import { encodeEnvelope, Kind } from "./envelope";
+import { encodeEnvelope, encodeRoles, Kind } from "./envelope";
 import { type SocketLike, WailsNetworkAdapter } from "./WailsNetworkAdapter";
 
 function setup(ready = () => true) {
@@ -25,6 +25,12 @@ function setup(ready = () => true) {
     const frame = encodeEnvelope({ kind: Kind.Message, peer: "peer", payload: encode(message) });
     socket.onmessage?.(new MessageEvent("message", { data: frame.buffer }));
   };
+  const rolesFrame = encodeEnvelope({
+    kind: Kind.Roles,
+    peer: "me",
+    payload: encodeRoles([{ peer: "peer", role: "writer", suspended: false }]),
+  });
+  socket.onmessage?.(new MessageEvent("message", { data: rolesFrame.buffer }));
   const handshake = () =>
     deliver({
       type: "arrive",

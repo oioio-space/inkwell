@@ -31,6 +31,7 @@ it.skipIf(!gc)("3 invented-id flood retains less than 4 MiB after GC", () => {
 });
 it.skipIf(!gc)("5 session churn retains less than 2 MiB after GC", () => {
   const a = new Admission(() => 0);
+  a.setMembers(["p"]);
   const sessions = new Set<string>();
   const before = heap();
   let accepted = 0;

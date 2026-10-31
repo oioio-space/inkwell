@@ -143,6 +143,9 @@ type Wiring struct {
 	pending  map[string][]trust.Hash                              // heads to sign once this device is known to be a writer
 	held     map[transport.PeerID]map[attestKey]trust.Attestation // replayed by connected peers not linked yet, verified when they are
 	closeErr error
+	// fullSnapshot is immutable and published before membership notifications.
+	fullSnapshot atomic.Pointer[map[transport.PeerID]struct{}]
+
 	// rolesSent is the last Roles payload sent to the bridge.
 	rolesSent []byte
 	tick      time.Duration
@@ -495,6 +498,7 @@ func (w *Wiring) activate(p transport.PeerID) {
 	w.active[p] = struct{}{}
 	if open {
 		w.full[p] = struct{}{}
+		w.publishFull()
 	}
 	w.mu.Unlock()
 	if open {
@@ -519,6 +523,9 @@ func (w *Wiring) refresh(p transport.PeerID) {
 	case !open && was:
 		delete(w.full, p)
 	}
+	if open != was {
+		w.publishFull()
+	}
 	w.mu.Unlock()
 	switch {
 	case open && !was:
@@ -536,6 +543,9 @@ func (w *Wiring) deactivate(p transport.PeerID) {
 	_, was := w.full[p]
 	delete(w.active, p)
 	delete(w.full, p)
+	if was {
+		w.publishFull()
+	}
 	w.mu.Unlock()
 	w.sync.OnPeerDown(p)
 	if was {
@@ -543,11 +553,19 @@ func (w *Wiring) deactivate(p transport.PeerID) {
 	}
 }
 
+// publishFull publishes an immutable view of the live gate. The caller holds mu.
+func (w *Wiring) publishFull() {
+	snapshot := maps.Clone(w.full)
+	w.fullSnapshot.Store(&snapshot)
+}
+
 // isActive reports whether the repo and attestation channels are open to p.
 func (w *Wiring) isActive(p transport.PeerID) bool {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-	_, ok := w.full[p]
+	snapshot := w.fullSnapshot.Load()
+	if snapshot == nil {
+		return false
+	}
+	_, ok := (*snapshot)[p]
 	return ok
 }
 
@@ -655,13 +673,26 @@ func (p *repoPort) RecvEnvelope(ctx context.Context) (bridge.Envelope, error) {
 		return bridge.Envelope{}, transport.ErrClosed
 	default:
 	}
-	select {
-	case e := <-p.out:
+	for {
+		var e bridge.Envelope
+		// Queued frames can be checked immediately; only wait when the queue is empty.
+		select {
+		case e = <-p.out:
+		default:
+			select {
+			case e = <-p.out:
+			case <-p.stopped:
+				return bridge.Envelope{}, transport.ErrClosed
+			case <-ctx.Done():
+				return bridge.Envelope{}, ctx.Err()
+			}
+		}
+		// Recheck queued work against the live gate. Keep PeerDown even after
+		// departure: the router needs it to cancel the peer's sender.
+		if (e.Kind == bridge.PeerUp || e.Kind == bridge.Message) && !(*Wiring)(p).isActive(e.Peer) {
+			continue
+		}
 		return e, nil
-	case <-p.stopped:
-		return bridge.Envelope{}, transport.ErrClosed
-	case <-ctx.Done():
-		return bridge.Envelope{}, ctx.Err()
 	}
 }
 
