@@ -884,3 +884,11 @@ Kept for history; where v3 or v4 changed the answer, the later tables above prev
 | 9 | tree cap ≠ document cap; TTL overstated | **accepted** | per-category budgets (§4: 2 + W·(32 + 2 048)); TTL wording corrected (≤ ~60 s for silent peers, never for talking ones; bound comes from the schema) |
 | 10 | missing tests; 256 and byte limits unjustified | **accepted** | tests 4-7, 10, 12 added; sizes measured (265 B snapshot → 1 KiB limit; handshake ≈ 150 B → 1 KiB; 56–310 KiB per resident doc → 16 resident); 32 variants flagged as an assumption with a compatible way to raise it |
 | 11 | simpler alternative (boundary + `isEphemeral` + small patch) | **adopted in part** | `isEphemeral` adopted (measured reconnect cost §0, §1.1); patch kept as fallback gated by contract tests, upstream PRs filed instead; comparison in §1.1 |
+
+
+## Décisions de l'utilisatrice (2026-10-31)
+
+D-1 : 32 variantes de départ par personne qui écrit. D-2 : délai de 30 jours avant effacement des données
+purgées. D-3 : détecter et alerter, sans blocage automatique. D-4 : purge irréversible une fois effacée.
+D-5 : adoption automatique par les co-éditeurs. D-6 : une décision admin signée par document pour
+l'historique antérieur. Registre : `docs/exigences.md` N9.
