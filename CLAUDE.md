@@ -79,7 +79,7 @@ with no alloc/throughput regression. Hot-path packages carry `Benchmark…` test
 List them on the line below (space-separated package paths; read by
 `.claude/hooks/benchmark-context.sh` — keep the exact `HOT_PATHS:` prefix):
 
-HOT_PATHS: internal/blob internal/transport/frame internal/transport/mux
+HOT_PATHS: internal/blob internal/transport/frame internal/transport/mux internal/app
 
 ## Research-first
 
