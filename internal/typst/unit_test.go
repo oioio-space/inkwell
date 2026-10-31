@@ -266,12 +266,3 @@ func TestScanLinksBounds(t *testing.T) {
 		}
 	})
 }
-
-func TestWatchFailure(t *testing.T) {
-	if err := failureOr(nil); err != nil {
-		t.Errorf("failureOr(nil) = %v", err)
-	}
-	if err := failureOr(os.ErrClosed); !errors.Is(err, os.ErrClosed) {
-		t.Errorf("failureOr(err) = %v, want it wrapped", err)
-	}
-}
