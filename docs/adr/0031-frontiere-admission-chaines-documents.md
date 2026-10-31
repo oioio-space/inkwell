@@ -1,5 +1,6 @@
 ---
-status: proposée
+status: acceptée
+decided: 2026-10-31 (utilisatrice)
 date: 2026-10-31
 decision-makers: [Mathieu]
 ---
@@ -468,3 +469,13 @@ Barème inchangé ; aucune fermeture d'implémentation n'est revendiquée ici.
 - recherche byzantine du 31/10/2026 (`14-research-byzantine-solutions.md`) : SSB, Nostr NIP-01, RFC 9162
   §11.3, p2panda-auth, [ERA v2](https://arxiv.org/html/2601.22963v2) (PaPoC 2026), Autobase, MLS (RFC 9420) ;
 - preuves de fourche de Hypercore ([hypercore-next#76](https://github.com/hypercore-protocol/hypercore-next/issues/76)).
+
+
+## Décision de l'utilisatrice (2026-10-31)
+
+ADR acceptée (rév. 6), y compris le rôle d'admin qui arbitre une équivocation. Résiduel R1
+(équivocation d'un auteur sur ses propres modifications, jusqu'à l'arbitrage) **accepté** : le
+supprimer exigerait un quorum, donc la fin de l'édition hors ligne. Résiduel R2 (croissance cumulée
+du disque) **fermé** : D-3 est amendée par un **quota disque cumulé par personne qui écrit**, avec
+alerte avant le seuil ; au-delà, ses nouvelles écritures sont refusées ; un admin peut l'augmenter.
+Registre : `docs/exigences.md` N10.

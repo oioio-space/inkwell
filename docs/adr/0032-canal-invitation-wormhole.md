@@ -1,5 +1,6 @@
 ---
-status: proposée
+status: acceptée
+decided: 2026-10-31 (utilisatrice)
 date: 2026-10-31
 decision-makers: [Mathieu]
 ---

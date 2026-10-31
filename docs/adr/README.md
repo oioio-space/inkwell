@@ -32,4 +32,6 @@ connaître la raison — pas pour le reste. Modèle : [`template.md`](template.m
 | [0028](0028-performance-huge-files-and-wan.md) | Performance : paliers par taille, Automerge dans un Worker, très gros textes lus par Go, fragments et priorités sur le réseau | proposée |
 | [0029](0029-reliability.md) | Fiabilité : invariants de non-perte, pannes injectées (netem, LazyFS, disque plein), endurance, état de synchro honnête | proposée |
 | [0030](0030-decisions-signees-garde-structurelle.md) | Décisions d'admin dans un journal signé hors du CRDT ; garde structurelle de toute modification Automerge avant le `Repo` | proposée |
+| [0031](0031-frontiere-admission-chaines-documents.md) | Frontière d'admission : signature par modification, chaînes par auteur, purge à accusé définitif, arbitrage d'équivocation |
+| [0032](0032-canal-invitation-wormhole.md) | Le rendez-vous d'invitation Wormhole est un canal séparé, limité à `internal/invite` |
 | [0033](0033-sidecar-directory-bound.md) | F5 : tmpfs privé borné, vérification des sorties et repli Landlock à parts fixes (limite des fichiers creux documentée) | proposée |

@@ -42,9 +42,9 @@ concevoir ou de revoir quoi que ce soit ; une exception exige une ADR.
 
 - Le CRDT vit dans la webview ; Go ne transporte que des **octets opaques**. Aucun code Go
   n'importe Automerge (ADR 0011) ; la convergence se teste en TypeScript.
-- Tout le réseau passe par l'interface `internal/transport.Transport` ; seul
-  `internal/transport/p2p` importe libp2p. *Exception de fait, à trancher par l'[ADR 0032](docs/adr/0032-canal-invitation-wormhole.md)
-  (proposée) : le rendez-vous d'invitation Wormhole, limité à `internal/invite`.*
+- La synchronisation entre pairs passe par l'interface `internal/transport.Transport` ; seul
+  `internal/transport/p2p` importe libp2p. Le rendez-vous d'invitation Wormhole est un canal
+  séparé, limité à `internal/invite` (ADR 0032).
 - Une seule source de vérité par chose : texte → Automerge, binaires → magasin BLAKE3,
   membres → liste signée, versions → go-git (projection).
 - Tout octet venu d'un pair est vérifié (signature, rôle) et son décodeur est fuzzé.

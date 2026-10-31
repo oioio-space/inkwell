@@ -46,6 +46,7 @@ Rien n'est « fait » sans tests verts et sans une passe `ux-walkthrough` réuss
 | N7 | 2026-10-31 | Modèle de menace byzantin complet : même une personne qui écrit, malveillante, ne doit jamais gêner les autres (lecteurs et pairs non attestés strictement bornés) | audit S1/S1b, ADR 0031 à rédiger | 🔨 |
 | N8 | 2026-10-31 | Fusionner tout de suite l'étape 1 (bornes dures à l'entrée de la webview, validation des messages) ; S1 reste Critique jusqu'à la garde ADR 0030 | audit S1, étape 1 | 🔨 |
 | N9 | 2026-10-31 | Admission (ADR 0031), décisions D-1 à D-6 : 32 variantes de départ par personne qui écrit ; données purgées récupérables 30 jours puis effacées après accusé de réception de tous les appareils admin ; croissance anormale de l'historique détectée et signalée aux admins, sans blocage automatique ; purge irréversible une fois effacée ; adoption automatique par les co-éditeurs d'un document rendu orphelin ; historique antérieur intégré par une décision admin signée par document | `audit-2026-10-31/06-admission-design.md` §11, ADR 0031 | 🔨 |
+| N10 | 2026-10-31 | ADR 0030, 0031 (rév. 6, avec l'arbitrage d'équivocation par un admin), 0032 et 0033 acceptées ; résiduel R1 accepté ; R2 fermé par un quota disque cumulé par personne qui écrit (amende D-3) | `docs/adr/`, `audit-2026-10-31/06-…` | 🔨 |
 
 ## Interface et édition
 
