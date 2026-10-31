@@ -436,3 +436,44 @@ func TestAdoptProjectNeverWritesTheOldProjectInTheNewStore(t *testing.T) {
 		}
 	})
 }
+
+// An idle relay must remain nonblocking and stop for every shutdown owner.
+func TestWiringIdleShutdown(t *testing.T) {
+	for _, shutdown := range []string{"parent", "transport", "wiring"} {
+		t.Run(shutdown, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				ctx, cancel := context.WithCancel(t.Context())
+				defer cancel()
+				dev := newDevice(t)
+				list := newProject(t, dev)
+				node := memnet.New(1, memnet.Faults{}).Join(p2p.IDFromKey(dev.Public()))
+				w := Wire(ctx, node, dev, list, NewAdmission(list), WiringOptions{})
+				t.Cleanup(func() { _ = w.Close() })
+				synctest.Wait()
+				select {
+				case <-w.stopped:
+					t.Fatal("idle wiring stopped before shutdown")
+				default:
+				}
+				switch shutdown {
+				case "parent":
+					cancel()
+				case "transport":
+					if err := node.Close(); err != nil {
+						t.Fatal(err)
+					}
+				case "wiring":
+					if err := w.Close(); err != nil {
+						t.Fatal(err)
+					}
+				}
+				synctest.Wait()
+				select {
+				case <-w.stopped:
+				default:
+					t.Fatal("wiring did not stop")
+				}
+			})
+		})
+	}
+}

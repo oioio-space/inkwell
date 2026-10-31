@@ -1,0 +1,45 @@
+goos: linux
+goarch: amd64
+pkg: github.com/oioio-space/inkwell/internal/app
+cpu: 13th Gen Intel(R) Core(TM) i7-1370P
+                 │   old.txt   │               new.txt                │
+                 │   sec/op    │    sec/op     vs base                │
+Relay/Idle-20      477.4n ± 1%   239.0n ±  3%  -49.94% (p=0.000 n=10)
+Relay/Message-20   1.486µ ± 2%   1.027µ ± 41%  -30.90% (p=0.001 n=10)
+geomean            842.2n        495.3n        -41.19%
+
+                 │   old.txt   │                 new.txt                 │
+                 │    B/op     │    B/op     vs base                     │
+Relay/Idle-20       288.0 ± 0%     0.0 ± 0%  -100.00% (p=0.000 n=10)
+Relay/Message-20   528.00 ± 0%   48.00 ± 0%   -90.91% (p=0.000 n=10)
+geomean             390.0                    ?                       ¹ ²
+¹ summaries must be >0 to compute geomean
+² ratios must be >0 to compute geomean
+
+                 │   old.txt   │                 new.txt                 │
+                 │  allocs/op  │ allocs/op   vs base                     │
+Relay/Idle-20       6.000 ± 0%   0.000 ± 0%  -100.00% (p=0.000 n=10)
+Relay/Message-20   11.000 ± 0%   1.000 ± 0%   -90.91% (p=0.000 n=10)
+geomean             8.124                    ?                       ¹ ²
+¹ summaries must be >0 to compute geomean
+² ratios must be >0 to compute geomean
+
+M2 methodology:
+  Before and after: go test ./internal/app -run '^$' -bench '^BenchmarkRelay$' -count=10 -benchmem
+  Comparison: benchstat old.txt new.txt
+  Run via mise exec -- scripts/heavy.sh, with GOTMPDIR and GOCACHE under ~/.cache/inkwell.
+  BenchmarkRelay/Message feeds a real mux repo queue, calls Wiring.step
+  (including trust/attestation polls), and checks the bridge envelope.
+  BenchmarkRelay/Idle measures the empty-queue step; no network or trust
+  initialization is timed. The message's remaining allocation is the mux queue.
+  Reuse one already-canceled polling context per Wiring. Keep the live wiring
+  context, goroutine ownership, and transport-close cancellation unchanged.
+  Both timings improve significantly (p<0.05); bytes and allocations decrease.
+
+Validation:
+  mise run lint: PASS.
+  go test -race ./internal/app: sandbox blocks TCP/UDP sockets; a verbose
+  diagnostic with -timeout=60s fails on listener creation and times out in
+  TestRelayOnlyTicketJoin cleanup. The original run was interrupted after
+  diagnosing this restriction; full package race validation is blocked.
+  go test -race ./internal/app -run '^Test(NonMemberNeverReachesBridge|RevokeDropsAndRefuses|AttestationsBeforeRepoFrames|AttestationsGossip|Admit|SwitchProject|AdoptProjectNeverWritesTheOldProjectInTheNewStore|WiringIdleShutdown)$' -timeout=60s: PASS.
