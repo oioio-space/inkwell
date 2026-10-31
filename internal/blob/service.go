@@ -1,6 +1,7 @@
 package blob
 
 import (
+	"bytes"
 	"cmp"
 	"context"
 	"encoding/binary"
@@ -747,14 +748,18 @@ func checkSlice(m Slice, h Hash) (data []byte, size uint64, final bool, err erro
 	n := uint64(m.Length)
 	end := m.Offset + n
 	switch {
-	case m.Offset >= size || end > size:
+	case n == 0 || n > MaxSlice:
+		return bad("invalid slice length")
+	case m.Offset >= size || end > size || end < m.Offset:
 		return bad("range outside the file")
 	case n%GroupSize != 0 && end != size:
 		return bad("range ends inside a group")
 	}
-	data, ok := bao.VerifySlice(m.Bao, groupLog, m.Offset, n, h)
-	if !ok || uint64(len(data)) != n {
+	encoded := bytes.NewReader(m.Bao)
+	buf := bytes.NewBuffer(make([]byte, 0, int(n)))
+	ok, decodeErr := bao.DecodeSlice(buf, encoded, groupLog, m.Offset, n, h)
+	if decodeErr != nil || !ok || encoded.Len() != 0 || buf.Len() != int(n) {
 		return bad("does not match the hash")
 	}
-	return data, size, end == size, nil
+	return buf.Bytes(), size, end == size, nil
 }

@@ -1,0 +1,31 @@
+goos: linux
+goarch: amd64
+pkg: github.com/oioio-space/inkwell/internal/blob
+cpu: 13th Gen Intel(R) Core(TM) i7-1370P
+          │   old.txt    │                new.txt                 │
+          │    sec/op    │     sec/op      vs base                │
+Put         96.57m ± 24%   102.02m ±  38%        ~ (p=0.579 n=10)
+ReadSlice   7.819m ± 23%    1.052m ± 328%  -86.55% (p=0.000 n=10)
+Fetch       67.52m ± 57%    52.57m ±   4%  -22.15% (p=0.000 n=10)
+geomean     37.08m          17.80m         -52.00%
+
+          │    old.txt    │                new.txt                 │
+          │      B/s      │      B/s       vs base                 │
+Put         165.9Mi ± 23%   156.8Mi ± 27%         ~ (p=0.579 n=10)
+ReadSlice   127.9Mi ± 20%   966.5Mi ± 77%  +655.75% (p=0.000 n=10)
+Fetch       238.1Mi ± 37%   304.4Mi ±  5%   +27.84% (p=0.000 n=10)
+geomean     171.6Mi         358.7Mi        +109.05%
+
+          │    old.txt    │               new.txt                │
+          │     B/op      │     B/op      vs base                │
+Put          117.5Ki ± 0%   117.5Ki ± 0%        ~ (p=0.924 n=10)
+ReadSlice    3.088Mi ± 0%   1.045Mi ± 0%  -66.17% (p=0.000 n=10)
+Fetch       113.77Mi ± 0%   65.33Mi ± 0%  -42.58% (p=0.000 n=10)
+geomean      3.429Mi        1.986Mi       -42.09%
+
+          │   old.txt   │               new.txt               │
+          │  allocs/op  │  allocs/op   vs base                │
+Put         2.160k ± 0%   2.159k ± 0%        ~ (p=0.885 n=10)
+ReadSlice    39.00 ± 0%    30.00 ± 0%  -23.08% (p=0.000 n=10)
+Fetch       3.449k ± 0%   3.209k ± 0%   -6.96% (p=0.000 n=10)
+geomean      662.3         592.4       -10.56%

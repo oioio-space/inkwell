@@ -26,8 +26,10 @@
 package blob
 
 import (
+	"bufio"
 	"bytes"
 	"crypto/rand"
+	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
@@ -601,12 +603,14 @@ func (s *Store) ReadSlice(h Hash, offset uint64, length uint32) (Slice, error) {
 	if err != nil {
 		return Slice{}, err
 	}
+	defer func() { _ = tree.Close() }()
 	var buf bytes.Buffer
-	buf.Grow(int(n) + maxParents)                                                                                                                       // the data, the header and the parent hashes: no regrowth
-	if err := bao.ExtractSlice(&buf, io.NewSectionReader(f, int64(offset), int64(n)), bytes.NewReader(tree), groupLog, offset, uint64(n)); err != nil { // #nosec G115 -- offset ≤ size.
+	buf.Grow(int(n) + maxParents)                                                        // data, header and parent hashes; no regrowth
+	if err := extractSlice(&buf, f, tree, uint64(size), offset, uint64(n)); err != nil { // #nosec G115 -- file size is nonnegative.
 		return Slice{}, fmt.Errorf("blob: extract slice of %s: %w", h.short(), err)
 	}
-	if _, ok := bao.VerifySlice(buf.Bytes(), groupLog, offset, uint64(n), h); !ok {
+	encoded := bytes.NewReader(buf.Bytes())
+	if ok, err := bao.DecodeSlice(io.Discard, encoded, groupLog, offset, uint64(n), h); err != nil || !ok || encoded.Len() != 0 {
 		_ = s.Remove(h)
 		s.log.Warn("blob: stored file does not match its hash, removed", "hash", h.short())
 		return Slice{}, ErrCorrupt
@@ -614,14 +618,69 @@ func (s *Store) ReadSlice(h Hash, offset uint64, length uint32) (Slice, error) {
 	return Slice{Hash: h, Offset: offset, Length: n, Bao: buf.Bytes()}, nil
 }
 
-// tree returns the outboard tree of the blob h, stored in f with size bytes.
+// extractSlice follows Bao's pre-order outboard layout, seeking over parents
+// outside the requested range instead of reading the entire tree. It only
+// extracts an encoding; the caller must authenticate it with bao.DecodeSlice.
+func extractSlice(dst io.Writer, data *os.File, tree io.ReadSeeker, size, offset, length uint64) error {
+	buf := make([]byte, GroupSize)
+	r := bufio.NewReader(tree)
+	if _, err := io.ReadFull(r, buf[:8]); err != nil {
+		return err
+	}
+	if binary.LittleEndian.Uint64(buf[:8]) != size {
+		return errors.New("outboard size differs from blob")
+	}
+	if _, err := dst.Write(buf[:8]); err != nil {
+		return err
+	}
+	var visit func(uint64, uint64) error
+	visit = func(pos, n uint64) error {
+		if pos >= offset+length || pos+n <= offset {
+			// A binary subtree with g leaves has g-1 parent pairs.
+			parents := (n+GroupSize-1)/GroupSize - 1
+			skip := int64(64 * parents) // #nosec G115 -- bounded by the store's maximum file size.
+			if skip <= int64(r.Buffered()) {
+				_, err := r.Discard(int(skip))
+				return err
+			}
+			_, err := tree.Seek(skip-int64(r.Buffered()), io.SeekCurrent)
+			r.Reset(tree)
+			return err
+		}
+		if n <= GroupSize {
+			if _, err := data.ReadAt(buf[:n], int64(pos)); err != nil { // #nosec G115 -- pos < size, bounded by MaxFile.
+				return err
+			}
+			_, err := dst.Write(buf[:n])
+			return err
+		}
+		if _, err := io.ReadFull(r, buf[:64]); err != nil {
+			return err
+		}
+		if _, err := dst.Write(buf[:64]); err != nil {
+			return err
+		}
+		mid := uint64(1) << (bits.Len64(n-1) - 1)
+		if err := visit(pos, mid); err != nil {
+			return err
+		}
+		return visit(pos+mid, n-mid)
+	}
+	return visit(0, size)
+}
+
+// tree opens the outboard tree of the blob h, stored in f with size bytes.
+// The caller must close the returned file.
 // A missing or damaged tree is rebuilt from the file, which also checks the
 // file against its hash.
-func (s *Store) tree(h Hash, f *os.File, size int64) ([]byte, error) {
+func (s *Store) tree(h Hash, f *os.File, size int64) (*os.File, error) {
 	final := blobPath(h) + obaoSuffix
 	want := bao.EncodedSize(int(size), groupLog, true)
-	if tree, err := s.root.ReadFile(final); err == nil && len(tree) == want {
-		return tree, nil
+	if tree, err := s.root.Open(final); err == nil {
+		if info, err := tree.Stat(); err == nil && info.Size() == int64(want) {
+			return tree, nil
+		}
+		_ = tree.Close()
 	}
 	tmp := partialDir + "/rebuild-" + rand.Text() + obaoSuffix + tmpSuffix
 	got, err := s.outboard(f, size, tmp)
@@ -633,9 +692,9 @@ func (s *Store) tree(h Hash, f *os.File, size int64) ([]byte, error) {
 		_ = s.Remove(h)
 		return nil, ErrCorrupt
 	}
-	tree, err := s.root.ReadFile(tmp)
+	tree, err := s.root.Open(tmp)
 	if err != nil {
-		return nil, fmt.Errorf("blob: read rebuilt outboard: %w", err)
+		return nil, fmt.Errorf("blob: open rebuilt outboard: %w", err)
 	}
 	if err := s.root.Chmod(tmp, 0o400); err == nil {
 		_ = s.root.Remove(final) // read-only, and now wrong

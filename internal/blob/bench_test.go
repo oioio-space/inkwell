@@ -11,14 +11,19 @@ import (
 
 const benchSize = 16 << 20
 
-// BenchmarkPut measures storing a file: copy, hash and outboard tree.
+// BenchmarkPut measures storing and removing a file: copy, hash and outboard
+// tree. Reusing the store bounds disk use across benchmark iterations.
 func BenchmarkPut(b *testing.B) {
 	data := testData(benchSize, 1)
+	s, _ := openStore(b, "", blob.Options{})
 	b.SetBytes(benchSize)
 	b.ReportAllocs()
 	for b.Loop() {
-		s, _ := openStore(b, "", blob.Options{})
-		if _, err := s.Put(bytes.NewReader(data), benchSize); err != nil {
+		h, err := s.Put(bytes.NewReader(data), benchSize)
+		if err != nil {
+			b.Fatal(err)
+		}
+		if err := s.Remove(h); err != nil {
 			b.Fatal(err)
 		}
 	}

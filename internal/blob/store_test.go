@@ -472,3 +472,31 @@ func TestHashText(t *testing.T) {
 }
 
 func upper(s string) string { return string(bytes.ToUpper([]byte(s))) }
+
+// Seeking past unrelated subtrees must produce exactly Bao's slice encoding,
+// including at unbalanced tree boundaries and in the final partial group.
+func TestReadSliceMatchesBao(t *testing.T) {
+	for _, size := range []int{blob.GroupSize - 7, blob.GroupSize, blob.GroupSize + 7, 129*blob.GroupSize + 777} {
+		s, _ := openStore(t, "", blob.Options{})
+		data := testData(size, 63)
+		h, err := s.PutBytes(data)
+		if err != nil {
+			t.Fatal(err)
+		}
+		tree, _ := bao.EncodeBuf(data, 4, true)
+		for offset := uint64(0); offset < uint64(size); offset += blob.GroupSize {
+			sl, err := s.ReadSlice(h, offset, blob.MaxSlice)
+			if err != nil {
+				t.Fatalf("ReadSlice(size=%d, offset=%d): %v", size, offset, err)
+			}
+			n := min(uint64(blob.MaxSlice), uint64(size)-offset)
+			var want bytes.Buffer
+			if err := bao.ExtractSlice(&want, bytes.NewReader(data[offset:offset+n]), bytes.NewReader(tree), 4, offset, n); err != nil {
+				t.Fatal(err)
+			}
+			if !bytes.Equal(sl.Bao, want.Bytes()) {
+				t.Fatalf("ReadSlice(size=%d, offset=%d) differs from Bao", size, offset)
+			}
+		}
+	}
+}
