@@ -139,3 +139,58 @@ handles 5000 {"unavailable":5000} heap/handle B 28340 rss/handle B 66087
 removeFromCache threw: DocHandle is not ready
 after removeFromCache of an unavailable handle, still cached: true
 ```
+
+## Sondes de la révision v4 (revue Codex n°3)
+
+Même environnement. `split.mjs` vérifie si un message de synchro peut être découpé en unités
+d'application plus petites ; `author.mjs` et `author2.mjs` vérifient le champ `author` d'Automerge 3.5
+(utilisé par la règle G12 proposée pour l'étape 2).
+
+### split.mjs
+
+```js
+const A = (await import(process.argv[2])).next;
+function build(n){ let d=A.from({text:""}); for(let i=0;i<n;i++) d=A.change(d,x=>A.splice(x,["text"],x.text.length,0,"ab")); return d; }
+const a = build(3000);
+let b = A.init(); let sa=A.initSyncState(), sb=A.initSyncState();
+let m; [sb,m]=A.generateSyncMessage(b,sb); let a2; [a2,sa]=A.receiveSyncMessage(a,sa,m);
+[sa,m]=A.generateSyncMessage(a2,sa);
+const dec = A.decodeSyncMessage(m);
+console.log("changes in msg", dec.changes.length, "bytes", m.byteLength);
+```
+
+Sortie : `changes in msg 1 bytes 4039`. Même résultat (`changes 1`) quand le receveur détient déjà
+500 des 3 500 modifications. Automerge 3.5 envoie l'historique manquant en **un seul paquet
+compressé** : un message de synchro ne se découpe pas en unités d'application plus petites, et son
+application est indivisible.
+
+### author.mjs, author2.mjs
+
+```js
+const A = (await import(process.argv[2])).next;
+let d = A.init({author: "aa".repeat(16)});
+d = A.change(d, x => { x.t = "hi"; });
+const h = A.getHeads(d);
+d = A.change(d, x => { x.t = "ho"; });
+d = A.changeAt(d, h, x => { x.u = 1; }).newDoc;
+for (const c of A.getAllChanges(d)) { const dc = A.decodeChange(c); console.log(dc.actor, dc.seq, A.getAuthorForActor(d, dc.actor)); }
+// author2: same actor, same op, time 0, with author "aa…", without author, with author "bb…"
+const mk = (author) => { let x = A.init(author ? {actor: "cc".repeat(16), author} : {actor: "cc".repeat(16)}); return A.change(x, {time: 0}, y => { y.t = 1; }); };
+console.log(A.getHeads(mk("aa".repeat(16)))[0], A.getHeads(mk(null))[0], A.getHeads(mk("bb".repeat(16)))[0]);
+console.log(Object.keys(A.decodeChange(A.getLastLocalChange(mk("aa".repeat(16))))));
+```
+
+Sorties :
+
+```
+1f7c5fd3db01886a311588e94a5ca689 1 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+1f7c5fd3db01886a311588e94a5ca689 2 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+13b22309011f7c5fd3db01886a311588e94a5ca689 1 aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa
+094d25ba… 3d15b484… add33a80…
+["ops","actor","hash","seq","startOp","time","message","deps","extra_bytes","author"]
+```
+
+Le champ `author` est porté par chaque modification (`decodeChange`), et il entre dans son hachage
+(trois hachages différents pour la même op). `changeAt` crée un acteur de 21 octets (préfixe ‖ acteur
+de base de 16 octets) qui garde l'auteur : la liaison doit passer par `author`, pas par les octets de
+l'acteur, sinon un acteur de base de 32 octets dépasserait la borne G1 (32 octets) après `changeAt`.
