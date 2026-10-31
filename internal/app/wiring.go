@@ -128,6 +128,7 @@ type Wiring struct {
 	save     func(trust.Op) error
 	onEmit   func(transport.Event)
 	ctx      context.Context
+	pollCtx  context.Context // already canceled: Recv drains queued events without waiting
 	cancel   context.CancelFunc
 	repoCh   transport.Transport
 	trustCh  transport.Transport
@@ -158,6 +159,8 @@ type Wiring struct {
 // the wiring. Canceling ctx or calling [Wiring.Close] stops it and closes t.
 func Wire(ctx context.Context, t transport.Transport, s trust.Signer, list *trust.List, adm *Admission, o WiringOptions) *Wiring {
 	ctx, cancel := context.WithCancel(ctx)
+	pollCtx, cancelPoll := context.WithCancel(context.Background())
+	cancelPoll()
 	subs := mux.Split(t, chanRepo, chanTrust, chanAttest)
 	w := &Wiring{
 		raw:      t,
@@ -169,6 +172,7 @@ func Wire(ctx context.Context, t transport.Transport, s trust.Signer, list *trus
 		save:     o.Save,
 		onEmit:   o.onEmit,
 		ctx:      ctx,
+		pollCtx:  pollCtx,
 		cancel:   cancel,
 		repoCh:   subs[chanRepo],
 		trustCh:  subs[chanTrust],
@@ -355,9 +359,7 @@ func (w *Wiring) run() {
 // poll returns the event queued on c, if any. It cancels the wiring once the
 // transport is closed.
 func (w *Wiring) poll(c transport.Transport) (transport.Event, bool) {
-	ctx, cancel := context.WithCancel(context.Background())
-	cancel()
-	ev, err := c.Recv(ctx)
+	ev, err := c.Recv(w.pollCtx)
 	if errors.Is(err, transport.ErrClosed) {
 		w.cancel()
 	}

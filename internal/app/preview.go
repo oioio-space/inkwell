@@ -246,7 +246,7 @@ func (p *Preview) docTimeLocked() time.Time {
 	if !p.wroteAt.IsZero() {
 		return p.wroteAt
 	}
-	return typst.DefaultTimestamp
+	return typst.DefaultTimestamp()
 }
 
 // fire starts the compilation the timer was waiting for.

@@ -168,10 +168,9 @@ func TestAttachmentsMalformed(t *testing.T) {
 	})
 
 	t.Run("an attachment too large to keep as it is", func(t *testing.T) {
-		old := maxAttachmentBytes
-		maxAttachmentBytes = 4
-		t.Cleanup(func() { maxAttachmentBytes = old })
-		if _, err := Attachments(pdf(filespec("a", 2, ""), stream("/Type/EmbeddedFile", "0123456789"))); err == nil {
+		t.Parallel()
+		cfg := Config{MaxAttachmentBytes: 4}
+		if _, err := cfg.Attachments(pdf(filespec("a", 2, ""), stream("/Type/EmbeddedFile", "0123456789"))); err == nil {
 			t.Error("Attachments = nil for a stream past the bound")
 		}
 	})
@@ -232,15 +231,14 @@ func TestLoadPins(t *testing.T) {
 
 func TestScanLinksBounds(t *testing.T) {
 	t.Run("a project with too many files is refused rather than half checked", func(t *testing.T) {
-		old := maxScanFiles
-		maxScanFiles = 5
-		t.Cleanup(func() { maxScanFiles = old })
+		t.Parallel()
 		files := map[string]string{}
 		for i := range 10 {
 			files[fmt.Sprintf("f%d.typ", i)] = "x"
 		}
 		p := writeProject(t, files)
-		if err := scanLinks(p.Root); !errors.Is(err, ErrUnsafeProject) {
+		e := newEngine(t, func(cfg *Config) { cfg.MaxScanFiles = 5 })
+		if _, err := e.prepare(p, "f0.typ"); !errors.Is(err, ErrUnsafeProject) {
 			t.Errorf("scanLinks = %v, want ErrUnsafeProject", err)
 		}
 	})
@@ -255,13 +253,13 @@ func TestScanLinksBounds(t *testing.T) {
 			t.Fatal(err)
 		}
 		t.Cleanup(func() { _ = os.Chmod(locked, 0o700) }) // #nosec G302 -- restoring the test folder so it can be removed
-		if err := scanLinks(p.Root); err != nil {
+		if err := scanLinks(p.Root, DefaultMaxScanFiles); err != nil {
 			t.Errorf("scanLinks = %v, want nil", err)
 		}
 	})
 
 	t.Run("a missing root is an error", func(t *testing.T) {
-		if err := scanLinks(filepath.Join(t.TempDir(), "nope")); err == nil {
+		if err := scanLinks(filepath.Join(t.TempDir(), "nope"), DefaultMaxScanFiles); err == nil {
 			t.Error("scanLinks(missing) = nil, want an error")
 		}
 	})

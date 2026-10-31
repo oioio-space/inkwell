@@ -64,7 +64,7 @@ signalé par une seule source est revérifié par un autre modèle avant d'être
 | F3 | Critique (plantage) | ISO/IEC 25010 fiabilité | `internal/transport/p2p` `TestWantAgainClearsResetHold` : déréférencement de pointeur nul dans libp2p `swarm_dial.go:476`, 1 fois sur 6 ; indépendant du lot 2 (`p2p` n'importe pas `trust`) | `quality-runner`, à diagnostiquer |
 | F1 (suite) | Majeur | idem F1 | même famille : `PRV-32` (`preview_test.go:516`), 1 échec puis 5 succès sur 5 | `quality-runner` |
 | F5 | Majeur (sécurité, à corriger) | §4 sidecars bornés ; ASVS 5.0 V2.4.1 | `internal/sidecar` : la borne de taille du dossier surveillé est contrôlée par sondage ; sous charge, `TestRunDirectoryBound` (`limits_test.go:69`) voit 152 Mio écrits pour une marge de 128 Mio (pré-push du 2026-10-31, 1 échec sur 1 780) ; un Typst hostile peut donc dépasser la borne en proportion de la charge | CI ; à corriger par une borne non fondée sur le temps (RLIMIT_FSIZE, quota, ou écriture via un système de fichiers borné) |
-| S1-R6 | Majeur (résiduel de l'étape 1) | N7 : un pair malveillant ne gêne jamais les autres | 1 024 identifiants de pairs qui épuisent leur budget de présence occupent toutes les entrées de l'admission : un nouveau pair est refusé jusqu'à environ 33 min (`frontend/src/net/admission.ts`, plafond 1 024) | revue Sonnet ; à fermer à l'étape 3 (identités bornées par la liste signée) |
+| S1-R6 | Critique (résiduel de l'étape 1, gravité revue par la conception v4) | N7 : un pair malveillant ne gêne jamais les autres | 1 024 identifiants de pairs qui épuisent leur budget de présence occupent toutes les entrées de l'admission : un nouveau pair est refusé jusqu'à environ 33 min (`frontend/src/net/admission.ts`, plafond 1 024) | revue Sonnet ; à fermer à l'étape 3 (identités bornées par la liste signée) |
 | F2 | Majeur (à prouver) | §3 concurrence : chaque goroutine a un propriétaire | `adopt` remplace le magasin de confiance pendant que la goroutine de `Wiring` peut sauvegarder ; risque d'écrire des opérations de l'ancien projet dans le nouveau. Après un échec de réouverture, le magasin reste fermé jusqu'au redémarrage | `architect`, à prouver par un test sous `-race` |
 | m1–m11 | Mineur | voir le rapport de l'architecte | variables globales servant de crochets de test, API sans appelant, tinymist embarqué (32,8 Mo) mais jamais lancé, `bridge.Storage` à 17 méthodes, doublons p2p, arrêt sans attente des goroutines, E/S hors `os.Root` dans typst | architect |
 
@@ -128,13 +128,18 @@ Chaque décision cite sa raison ; une décision qui touche une frontière passe 
 | S2 + F2 | ✅ fusionné | `957cc3d`, fusion `c5e9a4d` |
 | Étape 1 de l'admission (S1 partiel, S4, R1) et suites F1–F4 | ✅ fusionné ; S1 reste Critique (garde ADR 0030 à venir) ; PRS-37 a échoué 1 fois dans une suite e2e complète, taux à mesurer | fusions `ad2cf86`, `f2f1460` |
 | Révision byzantine de l'admission, ADR 0031 | 🔨 conception (architect) | `audit-2026-10-31/06-admission-design.md`, `docs/adr/0031-*.md` |
-| F3, plantage libp2p à la fermeture | 🔨 diagnostic ; correctif partiel non fusionné | branche `fix/p2p-dial-panic` |
-| F1, tests d'aperçu | 🔨 diagnostic | branche `fix/preview-determinism` |
+| F3, plantage libp2p à la fermeture | ⏸ en pause : garde partielle non fusionnée ; reste l'ordre de fermeture et l'échec résiduel `dial_test.go:167` | worktree `agent-ae8725405086b99e0`, branche `fix/p2p-dial-panic` |
+| Conception byzantine v4 et décisions D-1 à D-6 (N9) | ✅ fusionné ; revue Codex n°4 à relancer (limite d'usage) | `0394270` |
+| F5, borne du dossier des sidecars indépendante du temps (Landlock + RLIMIT_FSIZE, sorties déclarées par `internal/typst`) | 🔨 Codex, interrompu par sa limite d'usage (reprise après 14 h 44) | branche `fix/f5-sidecar-dir-bound` |
+| M2, allocation de contexte dans `Wiring.poll` : −30,9 % (p = 0,001), 11 → 1 allocation | ✅ fusionné | `23ba0a0` |
+| m1, variables globales mutables vers la configuration (hors `sidecar`) | ✅ fusionné | `c29bf47` |
+| M1 | ✅ fusionné | `192d462` |
+| M3 et code mort | ✅ fusionné | `9c3def9` |
+| F1 | ✅ fusionné | `04fa538` |
+| C2 : ADR 0032 proposée (invariant inchangé tant qu'elle n'est pas acceptée) | ✅ fusionné, décision de l'utilisatrice attendue | `04b5750` |
+| Correctif durable de `/tmp` (GOTMPDIR sur disque, purge) | ✅ fusionné | `4465b96` |
 | S3, attestations bornées | ⏸ attend l'ADR 0031 | — |
-| C2 : ADR qui remplace l'ADR 0004 pour le canal d'invitation | ⏳ | — |
 | M5 : extraire `internal/session` | ⏳ (après l'ADR 0031, préalable à `internal/policy` de l'ADR 0030) | — |
-| M1, M2 : allocations des chemins critiques, avec benchstat | ⏳ | — |
-| Code mort, puis M3 complexité | ⏳ | — |
 | Mineurs m1–m11 ; délai sur fsync (suite de S2) | ⏳ | — |
 | Garde structurelle de l'ADR 0030 | ⏳ prérequis de l'étape 2 de l'admission | — |
 

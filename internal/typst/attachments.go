@@ -12,13 +12,6 @@ import (
 	"unicode/utf8"
 )
 
-// maxAttachmentBytes bounds what is inflated for one attachment, so that a
-// PDF cannot turn a few kilobytes into gigabytes. A variable for the tests.
-var maxAttachmentBytes = 256 << 20
-
-// maxTotalAttachmentBytes bounds all the attachments of one PDF together.
-var maxTotalAttachmentBytes = 512 << 20
-
 const (
 	maxPDFObjects = 200_000
 	maxNesting    = 32
@@ -56,6 +49,20 @@ type pdfObject struct {
 // cannot read with certainty, rather than guessing. Streams are inflated up to
 // a bound. It is how Inkwell checks that pdf.attach reached the PDF.
 func Attachments(pdf []byte) ([]Attachment, error) {
+	return (Config{}).Attachments(pdf)
+}
+
+// Attachments lists embedded files using the configured attachment limits.
+// Zero limits use the defaults; no engine or sidecar is needed.
+func (cfg Config) Attachments(pdf []byte) ([]Attachment, error) {
+	maxAttachmentBytes := cfg.MaxAttachmentBytes
+	if maxAttachmentBytes <= 0 {
+		maxAttachmentBytes = DefaultMaxAttachmentBytes
+	}
+	maxTotalAttachmentBytes := cfg.MaxTotalAttachmentBytes
+	if maxTotalAttachmentBytes <= 0 {
+		maxTotalAttachmentBytes = DefaultMaxTotalAttachmentBytes
+	}
 	if !bytes.HasPrefix(pdf, []byte("%PDF-")) {
 		return nil, errors.New("typst: not a PDF")
 	}
@@ -72,7 +79,7 @@ func Attachments(pdf []byte) ([]Attachment, error) {
 		if spec.dict["Type"] != "/Filespec" {
 			continue
 		}
-		a, err := attachmentOf(spec, objs)
+		a, err := attachmentOf(spec, objs, maxAttachmentBytes)
 		if err != nil {
 			return nil, fmt.Errorf("typst: attachment in object %d: %w", num, err)
 		}
@@ -84,7 +91,7 @@ func Attachments(pdf []byte) ([]Attachment, error) {
 	return out, nil
 }
 
-func attachmentOf(spec pdfObject, objs map[int]pdfObject) (Attachment, error) {
+func attachmentOf(spec pdfObject, objs map[int]pdfObject, maxAttachmentBytes int) (Attachment, error) {
 	var a Attachment
 	a.Name = decodeString(spec.dict["UF"])
 	if a.Name == "" {
@@ -110,7 +117,7 @@ func attachmentOf(spec pdfObject, objs map[int]pdfObject) (Attachment, error) {
 		return a, fmt.Errorf("embedded file object %d has no stream", num)
 	}
 	a.MIMEType = decodeName(file.dict["Subtype"])
-	a.Data, err = decodeStream(file)
+	a.Data, err = decodeStream(file, maxAttachmentBytes)
 	return a, err
 }
 
@@ -190,7 +197,7 @@ func readObject(pdf []byte, start int) (pdfObject, int, error) {
 }
 
 // decodeStream applies the stream's filters; only FlateDecode is understood.
-func decodeStream(o pdfObject) ([]byte, error) {
+func decodeStream(o pdfObject, maxAttachmentBytes int) ([]byte, error) {
 	filter := o.dict["Filter"]
 	switch {
 	case filter == "":
