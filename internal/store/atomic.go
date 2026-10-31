@@ -63,15 +63,16 @@ func writeAtomic(r *os.Root, name string, src io.Reader, perm fs.FileMode, check
 	if err = r.Rename(tmp, name); err != nil {
 		return fmt.Errorf("store: rename %s: %w", tmp, err)
 	}
-	if err = syncDir(r, path.Dir(name)); err != nil {
+	if err = SyncDir(r, path.Dir(name)); err != nil {
 		return fmt.Errorf("store: sync directory of %s: %w", name, err)
 	}
 	return nil
 }
 
-// syncDir flushes directory dir so a rename in it is durable. Windows cannot
-// open a directory for syncing; NTFS journals metadata, so it is skipped there.
-func syncDir(r *os.Root, dir string) error {
+// SyncDir flushes the directory dir of r (use "." for r itself) so that the
+// renames and removals made in it are durable. Windows cannot open a directory
+// for syncing; NTFS journals metadata, so it is skipped there.
+func SyncDir(r *os.Root, dir string) error {
 	if runtime.GOOS == "windows" {
 		return nil
 	}
