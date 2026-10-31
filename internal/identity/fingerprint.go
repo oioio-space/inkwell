@@ -67,10 +67,14 @@ func wordlist(lang string) []string {
 // result is four "????" placeholders, never derived from (or cached for) the
 // input, so it cannot be mistaken for or poison a valid key's fingerprint.
 func Fingerprint(pub ed25519.PublicKey, lang string) [4]string {
+	return defaultFingerprints().fingerprint(pub, lang)
+}
+
+func (f *fingerprints) fingerprint(pub ed25519.PublicKey, lang string) [4]string {
 	if len(pub) != ed25519.PublicKeySize {
 		return invalidFingerprint
 	}
-	idx := indices(pub)
+	idx := f.get([ed25519.PublicKeySize]byte(pub))
 	words := wordlist(lang)
 	var out [fpWords]string
 	for i, n := range idx {
@@ -101,22 +105,16 @@ type fpEntry struct {
 	idx [fpWords]uint16
 }
 
-var fpState = newFingerprints(computeIndices)
+// The production cache is initialized once and never replaced by tests.
+var defaultFingerprints = sync.OnceValue(func() *fingerprints { return newFingerprints(computeIndices) })
 
 func newFingerprints(compute func(ed25519.PublicKey) [fpWords]uint16) *fingerprints {
-	f := &fingerprints{}
-	f.reset(compute)
-	return f
-}
-
-// reset empties the cache and installs compute.
-func (f *fingerprints) reset(compute func(ed25519.PublicKey) [fpWords]uint16) {
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	f.compute = compute
-	f.order = list.New()
-	f.items = map[[ed25519.PublicKeySize]byte]*list.Element{}
-	f.inflight = map[[ed25519.PublicKeySize]byte]*fpCall{}
+	return &fingerprints{
+		compute:  compute,
+		order:    list.New(),
+		items:    map[[ed25519.PublicKeySize]byte]*list.Element{},
+		inflight: map[[ed25519.PublicKeySize]byte]*fpCall{},
+	}
 }
 
 func (f *fingerprints) len() int {
@@ -157,10 +155,6 @@ func (f *fingerprints) get(key [ed25519.PublicKeySize]byte) [fpWords]uint16 {
 	f.mu.Unlock()
 	close(c.done)
 	return c.idx
-}
-
-func indices(pub ed25519.PublicKey) [fpWords]uint16 {
-	return fpState.get([ed25519.PublicKeySize]byte(pub))
 }
 
 func computeIndices(pub ed25519.PublicKey) [fpWords]uint16 {

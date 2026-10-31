@@ -48,25 +48,25 @@ func TestLoadOrCreateConcurrent(t *testing.T) {
 }
 
 func TestFingerprintRejectsWrongLength(t *testing.T) {
+	t.Parallel()
 	valid := make(ed25519.PublicKey, ed25519.PublicKeySize)
 	copy(valid, fixedKey()[:16]) // trailing zeros: a zero-padded short key would collide
 
 	var calls atomic.Int32
-	restore := identity.SetFingerprintCompute(func(pub ed25519.PublicKey) [4]uint16 {
+	fingerprint, _ := identity.NewTestFingerprints(func(pub ed25519.PublicKey) [4]uint16 {
 		calls.Add(1)
 		return [4]uint16{1, 2, 3, 4}
 	})
-	defer restore()
 
 	for _, short := range []ed25519.PublicKey{nil, valid[:16], append(bytes.Clone(valid), 0)} {
-		if got := identity.Fingerprint(short, "en"); got != identity.InvalidFingerprint {
+		if got := fingerprint(short, "en"); got != identity.InvalidFingerprint {
 			t.Errorf("Fingerprint(len %d) = %q, want %q", len(short), got, identity.InvalidFingerprint)
 		}
 	}
 	if got := calls.Load(); got != 0 {
 		t.Errorf("compute called %d times for invalid keys, want 0", got)
 	}
-	if got := identity.Fingerprint(valid, "en"); got == identity.InvalidFingerprint {
+	if got := fingerprint(valid, "en"); got == identity.InvalidFingerprint {
 		t.Errorf("Fingerprint(valid key) = %q after invalid calls, want real words", got)
 	}
 	if got := calls.Load(); got != 1 {
@@ -75,43 +75,43 @@ func TestFingerprintRejectsWrongLength(t *testing.T) {
 }
 
 func TestFingerprintDoesNotSerializeKeys(t *testing.T) {
+	t.Parallel()
 	keyA := fixedKey()
 	keyB := bytes.Clone(keyA)
 	keyB[0] ^= 0xff
 
 	started := make(chan struct{})
 	release := make(chan struct{})
-	restore := identity.SetFingerprintCompute(func(pub ed25519.PublicKey) [4]uint16 {
+	fingerprint, _ := identity.NewTestFingerprints(func(pub ed25519.PublicKey) [4]uint16 {
 		if bytes.Equal(pub, keyA) {
 			close(started)
 			<-release // key A's computation hangs until B has finished
 		}
 		return [4]uint16{5, 6, 7, 8}
 	})
-	defer restore()
 
 	var wg sync.WaitGroup
-	wg.Go(func() { identity.Fingerprint(keyA, "en") })
+	wg.Go(func() { fingerprint(keyA, "en") })
 	<-started
-	identity.Fingerprint(keyB, "en") // deadlocks if A's compute holds a global lock
+	fingerprint(keyB, "en") // deadlocks if A's compute holds a global lock
 	close(release)
 	wg.Wait()
 }
 
 func TestFingerprintSingleflight(t *testing.T) {
+	t.Parallel()
 	key := fixedKey()
 	var calls atomic.Int32
 	release := make(chan struct{})
-	restore := identity.SetFingerprintCompute(func(ed25519.PublicKey) [4]uint16 {
+	fingerprint, _ := identity.NewTestFingerprints(func(ed25519.PublicKey) [4]uint16 {
 		calls.Add(1)
 		<-release
 		return [4]uint16{9, 9, 9, 9}
 	})
-	defer restore()
 
 	var wg sync.WaitGroup
 	for range 8 {
-		wg.Go(func() { identity.Fingerprint(key, "en") })
+		wg.Go(func() { fingerprint(key, "en") })
 	}
 	close(release)
 	wg.Wait()
@@ -121,29 +121,29 @@ func TestFingerprintSingleflight(t *testing.T) {
 }
 
 func TestFingerprintCacheBounded(t *testing.T) {
+	t.Parallel()
 	var calls int
-	restore := identity.SetFingerprintCompute(func(ed25519.PublicKey) [4]uint16 {
+	fingerprint, cacheLen := identity.NewTestFingerprints(func(ed25519.PublicKey) [4]uint16 {
 		calls++
 		return [4]uint16{}
 	})
-	defer restore()
 
 	key := make(ed25519.PublicKey, ed25519.PublicKeySize)
 	for i := range identity.FingerprintCacheMax + 10 {
 		key[0], key[1] = byte(i), byte(i>>8)
-		identity.Fingerprint(key, "en")
+		fingerprint(key, "en")
 	}
-	if got := identity.FingerprintCacheLen(); got > identity.FingerprintCacheMax {
+	if got := cacheLen(); got > identity.FingerprintCacheMax {
 		t.Errorf("cache holds %d entries, want <= %d", got, identity.FingerprintCacheMax)
 	}
 	// The most recent key survived eviction; the oldest did not.
 	before := calls
-	identity.Fingerprint(key, "en")
+	fingerprint(key, "en")
 	if calls != before {
 		t.Error("most recently used key was evicted")
 	}
 	key[0], key[1] = 0, 0
-	identity.Fingerprint(key, "en")
+	fingerprint(key, "en")
 	if calls != before+1 {
 		t.Error("least recently used key was not evicted")
 	}

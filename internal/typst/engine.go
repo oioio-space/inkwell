@@ -42,11 +42,14 @@ import (
 
 // Defaults for [Config].
 const (
-	DefaultTimeout        = 60 * time.Second
-	DefaultMemoryLimit    = 4 << 30
-	DefaultMaxOutput      = 256 << 20
-	DefaultMaxPages       = 2000
-	DefaultMaxDiagnostics = 200
+	DefaultTimeout                 = 60 * time.Second
+	DefaultMemoryLimit             = 4 << 30
+	DefaultMaxOutput               = 256 << 20
+	DefaultMaxPages                = 2000
+	DefaultMaxDiagnostics          = 200
+	DefaultMaxScanFiles            = 100_000
+	DefaultMaxAttachmentBytes      = 256 << 20
+	DefaultMaxTotalAttachmentBytes = 512 << 20
 
 	maxMessage = 2000
 	maxStderr  = 1 << 20
@@ -56,16 +59,19 @@ const (
 	deadProxy = "http://127.0.0.1:9"
 )
 
-// maxScanFiles bounds the entries checked for links; a variable for the tests.
-var maxScanFiles = 100_000
-
 // DefaultTimestamp is the document date used when none is given: dates in a
 // document (datetime.today(), the PDF metadata) come from the document, not
 // from the clock, so two compilations of the same project are identical.
-var DefaultTimestamp = time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC)
+func DefaultTimestamp() time.Time { return time.Date(2000, 1, 1, 0, 0, 0, 0, time.UTC) }
 
 // Config configures an [Engine]. The zero value is ready for use.
 type Config struct {
+	// MaxScanFiles bounds entries checked for unsafe links; zero uses DefaultMaxScanFiles.
+	MaxScanFiles int
+	// MaxAttachmentBytes bounds one inflated attachment; zero uses DefaultMaxAttachmentBytes.
+	MaxAttachmentBytes int
+	// MaxTotalAttachmentBytes bounds all attachments of a PDF; zero uses DefaultMaxTotalAttachmentBytes.
+	MaxTotalAttachmentBytes int
 	// Store extracts and verifies the typst binary. The default is a
 	// [sidecar.Store] in CacheDir.
 	Store *sidecar.Store
@@ -159,7 +165,7 @@ func WithFormats(f Format) Option { return func(o *options) { o.formats = f } }
 func WithTimestamp(t time.Time) Option { return func(o *options) { o.timestamp = t } }
 
 func applyOptions(opts []Option) options {
-	o := options{formats: FormatPDF | FormatSVG, timestamp: DefaultTimestamp}
+	o := options{formats: FormatPDF | FormatSVG, timestamp: DefaultTimestamp()}
 	for _, f := range opts {
 		f(&o)
 	}
@@ -191,6 +197,9 @@ func New(cfg Config) (*Engine, error) {
 			return nil, err
 		}
 		cfg.CacheDir = dir
+	}
+	if cfg.MaxScanFiles <= 0 {
+		cfg.MaxScanFiles = DefaultMaxScanFiles
 	}
 	if cfg.Timeout <= 0 {
 		cfg.Timeout = DefaultTimeout
@@ -297,7 +306,7 @@ func (e *Engine) prepare(p Project, main string) (*job, error) {
 	if err := statInRoot(root, rel); err != nil {
 		return nil, fmt.Errorf("%w: %q: %w", ErrInvalidMain, main, err)
 	}
-	if err := scanLinks(root); err != nil {
+	if err := scanLinks(root, e.cfg.MaxScanFiles); err != nil {
 		return nil, err
 	}
 	if err := e.ensureCaches(); err != nil {
@@ -357,7 +366,7 @@ func statInRoot(root, rel string) error {
 // project. Typst checks that paths stay inside the root but follows a link
 // that is inside to a target that is not, so a link would read any file the
 // user can. A broken link is harmless: there is nothing to read.
-func scanLinks(root string) error {
+func scanLinks(root string, maxScanFiles int) error {
 	count := 0
 	return filepath.WalkDir(root, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
