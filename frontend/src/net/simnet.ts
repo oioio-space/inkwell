@@ -4,6 +4,7 @@ import {
   decodeHeads,
   encodeEnvelope,
   encodeHeads,
+  encodeRoles,
   Kind,
 } from "./envelope";
 import type { SocketLike } from "./WailsNetworkAdapter";
@@ -34,8 +35,9 @@ class SimSocket implements SocketLike {
   ) {
     queueMicrotask(() => {
       this.onopen?.(new Event("open"));
-      for (const other of net.linkedTo(peer)) this.deliver(Kind.PeerUp, other);
       net.announceState(this);
+      net.announceMembers();
+      for (const other of net.linkedTo(peer)) this.deliver(Kind.PeerUp, other);
     });
   }
   send(data: Uint8Array): void {
@@ -97,11 +99,26 @@ export class SimNet {
     this.#roles.set(peer, role);
   }
 
+  announceMembers(): void {
+    for (const [id, socket] of this.#sockets) {
+      socket.deliver(
+        Kind.Roles,
+        id,
+        encodeRoles(
+          [...this.#sockets.keys()]
+            .filter((peer) => !this.#revokedFor(id).get(peer))
+            .map((peer) => ({ peer, role: this.#roles.get(peer) ?? "writer", suspended: false })),
+        ),
+      );
+    }
+  }
+
   link(a: string, b: string): void {
     const key = SimNet.#key(a, b);
     if (a === b || this.#links.has(key)) return;
     this.#learnRevocations(a, b);
     if (this.#revokedFor(a).get(b) || this.#revokedFor(b).get(a)) return; // refused at the gate
+    this.announceMembers();
     this.#links.set(key, ++this.#epoch);
     this.#sockets.get(a)?.deliver(Kind.PeerUp, b);
     this.#sockets.get(b)?.deliver(Kind.PeerUp, a);

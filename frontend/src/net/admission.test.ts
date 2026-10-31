@@ -98,6 +98,7 @@ it("4 sticky scope caps distinct variants and changes epoch", () => {
 it("5 P1 rewrites sessions, enforces counts and rate, resets on down", () => {
   let now = 0;
   const a = new Admission(() => now);
+  a.setMembers(["peer", "bad", "honest", "p", "other"]);
   const sessions = new Set();
   let delivered = 0;
   for (let i = 0; i < 10000; i++) {
@@ -118,6 +119,7 @@ it("5 P1 rewrites sessions, enforces counts and rate, resets on down", () => {
 it("6 re-arrive bucket keeps latest pending", () => {
   let now = 0;
   const a = new Admission(() => now);
+  a.setMembers(["peer", "bad", "honest", "p", "other"]);
   let accepted = 0;
   for (let i = 0; i < 40; i++) if (a.arrive("peer", { i })) accepted++;
   expect(accepted).toBe(3);
@@ -128,6 +130,7 @@ it("6 re-arrive bucket keeps latest pending", () => {
 it("7 per peer hold bounds and persistent cooldown", () => {
   let now = 0;
   const a = new Admission(() => now);
+  a.setMembers(["peer", "bad", "honest", "p", "other"]);
   for (let i = 0; i < 4; i++) expect(a.hold("bad", request as never)).toBe(true);
   expect(a.hold("bad", request as never)).toBe(false);
   expect(a.held("bad")).toBe(0);
@@ -141,6 +144,7 @@ it("7 per peer hold bounds and persistent cooldown", () => {
 it("7 byte limit, MaxFrame exception, isolation and exponential reset cooldown", () => {
   let now = 0;
   const a = new Admission(() => now);
+  a.setMembers(["peer", "bad", "honest", "p", "other"]);
   const bytes = new Uint8Array(5 * 1024 * 1024);
   expect(a.hold("bad", { ...request, data: bytes } as never)).toBe(true);
   expect(a.hold("bad", { ...request, documentId: "other", data: bytes } as never)).toBe(false);
@@ -163,6 +167,7 @@ it("7 byte limit, MaxFrame exception, isolation and exponential reset cooldown",
 it("5 rate never exceeds 192 in one second and new adapter uses a new session", () => {
   let now = 0;
   const a = new Admission(() => now);
+  a.setMembers(["peer", "bad", "honest", "p", "other"]);
   let n = 0;
   for (let i = 0; i < 1000; i++) {
     now = i;
@@ -170,7 +175,9 @@ it("5 rate never exceeds 192 in one second and new adapter uses a new session", 
   }
   expect(n).toBeLessThanOrEqual(192);
   const first = a.ephemeral("other", ephemeral() as never);
-  const second = new Admission(Date.now, "newadapter").ephemeral("p", ephemeral() as never);
+  const other = new Admission(Date.now, "newadapter");
+  other.setMembers(["p"]);
+  const second = other.ephemeral("p", ephemeral() as never);
   expect((first as unknown as { sessionId: string }).sessionId).not.toBe(
     (second as unknown as { sessionId: string }).sessionId,
   );
@@ -228,6 +235,7 @@ it("rejects a 1 MiB variant URL before validation", () => {
 });
 it("disconnect and accepted arrives cannot refresh peer budgets", () => {
   const a = new Admission(() => 0);
+  a.setMembers(["peer", "p"]);
   for (let i = 1; i <= 128; i++)
     expect(a.ephemeral("peer", ephemeral("a", i) as never)).toBeDefined();
   for (let i = 0; i < 3; i++) {
@@ -263,71 +271,17 @@ function stateMaps(run: () => void) {
     sets.mockRestore();
   }
 }
-it("bounds both maps across 10,000 distinct ids and unknown PeerDowns", () => {
+it("A14 strangers cannot consume member entries or cooldowns", () => {
   const a = new Admission(() => 0);
-  const down = stateMaps(() => {
-    for (let i = 0; i < 10000; i++) {
-      a.forget(`down${i}`);
-      a.reset(`down${i}`);
+  a.setMembers(["member"]);
+  const maps = stateMaps(() => {
+    a.arrive("member", {});
+    for (let i = 0; i < 2000; i++) {
+      expect(a.arrive(`s${i}`, {})).toBe(false);
+      expect(a.hold(`s${i}`, request as never)).toBe(false);
+      expect(a.ephemeral(`s${i}`, ephemeral() as never)).toBeUndefined();
     }
   });
-  expect(down.peers.size).toBe(0);
-  const maps = stateMaps(() => {
-    for (let i = 0; i < 10000; i++) {
-      a.ephemeral(`e${i}`, ephemeral() as never);
-      a.arrive(`a${i}`, {});
-      for (let j = 0; j < 5; j++) if (!a.hold(`h${i}`, request as never)) break;
-    }
-  });
-  expect(maps.peers.size).toBe(1024);
-  expect(maps.cooldowns.size).toBeLessThanOrEqual(1024);
-}, 30000);
-it("evicts oldest fully refilled budgets with no extra budget on recreation", () => {
-  let now = 0;
-  const a = new Admission(() => now);
-  const kept = new Admission(() => now);
-  for (const admission of [a, kept]) {
-    for (let i = 1; i <= 128; i++) admission.ephemeral("old", ephemeral("a", i) as never);
-    admission.arrive("old", {});
-  }
-  now = 2000; // Ephemeral full, handshake still depleted: must retain it.
-  const maps = stateMaps(() => {
-    for (let i = 0; i < 1023; i++) a.ephemeral(`p${i}`, ephemeral() as never);
-  });
-  a.ephemeral("pressure", ephemeral() as never);
-  expect(maps.peers.has("old")).toBe(true);
-  now = 20000; // Both budgets full: recreation must give exactly the kept budget.
-  a.ephemeral("pressure", ephemeral() as never);
-  expect(maps.peers.has("old")).toBe(false);
-  for (let i = 1; i <= 129; i++)
-    expect(!!a.ephemeral("old", ephemeral("new", i) as never)).toBe(
-      !!kept.ephemeral("old", ephemeral("new", i) as never),
-    );
-  for (let i = 0; i < 4; i++) expect(a.arrive("old", {})).toBe(kept.arrive("old", {}));
+  expect(maps.peers.size).toBe(1);
+  expect(maps.cooldowns.size).toBe(0);
 });
-it("cap pressure preserves queues, pending handshakes and active cooldowns", () => {
-  let now = 0;
-  const a = new Admission(() => now);
-  a.hold("queued", request as never);
-  for (let i = 0; i < 4; i++) a.arrive("pending", { i });
-  const maps = stateMaps(() => {
-    for (let i = 0; i < 10000; i++) {
-      for (let j = 0; j < 5; j++) if (!a.hold(`bad${i}`, request as never)) break;
-    }
-  });
-  expect(maps.cooldowns.size).toBe(1022);
-  a.forget("bad0");
-  expect(a.retryAfter("bad0")).toBe(30000);
-  expect(a.arrive("bad0", {})).toBe(false);
-  expect(a.held("queued")).toBe(1);
-  now = 20000;
-  expect(a.pending("pending")).toEqual({ i: 3 });
-  expect(a.retryAfter("bad0")).toBe(10000);
-  now = 30000;
-  for (let i = 0; i < 10000; i++) {
-    a.forget(`bad${i}`);
-    for (let j = 0; j < 5; j++) if (!a.hold(`next${i}`, request as never)) break;
-  }
-  expect(maps.peers.size).toBe(1024);
-  expect(maps.cooldowns.size).toBeLessThanOrEqual(1024);
-}, 30000);

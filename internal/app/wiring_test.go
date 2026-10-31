@@ -2,8 +2,10 @@ package app
 
 import (
 	"context"
+	"crypto/ed25519"
 	"crypto/sha256"
 	"errors"
+	"fmt"
 	"os"
 	"slices"
 	"sync"
@@ -475,5 +477,101 @@ func TestWiringIdleShutdown(t *testing.T) {
 				}
 			})
 		})
+	}
+}
+
+// A revoked or suspended member must not deliver work queued before the fold changed.
+func TestMemberGateDrainsQueuedFrames(t *testing.T) {
+	for name, kind := range map[string]trust.OpKind{"remove": trust.OpRemove, "suspend": trust.OpSuspend} {
+		t.Run(name, func(t *testing.T) {
+			synctest.Test(t, func(t *testing.T) {
+				net := memnet.New(1, memnet.Faults{})
+				admin, dev := newDevice(t), newDevice(t)
+				a := join(t, net, admin, newProject(t, admin))
+				if _, err := a.w.Issue(trust.OpAdd, dev.Public(), trust.RoleWriter, "member"); err != nil {
+					t.Fatal(err)
+				}
+				x := net.Join(p2p.IDFromKey(dev.Public()))
+				net.Link(a.id, x.Local())
+				_ = next(t, a.w.Repo())
+				if err := x.Send(t.Context(), a.id, []byte{wireRepo, 'x'}); err != nil {
+					t.Fatal(err)
+				}
+				synctest.Wait() // the bridge has not consumed the queued frame
+				if _, err := a.w.Issue(kind, dev.Public(), 0, ""); err != nil {
+					t.Fatal(err)
+				}
+				if ev := next(t, a.w.Repo()); ev.Kind != transport.PeerDown {
+					t.Errorf("after revocation got %v, want PeerDown without queued data", ev)
+				}
+				nothing(t, a.w.Repo())
+			})
+		})
+	}
+}
+
+func TestMemberGateStrangerFlood(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		net := memnet.New(1, memnet.Faults{})
+		admin := newDevice(t)
+		a := join(t, net, admin, newProject(t, admin))
+		for i := range 2000 {
+			key := sha256.Sum256([]byte(fmt.Sprint(i)))
+			x := net.Join(p2p.IDFromKey(ed25519.PublicKey(key[:])))
+			net.Link(a.id, x.Local())
+			if err := x.Send(t.Context(), a.id, []byte{wireRepo, 'x'}); err != nil {
+				t.Fatal(err)
+			}
+			nothing(t, a.w.Repo())
+		}
+		if got := a.w.Repo().Peers(); len(got) != 0 {
+			t.Errorf("strangers got peer slots: %v", got)
+		}
+		dev := newDevice(t)
+		x := net.Join(p2p.IDFromKey(dev.Public()))
+		net.Link(a.id, x.Local())
+		if _, err := a.w.Issue(trust.OpAdd, dev.Public(), trust.RoleWriter, "member"); err != nil {
+			t.Fatal(err)
+		}
+		if ev := next(t, a.w.Repo()); ev.Kind != transport.PeerUp || ev.Peer != x.Local() {
+			t.Errorf("new member got %v, want immediate PeerUp", ev)
+		}
+	})
+}
+
+// Concurrent readers must see immutable snapshots, including completed revocations.
+func TestMemberGateSnapshotSwap(t *testing.T) {
+	w := &Wiring{full: make(map[transport.PeerID]struct{})}
+	var readers sync.WaitGroup
+	done := make(chan struct{})
+	for range 4 {
+		readers.Go(func() {
+			for {
+				select {
+				case <-done:
+					return
+				default:
+					w.isActive("peer")
+				}
+			}
+		})
+	}
+	defer readers.Wait()
+	defer close(done)
+	for range 1000 {
+		w.mu.Lock()
+		w.full["peer"] = struct{}{}
+		w.publishFull()
+		w.mu.Unlock()
+		if !w.isActive("peer") {
+			t.Fatal("published member rejected")
+		}
+		w.mu.Lock()
+		delete(w.full, "peer")
+		w.publishFull()
+		w.mu.Unlock()
+		if w.isActive("peer") {
+			t.Fatal("revoked member accepted")
+		}
 	}
 }

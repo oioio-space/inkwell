@@ -10,6 +10,7 @@ démontré (test, démo enregistrée ou tâche utilisateur chronométrée).
 
 - **Audit d'architecture (2026-10-31)** : référentiel, constats, décisions D1–D14, état des lots et
   marche à suivre pour reprendre : [docs/plans/2026-10-31-architecture-audit.md](docs/plans/2026-10-31-architecture-audit.md).
+- **Audit admission — étape 2.0** : pairs du Repo limités aux appareils membres non suspendus ; retrait explicite, annulation des files et suppression des cooldowns (A14). TDD et tests ciblés race, Vitest, svelte-check, lint et architecture verts ; invitations/relay à valider hors sandbox (sockets interdits).
 - **Étape 0 — Fondations** : terminée. Squelette go-starter, gates verts, architecture, ADR,
   feuille de route, outillage IA.
 - **Étape 1 — Noyau** : terminée — critère de sortie démontré en local par un test de bout

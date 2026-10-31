@@ -45,6 +45,7 @@ func BenchmarkRelay(b *testing.B) {
 				out:  make(chan bridge.Envelope, 1),
 				full: map[transport.PeerID]struct{}{"peer": {}},
 			}
+			w.publishFull()
 			wake := mux.Wake(w.repoCh)
 			ev := transport.Event{Kind: transport.Message, Peer: "peer", Payload: []byte{chanRepo, 'x'}}
 			b.ReportAllocs()
@@ -57,7 +58,10 @@ func BenchmarkRelay(b *testing.B) {
 					b.Fatalf("step = %v, want %v", got, queued)
 				}
 				if queued {
-					out := <-w.out
+					out, err := (*repoPort)(w).RecvEnvelope(ctx)
+					if err != nil {
+						b.Fatal(err)
+					}
 					if out.Kind != bridge.Message || string(out.Payload) != "x" {
 						b.Fatal("incorrect relay output")
 					}

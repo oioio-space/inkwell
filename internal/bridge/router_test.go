@@ -539,7 +539,7 @@ func TestNoticesAndEnvelopesReachTheWebview(t *testing.T) {
 		n.Join("b")
 		n.Link("a", "b")
 		past := bridge.Envelope{Kind: bridge.Attested, Peer: "b", Payload: heads1("d1")}
-		enf.notices = []bridge.Envelope{past, {Kind: bridge.Sealed, Peer: "a"}}
+		enf.notices = []bridge.Envelope{{Kind: bridge.Roles, Peer: "a", Payload: []byte{0, 0}}, past, {Kind: bridge.Sealed, Peer: "a"}}
 
 		r := bridge.NewRouter(enf, quietLogger())
 		c := newFakeConn(t)
@@ -547,8 +547,8 @@ func TestNoticesAndEnvelopesReachTheWebview(t *testing.T) {
 		runDone := wait(func() { _ = r.Run(ctx) })
 		serveDone := wait(func() { r.Serve(c) })
 
-		// On attach: the peers, then the state.
-		for _, want := range []bridge.Kind{bridge.PeerUp, bridge.Attested, bridge.Sealed} {
+		// On attach: signed membership must precede peer events.
+		for _, want := range []bridge.Kind{bridge.Roles, bridge.Attested, bridge.Sealed, bridge.PeerUp} {
 			if got := c.next(t); got.Kind != want {
 				t.Fatalf("on attach got %v, want %v", got.Kind, want)
 			}
