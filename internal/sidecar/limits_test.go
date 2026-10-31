@@ -132,10 +132,9 @@ func TestRunNoNetwork(t *testing.T) {
 }
 
 func TestRunNoNetworkFallsBack(t *testing.T) {
-	old := isolationOverride
-	isolationOverride = func() bool { return false }
-	t.Cleanup(func() { isolationOverride = old })
+	t.Parallel()
 	s := spec("echo")
+	s.isolationProbe = func() bool { return false }
 	s.NoNetwork = true
 	out, err := Run(t.Context(), s)
 	if err != nil || out.ExitCode != 0 || out.Isolated {

@@ -184,6 +184,7 @@ onMount(() => {
   return () => {
     clearInterval(timer);
     preview.stop();
+    void workspace.stop();
   };
 });
 </script>

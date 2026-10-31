@@ -172,16 +172,12 @@ func (r StoreRequest) validate() error {
 		err = store.ValidKey(r.Key)
 	case OpLoadRange:
 		err = store.ValidPrefix(r.Key)
-	case OpListFiles:
+	case OpListFiles, OpTree, OpReferenced:
 		if len(r.Key) != 0 {
 			err = fmt.Errorf("%d components, want 0", len(r.Key))
 		}
 	case OpWriteProjection, OpReadProjection, OpAcknowledge, OpFileInfo, OpPutBlob, OpWriteProjectionAt, OpReadSyncPoint, OpSetSyncPoint:
 		err = validPathKey(r.Key)
-	case OpTree, OpReferenced:
-		if len(r.Key) != 0 {
-			err = fmt.Errorf("%d components, want 0", len(r.Key))
-		}
 	default:
 		err = fmt.Errorf("op %d", r.Op)
 	}
@@ -190,12 +186,21 @@ func (r StoreRequest) validate() error {
 		return fmt.Errorf("%w: %w", ErrMalformed, err)
 	case r.ID == 0:
 		return fmt.Errorf("%w: request id 0", ErrMalformed)
-	case r.Op != OpSave && r.Op != OpWriteProjection && r.Op != OpWriteProjectionAt && r.Op != OpSetSyncPoint && r.Op != OpAcknowledge && r.Op != OpTree && r.Op != OpReferenced && len(r.Data) > 0:
+	case !r.Op.hasData() && len(r.Data) > 0:
 		return fmt.Errorf("%w: data on op %d", ErrMalformed, r.Op)
 	case len(r.Data) > store.MaxValue:
 		return fmt.Errorf("%w: %d bytes of data", ErrMalformed, len(r.Data))
 	}
 	return nil
+}
+
+// hasData reports whether an operation accepts a request payload.
+func (op StoreOp) hasData() bool {
+	switch op {
+	case OpSave, OpWriteProjection, OpWriteProjectionAt, OpSetSyncPoint, OpAcknowledge, OpTree, OpReferenced:
+		return true
+	}
+	return false
 }
 
 // validPathKey checks a key that names a file of the project: one component
@@ -303,16 +308,17 @@ func EncodeRange(entries []store.Entry) ([]byte, error) {
 	return b, nil
 }
 
-// Storage is what the store stream serves: a verified key-value store and
-// the project files Inkwell owns. [project.Project] implements it.
-// ReadProjection and WriteProjection exchange UTF-8 text with LF line ends;
-// ReadText says how the file is encoded on disk and List lists the folder.
-type Storage interface {
+// KV is the key-value storage consumed by the store stream.
+type KV interface {
 	Load(key []string) ([]byte, error)
 	Save(key []string, data []byte) error
 	Remove(key []string) error
 	LoadRange(prefix []string) ([]store.Entry, error)
 	RemoveRange(prefix []string) error
+}
+
+// Projection is the project text and sync metadata consumed by the store stream.
+type Projection interface {
 	WriteProjection(rel string, data []byte) error
 	// WriteProjectionAt also records point (opaque; nil for none) with the hash.
 	WriteProjectionAt(rel string, data, point []byte) error
@@ -325,6 +331,10 @@ type Storage interface {
 	SyncPoint(rel string) ([]byte, error)
 	ReadText(rel string) (project.Text, error)
 	List() ([]project.File, error)
+}
+
+// Tree is the project tree and blob storage consumed by the store stream.
+type Tree interface {
 	// SetTree projects the project tree of the webview (see
 	// [project.Project.ApplyTree]) and returns how many entries it refused.
 	SetTree(entries []project.TreeEntry) (rejected int, err error)
@@ -335,20 +345,22 @@ type Storage interface {
 	PutBlob(rel string) (hash [HashSize]byte, size int64, err error)
 }
 
-// StoreServer serves one [Storage] to the webview over the store stream.
+// StoreServer serves storage requests to the webview over the store stream.
 // Create one with [NewStoreServer].
 type StoreServer struct {
-	st      Storage
-	log     *slog.Logger
-	mu      sync.Mutex
-	cur     *session
-	pending map[string]struct{} // external edits the webview has not acknowledged
+	kv         KV
+	projection Projection
+	tree       Tree
+	log        *slog.Logger
+	mu         sync.Mutex
+	cur        *session
+	pending    map[string]struct{} // external edits the webview has not acknowledged
 }
 
-// NewStoreServer returns a server over st that logs to log. Document bytes
-// are never logged.
-func NewStoreServer(st Storage, log *slog.Logger) *StoreServer {
-	return &StoreServer{st: st, log: log, pending: map[string]struct{}{}}
+// NewStoreServer returns a server over the three storage consumers.
+// Document bytes are never logged.
+func NewStoreServer(kv KV, projection Projection, tree Tree, log *slog.Logger) *StoreServer {
+	return &StoreServer{kv: kv, projection: projection, tree: tree, log: log, pending: map[string]struct{}{}}
 }
 
 // NotifyExternal tells the webview that the project file rel was edited
@@ -432,28 +444,48 @@ func (s *StoreServer) Serve(c Conn) {
 	}
 }
 
-// handle runs one request.
+// handle runs one request through its storage consumer.
 func (s *StoreServer) handle(req StoreRequest) StoreResponse {
-	var (
-		payload []byte
-		err     error
-	)
-	rel := strings.Join(req.Key, "/") // for the operations that name a file
+	var payload []byte
+	var err error
+	switch req.Op {
+	case OpLoad, OpSave, OpRemove, OpLoadRange, OpRemoveRange:
+		payload, err = s.handleKV(req)
+	case OpTree, OpReferenced, OpPutBlob:
+		payload, err = s.handleTree(req)
+	default:
+		payload, err = s.handleProjection(req)
+	}
+	return s.respond(req, payload, err)
+}
+
+func (s *StoreServer) handleKV(req StoreRequest) ([]byte, error) {
+	var payload []byte
+	var err error
 	switch req.Op {
 	case OpLoad:
-		payload, err = s.st.Load(req.Key)
+		payload, err = s.kv.Load(req.Key)
 	case OpSave:
-		err = s.st.Save(req.Key, req.Data)
+		err = s.kv.Save(req.Key, req.Data)
 	case OpRemove:
-		err = s.st.Remove(req.Key)
+		err = s.kv.Remove(req.Key)
 	case OpLoadRange:
 		payload, err = s.loadRange(req.Key)
 	case OpRemoveRange:
-		err = s.st.RemoveRange(req.Key)
+		err = s.kv.RemoveRange(req.Key)
+	}
+	return payload, err
+}
+
+func (s *StoreServer) handleProjection(req StoreRequest) ([]byte, error) {
+	var payload []byte
+	var err error
+	rel := strings.Join(req.Key, "/")
+	switch req.Op {
 	case OpWriteProjection:
-		err = s.st.WriteProjection(rel, req.Data)
+		err = s.projection.WriteProjection(rel, req.Data)
 	case OpReadProjection:
-		payload, err = s.st.ReadProjection(rel)
+		payload, err = s.projection.ReadProjection(rel)
 	case OpListFiles:
 		payload, err = s.listFiles()
 	case OpFileInfo:
@@ -461,22 +493,31 @@ func (s *StoreServer) handle(req StoreRequest) StoreResponse {
 	case OpWriteProjectionAt:
 		err = s.writeAt(rel, req.Data)
 	case OpSetSyncPoint:
-		err = s.st.SetSyncPoint(rel, req.Data)
+		err = s.projection.SetSyncPoint(rel, req.Data)
 	case OpReadSyncPoint:
-		if payload, err = s.st.SyncPoint(rel); err == nil && len(payload) == 0 {
+		if payload, err = s.projection.SyncPoint(rel); err == nil && len(payload) == 0 {
 			err = fs.ErrNotExist
 		}
 	case OpAcknowledge:
 		if len(req.Data) == 0 {
-			err = s.st.Acknowledge(rel)
+			err = s.projection.Acknowledge(rel)
 		} else {
-			err = s.st.AcknowledgeAt(rel, req.Data)
+			err = s.projection.AcknowledgeAt(rel, req.Data)
 		}
 		if err == nil {
 			s.mu.Lock()
 			delete(s.pending, rel)
 			s.mu.Unlock()
 		}
+	}
+	return payload, err
+}
+
+func (s *StoreServer) handleTree(req StoreRequest) ([]byte, error) {
+	var payload []byte
+	var err error
+	rel := strings.Join(req.Key, "/")
+	switch req.Op {
 	case OpTree:
 		payload, err = s.setTree(req.Data)
 	case OpReferenced:
@@ -486,11 +527,11 @@ func (s *StoreServer) handle(req StoreRequest) StoreResponse {
 			hash [HashSize]byte
 			size int64
 		)
-		if hash, size, err = s.st.PutBlob(rel); err == nil {
+		if hash, size, err = s.tree.PutBlob(rel); err == nil {
 			payload = EncodeBlobInfo(hash, size)
 		}
 	}
-	return s.respond(req, payload, err)
+	return payload, err
 }
 
 // writeAt runs OpWriteProjectionAt.
@@ -502,7 +543,7 @@ func (s *StoreServer) writeAt(rel string, data []byte) error {
 	if len(point) == 0 {
 		point = nil
 	}
-	return s.st.WriteProjectionAt(rel, text, point)
+	return s.projection.WriteProjectionAt(rel, text, point)
 }
 
 // DecodeWriteAt parses the Data built by [EncodeWriteAt]; the results alias
@@ -524,7 +565,7 @@ func (s *StoreServer) setTree(data []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
-	rejected, err := s.st.SetTree(entries)
+	rejected, err := s.tree.SetTree(entries)
 	if err != nil {
 		return nil, err
 	}
@@ -540,12 +581,12 @@ func (s *StoreServer) setReferenced(data []byte) error {
 	if err != nil {
 		return err
 	}
-	return s.st.SetReferenced(hashes)
+	return s.tree.SetReferenced(hashes)
 }
 
 // listFiles runs OpListFiles.
 func (s *StoreServer) listFiles() ([]byte, error) {
-	files, err := s.st.List()
+	files, err := s.projection.List()
 	if err != nil {
 		return nil, err
 	}
@@ -554,7 +595,7 @@ func (s *StoreServer) listFiles() ([]byte, error) {
 
 // fileInfo runs OpFileInfo.
 func (s *StoreServer) fileInfo(rel string) ([]byte, error) {
-	t, err := s.st.ReadText(rel)
+	t, err := s.projection.ReadText(rel)
 	if err != nil {
 		return nil, err
 	}
@@ -564,7 +605,7 @@ func (s *StoreServer) fileInfo(rel string) ([]byte, error) {
 // loadRange runs OpLoadRange. Entries that could not be recovered are left
 // out and logged; the rest are returned.
 func (s *StoreServer) loadRange(prefix []string) ([]byte, error) {
-	entries, err := s.st.LoadRange(prefix)
+	entries, err := s.kv.LoadRange(prefix)
 	if err != nil && !errors.Is(err, store.ErrCorrupt) {
 		return nil, err
 	}

@@ -141,8 +141,42 @@ class Workspace {
   #marksTimer: ReturnType<typeof setTimeout> | undefined;
   #offSize: (() => void) | undefined;
 
+  #projectWaits = new Set<() => void>();
+  #generation = 0;
+  #offScope: (() => void) | undefined;
+
+  async stop(): Promise<void> {
+    this.#generation++;
+    for (const cancel of this.#projectWaits) cancel();
+    this.#offScope?.();
+    this.#offScope = undefined;
+    this.#offAdmission?.();
+    this.#offAdmission = undefined;
+    this.#offSize?.();
+    this.#offSize = undefined;
+    this.#loader = undefined;
+    clearTimeout(this.#marksTimer);
+    this.#projection?.stop();
+    this.#sync?.stop();
+    this.#projection = undefined;
+    this.#sync = undefined;
+    const repo = this.#repo;
+    this.#repo = undefined;
+    this.#adapter = undefined;
+    const storage = this.#storage;
+    this.#storage = undefined;
+    this.handle = undefined;
+    try {
+      await repo?.shutdown();
+    } finally {
+      storage?.close();
+    }
+  }
+
   async start(): Promise<void> {
+    const generation = ++this.#generation;
     const id = await Session.LocalPeer();
+    if (generation !== this.#generation) return;
     this.myId = id;
     if (!this.myName) this.setName(`Personne ${id.slice(0, 4)}`);
 
@@ -184,7 +218,7 @@ class Workspace {
 
     this.#loader = new BootstrapLoader(this.#repo, this.#admitted, () => adapter.drain());
     let epoch = this.#admitted.epoch;
-    this.#admitted.onChange(() => {
+    this.#offScope = this.#admitted.onChange(() => {
       if (epoch !== this.#admitted.epoch) {
         adapter.scopeChanged();
         epoch = this.#admitted.epoch;
@@ -198,6 +232,7 @@ class Workspace {
       () => this.#repo,
     );
     const saved = (await Projects.Current()).RootURL;
+    if (generation !== this.#generation) return;
     if (saved && isValidAutomergeUrl(saved)) {
       try {
         await this.open(saved);
@@ -214,8 +249,9 @@ class Workspace {
     this.#offAdmission?.();
     this.#admitted.setRoot(url);
     const epoch = this.#admitted.epoch;
+    const generation = this.#generation;
     const handle = await this.#repo.find<Doc>(url);
-    if (epoch !== this.#admitted.epoch) return;
+    if (generation !== this.#generation || epoch !== this.#admitted.epoch) return;
     const refresh = () => this.#admitted.refresh(handle.doc());
     refresh();
     handle.on("change", refresh);
@@ -230,6 +266,7 @@ class Workspace {
     this.#watchSize(handle);
     this.#adapter?.setProject(url);
     await Projects.SetRootURL(url);
+    if (generation !== this.#generation) return;
     const storage = this.#storage;
     if (!storage) return;
     // Saving with Ctrl+S: the file keeps what it holds until asked, so dirty is known from it.
@@ -506,12 +543,25 @@ class Workspace {
     const known = adapter.projectOf(peer);
     if (known) return Promise.resolve(known);
     return new Promise((resolve, reject) => {
-      const timer = setTimeout(() => reject(new Error("no project announced")), timeoutMs);
-      adapter.onProject((url, from) => {
-        if (from !== peer) return;
+      const cleanup = () => {
         clearTimeout(timer);
+        off();
+        this.#projectWaits.delete(cancel);
+      };
+      const cancel = () => {
+        cleanup();
+        reject(new Error("workspace stopped"));
+      };
+      const timer = setTimeout(() => {
+        cleanup();
+        reject(new Error("no project announced"));
+      }, timeoutMs);
+      const off = adapter.onProject((url, from) => {
+        if (from !== peer) return;
+        cleanup();
         resolve(url);
       });
+      this.#projectWaits.add(cancel);
     });
   }
 }

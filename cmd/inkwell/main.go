@@ -81,7 +81,7 @@ func main() {
 	if err := proj.Backup(time.Now(), backupsKept); err != nil {
 		log.Warn("backing up project", "err", err) // not fatal: the store still works
 	}
-	storeServer := bridge.NewStoreServer(rt.Files, log)
+	storeServer := bridge.NewStoreServer(rt.Files, rt.Files, rt.Files, log)
 	windows := newWindowHost() // nil without native windows (the server build)
 	var winService app.Windows
 	if windows != nil {
@@ -89,6 +89,7 @@ func main() {
 	}
 	presentHub := app.NewPresent(log)
 
+	var loops shutdownLoops
 	wails = application.New(application.Options{
 		Name:        "Inkwell",
 		Description: "Éditeur collaboratif Typst, sans serveur",
@@ -112,13 +113,7 @@ func main() {
 			ApplicationShouldTerminateAfterLastWindowClosed: true,
 		},
 		OnShutdown: func() {
-			cancel()
-			if err := rt.Close(); err != nil { // before the project: it keeps files there
-				log.Warn("closing network", "err", err)
-			}
-			if err := proj.Close(); err != nil {
-				log.Warn("closing project", "err", err)
-			}
+			shutdown(cancel, &loops, rt.Close, proj.Close, log)
 		},
 	})
 	wails.HandleStream(bridge.StreamName, func(c *application.StreamConn) { router.Serve(c) })
@@ -126,7 +121,7 @@ func main() {
 	wails.HandleStream(app.PreviewStreamName, func(c *application.StreamConn) { rt.Preview.Serve(c) })
 	wails.HandleStream(app.PresentStreamName, func(c *application.StreamConn) { presentHub.Serve(c) })
 
-	go func() {
+	loops.Go("project watch", func() {
 		if err := proj.Watch(ctx, func(rel string) {
 			log.Info("project file edited outside Inkwell", "file", rel)
 			storeServer.NotifyExternal(rel)
@@ -134,15 +129,15 @@ func main() {
 		}); err != nil {
 			log.Error("watching project files", "err", err)
 		}
-	}()
+	})
 
-	go func() {
+	loops.Go("bridge", func() {
 		// Run only returns once ctx is cancelled or the network is closed; anything
 		// else means the bridge died while the app is still running.
 		if err := router.Run(ctx); ctx.Err() == nil && !errors.Is(err, transport.ErrClosed) {
 			log.Error("bridge stopped", "err", err)
 		}
-	}()
+	})
 
 	main := wails.Window.NewWithOptions(application.WebviewWindowOptions{
 		Title:     "Inkwell",
@@ -190,4 +185,52 @@ func serverPort() int {
 		return p
 	}
 	return 8080
+}
+
+// shutdownLoopTimeout bounds shutdown when a loop is stuck sending to a dead webview.
+const shutdownLoopTimeout = 5 * time.Second
+
+type shutdownLoop struct {
+	name string
+	done <-chan struct{}
+}
+
+type shutdownLoops []shutdownLoop
+
+// Go registers loops before shutdown starts, retaining their names for diagnostics.
+func (loops *shutdownLoops) Go(name string, run func()) {
+	done := make(chan struct{})
+	*loops = append(*loops, shutdownLoop{name: name, done: done})
+	go func() {
+		defer close(done)
+		run()
+	}()
+}
+
+// shutdown gives loops a bounded time to finish before closing their resources.
+func shutdown(cancel context.CancelFunc, loops *shutdownLoops, closeNetwork, closeProject func() error, log *slog.Logger) {
+	cancel()
+	timer := time.NewTimer(shutdownLoopTimeout)
+	defer timer.Stop()
+wait:
+	for _, loop := range *loops {
+		select {
+		case <-loop.done:
+		case <-timer.C:
+			for _, pending := range *loops {
+				select {
+				case <-pending.done:
+				default:
+					log.Warn("shutdown loop did not stop", "loop", pending.name)
+				}
+			}
+			break wait
+		}
+	}
+	if err := closeNetwork(); err != nil {
+		log.Warn("closing network", "err", err)
+	}
+	if err := closeProject(); err != nil {
+		log.Warn("closing project", "err", err)
+	}
 }
