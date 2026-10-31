@@ -530,7 +530,7 @@ func TestPendingFullRefusesAndExpires(t *testing.T) {
 		t.Fatalf("Pending() = %d, want %d", l.Pending(), maxPending)
 	}
 
-	s := NewSync(l)
+	s := NewSync[string](l)
 	s.Tick()
 	if l.Pending() != maxPending {
 		t.Errorf("Pending() after one tick = %d, want %d", l.Pending(), maxPending)

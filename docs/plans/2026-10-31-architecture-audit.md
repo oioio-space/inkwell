@@ -61,6 +61,9 @@ signalé par une seule source est revérifié par un autre modèle avant d'être
 | M4 | Majeur | couverture < 85 % par paquet | `sidecar/fetch` 83,8 %, `transporttest` 77,7 % ; `cover.sh` ne contrôle que le total | mesures + architect |
 | M5 | Majeur | §2 : un paquet = un rôle | `internal/app` a 4 rôles ; ses tests tirent 610 paquets et un binaire de test de 104 Mo | architect |
 | F1 | Majeur (fiabilité, à diagnostiquer) | ISO/IEC 25010 fiabilité ; un test doit être déterministe | `internal/app` `TestPreviewCompilesTheProject/PRV-10` : 1 échec dans `mise run test`, 3 succès isolés (2026-10-31) | à diagnostiquer (`superpowers:systematic-debugging`), sans le déclarer instable au jugé |
+| F3 | Critique (plantage) | ISO/IEC 25010 fiabilité | `internal/transport/p2p` `TestWantAgainClearsResetHold` : déréférencement de pointeur nul dans libp2p `swarm_dial.go:476`, 1 fois sur 6 ; indépendant du lot 2 (`p2p` n'importe pas `trust`) | `quality-runner`, à diagnostiquer |
+| F1 (suite) | Majeur | idem F1 | même famille : `PRV-32` (`preview_test.go:516`), 1 échec puis 5 succès sur 5 | `quality-runner` |
+| F2 | Majeur (à prouver) | §3 concurrence : chaque goroutine a un propriétaire | `adopt` remplace le magasin de confiance pendant que la goroutine de `Wiring` peut sauvegarder ; risque d'écrire des opérations de l'ancien projet dans le nouveau. Après un échec de réouverture, le magasin reste fermé jusqu'au redémarrage | `architect`, à prouver par un test sous `-race` |
 | m1–m11 | Mineur | voir le rapport de l'architecte | variables globales servant de crochets de test, API sans appelant, tinymist embarqué (32,8 Mo) mais jamais lancé, `bridge.Storage` à 17 méthodes, doublons p2p, arrêt sans attente des goroutines, E/S hors `os.Root` dans typst | architect |
 
 ## Plan (ordre imposé par les dépendances)

@@ -7,8 +7,6 @@ import (
 	"slices"
 	"strings"
 	"testing"
-
-	"github.com/oioio-space/inkwell/internal/transport"
 )
 
 // opsMessage is an Ops sync message carrying ops, as a peer would send it.
@@ -22,8 +20,8 @@ func opsMessage(t testing.TB, ops ...Op) []byte {
 }
 
 // destinations returns the peers of out, in order.
-func destinations(out []Outbound) []transport.PeerID {
-	var to []transport.PeerID
+func destinations(out []Outbound[string]) []string {
+	var to []string
 	for _, o := range out {
 		to = append(to, o.To)
 	}
@@ -42,7 +40,7 @@ func decodedOps(t testing.TB, m []byte) []Op {
 
 // syncRig is a Sync over a project of a, with peers p and q up.
 type syncRig struct {
-	sync *Sync
+	sync *Sync[string]
 	list *List
 	src  *List // a replica that issues the ops the rig then receives
 	a, b Signer
@@ -52,7 +50,7 @@ func newSyncRig(t *testing.T) *syncRig {
 	t.Helper()
 	a, b := newSigner(1), newSigner(2)
 	l := project(t, a)
-	r := &syncRig{sync: NewSync(l), list: l, src: fork(t, l), a: a, b: b}
+	r := &syncRig{sync: NewSync[string](l), list: l, src: fork(t, l), a: a, b: b}
 	r.sync.OnPeerUp("p")
 	r.sync.OnPeerUp("q")
 	return r
@@ -63,7 +61,7 @@ func newSyncRig(t *testing.T) *syncRig {
 func TestSyncAnnouncesFrontier(t *testing.T) {
 	a := newSigner(1)
 	l := project(t, a)
-	s := NewSync(l)
+	s := NewSync[string](l)
 	out := s.OnPeerUp("p")
 	if len(out) != 1 || out[0].To != "p" {
 		t.Fatalf("OnPeerUp = %v, want one message to p", destinations(out))
@@ -77,7 +75,7 @@ func TestSyncAnnouncesFrontier(t *testing.T) {
 	if err := chain(t, sealed, a, maxOps+1); !errors.Is(err, ErrTooManyOps) {
 		t.Fatalf("sealing the list: %v", err)
 	}
-	s = NewSync(sealed)
+	s = NewSync[string](sealed)
 	if out := s.OnPeerUp("p"); len(out) != 0 {
 		t.Errorf("a sealed list announced itself: %d messages", len(out))
 	}
@@ -97,7 +95,7 @@ func TestSyncRelaysToEveryoneButTheSender(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, want := destinations(out), []transport.PeerID{"p", "s"}; !slices.Equal(got, want) {
+	if got, want := destinations(out), []string{"p", "s"}; !slices.Equal(got, want) {
 		t.Fatalf("relayed to %v, want %v (sorted, without the sender q)", got, want)
 	}
 	for _, o := range out {
@@ -119,17 +117,17 @@ func TestSyncRelaysToEveryoneButTheSender(t *testing.T) {
 func TestSyncBroadcastAndPeerDown(t *testing.T) {
 	r := newSyncRig(t)
 	op := mustIssue(t, r.src, r.a, OpAdd, r.b, RoleWriter)
-	if got := destinations(r.sync.Broadcast(op)); !slices.Equal(got, []transport.PeerID{"p", "q"}) {
+	if got := destinations(r.sync.Broadcast(op)); !slices.Equal(got, []string{"p", "q"}) {
 		t.Errorf("Broadcast to %v, want p, q", got)
 	}
 	r.sync.OnPeerDown("q")
-	if got := destinations(r.sync.Broadcast(op)); !slices.Equal(got, []transport.PeerID{"p"}) {
+	if got := destinations(r.sync.Broadcast(op)); !slices.Equal(got, []string{"p"}) {
 		t.Errorf("Broadcast after q went down to %v, want p", got)
 	}
 	if out := r.sync.Broadcast(); len(out) != 0 {
 		t.Errorf("Broadcast() of nothing = %d messages", len(out))
 	}
-	if got := destinations(r.sync.Tick()); !slices.Equal(got, []transport.PeerID{"p"}) {
+	if got := destinations(r.sync.Tick()); !slices.Equal(got, []string{"p"}) {
 		t.Errorf("Tick announced to %v, want only p", got)
 	}
 }
@@ -318,5 +316,25 @@ func TestChunkBoundaries(t *testing.T) {
 	}
 	if got := chunk("p", nil); len(got) != 0 {
 		t.Errorf("chunk(nil) = %d messages, want none", len(got))
+	}
+}
+
+func TestSyncIntegerPeers(t *testing.T) {
+	l := project(t, newSigner(1))
+	s := NewSync[int](l)
+	for _, p := range []int{2, 0, 1} {
+		s.OnPeerUp(p)
+	}
+	for name, out := range map[string][]Outbound[int]{
+		"Tick":      s.Tick(),
+		"Broadcast": s.Broadcast(l.Since(nil)...),
+	} {
+		var got []int
+		for _, m := range out {
+			got = append(got, m.To)
+		}
+		if !slices.Equal(got, []int{0, 1, 2}) {
+			t.Errorf("%s destinations = %v, want [0 1 2]", name, got)
+		}
 	}
 }

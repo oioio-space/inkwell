@@ -122,7 +122,7 @@ type Wiring struct {
 	raw      transport.Transport
 	signer   trust.Signer
 	adm      *Admission // holds the member list, replaced by SwitchProject
-	sync     *trust.Sync
+	sync     *trust.Sync[transport.PeerID]
 	att      attestStore
 	log      *slog.Logger
 	save     func(trust.Op) error
@@ -163,7 +163,7 @@ func Wire(ctx context.Context, t transport.Transport, s trust.Signer, list *trus
 		raw:      t,
 		signer:   s,
 		adm:      adm,
-		sync:     trust.NewSync(list),
+		sync:     trust.NewSync[transport.PeerID](list),
 		att:      attestStore{latest: make(map[attestKey]trust.Attestation)},
 		log:      o.Log,
 		save:     o.Save,
@@ -293,7 +293,7 @@ func (w *Wiring) SwitchProject(list *trust.List, save func(trust.Op) error) erro
 		}
 		w.adm.reset(list)
 		w.save = save
-		w.sync = trust.NewSync(list)
+		w.sync = trust.NewSync[transport.PeerID](list)
 		w.att.reset()
 		w.saved = savedOps(list)
 		clear(w.pending)
@@ -579,7 +579,7 @@ func (w *Wiring) notify(e bridge.Envelope) {
 	}
 }
 
-func (w *Wiring) sendTrust(out []trust.Outbound) {
+func (w *Wiring) sendTrust(out []trust.Outbound[transport.PeerID]) {
 	for _, o := range out {
 		if err := w.trustCh.Send(w.ctx, o.To, o.Data); err != nil && w.ctx.Err() == nil {
 			w.log.Debug("sending trust message", "peer", o.To, "err", err)

@@ -1,13 +1,12 @@
 package trust
 
 import (
+	"cmp"
 	"encoding/binary"
 	"errors"
 	"fmt"
 	"maps"
 	"slices"
-
-	"github.com/oioio-space/inkwell/internal/transport"
 )
 
 // Wire limits of the sync protocol.
@@ -27,50 +26,51 @@ const (
 )
 
 // Outbound is a message the caller must send on the trust channel.
-type Outbound struct {
-	To   transport.PeerID
+type Outbound[P cmp.Ordered] struct {
+	To   P
 	Data []byte
 }
 
-// Sync replicates a [List] between peers. It is a pure state machine: the
-// caller feeds it peer events and received messages, and sends what it
-// returns; it does no I/O, owns no goroutine and has no clock. Loss, duplication
-// and reordering are tolerated: every op is relayed on arrival, and calling
-// [Sync.Tick] periodically re-announces the frontier so that anything lost is
-// resent. A Have is answered with Ops, never with a Have, and at most twice
-// per peer and Tick (the budget survives reconnections), so a peer cannot make the replicas echo each other or
-// amplify traffic; each side learns what it lacks from its own announcements.
-// A sealed list does not announce. A Sync is not safe for concurrent use.
-type Sync struct {
+// Sync replicates a [List] between peers, sending in peer identifier order. It
+// is a pure state machine: the caller feeds it peer events and received
+// messages, and sends what it returns; it does no I/O, owns no goroutine and
+// has no clock. Loss, duplication and reordering are tolerated: every op is
+// relayed on arrival, and calling [Sync.Tick] periodically re-announces the
+// frontier so that anything lost is resent. A Have is answered with Ops, never
+// with a Have, and at most twice per peer and Tick (the budget survives
+// reconnections), so a peer cannot make the replicas echo each other or amplify
+// traffic; each side learns what it lacks from its own announcements. A sealed
+// list does not announce. A Sync is not safe for concurrent use.
+type Sync[P cmp.Ordered] struct {
 	list     *List
-	peers    map[transport.PeerID]struct{}
-	answered map[transport.PeerID]int // Haves answered since the last Tick.
+	peers    map[P]struct{}
+	answered map[P]int // Haves answered since the last Tick.
 }
 
-// NewSync returns a Sync that replicates l.
-func NewSync(l *List) *Sync {
-	return &Sync{list: l, peers: make(map[transport.PeerID]struct{}), answered: make(map[transport.PeerID]int)}
+// NewSync returns a Sync that replicates l using peer identifiers of type P.
+func NewSync[P cmp.Ordered](l *List) *Sync[P] {
+	return &Sync[P]{list: l, peers: make(map[P]struct{}), answered: make(map[P]int)}
 }
 
 // OnPeerUp registers p and announces our frontier to
 // it, unless the list is sealed.
-func (s *Sync) OnPeerUp(p transport.PeerID) []Outbound {
+func (s *Sync[P]) OnPeerUp(p P) []Outbound[P] {
 	s.peers[p] = struct{}{}
 	return s.have(p)
 }
 
 // OnPeerDown forgets p.
-func (s *Sync) OnPeerDown(p transport.PeerID) {
+func (s *Sync[P]) OnPeerDown(p P) {
 	delete(s.peers, p)
 }
 
 // Tick re-announces our frontier to every peer (unless the list is sealed),
 // resets the Have budgets and expires the old ops waiting for parents. Call it
 // periodically.
-func (s *Sync) Tick() []Outbound {
+func (s *Sync[P]) Tick() []Outbound[P] {
 	clear(s.answered)
 	s.list.prunePending()
-	var out []Outbound
+	var out []Outbound[P]
 	for _, p := range s.sortedPeers() {
 		out = append(out, s.have(p)...)
 	}
@@ -78,7 +78,7 @@ func (s *Sync) Tick() []Outbound {
 }
 
 // Broadcast relays locally issued ops to every peer.
-func (s *Sync) Broadcast(ops ...Op) []Outbound { return s.relay(ops, "") }
+func (s *Sync[P]) Broadcast(ops ...Op) []Outbound[P] { return s.relay(ops, nil) }
 
 // OnMessage handles one message received from a peer. The returned messages
 // are valid even when err is not nil: an op that fails to apply does not stop the others.
@@ -86,7 +86,7 @@ func (s *Sync) Broadcast(ops ...Op) []Outbound { return s.relay(ops, "") }
 // peer only on those: the other refusals (an unknown author from out-of-order
 // delivery, a full buffer, a sealed list) can happen to an honest peer, and
 // [Sync] recovers from them by itself.
-func (s *Sync) OnMessage(from transport.PeerID, data []byte) ([]Outbound, error) {
+func (s *Sync[P]) OnMessage(from P, data []byte) ([]Outbound[P], error) {
 	kind, have, ops, err := decodeMessage(data)
 	if err != nil {
 		return nil, err
@@ -99,7 +99,7 @@ func (s *Sync) OnMessage(from transport.PeerID, data []byte) ([]Outbound, error)
 		return chunk(from, s.list.Since(have)), nil
 	}
 	added, err := s.list.ApplyAll(ops)
-	return s.relay(added, from), malformedOnly(err)
+	return s.relay(added, &from), malformedOnly(err)
 }
 
 // malformedOnly keeps, among the errors joined in err by [List.ApplyAll], only
@@ -118,7 +118,7 @@ func malformedOnly(err error) error {
 	return errors.Join(bad...)
 }
 
-func (s *Sync) have(to transport.PeerID) []Outbound {
+func (s *Sync[P]) have(to P) []Outbound[P] {
 	if s.list.Sealed() {
 		return nil
 	}
@@ -129,28 +129,28 @@ func (s *Sync) have(to transport.PeerID) []Outbound {
 	for _, h := range f {
 		b = append(b, h[:]...)
 	}
-	return []Outbound{{To: to, Data: b}}
+	return []Outbound[P]{{To: to, Data: b}}
 }
 
 // relay sends ops to every peer but except.
-func (s *Sync) relay(ops []Op, except transport.PeerID) []Outbound {
+func (s *Sync[P]) relay(ops []Op, except *P) []Outbound[P] {
 	if len(ops) == 0 {
 		return nil
 	}
-	var out []Outbound
+	var out []Outbound[P]
 	for _, p := range s.sortedPeers() {
-		if p != except {
+		if except == nil || p != *except {
 			out = append(out, chunk(p, ops)...)
 		}
 	}
 	return out
 }
 
-func (s *Sync) sortedPeers() []transport.PeerID { return slices.Sorted(maps.Keys(s.peers)) }
+func (s *Sync[P]) sortedPeers() []P { return slices.Sorted(maps.Keys(s.peers)) }
 
 // chunk packs ops into Ops messages of about chunkBytes each.
-func chunk(to transport.PeerID, ops []Op) []Outbound {
-	var out []Outbound
+func chunk[P cmp.Ordered](to P, ops []Op) []Outbound[P] {
+	var out []Outbound[P]
 	var cur []byte
 	count := 0
 	flush := func() {
@@ -159,7 +159,7 @@ func chunk(to transport.PeerID, ops []Op) []Outbound {
 		}
 		b := []byte{msgOps}
 		b = binary.BigEndian.AppendUint16(b, uint16(count)) // #nosec G115 -- bounded by chunkBytes / min op size.
-		out = append(out, Outbound{To: to, Data: append(b, cur...)})
+		out = append(out, Outbound[P]{To: to, Data: append(b, cur...)})
 		cur, count = nil, 0
 	}
 	for _, o := range ops {

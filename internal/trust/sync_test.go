@@ -19,11 +19,11 @@ import (
 type replica struct {
 	node *memnet.Node
 	list *List
-	sync *Sync
+	sync *Sync[transport.PeerID]
 	mu   sync.Mutex
 }
 
-func (r *replica) send(ctx context.Context, out []Outbound) {
+func (r *replica) send(ctx context.Context, out []Outbound[transport.PeerID]) {
 	for _, o := range out {
 		_ = r.node.Send(ctx, o.To, o.Data) // loss is part of the test.
 	}
@@ -36,7 +36,7 @@ func (r *replica) run(ctx context.Context) {
 			return
 		}
 		r.mu.Lock()
-		var out []Outbound
+		var out []Outbound[transport.PeerID]
 		switch ev.Kind {
 		case transport.PeerUp:
 			out = r.sync.OnPeerUp(ev.Peer)
@@ -68,7 +68,7 @@ func (r *replica) issue(ctx context.Context, t *testing.T, by Signer, k OpKind, 
 	t.Helper()
 	r.mu.Lock()
 	op, err := r.list.Issue(by, k, subject.Public(), role, "")
-	var out []Outbound
+	var out []Outbound[transport.PeerID]
 	if err == nil {
 		out = r.sync.Broadcast(op)
 	}
@@ -87,7 +87,7 @@ func TestSyncConverges(t *testing.T) {
 
 		reps := map[transport.PeerID]*replica{}
 		for id, l := range map[transport.PeerID]*List{"a": root, "b": New(root.Project()), "c": New(root.Project())} {
-			reps[id] = &replica{node: net.Join(id), list: l, sync: NewSync(l)}
+			reps[id] = &replica{node: net.Join(id), list: l, sync: NewSync[transport.PeerID](l)}
 		}
 		ra, rb := reps["a"], reps["b"]
 
@@ -142,7 +142,7 @@ func TestSyncConverges(t *testing.T) {
 
 func TestSyncRejectsGarbage(t *testing.T) {
 	a := newSigner(1)
-	s := NewSync(project(t, a))
+	s := NewSync[transport.PeerID](project(t, a))
 	for _, msg := range [][]byte{nil, {9, 0, 0}, {msgHave, 0xff, 0xff}, {msgOps, 0, 1, 0xff, 0xff}, append([]byte{msgHave, 0, 0}, 0)} {
 		if _, err := s.OnMessage("p", msg); !errors.Is(err, ErrMalformed) {
 			t.Errorf("OnMessage(%x) = %v, want ErrMalformed", msg, err)
@@ -159,7 +159,7 @@ func TestSyncOutOfOrderIsNotAPeerError(t *testing.T) {
 	ops := src.Since(nil) // genesis, then the Add of b.
 	mustIssue(t, src, b, OpAdd, newSigner(3), RoleWriter)
 	last := src.Since([]Hash{ops[1].Hash()})
-	s := NewSync(New(src.Project()))
+	s := NewSync[transport.PeerID](New(src.Project()))
 	for _, m := range chunk("p", last) { // b's op before b's grant: unknown author.
 		if _, err := s.OnMessage("p", m.Data); err != nil {
 			t.Errorf("OnMessage(op of an unknown author) = %v, want nil", err)
@@ -180,7 +180,7 @@ func TestSyncChunksLargeBatches(t *testing.T) {
 	if len(msgs) < 2 {
 		t.Fatalf("chunk produced %d messages, want several", len(msgs))
 	}
-	peer := NewSync(New(l.Project()))
+	peer := NewSync[transport.PeerID](New(l.Project()))
 	for _, m := range msgs {
 		if len(m.Data) > MaxMessage {
 			t.Fatalf("message of %d bytes exceeds MaxMessage", len(m.Data))
@@ -216,14 +216,14 @@ func TestSyncNoAnnounceStorm(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	sa, sb := NewSync(la), NewSync(lb)
+	sa, sb := NewSync[transport.PeerID](la), NewSync[transport.PeerID](lb)
 	const A, B = transport.PeerID("A"), transport.PeerID("B")
 	queue := append(sa.OnPeerUp(B), sb.OnPeerUp(A)...) // one announcement each, no Tick.
 	msgs := 0
 	for ; len(queue) > 0 && msgs < 100; msgs++ {
 		m := queue[0]
 		queue = queue[1:]
-		var out []Outbound
+		var out []Outbound[transport.PeerID]
 		if m.To == B {
 			out, _ = sb.OnMessage(A, m.Data)
 		} else {
@@ -243,7 +243,7 @@ func TestSyncNoAnnounceStorm(t *testing.T) {
 }
 
 func TestSyncHaveNeverAnsweredWithHave(t *testing.T) {
-	s := NewSync(project(t, newSigner(1)))
+	s := NewSync[transport.PeerID](project(t, newSigner(1)))
 	out, err := s.OnMessage("p", haveMsg(Hash{9})) // a hash we do not know.
 	if err != nil || len(out) == 0 {
 		t.Fatalf("OnMessage(Have) = %d messages, %v; want the ops", len(out), err)
@@ -256,7 +256,7 @@ func TestSyncHaveNeverAnsweredWithHave(t *testing.T) {
 }
 
 func TestSyncHaveBudgetPerTick(t *testing.T) {
-	s := NewSync(project(t, newSigner(1)))
+	s := NewSync[transport.PeerID](project(t, newSigner(1)))
 	answered := func(p transport.PeerID) (n int) {
 		for range 10 {
 			if out, _ := s.OnMessage(p, haveMsg()); len(out) > 0 {
@@ -290,7 +290,7 @@ func TestSyncSealedDoesNotAnnounce(t *testing.T) {
 	if err := chain(t, l, a, maxOps-1); err != nil || !l.Sealed() {
 		t.Fatalf("chain = %v, Sealed() = %v", err, l.Sealed())
 	}
-	s := NewSync(l)
+	s := NewSync[transport.PeerID](l)
 	if out := s.OnPeerUp("p"); len(out) != 0 {
 		t.Errorf("OnPeerUp announced %d messages while sealed", len(out))
 	}
