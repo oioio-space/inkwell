@@ -128,13 +128,18 @@ Chaque décision cite sa raison ; une décision qui touche une frontière passe 
 | S2 + F2 | ✅ fusionné | `957cc3d`, fusion `c5e9a4d` |
 | Étape 1 de l'admission (S1 partiel, S4, R1) et suites F1–F4 | ✅ fusionné ; S1 reste Critique (garde ADR 0030 à venir) ; PRS-37 a échoué 1 fois dans une suite e2e complète, taux à mesurer | fusions `ad2cf86`, `f2f1460` |
 | Révision byzantine de l'admission, ADR 0031 | 🔨 conception (architect) | `audit-2026-10-31/06-admission-design.md`, `docs/adr/0031-*.md` |
-| F3, plantage libp2p à la fermeture | 🔨 diagnostic ; correctif partiel non fusionné | branche `fix/p2p-dial-panic` |
-| F1, tests d'aperçu | 🔨 diagnostic | branche `fix/preview-determinism` |
+| F3, plantage libp2p à la fermeture | ⏸ en pause : garde partielle non fusionnée ; reste l'ordre de fermeture et l'échec résiduel `dial_test.go:167` | worktree `agent-ae8725405086b99e0`, branche `fix/p2p-dial-panic` |
+| Révision n°4 de la conception byzantine (points ouverts de la revue n°3) | 🔨 architect (Opus) | `audit-2026-10-31/06-admission-design.md`, ADR 0031 |
+| F5, borne du dossier des sidecars indépendante du temps | 🔨 Codex | branche `fix/f5-sidecar-dir-bound` |
+| M2, allocation de contexte dans `Wiring.poll` (benchstat) | 🔨 Codex | branche `perf/m2-wiring-poll` |
+| m1, variables globales mutables vers la configuration (hors `sidecar`) | 🔨 Codex | branche `refactor/m1-globals` |
+| M1 | ✅ fusionné | `192d462` |
+| M3 et code mort | ✅ fusionné | `9c3def9` |
+| F1 | ✅ fusionné | `04fa538` |
+| C2 : ADR 0032 proposée (invariant inchangé tant qu'elle n'est pas acceptée) | ✅ fusionné, décision de l'utilisatrice attendue | `04b5750` |
+| Correctif durable de `/tmp` (GOTMPDIR sur disque, purge) | ✅ fusionné | `4465b96` |
 | S3, attestations bornées | ⏸ attend l'ADR 0031 | — |
-| C2 : ADR qui remplace l'ADR 0004 pour le canal d'invitation | ⏳ | — |
 | M5 : extraire `internal/session` | ⏳ (après l'ADR 0031, préalable à `internal/policy` de l'ADR 0030) | — |
-| M1, M2 : allocations des chemins critiques, avec benchstat | ⏳ | — |
-| Code mort, puis M3 complexité | ⏳ | — |
 | Mineurs m1–m11 ; délai sur fsync (suite de S2) | ⏳ | — |
 | Garde structurelle de l'ADR 0030 | ⏳ prérequis de l'étape 2 de l'admission | — |
 
