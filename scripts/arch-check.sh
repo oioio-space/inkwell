@@ -34,48 +34,25 @@ while read -r pkg imports; do
   done
 done <<< "$graph"
 
-# Each core root gets its own closure: C1 is allowed only for trust roots.
+# Each core root gets its own dependency closure, with no exceptions.
 roots="$(go list ./internal/trust/... ./internal/identity/... ./internal/transport/...)"
-transport_deps="$(go list -deps "$module/internal/transport")"
 while IFS= read -r root; do
   [[ "$root" != "$module/internal/transport/p2p" && "$root" != "$module/internal/transport/p2p/"* ]] || continue
   deps="$(go list -deps "$root")"
-  case "$root" in
-    "$module/internal/trust"|"$module/internal/trust/"*)
-      # Inspect edges outside transport's closure so C1's dependencies are exempt,
-      # while any independent route into transport remains forbidden.
-      while read -r pkg imports; do
-        grep -Fxq "$pkg" <<< "$deps" || continue
-        [[ "$pkg" == "$module/internal/trust" || "$pkg" == "$module/internal/trust/"* ]] || {
-          if grep -Fxq "$pkg" <<< "$transport_deps"; then continue; fi
-        }
-        for imp in $imports; do
-          case "$imp" in
-            "$module/internal/transport"|"$module/internal/transport/"*)
-              [[ "$pkg $imp" == "$module/internal/trust $module/internal/transport" ]] ||
-                report "$root reaches $imp via $pkg (trust must not reach transport; only C1 is deferred)"
-              ;;
-          esac
-        done
-      done <<< "$graph"
-      ;;
-    *)
-      while IFS= read -r dep; do
-        case "$root" in
-          "$module/internal/identity"|"$module/internal/identity/"*)
-            case "$dep" in
-              "$module/internal/transport"|"$module/internal/transport/"*)
-                report "$root reaches $dep (identity must not reach transport)" ;;
-            esac ;;
-          *)
-            case "$dep" in
-              "$module/internal/transport"|"$module/internal/transport/"*) ;;
-              "$module/internal/"*) report "$root reaches $dep (transport must be independent)" ;;
-            esac ;;
-        esac
-      done <<< "$deps"
-      ;;
-  esac
+  while IFS= read -r dep; do
+    case "$root" in
+      "$module/internal/trust"|"$module/internal/trust/"*|"$module/internal/identity"|"$module/internal/identity/"*)
+        case "$dep" in
+          "$module/internal/transport"|"$module/internal/transport/"*)
+            report "$root reaches $dep (trust and identity must not reach transport)" ;;
+        esac ;;
+      *)
+        case "$dep" in
+          "$module/internal/transport"|"$module/internal/transport/"*) ;;
+          "$module/internal/"*) report "$root reaches $dep (transport must be independent)" ;;
+        esac ;;
+    esac
+  done <<< "$deps"
 done <<< "$roots"
 
 # Direct imports, tests included, of every package of the module.

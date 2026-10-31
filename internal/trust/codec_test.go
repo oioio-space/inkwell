@@ -136,7 +136,7 @@ func FuzzDecodeAttestation(f *testing.F) {
 }
 
 func FuzzDecodeMessage(f *testing.F) {
-	s := NewSync(New(ProjectID{}))
+	s := NewSync[string](New(ProjectID{}))
 	f.Add(s.have("p")[0].Data)
 	for _, m := range chunk("p", sampleOps(f)) {
 		f.Add(m.Data)
