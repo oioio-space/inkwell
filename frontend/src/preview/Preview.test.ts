@@ -3,7 +3,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, click, render } from "../ui/testkit.svelte";
 import Preview from "./Preview.svelte";
 import { preview } from "./preview.svelte";
-import { problem, result, svgPage } from "./testkit";
+import { problem, result as makeResult, svgPage } from "./testkit";
+
+// The singleton survives tests; frames must keep increasing across fixtures too.
+let sequence = 0;
+const result = (over: Parameters<typeof makeResult>[0] = {}) =>
+  makeResult({ ...over, seq: ++sequence });
 
 // happy-dom lays nothing out: give the scroller the size of a real pane.
 function fakeSize(width: number, height: number): () => void {

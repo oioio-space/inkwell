@@ -59,6 +59,7 @@ export class PreviewModel {
   #client: PreviewClient | undefined;
   /** The version of the last successful compilation: its pages are the fresh ones. */
   #okRev = -1;
+  #lastAppliedSeq = -1;
   #anchors: { rev: number; list: Anchor[] } | undefined;
   #waiting: Waiter[] = [];
   #asked = "";
@@ -67,11 +68,13 @@ export class PreviewModel {
   #settle: ReturnType<typeof setTimeout> | undefined;
 
   start(open: () => SocketLike): void {
+    this.#lastAppliedSeq = -1;
     this.#client ??= new PreviewClient(open, (m) => this.receive(m));
     this.#client.start();
   }
 
   stop(): void {
+    this.#lastAppliedSeq = -1;
     this.#client?.stop();
   }
 
@@ -131,6 +134,8 @@ export class PreviewModel {
   }
 
   #result(m: ResultMessage): void {
+    if (m.seq < this.#lastAppliedSeq) return;
+    this.#lastAppliedSeq = m.seq;
     clearTimeout(this.#settle);
     this.compiling = false;
     this.hasResult = true;

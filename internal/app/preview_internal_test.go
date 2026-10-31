@@ -2,6 +2,7 @@ package app
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -9,6 +10,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/oioio-space/inkwell/internal/bridge"
 	"github.com/oioio-space/inkwell/internal/typst"
 )
 
@@ -152,4 +154,67 @@ func TestPRV32TwiceFiredTimerIsOneCompilation(t *testing.T) {
 	if got := cc.calls.Load(); got != 1 {
 		t.Errorf("%d compilations for one seq, want 1", got)
 	}
+}
+
+// A compilation launched and then replaced before its goroutine ran (a "view" request re-armed
+// the timer meanwhile) must not start Typst: the newer one answers, and a wasted run would also
+// be a compilation nobody asked for (PRV-32 under load).
+func TestPRV32ReplacedCompilationNeverStartsTypst(t *testing.T) {
+	cc := &countingCompiler{}
+	p := NewPreview(PreviewOptions{Engine: cc, Root: t.TempDir()})
+	t.Cleanup(p.Close)
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel() // replaced before it began
+	p.compile(ctx, compilation{seq: 1})
+	if got := cc.calls.Load(); got != 0 {
+		t.Errorf("a replaced compilation ran Typst %d times, want 0", got)
+	}
+}
+
+// Pause an old result after its sequence check, then publish its successor.
+func TestPreviewPublicationNeverRegresses(t *testing.T) {
+	p := NewPreview(PreviewOptions{Engine: &countingCompiler{}, Root: t.TempDir()})
+	defer p.Close()
+	c := &publicationConn{}
+	p.cur = &previewConn{c: c}
+	paused, release, done := make(chan struct{}), make(chan struct{}), make(chan struct{})
+	p.beforePublish = func(seq uint64) {
+		if seq == 1 {
+			close(paused)
+			<-release
+		}
+	}
+	p.seq = 1
+	go func() { defer close(done); p.compile(t.Context(), compilation{seq: 1}) }()
+	<-paused
+	p.mu.Lock()
+	p.seq = 2
+	p.mu.Unlock()
+	p.compile(t.Context(), compilation{seq: 2})
+	close(release)
+	<-done
+	var highest uint64
+	for _, m := range c.messages {
+		if m.Seq < highest {
+			t.Fatalf("published seq %d after %d", m.Seq, highest)
+		}
+		highest = m.Seq
+	}
+	if highest != 2 {
+		t.Fatalf("last sequence = %d, want 2", highest)
+	}
+}
+
+type publicationConn struct {
+	bridge.Conn
+	messages []PreviewMessage
+}
+
+func (c *publicationConn) Send(b []byte) error {
+	var m PreviewMessage
+	if err := json.Unmarshal(b, &m); err != nil {
+		return err
+	}
+	c.messages = append(c.messages, m)
+	return nil
 }

@@ -234,3 +234,47 @@ describe("PreviewModel", () => {
     m.stop();
   });
 });
+
+it("drops older results without changing any applied state", () => {
+  const m = new PreviewModel();
+  m.receive(result({ seq: 4, rev: 4 }));
+  const pages = m.pages;
+  m.receive({ type: "compiling", seq: 5 });
+  m.receive(
+    result({
+      seq: 3,
+      rev: 3,
+      pageCount: 1,
+      diagnostics: [problem()],
+      truncated: true,
+      failure: { kind: "errors", packages: [] },
+    }),
+  );
+  expect(m.compiling).toBe(true);
+  expect(m.pages).toBe(pages);
+  expect(m.rev).toBe(4);
+  expect(m.pageCount).toBe(3);
+  expect(m.diagnostics).toEqual([]);
+  expect(m.truncated).toBe(false);
+  expect(m.failure).toBeUndefined();
+  m.receive(result({ seq: 5, failure: { kind: "errors", packages: [] } }));
+  m.receive(result({ seq: 4, rev: 99 }));
+  expect(m.failure?.kind).toBe("errors");
+  expect(m.rev).toBe(4);
+});
+
+it("applies a restarted stream's sequence 1 after sequence 5", () => {
+  const m = new PreviewModel();
+  m.start(open);
+  last().open();
+  last().receive(result({ seq: 5, rev: 5 }));
+  expect(m.rev).toBe(5);
+  m.stop();
+  m.start(open);
+  last().open();
+  last().receive(result({ seq: 1, rev: 1, pageCount: 1, pages: [svgPage()] }));
+  expect(m.rev).toBe(1);
+  expect(m.pageCount).toBe(1);
+  expect([...m.pages.keys()]).toEqual([1]);
+  m.stop();
+});
