@@ -15,6 +15,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -360,4 +361,207 @@ func readGz(t *testing.T, path string) []byte {
 		t.Fatal(err)
 	}
 	return out.Bytes()
+}
+
+func TestDefaultAllowHostWithPort(t *testing.T) {
+	for host, want := range map[string]bool{
+		"github.com:443":                    true,
+		"objects.githubusercontent.com:443": true,
+		"evil.example:443":                  false,
+		"github.com.evil.example:443":       false,
+	} {
+		if got := DefaultAllowHost(host); got != want {
+			t.Errorf("DefaultAllowHost(%q) = %v, want %v", host, got, want)
+		}
+	}
+}
+
+func TestFetchDefaultsRefuseForeignHost(t *testing.T) {
+	f := newFixture(t, goodArchive(t), nil)
+	f.cfg.AllowHost = nil // the default allows GitHub only, not the test server
+	err := Fetch(t.Context(), f.cfg)
+	if err == nil || !strings.Contains(err.Error(), "refusing to download") {
+		t.Fatalf("Fetch = %v, want a refusal to download", err)
+	}
+	if got := f.hits.Load(); got != 0 {
+		t.Errorf("server was contacted %d times, want 0", got)
+	}
+}
+
+func TestFetchNeedsManifest(t *testing.T) {
+	if err := Fetch(t.Context(), Config{}); err == nil {
+		t.Fatal("Fetch without a manifest = nil, want an error")
+	}
+}
+
+func TestFetchLogsEachStep(t *testing.T) {
+	requireTar(t)
+	f := newFixture(t, goodArchive(t), nil)
+	var log bytes.Buffer
+	f.cfg.Log = &log
+	for range 2 {
+		if err := Fetch(t.Context(), f.cfg); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got := log.String()
+	for _, want := range []string{"tool linux_amd64: downloaded and verified", "tool linux_amd64: up to date"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("log lacks %q:\n%s", want, got)
+		}
+	}
+	if err := os.Remove(outFile(f)); err != nil {
+		t.Fatal(err)
+	}
+	log.Reset()
+	if err := Fetch(t.Context(), f.cfg); err != nil {
+		t.Fatal(err)
+	}
+	if want := "rebuilt from the download cache"; !strings.Contains(log.String(), want) {
+		t.Errorf("log lacks %q:\n%s", want, &log)
+	}
+	if got := f.hits.Load(); got != 1 {
+		t.Errorf("server hit %d times, want 1 (cache reused)", got)
+	}
+}
+
+func TestFetchRejectsHostileDownloads(t *testing.T) {
+	requireTar(t)
+
+	t.Run("archive with the right size but another checksum", func(t *testing.T) {
+		archive := goodArchive(t)
+		f := newFixture(t, archive, func(a *sidecar.Artifact) { a.ArchiveSHA256 = sum([]byte("other")) })
+		if err := Fetch(t.Context(), f.cfg); !errors.Is(err, ErrMismatch) {
+			t.Fatalf("Fetch = %v, want ErrMismatch", err)
+		}
+		assertEmpty(t, f.cfg.CacheDir)
+		assertEmpty(t, f.cfg.OutDir)
+	})
+
+	t.Run("archive shorter than pinned", func(t *testing.T) {
+		archive := goodArchive(t)
+		f := newFixture(t, archive, func(a *sidecar.Artifact) { a.ArchiveSize = int64(len(archive)) + 5 })
+		if err := Fetch(t.Context(), f.cfg); !errors.Is(err, ErrMismatch) {
+			t.Fatalf("Fetch = %v, want ErrMismatch", err)
+		}
+		assertEmpty(t, f.cfg.CacheDir)
+	})
+
+	t.Run("redirect loop", func(t *testing.T) {
+		f := newFixture(t, goodArchive(t), nil)
+		f.srv.Config.Handler = http.RedirectHandler(f.srv.URL+"/again", http.StatusFound)
+		err := Fetch(t.Context(), f.cfg)
+		if err == nil || !strings.Contains(err.Error(), "too many redirects") {
+			t.Fatalf("Fetch = %v, want too many redirects", err)
+		}
+	})
+
+	t.Run("redirect to plain http", func(t *testing.T) {
+		f := newFixture(t, goodArchive(t), nil)
+		f.srv.Config.Handler = http.RedirectHandler("http://"+strings.TrimPrefix(f.srv.URL, "https://"), http.StatusFound)
+		err := Fetch(t.Context(), f.cfg)
+		if err == nil || !strings.Contains(err.Error(), "refusing redirect") {
+			t.Fatalf("Fetch = %v, want a refused redirect", err)
+		}
+	})
+
+	t.Run("unparsable URL", func(t *testing.T) {
+		f := newFixture(t, goodArchive(t), func(a *sidecar.Artifact) { a.URL = "https://bad host/\x7f" })
+		if err := Fetch(t.Context(), f.cfg); err == nil {
+			t.Fatal("Fetch = nil, want an error")
+		}
+	})
+}
+
+func TestFetchRejectsBadBinaries(t *testing.T) {
+	requireTar(t)
+
+	t.Run("member larger than pinned", func(t *testing.T) {
+		f := newFixture(t, goodArchive(t), func(a *sidecar.Artifact) { a.Size = int64(len(binary)) - 3 })
+		if err := Fetch(t.Context(), f.cfg); !errors.Is(err, ErrMismatch) {
+			t.Fatalf("Fetch = %v, want ErrMismatch", err)
+		}
+		assertEmpty(t, f.cfg.OutDir)
+	})
+
+	t.Run("member smaller than pinned", func(t *testing.T) {
+		f := newFixture(t, goodArchive(t), func(a *sidecar.Artifact) { a.Size = int64(len(binary)) + 3 })
+		if err := Fetch(t.Context(), f.cfg); !errors.Is(err, ErrMismatch) {
+			t.Fatalf("Fetch = %v, want ErrMismatch", err)
+		}
+		assertEmpty(t, f.cfg.OutDir)
+	})
+
+	t.Run("member with another checksum", func(t *testing.T) {
+		f := newFixture(t, goodArchive(t), func(a *sidecar.Artifact) { a.SHA256 = sum([]byte("other")) })
+		if err := Fetch(t.Context(), f.cfg); !errors.Is(err, ErrMismatch) {
+			t.Fatalf("Fetch = %v, want ErrMismatch", err)
+		}
+		assertEmpty(t, f.cfg.OutDir)
+	})
+
+	t.Run("corrupt archive reports tar's complaint", func(t *testing.T) {
+		garbage := bytes.Repeat([]byte("not a tar archive "), 100)
+		f := newFixture(t, garbage, nil)
+		err := Fetch(t.Context(), f.cfg)
+		if err == nil || !strings.Contains(err.Error(), "extract "+member) {
+			t.Fatalf("Fetch = %v, want an extract error", err)
+		}
+		assertEmpty(t, f.cfg.OutDir)
+	})
+
+	t.Run("damaged output is rebuilt", func(t *testing.T) {
+		f := newFixture(t, goodArchive(t), nil)
+		if err := Fetch(t.Context(), f.cfg); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(outFile(f), []byte("garbage"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := Fetch(t.Context(), f.cfg); err != nil {
+			t.Fatal(err)
+		}
+		if got := readGz(t, outFile(f)); !bytes.Equal(got, binary) {
+			t.Errorf("rebuilt binary = %q, want %q", got, binary)
+		}
+	})
+}
+
+func TestFetchUnwritableDirectories(t *testing.T) {
+	requireTar(t)
+	blocker := filepath.Join(t.TempDir(), "file")
+	if err := os.WriteFile(blocker, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	t.Run("cache directory under a file", func(t *testing.T) {
+		f := newFixture(t, goodArchive(t), nil)
+		f.cfg.CacheDir = filepath.Join(blocker, "cache")
+		if err := Fetch(t.Context(), f.cfg); err == nil {
+			t.Fatal("Fetch = nil, want an error")
+		}
+		if got := f.hits.Load(); got != 0 {
+			t.Errorf("server hit %d times, want 0", got)
+		}
+	})
+
+	t.Run("output directory under a file", func(t *testing.T) {
+		f := newFixture(t, goodArchive(t), nil)
+		f.cfg.OutDir = filepath.Join(blocker, "bin")
+		if err := Fetch(t.Context(), f.cfg); err == nil {
+			t.Fatal("Fetch = nil, want an error")
+		}
+	})
+}
+
+func TestBoundedBufferKeepsTheStart(t *testing.T) {
+	b := &boundedBuffer{max: 5}
+	for _, s := range []string{"abc", "defgh", "ij"} {
+		if n, err := b.Write([]byte(s)); n != len(s) || err != nil {
+			t.Fatalf("Write(%q) = %d, %v, want %d, nil", s, n, err, len(s))
+		}
+	}
+	if got, want := b.String(), "abcde"; got != want {
+		t.Errorf("kept %q, want %q", got, want)
+	}
 }

@@ -1,9 +1,9 @@
 #!/usr/bin/env bash
-# Test coverage with an enforceable threshold.
-#   scripts/cover.sh          # (re)generate coverage.out + print total
-#   scripts/cover.sh --check  # use existing coverage.out (from test:ci) + fail if < COVER_MIN
+# Audit M4: statement-weighted coverage per package, after merging profile blocks.
+#   scripts/cover.sh          # (re)generate coverage.out + check every package
+#   scripts/cover.sh --check  # reuse coverage.out (or generate) + check every package
 #
-# Raise COVER_MIN in mise.toml [env] as the port gains real test coverage.
+# COVER_MIN defaults to 85; exemptions are listed explicitly below.
 set -euo pipefail
 
 repo_root="$(git rev-parse --show-toplevel)"
@@ -15,25 +15,35 @@ if [[ "${1:-}" != "--check" || ! -f coverage.out ]]; then
   go test -short -timeout=8m -covermode=atomic -coverpkg=./... -coverprofile=coverage.out ./...
 fi
 
-# cmd/ mains are thin CLI wrappers (glue, not unit-tested logic) and examples/
-# programs are runnable documentation (package main, no tests) — exclude both from
-# the coverage total, otherwise an untested main would fail the gate. Filter them
-# out of the profile before scoring.
-prof=coverage.out
-if grep -qE -e '/examples/' -e '/cmd/' coverage.out 2>/dev/null; then
-  prof="$(mktemp)"
-  grep -v -e '/examples/' -e '/cmd/' coverage.out >"$prof"
-fi
-
-total="$(go tool cover -func="$prof" 2>/dev/null | awk '/^total:/{gsub(/%/,"",$3); print $3}')"
-total="${total:-0.0}"
-printf '\033[34mTotal coverage: %s%%\033[0m\n' "$total"
-
-if [[ "${1:-}" == "--check" ]]; then
-  min="${COVER_MIN:-0}"
-  if awk -v t="$total" -v m="$min" 'BEGIN{exit !(t+0 < m+0)}'; then
-    printf '\033[31m✗ Coverage %s%% is below the required %s%%.\033[0m\n' "$total" "$min" >&2
-    exit 1
-  fi
-  printf '\033[32m✓ Coverage %s%% meets the %s%% minimum.\033[0m\n' "$total" "$min"
-fi
+# Explicit exemptions only: main wiring covered by e2e, and a test helper.
+# cmd/sidecar-fetch, cmd/inkwell-relay and internal/sidecar/fetch are NOT exempt.
+module="$(go list -m)"
+min="${COVER_MIN:-85}"
+awk -v module="$module" -v min="$min" '
+NR == 1 { next }
+{
+  block=$1
+  weights[block]=$2
+  counts[block]+=$3
+}
+END {
+  # -coverpkg=./... repeats blocks across test binaries: merge counts first.
+  for (block in weights) {
+    pkg=block
+    sub(/:[0-9]+[.][0-9]+,[0-9]+[.][0-9]+$/, "", pkg)
+    sub(/\/[^/]+$/, "", pkg)
+    statements[pkg]+=weights[block]
+    if (counts[block] > 0) covered[pkg]+=weights[block]
+  }
+  for (pkg in statements) {
+    if (pkg == module "/cmd/inkwell" || pkg == module "/internal/transport/transporttest") continue
+    if (!statements[pkg]) continue
+    all_statements+=statements[pkg]; all_covered+=covered[pkg]
+    pct=100*covered[pkg]/statements[pkg]
+    printf "%s: %.1f%% (minimum %s%%)\n", pkg, pct, min
+    if (pct < min) { failed=1; printf "✗ coverage: %s is below %s%%\n", pkg, min > "/dev/stderr" }
+  }
+  if (all_statements) printf "Total coverage (after exemptions): %.1f%%\n", 100*all_covered/all_statements
+  if (!all_statements) { print "✗ coverage: empty profile" > "/dev/stderr"; failed=1 }
+  exit failed
+}' coverage.out

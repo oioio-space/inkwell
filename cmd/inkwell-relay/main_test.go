@@ -156,3 +156,48 @@ func TestListFlag(t *testing.T) {
 		t.Errorf("list = %q, want %q", got, want)
 	}
 }
+
+func TestExitCode(t *testing.T) {
+	var stderr bytes.Buffer
+	if got := exitCode([]string{"--bogus"}, io.Discard, &stderr); got != 1 {
+		t.Errorf("exitCode(--bogus) = %d, want 1", got)
+	}
+	if got := exitCode([]string{"-h"}, io.Discard, io.Discard); got != 0 {
+		t.Errorf("exitCode(-h) = %d, want 0", got)
+	}
+	stderr.Reset()
+	args := []string{"--key", filepath.Join(t.TempDir(), "k"), "extra"}
+	if got := exitCode(args, io.Discard, &stderr); got != 1 || !strings.Contains(stderr.String(), `inkwell-relay: unexpected argument "extra"`) {
+		t.Errorf("exitCode(%v) = %d, stderr %q, want 1 and the unexpected argument", args, got, &stderr)
+	}
+}
+
+func TestKeyReadFailure(t *testing.T) {
+	// A directory where the key file should be: reading fails with something
+	// other than "not found", so no key is created over it.
+	dir := t.TempDir()
+	if err := os.Mkdir(filepath.Join(dir, "relay.key"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := loadOrCreateKey(filepath.Join(dir, "relay.key")); err == nil || !strings.Contains(err.Error(), "read key") {
+		t.Errorf("loadOrCreateKey(directory) = %v, want a read key error", err)
+	}
+}
+
+func TestKeyCreateInReadOnlyDirectory(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root ignores directory permissions")
+	}
+	dir := t.TempDir()
+	if err := os.Chmod(dir, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o700) })
+	_, err := loadOrCreateKey(filepath.Join(dir, "relay.key"))
+	if err == nil || !strings.Contains(err.Error(), "create key") {
+		t.Errorf("loadOrCreateKey in a read-only directory = %v, want a create key error", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "relay.key")); err == nil {
+		t.Error("a key file was left behind")
+	}
+}
