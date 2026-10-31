@@ -28,7 +28,9 @@ export default defineConfig({
   // Component tests mount Svelte components in happy-dom: they need the browser build. Outside
   // tests, leave Vite's default conditions alone (an empty list would drop "browser").
   resolve: process.env.VITEST ? { conditions: ["browser"] } : undefined,
+  cacheDir: "./test-results/.vite",
   test: {
+    execArgv: ["--expose-gc"],
     // Worktrees may share node_modules, but cached transforms contain absolute binding paths.
     // Keep them local so mocks and imports resolve to the same worktree's modules.
     fsModuleCachePath: fileURLToPath(new URL("./test-results/.vitest-cache", import.meta.url)),

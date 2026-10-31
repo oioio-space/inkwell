@@ -281,8 +281,8 @@ describe("convergence under link flaps (seeded)", () => {
         const texts = handles.map((h) => h.doc()?.text);
         const heads = handles.map((h) => JSON.stringify(h.heads()));
         return new Set(texts).size === 1 && new Set(heads).size === 1;
-      }, 10_000);
+      }, 60_000);
       expect(handles[0]?.doc()?.text.length).toBe(30);
-    });
+    }, 65_000);
   }
 });

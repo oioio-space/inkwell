@@ -4,6 +4,8 @@ import {
   parseAutomergeUrl,
 } from "@automerge/automerge-repo";
 
+import { MAX_PROJECT_URL_LENGTH } from "./admission";
+
 /** Interim root listing. Admission is sticky until the project changes. */
 export class AdmittedSet {
   #ids = new Set<string>();
@@ -36,7 +38,12 @@ export class AdmittedSet {
     for (const variant of doc.meta?.variants ?? []) {
       if (this.#ids.size >= 257) break;
       const url = variant?.url;
-      if (typeof url !== "string" || !isValidAutomergeUrl(url)) continue;
+      if (
+        typeof url !== "string" ||
+        url.length > MAX_PROJECT_URL_LENGTH ||
+        !isValidAutomergeUrl(url)
+      )
+        continue;
       const id = parseAutomergeUrl(url).documentId;
       if (id.length > 64 || this.#ids.has(id)) continue;
       this.#ids.add(id);

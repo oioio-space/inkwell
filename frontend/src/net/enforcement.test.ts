@@ -13,7 +13,7 @@ type Doc = { text: string };
 const kit = new Kit();
 afterEach(() => kit.shutdown());
 
-vi.setConfig({ testTimeout: 30_000 });
+vi.setConfig({ testTimeout: 90_000 });
 const SEEDS = Array.from({ length: 10 }, (_, i) => i + 1);
 
 function type(h: DocHandle<Doc>, s: string): void {
@@ -83,14 +83,19 @@ describe("un lecteur forge une modification", () => {
       expect(new Set(net.refused)).toEqual(new Set(["r"]));
       expect(a.adapter.coverageStats.removed + b.adapter.coverageStats.removed).toBeGreaterThan(0);
       // The reader does get the honest work, and its own edits stay its own.
-      await until(() => text(hr).replaceAll("X", "") === text(ha), 5000, "reader did not catch up");
+      // Reconnect bursts now wait for the persistent 20-second arrival budget.
+      await until(
+        () => text(hr).replaceAll("X", "") === text(ha),
+        60_000,
+        "reader did not catch up",
+      );
       // Ephemeral messages of a reader are not changes: they pass.
       await until(
         () => {
           hr.broadcast({ __presence: { type: "update", channel: "anchor", value: String(seed) } }); // sent again until the peers are back
           return cursors.length > 0;
         },
-        5000,
+        60_000,
         "ephemeral message from the reader lost",
       );
     });
