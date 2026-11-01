@@ -85,7 +85,7 @@ func TestDecodeRejects(t *testing.T) {
 }
 
 func TestMaxSizeOpFitsLimit(t *testing.T) {
-	op := Op{Kind: OpAdd, Role: RoleReader, Lamport: 1, Author: make([]byte, keyLen), Subject: make([]byte, keyLen)}
+	op := Op{Kind: OpAdd, Role: RoleReader, Lamport: 1, Author: newSigner(1).Public(), Subject: newSigner(2).Public()}
 	op.Name = string(bytes.Repeat([]byte("n"), MaxName))
 	for i := range MaxPrev {
 		op.Prev = append(op.Prev, Hash{byte(i + 1)})

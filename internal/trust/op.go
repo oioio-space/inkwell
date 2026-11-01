@@ -9,6 +9,8 @@ import (
 	"errors"
 	"fmt"
 	"unicode/utf8"
+
+	"github.com/oioio-space/inkwell/internal/identity"
 )
 
 // Limits of the canonical encoding. Every byte that comes from a peer is
@@ -189,8 +191,10 @@ func (o Op) Hash() Hash { return sha256.Sum256(Encode(o)) }
 
 // validate checks the op's structure against the canonical rules.
 func (o Op) validate() error {
-	if len(o.Author) != keyLen || len(o.Subject) != keyLen {
-		return fmt.Errorf("%w: key length", ErrMalformed)
+	for _, key := range []ed25519.PublicKey{o.Author, o.Subject} {
+		if err := identity.ValidatePublicKey(key); err != nil {
+			return fmt.Errorf("%w: %w", ErrMalformed, err)
+		}
 	}
 	if len(o.Name) > MaxName || !utf8.ValidString(o.Name) || len(o.RootURL) > MaxRootURL || !utf8.ValidString(o.RootURL) {
 		return fmt.Errorf("%w: text", ErrMalformed)

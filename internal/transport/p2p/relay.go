@@ -12,6 +12,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/p2p/host/autorelay"
+	"github.com/libp2p/go-libp2p/p2p/net/conngater"
 	"github.com/libp2p/go-libp2p/p2p/net/connmgr"
 	"github.com/libp2p/go-libp2p/p2p/protocol/circuitv2/client"
 	"github.com/libp2p/go-libp2p/p2p/protocol/circuitv2/relay"
@@ -95,6 +96,10 @@ func RunRelay(ctx context.Context, key ed25519.PrivateKey, o RelayOptions) error
 	if err != nil {
 		return err
 	}
+	base, err := conngater.NewBasicConnectionGater(nil)
+	if err != nil {
+		return fmt.Errorf("p2p: relay connection gater: %w", err)
+	}
 	cm, err := connmgr.NewConnManager(relayConnLow, relayConnHigh)
 	if err != nil {
 		return fmt.Errorf("p2p: connection manager: %w", err)
@@ -119,6 +124,7 @@ func RunRelay(ctx context.Context, key ed25519.PrivateKey, o RelayOptions) error
 		libp2p.DefaultMuxers,
 		libp2p.ListenAddrStrings(listen...),
 		libp2p.ConnectionManager(cm),
+		libp2p.ConnectionGater(gate{BasicConnectionGater: base, admit: func(peer.ID) bool { return true }}),
 		// A relay is a public server: no relay of its own, no reachability probe.
 		libp2p.DisableRelay(),
 		libp2p.ForceReachabilityPublic(),

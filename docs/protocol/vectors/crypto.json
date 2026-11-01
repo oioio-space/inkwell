@@ -84,6 +84,20 @@
       }
     },
     {
+      "id": "noncanonical-public-keys",
+      "status": "normative",
+      "description": "Non-canonical encodings of y = p, y = p+1 and negative zero; all MUST be rejected.",
+      "decoder": "public_key",
+      "verdict": "reject",
+      "expect": {
+        "keys_hex": [
+          "edffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+          "eeffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+          "0100000000000000000000000000000000000000000000000000000000000080"
+        ]
+      }
+    },
+    {
       "id": "peer-id-small-order",
       "status": "normative",
       "description": "PeerID dérivé de la clé neutre : tout le monde peut s'authentifier sous cette identité (la signature universelle passe la poignée de main Noise/TLS de libp2p). DOIT être refusé par le filtre de connexion, le décodage des PeerID, les ops de membres et les tickets.",

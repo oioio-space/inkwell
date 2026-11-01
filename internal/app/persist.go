@@ -2,17 +2,21 @@ package app
 
 import (
 	"cmp"
+	"crypto/sha256"
 	"encoding/binary"
 	"errors"
 	"fmt"
 	"io"
 	"io/fs"
+	"log/slog"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/oioio-space/inkwell/internal/identity"
 	"github.com/oioio-space/inkwell/internal/project"
 	"github.com/oioio-space/inkwell/internal/store"
 	"github.com/oioio-space/inkwell/internal/trust"
@@ -208,6 +212,9 @@ func (s *opStore) readAll() ([]trust.Op, error) {
 			}
 		case strings.HasSuffix(e.Name(), opExt):
 			op, err := s.read(e.Name())
+			if errors.Is(err, identity.ErrInvalidPublicKey) {
+				continue // read moved this op to quarantine.
+			}
 			if err != nil {
 				return nil, err
 			}
@@ -240,6 +247,20 @@ func (s *opStore) read(name string) (trust.Op, error) {
 		return trust.Op{}, fmt.Errorf("reading trust op %s: %w", name, err)
 	}
 	op, err := trust.Decode(b)
+	if errors.Is(err, identity.ErrInvalidPublicKey) {
+		const quarantine = "trust.quarantine"
+		if qerr := s.parent.Mkdir(quarantine, 0o700); qerr != nil && !errors.Is(qerr, fs.ErrExist) {
+			return trust.Op{}, qerr
+		}
+		hash := fmt.Sprintf("%x", sha256.Sum256(b))
+		if qerr := s.parent.Rename(filepath.Join(trustDir, name), filepath.Join(quarantine, hash+opExt)); qerr != nil {
+			return trust.Op{}, qerr
+		}
+		if qerr := errors.Join(store.SyncDir(s.parent, quarantine), store.SyncDir(s.parent, trustDir), store.SyncDir(s.parent, ".")); qerr != nil {
+			return trust.Op{}, qerr
+		}
+		slog.Warn("quarantined trust op with invalid public key", "hash", hash)
+	}
 	if err != nil {
 		return trust.Op{}, fmt.Errorf("decoding trust op %s: %w", name, err)
 	}
