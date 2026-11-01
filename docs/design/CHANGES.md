@@ -435,3 +435,7 @@ ci-dessus) :
   Chaque élément est coché d'avance, la taille totale est affichée, une seule confirmation suffit,
   et l'on peut passer. Un export sans ces éléments le dit dans son récapitulatif. `coverage.md` a
   sa ligne.
+- **Décision de l'utilisatrice** (rév. 7.1) : dans la vérification des ressources, les fichiers
+  **hors du dossier du projet** sont listés mais **non cochés** (vie privée). Les autres éléments
+  restent cochés d'avance. Ordre des polices : **le projet d'abord**, puis l'ordinateur, puis
+  Inkwell (§4.46, §5.12).

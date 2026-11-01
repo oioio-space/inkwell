@@ -157,12 +157,12 @@ tant qu'elles sont ouvertes, la spécification n'affirme pas sa fidélité compl
 | AD-78 | pas de CSS pour le PDF | utilisatrice | — | N27 « Markdown + CSS » |
 | AD-82 | IA : défauts de politique, **autorisation d'un admin dans un projet partagé**, MCP | **décidé par l'utilisatrice (2026-11-01)** | **PD-1**, ADR 0040, 0041 | — |
 | AD-83 | PD-1 (PD-2 retiré, PD-3 reporté) | utilisatrice | boucle du protocole (2.1) | — |
-| AD-91 | projet chiffré par objet, DEK par appareil ; protection **facultative**, jamais cochée par défaut | **décidé par l'utilisatrice (2026-11-01)** (facultative) ; reste l'ADR | **ADR** (remplace NG3), après P-VAULT | interprétation de « bloc chiffré » par objet |
+| AD-91 | projet chiffré par objet, DEK par appareil ; protection **facultative**, jamais cochée par défaut ; hibernation Linux par (b′) avec résiduel écrit (D-17) | **décidé par l'utilisatrice (2026-11-01)** (facultative, D-17) ; reste l'ADR | **ADR** (remplace NG3), après P-VAULT | interprétation de « bloc chiffré » par objet |
 | AD-95 | expérimentations acceptées à leur porte | utilisatrice | — | — |
 | AD-96 | variantes, y compris **variantes du projet entier** (HI-7) | **décidé par l'utilisatrice (2026-11-01)** | — | — |
 | AD-99 | autoporteur : appels système, nos binaires, dépendances garanties | **décidé par l'utilisatrice (2026-11-01)** (N42) | — | — |
-| AD-100 | polices : projet → inkwell → mes polices → ordinateur ; avertissement local | utilisatrice (ordre des sources) | — | — |
-| AD-101 | rassemblement des ressources ; fichiers hors racine non cochés | utilisatrice (exception hors racine) | — | — |
+| AD-100 | polices : projet → inkwell → mes polices → ordinateur ; avertissement local | **décidé par l'utilisatrice (2026-11-01)** | — | — |
+| AD-101 | rassemblement des ressources ; fichiers hors racine listés, non cochés | **décidé par l'utilisatrice (2026-11-01)** | — | — |
 | AD-102 | installation permanente d'une police ou d'un greffon du projet | **décidé par l'utilisatrice (2026-11-01)** | — | — |
 
 ---
@@ -1340,7 +1340,7 @@ Le détail des contradictions, manques, doublons, carte produit et phasage est d
 
 - **Révision 7 (Codex R6-B1, R6-M ; Fable R6-M1, R6-M2, m-1 à m-3).** (1) **Hibernation sous Linux** : `resume = 0:0` ne prouve rien ; acceptée seulement si elle est **impossible** (`/sys/power/state` sans `disk`, ou `/sys/power/disk` = `[disabled]`) ou si **toute destination locale** d'une image est chiffrée (chaque périphérique bloc persistant ne porte que des volumes `CRYPT-`, aucun amovible branché) ; un outil d'hibernation en espace utilisateur est couvert par cette règle ; sinon refus. (2) **macOS** : `hibernatemode` vérifié sur **tous** les profils d'énergie (`pmset -g custom`) ou volume de l'image vérifié ; plist analysée structurellement. (3) **Volume sous Linux** par `/proc/self/mountinfo` (source du montage, parent d'une partition, tous les périphériques d'un btrfs), fichiers d'échange résolus comme des chemins : btrfs sur LUKS et fichier d'échange sur LUKS **passent**. (4) **Vidages sur plantage** (OV-5) : `RLIMIT_CORE = 0` avant la création de la webview, destination d'un gestionnaire en tube vérifiée, rapports de WebView2 sous le dossier de données de la webview et purgés ; processus de rendu tué pendant la cérémonie dans P-VAULT. (5) « Protéger ce projet » dépend aussi de la cérémonie (SR-5) ; dossier de données de la webview dans OV-4 ; oracles Windows nommés (`HibernateEnabled`, `NtfsEncryptPagingFile`).
 
-- **Révision 8 (Codex R7-B1 ; Fable R7-M1, R7-m1 à m-4 ; décision de l'utilisatrice).** (1) **Protection facultative** : « Protéger ce projet » n'est jamais cochée par défaut, même pour un projet partagé (EN-0, décidé par l'utilisatrice le 2026-11-01). (2) **OV-1 (b′)** remplace (b) : l'ancienne règle « tout périphérique bloc chiffré » ne se lisait pas (sysfs n'expose aucune signature de partition non montée) et ne passait jamais sous UEFI (partition EFI et souvent `/boot` en clair) ; (b′) exige que chaque swap actif passe l'oracle, `/sys/power/resume` à `0:0` ou `CRYPT-`, uswsusp absent ou dirigé vers `CRYPT-`, TuxOnIce absent ; pendant la cérémonie, verrou d'inhibition `sleep` de `logind` et processus de rendu dédié terminé à la fin. Résiduel écrit (§9.9) : un outil d'administration hors des mécanismes connus ; désaccord D-17 (variante stricte « (a) seule » prête). (3) `st_rdev` du périphérique, pas `st_dev`. (4) `FailureReportFolderPath` est en lecture seule : il est sous le dossier de données de la webview, placé par OV-4, et purgé. (5) « P-VAULT-MAC » n'existait pas : OV-2 renvoie à P-VAULT sur macOS. (6) `systemd-coredump` honore `RLIMIT_CORE` ; le contrôle du volume de destination reste pour Apport et les gestionnaires inconnus. (7) N42 : oracles par API (DiskArbitration, IOKit `IOPMCopyPMPreferences`, `sysctl` `vm.swapusage`, WMI par COM, registre) ; plus de disque en mémoire macOS (`hdiutil`).
+- **Révision 8 (Codex R7-B1 ; Fable R7-M1, R7-m1 à m-4 ; décision de l'utilisatrice).** (1) **Protection facultative** : « Protéger ce projet » n'est jamais cochée par défaut, même pour un projet partagé (EN-0, décidé par l'utilisatrice le 2026-11-01). (2) **OV-1 (b′)** remplace (b) : l'ancienne règle « tout périphérique bloc chiffré » ne se lisait pas (sysfs n'expose aucune signature de partition non montée) et ne passait jamais sous UEFI (partition EFI et souvent `/boot` en clair) ; (b′) exige que chaque swap actif passe l'oracle, `/sys/power/resume` à `0:0` ou `CRYPT-`, uswsusp absent ou dirigé vers `CRYPT-`, TuxOnIce absent ; pendant la cérémonie, verrou d'inhibition `sleep` de `logind` et processus de rendu dédié terminé à la fin. Résiduel écrit (§9.9) : un outil d'administration hors des mécanismes connus ; D-17 **tranché par l'utilisatrice (2026-11-01)** : (b′) permise, résiduel documenté ; la variante stricte n'est pas retenue. (3) `st_rdev` du périphérique, pas `st_dev`. (4) `FailureReportFolderPath` est en lecture seule : il est sous le dossier de données de la webview, placé par OV-4, et purgé. (5) « P-VAULT-MAC » n'existait pas : OV-2 renvoie à P-VAULT sur macOS. (6) `systemd-coredump` honore `RLIMIT_CORE` ; le contrôle du volume de destination reste pour Apport et les gestionnaires inconnus. (7) N42 : oracles par API (DiskArbitration, IOKit `IOPMCopyPMPreferences`, `sysctl` `vm.swapusage`, WMI par COM, registre) ; plus de disque en mémoire macOS (`hdiutil`).
 
 ### AD-92 — Historique sans Git (N39)
 
@@ -1462,9 +1462,9 @@ Le détail des contradictions, manques, doublons, carte produit et phasage est d
   `AddFontResourceW` et `WM_FONTCHANGE`). Porte P-FONT, budget PF-11.
 - **Ordre des sources.** L'exigence énumère « inkwell, système, projet » ; la priorité retenue met le
   **projet** d'abord (ce qu'il porte doit gagner chez tous) puis **inkwell** (identique partout) ; à
-  confirmer si l'énumération voulait dire une priorité.
+  **décidé par l'utilisatrice (2026-11-01)**.
 - **Utilisatrice.** Exigence N43 ; licences hors du champ et aucune annonce des polices :
-  **décidé** (2026-11-01) ; ordre des sources : à confirmer.
+  **décidé** (2026-11-01) ; ordre des sources : **décidé** (2026-11-01).
 
 ### AD-101 — Rassemblement des ressources (N43)
 
@@ -1473,8 +1473,7 @@ Le détail des contradictions, manques, doublons, carte produit et phasage est d
   l'erreur de typst) et par les manifestes des extensions ; tout coché d'avance **sauf** les fichiers
   hors de la racine (un document reçu pourrait viser `~/.ssh/…`) ; autosuffisance vérifiée par une
   compilation de contrôle (RA-2) ; RA-T1 : export → import sur image vierge → même SHA-256 du PDF.
-- **Utilisatrice.** Demandé (2026-11-01) ; seule l'exception des fichiers hors racine est à
-  confirmer.
+- **Utilisatrice.** Décidé (2026-11-01), fichiers hors racine listés mais non cochés compris.
 
 ### AD-102 — Installation permanente d'une ressource de projet
 

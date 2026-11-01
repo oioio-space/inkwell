@@ -27,6 +27,9 @@ et deux exigences nouvelles (N42, N43). Aucune modification de `docs/protocol/` 
 | Extensions de projet chargées d'office et limitées | matrice : `AD-69` décidé |
 | Licences des polices hors du champ ; aucune annonce des polices d'un appareil | FT-7, FT-9 |
 | Une police ou un greffon du projet sert à tous tant que le projet est ouvert ; installation permanente au choix | FT-10, FT-12, PP-8, `AD-102` |
+| Ordre des polices : projet → inkwell → mes polices → ordinateur | FT-1 ; `AD-100` décidé |
+| Export : fichiers hors de la racine listés, non cochés | §6.13 ; `AD-101` décidé |
+| D-17 : (b′) permise, résiduel documenté | OV-1, §9.9 ; `AD-91` ; D-17 clos |
 
 ### N42 — autoporteur : chaque appel remplacé
 
@@ -76,8 +79,7 @@ mais aucune police.
 
 | # | Sujet | Codex | Fable | Recommandation |
 |---|---|---|---|---|
-| D-17 | Hibernation sous Linux | toute destination brute utilisable doit être prouvée chiffrée, sinon seule la branche (a) (hibernation impossible) passe | (b′) : les mécanismes connus prouvés un à un ; un outil d'administration ad hoc reste un résiduel écrit | **(b′)** avec verrou d'inhibition et processus de rendu dédié : (b′) ferme le cas de Codex pour `swsusp`, uswsusp et TuxOnIce, pas pour un outil arbitraire installé par l'administration de l'appareil (hors du modèle du Voleur, écrit au §9.9). Si Codex maintient, la variante stricte s'applique : « Protéger ce projet » indisponible sur une machine Linux où l'hibernation est possible |
-| — | Ordre des sources de polices | — | — | projet → inkwell → mes polices → ordinateur (`AD-100`) ; l'exigence énumérait « inkwell, système, projet » : à confirmer par l'utilisatrice |
+| D-17 *(clos : décision de l'utilisatrice, 2026-11-01 : (b′) permise, résiduel documenté)* | Hibernation sous Linux | toute destination brute utilisable doit être prouvée chiffrée, sinon seule la branche (a) (hibernation impossible) passe | (b′) : les mécanismes connus prouvés un à un ; un outil d'administration ad hoc reste un résiduel écrit | **(b′)** avec verrou d'inhibition et processus de rendu dédié : (b′) ferme le cas de Codex pour `swsusp`, uswsusp et TuxOnIce, pas pour un outil arbitraire installé par l'administration de l'appareil (hors du modèle du Voleur, écrit au §9.9). Si Codex maintient, la variante stricte s'applique : « Protéger ce projet » indisponible sur une machine Linux où l'hibernation est possible |
 
 
 ## 1.0.0-brouillon.8 — révision 7 (2026-11-01)

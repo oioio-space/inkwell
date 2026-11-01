@@ -2799,7 +2799,9 @@ vérification, qui sert pour les polices comme pour tout le reste.
   « **Ces éléments viennent de votre ordinateur : les ajouter au projet pour que tout le monde
   voie la même chose ?** ».
   - Chaque élément est listé, en mots (« Police Garamond », « Charte ACME », « Image logo.png,
-    dans Documents/Images »), avec sa taille, et **coché d'avance**.
+    dans Documents/Images »), avec sa taille. Polices, paquets, extensions et modèle sont **cochés
+    d'avance**. Les **fichiers hors du dossier du projet** sont listés mais **non cochés**
+    (décision de l'utilisatrice : un document reçu pourrait pointer vers un fichier privé).
   - La **taille totale** s'affiche (« 4,2 Mo ajoutés au projet »).
   - **Une seule confirmation** : « Ajouter au projet ».
   - On peut **passer** sans rien ajouter. L'export le dit alors dans son récapitulatif : « 3
@@ -2807,6 +2809,8 @@ vérification, qui sert pour les polices comme pour tout le reste.
 - **Où vont les éléments** : polices dans `polices/` ; paquets dans `.typstdeps/` ; images et
   fichiers dans le projet, avec mise à jour de leur chemin (une modification, annulable).
 - Extensions et modèle : extensions de projet (§4.32) ; le modèle est rangé avec le projet.
+- **Ordre des polices** : à nom égal, la police **du projet** passe avant celle de l'ordinateur,
+  puis avant celle d'Inkwell. Tout le monde voit ainsi la même chose.
 - **À Rejoindre** (§5.4) : rien de tel. La personne qui rejoint reçoit tout ce que le projet
   contient.
 
@@ -3022,8 +3026,8 @@ Le Go fournit déjà tout cela (`internal/app/invites.go`).
   - **PDF** (ou HTML pour un document Markdown en mise en page CSS) : le document mis en page ;
   - **Copie lisible** ou **Archive complète** (avec l'historique), protégées par mot de passe ou
     non (§4.43). La même **vérification des ressources** apparaît si besoin (polices, paquets, charte, fichiers
-    hors du projet, extensions, modèle) : cochée d'avance, avec la taille totale, facultative
-    (§4.46).
+    hors du projet, extensions, modèle) : cochée d'avance, **sauf les fichiers hors du projet**,
+    avec la taille totale, facultative (§4.46).
 
   L'export de l'historique en dépôt technique n'est **pas** ici (§4.22 point 8). Les préréglages du projet
   (§4.38) sont en tête.

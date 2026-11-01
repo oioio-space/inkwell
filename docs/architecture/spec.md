@@ -1392,8 +1392,8 @@ de l'étude (§7.2) :
       d'administration**, hors des mécanismes connus, qui contourne `logind` et écrit une image brute
       vers une partition en clair **pendant** la cérémonie, n'est pas détectable depuis
       l'application ; il suppose la maîtrise de l'administration de l'appareil, hors du modèle du
-      Voleur. Sur ce point, les revues divergent (D-17 de `CHANGES.md`) : la variante stricte (seule
-      la branche (a) passe) reste prête si elle est retenue.
+      Voleur. Les revues divergeaient (D-17 de `CHANGES.md`) ; **décidé par l'utilisatrice
+      (2026-11-01)** : (b′) permise, résiduel documenté.
   - **OV-2 macOS** (interfaces du système, jamais `diskutil`, `pmset`, `fdesetup`, `hdiutil` ;
     INV-14 ; appels par cgo, déjà requis par Wails sur macOS). Volume = `statfs(chemin).f_mntfromname`
     → disque de **DiskArbitration** (`DADiskCreateFromBSDName`, `DADiskCopyDescription`) ; chiffré si
