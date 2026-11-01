@@ -1,5 +1,8 @@
-// Command vectors prints the official test vectors of the inkwell protocol,
-// computed with the real codecs (scratch copy of the module).
+// Command vectors writes the official test vectors of the inkwell protocol,
+// computed with the real codecs. Run inside the module (ADR 0034 step 1 turns it
+// into protocol/cmd/vectors): go run . <dir>. Needs filippo.io/edwards25519
+// v1.2.0 (step 2) and the speccheck cases.json (crypto section).
+// REPO/PRESENCE CBOR vectors come from generate-repo.cjs.txt.
 package main
 
 import (
@@ -10,11 +13,13 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
-	"math/big"
 	"fmt"
+	"math/big"
 	"os"
 	"path/filepath"
 	"time"
+
+	"filippo.io/edwards25519"
 
 	"github.com/oioio-space/inkwell/internal/blob"
 	"github.com/oioio-space/inkwell/internal/bridge"
@@ -36,9 +41,40 @@ func seed(h string) signer {
 	return signer{ed25519.NewKeyFromSeed(b)}
 }
 
+// validKey is spec §3.2: decode the point (RFC 8032 §5.1.3), require the
+// canonical encoding, require a point of the prime-order subgroup other than O.
+func validKey(k []byte) error {
+	if len(k) != 32 {
+		return errors.New("length")
+	}
+	p, err := new(edwards25519.Point).SetBytes(k)
+	if err != nil {
+		return errors.New("not a point (RFC 8032 §5.1.3 decoding fails)")
+	}
+	if !bytes.Equal(p.Bytes(), k) {
+		return errors.New("non-canonical encoding")
+	}
+	id := edwards25519.NewIdentityPoint()
+	if new(edwards25519.Point).MultByCofactor(p).Equal(id) == 1 {
+		return errors.New("small order")
+	}
+	// Prime order: [L]A = O, computed as [L−1]A + A (L itself reduces to 0).
+	lm1, _ := new(edwards25519.Scalar).SetCanonicalBytes(lMinus1)
+	q := new(edwards25519.Point).ScalarMult(lm1, p)
+	if q.Add(q, p).Equal(id) != 1 {
+		return errors.New("mixed order (torsion component)")
+	}
+	return nil
+}
+
+// lMinus1 is L − 1, little-endian (L = 2^252 + 27742317777372353535851937790883648493).
+var lMinus1 = []byte{0xec, 0xd3, 0xf5, 0x5c, 0x1a, 0x63, 0x12, 0x58, 0xd6, 0x9c, 0xf7, 0xa2, 0xde, 0xf9, 0xde, 0x14, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x10}
+
 type V struct {
 	ID      string         `json:"id"`
-	Status  string         `json:"status"` // normative | proposed
+	Status  string         `json:"status"`            // normative | proposed
+	Enforce string         `json:"enforce,omitempty"` // migration step from which runners enforce it
+	Context map[string]any `json:"context,omitempty"` // receiver state the verdict depends on
 	Desc    string         `json:"description"`
 	Decoder string         `json:"decoder,omitempty"`
 	Input   string         `json:"input_hex,omitempty"`
@@ -50,6 +86,7 @@ type V struct {
 type File struct {
 	Spec    string `json:"spec"`
 	Version string `json:"spec_version"`
+	Gen     string `json:"generator"`
 	Keys    any    `json:"keys,omitempty"`
 	Vectors []V    `json:"vectors"`
 }
@@ -91,7 +128,8 @@ func must(err error) {
 
 func write(dir, name string, f File) {
 	f.Spec = "inkwell protocol"
-	f.Version = "2.0.0-draft"
+	f.Version = "2.0.0-draft.2"
+	f.Gen = "docs/protocol/vectors/generate.go.txt (real codecs; proposed vectors use encoders written from spec.md)"
 	b, err := json.MarshalIndent(f, "", "  ")
 	must(err)
 	must(os.WriteFile(filepath.Join(dir, name), append(b, '\n'), 0o644))
@@ -140,7 +178,7 @@ func main() {
 	full := append([]byte("inkwell/trust-op/v1\x00"), msg...)
 	cv = append(cv, V{ID: "ed25519-noncanonical-s", Status: "normative", Desc: "Signature de sig-domain-1 avec S remplacé par S + L (non canonique) : DOIT être refusée (RFC 8032 §5.1.7).",
 		Decoder: "signature", Input: hx(s2), Verdict: "reject", Expect: map[string]any{"public_hex": hx(A.Public()), "signed_bytes_hex": hx(full)},
-		})
+	})
 	pidA, mhA := peerID(A.Public())
 	cv = append(cv, V{ID: "peer-id-A", Status: "normative", Desc: "PeerID de la clé A : base58btc du multihash identité (0x00, 0x24) de la clé publique protobuf libp2p (0x08 0x01 0x12 0x20 || clé).",
 		Decoder: "peer_id", Input: hx(mhA), Verdict: "accept", Expect: map[string]any{"peer_id": pidA, "public_hex": hx(A.Public())}})
@@ -155,14 +193,64 @@ func main() {
 			"c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac037a",
 			"c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac03fa"}}})
 	cv = append(cv, V{ID: "noncanonical-public-keys", Status: "normative", Desc: "Non-canonical encodings of y = p, y = p+1 and negative zero; all MUST be rejected.",
-        Decoder: "public_key", Verdict: "reject", Expect: map[string]any{"keys_hex": []string{
-            "edffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
-            "eeffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
-            "0100000000000000000000000000000000000000000000000000000000000080"}}})
+		Decoder: "public_key", Verdict: "reject", Expect: map[string]any{"keys_hex": []string{
+			"edffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+			"eeffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+			"0100000000000000000000000000000000000000000000000000000000000080"}}})
 	pidI, mhI := peerID(ed25519.PublicKey(id))
 	cv = append(cv, V{ID: "peer-id-small-order", Status: "normative", Desc: "PeerID dérivé de la clé neutre : tout le monde peut s'authentifier sous cette identité (la signature universelle passe la poignée de main Noise/TLS de libp2p). DOIT être refusé par le filtre de connexion, le décodage des PeerID, les ops de membres et les tickets.",
 		Decoder: "peer_id", Input: hx(mhI), Verdict: "reject", Expect: map[string]any{"peer_id": pidI},
 		Current: "go-libp2p v0.51.0 UnmarshalEd25519PublicKey + Verify accept it; inkwell p2p.KeyFromID accepts it (finding)"})
+	cv = append(cv, V{ID: "noncanonical-public-keys", Status: "normative", Enforce: "step-2", Desc: "Encodages non canoniques de y = p, y = p + 1 et du zéro négatif : refusés (§3.2, règle 2).",
+		Decoder: "public_key", Verdict: "reject", Expect: map[string]any{"keys_hex": []string{
+			"edffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+			"eeffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+			"0100000000000000000000000000000000000000000000000000000000000080"}}})
+	z := make([]byte, 32)
+	z[0] = 2
+	err := validKey(z)
+	cv = append(cv, V{ID: "off-curve-public-key", Status: "normative", Enforce: "step-2",
+		Desc:    "y = 2 (02 00…00) : y < p et l'encodage n'est pas d'ordre petit, mais (y²−1)/(d·y²+1) n'est pas un carré : le point n'existe pas. Un filtre par plage et liste noire l'accepterait ; le décodage RFC 8032 §5.1.3 le refuse.",
+		Decoder: "public_key", Input: hex.EncodeToString(z), Verdict: map[bool]string{true: "accept", false: "reject"}[err == nil],
+		Expect: map[string]any{"reason": fmt.Sprint(err)}})
+	for _, k := range []string{
+		"edffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+		"eeffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+		"0100000000000000000000000000000000000000000000000000000000000080",
+	} {
+		b, _ := hex.DecodeString(k)
+		if validKey(b) == nil {
+			panic(k)
+		}
+	}
+	raw, err := os.ReadFile(os.Args[2])
+	if err != nil {
+		panic(err)
+	}
+	var cases []struct{ Message, Pub_key, Signature string }
+	if err := json.Unmarshal(raw, &cases); err != nil {
+		panic(err)
+	}
+	for i, c := range cases {
+		m, _ := hex.DecodeString(c.Message)
+		pk, _ := hex.DecodeString(c.Pub_key)
+		sig, _ := hex.DecodeString(c.Signature)
+		goOK := ed25519.Verify(pk, m, sig)
+		kerr := validKey(pk)
+		ok := goOK && kerr == nil
+		why := "ok"
+		switch {
+		case kerr != nil:
+			why = "key: " + kerr.Error()
+		case !goOK:
+			why = "crypto/ed25519.Verify = false"
+		}
+		cv = append(cv, V{ID: fmt.Sprintf("speccheck-%d", i), Status: "normative", Enforce: "step-2",
+			Desc:    fmt.Sprintf("Cas %d de « Taming the many EdDSAs » (Chalkias et al. 2020, novifinancial/ed25519-speccheck cases.json) ; verdict = clé valide (§3.2) ET vérification sans cofacteur (§3.3).", i),
+			Decoder: "signature+key", Verdict: map[bool]string{true: "accept", false: "reject"}[ok],
+			Expect:  map[string]any{"message_hex": c.Message, "public_hex": c.Pub_key, "signature_hex": c.Signature, "reason": why},
+			Current: fmt.Sprintf("crypto/ed25519.Verify alone = %v", goOK)})
+	}
 	write(dir, "crypto.json", File{Keys: keys, Vectors: cv})
 
 	// ---- trust ops ----
@@ -273,6 +361,25 @@ func main() {
 	binary.BigEndian.PutUint32(mis[len(mis)-4:], blob.GroupSize+1)
 	_, err = blob.Decode(mis)
 	bv = append(bv, V{ID: "blob-want-misaligned", Status: "normative", Desc: "Want de longueur 16385 (non multiple de 16 Kio) : refusé.", Decoder: "bulk", Input: hx(mis), Verdict: verdict(err)})
+	tail := bytes.Repeat([]byte{0xab}, 70000)
+	h, _ := st.PutBytes(tail)
+	w2, _ := blob.Encode(blob.Want{Hash: h, Offset: 65536, Length: blob.GroupSize})
+	_, err = blob.Decode(w2)
+	bv = append(bv, V{ID: "want-final-group", Status: "normative", Desc: "WANT du dernier groupe d'un blob de 70 000 octets : offset 65 536, longueur 16 384 (entière, au-delà de la fin : permis).", Decoder: "bulk", Input: hx(w2), Verdict: verdict(err), Expect: map[string]any{"blake3_hex": hx(h[:])}})
+	sl2, err := st.ReadSlice(h, 65536, blob.GroupSize)
+	if err != nil {
+		panic(err)
+	}
+	se2, _ := blob.Encode(sl2)
+	_, err = blob.Decode(se2)
+	bv = append(bv, V{ID: "slice-final-group", Status: "normative", Desc: "SLICE de ce dernier groupe : length = 4464 (< demandé, permis seulement parce que offset + length = taille) ; bao commence par la taille totale u64 LE = 70 000, qui DOIT égaler la taille attendue avant toute allocation.", Decoder: "bulk", Input: hx(se2), Verdict: verdict(err),
+		Expect: map[string]any{"length": sl2.Length, "bao_total": binary.LittleEndian.Uint64(sl2.Bao), "bao_len": len(sl2.Bao)}})
+	bv = append(bv, V{ID: "slice-size-mismatch", Status: "proposed", Enforce: "step-5", Desc: "slice-final-group reçu alors que la taille attendue (index du projet) est 70 001 : refusé avant allocation (faute du pair).", Decoder: "bulk+expect", Context: map[string]any{"expected_size": 70001, "outstanding": map[string]any{"offset": 65536, "length": 16384}}, Input: hx(se2), Verdict: "reject"})
+	bv = append(bv, V{ID: "slice-unsolicited", Status: "proposed", Enforce: "step-5", Desc: "slice-final-group sans WANT en cours pour (pair, hash) : jeté sans vérifier Bao ; faute seulement si aucune demande de ce hash n'a été annulée depuis 60 s.", Decoder: "bulk+expect", Context: map[string]any{"expected_size": 70000, "outstanding": nil}, Input: hx(se2), Verdict: "reject"})
+	bad2 := append([]byte{}, w2...)
+	binary.BigEndian.PutUint32(bad2[len(bad2)-4:], 4464)
+	_, err = blob.Decode(bad2)
+	bv = append(bv, V{ID: "want-final-group-exact", Status: "normative", Desc: "WANT du dernier groupe demandé à sa longueur exacte (4464) : refusé, une demande est toujours en groupes entiers.", Decoder: "bulk", Input: hx(bad2), Verdict: verdict(err)})
 	write(dir, "bulk.json", File{Vectors: bv})
 
 	// ---- invite ----
@@ -300,10 +407,34 @@ func main() {
 	iv = append(iv, V{ID: "lobby-reply-refused", Status: "normative", Desc: "Refused, raison 1 (ticket inutilisable).", Decoder: "lobby_reply", Input: hx(rf), Verdict: "accept"})
 	write(dir, "lobby.json", File{Vectors: iv})
 
-	// ---- session v2 (proposed: hand encoders per spec.md §5) ----
+	// ---- sync/2 streams (proposed: hand encoders, spec §5) ----
+	pidb := pid[:]
 	frame := func(t byte, body []byte) []byte {
 		b := binary.BigEndian.AppendUint32(nil, uint32(1+len(body)))
 		return append(append(b, t), body...)
+	}
+	// One libp2p protocol ID per stream class (spec §5.1); only REPO and LARGE
+	// streams carry a preamble. pre records the class of the input being built,
+	// and the vector's context names the protocol the stream was opened with.
+	protoOf := map[byte]string{1: "/inkwell/control/2.0.0", 2: "/inkwell/repo/2.0.0", 3: "/inkwell/presence/2.0.0", 4: "/inkwell/large/2.0.0"}
+	var lastClass byte
+	pre := func(class byte, gen uint32, extra ...uint32) []byte {
+		lastClass = class
+		if class == 1 || class == 3 {
+			return []byte{}
+		}
+		b := binary.BigEndian.AppendUint32(nil, gen)
+		for _, x := range extra {
+			b = binary.BigEndian.AppendUint32(b, x)
+		}
+		return b
+	}
+	withProto := func(ctx map[string]any) map[string]any {
+		out := map[string]any{"protocol": protoOf[lastClass]}
+		for k, v := range ctx {
+			out[k] = v
+		}
+		return out
 	}
 	tlv := func(b []byte, id uint16, v []byte) []byte {
 		b = binary.BigEndian.AppendUint16(b, id)
@@ -311,29 +442,80 @@ func main() {
 		return append(b, v...)
 	}
 	caps := binary.BigEndian.AppendUint16(nil, 0x0001)
-	caps = binary.BigEndian.AppendUint16(caps, 0x0a0a) // GREASE
-	hello := tlv(tlv(nil, 0x0001, pid[:]), 0x0002, caps)
+	caps = binary.BigEndian.AppendUint16(caps, 0x0a0a)
+	v2only := tlv(nil, 0x0004, []byte{0, 2}) // VERSIONS = [2]
+	hello := frame(0x01, append(tlv(tlv(nil, 0x0001, pidb), 0x0002, caps), v2only...))
 	var sv []V
-	sv = append(sv, V{ID: "hello", Status: "proposed", Desc: "Trame HELLO (type 0x01) : TLV PROJECT (0x0001, 32 o) puis CAPS (0x0002) = core/2 (0x0001) et une valeur GREASE (0x0A0A) à ignorer.", Decoder: "sync2_frame", Input: hx(frame(0x01, hello)), Verdict: "accept", Expect: map[string]any{"project_id_hex": hx(pid[:]), "effective_caps": []int{1}}})
-	dup := tlv(tlv(nil, 0x0002, caps), 0x0001, pid[:])
-	sv = append(sv, V{ID: "hello-unsorted-tlv", Status: "proposed", Desc: "HELLO dont les identifiants TLV ne sont pas strictement croissants : refusé (PROTOCOL_VIOLATION).", Decoder: "sync2_frame", Input: hx(frame(0x01, dup)), Verdict: "reject"})
-	ext := tlv(tlv(tlv(nil, 0x0001, pid[:]), 0x0002, caps), 0x7a7a, []byte{0xde, 0xad})
-	sv = append(sv, V{ID: "hello-unknown-tlv", Status: "proposed", Desc: "HELLO avec un TLV inconnu 0x7A7A : accepté, TLV ignoré.", Decoder: "sync2_frame", Input: hx(frame(0x01, ext)), Verdict: "accept"})
-	sv = append(sv, V{ID: "trust-frame", Status: "proposed", Desc: "Trame TRUST (0x03) portant sync-have.", Decoder: "sync2_frame", Input: hx(frame(0x03, have)), Verdict: "accept"})
-	sv = append(sv, V{ID: "attest-frame", Status: "proposed", Desc: "Trame ATTEST (0x04) portant attest-valid.", Decoder: "sync2_frame", Input: hx(frame(0x04, ae)), Verdict: "accept"})
-	obj := bytes.Repeat([]byte{0xab}, 70000)
-	oh := blob.HashOf(obj)
-	offer := binary.BigEndian.AppendUint32(append([]byte{}, oh[:]...), uint32(len(obj)))
-	sv = append(sv, V{ID: "offer-frame", Status: "proposed", Desc: "Trame OFFER (0x07) : BLAKE3 de 70000 octets 0xAB, taille u32 = 70000.", Decoder: "sync2_frame", Input: hx(frame(0x07, offer)), Verdict: "accept"})
-	small := binary.BigEndian.AppendUint32(append([]byte{}, oh[:]...), 65536)
-	sv = append(sv, V{ID: "offer-too-small", Status: "proposed", Desc: "OFFER de 65536 octets (≤ seuil en ligne) : refusé, un tel message passe en REPO.", Decoder: "sync2_frame", Input: hx(frame(0x07, small)), Verdict: "reject"})
-	rst := binary.BigEndian.AppendUint32(nil, 2)
-	sv = append(sv, V{ID: "repo-reset", Status: "proposed", Desc: "REPO_RESET (0x08) : génération 2, raison 0x02 (récupération échouée).", Decoder: "sync2_frame", Input: hx(frame(0x08, append(rst, 0x02))), Verdict: "accept"})
-	sv = append(sv, V{ID: "goaway", Status: "proposed", Desc: "GOAWAY (0x02) code 0x02 PROTOCOL_VIOLATION.", Decoder: "sync2_frame", Input: hx(frame(0x02, []byte{0x02})), Verdict: "accept"})
-	sv = append(sv, V{ID: "unknown-type", Status: "proposed", Desc: "Type de trame 0x7F inconnu : refusé (PROTOCOL_VIOLATION) ; aucune extension sans capacité négociée.", Decoder: "sync2_frame", Input: hx(frame(0x7f, nil)), Verdict: "reject"})
-	over := binary.BigEndian.AppendUint32(nil, 98305)
-	sv = append(sv, V{ID: "frame-too-large", Status: "proposed", Desc: "En-tête annonçant 98305 octets (> 96 Kio) : refusé avant toute allocation.", Decoder: "sync2_frame", Input: hx(append(over, 0x05)), Verdict: "reject"})
+	addS := func(id, desc, dec string, ctx map[string]any, in []byte, v string, exp map[string]any) {
+		sv = append(sv, V{ID: id, Status: "proposed", Enforce: "step-4", Desc: desc, Decoder: dec, Context: withProto(ctx), Input: hx(in), Verdict: v, Expect: exp})
+	}
+	addS("control-open", "Flux /inkwell/control/2.0.0 (sans préambule) : HELLO (PROJECT, CAPS = core/2 + GREASE 0x0A0A).", "sync2_stream", nil, append(pre(1, 0), hello...), "accept", map[string]any{"effective_caps": []int{1}, "project_id_hex": hx(pidb)})
+	addS("control-no-hello", "Flux CONTROL dont la première trame n'est pas HELLO (GOAWAY) : refusé.", "sync2_stream", nil, append(pre(1, 0), frame(0x02, []byte{0x01})...), "reject", nil)
+	capsNoCore := binary.BigEndian.AppendUint16(nil, 0x0a0a)
+	addS("hello-without-core", "HELLO dont CAPS ne contient pas core/2 : GOAWAY NO_COMMON_CAPABILITY (les capacités de sécurité ne se négocient pas, §5.4).", "sync2_stream", nil, append(pre(1, 0), frame(0x01, append(tlv(tlv(nil, 0x0001, pidb), 0x0002, capsNoCore), v2only...))...), "reject", map[string]any{"goaway": 5})
+	addS("hello-unsorted-tlv", "HELLO dont les TLV ne sont pas strictement croissants : refusé.", "sync2_stream", nil, append(pre(1, 0), frame(0x01, append(tlv(tlv(nil, 0x0002, caps), 0x0001, pidb), v2only...))...), "reject", nil)
+	addS("hello-unknown-tlv", "HELLO avec un TLV inconnu 0x7A7A : accepté, ignoré.", "sync2_stream", nil, append(pre(1, 0), frame(0x01, tlv(append(tlv(tlv(nil, 0x0001, pidb), 0x0002, caps), v2only...), 0x7a7a, []byte{0xde, 0xad}))...), "accept", nil)
+	rmsg := []byte{0xa1, 0x64, 't', 'y', 'p', 'e', 0x6f, 'd', 'o', 'c', '-', 'u', 'n', 'a', 'v', 'a', 'i', 'l', 'a', 'b', 'l', 'e'}
+	repoCtx := map[string]any{"session": "active", "gen": 2, "mode": "resetting"}
+	addS("repo-open-next", "Flux /inkwell/repo/2.0.0 de préambule gen = 2 reçu en Resetting(2) : confirmation ; puis une trame REPO (message opaque pour ce décodeur) et une annonce LARGE{id 1, 70 000}.", "sync2_stream", repoCtx,
+		append(append(pre(2, 2), frame(0x05, rmsg)...), frame(0x07, binary.BigEndian.AppendUint32(binary.BigEndian.AppendUint32(nil, 1), 70000))...), "accept", map[string]any{"gen": 2, "transition": "synced(2)"})
+	addS("repo-gen-jump", "Flux REPO de génération 4 reçu en Synced(2) : refusé (h > gen + 1, PROTOCOL_VIOLATION).", "sync2_stream", map[string]any{"session": "active", "gen": 2, "mode": "synced"}, pre(2, 4), "reject", map[string]any{"goaway": 2})
+	addS("repo-stale", "Flux REPO de génération 1 reçu en Synced(2) : flux réinitialisé sans sanction (ancien).", "sync2_stream", map[string]any{"session": "active", "gen": 2, "mode": "synced"}, pre(2, 1), "reject", map[string]any{"stream": "reset", "goaway": nil})
+	addS("frame-wrong-stream", "Trame PRESENCE (0x06) sur un flux REPO : refusé (chaque type a sa classe de flux).", "sync2_stream", repoCtx, append(pre(2, 2), frame(0x06, rmsg)...), "reject", map[string]any{"goaway": 2})
+	addS("large-too-small", "Annonce LARGE de 65 536 octets (≤ seuil en ligne) : refusé.", "sync2_stream", repoCtx, append(pre(2, 2), frame(0x07, binary.BigEndian.AppendUint32(binary.BigEndian.AppendUint32(nil, 1), 65536))...), "reject", nil)
+	addS("large-preamble", "Préambule d'un flux /inkwell/large/2.0.0 : gen 2, id 1, taille 70 000 ; suivent exactement 70 000 octets bruts puis la fin du flux.", "sync2_stream", map[string]any{"session": "active", "gen": 2, "mode": "synced", "announced": map[string]any{"id": 1, "size": 70000}}, pre(4, 2, 1, 70000), "accept", nil)
+	addS("large-unannounced", "Préambule LARGE dont (gen, id, taille) ne correspond à aucune annonce lue : le flux attend sans être lu jusqu'à l'annonce (au plus une en attente) ; une deuxième en attente est refusée.", "sync2_stream", map[string]any{"session": "active", "gen": 2, "mode": "synced", "announced": nil, "pending_large_streams": 1}, pre(4, 2, 2, 70000), "reject", nil)
+	key := []byte(B.Public())
+	author := append(append([]byte{}, key...), make([]byte, 16)...)
+	author = binary.BigEndian.AppendUint16(author, 1)
+	author = binary.BigEndian.AppendUint64(author, 1)
+	hc := sha256.Sum256([]byte("change"))
+	author = append(append(author, hc[:]...), make([]byte, 64)...)
+	addS("author-frame", "Trame AUTHOR (0x09) : clé B, epoch nul, 1 tuple (seq 1, hash, signature nulle). Forme seulement : la signature est vérifiée à l'étape « preuve » (§12) et échoue ici.", "sync2_stream", repoCtx, append(pre(2, 2), frame(0x09, author)...), "accept", map[string]any{"tuples": 1})
+	addS("frame-too-large", "En-tête de trame annonçant 98 305 octets sur CONTROL : refusé avant allocation.", "sync2_stream", nil, append(pre(1, 0), binary.BigEndian.AppendUint32(nil, 98305)...), "reject", nil)
+	addS("retired-type", "Type 0x08 (ancien REPO_RESET, retiré) : refusé ; un numéro retiré n'est jamais réattribué.", "sync2_stream", repoCtx, append(pre(2, 2), frame(0x08, []byte{0, 0, 0, 2, 2})...), "reject", nil)
 	write(dir, "session.json", File{Vectors: sv})
+	// ---- compatibility matrix (N14, spec §1.4): a 2.0 decoder facing 2.x/3.x bytes ----
+	var xv []V
+	addX := func(id, desc string, ctx map[string]any, in []byte, v string, exp map[string]any) {
+		xv = append(xv, V{ID: id, Status: "proposed", Enforce: "step-4", Desc: desc, Decoder: "sync2_stream", Context: withProto(ctx), Input: hx(in), Verdict: v, Expect: exp})
+	}
+	helloV := func(versions []byte, extra ...[]byte) []byte {
+		b := append(tlv(tlv(nil, 0x0001, pidb), 0x0002, caps), versions...)
+		for _, e := range extra {
+			b = append(b, e...)
+		}
+		return append(pre(1, 0), frame(0x01, b)...)
+	}
+	helloWith := func(extra ...[]byte) []byte { return helloV(v2only, extra...) }
+	addX("tlv-unknown-even", "HELLO 2.x avec un TLV inconnu d'identifiant pair (0x0006) : ignoré (extension compatible).", nil, helloWith(tlv(nil, 0x0006, []byte{1, 2})), "accept", nil)
+	addX("tlv-unknown-odd-critical", "HELLO avec un TLV inconnu d'identifiant impair (0x0007 : « à comprendre ») : GOAWAY UNSUPPORTED_CRITICAL, jamais une interprétation au hasard.", nil, helloWith(tlv(nil, 0x0007, []byte{1})), "reject", map[string]any{"goaway": 8})
+	capsFuture := binary.BigEndian.AppendUint16(nil, 0x0001)
+	capsFuture = binary.BigEndian.AppendUint16(capsFuture, 0x0a0a)
+	capsFuture = binary.BigEndian.AppendUint16(capsFuture, 0x0100)
+	addX("cap-unknown", "CAPS avec une capacité inconnue 0x0100 : ignorée (ensemble effectif = core/2).", nil, append(pre(1, 0), frame(0x01, append(tlv(tlv(nil, 0x0001, pidb), 0x0002, capsFuture), v2only...))...), "accept", map[string]any{"effective_caps": []int{1}})
+	vers := func(majors ...uint16) []byte {
+		var b []byte
+		for _, m := range majors {
+			b = binary.BigEndian.AppendUint16(b, m)
+		}
+		return tlv(nil, 0x0004, b)
+	}
+	addX("versions-ok", "HELLO sur /inkwell/sync/2.0.0 avec VERSIONS = [2, 3] ; le receveur ne parle que 2 : accepté (2 est bien la plus haute commune).", map[string]any{"negotiated": "/inkwell/sync/2.0.0", "local_majors": []int{2}}, helloV(vers(2, 3)), "accept", nil)
+	addX("versions-downgrade", "Même HELLO, mais le receveur parle aussi 3 : la négociation a donné 2 alors que 3 est commune → GOAWAY VERSION_DOWNGRADE (liaison de la négociation, comme RFC 9368).", map[string]any{"negotiated": "/inkwell/sync/2.0.0", "local_majors": []int{2, 3}}, helloV(vers(2, 3)), "reject", map[string]any{"goaway": 9})
+	addX("versions-unsorted", "VERSIONS non strictement croissantes : refusé.", nil, helloV(vers(3, 2)), "reject", nil)
+	addX("versions-missing", "HELLO sans VERSIONS : refusé (TLV obligatoire, §5.3).", nil, helloV(nil), "reject", nil)
+	gr := append(append(pre(1, 0), hello...), frame(0x4a, []byte{0x13, 0x37})...)
+	addX("frame-grease", "Trame GREASE 0x4A (plage ignorable 0x40–0x7F) après HELLO : ignorée.", nil, gr, "accept", nil)
+	addX("frame-ignorable-unknown", "Trame inconnue 0x55 (plage ignorable) : ignorée, comptée (16 par minute et par pair au plus).", nil, append(append(pre(1, 0), hello...), frame(0x55, []byte{0})...), "accept", nil)
+	addX("frame-critical-unknown", "Trame inconnue 0x30 (plage critique 0x01–0x3F, non négociée) : violation.", nil, append(append(pre(1, 0), hello...), frame(0x30, []byte{0})...), "reject", map[string]any{"goaway": 2})
+	setFuture := []byte{6, 2, 0, 1, 0, 1, 0}
+	addX("set-unknown", "SET d'identifiant 6 (ensemble futur, non négocié) : violation (le corps d'une trame critique ne s'étend que par capacité).", nil, append(append(pre(1, 0), hello...), frame(0x03, setFuture)...), "reject", map[string]any{"goaway": 2})
+	v3 := append([]byte{}, addEnc...)
+	v3[0] = 3
+	obj := binary.BigEndian.AppendUint16([]byte{1, 2, 0, 1}, uint16(len(v3)))
+	addX("object-version-unknown", "SET « objects » portant une op de membre de version 3 (inconnue) : l'objet est ignoré sans sanction (jamais interprété comme une v1), la trame reste valide.", nil, append(append(pre(1, 0), hello...), frame(0x03, append(obj, v3...))...), "accept", map[string]any{"objects_ignored": 1})
+	write(dir, "compat.json", File{Vectors: xv})
 
 	// ---- bridge (internal contract) ----
 	var gv []V
@@ -346,14 +528,18 @@ func main() {
 	gv = append(gv, V{ID: "bridge-attest", Status: "normative", Desc: "Enveloppe Attest (webview → Go) : Heads = len(doc) u16 || doc || têtes.", Decoder: "bridge_envelope", Input: hx(env2), Verdict: "accept"})
 	_, err = bridge.Decode(append([]byte{2}, env[1:]...))
 	gv = append(gv, V{ID: "bridge-bad-version", Status: "normative", Desc: "Version d'enveloppe 2 : refusée.", Decoder: "bridge_envelope", Input: hx(append([]byte{2}, env[1:]...)), Verdict: verdict(err)})
-	credit := binary.BigEndian.AppendUint32(nil, 1)
-	credit = binary.BigEndian.AppendUint64(credit, 0)
-	credit = binary.BigEndian.AppendUint32(credit, 4<<20)
-	cenv := append([]byte{1, 12, byte(len(hostID))}, hostID...)
-	cenv = append(cenv, credit...)
-	gv = append(gv, V{ID: "bridge-credit", Status: "proposed", Desc: "Enveloppe Credit (type 12) : génération 1, consommé 0, fenêtre 4 Mio.", Decoder: "bridge_envelope", Input: hx(cenv), Verdict: "accept"})
+	msgGen := append(binary.BigEndian.AppendUint32(nil, 2), payload...)
+	gv = append(gv, V{ID: "bridge-message-gen", Status: "proposed", Enforce: "step-6", Desc: "Message (kind 3) avec génération : payload = generation u32 || message.", Decoder: "bridge_envelope", Input: hx(append(append([]byte{1, 3, byte(len(hostID))}, hostID...), msgGen...)), Verdict: "accept", Expect: map[string]any{"generation": 2}})
+	for _, lane := range []byte{0, 2} {
+		c := binary.BigEndian.AppendUint32(nil, 2)
+		c = append(c, lane)
+		c = binary.BigEndian.AppendUint64(c, 0)
+		c = binary.BigEndian.AppendUint32(c, 4<<20)
+		gv = append(gv, V{ID: map[byte]string{0: "bridge-credit-lane", 2: "bridge-credit-bad-lane"}[lane], Status: "proposed", Enforce: "step-6", Desc: "Credit (kind 12) : génération, voie (0 en ligne, 1 LARGE), consommé, fenêtre.", Decoder: "bridge_envelope", Input: hx(append(append([]byte{1, 12, byte(len(hostID))}, hostID...), c...)), Verdict: map[byte]string{0: "accept", 2: "reject"}[lane], Expect: map[byte]map[string]any{0: {"generation": 2, "lane": 0, "window": 4 << 20}}[lane]})
+	}
 	write(dir, "bridge-internal.json", File{Vectors: gv})
 
 	_ = errors.New
+	_ = edwards25519.NewIdentityPoint
 	fmt.Println("ok")
 }

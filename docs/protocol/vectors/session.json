@@ -1,13 +1,18 @@
 {
   "spec": "inkwell protocol",
-  "spec_version": "2.0.0-draft",
+  "spec_version": "2.0.0-draft.2",
+  "generator": "docs/protocol/vectors/generate.go.txt (real codecs; proposed vectors use encoders written from spec.md)",
   "vectors": [
     {
-      "id": "hello",
+      "id": "control-open",
       "status": "proposed",
-      "description": "Trame HELLO (type 0x01) : TLV PROJECT (0x0001, 32 o) puis CAPS (0x0002) = core/2 (0x0001) et une valeur GREASE (0x0A0A) à ignorer.",
-      "decoder": "sync2_frame",
-      "input_hex": "0000002d0100010020a8c8601608f969e63ceeec9e77b8d8cbd99007442ffa67c028069149625d21660002000400010a0a",
+      "enforce": "step-4",
+      "context": {
+        "protocol": "/inkwell/control/2.0.0"
+      },
+      "description": "Flux /inkwell/control/2.0.0 (sans préambule) : HELLO (PROJECT, CAPS = core/2 + GREASE 0x0A0A).",
+      "decoder": "sync2_stream",
+      "input_hex": "000000330100010020a8c8601608f969e63ceeec9e77b8d8cbd99007442ffa67c028069149625d21660002000400010a0a000400020002",
       "verdict": "accept",
       "expect": {
         "effective_caps": [
@@ -17,83 +22,224 @@
       }
     },
     {
+      "id": "control-no-hello",
+      "status": "proposed",
+      "enforce": "step-4",
+      "context": {
+        "protocol": "/inkwell/control/2.0.0"
+      },
+      "description": "Flux CONTROL dont la première trame n'est pas HELLO (GOAWAY) : refusé.",
+      "decoder": "sync2_stream",
+      "input_hex": "000000020201",
+      "verdict": "reject"
+    },
+    {
+      "id": "hello-without-core",
+      "status": "proposed",
+      "enforce": "step-4",
+      "context": {
+        "protocol": "/inkwell/control/2.0.0"
+      },
+      "description": "HELLO dont CAPS ne contient pas core/2 : GOAWAY NO_COMMON_CAPABILITY (les capacités de sécurité ne se négocient pas, §5.4).",
+      "decoder": "sync2_stream",
+      "input_hex": "000000310100010020a8c8601608f969e63ceeec9e77b8d8cbd99007442ffa67c028069149625d2166000200020a0a000400020002",
+      "verdict": "reject",
+      "expect": {
+        "goaway": 5
+      }
+    },
+    {
       "id": "hello-unsorted-tlv",
       "status": "proposed",
-      "description": "HELLO dont les identifiants TLV ne sont pas strictement croissants : refusé (PROTOCOL_VIOLATION).",
-      "decoder": "sync2_frame",
-      "input_hex": "0000002d010002000400010a0a00010020a8c8601608f969e63ceeec9e77b8d8cbd99007442ffa67c028069149625d2166",
+      "enforce": "step-4",
+      "context": {
+        "protocol": "/inkwell/control/2.0.0"
+      },
+      "description": "HELLO dont les TLV ne sont pas strictement croissants : refusé.",
+      "decoder": "sync2_stream",
+      "input_hex": "00000033010002000400010a0a00010020a8c8601608f969e63ceeec9e77b8d8cbd99007442ffa67c028069149625d2166000400020002",
       "verdict": "reject"
     },
     {
       "id": "hello-unknown-tlv",
       "status": "proposed",
-      "description": "HELLO avec un TLV inconnu 0x7A7A : accepté, TLV ignoré.",
-      "decoder": "sync2_frame",
-      "input_hex": "000000330100010020a8c8601608f969e63ceeec9e77b8d8cbd99007442ffa67c028069149625d21660002000400010a0a7a7a0002dead",
+      "enforce": "step-4",
+      "context": {
+        "protocol": "/inkwell/control/2.0.0"
+      },
+      "description": "HELLO avec un TLV inconnu 0x7A7A : accepté, ignoré.",
+      "decoder": "sync2_stream",
+      "input_hex": "000000390100010020a8c8601608f969e63ceeec9e77b8d8cbd99007442ffa67c028069149625d21660002000400010a0a0004000200027a7a0002dead",
       "verdict": "accept"
     },
     {
-      "id": "trust-frame",
+      "id": "repo-open-next",
       "status": "proposed",
-      "description": "Trame TRUST (0x03) portant sync-have.",
-      "decoder": "sync2_frame",
-      "input_hex": "00000024030100015a502638d6036e758b40c0b8414f028e07abf10576fc1adfc49953d02fd04416",
-      "verdict": "accept"
+      "enforce": "step-4",
+      "context": {
+        "gen": 2,
+        "mode": "resetting",
+        "protocol": "/inkwell/repo/2.0.0",
+        "session": "active"
+      },
+      "description": "Flux /inkwell/repo/2.0.0 de préambule gen = 2 reçu en Resetting(2) : confirmation ; puis une trame REPO (message opaque pour ce décodeur) et une annonce LARGE{id 1, 70 000}.",
+      "decoder": "sync2_stream",
+      "input_hex": "000000020000001705a164747970656f646f632d756e617661696c61626c6500000009070000000100011170",
+      "verdict": "accept",
+      "expect": {
+        "gen": 2,
+        "transition": "synced(2)"
+      }
     },
     {
-      "id": "attest-frame",
+      "id": "repo-gen-jump",
       "status": "proposed",
-      "description": "Trame ATTEST (0x04) portant attest-valid.",
-      "decoder": "sync2_frame",
-      "input_hex": "000000ea0401a8c8601608f969e63ceeec9e77b8d8cbd99007442ffa67c028069149625d21663d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c00000192e5059000001c344e4d4e6e6b4d684c386a5872644a396a616d533538504156645875000231919abffa533f3b405001b59201b02a4ea3a18e318a49de0fd04e6eefe3d3389f3dfcdf3ed2b55d5d1a46146c040ff425b2487a9a806c6f7013a6d980fc3f44abb089d326dc5f91c7b8d2c4dfa3fe975805f35890dbdb560c5862648c32a9cda7131d5182a09a8bb50162f0f44bb1dc79e7215afc19e3b3a1e43add4af7c002",
-      "verdict": "accept"
+      "enforce": "step-4",
+      "context": {
+        "gen": 2,
+        "mode": "synced",
+        "protocol": "/inkwell/repo/2.0.0",
+        "session": "active"
+      },
+      "description": "Flux REPO de génération 4 reçu en Synced(2) : refusé (h \u003e gen + 1, PROTOCOL_VIOLATION).",
+      "decoder": "sync2_stream",
+      "input_hex": "00000004",
+      "verdict": "reject",
+      "expect": {
+        "goaway": 2
+      }
     },
     {
-      "id": "offer-frame",
+      "id": "repo-stale",
       "status": "proposed",
-      "description": "Trame OFFER (0x07) : BLAKE3 de 70000 octets 0xAB, taille u32 = 70000.",
-      "decoder": "sync2_frame",
-      "input_hex": "0000002507a3c79626605231cdf54f555001ae1a4d8a793bd5de97095742dd53f8cff233fb00011170",
-      "verdict": "accept"
+      "enforce": "step-4",
+      "context": {
+        "gen": 2,
+        "mode": "synced",
+        "protocol": "/inkwell/repo/2.0.0",
+        "session": "active"
+      },
+      "description": "Flux REPO de génération 1 reçu en Synced(2) : flux réinitialisé sans sanction (ancien).",
+      "decoder": "sync2_stream",
+      "input_hex": "00000001",
+      "verdict": "reject",
+      "expect": {
+        "goaway": null,
+        "stream": "reset"
+      }
     },
     {
-      "id": "offer-too-small",
+      "id": "frame-wrong-stream",
       "status": "proposed",
-      "description": "OFFER de 65536 octets (≤ seuil en ligne) : refusé, un tel message passe en REPO.",
-      "decoder": "sync2_frame",
-      "input_hex": "0000002507a3c79626605231cdf54f555001ae1a4d8a793bd5de97095742dd53f8cff233fb00010000",
+      "enforce": "step-4",
+      "context": {
+        "gen": 2,
+        "mode": "resetting",
+        "protocol": "/inkwell/repo/2.0.0",
+        "session": "active"
+      },
+      "description": "Trame PRESENCE (0x06) sur un flux REPO : refusé (chaque type a sa classe de flux).",
+      "decoder": "sync2_stream",
+      "input_hex": "000000020000001706a164747970656f646f632d756e617661696c61626c65",
+      "verdict": "reject",
+      "expect": {
+        "goaway": 2
+      }
+    },
+    {
+      "id": "large-too-small",
+      "status": "proposed",
+      "enforce": "step-4",
+      "context": {
+        "gen": 2,
+        "mode": "resetting",
+        "protocol": "/inkwell/repo/2.0.0",
+        "session": "active"
+      },
+      "description": "Annonce LARGE de 65 536 octets (≤ seuil en ligne) : refusé.",
+      "decoder": "sync2_stream",
+      "input_hex": "0000000200000009070000000100010000",
       "verdict": "reject"
     },
     {
-      "id": "repo-reset",
+      "id": "large-preamble",
       "status": "proposed",
-      "description": "REPO_RESET (0x08) : génération 2, raison 0x02 (récupération échouée).",
-      "decoder": "sync2_frame",
-      "input_hex": "00000006080000000202",
+      "enforce": "step-4",
+      "context": {
+        "announced": {
+          "id": 1,
+          "size": 70000
+        },
+        "gen": 2,
+        "mode": "synced",
+        "protocol": "/inkwell/large/2.0.0",
+        "session": "active"
+      },
+      "description": "Préambule d'un flux /inkwell/large/2.0.0 : gen 2, id 1, taille 70 000 ; suivent exactement 70 000 octets bruts puis la fin du flux.",
+      "decoder": "sync2_stream",
+      "input_hex": "000000020000000100011170",
       "verdict": "accept"
     },
     {
-      "id": "goaway",
+      "id": "large-unannounced",
       "status": "proposed",
-      "description": "GOAWAY (0x02) code 0x02 PROTOCOL_VIOLATION.",
-      "decoder": "sync2_frame",
-      "input_hex": "000000020202",
-      "verdict": "accept"
-    },
-    {
-      "id": "unknown-type",
-      "status": "proposed",
-      "description": "Type de trame 0x7F inconnu : refusé (PROTOCOL_VIOLATION) ; aucune extension sans capacité négociée.",
-      "decoder": "sync2_frame",
-      "input_hex": "000000017f",
+      "enforce": "step-4",
+      "context": {
+        "announced": null,
+        "gen": 2,
+        "mode": "synced",
+        "pending_large_streams": 1,
+        "protocol": "/inkwell/large/2.0.0",
+        "session": "active"
+      },
+      "description": "Préambule LARGE dont (gen, id, taille) ne correspond à aucune annonce lue : le flux attend sans être lu jusqu'à l'annonce (au plus une en attente) ; une deuxième en attente est refusée.",
+      "decoder": "sync2_stream",
+      "input_hex": "000000020000000200011170",
       "verdict": "reject"
+    },
+    {
+      "id": "author-frame",
+      "status": "proposed",
+      "enforce": "step-4",
+      "context": {
+        "gen": 2,
+        "mode": "resetting",
+        "protocol": "/inkwell/repo/2.0.0",
+        "session": "active"
+      },
+      "description": "Trame AUTHOR (0x09) : clé B, epoch nul, 1 tuple (seq 1, hash, signature nulle). Forme seulement : la signature est vérifiée à l'étape « preuve » (§12) et échoue ici.",
+      "decoder": "sync2_stream",
+      "input_hex": "000000020000009b093d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c000000000000000000000000000000000001000000000000000112ea12eace7d655f471ce55e34f89b1b77a3d9d05a445ca82877dd2235beaa5100000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000",
+      "verdict": "accept",
+      "expect": {
+        "tuples": 1
+      }
     },
     {
       "id": "frame-too-large",
       "status": "proposed",
-      "description": "En-tête annonçant 98305 octets (\u003e 96 Kio) : refusé avant toute allocation.",
-      "decoder": "sync2_frame",
-      "input_hex": "0001800105",
+      "enforce": "step-4",
+      "context": {
+        "protocol": "/inkwell/control/2.0.0"
+      },
+      "description": "En-tête de trame annonçant 98 305 octets sur CONTROL : refusé avant allocation.",
+      "decoder": "sync2_stream",
+      "input_hex": "00018001",
+      "verdict": "reject"
+    },
+    {
+      "id": "retired-type",
+      "status": "proposed",
+      "enforce": "step-4",
+      "context": {
+        "gen": 2,
+        "mode": "resetting",
+        "protocol": "/inkwell/repo/2.0.0",
+        "session": "active"
+      },
+      "description": "Type 0x08 (ancien REPO_RESET, retiré) : refusé ; un numéro retiré n'est jamais réattribué.",
+      "decoder": "sync2_stream",
+      "input_hex": "0000000200000006080000000202",
       "verdict": "reject"
     }
   ]

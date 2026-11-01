@@ -1,6 +1,7 @@
 {
   "spec": "inkwell protocol",
-  "spec_version": "2.0.0-draft",
+  "spec_version": "2.0.0-draft.2",
+  "generator": "docs/protocol/vectors/generate.go.txt (real codecs; proposed vectors use encoders written from spec.md)",
   "vectors": [
     {
       "id": "ticket-text",

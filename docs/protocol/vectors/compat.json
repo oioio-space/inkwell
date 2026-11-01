@@ -1,0 +1,180 @@
+{
+  "spec": "inkwell protocol",
+  "spec_version": "2.0.0-draft.2",
+  "generator": "docs/protocol/vectors/generate.go.txt (real codecs; proposed vectors use encoders written from spec.md)",
+  "vectors": [
+    {
+      "id": "tlv-unknown-even",
+      "status": "proposed",
+      "enforce": "step-4",
+      "context": {
+        "protocol": "/inkwell/control/2.0.0"
+      },
+      "description": "HELLO 2.x avec un TLV inconnu d'identifiant pair (0x0006) : ignoré (extension compatible).",
+      "decoder": "sync2_stream",
+      "input_hex": "000000390100010020a8c8601608f969e63ceeec9e77b8d8cbd99007442ffa67c028069149625d21660002000400010a0a000400020002000600020102",
+      "verdict": "accept"
+    },
+    {
+      "id": "tlv-unknown-odd-critical",
+      "status": "proposed",
+      "enforce": "step-4",
+      "context": {
+        "protocol": "/inkwell/control/2.0.0"
+      },
+      "description": "HELLO avec un TLV inconnu d'identifiant impair (0x0007 : « à comprendre ») : GOAWAY UNSUPPORTED_CRITICAL, jamais une interprétation au hasard.",
+      "decoder": "sync2_stream",
+      "input_hex": "000000380100010020a8c8601608f969e63ceeec9e77b8d8cbd99007442ffa67c028069149625d21660002000400010a0a0004000200020007000101",
+      "verdict": "reject",
+      "expect": {
+        "goaway": 8
+      }
+    },
+    {
+      "id": "cap-unknown",
+      "status": "proposed",
+      "enforce": "step-4",
+      "context": {
+        "protocol": "/inkwell/control/2.0.0"
+      },
+      "description": "CAPS avec une capacité inconnue 0x0100 : ignorée (ensemble effectif = core/2).",
+      "decoder": "sync2_stream",
+      "input_hex": "000000350100010020a8c8601608f969e63ceeec9e77b8d8cbd99007442ffa67c028069149625d21660002000600010a0a0100000400020002",
+      "verdict": "accept",
+      "expect": {
+        "effective_caps": [
+          1
+        ]
+      }
+    },
+    {
+      "id": "versions-ok",
+      "status": "proposed",
+      "enforce": "step-4",
+      "context": {
+        "local_majors": [
+          2
+        ],
+        "negotiated": "/inkwell/sync/2.0.0",
+        "protocol": "/inkwell/control/2.0.0"
+      },
+      "description": "HELLO sur /inkwell/sync/2.0.0 avec VERSIONS = [2, 3] ; le receveur ne parle que 2 : accepté (2 est bien la plus haute commune).",
+      "decoder": "sync2_stream",
+      "input_hex": "000000350100010020a8c8601608f969e63ceeec9e77b8d8cbd99007442ffa67c028069149625d21660002000400010a0a0004000400020003",
+      "verdict": "accept"
+    },
+    {
+      "id": "versions-downgrade",
+      "status": "proposed",
+      "enforce": "step-4",
+      "context": {
+        "local_majors": [
+          2,
+          3
+        ],
+        "negotiated": "/inkwell/sync/2.0.0",
+        "protocol": "/inkwell/control/2.0.0"
+      },
+      "description": "Même HELLO, mais le receveur parle aussi 3 : la négociation a donné 2 alors que 3 est commune → GOAWAY VERSION_DOWNGRADE (liaison de la négociation, comme RFC 9368).",
+      "decoder": "sync2_stream",
+      "input_hex": "000000350100010020a8c8601608f969e63ceeec9e77b8d8cbd99007442ffa67c028069149625d21660002000400010a0a0004000400020003",
+      "verdict": "reject",
+      "expect": {
+        "goaway": 9
+      }
+    },
+    {
+      "id": "versions-unsorted",
+      "status": "proposed",
+      "enforce": "step-4",
+      "context": {
+        "protocol": "/inkwell/control/2.0.0"
+      },
+      "description": "VERSIONS non strictement croissantes : refusé.",
+      "decoder": "sync2_stream",
+      "input_hex": "000000350100010020a8c8601608f969e63ceeec9e77b8d8cbd99007442ffa67c028069149625d21660002000400010a0a0004000400030002",
+      "verdict": "reject"
+    },
+    {
+      "id": "versions-missing",
+      "status": "proposed",
+      "enforce": "step-4",
+      "context": {
+        "protocol": "/inkwell/control/2.0.0"
+      },
+      "description": "HELLO sans VERSIONS : refusé (TLV obligatoire, §5.3).",
+      "decoder": "sync2_stream",
+      "input_hex": "0000002d0100010020a8c8601608f969e63ceeec9e77b8d8cbd99007442ffa67c028069149625d21660002000400010a0a",
+      "verdict": "reject"
+    },
+    {
+      "id": "frame-grease",
+      "status": "proposed",
+      "enforce": "step-4",
+      "context": {
+        "protocol": "/inkwell/control/2.0.0"
+      },
+      "description": "Trame GREASE 0x4A (plage ignorable 0x40–0x7F) après HELLO : ignorée.",
+      "decoder": "sync2_stream",
+      "input_hex": "000000330100010020a8c8601608f969e63ceeec9e77b8d8cbd99007442ffa67c028069149625d21660002000400010a0a000400020002000000034a1337",
+      "verdict": "accept"
+    },
+    {
+      "id": "frame-ignorable-unknown",
+      "status": "proposed",
+      "enforce": "step-4",
+      "context": {
+        "protocol": "/inkwell/control/2.0.0"
+      },
+      "description": "Trame inconnue 0x55 (plage ignorable) : ignorée, comptée (16 par minute et par pair au plus).",
+      "decoder": "sync2_stream",
+      "input_hex": "000000330100010020a8c8601608f969e63ceeec9e77b8d8cbd99007442ffa67c028069149625d21660002000400010a0a000400020002000000025500",
+      "verdict": "accept"
+    },
+    {
+      "id": "frame-critical-unknown",
+      "status": "proposed",
+      "enforce": "step-4",
+      "context": {
+        "protocol": "/inkwell/control/2.0.0"
+      },
+      "description": "Trame inconnue 0x30 (plage critique 0x01–0x3F, non négociée) : violation.",
+      "decoder": "sync2_stream",
+      "input_hex": "000000330100010020a8c8601608f969e63ceeec9e77b8d8cbd99007442ffa67c028069149625d21660002000400010a0a000400020002000000023000",
+      "verdict": "reject",
+      "expect": {
+        "goaway": 2
+      }
+    },
+    {
+      "id": "set-unknown",
+      "status": "proposed",
+      "enforce": "step-4",
+      "context": {
+        "protocol": "/inkwell/control/2.0.0"
+      },
+      "description": "SET d'identifiant 6 (ensemble futur, non négocié) : violation (le corps d'une trame critique ne s'étend que par capacité).",
+      "decoder": "sync2_stream",
+      "input_hex": "000000330100010020a8c8601608f969e63ceeec9e77b8d8cbd99007442ffa67c028069149625d21660002000400010a0a000400020002000000080306020001000100",
+      "verdict": "reject",
+      "expect": {
+        "goaway": 2
+      }
+    },
+    {
+      "id": "object-version-unknown",
+      "status": "proposed",
+      "enforce": "step-4",
+      "context": {
+        "protocol": "/inkwell/control/2.0.0"
+      },
+      "description": "SET « objects » portant une op de membre de version 3 (inconnue) : l'objet est ignoré sans sanction (jamais interprété comme une v1), la trame reste valide.",
+      "decoder": "sync2_stream",
+      "input_hex": "000000330100010020a8c8601608f969e63ceeec9e77b8d8cbd99007442ffa67c028069149625d21660002000400010a0a000400020002000000db030102000100d40302020000000000000001d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c0000000000000000000000000000000000000000000000000000000000000000000442c3a961000001a8c8601608f969e63ceeec9e77b8d8cbd99007442ffa67c028069149625d2166e1a098fa6fa8198106dff379bb04bcb1b74a8a7ace8455ef8ca511109b72ab37a93956c8fcbb94934a4865ebf0294b3464a19308b11febcd501987e6718eb704",
+      "verdict": "accept",
+      "expect": {
+        "objects_ignored": 1
+      }
+    }
+  ]
+}

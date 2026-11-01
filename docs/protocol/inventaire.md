@@ -1,6 +1,6 @@
 # Inventaire des échanges et défauts (état au 2026-11-01)
 
-> Informatif. Photographie du code avant la mise en œuvre de [spec.md](spec.md). Chemins
+> Informatif. Photographie du code avant la mise en œuvre de [spec.md](spec.md) (révision 2). Chemins
 > relatifs à la racine du dépôt ; ceux marqués † n'existent que dans le travail non fusionné
 > des étapes 2.1–2.3 (`.claude/worktrees/s2-1`, branche `feat/stage2-1-3`).
 
@@ -49,11 +49,11 @@
 |---|---|---|---|---|
 | S1, S1b | état par document et par pair créé avant toute règle, éphémères non filtrés | audit `2026-10-31-architecture-audit.md`, `audit-2026-10-31/04`, `05` | étape 1 et 2.0 fusionnées ; reste Critique jusqu'à la garde ADR 0030 | §12 (un seul ordre), §9.4 |
 | S2 | liste des membres réécrite de façon non atomique | `app/persist.go:133-137` (avant correctif) | corrigé (D6) | §14.1 |
-| S3 | attestations gardées sans plafond | `app/attest.go:49` | ouvert (attend l'ensemble admis) | §16.1 (65 536 clés) |
+| S3 | attestations gardées sans plafond ; avec un plafond commun, un écrivain le remplirait seul | `app/attest.go:49` | ouvert | §10.6 (parts par signataire), §16.1 |
 | S4 | CBOR nul → TypeError, trame perdue | `WailsNetworkAdapter.ts:302` (avant) | corrigé | §9.2 |
 | R-Serve | la boucle `Serve` du routeur attendait l'envoi d'un gros document | revue Opus du 2026-11-01 (`17-stage2-progress.md:471-480`) | corrigé par deux voies par pair † | §10.1 |
-| R-Reset | boucle de réinitialisations : une rafale honnête (> 64 messages ou > 2 Mio) remplit la boîte d'envoi, `Reset` du pair, resynchronisation, nouvelle rafale | `bridge/router.go:210-241` † ; même schéma pour l'attente de la webview `admission.ts:212-231` | **ouvert** | §10.3 et Annexe A.1 (crédits : la rafale attend au lieu de déborder) ; §7.3 (cadence des REPO_RESET) |
-| R-Evict | perte silencieuse d'un message de la classe fiable : un message partiel abandonné (TTL, trou, éviction) n'est jamais signalé à l'émetteur, dont l'état de synchronisation croit l'avoir livré | `mux/fragment.go:248-299`, `:313-330` † | **ouvert** | §5.5, §7.2 (tirage), §7.3 |
+| R-Reset | boucle de réinitialisations : une rafale honnête (> 64 messages ou > 2 Mio) remplit la boîte d'envoi, `Reset` du pair, resynchronisation, nouvelle rafale | `bridge/router.go:210-241` † ; même schéma pour l'attente de la webview `admission.ts:212-231` | **ouvert** | §10.3 et Annexe A.1 (crédits par voie : la rafale attend au lieu de déborder) ; §7.3 (cadence) |
+| R-Evict | perte silencieuse d'un message de la classe fiable : un message partiel abandonné (TTL, trou, éviction) n'est jamais signalé à l'émetteur, dont l'état de synchronisation croit l'avoir livré | `mux/fragment.go:248-299`, `:313-330` † | **ouvert** | §5.5 (règle L), §7.2 (flux LARGE), §7.3 |
 | R-V2 | op v2 décodée avant toute négociation | `trust/op.go:196-198`, `:381` † (corrigé par un refus en dur) | contourné | §5.4 (décodeurs paramétrés par l'ensemble effectif) |
 | R-Save | journal de décisions écrit sans remplacement atomique | `policy/disk.go:40` † (corrigé : `store.WriteAtomic`) | corrigé | §14.1 |
 
@@ -71,7 +71,11 @@
 | N-8 | Mineur | Version du Stream `store` devinée à chaque trame par le préfixe `ISV2` : une requête v1 d'identifiant `0x49535632` est mal aiguillée. | `bridge/storestream.go:441` † | Annexe A.2 |
 | N-9 | Mineur | Le décodeur générique d'enveloppe décode et ré-encode le JSON de `Decide` / `Policy` (jusqu'à 64 Mio) avant tout aiguillage. | `bridge/envelope.go:77-84` †, `bridge/policy.go:62-75` † | Annexe A.1 (validation tardive) |
 | N-10 | Mineur | Aucune liaison explicite au projet en début de session : un membre d'un autre projet n'est écarté qu'au cas par cas (signature, projet de l'attestation, admission des documents). | absence de HELLO ; `app/wiring.go:409-430` | §5.3 |
-| N-11 | Mineur | Le débordement disque ne borne pas le pic de mémoire : la fin d'un réassemblage alloue le message entier. | `mux/spill.go:109-116` † | §7.2 (objet livré seulement avec crédit) |
+| N-11 | Mineur | Le débordement disque ne borne pas le pic de mémoire : la fin d'un réassemblage alloue le message entier. | `mux/spill.go:109-116` † | §7.2 (taille réservée avant lecture) ; débordement abandonné |
+| N-12 | Majeur (désaccord d'analyse entre implémentations) | L'adaptateur encode avec `encode` de `cbor-x` sans réglage : chaque `Uint8Array` est étiqueté (tag 64) et les maps ont un en-tête de 2 octets ; le décodeur `cbor-x` accepte les clés en double en gardant la dernière. Vérifié : `encode({data:Uint8Array[1]})` = `b9 0001 64 'data' d8 40 41 01` ; `decode(a3 61'a' 01 61'a' 02 61'a' 03)` = `{a:3}`. | `frontend/src/net/WailsNetworkAdapter.ts:9`, `:469` ; `admission.ts:2`, `:56` | §9.2.1 (profil de validité), §9.2.2 (émission) |
+| N-13 | Mineur | Attestations gardées pour un pair pas encore actif : 40 000 par pair, sans total (64 pairs × 40 000 × 4 Kio). | `app/attest.go:290` | §5.3 (rien n'est lu avant HELLO) : supprimé |
+| N-14 | Majeur (revue 02-fable) | Une modification non couverte évincée ou oubliée est une perte silencieuse : l'émetteur l'a notée envoyée (`sentHashes`) et ne la renverra pas. | `frontend/src/net/coverage.ts:99-105` | §5.5 (règle L), §9.4 (attente bornée, ATTEST_WANT, puis changement de génération) |
+| N-15 | Majeur (revue 02-fable ; ADR 0028) | Les délais au débit (20 s + taille / 16 Kio/s, 30 s par WANT de 1 Mio) font échouer en boucle un pair honnête derrière un relais lent. | `frame/progress.go:18-95`, `blob/service.go` | §10.2 (aucun délai sur la lenteur), §8.1 (délai au progrès, tailles adaptatives) |
 
 Hors protocole, déjà suivis par l'audit : F3 (plantage libp2p à la fermeture), F6 (test de
 simulation intermittent), F1 (aperçu).
