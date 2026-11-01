@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Version | 1.0.0-brouillon.6 (2026-11-01, révision 5 : tour 4 ; [CHANGES.md](CHANGES.md), [coherence.md](coherence.md)) |
+| Version | 1.0.0-brouillon.7 (2026-11-01, révision 6 : tour 5 ; [CHANGES.md](CHANGES.md), [coherence.md](coherence.md)) |
 | Rôle | lever chaque doute trouvé en écrivant [spec.md](spec.md) : une question, ses options, une recommandation, sa raison |
 | Sources des doutes | [conception](../conception.pdf), [questions ouvertes](../open-questions.md), [audit](../plans/2026-10-31-architecture-audit.md), ADR 0001–0034, [protocole](../protocol/spec.md), [design](../design/spec.md), code (`main` à `362cb4d`, chantier `proto1`), `TODO` et `t.Skip` |
 
@@ -980,6 +980,8 @@ servent pas de preuve ; celles dont dépendent les décisions ont été vérifi�
 
 - **Révision 5 (Fable R4-M1).** Le repli « compilé à l'installation » n'existait pas sous H-3 (wazero ne garde le code natif qu'en mémoire d'un processus ou dans un dossier de cache). Repli réel : (a) **préchauffage** en tâche de fond après la première peinture pour les greffons épinglés ou actifs au dernier usage, dans la limite des 6 actifs, activation froide affichée « Extension en préparation… » ; (b) sinon **revue de H-3 par ADR** (cache disque scellé, haché par le parent, dans le coffre pour un projet protégé).
 
+- **Révision 6 (Fable R5-M2).** H-4 dit maintenant « jamais avant la première peinture » : le préchauffage est permis après « dernier projet modifiable », à priorité basse, pour les greffons épinglés ou actifs au dernier usage, seulement si le repli (a) est engagé ; `PERF-START` se mesure avec six greffons épinglés.
+
 ### AD-58 — Droits
 
 - **Recommandation.** §15.5 : aucune capacité ambiante, capacités nommées et montrées, règle
@@ -1328,6 +1330,8 @@ Le détail des contradictions, manques, doublons, carte produit et phasage est d
 - **Révision 4 (Codex R3-B1, R3-B2 ; Fable R3-M5, m-9).** (1) La DEK (32 octets) est la **charge utile d'un fichier age complet** (bibliothèque `filippo.io/age`, stanzas inchangées), liée au projet, à l'appareil et à l'époque ; destinataires : la clé de l'appareil et le destinataire de secours ; DEK **par projet et par appareil** (pas d'enveloppe pour les autres appareils). (2) Le dossier de travail n'existe **que** sur un support qui ne garde pas de clair après coupure ou vol : mémoire (tmpfs sans swap en clair ; disque en mémoire sous macOS, à prouver) ou disque chiffré par le système **vérifié** ; sinon, pour un projet protégé, aperçu, export lisible et service de langage des fichiers fermés sont refusés sur la cible. (3) Budget : matérialisation par dépendances réelles, ≤ 512 Mio, refus au-delà. (4) Git dans le coffre (go-git sur `billy.Filesystem`), index dans le dossier de travail. (5) Repli : NG3 reste et G13 passe en v1.x si P-VAULT échoue.
 
 - **Révision 5 (Codex R4-B1, Fable R4-M2, m-1).** Règle VK (EN-3) : toute voie locale vers la DEK dépend d'un secret absent du disque lisible hors ligne : clé privée X25519 dans le trousseau, ou enveloppée sous mot de passe (Argon2id 256 Mio, 3 passes, 4 fils), ou sur disque chiffré vérifié ; **aucun repli** vers un fichier nu pour un projet protégé ; P-VAULT : vol hors ligne, aucun trousseau, recherche des octets de clés sur l'image. **Voie de récupération** : par le destinataire de secours, un `peer` différent est accepté, l'ancien appareil affiché, la DEK ré-enveloppée pour le nouvel appareil sous une **nouvelle époque**. **Oracles** de « vérifié » nommés (`/proc/swaps`, `dm/uuid` en `CRYPT-`, `lsblk`, `sysctl vm.swapusage`, `fdesetup status`, `Win32_EncryptableVolume`) ; le disque en mémoire de macOS exige aussi le swap chiffré.
+
+- **Révision 6 (Codex R5-B1, R5-B2, R5-M1 ; Fable R5-M1, m-1 à m-5).** (1) **Cérémonie de la phrase** (SR-5) : Go ne peut verrouiller que ses tampons ; la webview garde les mots dans un processus de rendu non verrouillable ; la garantie minimale (aucune page de la phrase écrite en clair sur un support persistant) vient de l'oracle de pagination (swap et hibernation) joué avant toute création ou restauration ; s'il échoue, la cérémonie est **refusée** avec la marche à suivre. (2) **Oracles liés au volume** (OV-1 à OV-4) : chaque chemin sensible (dossier de travail, clé X25519 en mode disque, swap, hibernation) est résolu jusqu'à son volume réel et vérifié sur ce volume (sysfs sous Linux, `zram` sans périphérique de repli en clair ; volume APFS sous macOS, le statut global de FileVault ne suffit pas ; volume BitLocker sous Windows) ; placement forcé sous le dossier de la personne. (3) §9.4 corrigé : le trousseau garde la clé X25519 de l'appareil, **jamais** le secret de secours ; lignes de la clé X25519, de la DEK et du secret dans les tables des §9.4 et §6.1. (4) La récupération ne révoque pas l'ancien appareil : elle propose « Tout rechiffrer ».
 
 ### AD-92 — Historique sans Git (N39)
 

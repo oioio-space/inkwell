@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Version | **1.0.0-brouillon.6** (révision 5 : revues du tour 4 ; [CHANGES.md](CHANGES.md), [coherence.md](coherence.md)) |
+| Version | **1.0.0-brouillon.7** (révision 6 : revues du tour 5 ; [CHANGES.md](CHANGES.md), [coherence.md](coherence.md)) |
 | Date | 2026-11-01 |
 | Statut | proposé (exigence N18) ; à valider par la boucle de revue Fable + Codex, puis par l'utilisatrice |
 | Remplace | [`docs/architecture.md`](../architecture.md) (devenu un renvoi) |
@@ -69,7 +69,7 @@ n'en dépend (`AD-95`). Règles de toutes les portes :
 |---|---|---|---|
 | Hôte des greffons, ABI noyau | **P-PLUG-PROTO** : modules « bonjour » Rust et Go construits par ABI-9, **table des importations réellement liées**, paquet signé et son contenu signé, proposition puis Annuler, révocation d'un mandat en vol, allocation refusée et débordement (`memory.size()`), **minuterie positive** puis annulation pendant l'attente, vecteurs ABI-8 ; tout passe ou la porte échoue. **P-PLUG-BENCH** (seuils de l'annexe) : 16 greffons **installés**, 6 actifs, 10 en attente, admission, éviction et équité vérifiées ; tailles des modules, froid et chaud, mémoire cumulée, trajet complet | si l'activation dépasse 500 ms : (a) **préchauffage** — pour les greffons épinglés ou actifs au dernier usage, l'hôte est créé et le module compilé **en tâche de fond après la première peinture**, dans la limite des 6 actifs ; une activation froide reste possible et s'affiche « Extension en préparation… » (wazero ne garde le code natif qu'en mémoire d'un processus ou dans un dossier de cache : « compilé à l'installation » n'existe pas sous H-3) ; (b) si le préchauffage ne suffit pas, **revue de H-3 par ADR** (cache disque scellé et haché par le parent, dans le coffre pour un projet protégé), jamais implicitement ; si l'appel dépasse 2 ms : décision revue (pas le budget) ; si P-PLUG-PROTO échoue : pas de greffons tiers, extensions intégrées TypeScript seules | §7.3, §15.20, annexe |
 | Enfermement (Linux, macOS, Windows) | **PLUG-COMPROMISED-\*** et **P-SANDBOX-LINUX, -MAC, -WIN** : un **corpus commun** d'attaques par un enfant natif hostile — chemins canaris **normalement lisibles** par la personne, poignées et descripteurs hérités, réseau (TCP, UDP, Unix, DNS), `execve`, création de processus, deux hôtes simultanés, quotas et arrêt sous saturation ; **sidecars** aussi : lecture limitée au dossier de travail, sortie disque bornée à **256 Mio par compilation** (`typst.DefaultMaxOutput`) et à **512 Mio cumulés** pour toutes les compilations simultanées (le parent refuse d'en lancer une de plus au-delà), réseau refusé, mort avec le parent ; oracle : **aucune** tentative ne réussit, sur chaque cible de la matrice (§9.10) | la cible reste en réduction écrite (§9.11) : ni greffons tiers, ni aperçu ; Linux seul = alpha | §9.10, §9.11 |
-| Coffre chiffré | **P-VAULT** : coupure de courant et `kill -9` à chaque étape d'écriture puis **inspection hors ligne avant relance** (aucun clair hors support autorisé, EN-4) ; verrouillage ; export chiffré lu par `age -d` ; migration d'un projet en clair ; récupération **sans** l'ancien appareil ; disque plein ; troncature et altération d'objets ; index, journaux, temporaires ; oracle de non-perte (I1–I8) ; budgets du §12.5 ; six cibles | NG3 reste (projet en clair, chiffrement du disque recommandé) et G13 passe en v1.x | §6.10 |
+| Coffre chiffré | **P-VAULT** : coupure de courant et `kill -9` à chaque étape d'écriture puis **inspection hors ligne avant relance** (aucun clair hors support autorisé, EN-4) ; verrouillage ; export chiffré lu par `age -d` ; migration d'un projet en clair ; récupération **sans** l'ancien appareil ; disque plein ; **cérémonie de la phrase** sous pression mémoire puis recherche des mots sur le swap et l'image d'hibernation (SR-5) ; témoins de volume (OV-4 : démarrage chiffré et destination externe en clair, changement de montage, état inconnu) ; troncature et altération d'objets ; index, journaux, temporaires ; oracle de non-perte (I1–I8) ; budgets du §12.5 ; six cibles | NG3 reste (projet en clair, chiffrement du disque recommandé) et G13 passe en v1.x | §6.10 |
 | Index de recherche pour l'IA | **P-IDX** : corpus français **versionné** (projet d'exemple et deux projets Typst publics, 200 requêtes écrites avant l'essai, passages attendus jugés à trois niveaux) ; seuils fixés : **rappel@10 ≥ 0,8 et MRR ≥ 0,6** pour R0 ; aucune requête du corpus sans résultat ; retard d'index ≤ 5 s ; corruption puis reconstruction ; budgets du §12.5 ; six cibles ; R1 ou R2 seulement si **+0,1 de rappel@10** mesuré | recherche d'IA **sans index** : lecture du fichier courant et des fichiers que la personne désigne | §15.18 |
 | Projection Git | **P-GIT-BENCH** : projet de 1 000 fichiers (2 Mo de texte, 50 blobs de 1 Mo), 500 versions à 2 % de changement chacune ; seuils du §12.5 ; témoin : écrivain minimal jetable (dans `docs/plans/`) | écrivain minimal (`AD-13` option 2) | §6.11 |
 | Mermaid sans DOM (API 1.1) | **P-MERMAID** : module `beautiful-mermaid` épinglé, compilé par le kit JavaScript ; importations permises seulement ; taille ≤ 8 Mio ; p95 ≤ 300 ms pour 200 nœuds dans l'hôte ; polices reproductibles et cohérentes avec le PDF ; corpus de diagrammes pris en charge **et** refusés (message clair) ; SVG assaini ; annulation ; six cibles | Mermaid absent, et dit ; Graphviz et D2 restent | §15.14 |
@@ -768,6 +768,7 @@ repose sur I1–I4 (§10).
 | Attestations de têtes | objets signés, le dernier gagne par (document, signataire) | magasin d'attestations | celles de l'appareil, avant diffusion (protocole §14.2) | couverture dans la webview |
 | Octets d'un binaire | magasin BLAKE3 (ADR 0006, 0023) | `blob.Store` | `.inkwell/blobs/` + arbre Bao | copie lisible sous son chemin (fichier possédé) |
 | Clé de l'appareil | `device.key` | `identity.Device` | `<UserConfigDir>/inkwell/device.key` (0600) | PeerID, empreinte |
+| Clé X25519 de chiffrement de l'appareil | VK-1 (trousseau, mot de passe ou disque chiffré vérifié) *[cible, `AD-91`]* | Go | jamais un fichier nu pour un projet protégé | enveloppes des DEK |
 | Réglages de l'appareil | fichier de réglages *[cible, `AD-21`]* | `app` | `<UserConfigDir>/inkwell/settings.json` | interface |
 | Rendus partagés (diagrammes) | fichiers ordinaires du projet : nœuds `blob` `.renders/<clé>.svg` et document `.renders/index.jsonl` (JSON Lines) *[cible, `AD-70`]* | `Repo`, `blob.Store` | comme tout fichier | aperçu, PDF |
 | Modèles de projet | bibliothèque locale de l'appareil *[cible, `AD-78`]* | `app` | `<UserDataDir>/inkwell/templates/` | galerie, vignettes (cache) |
@@ -1074,8 +1075,7 @@ seul secret pour tous les projets de la personne ; la déduplication est réelle
   ni fichier, ni trousseau, ni réglage, ni journal, ni rapport. Il n'existe en clair qu'**en
   mémoire**, deux fois : à sa **création** (le temps de dériver les clés et de montrer la phrase et le
   kit) et à une **restauration** (le temps de déchiffrer et de ré-envelopper). Ensuite il est
-  **effacé** (tampon `[]byte` écrasé de zéros dès la fin, jamais converti en `string` ; la webview ne
-  reçoit que les mots à afficher, effacés de son DOM à la fermeture du dialogue).
+  **effacé** (tampon `[]byte` écrasé de zéros dès la fin, jamais converti en `string` ; les mots montrés ou saisis dans la webview suivent SR-5).
 - **SR-2** Ce que l'appareil **garde**, à la place : la **clé publique** du destinataire de secours
   (non secrète) ; les sous-clés de sauvegarde (`name`, `obj`, `meta`, `locator`, `descriptor`, `kit`),
   **jamais en clair** : enveloppées comme la DEK (§6.10 EN-2, destinataire = la clé de l'appareil),
@@ -1089,6 +1089,34 @@ seul secret pour tous les projets de la personne ; la déduplication est réelle
   garanties (la mémoire de la webview est hors de notre contrôle, EN-7).
 - **SR-4** La phrase et le kit sont **gardés par la personne, hors de l'appareil** (papier, autre
   support) : c'est la seule voie complète de récupération sans un autre appareil.
+- **SR-5 Cérémonie de la phrase** (création et affichage, saisie d'une restauration ; sécurité,
+  *à auditer*). Les 24 mots **sont** le secret (BIP-39 est réversible) : toute représentation compte,
+  y compris la saisie, l'affichage et le transport vers la webview.
+  - **Ce que Go peut garantir** : ses propres tampons verrouillés (`mlock`, `VirtualLock`) quand le
+    système l'accorde, effacés après usage, jamais journalisés ; vidages sur plantage désactivés
+    pendant la cérémonie (`RLIMIT_CORE = 0`, `PR_SET_DUMPABLE = 0` sous Linux, exclusion du rapport
+    d'erreur de Windows).
+  - **Ce que Go ne peut pas garantir** : la mémoire du **processus de rendu** de la webview
+    (WebKitGTK, WKWebView, WebView2), où les mots vivent comme chaînes JavaScript immuables, non
+    effaçables et non verrouillables ; retirer les mots du DOM ne les efface pas de ce processus ; les
+    méthodes de saisie du système peuvent apprendre des mots.
+  - **Garantie minimale** : **aucune page contenant la phrase n'est écrite en clair sur un support
+    persistant**. Elle ne vient pas de `mlock` mais de l'**environnement** : avant toute cérémonie,
+    l'oracle de pagination (OV-1 à OV-3 : swap **et** hibernation) doit passer sur cet ordinateur. S'il
+    échoue ou ne peut être lu, la cérémonie est **refusée** : « Sur cet ordinateur, la mémoire peut
+    être copiée en clair sur le disque. Activez le chiffrement du disque (ou désactivez la mémoire
+    d'échange et la mise en veille prolongée), puis réessayez ; ou faites-le sur un autre appareil
+    dont le disque est chiffré. » Création et restauration suivent la même règle.
+  - Réductions supplémentaires (sans valeur de garantie) : champ sans saisie automatique, sans
+    correcteur, sans presse-papiers (copier et coller bloqués) ; fenêtre exclue des captures quand
+    le système le permet (SR-3) ; avertissement sur les méthodes de saisie qui apprennent ; mots
+    retirés du DOM et dialogue détruit à la fermeture ; ce qui reste en mémoire vive du processus de
+    rendu jusqu'à sa réutilisation est un résiduel **non persistant**, accepté (EN-7 : une session
+    ouverte compromise est hors périmètre).
+  - P-VAULT : pression mémoire pendant la cérémonie, échec du verrouillage, fermeture, plantage,
+    puis **inspection hors ligne** du swap, de l'image d'hibernation et du disque, avec recherche des
+    **mots** (listes anglaise et française) et des octets du secret ; ordinateur dont l'oracle échoue
+    → cérémonie refusée.
 
 **Objets** (ST-4). `nom = hex(BLAKE3 à clé(K_nom, clair))` (256 bits, 64 caractères) ; contenu
 = nonce de 24 octets aléatoire ‖ XChaCha20-Poly1305(K_obj, nonce, clair, AAD =
@@ -1265,8 +1293,12 @@ de l'étude (§7.2) :
   *Portable de Paul* ») ; la DEK est aussitôt **ré-enveloppée** pour le nouvel appareil sous une
   **nouvelle époque** (`keyring/<époque + 1>.age`, destinataires : la clé du nouvel appareil et le
   secours), puis le secret est effacé ; l'ancienne enveloppe reste lisible par le secours seulement ;
-  désormais une enveloppe dont le destinataire appareil est l'ancien `peer` est refusée. Vecteur :
-  « secours sur un appareil neuf, époque + 1, ancien appareil refusé ensuite ».
+  le nouvel appareil n'accepte plus d'enveloppe dont le destinataire appareil est l'ancien `peer`.
+  Cela **ne révoque rien** : si l'ancien appareil et sa clé existent encore (disque cloné, image
+  restaurée), il ouvre toujours l'ancienne enveloppe. Quand l'ancien appareil est perdu et non retiré,
+  la récupération **propose « Tout rechiffrer »** (nouvelle DEK, nouvelle époque, objets rechiffrés,
+  §9.4). Vecteurs : « secours sur un appareil neuf, époque + 1 » ; « récupération puis Tout
+  rechiffrer : l'ancienne enveloppe ne déchiffre plus aucun objet ».
 - **EN-3** Déverrouillage. **Toute voie locale qui restitue la DEK dépend d'un secret absent du
   disque lisible hors ligne** (règle VK, sécurité, *à auditer*) :
   - **VK-1** La clé privée X25519 de l'appareil (destinataire « appareil » d'EN-2) est gardée **soit**
@@ -1293,18 +1325,35 @@ de l'étude (§7.2) :
   | Cible | Support autorisé | Sinon |
   |---|---|---|
   | Linux | tmpfs privé (ADR 0033) **et** absence de swap en clair (aucun swap, zram, ou swap chiffré, vérifiés au déverrouillage) | disque chiffré par le système vérifié (LUKS sous le dossier) ; sinon refus |
-  | macOS | disque en mémoire créé sans pilote (`hdiutil attach -nomount ram://`, puis système de fichiers privé ; *à prouver* par P-VAULT) **et** swap chiffré (le disque en mémoire peut être paginé) | volume FileVault actif, vérifié (`fdesetup status`) ; sinon refus |
+  | macOS | disque en mémoire créé sans pilote (`hdiutil attach -nomount ram://`, puis système de fichiers privé ; *à prouver* par P-VAULT) **et** swap chiffré (le disque en mémoire peut être paginé) | volume du dossier chiffré, vérifié **sur ce volume** (OV-2) ; sinon refus |
   | Windows | aucun support mémoire sans pilote | volume BitLocker (ou chiffrement de l'appareil) actif, vérifié ; sinon refus |
 
-  **Oracles de « vérifié »** (au déverrouillage, et à chaque matérialisation) :
-  - Linux, swap : `/proc/swaps` vide, ou chaque entrée sur `zram*` ou sur un périphérique `dm-*`
-    dont `/sys/block/dm-*/dm/uuid` commence par `CRYPT-` ; disque chiffré : le périphérique qui porte
-    le dossier est, dans `lsblk -o TYPE`, sous un nœud de type `crypt`.
-  - macOS : `sysctl vm.swapusage` contient `(encrypted)` (exigé aussi pour le disque en mémoire) ;
-    FileVault : `fdesetup status` rend « FileVault is On ».
-  - Windows : `Win32_EncryptableVolume.ProtectionStatus = 1` (WMI) pour le volume du dossier.
-  - Un support annoncé chiffré qui ne l'est pas → **refus** (cas de P-VAULT) ; un oracle qui ne peut
-    pas être lu → refus (échec fermé).
+  **Oracles de « vérifié »**, **liés au volume** (règle OV, sécurité, *à auditer*). Chaque oracle
+  porte sur le **volume réel** de chaque chemin sensible : le dossier de travail, l'emplacement de la
+  clé X25519 quand VK-1 s'appuie sur le disque chiffré, et les cibles de **pagination** (swap,
+  image d'hibernation). Il est rejoué au déverrouillage, à chaque matérialisation et avant chaque
+  cérémonie de la phrase (SR-5) ; un montage qui change entre la vérification et l'usage est revérifié.
+  - **OV-1 Linux** (lecture de **sysfs**, jamais de la sortie d'un programme externe) : volume =
+    `stat(chemin).st_dev` → `/sys/dev/block/<maj>:<min>`, puis la chaîne des `slaves/` jusqu'à un
+    `dm-*` dont `dm/uuid` commence par `CRYPT-`. Swap : `/proc/swaps` vide, ou chaque entrée est soit
+    un `dm-*` `CRYPT-`, soit un `zram*` dont `/sys/block/zramX/backing_dev` vaut `none` ou désigne un
+    `dm-*` `CRYPT-` (zram peut écrire ses pages inactives sur un périphérique de repli). Hibernation :
+    `/sys/power/resume` vaut `0:0`, ou désigne un périphérique `CRYPT-`.
+  - **OV-2 macOS** : volume = `statfs(chemin).f_mntfromname` → identifiant APFS ; ce volume doit être
+    chiffré (`diskutil info -plist <volume>` : `FileVault` = vrai, ou `Encrypted` = vrai pour un volume
+    externe chiffré) ; le statut global `fdesetup status` ne suffit **pas**. Swap : `sysctl
+    vm.swapusage` contient `(encrypted)` (exigé aussi pour le disque en mémoire, qui peut être paginé) ;
+    hibernation : `pmset -g` `hibernatemode` = 0, ou image d'hibernation sur un volume vérifié.
+  - **OV-3 Windows** : volume = `GetVolumePathName(chemin)` → `Win32_EncryptableVolume` de ce volume,
+    `ProtectionStatus = 1` ; pagination : chaque fichier d'échange (`Win32_PageFileUsage`) sur un
+    volume vérifié, ou chiffrement du fichier d'échange actif ; hibernation désactivée, ou fichier
+    d'hibernation sur le volume système vérifié.
+  - **OV-4 Placement** : le dossier de travail et la clé X25519 (mode « disque chiffré ») sont
+    **toujours** placés sous le dossier de la personne, sur un volume vérifié ; un autre volume →
+    refus. Témoins de P-VAULT : « démarrage chiffré, destination externe en clair » → refus ;
+    changement de montage → refus ; état inconnu → refus.
+  - Un support annoncé chiffré qui ne l'est pas → **refus** ; un oracle qui ne peut pas être lu →
+    refus (échec fermé).
 
   « Refus » veut dire : pour un projet **protégé** sur cette machine, l'aperçu, l'export et le
   service de langage des fichiers fermés sont **indisponibles**, avec le message « Pour compiler un
@@ -1589,6 +1638,9 @@ Règles d'application :
 | Clé | Création | Stockage | Usage | Rotation, perte |
 |---|---|---|---|---|
 | Clé Ed25519 de l'appareil | `crypto/rand` au premier lancement | `device.key` 0600, écriture atomique, revalidée (ordre premier) au chargement | identité libp2p, signatures à domaine séparé (`inkwell/<domaine>/v1\0`) | pas de rotation en v1 : la clé **est** l'appareil. Perte ou vol : un admin retire l'appareil ; la personne ajoute un nouvel appareil à son groupe. Perte du seul appareil admin sans second admin : nouveau projet (ADR 0017) |
+| Clé X25519 de chiffrement de l'appareil *[cible]* | `crypto/rand`, à la première protection d'un projet ; liée à la clé Ed25519 par une signature `inkwell-ext:enc-key:1` | **VK-1** : trousseau du système, **ou** enveloppée sous un mot de passe (Argon2id), **ou** sur un disque chiffré vérifié (oracles d'EN-4, liés au volume) ; jamais un fichier nu pour un projet protégé | destinataire « appareil » des enveloppes de DEK (EN-2) | perte : récupération par le secours (EN-2) ; appareil compromis : « Tout rechiffrer » |
+| DEK d'un projet *[cible]* | `crypto/rand`, par projet et par appareil | charge utile d'un fichier age `keyring/<époque>.age` (EN-2) | chiffrement des objets du coffre | « Tout rechiffrer » (nouvelle DEK, nouvelle époque) |
+| Secret de secours *[cible]* | `crypto/rand`, à l'activation de la sauvegarde ou de la protection | **jamais sur l'appareil** (SR-1) ; phrase et kit gardés par la personne | clés de sauvegarde, destinataire de secours (HKDF) | en cas de doute : nouveau secret, nouvelles enveloppes, nouvelle phrase |
 | Clés de session | éphémères, TLS 1.3 / Noise | mémoire | chiffrement d'une connexion | à chaque connexion (confidentialité persistante) |
 | Secret du ticket | `crypto/rand` | mémoire de l'hôte | admission par le salon | 15 min, usage unique |
 | Clé PAKE | SPAKE2 (wormhole-william) | mémoire | chiffrer le texte d'invitation | une par code |
@@ -1596,13 +1648,14 @@ Règles d'application :
 
 Il n'existe **aucune** clé symétrique de groupe : la « rotation de la clé de session » de
 l'ADR 0005 (point 5) n'a pas d'objet ; un retrait prend effet par le filtre de connexion et
-la fin de la couverture (`AD-09`). Le trousseau du système (Secret Service, Trousseau de macOS, Gestionnaire d'identifiants de
-Windows) garde, quand il est disponible, le **secret de secours** et l'enveloppe locale de la DEK
-(§6.10 EN-3) ; la bibliothèque est choisie sans cgo et auditée avant adoption (ADR 0008). Clés
-nouvelles *[cible]* : **DEK** du projet (256 bits, par projet et par appareil, charge utile d'un fichier age, §6.10 EN-2) ; **clé
-X25519** de chiffrement de l'appareil, séparée de la clé de signature et liée à elle par une
-signature ; **secret de secours** de la personne (phrase de 24 mots, kit de secours, §6.7 ST-8) ;
-rotation : « Tout rechiffrer » sur demande (appareil compromis). La clé de l'appareil signe aussi, hors protocole, sous des préfixes `inkwell-ext:` disjoints des domaines du protocole (§15.19) ; liste **fermée** : `plugin-package` (paquets, ABI-7), `backup-head` (têtes de sauvegarde, ST-5), `export` (manifeste d'export, EN-6), `enc-key` (liaison de la clé X25519, EN-2).
+la fin de la couverture (`AD-09`). Le trousseau du système (Secret Service, Trousseau de macOS,
+Gestionnaire d'identifiants de Windows) garde, quand il est disponible, la **clé privée X25519 de
+l'appareil** (§6.10 VK-1) ; le **secret de secours n'y est jamais** (§6.7 SR-1) ; l'enveloppe de la
+DEK est l'objet `keyring/<époque>.age` du projet, pas une entrée du trousseau ; la bibliothèque est
+choisie sans cgo et auditée avant adoption (ADR 0008). La clé de l'appareil signe aussi, hors
+protocole, sous des préfixes `inkwell-ext:` disjoints des domaines du protocole (§15.19) ; liste
+**fermée** : `plugin-package` (paquets, ABI-7), `backup-head` (têtes de sauvegarde, ST-5), `export`
+(manifeste d'export, EN-6), `enc-key` (liaison de la clé X25519, EN-2).
 
 ### 9.5 Enfermement des sidecars (F5)
 
@@ -1613,7 +1666,7 @@ rotation : « Tout rechiffrer » sur demande (appareil compromis). La clé de l'
 | Pas de réseau : espace de noms réseau et utilisateur privé, repli journalisé sur les proxys refusés (`Engine.NetworkMode`) ; sur Ubuntu 24.04, le profil AppArmor `inkwell` des paquets `.deb` permet `userns` et supprime ce repli (H-6) | oui | Seatbelt `(deny network*)` ; AppContainer sans capacité réseau |
 | `--root` sur le projet ; liens symboliques sortants refusés avant lancement | oui | oui |
 | Lecture limitée au dossier de travail privé, au binaire et aux paquets fournis (Landlock) | *[cible, `AD-28`]* | Seatbelt `file-read*` limité ; ACL du dossier de travail pour l'AppContainer |
-| Sortie : 256 Mio par compilation (`typst.DefaultMaxOutput`), 512 Mio cumulés pour les compilations simultanées (admission par le parent) | oui | oui (objet de tâche, rlimit) |
+| Sortie : 256 Mio par compilation (`typst.DefaultMaxOutput`), 512 Mio cumulés pour les compilations simultanées (admission par le parent) ; **la borne noyau** est la ligne suivante, `MaxOutput` n'étant aujourd'hui qu'une vérification *a posteriori* de la taille produite (`engine.go`) | oui | macOS : `RLIMIT_FSIZE` ; Windows : un objet de tâche ne borne pas la taille des fichiers écrits → dossier de travail sur un volume à quota, ou lancement borné refusé (§9.11, *à prouver*) |
 | Sortie bornée par le noyau : tmpfs privé de taille fixe dans un espace de noms de montage, fichiers déclarés seuls inscriptibles (Landlock), `RLIMIT_FSIZE` ; repli Landlock ABI ≥ 3 à parts fixes ; sinon échec fermé (ADR 0033) | oui | lancement borné refusé |
 | Mémoire (`RLIMIT_AS`), délai (`context.WithTimeout`, 30 s pour un export), CPU (compilations simultanées bornées) | oui | macOS : rlimits et surveillance ; Windows : objet de tâche |
 | Mort avec le parent : `Pdeathsig` (fil verrouillé), groupe de processus | oui | `kqueue` `NOTE_EXIT` ; objet de tâche « tuer à la fermeture » |
@@ -1671,7 +1724,7 @@ GTK ni de WebKitGTK mappés). Les autres plates-formes : §9.11.
 | H-1 | **Landlock** (défense en profondeur) : droits gérés = tous ceux que l'ABI sondée connaît (masque calculé : ABI 1 sans `REFER` ni `TRUNCATE`, ABI 2 avec `REFER`, ABI 3 avec `TRUNCATE`, ABI ≥ 4 réseau TCP refusé aussi) ; une seule règle : `execute` et `read_file` sur le binaire hôte (nécessaire à l'`execve` de H-0) ; `TSYNC` en plus quand l'ABI ≥ 8 | ABI absente : continuer seulement si H-5 tient, état montré dans « Détails techniques » |
 | H-2 | Modules par `memfd` scellé, hachage vérifié **par le parent** avant envoi ; l'hôte n'ouvre aucun chemin | — |
 | H-3 | **Aucun cache de compilation sur disque** : compilation en mémoire pour la vie de l'hôte ; coût mesuré par P-PLUG-BENCH | — |
-| H-4 | **Un hôte par greffon actif** (autorité exacte, §7.3 IPC-3), créé **paresseusement** à la première activation, jamais au démarrage ; **≤ 6 hôtes actifs** (au-delà : le plus ancien inactif est arrêté — jamais un hôte qui a un mandat ou un appel en vol ; s'il n'y en a pas, refus d'activation avec le message « Trop d'extensions actives ») ; un greffon de projet n'est jamais dans le même hôte qu'un autre | — |
+| H-4 | **Un hôte par greffon actif** (autorité exacte, §7.3 IPC-3), créé **paresseusement** à la première activation, **jamais avant la première peinture** ; après elle, seuls les greffons épinglés ou actifs au dernier usage peuvent être **préchauffés**, et seulement si P-PLUG-BENCH a engagé le repli (a) du §0.5, à priorité basse, après « dernier projet modifiable » (§12.5) ; **≤ 6 hôtes actifs** (au-delà : le plus ancien inactif est arrêté — jamais un hôte qui a un mandat ou un appel en vol ; s'il n'y en a pas, refus d'activation avec le message « Trop d'extensions actives ») ; un greffon de projet n'est jamais dans le même hôte qu'un autre | — |
 | H-5 | **seccomp**, barrière **principale** des fichiers et du réseau : (a) vérification d'architecture (`AUDIT_ARCH_X86_64`, `AUDIT_ARCH_AARCH64` ; ABI x32 refusée) ; (b) **refusés** (`EPERM`) : `socket`, `socketpair`, `connect`, `bind`, `listen`, `accept*`, toutes les ouvertures et créations de chemins (`open`, `openat`, `openat2`, `creat`, `mkdir*`, `mknod*`, `unlink*`, `rename*`, `link*`, `symlink*`, `truncate`, `chmod*`, `chown*`), `execve`, `execveat`, `ptrace`, `process_vm_*`, `memfd_create`, `bpf`, `mount`, `unshare`, `setns`, `keyctl`, `io_uring_*` ; (c) `clone` permis **seulement** avec `CLONE_THREAD` et sans aucun drapeau d'espace de noms ; `clone3` refusé avec `ENOSYS` (refus préventif : le runtime Go 1.27 n'appelle que `clone`) ; (d) **liste blanche normative** dans `internal/plugin/host/seccomp_linux.go`, **dérivée** en CI en lançant l'hôte sous `strace -f` sur un banc complet (compilation WebAssembly, ramasse-miettes, croissance des fils, délais, arrêt), comme le profil par défaut de Docker ; tout appel non listé → `EPERM` journalisé | échec fermé |
 | H-6 | Réseau : refusé par H-5 (aucune socket ne peut être créée ; la seule héritée est celle du parent) ; espace de noms réseau en plus quand le système le permet. Sur Ubuntu 24.04 (`kernel.apparmor_restrict_unprivileged_userns=1`), les paquets `.deb` installent un profil AppArmor `inkwell` qui permet `userns` (il sert aussi `typst` et `tinymist`, §9.5) | H-5 suffit |
 | H-7 | Mémoire : chaque module plafonné (`WithMemoryLimitPages`, 64 Mio par défaut, 256 Mio au plus) ; `RLIMIT_AS` fixé après mesure (P-PLUG-BENCH : VSZ réel du compilateur) ; cgroup v2 par hôte (`memory.max`, `cpu.max`) quand la session `systemd --user` le délègue ; `SetMemoryLimit` n'est qu'une cible du ramasse-miettes, pas un plafond ; le **parent** mesure RSS et CPU (`/proc/<pid>/stat`) et arrête un hôte au-delà de sa limite (§11.1) | rlimits et surveillance du parent |
@@ -1912,7 +1965,7 @@ référence sur le matériel de CI (amd64 et arm64), puis tenues.
 | relais d'un message dans Go (pont → session), ≤ 64 Kio | ≤ 50 µs, **0 allocation** | `BenchmarkRelay` | une goroutine par session, dépôts non bloquants |
 | hachage et vérification de blob | BLAKE3, blob de 64 Mio, cache chaud : ≥ 500 Mo/s par cœur sur amd64 (AVX2), ≥ 300 Mo/s sur arm64, à confirmer par la mesure de référence ; vérification Bao en flux | `BenchmarkPut/Read/Fetch` | `errgroup.SetLimit(GOMAXPROCS)` sur les groupes de 16 Kio |
 | écriture d'un incrément | ≤ 2 ms hors `fsync` ; `fsync` groupé ≤ 500 ms (D-8) | `BenchmarkWriteAtomic`, LazyFS | un travailleur par voie (≤ W+2) |
-| démarrage | fenêtre peinte ≤ 1 s ; dernier projet modifiable ≤ 1,5 s ; registre des extensions ≤ 10 ms (50 manifestes) | `PERF-START`, `BenchmarkRegistryBuild` | travail lent après la peinture |
+| démarrage | fenêtre peinte ≤ 1 s ; dernier projet modifiable ≤ 1,5 s ; registre des extensions ≤ 10 ms (50 manifestes) ; préchauffage des greffons (H-4) seulement **après** « dernier projet modifiable », à priorité basse | `PERF-START` mesuré **avec six greffons épinglés**, `BenchmarkRegistryBuild` | travail lent après la peinture |
 | aperçu | ≤ 1 s complet (20 pages) ; ≤ 300 ms incrémental (`AD-26`) | `PERF-PREVIEW` | une compilation active, la précédente annulée |
 | service de langage | ≤ 100 ms (complétion, signature, survol) | `PERF-LSP` | réponses périmées jetées |
 | recherche dans le projet (10 000 fichiers) | premiers résultats ≤ 100 ms, fin ≤ 500 ms | `PERF-SEARCH` | `errgroup.SetLimit` sur les fichiers, résultats en flux |
@@ -3140,6 +3193,7 @@ proposition de bout en bout → Graphviz jusqu'au PDF → reste.
 | projet en clair sur le disque (N37) | §6.10 | `AD-91` |
 | budgets et bancs partiels (N38) | §12.5 | `AD-93` |
 | versions dans `meta.versions` du document racine seulement, aucune vue « voyager dans le temps », aucune projection Git (N39) | §6.11 | `AD-13`, `AD-92` |
+| `MaxOutput` de `typst` est vérifié **après** la compilation sur la taille produite (`internal/typst/engine.go`), pas une borne ; seule la borne noyau (tmpfs, `RLIMIT_FSIZE`, ADR 0033) vaut preuve | §9.5 | P-SANDBOX |
 | variantes de document présentes (`history/graph.ts`) ; « intégrer » fait aujourd'hui `A.merge` (`versions.ts:234–271`), alors que la cible est une différence appliquée (HI-6) ; vocabulaire « fusion » dans l'interface (N41) | §6.11 HI-6 | `AD-96` |
 | lecteurs : la conception permet leurs commentaires, la couverture (ADR 0018) les refuse | mécanisme dédié | `AD-14` |
 

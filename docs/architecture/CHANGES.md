@@ -1,5 +1,27 @@
 # Changements de l'architecture
 
+## 1.0.0-brouillon.7 — révision 6 (2026-11-01)
+
+Réponse au tour 5 : [Fable](reviews/09-fable-r5.md) **ACCEPT** (2 majeurs de texte, 5 mineurs) ;
+[Codex](reviews/10-codex-r5.md) **NOT ACCEPTED** (2 bloquants, 1 majeur). Aucune modification de
+`docs/protocol/` ni de `docs/design/`.
+
+| Constat | Changement |
+|---|---|
+| Codex R5-B1 la phrase peut être paginée en clair ; Fable R5-m2 la phrase traverse la webview sans vérifier le swap | §6.7 **SR-5 Cérémonie de la phrase** : ce que Go peut garantir (ses tampons verrouillés et effacés, vidages désactivés) et ce qu'il **ne peut pas** (processus de rendu de la webview : chaînes immuables, non effaçables, non verrouillables ; méthodes de saisie) ; **garantie minimale** = aucune page de la phrase écrite en clair sur un support persistant, obtenue par l'**oracle de pagination** (swap **et** hibernation) joué avant toute création ou restauration ; s'il échoue : **cérémonie refusée** avec la marche à suivre ; réductions sans valeur de garantie (pas de presse-papiers, de correcteur, de saisie automatique ; captures exclues si possible) ; P-VAULT : recherche des **mots** sur le swap et l'image d'hibernation |
+| Codex R5-B2 l'oracle FileVault n'est pas lié au volume | §6.10 **OV-1 à OV-4** : chaque chemin sensible (dossier de travail, clé X25519 en mode disque, swap, hibernation) résolu jusqu'à son **volume réel** et vérifié sur ce volume — sysfs sous Linux, `diskutil info` du volume APFS sous macOS (le statut global ne suffit pas), `Win32_EncryptableVolume` du volume sous Windows ; placement forcé sous le dossier de la personne ; témoins « démarrage chiffré, destination externe en clair », changement de montage, état inconnu → refus |
+| Codex R5-M1, Fable R5-M1 §9.4 garde le secret au trousseau | §9.4 : le trousseau garde la **clé X25519 de l'appareil** (VK-1), **jamais** le secret de secours ; l'enveloppe de DEK est l'objet `keyring/<époque>.age` |
+| Fable R5-M2 « jamais au démarrage » interdit le préchauffage | H-4 : « jamais **avant la première peinture** », préchauffage après « dernier projet modifiable », priorité basse, seulement si le repli (a) est engagé ; §12.5 : `PERF-START` mesuré avec six greffons épinglés |
+| Fable R5-m1 `zram` sans `backing_dev` | OV-1 : `zram` accepté seulement sans périphérique de repli ou avec un repli `CRYPT-` ; sysfs au lieu de `lsblk` |
+| Fable R5-m3 l'ancien appareil n'est pas révoqué | EN-2 : dit que rien n'est révoqué ; la récupération **propose « Tout rechiffrer »** ; vecteur |
+| Fable R5-m4 §9.5 surclame l'objet de tâche | §9.5 : un objet de tâche ne borne pas la taille des fichiers ; Windows = volume à quota ou refus ; `MaxOutput` est une vérification *a posteriori* (écart au §16) |
+| Fable R5-m5 clé X25519 absente des tables | lignes « Clé X25519 », « DEK », « Secret de secours » au §9.4 ; ligne « Clé X25519 » au §6.1 |
+
+### Désaccords à débattre
+
+Aucun.
+
+
 ## 1.0.0-brouillon.6 — révision 5 (2026-11-01)
 
 Réponse au tour 4 : [Fable](reviews/07-fable-r4.md) **ACCEPT** (2 majeurs de texte, 5 mineurs) ;
