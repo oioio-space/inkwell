@@ -1,5 +1,8 @@
 # Le design d'Inkwell, en clair
 
+**Statut : acceptée (rév. 7)** par les deux relecteurs, le 2026-11-01. Les choix qui restent à
+l'utilisatrice sont dans [`decisions-utilisatrice.md`](decisions-utilisatrice.md).
+
 Ce dossier décrit à quoi ressemble Inkwell et comment il se comporte. Il s'adresse à toute
 personne qui touche à l'interface : développement, revue, tests.
 
@@ -10,6 +13,7 @@ personne qui touche à l'interface : développement, revue, tests.
 | [`inventory.md`](inventory.md) | L'interface actuelle, relevée dans le code, et ses écarts avec la règle, dans l'ordre où les corriger. |
 | [`tokens.json`](tokens.json) | Les jetons de design, lisibles par une machine. |
 | [`coverage.md`](coverage.md) | La grille de contrôle : Nielsen, WCAG 2.2 A et AA, motifs APG, GNOME HIG et libadwaita, et tous les domaines de l'expérience. |
+| [`decisions-utilisatrice.md`](decisions-utilisatrice.md) | Les décisions qui restent à l'utilisatrice, en clair. |
 | [`CHANGES.md`](CHANGES.md) | Ce que la révision 2 a changé, constat par constat. |
 | [`reviews/`](reviews/) | Les revues archivées. |
 

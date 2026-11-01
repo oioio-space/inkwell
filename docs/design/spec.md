@@ -1,6 +1,8 @@
 # Système de design d'Inkwell — spécification (N17)
 
-- **Statut :** proposition, **révision 7** (2026-11-01). Elle ferme les revues n°6 ; la révision 6
+- **Statut :** **acceptée (rév. 7)** par Fable et Codex (revues n°7), le 2026-11-01. Les décisions
+  restantes de l'utilisatrice sont dans [`decisions-utilisatrice.md`](decisions-utilisatrice.md).
+- Révision 7 : Elle ferme les revues n°6 ; la révision 6
   fermait les revues n°5.
 - Révision 5 :
   - Elle répond aux revues n°1 à n°3 de Codex et de Fable ([`reviews/`](reviews/)), applique les
@@ -1109,10 +1111,9 @@ G-51).
     modifié ».
 - **Les versions nommées** se détachent :
   - par une **forme**, un losange plein (et non par la seule couleur `--version-marker`) ;
-  - (le jeton `--variant-line` est **retiré** : la voie d'une variante est en `--fg-dim`, Fable m4) ;
   - par leur nom et leur note.
-- **Les variantes** sont **une voie parallèle**, signalée par un filet `--fg-dim` et **le nom de
-  la variante** (Fable m4 : la couleur ne distingue pas variante, IA et extension, qui se
+- **Les variantes** sont **une voie parallèle**, signalée par un filet `--fg-dim` (le jeton
+  `--variant-line` est retiré) et **le nom de la variante** (Fable m4 : la couleur ne distingue pas variante, IA et extension, qui se
   ressemblent ; le violet reste réservé à l'IA).
 - **Filtres** : personne, période, fichier, section ; un groupe de bascules « Tout · Mes
   modifications · Versions nommées ».
@@ -3252,7 +3253,7 @@ et la personne peut lui en donner une (Préférences › Écriture › Raccourci
   raccourci.
 - **Aucun raccourci de la liste réservée** du système (ci-dessous).
 - Les **touches de fonction** sous macOS demandent souvent Fn, et certaines sont prises (F11 :
-  Afficher le bureau). Chaque commande à touche de fonction a donc une liaison macOS à lettre.
+  Afficher le bureau). Chaque commande à touche de fonction a donc une liaison macOS à lettre, **sauf Zones** (⌘F6 / ⇧⌘F6 : Fn requis sur un portable, comme F6 dans VS Code et les navigateurs ; aucune lettre libre ne convient).
 
 | Action | Linux (GNOME) | macOS | Windows | État |
 |---|---|---|---|---|
@@ -3314,8 +3315,7 @@ la table de **chaque** système.
 
 | Linux (GNOME, GTK 4, IBus, WebKitGTK) [S2] [S25] | macOS [S30] | Windows [S31] |
 |---|---|---|
-| Super+… ; Alt+Tab ; Alt+F2 ; Alt+F4 ; Alt+F7 ; Alt+F8 ; Alt+F10 ; Alt+Espace ; Ctrl+Alt+Suppr ; Ctrl+Alt+T (Ubuntu) ; Ctrl+Alt+flèches ; Impr, Maj+Impr, Alt+Impr | ⌘H, **⌥⌘H** ; ⌘M, ⌥⌘M ; ⌘Q ; ⌘Tab ; ⌘` ; ⌘Espace, ⌥⌘Espace ; **⌃Espace, ⌃⌥Espace** (source de saisie) ; ⌃⌘Espace (émojis) ; ⌥⌘Échap ; ⇧⌘3, ⇧⌘4, ⇧⌘5 ; ⌃⌘Q ; ⇧⌘Q, ⌥⇧⌘Q ; ⇧⌘? (aide du système) ; ⌃↑, ⌃↓, ⌃←, ⌃→ (Mission Control) ; ⌥⌘8, ⌥⌘= et ⌥⌘- (zoom d'accessibilité) ; ⌘F5 (VoiceOver) ; F11 ; ⌃F1 à ⌃F8 (navigation au
-clavier du système) ; ⌃⌘D (définition du mot) ; ⌥⌘T (barre d'outils des applications de texte) | **toute combinaison Ctrl+Alt** (AltGr) ; **Alt+lettre ou chiffre** (touches d'accès) ; Win+… (dont Win+. émojis, Win+Espace saisie) ; Alt+Tab ; Alt+F4 ; Alt+Espace ; Ctrl+Échap ; Ctrl+Maj+Échap ; Ctrl+Alt+Suppr ; Maj+Alt (langue de saisie) |
+| Super+… ; Alt+Tab ; Alt+F2 ; Alt+F4 ; Alt+F7 ; Alt+F8 ; Alt+F10 ; Alt+Espace ; Ctrl+Alt+Suppr ; Ctrl+Alt+T (Ubuntu) ; Ctrl+Alt+flèches ; Impr, Maj+Impr, Alt+Impr | ⌘H, **⌥⌘H** ; ⌘M, ⌥⌘M ; ⌘Q ; ⌘Tab ; ⌘` ; ⌘Espace, ⌥⌘Espace ; **⌃Espace, ⌃⌥Espace** (source de saisie) ; ⌃⌘Espace (émojis) ; ⌥⌘Échap ; ⇧⌘3, ⇧⌘4, ⇧⌘5 ; ⌃⌘Q ; ⇧⌘Q, ⌥⇧⌘Q ; ⇧⌘? (aide du système) ; ⌃↑, ⌃↓, ⌃←, ⌃→ (Mission Control) ; ⌥⌘8, ⌥⌘= et ⌥⌘- (zoom d'accessibilité) ; ⌘F5 (VoiceOver) ; F11 ; ⌃F1 à ⌃F8 (navigation au clavier du système) ; ⌃⌘D (définition du mot) ; ⌥⌘T (barre d'outils des applications de texte) | **toute combinaison Ctrl+Alt** (AltGr) ; **Alt+lettre ou chiffre** (touches d'accès) ; Win+… (dont Win+. émojis, Win+Espace saisie) ; Alt+Tab ; Alt+F4 ; Alt+Espace ; Ctrl+Échap ; Ctrl+Maj+Échap ; Ctrl+Alt+Suppr ; Maj+Alt (langue de saisie) |
 | Ctrl+. et Ctrl+; (émojis de GTK 4) ; Ctrl+Maj+U (saisie Unicode) ; Ctrl+Maj+I (inspecteur web, s'il est activé) ; **Ctrl+Espace à risque** (IBus) | | Ctrl+Espace **à risque** (méthode de saisie chinoise) |
 
 **K-6.** Le registre DOIT refuser, par un test **sur chacun des trois systèmes** :
@@ -3451,11 +3451,11 @@ Une règle sans assertion n'est pas finie.
 | §4.29 à §4.35 | consentement, états du gestionnaire, épinglage par la personne seulement, attribution par point, mode sans extensions, repère du mode développeur, repli d'une extension de projet, erreur de diagramme en ligne ; densité d'attribution à 360px | `frontend/e2e/extensions.spec.ts` + tests d'API de l'architecture (`EXT-ND1` à `ND8`) | **à écrire** |
 | TH-D2 (rév. 7) | texte secondaire et anneau sur les états : `--hover-bg` `#acacac` **refusé** (4,45:1, 2,67:1) ; `#bbbbbb` **accepté** (4,81:1, 3,16:1) | `theme/contract.test.ts` | **à écrire** |
 | TH-D2 (rév. 4) | états interactifs (`--hover-bg` noir refusé), planchers `hcMin` (thème « papier » accepté, `--fg-dim` HC à 55 % refusé), `hcOnly` (`--border` HC < 3:1 refusé), contrat `^2.0` refusé, valeur hors bornes refusée | `theme/contract.test.ts` | **à écrire** |
-| K-6, K-7 (rév. 6) | **pour chacun des trois systèmes** : aucun doublon, aucun raccourci réservé, aucune combinaison Ctrl+Alt, aucun Alt+alphanumérique sous Windows ; sous WebKitGTK avec IBus actif, Ctrl+Espace atteint la page, sinon Alt+/ ; sous macOS, ⌥Échap | `commands.test.ts` (une table par système), `frontend/e2e/keys.spec.ts` (trois systèmes) | **à écrire** |
+| K-6, K-7 (rév. 6) | **pour chacun des trois systèmes** : aucun doublon, aucun raccourci réservé **sauf une commande déléguée au système, décrite sans être capturée** (Aide et Quitter sous macOS), aucune combinaison Ctrl+Alt, aucun Alt+alphanumérique sous Windows ; sous WebKitGTK avec IBus actif, Ctrl+Espace atteint la page, sinon Alt+/ ; sous macOS, ⌥Échap | `commands.test.ts` (une table par système), `frontend/e2e/keys.spec.ts` (trois systèmes) | **à écrire** |
 | §4.34 | chaque diagramme a une description, présente dans `image(alt:)`, dans l'export HTML et dans la Vue lecture ; l'absence est comptée en avertissement | `e2e/diagrams.spec.ts` | **à écrire** |
 | §4.36, §4.37 (rév. 4) | carte au clavier (entrer, Tab, Échap) ; correction périmée grisée et jamais appliquée ; diagnostic sans position ; service indisponible sans indicateur permanent | `editor/diagnostics.test.ts`, `editor/assist.test.ts` | **à écrire** |
 | §4.38 | orthographe en pointillé, jamais comptée ; suggestions de style seulement sur « Relire » ; dictionnaire du projet partagé entre deux instances ; typographie à la frappe annulable en un pas ; aucun score affiché | `e2e/writing.spec.ts` (deux instances) | **à écrire** |
-| §4.39 | rien n'est envoyé sans profil ; dialogue d'envoi avec les passages d'autrui marqués ; contexte « autrui » → outils retirés (test de propriété IA-5) ; proposition par morceau, une modification « via IA », Ctrl+Z ; rien ne part chez les collègues avant « Accepter » ; repère des connexions MCP et agents | `e2e/ai.spec.ts` (fournisseur factice compatible OpenAI), `ext/ai/*.test.ts` | **à écrire** |
+| §4.39 | rien n'est envoyé sans profil ; dialogue d'envoi avec les passages d'autrui marqués ; contexte « autrui » → outils retirés (test de propriété IA-5) ; proposition par morceau, une modification « via IA », Ctrl+Z ; rien ne part chez les collègues avant « Appliquer » ; « Accepter » et « Refuser » ne publient rien ; repère des connexions MCP et agents | `e2e/ai.spec.ts` (fournisseur factice compatible OpenAI), `ext/ai/*.test.ts` | **à écrire** |
 | §4.40 | table APG *Grid* triable ; annonce seulement sur changement d'état ; extension lente de test → toast « Voir » unique, aucun dialogue ; service relançable, jamais désactivable | `e2e/resources.spec.ts` | **à écrire** |
 | §5.19 (rév. 4) | dialogue unique ; annuler ne crée rien ; vignette de repli ; perte du rôle Écriture → « Enregistrer dans Mes modèles » | `e2e/templates.spec.ts` | **à écrire** |
 | §4.22, §4.41 (rév. 6) | frise : focus itinérant, vue du passé après 300ms de calme, barre d'actions, comparaison par deux sélecteurs, `aria-valuetext` du curseur ; proposition : entrer, sortir (Échap), touches inactives dans un champ, choix locaux puis **une** modification à « Appliquer », choix gardés après recalcul ; variante du projet entier, repère des fichiers modifiés | `e2e/versions.spec.ts`, `ui/proposal.test.ts` | **à écrire** |

@@ -350,3 +350,20 @@ script.
 | m6 | ⌃⌘S n'est pas la convention de la barre latérale | panneau de gauche **⌥⌘S** (convention du Finder) ; Enregistrer une version **⌃⌘S** ; ⌃⌘D, ⌥⌘T et ⌃F1 à ⌃F8 ajoutés aux réservés macOS ; Zones sous macOS sur **⌘F6** (⌃F6 est réservé) |
 | m7 | Sort de la variante après intégration | **close**, visible dans la frise (filtre « variantes intégrées ») ; on peut en repartir (§4.41) |
 | m9 | Infobulle d'un bouton `disabled` inatteignable | `aria-disabled="true"` et focalisable : actions de la frise (§4.22), « Appliquer » (§4.41) |
+
+---
+
+# Spécification **acceptée (rév. 7)**
+
+Fable n°7 ([11-fable-r7.md](reviews/11-fable-r7.md)) et Codex n°7 ([12-codex-r7.md](reviews/12-codex-r7.md))
+acceptent la révision 7. Les six mineurs documentaires sont corrigés :
+
+| # | Correction |
+|---|---|
+| Fable m1, Codex R7-m1 | §10, ligne §4.39 : « rien ne part chez les collègues avant « Appliquer » ; « Accepter » et « Refuser » ne publient rien » |
+| Fable m2 | §10, ligne K-6 et K-7 : exception des commandes déléguées au système (Aide et Quitter sous macOS) |
+| Fable m3 | K-7 : exception écrite pour Zones (⌘F6, Fn requis sur un portable) |
+| Fable m4 | la note sur `--variant-line` déplacée dans le point « Les variantes » de §4.22 |
+| Codex R7-m2 | rangée des réservations macOS recollée sur une seule ligne physique |
+
+Les décisions qui reviennent à l'utilisatrice sont dans [`decisions-utilisatrice.md`](decisions-utilisatrice.md).
