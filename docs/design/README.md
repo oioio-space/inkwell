@@ -100,7 +100,8 @@ sans apprendre, et que l'application suit le thème clair ou sombre du système.
     côtés côte à côte.
 - **Protéger, sauvegarder, transmettre**, quatre mots distincts (version, sauvegarde, archive,
   modèle) :
-  - protection cochée par défaut pour un projet partagé ;
+  - protection **au choix**, non cochée par défaut, même pour un projet partagé (décision de
+    l'utilisatrice) ;
   - phrase et kit de secours vérifiés ;
   - restauration à côté, sans rien écraser.
 - **Ne pas synchroniser** : un geste et un nuage barré ; la personne, ou l'admin pour tout le

@@ -84,6 +84,7 @@ Rien n'est « fait » sans tests verts et sans une passe `ux-walkthrough` réuss
 | N39 | 2026-11-01 | Historique « à la Git » (versions, comparaison, restauration…) ; application autoporteuse : jamais besoin de Git (ni d'aucun autre outil) installé sur la machine — tout est embarqué ; pour la personne, aucune connaissance de Git : revenir en arrière et en avant librement, sans rien perdre ni apprendre de notion, extrêmement clair et convivial (zéro jargon Git dans l'interface) | `docs/architecture/`, `docs/design/` | 🔨 |
 | N40 | 2026-11-01 | Aucune intégration native de Word (ni import ni export DOCX) : c'est un sujet de plugin si quelqu'un le souhaite. Même règle appliquée par défaut aux autres formats bureautiques (ODT, Google Docs), sauf avis contraire | `docs/architecture/`, `docs/design/` | ✅ décidé |
 | N41 | 2026-11-01 | Bifurcations (forks) et fusions (merges) de versions ou de projets, très claires pour la personne (sans jargon Git) | `docs/architecture/`, `docs/design/` | 🔨 |
+| N42 | 2026-11-01 | Application entièrement autoporteuse (self-contained) : le chiffrement et toutes les fonctionnalités ne dépendent d'aucun autre logiciel installé ; aucun programme externe lancé à l'exécution (seuls nos sidecars embarqués et vérifiés), uniquement les API du système | `docs/architecture/`, code (`internal/sidecar` exécute aujourd'hui `setpriv`, `prlimit`, `unshare`, `mount`) | 🔨 |
 
 ## Interface et édition
 

@@ -367,3 +367,17 @@ acceptent la révision 7. Les six mineurs documentaires sont corrigés :
 | Codex R7-m2 | rangée des réservations macOS recollée sur une seule ligne physique |
 
 Les décisions qui reviennent à l'utilisatrice sont dans [`decisions-utilisatrice.md`](decisions-utilisatrice.md).
+
+---
+
+# Décisions utilisatrice (2026-11-01)
+
+Les quatre premières décisions de [`decisions-utilisatrice.md`](decisions-utilisatrice.md) sont
+prises. Seule la protection change la spécification.
+
+| Décision | Effet |
+|---|---|
+| **Protection : au choix, non cochée par défaut**, même pour un projet partagé (contre la recommandation des relecteurs) | §4.43 point 2 : case décochée partout, simplement **proposée** au partage (§5.3) et à Rejoindre (§5.4) ; la phrase de secours n'est créée qu'à la **première** protection ; le bandeau de secours n'apparaît que chez qui a protégé un projet ; §10, §11 (Q23), `coverage.md`, `inventory.md` (G-92) et `README.md` alignés |
+| IA absente tant que non réglée ; un admin l'autorise dans un projet partagé | déjà la spécification (§4.39) ; Q19 marquée décidée |
+| Variantes : toujours tout le projet | déjà la spécification (§4.22) ; Q22 marquée décidée |
+| Extensions de projet : chargées seules, droits limités, interrupteur personnel | déjà la spécification (§4.32) ; Q14 marquée décidée |

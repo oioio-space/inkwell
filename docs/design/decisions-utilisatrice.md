@@ -7,14 +7,14 @@ Pour chacun : la question, les choix possibles, la recommandation des relecteurs
 
 ## Les cinq plus importantes
 
-**1 ★ Protéger les projets partagés par défaut ?**
+**1 ★ Protéger les projets partagés par défaut ?** — ✅ **décidé : B** (au choix, non protégé par défaut)
 - Choix :
   - A. Oui, la protection est cochée d'office dès qu'on partage ou qu'on rejoint un projet.
   - B. Non, chacun la coche s'il veut.
 - Recommandation : **A**. Une phrase de secours unique par personne, notée une seule fois.
 - Pourquoi : un ordinateur perdu ou volé ne laisse alors rien lire, sans effort à chaque projet.
 
-**2 ★ Comment l'IA arrive-t-elle ?**
+**2 ★ Comment l'IA arrive-t-elle ?** — ✅ **décidé : A**
 - Choix :
   - A. Absente tant que personne ne l'a réglée ; dans un projet partagé, c'est un admin qui
     l'autorise.
@@ -22,14 +22,14 @@ Pour chacun : la question, les choix possibles, la recommandation des relecteurs
 - Recommandation : **A**. Avant chaque envoi, on voit le texte qui part et vers où.
 - Pourquoi : le texte des autres personnes ne part jamais sans accord.
 
-**3 ★ Une « variante » couvre-t-elle tout le projet, ou un seul fichier ?**
+**3 ★ Une « variante » couvre-t-elle tout le projet, ou un seul fichier ?** — ✅ **décidé : A**
 - Choix :
   - A. Tout le projet.
   - B. Seulement les fichiers choisis.
 - Recommandation : **A**. Les fichiers modifiés dans la variante sont signalés.
 - Pourquoi : on n'a jamais à se demander quels fichiers sont « dedans ».
 
-**4 ★ Les extensions ajoutées à un projet se chargent-elles seules chez tout le monde ?**
+**4 ★ Les extensions ajoutées à un projet se chargent-elles seules chez tout le monde ?** — ✅ **décidé : A**
 - Choix :
   - A. Oui, mais limitées. Un bandeau dit qui les a ajoutées, et chacun peut les couper pour soi.
   - B. Non, chacun les accepte une par une.

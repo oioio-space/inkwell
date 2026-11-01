@@ -2600,14 +2600,15 @@ tous les projets de la personne).
   le 3 mars) ».
 
 **2. Quand la protection s'applique.**
-- **Projet personnel** : la case « Protéger ce projet sur cet ordinateur », dans Préférences ›
-  Projet et à la création, est **décochée** par défaut.
-- **Projet partagé** : cochée par défaut, **au moment où le projet devient partagé** :
-  - dans « Écrire à plusieurs » (§5.3), une ligne avant « Créer une invitation » : « Ce projet sera
-    protégé sur cet ordinateur · Modifier » ;
-  - dans **Rejoindre** (§5.4, étape 4), la même ligne.
-
-  Jamais par un dialogue de plus.
+- **Toujours au choix de la personne** (décision de l'utilisatrice, 2026-11-01, contre la
+  recommandation des relecteurs) : la case « Protéger ce projet sur cet ordinateur » est
+  **décochée par défaut**, que le projet soit personnel ou partagé.
+- On la trouve dans Préférences › Projet et à la création. **Au moment où le projet devient
+  partagé**, et à Rejoindre, une ligne la **propose** sans la cocher : « Protéger ce projet sur cet
+  ordinateur · Protéger » (§5.3, §5.4). Jamais par un dialogue de plus.
+- **La phrase de secours n'est créée que lorsque la personne protège un projet pour la première
+  fois** (point 3). Une personne qui ne protège rien ne voit jamais le parcours du secours, ni son
+  bandeau.
 - Sous la case : « Si cet ordinateur est perdu ou volé **éteint**, personne ne peut lire les
   fichiers de ce projet sur son disque. » La phrase est exacte : si une copie lisible durable est
   activée (point 6), elle le dit aussi.
@@ -2642,7 +2643,8 @@ tous les projets de la personne).
    - « **Kit** : aucun endroit choisi · Choisir » (conseil, pas d'obligation).
 
    « Plus tard » est possible à chaque étape : la protection est active quoi qu'il arrive.
-   - **Un bandeau d'information** n'apparaît **que** si la **phrase** n'est pas notée ou pas
+   - **Un bandeau d'information** n'apparaît **que** chez une personne qui a protégé au moins un
+     projet, et seulement si sa **phrase** n'est pas notée ou pas
      vérifiée. Il est **fermable**, et ne revient qu'au lancement suivant, **7 jours** plus tard
      (Fable m5 ; HIG *Banners*). Il occupe le rang « information » de L-8.
    - L'état du **kit** ne fait jamais apparaître de bandeau.
@@ -2769,9 +2771,10 @@ exporter**. Chaque parcours a son entrée, ses étapes, ses messages et sa sorti
 
 Dialogue « Écrire à plusieurs » :
 1. Rôle « Écriture | Lecture ».
-   Une ligne au-dessus de « Créer une invitation » : « Ce projet sera protégé sur cet ordinateur
-   · Modifier » (§4.43 point 2). Si la personne n'a pas encore de phrase de secours, « Mettre mon
-   secours en lieu sûr » est proposé **après** l'invitation, jamais avant.
+   Une ligne au-dessus de « Créer une invitation » : « Protéger ce projet sur cet ordinateur ·
+   Protéger » (§4.43 point 2), **non cochée**. Si la personne choisit de protéger et n'a pas
+   encore de phrase de secours, « Mettre mon secours en lieu sûr » est proposé **après**
+   l'invitation, jamais avant.
 2. « Créer une invitation » : le texte de l'invitation, « Copier » (toast), et sa validité en
    clair.
 3. Personnes à proximité, avec leur empreinte en 4 mots et « Inviter » ; l'interrupteur « Me
@@ -2788,8 +2791,9 @@ Le Go fournit déjà tout cela (`internal/app/invites.go`).
 3. **Comparer** l'empreinte : 4 mots, « Ce sont les mêmes » ou « Ils sont différents ». On
    compare, on ne retape pas (3.3.8).
 4. Réception, avec sa progression. Le fichier principal s'ouvre dès qu'il est là. Une ligne :
-   « Ce projet sera protégé sur cet ordinateur · Modifier » (§4.43 point 2) ; le secours, s'il
-   manque, est proposé plus tard par un bandeau d'information, jamais pendant la réception.
+   « Protéger ce projet sur cet ordinateur · Protéger » (§4.43 point 2), **non cochée** ; si la
+   personne protège et n'a pas de phrase, le secours est proposé plus tard, jamais pendant la
+   réception.
 5. Toast « Vous avez rejoint « Rapport » ».
 
 | Erreur | Texte | Action |
@@ -3461,7 +3465,7 @@ Une règle sans assertion n'est pas finie.
 | §4.22, §4.41 (rév. 6) | frise : focus itinérant, vue du passé après 300ms de calme, barre d'actions, comparaison par deux sélecteurs, `aria-valuetext` du curseur ; proposition : entrer, sortir (Échap), touches inactives dans un champ, choix locaux puis **une** modification à « Appliquer », choix gardés après recalcul ; variante du projet entier, repère des fichiers modifiés | `e2e/versions.spec.ts`, `ui/proposal.test.ts` | **à écrire** |
 | §4.22 (N39, N41) | frise ; vue du passé en lecture seule, Revenir au présent ; restaurer = nouvelle version, Annuler ; comparer par mots ; créer, proposer d'intégrer, intégrer par morceau ; passages des deux côtés côte à côte ; aucun mot de Git dans le DOM (liste interdite) | `e2e/versions.spec.ts` (deux instances) | **à écrire** |
 | §4.42 (N34) | règle personnelle, règle du projet (admin seulement) ; aperçu « N fichiers concernés » ; fichier utilisé par la compilation non excluable ; export sans les non synchronisés | `e2e/sync-rules.spec.ts` | **à écrire** |
-| §4.43 (rév. 6) | phrase créée une seule fois par personne ; défaut au moment du partage et de Rejoindre ; vérification avec complétion et collage ; kit réécrit en silence, avertissement seulement en échec ; récupération par la **phrase seule**, avec l'avertissement de fraîcheur | `e2e/protect.spec.ts` | **à écrire** |
+| §4.43 (rév. 6) | protection **non cochée par défaut**, proposée au partage et à Rejoindre ; phrase créée seulement à la première protection, une seule fois par personne ; aucun parcours ni bandeau de secours sans protection ; vérification avec complétion et collage ; kit réécrit en silence, avertissement seulement en échec ; récupération par la **phrase seule**, avec l'avertissement de fraîcheur | `e2e/protect.spec.ts` | **à écrire** |
 | §4.43, §4.44 (N37) | protéger, verrouiller, déverrouiller ; phrase vérifiée ; kit imprimé sans la phrase ; restauration à côté ; fraîcheur dite ; export protégé lisible par `age` | `e2e/protect.spec.ts` | **à écrire** (porte P-VAULT de l'architecture) |
 | §4.45 (N40) | aucune chaîne « Word », « DOCX », « ODT », « Google Docs » dans `fr.json` et `en.json` ; collage HTML → Typst | `ui/i18n.test.ts` (extension), `editor/paste.test.ts` | **à écrire** |
 | §8.4 (N35) | Cmd sur macOS (registre), barre de menus générée du registre, fiche « aperçu indisponible » sur une cible sans porte | `e2e/platform.spec.ts` sur les trois systèmes | **à écrire** |
@@ -3499,14 +3503,14 @@ Les deux revues convergent sur chacune de ces recommandations.
 | Q10 | Imprimer | Par l'export PDF et la boîte d'impression du système, sans raccourci (§5.12). |
 | Q11 | Fichiers de code | Ouverts **en lecture**, « Modifier » sur demande, mémorisé par fichier ; coloration avec les 10 jetons existants ; `language-data` paresseux, avec une liste blanche d'environ 25 langages (§4.28). |
 | Q13 | Thèmes (N22) | Thème et variante choisis séparément dans Apparence ; refus complet d'un thème qui échoue dans un mode ; aucun thème imposé par un projet (§2.10). |
-| Q14 | Extensions de projet (N23) | Bandeau de provenance non bloquant ; mode restreint pour ce qui dépasse le niveau « projet » ; « Désactiver pour moi » (§4.32). |
+| Q14 | Extensions de projet (N23) | **Décidé** (recommandation suivie) : Bandeau de provenance non bloquant ; mode restreint pour ce qui dépasse le niveau « projet » ; « Désactiver pour moi » (§4.32). |
 | Q15 | Développement (N25) | Mode développeur local, signalé par une pastille rouge permanente ; Inspecteur = détail d'une ligne de Ressources (§4.35). |
 | Q16 | Mises en page Markdown fournies (T11 B8 : « Note », « Rapport »…) contre N27 (« aucun modèle fourni ») | Les mises en page B8 restent des **mises en page** d'un fichier `.md` (§5.9), pas des modèles de projet. Garder les styles « Adwaita » et « Lecture » comme valeurs par défaut lisibles ; retirer « Rapport » et « Lettre » de B8 si l'utilisatrice veut aucun contenu fourni. |
 | Q18 | Liste des problèmes | **Tranché** (C13) : liste dans Relire › Problèmes, un seul compteur dans la barre d'état. |
-| Q19 | IA (N31) | Destination IA du tiroir (si activée), pastille « IA : envoi vers X » pendant une séance ; propositions par morceau ; dialogue d'envoi du cœur ; désactivée dans les projets partagés jusqu'à PD-1 ; MCP et agents désactivés par défaut (§4.39). |
+| Q19 | IA (N31) | **Décidé** (recommandation suivie) : Destination IA du tiroir (si activée), pastille « IA : envoi vers X » pendant une séance ; propositions par morceau ; dialogue d'envoi du cœur ; désactivée dans les projets partagés jusqu'à PD-1 ; MCP et agents désactivés par défaut (§4.39). |
 | Q20 | Outils d'écriture (N30) | Orthographe discrète à la frappe ; tout le reste dans Relire › Problèmes (Suggestions), à la demande ; aucun score ; objectifs locaux sans série (§4.38). |
-| Q22 | Versions et variantes (N39, N41) | Relire › Versions : frise, vue du passé en lecture seule, restaurer = nouvelle version, variantes en voie parallèle, intégration relue par morceau, passages des deux côtés côte à côte (§4.22). |
-| Q23 | Protection et sauvegarde (N37) | « Protéger ce projet » cochée par défaut pour un projet partagé ; phrase vérifiée par 3 mots ; kit imprimable sans la phrase ; restauration à côté (§4.43, §4.44). |
+| Q22 | Versions et variantes (N39, N41) | **Décidé** pour les variantes (tout le projet, recommandation suivie) : Relire › Versions : frise, vue du passé en lecture seule, restaurer = nouvelle version, variantes en voie parallèle, intégration relue par morceau, passages des deux côtés côte à côte (§4.22). |
+| Q23 | Protection et sauvegarde (N37) | **Décidé par l'utilisatrice** : « Protéger ce projet » **au choix, non coché par défaut**, même pour un projet partagé ; phrase vérifiée par 3 mots ; kit imprimable sans la phrase ; restauration à côté (§4.43, §4.44). |
 | Q24 | Non synchronisés (N34) | Personnel d'abord ; règle du projet par un admin après PD-1 ; aperçu du nombre de fichiers (§4.42). |
 | Q21 | Ressources (N32) | Vue « Ressources » à part, hors du tiroir (architecture RS-6) ; toasts « Voir », jamais de dialogue (§4.40). |
 | Q17 | Compte des problèmes dans la barre d'état | **Tranché** (C13) : un seul bouton, dont le clic va au suivant (§4.17). |
