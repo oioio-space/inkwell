@@ -1,5 +1,29 @@
 # Changements de l'architecture
 
+## 1.0.0-brouillon.8 — révision 7 (2026-11-01)
+
+Réponse au tour 6 : [Fable](reviews/11-fable-r6.md) **ACCEPT** (2 majeurs de texte, 5 mineurs) ;
+[Codex](reviews/12-codex-r6.md) **NOT ACCEPTED** (1 bloquant, 2 majeurs). Aucune modification de
+`docs/protocol/` ni de `docs/design/`.
+
+| Constat | Changement |
+|---|---|
+| Codex R6-B1 `resume = 0:0` ne prouve pas l'absence d'hibernation (outil en espace utilisateur) | OV-1 : hibernation acceptée seulement si **impossible** (`/sys/power/state` sans `disk`, ou `/sys/power/disk` = `[disabled]`) ou si **toute destination locale** d'une image est chiffrée (tous les périphériques blocs persistants en `CRYPT-`, aucun amovible branché pendant la cérémonie) ; cela couvre les outils `/dev/snapshot` ; sinon refus ; témoin P-VAULT « outil d'hibernation vers une destination en clair → refus » |
+| Codex R6-M macOS, profils d'énergie | OV-2 : `hibernatemode` sur **tous** les profils (`pmset -g custom`) ou volume de `hibernatefile` vérifié ; profil illisible → refus |
+| Codex R6-M1 §9.11 contredit §9.5 sur Windows | §9.11 : un objet de tâche ne borne pas la taille des fichiers ; volume à quota ou lancement borné refusé |
+| Fable R6-M1 OV-1 ne passe pas sur btrfs ni sur un fichier d'échange | OV-1 : volume par `/proc/self/mountinfo` (source du montage), parent d'une partition avant `slaves/`, **tous** les périphériques d'un btrfs ; fichier d'échange résolu comme un chemin ; témoins « btrfs sur LUKS → accepté », « fichier d'échange sur LUKS → accepté », « btrfs en clair → refus » |
+| Fable R6-M2 vidage du processus de rendu | **OV-5** : `RLIMIT_CORE = 0` **au lancement, avant la webview** (hérité par les processus de rendu) ; `core_pattern` en tube : volume de destination (`/var/lib/systemd/coredump`, `/var/crash`) vérifié, sinon refus ; WebView2 : `FailureReportFolderPath` sous le dossier de données de la webview, purgé après la cérémonie ; macOS : `DiagnosticReports` sur un volume vérifié ; P-VAULT : processus de rendu tué pendant la cérémonie, recherche dans ces magasins |
+| Fable R6-m1 « Protéger » dépend aussi de SR-5 ; hibernation au déverrouillage | VK-1, §0.5 (repli de P-VAULT), §9.2 (« dit à l'écran au déverrouillage, non bloquant pour l'édition ») |
+| Fable R6-m2 oracles macOS et Windows non nommés | OV-2 : plist analysée structurellement, clés à confirmer par P-VAULT-MAC ; OV-3 : `HibernateEnabled`, `NtfsEncryptPagingFile` ; OV-1 : `/sys/power/disk` = `[disabled]` |
+| Fable R6-m3 dossier de données de la webview | OV-4 : placé sous le dossier de la personne, sur un volume vérifié |
+| Fable R6-m4 `MaxOutput` sous Linux | §9.5 et §16 : sous Linux il dimensionne la borne noyau (tmpfs, `RLIMIT_FSIZE`, parts Landlock) ; ailleurs vérification *a posteriori*, lancement borné refusé |
+| Fable R6-m5 `coherence.md` daté | en-tête mis à jour |
+
+### Désaccords à débattre
+
+Aucun.
+
+
 ## 1.0.0-brouillon.7 — révision 6 (2026-11-01)
 
 Réponse au tour 5 : [Fable](reviews/09-fable-r5.md) **ACCEPT** (2 majeurs de texte, 5 mineurs) ;

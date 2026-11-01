@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Date | 2026-11-01 (révision 4 de l’architecture, `spec.md` 1.0.0-brouillon.5) |
+| Date | 2026-11-01 (révision 7 de l’architecture, `spec.md` 1.0.0-brouillon.8) |
 | But | relire ensemble tout ce qui a été demandé à la volée (N17–N41, U*, L*), résoudre les contradictions, combler ou différer explicitement les manques, fusionner les doublons, et ramener le tout à la finalité : **des personnes qui aiment écrire, ensemble, sans serveur** |
 | Entrées | [audit de cohérence de Codex](reviews/coherence-codex.md) ; revues du tour 2 ([Fable](reviews/03-fable-r2.md) §4, [Codex](reviews/04-codex-r2.md) §4) ; études [encryption](research/encryption.md), [sync-ignore](research/sync-ignore.md), [ai §12](research/ai.md), [editor-features](research/editor-features.md), [plugins](research/plugins.md) ; [design rév. 4](../design/spec.md) ; [exigences](../exigences.md) |
 | Règle de tri | à valeur égale, ce qui sert d'abord le parcours **écrire → partager → retrouver → corriger → exporter** passe devant ; une plate-forme (extensions, IA, coffre) se construit sur ce parcours, jamais à sa place |
