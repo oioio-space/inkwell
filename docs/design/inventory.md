@@ -1,4 +1,4 @@
-# Inventaire de l'interface et écarts avec la spécification (N17, révision 6)
+# Inventaire de l'interface et écarts avec la spécification (N17, révision 7)
 
 - **Relevé du 2026-11-01** sur `main` (`3841ff2`), dans `frontend/src` ; les chemins sont
   relatifs à ce dossier, sauf mention contraire.

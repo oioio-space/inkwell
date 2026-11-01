@@ -326,3 +326,27 @@ recalculés : **161 paires** dans les quatre modes, aucun échec hors des paires
   projet**, c'est-à-dire l'ensemble de ces variantes, créé et intégré en une fois.
 - **HI-5** : l'export en dépôt Git sort de l'interface d'écriture (outils du mode développeur ou
   extension).
+
+---
+
+# Révision 7 — revues n°6
+
+Revues : [Fable n°6](reviews/09-fable-r6.md) (ACCEPT : 1 majeur, 9 mineurs) et
+[Codex n°6](reviews/10-codex-r6.md) (NOT ACCEPTED : 2 majeurs, 1 mineur). **160 paires** recalculées :
+aucun échec hors des paires interdites. Les rapports des deux contre-exemples ont été revérifiés par
+script.
+
+| # | Constat | Correction |
+|---|---|---|
+| Codex R6-M1 | Deux contrats de proposition pour l'IA ; *Listbox* contre groupes ; « Accepter et appliquer » | §4.39 point 2 renvoie **entièrement** à §4.41 : morceaux en groupes focalisables, choix locaux, **un seul « Appliquer »** partout, même pour un seul morceau ; « Accepter et appliquer » est retiré. « Annuler cette discussion » ne défait que ce qui a été **appliqué**. §4.39 point 11 n'est plus une *Listbox*. `coverage.md` (ligne *Listbox*) est aligné. |
+| Codex R6-M2 | ⌘P contre ⇧⌘O ; ⇧⌘? réservé mais lié | §3.2 : ⇧⌘O sous macOS. Aide sous macOS = **commande déléguée au système**, que le registre décrit sans la capturer ; K-6 reconnaît ces commandes. Les choix propres à Inkwell (Ctrl+P sous GNOME, F9) sont dits **explicites**, et non des conventions ; les liaisons citées dans tout le texte sont testées contre la même table. |
+| Codex R6-m1, Fable m8 | `coverage.md:176` garde « popover existant » et « F8 et Ctrl+. » | La cellule est réécrite avec le seul comportement cible (Relire, Alt+Entrée, F8). Le popover ne reste que dans la colonne des preuves du code actuel. |
+| Fable M1 | Le contre-exemple `#bbbbbb` est accepté par le contrat | Remplacé par **`#acacac`** : texte principal 6,94:1, `--fg-dim-on-state` **4,45:1**, anneau **2,67:1**, donc **refusé**. `#bbbbbb` est donné comme cas **accepté** (4,81 ; 3,16), ce qui prouve le seuil (§2.10, §10). |
+| m1 | `#ffffff` brut dans la paire 23 | `--on-dark-fg` |
+| m2 | « Git » dans les outils du mode développeur | « Exporter l'historique (format technique)… » ; le nom du format n'apparaît que sous « Détails techniques ». La règle « aucun mot de Git » vaut **même en mode développeur**. |
+| m3 | Deux lignes « retour en arrière » dans §6.4 | une seule ligne, avec l'union des mots interdits |
+| m4 | `--variant-line` orphelin | jeton et paire retirés ; la voie d'une variante est en `--fg-dim` |
+| m5 | Bandeau de secours permanent | bandeau **seulement** si la phrase n'est pas notée ou pas vérifiée ; fermable ; revient au lancement suivant, 7 jours plus tard ; jamais pour le kit ; état « pas encore notée » ajouté |
+| m6 | ⌃⌘S n'est pas la convention de la barre latérale | panneau de gauche **⌥⌘S** (convention du Finder) ; Enregistrer une version **⌃⌘S** ; ⌃⌘D, ⌥⌘T et ⌃F1 à ⌃F8 ajoutés aux réservés macOS ; Zones sous macOS sur **⌘F6** (⌃F6 est réservé) |
+| m7 | Sort de la variante après intégration | **close**, visible dans la frise (filtre « variantes intégrées ») ; on peut en repartir (§4.41) |
+| m9 | Infobulle d'un bouton `disabled` inatteignable | `aria-disabled="true"` et focalisable : actions de la frise (§4.22), « Appliquer » (§4.41) |

@@ -1,6 +1,7 @@
 # Système de design d'Inkwell — spécification (N17)
 
-- **Statut :** proposition, **révision 6** (2026-11-01). Elle ferme les revues n°5 (Fable, Codex).
+- **Statut :** proposition, **révision 7** (2026-11-01). Elle ferme les revues n°6 ; la révision 6
+  fermait les revues n°5.
 - Révision 5 :
   - Elle répond aux revues n°1 à n°3 de Codex et de Fable ([`reviews/`](reviews/)), applique les
     20 changements de la passe de cohérence (`architecture/coherence.md` §6), s'aligne sur
@@ -384,9 +385,13 @@ une** ; un jeton sans classe est une erreur du fichier, refusée par le test.
      `--selected-bg`, composés sur chacune des surfaces où ils apparaissent ; texte sur
      `--card-bg` et `--page-bg` ; anneau de focus contre chaque surface (Codex R3-B1).
    - Les paires couvrent aussi le **texte secondaire** et l'**anneau intérieur** sur ces états.
-   - Contre-exemples de test : `--hover-bg` noir (texte à 1,00:1) **refusé** ; `--hover-bg`
-     `#bbbbbb` en clair (texte principal à 7,91:1, mais secondaire à 3,92:1) **refusé** (Codex
-     R5-B1).
+   - Contre-exemples de test (Fable R6-M1, recalculés) :
+     - `--hover-bg` noir : texte à 1,00:1, **refusé** ;
+     - `--hover-bg` **`#acacac`** en clair : texte principal 6,94:1 (passe), mais
+       `--fg-dim-on-state` **4,45:1** et anneau intérieur **2,67:1**, **refusé** ;
+     - `--hover-bg` `#bbbbbb` en clair : `--fg-dim-on-state` 4,81:1, anneau 3,16:1, **accepté**. Le
+       cas prouve que le seuil est au bon endroit. (La rév. 6 le disait refusé, à tort : le
+       3,92:1 cité portait sur `--fg-dim`, une paire interdite, donc non évaluée.)
    - Une combinaison qui ne peut pas être vérifiée (texte posé sur un fond d'extension non
      déclaré) est **interdite** : l'hôte ne la dessine pas.
 3. **Planchers** : chaque paire a `min`, et `hcMin` pour les modes HC (Fable R3-M1).
@@ -476,7 +481,7 @@ Ctrl+Maj+T). Une fonction absente ou non installée **n'affiche rien**.
 
 | Je veux… | Clic | Clavier | Palette |
 |---|---|---|---|
-| ouvrir un fichier | Fichiers › ligne | Ctrl+P (« Aller au fichier », **Cmd+P** sur macOS, §8.4) | oui |
+| ouvrir un fichier | Fichiers › ligne | Ctrl+P (« Aller au fichier » ; **⇧⌘O** sur macOS, où ⌘P imprime, §8.2) | oui |
 | changer de fichier ouvert | onglet | Ctrl+Page↓ / Page↑, Ctrl+Tab | oui |
 | aller à un titre | Sommaire › titre | Ctrl+Maj+O | oui |
 | aller à une ligne, à un problème | barre d'état | Ctrl+G ; F8 / Maj+F8 (problèmes) | oui |
@@ -1085,7 +1090,7 @@ avoir demandé « Conserver l'original, Remplacer ou Conserver les deux ». Inkw
 jamais : restaurer **ajoute** une version.
 
 **Aucun mot de Git dans l'interface d'écriture** : ni branche, commit, fusion, checkout ni HEAD,
-**sans exception**. L'export technique de l'historique en dépôt (HI-5) n'est pas dans
+**sans exception**, **même en mode développeur**. L'export technique de l'historique (HI-5) n'est pas dans
 l'interface d'écriture (point 8).
 
 **Où :** tiroir › **Relire** › sous-vue **Versions** (Relire : Ctrl+Maj+H, puis l'onglet
@@ -1104,6 +1109,7 @@ G-51).
     modifié ».
 - **Les versions nommées** se détachent :
   - par une **forme**, un losange plein (et non par la seule couleur `--version-marker`) ;
+  - (le jeton `--variant-line` est **retiré** : la voie d'une variante est en `--fg-dim`, Fable m4) ;
   - par leur nom et leur note.
 - **Les variantes** sont **une voie parallèle**, signalée par un filet `--fg-dim` et **le nom de
   la variante** (Fable m4 : la couleur ne distingue pas variante, IA et extension, qui se
@@ -1119,8 +1125,9 @@ l'**option sélectionnée** (Codex R5-M3) :
 - « Nommer cette version… » ;
 - « Créer une variante à partir d'ici… ».
 
-Quand rien n'est sélectionné, les actions sont désactivées, avec une infobulle « Choisissez une
-version ». Le menu contextuel d'une option (Maj+F10) propose les mêmes actions.
+Quand rien n'est sélectionné, les actions sont **inactives mais focalisables** (`aria-disabled="true"`,
+non `disabled`), pour que leur infobulle « Choisissez une version » reste atteignable au clavier
+(Fable m9).
 
 **3. Voyager dans le temps, sans rien changer** (HI-1) :
 - **Le focus ne charge rien.** ↑ ↓ déplacent le focus dans la frise. La vue du passé suit **après
@@ -1143,7 +1150,7 @@ cette version).
 - Toast « Version d'hier 17:42 restaurée · Annuler ». Aujourd'hui reste dans la frise.
 - L'aperçu dit ce qui **ne revient pas** : une purge, le retrait d'une personne.
 
-**5. Nommer** (HI-3) : « Enregistrer une version… » (menu Projet, palette, Ctrl+Maj+S, ⌥⌘S sur
+**5. Nommer** (HI-3) : « Enregistrer une version… » (menu Projet, palette, Ctrl+Maj+S, ⌃⌘S sur
 macOS, §8.2), ou « Nommer cette version… » dans la barre. Un nom, et une note facultative.
 
 **6. Comparer** (HI-4) : « Comparer… » ouvre un petit dialogue à **deux sélecteurs**, « De » (par
@@ -1174,8 +1181,9 @@ L'architecture et le code tiennent les variantes **par document** (HI-6, `doc.me
 variante « du projet » est donc l'ensemble cohérent de ces variantes de documents, créé et
 intégré en une fois. Ce point d'alignement est à confirmer dans HI-6 (`CHANGES.md`).
 
-**8. Hors de l'interface d'écriture.** « Exporter l'historique en dépôt Git » (HI-5) ne figure
-**ni** dans Exporter, **ni** dans les menus. Il vit dans les **outils du mode développeur**
+**8. Hors de l'interface d'écriture.** « **Exporter l'historique (format technique)…** » (HI-5) ne
+figure **ni** dans Exporter, **ni** dans les menus. Le nom du format n'apparaît que sous « Détails
+techniques » de ce dialogue. Il vit dans les **outils du mode développeur**
 (Préférences › Application › Mode développeur › « Outils », §4.35), ou dans une extension. HI-5 est
 à aligner (`CHANGES.md`).
 
@@ -1718,7 +1726,7 @@ moteur de navigateur. Le parcours vaut pour tout langage de rendu.
 Pour qui écrit une extension (architecture §15.12, §15.15). **Invisibles par défaut.**
 
 - **Mode développeur** : Préférences › Application › « Mode développeur ». Ses **outils** contiennent
-  aussi « Exporter l'historique en dépôt Git » (§4.22 point 8). Il est **local**, jamais
+  aussi « Exporter l'historique (format technique)… » (§4.22 point 8). Il est **local**, jamais
   synchronisé, et jamais appliqué à une extension de projet.
 - **Repère permanent et clair** :
   - une pastille « Mode développeur » en `--destructive-bg`, avec texte blanc (4,83 / 6,11),
@@ -2234,30 +2242,22 @@ jamais écrire**.
   Elle disparaît quand la séance se termine. Hors séance, l'IA n'occupe rien dans l'en-tête ; un
   bouton « IA » PEUT être épinglé par la personne (§4.30).
 
-**2. Propositions : relire, accepter, annuler.**
-- Le texte en flux s'écrit dans une **couche fantôme locale** :
-  - souligné pointillé `--ai-mark`, avec le libellé « Proposition de l'IA » ;
-  - **jamais dans le document partagé** : les collègues ne voient rien avant « Accepter », pas de
-    demi-phrases chez les autres.
-- **Diff par morceau** (C-DIFF : ajouts soulignés, suppressions barrées, avec les signes). Chaque
-  morceau a « Accepter » et « Refuser » ; en tête, « Tout accepter », « Tout refuser », et une
-  ligne d'explication du modèle.
-  - Clavier : ↑ ↓ d'un morceau à l'autre ; Entrée accepte ; Suppr refuse.
-- **Mise en évidence obligatoire**, dans le diff (architecture §15.18) :
-  - liens et chemins **nouveaux** ;
-  - `#read`, `#include` hors projet ;
-  - caractères invisibles (zéro largeur, balises Unicode, bidi).
-
-  Chacun porte `warn` et une phrase (« Lien nouveau vers example.org »).
-- Garde-fous :
-  - au-delà de 30 % du fichier, un avertissement en tête (« Cette proposition change 42 % du
-    fichier ») ;
-  - un morceau qui touche le texte d'**une autre personne** porte son nom (« texte de Paul »).
-- **Accepter = une modification**, signée par la personne qui accepte, étiquetée « via IA ». Un
-  Ctrl+Z l'annule (ND-8). « Annuler cette discussion » défait toutes les modifications « via IA »
-  de la séance, en une modification.
-- **Proposition périmée** (le texte a changé entre-temps) : le morceau est grisé, « Plus à jour ·
-  Redemander ». Il n'est jamais appliqué ailleurs.
+**2. Propositions : la relecture commune de §4.41, sans exception.**
+- Le texte en flux s'écrit dans une **couche fantôme locale** : souligné pointillé `--ai-mark`,
+  libellé « Proposition de l'IA ». Il n'est **jamais** dans le document partagé : les collègues ne
+  voient rien avant « **Appliquer** ».
+- La relecture, le clavier, la transaction et la péremption sont **exactement** ceux de §4.41 :
+  - morceaux focalisables (`role="group"`) avec leurs boutons ;
+  - choix locaux ;
+  - **un seul « Appliquer »**, qui écrit **une** modification, étiquetée « via IA ».
+- Ce qui est propre à l'IA :
+  - la **ligne d'explication** du modèle, en tête de la barre de relecture ;
+  - les **mises en évidence obligatoires** (liens et chemins nouveaux, `#read` et `#include` hors
+    projet, caractères invisibles), chacune avec `warn` et une phrase ;
+  - les garde-fous : au-delà de 30 % du fichier, un avertissement en tête ; un morceau qui touche
+    le texte d'**une autre personne** porte son nom ;
+  - « **Annuler cette discussion** » défait, en une modification, toutes les modifications « via
+    IA » **appliquées** pendant la séance.
 
 **3. Autorat visible pour les collègues.**
 - L'Historique dit « Camille, via IA (DGX interne) ». C'est une **déclaration signée par
@@ -2383,7 +2383,9 @@ Titre : « Envoyer à « DGX interne » ? ».
 **11. Lecteur d'écran et clavier.**
 - La discussion est un `role="log"` : les réponses sont annoncées poliment, **une fois
   terminées**, jamais mot à mot.
-- Le diff de proposition suit APG *Listbox* (morceaux), avec ses boutons par Tab.
+- La relecture d'une proposition suit §4.41 : chaque morceau est un **groupe focalisable**
+  (`role="group"`, nommé), avec ses boutons ; **pas** de *Listbox*, dont les options ne peuvent
+  pas contenir de boutons.
 - Le popover de sélection est un `role="dialog"` nommé ; Échap le ferme et rend le focus au
   texte.
 - Textes en fr et en en ; les réponses du modèle sont dans la langue de la personne, demandée au
@@ -2519,12 +2521,17 @@ appliquer en une fois.
 - « **Appliquer** » écrit **une seule modification**, avec tous les morceaux acceptés. Elle est
   signée par la personne, attribuée à la source (« via IA », « intégration de Ton plus court ») et
   annulable par un Ctrl+Z.
-- « Appliquer » est désactivé tant qu'un morceau en **divergence** n'a pas de choix. L'infobulle
-  dit « 2 passages à choisir ».
+- « Appliquer » reste focalisable mais **inactif** (`aria-disabled="true"`, et non `disabled`)
+  tant qu'un morceau en **divergence** n'a pas de choix. Son infobulle, atteignable au clavier, dit
+  « 2 passages à choisir ».
+- **Après l'intégration d'une variante**, la variante est **close** : elle ne reçoit plus de
+  modification et reste visible dans la frise, filtre « variantes intégrées ». « Créer une variante
+  à partir d'ici » permet de repartir de son état (Fable m7).
 - « **Tout accepter** » accepte tous les morceaux **sans divergence**, et laisse les divergences à
   choisir.
-- **Une proposition d'un seul morceau** (cas courant de l'IA) : son bouton s'appelle « Accepter et
-  appliquer ». C'est la même transaction.
+- **Un seul contrôle final, partout** : « **Appliquer** », dans la barre de relecture, y compris
+  pour une proposition d'un seul morceau. Un morceau n'a que « Accepter » et « Refuser », qui sont
+  des choix locaux. L'ancien bouton « Accepter et appliquer » est retiré (Codex R6-M1).
 - **Périmée** : si le texte change pendant la relecture (soi ou une autre personne), les morceaux
   touchés sont grisés, « Plus à jour ». « Recalculer » refait la différence, et **garde les choix**
   des morceaux qui n'ont pas changé.
@@ -2626,14 +2633,18 @@ tous les projets de la personne).
    dossier d'un nuage). Inkwell y **réécrit le kit en silence** après chaque sauvegarde réussie
    (Fable m3, Codex R5-M1). Une page imprimable du kit existe aussi : datée, avec un code QR, **sans
    la phrase**.
-5. **Terminé.** L'état dit précisément ce qui manque, dans Préférences › Apparence et moi ›
-   « Secours » et dans un bandeau d'information tant que c'est incomplet :
+5. **Terminé.** L'état dit précisément ce qui manque, **dans Préférences › Apparence et moi ›
+   « Secours » et dans le popover d'état** :
    - « Phrase notée et vérifiée · Kit à jour (clé USB, hier) » ;
+   - « Phrase **pas encore notée** · Noter » ;
    - « Phrase **non vérifiée** · Vérifier » ;
    - « **Kit** : aucun endroit choisi · Choisir » (conseil, pas d'obligation).
 
-   « Plus tard » est possible à chaque étape : la protection est active quoi qu'il arrive, seul le
-   secours reste incomplet, et le bandeau le dit.
+   « Plus tard » est possible à chaque étape : la protection est active quoi qu'il arrive.
+   - **Un bandeau d'information** n'apparaît **que** si la **phrase** n'est pas notée ou pas
+     vérifiée. Il est **fermable**, et ne revient qu'au lancement suivant, **7 jours** plus tard
+     (Fable m5 ; HIG *Banners*). Il occupe le rang « information » de L-8.
+   - L'état du **kit** ne fait jamais apparaître de bandeau.
 - **Le kit n'avertit qu'en cas d'échec** : « Le kit de secours n'a pas pu être mis à jour sur la
   clé USB (introuvable) · Choisir un autre endroit ».
 
@@ -3145,7 +3156,6 @@ Il complète le glossaire.
 | couper une personne, réversible | **Déconnecter** / **Laisser revenir** | bannir |
 | retirer définitivement | **Retirer** | supprimer une personne |
 | version gardée | **Enregistrer une version**, **version nommée** | commit, tag |
-| retour en arrière | **Restaurer cette version** (crée une nouvelle version), **Revenir au présent** (quitte la vue du passé) | rollback, revert, checkout |
 | annuler un effet | **Annuler** | défaire |
 | garder le texte local | **Garder la version d'Inkwell** | ignorer, écraser |
 | incorporer le texte modifié hors d'Inkwell | **Intégrer** (fichier modifié dehors) | importer, fusionner |
@@ -3166,7 +3176,7 @@ Il complète le glossaire.
 | fournisseur d'IA | **fournisseur**, « serveur de votre entreprise » | endpoint, LLM, API |
 | consommation d'une extension | **mémoire**, **calcul**, **délai** | CPU, RAM, PID, processus |
 | suggestion d'écriture | **suggestion** (Relire › Problèmes, filtre Suggestions) | lint, score |
-| retour en arrière | **version**, **Restaurer cette version**, **Revenir au présent** | commit, checkout, revert, HEAD |
+| retour en arrière | **version**, **Restaurer cette version** (crée une nouvelle version), **Revenir au présent** (quitte la vue du passé) | commit, checkout, revert, rollback, HEAD, Git |
 | copie de travail parallèle | **variante**, **Créer une variante**, **Proposer d'intégrer**, **Intégrer**, **Abandonner la variante** | branche, fork, fusion, merge, pull request |
 | chiffrement | **protéger**, **verrouillé**, **déverrouiller**, **phrase de secours**, **kit de secours** | chiffrer, clé, DEK, seed |
 | récupération | **sauvegarde**, **Restaurer une copie** | backup, dump |
@@ -3222,6 +3232,10 @@ WCAG 2.2 AA. Le relevé critère par critère des 55 critères A et AA est dans
 
 ### 8.2 Registre des commandes et raccourcis, par système
 
+Les choix propres à Inkwell (Ctrl+P pour « Aller au fichier » sous GNOME, F9 pour le panneau) sont
+des **choix explicites**, non des conventions du système. Les liaisons affichées dans tout le texte
+(parcours, Aide) sont testées contre cette même table.
+
 Une seule source alimente les menus (barre de menus macOS comprise), les infobulles, la palette,
 l'Aide et la fenêtre des raccourcis. **Chaque commande a une liaison écrite pour chaque
 système** : il n'y a **plus de traduction automatique** de Ctrl en Cmd (Codex R5-M4, Fable
@@ -3266,10 +3280,10 @@ et la personne peut lui en donner une (Préférences › Écriture › Raccourci
 | Suggestions (complétion) | Ctrl+Espace (**à confirmer par un e2e WebKitGTK avec IBus actif**) ; repli Alt+/ | **⌥Échap** (« Compléter » du système de texte ; ⌃Espace change la source de saisie) | Ctrl+Espace ; repli Ctrl+J (une méthode de saisie chinoise peut prendre Ctrl+Espace) | à faire |
 | Aide sur la fonction | Ctrl+Maj+Espace | ⇧⌘Espace | Ctrl+Maj+Espace | à faire |
 | Aller à la définition | F12 | **⌃⌘J** | F12 | à faire |
-| Panneau de gauche | F9 | **⌃⌘S** (barre latérale, convention) | F9 | à faire |
+| Panneau de gauche | F9 | **⌥⌘S** (la convention du Finder pour la barre latérale) | F9 | à faire |
 | Relire (tiroir) | Ctrl+Maj+H | ⇧⌘H | Ctrl+Maj+H | à faire |
 | Versions | — (Relire › Versions, ou palette) | — | — | **retiré** (était Ctrl+Alt+H, soit ⌥⌘H « Masquer les autres ») |
-| Enregistrer une version | Ctrl+Maj+S | **⌥⌘S** (⇧⌘S : Dupliquer) | Ctrl+Maj+S | à faire |
+| Enregistrer une version | Ctrl+Maj+S | **⌃⌘S** (⇧⌘S : Dupliquer ; ⌥⌘S : barre latérale) | Ctrl+Maj+S | à faire |
 | Source → aperçu | Ctrl+Maj+J | ⇧⌘J | Ctrl+Maj+J | à faire (était Ctrl+Alt+J) |
 | Demander à l'IA | — (menu contextuel, palette ; assignable) | — | — | **retiré** (était Ctrl+Alt+I) |
 | Mode concentration | Ctrl+Maj+D | ⇧⌘D | Ctrl+Maj+D | à faire (était Ctrl+Alt+F) |
@@ -3287,10 +3301,10 @@ et la personne peut lui en donner une (Préférences › Écriture › Raccourci
 | Zoom du texte | Ctrl+= / Ctrl+- / Ctrl+0 | ⌘= / ⌘- / ⌘0 | Ctrl+= / Ctrl+- / Ctrl+0 | fait |
 | Menu principal | F10 | — (barre de menus du système) | F10 | à faire |
 | Menu contextuel | Maj+F10, touche Menu | ⌃clic ; Maj+F10 | Maj+F10, touche Menu | tableur seulement |
-| Zones | F6 / Maj+F6 | ⌃F6 / ⌃⇧F6 | F6 / Maj+F6 | à faire |
+| Zones | F6 / Maj+F6 | **⌘F6 / ⇧⌘F6** (⌃F6 est réservé à la navigation au clavier du système) | F6 / Maj+F6 | à faire |
 | Projets | Ctrl+O | ⌘O | Ctrl+O | à faire |
 | Préférences | Ctrl+, | ⌘, | Ctrl+, | à faire |
-| Aide | F1 | ⇧⌘? (menu Aide du système) | F1 | à faire |
+| Aide | F1 | **délégué au système** : le menu Aide de macOS porte ⇧⌘? ; Inkwell ne capture pas la touche (K-6) | F1 | à faire |
 | Raccourcis | Ctrl+? | ⌥⌘/ | Ctrl+Maj+? | à faire |
 | Plein écran | F11 | ⌃⌘F | F11 | à faire |
 | Exporter | — (après l'audit du registre, C14) | — | — | à faire |
@@ -3300,12 +3314,14 @@ la table de **chaque** système.
 
 | Linux (GNOME, GTK 4, IBus, WebKitGTK) [S2] [S25] | macOS [S30] | Windows [S31] |
 |---|---|---|
-| Super+… ; Alt+Tab ; Alt+F2 ; Alt+F4 ; Alt+F7 ; Alt+F8 ; Alt+F10 ; Alt+Espace ; Ctrl+Alt+Suppr ; Ctrl+Alt+T (Ubuntu) ; Ctrl+Alt+flèches ; Impr, Maj+Impr, Alt+Impr | ⌘H, **⌥⌘H** ; ⌘M, ⌥⌘M ; ⌘Q ; ⌘Tab ; ⌘` ; ⌘Espace, ⌥⌘Espace ; **⌃Espace, ⌃⌥Espace** (source de saisie) ; ⌃⌘Espace (émojis) ; ⌥⌘Échap ; ⇧⌘3, ⇧⌘4, ⇧⌘5 ; ⌃⌘Q ; ⇧⌘Q, ⌥⇧⌘Q ; ⇧⌘? (aide du système) ; ⌃↑, ⌃↓, ⌃←, ⌃→ (Mission Control) ; ⌥⌘8, ⌥⌘= et ⌥⌘- (zoom d'accessibilité) ; ⌘F5 (VoiceOver) ; F11 | **toute combinaison Ctrl+Alt** (AltGr) ; **Alt+lettre ou chiffre** (touches d'accès) ; Win+… (dont Win+. émojis, Win+Espace saisie) ; Alt+Tab ; Alt+F4 ; Alt+Espace ; Ctrl+Échap ; Ctrl+Maj+Échap ; Ctrl+Alt+Suppr ; Maj+Alt (langue de saisie) |
+| Super+… ; Alt+Tab ; Alt+F2 ; Alt+F4 ; Alt+F7 ; Alt+F8 ; Alt+F10 ; Alt+Espace ; Ctrl+Alt+Suppr ; Ctrl+Alt+T (Ubuntu) ; Ctrl+Alt+flèches ; Impr, Maj+Impr, Alt+Impr | ⌘H, **⌥⌘H** ; ⌘M, ⌥⌘M ; ⌘Q ; ⌘Tab ; ⌘` ; ⌘Espace, ⌥⌘Espace ; **⌃Espace, ⌃⌥Espace** (source de saisie) ; ⌃⌘Espace (émojis) ; ⌥⌘Échap ; ⇧⌘3, ⇧⌘4, ⇧⌘5 ; ⌃⌘Q ; ⇧⌘Q, ⌥⇧⌘Q ; ⇧⌘? (aide du système) ; ⌃↑, ⌃↓, ⌃←, ⌃→ (Mission Control) ; ⌥⌘8, ⌥⌘= et ⌥⌘- (zoom d'accessibilité) ; ⌘F5 (VoiceOver) ; F11 ; ⌃F1 à ⌃F8 (navigation au
+clavier du système) ; ⌃⌘D (définition du mot) ; ⌥⌘T (barre d'outils des applications de texte) | **toute combinaison Ctrl+Alt** (AltGr) ; **Alt+lettre ou chiffre** (touches d'accès) ; Win+… (dont Win+. émojis, Win+Espace saisie) ; Alt+Tab ; Alt+F4 ; Alt+Espace ; Ctrl+Échap ; Ctrl+Maj+Échap ; Ctrl+Alt+Suppr ; Maj+Alt (langue de saisie) |
 | Ctrl+. et Ctrl+; (émojis de GTK 4) ; Ctrl+Maj+U (saisie Unicode) ; Ctrl+Maj+I (inspecteur web, s'il est activé) ; **Ctrl+Espace à risque** (IBus) | | Ctrl+Espace **à risque** (méthode de saisie chinoise) |
 
 **K-6.** Le registre DOIT refuser, par un test **sur chacun des trois systèmes** :
 - deux actions sur un même raccourci dans un même contexte ;
-- un raccourci de la table réservée de ce système ;
+- un raccourci de la table réservée de ce système, **sauf** une commande **déléguée au système**
+  (Aide sous macOS, Quitter), que le registre décrit sans la capturer et que le test reconnaît ;
 - toute combinaison Ctrl+Alt ;
 - Alt+alphanumérique sous Windows.
 
@@ -3433,7 +3449,7 @@ Une règle sans assertion n'est pas finie.
 | G-0, §4.16 | clic et Entrée ouvrent le fichier, onglet actif, focus dans l'éditeur | `frontend/e2e/files.spec.ts` | **à écrire** |
 | PERF-1, §5.17 | latence de frappe à 512 Ki et 2 Mi caractères ; frappe locale < 50ms pendant une synchronisation lente (netsim) | `frontend/e2e/perf.spec.ts` | **à écrire** (`e2e/netsim.spec.ts` existe, sans mesure de frappe) |
 | §4.29 à §4.35 | consentement, états du gestionnaire, épinglage par la personne seulement, attribution par point, mode sans extensions, repère du mode développeur, repli d'une extension de projet, erreur de diagramme en ligne ; densité d'attribution à 360px | `frontend/e2e/extensions.spec.ts` + tests d'API de l'architecture (`EXT-ND1` à `ND8`) | **à écrire** |
-| TH-D2 (rév. 6) | texte secondaire et anneau sur les états : `--hover-bg` `#bbbbbb` refusé (secondaire à 3,92:1) | `theme/contract.test.ts` | **à écrire** |
+| TH-D2 (rév. 7) | texte secondaire et anneau sur les états : `--hover-bg` `#acacac` **refusé** (4,45:1, 2,67:1) ; `#bbbbbb` **accepté** (4,81:1, 3,16:1) | `theme/contract.test.ts` | **à écrire** |
 | TH-D2 (rév. 4) | états interactifs (`--hover-bg` noir refusé), planchers `hcMin` (thème « papier » accepté, `--fg-dim` HC à 55 % refusé), `hcOnly` (`--border` HC < 3:1 refusé), contrat `^2.0` refusé, valeur hors bornes refusée | `theme/contract.test.ts` | **à écrire** |
 | K-6, K-7 (rév. 6) | **pour chacun des trois systèmes** : aucun doublon, aucun raccourci réservé, aucune combinaison Ctrl+Alt, aucun Alt+alphanumérique sous Windows ; sous WebKitGTK avec IBus actif, Ctrl+Espace atteint la page, sinon Alt+/ ; sous macOS, ⌥Échap | `commands.test.ts` (une table par système), `frontend/e2e/keys.spec.ts` (trois systèmes) | **à écrire** |
 | §4.34 | chaque diagramme a une description, présente dans `image(alt:)`, dans l'export HTML et dans la Vue lecture ; l'absence est comptée en avertissement | `e2e/diagrams.spec.ts` | **à écrire** |
