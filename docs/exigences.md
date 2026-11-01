@@ -88,6 +88,7 @@ Rien n'est « fait » sans tests verts et sans une passe `ux-walkthrough` réuss
 | N43 | 2026-11-01 | Les polices ne doivent jamais être un problème pour Typst : accès aux polices du système et à celles qu'on fournit, extrêmement facilement ; un gestionnaire de polices si besoin ; **pas de gestion des licences** (c'est la personne qui en est responsable) ; une police disponible dans un projet l'est pour tout le monde dans ce projet, et chacun peut l'installer de façon pérenne s'il le souhaite. **Même principe pour les plugins** de projet (N23) : disponibles pour tous dans le projet, installables de façon pérenne au choix | `docs/architecture/`, `docs/design/` | 🔨 |
 | N44 | 2026-11-01 | Synchronisation texte ↔ aperçu dans les deux sens : l'aperçu suit l'endroit où l'on est dans le texte, et inversement | `docs/architecture/`, `docs/design/` | 🔨 |
 | N45 | 2026-11-01 | La synchronisation texte ↔ aperçu ne doit jamais entrer en conflit avec l'édition des autres (leurs modifications ne déplacent pas ma vue) ; mode « suivre » : suivre en direct l'édition d'une autre personne, texte et aperçu suivant sa position | `docs/architecture/`, `docs/design/` | 🔨 |
+| N46 | 2026-11-01 | Variantes (branches) isolées : travailler sur une variante ne change pas le travail des autres sur leurs variantes ; plusieurs personnes peuvent travailler en même temps sur des variantes différentes (et à plusieurs sur la même) | `docs/architecture/`, `docs/design/` | 🔨 |
 
 ## Interface et édition
 

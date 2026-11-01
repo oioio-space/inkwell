@@ -456,3 +456,13 @@ ci-dessus) :
   - « la personne suivie le voit-elle ? » est la **décision n° 21** de
     `decisions-utilisatrice.md` ; recommandation : oui, discrètement, pour la vie privée ;
   - §5.15 renvoie à §4.47 ; `coverage.md` (deux lignes) et `inventory.md` (G-104) mis à jour.
+- **N46, variantes isolées** (rév. 7.1, §4.22) :
+  - la variante courante est personnelle, et en changer ne touche que ma vue ;
+  - « Variante : … » est toujours visible dans l'en-tête et la frise ;
+  - une modification reste dans sa variante ; seule l'intégration la fait traverser ;
+  - la présence dit qui est sur quelle variante, et seuls les curseurs de la même variante
+    s'affichent ;
+  - suivre une personne sur une autre variante demande d'abord de passer dessus ;
+  - aucune notification par modification : seules les propositions d'intégrer vers ma variante
+    arrivent ;
+  - `coverage.md` a sa ligne.
