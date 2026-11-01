@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Version | **1.0.0-brouillon.8** (révision 7 : revues du tour 6 ; [CHANGES.md](CHANGES.md), [coherence.md](coherence.md)) |
+| Version | **1.0.0-brouillon.9** (révision 8 : revues du tour 7, N42 autoporteur, N43 polices ; [CHANGES.md](CHANGES.md), [coherence.md](coherence.md)) |
 | Date | 2026-11-01 |
 | Statut | proposé (exigence N18) ; à valider par la boucle de revue Fable + Codex, puis par l'utilisatrice |
 | Remplace | [`docs/architecture.md`](../architecture.md) (devenu un renvoi) |
@@ -74,6 +74,8 @@ n'en dépend (`AD-95`). Règles de toutes les portes :
 | Projection Git | **P-GIT-BENCH** : projet de 1 000 fichiers (2 Mo de texte, 50 blobs de 1 Mo), 500 versions à 2 % de changement chacune ; seuils du §12.5 ; témoin : écrivain minimal jetable (dans `docs/plans/`) | écrivain minimal (`AD-13` option 2) | §6.11 |
 | Mermaid sans DOM (API 1.1) | **P-MERMAID** : module `beautiful-mermaid` épinglé, compilé par le kit JavaScript ; importations permises seulement ; taille ≤ 8 Mio ; p95 ≤ 300 ms pour 200 nœuds dans l'hôte ; polices reproductibles et cohérentes avec le PDF ; corpus de diagrammes pris en charge **et** refusés (message clair) ; SVG assaini ; annulation ; six cibles | Mermaid absent, et dit ; Graphviz et D2 restent | §15.14 |
 | Rendu à DOM (Mermaid complet) | **P-FRAME** : processus web dédié et tuable, réseau et navigation refusés par l'hôte, boucle infinie tuée sans gêner la frappe, source canari jamais vue hors de l'appareil — sur **chaque** moteur de cible (WebKitGTK, WKWebView, WebView2), ou refus écrit sur la cible | Mermaid complet absent | §15.14 |
+| Polices (N43) | **P-FONT** : priorité FT-1 prouvée (même famille et variante dans le projet et le système → projet) ; listes identiques vues par typst et tinymist ; `getDocumentMetrics` rend la source (chemin) de chaque police utilisée, replis de glyphes compris ; PF-11 ≤ 50 ms p95 pour 1 000 fichiers ; RA-T1 (PDF identique après export et import sur image vierge) | FT-8 : compilation de contrôle et avertissements `unknown font family` ; FT-6 : vue réduite | §6.12, §6.13 |
+| Dépendances garanties (N42) | **P-DEPS** : installation et fumée réseau coupé sur chaque image de DG-3 ; Windows sans WebView2 hors ligne ; contrôles `GLIBC_*`, `DT_NEEDED`, `LC_LOAD_DYLIB` ; lanceur DG-2 qui nomme le paquet manquant | cible retirée de DG-3 (jamais promise sans preuve) | §14.1 |
 | Deltas du protocole PD-* | boucle de revue du protocole ; vecteurs | fonctions bloquées (N23, politique IA partagée, règle de projet de N34) | §15.19 |
 
 **Reporté, pas expérimenté** : le client **ACP** (§15.18). Un agent tiers a besoin de fichiers et
@@ -145,6 +147,7 @@ Ces invariants reprennent ceux de [`CLAUDE.md`](../../CLAUDE.md) ; les changer e
 | INV-11 | *[proposé, ADR 0039]* Le noyau fermé est la liste K-1 à K-10 (§15.3) ; tout le reste est un point d'extension ; une extension intégrée n'a aucun droit qu'un greffon ne puisse demander (sauf `ui.native`) ; aucune extension ne retire une zone protégée (ND-1 à ND-8) | AC-16, FE-3, P-EXT-*, `EXT-ND*` |
 | INV-12 | *[proposé]* Aucun outil externe à l'exécution : l'historique Git est produit par go-git (Go pur), jamais par un binaire `git`, `ssh` ou de compression ; aucun `os/exec` d'un outil absent de l'exécutable (sauf ceux que la personne désigne elle-même : agent ACP, `AD-82`) | AC-17, AC-18 (§4.5) |
 | INV-13 | *[proposé]* Une garantie d'enfermement vaut sur les six cibles, ou la capacité qu'elle protège est **refusée** sur la cible qui ne la tient pas (échec fermé, réduction écrite dans §9.11) | P-SANDBOX-* |
+| INV-14 | *[proposé, exigence de l'utilisatrice 2026-11-01]* **Autoporteur** : à l'exécution, aucun programme externe n'est lancé ; seules exceptions : **nos** binaires embarqués et revérifiés (SHA-256) avant chaque lancement — `typst`, `tinymist`, `inkwell-sandbox` —, le **lanceur Linux** qui exécute l'exécutable d'inkwell lui-même (DG-2), et la commande d'agent ACP qu'une personne désigne elle-même (`AD-82`, hors du cœur, reportée). Seules sont permises les interfaces du système : appels système, API du trousseau (Secret Service par D-Bus, Security.framework, Credential Manager), cadres de la plate-forme (IOKit, DiskArbitration, AppKit, WMI par COM, registre, portails XDG). Ni shell, ni util-linux, ni `fc-list`/`fc-match`, ni `open`/`start`, ni `pmset`, `diskutil`, `fdesetup`, `hdiutil`, `manage-bde`, PowerShell, `xdg-open`, `git`, `age`. LanguageTool et les agents ACP restent des ajouts **optionnels** fournis par la personne, hors du cœur. Exceptions **de test et de construction** seulement : `git check-ignore` (jeu de conformité d'IG-3), `strace` (dérivation de la liste seccomp), `tar` de `cmd/sidecar-fetch` (à la construction, jamais lié au produit, AC-6) | AC-18, AC-19 ; e2e « sans shell ni util-linux » ; bibliothèques et composants : §14.1 (« Dépendances garanties ») |
 
 ## 2. Attributs de qualité (ISO/IEC 25010:2023) et budgets
 
@@ -264,7 +267,7 @@ nommés d'un greffon (`net.hosts`, §15.5), le fournisseur d'IA autorisé (§15.
 | `tinymist lsp` *[cible]* | binaire épinglé, stdio | complétion, survol, diagnostics à la frappe | aucun port ; aucune écriture |
 | Dossier du projet | fichiers | projection lisible, magasin, listes signées | — |
 | `inkwell-relay` | Go + libp2p | relais circuit v2 | ne voit jamais le contenu |
-| Hôte des greffons *[expérimentation, ADR 0039]* | `inkwell-plugin-host` (binaire statique Go pur), wazero | exécuter **un** greffon WebAssembly par processus, ≤ 6 actifs, créés paresseusement (§9.10 H-4) | aucun fichier, aucun réseau, aucun secret ; tout passe par Go (capacités) |
+| Hôte des greffons *[expérimentation, ADR 0039]* | `inkwell-sandbox` (mode `plugin-host`) (binaire statique Go pur), wazero | exécuter **un** greffon WebAssembly par processus, ≤ 6 actifs, créés paresseusement (§9.10 H-4) | aucun fichier, aucun réseau, aucun secret ; tout passe par Go (capacités) |
 | Rendu à DOM *[différé, P-FRAME]* | processus web dédié, à prouver | rendre un diagramme pour les moteurs qui exigent une mise en page de navigateur (§15.14) | rien en v1 |
 
 ### 3.3 Composants du cœur Go
@@ -542,7 +545,7 @@ des hôtes de greffons.
   `Grant`, `Manifest`, `Package` (contenu vérifié, signature, continuité de clé), `SanitizeSVG`.
 - Dépend de : `sandbox`, `tasks`, `store`, `identity` (vérification de signature seulement),
   `protocol/sig`. **NE DOIT PAS** dépendre de `ledger`, `transport`, `bridge`, `blob`. wazero n'est
-  importé que par `internal/plugin/host`, lié seulement dans `cmd/inkwell-plugin-host` (AC-16).
+  importé que par `internal/plugin/host`, lié seulement dans `cmd/inkwell-sandbox` (AC-16).
 - État : `<UserDataDir>/inkwell/plugins/` (paquets vérifiés), droits et épinglages dans les
   réglages ; **aucun cache de compilation sur disque** (H-3).
 - Concurrence : un superviseur par hôte ; appels par file bornée en octets ; arrêt §15.9.
@@ -552,10 +555,21 @@ des hôtes de greffons.
   épinglages et son journal ; un greffon de projet désactivé pour soi garde son magasin par projet
   jusqu'à la fermeture du projet, puis l'efface s'il a été retiré par décision.
 
-**`cmd/inkwell-plugin-host`** *[expérimentation]* — l'hôte de greffons : binaire **Go pur,
-statique** (`CGO_ENABLED=0`), embarqué et extrait en lecture seule comme un sidecar, revérifié
-(SHA-256) avant chaque lancement ; lancé en deux temps (§9.10 H-0). Il n'importe ni Wails, ni GTK,
-ni rien d'applicatif hors `internal/plugin/host` et `internal/sandbox`.
+**`cmd/inkwell-sandbox`** *[cible ; mode `plugin-host` en expérimentation]* — **notre** binaire
+d'enfermement : **Go pur, statique** (`CGO_ENABLED=0`), embarqué et extrait en lecture seule comme un
+sidecar, revérifié (SHA-256) avant chaque lancement. Deux modes : `plugin-host` (hôte d'un greffon,
+lancé en deux temps, §9.10 H-0) et **`exec`** (lanceur des sidecars `typst` et `tinymist`, §9.5) :
+dans son propre processus, il pose espaces de noms, montage tmpfs, limites, Landlock, `no_new_privs`,
+abandon des capacités et seccomp **par des appels système**, puis `execve` du sidecar vérifié.
+Il remplace toute la chaîne `/bin/sh` + `ulimit`, `/usr/bin/setpriv`, `/usr/bin/prlimit`,
+`/usr/bin/unshare`, `/usr/bin/mount` du code actuel (§16, INV-14). Il n'importe ni Wails, ni GTK,
+ni rien d'applicatif hors `internal/plugin/host` et `internal/sandbox`. Il n'analyse aucune police :
+l'index des polices passe par `typst fonts` enfermé (FT-5).
+
+**`cmd/inkwell-launch`** *[cible, Linux seulement ; `AD-99`]* — lanceur **statique** installé comme
+`/usr/bin/inkwell` : vérifie la présence de GTK 4, de WebKitGTK 6.0 et la version de la glibc, puis
+`unix.Exec` de l'exécutable d'inkwell ; sinon un message en mots simples (§14.1 DG-2). N'importe
+que la bibliothèque standard et `golang.org/x/sys`.
 
 **`internal/sandbox`** *[cible, N35]* — le port d'enfermement des processus enfants, commun aux
 sidecars et aux hôtes de greffons.
@@ -657,9 +671,10 @@ donnée (seulement des constantes, `ui/icons`). Vérifiées par Biome `noRestric
 | FE-1 | `packages/protocol` n'importe rien de `src/` | Biome *[cible]* |
 | FE-2 | règles du §4.4 | Biome *[cible]* |
 | FE-3 | `src/ext/**` n'importe que `@inkwell/extension-api` et `src/ui/kit` | Biome *[cible, ADR 0039]* |
-| AC-16 | seul `internal/plugin/host` importe wazero, et il n'est lié que dans `cmd/inkwell-plugin-host`, construit `CGO_ENABLED=0` sans Wails ; aucun paquet du noyau fermé (§15.3) n'importe `internal/plugin` | `arch-check.sh`, `go version -m` *[cible, ADR 0039]* |
+| AC-16 | seul `internal/plugin/host` importe wazero, et il n'est lié que dans `cmd/inkwell-sandbox`, construit `CGO_ENABLED=0` sans Wails ; aucun paquet du noyau fermé (§15.3) n'importe `internal/plugin` | `arch-check.sh`, `go version -m` *[cible, ADR 0039]* |
 | AC-17 | seul `internal/milestone` importe go-git | `arch-check.sh` *[cible]* |
-| AC-18 | aucun `os/exec` hors de `internal/sandbox` (qui ne lance que des binaires embarqués et vérifiés, ou la commande d'agent désignée par la personne, `AD-82`) ; aucune chaîne `"git"` lancée | `arch-check.sh` + test sans `git` dans `PATH` *[cible]* |
+| AC-18 | dans le code de production (hors `_test.go`, hors `cmd/sidecar-fetch`), **seul** `internal/sandbox` importe `os/exec` ou appelle `syscall.Exec`, `os.StartProcess`, `unix.Exec` ; aucun littéral de chemin absolu d'exécutable (`"/bin/…"`, `"/usr/bin/…"`, `"…\\System32\\…"`) ni nom de programme du système (`sh`, `setpriv`, `prlimit`, `unshare`, `mount`, `tar`, `git`, `pmset`, `diskutil`, `powershell`…) dans un appel de lancement | `arch-check.sh` (graphe d'imports + recherche des littéraux dans les paquets de production) *[cible, INV-14]* |
+| AC-19 | `internal/sandbox.Start` n'accepte qu'un **binaire vérifié** (type `sidecar.Verified`, obtenu seulement par l'extraction et la vérification SHA-256 du manifeste embarqué), jamais une chaîne de chemin ; seule exception typée : la commande d'agent ACP désignée par la personne (reportée) | compilation (types) + revue ; e2e dans un conteneur **sans shell ni util-linux** (`/bin/sh`, `/usr/bin/*` absents) : aperçu, export, greffon, sauvegarde fonctionnent *[cible]* |
 
 ## 5. Concurrence, cycle de vie, arrêt
 
@@ -1225,6 +1240,9 @@ personnes. Un modèle **est un projet**, marqué comme modèle, décrit par la s
   un second moteur de mise en page (navigateur) : écarté en v1 (`AD-78`, à confirmer).
 - **TM-7** Les modèles ne sont pas des greffons et n'exécutent rien hors de Typst (et de ses
   greffons Typst purs, X-8).
+- **TM-8** Un modèle porte ses polices (`fonts/`) et ses paquets (`.typstdeps/`), copiés à la
+  création (FT-13) ; « Enregistrer comme modèle » passe par le rassemblement des ressources
+  (§6.13) : un modèle est autosuffisant.
 
 ### 6.9 Fichiers non synchronisés (N34)
 
@@ -1243,7 +1261,7 @@ Syncthing). Ce que « ne pas synchroniser » veut dire ici, corrigé par la revu
   autorité ; avant PD-1, seule la couche personnelle existe.
 - **IG-3** Syntaxe gitignore (`.inkwellignore` pour l'édition à la main, interprété par le paquet
   `plumbing/format/gitignore` de go-git, déjà lié pour N39), jeu de conformité contre `git
-  check-ignore` produit à la construction, parseur fuzzé ; motifs jamais hors de la racine.
+  check-ignore` produit à la construction (outil de test seulement, jamais lancé par l'application, INV-14), parseur fuzzé ; motifs jamais hors de la racine.
 - **IG-4** Défauts : déchets du système (`.DS_Store`, `Thumbs.db`, `desktop.ini`, `*~`, `*.swp`),
   dossiers de gestion de versions (`.git/`, `.jj/`), dossiers de sortie déclarés. **Jamais**
   `.typstdeps/`, les polices, la charte, ni les ressources référencées par la compilation (N5,
@@ -1269,6 +1287,10 @@ Syncthing). Ce que « ne pas synchroniser » veut dire ici, corrigé par la revu
 [research/encryption.md](research/encryption.md). Recommandation retenue, avec la simplification
 de l'étude (§7.2) :
 
+- **EN-0** *[décidé par l'utilisatrice, 2026-11-01]* La protection est **facultative** : « Protéger
+  ce projet » n'est **jamais** cochée par défaut, même pour un projet partagé ; la personne la
+  choisit (création, paramètres du projet). Un projet non protégé garde le comportement actuel
+  (fichiers en clair dans son dossier) ; aucune incitation insistante (`AD-91`, révision 8).
 - **EN-1** Pas de système de fichiers monté (aucun pilote FUSE, WinFsp, macFUSE : contraires à
   « autonome » et à « aucun port »). Le « bloc chiffré » de N37 est tenu **par objet** : chaque
   valeur du magasin `IKV1` et chaque blob est chiffré (XChaCha20-Poly1305, nonce aléatoire de 24
@@ -1330,7 +1352,7 @@ de l'étude (§7.2) :
   | Cible | Support autorisé | Sinon |
   |---|---|---|
   | Linux | tmpfs privé (ADR 0033) **et** absence de swap en clair (aucun swap, zram, ou swap chiffré, vérifiés au déverrouillage) | disque chiffré par le système vérifié (LUKS sous le dossier) ; sinon refus |
-  | macOS | disque en mémoire créé sans pilote (`hdiutil attach -nomount ram://`, puis système de fichiers privé ; *à prouver* par P-VAULT) **et** swap chiffré (le disque en mémoire peut être paginé) | volume du dossier chiffré, vérifié **sur ce volume** (OV-2) ; sinon refus |
+  | macOS | **aucun** support mémoire : le disque en mémoire exigeait `hdiutil` (programme externe, contraire à INV-14 ; `AD-99`) | volume du dossier chiffré, vérifié **sur ce volume** (OV-2) ; sinon refus |
   | Windows | aucun support mémoire sans pilote | volume BitLocker (ou chiffrement de l'appareil) actif, vérifié ; sinon refus |
 
   **Oracles de « vérifié »**, **liés au volume** (règle OV, sécurité, *à auditer*). Chaque oracle
@@ -1339,53 +1361,73 @@ de l'étude (§7.2) :
   cibles de **pagination** (swap, image d'hibernation) et de **vidage sur plantage** (OV-5). Il est
   rejoué au déverrouillage, à chaque matérialisation et avant chaque cérémonie de la phrase (SR-5) ;
   un montage qui change entre la vérification et l'usage est revérifié.
-  - **OV-1 Linux** (lecture de `/proc` et de **sysfs**, jamais de la sortie d'un programme externe).
-    *Volume d'un chemin* : dans `/proc/self/mountinfo` (`proc_pid_mountinfo(5)`), le point de montage
-    le plus long qui préfixe le chemin donne la **source du montage** ; `stat` de la source →
-    `/sys/dev/block/<maj>:<min>` ; une partition remonte à son disque parent avant `slaves/` ; on
-    suit `slaves/` jusqu'à un `dm-*` dont `dm/uuid` commence par `CRYPT-`. btrfs : **chaque**
-    périphérique du système de fichiers (`/sys/fs/btrfs/<uuid>/devices/`) doit l'être. Source sans
-    périphérique bloc local (overlayfs, NFS, FUSE, `tmpfs` hors dossier de travail) → refus.
-    *Swap* : `/proc/swaps` vide, ou chaque entrée est un `dm-*` `CRYPT-`, un `zram*` dont
-    `/sys/block/zramX/backing_dev` vaut `none` ou désigne un `dm-*` `CRYPT-`, ou un **fichier**
-    (`Type: file`) dont le chemin est résolu comme ci-dessus. *Hibernation* : mécanismes pris en
-    charge et preuve exigée — (a) **impossible** : `/sys/power/state` ne contient pas `disk`, ou
-    `/sys/power/disk` vaut `[disabled]` (noyau verrouillé, `nohibernate`) ; ou (b) **possible**, mais
-    **toute destination locale d'une image est chiffrée** : chaque périphérique bloc persistant de
-    `/sys/block/` (hors `loop`, `ram`, `zram` sans repli) ne porte que des volumes `CRYPT-` ou aucun
-    système de fichiers ni swap, et aucun périphérique amovible n'est branché pendant la cérémonie ;
-    `/sys/power/resume` vaut `0:0` ou désigne un `CRYPT-`. Un outil d'hibernation en espace
-    utilisateur (interface `/dev/snapshot`) peut écrire l'image où il veut : la règle (b) couvre toute
-    destination locale ; tout autre cas → refus.
-  - **OV-2 macOS** (pas d'équivalent de sysfs : les sorties `-plist` sont **analysées
-    structurellement**, jamais du texte). Volume = `statfs(chemin).f_mntfromname` → volume APFS ;
-    chiffré selon `diskutil info -plist <volume>` (clés `FileVault` ou `Encrypted`, à confirmer par
-    P-VAULT-MAC) ; le statut global `fdesetup status` ne suffit pas. Swap : `sysctl vm.swapusage`
-    contient `(encrypted)` (exigé aussi pour le disque en mémoire). Hibernation : pour **tous** les
-    profils d'énergie (`pmset -g custom` : batterie, secteur, onduleur), `hibernatemode` = 0, **ou**
-    le volume de `hibernatefile` est vérifié comme ci-dessus ; un profil illisible → refus.
-  - **OV-3 Windows** : volume = `GetVolumePathName(chemin)` → `Win32_EncryptableVolume` de ce volume,
-    `ProtectionStatus = 1`. Pagination : chaque fichier d'échange (`Win32_PageFileUsage`) sur un
-    volume vérifié, ou `NtfsEncryptPagingFile = 1`
-    (`HKLM\SYSTEM\CurrentControlSet\Control\FileSystem`). Hibernation :
-    `HKLM\SYSTEM\CurrentControlSet\Control\Power\HibernateEnabled = 0`, ou fichier d'hibernation
-    sur le volume système vérifié.
+  - **OV-1 Linux** (lecture de `/proc` et de **sysfs** par des appels système, jamais d'un programme
+    externe ; INV-14). *Volume d'un chemin* : dans `/proc/self/mountinfo` (`proc_pid_mountinfo(5)`),
+    le point de montage le plus long qui préfixe le chemin donne la **source du montage** ; `stat` de
+    la source, champ **`st_rdev`** (le numéro du périphérique, pas `st_dev`) →
+    `/sys/dev/block/<maj>:<min>` ; une partition remonte à son disque parent avant `slaves/` ; on suit
+    `slaves/` jusqu'à un `dm-*` dont `dm/uuid` commence par `CRYPT-`. btrfs : **chaque** périphérique
+    du système de fichiers (`/sys/fs/btrfs/<uuid>/devices/`) doit l'être. Source sans périphérique bloc
+    local (overlayfs, NFS, FUSE, `tmpfs` hors dossier de travail) → refus. *Swap* : `/proc/swaps`
+    vide, ou chaque entrée est un `dm-*` `CRYPT-`, un `zram*` dont `/sys/block/zramX/backing_dev` vaut
+    `none` ou désigne un `dm-*` `CRYPT-`, ou un **fichier** (`Type: file`) dont le chemin est résolu
+    comme ci-dessus. *Hibernation*, mécanismes pris en charge et preuve exigée :
+    - **(a) impossible** : `/sys/power/state` ne contient pas `disk`, ou `/sys/power/disk` vaut
+      `[disabled]` (noyau verrouillé, `nohibernate`) ;
+    - **(b′) possible, par les mécanismes connus seulement** : l'hibernation du noyau (`swsusp`)
+      n'écrit l'image que dans un swap **actif**, désigné par `/sys/power/resume` ; donc chaque swap
+      actif passe l'oracle ci-dessus, `/sys/power/resume` vaut `0:0` ou désigne un `CRYPT-` ; et aucun
+      outil d'hibernation en espace utilisateur n'est configuré vers une destination en clair :
+      `/etc/uswsusp.conf` et `/etc/suspend.conf` absents, ou leur `resume device` résolu `CRYPT-` ;
+      `/sys/power/tuxonice` absent. L'ancienne règle « tout périphérique bloc chiffré » est
+      **abandonnée** : sysfs n'expose aucune signature de système de fichiers d'une partition non
+      montée, et toute installation UEFI a une partition EFI (et souvent `/boot`) en clair, donc elle
+      ne pouvait ni être lue ni passer.
+    - **Pendant la cérémonie** (défense en plus) : verrou d'inhibition `sleep` de `systemd-logind`
+      (`Inhibit("sleep", …, "block")` par D-Bus) ; la cérémonie se fait dans une **fenêtre dont le
+      processus de rendu est dédié** et **terminé** à la fin (les pages libérées ne sont pas écrites
+      par l'hibernation du noyau) ; la durée d'exposition est celle de la cérémonie (*à prouver* par
+      P-VAULT : processus dédié sur chaque moteur).
+    - **Résiduel écrit** (§9.9, `AD-91`) : un outil **installé et configuré avec les droits
+      d'administration**, hors des mécanismes connus, qui contourne `logind` et écrit une image brute
+      vers une partition en clair **pendant** la cérémonie, n'est pas détectable depuis
+      l'application ; il suppose la maîtrise de l'administration de l'appareil, hors du modèle du
+      Voleur. Sur ce point, les revues divergent (D-17 de `CHANGES.md`) : la variante stricte (seule
+      la branche (a) passe) reste prête si elle est retenue.
+  - **OV-2 macOS** (interfaces du système, jamais `diskutil`, `pmset`, `fdesetup`, `hdiutil` ;
+    INV-14 ; appels par cgo, déjà requis par Wails sur macOS). Volume = `statfs(chemin).f_mntfromname`
+    → disque de **DiskArbitration** (`DADiskCreateFromBSDName`, `DADiskCopyDescription`) ; chiffré si
+    la description le déclare (clé du support chiffré, à confirmer par P-VAULT sur macOS) ; le statut
+    global de FileVault ne suffit pas. Swap : `sysctl("vm.swapusage")` par l'appel système, structure
+    `xsw_usage`, champ `xsu_encrypted` (exigé). Hibernation : **IOKit**, `IOPMCopyPMPreferences` (tous
+    les profils : batterie, secteur, onduleur) : `Hibernate Mode` = 0 partout, **ou** le volume de
+    `Hibernate File` vérifié comme ci-dessus ; un profil illisible → refus.
+  - **OV-3 Windows** (interfaces du système, jamais `manage-bde` ni PowerShell ; INV-14). Volume =
+    `GetVolumePathNameW(chemin)` → classe WMI `Win32_EncryptableVolume` de ce volume, interrogée par
+    **COM** (`go-ole`, déjà dans le graphe par Wails), `ProtectionStatus = 1`. Pagination : chaque
+    fichier d'échange (WMI `Win32_PageFileUsage`) sur un volume vérifié, ou `NtfsEncryptPagingFile =
+    1` lu par l'API du registre (`HKLM\SYSTEM\CurrentControlSet\Control\FileSystem`). Hibernation :
+    `HibernateEnabled = 0` (`HKLM\SYSTEM\CurrentControlSet\Control\Power`, API du registre), ou fichier
+    d'hibernation sur le volume système vérifié.
   - **OV-4 Placement** : le dossier de travail, la clé X25519 (mode « disque chiffré ») et le
     **dossier de données de la webview** (cache, stockage local, rapports de plantage de WebView2)
     sont **toujours** placés sous le dossier de la personne, sur un volume vérifié ; un autre volume
     → refus. Témoins de P-VAULT : « démarrage chiffré, destination externe en clair » → refus ;
     changement de montage → refus ; état inconnu → refus ; **btrfs sur LUKS → accepté** ; **fichier
-    d'échange sur LUKS → accepté** ; **btrfs en clair → refus** ; outil d'hibernation en espace
-    utilisateur vers une destination en clair → refus.
+    d'échange sur LUKS → accepté** ; **btrfs en clair → refus** ; uswsusp configuré vers un swap ou
+    une partition en clair → refus ; `resume` vers un swap en clair → refus ; hibernation demandée
+    pendant la cérémonie → bloquée par le verrou d'inhibition.
   - **OV-5 Vidages sur plantage** (le processus de rendu de la webview garde les mots, SR-5).
     `RLIMIT_CORE = 0` est posé **au lancement de l'application, avant la création de la webview**,
     pour être hérité par les processus de rendu ; `PR_SET_DUMPABLE = 0` (Go) pendant la cérémonie.
-    Comme un gestionnaire en tube (`core_pattern` commençant par `|`, par exemple
-    `systemd-coredump`, Apport) peut ignorer cette limite (`core(5)`), le **volume de destination** du
-    gestionnaire (`/var/lib/systemd/coredump`, `/var/crash`) doit être vérifié, sinon refus de la
-    cérémonie. Windows : `FailureReportFolderPath` de WebView2 placé sous le dossier de données de la
-    webview (OV-4) et **purgé** à la fin de la cérémonie ; exclusion du rapport d'erreur de Windows
-    pour le processus principal. macOS : `~/Library/Logs/DiagnosticReports` sur un volume vérifié.
+    `systemd-coredump` honore cette limite (`systemd-coredump(8)` : rien n'est traité quand
+    `RLIMIT_CORE` est insuffisant) ; d'autres gestionnaires en tube peuvent l'ignorer (`core(5)`,
+    Apport selon sa version) : le **volume de destination** du gestionnaire (`/var/lib/systemd/coredump`,
+    `/var/crash`) est donc vérifié aussi, sinon refus de la cérémonie. Windows : le dossier des
+    rapports de WebView2 (`FailureReportFolderPath`, propriété **en lecture seule**) se trouve **par
+    construction** sous le dossier de données de la webview, placé par OV-4 ; il est **purgé** à la fin
+    de la cérémonie ; exclusion du rapport d'erreur de Windows pour le processus principal
+    (`WerAddExcludedApplication`). macOS : `~/Library/Logs/DiagnosticReports` sur un volume vérifié.
   - Un support annoncé chiffré qui ne l'est pas → **refus** ; un oracle qui ne peut pas être lu →
     refus (échec fermé).
 
@@ -1410,8 +1452,9 @@ de l'étude (§7.2) :
   **choix explicite** signalé : « ce projet n'est alors plus seulement chiffré sur ce disque ».
 - **EN-6** Export en **un fichier** : `projet.zip` (copie lisible) ou `projet.inkwell.zip`
   (archive complète, avec historique) ; chacun **chiffrable par age** (mot de passe, ou les
-  personnes du projet), lisible sans inkwell par `age -d` ; manifeste signé (préfixe externe
-  `"inkwell-ext:export:1\0"`).
+  personnes du projet), lisible sans inkwell par `age -d` ; chiffré par la bibliothèque `filippo.io/age`, jamais par
+  l'outil `age` (INV-14) ; manifeste signé (préfixe externe `"inkwell-ext:export:1\0"`). L'export
+  passe d'abord par le **rassemblement des ressources** (§6.13) : il est **autosuffisant**.
 - **EN-7** Honnêteté écrite : protège un appareil **éteint** ou volé, une sauvegarde, un export, à
   condition qu'EN-4 tienne sur la cible ; ne protège pas une session ouverte sur un appareil
   compromis, ni la mémoire de la webview ; aucune promesse d'effacement physique sur SSD ; après un
@@ -1503,6 +1546,160 @@ projection ; la personne n'a besoin de connaître ni l'une ni l'autre.
 - **HI-10 Horloge du voyage dans le temps.** Le curseur suit l'**ordre de réception sur cet
   appareil** (honnête et déterministe localement) ; l'heure affichée est l'heure **déclarée** par
   l'auteur, marquée comme telle (un pair peut la falsifier).
+
+### 6.12 Polices (N43)
+
+*[cible ; `AD-100` ; porte **P-FONT**]* Une police ne doit jamais être un problème : Typst atteint
+sans réglage les polices du système et celles qu'on lui fournit, et ce que le projet porte se rend
+pareil chez chaque membre.
+
+**État vérifié le 2026-11-01** (typst 0.15.1 et tinymist 0.15.10 épinglés ; sources lues, mesures
+sur l'appareil de développement, 432 fichiers de polices, 128 familles) :
+
+- typst découvre les polices dans cet ordre : **système** (`fontdb` ; sous Linux, lecture des
+  fichiers de fontconfig, sans programme externe), **embarquées** de `typst-assets` (Libertinus
+  Serif, New Computer Modern et sa variante Math, DejaVu Sans Mono), puis chaque `--font-path`
+  (`TYPST_FONT_PATHS`, séparateur du système), parcouru récursivement ; drapeaux
+  `--ignore-system-fonts` et `--ignore-embedded-fonts` (`crates/typst-cli/src/fonts.rs`,
+  `discover_fonts`) ;
+- à famille et variante égales, **la première ajoutée gagne** (`FontBook::find_best_variant`,
+  comparaison stricte) : laissée telle quelle, une police du système masquerait celle du projet ;
+- `--deps` ne liste pas les polices (mesuré) ; une famille inconnue donne l'avertissement
+  `unknown font family` avec sa position (mesuré) ;
+- la découverte des polices du système coûte **≈ 80 ms à chaque `typst compile`** (3 essais),
+  0 ms sans elle ;
+- tinymist : réglages `fontPaths` et `systemFonts` (vrai par défaut, l'emporte sur
+  `--ignore-system-fonts`, changement à chaud impossible) ; la requête
+  `tinymist.getDocumentMetrics` rend pour chaque police **réellement utilisée** par le document
+  compilé (replis de glyphes compris) sa famille, sa variante, sa **source** (fichier ou police
+  embarquée) et sa première occurrence (fichier, ligne, colonne)
+  (`crates/tinymist-query/src/document_metrics.rs`) ;
+- **code actuel** : `--ignore-system-fonts` et `--font-path <polices d'inkwell>:<projet>/fonts`
+  (`engine.go:463`) : les polices du système sont **inaccessibles**, et celles de `typst-assets`
+  passent **avant** celles du projet (§16).
+
+**Règles :**
+
+- **FT-1 Quatre sources, priorité fixe**, de la plus forte à la plus faible : (1) **projet**
+  (`fonts/` du projet : blobs BLAKE3, synchronisés chez tous les membres) ; (2) **inkwell** (Inter
+  et une copie des polices de `typst-assets` de la version épinglée, embarquées, extraites et
+  revérifiées comme les paquets fournis) ; (3) **mes polices** (installation permanente, FT-12) ;
+  (4) **cet ordinateur** (dossiers du système). Raison : ce que porte le projet doit gagner partout ;
+  ce qu'inkwell embarque est identique sur tous les appareils, donc passe avant ce qui varie d'un
+  appareil à l'autre. L'exigence nomme trois sources ; la troisième ici naît de FT-12.
+- **FT-2 Mise en œuvre** : typst est lancé avec `--ignore-system-fonts --ignore-embedded-fonts`
+  et **une** liste `--font-path` dans l'ordre de FT-1 (la première ajoutée gagne), les dossiers du
+  système en dernier. tinymist reçoit **la même liste** (`fontPaths`, `systemFonts: false`) :
+  complétion, aperçu et compilation voient les mêmes polices. Témoins P-FONT : une famille présente
+  dans le projet et dans le système, de même variante → celle du projet ; listes identiques vues par
+  `typst fonts --variants` et par tinymist.
+- **FT-3 Familles mêlées** : une variante absente du projet (le gras d'une famille dont le projet
+  n'a que le romain) peut venir d'ailleurs ; FT-8 la voit (source locale) et FT-9 le signale.
+- **FT-4 Dossiers du système, calculés par Go**, jamais par `fc-list` ni `fc-match` (INV-14) :
+  Linux : `$XDG_DATA_HOME/fonts`, `~/.fonts`, `<d>/fonts` pour chaque `<d>` de `$XDG_DATA_DIRS`
+  (défaut `/usr/local/share:/usr/share`), plus les `<dir>` de `/etc/fonts/fonts.conf` et de ses
+  `<include>` (XML borné : 1 Mio par fichier, profondeur 8, 64 inclusions) ; sous Flatpak,
+  `/run/host/fonts`. macOS : `/System/Library/Fonts`, `/Library/Fonts`, `~/Library/Fonts` et les
+  dossiers des URL rendues par CoreText (`CTFontManagerCopyAvailableFontURLs`, polices
+  téléchargeables du système). Windows : `SHGetKnownFolderPath(FOLDERID_Fonts)`,
+  `%LOCALAPPDATA%\Microsoft\Windows\Fonts` et les dossiers des valeurs de
+  `HKCU\Software\Microsoft\Windows NT\CurrentVersion\Fonts` (API du registre). Ces dossiers sont
+  ouverts **en lecture seule** aux sidecars (Landlock ; Seatbelt `file-read*` ; AppContainer :
+  `C:\Windows\Fonts` est lisible par défaut, les dossiers par personne reçoivent une ACE de lecture
+  comme le dossier de travail, §9.11).
+- **FT-5 Index des polices**, en cache et incrémental (`<cache>/fonts/index`) : par fichier
+  `(chemin, taille, mtime, identifiant de fichier) → familles, variantes, rang dans la collection` ;
+  construit **en arrière-plan après le démarrage**, jamais sur son chemin (PM-1, N38), par `typst
+  fonts --variants --ignore-system-fonts --ignore-embedded-fonts --font-path <dossier>` enfermé
+  (§9.5), **dossier par dossier** ; seuls les dossiers modifiés sont relus. La sortie est du texte,
+  pas une API stable de typst : décodeur borné et fuzzé, figé par un test de référence rejoué à
+  chaque montée de version. L'index sert au gestionnaire (FT-14) et à la vue réduite (FT-6) ; il ne
+  décide jamais du rendu : c'est typst qui résout.
+- **FT-6 Coût par compilation** (N38, budget **PF-11**) : la découverte des dossiers de FT-2 est
+  payée à chaque `typst compile` ; budget ≤ 50 ms p95 avec 1 000 fichiers de polices sur la machine
+  de référence (P-FONT). Au-delà, repli nommé : **vue réduite**, un dossier de session qui contient
+  des liens vers les seuls fichiers du système des familles **utilisées** par le projet (FT-8) ou
+  **nommées** par ses documents (avertissements `unknown font family` de la vue), recalculé quand
+  une famille nouvelle apparaît ; liens symboliques sous Linux et macOS ; sous Windows, liens
+  physiques sur le même volume, sinon les dossiers entiers. tinymist, résident, ne paie la découverte
+  qu'une fois.
+- **FT-7 Validation et bornes** (un analyseur de polices est une surface d'attaque) : aucun
+  analyseur de police dans le processus Go ; un fichier n'entre dans le projet ou dans « mes
+  polices » que si **typst l'accepte** (`typst fonts --variants` enfermé, sur un dossier de
+  préparation qui ne contient que lui) ; ≤ 128 Mio par fichier (une collection CJK complète tient),
+  ≤ 512 Mio et ≤ 256 fichiers de polices par projet, comptés dans le quota N10 ; formats `ttf`,
+  `otf`, `ttc`, `otc`. Les **licences** relèvent de la personne : inkwell ne les lit ni ne les juge,
+  aucun contrôle `fsType` (décision de l'utilisatrice, 2026-11-01).
+- **FT-8 Polices utilisées**, **lues dans la résolution de typst**, jamais en analysant le texte :
+  `tinymist.getDocumentMetrics` sur chaque fichier principal compilé (famille, variante, source,
+  première occurrence). Repli si P-FONT l'invalide : compilation de contrôle avec les seules sources
+  (1) et (2), dont les avertissements `unknown font family` donnent les familles nommées venues
+  d'ailleurs (sans les replis de glyphes : limite écrite). Une police est **locale** si sa source est
+  (3) ou (4).
+- **FT-9 Avertissement local, aucune annonce** : aucun appareil n'annonce ses polices (ce serait
+  une empreinte de l'appareil et un changement de protocole). Quand un document d'un projet
+  **partagé** utilise une police locale, la liste des problèmes (N28, §15.17) porte `font.local` :
+  « La police « X » vient de cet ordinateur : les autres personnes du projet verront une autre
+  police », clic vers la première occurrence, correction rapide **« Ajouter la police au projet »**
+  (FT-11). Une famille introuvable donne `font.unknown` (« Police introuvable : X »), corrections
+  « Choisir une police… » (gestionnaire) et, si l'index la connaît sous un nom voisin, « Remplacer
+  par Y ». Projet non partagé : pas d'avertissement ; l'information reste dans le gestionnaire.
+- **FT-10 À tous, automatiquement** : une police du projet est un fichier du projet comme un autre
+  (blob, synchronisée, versionnée), **utilisée automatiquement** par chaque membre tant que le
+  projet est ouvert ; ni installation ni geste.
+- **FT-11 Copie d'une police de l'ordinateur vers le projet**, sans programme externe : le chemin
+  vient de la source rendue par FT-8 ; Go **refuse** tout chemin hors des dossiers de FT-4 et de
+  « mes polices » (une résolution manipulée ne fait copier aucun autre fichier) ; lecture par
+  `os.Root` ouvert sur ce dossier, bornes et validation de FT-7, écriture dans le magasin BLAKE3,
+  entrée `fonts/<nom du fichier>` (collision → suffixe) ; une collection est copiée entière.
+- **FT-12 Installation permanente**, au choix de chaque personne (« Installer pour tous mes
+  projets ») : cible = **dossier géré par inkwell** (`<données>/fonts/`, source (3)). C'est la seule
+  voie identique et simple sur les six cibles : une copie de fichier, sans droits d'administration,
+  déjà lisible par les sidecars, retirée par suppression. Les dossiers par personne du système
+  suffiraient sous Linux (`~/.local/share/fonts`) et macOS (`~/Library/Fonts`), mais sous Windows ils
+  exigent en plus une valeur de registre, `AddFontResourceW` et la diffusion de `WM_FONTCHANGE`, et
+  ils touchent toutes les autres applications : trois chemins de code et des effets hors d'inkwell.
+  Limite écrite : une police installée ainsi ne sert qu'à inkwell.
+- **FT-13 Modèles** (N27) : un modèle porte ses polices (`fonts/`) ; « Nouveau projet depuis un
+  modèle » les copie dans le projet (TM-8).
+- **FT-14 Accroches du gestionnaire de polices** (dessin à faire dans `docs/design/`) : liste par
+  famille (nom, variantes) ; **aperçu rendu par typst** (texte d'essai modifiable), jamais par la
+  webview ; **source** (projet, inkwell, mes polices, cet ordinateur) ; « utilisée dans ce projet »
+  (FT-8) et l'avertissement `font.local` ; gestes : ajouter au projet (un fichier, ou depuis cet
+  ordinateur), retirer du projet (droit d'écriture des fichiers du projet), installer pour tous mes
+  projets, retirer de mes polices. Emplacement : un onglet **« Polices » des paramètres du projet**
+  (ce que voit le projet) et une section des **Préférences** (mes polices) : mêmes composants, pas
+  de nouvelle fenêtre (règle de cohérence).
+
+### 6.13 Rassemblement des ressources (N43)
+
+*[cible ; `AD-101`]* **Une seule étape**, au **partage** (première invitation) et à **chaque export
+en un fichier** (EN-6, chiffré ou en clair), propose d'embarquer dans le projet tout ce dont il
+dépend hors de lui. La découverte passe par **la résolution de typst et de tinymist** et par les
+**manifestes des extensions**, jamais par l'analyse du texte.
+
+| Dépendance | Découverte | Embarquée dans | Cochée d'avance |
+|---|---|---|---|
+| Polices de l'ordinateur ou de « mes polices » | FT-8 (`getDocumentMetrics`, source (3) ou (4)) | `fonts/` (FT-11) | oui |
+| Paquets Typst : `@preview` venus du cache fourni par inkwell, `@local` (une charte…) | `typst compile --deps - --deps-format json` : fichiers lus sous les dossiers de paquets → `(espace, nom, version)` (mesuré sur 0.15.1 : les fichiers d'un paquet `@local` y figurent) | `.typstdeps/<espace>/<nom>/<version>/`, paquet entier | oui |
+| Fichiers hors de la racine du projet | erreur de typst « would escape the project root », avec position (mesuré) ; même chaîne pour le Markdown | `ressources/`, et le chemin est réécrit dans le document (modification visible, annulable) | **non** : un document reçu d'un pair pourrait viser `~/.ssh/…` ; chemin complet affiché ; seulement des fichiers ordinaires d'un type connu (N20), hors dossiers cachés et hors données d'inkwell, bornés |
+| Extensions personnelles dont le projet a besoin | manifestes : types de fichiers, rendus (`renderers`), langages, rapprochés des types et des blocs présents dans le projet | décision `plugin/<id>` (§15.10 ; admin ; après PD-1) | oui si la personne est admin et PD-1 acceptée ; sinon listée |
+| Modèle d'origine | ses fichiers et polices sont déjà copiés à la création (TM-3, TM-8) ; un modèle utilisé comme paquet `@local` relève de la ligne des paquets | — | — |
+
+- **RA-1** Une liste cochable avec la taille totale, un geste « Ajouter au projet », annulable ;
+  rien n'est copié sans ce geste.
+- **RA-2 Autosuffisance vérifiée** : après l'étape, une compilation de contrôle avec les seules
+  sources (1) et (2) de FT-1, les seuls paquets de `.typstdeps/` et sans réseau réussit, et
+  `getDocumentMetrics` n'y montre aucune police de source (3) ou (4). Sinon l'export le dit (« Ce
+  fichier aura besoin de : … ») ; jamais d'échec silencieux.
+- **RA-3** L'export contient la projection, les blobs (polices comprises), `.typstdeps/`, les
+  paquets des extensions du projet et le manifeste signé : l'ouvrir sur une machine propre
+  n'exige **rien d'autre** qu'inkwell (INV-14, N42).
+- **RA-4** Test **RA-T1** (e2e, CI) : projet de référence (une police de l'ordinateur, un paquet
+  `@local`, une extension de rendu) → rassemblement → export clair puis chiffré → import dans une
+  **image propre** (aucune police installée, réseau coupé ; autre architecture si disponible) →
+  compilation → **SHA-256 du PDF identique** à celui de la machine source (`--creation-timestamp`,
+  `SOURCE_DATE_EPOCH` fixés). Témoin négatif : sans l'étape, RA-2 détecte la police manquante.
 
 ## 7. Pont Go ↔ webview
 
@@ -1699,12 +1896,28 @@ protocole, sous des préfixes `inkwell-ext:` disjoints des domaines du protocole
 | Environnement construit de zéro ; proxys vers un port refusé | oui | oui |
 | Pas de réseau : espace de noms réseau et utilisateur privé, repli journalisé sur les proxys refusés (`Engine.NetworkMode`) ; sur Ubuntu 24.04, le profil AppArmor `inkwell` des paquets `.deb` permet `userns` et supprime ce repli (H-6) | oui | Seatbelt `(deny network*)` ; AppContainer sans capacité réseau |
 | `--root` sur le projet ; liens symboliques sortants refusés avant lancement | oui | oui |
-| Lecture limitée au dossier de travail privé, au binaire et aux paquets fournis (Landlock) | *[cible, `AD-28`]* | Seatbelt `file-read*` limité ; ACL du dossier de travail pour l'AppContainer |
+| Lecture limitée au dossier de travail privé, au binaire, aux paquets fournis et, en **lecture seule**, aux dossiers de polices calculés par Go (§6.12, FT-4) (Landlock) | *[cible, `AD-28`]* | Seatbelt `file-read*` limité ; ACL du dossier de travail pour l'AppContainer |
 | Sortie : 256 Mio par compilation (`typst.DefaultMaxOutput`), 512 Mio cumulés pour les compilations simultanées (admission par le parent)  ; Linux : `MaxOutput` **dimensionne la borne noyau** (taille du tmpfs, `RLIMIT_FSIZE`, parts Landlock, `engine.go:484`, `mount_linux.go:95`) et la vérification finale est une seconde admission ; macOS et Windows : vérification *a posteriori* seulement (`engine.go:658`, `:706`), donc lancement borné refusé (`dir_other.go`) | oui | macOS : `RLIMIT_FSIZE` ; Windows : un objet de tâche ne borne pas la taille des fichiers écrits → dossier de travail sur un volume à quota, ou lancement borné refusé (§9.11, *à prouver*) |
 | Sortie bornée par le noyau : tmpfs privé de taille fixe dans un espace de noms de montage, fichiers déclarés seuls inscriptibles (Landlock), `RLIMIT_FSIZE` ; repli Landlock ABI ≥ 3 à parts fixes ; sinon échec fermé (ADR 0033) | oui | lancement borné refusé |
 | Mémoire (`RLIMIT_AS`), délai (`context.WithTimeout`, 30 s pour un export), CPU (compilations simultanées bornées) | oui | macOS : rlimits et surveillance ; Windows : objet de tâche |
 | Mort avec le parent : `Pdeathsig` (fil verrouillé), groupe de processus | oui | `kqueue` `NOTE_EXIT` ; objet de tâche « tuer à la fermeture » |
 | Relance bornée (tinymist) : recul exponentiel, jamais plus d'une relance par minute sans message | *[cible, `AD-20`]* | — |
+
+**Lancement sans programme externe** (INV-14 ; `AD-99`). Le code actuel enchaîne `/bin/sh -c
+'ulimit …; exec …'`, `/usr/bin/setpriv --landlock-access …`, `/usr/bin/prlimit --fsize=…`,
+`/usr/bin/unshare --user --map-root-user --mount sh -c 'mount -t tmpfs …'` : util-linux et un shell
+ne sont garantis sur aucune cible. Cible : le parent lance **`inkwell-sandbox exec`** (notre binaire
+statique, §4.2) avec `SysProcAttr.Cloneflags = CLONE_NEWUSER | CLONE_NEWNS | CLONE_NEWNET`,
+`UidMappings`/`GidMappings` (soi → 0), `Setpgid`, `Pdeathsig` ; dans ce processus, **par appels
+système** : `unix.Mount("tmpfs", dir, "tmpfs", MS_NOSUID|MS_NODEV|MS_NOEXEC, "size=…,nr_inodes=…")`
+pour la sortie bornée ; `unix.Setrlimit` (`RLIMIT_AS`, `RLIMIT_FSIZE`, `RLIMIT_CORE = 0`, octets
+exacts, sans arrondi de shell) ; `unix.Prctl(PR_SET_NO_NEW_PRIVS)` ; abandon des capacités
+(`PR_CAPBSET_DROP` pour chaque capacité, `unix.Capset` à vide, `PR_SET_SECUREBITS`) ; Landlock par
+`github.com/landlock-lsm/go-landlock` (maintenu par le projet Landlock, v0.11, épinglé et audité,
+ADR 0008 ; repli : appels `landlock_*` directs de `golang.org/x/sys/unix`) en mode « au mieux » de
+l'ABI sondée ; puis `unix.Exec` du sidecar **vérifié**. La sonde d'isolation (`netns_linux.go`)
+lance le même binaire en mode `probe`, pas `/bin/sh`. Sous macOS et Windows, mêmes rôles par
+`sandbox_init` (Seatbelt) et par `CreateProcess` avec AppContainer et objet de tâche (§9.11).
 
 Un `tinymist lsp` résident lit le projet mais n'écrit rien : toute écriture lui est refusée
 (Landlock) *[cible]*.
@@ -1744,17 +1957,21 @@ de l'étape 5.
 
 R1 (auto-équivoque, ADR 0031) ; R7 (admins en place de confiance) ; projets non protégés lisibles sur le disque (§6.10 EN-7) ; métadonnées visibles du relais et du serveur de rendez-vous ; scellement de la
 gestion des membres par un ancien admin compromis (ADR 0017) ; risque de dépendance
-compromise après revue.
+compromise après revue. ; **hibernation hors des mécanismes connus** (OV-1 (b′)) : un outil installé et
+configuré avec les droits d'administration, qui contourne `logind` et écrit une image brute vers
+une partition en clair pendant une cérémonie, n'est pas détectable depuis l'application (il suppose
+la maîtrise de l'administration de l'appareil, hors du modèle du Voleur ; D-17) ; rendu différent
+chez un pair quand un document utilise une police locale non ajoutée au projet (FT-9 l'avertit).
 
 ### 9.10 Enfermement de l'hôte des greffons (Linux)
 
 *[expérimentation, ADR 0039 ; `AD-87`]* Exécutable et vérifiable. L'hôte est le binaire statique
-`inkwell-plugin-host` (Go pur, `CGO_ENABLED=0` : aucune bibliothèque partagée à charger, pas de
+`inkwell-sandbox` (mode `plugin-host`) (Go pur, `CGO_ENABLED=0` : aucune bibliothèque partagée à charger, pas de
 GTK ni de WebKitGTK mappés). Les autres plates-formes : §9.11.
 
 | # | Mesure | Règle exacte | Si elle manque |
 |---|---|---|---|
-| H-0 | **Démarrage en deux temps** | (1) le parent lance `inkwell-plugin-host --stage=lock` (poignées héritées : la socket seule) ; (2) ce processus fixe son fil (`runtime.LockOSThread`), pose `PR_SET_NO_NEW_PRIVS`, pose Landlock **sur ce fil**, puis `execve` de lui-même avec `--stage=run` : `execve` détruit tous les autres fils, et le nouveau processus, mono-fil au départ, **hérite** du domaine Landlock ; tous les fils que son runtime crée ensuite en descendent ; (3) en `--stage=run`, avant de lire quoi que ce soit, il **vérifie Landlock d'abord** (une ouverture d'un chemin lisible doit échouer avec `EACCES`, faute de quoi Landlock manque), **puis** pose seccomp avec `SECCOMP_FILTER_FLAG_TSYNC` (tous les fils) et le vérifie (statut relu ; la même ouverture échoue maintenant avec `EPERM`), puis envoie `ready` en déclarant ce qui est posé ; le parent n'envoie aucun module avant `ready` | échec fermé |
+| H-0 | **Démarrage en deux temps** | (1) le parent lance `inkwell-sandbox plugin-host --stage=lock` (poignées héritées : la socket seule) ; (2) ce processus fixe son fil (`runtime.LockOSThread`), pose `PR_SET_NO_NEW_PRIVS`, pose Landlock **sur ce fil**, puis `execve` de lui-même avec `--stage=run` : `execve` détruit tous les autres fils, et le nouveau processus, mono-fil au départ, **hérite** du domaine Landlock ; tous les fils que son runtime crée ensuite en descendent ; (3) en `--stage=run`, avant de lire quoi que ce soit, il **vérifie Landlock d'abord** (une ouverture d'un chemin lisible doit échouer avec `EACCES`, faute de quoi Landlock manque), **puis** pose seccomp avec `SECCOMP_FILTER_FLAG_TSYNC` (tous les fils) et le vérifie (statut relu ; la même ouverture échoue maintenant avec `EPERM`), puis envoie `ready` en déclarant ce qui est posé ; le parent n'envoie aucun module avant `ready` | échec fermé |
 | H-1 | **Landlock** (défense en profondeur) : droits gérés = tous ceux que l'ABI sondée connaît (masque calculé : ABI 1 sans `REFER` ni `TRUNCATE`, ABI 2 avec `REFER`, ABI 3 avec `TRUNCATE`, ABI ≥ 4 réseau TCP refusé aussi) ; une seule règle : `execute` et `read_file` sur le binaire hôte (nécessaire à l'`execve` de H-0) ; `TSYNC` en plus quand l'ABI ≥ 8 | ABI absente : continuer seulement si H-5 tient, état montré dans « Détails techniques » |
 | H-2 | Modules par `memfd` scellé, hachage vérifié **par le parent** avant envoi ; l'hôte n'ouvre aucun chemin | — |
 | H-3 | **Aucun cache de compilation sur disque** : compilation en mémoire pour la vie de l'hôte ; coût mesuré par P-PLUG-BENCH | — |
@@ -2064,6 +2281,9 @@ référence sur le matériel de CI (amd64 et arm64), puis tenues.
 - **PF-10** Choix de bibliothèque par la mesure : implémentation BLAKE3, codec CBOR, moteur de
   l'index, go-git contre écrivain minimal, mode de compilation de wazero ; chaque choix a son banc
   comparatif dans `docs/plans/`.
+- **PF-11** Polices (N43) : découverte des polices par compilation ≤ 50 ms p95 avec 1 000 fichiers
+  de polices (mesuré aujourd'hui : ≈ 80 ms pour 432 fichiers, d'où la vue réduite de FT-6) ; index
+  (FT-5) jamais sur le chemin du démarrage ; lanceur DG-2 ≤ 5 ms.
 
 ## 13. Tests : ce que chaque niveau prouve
 
@@ -2100,7 +2320,7 @@ déclaré instable sans taux mesuré et cause prouvée (D14) ; les tests lourds 
 3. **Frontend** : Vite (production) → `frontend/dist`, embarqué (`inkwell.Assets`).
 4. **Exécutable** : Wails v3 (cgo, GTK4/WebKitGTK 6.0), `-trimpath`, version injectée
    (`-ldflags -X internal/version…`), date reproductible (`SOURCE_DATE_EPOCH`). PGO : `default.pgo` (PF-7). Hôte des
-   greffons `cmd/inkwell-plugin-host` construit à part, `CGO_ENABLED=0`, statique, embarqué et
+   greffons `cmd/inkwell-sandbox` construit à part, `CGO_ENABLED=0`, statique, embarqué et
    revérifié comme un sidecar ; profil AppArmor `inkwell` livré dans les `.deb` (H-6).
 5. **Paquets** *[cible : six cibles, N35]* : Linux par goreleaser + nFPM, une exécution native par
    architecture (`ubuntu-24.04`, `ubuntu-24.04-arm`) ; macOS (amd64, arm64) en `.app` signé et notarisé ;
@@ -2117,6 +2337,58 @@ déclaré instable sans taux mesuré et cause prouvée (D14) ; les tests lourds 
    Wails v3 vérifié par signature pour l'exécutable autonome).
 10. **Wails** : `v3.0.0-beta.34` aujourd'hui ; passage à la v3.0.x stable par la procédure de
     l'ADR 0008 (`AD-19`).
+
+### 14.1 Dépendances garanties (N42)
+
+*[cible ; `AD-99`]* Rien ne dépend d'un programme ou d'une bibliothèque « peut-être installé » :
+chaque composant nécessaire a une garantie de présence **et** un test qui la prouve.
+
+| Composant | Plate-forme | Garantie de présence | Preuve |
+|---|---|---|---|
+| GTK 4, WebKitGTK 6.0 (et leurs dépendances : GLib, libsoup 3…) | Linux | dépendances **obligatoires** des paquets, résolues par le gestionnaire de paquets (`.deb` : `libgtk-4-1`, `libwebkitgtk-6.0-4` ; `.rpm` : `gtk4`, `webkitgtk6.0` ; `.goreleaser.yaml`) ; `tar.gz` : le lanceur DG-2 les cherche et le dit | installation dans un conteneur **vierge** de chaque image de DG-3, puis fumée e2e réseau coupé |
+| glibc | Linux | plancher fixé par l'**image de construction** = la plus ancienne de DG-3 (aujourd'hui Ubuntu 24.04, glibc 2.39) | contrôle de construction : plus haute version `GLIBC_*` importée ≤ plancher (outil Go, `debug/elf`) |
+| Bibliothèques liées par cgo | Linux, macOS | seules permises : GTK 4, WebKitGTK 6.0 et leurs dépendances, libc (Linux) ; cadres du système (macOS) ; Windows : pas de cgo (Wails v3, chargeur WebView2 en Go, *à vérifier*) | contrôle de construction : `DT_NEEDED` (`debug/elf`) et `LC_LOAD_DYLIB` (`debug/macho`) comparés à une liste permise |
+| `typst`, `tinymist` | toutes | sidecars embarqués, revérifiés (SHA-256, ADR 0024) ; Linux : binaires **musl statiques** | AC-19 ; tests de `internal/sidecar` |
+| `inkwell-sandbox` | toutes | Go statique (`CGO_ENABLED=0`), embarqué, revérifié | AC-18, AC-19 |
+| Runtime **WebView2** (Evergreen) | Windows | préinstallé sur Windows 11 et diffusé par Microsoft sur Windows 10 ; s'il manque, l'installateur exécute **à l'installation** le **programme d'installation autonome Evergreen** qu'il embarque (hors ligne, signé par Microsoft). Aujourd'hui l'amorce de Wails le **télécharge** (`build/windows/nsis/wails_tools.nsh`, `MicrosoftEdgeWebview2Setup.exe`) : à remplacer (§16). Version fixe écartée : inkwell devrait livrer lui-même les correctifs de sécurité de Chromium | image Windows sans WebView2 : installation hors ligne, puis fumée ; DG-1 |
+| WKWebView, Security, IOKit, DiskArbitration, CoreText | macOS | cadres du système ; **macOS 12 minimum** (`LSMinimumSystemVersion` 12.0.0, `build/darwin/Info.plist`), plancher que Go impose aussi ; en dessous, macOS refuse l'ouverture avec son propre message | fumée sur macOS amd64 et arm64 |
+| Version du système | Windows | Windows 10 (22H2) ou 11 ; plancher de Go ; WebView2 n'existe plus pour 7 et 8 | fumée Windows amd64 et arm64 |
+| Polices pour Typst | toutes | Inter et polices de `typst-assets` embarquées (FT-1) ; celles du projet dans le projet (§6.12) | RA-T1 (machine sans aucune police) |
+| Paquets Typst | toutes | fournis ou dans `.typstdeps/` (ADR 0024, §6.13) | RA-T1 ; NG6 réseau coupé |
+| Trousseau | Linux | Secret Service par D-Bus (`godbus`, sans `libsecret`) : **non garanti** (aucun démon sur un bureau minimal) ; détecté ; absent → VK-1 propose le mot de passe ou le disque chiffré vérifié | test : session D-Bus sans `org.freedesktop.secrets` |
+| Trousseau | macOS, Windows | Security.framework ; Credential Manager : parties du système | e2e |
+| Bus de session, portails XDG, `logind` | Linux | **facultatifs** : absents → repli dit (« Copier le chemin » au lieu d'« Afficher dans le dossier » ; pas de verrou d'inhibition, OV-1) | test sans bus de session |
+| Intégration au bureau (« Afficher dans le dossier », ouvrir le PDF, imprimer) | toutes | API, jamais `xdg-open`, `open` ni `start` : Linux, portail `org.freedesktop.portal.OpenURI` ou `org.freedesktop.FileManager1` (D-Bus) ; macOS, `NSWorkspace` ; Windows, `ShellExecuteExW` et `SHOpenFolderAndSelectItems` | AC-18 |
+
+- **DG-1 Contrôle au démarrage** : avant la première fenêtre, l'application vérifie ses composants
+  (sidecars, runtime WebView2 par `GetAvailableCoreWebView2BrowserVersionString`, version du
+  système, dossiers de données inscriptibles) ; un manque → **un** message en mots simples (« Il
+  manque un composant de Windows dont Inkwell a besoin : WebView2. Réinstallez Inkwell pour
+  l'ajouter. ») par la boîte de message du système (`MessageBoxW` ; `NSAlert`), jamais un plantage
+  ni une trace ; rien n'est lancé pour réparer (INV-14).
+- **DG-2 Lanceur Linux statique** : une bibliothèque absente fait échouer le chargeur dynamique
+  **avant** `main` ; l'exécutable lié à GTK ne peut donc rien dire. `/usr/bin/inkwell` est un
+  **lanceur** Go statique (`CGO_ENABLED=0`, `cmd/inkwell-launch`) : il lit `/etc/ld.so.cache` et les
+  dossiers standard (lecture bornée) pour trouver `libgtk-4.so.1` et `libwebkitgtk-6.0.so.4`, lit la
+  version de la glibc dans les définitions de versions de `libc.so.6` (`debug/elf`), puis
+  `unix.Exec` de l'exécutable d'inkwell (`/usr/lib/inkwell/inkwell`). Un manque → message en mots
+  simples nommant les paquets à installer pour la distribution détectée (`/etc/os-release`), par une
+  notification (`org.freedesktop.Notifications`, D-Bus) quand un bus existe, sur la sortie d'erreur,
+  et dans `$XDG_STATE_HOME/inkwell/demarrage.txt`. Coût ≤ 5 ms, mesuré (PM-1).
+- **DG-3 Matrice minimale** : Linux amd64 et arm64 : **Ubuntu 24.04 LTS, Debian 13, Fedora** (deux
+  dernières versions) ; candidates mesurées avant d'être promises : Debian 12 (WebKitGTK 6.0 présent,
+  GTK 4.8 : symboles exigés par Wails à vérifier ; glibc 2.36, donc construction dans une image
+  Debian 12), AlmaLinux 10 ; Ubuntu 22.04 écartée (pas de WebKitGTK 6.0 dans l'archive principale,
+  *à vérifier*). macOS 12 et suivants ; Windows 10 22H2 et 11. Chaque image exécute l'installation
+  et la fumée réseau coupé ; la liste est publiée dans la documentation d'installation.
+- **DG-4 Formats** : `.deb` et `.rpm` (dépendances résolues) ; `tar.gz` (lanceur DG-2) ; Flatpak
+  (runtime GNOME qui porte GTK 4 et WebKitGTK 6.0) **différé** : son bac à sable refuse
+  `CLONE_NEWUSER`, donc l'enfermement des sidecars (§9.5) n'y tient pas tel quel, à mesurer ;
+  AppImage **écarté** : WebKitGTK lance ses processus auxiliaires par des chemins fixes et dépend de
+  la glibc de l'hôte, l'embarquer n'est pas fiable.
+- **DG-5** Les programmes lancés **par l'installateur** (programme d'installation de WebView2,
+  scripts de paquet comme `gtk4-update-icon-cache`) relèvent de l'installation, pas de l'exécution
+  (INV-14) ; ils sont nommés ici et testés par l'installation en image vierge.
 
 ## 15. Évolution et extensibilité
 
@@ -2467,6 +2739,14 @@ un mandat d'une autre commande.
   (API 1.2, §15.12) sont portées par sa décision ; un graphe incomplet n'est pas chargé.
 - **PP-7** Bornes : paquet ≤ 16 Mio, module ≤ 8 Mio décompressé, 16 greffons par projet, 64 Mio au
   total, comptés dans le quota N10 de l'admin qui les ajoute.
+- **PP-8 Installation permanente** (au choix de chaque personne ; même principe que les polices,
+  FT-10, FT-12) : un greffon de projet sert à **tous les membres tant que le projet est ouvert** ; depuis
+  la liste de PP-3, « Installer pour tous mes projets » copie le paquet (même empreinte BLAKE3) parmi
+  les extensions **personnelles**. L'usage permanent **élargit la portée** au-delà du projet : il
+  passe par le **consentement normal** d'une extension personnelle (écran des capacités, §15.5),
+  sans rien hériter du niveau « projet » ni d'un accord donné dans le projet ; l'extension ainsi
+  installée suit ses propres mises à jour, jamais celles du projet ; dans un projet qui porte le même
+  greffon, seule la version du projet y est chargée (`AD-102`).
 
 **Versions entre appareils** (N14, PV-6) : un appareil charge le greffon si l'intervalle d'API du
 manifeste recoupe le sien ; sinon il l'indique (« Ce projet utilise une extension qui demande une
@@ -3232,6 +3512,12 @@ proposition de bout en bout → Graphviz jusqu'au PDF → reste.
 | `MaxOutput` de `typst` : sous Linux il dimensionne la borne noyau (tmpfs, `RLIMIT_FSIZE`, parts Landlock) et la vérification finale est une seconde admission ; ailleurs ce n'est qu'une vérification *a posteriori* (`engine.go:658`, `:706`) et le lancement borné est refusé | §9.5 | P-SANDBOX |
 | variantes de document présentes (`history/graph.ts`) ; « intégrer » fait aujourd'hui `A.merge` (`versions.ts:234–271`), alors que la cible est une différence appliquée (HI-6) ; vocabulaire « fusion » dans l'interface (N41) | §6.11 HI-6 | `AD-96` |
 | lecteurs : la conception permet leurs commentaires, la couverture (ADR 0018) les refuse | mécanisme dédié | `AD-14` |
+| programmes externes lancés à l'exécution (N42) : `/bin/sh -c 'ulimit …; exec …'` (`internal/sidecar/limit_linux.go`), `/bin/sh` comme sonde d'isolation (`netns_linux.go`), `/usr/bin/setpriv --landlock-access`, `/usr/bin/prlimit`, `/bin/true` (`dir_linux.go`), `/usr/bin/unshare`, `/bin/sh`, `/usr/bin/mount`, `setpriv`, `prlimit` (`mount_linux.go`) | `inkwell-sandbox exec` et appels système (§9.5) | `AD-99` |
+| `tar` lancé par `internal/sidecar/fetch/fetch.go` | reste un outil de **construction** (jamais lié au produit, AC-6) ; extraction par `archive/tar` + décompression xz en Go si l'outil manque sur un hôte de construction | `AD-99` |
+| installateur Windows : l'amorce WebView2 **télécharge** le runtime (`build/windows/nsis/wails_tools.nsh`) | programme d'installation autonome Evergreen embarqué (§14.1) | `AD-99` |
+| aucune garantie écrite des bibliothèques (GTK 4, WebKitGTK 6.0, glibc), aucun contrôle au démarrage, `/usr/bin/inkwell` lié dynamiquement | §14.1 (DG-1 à DG-5), `cmd/inkwell-launch` | `AD-99` |
+| manifeste des sidecars sans cible Windows (`internal/sidecar/manifest.json` : Linux et macOS seulement) | six cibles (N35) | `AD-94` |
+| polices : `--ignore-system-fonts` (`engine.go:463`), polices de l'ordinateur inaccessibles ; polices de `typst-assets` avant celles du projet ; aucun gestionnaire de polices (N43) | §6.12, §6.13 | `AD-100`, `AD-101` |
 
 ## 17. Références
 
@@ -3290,7 +3576,7 @@ clé de l'appareil vit dans le processus Go.
 
 **Option 4, avec l'ABI minimale de l'option 3 et le schéma WIT comme seule description.**
 
-1. **Hôte.** Chaque greffon actif tourne dans **son propre** processus `inkwell-plugin-host`
+1. **Hôte.** Chaque greffon actif tourne dans **son propre** processus `inkwell-sandbox` (mode `plugin-host`)
    (binaire statique Go pur, distinct de l'exécutable GTK), créé paresseusement, ≤ 6 actifs, enfermé
    par le démarrage en deux temps (§9.10 H-0 : Landlock posé puis `execve`, seccomp avec `TSYNC`,
    vérification, puis `ready`) et par le port `internal/sandbox` sur les autres plates-formes
@@ -3397,5 +3683,5 @@ clé de l'appareil vit dans le processus Go.
 
 1. Accepter cette ADR (après P-PLUG-BENCH et la revue de sécurité).
 2. Catalogue de greffons : fichier seulement en v1, ou aussi un catalogue signé (`AD-61`) ?
-3. Niveau « projet » chargé sans question (N23) : **contribuer seulement** (liste réduite du §15.10, B-4 de la revue Fable) ; N23 attend la mineure PD-1 du protocole.
+3. *[décidé par l'utilisatrice, 2026-11-01 : suivre la recommandation]* Niveau « projet » chargé sans question (N23) : **contribuer seulement** (liste réduite du §15.10, B-4 de la revue Fable) ; N23 attend la mineure PD-1 du protocole.
 4. Mermaid différé (P-FRAME) ; Graphviz est le cas livré.

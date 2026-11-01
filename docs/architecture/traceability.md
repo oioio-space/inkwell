@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Version | 1.0.0-brouillon.8 (2026-11-01, révision 7 ; N1 à N41) |
+| Version | 1.0.0-brouillon.9 (2026-11-01, révision 8 ; N1 à N43) |
 | Lire avec | [spec.md](spec.md) (règles), [decisions.md](decisions.md) (`AD-xx`), [exigences](../exigences.md) |
 
 Chaque ligne relie une demande à l'élément d'architecture qui la sert et à la preuve qui la
@@ -73,6 +73,8 @@ vérifie (test, porte, revue). Une ligne sans preuve est un trou : colonne « É
 | N39 | historique sans Git, autoporteur | §6.11 HI-1–HI-5, INV-12, `AD-13`, `AD-92` | P-GIT-BENCH ; test sans `git` dans `PATH` ; e2e « voyager, restaurer, annuler » | ⏳ |
 | N40 | aucun format bureautique natif | §1.3 NG1, `AD-33`, `AD-98` | revue : aucune dépendance pandoc ni entrée de menu Word/ODT | ✅ décidé |
 | N41 | variantes et intégrations claires | §6.11 HI-6, HI-7, `AD-96` | e2e « créer, comparer, proposer d'intégrer, intégrer, annuler » ; aucun mot de Git (garde du glossaire) | ⏳ |
+| N42 | autoporteur : aucun programme externe à l'exécution hors nos binaires vérifiés ; API du système seulement ; dépendances garanties | INV-14, §9.5 (`inkwell-sandbox exec`), OV-1 à OV-5, EN-4, §14.1 DG-1 à DG-5, `AD-99` | AC-18 (seul `internal/sandbox` lance un processus, aucun littéral de programme du système), AC-19 (`sidecar.Verified`), e2e « sans shell ni util-linux », P-DEPS (installation en image vierge, contrôles `GLIBC_*`, `DT_NEEDED`, `LC_LOAD_DYLIB`, Windows sans WebView2 hors ligne) |
+| N43 | polices : système et fournies sans réglage ; projet → inkwell → mes polices → ordinateur ; avertissement local ; ajout au projet ; installation permanente ; rassemblement des ressources au partage et à l'export | §6.12 FT-1 à FT-14, §6.13 RA-1 à RA-4, PP-8, TM-8, `AD-100` à `AD-102` | P-FONT (priorité, listes typst = tinymist, PF-11) ; RA-T1 (export → import sur image vierge → même SHA-256 du PDF) ; fuzz du décodeur de `typst fonts` ; test de refus d'un chemin hors des dossiers de polices (FT-11) |
 | G-0 | clic dans la liste des fichiers | §6.6 (G-0a, b, c), `AD-77` | e2e `files.spec.ts` FM-OPEN-1…8 | ⏳ |
 | U1 | encodage, fins de ligne | `project` (`FileInfo`), MF-15 | `text_test.go`, `externalSync.test.ts` | ✅ |
 | U4–U6, U9 | barres par type, insertion, icônes | points `toolbar`, `menus`, `file-types` (§15.4) | e2e `format.spec.ts`, `shell.spec.ts` | ✅ (à porter sur le registre) |

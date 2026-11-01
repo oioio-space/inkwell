@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Version | 1.0.0-brouillon.8 (2026-11-01, révision 7 : tour 6 ; [CHANGES.md](CHANGES.md), [coherence.md](coherence.md)) |
+| Version | 1.0.0-brouillon.9 (2026-11-01, révision 8 : tour 7, N42, N43 ; [CHANGES.md](CHANGES.md), [coherence.md](coherence.md)) |
 | Rôle | lever chaque doute trouvé en écrivant [spec.md](spec.md) : une question, ses options, une recommandation, sa raison |
 | Sources des doutes | [conception](../conception.pdf), [questions ouvertes](../open-questions.md), [audit](../plans/2026-10-31-architecture-audit.md), ADR 0001–0034, [protocole](../protocol/spec.md), [design](../design/spec.md), code (`main` à `362cb4d`, chantier `proto1`), `TODO` et `t.Skip` |
 
@@ -76,7 +76,7 @@ Règles :
 | AD-54 | Grammaires de coloration | liste fermée de langages Lezer, découpés par Vite, embarqués, chargés à la demande | non | spec §6.6 MF-18 |
 | AD-55 | Fichier binaire ou inconnu | reniflage WHATWG partagé Go/TS ; texte brut ou carte de blob | non | spec §6.6 MF-15 |
 | AD-56 | Un seul point d'entrée « ouvrir » pour tous les types | `open(nodeId)` → registre → vue ; fin de `?file=` | non | spec §6.6 MF-5 |
-| AD-57 | Où tournent les greffons | **un processus `inkwell-plugin-host` par greffon actif** (binaire statique Go pur, démarrage en deux temps), ≤ 6 actifs ; **expérimentation** jusqu'à P-PLUG-PROTO et P-PLUG-BENCH | **oui** (ADR 0039) | spec §0.5, §9.10 |
+| AD-57 | Où tournent les greffons | **un processus `inkwell-sandbox` par greffon actif** (binaire statique Go pur, démarrage en deux temps), ≤ 6 actifs ; **expérimentation** jusqu'à P-PLUG-PROTO et P-PLUG-BENCH | **oui** (ADR 0039) | spec §0.5, §9.10 |
 | AD-58 | Droits des greffons | capacités nommées ; **règle de flux fermée** (sources I0–I3 × puits O0–O4, RF-1 à RF-5) ; secrets injectés par Go | **oui** (ADR 0039) | ADR 0039 |
 | AD-59 | Surface et versions de l'API | WIT `inkwell:plugin@1.x.y`, SemVer, règles d'évolution du protocole (N14) | non | ADR 0039 |
 | AD-60 | Greffons et collaboration | jamais d'installation **globale** depuis un pair ; greffons de projet bornés (`AD-69`) ; rendu dégradé sans greffon | **oui** | ADR 0039 |
@@ -151,14 +151,19 @@ tant qu'elles sont ouvertes, la spécification n'affirme pas sa fidélité compl
 | AD-52 | texte + conflits structurels pour tous les observateurs | utilisatrice (avec AD-07) | ADR 0026 acceptée | — |
 | AD-57, AD-58, AD-61 | greffons : un hôte par greffon, règle de flux, fichier seulement | utilisatrice | **ADR 0039**, après P-PLUG-PROTO, P-PLUG-BENCH, P-SANDBOX-*, revue de sécurité | — |
 | AD-67 | N22 servie en v1 par la sauvegarde personnelle, non déclarée satisfaite | utilisatrice | ADR 0039 | N22 partielle |
-| AD-69 | greffons de projet bornés | utilisatrice | **PD-1** + ADR 0039 | N23 bornée |
+| AD-69 | greffons de projet bornés, chargés d'office **et limités** (contribuer seulement) | **décidé par l'utilisatrice (2026-11-01)** | **PD-1** + ADR 0039 | N23 bornée |
 | AD-70 | Mermaid complet différé ; sous-ensemble sans DOM en API 1.1 | utilisatrice | — | Mermaid partiel |
 | AD-72 | `docs/plugin-api/` | utilisatrice | sa propre boucle de revue | — |
 | AD-78 | pas de CSS pour le PDF | utilisatrice | — | N27 « Markdown + CSS » |
-| AD-82 | IA : défauts de politique, MCP | utilisatrice | **PD-1**, ADR 0040, 0041 | — |
+| AD-82 | IA : défauts de politique, **autorisation d'un admin dans un projet partagé**, MCP | **décidé par l'utilisatrice (2026-11-01)** | **PD-1**, ADR 0040, 0041 | — |
 | AD-83 | PD-1 (PD-2 retiré, PD-3 reporté) | utilisatrice | boucle du protocole (2.1) | — |
-| AD-91 | projet chiffré par objet, DEK par appareil | utilisatrice | **ADR** (remplace NG3), après P-VAULT | interprétation de « bloc chiffré » par objet |
+| AD-91 | projet chiffré par objet, DEK par appareil ; protection **facultative**, jamais cochée par défaut | **décidé par l'utilisatrice (2026-11-01)** (facultative) ; reste l'ADR | **ADR** (remplace NG3), après P-VAULT | interprétation de « bloc chiffré » par objet |
 | AD-95 | expérimentations acceptées à leur porte | utilisatrice | — | — |
+| AD-96 | variantes, y compris **variantes du projet entier** (HI-7) | **décidé par l'utilisatrice (2026-11-01)** | — | — |
+| AD-99 | autoporteur : appels système, nos binaires, dépendances garanties | **décidé par l'utilisatrice (2026-11-01)** (N42) | — | — |
+| AD-100 | polices : projet → inkwell → mes polices → ordinateur ; avertissement local | utilisatrice (ordre des sources) | — | — |
+| AD-101 | rassemblement des ressources ; fichiers hors racine non cochés | utilisatrice (exception hors racine) | — | — |
+| AD-102 | installation permanente d'une police ou d'un greffon du projet | **décidé par l'utilisatrice (2026-11-01)** | — | — |
 
 ---
 
@@ -974,7 +979,7 @@ servent pas de preuve ; celles dont dépendent les décisions ont été vérifi�
 
 - **Révision 2 (revues Fable B-3, M-1 ; Codex B4, M5).** Les deux revues approuvent l'option 4. Précisé : enfermement exécutable (spec §9.10 : modules par `memfd` scellé, **pas de cache disque en v1**, seccomp et Landlock obligatoires, profil AppArmor livré pour Ubuntu 24.04, budget mémoire par hôte, échec fermé visible) ; **compartiments** (un hôte par projet, un pour les greffons globaux sans sortie, un par greffon qui a une sortie) : une évasion n'obtient que les droits de son compartiment ; canal et autorité imposés par le parent (§7.3) ; banc P-PLUG-BENCH avec **témoin en processus**, trajet complet, RSS par hôte.
 
-- **Révision 3 (revues Fable R2-B1, R2-M2 ; Codex R2-1, R2-2, R2-10).** (1) **Un hôte par greffon actif** : seule autorité qu'un parent peut attacher à une connexion après une évasion (Codex) ; paresseux et **≤ 6 actifs** (borne de Fable) ; (2) hôte = binaire **statique** Go pur `inkwell-plugin-host`, démarrage en deux temps (Landlock posé sur un fil puis `execve`, seccomp avec `TSYNC`, vérification, `ready`) ; seccomp est la barrière principale, Landlock la défense en profondeur ; liste seccomp dérivée par `strace` en CI, `clone` filtré, `clone3` refusé ; (3) canal en **flux d'octets**, autorité attachée à la connexion ; (4) **statut d'expérimentation** (spec §0.5, `AD-95`) : l'acceptation de la spec ne vaut pas celle de l'hôte tant que P-PLUG-PROTO, P-PLUG-BENCH, `PLUG-COMPROMISED-*` et P-SANDBOX-* ne sont pas passées, résultats bruts à l'appui.
+- **Révision 3 (revues Fable R2-B1, R2-M2 ; Codex R2-1, R2-2, R2-10).** (1) **Un hôte par greffon actif** : seule autorité qu'un parent peut attacher à une connexion après une évasion (Codex) ; paresseux et **≤ 6 actifs** (borne de Fable) ; (2) hôte = binaire **statique** Go pur `inkwell-sandbox`, démarrage en deux temps (Landlock posé sur un fil puis `execve`, seccomp avec `TSYNC`, vérification, `ready`) ; seccomp est la barrière principale, Landlock la défense en profondeur ; liste seccomp dérivée par `strace` en CI, `clone` filtré, `clone3` refusé ; (3) canal en **flux d'octets**, autorité attachée à la connexion ; (4) **statut d'expérimentation** (spec §0.5, `AD-95`) : l'acceptation de la spec ne vaut pas celle de l'hôte tant que P-PLUG-PROTO, P-PLUG-BENCH, `PLUG-COMPROMISED-*` et P-SANDBOX-* ne sont pas passées, résultats bruts à l'appui.
 
 - **Révision 4 (D-10 convergé ; Fable R3).** Les deux revues retiennent **un hôte par greffon actif**. Précisions : l'éviction ne touche jamais un hôte qui a un mandat ou un appel en vol ; **repli nommé** si l'activation dépasse 500 ms : module compilé à l'installation et gardé dans l'hôte tant qu'il vit, aucune éviction automatique sous 6 actifs, jamais de cache disque ; P-PLUG-BENCH éprouve 16 greffons installés, 6 actifs, 10 en attente.
 
@@ -1335,6 +1340,8 @@ Le détail des contradictions, manques, doublons, carte produit et phasage est d
 
 - **Révision 7 (Codex R6-B1, R6-M ; Fable R6-M1, R6-M2, m-1 à m-3).** (1) **Hibernation sous Linux** : `resume = 0:0` ne prouve rien ; acceptée seulement si elle est **impossible** (`/sys/power/state` sans `disk`, ou `/sys/power/disk` = `[disabled]`) ou si **toute destination locale** d'une image est chiffrée (chaque périphérique bloc persistant ne porte que des volumes `CRYPT-`, aucun amovible branché) ; un outil d'hibernation en espace utilisateur est couvert par cette règle ; sinon refus. (2) **macOS** : `hibernatemode` vérifié sur **tous** les profils d'énergie (`pmset -g custom`) ou volume de l'image vérifié ; plist analysée structurellement. (3) **Volume sous Linux** par `/proc/self/mountinfo` (source du montage, parent d'une partition, tous les périphériques d'un btrfs), fichiers d'échange résolus comme des chemins : btrfs sur LUKS et fichier d'échange sur LUKS **passent**. (4) **Vidages sur plantage** (OV-5) : `RLIMIT_CORE = 0` avant la création de la webview, destination d'un gestionnaire en tube vérifiée, rapports de WebView2 sous le dossier de données de la webview et purgés ; processus de rendu tué pendant la cérémonie dans P-VAULT. (5) « Protéger ce projet » dépend aussi de la cérémonie (SR-5) ; dossier de données de la webview dans OV-4 ; oracles Windows nommés (`HibernateEnabled`, `NtfsEncryptPagingFile`).
 
+- **Révision 8 (Codex R7-B1 ; Fable R7-M1, R7-m1 à m-4 ; décision de l'utilisatrice).** (1) **Protection facultative** : « Protéger ce projet » n'est jamais cochée par défaut, même pour un projet partagé (EN-0, décidé par l'utilisatrice le 2026-11-01). (2) **OV-1 (b′)** remplace (b) : l'ancienne règle « tout périphérique bloc chiffré » ne se lisait pas (sysfs n'expose aucune signature de partition non montée) et ne passait jamais sous UEFI (partition EFI et souvent `/boot` en clair) ; (b′) exige que chaque swap actif passe l'oracle, `/sys/power/resume` à `0:0` ou `CRYPT-`, uswsusp absent ou dirigé vers `CRYPT-`, TuxOnIce absent ; pendant la cérémonie, verrou d'inhibition `sleep` de `logind` et processus de rendu dédié terminé à la fin. Résiduel écrit (§9.9) : un outil d'administration hors des mécanismes connus ; désaccord D-17 (variante stricte « (a) seule » prête). (3) `st_rdev` du périphérique, pas `st_dev`. (4) `FailureReportFolderPath` est en lecture seule : il est sous le dossier de données de la webview, placé par OV-4, et purgé. (5) « P-VAULT-MAC » n'existait pas : OV-2 renvoie à P-VAULT sur macOS. (6) `systemd-coredump` honore `RLIMIT_CORE` ; le contrôle du volume de destination reste pour Apport et les gestionnaires inconnus. (7) N42 : oracles par API (DiskArbitration, IOKit `IOPMCopyPMPreferences`, `sysctl` `vm.swapusage`, WMI par COM, registre) ; plus de disque en mémoire macOS (`hdiutil`).
+
 ### AD-92 — Historique sans Git (N39)
 
 - **Recommandation.** Spec §6.11 HI-1 à HI-5 : voyager dans le temps (vue en lecture seule),
@@ -1415,6 +1422,68 @@ Le détail des contradictions, manques, doublons, carte produit et phasage est d
 - **Recommandation.** Aucun natif ; collage riche (HTML → Typst ou Markdown) dans le cœur ;
   greffons `importers` et `exporters` pour qui le veut. La suggestion DOCX/ODT de l'audit de
   cohérence de Codex est écartée par N40.
+
+## Révision 8 : autoporteur (N42), polices et ressources (N43)
+
+### AD-99 — Autoporteur : aucun programme externe, dépendances garanties (N42)
+
+- **Doute.** Le code lance `/bin/sh`, `setpriv`, `prlimit`, `unshare`, `mount`, `/bin/true` pour
+  enfermer les sidecars ; la spécification citait `diskutil`, `fdesetup`, `pmset`, `hdiutil`,
+  PowerShell ; l'installateur Windows télécharge WebView2 ; `/usr/bin/inkwell` lié à GTK ne peut rien
+  dire si une bibliothèque manque. Aucun de ces programmes n'est garanti sur toutes les cibles.
+- **Options.** (1) Garder les outils et les déclarer en dépendances des paquets : ne couvre ni
+  `tar.gz`, ni macOS, ni Windows, et fait dépendre la sécurité d'outils hors de notre contrôle.
+  (2) **Appels système et API du système**, plus **nos** binaires embarqués : un lanceur statique
+  `inkwell-sandbox exec` (espaces de noms, tmpfs, rlimits, Landlock, `no_new_privs`, capacités,
+  seccomp par appels système), oracles par sysfs, DiskArbitration, IOKit, `sysctl`, WMI par COM et
+  registre ; garanties des bibliothèques écrites et testées (§14.1).
+- **Recommandation.** (2). INV-14, AC-18, AC-19 ; §9.5 ; OV-1 à OV-5 ; EN-4 (le disque en mémoire de
+  macOS disparaît : il exigeait `hdiutil`) ; §14.1 DG-1 à DG-5 (contrôle au démarrage, lanceur Linux
+  statique `cmd/inkwell-launch`, matrice minimale, formats, programmes d'installation) ; P-DEPS.
+- **Norme et preuve.** `capabilities(7)`, `user_namespaces(7)`, `landlock(7)`, `prctl(2)`,
+  `setrlimit(2)` ; go-landlock (projet Landlock) ; `ld.so(8)` (un `DT_NEEDED` manquant échoue avant
+  `main`) ; distribution de WebView2 (Evergreen autonome, version fixe) de Microsoft.
+- **Utilisatrice.** Exigence N42 (2026-11-01) ; décidé.
+
+### AD-100 — Polices (N43)
+
+- **Doute.** Le code coupe les polices de l'ordinateur (`--ignore-system-fonts`) ; typst 0.15.1
+  ajoute les polices du système puis les siennes **avant** les `--font-path`, et la première
+  ajoutée gagne : les ouvrir naïvement ferait masquer les polices du projet.
+- **Options.** (1) Polices de l'ordinateur coupées (déterminisme total, contraire à N43). (2) Ordre
+  par défaut de typst (le système masque le projet). (3) **Une liste `--font-path` ordonnée**
+  projet → inkwell → mes polices → ordinateur, les deux drapeaux `--ignore-*` posés, la même liste
+  pour tinymist ; avertissement local (jamais d'annonce entre pairs) ; ajout au projet en un clic.
+- **Recommandation.** (3), §6.12 FT-1 à FT-14 ; « polices utilisées » lues dans
+  `tinymist.getDocumentMetrics` (résolution réelle, replis compris) ; index en arrière-plan ;
+  validation par typst seul ; aucun contrôle de licence ; installation permanente dans un dossier
+  géré par inkwell (une copie de fichier, identique sur les six cibles, sans effet sur les autres
+  applications ; les dossiers par personne du système exigeraient sous Windows registre,
+  `AddFontResourceW` et `WM_FONTCHANGE`). Porte P-FONT, budget PF-11.
+- **Ordre des sources.** L'exigence énumère « inkwell, système, projet » ; la priorité retenue met le
+  **projet** d'abord (ce qu'il porte doit gagner chez tous) puis **inkwell** (identique partout) ; à
+  confirmer si l'énumération voulait dire une priorité.
+- **Utilisatrice.** Exigence N43 ; licences hors du champ et aucune annonce des polices :
+  **décidé** (2026-11-01) ; ordre des sources : à confirmer.
+
+### AD-101 — Rassemblement des ressources (N43)
+
+- **Recommandation.** §6.13 : une étape au partage et à chaque export en un fichier ; découverte par
+  la résolution de typst et de tinymist (polices, paquets par `--deps`, chemins hors racine par
+  l'erreur de typst) et par les manifestes des extensions ; tout coché d'avance **sauf** les fichiers
+  hors de la racine (un document reçu pourrait viser `~/.ssh/…`) ; autosuffisance vérifiée par une
+  compilation de contrôle (RA-2) ; RA-T1 : export → import sur image vierge → même SHA-256 du PDF.
+- **Utilisatrice.** Demandé (2026-11-01) ; seule l'exception des fichiers hors racine est à
+  confirmer.
+
+### AD-102 — Installation permanente d'une ressource de projet
+
+- **Recommandation.** Une police ou un greffon du projet sert à **tous les membres tant que le
+  projet est ouvert** ; chaque personne peut l'installer **pour tous ses projets** : police → dossier
+  géré par inkwell (FT-12) ; greffon → extension personnelle, par le **consentement normal**
+  (capacités, §15.5), car l'usage permanent élargit la portée ; rien n'est hérité du niveau
+  « projet » (PP-8).
+- **Utilisatrice.** Décidé (2026-11-01).
 
 ## Sources consultées pour ces décisions
 

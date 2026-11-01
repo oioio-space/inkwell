@@ -1,5 +1,85 @@
 # Changements de l'architecture
 
+## 1.0.0-brouillon.9 — révision 8 (2026-11-01)
+
+Réponse au tour 7 : [Fable](reviews/13-fable-r7.md) **ACCEPT** (1 majeur, 4 mineurs) ;
+[Codex](reviews/14-codex-r7.md) **NOT ACCEPTED** (1 bloquant). Plus une décision de l'utilisatrice
+et deux exigences nouvelles (N42, N43). Aucune modification de `docs/protocol/` ni de `docs/design/`.
+
+### Revues du tour 7
+
+| Constat | Changement |
+|---|---|
+| Codex R7-B1 OV-1 (b) admet une destination d'hibernation brute et en clair | OV-1 **(b′)** : hibernation possible acceptée seulement par les mécanismes connus, chacun prouvé (chaque swap actif passe l'oracle ; `/sys/power/resume` = `0:0` ou `CRYPT-` ; `/etc/uswsusp.conf` et `/etc/suspend.conf` absents ou `resume device` en `CRYPT-` ; `/sys/power/tuxonice` absent) ; pendant la cérémonie, verrou d'inhibition `sleep` de `logind` (D-Bus) et processus de rendu dédié terminé à la fin ; résiduel écrit au §9.9 ; témoins OV-4 (uswsusp en clair, `resume` en clair, hibernation demandée pendant la cérémonie) ; D-17 ci-dessous |
+| Fable R7-M1 (b) illisible (aucune signature d'une partition non montée dans sysfs) et infranchissable sous UEFI (partition EFI, `/boot` en clair) | même changement : (b) supprimée, (b′) proposée par Fable retenue et durcie (verrou, processus dédié) |
+| Fable R7-m1 `st_dev` | OV-1 : **`st_rdev`** de la source (numéro du périphérique) |
+| Fable R7-m2 `FailureReportFolderPath` n'est pas réglable | OV-5 : propriété **en lecture seule**, sous le dossier de données de la webview par construction (placé par OV-4), purgée à la fin de la cérémonie |
+| Fable R7-m3 « P-VAULT-MAC » indéfini | OV-2 renvoie à P-VAULT sur macOS |
+| Fable R7-m4 `systemd-coredump` honore `RLIMIT_CORE` | OV-5 : dit (`systemd-coredump(8)`) ; le contrôle du volume de destination reste pour Apport et les gestionnaires inconnus |
+
+### Décisions de l'utilisatrice (2026-11-01)
+
+| Décision | Changement |
+|---|---|
+| Protection du projet **facultative**, jamais par défaut, même partagé | spec EN-0 ; `AD-91` révision 8 ; `coherence.md` élément 9 du design |
+| IA : autorisation d'un admin dans un projet partagé | matrice : `AD-82` décidé |
+| Variantes du projet entier | matrice : `AD-96` (HI-7) décidé |
+| Extensions de projet chargées d'office et limitées | matrice : `AD-69` décidé |
+| Licences des polices hors du champ ; aucune annonce des polices d'un appareil | FT-7, FT-9 |
+| Une police ou un greffon du projet sert à tous tant que le projet est ouvert ; installation permanente au choix | FT-10, FT-12, PP-8, `AD-102` |
+
+### N42 — autoporteur : chaque appel remplacé
+
+| Appel (où) | Remplacé par |
+|---|---|
+| `/bin/sh -c 'ulimit -v …; exec …'` (`internal/sidecar/limit_linux.go`) | `unix.Setrlimit` (`RLIMIT_AS`, `RLIMIT_FSIZE`, `RLIMIT_CORE`) dans `inkwell-sandbox exec` |
+| `/bin/sh` comme sonde d'isolation réseau (`netns_linux.go`) | `inkwell-sandbox` mode `probe` |
+| `/usr/bin/setpriv --landlock-access …` (`dir_linux.go`, `mount_linux.go`) | go-landlock v0.11 (repli : appels `landlock_*` de `x/sys/unix`) ; `PR_SET_NO_NEW_PRIVS`, `PR_CAPBSET_DROP`, `Capset`, `PR_SET_SECUREBITS` |
+| `/usr/bin/prlimit --fsize=…` (`dir_linux.go`, `mount_linux.go`) | `unix.Setrlimit(RLIMIT_FSIZE)` |
+| `/bin/true` (`dir_linux.go`) | supprimé (sonde par `probe`) |
+| `/usr/bin/unshare --user --map-root-user --mount sh -c …` (`mount_linux.go`) | `SysProcAttr.Cloneflags` (`CLONE_NEWUSER`, `CLONE_NEWNS`, `CLONE_NEWNET`), `UidMappings`/`GidMappings` |
+| `/usr/bin/mount -t tmpfs …` (`mount_linux.go`) | `unix.Mount("tmpfs", …)` |
+| `hdiutil attach -nomount ram://` (spec EN-4) | supprimé : macOS n'a plus de disque en mémoire ; volume chiffré vérifié seulement |
+| `diskutil info -plist`, `fdesetup` (spec OV-2) | `statfs` puis DiskArbitration (`DADiskCreateFromBSDName`, `DADiskCopyDescription`) |
+| `pmset -g custom` (spec OV-2) | IOKit `IOPMCopyPMPreferences` (tous les profils) |
+| commande `sysctl vm.swapusage` (spec OV-2) | appel `sysctl("vm.swapusage")`, `xsw_usage.xsu_encrypted` |
+| PowerShell, `manage-bde` (spec OV-3) | WMI par COM (`go-ole`) : `Win32_EncryptableVolume`, `Win32_PageFileUsage` ; registre par `x/sys/windows/registry` |
+| `xdg-open`, `open`, `start` (intégration au bureau) | portail `OpenURI` ou `FileManager1` (D-Bus) ; `NSWorkspace` ; `ShellExecuteExW`, `SHOpenFolderAndSelectItems` |
+| `fc-list`, `fc-match` (polices) | dossiers calculés par Go (XDG, `fonts.conf` lu, CoreText, `FOLDERID_Fonts`, registre) |
+| outil `age` | bibliothèque `filippo.io/age` (EN-6) |
+| `git check-ignore` (IG-3) | gardé, **outil de test seulement** |
+| `tar` (`internal/sidecar/fetch/fetch.go`) | gardé, **construction seulement** (AC-6) ; `archive/tar` si l'outil manque |
+| amorce WebView2 qui télécharge (`build/windows/nsis/wails_tools.nsh`) | programme d'installation autonome Evergreen embarqué, lancé à l'installation (DG-5) |
+
+Ajouts : INV-14 ; AC-18 (seul `internal/sandbox` lance un processus ; aucun littéral de programme
+du système) et AC-19 (`sidecar.Verified`) ; §9.5 lancement sans programme externe ; §14.1
+**Dépendances garanties** (GTK 4, WebKitGTK 6.0, glibc, cgo, WebView2, macOS 12, Windows 10/11,
+polices, paquets, trousseau, bus, intégration au bureau ; DG-1 contrôle au démarrage, DG-2 lanceur
+Linux statique `cmd/inkwell-launch`, DG-3 matrice minimale, DG-4 formats : Flatpak différé,
+AppImage écarté, DG-5 programmes d'installation) ; porte P-DEPS ; §16 (six écarts) ; `AD-99`.
+
+### N43 — polices et ressources
+
+§6.12 FT-1 à FT-14 (état vérifié de typst 0.15.1 et tinymist 0.15.10 ; priorité projet → inkwell →
+mes polices → ordinateur, par une liste `--font-path` ordonnée et les deux drapeaux `--ignore-*`,
+car typst ajoute sinon le système **avant** les `--font-path` et la première ajoutée gagne ; mêmes
+polices pour tinymist ; index incrémental en arrière-plan ; validation par typst seul ; polices
+utilisées lues par `tinymist.getDocumentMetrics` ; avertissement local `font.local`, jamais
+d'annonce ; copie vérifiée vers le magasin BLAKE3 ; installation permanente dans un dossier géré
+par inkwell ; accroches du gestionnaire). §6.13 rassemblement des ressources (polices, paquets,
+fichiers hors racine non cochés, extensions, modèle ; RA-T1 : même SHA-256 du PDF après import sur
+image vierge). TM-8, PP-8, PF-11, P-FONT, `AD-100` à `AD-102`. Mesures : découverte des polices du
+système ≈ 80 ms par compilation (432 fichiers) ; `--deps` liste les fichiers d'un paquet `@local`
+mais aucune police.
+
+### Désaccords à débattre
+
+| # | Sujet | Codex | Fable | Recommandation |
+|---|---|---|---|---|
+| D-17 | Hibernation sous Linux | toute destination brute utilisable doit être prouvée chiffrée, sinon seule la branche (a) (hibernation impossible) passe | (b′) : les mécanismes connus prouvés un à un ; un outil d'administration ad hoc reste un résiduel écrit | **(b′)** avec verrou d'inhibition et processus de rendu dédié : (b′) ferme le cas de Codex pour `swsusp`, uswsusp et TuxOnIce, pas pour un outil arbitraire installé par l'administration de l'appareil (hors du modèle du Voleur, écrit au §9.9). Si Codex maintient, la variante stricte s'applique : « Protéger ce projet » indisponible sur une machine Linux où l'hibernation est possible |
+| — | Ordre des sources de polices | — | — | projet → inkwell → mes polices → ordinateur (`AD-100`) ; l'exigence énumérait « inkwell, système, projet » : à confirmer par l'utilisatrice |
+
+
 ## 1.0.0-brouillon.8 — révision 7 (2026-11-01)
 
 Réponse au tour 6 : [Fable](reviews/11-fable-r6.md) **ACCEPT** (2 majeurs de texte, 5 mineurs) ;

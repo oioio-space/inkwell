@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Date | 2026-11-01 (révision 7 de l’architecture, `spec.md` 1.0.0-brouillon.8) |
+| Date | 2026-11-01 (révision 8 de l’architecture, `spec.md` 1.0.0-brouillon.9) |
 | But | relire ensemble tout ce qui a été demandé à la volée (N17–N41, U*, L*), résoudre les contradictions, combler ou différer explicitement les manques, fusionner les doublons, et ramener le tout à la finalité : **des personnes qui aiment écrire, ensemble, sans serveur** |
 | Entrées | [audit de cohérence de Codex](reviews/coherence-codex.md) ; revues du tour 2 ([Fable](reviews/03-fable-r2.md) §4, [Codex](reviews/04-codex-r2.md) §4) ; études [encryption](research/encryption.md), [sync-ignore](research/sync-ignore.md), [ai §12](research/ai.md), [editor-features](research/editor-features.md), [plugins](research/plugins.md) ; [design rév. 4](../design/spec.md) ; [exigences](../exigences.md) |
 | Règle de tri | à valeur égale, ce qui sert d'abord le parcours **écrire → partager → retrouver → corriger → exporter** passe devant ; une plate-forme (extensions, IA, coffre) se construit sur ce parcours, jamais à sa place |
@@ -160,10 +160,14 @@ brouillons privés, intégration entre projets ; Mermaid complet (P-FRAME) ; API
    jamais branche, fusion, commit.
 8. **Variantes** (N41) : créer, comparer avec l'original, proposer d'intégrer, intégrer, divergence
    affichée ; « Dupliquer le projet ».
-9. **Protection du projet** (N37) : case « Protéger ce projet » (cochée par défaut pour un projet
-   partagé), message « Pour compiler un projet protégé ici, activez le chiffrement du disque » quand
+9. **Protection du projet** (N37) : case « Protéger ce projet », **facultative** et **jamais cochée par
+   défaut**, même pour un projet partagé (décision de l'utilisatrice, 2026-11-01, EN-0), message « Pour compiler un projet protégé ici, activez le chiffrement du disque » quand
    la cible l'exige (§6.10 EN-4), message de la borne de 512 Mio, déverrouillage, phrase et **kit de secours** (impression, QR), « les données sont
    perdues sans eux » dit à l'activation, export chiffré ou lisible.
+9 bis. **Polices et ressources** (N43) : onglet « Polices » des paramètres du projet et section
+   des Préférences (FT-14) ; entrées `font.local` et `font.unknown` dans les problèmes ; liste
+   cochable du rassemblement des ressources au partage et à l'export (§6.13) ; « Installer pour tous
+   mes projets » pour une police ou une extension du projet (FT-12, PP-8).
 10. **Sauvegarde et restauration** : « Sauvegarder / Restaurer une copie », date du dernier succès,
     restauration à côté, avertissement de fraîcheur d'un appareil neuf (§6.7 ST-7).
 11. **Vue Ressources** (N32) : tableau façon `about:processes`, verbes annuler, mettre en pause,
