@@ -1,7 +1,7 @@
 ---
 status: proposée
 date: 2026-11-01
-revision: 4 (revues 01 à 06 ; exigences N13, N14, N15 ; choix D1 à confirmer par les deux relecteurs)
+revision: 5 (revues 01 à 08, débat D1 conclu par un accord ; exigences N13, N14, N15)
 decision-makers: [Mathieu]
 ---
 
@@ -72,7 +72,8 @@ perte à signaler » → c'est exactement le changement de génération, et la r
 partout ; « barrière de séquence pour l'attestation » → ATTEST et AUTHOR voyagent sur le flux
 REPO, avant le message ; « réservation ou éviction » → parts réservées (§10.6). Bao n'apporte
 rien à l'intérieur d'une connexion authentifiée avec le pair qui a produit le message : il
-reste pour les blobs, qui peuvent venir de n'importe quel détenteur.
+reste pour ce qui peut venir de n'importe quel détenteur — les blobs, et les rares
+modifications indivisibles plus grandes qu'une part, tirées par leur racine (accord D1).
 
 Encodage, comparé séparément. Les objets signés restent en binaire fixe (le `ProjectID` en
 dépend). Les messages CBOR de la couche dépôt ne sont pas signés : un **profil de validité**
@@ -112,7 +113,11 @@ Option retenue : **B**, décrite normativement dans
 7. **SET** : un seul mécanisme d'anti-entropie pour les cinq ensembles signés, par lots en
    ordre causal avec curseur et achèvement prouvé (§6.1) ; **ATTEST_WANT** : réconciliation des
    attestations tirée par le receveur (§6.2).
-8. **Parts réservées** sur tout plafond partagé (§10.6) ; **aucun délai sur la lenteur**, seul
+8. **Parts réservées** sur tout plafond partagé (§10.6), **fixes** (`C / 64`) pour la mémoire
+   réservée d'avance des objets LARGE, dynamiques pour ce qui est reprenable ; un objet plus
+   grand que sa part est redemandé par pages ≤ part, ou, s'il s'agit d'une modification
+   indivisible, tiré par le vrac en tranches Bao reprenables mises en attente sur disque par
+   auteur (accord D1 entre les relecteurs) ; **aucun délai sur la lenteur**, seul
    l'arrêt complet d'un transfert réservé échoue (§10.2) ; pas d'auto-blocage (§10.7).
 9. **Profil de validité CBOR** (§9.2.1) ; aucun flottant (pointeur en dix-millièmes) ;
    `targetId` partout.
@@ -245,17 +250,20 @@ mode « signalé », sans échouer, jusqu'à leur `enforce`.
 
 ## Décisions demandées à l'utilisatrice
 
-1. Accepter cette ADR, révision 2 (option B).
+1. Accepter cette ADR, révision 5 (option B).
 2. Règle d'ordre premier pour les clés (`[L]A = O`) : plus stricte que « pas d'ordre petit »,
    sans effet sur une clé honnête ; elle change le verdict de deux cas de Chalkias.
 3. Session = connexion : le passage du relais au direct relance la synchronisation avec ce
    pair (deux sessions au plus pendant le passage, époques distinctes).
-4. Règle H : ce qu'un receveur refuse ou laisse expirer est redemandé par pages
+4. Accord D1 des relecteurs : pages ≤ part, et tranches Bao reprenables pour une modification
+   indivisible plus grande, attente sur disque par auteur sous le quota N10 (d'ici là, une
+   modification ≤ 16 Mio par auteur et par receveur).
+5. Règle H : ce qu'un receveur refuse ou laisse expirer est redemandé par pages
    d'historique, au plus une fois par minute et par document, au lieu de réinitialiser la
    génération.
-5. Le pointeur de présentation passe en dix-millièmes entiers (le protocole n'a plus aucun
+6. Le pointeur de présentation passe en dix-millièmes entiers (le protocole n'a plus aucun
    flottant).
-6. Module `protocol` comme sous-module de ce dépôt (recommandé) plutôt qu'un dépôt séparé ;
+7. Module `protocol` comme sous-module de ce dépôt (recommandé) plutôt qu'un dépôt séparé ;
    licence du module : celle du dépôt (MPL-2.0, copyleft par fichier, compatible avec une
    intégration dans une application propriétaire) est recommandée ; Apache-2.0 ou MIT
    faciliteraient encore l'adoption, au prix de la réciprocité.

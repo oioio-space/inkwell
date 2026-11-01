@@ -1,6 +1,6 @@
 # Le protocole inkwell, en clair
 
-> Version : **2.0.0-brouillon.4** (2026-11-01). Texte normatif : [spec.md](spec.md).
+> Version : **2.0.0-brouillon.5** (2026-11-01). Texte normatif : [spec.md](spec.md).
 > Décision : [ADR 0034](../adr/0034-protocole-unifie.md). Changements et revues :
 > [CHANGES.md](CHANGES.md), [reviews/](reviews/). État actuel et défauts :
 > [inventaire.md](inventaire.md). Vecteurs : [vectors/](vectors/). Schémas CBOR : [cddl/](cddl/).
@@ -23,7 +23,7 @@ HTTP/2 et QUIC le font pour chaque flux. Un flux lent ne gêne donc jamais les a
 | `repo` | les messages des documents (automerge-repo), précédés de leurs preuves (attestation, signature d'auteur) | jamais en silence : on change de **génération** (on ferme ce flux, on en ouvre un neuf) et Automerge resynchronise |
 | `presence` | curseurs, noms affichés, pilotage de présentation | sans importance : le suivant remplace |
 | `large` | un message de plus de 64 Kio, sur son propre flux, ouvert seulement quand le receveur a réservé la place et l'a demandé | comme `repo` |
-| `bulk` | les fichiers joints, par tranches vérifiées contre leur empreinte BLAKE3 | on redemande ailleurs |
+| `bulk` | les fichiers joints, et les rares modifications indivisibles plus grandes qu'une part, par tranches vérifiées contre leur empreinte BLAKE3, reprenables | on redemande ailleurs |
 | `lobby` | un inconnu invité se présente (une question, une réponse) | il réessaie |
 
 ## Les règles qui évitent les défauts

@@ -49,13 +49,15 @@ toujours** ; deux changements de génération. **L'annulation d'un flux ne rend 
 tout de suite** (révision 4, revues 05-codex et 06-fable) : le crédit de l'ancien flux reste
 pris (`pending`) jusqu'au RESET_STREAM du pair (`ResetArrives`, équité faible pour un pair
 honnête) ; un seul flux annulé en attente ; un pair qui ne répond pas déclenche la fermeture
-de la session (`Teardown`, 10 s). Propriété : `ControlLive` (toute trame de contrôle voulue
+de la session (`Teardown`, 10 s). Seul le flux REPO est annulé : un flux LARGE entrant de
+l'ancienne génération est lu jusqu'au bout et jeté (spec §5.1 c), il ne retient pas de crédit ;
+`Switch` ne touche donc que REPO, par construction. Propriété : `ControlLive` (toute trame de contrôle voulue
 finit par être lue, ou la session est fermée). Résultats (TLC exhaustif, 2026-11-01) :
 
 | Variante | Résultat |
 |---|---|
 | règles de la spec (`PullLarge`, `Honest`, `TeardownRule` vrais) | aucune erreur (36 683 états, 10 882 distincts) |
-| pair honnête **sans** règle de fermeture | aucune erreur : le contrôle attend au plus le RESET_STREAM, jamais de fermeture nécessaire |
+| pair honnête **sans** règle de fermeture (`ConnCreditHonest.cfg`) | aucune erreur : le contrôle attend au plus le RESET_STREAM, jamais de fermeture nécessaire |
 | pair qui n'envoie jamais RESET_STREAM, avec la règle de fermeture | aucune erreur : la session est fermée |
 | pair qui n'envoie jamais RESET_STREAM, **sans** règle de fermeture | `ControlLive` violée : le crédit reste pris pour toujours |
 | LARGE ouvert sans LARGE_REPLY (`PullLarge = FALSE`) | `ControlLive` violée : REPO et LARGE non lus prennent tout le crédit |

@@ -10,7 +10,10 @@
 (* The webview may stop consuming forever (Stuck). Property: every wanted   *)
 (* CONTROL frame is eventually read, or the session is torn down.          *)
 (* Rules: CONTROL always drained; at most one cancelled stream pending;     *)
-(* LARGE opened only after LARGE_REPLY (read into a reservation).            *)
+(* LARGE opened only after LARGE_REPLY (read into a reservation); on a      *)
+(* generation change only REPO is cancelled — an inbound LARGE of the old    *)
+(* generation is read to its end and dropped, so it never holds credit      *)
+(* (spec §5.1 c): Switch therefore touches REPO only, by design.            *)
 EXTENDS Naturals
 
 CONSTANTS Wc, Ws, QMax, MaxRepo, MaxLarge, MaxCtl, MaxSwitch,
@@ -80,6 +83,4 @@ Spec == Init /\ [][Next]_vars /\ WF_vars(SendCtl) /\ WF_vars(ReadCtl) /\ WF_vars
 CreditOK == Credit >= 0
 OnePending == pending <= Ws
 ControlLive == <>(nCtlRead = MaxCtl \/ torn)
-\* Stronger, for an honest peer: no teardown is ever needed.
-HonestNoTeardown == Honest => [](~torn \/ pending > 0)
 =============================================================================

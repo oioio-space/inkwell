@@ -82,9 +82,9 @@
         "protocol": "/inkwell/repo/2.0.0",
         "session": "active"
       },
-      "description": "Flux /inkwell/repo/2.0.0 de préambule gen = 2 reçu en Resetting(2) : confirmation ; puis une trame REPO (message opaque pour ce décodeur) et une annonce LARGE{id 1, 70 000}.",
+      "description": "Flux /inkwell/repo/2.0.0 de préambule gen = 2 reçu en Resetting(2) : confirmation ; puis une trame REPO (message opaque pour ce décodeur) et une annonce LARGE{id 1, 70 000 octets, root BLAKE3, change nul, doc}.",
       "decoder": "sync2_stream",
-      "input_hex": "000000020000001705a164747970656f646f632d756e617661696c61626c6500000009070000000100011170",
+      "input_hex": "000000020000001705a164747970656f646f632d756e617661696c61626c650000006707000000010001117000a3c79626605231cdf54f555001ae1a4d8a793bd5de97095742dd53f8cff233fb00000000000000000000000000000000000000000000000000000000000000001c344e4d4e6e6b4d684c386a5872644a396a616d533538504156645875",
       "verdict": "accept",
       "expect": {
         "gen": 2,
@@ -158,7 +158,55 @@
       },
       "description": "Annonce LARGE de 65 536 octets (≤ seuil en ligne) : refusé.",
       "decoder": "sync2_stream",
-      "input_hex": "0000000200000009070000000100010000",
+      "input_hex": "000000020000006707000000010001000000a3c79626605231cdf54f555001ae1a4d8a793bd5de97095742dd53f8cff233fb00000000000000000000000000000000000000000000000000000000000000001c344e4d4e6e6b4d684c386a5872644a396a616d533538504156645875",
+      "verdict": "reject"
+    },
+    {
+      "id": "large-indivisible",
+      "status": "proposed",
+      "enforce": "step-4",
+      "context": {
+        "gen": 2,
+        "mode": "resetting",
+        "protocol": "/inkwell/repo/2.0.0",
+        "session": "active"
+      },
+      "description": "Annonce LARGE indivisible (bit 0) : objet = une seule modification de 70 000 octets, root = BLAKE3, change = son empreinte Automerge ; le receveur répond LARGE_REPLY 0 et la tire par le vrac (§7.2, §8.1).",
+      "decoder": "sync2_stream",
+      "input_hex": "000000020000006707000000010001117001a3c79626605231cdf54f555001ae1a4d8a793bd5de97095742dd53f8cff233fb518333375d11a5061daadcb3c9c768a86584e9ca442ae19b94a7c47da12bbaa61c344e4d4e6e6b4d684c386a5872644a396a616d533538504156645875",
+      "verdict": "accept",
+      "expect": {
+        "indivisible": true
+      }
+    },
+    {
+      "id": "large-indivisible-no-change",
+      "status": "proposed",
+      "enforce": "step-4",
+      "context": {
+        "gen": 2,
+        "mode": "resetting",
+        "protocol": "/inkwell/repo/2.0.0",
+        "session": "active"
+      },
+      "description": "Annonce indivisible dont change est nul : refusé (une modification indivisible nomme son empreinte).",
+      "decoder": "sync2_stream",
+      "input_hex": "000000020000006707000000010001117001a3c79626605231cdf54f555001ae1a4d8a793bd5de97095742dd53f8cff233fb00000000000000000000000000000000000000000000000000000000000000001c344e4d4e6e6b4d684c386a5872644a396a616d533538504156645875",
+      "verdict": "reject"
+    },
+    {
+      "id": "large-flags-reserved",
+      "status": "proposed",
+      "enforce": "step-4",
+      "context": {
+        "gen": 2,
+        "mode": "resetting",
+        "protocol": "/inkwell/repo/2.0.0",
+        "session": "active"
+      },
+      "description": "Annonce LARGE avec un bit de drapeau réservé (0x02) : refusé.",
+      "decoder": "sync2_stream",
+      "input_hex": "000000020000006707000000010001117002a3c79626605231cdf54f555001ae1a4d8a793bd5de97095742dd53f8cff233fb00000000000000000000000000000000000000000000000000000000000000001c344e4d4e6e6b4d684c386a5872644a396a616d533538504156645875",
       "verdict": "reject"
     },
     {
@@ -361,11 +409,12 @@
       "context": {
         "protocol": "/inkwell/control/2.0.0"
       },
-      "description": "LARGE_REPLY (0x0B) id 1, verdict 1 : le receveur a réservé, l'émetteur peut ouvrir le flux LARGE (§7.2).",
+      "description": "LARGE_REPLY (0x0B) génération 2, id 1, verdict 1 : le receveur a réservé, l'émetteur peut ouvrir le flux LARGE (§7.2). Une réponse d'une autre génération ne correspond à rien.",
       "decoder": "sync2_stream",
-      "input_hex": "0000003f0100010020a8c8601608f969e63ceeec9e77b8d8cbd99007442ffa67c028069149625d21660002000400010a0a000400020002000800080123456789abcdef000000060b0000000101",
+      "input_hex": "0000003f0100010020a8c8601608f969e63ceeec9e77b8d8cbd99007442ffa67c028069149625d21660002000400010a0a000400020002000800080123456789abcdef0000000a0b000000020000000101",
       "verdict": "accept",
       "expect": {
+        "gen": 2,
         "id": 1,
         "verdict": 1
       }
@@ -377,11 +426,12 @@
       "context": {
         "protocol": "/inkwell/control/2.0.0"
       },
-      "description": "LARGE_REPLY id 1, verdict 0 : refus (objet plus grand que la part) ; l'émetteur oublie l'objet, le receveur passera par les pages d'historique.",
+      "description": "LARGE_REPLY génération 2, id 1, verdict 0 : ne pas ouvrir le flux (objet plus grand que la part : pages d'historique ; ou modification indivisible : vrac).",
       "decoder": "sync2_stream",
-      "input_hex": "0000003f0100010020a8c8601608f969e63ceeec9e77b8d8cbd99007442ffa67c028069149625d21660002000400010a0a000400020002000800080123456789abcdef000000060b0000000100",
+      "input_hex": "0000003f0100010020a8c8601608f969e63ceeec9e77b8d8cbd99007442ffa67c028069149625d21660002000400010a0a000400020002000800080123456789abcdef0000000a0b000000020000000100",
       "verdict": "accept",
       "expect": {
+        "gen": 2,
         "id": 1,
         "verdict": 0
       }
@@ -395,7 +445,7 @@
       },
       "description": "LARGE_REPLY de verdict 2 : refusé.",
       "decoder": "sync2_stream",
-      "input_hex": "0000003f0100010020a8c8601608f969e63ceeec9e77b8d8cbd99007442ffa67c028069149625d21660002000400010a0a000400020002000800080123456789abcdef000000060b0000000102",
+      "input_hex": "0000003f0100010020a8c8601608f969e63ceeec9e77b8d8cbd99007442ffa67c028069149625d21660002000400010a0a000400020002000800080123456789abcdef0000000a0b000000020000000102",
       "verdict": "reject"
     }
   ]

@@ -201,3 +201,66 @@ de débit disparaît ; il ne reste qu'un quantum de partage du temps, sur une vo
 - `RepoGen.cfg` non exhaustif ; passage entre sessions et crédits du pont argumentés, non
   modélisés ; objets proposés sans codec, admission des annonces déclarative (avant bascule,
   étape 8).
+
+---
+
+# Tour 4 : révision 5 (2.0.0-brouillon.4 → 2.0.0-brouillon.5)
+
+Revues [07-codex](reviews/07-codex.md) et [08-fable](reviews/08-fable.md) (« revise », aucune
+Critique) et débat [09-debate-D1](reviews/09-debate-D1.md) : **accord** des deux relecteurs.
+
+## D1 — accord, appliqué
+
+« C (pages ≤ part) + tranches Bao reprenables via §8.1 pour les modifications indivisibles plus
+grandes qu'une part, tirées par empreinte depuis l'annonce LARGE, mises en attente sur disque
+par auteur sous le quota N10, ordonnancées en DRR, sans quantum, sans voie, sans
+réinitialisation sur la lenteur. » Appliqué :
+
+| Élément de l'accord | Où |
+|---|---|
+| `LARGE{id, size, flags (bit indivisible), root = BLAKE3, change, doc}` ; le bit n'est posé qu'en réponse à `history-request` pour une seule modification plus grande que `max` | spec §5.2, §7.2 ; `session.json#large-indivisible`, `#large-indivisible-no-change`, `#large-flags-reserved` |
+| tirage par `root` chez l'annonceur puis chez tout détenteur ; règle de service étendue (« ou une modification indivisible annoncée ou détenue », document admis, demandeur membre actif) ; l'annonceur garde la modification indexée par `root` tant qu'une demande est en cours | spec §8.1 |
+| liaison document, auteur, empreinte Automerge, taille, racine Bao ; enveloppe CBOR faite localement ; chaîne de réception normale | spec §8.1 |
+| attente **sur disque par auteur**, quota N10 ; d'ici là 1 modification ≤ 16 Mio par auteur et par receveur ; LRU dans la part de l'auteur, jamais sur un délai ; reprise persistée ; DRR ; 3 échecs → autre détenteur, puis règle H | spec §8.1, §16.1 |
+| **voie des gros objets supprimée** : plus de quantum, de FIFO, de reprise | spec §7.2, §16.1, §10.6 |
+
+Constats devenus sans objet grâce à l'accord : Fable « pas de signal d'éligibilité à la voie »
+(le bit indivisible et `doc` sont dans LARGE) ; Fable « oubli à 10 min contre attente dans la
+file de la voie » et « fin de file non définie » (plus de voie ni de file ; avec des parts fixes
+un receveur honnête répond aussitôt, l'oubli à 10 min ne vise qu'un pair qui ne répond pas) ;
+Codex « une modification de 16 Mio plus son enveloppe CBOR dépasse la voie » (plus de voie ;
+le vrac transporte la modification brute, l'enveloppe est faite localement) ; Codex « refuser
+LARGE ne dit ni le document ni s'il est indivisible » (`doc` et le bit sont dans l'annonce).
+
+## Revue 07-codex
+
+| # | Constat | Changement | Où |
+|---|---|---|---|
+| C3 | Les parts rétrécissent quand des pairs arrivent, les réservations ne sont jamais reprises : admission non prouvée | **Parts fixes** pour la mémoire réservée d'avance : `r = 256 Mio / 64 = 4 Mio` (64 = maximum de pairs actifs). Preuve : chaque pair a au plus une réservation ≤ `r`, donc la somme ≤ 64 × `r` = 256 Mio ; tout nouvel objet ≤ `r` est admis aussitôt, quelle que soit l'arrivée de pairs ; rien à renégocier. Les parts dynamiques restent pour ce qui est reprenable | spec §10.6, §16.1 |
+| C5 | La règle I annule REPO **et** LARGE alors qu'une seule annulation peut être en attente ; ConnCredit ne modélise que REPO | La règle I n'annule plus que REPO ; un LARGE entrant de l'ancienne génération est lu jusqu'au bout et jeté (déjà dans sa réservation), il ne retient jamais de crédit ; ConnCredit est donc juste par construction (dit dans le modèle) | spec §5.1 (c), §7.3 ; `tla/ConnCredit.tla` |
+| Nouveau | `LARGE_REPLY` sans génération | `LARGE_REPLY{gen, id, verdict}` ; une réponse d'une autre génération est ignorée | spec §5.2, §7.2 ; `session.json#large-reply-*` |
+| Nouveau | Métadonnées de LARGE pour la règle H | voir D1 | |
+| Nouveau | Enveloppe CBOR et voie de 16 Mio | sans objet (voir D1) ; `history-request.max` compte l'enveloppe | spec §9.6 |
+
+## Revue 08-fable
+
+| # | Constat | Changement | Où |
+|---|---|---|---|
+| F8-1 | Pas de signal d'éligibilité à la voie | sans objet (D1) | |
+| F8-2 | Oubli à 10 min contre attente FIFO ; fin de file | sans objet (D1) | |
+| F8-3 | LARGE annulé non compté | La règle I ne l'annule plus : lu jusqu'au bout et jeté | spec §5.1 (c), §7.3 |
+| F8-4 | La marge de 4,5 Mio ne tient que pour une bascule | §5.1 (d) récrit : la vraie garantie est « le contrôle peut attendre jusqu'au RESET_STREAM : ≤ 1 aller-retour avec un pair honnête, ≤ 10 s avant fermeture sinon » | spec §5.1 (d) |
+| F8-5 | Départage à clés égales | Puis la session Active la plus ancienne | spec §5.1 |
+| F8-6 | Ligne émetteur du §11.2 | États `Annoncé → Demandé → Écrit → Fini`, `Refusé`, `Oublié` ; plus de « reprise de part » | spec §7.4, §11.2 |
+| F8-7 | `HonestNoTeardown` vacante | Supprimée ; variante reproductible `tla/ConnCreditHonest.cfg` (pair honnête sans règle de fermeture : aucune erreur) | `tla/` |
+
+## Simplifications de ce tour
+
+La voie des gros objets, son quantum et sa file disparaissent ; les rares modifications
+indivisibles réutilisent le vrac (Bao, reprise, DRR) déjà spécifié pour les blobs. Les parts
+fixes de la mémoire réservée suppriment toute renégociation.
+
+## Reste ouvert après ce tour
+
+- `RepoGen.cfg` non exhaustif ; passage entre sessions et crédits du pont argumentés, non
+  modélisés ; objets proposés sans codec (étape 8).

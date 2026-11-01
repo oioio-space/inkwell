@@ -460,13 +460,27 @@ func main() {
 	addS("hello-unsorted-tlv", "HELLO dont les TLV ne sont pas strictement croissants : refusé.", "sync2_stream", nil, append(pre(1, 0), frame(0x01, append(tlv(tlv(nil, 0x0002, caps), 0x0001, pidb), htail...))...), "reject", nil)
 	addS("hello-unknown-tlv", "HELLO avec un TLV inconnu 0x7A7A : accepté, ignoré.", "sync2_stream", nil, append(pre(1, 0), frame(0x01, tlv(append(tlv(tlv(nil, 0x0001, pidb), 0x0002, caps), htail...), 0x7a7a, []byte{0xde, 0xad}))...), "accept", nil)
 	rmsg := []byte{0xa1, 0x64, 't', 'y', 'p', 'e', 0x6f, 'd', 'o', 'c', '-', 'u', 'n', 'a', 'v', 'a', 'i', 'l', 'a', 'b', 'l', 'e'}
+	// LARGE body (§5.2): id u32 ; size u32 ; flags u8 ; root [32] ; change [32] ; doc str8.
+	largeBody := func(id, size uint32, flags byte, root, change []byte, doc string) []byte {
+		b := binary.BigEndian.AppendUint32(binary.BigEndian.AppendUint32(nil, id), size)
+		b = append(append(append(b, flags), root...), change...)
+		return append(append(b, byte(len(doc))), doc...)
+	}
+	largeObj := bytes.Repeat([]byte{0xab}, 70000)
+	bigRoot := blob.HashOf(largeObj)
+	zero32 := make([]byte, 32)
+	const largeDoc = "4NMNnkMhL8jXrdJ9jamS58PAVdXu"
 	repoCtx := map[string]any{"session": "active", "gen": 2, "mode": "resetting"}
-	addS("repo-open-next", "Flux /inkwell/repo/2.0.0 de préambule gen = 2 reçu en Resetting(2) : confirmation ; puis une trame REPO (message opaque pour ce décodeur) et une annonce LARGE{id 1, 70 000}.", "sync2_stream", repoCtx,
-		append(append(pre(2, 2), frame(0x05, rmsg)...), frame(0x07, binary.BigEndian.AppendUint32(binary.BigEndian.AppendUint32(nil, 1), 70000))...), "accept", map[string]any{"gen": 2, "transition": "synced(2)"})
+	addS("repo-open-next", "Flux /inkwell/repo/2.0.0 de préambule gen = 2 reçu en Resetting(2) : confirmation ; puis une trame REPO (message opaque pour ce décodeur) et une annonce LARGE{id 1, 70 000 octets, root BLAKE3, change nul, doc}.", "sync2_stream", repoCtx,
+		append(append(pre(2, 2), frame(0x05, rmsg)...), frame(0x07, largeBody(1, 70000, 0, bigRoot[:], zero32, largeDoc))...), "accept", map[string]any{"gen": 2, "transition": "synced(2)"})
 	addS("repo-gen-jump", "Flux REPO de génération 4 reçu en Synced(2) : refusé (h > gen + 1, PROTOCOL_VIOLATION).", "sync2_stream", map[string]any{"session": "active", "gen": 2, "mode": "synced"}, pre(2, 4), "reject", map[string]any{"goaway": 2})
 	addS("repo-stale", "Flux REPO de génération 1 reçu en Synced(2) : flux réinitialisé sans sanction (ancien).", "sync2_stream", map[string]any{"session": "active", "gen": 2, "mode": "synced"}, pre(2, 1), "reject", map[string]any{"stream": "reset", "goaway": nil})
 	addS("frame-wrong-stream", "Trame PRESENCE (0x06) sur un flux REPO : refusé (chaque type a sa classe de flux).", "sync2_stream", repoCtx, append(pre(2, 2), frame(0x06, rmsg)...), "reject", map[string]any{"goaway": 2})
-	addS("large-too-small", "Annonce LARGE de 65 536 octets (≤ seuil en ligne) : refusé.", "sync2_stream", repoCtx, append(pre(2, 2), frame(0x07, binary.BigEndian.AppendUint32(binary.BigEndian.AppendUint32(nil, 1), 65536))...), "reject", nil)
+	addS("large-too-small", "Annonce LARGE de 65 536 octets (≤ seuil en ligne) : refusé.", "sync2_stream", repoCtx, append(pre(2, 2), frame(0x07, largeBody(1, 65536, 0, bigRoot[:], zero32, largeDoc))...), "reject", nil)
+	chg := sha256.Sum256(largeObj) // stands for the Automerge change hash covered by the preceding AUTHOR tuple
+	addS("large-indivisible", "Annonce LARGE indivisible (bit 0) : objet = une seule modification de 70 000 octets, root = BLAKE3, change = son empreinte Automerge ; le receveur répond LARGE_REPLY 0 et la tire par le vrac (§7.2, §8.1).", "sync2_stream", repoCtx, append(pre(2, 2), frame(0x07, largeBody(1, 70000, 1, bigRoot[:], chg[:], largeDoc))...), "accept", map[string]any{"indivisible": true})
+	addS("large-indivisible-no-change", "Annonce indivisible dont change est nul : refusé (une modification indivisible nomme son empreinte).", "sync2_stream", repoCtx, append(pre(2, 2), frame(0x07, largeBody(1, 70000, 1, bigRoot[:], zero32, largeDoc))...), "reject", nil)
+	addS("large-flags-reserved", "Annonce LARGE avec un bit de drapeau réservé (0x02) : refusé.", "sync2_stream", repoCtx, append(pre(2, 2), frame(0x07, largeBody(1, 70000, 2, bigRoot[:], zero32, largeDoc))...), "reject", nil)
 	addS("large-preamble", "Préambule d'un flux /inkwell/large/2.0.0 : gen 2, id 1, taille 70 000 ; suivent exactement 70 000 octets bruts puis la fin du flux.", "sync2_stream", map[string]any{"session": "active", "gen": 2, "mode": "synced", "announced": map[string]any{"id": 1, "size": 70000}}, pre(4, 2, 1, 70000), "accept", nil)
 	addS("large-unannounced", "Préambule LARGE dont (gen, id, taille) ne correspond à aucune annonce lue : le flux attend sans être lu jusqu'à l'annonce (au plus une en attente) ; une deuxième en attente est refusée.", "sync2_stream", map[string]any{"session": "active", "gen": 2, "mode": "synced", "announced": nil, "pending_large_streams": 1}, pre(4, 2, 2, 70000), "reject", nil)
 	key := []byte(B.Public())
@@ -498,9 +512,9 @@ func main() {
 	addS("attest-want-empty", "ATTEST_WANT de document vide : refusé (1 à 64 octets).", "sync2_stream", nil, append(append(pre(1, 0), hello...), frame(0x0a, []byte{0, 0})...), "reject", nil)
 	addS("goaway-overloaded", "GOAWAY (0x02) code 0x07 OVERLOADED après HELLO.", "sync2_stream", nil, append(append(pre(1, 0), hello...), frame(0x02, []byte{0x07})...), "accept", map[string]any{"code": 7})
 	addS("goaway-long", "GOAWAY de corps 2 octets : refusé (corps = 1 octet).", "sync2_stream", nil, append(append(pre(1, 0), hello...), frame(0x02, []byte{0x07, 0})...), "reject", nil)
-	addS("large-reply-pull", "LARGE_REPLY (0x0B) id 1, verdict 1 : le receveur a réservé, l'émetteur peut ouvrir le flux LARGE (§7.2).", "sync2_stream", nil, append(append(pre(1, 0), hello...), frame(0x0b, append(binary.BigEndian.AppendUint32(nil, 1), 1))...), "accept", map[string]any{"id": 1, "verdict": 1})
-	addS("large-reply-refuse", "LARGE_REPLY id 1, verdict 0 : refus (objet plus grand que la part) ; l'émetteur oublie l'objet, le receveur passera par les pages d'historique.", "sync2_stream", nil, append(append(pre(1, 0), hello...), frame(0x0b, append(binary.BigEndian.AppendUint32(nil, 1), 0))...), "accept", map[string]any{"id": 1, "verdict": 0})
-	addS("large-reply-bad-verdict", "LARGE_REPLY de verdict 2 : refusé.", "sync2_stream", nil, append(append(pre(1, 0), hello...), frame(0x0b, append(binary.BigEndian.AppendUint32(nil, 1), 2))...), "reject", nil)
+	addS("large-reply-pull", "LARGE_REPLY (0x0B) génération 2, id 1, verdict 1 : le receveur a réservé, l'émetteur peut ouvrir le flux LARGE (§7.2). Une réponse d'une autre génération ne correspond à rien.", "sync2_stream", nil, append(append(pre(1, 0), hello...), frame(0x0b, append(binary.BigEndian.AppendUint32(binary.BigEndian.AppendUint32(nil, 2), 1), 1))...), "accept", map[string]any{"gen": 2, "id": 1, "verdict": 1})
+	addS("large-reply-refuse", "LARGE_REPLY génération 2, id 1, verdict 0 : ne pas ouvrir le flux (objet plus grand que la part : pages d'historique ; ou modification indivisible : vrac).", "sync2_stream", nil, append(append(pre(1, 0), hello...), frame(0x0b, append(binary.BigEndian.AppendUint32(binary.BigEndian.AppendUint32(nil, 2), 1), 0))...), "accept", map[string]any{"gen": 2, "id": 1, "verdict": 0})
+	addS("large-reply-bad-verdict", "LARGE_REPLY de verdict 2 : refusé.", "sync2_stream", nil, append(append(pre(1, 0), hello...), frame(0x0b, append(binary.BigEndian.AppendUint32(binary.BigEndian.AppendUint32(nil, 2), 1), 2))...), "reject", nil)
 	write(dir, "session.json", File{Vectors: sv})
 	// ---- compatibility matrix (N14, spec §1.4): a 2.0 decoder facing 2.x/3.x bytes ----
 	var xv []V
