@@ -75,6 +75,8 @@ des deux est une vue.
 | hautement extensible (N20–N26) | registre unique, extensions intégrées sur la même API, greffons WebAssembly à droits nommés, greffons de projet bornés, interface jamais dénaturée, budgets mesurés |
 | une IA de premier rang (N31) | une extension intégrée comme les autres : fournisseurs appelés par Go (y compris le serveur d'IA de l'entreprise), politique décidée pour le projet, propositions relues avant d'entrer, protection contre les consignes cachées dans le texte des autres, serveur MCP local sans port par défaut |
 | écrire confortablement (N27–N30) | modèles créés par les personnes, erreurs cliquables comme dans un IDE, aide à la saisie Typst (tinymist), outils d'écriture |
+| revenir en arrière sans connaître Git (N39, N41) | voyager dans l'historique, restaurer sans rien détruire, versions, variantes « proposer d'intégrer » ; Git n'est qu'une copie produite par go-git, jamais un outil à installer |
+| un projet protégé, sur tous les systèmes (N35, N37) | chaque morceau du projet chiffré sur le disque, une phrase et un kit de secours ; Linux, macOS, Windows, amd64 et arm64, et une fonction refusée plutôt qu'affaiblie là où l'isolation n'est pas prouvée |
 
 ## Les règles qui ne bougent pas
 
@@ -94,5 +96,8 @@ Elles sont vérifiées par `scripts/arch-check.sh` ; les changer exige une ADR.
 Le cœur tourne (étapes 0 à 3 en grande partie, T11 en cours), avec un seul document par projet
 pour l'instant. Le protocole réseau public (ADR 0034) est accepté et en migration. Les greffons
 (ADR 0039, en annexe de la spec, étude dans [research/plugins.md](research/plugins.md)) et la
-spécification du protocole des greffons (`docs/plugin-api/`, à écrire) sont proposés. Les écarts entre ce document et le code sont listés
+spécification du protocole des greffons (`docs/plugin-api/`, à écrire) sont proposés. La
+[passe de cohérence](coherence.md) range chaque fonction à sa place et fixe l'ordre : écrire, partager,
+retrouver, corriger, exporter d'abord ; les plates-formes (extensions, IA, coffre) ensuite, chacune
+acceptée seulement quand ses preuves sont faites. Les écarts entre ce document et le code sont listés
 dans [spec.md §16](spec.md#16-écarts-avec-le-code-au-2026-11-01), chacun avec sa décision.

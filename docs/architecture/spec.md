@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Version | **1.0.0-brouillon.3** (révision 2 après revue ; changements : [CHANGES.md](CHANGES.md)) |
+| Version | **1.0.0-brouillon.4** (révision 3 : revues du tour 2 et passe de cohérence N36 ; [CHANGES.md](CHANGES.md), [coherence.md](coherence.md)) |
 | Date | 2026-11-01 |
 | Statut | proposé (exigence N18) ; à valider par la boucle de revue Fable + Codex, puis par l'utilisatrice |
 | Remplace | [`docs/architecture.md`](../architecture.md) (devenu un renvoi) |
@@ -24,7 +24,7 @@ quand, et seulement quand, ils sont écrits en gras.
 
 Chaque règle ou élément porte, si besoin, une marque :
 
-- *[en place]* : le code le fait aujourd'hui (2026-11-01, `main` à `362cb4d`) ;
+- *[en place]* : le code le fait aujourd'hui (2026-11-01, `main` à `9e49e5f`) ;
 - *[cible]* : décidé, pas encore fait ; le chemin est indiqué (ADR, étape, `AD-xx`) ;
 - *[à décider AD-xx]* : la règle dépend d'une décision ouverte de [decisions.md](decisions.md).
 
@@ -45,6 +45,23 @@ tout octet échangé entre appareils ; ce document l'est pour tout le reste.
 changement Automerge signé. « Acteur » = une goroutine qui possède seule un état et le
 modifie sur ordre reçu par une file.
 
+### 0.5 Ce que vaut l'acceptation de ce document
+
+Accepter cette spécification vaut décision pour tout ce qui n'est pas listé ci-dessous. Les
+parties suivantes sont des **expérimentations** : leur contrat est écrit ici, mais elles ne sont
+acceptées que lorsque leur porte est passée (résultats bruts, matériel, versions, commandes, dans
+`docs/plans/`) ; d'ici là, aucun code de production n'en dépend.
+
+| Expérimentation | Porte qui l'accepte | Où |
+|---|---|---|
+| Hôte des greffons, ABI noyau, compartiments | P-PLUG-PROTO (bonjour Rust et Go, paquet signé, proposition annulable), P-PLUG-BENCH, `PLUG-COMPROMISED-*`, P-SANDBOX-LINUX | §7.3, §9.10, §15.20, annexe |
+| Enfermement sur macOS et Windows | P-SANDBOX-MAC, P-SANDBOX-WIN | §9.11 |
+| Coffre chiffré du projet | P-VAULT (bancs, plantage, six cibles) et ADR | §6.10 |
+| Index de recherche pour l'IA | P-IDX (bancs, rappel en français) | §15.18 |
+| Rendu à DOM (Mermaid en cadre) | P-FRAME | §15.14 |
+| Client ACP | bac à sable prouvé sur la cible | §15.18 |
+| Deltas du protocole PD-* | boucle de revue du protocole | §15.19 |
+
 ## 1. Finalité, objectifs, non-objectifs
 
 ### 1.1 Finalité
@@ -64,13 +81,14 @@ l'application ([PROGRESS.md](../../PROGRESS.md)).
 | G1 | Édition à plusieurs, en direct, de Typst, Markdown, texte et tableaux CSV, avec curseurs et présence | conception p. 1, 32 ; U19–U22 |
 | G2 | Aucun serveur : pas de compte, pas de cloud ; un relais optionnel ne voit que du chiffré | conception p. 1, 15, 19 |
 | G3 | Hors ligne d'abord : chaque frappe gardée localement ; fusion au retour, sans perte | conception p. 1, 14 ; U32 |
-| G4 | Qui a écrit quoi ; historique, versions nommées, retour arrière, divergences signalées et réglables | conception p. 6–11 ; U11, U12, U27 |
+| G4 | Qui a écrit quoi ; historique « à la Git » sans connaître Git : revenir en arrière et en avant librement, versions nommées, comparer, restaurer sans rien perdre ; variantes et intégrations claires ; divergences signalées et réglables | conception p. 6–11 ; U11, U12, U27 ; N39, N41 ; §6.11 |
 | G5 | Aperçu et export PDF déterministes, entièrement hors ligne | conception p. 5, 13 ; ADR 0024 |
 | G6 | Confiance explicite : invitation, liste signée, rôles, suspension, retrait, zones verrouillées ; une personne malveillante ne gêne jamais les autres | conception p. 3–4, 20 ; N2–N4, N7 |
 | G7 | Projet multi-fichiers : textes, binaires, paquets ; rejoindre = tout recevoir | conception p. 5, 12, 31 ; N5 ; ADR 0023 |
 | G8 | Interface Adwaita, zéro jargon, accessible, fr/en, cohérente | conception p. 13, 37 ; U1–U3, U31 |
-| G9 | Fiable et rapide, y compris par Internet et sur de très gros fichiers | U32, U33 ; ADR 0028, 0029 |
-| G10 | Un seul exécutable autonome ; `.deb` et `.rpm` amd64 et arm64 ; SemVer ; signé | L1–L5 ; ADR 0025 |
+| G9 | Fiable et **mesurément** rapide (budgets chiffrés, bancs, profils, régressions en CI, concurrence bornée de Go), y compris par Internet et sur de très gros fichiers | U32, U33, N38 ; ADR 0028, 0029 ; §12 |
+| G10 | Un seul exécutable autonome, aucun outil externe à l'exécution (ni Git, ni pandoc) ; **Linux, macOS, Windows, amd64 et arm64** ; `.deb`, `.rpm` et paquets natifs ; SemVer ; signé | L1–L5, N35, N39 ; ADR 0025 ; §9.11, §14 |
+| G13 | Projet chiffré sur le disque, simple pour la personne ; export en un fichier, chiffré ou lisible | N37 ; §6.10 |
 | G11 | Un protocole public, versionné, réutilisable par d'autres applications | N12–N16 ; ADR 0034 |
 | G12 | **Hautement extensible** : toute fonction visible est un point d'extension ; le cœur est livré en extensions sur la même API ; greffons WebAssembly multi-langages, de l'appareil ou du projet ; sans dénaturer l'application ni la ralentir | N20–N24 ; §15 ; ADR 0039 (proposée) |
 
@@ -78,16 +96,16 @@ l'application ([PROGRESS.md](../../PROGRESS.md)).
 
 | # | Hors périmètre | Source |
 |---|---|---|
-| NG1 | Application mobile ; édition WYSIWYG du PDF ; édition native RTF/DOCX (import/export seulement) | conception p. 39 |
+| NG1 | Application mobile ; édition WYSIWYG du PDF ; **aucune intégration native des formats bureautiques** (Word/DOCX, RTF, ODT, Google Docs), ni import ni export : un greffon peut l'offrir (`importers`, `exporters`) | conception p. 39 ; **N40** |
 | NG2 | Synchronisation par un compte en ligne ; serveur de découverte global | conception p. 19, 39 |
-| NG3 | Chiffrement au repos en v1 (le disque de l'appareil est de confiance ; chiffrement du disque par le système recommandé) | conception p. 4, 39 ; ADR 0005 |
+| NG3 | *(retiré par N37)* : le chiffrement au repos devient un objectif (G13, §6.10) ; restent hors périmètre la protection d'une session ouverte sur un appareil compromis et l'effacement physique garanti sur SSD | N37 |
 | NG4 | Permissions par dossier ; capacités transitives (Keyhive) en v1 | conception p. 39 ; ADR 0005 |
 | NG5 | Go qui lit ou fusionne Automerge | ADR 0002, 0011 |
 | NG6 | Téléchargement à l'exécution (sidecars, paquets Typst, polices) | ADR 0024 |
 | NG7 | Port réseau local pour le pont webview ↔ Go | ADR 0009 |
 | NG8 | Télémétrie ; tout envoi automatique de journaux | conception p. 15 |
 | NG9 | Consensus ou quorum (l'édition hors ligne passe avant ; l'auto-équivoque reste arbitrée par un admin) | ADR 0031 R1 |
-| NG10 | v2, hors de ce document sauf mention : brouillons privés et branches, résumés par modèle, Tiptap, aperçu partagé pour un invité sans l'application, télécommande téléphone, `join` sans fenêtre | conception p. 7, 38 ; `AD-34`, `AD-35` |
+| NG10 | v2, hors de ce document sauf mention : brouillons **privés**, résumés par modèle, Tiptap, aperçu partagé pour un invité sans l'application, télécommande téléphone, `join` sans fenêtre, intégrer les changements d'un **autre projet** | conception p. 7, 38 ; `AD-34`, `AD-35`, `AD-96` |
 
 ### 1.4 Invariants
 
@@ -106,6 +124,8 @@ Ces invariants reprennent ceux de [`CLAUDE.md`](../../CLAUDE.md) ; les changer e
 | INV-9 | Un paquet = un rôle, créé à l'étape qui en a besoin | §4 ; revue |
 | INV-10 | Le module `protocol` n'importe rien d'inkwell ; inkwell n'a aucune copie privée de ses codecs | AC-9 *[cible, ADR 0034 étape 1]* |
 | INV-11 | *[proposé, ADR 0039]* Le noyau fermé est la liste K-1 à K-10 (§15.3) ; tout le reste est un point d'extension ; une extension intégrée n'a aucun droit qu'un greffon ne puisse demander (sauf `ui.native`) ; aucune extension ne retire une zone protégée (ND-1 à ND-8) | AC-16, FE-3, P-EXT-*, `EXT-ND*` |
+| INV-12 | *[proposé]* Aucun outil externe à l'exécution : l'historique Git est produit par go-git (Go pur), jamais par un binaire `git`, `ssh` ou de compression ; aucun `os/exec` d'un outil absent de l'exécutable (sauf ceux que la personne désigne elle-même : agent ACP, `AD-82`) | AC-17, AC-18 (§4.5) |
+| INV-13 | *[proposé]* Une garantie d'enfermement vaut sur les six cibles, ou la capacité qu'elle protège est **refusée** sur la cible qui ne la tient pas (échec fermé, réduction écrite dans §9.11) | P-SANDBOX-* |
 
 ## 2. Attributs de qualité (ISO/IEC 25010:2023) et budgets
 
@@ -123,7 +143,7 @@ fiabilité l'[ADR 0029](../adr/0029-reliability.md). Un budget marqué *proposé
 | | pertinence | les cinq tâches (créer, partager, relire, présenter, exporter) réussies | tests en personne, temps consigné ([ux-principles](../ux-principles.md)) |
 | Efficacité | temps de réponse | frappe → affichage local p95 ≤ 16 ms ; frappe → pair LAN p95 ≤ 100 ms (≤ 128 Ki car.), ≤ 1 s (≤ 2 Mi) ; par relais (RTT 100 ms, 1 % de pertes) p95 ≤ 300 ms ; frappe pendant un message de 6 Mo à 1 Mbit/s p95 ≤ 500 ms ; démarrage : fenêtre peinte ≤ 1 s, dernier projet modifiable ≤ 1,5 s ; document de 50 000 opérations ouvert < 2 s | cas `PERF-*` (`INKWELL_PERF=1`) ; e2e ; condition de mesure §12.3 (`AD-27`) |
 | | | aperçu : p95 ≤ 1 s après la dernière frappe pour ≤ 20 pages *(proposé, `typst compile`)* ; ≤ 300 ms après l'aperçu incrémental *(cible, `AD-26`)* | e2e `preview.spec.ts` chronométré |
-| | utilisation des ressources | webview ≤ 600 Mo (projet ≤ 2 Mi ouvert), alerte 1,5 Go ; WASM ≤ 1 Go par Worker ; processus Go ≤ 300 Mo RSS pour 2 Mi de texte + 20 Mo de blobs *(proposé)* ; 0 allocation par trame ≤ 64 Kio | `PERF-*` ; bancs `HOT_PATHS` (`-benchmem`) |
+| | utilisation des ressources | webview ≤ 600 Mo (projet ≤ 2 Mi ouvert), alerte 1,5 Go ; WASM ≤ 1 Go par Worker ; processus Go ≤ 300 Mo RSS pour 2 Mi de texte + 20 Mo de blobs *(proposé)* ; 0 allocation par trame ≤ 64 Kio ; hôtes de greffons : ≤ 40 Mio RSS au repos chacun, ≤ 6 actifs (au-delà, refus d'activation avec message), somme ≤ 1,5 Gio de mémoire linéaire ; **budget global** (Go + webview + sidecars + hôtes) ≤ 2,5 Gio avec un projet de 2 Mi caractères et 6 greffons actifs, mesuré RSS **et** VSZ *(proposé, N32, N38)* | `PERF-*` ; bancs `HOT_PATHS` (`-benchmem`) |
 | | capacité | 64 appareils connectés par projet (128 connexions) ; 1024 opérations de membres ; 10 000 nœuds d'arbre ; 10 000 documents couverts ; 100 Mo par fichier binaire, 2 Go par projet (au-delà, confirmation) | tests de borne (P-BORNES) ; `AD-23` |
 | Compatibilité | coexistence | un éditeur externe sur le même dossier : modification détectée, jamais écrasée sans accord | tests `EXT-*` ; règle de propriété (ADR 0020) |
 | | interopérabilité | vecteurs du protocole passés à 100 % en Go et en TypeScript ; majeures N et N−1 parlées 12 mois ; fichiers projetés lisibles par `typst` en ligne de commande et par Git | P-VEC, P-COMPAT ; test de projection |
@@ -145,7 +165,7 @@ fiabilité l'[ADR 0029](../adr/0029-reliability.md). Un budget marqué *proposé
 | | analysabilité | complexité cognitive et cyclomatique ≤ 30 (échec), cible 15 | golangci-lint (gocognit, gocyclo) |
 | | modifiabilité | aucun doublon ≥ 100 jetons | dupl |
 | | testabilité | couverture ≥ 85 % par paquet (exemptions listées dans `scripts/cover.sh`) ; score de mutation ≥ 80 % sur `protocol/trust` et `protocol/session` *(proposé)* | `cover:check` ; `mutate:go` |
-| Flexibilité | adaptabilité | Linux amd64 et arm64 en v1 ; macOS et Windows selon `AD-18` | CI native |
+| Flexibilité | adaptabilité | Linux, macOS, Windows, amd64 et arm64 (N35) ; une capacité sans enfermement prouvé est refusée sur la cible (INV-13) | CI native sur six cibles ; P-SANDBOX-* |
 | | installabilité | `.deb` et `.rpm` installés puis e2e « fumée » sur Debian 13, Ubuntu 24.04, Fedora 44, amd64 et arm64 | `pkg:test` (`PKG-01…12`) |
 | | remplaçabilité | chaque frontière (transport, stockage, compilateur, pont) a une doublure de test | `memnet`, `transporttest`, faux magasins |
 | | modifiabilité et adaptabilité, au service de l'extensibilité (N20–N26) | 100 % des fonctions visibles inscrites par le registre des contributions ; chaque point du §15.4 utilisé par au moins une extension intégrée ; 0 import interne depuis `src/ext/**` ; ajouter un type, une commande, un panneau, un exportateur = une contribution, sans toucher au cœur ; démarrage : ≤ 10 ms ajoutées par 50 extensions | P-EXT-1 à P-EXT-7 ; `BenchmarkRegistryBuild` ; ADR 0027, 0039 |
@@ -225,7 +245,7 @@ nommés d'un greffon (`net.hosts`, §15.5), le fournisseur d'IA autorisé (§15.
 | `tinymist lsp` *[cible]* | binaire épinglé, stdio | complétion, survol, diagnostics à la frappe | aucun port ; aucune écriture |
 | Dossier du projet | fichiers | projection lisible, magasin, listes signées | — |
 | `inkwell-relay` | Go + libp2p | relais circuit v2 | ne voit jamais le contenu |
-| Hôte des greffons *[cible, ADR 0039]* | `inkwell --plugin-host`, wazero | exécuter les greffons WebAssembly ; un hôte global, un par projet ouvert avec greffons | aucun fichier, aucun réseau, aucun secret ; tout passe par Go (capacités) |
+| Hôte des greffons *[cible, ADR 0039]* | `inkwell-plugin-host`, wazero | exécuter les greffons WebAssembly ; un hôte global, un par projet ouvert avec greffons | aucun fichier, aucun réseau, aucun secret ; tout passe par Go (capacités) |
 | Rendu à DOM *[différé, P-FRAME]* | processus web dédié, à prouver | rendre un diagramme pour les moteurs qui exigent une mise en page de navigateur (§15.14) | rien en v1 |
 
 ### 3.3 Composants du cœur Go
@@ -488,18 +508,60 @@ compilations périmées, pages visibles, export PDF.
 **`internal/textview`** *[cible, ADR 0028 D4, tâche PERF-10]* — index de lignes et pages de
 64 Kio pour les fichiers trop gros pour Automerge ; Stream `view`.
 
-**`internal/milestone`** *[à décider, `AD-13`]* — projection Git déterministe des versions
-nommées.
+**`internal/milestone`** *[cible, `AD-13`, N39]* — la projection Git des versions, par **go-git**
+(Go pur) : un dépôt reconstructible depuis les versions nommées (§6.11), jamais une autorité.
+- API : `Project(versions) error` (rejoue les versions manquantes en commits déterministes),
+  `Export(dst)` ; port `Snapshot` (arbre de fichiers d'une version, fourni par `app` depuis la
+  projection et le magasin).
+- Dépend de : go-git (seul importateur, AC-17), `store` ; **jamais** `os/exec` (AC-18).
+- Concurrence : un travailleur, file bornée, annulable ; hors du chemin d'édition.
 
-**`internal/plugin`** *[cible, ADR 0039]* — le gestionnaire d'extensions et l'hôte des greffons.
-- API : `Manager` (installer depuis un fichier, activer, désactiver, mettre à jour, retirer, droits par appareil et par projet), `Host` (lance et supervise `inkwell --plugin-host`, appels bornés), `Grant`, `Manifest`, `Package` (zip vérifié, signature, continuité de clé), `SanitizeSVG`.
-- Dépend de : `sidecar` (enfermement, superviseur), `store`, `identity` (vérification de signature seulement), `protocol/sig` ; wazero **seulement** dans le sous-paquet `internal/plugin/host` exécuté par le processus enfant (AC-16). **NE DOIT PAS** dépendre de `ledger`, `transport`, `bridge`, `blob`.
-- État : `<UserDataDir>/inkwell/plugins/` (paquets vérifiés), droits et épinglages dans les réglages ; cache de compilation wazero (`<UserCacheDir>`).
-- Concurrence : un superviseur par hôte (global, et un par projet ouvert avec greffons) ; appels par file bornée ; arrêt §15.9.
-- Fuzz : manifeste, paquet, sorties des greffons (propositions, vues, jetons), assainisseur SVG.
+**`internal/plugin`** *[expérimentation, ADR 0039]* — le gestionnaire d'extensions et le lanceur
+des hôtes de greffons.
+- API : `Manager` (installer depuis un fichier, activer, désactiver, mettre à jour, retirer, droits
+  par appareil et par projet), `Host` (lance et supervise un hôte par greffon actif, §9.10 H-4),
+  `Grant`, `Manifest`, `Package` (contenu vérifié, signature, continuité de clé), `SanitizeSVG`.
+- Dépend de : `sandbox`, `tasks`, `store`, `identity` (vérification de signature seulement),
+  `protocol/sig`. **NE DOIT PAS** dépendre de `ledger`, `transport`, `bridge`, `blob`. wazero n'est
+  importé que par `internal/plugin/host`, lié seulement dans `cmd/inkwell-plugin-host` (AC-16).
+- État : `<UserDataDir>/inkwell/plugins/` (paquets vérifiés), droits et épinglages dans les
+  réglages ; **aucun cache de compilation sur disque** (H-3).
+- Concurrence : un superviseur par hôte ; appels par file bornée en octets ; arrêt §15.9.
+- Fuzz : manifeste, paquet, trames IPC, sorties des greffons (propositions, vues, jetons),
+  assainisseur SVG.
 - Retirer un greffon global efface son dossier, son magasin privé (`storage`), ses droits, ses
   épinglages et son journal ; un greffon de projet désactivé pour soi garde son magasin par projet
   jusqu'à la fermeture du projet, puis l'efface s'il a été retiré par décision.
+
+**`cmd/inkwell-plugin-host`** *[expérimentation]* — l'hôte de greffons : binaire **Go pur,
+statique** (`CGO_ENABLED=0`), embarqué et extrait en lecture seule comme un sidecar, revérifié
+(SHA-256) avant chaque lancement ; lancé en deux temps (§9.10 H-0). Il n'importe ni Wails, ni GTK,
+ni rien d'applicatif hors `internal/plugin/host` et `internal/sandbox`.
+
+**`internal/sandbox`** *[cible, N35]* — le port d'enfermement des processus enfants, commun aux
+sidecars et aux hôtes de greffons.
+- API : `Spec{Exe, Args, Handles, FS: aucun | lecture(chemins) | écriture(dossier), Net: aucun,
+  Mem, CPU, Mur}`, `Probe() Capabilities`, `Start(ctx, Spec) (*Process, error)` ; échec fermé si une
+  garantie demandée manque (INV-13).
+- Implémentations : Linux (Landlock, seccomp, espaces de noms, rlimits, cgroup v2 si délégué),
+  macOS (profil Seatbelt, rlimits, surveillance du parent), Windows (AppContainer sans capacité,
+  objet de tâche, politique « aucun processus enfant ») — §9.11.
+- Dépend de : rien d'interne ; `golang.org/x/sys`.
+
+**`internal/tasks`** *[cible, N32]* — le superviseur des travaux : table unique de tout ce qui
+consomme (sidecars, hôtes, Worker, flux d'IA, serveur MCP, indexeur, compilation, sauvegarde) ;
+mesures prises par le parent ; limites ; arrêter, mettre en pause, reprendre (§11.1).
+- Dépend de : rien d'interne (les propriétaires s'y inscrivent par un port).
+
+**`internal/index`** *[expérimentation, N33]* — l'index de recherche dérivé, local, jetable
+(§15.18) : instantané `(nodeId, révision, texte, provenance)` venu de la webview → extraits →
+requêtes bornées. **NE DOIT PAS** lire Automerge ni la projection seule.
+
+**`internal/vault`** *[expérimentation, N37]* — le coffre chiffré du projet sous `store` et `blob`
+(§6.10) : objets chiffrés, enveloppes de clés, verrouillage, dossier de travail privé, export.
+
+**`internal/ai`**, **`internal/mcpserver`** *[cible, `AD-82`]* — fournisseurs d'IA (client HTTP
+interne, analyseur SSE fuzzé) et serveur MCP (go-sdk épinglé derrière ce paquet).
 
 **`internal/settings`** *[cible, `AD-21`]* — réglages de l'appareil (`settings.json`, versionné).
 
@@ -576,7 +638,9 @@ donnée (seulement des constantes, `ui/icons`). Vérifiées par Biome `noRestric
 | FE-1 | `packages/protocol` n'importe rien de `src/` | Biome *[cible]* |
 | FE-2 | règles du §4.4 | Biome *[cible]* |
 | FE-3 | `src/ext/**` n'importe que `@inkwell/extension-api` et `src/ui/kit` | Biome *[cible, ADR 0039]* |
-| AC-16 | seul `internal/plugin/host` importe wazero ; aucun paquet du noyau fermé (§15.3) n'importe `internal/plugin` | `arch-check.sh` *[cible, ADR 0039]* |
+| AC-16 | seul `internal/plugin/host` importe wazero, et il n'est lié que dans `cmd/inkwell-plugin-host`, construit `CGO_ENABLED=0` sans Wails ; aucun paquet du noyau fermé (§15.3) n'importe `internal/plugin` | `arch-check.sh`, `go version -m` *[cible, ADR 0039]* |
+| AC-17 | seul `internal/milestone` importe go-git | `arch-check.sh` *[cible]* |
+| AC-18 | aucun `os/exec` hors de `internal/sandbox` (qui ne lance que des binaires embarqués et vérifiés, ou la commande d'agent désignée par la personne, `AD-82`) ; aucune chaîne `"git"` lancée | `arch-check.sh` + test sans `git` dans `PATH` *[cible]* |
 
 ## 5. Concurrence, cycle de vie, arrêt
 
@@ -686,12 +750,12 @@ repose sur I1–I4 (§10).
 | Octets d'un binaire | magasin BLAKE3 (ADR 0006, 0023) | `blob.Store` | `.inkwell/blobs/` + arbre Bao | copie lisible sous son chemin (fichier possédé) |
 | Clé de l'appareil | `device.key` | `identity.Device` | `<UserConfigDir>/inkwell/device.key` (0600) | PeerID, empreinte |
 | Réglages de l'appareil | fichier de réglages *[cible, `AD-21`]* | `app` | `<UserConfigDir>/inkwell/settings.json` | interface |
-| Rendus partagés (diagrammes) | fichiers ordinaires du projet : nœuds `blob` `.renders/<clé>.svg` et document `.renders/index.json` *[cible, `AD-70`]* | `Repo`, `blob.Store` | comme tout fichier | aperçu, PDF |
+| Rendus partagés (diagrammes) | fichiers ordinaires du projet : nœuds `blob` `.renders/<clé>.svg` et document `.renders/index.jsonl` (JSON Lines) *[cible, `AD-70`]* | `Repo`, `blob.Store` | comme tout fichier | aperçu, PDF |
 | Modèles de projet | bibliothèque locale de l'appareil *[cible, `AD-78`]* | `app` | `<UserDataDir>/inkwell/templates/` | galerie, vignettes (cache) |
 | Politique IA | par appareil ; par projet après PD-1 (décisions `ai/`) *[cible, `AD-82`]* | `settings` ; ledger | `settings.json` ; journal signé | en-tête « IA : … », « Qui voit quoi » |
 | Greffons de projet | décisions `plugin/<id>` du journal signé *[cible, `AD-69`]* | ledger | `.inkwell/sets/decisions/` ; paquet en blob | liste « Extensions du projet » |
 | Extensions installées, droits, épinglages, mode développeur | réglages de l'appareil + dossier des greffons *[cible, ADR 0039]* | `internal/plugin` | `<UserDataDir>/inkwell/plugins/`, `settings.json` | gestionnaire d'extensions |
-| Clé de stockage distant | par projet et par appareil *[cible, `AD-67`]* | `internal/plugin` (côté Go, jamais l'hôte) | `<UserConfigDir>/inkwell/` (0600) | — |
+| Secret de secours | un par personne, 256 bits *[cible, `AD-67`, `AD-91`]* | Go (jamais un hôte de greffon) | trousseau du système ou `<UserConfigDir>/inkwell/` (0600) | clés de sauvegarde et destinataire de secours du coffre (HKDF) ; phrase et kit de secours |
 | Présence, curseurs, sélection | aucune : éphémère | `Repo` (éphémère) | **jamais** persistée | — |
 | État de synchronisation Automerge | aucune (pairs éphémères, ADR 0031) | — | **jamais** ; les anciens sont effacés | — |
 
@@ -810,7 +874,7 @@ section définit le modèle qui manque. Décisions et preuves : `AD-46` à `AD-5
 | Notion | Définition | Propriétaire | Persistance |
 |---|---|---|---|
 | documents chargés | poignées `DocHandle` en mémoire : actif, récents, en cours de projection ou de réception | `src/workspace` (puis le Worker) | aucune |
-| documents ouverts | ceux que la personne a ouverts, dans l'ordre (liste de récents ; onglets si `AD-47` les retient) | `src/workspace` | réglages de l'appareil, état de reprise (`AD-21`) |
+| documents ouverts | ceux que la personne a ouverts, en **onglets** (N19), dans son ordre | `src/workspace` | réglages de l'appareil, état de reprise (`AD-21`) |
 | document actif | un seul : celui que montre la zone d'édition | `src/workspace` | idem |
 | fichier principal | entrée de compilation du projet | décision d'admin (ADR 0030) ; repli : nœud principal de la genèse | journal de décisions |
 
@@ -842,8 +906,8 @@ section définit le modèle qui manque. Décisions et preuves : `AD-46` à `AD-5
   ou non ; elle ne dépend pas du mode d'enregistrement.
 - **MF-12** La projection sur le disque est une vue de **tous** les documents texte admis, pas
   seulement de l'actif : un document changé par un pair est reprojeté même s'il n'est pas
-  ouvert. Une projection et une synchronisation externe (B1) par nœud, créées à la demande,
-  détruites avec le déchargement.
+  ouvert. La projection et la synchronisation externe (B1) d'un nœud vivent dans son **état par
+  nœud** (MF-20), indépendant de la poignée : décharger une poignée ne les détruit pas.
 - **MF-13** Le mode (automatique ou manuel) est un réglage de l'appareil, le même pour tous les
   fichiers ; l'état « non enregistré » est par fichier (pastille dans la liste) ; Ctrl+S
   enregistre tous les fichiers modifiés du projet ; fermer ne pose aucune question bloquante
@@ -910,8 +974,14 @@ section définit le modèle qui manque. Décisions et preuves : `AD-46` à `AD-5
   modifications externes vivent dans une table par nœud indépendante de la visibilité.
 - **MF-21** File de projection indépendante de la visibilité : toute modification admise d'un
   document texte (local ou d'un pair) met son nœud dans la file ; un travailleur charge la poignée
-  si besoin, écrit, puis la rend. En mode manuel, un nœud sale **n'est jamais déchargé** (il compte
-  dans les plafonds) ; à la fermeture, il reste sale dans Automerge, sans question (SAV-03).
+  si besoin, écrit, puis la rend. « Non enregistré » (mode manuel) est une propriété de l'**état
+  par nœud** (têtes du dernier enregistrement), pas de la poignée : une poignée sale **peut** être
+  déchargée (son texte est déjà durable dans Automerge) ; les plafonds MF-19 ne sont donc jamais
+  bloqués par des documents non enregistrés ; à la fermeture, rien n'est demandé (SAV-03). La
+  mémoire comptée inclut l'historique Automerge chargé (mémoire WASM mesurée par poignée), pas
+  seulement les caractères ; au plafond de mémoire du Worker, l'ouverture demandée est servie
+  après déchargement des poignées inactives, et la réception admise n'est jamais refusée pour
+  cette raison.
 - **MF-22** Modifications externes d'un fichier déchargé : la surveillance de Go les inscrit au
   registre par nœud ; la fusion B1 se fait au prochain chargement ou par la file, jamais perdue.
 - **MF-23** Ouvertures concurrentes : chaque `open(nodeId)` porte un numéro croissant ; seule la
@@ -919,15 +989,19 @@ section définit le modèle qui manque. Décisions et preuves : `AD-46` à `AD-5
   ignorée. Renommer un nœud pendant son chargement ne change rien (l'identité est le nœud).
 - **MF-24** Annulation et sélection : par nœud et par personne, jamais partagées ; gardées tant
   que l'état du nœud vit (MF-20).
-- **MF-25** Tableaux (ADR 0026, `AD-52`) : à chaque fusion de modifications distantes, l'adaptateur
-  du tableur compare, **au niveau des opérations**, les lignes que la personne a touchées depuis la
-  dernière synchronisation aux plages que les modifications concurrentes ont supprimées ou
-  déplacées ; une intersection est un **conflit structurel**, même si le CSV reste bien formé :
-  carte attribuée « Paul a supprimé la ligne que vous modifiiez » avec « Restaurer ma ligne »
-  (proposition) ou « Garder la suppression » ; le texte orphelin est retiré de la ligne voisine
-  dans la même proposition. Oracle : test de propriété à graine contre un modèle de référence à
+- **MF-25** Tableaux (ADR 0026, `AD-52`) : le **conflit structurel** se calcule sur le **graphe des
+  modifications** (opérations Automerge avec leur acteur), pas sur un diff de texte, et **pour toutes
+  les paires de modifications concurrentes admises**, quel que soit l'appareil qui observe et l'ordre
+  d'arrivée : une insertion dans une ligne concurrente à la suppression ou au déplacement de cette
+  ligne est un conflit, même si le CSV reste bien formé. Chaque appareil le recalcule de façon
+  déterministe et le montre tant qu'il n'est pas réparé : carte attribuée « Paul a supprimé la ligne
+  que Léa modifiait » avec « Restaurer la ligne » ou « Garder la suppression » ; la réparation est une
+  **proposition** que quelqu'un choisit (elle retire alors aussi le texte orphelin) ; rien n'est
+  modifié automatiquement pour masquer le conflit. Oracle : test de propriété à graine contre un modèle de référence à
   identités de lignes (chaque cellule garde sa ligne d'origine ou est signalée), remplaçant
-  l'assertion actuelle `record(r).length > 0` de `collab.test.ts`.
+  l'assertion actuelle `record(r).length > 0` de `collab.test.ts`. Cas exigés : trois
+  appareils (A modifie, B supprime, C observe), C en ligne puis hors ligne et rattrapage,
+  réouverture, colonnes, cellules sur plusieurs lignes ; deux ordres d'acteurs.
 
 **Chemin minimal pour corriger G-0** (clic sans effet, N19 ; `AD-77`)
 
@@ -936,104 +1010,100 @@ On ne l'attend pas pour rendre le clic utile :
 
 | Lot | Contenu | Dépend de | Preuve |
 |---|---|---|---|
-| **G-0a** (immédiat, avant le Worker) | `onOpen(path)` ouvre vraiment : `main.typ` → éditeur ; tout autre fichier texte → **lecture seule** depuis la projection (Go la sert déjà) avec le bandeau « Ce fichier n'est pas encore partagé : il ne se modifie pas encore à plusieurs » ; tableau → grille en lecture seule ; image → visionneuse ; autre → carte ; sous-titre et présence suivent ; suppression de `?file=` | rien | e2e `files.spec.ts` FM-OPEN-1 (clic → contenu du bon fichier), FM-OPEN-2 (sous-titre), FM-OPEN-3 (txt, csv, md, typ distincts, sans `?file=`) |
+| **G-0a** (immédiat, avant le Worker) | `onOpen(path)` ouvre vraiment : `main.typ` → éditeur ; tout autre fichier texte → **lecture seule** depuis la projection (Go la sert déjà) avec le bandeau « Dans cette version, ce fichier s'affiche en lecture seule » (l'état réseau réel reste celui de l'en-tête ; aucune promesse sur son partage) ; tableau → grille en lecture seule ; image → visionneuse ; autre → carte ; sous-titre et présence suivent ; suppression de `?file=` | rien | e2e `files.spec.ts` FM-OPEN-1 (clic → contenu du bon fichier), FM-OPEN-2 (sous-titre), FM-OPEN-3 (txt, csv, md, typ distincts, sans `?file=`) |
 | **G-0b** | MF-1, MF-2, MF-5, MF-12 : index `G` matérialisé, un document par fichier, `open(nodeId)`, projection de tous les textes | ADR 0031 (annonces), étape 8 d'ADR 0034 | FM-OPEN-4 (ouvrir A, B, A), FM-OPEN-5 (renommer A pendant son chargement), FM-OPEN-6 (modification de B reçue, B fermé, écrite sur le disque), FM-OPEN-7 (mode manuel, éviction refusée), FM-OPEN-8 (redémarrage : ouverts et actif retrouvés) |
-| **G-0c** | MF-6, MF-7, MF-19 à MF-24, onglets si `AD-47` | Worker (ADR 0028 D2) | `PERF-*` avec 10 000 documents |
+| **G-0c** | MF-6, MF-7, MF-19 à MF-24, barre d.onglets (N19) | Worker (ADR 0028 D2) | `PERF-*` avec 10 000 documents |
 
 ### 6.7 Stockage distant par extension (N22)
 
 *[cible, ADR 0039 ; `AD-67`]* Une extension peut fournir un **dorsal de stockage** (nuage,
-autre système de fichiers, disque réseau). En v1, « remplacer le stockage » est **réinterprété**
-en *sauvegarde distante et restauration pour la même personne* (à confirmer, `AD-67`) : la copie
-locale reste la copie de travail. L'**intégrité** reste fermée (K-6) : le cœur l'impose au-dessus
-de tout dorsal, traité comme **byzantin**, comme un dépôt restic, un distant Git ou un appareil
-Syncthing « non fiable ».
+autre système de fichiers, disque réseau). Trois intentions distinctes, jamais confondues
+(`coherence.md`, C08) : **stockage de travail** (local, toujours), **sauvegarde** (dorsal, cette
+section), **miroir lisible** (copie en clair, en fin de section). En v1, N22 est servie par la
+sauvegarde et la restauration pour la même personne ; un vrai fournisseur de stockage (projet
+vivant ailleurs, cache local hors ligne) est **reporté** et N22 n'est pas déclarée satisfaite pour
+autant (`AD-67`). L'**intégrité** reste fermée (K-6) : le cœur l'impose au-dessus de tout dorsal,
+traité comme **byzantin** (dépôt restic, distant Git, appareil Syncthing « non fiable »).
 
 **Ce qui ne change pas.**
 
-- **ST-1** La copie locale (`.inkwell/` et la projection) est **la** copie de travail, toujours
-  autoritative pour l'édition, hors ligne compris. Typst, la projection Git (`AD-13`), la
-  surveillance des modifications externes et la recherche (`AD-42`) travaillent sur ce dossier
-  local matérialisé, jamais sur le dorsal.
-- **ST-2** Aucune frappe n'attend le dorsal ; aucun arrêt ne l'attend : les données sont
-  durables localement avant tout envoi (I1, I2).
+- **ST-1** La copie locale est **la** copie de travail, toujours autoritative pour l'édition, hors
+  ligne compris. Typst, la projection Git, la surveillance et la recherche travaillent sur le
+  dossier local (ou le dossier de travail privé du coffre, §6.10), jamais sur le dorsal.
+- **ST-2** Aucune frappe ni aucun arrêt n'attend le dorsal : les données sont durables localement
+  avant tout envoi (I1, I2).
 
-**Contrat du dorsal** (interface `storage-backend`), inspiré du dorsal de restic (`Save`,
-`Load`, `Stat`, `List`, `Remove` sur des noms opaques), des services d'OpenDAL (opérations
-uniformes, drapeaux de capacité) et d'`io/fs` :
+**Contrat du dorsal** (`storage-backend`), d'après le dorsal de restic (opérations sur noms
+opaques), les services d'OpenDAL (drapeaux de capacité) et `io/fs` : `capabilities()`,
+`put(nom, octets)` (idempotent), `get(nom, début, longueur)`, `list(préfixe, curseur)` (pages
+≤ 1 000, peut être incomplète ou mentir), `delete(nom)` (peut ne pas effacer). Aucune exigence de
+confiance sur le dorsal.
 
-| Opération | Sens | Exigence sur le dorsal |
+**Secret et clés** (ST-3). Chaque personne a **un secret de secours** de 256 bits, aléatoire, gardé
+par Go (0600, trousseau du système quand il est disponible, §6.10), montré une fois sous forme de
+**phrase de 24 mots** (BIP-39 : 256 bits et 8 bits de contrôle, **rien d'autre**). Clés dérivées
+par HKDF-SHA-256 (sel = `ProjectID`, info à domaines séparés) : `inkwell-backup/name/1` (nommage),
+`inkwell-backup/obj/1` (objets), `inkwell-backup/meta/1` (manifestes et têtes),
+`inkwell-recovery/x25519/1` (destinataire de secours du coffre, §6.10). Un seul secret pour tous
+les projets de la personne ; la déduplication est réelle entre ses appareils.
+
+**Objets** (ST-4). `nom = hex(BLAKE3 à clé(K_nom, clair))` (256 bits, 64 caractères) ; contenu
+= nonce de 24 octets aléatoire ‖ XChaCha20-Poly1305(K_obj, nonce, clair, AAD =
+`"inkwell-backup/obj/1" ‖ ProjectID ‖ nom`) ; grands objets découpés en morceaux de 1 Mio.
+L'extension ne voit que des octets chiffrés et des noms opaques.
+
+**Manifestes et têtes** (ST-5), en CBOR à émission déterministe (RFC 8949 §4.2.1) :
+
+| Objet | Champs | Protection |
 |---|---|---|
-| `capabilities()` | taille maximale d'objet, lecture par plage, liste paginée | — |
-| `put(nom, octets)` | écrit un objet ; idempotent | aucune (le cœur revérifie tout) |
-| `get(nom, début, longueur)` | lit un objet ou une plage | aucune |
-| `list(préfixe, curseur)` | énumère, par pages ≤ 1 000 | peut être incomplète ou mentir |
-| `delete(nom)` | appelé seulement par le ménage du cœur | peut ne pas effacer |
+| manifeste | `{v:1, project, peer, counter, objects: [noms triés]}` | AEAD sous K_meta, AAD = `"inkwell-backup/manifest/1" ‖ ProjectID ‖ PeerID ‖ counter (u64 gros-boutiste)` ; nom = `manifests/<PeerID>/<counter>` |
+| tête | `{v:1, project, peer, counter, date, manifest_hash, prev_counter}` | signée par la clé de l'appareil sous le préfixe **externe** `"inkwell-ext:backup-head:1\0"` (hors registre §20.4 du protocole : jamais échangée entre pairs, et ce préfixe ne peut pas être celui d'un domaine du protocole), puis AEAD sous K_meta, AAD = `"inkwell-backup/head/1" ‖ ProjectID ‖ PeerID ‖ counter` ; nom = `heads/<PeerID>/<counter>` |
 
-**Clés** (ST-3) : une **clé de stockage par projet et par personne**, aléatoire (256 bits),
-gardée par Go à côté de `device.key` (0600), transportée d'un appareil de la personne à un autre
-**seulement** par la phrase de récupération (ST-8), jamais par le dorsal ni par un pair. Clés
-dérivées par HKDF-SHA-256 à domaines séparés : `inkwell/backup/obj-name/v1` (nommage),
-`inkwell/backup/obj-aead/v1` (chiffrement), `inkwell/backup/head-aead/v1`. Une seule clé par
-personne rend la déduplication réelle entre ses appareils.
+Ordre : objets, puis manifeste, puis tête, chacun après la confirmation du précédent ; une tête
+n'est jamais réécrite ; on garde toujours les deux dernières têtes de chaque appareil.
 
-**Objets** (ST-4) : `nom = hex(BLAKE3 à clé(clé de nommage, clair))[:32]` ; contenu =
-XChaCha20-Poly1305, nonce aléatoire de 24 octets en tête, **AAD** = `"inkwell/backup/obj/v1" ‖
-ProjectID ‖ nom` (un objet ne peut pas être déplacé sous un autre nom ou un autre projet) ;
-grands objets découpés en morceaux de 1 Mio, chaque morceau un objet. L'extension ne voit que des
-octets chiffrés et des noms opaques ; la clé ne quitte jamais Go (S-3).
+**Lecture** (ST-6) : AEAD, puis `BLAKE3 à clé(K_nom, clair) = nom`, puis revérification complète
+des objets signés (D-4) ; une tête dont le manifeste ou un objet manque est **incomplète** :
+refusée, la précédente est essayée.
 
-**Graphe et ordre d'écriture** (ST-5) : objets (valeurs du magasin, blobs, ensembles signés) →
-**manifeste** (liste des noms d'objets d'un instantané, chiffré, AAD de manifeste) → **tête**
-`heads/<PeerID>/<compteur>` = `{ProjectID, PeerID, compteur, date, nom du manifeste,
-compteur précédent}` signée par l'appareil (domaine `inkwell/backup-head/v1`) puis chiffrée.
-Ordre : objets, puis manifeste, puis tête, chacun écrit **après** la confirmation du précédent ;
-la tête précédente n'est retirée qu'après la vérification de lecture de la nouvelle (on garde
-toujours deux têtes). Une tête n'est jamais réécrite (nom neuf à chaque compteur) : aucune
-écriture déchirée ni réordonnancement ne peut produire une tête qui désigne un manifeste absent
-sans être vu (lecture de vérification).
+**Fraîcheur, honnêtement** (ST-7). Chaque appareil persiste, par `(ProjectID, PeerID)`, le plus
+grand compteur vu ; une tête plus ancienne est refusée (retour arrière **détecté** sur un appareil
+déjà synchronisé). Un appareil **neuf** ne peut pas, seul, savoir si la tête servie est la plus
+récente (limite connue, comme TUF sans ancre). Ancres : (a) le **kit de secours** (ST-8) porte les
+compteurs connus quand il a été produit, et l'écran dit « Sauvegarde n° 42 du 3 mars ; votre kit
+date du 12 mars : des modifications plus récentes ont pu ne pas être sauvegardées » ; (b)
+l'appareil restauré est un **nouvel appareil** de la personne, admis au projet (groupe d'appareils,
+ADR 0017) : dès qu'un membre est joignable, la synchronisation apporte ce que le dorsal a caché.
+**Résiduel écrit à l'écran** : sans membre joignable, un dorsal hostile peut faire repartir un
+appareil neuf d'un état ancien ; il ne peut ni modifier, ni forger, ni faire lire. Restaurer ne
+réimpose jamais une autorité ancienne (les ensembles signés se plient ; une purge apprise ensuite
+s'applique). Résiduel : tailles et nombre d'objets visibles (pas de rembourrage en v1).
 
-**Lecture** (ST-6) : AEAD, puis BLAKE3 du clair = nom attendu, puis revérification complète des
-objets signés (D-4) ; une tête dont le manifeste ou un objet manque est **incomplète** : refusée,
-la précédente est essayée. Liste incomplète ou mensongère : on ne voit que des têtes valides,
-jamais un mélange.
+**Phrase et kit de secours** (ST-8). La **phrase** (24 mots, BIP-39, listes anglaise et française)
+ne porte **que** le secret. Le **kit de secours** est un fichier (et une page imprimable avec code
+QR) versionné : `{v:1, personne, projets: [{ProjectID, titre (local), dorsal (type et adresse sans
+identifiant de connexion), compteurs par appareil, date}]}`, authentifié par HMAC sous une clé
+dérivée du secret (`inkwell-recovery/kit/1`), régénéré à chaque nouvelle sauvegarde réussie (la
+personne choisit où le garder). Restaurer : phrase **et** kit (ou phrase seule : on liste les
+projets trouvés sur le dorsal, sans ancre de fraîcheur, et on le dit). La phrase ne restaure **ni**
+la clé de l'appareil, **ni** les droits d'admin : ce sont d'autres objets (§9.4).
 
-**Fraîcheur, honnêtement** (ST-7) :
+**Échecs et latence.** File bornée hors du chemin d'édition, 30 s par appel, recul exponentiel,
+débit plafonné ; hors ligne, la file s'allonge sur disque (bornée par le quota du projet). État
+montré : « Sauvegarde : à jour au … / en retard de N / injoignable depuis … » (une ligne de la vue
+Ressources, §11.1).
 
-- Un appareil **déjà synchronisé** refuse une tête plus ancienne que son dernier compteur vu
-  (retour arrière détecté).
-- Un appareil **neuf** qui restaure ne peut **pas** savoir seul si la tête la plus récente que
-  le dorsal lui montre est la plus récente qui existe (même limite que TUF sans ancre de
-  fraîcheur). Ancres prévues : (a) la phrase de récupération porte le compteur et la date au moment
-  où elle est montrée, et l'écran de restauration dit « Sauvegarde du 3 mars, 14 h 02 ; la phrase
-  date du 12 mars : des modifications plus récentes ont pu ne pas être sauvegardées » ; (b) l'appareil
-  restauré est un **nouvel appareil** de la personne, admis au projet comme tout appareil (groupe
-  d'appareils, ADR 0017) : dès qu'un membre est joignable, la synchronisation normale apporte ce que
-  le dorsal a caché.
-- **Résiduel accepté**, écrit à l'écran : sans membre joignable, un dorsal hostile peut faire
-  repartir un appareil neuf d'un état ancien ; il ne peut ni modifier, ni forger, ni faire lire.
-- Restaurer n'impose jamais un état d'autorité ancien : les ensembles signés se **plient**
-  (protocole §14.5) ; une op ancienne ne retire rien de ce que l'appareil apprendra ensuite ; une
-  purge reçue plus tard s'applique normalement.
-- **Résiduel** : tailles et nombre d'objets visibles du dorsal (pas de rembourrage en v1).
-
-**Phrase de récupération** (ST-8) : 24 mots (BIP-39, liste anglaise et française), encodant la
-clé de stockage, le `ProjectID`, le dernier compteur et sa date, avec somme de contrôle ; montrée
-une fois à l'activation de la sauvegarde, puis sur demande (geste, mot de passe de session du
-système si disponible).
-
-**Échecs et latence.** Envois et lectures passent par une file bornée hors du chemin d'édition,
-délai de 30 s par appel, recul exponentiel, débit plafonné ; hors ligne, la file s'allonge sur
-disque (bornée par le quota du projet) et repart au retour. L'état « Sauvegarde distante : à jour
-au … / en retard de N / injoignable depuis … » est montré.
-
-**Ménage** : le cœur garde les objets des deux dernières têtes de chaque appareil de la personne
-et de toutes les têtes de moins de 30 jours ; le reste est supprimé par `delete` (le dorsal peut ne
-pas obéir : coût de stockage, pas d'intégrité).
+**Ménage distant : aucun en v1.** `list` peut être incomplet et plusieurs appareils de la personne
+téléversent des objets partagés avant leur tête : aucune suppression ne peut être sûre sur la seule
+foi d'une liste non fiable. En v1, rien n'est supprimé sur le dorsal sauf par le geste « Supprimer
+cette sauvegarde » (tout le préfixe du projet) ; le coût de stockage croît, c'est un résiduel
+assumé. Un ménage sûr (un coordinateur parmi les appareils de la personne, période de grâce, objets
+d'une tête en cours protégés) est une décision ultérieure.
 
 **Miroir lisible** (point distinct, `mirrors`) : copie à sens unique de la projection lisible vers
 un dossier local choisi (par exemple monté par le client d'un nuage), sans `.inkwell/`,
-explicitement non chiffrée et signalée comme telle.
+explicitement **non chiffrée** et signalée comme telle ; incompatible avec un projet protégé
+(§6.10) sauf accord explicite à chaque activation.
 
 ### 6.8 Modèles de projet (N27)
 
@@ -1042,15 +1112,20 @@ personnes. Un modèle **est un projet**, marqué comme modèle, décrit par la s
 `[template]` de `typst.toml` (format des modèles de Typst Universe : `path`, `entrypoint`,
 `thumbnail`), plus un nom et une description obligatoires.
 
-- **TM-1** Bibliothèque locale : `<UserDataDir>/inkwell/templates/<id>/` (un dossier de projet
-  complet, `.typstdeps/` compris) ; l'index des modèles est une vue de ce dossier.
+- **TM-1** Bibliothèque **visible** : `<Documents>/Inkwell/Modèles/<nom>/` (un dossier de projet
+  complet, `.typstdeps/` compris), à côté des projets, pour que la personne la voie, la sauvegarde
+  et la partage comme des fichiers ; l'index des modèles est une vue de ce dossier ; un seul
+  emplacement (`coherence.md`, C15).
 - **TM-2** Gestes : « Enregistrer comme modèle » (depuis un projet : copie de la projection et de
-  `.typstdeps/`, **sans** `.inkwell/`, donc sans historique ni membres) ; modifier (ouvrir le
+  `.typstdeps/`, **sans** `.inkwell/`, donc sans historique ni membres), la personne choisit les fichiers
+  inclus ; jamais de clés, sauvegardes, index, caches ni état personnel ; modifier (ouvrir le
   modèle comme projet local) ; dupliquer ; supprimer (corbeille de 30 jours) ; importer et
   exporter (archive du `AD-38`) ; partager (envoyer l'archive, ou ouvrir le modèle comme projet et
   inviter).
 - **TM-3** « Nouveau projet depuis un modèle » = copie locale, champs à remplir (titre, auteur)
-  substitués dans les fichiers déclarés ; **jamais** `typst init` (qui télécharge depuis
+  substitués dans les fichiers déclarés ; chaque valeur est **typée et échappée** selon le format du
+  fichier (chaîne Typst, texte Markdown, valeur CSV), jamais insérée comme du code ni comme un
+  chemin ; **jamais** `typst init` (qui télécharge depuis
   Universe, contraire à NG6).
 - **TM-4** Vignette : compilée **localement** (première page, SVG ou PNG) par le moteur enfermé,
   mise en cache ; recalculée quand le modèle change.
@@ -1063,6 +1138,120 @@ personnes. Un modèle **est un projet**, marqué comme modèle, décrit par la s
   un second moteur de mise en page (navigateur) : écarté en v1 (`AD-78`, à confirmer).
 - **TM-7** Les modèles ne sont pas des greffons et n'exécutent rien hors de Typst (et de ses
   greffons Typst purs, X-8).
+
+### 6.9 Fichiers non synchronisés (N34)
+
+*[cible ; `AD-90`]* Étude : [research/sync-ignore.md](research/sync-ignore.md) (Teamtype, gitignore,
+Syncthing). Ce que « ne pas synchroniser » veut dire ici, corrigé par la revue (`coherence.md`, C16) :
+
+- **IG-1** C'est une politique de **publication et de réception de fichiers locaux**, pas un
+  contrôle d'accès et pas un filtre du protocole : elle décide qu'un fichier **local** n'est pas
+  **importé** dans le projet (ni nœud, ni document, ni blob), et qu'un blob du projet n'est pas
+  **téléchargé** sur cet appareil. Elle ne retire jamais un document déjà admis du graphe
+  Automerge, ni chez soi ni chez les autres, et ne « cache » rien à qui l'a déjà reçu (l'écran le
+  dit : « ne retire pas les copies déjà reçues »).
+- **IG-2** Deux couches. **Personnelle** (cet appareil, jamais synchronisée) : peut seulement
+  exclure pour soi. **Du projet** : décidée par un admin, donc une **décision signée** (espace
+  `ignore/` de PD-1, §15.19) — pas un fichier ordinaire éditable, qui deviendrait une seconde
+  autorité ; avant PD-1, seule la couche personnelle existe.
+- **IG-3** Syntaxe gitignore (`.inkwellignore` pour l'édition à la main, interprété par le paquet
+  `plumbing/format/gitignore` de go-git, déjà lié pour N39), jeu de conformité contre `git
+  check-ignore` produit à la construction, parseur fuzzé ; motifs jamais hors de la racine.
+- **IG-4** Défauts : déchets du système (`.DS_Store`, `Thumbs.db`, `desktop.ini`, `*~`, `*.swp`),
+  dossiers de gestion de versions (`.git/`, `.jj/`), dossiers de sortie déclarés. **Jamais**
+  `.typstdeps/`, les polices, la charte, ni les ressources référencées par la compilation (N5,
+  ADR 0024 : tout recevoir, rien à télécharger) ; jamais « tous les PDF ».
+- **IG-5** Un fichier exclu que la compilation référence est signalé (« `logo.png` n'est pas
+  synchronisé mais le document l'utilise ») ; un renommage applique la règle au nouveau chemin ;
+  réinclure un fichier l'importe comme un nouveau fichier.
+- **IG-6** L'index de recherche (N33) n'indexe pas les fichiers exclus pour l'IA ; les exports les
+  omettent sauf case cochée par la personne, et le manifeste d'export le dit.
+
+### 6.10 Projet chiffré sur le disque (N37)
+
+*[expérimentation ; ADR à rédiger, remplace NG3 ; `AD-91`]* Étude :
+[research/encryption.md](research/encryption.md). Recommandation retenue, avec la simplification
+de l'étude (§7.2) :
+
+- **EN-1** Pas de système de fichiers monté (aucun pilote FUSE, WinFsp, macFUSE : contraires à
+  « autonome » et à « aucun port »). Le « bloc chiffré » de N37 est tenu **par objet** : chaque
+  valeur du magasin `IKV1` et chaque blob est chiffré (XChaCha20-Poly1305, nonce aléatoire de 24
+  octets, AAD = projet, type, nom, époque), avec des **noms opaques** (BLAKE3 à clé) ; une frappe
+  ne rechiffre que le petit objet qu'elle touche. Les identifiants du protocole (BLAKE3 du clair,
+  Bao) vivent **dans** les objets chiffrés : le protocole ne change pas.
+- **EN-2** **Clé de projet par appareil** (DEK, 256 bits) : les pairs échangent du clair sur un
+  canal chiffré, jamais du chiffré-au-repos ; la DEK n'a donc pas à être partagée entre personnes
+  (pas de clé de groupe, pas de rotation au retrait d'un membre). Elle est enveloppée au **format
+  d'en-tête age** (C2SP) pour : la clé de chiffrement de l'appareil (X25519 **séparée** de la clé de
+  signature, liée à elle par une signature), le **destinataire de secours** dérivé du secret de
+  secours (ST-3), et les autres appareils de la même personne.
+- **EN-3** Déverrouillage : trousseau du système (Secret Service, Trousseau de macOS, Gestionnaire
+  d'identifiants de Windows) quand il est disponible ; sinon un mot de passe de l'appareil
+  (Argon2id). Projet **verrouillé** : service de langage, IA, indexeur arrêtés, dossier de travail
+  effacé, clés retirées de la mémoire autant que Go le permet.
+- **EN-4** Ce qui lit des fichiers (Typst, tinymist pour les fichiers non ouverts, Git, recherche)
+  lit un **dossier de travail privé** matérialisé à la demande : Linux, tmpfs privé (ADR 0033) ;
+  macOS, dossier privé exclu de Spotlight et de Time Machine ; Windows, dossier privé de
+  `%LOCALAPPDATA%` (ACL de la personne seule, non indexé). Effacé à la fermeture et balayé au
+  démarrage. Le texte ouvert part vers tinymist par la mémoire (LSP), pas par le disque.
+- **EN-5** Copies sensibles traitées comme le projet : index de recherche, projection Git,
+  vignettes, sauvegardes locales, attentes indivisibles (`staging/`), journaux (aucun contenu, O-2),
+  fichiers temporaires. Une projection lisible **durable** (édition externe U7, miroir) est un
+  **choix explicite** signalé : « ce projet n'est alors plus seulement chiffré sur ce disque ».
+- **EN-6** Export en **un fichier** : `projet.zip` (copie lisible) ou `projet.inkwell.zip`
+  (archive complète, avec historique) ; chacun **chiffrable par age** (mot de passe, ou les
+  personnes du projet), lisible sans inkwell par `age -d` ; manifeste signé (préfixe externe
+  `"inkwell-ext:export:1\0"`).
+- **EN-7** Honnêteté écrite : protège un appareil éteint ou volé, une sauvegarde, un export ; ne
+  protège pas une session ouverte sur un appareil compromis, ni contre l'hibernation non
+  chiffrée ; aucune promesse d'effacement physique sur SSD ; un membre retiré garde ce qu'il a
+  déjà reçu.
+- **EN-8** Protocole : aucun changement pour le chiffrement local ; la clé X25519 de l'appareil dans
+  la liste des membres n'est nécessaire que pour « exporter chiffré pour les personnes du projet » et
+  pour un dossier partagé dans un nuage commun : delta reporté (PD-3, §15.19).
+- Porte **P-VAULT** : bancs (ouverture d'un gros projet, frappe, rechiffrement complet), plantage à
+  chaque étape d'écriture, six cibles, test canari « aucun clair sur disque après fermeture ».
+
+### 6.11 Historique, versions et variantes (N39, N41)
+
+*[cible ; `AD-13`, `AD-92`, `AD-96`]* La vérité reste Automerge (INV-3) ; Git n'est qu'une
+projection ; la personne n'a besoin de connaître ni l'une ni l'autre.
+
+- **HI-1 Voyager dans le temps.** Une vue « Historique » montre le projet tel qu'il était à
+  n'importe quel moment (vue Automerge en lecture seule aux têtes choisies, pour chaque document et
+  l'index) ; aller en arrière ou en avant ne modifie rien ; le travail en cours reste intact et
+  visible d'un clic (« Revenir au présent »).
+- **HI-2 Restaurer sans détruire.** « Restaurer cette version » (un fichier, une sélection, ou tout
+  le projet) produit une **nouvelle modification** (différence entre aujourd'hui et la version),
+  prévisualisée, annulable, soumise aux droits et à la garde comme toute modification ; jamais un
+  remplacement du magasin, d'une référence ni de l'autorité (une purge ou un retrait ne reviennent
+  pas). Les fichiers supprimés, blobs et dépendances de la version reviennent avec elle.
+- **HI-3 Versions nommées** = un **manifeste de têtes** de tout le projet (index, chaque document,
+  blobs référencés, fichier principal), avec nom, note, auteur, date ; stocké dans le document
+  racine (`meta.versions`, comme aujourd'hui, `versions.ts:59`), borné (≤ 10 000 versions).
+- **HI-4 Comparer** deux moments ou deux versions : différence **par mots** (étude editor-features
+  §9.6), auteur de chaque passage, fichiers ajoutés, supprimés, renommés.
+- **HI-5 Projection Git par go-git** (`internal/milestone`) : un dépôt nu `.inkwell/git/`
+  reconstructible, un commit déterministe par version nommée (arbre = projection à ces têtes, auteur
+  = personne, date = date de la version) ; « Exporter l'historique en dépôt Git » le clone ailleurs.
+  Jamais de binaire `git` (INV-12) ; jamais une autorité. go-git v5 stable (≥ 5.19, correctif
+  CVE-2026-45022) ; v6 encore en alpha au 2026-11-01. Mesuré avant adoption (P-GIT-BENCH : projeter
+  une version de 1 000 fichiers, reconstruire 500 versions, taille du dépôt) contre l'écrivain
+  minimal maison qu'`AD-13` envisageait ; go-git est retenu sauf écart mesuré au-delà des budgets.
+- **HI-6 Variantes (N41)**, d'après Patchwork (Ink & Switch : branches légères, différences
+  visibles, groupes de modifications) et les variantes déjà présentes (ADR 0031 : annonces de
+  variantes ; `history/graph.ts`). Vocabulaire : **« Créer une variante »** (copie d'un document à
+  partir d'un moment, qui garde son histoire commune), **« Comparer avec l'original »**,
+  **« Proposer d'intégrer »** (demande montrée à qui peut écrire l'original, avec la différence),
+  **« Intégrer »** (fusion Automerge des modifications de la variante dans l'original : une
+  modification, annulable, attribuée ; les passages modifiés des deux côtés apparaissent comme une
+  divergence ordinaire à régler, §10.4), **« Abandonner la variante »** (corbeille). Jamais
+  « branche », « fusion », « commit ».
+- **HI-7 Variante de projet** : « Dupliquer le projet » crée un **nouveau projet** (nouvel
+  identifiant, membres choisis, historique copié ou non). Intégrer les changements d'un autre
+  projet est hors v1 (NG10) : les identités de documents diffèrent.
+- **HI-8** Rien de ceci n'exige de nouveau format entre appareils : versions et variantes sont des
+  documents et des modifications Automerge admis par les règles existantes (ADR 0031).
 
 ## 7. Pont Go ↔ webview
 
@@ -1110,29 +1299,41 @@ comprend pas.
 
 ### 7.3 Canal Go ↔ hôte des greffons (interne)
 
-*[cible, ADR 0039 ; `AD-86`]* Interne (comme le pont), mais soumis à B-1 : codec borné, vecteurs
-dorés, `Fuzz*`. L'enfant est traité comme **compromis** : le parent impose tout, indépendamment du
-contenu des messages.
+*[expérimentation, ADR 0039 ; `AD-86`]* Interne, mais soumis à B-1 : codec borné, vecteurs dorés,
+`Fuzz*`. L'hôte est traité comme **compromis** : le parent impose tout, indépendamment du contenu.
 
-- **IPC-1 Transport.** Une paire de sockets Unix (`socketpair`, `SOCK_SEQPACKET`) créée par le
-  parent avant le lancement, seul descripteur réseau de l'enfant ; plus des descripteurs `memfd`
-  scellés (`F_SEAL_WRITE|F_SEAL_SHRINK|F_SEAL_GROW`) pour les modules (§9.10). Aucun autre
-  descripteur hérité (`close_range` avant `execve`).
-- **IPC-2 Cadrage.** Trame = `type u8 ‖ id d'appel u32 ‖ compartiment u16 ‖ génération u32 ‖
-  longueur u32 ‖ charge CBOR` ; charge ≤ 4 Mio (propositions et SVG ≤ 4 Mio, §15.4) ; au-delà :
-  erreur `resource-exhausted`, la trame est jetée, la connexion n'est pas réinitialisée.
-- **IPC-3 Autorité.** C'est le **parent** qui attribue `compartiment` et `génération` à chaque
-  activation et qui garde la table (compartiment, génération) → (greffon, droits, projet, mandat).
-  Un appel hôte venu de l'enfant n'est honoré que si sa génération est courante et que **les droits
-  du compartiment** le permettent ; l'enfant ne peut rien revendiquer de plus (§9.10, H-4).
-- **IPC-4 Concurrence.** Une instance WebAssembly sert **un appel à la fois** (wazero ne garantit
-  pas l'appel concurrent d'une même instance) ; file ≤ 8 appels par greffon, au-delà
-  `resource-exhausted` ; ≤ 16 appels en vol par hôte ; équité par tourniquet entre greffons.
-- **IPC-5 Annulation.** Trame `cancel(id)` ; l'enfant annule le contexte de l'appel (interruption
-  wazero) ; une réponse arrivée après l'annulation, ou d'une génération périmée, est ignorée ;
-  rien de ce qu'elle porte ne prend effet (mandat révoqué, §15.10).
-- **IPC-6 Vie.** Le parent supervise (recul, `Pdeathsig`) ; arrêt : `app.stopping` (§15.9), puis
-  SIGTERM, puis SIGKILL après 1 s.
+- **IPC-1 Transport.** Un **flux d'octets** (`socketpair(AF_UNIX, SOCK_STREAM)` sous Linux et
+  macOS ; paire de tubes anonymes hérités par liste de poignées sous Windows), créé par le parent
+  avant le lancement : seul canal de l'hôte. `SOCK_SEQPACKET` est écarté : `SO_SNDBUF` borne la
+  taille d'un datagramme (≈ 208 Kio par défaut, `unix(7)`), incompatible avec des charges de
+  plusieurs Mio. Les modules arrivent par `memfd` scellé (Linux, `SCM_RIGHTS`, **une seule fois**, à
+  l'activation) ou dans le flux lui-même (macOS, Windows) ; tout autre descripteur ou poignée
+  ancillaire reçu est fermé et compté comme faute.
+- **IPC-2 Cadrage** (tous les entiers **gros-boutistes**) : `type u8 ‖ drapeaux u8 ‖ réservé u16
+  (= 0) ‖ id d'appel u32 ‖ génération u32 ‖ longueur u32 ‖ charge CBOR`. Types : 1 `call`
+  (parent → hôte), 2 `result`, 3 `host_call` (hôte → parent), 4 `host_result`, 5 `cancel`, 6 `log`,
+  7 `ready` (enfermement posé, §9.10 H-0), 8 `goaway` ; type inconnu → faute. Charge ≤ 4 Mio pour
+  `call`/`result`, ≤ 1 Mio pour `host_call`, ≤ 4 Mio pour `host_result` de `document.read`,
+  ≤ 64 Kio pour `log` ; au-delà : la connexion est coupée et l'hôte relancé (pas de lecture
+  partielle).
+- **IPC-3 Autorité.** **Un hôte = un greffon** (§9.10 H-4) : l'autorité est celle **du greffon que le
+  parent a lancé sur cette connexion**, jamais une valeur lue dans une trame. Le parent garde, **par
+  connexion**, la génération courante, les droits accordés, le projet, le mandat en cours
+  (§15.10) ; un appel hôte n'est honoré que s'il porte la génération courante **et** que ces droits
+  le permettent. L'hôte ne peut rien revendiquer d'autre : il n'y a qu'un greffon derrière la
+  connexion.
+- **IPC-4 Contre-pression en octets.** Par connexion : ≤ 8 appels en file, ≤ 16 Mio en vol au
+  total (charges comprises), ≤ 4 `host_call` simultanés ; au-delà, le parent cesse de lire la
+  connexion (le flux freine l'hôte) et répond `resource-exhausted` aux nouveaux appels côté
+  webview ; un appel à la fois par instance WebAssembly.
+- **IPC-5 Annulation prioritaire.** `cancel(id)` passe avant toute charge en attente d'envoi ;
+  l'hôte interrompt l'exécution ; une réponse arrivée après l'annulation, ou d'une génération
+  périmée, est jetée ; rien de ce qu'elle porte ne prend effet.
+- **IPC-6 Vie.** Le parent supervise (recul, mort avec le parent : `Pdeathsig` sous Linux, objet de
+  tâche « tuer à la fermeture » sous Windows, surveillance du tube sous macOS) ; arrêt :
+  `app.stopping` (§15.9), puis `goaway`, puis arrêt forcé après 1 s.
+- Preuve : vecteurs de trames, fuzz du décodeur, test « 4 Mio aller et retour avec annulation » sur
+  les six cibles, sans privilège.
 
 ## 8. Réseau
 
@@ -1201,7 +1402,7 @@ Règles d'application :
 | Fournisseur d'IA (distant ou de l'entreprise) | lire ce que la politique et l'aperçu lui envoient ; répondre n'importe quoi | écrire sans proposition acceptée ; obtenir des outils hors classe | ce qui est envoyé avec accord |
 | Personne qui écrit, malveillante, par injection de prompt | placer des consignes dans le texte que l'IA d'une autre lit | faire agir l'IA d'une autre au-delà de `lire` et `proposer` (IA-2) ; obtenir une écriture sans relecture | une proposition trompeuse, relue et attribuée |
 | Client MCP | appeler les outils de sa portée après accord | écrire directement, lire un autre projet, relayer un jeton | ce que sa portée permet |
-| Voleur de l'appareil | tout lire (pas de chiffrement au repos, NG3) | — | documenté ; chiffrement du disque par le système recommandé |
+| Voleur de l'appareil | tout lire d'un projet **non protégé** ; d'un projet protégé (§6.10), seulement ce que révèlent tailles et nombre d'objets | lire un projet protégé verrouillé | appareil volé déverrouillé ; hibernation non chiffrée ; chiffrement du disque par le système toujours recommandé |
 | Autre programme de la même session | lire le dossier du projet | lire le pont (aucun port) | hors périmètre |
 
 ### 9.3 Contrôles
@@ -1227,22 +1428,26 @@ Règles d'application :
 
 Il n'existe **aucune** clé symétrique de groupe : la « rotation de la clé de session » de
 l'ADR 0005 (point 5) n'a pas d'objet ; un retrait prend effet par le filtre de connexion et
-la fin de la couverture (`AD-09`). Le stockage de la clé dans le trousseau du système est
-écarté en v1 (dépendance, cgo ou D-Bus selon le système) et réexaminé avec le chiffrement au
-repos.
+la fin de la couverture (`AD-09`). Le trousseau du système (Secret Service, Trousseau de macOS, Gestionnaire d'identifiants de
+Windows) garde, quand il est disponible, le **secret de secours** et l'enveloppe locale de la DEK
+(§6.10 EN-3) ; la bibliothèque est choisie sans cgo et auditée avant adoption (ADR 0008). Clés
+nouvelles *[cible]* : **DEK** du projet (256 bits, par appareil, enveloppée au format age) ; **clé
+X25519** de chiffrement de l'appareil, séparée de la clé de signature et liée à elle par une
+signature ; **secret de secours** de la personne (phrase de 24 mots, kit de secours, §6.7 ST-8) ;
+rotation : « Tout rechiffrer » sur demande (appareil compromis).
 
 ### 9.5 Enfermement des sidecars (F5)
 
-| Mesure | Linux | macOS, Windows |
+| Mesure | Linux | macOS, Windows (port `internal/sandbox`, §9.11, *à prouver*) |
 |---|---|---|
 | Binaire vérifié (SHA-256) avant chaque lancement ; extrait en lecture seule | oui | oui |
 | Environnement construit de zéro ; proxys vers un port refusé | oui | oui |
-| Pas de réseau : espace de noms réseau et utilisateur privé, repli journalisé sur les proxys refusés (`Engine.NetworkMode`) | oui | non *[`AD-18`]* |
+| Pas de réseau : espace de noms réseau et utilisateur privé, repli journalisé sur les proxys refusés (`Engine.NetworkMode`) ; sur Ubuntu 24.04, le profil AppArmor `inkwell` des paquets `.deb` permet `userns` et supprime ce repli (H-6) | oui | Seatbelt `(deny network*)` ; AppContainer sans capacité réseau |
 | `--root` sur le projet ; liens symboliques sortants refusés avant lancement | oui | oui |
-| Lecture limitée au projet, au binaire et aux paquets fournis (Landlock) | *[cible, `AD-28`]* | — |
+| Lecture limitée au dossier de travail privé, au binaire et aux paquets fournis (Landlock) | *[cible, `AD-28`]* | Seatbelt `file-read*` limité ; ACL du dossier de travail pour l'AppContainer |
 | Sortie bornée par le noyau : tmpfs privé de taille fixe dans un espace de noms de montage, fichiers déclarés seuls inscriptibles (Landlock), `RLIMIT_FSIZE` ; repli Landlock ABI ≥ 3 à parts fixes ; sinon échec fermé (ADR 0033) | oui | lancement borné refusé |
-| Mémoire (`RLIMIT_AS`), délai (`context.WithTimeout`, 30 s pour un export), CPU (compilations simultanées bornées) | oui | délai et CPU seulement |
-| Mort avec le parent : `Pdeathsig` (fil verrouillé), groupe de processus | oui | *[`AD-18`]* |
+| Mémoire (`RLIMIT_AS`), délai (`context.WithTimeout`, 30 s pour un export), CPU (compilations simultanées bornées) | oui | macOS : rlimits et surveillance ; Windows : objet de tâche |
+| Mort avec le parent : `Pdeathsig` (fil verrouillé), groupe de processus | oui | `kqueue` `NOTE_EXIT` ; objet de tâche « tuer à la fermeture » |
 | Relance bornée (tinymist) : recul exponentiel, jamais plus d'une relance par minute sans message | *[cible, `AD-20`]* | — |
 
 Un `tinymist lsp` résident lit le projet mais n'écrit rien : toute écriture lui est refusée
@@ -1281,40 +1486,71 @@ de l'étape 5.
 
 ### 9.9 Résiduels acceptés
 
-R1 (auto-équivoque, ADR 0031) ; R7 (admins en place de confiance) ; NG3 (pas de chiffrement
-au repos) ; métadonnées visibles du relais et du serveur de rendez-vous ; scellement de la
+R1 (auto-équivoque, ADR 0031) ; R7 (admins en place de confiance) ; projets non protégés lisibles sur le disque (§6.10 EN-7) ; métadonnées visibles du relais et du serveur de rendez-vous ; scellement de la
 gestion des membres par un ancien admin compromis (ADR 0017) ; risque de dépendance
 compromise après revue.
 
-### 9.10 Enfermement de l'hôte des greffons
+### 9.10 Enfermement de l'hôte des greffons (Linux)
 
-*[cible, ADR 0039 ; `AD-87`]* Exécutable et vérifiable, comme §9.5. L'enfermement est fait
-**avant** tout code tiers : l'enfant le pose lui-même au démarrage (`inkwell --plugin-host`),
-avant de lire le premier module ; le parent vérifie qu'il est posé (H-6) avant d'envoyer un
-module.
+*[expérimentation, ADR 0039 ; `AD-87`]* Exécutable et vérifiable. L'hôte est le binaire statique
+`inkwell-plugin-host` (Go pur, `CGO_ENABLED=0` : aucune bibliothèque partagée à charger, pas de
+GTK ni de WebKitGTK mappés). Les autres plates-formes : §9.11.
 
-| # | Mesure | Linux | Ailleurs |
+| # | Mesure | Règle exacte | Si elle manque |
 |---|---|---|---|
-| H-1 | **Aucun accès au système de fichiers** : Landlock, tous les droits gérés, aucune règle (ABI ≥ 1) | oui ; échec fermé | greffons tiers refusés (`AD-18`) |
-| H-2 | Modules reçus par `memfd` scellé, hachage vérifié **par le parent** avant envoi ; l'enfant n'ouvre aucun chemin | oui | — |
-| H-3 | **Pas de cache de compilation sur disque en v1** : compilation en mémoire, cache en mémoire pour la vie de l'hôte (un hôte vit autant que le projet) ; coût mesuré par P-PLUG-BENCH ; un cache disque géré par le parent est une décision ultérieure (`AD-87`) | oui | — |
-| H-4 | **Compartiments** : un hôte = un compartiment de confiance. Hôtes distincts pour : (a) chaque projet ouvert (greffons de projet) ; (b) greffons globaux **sans** canal de sortie (§15.5, classe O0) ; (c) **chaque** greffon qui a un canal de sortie réseau ou `storage.backend`, seul dans son hôte. Une évasion n'obtient que les droits de son compartiment | oui | — |
-| H-5 | **seccomp** (liste blanche) : `read`, `write`, `recvmsg`, `sendmsg` sur les descripteurs hérités, `mmap`, `mprotect`, `munmap`, `madvise`, `futex`, `clock_gettime`, `nanosleep`, `getrandom`, `sched_yield`, signaux du runtime Go, `exit_group` ; **refusés** : `socket`, `connect`, `open*`, `execve*`, `ptrace`, `process_vm_*`, `memfd_create` | oui ; échec fermé | — |
-| H-6 | Réseau : `socket()` refusé par H-5 ; en plus, espace de noms réseau privé quand le système le permet. Sur Ubuntu 24.04 (`kernel.apparmor_restrict_unprivileged_userns=1`), les paquets `.deb` installent un profil AppArmor `inkwell` qui permet `userns` ; sans profil (archive autonome), l'espace de noms manque, H-5 suffit, l'état est montré dans « Détails techniques » | oui | — |
-| H-7 | Mémoire : chaque module plafonné (`WithMemoryLimitPages`, 64 Mio par défaut, 256 Mio au plus) ; **budget par hôte** 512 Mio de mémoire linéaire cumulée, contrôlé à l'activation (refus avec message, déchargement d'abord du greffon inactif le plus ancien) ; `debug.SetMemoryLimit` à 640 Mio et `RLIMIT_AS` à 4 Gio (le compilateur réserve des régions de code) ; dépassement : l'hôte entier meurt, le superviseur le relance, ses greffons se réactivent à la demande | oui | — |
-| H-8 | `Pdeathsig`, groupe de processus, superviseur avec recul (C-7) | oui | — |
+| H-0 | **Démarrage en deux temps** | (1) le parent lance `inkwell-plugin-host --stage=lock` (poignées héritées : la socket seule) ; (2) ce processus fixe son fil (`runtime.LockOSThread`), pose `PR_SET_NO_NEW_PRIVS`, pose Landlock **sur ce fil**, puis `execve` de lui-même avec `--stage=run` : `execve` détruit tous les autres fils, et le nouveau processus, mono-fil au départ, **hérite** du domaine Landlock ; tous les fils que son runtime crée ensuite en descendent ; (3) en `--stage=run`, avant de lire quoi que ce soit, il pose seccomp avec `SECCOMP_FILTER_FLAG_TSYNC` (tous les fils), vérifie les deux (relit son statut seccomp, tente une ouverture qui doit échouer), puis envoie `ready` ; le parent n'envoie aucun module avant `ready` | échec fermé |
+| H-1 | **Landlock** (défense en profondeur) : droits gérés = tous ceux que l'ABI sondée connaît (masque calculé : ABI 1 sans `REFER` ni `TRUNCATE`, ABI 2 avec `REFER`, ABI 3 avec `TRUNCATE`, ABI ≥ 4 réseau TCP refusé aussi) ; une seule règle : `execute` et `read_file` sur le binaire hôte (nécessaire à l'`execve` de H-0) ; `TSYNC` en plus quand l'ABI ≥ 8 | ABI absente : continuer seulement si H-5 tient, état montré dans « Détails techniques » |
+| H-2 | Modules par `memfd` scellé, hachage vérifié **par le parent** avant envoi ; l'hôte n'ouvre aucun chemin | — |
+| H-3 | **Aucun cache de compilation sur disque** : compilation en mémoire pour la vie de l'hôte ; coût mesuré par P-PLUG-BENCH | — |
+| H-4 | **Un hôte par greffon actif** (autorité exacte, §7.3 IPC-3), créé **paresseusement** à la première activation, jamais au démarrage ; **≤ 6 hôtes actifs** (au-delà : le plus ancien inactif est arrêté ; s'il n'y en a pas, refus d'activation avec le message « Trop d'extensions actives ») ; un greffon de projet n'est jamais dans le même hôte qu'un autre | — |
+| H-5 | **seccomp**, barrière **principale** des fichiers et du réseau : (a) vérification d'architecture (`AUDIT_ARCH_X86_64`, `AUDIT_ARCH_AARCH64` ; ABI x32 refusée) ; (b) **refusés** (`EPERM`) : `socket`, `socketpair`, `connect`, `bind`, `listen`, `accept*`, toutes les ouvertures et créations de chemins (`open`, `openat`, `openat2`, `creat`, `mkdir*`, `mknod*`, `unlink*`, `rename*`, `link*`, `symlink*`, `truncate`, `chmod*`, `chown*`), `execve`, `execveat`, `ptrace`, `process_vm_*`, `memfd_create`, `bpf`, `mount`, `unshare`, `setns`, `keyctl`, `io_uring_*` ; (c) `clone` permis **seulement** avec `CLONE_THREAD` et sans aucun drapeau d'espace de noms ; `clone3` refusé avec `ENOSYS` (le runtime Go se rabat sur `clone`) ; (d) **liste blanche normative** dans `internal/plugin/host/seccomp_linux.go`, **dérivée** en CI en lançant l'hôte sous `strace -f` sur un banc complet (compilation WebAssembly, ramasse-miettes, croissance des fils, délais, arrêt), comme le profil par défaut de Docker ; tout appel non listé → `EPERM` journalisé | échec fermé |
+| H-6 | Réseau : refusé par H-5 (aucune socket ne peut être créée ; la seule héritée est celle du parent) ; espace de noms réseau en plus quand le système le permet. Sur Ubuntu 24.04 (`kernel.apparmor_restrict_unprivileged_userns=1`), les paquets `.deb` installent un profil AppArmor `inkwell` qui permet `userns` (il sert aussi `typst` et `tinymist`, §9.5) | H-5 suffit |
+| H-7 | Mémoire : chaque module plafonné (`WithMemoryLimitPages`, 64 Mio par défaut, 256 Mio au plus) ; `RLIMIT_AS` fixé après mesure (P-PLUG-BENCH : VSZ réel du compilateur) ; cgroup v2 par hôte (`memory.max`, `cpu.max`) quand la session `systemd --user` le délègue ; `SetMemoryLimit` n'est qu'une cible du ramasse-miettes, pas un plafond ; le **parent** mesure RSS et CPU (`/proc/<pid>/stat`) et arrête un hôte au-delà de sa limite (§11.1) | rlimits et surveillance du parent |
+| H-8 | `Pdeathsig`, groupe de processus, superviseur avec recul (C-7) | — |
 
-**Échec fermé, visible.** Si H-1 ou H-5 ne peut pas être posé : aucun greffon tiers ni de projet ne
-se charge ; bandeau unique « Les extensions sont désactivées : ce système ne permet pas de les isoler
-— Détails » ; les extensions intégrées en TypeScript restent. En v1 (Linux seulement, `AD-18`), les
-extensions intégrées en WebAssembly (Tâches) suivent la même règle : sans isolation, Tâches est
-indisponible et le dit.
+**Échec fermé, visible.** Si H-0 ou H-5 échoue : aucun greffon tiers ni de projet ne se charge ;
+bandeau « Les extensions sont désactivées : ce système ne permet pas de les isoler — Détails » ; les
+extensions intégrées **TypeScript** restent. Tâches (U29) est une extension intégrée **TypeScript**
+(elle ne dépend pas de l'hôte) ; Graphviz seul porte le chemin WebAssembly livré.
 
-**Honnêteté sur l'isolation.** Une instance WebAssembly qui plante ne touche pas les autres (piège
-wazero) ; une **évasion native** donne tout l'hôte, donc tous les greffons de son compartiment
-(H-4), jamais un autre compartiment ni le processus principal. Preuve exigée : test d'un **enfant
-simulé compromis** (programme de test qui parle IPC en revendiquant d'autres compartiments,
-générations, tailles et appels hôte) : tout est refusé par le parent (`PLUG-COMPROMISED-*`).
+**Honnêteté sur l'isolation.** Un piège WebAssembly ne touche que son greffon ; une **évasion
+native** donne l'hôte, c'est-à-dire **un seul greffon** et ses droits, jamais un autre greffon ni le
+processus principal. Preuve exigée : un **enfant natif hostile** (programme de test qui parle IPC en
+falsifiant générations, tailles, types et appels hôte, et tente fichiers, réseau, `execve`) : tout
+est refusé (`PLUG-COMPROMISED-*`), sur amd64 et arm64, en paquet et en archive.
+
+**Matrice des noyaux à tester** (versions initiales, l'ABI réelle est **sondée**) : Ubuntu 22.04
+(5.15, Landlock ABI 1), Debian 12 (6.1, ABI 2), Ubuntu 24.04 (6.8, ABI 4), Debian 13 (6.12, ABI 6),
+Fedora courante ; porte **P-SANDBOX-LINUX**.
+
+### 9.11 Six plates-formes : enfermement commun ou capacité refusée (N35)
+
+*[cible ; `AD-18` révisé, `AD-94`]* Toute garantie vaut sur Linux, macOS et Windows, amd64 et
+arm64, par le port `internal/sandbox` ; sinon la capacité qu'elle protège est **refusée** sur la
+cible (INV-13). Les mécanismes macOS et Windows sont **à prouver** (P-SANDBOX-MAC,
+P-SANDBOX-WIN) ; leur nom ne vaut pas preuve.
+
+| Garantie | Linux | macOS | Windows |
+|---|---|---|---|
+| Aucun fichier | seccomp + Landlock (§9.10) | profil Seatbelt appliqué par l'hôte à **lui-même** au démarrage (`sandbox_init` : tout le processus, hérité par ses enfants) : `(deny default)`, lecture seulement des bibliothèques du système, aucune écriture ; `sandbox-exec` est déprécié mais Seatbelt reste le seul mécanisme pour un processus hors App Sandbox (constat au 2026) | **AppContainer** sans aucune capacité : aucun accès hors des emplacements de l'AppContainer |
+| Aucun réseau | seccomp (`socket` refusé) | `(deny network*)` | AppContainer sans `internetClient` ni `privateNetwork` |
+| Aucun processus | `execve` refusé, `clone` filtré | `(deny process-exec process-fork)` | attribut `CHILD_PROCESS_POLICY` « aucun enfant » + objet de tâche, 1 processus actif |
+| Mémoire | rlimits, cgroup, `WithMemoryLimitPages` | `WithMemoryLimitPages` + surveillance du parent (RSS par `task_info`) et arrêt | objet de tâche (`JOB_OBJECT_LIMIT_PROCESS_MEMORY`) |
+| CPU | cgroup `cpu.max` si délégué, sinon surveillance | surveillance du parent | objet de tâche (`CPU_RATE_CONTROL`) |
+| Mort avec le parent | `Pdeathsig` | surveillance du tube, `kqueue` `NOTE_EXIT` | objet de tâche « tuer à la fermeture » |
+| Canal | socket Unix | socket Unix | tubes anonymes hérités par `PROC_THREAD_ATTRIBUTE_HANDLE_LIST` |
+
+**Sidecars** (`typst`, `tinymist`, §9.5) sur le même port : ils lisent le **dossier de travail
+privé** (§6.10 EN-4, aussi sans coffre : copie de la projection), ce qui permet sur Windows une ACL
+sur ce seul dossier pour l'AppContainer et sur macOS une règle Seatbelt `file-read*` limitée ; sortie
+bornée par rlimit (Linux, macOS) ou objet de tâche (Windows). L'ADR 0033 refuse un lancement borné
+sans garantie : tant que P-SANDBOX-MAC ou P-SANDBOX-WIN n'est pas passée, l'aperçu y est
+**indisponible**, pas affaibli.
+
+**Réductions écrites, en attendant les portes** : sur une cible sans enfermement prouvé, (1) aucun
+greffon tiers ni de projet ; (2) aucun client ACP ; (3) aperçu et export indisponibles (le reste de
+l'éditeur fonctionne). Une version publique « Linux seulement » est une **alpha**, annoncée comme
+telle ; elle ne clôt ni N35 ni L5.
 
 ## 10. Erreurs et reprise
 
@@ -1394,6 +1630,34 @@ peut pas épuiser la mémoire d'un autre.
 - **O-7** Preuve : un test e2e « canari » tape une chaîne unique et vérifie qu'elle n'apparaît
   dans aucun journal, aucun journal circulaire, aucune trace, aucun rapport *[cible]*.
 
+### 11.1 Ressources : le gestionnaire de tâches (N32)
+
+*[cible ; `AD-88`]* Modèle : `about:processes` de Firefox. Le gestionnaire appartient au **cœur**
+(`internal/tasks`) : un greffon ne peut pas fournir la vue qui sert à l'arrêter.
+
+- **RS-1** Une **table unique** des travaux, alimentée par chaque propriétaire du §5.2 et par :
+  sidecars, hôtes de greffons, Worker Automerge, compilation, service de langage, flux d'IA,
+  serveur MCP, indexeur, sauvegarde, projection Git. Chaque ligne : identifiant stable, **nom sans
+  jargon** (« Dessin des diagrammes », « Aide à la saisie Typst », jamais « plugin host »), classe,
+  état (actif, en attente, en pause, arrêté, et pourquoi), CPU cumulé et récent, mémoire (résidente
+  du processus ; linéaire WebAssembly séparée), entrées et sorties, dernier appel, limite.
+- **RS-2** Mesures prises par le **parent** pour tout ce qui est un processus (`/proc/<pid>/stat`,
+  `getrusage`, cgroup ; `task_info` sous macOS ; requêtes d'objet de tâche sous Windows) ; ce qu'un
+  hôte rapporte de lui-même est **indicatif** (§7.3 : il peut mentir) et marqué comme tel.
+- **RS-3** Verbes : **annuler** (un appel ou un travail), **mettre en pause** (la file ne lui donne
+  plus rien), **arrêter** (le processus), **désactiver** (l'extension) ; aucun verbe ne perd de
+  donnée (le texte est dans Automerge, durable).
+- **RS-4** Limites par classe (greffons, IA, compilation, index), réglables **à la baisse** par la
+  personne (jamais au-delà du manifeste ni des bornes du §9.10) ; appliquées à l'activation
+  suivante ; dépassement : ralentir, puis mettre en pause avec le message de ND-5.
+- **RS-5** Aucune donnée de document dans une ligne (O-2) : pas de nom de fichier ni de titre ;
+  preuve : test canari O-7 étendu à la vue.
+- **RS-6** Emplacement : une **vue « Ressources »** ouverte par le menu de l'application, la palette
+  et le menu « Extensions » ; un indicateur discret dans la barre d'état seulement quand quelque
+  chose est en pause ou au-delà de sa limite (pas un onglet de plus dans le tiroir).
+- **RS-7** Budget : la table se met à jour au plus 2 fois par seconde, ≤ 1 % d'un cœur quand la vue
+  est ouverte, 0 quand elle est fermée.
+
 ## 12. Performance
 
 ### 12.1 Chemins chauds
@@ -1442,6 +1706,51 @@ Les budgets sont ceux du §2. Conditions normatives de mesure :
 - **PF-4** Profil PGO (`default.pgo`) à l'étape 6, tiré d'un profil réel (sans donnée de
   document).
 
+### 12.5 Tout mesurer, garder le plus rapide (N38)
+
+*[cible ; `AD-93`]* Chaque chemin chaud a un budget chiffré, un banc qui le mesure et une porte en
+CI. Une option n'est retenue que si elle est la plus rapide **mesurée** parmi celles qui tiennent
+les invariants (`benchstat`, `-count ≥ 10`, p < 0,05, sans régression d'allocations) ; le chiffre
+et la commande vont dans le plan du lot. Valeurs *proposées*, à fixer par la première mesure de
+référence sur le matériel de CI (amd64 et arm64), puis tenues.
+
+| Chemin | Budget p95 (mémoire) | Banc, cas | Concurrence |
+|---|---|---|---|
+| frappe → affichage local | ≤ 16 ms par image ; gestionnaire d'entrée ≤ 4 ms sur le fil d'affichage | `PERF-TYPE` (Long Tasks API : aucune tâche > 50 ms) | Automerge dans le Worker |
+| frappe → pair (LAN, relais) | ≤ 100 ms, ≤ 300 ms | `PERF-SYNC-*` (netem) | session par pair, flux par classe |
+| relais d'un message dans Go (pont → session), ≤ 64 Kio | ≤ 50 µs, **0 allocation** | `BenchmarkRelay` | une goroutine par session, dépôts non bloquants |
+| hachage et vérification de blob | ≥ 500 Mo/s par cœur (BLAKE3), vérification Bao en flux | `BenchmarkPut/Read/Fetch` | `errgroup.SetLimit(GOMAXPROCS)` sur les groupes de 16 Kio |
+| écriture d'un incrément | ≤ 2 ms hors `fsync` ; `fsync` groupé ≤ 500 ms (D-8) | `BenchmarkWriteAtomic`, LazyFS | un travailleur par voie (≤ W+2) |
+| démarrage | fenêtre peinte ≤ 1 s ; dernier projet modifiable ≤ 1,5 s ; registre des extensions ≤ 10 ms (50 manifestes) | `PERF-START`, `BenchmarkRegistryBuild` | travail lent après la peinture |
+| aperçu | ≤ 1 s complet (20 pages) ; ≤ 300 ms incrémental (`AD-26`) | `PERF-PREVIEW` | une compilation active, la précédente annulée |
+| service de langage | ≤ 100 ms (complétion, signature, survol) | `PERF-LSP` | réponses périmées jetées |
+| recherche dans le projet (10 000 fichiers) | premiers résultats ≤ 100 ms, fin ≤ 500 ms | `PERF-SEARCH` | `errgroup.SetLimit` sur les fichiers, résultats en flux |
+| index (N33) | ≤ 50 ms par document de 100 Ko ; indexation initiale de 1 000 fichiers ≤ 5 s ; ≤ 1 cœur, ≤ 150 Mio | `PERF-IDX-*` | travailleur basse priorité, en pause pendant une frappe rapide |
+| appel de greffon (64 Kio, trajet complet) | ≤ 2 ms ; activation ≤ 150 ms (≤ 500 ms compilation comprise) | P-PLUG-BENCH | un appel à la fois par instance |
+| coffre (N37) | ≤ +10 % sur l'écriture d'un incrément, ≤ +20 % sur l'ouverture d'un gros projet | P-VAULT | chiffrement par objet, parallèle borné |
+| projection Git d'une version (1 000 fichiers) | ≤ 1 s ; reconstruction de 500 versions ≤ 60 s en tâche de fond | P-GIT-BENCH | un travailleur |
+| mémoire totale | budget global du §2 | `PERF-MEM` | — |
+
+**Règles de concurrence** (vérifiées par revue et par tests) :
+
+- **PF-5** Tout parallélisme est **borné** : `errgroup.Group` avec `SetLimit` ou pool de
+  travailleurs à file bornée ; jamais une goroutine par message, par fichier ou par pair sans
+  borne ; chaque goroutine a un propriétaire, un `context`, une sortie (C-1).
+- **PF-6** `goleak` dans chaque `TestMain` des paquets concurrents ; `-race` en CI ; tests de
+  concurrence sous `testing/synctest` ; tests de charge des files (borne et comportement à la
+  borne, C-4).
+- **PF-7** **PGO** : `default.pgo` tiré d'un profil CPU représentatif (frappe, synchronisation,
+  compilation, indexation, sans donnée de document), renouvelé à chaque mineure, gardé seulement si
+  `benchstat` montre un gain sur les paquets de `HOT_PATHS:`.
+- **PF-8** Webview : fil d'affichage ≤ 16 ms par image, aucune tâche > 50 ms (observateur Long Tasks
+  dans les e2e) ; tout travail plus long dans un Worker ; mesures `performance.mark` dans les e2e.
+- **PF-9** CI : `bench:compare` contre `main` sur toute modification d'un paquet de `HOT_PATHS:`
+  (échec sur régression significative de temps ou d'allocations) ; cas `PERF-*` et `PERF-EXT-*` la
+  nuit sur amd64 et arm64, avec résultats bruts archivés.
+- **PF-10** Choix de bibliothèque par la mesure : implémentation BLAKE3, codec CBOR, moteur de
+  l'index, go-git contre écrivain minimal, mode de compilation de wazero ; chaque choix a son banc
+  comparatif dans `docs/plans/`.
+
 ## 13. Tests : ce que chaque niveau prouve
 
 | Niveau | Outil | Où | Prouve | Porte |
@@ -1476,9 +1785,12 @@ déclaré instable sans taux mesuré et cause prouvée (D14) ; les tests lourds 
    Git), embarqués par `go:embed` avec étiquettes de plate-forme (ADR 0024).
 3. **Frontend** : Vite (production) → `frontend/dist`, embarqué (`inkwell.Assets`).
 4. **Exécutable** : Wails v3 (cgo, GTK4/WebKitGTK 6.0), `-trimpath`, version injectée
-   (`-ldflags -X internal/version…`), date reproductible (`SOURCE_DATE_EPOCH`).
-5. **Paquets** : goreleaser + nFPM, une exécution native par architecture
-   (`ubuntu-24.04`, `ubuntu-24.04-arm`) ; `.deb`, `.rpm`, `tar.gz` ; entrée de bureau,
+   (`-ldflags -X internal/version…`), date reproductible (`SOURCE_DATE_EPOCH`). PGO : `default.pgo` (PF-7). Hôte des
+   greffons `cmd/inkwell-plugin-host` construit à part, `CGO_ENABLED=0`, statique, embarqué et
+   revérifié comme un sidecar ; profil AppArmor `inkwell` livré dans les `.deb` (H-6).
+5. **Paquets** *[cible : six cibles, N35]* : Linux par goreleaser + nFPM, une exécution native par
+   architecture (`ubuntu-24.04`, `ubuntu-24.04-arm`) ; macOS (amd64, arm64) en `.app` signé et notarisé ;
+   Windows (amd64, arm64) en installateur signé ; Linux : `.deb`, `.rpm`, `tar.gz` ; entrée de bureau,
    AppStream, type MIME `text/x-typst`, icônes (ADR 0025).
 6. **Traçabilité** : SBOM syft par artefact ; `grype` ; `checksums.txt` signé par cosign sans
    clé ; `.deb`/`.rpm` signés GPG si la clé existe.
@@ -1606,7 +1918,7 @@ dogfooding). Budgets mesurés par les cas `PERF-EXT-*` sur les machines de CI.
 | Commande | `commands` | contribuer | selon la commande | toutes : mise en forme, partager, exporter, versions, rechercher | `onCommand` | palette ouverte ≤ 50 ms avec 1 000 commandes ; appel d'un greffon : aller-retour p95 ≤ 2 ms + son travail, plafond 1 s |
 | Menu, palette, raccourci | `menus` (données) | contribuer | — | menu Insérer (U9), palette (Ctrl+Maj+P), raccourcis | aucune (déclaratif) | 0 appel d'extension pour afficher |
 | Barre d'outils par type | `toolbar` (données) | contribuer | — | barres Typst et Markdown (U4, U5), barre du tableur | aucune | 0 appel pour afficher ; état « actif » ≤ 4 mises à jour/s |
-| Panneau latéral, onglet du tiroir | `panels` | contribuer | `ui.view` | Historique, Commentaires, Activité, Rechercher, Sommaire (U30), Tâches (U29, livrée en **greffon WebAssembly**) | `onView` | premier rendu ≤ 100 ms ; mises à jour ≤ 10/s ; **interaction** (clic dans une vue déclarative → vue mise à jour, aller-retour webview → Go → hôte compris) p95 ≤ 100 ms |
+| Panneau latéral, onglet du tiroir | `panels` | contribuer | `ui.view` | Historique, Commentaires, Activité, Rechercher, Sommaire (U30), Tâches (U29, extension intégrée TypeScript), panneau d’exemple livré en **greffon WebAssembly** (preuve du chemin `ui.view`) | `onView` | premier rendu ≤ 100 ms ; mises à jour ≤ 10/s ; **interaction** (clic dans une vue déclarative → vue mise à jour, aller-retour webview → Go → hôte compris) p95 ≤ 100 ms |
 | Barre d'état, bandeau, toast | `status` | contribuer | `ui.view` | mots, « Page X sur Y », encodage, fin de ligne (U1) | `onFileType` | ≤ 4 mises à jour/s par élément, coalescées |
 | Type de fichier : reconnaissance | `file-types` (données) | contribuer | — | Typst, Markdown, tableaux, texte, code, images, PDF (§6.6) | aucune | registre construit ≤ 10 ms |
 | Vue, éditeur d'un type | `viewers` | remplacer (par type) | `document.read`, `document.propose` ou `blob.read` ; `ui.view` ou `ui.native` | éditeur CodeMirror, grille CSV (ADR 0026), visionneuse d'images, PDF.js (`AD-39`) | `onFileType` | ouverture d'un fichier ≤ 1 Mio : activation + premier rendu ≤ 200 ms ; activation d'un greffon : ≤ 150 ms module déjà compilé dans l'hôte, ≤ 500 ms compilation comprise (pas de cache disque en v1, H-3) |
@@ -1639,10 +1951,11 @@ par Go pour tout ce qui sort de la webview (B-2).
 |---|---|---|---|
 | `self.read`, `people.read`, `presence.read`, `extensions.read` | lectures du §15.3 | registre | « voir les personnes du projet » |
 | `document.read` | plages des documents texte **du projet ouvert**, à la demande (jamais un document entier copié d'office) | webview, porte de taille | « lire les documents de ce projet » |
-| `document.propose` | proposer des modifications ancrées (étude, §5.2) ; la webview les valide puis les applique en **une** modification annulable, signée par la personne, étiquetée « via X » | webview : bornes, garde, attribution | « proposer des modifications » |
-| `document.create` | créer un fichier texte par l'index (MF-4) | webview | « créer des fichiers » |
+| `document.propose` | proposer des modifications ancrées (étude, §5.2) ; **règle unique** pour tout auteur de proposition (greffon, IA, client MCP, agent) : la webview valide (bornes, porte de taille, garde) puis **montre la différence par morceau**, « Accepter / Refuser / Tout accepter » ; l'acceptation produit **une** modification annulable, signée par la personne, étiquetée « via X » ; « appliquer sans relire » est un **réglage par greffon** choisi par la personne (jamais pour un greffon de projet ni pour l'IA) | webview : bornes, garde, attribution | « proposer des modifications » |
+| `document.create` | créer un fichier texte par l'index (MF-4) ; chaque création apparaît dans l'Activité (« Diagrammes a créé `.renders/…` ») | webview | « créer des fichiers » |
 | `project.read`, `blob.read` | lire la projection et les blobs, par `os.Root` | Go | « lire les fichiers du projet » |
-| `compile.run`, `compile.read` | obtenir un PDF, des pages SVG, `typst query` du projet ; lire les ancres de l'aperçu | Go, sidecar enfermé | « compiler le projet » |
+| `compile.run` | obtenir un PDF, des pages SVG ou un résultat de `typst query` du projet, par le moteur enfermé | Go, sidecar enfermé | « compiler le projet » |
+| `compile.read` | lire les ancres et les diagnostics du **dernier aperçu** (aucune compilation lancée) | webview | « voir les erreurs et l'aperçu » |
 | `export.write` | écrire **un** fichier choisi par la personne dans une boîte de dialogue de Go | Go | « enregistrer un fichier que vous choisissez » |
 | `import.read` | lire **un** fichier choisi par la personne | Go | « ouvrir un fichier que vous choisissez » |
 | `history.read` | historique des documents (auteurs, dates, différences) | webview | « voir l'historique » |
@@ -1664,11 +1977,11 @@ par ce qu'elle **fait entrer** (source) et ce qu'elle **fait sortir** (puits) :
 |---|---|---|---|---|
 | I0 | rien (réglages propres, `storage`) | | O0 | aucun hors de l'appareil : interface, `storage`, propositions et rendus **visibles** dans le projet |
 | I1 | métadonnées : `self.read`, `people.read`, `presence.read`, `extensions.read`, événements sans contenu | | O1 | fichier choisi par la personne : `export.write`, `mirror.dir` (clair, local, montré) |
-| I2 | contenu du projet : `document.read`, `project.read`, `blob.read`, `history.read`, `compile.run`, `compile.read`, entrée d'un `renderer`, événements `document.*` | | O2 | réseau : `net.hosts` |
+| I2 | contenu du projet : `document.read`, `project.read`, `blob.read`, `history.read`, `compile.run`, `compile.read`, entrée d'un `renderer`, événements `document.*`, résultats de l'index (`index.*`, N33) | | O2 | réseau : `net.hosts` |
 | I3 | fichier choisi par la personne : `import.read` | | O3 | dorsal : `storage.backend` (le cœur ne lui donne que du chiffré) |
-| | | | O4 | modèle d'IA : `ai.complete` (envoyé **par Go**, §15.18) |
+| | | | O4 | modèle d'IA : `ai.complete`, embeddings et reclassement de l'index (envoyés **par Go**, §15.18) |
 
-- **RF-1** Un **compartiment** (§9.10 H-4 : le greffon et tous ceux qu'il peut appeler, §15.12)
+- **RF-1** Un **compartiment** (le greffon, seul dans son hôte, §9.10 H-4, et tous ceux qu'il peut appeler, §15.12)
   qui a O2 n'a **aucune** source au-delà de I0, sauf les secrets de son propre dorsal, **injectés
   par Go** dans la requête (le greffon nomme `secret:<nom>`, ne le voit jamais).
 - **RF-2** O3 ne reçoit que des octets chiffrés par le cœur ; un dorsal (O3) qui a aussi O2 reste
@@ -1693,7 +2006,7 @@ par seconde, opérations par proposition. Trois dépassements → greffon mis en
 
 | | Extension intégrée | Greffon |
 |---|---|---|
-| Code | TypeScript dans l'exécutable (`src/ext/<nom>`), ou WebAssembly fourni (Tâches) | module WebAssembly signé (annexe) |
+| Code | TypeScript dans l'exécutable (`src/ext/<nom>`), ou WebAssembly fourni (Graphviz) | module WebAssembly signé (annexe) |
 | Où il tourne | webview (TypeScript) ; hôte des greffons (WebAssembly) | hôte des greffons, processus enfant enfermé (annexe, *Décision* point 1) |
 | Manifeste, capacités, activation | oui, mêmes règles | oui |
 | `ui.native` | permis (chemin de frappe) | jamais |
@@ -1891,6 +2204,7 @@ Personnes, gestionnaire d'extensions et entrée « Redémarrer sans extensions �
 | Rechargement à chaud pendant le développement | **retenu, mode développeur** | réglage « Mode développeur » : greffon non empaqueté lu dans un dossier choisi, rechargé à chaque modification ; non signé permis **seulement** là, avec un bandeau rouge permanent ; jamais pour un greffon de projet |
 | Kit de développement et modèles par langage | **retenu** | générés depuis le WIT : Rust et Go (`wasip1`, TinyGo) d'abord, AssemblyScript ensuite ; outil `inkwell plugin new | pack | sign | test` (sans fenêtre, compatible `AD-35`) |
 | Kit de conformité des greffons | **retenu** | comme les vecteurs du protocole : jeux d'entrées de l'hôte et réponses attendues (forme, bornes, déterminisme : même entrée → même sortie), budgets mesurés ; `inkwell plugin test` le lance ; exigé pour un futur catalogue ; l'hôte passe les mêmes vecteurs en CI |
+| UTCP (client ou manuel exporté) | **écarté** | gabarits d'appel exécutables (`cli`, `tcp`, `udp`), écosystème sans hôte majeur ni fondation au 2026-11-01 ; MCP est l'interface unique ; réexaminé si un hôte majeur l'adopte |
 | Accès au DOM ou au CSS de l'application | **écarté** | leçons d'Obsidian et de Firefox (XUL) : interdit la refonte et toute sécurité ; ND-1, ND-2 |
 | Données propres à une extension dans le document partagé (`ext/<id>`) | **différé** (`AD-66`) | exige une règle de garde et des bornes dans le protocole ; v1 : magasin privé et contenu standard |
 
@@ -1957,8 +2271,11 @@ liaisons ni Streams, tuable seul, réseau et navigation refusés par l'hôte (po
 de WebKitGTK, pas seulement la CSP), canal `MessagePort` par instance avec identifiants et tailles
 bornées ; preuves : boucle infinie tuée sans gêner la frappe, tentative de navigation avec une
 source canari jamais vue hors de l'appareil. Même alors : capacité nommée `render.frame`, **hors**
-du niveau « projet », installée par geste. Alternative suivie : un moteur Mermaid sans DOM
-(sous-ensemble) ou une version WebAssembly, s'il en paraît une.
+du niveau « projet », installée par geste. Voie retenue pour l'API 1.1 : `beautiful-mermaid` (TypeScript, MIT, rendu SVG **sans DOM** d'un
+sous-ensemble : organigrammes, séquences, états, classes, entités), compilé en module WebAssembly
+par le kit JavaScript (§15.15), devient un `renderer` `wasm` ordinaire dans l'hôte enfermé, sans
+P-FRAME ; ce n'est pas tout Mermaid, et l'écran le dit pour un diagramme non pris en charge ; taille
+du module mesurée avant adoption.
 
 **3. Assainir avant tout affichage.** Tout SVG produit par une extension passe par l'assainisseur
 de Go (lecture XML en flux, liste blanche d'éléments et d'attributs : ni `script`, ni
@@ -1968,23 +2285,27 @@ Affichage en `<img>` seulement (B-7). Un SVG reçu d'un pair est réassaini avan
 
 **4. Jusqu'au PDF, sans toucher au protocole.** Typst n'inclut que des images. Le rendu devient un
 **fichier ordinaire du projet** : un nœud `blob` de l'index sous `.renders/<clé>.svg` (ADR 0023,
-schéma existant), `clé = hex(BLAKE3(greffon@version ‖ empreinte du paquet ‖ options ‖
-source))[:32]` ; plus un document texte ordinaire `.renders/index.json` (source normalisée → clé,
-description). Aucun champ nouveau dans l'index, aucune règle de garde nouvelle : la validation se
-fait **à l'interprétation** (lecture stricte et bornée de `index.json`, SVG réassaini) ; c'est le
+schéma existant), `clé = hex(BLAKE3(greffon@version ‖ empreinte du paquet ‖ options ‖ empreinte des
+polices du projet ‖ source))[:32]` (un changement de police invalide le rendu) ; plus un document
+texte ordinaire `.renders/index.jsonl` en **JSON Lines** : une entrée autonome par ligne
+(`{"source_hash":…, "key":…, "lang":…, "description":…}`), terminée par `\n`, ≤ 4 Kio par ligne,
+≤ 10 000 lignes ; une ligne invalide est **ignorée et comptée**, jamais bloquante (deux personnes
+qui ajoutent une ligne en même temps produisent un texte fusionné toujours lisible, ce qu'un objet
+JSON unique ne garantit pas). Aucun champ nouveau dans l'index, aucune règle de garde nouvelle : la
+validation se fait **à l'interprétation** (lecture ligne à ligne bornée, SVG réassaini) ; c'est le
 choix demandé, justifié par « ne pas toucher au protocole accepté pour une vue ». Un paquet Typst
 fourni, `inkwell-diagrams` (copié dans `.typstdeps/` à la première insertion), contient la règle
-`show raw.where(lang: "dot")` (et `d2`…) qui lit `index.json` et appelle `image(..., alt: …)`. Même
+`show raw.where(lang: "dot")` (et `d2`…) qui lit `index.jsonl` et appelle `image(..., alt: …)`. Même
 chemin pour le Markdown (`cmarker` passe les blocs de code à Typst) et l'export HTML. X-8 tient : le
 greffon n'entre pas dans la compilation, son **résultat** est un fichier du projet.
 
-**5. Qui publie.** Publier = écrire dans le projet (blob, nœud, `index.json`), donc une
+**5. Qui publie.** Publier = écrire dans le projet (blob, nœud, `index.jsonl`), donc une
 modification attribuée. Permis : à l'extension intégrée « Diagrammes » quand la personne vient de
 modifier la source du bloc (« via Diagrammes ») ; à un greffon **installé par la personne** qui a
 reçu `document.create` ; jamais à un greffon de projet sans accord (§15.10 : rendu local seulement).
 Une personne sans le greffon voit le dernier rendu partagé, dans l'aperçu et dans le PDF (ND-7).
 Deux rendus concurrents d'une même clé : homonymes résolus par l'index (ADR 0023), le même partout.
-Rendus orphelins (clé absente d'`index.json`) : retirés par la commande « Nettoyer les rendus »
+Rendus orphelins (clé absente d'`index.jsonl`) : retirés par la commande « Nettoyer les rendus »
 (écrivain ; en mode `approval`, par décision d'admin) ; leur taille compte dans le quota N10. Un
 rendu qui ne correspond pas à sa source se voit chez qui a le greffon (« Le dessin partagé ne
 correspond pas à sa source — Redessiner ») ; même risque qu'une image trompeuse, attribuée.
@@ -2110,7 +2431,7 @@ autres personnes (ce que le greffon propose passe par les mêmes règles).
 |---|---|---|
 | Temps jusqu'au premier greffon (de `new` au bouton qui marche dans inkwell) | ≤ 5 min par langage | tâche chronométrée par trois personnes qui découvrent inkwell, comme les tests en personne de l'interface ([ux-principles](../ux-principles.md)) |
 | Lignes des exemples | tableau ci-dessus | compteur en CI sur `examples/` |
-| Surface de l'API | ≤ 60 fonctions, ≤ 40 types | `mise run api:surface` |
+| Surface de l’API | plafonds par étape (DX-5 : 1.0 ≤ 60 fonctions et ≤ 45 types) | `mise run api:surface` |
 | Erreurs actionnables | 100 % nomment champ ou capacité | test sur le catalogue d'erreurs du WIT |
 | Documentation | 100 % des éléments documentés et un exemple par point d'extension | `mise run api:doc` |
 
@@ -2201,9 +2522,16 @@ libellés suivent le glossaire.
   arrivent par `didOpen`/`didChange` incrémentaux **depuis la webview** (le texte Automerge, pas le
   disque) ; les autres sont lus sur la projection. Conversion des positions UTF-16 du LSP ↔ indices
   Automerge testée par propriété.
-- **LSP-3** Versions : chaque `didChange` porte la version du document ; chaque requête porte la
-  version vue ; **toute réponse dont la version est dépassée par une modification locale ou d'un
-  pair est abandonnée** sans affichage. Budget : p95 ≤ 100 ms (complétion, signature, survol),
+- **LSP-3** Versions : chaque `didChange` porte la version du document. Comme toutes les réponses LSP
+  ne portent pas de version, le client garde pour chaque requête `(id, nodeId, révision, génération
+  du serveur)` et l'**instantané de conversion** UTF-16 ↔ Automerge de cette révision ; **toute
+  réponse dont la révision est dépassée par une modification locale ou d'un pair est abandonnée**
+  sans affichage. Un diagnostic de compilation porte la révision projetée qu'il a compilée : il n'est
+  ancré que si elle est encore courante, sinon il est montré **périmé** (grisé, inactif) jusqu'à la
+  compilation suivante. En mode manuel, les documents fermés non enregistrés sont envoyés à tinymist
+  par `didOpen` (texte Automerge) pour que ses diagnostics ne portent pas sur une projection
+  ancienne. Les actions de code (renommage, corrections) s'appliquent comme **une proposition
+  multi-fichiers atomique**, sous la garde et selon le rôle. Budget : p95 ≤ 100 ms (complétion, signature, survol),
   sinon abandon.
 - **LSP-4** Survol et signature : docstrings `///` (syntaxe Typst, conventions de tinymist) des
   fonctions **de la personne et de sa charte** ; rendus en texte et listes sûrs, jamais en HTML brut
@@ -2213,9 +2541,12 @@ libellés suivent le glossaire.
 
 **Erreurs comme un IDE (N28).**
 
-- **ER-1** Un seul onglet « Problèmes à corriger » dans le tiroir : diagnostics de compilation
-  (`typst`), du service de langage, du tableur (CSV), de Markdown (`cmarker`) et du CSS des modèles
-  (TM-6), groupés par fichier ; compteur dans la barre d'en-tête.
+- **ER-1** Un **seul service de diagnostics** (source, gravité, cible ancrée, révision, action) pour
+  la compilation (`typst`), le service de langage, le tableur (CSV), Markdown (`cmarker`) et le CSS
+  des modèles (TM-6) ; les suggestions de relecture n'entrent pas dans le compte des erreurs.
+  Surfaces (`coherence.md`, C13) : un **compteur dans la barre d'état** (un seul, nulle part
+  ailleurs) ; clic = problème suivant (comme F8) ; « Tous les problèmes » ouvre la liste groupée par
+  fichier dans la vue **Relire** du tiroir.
 - **ER-2** Chaque diagnostic est ancré par un curseur Automerge (il suit les modifications
   concurrentes jusqu'à l'actualisation) ; clic, ou **F8 / Maj+F8**, ouvre le bon fichier (MF-10),
   place le curseur et sélectionne la plage, prête à corriger.
@@ -2241,7 +2572,10 @@ connexion à Zotero dans le cœur.
 **équivalent** : la « Vue lecture », produite par l'export HTML de Typst (≥ 0.15, MathML compris)
 du même projet, **assaini** par Go (liste blanche, aucun script, aucune ressource distante),
 affiché dans un `iframe` `sandbox` **sans** `allow-scripts`, navigable au clavier et au lecteur
-d'écran, synchronisé avec la page courante ; chaque diagramme y porte sa `description`
+d'écran, synchronisé avec la page courante. L'export HTML de Typst 0.15 est **expérimental**
+(`--features html`, épinglé avec la version du manifeste) et peut échouer : **repli garanti** dans le
+même cadre, plan des titres (`typst query`) et texte du document source, pour que le parcours au
+lecteur d'écran ne soit jamais vide ; chaque diagramme y porte sa `description`
 (§15.14). Preuve : parcours clavier et lecteur d'écran (Orca) dans `ux-walkthrough`, en plus d'axe.
 
 ### 15.18 Intelligence artificielle de premier rang (N31)
@@ -2274,9 +2608,25 @@ journal signé : espace `ai/` → **delta du protocole PD-1** (§15.19) ; avant 
 la politique **par appareil** existe, et l'IA est **désactivée par défaut dans tout projet
 partagé**.
 
-**Consentement à l'envoi** (sécurité, *à auditer*). Avant le premier envoi d'une session :
-« voici exactement le texte qui part, et vers où » (plage, fournisseur, classe) ; le texte
-d'**autres personnes** y est marqué comme tel ; rien ne part sans geste.
+**Consentement à l'envoi, continu** (sécurité, *à auditer*). Un aperçu « voici exactement le texte
+qui part, et vers où » (plages, fichiers, fournisseur, classe, texte d'**autres personnes** marqué)
+est montré **au premier envoi d'une session et à chaque envoi qui introduit** une provenance, un
+fichier ou une destination non encore montrés dans cette session (y compris par un outil, un
+extrait de l'index ou un changement de profil) ; un changement de politique ou de profil pendant
+un flux l'**interrompt**. Un indicateur permanent « IA : envoi vers X » est dans la barre d'en-tête
+tant qu'une session est ouverte. Rien ne part sans geste.
+
+**Consommation visible et bornée** (N31). Chaque profil déclare ses limites : jetons par réponse,
+par session et par jour, tours et appels d'outils par tour, délai ; chaque réponse affiche les
+jetons comptés par le fournisseur quand il les rend, sinon une **estimation marquée comme telle**,
+la latence, et le coût seulement si le profil le connaît (sinon « coût inconnu ») ; paramètres
+(modèle, température, longueur) réglables dans le profil ; annulation à tout moment ; un tableau
+par session et par projet dans la vue Ressources (§11.1). Les traces locales n'enregistrent pas le
+texte si la personne le refuse.
+
+**Contamination monotone.** Dès qu'une session a vu du texte `autrui` ou `externe` (y compris un
+résultat d'outil ou un extrait de l'index), elle le reste jusqu'à sa fin : aucun résumé ni « nouvelle
+question » ne rend les outils retirés (IA-2).
 
 **Éditer = proposer.** Toute sortie qui touche un document est une **proposition** (§15.5) : diff
 lisible par morceau, « Accepter / Refuser / Tout accepter », appliquée en **une** modification
@@ -2310,19 +2660,51 @@ ressources, prompts, outils, élicitation ; échantillonnage, racines et journal
 on ne s'y appuie pas) :
 
 - **MCP-1** Par défaut, `inkwell mcp` (stdio, lancé par le client) relaie vers l'instance en cours
-  par une socket Unix `0600` dans le dossier d'exécution de la personne : **aucun port**.
+  par une socket Unix `0600` dans le dossier d'exécution de la personne (Linux, macOS) ou un tube
+  nommé à ACL de la personne seule (Windows) : **aucun port**.
 - **MCP-2** En option, désactivé par défaut : Streamable HTTP sur `127.0.0.1`, port éphémère,
   jeton comparé en temps constant, jamais journalisé, `Origin` validé (exigence de la spec MCP),
   aucun jeton tiers accepté ni relayé.
 - **MCP-3** Portées : `lecture`, `compilation`, `proposition` (vers la file de revue humaine,
   « via <nom du client> ») ; jamais d'écriture directe, de suppression, de partage, de réglage, de
-  politique ; consentement **par client** à la première connexion ; politique du projet appliquée
-  avant tout (`ia.mcp: off | lecture | proposition`).
+  politique. **Identité du client** : chaque client reçoit, à son autorisation, un **jeton de
+  lancement** propre à (client, projet), écrit dans un fichier `0600` qu'il passe à `inkwell mcp`,
+  révocable et expirant ; le nom annoncé par le client n'est **pas** une preuve, et l'écran le dit
+  (« se présente comme Claude Desktop ») ; un autre programme de la même session qui vole ce jeton
+  reste hors périmètre (§9.2). Avant PD-1, MCP est **désactivé dans tout projet partagé** et réglé
+  par la personne dans ses projets seule.
 - **MCP-4** Go est un **relais** : chaque outil est une commande du registre exécutée dans la
   webview (CRDT) ; sans fenêtre, lecture seule de la projection, signalée.
 - **MCP-5** Dépendance : `modelcontextprotocol/go-sdk` (≥ v1.7.0, qui prend en charge 2026-07-28),
   épinglé, derrière `internal/mcpserver` ; son gestionnaire Streamable HTTP reste **à confirmer**
   avant MCP-2.
+
+**Recherche pour l'IA, index local** (N33 ; *expérimentation*, porte P-IDX ; `AD-89`). D'après
+l'étude `ai.md` §12 :
+
+- **RG-1** Service dérivé `internal/index` : la webview envoie un **instantané** `(nodeId, révision,
+  texte ou plage, provenance par intervalles)` par le Stream `ai` (codec borné, fuzzé) après 800 ms
+  d'inactivité ; Go découpe selon la structure (titres, étiquettes, fonctions par les symboles de
+  tinymist ; tableaux par groupes de lignes), ne réindexe que les extraits changés ; jamais Automerge
+  ni la projection seule.
+- **RG-2** Lexical d'abord (R0) : aucun vecteur, aucun téléchargement, aucune sortie réseau ;
+  moteur choisi par la mesure (PF-10) entre SQLite FTS5 en Go pur, bleve et un index inversé interne,
+  sur les six cibles. Vecteurs et reclassement (R1, R2) seulement si un banc de rappel en français le
+  justifie, et alors **envoi O4** sous politique et aperçu (modèle local fourni par la personne,
+  jamais embarqué ni téléchargé).
+- **RG-3** Index **par appareil et par projet**, hors du dossier du projet, hors protocole, jamais
+  synchronisé, schéma versionné, reconstructible, effacé à la fermeture ou au retrait ; quota de
+  200 Mio par projet, bornes par document ; chiffré comme le projet (§6.10) ; arrêté quand le projet
+  est verrouillé.
+- **RG-4** Chaque extrait porte sa provenance (`soi`, `autrui`, `externe` ; mixte = `autrui`) : sans
+  elle la recherche contournerait IA-2. Les fichiers `ai: never` et non synchronisés (IG-6) sont
+  exclus **à l'indexation et à chaque requête** ; la portée de la session (projet ouvert, fichiers
+  choisis) est appliquée à chaque requête ; le classement ne confère aucune confiance.
+- **RG-5** Cinq commandes du registre (classe `lire`) : `index.plan`, `index.chercher`,
+  `index.lire_plage`, `index.references`, `index.fichiers` ; mêmes pour la palette, les greffons,
+  l'IA, MCP ; bornes : k ≤ 20, ≤ 8 Kio par résultat, ≤ 32 Kio par tour ; citations par **nœud et
+  révision** (`inkwell://projet/<id>/n/<nodeId>#L12-L18@rev`), qui survivent aux renommages ; un clic
+  ouvre le passage (même navigation que les erreurs, ER-2) ; périmé si la révision a changé, et dit.
 
 **Agents externes et autres interfaces** (étude §9–§11 ; catalogue de 17 interfaces) :
 
@@ -2334,12 +2716,12 @@ on ne s'y appuie pas) :
   serveur MCP** de session (jeton propre à la session) : il lit et **propose** par nos outils ; un
   diff ACP (`oldText`, `newText`) devient une proposition ancrée, périmée si le texte a changé ;
   `execute`, `fetch`, suppression et déplacement refusés ; « toujours autoriser » ne vaut que pour
-  la session. Une session ACP est une extension intégrée virtuelle `ext/acp:<agent>` (lecture,
-  proposition, `compile.read`), soumise à la règle des deux.
-- **UTCP** : **pas de client** (ses gabarits d'appel sont des ordres exécutables, `cli`, `tcp`,
-  `udp` compris) ; **MCP reste l'interface unique** ; un manuel UTCP **exporté** depuis le
-  registre (fichier `0600`, mêmes portées) est une option de la dernière étape, désactivée par
-  défaut, avec un test de non-divergence.
+  la session. Les services d'inkwell qu'il utilise sont ceux d'une extension intégrée virtuelle
+  `ext/acp:<agent>` (lecture, proposition, `compile.read`), soumise à la règle des deux **pour ce qui
+  passe par inkwell** ; l'agent lui-même garde ses propres outils et son propre réseau : **aucune**
+  garantie des greffons ne lui est attribuée, l'écran le dit, et sans bac à sable prouvé sur la cible
+  (§9.11) l'option est indisponible.
+- **UTCP** : écarté (pas de client, pas de manuel exporté) ; réexaminé si un hôte majeur l’adopte (§15.12).
 - Écartés ou différés (raisons dans l'étude §10) : A2A, ACP d'IBM, WebMCP, `lsp-ai`, temps réel
   dans le nuage ; MCP Apps (`iframe`, réseau par l'hôte) différé ; client MCP sortant (outils de
   l'entreprise) en dernière étape, réduit par la règle des deux.
@@ -2347,7 +2729,7 @@ on ne s'y appuie pas) :
   consigne que si un admin les a signées (décision au journal, PD-1) ; sinon texte `autrui`.
 
 **Feuille de route** (étude, §1 et §11) : fournisseurs, propositions, commandes « reformuler, corriger » → politique,
-marques, panneau de discussion → MCP stdio → MCP HTTP, client ACP et manuel UTCP en option → discussion « application », client MCP sortant, voix locale.
+marques, panneau de discussion → MCP stdio → MCP HTTP et client ACP en option → discussion « application », client MCP sortant, voix locale.
 
 ### 15.19 Ce que l'extensibilité demande au protocole (PD-*)
 
@@ -2356,56 +2738,115 @@ ici pour une **mineure 2.1**, à écrire et à faire accepter par la boucle du p
 (`docs/protocol/`) ; cette spécification ne la modifie pas. Tout ce qui en dépend est bloqué
 d'ici là et le dit.
 
-| # | Delta proposé | Contenu exact demandé | Vecteurs | Bloque |
-|---|---|---|---|---|
-| PD-1 | Espaces de décisions `plugin/` et `ai/` | (a) **règle de tolérance** de `policy_op_v1` pour un espace inconnu : l'entrée est **conservée et ignorée** par le pli, l'op reste acceptée, sans sanction (le pli reste identique entre 2.0 et 2.1 puisqu'une entrée ignorée n'a aucun effet) ; (b) inscription au §20.5 de `plugin/<id>` (clé ≤ 160 o, `id` en notation inverse de domaine) et `ai/policy`, `ai/profile/<nom>`, `ai/mcp` ; (c) schémas des valeurs (≤ 4096 o, CBOR à clés fixes) ; (d) émission seulement après la décision `format ≥ 1` ; (e) ligne au §16 du protocole | `policy.json#unknown-namespace`, `#plugin-entry`, `#ai-policy` | N23 (§15.10), politique IA de projet (§15.18) |
-| PD-2 | Domaines de signature | inscrire `inkwell/plugin/v1` (signature des paquets de greffons, vérifiée par chaque pair pour un greffon de projet) et `inkwell/backup-head/v1` (têtes de sauvegarde, jamais échangées entre pairs, inscrites pour éviter toute collision) au §20.4 | `sig.json#plugin-package`, `#backup-head` | N23, §6.7 |
+**PD-1 — Espaces de décisions `plugin/`, `ai/`, `ignore/`** (bloque N23, la politique IA de
+projet, la règle de projet de N34).
 
-**Retirés de la révision 1** (plus besoin de delta) : la carte `renders` dans l'index (les rendus
-sont des fichiers ordinaires, §15.14) ; un TLV `PLUGIN_API` dans le HELLO (PV-6 ne promet plus de
-vérification préalable).
+1. **Encodage.** `policy_op_v1.entries` est `(key str16, value str16)` en UTF-8 (protocole §4.4) :
+   une valeur nouvelle est la **chaîne base64url sans remplissage** d'un objet CBOR à émission
+   déterministe (RFC 8949 §4.2.1), ≤ 4096 caractères ; clé ≤ 160 octets.
+2. **Schémas** (champ `v` = version de l'objet ; champ inconnu ignoré sauf marqué `!`) :
+   - `plugin/<id>` (`id` en notation inverse de domaine, `[a-z0-9.-]{3,96}`) :
+     `{v:1, version:"1.2.3", hash:bstr32 (BLAKE3 du contenu signé, §15.20 ABI-7), api:"^1.0",
+     caps:[str], deps:[{id, range, hash}], state:"active"|"retired"}` ;
+   - `ai/policy` : `{v:1, mode:"off"|"local"|"org"|"libre", mcp:"off"|"read"|"propose"}` ;
+     `ai/profile/<nom>` : `{v:1, url, ca_sha256?:bstr32, class:"local"|"org"}` ;
+     `ai/rules` : `{v:1, hash:bstr32}` (règles d'écriture signées, §15.18) ;
+   - `ignore/project` : `{v:1, patterns:[str] (≤ 256, ≤ 256 octets chacun)}`.
+3. **Émission.** Jamais avant une décision `format ≥ 1` debout ; **jamais mêlée** à une entrée
+   d'un espace de la 2.0 dans la même op (une op = un seul espace nouveau).
+4. **Réception (règle de pli).** Un appareil 2.1 **conserve et ignore** toute entrée `plugin/`,
+   `ai/`, `ignore/` qui n'a pas `format ≥ 1` debout dans son passé causal au moment de son
+   application ; elle n'a d'effet qu'à partir de là. Tout appareil conserve et ignore un espace
+   **inconnu** (futures mineures), sans sanction.
+5. **Ce que la 2.1 ne fait pas** : elle ne rend pas tolérants les appareils 2.0 déjà publiés, qui
+   **refusent** une op contenant un espace inconnu. La transition est celle du protocole §1.4.4 :
+   après `format ≥ 1`, un appareil 2.0 passe le projet en **lecture seule** avec un message, au lieu
+   de calculer un autre pli. L'admin qui émet `format ≥ 1` voit quels membres devront se mettre à
+   jour (d'après les erreurs de synchronisation constatées, sans promesse).
+6. **Vecteurs** : `policy.json#plugin-entry`, `#plugin-entry-before-format` (ignorée par tous),
+   `#mixed-op-refused-by-emitter`, `#format-arrives-after-entry` (deux ordres d'arrivée),
+   `#unknown-namespace-kept`, `#ai-policy`, `#ignore-project`, et le cas « reconnexion avec
+   générations différentes » ; ligne au §16 du protocole.
 
-### 15.20 ABI noyau des greffons (normatif dès maintenant)
+**PD-2 — retiré.** Les signatures des paquets de greffons, des têtes de sauvegarde et des exports
+ne sont **pas** des objets du protocole : elles utilisent des préfixes **externes**
+`"inkwell-ext:<objet>:<version>\0"` (« inkwell-ext: » ne peut pas commencer un message signé du
+protocole, dont les domaines sont `inkwell/<domaine>/v1\0`, protocole §3.3) ; aucune inscription
+au §20.4 n'est demandée.
 
-*[cible ; ADR 0039]* Le reste (interfaces de chaque point, schéma complet du manifeste,
-registres) va dans `docs/plugin-api/` (§15.16) ; ce noyau est fixé ici pour qu'un greffon minimal
-et l'hôte puissent être écrits indépendamment.
+**PD-3 — reporté** : clé X25519 de chiffrement d'appareil dans les ops de membres (nouvelle
+version d'op), pour l'export chiffré « pour les personnes du projet » et un dossier partagé dans un
+nuage commun (§6.10 EN-8).
+
+**Retirés de la révision 1** : carte `renders` dans l'index (les rendus sont des fichiers
+ordinaires, §15.14) ; TLV `PLUGIN_API` dans le HELLO (PV-6).
+
+### 15.20 ABI noyau des greffons (normatif, expérimentation jusqu'à P-PLUG-PROTO)
+
+*[expérimentation ; ADR 0039]* Ce noyau suffit pour qu'un greffon minimal et l'hôte soient écrits
+indépendamment ; le reste va dans `docs/plugin-api/` (§15.16). Il est accepté quand **P-PLUG-PROTO**
+fournit les modules et vecteurs d'ABI-8, construits par les commandes épinglées d'ABI-9.
 
 - **ABI-1 Module.** WebAssembly 2.0 cœur, `wasm32`, **réacteur** : exporte `_initialize` (appelé
-  une fois par l'hôte, s'il existe) et jamais `_start` ; une seule mémoire exportée `memory`,
-  maximum déclaré ≤ 256 Mio (refus sinon, avant instanciation).
-- **ABI-2 Exports** : `inkwell_abi_version() -> i32` (rend `1`) ;
-  `inkwell_alloc(len: i32) -> i32` (rend un pointeur aligné sur 8, ou 0) ;
-  `inkwell_free(ptr: i32, len: i32)` ;
-  `inkwell_call(fn_ptr, fn_len, in_ptr, in_len: i32) -> i64` : `fn` est le nom UTF-8 de la
-  fonction WIT (`commands.run`, `renderers.render`…), `in` sa charge CBOR ; le résultat code
-  `(ptr << 32) | len` d'une **réponse** CBOR que l'hôte lit puis libère par `inkwell_free`. Le
-  greffon ne conserve aucun pointeur de l'hôte après le retour.
-- **ABI-3 Imports** (module `inkwell`) : `host_call(fn_ptr, fn_len, in_ptr, in_len, out_ptr_ptr,
-  out_len_ptr) -> i32` (même convention, la sortie est allouée par l'hôte **dans** la mémoire du
-  greffon via `inkwell_alloc`) ; `log(niveau, ptr, len)` ; `cancelled() -> i32`. Fonctions de
-  `wasi_snapshot_preview1` **tolérées** (pour les chaînes d'outils) : `fd_write` sur 1 et 2
-  (redirigé vers le journal du greffon), `random_get` (graine fournie par l'hôte, enregistrée en
-  mode débogage), `clock_time_get` (horloge monotone **seulement** si `time.read` est accordé,
-  sinon 0), `proc_exit`, `environ_*` et `args_*` (vides), `fd_close`/`fd_fdstat_get` sur 0–2 ;
-  toute autre importation → refus à l'installation.
-- **ABI-4 Réponse** : CBOR `{ "ok": <valeur> }` ou `{ "err": {code, message, field?, capability?,
-  hint} }` (DX-3) ; codes du registre ; émission en encodage déterministe (RFC 8949 §4.2.1) ;
-  décodage strict des deux côtés (clés en double, étiquettes, flottants non canoniques refusés),
-  tailles bornées (§16 du futur `docs/plugin-api/`, 4 Mio par défaut).
-- **ABI-5 Négociation** : `host.features()` (premier appel conseillé) rend les fonctions
-  disponibles et les capacités accordées ; une fonction absente rend `unimplemented`.
-- **ABI-6 Annulation** : l'hôte interrompt l'exécution (contexte wazero) ; un greffon long appelle
-  `cancelled()` entre deux étapes ; une réponse après annulation est jetée (IPC-5).
-- **ABI-7 Paquet signé** : `.inkwell-plugin` = zip **sans compression variable** (entrées
-  `STORE` ou `DEFLATE` niveau fixé, triées, dates nulles) ; octets signés = `"inkwell/plugin/v1\0"
-  ‖ BLAKE3(manifeste canonique) ‖ BLAKE3(module) ‖ BLAKE3(liste triée des autres fichiers et de
-  leurs BLAKE3)` ; signature Ed25519 dans `signature.cbor` (`{clé, sig}`), clé validée comme au §3.2
-  du protocole.
-- **ABI-8 Vecteurs** (dans `docs/plugin-api/vectors/`, dès la première version) : un module
-  « bonjour » Rust et Go (sources, octets, hachage), un appel `commands.run` et sa réponse, une
-  proposition annulable (entrée, sortie, effet attendu), un paquet signé et ses octets signés, une
-  importation refusée, une réponse mal formée refusée.
+  une fois, s'il existe), jamais `_start` ; une mémoire exportée `memory`. Le maximum **déclaré**
+  par le module est ignoré : l'hôte impose le sien (`WithMemoryLimitPages`, 64 Mio par défaut,
+  256 Mio au plus, §9.10 H-7).
+- **ABI-2 Exports** : `inkwell_abi_version() -> i32` (rend `1`) ; `inkwell_alloc(len i32) -> i32`
+  (pointeur aligné sur 8, ou 0) ; `inkwell_free(ptr, len i32)` ; `inkwell_call(fn_ptr, fn_len,
+  in_ptr, in_len i32) -> i64`. Avant `inkwell_call`, l'hôte obtient deux zones par `inkwell_alloc`
+  et y copie le nom UTF-8 de la fonction WIT et la charge CBOR ; elles appartiennent ensuite au
+  greffon, qui les libère. Le résultat code `(ptr << 32) | len` d'une **réponse** CBOR que l'hôte
+  copie puis libère par `inkwell_free`. Toute zone est vérifiée contre `memory.size()` avant
+  lecture ou écriture (débordement → piège, appel en échec).
+- **ABI-3 Fonctions de l'hôte** (module `inkwell`), **sans réentrance** : l'hôte n'appelle
+  **jamais** une fonction du greffon pendant qu'une de ses fonctions est en cours.
+  `host_call(fn_ptr, fn_len, in_ptr, in_len) -> i64` lit l'entrée dans la mémoire du greffon,
+  exécute, garde la réponse côté hôte et rend `(poignée << 32) | longueur` (ou un code négatif) ;
+  `host_read(poignée, dst_ptr, dst_len) -> i32` copie la réponse dans une zone que le greffon a
+  allouée lui-même, puis la poignée est libérée ; `log(niveau, ptr, len)` ; `cancelled() -> i32`.
+  Bornes : entrée d'un `host_call` ≤ 1 Mio ; réponse ≤ 1 Mio, sauf `document.read` ≤ 4 Mio.
+- **ABI-4 WASI toléré**, liste **dérivée des importations réelles** des modules « bonjour » d'ABI-8
+  (Go 1.27 : `runtime/os_wasip1.go`, `runtime/lock_wasip1.go`, `syscall/fs_wasip1.go` ; Rust
+  `wasm32-wasip1`), chaque fonction **neutralisée** :
+
+  | Fonction `wasi_snapshot_preview1` | Comportement de l'hôte |
+  |---|---|
+  | `fd_write` (1, 2) | vers le journal du greffon, borné ; autre descripteur → `EBADF` |
+  | `fd_read` (0) | fin de fichier ; autre → `EBADF` |
+  | `fd_close`, `fd_fdstat_get`, `fd_seek` | 0–2 : succès neutre ; autre → `EBADF` |
+  | `fd_prestat_get`, `fd_prestat_dir_name` | `EBADF` (aucun dossier préouvert : le parcours d'`os` à l'initialisation s'arrête aussitôt) |
+  | `path_open` et toute fonction de chemin | `ENOTCAPABLE` |
+  | `clock_time_get`, `clock_res_get` | horloge monotone de l'hôte **quantifiée à 100 ms** si `time.read` n'est pas accordé (jamais 0, qui bloquerait `time.Sleep` et l'ordonnanceur) ; horloge exacte si accordé ; enregistrée en mode débogage |
+  | `poll_oneoff` | abonnements d'horloge : attente bornée par le délai restant de l'appel ; abonnements de descripteur : `EBADF` |
+  | `sched_yield` | sans effet |
+  | `random_get` | aléa de l'hôte (enregistré en mode débogage) |
+  | `args_get`, `args_sizes_get`, `environ_get`, `environ_sizes_get` | vides |
+  | `proc_exit` | fin de l'appel en échec, instance recréée |
+  | toute autre importation | **refus à l'installation**, avec le nom de l'importation |
+
+- **ABI-5 Réponse** : CBOR `{ "ok": <valeur> }` ou `{ "err": {code, message, field?, capability?,
+  hint} }` (DX-3) ; émission en encodage déterministe (RFC 8949 §4.2.1) ; décodage strict des deux
+  côtés (clés en double, étiquettes non prévues, flottants non canoniques refusés).
+- **ABI-6 Négociation** : `host.features()` rend les fonctions disponibles et les capacités
+  accordées ; une fonction absente rend `unimplemented`. **Annulation** : l'hôte interrompt
+  l'exécution ; un greffon long appelle `cancelled()` ; une réponse après annulation est jetée.
+- **ABI-7 Paquet signé.** `.inkwell-plugin` = zip quelconque (la compression n'entre pas dans la
+  signature). Chemins : UTF-8 NFC, séparateur `/`, ni `..`, ni chemin absolu, ni lien, ni doublon,
+  ni collision après pliage de casse ; ≤ 1 000 fichiers ; ≤ 16 Mio décompressés. Contenu signé =
+  CBOR déterministe `{v:1, manifest: BLAKE3(manifeste), files: [[chemin, BLAKE3(contenu)], …]}`
+  avec `files` triée par octets du chemin, **excluant** `signature.cbor` ; le manifeste est signé
+  **tel quel** (ses octets JSON), pas re-sérialisé. Message signé = `"inkwell-ext:plugin-package:1\0"
+  ‖ BLAKE3(contenu signé)` ; `signature.cbor` = `{v:1, key:bstr32, sig:bstr64}`, clé validée comme au
+  §3.2 du protocole.
+- **ABI-8 Vecteurs** (`docs/plugin-api/vectors/`, produits par P-PLUG-PROTO) : modules « bonjour »
+  Rust et Go (sources, commandes, octets, hachage, **table des importations liées**), un appel
+  `commands.run` et sa réponse, une proposition annulable, un paquet signé avec son contenu signé,
+  une importation refusée, une réponse mal formée refusée, un `host_call` au-delà de la borne.
+- **ABI-9 Chaînes d'outils épinglées.** Rust : version épinglée dans `rust-toolchain.toml`, cible
+  `wasm32-wasip1`, `crate-type = ["cdylib"]`. Go : version de `go.mod`, `GOOS=wasip1 GOARCH=wasm go
+  build -buildmode=c-shared` avec exports `//go:wasmexport` (Go ≥ 1.24). TinyGo : **API 1.1**, avec sa
+  propre table d'importations (ordonnanceur `asyncify`, `poll_oneoff`) établie par mesure, pas avant.
+  Test du kit : « module Go minimal accepté ; `fmt.Println` et `time.Sleep(0)` ne bloquent pas ».
 
 ### 15.21 Étapes de livraison de l'API
 
@@ -2413,7 +2854,7 @@ Livrer progressivement, sans dépendre des étapes suivantes (M-3, M5 des revues
 
 | Étape | Contenu | Preuves avant l'étape suivante |
 |---|---|---|
-| **API 1.0** | registre, `commands`, `menus`, `actions`, `panels` (`ui.view`), `status`, `file-types`, `viewers` (autre vue seulement pour un type du cœur), `tokens`, `decorations` (marques seulement), `transforms` (par commande), `renderers` (`wasm`), `events`, `themes`, `settings`, `storage` ; kits Rust et Go ; extensions intégrées portées dessus ; Tâches et Graphviz en WebAssembly | P-PLUG-BENCH, P-PLUG-PROTO, P-EXT-1…7, `PLUG-COMPROMISED-*`, revue `security-auditor` |
+| **API 1.0** | registre, `commands`, `menus`, `actions`, `panels` (`ui.view`), `status`, `file-types`, `viewers` (autre vue seulement pour un type du cœur), `tokens`, `decorations` (marques seulement), `transforms` (par commande), `renderers` (`wasm`), `events`, `themes`, `settings`, `storage` ; kits Rust et Go ; extensions intégrées portées dessus ; Graphviz en WebAssembly (Tâches en TypeScript) | P-PLUG-BENCH, P-PLUG-PROTO, P-EXT-1…7, `PLUG-COMPROMISED-*`, revue `security-auditor` |
 | **API 1.1** | `exporters`, `importers`, `windows`, `gutters`, `inline-widgets`, `hover`, `completion`, `ai-tools` ; macros ; kits TypeScript et AssemblyScript | mêmes portes sur les nouveaux points |
 | **API 1.2** | `storage-backend`, `mirrors`, `language-server`, points déclarés par un greffon ; greffons de projet si PD-1 est acceptée | P-BYZ des greffons de projet ; fuzz du dorsal |
 
@@ -2440,7 +2881,7 @@ proposition de bout en bout → Graphviz jusqu'au PDF → reste.
 | aucune règle de couches dans le frontend | Biome `noRestrictedImports` | `AD-30` |
 | statuts d'ADR incohérents (index, 0021–0029 proposées mais livrées) | acceptations | `AD-07` |
 | `files_test.go:713` ignoré (suspension et blobs) | test actif | `AD-36` |
-| CI sous Linux seulement | selon la décision de plates-formes | `AD-18` |
+| CI sous Linux seulement | CI native sur six cibles (N35) | `AD-18`, `AD-94` |
 | un seul document : clic dans la liste des fichiers sans effet (`App.svelte:197`), projection et synchronisation externe sur `main.typ` seulement (`workspace.svelte.ts:42,270–310`), aucun index matérialisé côté TypeScript | modèle multi-fichiers §6.6 | `AD-46` à `AD-50` |
 | aperçu compilé sur un principal fixé au démarrage (`preview.go:85,179`) | principal suivi par le `Tree` (MF-8) | `AD-48` |
 | deux langages colorés (Typst, Markdown), aucun registre de types | registre des contributions, grammaires à la demande | `AD-51`, `AD-54` |
@@ -2452,6 +2893,14 @@ proposition de bout en bout → Graphviz jusqu'au PDF → reste.
 | aucune bibliothèque de modèles (N27) | §6.8 | `AD-78` |
 | aucune IA, aucun serveur MCP (N31) | §15.18 | `AD-82` |
 | clic dans la liste des fichiers sans effet (G-0) | chemin minimal G-0a puis G-0b, G-0c (§6.6) | `AD-77` |
+| aucune vue des ressources ni limite réglable (N32) | §11.1, `internal/tasks` | `AD-88` |
+| aucun index de recherche pour l'IA (N33) | §15.18 RG-1 à RG-5 | `AD-89` |
+| aucun fichier non synchronisé (N34) | §6.9 | `AD-90` |
+| enfermement Linux seulement ; `dir_other.go` et `limit_other.go` sans garantie (N35) | §9.11, `internal/sandbox` | `AD-18`, `AD-94` |
+| projet en clair sur le disque (N37) | §6.10 | `AD-91` |
+| budgets et bancs partiels (N38) | §12.5 | `AD-93` |
+| versions dans `meta.versions` du document racine seulement, aucune vue « voyager dans le temps », aucune projection Git (N39) | §6.11 | `AD-13`, `AD-92` |
+| variantes de document présentes (`history/graph.ts`), vocabulaire « fusion » dans l'interface (N41) | §6.11 HI-6 | `AD-96` |
 | lecteurs : la conception permet leurs commentaires, la couverture (ADR 0018) les refuse | mécanisme dédié | `AD-14` |
 
 ## 17. Références
@@ -2469,6 +2918,7 @@ proposition de bout en bout → Graphviz jusqu'au PDF → reste.
 - A. Cockburn, *Hexagonal architecture* ; M. Fowler, *Event Sourcing*, *CQRS*.
 - Extensions : [research/plugins.md](research/plugins.md) et ses sources ; wazero <https://pkg.go.dev/github.com/tetratelabs/wazero> ; WASI 0.3 <https://wasi.dev/releases/wasi-p3> ; Wasmtime, débogage <https://docs.wasmtime.dev/examples-debugging-guest.html> ; VS Code, points de contribution et *Workspace Trust* <https://code.visualstudio.com/api/references/contribution-points>, <https://code.visualstudio.com/api/extension-guides/workspace-trust> ; Eclipse `menuContributions` ; JetBrains, groupes d'actions <https://plugins.jetbrains.com/docs/intellij/basic-action-system.html> ; GNOME `GMenu` <https://docs.gtk.org/gio/class.Menu.html> ; Firefox, bouton « Extensions » unifié (Firefox 109) ; Figma <https://www.figma.com/blog/how-we-built-the-figma-plugin-system/> ; macros d'Office bloquées <https://learn.microsoft.com/en-us/deployoffice/security/internet-macros-blocked> ; Jupyter <https://github.com/jupyter/notebook/blob/4.4.1/docs/source/security.rst> ; Google AIP <https://google.aip.dev/193>, <https://google.aip.dev/151> ; Rust API Guidelines <https://rust-lang.github.io/api-guidelines/checklist.html>.
 - Stockage distant : restic (`internal/backend/backend.go`), OpenDAL <https://opendal.apache.org/docs/concepts>, `io/fs`.
+- Révision 3 : [research/encryption.md](research/encryption.md) ; [research/sync-ignore.md](research/sync-ignore.md) ; age (C2SP) <https://github.com/C2SP/C2SP/blob/main/age.md> ; Patchwork (Ink & Switch) <https://www.inkandswitch.com/patchwork/notebook/> ; Seatbelt et `sandbox-exec` (dépréciation, Apple, containerization #737) <https://github.com/apple/containerization/issues/737> ; AppContainer et objets de tâche (Chromium `sandbox/win`) <https://chromium.googlesource.com/chromium/src.git/+/49cea54a/sandbox/win/src/app_container_test.cc> ; go-git v6 alpha et CVE-2026-45022 <https://tracker.debian.org/golang-github-go-git-go-git-v6> ; `unix(7)` (`SO_SNDBUF`) ; Landlock, `LANDLOCK_RESTRICT_SELF_TSYNC` ; seccomp `SECCOMP_FILTER_FLAG_TSYNC` <https://docs.kernel.org/userspace-api/seccomp_filter.html> ; BIP-39 <https://github.com/bitcoin/bips/blob/master/bip-0039.mediawiki>.
 - Diagrammes : mermaid #3886 <https://github.com/mermaid-js/mermaid/issues/3886> ; CVE-2026-41148, CVE-2026-41149 <https://nvd.nist.gov/vuln/detail/CVE-2026-41149> ; diagraph <https://typst.app/universe/package/diagraph> ; D2.js <https://www.npmjs.com/package/@terrastruct/d2>.
 - WCAG 2.2 (SC 1.4.3, 1.4.11, 2.4.13) ; RFC 8701 ; RFC 9413.
 
@@ -2477,7 +2927,7 @@ proposition de bout en bout → Graphviz jusqu'au PDF → reste.
 
 ## Annexe — Brouillon d'ADR 0039 : greffons WebAssembly
 
-> **Statut : proposée**, non acceptée. Elle sera copiée dans `docs/adr/0039-greffons-webassembly.md`
+> **Statut : proposée, expérimentation** (§0.5), non acceptée. Elle sera copiée dans `docs/adr/0039-greffons-webassembly.md`
 > après la revue `security-auditor` (points **SC-*** ci-dessous) et la preuve P-PLUG-BENCH.
 > Étude de référence : [research/plugins.md](research/plugins.md) (ci-après « l'étude ») ;
 > ce brouillon ne reprend pas sa comparaison, il tranche. Les affirmations marquées
@@ -2510,31 +2960,28 @@ clé de l'appareil vit dans le processus Go.
 
 **Option 4, avec l'ABI minimale de l'option 3 et le schéma WIT comme seule description.**
 
-1. **Hôte.** Les greffons tournent dans `inkwell --plugin-host`, l'exécutable lui-même relancé
-   en processus enfant, sous l'enfermement des sidecars défini au §9.10 (H-1 à H-8 : aucun fichier — modules
-   par `memfd` scellé —, seccomp, Landlock, réseau coupé, mémoire par hôte, échec fermé visible),
-   par **compartiments** (H-4 : un hôte par projet ouvert, un pour les greffons globaux sans sortie,
-   un par greffon qui a une sortie réseau ou un dorsal). Canal avec le parent : §7.3 (le parent
-   impose autorité, tailles, générations). Moteur : wazero (compilateur, **cache en mémoire
-   seulement** en v1), un module instancié par greffon, un appel à la fois, réutilisé.
+1. **Hôte.** Chaque greffon actif tourne dans **son propre** processus `inkwell-plugin-host`
+   (binaire statique Go pur, distinct de l'exécutable GTK), créé paresseusement, ≤ 6 actifs, enfermé
+   par le démarrage en deux temps (§9.10 H-0 : Landlock posé puis `execve`, seccomp avec `TSYNC`,
+   vérification, puis `ready`) et par le port `internal/sandbox` sur les autres plates-formes
+   (§9.11). Canal avec le parent : §7.3 (flux d'octets, autorité attachée à la connexion). Moteur :
+   wazero (compilateur, **cache en mémoire seulement**), un appel à la fois.
    *Pourquoi pas l'option 3 telle que l'étude la recommande :* une évasion du moteur (défaut du
-   code natif généré) dans le processus principal donnerait `device.key`, le réseau et
-   `os.Root` ; dans l'enfant, elle ne donne qu'un processus sans fichier, sans réseau et sans
-   secret. *Pourquoi pas l'option 2 :* le code tiers tournerait dans l'origine qui tient le pont
-   (Stream `net`, kind `Sign`) ; jco en navigateur est encore expérimental ; le mode sans fenêtre
+   code natif généré) dans le processus principal donnerait `device.key`, le réseau et `os.Root` ;
+   dans l'hôte, elle ne donne qu'un processus sans fichier, sans réseau, sans secret, avec les droits
+   d'**un** greffon. *Pourquoi pas l'option 2 :* le code tiers tournerait dans l'origine qui tient le
+   pont (Stream `net`, kind `Sign`) ; jco en navigateur est encore expérimental ; le mode sans fenêtre
    (`AD-35`) serait exclu. *Pourquoi pas l'option 1 :* l'API composants de wasmtime-go n'est pas
    publiée (tickets #280, #290, #291 ouverts) et ajoute du cgo.
-2. **ABI.** Octets entrants, octets sortants : le greffon exporte `alloc`, `call(fonction,
-   entrée) → sortie` ; l'hôte offre au plus six fonctions (`host_call`, `log`, `now` si la
-   capacité l'accorde, `random`, `cancelled`, `yield`). Les messages sont en CBOR **émis** en encodage déterministe (RFC 8949 §4.2.1) et
-   **décodés** strictement (profil de validité du §9.2 du protocole, côté réception ; ce profil ne
-   rend pas la réception déterministe) ; contrat exact au §15.20, décrits en **WIT** (`inkwell:plugin@1.0.0`), d'où
-   l'on génère les types Go, TypeScript et les kits de développement (Rust et Go d'abord ; tout
-   langage qui produit un module `wasm32` peut suivre l'ABI). Imports WASI tolérés :
-   seulement les fonctions de `wasi_snapshot_preview1` dont les chaînes d'outils ont besoin,
-   neutralisées (aucun descripteur ouvert, aucune socket).
-   *Pourquoi pas Extism :* même forme, mais une membrane plus large à auditer et un SDK Go dont
-   la dernière version date du 2025-03-19 (v1.7.1) ; rien n'empêche un kit compatible plus tard.
+2. **ABI.** Octets entrants, octets sortants, **sans réentrance** : exports `inkwell_alloc`,
+   `inkwell_free`, `inkwell_call`, `inkwell_abi_version` ; fonctions de l'hôte `host_call`,
+   `host_read`, `log`, `cancelled` ; WASI de `wasi_snapshot_preview1` toléré et **neutralisé**
+   fonction par fonction (§15.20 ABI-4 : liste dérivée des importations réelles des modules Rust et
+   Go). Messages en CBOR **émis** en encodage déterministe (RFC 8949 §4.2.1) et **décodés**
+   strictement ; contrat exact au §15.20 ; interfaces par point décrites en WIT
+   (`inkwell:plugin@1.0.0`), d'où l'on génère les types et les kits (Rust et Go en 1.0).
+   *Pourquoi pas Extism :* même forme, mais une membrane plus large à auditer et un SDK Go dont la
+   dernière version date du 2025-03-19 (v1.7.1).
 3. **Où passent les données.** Le cœur ne copie jamais un document entier vers un greffon
    (leçon Figma) : le greffon demande des plages (`document.read`). Il modifie un document en
    rendant une **proposition** (opérations ancrées sur des curseurs stables, empreinte de la
@@ -2565,18 +3012,18 @@ clé de l'appareil vit dans le processus Go.
 - Bien : extensible partout sauf le noyau fermé ; un défaut du moteur ne touche pas la clé ;
   aucun format nouveau entre appareils sauf l'espace de décisions `plugin/` ; le cœur sert de
   premier client de l'API (P-EXT-3).
-- Moins bien : un aller-retour entre processus par appel (budget §15.4) ; un processus de plus
-  par projet ouvert avec greffons ; l'API WIT est à nous tant que les composants ne sont pas
-  exécutables en Go pur ; Linux seulement tant que l'enfermement n'existe pas ailleurs
-  (`AD-18`) — ailleurs, greffons tiers refusés (échec fermé), extensions intégrées
-  TypeScript disponibles.
+- Moins bien : un aller-retour entre processus par appel (budget §15.4) ; un processus par greffon
+  actif (≤ 6) ; l'API WIT est à nous tant que les composants ne sont pas exécutables en Go pur ; sur
+  une cible dont l'enfermement n'est pas prouvé (P-SANDBOX-MAC, -WIN), greffons tiers refusés
+  (échec fermé, §9.11), extensions intégrées TypeScript disponibles.
 
 ### Confirmation (portes avant acceptation)
 
 | Porte | Preuve |
 |---|---|
-| **P-PLUG-BENCH** | banc `benchstat` (`-count ≥ 10`, p50, p95, p99), sur amd64 **et** arm64, trois greffons types (Rust, Go `wasip1`, TinyGo), avec **témoin en processus** (option 3) et **cible** en processus enfant (option 4) : compilation, instanciation (module déjà compilé dans l'hôte ; compilation comprise), appel vide, appels 64 Kio, 1 Mio et 4 Mio aller et retour, **trajet complet** webview → Go → enfant → retour, appels réentrants (`host_call` pendant un appel), 16 greffons en concurrence, mémoire résidente **par hôte** et coût d'un hôte par projet, taille ajoutée à l'exécutable. Seuils : appel complet p95 ≤ 2 ms pour 64 Kio ; interaction de vue p95 ≤ 100 ms ; activation ≤ 150 ms (compilé) et ≤ 500 ms (compilation comprise) ; hôte au repos ≤ 40 Mio RSS ; 0 ms avant la première peinture. Si la cible dépasse le témoin au-delà des budgets, la décision est revue (pas les budgets). **Prérequis de l'acceptation.** |
+| **P-PLUG-BENCH** | banc `benchstat` (`-count ≥ 10`, p50, p95, p99), sur amd64 **et** arm64, deux greffons types (Rust, Go `wasip1` ; TinyGo avec le kit 1.1), avec **témoin en processus** (option 3) et **cible** en processus enfant (option 4) : compilation, instanciation (module déjà compilé dans l'hôte ; compilation comprise), appel vide, appels 64 Kio, 1 Mio et 4 Mio aller et retour, **trajet complet** webview → Go → enfant → retour, appels réentrants (`host_call` pendant un appel), 16 greffons en concurrence, mémoire résidente **par hôte** et coût d'un hôte par projet, taille ajoutée à l'exécutable. Seuils : appel complet p95 ≤ 2 ms pour 64 Kio ; interaction de vue p95 ≤ 100 ms ; activation ≤ 150 ms (compilé) et ≤ 500 ms (compilation comprise) ; hôte au repos ≤ 40 Mio RSS, VSZ mesurée (pour fixer `RLIMIT_AS`) ; 0 ms avant la première peinture. Si la cible dépasse le témoin au-delà des budgets, la décision est revue (pas les budgets). **Prérequis de l'acceptation.** |
 | P-PLUG-PROTO | prototype de bout en bout : un diagnostic et une proposition (greffon → hôte → Go → webview → modification Automerge → Annuler) |
+| P-SANDBOX-LINUX, -MAC, -WIN | démarrage en deux temps (Linux), profil Seatbelt (macOS), AppContainer et objet de tâche (Windows) prouvés par l'enfant natif hostile, sur amd64 et arm64, en paquet et en archive ; matrice des noyaux du §9.10 |
 | P-EXT-1 … 7 | §15.7 |
 | P-SEC | revue `security-auditor` (Opus, xhigh) des points SC-* |
 | P-FUZZ | décodeurs des sorties de greffon (propositions, vues, jetons, manifestes, paquets) fuzzés 1 h chacun |
@@ -2599,6 +3046,8 @@ clé de l'appareil vit dans le processus Go.
 | SC-12 | Enfant compromis : le parent impose compartiment, génération, tailles, crédits et droits indépendamment des messages (§7.3) ; tests `PLUG-COMPROMISED-*` |
 | SC-13 | Mandats des greffons de projet (§15.10) : effet contrôlé contre le mandat, révocation, réponses tardives jetées |
 | SC-14 | IA : règle des deux et CaMeL allégé (IA-2), aperçu de l'envoi, politique du projet, MCP (portées, consentement par client, `Origin`, jeton) (§15.18) |
+| SC-15 | Démarrage en deux temps (H-0), liste seccomp dérivée par `strace`, `clone` filtré, `clone3` refusé ; équivalents macOS et Windows (§9.11) ; aucune garantie prêtée à une cible non prouvée |
+| SC-16 | Paquet signé : contenu signé (ABI-7), préfixe externe, chemins, continuité de clé ; WASI neutralisé (ABI-4) |
 
 ### Vérifié le 2026-11-01 (et ce qui reste ouvert)
 

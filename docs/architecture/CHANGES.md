@@ -1,5 +1,86 @@
 # Changements de l'architecture
 
+## 1.0.0-brouillon.4 — révision 3 (2026-11-01)
+
+Réponse au tour 2 ([Fable](reviews/03-fable-r2.md) : 4 bloquants, 3 majeurs, 9 mineurs ;
+[Codex](reviews/04-codex-r2.md) : 7 bloquants, 5 majeurs, 1 mineur ; les deux « NOT ACCEPTED »),
+à l'[audit de cohérence de Codex](reviews/coherence-codex.md) et aux exigences N32 à N41. Nouveau
+document : [coherence.md](coherence.md) (contradictions C01–C25, manques M01–M22, doublons, carte
+produit, phasage, changements du design). Aucune modification de `docs/protocol/` ni de
+`docs/design/`.
+
+### Revue Fable, tour 2
+
+| Constat | Changement |
+|---|---|
+| R2-B1 (1) Landlock ne couvre pas les fils déjà créés ; poser avant `execve` interdit l'`execve` | §9.10 **H-0 démarrage en deux temps** : binaire hôte **statique** distinct, Landlock posé sur un fil fixé puis `execve` de lui-même (tous les autres fils disparaissent, le domaine est hérité), `TSYNC` en plus quand l'ABI ≥ 8 ; une seule règle (`execute`, `read_file` sur le binaire) |
+| R2-B1 (2) liste seccomp qui tue le runtime Go | §9.10 H-5 : familles et refus normatifs, liste blanche **dérivée** par `strace -f` en CI dans `seccomp_linux.go`, `clone` filtré par drapeaux, `clone3` refusé (`ENOSYS`), contrôle d'architecture ; seccomp devient la barrière principale |
+| R2-B1 (3) `SOCK_SEQPACKET` contre 4 Mio | §7.3 IPC-1 : **flux d'octets** et cadrage par longueur |
+| R2-B2 ABI-3 refuse le bonjour Go ; horloge à 0 | §15.20 ABI-4 : WASI dérivé des importations réelles (Go 1.27, Rust), neutralisé par fonction (`poll_oneoff`, `sched_yield`, `fd_prestat_*`…) ; horloge quantifiée, jamais 0 ; test du kit « `fmt.Println`, `time.Sleep(0)` » ; annexe alignée (fonctions de l'hôte) |
+| R2-B3 règle de pli à la réception absente ; `index.json` non sûr sous fusion ; polices hors de la clé | §15.19 PD-1 point 4 (entrée sans effet tant que `format ≥ 1` n'est pas debout dans son passé causal) et vecteur `#plugin-entry-before-format` ; §15.14 `.renders/index.jsonl` en **JSON Lines** ; empreinte des polices dans la clé |
+| R2-B4 ST-8 impossible en 24 mots | §6.7 ST-8 : phrase = secret seul ; **kit de secours** versionné ; ST-7 (a) réécrit sur le kit |
+| R2-M1 « Ailleurs : — » contre N35 | §9.11 nouveau, port `internal/sandbox`, INV-13, `AD-18` révisé, `AD-94` |
+| R2-M2 budget système des hôtes | §2 : ≤ 40 Mio RSS au repos, ≤ 6 actifs, somme ≤ 1,5 Gio, budget global ≤ 2,5 Gio, RSS **et** VSZ |
+| R2-M3 consentement IA au premier envoi seulement | §15.18 « Consentement à l'envoi, continu » + indicateur permanent |
+| R2-m1 restes de la révision 1 | §4.2 cache disque retiré ; §6.1 secret de secours ; §15.15 « ≤ 45 types » ; traçabilité N22 « règle de flux » |
+| R2-m2 deux sens de « compartiment » | un hôte = un greffon : « compartiment » = le greffon et ceux qu'il appelle ; autorité **par connexion** (§7.3 IPC-3) |
+| R2-m3 hôtes paresseux | §9.10 H-4 |
+| R2-m4 Vue lecture : repli | §15.17 : export HTML expérimental épinglé, repli plan + texte source |
+| R2-m5 Tâches en WebAssembly | Tâches redevient **TypeScript** ; Graphviz porte le chemin WebAssembly |
+| R2-m6 `compile.run` / `compile.read` | §15.5 : deux lignes |
+| R2-m7 deux UX de proposition ; `document.create` invisible | §15.5 : une règle (diff par morceau) ; « appliquer sans relire » réglable par greffon ; créations dans l'Activité |
+| R2-m8 AppArmor et sidecars | §9.5 renvoie au profil `inkwell` (H-6) |
+| R2-m9 tailles d'ABI | §15.20 ABI-3 : entrée ≤ 1 Mio, réponse ≤ 1 Mio sauf `document.read` ≤ 4 Mio ; vérification contre `memory.size()` |
+| §3.4 sur-ingénierie : UTCP, TinyGo dans le banc | UTCP retiré (§15.12) ; banc sur Rust et Go, TinyGo avec le kit 1.1 |
+| §4 crochets N32, N33, N34, N35 | §11.1, §15.18 RG-*, §6.9, §9.11 |
+
+### Revue Codex, tour 2
+
+| Constat | Changement |
+|---|---|
+| R2-1 confinement non exécutable (ABI Landlock, `clone`, threads, ordre) | §9.10 H-0, H-1 (masque par ABI sondée), H-5 ; matrice Ubuntu 22.04, Debian 12, Ubuntu 24.04, Debian 13, Fedora ; P-SANDBOX-LINUX ; enfant natif hostile |
+| R2-2 autorité des compartiments, transport | **un hôte par greffon actif** (autorité exacte, attachée à la connexion) ; O1, O4 et greffons de projet chacun dans leur hôte par construction ; §7.3 codec complet (gros-boutiste, types, bornes, crédits en octets, annulation prioritaire, descripteurs ancillaires refusés) ; test 4 Mio avec annulation sans privilège |
+| R2-3 ABI Go et TinyGo, octets signés | §15.20 ABI-4 (importations réelles), ABI-3 (sans réentrance, `host_read`), ABI-1 (maximum imposé par l'hôte), ABI-7 (contenu signé canonique, préfixe externe, chemins), ABI-9 (chaînes épinglées ; TinyGo en 1.1) ; vecteurs et modules produits par P-PLUG-PROTO avant l'acceptation de l'hôte |
+| R2-4 PD-1 et PD-2 incompatibles avec les codecs et domaines acceptés | PD-1 : base64url d'un CBOR dans le `str16`, schémas complets, émission séparée, aveu de l'intolérance des 2.0 et transition par lecture seule (§1.4.4), vecteurs ; **PD-2 retiré** (préfixes externes `inkwell-ext:`, hors §20.4) |
+| R2-5 récupération, nommage, formats, ménage | §6.7 réécrit : secret et kit, nommage et vérification identiques, formats CBOR avec AAD, têtes signées, compteurs par `(ProjectID, PeerID)`, **aucun ménage distant en v1** ; §9.2 ne promet plus la détection universelle |
+| R2-6 baseline contraire à N35, N37, N39, N40 | §1.2 (G4, G9, G10, G13), §1.3 (NG1, NG3, NG10), INV-12, INV-13, §6.10, §6.11, §9.11 ; `AD-13`, `AD-18`, `AD-33`, `AD-47` tranchés |
+| R2-7 session manuelle saturée, G-0a, versions de diagnostics | MF-12 et MF-21 réécrits (état « non enregistré » par nœud, poignée déchargeable, mémoire de l'historique comptée) ; bandeau G-0a honnête ; LSP-3 (instantané par requête, diagnostics périmés inactifs, `didOpen` des documents non enregistrés, actions de code en proposition atomique) |
+| R2-8 MF-25 n'est pas indépendant de l'observateur | MF-25 : toutes les paires concurrentes, recalcul déterministe, réparation seulement par proposition choisie, cas à trois appareils |
+| R2-9 IA : consommation, consentement, identité MCP | §15.18 : limites et compteurs, estimation marquée, coût inconnu, consentement continu, contamination monotone, jeton de lancement MCP, MCP désactivé en projet partagé avant PD-1, ACP sans garantie |
+| R2-10 P-PLUG-BENCH non passée | §0.5 : l'hôte, l'ABI et l'enfermement deviennent des **expérimentations** acceptées seulement à leur porte (`AD-95`) ; aucun code de production n'en dépend d'ici là |
+| R2-11 crochets N32, N33, N34, N37, N39 | §11.1, §15.18, §6.9, §6.10, §6.11 ; traçabilité N1 à N41 |
+| R2-12 modèles et outils d'écriture | §6.8 : valeurs typées et échappées, fichiers choisis, caches et clés exclus |
+
+### Audit de cohérence (Codex) et exigences N32 à N41
+
+Tous les constats C01 à C20 et les manques 1 à 12 sont traités dans [coherence.md](coherence.md)
+(tables §1 et §2), sauf la proposition DOCX/ODT, **écartée par N40**. Exigences : N32 → §11.1,
+`AD-88` ; N33 → §15.18, `AD-89` ; N34 → §6.9, `AD-90` ; N35 → §9.11, `AD-94` ; N36 → coherence.md ;
+N37 → §6.10, `AD-91` ; N38 → §12.5, `AD-93` ; N39 → §6.11, `AD-92`, `AD-13` ; N40 → §1.3,
+`AD-33`, `AD-98` ; N41 → §6.11, `AD-96`.
+
+Vérifié le 2026-11-01 pour cette révision : `sandbox-exec` déprécié mais fonctionnel, Seatbelt
+hérité par les enfants (Apple containerization #737, essais 2026) ; AppContainer sans capacité =
+aucun réseau, objet de tâche (mémoire, CPU, nombre de processus) (Chromium `sandbox/win`) ; go-git v6
+en alpha, CVE-2026-45022 corrigée en 5.19.0 (traqueur Debian) ; Patchwork (Ink & Switch). Restent
+**à prouver** : P-SANDBOX-MAC, P-SANDBOX-WIN, P-VAULT, P-IDX, P-GIT-BENCH.
+
+### Désaccords à débattre (tour 3)
+
+| # | Sujet | Fable | Codex | Recommandation |
+|---|---|---|---|---|
+| D-10 | Combien d'hôtes de greffons | un hôte par **classe de sortie**, paresseux, ≤ 6 (D-5 du tour 2) | **autorité commune exacte** : un colocataire natif compromis ne peut pas être distingué (R2-2) | **un hôte par greffon actif**, paresseux, ≤ 6 actifs : satisfait l'exigence d'autorité de Codex et la borne de coût de Fable ; P-PLUG-BENCH mesure le RSS par hôte |
+| D-11 | Comment poser Landlock | binaire statique lancé par le chemin `setpriv` des sidecars, une règle, `TSYNC` si ABI ≥ 8 | composition exacte écrite, sans réutiliser tel quel le lanceur des sidecars | **démarrage en deux temps** (Landlock sur un fil puis `execve` de soi) : ne dépend pas d'un `setpriv` récent (Ubuntu 24.04 a util-linux 2.39) ; seccomp avec `TSYNC` (disponible depuis Linux 3.17) comme barrière principale |
+| D-12 | TinyGo | peut attendre le kit 1.1 | profil Rust, Go **et** TinyGo épinglé maintenant | Rust et Go en 1.0 ; TinyGo en 1.1, sa table d'importations établie par mesure |
+| D-13 | UTCP | retirer de la spec (sur-ingénierie) | export seul, choix accepté | **retirer** (§15.12 « écarté, réexaminer si ») |
+| D-14 | Preuves avant acceptation | bloquants « de texte » ; le banc reste une porte | le banc est expressément préalable : le passer ou rétrograder la décision | **rétrograder en expérimentation** (§0.5) : la spec s'accepte, l'hôte attend ses preuves |
+| D-15 | Mermaid | `beautiful-mermaid` (sans DOM) compilé par le kit JavaScript, `renderer` `wasm` en API 1.1 | différé, aucun résultat P-FRAME ne justifie un retour | **sous-ensemble sans DOM en 1.1** (pas de P-FRAME, pas de DOM), Mermaid complet derrière P-FRAME ; à confirmer par Codex |
+| D-16 | Domaines de signature des paquets et têtes | les inscrire au registre (tour 1, B-2) | la grammaire du §20.4 interdit `/` ; signatures externes | **préfixes externes `inkwell-ext:`**, PD-2 retiré |
+
+Convergences constatées (aucun débat) : D-1 (noyau d'ABI ici, interfaces ailleurs), D-3 (rendus
+fichiers ordinaires), D-4 (pas de TLV), D-6 (MF-25), D-7 (Vue lecture), D-8 (`Runtime` par projet,
+un projet ouvert en v1, décision de l'utilisatrice), D-9 (GREASE dans `host.features()`).
+
 ## 1.0.0-brouillon.3 — révision 2 (2026-11-01)
 
 Réponse au tour 1 de revue : [Fable](reviews/01-fable.md) (4 bloquants, 8 majeurs, 9 mineurs) et

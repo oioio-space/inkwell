@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Version | 1.0.0-brouillon.3 (2026-11-01, révision 2 après revue ; [CHANGES.md](CHANGES.md)) |
+| Version | 1.0.0-brouillon.4 (2026-11-01, révision 3 : tour 2 et passe de cohérence ; [CHANGES.md](CHANGES.md), [coherence.md](coherence.md)) |
 | Rôle | lever chaque doute trouvé en écrivant [spec.md](spec.md) : une question, ses options, une recommandation, sa raison |
 | Sources des doutes | [conception](../conception.pdf), [questions ouvertes](../open-questions.md), [audit](../plans/2026-10-31-architecture-audit.md), ADR 0001–0034, [protocole](../protocol/spec.md), [design](../design/spec.md), code (`main` à `362cb4d`, chantier `proto1`), `TODO` et `t.Skip` |
 
@@ -32,12 +32,12 @@ Règles :
 | AD-10 | Version des données stockées | entier `layout`, lecture seule si plus récent, migration atomique | non | ADR 0035 |
 | AD-11 | Rangement des ensembles signés | `.inkwell/sets/<ensemble>/` ; `trust/` migré à la disposition 2 | non | ADR 0035 |
 | AD-12 | Instance unique, verrous | instance unique Wails + `device.lock` + `.inkwell/lock` | non | ADR 0037 |
-| AD-13 | Versions nommées → Git | projection à chaque version nommée, reconstructible ; écrivain Git minimal | **oui** | ADR à rédiger (étape 4) |
+| AD-13 | Versions nommées → Git | **go-git** (Go pur, N39) en projection reconstructible, jamais de binaire `git` ; mesuré (P-GIT-BENCH) | non (N39 a tranché) | spec §6.11 |
 | AD-14 | Commentaires des lecteurs | admission bornée au sous-arbre des commentaires | **oui** | ADR à rédiger (avant l'étape 4) |
 | AD-15 | Journal circulaire réseau | métadonnées seulement | non | spec O-3 |
 | AD-16 | Journaux, rapport de bug | fichier tournant local ; rapport = archive locale + page de ticket préremplie | **oui** (envoi) | ADR 0037 |
 | AD-17 | Mises à jour | manifeste signé ; `.deb`/`.rpm` : avertir seulement ; activée par défaut | **oui** | ADR 0038 |
-| AD-18 | Plates-formes v1 | Linux amd64 et arm64 seulement ; macOS et Windows après parité d'enfermement | **oui** | ADR (amende 0003) |
+| AD-18 | Plates-formes | **six cibles** (N35) ; port d'enfermement par OS, capacité refusée tant qu'une porte manque ; Linux seul = alpha | non (N35 a tranché) | spec §9.11 |
 | AD-19 | Wails beta.34 | passer à v3.0.x stable par la procédure de l'ADR 0008 | non | lot dédié |
 | AD-20 | LSP tinymist | remplacée par `AD-80` | non | spec §15.17 |
 | AD-21 | Réglages de l'appareil | `settings.json` en Go, versionné ; `INKWELL_*` pour les tests | non | ADR 0037 |
@@ -52,7 +52,7 @@ Règles :
 | AD-30 | Couches du frontend non vérifiées | Biome `noRestrictedImports` dans `fe:check` | non | `fe:check` |
 | AD-31 | `protocol/bridge` dans le module public | rendre l'enveloppe du pont à `internal/bridge` | non | revue de l'étape 1 |
 | AD-32 | Couleur et nom d'une personne | couleur choisie portée par la présence ; nom fixé à l'admission en v1 | **oui** (design Q4) | spec §6.1 |
-| AD-33 | Import et export DOCX, RTF, LaTeX | pandoc en troisième sidecar épinglé, ou report en v2 | **oui** | ADR (amende 0024) |
+| AD-33 | Import et export DOCX, RTF, ODT | **aucune intégration native, aucun pandoc livré** (N40) ; greffons possibles | non (N40 a tranché) | spec §1.3 NG1 |
 | AD-34 | Aperçu partagé pour un invité sans l'application | v2 ; exigera sa propre ADR (serveur hors boucle locale) | non | v2 |
 | AD-35 | Compagnon en ligne de commande | `export` en v1.x (projection) ; `join --headless` en v2 avec ADR | non | v2 |
 | AD-36 | Test ignoré `files_test.go:713` | l'écrire maintenant que la suspension est fusionnée | non | test actif |
@@ -66,7 +66,7 @@ Règles :
 | AD-44 | Accessibilité de l'aperçu et du PDF | **équivalent accessible** : « Vue lecture » (export HTML de Typst assaini, sans script) + descriptions de diagrammes ; PDF balisé, option PDF/UA-1 | non | spec §2 |
 | AD-45 | Tests intermittents F3, F6, F8, F9, PRS-37 | mesurer et prouver la cause avant la bascule ADR 0034 | non | porte P-* |
 | AD-46 | Un document par fichier ou par projet | un document Automerge par fichier texte + index `G` séparé (ADR 0030 §3) ; tout désigne un nœud, jamais un chemin | non | spec §6.6 MF-1–4 |
-| AD-47 | Documents ouverts, onglets, document actif | un document actif + liste de récents ; modèle prêt pour des onglets | **oui** (onglets ou non) | spec §6.6 MF-5–7 |
+| AD-47 | Documents ouverts, onglets, document actif | **onglets** (N19) : ouverts ≠ chargés ≠ actif, un éditeur visible | non (N19 a tranché) | spec §6.6 |
 | AD-48 | Fichier principal ou fichier édité | l'aperçu compile toujours le principal (décision d'admin) ; « Aperçu de ce fichier » à part | non | spec §6.6 MF-8–10 |
 | AD-49 | Enregistrement par fichier | projection de tous les textes admis ; « non enregistré » par fichier ; Ctrl+S = tout | non | spec §6.6 MF-11–13 |
 | AD-50 | Renommer ou supprimer un fichier ouvert ailleurs | l'éditeur suit le nœud ; corbeille = bandeau, frappe continue | non | spec §6.6 |
@@ -76,7 +76,7 @@ Règles :
 | AD-54 | Grammaires de coloration | liste fermée de langages Lezer, découpés par Vite, embarqués, chargés à la demande | non | spec §6.6 MF-18 |
 | AD-55 | Fichier binaire ou inconnu | reniflage WHATWG partagé Go/TS ; texte brut ou carte de blob | non | spec §6.6 MF-15 |
 | AD-56 | Un seul point d'entrée « ouvrir » pour tous les types | `open(nodeId)` → registre → vue ; fin de `?file=` | non | spec §6.6 MF-5 |
-| AD-57 | Où tournent les greffons | wazero dans des **processus enfants enfermés par compartiment** (§9.10), canal §7.3, cache en mémoire ; banc avec témoin en processus avant acceptation | **oui** (ADR 0039) | ADR 0039 |
+| AD-57 | Où tournent les greffons | **un processus `inkwell-plugin-host` par greffon actif** (binaire statique Go pur, démarrage en deux temps), ≤ 6 actifs ; **expérimentation** jusqu'à P-PLUG-PROTO et P-PLUG-BENCH | **oui** (ADR 0039) | spec §0.5, §9.10 |
 | AD-58 | Droits des greffons | capacités nommées ; **règle de flux fermée** (sources I0–I3 × puits O0–O4, RF-1 à RF-5) ; secrets injectés par Go | **oui** (ADR 0039) | ADR 0039 |
 | AD-59 | Surface et versions de l'API | WIT `inkwell:plugin@1.x.y`, SemVer, règles d'évolution du protocole (N14) | non | ADR 0039 |
 | AD-60 | Greffons et collaboration | jamais d'installation **globale** depuis un pair ; greffons de projet bornés (`AD-69`) ; rendu dégradé sans greffon | **oui** | ADR 0039 |
@@ -105,46 +105,60 @@ Règles :
 | AD-83 | Deltas du protocole demandés | PD-1 (espaces `plugin/`, `ai/` + règle de tolérance), PD-2 (domaines) ; mineure 2.1 à faire accepter par la boucle du protocole | **oui** (acceptation) | `docs/protocol/` |
 | AD-84 | Fidélité à la conception | aucune fidélité complète affirmée tant que les écarts de la matrice ci-dessous sont ouverts | **oui** | matrice |
 | AD-85 | Ordre de livraison de l'API | API 1.0 réduite, puis 1.1, 1.2 ; registre → commande, panneau, proposition → Graphviz → dorsal | non | spec §15.21 |
-| AD-86 | Canal Go ↔ hôte des greffons | `socketpair` `SOCK_SEQPACKET`, trames bornées, autorité imposée par le parent, un appel à la fois par instance | non | spec §7.3 |
+| AD-86 | Canal Go ↔ hôte des greffons | flux d’octets (`SOCK_STREAM`, tubes sous Windows), trames bornées, autorité imposée par le parent, un appel à la fois par instance | non | spec §7.3 |
 | AD-87 | Enfermement de l'hôte et compartiments | aucun fichier (memfd), seccomp, Landlock, profil AppArmor livré, mémoire par hôte, un compartiment par classe de sortie, échec fermé visible | non | spec §9.10 |
+| AD-88 | Gestionnaire de tâches (N32) | vue « Ressources » du cœur (`internal/tasks`), mesures par le parent, limites réglables à la baisse | non | spec §11.1 |
+| AD-89 | Index de recherche pour l'IA (N33) | lexical local d'abord, moteur choisi par la mesure, provenance par extrait, citations par nœud ; **expérimentation** (P-IDX) | non | spec §15.18 |
+| AD-90 | Fichiers non synchronisés (N34) | politique d'import et de réception locale ; règle de projet par décision signée (PD-1) ; jamais `.typstdeps/` | non | spec §6.9 |
+| AD-91 | Projet chiffré (N37) | coffre par objet sans montage, DEK par appareil enveloppée en age, dossier de travail privé, export age ; **expérimentation** (P-VAULT) | **oui** (ADR, remplace NG3) | spec §6.10 |
+| AD-92 | Historique sans Git (N39) | voyager, restaurer par nouvelle modification, comparer par mots, versions = manifestes de têtes | non | spec §6.11 |
+| AD-93 | Performance mesurée (N38) | budgets par chemin, règles de concurrence bornée, PGO, portes CI, choix de bibliothèque par banc | non | spec §12.5 |
+| AD-94 | Port d'enfermement six cibles (N35) | `internal/sandbox` : Landlock et seccomp, Seatbelt, AppContainer et objets de tâche ; INV-13 ; **expérimentation** par OS | non | spec §9.11 |
+| AD-95 | Ce que vaut l'acceptation | les expérimentations ne sont acceptées qu'à leur porte (§0.5) | **oui** | spec §0.5 |
+| AD-96 | Variantes et intégrations (N41) | sur les variantes existantes (ADR 0031) ; vocabulaire d'écriture ; « Dupliquer le projet » ; entre projets différé | non | spec §6.11 HI-6, HI-7 |
+| AD-97 | Carte produit et surfaces | tiroir à trois destinations, gauche à deux onglets, un compteur de problèmes, barre d'état à quatre éléments | non (design rév. 5) | `coherence.md` §4 |
+| AD-98 | Formats bureautiques (N40) | aucun natif ; collage riche dans le cœur ; greffons | non | spec §1.3 |
 
 **Nouvelles ADR proposées** (numéros réservés) : 0027 registre unique des contributions
 (types de fichiers, commandes, panneaux, exportateurs ; `AD-08`, `AD-51`, `AD-63`) ; 0035 disposition et migration des données (`AD-10`, `AD-11`) ; 0036 découpage de
 `internal/app` et acteur `internal/ledger` (`AD-02`, `AD-04`, `AD-05`, `AD-09`, `AD-29`) ;
 0037 état local de l'appareil : verrous, réglages, journaux (`AD-12`, `AD-16`, `AD-21`) ;
-0038 mises à jour (`AD-17`) ; 0039 greffons WebAssembly (`AD-57` à `AD-76`, brouillon dans
+0038 mises à jour (`AD-17`) ; ADR à rédiger « chiffrement au repos » qui remplace NG3 (`AD-91`) ; 0039 greffons WebAssembly (`AD-57` à `AD-76`, brouillon dans
 [spec.md, annexe](spec.md#annexe--brouillon-dadr-0039--greffons-webassembly)). Sous réserve du choix de l'utilisatrice : `AD-01` (si
 plusieurs projets), `AD-13`, `AD-14`, `AD-18`, `AD-33`, `AD-43`, `AD-68`. **Spécification à écrire ensuite** : `docs/plugin-api/` (`AD-72`), avec sa propre boucle de revue Fable + Codex.
 
 ### Matrice des décisions finales (ce que l'acceptation de cette spécification ne vaut pas)
 
 Accepter `spec.md` vaut décision pour toutes les recommandations **techniques** (colonne
-« Utilisatrice : non »). Elle **ne vaut pas** les décisions ci-dessous, qui exigent un acte à
-part ; tant qu'elles sont ouvertes, la spécification n'affirme pas sa fidélité complète à la
-conception (`AD-84`).
+« Utilisatrice : non »), **sauf** les expérimentations du §0.5 de la spec, acceptées seulement à
+leur porte (`AD-95`). Elle **ne vaut pas** les décisions ci-dessous, qui exigent un acte à part ;
+tant qu'elles sont ouvertes, la spécification n'affirme pas sa fidélité complète à la conception
+(`AD-84`).
+
+**Tranché par l'utilisatrice depuis la révision 2** (plus de décision à demander) : plates-formes
+(N35 → `AD-18`), historique par go-git (N39 → `AD-13`), aucun format bureautique natif (N40 →
+`AD-33`, `AD-98`), onglets (N19 → `AD-47`).
 
 | AD | Recommandation | Qui décide | Amendement nécessaire | Écart à la conception |
 |---|---|---|---|---|
-| AD-01 | un seul projet ouvert à la fois en v1 | utilisatrice | aucun (design §5.2 l'a déjà) | **oui**, p. 13 |
+| AD-01 | un seul projet ouvert à la fois en v1, `Runtime` par projet | utilisatrice | aucun (design §5.2) | **oui**, p. 13 |
 | AD-07 | accepter 0021–0023, 0026 (seuil remplacé), 0028, 0029 | utilisatrice | statuts d'ADR | — |
-| AD-13 | projection Git par écrivain minimal, cachée | utilisatrice | ADR (étape 4) | nomme go-git |
-| AD-14 | commentaires des lecteurs par admission bornée | utilisatrice | **mineure du protocole** (la couverture acceptée exige un écrivain, protocole §9.4) + ADR | p. 11–12 sinon |
+| AD-14 | commentaires des lecteurs par admission bornée | utilisatrice | **mineure du protocole** (couverture, protocole §9.4) + ADR | p. 11–12 sinon |
 | AD-17 | mises à jour : manifeste signé, avertir pour `.deb`/`.rpm` | utilisatrice (défaut actif ou non) | ADR 0038 | — |
-| AD-18 | Linux seulement en v1 | utilisatrice | ADR (amende 0003) | `PROGRESS.md` étape 6 |
 | AD-24 | quota 1 Gio par personne qui écrit | utilisatrice | — | — |
-| AD-26 | aperçu ≤ 1 s complet, ≤ 300 ms incrémental | technique, après mesure | **amendement de `engineering-principles.md` §3 par ADR** (le principe dit 300 ms) | — |
-| AD-33 | pandoc en sidecar, ou v2 | utilisatrice | ADR (amende 0024) | p. 37 sinon |
+| AD-26 | aperçu ≤ 1 s complet, ≤ 300 ms incrémental | technique, après mesure | **amendement de `engineering-principles.md` §3 par ADR** si 300 ms est inatteignable en complet | — |
 | AD-43 | aucun relais tenu par le projet | utilisatrice | ADR (précise 0004) | — |
-| AD-47 | un document actif, sans onglets | utilisatrice | — | — |
-| AD-52 | texte + conflits structurels | utilisatrice (avec AD-07) | ADR 0026 acceptée | — |
-| AD-57, AD-58, AD-61 | greffons : hôte enfant par compartiment, règle de flux, fichier seulement | utilisatrice | **ADR 0039** après P-PLUG-BENCH et revue de sécurité | — |
-| AD-67 | sauvegarde personnelle en v1 | utilisatrice | ADR 0039 | N22 réinterprétée |
+| AD-52 | texte + conflits structurels pour tous les observateurs | utilisatrice (avec AD-07) | ADR 0026 acceptée | — |
+| AD-57, AD-58, AD-61 | greffons : un hôte par greffon, règle de flux, fichier seulement | utilisatrice | **ADR 0039**, après P-PLUG-PROTO, P-PLUG-BENCH, P-SANDBOX-*, revue de sécurité | — |
+| AD-67 | N22 servie en v1 par la sauvegarde personnelle, non déclarée satisfaite | utilisatrice | ADR 0039 | N22 partielle |
 | AD-69 | greffons de projet bornés | utilisatrice | **PD-1** + ADR 0039 | N23 bornée |
-| AD-70 | Mermaid différé | utilisatrice | — | demande explicite de Mermaid |
+| AD-70 | Mermaid complet différé ; sous-ensemble sans DOM en API 1.1 | utilisatrice | — | Mermaid partiel |
 | AD-72 | `docs/plugin-api/` | utilisatrice | sa propre boucle de revue | — |
 | AD-78 | pas de CSS pour le PDF | utilisatrice | — | N27 « Markdown + CSS » |
 | AD-82 | IA : défauts de politique, MCP | utilisatrice | **PD-1**, ADR 0040, 0041 | — |
-| AD-83 | PD-1, PD-2 | utilisatrice | boucle du protocole (2.1) | — |
+| AD-83 | PD-1 (PD-2 retiré, PD-3 reporté) | utilisatrice | boucle du protocole (2.1) | — |
+| AD-91 | projet chiffré par objet, DEK par appareil | utilisatrice | **ADR** (remplace NG3), après P-VAULT | interprétation de « bloc chiffré » par objet |
+| AD-95 | expérimentations acceptées à leur porte | utilisatrice | — | — |
 
 ---
 
@@ -349,6 +363,8 @@ conception (`AD-84`).
 - **Utilisatrice : oui** — la conception nomme go-git ; et : le dépôt doit-il être visible
   dans le dossier du projet (`.git/`, utile aux informaticiens, mais un éditeur externe le
   verra) ou caché (`.inkwell/git/`, recommandé) ?
+
+- **Révision 3 (N39, revue Codex R2-6).** L'utilisatrice exige go-git et une application autoporteuse : **go-git** (Go pur, v5 ≥ 5.19 ; v6 en alpha) dans `internal/milestone`, projection reconstructible, jamais de binaire `git` (INV-12, AC-17, AC-18). L'écrivain minimal reste le **témoin** du banc P-GIT-BENCH (projection de 1 000 fichiers, reconstruction de 500 versions, taille) ; go-git est retenu sauf écart au-delà des budgets du §12.5. Dépôt caché (`.inkwell/git/`), « Exporter l'historique en dépôt Git » pour qui veut un `.git` visible. Plus de décision de l'utilisatrice à demander.
 
 ### AD-21 — Réglages de l'appareil
 
@@ -606,6 +622,8 @@ conception (`AD-84`).
   paquets sans cgo) pour qu'il ne pourrisse pas.
 - **Utilisatrice : oui.**
 
+- **Révision 3 (N35, revues Fable R2-M1, Codex R2-6).** N35 tranche : Linux, macOS, Windows, amd64 et arm64. Port `internal/sandbox` (spec §9.11) ; tant qu'une porte P-SANDBOX-* manque sur une cible, les capacités qu'elle protège y sont **refusées** (greffons tiers, ACP, aperçu), jamais affaiblies (INV-13) ; une version Linux seule est une alpha annoncée.
+
 ### AD-19 — Wails beta.34 vers v3.0.x
 
 - **Doute.** `go.mod` épingle `v3.0.0-beta.34` ; la v3.0.0 stable est publiée
@@ -625,6 +643,8 @@ conception (`AD-84`).
   (3) report en v2 ; la v1 exporte PDF (et HTML par Typst, encore expérimental).
 - **Recommandation.** Option 1 à l'étape 6 si la taille est acceptée ; sinon option 3.
 - **Utilisatrice : oui** (taille de l'exécutable contre fonction).
+
+- **Révision 3 (N40).** Tranché : **aucune** intégration native des formats bureautiques, ni import ni export, **aucun pandoc** livré ; un greffon (`importers`, `exporters`) peut l'offrir. Le collage riche (HTML → Typst ou Markdown) reste dans le cœur.
 
 ### AD-34 — Aperçu partagé pour un invité sans l'application (v2)
 
@@ -818,6 +838,8 @@ principal au démarrage. Codex a refusé un correctif étroit : le modèle manqu
   ux-principles (« calme », peu de chrome) ; présence par nœud (U16).
 - **Utilisatrice : oui** (onglets ou non).
 
+- **Révision 3 (N19, audit de cohérence C20).** N19 demande les onglets : **retenus**. Ouverts ≠ chargés ≠ actif (MF-5 à MF-7, MF-19) ; un seul éditeur visible ; barre d'onglets au lot G-0c, après le correctif G-0a.
+
 ### AD-48 — Fichier principal et fichier édité
 
 - **Recommandation.** MF-8 à MF-10 : l'aperçu et l'export compilent toujours le principal
@@ -942,6 +964,8 @@ servent pas de preuve ; celles dont dépendent les décisions ont été vérifi�
 
 - **Révision 2 (revues Fable B-3, M-1 ; Codex B4, M5).** Les deux revues approuvent l'option 4. Précisé : enfermement exécutable (spec §9.10 : modules par `memfd` scellé, **pas de cache disque en v1**, seccomp et Landlock obligatoires, profil AppArmor livré pour Ubuntu 24.04, budget mémoire par hôte, échec fermé visible) ; **compartiments** (un hôte par projet, un pour les greffons globaux sans sortie, un par greffon qui a une sortie) : une évasion n'obtient que les droits de son compartiment ; canal et autorité imposés par le parent (§7.3) ; banc P-PLUG-BENCH avec **témoin en processus**, trajet complet, RSS par hôte.
 
+- **Révision 3 (revues Fable R2-B1, R2-M2 ; Codex R2-1, R2-2, R2-10).** (1) **Un hôte par greffon actif** : seule autorité qu'un parent peut attacher à une connexion après une évasion (Codex) ; paresseux et **≤ 6 actifs** (borne de Fable) ; (2) hôte = binaire **statique** Go pur `inkwell-plugin-host`, démarrage en deux temps (Landlock posé sur un fil puis `execve`, seccomp avec `TSYNC`, vérification, `ready`) ; seccomp est la barrière principale, Landlock la défense en profondeur ; liste seccomp dérivée par `strace` en CI, `clone` filtré, `clone3` refusé ; (3) canal en **flux d'octets**, autorité attachée à la connexion ; (4) **statut d'expérimentation** (spec §0.5, `AD-95`) : l'acceptation de la spec ne vaut pas celle de l'hôte tant que P-PLUG-PROTO, P-PLUG-BENCH, `PLUG-COMPROMISED-*` et P-SANDBOX-* ne sont pas passées, résultats bruts à l'appui.
+
 ### AD-58 — Droits
 
 - **Recommandation.** §15.5 : aucune capacité ambiante, capacités nommées et montrées, règle
@@ -1013,6 +1037,8 @@ servent pas de preuve ; celles dont dépendent les décisions ont été vérifi�
 
 - **Révision 2 (revues Fable M-4, Codex B3).** ST-7 promettait de voir tout rejeu : faux pour un appareil neuf. Spec §6.7 réécrite : clé **par projet et par personne** (HKDF, domaines séparés), AEAD XChaCha20-Poly1305 avec AAD (projet, nom), graphe objets → manifeste → tête, deux têtes gardées, têtes jamais réécrites ; **fraîcheur** : détectée sur un appareil déjà synchronisé, **non vérifiable** sur un appareil neuf (résiduel écrit à l'écran), ancres : phrase de récupération datée et synchronisation avec les membres ; restaurer ne réimpose jamais une autorité ancienne (pli) ; tailles visibles (résiduel).
 
+- **Révision 3 (revues Fable R2-B4, Codex R2-5).** Phrase de 24 mots = **secret seul** (BIP-39) ; **kit de secours** versionné à part (projets, dorsal, compteurs par appareil, dates), authentifié ; un secret par personne, clés par HKDF (sauvegarde et destinataire de secours du coffre) ; nommage BLAKE3 à clé complet et vérification identique ; manifestes et têtes en CBOR avec AAD définis ; têtes signées sous un préfixe externe ; compteurs par `(ProjectID, PeerID)` ; **aucun ménage distant en v1** (liste non fiable, appareils multiples) ; N22 **non déclarée satisfaite** par la sauvegarde (audit de cohérence C08).
+
 ### AD-68 — Nuage partagé entre membres (v2)
 
 - **Constat.** Utile quand les membres ne sont jamais en ligne en même temps ; exige une clé de
@@ -1042,6 +1068,8 @@ servent pas de preuve ; celles dont dépendent les décisions ont été vérifi�
 - **Révision 2 (revues Fable B-1, m-2 ; Codex B2, B5).** (1) Le cadre `frame` faisait tourner du JavaScript tiers dans le processus web qui tient le pont : **retiré**. Mermaid est **différé** jusqu'à la porte P-FRAME (processus web dédié, tuable, sans liaisons, réseau et navigation refusés par l'hôte, prouvé sur WebKitGTK) ; alors capacité `render.frame`, hors niveau « projet ». Graphviz en `wasm` est le cas livré. (2) La carte `renders` dans l'index exigeait une règle de garde : remplacée par des **fichiers ordinaires** (`.renders/<clé>.svg`, `.renders/index.json`), validation à l'interprétation ; **aucun delta du protocole**. (3) Polices du rendu = polices fournies à Typst ; `description` exigée (accessibilité).
 - **Utilisatrice : oui** (Mermaid différé).
 
+- **Révision 3 (Fable D-2).** Voie retenue pour l'API 1.1 : `beautiful-mermaid` (TypeScript, MIT, rendu SVG sans DOM d'un sous-ensemble de Mermaid) compilé en WebAssembly par le kit JavaScript, comme `renderer` `wasm` ordinaire ; Mermaid complet reste derrière P-FRAME. `.renders/index.jsonl` en **JSON Lines** (tolérant à la fusion de texte) ; la clé de rendu inclut l'empreinte des polices du projet (revue Fable R2-B3).
+
 ### AD-71 — Expérience des développeuses
 
 - **Recommandation.** §15.15 : DX-1 à DX-7, bonjour en 10 lignes, quatre langages, mesures.
@@ -1058,6 +1086,8 @@ servent pas de preuve ; celles dont dépendent les décisions ont été vérifi�
 - **Utilisatrice : oui** (acceptation, comme l'ADR 0034).
 
 - **Révision 2 (revue Codex B1).** Le noyau de l'ABI est maintenant **normatif dans la spec** (§15.20 : module réacteur, exports, imports, WASI toléré, réponse et erreurs, négociation, annulation, octets signés du paquet, vecteurs minimaux) ; `docs/plugin-api/` reste à écrire pour les interfaces de chaque point et les registres, avec sa propre boucle.
+
+- **Révision 3 (revues Fable R2-B2, Codex R2-3).** ABI corrigée : WASI toléré **dérivé des importations réelles** de Go et de Rust et neutralisé fonction par fonction (`poll_oneoff`, `sched_yield`, `fd_prestat_*` compris), horloge quantifiée jamais nulle, **aucune réentrance** (`host_call` puis `host_read` dans une zone allouée par le greffon), maximum mémoire imposé par l'hôte, paquet signé par une liste canonique d'empreintes sous un préfixe externe. Rust et Go en 1.0 avec chaînes d'outils épinglées (ABI-9) ; TinyGo en 1.1, sa table d'importations établie par mesure. Les vecteurs et modules sont produits par P-PLUG-PROTO avant l'acceptation de l'hôte (`AD-95`).
 
 ### AD-73 — Surfaces d'interface et bouton d'extension
 
@@ -1169,6 +1199,8 @@ servent pas de preuve ; celles dont dépendent les décisions ont été vérifi�
   SDK Go, modèle d'appel `mcp` sur stdio). Aucune ne bloque les premières étapes (fournisseurs,
   propositions, MCP stdio).
 
+- **Révision 3 (revues Fable R2-M3, Codex R2-9).** Aperçu d'envoi à chaque nouvelle provenance, fichier ou destination dans la session ; indicateur permanent ; consommation visible et bornée (jetons comptés ou estimation marquée, coût inconnu dit) ; contamination monotone sur toute la session (outils et extraits de l'index compris) ; identité MCP par **jeton de lancement** par (client, projet), nom annoncé non pris pour une preuve ; MCP désactivé dans les projets partagés avant PD-1 ; ACP sans garantie prêtée ; UTCP écarté de la spec (Fable) ; RAG en §15.18 RG-1 à RG-5 (`AD-89`).
+
 ### AD-83 — Deltas du protocole
 
 - **Constat (revues Fable B-2, M-5 ; Codex B5).** La révision 1 appelait « extension compatible »
@@ -1179,6 +1211,8 @@ servent pas de preuve ; celles dont dépendent les décisions ont été vérifi�
   PD-2 (domaines de signature) ; proposés pour une **mineure 2.1** dans la boucle du protocole ;
   carte `renders` et TLV `PLUGIN_API` **retirés** (plus nécessaires).
 - **Utilisatrice : oui** (acceptation de la mineure).
+
+- **Révision 3 (revues Fable R2-B3, Codex R2-4).** PD-1 réécrit : valeur = base64url d'un CBOR déterministe (le champ est un `str16` UTF-8) ; schémas `plugin/`, `ai/`, `ignore/` ; jamais émis avant `format ≥ 1` ni mêlé à un espace de la 2.0 ; **règle de pli à la réception** (entrée conservée et ignorée tant que `format ≥ 1` n'est pas debout dans son passé causal) ; aveu que la 2.1 ne rend pas tolérants les appareils 2.0 (transition par la lecture seule du protocole §1.4.4) ; vecteurs nommés. **PD-2 retiré** : signatures de paquets, de têtes et d'exports sous des préfixes externes `inkwell-ext:`, hors registre §20.4 (dont la grammaire interdit `/`). PD-3 (clé X25519 dans les ops de membres) reporté.
 
 ### AD-84 — Fidélité à la conception
 
@@ -1199,6 +1233,8 @@ servent pas de preuve ; celles dont dépendent les décisions ont été vérifi�
   parent ; un appel à la fois par instance, file ≤ 8 par greffon, ≤ 16 en vol par hôte ; annulation ;
   vecteurs et fuzz (règle B-1).
 
+- **Révision 3 (revues Fable R2-B1 point 3, Codex R2-2).** `SOCK_STREAM` (Linux, macOS) et tubes anonymes (Windows) au lieu de `SOCK_SEQPACKET` (borné par `SO_SNDBUF`) ; cadrage complet (gros-boutiste, types, drapeaux, bornes par type), contre-pression **en octets**, annulation prioritaire, descripteurs ancillaires refusés sauf le `memfd` d'activation ; autorité attachée à la connexion (un greffon par hôte).
+
 ### AD-87 — Enfermement de l'hôte et compartiments
 
 - **Recommandation.** Spec §9.10 H-1 à H-8.
@@ -1208,6 +1244,115 @@ servent pas de preuve ; celles dont dépendent les décisions ont été vérifi�
   800-53 SC-39). Test d'un enfant simulé compromis (`PLUG-COMPROMISED-*`).
 - **Ouvert, mesuré par P-PLUG-BENCH** : coût de la compilation sans cache disque ; un cache géré par
   le parent est une décision ultérieure.
+
+- **Révision 3.** Remplacée par la spec §9.10 révisée (H-0 démarrage en deux temps ; matrice des noyaux Ubuntu 22.04, Debian 12, Ubuntu 24.04, Debian 13, Fedora ; Landlock masqué par ABI sondée ; seccomp barrière principale) et §9.11 (autres plates-formes, `AD-94`).
+
+---
+
+## Révision 3 : passe de cohérence et exigences N32 à N41
+
+Le détail des contradictions, manques, doublons, carte produit et phasage est dans
+[coherence.md](coherence.md) ; ici, les décisions et leur raison.
+
+### AD-88 — Gestionnaire de tâches (N32)
+
+- **Recommandation.** Spec §11.1 : `internal/tasks`, table unique de tout ce qui consomme ; mesures
+  par le **parent** (ce qu'un hôte dit de lui-même est indicatif) ; verbes annuler, mettre en pause,
+  arrêter, désactiver ; limites par classe réglables à la baisse ; vue « Ressources » hors du tiroir.
+- **Norme et preuve.** Firefox `about:processes` ; revue Fable §4.1 et Codex R2-11 ; un greffon ne
+  peut pas fournir la vue qui sert à l'arrêter (Codex).
+
+### AD-89 — Index de recherche pour l'IA (N33)
+
+- **Recommandation.** Spec §15.18 RG-1 à RG-5, d'après `research/ai.md` §12 : instantané venu de la
+  webview, lexical d'abord, moteur choisi par la mesure (SQLite FTS5 en Go pur, bleve, index
+  interne), local et jetable, chiffré comme le projet, provenance par extrait, citations par nœud et
+  révision (pas par chemin : un renommage ne les casse pas, Codex R2-11), embeddings = envoi O4.
+- **Ouvert, mesuré par P-IDX** : moteur, rappel en français, coût sur les six cibles.
+
+### AD-90 — Fichiers non synchronisés (N34)
+
+- **Recommandation.** Spec §6.9 : ignorer = ne pas importer un fichier local, ne pas télécharger
+  un blob ; jamais un retrait chez les autres ; deux couches (personnelle maintenant, projet par
+  décision signée après PD-1) ; syntaxe gitignore par le paquet de go-git ; **jamais** `.typstdeps/`
+  ni ressources référencées (contre l'étude, qui l'excluait par défaut : contraire à N5 et à
+  l'ADR 0024).
+- **Norme et preuve.** Teamtype (VCS non synchronisé par défaut), Syncthing (`.stignore` jamais
+  synchronisé), revue Codex R2-11 (un filtre par chemin n'est pas une frontière d'admission).
+
+### AD-91 — Projet chiffré (N37)
+
+- **Recommandation.** Spec §6.10, d'après `research/encryption.md` : pas de montage ; chiffrement
+  par objet ; DEK **par appareil** (les pairs échangent du clair sur un canal chiffré, donc aucune
+  clé de groupe) enveloppée au format age pour la clé X25519 de l'appareil, le destinataire de
+  secours et les autres appareils de la personne ; trousseau du système ou mot de passe ; dossier de
+  travail privé ; export zip ou zip chiffré par age.
+- **Interprétation à faire accepter** : « un bloc chiffré, rechiffré à chaque écriture » est tenu
+  **par objet** (une frappe ne rechiffre que l'objet touché), pas par un conteneur monolithique.
+- **Expérimentation** : P-VAULT. **Utilisatrice : oui** (ADR qui remplace NG3).
+
+### AD-92 — Historique sans Git (N39)
+
+- **Recommandation.** Spec §6.11 HI-1 à HI-5 : voyager dans le temps (vue en lecture seule),
+  restaurer par une **nouvelle modification** prévisualisée et annulable (jamais un remplacement qui
+  ressuscite une autorité ou une purge, Codex R2-11), versions nommées = manifestes de têtes de tout
+  le projet, comparer par mots, projection go-git (`AD-13`). Zéro mot de Git dans l'interface.
+
+### AD-93 — Performance mesurée (N38)
+
+- **Recommandation.** Spec §12.5 : budgets par chemin (valeurs proposées, fixées par une première
+  mesure de référence puis tenues), règles PF-5 à PF-10 (parallélisme borné par `errgroup.SetLimit`
+  ou pools, `goleak`, `-race`, `synctest`, PGO gardé seulement s'il gagne, budgets du fil
+  d'affichage, `bench:compare` en CI, choix de bibliothèque par banc).
+- **Norme.** `engineering-principles.md` §3 ; consigne du dépôt « prouver par benchstat ».
+
+### AD-94 — Port d'enfermement sur six cibles (N35)
+
+- **Recommandation.** Spec §9.11 : `internal/sandbox` avec garanties communes (aucun fichier,
+  aucun réseau, aucun processus, mémoire, CPU, mort avec le parent, canal) ; Linux : Landlock et
+  seccomp ; macOS : profil Seatbelt appliqué par l'hôte à lui-même (`sandbox-exec` déprécié mais
+  Seatbelt reste le seul mécanisme hors App Sandbox ; enfants inclus) ; Windows : AppContainer sans
+  capacité, objet de tâche (mémoire, CPU, un processus, tuer à la fermeture), politique « aucun
+  enfant », poignées héritées par liste. Les sidecars passent par le même port et lisent le dossier
+  de travail privé.
+- **Expérimentation** : P-SANDBOX-MAC et P-SANDBOX-WIN (« le nom d'un mécanisme n'est pas une
+  preuve », Codex).
+
+### AD-95 — Ce que vaut l'acceptation de la spécification
+
+- **Constat.** Codex R2-10 : une porte déclarée « préalable à l'acceptation » ne peut pas être
+  remplacée par une meilleure liste de mesures. Un agent de conception ne produit ni binaire ni
+  banc.
+- **Recommandation.** Spec §0.5 : la spécification est acceptable sans ces preuves, **mais** les
+  parties qui en dépendent (hôte des greffons et ABI, enfermement macOS et Windows, coffre, index,
+  rendu à DOM, ACP, deltas du protocole) sont des **expérimentations**, acceptées seulement à leur
+  porte, résultats bruts dans `docs/plans/`. Aucun code de production n'en dépend d'ici là.
+- **Utilisatrice : oui.**
+
+### AD-96 — Variantes et intégrations (N41)
+
+- **Recommandation.** Spec §6.11 HI-6, HI-7 : sur les variantes déjà présentes (ADR 0031,
+  `history/graph.ts`) ; « Créer une variante », « Comparer avec l'original », « Proposer
+  d'intégrer », « Intégrer » (fusion Automerge native puisque l'histoire est commune ; une
+  modification annulable ; les passages modifiés des deux côtés deviennent une divergence ordinaire),
+  « Abandonner la variante » ; « Dupliquer le projet » pour un projet ; intégrer entre projets
+  différents hors v1.
+- **Norme et preuve.** Patchwork d'Ink & Switch (branches légères, différences visibles, groupes
+  de modifications, histoire comme une conversation) ; Upwelling (brouillons comme branches
+  légères).
+
+### AD-97 — Carte produit et surfaces
+
+- **Recommandation.** `coherence.md` §4 : tiroir à trois destinations (Rechercher, Relire, IA),
+  gauche à deux onglets (Fichiers, Sommaire), un seul compteur de problèmes (barre d'état), barre
+  d'état à quatre éléments visibles, Ressources hors du tiroir, rien d'affiché pour une fonction
+  absente. Liste des changements du design au §6 de `coherence.md`.
+
+### AD-98 — Formats bureautiques (N40)
+
+- **Recommandation.** Aucun natif ; collage riche (HTML → Typst ou Markdown) dans le cœur ;
+  greffons `importers` et `exporters` pour qui le veut. La suggestion DOCX/ODT de l'audit de
+  cohérence de Codex est écartée par N40.
 
 ## Sources consultées pour ces décisions
 
