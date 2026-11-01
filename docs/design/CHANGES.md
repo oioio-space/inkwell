@@ -381,3 +381,41 @@ prises. Seule la protection change la spécification.
 | IA absente tant que non réglée ; un admin l'autorise dans un projet partagé | déjà la spécification (§4.39) ; Q19 marquée décidée |
 | Variantes : toujours tout le projet | déjà la spécification (§4.22) ; Q22 marquée décidée |
 | Extensions de projet : chargées seules, droits limités, interrupteur personnel | déjà la spécification (§4.32) ; Q14 marquée décidée |
+
+---
+
+# Addendum rév. 7.1 — polices (N43)
+
+Un ajout à la spécification acceptée, sans rien changer à l'existant : **§4.46 Polices**.
+- **Gestionnaire** : une section « Polices » de Préférences › Projet, et non une nouvelle fenêtre.
+  Il montre l'échantillon en direct, la source (Inkwell, Système, Projet) et la disponibilité chez
+  chaque personne, en mots.
+- **Ajouter** une police par glisser-déposer ou par fichier ; **retirer**, avec Annuler.
+- **Avertissement de licence** quand la police interdit l'intégration (`fsType`, [S32]) ; on peut
+  l'ajouter « pour moi ».
+- **Police manquante** :
+  - un message calme au point d'écriture et dans Relire › Problèmes, avec un clic jusqu'à la
+    ligne ;
+  - la correction en un clic : « Ajouter la police au projet ».
+- **Complétion** des noms de police, chacun écrit dans sa police, avec sa source.
+- **Modèles** : ils emportent leurs polices (§5.19).
+- Liens : §4.36 (table des messages), §4.37 (complétion), §5.13 (page Projet), §5.19.
+- `coverage.md` : nouvelle ligne N43. `inventory.md` : G-102.
+- À confirmer dans l'architecture (N18) : chaque appareil annonce les **noms** des familles de
+  police qu'il possède, pour afficher la disponibilité chez les autres.
+
+**Précisions de l'utilisatrice sur la rév. 7.1** (elles remplacent les points correspondants
+ci-dessus) :
+- **Aucune vérification de licence**, aucun avertissement de licence : la personne est
+  responsable. Le texte sur `fsType` et « Ajouter quand même pour moi » est retiré.
+- **Aucune disponibilité par personne** : pas d'annonce des polices entre appareils (vie privée,
+  et pas d'échange de plus). On signale **localement** le seul risque réel : « Cette police vient
+  de votre ordinateur ; les autres personnes ne l'ont peut-être pas · Ajouter la police au
+  projet ». Le point « à confirmer dans l'architecture » est donc retiré.
+- Une police du projet est **disponible chez tous automatiquement**. Chacun peut, quand il veut,
+  « **Installer pour tous mes projets** » (installation permanente) : depuis le gestionnaire, et
+  depuis la ligne de la police dans le projet.
+- **Même principe pour les extensions de projet** (§4.32) : disponibles pour tout le projet, avec
+  « **Installer pour tous mes projets** » en option. Cette installation dépasse le projet, et
+  ouvre donc le **consentement habituel** (§4.29).
+- `coverage.md` (lignes N43 et N23) et `inventory.md` (G-102, G-72) sont alignés.

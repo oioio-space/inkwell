@@ -157,7 +157,7 @@ Ces fonctions n'existent pas encore. Chaque ligne nomme ce que le code devra mon
 | # | Grav. | Écart | Norme | Preuve | Correction |
 |---|---|---|---|---|---|
 | G-71 | M | Pas de contrat de thème ; `data-theme` réglé nulle part ; aucune validation au chargement | N22, TH-1 à TH-4 (architecture §15.8), 1.4.3, 1.4.11 | `theme/tokens.css` n'a ni modes HC complets ni chargement de thème ; aucun `data-theme` dans `src` | spec §2.10, `tokens.json` (`contract`, `themeContract`), `theme/contract.test.ts` |
-| G-72 | M | Pas d'interface pour les extensions de projet (provenance, mode restreint, « Désactiver pour moi ») | N23, PP-3 à PP-5 | aucun composant | spec §4.32 |
+| G-72 | M | Pas d'interface pour les extensions de projet (provenance, mode restreint, « Désactiver pour moi », « Installer pour tous mes projets ») | N23, PP-3 à PP-5 | aucun composant | spec §4.32 |
 | G-73 | m | Pas de bouton Extensions ni d'épinglage | N24, architecture §15.13 | aucun composant | spec §4.30 |
 | G-74 | M | Pas de mode sans extensions, ni de zones protégées, ni d'affichage des conflits de raccourcis | N24, ND-1 à ND-6 | aucun composant | spec §4.33 |
 | G-75 | m | Pas de rendu de diagramme | N24, architecture §15.14 | aucun composant | spec §4.34 |
@@ -210,6 +210,12 @@ Ces fonctions n'existent pas encore. Chaque ligne nomme ce que le code devra mon
 | G-100 | M | Texte secondaire en `--fg-dim` sur survol : raccourcis des menus à 4,22:1 sur un popover sombre | 1.4.3 ; Codex R5-B1 | `theme/adwaita.css` (`.mi .k` en `--fg-dim`, `.mi:hover` en `--hover-bg`) | `--fg-dim-on-state` |
 | G-101 | m | L'icône de l'historique est une branche | N39 (zéro imagerie de Git) | `ui/shell/HeaderBar.svelte:126` (`<Icon name="branch" />`) | `clock` (§8.3) |
 
+### 2.12 Addendum rév. 7.1 : polices (N43)
+
+| # | Grav. | Écart | Norme | Preuve | Correction |
+|---|---|---|---|---|---|
+| G-102 | M | Pas de gestionnaire de polices ni de dossier `polices/` du projet ; pas d'installation « pour tous mes projets » ; une police venue de cet ordinateur n'est pas signalée, et une police absente n'a que le message brut du compilateur, sans correction | N43, N28, Nielsen 9 | aucun composant ; `preview/protocol.ts` (message seul) ; `ui/shell/StatusBar.svelte:120` | spec §4.46 (signalement **local**, sans donnée des autres appareils) |
+
 ## 3. Corrections, dans l'ordre
 
 L'ordre suit la valeur (parcours cassé et accessibilité d'abord), puis le coût, puis les
@@ -261,6 +267,7 @@ par une passe Orca.
   - G-84 (aide à l'écriture, après le branchement du LSP).
 - **Vague 11, écriture, IA, ressources :** G-85 et G-85b avec la vague 1 (contraste) ; G-88
   (écriture) ; G-87 (ressources, avec la vague 8) ; G-86 (IA, après PD-1 et les ADR 0040 et 0041).
+- **Vague 14, polices** : G-102, avec G-80 et G-82 (problèmes) et G-84 (complétion).
 - **Vague 13, rév. 6** : G-100 avec la vague 1 (contraste) ; G-98, G-99 avec le registre (G-63) ;
   G-101 avec G-89.
 - **Vague 12, cohérence** (MVP de `coherence.md` §5) :

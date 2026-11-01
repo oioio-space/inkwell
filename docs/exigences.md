@@ -85,6 +85,7 @@ Rien n'est « fait » sans tests verts et sans une passe `ux-walkthrough` réuss
 | N40 | 2026-11-01 | Aucune intégration native de Word (ni import ni export DOCX) : c'est un sujet de plugin si quelqu'un le souhaite. Même règle appliquée par défaut aux autres formats bureautiques (ODT, Google Docs), sauf avis contraire | `docs/architecture/`, `docs/design/` | ✅ décidé |
 | N41 | 2026-11-01 | Bifurcations (forks) et fusions (merges) de versions ou de projets, très claires pour la personne (sans jargon Git) | `docs/architecture/`, `docs/design/` | 🔨 |
 | N42 | 2026-11-01 | Application entièrement autoporteuse (self-contained) : le chiffrement et toutes les fonctionnalités ne dépendent d'aucun autre logiciel installé ; aucun programme externe lancé à l'exécution (seuls nos sidecars embarqués et vérifiés), uniquement les API du système | `docs/architecture/`, code (`internal/sidecar` exécute aujourd'hui `setpriv`, `prlimit`, `unshare`, `mount`) | 🔨 |
+| N43 | 2026-11-01 | Les polices ne doivent jamais être un problème pour Typst : accès aux polices du système et à celles qu'on fournit, extrêmement facilement ; un gestionnaire de polices si besoin ; **pas de gestion des licences** (c'est la personne qui en est responsable) ; une police disponible dans un projet l'est pour tout le monde dans ce projet, et chacun peut l'installer de façon pérenne s'il le souhaite. **Même principe pour les plugins** de projet (N23) : disponibles pour tous dans le projet, installables de façon pérenne au choix | `docs/architecture/`, `docs/design/` | 🔨 |
 
 ## Interface et édition
 

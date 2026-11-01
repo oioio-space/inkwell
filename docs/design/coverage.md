@@ -168,7 +168,7 @@ Il y a 55 critères ; le 4.1.1 est retiré de WCAG 2.2.
 | **Stockage distant, miroir, cycle de vie (N22)** | §4.29 | S→N | G-70 |
 | **Points d'affichage et attribution** (architecture §15.4, §15.13) | §4.31 | S→N | G-77 |
 | **Bouton Extensions et épinglage** | §4.30 | S→N | G-73 |
-| **Extensions de projet (N23)** : provenance, consentement au-delà du niveau projet, interrupteur personnel, repli | §4.32 | S→N | G-72 |
+| **Extensions de projet (N23)** (rév. 7.1 : « Installer pour tous mes projets », avec le consentement habituel) : provenance, consentement au-delà du niveau projet, interrupteur personnel, repli | §4.32 | S→N | G-72 |
 | **Ne pas dénaturer (N24)** : zones protégées, dialogues inimitables, conflits de raccourcis, mode sans extensions | §4.33 | S→N | G-74 |
 | **Diagrammes (N24)** : bloc, aperçu en ligne et dans l'aperçu, dernier rendu partagé, erreurs en ligne | §4.34 | S→N | G-75 |
 | **Outils de développement (N25)** : mode développeur signalé et local, Inspecteur | §4.35 | S→N | G-76 |
@@ -187,6 +187,7 @@ Il y a 55 critères ; le 4.1.1 est retiré de WCAG 2.2.
 | **Formats bureautiques (N40)** : aucune entrée ; collage riche converti | §4.45 | S→N | G-97 |
 | **Plates-formes (N35)** : **liaisons écrites par système** (plus de traduction Ctrl→Cmd), aucune combinaison Ctrl+Alt (AltGr), aucun Alt+alphanumérique sous Windows, tables réservées Linux, macOS et Windows tirées des sources officielles, barre de menus macOS depuis le registre, « aperçu indisponible sur ce système » | §8.2, §8.4 | S→N | G-95, G-98, G-99 |
 | **États honnêtes** (C19) : mots fondés sur l'état acquitté | §4.15, §5.16 | S→G | G-94 |
+| **Polices (N43, rév. 7.1)** : gestionnaire dans Préférences › Projet (échantillon en direct, source Inkwell, Système ou Projet) ; police du projet disponible chez tous automatiquement ; « Installer pour tous mes projets » ; ajouter par glisser-déposer ou par fichier, retirer avec Annuler ; **aucune vérification de licence** ; avertissement **local** pour une police venue de cet ordinateur, sans aucune donnée des autres appareils ; correction en un clic, et dans Relire › Problèmes avec un clic jusqu'à la ligne ; complétion des noms ; modèles avec leurs polices | §4.46, §4.36, §4.37, §5.19 | S→N | G-102 |
 | **Commentaires** | §4.27 | H, et S→G sur l'onglet | Hors périmètre (Q8). L'onglet **est encore affiché** (`ui/history/HistoryDrawer.svelte:206-207`) : G-62. |
 | **Présentation** | §4.23, §5.11 | S→G | G-7 |
 

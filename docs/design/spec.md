@@ -1,6 +1,6 @@
 # Système de design d'Inkwell — spécification (N17)
 
-- **Statut :** **acceptée (rév. 7)** par Fable et Codex (revues n°7), le 2026-11-01. Les décisions
+- **Statut :** **acceptée (rév. 7)**, avec l'addendum **rév. 7.1** (polices, N43, §4.46), par Fable et Codex (revues n°7), le 2026-11-01. Les décisions
   restantes de l'utilisatrice sont dans [`decisions-utilisatrice.md`](decisions-utilisatrice.md).
 - Révision 7 : Elle ferme les revues n°6 ; la révision 6
   fermait les revues n°5.
@@ -1623,6 +1623,12 @@ personne qui ouvre le projet (architecture §15.10, PP-1 à PP-7).
   stockage, fichiers choisis, dessin libre, personnes. La ligne dit alors : « Demande davantage :
   se connecter à nuage.example · Autoriser pour moi ». Autoriser ouvre le consentement (§4.29),
   qui vaut pour cette version et cet ordinateur.
+- **Disponible pour tout le projet, automatiquement** : chaque personne qui ouvre le projet a
+  l'extension, avec les droits limités du niveau « projet ».
+- **« Installer pour tous mes projets »** (décision de l'utilisatrice, rév. 7.1) : sur la ligne de
+  l'extension, à faire quand on veut. Cette installation **permanente** dépasse le projet. Elle
+  ouvre donc le **consentement habituel** (§4.29), avec la liste de ce que l'extension pourra
+  faire dans **tous** les projets. L'extension garde aussi sa place dans le projet.
 - **Interrupteur personnel** (PP-4) : « Désactiver pour moi », **sur chaque ligne**. Le bandeau
   de provenance n'a que « Voir », sans ambiguïté sur l'extension visée.
   Les autres personnes ne sont pas touchées, et le projet reste lisible et modifiable.
@@ -1916,7 +1922,7 @@ décision de cohérence, qui remplace le popover de la rév. 4). Le popover actu
   | `file not found` | Le fichier « logo.png » est introuvable dans le projet. | Ajoutez-le, ou corrigez le chemin. |
   | `unclosed delimiter` | Une parenthèse ou un crochet n'est pas fermé. | Cherchez son partenaire avant la fin de la ligne. |
   | `expected expression` | Il manque une valeur ici. | — |
-  | `unknown font family` | La police « X » n'est pas disponible : une autre est utilisée. | Ajoutez-la au projet, ou choisissez-en une autre. |
+  | `unknown font family` | La police « X » n'est pas disponible : une autre est utilisée. | Ajoutez-la au projet (un clic, §4.46), ou choisissez-en une autre. |
   | paquet introuvable | Le paquet « X » n'est ni fourni ni dans le projet. | Inkwell ne télécharge jamais de paquet ; ajoutez-le dans le dossier du projet. |
 
 - **Un message absent de la table** s'affiche tel quel, précédé de « Message du compilateur : ».
@@ -1973,6 +1979,7 @@ on tape là où elle sert. Elle ne clignote jamais, et ne recouvre jamais la lig
   - dans les arguments d'un appel ;
   - après `@` (étiquettes et références, T11 B7) ;
   - dans une chaîne de chemin (`#image("`, `#include "`) ;
+- dans un nom de police (`font: "`), avec les polices disponibles (§4.46) ;
   - ou sur demande, avec **Ctrl+Espace**.
 
   Jamais sur une lettre isolée en plein texte.
@@ -2719,6 +2726,84 @@ Architecture §6.7 ; `coherence.md` M01. Quatre intentions, quatre mots, jamais 
 - Une **extension** peut ajouter un importateur ou un exportateur bureautique (§4.31, lignes 13
   et 14). Elle apparaît alors dans la liste des formats, avec « par X ».
 
+### 4.46 Polices (N43, addendum rév. 7.1)
+
+**But :** une police n'est **jamais** un problème. On voit ce qui est disponible, et l'on corrige en
+un clic. L'apparence de l'interface n'en dépend pas : il s'agit des polices du document, celles que
+Typst emploie.
+
+**Responsabilité** (décision de l'utilisatrice) : Inkwell **ne vérifie aucune licence** et n'affiche
+**aucun avertissement de licence**. La personne qui ajoute une police en est responsable.
+
+**Trois sources**, dites en mots :
+- **Inkwell** : fournies avec l'application, présentes partout ;
+- **Système** : installées sur **cet ordinateur**, ou installées par la personne « pour tous mes
+  projets » (plus bas). Typst les voit ici, mais les autres personnes ne les ont peut-être pas ;
+- **Projet** : les fichiers du dossier `polices/` du projet. Ils sont **disponibles
+  automatiquement chez toutes les personnes du projet**, puisqu'ils voyagent avec lui, et sont
+  passés à Typst (architecture : `--font-path`, et rien n'est jamais téléchargé).
+
+**Aucune donnée ne vient des autres appareils** : Inkwell ne demande ni n'annonce la liste des
+polices d'une personne. Ce serait une fuite de vie privée (une liste de polices identifie un
+ordinateur) et un échange de plus. Le seul risque réel est **local** : un document qui emploie une
+police venue de **mon** ordinateur et absente du projet. C'est celui-là qu'on signale.
+
+**Le gestionnaire de polices** : Préférences › Projet › « **Polices** » (une section de la page
+Projet, et non une nouvelle fenêtre), aussi par la palette et par le lien des messages ci-dessous.
+- **Une liste encadrée**, une ligne par famille, groupée par source ; en tête, « Utilisées par ce
+  document ». Chaque ligne montre :
+  - le **nom** ;
+  - un **échantillon en direct**, écrit dans cette police (« Portez ce vieux whisky au juge blond
+    qui fume » ; en anglais, « The quick brown fox jumps over the lazy dog »), modifiable dans un
+    champ au-dessus de la liste ;
+  - la **source**, en mot : « Inkwell », « Système » ou « Projet ».
+
+  Une police **Système** utilisée par le document porte la mention « Vient de votre ordinateur »,
+  avec `warn` et le texte.
+- **Actions** sur une ligne :
+  - « **Ajouter au projet** » (police système) : une copie du fichier entre dans `polices/`, et la
+    police devient disponible pour tout le projet ;
+  - « **Installer pour tous mes projets** » (police du projet) : une installation **permanente**,
+    pour cette personne, sur cet ordinateur, à faire quand on veut. La police reste aussi dans le
+    projet ;
+  - « **Retirer du projet** » (police du projet) : le fichier va à la corbeille du projet, avec le
+    toast « Annuler ». Si le document l'utilise encore, on le dit avant : « Le document utilise
+    cette police dans 3 passages » ;
+  - « **Désinstaller** » (police installée pour tous mes projets) : rien n'est retiré des projets.
+- **Ajouter une police au projet** :
+  - « **Ajouter un fichier de police…** » (`.ttf`, `.otf`, `.ttc`, `.woff2`) ;
+  - ou **glisser-déposer** un fichier sur la liste, ou sur Fichiers. Un fichier de police déposé
+    sur Fichiers est rangé dans `polices/`, et un toast le dit.
+- **Accessibilité** :
+  - liste encadrée, une ligne = un groupe nommé par la famille ;
+  - l'échantillon est décoratif pour le lecteur d'écran (`aria-hidden`), le nom porte
+    l'information ;
+  - boutons de 44px ;
+  - fr et en.
+
+**Police à risque, au point d'écriture** (gravité « avertissement », §4.36). Le message est **local**
+et **calme**, le soulignement en pointillé, jamais rouge.
+- Police **venue de cet ordinateur**, absente du projet : « **Cette police vient de votre
+  ordinateur ; les autres personnes ne l'ont peut-être pas.** · Ajouter la police au projet ».
+- Police **introuvable** (ni ici, ni dans le projet, ni dans Inkwell) : « **Cette police n'est pas
+  disponible** : une autre est utilisée. · Ajouter un fichier de police… · Choisir une autre
+  police ».
+- **Un clic corrige** (correction rapide, Alt+Entrée) : « Ajouter la police au projet » copie le
+  fichier depuis cet ordinateur.
+- Les deux messages sont aussi dans **Relire › Problèmes** ; **un clic mène à la ligne**
+  (`font: "…"` ou `#set text(font: …)`), comme tout problème (§4.36).
+
+**Complétion du nom de police** (N29, §4.37) : dans `font: "`, la fenêtre de complétion propose les
+**polices disponibles** :
+- chaque nom est **écrit dans sa police** et suivi de sa source (« Projet », « Inkwell »,
+  « Système · vient de votre ordinateur ») ;
+- les polices **du projet** et **d'Inkwell** viennent d'abord, puisqu'elles sont partout ;
+- le lecteur d'écran lit le nom et la source.
+
+**Modèles** (N27, §5.19) : un modèle **emporte ses polices**. « Enregistrer comme modèle » inclut le
+dossier `polices/`, et propose d'y ajouter les polices **système** que le document utilise. La
+galerie dit « polices fournies » ou « **manque** : X ».
+
 ## 5. Écrans et parcours
 
 Les cinq tâches de référence (`ux-principles.md`) sont : **créer, partager, relire, présenter,
@@ -2918,7 +3003,7 @@ Le Go fournit déjà tout cela (`internal/app/invites.go`).
 |---|---|---|
 | **Écriture** | **Enregistrement** : Automatique, Avec Ctrl+S, délai ; modifications hors d'Inkwell : Intégrer, Demander · **Éditeur** : suggestions en tapant, aide sur les arguments, nom des arguments (§4.37), retour à la ligne · **Orthographe** et dictionnaire personnel · objectif de mots, vitesse de lecture, concentration · **Raccourcis** (assigner, conflits) | **cet appareil**, pour ce projet (le mode d'enregistrement n'est **pas** partagé ni signé : c'est un choix de chaque personne) |
 | **Apparence et moi** | **Thème** (§2.10), **Variante** (Système, Clair, Sombre), taille du texte, ligatures · nom, couleur souhaitée, empreinte, « Me rendre invisible » · **Secours** (phrase, kit, §4.43) · **appareils** (ajouter, remplacer, retirer, M02) | cet appareil ; nom, couleur et secours : **mes appareils** |
-| **Projet** | fichier principal ; rôles ; verrous ; **protection** (§4.43) ; **fichiers non synchronisés** (§4.42 : règles du projet et mes règles) ; règles partagées : typographie, dictionnaire, extraits ; pour un admin : suppression des fichiers, **IA dans ce projet**, agents et applications permis · **Sauvegarde** : la destination | règles partagées et décisions d'admin : **ce projet, signé** ; protection, mes règles et **destination de sauvegarde** : **cet appareil** |
+| **Projet** | fichier principal ; rôles ; verrous ; **polices** (§4.46) ; **protection** (§4.43) ; **fichiers non synchronisés** (§4.42 : règles du projet et mes règles) ; règles partagées : typographie, dictionnaire, extraits ; pour un admin : suppression des fichiers, **IA dans ce projet**, agents et applications permis · **Sauvegarde** : la destination | règles partagées et décisions d'admin : **ce projet, signé** ; protection, mes règles et **destination de sauvegarde** : **cet appareil** |
 | **IA** (N31) | utiliser l'IA ; fournisseurs et « Tester la connexion » ; texte fantôme ; autres applications (MCP) ; agents (§4.39) | cet appareil |
 | **Extensions** | installées (ce projet, les miennes, les intégrées) ; autorisations ; raccourcis et conflits ; « Appliquer sans relire » ; mettre à jour, retirer, effacer les données ; redémarrer sans extensions (§4.29 à §4.33). La consommation est dans la vue **Ressources** (§4.40). | cet appareil ; extensions de projet : ce projet |
 | **Application** | langue de l'interface (chaque nom de langue porte son `lang`) ; mises à jour ; réseau ; confidentialité ; nettoyage (M09) ; profil sans secrets (M11) ; Détails techniques ; **Mode développeur** et ses outils (§4.35) | cet appareil |
@@ -3075,7 +3160,8 @@ Fable m8).
 - **Automatiques** :
   - vignette tirée de la page 1 de l'aperçu ;
   - type deviné (Touying → « Diapositives ») ;
-  - polices et charte détectées.
+  - polices et charte détectées ; le dossier `polices/` est inclus, et les polices système
+    utilisées sont proposées à l'ajout (§4.46).
 - **« Options avancées »**, repliées :
   - type et étiquettes ;
   - « Remplacer le texte par un texte d'exemple » ;
@@ -3608,6 +3694,7 @@ documentation en ligne.
 - [S31] Microsoft, *Windows UX Guide › Keyboard* (« Don't use Ctrl+Alt combinations », « Don't use
   Alt+alphanumeric key combinations for shortcut keys ») :
   https://learn.microsoft.com/windows/win32/uxguide/inter-keyboard
+- [S32] Typst, `--font-path` et polices du système : https://typst.app/docs/reference/text/text/#parameters-font
 - [S18] Architecture d'Inkwell, §15 (points d'extension, capacités, thèmes, greffons de projet,
   noyau fermé, surfaces, diagrammes, outils) : [`../architecture/spec.md`](../architecture/spec.md)
 - [RFC 2119] https://www.rfc-editor.org/rfc/rfc2119 · [RFC 8174] https://www.rfc-editor.org/rfc/rfc8174
