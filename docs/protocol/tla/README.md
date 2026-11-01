@@ -20,7 +20,7 @@ des demandes de la webview, des suspensions (Restreint) et les règles I, B, A, 
 | Constantes | Résultat |
 |---|---|
 | MaxGen 3, MaxMsg 1, QMax 1, MaxLoss 1, MaxRestrict 1 | **exhaustif, aucune erreur** : 117 385 états, 47 638 distincts, profondeur 32, vivacité comprise (2026-11-01) |
-| `RepoGen.cfg` : MaxGen 4, MaxMsg 2, QMax 1, MaxLoss 2, MaxRestrict 1 | **non exhaustif** : plus de 35 millions d'états distincts (93 millions engendrés, profondeur ≥ 34) explorés en 25 min sur 4 cœurs sans aucune violation de sûreté ni de vivacité sur la partie explorée ; à finir sur la CI nocturne (porte P-TLA) |
+| `RepoGen.cfg` : MaxGen 4, MaxMsg 2, QMax 1, MaxLoss 2, MaxRestrict 1 | **non exhaustif** : plus de 39 millions d'états distincts (104 millions engendrés, profondeur ≥ 35) explorés en 25 min sur 4 cœurs sans aucune violation de sûreté ni de vivacité sur la partie explorée ; à finir sur la CI nocturne (porte P-TLA) |
 
 Le modèle a trouvé deux défauts de la première rédaction, corrigés dans la spec :
 1. réactiver plusieurs fois pendant que l'autre pair est Bas faisait monter `gen` sans
