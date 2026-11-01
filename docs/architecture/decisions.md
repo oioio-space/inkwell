@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Version | 1.0.0-brouillon.5 (2026-11-01, révision 4 : tour 3 ; [CHANGES.md](CHANGES.md), [coherence.md](coherence.md)) |
+| Version | 1.0.0-brouillon.6 (2026-11-01, révision 5 : tour 4 ; [CHANGES.md](CHANGES.md), [coherence.md](coherence.md)) |
 | Rôle | lever chaque doute trouvé en écrivant [spec.md](spec.md) : une question, ses options, une recommandation, sa raison |
 | Sources des doutes | [conception](../conception.pdf), [questions ouvertes](../open-questions.md), [audit](../plans/2026-10-31-architecture-audit.md), ADR 0001–0034, [protocole](../protocol/spec.md), [design](../design/spec.md), code (`main` à `362cb4d`, chantier `proto1`), `TODO` et `t.Skip` |
 
@@ -342,6 +342,8 @@ tant qu'elles sont ouvertes, la spécification n'affirme pas sa fidélité compl
 
 ### AD-13 — Versions nommées et projection Git
 
+> *Historique : la recommandation initiale ci-dessous est **remplacée** par le dernier paragraphe « Révision n » de cette entrée, qui seul fait foi.*
+
 - **Doute.** La conception (p. 1, 6, 9) et `CLAUDE.md` veulent des jalons go-git, projection
   jamais source de vérité ; rien n'est écrit ; l'étape 2.0 (N11) a écarté toute écriture de
   refs Git en attendant.
@@ -609,6 +611,8 @@ tant qu'elles sont ouvertes, la spécification n'affirme pas sa fidélité compl
 
 ### AD-18 — Plates-formes de la v1
 
+> *Historique : la recommandation initiale ci-dessous est **remplacée** par le dernier paragraphe « Révision n » de cette entrée, qui seul fait foi.*
+
 - **Doute.** L'objectif final (L2) vise `.deb`/`.rpm` amd64 et arm64 ; `PROGRESS.md`
   (étape 6) vise aussi macOS et Windows signés et notarisés. L'enfermement (espace de noms
   réseau, Landlock, tmpfs borné, `Pdeathsig`) est Linux seulement ; ADR 0033 **refuse** de
@@ -633,6 +637,8 @@ tant qu'elles sont ouvertes, la spécification n'affirme pas sa fidélité compl
   v3.0.x.
 
 ### AD-33 — Import et export DOCX, RTF, LaTeX
+
+> *Historique : la recommandation initiale ci-dessous est **remplacée** par le dernier paragraphe « Révision n » de cette entrée, qui seul fait foi.*
 
 - **Doute.** La conception veut RTF et DOCX « en import/export seulement » (p. 1) et, à
   l'étape 6, l'import Markdown, DOCX et LaTeX par pandoc (p. 37) ; « un jour pandoc » parmi les
@@ -828,6 +834,8 @@ principal au démarrage. Codex a refusé un correctif étroit : le modèle manqu
 
 ### AD-47 — Documents ouverts, onglets, document actif
 
+> *Historique : la recommandation initiale ci-dessous est **remplacée** par le dernier paragraphe « Révision n » de cette entrée, qui seul fait foi.*
+
 - **Options.** (1) un document actif et une liste de récents, retour arrière (Alt+←), comme
   Overleaf et typst.app ; (2) onglets (barre d'onglets d'Adwaita, comme l'Éditeur de texte de
   GNOME, VS Code) ; (3) vues divisées.
@@ -949,6 +957,8 @@ servent pas de preuve ; celles dont dépendent les décisions ont été vérifi�
 
 ### AD-57 — Où tournent les greffons
 
+> *Historique : la recommandation initiale ci-dessous est **remplacée** par le dernier paragraphe « Révision n » de cette entrée, qui seul fait foi.*
+
 - **Options.** (1) composants par wasmtime-go ; (2) composants par jco dans la webview ;
   (3) wazero dans le processus d'inkwell (recommandation de l'étude) ; (4) wazero dans un
   **processus enfant enfermé** ; (5) Extism.
@@ -967,6 +977,8 @@ servent pas de preuve ; celles dont dépendent les décisions ont été vérifi�
 - **Révision 3 (revues Fable R2-B1, R2-M2 ; Codex R2-1, R2-2, R2-10).** (1) **Un hôte par greffon actif** : seule autorité qu'un parent peut attacher à une connexion après une évasion (Codex) ; paresseux et **≤ 6 actifs** (borne de Fable) ; (2) hôte = binaire **statique** Go pur `inkwell-plugin-host`, démarrage en deux temps (Landlock posé sur un fil puis `execve`, seccomp avec `TSYNC`, vérification, `ready`) ; seccomp est la barrière principale, Landlock la défense en profondeur ; liste seccomp dérivée par `strace` en CI, `clone` filtré, `clone3` refusé ; (3) canal en **flux d'octets**, autorité attachée à la connexion ; (4) **statut d'expérimentation** (spec §0.5, `AD-95`) : l'acceptation de la spec ne vaut pas celle de l'hôte tant que P-PLUG-PROTO, P-PLUG-BENCH, `PLUG-COMPROMISED-*` et P-SANDBOX-* ne sont pas passées, résultats bruts à l'appui.
 
 - **Révision 4 (D-10 convergé ; Fable R3).** Les deux revues retiennent **un hôte par greffon actif**. Précisions : l'éviction ne touche jamais un hôte qui a un mandat ou un appel en vol ; **repli nommé** si l'activation dépasse 500 ms : module compilé à l'installation et gardé dans l'hôte tant qu'il vit, aucune éviction automatique sous 6 actifs, jamais de cache disque ; P-PLUG-BENCH éprouve 16 greffons installés, 6 actifs, 10 en attente.
+
+- **Révision 5 (Fable R4-M1).** Le repli « compilé à l'installation » n'existait pas sous H-3 (wazero ne garde le code natif qu'en mémoire d'un processus ou dans un dossier de cache). Repli réel : (a) **préchauffage** en tâche de fond après la première peinture pour les greffons épinglés ou actifs au dernier usage, dans la limite des 6 actifs, activation froide affichée « Extension en préparation… » ; (b) sinon **revue de H-3 par ADR** (cache disque scellé, haché par le parent, dans le coffre pour un projet protégé).
 
 ### AD-58 — Droits
 
@@ -1043,6 +1055,8 @@ servent pas de preuve ; celles dont dépendent les décisions ont été vérifi�
 
 - **Révision 4 (Codex R3-M1).** Espace de noms par projet `p/<loc>/` avec `loc` dérivé du **secret seul** (le dorsal ne voit pas le `ProjectID`) ; descripteur de projet chiffré : la **phrase seule** (plus l'adresse du dorsal) retrouve les projets ; manifestes et têtes : même enveloppe que les objets (version, nonce, AEAD), têtes signées et vérifiées ; kit **proposé** à la régénération, pas exigé (Fable).
 
+- **Révision 5 (Codex R4-B1).** Le secret de secours n'est **jamais** sur l'appareil (SR-1 à SR-4, spec §6.7) : en mémoire seulement à sa création et à une restauration, effacé ensuite, page verrouillée quand le système l'accorde, fenêtre exclue des captures quand c'est possible ; l'appareil garde la clé **publique** de secours et des sous-clés de sauvegarde **enveloppées** ; la phrase et le kit sont gardés hors de l'appareil.
+
 ### AD-68 — Nuage partagé entre membres (v2)
 
 - **Constat.** Utile quand les membres ne sont jamais en ligne en même temps ; exige une clé de
@@ -1062,6 +1076,8 @@ servent pas de preuve ; celles dont dépendent les décisions ont été vérifi�
 - **Révision 2 (revues Fable B-2, B-4 ; Codex B5, M1).** (1) `plugin/<id>` n'est **pas** une extension compatible du protocole accepté : il exige la mineure PD-1 (`AD-83`) ; N23 est bloquée d'ici là. (2) Niveau « projet » réduit à **contribuer** : ni remplacer (vue par défaut, thème…), ni envelopper (collage), décorations de marque seulement (aucun `replace`, aucun widget qui masque), `transforms` par commande seulement. (3) **Mandat** borné (commande, documents, 30 s, propositions comptées), révoqué à la désactivation, la mise à jour, une nouvelle décision, la fermeture ; réponses tardives jetées. (4) Rendus : locaux seulement pour un greffon de projet.
 
 ### AD-70 — Diagrammes
+
+> *Historique : la recommandation initiale ci-dessous est **remplacée** par le dernier paragraphe « Révision n » de cette entrée, qui seul fait foi.*
 
 - **Recommandation.** §15.14 : contrat pur `renderers` ; hôte `wasm` par défaut, cadre isolé pour
   Mermaid ; assainisseur SVG en Go, affichage en `<img>` ; rendu partagé en blob et entrée
@@ -1211,6 +1227,8 @@ servent pas de preuve ; celles dont dépendent les décisions ont été vérifi�
 
 ### AD-83 — Deltas du protocole
 
+> *Historique : la recommandation initiale ci-dessous est **remplacée** par le dernier paragraphe « Révision n » de cette entrée, qui seul fait foi.*
+
 - **Constat (revues Fable B-2, M-5 ; Codex B5).** La révision 1 appelait « extension compatible »
   des ajouts que le protocole accepté ne tolère pas (registre §20.5 fermé, aucune règle pour un
   espace inconnu, HELLO sans version d'application).
@@ -1296,6 +1314,8 @@ Le détail des contradictions, manques, doublons, carte produit et phasage est d
 
 ### AD-91 — Projet chiffré (N37)
 
+> *Historique : la recommandation initiale ci-dessous est **remplacée** par le dernier paragraphe « Révision n » de cette entrée, qui seul fait foi.*
+
 - **Recommandation.** Spec §6.10, d'après `research/encryption.md` : pas de montage ; chiffrement
   par objet ; DEK **par appareil** (les pairs échangent du clair sur un canal chiffré, donc aucune
   clé de groupe) enveloppée au format age pour la clé X25519 de l'appareil, le destinataire de
@@ -1307,6 +1327,8 @@ Le détail des contradictions, manques, doublons, carte produit et phasage est d
 
 - **Révision 4 (Codex R3-B1, R3-B2 ; Fable R3-M5, m-9).** (1) La DEK (32 octets) est la **charge utile d'un fichier age complet** (bibliothèque `filippo.io/age`, stanzas inchangées), liée au projet, à l'appareil et à l'époque ; destinataires : la clé de l'appareil et le destinataire de secours ; DEK **par projet et par appareil** (pas d'enveloppe pour les autres appareils). (2) Le dossier de travail n'existe **que** sur un support qui ne garde pas de clair après coupure ou vol : mémoire (tmpfs sans swap en clair ; disque en mémoire sous macOS, à prouver) ou disque chiffré par le système **vérifié** ; sinon, pour un projet protégé, aperçu, export lisible et service de langage des fichiers fermés sont refusés sur la cible. (3) Budget : matérialisation par dépendances réelles, ≤ 512 Mio, refus au-delà. (4) Git dans le coffre (go-git sur `billy.Filesystem`), index dans le dossier de travail. (5) Repli : NG3 reste et G13 passe en v1.x si P-VAULT échoue.
 
+- **Révision 5 (Codex R4-B1, Fable R4-M2, m-1).** Règle VK (EN-3) : toute voie locale vers la DEK dépend d'un secret absent du disque lisible hors ligne : clé privée X25519 dans le trousseau, ou enveloppée sous mot de passe (Argon2id 256 Mio, 3 passes, 4 fils), ou sur disque chiffré vérifié ; **aucun repli** vers un fichier nu pour un projet protégé ; P-VAULT : vol hors ligne, aucun trousseau, recherche des octets de clés sur l'image. **Voie de récupération** : par le destinataire de secours, un `peer` différent est accepté, l'ancien appareil affiché, la DEK ré-enveloppée pour le nouvel appareil sous une **nouvelle époque**. **Oracles** de « vérifié » nommés (`/proc/swaps`, `dm/uuid` en `CRYPT-`, `lsblk`, `sysctl vm.swapusage`, `fdesetup status`, `Win32_EncryptableVolume`) ; le disque en mémoire de macOS exige aussi le swap chiffré.
+
 ### AD-92 — Historique sans Git (N39)
 
 - **Recommandation.** Spec §6.11 HI-1 à HI-5 : voyager dans le temps (vue en lecture seule),
@@ -1315,6 +1337,8 @@ Le détail des contradictions, manques, doublons, carte produit et phasage est d
   le projet, comparer par mots, projection go-git (`AD-13`). Zéro mot de Git dans l'interface.
 
 - **Révision 4 (Codex R3-B3 ; Fable m-10).** Les versions nommées **épinglent** leurs blobs, rendus et paquets dans le ménage (§6.5, HI-9), épingle posée avant la publication du manifeste ; un moment quelconque n'épingle rien et la vue le dit ; une **purge** l'emporte (version « incomplète », rien ressuscité) ; horloge du voyage = ordre de réception sur l'appareil, heure déclarée marquée (HI-10).
+
+- **Révision 5 (Fable R4-m2, R4-m4).** Version **incomplète dès la création** quand un blob manque partout (demandé aux pairs avant la publication) ; un appareil qui reçoit un manifeste épingle ce qu'il a et va chercher le reste. Une personne qui peut écrire l'original **prévisualise** l'intégration comme une proposition et l'applique elle-même (pas les règles des auteurs non humains).
 
 ### AD-93 — Performance mesurée (N38)
 
@@ -1325,6 +1349,8 @@ Le détail des contradictions, manques, doublons, carte produit et phasage est d
 - **Norme.** `engineering-principles.md` §3 ; consigne du dépôt « prouver par benchstat ».
 
 - **Révision 4 (Codex R3-M4 ; Fable R3-M4, m-11, m-14).** Protocole de mesure normatif (§12.5 PM-1 à PM-6) : corpus versionnés, conditions, échantillons, chronomètres, bruit ; RSS/PSS plafonnée, VSZ observée à part ; Long Tasks ne prouve que ≥ 50 ms, frappe mesurée à la peinture suivante ; seuils fixés avant comparaison ; **mesure de référence dans le premier lot du MVP** ; budgets ajoutés (voyage dans le temps, comparaison par mots, motifs, déverrouillage, rechiffrement) ; BLAKE3 par architecture.
+
+- **Révision 5 (Codex R4-M1).** PM-4 sépare gestionnaire (≤ 4 ms), attente du rappel d'image et latence jusqu’à l’affichage ; `requestAnimationFrame` ne prouve pas la peinture ; mesure par Event Timing là où le moteur l'offre ou par capture horodatée externe ; chaque oracle validé par un cas témoin de mise en page lente ; sans oracle validé, le cas échoue.
 
 ### AD-94 — Port d'enfermement sur six cibles (N35)
 
@@ -1340,6 +1366,8 @@ Le détail des contradictions, manques, doublons, carte produit et phasage est d
 
 ### AD-95 — Ce que vaut l'acceptation de la spécification
 
+> *Historique : la recommandation initiale ci-dessous est **remplacée** par le dernier paragraphe « Révision n » de cette entrée, qui seul fait foi.*
+
 - **Constat.** Codex R2-10 : une porte déclarée « préalable à l'acceptation » ne peut pas être
   remplacée par une meilleure liste de mesures. Un agent de conception ne produit ni binaire ni
   banc.
@@ -1351,7 +1379,11 @@ Le détail des contradictions, manques, doublons, carte produit et phasage est d
 
 - **Révision 4 (Codex R3-B4 ; Fable R3-M3, D-14 convergé).** Règles E-1 à E-5 de toutes les portes (entrées et seuils figés avant, résultats bruts, matrice, **repli nommé à l'avance**, rejeu à chaque majeure de macOS et de Windows) ; une colonne de repli par expérimentation ; portes complétées (P-PLUG-PROTO, P-PLUG-BENCH, P-SANDBOX-* avec sidecars, P-VAULT avec inspection hors ligne avant relance, P-IDX, P-GIT-BENCH, P-MERMAID, P-FRAME) ; ACP sorti des expérimentations (report).
 
+- **Révision 5 (Fable R4-m5).** Sortie des sidecars : 256 Mio par compilation, 512 Mio cumulés pour les compilations simultanées, inscrits dans P-SANDBOX (§0.5) et au §9.5.
+
 ### AD-96 — Variantes et intégrations (N41)
+
+> *Historique : la recommandation initiale ci-dessous est **remplacée** par le dernier paragraphe « Révision n » de cette entrée, qui seul fait foi.*
 
 - **Recommandation.** Spec §6.11 HI-6, HI-7 : sur les variantes déjà présentes (ADR 0031,
   `history/graph.ts`) ; « Créer une variante », « Comparer avec l'original », « Proposer

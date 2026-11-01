@@ -1,5 +1,29 @@
 # Changements de l'architecture
 
+## 1.0.0-brouillon.6 — révision 5 (2026-11-01)
+
+Réponse au tour 4 : [Fable](reviews/07-fable-r4.md) **ACCEPT** (2 majeurs de texte, 5 mineurs) ;
+[Codex](reviews/08-codex-r4.md) **NOT ACCEPTED** (1 bloquant, 1 majeur, 1 mineur). Aucune
+modification de `docs/protocol/` ni de `docs/design/`.
+
+| Constat | Changement |
+|---|---|
+| Codex R4-B1 le secret de secours peut rester lisible sur le disque volé | §6.7 **SR-1 à SR-4** : le secret n'est **jamais** sur l'appareil ; en clair seulement en mémoire, à sa création et à une restauration, puis effacé (tampon écrasé, jamais une `string`) ; page verrouillée (`mlock`, `VirtualLock`) quand le système l'accorde ; jamais journalisé ; fenêtre de la phrase exclue des captures quand c'est possible (Windows, macOS ; dit sous Linux) ; l'appareil garde la clé **publique** de secours et des sous-clés de sauvegarde **enveloppées** ; §6.10 **EN-3 / VK-1 à VK-3** : toute voie locale vers la DEK dépend d'un secret absent du disque lisible hors ligne (trousseau, mot de passe Argon2id aux paramètres fixés, ou disque chiffré vérifié), **aucun repli** vers un fichier nu pour un projet protégé ; §6.1 aligné ; P-VAULT : vol hors ligne, configuration et trousseau absents, recherche des octets de clés sur l'image |
+| Codex R4-M1 PM-4 arrête le chronomètre avant la peinture | §12.5 PM-4 : trois grandeurs séparées (gestionnaire ≤ 4 ms, attente du rappel, latence jusqu'à l'affichage) ; `requestAnimationFrame` ne prouve pas la peinture ; Event Timing ou capture horodatée externe ; oracle validé par un cas témoin de mise en page lente ; sans oracle, échec |
+| Codex R4-m1 résumés anciens | §3.2 : un greffon par hôte ; annexe, Décision 6 : message `inkwell-ext:plugin-package:1\0` ; `decisions.md` : les recommandations initiales remplacées (AD-13, 18, 33, 47, 57, 70, 83, 91, 95, 96) portent la mention « remplacée par la dernière révision, qui seule fait foi » |
+| Fable R4-M1 repli « compilé à l'installation » inapplicable sous H-3 | §0.5 : repli = **préchauffage** en tâche de fond après la première peinture (épinglés ou actifs au dernier usage, ≤ 6) avec « Extension en préparation… » ; sinon **revue de H-3 par ADR** (cache disque scellé, haché par le parent, dans le coffre si protégé) |
+| Fable R4-M2 « refus d'un autre appareil » contre récupération | §6.10 EN-2 **voie de récupération** : par le destinataire de secours, ancien `peer` accepté et affiché, DEK ré-enveloppée pour le nouvel appareil sous une nouvelle époque ; vecteur « secours sur appareil neuf, époque + 1, ancien appareil refusé ensuite » |
+| Fable R4-m1 oracles de « vérifié » | EN-4 : `/proc/swaps`, `dm/uuid` en `CRYPT-`, `lsblk`, `sysctl vm.swapusage` « (encrypted) » (exigé aussi pour le disque en mémoire de macOS), `fdesetup status`, `Win32_EncryptableVolume.ProtectionStatus` ; support faussement annoncé → refus |
+| Fable R4-m2 version incomplète dès la création | HI-9 : blobs manquants demandés aux pairs avant publication, sinon « incomplète » dès la création ; épingle de ce qu'on a, le reste cherché ; tests |
+| Fable R4-m3 `AD-96` périmé | mention « remplacée » en tête de l'entrée |
+| Fable R4-m4 HI-6 et § 15.5 | la personne qui peut écrire l'original **prévisualise** l'intégration comme une proposition et l'applique elle-même ; les règles des auteurs non humains ne la concernent pas |
+| Fable R4-m5 borne des sidecars sans chiffre | 256 Mio par compilation, 512 Mio cumulés (admission par le parent), au §0.5 et au §9.5 |
+
+### Désaccords à débattre
+
+Aucun. D-10 à D-16 restent convergés (Codex tour 4 : accord sur l'issue enregistrée).
+
+
 ## 1.0.0-brouillon.5 — révision 4 (2026-11-01)
 
 Réponse au tour 3 : [Fable](reviews/05-fable-r3.md) **ACCEPT** (0 bloquant, 5 majeurs de texte,

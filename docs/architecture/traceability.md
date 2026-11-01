@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Version | 1.0.0-brouillon.5 (2026-11-01, révision 4 ; N1 à N41) |
+| Version | 1.0.0-brouillon.6 (2026-11-01, révision 5 ; N1 à N41) |
 | Lire avec | [spec.md](spec.md) (règles), [decisions.md](decisions.md) (`AD-xx`), [exigences](../exigences.md) |
 
 Chaque ligne relie une demande à l'élément d'architecture qui la sert et à la preuve qui la
