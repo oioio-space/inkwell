@@ -64,36 +64,36 @@ sans apprendre, et que l'application suit le thème clair ou sombre du système.
    grandes polices.
 7. **Mesuré, pas supposé** : chaque règle a sa preuve (un test, une capture, une revue).
 
-## Les grandes décisions (révision 4)
+## Les grandes décisions (révision 5)
 
-- **Jetons libadwaita 1.8, corrigés pour WCAG 2.2 AA.** `tokens.json` est le **contrat de
-  thème** :
-  - chaque jeton est classé, avec des bornes typées et une version ;
-  - l'hôte vérifie 128 paires, **états interactifs compris**, dans les quatre modes, avec des
-    planchers HC (7:1 pour le texte principal) ;
-  - un seul échec, et le thème est refusé, avec la raison exacte.
-- **La structure à gauche** (Fichiers, Sommaire, Tâches, Liens) ; **le temps et les autres à
-  droite** (Historique, Activité, Rechercher, Relecture, IA) ; des onglets de fichiers. G-0 (le
-  clic sur un fichier) reste ouvert.
-- **Messages :** état critique, puis questions, puis états. Un toast n'a qu'une action, et
-  l'annulation dure.
-- **Extensions :**
-  - une ligne par point de l'architecture, avec son attribution ;
-  - rendues par Inkwell, en Adwaita ;
-  - épinglées par la personne seulement (6 au plus) ;
-  - zones protégées ; mode sans extensions ;
-  - vue **En cours** pour voir et arrêter ce qui consomme.
-- **Écrire, c'est calme :** orthographe en pointillé gris-bleu, Relecture à la demande, aucun
-  score ni rouge, objectifs locaux sans série, typographie française.
-- **L'IA propose, la personne dispose :**
-  - diff par morceau, « via IA » visible ;
-  - rien ne part sans voir quoi et vers où ;
-  - la politique est décidée par un admin ;
-  - désactivée par défaut dans les projets partagés.
-- **Problèmes :** un clic jusqu'à l'erreur ; F8 ; corrections rapides sur **Alt+Entrée** (Ctrl+.
-  est pris par GTK).
-- **Modèles :** aucun fourni ; enregistrés en un dialogue, au format de Typst.
-- **Rien n'est ratifié** (`spec.md` §11) ; les désaccords sont dans `CHANGES.md`.
+- **La carte calme** (passe de cohérence, `architecture/coherence.md`). À l'ouverture : Fichiers,
+  le texte, l'aperçu, aucun tiroir.
+  - **À gauche**, deux onglets : Fichiers et Sommaire.
+  - **À droite**, trois destinations : Rechercher ; **Relire** (Problèmes, Commentaires,
+    Activité, Versions) ; IA, si elle est activée.
+  - La **barre d'état** a quatre éléments, avec **un seul compteur** de problèmes.
+  - **Ressources** est à part.
+- **Revenir en arrière sans Git :**
+  - une frise en mots ;
+  - le passé se regarde en lecture seule ;
+  - **restaurer crée une nouvelle version**, et rien n'est perdu ;
+  - comparer par mots ;
+  - **variantes** et « Proposer d'intégrer », relues par morceau, avec les passages des deux
+    côtés côte à côte.
+- **Protéger, sauvegarder, transmettre**, quatre mots distincts (version, sauvegarde, archive,
+  modèle) :
+  - protection cochée par défaut pour un projet partagé ;
+  - phrase et kit de secours vérifiés ;
+  - restauration à côté, sans rien écraser.
+- **Ne pas synchroniser** : un geste et un nuage barré ; la personne, ou l'admin pour tout le
+  projet ; l'aperçu des fichiers concernés.
+- **Une seule façon de relire une proposition** (extension, IA, application, variante) : par
+  morceau.
+- **États honnêtes** : on dit « enregistré », « envoyé » ou « reçu », jamais une promesse de plus.
+- **Partout le même Adwaita**, avec les gestes de chaque système (Cmd sur macOS). Aucun format
+  Word ni ODT.
+- **Jetons :** 131 paires vérifiées, états interactifs et frise compris ; contrat de thème.
+- Les décisions non tranchées et les désaccords sont dans `spec.md` §11 et `CHANGES.md`.
 
 ## Comment s'en servir
 

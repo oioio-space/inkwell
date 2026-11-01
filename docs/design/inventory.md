@@ -1,4 +1,4 @@
-# Inventaire de l'interface et écarts avec la spécification (N17, révision 4)
+# Inventaire de l'interface et écarts avec la spécification (N17, révision 5)
 
 - **Relevé du 2026-11-01** sur `main` (`3841ff2`), dans `frontend/src` ; les chemins sont
   relatifs à ce dossier, sauf mention contraire.
@@ -127,7 +127,7 @@
 | G-46 | M | 79 espaces ordinaires avant `? ! : ;` et dans « » | §6.3 | `fr.json` | U+202F, U+00A0, et un test |
 | G-47 | m | `<html lang="fr">` fixe | 3.1.1 | `frontend/index.html:2`, `i18n/index.ts:8` | `lang` dynamique |
 | G-48 | m | Jargon (« Révision {commit} », `.typstdeps`, UTF-8) | P5 | `fr.json:85`, `:428`, `:167-177` | « Détails techniques » |
-| G-49 | m | Ctrl+K = lien ; pas de palette | règle 3 | `ui/toolbar/spec.ts:96` | Q1 : palette sur Ctrl+Maj+P |
+| G-49 | m | Pas de palette ; Ctrl+K = lien (**juste**, C14) | règle 3 corrigée | `ui/toolbar/spec.ts:96` | palette sur Ctrl+Maj+P (Cmd+Maj+P sur macOS) |
 | G-56 | M | Chemin du fichier dans le toast d'export ; pas d'action « Ouvrir » | E-2, Nielsen 3 | `fr.json:450`, `preview/actions.ts:82` | §5.12 |
 | G-57 | M | Écrans vides en texte seul, sans action | HIG *Placeholders*, Nielsen 9 | `HistoryDrawer.svelte:207`, `:213`, `PeopleDialog.svelte:101`, `Preview.svelte:193-201` | `StatusPage` |
 | G-58 | M | Pas d'aide ni de fenêtre des raccourcis | Nielsen 10, 3.2.6 | aucun composant | §4.26 |
@@ -172,7 +172,7 @@ Ces fonctions n'existent pas encore. Chaque ligne nomme ce que le code devra mon
 |---|---|---|---|---|---|
 | G-80 | M | Aucun soulignement ni marqueur de marge pour les problèmes dans l'éditeur | N28, Nielsen 9, 3.3.1 | `@codemirror/lint` absent (`frontend/package.json`) ; aucun `setDiagnostics` dans `src` | spec §4.36 |
 | G-81 | M | Le diagnostic a la ligne et la **colonne** de début (message coupé à **4 000** caractères), mais ni fin de plage, ni conseil, ni correction, ni trace ; les problèmes CSV n'ont que la ligne | N28, 3.3.3 | `preview/protocol.ts:8-19`, `:134-142` ; `editor/csv/problems.ts:17` (`findProblems`) | modèle de diagnostic unique (§4.36) ; à porter au protocole de l'aperçu (N18) |
-| G-82 | M | Messages du compilateur bruts, en anglais ; pas de phrase en clair ni de conseil ; le compte de la barre d'état n'amène pas à l'erreur (il ouvre une liste) | N28, P5, Nielsen 9 | `ui/shell/StatusBar.svelte:120` (`d.message.split("\n")[0]`), `:84-101` | table de traduction, bouton partagé, F8, Ctrl+. |
+| G-82 | M | Messages du compilateur bruts, en anglais ; pas de phrase en clair ni de conseil ; le compte de la barre d'état n'amène pas à l'erreur (il ouvre une liste) | N28, P5, Nielsen 9 | `ui/shell/StatusBar.svelte:120` (`d.message.split("\n")[0]`), `:84-101` | table de traduction ; compteur unique dont le clic va au suivant ; F8 ; corrections sur **Alt+Entrée** ; liste dans Relire (C13) |
 | G-83 | M | Aucun modèle de projet : ni galerie, ni enregistrement, ni gestion. « Nouveau projet » n'existe pas (G-40). | N27 | aucun composant | spec §5.2, §5.19 |
 | G-84 | M | tinymist est embarqué, mais son LSP n'est pas relié à l'éditeur : ni complétion, ni aide de signature, ni survol, ni définition | N29 | `@codemirror/autocomplete` absent de `frontend/package.json` ; aucun appel LSP dans `frontend/src/editor` | spec §4.37 ; branchement (architecture N18) |
 
@@ -185,6 +185,21 @@ Ces fonctions n'existent pas encore. Chaque ligne nomme ce que le code devra mon
 | G-86 | M | Pas d'IA : ni onglet, ni proposition, ni fournisseur, ni politique, ni dialogue d'envoi | N31 | aucun code ; architecture §15.18 | spec §4.39 |
 | G-87 | M | Pas de vue des ressources des extensions | N32, ND-5 | aucun code | spec §4.40 |
 | G-88 | M | Pas d'orthographe, de Relecture, de mode concentration, d'objectifs, de typographie française à la frappe, de dialogues d'insertion de figure ni de citation | N30 | aucun correcteur dans `frontend/package.json` ; le compte de mots existe (`ui/popover/StatsPopover.svelte`) | spec §4.38 |
+
+### 2.10 Révision 5 : cohérence (N36), versions, variantes, protection, synchronisation, plates-formes
+
+| # | Grav. | Écart | Norme | Preuve | Correction |
+|---|---|---|---|---|---|
+| G-0a / G-0b | **B** | G-0 se corrige en deux temps (architecture `AD-77`). **G-0a** : le clic ouvre vraiment (éditeur pour `main.typ`, lecture seule ailleurs, avec un bandeau). **G-0b** : édition en onglet. **Toujours ouvert.** | Nielsen 1 et 3 | `App.svelte:197` | spec §4.16 ; `e2e/files.spec.ts` |
+| G-89 | M | L'historique est un tiroir à trois onglets (Historique, Commentaires, Activité) : pas de vue du passé en lecture seule, pas de « Revenir au présent », pas de curseur temporel, pas de restauration de tout le projet avec aperçu | N39, `coherence.md` §6.7 | `ui/history/HistoryDrawer.svelte:46`, `:82-88` | Relire › Versions (spec §4.22) |
+| G-90 | M | Les variantes existent (`doc.meta.variants`), mais l'interface dit « fusion » et n'a ni « Proposer d'intégrer », ni relecture d'intégration par morceau, ni choix côte à côte | N41, glossaire | `ui/history/HistoryDrawer.svelte:61-64` ; `i18n/fr.json:549`, `:618`, `:621`, `:622`, `:656`, `:663` (G-61) | spec §4.22, §4.41 |
+| G-91 | M | Pas de fichiers non synchronisés : ni geste, ni marque, ni aperçu, ni règles | N34 | aucun code ; architecture §6.9 | spec §4.42 |
+| G-92 | M | Pas de protection du projet, de phrase ni de kit de secours, de sauvegarde ni de restauration à côté | N37, M01 | aucun code ; architecture §6.7, §6.10 | spec §4.43, §4.44 |
+| G-93 | M | Barre d'état surchargée (personnes, problèmes, page, non enregistré, position, mots, zoom, encodage, langage) ; liste des problèmes en popover | `coherence.md` §6.4, §6.5 | `ui/shell/StatusBar.svelte:78-150` | quatre éléments, le reste sous ⋯ ; liste dans Relire (spec §4.17, §4.36) |
+| G-94 | M | Un texte promet plus que l'état connu | C19, H-HON | `i18n/fr.json:7` (« Hors ligne — rien n'est perdu ») | spec §4.15 |
+| G-95 | M | Pas de barre de menus macOS générée du registre, pas d'affichage « ⌘ » des raccourcis, pas de fiche « aperçu indisponible sur ce système » | N35, `coherence.md` §6.18 | `ui/toolbar/spec.ts` (`shortcutLabel`), `App.svelte:127-148` | spec §8.4 |
+| G-96 | m | Panneau de gauche : la spec rév. 4 prévoyait quatre onglets ; il en faut deux (Fichiers, Sommaire), avec Liens dans les détails et Tâches en filtre | `coherence.md` §6.3 | spec rév. 4 §4.16 (corrigé) ; code : un seul panneau Fichiers (`ui/shell/Sidebar.svelte`) | spec §4.16 |
+| G-97 | m | Aucune entrée bureautique dans le code ; le collage riche n'est pas converti | N40, M05 | aucun gestionnaire de collage HTML dans `frontend/src/editor` | spec §4.45 |
 
 ## 3. Corrections, dans l'ordre
 
@@ -237,5 +252,13 @@ par une passe Orca.
   - G-84 (aide à l'écriture, après le branchement du LSP).
 - **Vague 11, écriture, IA, ressources :** G-85 et G-85b avec la vague 1 (contraste) ; G-88
   (écriture) ; G-87 (ressources, avec la vague 8) ; G-86 (IA, après PD-1 et les ADR 0040 et 0041).
+- **Vague 12, cohérence** (MVP de `coherence.md` §5) :
+  - G-0a, puis G-0b ;
+  - G-93, G-94 ;
+  - G-89 et G-90 (« Revenir en arrière ») ;
+  - G-91 (couche personnelle) ;
+  - G-92 (sauvegarde locale et restauration à côté au MVP ; protection en v1) ;
+  - G-95 (v1, six plates-formes) ;
+  - G-96, G-97.
 - **Transverses**, à mener avec la vague 4 : G-78 (replis du focus), G-79 (langue des
   passages).

@@ -11,7 +11,8 @@ mesuré en tests utilisateurs à chaque étape.
 2. **Le texte d'abord** : barre d'en-tête Adwaita (titre, état de synchro, avatars), c'est
    tout. La barre de formatage apparaît sur la sélection ; les panneaux secondaires
    partagent un tiroir à onglets à droite.
-3. **Trois accès à tout** : clic, raccourci, palette (Ctrl/Cmd+K) qui affiche le raccourci.
+3. **Trois accès à tout** : clic, raccourci, palette (Ctrl/Cmd+Maj+P, et menu › « Rechercher une commande… ») qui affiche le
+   raccourci ; Ctrl/Cmd+K reste « lien » (décision de cohérence C14, 2026-11-01).
 4. **Zéro jargon** : voir [glossaire](glossary.md).
 5. **Chaque message dit quoi faire** : une phrase + une action, jamais un code seul ; toute
    attente a une durée ou une progression visible.

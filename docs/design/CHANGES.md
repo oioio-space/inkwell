@@ -182,3 +182,81 @@ des paires interdites.
    convention de CodeMirror et de VS Code, et que GNOME règle IBus sur Super+Espace par défaut
    [à confirmer par un e2e sous WebKitGTK]. Le repli Alt+/ est documenté. Si l'e2e montre une
    interception par défaut, on inverse.
+
+---
+
+# Révision 5 — passe de cohérence (N36), puis N34, N35, N37, N39, N40 et N41
+
+Entrées :
+- [`architecture/coherence.md`](../architecture/coherence.md) §6, avec ses 20 changements demandés
+  au design ;
+- l'architecture rév. 3 (`1.0.0-brouillon.4`) : §6.6, §6.7, §6.9, §6.10, §6.11, §9.11, §10.4,
+  §11.1, §15.17, §15.18 ;
+- les études `sync-ignore.md` et `encryption.md`.
+
+Les points de la revue n°3 sont fermés depuis la rév. 4. Les contrastes ont été recalculés :
+**131 paires**, aucun échec hors des paires interdites.
+
+## Les 20 changements de la passe de cohérence
+
+| # | Changement demandé | Correction |
+|---|---|---|
+| 1 | Onglets : ouverts ≠ chargés ; fermeture sans question | §4.25 : « ouvert ≠ chargé ≠ actif », rechargement ≤ 200ms, fermeture sans question (SAV-03) |
+| 2 | Tiroir à trois destinations ; Inspecteur et « En cours » hors du tiroir | §3.1 : Rechercher, **Relire** (Problèmes, Commentaires, Activité, Versions), IA (si activée). §4.35 : Inspecteur = détail de Ressources. §4.40 : Ressources hors du tiroir. |
+| 3 | Gauche à deux onglets ; Liens dans les détails ; Tâches en filtre ; nuage barré | §4.16 réécrit (Fichiers, Sommaire ; « Titres · Tâches · Tout » ; détails d'un fichier avec Liens ; `cloud-off`) |
+| 4 | Un seul compteur de problèmes, dans la barre d'état ; clic = suivant ; liste dans Relire | §4.17, §4.36 ; **le désaccord n°1 de la rév. 4 est clos en faveur de C13** : le popover disparaît (G-93) |
+| 5 | Barre d'état : quatre éléments, le reste sous ⋯ | §4.17 : problèmes, non enregistré, position et mots, page ; indicateur Ressources seulement en cas de pause |
+| 6 | Raccourcis (Ctrl+K, Ctrl+Maj+P, Alt+Entrée) ; corriger la règle 3 ; export après audit ; plus de Ctrl+. | `ux-principles.md` règle 3 **corrigée** ; §8.2 : export sans raccourci jusqu'à l'audit ; inventaire G-82 et G-49 réécrits, sans Ctrl+. |
+| 7 | Historique sans Git | §4.22 réécrit : frise, vue du passé, curseur temporel, Revenir au présent, restaurer = nouvelle version, comparer par mots, vocabulaire figé |
+| 8 | Variantes | §4.22 points 6 et 7 : créer, comparer, proposer d'intégrer, intégrer, abandonner, divergence côte à côte, Dupliquer le projet |
+| 9 | Protection du projet | §4.43 : case cochée par défaut pour un projet partagé ; déverrouillage ; phrase et kit ; « sans eux, perdus » ; export protégé ou lisible |
+| 10 | Sauvegarde et restauration | §4.44 : date du dernier succès, restauration à côté, fraîcheur ST-7 |
+| 11 | Vue Ressources | §4.40 : vue à part ; annuler, mettre en pause, arrêter, désactiver ; limites à la baisse ; portée sans nom de fichier ni titre (RS-5) ; IA et sauvegarde en lignes |
+| 12 | Non synchronisés | §4.42 : « Ne pas synchroniser », « Pour tout le projet », aperçu, « ne retire pas les copies déjà reçues » |
+| 13 | IA : indicateur, aperçu à chaque nouvelle provenance, consommation, marques, jeton MCP par client, « se présente comme » | §4.39 : pastille « IA : envoi vers X » pendant une séance ; dialogue d'envoi à chaque nouvelle provenance ; jetons, « estimation », « coût inconnu » ; jeton par application ; « se présente comme » |
+| 14 | Propositions : une présentation ; « appliquer sans relire » par extension | §4.41 ; §4.29 (réglage sur la ligne, jamais pour une extension de projet ni l'IA) |
+| 15 | Modèles : un emplacement, aucun gabarit, choix des fichiers, CSS = réglage d'export HTML | §5.19 : `Documents/Inkwell/Modèles/` seul ; plus de « modèles de l'équipe » ; fichiers inclus visibles ; CSS = export HTML (`AD-78`) ; Q16 tranchée |
+| 16 | États honnêtes | §4.15 (table des états acquittés, H-HON), §5.16 (deux messages corrigés) ; G-94 |
+| 17 | Extensions : un gestionnaire, puzzle, épinglage, mode sans extensions, badge | §4.29 : portée et provenance sur chaque ligne, format `.inkwell-plugin` ; le reste était déjà là (§4.30, §4.32, §4.33) |
+| 18 | Plates-formes | §8.4 : Cmd sur macOS, barre de menus du système depuis le registre, réservés par système, fiche « aperçu indisponible sur ce système » |
+| 19 | Aucun format bureautique ; collage riche oui | §4.45, §5.12 |
+| 20 | Glossaire | `glossary.md` : ajout de version, variante, proposer d'intégrer et intégrer, protéger, phrase et kit de secours, sauvegarde, ressources, non synchronisé ; retrait de jalon et de brouillon ; « fusionner » interdit. §6.4 complété. |
+
+Et aussi, depuis la carte produit et les manques :
+- Accueil avec « Restaurer une copie » ; « Nouveau » en Typst, Markdown, texte, tableau (§5.2) ;
+- Préférences en six pages, chaque ligne avec sa portée (§5.13) ;
+- appareils (M02) ; nettoyage (M09) ; profil sans secrets (M11) ;
+- impression au MVP par le lecteur de PDF (M21) ;
+- script lecteur d'écran de la collaboration (M07, §10).
+
+## Exigences nouvelles
+
+| Exigence | Correction |
+|---|---|
+| N34, ne pas synchroniser | §4.42, §4.16 (marque), §5.13 (écran des règles) ; G-91 |
+| N35, plates-formes | §8.4 ; G-95 |
+| N37, protection | §4.43, §4.44, §5.12 (exports) ; G-92 |
+| N39, historique sans Git | §4.22 (frise, voyager, restaurer sans détruire, versions nommées, comparer) ; prior art : Google Docs, Figma, Time Machine, Patchwork [S28] ; G-89 |
+| N40, aucun format bureautique | §4.45 ; test de chaînes interdites (§10) ; G-97 |
+| N41, variantes | §4.22 (variantes, relecture d'intégration, choix côte à côte), §4.41 ; G-90 |
+
+Note de méthode : les références Patchwork, Google Docs, Figma et Time Machine viennent de la
+connaissance des produits et de leurs pages d'aide publiques, citées en [S28]. Leur contenu n'a
+pas été relu en ligne pour cette révision. L'architecture (HI-6) s'appuie aussi sur Patchwork.
+
+## Désaccords à débattre
+
+1. *(clos)* La liste des problèmes : le popover de la rév. 4 cède à C13 (liste dans Relire,
+   compteur unique dans la barre d'état). Le désaccord n'a plus d'objet.
+2. **La barre de mise en forme à l'ouverture.** `coherence.md` §4 écrit « la barre de mise en forme
+   se masque ».
+   - T11 (D, validé) dit que l'utilisatrice a **choisi une barre fixe**, repliable par
+     Ctrl+Maj+T, au lieu de la barre sur sélection prévue par la conception.
+   - Ce design garde **le choix de la personne** (§3.1). À confirmer par l'utilisatrice avant de
+     changer un comportement qu'elle a validé.
+3. **Ressources en fenêtre auxiliaire.**
+   - L'architecture (RS-6) dit « vue » sans en fixer le contenant, et C18 admet des fenêtres
+     auxiliaires.
+   - Ce design en fait une fenêtre non modale, pour voir l'effet d'un arrêt à côté du travail.
+   - Si l'utilisatrice préfère une page dans la fenêtre principale, la table reste identique.
+4. **Ctrl+; et Ctrl+Espace** : inchangés depuis la rév. 4 (désaccords n°2 et n°3), toujours ouverts.
