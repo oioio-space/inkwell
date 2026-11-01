@@ -9,6 +9,9 @@ personne qui touche à l'interface : développement, revue, tests.
 | [`spec.md`](spec.md) | La règle : jetons, composants, écrans, accessibilité, cohérence. Normatif (DOIT, DEVRAIT, PEUT). |
 | [`inventory.md`](inventory.md) | L'interface actuelle, relevée dans le code, et ses écarts avec la règle, dans l'ordre où les corriger. |
 | [`tokens.json`](tokens.json) | Les jetons de design, lisibles par une machine. |
+| [`coverage.md`](coverage.md) | La grille de contrôle : Nielsen, WCAG 2.2 A et AA, motifs APG, GNOME HIG et libadwaita, et tous les domaines de l'expérience. |
+| [`CHANGES.md`](CHANGES.md) | Ce que la révision 2 a changé, constat par constat. |
+| [`reviews/`](reviews/) | Les revues archivées. |
 
 Ce dossier précise [`../ux-principles.md`](../ux-principles.md) et le [glossaire](../glossary.md),
 il ne les remplace pas. En cas de désaccord, ce sont eux qui gagnent, jusqu'à ce qu'une ADR
@@ -61,18 +64,30 @@ sans apprendre, et que l'application suit le thème clair ou sombre du système.
    grandes polices.
 7. **Mesuré, pas supposé** : chaque règle a sa preuve (un test, une capture, une revue).
 
-## Les grandes décisions de cette version
+## Les grandes décisions (révision 2)
 
-- **Les jetons libadwaita 1.8 restent la base.** On corrige quatre valeurs qui ne passent pas
-  WCAG 2.2 AA : l'anneau de focus, la couleur « succès », deux marques de fichiers. On ajoute
-  une variante « trait » des couleurs de personnes pour les curseurs sur fond clair.
-- **Une échelle typographique de six tailles** remplace les treize tailles relevées dans le
-  code.
-- **Un seul composant `Dialog`** remplace sept dialogues recopiés.
-- **Au plus un bandeau visible à la fois**, choisi par priorité, comme `AdwBanner`. Un toast
-  ne pose jamais de question.
-- **Une palette de commandes (Ctrl+K)** est prévue par les principes, mais Ctrl+K sert
-  aujourd'hui aux liens : c'est une question ouverte (voir `spec.md` §11).
+- **Les jetons libadwaita 1.8 restent la base.** On corrige les valeurs qui échouent à WCAG 2.2 AA :
+  - l'anneau de focus, avec une variante blanche pour les fonds sombres ;
+  - la couleur « succès » ;
+  - deux marques de fichiers ;
+  - le texte secondaire sur une sélection ;
+  - les numéros de ligne.
+
+  Les couleurs de personnes gagnent une variante « trait » pour les curseurs.
+- **La structure à gauche, le temps et les autres à droite.**
+  - À gauche : Fichiers, Sommaire, Tâches, Liens.
+  - À droite : Historique, Activité, Rechercher.
+  - Des **onglets de fichiers** au centre.
+- **Une question passe avant un état.** Au plus un bandeau visible ; aucun message caché sans
+  recours. Un toast ne pose jamais de question, et ce qu'il annule reste annulable après.
+- **Un seul composant par besoin** : `Dialog`, `Tooltip`, `ToastHost`, `BannerHost`,
+  `StatusPage`.
+- **Le code se lit, il ne se programme pas.** Les fichiers de code s'ouvrent en lecture, avec
+  les dix couleurs existantes, et « Modifier » sur demande.
+- **Les extensions** se gèrent dans les Préférences. Le consentement s'écrit en phrases simples,
+  et le contenu d'une extension est toujours encadré et signé.
+- **Palette sur Ctrl+Maj+P**, Ctrl+K reste le lien. C'est une recommandation à confirmer, comme
+  les autres de `spec.md` §11.
 
 ## Comment s'en servir
 
@@ -81,4 +96,4 @@ sans apprendre, et que l'application suit le thème clair ou sombre du système.
 - **Avant une revue d'interface :** appliquer la liste de `spec.md` §8 (cohérence) et §9
   (anti-motifs), puis le skill `ux-walkthrough`.
 - **Pour changer un jeton :** modifier `tokens.json` et `frontend/src/theme/tokens.css`
-  ensemble ; le test de parité le vérifie (voir `spec.md` §2.1).
+  ensemble. Le test de parité qui le vérifiera est à écrire (`spec.md` T-5, inventaire G-1b).
