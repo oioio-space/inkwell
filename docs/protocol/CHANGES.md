@@ -374,3 +374,51 @@ index (`max = r`), rejeu, vecteur `bridge-advice`.
 
 - `RepoGen.cfg` non exhaustif ; passage entre sessions et crédits du pont argumentés, non
   modélisés ; codecs `sync2` et objets proposés sans implémentation (étapes 4 et 8).
+
+---
+
+# Tour 9 : révision 10 (2.0.0-brouillon.9 → 2.0.0-brouillon.10)
+
+Revues [18-codex](reviews/18-codex.md) (« revise ») et [19-fable](reviews/19-fable.md)
+(« **accept** »). La divergence sur l'équité des emplacements a été tranchée par le débat
+[20-debate-D2](reviews/20-debate-D2.md) : **accord**, appliqué ici.
+
+## D2 — accord, appliqué
+
+| Élément de l'accord | Où |
+|---|---|
+| À chaque libération ou disponibilité d'un emplacement (fin ou abandon du tirage, connexion, redémarrage), réservation **atomique** pour l'entrée inactive éligible **de plus petit rang d'attente** (ordre de première annonce), **avant toute nouvelle annonce** | spec §8.1, §16.1 |
+| Rang conservé à travers les réannonces (dédoublonnage) et les redémarrages (persisté) | spec §8.1 |
+| Aucun transfert actif préempté ; plafonds et règle H inchangés | spec §8.1 |
+| Hypothèse de vivacité écrite : au moins un détenteur honnête, connecté et disponible ; borne : entrées de rang plus petit chez ce détenteur × un transfert de 16 Mio | spec §8.1 |
+| Scénario « R face à des annonces renouvelées » dans P-BYZ | ADR P-BYZ |
+| **À confirmer par les deux relecteurs** : la variante de Fable « plus récemment avancée d'abord » au seul redémarrage n'est pas retenue ; une seule règle, l'ordre d'attente partout | spec §8.1 |
+
+**Éviction des inactives et ordre d'attente** (vérification demandée) : l'éviction au plafond
+pouvait retirer une entrée honnête en file avant son tour. Précédence désormais écrite : finies ou
+plus voulues, puis inactives **sans détenteur connecté** (LRU), puis seulement les inactives
+éligibles, du plus grand rang au plus petit ; et retirer une entrée retire ses **octets**, jamais
+son rang (enregistrement de ~100 octets, ≤ 64 par pair). Une entrée en file peut donc perdre ses
+octets si le plafond est plein d'actives, mais jamais son tour : la borne d'attente ne change pas
+(elle repart de zéro à son tour). Scénario ajouté à P-BYZ.
+
+## Revue 18-codex
+
+| # | Constat | Changement | Où |
+|---|---|---|---|
+| Vivacité (Majeur) | Une ancienne entrée peut rester inactive si une nouvelle annonce passe toujours devant | voir D2 | spec §8.1 |
+| Règle H sans borne (Majeur) | Redemander ne garantit pas l'admission | Borne d'attente établie sous l'hypothèse d'un détenteur honnête connecté ; sans lui, aucune garantie possible, la règle H reste le recours (écrit) | spec §8.1 |
+
+## Revue 19-fable (accept)
+
+| # | Constat | Changement | Où |
+|---|---|---|---|
+| F19-3 | Pas de déclencheur à la libération ; ordre non défini | voir D2 (FIFO, pas « plus récemment avancée ») | spec §8.1 |
+| F19-4 | Un détenteur retiré de la liste des membres doit sortir de la liste des détenteurs | Écrit ; le doublement d'une plage exige un autre détenteur **connecté et membre** | spec §8.1 |
+| F19-5 | « ≤ 1 par 4 Mio » contre « ≈ 4 Mio » | §16.1 aligné (« ≈ 4 Mio ») | spec §16.1 |
+
+## Reste ouvert après ce tour
+
+- Confirmation par les deux relecteurs de l'ordre d'attente unique (y compris au redémarrage).
+- `RepoGen.cfg` non exhaustif ; passage entre sessions et crédits du pont argumentés, non
+  modélisés ; codecs `sync2` et objets proposés sans implémentation (étapes 4 et 8).

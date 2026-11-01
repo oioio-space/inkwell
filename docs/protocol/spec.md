@@ -2,10 +2,10 @@
 
 | | |
 |---|---|
-| Version | **2.0.0-brouillon.9** (SemVer, §1.4) |
+| Version | **2.0.0-brouillon.10** (SemVer, §1.4) |
 | Date | 2026-11-01 |
 | Statut | proposé ([ADR 0034](../adr/0034-protocole-unifie.md)) ; les parties marquées *existant* décrivent des octets déjà émis par inkwell et sont figées |
-| Révision | 9 : revues [01-codex](reviews/01-codex.md), [02-fable](reviews/02-fable.md), [03-codex](reviews/03-codex.md), [04-fable](reviews/04-fable.md), [05-codex](reviews/05-codex.md), [06-fable](reviews/06-fable.md), [07-codex](reviews/07-codex.md), [08-fable](reviews/08-fable.md), le débat [09-debate-D1](reviews/09-debate-D1.md) (accord), [10-codex](reviews/10-codex.md), [11-fable](reviews/11-fable.md), [12-codex](reviews/12-codex.md), [13-fable](reviews/13-fable.md), [14-codex](reviews/14-codex.md), [15-fable](reviews/15-fable.md), [16-codex](reviews/16-codex.md) et [17-fable](reviews/17-fable.md) intégrés ; correspondance dans [CHANGES.md](CHANGES.md) |
+| Révision | 10 : revues [01-codex](reviews/01-codex.md), [02-fable](reviews/02-fable.md), [03-codex](reviews/03-codex.md), [04-fable](reviews/04-fable.md), [05-codex](reviews/05-codex.md), [06-fable](reviews/06-fable.md), [07-codex](reviews/07-codex.md), [08-fable](reviews/08-fable.md), le débat [09-debate-D1](reviews/09-debate-D1.md) (accord), [10-codex](reviews/10-codex.md), [11-fable](reviews/11-fable.md), [12-codex](reviews/12-codex.md), [13-fable](reviews/13-fable.md), [14-codex](reviews/14-codex.md), [15-fable](reviews/15-fable.md), [16-codex](reviews/16-codex.md), [17-fable](reviews/17-fable.md), [18-codex](reviews/18-codex.md), [19-fable](reviews/19-fable.md) et le débat [20-debate-D2](reviews/20-debate-D2.md) (accord) intégrés ; correspondance dans [CHANGES.md](CHANGES.md) |
 | Aperçu | [README.md](README.md) |
 | Vecteurs, modèle | [vectors/](vectors/) (§21), [tla/](tla/) (§7.3) |
 | Paquets | module Go `github.com/oioio-space/inkwell/protocol`, paquet TypeScript `@inkwell/protocol` (§1.6) |
@@ -1033,21 +1033,37 @@ busy    { kind u8 = 4 ; hash [32] ; retry_ms u32 ≤ 60 000 }
     l'emplacement d'un pair connecté qui la détient** ; seules les entrées actives sont tirées.
     Une entrée dont tous les détenteurs connectés ont déjà leur emplacement pris est
     **inactive** et n'est pas tirée.
-    **Attribution**, toujours dans un emplacement **libre**, avec **réservation atomique** de la
-    taille annoncée (≤ 16 Mio) : à l'annonce d'un `root` nouveau par P, l'entrée est créée dans
-    l'emplacement de P s'il est libre, sinon l'annonce attend (la règle H la redemandera) ; à
-    l'annonce d'un `root` déjà connu (dédoublonnage), P devient détenteur, et si l'entrée est
-    inactive et que l'emplacement de P est libre, elle y est attribuée ; quand le pair attribué
-    se déconnecte ou est **retiré de la liste des membres**, l'entrée devient inactive, puis
-    est réattribuée à un autre détenteur connecté dont l'emplacement est libre ; au démarrage,
-    toutes les entrées sont inactives et sont réattribuées à mesure que leurs détenteurs se
-    connectent, au plus une par emplacement (la plus récemment avancée d'abord). Un tirage
-    actif n'est **jamais** remplacé.
+    **Attribution** (accord D2, [20-debate-D2](reviews/20-debate-D2.md)), toujours dans un
+    emplacement **libre**, avec **réservation atomique** de la taille annoncée (≤ 16 Mio).
+    Chaque entrée a un **rang d'attente** : l'ordre de sa première annonce chez ce receveur,
+    persisté, conservé à travers les réannonces et les redémarrages. Une règle unique : **chaque
+    fois qu'un emplacement devient libre ou disponible** (fin ou abandon du tirage, connexion du
+    pair, redémarrage du receveur), il est réservé à l'entrée inactive **éligible** (que ce pair
+    détient) **de plus petit rang**, avant toute nouvelle annonce ; s'il n'y en a pas, à la
+    prochaine annonce de ce pair. Une annonce d'un `root` nouveau quand l'emplacement du pair est
+    pris crée une entrée inactive, rangée en fin d'attente ; une annonce d'un `root` déjà connu
+    (dédoublonnage) ajoute le détenteur, sans changer le rang. Quand le pair attribué se
+    déconnecte ou est **retiré de la liste des membres**, l'entrée devient inactive (elle garde
+    son rang) et suit la même règle chez ses autres détenteurs connectés ; un détenteur retiré
+    de la liste des membres est **retiré de la liste des détenteurs**. Un tirage actif n'est
+    **jamais** préempté. *(« Plus récemment avancée d'abord » au redémarrage, proposé par Fable,
+    n'est pas retenu : une seule règle, l'ordre d'attente partout — à confirmer par les deux
+    relecteurs.)*
+    **Vivacité.** Hypothèse : l'entrée a au moins un détenteur **honnête, connecté et
+    disponible**. Alors elle est tirée, et son attente est bornée par le nombre d'entrées de rang
+    plus petit dans la file de ce détenteur, multiplié par la durée d'un transfert de 16 Mio à
+    son débit ; un flux de nouvelles annonces ne passe jamais devant elle (scénario « R face à des
+    annonces renouvelées », porte P-BYZ). Sans détenteur honnête connecté, aucune garantie n'est
+    possible ; la règle H reste le recours.
     **Plafond global** : 1 Gio d'attente au total, entrées inactives comprises (pairs absents).
     Les entrées actives occupent au plus un emplacement par pair connecté, donc au plus
     64 × 16 Mio = 1 Gio ; pour réserver un emplacement, on retire d'abord les entrées finies ou
-    plus voulues (document plus admis, modification obtenue autrement), puis les inactives, de
-    la moins récemment avancée à la plus récente ; une entrée active n'est **jamais** retirée.
+    plus voulues (document plus admis, modification obtenue autrement), puis les inactives **sans
+    détenteur connecté**, de la moins récemment avancée à la plus récente, et seulement en dernier
+    les inactives éligibles, **du plus grand rang au plus petit** (la plus ancienne en attente
+    part la dernière) ; une entrée active n'est **jamais** retirée. Retirer une entrée inactive
+    retire ses **octets**, jamais son rang d'attente (un enregistrement de ~100 octets, au plus 64
+    par pair) : à son tour, elle repart de zéro, et la borne d'attente ci-dessus ne change pas.
     Une réservation dans l'emplacement d'un pair connecté réussit donc toujours, et ni 65
     membres successifs, ni un pair qui annonce plusieurs racines laissées par d'autres, ne
     dépassent le plafond (scénarios de la porte P-BYZ). Jamais sur un délai. Plusieurs relais
@@ -1055,7 +1071,7 @@ busy    { kind u8 = 4 ; hash [32] ; retry_ms u32 ≤ 60 000 }
     ne limite *par auteur réel* avant vérification), mais chacun reste borné par pair, et le
     dédoublonnage par `root` évite les copies d'une même racine ;
   - **plages doublées** : une plage en cours depuis plus de 30 s chez un détenteur **DOIT** être
-    demandée aussi à un autre détenteur, s'il en existe un (la règle « une demande par (pair, hash) » vaut par
+    demandée aussi à un autre détenteur **connecté et membre**, s'il en existe un (la règle « une demande par (pair, hash) » vaut par
     pair) ; la première réponse complète gagne, les autres sont annulées. Un relais pressé qui
     annonce le premier une vraie racine puis « goutte » une plage ne retarde donc rien ;
   - **reprise** : l'état (groupes vérifiés) est persisté et repris après un redémarrage ou un
@@ -1528,8 +1544,8 @@ de `protocol` ; un test par ligne vérifie la borne, la borne + 1 et la reprise.
 | file d'entrée REPO d'un pair | 4 Mio et 1024 trames (impl.) | par pair | lecture du flux suspendue | dès que la webview consomme |
 | file d'entrée CONTROL d'un pair | 512 Kio (impl.) | par pair | lecture suspendue **seulement** le temps que l'acteur `Wiring` traite (CPU et disque locaux) ; jamais à cause du réseau ni de la webview — « toujours lu » au sens de §5.1 (a) | immédiate |
 | flux annulés en attente de RESET_STREAM | 1 par session ; 10 s | par session | GOAWAY PROTOCOL_VIOLATION, session fermée | reconnexion |
-| modifications indivisibles en attente (disque, §14 point 7) | par `root` ; **un emplacement de 16 Mio par pair connecté** ; active ⇔ occupe l'emplacement d'un pair connecté qui la détient ; attribution seulement dans un emplacement libre, réservation atomique ; **plafond global 1 Gio, pairs absents compris** (retrait : finies ou plus voulues, puis inactives en LRU ; jamais une active) ; jamais remplacé, jamais sur un délai ; quota N10 de l'auteur crédité après vérification | par pair annonceur | l'annonce suivante du même pair attend ; la règle H continue auprès des autres détenteurs | reprise des groupes vérifiés, même après 24 h |
-| index des modifications indivisibles | entrées vérifiées seulement ; ≤ 1 par 4 Mio d'historique stocké ; retirée avec le document ou la modification | par auteur (N10) | — | — |
+| modifications indivisibles en attente (disque, §14 point 7) | par `root` ; **un emplacement de 16 Mio par pair connecté** ; active ⇔ occupe l'emplacement d'un pair connecté qui la détient ; attribution seulement dans un emplacement libre, réservation atomique, **à l'entrée éligible de plus petit rang d'attente** (FIFO, persisté) avant toute nouvelle annonce ; rangs : ≤ 64 par pair ; **plafond global 1 Gio, pairs absents compris** (retrait : finies ou plus voulues, puis inactives en LRU ; jamais une active) ; jamais remplacé, jamais sur un délai ; quota N10 de l'auteur crédité après vérification | par pair annonceur | l'annonce suivante du même pair attend ; la règle H continue auprès des autres détenteurs | reprise des groupes vérifiés, même après 24 h |
+| index des modifications indivisibles | entrées vérifiées seulement ; ≤ 1 par ≈ 4 Mio d'historique stocké ; retirée avec le document ou la modification | par auteur (N10) | — | — |
 | annonce indivisible | ≤ 16 777 216 octets (G1) | — | violation | — |
 | flux LARGE | ≤ `r` = 4 194 304 octets ; une annonce ordinaire plus grande n'est qu'un avis (`LARGE_REPLY` 0, pages) | — | violation si un flux dépasse `r` | pages d'historique |
 | PRESENCE par pair | 16 entrées, dernière par `sessionId` | par pair | la plus ancienne remplacée | — |
