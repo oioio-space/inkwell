@@ -1,7 +1,7 @@
 ---
 status: proposée
 date: 2026-11-01
-revision: 3 (revues 01-codex, 02-fable, 03-codex, 04-fable ; exigences N13, N14, N15)
+revision: 4 (revues 01 à 06 ; exigences N13, N14, N15 ; choix D1 à confirmer par les deux relecteurs)
 decision-makers: [Mathieu]
 ---
 
@@ -98,7 +98,7 @@ Option retenue : **B**, décrite normativement dans
    `changesig/1` sont retirés.
 4. **Un flux par classe, identifié par son protocole libp2p** (`/inkwell/control/2.0.0`,
    `/inkwell/repo/2.0.0`, `/inkwell/presence/2.0.0`) et un flux `/inkwell/large/2.0.0` par
-   message de plus de 64 Kio, ouvert seulement après `LARGE_PULL` (§5.1, §7.2) ; un seul flux de
+   message de plus de 64 Kio, ouvert seulement après `LARGE_REPLY` (§5.1, §7.2) ; un seul flux de
    données peut rester non lu par connexion, ce qui protège le contrôle de la fenêtre de
    connexion de QUIC ; nombre de flux borné par le gestionnaire de ressources de libp2p (deux
    fois les limites d'une session, pour le passage relais → direct). Une session = une
@@ -165,8 +165,8 @@ fichier) :
 
 | Porte | Preuve |
 |---|---|
-| P-TLA | `mise run tla` : `RepoGen` exhaustif sur `RepoGenSmall.cfg` et `ConnCredit` exhaustif, sans erreur, vivacité comprise ; leurs mutations échouent ; `RepoGen.cfg` sans violation sur la nuit ; aucune affirmation de la spec au-delà de ce que dit §7.3 |
-| P-QUIC | test au démarrage : fenêtre de connexion ≥ fenêtre de flux + 4 Mio pour la version épinglée de go-libp2p ; test de bout en bout : REPO non lu + LARGE en cours, le contrôle passe |
+| P-TLA | `mise run tla` : `RepoGen` exhaustif sur `RepoGenSmall.cfg` et `ConnCredit` exhaustif (crédit rendu seulement au RESET_STREAM, fermeture à 10 s), sans erreur, vivacité comprise ; leurs mutations échouent ; `RepoGen.cfg` sans violation sur la nuit ; aucune affirmation de la spec au-delà de ce que dit §7.3 |
+| P-QUIC | test au démarrage : maximum de connexion ≥ maximum de flux + fenêtre initiale de flux + 1 Mio pour les versions épinglées de go-libp2p et quic-go ; bout en bout : REPO non lu + LARGE en cours + changement de génération, le contrôle passe ; un pair qui ignore STOP_SENDING voit sa session fermée en 10 s |
 | P-VEC | tous les vecteurs dont `enforce` ≤ étape courante passent en Go **et** en TypeScript ; à la bascule, **tous** |
 | P-BORNES | un test par ligne du §16 (borne, borne + 1, reprise) |
 | P-BYZ | scénarios : pair qui ne lit jamais ; membre qui « goutte » un LARGE ; un écrivain qui remplit 65 536 clés d'attestation (les honnêtes restent couverts) ; inondation de SET ; 3 générations par seconde refusées ; relais à 8 Kio/s qui finit |
@@ -215,7 +215,7 @@ mode « signalé », sans échouer, jusqu'à leur `enforce`.
 | 3 | **Modèle d'abord** : `mise run tla` (TLC épinglé) ; profil CBOR et schémas §9 dans `@inkwell/protocol`, adaptateur branché dessus (`targetId` partout, encodeur conforme, pointeur entier) | outillage, `frontend` | N-12 | `step-3` |
 | 4 | `protocol/sync2` (préambules, trames, HELLO avec VERSIONS, règles de l'inconnu, règles I/B/A/R/T/W pures) ; `protocol/libp2p` (un identifiant par classe, gestionnaire de ressources par protocole et par pair, identify pour les versions) ; `internal/transport/session` derrière le drapeau `sync2` (développement seulement) | `protocol`, `internal/transport` | N-4, N-5, N-10, R-V2 | `step-4` |
 | 5 | Boucles partagées non bloquantes (boîtes par pair pour `Wiring`, notifications coalescées, `Attest` asynchrone, persistance avant diffusion) ; vrac : trame ≤ 1 065 005 o, parts par pair, appariement, délais au progrès, tailles adaptatives | `app`, `bridge`, `p2p/bulk.go`, `blob` | N-2, N-3, N-6, N-7, N-15 | `step-5` |
-| 6 | **Ensemble, derrière le drapeau `sync2`** (Codex C4 : on ne retire pas le `Reset` sur débordement avant que les règles L et H soient en place) : pont (époque dans Message, crédits par voie, présence sans crédit) ; rythme à la source (§7.4) ; flux LARGE avec LARGE_PULL et parts réservées ; attestations par signataire et ≤ 256 têtes ; règles L et H, dont la fin de l'expiration silencieuse de `coverage.ts` ; ATTEST_WANT ; puis suppression des deux voies et du `Reset` sur débordement du routeur, **dans la même étape** | `bridge`, `session`, `blob`, `app`, `frontend` | **R-Reset**, **R-Evict**, N-11, N-13, N-14, S3 | `step-6` |
+| 6 | **Ensemble, derrière le drapeau `sync2`** (Codex C4 : on ne retire pas le `Reset` sur débordement avant que les règles L et H soient en place) : pont (époque dans Message, crédits par voie, présence sans crédit) ; rythme à la source (§7.4) ; flux LARGE avec LARGE_REPLY et parts réservées ; attestations par signataire et ≤ 256 têtes ; règles L et H, dont la fin de l'expiration silencieuse de `coverage.ts` ; ATTEST_WANT ; puis suppression des deux voies et du `Reset` sur débordement du routeur, **dans la même étape** | `bridge`, `session`, `blob`, `app`, `frontend` | **R-Reset**, **R-Evict**, N-11, N-13, N-14, S3 | `step-6` |
 | 7 | (fusionnée dans 6) | — | — | — |
 | 8 | SET (cinq ensembles, curseurs) ; objets de l'ADR 0031 (accusé, annonce, AUTHOR, preuve) ; pages d'historique — en suivant les étapes 2.x–3.x de l'ADR 0031 | `protocol`, `trust`, `policy`, `listing`, `app`, `frontend` | — | `step-8` |
 | 9 | **Portes** P-TLA … P-ARCH vertes ; revue | — | — | tous |

@@ -45,18 +45,25 @@ changement de génération → `NoSilentLoss` violé ; livraison sans contrôle 
 
 Un sens d'une connexion QUIC : flux CONTROL, REPO (peut rester non lu), LARGE ; crédit de
 connexion partagé `Wc = 3`, fenêtre de flux `Ws = 2` ; la webview peut s'arrêter **pour
-toujours** ; un changement de génération. Propriété : `ControlLive` (toute trame de contrôle
-voulue finit par être lue). Résultats (TLC exhaustif, 2026-11-01) :
+toujours** ; deux changements de génération. **L'annulation d'un flux ne rend pas son crédit
+tout de suite** (révision 4, revues 05-codex et 06-fable) : le crédit de l'ancien flux reste
+pris (`pending`) jusqu'au RESET_STREAM du pair (`ResetArrives`, équité faible pour un pair
+honnête) ; un seul flux annulé en attente ; un pair qui ne répond pas déclenche la fermeture
+de la session (`Teardown`, 10 s). Propriété : `ControlLive` (toute trame de contrôle voulue
+finit par être lue, ou la session est fermée). Résultats (TLC exhaustif, 2026-11-01) :
 
 | Variante | Résultat |
 |---|---|
-| règles de la spec (`PullLarge = TRUE`, `CancelOld = TRUE`) | aucune erreur (13 987 états, 3 516 distincts) |
-| LARGE ouvert sans LARGE_PULL (`PullLarge = FALSE`) | `ControlLive` violée : REPO et LARGE non lus prennent tout le crédit |
-| ancien flux REPO non annulé (`CancelOld = FALSE`) | `ControlLive` violée |
+| règles de la spec (`PullLarge`, `Honest`, `TeardownRule` vrais) | aucune erreur (36 683 états, 10 882 distincts) |
+| pair honnête **sans** règle de fermeture | aucune erreur : le contrôle attend au plus le RESET_STREAM, jamais de fermeture nécessaire |
+| pair qui n'envoie jamais RESET_STREAM, avec la règle de fermeture | aucune erreur : la session est fermée |
+| pair qui n'envoie jamais RESET_STREAM, **sans** règle de fermeture | `ControlLive` violée : le crédit reste pris pour toujours |
+| LARGE ouvert sans LARGE_REPLY (`PullLarge = FALSE`) | `ControlLive` violée : REPO et LARGE non lus prennent tout le crédit |
 
-Non couverts : les valeurs réelles des fenêtres (règle « connexion ≥ flux + 4 Mio », vérifiée
-par un test au démarrage contre la version épinglée de go-libp2p), yamux (sans fenêtre de
-connexion, le cas facile).
+Non couverts : les valeurs réelles des fenêtres (règle « maximum de connexion ≥ maximum de flux
++ fenêtre initiale de flux + 1 Mio », vérifiée par un test au démarrage contre les versions
+épinglées de go-libp2p et quic-go : 15 ≥ 10 + 0,5 + 1 Mio), la croissance automatique des
+fenêtres, yamux (sans fenêtre de connexion, le cas facile).
 
 ## Lancer
 

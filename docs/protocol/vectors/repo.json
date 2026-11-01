@@ -241,7 +241,7 @@
       "id": "history-request",
       "status": "proposed",
       "enforce": "step-3",
-      "description": "Demande de pages d'historique (§9.6) : têtes connues du demandeur.",
+      "description": "Demande de pages d'historique (§9.6) : têtes du demandeur et taille maximale d'une page (sa part, ici 4 Mio) ; la réponse contient toute modification hors du passé causal de ces têtes, branches concurrentes comprises.",
       "decoder": "repo_message",
       "context": {
         "from": "12D3KooWQK1wnefoLrcVHbbnf5tLzbopUd3K3bFAoJpA7YJgL5pV",
@@ -250,7 +250,7 @@
           "4NMNnkMhL8jXrdJ9jamS58PAVdXu"
         ]
       },
-      "input_hex": "a5646861766581582031919abffa533f3b405001b59201b02a4ea3a18e318a49de0fd04e6eefe3d33864747970656f686973746f72792d726571756573746873656e64657249647834313244334b6f6f57514b31776e65666f4c7263564862626e6635744c7a626f705564334b336246416f4a704137594a674c3570566874617267657449647834313244334b6f6f5744775469725163653152524b6e6173543566505646677a58437936536952675377727750474c43377a4539316a646f63756d656e744964781c344e4d4e6e6b4d684c386a5872644a396a616d533538504156645875",
+      "input_hex": "a6636d61781a00400000646861766581582031919abffa533f3b405001b59201b02a4ea3a18e318a49de0fd04e6eefe3d33864747970656f686973746f72792d726571756573746873656e64657249647834313244334b6f6f57514b31776e65666f4c7263564862626e6635744c7a626f705564334b336246416f4a704137594a674c3570566874617267657449647834313244334b6f6f5744775469725163653152524b6e6173543566505646677a58437936536952675377727750474c43377a4539316a646f63756d656e744964781c344e4d4e6e6b4d684c386a5872644a396a616d533538504156645875",
       "verdict": "accept",
       "expect": {
         "type": "history-request",
@@ -259,7 +259,27 @@
         "documentId": "4NMNnkMhL8jXrdJ9jamS58PAVdXu",
         "have": [
           "31919abffa533f3b405001b59201b02a4ea3a18e318a49de0fd04e6eefe3d338"
+        ],
+        "max": 4194304
+      }
+    },
+    {
+      "id": "history-request-no-max",
+      "status": "proposed",
+      "enforce": "step-3",
+      "description": "Demande sans « max » : refusé (champ obligatoire).",
+      "decoder": "repo_message",
+      "context": {
+        "from": "12D3KooWQK1wnefoLrcVHbbnf5tLzbopUd3K3bFAoJpA7YJgL5pV",
+        "me": "12D3KooWDwTirQce1RRKnasT5fPVFgzXCy6SiRgSwrwPGLC7zE91",
+        "admitted": [
+          "4NMNnkMhL8jXrdJ9jamS58PAVdXu"
         ]
+      },
+      "input_hex": "a564686176658064747970656f686973746f72792d726571756573746873656e64657249647834313244334b6f6f57514b31776e65666f4c7263564862626e6635744c7a626f705564334b336246416f4a704137594a674c3570566874617267657449647834313244334b6f6f5744775469725163653152524b6e6173543566505646677a58437936536952675377727750474c43377a4539316a646f63756d656e744964781c344e4d4e6e6b4d684c386a5872644a396a616d533538504156645875",
+      "verdict": "reject",
+      "expect": {
+        "reason": "max"
       }
     },
     {
@@ -688,10 +708,10 @@
       }
     },
     {
-      "id": "history-page-empty",
+      "id": "history-page-terminal",
       "status": "proposed",
       "enforce": "step-3",
-      "description": "Page d'historique sans modification : refusé.",
+      "description": "Réponse terminale vide (rien à envoyer) : changes = [], last = true : accepté.",
       "decoder": "repo_message",
       "context": {
         "from": "12D3KooWQK1wnefoLrcVHbbnf5tLzbopUd3K3bFAoJpA7YJgL5pV",
@@ -701,9 +721,71 @@
         ]
       },
       "input_hex": "a6646c617374f564747970656c686973746f72792d70616765676368616e676573806873656e64657249647834313244334b6f6f57514b31776e65666f4c7263564862626e6635744c7a626f705564334b336246416f4a704137594a674c3570566874617267657449647834313244334b6f6f5744775469725163653152524b6e6173543566505646677a58437936536952675377727750474c43377a4539316a646f63756d656e744964781c344e4d4e6e6b4d684c386a5872644a396a616d533538504156645875",
+      "verdict": "accept",
+      "expect": {
+        "type": "history-page",
+        "senderId": "12D3KooWQK1wnefoLrcVHbbnf5tLzbopUd3K3bFAoJpA7YJgL5pV",
+        "targetId": "12D3KooWDwTirQce1RRKnasT5fPVFgzXCy6SiRgSwrwPGLC7zE91",
+        "documentId": "4NMNnkMhL8jXrdJ9jamS58PAVdXu",
+        "changes": 0,
+        "last": true
+      }
+    },
+    {
+      "id": "history-page-empty",
+      "status": "proposed",
+      "enforce": "step-3",
+      "description": "Page vide qui n'est pas la dernière : refusé.",
+      "decoder": "repo_message",
+      "context": {
+        "from": "12D3KooWQK1wnefoLrcVHbbnf5tLzbopUd3K3bFAoJpA7YJgL5pV",
+        "me": "12D3KooWDwTirQce1RRKnasT5fPVFgzXCy6SiRgSwrwPGLC7zE91",
+        "admitted": [
+          "4NMNnkMhL8jXrdJ9jamS58PAVdXu"
+        ]
+      },
+      "input_hex": "a6646c617374f464747970656c686973746f72792d70616765676368616e676573806873656e64657249647834313244334b6f6f57514b31776e65666f4c7263564862626e6635744c7a626f705564334b336246416f4a704137594a674c3570566874617267657449647834313244334b6f6f5744775469725163653152524b6e6173543566505646677a58437936536952675377727750474c43377a4539316a646f63756d656e744964781c344e4d4e6e6b4d684c386a5872644a396a616d533538504156645875",
       "verdict": "reject",
       "expect": {
-        "reason": "changes"
+        "reason": "empty page must be the last (terminal answer)"
+      }
+    },
+    {
+      "id": "presence-extra-key",
+      "status": "proposed",
+      "enforce": "step-3",
+      "description": "Enveloppe de présence avec une clé de plus à côté de __presence : refusé (map fermée).",
+      "decoder": "repo_message",
+      "context": {
+        "from": "12D3KooWQK1wnefoLrcVHbbnf5tLzbopUd3K3bFAoJpA7YJgL5pV",
+        "me": "12D3KooWDwTirQce1RRKnasT5fPVFgzXCy6SiRgSwrwPGLC7zE91",
+        "admitted": [
+          "4NMNnkMhL8jXrdJ9jamS58PAVdXu"
+        ]
+      },
+      "input_hex": "a76464617461581fa26178016a5f5f70726573656e6365a1647479706569686561727462656174647479706569657068656d6572616c65636f756e74016873656e64657249647834313244334b6f6f57514b31776e65666f4c7263564862626e6635744c7a626f705564334b336246416f4a704137594a674c3570566874617267657449647834313244334b6f6f5744775469725163653152524b6e6173543566505646677a58437936536952675377727750474c43377a4539316973657373696f6e49646273316a646f63756d656e744964781c344e4d4e6e6b4d684c386a5872644a396a616d533538504156645875",
+      "verdict": "reject",
+      "expect": {
+        "reason": "envelope is a closed map with one key"
+      }
+    },
+    {
+      "id": "presence-inner-critical",
+      "status": "proposed",
+      "enforce": "step-3",
+      "description": "Clé « à comprendre » à l'intérieur du CBOR imbriqué de l'éphémère : refusé.",
+      "decoder": "repo_message",
+      "context": {
+        "from": "12D3KooWQK1wnefoLrcVHbbnf5tLzbopUd3K3bFAoJpA7YJgL5pV",
+        "me": "12D3KooWDwTirQce1RRKnasT5fPVFgzXCy6SiRgSwrwPGLC7zE91",
+        "admitted": [
+          "4NMNnkMhL8jXrdJ9jamS58PAVdXu"
+        ]
+      },
+      "input_hex": "a764646174615820a16a5f5f70726573656e6365a262217a01647479706569686561727462656174647479706569657068656d6572616c65636f756e74016873656e64657249647834313244334b6f6f57514b31776e65666f4c7263564862626e6635744c7a626f705564334b336246416f4a704137594a674c3570566874617267657449647834313244334b6f6f5744775469725163653152524b6e6173543566505646677a58437936536952675377727750474c43377a4539316973657373696f6e49646273316a646f63756d656e744964781c344e4d4e6e6b4d684c386a5872644a396a616d533538504156645875",
+      "verdict": "reject",
+      "expect": {
+        "reason": "unknown must-understand key (inner payload)"
       }
     },
     {

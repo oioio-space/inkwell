@@ -2,10 +2,10 @@
 
 | | |
 |---|---|
-| Version | **2.0.0-brouillon.3** (SemVer, §1.4) |
+| Version | **2.0.0-brouillon.4** (SemVer, §1.4) |
 | Date | 2026-11-01 |
 | Statut | proposé ([ADR 0034](../adr/0034-protocole-unifie.md)) ; les parties marquées *existant* décrivent des octets déjà émis par inkwell et sont figées |
-| Révision | 3 : revues [01-codex](reviews/01-codex.md), [02-fable](reviews/02-fable.md), [03-codex](reviews/03-codex.md) et [04-fable](reviews/04-fable.md) intégrées ; correspondance dans [CHANGES.md](CHANGES.md) |
+| Révision | 4 : revues [01-codex](reviews/01-codex.md), [02-fable](reviews/02-fable.md), [03-codex](reviews/03-codex.md), [04-fable](reviews/04-fable.md), [05-codex](reviews/05-codex.md) et [06-fable](reviews/06-fable.md) intégrées (révision 4 ; les choix marqués « à confirmer » attendent l'accord des deux relecteurs) ; correspondance dans [CHANGES.md](CHANGES.md) |
 | Aperçu | [README.md](README.md) |
 | Vecteurs, modèle | [vectors/](vectors/) (§21), [tla/](tla/) (§7.3) |
 | Paquets | module Go `github.com/oioio-space/inkwell/protocol`, paquet TypeScript `@inkwell/protocol` (§1.6) |
@@ -327,7 +327,9 @@ Le champ `doc` admet 1 à 256 octets (format figé), mais l'attestation n'est va
 document de l'ensemble admis, dont les identifiants ont au plus 64 caractères (§9.2.3) : en
 pratique `doc` fait au plus 64 octets. **Valable** si `project` est celui de la session, la signature vérifie (§3.3), `signer` est
 dans la liste courante un appareil de rôle écriture ou admin non suspendu, et `doc` est dans
-l'ensemble admis (§4.10). Elle n'autorise que la couverture du §9.4.
+l'ensemble admis (§4.10). Elle n'autorise que la couverture du §9.4. Plusieurs attestations
+d'un même (document, signataire) peuvent compter à la fois : celles que le magasin garde
+(§6.2) ; chacune couvre ses têtes et leurs ancêtres.
 
 ### 4.4 Décision d'admin, version 1
 
@@ -538,23 +540,41 @@ est l'énoncé normatif minimal pour décider l'admission d'un `documentId`.
   une violation. Les limites de nombre de flux par pair et par protocole sont celles du
   gestionnaire de ressources de libp2p (portées *protocol* et *peer*), réglé selon §16.
 
-- **Au plus deux sessions par pair** à la fois, pendant un passage : la nouvelle supplante
-  l'ancienne dès qu'elle est Active (l'ancienne ferme alors ses flux REPO, LARGE et PRESENCE,
-  puis la connexion). Les limites du gestionnaire de ressources sont donc réglées à **deux fois**
-  les limites d'une session (portées *peer* × *protocol*), et la règle « un flux par classe »
-  s'applique **par session**. Chaque session a un identifiant local `session` (`u32`,
-  croissant pour la vie du processus), qui accompagne la génération partout côté local
-  (règle T, Annexe A).
+- **Au plus deux sessions par pair** à la fois, pendant un passage. **Départage
+  déterministe** (les deux côtés calculent le même résultat, sans message de plus) : chaque
+  HELLO porte `SESSION_NONCE` (`u64` aléatoire, §5.3) ; la **clé** d'une session est le couple
+  (nonce envoyé par le pair de plus petit PeerID, nonce de l'autre). Entre deux sessions vers
+  le même pair, on garde (1) une connexion directe plutôt qu'une connexion relayée (tous deux
+  voient `/p2p-circuit` dans l'adresse), puis (2) la plus grande clé. Dès que la gardée est
+  Active, l'autre ferme ses flux REPO, LARGE et PRESENCE puis la connexion (GOAWAY NO_ERROR).
+  Deux connexions directes simultanées (DCUtR) se résolvent donc en une seule, la même des deux
+  côtés. Les limites du gestionnaire de ressources sont réglées à **deux fois** celles d'une
+  session (portées *peer* × *protocol*) ; la règle « un flux par classe » s'applique **par
+  session**. Chaque session a aussi un identifiant local `session` (`u32`, croissant pour la
+  vie du processus) qui accompagne la génération partout côté local (règle T, Annexe A).
 - **Fenêtre de connexion** ([RFC 9000 §4.1]) : sur QUIC, tous les flux partagent le crédit de
-  la connexion, et un flux non lu en retient jusqu'à sa propre fenêtre. D'où trois règles :
-  (a) CONTROL et PRESENCE sont **toujours lus** ; (b) un seul flux de données peut rester non lu
-  : le flux REPO courant — l'ancien flux REPO est **annulé aussitôt** (STOP_SENDING /
-  `CancelRead`, qui rend son crédit) au changement de génération, et un flux LARGE n'est
-  **ouvert qu'après LARGE_PULL** (§7.2), donc toujours lu dans une réservation ; (c) une
-  implémentation **DOIT** avoir `fenêtre de connexion ≥ fenêtre d'un flux + 4 Mio` (go-libp2p
-  v0.51.0 : 15 Mio et 10 Mio, conforme ; à revérifier à chaque montée de version). Ainsi le
-  contrôle n'est jamais derrière des données, sur QUIC comme sur yamux (qui n'a pas de fenêtre
-  de connexion). Modèle : [tla/ConnCredit.tla](tla/ConnCredit.tla).
+  la connexion ; un flux non lu en retient jusqu'à sa fenêtre. Valeurs effectives avec
+  go-libp2p v0.51.0 et quic-go v0.64.1 : fenêtres **initiales** 512 Kio (flux) et 768 Kio
+  (connexion), qui grandissent avec le débit lu jusqu'aux **maximums** 10 Mio et 15 Mio ; quic-go
+  garde toujours la fenêtre de connexion ≥ 1,5 × celle de tout flux. Règles :
+  (a) CONTROL et PRESENCE sont **toujours lus** ;
+  (b) **un seul flux de données peut rester non lu** : le flux REPO courant ; un flux LARGE
+  n'est ouvert qu'après LARGE_REPLY (§7.2) et se lit aussitôt ;
+  (c) au changement de génération, l'ancien flux REPO (et tout flux LARGE de l'ancienne
+  génération) est **annulé** (STOP_SENDING). Son crédit ne revient **pas** aussitôt : il revient
+  quand la taille finale est connue, c'est-à-dire à l'arrivée du RESET_STREAM (ou du FIN) du
+  pair, qu'un pair honnête **DOIT** envoyer ([RFC 9000 §3.5]) — au moins un aller-retour
+  ([RFC 9000 §4.5]). D'où : **au plus un flux annulé en attente** par session (un nouveau
+  changement de génération attend sa fin ; la cadence est de toute façon ≥ 2 s) ; et si le
+  RESET_STREAM n'arrive pas dans les **10 s**, le pair viole RFC 9000 : GOAWAY
+  PROTOCOL_VIOLATION et fermeture de **cette** session ;
+  (d) pendant cet aller-retour, l'ancien flux retient au plus sa fenêtre et le nouveau au plus
+  sa fenêtre initiale (512 Kio) : avec les maximums (10 Mio + 0,5 Mio ≤ 15 Mio) il reste au moins
+  4,5 Mio au contrôle ; au tout début d'une connexion (fenêtres initiales), le contrôle peut
+  attendre **au plus cet aller-retour** ; un pair qui ne répond pas ne bloque que sa propre
+  session, au plus 10 s. Une implémentation **DOIT** avoir `fenêtre maximale de connexion ≥
+  fenêtre maximale de flux + fenêtre initiale de flux + 1 Mio` (vérifié au démarrage, porte
+  P-QUIC). yamux n'a pas de fenêtre de connexion. Modèle : [tla/ConnCredit.tla](tla/ConnCredit.tla).
 - Flux par pair, par session et par sens : **1 CONTROL**, **1 REPO** (plus, pendant au plus un tour de
   génération, l'ancien en cours de fermeture), **1 PRESENCE**, **au plus 1 LARGE non lu**
   (§7.2). Un flux de plus ou un `gen` hors règle est une violation, sauf le cas « ancien » du
@@ -596,7 +616,7 @@ classe est une violation : `#frame-wrong-stream`, `#retired-type`) et **ignorabl
 | 0x08 | — | — | retiré (ancien REPO_RESET), jamais réattribué | — |
 | 0x09 | AUTHOR | REPO (avant ce qu'elle couvre) | `author_batch` (§4.7) | ≤ 98 303 |
 | 0x0A | ATTEST_WANT | CONTROL | `doc str16` (1–64) : « envoie-moi tes attestations de ce document » (§6.2) | ≤ 66 |
-| 0x0B | LARGE_PULL | CONTROL | `id u32` : « j'ai réservé la place, ouvre le flux LARGE `id` » (§7.2) | 4 |
+| 0x0B | LARGE_REPLY | CONTROL | `id u32 ; verdict u8` : 1 = « j'ai réservé la place, ouvre le flux LARGE `id` », 0 = « je n'en veux pas » (refus, règle H) (§7.2) | 5 |
 
 ### 5.3 HELLO
 
@@ -612,6 +632,7 @@ classe est une violation : `#frame-wrong-stream`, `#retired-type`) et **ignorabl
 | 0x0001 | PROJECT | `[32]` ProjectID | OBLIGATOIRE ; différent du nôtre → GOAWAY PROJECT_MISMATCH |
 | 0x0002 | CAPS | `u16` × k, strictement croissants, k ≥ 1 | OBLIGATOIRE ; registre §20.2 |
 | 0x0004 | VERSIONS | `u16` × k, majeures parlées, strictement croissantes | OBLIGATOIRE ; liaison de la négociation (§1.4.3) |
+| 0x0008 | SESSION_NONCE | `u64` aléatoire, tiré à chaque connexion | OBLIGATOIRE ; départage des sessions (§5.1) |
 | 0x?A?A | GREASE | quelconque | ignoré |
 
 - Le HELLO **DOIT** arriver dans les 10 s suivant l'ouverture de la connexion ; sinon
@@ -655,7 +676,10 @@ d'auteur à l'expiration de son attente, document pas encore prêt et file d'att
 est un **refus** noté par (pair, document), **jamais** un changement de génération. Quand la
 cause peut avoir disparu (nouvelle attestation ou nouveau tuple reçu, document prêt, file
 vidée), et au plus une fois par (pair, document) et par 60 s, le receveur envoie
-`history-request` (§9.6) avec ses têtes : l'émetteur lui renvoie, en pages, ce qui lui manque.
+`history-request` (§9.6) avec ses têtes, d'abord au pair qui avait livré le message, puis, s'il
+ne répond pas ou si la cause demeure, à un autre membre actif qui détient le document (à tour
+de rôle) : celui-ci lui renvoie, en pages, **toute** modification hors du passé causal de ses
+têtes, branches concurrentes comprises.
 Ainsi un écrivain disparu ou byzantin qui atteste une tête fantôme coûte au plus une demande
 par minute, sans boucle de générations entre pairs honnêtes ; et l'émetteur ne fait jamais de
 règle L pour une file **locale** (§16.2).
@@ -729,12 +753,15 @@ set_msg  { set u8 ; kind u8 ; corps }
   document **DOIT** y faire précéder ce message de l'attestation de ces têtes s'il écrit, et
   des attestations qu'il détient pour les têtes qu'il relaie et que ce pair n'a pas encore
   reçues de lui dans cette génération.
-- **Garde.** Le receveur garde, par (document, signataire), les attestations valables les
-  plus récentes **tant qu'elles couvrent ensemble au plus 256 têtes distinctes** (la borne de
-  la couverture, §16.2), dans la part du signataire (§10.6) : toute tête encore dans
-  l'ensemble de couverture d'un pair a donc son attestation, qu'un relais (même un appareil
-  qui lit seulement) peut redonner. Une attestation nouvelle et valable est relayée aux autres
-  pairs actifs sur CONTROL ; une déjà gardée n'est pas relayée.
+- **Garde.** Par (document, signataire), le receveur garde un ensemble d'attestations
+  valables, dans la part du signataire (§10.6) :
+  *acceptation* — une attestation est gardée si elle apporte au moins une tête que l'ensemble
+  n'a pas, sinon elle est ignorée ; *éviction* — tant que l'ensemble couvre plus de 256 têtes
+  distinctes, on retire l'attestation de plus petit `seq` (les plus anciennes partent d'abord) ;
+  *usage* — toutes celles qui restent comptent pour la couverture (§9.4). Toute tête encore
+  dans l'ensemble de couverture d'un pair (même borne de 256) a donc son attestation, qu'un
+  relais, même un appareil qui lit seulement, peut redonner. Une attestation nouvellement
+  gardée est relayée aux autres pairs actifs sur CONTROL ; une ignorée ne l'est pas.
 - **Signataire pas encore connu.** Une attestation bien signée dont le signataire n'est pas
   (encore) un écrivain de la liste est **gardée en attente**, comme un objet SET orphelin : au
   plus deux périodes, dans la part du pair qui l'a livrée, revérifiée à chaque changement de la
@@ -772,29 +799,40 @@ borne du pont) il n'existe pas ; un message d'historique trop gros passe par des
 
 1. L'émetteur écrit sur le flux REPO, à la place du message, `LARGE{id, size}` (`id`
    strictement croissant dans la génération, à partir de 1), et garde l'objet.
-2. Le receveur, après avoir lu l'annonce et **réservé** `size` octets (admission ci-dessous),
-   envoie `LARGE_PULL{id}` sur CONTROL. L'émetteur ouvre alors seulement le flux
+2. Le receveur répond sur CONTROL par `LARGE_REPLY{id, verdict}` : `verdict = 1` après avoir
+   **réservé** `size` octets (admission ci-dessous) ; `verdict = 0` s'il ne le tirera pas
+   (objet plus grand que sa part : refus, règle H). Sur un refus, l'émetteur oublie l'objet. Un
+   objet annoncé sans réponse depuis **10 min** est oublié aussi, et l'état de synchronisation
+   de ce (pair, document) réinitialisé (§7.4) ; l'émetteur garde donc au plus un objet annoncé
+   par pair, au plus 10 min. Sur `verdict = 1`, l'émetteur ouvre alors seulement le flux
    `/inkwell/large/2.0.0` de préambule `(gen, id, size)`, y écrit les `size` octets et ferme
    son écriture ; le receveur le lit aussitôt, dans sa réservation. Un flux LARGE ne reste donc
    jamais non lu (§5.1, fenêtre de connexion). La taille est connue et vérifiée **avant** toute
    allocation. Un flux LARGE non demandé, ou dont le préambule ne correspond pas à la demande,
    est une violation (`#large-unannounced`).
-   **Admission d'un objet indivisible.** Sous sa part `r` (§10.6), l'objet est admis. Plus grand
-   que `r`, il est admis sur la place libre ; sinon il attend, en file **FIFO** des objets en
-   attente, servie dès qu'il y a la place. Si un objet attend depuis plus de 60 s, le pool
-   reprend (règle L pour celui-là) l'objet en cours **le plus lent sur les 60 dernières
-   secondes, s'il avance à moins de 16 Kio/s** ; un objet qui avance plus vite n'est jamais
-   repris. La lenteur ne coûte donc rien tant que personne n'attend, et la file garantit que
-   l'objet le plus ancien finit par passer (Codex C3).
+   **Admission** (*à confirmer par les deux relecteurs*, voir CHANGES.md « Tour 3 », D1) :
+   - un objet de taille ≤ `r` (la part du pair, §10.6) est **toujours admis** et jamais repris ;
+   - un receveur **ne tire pas** un objet plus grand que sa part (`LARGE_REPLY` 0) : c'est un refus (règle H), et
+     il redemande le document par pages d'au plus `max = r` octets (§9.6), qui tiennent donc
+     dans sa part ;
+   - seule une **modification indivisible** plus grande que `r` (une page ne contenant qu'elle)
+     reste : elle passe par la **voie des gros objets**, une capacité de 16 Mio **hors des parts**
+     (la plus grande modification permise, G1), un objet à la fois, servie en FIFO ; le premier
+     en file réserve la voie dès qu'elle se libère (personne ne passe devant lui). L'objet qui
+     tient la voie la garde tant qu'il progresse ; si un autre attend, il la garde encore
+     pendant un **quantum** de `10 min + taille / 4 Kio/s` (1 h 18 pour 16 Mio), puis la cède
+     (règle L, il revient en fin de file). Un pair à 4 Kio/s ou plus finit donc toujours dans
+     son quantum (ADR 0028), un pair qui « goutte » ne retient la voie qu'un quantum, et rien
+     de tout cela ne touche aux parts des autres.
 3. Le message est livré quand exactement `size` octets ont été lus et que le flux est fini ;
    plus ou moins est une violation.
 4. Un émetteur a **au plus un flux LARGE non terminé** par pair ; l'annonce suivante attend.
 5. Pas d'empreinte : la connexion authentifiée garantit l'origine et l'intégrité (TLS 1.3 /
    Noise). Bao ne sert qu'aux blobs, qui peuvent venir de n'importe quel membre (§8.1).
 6. Échec (flux réinitialisé par l'un ou l'autre, connexion perdue, **aucun progrès pendant
-   60 s** alors que le receveur a réservé et lit, ou reprise sous contention ci-dessus) : le
-   message est perdu, règle L. La lenteur seule, sans personne qui attend, n'est jamais un
-   échec.
+   60 s après LARGE_REPLY**, ou fin de quantum dans la voie des gros objets) : le message est
+   perdu, règle L. Attendre son LARGE_REPLY n'est jamais un échec ; la lenteur seule, sans
+   personne qui attend la voie, non plus.
 
 ### 7.3 Générations
 
@@ -810,7 +848,8 @@ sans étiquette par trame. Le modèle [tla/RepoGen.tla](tla/RepoGen.tla) vérifi
 - **Règle I (engager).** Depuis Synchro, sur une perte (règle L) : en un seul pas de l'acteur
   du pair, `gen := gen + 1`, `mode := Attente`, `conf := faux`, réinitialiser le flux REPO
   sortant courant **et** tout flux LARGE sortant (ce qu'ils contenaient est jeté
-  atomiquement par le transport), cesser de lire le flux REPO entrant, ouvrir un nouveau flux
+  atomiquement par le transport), **annuler** (STOP_SENDING) le flux REPO entrant et tout flux
+  LARGE entrant de l'ancienne génération (§5.1 c), ouvrir un nouveau flux
   REPO sortant de préambule `gen`, et dire à la webview que le pair part.
 - **Règle B (activer).** Entrer en Actif (début de session, reprise après Restreint) est un
   engagement vers `gen + 1` si `conf`, sinon vers `max(gen, 1)` (une génération jamais
@@ -855,9 +894,11 @@ sans étiquette par trame. Le modèle [tla/RepoGen.tla](tla/RepoGen.tla) vérifi
   préfixe sans trou de ce que l'autre y a envoyé ; à l'arrêt, tout ce qui a été envoyé a été
   livré ; avec un nombre fini de pertes et de suspensions, retour à une même génération. La
   livraison n'y attend pas de crédit du pont. `ConnCredit`, exhaustif : un sens d'une
-  connexion QUIC, fenêtre de connexion partagée, REPO non lu, LARGE après LARGE_PULL,
-  changement de génération, webview qui peut s'arrêter pour toujours — le contrôle passe
-  toujours, et retirer LARGE_PULL ou l'annulation de l'ancien flux le casse. **Non modélisés,
+  connexion QUIC, fenêtre de connexion partagée, REPO non lu, LARGE après LARGE_REPLY,
+  changements de génération dont le crédit ne revient qu'au RESET_STREAM du pair, un seul flux
+  annulé en attente, webview qui peut s'arrêter pour toujours — le contrôle passe toujours
+  (après au plus le RESET_STREAM d'un pair honnête), ou la session d'un pair qui ne répond pas
+  est fermée ; retirer LARGE_REPLY ou la fermeture à 10 s le casse. **Non modélisés,
   argumentés** : plus de deux pairs (les machines sont par pair), le passage entre deux
   sessions (époques distinctes), les crédits du pont (§10.7).
 
@@ -872,14 +913,19 @@ sans étiquette par trame. Le modèle [tla/RepoGen.tla](tla/RepoGen.tla) vérifi
 **Rythme à la source** (aucune file locale ne déclenche la règle L) : un pair fait entrer les
 documents en synchronisation avec un pair **progressivement** (au plus 64 dont le premier
 message n'a pas encore reçu de réponse ; dans automerge-repo, par un `sharePolicy` qui répond
-à mesure) ; il garde **au plus un** message en attente de crédit par (pair, document) — un
+à mesure ; une place se libère à la réponse, à un `doc-unavailable`, au refus du document ou
+après 60 s sans réponse) ; il garde **au plus un** message en attente de crédit par (pair, document) — un
 nouveau message pour ce (pair, document) remplace l'ancien, et l'état de synchronisation
 Automerge de ce seul (pair, document) est réinitialisé, ce que le protocole de synchronisation
 d'Automerge tolère (l'état de synchronisation peut être perdu à tout moment ; il est même
-éphémère ici, §9.3). Un démarrage avec 10 000 documents et un pair lent ne produit donc ni
-débordement ni réinitialisation.
+éphémère ici, §9.3) ; aussitôt après, l'adaptateur demande à automerge-repo un nouveau
+message pour ce (pair, document) (reprise de la synchronisation de ce document avec ce pair),
+qui prend la place libérée. La limite de 16 Mio vaut pour la voie en ligne ; un message LARGE
+attend seul dans la voie LARGE, quelle que soit sa taille (≤ 64 Mio). Un démarrage avec
+10 000 documents et un pair lent ne produit donc ni débordement ni réinitialisation.
 
-Flux LARGE sortant : `Annoncé → Demandé (LARGE_PULL) → Écrit → Fini`, ou `Réinitialisé` (règle I, sortie d'Actif,
+Flux LARGE sortant (le délai de 60 s sans progrès court seulement **après** LARGE_REPLY) :
+`Annoncé → Demandé (LARGE_REPLY) → Écrit → Fini`, ou `Réinitialisé` (règle I, sortie d'Actif,
 réinitialisation par le pair, 60 s sans progrès) → règle L. L'objet est gardé, dans la part
 du pair (§10.6), jusqu'à `Fini` ou `Réinitialisé`.
 
@@ -1083,13 +1129,16 @@ pointeur de présentation est en **dix-millièmes entiers** de la diapositive
 
 ### 9.6 Pages d'historique (ADR 0031 M5)
 
-- Un receveur qui n'a aucune copie d'un document admis, ou qui refuse un message de
-  synchronisation au-delà des bornes de la garde avec une erreur récupérable, envoie
-  `history-request {documentId, have}` (`have` : ses têtes, ≤ 256).
-- L'émetteur répond par **une** page `history-page {documentId, changes, last}` : des
-  modifications entières (1 à 256), dans l'ordre topologique, qui descendent de `have` et que
-  le demandeur n'a pas, ≤ 16 Mio décompressés au total (une modification tient toujours :
-  la fabrique locale découpe à 65 536 opérations).
+- Un receveur qui n'a aucune copie d'un document admis, qui refuse un message de
+  synchronisation au-delà des bornes de la garde avec une erreur récupérable, ou qui applique
+  la règle H, envoie `history-request {documentId, have, max}` (`have` : ses têtes, ≤ 256 ;
+  `max` : la taille maximale d'une page qu'il accepte, sa part `r` au plus).
+- Le destinataire répond par **une** page `history-page {documentId, changes, last}` : des
+  modifications entières (0 à 256), dans l'ordre topologique, choisies parmi **toutes celles
+  qui ne sont pas dans le passé causal de `have`** (les branches concurrentes comprises, pas
+  seulement les descendants), ≤ `max` octets et ≤ 16 Mio décompressés ; une modification seule
+  plus grande que `max` part seule, par la voie des gros objets (§7.2). Quand il n'a plus rien,
+  il répond par une page **terminale** `changes = [], last = true` (`repo.json#history-page-terminal`).
 - L'émetteur fait précéder chaque page, sur le flux REPO, des ATTEST et AUTHOR qui la couvrent
   (§5.6) ; une page de plus de 64 Kio passe par LARGE.
 - C'est aussi le moyen de la **règle H** (§5.5) : un receveur qui a refusé ou laissé expirer
@@ -1189,8 +1238,7 @@ retient que la sienne, plus du libre qu'on lui reprend dès qu'un autre en a bes
 | Plafond `C` (§16) | Principaux | Reprise |
 |---|---|---|
 | attestations gardées : 65 536 clés, 64 Mio | signataires debout (écrivains) | oubli de sa plus ancienne (réconciliation §6.2) |
-| objets LARGE retenus par l'émetteur : 256 Mio | pairs actifs | objet plus grand que sa part : place libre, FIFO, reprise sous contention (§7.2) |
-| objets LARGE réservés par le receveur : 256 Mio | pairs actifs | idem |
+| objets LARGE réservés par le receveur : 256 Mio | pairs actifs | jamais : un objet plus grand que sa part est refusé et repris par pages ≤ `r` ; une modification indivisible passe par la voie des gros objets, hors des parts (§7.2) |
 | objets en attente de parents (SET) : 256 | pairs qui les ont livrés | oubli (tour suivant) |
 | messages en attente de couverture ou d'auteur | pairs qui les ont livrés | refus, règle H |
 | demandes de vrac servies : 2 par pair, `max(8, 2 × n)` au total | pairs actifs | BUSY |
@@ -1210,11 +1258,13 @@ Le graphe « attend » est acyclique, donc aucune combinaison de files pleines n
   expire en refus, règle H), (c) un crédit **sortant** vers quelque pair que ce soit (la file
   sortante est bornée par document et remplace, §16.2 ; elle n'attend jamais), (d) un message
   LARGE (§5.6 point 3) ;
-- un flux LARGE n'existe qu'après réservation (LARGE_PULL) et se lit toujours ; la
+- un flux LARGE n'existe qu'après réservation (LARGE_REPLY) et se lit toujours ; la
   réservation suivante attend la livraison du précédent (voie LARGE du pont, même argument) ;
 - sur QUIC, le crédit de connexion est partagé : le seul flux qui peut rester non lu (REPO)
-  retient au plus une fenêtre de flux, inférieure de 4 Mio à celle de la connexion (§5.1) ;
-  CONTROL et PRESENCE trouvent donc toujours du crédit (modèle `ConnCredit`) ;
+  retient au plus sa fenêtre, plus, pendant un aller-retour après un changement de génération,
+  l'ancien flux annulé (§5.1 c–d) ; CONTROL et PRESENCE trouvent donc du crédit, au pire après
+  le RESET_STREAM d'un pair honnête, et un pair qui ne l'envoie pas voit sa session fermée en
+  10 s (modèle `ConnCredit`) ;
 - écrire n'attend que la lecture du pair ; aucun lecteur n'attend son propre écrivain.
 
 Entre deux pairs, la seule dépendance croisée passerait par « la webview de A attend son envoi
@@ -1346,23 +1396,25 @@ de `protocol` ; un test par ligne vérifie la borne, la borne + 1 et la reprise.
 
 | Objet | Borne | Part réservée | À la borne | Reprise |
 |---|---|---|---|---|
-| connexions | 64 entrantes, 64 sortantes (impl.) | — | refusée | à la fermeture d'une autre |
+| connexions | 2 par pair (passage) ; 128 entrantes, 128 sortantes au total (impl., 64 membres × 2) | — | refusée | à la fermeture d'une autre |
 | flux par pair et par sens (gestionnaire de ressources libp2p, portées *protocol* × *peer*) | control 1, repo 1 (+1 en fermeture), presence 1, large 1 non lu ; vrac 1 ; salon 4 | — | violation (salon : réinitialisé) | Tenu |
 | trame sync | 98 304 o | — | violation | Tenu |
 | trame vrac | 1 065 005 o | — | violation | Tenu |
 | salon | requête 4096 o / 10 s ; réponse 262 144 o ; traitement 3 min | — | flux fermé | nouvelle requête |
 | HELLO | 1024 o ; 10 s | — | GOAWAY | Tenu |
 | file d'entrée REPO d'un pair | 4 Mio et 1024 trames (impl.) | par pair | lecture du flux suspendue | dès que la webview consomme |
-| file d'entrée CONTROL d'un pair | 512 Kio (impl.) | par pair | lecture suspendue (traitement CPU seul) | immédiate |
+| file d'entrée CONTROL d'un pair | 512 Kio (impl.) | par pair | lecture suspendue **seulement** le temps que l'acteur `Wiring` traite (CPU et disque locaux) ; jamais à cause du réseau ni de la webview — « toujours lu » au sens de §5.1 (a) | immédiate |
+| flux annulés en attente de RESET_STREAM | 1 par session ; 10 s | par session | GOAWAY PROTOCOL_VIOLATION, session fermée | reconnexion |
+| voie des gros objets | 16 Mio hors des parts, un objet à la fois, FIFO ; quantum `10 min + taille / 4 Kio/s` si quelqu'un attend | — | attente en file | règle L en fin de quantum |
 | PRESENCE par pair | 16 entrées, dernière par `sessionId` | par pair | la plus ancienne remplacée | — |
 | file de sortie CONTROL d'un pair | 1 Mio (impl.) | par pair | curseurs SET différés ; réponses ATTEST_WANT ignorées ; commérage ATTEST jeté | tour suivant (15 s) |
 | curseurs SET | 1 par (pair, set) ; 2 nouveaux par 15 s | par pair | demande ignorée | tour suivant |
 | ATTEST_WANT | 64 demandes émises et 64 servies par pair et par 15 s ; attente 30 s | par pair | demande non émise / ignorée | 15 s ; règle H à 30 s |
 | sortie dépôt d'un pair (pont) | voie en ligne 4 Mio ; voie LARGE 1 objet | par pair | la webview attend | crédit rendu |
-| objets LARGE retenus (émetteur) | 1 par pair ; 256 Mio au total | ⌊256 Mio / n⌋ | au-delà de la part : place libre, FIFO ; reprise du plus lent (< 16 Kio/s) si un objet attend > 60 s | règle L à la reprise |
-| objets LARGE réservés (receveur) | 1 par pair ; 256 Mio au total | ⌊256 Mio / n⌋ | pas de LARGE_PULL avant la réservation | idem |
+| objets LARGE annoncés (émetteur) | 1 par pair, en attente de `LARGE_REPLY`, ≤ 10 min (dans la voie LARGE de la webview) | par pair | oublié au refus ou après 10 min ; état de synchronisation de ce document réinitialisé | règle H chez le receveur |
+| objets LARGE réservés (receveur) | 1 par pair ; ≤ part `r` = ⌊256 Mio / n⌋ ; plus grand : refus (`LARGE_REPLY` 0) sauf modification indivisible | ⌊256 Mio / n⌋ | refus | pages d'historique ≤ `r` (§9.6) |
 | sessions par pair | 2 pendant un passage ; limites du gestionnaire de ressources = 2 × celles d'une session | — | la plus ancienne fermée | — |
-| fenêtres QUIC | connexion ≥ flux + 4 Mio (go-libp2p v0.51.0 : 15 Mio / 10 Mio) | — | configuration refusée au démarrage | — |
+| fenêtres QUIC | maximum de connexion ≥ maximum de flux + fenêtre initiale de flux + 1 Mio (go-libp2p v0.51.0 et quic-go v0.64.1 : 15 ≥ 10 + 0,5 + 1 Mio ; initiales 512 / 768 Kio) | — | démarrage refusé (porte P-QUIC) | — |
 | trames ignorables | 256 trames et 256 Kio par minute et par pair | par pair | OVERLOADED | — |
 | progrès d'un flux LARGE | 60 s sans octet alors que réservé et lu | — | flux réinitialisé | règle L |
 | génération | engagements et réessais 1 / 2 s par pair, doublé jusqu'à 60 s (mémoire 10 min) ; flux REPO entrants ≤ 2 / 2 s ; `gen ≤ 2^32 − 1` | — | retardé ; OVERLOADED ; fin de session (règle W) | — |
@@ -1376,7 +1428,7 @@ de `protocol` ; un test par ligne vérifie la borne, la borne + 1 et la reprise.
 | annonces | `Q* + 2` par auteur (ADR 0031) ; attente L2 : 4 par auteur | par auteur | refus ; plus ancienne de l'auteur évincée | — |
 | preuves | 1 par (key, epoch), 4 par key | par clé | ignorée | — |
 | op / attestation / décision / accusé / annonce | 4096 / 4096 / 8192 / 8192 / 4096 o ; 64 parents ; 64 têtes ; 96 entrées | — | refus | — |
-| attestations gardées | les plus récentes par (doc, signataire), ≤ 256 têtes distinctes ; 65 536 clés et 64 Mio au total (impl. ≥) | ⌊C / signataires debout⌋ | reprise (§10.6) | réconciliation |
+| attestations gardées | par (doc, signataire) : acceptée si elle apporte une tête nouvelle, éviction par plus petit `seq` au-delà de 256 têtes distinctes ; 65 536 clés et 64 Mio au total (impl. ≥) | ⌊C / signataires debout⌋ | reprise (§10.6) | réconciliation |
 | attestations en attente de leur signataire | 2 périodes | par pair livreur | oubli | réconciliation |
 | refus notés (règle H) | 1 drapeau par (pair, document admis) ; `history-request` ≤ 1 par (pair, document) et par 60 s | par pair | — | page d'historique |
 | ticket | 1024 caractères ; 15 min ; usage unique | — | refus | nouveau ticket |
@@ -1402,7 +1454,7 @@ de `protocol` ; un test par ligne vérifie la borne, la borne + 1 et la reprise.
 | Objet | Borne | À la borne |
 |---|---|---|
 | enveloppe `net` | 64 Mio (limite Wails) ; pair ≤ 64 o | refus |
-| crédit par (pair, génération, voie) | en ligne : fenêtre 4 Mio ; LARGE : 1 objet | violation : session du pont fermée, la webview se recharge |
+| crédit par (pair, époque, voie) | en ligne : fenêtre 4 Mio ; LARGE : 1 objet | violation : session du pont fermée, la webview se recharge |
 | présence | pas de crédit ; 16 par pair coalescées côté Go | la plus ancienne remplacée |
 | notifications d'état (rôles, attestations, suspension, ensemble admis) | coalescées : dernière valeur par clé | — |
 | `store` | 1026 voies ; page ≤ 1 Mio ; valeur ≤ 32 Mio ; clé ≤ 4 composants de 128 o | refus |
@@ -1419,8 +1471,9 @@ de `protocol` ; un test par ligne vérifie la borne, la borne + 1 et la reprise.
   Ed25519 ; le relais voit qui parle à qui et combien, jamais le contenu. Sans la validation
   du §3.2, une clé d'ordre petit enregistrée comme membre rend son identité publique (N-1).
 - **Autorisation** : la liste signée (§4.9) décide qui se connecte et avec quel rôle ; les
-  objets signés sont rejouables mais idempotents ; une attestation ne compte que si elle est
-  la plus récente et que son signataire écrit encore. L'écriture exige la couverture (§9.4),
+  objets signés sont rejouables mais idempotents ; une attestation compte tant qu'elle est
+  gardée (§6.2, au plus 256 têtes par document et par signataire) et que son signataire écrit
+  encore. L'écriture exige la couverture (§9.4),
   l'auteur exact de chaque modification (G12) et la garde (§9.7) ; aucune de ces vérifications
   ne se négocie (§5.4).
 - **Épuisement** : chaque file, carte et octet disque a une borne et un propriétaire (§16) ;
@@ -1485,7 +1538,7 @@ critique et une capacité.
 | 0x0002–0x0005 | anciennement `member-op/2`, `policy/1`, `history/1`, `changesig/1` : incluses dans `core/2` | retirées, jamais réattribuées |
 | 0x?A?A | GREASE (16 valeurs) | à ignorer |
 
-TLV du HELLO : `0x0001` PROJECT, `0x0002` CAPS, `0x0004` VERSIONS, `0x?A?A` GREASE ; le reste à
+TLV du HELLO : `0x0001` PROJECT, `0x0002` CAPS, `0x0004` VERSIONS, `0x0008` SESSION_NONCE, `0x?A?A` GREASE ; le reste à
 attribuer (pair : ignorable ; impair : à comprendre).
 
 ### 20.3 Codes GOAWAY
@@ -1687,7 +1740,7 @@ enveloppe { version u8 = 1 ; kind u8 ; peer str8 (PeerID, 1–64) ; payload [res
 | kind | Nom | Sens | payload |
 |---|---|---|---|
 | 1 | PeerUp | Go → webview | `session u32 ; generation u32` : début d'une époque §7.3 |
-| 2 | PeerDown | Go → webview | vide |
+| 2 | PeerDown | Go → webview | `session u32 ; generation u32` : fin de cette époque (un PeerDown, un Credit ou un Message d'une autre époque que la courante est ignoré) |
 | 3 | Message | les deux | `session u32 ; generation u32 ; message` (REPO ou objet LARGE) |
 | 4 | Attest | webview → Go | `Heads` : `doc str16 (1–256) ; têtes [32] × ≤ 64` |
 | 5 | Attested | Go → webview | `Heads` d'un signataire `peer` valable |

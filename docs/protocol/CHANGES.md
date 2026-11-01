@@ -92,7 +92,7 @@ Revues [03-codex](reviews/03-codex.md) et [04-fable](reviews/04-fable.md), toute
 
 | # | Gravité | Constat | Changement | Où |
 |---|---|---|---|---|
-| F4-1 | Critique | Fenêtre de **connexion** QUIC (go-libp2p v0.51.0 : 10 Mio par flux, 15 Mio par connexion) : REPO + LARGE non lus prennent tout, le contrôle cale | **Un seul flux de données peut rester non lu par connexion** : l'ancien REPO est annulé aussitôt (`CancelRead` rend le crédit, quic-go v0.64.1 `receive_stream.go:400-410`) ; un flux LARGE n'est ouvert qu'après **LARGE_PULL** (réservation faite, lu aussitôt) ; règle normative « connexion ≥ flux + 4 Mio » (vérifiée au démarrage : go-libp2p v0.51.0 n'expose pas d'option pour régler ces fenêtres) ; **modèle `ConnCredit`** : la règle passe, ses deux mutations échouent | spec §5.1, §5.2 (0x0B), §7.2, §10.2, §10.7 ; `tla/ConnCredit.tla` ; ADR P-QUIC |
+| F4-1 | Critique | Fenêtre de **connexion** QUIC (go-libp2p v0.51.0 : 10 Mio par flux, 15 Mio par connexion) : REPO + LARGE non lus prennent tout, le contrôle cale | **Un seul flux de données peut rester non lu par connexion** : l'ancien REPO est annulé aussitôt (**corrigé au tour 3** : `CancelRead` ne rend le crédit qu'à l'arrivée du RESET_STREAM ou du FIN du pair, quic-go v0.64.1 `receive_stream.go:137-143`, `:410` ; voir F6-1) ; un flux LARGE n'est ouvert qu'après **LARGE_PULL** (réservation faite, lu aussitôt) ; règle normative « connexion ≥ flux + 4 Mio » (vérifiée au démarrage : go-libp2p v0.51.0 n'expose pas d'option pour régler ces fenêtres) ; **modèle `ConnCredit`** : la règle passe, ses deux mutations échouent | spec §5.1, §5.2 (0x0B), §7.2, §10.2, §10.7 ; `tla/ConnCredit.tla` ; ADR P-QUIC |
 | F4-2 | Majeur | Les affirmations dépassent le modèle | §7.3 dit **exactement** ce que vérifient `RepoGen` (exhaustif sur la petite configuration) et `ConnCredit`, et ce qui est seulement argumenté ; `RepoGen` reçoit `InboundLost` (réexhaustif, aucune erreur) ; `ConnCredit` couvre crédit de connexion, LARGE et webview arrêtée | spec §7.3, §10.7 ; `tla/` |
 | F4-3 | Majeur | Tête fantôme ou relais en lecture : expiration de la couverture → règle L toutes les 30 s entre pairs honnêtes | **Règle H** : expiration, refus et file pleine côté receveur = refus noté, redemandé par `history-request` au plus 1 fois par (pair, document) et par minute ; jamais de règle L ; le magasin garde les attestations d'un (doc, signataire) jusqu'à 256 têtes (la borne de la couverture), et ATTEST_WANT les renvoie toutes | spec §5.5, §6.2, §9.4, §9.6, §13, §16 |
 | F4-4 | Majeur | File sortante locale 16 Mio → règle L et LARGE réinitialisé : boucle au démarrage | **Rythme à la source** : entrée progressive des documents (≤ 64 en synchronisation initiale) ; **au plus un message en attente par (pair, document)**, le nouveau remplace l'ancien avec réinitialisation de l'état de synchronisation de ce seul document ; aucune file locale ne déclenche de règle L | spec §7.4, §16.2 |
@@ -131,3 +131,73 @@ que par des réglages fins de fenêtres que go-libp2p n'expose pas.
   et les crédits du pont restent argumentés, non modélisés.
 - Les scénarios `listing_admit` donnent un verdict tiré du §4.10, pas d'un codec (aucun
   n'existe avant l'étape 8).
+
+---
+
+# Tour 3 : révision 4 (2.0.0-brouillon.3 → 2.0.0-brouillon.4)
+
+Revues [05-codex](reviews/05-codex.md) et [06-fable](reviews/06-fable.md), toutes deux
+« revise », convergentes. Codex confirme fermés : C4, C7, C9, C13.
+
+## Divergence à trancher entre les relecteurs
+
+### D1 — admission d'un objet indivisible plus grand qu'une part (Codex C3, Fable F6-3) — *à confirmer par les deux relecteurs*
+
+Constat commun : avec 64 pairs la part `r` vaut 4 Mio ; des pairs qui renouvellent des objets
+sous leur part (Codex) ou qui « gouttent » sans jamais finir peuvent priver d'admission un
+objet honnête plus grand, et la reprise « sous 16 Kio/s » de la révision 3 est une
+réinitialisation au débit qui affame un pair lent honnête (Fable).
+
+| Critère | A — Codex : réservation progressive | B — Fable : page ≤ part, ou reprise au plus une fois | **C — recommandée, appliquée** |
+|---|---|---|---|
+| Règle | le premier en file accumule toute la place libérée ; personne ne passe devant lui ; pas de reprise | les pages d'historique ne dépassent jamais la part ; un objet repris une fois est ensuite protégé | (1) un receveur ne tire jamais un objet plus grand que sa part (`LARGE_REPLY` 0) et le redemande par pages ≤ `r` (`history-request.max`) — idée de B ; (2) seule reste une modification **indivisible** plus grande que `r` : voie des gros objets de 16 Mio **hors des parts**, un objet à la fois, FIFO avec réservation du premier en file — idée de A ; (3) dans cette voie, le détenteur la garde tant qu'il progresse, et un **quantum** `10 min + taille / 4 Kio/s` seulement si quelqu'un attend |
+| Sûreté N7 | renouvellement fermé ; mais des pairs qui gouttent sans finir gardent la place pour toujours | page ≤ part supprime presque tous les gros objets ; mais un objet « protégé » qui goutte garde sa part pour toujours | aucune part n'est jamais reprise ; un pair qui goutte ne retient la voie qu'un quantum ; admission garantie en au plus (rang dans la file × quantum) |
+| Vivacité d'un pair lent honnête (ADR 0028) | bonne (jamais repris) | bonne (au plus une reprise) | les objets ≤ part ne sont jamais repris ; dans la voie, un pair à ≥ 4 Kio/s finit toujours dans son quantum ; en dessous, il ne perd son tour que si quelqu'un attend la voie (il faut une modification indivisible > 4 Mio **et** n ≥ 64) |
+| Simplicité | moyenne (comptabilité de la réservation accumulée, une seule réserve partagée) | bonne | bonne : le cas normal réutilise les pages d'historique ; une seule petite voie à part |
+| Réutilisation | — | pages d'historique | pages d'historique |
+| Évolutivité | neutre | neutre | `max` est un champ de `history-request` ; le quantum et la taille de la voie sont des constantes |
+
+Pourquoi C : elle prend à B ce qui supprime le problème (presque aucun objet ne dépasse une
+part si le receveur fixe la taille des pages) et à A ce qui garantit l'admission du reste (une
+file avec réservation), et elle remplace le seuil de débit par un quantum de partage du temps
+qui ne s'applique qu'à une voie rare et seulement quand quelqu'un attend. Ni A ni B seuls ne
+résistent à un pair qui goutte sans jamais finir.
+
+## Revue 06-fable
+
+| # | Gravité | Constat | Changement | Où |
+|---|---|---|---|---|
+| F6-1 | Critique (avec Codex C5) | `CancelRead` ne rend le crédit qu'au RESET_STREAM du pair | Texte corrigé : crédit rendu à l'arrivée du RESET_STREAM ou du FIN (≥ 1 aller-retour, RFC 9000 §3.5/§4.5) ; **un seul flux annulé en attente** par session ; sans RESET_STREAM en **10 s**, GOAWAY PROTOCOL_VIOLATION et fermeture de cette session seule ; exposition bornée : un aller-retour pour un pair honnête (4,5 Mio de marge aux fenêtres maximales ; au tout début d'une connexion le contrôle peut attendre cet aller-retour) ; `ConnCredit` modélise le retour différé et la fermeture : 4 variantes, dont « pair muet sans fermeture » qui échoue | spec §5.1 (c)(d), §7.3, §10.7, §16.1 ; `tla/ConnCredit.tla` |
+| F6-2 | Majeur | Deux sessions sans départage : boucle de reconnexion (DCUtR) | `SESSION_NONCE` (`u64`) dans le HELLO ; clé de session = (nonce du plus petit PeerID, nonce de l'autre) ; on garde le direct avant le relayé, puis la plus grande clé : même choix des deux côtés | spec §5.1, §5.3, §20.2 ; `compat.json#nonce-missing` |
+| F6-3 | Majeur | Reprise au débit qui affame un pair lent | voir D1 | spec §7.2 |
+| F6-4 | Mineur | Règle I « cesser de lire » contre §5.1 « annuler » | Règle I : annuler (STOP_SENDING) le REPO entrant et tout LARGE entrant de l'ancienne génération | spec §7.3 |
+| F6-5 | Mineur | 60 s sans progrès sans « après LARGE_REPLY » | Le délai ne court qu'après `LARGE_REPLY` ; attendre sa réponse n'est jamais un échec | spec §7.2, §7.4 |
+| F6-6 | Mineur | Destinataire de `history-request` | D'abord le pair qui avait livré le message, puis un autre membre actif qui détient le document, à tour de rôle | spec §5.5 |
+| F6-7 | Mineur | Les 64 places de synchronisation initiale sans délai | Une place se libère à la réponse, à un `doc-unavailable`, au refus du document ou après 60 s | spec §7.4 |
+| F6-8 | Mineur | 64 + 64 connexions contre 2 par pair | 128 entrantes, 128 sortantes, 2 par pair | spec §16.1 |
+| F6-9 | Mineur | CONTROL « toujours lu » et sa file de 512 Kio | Écrit : la lecture ne s'arrête que le temps du traitement local (CPU, disque), jamais à cause du réseau ou de la webview | spec §16.1 |
+
+## Revue 05-codex
+
+| # | Constat | Changement | Où |
+|---|---|---|---|
+| C3 | Admission d'un objet plus grand qu'une part | voir D1 | spec §7.2, §10.6, §16.1 |
+| C5 | Crédit rendu au RESET seulement ; fenêtres **maximales** 10/15 Mio, initiales 512/768 Kio | voir F6-1 ; valeurs effectives écrites (quic-go garde la connexion ≥ 1,5 × tout flux) ; P-QUIC vérifie les **maximums** et la fenêtre initiale | spec §5.1, §16.1 ; ADR P-QUIC |
+| Passage | Credit et PeerDown sans session | PeerDown, Credit, Reset et Message portent l'époque `(session, génération)` ; tout message du pont d'une autre époque est ignoré | spec Annexe A ; `bridge-internal.json#bridge-peerdown-epoch` |
+| Nouveau, Critique | La règle H ne répare pas une branche concurrente manquante | La réponse contient **toute modification hors du passé causal de `have`**, branches concurrentes comprises ; réponse terminale vide (`changes = []`, `last = true`) ; `history-request.max` | spec §9.6 ; CDDL ; `repo.json#history-request`, `#history-page-terminal`, `#history-page-empty`, `#history-request-no-max` |
+| Nouveau | Remplacement par document : régénération ; LARGE > 16 Mio dans une file de 16 Mio | Après réinitialisation de l'état de synchronisation d'un (pair, document), l'adaptateur redemande un message pour ce document, qui prend la place ; la limite de 16 Mio vaut pour la voie en ligne, un LARGE attend seul dans sa voie ; un LARGE annoncé sans réponse est oublié après 10 min ; `LARGE_REPLY` (ex-`LARGE_PULL`) peut refuser | spec §7.2, §7.4, §16 ; `session.json#large-reply-*` |
+| Nouveau | Plusieurs attestations gardées contre « seule la plus récente compte » | Règles écrites : acceptation si elle apporte une tête nouvelle, éviction par plus petit `seq` au-delà de 256 têtes, toutes celles gardées comptent ; §4.3 et §17 alignés | spec §4.3, §6.2, §17 |
+| Nouveau | Le parseur des vecteurs accepte des clés autour de `__presence` et ignore les clés critiques internes | Enveloppe fermée (une seule clé) et recherche des clés `!` dans le CBOR interne ; vecteurs `repo.json#presence-extra-key`, `#presence-inner-critical` | `generate-repo.cjs.txt` |
+| Portes | Garder toutes les portes ; étendre ConnCredit au délai FIN/RESET | Toutes les portes gardées (P-COMPAT comprise) ; P-TLA et P-QUIC précisées ; ConnCredit étendu | ADR §Confirmation |
+
+## Simplifications de ce tour
+
+Presque aucun objet ne dépasse plus une part : le receveur fixe la taille des pages. Le seuil
+de débit disparaît ; il ne reste qu'un quantum de partage du temps, sur une voie rare.
+
+## Reste ouvert après ce tour
+
+- D1 à confirmer par les deux relecteurs.
+- `RepoGen.cfg` non exhaustif ; passage entre sessions et crédits du pont argumentés, non
+  modélisés ; objets proposés sans codec, admission des annonces déclarative (avant bascule,
+  étape 8).

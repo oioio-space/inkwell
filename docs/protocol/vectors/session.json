@@ -12,7 +12,7 @@
       },
       "description": "Flux /inkwell/control/2.0.0 (sans préambule) : HELLO (PROJECT, CAPS = core/2 + GREASE 0x0A0A).",
       "decoder": "sync2_stream",
-      "input_hex": "000000330100010020a8c8601608f969e63ceeec9e77b8d8cbd99007442ffa67c028069149625d21660002000400010a0a000400020002",
+      "input_hex": "0000003f0100010020a8c8601608f969e63ceeec9e77b8d8cbd99007442ffa67c028069149625d21660002000400010a0a000400020002000800080123456789abcdef",
       "verdict": "accept",
       "expect": {
         "effective_caps": [
@@ -42,7 +42,7 @@
       },
       "description": "HELLO dont CAPS ne contient pas core/2 : GOAWAY NO_COMMON_CAPABILITY (les capacités de sécurité ne se négocient pas, §5.4).",
       "decoder": "sync2_stream",
-      "input_hex": "000000310100010020a8c8601608f969e63ceeec9e77b8d8cbd99007442ffa67c028069149625d2166000200020a0a000400020002",
+      "input_hex": "0000003d0100010020a8c8601608f969e63ceeec9e77b8d8cbd99007442ffa67c028069149625d2166000200020a0a000400020002000800080123456789abcdef",
       "verdict": "reject",
       "expect": {
         "goaway": 5
@@ -57,7 +57,7 @@
       },
       "description": "HELLO dont les TLV ne sont pas strictement croissants : refusé.",
       "decoder": "sync2_stream",
-      "input_hex": "00000033010002000400010a0a00010020a8c8601608f969e63ceeec9e77b8d8cbd99007442ffa67c028069149625d2166000400020002",
+      "input_hex": "0000003f010002000400010a0a00010020a8c8601608f969e63ceeec9e77b8d8cbd99007442ffa67c028069149625d2166000400020002000800080123456789abcdef",
       "verdict": "reject"
     },
     {
@@ -69,7 +69,7 @@
       },
       "description": "HELLO avec un TLV inconnu 0x7A7A : accepté, ignoré.",
       "decoder": "sync2_stream",
-      "input_hex": "000000390100010020a8c8601608f969e63ceeec9e77b8d8cbd99007442ffa67c028069149625d21660002000400010a0a0004000200027a7a0002dead",
+      "input_hex": "000000450100010020a8c8601608f969e63ceeec9e77b8d8cbd99007442ffa67c028069149625d21660002000400010a0a000400020002000800080123456789abcdef7a7a0002dead",
       "verdict": "accept"
     },
     {
@@ -251,7 +251,7 @@
       },
       "description": "SET (0x03) ensemble 1 (membres), kind 1 have : frontière = op-add-writer.",
       "decoder": "sync2_stream",
-      "input_hex": "000000330100010020a8c8601608f969e63ceeec9e77b8d8cbd99007442ffa67c028069149625d21660002000400010a0a0004000200020000002503010100015a502638d6036e758b40c0b8414f028e07abf10576fc1adfc49953d02fd04416",
+      "input_hex": "0000003f0100010020a8c8601608f969e63ceeec9e77b8d8cbd99007442ffa67c028069149625d21660002000400010a0a000400020002000800080123456789abcdef0000002503010100015a502638d6036e758b40c0b8414f028e07abf10576fc1adfc49953d02fd04416",
       "verdict": "accept",
       "expect": {
         "kind": "have",
@@ -267,7 +267,7 @@
       },
       "description": "SET ensemble 1, kind 2 objects : une op (op-add-writer).",
       "decoder": "sync2_stream",
-      "input_hex": "000000330100010020a8c8601608f969e63ceeec9e77b8d8cbd99007442ffa67c028069149625d21660002000400010a0a000400020002000000db030102000100d40102020000000000000001d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c0000000000000000000000000000000000000000000000000000000000000000000442c3a961000001a8c8601608f969e63ceeec9e77b8d8cbd99007442ffa67c028069149625d2166e1a098fa6fa8198106dff379bb04bcb1b74a8a7ace8455ef8ca511109b72ab37a93956c8fcbb94934a4865ebf0294b3464a19308b11febcd501987e6718eb704",
+      "input_hex": "0000003f0100010020a8c8601608f969e63ceeec9e77b8d8cbd99007442ffa67c028069149625d21660002000400010a0a000400020002000800080123456789abcdef000000db030102000100d40102020000000000000001d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c0000000000000000000000000000000000000000000000000000000000000000000442c3a961000001a8c8601608f969e63ceeec9e77b8d8cbd99007442ffa67c028069149625d2166e1a098fa6fa8198106dff379bb04bcb1b74a8a7ace8455ef8ca511109b72ab37a93956c8fcbb94934a4865ebf0294b3464a19308b11febcd501987e6718eb704",
       "verdict": "accept",
       "expect": {
         "kind": "objects",
@@ -284,7 +284,7 @@
       },
       "description": "SET ensemble 5 (preuves, plat), kind 3 digest : 0 objet, SHA-256 de la chaîne vide.",
       "decoder": "sync2_stream",
-      "input_hex": "000000330100010020a8c8601608f969e63ceeec9e77b8d8cbd99007442ffa67c028069149625d21660002000400010a0a0004000200020000002703050300000000e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "input_hex": "0000003f0100010020a8c8601608f969e63ceeec9e77b8d8cbd99007442ffa67c028069149625d21660002000400010a0a000400020002000800080123456789abcdef0000002703050300000000e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
       "verdict": "accept",
       "expect": {
         "kind": "digest",
@@ -300,7 +300,7 @@
       },
       "description": "SET kind 1 (have) sur l'ensemble 5 (plat) : refusé, un ensemble plat n'a que digest.",
       "decoder": "sync2_stream",
-      "input_hex": "000000330100010020a8c8601608f969e63ceeec9e77b8d8cbd99007442ffa67c028069149625d21660002000400010a0a000400020002000000050305010000",
+      "input_hex": "0000003f0100010020a8c8601608f969e63ceeec9e77b8d8cbd99007442ffa67c028069149625d21660002000400010a0a000400020002000800080123456789abcdef000000050305010000",
       "verdict": "reject"
     },
     {
@@ -312,7 +312,7 @@
       },
       "description": "ATTEST_WANT (0x0A) : doc str16.",
       "decoder": "sync2_stream",
-      "input_hex": "000000330100010020a8c8601608f969e63ceeec9e77b8d8cbd99007442ffa67c028069149625d21660002000400010a0a0004000200020000001f0a001c344e4d4e6e6b4d684c386a5872644a396a616d533538504156645875",
+      "input_hex": "0000003f0100010020a8c8601608f969e63ceeec9e77b8d8cbd99007442ffa67c028069149625d21660002000400010a0a000400020002000800080123456789abcdef0000001f0a001c344e4d4e6e6b4d684c386a5872644a396a616d533538504156645875",
       "verdict": "accept"
     },
     {
@@ -324,7 +324,7 @@
       },
       "description": "ATTEST_WANT de document vide : refusé (1 à 64 octets).",
       "decoder": "sync2_stream",
-      "input_hex": "000000330100010020a8c8601608f969e63ceeec9e77b8d8cbd99007442ffa67c028069149625d21660002000400010a0a000400020002000000030a0000",
+      "input_hex": "0000003f0100010020a8c8601608f969e63ceeec9e77b8d8cbd99007442ffa67c028069149625d21660002000400010a0a000400020002000800080123456789abcdef000000030a0000",
       "verdict": "reject"
     },
     {
@@ -336,7 +336,7 @@
       },
       "description": "GOAWAY (0x02) code 0x07 OVERLOADED après HELLO.",
       "decoder": "sync2_stream",
-      "input_hex": "000000330100010020a8c8601608f969e63ceeec9e77b8d8cbd99007442ffa67c028069149625d21660002000400010a0a000400020002000000020207",
+      "input_hex": "0000003f0100010020a8c8601608f969e63ceeec9e77b8d8cbd99007442ffa67c028069149625d21660002000400010a0a000400020002000800080123456789abcdef000000020207",
       "verdict": "accept",
       "expect": {
         "code": 7
@@ -351,23 +351,52 @@
       },
       "description": "GOAWAY de corps 2 octets : refusé (corps = 1 octet).",
       "decoder": "sync2_stream",
-      "input_hex": "000000330100010020a8c8601608f969e63ceeec9e77b8d8cbd99007442ffa67c028069149625d21660002000400010a0a00040002000200000003020700",
+      "input_hex": "0000003f0100010020a8c8601608f969e63ceeec9e77b8d8cbd99007442ffa67c028069149625d21660002000400010a0a000400020002000800080123456789abcdef00000003020700",
       "verdict": "reject"
     },
     {
-      "id": "large-pull",
+      "id": "large-reply-pull",
       "status": "proposed",
       "enforce": "step-4",
       "context": {
         "protocol": "/inkwell/control/2.0.0"
       },
-      "description": "LARGE_PULL (0x0B) id 1 : le receveur a réservé, l'émetteur peut ouvrir le flux LARGE (§7.2).",
+      "description": "LARGE_REPLY (0x0B) id 1, verdict 1 : le receveur a réservé, l'émetteur peut ouvrir le flux LARGE (§7.2).",
       "decoder": "sync2_stream",
-      "input_hex": "000000330100010020a8c8601608f969e63ceeec9e77b8d8cbd99007442ffa67c028069149625d21660002000400010a0a000400020002000000050b00000001",
+      "input_hex": "0000003f0100010020a8c8601608f969e63ceeec9e77b8d8cbd99007442ffa67c028069149625d21660002000400010a0a000400020002000800080123456789abcdef000000060b0000000101",
       "verdict": "accept",
       "expect": {
-        "id": 1
+        "id": 1,
+        "verdict": 1
       }
+    },
+    {
+      "id": "large-reply-refuse",
+      "status": "proposed",
+      "enforce": "step-4",
+      "context": {
+        "protocol": "/inkwell/control/2.0.0"
+      },
+      "description": "LARGE_REPLY id 1, verdict 0 : refus (objet plus grand que la part) ; l'émetteur oublie l'objet, le receveur passera par les pages d'historique.",
+      "decoder": "sync2_stream",
+      "input_hex": "0000003f0100010020a8c8601608f969e63ceeec9e77b8d8cbd99007442ffa67c028069149625d21660002000400010a0a000400020002000800080123456789abcdef000000060b0000000100",
+      "verdict": "accept",
+      "expect": {
+        "id": 1,
+        "verdict": 0
+      }
+    },
+    {
+      "id": "large-reply-bad-verdict",
+      "status": "proposed",
+      "enforce": "step-4",
+      "context": {
+        "protocol": "/inkwell/control/2.0.0"
+      },
+      "description": "LARGE_REPLY de verdict 2 : refusé.",
+      "decoder": "sync2_stream",
+      "input_hex": "0000003f0100010020a8c8601608f969e63ceeec9e77b8d8cbd99007442ffa67c028069149625d21660002000400010a0a000400020002000800080123456789abcdef000000060b0000000102",
+      "verdict": "reject"
     }
   ]
 }
