@@ -1,3 +1,5 @@
+packages:
+  - packages/*
 # pnpm settings (ADR 0010 — supply chain): never install a version younger than 7 days,
 # exact versions only, and every dependency build script must be reviewed here.
 minimumReleaseAge: 10080

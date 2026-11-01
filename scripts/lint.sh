@@ -7,6 +7,10 @@
 # staged for commit (used by the pre-commit hook).
 set -euo pipefail
 
+
+for tool in git go; do
+ command -v "$tool" >/dev/null 2>&1 || { printf 'Required tool missing: %s\n' "$tool" >&2; exit 1; }
+done
 repo_root="$(git rev-parse --show-toplevel)"
 cd "$repo_root"
 
@@ -14,6 +18,9 @@ cd "$repo_root"
 # running under mise, which already puts the pinned tools on PATH).
 gopath_bin="$(go env GOPATH)/bin"
 export PATH="$PATH:$gopath_bin"
+for tool in git go find gofmt; do
+ command -v "$tool" >/dev/null 2>&1 || { printf 'Required tool missing: %s\n' "$tool" >&2; exit 1; }
+done
 
 staged_only=0
 [[ "${1:-}" == "--staged" ]] && staged_only=1
@@ -25,13 +32,17 @@ ok()   { printf '\033[32m✓ %s\033[0m\n' "$1"; }
 if [[ $staged_only -eq 1 ]]; then
   mapfile -t go_files < <(git diff --cached --name-only --diff-filter=ACM -- '*.go')
 else
-  mapfile -t go_files < <(git ls-files -- '*.go')
+  files="$(find . -type d \( -name .git -o -path './frontend/bindings' -o -path './frontend/node_modules' \) -prune -o -type f -name '*.go' -print)"
+  go_files=()
+  [[ -z "$files" ]] || mapfile -t go_files <<< "$files"
 fi
 
 if [[ ${#go_files[@]} -eq 0 ]]; then
   ok "No Go files to check."
   exit 0
 fi
+
+command -v golangci-lint >/dev/null 2>&1 || { printf 'Required tool missing: golangci-lint\n' >&2; exit 1; }
 
 # 1. Formatting — guide: Formatting (gofmt).
 unformatted="$(gofmt -l "${go_files[@]}" || true)"
@@ -42,17 +53,14 @@ fi
 ok "gofmt"
 
 # 2. go vet — best-practices: correctness.
+(cd protocol && go vet ./...) || fail "protocol go vet found problems"
 go vet ./... || fail "go vet found problems"
 ok "go vet"
 
 # 3. golangci-lint — the itemized style-guide linters (.golangci.yml).
-if command -v golangci-lint >/dev/null 2>&1; then
-  golangci-lint run ./... || fail "golangci-lint found style-guide violations"
-  ok "golangci-lint"
-else
-  echo "⚠ golangci-lint not installed — skipping. Install:" >&2
-  echo "    go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@latest" >&2
-fi
+(cd protocol && golangci-lint run ./...) || fail "protocol style-guide violations"
+golangci-lint run ./... || fail "golangci-lint found style-guide violations"
+ok "golangci-lint"
 
 # 4. Build — code must compile.
 # -pgo=off: this build-check runs concurrently (under `mise run ci`) with the

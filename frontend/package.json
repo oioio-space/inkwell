@@ -11,7 +11,8 @@
     "check": "biome check . && svelte-check --tsconfig ./tsconfig.json && vitest run",
     "fmt": "biome check --write .",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "vectors:repo": "NODE_PATH=./node_modules node ../protocol/cmd/repo-vectors/main.cjs"
   },
   "dependencies": {
     "@automerge/automerge": "3.5.0",
@@ -28,7 +29,8 @@
     "cbor-x": "1.6.7",
     "codemirror": "6.0.2",
     "codemirror-lang-typst": "0.6.0",
-    "papaparse": "5.7.0"
+    "papaparse": "5.7.0",
+    "@inkwell/protocol": "workspace:*"
   },
   "devDependencies": {
     "@axe-core/playwright": "4.12.1",

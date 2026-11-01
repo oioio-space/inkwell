@@ -50,7 +50,7 @@ func groupsOf(size int64) int { return int((size + GroupSize - 1) / GroupSize) }
 func (s *Store) openDownload(h Hash, size int64) (*download, error) {
 	d := &download{
 		s: s, h: h, size: size, groups: groupsOf(size),
-		dataName: partialDir + "/" + h.hex(),
+		dataName: partialDir + "/" + h.Hex(),
 	}
 	d.mapName = d.dataName + ".map"
 	if d.resume() {
@@ -78,7 +78,7 @@ func (d *download) resume() bool {
 	}
 	bitmap, ok := parseMap(raw, d.size, d.groups)
 	if !ok {
-		d.s.log.Warn("blob: download map unusable, starting over", "hash", d.h.short())
+		d.s.log.Warn("blob: download map unusable, starting over", "hash", d.h.Short())
 		return false
 	}
 	f, err := d.s.root.OpenFile(d.dataName, os.O_RDWR, 0)
@@ -169,7 +169,7 @@ func (d *download) put(offset uint64, data []byte) error {
 			d.have++
 		}
 	}
-	d.s.written(d.h.hex(), min(d.size, int64(d.have)*GroupSize))
+	d.s.written(d.h.Hex(), min(d.size, int64(d.have)*GroupSize))
 	d.unsynced += int64(len(data))
 	if d.unsynced >= syncEvery {
 		return d.flush()

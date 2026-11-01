@@ -227,7 +227,7 @@ func isHashName(name string) bool {
 
 // blobPath returns the path of the blob h below the root.
 func blobPath(h Hash) string {
-	x := h.hex()
+	x := h.Hex()
 	return x[:2] + "/" + x
 }
 
@@ -254,7 +254,7 @@ func (s *Store) Size(h Hash) (int64, error) {
 		return 0, ErrNotFound
 	}
 	if err != nil {
-		return 0, fmt.Errorf("blob: stat %s: %w", h.short(), err)
+		return 0, fmt.Errorf("blob: stat %s: %w", h.Short(), err)
 	}
 	return info.Size(), nil
 }
@@ -379,8 +379,8 @@ func (s *Store) unhold(key string) {
 // settle gives back the hold of the blob h unless a partial download of it is
 // on disk: the file is stored, or its download was discarded.
 func (s *Store) settle(h Hash) {
-	if _, err := s.root.Lstat(partialDir + "/" + h.hex()); err != nil {
-		s.unhold(h.hex())
+	if _, err := s.root.Lstat(partialDir + "/" + h.Hex()); err != nil {
+		s.unhold(h.Hex())
 	}
 }
 
@@ -499,12 +499,12 @@ func (s *Store) Get(h Hash) ([]byte, error) {
 		return nil, ErrNotFound
 	}
 	if err != nil {
-		return nil, fmt.Errorf("blob: open %s: %w", h.short(), err)
+		return nil, fmt.Errorf("blob: open %s: %w", h.Short(), err)
 	}
 	defer func() { _ = f.Close() }() // read-only handle
 	info, err := f.Stat()
 	if err != nil {
-		return nil, fmt.Errorf("blob: stat %s: %w", h.short(), err)
+		return nil, fmt.Errorf("blob: stat %s: %w", h.Short(), err)
 	}
 	if info.Size() > s.opt.MaxFile {
 		_ = s.Remove(h)
@@ -512,11 +512,11 @@ func (s *Store) Get(h Hash) ([]byte, error) {
 	}
 	data, err := io.ReadAll(io.LimitReader(f, info.Size()+1))
 	if err != nil {
-		return nil, fmt.Errorf("blob: read %s: %w", h.short(), err)
+		return nil, fmt.Errorf("blob: read %s: %w", h.Short(), err)
 	}
 	if blake3.Sum256(data) != h {
 		_ = s.Remove(h)
-		s.log.Warn("blob: stored file does not match its hash, removed", "hash", h.short())
+		s.log.Warn("blob: stored file does not match its hash, removed", "hash", h.Short())
 		return nil, ErrCorrupt
 	}
 	return data, nil
@@ -532,12 +532,12 @@ func (s *Store) Reader(h Hash) (*os.File, int64, error) {
 		return nil, 0, ErrNotFound
 	}
 	if err != nil {
-		return nil, 0, fmt.Errorf("blob: open %s: %w", h.short(), err)
+		return nil, 0, fmt.Errorf("blob: open %s: %w", h.Short(), err)
 	}
 	info, err := f.Stat()
 	if err != nil {
 		_ = f.Close()
-		return nil, 0, fmt.Errorf("blob: stat %s: %w", h.short(), err)
+		return nil, 0, fmt.Errorf("blob: stat %s: %w", h.Short(), err)
 	}
 	return f, info.Size(), nil
 }
@@ -564,7 +564,7 @@ func (s *Store) Remove(h Hash) error {
 		}
 	}
 	if err := errors.Join(errs...); err != nil {
-		return fmt.Errorf("blob: remove %s: %w", h.short(), err)
+		return fmt.Errorf("blob: remove %s: %w", h.Short(), err)
 	}
 	s.mu.Lock()
 	s.used -= size
@@ -587,12 +587,12 @@ func (s *Store) ReadSlice(h Hash, offset uint64, length uint32) (Slice, error) {
 		return Slice{}, ErrNotFound
 	}
 	if err != nil {
-		return Slice{}, fmt.Errorf("blob: open %s: %w", h.short(), err)
+		return Slice{}, fmt.Errorf("blob: open %s: %w", h.Short(), err)
 	}
 	defer func() { _ = f.Close() }() // read-only handle
 	info, err := f.Stat()
 	if err != nil {
-		return Slice{}, fmt.Errorf("blob: stat %s: %w", h.short(), err)
+		return Slice{}, fmt.Errorf("blob: stat %s: %w", h.Short(), err)
 	}
 	size := info.Size()
 	if offset >= uint64(size) { // #nosec G115 -- a file size is not negative.
@@ -607,12 +607,12 @@ func (s *Store) ReadSlice(h Hash, offset uint64, length uint32) (Slice, error) {
 	var buf bytes.Buffer
 	buf.Grow(int(n) + maxParents)                                                        // data, header and parent hashes; no regrowth
 	if err := extractSlice(&buf, f, tree, uint64(size), offset, uint64(n)); err != nil { // #nosec G115 -- file size is nonnegative.
-		return Slice{}, fmt.Errorf("blob: extract slice of %s: %w", h.short(), err)
+		return Slice{}, fmt.Errorf("blob: extract slice of %s: %w", h.Short(), err)
 	}
 	encoded := bytes.NewReader(buf.Bytes())
 	if ok, err := bao.DecodeSlice(io.Discard, encoded, groupLog, offset, uint64(n), h); err != nil || !ok || encoded.Len() != 0 {
 		_ = s.Remove(h)
-		s.log.Warn("blob: stored file does not match its hash, removed", "hash", h.short())
+		s.log.Warn("blob: stored file does not match its hash, removed", "hash", h.Short())
 		return Slice{}, ErrCorrupt
 	}
 	return Slice{Hash: h, Offset: offset, Length: n, Bao: buf.Bytes()}, nil

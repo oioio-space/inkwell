@@ -54,19 +54,19 @@ func (s *Store) GC(referenced func(Hash) bool, maxAge time.Duration) (GCResult, 
 		if referenced(h) {
 			continue
 		}
-		since, marked := state.Unreferenced[h.hex()]
+		since, marked := state.Unreferenced[h.Hex()]
 		if !marked {
-			next[h.hex()] = now.Unix()
+			next[h.Hex()] = now.Unix()
 			continue
 		}
 		if now.Sub(time.Unix(since, 0)) < maxAge {
-			next[h.hex()] = since
+			next[h.Hex()] = since
 			continue
 		}
 		size, _ := s.Size(h)
 		if err := s.Remove(h); err != nil {
 			errs = append(errs, err)
-			next[h.hex()] = since
+			next[h.Hex()] = since
 			continue
 		}
 		res.Removed++
@@ -105,7 +105,7 @@ func (s *Store) gcPartials(referenced func(Hash) bool, maxAge time.Duration, now
 			continue
 		}
 		_ = s.root.Remove(name + ".map") // may be absent
-		s.unhold(h.hex())
+		s.unhold(h.Hex())
 		freed += info.Size()
 		removed++
 	}

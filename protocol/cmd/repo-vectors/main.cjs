@@ -1,0 +1,332 @@
+// Command repo-vectors writes the proposed CBOR corpus to stdout.
+// Run from frontend: pnpm run vectors:repo.
+"use strict";
+const A = require("@automerge/automerge");
+const cborx = require("cbor-x");
+
+// ---- deterministic encoder (RFC 8949 §4.2.1 core deterministic, profile subset) ----
+const head = (major, n) => {
+  if (n < 24) return [(major << 5) | n];
+  if (n < 0x100) return [(major << 5) | 24, n];
+  if (n < 0x10000) return [(major << 5) | 25, n >> 8, n & 255];
+  if (n < 0x100000000) return [(major << 5) | 26, (n >>> 24) & 255, (n >>> 16) & 255, (n >>> 8) & 255, n & 255];
+  const out = [(major << 5) | 27]; let x = BigInt(n);
+  for (let k = 7; k >= 0; k--) out.push(Number((x >> BigInt(8 * k)) & 255n));
+  return out;
+};
+const cmp = (a, b) => { for (let i = 0; i < Math.min(a.length, b.length); i++) if (a[i] !== b[i]) return a[i] - b[i]; return a.length - b.length; };
+function enc(v) {
+  if (v === null) return [0xf6];
+  if (v === false) return [0xf4];
+  if (v === true) return [0xf5];
+  if (typeof v === "number") { if (!Number.isSafeInteger(v) || v < 0) throw new Error("profile: uint only"); return head(0, v); }
+  if (typeof v === "string") { const b = [...Buffer.from(v, "utf8")]; return head(3, b.length).concat(b); }
+  if (v instanceof Uint8Array) return head(2, v.length).concat([...v]);
+  if (Array.isArray(v)) return v.reduce((a, x) => a.concat(enc(x)), head(4, v.length));
+  const ks = Object.keys(v).map((k) => [enc(k), enc(v[k])]).sort((x, y) => cmp(x[0], y[0]));
+  return ks.reduce((a, [k, x]) => a.concat(k, x), head(5, ks.length));
+}
+const encode = (v) => Uint8Array.from(enc(v));
+const hex = (b) => Buffer.from(b).toString("hex");
+const unhex = (h) => Uint8Array.from(Buffer.from(h, "hex"));
+
+// ---- validity profile (§9.2): reject exactly what two decoders could read differently ----
+const MAX_DEPTH = 8, MAX_ITEMS = 4096, MAX_MAP = 64, MAX_ARRAY = 256;
+function check(b) {
+  let i = 0, items = 0;
+  const arg = (ai) => {
+    if (ai < 24) return ai;
+    const n = { 24: 1, 25: 2, 26: 4, 27: 8 }[ai];
+    if (!n) throw new Error(ai === 31 ? "indefinite length" : "reserved additional info");
+    if (i + n > b.length) throw new Error("truncated");
+    let v = 0; for (let k = 0; k < n; k++) v = v * 256 + b[i + k];
+    i += n;
+    if (v > Number.MAX_SAFE_INTEGER) throw new Error("integer above 2^53-1");
+    return v;
+  };
+  const item = (depth) => {
+    if (depth > MAX_DEPTH) throw new Error("depth > 8");
+    if (++items > MAX_ITEMS) throw new Error("more than 4096 items");
+    if (i >= b.length) throw new Error("truncated");
+    const ib = b[i++], major = ib >> 5, ai = ib & 31;
+    switch (major) {
+      case 0: arg(ai); return;
+      case 1: throw new Error("negative integer");
+      case 2: case 3: { const n = arg(ai); if (i + n > b.length) throw new Error("truncated");
+        const s = b.subarray(i, i + n); i += n;
+        if (major === 3) return new TextDecoder("utf-8", { fatal: true }).decode(s);
+        return; }
+      case 4: { const n = arg(ai); if (n > MAX_ARRAY) throw new Error("array > 256"); for (let k = 0; k < n; k++) item(depth + 1); return; }
+      case 5: { const n = arg(ai); if (n > MAX_MAP) throw new Error("map > 64 pairs"); const seen = new Set();
+        for (let k = 0; k < n; k++) {
+          if ((b[i] >> 5) !== 3) throw new Error("map key not a text string");
+          // Compare the DECODED key: the same text can be encoded with different
+          // length widths (both accepted, §9.2.1), so comparing bytes would miss it.
+          const key = item(depth + 1);
+          if (seen.has(key)) throw new Error("duplicate map key"); seen.add(key);
+          item(depth + 1);
+        } return; }
+      case 6: throw new Error("tag");
+      case 7: if (ib === 0xf4 || ib === 0xf5 || ib === 0xf6) return;
+        throw new Error(ai >= 25 && ai <= 27 ? "float" : "simple value other than false/true/null");
+    }
+  };
+  item(1);
+  if (i !== b.length) throw new Error("trailing bytes");
+}
+
+// ---- schema (§9.3–§9.6, cddl/repo.cddl), context = authenticated sender, receiver, admitted set ----
+const PEER = /^[!-~]{1,64}$/, DOC = /^[1-9A-HJ-NP-Za-km-z]{1,64}$/, URL = /^automerge:[1-9A-HJ-NP-Za-km-z]{1,70}$/;
+const own = (o, k) => (Object.hasOwn(o, k) ? o[k] : undefined);
+const isMap = (v) => v !== null && typeof v === "object" && !Array.isArray(v) && !(v instanceof Uint8Array);
+const uint = (v, max) => Number.isSafeInteger(v) && v >= 0 && v <= max;
+function presence(p) {
+  const ch = (k, v) => ["name", "anchor", "head"].includes(k) && typeof v === "string" && Buffer.byteLength(v) <= (k === "name" ? 128 : 64);
+  switch (own(p, "type")) {
+    case "heartbeat": case "goodbye": return true;
+    case "update": return ch(own(p, "channel"), own(p, "value"));
+    case "snapshot": { const s = own(p, "state"); return isMap(s) && Object.keys(s).length <= 3 && Object.entries(s).every(([k, v]) => ch(k, v)); }
+  }
+  return false;
+}
+function present(m) {
+  const keys = Object.keys(m).sort().join(","), ep = (v) => uint(v, 2147483648), peer = (v) => typeof v === "string" && PEER.test(v);
+  const coord = (v) => uint(v, 10000);
+  switch (own(m, "t")) {
+    case "state": return keys === "epoch,screen,seq,slide,step,t" && ep(m.epoch) && uint(m.seq, Number.MAX_SAFE_INTEGER) && uint(m.slide, 100000) && m.slide >= 1 && uint(m.step, 100000) && ["show", "black", "white"].includes(m.screen);
+    case "laser": return keys === "epoch,t,x,y" && ep(m.epoch) && ((m.x === null && m.y === null) || (coord(m.x) && coord(m.y)));
+    case "take": case "end": return keys === "epoch,t" && ep(m.epoch);
+    case "hello": case "ask": return keys === "t";
+    case "give": return keys === "epoch,t,to" && ep(m.epoch) && peer(m.to);
+    case "deny": return keys === "t,to" && peer(m.to);
+  }
+  return false;
+}
+class Ignored extends Error {}
+// N14: an unknown key whose name starts with "!" is "must-understand"; no key of
+// this version starts with "!", so any such key refuses the message.
+function critical(v) {
+  if (Array.isArray(v)) return v.some(critical);
+  if (isMap(v)) return Object.keys(v).some((k) => k.startsWith("!")) || Object.values(v).some(critical);
+  return false;
+}
+function parse(bytes, c) {
+  check(bytes);
+  const v = cborx.decode(bytes);
+  if (!isMap(v)) throw new Error("not a map");
+  if (critical(v)) throw new Error("unknown must-understand key");
+  const type = own(v, "type"), senderId = own(v, "senderId"), targetId = own(v, "targetId");
+  if (typeof senderId !== "string" || senderId !== c.from) throw new Error("senderId is not the authenticated sender");
+  if (typeof targetId !== "string" || targetId !== c.me) throw new Error("targetId is not the receiver");
+  const out = { type, senderId, targetId };
+  if (type === "arrive" || type === "welcome") {
+    if (bytes.length > 1024) throw new Error("handshake > 1024 bytes");
+    const md = own(v, "peerMetadata"); if (md !== undefined && !isMap(md)) throw new Error("peerMetadata");
+    const url = own(v, "projectUrl");
+    if (url !== undefined) { if (typeof url !== "string" || !URL.test(url) || url.length > 80) throw new Error("projectUrl"); out.projectUrl = url; }
+    return out;
+  }
+  if (["remote-subscription-change", "remote-heads-changed"].includes(type)) throw new Error("type not admitted");
+  if (!["sync", "request", "doc-unavailable", "ephemeral", "history-request", "history-page"].includes(type)) throw new Ignored("unknown type: ignored (N14)");
+  const documentId = own(v, "documentId");
+  if (typeof documentId !== "string" || !DOC.test(documentId)) throw new Error("documentId");
+  if (!c.admitted.includes(documentId)) throw new Error("document not in the admitted set");
+  out.documentId = documentId;
+  if (type === "doc-unavailable") return out;
+  if (type === "history-request") {
+    const have = own(v, "have"), max = own(v, "max");
+    if (!Array.isArray(have) || have.length > 256 || !have.every((h) => h instanceof Uint8Array && h.length === 32)) throw new Error("have");
+    if (max !== 4194304) throw new Error("max must be r = 4194304");
+    out.have = have.map(hex); out.max = max; return out;
+  }
+  if (type === "history-page") {
+    const ch = own(v, "changes"), last = own(v, "last");
+    if (!Array.isArray(ch) || ch.length > 256 || !ch.every((x) => x instanceof Uint8Array && x.length >= 1)) throw new Error("changes");
+    if (typeof last !== "boolean") throw new Error("last");
+    if (ch.length === 0 && !last) throw new Error("empty page must be the last (terminal answer)");
+    out.changes = ch.length; out.last = last; return out;
+  }
+  const data = own(v, "data");
+  if (!(data instanceof Uint8Array)) throw new Error("data is not a byte string");
+  out.data_len = data.length;
+  if (type !== "ephemeral") return out;
+  const sessionId = own(v, "sessionId"), count = own(v, "count");
+  if (typeof sessionId !== "string" || !/^[0-9a-z]{1,16}$/.test(sessionId)) throw new Error("sessionId");
+  if (!uint(count, Number.MAX_SAFE_INTEGER) || count < 1) throw new Error("count");
+  if (data.length > 1024) throw new Error("ephemeral data > 1024 bytes");
+  check(data);
+  const e = cborx.decode(data);
+  if (!isMap(e)) throw new Error("ephemeral payload");
+  if (critical(e)) throw new Error("unknown must-understand key (inner payload)");
+  if (Object.keys(e).length !== 1) throw new Error("envelope is a closed map with one key");
+  if (Object.hasOwn(e, "__present")) { if (!isMap(e.__present) || !present(e.__present)) throw new Error("__present"); }
+  else if (!isMap(own(e, "__presence")) || !presence(e.__presence)) throw new Error("__presence");
+  Object.assign(out, { sessionId, count }); return out;
+}
+
+// ---- data ----
+const FROM = "12D3KooWQK1wnefoLrcVHbbnf5tLzbopUd3K3bFAoJpA7YJgL5pV";   // key A (crypto.json#peer-id-A)
+const ME = peerId("3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c"); // key B
+const DOCID = "4NMNnkMhL8jXrdJ9jamS58PAVdXu", ROOT = "automerge:2j9knpCseyhnK8izDmLpGP5WMdZQ";
+function peerId(pubHex) {
+  const b = [0x00, 0x24, 0x08, 0x01, 0x12, 0x20, ...unhex(pubHex)];
+  const al = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
+  let x = BigInt("0x" + hex(b)), s = "";
+  while (x > 0n) { s = al[Number(x % 58n)] + s; x /= 58n; }
+  for (const c of b) { if (c !== 0) break; s = "1" + s; }
+  return s;
+}
+if (peerId("d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a") !== FROM) throw new Error("peer id");
+let d = A.init({ actor: "0102030405060708090a0b0c0d0e0f10" });
+d = A.change(d, { time: 0, message: "" }, (x) => { x.t = "inkwell"; });
+const SYNC = A.generateSyncMessage(d, A.initSyncState())[1];
+const CHANGE = A.getAllChanges(d)[0];
+const ctx = { from: FROM, me: ME, admitted: [DOCID] };
+const base = (type) => ({ type, senderId: FROM, targetId: ME, documentId: DOCID });
+const eph = (payload, extra = {}) => ({ ...base("ephemeral"), sessionId: "s1", count: 1, data: encode(payload), ...extra });
+
+const vectors = [];
+function add(id, desc, bytes, c = ctx) {
+  let verdict = "accept", expect;
+  try { expect = parse(bytes, c); } catch (e) { verdict = e instanceof Ignored ? "ignore" : "reject"; expect = { reason: e.message }; }
+  // cross-check: our encoder agrees with cbor-x on every accepted value
+  if (verdict === "accept" && hex(encode(cborx.decode(bytes))) !== hex(bytes) && !id.startsWith("liberal-")) throw new Error("encoder mismatch " + id);
+  vectors.push({ id, status: "proposed", enforce: "step-3", description: desc, decoder: "repo_message",
+    context: { from: c.from, me: c.me, admitted: c.admitted }, input_hex: hex(bytes), verdict, expect });
+}
+const raw = (h) => unhex(h);
+const swapHead = (b, from, to) => { const h = hex(b); if (!h.startsWith(from)) throw new Error("head"); return unhex(to + h.slice(from.length)); };
+
+// positive
+add("arrive", "Poignée de main arrive : senderId, targetId (obligatoire partout, §9.2), peerMetadata ignorée, projectUrl.", encode({ type: "arrive", senderId: FROM, targetId: ME, peerMetadata: { isEphemeral: true }, projectUrl: ROOT }));
+add("welcome", "Poignée de main welcome sans projectUrl.", encode({ type: "welcome", senderId: FROM, targetId: ME, peerMetadata: {} }));
+add("sync", "Message sync portant un vrai message de synchronisation Automerge 3.5.0 (acteur et horodatage fixés).", encode({ ...base("sync"), data: SYNC }));
+add("request", "Message request (même forme que sync).", encode({ ...base("request"), data: SYNC }));
+add("doc-unavailable", "doc-unavailable : sans data.", encode(base("doc-unavailable")));
+add("unknown-key-ignored", "Clé inconnue « x-later » (map ouverte) : acceptée, ignorée et non conservée.", encode({ ...base("sync"), data: SYNC, "x-later": [1, 2, { a: "b" }] }));
+add("presence-update", "Éphémère : __presence update du canal name.", encode(eph({ __presence: { type: "update", channel: "name", value: "Béa" } })));
+add("presence-snapshot", "Éphémère : __presence snapshot de deux canaux.", encode(eph({ __presence: { type: "snapshot", state: { name: "Béa", head: "12" } } })));
+add("present-laser", "Éphémère : pointeur de présentation en dix-millièmes (entiers, aucun flottant).", encode(eph({ __present: { t: "laser", epoch: 3, x: 5000, y: 2500 } })));
+add("present-laser-off", "Pointeur éteint : x et y tous deux null.", encode(eph({ __present: { t: "laser", epoch: 3, x: null, y: null } })));
+add("history-request", "Demande de pages d'historique (§9.6) : têtes du demandeur et max = r = 4 Mio ; la réponse contient toute modification hors du passé causal de ces têtes, branches concurrentes comprises.", encode({ ...base("history-request"), have: [unhex("31919abffa533f3b405001b59201b02a4ea3a18e318a49de0fd04e6eefe3d338")], max: 4194304 }));
+add("history-request-no-max", "Demande sans « max » : refusé (champ obligatoire).", encode({ ...base("history-request"), have: [] }));
+add("history-request-wrong-max", "Demande avec max = 65 536 : refusé (max est fixé à r = 4 194 304 dans cette version).", encode({ ...base("history-request"), have: [], max: 65536 }));
+add("history-page", "Page d'historique : modifications Automerge entières, ordre topologique, last = true.", encode({ ...base("history-page"), changes: [CHANGE], last: true }));
+add("liberal-cbor-x-map-header", "Même message sync encodé par cbor-x (en-tête de map sur 2 octets, ordre d'insertion des clés) : accepté ; la sérialisation préférée est RECOMMANDÉE à l'émission, non exigée à la réception (§9.2).",
+  new cborx.Encoder({ tagUint8Array: false, useRecords: false }).encode({ ...base("sync"), data: SYNC }));
+// negative: validity profile
+const good = encode({ ...base("sync"), data: SYNC });
+add("duplicate-key", "Clé type en double (cbor-x garde la dernière) : refusé, deux décodeurs pourraient lire deux messages différents.",
+  raw(hex(good).replace(/^a5/, "a6") + hex(encode("type")) + hex(encode("request"))));
+add("duplicate-key-nonpreferred", "Clé type en double dont la seconde occurrence est encodée avec une longueur sur 1 octet (78 04) : même texte, donc doublon, refusé (comparaison des clés décodées, pas des octets).",
+  raw(hex(good).replace(/^a5/, "a6") + "7804" + Buffer.from("type").toString("hex") + hex(encode("request"))));
+add("tag-64", "data étiquetée (tag 64, ce qu'émet le `encode` par défaut de cbor-x) : refusé.", new cborx.Encoder({ useRecords: false }).encode({ ...base("sync"), data: SYNC }));
+add("float", "Pointeur en flottant (0.5) : refusé, aucun flottant dans le protocole.", encode({ ...base("ephemeral"), sessionId: "s1", count: 1, data: raw("a1695f5f70726573656e74a46174656c617365726565706f6368036178f93800617901") }));
+add("negative-int", "count = -1 (entier négatif) : refusé.", raw(hex(encode({ ...base("ephemeral"), sessionId: "s1", count: 1, data: encode({ __presence: { type: "heartbeat" } }) })).replace("65636f756e7401", "65636f756e7420")));
+add("indefinite-map", "Map de longueur indéfinie : refusé.", raw("bf" + hex(good).slice(2) + "ff"));
+add("trailing-byte", "Un octet après l'élément : refusé.", raw(hex(good) + "00"));
+add("too-deep", "Clé inconnue imbriquée sur 9 niveaux : refusé (profondeur ≤ 8, même dans un champ ignoré).", encode({ ...base("doc-unavailable"), x: [[[[[[[[1]]]]]]]] }));
+add("big-uint", "count = 2^53 : refusé (au-delà de 2^53 − 1, illisible exactement en JavaScript).", raw(hex(encode({ ...base("ephemeral"), sessionId: "s1", count: 1, data: encode({ __presence: { type: "heartbeat" } }) })).replace("65636f756e7401", "65636f756e741b0020000000000000")));
+add("non-text-key", "Clé de map entière : refusé.", raw("a6" + hex(good).slice(2) + "0000"));
+add("bad-utf8", "senderId qui n'est pas de l'UTF-8 valide : refusé.", raw(hex(good).replace(hex(encode(FROM)), "7834" + "ff".repeat(1) + Buffer.from(FROM.slice(1)).toString("hex"))));
+// negative: schema and context
+add("wrong-sender", "senderId différent du pair authentifié : refusé.", encode({ ...base("sync"), senderId: ME, data: SYNC }));
+add("wrong-target", "targetId différent du receveur : refusé.", encode({ ...base("sync"), targetId: FROM, data: SYNC }));
+add("arrive-no-target", "arrive sans targetId : refusé (règle unique du §9.2).", encode({ type: "arrive", senderId: FROM, peerMetadata: {} }));
+add("not-admitted", "documentId hors de l'ensemble admis du receveur : refusé (jeté sans réponse).", encode({ ...base("sync"), data: SYNC }), { ...ctx, admitted: [] });
+add("remote-heads-changed", "Type remote-heads-changed : refusé.", encode({ ...base("remote-heads-changed"), data: SYNC }));
+add("laser-half", "Pointeur avec x seul (y null) : refusé.", encode(eph({ __present: { t: "laser", epoch: 3, x: 1, y: null } })));
+add("present-extra-key", "Map fermée de présentation avec une clé de plus : refusé.", encode(eph({ __present: { t: "take", epoch: 1, z: 0 } })));
+add("ephemeral-too-big", "Éphémère dont data fait 1025 octets : refusé.", encode({ ...base("ephemeral"), sessionId: "s1", count: 1, data: encode({ __presence: { type: "update", channel: "name", value: "x".repeat(1010) } }) }));
+add("handshake-too-big", "arrive de plus de 1024 octets : refusé.", encode({ type: "arrive", senderId: FROM, targetId: ME, peerMetadata: { pad: "x".repeat(1000) } }));
+add("history-page-terminal", "Réponse terminale vide (rien à envoyer) : changes = [], last = true : accepté.", encode({ ...base("history-page"), changes: [], last: true }));
+add("history-page-empty", "Page vide qui n'est pas la dernière : refusé.", encode({ ...base("history-page"), changes: [], last: false }));
+add("presence-extra-key", "Enveloppe de présence avec une clé de plus à côté de __presence : refusé (map fermée).", encode(eph({ __presence: { type: "heartbeat" }, x: 1 })));
+add("presence-inner-critical", "Clé « à comprendre » à l'intérieur du CBOR imbriqué de l'éphémère : refusé.", encode(eph({ __presence: { type: "heartbeat", "!z": 1 } })));
+
+// compatibility matrix (N14): what a 2.0 receiver does with 2.x / future messages
+add("compat-grease-key", "Clé GREASE « _g7a3c » (map ouverte) : ignorée ; un émetteur DEVRAIT en glisser de temps en temps (anti-ossification, RFC 8701).", encode({ ...base("sync"), data: SYNC, _g7a3c: 1 }));
+add("compat-new-optional-key", "Champ facultatif d'une version future (« priority ») : ignoré, non conservé.", encode({ ...base("sync"), data: SYNC, priority: 3 }));
+add("compat-critical-key", "Champ « à comprendre » d'une version future (« !encrypted ») : message refusé, jamais lu sans lui.", encode({ ...base("sync"), data: SYNC, "!encrypted": true }));
+add("compat-nested-critical-key", "Clé « à comprendre » dans une map ouverte imbriquée (peerMetadata) : refusé.", encode({ type: "arrive", senderId: FROM, targetId: ME, peerMetadata: { "!x": 1 } }));
+add("compat-unknown-type", "Type inconnu « future-kind » (nouveau type de message d'une version future) : ignoré sans erreur (ni violation ni règle L).", encode({ ...base("future-kind"), data: SYNC }));
+add("compat-grease-type", "Type GREASE « grease-4f1e » : ignoré.", encode({ ...base("grease-4f1e") }));
+
+// ---- G9 schema of the index (spec §9.7), real Automerge 3.5.0 changes ----
+const gvec = [];
+{
+  let ix = A.init({ actor: "0102030405060708090a0b0c0d0e0f10" });
+  ix = A.change(ix, { time: 0, message: "" }, (x) => { x.schema = 1; x.nodes = {}; x.packages = {}; });
+  const NODE = "0123456789abcdef0123456789abcdef";
+  const withNode = A.change(A.clone(ix, { actor: "1112131415161718191a1b1c1d1e1f20" }), { time: 0, message: "" }, (x) => { x.nodes[NODE] = {}; });
+  let nodesObj;
+  for (const op of A.decodeChange(A.getLastLocalChange(withNode)).ops) if (op.action === "makeMap") nodesObj = op.obj;
+  const rule = (ch) => {
+    for (const op of A.decodeChange(ch).ops) {
+      if (op.obj === "_root") return "R-root: root op outside G";
+      if (op.obj === nodesObj && !(op.action === "makeMap" && /^[0-9a-f]{32}$/.test(String(op.key)) && op.pred.length === 0))
+        return "R-nodes: only makeMap with a 32-hex key and pred []";
+    }
+    return null;
+  };
+  const mk = (id, desc, base, fn) => {
+    const next = A.change(A.clone(base, { actor: "2122232425262728292a2b2c2d2e2f30" }), { time: 0, message: "" }, fn);
+    const ch = A.getLastLocalChange(next);
+    const why = rule(ch);
+    gvec.push({ id, status: "proposed", enforce: "step-8", description: desc, decoder: "guard_schema",
+      context: { nodes_obj: nodesObj }, input_hex: hex(ch), verdict: why ? "reject" : "accept", expect: why ? { rule: why } : undefined });
+  };
+  mk("g9-node-add", "Ajout d'un nœud : makeMap sur nodes, clé de 32 hex, pred vide : admis.", ix, (x) => { x.nodes["fedcba9876543210fedcba9876543210"] = {}; });
+  mk("g9-root-op", "Écriture à la racine hors de G (x.extra = 1) : refusée (R-root).", ix, (x) => { x.extra = 1; });
+  mk("g9-node-delete", "Suppression d'un nœud (del sur nodes) : refusée (R-nodes) ; masquer un nœud est une décision.", withNode, (x) => { delete x.nodes[NODE]; });
+  mk("g9-node-replace", "Remplacement d'un nœud existant (makeMap avec pred non vide) : refusé (R-nodes).", withNode, (x) => { x.nodes[NODE] = {}; });
+  mk("g9-node-badkey", "Nœud de clé « abc » (pas 32 hex) : refusé (R-nodes).", ix, (x) => { x.nodes.abc = {}; });
+  mk("g9-node-scalar", "Scalaire posé dans nodes : refusé (R-nodes).", ix, (x) => { x.nodes["00112233445566778899aabbccddeeff"] = 1; });
+}
+for (const v of gvec) vectors.push(v);
+
+// ---- indivisible changes (spec §7.2, §8.1, §9.6): binding and page route, real Automerge change ----
+{
+  // ~70 kB of incompressible text so the encoded change exceeds the 64 KiB minimum of max
+  let seed = 7; const rnd = () => (seed = (seed * 1103515245 + 12345) % 2147483648);
+  const text = Array.from({ length: 70000 }, () => String.fromCharCode(97 + (rnd() % 26))).join("");
+  let dd = A.init({ actor: "3132333435363738393a3b3c3d3e3f40" });
+  dd = A.change(dd, { time: 0, message: "" }, (x) => { x.t = text; });
+  const ch = A.getLastLocalChange(dd), info = A.decodeChange(ch);
+  const binding = (id, desc, expHash, expSize) => {
+    const okHash = info.hash === expHash, okSize = ch.length === expSize;
+    vectors.push({ id, status: "proposed", enforce: "step-8", description: desc, decoder: "indivisible_binding",
+      context: { expected_change_hash: expHash, expected_size: expSize, doc_admitted: true }, input_hex: hex(ch),
+      verdict: okHash && okSize ? "accept" : "reject", expect: okHash && okSize ? { change_hash: info.hash } : { reason: okHash ? "size differs from the announce" : "Automerge change hash differs from the announce" } });
+  };
+  binding("indivisible-binding-ok", "Modification indivisible reçue par le vrac : empreinte Automerge et taille conformes à l'annonce : admise à la chaîne de réception.", info.hash, ch.length);
+  const bad = info.hash.slice(0, 63) + (info.hash[63] === "0" ? "1" : "0");
+  binding("indivisible-hash-mismatch", "Octets dont l'empreinte Automerge n'est pas celle de l'annonce : refusé.", bad, ch.length);
+  let other = A.init({ actor: "4142434445464748494a4b4c4d4e4f50" });
+  other = A.change(other, { time: 0, message: "" }, (x) => { x.t = text.split("").reverse().join(""); });
+  const forged = A.getLastLocalChange(other), forgedInfo = A.decodeChange(forged);
+  vectors.push({ id: "indivisible-tuple-false-root", status: "proposed", enforce: "step-8", description: "Rejeu : un relais associe le tuple d'auteur honnête (qui signe change) à la racine d'une AUTRE modification valide qu'il sert ; Bao vérifie contre cette racine, mais l'empreinte Automerge finale n'est pas change : refusé, imputé au pair annonceur (son emplacement est libéré), quota de l'auteur non crédité.", decoder: "indivisible_binding",
+    context: { expected_change_hash: info.hash, expected_size: forged.length, announcer: "relay", tuple_author: "honest" }, input_hex: hex(forged), verdict: "reject",
+    expect: { charged_to: "announcer", author_quota_credited: false, received_change_hash: forgedInfo.hash, reason: "Automerge change hash differs from the announce" } });
+  binding("indivisible-size-mismatch", "Octets dont la longueur n'est pas la taille annoncée : refusé.", info.hash, ch.length + 1);
+  vectors.push({ id: "indivisible-serve-unadmitted", status: "proposed", enforce: "step-8", description: "WANT par racine d'une modification d'un document hors de l'ensemble admis du serveur : réponse MISSING (indiscernable d'un objet absent).", decoder: "bulk_serve",
+    context: { holds_root: true, doc_admitted: false, requester_active_member: true }, verdict: "reject", expect: { answer: "MISSING" } });
+  // Boundary at max = r (fixed): find texts whose change fits r while its encoded singleton
+  // page does not (envelope overflow), and one whose page fits exactly.
+  const R = 4194304;
+  const pageOf = (c) => encode({ type: "history-page", senderId: FROM, targetId: ME, documentId: DOCID, changes: [c], last: true });
+  const big = Array.from({ length: 4300000 }, () => String.fromCharCode(97 + (rnd() % 26))).join("");
+  const mk = (n) => { let x = A.init({ actor: "5152535455565758595a5b5c5d5e5f60" }); x = A.change(x, { time: 0, message: "" }, (y) => { y.t = big.slice(0, n); }); return A.getLastLocalChange(x); };
+  let lo = 4000000, hi = 4300000;           // largest n whose page fits r
+  while (lo < hi) { const mid = Math.ceil((lo + hi) / 2); if (pageOf(mk(mid)).length <= R) lo = mid; else hi = mid - 1; }
+  const fit = mk(lo), over = mk(lo + 1);
+  const route = (id, desc, c) => { const pl = pageOf(c).length; vectors.push({ id, status: "proposed", enforce: "step-8", description: desc, decoder: "page_route",
+    context: { max: R, change_len: c.length, singleton_page_len: pl }, input_sha256: require("crypto").createHash("sha256").update(c).digest("hex"),
+    recipe: "4 Mio : octets non recopiés ; les régénérer avec generate-repo.cjs.txt (acteur 5152…5f60, time 0, texte pseudo-aléatoire graine 7 tronqué à text_len)", text_len: c === fit ? lo : lo + 1, verdict: "accept", expect: { route: pl <= R ? "page" : "indivisible" } }); };
+  route("page-route-fits", "max = r : la plus grande modification dont la page singleton encodée tient dans r part dans une page.", fit);
+  if (!(over.length <= R && pageOf(over).length > R)) throw new Error("no envelope-overflow witness");
+  route("page-route-envelope-overflow", "max = r : un caractère de plus ; la modification brute tient (≤ r) mais pas sa page encodée : indivisible, tirée par le vrac (Codex, débordement d'enveloppe).", over);
+}
+
+process.stdout.write(JSON.stringify({ spec: "inkwell protocol", spec_version: "2.0.0-draft.2",
+  generator: "vectors/generate-repo.cjs.txt (cbor-x 1.6.7, @automerge/automerge 3.5.0)", vectors }, null, 2) + "\n");
