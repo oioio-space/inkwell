@@ -424,3 +424,14 @@ ci-dessus) :
   plusieurs », §5.12 « Exporter… »), par une section et non par un dialogue : chaque police cochée
   d'avance, une confirmation, toujours facultative. À Rejoindre (§5.4), les polices du projet
   arrivent seules. §4.46 est complété.
+- **Généralisation** (rév. 7.1, demande de l'utilisatrice) : la proposition des polices devient
+  **une seule vérification des ressources**. Elle tourne au partage (§5.3) et à l'export en un seul
+  fichier, copie lisible ou archive, protégé ou non (§5.12). Elle liste :
+  - les polices de cet ordinateur ;
+  - les paquets Typst (fournis, `.typstdeps`, paquets locaux comme la charte) ;
+  - les fichiers référencés hors du projet ;
+  - les extensions et le modèle du projet.
+
+  Chaque élément est coché d'avance, la taille totale est affichée, une seule confirmation suffit,
+  et l'on peut passer. Un export sans ces éléments le dit dans son récapitulatif. `coverage.md` a
+  sa ligne.
