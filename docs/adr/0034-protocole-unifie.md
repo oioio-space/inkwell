@@ -1,7 +1,7 @@
 ---
 status: proposée
 date: 2026-11-01
-revision: 6 (revues 01 à 11, débat D1 conclu par un accord ; exigences N13, N14, N15)
+revision: 7 (revues 01 à 13, débat D1 conclu par un accord ; exigences N13, N14, N15)
 decision-makers: [Mathieu]
 ---
 
@@ -175,7 +175,7 @@ fichier) :
 | P-QUIC | test au démarrage : maximum de connexion ≥ maximum de flux + fenêtre initiale de flux + 1 Mio pour les versions épinglées de go-libp2p et quic-go ; bout en bout : REPO non lu + LARGE en cours + changement de génération, le contrôle passe ; un pair qui ignore STOP_SENDING voit sa session fermée en 10 s |
 | P-VEC | tous les vecteurs dont `enforce` ≤ étape courante passent en Go **et** en TypeScript ; à la bascule, **tous** |
 | P-BORNES | un test par ligne du §16 (borne, borne + 1, reprise) |
-| P-BYZ | scénarios : pair qui ne lit jamais ; membre qui « goutte » un LARGE ; un écrivain qui remplit 65 536 clés d'attestation (les honnêtes restent couverts) ; inondation de SET ; 3 générations par seconde refusées ; relais à 8 Kio/s qui finit |
+| P-BYZ | scénarios : pair qui ne lit jamais ; membre qui « goutte » un LARGE ; un écrivain qui remplit 65 536 clés d'attestation (les honnêtes restent couverts) ; inondation de SET ; 3 générations par seconde refusées ; relais à 8 Kio/s qui finit ; un relais qui associe un tuple honnête à une fausse racine (imputé à lui seul, quota de l'auteur intact) ; un annonceur qui « goutte » une modification indivisible pendant que le receveur obtient le document d'autres détenteurs |
 | P-ADR31 | prérequis d'activation de l'ADR 0031 : G1–G12 et Worker, `ChangeSig`, pages d'historique, ensemble admis — leurs tests de Confirmation passent |
 | P-FUZZ | une cible par décodeur nouveau (préambule, trames, SET, AUTHOR, profil CBOR, schémas), corpus = vecteurs, 1 h chacune sans plantage |
 | P-SEC | revue `security-auditor` (Opus) du module `protocol` et de la session |
@@ -251,7 +251,7 @@ mode « signalé », sans échouer, jusqu'à leur `enforce`.
 
 ## Décisions demandées à l'utilisatrice
 
-1. Accepter cette ADR, révision 6 (option B).
+1. Accepter cette ADR, révision 7 (option B).
 2. Règle d'ordre premier pour les clés (`[L]A = O`) : plus stricte que « pas d'ordre petit »,
    sans effet sur une clé honnête ; elle change le verdict de deux cas de Chalkias.
 3. Session = connexion : le passage du relais au direct relance la synchronisation avec ce

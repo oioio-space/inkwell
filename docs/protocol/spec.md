@@ -2,10 +2,10 @@
 
 | | |
 |---|---|
-| Version | **2.0.0-brouillon.6** (SemVer, §1.4) |
+| Version | **2.0.0-brouillon.7** (SemVer, §1.4) |
 | Date | 2026-11-01 |
 | Statut | proposé ([ADR 0034](../adr/0034-protocole-unifie.md)) ; les parties marquées *existant* décrivent des octets déjà émis par inkwell et sont figées |
-| Révision | 6 : revues [01-codex](reviews/01-codex.md), [02-fable](reviews/02-fable.md), [03-codex](reviews/03-codex.md), [04-fable](reviews/04-fable.md), [05-codex](reviews/05-codex.md), [06-fable](reviews/06-fable.md), [07-codex](reviews/07-codex.md), [08-fable](reviews/08-fable.md), le débat [09-debate-D1](reviews/09-debate-D1.md) (accord), [10-codex](reviews/10-codex.md) et [11-fable](reviews/11-fable.md) intégrés ; correspondance dans [CHANGES.md](CHANGES.md) |
+| Révision | 7 : revues [01-codex](reviews/01-codex.md), [02-fable](reviews/02-fable.md), [03-codex](reviews/03-codex.md), [04-fable](reviews/04-fable.md), [05-codex](reviews/05-codex.md), [06-fable](reviews/06-fable.md), [07-codex](reviews/07-codex.md), [08-fable](reviews/08-fable.md), le débat [09-debate-D1](reviews/09-debate-D1.md) (accord), [10-codex](reviews/10-codex.md), [11-fable](reviews/11-fable.md), [12-codex](reviews/12-codex.md) et [13-fable](reviews/13-fable.md) intégrés ; correspondance dans [CHANGES.md](CHANGES.md) |
 | Aperçu | [README.md](README.md) |
 | Vecteurs, modèle | [vectors/](vectors/) (§21), [tla/](tla/) (§7.3) |
 | Paquets | module Go `github.com/oioio-space/inkwell/protocol`, paquet TypeScript `@inkwell/protocol` (§1.6) |
@@ -799,7 +799,8 @@ Un message de la couche dépôt de 1 à 65 536 octets voyage en ligne dans une t
 Jusqu'à `r` = 4 194 304 octets (la part fixe, §10.6), il voyage par un flux LARGE (§7.2).
 Plus grand, il n'est qu'annoncé (avis) et le receveur redemande le document par pages d'au
 plus `r` octets (§9.6) ; une modification qui ne tient pas seule dans une page est tirée par
-le vrac (§8.1). Le pont interne plafonne un message à 67 108 797 octets (2^26 − 67).
+le vrac (§8.1). Un avis ne franchit pas le pont : la webview envoie seulement `Advice` (Annexe A) ; le pont
+plafonne un message à 67 108 797 octets (2^26 − 67).
 
 ### 7.2 Flux LARGE
 
@@ -814,9 +815,13 @@ le vrac (§8.1). Le pont interne plafonne un message à 67 108 797 octets (2^26 
    `#large-indivisible-no-change`). Une annonce indivisible de plus de 16 777 216 octets est une
    violation (la garde G1 interdit une telle modification, `#large-indivisible-too-big`) : un
    refus définitif, jamais redemandé.
-   Une annonce **ordinaire** de plus de `r` octets n'est qu'un **avis** : l'émetteur, qui connaît
-   la part fixe `r`, n'en garde pas l'objet ; le receveur répond `verdict = 0` et redemande le
-   document par pages (règle H). Seuls les objets ordinaires ≤ `r` passent par un flux LARGE.
+   Une annonce **ordinaire** de plus de `r` octets n'est qu'un **avis** : `root` et `change`
+   y sont nuls (32 zéros), l'émetteur l'annonce d'après la seule taille, sans faire passer les
+   octets par le pont ni les garder (un message de synchronisation de 200 Mio n'a donc pas
+   besoin de franchir le plafond de 64 Mio du pont, `#large-advice`) ; le receveur répond
+   `verdict = 0` et redemande le document par pages (règle H). Une annonce ordinaire ≤ `r`
+   **DOIT** avoir un `root` non nul (`#large-ordinary-zero-root`). Seuls les objets ordinaires
+   ≤ `r` passent par un flux LARGE.
 2. Le receveur répond sur CONTROL par `LARGE_REPLY{gen, id, verdict}` (la génération lie la
    réponse : une réponse d'une génération passée ne correspond à rien et est ignorée) :
    - objet ordinaire de taille ≤ `r` (la part fixe, §10.6) : il est **toujours** admis ;
@@ -844,7 +849,9 @@ le vrac (§8.1). Le pont interne plafonne un message à 67 108 797 octets (2^26 
    règle L. La fin, la réinitialisation ou l'échec d'un flux d'une époque **passée** n'est pas
    une perte (règle T : on l'ignore) ; en particulier, le pair qui applique la règle I
    réinitialise son LARGE sortant, et notre LARGE entrant de l'ancienne génération finit en
-   RESET_STREAM sans rien déclencher. Attendre sa réponse n'est jamais un échec ; la lenteur
+   RESET_STREAM sans rien déclencher. Le délai de 60 s sans progrès s'applique **aussi** à un
+   LARGE d'une époque passée (il est alors réinitialisé et sa réservation libérée) : seule la
+   règle L est omise ; un pair qui « goutte » un tel flux ne retient que sa propre part. Attendre sa réponse n'est jamais un échec ; la lenteur
    seule non plus ; rien n'est jamais repris pour faire de la place.
 
 ### 7.3 Générations
@@ -991,31 +998,45 @@ busy    { kind u8 = 4 ; hash [32] ; retry_ms u32 ≤ 60 000 }
   est une **violation**, comme partout (§13).
 - **Modifications indivisibles** (accord D1, [09-debate-D1](reviews/09-debate-D1.md)). Le même
   protocole sert une modification annoncée `LARGE` indivisible (§7.2), par son `root` :
-  - **liaison** : le transfert est lié au document `doc`, au **principal** (la clé d'auteur du
-    tuple qui couvre `change` ; tant que les tuples d'auteur n'existent pas, étape 8, le pair qui
-    a fait l'annonce), à l'empreinte Automerge attendue `change`, à la taille `size` et à la
-    racine `root` ; Bao vérifie chaque tranche contre `root` ; à la fin, l'empreinte Automerge
-    des octets doit valoir `change` (`repo.json#indivisible-hash-mismatch`) et la longueur
-    valoir `size` (`#indivisible-size-mismatch`) ; puis la modification passe la chaîne de
-    réception normale (§9.4 : admission, couverture, garde) comme une page d'une seule
-    modification, dont l'enveloppe CBOR est faite **localement** ;
+  - **imputation** : tout ce qui n'est pas encore vérifié est imputé au **pair qui a fait
+    l'annonce** (le livreur), toujours : le tuple d'auteur signe `change`, pas `root`, `size` ni
+    `doc`, donc un relais peut associer un tuple honnête à une fausse racine ; c'est alors son
+    emplacement à lui qu'il occupe (`repo.json#indivisible-tuple-false-root`). Le quota cumulé
+    de l'**auteur** (N10) n'est crédité qu'**après** vérification de `change`. Il n'y a donc plus
+    de principal provisoire ni de dépendance à l'étape 8 ;
+  - **liaison** : le transfert est lié au document `doc`, à l'empreinte Automerge attendue
+    `change`, à la taille `size` et à la racine `root` ; Bao vérifie chaque tranche contre
+    `root` ; à la fin, l'empreinte Automerge des octets doit valoir `change`
+    (`repo.json#indivisible-hash-mismatch`) et la longueur valoir `size`
+    (`#indivisible-size-mismatch`) ; puis la modification passe la chaîne de réception normale
+    (§9.4 : admission, couverture, auteur G12, garde) comme une page d'une seule modification,
+    dont l'enveloppe CBOR est faite **localement** ;
+  - **dédoublonnage** : une annonce d'un `root` déjà en cours de tirage **ajoute un détenteur**,
+    jamais un second transfert ;
   - **qui sert** : l'annonceur, et tout membre qui détient la modification. Chacun tient un
-    **index persistant** `root → (document, empreinte)` de toute modification indivisible
-    qu'il a annoncée, reçue ou obtenue (rare, ~70 octets chacune) et la sert tant que le
-    document est admis ; aucune fenêtre de temps, ce qui couvre l'intervalle entre
-    `LARGE_REPLY` et le premier WANT et un redémarrage de l'un ou de l'autre. On la demande à
-    l'annonceur d'abord, puis aux autres à tour de rôle ;
+    **index persistant** `root → (document, empreinte)` des modifications indivisibles qu'il a
+    produites ou **vérifiées et admises** (jamais avant), et la sert tant que le document est
+    admis ; une entrée est retirée quand le document n'est plus admis ou est purgé, ou quand la
+    modification n'y est plus. **Borne** : une modification indivisible fait plus de 4 Mio
+    encodée, donc l'index a au plus une entrée par 4 Mio d'historique vérifié et stocké
+    (~70 octets par entrée), imputée au quota N10 de l'auteur avec sa modification ; aucune
+    fenêtre de temps, ce qui couvre l'intervalle entre `LARGE_REPLY` et le premier WANT et un
+    redémarrage. On la demande à l'annonceur d'abord, puis aux autres à tour de rôle ;
   - **attente sur disque** : les tranches reçues sont rangées sous le dossier de données du
-    projet (§14, point 7), **par principal**, imputées au quota cumulé de l'auteur (N10) ; en
-    attendant ce quota, au plus **un tirage en cours par principal et par receveur** (≤ 16 Mio).
-    Un tirage en cours n'est **jamais** remplacé : une deuxième modification indivisible du même
-    principal attend (la règle H la redemandera) ; une entrée n'est retirée que **finie** ou
-    **plus voulue** (document plus admis, modification obtenue autrement, principal retiré de
-    la liste) ; jamais sur un délai ;
+    projet (§14, point 7), **par pair annonceur** : au plus **un tirage en cours par pair
+    annonceur et par receveur** (≤ 16 Mio). Un tirage en cours n'est **jamais** remplacé : une
+    deuxième annonce du même pair attend (la règle H la redemandera) ; une entrée n'est retirée
+    que **finie** ou **plus voulue** (document plus admis, modification obtenue autrement,
+    annonceur retiré de la liste) ; jamais sur un délai. **Borne honnête** : au plus 64 pairs ×
+    16 Mio = 1 Gio d'attente sur disque chez un receveur ; plusieurs relais peuvent faire
+    tirer la même modification d'un même auteur chacun dans son emplacement (rien ne limite
+    *par auteur réel* avant vérification), mais chacun reste borné par pair, et le
+    dédoublonnage par `root` évite les copies d'une même racine ;
   - **reprise** : l'état (groupes vérifiés) est persisté et repris après un redémarrage ou un
     changement de détenteur, comme les têtes de l'historique, sans limite de durée ;
-  - **règle H suspendue** : tant qu'un tirage pour le document D est en cours, le receveur
-    n'envoie pas de `history-request` pour D ;
+  - **règle H non suspendue** : pendant un tirage pour le document D, le receveur peut
+    toujours demander des pages de D à **d'autres** détenteurs ; un annonceur qui « goutte »
+    ne retient donc que son propre emplacement, jamais l'accès du receveur à D ;
   - **ordonnancement** : les demandes sont servies et émises en DRR (§10.4) ; aucun quantum,
     aucune reprise pour lenteur ;
   - **échecs** : trois échecs sur une plage chez un détenteur → un autre détenteur ; plus aucun
@@ -1185,7 +1206,9 @@ pointeur de présentation est en **dix-millièmes entiers** de la diapositive
   `max` : la taille maximale d'une page qu'il accepte, sa part `r` au plus, enveloppe CBOR
   comprise).
 - Le destinataire répond par **une** page `history-page {documentId, changes, last}` : des
-  modifications entières (0 à 256), dans l'ordre topologique, choisies parmi **toutes celles
+  modifications entières (0 à 256), formant un **préfixe causalement clos** (chaque dépendance
+  d'une modification est dans le passé causal de `have` ou plus tôt dans la même page), dans
+  l'ordre topologique, choisies parmi **toutes celles
   qui ne sont pas dans le passé causal de `have`** (les branches concurrentes comprises, pas
   seulement les descendants), dont l'**encodage** fait ≤ `max` octets (enveloppe CBOR
   comprise) et ≤ 16 Mio décompressés. Une modification est **indivisible** pour cette demande
@@ -1201,7 +1224,8 @@ pointeur de présentation est en **dix-millièmes entiers** de la diapositive
   ses nouvelles têtes, jusqu'à `last = true`. Le rythme est celui du receveur ; une reprise
   après redémarrage repart des têtes persistées. Il **PEUT** demander la page suivante dès la
   réception de la précédente, avant de l'appliquer, avec pour `have` ses têtes réunies à celles
-  des modifications reçues : au plus **deux** pages en vol par (pair, document).
+  des modifications reçues — c'est une frontière valable **parce que** chaque page est un
+  préfixe causalement clos : au plus **deux** pages en vol par (pair, document).
 - *Coût.* Avec la part fixe de 4 Mio, une synchronisation initiale d'un historique de `H` octets
   demande `⌈H / 4 Mio⌉` pages successives (50 pour 200 Mio) ; à deux pages en vol, le coût en
   allers-retours est divisé par deux, sans dépasser la part.
@@ -1436,7 +1460,7 @@ courtoisie : le récepteur **NE DOIT PAS** en dépendre.
 6. **Caches** : sous le cache utilisateur (`inkwell/…`), `0700`, confinés par `os.Root`,
    nettoyés à la fin, à l'abandon et après 24 h ; jamais dans un `/tmp` en mémoire.
 7. **Attente des modifications indivisibles** (§8.1) : sous le dossier de données du projet
-   (`.inkwell/staging/<principal>/<root>`, avec la carte des groupes vérifiés écrite par
+   (`.inkwell/staging/<pair annonceur>/<root>`, avec la carte des groupes vérifiés écrite par
    remplacement atomique), `0700`, `os.Root` ; **pas** un cache : conservée à travers les
    redémarrages et sans limite de durée, retirée seulement quand la modification est obtenue ou
    n'est plus voulue (§8.1) ; ces règles priment le point 6. Une reprise après plus de 24 h est
@@ -1477,7 +1501,8 @@ de `protocol` ; un test par ligne vérifie la borne, la borne + 1 et la reprise.
 | file d'entrée REPO d'un pair | 4 Mio et 1024 trames (impl.) | par pair | lecture du flux suspendue | dès que la webview consomme |
 | file d'entrée CONTROL d'un pair | 512 Kio (impl.) | par pair | lecture suspendue **seulement** le temps que l'acteur `Wiring` traite (CPU et disque locaux) ; jamais à cause du réseau ni de la webview — « toujours lu » au sens de §5.1 (a) | immédiate |
 | flux annulés en attente de RESET_STREAM | 1 par session ; 10 s | par session | GOAWAY PROTOCOL_VIOLATION, session fermée | reconnexion |
-| modifications indivisibles en attente (disque, §14 point 7) | par principal, au quota N10 ; d'ici là 1 tirage en cours ≤ 16 Mio par principal et par receveur ; jamais remplacé, jamais sur un délai | par principal | la suivante attend (règle H, suspendue pour le document pendant le tirage) | reprise des groupes vérifiés, même après 24 h |
+| modifications indivisibles en attente (disque, §14 point 7) | 1 tirage en cours ≤ 16 Mio **par pair annonceur** et par receveur (≤ 1 Gio au total) ; dédoublonnage par `root` ; jamais remplacé, jamais sur un délai ; quota N10 de l'auteur crédité après vérification | par pair annonceur | l'annonce suivante du même pair attend ; la règle H continue auprès des autres détenteurs | reprise des groupes vérifiés, même après 24 h |
+| index des modifications indivisibles | entrées vérifiées seulement ; ≤ 1 par 4 Mio d'historique stocké ; retirée avec le document ou la modification | par auteur (N10) | — | — |
 | annonce indivisible | ≤ 16 777 216 octets (G1) | — | violation | — |
 | flux LARGE | ≤ `r` = 4 194 304 octets ; une annonce ordinaire plus grande n'est qu'un avis (`LARGE_REPLY` 0, pages) | — | violation si un flux dépasse `r` | pages d'historique |
 | PRESENCE par pair | 16 entrées, dernière par `sessionId` | par pair | la plus ancienne remplacée | — |
@@ -1831,6 +1856,7 @@ enveloppe { version u8 = 1 ; kind u8 ; peer str8 (PeerID, 1–64) ; payload [res
 | 16 | Authored | Go → webview | tuples d'auteur vérifiés (§4.7) |
 | 17 | Listed | Go → webview | ensemble admis (§4.10), avec projet et époque |
 | 18 | WantAttest | webview → Go | `doc str16` : demander ATTEST_WANT au pair `peer` (§6.2) |
+| 19 | Advice | webview → Go | `session u32 ; generation u32 ; size u32 ; doc str8` : annoncer un avis (§7.2) sans en envoyer les octets |
 
 - **Crédits** : pour chaque (pair, génération, voie), l'émetteur compte les octets de
   `message` envoyés (`sent`) ; le receveur annonce `consumed` et `window`. Voie 0 :

@@ -210,6 +210,54 @@
       "verdict": "reject"
     },
     {
+      "id": "large-advice",
+      "status": "proposed",
+      "enforce": "step-4",
+      "context": {
+        "gen": 2,
+        "mode": "resetting",
+        "protocol": "/inkwell/repo/2.0.0",
+        "session": "active"
+      },
+      "description": "Avis : annonce ordinaire de 209 715 200 octets (> r), root et change nuls ; l'émetteur n'en a pas fait passer les octets par le pont ; le receveur répond LARGE_REPLY 0 et passe aux pages (§7.2).",
+      "decoder": "sync2_stream",
+      "input_hex": "000000020000006707000000010c80000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001c344e4d4e6e6b4d684c386a5872644a396a616d533538504156645875",
+      "verdict": "accept",
+      "expect": {
+        "advice": true
+      }
+    },
+    {
+      "id": "large-ordinary-zero-root",
+      "status": "proposed",
+      "enforce": "step-4",
+      "context": {
+        "gen": 2,
+        "mode": "resetting",
+        "protocol": "/inkwell/repo/2.0.0",
+        "session": "active"
+      },
+      "description": "Annonce ordinaire ≤ r (70 000 octets) avec root nul : refusé (seul un avis a une racine nulle).",
+      "decoder": "sync2_stream",
+      "input_hex": "000000020000006707000000010001117000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000001c344e4d4e6e6b4d684c386a5872644a396a616d533538504156645875",
+      "verdict": "reject"
+    },
+    {
+      "id": "large-advice-with-root",
+      "status": "proposed",
+      "enforce": "step-4",
+      "context": {
+        "gen": 2,
+        "mode": "resetting",
+        "protocol": "/inkwell/repo/2.0.0",
+        "session": "active"
+      },
+      "description": "Avis (> r) portant une racine non nulle : refusé (un avis n'a ni racine ni empreinte).",
+      "decoder": "sync2_stream",
+      "input_hex": "000000020000006707000000010c80000000a3c79626605231cdf54f555001ae1a4d8a793bd5de97095742dd53f8cff233fb00000000000000000000000000000000000000000000000000000000000000001c344e4d4e6e6b4d684c386a5872644a396a616d533538504156645875",
+      "verdict": "reject"
+    },
+    {
       "id": "large-indivisible-too-big",
       "status": "proposed",
       "enforce": "step-4",

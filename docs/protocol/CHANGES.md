@@ -301,3 +301,31 @@ Critique, aucune divergence. Codex confirme fermés : C3, C5, métadonnées de L
 
 - `RepoGen.cfg` non exhaustif ; passage entre sessions et crédits du pont argumentés, non
   modélisés ; codecs `sync2` et objets proposés sans implémentation (étapes 4 et 8).
+
+---
+
+# Tour 6 : révision 7 (2.0.0-brouillon.6 → 2.0.0-brouillon.7)
+
+Revues [12-codex](reviews/12-codex.md) et [13-fable](reviews/13-fable.md) : « revise », aucune
+Critique, aucune divergence ; **le même Majeur trouvé indépendamment par les deux** (un annonceur
+peut immobiliser l'emplacement d'attente avec une fausse racine). Codex confirme fermés :
+enveloppe, attente hors du cache de 24 h, reliquat de l'ADR.
+
+| # | Source | Constat | Changement | Où |
+|---|---|---|---|---|
+| T6-1 | Fable F13-2, Codex (Majeur) | Fausse racine et « goutte-à-goutte » : la règle H suspendue prive le receveur du document ; après l'étape 8, un relais occupe l'unique emplacement d'un auteur honnête avec son vrai `change` | Tout ce qui n'est pas vérifié est **imputé au pair annonceur**, toujours ; le quota N10 de l'auteur n'est crédité qu'après vérification de `change` ; **suspension de la règle H supprimée** (pages toujours demandables à d'autres détenteurs) ; **dédoublonnage par `root`** ; plus de principal provisoire ni de dépendance à l'étape 8 ; vecteur de rejeu `repo.json#indivisible-tuple-false-root` ; scénarios ajoutés à P-BYZ | spec §8.1, §16.1 ; ADR P-BYZ |
+| T6-2 | Codex (PARTIEL) | Plusieurs relais contournent une limite par auteur réel | Borne écrite honnêtement : 1 tirage ≤ 16 Mio par pair annonceur et par receveur, ≤ 1 Gio au total ; rien ne limite *par auteur réel* avant vérification ; dédoublonnage par `root` | spec §8.1 |
+| T6-3 | Codex (Majeur) | Index persistant sans borne, imputation ni suppression | Insertion **après vérification et admission** seulement (ou modification produite localement) ; retrait avec le document (désadmis, purgé) ou la modification ; borne : ≤ 1 entrée par 4 Mio d'historique vérifié (une modification indivisible fait plus de 4 Mio encodée), imputée au quota N10 de l'auteur | spec §8.1, §16.1 |
+| T6-4 | Fable F13-3 | Deux pages en vol sûres seulement si une page est un préfixe causalement clos | Règle écrite : chaque dépendance d'une modification d'une page est dans le passé de `have` ou plus tôt dans la page | spec §9.6 |
+| T6-5 | Fable F13-4 | Un LARGE d'une époque passée peut goutter et garder la réservation | Le délai de 60 s sans progrès s'applique aussi à lui (réinitialisé, réservation libérée) ; seule la règle L est omise ; il ne retient que la part du pair | spec §7.2 (5) |
+| T6-6 | Fable F13-5 | Un avis doit franchir le pont pour calculer `root` | Un avis porte `root` et `change` nuls, s'annonce d'après la taille seule, sans passer les octets par le pont (kind 19 `Advice`) ; une annonce ordinaire ≤ `r` doit avoir un `root` non nul ; vecteurs `session.json#large-advice`, `#large-ordinary-zero-root`, `#large-advice-with-root` | spec §7.1, §7.2, Annexe A |
+
+## Simplification de ce tour
+
+Une seule règle d'imputation (le pair annonceur) remplace « principal = auteur, sauf avant
+l'étape 8 » ; la suspension de la règle H disparaît.
+
+## Reste ouvert après ce tour
+
+- `RepoGen.cfg` non exhaustif ; passage entre sessions et crédits du pont argumentés, non
+  modélisés ; codecs `sync2` et objets proposés sans implémentation (étapes 4 et 8).

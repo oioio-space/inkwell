@@ -310,6 +310,9 @@ for (const v of gvec) vectors.push(v);
   binding("indivisible-binding-ok", "Modification indivisible reçue par le vrac : empreinte Automerge et taille conformes à l'annonce : admise à la chaîne de réception.", info.hash, ch.length);
   const bad = info.hash.slice(0, 63) + (info.hash[63] === "0" ? "1" : "0");
   binding("indivisible-hash-mismatch", "Octets dont l'empreinte Automerge n'est pas celle de l'annonce : refusé.", bad, ch.length);
+  vectors.push({ id: "indivisible-tuple-false-root", status: "proposed", enforce: "step-8", description: "Rejeu : un relais associe le tuple d'auteur honnête (qui signe change) à une fausse racine et sert d'autres octets ; Bao vérifie contre cette fausse racine, mais l'empreinte Automerge finale n'est pas change : refusé, imputé au pair annonceur (son emplacement est libéré), quota de l'auteur non crédité.", decoder: "indivisible_binding",
+    context: { expected_change_hash: info.hash, expected_size: ch.length - 1, announcer: "relay", tuple_author: "honest" }, input_hex: hex(ch.subarray(0, ch.length - 1)), verdict: "reject",
+    expect: { charged_to: "announcer", author_quota_credited: false, reason: "Automerge change hash differs from the announce" } });
   binding("indivisible-size-mismatch", "Octets dont la longueur n'est pas la taille annoncée : refusé.", info.hash, ch.length + 1);
   vectors.push({ id: "indivisible-serve-unadmitted", status: "proposed", enforce: "step-8", description: "WANT par racine d'une modification d'un document hors de l'ensemble admis du serveur : réponse MISSING (indiscernable d'un objet absent).", decoder: "bulk_serve",
     context: { holds_root: true, doc_admitted: false, requester_active_member: true }, verdict: "reject", expect: { answer: "MISSING" } });
