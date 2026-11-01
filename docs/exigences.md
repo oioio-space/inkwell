@@ -79,6 +79,9 @@ Rien n'est « fait » sans tests verts et sans une passe `ux-walkthrough` réuss
 | N34 | 2026-11-01 | Fichiers ignorés par la synchronisation, façon `.gitignore` ; s'inspirer de Teamtype (ex-Ethersync, synchro par Automerge) et de ses fonctions | `docs/architecture/`, `docs/design/` | 🔨 |
 | N35 | 2026-11-01 | Application finale compatible Linux, macOS et Windows, sur amd64 et arm64 (et ainsi de suite) — toute décision (bac à sable des plugins, IA, stockage…) doit tenir sur toutes ces plateformes | `docs/architecture/` | 🔨 |
 | N36 | 2026-11-01 | Passe de cohérence globale : tout ce qui a été défini à la volée est relu ensemble, les manques comblés, les contradictions résolues, l'ensemble rendu cohérent avec la finalité (des personnes qui aiment écrire) | `docs/architecture/coherence.md` | 🔨 |
+| N37 | 2026-11-01 | Chiffrement du projet : sur disque le projet reste un bloc chiffré (sorte de système de fichiers virtuel), rechiffré à chaque écriture ; déchiffrement par clé publique / clé privée échangées via un annuaire ; extrêmement simple pour la personne ; export en un seul fichier, chiffré ou en clair — trouver la meilleure solution | `docs/architecture/` | 🔨 |
+| N38 | 2026-11-01 | Application extrêmement performante : tirer parti des performances et de la concurrence de Go ; tout est mesuré (budgets chiffrés, benchmarks, profils, régressions en CI) ; toujours chercher et retenir la solution la plus performante, preuve à l'appui | `docs/architecture/`, `docs/engineering-principles.md` | 🔨 |
+| N39 | 2026-11-01 | Historique « à la Git » (versions, comparaison, restauration…) ; application autoporteuse : jamais besoin de Git (ni d'aucun autre outil) installé sur la machine — tout est embarqué | `docs/architecture/` | 🔨 |
 
 ## Interface et édition
 
