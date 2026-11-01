@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Version | 1.0.0-brouillon.4 (2026-11-01, révision 3 : tour 2 et passe de cohérence ; [CHANGES.md](CHANGES.md), [coherence.md](coherence.md)) |
+| Version | 1.0.0-brouillon.5 (2026-11-01, révision 4 : tour 3 ; [CHANGES.md](CHANGES.md), [coherence.md](coherence.md)) |
 | Rôle | lever chaque doute trouvé en écrivant [spec.md](spec.md) : une question, ses options, une recommandation, sa raison |
 | Sources des doutes | [conception](../conception.pdf), [questions ouvertes](../open-questions.md), [audit](../plans/2026-10-31-architecture-audit.md), ADR 0001–0034, [protocole](../protocol/spec.md), [design](../design/spec.md), code (`main` à `362cb4d`, chantier `proto1`), `TODO` et `t.Skip` |
 
@@ -88,7 +88,7 @@ Règles :
 | AD-66 | Données d'extension dans le document partagé | différé ; v1 : magasin privé et contenu standard | non | ADR future |
 | AD-67 | Dorsal de stockage par extension | sauvegarde personnelle (v1) ; clé par projet et par personne, AEAD avec AAD, graphe objets → manifeste → tête ; **fraîcheur non vérifiable sur un appareil neuf** (résiduel écrit, ancres : phrase datée, membres) | **oui** (portée v1) | spec §6.7, ADR 0039 |
 | AD-68 | Nuage partagé entre membres | v2 : clé de stockage de projet distribuée par le ledger, ADR à part | **oui** | v2 |
-| AD-69 | Greffons de projet | **contribuer seulement**, mandats bornés et révocables, hôte par projet ; **bloqué par PD-1** (mineure du protocole) | **oui** (N23 à confirmer) | spec §15.10 |
+| AD-69 | Greffons de projet | **contribuer seulement**, mandats bornés et révocables, un hôte par greffon (jamais partagé avec un autre greffon) ; **bloqué par PD-1** (mineure du protocole) | **oui** (N23 à confirmer) | spec §15.10 |
 | AD-70 | Diagrammes : contrat de rendu et rendus partagés | contrat pur en `wasm` (Graphviz livré) ; rendus = **fichiers ordinaires** du projet (aucun delta du protocole) ; **Mermaid différé** (P-FRAME) | non | spec §15.14 |
 | AD-71 | Expérience des développeuses | API étagée 1.0, 1.1, 1.2 (plafonds de surface par étape) ; Rust et Go en 1.0 ; bonjour bilingue en 10 lignes | non | spec §15.15 |
 | AD-72 | Spécification du protocole des greffons | `docs/plugin-api/` normative, deux axes de version, détection de fonctions, N/N−1 avec adaptateur ; boucle de revue Fable + Codex | **oui** (acceptation) | `docs/plugin-api/` |
@@ -102,20 +102,20 @@ Règles :
 | AD-80 | Service de langage tinymist (N29) | stdio enfermé, `didChange` depuis la webview, versions et réponses périmées jetées, p95 ≤ 100 ms, docstrings sûrs | non | spec §15.17 |
 | AD-81 | Outils d'écriture (N30) | recommandations 11–18 de l'étude, en extensions intégrées | non | spec §15.17 |
 | AD-82 | IA de premier rang (N31) | `ext/ai` ; fournisseurs compatibles OpenAI appelés par Go ; politique de projet ; propositions ; règle des deux ; MCP stdio par socket `0600` | **oui** (défauts, ADR 0040, 0041) | spec §15.18 |
-| AD-83 | Deltas du protocole demandés | PD-1 (espaces `plugin/`, `ai/` + règle de tolérance), PD-2 (domaines) ; mineure 2.1 à faire accepter par la boucle du protocole | **oui** (acceptation) | `docs/protocol/` |
+| AD-83 | Deltas du protocole demandés | PD-1 (espaces `plugin/`, `ai/`, `ignore/`, encodage, règle de pli) ; PD-2 **retiré** (préfixes externes) ; PD-3 reporté ; mineure 2.1 à faire accepter par la boucle du protocole | **oui** (acceptation) | `docs/protocol/` |
 | AD-84 | Fidélité à la conception | aucune fidélité complète affirmée tant que les écarts de la matrice ci-dessous sont ouverts | **oui** | matrice |
 | AD-85 | Ordre de livraison de l'API | API 1.0 réduite, puis 1.1, 1.2 ; registre → commande, panneau, proposition → Graphviz → dorsal | non | spec §15.21 |
 | AD-86 | Canal Go ↔ hôte des greffons | flux d’octets (`SOCK_STREAM`, tubes sous Windows), trames bornées, autorité imposée par le parent, un appel à la fois par instance | non | spec §7.3 |
-| AD-87 | Enfermement de l'hôte et compartiments | aucun fichier (memfd), seccomp, Landlock, profil AppArmor livré, mémoire par hôte, un compartiment par classe de sortie, échec fermé visible | non | spec §9.10 |
+| AD-87 | Enfermement de l'hôte (Linux) | démarrage en deux temps (Landlock puis `execve`), seccomp avec `TSYNC` barrière principale, un hôte par greffon, aucun fichier (memfd), profil AppArmor livré, chien de garde du parent, échec fermé visible ; **expérimentation** | non | spec §9.10 |
 | AD-88 | Gestionnaire de tâches (N32) | vue « Ressources » du cœur (`internal/tasks`), mesures par le parent, limites réglables à la baisse | non | spec §11.1 |
 | AD-89 | Index de recherche pour l'IA (N33) | lexical local d'abord, moteur choisi par la mesure, provenance par extrait, citations par nœud ; **expérimentation** (P-IDX) | non | spec §15.18 |
 | AD-90 | Fichiers non synchronisés (N34) | politique d'import et de réception locale ; règle de projet par décision signée (PD-1) ; jamais `.typstdeps/` | non | spec §6.9 |
-| AD-91 | Projet chiffré (N37) | coffre par objet sans montage, DEK par appareil enveloppée en age, dossier de travail privé, export age ; **expérimentation** (P-VAULT) | **oui** (ADR, remplace NG3) | spec §6.10 |
+| AD-91 | Projet chiffré (N37) | coffre par objet sans montage ; DEK par projet et par appareil, charge utile d'un fichier age ; dossier de travail en mémoire ou sur disque chiffré vérifié, sinon compilation refusée ; ≤ 512 Mio ; **expérimentation** (P-VAULT) | **oui** (ADR, remplace NG3) | spec §6.10 |
 | AD-92 | Historique sans Git (N39) | voyager, restaurer par nouvelle modification, comparer par mots, versions = manifestes de têtes | non | spec §6.11 |
 | AD-93 | Performance mesurée (N38) | budgets par chemin, règles de concurrence bornée, PGO, portes CI, choix de bibliothèque par banc | non | spec §12.5 |
 | AD-94 | Port d'enfermement six cibles (N35) | `internal/sandbox` : Landlock et seccomp, Seatbelt, AppContainer et objets de tâche ; INV-13 ; **expérimentation** par OS | non | spec §9.11 |
 | AD-95 | Ce que vaut l'acceptation | les expérimentations ne sont acceptées qu'à leur porte (§0.5) | **oui** | spec §0.5 |
-| AD-96 | Variantes et intégrations (N41) | sur les variantes existantes (ADR 0031) ; vocabulaire d'écriture ; « Dupliquer le projet » ; entre projets différé | non | spec §6.11 HI-6, HI-7 |
+| AD-96 | Variantes et intégrations (N41) | sur les variantes existantes (ADR 0031) ; « Intégrer » = **différence appliquée** en modifications nouvelles, annulable en un groupe ; fusion native écartée en v1 ; entre projets différé | non | spec §6.11 HI-6, HI-7 |
 | AD-97 | Carte produit et surfaces | tiroir à trois destinations, gauche à deux onglets, un compteur de problèmes, barre d'état à quatre éléments | non (design rév. 5) | `coherence.md` §4 |
 | AD-98 | Formats bureautiques (N40) | aucun natif ; collage riche dans le cœur ; greffons | non | spec §1.3 |
 
@@ -125,7 +125,7 @@ Règles :
 0037 état local de l'appareil : verrous, réglages, journaux (`AD-12`, `AD-16`, `AD-21`) ;
 0038 mises à jour (`AD-17`) ; ADR à rédiger « chiffrement au repos » qui remplace NG3 (`AD-91`) ; 0039 greffons WebAssembly (`AD-57` à `AD-76`, brouillon dans
 [spec.md, annexe](spec.md#annexe--brouillon-dadr-0039--greffons-webassembly)). Sous réserve du choix de l'utilisatrice : `AD-01` (si
-plusieurs projets), `AD-13`, `AD-14`, `AD-18`, `AD-33`, `AD-43`, `AD-68`. **Spécification à écrire ensuite** : `docs/plugin-api/` (`AD-72`), avec sa propre boucle de revue Fable + Codex.
+plusieurs projets), `AD-14`, `AD-43`, `AD-68` (`AD-13`, `AD-18`, `AD-33` sont tranchés par N39, N35, N40). **Spécification à écrire ensuite** : `docs/plugin-api/` (`AD-72`), avec sa propre boucle de revue Fable + Codex.
 
 ### Matrice des décisions finales (ce que l'acceptation de cette spécification ne vaut pas)
 
@@ -966,6 +966,8 @@ servent pas de preuve ; celles dont dépendent les décisions ont été vérifi�
 
 - **Révision 3 (revues Fable R2-B1, R2-M2 ; Codex R2-1, R2-2, R2-10).** (1) **Un hôte par greffon actif** : seule autorité qu'un parent peut attacher à une connexion après une évasion (Codex) ; paresseux et **≤ 6 actifs** (borne de Fable) ; (2) hôte = binaire **statique** Go pur `inkwell-plugin-host`, démarrage en deux temps (Landlock posé sur un fil puis `execve`, seccomp avec `TSYNC`, vérification, `ready`) ; seccomp est la barrière principale, Landlock la défense en profondeur ; liste seccomp dérivée par `strace` en CI, `clone` filtré, `clone3` refusé ; (3) canal en **flux d'octets**, autorité attachée à la connexion ; (4) **statut d'expérimentation** (spec §0.5, `AD-95`) : l'acceptation de la spec ne vaut pas celle de l'hôte tant que P-PLUG-PROTO, P-PLUG-BENCH, `PLUG-COMPROMISED-*` et P-SANDBOX-* ne sont pas passées, résultats bruts à l'appui.
 
+- **Révision 4 (D-10 convergé ; Fable R3).** Les deux revues retiennent **un hôte par greffon actif**. Précisions : l'éviction ne touche jamais un hôte qui a un mandat ou un appel en vol ; **repli nommé** si l'activation dépasse 500 ms : module compilé à l'installation et gardé dans l'hôte tant qu'il vit, aucune éviction automatique sous 6 actifs, jamais de cache disque ; P-PLUG-BENCH éprouve 16 greffons installés, 6 actifs, 10 en attente.
+
 ### AD-58 — Droits
 
 - **Recommandation.** §15.5 : aucune capacité ambiante, capacités nommées et montrées, règle
@@ -1039,6 +1041,8 @@ servent pas de preuve ; celles dont dépendent les décisions ont été vérifi�
 
 - **Révision 3 (revues Fable R2-B4, Codex R2-5).** Phrase de 24 mots = **secret seul** (BIP-39) ; **kit de secours** versionné à part (projets, dorsal, compteurs par appareil, dates), authentifié ; un secret par personne, clés par HKDF (sauvegarde et destinataire de secours du coffre) ; nommage BLAKE3 à clé complet et vérification identique ; manifestes et têtes en CBOR avec AAD définis ; têtes signées sous un préfixe externe ; compteurs par `(ProjectID, PeerID)` ; **aucun ménage distant en v1** (liste non fiable, appareils multiples) ; N22 **non déclarée satisfaite** par la sauvegarde (audit de cohérence C08).
 
+- **Révision 4 (Codex R3-M1).** Espace de noms par projet `p/<loc>/` avec `loc` dérivé du **secret seul** (le dorsal ne voit pas le `ProjectID`) ; descripteur de projet chiffré : la **phrase seule** (plus l'adresse du dorsal) retrouve les projets ; manifestes et têtes : même enveloppe que les objets (version, nonce, AEAD), têtes signées et vérifiées ; kit **proposé** à la régénération, pas exigé (Fable).
+
 ### AD-68 — Nuage partagé entre membres (v2)
 
 - **Constat.** Utile quand les membres ne sont jamais en ligne en même temps ; exige une clé de
@@ -1069,6 +1073,8 @@ servent pas de preuve ; celles dont dépendent les décisions ont été vérifi�
 - **Utilisatrice : oui** (Mermaid différé).
 
 - **Révision 3 (Fable D-2).** Voie retenue pour l'API 1.1 : `beautiful-mermaid` (TypeScript, MIT, rendu SVG sans DOM d'un sous-ensemble de Mermaid) compilé en WebAssembly par le kit JavaScript, comme `renderer` `wasm` ordinaire ; Mermaid complet reste derrière P-FRAME. `.renders/index.jsonl` en **JSON Lines** (tolérant à la fusion de texte) ; la clé de rendu inclut l'empreinte des polices du projet (revue Fable R2-B3).
+
+- **Révision 4 (D-15 convergé).** `beautiful-mermaid` est un **candidat** de l'API 1.1 derrière la porte **P-MERMAID** (§0.5 : module épinglé, importations permises, ≤ 8 Mio, p95 ≤ 300 ms pour 200 nœuds, polices, corpus pris en charge et refusé, SVG assaini, annulation, six cibles) ; repli : Mermaid absent, et dit ; rien en 1.0 ; Mermaid complet derrière P-FRAME, qui doit valoir sur chaque moteur de cible.
 
 ### AD-71 — Expérience des développeuses
 
@@ -1201,6 +1207,8 @@ servent pas de preuve ; celles dont dépendent les décisions ont été vérifi�
 
 - **Révision 3 (revues Fable R2-M3, Codex R2-9).** Aperçu d'envoi à chaque nouvelle provenance, fichier ou destination dans la session ; indicateur permanent ; consommation visible et bornée (jetons comptés ou estimation marquée, coût inconnu dit) ; contamination monotone sur toute la session (outils et extraits de l'index compris) ; identité MCP par **jeton de lancement** par (client, projet), nom annoncé non pris pour une preuve ; MCP désactivé dans les projets partagés avant PD-1 ; ACP sans garantie prêtée ; UTCP écarté de la spec (Fable) ; RAG en §15.18 RG-1 à RG-5 (`AD-89`).
 
+- **Révision 4 (Fable R3-M2, Codex).** ACP est un **report après v1**, pas une expérimentation : un agent tiers a besoin de fichiers et de réseau ; sa réouverture exigera son propre profil (destination et proxy, fichiers, processus, tests d'évasion).
+
 ### AD-83 — Deltas du protocole
 
 - **Constat (revues Fable B-2, M-5 ; Codex B5).** La révision 1 appelait « extension compatible »
@@ -1262,6 +1270,8 @@ Le détail des contradictions, manques, doublons, carte produit et phasage est d
 - **Norme et preuve.** Firefox `about:processes` ; revue Fable §4.1 et Codex R2-11 ; un greffon ne
   peut pas fournir la vue qui sert à l'arrêter (Codex).
 
+- **Révision 4 (Codex R3-M6 ; Fable m-13).** Quatre niveaux (information, plafond WebAssembly, plafond du noyau, chien de garde du parent qui tourne toujours, relevé toutes les 500 ms, arrêt après 2 relevés au-delà) ; limites chiffrées par classe ; réserve du cœur (25 % d'un cœur, 512 Mio) ; verbes par classe (le cœur n'offre qu'« annuler un travail ») ; « Arrêter » n'interrompt jamais une écriture non durable ; parts estimées des tâches internes dites comme telles.
+
 ### AD-89 — Index de recherche pour l'IA (N33)
 
 - **Recommandation.** Spec §15.18 RG-1 à RG-5, d'après `research/ai.md` §12 : instantané venu de la
@@ -1269,6 +1279,8 @@ Le détail des contradictions, manques, doublons, carte produit et phasage est d
   interne), local et jetable, chiffré comme le projet, provenance par extrait, citations par nœud et
   révision (pas par chemin : un renommage ne les casse pas, Codex R2-11), embeddings = envoi O4.
 - **Ouvert, mesuré par P-IDX** : moteur, rappel en français, coût sur les six cibles.
+
+- **Révision 4 (Fable R3-M1, Codex R3-B4, R3-M5).** Porte **P-IDX** mesurable : corpus français versionné (projet d'exemple et deux projets Typst publics, 200 requêtes écrites avant l'essai, jugements à trois niveaux), **rappel@10 ≥ 0,8 et MRR ≥ 0,6**, aucune requête sans résultat, retard ≤ 5 s ; R1 ou R2 seulement à +0,1 de rappel@10 ; repli : recherche d'IA sans index. Autorité effective = intersection (RG-6) ; file coalescée bornée, mise à jour forcée par une requête, invalidation immédiate (RG-7) ; pour un projet protégé, l'index vit dans le dossier de travail.
 
 ### AD-90 — Fichiers non synchronisés (N34)
 
@@ -1279,6 +1291,8 @@ Le détail des contradictions, manques, doublons, carte produit et phasage est d
   l'ADR 0024).
 - **Norme et preuve.** Teamtype (VCS non synchronisé par défaut), Syncthing (`.stignore` jamais
   synchronisé), revue Codex R2-11 (un filtre par chemin n'est pas une frontière d'admission).
+
+- **Révision 4 (Codex R3-M3, Fable m-8).** Table des transitions (§6.9 IG-5) : seul un fichier jamais admis crée un nœud ; un texte déjà admis ne peut pas être « désynchronisé » (l'écran dit que ses nouvelles modifications continuent) ; un blob non téléchargé n'est jamais annoncé comme disponible ; une dépendance du principal ne peut pas être exclue.
 
 ### AD-91 — Projet chiffré (N37)
 
@@ -1291,12 +1305,16 @@ Le détail des contradictions, manques, doublons, carte produit et phasage est d
   **par objet** (une frappe ne rechiffre que l'objet touché), pas par un conteneur monolithique.
 - **Expérimentation** : P-VAULT. **Utilisatrice : oui** (ADR qui remplace NG3).
 
+- **Révision 4 (Codex R3-B1, R3-B2 ; Fable R3-M5, m-9).** (1) La DEK (32 octets) est la **charge utile d'un fichier age complet** (bibliothèque `filippo.io/age`, stanzas inchangées), liée au projet, à l'appareil et à l'époque ; destinataires : la clé de l'appareil et le destinataire de secours ; DEK **par projet et par appareil** (pas d'enveloppe pour les autres appareils). (2) Le dossier de travail n'existe **que** sur un support qui ne garde pas de clair après coupure ou vol : mémoire (tmpfs sans swap en clair ; disque en mémoire sous macOS, à prouver) ou disque chiffré par le système **vérifié** ; sinon, pour un projet protégé, aperçu, export lisible et service de langage des fichiers fermés sont refusés sur la cible. (3) Budget : matérialisation par dépendances réelles, ≤ 512 Mio, refus au-delà. (4) Git dans le coffre (go-git sur `billy.Filesystem`), index dans le dossier de travail. (5) Repli : NG3 reste et G13 passe en v1.x si P-VAULT échoue.
+
 ### AD-92 — Historique sans Git (N39)
 
 - **Recommandation.** Spec §6.11 HI-1 à HI-5 : voyager dans le temps (vue en lecture seule),
   restaurer par une **nouvelle modification** prévisualisée et annulable (jamais un remplacement qui
   ressuscite une autorité ou une purge, Codex R2-11), versions nommées = manifestes de têtes de tout
   le projet, comparer par mots, projection go-git (`AD-13`). Zéro mot de Git dans l'interface.
+
+- **Révision 4 (Codex R3-B3 ; Fable m-10).** Les versions nommées **épinglent** leurs blobs, rendus et paquets dans le ménage (§6.5, HI-9), épingle posée avant la publication du manifeste ; un moment quelconque n'épingle rien et la vue le dit ; une **purge** l'emporte (version « incomplète », rien ressuscité) ; horloge du voyage = ordre de réception sur l'appareil, heure déclarée marquée (HI-10).
 
 ### AD-93 — Performance mesurée (N38)
 
@@ -1305,6 +1323,8 @@ Le détail des contradictions, manques, doublons, carte produit et phasage est d
   ou pools, `goleak`, `-race`, `synctest`, PGO gardé seulement s'il gagne, budgets du fil
   d'affichage, `bench:compare` en CI, choix de bibliothèque par banc).
 - **Norme.** `engineering-principles.md` §3 ; consigne du dépôt « prouver par benchstat ».
+
+- **Révision 4 (Codex R3-M4 ; Fable R3-M4, m-11, m-14).** Protocole de mesure normatif (§12.5 PM-1 à PM-6) : corpus versionnés, conditions, échantillons, chronomètres, bruit ; RSS/PSS plafonnée, VSZ observée à part ; Long Tasks ne prouve que ≥ 50 ms, frappe mesurée à la peinture suivante ; seuils fixés avant comparaison ; **mesure de référence dans le premier lot du MVP** ; budgets ajoutés (voyage dans le temps, comparaison par mots, motifs, déverrouillage, rechiffrement) ; BLAKE3 par architecture.
 
 ### AD-94 — Port d'enfermement sur six cibles (N35)
 
@@ -1329,6 +1349,8 @@ Le détail des contradictions, manques, doublons, carte produit et phasage est d
   porte, résultats bruts dans `docs/plans/`. Aucun code de production n'en dépend d'ici là.
 - **Utilisatrice : oui.**
 
+- **Révision 4 (Codex R3-B4 ; Fable R3-M3, D-14 convergé).** Règles E-1 à E-5 de toutes les portes (entrées et seuils figés avant, résultats bruts, matrice, **repli nommé à l'avance**, rejeu à chaque majeure de macOS et de Windows) ; une colonne de repli par expérimentation ; portes complétées (P-PLUG-PROTO, P-PLUG-BENCH, P-SANDBOX-* avec sidecars, P-VAULT avec inspection hors ligne avant relance, P-IDX, P-GIT-BENCH, P-MERMAID, P-FRAME) ; ACP sorti des expérimentations (report).
+
 ### AD-96 — Variantes et intégrations (N41)
 
 - **Recommandation.** Spec §6.11 HI-6, HI-7 : sur les variantes déjà présentes (ADR 0031,
@@ -1340,6 +1362,8 @@ Le détail des contradictions, manques, doublons, carte produit et phasage est d
 - **Norme et preuve.** Patchwork d'Ink & Switch (branches légères, différences visibles, groupes
   de modifications, histoire comme une conversation) ; Upwelling (brouillons comme branches
   légères).
+
+- **Révision 4 (Codex R3-M2, Fable R3-M6).** Choisi : **différence appliquée**. « Intégrer » applique à l'original actuel la différence entre le point de départ (ou la dernière intégration) et l'état de la variante, comme une proposition de modifications **nouvelles** écrites par qui intègre, admises par les règles ordinaires ; aucune règle d'admission nouvelle ; « Annuler » annule ce groupe ; intégration répétée depuis le dernier point ; zones verrouillées refusées ; divergence ordinaire si les deux côtés ont changé. Écartée pour la v1 : la fusion native (Patchwork, `A.merge` du code actuel), qui exigerait d'amender l'ADR 0031 ; écart du code au §16 de la spec.
 
 ### AD-97 — Carte produit et surfaces
 

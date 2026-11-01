@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Version | 1.0.0-brouillon.4 (2026-11-01, révision 3 ; N1 à N41) |
+| Version | 1.0.0-brouillon.5 (2026-11-01, révision 4 ; N1 à N41) |
 | Lire avec | [spec.md](spec.md) (règles), [decisions.md](decisions.md) (`AD-xx`), [exigences](../exigences.md) |
 
 Chaque ligne relie une demande à l'élément d'architecture qui la sert et à la preuve qui la
@@ -64,7 +64,7 @@ vérifie (test, porte, revue). Une ligne sans preuve est un trou : colonne « É
 | N30 | outils d'écriture | §15.17, `AD-81` | `ux-walkthrough` ; tests en personne (étude §5 point 6) | ⏳ |
 | N31 | IA de premier rang, MCP, serveurs de l'entreprise | §15.18, `AD-82` | propriété IA-5 ; corpus d'injections fuzzé ; fuzz SSE et arguments MCP ; « une proposition acceptée = une modification annulable » ; MCP : `Origin`, jeton, portées | ⏳ ❓ `AD-82`, PD-1 |
 | N32 | ressources des greffons, gestionnaire de tâches | §11.1, §9.10 H-7, `AD-88` | test « Arrêter sous saturation » ; boucle infinie native et WebAssembly ; canari O-7 sur la vue | ⏳ |
-| N33 | RAG natif | §15.18 RG-1–RG-5, `AD-89` | P-IDX (banc de rappel en français, `PERF-IDX-*`) ; propriété « citation existe à `rev` ou dite périmée » ; injection « extrait `autrui` en tête ⇒ aucun outil hors classe » | ⏳ expérimentation |
+| N33 | RAG natif | §15.18 RG-1–RG-5, `AD-89` | P-IDX (corpus français versionné, rappel@10 ≥ 0,8, MRR ≥ 0,6, `PERF-IDX-*`) ; propriété « citation existe à `rev` ou dite périmée » ; injection « extrait `autrui` en tête ⇒ aucun outil hors classe » | ⏳ expérimentation |
 | N34 | fichiers non synchronisés | §6.9 IG-1–IG-6, `AD-90` | conformité contre `git check-ignore` ; fuzz du parseur ; « fichier exclu référencé par Typst signalé » | ⏳ (projet : PD-1) |
 | N35 | Linux, macOS, Windows, amd64 et arm64 | §9.11, `internal/sandbox`, INV-13, `AD-18`, `AD-94` | P-SANDBOX-LINUX, -MAC, -WIN ; CI native sur six cibles | ⏳ expérimentation (macOS, Windows) |
 | N36 | passe de cohérence | [coherence.md](coherence.md) | revue Fable + Codex | 🔨 |
@@ -86,7 +86,7 @@ vérifie (test, porte, revue). Une ligne sans preuve est un trou : colonne « É
 | U18 | mise en page des Markdown | Typst + `cmarker` (§6.6) | MDL-* | ⏳ |
 | U19–U22, U25 | tableur CSV | ADR 0026, `AD-52`, `AD-53` | `sheet.spec.ts`, `collab.test.ts` (CSV-04b) | 🧪 ❓ `AD-52` |
 | U26 | types modulaires | ADR 0027, `AD-08`, `AD-51` | P-EXT-1 | ⏳ |
-| U29, U30 | tâches, sommaire | panneaux (§15.4) ; Tâches en greffon WebAssembly | contrat de l'API | ⏳ |
+| U29, U30 | tâches, sommaire | panneaux (§15.4) ; Tâches en extension intégrée TypeScript (§9.10) | contrat de l'API | ⏳ |
 | U31 | aucune « verrue » | §15.1, §15.11 (ND-4) | `ux-walkthrough` | règle |
 | U32 | fiable | §10, ADR 0029 | I1–I8 | 🧪 |
 | U33, U34 | performant, gros fichiers | §12, ADR 0028 | `PERF-*`, `limits.test.ts` | 🧪 |

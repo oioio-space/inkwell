@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Date | 2026-11-01 (révision 3 de l'architecture, `spec.md` 1.0.0-brouillon.4) |
+| Date | 2026-11-01 (révision 4 de l’architecture, `spec.md` 1.0.0-brouillon.5) |
 | But | relire ensemble tout ce qui a été demandé à la volée (N17–N41, U*, L*), résoudre les contradictions, combler ou différer explicitement les manques, fusionner les doublons, et ramener le tout à la finalité : **des personnes qui aiment écrire, ensemble, sans serveur** |
 | Entrées | [audit de cohérence de Codex](reviews/coherence-codex.md) ; revues du tour 2 ([Fable](reviews/03-fable-r2.md) §4, [Codex](reviews/04-codex-r2.md) §4) ; études [encryption](research/encryption.md), [sync-ignore](research/sync-ignore.md), [ai §12](research/ai.md), [editor-features](research/editor-features.md), [plugins](research/plugins.md) ; [design rév. 4](../design/spec.md) ; [exigences](../exigences.md) |
 | Règle de tri | à valeur égale, ce qui sert d'abord le parcours **écrire → partager → retrouver → corriger → exporter** passe devant ; une plate-forme (extensions, IA, coffre) se construit sur ce parcours, jamais à sa place |
@@ -17,7 +17,7 @@ greffon (`importers`, `exporters`) peut l'offrir. Le reste de cet écart est not
 |---|---|---|---|
 | C01 | Projet chiffré (N37) contre projet en clair (NG3, §6.2) | NG3 retiré ; coffre par objet, sans montage ; G13 | spec §1.3, §6.10 ; `AD-91` |
 | C02 | Chiffrement contre BLAKE3/Bao et révocation | identifiants du protocole **dans** les objets chiffrés, noms physiques opaques ; DEK par appareil, aucune clé de groupe ; un membre retiré garde ce qu'il a reçu | §6.10 EN-1, EN-2, EN-7 |
-| C03 | Coffre contre fichiers réels (Typst, LSP, Git, recherche, export) | dossier de travail privé matérialisé à la demande, effacé, balayé au démarrage ; état « verrouillé » ; copies sensibles listées ; projection lisible durable = choix explicite | §6.10 EN-3–EN-5 |
+| C03 | Coffre contre fichiers réels (Typst, LSP, Git, recherche, export) | dossier de travail **en mémoire** (tmpfs sans swap en clair ; disque en mémoire sous macOS) ou sur un disque **chiffré par le système, vérifié** ; sinon compilation refusée pour un projet protégé ; borne de 512 Mio et matérialisation par dépendances ; Git dans le coffre (billy) ; index dans le dossier de travail ; projection lisible durable = choix explicite | §6.10 EN-3–EN-5 |
 | C04 | « Annuaire » contre aucun serveur | l'annuaire **est** la liste signée des membres ; annuaire d'entreprise = suggestion, jamais autorité ; clé X25519 dans les ops de membres reportée (PD-3) | §6.10 EN-8, §15.19 |
 | C05 | Linux seulement (AD-18) contre N35 | port `internal/sandbox` à trois implémentations ; capacité **refusée** sur une cible non prouvée (INV-13) ; Linux seul = alpha annoncée | §9.11 ; `AD-18`, `AD-94` |
 | C06 | « Jamais installé depuis un pair » contre N23 | réception d'un paquet ≠ activation ≠ installation globale ; jamais d'installation globale ; greffon de projet borné ; « aucun code reçu » banni des promesses | §15.10 |
@@ -28,7 +28,7 @@ greffon (`importers`, `exporters`) peut l'offrir. Le reste de cet écart est not
 | C11 | ACP « soumis aux capacités » contre processus à pleins droits | aucune garantie prêtée à l'agent ; option indisponible sans bac à sable prouvé | §15.18 ACP-1 |
 | C12 | IA et RAG : portée de lecture | portée de session choisie avant récupération, appliquée à chaque requête ; provenance par extrait ; contamination monotone ; `ai: never` et fichiers non synchronisés exclus | §15.18 RG-1–RG-5 |
 | C13 | Problèmes : popover, onglet, compteur d'en-tête ou de barre d'état | un service ; **un** compteur, dans la barre d'état ; clic = suivant ; liste dans « Relire » | §15.17 ER-1 |
-| C14 | Raccourcis : palette sur Ctrl+K (principes UX) contre lien sur Ctrl+K (design, code) | un registre exécutable unique ; Ctrl+K = lien, Ctrl+Maj+P = palette, Alt+Entrée = corrections ; **principes UX règle 3 à corriger** ; export : raccourci libre après audit du registre | §15.13 ; design rév. 5 |
+| C14 | Raccourcis répartis (registre du design, `toolbar/spec.ts`, `editor/format/keymap.ts`), collision de l'export avec le bloc de code, recommandation périmée Ctrl+. dans l'inventaire du design | un registre exécutable unique ; Ctrl+K = lien (code, `keymap.ts:16`), Ctrl+Maj+P = palette (**déjà** dans `ux-principles.md:14`, rien à y corriger), Alt+Entrée = corrections ; export : raccourci libre après audit du registre ; inventaire du design à mettre à jour | §15.13 ; design rév. 5 |
 | C15 | « Aucun modèle fourni » contre styles « Rapport », Markdown + CSS, deux emplacements | aucun gabarit livré ; un emplacement (`Documents/Inkwell/Modèles/`) ; CSS pour l'export HTML seulement, décision de l'utilisatrice (`AD-78`) ; le projet d'exemple n'est pas un modèle | §6.8 |
 | C16 | Ignorer contre « tout recevoir » (N5) | ignorer = ne pas importer un fichier local, ne pas télécharger un blob ; jamais `.typstdeps/`, polices, charte, ressources référencées ; jamais un retrait chez les autres | §6.9 |
 | C17 | Versions : Git vérité ou projection ? | vérité = manifestes de têtes Automerge ; Git = projection go-git reconstructible ; restaurer = nouvelle modification | §6.11 |
@@ -93,7 +93,7 @@ ou non installée.
 | Surface | Contenu | Surcharge constatée → simplification |
 |---|---|---|
 | **Accueil** | nom et couleur au premier usage ; projets récents ; Nouveau (Typst, Markdown, texte, tableau ; depuis un modèle de la personne) ; Ouvrir ; Rejoindre ; Restaurer une copie | — ; aucun modèle préinstallé |
-| **Barre d'en-tête** | projet et fichier ; état de synchronisation et d'enregistrement ; personnes ; Partager ; menu de l'application ; bouton « Extensions » (pièce de puzzle) ; actions **épinglées par la personne** ; indicateur « IA : envoi vers X » seulement pendant une session d'IA | compteur de problèmes, IA, puzzle, actions s'ajoutaient → le compteur va à la barre d'état ; l'IA n'apparaît qu'activée ; ≤ 6 actions épinglées |
+| **Barre d'en-tête** | projet et fichier ; état de synchronisation et d'enregistrement ; personnes ; Partager ; menu de l'application ; bouton « Extensions » (pièce de puzzle) **seulement** si une extension tierce ou de projet existe ; actions **épinglées par la personne** ; indicateur « IA : envoi vers X » seulement pendant une session d'IA | compteur de problèmes, IA, puzzle, actions s'ajoutaient → le compteur va à la barre d'état ; l'IA n'apparaît qu'activée ; ≤ 6 actions épinglées |
 | **Onglets et document** | fichiers ouverts en onglets (N19) ; éditeur du type (Typst, Markdown, tableau, texte, code coloré, image, PDF, carte) ; barre contextuelle ; menu Insérer (image, tableau, note, citation, renvoi, symbole, diagramme) ; complétion, signature, erreurs au point d'écriture | — |
 | **Gauche** | deux onglets : **Fichiers** (avec corbeille et marque « non synchronisé ») et **Sommaire** ; Tâches = filtre du Sommaire | quatre onglets (Fichiers, Sommaire, Liens, Tâches) + extensions dans 264 px → deux onglets ; Liens dans les détails d'un fichier |
 | **Aperçu** | pages ; « Vue lecture » accessible ; saut source ↔ aperçu ; zoom ; Exporter ; Présenter | aperçu + tiroir + gauche compriment le texte → une seule zone secondaire à la fois sous une largeur donnée, retour garanti au texte |
@@ -112,11 +112,12 @@ dernier). Une alpha Linux ne clôt ni N35, ni N37, ni L5.
 
 | Lot | Exigences | Valeur | Risque traité | Porte |
 |---|---|---|---|---|
-| Écrire et retrouver | G-0a puis G-0b, onglets (N19), N20, U1, U3–U8, U13, U14, U24–U26 | ouvrir vraiment plusieurs fichiers, créer, renommer, corbeille, txt, md, typ, csv | parcours principal cassé aujourd'hui | FM-OPEN-1…8, export du bon projet après redémarrage |
+| Mesure de référence (N38) | `PERF-TYPE`, `PERF-SYNC-*`, `PERF-START`, `PERF-MEM`, bancs Go de `HOT_PATHS:`, corpus de §12.5 PM-1 | sans elle, aucun budget n'est un seuil | budgets restés des souhaits | résultats bruts archivés, seuils fixés (PM-5) |
+| Écrire et retrouver | G-0a puis G-0b ; **onglets (N19) au lot G-0c, qui dépend du Worker** (ADR 0028 D2) : G-0a en lecture seule ne satisfait ni N19 ni N20 ; N20, U1, U3–U8, U13, U14, U24–U26 | ouvrir vraiment plusieurs fichiers, créer, renommer, corbeille, txt, md, typ, csv | parcours principal cassé aujourd'hui | FM-OPEN-1…8, export du bon projet après redémarrage |
 | Collaborer sans perdre | N1–N16, N-1, U7, U32–U34 ; migration ADR 0034 et admission ADR 0031 | inviter, retirer, hors ligne puis converger | sécurité byzantine avant exposition | P-* d'ADR 0034, deux appareils réels, disque plein, plantage |
 | Comprendre, corriger, produire | N28, N29 (socle), U4, U9, U15, U17, U18, L1 | erreurs cliquables, F8, complétion et survol de la charte, aperçu et PDF hors ligne | tinymist non branché | `problems.spec.ts`, `PERF-LSP` |
 | Première minute et secours | N17, N19, U31, U32 ; sauvegarde locale et restauration à côté ; aide embarquée ; fr et en | ne jamais avoir peur de perdre | confiance | tests en personne, Orca |
-| Revenir en arrière | N39 (voyager, restaurer, comparer, versions nommées) | se tromper et revenir sans Git | perte perçue | e2e Historique |
+| Revenir en arrière | N39 (voyager, restaurer, comparer, versions nommées), **après** les épingles des versions dans le ménage (HI-9) et la sémantique d'« Intégrer » (HI-6) | se tromper et revenir sans Git | perte perçue | e2e Historique |
 | Fondations extensibles | registre unique, extensions intégrées TypeScript (N21, N24 socle) | ajouter sans « verrue » | réécriture plus tard | P-EXT-1, P-EXT-2 |
 
 ### v1 (première version générale) — finir les étapes 3 et 4, industrialiser 5 et 6
@@ -128,7 +129,7 @@ dernier). Une alpha Linux ne clôt ni N35, ni N37, ni L5.
 | Relire ensemble | étape 4 : commentaires, mentions, Activité ; N4, N6 ; U11, U12, U16, U27, U29, U30 | valeur directe pour la relecture de groupe ; schéma avant interface |
 | Variantes | N41 | sur les variantes déjà présentes |
 | Extensions utilisables | N21–N26, N32 ; API 1.0 ; Graphviz ; N23 après PD-1 | après P-PLUG-PROTO et P-PLUG-BENCH ; vue Ressources dès le premier greffon tiers |
-| Modèles et écriture | N27, N30 | modèles de la personne, orthographe, références, concentration |
+| Modèles et écriture | N27, N30 ; N34 (couche personnelle des fichiers non synchronisés ; couche du projet après PD-1) | modèles de la personne, orthographe, références, concentration |
 | IA, étroite | N31, N33 (lexical) | fournisseur de l'entreprise par Go, aperçu d'envoi, propositions par morceau, discussion, index lexical, MCP stdio ; politique partagée après PD-1 |
 | Distribution | étapes 5 et 6, N38, M06, M08, M09 | signatures, mises à jour, migrations, nettoyage, preuves WAN et gros projets |
 
@@ -150,9 +151,9 @@ brouillons privés, intégration entre projets ; Mermaid complet (P-FRAME) ; API
 4. **Problèmes** : un seul compteur, dans la barre d'état ; clic = suivant ; liste dans Relire ;
    aucun compteur dans l'en-tête (C13).
 5. **Barre d'état** : quatre éléments visibles, le reste sous « ⋯ ».
-6. **Raccourcis** : Ctrl+K lien, Ctrl+Maj+P palette, Alt+Entrée corrections ; **corriger la règle 3
-   de `ux-principles.md`** ; raccourci d'export attribué après audit du registre ; aucune
-   recommandation périmée (Ctrl+. ) dans l'inventaire.
+6. **Raccourcis** : Ctrl+K lien, Ctrl+Maj+P palette (déjà dans `ux-principles.md`), Alt+Entrée
+   corrections ; raccourci d'export attribué après audit du registre ; retirer la recommandation
+   périmée Ctrl+. de l'inventaire ; menus et aide générés depuis le registre.
 7. **Historique sans Git** : vue « voyager dans le temps » (curseur temporel, Revenir au présent),
    « Restaurer cette version » avec aperçu et Annuler, « Comparer » par mots ; vocabulaire
    **version**, **variante**, **proposer d'intégrer**, **intégrer**, **abandonner la variante** ;
@@ -160,7 +161,8 @@ brouillons privés, intégration entre projets ; Mermaid complet (P-FRAME) ; API
 8. **Variantes** (N41) : créer, comparer avec l'original, proposer d'intégrer, intégrer, divergence
    affichée ; « Dupliquer le projet ».
 9. **Protection du projet** (N37) : case « Protéger ce projet » (cochée par défaut pour un projet
-   partagé), déverrouillage, phrase et **kit de secours** (impression, QR), « les données sont
+   partagé), message « Pour compiler un projet protégé ici, activez le chiffrement du disque » quand
+   la cible l'exige (§6.10 EN-4), message de la borne de 512 Mio, déverrouillage, phrase et **kit de secours** (impression, QR), « les données sont
    perdues sans eux » dit à l'activation, export chiffré ou lisible.
 10. **Sauvegarde et restauration** : « Sauvegarder / Restaurer une copie », date du dernier succès,
     restauration à côté, avertissement de fraîcheur d'un appareil neuf (§6.7 ST-7).

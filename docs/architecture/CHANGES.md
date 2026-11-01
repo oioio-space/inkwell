@@ -1,5 +1,76 @@
 # Changements de l'architecture
 
+## 1.0.0-brouillon.5 — révision 4 (2026-11-01)
+
+Réponse au tour 3 : [Fable](reviews/05-fable-r3.md) **ACCEPT** (0 bloquant, 5 majeurs de texte,
+15 mineurs) ; [Codex](reviews/06-codex-r3.md) **NOT ACCEPTED** (4 bloquants, 6 majeurs, 1 mineur).
+Aucune modification de `docs/protocol/` ni de `docs/design/`.
+
+### Revue Codex, tour 3
+
+| Constat | Changement |
+|---|---|
+| R3-B1 clair persistant du dossier de travail (macOS, Windows ; swap) | §6.10 EN-4 : dossier de travail **seulement** en mémoire (tmpfs sans swap en clair vérifié ; disque en mémoire sous macOS, à prouver) ou sur un disque chiffré par le système **vérifié** (LUKS, FileVault, BitLocker) ; sinon, pour un projet protégé, aperçu, export lisible et service de langage des fichiers fermés **refusés** sur la cible ; EN-7 réécrit (garantie conditionnée) ; P-VAULT : coupure à chaque étape et **inspection hors ligne avant relance** |
+| R3-B2 une DEK de 256 bits n'est pas une clé d'en-tête age | EN-2 : la DEK est la **charge utile d'un fichier age complet** (`filippo.io/age`, stanzas inchangées), clair `{v, project, peer, epoch, dek}`, refus d'un objet d'un autre projet ; vecteurs |
+| R3-B3 l'historique promet des blobs que le ménage efface | §6.5 : versions nommées et variantes **racines** du ménage ; §6.11 HI-9 : épingle avant publication du manifeste, moment quelconque sans épingle et dit, purge prioritaire (« version incomplète ») ; tests V1 / remplacement / ménage / restauration |
+| R3-B4 portes non mesurables ou contradictoires | §0.5 réécrit : règles E-1 à E-5, oracle et seuil par porte, **repli nommé à l'avance**, 16 installés / 6 actifs / 10 en attente, sidecars dans P-SANDBOX, P-VAULT hors ligne, P-IDX chiffrée, P-FRAME sur chaque moteur, ACP **reporté** (plus une expérimentation) |
+| R3-M1 récupération (découverte, espaces de noms, enveloppe des têtes) | §6.7 : `p/<loc>/` dérivé du secret seul, descripteur chiffré (phrase seule + adresse du dorsal), même enveloppe AEAD que les objets, vérification de la signature des têtes, test deux projets / deux appareils |
+| R3-M2 « intégrer = une modification » | §6.11 HI-6 : **différence appliquée** (choisie), admission ordinaire, « Annuler » sur le groupe, intégration répétée, zones verrouillées refusées ; fusion native écartée (amendement d'ADR 0031 qu'elle exigerait) ; écart du code au §16 |
+| R3-M3 transitions des fichiers non synchronisés | §6.9 IG-5 : table des transitions (jamais admis, texte admis, blob, dépendance du principal) |
+| R3-M4 protocole de mesure | §12.5 PM-1 à PM-6 ; §2 RSS/PSS plafonnée, VSZ à part ; Long Tasks ≥ 50 ms seulement |
+| R3-M5 autorité et fraîcheur de l'index | §15.18 RG-6 (intersection, outils réduits si contaminé, pas de provenance pas de résultat), RG-7 (file coalescée bornée, 5 s au plus, mise à jour forcée par une requête, invalidation) |
+| R3-M6 plafond de nuisance | §11.1 RS-8 : quatre niveaux, chien de garde permanent (500 ms, 2 relevés), limites par classe, réserve du cœur ; RS-3 verbes par classe ; RS-7 corrigé |
+| R3-m1 restes | §15.5 `time.read` (jamais 0) ; FM-OPEN-7 ; synthèses `AD-69`, `AD-83`, `AD-87` ; traçabilité U29/U30 ; liste « sous réserve » sans `AD-13`, `AD-18`, `AD-33` |
+| Tests demandés en passant | JSON Lines : deux ajouts concurrents donnent deux lignes ; minuterie positive et annulation (ABI-9) ; Vue lecture : tableaux, mathématiques, figures, renvois, sans prétendre à une équivalence générale |
+
+### Revue Fable, tour 3
+
+| Constat | Changement |
+|---|---|
+| R3-M1 P-IDX non mesurable | §0.5 : corpus, rappel@10 ≥ 0,8, MRR ≥ 0,6, +0,1 pour R1/R2 |
+| R3-M2 porte ACP indéfinie | ACP **reporté après v1** (§0.5, ACP-1) |
+| R3-M3 repli nommé | colonne « repli » du §0.5 |
+| R3-M4 N38 placé en dernier | mesure de référence au **premier lot du MVP** (`coherence.md` §5, §12.5 PM-5) |
+| R3-M5 budget du dossier de travail | §6.10 EN-9 : dépendances réelles, ≤ 512 Mio, refus au-delà ; rémanence dans EN-7 |
+| R3-M6 sémantique d'« Intégrer » | §6.11 HI-6 (voir Codex R3-M2) |
+| m-1 `clone3` « se rabat » | « refus préventif » (H-5) |
+| m-2 vérification Landlock masquée par seccomp | H-0 : Landlock vérifié (`EACCES`) **avant** seccomp (`EPERM`) |
+| m-3 liste des signatures hors protocole | §9.4 : liste fermée `plugin-package`, `backup-head`, `export`, `enc-key` |
+| m-4 C14 périmé | `coherence.md` C14 et §6 point 6 corrigés (`ux-principles.md` dit déjà Ctrl+Maj+P) |
+| m-5 `.inkwell/git/` « à décider » | `[cible, AD-13]`, dans le coffre si protégé |
+| m-6 bouton puzzle permanent | affiché seulement si une extension tierce ou de projet existe |
+| m-7 N34 absent du phasage | v1, lot « Modèles et écriture » |
+| m-8 blob non téléchargé annoncé | IG-5 : jamais annoncé |
+| m-9 DEK « par appareil » ou « par personne » | **par projet et par appareil** ; enveloppe pour l'appareil et le secours seulement |
+| m-10 horloge du voyage dans le temps | HI-10 |
+| m-11 budgets manquants | §12.5 : voyage dans le temps, comparaison par mots, motifs, déverrouillage, rechiffrement |
+| m-12 rejouer les portes d'enfermement | E-5 |
+| m-13 verbes par classe | RS-3, RS-8 |
+| m-14 BLAKE3 par architecture | §12.5 |
+| m-15 index « chiffré » | RG-3 : dans le dossier de travail pour un projet protégé |
+| sur-ingénierie : kit régénéré à chaque sauvegarde | kit **proposé** après 30 jours ou sur geste |
+| amélioration : Git dans le coffre | EN-5 : go-git sur `billy.Filesystem` au-dessus du magasin chiffré |
+
+### Désaccords D-10 à D-16 : tous convergés
+
+| # | Décision commune |
+|---|---|
+| D-10 | un hôte par greffon actif, paresseux, ≤ 6 actifs ; éviction jamais pendant un mandat ou un appel ; repli nommé si la compilation dépasse 500 ms |
+| D-11 | démarrage en deux temps (Landlock puis `execve`), seccomp avec `TSYNC` barrière principale ; vérification Landlock avant seccomp |
+| D-12 | Rust et Go en 1.0, TinyGo en 1.1 ; minuterie positive et annulation dans le kit ; taille et compilation du module Go consignées |
+| D-13 | UTCP retiré |
+| D-14 | expérimentations acceptées à leur porte, sans dépendance de production, avec repli nommé |
+| D-15 | `beautiful-mermaid` **candidat** de l'API 1.1 derrière P-MERMAID ; Mermaid complet derrière P-FRAME sur chaque moteur |
+| D-16 | préfixes externes `inkwell-ext:`, PD-2 retiré, liste fermée au §9.4 |
+
+### Désaccords à débattre
+
+Aucun désaccord ouvert entre les deux revues. Un **choix de conception** est signalé pour la
+revue suivante plutôt que débattu : « Intégrer » par différence appliquée (attribution fine
+gardée dans la variante) plutôt que par fusion native des opérations (attribution d'origine, mais
+amendement d'ADR 0031) ; Fable a noté que Patchwork fait la seconde.
+
+
 ## 1.0.0-brouillon.4 — révision 3 (2026-11-01)
 
 Réponse au tour 2 ([Fable](reviews/03-fable-r2.md) : 4 bloquants, 3 majeurs, 9 mineurs ;
