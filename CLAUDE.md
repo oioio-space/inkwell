@@ -42,9 +42,11 @@ concevoir ou de revoir quoi que ce soit ; une exception exige une ADR.
 
 - Le CRDT vit dans la webview ; Go ne transporte que des **octets opaques**. Aucun code Go
   n'importe Automerge (ADR 0011) ; la convergence se teste en TypeScript.
-- La synchronisation entre pairs passe par l'interface `internal/transport.Transport` ; seul
-  `internal/transport/p2p` importe libp2p. Le rendez-vous d'invitation Wormhole est un canal
-  séparé, limité à `internal/invite` (ADR 0032).
+- La synchronisation entre pairs passe par l'interface `internal/transport.Transport` ; seuls
+  `internal/transport/p2p` et le module `protocol/libp2p` importent libp2p. Le rendez-vous d'invitation
+  Wormhole est un canal séparé, limité à `internal/invite` (ADR 0032).
+- Le protocole est spécifié publiquement dans `docs/protocol/` (ADR 0034). Le module `protocol` (cœur pur,
+  sans E/S) n'importe rien d'inkwell ; inkwell importe `protocol` et n'a aucune copie privée de ses codecs.
 - Une seule source de vérité par chose : texte → Automerge, binaires → magasin BLAKE3,
   membres → liste signée, versions → go-git (projection).
 - Tout octet venu d'un pair est vérifié (signature, rôle) et son décodeur est fuzzé.

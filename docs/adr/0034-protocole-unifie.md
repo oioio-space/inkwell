@@ -1,5 +1,6 @@
 ---
-status: proposée
+status: acceptée
+decided: 2026-11-01 (utilisatrice, après acceptation par Fable et Codex au tour 10)
 date: 2026-11-01
 revision: 10 (revues 01 à 19, débats D1 et D2 conclus par un accord ; exigences N13, N14, N15)
 decision-makers: [Mathieu]
@@ -288,3 +289,12 @@ mode « signalé », sans échouer, jusqu'à leur `enforce`.
 [RFC 9000 §4.1]: https://www.rfc-editor.org/rfc/rfc9000#section-4.1
 [DRR]: https://doi.org/10.1109/90.502236
 [Newcombe 2015]: https://doi.org/10.1145/2699417
+
+
+## Décision de l'utilisatrice (2026-11-01)
+
+ADR acceptée (révision 10). Décisions associées : la règle d'ordre premier des clés (déjà appliquée par le correctif
+N-1) ; session = connexion, donc le passage du relais au direct resynchronise ce pair ; coordonnées du pointeur de
+présentation en dix-millièmes entiers ; le module `protocol` est un sous-module de ce dépôt sous licence **MPL-2.0** ;
+bascule nette vers `sync/2.0.0` et abandon du débordement sur disque de l'étape 2.2 (décisions antérieures). Registre :
+`docs/exigences.md` N16.
