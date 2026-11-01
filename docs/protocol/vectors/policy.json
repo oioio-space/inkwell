@@ -1,0 +1,30 @@
+{
+  "spec": "inkwell protocol",
+  "spec_version": "2.0.0-draft",
+  "keys": {
+    "A": {
+      "note": "RFC 8032 §7.1 TEST 1",
+      "public_hex": "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a",
+      "seed_hex": "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60"
+    },
+    "B": {
+      "note": "RFC 8032 §7.1 TEST 2",
+      "public_hex": "3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c",
+      "seed_hex": "4ccd089b28ff96da9db6c346ec114e0f5b8a319f35aba624da8cf6ed4fb8a6fb"
+    }
+  },
+  "vectors": [
+    {
+      "id": "policy-mode-approval",
+      "status": "proposed",
+      "description": "Décision signée par A (admin) : mode = approval, frontière des membres = op-add-writer, Lamport 1. Inerte tant que la capacité policy/1 n'est pas négociée.",
+      "decoder": "policy_op",
+      "input_hex": "010000000000000001d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a00015a502638d6036e758b40c0b8414f028e07abf10576fc1adfc49953d02fd044160100046d6f64650008617070726f76616cd6da6e8f8afd528337114736ad97bc40aa4bfc2f197503a49be7ac7eb4338cfef343b2f2ef9b574fdac077db1bf0196cd1187251d41357a506591de863cbc708",
+      "verdict": "accept",
+      "expect": {
+        "hash_hex": "b424f97e4dcea82b7c7e69f770b71dc90c437fdf8d1c595b39c184610dddb71f",
+        "signed_bytes_hex": "696e6b77656c6c2f706f6c6963792d6f702f763100a8c8601608f969e63ceeec9e77b8d8cbd99007442ffa67c028069149625d2166010000000000000001d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a00015a502638d6036e758b40c0b8414f028e07abf10576fc1adfc49953d02fd044160100046d6f64650008617070726f76616c"
+      }
+    }
+  ]
+}

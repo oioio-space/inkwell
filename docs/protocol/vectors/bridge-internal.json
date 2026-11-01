@@ -1,0 +1,38 @@
+{
+  "spec": "inkwell protocol",
+  "spec_version": "2.0.0-draft",
+  "vectors": [
+    {
+      "id": "bridge-message",
+      "status": "normative",
+      "description": "Enveloppe Message (interne) : version 1, type 3, longueur du pair, pair, charge opaque.",
+      "decoder": "bridge_envelope",
+      "input_hex": "010334313244334b6f6f57514b31776e65666f4c7263564862626e6635744c7a626f705564334b336246416f4a704137594a674c357056a164747970656473796e63",
+      "verdict": "accept"
+    },
+    {
+      "id": "bridge-attest",
+      "status": "normative",
+      "description": "Enveloppe Attest (webview → Go) : Heads = len(doc) u16 || doc || têtes.",
+      "decoder": "bridge_envelope",
+      "input_hex": "010434313244334b6f6f57514b31776e65666f4c7263564862626e6635744c7a626f705564334b336246416f4a704137594a674c357056001c344e4d4e6e6b4d684c386a5872644a396a616d53353850415664587531919abffa533f3b405001b59201b02a4ea3a18e318a49de0fd04e6eefe3d3389f3dfcdf3ed2b55d5d1a46146c040ff425b2487a9a806c6f7013a6d980fc3f44",
+      "verdict": "accept"
+    },
+    {
+      "id": "bridge-bad-version",
+      "status": "normative",
+      "description": "Version d'enveloppe 2 : refusée.",
+      "decoder": "bridge_envelope",
+      "input_hex": "020334313244334b6f6f57514b31776e65666f4c7263564862626e6635744c7a626f705564334b336246416f4a704137594a674c357056a164747970656473796e63",
+      "verdict": "reject"
+    },
+    {
+      "id": "bridge-credit",
+      "status": "proposed",
+      "description": "Enveloppe Credit (type 12) : génération 1, consommé 0, fenêtre 4 Mio.",
+      "decoder": "bridge_envelope",
+      "input_hex": "010c34313244334b6f6f57514b31776e65666f4c7263564862626e6635744c7a626f705564334b336246416f4a704137594a674c35705600000001000000000000000000400000",
+      "verdict": "accept"
+    }
+  ]
+}

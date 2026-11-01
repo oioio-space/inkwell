@@ -1,0 +1,102 @@
+; Protocole inkwell 2.0 (brouillon) — couche « dépôt » (spec.md §9).
+; Messages automerge-repo 2.x transportés dans les trames REPO (0x05) et
+; PRESENCE (0x06) de /inkwell/sync/2.0.0. Notation : RFC 8610 (CDDL).
+;
+; Règles qui ne s'expriment pas en CDDL (normatives, spec.md §9) :
+;  - un message est un seul élément CBOR (RFC 8949), sans octet après lui ;
+;  - pas d'éléments de longueur indéfinie, pas d'étiquettes (tags), pas de
+;    clés de map en double : sinon le message est refusé ;
+;  - les clés inconnues sont ignorées et NE DOIVENT PAS être conservées ni
+;    retransmises (le récepteur reconstruit le message à partir des seuls
+;    champs connus) ;
+;  - senderId DOIT être égal au PeerID authentifié par libp2p de l'émetteur ;
+;    targetId DOIT être le PeerID du récepteur.
+
+repo-message = handshake / doc-message / ephemeral
+
+; ---- poignée de main (≤ 1024 octets encodés) ----
+handshake = {
+  type: "arrive" / "welcome",
+  senderId: peer-id,
+  ? peerMetadata: peer-metadata,
+  ? projectUrl: automerge-url,   ; extension inkwell : document racine du projet
+  * tstr => any                  ; ignoré
+}
+
+; Le récepteur traite TOUT pair comme éphémère et ignore storageId
+; (pas d'état de synchronisation persistant par pair, ADR 0031).
+peer-metadata = {
+  ? isEphemeral: bool,
+  ? storageId: tstr,
+  * tstr => any
+}
+
+; ---- messages de document ----
+doc-message = sync / request / doc-unavailable
+
+sync = {
+  type: "sync",
+  doc-header,
+  data: bstr,                    ; message de synchronisation Automerge (format binaire Automerge)
+  * tstr => any
+}
+
+request = {
+  type: "request",
+  doc-header,
+  data: bstr,
+  * tstr => any
+}
+
+doc-unavailable = {
+  type: "doc-unavailable",
+  doc-header,
+  * tstr => any
+}
+
+doc-header = (
+  senderId: peer-id,
+  targetId: peer-id,
+  documentId: document-id,       ; DOIT appartenir à l'ensemble admis du récepteur
+)
+
+; ---- éphémère : présence et présentation (trame PRESENCE) ----
+ephemeral = {
+  type: "ephemeral",
+  doc-header,
+  sessionId: tstr .regexp "[0-9a-z]{1,16}",
+  count: uint .ge 1,
+  data: bstr .cbor ephemeral-payload,   ; ≤ 1024 octets encodés
+  * tstr => any
+}
+
+ephemeral-payload = presence-envelope / present-envelope
+
+presence-envelope = { "__presence": presence }
+presence = heartbeat / goodbye / update / snapshot
+heartbeat = { type: "heartbeat", * tstr => any }
+goodbye   = { type: "goodbye", * tstr => any }
+update    = { type: "update", channel: channel-name, value: channel-value, * tstr => any }
+snapshot  = { type: "snapshot", state: { * channel-name => channel-value }, * tstr => any }
+channel-name  = "name" / "anchor" / "head"
+channel-value = tstr .size (0..128)   ; "name" ≤ 128 octets, "anchor" et "head" ≤ 64
+
+present-envelope = { "__present": present }   ; seule clé autorisée
+present = present-state / present-laser / present-take / present-end
+        / present-hello / present-ask / present-give / present-deny
+present-state = { t: "state", epoch: epoch, seq: uint, slide: 1..100000,
+                  step: 0..100000, screen: "show" / "black" / "white" }
+present-laser = { t: "laser", epoch: epoch, x: unit / null, y: unit / null } ; x et y tous deux null ou tous deux nombres
+present-take  = { t: "take", epoch: epoch }
+present-end   = { t: "end", epoch: epoch }
+present-hello = { t: "hello" }
+present-ask   = { t: "ask" }
+present-give  = { t: "give", to: peer-id, epoch: epoch }
+present-deny  = { t: "deny", to: peer-id }
+epoch = 0..2147483648
+unit  = 0.0..1.0 / 0 / 1
+
+; ---- types de base ----
+peer-id = tstr .regexp "[!-~]{1,64}"      ; PeerID libp2p canonique (base58btc, « 12D3KooW… »)
+document-id = tstr .regexp "[1-9A-HJ-NP-Za-km-z]{1,64}"   ; DocumentId automerge-repo (bs58check de 16 octets)
+automerge-url = tstr .regexp "automerge:[1-9A-HJ-NP-Za-km-z]{1,70}"   ; ≤ 80 caractères

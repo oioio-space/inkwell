@@ -1,0 +1,100 @@
+{
+  "spec": "inkwell protocol",
+  "spec_version": "2.0.0-draft",
+  "vectors": [
+    {
+      "id": "hello",
+      "status": "proposed",
+      "description": "Trame HELLO (type 0x01) : TLV PROJECT (0x0001, 32 o) puis CAPS (0x0002) = core/2 (0x0001) et une valeur GREASE (0x0A0A) à ignorer.",
+      "decoder": "sync2_frame",
+      "input_hex": "0000002d0100010020a8c8601608f969e63ceeec9e77b8d8cbd99007442ffa67c028069149625d21660002000400010a0a",
+      "verdict": "accept",
+      "expect": {
+        "effective_caps": [
+          1
+        ],
+        "project_id_hex": "a8c8601608f969e63ceeec9e77b8d8cbd99007442ffa67c028069149625d2166"
+      }
+    },
+    {
+      "id": "hello-unsorted-tlv",
+      "status": "proposed",
+      "description": "HELLO dont les identifiants TLV ne sont pas strictement croissants : refusé (PROTOCOL_VIOLATION).",
+      "decoder": "sync2_frame",
+      "input_hex": "0000002d010002000400010a0a00010020a8c8601608f969e63ceeec9e77b8d8cbd99007442ffa67c028069149625d2166",
+      "verdict": "reject"
+    },
+    {
+      "id": "hello-unknown-tlv",
+      "status": "proposed",
+      "description": "HELLO avec un TLV inconnu 0x7A7A : accepté, TLV ignoré.",
+      "decoder": "sync2_frame",
+      "input_hex": "000000330100010020a8c8601608f969e63ceeec9e77b8d8cbd99007442ffa67c028069149625d21660002000400010a0a7a7a0002dead",
+      "verdict": "accept"
+    },
+    {
+      "id": "trust-frame",
+      "status": "proposed",
+      "description": "Trame TRUST (0x03) portant sync-have.",
+      "decoder": "sync2_frame",
+      "input_hex": "00000024030100015a502638d6036e758b40c0b8414f028e07abf10576fc1adfc49953d02fd04416",
+      "verdict": "accept"
+    },
+    {
+      "id": "attest-frame",
+      "status": "proposed",
+      "description": "Trame ATTEST (0x04) portant attest-valid.",
+      "decoder": "sync2_frame",
+      "input_hex": "000000ea0401a8c8601608f969e63ceeec9e77b8d8cbd99007442ffa67c028069149625d21663d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c00000192e5059000001c344e4d4e6e6b4d684c386a5872644a396a616d533538504156645875000231919abffa533f3b405001b59201b02a4ea3a18e318a49de0fd04e6eefe3d3389f3dfcdf3ed2b55d5d1a46146c040ff425b2487a9a806c6f7013a6d980fc3f44abb089d326dc5f91c7b8d2c4dfa3fe975805f35890dbdb560c5862648c32a9cda7131d5182a09a8bb50162f0f44bb1dc79e7215afc19e3b3a1e43add4af7c002",
+      "verdict": "accept"
+    },
+    {
+      "id": "offer-frame",
+      "status": "proposed",
+      "description": "Trame OFFER (0x07) : BLAKE3 de 70000 octets 0xAB, taille u32 = 70000.",
+      "decoder": "sync2_frame",
+      "input_hex": "0000002507a3c79626605231cdf54f555001ae1a4d8a793bd5de97095742dd53f8cff233fb00011170",
+      "verdict": "accept"
+    },
+    {
+      "id": "offer-too-small",
+      "status": "proposed",
+      "description": "OFFER de 65536 octets (≤ seuil en ligne) : refusé, un tel message passe en REPO.",
+      "decoder": "sync2_frame",
+      "input_hex": "0000002507a3c79626605231cdf54f555001ae1a4d8a793bd5de97095742dd53f8cff233fb00010000",
+      "verdict": "reject"
+    },
+    {
+      "id": "repo-reset",
+      "status": "proposed",
+      "description": "REPO_RESET (0x08) : génération 2, raison 0x02 (récupération échouée).",
+      "decoder": "sync2_frame",
+      "input_hex": "00000006080000000202",
+      "verdict": "accept"
+    },
+    {
+      "id": "goaway",
+      "status": "proposed",
+      "description": "GOAWAY (0x02) code 0x02 PROTOCOL_VIOLATION.",
+      "decoder": "sync2_frame",
+      "input_hex": "000000020202",
+      "verdict": "accept"
+    },
+    {
+      "id": "unknown-type",
+      "status": "proposed",
+      "description": "Type de trame 0x7F inconnu : refusé (PROTOCOL_VIOLATION) ; aucune extension sans capacité négociée.",
+      "decoder": "sync2_frame",
+      "input_hex": "000000017f",
+      "verdict": "reject"
+    },
+    {
+      "id": "frame-too-large",
+      "status": "proposed",
+      "description": "En-tête annonçant 98305 octets (\u003e 96 Kio) : refusé avant toute allocation.",
+      "decoder": "sync2_frame",
+      "input_hex": "0001800105",
+      "verdict": "reject"
+    }
+  ]
+}

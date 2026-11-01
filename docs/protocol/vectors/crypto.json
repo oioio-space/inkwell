@@ -1,0 +1,99 @@
+{
+  "spec": "inkwell protocol",
+  "spec_version": "2.0.0-draft",
+  "keys": {
+    "A": {
+      "note": "RFC 8032 §7.1 TEST 1",
+      "public_hex": "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a",
+      "seed_hex": "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60"
+    },
+    "B": {
+      "note": "RFC 8032 §7.1 TEST 2",
+      "public_hex": "3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c",
+      "seed_hex": "4ccd089b28ff96da9db6c346ec114e0f5b8a319f35aba624da8cf6ed4fb8a6fb"
+    }
+  },
+  "vectors": [
+    {
+      "id": "sig-domain-1",
+      "status": "normative",
+      "description": "Signature à séparation de domaine : Ed25519(seed A, \"inkwell/trust-op/v1\\x00\" || \"abc\")",
+      "verdict": "accept",
+      "expect": {
+        "domain": "trust-op",
+        "message_hex": "616263",
+        "public_hex": "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a",
+        "signature_hex": "816c5e474a288dbc93d0434ab8e185388ccea4cc3e1b1e323603aba83abb33260b7de04eaf16795082073eb04f43b04da8f8e7cf45d75a608c8a8a90cbe10209",
+        "signed_bytes_hex": "696e6b77656c6c2f74727573742d6f702f763100616263"
+      }
+    },
+    {
+      "id": "ed25519-small-order-key",
+      "status": "normative",
+      "description": "Clé publique d'ordre petit (point neutre, 0x01 00…00) et signature R = neutre, S = 0 : vérifie pour tout message avec l'équation sans cofacteur. Une clé d'ordre petit DOIT être refusée partout où une clé entre dans le protocole.",
+      "decoder": "public_key",
+      "input_hex": "0100000000000000000000000000000000000000000000000000000000000000",
+      "verdict": "reject",
+      "expect": {
+        "message_hex": "616e797468696e67",
+        "signature_hex": "01000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000000"
+      },
+      "current_go": "crypto/ed25519.Verify returns true: Go accepts today (finding)"
+    },
+    {
+      "id": "ed25519-noncanonical-s",
+      "status": "normative",
+      "description": "Signature de sig-domain-1 avec S remplacé par S + L (non canonique) : DOIT être refusée (RFC 8032 §5.1.7).",
+      "decoder": "signature",
+      "input_hex": "816c5e474a288dbc93d0434ab8e185388ccea4cc3e1b1e323603aba83abb3326f850d6abc9798ba858a435532e3d8f62a8f8e7cf45d75a608c8a8a90cbe10219",
+      "verdict": "reject",
+      "expect": {
+        "public_hex": "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a",
+        "signed_bytes_hex": "696e6b77656c6c2f74727573742d6f702f763100616263"
+      }
+    },
+    {
+      "id": "peer-id-A",
+      "status": "normative",
+      "description": "PeerID de la clé A : base58btc du multihash identité (0x00, 0x24) de la clé publique protobuf libp2p (0x08 0x01 0x12 0x20 || clé).",
+      "decoder": "peer_id",
+      "input_hex": "002408011220d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a",
+      "verdict": "accept",
+      "expect": {
+        "peer_id": "12D3KooWQK1wnefoLrcVHbbnf5tLzbopUd3K3bFAoJpA7YJgL5pV",
+        "public_hex": "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a"
+      }
+    },
+    {
+      "id": "small-order-keys",
+      "status": "normative",
+      "description": "Les huit encodages canoniques des points d'ordre ≤ 8 (vérifiés avec filippo.io/edwards25519 v1.2.0 : [8]A = O). Chacun DOIT être refusé comme clé publique ; un encodage non canonique (re-encodage différent) DOIT l'être aussi.",
+      "decoder": "public_key",
+      "verdict": "reject",
+      "expect": {
+        "keys_hex": [
+          "0100000000000000000000000000000000000000000000000000000000000000",
+          "ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+          "0000000000000000000000000000000000000000000000000000000000000000",
+          "0000000000000000000000000000000000000000000000000000000000000080",
+          "26e8958fc2b227b045c3f489f2ef98f0d5dfac05d3c63339b13802886d53fc05",
+          "26e8958fc2b227b045c3f489f2ef98f0d5dfac05d3c63339b13802886d53fc85",
+          "c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac037a",
+          "c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac03fa"
+        ]
+      }
+    },
+    {
+      "id": "peer-id-small-order",
+      "status": "normative",
+      "description": "PeerID dérivé de la clé neutre : tout le monde peut s'authentifier sous cette identité (la signature universelle passe la poignée de main Noise/TLS de libp2p). DOIT être refusé par le filtre de connexion, le décodage des PeerID, les ops de membres et les tickets.",
+      "decoder": "peer_id",
+      "input_hex": "0024080112200100000000000000000000000000000000000000000000000000000000000000",
+      "verdict": "reject",
+      "expect": {
+        "peer_id": "12D3KooW9tGaPdJo5jmCpadQ971nfiq4kLcQjeBPYTfutBTtckPH"
+      },
+      "current_go": "go-libp2p v0.51.0 UnmarshalEd25519PublicKey + Verify accept it; inkwell p2p.KeyFromID accepts it (finding)"
+    }
+  ]
+}

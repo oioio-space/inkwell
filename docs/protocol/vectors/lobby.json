@@ -1,0 +1,57 @@
+{
+  "spec": "inkwell protocol",
+  "spec_version": "2.0.0-draft",
+  "vectors": [
+    {
+      "id": "ticket-text",
+      "status": "normative",
+      "description": "Texte d'invitation : \"inkwell1:\" + base32 sans remplissage de (version 1, drapeaux, rôle, ProjectID, secret, expiration u64, hôte, adresses).",
+      "decoder": "ticket_text",
+      "input_hex": "696e6b77656c6c313a41454141464b47494d414c4152364c4a3459364f353345364f36344e5253365a53414455494c37324d374143514255524a46524632494c474141415145415945415544414f43414a424946515944494f42344141414141414d3453423342425547455a45494d324c4e3558564f554b4c47463357345a4c474e354748455932574a4252474533544747563245593654434e3559464b5a42544a4d5a57455253424e35464841514a584c4646474f5442564f424c4143485a504e465944494c5a5248455a43344d424f474958444f4c33564d525943364e5a554745345336344c564e46525332355252",
+      "verdict": "accept",
+      "expect": {
+        "text": "inkwell1:AEAAFKGIMALAR6LJ4Y6O53E6O64NRS6ZSADUIL72M7ACQBURJFRF2ILGAAAQEAYEAUDAOCAJBIFQYDIOB4AAAAAAM4SB3BBUGEZEIM2LN5XVOUKLGF3W4ZLGN5GHEY2WJBRGE3TGGV2EY6TCN5YFKZBTJMZWERSBN5FHAQJXLFFGOTBVOBLACHZPNFYDILZRHEZC4MBOGIXDOL3VMRYC6NZUGE4S64LVNFRS25RR"
+      }
+    },
+    {
+      "id": "lobby-request-1",
+      "status": "normative",
+      "description": "Requête de salon (1 Hello, 2 Ask, 3 Redeem).",
+      "decoder": "lobby_request",
+      "input_hex": "01",
+      "verdict": "accept"
+    },
+    {
+      "id": "lobby-request-2",
+      "status": "normative",
+      "description": "Requête de salon (1 Hello, 2 Ask, 3 Redeem).",
+      "decoder": "lobby_request",
+      "input_hex": "020442c3a961",
+      "verdict": "accept"
+    },
+    {
+      "id": "lobby-request-3",
+      "status": "normative",
+      "description": "Requête de salon (1 Hello, 2 Ask, 3 Redeem).",
+      "decoder": "lobby_request",
+      "input_hex": "03a8c8601608f969e63ceeec9e77b8d8cbd99007442ffa67c028069149625d2166000102030405060708090a0b0c0d0e0f0442c3a961",
+      "verdict": "accept"
+    },
+    {
+      "id": "lobby-reply-welcome",
+      "status": "normative",
+      "description": "Welcome : URL racine, puis ops (u32 longueur || op) dans l'ordre d'application.",
+      "decoder": "lobby_reply",
+      "input_hex": "0200266175746f6d657267653a326a396b6e7043736579686e4b38697a446d4c70475035574d645a510002000000e20101030000000000000000d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511ad75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a0000000000000000000000000000000000000000000000000000000000000000000c50726f6a65742064c3a96d6f00266175746f6d657267653a326a396b6e7043736579686e4b38697a446d4c70475035574d645a51009547935c599edf14fc590553b000f4944cda11c1389bec45dcf9b6a32015ce703307ec06a645c4eac147cd9f35e3e2999382a8f58d81a92743616b4f632a4904000000d40102020000000000000001d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c0000000000000000000000000000000000000000000000000000000000000000000442c3a961000001a8c8601608f969e63ceeec9e77b8d8cbd99007442ffa67c028069149625d2166e1a098fa6fa8198106dff379bb04bcb1b74a8a7ace8455ef8ca511109b72ab37a93956c8fcbb94934a4865ebf0294b3464a19308b11febcd501987e6718eb704",
+      "verdict": "accept"
+    },
+    {
+      "id": "lobby-reply-refused",
+      "status": "normative",
+      "description": "Refused, raison 1 (ticket inutilisable).",
+      "decoder": "lobby_reply",
+      "input_hex": "0301",
+      "verdict": "accept"
+    }
+  ]
+}

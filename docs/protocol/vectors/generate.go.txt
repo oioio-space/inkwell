@@ -1,0 +1,354 @@
+// Command vectors prints the official test vectors of the inkwell protocol,
+// computed with the real codecs (scratch copy of the module).
+package main
+
+import (
+	"bytes"
+	"crypto/ed25519"
+	"crypto/sha256"
+	"encoding/binary"
+	"encoding/hex"
+	"encoding/json"
+	"errors"
+	"math/big"
+	"fmt"
+	"os"
+	"path/filepath"
+	"time"
+
+	"github.com/oioio-space/inkwell/internal/blob"
+	"github.com/oioio-space/inkwell/internal/bridge"
+	"github.com/oioio-space/inkwell/internal/invite"
+	"github.com/oioio-space/inkwell/internal/policy"
+	"github.com/oioio-space/inkwell/internal/transport"
+	"github.com/oioio-space/inkwell/internal/trust"
+)
+
+type signer struct{ k ed25519.PrivateKey }
+
+func (s signer) Public() ed25519.PublicKey { return s.k.Public().(ed25519.PublicKey) }
+func (s signer) Sign(domain string, msg []byte) []byte {
+	return ed25519.Sign(s.k, append([]byte("inkwell/"+domain+"/v1\x00"), msg...))
+}
+
+func seed(h string) signer {
+	b, _ := hex.DecodeString(h)
+	return signer{ed25519.NewKeyFromSeed(b)}
+}
+
+type V struct {
+	ID      string         `json:"id"`
+	Status  string         `json:"status"` // normative | proposed
+	Desc    string         `json:"description"`
+	Decoder string         `json:"decoder,omitempty"`
+	Input   string         `json:"input_hex,omitempty"`
+	Verdict string         `json:"verdict"` // accept | reject
+	Expect  map[string]any `json:"expect,omitempty"`
+	Current string         `json:"current_go,omitempty"` // behaviour of today's Go code when it differs
+}
+
+type File struct {
+	Spec    string `json:"spec"`
+	Version string `json:"spec_version"`
+	Keys    any    `json:"keys,omitempty"`
+	Vectors []V    `json:"vectors"`
+}
+
+func hx(b []byte) string { return hex.EncodeToString(b) }
+
+func b58(b []byte) string {
+	const alpha = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+	x := new(big.Int).SetBytes(b)
+	var out []byte
+	mod := new(big.Int)
+	for x.Sign() > 0 {
+		x.DivMod(x, big.NewInt(58), mod)
+		out = append([]byte{alpha[mod.Int64()]}, out...)
+	}
+	for _, c := range b {
+		if c != 0 {
+			break
+		}
+		out = append([]byte{'1'}, out...)
+	}
+	return string(out)
+}
+
+// peerID is the libp2p PeerID of an Ed25519 key: base58btc(multihash identity(protobuf PublicKey)).
+func peerID(pub ed25519.PublicKey) (string, []byte) {
+	pb := append([]byte{0x08, 0x01, 0x12, 0x20}, pub...)
+	mh := append([]byte{0x00, byte(len(pb))}, pb...)
+	return b58(mh), mh
+}
+
+func hh(h trust.Hash) string { return hex.EncodeToString(h[:]) }
+
+func must(err error) {
+	if err != nil {
+		panic(err)
+	}
+}
+
+func write(dir, name string, f File) {
+	f.Spec = "inkwell protocol"
+	f.Version = "2.0.0-draft"
+	b, err := json.MarshalIndent(f, "", "  ")
+	must(err)
+	must(os.WriteFile(filepath.Join(dir, name), append(b, '\n'), 0o644))
+}
+
+func verdict(err error) string {
+	if err != nil {
+		return "reject"
+	}
+	return "accept"
+}
+
+func main() {
+	dir := os.Args[1]
+	A := seed("9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60") // RFC 8032 §7.1 test 1
+	B := seed("4ccd089b28ff96da9db6c346ec114e0f5b8a319f35aba624da8cf6ed4fb8a6fb") // RFC 8032 §7.1 test 2
+	keys := map[string]any{
+		"A": map[string]string{"seed_hex": "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60", "public_hex": hx(A.Public()), "note": "RFC 8032 §7.1 TEST 1"},
+		"B": map[string]string{"seed_hex": "4ccd089b28ff96da9db6c346ec114e0f5b8a319f35aba624da8cf6ed4fb8a6fb", "public_hex": hx(B.Public()), "note": "RFC 8032 §7.1 TEST 2"},
+	}
+
+	// ---- crypto ----
+	var cv []V
+	msg := []byte("abc")
+	sig := A.Sign("trust-op", msg)
+	cv = append(cv, V{ID: "sig-domain-1", Status: "normative", Desc: "Signature à séparation de domaine : Ed25519(seed A, \"inkwell/trust-op/v1\\x00\" || \"abc\")",
+		Verdict: "accept", Expect: map[string]any{"domain": "trust-op", "message_hex": hx(msg), "signed_bytes_hex": hx(append([]byte("inkwell/trust-op/v1\x00"), msg...)), "public_hex": hx(A.Public()), "signature_hex": hx(sig)}})
+	id := make([]byte, 32)
+	id[0] = 1
+	univ := make([]byte, 64)
+	univ[0] = 1
+	cv = append(cv, V{ID: "ed25519-small-order-key", Status: "normative",
+		Desc:    "Clé publique d'ordre petit (point neutre, 0x01 00…00) et signature R = neutre, S = 0 : vérifie pour tout message avec l'équation sans cofacteur. Une clé d'ordre petit DOIT être refusée partout où une clé entre dans le protocole.",
+		Decoder: "public_key", Input: hx(id), Verdict: "reject",
+		Expect:  map[string]any{"signature_hex": hx(univ), "message_hex": hx([]byte("anything"))},
+		Current: fmt.Sprintf("crypto/ed25519.Verify returns %v: Go accepts today (finding)", ed25519.Verify(id, []byte("anything"), univ))})
+	// S + L
+	L := []byte{0xed, 0xd3, 0xf5, 0x5c, 0x1a, 0x63, 0x12, 0x58, 0xd6, 0x9c, 0xf7, 0xa2, 0xde, 0xf9, 0xde, 0x14, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x10}
+	s2 := append([]byte{}, sig...)
+	carry := 0
+	for i := range 32 {
+		v := int(s2[32+i]) + int(L[i]) + carry
+		s2[32+i] = byte(v)
+		carry = v >> 8
+	}
+	full := append([]byte("inkwell/trust-op/v1\x00"), msg...)
+	cv = append(cv, V{ID: "ed25519-noncanonical-s", Status: "normative", Desc: "Signature de sig-domain-1 avec S remplacé par S + L (non canonique) : DOIT être refusée (RFC 8032 §5.1.7).",
+		Decoder: "signature", Input: hx(s2), Verdict: "reject", Expect: map[string]any{"public_hex": hx(A.Public()), "signed_bytes_hex": hx(full)},
+		})
+	pidA, mhA := peerID(A.Public())
+	cv = append(cv, V{ID: "peer-id-A", Status: "normative", Desc: "PeerID de la clé A : base58btc du multihash identité (0x00, 0x24) de la clé publique protobuf libp2p (0x08 0x01 0x12 0x20 || clé).",
+		Decoder: "peer_id", Input: hx(mhA), Verdict: "accept", Expect: map[string]any{"peer_id": pidA, "public_hex": hx(A.Public())}})
+	cv = append(cv, V{ID: "small-order-keys", Status: "normative", Desc: "Les huit encodages canoniques des points d'ordre ≤ 8 (vérifiés avec filippo.io/edwards25519 v1.2.0 : [8]A = O). Chacun DOIT être refusé comme clé publique ; un encodage non canonique (re-encodage différent) DOIT l'être aussi.",
+		Decoder: "public_key", Verdict: "reject", Expect: map[string]any{"keys_hex": []string{
+			"0100000000000000000000000000000000000000000000000000000000000000",
+			"ecffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
+			"0000000000000000000000000000000000000000000000000000000000000000",
+			"0000000000000000000000000000000000000000000000000000000000000080",
+			"26e8958fc2b227b045c3f489f2ef98f0d5dfac05d3c63339b13802886d53fc05",
+			"26e8958fc2b227b045c3f489f2ef98f0d5dfac05d3c63339b13802886d53fc85",
+			"c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac037a",
+			"c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac03fa"}}})
+	pidI, mhI := peerID(ed25519.PublicKey(id))
+	cv = append(cv, V{ID: "peer-id-small-order", Status: "normative", Desc: "PeerID dérivé de la clé neutre : tout le monde peut s'authentifier sous cette identité (la signature universelle passe la poignée de main Noise/TLS de libp2p). DOIT être refusé par le filtre de connexion, le décodage des PeerID, les ops de membres et les tickets.",
+		Decoder: "peer_id", Input: hx(mhI), Verdict: "reject", Expect: map[string]any{"peer_id": pidI},
+		Current: "go-libp2p v0.51.0 UnmarshalEd25519PublicKey + Verify accept it; inkwell p2p.KeyFromID accepts it (finding)"})
+	write(dir, "crypto.json", File{Keys: keys, Vectors: cv})
+
+	// ---- trust ops ----
+	var tv []V
+	gen, pid := trust.Genesis(A, "Projet démo", "automerge:2j9knpCseyhnK8izDmLpGP5WMdZQ")
+	list := trust.New(pid)
+	must(list.Apply(gen))
+	genEnc := trust.Encode(gen)
+	tv = append(tv, V{ID: "op-genesis", Status: "normative", Desc: "Genèse signée par A ; ProjectID = SHA-256 de l'encodage complet (signature comprise) ; signée avec le projet nul.",
+		Decoder: "trust_op", Input: hx(genEnc), Verdict: "accept", Expect: map[string]any{"hash_hex": hh(gen.Hash()), "project_id_hex": hx(pid[:]), "kind": 1, "role": 3, "lamport": 0}})
+	add, err := list.IssueWith(A, trust.Op{Kind: trust.OpAdd, Subject: B.Public(), Role: trust.RoleWriter, Name: "Béa"})
+	must(err)
+	addEnc := trust.Encode(add)
+	tv = append(tv, V{ID: "op-add-writer", Status: "normative", Desc: "A ajoute B comme personne qui écrit (Add, rôle 2), parent = genèse, Lamport 1 ; signé sur ProjectID || corps.",
+		Decoder: "trust_op", Input: hx(addEnc), Verdict: "accept", Expect: map[string]any{"hash_hex": hh(add.Hash()), "kind": 2, "role": 2, "lamport": 1, "signed_bytes_hex": hx(append(append([]byte("inkwell/trust-op/v1\x00"), pid[:]...), addEnc[:len(addEnc)-64]...))}})
+	_, err = trust.Decode(append(append([]byte{}, addEnc...), 0))
+	tv = append(tv, V{ID: "op-trailing-byte", Status: "normative", Desc: "op-add-writer suivi d'un octet nul : refusé (décodage strict).", Decoder: "trust_op", Input: hx(append(append([]byte{}, addEnc...), 0)), Verdict: verdict(err)})
+	v2 := append([]byte{}, addEnc...)
+	v2[0] = 2
+	_, err = trust.Decode(v2)
+	tv = append(tv, V{ID: "op-version-2-not-negotiated", Status: "normative", Desc: "Version d'op 2 (Seen) sans la capacité member-op/2 négociée : refusée.", Decoder: "trust_op", Input: hx(v2), Verdict: verdict(err)})
+	bad := append([]byte{}, addEnc...)
+	bad[len(bad)-1] ^= 1
+	o, err := trust.Decode(bad)
+	if err == nil {
+		l2 := trust.New(pid)
+		must(l2.Apply(gen))
+		err = l2.Apply(o)
+	}
+	tv = append(tv, V{ID: "op-bad-signature", Status: "normative", Desc: "op-add-writer avec le dernier bit de signature inversé : décodage accepté, application refusée (signature).", Decoder: "trust_op+apply", Input: hx(bad), Verdict: verdict(err), Expect: map[string]any{"error": fmt.Sprint(err)}})
+	// sync messages
+	s := trust.NewSync[string](list)
+	have := s.OnPeerUp("p")[0].Data
+	tv = append(tv, V{ID: "sync-have", Status: "normative", Desc: "Message Have : type 1, compte u16, frontière (hash de op-add-writer).", Decoder: "trust_sync", Input: hx(have), Verdict: "accept"})
+	empty := []byte{1, 0, 0}
+	out, err := s.OnMessage("q", empty)
+	must(err)
+	tv = append(tv, V{ID: "sync-ops", Status: "normative", Desc: "Réponse Ops à un Have vide : type 2, compte u16, puis (u16 longueur || op) pour la genèse et op-add-writer.", Decoder: "trust_sync", Input: hx(out[0].Data), Verdict: "accept", Expect: map[string]any{"ops": 2}})
+	big := []byte{1, 1, 1}
+	big = append(big, make([]byte, 257*32)...)
+	_, err = trust.NewSync[string](list).OnMessage("r", big)
+	tv = append(tv, V{ID: "sync-have-too-many", Status: "normative", Desc: "Have annonçant 257 hachages (> 256), suivis de 257 hachages nuls : refusé.", Decoder: "trust_sync", Input: hx(big), Verdict: verdict(err)})
+	write(dir, "trust.json", File{Keys: keys, Vectors: tv})
+
+	// ---- attestation ----
+	var av []V
+	h1 := sha256.Sum256([]byte("change-1"))
+	h2 := sha256.Sum256([]byte("change-2"))
+	att, err := trust.NewAttestation(B, pid, "4NMNnkMhL8jXrdJ9jamS58PAVdXu", []trust.Hash{h2, h1}, 1730419200000)
+	must(err)
+	ae := trust.EncodeAttestation(att)
+	av = append(av, V{ID: "attest-valid", Status: "normative", Desc: "Attestation de B (écrit) sur deux têtes triées, Seq = 1730419200000 ; domaine \"attest\" ; corps = version || ProjectID || clé || Seq || doc || têtes.",
+		Decoder: "attestation+verify", Input: hx(ae), Verdict: verdict(list.Verify(att))})
+	other := pid
+	other[0] ^= 0xff
+	att2 := att
+	att2.Project = other
+	av = append(av, V{ID: "attest-wrong-project", Status: "normative", Desc: "attest-valid avec un autre ProjectID (signature recalculée inchangée) : refusé (mauvais projet).",
+		Decoder: "attestation+verify", Input: hx(trust.EncodeAttestation(att2)), Verdict: verdict(list.Verify(att2))})
+	unsorted := append([]byte{}, ae...)
+	// swap the two heads (offset: 1+32+32+8+2+len(doc)+2)
+	off := 1 + 32 + 32 + 8 + 2 + len(att.Doc) + 2
+	tmp := append([]byte{}, unsorted[off:off+32]...)
+	copy(unsorted[off:off+32], unsorted[off+32:off+64])
+	copy(unsorted[off+32:off+64], tmp)
+	_, err = trust.DecodeAttestation(unsorted)
+	av = append(av, V{ID: "attest-heads-unsorted", Status: "normative", Desc: "Têtes non strictement croissantes : refusé au décodage.", Decoder: "attestation", Input: hx(unsorted), Verdict: verdict(err)})
+	write(dir, "attest.json", File{Keys: keys, Vectors: av})
+
+	// ---- policy ----
+	var pv []V
+	pop := policy.Op{Members: []trust.Hash{add.Hash()}, Author: A.Public(), Lamport: 1, Entries: []policy.Entry{{Key: "mode", Value: "approval"}}}
+	body, err := policy.Encode(pop)
+	must(err)
+	smsg := append(append([]byte{}, pid[:]...), body[:len(body)-64]...)
+	copy(pop.Sig[:], A.Sign("policy-op", smsg))
+	penc, err := policy.Encode(pop)
+	must(err)
+	_, derr := policy.Decode(penc)
+	pv = append(pv, V{ID: "policy-mode-approval", Status: "proposed", Desc: "Décision signée par A (admin) : mode = approval, frontière des membres = op-add-writer, Lamport 1. Inerte tant que la capacité policy/1 n'est pas négociée.",
+		Decoder: "policy_op", Input: hx(penc), Verdict: verdict(derr), Expect: map[string]any{"hash_hex": hh(pop.Hash()), "signed_bytes_hex": hx(append([]byte("inkwell/policy-op/v1\x00"), smsg...))}})
+	write(dir, "policy.json", File{Keys: keys, Vectors: pv})
+
+	// ---- blob ----
+	var bv []V
+	data := bytes.Repeat([]byte("inkwell "), 2048) // 16 KiB
+	bh := blob.HashOf(data)
+	w, _ := blob.Encode(blob.Want{Hash: bh, Offset: 0, Length: blob.GroupSize})
+	bv = append(bv, V{ID: "blob-want", Status: "normative", Desc: "Want du premier groupe (16 Kio) d'un blob de 16 Kio (\"inkwell \" × 2048), hash BLAKE3.", Decoder: "bulk", Input: hx(w), Verdict: "accept", Expect: map[string]any{"blake3_hex": hx(bh[:])}})
+	root, err := os.OpenRoot(os.TempDir())
+	must(err)
+	dirName, _ := os.MkdirTemp(os.TempDir(), "vec")
+	root, err = os.OpenRoot(dirName)
+	must(err)
+	st, err := blob.Open(root, blob.Options{FreeSpace: func() (uint64, error) { return 1 << 40, nil }})
+	must(err)
+	_, err = st.PutBytes(data)
+	must(err)
+	sl, err := st.ReadSlice(bh, 0, blob.GroupSize)
+	must(err)
+	se, _ := blob.Encode(sl)
+	bv = append(bv, V{ID: "blob-slice", Status: "normative", Desc: "Slice répondant à blob-want : encodage Bao (longueur u64 LE, puis données) vérifiable contre le seul hash.", Decoder: "bulk", Input: hx(se), Verdict: "accept"})
+	m, _ := blob.Encode(blob.Missing{Hash: bh})
+	bv = append(bv, V{ID: "blob-missing", Status: "normative", Desc: "Missing.", Decoder: "bulk", Input: hx(m), Verdict: "accept"})
+	bz, _ := blob.Encode(blob.Busy{Hash: bh, Retry: time.Second})
+	bv = append(bv, V{ID: "blob-busy", Status: "normative", Desc: "Busy, nouvel essai dans 1000 ms.", Decoder: "bulk", Input: hx(bz), Verdict: "accept"})
+	mis := append([]byte{}, w...)
+	binary.BigEndian.PutUint32(mis[len(mis)-4:], blob.GroupSize+1)
+	_, err = blob.Decode(mis)
+	bv = append(bv, V{ID: "blob-want-misaligned", Status: "normative", Desc: "Want de longueur 16385 (non multiple de 16 Kio) : refusé.", Decoder: "bulk", Input: hx(mis), Verdict: verdict(err)})
+	write(dir, "bulk.json", File{Vectors: bv})
+
+	// ---- invite ----
+	var iv []V
+	var secret [16]byte
+	for i := range secret {
+		secret[i] = byte(i)
+	}
+	hostStr, _ := peerID(A.Public())
+	hostID := transport.PeerID(hostStr)
+	tk := invite.Ticket{Expires: time.Unix(1730420100, 0), Host: hostID, Addrs: []string{"/ip4/192.0.2.7/udp/7419/quic-v1/p2p/" + string(hostID)}, Project: pid, Secret: secret, Role: trust.RoleWriter}
+	text := tk.Text()
+	_, err = invite.ParseText(text)
+	iv = append(iv, V{ID: "ticket-text", Status: "normative", Desc: "Texte d'invitation : \"inkwell1:\" + base32 sans remplissage de (version 1, drapeaux, rôle, ProjectID, secret, expiration u64, hôte, adresses).", Decoder: "ticket_text", Input: hx([]byte(text)), Verdict: verdict(err), Expect: map[string]any{"text": text}})
+	for _, r := range []invite.Request{{Kind: invite.KindHello}, {Kind: invite.KindAsk, Name: "Béa"}, {Kind: invite.KindRedeem, Project: pid, Secret: secret, Name: "Béa"}} {
+		e := r.Encode()
+		_, err := invite.DecodeRequest(e)
+		iv = append(iv, V{ID: fmt.Sprintf("lobby-request-%d", r.Kind), Status: "normative", Desc: "Requête de salon (1 Hello, 2 Ask, 3 Redeem).", Decoder: "lobby_request", Input: hx(e), Verdict: verdict(err)})
+	}
+	rep := invite.Reply{Kind: invite.ReplyWelcome, RootURL: "automerge:2j9knpCseyhnK8izDmLpGP5WMdZQ", Ops: []trust.Op{gen, add}}
+	re := rep.Encode()
+	_, err = invite.DecodeReply(re)
+	iv = append(iv, V{ID: "lobby-reply-welcome", Status: "normative", Desc: "Welcome : URL racine, puis ops (u32 longueur || op) dans l'ordre d'application.", Decoder: "lobby_reply", Input: hx(re), Verdict: verdict(err)})
+	rf := invite.Reply{Kind: invite.ReplyRefused, Reason: invite.ReasonInvalid}.Encode()
+	iv = append(iv, V{ID: "lobby-reply-refused", Status: "normative", Desc: "Refused, raison 1 (ticket inutilisable).", Decoder: "lobby_reply", Input: hx(rf), Verdict: "accept"})
+	write(dir, "lobby.json", File{Vectors: iv})
+
+	// ---- session v2 (proposed: hand encoders per spec.md §5) ----
+	frame := func(t byte, body []byte) []byte {
+		b := binary.BigEndian.AppendUint32(nil, uint32(1+len(body)))
+		return append(append(b, t), body...)
+	}
+	tlv := func(b []byte, id uint16, v []byte) []byte {
+		b = binary.BigEndian.AppendUint16(b, id)
+		b = binary.BigEndian.AppendUint16(b, uint16(len(v)))
+		return append(b, v...)
+	}
+	caps := binary.BigEndian.AppendUint16(nil, 0x0001)
+	caps = binary.BigEndian.AppendUint16(caps, 0x0a0a) // GREASE
+	hello := tlv(tlv(nil, 0x0001, pid[:]), 0x0002, caps)
+	var sv []V
+	sv = append(sv, V{ID: "hello", Status: "proposed", Desc: "Trame HELLO (type 0x01) : TLV PROJECT (0x0001, 32 o) puis CAPS (0x0002) = core/2 (0x0001) et une valeur GREASE (0x0A0A) à ignorer.", Decoder: "sync2_frame", Input: hx(frame(0x01, hello)), Verdict: "accept", Expect: map[string]any{"project_id_hex": hx(pid[:]), "effective_caps": []int{1}}})
+	dup := tlv(tlv(nil, 0x0002, caps), 0x0001, pid[:])
+	sv = append(sv, V{ID: "hello-unsorted-tlv", Status: "proposed", Desc: "HELLO dont les identifiants TLV ne sont pas strictement croissants : refusé (PROTOCOL_VIOLATION).", Decoder: "sync2_frame", Input: hx(frame(0x01, dup)), Verdict: "reject"})
+	ext := tlv(tlv(tlv(nil, 0x0001, pid[:]), 0x0002, caps), 0x7a7a, []byte{0xde, 0xad})
+	sv = append(sv, V{ID: "hello-unknown-tlv", Status: "proposed", Desc: "HELLO avec un TLV inconnu 0x7A7A : accepté, TLV ignoré.", Decoder: "sync2_frame", Input: hx(frame(0x01, ext)), Verdict: "accept"})
+	sv = append(sv, V{ID: "trust-frame", Status: "proposed", Desc: "Trame TRUST (0x03) portant sync-have.", Decoder: "sync2_frame", Input: hx(frame(0x03, have)), Verdict: "accept"})
+	sv = append(sv, V{ID: "attest-frame", Status: "proposed", Desc: "Trame ATTEST (0x04) portant attest-valid.", Decoder: "sync2_frame", Input: hx(frame(0x04, ae)), Verdict: "accept"})
+	obj := bytes.Repeat([]byte{0xab}, 70000)
+	oh := blob.HashOf(obj)
+	offer := binary.BigEndian.AppendUint32(append([]byte{}, oh[:]...), uint32(len(obj)))
+	sv = append(sv, V{ID: "offer-frame", Status: "proposed", Desc: "Trame OFFER (0x07) : BLAKE3 de 70000 octets 0xAB, taille u32 = 70000.", Decoder: "sync2_frame", Input: hx(frame(0x07, offer)), Verdict: "accept"})
+	small := binary.BigEndian.AppendUint32(append([]byte{}, oh[:]...), 65536)
+	sv = append(sv, V{ID: "offer-too-small", Status: "proposed", Desc: "OFFER de 65536 octets (≤ seuil en ligne) : refusé, un tel message passe en REPO.", Decoder: "sync2_frame", Input: hx(frame(0x07, small)), Verdict: "reject"})
+	rst := binary.BigEndian.AppendUint32(nil, 2)
+	sv = append(sv, V{ID: "repo-reset", Status: "proposed", Desc: "REPO_RESET (0x08) : génération 2, raison 0x02 (récupération échouée).", Decoder: "sync2_frame", Input: hx(frame(0x08, append(rst, 0x02))), Verdict: "accept"})
+	sv = append(sv, V{ID: "goaway", Status: "proposed", Desc: "GOAWAY (0x02) code 0x02 PROTOCOL_VIOLATION.", Decoder: "sync2_frame", Input: hx(frame(0x02, []byte{0x02})), Verdict: "accept"})
+	sv = append(sv, V{ID: "unknown-type", Status: "proposed", Desc: "Type de trame 0x7F inconnu : refusé (PROTOCOL_VIOLATION) ; aucune extension sans capacité négociée.", Decoder: "sync2_frame", Input: hx(frame(0x7f, nil)), Verdict: "reject"})
+	over := binary.BigEndian.AppendUint32(nil, 98305)
+	sv = append(sv, V{ID: "frame-too-large", Status: "proposed", Desc: "En-tête annonçant 98305 octets (> 96 Kio) : refusé avant toute allocation.", Decoder: "sync2_frame", Input: hx(append(over, 0x05)), Verdict: "reject"})
+	write(dir, "session.json", File{Vectors: sv})
+
+	// ---- bridge (internal contract) ----
+	var gv []V
+	payload := []byte{0xa1, 0x64, 't', 'y', 'p', 'e', 0x64, 's', 'y', 'n', 'c'}
+	env, err := bridge.Encode(bridge.Envelope{Kind: bridge.Message, Peer: hostID, Payload: payload})
+	must(err)
+	gv = append(gv, V{ID: "bridge-message", Status: "normative", Desc: "Enveloppe Message (interne) : version 1, type 3, longueur du pair, pair, charge opaque.", Decoder: "bridge_envelope", Input: hx(env), Verdict: "accept"})
+	hp, _ := bridge.EncodeHeads(bridge.Heads{Doc: "4NMNnkMhL8jXrdJ9jamS58PAVdXu", Heads: [][32]byte{h1, h2}})
+	env2, _ := bridge.Encode(bridge.Envelope{Kind: bridge.Attest, Peer: hostID, Payload: hp})
+	gv = append(gv, V{ID: "bridge-attest", Status: "normative", Desc: "Enveloppe Attest (webview → Go) : Heads = len(doc) u16 || doc || têtes.", Decoder: "bridge_envelope", Input: hx(env2), Verdict: "accept"})
+	_, err = bridge.Decode(append([]byte{2}, env[1:]...))
+	gv = append(gv, V{ID: "bridge-bad-version", Status: "normative", Desc: "Version d'enveloppe 2 : refusée.", Decoder: "bridge_envelope", Input: hx(append([]byte{2}, env[1:]...)), Verdict: verdict(err)})
+	credit := binary.BigEndian.AppendUint32(nil, 1)
+	credit = binary.BigEndian.AppendUint64(credit, 0)
+	credit = binary.BigEndian.AppendUint32(credit, 4<<20)
+	cenv := append([]byte{1, 12, byte(len(hostID))}, hostID...)
+	cenv = append(cenv, credit...)
+	gv = append(gv, V{ID: "bridge-credit", Status: "proposed", Desc: "Enveloppe Credit (type 12) : génération 1, consommé 0, fenêtre 4 Mio.", Decoder: "bridge_envelope", Input: hx(cenv), Verdict: "accept"})
+	write(dir, "bridge-internal.json", File{Vectors: gv})
+
+	_ = errors.New
+	fmt.Println("ok")
+}

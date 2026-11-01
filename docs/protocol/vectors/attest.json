@@ -1,0 +1,42 @@
+{
+  "spec": "inkwell protocol",
+  "spec_version": "2.0.0-draft",
+  "keys": {
+    "A": {
+      "note": "RFC 8032 §7.1 TEST 1",
+      "public_hex": "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a",
+      "seed_hex": "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60"
+    },
+    "B": {
+      "note": "RFC 8032 §7.1 TEST 2",
+      "public_hex": "3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c",
+      "seed_hex": "4ccd089b28ff96da9db6c346ec114e0f5b8a319f35aba624da8cf6ed4fb8a6fb"
+    }
+  },
+  "vectors": [
+    {
+      "id": "attest-valid",
+      "status": "normative",
+      "description": "Attestation de B (écrit) sur deux têtes triées, Seq = 1730419200000 ; domaine \"attest\" ; corps = version || ProjectID || clé || Seq || doc || têtes.",
+      "decoder": "attestation+verify",
+      "input_hex": "01a8c8601608f969e63ceeec9e77b8d8cbd99007442ffa67c028069149625d21663d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c00000192e5059000001c344e4d4e6e6b4d684c386a5872644a396a616d533538504156645875000231919abffa533f3b405001b59201b02a4ea3a18e318a49de0fd04e6eefe3d3389f3dfcdf3ed2b55d5d1a46146c040ff425b2487a9a806c6f7013a6d980fc3f44abb089d326dc5f91c7b8d2c4dfa3fe975805f35890dbdb560c5862648c32a9cda7131d5182a09a8bb50162f0f44bb1dc79e7215afc19e3b3a1e43add4af7c002",
+      "verdict": "accept"
+    },
+    {
+      "id": "attest-wrong-project",
+      "status": "normative",
+      "description": "attest-valid avec un autre ProjectID (signature recalculée inchangée) : refusé (mauvais projet).",
+      "decoder": "attestation+verify",
+      "input_hex": "0157c8601608f969e63ceeec9e77b8d8cbd99007442ffa67c028069149625d21663d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c00000192e5059000001c344e4d4e6e6b4d684c386a5872644a396a616d533538504156645875000231919abffa533f3b405001b59201b02a4ea3a18e318a49de0fd04e6eefe3d3389f3dfcdf3ed2b55d5d1a46146c040ff425b2487a9a806c6f7013a6d980fc3f44abb089d326dc5f91c7b8d2c4dfa3fe975805f35890dbdb560c5862648c32a9cda7131d5182a09a8bb50162f0f44bb1dc79e7215afc19e3b3a1e43add4af7c002",
+      "verdict": "reject"
+    },
+    {
+      "id": "attest-heads-unsorted",
+      "status": "normative",
+      "description": "Têtes non strictement croissantes : refusé au décodage.",
+      "decoder": "attestation",
+      "input_hex": "01a8c8601608f969e63ceeec9e77b8d8cbd99007442ffa67c028069149625d21663d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c00000192e5059000001c344e4d4e6e6b4d684c386a5872644a396a616d53353850415664587500029f3dfcdf3ed2b55d5d1a46146c040ff425b2487a9a806c6f7013a6d980fc3f4431919abffa533f3b405001b59201b02a4ea3a18e318a49de0fd04e6eefe3d338abb089d326dc5f91c7b8d2c4dfa3fe975805f35890dbdb560c5862648c32a9cda7131d5182a09a8bb50162f0f44bb1dc79e7215afc19e3b3a1e43add4af7c002",
+      "verdict": "reject"
+    }
+  ]
+}

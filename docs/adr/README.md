@@ -35,3 +35,4 @@ connaître la raison — pas pour le reste. Modèle : [`template.md`](template.m
 | [0031](0031-frontiere-admission-chaines-documents.md) | Frontière d'admission : signature par modification, chaînes par auteur, purge à accusé définitif, arbitrage d'équivocation |
 | [0032](0032-canal-invitation-wormhole.md) | Le rendez-vous d'invitation Wormhole est un canal séparé, limité à `internal/invite` |
 | [0033](0033-sidecar-directory-bound.md) | F5 : tmpfs privé borné, vérification des sorties et repli Landlock à parts fixes (limite des fichiers creux documentée) | proposée |
+| [0034](0034-protocole-unifie.md) | Protocole unique et public : flux ordonné de petites trames, tirage par le receveur, crédits sur le pont, HELLO et générations | proposée |
