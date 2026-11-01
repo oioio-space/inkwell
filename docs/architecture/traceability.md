@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Version | 1.0.0-brouillon.9 (2026-11-01, révision 8 ; N1 à N43) |
+| Version | 1.0.0-brouillon.10 (2026-11-01, révision 8.1 ; N1 à N45) |
 | Lire avec | [spec.md](spec.md) (règles), [decisions.md](decisions.md) (`AD-xx`), [exigences](../exigences.md) |
 
 Chaque ligne relie une demande à l'élément d'architecture qui la sert et à la preuve qui la
@@ -75,6 +75,8 @@ vérifie (test, porte, revue). Une ligne sans preuve est un trou : colonne « É
 | N41 | variantes et intégrations claires | §6.11 HI-6, HI-7, `AD-96` | e2e « créer, comparer, proposer d'intégrer, intégrer, annuler » ; aucun mot de Git (garde du glossaire) | ⏳ |
 | N42 | autoporteur : aucun programme externe à l'exécution hors nos binaires vérifiés ; API du système seulement ; dépendances garanties | INV-14, §9.5 (`inkwell-sandbox exec`), OV-1 à OV-5, EN-4, §14.1 DG-1 à DG-5, `AD-99` | AC-18 (seul `internal/sandbox` lance un processus, aucun littéral de programme du système), AC-19 (`sidecar.Verified`), e2e « sans shell ni util-linux », P-DEPS (installation en image vierge, contrôles `GLIBC_*`, `DT_NEEDED`, `LC_LOAD_DYLIB`, Windows sans WebView2 hors ligne) |
 | N43 | polices : système et fournies sans réglage ; projet → inkwell → mes polices → ordinateur ; avertissement local ; ajout au projet ; installation permanente ; rassemblement des ressources au partage et à l'export | §6.12 FT-1 à FT-14, §6.13 RA-1 à RA-4, PP-8, TM-8, `AD-100` à `AD-102` | P-FONT (priorité, listes typst = tinymist, PF-11) ; RA-T1 (export → import sur image vierge → même SHA-256 du PDF) ; fuzz du décodeur de `typst fonts` ; test de refus d'un chemin hors des dossiers de polices (FT-11) |
+| N44 | synchronisation texte ↔ aperçu continue et dans les deux sens (défilement et clic) | §15.17 SY-1 à SY-8, PF-12, P-SYNC, `AD-103` | propriétés de la table (monotone, aller-retour) ; modèle de SY-5 (aucun ping-pong, la dernière entrée gagne) ; e2e titre N, clic paragraphe, fichier inclus, fichier hors compilation ; banc PF-12 |
+| N45 | une modification distante ne déplace jamais la vue ; suivre une personne (fichier actif, curseur, aperçu) ; la personne suivie voit un œil | §15.17 RV-1 à RV-8, PF-13, PD-4, `AD-104` | propriété RV-1 (lots distants aléatoires → premier caractère visible et sélection conservés) ; modèle du suivi (arrêt à la première entrée locale) ; présence hostile bornée ; vecteurs `repo.json#presence-follow*` (après PD-4) ; e2e à deux pairs |
 | G-0 | clic dans la liste des fichiers | §6.6 (G-0a, b, c), `AD-77` | e2e `files.spec.ts` FM-OPEN-1…8 | ⏳ |
 | U1 | encodage, fins de ligne | `project` (`FileInfo`), MF-15 | `text_test.go`, `externalSync.test.ts` | ✅ |
 | U4–U6, U9 | barres par type, insertion, icônes | points `toolbar`, `menus`, `file-types` (§15.4) | e2e `format.spec.ts`, `shell.spec.ts` | ✅ (à porter sur le registre) |

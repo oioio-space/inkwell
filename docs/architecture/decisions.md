@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Version | 1.0.0-brouillon.9 (2026-11-01, révision 8 : tour 7, N42, N43 ; [CHANGES.md](CHANGES.md), [coherence.md](coherence.md)) |
+| Version | 1.0.0-brouillon.10 (2026-11-01, révision 8.1 : N44, N45 ; révision 8 : tour 7, N42, N43 ; [CHANGES.md](CHANGES.md), [coherence.md](coherence.md)) |
 | Rôle | lever chaque doute trouvé en écrivant [spec.md](spec.md) : une question, ses options, une recommandation, sa raison |
 | Sources des doutes | [conception](../conception.pdf), [questions ouvertes](../open-questions.md), [audit](../plans/2026-10-31-architecture-audit.md), ADR 0001–0034, [protocole](../protocol/spec.md), [design](../design/spec.md), code (`main` à `362cb4d`, chantier `proto1`), `TODO` et `t.Skip` |
 
@@ -164,6 +164,8 @@ tant qu'elles sont ouvertes, la spécification n'affirme pas sa fidélité compl
 | AD-100 | polices : projet → inkwell → mes polices → ordinateur ; avertissement local | **décidé par l'utilisatrice (2026-11-01)** | — | — |
 | AD-101 | rassemblement des ressources ; fichiers hors racine listés, non cochés | **décidé par l'utilisatrice (2026-11-01)** | — | — |
 | AD-102 | installation permanente d'une police ou d'un greffon du projet | **décidé par l'utilisatrice (2026-11-01)** | — | — |
+| AD-103 | synchronisation texte ↔ aperçu : table par compilation, LSP amont ou sidecar `inkwell-typst` | technique, après P-SYNC | — | — |
+| AD-104 | vue stable ; suivre une personne ; œil sur l'avatar de qui suit | **décidé par l'utilisatrice (2026-11-01)** (annonce) | **PD-4** (présence) | — |
 
 ---
 
@@ -1483,6 +1485,38 @@ Le détail des contradictions, manques, doublons, carte produit et phasage est d
   (capacités, §15.5), car l'usage permanent élargit la portée ; rien n'est hérité du niveau
   « projet » (PP-8).
 - **Utilisatrice.** Décidé (2026-11-01).
+
+## Révision 8.1 : synchronisation texte ↔ aperçu (N44), vue stable et suivi (N45)
+
+### AD-103 — Synchronisation texte ↔ aperçu (N44)
+
+- **Doute.** typst 0.15.1 a la correspondance exacte (`typst-ide` : `jump_from_click`,
+  `jump_from_cursor`) mais aucune ligne de commande ne l'expose ; tinymist 0.15.10 l'appelle
+  seulement pour son aperçu web, servi par un WebSocket sur `127.0.0.1`, injoignable depuis l'espace
+  réseau privé de §9.5 et contraire à ADR 0009. Le code saute au paragraphe près par `typst eval`
+  (second passage de mise en page) et ne suit pas le défilement.
+- **Options.** (i) Requête LSP proposée en amont à tinymist (stdio) ; (ii) notre sidecar résident
+  `inkwell-typst` (Rust, typst + `typst-ide` épinglés), qui compilerait aussi l'aperçu en incrémental ;
+  (iii) ancres de blocs appariées (actuel) ; (iv) aperçu web de tinymist : **écarté** (réseau dans
+  l'enfermement, port local pour la webview).
+- **Recommandation.** Table de correspondance construite une fois par compilation, défilement par
+  interpolation sans appel à Go (SY-3) ; (i) si l'amont l'accepte, sinon (ii) après P-SYNC ; (iii) en
+  repli nommé ; Markdown par étiquettes de titres de `cmarker` et appariement (SY-2) ; la dernière
+  action de la personne gagne (SY-5). Spec §15.17 SY-1 à SY-8, PF-12.
+- **Utilisatrice.** Exigence N44 ; choix (i)/(ii) technique, après P-SYNC.
+
+### AD-104 — Vue stable et mode « suivre » (N45)
+
+- **Recommandation.** RV-1 à RV-8 : une modification distante ne déplace jamais la vue (annotation
+  `remote`, ancrage par curseur Automerge du premier caractère visible) ; suivre une personne par sa
+  présence existante (curseurs Automerge, fichier actif = document du dernier `update`, réémis à
+  l'activation) ; toute entrée locale arrête le suivi ; rythme borné ; présence hostile sans danger
+  et bornée ; nom tiré de la liste signée des membres.
+- **Annonce du suivi.** **Décidé par l'utilisatrice (2026-11-01)** : la personne suivie voit un œil
+  sur l'avatar de qui la suit. Canal de présence nouveau → **delta du protocole PD-4** (`follow` en
+  `update` seulement, jamais en `snapshot`, pour qu'un appareil 2.0 ne jette que ce message).
+  Recommandation complémentaire : « Ne pas partager ma position ».
+- **Utilisatrice.** Annonce décidée ; PD-4 par la boucle du protocole.
 
 ## Sources consultées pour ces décisions
 

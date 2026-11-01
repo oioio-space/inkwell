@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Version | **1.0.0-brouillon.9** (révision 8 : revues du tour 7, N42 autoporteur, N43 polices ; [CHANGES.md](CHANGES.md), [coherence.md](coherence.md)) |
+| Version | **1.0.0-brouillon.10** (révision 8.1 : N44 synchronisation texte ↔ aperçu, N45 vue stable et suivi ; révision 8 : tour 7, N42, N43 ; [CHANGES.md](CHANGES.md), [coherence.md](coherence.md)) |
 | Date | 2026-11-01 |
 | Statut | proposé (exigence N18) ; à valider par la boucle de revue Fable + Codex, puis par l'utilisatrice |
 | Remplace | [`docs/architecture.md`](../architecture.md) (devenu un renvoi) |
@@ -75,6 +75,7 @@ n'en dépend (`AD-95`). Règles de toutes les portes :
 | Mermaid sans DOM (API 1.1) | **P-MERMAID** : module `beautiful-mermaid` épinglé, compilé par le kit JavaScript ; importations permises seulement ; taille ≤ 8 Mio ; p95 ≤ 300 ms pour 200 nœuds dans l'hôte ; polices reproductibles et cohérentes avec le PDF ; corpus de diagrammes pris en charge **et** refusés (message clair) ; SVG assaini ; annulation ; six cibles | Mermaid absent, et dit ; Graphviz et D2 restent | §15.14 |
 | Rendu à DOM (Mermaid complet) | **P-FRAME** : processus web dédié et tuable, réseau et navigation refusés par l'hôte, boucle infinie tuée sans gêner la frappe, source canari jamais vue hors de l'appareil — sur **chaque** moteur de cible (WebKitGTK, WKWebView, WebView2), ou refus écrit sur la cible | Mermaid complet absent | §15.14 |
 | Polices (N43) | **P-FONT** : priorité FT-1 prouvée (même famille et variante dans le projet et le système → projet) ; listes identiques vues par typst et tinymist ; `getDocumentMetrics` rend la source (chemin) de chaque police utilisée, replis de glyphes compris ; PF-11 ≤ 50 ms p95 pour 1 000 fichiers ; RA-T1 (PDF identique après export et import sur image vierge) | FT-8 : compilation de contrôle et avertissements `unknown font family` ; FT-6 : vue réduite | §6.12, §6.13 |
+| Synchronisation texte ↔ aperçu (N44) | **P-SYNC** : (i) requête LSP de tinymist publiée, ou (ii) sidecar `inkwell-typst` construit et mesuré (compilation incrémentale, saut exact) ; PF-12 ; modèle SY-5 | (iii) ancres de blocs appariées (code actuel), précises au paragraphe | §15.17, SY-1 à SY-8 |
 | Dépendances garanties (N42) | **P-DEPS** : installation et fumée réseau coupé sur chaque image de DG-3 ; Windows sans WebView2 hors ligne ; contrôles `GLIBC_*`, `DT_NEEDED`, `LC_LOAD_DYLIB` ; lanceur DG-2 qui nomme le paquet manquant | cible retirée de DG-3 (jamais promise sans preuve) | §14.1 |
 | Deltas du protocole PD-* | boucle de revue du protocole ; vecteurs | fonctions bloquées (N23, politique IA partagée, règle de projet de N34) | §15.19 |
 
@@ -2284,6 +2285,10 @@ référence sur le matériel de CI (amd64 et arm64), puis tenues.
 - **PF-11** Polices (N43) : découverte des polices par compilation ≤ 50 ms p95 avec 1 000 fichiers
   de polices (mesuré aujourd'hui : ≈ 80 ms pour 432 fichiers, d'où la vue réduite de FT-6) ; index
   (FT-5) jamais sur le chemin du démarrage ; lanceur DG-2 ≤ 5 ms.
+- **PF-12** Synchronisation texte ↔ aperçu (N44) : aucune compilation ni appel à Go par
+  défilement ; ≤ 1 ms par image pour 10 000 lignes ; saut au clic ≤ 50 ms p95 (SY-7).
+- **PF-13** Présence et suivi (N45) : ≤ 10 émissions par seconde et par document ; ≤ 0,5 ms par
+  message reçu ; vue du suiveur ≤ 10 déplacements par seconde (RV-5).
 
 ## 13. Tests : ce que chaque niveau prouve
 
@@ -3172,6 +3177,130 @@ même cadre, plan des titres (`typst query`) et texte du document source, pour q
 lecteur d'écran ne soit jamais vide ; le parcours vérifié couvre tableaux, mathématiques, figures, renvois et ordre de lecture, et ne revendique pas d'équivalence générale au-delà de ce qui est vérifié ; chaque diagramme y porte sa `description`
 (§15.14). Preuve : parcours clavier et lecteur d'écran (Orca) dans `ux-walkthrough`, en plus d'axe.
 
+#### Synchronisation texte ↔ aperçu, continue et dans les deux sens (N44)
+
+*[cible ; `AD-103` ; porte **P-SYNC**]* Le défilement de l'un suit l'autre en continu, et un clic
+mène de l'un à l'autre.
+
+**État vérifié le 2026-11-01.** typst 0.15.1 fournit dans `typst-ide` (`src/jump.rs`)
+`jump_from_click(world, document, position) → Jump::File(fichier, décalage)` et
+`jump_from_cursor(document, source, curseur) → positions` (page, x, y) ; tinymist 0.15.10 les appelle
+(`tinymist-query/src/jump.rs`) mais ne les expose qu'à **son aperçu web**, dont le plan de données est
+un WebSocket sur `127.0.0.1` (`--data-plane-host`), injoignable depuis l'espace réseau privé du
+sidecar (§9.5) et contraire au pont sans port (ADR 0009). La ligne de commande de typst ne donne
+aucune correspondance source → page. Le code actuel fait le **saut au clic seulement**, au paragraphe
+près : positions des titres et paragraphes par `typst eval` (`internal/typst/anchors.go`, un second
+passage de mise en page à chaque compilation) appariées au texte par leurs mots
+(`frontend/src/preview/sync.ts`) ; **aucun défilement suivi** (§16).
+
+- **SY-1 Correspondance Typst**, trois voies départagées par P-SYNC, aucune ne coûtant une
+  compilation de plus par défilement : (i) une requête **LSP** de tinymist (`jumpFromCursor`,
+  `jumpFromClick` sur stdio) proposée en amont, épinglée une fois publiée ; (ii) **notre** sidecar
+  résident `inkwell-typst` (Rust : typst et `typst-ide` 0.15.1, stdio, construit de façon
+  reproductible, embarqué et revérifié comme les autres, INV-14) qui compilerait aussi l'aperçu en
+  **incrémental** (une compilation au lieu d'un lancement à froid ; supprime aussi le coût de FT-6) ;
+  (iii) **repli nommé** : le mécanisme actuel (ancres de blocs appariées), précis au paragraphe. (i) et
+  (ii) sont précis au texte ; une ligne sans texte (`#set`, code) se rattache au texte suivant. Chaque
+  réponse porte la révision de la source et du rendu ; une réponse périmée est ignorée.
+- **SY-2 Markdown** : le Markdown se rend **par Typst** (`cmarker`, TM-6), pas par HTML. Ancres de
+  lignes source : l'analyse Markdown de la webview (celle de l'éditeur) donne la ligne de chaque
+  bloc ; les titres reçoivent des étiquettes (`cmarker` : `heading-labels`, `label-prefix:
+  "inkwell-"`) dont la position est lue avec les ancres → titres **exacts** ; les paragraphes entre
+  deux titres par appariement du texte. L'export HTML (Typst ≥ 0.15), s'il est montré, porte
+  `data-source-line` sur chaque bloc.
+- **SY-3 Table de correspondance** : liste triée `(ligne source, page, y)` construite **une fois par
+  compilation** (pour (i) et (ii), une requête groupée sur les débuts de blocs), jamais par
+  défilement. Défilement : ligne en haut de la vue → recherche dichotomique → interpolation entre les
+  deux paires voisines → position cible ; et l'inverse. Coût O(log n) par image, aucun appel à Go.
+- **SY-4 Clic et curseur** : clic dans l'aperçu → `jumpFromClick` (une requête) ou table → curseur et
+  ligne visibles dans l'éditeur ; commande « Montrer dans l'aperçu » et, en option, « suivre le
+  curseur » → marque brève sur la page. Le texte d'un autre fichier ouvre ce fichier (SY-6).
+- **SY-5 Pas de boucle : la dernière action de la personne gagne.** Chaque volet note ses entrées
+  **humaines** (molette, toucher, clavier, glissé de la barre, déplacement du curseur) : le volet
+  touché devient **meneur** pour 300 ms, renouvelées à chaque entrée. Un défilement fait par
+  programme sur le suiveur porte un jeton et **n'émet jamais** de synchronisation ; une entrée humaine
+  sur le suiveur le fait meneur aussitôt. À une recompilation, le meneur ne bouge pas ; seul le
+  suiveur se recale.
+- **SY-6 Plusieurs fichiers** : l'aperçu montre le fichier principal (MF-8) ; la synchronisation vaut
+  pour le document actif s'il entre dans cette compilation (inclus, importé). Sinon elle est coupée,
+  avec la mention discrète « Ce fichier n'apparaît pas dans l'aperçu ». Un clic sur un texte venu
+  d'un autre fichier ouvre ce fichier (MF : ouvrir) et y place le curseur. Un texte qui paraît
+  plusieurs fois (fichier inclus deux fois) : la position la plus proche de la vue actuelle de
+  l'aperçu.
+- **SY-7 Rythme et budget** (N38, **PF-12**) : défilement limité à une image d'animation
+  (`requestAnimationFrame`) ; « suivre le curseur » attend 100 ms de calme ; clic immédiat. Aucune
+  compilation ni appel à Go par défilement ; ≤ 1 ms par image pour 10 000 lignes ; saut au clic ≤ 50
+  ms p95 ; la construction de la table ≤ 5 % du temps de compilation (le second passage de (iii)
+  est mesuré et dit).
+- **SY-8 Tests** : propriétés de la table (monotone, interpolation bornée, aller-retour ligne →
+  position → ligne stable à un bloc près) ; **modèle** de SY-5 (entrelacements aléatoires d'entrées
+  humaines sur les deux volets → aucun ping-pong : défilements programmés ≤ entrées humaines,
+  meneur = dernière entrée) ; e2e : défiler jusqu'au titre N → l'aperçu le montre ; clic sur un
+  paragraphe → bonne ligne ; fichier inclus ; fichier hors compilation.
+
+#### Modifications distantes et mode « suivre » (N45)
+
+*[cible ; `AD-104` ; delta du protocole **PD-4** pour l'annonce du suivi]*
+
+**Ce que porte déjà la présence** (protocole §6.3, §9.5, `cddl/repo.cddl`) : des messages
+`ephemeral` **par document** (`documentId` de l'en-tête), avec `sessionId`, émetteur authentifié
+(`senderId` = PeerID), `data` ≤ 1024 octets ; `__presence` = `heartbeat`, `goodbye`, `update`
+(canaux **fermés** `name`, `anchor`, `head`), `snapshot` (état **fermé** `{name, anchor, head}`) ;
+`anchor` et `head` sont des **curseurs Automerge** (`frontend/src/editor/presence.ts` :
+`getCursor`, `getCursorPosition`), stables sous les modifications concurrentes. Budget par pair :
+128 en rafale, 64 par seconde ; Go garde la dernière par (pair, `sessionId`), 16 par pair. Le
+curseur et le **fichier actif** (le document du dernier `update` de `anchor`/`head`) suffisent donc
+pour suivre ; **l'annonce du suivi** n'existe pas.
+
+- **RV-1 Une modification distante ne déplace jamais la vue locale.** Les transactions venues
+  d'Automerge portent l'annotation `remote` : jamais `scrollIntoView`, jamais dans l'historique
+  d'annulation, jamais de changement de fichier actif. La sélection locale et toutes les positions
+  locales (marques de recherche, diagnostics, plis) sont **appliquées à travers** les changements
+  (correspondance de CodeMirror 6). Ancrage du défilement : avant un lot distant, la vue retient le
+  premier caractère visible **comme curseur Automerge** et son décalage en pixels ; après, si ce
+  caractère a bougé, elle se recale dessus (effet `EditorView.scrollIntoView(pos, {y: "start",
+  yMargin})`) ; s'il a été supprimé, sur le plus proche survivant. L'aperçu garde de même le bloc
+  sous son bord haut à chaque recompilation.
+- **RV-2** La synchronisation texte ↔ aperçu (SY-5) n'est déclenchée **que par une entrée humaine
+  locale** ; une modification distante ou une recompilation n'en déclenche aucune.
+- **RV-3 Suivre une personne** (menu de son avatar : « Suivre Marie ») : mon éditeur ouvre son
+  **fichier actif** et garde **sa tête de sélection** visible (révélée avec une marge, sans recentrer
+  à chaque frappe) ; mon aperçu suit par la table de SY-3. Toute entrée humaine locale (frappe, clic,
+  défilement, changement de fichier) **arrête** le suivi (la dernière action de la personne gagne,
+  SY-5) ; bandeau discret « Vous suivez Marie · Arrêter ». À l'activation d'un fichier, un client
+  inkwell **réémet** `anchor`/`head` de sa sélection dans ce document : le fichier actif se lit sans
+  nouveau champ.
+- **RV-4 Annonce du suivi** *(décision de l'utilisatrice, 2026-11-01)* : la personne suivie **voit**
+  qui la suit, un petit œil sur l'avatar de la personne qui suit. C'est un **champ de présence
+  nouveau**, donc un **delta du protocole** (PD-4, §15.19), pas une modification de
+  `docs/protocol/` ; d'ici là, le suivi marche sans annonce et l'interface ne montre pas d'œil.
+  L'annonce est une **courtoisie d'un client honnête**, pas une garantie : un client modifié peut
+  suivre sans l'annoncer ; il ne voit rien de plus que ce que la présence montre déjà à chaque
+  membre (curseur, fichier actif).
+- **RV-5 Rythme** (N38, **PF-13**) : émission de `anchor`/`head` coalescée à ≤ 10 par seconde et par
+  document (dernier état gagne, envoi en fin de rafale), battement 15 s, expiration d'une personne
+  après 45 s sans message ; réception : rendu des curseurs distants au plus une fois par image ; vue
+  du suiveur déplacée au plus 10 fois par seconde, changement de fichier suivi au plus une fois par
+  2 s ; traitement d'un message de présence ≤ 0,5 ms dans la webview. Les budgets du protocole (64
+  par seconde) restent la borne dure.
+- **RV-6 Pair byzantin** : une présence mensongère peut traîner la vue d'un suiveur n'importe où
+  dans le projet ; c'est **sans danger** (rien n'est écrit, rien ne sort) et **borné** : présence
+  acceptée seulement d'un membre authentifié pour un document admis ; curseur invalide ou hors du
+  texte → ignoré (borné à la longueur) ; fichier hors de l'arbre du projet → ignoré ; un document
+  du palier « énorme » (ADR 0028) s'ouvre en lecture paresseuse ; rythme de RV-5 ; la moindre entrée
+  locale rend la main. Le nom montré est celui de la **liste signée des membres**, jamais le `name`
+  déclaré par la présence (pas d'usurpation). Un faux « je suis Marie » ou un faux œil ne fait
+  qu'afficher un indicateur.
+- **RV-7 Confidentialité** : suivre ne révèle rien que la présence ne montre déjà à tous ; l'œil
+  (RV-4) rend l'observation visible. Recommandation complémentaire : un réglage « Ne pas partager ma
+  position » (n'émet plus `anchor`/`head`), qui rend aussi la personne impossible à suivre.
+- **RV-8 Tests** : propriété de RV-1 (insertions et suppressions distantes aléatoires au-dessus, dans
+  et sous la vue → premier caractère visible et sélection locale conservés, ou plus proche
+  survivant) ; modèle du suivi (entrées locales et présences entrelacées → le suivi s'arrête à la
+  première entrée locale ; aucune émission de synchronisation par une présence) ; présence hostile
+  (curseur invalide, document non admis, rafale de 1 000 messages) → bornes de RV-5 et RV-6 ; e2e à
+  deux pairs.
+
 ### 15.18 Intelligence artificielle de premier rang (N31)
 
 *[cible ; ADR 0040 et 0041 à rédiger ; `AD-82`]* Étude : [research/ai.md](research/ai.md). L'IA
@@ -3374,6 +3503,22 @@ projet, la règle de projet de N34).
    `#unknown-namespace-kept`, `#ai-policy`, `#ignore-project`, et le cas « reconnexion avec
    générations différentes » ; ligne au §16 du protocole.
 
+**PD-4 — Annonce du suivi dans la présence** (bloque l'œil de N45, RV-4 ; le suivi lui-même n'en
+dépend pas).
+
+1. **Champ.** Un canal de présence **nouveau** `follow`, dans un message `update` seul :
+   `{type: "update", channel: "follow", value: tstr .size (0..64)}`, valeur = PeerID texte du pair
+   suivi, ou `""` pour « je ne suis plus personne » ; émis sur la présence du **document racine** du
+   projet (chargé par chaque membre).
+2. **Jamais dans un `snapshot`.** `snapshot-state` est une map fermée : un appareil 2.0 jetterait le
+   `snapshot` entier (nom et curseur compris). `follow` voyage donc seulement en `update` ; un
+   appareil 2.0 jette ce seul message (classe à perte, sans sanction : protocole, tableau des refus,
+   « map CBOR fermée (présence) → message jeté ») et garde le reste.
+3. **Rythme** : au plus 1 `follow` par seconde et par pair ; un `follow` vers un pair absent est
+   ignoré ; le dernier gagne par `sessionId`.
+4. **Vecteurs** : `repo.json#presence-follow`, `#presence-follow-stop`, `#presence-follow-in-snapshot`
+   (refusé), `#presence-follow-old-peer` (jeté seul).
+
 **PD-2 — retiré.** Les signatures des paquets de greffons, des têtes de sauvegarde et des exports
 ne sont **pas** des objets du protocole : elles utilisent des préfixes **externes**
 `"inkwell-ext:<objet>:<version>\0"` (« inkwell-ext: » ne peut pas commencer un message signé du
@@ -3517,6 +3662,8 @@ proposition de bout en bout → Graphviz jusqu'au PDF → reste.
 | installateur Windows : l'amorce WebView2 **télécharge** le runtime (`build/windows/nsis/wails_tools.nsh`) | programme d'installation autonome Evergreen embarqué (§14.1) | `AD-99` |
 | aucune garantie écrite des bibliothèques (GTK 4, WebKitGTK 6.0, glibc), aucun contrôle au démarrage, `/usr/bin/inkwell` lié dynamiquement | §14.1 (DG-1 à DG-5), `cmd/inkwell-launch` | `AD-99` |
 | manifeste des sidecars sans cible Windows (`internal/sidecar/manifest.json` : Linux et macOS seulement) | six cibles (N35) | `AD-94` |
+| présence : curseur et nom seulement ; aucun mode « suivre », aucune annonce du suivi ; ancrage de la vue sous les modifications distantes non spécifié ni testé (N45) | §15.17 RV-1 à RV-8 ; PD-4 | `AD-104` |
+| saut au clic seulement, au paragraphe près, par `typst eval` (second passage de mise en page, `anchors.go`) ; aucun défilement suivi (N44) | §15.17 SY-1 à SY-8 | `AD-103` |
 | polices : `--ignore-system-fonts` (`engine.go:463`), polices de l'ordinateur inaccessibles ; polices de `typst-assets` avant celles du projet ; aucun gestionnaire de polices (N43) | §6.12, §6.13 | `AD-100`, `AD-101` |
 
 ## 17. Références

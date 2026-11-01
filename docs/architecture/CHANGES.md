@@ -1,5 +1,22 @@
 # Changements de l'architecture
 
+## 1.0.0-brouillon.10 — révision 8.1 (2026-11-01)
+
+Deux exigences nouvelles (N44, N45) et une décision de l'utilisatrice. Aucune modification de
+`docs/protocol/` ni de `docs/design/`.
+
+| Demande | Changement |
+|---|---|
+| N44 synchronisation texte ↔ aperçu, défilement et clic | §15.17 **SY-1 à SY-8** : état vérifié (`typst-ide` 0.15.1 `jump_from_click`/`jump_from_cursor` ; tinymist 0.15.10 ne les expose qu'à son aperçu web sur `127.0.0.1`, écarté) ; table de correspondance construite une fois par compilation, défilement par interpolation sans appel à Go ; voies (i) requête LSP proposée à tinymist, (ii) sidecar résident `inkwell-typst`, (iii) repli : ancres de blocs actuelles ; Markdown par étiquettes de titres de `cmarker` ; la dernière action de la personne gagne ; plusieurs fichiers ; PF-12 ; P-SYNC ; `AD-103` ; écart au §16 |
+| N45 (1) une modification distante ne déplace jamais la vue | RV-1, RV-2 : annotation `remote`, positions appliquées à travers les changements de CodeMirror 6, ancrage par curseur Automerge du premier caractère visible ; synchronisation déclenchée seulement par une entrée locale |
+| N45 (2) mode « suivre » | RV-3 : fichier actif et curseur tirés de la présence **existante** (`anchor`/`head` = curseurs Automerge, document de l'en-tête), réémis à l'activation d'un fichier ; arrêt à la première entrée locale ; RV-5 rythme (≤ 10/s, PF-13) ; RV-6 présence hostile sans danger et bornée, nom tiré de la liste signée ; RV-7 confidentialité ; RV-8 tests ; `AD-104` |
+| Décision : la personne suivie voit un œil sur l'avatar de qui la suit | RV-4 ; **delta du protocole PD-4** (§15.19) : canal `follow` en `update` seulement, jamais en `snapshot` (une map fermée ferait jeter tout le `snapshot` par un appareil 2.0) ; proposé, pas écrit dans `docs/protocol/` |
+
+### Désaccords à débattre
+
+Aucun.
+
+
 ## 1.0.0-brouillon.9 — révision 8 (2026-11-01)
 
 Réponse au tour 7 : [Fable](reviews/13-fable-r7.md) **ACCEPT** (1 majeur, 4 mineurs) ;
