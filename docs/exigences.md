@@ -49,6 +49,7 @@ Rien n'est « fait » sans tests verts et sans une passe `ux-walkthrough` réuss
 | N10 | 2026-10-31 | ADR 0030, 0031 (rév. 6, avec l'arbitrage d'équivocation par un admin), 0032 et 0033 acceptées ; résiduel R1 accepté ; R2 fermé par un quota disque cumulé par personne qui écrit (amende D-3) | `docs/adr/`, `audit-2026-10-31/06-…` | 🔨 |
 | N11 | 2026-10-31 | Étape 2.0 : seuls les appareils membres atteignent le Repo ; retrait et suspension déconnectent et drainent, TDD strict, sans écriture de refs git | `audit-2026-10-31/06-admission-design.md` §5.6, A14 ; `internal/app`, `internal/bridge`, `frontend/src/net` | 🧪 implémenté ; Vitest, svelte-check, lint, architecture et tests ciblés race verts ; intégration réseau bloquée par le sandbox |
 | N12 | 2026-11-01 | Un protocole clair, explicable, défini et bien fait, ouvert à d'autres applications : spécification publique interopérable (langage normatif RFC 2119/8174, CDDL RFC 8610, encodage déterministe, cryptographie exacte, vecteurs de test, suite de conformité, versionnage) ; plus de correctifs au fil de l'eau ; tests utiles (propriétés, modèle, fuzzing) | `docs/protocol/`, ADR 0034 | 🔨 |
+| N13 | 2026-11-01 | Un paquet dédié au protocole, réutilisable par d'autres : module Go public hors `internal/` (cœur indépendant du transport + liaison libp2p optionnelle), équivalent TypeScript, vecteurs embarqués et conformité exportée ; inkwell l'utilise lui-même | ADR 0034, `docs/protocol/` | 🔨 |
 
 ## Interface et édition
 
