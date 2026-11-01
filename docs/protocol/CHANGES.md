@@ -264,3 +264,40 @@ fixes de la mémoire réservée suppriment toute renégociation.
 
 - `RepoGen.cfg` non exhaustif ; passage entre sessions et crédits du pont argumentés, non
   modélisés ; objets proposés sans codec (étape 8).
+
+---
+
+# Tour 5 : révision 6 (2.0.0-brouillon.5 → 2.0.0-brouillon.6)
+
+Revues [10-codex](reviews/10-codex.md) et [11-fable](reviews/11-fable.md) : « revise », aucune
+Critique, aucune divergence. Codex confirme fermés : C3, C5, métadonnées de LARGE, liaison de
+`LARGE_REPLY`.
+
+## Revue 11-fable
+
+| # | Gravité | Constat | Changement | Où |
+|---|---|---|---|---|
+| F11-1 | Majeur | Remplacement LRU à l'arrivée : un auteur honnête avec deux modifications indivisibles fait tourner en rond un receveur lent | Un tirage en cours n'est **jamais** remplacé ; la deuxième attend (règle H) ; une entrée ne sort que **finie** ou **plus voulue** (document plus admis, obtenue autrement, principal retiré) ; jamais sur un délai | spec §8.1, §16.1 |
+| F11-2 | Majeur (avec Codex) | Attente rangée dans un cache nettoyé à 24 h ; « §14.6 » inexistant | Nouveau §14 point 7 : sous le dossier de données du projet (`.inkwell/staging/<principal>/<root>`), carte des groupes vérifiés écrite atomiquement, pas un cache, sans limite de durée, prime le point 6 ; reprise après plus de 24 h testée (P-BORNES) | spec §8.1, §14 |
+| F11-3 | Mineur | La réinitialisation d'un LARGE d'une époque passée compte comme une perte | La règle T vaut aussi pour les **événements** : fin, réinitialisation ou échec d'un flux d'une époque passée sont ignorés ; seul un échec de l'époque courante est une règle L | spec §7.2 (5), §7.3 |
+| F11-4 | Mineur | « Garde indexée tant qu'une demande est en cours » non défini | **Index persistant** `root → (document, empreinte)` de toute modification indivisible annoncée, reçue ou obtenue, servi tant que le document est admis : couvre l'attente du premier WANT et les redémarrages | spec §7.2, §8.1 |
+| F11-5 | Mineur | Principal provisoire avant les tuples d'auteur | Principal = clé d'auteur du tuple, et d'ici l'étape 8 le pair qui a fait l'annonce | spec §8.1 |
+| F11-6 | Mineur | Annonce indivisible > 16 Mio sans issue | Violation (G1), refus définitif jamais redemandé | spec §7.2, §16.1 ; `session.json#large-indivisible-too-big` |
+| F11-7 | Mineur | Bornes 67 108 797 alors que r = 4 Mio | Préambule LARGE et `history-request.max` ≤ 4 194 304 ; une annonce ordinaire plus grande n'est qu'un **avis** (l'émetteur ne garde rien, le receveur répond 0 et passe aux pages) | spec §5.1, §7.2, §16.1 ; CDDL ; `session.json#large-preamble-above-share` |
+| F11-8 | Mineur | Règle H pendant un tirage | Suspendue pour le document D tant qu'un tirage pour D est en cours | spec §8.1 |
+| F11-9 | Mineur | Vecteurs de la liaison indivisible | `repo.json#indivisible-binding-ok`, `#indivisible-hash-mismatch`, `#indivisible-size-mismatch` (vraie modification Automerge de ~70 ko), `#indivisible-serve-unadmitted` (MISSING) | `vectors/` |
+| F11-10 | Mineur (avec Codex) | Reliquat « reprise sous contention » dans l'ADR ; ligne receveur du §11.2 | Conséquence récrite (parts fixes, pages, rien n'est repris) ; ligne receveur avec `Refusé` | ADR §Conséquences ; spec §11.2 |
+| F11-11 | Remarque | Coût des pages successives | Écrit (`⌈H / 4 Mio⌉`, 50 pages pour 200 Mio) ; deux pages en vol par (pair, document) permises | spec §9.6 |
+
+## Revue 10-codex
+
+| # | Constat | Changement | Où |
+|---|---|---|---|
+| Enveloppe | Une modification brute ≤ `max` dont la page encodée dépasse `max` n'a pas de route | L'indivisibilité se décide sur la **page singleton encodée** (enveloppe comprise) ; vecteurs de bord `repo.json#page-route-fits` (max = taille encodée → page) et `#page-route-envelope-overflow` (max − 1 → indivisible, alors que la modification brute tient) | spec §7.2, §9.6 |
+| D1 / cache 24 h | voir F11-2 | | |
+| Reliquat ADR | voir F11-10 | | |
+
+## Reste ouvert après ce tour
+
+- `RepoGen.cfg` non exhaustif ; passage entre sessions et crédits du pont argumentés, non
+  modélisés ; codecs `sync2` et objets proposés sans implémentation (étapes 4 et 8).

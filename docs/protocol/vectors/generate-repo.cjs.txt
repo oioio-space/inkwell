@@ -145,7 +145,7 @@ function parse(bytes, c) {
   if (type === "history-request") {
     const have = own(v, "have"), max = own(v, "max");
     if (!Array.isArray(have) || have.length > 256 || !have.every((h) => h instanceof Uint8Array && h.length === 32)) throw new Error("have");
-    if (!uint(max, 67108797) || max < 65536) throw new Error("max");
+    if (!uint(max, 4194304) || max < 65536) throw new Error("max");
     out.have = have.map(hex); out.max = max; return out;
   }
   if (type === "history-page") {
@@ -292,6 +292,33 @@ const gvec = [];
   mk("g9-node-scalar", "Scalaire posé dans nodes : refusé (R-nodes).", ix, (x) => { x.nodes["00112233445566778899aabbccddeeff"] = 1; });
 }
 for (const v of gvec) vectors.push(v);
+
+// ---- indivisible changes (spec §7.2, §8.1, §9.6): binding and page route, real Automerge change ----
+{
+  // ~70 kB of incompressible text so the encoded change exceeds the 64 KiB minimum of max
+  let seed = 7; const rnd = () => (seed = (seed * 1103515245 + 12345) % 2147483648);
+  const text = Array.from({ length: 70000 }, () => String.fromCharCode(97 + (rnd() % 26))).join("");
+  let dd = A.init({ actor: "3132333435363738393a3b3c3d3e3f40" });
+  dd = A.change(dd, { time: 0, message: "" }, (x) => { x.t = text; });
+  const ch = A.getLastLocalChange(dd), info = A.decodeChange(ch);
+  const binding = (id, desc, expHash, expSize) => {
+    const okHash = info.hash === expHash, okSize = ch.length === expSize;
+    vectors.push({ id, status: "proposed", enforce: "step-8", description: desc, decoder: "indivisible_binding",
+      context: { expected_change_hash: expHash, expected_size: expSize, doc_admitted: true }, input_hex: hex(ch),
+      verdict: okHash && okSize ? "accept" : "reject", expect: okHash && okSize ? { change_hash: info.hash } : { reason: okHash ? "size differs from the announce" : "Automerge change hash differs from the announce" } });
+  };
+  binding("indivisible-binding-ok", "Modification indivisible reçue par le vrac : empreinte Automerge et taille conformes à l'annonce : admise à la chaîne de réception.", info.hash, ch.length);
+  const bad = info.hash.slice(0, 63) + (info.hash[63] === "0" ? "1" : "0");
+  binding("indivisible-hash-mismatch", "Octets dont l'empreinte Automerge n'est pas celle de l'annonce : refusé.", bad, ch.length);
+  binding("indivisible-size-mismatch", "Octets dont la longueur n'est pas la taille annoncée : refusé.", info.hash, ch.length + 1);
+  vectors.push({ id: "indivisible-serve-unadmitted", status: "proposed", enforce: "step-8", description: "WANT par racine d'une modification d'un document hors de l'ensemble admis du serveur : réponse MISSING (indiscernable d'un objet absent).", decoder: "bulk_serve",
+    context: { holds_root: true, doc_admitted: false, requester_active_member: true }, verdict: "reject", expect: { answer: "MISSING" } });
+  const page = encode({ type: "history-page", senderId: FROM, targetId: ME, documentId: DOCID, changes: [ch], last: true });
+  const route = (id, desc, max) => vectors.push({ id, status: "proposed", enforce: "step-8", description: desc, decoder: "page_route",
+    context: { max, change_len: ch.length, singleton_page_len: page.length }, input_hex: hex(ch), verdict: "accept", expect: { route: page.length <= max ? "page" : "indivisible" } });
+  route("page-route-fits", "max = taille de la page singleton encodée : la modification part dans une page.", page.length);
+  route("page-route-envelope-overflow", "max = taille encodée − 1 : la modification brute tient (≤ max) mais pas sa page encodée : indivisible, tirée par le vrac (Codex, débordement d'enveloppe).", page.length - 1);
+}
 
 process.stdout.write(JSON.stringify({ spec: "inkwell protocol", spec_version: "2.0.0-draft.2",
   generator: "vectors/generate-repo.cjs.txt (cbor-x 1.6.7, @automerge/automerge 3.5.0)", vectors }, null, 2) + "\n");

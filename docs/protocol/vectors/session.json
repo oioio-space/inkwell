@@ -210,6 +210,40 @@
       "verdict": "reject"
     },
     {
+      "id": "large-indivisible-too-big",
+      "status": "proposed",
+      "enforce": "step-4",
+      "context": {
+        "gen": 2,
+        "mode": "resetting",
+        "protocol": "/inkwell/repo/2.0.0",
+        "session": "active"
+      },
+      "description": "Annonce indivisible de 16 777 217 octets : violation (la garde G1 interdit une modification de plus de 16 Mio) ; refus définitif.",
+      "decoder": "sync2_stream",
+      "input_hex": "000000020000006707000000010100000101a3c79626605231cdf54f555001ae1a4d8a793bd5de97095742dd53f8cff233fb518333375d11a5061daadcb3c9c768a86584e9ca442ae19b94a7c47da12bbaa61c344e4d4e6e6b4d684c386a5872644a396a616d533538504156645875",
+      "verdict": "reject"
+    },
+    {
+      "id": "large-preamble-above-share",
+      "status": "proposed",
+      "enforce": "step-4",
+      "context": {
+        "announced": {
+          "id": 1,
+          "size": 4194305
+        },
+        "gen": 2,
+        "mode": "synced",
+        "protocol": "/inkwell/large/2.0.0",
+        "session": "active"
+      },
+      "description": "Préambule d'un flux LARGE de 4 194 305 octets (> r = 4 Mio) : violation, seuls les objets ≤ r passent par un flux LARGE.",
+      "decoder": "sync2_stream",
+      "input_hex": "000000020000000100400001",
+      "verdict": "reject"
+    },
+    {
       "id": "large-preamble",
       "status": "proposed",
       "enforce": "step-4",

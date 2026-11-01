@@ -1,4 +1,4 @@
-; Protocole inkwell 2.0.0-brouillon.4 — couche « dépôt » (spec.md §9).
+; Protocole inkwell 2.0.0-brouillon.6 — couche « dépôt » (spec.md §9).
 ; Messages automerge-repo 2.x (et deux extensions inkwell, §9.6) dans les trames
 ; REPO (0x05) et PRESENCE (0x06), et dans les flux LARGE. Notation : RFC 8610.
 ;
@@ -39,7 +39,7 @@ history-request = {
   type: "history-request", doc-header,
   have: [0*256 change-hash],    ; têtes du demandeur ; la réponse contient TOUTE modification
                                 ; hors de leur passé causal (branches concurrentes comprises)
-  max: 65536..67108797,         ; taille maximale d'une page acceptée (≤ part du demandeur)
+  max: 65536..4194304,          ; taille maximale d'une page acceptée, enveloppe comprise (≤ part fixe, 4 Mio)
   * tstr => any
 }
 history-page = {

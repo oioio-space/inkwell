@@ -1,7 +1,7 @@
 ---
 status: proposée
 date: 2026-11-01
-revision: 5 (revues 01 à 08, débat D1 conclu par un accord ; exigences N13, N14, N15)
+revision: 6 (revues 01 à 11, débat D1 conclu par un accord ; exigences N13, N14, N15)
 decision-makers: [Mathieu]
 ---
 
@@ -160,9 +160,10 @@ fichier) :
 - Moins bien : changement majeur du fil `sync` ; un flux libp2p de plus par message de plus de
   64 Kio (négociation multistream optimiste, coût faible) ; un passage du relais au direct
   relance la synchronisation Automerge avec ce pair (nouvelle session).
-- Moins bien : sous contention, un objet LARGE au-dessus de sa part peut être repris
-  (règle L) pour qu'un pair sous sa part passe ; avec peu de pairs (n ≤ 4, part ≥ 64 Mio)
-  cela n'arrive jamais ; au-delà, c'est le prix d'une garantie pour les pairs honnêtes.
+- Moins bien : avec la part fixe de 4 Mio, tout message de plus de 4 Mio passe par des pages
+  d'historique (`⌈H / 4 Mio⌉` pages, deux en vol), même entre deux pairs ; une modification
+  indivisible plus grande est tirée par le vrac. Rien n'est jamais repris pour faire de la
+  place.
 - Résiduel de volume (Majeur jusqu'au quota N10) : la convergence byzantine ne protège pas du
   volume de modifications valides (spec §17).
 
@@ -250,7 +251,7 @@ mode « signalé », sans échouer, jusqu'à leur `enforce`.
 
 ## Décisions demandées à l'utilisatrice
 
-1. Accepter cette ADR, révision 5 (option B).
+1. Accepter cette ADR, révision 6 (option B).
 2. Règle d'ordre premier pour les clés (`[L]A = O`) : plus stricte que « pas d'ordre petit »,
    sans effet sur une clé honnête ; elle change le verdict de deux cas de Chalkias.
 3. Session = connexion : le passage du relais au direct relance la synchronisation avec ce
