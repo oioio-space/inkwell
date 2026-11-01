@@ -161,3 +161,99 @@ Note : V valeur, C coût, Co collaboration, P perf, H hors ligne (OK = aucun ré
 ## 7. Limites de l'étude
 
 Pages tinymist `completion.html`, `lint.html`, `lsp.html` introuvables (404) ; la complétion des étiquettes/bibliographie et les options hors ligne de tinymist sont donc **[à vérifier]** par un banc d'essai sur le binaire épinglé avant toute décision ferme. Les sources des outils d'écriture non lisibles sont marquées (g). Aucune mesure de performance n'a été faite ici ; les budgets viennent de la spec.
+
+---
+
+# Addendum N30 : outils d'écriture (« se sentir chez soi quand on aime écrire »)
+
+Date : 2026-11-01. Même grille (V, C, Co, P, H) et mêmes classes qu'au §3. Colonne **Déjà là** : ce que Typst ou tinymist fournit. Principe directeur : **le texte d'abord, aucun bruit** ; tout est discret par défaut, local à la personne (jamais synchronisé), et activable dans un seul réglage « Aide à l'écriture ».
+
+## 8. Sources nouvelles
+
+- LanguageTool : cœur sous **LGPL 2.1+**, serveur HTTP local (`/v2/check`, port choisi par l'appelant, inaccessible aux autres machines par défaut, Java 8+) : [dépôt](https://github.com/languagetool-org/languagetool), [serveur HTTP](https://dev.languagetool.org/http-server). Les n-grammes (meilleure détection des confusions) sont **hors du téléchargement**, ~8 Go en anglais, disponibles aussi pour le français, SSD recommandé ([n-grammes](https://dev.languagetool.org/finding-errors-using-n-gram-data)). Application ~156 Mo ([Wikipedia](https://en.wikipedia.org/wiki/LanguageTool), source secondaire) ; mémoire : exemples à 2-4 Go de tas avec n-grammes, aucun minimum officiel trouvé. Par défaut ses réglages utilisent le nuage de LanguageTool : un serveur embarqué devrait le désactiver explicitement.
+- Dictionnaires Hunspell via [wooorm/dictionaries](https://github.com/wooorm/dictionaries) : français **MPL-2.0**, anglais **MIT AND BSD** ; tailles non publiées sur la page **[à mesurer]** ; nspell les lit.
+- [Harper](https://github.com/hydraxman/harper) (miroirs ; dépôt amont non confirmé **[à vérifier]**) : correcteur de grammaire hors ligne en Rust, WASM, **anglais seulement**, comprend déjà le Typst.
+- Typst : [`smartquote`](https://typst.app/docs/reference/text/smartquote/) (guillemets selon `lang`, ex. `fr`), [`text(lang, region, hyphenate)`](https://typst.app/docs/reference/text/text/). Espaces françaises : le [forum](https://forum.typst.app/t/french-unbreakable-spaces-rule/8379) indique qu'il reste du travail pour respecter toutes les règles et cite l'[issue #1920](https://github.com/typst/typst/issues/1920) (insécables dans « »). **Ne pas supposer** que `lang: "fr"` suffit **[à vérifier sur le Typst épinglé]**.
+- [Hayagriva](https://github.com/typst/hayagriva) : YAML natif, BibTeX/BibLaTeX en entrée (`.bib` accepté), ~100 styles CSL embarqués (licence CC-BY-SA 3.0 pour ces styles, attribution à prévoir), MIT/Apache-2.0 pour le code.
+- Google Docs [mode Suggestion](https://support.google.com/docs/answer/6033474), iA Writer [mode focus](https://ia.net/writer/support/editor/focus-mode), Typora [mode focus / machine à écrire, nombre de mots](https://typora.io/) : déjà cités au §2.
+- Non vérifiés faute de page lisible (g) : Antidote (analyse de style, dictionnaires de synonymes), Hemingway, Zettlr, LyX, Zotero (export BibTeX/CSL), formule de lisibilité Kandel-Moles pour le français, CNRTL pour les synonymes.
+
+## 9. Classification
+
+### 9.1 Correction et style
+
+| Fonction | Déjà là | Classe | V | C | Co | P | H | Décision |
+|---|---|---|---|---|---|---|---|---|
+| Orthographe fr/en, soulignement discret | Ni Typst ni tinymist (aucune vue dans la doc **[à vérifier]**) | ADAPT | 5 | M | ! | OK | OK | Hunspell/nspell avec dictionnaires **embarqués** (MPL-2.0 / MIT+BSD : mentions de licence dans « À propos »). Exécuté dans la webview sur le **texte de prose seulement** (pas le code Typst : on le déduit de l'arbre syntaxique, sinon `#let` serait souligné). Langue = `lang` du document. |
+| Dictionnaire personnel et du projet | — | ADAPT | 5 | S | + | OK | OK | « Ajouter au dictionnaire » : personnel (local) ou **du projet** (liste partagée, texte CRDT) : les noms propres d'un roman profitent à tout le groupe. |
+| Grammaire fr/en | — | PLUGIN | 4 | L | ! | lourd | ! | **LanguageTool** en greffon optionnel (N21) : JVM + règles. Licence LGPL 2.1+ : compatible en processus séparé lancé sur `127.0.0.1`, port éphémère, jeton en temps constant (invariant serveurs locaux), **mode nuage coupé**. Poids : application ~156 Mo, n-grammes en Go : jamais embarqués ; la personne les ajoute elle-même (aucun téléchargement par l'application). Si la JVM n'est pas présente, le greffon l'indique. Alternative légère : Harper pour l'anglais seulement. |
+| Affichage des suggestions de grammaire sans bruit | — | ADAPT | 5 | S | OK | OK | OK | Pas de soulignement rouge permanent. Pointillé **gris-bleu** sous l'endroit ; l'infobulle montre une phrase + « Corriger » / « Ignorer ». Pas de compteur dans l'en-tête ; un onglet « Relecture » du tiroir liste les suggestions, **à la demande** (bouton « Relire ») plutôt qu'à la frappe. L'orthographe seule reste à la frappe. Jamais de couleur seule (aussi une icône). |
+| Synonymes et dictionnaire des synonymes | — | ADAPT | 4 | M | OK | OK | OK | Jeu libre hors ligne (ex. listes sous licence ouverte, **[à choisir, licence à vérifier]**), consultable via clic droit sur un mot (« Autres mots »). Greffon si la licence impose des mentions. |
+| Lisibilité et style (phrases longues, répétitions, adverbes) | — | ADAPT | 3 | M | OK | OK | OK | Surlignage **à la demande** dans l'onglet « Relecture » (à la Hemingway), jamais une note chiffrée comme verdict. Répétitions proches : utile et facile (hors ligne, sans modèle). Formules de lisibilité : indicatif, adapté à la langue **[à valider pour le français]**. |
+| Lissage automatique par IA (réécrire) | — | REJECT | — | — | — | — | ! | Hors périmètre (réseau, vie privée). Greffon de tiers possible, jamais livré. |
+
+### 9.2 Concentration et suivi
+
+| Fonction | Déjà là | Classe | V | C | Co | P | H | Décision |
+|---|---|---|---|---|---|---|---|---|
+| Mode focus (phrase/paragraphe) et machine à écrire | — | ADAPT | 4 | S | OK | OK | OK | Local. Masque tiroirs et barres, plein écran sans distraction (Échap pour quitter). Respecte `prefers-reduced-motion` (pas de défilement animé). |
+| Mots, caractères, temps de lecture | tinymist (mots, barre d'état) | REUSE/ADAPT | 4 | S | + | OK | OK | Sélection comptée ; temps de lecture ~ 230 mots/min fr, réglable. Le compte porte sur la prose, pas sur le balisage. |
+| Objectifs et statistiques de session | — | ADAPT | 3 | S | OK | OK | OK | Objectif de mots (jour/session) en cercle discret ; **jamais de série à maintenir** ni de rappel culpabilisant ; stockage **local** (aucune télémétrie, règle UX 10). |
+
+### 9.3 Chercher, remplacer, abréger
+
+| Fonction | Déjà là | Classe | V | C | Co | P | H | Décision |
+|---|---|---|---|---|---|---|---|---|
+| Chercher dans le fichier, le projet | tinymist : symboles seulement | ADAPT | 5 | M | ! | OK | OK | Ctrl+F simple ; « Dans tout le projet » ; résultats groupés par fichier, avec présence des collègues. **Regex masqué** derrière « Options avancées ». Remplacer tout : aperçu + « Annuler ». |
+| Remplacer sur plusieurs fichiers | tinymist : renommage de symbole | ADAPT | 4 | M | ! | OK | OK | Une transaction par fichier ; avertit si une personne édite un fichier touché. |
+| Extraits et expansions de texte (ex. `;sig`) | Typst : snippets de tinymist | ADAPT | 3 | M | + | OK | OK | Liste de la personne ; liste **du projet** (partagée). Le texte inséré peut contenir des champs, compatible avec les modèles (N27). |
+
+### 9.4 Typographie française (très important)
+
+| Fonction | Déjà là | Classe | V | C | Co | P | H | Décision |
+|---|---|---|---|---|---|---|---|---|
+| Guillemets « » intelligents, apostrophe ’ | Typst `smartquote` (selon `lang`) | REUSE | 5 | S | OK | OK | OK | Typst le fait **à la compilation** : la personne écrit `"` et obtient « » dans l'aperçu. Dans l'**éditeur** (Markdown/txt), conversion à la frappe optionnelle. Pour le Typst, ne **jamais** réécrire le texte source : l'aperçu suffit. |
+| Insécables avant `;` `:` `!` `?`, dans « » | Partiel côté Typst (issue #1920 ouverte à ma connaissance de la source) **[à vérifier]** | ADAPT | 5 | M | OK | OK | OK | Deux niveaux. 1) **Rendu** : règle d'affichage (show rule) fournie par l'application pour les documents `lang: fr` (U+202F avant `;` `!` `?`, U+00A0 avant `:` et dans « », cf. forum) : le texte source reste propre. 2) **Édition** (txt/Markdown) : conversion à la frappe optionnelle, avec point visible (affichage des espaces insécables, le caractère `·` discret, désactivable) et vérification « Typographie » dans l'onglet Relecture. Les modèles de N27 portent la règle. Test : jeux de phrases fr avec attendus Unicode exacts. |
+| Points de suspension, tirets (– —), « œ », majuscules accentuées | — | ADAPT | 4 | S | OK | OK | OK | Table de remplacements typographiques (activable) et palette de caractères spéciaux (voir 9.6). |
+| Césure et langue du document | Typst `lang` (césure automatique) | REUSE | 4 | S | OK | OK | OK | Sélecteur de langue du projet (pas par fichier d'abord), exposé comme « Langue du document ». |
+
+### 9.5 Références, structure, insertion
+
+| Fonction | Déjà là | Classe | V | C | Co | P | H | Décision |
+|---|---|---|---|---|---|---|---|---|
+| Notes de bas de page | Typst natif (`#footnote`) | REUSE | 5 | S | OK | OK | OK | Bouton « Note » : crée l'appel, place le curseur dans la note. En Markdown : syntaxe standard. |
+| Citations et bibliographie | Typst + Hayagriva (YAML, `.bib`) | ADAPT | 5 | M | + | OK | OK | « Sources » : liste des références du projet ; « Citer » ouvre un sélecteur (auteur, titre) qui insère `@clé`. Import d'un `.bib` exporté de Zotero (g) **par fichier** (jamais de connexion à Zotero : réseau et compte hors périmètre ; greffon éventuel). Styles CSL embarqués, **mention CC-BY-SA 3.0**. |
+| Renvois croisés, table des matières | Typst natif (`#outline`, `@label`) ; tinymist : plan, étiquettes | REUSE/ADAPT | 5 | S | + | OK | OK | « Insérer un renvoi » ouvre la liste des cibles ; « Table des matières » en un clic (voir §3.3, I1). |
+| Insérer figure / tableau | Typst natif ; barre de mise en forme (N20) | ADAPT | 5 | M | OK | OK | OK | Boîte « Image » (glisser, légende, nom) ; tableau par grille de cases, rempli depuis un `.csv` du projet. Génèrent du Typst/Markdown propre, jamais du balisage opaque. |
+| Aide à la saisie des maths | Typst : mathématiques natives, tinymist : symboles | ADAPT | 4 | M | OK | OK | OK | Palette de symboles + aperçu de l'équation en direct dans une infobulle ; « Équation » en ligne ↔ bloc (action de code tinymist). |
+| Caractères spéciaux et émojis | tinymist : vue Symboles | ADAPT | 4 | S | OK | OK | OK | Sélecteur unique (Ctrl/Cmd+;) : symboles Typst, ponctuation française, émojis ; recherche par nom français. Jeu **embarqué**. |
+
+### 9.6 Versions, relecture, export
+
+| Fonction | Déjà là | Classe | V | C | Co | P | H | Décision |
+|---|---|---|---|---|---|---|---|---|
+| Comparer deux brouillons / versions | — (go-git, jalons prévus) | ADAPT | 5 | M | + | OK | OK | « Afficher les modifications » (nom figé du glossaire) : comparaison **par mots**, pas par lignes ; ajouts/suppressions soulignés (couleurs + signes). Entre deux jalons ; entre deux brouillons en v2. |
+| Annotations et commentaires | — | ADAPT | 5 | M | + | OK | OK | Déjà en rec. 5 : commentaires ancrés, résolution, onglet Activité. Ajouter **surlignage** personnel (local) distinct du commentaire (partagé). |
+| Mode Suggestion | — | ADAPT (v2) | 4 | L | ! | OK | OK | Inchangé : dépend des brouillons. |
+| Préréglages d'export | tinymist : exports | ADAPT | 4 | S | OK | OK | OK | « Préréglages » du projet (ex. « Relecture : PDF avec numéros de ligne », « Impression », « Écran ») ; stockés dans le projet, donc **partagés**, et rattachés au modèle (N27). Un seul bouton « Exporter ». |
+
+## 10. Idées nouvelles propres à la collaboration (écriture)
+
+- **W1. Dictionnaire du projet partagé** : un nom de personnage ajouté par l'une cesse d'être souligné chez toutes.
+- **W2. Règles de typographie partagées par le projet** : langue, guillemets, insécables, appartiennent au projet ; tout le groupe voit le même rendu, aucune « guerre d'apostrophes ».
+- **W3. « Relecture » assignable** : le résultat d'une relecture (orthographe/style) devient des commentaires ancrés, adressés à une personne.
+- **W4. Objectif de groupe** (optionnel, jamais classement) : compteur de mots du projet, sans nom par personne par défaut.
+- **W5. Sources partagées** : la bibliographie est du texte CRDT, « Citer » propose aussi les sources que les collègues viennent d'ajouter, avec leur avatar.
+
+## 11. Recommandations mises à jour (ajouts aux dix du §6)
+
+11. **ADAPT** : orthographe fr/en Hunspell embarquée, soulignement discret, dictionnaire du projet partagé (V5, C M, hors ligne).
+12. **ADAPT** : typographie française en deux niveaux, rendu (show rule du modèle) et saisie optionnelle ; ne pas se fier au seul `lang: "fr"` de Typst avant vérification.
+13. **PLUGIN** : LanguageTool (LGPL 2.1+) comme greffon hors ligne en processus séparé, nuage coupé, n-grammes jamais embarqués ; suggestions dans l'onglet « Relecture » à la demande.
+14. **ADAPT** : onglet « Relecture » unique (style, répétitions, typographie) ; jamais de note chiffrée ni de soulignement rouge permanent.
+15. **ADAPT** : focus/machine à écrire, mots + temps de lecture, objectifs **locaux** et sans culpabilisation.
+16. **ADAPT** : recherche/remplacement de projet avec regex masqué ; extraits partagés.
+17. **REUSE/ADAPT** : notes, citations (import `.bib`), renvois, table des matières, figures/tableaux, maths, caractères : tous via un menu « Insérer » et la palette, générant du Typst propre.
+18. **ADAPT** : comparaison par mots entre jalons, préréglages d'export partagés avec le modèle.
+
+À rejeter : réécriture par IA livrée, séries d'écriture et notifications de gamification, connexion directe à Zotero (réseau/compte) dans le cœur. Avant décision ferme, à mesurer : tailles des dictionnaires fr/en embarqués, poids du greffon LanguageTool et mémoire JVM, comportement de `lang: "fr"` sur le Typst épinglé, licence du jeu de synonymes.
