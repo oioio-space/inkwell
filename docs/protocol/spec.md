@@ -2,10 +2,10 @@
 
 | | |
 |---|---|
-| Version | **2.0.0-brouillon.8** (SemVer, §1.4) |
+| Version | **2.0.0-brouillon.9** (SemVer, §1.4) |
 | Date | 2026-11-01 |
 | Statut | proposé ([ADR 0034](../adr/0034-protocole-unifie.md)) ; les parties marquées *existant* décrivent des octets déjà émis par inkwell et sont figées |
-| Révision | 8 : revues [01-codex](reviews/01-codex.md), [02-fable](reviews/02-fable.md), [03-codex](reviews/03-codex.md), [04-fable](reviews/04-fable.md), [05-codex](reviews/05-codex.md), [06-fable](reviews/06-fable.md), [07-codex](reviews/07-codex.md), [08-fable](reviews/08-fable.md), le débat [09-debate-D1](reviews/09-debate-D1.md) (accord), [10-codex](reviews/10-codex.md), [11-fable](reviews/11-fable.md), [12-codex](reviews/12-codex.md), [13-fable](reviews/13-fable.md), [14-codex](reviews/14-codex.md) et [15-fable](reviews/15-fable.md) intégrés ; correspondance dans [CHANGES.md](CHANGES.md) |
+| Révision | 9 : revues [01-codex](reviews/01-codex.md), [02-fable](reviews/02-fable.md), [03-codex](reviews/03-codex.md), [04-fable](reviews/04-fable.md), [05-codex](reviews/05-codex.md), [06-fable](reviews/06-fable.md), [07-codex](reviews/07-codex.md), [08-fable](reviews/08-fable.md), le débat [09-debate-D1](reviews/09-debate-D1.md) (accord), [10-codex](reviews/10-codex.md), [11-fable](reviews/11-fable.md), [12-codex](reviews/12-codex.md), [13-fable](reviews/13-fable.md), [14-codex](reviews/14-codex.md), [15-fable](reviews/15-fable.md), [16-codex](reviews/16-codex.md) et [17-fable](reviews/17-fable.md) intégrés ; correspondance dans [CHANGES.md](CHANGES.md) |
 | Aperçu | [README.md](README.md) |
 | Vecteurs, modèle | [vectors/](vectors/) (§21), [tla/](tla/) (§7.3) |
 | Paquets | module Go `github.com/oioio-space/inkwell/protocol`, paquet TypeScript `@inkwell/protocol` (§1.6) |
@@ -1020,29 +1020,42 @@ busy    { kind u8 = 4 ; hash [32] ; retry_ms u32 ≤ 60 000 }
     produites ou **vérifiées et admises** (jamais avant), et la sert tant que le document est
     admis ; une entrée est retirée quand le document n'est plus admis ou est purgé, ou quand la
     modification n'y est plus. **Borne** : `max` étant fixé à `r` (§9.6), une modification
-    indivisible a une page singleton encodée de plus de 4 Mio, donc l'index a au plus une
-    entrée par 4 Mio d'historique vérifié et stocké (`repo.json#page-route-*`, à `max = r`)
+    indivisible a une page singleton encodée de plus de 4 Mio, donc la modification elle-même
+    fait plus de `r` moins l'enveloppe (≈ 4 Mio), et l'index a au plus une entrée par ≈ 4 Mio
+    d'historique vérifié et stocké (`repo.json#page-route-*`, à `max = r`)
     (~70 octets par entrée), imputée au quota N10 de l'auteur avec sa modification ; aucune
     fenêtre de temps, ce qui couvre l'intervalle entre `LARGE_REPLY` et le premier WANT et un
     redémarrage. On la demande à l'annonceur d'abord, puis aux autres à tour de rôle ;
   - **attente sur disque** : les tranches reçues sont rangées sous le dossier de données du
-    projet (§14, point 7), **par `root`**, avec la liste de ses détenteurs connus. Chaque
-    entrée est imputée à un pair annonceur : au plus **un tirage actif par pair annonceur et
-    par receveur** (≤ 16 Mio) ; si ce pair est retiré de la liste, l'entrée passe à un autre
-    détenteur qui l'a annoncée (sinon elle devient inactive). Un tirage n'est **jamais**
-    remplacé : une deuxième annonce du même pair attend (la règle H la redemandera).
-    **Plafond global** : 1 Gio d'attente au total, pairs absents compris. Une entrée est
-    **active** si un de ses détenteurs est connecté et la sert ; à la limite, on retire d'abord
-    les entrées finies ou plus voulues (document plus admis, modification obtenue autrement),
-    puis les entrées **inactives**, de la moins récemment avancée à la plus récente ; une entrée
-    active n'est **jamais** retirée. Comme les entrées actives sont au plus une par pair
-    connecté (≤ 64 × 16 Mio = 1 Gio), un pair connecté obtient toujours son emplacement, et 65
-    membres successifs ne dépassent pas le plafond. Jamais sur un délai. Plusieurs relais
+    projet (§14, point 7), **par `root`**, avec la liste de ses détenteurs connus.
+    **Emplacements.** Chez un receveur, chaque pair **connecté** (session Active) possède
+    **un** emplacement de 16 Mio. Une entrée est **active** si et seulement si elle **occupe
+    l'emplacement d'un pair connecté qui la détient** ; seules les entrées actives sont tirées.
+    Une entrée dont tous les détenteurs connectés ont déjà leur emplacement pris est
+    **inactive** et n'est pas tirée.
+    **Attribution**, toujours dans un emplacement **libre**, avec **réservation atomique** de la
+    taille annoncée (≤ 16 Mio) : à l'annonce d'un `root` nouveau par P, l'entrée est créée dans
+    l'emplacement de P s'il est libre, sinon l'annonce attend (la règle H la redemandera) ; à
+    l'annonce d'un `root` déjà connu (dédoublonnage), P devient détenteur, et si l'entrée est
+    inactive et que l'emplacement de P est libre, elle y est attribuée ; quand le pair attribué
+    se déconnecte ou est **retiré de la liste des membres**, l'entrée devient inactive, puis
+    est réattribuée à un autre détenteur connecté dont l'emplacement est libre ; au démarrage,
+    toutes les entrées sont inactives et sont réattribuées à mesure que leurs détenteurs se
+    connectent, au plus une par emplacement (la plus récemment avancée d'abord). Un tirage
+    actif n'est **jamais** remplacé.
+    **Plafond global** : 1 Gio d'attente au total, entrées inactives comprises (pairs absents).
+    Les entrées actives occupent au plus un emplacement par pair connecté, donc au plus
+    64 × 16 Mio = 1 Gio ; pour réserver un emplacement, on retire d'abord les entrées finies ou
+    plus voulues (document plus admis, modification obtenue autrement), puis les inactives, de
+    la moins récemment avancée à la plus récente ; une entrée active n'est **jamais** retirée.
+    Une réservation dans l'emplacement d'un pair connecté réussit donc toujours, et ni 65
+    membres successifs, ni un pair qui annonce plusieurs racines laissées par d'autres, ne
+    dépassent le plafond (scénarios de la porte P-BYZ). Jamais sur un délai. Plusieurs relais
     peuvent faire tirer la même modification d'un même auteur chacun dans son emplacement (rien
     ne limite *par auteur réel* avant vérification), mais chacun reste borné par pair, et le
     dédoublonnage par `root` évite les copies d'une même racine ;
-  - **plages doublées** : une plage en cours depuis plus de 30 s chez un détenteur **PEUT** être
-    demandée aussi à un autre détenteur (la règle « une demande par (pair, hash) » vaut par
+  - **plages doublées** : une plage en cours depuis plus de 30 s chez un détenteur **DOIT** être
+    demandée aussi à un autre détenteur, s'il en existe un (la règle « une demande par (pair, hash) » vaut par
     pair) ; la première réponse complète gagne, les autres sont annulées. Un relais pressé qui
     annonce le premier une vraie racine puis « goutte » une plage ne retarde donc rien ;
   - **reprise** : l'état (groupes vérifiés) est persisté et repris après un redémarrage ou un
@@ -1515,7 +1528,7 @@ de `protocol` ; un test par ligne vérifie la borne, la borne + 1 et la reprise.
 | file d'entrée REPO d'un pair | 4 Mio et 1024 trames (impl.) | par pair | lecture du flux suspendue | dès que la webview consomme |
 | file d'entrée CONTROL d'un pair | 512 Kio (impl.) | par pair | lecture suspendue **seulement** le temps que l'acteur `Wiring` traite (CPU et disque locaux) ; jamais à cause du réseau ni de la webview — « toujours lu » au sens de §5.1 (a) | immédiate |
 | flux annulés en attente de RESET_STREAM | 1 par session ; 10 s | par session | GOAWAY PROTOCOL_VIOLATION, session fermée | reconnexion |
-| modifications indivisibles en attente (disque, §14 point 7) | par `root` ; 1 tirage actif ≤ 16 Mio **par pair annonceur** et par receveur ; **plafond global 1 Gio, pairs absents compris** (retrait : finies ou plus voulues, puis inactives en LRU ; jamais une active) ; jamais remplacé, jamais sur un délai ; quota N10 de l'auteur crédité après vérification | par pair annonceur | l'annonce suivante du même pair attend ; la règle H continue auprès des autres détenteurs | reprise des groupes vérifiés, même après 24 h |
+| modifications indivisibles en attente (disque, §14 point 7) | par `root` ; **un emplacement de 16 Mio par pair connecté** ; active ⇔ occupe l'emplacement d'un pair connecté qui la détient ; attribution seulement dans un emplacement libre, réservation atomique ; **plafond global 1 Gio, pairs absents compris** (retrait : finies ou plus voulues, puis inactives en LRU ; jamais une active) ; jamais remplacé, jamais sur un délai ; quota N10 de l'auteur crédité après vérification | par pair annonceur | l'annonce suivante du même pair attend ; la règle H continue auprès des autres détenteurs | reprise des groupes vérifiés, même après 24 h |
 | index des modifications indivisibles | entrées vérifiées seulement ; ≤ 1 par 4 Mio d'historique stocké ; retirée avec le document ou la modification | par auteur (N10) | — | — |
 | annonce indivisible | ≤ 16 777 216 octets (G1) | — | violation | — |
 | flux LARGE | ≤ `r` = 4 194 304 octets ; une annonce ordinaire plus grande n'est qu'un avis (`LARGE_REPLY` 0, pages) | — | violation si un flux dépasse `r` | pages d'historique |
@@ -1590,7 +1603,9 @@ de `protocol` ; un test par ligne vérifie la borne, la borne + 1 et la reprise.
   l'auteur exact de chaque modification (G12) et la garde (§9.7) ; aucune de ces vérifications
   ne se négocie (§5.4).
 - **Épuisement** : chaque file, carte et octet disque a une borne et un propriétaire (§16) ;
-  chaque plafond partagé a des parts réservées (§10.6) ; rien n'est lu sans crédit (§10.2) ;
+  chaque plafond partagé a des parts réservées (§10.6) ; l'attente des modifications
+  indivisibles est plafonnée à 1 Gio sur disque, pairs absents compris, avec un emplacement
+  garanti par pair connecté (§8.1) ; rien n'est lu sans crédit (§10.2) ;
   aucune boucle partagée n'attend un pair ; aucune combinaison de files pleines ne bloque
   (§10.7).
 - **Résiduel de volume (Majeur jusqu'au quota N10)** : un appareil qui écrit peut produire

@@ -1,6 +1,6 @@
 # Le protocole inkwell, en clair
 
-> Version : **2.0.0-brouillon.8** (2026-11-01). Texte normatif : [spec.md](spec.md).
+> Version : **2.0.0-brouillon.9** (2026-11-01). Texte normatif : [spec.md](spec.md).
 > Décision : [ADR 0034](../adr/0034-protocole-unifie.md). Changements et revues :
 > [CHANGES.md](CHANGES.md), [reviews/](reviews/). État actuel et défauts :
 > [inventaire.md](inventaire.md). Vecteurs : [vectors/](vectors/). Schémas CBOR : [cddl/](cddl/).

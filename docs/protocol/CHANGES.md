@@ -352,3 +352,25 @@ Critique, aucune divergence ; le même Majeur trouvé par les deux (borne de l'i
 
 - `RepoGen.cfg` non exhaustif ; passage entre sessions et crédits du pont argumentés, non
   modélisés ; codecs `sync2` et objets proposés sans implémentation (étapes 4 et 8).
+
+---
+
+# Tour 8 : révision 9 (2.0.0-brouillon.8 → 2.0.0-brouillon.9)
+
+Revues [16-codex](reviews/16-codex.md) et [17-fable](reviews/17-fable.md) : « revise », **un seul
+Majeur, le même** chez les deux, aucune Critique, aucune divergence. Codex confirme fermés :
+index (`max = r`), rejeu, vecteur `bridge-advice`.
+
+| # | Source | Constat | Changement | Où |
+|---|---|---|---|---|
+| T8-1 | Codex, Fable F17-2 (Majeur) | Deux définitions d'« active » : un pair connecté qui sert plusieurs racines laissées par des absents en rend plusieurs actives hors de tout emplacement (Codex : 63 + 1 × 2 → 65 actives, > 1 Gio ; Fable : X met en attente R1…Rn puis part, Y les annonce toutes et goutte) | **Une définition** : chaque pair connecté possède **un** emplacement de 16 Mio ; une entrée est active **si et seulement si** elle occupe l'emplacement d'un pair connecté qui la détient ; seules les actives sont tirées ; une entrée dont les détenteurs connectés ont tous leur emplacement pris est inactive. Attribution (annonce nouvelle, dédoublonnage, départ du pair attribué, redémarrage) **seulement dans un emplacement libre**, avec **réservation atomique** de la taille ; au redémarrage, réattribution une par emplacement. D'où actives ≤ pairs connectés × 16 Mio ≤ 1 Gio, et une réservation dans l'emplacement d'un pair connecté réussit toujours (en retirant les finies, puis les inactives). Les deux contre-exemples sont des scénarios de P-BYZ | spec §8.1, §16.1 ; ADR P-BYZ |
+| T8-2 | Fable F17-3 | « Retiré de la liste » ambigu | « Retiré de la liste des membres », distingué de « se déconnecte » ; les deux rendent l'entrée inactive | spec §8.1 |
+| T8-3 | Codex (Mineur) | « PEUT doubler » ne garantit pas l'absence de retard | **DOIT** doubler une plage en cours depuis 30 s s'il existe un autre détenteur | spec §8.1 |
+| T8-4 | Fable F17-4 | Borne « 1 par 4 Mio » | « ≈ 4 Mio » (plus que `r` moins l'enveloppe) | spec §8.1 |
+| T8-5 | Fable F17-4 | §17 ne cite pas le plafond d'attente | Ajouté à « Épuisement » | spec §17 |
+| T8-6 | Fable F17-4 | L'ADR cite encore « brouillon.2 » | « brouillon.9 » | ADR §Décision |
+
+## Reste ouvert après ce tour
+
+- `RepoGen.cfg` non exhaustif ; passage entre sessions et crédits du pont argumentés, non
+  modélisés ; codecs `sync2` et objets proposés sans implémentation (étapes 4 et 8).
