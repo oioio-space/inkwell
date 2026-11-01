@@ -20,7 +20,7 @@ chez tout le monde.
   └───────────────▲─────────────────────────────────┘
                   │ Streams Wails : octets opaques, aucun port local
   ┌───────────────┴─────────────────────────────────┐
-  │  Cœur Go : réseau, confiance, disque, Typst     │  ← ne lit jamais le texte
+  │  Cœur Go : réseau, confiance, disque, Typst     │  ← ne décode jamais Automerge (il lit la projection)
   └───▲───────────────▲───────────────────▲─────────┘
       │ libp2p chiffré │ os.Root            │ processus bornés
    autres personnes   dossier du projet    typst (et tinymist)
@@ -73,6 +73,8 @@ des deux est une vue.
 | zéro jargon, Adwaita | « pair » dans le code, « personne » à l'écran ; composants Adwaita réutilisés |
 | un projet de plusieurs fichiers | un document par fichier texte, un index qui les relie, chaque fichier désigné par un identifiant stable (on peut le renommer pendant qu'une autre personne écrit) |
 | hautement extensible (N20–N26) | registre unique, extensions intégrées sur la même API, greffons WebAssembly à droits nommés, greffons de projet bornés, interface jamais dénaturée, budgets mesurés |
+| une IA de premier rang (N31) | une extension intégrée comme les autres : fournisseurs appelés par Go (y compris le serveur d'IA de l'entreprise), politique décidée pour le projet, propositions relues avant d'entrer, protection contre les consignes cachées dans le texte des autres, serveur MCP local sans port par défaut |
+| écrire confortablement (N27–N30) | modèles créés par les personnes, erreurs cliquables comme dans un IDE, aide à la saisie Typst (tinymist), outils d'écriture |
 
 ## Les règles qui ne bougent pas
 

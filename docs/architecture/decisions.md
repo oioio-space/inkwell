@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Version | 1.0.0-brouillon.2 (2026-11-01) |
+| Version | 1.0.0-brouillon.3 (2026-11-01, révision 2 après revue ; [CHANGES.md](CHANGES.md)) |
 | Rôle | lever chaque doute trouvé en écrivant [spec.md](spec.md) : une question, ses options, une recommandation, sa raison |
 | Sources des doutes | [conception](../conception.pdf), [questions ouvertes](../open-questions.md), [audit](../plans/2026-10-31-architecture-audit.md), ADR 0001–0034, [protocole](../protocol/spec.md), [design](../design/spec.md), code (`main` à `362cb4d`, chantier `proto1`), `TODO` et `t.Skip` |
 
@@ -20,7 +20,7 @@ Règles :
 
 | # | Sujet | Recommandation | Utilisatrice | Se ferme par |
 |---|---|---|---|---|
-| AD-01 | Plusieurs projets ouverts | v1 : un projet par fenêtre et par processus ; architecture prête pour plusieurs | **oui** (écart à la conception p. 13) | spec N-1 ; ADR si plusieurs |
+| AD-01 | Plusieurs projets ouverts | v1 : **un seul projet ouvert à la fois**, dans un seul processus ; architecture prête pour plusieurs | **oui** (écart à la conception p. 13) | spec N-1 ; ADR si plusieurs |
 | AD-02 | Où vit l'autorité (`Wiring`) | un acteur `internal/ledger`, plis purs dans `protocol` | non | ADR 0036 |
 | AD-03 | Alias `internal/trust` → `protocol/trust` | toléré à l'étape 1 seulement, garde AC-15 | non | ADR 0034 étape 2 |
 | AD-04 | Composition processus / projet | `cmd/inkwell` = processus ; `app.Host` tient le `Runtime` courant | non | ADR 0036 |
@@ -39,7 +39,7 @@ Règles :
 | AD-17 | Mises à jour | manifeste signé ; `.deb`/`.rpm` : avertir seulement ; activée par défaut | **oui** | ADR 0038 |
 | AD-18 | Plates-formes v1 | Linux amd64 et arm64 seulement ; macOS et Windows après parité d'enfermement | **oui** | ADR (amende 0003) |
 | AD-19 | Wails beta.34 | passer à v3.0.x stable par la procédure de l'ADR 0008 | non | lot dédié |
-| AD-20 | LSP tinymist | stdio par un Stream `lsp`, méthodes filtrées en Go | non | spec §7 |
+| AD-20 | LSP tinymist | remplacée par `AD-80` | non | spec §15.17 |
 | AD-21 | Réglages de l'appareil | `settings.json` en Go, versionné ; `INKWELL_*` pour les tests | non | ADR 0037 |
 | AD-22 | Étiquettes de test dans l'exécutable publié | porte AC-14 (`go version -m`) | non | job de publication |
 | AD-23 | Liste de membres scellée à 1024 ops | garder ; alerte à 80 % et « recréer avec les mêmes personnes » | non | spec §2 |
@@ -63,7 +63,7 @@ Règles :
 | AD-41 | Projet sur clé USB, disque réseau, dossier synchronisé | détecter, avertir, lecture seule si les garanties manquent | non | spec §10.3 |
 | AD-42 | Recherche dans tout le projet | Go cherche la projection (RE2) ; la webview cherche les documents ouverts | non | spec §4 |
 | AD-43 | Relais par défaut | aucun relais tenu par le projet en v1 ; relais du groupe | **oui** | ADR (précise 0004) |
-| AD-44 | Accessibilité de l'aperçu et du PDF | `alt` par page ; PDF balisé ; option PDF/UA-1 | non | spec §2 |
+| AD-44 | Accessibilité de l'aperçu et du PDF | **équivalent accessible** : « Vue lecture » (export HTML de Typst assaini, sans script) + descriptions de diagrammes ; PDF balisé, option PDF/UA-1 | non | spec §2 |
 | AD-45 | Tests intermittents F3, F6, F8, F9, PRS-37 | mesurer et prouver la cause avant la bascule ADR 0034 | non | porte P-* |
 | AD-46 | Un document par fichier ou par projet | un document Automerge par fichier texte + index `G` séparé (ADR 0030 §3) ; tout désigne un nœud, jamais un chemin | non | spec §6.6 MF-1–4 |
 | AD-47 | Documents ouverts, onglets, document actif | un document actif + liste de récents ; modèle prêt pour des onglets | **oui** (onglets ou non) | spec §6.6 MF-5–7 |
@@ -71,13 +71,13 @@ Règles :
 | AD-49 | Enregistrement par fichier | projection de tous les textes admis ; « non enregistré » par fichier ; Ctrl+S = tout | non | spec §6.6 MF-11–13 |
 | AD-50 | Renommer ou supprimer un fichier ouvert ailleurs | l'éditeur suit le nœud ; corbeille = bandeau, frappe continue | non | spec §6.6 |
 | AD-51 | Registre des types de fichiers | une table de données partagée Go/TS + modules TS à la demande ; noyau inscrit comme les greffons | non | ADR 0027 |
-| AD-52 | Tableaux CSV : texte ou modèle structuré | texte Automerge (ADR 0026) + détection des lignes abîmées ; essai d'un modèle à identifiants de lignes et colonnes à l'étape 4 | **oui** (avec l'acceptation d'ADR 0026) | ADR 0026 |
+| AD-52 | Tableaux CSV : texte ou modèle structuré | texte (ADR 0026) + **détection des conflits structurels au niveau des opérations** et réparation attribuée (MF-25), oracle à identités de lignes ; essai du modèle structuré à l'étape 4 | **oui** (avec l'acceptation d'ADR 0026) | ADR 0026 |
 | AD-53 | Bornes de taille par type | paliers ADR 0028 par type ; grille sur index de lignes ; images ≤ 100 Mpx | non | spec §12.2 |
 | AD-54 | Grammaires de coloration | liste fermée de langages Lezer, découpés par Vite, embarqués, chargés à la demande | non | spec §6.6 MF-18 |
 | AD-55 | Fichier binaire ou inconnu | reniflage WHATWG partagé Go/TS ; texte brut ou carte de blob | non | spec §6.6 MF-15 |
 | AD-56 | Un seul point d'entrée « ouvrir » pour tous les types | `open(nodeId)` → registre → vue ; fin de `?file=` | non | spec §6.6 MF-5 |
-| AD-57 | Où tournent les greffons | modules WebAssembly cœur sous wazero, dans un **processus enfant enfermé** (un global, un par projet) ; WIT comme schéma ; composants en API 2 | **oui** (ADR 0039) | ADR 0039 |
-| AD-58 | Droits des greffons | aucune capacité ambiante ; droits nommés montrés à l'installation ; mémoire, temps, sortie bornés | **oui** (ADR 0039) | ADR 0039 |
+| AD-57 | Où tournent les greffons | wazero dans des **processus enfants enfermés par compartiment** (§9.10), canal §7.3, cache en mémoire ; banc avec témoin en processus avant acceptation | **oui** (ADR 0039) | ADR 0039 |
+| AD-58 | Droits des greffons | capacités nommées ; **règle de flux fermée** (sources I0–I3 × puits O0–O4, RF-1 à RF-5) ; secrets injectés par Go | **oui** (ADR 0039) | ADR 0039 |
 | AD-59 | Surface et versions de l'API | WIT `inkwell:plugin@1.x.y`, SemVer, règles d'évolution du protocole (N14) | non | ADR 0039 |
 | AD-60 | Greffons et collaboration | jamais d'installation **globale** depuis un pair ; greffons de projet bornés (`AD-69`) ; rendu dégradé sans greffon | **oui** | ADR 0039 |
 | AD-61 | Distribution et signature | fichier `.inkwell-plugin` signé, continuité de clé ; dépôt optionnel plus tard, jamais sans geste | **oui** (dépôt ou non) | ADR 0039 |
@@ -86,16 +86,27 @@ Règles :
 | AD-64 | Ce qui change le PDF | seulement des paquets Typst fournis (greffons Typst inclus) ; un greffon inkwell ne change jamais la compilation | non | ADR 0039 |
 | AD-65 | Points d'extension déclarés par un greffon | retenu en API 1.1 : graphe de dépendances SemVer, cycles et conflits refusés, règle d'exclusion par composante | non | spec §15.12 |
 | AD-66 | Données d'extension dans le document partagé | différé ; v1 : magasin privé et contenu standard | non | ADR future |
-| AD-67 | Dorsal de stockage par extension | dorsal byzantin ; chiffré, adressé par contenu, vérifié par le cœur ; copie locale autoritative | **oui** (portée v1) | spec §6.7, ADR 0039 |
+| AD-67 | Dorsal de stockage par extension | sauvegarde personnelle (v1) ; clé par projet et par personne, AEAD avec AAD, graphe objets → manifeste → tête ; **fraîcheur non vérifiable sur un appareil neuf** (résiduel écrit, ancres : phrase datée, membres) | **oui** (portée v1) | spec §6.7, ADR 0039 |
 | AD-68 | Nuage partagé entre membres | v2 : clé de stockage de projet distribuée par le ledger, ADR à part | **oui** | v2 |
-| AD-69 | Greffons de projet | décision d'admin `plugin/<id>`, blob vérifié, niveau « projet » sans question, accord local au-delà, hôte par projet | **oui** (N23 à confirmer) | spec §15.10 |
-| AD-70 | Diagrammes : contrat de rendu et rendus partagés | contrat pur `renderers`, hôte `wasm` ou cadre isolé ; SVG assaini ; rendu en blob, entrée `renders` de l'index | non | spec §15.14 |
-| AD-71 | Expérience des développeuses | une API ≤ 60 fonctions, une erreur, un asynchronisme ; référence générée ; bonjour en 10 lignes ; mesures | non | spec §15.15 |
+| AD-69 | Greffons de projet | **contribuer seulement**, mandats bornés et révocables, hôte par projet ; **bloqué par PD-1** (mineure du protocole) | **oui** (N23 à confirmer) | spec §15.10 |
+| AD-70 | Diagrammes : contrat de rendu et rendus partagés | contrat pur en `wasm` (Graphviz livré) ; rendus = **fichiers ordinaires** du projet (aucun delta du protocole) ; **Mermaid différé** (P-FRAME) | non | spec §15.14 |
+| AD-71 | Expérience des développeuses | API étagée 1.0, 1.1, 1.2 (plafonds de surface par étape) ; Rust et Go en 1.0 ; bonjour bilingue en 10 lignes | non | spec §15.15 |
 | AD-72 | Spécification du protocole des greffons | `docs/plugin-api/` normative, deux axes de version, détection de fonctions, N/N−1 avec adaptateur ; boucle de revue Fable + Codex | **oui** (acceptation) | `docs/plugin-api/` |
 | AD-73 | Surfaces d'interface et bouton d'extension | contribution `{commande, emplacement, groupe, ordre, quand}` ; une action par extension, épinglée par la personne seule | non | spec §15.13 |
 | AD-74 | Mode débogage | piles DWARF, Inspecteur, enregistrer et rejouer ; pas à pas par rejeu sous Wasmtime ou en natif | non | spec §15.15 |
 | AD-75 | Thèmes | données typées sur `tokens.json`, contrastes WCAG vérifiés au chargement | non | spec §15.8 |
 | AD-76 | Cycle de vie et événements | bus versionné, asynchrone, coalescé, borné ; arrêt : données d'abord, 1 s pour les greffons | non | spec §15.9 |
+| AD-77 | Corriger G-0 (clic sans effet) | chemin minimal G-0a tout de suite (lecture seule des autres fichiers), puis G-0b, G-0c | non | spec §6.6 |
+| AD-78 | Modèles de projet (N27) | aucun livré ; bibliothèque locale ; `typst.toml [template]` ; jamais `typst init` ; Markdown stylé par Typst, CSS pour l'export HTML seulement | **oui** (CSS) | spec §6.8 |
+| AD-79 | Erreurs comme un IDE (N28) | onglet « Problèmes » unique, F8, diagnostics ancrés, messages par table déterministe | non | spec §15.17 |
+| AD-80 | Service de langage tinymist (N29) | stdio enfermé, `didChange` depuis la webview, versions et réponses périmées jetées, p95 ≤ 100 ms, docstrings sûrs | non | spec §15.17 |
+| AD-81 | Outils d'écriture (N30) | recommandations 11–18 de l'étude, en extensions intégrées | non | spec §15.17 |
+| AD-82 | IA de premier rang (N31) | `ext/ai` ; fournisseurs compatibles OpenAI appelés par Go ; politique de projet ; propositions ; règle des deux ; MCP stdio par socket `0600` | **oui** (défauts, ADR 0040, 0041) | spec §15.18 |
+| AD-83 | Deltas du protocole demandés | PD-1 (espaces `plugin/`, `ai/` + règle de tolérance), PD-2 (domaines) ; mineure 2.1 à faire accepter par la boucle du protocole | **oui** (acceptation) | `docs/protocol/` |
+| AD-84 | Fidélité à la conception | aucune fidélité complète affirmée tant que les écarts de la matrice ci-dessous sont ouverts | **oui** | matrice |
+| AD-85 | Ordre de livraison de l'API | API 1.0 réduite, puis 1.1, 1.2 ; registre → commande, panneau, proposition → Graphviz → dorsal | non | spec §15.21 |
+| AD-86 | Canal Go ↔ hôte des greffons | `socketpair` `SOCK_SEQPACKET`, trames bornées, autorité imposée par le parent, un appel à la fois par instance | non | spec §7.3 |
+| AD-87 | Enfermement de l'hôte et compartiments | aucun fichier (memfd), seccomp, Landlock, profil AppArmor livré, mémoire par hôte, un compartiment par classe de sortie, échec fermé visible | non | spec §9.10 |
 
 **Nouvelles ADR proposées** (numéros réservés) : 0027 registre unique des contributions
 (types de fichiers, commandes, panneaux, exportateurs ; `AD-08`, `AD-51`, `AD-63`) ; 0035 disposition et migration des données (`AD-10`, `AD-11`) ; 0036 découpage de
@@ -104,6 +115,36 @@ Règles :
 0038 mises à jour (`AD-17`) ; 0039 greffons WebAssembly (`AD-57` à `AD-76`, brouillon dans
 [spec.md, annexe](spec.md#annexe--brouillon-dadr-0039--greffons-webassembly)). Sous réserve du choix de l'utilisatrice : `AD-01` (si
 plusieurs projets), `AD-13`, `AD-14`, `AD-18`, `AD-33`, `AD-43`, `AD-68`. **Spécification à écrire ensuite** : `docs/plugin-api/` (`AD-72`), avec sa propre boucle de revue Fable + Codex.
+
+### Matrice des décisions finales (ce que l'acceptation de cette spécification ne vaut pas)
+
+Accepter `spec.md` vaut décision pour toutes les recommandations **techniques** (colonne
+« Utilisatrice : non »). Elle **ne vaut pas** les décisions ci-dessous, qui exigent un acte à
+part ; tant qu'elles sont ouvertes, la spécification n'affirme pas sa fidélité complète à la
+conception (`AD-84`).
+
+| AD | Recommandation | Qui décide | Amendement nécessaire | Écart à la conception |
+|---|---|---|---|---|
+| AD-01 | un seul projet ouvert à la fois en v1 | utilisatrice | aucun (design §5.2 l'a déjà) | **oui**, p. 13 |
+| AD-07 | accepter 0021–0023, 0026 (seuil remplacé), 0028, 0029 | utilisatrice | statuts d'ADR | — |
+| AD-13 | projection Git par écrivain minimal, cachée | utilisatrice | ADR (étape 4) | nomme go-git |
+| AD-14 | commentaires des lecteurs par admission bornée | utilisatrice | **mineure du protocole** (la couverture acceptée exige un écrivain, protocole §9.4) + ADR | p. 11–12 sinon |
+| AD-17 | mises à jour : manifeste signé, avertir pour `.deb`/`.rpm` | utilisatrice (défaut actif ou non) | ADR 0038 | — |
+| AD-18 | Linux seulement en v1 | utilisatrice | ADR (amende 0003) | `PROGRESS.md` étape 6 |
+| AD-24 | quota 1 Gio par personne qui écrit | utilisatrice | — | — |
+| AD-26 | aperçu ≤ 1 s complet, ≤ 300 ms incrémental | technique, après mesure | **amendement de `engineering-principles.md` §3 par ADR** (le principe dit 300 ms) | — |
+| AD-33 | pandoc en sidecar, ou v2 | utilisatrice | ADR (amende 0024) | p. 37 sinon |
+| AD-43 | aucun relais tenu par le projet | utilisatrice | ADR (précise 0004) | — |
+| AD-47 | un document actif, sans onglets | utilisatrice | — | — |
+| AD-52 | texte + conflits structurels | utilisatrice (avec AD-07) | ADR 0026 acceptée | — |
+| AD-57, AD-58, AD-61 | greffons : hôte enfant par compartiment, règle de flux, fichier seulement | utilisatrice | **ADR 0039** après P-PLUG-BENCH et revue de sécurité | — |
+| AD-67 | sauvegarde personnelle en v1 | utilisatrice | ADR 0039 | N22 réinterprétée |
+| AD-69 | greffons de projet bornés | utilisatrice | **PD-1** + ADR 0039 | N23 bornée |
+| AD-70 | Mermaid différé | utilisatrice | — | demande explicite de Mermaid |
+| AD-72 | `docs/plugin-api/` | utilisatrice | sa propre boucle de revue | — |
+| AD-78 | pas de CSS pour le PDF | utilisatrice | — | N27 « Markdown + CSS » |
+| AD-82 | IA : défauts de politique, MCP | utilisatrice | **PD-1**, ADR 0040, 0041 | — |
+| AD-83 | PD-1, PD-2 | utilisatrice | boucle du protocole (2.1) | — |
 
 ---
 
@@ -132,6 +173,8 @@ plusieurs projets), `AD-13`, `AD-14`, `AD-18`, `AD-33`, `AD-43`, `AD-68`. **Spé
   `Runtime`, filtre d'union) pour un gain que personne n'a demandé. Résiduel : un projet fermé
   ne se synchronise pas (comme Teamtype) ; l'édition hors ligne le couvre (G3).
 - **Utilisatrice : oui** — écart à la conception p. 13.
+
+- **Révision 2.** La synthèse disait « un projet par fenêtre et par processus » : formulation ambiguë, corrigée en « un seul projet ouvert à la fois, dans un seul processus » (option 1 du corps). Écart à la conception (p. 13) inscrit dans la matrice.
 
 ### AD-02 — L'autorité du projet : un acteur `internal/ledger`
 
@@ -460,6 +503,8 @@ plusieurs projets), `AD-13`, `AD-14`, `AD-18`, `AD-33`, `AD-43`, `AD-68`. **Spé
 - **Utilisatrice : oui** (l'option 1 est un écart à la conception ; l'option 2 étend le
   protocole).
 
+- **Révision 2.** L'option 2 n'est **pas** compatible avec le protocole accepté : la couverture (protocole §9.4) exige qu'une modification admise soit couverte par un écrivain. Elle exige une **mineure du protocole** (nouveau domaine de signature, règle de couverture des commentaires, vecteurs) et une ADR ; sans elles, seule l'option 1 est possible. Inscrit dans la matrice.
+
 ### AD-20 — LSP tinymist
 
 - **Doute.** `tinymist` (32,8 Mo) est embarqué mais jamais lancé (audit m-x) ; la conception
@@ -473,6 +518,8 @@ plusieurs projets), `AD-13`, `AD-14`, `AD-18`, `AD-33`, `AD-43`, `AD-68`. **Spé
   §9.5 (lecture seule, pas de réseau, mémoire bornée), relance bornée.
 - **Raison.** Aucun port (ADR 0009) ; un défaut de la webview ne donne pas à un pair le
   pouvoir de faire écrire tinymist (B-2).
+
+- **Révision 2.** Remplacée par `AD-80` (N29, spec §15.17), qui en garde l'enfermement et la liste blanche et ajoute versions, espace de travail multi-fichiers et budget.
 
 ### AD-22 — Étiquettes de test dans l'exécutable publié
 
@@ -651,6 +698,8 @@ plusieurs projets), `AD-13`, `AD-14`, `AD-18`, `AD-33`, `AD-43`, `AD-68`. **Spé
   incrémental pour ≤ 20 pages, ≤ 1 s en compilation complète.
 - **Raison.** Pas de port, pas de second moteur de rendu ; décider sur mesure, pas au jugé.
 
+- **Révision 2.** Le budget de 300 ms est écrit dans `engineering-principles.md` §3 : la spécification ne peut pas l'assouplir seule. Tant que la mesure n'a pas tranché, le principe reste la cible ; si l'essai montre qu'il est inatteignable en compilation complète, une **ADR amende le principe** (matrice).
+
 ### AD-27 — Condition de mesure « frappe → pair »
 
 - **Doute.** Le budget LAN (p95 ≤ 100 ms) se heurte à la cadence de synchronisation
@@ -681,6 +730,8 @@ plusieurs projets), `AD-13`, `AD-14`, `AD-18`, `AD-33`, `AD-43`, `AD-68`. **Spé
   d'export.
 - **Raison.** Garder l'aperçu inerte (aucun balisage venu d'un pair dans le DOM) sans
   sacrifier WCAG 2.2 AA.
+
+- **Révision 2 (revue Codex M7).** `alt="Page N sur M"` n'est pas un équivalent (WCAG 2.2 SC 1.1.1). Recommandation remplacée : « Vue lecture » de l'aperçu, produite par l'export HTML de Typst (≥ 0.15, MathML), **assainie** par Go, affichée dans un `iframe` `sandbox` sans scripts, navigable au clavier et au lecteur d'écran, synchronisée avec la page ; descriptions des diagrammes (contrat `renderers`) ; parcours vérifié avec Orca, pas seulement axe (spec §15.17).
 
 ### AD-36 — Test ignoré `files_test.go:713`
 
@@ -825,6 +876,8 @@ principal au démarrage. Codex a refusé un correctif étroit : le modèle manqu
   l'option 2 gagne.
 - **Utilisatrice : oui**, avec l'acceptation de l'ADR 0026 (`AD-07`).
 
+- **Révision 2 (revue Codex M3).** Compter les champs ne voit pas une valeur déplacée dans une ligne voisine de même largeur. Décidé maintenant : détection **au niveau des opérations** (lignes touchées localement × plages supprimées ou déplacées par des modifications concurrentes), carte de réparation attribuée, texte orphelin retiré dans la même proposition (spec MF-25) ; **oracle** : propriété à graine contre un modèle à identités de lignes, qui remplace l'assertion `record(r).length > 0` de `collab.test.ts:217–220`. L'essai du modèle structuré reste à l'étape 4 ; il ne conditionne plus la sûreté actuelle.
+
 ### AD-53 — Bornes de taille par type
 
 - **Recommandation.** Paliers de l'ADR 0028 (comptés en caractères) pour texte, code, Markdown,
@@ -887,12 +940,16 @@ servent pas de preuve ; celles dont dépendent les décisions ont été vérifi�
 - **Preuve exigée.** P-PLUG-BENCH (`benchstat`, `-count ≥ 10`) avant l'acceptation.
 - **Utilisatrice : oui** (ADR 0039).
 
+- **Révision 2 (revues Fable B-3, M-1 ; Codex B4, M5).** Les deux revues approuvent l'option 4. Précisé : enfermement exécutable (spec §9.10 : modules par `memfd` scellé, **pas de cache disque en v1**, seccomp et Landlock obligatoires, profil AppArmor livré pour Ubuntu 24.04, budget mémoire par hôte, échec fermé visible) ; **compartiments** (un hôte par projet, un pour les greffons globaux sans sortie, un par greffon qui a une sortie) : une évasion n'obtient que les droits de son compartiment ; canal et autorité imposés par le parent (§7.3) ; banc P-PLUG-BENCH avec **témoin en processus**, trajet complet, RSS par hôte.
+
 ### AD-58 — Droits
 
 - **Recommandation.** §15.5 : aucune capacité ambiante, capacités nommées et montrées, règle
   d'exclusion (`net.hosts` ou lecture du clair, jamais les deux), bornes de mémoire et de temps
   (pas de *fuel* dans wazero : interruption par contexte).
 - **Utilisatrice : oui** (liste des capacités, phrases montrées).
+
+- **Révision 2 (revue Codex M6).** La liste d'exclusion était partielle (`import.read`, `self.read`, `presence.read`, entrée des `renderers`). Remplacée par une **règle de flux fermée** : sources I0–I3, puits O0–O4, règles RF-1 à RF-5 calculées par compartiment (spec §15.5) ; secrets d'un dorsal injectés par Go (`secret:<nom>`) ; `ai.complete` (O4) seul chemin de sortie du contenu, par Go, sous politique et aperçu.
 
 ### AD-59 — Surface et versions de l'API
 
@@ -954,6 +1011,8 @@ servent pas de preuve ; celles dont dépendent les décisions ont été vérifi�
   « non fiables » chiffrés).
 - **Utilisatrice : oui** (portée v1 : sauvegarde personnelle).
 
+- **Révision 2 (revues Fable M-4, Codex B3).** ST-7 promettait de voir tout rejeu : faux pour un appareil neuf. Spec §6.7 réécrite : clé **par projet et par personne** (HKDF, domaines séparés), AEAD XChaCha20-Poly1305 avec AAD (projet, nom), graphe objets → manifeste → tête, deux têtes gardées, têtes jamais réécrites ; **fraîcheur** : détectée sur un appareil déjà synchronisé, **non vérifiable** sur un appareil neuf (résiduel écrit à l'écran), ancres : phrase de récupération datée et synchronisation avec les membres ; restaurer ne réimpose jamais une autorité ancienne (pli) ; tailles visibles (résiduel).
+
 ### AD-68 — Nuage partagé entre membres (v2)
 
 - **Constat.** Utile quand les membres ne sont jamais en ligne en même temps ; exige une clé de
@@ -970,6 +1029,8 @@ servent pas de preuve ; celles dont dépendent les décisions ont été vérifi�
   (modèle) ; greffons d'organisation de Figma.
 - **Utilisatrice : oui** (confirmer le niveau « projet »).
 
+- **Révision 2 (revues Fable B-2, B-4 ; Codex B5, M1).** (1) `plugin/<id>` n'est **pas** une extension compatible du protocole accepté : il exige la mineure PD-1 (`AD-83`) ; N23 est bloquée d'ici là. (2) Niveau « projet » réduit à **contribuer** : ni remplacer (vue par défaut, thème…), ni envelopper (collage), décorations de marque seulement (aucun `replace`, aucun widget qui masque), `transforms` par commande seulement. (3) **Mandat** borné (commande, documents, 30 s, propositions comptées), révoqué à la désactivation, la mise à jour, une nouvelle décision, la fermeture ; réponses tardives jetées. (4) Rendus : locaux seulement pour un greffon de projet.
+
 ### AD-70 — Diagrammes
 
 - **Recommandation.** §15.14 : contrat pur `renderers` ; hôte `wasm` par défaut, cadre isolé pour
@@ -978,11 +1039,16 @@ servent pas de preuve ; celles dont dépendent les décisions ont été vérifi�
 - **Norme et preuve.** mermaid #3886 (mise en page par le navigateur) ; CVE-2026-41148 et 41149
   (injections dans les SVG de Mermaid) ; `diagraph` (Graphviz en greffon Typst) ; D2.js.
 
+- **Révision 2 (revues Fable B-1, m-2 ; Codex B2, B5).** (1) Le cadre `frame` faisait tourner du JavaScript tiers dans le processus web qui tient le pont : **retiré**. Mermaid est **différé** jusqu'à la porte P-FRAME (processus web dédié, tuable, sans liaisons, réseau et navigation refusés par l'hôte, prouvé sur WebKitGTK) ; alors capacité `render.frame`, hors niveau « projet ». Graphviz en `wasm` est le cas livré. (2) La carte `renders` dans l'index exigeait une règle de garde : remplacée par des **fichiers ordinaires** (`.renders/<clé>.svg`, `.renders/index.json`), validation à l'interprétation ; **aucun delta du protocole**. (3) Polices du rendu = polices fournies à Typst ; `description` exigée (accessibilité).
+- **Utilisatrice : oui** (Mermaid différé).
+
 ### AD-71 — Expérience des développeuses
 
 - **Recommandation.** §15.15 : DX-1 à DX-7, bonjour en 10 lignes, quatre langages, mesures.
 - **Norme.** Google AIP (193, 151), guides de l'API des extensions de VS Code, *Rust API
   Guidelines*.
+
+- **Révision 2 (revues Fable M-3, m-4 ; Codex M5).** 29 interfaces pour 60 fonctions étaient incompatibles. API **étagée** (spec §15.21) : 1.0 (13 interfaces, ≤ 60 fonctions, ≤ 45 types), 1.1, 1.2, avec plafonds par étape ; kits Rust et Go en 1.0, TypeScript et AssemblyScript en 1.1 ; GREASE seulement dans `host.features()` ; l'exemple « bonjour » est bilingue (ND-4).
 
 ### AD-72 — Spécification du protocole des greffons
 
@@ -990,6 +1056,8 @@ servent pas de preuve ; celles dont dépendent les décisions ont été vérifi�
   conformité ; **rédigée ensuite**, avec sa propre boucle de revue Fable + Codex, comme
   `docs/protocol/`.
 - **Utilisatrice : oui** (acceptation, comme l'ADR 0034).
+
+- **Révision 2 (revue Codex B1).** Le noyau de l'ABI est maintenant **normatif dans la spec** (§15.20 : module réacteur, exports, imports, WASI toléré, réponse et erreurs, négociation, annulation, octets signés du paquet, vecteurs minimaux) ; `docs/plugin-api/` reste à écrire pour les interfaces de chaque point et les registres, avec sa propre boucle.
 
 ### AD-73 — Surfaces d'interface et bouton d'extension
 
@@ -1016,6 +1084,130 @@ servent pas de preuve ; celles dont dépendent les décisions ont été vérifi�
 
 - **Recommandation.** §15.9 : bus versionné, asynchrone, coalescé, borné, gardé par capacités ;
   aucun crochet avant la peinture ; arrêt : données durables d'abord, puis 1 s pour les greffons.
+
+---
+
+## Révision 2 : décisions nouvelles
+
+### AD-77 — Corriger G-0 sans attendre le modèle complet
+
+- **Doute.** Les deux revues confirment le défaut (`App.svelte:197`, `Sidebar.svelte:17`,
+  `workspace.svelte.ts:42,247,275–293`) et qu'un correctif du seul rappel ne suffit pas ; le modèle
+  complet dépend de l'index `G` et des annonces (ADR 0031, étape 8 d'ADR 0034).
+- **Recommandation.** Trois lots (spec §6.6) : **G-0a** immédiat (ouvrir pour de vrai : `main.typ`
+  modifiable, les autres en lecture seule depuis la projection avec un bandeau honnête ; fin de
+  `?file=`) ; **G-0b** après les annonces (MF-1, MF-2, MF-5, MF-12) ; **G-0c** avec le Worker
+  (MF-6, MF-7, MF-19–MF-24). Tests nommés FM-OPEN-1 à 8.
+
+### AD-78 — Modèles de projet (N27)
+
+- **Recommandation.** Spec §6.8 : aucun modèle livré ; un modèle est un projet de la bibliothèque
+  locale, décrit par `typst.toml [template]` (format des modèles de Typst Universe) ; créer depuis
+  un projet (sans historique ni membres), modifier, dupliquer, supprimer, importer et exporter
+  (archive `AD-38`), partager ; nouveau projet = copie locale, **jamais** `typst init` (il
+  télécharge) ; vignettes compilées localement ; plusieurs variantes (document, présentation) par
+  modèle.
+- **Doute pour l'utilisatrice.** N27 cite « Markdown + CSS ». Le PDF d'inkwell vient de Typst
+  (déterministe, G5) ; un style **CSS** pour le PDF exigerait un moteur de navigateur comme second
+  moteur de mise en page (rendu variable d'une machine à l'autre). Recommandé : Markdown mis en page
+  par un gabarit Typst (`cmarker`), CSS réservé à l'export HTML.
+- **Utilisatrice : oui.**
+
+### AD-79 — Erreurs comme un IDE (N28)
+
+- **Recommandation.** Spec §15.17 ER-1 à ER-4 : onglet « Problèmes à corriger » unique (Typst,
+  service de langage, CSV, Markdown, CSS des modèles), diagnostics ancrés par curseur Automerge,
+  F8/Maj+F8, clic → bon fichier, plage sélectionnée ; messages par table déterministe, brut sous
+  « Détails techniques ».
+- **Norme et preuve.** VS Code (panneau Problèmes, F8), étude editor-features §3.2 ; un message
+  d'un pair n'est jamais du HTML.
+
+### AD-80 — Service de langage tinymist (N29)
+
+- **Recommandation.** Spec §15.17 LSP-1 à LSP-5 : enfermé, liste blanche, `didChange` depuis la
+  webview (texte Automerge), multi-fichiers (autres fichiers sur la projection), versions et
+  réponses périmées jetées, p95 ≤ 100 ms, docstrings `///` rendus sûrs, `syntaxOnly` au-delà du
+  palier Grand, hors ligne prouvé par un test en espace de noms réseau vide.
+- **À vérifier au banc** (étude §7) : complétion des étiquettes et clés bibliographiques ; options
+  de chemin des paquets de tinymist.
+
+### AD-81 — Outils d'écriture (N30)
+
+- **Recommandation.** Recommandations 11 à 18 de l'étude (addendum §8–§11), en extensions
+  intégrées : orthographe embarquée, dictionnaire du projet, onglet « Relecture », typographie
+  française, focus, comptes et objectifs locaux, recherche et extraits du projet, insertions,
+  comparaison par mots, préréglages d'export. LanguageTool en greffon optionnel ; gamification
+  écartée. **À mesurer** : taille des dictionnaires, `lang: "fr"` sur le Typst épinglé, licence des
+  synonymes.
+
+### AD-82 — IA de premier rang (N31)
+
+- **Recommandation.** Spec §15.18, d'après l'étude `research/ai.md` : extension intégrée
+  `ext/ai` ; une API (registre de commandes) pour palette, greffons, agent et MCP ; fournisseurs
+  compatibles OpenAI appelés **par Go** (AC interne, mTLS, OIDC, proxy) ; politique IA du projet
+  (`off`, `local`, `org`, `libre`), défaut « rien ne part sans décision d'admin » dans un projet
+  partagé ; aperçu de ce qui part ; propositions par morceau, couche fantôme hors CRDT ; règle des
+  deux et CaMeL allégé contre l'injection ; discussion = artefacts déclaratifs ; MCP par shim stdio
+  et socket `0600`, HTTP local en option.
+- **Résolu** : le conflit de l'étude avec la règle d'exclusion (§3.3 de l'étude) est réglé par le
+  puits O4 et `ai.complete` (RF-3) : le contenu ne sort que par Go, sous politique et aperçu.
+- **Vérifié le 2026-11-01** : révision MCP 2026-07-28, requêtes sans état
+  (modelcontextprotocol.io/specification/latest) ; échantillonnage, racines et journalisation
+  dépréciés (README de go-sdk) ; go-sdk ≥ v1.7.0 prend en charge 2026-07-28. **Ouvert** :
+  gestionnaire Streamable HTTP du SDK (avant MCP-2) ; affirmations « [mémoire] » de l'étude sur
+  les autres fournisseurs et éditeurs, à sourcer avant les ADR 0040 et 0041.
+- **Utilisatrice : oui** (défauts de la politique, exposition MCP).
+
+- **Extension de l'étude (§9–§11, ACP, UTCP).** Intégrée en spec §15.18 (ACP-1, UTCP, règles de
+  projet signées). Vérifié le 2026-11-01 : ACP v1 stable, v2 en brouillon, registre stabilisé, SDK
+  officiels Kotlin, Java, Python, Rust, TypeScript, **pas de Go** (agentclientprotocol.com/llms.txt).
+  Questions ouvertes de l'étude (§11.5, ses numéros 8 à 16), suivies ici comme **IA-Q8 à IA-Q16** :
+  SDK ACP en Go ou client maison ; attendre ACP v2 stable ; bac à sable de sous-processus
+  multiplateforme ; empreinte et mise à jour d'un agent installé par la personne ; conversion
+  `oldText/newText` en opérations ancrées sous concurrence ; licences (ACP, poids Zeta2) ; statut de
+  MCP Apps ; Open Responses contre Responses ; UTCP (attendre un hôte majeur, licence MPL-2.0 du
+  SDK Go, modèle d'appel `mcp` sur stdio). Aucune ne bloque les premières étapes (fournisseurs,
+  propositions, MCP stdio).
+
+### AD-83 — Deltas du protocole
+
+- **Constat (revues Fable B-2, M-5 ; Codex B5).** La révision 1 appelait « extension compatible »
+  des ajouts que le protocole accepté ne tolère pas (registre §20.5 fermé, aucune règle pour un
+  espace inconnu, HELLO sans version d'application).
+- **Recommandation.** Table PD de la spec (§15.19) : PD-1 (espaces `plugin/` et `ai/`, règle de
+  tolérance « entrée conservée et ignorée, op acceptée, sans sanction », émission après `format`) et
+  PD-2 (domaines de signature) ; proposés pour une **mineure 2.1** dans la boucle du protocole ;
+  carte `renders` et TLV `PLUGIN_API` **retirés** (plus nécessaires).
+- **Utilisatrice : oui** (acceptation de la mineure).
+
+### AD-84 — Fidélité à la conception
+
+- **Recommandation.** Ne pas affirmer la fidélité complète : la matrice des décisions finales liste
+  chaque écart (AD-01, AD-13, AD-14, AD-33, AD-67, AD-69, AD-70, AD-78) et ce qu'il faut pour le
+  lever.
+
+### AD-85 — Ordre de livraison de l'API
+
+- **Recommandation.** Spec §15.21 : 1.0 réduite (13 interfaces), 1.1, 1.2 ; ordre registre →
+  commande, panneau, proposition → Graphviz jusqu'au PDF → reste ; les points déclarés par un
+  greffon, le dorsal et le service de langage des greffons en 1.2.
+
+### AD-86 — Canal Go ↔ hôte des greffons
+
+- **Recommandation.** Spec §7.3 IPC-1 à IPC-6 : `socketpair` `SOCK_SEQPACKET` seul descripteur
+  avec des `memfd` scellés ; trames bornées (≤ 4 Mio) ; compartiment et génération attribués par le
+  parent ; un appel à la fois par instance, file ≤ 8 par greffon, ≤ 16 en vol par hôte ; annulation ;
+  vecteurs et fuzz (règle B-1).
+
+### AD-87 — Enfermement de l'hôte et compartiments
+
+- **Recommandation.** Spec §9.10 H-1 à H-8.
+- **Norme et preuve.** Landlock (documentation du noyau) ; restriction AppArmor des espaces de noms
+  utilisateur d'Ubuntu 24.04 (`kernel.apparmor_restrict_unprivileged_userns=1`, citée par la revue
+  Fable) et `internal/sidecar/netns_linux.go:22–34` (repli actuel) ; défense en profondeur (NIST SP
+  800-53 SC-39). Test d'un enfant simulé compromis (`PLUG-COMPROMISED-*`).
+- **Ouvert, mesuré par P-PLUG-BENCH** : coût de la compilation sans cache disque ; un cache géré par
+  le parent est une décision ultérieure.
 
 ## Sources consultées pour ces décisions
 
@@ -1057,3 +1249,8 @@ servent pas de preuve ; celles dont dépendent les décisions ont été vérifi�
 - API : [AIP-193](https://google.aip.dev/193), [AIP-151](https://google.aip.dev/151),
   [Rust API Guidelines](https://rust-lang.github.io/api-guidelines/checklist.html),
   [VS Code, points de contribution](https://code.visualstudio.com/api/references/contribution-points).
+- Révision 2 : [MCP 2026-07-28](https://modelcontextprotocol.io/specification/latest) ;
+  [go-sdk](https://github.com/modelcontextprotocol/go-sdk) ;
+  [Landlock](https://docs.kernel.org/userspace-api/landlock.html) ;
+  [Typst, modèles (`typst.toml [template]`)](https://github.com/typst/packages) ;
+  [research/editor-features.md](research/editor-features.md) ; [research/ai.md](research/ai.md).

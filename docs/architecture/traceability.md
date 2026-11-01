@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Version | 1.0.0-brouillon.2 (2026-11-01) |
+| Version | 1.0.0-brouillon.3 (2026-11-01, révision 2) |
 | Lire avec | [spec.md](spec.md) (règles), [decisions.md](decisions.md) (`AD-xx`), [exigences](../exigences.md) |
 
 Chaque ligne relie une demande à l'élément d'architecture qui la sert et à la preuve qui la
@@ -24,7 +24,7 @@ vérifie (test, porte, revue). Une ligne sans preuve est un trou : colonne « É
 | fiable et rapide (U32, U33) | G9 | §10, §12, ADR 0028, 0029 | `PERF-*`, `bench:compare`, LazyFS | 🧪 |
 | un exécutable, `.deb`, `.rpm` (L1–L5) | G10 | §14, ADR 0024, 0025 | `pkg:test` (PKG-01…12) ; AC-14 | 🧪 ❓ `AD-18` |
 | protocole public (N12–N16) | G11 | §4.3, §8, `docs/protocol/` | P-VEC, P-COMPAT, P-TLA, P-FUZZ | 🧪 (migration) |
-| hautement extensible (N20–N26) | G12 | §15, annexe (ADR 0039), §6.6, §6.7 | P-EXT-1…7, `EXT-ND*`, `CAP-*`, P-PLUG-BENCH | ⏳ ❓ `AD-57` |
+| hautement extensible (N20–N26) | G12 | §15, annexe (ADR 0039), §6.6, §6.7, §7.3, §9.10 | P-EXT-1…7, `EXT-ND*`, `CAP-*`, P-PLUG-BENCH (avec témoin), `PLUG-COMPROMISED-*` | ⏳ ❓ `AD-57` |
 | commentaires, lecture seule (p. 11–12) | G4, G6 | `AD-14` | — | ❓ `AD-14` |
 | plusieurs projets ouverts (p. 13) | — | N-1, `AD-01` | — | ❓ `AD-01` |
 | mises à jour signées, rapport de bug (p. 15–16, 38) | G10 | §11, `AD-16`, `AD-17` | test canari O-7 | ⏳ ❓ |
@@ -55,6 +55,12 @@ vérifie (test, porte, revue). Une ligne sans preuve est un trou : colonne « É
 | N24 | ne pas dénaturer ; aller au plus loin | §15.11, §15.12, §15.13 | `EXT-ND1`…`EXT-ND8` | ⏳ |
 | N25 | API claire, débogage | §15.15, `AD-71`, `AD-74` | TTFP chronométré, `api:surface`, `api:doc`, rejeu | ⏳ |
 | N26 | protocole des greffons, versions compatibles | §15.16, `AD-72` | vecteurs `docs/plugin-api/`, matrice de compatibilité | ⏳ (spécification à écrire) |
+| N27 | modèles créés par les personnes | §6.8, `AD-78` | e2e `templates.spec.ts` (créer, dupliquer, importer, nouveau projet sans réseau) ; test « aucun `typst init` » | ⏳ ❓ `AD-78` |
+| N28 | erreurs comme un IDE | §15.17 ER-1–4, `AD-79` | e2e `problems.spec.ts` (F8, clic → fichier et plage) ; table de messages (unitaire) | ⏳ |
+| N29 | aide à la saisie Typst (tinymist) | §15.17 LSP-1–5, `AD-80` | propriété UTF-16 ↔ Automerge ; réponses périmées jetées (`LSP-STALE`) ; `PERF-LSP` p95 ≤ 100 ms ; test réseau coupé | ⏳ |
+| N30 | outils d'écriture | §15.17, `AD-81` | `ux-walkthrough` ; tests en personne (étude §5 point 6) | ⏳ |
+| N31 | IA de premier rang, MCP, serveurs de l'entreprise | §15.18, `AD-82` | propriété IA-5 ; corpus d'injections fuzzé ; fuzz SSE et arguments MCP ; « une proposition acceptée = une modification annulable » ; MCP : `Origin`, jeton, portées | ⏳ ❓ `AD-82`, PD-1 |
+| G-0 | clic dans la liste des fichiers | §6.6 (G-0a, b, c), `AD-77` | e2e `files.spec.ts` FM-OPEN-1…8 | ⏳ |
 | U1 | encodage, fins de ligne | `project` (`FileInfo`), MF-15 | `text_test.go`, `externalSync.test.ts` | ✅ |
 | U4–U6, U9 | barres par type, insertion, icônes | points `toolbar`, `menus`, `file-types` (§15.4) | e2e `format.spec.ts`, `shell.spec.ts` | ✅ (à porter sur le registre) |
 | U7 | modifications externes | ADR 0020, F-2, MF-12 | `externalSync.test.ts`, EXT-* | 🧪 (main.typ seulement) |
@@ -111,13 +117,15 @@ Détail des budgets : spec §15.4, §15.13, §15.14.
 | complétion, survol, langages | `completion`, `hover`, `language-server` | `document.read` | LSP tinymist | p95 ≤ 100 ms | contrat LSP |
 | diagnostics, décorations, gouttières, widgets | `diagnostics`, `decorations`, `gutters`, `inline-widgets` | `document.read` | problèmes Typst, bande des modifications, aperçu en ligne des diagrammes | 1 maj/300 ms ; ≤ 4 ms | `PERF-EXT-DECO` |
 | transformations, collage | `transforms` | `document.read`, `document.propose` | tri, collage du tableur, remplacer tout | ≤ 50 ms appliqué | `EXT-ND8` (Annuler) |
-| rendu de diagramme | `renderers` | aucune | **Diagrammes** : Graphviz (`wasm`) ; exemple Mermaid (`frame`) | p95 ≤ 300 ms | fuzz assainisseur SVG ; e2e jusqu'au PDF |
+| rendu de diagramme | `renderers` | entrée I2 seulement | **Diagrammes** : Graphviz (`wasm`) ; exemple D2 ; Mermaid différé (P-FRAME) | p95 ≤ 300 ms | fuzz assainisseur SVG ; e2e jusqu'au PDF |
 | affichage de l'aperçu | `preview-overlays` | `compile.read` | saut source ↔ aperçu | ≤ 16 ms/page | contrat ; X-8 |
 | exportateurs, importateurs | `exporters`, `importers` | `compile.run`, `export.write`, `import.read`, `document.create` | PDF, PDF/UA, archive ; CSV | ≤ 120 s, annulable | e2e export |
 | thèmes, icônes | `themes`, `icons` | — | Adwaita clair, sombre, contraste élevé | validation ≤ 20 ms ; bascule ≤ 50 ms | test de contraste (TH-2) |
 | stockage distant, miroir | `storage-backend`, `mirrors` | `net.hosts` + `storage.backend` ; `mirror.dir` | « Dossier de sauvegarde » | hors chemin d'édition | fuzz ; ST-1…7 ; règle d'exclusion `CAP-EXCL` |
 | cycle de vie, événements | `events` | celle de l'événement | Activité, « Pendant votre absence… » | ≤ 1 µs sans abonné ; arrêt ≤ 1 s | `PERF-EXT-START`, `PERF-EXT-STOP` |
-| greffons de projet | décisions `plugin/<id>` | niveau « projet » | exemple « greffon de projet » (§15.15) | 16 greffons, 64 Mio | `EXT-PP-1`…`7` |
+| fournisseurs et outils d'IA | `ai-providers`, `ai-tools`, `ai-surfaces` | `ai.complete` (O4, par Go), classes d'outils | « Reformuler », « Corriger », discussion | premier jeton ≤ 1 s (local) | IA-5, fuzz SSE |
+| erreurs, service de langage, outils d'écriture | `diagnostics`, `completion`, `hover`, `panels` | `document.read` | Problèmes, tinymist, Relecture, orthographe | p95 ≤ 100 ms | `PERF-LSP`, `problems.spec.ts` |
+| greffons de projet | décisions `plugin/<id>` (PD-1) | niveau « projet » = contribuer, mandats | exemple « greffon de projet » (§15.15) | 16 greffons, 64 Mio | `EXT-PP-1`…`7`, `EXT-MANDATE-*` |
 | débogage | Inspecteur, rejeu | mode développeur | — | sans effet hors mode | `EXT-DBG-*` (jamais pour un greffon de projet) |
 
 ## 5. Trous connus (à fermer)
