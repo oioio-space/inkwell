@@ -1,0 +1,165 @@
+{
+  "spec": "inkwell protocol",
+  "spec_version": "2.0.0-draft.2",
+  "generator": "docs/protocol/vectors/generate.go.txt (real codecs; proposed vectors use encoders written from spec.md)",
+  "keys": {
+    "A": {
+      "note": "RFC 8032 §7.1 TEST 1",
+      "public_hex": "d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a",
+      "seed_hex": "9d61b19deffd5a60ba844af492ec2cc44449c5697b326919703bac031cae7f60"
+    },
+    "B": {
+      "note": "RFC 8032 §7.1 TEST 2",
+      "public_hex": "3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c",
+      "seed_hex": "4ccd089b28ff96da9db6c346ec114e0f5b8a319f35aba624da8cf6ed4fb8a6fb"
+    }
+  },
+  "vectors": [
+    {
+      "id": "author-batch",
+      "status": "proposed",
+      "enforce": "step-8",
+      "description": "author_batch : clé B, epoch 01×16, un tuple (seq 1, hash), signature domaine « change » sur ProjectID || clé || epoch || seq || hash.",
+      "decoder": "author_batch+verify",
+      "input_hex": "3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c010101010101010101010101010101010001000000000000000112ea12eace7d655f471ce55e34f89b1b77a3d9d05a445ca82877dd2235beaa510996224010cfd9d28620f2cb32f45d680a3029be9ebc44ed0fe4062d35210a91cb0ac2acb57ba8caa5d0d8f0f0d69dc19e3e794cd7ec263d9d9c17e84b299804",
+      "verdict": "accept",
+      "expect": {
+        "actor_hex": "0505882fbfd358bea961eb683d33c2c1",
+        "signed_bytes_hex": "696e6b77656c6c2f6368616e67652f763100a8c8601608f969e63ceeec9e77b8d8cbd99007442ffa67c028069149625d21663d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c01010101010101010101010101010101000000000000000112ea12eace7d655f471ce55e34f89b1b77a3d9d05a445ca82877dd2235beaa51"
+      }
+    },
+    {
+      "id": "author-batch-bad-sig",
+      "status": "proposed",
+      "enforce": "step-8",
+      "description": "author-batch avec le dernier bit de signature inversé : refusé.",
+      "decoder": "author_batch+verify",
+      "input_hex": "3d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c010101010101010101010101010101010001000000000000000112ea12eace7d655f471ce55e34f89b1b77a3d9d05a445ca82877dd2235beaa510996224010cfd9d28620f2cb32f45d680a3029be9ebc44ed0fe4062d35210a91cb0ac2acb57ba8caa5d0d8f0f0d69dc19e3e794cd7ec263d9d9c17e84b299805",
+      "verdict": "reject"
+    },
+    {
+      "id": "evidence",
+      "status": "proposed",
+      "enforce": "step-8",
+      "description": "evidence_v1 : deux tuples de B pour (epoch, seq 1) avec deux empreintes différentes, hash_a < hash_b : preuve d'équivoque valable (249 octets).",
+      "decoder": "evidence+verify",
+      "input_hex": "013d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c01010101010101010101010101010101000000000000000102314b8274d73f854b26117e324d53ca112a36f2243fca74189018fd89da6cd0a091c40496d6b2950a28e7cf3165bcb504cec28f781338773943e9d6142b481c77e9aed1ce89a912bace25740d1e6bc46990159ed8f2d6f3e87d98eba738dc0f12ea12eace7d655f471ce55e34f89b1b77a3d9d05a445ca82877dd2235beaa510996224010cfd9d28620f2cb32f45d680a3029be9ebc44ed0fe4062d35210a91cb0ac2acb57ba8caa5d0d8f0f0d69dc19e3e794cd7ec263d9d9c17e84b299804",
+      "verdict": "accept",
+      "expect": {
+        "length": 249
+      }
+    },
+    {
+      "id": "evidence-same-hash",
+      "status": "proposed",
+      "enforce": "step-8",
+      "description": "Deux fois la même empreinte : refusé (hash_a < hash_b strict).",
+      "decoder": "evidence+verify",
+      "input_hex": "013d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c01010101010101010101010101010101000000000000000102314b8274d73f854b26117e324d53ca112a36f2243fca74189018fd89da6cd0a091c40496d6b2950a28e7cf3165bcb504cec28f781338773943e9d6142b481c77e9aed1ce89a912bace25740d1e6bc46990159ed8f2d6f3e87d98eba738dc0f02314b8274d73f854b26117e324d53ca112a36f2243fca74189018fd89da6cd0a091c40496d6b2950a28e7cf3165bcb504cec28f781338773943e9d6142b481c77e9aed1ce89a912bace25740d1e6bc46990159ed8f2d6f3e87d98eba738dc0f",
+      "verdict": "reject"
+    },
+    {
+      "id": "listing-variant",
+      "status": "proposed",
+      "enforce": "step-8",
+      "description": "listing_op_v1 : variante (sort 1) de B, position 1, slot 1, membres = op-add-writer, aucune décision, ancre = SHA-256(\"anchor\") ; DocId = BLAKE3(\"inkwell/doc/v1\" ‖ ProjectID ‖ auteur ‖ sort ‖ slot ‖ ancre)[:16].",
+      "decoder": "listing_op+verify",
+      "input_hex": "01013d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c00000001000100015a502638d6036e758b40c0b8414f028e07abf10576fc1adfc49953d02fd044160079bfb0e2ba76b9d447606ddbcc494834f05a4c11deb052e74b49ea307a3c5bcd7e94402d8e6a7f8b4d7a8b1886cf22d8d19972eb3fab033340ebd3082b4c095916750b233e2c2dd8e622b23a885c9815d4784c8d81194bb69f953fdf16adb20b",
+      "verdict": "accept",
+      "expect": {
+        "doc_id_hex": "cecac732ba6150808aadd2eae128aa75",
+        "document_id": "3t6ZAtT6Ujy2i2ySSHEqvbcjUJXr"
+      }
+    },
+    {
+      "id": "listing-slot-zero",
+      "status": "proposed",
+      "enforce": "step-8",
+      "description": "Variante de slot 0 : refusée (1 ≤ slot ≤ Q, L3).",
+      "decoder": "listing_op+verify",
+      "input_hex": "01013d4017c3e843895a92b70aa74d1b7ebc9c982ccf2ec4968cc0cd55f12af4660c00000001000000015a502638d6036e758b40c0b8414f028e07abf10576fc1adfc49953d02fd044160079bfb0e2ba76b9d447606ddbcc494834f05a4c11deb052e74b49ea307a3c5bcd7e94402d8e6a7f8b4d7a8b1886cf22d8d19972eb3fab033340ebd3082b4c095916750b233e2c2dd8e622b23a885c9815d4784c8d81194bb69f953fdf16adb20b",
+      "verdict": "reject"
+    },
+    {
+      "id": "final-ack",
+      "status": "proposed",
+      "enforce": "step-8",
+      "description": "final_ack_v1 de A : membres = op-add-writer, décisions = policy-mode-approval, une entrée (doc, génération 1, purge = empreinte de la décision).",
+      "decoder": "final_ack+verify",
+      "input_hex": "01d75a980182b10ab7d54bfed3c964073a0ee172f3daa62325af021a68f707511a015a502638d6036e758b40c0b8414f028e07abf10576fc1adfc49953d02fd0441601b424f97e4dcea82b7c7e69f770b71dc90c437fdf8d1c595b39c184610dddb71f01cecac732ba6150808aadd2eae128aa7500000001b424f97e4dcea82b7c7e69f770b71dc90c437fdf8d1c595b39c184610dddb71fead4ea008ac40cd6c20cd62d43418a668b2b8e9cd2c296855008ab753429e0db1374d064ad9aac9ca8c31de6c4e4fbf839bd6a7fa7a4b8333616d2d1448c790a",
+      "verdict": "accept"
+    },
+    {
+      "id": "admit-l4-reader",
+      "status": "proposed",
+      "enforce": "step-8",
+      "context": {
+        "author_role": "reader",
+        "quota_grants": 0,
+        "slot": 1,
+        "variants_before": 0
+      },
+      "description": "Annonce d'un auteur qui lit seulement dans le pli de `members` : refusée (L4).",
+      "decoder": "listing_admit",
+      "verdict": "reject"
+    },
+    {
+      "id": "admit-l5-33rd",
+      "status": "proposed",
+      "enforce": "step-8",
+      "context": {
+        "author_role": "writer",
+        "quota_grants": 0,
+        "slot": 33,
+        "variants_before": 32
+      },
+      "description": "33e variante sans octroi (Q = 32) : refusée (L5).",
+      "decoder": "listing_admit",
+      "verdict": "reject"
+    },
+    {
+      "id": "admit-l5-granted",
+      "status": "proposed",
+      "enforce": "step-8",
+      "context": {
+        "author_role": "writer",
+        "quota_grants": 1,
+        "slot": 33,
+        "variants_before": 32
+      },
+      "description": "33e variante avec un octroi `quota/<clé>` debout dans le passé de `decisions` (Q = 64) : admise.",
+      "decoder": "listing_admit",
+      "verdict": "accept"
+    },
+    {
+      "id": "admit-l3-repeat",
+      "status": "proposed",
+      "enforce": "step-8",
+      "context": {
+        "author_role": "writer",
+        "quota_grants": 0,
+        "slot": 1,
+        "slots_used": [
+          1
+        ],
+        "variants_before": 1
+      },
+      "description": "Slot déjà utilisé sur la chaîne de l'auteur : refusée (L3).",
+      "decoder": "listing_admit",
+      "verdict": "reject"
+    },
+    {
+      "id": "admit-freeze",
+      "status": "proposed",
+      "enforce": "step-8",
+      "context": {
+        "author_role": "writer",
+        "equivocation_at": 2,
+        "position": 2
+      },
+      "description": "Deux annonces de l'auteur à la même position : chaîne gelée à partir de cette position, la seconde n'est pas debout.",
+      "decoder": "listing_admit",
+      "verdict": "reject"
+    }
+  ]
+}

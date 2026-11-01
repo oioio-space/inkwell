@@ -2,10 +2,10 @@
 
 | | |
 |---|---|
-| Version | **2.0.0-brouillon.2** (SemVer, §1.4) |
+| Version | **2.0.0-brouillon.3** (SemVer, §1.4) |
 | Date | 2026-11-01 |
 | Statut | proposé ([ADR 0034](../adr/0034-protocole-unifie.md)) ; les parties marquées *existant* décrivent des octets déjà émis par inkwell et sont figées |
-| Révision | 2 : revues [01-codex](reviews/01-codex.md) et [02-fable](reviews/02-fable.md) intégrées ; correspondance dans [CHANGES.md](CHANGES.md) |
+| Révision | 3 : revues [01-codex](reviews/01-codex.md), [02-fable](reviews/02-fable.md), [03-codex](reviews/03-codex.md) et [04-fable](reviews/04-fable.md) intégrées ; correspondance dans [CHANGES.md](CHANGES.md) |
 | Aperçu | [README.md](README.md) |
 | Vecteurs, modèle | [vectors/](vectors/) (§21), [tla/](tla/) (§7.3) |
 | Paquets | module Go `github.com/oioio-space/inkwell/protocol`, paquet TypeScript `@inkwell/protocol` (§1.6) |
@@ -62,7 +62,7 @@ Correctif (`2.0.1`) : texte seulement.
 | identifiant de protocole (majeure) | multistream-select : celui qui ouvre propose ses identifiants **du plus récent au plus ancien** ; le premier accepté est la plus haute majeure commune (symétrique) | aucune commune : message clair (§1.4.5) |
 | TLV de HELLO | identifiant **pair** : ignoré ; identifiant **impair** : « à comprendre », refus | GOAWAY UNSUPPORTED_CRITICAL (`compat.json#tlv-unknown-odd-critical`) |
 | capacité | ignorée (l'ensemble effectif est l'intersection) | — (`#cap-unknown`) |
-| type de trame `0x40`–`0x7F` (plage **ignorable**) | sautée grâce à sa longueur, comptée (16 par minute et par pair au plus, puis OVERLOADED) | — (`#frame-ignorable-unknown`, `#frame-grease`) |
+| type de trame `0x40`–`0x7F` (plage **ignorable**) | sautée grâce à sa longueur, comptée (au plus 256 trames et 256 Kio par minute et par pair, puis OVERLOADED ; une extension périodique plus bavarde passe par une capacité, §20.1) | — (`#frame-ignorable-unknown`, `#frame-grease`) |
 | type de trame `0x01`–`0x3F` (plage **critique**) non négocié | violation : une trame critique n'existe que par capacité | GOAWAY PROTOCOL_VIOLATION (`#frame-critical-unknown`) |
 | classe de flux, ensemble SET, `kind` d'un SET | critiques : n'existent que par capacité | PROTOCOL_VIOLATION (`#set-unknown`) |
 | version d'objet signé | l'objet est **ignoré sans sanction**, jamais lu comme une autre version (l'octet de version est dans les octets signés) | — (`#object-version-unknown`) |
@@ -89,10 +89,13 @@ ignorables sont comptées.
 
 #### 1.4.4 Objets signés et données stockées
 
-- Les octets signés commencent par l'octet de version de l'objet et le domaine se termine par
-  `/v1` (§3.3) : un vérificateur ancien et un récent ne peuvent pas lire le même octet-chaîne
-  signé de deux façons. Une nouvelle version d'objet change l'octet de version, et le suffixe
-  de domaine si la signature couvre autre chose.
+- La version d'un objet est liée à sa signature de deux façons : le domaine signé se termine
+  par `/vN` (§3.3, pour tous les objets), et l'octet de version de l'objet, quand il en a un,
+  fait partie des octets signés (après le `ProjectID` pour `trust-op`, `policy-op`,
+  `final-ack` et `listing-op` ; en tête pour `attest`). Le tuple d'auteur (`change`) n'a pas
+  d'octet de version : seul son domaine le versionne. Un vérificateur ancien et un récent ne
+  peuvent donc pas lire le même octet-chaîne signé de deux façons. Une nouvelle version d'objet
+  change l'octet de version, et le suffixe de domaine si la signature couvre autre chose.
 - **Toujours lisible** : une implémentation lit et vérifie toutes les versions d'objet définies
   jusqu'à la sienne, pour toujours (un projet en dépend : son identifiant est l'empreinte de sa
   genèse). Le retrait d'une version n'arrête que son **émission**.
@@ -102,6 +105,11 @@ ignorables sont comptées.
   l'autorise pour le projet ; un nœud qui ne connaît pas cette mineure passe le projet en
   **lecture seule** et le dit, au lieu de calculer un autre pli que les autres.
 - **Ancien → récent** : un nœud récent lit tout ce qu'un ancien a signé ; rien à faire.
+- **Pas d'arrêt silencieux** : un nœud qui reçoit un objet de version inconnue ne le stocke ni
+  ne le relaie (il ne peut pas le vérifier) ; il le compte et le **dit** à la personne (« une
+  partie de la liste vient d'une version plus récente d'inkwell : mettez à jour »). Comme une
+  version qui change un pli attend la décision `format`, ce cas ne survient qu'avant cette
+  décision, chez les nœuds qui la refuseront de toute façon.
 
 #### 1.4.5 Politique de support et de retrait
 
@@ -315,7 +323,9 @@ attestation_v1 {
 }                    taille totale ≤ 4096 octets
 ```
 
-**Valable** si `project` est celui de la session, la signature vérifie (§3.3), `signer` est
+Le champ `doc` admet 1 à 256 octets (format figé), mais l'attestation n'est valable que pour un
+document de l'ensemble admis, dont les identifiants ont au plus 64 caractères (§9.2.3) : en
+pratique `doc` fait au plus 64 octets. **Valable** si `project` est celui de la session, la signature vérifie (§3.3), `signer` est
 dans la liste courante un appareil de rôle écriture ou admin non suspendu, et `doc` est dans
 l'ensemble admis (§4.10). Elle n'autorise que la couverture du §9.4.
 
@@ -481,7 +491,14 @@ admis = racine ∪ G ∪ annonces debout sous le point de gel ∪ documents adop
         \ { d : doc/d = purged }
 ```
 
-- **racine** : document de `root_url` de la genèse ; **G** : index exact de l'ADR 0030 §3.
+- **racine** : document de `root_url` de la genèse ;
+- **G**, l'index, calculé par chaque pair sans réseau, octet pour octet ([ADR 0030] §3) : une
+  modification d'acteur `a0 = BLAKE3("inkwell/index-actor/v1" ‖ ProjectID)[:16]`, `seq 1`,
+  `startOp 1`, `time 0`, `deps []`, qui pose à la racine `schema = 1`, `nodes = {}`,
+  `packages = {}` et le nœud principal `main.typ` pointant vers `root_url`, d'identifiant
+  `BLAKE3("inkwell/main-node/v1" ‖ root_url)[:16]` ; son `documentId` est
+  `BLAKE3("inkwell/index/v1" ‖ empreinte(G))[:16]` (bs58check). Un vecteur doré figera
+  l'empreinte de G (étape 8) ;
 - **Annonce debout** (ADR 0031 L1–L5) : canonique et signée (L1) ; passé (`prev`,
   `members`, `decisions`) détenu (L2, sinon attente bornée par auteur, §16) ; `position`
   exacte et `slot` jamais répété sur la chaîne de l'auteur (L3) ; l'auteur écrit et n'est
@@ -521,7 +538,24 @@ est l'énoncé normatif minimal pour décider l'admission d'un `documentId`.
   une violation. Les limites de nombre de flux par pair et par protocole sont celles du
   gestionnaire de ressources de libp2p (portées *protocol* et *peer*), réglé selon §16.
 
-- Flux par pair et par sens : **1 CONTROL**, **1 REPO** (plus, pendant au plus un tour de
+- **Au plus deux sessions par pair** à la fois, pendant un passage : la nouvelle supplante
+  l'ancienne dès qu'elle est Active (l'ancienne ferme alors ses flux REPO, LARGE et PRESENCE,
+  puis la connexion). Les limites du gestionnaire de ressources sont donc réglées à **deux fois**
+  les limites d'une session (portées *peer* × *protocol*), et la règle « un flux par classe »
+  s'applique **par session**. Chaque session a un identifiant local `session` (`u32`,
+  croissant pour la vie du processus), qui accompagne la génération partout côté local
+  (règle T, Annexe A).
+- **Fenêtre de connexion** ([RFC 9000 §4.1]) : sur QUIC, tous les flux partagent le crédit de
+  la connexion, et un flux non lu en retient jusqu'à sa propre fenêtre. D'où trois règles :
+  (a) CONTROL et PRESENCE sont **toujours lus** ; (b) un seul flux de données peut rester non lu
+  : le flux REPO courant — l'ancien flux REPO est **annulé aussitôt** (STOP_SENDING /
+  `CancelRead`, qui rend son crédit) au changement de génération, et un flux LARGE n'est
+  **ouvert qu'après LARGE_PULL** (§7.2), donc toujours lu dans une réservation ; (c) une
+  implémentation **DOIT** avoir `fenêtre de connexion ≥ fenêtre d'un flux + 4 Mio` (go-libp2p
+  v0.51.0 : 15 Mio et 10 Mio, conforme ; à revérifier à chaque montée de version). Ainsi le
+  contrôle n'est jamais derrière des données, sur QUIC comme sur yamux (qui n'a pas de fenêtre
+  de connexion). Modèle : [tla/ConnCredit.tla](tla/ConnCredit.tla).
+- Flux par pair, par session et par sens : **1 CONTROL**, **1 REPO** (plus, pendant au plus un tour de
   génération, l'ancien en cours de fermeture), **1 PRESENCE**, **au plus 1 LARGE non lu**
   (§7.2). Un flux de plus ou un `gen` hors règle est une violation, sauf le cas « ancien » du
   §7.3 (flux réinitialisé sans sanction) ; un identifiant inconnu est refusé par
@@ -561,7 +595,8 @@ classe est une violation : `#frame-wrong-stream`, `#retired-type`) et **ignorabl
 | 0x07 | LARGE | REPO | `id u32 ; size u32` : annonce un flux LARGE à cette place (§7.2) | 8 |
 | 0x08 | — | — | retiré (ancien REPO_RESET), jamais réattribué | — |
 | 0x09 | AUTHOR | REPO (avant ce qu'elle couvre) | `author_batch` (§4.7) | ≤ 98 303 |
-| 0x0A | ATTEST_WANT | CONTROL | `doc str16` (1–256) : « envoie-moi tes attestations de ce document » (§6.2) | ≤ 258 |
+| 0x0A | ATTEST_WANT | CONTROL | `doc str16` (1–64) : « envoie-moi tes attestations de ce document » (§6.2) | ≤ 66 |
+| 0x0B | LARGE_PULL | CONTROL | `id u32` : « j'ai réservé la place, ouvre le flux LARGE `id` » (§7.2) | 4 |
 
 ### 5.3 HELLO
 
@@ -605,17 +640,25 @@ classe est une violation : `#frame-wrong-stream`, `#retired-type`) et **ignorabl
 |---|---|---|---|
 | contrôle | CONTROL : HELLO, GOAWAY | session | perte du flux = fin de session |
 | état | CONTROL : SET, ATTEST, ATTEST_WANT | anti-entropie ; dernier gagne | **permise** : réparée par l'anti-entropie (§6.1) ou la réconciliation (§6.2) |
-| dépôt | REPO : REPO, LARGE, AUTHOR, ATTEST ; flux LARGE | fiable, ordonnée, par génération | **interdite** : règle L |
+| dépôt | REPO : REPO, LARGE, AUTHOR, ATTEST ; flux LARGE | fiable, ordonnée, par génération | **interdite** : règle L (transport), règle H (receveur) |
 | présence | PRESENCE | dernier gagne par `sessionId` | permise |
 
-**Règle L (aucune perte silencieuse dans la classe dépôt).** Tout ce qui empêche un message
-de la classe dépôt, émis dans la génération g, d'atteindre la garde du receveur **DOIT**
-faire changer de génération (§7.3) : flux REPO ou LARGE réinitialisé, file locale pleine,
-modification non couverte expirée (§9.4), tuple d'auteur manquant expiré, demande de la
-webview. La raison est l'état de synchronisation d'Automerge : un message « envoyé » ne sera
-jamais renvoyé (`sentHashes`), donc une perte non dite est une divergence durable. **Un refus
-n'est pas une perte** : un message que l'admission, la couverture définitive ou la garde
-refusent est un verdict ; changer de génération le ferait renvoyer et refuser en boucle.
+**Règle L (aucune perte silencieuse dans la classe dépôt).** Une perte **en transport** — flux
+REPO ou LARGE réinitialisé, flux LARGE sans progrès — ou une demande de la webview **DOIT**
+faire changer de génération (§7.3). La raison est l'état de synchronisation d'Automerge : un
+message « envoyé » ne sera jamais renvoyé (`sentHashes`), donc une perte non dite est une
+divergence durable.
+
+**Règle H (ce que le receveur ne garde pas, il le redemande).** Un message que le receveur a
+bien reçu mais ne remet pas au `Repo` — refusé (admission, garde), non couvert ou sans tuple
+d'auteur à l'expiration de son attente, document pas encore prêt et file d'attente pleine —
+est un **refus** noté par (pair, document), **jamais** un changement de génération. Quand la
+cause peut avoir disparu (nouvelle attestation ou nouveau tuple reçu, document prêt, file
+vidée), et au plus une fois par (pair, document) et par 60 s, le receveur envoie
+`history-request` (§9.6) avec ses têtes : l'émetteur lui renvoie, en pages, ce qui lui manque.
+Ainsi un écrivain disparu ou byzantin qui atteste une tête fantôme coûte au plus une demande
+par minute, sans boucle de générations entre pairs honnêtes ; et l'émetteur ne fait jamais de
+règle L pour une file **locale** (§16.2).
 
 ### 5.6 Ordre
 
@@ -663,9 +706,12 @@ set_msg  { set u8 ; kind u8 ; corps }
   d'abord, donc applicables dans l'ordre d'arrivée), en trames `objects` d'au plus 98 303
   octets, **à mesure que la file de sortie CONTROL du pair a de la place** ; rien n'est
   matérialisé d'avance (état : un curseur par (pair, set)). Un nouveau `have`/`digest` du
-  même pair pour le même set remplace le curseur ; au plus **2 nouveaux curseurs par (pair,
-  set) et par 15 s** (aucune amplification). Le curseur s'arrête à épuisement, à la sortie
-  d'Actif, ou si le flux CONTROL tombe.
+  même pair pour le même set **ne recommence pas** un curseur actif : il met seulement à jour
+  le filtre (les objets désormais dans le passé de la nouvelle frontière sont sautés) et le
+  curseur **reprend où il en était**, jusqu'à la fin de l'ensemble ; un lent ne peut donc pas
+  affamer la fin. Un nouveau curseur ne démarre qu'une fois le précédent terminé, au plus **2
+  par (pair, set) et par 15 s** (aucune amplification). Le curseur s'arrête à épuisement, à la
+  sortie d'Actif, ou si le flux CONTROL tombe.
 - **Achèvement.** Sans perte, une réponse amène le demandeur à l'ensemble du répondeur en un
   tour (le curseur parcourt un ensemble fini, borné §16). Avec pertes, chaque tour applique au
   moins le premier lot (parents d'abord), la frontière annoncée avance, et le tour suivant
@@ -683,17 +729,23 @@ set_msg  { set u8 ; kind u8 ; corps }
   document **DOIT** y faire précéder ce message de l'attestation de ces têtes s'il écrit, et
   des attestations qu'il détient pour les têtes qu'il relaie et que ce pair n'a pas encore
   reçues de lui dans cette génération.
-- **Garde.** Le receveur garde, par (document, signataire), l'attestation valable de plus
-  grand `seq`, dans la part du signataire (§10.6). Une attestation nouvelle et valable est
-  relayée aux autres pairs actifs sur CONTROL ; une égale ou plus ancienne n'est ni gardée ni
-  relayée.
+- **Garde.** Le receveur garde, par (document, signataire), les attestations valables les
+  plus récentes **tant qu'elles couvrent ensemble au plus 256 têtes distinctes** (la borne de
+  la couverture, §16.2), dans la part du signataire (§10.6) : toute tête encore dans
+  l'ensemble de couverture d'un pair a donc son attestation, qu'un relais (même un appareil
+  qui lit seulement) peut redonner. Une attestation nouvelle et valable est relayée aux autres
+  pairs actifs sur CONTROL ; une déjà gardée n'est pas relayée.
+- **Signataire pas encore connu.** Une attestation bien signée dont le signataire n'est pas
+  (encore) un écrivain de la liste est **gardée en attente**, comme un objet SET orphelin : au
+  plus deux périodes, dans la part du pair qui l'a livrée, revérifiée à chaque changement de la
+  liste ; elle n'est ni relayée ni comptée avant.
 - **Activation.** À l'entrée en Actif, chaque pair envoie sur CONTROL la dernière attestation
   de chaque (document admis, signataire) qu'il garde.
 - **Réconciliation (tirée par le receveur).** Quand la couverture (§9.4) attend une tête
   attestée pour un document, le receveur envoie `ATTEST_WANT(doc)` au pair qui a livré le
-  message, puis toutes les 15 s tant que l'attente dure (au plus 30 s, puis règle L) ; au
-  plus 64 documents demandés par pair et par 15 s. Le pair répond sur CONTROL par la dernière
-  attestation de chaque signataire qu'il garde pour `doc` ; il sert au plus 64 demandes par
+  message, puis toutes les 15 s tant que l'attente dure (au plus 30 s, puis règle H) ; au
+  plus 64 documents demandés par pair et par 15 s. Le pair répond sur CONTROL par toutes les
+  attestations qu'il garde pour `doc` ; il sert au plus 64 demandes par
   pair et par 15 s, au-delà il les ignore. Ainsi une attestation perdue revient en au plus
   15 s + un aller-retour, sans attendre une reconnexion, et sans trafic périodique quand rien
   ne manque.
@@ -719,27 +771,38 @@ borne du pont) il n'existe pas ; un message d'historique trop gros passe par des
 ### 7.2 Flux LARGE
 
 1. L'émetteur écrit sur le flux REPO, à la place du message, `LARGE{id, size}` (`id`
-   strictement croissant dans la génération, à partir de 1), puis ouvre un flux LARGE de
-   préambule `(gen, id, size)` (`/inkwell/large/2.0.0`) et y écrit les `size` octets, puis ferme son écriture.
-2. Le receveur ne lit un flux LARGE qu'après avoir lu l'annonce correspondante **et** réservé
-   `size` octets dans la part du pair (§10.6) ; jusque-là il le laisse non lu, et le contrôle
-   de flux du transport retient l'émetteur. La taille est donc connue et vérifiée **avant**
-   toute allocation. Un flux LARGE dont le préambule ne correspond pas à l'annonce lue (gen,
-   id, size) est une violation ; au plus un flux LARGE non annoncé attend (`#large-unannounced`).
+   strictement croissant dans la génération, à partir de 1), et garde l'objet.
+2. Le receveur, après avoir lu l'annonce et **réservé** `size` octets (admission ci-dessous),
+   envoie `LARGE_PULL{id}` sur CONTROL. L'émetteur ouvre alors seulement le flux
+   `/inkwell/large/2.0.0` de préambule `(gen, id, size)`, y écrit les `size` octets et ferme
+   son écriture ; le receveur le lit aussitôt, dans sa réservation. Un flux LARGE ne reste donc
+   jamais non lu (§5.1, fenêtre de connexion). La taille est connue et vérifiée **avant** toute
+   allocation. Un flux LARGE non demandé, ou dont le préambule ne correspond pas à la demande,
+   est une violation (`#large-unannounced`).
+   **Admission d'un objet indivisible.** Sous sa part `r` (§10.6), l'objet est admis. Plus grand
+   que `r`, il est admis sur la place libre ; sinon il attend, en file **FIFO** des objets en
+   attente, servie dès qu'il y a la place. Si un objet attend depuis plus de 60 s, le pool
+   reprend (règle L pour celui-là) l'objet en cours **le plus lent sur les 60 dernières
+   secondes, s'il avance à moins de 16 Kio/s** ; un objet qui avance plus vite n'est jamais
+   repris. La lenteur ne coûte donc rien tant que personne n'attend, et la file garantit que
+   l'objet le plus ancien finit par passer (Codex C3).
 3. Le message est livré quand exactement `size` octets ont été lus et que le flux est fini ;
    plus ou moins est une violation.
 4. Un émetteur a **au plus un flux LARGE non terminé** par pair ; l'annonce suivante attend.
 5. Pas d'empreinte : la connexion authentifiée garantit l'origine et l'intégrité (TLS 1.3 /
    Noise). Bao ne sert qu'aux blobs, qui peuvent venir de n'importe quel membre (§8.1).
-6. Échec (flux réinitialisé par l'un ou l'autre, connexion perdue, ou **aucun progrès
-   pendant 60 s** alors que le receveur a réservé et lit) : le message est perdu, règle L. La
-   lenteur seule n'est jamais un échec ; seul l'arrêt complet l'est.
+6. Échec (flux réinitialisé par l'un ou l'autre, connexion perdue, **aucun progrès pendant
+   60 s** alors que le receveur a réservé et lit, ou reprise sous contention ci-dessus) : le
+   message est perdu, règle L. La lenteur seule, sans personne qui attend, n'est jamais un
+   échec.
 
 ### 7.3 Générations
 
 La synchronisation automerge-repo avec un pair vit dans une **génération** `g` (`u32`). Par
 pair distant, chaque côté tient `gen` (0 au début de la session), `mode ∈ {Bas, Attente,
-Synchro}` et `conf` (vrai si `gen` a été confirmée par le pair). La génération est **portée
+Synchro}` et `conf` (vrai si `gen` a été confirmée par le pair). Côté local, l'**époque** d'un
+élément est le couple `(session, gen)` (§5.1) : deux sessions vers le même pair ne se
+confondent jamais, même si leurs générations repartent de 0. La génération est **portée
 par le préambule du flux `/inkwell/repo/2.0.0`** : tout ce qu'un flux transporte appartient à sa génération,
 sans étiquette par trame. Le modèle [tla/RepoGen.tla](tla/RepoGen.tla) vérifie ces règles
 (TLC, §21).
@@ -766,9 +829,9 @@ sans étiquette par trame. Le modèle [tla/RepoGen.tla](tla/RepoGen.tla) vérifi
   ou nous croit en retard), on rouvre un flux de la **même** génération après le délai de
   cadence ; un réessai ne change jamais `gen`.
 - **Règle T (génération à chaque passage).** Tout élément de la classe dépôt (trame lue, objet
-  LARGE, message du pont dans les deux sens) porte la génération du flux d'où il vient ; à
-  chaque passage asynchrone (file d'entrée, pont, livraison à la webview, envoi), un élément
-  dont la génération n'est pas `gen` en Synchro est jeté. L'annulation atomique des files
+  LARGE, message du pont dans les deux sens) porte l'**époque** `(session, gen)` du flux d'où il
+  vient ; à chaque passage asynchrone (file d'entrée, pont, livraison à la webview, envoi), un
+  élément dont l'époque n'est pas l'époque courante en Synchro est jeté. L'annulation atomique des files
   (règle I) est l'obligation de libérer la mémoire ; la règle T est ce qui garantit qu'aucun
   ancien message n'entre dans la nouvelle génération, quel que soit l'entrelacement.
 - **Barrière.** Sur un flux, aucune trame d'une génération ne précède son préambule ; aucune
@@ -776,18 +839,27 @@ sans étiquette par trame. Le modèle [tla/RepoGen.tla](tla/RepoGen.tla) vérifi
   barrière est le préambule lui-même ; elle est vérifiable par le receveur.
 - **Cadence.** Un pair **NE DOIT PAS** engager (règle I) ni réessayer (règle R) plus d'une
   fois par 2 s vers un même pair ; l'intervalle double à chaque nouvel engagement dans les
-  10 min (jusqu'à 60 s). Les deux partagent ce seul compteur. Un pair qui ouvre plus de 2 flux
-  REPO en 2 s est fermé (GOAWAY OVERLOADED).
+  10 min (jusqu'à 60 s). Les deux partagent ce seul compteur. Un flux qui **suit** (règle A,
+  ligne 4) répond à un flux que nous avons ouvert et n'use pas de jeton. Le receveur compte
+  donc : flux REPO entrants en 2 s ≤ 1 + nombre de flux REPO **que nous avons ouverts** dans
+  les 2 s précédentes ; au-delà, GOAWAY OVERLOADED.
 - **Règle W (épuisement).** `gen ≤ 2^32 − 1`. Si un pas devait dépasser cette valeur, le pair
   ferme la session (GOAWAY NO_ERROR) ; la suivante repart de 0. À la cadence ci-dessus, il
   faudrait plus de 270 ans de réinitialisations ininterrompues.
-- **Propriétés vérifiées** (TLC sur deux pairs, flux non ordonnés entre eux, pertes locales,
-  suspensions, files bornées, livraisons asynchrones ; constantes dans `RepoGen.cfg`) :
-  aucune violation entre pairs honnêtes ; `|gen_A − gen_B| ≤ 1` ; deux côtés en Synchro ont
-  la même génération ; ce qu'un côté livre dans une génération est un préfixe de ce que
-  l'autre y a envoyé, sans trou ; à l'arrêt en Synchro, tout ce qui a été envoyé a été livré ;
-  avec un nombre fini de pertes et de suspensions, les deux côtés finissent en Synchro dans la
-  même génération.
+- **Ce que le modèle vérifie, et seulement cela** ([tla/](tla/README.md)). `RepoGen`, **exhaustif**
+  sur `RepoGenSmall.cfg` (3 générations, 1 message par génération, 1 perte, 1 suspension, file
+  de 1) : deux pairs, une seule session, flux non ordonnés entre eux, pertes locales, demandes
+  de la webview, perte du flux entrant ou sortant, suspensions, livraisons asynchrones avec
+  contrôle de génération — aucune violation entre pairs honnêtes ; `|gen_A − gen_B| ≤ 1` ;
+  deux côtés en Synchro ont la même génération ; ce qu'un côté livre dans une génération est un
+  préfixe sans trou de ce que l'autre y a envoyé ; à l'arrêt, tout ce qui a été envoyé a été
+  livré ; avec un nombre fini de pertes et de suspensions, retour à une même génération. La
+  livraison n'y attend pas de crédit du pont. `ConnCredit`, exhaustif : un sens d'une
+  connexion QUIC, fenêtre de connexion partagée, REPO non lu, LARGE après LARGE_PULL,
+  changement de génération, webview qui peut s'arrêter pour toujours — le contrôle passe
+  toujours, et retirer LARGE_PULL ou l'annulation de l'ancien flux le casse. **Non modélisés,
+  argumentés** : plus de deux pairs (les machines sont par pair), le passage entre deux
+  sessions (époques distinctes), les crédits du pont (§10.7).
 
 ### 7.4 Émetteur : machine à états par pair
 
@@ -797,7 +869,17 @@ sans étiquette par trame. Le modèle [tla/RepoGen.tla](tla/RepoGen.tla) vérifi
 | Ouvert(g) en Attente | flux du pair de génération g (règle A) → Synchro ; réinitialisé par le pair → Aucun puis règle R | — |
 | Ouvert(g) en Synchro | messages de la webview de génération g, dans l'ordre : ATTEST et AUTHOR d'abord, puis REPO ou LARGE ; un LARGE à la fois | perte → règle I ; suspension → Aucun ; sortie d'Actif → Aucun |
 
-Flux LARGE sortant : `Annoncé → Écrit → Fini`, ou `Réinitialisé` (règle I, sortie d'Actif,
+**Rythme à la source** (aucune file locale ne déclenche la règle L) : un pair fait entrer les
+documents en synchronisation avec un pair **progressivement** (au plus 64 dont le premier
+message n'a pas encore reçu de réponse ; dans automerge-repo, par un `sharePolicy` qui répond
+à mesure) ; il garde **au plus un** message en attente de crédit par (pair, document) — un
+nouveau message pour ce (pair, document) remplace l'ancien, et l'état de synchronisation
+Automerge de ce seul (pair, document) est réinitialisé, ce que le protocole de synchronisation
+d'Automerge tolère (l'état de synchronisation peut être perdu à tout moment ; il est même
+éphémère ici, §9.3). Un démarrage avec 10 000 documents et un pair lent ne produit donc ni
+débordement ni réinitialisation.
+
+Flux LARGE sortant : `Annoncé → Demandé (LARGE_PULL) → Écrit → Fini`, ou `Réinitialisé` (règle I, sortie d'Actif,
 réinitialisation par le pair, 60 s sans progrès) → règle L. L'objet est gardé, dans la part
 du pair (§10.6), jusqu'à `Fini` ou `Réinitialisé`.
 
@@ -810,7 +892,7 @@ on les vérifie contre leur empreinte. Un flux unidirectionnel par sens et par p
 `u32 length` comme §5.2, `length ≤ 1 065 005`. Corps :
 
 ```
-want    { kind u8 = 1 ; hash [32] ; offset u64 ; length u32 }   offset, length multiples de 16 384 ; 1 ≤ length ≤ 1 048 576
+want    { kind u8 = 1 ; hash [32] ; offset u64 ; length u32 }   offset multiple de 16 384 ; length = 16 384 × k, 1 ≤ k ≤ 64
 slice   { kind u8 = 2 ; hash [32] ; offset u64 ; length u32 ; bao [..] }   bao ≤ 1 064 960 octets
 missing { kind u8 = 3 ; hash [32] }
 busy    { kind u8 = 4 ; hash [32] ; retry_ms u32 ≤ 60 000 }
@@ -828,8 +910,9 @@ busy    { kind u8 = 4 ; hash [32] ; retry_ms u32 ≤ 60 000 }
   égale la taille attendue (index du projet) et que `offset < taille` ; sinon faute
   (`#slice-size-mismatch`).
 - **Appariement.** Au plus **une** demande en cours par (pair, hash) et au plus 2 par pair ;
-  une réponse s'apparie par (pair, hash) et un SLICE **DOIT** reprendre l'`offset` et la
-  `length` demandés. Un SLICE, MISSING ou BUSY sans demande en cours pour (pair, hash) est
+  une réponse s'apparie par (pair, hash) ; un SLICE **DOIT** reprendre l'`offset` demandé et la
+  `length` demandée, **sauf** pour la plage qui contient la fin du blob, où `length` = taille −
+  `offset` (`#slice-final-group`). Un SLICE, MISSING ou BUSY sans demande en cours pour (pair, hash) est
   **non sollicité** : jeté sans vérifier Bao ; c'est une faute seulement si aucune demande de
   ce hash n'a été annulée (délai, génération, abandon) depuis 60 s (`#slice-unsolicited`).
   Demander plus de 2 à la fois est une violation.
@@ -916,7 +999,9 @@ avant tout décodage de schéma, exactement ce qui peut se lire de deux façons 
 5. un **entier négatif** (`#negative-int`) ou un entier > 2^53 − 1 (`#big-uint`), que
    JavaScript ne lit pas exactement ;
 6. une clé de map qui n'est pas une chaîne de texte (`#non-text-key`), ou une **clé en
-   double** (`#duplicate-key`) — `cbor-x`, par exemple, garde silencieusement la dernière ;
+   double** (`#duplicate-key`) — `cbor-x`, par exemple, garde silencieusement la dernière.
+   Deux clés sont en double si leurs **textes décodés** sont égaux, quel que soit leur
+   encodage (`#duplicate-key-nonpreferred` : `64 'type'` puis `78 04 'type'`) ;
 7. un texte qui n'est pas de l'UTF-8 valide (`#bad-utf8`) ;
 8. une **profondeur** > 8 (l'élément racine est au niveau 1) (`#too-deep`), plus de 4096
    éléments au total, une map de plus de 64 paires, un tableau de plus de 256 éléments.
@@ -979,14 +1064,14 @@ Un message de document n'atteint le `Repo` qu'après **toutes** ces étapes, dan
    modification apportée est une tête attestée (§4.3) par un appareil qui écrit, actuel et non
    suspendu, ou un ancêtre d'une telle tête. Une modification non encore couverte **attend**
    (au plus 4 messages par document et par pair, 8 Mio par pair, 30 s) pendant la
-   réconciliation (§6.2) ; à l'expiration, règle L ;
+   réconciliation (§6.2) ; à l'expiration, c'est un refus, et la règle H la redemandera ;
 4. **garde structurelle** (§9.7), y compris **G12** : chaque modification a un tuple d'auteur
    vérifié (§4.7) dont l'acteur dérivé est le sien ; un tuple manquant fait attendre (4 par
-   auteur, 30 s, puis règle L) ;
+   auteur, 30 s, puis refus et règle H) ;
 5. **`Repo`**.
 
 Un message pour un document admis pas encore chargé **PEUT** attendre (4 par document et par
-pair, 8 Mio par pair) ; au-delà, règle L.
+pair, 8 Mio par pair) ; au-delà, refus et règle H.
 
 ### 9.5 Éphémère
 
@@ -1005,6 +1090,10 @@ pointeur de présentation est en **dix-millièmes entiers** de la diapositive
   modifications entières (1 à 256), dans l'ordre topologique, qui descendent de `have` et que
   le demandeur n'a pas, ≤ 16 Mio décompressés au total (une modification tient toujours :
   la fabrique locale découpe à 65 536 opérations).
+- L'émetteur fait précéder chaque page, sur le flux REPO, des ATTEST et AUTHOR qui la couvrent
+  (§5.6) ; une page de plus de 64 Kio passe par LARGE.
+- C'est aussi le moyen de la **règle H** (§5.5) : un receveur qui a refusé ou laissé expirer
+  des modifications d'un document les redemande ainsi, une fois la cause disparue.
 - Le receveur passe la page par la chaîne §9.4, l'applique, la persiste, puis redemande avec
   ses nouvelles têtes, jusqu'à `last = true`. Le rythme est celui du receveur ; une reprise
   après redémarrage repart des têtes persistées.
@@ -1025,7 +1114,7 @@ message entier. Deux implémentations **DOIVENT** rendre le même verdict.
 | G6 élément | `elemId` vaut `_head` ou désigne une insertion du même objet, dans `before(c)` ou plus tôt dans `c` |
 | G7 `pred` | entrées distinctes, chacune une op `set`, `make*` ou insertion de `before(c)` (ou plus tôt dans `c`) sur le même objet et la même clé ou élément, jamais un `del` ni un `inc` |
 | G8 unicité | un `(acteur, seq)` déjà admis avec une autre empreinte est refusé et prouve une équivoque (§4.8) |
-| G9 schéma | celui du document s'il en déclare un (racine, index) |
+| G9 schéma | pour l'index G (§4.10) : **R-root** — une op dont `obj` est `_root` n'est admise que dans G ; **R-nodes** — sur la map `nodes`, seule `makeMap` est permise, avec une clé de 32 caractères hexadécimaux minuscules et `pred` vide (ni `del`, ni scalaire, ni remplacement) (`repo.json#g9-*`) |
 | G10 document complet | chargement isolé, puis chaque modification dans l'ordre topologique passe G1–G9 |
 | G11 ancrage | rien d'un document dérivé avant son ancre (§4.6) ; ensuite, l'ancre est dans le passé de chaque modification |
 | G12 auteur | tuple vérifié (§4.7), acteur = `actor(key, epoch)` ; exceptions : la genèse exacte G et le passé `legacy/<d>` |
@@ -1044,6 +1133,8 @@ message entier. Deux implémentations **DOIVENT** rendre le même verdict.
 - **Crédit = celui du transport, par flux.** Un receveur dont la file d'un flux est pleine
   **DOIT** cesser de lire ce flux, sans le réinitialiser ; le transport freine l'émetteur, sur
   ce flux seulement.
+- **Fenêtre de connexion** : voir §5.1 ; un seul flux de données (REPO) peut rester non lu
+  par connexion.
 - **Ce qui est toujours lu** : CONTROL (son traitement ne fait jamais attendre la lecture :
   une réponse qui ne trouve pas de place en sortie est différée par son curseur §6.1, ou
   ignorée pour ATTEST_WANT) et PRESENCE (on remplace). **Ce qui est lu au rythme du
@@ -1098,10 +1189,10 @@ retient que la sienne, plus du libre qu'on lui reprend dès qu'un autre en a bes
 | Plafond `C` (§16) | Principaux | Reprise |
 |---|---|---|
 | attestations gardées : 65 536 clés, 64 Mio | signataires debout (écrivains) | oubli de sa plus ancienne (réconciliation §6.2) |
-| objets LARGE retenus par l'émetteur : 256 Mio | pairs actifs | flux LARGE réinitialisé, règle L |
+| objets LARGE retenus par l'émetteur : 256 Mio | pairs actifs | objet plus grand que sa part : place libre, FIFO, reprise sous contention (§7.2) |
 | objets LARGE réservés par le receveur : 256 Mio | pairs actifs | idem |
 | objets en attente de parents (SET) : 256 | pairs qui les ont livrés | oubli (tour suivant) |
-| messages en attente de couverture ou d'auteur | pairs qui les ont livrés | règle L |
+| messages en attente de couverture ou d'auteur | pairs qui les ont livrés | refus, règle H |
 | demandes de vrac servies : 2 par pair, `max(8, 2 × n)` au total | pairs actifs | BUSY |
 
 Une borne qui est déjà **par principal sans total commun** (files d'un pair, budgets
@@ -1116,15 +1207,20 @@ Le graphe « attend » est acyclique, donc aucune combinaison de files pleines n
   attend que la webview consomme ; la consommation de la webview n'attend **jamais** (a) une
   trame plus loin sur le même flux (les preuves précèdent les données, §5.6), (b) le flux
   CONTROL (une modification non couverte attend à côté, sans arrêter la consommation, et
-  expire en règle L), (c) un crédit **sortant** vers quelque pair que ce soit (un débordement
-  sortant est une règle L, pas une attente), (d) un message LARGE (§5.6 point 3) ;
-- lire LARGE attend une réservation dans la part du pair, libérée par la livraison du
-  précédent (voie LARGE du pont, même argument) ;
+  expire en refus, règle H), (c) un crédit **sortant** vers quelque pair que ce soit (la file
+  sortante est bornée par document et remplace, §16.2 ; elle n'attend jamais), (d) un message
+  LARGE (§5.6 point 3) ;
+- un flux LARGE n'existe qu'après réservation (LARGE_PULL) et se lit toujours ; la
+  réservation suivante attend la livraison du précédent (voie LARGE du pont, même argument) ;
+- sur QUIC, le crédit de connexion est partagé : le seul flux qui peut rester non lu (REPO)
+  retient au plus une fenêtre de flux, inférieure de 4 Mio à celle de la connexion (§5.1) ;
+  CONTROL et PRESENCE trouvent donc toujours du crédit (modèle `ConnCredit`) ;
 - écrire n'attend que la lecture du pair ; aucun lecteur n'attend son propre écrivain.
 
 Entre deux pairs, la seule dépendance croisée passerait par « la webview de A attend son envoi
-vers B », exclue par (c). Le modèle TLA+ (§7.3) vérifie la version à files bornées (lecture
-seulement avec de la place, livraison toujours possible).
+vers B », exclue par (c). Les modèles vérifient : files bornées et générations (`RepoGen`),
+crédit de connexion et webview arrêtée (`ConnCredit`) ; les crédits du pont sont argumentés
+ici, non modélisés (§7.3).
 
 ## 11. Machines à états
 
@@ -1166,9 +1262,10 @@ partir ; `gen` et `conf` sont gardés jusqu'à la fin de la session.
 
 ### 11.4 Pair vu de la webview
 
-`Annoncé(g)` (PeerUp de génération g) → `Poignée de main` (arrive/welcome) → `Synchronise`
-→ `Parti` (PeerDown, ou PeerUp d'une génération plus récente). Un message du pont dont la
-génération n'est pas celle du dernier PeerUp est jeté (règle T).
+`Annoncé(s, g)` (PeerUp de l'époque (session s, génération g)) → `Poignée de main`
+(arrive/welcome) → `Synchronise` → `Parti` (PeerDown, ou PeerUp d'une autre époque). Un
+message du pont dont l'époque n'est pas celle du dernier PeerUp est jeté (règle T) : un
+message tardif d'une ancienne session ne passe donc jamais, même si sa génération coïncide.
 
 ## 12. Ordre de vérification des octets non fiables
 
@@ -1195,7 +1292,8 @@ entrée qui échoue n'atteint jamais l'étape suivante.
 |---|---|---|---|
 | objet | objet signé bien formé mais refusé (auteur inconnu, rôle, ancien) ; modification refusée par la couverture définitive ou la garde | ignoré ou jeté, compté ; **pas** de règle L | anti-entropie |
 | objet (vrac) | Bao invalide, taille fausse, réponse non sollicitée fautive | faute du pair (3 → 10 min sans l'interroger) | autre détenteur |
-| génération | règle L (§5.5) | règle I (§7.3) | nouvelle génération, Automerge resynchronise |
+| génération | règle L (§5.5) : perte en transport, demande de la webview | règle I (§7.3) | nouvelle génération, Automerge resynchronise |
+| document | règle H (§5.5) : message reçu mais non remis (refus, attente expirée, file pleine) | refus noté par (pair, document) | `history-request` (§9.6), au plus 1 par minute |
 | flux | flux REPO ancien, flux en état Restreint | flux réinitialisé sans sanction | — |
 | connexion | **toute trame ou tout préambule mal formé, sur tout flux** (sync, vrac) ; type interdit ; borne dépassée ; HELLO faux ou absent ; règle A violée ; trop de flux ; octet sur un flux ouvert | GOAWAY PROTOCOL_VIOLATION (ou code précis), fermeture, Tenu | après l'attente |
 | connexion | cadence dépassée (§7.3), inondation | GOAWAY OVERLOADED, fermeture, Tenu | après l'attente |
@@ -1259,10 +1357,13 @@ de `protocol` ; un test par ligne vérifie la borne, la borne + 1 et la reprise.
 | PRESENCE par pair | 16 entrées, dernière par `sessionId` | par pair | la plus ancienne remplacée | — |
 | file de sortie CONTROL d'un pair | 1 Mio (impl.) | par pair | curseurs SET différés ; réponses ATTEST_WANT ignorées ; commérage ATTEST jeté | tour suivant (15 s) |
 | curseurs SET | 1 par (pair, set) ; 2 nouveaux par 15 s | par pair | demande ignorée | tour suivant |
-| ATTEST_WANT | 64 demandes émises et 64 servies par pair et par 15 s ; attente 30 s | par pair | demande non émise / ignorée | 15 s ; règle L à 30 s |
+| ATTEST_WANT | 64 demandes émises et 64 servies par pair et par 15 s ; attente 30 s | par pair | demande non émise / ignorée | 15 s ; règle H à 30 s |
 | sortie dépôt d'un pair (pont) | voie en ligne 4 Mio ; voie LARGE 1 objet | par pair | la webview attend | crédit rendu |
-| objets LARGE retenus (émetteur) | 1 par pair ; 256 Mio au total | ⌊256 Mio / n⌋ | la webview attend, ou reprise (§10.6) | règle L à la reprise |
-| objets LARGE réservés (receveur) | 1 par pair ; 256 Mio au total | ⌊256 Mio / n⌋ | flux non lu, ou reprise | idem |
+| objets LARGE retenus (émetteur) | 1 par pair ; 256 Mio au total | ⌊256 Mio / n⌋ | au-delà de la part : place libre, FIFO ; reprise du plus lent (< 16 Kio/s) si un objet attend > 60 s | règle L à la reprise |
+| objets LARGE réservés (receveur) | 1 par pair ; 256 Mio au total | ⌊256 Mio / n⌋ | pas de LARGE_PULL avant la réservation | idem |
+| sessions par pair | 2 pendant un passage ; limites du gestionnaire de ressources = 2 × celles d'une session | — | la plus ancienne fermée | — |
+| fenêtres QUIC | connexion ≥ flux + 4 Mio (go-libp2p v0.51.0 : 15 Mio / 10 Mio) | — | configuration refusée au démarrage | — |
+| trames ignorables | 256 trames et 256 Kio par minute et par pair | par pair | OVERLOADED | — |
 | progrès d'un flux LARGE | 60 s sans octet alors que réservé et lu | — | flux réinitialisé | règle L |
 | génération | engagements et réessais 1 / 2 s par pair, doublé jusqu'à 60 s (mémoire 10 min) ; flux REPO entrants ≤ 2 / 2 s ; `gen ≤ 2^32 − 1` | — | retardé ; OVERLOADED ; fin de session (règle W) | — |
 | vrac (demandeur) | 1 demande par (pair, hash), 2 par pair ; 30 s sans octet ; 3 échecs par plage ; 5 BUSY de suite | par pair | échec | autre détenteur |
@@ -1275,7 +1376,9 @@ de `protocol` ; un test par ligne vérifie la borne, la borne + 1 et la reprise.
 | annonces | `Q* + 2` par auteur (ADR 0031) ; attente L2 : 4 par auteur | par auteur | refus ; plus ancienne de l'auteur évincée | — |
 | preuves | 1 par (key, epoch), 4 par key | par clé | ignorée | — |
 | op / attestation / décision / accusé / annonce | 4096 / 4096 / 8192 / 8192 / 4096 o ; 64 parents ; 64 têtes ; 96 entrées | — | refus | — |
-| attestations gardées | dernière par (doc, signataire) ; 65 536 clés et 64 Mio au total (impl. ≥) | ⌊C / signataires debout⌋ | reprise (§10.6) | réconciliation |
+| attestations gardées | les plus récentes par (doc, signataire), ≤ 256 têtes distinctes ; 65 536 clés et 64 Mio au total (impl. ≥) | ⌊C / signataires debout⌋ | reprise (§10.6) | réconciliation |
+| attestations en attente de leur signataire | 2 périodes | par pair livreur | oubli | réconciliation |
+| refus notés (règle H) | 1 drapeau par (pair, document admis) ; `history-request` ≤ 1 par (pair, document) et par 60 s | par pair | — | page d'historique |
 | ticket | 1024 caractères ; 15 min ; usage unique | — | refus | nouveau ticket |
 
 ### 16.2 Webview (couche dépôt)
@@ -1286,13 +1389,13 @@ de `protocol` ; un test par ligne vérifie la borne, la borne + 1 et la reprise.
 | poignée de main | 1024 o ; 3 `arrive` puis 1 / 20 s | par pair | jetée | attente |
 | identifiants | PeerID, DocumentId ≤ 64 ; `projectUrl` ≤ 80 | — | refus | — |
 | éphémère | `data` ≤ 1024 o ; 128 en rafale, 64/s | par pair | jeté | seau |
-| attente document non prêt | 4 par document, 8 Mio par pair | par pair | règle L | nouvelle génération |
-| attente de couverture | 4 messages par document et par pair, 8 Mio par pair, 30 s | par pair | règle L | idem |
-| attente de tuple d'auteur (G12) | 4 par auteur, 30 s | par auteur | règle L | idem |
-| attente de dépendances (G2) | quota par émetteur, ses plus anciennes évincées | par pair | règle L | idem |
+| attente document non prêt | 4 par document, 8 Mio par pair | par pair | refus, règle H | page d'historique |
+| attente de couverture | 4 messages par document et par pair, 8 Mio par pair, 30 s | par pair | refus, règle H | idem |
+| attente de tuple d'auteur (G12) | 4 par auteur, 30 s | par auteur | refus, règle H | idem |
+| attente de dépendances (G2) | quota par émetteur, ses plus anciennes évincées | par pair | refus, règle H | idem |
 | couverture | 256 têtes par (doc, signataire) ; 1024 documents par signataire ; 10 000 documents | par signataire | les plus anciennes oubliées | réconciliation |
 | garde | ≤ 65 536 opérations et 16 Mio décompressés par modification ; Worker 256 Mio | — | refus (avant Automerge) | pages d'historique |
-| file de sortie d'un pair | 16 Mio et `max(4096, |admis| + 64)` messages (impl.) | par pair | règle L | nouvelle génération |
+| file de sortie d'un pair | **au plus 1 message en attente de crédit par (pair, document)** ; au plus 64 documents en synchronisation initiale par pair (les autres entrent à mesure) ; 16 Mio (impl.) | par pair | un nouveau message pour un (pair, document) qui en a déjà un en attente le **remplace**, et l'état de synchronisation Automerge de ce seul (pair, document) est réinitialisé (correctif de cycle de vie, ADR 0031) ; au-delà de 16 Mio, plus aucun document n'entre en synchronisation ; **jamais de règle L** | à mesure des crédits |
 
 ### 16.3 Pont interne (Annexe A)
 
@@ -1367,10 +1470,12 @@ en double (N-12) ; le pointeur de présentation est en flottants (§9.5) ; `hand
 
 ### 20.1 Types de trame (majeure 2)
 
-`0x00` réservé ; `0x01`–`0x07`, `0x09`, `0x0A` : §5.2 ; `0x08` retiré ; `0x0B`–`0x3F`
+`0x00` réservé ; `0x01`–`0x07`, `0x09`–`0x0B` : §5.2 ; `0x08` retiré ; `0x0B`–`0x3F`
 (critiques) : à attribuer par une mineure, chacun lié à une capacité et à une classe de flux ;
 `0x40`–`0x7F` (ignorables) : à attribuer par une mineure, sans capacité, dont GREASE `0x4A`,
-`0x5A`, `0x6A`, `0x7A` ; `0x80`–`0xFF` : réservés à une majeure.
+`0x5A`, `0x6A`, `0x7A` ; `0x80`–`0xFF` : réservés à une majeure. Une extension ignorable doit
+tenir dans le budget des trames ignorables (§16.1) ; plus bavarde, elle prend un type
+critique et une capacité.
 
 ### 20.2 Capacités (CAPS) et TLV du HELLO
 
@@ -1436,7 +1541,8 @@ est retiré (bascule nette). Une nouvelle classe s'ajoute par une mineure, liée
 - **Décodeurs nommés** : `public_key`, `signature`, `signature+key`, `peer_id`, `trust_op`,
   `trust_op+apply`, `trust_sync`, `attestation`, `attestation+verify`, `policy_op`, `bulk`,
   `bulk+expect`, `ticket_text`, `lobby_request`, `lobby_reply`, `sync2_stream` (dont
-  `compat.json`),
+  `compat.json`), `trust_fold` (`fold.json`), `author_batch+verify`, `evidence+verify`,
+  `listing_op+verify`, `final_ack+verify`, `listing_admit` (`objects.json`), `guard_schema`,
   `repo_message`, `bridge_envelope` (interne).
 - **Matrice de compatibilité** (N14) : `compat.json` (session) et `repo.json#compat-*`
   (couche dépôt) disent ce qu'un décodeur 2.0 fait d'octets d'une mineure future ou d'une
@@ -1444,8 +1550,9 @@ est retiré (bascule nette). Une nouvelle classe s'ajoute par une mineure, liée
   ignoré) ; à chaque nouvelle mineure, ses propres vecteurs y sont ajoutés avec le verdict
   qu'un décodeur 2.0 **doit** rendre, et un test croisé fait décoder les vecteurs de N+1 par
   le décodeur N (paquets `protocol/sync2` de deux versions du module).
-- **Modèle.** [tla/RepoGen.tla](tla/RepoGen.tla) et `RepoGen.cfg` ; `mise run tla` (TLC
-  épinglé, SHA-256) ; c'est une porte de l'ADR 0034 avant la bascule.
+- **Modèles.** [tla/RepoGen.tla](tla/RepoGen.tla) (`RepoGenSmall.cfg` exhaustif, `RepoGen.cfg`
+  long) et [tla/ConnCredit.tla](tla/ConnCredit.tla) ; `mise run tla` (TLC épinglé, SHA-256) ;
+  c'est une porte de l'ADR 0034 avant la bascule. §7.3 dit exactement ce qu'ils couvrent.
 - **Conformité.** Une implémentation est conforme si elle donne le verdict attendu sur tous les
   vecteurs de la version qu'elle annonce, reproduit chaque `expect`, et passe l'exécuteur
   `protocol/conformance` (Go, vecteurs embarqués, interface à implémenter par la cible) ou son
@@ -1579,9 +1686,9 @@ enveloppe { version u8 = 1 ; kind u8 ; peer str8 (PeerID, 1–64) ; payload [res
 
 | kind | Nom | Sens | payload |
 |---|---|---|---|
-| 1 | PeerUp | Go → webview | `generation u32` : début d'une génération §7.3 |
+| 1 | PeerUp | Go → webview | `session u32 ; generation u32` : début d'une époque §7.3 |
 | 2 | PeerDown | Go → webview | vide |
-| 3 | Message | les deux | `generation u32 ; message` (REPO ou objet LARGE) |
+| 3 | Message | les deux | `session u32 ; generation u32 ; message` (REPO ou objet LARGE) |
 | 4 | Attest | webview → Go | `Heads` : `doc str16 (1–256) ; têtes [32] × ≤ 64` |
 | 5 | Attested | Go → webview | `Heads` d'un signataire `peer` valable |
 | 6 | Revoked | Go → webview | vide : les attestations de `peer` sont caduques |
@@ -1590,9 +1697,9 @@ enveloppe { version u8 = 1 ; kind u8 ; peer str8 (PeerID, 1–64) ; payload [res
 | 9 | Suspended | Go → webview | `u8` : 1 suspendu, 0 repris ; `peer` = admin auteur |
 | 10 | Decide | webview → Go | intention d'admin |
 | 11 | Policy | Go → webview | état plié des décisions |
-| 12 | Credit | les deux | `generation u32 ; lane u8 (0 en ligne, 1 LARGE) ; consumed u64 ; window u32` |
+| 12 | Credit | les deux | `session u32 ; generation u32 ; lane u8 (0 en ligne, 1 LARGE) ; consumed u64 ; window u32` |
 | 13 | Presence | les deux | message `ephemeral` (sans crédit) |
-| 14 | Reset | webview → Go | `generation u32` : la webview demande la règle I |
+| 14 | Reset | webview → Go | `session u32 ; generation u32` : la webview demande la règle I |
 | 15 | Sign | webview → Go | lot de (`seq`, `hash`) à signer pour un `epoch` (§4.7) |
 | 16 | Authored | Go → webview | tuples d'auteur vérifiés (§4.7) |
 | 17 | Listed | Go → webview | ensemble admis (§4.10), avec projet et époque |
@@ -1605,8 +1712,8 @@ enveloppe { version u8 = 1 ; kind u8 ; peer str8 (PeerID, 1–64) ; payload [res
   recule est ignoré ; une voie inconnue est refusée (`bridge-internal.json#bridge-credit-bad-lane`).
   « Consommé » : côté Go → webview, remis au `Repo` après la garde ; côté webview → Go, écrit
   sur le flux du pair.
-- **Génération** : un Message dont la génération n'est pas celle du dernier PeerUp est jeté
-  des deux côtés (règle T, `#bridge-message-gen`).
+- **Époque** : un Message dont `(session, generation)` n'est pas celui du dernier PeerUp est
+  jeté des deux côtés (règle T, `#bridge-message-gen`).
 - **Ordre** : avant de livrer un Message, le routeur envoie les notifications d'état en
   attente (Roles, Attested, Revoked, Suspended, Listed, Authored), coalescées.
 - **Validation tardive** : `Decide` et `Policy` sont validés par leur gestionnaire, après

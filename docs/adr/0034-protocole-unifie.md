@@ -1,7 +1,7 @@
 ---
 status: proposée
 date: 2026-11-01
-revision: 2 (revues 01-codex et 02-fable ; exigences N13, N14, N15)
+revision: 3 (revues 01-codex, 02-fable, 03-codex, 04-fable ; exigences N13, N14, N15)
 decision-makers: [Mathieu]
 ---
 
@@ -98,12 +98,17 @@ Option retenue : **B**, décrite normativement dans
    `changesig/1` sont retirés.
 4. **Un flux par classe, identifié par son protocole libp2p** (`/inkwell/control/2.0.0`,
    `/inkwell/repo/2.0.0`, `/inkwell/presence/2.0.0`) et un flux `/inkwell/large/2.0.0` par
-   message de plus de 64 Kio, lu seulement après réservation (§5.1, §7.2) ; nombre de flux
-   borné par le gestionnaire de ressources de libp2p. Une session = une connexion.
+   message de plus de 64 Kio, ouvert seulement après `LARGE_PULL` (§5.1, §7.2) ; un seul flux de
+   données peut rester non lu par connexion, ce qui protège le contrôle de la fenêtre de
+   connexion de QUIC ; nombre de flux borné par le gestionnaire de ressources de libp2p (deux
+   fois les limites d'une session, pour le passage relais → direct). Une session = une
+   connexion ; côté local, l'époque `(session, génération)`.
 5. **Générations dans le préambule du flux REPO** ; règles I, B, A, R, T, W ; cadence partagée
    par engagements et réessais ; vérifiées par le modèle TLA+ ([tla/](../protocol/tla/)).
-6. **Règle L** : toute perte de la classe dépôt (y compris une modification non couverte qui
-   expire) change de génération ; un refus n'est pas une perte (§5.5).
+6. **Règles L et H** (§5.5) : une perte en transport change de génération (L) ; ce que le
+   receveur a reçu mais ne garde pas (refus, attente expirée, file pleine) est redemandé par
+   pages d'historique (H), sans jamais toucher à la génération ; aucune file **locale** ne
+   déclenche de réinitialisation (rythme à la source, §7.4).
 7. **SET** : un seul mécanisme d'anti-entropie pour les cinq ensembles signés, par lots en
    ordre causal avec curseur et achèvement prouvé (§6.1) ; **ATTEST_WANT** : réconciliation des
    attestations tirée par le receveur (§6.2).
@@ -160,7 +165,8 @@ fichier) :
 
 | Porte | Preuve |
 |---|---|
-| P-TLA | `mise run tla` : `RepoGen` exhaustif sur la petite configuration, sans erreur, vivacité comprise ; configuration `RepoGen.cfg` sans violation de sûreté |
+| P-TLA | `mise run tla` : `RepoGen` exhaustif sur `RepoGenSmall.cfg` et `ConnCredit` exhaustif, sans erreur, vivacité comprise ; leurs mutations échouent ; `RepoGen.cfg` sans violation sur la nuit ; aucune affirmation de la spec au-delà de ce que dit §7.3 |
+| P-QUIC | test au démarrage : fenêtre de connexion ≥ fenêtre de flux + 4 Mio pour la version épinglée de go-libp2p ; test de bout en bout : REPO non lu + LARGE en cours, le contrôle passe |
 | P-VEC | tous les vecteurs dont `enforce` ≤ étape courante passent en Go **et** en TypeScript ; à la bascule, **tous** |
 | P-BORNES | un test par ligne du §16 (borne, borne + 1, reprise) |
 | P-BYZ | scénarios : pair qui ne lit jamais ; membre qui « goutte » un LARGE ; un écrivain qui remplit 65 536 clés d'attestation (les honnêtes restent couverts) ; inondation de SET ; 3 générations par seconde refusées ; relais à 8 Kio/s qui finit |
@@ -209,8 +215,8 @@ mode « signalé », sans échouer, jusqu'à leur `enforce`.
 | 3 | **Modèle d'abord** : `mise run tla` (TLC épinglé) ; profil CBOR et schémas §9 dans `@inkwell/protocol`, adaptateur branché dessus (`targetId` partout, encodeur conforme, pointeur entier) | outillage, `frontend` | N-12 | `step-3` |
 | 4 | `protocol/sync2` (préambules, trames, HELLO avec VERSIONS, règles de l'inconnu, règles I/B/A/R/T/W pures) ; `protocol/libp2p` (un identifiant par classe, gestionnaire de ressources par protocole et par pair, identify pour les versions) ; `internal/transport/session` derrière le drapeau `sync2` (développement seulement) | `protocol`, `internal/transport` | N-4, N-5, N-10, R-V2 | `step-4` |
 | 5 | Boucles partagées non bloquantes (boîtes par pair pour `Wiring`, notifications coalescées, `Attest` asynchrone, persistance avant diffusion) ; vrac : trame ≤ 1 065 005 o, parts par pair, appariement, délais au progrès, tailles adaptatives | `app`, `bridge`, `p2p/bulk.go`, `blob` | N-2, N-3, N-6, N-7, N-15 | `step-5` |
-| 6 | Pont : génération dans Message, crédits par voie (A.1), présence sans crédit ; suppression des deux voies et du `Reset` sur débordement | `bridge`, `frontend/src/net` | **R-Reset** | `step-6` |
-| 7 | Flux LARGE et parts réservées (§10.6) ; attestations par signataire ; règle L partout, dont l'expiration de la couverture (`coverage.ts`) ; ATTEST_WANT | `session`, `blob`, `app`, `frontend` | **R-Evict**, N-11, N-13, N-14, S3 | `step-7` |
+| 6 | **Ensemble, derrière le drapeau `sync2`** (Codex C4 : on ne retire pas le `Reset` sur débordement avant que les règles L et H soient en place) : pont (époque dans Message, crédits par voie, présence sans crédit) ; rythme à la source (§7.4) ; flux LARGE avec LARGE_PULL et parts réservées ; attestations par signataire et ≤ 256 têtes ; règles L et H, dont la fin de l'expiration silencieuse de `coverage.ts` ; ATTEST_WANT ; puis suppression des deux voies et du `Reset` sur débordement du routeur, **dans la même étape** | `bridge`, `session`, `blob`, `app`, `frontend` | **R-Reset**, **R-Evict**, N-11, N-13, N-14, S3 | `step-6` |
+| 7 | (fusionnée dans 6) | — | — | — |
 | 8 | SET (cinq ensembles, curseurs) ; objets de l'ADR 0031 (accusé, annonce, AUTHOR, preuve) ; pages d'historique — en suivant les étapes 2.x–3.x de l'ADR 0031 | `protocol`, `trust`, `policy`, `listing`, `app`, `frontend` | — | `step-8` |
 | 9 | **Portes** P-TLA … P-ARCH vertes ; revue | — | — | tous |
 | 10 | **Bascule nette** : `sync2` actif, `/inkwell/sync/1.0.0` retiré (décision 2026-11-01) ; suppression de `mux`, `frame.Budget`, file commune de `Node` ; `HOT_PATHS` : `mux` → `session` ; reformulation des invariants de `CLAUDE.md` | `transport`, `app`, `CLAUDE.md` | — | tous |
@@ -243,10 +249,13 @@ mode « signalé », sans échouer, jusqu'à leur `enforce`.
 2. Règle d'ordre premier pour les clés (`[L]A = O`) : plus stricte que « pas d'ordre petit »,
    sans effet sur une clé honnête ; elle change le verdict de deux cas de Chalkias.
 3. Session = connexion : le passage du relais au direct relance la synchronisation avec ce
-   pair.
-4. Le pointeur de présentation passe en dix-millièmes entiers (le protocole n'a plus aucun
+   pair (deux sessions au plus pendant le passage, époques distinctes).
+4. Règle H : ce qu'un receveur refuse ou laisse expirer est redemandé par pages
+   d'historique, au plus une fois par minute et par document, au lieu de réinitialiser la
+   génération.
+5. Le pointeur de présentation passe en dix-millièmes entiers (le protocole n'a plus aucun
    flottant).
-5. Module `protocol` comme sous-module de ce dépôt (recommandé) plutôt qu'un dépôt séparé ;
+6. Module `protocol` comme sous-module de ce dépôt (recommandé) plutôt qu'un dépôt séparé ;
    licence du module : celle du dépôt (MPL-2.0, copyleft par fichier, compatible avec une
    intégration dans une application propriétaire) est recommandée ; Apache-2.0 ou MIT
    faciliteraient encore l'adoption, au prix de la réciprocité.

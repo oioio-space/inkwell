@@ -80,3 +80,54 @@ révision 1 et 9 aujourd'hui.
   codec ni vecteur (étape 8, avec l'ADR 0031).
 - Valeurs « impl. » du §16 à mesurer (bancs) ; R-Reset résiduel si un pair honnête dépasse
   `max(4096, |admis| + 64)` messages en attente de crédit.
+
+---
+
+# Tour 2 : révision 3 (2.0.0-brouillon.2 → 2.0.0-brouillon.3)
+
+Revues [03-codex](reviews/03-codex.md) et [04-fable](reviews/04-fable.md), toutes deux
+« revise ». C1, C2, C6, C8, C10, C11, C12 sont confirmés fermés par Codex.
+
+## Revue 04-fable
+
+| # | Gravité | Constat | Changement | Où |
+|---|---|---|---|---|
+| F4-1 | Critique | Fenêtre de **connexion** QUIC (go-libp2p v0.51.0 : 10 Mio par flux, 15 Mio par connexion) : REPO + LARGE non lus prennent tout, le contrôle cale | **Un seul flux de données peut rester non lu par connexion** : l'ancien REPO est annulé aussitôt (`CancelRead` rend le crédit, quic-go v0.64.1 `receive_stream.go:400-410`) ; un flux LARGE n'est ouvert qu'après **LARGE_PULL** (réservation faite, lu aussitôt) ; règle normative « connexion ≥ flux + 4 Mio » (vérifiée au démarrage : go-libp2p v0.51.0 n'expose pas d'option pour régler ces fenêtres) ; **modèle `ConnCredit`** : la règle passe, ses deux mutations échouent | spec §5.1, §5.2 (0x0B), §7.2, §10.2, §10.7 ; `tla/ConnCredit.tla` ; ADR P-QUIC |
+| F4-2 | Majeur | Les affirmations dépassent le modèle | §7.3 dit **exactement** ce que vérifient `RepoGen` (exhaustif sur la petite configuration) et `ConnCredit`, et ce qui est seulement argumenté ; `RepoGen` reçoit `InboundLost` (réexhaustif, aucune erreur) ; `ConnCredit` couvre crédit de connexion, LARGE et webview arrêtée | spec §7.3, §10.7 ; `tla/` |
+| F4-3 | Majeur | Tête fantôme ou relais en lecture : expiration de la couverture → règle L toutes les 30 s entre pairs honnêtes | **Règle H** : expiration, refus et file pleine côté receveur = refus noté, redemandé par `history-request` au plus 1 fois par (pair, document) et par minute ; jamais de règle L ; le magasin garde les attestations d'un (doc, signataire) jusqu'à 256 têtes (la borne de la couverture), et ATTEST_WANT les renvoie toutes | spec §5.5, §6.2, §9.4, §9.6, §13, §16 |
+| F4-4 | Majeur | File sortante locale 16 Mio → règle L et LARGE réinitialisé : boucle au démarrage | **Rythme à la source** : entrée progressive des documents (≤ 64 en synchronisation initiale) ; **au plus un message en attente par (pair, document)**, le nouveau remplace l'ancien avec réinitialisation de l'état de synchronisation de ce seul document ; aucune file locale ne déclenche de règle L | spec §7.4, §16.2 |
+| F4-5 | Majeur | Passage relais → direct : générations qui repartent de 0, messages tardifs de l'ancienne session acceptés ; limites du gestionnaire de ressources (Codex : nouvelle Critique) | **Époque `(session, génération)`** côté local (PeerUp, Message, Credit, Reset) ; au plus deux sessions par pair, la nouvelle supplante l'ancienne dès qu'elle est Active ; limites réglées à 2 × une session | spec §5.1, §7.3, §11.4, §16.1, Annexe A ; `bridge-internal.json` |
+| F4-6 | Majeur (N12) | Vecteurs du pli, des annonces, de G9, des trames et objets | `fold.json` : 7 scénarios (ancienneté, coupe concurrente, révocation contre octroi, dernier admin, sortie, suspension, admin suspendu qui antidate), **calculés par le vrai `trust`**, indépendance de l'ordre vérifiée ; `objects.json` : `author_batch`, `evidence`, `listing_op` (DocId, documentId), `final_ack` (signatures Ed25519 et BLAKE3 réelles), scénarios L3/L4/L5/gel ; `repo.json#g9-*` : 6 vraies modifications Automerge contre R-root/R-nodes ; `session.json` : SET (have, objects, digest), ATTEST_WANT, GOAWAY, LARGE_PULL ; G et R-root/R-nodes écrits dans la spec | `vectors/` ; spec §4.10, §9.7 |
+| F4-7a | Mineur | « Les octets signés commencent par l'octet de version » est faux | Texte exact : domaine `/vN` pour tous, octet de version **dans** les octets signés quand il existe, aucun pour `change` | spec §1.4.4 |
+| F4-7b | Mineur | 16 trames ignorables par minute trop peu | 256 trames et 256 Kio par minute et par pair ; règle §20.1 pour une extension bavarde (type critique + capacité) | spec §1.4.2, §16.1, §20.1 |
+| F4-7c | Mineur | « Suivre » ouvre un flux non compté | Un flux qui suit n'use pas de jeton ; le receveur compte « ≤ 1 + flux que nous avons ouverts dans les 2 s » | spec §7.3 |
+| F4-7d | Mineur | Attestation d'un signataire pas encore connu jetée | Gardée en attente comme un orphelin SET (2 périodes, part du livreur), revérifiée à chaque changement de liste | spec §6.2, §16.1 |
+| F4-7e | Mineur | WANT « 1 ≤ length » contre multiples de 16 384 | `length = 16 384 × k, 1 ≤ k ≤ 64` | spec §8.1 |
+| F4-7f | Mineur | `doc` ≤ 256 contre `document-id` ≤ 64 | Format figé à 256, valable seulement pour un document admis (≤ 64) ; ATTEST_WANT à 1–64 | spec §4.3, §5.2 |
+| F4-7g | Mineur | Un ancien nœud cesse de relayer en silence les versions inconnues | Il ne relaie pas ce qu'il ne peut pas vérifier, mais le **dit** à la personne ; `format` empêche ce cas entre nœuds qui l'acceptent | spec §1.4.4 |
+
+## Revue 03-codex (constats partiels et nouveau)
+
+| # | Constat | Changement | Où |
+|---|---|---|---|
+| C3 | Objet indivisible plus grand que sa part (63 lents × 4 Mio, honnête de 8 Mio) | Admission : sous la part, admis ; au-delà, place libre et **FIFO** ; si un objet attend plus de 60 s, reprise de l'objet en cours le plus lent **et** sous 16 Kio/s (jamais d'un objet qui avance plus vite, jamais quand personne n'attend) | spec §7.2, §10.6, §16.1 |
+| C4 | Le `Reset` sur débordement disparaît avant la règle L | Étapes 6 et 7 fusionnées, **derrière `sync2`** ; le retrait du `Reset` se fait dans la même étape que les règles L et H | ADR §Migration |
+| C5 | Crédit de connexion | voir F4-1 | |
+| C7 | Appariement du dernier SLICE | Exception écrite : la plage qui contient la fin a `length = taille − offset` | spec §8.1 |
+| C9 | Doublons détectés par octets (reproduit : `78 04 'type'`) | Comparaison des **clés décodées** dans le générateur et la spec ; vecteur `repo.json#duplicate-key-nonpreferred` (refusé ; l'ancien générateur l'acceptait) | `generate-repo.cjs.txt`, spec §9.2.1 |
+| C13 | Un curseur recommencé tous les 15 s affame la fin | Un `have`/`digest` ne recommence pas un curseur actif : il met à jour le filtre, le curseur reprend où il en était | spec §6.1 |
+| Nouveau | Passage relais → direct bloqué par la limite d'un flux CONTROL par pair | voir F4-5 | |
+
+## Simplifications de ce tour
+
+La règle L ne couvre plus que le transport (une seule source de réinitialisation) ; tout ce qui
+se passe chez le receveur passe par un mécanisme déjà là, les pages d'historique (règle H).
+La fenêtre de connexion est protégée par une règle structurelle (un seul flux non lu) plutôt
+que par des réglages fins de fenêtres que go-libp2p n'expose pas.
+
+## Reste ouvert après ce tour
+
+- `RepoGen.cfg` (grande configuration) : toujours non exhaustif ; le passage entre sessions
+  et les crédits du pont restent argumentés, non modélisés.
+- Les scénarios `listing_admit` donnent un verdict tiré du §4.10, pas d'un codec (aucun
+  n'existe avant l'étape 8).

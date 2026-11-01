@@ -1,6 +1,6 @@
 # Le protocole inkwell, en clair
 
-> Version : **2.0.0-brouillon.2** (2026-11-01). Texte normatif : [spec.md](spec.md).
+> Version : **2.0.0-brouillon.3** (2026-11-01). Texte normatif : [spec.md](spec.md).
 > Décision : [ADR 0034](../adr/0034-protocole-unifie.md). Changements et revues :
 > [CHANGES.md](CHANGES.md), [reviews/](reviews/). État actuel et défauts :
 > [inventaire.md](inventaire.md). Vecteurs : [vectors/](vectors/). Schémas CBOR : [cddl/](cddl/).
@@ -22,7 +22,7 @@ HTTP/2 et QUIC le font pour chaque flux. Un flux lent ne gêne donc jamais les a
 | `control` | « qui je suis, quel projet, ce que je sais faire, quelles versions » (HELLO) ; la liste des membres, les décisions, les annonces de documents (SET) ; les attestations | c'est réparé : chacun redit toutes les 15 s où il en est, et on redemande une attestation qui manque |
 | `repo` | les messages des documents (automerge-repo), précédés de leurs preuves (attestation, signature d'auteur) | jamais en silence : on change de **génération** (on ferme ce flux, on en ouvre un neuf) et Automerge resynchronise |
 | `presence` | curseurs, noms affichés, pilotage de présentation | sans importance : le suivant remplace |
-| `large` | un message de plus de 64 Kio, sur son propre flux, lu seulement quand le receveur a réservé la place | comme `repo` |
+| `large` | un message de plus de 64 Kio, sur son propre flux, ouvert seulement quand le receveur a réservé la place et l'a demandé | comme `repo` |
 | `bulk` | les fichiers joints, par tranches vérifiées contre leur empreinte BLAKE3 | on redemande ailleurs |
 | `lobby` | un inconnu invité se présente (une question, une réponse) | il réessaie |
 
@@ -33,8 +33,9 @@ HTTP/2 et QUIC le font pour chaque flux. Un flux lent ne gêne donc jamais les a
 2. **Celui qui reçoit fixe le débit.** Sur le réseau, par le contrôle de flux du transport,
    flux par flux ; sur le pont interne, par des crédits. La lenteur n'est jamais une faute ;
    seul un arrêt complet en est une.
-3. **Perdre, c'est le dire** (règle L). Un message de document ne se perd jamais en silence :
-   on change de génération. Un **refus** (message invalide) n'est pas une perte.
+3. **Perdre, c'est le dire.** Un message de document perdu en route fait changer de génération
+   (règle L). Un message reçu mais non gardé (invalide, preuve manquante, file pleine) est noté,
+   puis redemandé par pages d'historique (règle H) : jamais de boucle de réinitialisations.
 4. **Chacun sa part.** Tout plafond partagé (attestations, gros messages, service des fichiers)
    garantit une part à chaque pair ou à chaque personne qui écrit ; personne ne peut prendre la
    part d'un autre.

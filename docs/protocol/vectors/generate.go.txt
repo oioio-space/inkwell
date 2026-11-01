@@ -17,7 +17,10 @@ import (
 	"math/big"
 	"os"
 	"path/filepath"
+	"sort"
 	"time"
+
+	"lukechampine.com/blake3"
 
 	"filippo.io/edwards25519"
 
@@ -80,6 +83,7 @@ type V struct {
 	Input   string         `json:"input_hex,omitempty"`
 	Verdict string         `json:"verdict"` // accept | reject
 	Expect  map[string]any `json:"expect,omitempty"`
+	Inputs  []string       `json:"inputs_hex,omitempty"` // several inputs (fold: ops in causal order)
 	Current string         `json:"current_go,omitempty"` // behaviour of today's Go code when it differs
 }
 
@@ -130,9 +134,12 @@ func write(dir, name string, f File) {
 	f.Spec = "inkwell protocol"
 	f.Version = "2.0.0-draft.2"
 	f.Gen = "docs/protocol/vectors/generate.go.txt (real codecs; proposed vectors use encoders written from spec.md)"
-	b, err := json.MarshalIndent(f, "", "  ")
-	must(err)
-	must(os.WriteFile(filepath.Join(dir, name), append(b, '\n'), 0o644))
+	var buf bytes.Buffer
+	enc := json.NewEncoder(&buf)
+	enc.SetEscapeHTML(false) // keep "<", ">" and "&" readable in descriptions
+	enc.SetIndent("", "  ")
+	must(enc.Encode(f))
+	must(os.WriteFile(filepath.Join(dir, name), buf.Bytes(), 0o644))
 }
 
 func verdict(err error) string {
@@ -192,11 +199,6 @@ func main() {
 			"26e8958fc2b227b045c3f489f2ef98f0d5dfac05d3c63339b13802886d53fc85",
 			"c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac037a",
 			"c7176a703d4dd84fba3c0b760d10670f2a2053fa2c39ccc64ec7fd7792ac03fa"}}})
-	cv = append(cv, V{ID: "noncanonical-public-keys", Status: "normative", Desc: "Non-canonical encodings of y = p, y = p+1 and negative zero; all MUST be rejected.",
-		Decoder: "public_key", Verdict: "reject", Expect: map[string]any{"keys_hex": []string{
-			"edffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
-			"eeffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff7f",
-			"0100000000000000000000000000000000000000000000000000000000000080"}}})
 	pidI, mhI := peerID(ed25519.PublicKey(id))
 	cv = append(cv, V{ID: "peer-id-small-order", Status: "normative", Desc: "PeerID dérivé de la clé neutre : tout le monde peut s'authentifier sous cette identité (la signature universelle passe la poignée de main Noise/TLS de libp2p). DOIT être refusé par le filtre de connexion, le décodage des PeerID, les ops de membres et les tickets.",
 		Decoder: "peer_id", Input: hx(mhI), Verdict: "reject", Expect: map[string]any{"peer_id": pidI},
@@ -474,6 +476,27 @@ func main() {
 	addS("author-frame", "Trame AUTHOR (0x09) : clé B, epoch nul, 1 tuple (seq 1, hash, signature nulle). Forme seulement : la signature est vérifiée à l'étape « preuve » (§12) et échoue ici.", "sync2_stream", repoCtx, append(pre(2, 2), frame(0x09, author)...), "accept", map[string]any{"tuples": 1})
 	addS("frame-too-large", "En-tête de trame annonçant 98 305 octets sur CONTROL : refusé avant allocation.", "sync2_stream", nil, append(pre(1, 0), binary.BigEndian.AppendUint32(nil, 98305)...), "reject", nil)
 	addS("retired-type", "Type 0x08 (ancien REPO_RESET, retiré) : refusé ; un numéro retiré n'est jamais réattribué.", "sync2_stream", repoCtx, append(pre(2, 2), frame(0x08, []byte{0, 0, 0, 2, 2})...), "reject", nil)
+	// ---- control frames (proposed, §5.2, §6.1, §6.2, §7.2) ----
+	haveBody := append([]byte{1, 1}, binary.BigEndian.AppendUint16(nil, 1)...)
+	ah := add.Hash()
+	haveBody = append(haveBody, ah[:]...)
+	addS("set-have", "SET (0x03) ensemble 1 (membres), kind 1 have : frontière = op-add-writer.", "sync2_stream", nil, append(append(pre(1, 0), hello...), frame(0x03, haveBody)...), "accept", map[string]any{"set": 1, "kind": "have"})
+	objBody := append([]byte{1, 2}, binary.BigEndian.AppendUint16(nil, 1)...)
+	objBody = binary.BigEndian.AppendUint16(objBody, uint16(len(addEnc)))
+	objBody = append(objBody, addEnc...)
+	addS("set-objects", "SET ensemble 1, kind 2 objects : une op (op-add-writer).", "sync2_stream", nil, append(append(pre(1, 0), hello...), frame(0x03, objBody)...), "accept", map[string]any{"set": 1, "kind": "objects", "objects": 1})
+	emptyDigest := sha256.Sum256(nil)
+	digBody := append([]byte{5, 3}, binary.BigEndian.AppendUint32(nil, 0)...)
+	digBody = append(digBody, emptyDigest[:]...)
+	addS("set-digest", "SET ensemble 5 (preuves, plat), kind 3 digest : 0 objet, SHA-256 de la chaîne vide.", "sync2_stream", nil, append(append(pre(1, 0), hello...), frame(0x03, digBody)...), "accept", map[string]any{"set": 5, "kind": "digest"})
+	addS("set-have-on-flat", "SET kind 1 (have) sur l'ensemble 5 (plat) : refusé, un ensemble plat n'a que digest.", "sync2_stream", nil, append(append(pre(1, 0), hello...), frame(0x03, append([]byte{5, 1}, 0, 0))...), "reject", nil)
+	docB := []byte("4NMNnkMhL8jXrdJ9jamS58PAVdXu")
+	aw := binary.BigEndian.AppendUint16(nil, uint16(len(docB)))
+	addS("attest-want", "ATTEST_WANT (0x0A) : doc str16.", "sync2_stream", nil, append(append(pre(1, 0), hello...), frame(0x0a, append(aw, docB...))...), "accept", nil)
+	addS("attest-want-empty", "ATTEST_WANT de document vide : refusé (1 à 64 octets).", "sync2_stream", nil, append(append(pre(1, 0), hello...), frame(0x0a, []byte{0, 0})...), "reject", nil)
+	addS("goaway-overloaded", "GOAWAY (0x02) code 0x07 OVERLOADED après HELLO.", "sync2_stream", nil, append(append(pre(1, 0), hello...), frame(0x02, []byte{0x07})...), "accept", map[string]any{"code": 7})
+	addS("goaway-long", "GOAWAY de corps 2 octets : refusé (corps = 1 octet).", "sync2_stream", nil, append(append(pre(1, 0), hello...), frame(0x02, []byte{0x07, 0})...), "reject", nil)
+	addS("large-pull", "LARGE_PULL (0x0B) id 1 : le receveur a réservé, l'émetteur peut ouvrir le flux LARGE (§7.2).", "sync2_stream", nil, append(append(pre(1, 0), hello...), frame(0x0b, binary.BigEndian.AppendUint32(nil, 1))...), "accept", map[string]any{"id": 1})
 	write(dir, "session.json", File{Vectors: sv})
 	// ---- compatibility matrix (N14, spec §1.4): a 2.0 decoder facing 2.x/3.x bytes ----
 	var xv []V
@@ -517,6 +540,148 @@ func main() {
 	addX("object-version-unknown", "SET « objects » portant une op de membre de version 3 (inconnue) : l'objet est ignoré sans sanction (jamais interprété comme une v1), la trame reste valide.", nil, append(append(pre(1, 0), hello...), frame(0x03, append(obj, v3...))...), "accept", map[string]any{"objects_ignored": 1})
 	write(dir, "compat.json", File{Vectors: xv})
 
+	// ---- member-list fold (normative §4.9): real trust package, ops forged per §4.1 ----
+	kseed := func(tag string) signer {
+		h := sha256.Sum256([]byte("inkwell-test-" + tag))
+		return signer{ed25519.NewKeyFromSeed(h[:])}
+	}
+	C, D := kseed("C"), kseed("D")
+	forge := func(s signer, parents []trust.Op, tmpl trust.Op) trust.Op {
+		var lam uint64
+		for _, p := range parents {
+			tmpl.Prev = append(tmpl.Prev, p.Hash())
+			lam = max(lam, p.Lamport)
+		}
+		sort.Slice(tmpl.Prev, func(i, j int) bool { return bytes.Compare(tmpl.Prev[i][:], tmpl.Prev[j][:]) < 0 })
+		tmpl.Lamport, tmpl.Author = lam+1, s.Public()
+		enc := trust.Encode(tmpl)
+		copy(tmpl.Sig[:], s.Sign("trust-op", append(append([]byte{}, pid[:]...), enc[:len(enc)-64]...)))
+		return tmpl
+	}
+	members := func(ops []trust.Op) []map[string]any {
+		l := trust.New(pid)
+		for range ops { // any order: retry until nothing new is stored
+			_, _ = l.ApplyAll(ops)
+		}
+		var out []map[string]any
+		for _, m := range l.Members() {
+			out = append(out, map[string]any{"public_hex": hx(m.Pub), "role": int(m.Role), "suspended": l.Suspended(m.Pub)})
+		}
+		return out
+	}
+	var fv []V
+	scen := func(id, desc string, ops ...trust.Op) {
+		var in []string
+		for _, o := range ops {
+			in = append(in, hx(trust.Encode(o)))
+		}
+		rev := append([]trust.Op{}, ops...)
+		for i, j := 0, len(rev)-1; i < j; i, j = i+1, j-1 {
+			rev[i], rev[j] = rev[j], rev[i]
+		}
+		want := members(ops)
+		if a, b := fmt.Sprint(want), fmt.Sprint(members(rev)); a != b {
+			panic("fold depends on order: " + id)
+		}
+		fv = append(fv, V{ID: id, Status: "normative", Desc: desc, Decoder: "trust_fold", Inputs: in, Verdict: "accept", Expect: map[string]any{"members": want, "order_independent": true}})
+	}
+	addBadmin := forge(A, []trust.Op{gen}, trust.Op{Kind: trust.OpAdd, Subject: B.Public(), Role: trust.RoleAdmin, Name: "Béa"})
+	scen("fold-seniority", "B (admin, plus récent) retire A (créateur, admin) : sans effet (règle 2) ; A et B restent admins.", gen, addBadmin,
+		forge(B, []trust.Op{addBadmin}, trust.Op{Kind: trust.OpRemove, Subject: A.Public()}))
+	addCw := forge(A, []trust.Op{addBadmin}, trust.Op{Kind: trust.OpAdd, Subject: C.Public(), Role: trust.RoleWriter, Name: "Cé"})
+	scen("fold-concurrent-cut", "A retire B pendant que B ajoute D (concurrents) : l'ajout de B, qui n'a pas vu sa coupe, est mort (règle 3b) ; B et D ne sont pas membres, C écrit.", gen, addBadmin, addCw,
+		forge(A, []trust.Op{addCw}, trust.Op{Kind: trust.OpRemove, Subject: B.Public()}),
+		forge(B, []trust.Op{addCw}, trust.Op{Kind: trust.OpAdd, Subject: D.Public(), Role: trust.RoleWriter, Name: "Dé"}))
+	scen("fold-revocation-beats-grant", "A passe C en lecture pendant que B le passe admin (concurrents) : le niveau le plus bas l'emporte (règle 4), C lit.", gen, addBadmin, addCw,
+		forge(A, []trust.Op{addCw}, trust.Op{Kind: trust.OpSetRole, Subject: C.Public(), Role: trust.RoleReader}),
+		forge(B, []trust.Op{addCw}, trust.Op{Kind: trust.OpSetRole, Subject: C.Public(), Role: trust.RoleAdmin}))
+	scen("fold-last-admin", "A, seul admin, se retire : ignoré (règle 2, dernier admin) ; A reste admin.", gen,
+		forge(A, []trust.Op{gen}, trust.Op{Kind: trust.OpRemove, Subject: A.Public()}))
+	scen("fold-exit", "A se retire alors que B est admin : sortie (règle 3) ; A n'est plus membre, B reste admin.", gen, addBadmin,
+		forge(A, []trust.Op{addBadmin}, trust.Op{Kind: trust.OpRemove, Subject: A.Public()}))
+	addBw := forge(A, []trust.Op{gen}, trust.Op{Kind: trust.OpAdd, Subject: B.Public(), Role: trust.RoleWriter, Name: "Béa"})
+	scen("fold-suspension", "A suspend B (écrit) : B suspendu, rôle gardé (règle 6).", gen, addBw,
+		forge(A, []trust.Op{addBw}, trust.Op{Kind: trust.OpSuspend, Subject: B.Public()}))
+	scen("fold-suspended-admin-backdates", "A suspend B (admin) pendant que B ajoute C (concurrents) : l'ajout de B est mort (règle 6, S3b) ; C n'est pas membre.", gen, addBadmin,
+		forge(A, []trust.Op{addBadmin}, trust.Op{Kind: trust.OpSuspend, Subject: B.Public()}),
+		forge(B, []trust.Op{addBadmin}, trust.Op{Kind: trust.OpAdd, Subject: C.Public(), Role: trust.RoleWriter, Name: "Cé"}))
+	write(dir, "fold.json", File{Keys: keys, Vectors: fv})
+
+	// ---- objects of ADR 0031 (proposed layouts §4.5–§4.8; real Ed25519 and BLAKE3) ----
+	var ov []V
+	epoch := bytes.Repeat([]byte{0x01}, 16)
+	chHash := sha256.Sum256([]byte("change"))
+	csig := func(s signer, seq uint64, h []byte) []byte {
+		m := append(append(append([]byte{}, pid[:]...), s.Public()...), epoch...)
+		m = append(binary.BigEndian.AppendUint64(m, seq), h...)
+		return s.Sign("change", m)
+	}
+	ab := append(append([]byte{}, B.Public()...), epoch...)
+	ab = binary.BigEndian.AppendUint16(ab, 1)
+	ab = binary.BigEndian.AppendUint64(ab, 1)
+	ab = append(append(ab, chHash[:]...), csig(B, 1, chHash[:])...)
+	actor := blake3.Sum256(append(append(append([]byte("inkwell/actor/v2"), pid[:]...), B.Public()...), epoch...))
+	ov = append(ov, V{ID: "author-batch", Status: "proposed", Enforce: "step-8", Desc: "author_batch : clé B, epoch 01×16, un tuple (seq 1, hash), signature domaine « change » sur ProjectID || clé || epoch || seq || hash.", Decoder: "author_batch+verify", Input: hx(ab), Verdict: "accept",
+		Expect: map[string]any{"actor_hex": hx(actor[:16]), "signed_bytes_hex": hx(append([]byte("inkwell/change/v1\x00"), append(append(append(append([]byte{}, pid[:]...), B.Public()...), epoch...), append(binary.BigEndian.AppendUint64(nil, 1), chHash[:]...)...)...))}})
+	abBad := append([]byte{}, ab...)
+	abBad[len(abBad)-1] ^= 1
+	ov = append(ov, V{ID: "author-batch-bad-sig", Status: "proposed", Enforce: "step-8", Desc: "author-batch avec le dernier bit de signature inversé : refusé.", Decoder: "author_batch+verify", Input: hx(abBad), Verdict: "reject"})
+	h2b := sha256.Sum256([]byte("change-bis"))
+	ha, hb := chHash[:], h2b[:]
+	if bytes.Compare(ha, hb) > 0 {
+		ha, hb = hb, ha
+	}
+	ev := append(append([]byte{1}, B.Public()...), epoch...)
+	ev = binary.BigEndian.AppendUint64(ev, 1)
+	ev = append(append(append(ev, ha...), csig(B, 1, ha)...), append(hb, csig(B, 1, hb)...)...)
+	ov = append(ov, V{ID: "evidence", Status: "proposed", Enforce: "step-8", Desc: "evidence_v1 : deux tuples de B pour (epoch, seq 1) avec deux empreintes différentes, hash_a < hash_b : preuve d'équivoque valable (249 octets).", Decoder: "evidence+verify", Input: hx(ev), Verdict: "accept", Expect: map[string]any{"length": len(ev)}})
+	evSame := append(append([]byte{1}, B.Public()...), epoch...)
+	evSame = binary.BigEndian.AppendUint64(evSame, 1)
+	evSame = append(append(append(evSame, ha...), csig(B, 1, ha)...), append(append([]byte{}, ha...), csig(B, 1, ha)...)...)
+	ov = append(ov, V{ID: "evidence-same-hash", Status: "proposed", Enforce: "step-8", Desc: "Deux fois la même empreinte : refusé (hash_a < hash_b strict).", Decoder: "evidence+verify", Input: hx(evSame), Verdict: "reject"})
+	anchorH := sha256.Sum256([]byte("anchor"))
+	lo := []byte{1, 1}
+	lo = append(lo, B.Public()...)
+	lo = binary.BigEndian.AppendUint32(lo, 1)
+	lo = binary.BigEndian.AppendUint16(lo, 1)
+	lo = append(lo, 0, 1)
+	lo = append(lo, ah[:]...)
+	lo = append(lo, 0)
+	lo = append(lo, anchorH[:]...)
+	lo = append(lo, B.Sign("listing-op", append(append([]byte{}, pid[:]...), lo...))...)
+	docID := blake3.Sum256(append(append(append(append([]byte("inkwell/doc/v1"), pid[:]...), B.Public()...), binary.BigEndian.AppendUint16([]byte{1}, 1)...), anchorH[:]...))
+	ck1 := sha256.Sum256(docID[:16])
+	ck2 := sha256.Sum256(ck1[:])
+	ov = append(ov, V{ID: "listing-variant", Status: "proposed", Enforce: "step-8", Desc: "listing_op_v1 : variante (sort 1) de B, position 1, slot 1, membres = op-add-writer, aucune décision, ancre = SHA-256(\"anchor\") ; DocId = BLAKE3(\"inkwell/doc/v1\" ‖ ProjectID ‖ auteur ‖ sort ‖ slot ‖ ancre)[:16].", Decoder: "listing_op+verify", Input: hx(lo), Verdict: "accept",
+		Expect: map[string]any{"doc_id_hex": hx(docID[:16]), "document_id": b58(append(append([]byte{}, docID[:16]...), ck2[:4]...))}})
+	loBad := append([]byte{}, lo...)
+	binary.BigEndian.PutUint16(loBad[2+32+4:], 0)
+	ov = append(ov, V{ID: "listing-slot-zero", Status: "proposed", Enforce: "step-8", Desc: "Variante de slot 0 : refusée (1 ≤ slot ≤ Q, L3).", Decoder: "listing_op+verify", Input: hx(loBad), Verdict: "reject"})
+	fa := append([]byte{1}, A.Public()...)
+	fa = append(append(fa, 1), ah[:]...)
+	ph := pop.Hash()
+	fa = append(append(fa, 1), ph[:]...)
+	fa = append(fa, 1)
+	fa = append(fa, docID[:16]...)
+	fa = binary.BigEndian.AppendUint32(fa, 1)
+	fa = append(fa, ph[:]...)
+	fa = append(fa, A.Sign("final-ack", append(append([]byte{}, pid[:]...), fa...))...)
+	ov = append(ov, V{ID: "final-ack", Status: "proposed", Enforce: "step-8", Desc: "final_ack_v1 de A : membres = op-add-writer, décisions = policy-mode-approval, une entrée (doc, génération 1, purge = empreinte de la décision).", Decoder: "final_ack+verify", Input: hx(fa), Verdict: "accept"})
+	// listing admission (L1–L5, Q): verdicts from §4.10, structured scenarios
+	for _, sc := range []struct {
+		id, desc, verdict string
+		ctx               map[string]any
+	}{
+		{"admit-l4-reader", "Annonce d'un auteur qui lit seulement dans le pli de `members` : refusée (L4).", "reject", map[string]any{"author_role": "reader", "variants_before": 0, "quota_grants": 0, "slot": 1}},
+		{"admit-l5-33rd", "33e variante sans octroi (Q = 32) : refusée (L5).", "reject", map[string]any{"author_role": "writer", "variants_before": 32, "quota_grants": 0, "slot": 33}},
+		{"admit-l5-granted", "33e variante avec un octroi `quota/<clé>` debout dans le passé de `decisions` (Q = 64) : admise.", "accept", map[string]any{"author_role": "writer", "variants_before": 32, "quota_grants": 1, "slot": 33}},
+		{"admit-l3-repeat", "Slot déjà utilisé sur la chaîne de l'auteur : refusée (L3).", "reject", map[string]any{"author_role": "writer", "variants_before": 1, "quota_grants": 0, "slot": 1, "slots_used": []int{1}}},
+		{"admit-freeze", "Deux annonces de l'auteur à la même position : chaîne gelée à partir de cette position, la seconde n'est pas debout.", "reject", map[string]any{"author_role": "writer", "equivocation_at": 2, "position": 2}},
+	} {
+		ov = append(ov, V{ID: sc.id, Status: "proposed", Enforce: "step-8", Desc: sc.desc, Decoder: "listing_admit", Context: sc.ctx, Verdict: sc.verdict})
+	}
+	write(dir, "objects.json", File{Keys: keys, Vectors: ov})
+
 	// ---- bridge (internal contract) ----
 	var gv []V
 	payload := []byte{0xa1, 0x64, 't', 'y', 'p', 'e', 0x64, 's', 'y', 'n', 'c'}
@@ -528,14 +693,14 @@ func main() {
 	gv = append(gv, V{ID: "bridge-attest", Status: "normative", Desc: "Enveloppe Attest (webview → Go) : Heads = len(doc) u16 || doc || têtes.", Decoder: "bridge_envelope", Input: hx(env2), Verdict: "accept"})
 	_, err = bridge.Decode(append([]byte{2}, env[1:]...))
 	gv = append(gv, V{ID: "bridge-bad-version", Status: "normative", Desc: "Version d'enveloppe 2 : refusée.", Decoder: "bridge_envelope", Input: hx(append([]byte{2}, env[1:]...)), Verdict: verdict(err)})
-	msgGen := append(binary.BigEndian.AppendUint32(nil, 2), payload...)
-	gv = append(gv, V{ID: "bridge-message-gen", Status: "proposed", Enforce: "step-6", Desc: "Message (kind 3) avec génération : payload = generation u32 || message.", Decoder: "bridge_envelope", Input: hx(append(append([]byte{1, 3, byte(len(hostID))}, hostID...), msgGen...)), Verdict: "accept", Expect: map[string]any{"generation": 2}})
+	msgGen := append(binary.BigEndian.AppendUint32(binary.BigEndian.AppendUint32(nil, 7), 2), payload...) // session 7, generation 2
+	gv = append(gv, V{ID: "bridge-message-gen", Status: "proposed", Enforce: "step-6", Desc: "Message (kind 3) avec époque : payload = session u32 || generation u32 || message.", Decoder: "bridge_envelope", Input: hx(append(append([]byte{1, 3, byte(len(hostID))}, hostID...), msgGen...)), Verdict: "accept", Expect: map[string]any{"session": 7, "generation": 2}})
 	for _, lane := range []byte{0, 2} {
-		c := binary.BigEndian.AppendUint32(nil, 2)
+		c := binary.BigEndian.AppendUint32(binary.BigEndian.AppendUint32(nil, 7), 2)
 		c = append(c, lane)
 		c = binary.BigEndian.AppendUint64(c, 0)
 		c = binary.BigEndian.AppendUint32(c, 4<<20)
-		gv = append(gv, V{ID: map[byte]string{0: "bridge-credit-lane", 2: "bridge-credit-bad-lane"}[lane], Status: "proposed", Enforce: "step-6", Desc: "Credit (kind 12) : génération, voie (0 en ligne, 1 LARGE), consommé, fenêtre.", Decoder: "bridge_envelope", Input: hx(append(append([]byte{1, 12, byte(len(hostID))}, hostID...), c...)), Verdict: map[byte]string{0: "accept", 2: "reject"}[lane], Expect: map[byte]map[string]any{0: {"generation": 2, "lane": 0, "window": 4 << 20}}[lane]})
+		gv = append(gv, V{ID: map[byte]string{0: "bridge-credit-lane", 2: "bridge-credit-bad-lane"}[lane], Status: "proposed", Enforce: "step-6", Desc: "Credit (kind 12) : session, génération, voie (0 en ligne, 1 LARGE), consommé, fenêtre.", Decoder: "bridge_envelope", Input: hx(append(append([]byte{1, 12, byte(len(hostID))}, hostID...), c...)), Verdict: map[byte]string{0: "accept", 2: "reject"}[lane], Expect: map[byte]map[string]any{0: {"session": 7, "generation": 2, "lane": 0, "window": 4 << 20}}[lane]})
 	}
 	write(dir, "bridge-internal.json", File{Vectors: gv})
 

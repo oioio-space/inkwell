@@ -96,6 +96,14 @@ StreamLost(p) ==
   /\ Initiate(p)
   /\ UNCHANGED <<q, sent, dlv, loss, rstr, viol>>
 
+\* The inbound stream we read was reset by the peer while we are synced and no
+\* newer stream replaced it: also a loss (rule L, receiver side).
+InboundLost(p) ==
+  /\ mode[p] = "synced" /\ inG[p] \in Gens /\ gen[p] < MaxGen
+  /\ str[Other(p)][inG[p]].st = "reset"
+  /\ Initiate(p)
+  /\ UNCHANGED <<q, sent, dlv, loss, rstr, viol>>
+
 \* Resetting and our new stream was refused (peer down or stale): reopen the
 \* SAME generation after the rate-limit delay (rule R: retries never bump gen).
 Retry(p) ==
@@ -174,12 +182,13 @@ Restrict(p) ==
 
 Next ==
   \E p \in Peers :
-    \/ Activate(p) \/ LocalLoss(p) \/ Request(p) \/ StreamLost(p) \/ Retry(p)
+    \/ Activate(p) \/ LocalLoss(p) \/ Request(p) \/ StreamLost(p) \/ InboundLost(p) \/ Retry(p)
     \/ Send(p) \/ Read(p) \/ Deliver(p) \/ Restrict(p)
     \/ \E g \in Gens : Accept(p, g)
 
 Fair == \A p \in Peers :
-          /\ WF_vars(Activate(p)) /\ WF_vars(StreamLost(p)) /\ WF_vars(Retry(p))
+          /\ WF_vars(Activate(p)) /\ WF_vars(StreamLost(p)) /\ WF_vars(InboundLost(p))
+          /\ WF_vars(Retry(p))
           /\ WF_vars(Read(p)) /\ WF_vars(Deliver(p))
           /\ \A g \in Gens : WF_vars(Accept(p, g))
 

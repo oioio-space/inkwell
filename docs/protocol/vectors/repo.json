@@ -329,6 +329,25 @@
       }
     },
     {
+      "id": "duplicate-key-nonpreferred",
+      "status": "proposed",
+      "enforce": "step-3",
+      "description": "Clé type en double dont la seconde occurrence est encodée avec une longueur sur 1 octet (78 04) : même texte, donc doublon, refusé (comparaison des clés décodées, pas des octets).",
+      "decoder": "repo_message",
+      "context": {
+        "from": "12D3KooWQK1wnefoLrcVHbbnf5tLzbopUd3K3bFAoJpA7YJgL5pV",
+        "me": "12D3KooWDwTirQce1RRKnasT5fPVFgzXCy6SiRgSwrwPGLC7zE91",
+        "admitted": [
+          "4NMNnkMhL8jXrdJ9jamS58PAVdXu"
+        ]
+      },
+      "input_hex": "a66464617461582f42018a82a24e48e4afb9422ca65fadf64e8042fbb703f6ac01ba6d93ba497f02020000010005010a0744150002028464747970656473796e636873656e64657249647834313244334b6f6f57514b31776e65666f4c7263564862626e6635744c7a626f705564334b336246416f4a704137594a674c3570566874617267657449647834313244334b6f6f5744775469725163653152524b6e6173543566505646677a58437936536952675377727750474c43377a4539316a646f63756d656e744964781c344e4d4e6e6b4d684c386a5872644a396a616d5335385041566458757804747970656772657175657374",
+      "verdict": "reject",
+      "expect": {
+        "reason": "duplicate map key"
+      }
+    },
+    {
       "id": "tag-64",
       "status": "proposed",
       "enforce": "step-3",
@@ -807,6 +826,93 @@
       "verdict": "ignore",
       "expect": {
         "reason": "unknown type: ignored (N14)"
+      }
+    },
+    {
+      "id": "g9-node-add",
+      "status": "proposed",
+      "enforce": "step-8",
+      "description": "Ajout d'un nœud : makeMap sur nodes, clé de 32 hex, pred vide : admis.",
+      "decoder": "guard_schema",
+      "context": {
+        "nodes_obj": "2@0102030405060708090a0b0c0d0e0f10"
+      },
+      "input_hex": "856f4a83e675b7d00184010186efd7ea7cbdb35a1fcdab8d71a5b48ad496856c1d42b56337d6384df68220f3102122232425262728292a2b2c2d2e2f300104000001100102030405060708090a0b0c0d0e0f100701020202152234014202560270027f017f027f206665646362613938373635343332313066656463626139383736353433323130017f007f007f00",
+      "verdict": "accept"
+    },
+    {
+      "id": "g9-root-op",
+      "status": "proposed",
+      "enforce": "step-8",
+      "description": "Écriture à la racine hors de G (x.extra = 1) : refusée (R-root).",
+      "decoder": "guard_schema",
+      "context": {
+        "nodes_obj": "2@0102030405060708090a0b0c0d0e0f10"
+      },
+      "input_hex": "856f4a83dfe1780601530186efd7ea7cbdb35a1fcdab8d71a5b48ad496856c1d42b56337d6384df68220f3102122232425262728292a2b2c2d2e2f300104000000061507340142025602570170027f056578747261017f017f14017f00",
+      "verdict": "reject",
+      "expect": {
+        "rule": "R-root: root op outside G"
+      }
+    },
+    {
+      "id": "g9-node-delete",
+      "status": "proposed",
+      "enforce": "step-8",
+      "description": "Suppression d'un nœud (del sur nodes) : refusée (R-nodes) ; masquer un nœud est une décision.",
+      "decoder": "guard_schema",
+      "context": {
+        "nodes_obj": "2@0102030405060708090a0b0c0d0e0f10"
+      },
+      "input_hex": "856f4a83d134ff3a019d010176b7f8c75abab9da9e620e0efc958b67f392368d60b393f98c02a4056d3ac21c102122232425262728292a2b2c2d2e2f300105000002100102030405060708090a0b0c0d0e0f10101112131415161718191a1b1c1d1e1f20090102020215223401420256027002710273027f017f027f203031323334353637383961626364656630313233343536373839616263646566017f037f007f017f027f04",
+      "verdict": "reject",
+      "expect": {
+        "rule": "R-nodes: only makeMap with a 32-hex key and pred []"
+      }
+    },
+    {
+      "id": "g9-node-replace",
+      "status": "proposed",
+      "enforce": "step-8",
+      "description": "Remplacement d'un nœud existant (makeMap avec pred non vide) : refusé (R-nodes).",
+      "decoder": "guard_schema",
+      "context": {
+        "nodes_obj": "2@0102030405060708090a0b0c0d0e0f10"
+      },
+      "input_hex": "856f4a83b43b811f019d010176b7f8c75abab9da9e620e0efc958b67f392368d60b393f98c02a4056d3ac21c102122232425262728292a2b2c2d2e2f300105000002100102030405060708090a0b0c0d0e0f10101112131415161718191a1b1c1d1e1f20090102020215223401420256027002710273027f017f027f203031323334353637383961626364656630313233343536373839616263646566017f007f007f017f027f04",
+      "verdict": "reject",
+      "expect": {
+        "rule": "R-nodes: only makeMap with a 32-hex key and pred []"
+      }
+    },
+    {
+      "id": "g9-node-badkey",
+      "status": "proposed",
+      "enforce": "step-8",
+      "description": "Nœud de clé « abc » (pas 32 hex) : refusé (R-nodes).",
+      "decoder": "guard_schema",
+      "context": {
+        "nodes_obj": "2@0102030405060708090a0b0c0d0e0f10"
+      },
+      "input_hex": "856f4a8310b96e9601670186efd7ea7cbdb35a1fcdab8d71a5b48ad496856c1d42b56337d6384df68220f3102122232425262728292a2b2c2d2e2f300104000001100102030405060708090a0b0c0d0e0f100701020202150534014202560270027f017f027f03616263017f007f007f00",
+      "verdict": "reject",
+      "expect": {
+        "rule": "R-nodes: only makeMap with a 32-hex key and pred []"
+      }
+    },
+    {
+      "id": "g9-node-scalar",
+      "status": "proposed",
+      "enforce": "step-8",
+      "description": "Scalaire posé dans nodes : refusé (R-nodes).",
+      "decoder": "guard_schema",
+      "context": {
+        "nodes_obj": "2@0102030405060708090a0b0c0d0e0f10"
+      },
+      "input_hex": "856f4a83cc70cc320187010186efd7ea7cbdb35a1fcdab8d71a5b48ad496856c1d42b56337d6384df68220f3102122232425262728292a2b2c2d2e2f300104000001100102030405060708090a0b0c0d0e0f1008010202021522340142025602570170027f017f027f203030313132323333343435353636373738383939616162626363646465656666017f017f14017f00",
+      "verdict": "reject",
+      "expect": {
+        "rule": "R-nodes: only makeMap with a 32-hex key and pred []"
       }
     }
   ]

@@ -63,12 +63,15 @@ function check(b) {
       case 1: throw new Error("negative integer");
       case 2: case 3: { const n = arg(ai); if (i + n > b.length) throw new Error("truncated");
         const s = b.subarray(i, i + n); i += n;
-        if (major === 3) new TextDecoder("utf-8", { fatal: true }).decode(s); return; }
+        if (major === 3) return new TextDecoder("utf-8", { fatal: true }).decode(s);
+        return; }
       case 4: { const n = arg(ai); if (n > MAX_ARRAY) throw new Error("array > 256"); for (let k = 0; k < n; k++) item(depth + 1); return; }
       case 5: { const n = arg(ai); if (n > MAX_MAP) throw new Error("map > 64 pairs"); const seen = new Set();
         for (let k = 0; k < n; k++) {
-          const start = i; if ((b[i] >> 5) !== 3) throw new Error("map key not a text string");
-          item(depth + 1); const key = hex(b.subarray(start, i));
+          if ((b[i] >> 5) !== 3) throw new Error("map key not a text string");
+          // Compare the DECODED key: the same text can be encoded with different
+          // length widths (both accepted, §9.2.1), so comparing bytes would miss it.
+          const key = item(depth + 1);
           if (seen.has(key)) throw new Error("duplicate map key"); seen.add(key);
           item(depth + 1);
         } return; }
@@ -218,6 +221,8 @@ add("liberal-cbor-x-map-header", "Même message sync encodé par cbor-x (en-têt
 const good = encode({ ...base("sync"), data: SYNC });
 add("duplicate-key", "Clé type en double (cbor-x garde la dernière) : refusé, deux décodeurs pourraient lire deux messages différents.",
   raw(hex(good).replace(/^a5/, "a6") + hex(encode("type")) + hex(encode("request"))));
+add("duplicate-key-nonpreferred", "Clé type en double dont la seconde occurrence est encodée avec une longueur sur 1 octet (78 04) : même texte, donc doublon, refusé (comparaison des clés décodées, pas des octets).",
+  raw(hex(good).replace(/^a5/, "a6") + "7804" + Buffer.from("type").toString("hex") + hex(encode("request"))));
 add("tag-64", "data étiquetée (tag 64, ce qu'émet le `encode` par défaut de cbor-x) : refusé.", new cborx.Encoder({ useRecords: false }).encode({ ...base("sync"), data: SYNC }));
 add("float", "Pointeur en flottant (0.5) : refusé, aucun flottant dans le protocole.", encode({ ...base("ephemeral"), sessionId: "s1", count: 1, data: raw("a1695f5f70726573656e74a46174656c617365726565706f6368036178f93800617901") }));
 add("negative-int", "count = -1 (entier négatif) : refusé.", raw(hex(encode({ ...base("ephemeral"), sessionId: "s1", count: 1, data: encode({ __presence: { type: "heartbeat" } }) })).replace("65636f756e7401", "65636f756e7420")));
@@ -246,6 +251,39 @@ add("compat-critical-key", "Champ « à comprendre » d'une version future (« !
 add("compat-nested-critical-key", "Clé « à comprendre » dans une map ouverte imbriquée (peerMetadata) : refusé.", encode({ type: "arrive", senderId: FROM, targetId: ME, peerMetadata: { "!x": 1 } }));
 add("compat-unknown-type", "Type inconnu « future-kind » (nouveau type de message d'une version future) : ignoré sans erreur (ni violation ni règle L).", encode({ ...base("future-kind"), data: SYNC }));
 add("compat-grease-type", "Type GREASE « grease-4f1e » : ignoré.", encode({ ...base("grease-4f1e") }));
+
+// ---- G9 schema of the index (spec §9.7), real Automerge 3.5.0 changes ----
+const gvec = [];
+{
+  let ix = A.init({ actor: "0102030405060708090a0b0c0d0e0f10" });
+  ix = A.change(ix, { time: 0, message: "" }, (x) => { x.schema = 1; x.nodes = {}; x.packages = {}; });
+  const NODE = "0123456789abcdef0123456789abcdef";
+  const withNode = A.change(A.clone(ix, { actor: "1112131415161718191a1b1c1d1e1f20" }), { time: 0, message: "" }, (x) => { x.nodes[NODE] = {}; });
+  let nodesObj;
+  for (const op of A.decodeChange(A.getLastLocalChange(withNode)).ops) if (op.action === "makeMap") nodesObj = op.obj;
+  const rule = (ch) => {
+    for (const op of A.decodeChange(ch).ops) {
+      if (op.obj === "_root") return "R-root: root op outside G";
+      if (op.obj === nodesObj && !(op.action === "makeMap" && /^[0-9a-f]{32}$/.test(String(op.key)) && op.pred.length === 0))
+        return "R-nodes: only makeMap with a 32-hex key and pred []";
+    }
+    return null;
+  };
+  const mk = (id, desc, base, fn) => {
+    const next = A.change(A.clone(base, { actor: "2122232425262728292a2b2c2d2e2f30" }), { time: 0, message: "" }, fn);
+    const ch = A.getLastLocalChange(next);
+    const why = rule(ch);
+    gvec.push({ id, status: "proposed", enforce: "step-8", description: desc, decoder: "guard_schema",
+      context: { nodes_obj: nodesObj }, input_hex: hex(ch), verdict: why ? "reject" : "accept", expect: why ? { rule: why } : undefined });
+  };
+  mk("g9-node-add", "Ajout d'un nœud : makeMap sur nodes, clé de 32 hex, pred vide : admis.", ix, (x) => { x.nodes["fedcba9876543210fedcba9876543210"] = {}; });
+  mk("g9-root-op", "Écriture à la racine hors de G (x.extra = 1) : refusée (R-root).", ix, (x) => { x.extra = 1; });
+  mk("g9-node-delete", "Suppression d'un nœud (del sur nodes) : refusée (R-nodes) ; masquer un nœud est une décision.", withNode, (x) => { delete x.nodes[NODE]; });
+  mk("g9-node-replace", "Remplacement d'un nœud existant (makeMap avec pred non vide) : refusé (R-nodes).", withNode, (x) => { x.nodes[NODE] = {}; });
+  mk("g9-node-badkey", "Nœud de clé « abc » (pas 32 hex) : refusé (R-nodes).", ix, (x) => { x.nodes.abc = {}; });
+  mk("g9-node-scalar", "Scalaire posé dans nodes : refusé (R-nodes).", ix, (x) => { x.nodes["00112233445566778899aabbccddeeff"] = 1; });
+}
+for (const v of gvec) vectors.push(v);
 
 process.stdout.write(JSON.stringify({ spec: "inkwell protocol", spec_version: "2.0.0-draft.2",
   generator: "vectors/generate-repo.cjs.txt (cbor-x 1.6.7, @automerge/automerge 3.5.0)", vectors }, null, 2) + "\n");

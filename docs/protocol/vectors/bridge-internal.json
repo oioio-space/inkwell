@@ -31,25 +31,27 @@
       "id": "bridge-message-gen",
       "status": "proposed",
       "enforce": "step-6",
-      "description": "Message (kind 3) avec génération : payload = generation u32 || message.",
+      "description": "Message (kind 3) avec époque : payload = session u32 || generation u32 || message.",
       "decoder": "bridge_envelope",
-      "input_hex": "010334313244334b6f6f57514b31776e65666f4c7263564862626e6635744c7a626f705564334b336246416f4a704137594a674c35705600000002a164747970656473796e63",
+      "input_hex": "010334313244334b6f6f57514b31776e65666f4c7263564862626e6635744c7a626f705564334b336246416f4a704137594a674c3570560000000700000002a164747970656473796e63",
       "verdict": "accept",
       "expect": {
-        "generation": 2
+        "generation": 2,
+        "session": 7
       }
     },
     {
       "id": "bridge-credit-lane",
       "status": "proposed",
       "enforce": "step-6",
-      "description": "Credit (kind 12) : génération, voie (0 en ligne, 1 LARGE), consommé, fenêtre.",
+      "description": "Credit (kind 12) : session, génération, voie (0 en ligne, 1 LARGE), consommé, fenêtre.",
       "decoder": "bridge_envelope",
-      "input_hex": "010c34313244334b6f6f57514b31776e65666f4c7263564862626e6635744c7a626f705564334b336246416f4a704137594a674c3570560000000200000000000000000000400000",
+      "input_hex": "010c34313244334b6f6f57514b31776e65666f4c7263564862626e6635744c7a626f705564334b336246416f4a704137594a674c357056000000070000000200000000000000000000400000",
       "verdict": "accept",
       "expect": {
         "generation": 2,
         "lane": 0,
+        "session": 7,
         "window": 4194304
       }
     },
@@ -57,9 +59,9 @@
       "id": "bridge-credit-bad-lane",
       "status": "proposed",
       "enforce": "step-6",
-      "description": "Credit (kind 12) : génération, voie (0 en ligne, 1 LARGE), consommé, fenêtre.",
+      "description": "Credit (kind 12) : session, génération, voie (0 en ligne, 1 LARGE), consommé, fenêtre.",
       "decoder": "bridge_envelope",
-      "input_hex": "010c34313244334b6f6f57514b31776e65666f4c7263564862626e6635744c7a626f705564334b336246416f4a704137594a674c3570560000000202000000000000000000400000",
+      "input_hex": "010c34313244334b6f6f57514b31776e65666f4c7263564862626e6635744c7a626f705564334b336246416f4a704137594a674c357056000000070000000202000000000000000000400000",
       "verdict": "reject"
     }
   ]
