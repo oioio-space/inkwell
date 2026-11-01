@@ -1,8 +1,11 @@
 package app
 
 import (
+	"bytes"
+	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -167,5 +170,57 @@ func TestReplaceSwitchesTheStoredProject(t *testing.T) {
 	t.Cleanup(func() { _ = st2.close() })
 	if again.Project() != other.Project() || again.Len() != 2 {
 		t.Errorf("reopened project %v with %d ops, want the replacement %v with 2", again.Project(), again.Len(), other.Project())
+	}
+}
+
+func TestOpenTrustQuarantinesInvalidKey(t *testing.T) {
+	proj, folder := newProjectFolder(t)
+	dev, guest := newDevice(t), newDevice(t)
+	list, st, err := openTrust(proj, dev)
+	if err != nil {
+		t.Fatal(err)
+	}
+	good, err := list.Issue(dev, trust.OpAdd, guest.Public(), trust.RoleWriter, "guest")
+	if err != nil {
+		t.Fatal(err)
+	}
+	bad := good
+	bad.Subject = make([]byte, 32)
+	bad.Subject[0] = 1
+	bad.Name = "private-content-must-not-be-logged"
+	// Sign the legacy op: before key validation this was a valid Add.
+	projectID := list.Project()
+	encoded := trust.Encode(bad)
+	copy(bad.Sig[:], dev.Sign("trust-op", append(bytes.Clone(projectID[:]), encoded[:len(encoded)-len(bad.Sig)]...)))
+	for _, op := range []trust.Op{good, bad} {
+		if err := st.save(op); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := st.close(); err != nil {
+		t.Fatal(err)
+	}
+	var logs bytes.Buffer
+	old := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&logs, nil)))
+	defer slog.SetDefault(old)
+	for range 2 {
+		again, st, err := openTrust(proj, dev)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if again.Project() != list.Project() || again.Len() != 2 {
+			t.Fatal("valid ops lost")
+		}
+		if err := st.close(); err != nil {
+			t.Fatal(err)
+		}
+	}
+	data, err := os.ReadFile(filepath.Join(folder, ".inkwell", "trust.quarantine", bad.Hash().String()+opExt))
+	if err != nil || !bytes.Equal(data, trust.Encode(bad)) {
+		t.Fatalf("quarantine: %v", err)
+	}
+	if strings.Count(logs.String(), bad.Hash().String()) != 1 || strings.Contains(logs.String(), bad.Name) {
+		t.Fatalf("unexpected log: %s", &logs)
 	}
 }

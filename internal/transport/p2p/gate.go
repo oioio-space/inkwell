@@ -5,6 +5,8 @@ import (
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/p2p/net/conngater"
 	ma "github.com/multiformats/go-multiaddr"
+
+	"github.com/oioio-space/inkwell/internal/transport"
 )
 
 // gate is the node's connection gater. A peer is let in once it is
@@ -32,6 +34,9 @@ func (g gate) InterceptAddrDial(p peer.ID, a ma.Multiaddr) bool {
 
 // InterceptSecured decides on an authenticated connection.
 func (g gate) InterceptSecured(_ network.Direction, p peer.ID, addrs network.ConnMultiaddrs) bool {
+	if _, err := KeyFromID(transport.PeerID(p.String())); err != nil {
+		return false
+	}
 	if g.isRelay(p) {
 		return true
 	}

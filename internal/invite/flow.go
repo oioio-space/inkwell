@@ -316,7 +316,7 @@ func refuse(why Reason) []byte { return Reply{Kind: ReplyRefused, Reason: why}.E
 // redeem handles a Redeem request.
 func (h *Host) redeem(from transport.PeerID, r Request) []byte {
 	key, err := h.cfg.KeyOf(from)
-	if err != nil || r.Project != h.cfg.List.Project() {
+	if err != nil || identity.ValidatePublicKey(key) != nil || r.Project != h.cfg.List.Project() {
 		return refuse(ReasonInvalid)
 	}
 	t, ok := h.take(r.Secret)
@@ -353,7 +353,7 @@ func (h *Host) take(secret [16]byte) (Ticket, bool) {
 // ask handles an Ask request: it waits for a person to answer.
 func (h *Host) ask(ctx context.Context, from transport.PeerID, name string) ([]byte, bool) {
 	key, err := h.cfg.KeyOf(from)
-	if err != nil {
+	if err != nil || identity.ValidatePublicKey(key) != nil {
 		return nil, false
 	}
 	if h.cfg.List.Role(key) > 0 {
@@ -533,6 +533,9 @@ func (j Joiner) verify(rep Reply, host transport.PeerID, project *trust.ProjectI
 	hostKey, err := j.KeyOf(host)
 	if err != nil {
 		return nil, fmt.Errorf("invite: host key: %w", err)
+	}
+	if err := identity.ValidatePublicKey(hostKey); err != nil {
+		return nil, err
 	}
 	i := slices.IndexFunc(rep.Ops, isGenesis)
 	if i < 0 {

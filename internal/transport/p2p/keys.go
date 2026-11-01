@@ -8,6 +8,7 @@ import (
 	"github.com/libp2p/go-libp2p/core/crypto"
 	"github.com/libp2p/go-libp2p/core/peer"
 
+	"github.com/oioio-space/inkwell/internal/identity"
 	"github.com/oioio-space/inkwell/internal/transport"
 )
 
@@ -16,6 +17,9 @@ import (
 // printable characters, and so a valid [transport.PeerID]. It returns "" if
 // pub is not an Ed25519 public key.
 func IDFromKey(pub ed25519.PublicKey) transport.PeerID {
+	if identity.ValidatePublicKey(pub) != nil {
+		return ""
+	}
 	pk, err := crypto.UnmarshalEd25519PublicKey(pub)
 	if err != nil {
 		return ""
@@ -45,6 +49,9 @@ func KeyFromID(id transport.PeerID) (ed25519.PublicKey, error) {
 	raw, err := pk.Raw()
 	if err != nil {
 		return nil, fmt.Errorf("p2p: public key of %q: %w", id, err)
+	}
+	if err := identity.ValidatePublicKey(raw); err != nil {
+		return nil, err
 	}
 	return ed25519.PublicKey(raw), nil
 }

@@ -519,8 +519,9 @@ func TestMemberGateStrangerFlood(t *testing.T) {
 		admin := newDevice(t)
 		a := join(t, net, admin, newProject(t, admin))
 		for i := range 2000 {
-			key := sha256.Sum256([]byte(fmt.Sprint(i)))
-			x := net.Join(p2p.IDFromKey(ed25519.PublicKey(key[:])))
+			seed := sha256.Sum256([]byte(fmt.Sprint(i)))
+			key := ed25519.NewKeyFromSeed(seed[:]).Public().(ed25519.PublicKey)
+			x := net.Join(p2p.IDFromKey(key))
 			net.Link(a.id, x.Local())
 			if err := x.Send(t.Context(), a.id, []byte{wireRepo, 'x'}); err != nil {
 				t.Fatal(err)

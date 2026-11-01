@@ -7,6 +7,8 @@ import (
 	"fmt"
 	"slices"
 	"unicode/utf8"
+
+	"github.com/oioio-space/inkwell/internal/identity"
 )
 
 // Limits of the canonical attestation encoding.
@@ -40,7 +42,7 @@ type Attestation struct {
 }
 
 func (a Attestation) validate() error {
-	if len(a.Signer) != keyLen || a.Doc == "" || len(a.Doc) > MaxDoc || !utf8.ValidString(a.Doc) || len(a.Heads) > MaxHeads {
+	if identity.ValidatePublicKey(a.Signer) != nil || a.Doc == "" || len(a.Doc) > MaxDoc || !utf8.ValidString(a.Doc) || len(a.Heads) > MaxHeads {
 		return fmt.Errorf("%w: attestation fields", ErrMalformed)
 	}
 	if !strictlyAscending(a.Heads) {

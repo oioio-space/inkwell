@@ -480,8 +480,9 @@ func (w *Wiring) afterChange() {
 // them, and closes them to the others: a suspended peer, or every peer if this
 // device is suspended.
 func (w *Wiring) reconcile() {
-	for _, p := range slices.Sorted(maps.Keys(w.up)) {
-		if !w.isLinked(p) && w.adm.Admit(p) {
+	// Scan members rather than revalidating every connected stranger on each event.
+	for _, p := range slices.Sorted(maps.Keys(w.adm.dialTargets(w.raw.Local()))) {
+		if _, up := w.up[p]; up && !w.isLinked(p) && w.adm.Admit(p) {
 			w.activate(p)
 		}
 	}

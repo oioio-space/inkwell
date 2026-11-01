@@ -7,6 +7,12 @@ Rien n'est « fait » sans tests verts et sans une passe `ux-walkthrough` réuss
 
 États : ⏳ à faire · 🔨 en cours · ✅ fait et testé · 🧪 fait, tests partiels · ❓ question ouverte
 
+## Sécurité du protocole
+
+| # | Date | Demande | Où | État |
+|---|------|---------|----|------|
+| N-1 | 2026-11-01 | Refuser les clés Ed25519 non canoniques et d’ordre petit avant toute admission ou vérification | `internal/identity/public.go`, p2p, invite, trust, attestations ; vecteurs et tests de rejet | 🧪 (race ciblée, lint, arch, deadcode OK ; suite réseau bloquée par le bac à sable) |
+
 ## Façon de travailler
 
 | # | Date | Demande | Où | État |
