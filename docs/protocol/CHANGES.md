@@ -422,3 +422,10 @@ octets si le plafond est plein d'actives, mais jamais son tour : la borne d'atte
 - Confirmation par les deux relecteurs de l'ordre d'attente unique (y compris au redémarrage).
 - `RepoGen.cfg` non exhaustif ; passage entre sessions et crédits du pont argumentés, non
   modélisés ; codecs `sync2` et objets proposés sans implémentation (étapes 4 et 8).
+
+## Tour 10 — confirmation (2026-11-01)
+
+Codex (`reviews/21-codex.md`) et Fable (`reviews/22-fable.md`) **acceptent** la révision 10. Seule remarque commune,
+mineure : la cellule « modifications indivisibles en attente » du §16.1 résumait l'éviction en « inactives en LRU » ;
+elle reprend désormais l'ordre complet du §8.1 (finies ou plus voulues, puis inactives sans détenteur connecté en LRU,
+puis éligibles du plus grand rang au plus petit ; octets retirés, rang gardé). Aucun changement de règle.
