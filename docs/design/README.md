@@ -64,30 +64,28 @@ sans apprendre, et que l'application suit le thème clair ou sombre du système.
    grandes polices.
 7. **Mesuré, pas supposé** : chaque règle a sa preuve (un test, une capture, une revue).
 
-## Les grandes décisions (révision 2)
+## Les grandes décisions (révision 3)
 
-- **Les jetons libadwaita 1.8 restent la base.** On corrige les valeurs qui échouent à WCAG 2.2 AA :
-  - l'anneau de focus, avec une variante blanche pour les fonds sombres ;
-  - la couleur « succès » ;
-  - deux marques de fichiers ;
-  - le texte secondaire sur une sélection ;
-  - les numéros de ligne.
-
-  Les couleurs de personnes gagnent une variante « trait » pour les curseurs.
-- **La structure à gauche, le temps et les autres à droite.**
-  - À gauche : Fichiers, Sommaire, Tâches, Liens.
-  - À droite : Historique, Activité, Rechercher.
-  - Des **onglets de fichiers** au centre.
-- **Une question passe avant un état.** Au plus un bandeau visible ; aucun message caché sans
-  recours. Un toast ne pose jamais de question, et ce qu'il annule reste annulable après.
-- **Un seul composant par besoin** : `Dialog`, `Tooltip`, `ToastHost`, `BannerHost`,
-  `StatusPage`.
-- **Le code se lit, il ne se programme pas.** Les fichiers de code s'ouvrent en lecture, avec
-  les dix couleurs existantes, et « Modifier » sur demande.
-- **Les extensions** se gèrent dans les Préférences. Le consentement s'écrit en phrases simples,
-  et le contenu d'une extension est toujours encadré et signé.
-- **Palette sur Ctrl+Maj+P**, Ctrl+K reste le lien. C'est une recommandation à confirmer, comme
-  les autres de `spec.md` §11.
+- **Jetons libadwaita 1.8, corrigés pour WCAG 2.2 AA.** `tokens.json` est aussi le **contrat
+  de thème** : chaque jeton est remplaçable, dérivé ou verrouillé. Un thème qui échoue dans un
+  seul mode est refusé en entier, avec la raison.
+- **La structure à gauche, le temps et les autres à droite**, et des onglets de fichiers. Le
+  clic sur un fichier, encore cassé (G-0, ouvert), a son comportement attendu écrit.
+- **Messages :** un état critique d'abord, puis les questions, puis le reste. Un toast n'a
+  qu'une action, et ce qu'il annule reste annulable après.
+- **Extensions :**
+  - une ligne par point de l'architecture, chacune avec son attribution visible ;
+  - les extensions sont rendues par Inkwell, en Adwaita ;
+  - épinglées par la personne, jamais par elles-mêmes ;
+  - des zones protégées, et un mode sans extensions ;
+  - les extensions de projet sont annoncées et désactivables pour soi.
+- **Modèles :** aucun n'est fourni. On enregistre un projet comme modèle, au format de Typst ;
+  une charte se partage entre plusieurs modèles.
+- **Problèmes :** un clic amène à l'erreur, partout. Les messages sont en clair, avec le texte
+  d'origine, des conseils et des corrections rapides. F8 et Ctrl+. sont libres.
+- **Aide à l'écriture Typst :** complétion, signatures et documentation `///`, par tinymist.
+  C'est calme : un outil d'écriture, pas un IDE.
+- **Rien n'est ratifié** : les recommandations attendent l'utilisatrice (`spec.md` §11).
 
 ## Comment s'en servir
 

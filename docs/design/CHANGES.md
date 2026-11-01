@@ -11,7 +11,7 @@ Cette révision répond aux revues n°1 de [Codex](reviews/01-codex.md) et de
 | C2 | §2.2 [M] Les fonds translucides n'ont pas de fond parent déclaré ; l'infobulle annonce 12,57 dans les deux thèmes | Champ `over` pour chaque paire. Bandeaux mesurés sur `--window-bg`, différences sur `--dialog-bg` (6,24 / 5,94) **et** sur `--view-bg`. Infobulle : 12,57 / 20,24 (§4.6). |
 | C3 | §2.2, §7 [B] Paires oubliées : `--fg-dim` sur la sélection (4,48 / 4,26), numéros de ligne (2,51) | Paires interdites C-SEL et C-GUT (§2.2), marquées `forbidden` dans `tokens.json`. Inventaire G-50 (`HistoryRow.svelte:158`) et G-52 (`editor/setup.ts:38`). |
 | C4 | §2.1 [M] `tokens.json` ne pilote pas tout le CSS : `--hl-link` manque, variantes en prose, HC en `\|`, typographie sans famille ; la parité est présentée comme existante | `tokens.json` réécrit : `--hl-link`, `--person-N-line` et `--person-N-ink` comme jetons, un nom `css` partout, `modes` (`dark`, `hc-light`, `hc-dark`), typographies avec `fontFamily` et `cssValue`. La parité est déclarée **à écrire** (T-5, G-1b), dans le README et dans le JSON. |
-| C5 | §4.16, §5.5 [B] Cliquer un fichier n'ouvre rien (`App.svelte:197`) | Inventaire **G-0**, corrigé par un lot séparé. La spec définit le modèle d'onglets de fichiers (§4.25) et l'ouverture (§5.5). |
+| C5 | §4.16, §5.5 [B] Cliquer un fichier n'ouvre rien (`App.svelte:197`) | Inventaire **G-0** — *rév. 3 : ouvert, non corrigé ; la mention « corrigé » était fausse*. La spec définit le modèle d'onglets de fichiers (§4.25) et l'ouverture (§5.5). |
 | C6 | §3.4, §4.19 [M] Troisième source de toasts (`Sheet.svelte:605`, `:169`) et bandeaux locaux du tableur | L-8c, L-9 ; G-13 et G-16 complétés avec les lignes exactes ; `HistoryBars.svelte:143` ajouté. |
 | C7 | §4.3–4.5, §4.16, §4.22 [M] Barre du tableur, radios des préférences, DiffView, HistoryBars ; l'historique est une `listbox` dont le focus ne suit pas | F-1 étendu à toutes les barres (§4.3) ; groupes de bascules (§4.5) ; historique en `listbox` APG (§4.22). Inventaire G-51, G-54. |
 | C8 | §4.2, §4.13, §4.24 [M] ↑ ouvre sur le premier élément ; l'exception Échap → éditeur ; le menu à la place d'un `<select>` ; l'ARIA de la palette est incomplet | ↑ ouvre sur le dernier élément ; **retour au déclencheur sans exception** (§4) ; `<select>` natif quel que soit le nombre d'options (§4.5) ; palette en *combobox* complet (§4.24). |
@@ -49,3 +49,61 @@ Cette révision répond aux revues n°1 de [Codex](reviews/01-codex.md) et de
 | N20 : types de fichiers, code en lecture, icônes, palette, détection, inconnus et binaires ; approche CodeMirror la plus légère | §4.28 (FT-1 à FT-7 et tableau des options) ; `--mark-code` ; Q11 ; G-65 à G-69. |
 | N21 : extensions (gestion, consentement, points d'affichage, confinement, collaboration) | §4.29 ; `--mark-extension` ; §5.13 ; §6.4 ; Q12 ; G-70. |
 | Inscrire le détail de N17 dans `docs/exigences.md` | Ligne N17 complétée. |
+
+---
+
+# Révision 3 — du constat de la revue n°2 à la correction
+
+Ce qui suit répond aux revues n°2 de [Fable](reviews/03-fable-r2.md) et de
+[Codex](reviews/04-codex-r2.md), toutes deux « NOT ACCEPTED », puis aux exigences N22 à N29.
+
+## Revue Fable n°2
+
+| # | Constat | Correction |
+|---|---|---|
+| B1 | N22, le contrat de thème, est absent | spec **§2.10** :<ul><li>jetons remplaçables, dérivés ou verrouillés ;</li><li>validation par l'hôte dans les quatre modes, avec refus complet ;</li><li>HC jamais affaibli ; ΔE des personnes ; aucun effet sous `forced-colors` ;</li><li>Apparence › Thème : vignettes, refus expliqué, « Revenir au thème par défaut » ;</li><li>ordre de priorité ;</li><li>un projet ne peut pas imposer un thème.</li></ul>`tokens.json` : `contract` sur chaque jeton, `themeContract`, paires HC **calculables par machine** dans les quatre modes. Les pseudo-paires « (contraste élevé) » sont retirées. Couverture : ligne N22. Inventaire : G-71. |
+| B2 | Les points d'affichage contredisent l'architecture §15.4 | spec **§4.31** : une ligne par point de §15.4, dans le même ordre (stockage et miroir réunis), avec l'emplacement, l'attribution visible, l'état désactivé ou planté, et ce qui est interdit. Les surfaces de §15.13 sont reprises ; les **deux** sélecteurs, selon L-2. Couverture APG : ligne « Extensions ». |
+| M1 | G-0 est présenté comme corrigé | G-0 est **ouvert** partout : inventaire, couverture, CHANGES rév. 2 (voir C5 plus bas). La spec §4.16 décrit le comportement attendu comme critère d'acceptation, avec le test `e2e/files.spec.ts` (à écrire). |
+| M2 | Des preuves citées comme existantes n'existent pas ; des lignes S sont sans preuve | §10 réécrit avec une colonne **État** (existant / à écrire). Seuls les fichiers existants sont donnés comme preuve : `tokens.test.ts:44-50`, `e2e/shell.spec.ts:24`, `:151`, `:253`, `e2e/sheet.spec.ts:613`, `ui/i18n.test.ts`. Dans `coverage.md`, chaque S a une preuve ; les autres passent en S→N ; 3.2.2, *Popovers* et *Performance perçue* sont rétrogradés. |
+| m1 | « Chaque paire interdite échoue » est faux | T-5 : une paire interdite est un **usage interdit par politique** ; le test vérifie son absence du code, pas son échec. |
+| m2 | Les hexadécimaux de `--person-N-line` contredisent `color-mix` | Les hexadécimaux du JSON sont **canoniques** (§2.2, T-5). Les rapports sont recalculés à partir d'eux. |
+| m3 | Chemins et lignes de l'inventaire | `workspace/workspace.svelte.ts`, `ui/icons/FileIcon.svelte`, `ui/shell/StatusBar.svelte` ; G-61 : `:549`, `:618`, `:621`, `:622`, `:656`, `:663`. |
+| m4 | La touche L est oubliée | §4.23, A-20 et couverture 2.1.4 : B, W, L (`present/keys.ts:61-69`). |
+| m5 | Infobulle sombre : la spec et le JSON divergent | La ligne `--tooltip-bg` de §2.2 est explicite (20,24 sur la vue sombre). |
+| m6 | 3.1.2 et « English » | §5.13 : chaque nom de langue porte son `lang` ; couverture 3.1.2 ; G-79. |
+| m7 | 3.3.2 contre le champ de recherche | §4.13 : exemption explicite (HIG *Search*), preuve `SearchField.svelte:55-69`. |
+| m8 | Sur-ingénierie : FT-3, TO-1 | FT-3 ramené au séparateur et à l'en-tête en gras. TO-1 : la phrase « une fois par session » est retirée ; le rappel passe dans l'infobulle « Annuler · Ctrl+Z » et dans l'Aide. |
+
+## Revue Codex n°2
+
+| # | Constat | Correction |
+|---|---|---|
+| R2-B1 | N22 absent | Comme Fable B1. En plus : version du contrat, jetons inconnus et absents, priorité système, utilisateur, extension, composition des translucides, retour au thème sûr (§2.10). |
+| R2-B2 | G-0 toujours ouvert | Comme Fable M1. |
+| R2-M1 | La matrice confond exigence et preuve | Légende stricte (S = preuve existante citée). Commentaires : « hors périmètre », mais l'onglet est **encore affiché**, en S→G (G-62). Performance perçue en S→N. |
+| R2-M2 | Exemption de reflow trop large | L-5 : le texte revient à la ligne (forcé sous 560px ; preuve `editor/setup.ts:122`). Seul le 2D est exempté : grille, pages, tableaux d'extension. Le test couvre les quatre formats. |
+| R2-M3 | Transitions de focus incomplètes | §4 : retour au déclencheur et **quatre replis** ordonnés ; un contenu ouvert reçoit le focus. §4.25 : activation **manuelle**, `aria-selected`, un `tabpanel` unique, focus après le dernier onglet fermé. §3.3 : nom accessible et orientation des séparateurs. G-78. |
+| R2-M4 | Retrait d'une extension et perte de données | §4.29 : « Retirer » **garde les données** ; « Effacer ses données… » est un geste à part, confirmé ; « Récemment retirées » ; la réactivation après une autorisation rendue est spécifiée ; TO-1 étendu. |
+| R2-M5 | Stockage, cycle de vie, consentement incomplets | §4.29 : le local reste la vérité ; état de la copie ; échec ; arrêt ; migration ; actions de démarrage et d'arrêt visibles dans Activité. Le consentement reprend les phrases de §15.5, montre ce qui est automatique, et « Tout voir » à la mise à jour. |
+| R2-M6 | Des états manquent | §4 : neuf états, et les actions hors ligne **revérifiées** à l'envoi. §4.29 : états du gestionnaire (vide, installation, mise à jour, abîmé ou incompatible, échec, pause, conflit). §5.1 : validation et abandon du nom. |
+| R2-M7 | Prédicat des paires interdites | Comme Fable m1. |
+| R2-M8 | Toasts à deux actions ; priorité absolue des questions | Une seule action par toast (§4.12) : intégration → « Annuler » (lignes teintées) ; export → « Ouvrir » (« Afficher dans le dossier » dans le menu). L-8 révisé : états **critiques** pour l'écriture, puis questions, puis autres états ; « +1 question » toujours visible. |
+| R2-m1 | Moyens figés (25 langages, polices en TS) ; densité d'attribution | Couverture par priorité sous **budget** (60 Ko, 100ms, 5ms). T-1 TS limité aux couleurs et ombres. Densité d'attribution à 360px testée (§4.31, §10). |
+| R2-m2 | Des arbitrages non ratifiés sont présentés comme clos | §11 : « Rien n'est ratifié » ; C12, F5 et F8 sont fermés en spécification, avec une **décision en attente**. `ux-principles.md` et le glossaire ne sont pas modifiés. |
+
+## Correction de la révision 2
+
+- **C5 (CHANGES rév. 2)** disait « corrigé par un lot séparé ». C'était **faux**. G-0 est
+  ouvert, et le restera jusqu'à un commit qui le prouve.
+
+## Exigences ajoutées pendant la révision 3
+
+| Exigence | Correction |
+|---|---|
+| N22 (thèmes, stockage, cycle de vie) | §2.10, §4.29 ; G-71 |
+| N23 (extensions de projet) | §4.32 : provenance, mode restreint et consentement au-delà du niveau projet, « Désactiver pour moi », repli, badge ; G-72 |
+| N24 (ne pas dénaturer ; surfaces ; bouton Extensions ; diagrammes) | §4.30 (épinglage par la personne seulement), §4.31 (contributions déclaratives `{commande, emplacement, groupe, ordre, quand}`, rendues par l'hôte en Adwaita), §4.33 (zones protégées, dialogues inimitables, conflits de raccourcis, mode sans extensions), §4.34 (Mermaid, Graphviz : bloc, en ligne et dans l'aperçu, dernier rendu partagé, erreurs en ligne) ; G-73 à G-75, G-77 |
+| N25 (outils de développement) | §4.35 : mode développeur local, pastille rouge permanente, Inspecteur dans le tiroir ; G-76 |
+| N27 (modèles de projet, créés par les personnes) | §5.2 (« Nouveau projet » vide par défaut), **§5.19** : format `typst.toml` `[template]` + `[tool.inkwell]` ; Touying ; Markdown + CSS ; charte = paquet local partagé ; contenu copié, charte en dépendance versionnée ; galerie ; écran vide ; enregistrer en 3 étapes avec vignette automatique ; gestion dans Projets › Modèles ; personnel ou d'équipe ; G-83 ; Q16 |
+| N28 (erreurs de compilation claires, « comme un IDE ») | **§4.36** : soulignement et marge ; liste Problèmes dans le popover existant ; **un clic** jusqu'à l'erreur depuis chaque signal, y compris les fichiers importés et les modèles ; F8 / Maj+F8 (libres) ; corrections rapides (Ctrl+., ampoule) ; messages en clair avec le texte d'origine et les conseils ; aperçu qui garde le dernier bon rendu ; gravités ; annonces polies ; calme pendant la frappe ; un modèle de diagnostic unique pour Typst, Markdown, CSS, CSV et les extensions ; G-80 à G-82 ; Q17 |
+| N29 (aide à l'écriture Typst) | **§4.37** : complétion (icônes de genre, aperçu de la documentation), aide de signature, carte de survol avec « Aller à la définition » (F12, onglet), indices discrets désactivés par défaut, convention `///` de tidy encouragée par l'assistant de modèle, combobox et listbox APG, fr et en, Markdown (chemins, ancres), point d'extension, réglages ; G-84 |

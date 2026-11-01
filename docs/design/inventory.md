@@ -1,9 +1,13 @@
-# Inventaire de l'interface et écarts avec la spécification (N17, révision 2)
+# Inventaire de l'interface et écarts avec la spécification (N17, révision 3)
 
 - **Relevé du 2026-11-01** sur `main` (`3841ff2`), dans `frontend/src` ; les chemins sont
   relatifs à ce dossier, sauf mention contraire.
-- La révision 2 ajoute les constats des revues n°1 de Codex et de Fable et l'audit de couverture
-  ([`coverage.md`](coverage.md)), ainsi que N20 (types de fichiers) et N21 (extensions).
+- La révision 2 ajoute les constats des revues n°1, l'audit de couverture
+  ([`coverage.md`](coverage.md)), N20 et N21.
+- La révision 3 ajoute les revues n°2 :
+  - **G-0 est ouvert** ;
+  - les chemins sont corrigés ;
+  - s'ajoutent G-71 à G-83 (N22 à N25, N27, N28).
 - Les identifiants G-1 à G-49 de la révision 1 sont conservés.
 - **Gravité :**
   - **B** : bloquant (échec WCAG 2.2 AA ou parcours principal cassé) ;
@@ -22,7 +26,7 @@
 | Barre de mise en forme | `ui/toolbar/*` | conforme à T11 ; clavier non APG |
 | Menus | `ui/popover/MenuButton.svelte` | ↑ et Échap non APG |
 | Barre d'état | `ui/shell/StatusBar.svelte` | complète ; boutons et texte confondus |
-| Fichiers | `ui/shell/Sidebar.svelte` | **le clic n'ouvre rien** (G-0) ; pas d'arbre ARIA ; pas de Sommaire, Tâches ni Liens |
+| Fichiers | `ui/shell/Sidebar.svelte` | **le clic n'ouvre rien** (G-0, ouvert) ; pas d'arbre ARIA ; pas de Sommaire, Tâches ni Liens |
 | Aperçu | `preview/Preview.svelte` | bon ; couleurs brutes |
 | Tableur | `ui/sheet/*` | grille APG ; toast et bandeaux propres |
 | Historique | `ui/history/*` | `listbox` sans focus d'option ; onglet Commentaires vide |
@@ -43,7 +47,7 @@
 
 | # | Grav. | Écart | Norme | Preuve | Correction |
 |---|---|---|---|---|---|
-| **G-0** | **B** | Cliquer un fichier dans Fichiers ne l'ouvre pas : `onOpen` ignore le chemin transmis. | Nielsen 1 et 3 ; spec §4.16 | `App.svelte:197` (`onOpen={() => session.focus()}`) ; `ui/shell/Sidebar.svelte:49` transmet `node.path` | **Corrigé par un lot séparé** (signalé par Codex, en cours hors N17). La spec définit en plus le modèle d'onglets (§4.25, G-55). |
+| **G-0** | **B** | Cliquer un fichier dans Fichiers ne l'ouvre pas : `onOpen` ignore le chemin transmis. | Nielsen 1 et 3 ; spec §4.16 | `App.svelte:197` (`onOpen={() => session.focus()}`) ; `ui/shell/Sidebar.svelte:49` transmet `node.path` | **Ouvert.** Le correctif est un lot séparé, **à faire** ; aucun commit ne le corrige (`App.svelte:197` est inchangé). Le comportement attendu, qui sert de critère d'acceptation, est en spec §4.16. Le test e2e `G-0` (`e2e/files.spec.ts`) est à écrire. Le modèle d'onglets est G-55. |
 
 ### 2.1 Jetons et contraste
 
@@ -86,12 +90,12 @@
 | G-26 | M | `<ul>` dans un `<button>` ; pas de « +N » | HTML, 4.1.2 | `ui/PeopleStack.svelte:14-36` | AV-1 |
 | G-27 | M | Couleur par hachage modulo 8 | C-PERSON-2, 1.4.1 | `ui/people.ts:25-31` | créneau du projet (Q4) |
 | G-28 | M | `.danger` local | P2 | `PeopleDialog.svelte:166`, `:336-342` | `.destructive` |
-| G-29 | M | `.fb` sur du texte ; `opacity` sur le texte ; zones actives de 28px | ST-1, ST-2, §2.5 | `StatusBar.svelte:132`, `:137`, `:139`, `:150`, `:169-175` | zones actives de 34px |
+| G-29 | M | `.fb` sur du texte ; `opacity` sur le texte ; zones actives de 28px | ST-1, ST-2, §2.5 | `ui/shell/StatusBar.svelte:132`, `:137`, `:139`, `:150`, `:169-175` | zones actives de 34px |
 | G-30 | m | Pastille d'état en double | Nielsen 8 | `HeaderBar.svelte:82-84`, `StatusBar.svelte:78-81` | §4.15 |
 | G-31 | m | Nom accessible variable en plus d'`aria-pressed` | APG *Button*, 2.5.3 | `HeaderBar.svelte:76`, `:96`, `:121` | H-4 |
 | G-32 | m | Titre de barre = « Inkwell » | HIG *Header bars*, 2.4.2 | `App.svelte:110`, `:201` | Q2 |
 | G-33 | m | Pas de F10, F6, Ctrl+, ni Ctrl+? | HIG *Keyboard*, 2.4.1 | `App.svelte:127-148` | §8.2 |
-| G-34 | m | Type de fichier lu en double | 1.1.1 | `FileIcon.svelte:29-30`, `Sidebar.svelte:52` | I-5 |
+| G-34 | m | Type de fichier lu en double | 1.1.1 | `ui/icons/FileIcon.svelte:29-30`, `ui/shell/Sidebar.svelte:52` | I-5 |
 | G-35 | m | Liseré d'avatar en `--headerbar-bg` fixe | T-1 | `PeopleStack.svelte:67` | surface parente |
 | G-51 | M | Historique en `listbox` : les flèches changent la sélection sans déplacer le focus ni renseigner `aria-activedescendant` | APG *Listbox*, 4.1.2 | `HistoryDrawer.svelte:143-149` | §4.22 |
 | G-54 | M | Groupes radio sans flèches ; barre du tableur sans tabindex itinérant ; ↑ ouvre un menu sur le premier élément | APG *Radio Group*, *Toolbar*, *Menu Button* | `Preferences.svelte:52`, `DiffView.svelte:181`, `HistoryBars.svelte:162`, `Sheet.svelte:479`, `MenuButton.svelte:115` | §4.2, §4.3, §4.5 |
@@ -106,14 +110,14 @@
 | G-36 | M | Aucune poignée de redimensionnement (panneaux, tiroir, vue présentateur) | T11 A6 (RSZ-04 à 08), 2.5.7 | `Sidebar.svelte:68`, `HistoryDrawer.svelte:230`, `present/PresenterView.svelte` | §3.3 |
 | G-37 | M | Sous 900px, l'aperçu reste côte à côte (seuil à 560px) | T11 A6, 1.4.10 | `App.svelte:357-364` | §3.4 |
 | G-38 | M | Recherche dans le projet non montée | T11 B6 | `ui/search/SearchPanel.svelte` (aucun import hors test) ; `editor/search/keymap.ts:22-40` jamais branché | onglet Rechercher (Q5) |
-| G-55 | **B** | Pas de modèle d'onglets de fichiers ni de sélecteur à gauche (Sommaire, Tâches, Liens absents) | HIG *Tabs*, `AdwViewSwitcher` ; T11 B7, B10 | `workspace.svelte.ts:120` (un seul `current`) ; `Sidebar.svelte:29-61` | §4.25, §4.16 |
+| G-55 | **B** | Pas de modèle d'onglets de fichiers ni de sélecteur à gauche (Sommaire, Tâches, Liens absents) | HIG *Tabs*, `AdwViewSwitcher` ; T11 B7, B10 | `workspace/workspace.svelte.ts:120` (un seul `current`) ; `Sidebar.svelte:29-61` | §4.25, §4.16 |
 | G-62 | M | Onglet Commentaires affiché, sans fonction | Nielsen 8, L-2b | `HistoryDrawer.svelte:46`, `:206-207` | le masquer (Q8) |
 
 ### 2.4 Parcours, contenu, aide
 
 | # | Grav. | Écart | Norme | Preuve | Correction |
 |---|---|---|---|---|---|
-| G-39 | **B** | Pas d'accueil : nom inventé | règle 8 | `workspace.svelte.ts:181` | §5.1 |
+| G-39 | **B** | Pas d'accueil : nom inventé | règle 8 | `workspace/workspace.svelte.ts:181` | §5.1 |
 | G-40 | **B** | Pas d'écran Projets | tâche « créer » | `internal/app/docs.go:86` | §5.2 |
 | G-41 | M | Le partage n'expose ni le rôle, ni la proximité, ni les demandes, ni l'empreinte | §5.3–5.4, 3.3.8 | `ShareDialog.svelte:37-95` ; `internal/app/invites.go` | §5.3, §5.4 |
 | G-42 | M | Préférences réduites ; `data-theme` réglé nulle part | §5.13, T-2 | `Preferences.svelte:48-99` ; aucun `data-theme` dans `src` | §5.13 |
@@ -127,7 +131,7 @@
 | G-56 | M | Chemin du fichier dans le toast d'export ; pas d'action « Ouvrir » | E-2, Nielsen 3 | `fr.json:450`, `preview/actions.ts:82` | §5.12 |
 | G-57 | M | Écrans vides en texte seul, sans action | HIG *Placeholders*, Nielsen 9 | `HistoryDrawer.svelte:207`, `:213`, `PeopleDialog.svelte:101`, `Preview.svelte:193-201` | `StatusPage` |
 | G-58 | M | Pas d'aide ni de fenêtre des raccourcis | Nielsen 10, 3.2.6 | aucun composant | §4.26 |
-| G-61 | M | « fusion », « Fusionner », « fusionnée » | §6.4, glossaire (« merge ») | `fr.json:549`, `:618`, `:619`, `:622`, `:656` | « Intégrer la variante » |
+| G-61 | M | « fusion », « Fusionner », « fusionnée » | §6.4, glossaire (« merge ») | `i18n/fr.json:549`, `:618`, `:621`, `:622`, `:656`, `:663` | « Intégrer la variante » |
 | G-63 | m | Pas de registre unique des commandes ; doublons de raccourcis non testés | K-6, Nielsen 5 | raccourcis répartis entre `App.svelte:127-148`, `ui/toolbar/spec.ts`, `editor/format/keymap.ts`, `editor/search/keymap.ts` | §8.2 |
 
 ### 2.5 Types de fichiers et code (N20)
@@ -137,7 +141,7 @@
 | G-65 | M | Pas de type « code » dans `FileKind` | FT-1 | `store/files.ts:20-30` (le format est versionné : `FILES_VERSION`, ligne 12) | ajouter `code`, à décider avec N18 et le protocole |
 | G-66 | M | Pas de coloration du code : ni fichiers, ni blocs Markdown (`codeLanguages` absent) | FT-2, FT-4 | `editor/highlight.ts:47-58` ; `@codemirror/language-data` absent de `package.json` | `language-data` paresseux, avec une liste blanche |
 | G-67 | M | Pas de mode lecture pour le code ou les fichiers inconnus | FT-5 | `editor/format/lang.ts:5-15` (tout ce qui n'est pas Typst ou Markdown devient « plain » et s'édite) | barre « lecture · Modifier » |
-| G-68 | M | Pas de fiche pour les fichiers binaires ; ce qui s'affiche à leur ouverture reste à vérifier une fois G-0 corrigé | FT-6 | `workspace.svelte.ts:247` (`open(url)` pour des documents texte seulement) | fiche (§4.28) |
+| G-68 | M | Pas de fiche pour les fichiers binaires ; ce qui s'affiche à leur ouverture reste à vérifier une fois G-0 corrigé | FT-6 | `workspace/workspace.svelte.ts:247` (`open(url)` pour des documents texte seulement) | fiche (§4.28) |
 | G-69 | m | Le CSV en texte n'a pas de colonnes repérées | FT-3 | `App.svelte:248-253` (vue texte = éditeur nu) | FT-3 |
 
 ### 2.6 Extensions (N21)
@@ -146,13 +150,39 @@
 |---|---|---|---|---|---|
 | G-70 | — | Rien n'existe encore : c'est attendu, l'exécution relève de N18 | §4.29 | — | page Préférences › Extensions, consentement, cadre attribué |
 
+### 2.7 Thèmes, extensions de projet, intégrité, diagrammes, développement (N22 à N25)
+
+Ces fonctions n'existent pas encore. Chaque ligne nomme ce que le code devra montrer.
+
+| # | Grav. | Écart | Norme | Preuve | Correction |
+|---|---|---|---|---|---|
+| G-71 | M | Pas de contrat de thème ; `data-theme` réglé nulle part ; aucune validation au chargement | N22, TH-1 à TH-4 (architecture §15.8), 1.4.3, 1.4.11 | `theme/tokens.css` n'a ni modes HC complets ni chargement de thème ; aucun `data-theme` dans `src` | spec §2.10, `tokens.json` (`contract`, `themeContract`), `theme/contract.test.ts` |
+| G-72 | M | Pas d'interface pour les extensions de projet (provenance, mode restreint, « Désactiver pour moi ») | N23, PP-3 à PP-5 | aucun composant | spec §4.32 |
+| G-73 | m | Pas de bouton Extensions ni d'épinglage | N24, architecture §15.13 | aucun composant | spec §4.30 |
+| G-74 | M | Pas de mode sans extensions, ni de zones protégées, ni d'affichage des conflits de raccourcis | N24, ND-1 à ND-6 | aucun composant | spec §4.33 |
+| G-75 | m | Pas de rendu de diagramme | N24, architecture §15.14 | aucun composant | spec §4.34 |
+| G-76 | m | Pas de mode développeur ni d'Inspecteur | N25, architecture §15.15 | aucun composant | spec §4.35 |
+| G-77 | M | Aucun registre de contributions : menus, barres et panneaux sont codés en dur | architecture P-EXT-1, spec §4.31 | `ui/shell/HeaderBar.svelte:128-208`, `ui/toolbar/spec.ts` | registre déclaratif |
+| G-78 | m | Pas de repli quand le déclencheur du focus a disparu | APG *Dialog*, 2.4.3 | `ui/popover/MenuButton.svelte:50-55` (un seul chemin : l'éditeur) | spec §4, « Retour du focus » |
+| G-79 | m | La langue d'un passage n'est pas portée (option « English », langue déclarée d'un document) | 3.1.2 | `ui/prefs/Preferences.svelte` (aucun `lang`) ; `frontend/index.html:2` | spec §5.13, coverage 3.1.2 |
+
+### 2.8 Modèles et problèmes de compilation (N27, N28)
+
+| # | Grav. | Écart | Norme | Preuve | Correction |
+|---|---|---|---|---|---|
+| G-80 | M | Aucun soulignement ni marqueur de marge pour les problèmes dans l'éditeur | N28, Nielsen 9, 3.3.1 | `@codemirror/lint` absent (`frontend/package.json`) ; aucun `setDiagnostics` dans `src` | spec §4.36 |
+| G-81 | M | Le diagnostic n'a ni colonne, ni plage, ni conseil, ni correction, ni trace ; le message est coupé à 400 caractères | N28, 3.3.3 | `preview/protocol.ts:10-12`, `:134-137` | modèle de diagnostic unique (§4.36) ; à porter au protocole de l'aperçu (N18) |
+| G-82 | M | Messages du compilateur bruts, en anglais ; pas de phrase en clair ni de conseil ; le compte de la barre d'état n'amène pas à l'erreur (il ouvre une liste) | N28, P5, Nielsen 9 | `ui/shell/StatusBar.svelte:120` (`d.message.split("\n")[0]`), `:84-101` | table de traduction, bouton partagé, F8, Ctrl+. |
+| G-83 | M | Aucun modèle de projet : ni galerie, ni enregistrement, ni gestion. « Nouveau projet » n'existe pas (G-40). | N27 | aucun composant | spec §5.2, §5.19 |
+| G-84 | M | tinymist est embarqué, mais son LSP n'est pas relié à l'éditeur : ni complétion, ni aide de signature, ni survol, ni définition | N29 | `@codemirror/autocomplete` absent de `frontend/package.json` ; aucun appel LSP dans `frontend/src/editor` | spec §4.37 ; branchement (architecture N18) |
+
 ## 3. Corrections, dans l'ordre
 
 L'ordre suit la valeur (parcours cassé et accessibilité d'abord), puis le coût, puis les
 dépendances. Chaque vague passe par `ux-walkthrough`, par des captures en clair et en sombre, et
 par une passe Orca.
 
-- **Vague 0, lot séparé, en cours.** G-0 : ouvrir le fichier cliqué.
+- **Vague 0, lot séparé, à faire.** G-0 : ouvrir le fichier cliqué, selon spec §4.16 (non corrigé au 2026-11-01).
 - **Vague 1, contraste et jetons :**
   - G-1, G-53 (anneaux), G-2, G-3, G-4, G-5, G-6, G-10, G-50, G-52 ;
   - G-1b (test de parité et paires) ;
@@ -184,4 +214,16 @@ par une passe Orca.
   - G-56 ;
   - G-58 (aide) ;
   - G-21, G-32, G-48.
-- **Vague 8, extensions :** G-70, après la conception de l'exécution (N18).
+- **Vague 8, extensions** (après la conception de l'exécution, N18) :
+  - G-77 (registre de contributions) ;
+  - G-70, G-73, G-74 (gestion, bouton, sûreté) ;
+  - G-72 (extensions de projet) ;
+  - G-75 (diagrammes) ;
+  - G-76 (outils).
+- **Vague 9, thèmes :** G-71 (contrat, validation, Apparence), après G-1b.
+- **Vague 10, problèmes et modèles :**
+  - G-80, G-81, G-82 (problèmes, avec N18 pour le protocole) ;
+  - G-83 (modèles, après G-40) ;
+  - G-84 (aide à l'écriture, après le branchement du LSP).
+- **Transverses**, à mener avec la vague 4 : G-78 (replis du focus), G-79 (langue des
+  passages).

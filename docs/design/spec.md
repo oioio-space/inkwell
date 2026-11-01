@@ -1,7 +1,7 @@
 # Système de design d'Inkwell — spécification (N17)
 
-- **Statut :** proposition, **révision 2** (2026-11-01).
-  - Elle répond aux revues n°1 de Codex et de Fable ([`reviews/`](reviews/)).
+- **Statut :** proposition, **révision 3** (2026-11-01).
+  - Elle répond aux revues n°1 et n°2 de Codex et de Fable ([`reviews/`](reviews/)), et intègre N22 à N25 et N27 à N29.
   - Le détail des changements est dans [`CHANGES.md`](CHANGES.md).
   - Les choix marqués « *à confirmer par l'utilisatrice* » restent des recommandations (§11).
 - **Portée :** toute l'expérience d'interface du frontend (`frontend/src`) :
@@ -12,7 +12,9 @@
   - collaboration ;
   - projets à plusieurs fichiers ;
   - types de fichiers et code (N20) ;
-  - extensions (N21) ;
+  - extensions (N21), thèmes et cycle de vie (N22), extensions de projet (N23), ce qu'une
+    extension ne peut pas changer et les diagrammes (N24), outils de développement (N25) ;
+  - modèles de projet (N27), problèmes de compilation (N28), aide à l'écriture Typst (N29) ;
   - aperçu, export et impression ;
   - réglages, raccourcis, palette et aide ;
   - langues, thèmes et tailles de fenêtre ;
@@ -73,8 +75,10 @@
   Un composant NE DOIT PAS employer de valeur brute : couleur, ombre, rayon, durée, taille de
   texte. Exceptions : `0`, un filet de `1px`, `50%` pour un cercle, et les tailles d'icône.
 
-  La règle vaut aussi pour les **thèmes CodeMirror écrits en TypeScript**
-  (`EditorView.theme`, `baseTheme` dans `editor/*.ts`).
+  La règle vaut aussi pour les **couleurs et les ombres** des thèmes CodeMirror écrits en
+  TypeScript (`EditorView.theme`, `baseTheme` dans `editor/*.ts`), parce qu'un thème (§2.10) doit
+  pouvoir les changer. Les tailles et marges internes de CodeMirror en sont exemptées : on vise
+  le résultat (T-7, T-9), pas le moyen (Codex R2-m1).
 - **T-2.** Le clair et le sombre DOIVENT passer par `light-dark()` avec
   `color-scheme: light dark`. Le système décide par défaut ; `data-theme="light|dark"` force le
   choix (réglage Apparence, §5.13).
@@ -88,15 +92,19 @@
   - `--disabled-opacity` à 0,4.
 - **T-4.** Sous `forced-colors: active`, tout état porté par un fond (sélection, pression,
   focus, bascule) a aussi un contour ou une forme [S6].
-- **T-5.** `docs/design/tokens.json` est la référence lisible par machine ; `tokens.css` est ce
-  que le code consomme. Le **test de parité est à écrire** (inventaire G-1b) :
+- **T-5.** `docs/design/tokens.json` est la référence lisible par machine **et le contrat de
+  thème** (§2.10). `tokens.css` est ce que le code consomme. Le **test de parité est à écrire**
+  (inventaire G-1b) :
   - chaque jeton de `tokens.json` existe dans `tokens.css` sous son nom `css`, avec ses valeurs
-    par mode ;
-  - chaque paire de `contrast.pairs` atteint `min` ;
-  - chaque paire `forbidden` échoue, et son usage est absent du code.
+    par mode, **à l'hexadécimal près** ; les hexadécimaux du JSON sont canoniques, y compris pour
+    les jetons dérivés ;
+  - chaque paire **non interdite** de `contrast.pairs` atteint `min` dans les quatre modes
+    (`light`, `dark`, `hcLight`, `hcDark`) ;
+  - une paire `forbidden` est un **usage interdit par politique**, pas un échec attendu : elle
+    peut passer dans un mode (par exemple `--accent` sur `--stage-bg`, 3,46 / 12,40). Le test
+    vérifie que ce couple **n'apparaît pas dans le code** (analyse des styles), pas qu'il échoue.
 
-  Aujourd'hui, seules les neuf couleurs syntaxiques sont vérifiées (`theme/tokens.test.ts`).
-  On n'ajoute pas de générateur.
+  Aujourd'hui, seules les neuf couleurs syntaxiques sont vérifiées (`theme/tokens.test.ts:24-58`).
 - **T-6.** Un jeton se nomme par son rôle, jamais par sa valeur.
 
 ### 2.2 Couleurs
@@ -116,7 +124,7 @@ calculées sont dans `tokens.json`. Ci-dessous : les rôles et les décisions.
 | `--card-bg`, `--popover-bg` | cartes, popovers | `#ffffff` | 8 % blanc / `#36363a` |
 | `--dialog-bg` *(nouveau)* | dialogues | `#fafafb` | `#36363a` |
 | `--toast-bg` *(nouveau)* | toasts | `rgb(0 0 6 / 84%)` | `#36363a` |
-| `--tooltip-bg` | infobulles | `rgb(0 0 6 / 80%)` | idem |
+| `--tooltip-bg` | infobulles | `rgb(0 0 6 / 80%)` (texte blanc 12,57 sur vue) | `rgb(0 0 6 / 80%)` sur vue sombre (20,24) |
 | `--stage-bg`, `--stage-overlay` *(nouveaux)* | scène de présentation | `#000`, `rgb(0 0 0 / 55%)` | idem |
 | `--page-bg` *(nouveau)* | papier de l'aperçu | `#fff` | `#fff` |
 | `--backdrop` *(nouveau)* | voile derrière un dialogue | `rgb(0 0 6 / 30%)` | `rgb(0 0 0 / 45%)` |
@@ -191,8 +199,10 @@ calculées sont dans `tokens.json`. Ci-dessous : les rôles et les décisions.
 
 - Les huit couleurs d'Okabe-Ito [S8] : `--person-1` à `--person-8`.
 - **Encre** `--person-N-ink` : noir, sauf blanc sur `--person-5`. Contraste minimal 5,19.
-- **Trait** `--person-N-line` = `light-dark(color-mix(in srgb, var(--person-N) 65%, #000), var(--person-N))`,
-  pour le curseur distant, la marge, la bande de modifications et le contour du curseur d'un
+- **Trait** `--person-N-line` : en clair, `--person-N` × 0,65 (canaux sRGB, arrondis). Les
+  **hexadécimaux de `tokens.json` sont canoniques** et s'écrivent tels quels dans `tokens.css`
+  (`#9c942b` pour la personne 4, par exemple). En sombre, c'est `--person-N` lui-même. Il sert au
+  curseur distant, à la marge, à la bande de modifications et au contour du curseur d'un
   suiveur. Contraste minimal **3,14** en clair (jaune), 3,24 en sombre (bleu).
 - **Fond** de sélection ou de « qui a écrit quoi » : 25 % de la couleur. Il est décoratif, car
   le nom est donné ailleurs.
@@ -310,6 +320,63 @@ onglets en pilule). Aucun autre rayon.
 
 ---
 
+### 2.10 Thèmes : le contrat de jetons (N22)
+
+Un thème est une **extension de données**, sans code ni CSS (architecture §15.8, TH-1 à TH-4).
+Il fournit des valeurs de jetons pour les modes `light`, `dark`, `hc-light` et `hc-dark`. N17
+fixe ce qu'un thème peut changer, comment l'hôte le valide, et ce que la personne voit.
+
+**TH-D1. Trois classes de jetons**, déclarées dans `tokens.json` (`contract`) :
+
+| Classe | Sens | Jetons |
+|---|---|---|
+| **remplaçable** (`overridable`) | un thème peut fournir une valeur, dans les bornes (`bounds`) | surfaces, `--fg`, `--fg-dim`, `--accent`, `--accent-bg`, `--suggested-bg`, états, différences, `--hl-*` (sauf lien), marques de fichiers (sauf extension), `--person-1` à `-8`, rayons (sauf pilule), ombres, polices de la liste fournie, courbes, durées normales |
+| **dérivé** (`derived`) | l'hôte le **recalcule** depuis d'autres jetons ; une valeur fournie est ignorée | `--person-N-line`, `--person-N-ink` (noir ou blanc, le plus contrasté), `--hl-link` = `--accent`, `--destructive` = `--error`, couleur de `--focus-ring` = `--accent` |
+| **verrouillé** (`locked`) | jamais changé | `--on-dark-fg`, `--focus-ring-on-dark`, épaisseur et décalage des anneaux, `--disabled-opacity`, `--mark-extension`, cibles et hauteurs de barre, espacements, échelle de texte, couches, `--duration-fade`, toutes les durées **sous `reduce`** |
+
+- La version du contrat est `themeContract.version` (1.0). Un jeton absent garde la valeur
+  d'Adwaita. Un jeton inconnu est ignoré, et signalé dans l'Inspecteur (§4.35).
+- Les modes HC d'un thème **ne peuvent pas affaiblir** ceux d'Adwaita : pour chaque paire, le
+  rapport HC du thème est au moins celui d'Adwaita (TH-2).
+- Sous `forced-colors: active`, un thème n'a **aucun effet** (T-4).
+
+**TH-D2. Validation au chargement, côté hôte** (≤ 20ms, architecture §15.4) :
+1. l'hôte compose les valeurs du thème sur `tokens.json`, recalcule les jetons dérivés, puis
+   évalue **toutes les paires non interdites** dans les quatre modes, avec la méthode de
+   `contrastMethod` (translucides composés sur `over`) ;
+2. il vérifie que les huit couleurs de personnes restent distinctes (ΔE2000 ≥ 15, TH-4) ;
+3. **un seul échec, dans n'importe quel mode, et le thème entier est refusé.** Rien n'est
+   appliqué à moitié, ni un mode sans l'autre.
+
+**TH-D3. Ce que la personne voit** : Préférences › Apparence (§5.13).
+- **Thème** : une liste radio, avec « Adwaita (par défaut) » puis les thèmes installés. Chaque
+  ligne montre une **vignette** (fond, texte, accent, en clair et en sombre) tirée de ses
+  valeurs. Le choix s'applique tout de suite (≤ 50ms, sans scintillement : bascule des variables
+  sur `:root` en une écriture).
+- **Variante** : Système, Clair, Sombre. Elle est indépendante du thème, qui fournit les deux
+  modes.
+- Après un changement : toast « Thème « Encre » appliqué · Annuler ».
+- **Thème refusé** :
+  - la ligne reste dans la liste, désactivée, avec l'icône `warn` et le texte « Pas assez
+    lisible : 3 couleurs manquent de contraste » ;
+  - « Détails » ouvre la liste des paires refusées : rôle en clair (« texte secondaire sur
+    barre latérale, mode sombre »), rapport mesuré, seuil ;
+  - le thème en place n'est pas touché.
+- **Revenir au thème par défaut** est toujours possible : bouton en tête du groupe Thème, et en
+  mode sans extensions (§4.33), qui ignore tout thème.
+- Un thème validé ne peut pas être illisible par construction. Mais si un défaut de rendu
+  survient (police manquante, par exemple), le choix d'Adwaita reste à un clic, sous un intitulé
+  lisible dans tous les thèmes.
+- **Ordre de priorité :**
+  - `forced-colors` passe avant tout ;
+  - puis `prefers-contrast: more`, qui sélectionne les modes HC du thème choisi ;
+  - puis la variante (Système, Clair, Sombre) ;
+  - puis le thème.
+
+  Un greffon **de projet** ne peut pas imposer de thème : il peut le proposer, et la personne
+  le choisit (§4.32).
+- Les cadres d'extension (§4.31) reçoivent les jetons **du thème actif**.
+
 ## 3. Architecture de l'information et mise en page
 
 ### 3.1 Les zones
@@ -382,12 +449,16 @@ navigation des navigateurs, connue de tous.
 | vue présentateur : courante ↔ suivante | 65 % / 35 % | 50 % | 80 % | — |
 | tableur ↔ aperçu, panneau de recherche ouvert (RSZ-07) | trois zones ; les règles ci-dessus s'additionnent | | | |
 
-- **L-3.** Chaque frontière est une **poignée APG *Window Splitter*** [S5] :
-  - rôle `separator`, focalisable, avec `aria-valuenow`, `aria-valuemin`, `aria-valuemax` et
-    `aria-controls` ;
-  - flèches ±16px, Maj+flèches ±64px, Origine/Fin, Entrée pour replier ou rouvrir ;
+- **L-3.** Chaque frontière est une poignée APG *Window Splitter* [S5] :
+  - `role="separator"`, focalisable (`tabindex="0"`) ;
+  - **nom accessible** « Redimensionner le panneau Fichiers », « … l'aperçu », « … les notes » ;
+  - `aria-orientation="vertical"` entre deux panneaux côte à côte, `"horizontal"` entre
+    diapositive et notes ;
+  - `aria-valuenow`, `aria-valuemin` et `aria-valuemax`, en pourcentage de la zone ;
+    `aria-controls` vers le panneau qu'elle redimensionne ;
+  - clavier : flèches ±16px, Maj+flèches ±64px, Origine/Fin, Entrée pour replier ou rouvrir ;
   - double-clic pour la taille par défaut ;
-  - zone de saisie de 8px.
+  - zone de saisie de 8px pour un filet visible de 1px.
 - **L-4.** Chaque redimensionnement a une alternative sans glisser (2.5.7) : le clavier, et les
   entrées du menu Affichage.
 
@@ -399,16 +470,23 @@ aux siens.
 | État | Largeur | Comportement |
 |---|---|---|
 | **Large** | ≥ 1200px | Trois zones côte à côte ; le tiroir pousse le contenu. |
-| **Moyen** | 900–1199px | Le tiroir **recouvre** l'aperçu (niveau 2) au lieu de le pousser. |
-| **Étroit** | 560–899px | **Comme A6 :** le panneau de gauche **et l'aperçu** deviennent des panneaux superposés (`AdwOverlaySplitView`). La source occupe toute la largeur ; « Aperçu » ouvre l'aperçu par-dessus. Le tiroir est superposé aussi. Un seul panneau superposé à la fois ; Échap ou un clic extérieur le ferme. |
-| **Très étroit** | 360–559px | Comme Étroit. En plus : la barre d'en-tête ne garde que fichiers, titre, Partager et le menu ; les onglets deviennent un menu « fichiers ouverts » ; les dialogues deviennent des feuilles en bas (`AdwDialog` [S1]) ; la barre d'état applique ST-3. |
+| **Moyen** | 900–1199px | Le tiroir **recouvre** l'aperçu (niveau 2). |
+| **Étroit** | 560–899px | Comme A6 : le panneau de gauche **et l'aperçu** deviennent des panneaux superposés (`AdwOverlaySplitView`). La source prend toute la largeur ; « Aperçu » ouvre l'aperçu par-dessus. Le tiroir est superposé lui aussi. Un seul panneau superposé à la fois ; Échap ou un clic extérieur le ferme. |
+| **Très étroit** | 360–559px | Comme Étroit. La barre d'en-tête ne garde que fichiers, titre, Partager et le menu. Les boutons épinglés passent dans le menu Extensions (§4.30). Les onglets deviennent un menu « Fichiers ouverts ». Les dialogues s'ouvrent en feuille en bas. La barre d'état applique ST-3. |
 
-- La rév. 1 gardait l'aperçu côte à côte jusqu'à 560px, contre A6 (revues Codex et Fable).
-- **L-5.** Taille minimale : 360 × 480px. Le contenu se relit à 320px CSS sans défilement
-  horizontal de la fenêtre (1.4.10) ; l'éditeur, le tableur et l'aperçu sont exemptés (contenus
-  à deux dimensions).
-- **L-6.** Pas de barre de défilement horizontale sur la fenêtre. Aucun texte coupé sans
-  ellipse et sans moyen de lire le texte entier (infobulle ou nom accessible).
+- **L-5.** Taille minimale : 360 × 480px. À 320px CSS (zoom 400 %), tout se relit **sans
+  défilement horizontal** (1.4.10).
+  - **Le texte des documents** (`.txt`, `.md`, `.typ`, code) **revient à la ligne** : sous 560px,
+    le retour à la ligne est forcé, quel que soit le réglage, et les commandes restent
+    accessibles par le menu.
+  - **Seul ce qui est intrinsèquement à deux dimensions** est exempté, par la note de 1.4.10 :
+    - la grille du tableur ;
+    - les pages de l'aperçu ;
+    - les tableaux d'une vue d'extension ;
+    - une ligne de code dont le retour à la ligne a été coupé par la personne.
+  - Le test (§10) couvre les quatre formats, en plus du chrome.
+- **L-6.** Pas de barre de défilement horizontale sur la fenêtre. Aucun texte coupé sans ellipse,
+  ni sans moyen de lire le texte entier.
 - **L-7.** Les barres débordent dans un menu ⋯, groupe par groupe.
 
 ### 3.5 Messages : bandeaux et toasts
@@ -419,72 +497,86 @@ aux siens.
 |---|---|---|
 | **Événement** passé | toast | « 3 lignes intégrées » |
 | **État** qui dure | bandeau | « Hors ligne » |
-| **Question** qui attend une décision | bandeau-question ou dialogue | « Léa demande à rejoindre » |
+| **Question** qui attend une décision | bandeau-question, ou dialogue | « Léa demande à rejoindre » |
 
 - **L-8. Au plus un bandeau visible.** Ordre de priorité :
-
-  1. **Les questions**, de la plus ancienne à la plus récente :
+  1. **États critiques pour l'écriture en cours** : écriture sur le disque impossible, fichier
+     actif disparu ou devenu binaire, accès retiré. Ils sont rares et brefs, et la personne ne
+     peut rien faire de sûr avant de les connaître.
+  2. **Questions**, de la plus ancienne à la plus récente :
      - fichier modifié hors d'Inkwell en mode « Demander » (§5.16) ;
-     - demande d'accès, pour un admin (§5.4) ;
-     - demande de prise de main, pour le pilote (§5.11) ;
-     - demande de suppression d'un fichier, pour un admin (B5).
-  2. **Les états qui bloquent l'écriture**, par ordre :
-     - fichier disparu ou devenu binaire ;
-     - écriture sur le disque impossible ;
-     - projet scellé ;
-     - accès retiré ;
-     - accès suspendu ou en lecture ;
-     - fichier trop lourd, en lecture seule.
-  3. **Les états d'information** : quelqu'un présente, fichier volumineux, hors ligne
-     prolongé.
+     - demande d'accès (admin, §5.4) ;
+     - prise de main (pilote, §5.11) ;
+     - demande de suppression d'un fichier (admin, B5) ;
+     - mise à jour des liens après un renommage (§5.6).
+  3. **Autres états qui bloquent l'écriture** : projet scellé, accès suspendu ou en lecture,
+     fichier trop lourd.
+  4. **Information** : quelqu'un présente, fichier volumineux, hors ligne prolongé, mode sans
+     extensions, mode développeur (§4.35, qui reste toujours visible : voir L-8d).
+- **L-8b.** S'il reste d'autres messages, le bandeau affiche un bouton :
+  - « **+1 question** » en style suggéré s'il y a au moins une question en attente ;
+  - sinon « +N autres ».
 
-  Une question passe donc toujours avant un état : un état durable ne peut pas la masquer. Une
-  question à laquelle seul le dialogue ouvert permet de répondre s'affiche dans ce dialogue.
-- **L-8b.** S'il y a d'autres messages en attente, le bandeau DOIT afficher un bouton
-  « +N autres ». Il ouvre le popover de l'état de synchronisation (§4.15), qui DOIT lister tous
-  les messages en cours. Rien n'est donc caché sans accès (revue Codex).
-- **L-8c.** Les bandeaux **locaux** d'un composant passent par le même `BannerHost` et sa
-  priorité, dans la zone du composant :
-  - filtre, détection, lecture seule et échec du tableur (`Sheet.svelte:469`, `:541`, `:555`,
-    `:567`) ;
-  - différences (`HistoryBars.svelte:143`).
-- **L-9. Au plus un toast**, dans une file gérée par **un seul `ToastHost`**. Aujourd'hui,
-  trois sources s'ignorent :
-  - `NoticeToast` ;
-  - `ExternalChangeToast` ;
-  - le toast du tableur (`Sheet.svelte:605`, minuterie de 9s à `:169`).
-
-  Un toast plus récent remplace le courant ; le remplacé n'est pas perdu (§4.12, annulation
-  durable).
-- **L-10.** Les exemples d'un toast d'annulation sont des actions **réversibles** :
-  « Paul est en lecture · Annuler », « Fichier mis à la corbeille · Annuler ». Retirer une
-  personne est irréversible : c'est une confirmation, jamais « Annuler » (correction de la
-  rév. 1).
-
----
+  Le bouton ouvre le popover de l'état de synchronisation (§4.15), qui DOIT lister tous les
+  messages en cours. Une question n'est donc **jamais invisible** : au pire, elle est signalée
+  par ce bouton sous un état critique. Un état critique n'est jamais caché par une question.
+- **L-8c.** Les bandeaux **locaux** d'un composant passent par le même `BannerHost`, dans la
+  zone de ce composant :
+  - le tableur (`ui/sheet/Sheet.svelte:469`, `:541`, `:555`, `:567`) ;
+  - les différences (`ui/history/HistoryBars.svelte:143`).
+- **L-8d.** Le **mode développeur** et le **mode sans extensions** ont un repère permanent, qui
+  n'est pas un bandeau : une pastille dans la barre d'en-tête, §4.33 et §4.35. Ils ne prennent
+  donc jamais la place d'une question.
+- **L-9. Au plus un toast**, dans une file gérée par un seul `ToastHost`. Aujourd'hui, trois
+  sources s'ignorent : `NoticeToast`, `ExternalChangeToast` et le toast du tableur
+  (`ui/sheet/Sheet.svelte:605`, minuterie à `:169`). Un toast plus récent remplace le courant ;
+  le remplacé reste rattrapable (TO-1).
+- **L-10.** Un toast « Annuler » ne suit qu'une action **réversible** : « Paul est en lecture »,
+  « Fichier mis à la corbeille ». Retirer une personne est irréversible : c'est une confirmation,
+  sans « Annuler ».
 
 ## 4. Composants
 
-Une implémentation par composant. Les classes globales vivent dans `theme/adwaita.css` ; les
+Une implémentation par composant. Les classes globales vivent dans `theme/adwaita.css`, les
 composants dans `ui/`.
 
-**Les huit états de base**, à décrire pour chaque composant interactif :
+**Les neuf états de base.** Chaque composant **interactif** les décrit ; un élément décoratif,
+seulement ceux qui le concernent.
 
 | État | Rendu commun |
 |---|---|
 | repos | — |
 | survol | `--hover-bg`, `--duration-fast` |
-| focus | `--focus-ring` (`--focus-ring-on-dark` sur fond sombre), `:focus-visible` seulement |
+| focus | `--focus-ring` (ou `--focus-ring-on-dark` sur un fond sombre), en `:focus-visible` seulement |
 | actif / pressé | `--selected-bg` ; contour sous `forced-colors` |
-| désactivé | `--disabled-opacity`, `disabled` ou `aria-disabled`, pas de survol ; **une infobulle dit pourquoi** si la raison n'est pas évidente |
+| désactivé | `--disabled-opacity`, `disabled` ou `aria-disabled`, sans survol. **Une infobulle dit pourquoi**, si ce n'est pas évident. |
 | chargement | `aria-busy`, indicateur après 300ms (§4.21) |
-| erreur | `--error` + texte, `aria-invalid` ou bandeau |
+| erreur | `--error` + texte, avec `aria-invalid` ou un bandeau |
 | vide | écran vide (§4.20) |
-| hors ligne | les actions qui exigent le réseau restent actives et **mettent en attente** (« Sera envoyé au retour du réseau »). Seules restent inactives celles qui ne peuvent pas attendre (« Rejoindre », « Inviter à proximité »), avec leur raison dans l'infobulle. |
+| hors ligne | voir ci-dessous |
 
-Clavier : APG [S5]. **Retour du focus** : quand un conteneur transitoire se ferme (menu,
-popover, dialogue, panneau superposé), le focus revient **toujours à l'élément qui l'a ouvert**.
-Il n'y a pas d'exception.
+**Hors ligne.**
+- Les actions qui exigent le réseau restent actives et **mettent en attente** : « Sera envoyé au
+  retour du réseau ».
+- Seules restent inactives celles qui ne peuvent pas attendre (« Rejoindre », « Inviter à
+  proximité ») ; leur infobulle dit pourquoi.
+- **À l'envoi**, chaque action en attente est **revérifiée** avec les droits de ce moment-là. Une
+  action refusée (rôle changé, accès suspendu) n'est pas perdue : elle reste sur cet ordinateur
+  (ADR 0021). Un toast le dit : « 2 modifications n'ont pas été envoyées : votre accès a changé.
+  · Voir ». « Voir » ouvre l'Historique, filtré sur ces modifications.
+
+**Clavier :** APG [S5].
+
+**Retour du focus.** Quand un conteneur transitoire se ferme (menu, popover, dialogue, panneau
+superposé, palette), le focus revient à l'élément qui l'a ouvert. **Replis**, si cet élément
+n'existe plus ou n'est plus focalisable (supprimé, désactivé, extension retirée) :
+1. l'élément qui avait le focus juste avant l'ouverture (APG *Dialog*, « retour logique ») ;
+2. sinon, le conteneur parent du déclencheur, sur son élément courant (barre d'outils, liste) ;
+3. sinon, l'éditeur de l'onglet actif ;
+4. sinon, le titre de la zone principale.
+
+Une commande qui **ouvre un autre contenu** (un fichier, un panneau) donne le focus à ce
+contenu, pas au déclencheur.
 
 ### 4.1 Barre d'en-tête (`ui/shell/HeaderBar.svelte`)
 
@@ -501,8 +593,14 @@ Il n'y a pas d'exception.
   - **Partager** (bouton suggéré) ;
   - Historique ;
   - menu principal.
-- **H-2.** Au plus six contrôles à droite. Un espace libre pour déplacer la fenêtre. Un seul
-  bouton suggéré, « Partager » : écart assumé avec la HIG, c'est l'action à découvrir.
+- **H-2.** À droite, au plus **six contrôles du cœur**, plus le bouton **Extensions** (§4.30) et
+  le groupe de ses boutons **épinglés**, placé juste avant lui.
+  - Un espace libre reste pour déplacer la fenêtre.
+  - Épinglés visibles : 6 au plus en Large, 2 en Moyen, aucun en Étroit ; les autres restent
+    dans le menu Extensions.
+  - Un seul bouton suggéré, « Partager » : écart assumé avec la HIG, c'est l'action à
+    découvrir.
+  - Le titre, la pile des personnes, l'état et « Partager » sont des **zones protégées** (§4.33).
 - **H-3.** Infobulles par le composant §4.6, jamais par `title=`.
 - **H-4.** Les bascules ont un **nom fixe** (« Fichiers », « Aperçu », « Historique ») et
   `aria-pressed`.
@@ -688,22 +786,29 @@ Cela vaut pour la barre de mise en forme (`FormatBar.svelte`), la barre du table
 - **Anatomie :**
   - une pilule `--toast-bg`, texte `--on-dark-fg` (14,51 / 12,03) ;
   - focus `--focus-ring-on-dark` ;
-  - une phrase de 60 caractères au plus, au plus une action, et fermer.
-- **Durées :** 5s, ou 10s avec une action [S1]. La minuterie **se suspend** au survol et au
-  focus.
-- **TO-1.** Annulation durable (2.2.1, revues Codex et Fable). Ce qu'un toast propose
-  d'annuler DOIT rester annulable **après** sa disparition :
-  - une modification de texte : Ctrl+Z, et Historique › « Annuler cette modification » ;
-  - une action sur un fichier (corbeille, renommage, déplacement) : Ctrl+Z dans le panneau
-    Fichiers, et Fichiers › Corbeille › « Restaurer » ;
-  - une action sur une personne (rôle, déconnecter) : la commande inverse **sur la ligne** de
-    la personne (« Laisser revenir », menu Rôle) ;
-  - un export : rien à annuler.
+  - une phrase de 60 caractères au plus, **une seule action**, et fermer.
 
-  Le toast le dit une fois par session : « Vous pouvez aussi annuler avec Ctrl+Z ».
-- **TO-2.** Un toast ne pose jamais de question. Écart actuel : `ExternalChangeToast.svelte:52-63`.
-- **Lecteur d'écran :** même règle de régions persistantes que §4.11 ; `status`, ou `alert` pour
-  un échec. L'action est atteignable par F6, qui passe par la zone des toasts.
+  Une seconde action éventuelle vit ailleurs, sur un accès durable : un menu ou la ligne
+  concernée.
+- **Durées :** 5s, ou 10s avec une action [S1]. La minuterie se suspend au survol et au focus.
+- **TO-1. Annulation durable** (2.2.1). Ce qu'un toast propose d'annuler reste annulable **après**
+  sa disparition :
+
+  | Action | Annulation durable |
+  |---|---|
+  | modification de texte (dont une intégration depuis le disque) | Ctrl+Z ; Historique › « Annuler cette modification » |
+  | fichier mis à la corbeille, renommé, déplacé | Ctrl+Z dans Fichiers ; Corbeille › « Restaurer » |
+  | rôle changé, personne déconnectée | la commande inverse sur la ligne de la personne |
+  | extension retirée | Préférences › Extensions › « Récemment retirées » › « Réinstaller » ; ses données ont été gardées (§4.29) |
+  | thème changé | Préférences › Apparence |
+
+  L'infobulle du bouton « Annuler » rappelle le raccourci (« Annuler · Ctrl+Z »), et l'Aide le
+  dit. **Aucune phrase de plus dans le toast.**
+- **TO-2.** Un toast ne pose jamais de question. Écart actuel : `ui/ExternalChangeToast.svelte:52-63`.
+- **TO-3.** Le toast d'une extension est préfixé par son nom (« Diagramme : … »). Une extension
+  émet au plus un toast toutes les 10s (architecture §15.13).
+- **Lecteur d'écran :** régions persistantes (§4.11) ; `status`, ou `alert` pour un échec.
+  L'action est atteignable par F6, qui passe par la zone des toasts.
 
 ### 4.13 Champs
 
@@ -714,7 +819,12 @@ Cela vaut pour la barre de mise en forme (`FormatBar.svelte`), la barre du table
   - `aria-invalid` ;
   - la saisie est conservée ;
   - le message dit comment corriger (3.3.1, 3.3.3).
-- **Recherche :** loupe, bouton effacer, options en bascules. Échap efface, puis ferme.
+- **Recherche :** loupe, bouton effacer, options en bascules ; Échap efface, puis ferme.
+  - **Exemption explicite du libellé visible**, comme le champ de recherche d'Adwaita
+    (`GtkSearchEntry`, HIG *Search*) : la loupe, le texte indicatif « Rechercher… » et le titre
+    de la zone (« Rechercher », barre « Rechercher dans le fichier ») tiennent lieu de libellé.
+  - Le nom accessible est donné (`aria-label`, `ui/search/SearchField.svelte:55-69`). WCAG 3.3.2
+    est satisfait par ces instructions persistantes, car la zone garde son titre.
 - **Saisie redondante** (3.3.7) : le nom n'est demandé qu'une fois ; une invitation reste dans
   le champ après un échec.
 - **Renommer en place** (F2, §5.6) : un champ dans la ligne. Entrée valide, Échap annule ; une
@@ -785,8 +895,23 @@ C'est **un bouton** dans la barre d'en-tête : pastille + mot. Il ouvre un popov
   - suppression demandée : nom barré et mention ;
   - corbeille : section repliée en bas ;
   - modifié dehors : point `--accent`.
-- **Clic** : ouvre le fichier dans un onglet (§4.25). Écart actuel : le clic ne fait rien
-  (G-0).
+- **Ouvrir un fichier depuis l'arbre (G-0, ouvert : le correctif est un lot séparé, à faire).**
+  C'est le comportement attendu, qui servira de critère d'acceptation au correctif :
+  - un **clic** ou **Entrée** sur un fichier appelle `open(nodeId)` (architecture MF-5) ;
+  - si le fichier a déjà un onglet, cet onglet est activé ; sinon, un onglet s'ouvre à droite de
+    l'onglet actif (§4.25) ;
+  - le **focus va à l'éditeur** du fichier ouvert (contenu ouvert, §4 « Retour du focus ») ;
+  - **Espace** ouvre le fichier mais **garde le focus dans l'arbre**, pour parcourir sans
+    quitter la liste ;
+  - un clic sur un dossier le replie ou le déplie ; il n'ouvre rien ;
+  - un type sans éditeur ouvre sa vue (image, fiche d'un binaire, §4.28) ;
+  - un fichier qui vient de disparaître : toast « « ch2.typ » n'existe plus », et la liste se met
+    à jour ;
+  - la ligne du fichier actif prend `aria-current="page"` et `--selected-bg`.
+
+  Aujourd'hui, `App.svelte:197` ignore le chemin transmis par `ui/shell/Sidebar.svelte:49`. Le
+  test e2e `G-0` (à écrire, `e2e/files.spec.ts`) clique deux fichiers, puis vérifie le texte de
+  l'éditeur et l'onglet actif.
 - **Glisser-déposer** : avec l'équivalent « Déplacer vers… » (2.5.7).
 - **Sommaire** (B10) : arbre des titres du fichier actif. Le titre courant est surligné et
   suivi ; filtre par Ctrl+Maj+O ; repli et dépli ; même modèle APG.
@@ -917,7 +1042,8 @@ plus un bouton suggéré.
   - barre d'outils : F-1.
 - **Clavier :**
   - → / Espace / Page↓ ; ← / Page↑ ; Origine et Fin ;
-  - B et W ;
+  - B (écran noir), W (écran blanc), L (pointeur laser), uniquement dans la vue de présentation
+    (`present/keys.ts:61-69`) ;
   - un numéro + Entrée ;
   - Échap.
 - **Lecteur d'écran :** « Diapositive n sur N : titre », en `status`.
@@ -942,43 +1068,44 @@ plus un bouton suggéré.
 
 ### 4.25 Onglets de fichiers (`FileTabs`, *à créer*)
 
-Le modèle n'existe pas aujourd'hui : un seul fichier courant, `workspace.current`.
+Le modèle n'existe pas aujourd'hui : un seul fichier courant (`workspace/workspace.svelte.ts:120`).
+Il prend la place des « documents ouverts » de l'architecture (MF-5 ; `AD-47` décide s'il y a
+des onglets, et cette section est la proposition de design pour cette décision).
 
 - **Modèle :**
   - une liste ordonnée d'onglets **par projet, sur cet ordinateur**, jamais synchronisée ;
-  - chaque onglet garde chemin, position, défilement et vue (texte ou tableau) ;
+  - chaque onglet garde chemin, position, défilement et vue ;
   - un seul onglet actif ;
-  - **un fichier = au plus un onglet** : rouvrir un fichier active son onglet.
+  - un fichier = au plus un onglet.
 - **Ouvrir :**
-  - clic ou Entrée dans Fichiers, Ctrl+P, un lien, un résultat de recherche, une tâche, un
-    problème : l'onglet s'ouvre **à droite de l'onglet actif** et devient actif ;
-  - pas d'onglet « aperçu » temporaire : la règle est plus simple pour des personnes non
-    techniques.
+  - clic ou Entrée dans Fichiers (§4.16), Ctrl+P, un lien, un résultat, une tâche, un
+    problème ;
+  - l'onglet s'ouvre à droite de l'onglet actif et devient actif.
 - **Fermer :**
-  - Ctrl+W, bouton × ou clic du milieu ;
-  - fermer ne pose **jamais** de question (SAV-03), car tout est gardé ;
+  - Ctrl+W, bouton ×, clic du milieu, ou Suppr sur l'onglet focalisé ;
+  - aucune question (SAV-03) ;
   - le focus va à l'onglet voisin de droite, sinon de gauche ;
-  - si plus rien n'est ouvert, l'écran vide « Aucun fichier ouvert » s'affiche.
-- **Renommé ou déplacé** (ici ou par une autre personne) : l'onglet suit, avec un toast discret
-  seulement si c'est quelqu'un d'autre.
-- **Supprimé** : l'onglet reste, en italique, avec le bandeau « Ce fichier est dans la
-  corbeille » et l'action « Restaurer ».
+  - **dernier onglet fermé** : l'écran vide « Aucun fichier ouvert » s'affiche, et le focus va
+    sur son bouton « Ouvrir le fichier principal ».
+- **Renommé ou déplacé** : l'onglet suit le fichier. **Supprimé** : l'onglet reste, en italique,
+  avec un bandeau « Ce fichier est dans la corbeille · Restaurer ».
 - **Anatomie :**
   - barre de `--tab-height` sur `--headerbar-bg` ;
-  - onglet : `FileIcon`, nom, point si non enregistré (mode Ctrl+S), × au survol **et au
-    focus** ;
-  - onglet actif : `--selected-bg` + filet `--accent` en bas (et contour sous
-    `forced-colors`) ;
-  - débordement : défilement horizontal de la barre, plus un menu « Fichiers ouverts » (⌄) qui
-    les liste tous ;
-  - au-delà de 12 onglets ouverts, rien n'est fermé d'office.
-- **Clavier** (APG *Tabs* [S5]) :
-  - un arrêt de tabulation ; ← → ; Suppr ferme l'onglet focalisé ;
-  - Ctrl+Page↓ / Page↑ et Ctrl+Tab passent au suivant ou au précédent ;
-  - Ctrl+Maj+Page↓ / Page↑ déplacent l'onglet (alternative au glisser, 2.5.7) ;
-  - Alt+1…9 vont à l'onglet n.
-- **Lecteur d'écran :** `tablist` nommé « Fichiers ouverts ». Un onglet se lit « main.typ, Typst,
-  non enregistré ».
+  - onglet : `FileIcon`, nom, point « non enregistré », × visible au survol **et au focus** ;
+  - onglet actif : `--selected-bg` et un filet `--accent` en bas ;
+  - débordement : défilement de la barre, plus un menu « Fichiers ouverts ».
+- **ARIA et clavier** (APG *Tabs*, **activation manuelle**, car ouvrir un fichier charge un
+  document [S5]) :
+  - `role="tablist"` (« Fichiers ouverts ») ;
+  - chaque onglet a `role="tab"`, `aria-selected="true"` s'il est actif, et `aria-controls` vers
+    **l'unique** `role="tabpanel"` de la zone d'édition. Ce panneau porte
+    `aria-labelledby` = l'onglet actif ;
+  - un seul arrêt de tabulation (tabindex itinérant) ; ← → Origine Fin **déplacent le focus**
+    sans activer ; **Entrée ou Espace activent** ;
+  - Ctrl+Page↓ / Page↑ et Ctrl+Tab **activent** le suivant ou le précédent depuis n'importe où ;
+  - Ctrl+Maj+Page↓ / Page↑ déplacent l'onglet, en alternative au glisser (2.5.7) ;
+  - Alt+1…9 activent l'onglet n.
+- **Lecteur d'écran :** « main.typ, Typst, non enregistré, onglet 2 sur 4 ».
 
 ### 4.26 Aide (`Help`, *à créer*)
 
@@ -1046,14 +1173,10 @@ programmation : pas de complétion, de diagnostic, de pliage intelligent ni de t
 
   On ne devine jamais un langage par le contenu (statistiques) : c'est imprévisible, et deux
   personnes pourraient voir deux colorations différentes.
-- **FT-3. Colonnes repérées (CSV en texte).**
-  - Une colonne sur deux est teintée de `--hover-bg`.
-  - Le séparateur est en `--hl-marker`.
-  - L'en-tête est en gras.
-  - Au survol ou au curseur, une infobulle donne le nom de la colonne (« Colonne C · Prix »).
-
-  On n'utilise pas une couleur par colonne : ce serait illisible au-delà de 8 colonnes, et la
-  couleur porterait seule l'information.
+- **FT-3. CSV en vue texte.** La vue texte est un **repli** : la lecture se fait dans le tableur.
+  Dans le texte, le séparateur est en `--hl-marker` et la ligne d'en-tête en gras, rien de plus.
+  Simplification de la rév. 2, à la demande de Fable : plus de teinte par colonne ni
+  d'infobulle.
 - **FT-4. Palette de coloration du code.** On **réutilise les dix jetons `--hl-*`** existants.
   Ils sont tous ≥ 4,77:1 sur la vue, en clair comme en sombre, et déjà testés. On n'ajoute
   aucune couleur.
@@ -1108,108 +1231,612 @@ programmation : pas de complétion, de diagnostic, de pliage intelligent ni de t
 | Jetons sémantiques de tinymist (LSP) | Coloration Typst plus fine (types et symboles résolus). | Un aller-retour vers le *sidecar* à chaque modification, de la latence, et un second système de coloration. | **non retenu en v1** ; à réévaluer si la coloration Lezer de Typst se révèle insuffisante en test |
 | `codemirror-lang-typst` (grammaire Lezer, déjà employée, sans WASM) | Coloration Typst actuelle. | Déjà là. | conservé |
 
-- Une **liste blanche** d'environ 25 langages, dans `language-data`, limite la taille du paquet.
-  Un langage hors liste s'affiche sans coloration.
+- **Couverture par priorité, sous budget mesuré**, plutôt qu'un nombre fixe de langages :
+  - **priorité 1**, toujours dans la liste fermée de l'architecture (`AD-54`) : JSON, YAML,
+    Python, JavaScript/TypeScript, Shell, HTML/CSS, Go, SQL, TOML, XML ;
+  - **priorité 2** : Rust, C/C++, Java ; le reste n'est ajouté que sous le budget.
+  - **Budget** : un langage coûte au plus 60 Ko compressés, chargés à la première ouverture.
+    La première coloration de la zone visible arrive ≤ 100ms après l'ouverture. Une mise à jour
+    coûte ≤ 5ms (architecture §15.4, point Coloration).
+  - Un langage hors de la liste s'affiche sans coloration.
 - La coloration des blocs passe par `markdown({ codeLanguages })`. Pour Typst, il faut vérifier
   que `codemirror-lang-typst` 0.6 permet l'imbrication (`parseMixed`). Sinon, les blocs restent
   en `--hl-raw` : *à vérifier en N18*.
 
-### 4.29 Extensions (N21)
+### 4.29 Extensions : gérer et consentir (N21)
 
-Le mot d'interface est **« extension »**, comme les extensions de GNOME. Jamais « plugin »,
-« module », « WASI », « bac à sable » ni « capacité » (P5). L'exécution et l'API relèvent de
-l'architecture (N18). N17 fixe ce que la personne voit.
+- **Le mot de l'interface est « extension ».** Jamais « plugin », « greffon », « module »,
+  « WASI », « bac à sable » ni « capacité » (P5).
+- Le code parle de « greffon » pour un module WebAssembly, et d'« extension intégrée » pour une
+  extension du cœur (architecture §15.6). L'exécution, l'API et les capacités relèvent de N18
+  (architecture §15) ; N17 fixe ce que la personne voit, **sans rien y contredire**.
 
-**Gérer les extensions** : Préférences › page **Extensions**. C'est une page de
-`AdwPreferencesDialog` [S1], et non une nouvelle fenêtre (K-2). Le modèle est l'application
-*Extensions* de GNOME [S15].
+**Gérer.** Préférences › page **Extensions**, une page d'`AdwPreferencesDialog` (K-2), sur le
+modèle de l'application *Extensions* de GNOME [S15].
 
-- **En tête :** « Installer depuis un fichier… » (sélecteur de fichier). Un catalogue en ligne
-  pourra venir plus tard, derrière ce même bouton ; il est hors de N17.
-- **Une ligne par extension** (ligne dépliable, comme `AdwExpanderRow`) :
-  - icône symbolique (celle de l'extension, sinon la pièce de puzzle générique) ;
-  - nom ; auteur ; une phrase ;
-  - **interrupteur** Activer ;
+- **En tête :**
+  - « Installer depuis un fichier… » ;
+  - « Redémarrer sans extensions » (§4.33).
+- **Trois groupes :**
+  - « Extensions de ce projet » (§4.32) ;
+  - « Mes extensions » ;
+  - « Intégrées » : extensions du cœur, désactivables sauf les essentielles, qui ne peuvent pas
+    être retirées.
+- **Une ligne par extension** (`AdwExpanderRow`) :
+  - icône symbolique, nom, auteur, une phrase, **interrupteur** Activer ;
   - une fois dépliée :
-    - version ;
-    - « Ce qu'elle peut faire » (la liste des autorisations, chacune avec son interrupteur) ;
+    - version et provenance ;
+    - « Ce qu'elle peut faire », chaque autorisation avec son interrupteur ;
+    - raccourcis et conflits (§4.33) ;
     - « Mettre à jour depuis un fichier… » ;
-    - « Retirer ».
-- **États d'une ligne :**
+    - « Retirer » ;
+    - « Effacer ses données… ».
 
-  | État | Rendu |
-  |---|---|
-  | active | interrupteur activé |
-  | désactivée | interrupteur désactivé, nom en `--fg-dim` |
-  | erreur au chargement | icône `warn` + « Ne démarre pas : fichier abîmé ou version d'Inkwell trop ancienne. » + « Retirer » |
-  | arrêtée après des plantages | « Désactivée après 3 arrêts en 5 minutes. » + « Réactiver » |
-  | autorisation retirée | la ligne d'autorisation dit ce qui ne marche plus (« Ne peut plus ajouter de bouton ») |
+**États du gestionnaire** (Codex R2-M6) :
 
-- **Plantage en cours d'usage :** toast « L'extension « Diagramme » s'est arrêtée. Votre texte
-  n'est pas touché. · Relancer ». Une extension ne peut jamais bloquer la frappe (PERF-1).
-- **Mettre à jour :** depuis un fichier. Si la nouvelle version demande **de nouvelles
-  autorisations**, le dialogue de consentement ne montre **que celles-là**.
-- **Retirer :** toast « « Diagramme » retirée · Annuler ». L'extension reste récupérable jusqu'à
-  la fermeture d'Inkwell. Ses données locales sont effacées après.
-
-**Consentement** (Nielsen n°2, 3, 5 ; HIG *Dialogs* [S2]). À l'installation, un `AlertDialog`
-s'ouvre :
-- titre « Installer « Diagramme » ? » ;
-- l'auteur et la provenance (« depuis un fichier de votre ordinateur ») ;
-- **la liste de ce que l'extension pourra faire**, en phrases simples, chacune avec une icône.
-  Par exemple :
-
-  | Autorisation (interface) | Sens |
-  |---|---|
-  | « Lire le texte du fichier ouvert » | lecture du document actif |
-  | « Modifier le texte de vos documents » | écriture, **mise en avant** (`--warning`) |
-  | « Lire les autres fichiers du projet » | lecture du projet |
-  | « Ajouter des boutons et un panneau » | points d'affichage |
-  | « Afficher un type de fichier » | visionneuse |
-  | « Produire un aperçu ou un export » | aperçu et export |
-  | « Garder des données sur cet ordinateur » | stockage local |
-  | « Communiquer avec Internet » | réseau, **mise en avant**, avec « Inkwell ne peut pas voir ce qu'elle envoie » |
-
-- les boutons « Annuler » (focus initial) et « Installer ».
-
-Toute autorisation est **révocable** à tout moment depuis la ligne dépliée. L'extension est
-alors informée, et la fonction qui en dépend disparaît avec une explication.
-
-**Points d'affichage** : une extension n'apparaît que là où l'interface l'accueille déjà (K-2).
-
-| Point | Où | Règle |
+| État | Rendu | Sortie |
 |---|---|---|
-| Panneau | un onglet du sélecteur de gauche, après les onglets d'Inkwell | icône symbolique monochrome, sinon la pièce de puzzle |
-| Bouton de barre | un groupe « Extensions » à la fin de la barre de mise en forme, avant Insérer, puis dans le débordement ⋯ | infobulle « Nom (extension « X ») » |
-| Commande | dans la palette, groupe « Extensions », nom préfixé (« Diagramme : Insérer un diagramme ») | les raccourcis d'une extension ne remplacent jamais ceux d'Inkwell (K-6) |
-| Visionneuse de type de fichier | la vue d'un type non géré, ou « Ouvrir avec… » pour un type géré. Les quatre types principaux gardent leur vue par défaut. | — |
-| Aperçu, export | un format de plus dans « Exporter… » (« HTML, par Diagramme »), ou un rendu dans l'aperçu | — |
+| aucune extension installée | écran vide « Aucune extension pour l'instant » + « Installer depuis un fichier… » | — |
+| installation en cours | ligne provisoire, barre de progression, « Annuler » | annuler : rien n'est gardé |
+| mise à jour en cours | la ligne garde l'ancienne version active, avec un indicateur d'attente | annulable |
+| **paquet abîmé** ou signature invalide | dialogue « Ce fichier n'est pas une extension valide, ou il a été modifié. » | rien n'est installé |
+| **paquet incompatible** (version d'API) | « Faite pour une version plus récente d'Inkwell. Mettez Inkwell à jour pour l'utiliser. » | rien n'est installé |
+| échec d'une mise à jour | « La mise à jour a échoué ; la version 1.2 reste installée. · Détails » | ancienne version intacte |
+| active | interrupteur activé | — |
+| désactivée | interrupteur désactivé, nom en `--fg-dim` | réactiver |
+| **en pause pour lenteur** (ND-5) | « Mise en pause : trop lente. » + « Reprendre » | — |
+| arrêtée après des plantages | « Désactivée après 3 arrêts en 5 minutes. » + « Réactiver » | — |
+| autorisation retirée | la ligne dit ce qui ne marche plus. Rendre l'autorisation rétablit la fonction **sans redémarrer**, et un toast le confirme. | — |
+| conflit de raccourci | badge « Conflit » ; le raccourci de l'extension reste **inactif** jusqu'au choix (§4.33) | — |
 
-**Confinement visuel** : on doit savoir ce qui vient d'une extension.
-- Le contenu d'une extension est dessiné **dans un cadre fourni par Inkwell**.
-- Ce cadre a une ligne d'attribution en `--text-caption` : une pièce de puzzle en
-  `--mark-extension`, puis « Extension « Diagramme » ».
-- Le cadre **reçoit les jetons** de `tokens.css` (couleurs, polices, rayons, clair et sombre).
-  Le rendu suit donc le thème d'Inkwell et ne détonne jamais.
-- Une extension **ne peut pas** :
-  - dessiner hors de son cadre ;
-  - ouvrir un dialogue ou un toast à elle : elle passe par `Dialog` et `ToastHost`, qui
-    préfixent le nom de l'extension ;
-  - poser un bandeau-question ;
-  - imiter un écran d'Inkwell (consentement, personnes, partage).
+- **Plantage en usage :** toast « Diagramme s'est arrêtée. Votre texte n'est pas touché. ·
+  Relancer ». Une extension ne bloque jamais la frappe (PERF-1, ND-5).
+- **Retirer** (Codex R2-M4) :
+  - retire le code ;
+  - **garde ses données** (réglages, magasin privé), qu'une réinstallation retrouve ;
+  - toast « Diagramme retirée · Annuler » ;
+  - « Récemment retirées », en bas de la page, garde « Réinstaller » jusqu'à la fermeture
+    d'Inkwell.
+- **Effacer ses données…** est un geste à part : une confirmation (§4.9), « Effacer les données
+  de Diagramme ? Ses réglages et ce qu'elle a gardé sur cet ordinateur seront supprimés. Vos
+  documents ne sont pas touchés. » Elle n'efface jamais un document du projet.
 
-**Collaboration** : quand le document de quelqu'un utilise une extension que je n'ai pas.
-- Le **texte reste lisible et modifiable**. Seule la vue enrichie manque.
-- À la place de la vue, ou du rendu dans l'aperçu, un encadré neutre s'affiche : « Ce passage
-  s'affiche avec l'extension « Diagramme », que vous n'avez pas. Le texte reste modifiable. »
-  Il propose « Afficher le texte » et « D'où vient cette extension ? », qui donne le nom,
-  l'auteur, et « Demandez le fichier à Marie ».
-- **Rien ne s'installe tout seul**, même envoyé par une autre personne. Installer reste un geste
-  explicite, avec consentement.
-- Avant un export : « Ce document utilise l'extension « Diagramme » : ces passages manqueront
-  dans le PDF. · Exporter quand même · Annuler ».
+**Consentement** (Nielsen 2, 3, 5 ; HIG *Dialogs*). C'est un `AlertDialog` **du cœur** : zone
+protégée, inimitable (§4.33).
+- Titre « Installer « Diagramme » ? » ; l'auteur ; la provenance.
+- **La liste de ce qu'elle pourra faire**, avec les **phrases de l'architecture** (§15.5) :
+  - « lire vos documents » ;
+  - « proposer des modifications » ;
+  - « créer des fichiers » ;
+  - « lire les fichiers du projet » ;
+  - « compiler le projet » ;
+  - « enregistrer un fichier que vous choisissez » ;
+  - « ouvrir un fichier que vous choisissez » ;
+  - « voir l'historique » ;
+  - « voir les personnes du projet » ;
+  - « afficher un dessin libre » ;
+  - « se connecter à : nuage.example » ;
+  - « garder une copie chiffrée de vos projets chez nuage.example » ;
+  - « copier vos fichiers lisibles dans … ».
 
----
+  Les autorisations qui sortent de l'ordinateur (réseau, stockage, miroir) sont **mises en
+  avant** (icône `warn`, `--warning`), avec ce qu'elles font **automatiquement** : « à chaque
+  enregistrement, en arrière-plan ».
+- La mémoire demandée, si elle dépasse 64 Mio : « peut utiliser jusqu'à 256 Mo de mémoire ».
+- Boutons : « Annuler » (focus initial) et « Installer ».
+- **Mise à jour** : les **nouvelles** autorisations sont en tête, et « Tout voir » déplie la liste
+  complète (Codex R2-M5).
+- Toute autorisation est **révocable** depuis la ligne dépliée.
+
+**Stockage distant, miroir, cycle de vie** (N22, Codex R2-M5 ; architecture §6.7, §15.4,
+§15.9) :
+- **Le dossier local reste la vérité.** Un stockage distant ne garde qu'une **copie chiffrée** ;
+  un miroir, une copie lisible dans un dossier choisi.
+- Sans l'extension, ou si elle échoue, **le projet s'ouvre et s'édite normalement** depuis cet
+  ordinateur. La promesse ND-7 tient.
+- L'état de la copie est dans le popover d'état (§4.15) : « Copie chez nuage.example : il y a
+  3 min ».
+- En cas d'échec, bandeau d'information (niveau 4) : « La copie chez nuage.example a échoué. Vos
+  projets restent sur cet ordinateur. · Réessayer ».
+- « **Arrêter la copie** » est sur la ligne de l'extension. La copie distante n'est pas effacée
+  sans un second geste confirmé.
+- **Migration** vers un autre stockage : « Copier vers… » montre une progression. L'ancien
+  stockage reste en place jusqu'à la fin, vérifiée, de la copie.
+- **Actions au démarrage et à l'arrêt** : elles ne montrent rien, sauf un effet visible. Elles
+  sont alors listées dans l'onglet Activité, préfixées du nom (« Au démarrage, Sauvegarde a
+  copié 3 projets »).
+  - L'arrêt ne pose jamais de question. Il attend au plus 1s par extension (§15.9).
+  - Ce qui n'a pas fini reprend au lancement suivant.
+
+### 4.30 Bouton Extensions (menu à pièce de puzzle)
+
+Inspiré du bouton unifié de Firefox depuis la version 109 [S16] ; architecture §15.13.
+
+- **Place :** dans la barre d'en-tête, à droite, avant le menu principal. Icône `puzzle`, nom
+  accessible « Extensions », infobulle.
+- **Visibilité :** il n'apparaît que si au moins une extension active offre une action.
+- **Menu** (APG *Menu Button*) : une ligne par extension active qui offre une **action** :
+  - icône, nom, badge éventuel (4 caractères au plus, couleur d'état, au plus un changement par
+    seconde) ;
+  - à droite, une **punaise** « Épingler à la barre », bascule `aria-pressed` ;
+  - un clic sur la ligne lance l'action, ou ouvre son popover déclaratif ;
+  - en bas, « Gérer les extensions… » ouvre Préférences › Extensions.
+- **C'est la personne qui épingle.** Une extension ne peut ni s'épingler, ni se placer hors de
+  cette zone (ND-1).
+  - Une extension globale est épinglée pour cet ordinateur ; une extension de projet, **par
+    projet**.
+  - L'admin ne l'impose jamais.
+  - L'ordre des boutons épinglés se change par glisser, ou par « Déplacer à gauche / à
+    droite » dans le menu contextuel du bouton (2.5.7).
+- **Bouton épinglé :**
+  - bouton plat `.fb`, icône symbolique de l'extension ;
+  - infobulle « Nom (extension « X ») » ;
+  - badge en pastille ;
+  - menu contextuel « Désépingler » et « Gérer… ».
+- **États :** extension désactivée ou en pause → la ligne et le bouton disparaissent. Extension
+  plantée → la ligne reste, avec `warn`, « Arrêtée · Relancer ».
+
+### 4.31 Contributions : où une extension s'affiche, et comment on la reconnaît
+
+- **Le modèle est déclaratif** (architecture §15.13). Une contribution =
+  `{commande, emplacement, groupe, ordre, quand}`.
+  - L'hôte la **dessine lui-même, en composants Adwaita** (`ui.view`), sans appeler
+    l'extension pour afficher.
+  - Les groupes du cœur gardent leur place. Les éléments d'une extension vont dans son groupe,
+    après ceux du cœur.
+  - La personne peut réordonner ou masquer un élément d'extension, jamais un élément protégé.
+- **Attribution :** chaque point d'affichage a sa règle, pour que l'on sache toujours ce qui
+  vient d'une extension (Fable R2-B2). La pièce `puzzle` en `--mark-extension` est le repère
+  commun. On ne l'ajoute que là où c'est lisible ; ailleurs, le **nom** suffit.
+- **Points d'extension**, alignés **ligne pour ligne** sur l'architecture §15.4 (et §15.13 pour
+  les surfaces) :
+
+| # | Point (§15.4) | Où cela s'affiche | Attribution visible | Désactivée, en pause, plantée | Interdit |
+|---|---|---|---|---|---|
+| 1 | Commande | palette, menus, raccourcis | palette : colonne « groupe » = nom de l'extension | commande retirée de la palette | prendre un raccourci du cœur (ND-3) |
+| 2 | Menu, palette, raccourci | menu principal (groupes `extensions`, `insert`, `export`, `view`) ; menus contextuels `editor/`, `files/`, `tabs/`, `preview/`, `people/`, `link/context` | groupe séparé par un filet ; au-delà de 8 entrées par menu, un sous-menu « Extensions » ; infobulle « par X » | entrées retirées | groupes `project`, `people`, `about` ; entrées de droits et de confiance du menu d'une personne ; « Supprimer », « Restaurer » |
+| 3 | Barre d'outils par type | groupe « Extensions » en fin de barre, avant Insérer, puis dans le débordement ⋯ | infobulle « Nom (extension « X ») » | boutons retirés | Annuler, Rétablir, état d'enregistrement |
+| 4 | Panneau latéral, onglet du tiroir | **les deux sélecteurs**, selon L-2 (la structure à gauche, le temps et les autres à droite), après les onglets du cœur | icône de l'onglet + nom ; en tête du panneau, une ligne `--text-caption` : pièce + « Extension « X » » | le panneau affiche « X est désactivée · Réactiver » | onglet Personnes ; Fichiers comme onglet par défaut |
+| 5 | Barre d'état, bandeau, toast | barre d'état : groupe `extensions` à droite, au plus 3 éléments visibles, puis ⋯ ; bandeau et toast par `BannerHost` / `ToastHost` | élément : infobulle « X : … » ; toast et bandeau préfixés « X : » | éléments retirés | état de synchronisation, d'enregistrement, présence ; bandeau-question de confiance ; une question dans un toast (TO-2) ; plus d'un bandeau d'extension à la fois |
+| 6 | Type de fichier : reconnaissance | icône et nom de type dans Fichiers | description de la ligne : « Type fourni par X » | repli sur « fichier inconnu » (FT-6) | changer l'icône des quatre types principaux |
+| 7 | Vue, éditeur d'un type | la zone d'édition, pour ce type ; « Ouvrir avec… » pour un type déjà géré | barre secondaire « Affiché par X · Ouvrir avec… » | repli MF-14 : texte, ou fiche du fichier (FT-6) | remplacer la vue d'un des quatre types principaux sans le geste « Ouvrir avec… » |
+| 8 | Coloration | dans l'éditeur, avec les jetons `--hl-*` seulement | aucune (coloration standard) | texte sans coloration | couleurs hors jetons |
+| 9 | Complétion, survol, aide de signature | liste de complétion ; carte de survol | section titrée par le nom de l'extension ; complétion : colonne « source » | rien | la carte d'une personne, la carte de divergence |
+| 10 | Diagnostics, décorations, gouttières, widgets en ligne | soulignements, colonne de gouttière (2 au plus, à droite de celles du cœur), widgets sous une ligne | gouttière et soulignement : l'infobulle commence par « X : » ; widget en ligne : filet gauche `--mark-extension`, et nom accessible suffixé « (extension X) » | décorations retirées | marques des autres personnes, zones verrouillées, divergences, bande des modifications |
+| 11 | Transformation de document | commande, ou proposition avant collage | la modification porte « via X » dans l'Historique (ND-8) | commande retirée | appliquer sans le geste de la personne (PP-2) |
+| 12 | Affichage de l'aperçu | surcouche des pages | survol de la surcouche : « X » | surcouche retirée | modifier le rendu Typst (X-8) |
+| 13 | Exportateur | Exporter… : un format de plus | « HTML · par X » dans la liste des formats | format retiré | remplacer le PDF par défaut sans choix explicite |
+| 14 | Importateur | « Importer… » : un format de plus | « par X » | format retiré | — |
+| 15 | Thème, jeu d'icônes | Préférences › Apparence (§2.10) | nom du thème, « par X » | retour à Adwaita | jetons verrouillés ; icônes des zones protégées |
+| 16 | Page de réglages | une page par extension dans Préférences, rangée par ordre alphabétique après les pages du cœur | titre de la page = nom ; sous-titre « Extension » ; icône de l'extension | « X est désactivée · Réactiver » | pages Réseau, Confidentialité, Extensions |
+| 17 | Diff et historique | une vue de plus dans Différences (groupe de bascules) | nom de la vue + « par X » | vue retirée | — |
+| 18 | Stockage distant, miroir | ligne de l'extension ; popover d'état | « Copie chez … par X » | §4.29 : le local reste la vérité | voir du clair (règle d'exclusion, §15.5) |
+| 19 | Cycle de vie, événements | rien, sauf l'Activité | Activité : « Au démarrage, X a … » | — | une question à l'arrêt |
+| 20 | Rendu de diagramme | §4.34 | pied du rendu : « Dessiné par X » | dernier rendu partagé | exécuter du code hors du cadre isolé |
+| 21 | Fenêtres, dialogues, menus contextuels, popovers, écran d'accueil, glisser-déposer | fenêtre : titre « X — Inkwell » et une bande d'attribution ; dialogue : **dans** la fenêtre, avec une bande « Extension « X » » sous le titre ; popover : attaché à un bouton de l'extension ; accueil : au plus 4 cartes « Démarrer avec », badge « par X » ; dépôt : si plusieurs extensions acceptent, un popover « Déposer avec… » | toujours la bande ou le badge | fenêtres fermées, cartes retirées | une fenêtre qui prend le focus sans geste ; les dialogues d'accord, de droits et d'invitation ; « Nouveau projet », « Ouvrir », « Rejoindre » |
+
+- **Correspondance :** chaque ligne de §15.4 a sa ligne ici, dans le même ordre. Seuls
+  « Stockage distant » et « Miroir lisible » sont réunis (ligne 18). Les surfaces de §15.13 sont
+  dans les lignes 2, 4, 5, 10 et 21. Une contradiction avec l'architecture se règle en faveur
+  de §15, puis cette table est corrigée.
+- **Cadre d'une vue libre** (`ui.canvas`, iframe isolée) :
+  - un cadre fourni par Inkwell, avec la ligne d'attribution ;
+  - il reçoit les jetons **du thème actif** ;
+  - aucun dessin hors du cadre.
+- **Densité :** à 360px, une attribution par zone, jamais une par élément (test de §10, Codex
+  R2-m1).
+
+### 4.32 Extensions de projet (N23)
+
+Une extension peut **appartenir au projet** : un admin l'ajoute, et elle se charge chez chaque
+personne qui ouvre le projet (architecture §15.10, PP-1 à PP-7).
+
+- **Provenance, à la première ouverture** (PP-3) : un bandeau d'information non bloquant, « Ce
+  projet utilise 2 extensions ajoutées par Marie. · Voir ».
+  - « Voir » ouvre Préférences › Extensions › « Extensions de ce projet ». Chaque ligne y dit
+    qui l'a ajoutée et quand, son auteur, et l'empreinte du paquet en 4 mots.
+  - Le bandeau ne revient plus pour ces versions.
+- **Ce qui se charge sans question** : le niveau « projet » (affichage déclaratif, types de
+  fichiers, coloration, lecture du projet, propositions sur commande).
+- **Ce qui dépasse ce niveau** reste **en mode restreint**, sans le pouvoir demandé : réseau,
+  stockage, fichiers choisis, dessin libre, personnes. La ligne dit alors : « Demande davantage :
+  se connecter à nuage.example · Autoriser pour moi ». Autoriser ouvre le consentement (§4.29),
+  qui vaut pour cette version et cet ordinateur.
+- **Interrupteur personnel** (PP-4) : « Désactiver pour moi », sur la ligne et dans le bandeau.
+  Les autres personnes ne sont pas touchées, et le projet reste lisible et modifiable.
+- **Repli** : un contenu dont l'extension manque, ou est désactivée, s'affiche en texte, ou par
+  son dernier rendu partagé (§4.34). Un encadré neutre le dit : « Ce passage s'affiche avec
+  « Diagramme », désactivée pour vous. · Afficher le texte ».
+- **Version incompatible** : « Mettez Inkwell à jour pour utiliser Diagramme », puis le repli.
+- **Décision contestée** (PP-6) : les admins voient une carte « Deux versions de Diagramme ont
+  été ajoutées en même temps : aucune n'est chargée. · Choisir ».
+- **Badge « Extension du projet »** sur chaque cadre, chaque bouton épinglé et chaque page de
+  réglages d'une extension de projet (PP-5).
+- Une modification proposée par une extension de projet porte « via Diagramme (ajoutée par
+  Marie) » dans l'Historique (PP-2).
+
+### 4.33 Ne pas dénaturer Inkwell (N24)
+
+Une extension ajoute, décore ou enveloppe. Elle n'enlève ni ne cache rien (architecture §15.11,
+ND-1 à ND-8).
+
+- **Zones protégées**, qu'aucune contribution ne peut atteindre :
+  - dans la barre d'en-tête : nom du projet, pile des personnes, état de synchronisation et
+    d'enregistrement, « Partager » ;
+  - qui modifie quel fichier (curseurs, bande des modifications) ;
+  - les bandeaux de confiance et de droits ;
+  - les dialogues d'accord ;
+  - Annuler et Rétablir ;
+  - le panneau Personnes ;
+  - le gestionnaire d'extensions ;
+  - « Redémarrer sans extensions ».
+- **Dialogues de confiance inimitables** (ND-2) :
+  - un dialogue d'accord, de droits ou d'invitation est **toujours rendu par le cœur** ; il porte
+    l'en-tête « Inkwell » et l'icône de l'application ;
+  - un dialogue d'extension porte **toujours** la bande « Extension « X » », ne peut afficher ni
+    cet en-tête, ni cette icône, ni un champ de mot de passe, et ne s'ouvre jamais par-dessus un
+    dialogue du cœur.
+- **Raccourcis** (ND-3) :
+  - les raccourcis du cœur sont réservés ;
+  - un conflit rend le raccourci de l'extension **inactif** ;
+  - il est signalé par le badge « Conflit » sur la ligne de l'extension et dans la fenêtre des
+    raccourcis (§4.26) ; la personne tranche (« Garder celui d'Inkwell », « Donner à X »,
+    « Choisir un autre raccourci… ») ;
+  - jamais en silence.
+- **Textes d'extension** (ND-4) : fr et en présents ; longueurs bornées (titre de commande ≤ 40,
+  infobulle ≤ 80, toast ≤ 120 caractères) ; aucun terme interdit du glossaire. Sinon, l'élément
+  est refusé au chargement, avec la raison dans l'Inspecteur (§4.35).
+- **Mode sans extensions** (ND-6) :
+  - **Entrées :**
+    - menu principal › « Redémarrer sans extensions » ;
+    - Préférences › Extensions ;
+    - `inkwell --safe-mode` ;
+    - proposé d'office après deux démarrages interrompus, par un dialogue du cœur : « Inkwell
+      s'est arrêté deux fois au démarrage. Redémarrer sans extensions ? · Redémarrer sans
+      extensions · Démarrer normalement » ;
+  - **Repère** : une pastille permanente « Sans extensions » dans la barre d'en-tête, à côté de
+    l'état (L-8d). Elle ouvre un popover : « Aucune extension n'est chargée. · Redémarrer
+    normalement » ;
+  - le thème est Adwaita.
+
+### 4.34 Diagrammes : le parcours de référence (N24)
+
+Mermaid, Graphviz… (architecture §15.14). C'est le modèle de toute extension qui « dessine » un
+bloc de code.
+
+- **Écrire :**
+  - Markdown : bloc ```` ```mermaid ```` ; Typst : bloc brut ```` ```mermaid ````, même règle ;
+  - Insérer › Diagramme propose les langages des extensions de rendu présentes ;
+  - le bloc est coloré selon FT-2.
+- **Voir :**
+  - **dans l'aperçu**, à sa place, comme une image ;
+  - **en ligne**, sous le bloc, dans l'éditeur : un widget repliable (« Masquer le dessin »),
+    avec le filet `--mark-extension` et le pied « Dessiné par Mermaid » ;
+  - le rendu se met à jour 500ms après la dernière frappe dans le bloc ; pendant ce temps,
+    l'ancien dessin reste, avec « Mise à jour… » après 300ms.
+- **Erreur, en ligne**, jamais en toast : le widget affiche le dernier dessin réussi, estompé,
+  puis la ligne `warn` « Ligne 4 : flèche incomplète » (bouton qui amène à la ligne), sur
+  `--error-bg`. Le bloc reçoit un soulignement à la ligne fautive. Les problèmes de la barre
+  d'état les comptent.
+- **Trop complexe** (plafond de 5s) : « Diagramme trop complexe pour être dessiné. » avec le
+  dernier dessin réussi.
+- **Collaboration :**
+  - une personne **sans l'extension** voit le **dernier rendu partagé**, dans l'aperçu, dans le
+    PDF et en ligne, avec le pied « Dernier dessin partagé · Dessiné par Mermaid chez Marie » ;
+  - si le dessin ne correspond pas à la source : chez qui a l'extension, « Le dessin partagé ne
+    correspond pas à sa source · Redessiner » ;
+  - personne n'a jamais dessiné : encadré neutre « Ce diagramme s'affiche avec Mermaid, que vous
+    n'avez pas. · Afficher le texte ».
+- **Lecteur d'écran :** le dessin est une image nommée « Diagramme Mermaid, ligne 12 ». Le
+  source reste le texte alternatif complet, lu dans l'éditeur.
+
+### 4.35 Outils de développement des extensions (N25)
+
+Pour qui écrit une extension (architecture §15.12, §15.15). **Invisibles par défaut.**
+
+- **Mode développeur** : Préférences › Avancé › « Mode développeur ». Il est **local**, jamais
+  synchronisé, et jamais appliqué à une extension de projet.
+- **Repère permanent et clair** :
+  - une pastille « Mode développeur » en `--destructive-bg`, avec texte blanc (4,83 / 6,11),
+    dans la barre d'en-tête, à côté de l'état ;
+  - un filet de 2px `--destructive-bg` en haut de la fenêtre ;
+  - un clic sur la pastille propose « Quitter le mode développeur ».
+
+  C'est le « bandeau rouge permanent » de l'architecture, rendu comme une pastille pour ne pas
+  prendre l'emplacement du bandeau (L-8d).
+- **Extension non empaquetée** : « Charger depuis un dossier… ». Elle est rechargée à chaque
+  modification, avec le toast « Diagramme rechargée », et porte le badge « Non signée · en
+  développement ».
+- **Inspecteur d'extensions** : un onglet du **tiroir**, présent seulement en mode développeur.
+  Pour l'extension choisie (sélecteur) :
+  - **Journal** (`role="log"`, horodaté, filtre par niveau, copier) ;
+  - **Appels** (nom, durée, résultat) ;
+  - **Temps et mémoire** par rapport à ses budgets (§15.4), en barres avec valeur écrite ;
+  - **Refus d'autorisation** (« lire vos documents : refusé ») ;
+  - **Événements reçus** ;
+  - **Contributions refusées** au chargement (ND-4, jetons de thème inconnus).
+
+  Rien ne quitte l'ordinateur ; « Copier le rapport » met le texte dans le presse-papiers.
+- **Messages destinés aux développeuses** : ils sont techniques **seulement dans l'Inspecteur**.
+  Le reste de l'interface garde le glossaire (P5).
+
+### 4.36 Problèmes de compilation : où, et comment corriger (N28)
+
+**But :** voir **où** est le problème et **comment** le corriger, tout de suite. Typst, Markdown
+(mis en page par Typst ou en CSS), CSS, extensions de rendu.
+
+**Sources, réutilisées et non réinventées :**
+- **Typst** : les diagnostics de **tinymist** (LSP), avec leur position (plage), leurs
+  **conseils** (`hint`) et leur trace (« appelé depuis ») [S19]. Les diagnostics de la
+  compilation de l'aperçu servent de secours.
+- **Markdown** : les erreurs de la mise en page Typst (`cmarker`), ramenées à la ligne du `.md` ;
+  les liens et images introuvables (avertissement).
+- **CSS** : les refus de l'assainisseur (B8), par exemple « `@import` retiré : un style ne peut
+  pas charger un autre fichier » (avertissement).
+- **Extensions de rendu** : l'erreur d'un diagramme (§4.34).
+
+**Gravités :**
+
+| Gravité | Sens | Soulignement | Marge | Compté dans la barre d'état |
+|---|---|---|---|---|
+| **Erreur** | l'aperçu et l'export ne peuvent pas se mettre à jour | ondulé `--error` | icône `fail` | oui (⊗ n) |
+| **Avertissement** | le document se compile, mais quelque chose cloche (police absente, lien cassé) | pointillé `--warning` | icône `warn` | oui (⚠ n) |
+| **Conseil** | suggestion (`hint`) | aucun ; seulement dans la carte | — | non |
+
+Les formes et les icônes diffèrent d'une gravité à l'autre : la couleur n'est jamais seule
+(A-3). Les couleurs viennent des jetons, et les contrastes sont dans `tokens.json`.
+
+**Dans l'éditeur :**
+- **Soulignement** sous la plage exacte, et **marqueur dans la marge**, à droite des numéros de
+  ligne (`@codemirror/lint` : `setDiagnostics` et `lintGutter` ; son panneau n'est pas employé).
+- **Carte de survol, ou de focus**, quand le curseur entre dans la plage et après F8 :
+  - la phrase en clair, en fr ou en en (« « titre » n'est défini nulle part. ») ;
+  - **Conseil :** la suggestion (« Vérifiez l'orthographe, ou définissez-le avec `#let`. ») ;
+  - « Texte d'origine », une section repliable avec le message du compilateur tel quel, en mono
+    et en anglais, et « Copier » ;
+  - pour une trace : « Appelé depuis main.typ, ligne 3 », en lien.
+- **Calme pendant la frappe :** le soulignement d'une plage **qu'on est en train de taper**
+  n'apparaît qu'après **1s sans frappe**, ou quand le curseur quitte la ligne. Les autres
+  restent à jour. Les diagnostics suivent la compilation de l'aperçu, qui attend 300ms de
+  calme. Rien ne déplace le curseur ni ne vole le focus.
+
+**Un clic, et le curseur est sur l'erreur** (« comme un IDE »). De **chaque** endroit qui
+signale un problème, **un seul clic** (ou Entrée) suffit :
+- ouvrir le fichier, dans son onglet (§4.25), même s'il était fermé ;
+- **placer le curseur au début de la plage fautive**, la ligne centrée à l'écran, le focus dans
+  l'éditeur ;
+- ouvrir la carte du problème (lue par le lecteur d'écran).
+
+On peut alors corriger tout de suite.
+
+| Où le problème est signalé | Geste | Ce qui se passe |
+|---|---|---|
+| **compte de la barre d'état** (⊗ 2 ⚠ 1) | clic sur le compte | **va au premier problème** (le plus grave, dans le fichier actif d'abord) ; chaque nouveau clic va au suivant. Le compte est un **bouton partagé** : sa flèche ⌄ ouvre la liste. |
+| **liste Problèmes** (popover) | clic ou Entrée sur un élément | va à ce problème ; le popover se ferme |
+| **bandeau d'erreur de l'aperçu** | « Voir le premier problème » | va au premier problème qui bloque l'aperçu |
+| **marqueur de la marge** | clic | curseur au début de la plage de cette ligne, carte ouverte |
+| **erreur dans un fichier importé, un modèle ou une charte** | clic dans la liste | ouvre **ce fichier** dans un onglet, curseur sur l'erreur ; modèle ou charte : onglet **en lecture**, avec « Aller à l'appel dans main.typ » en tête de la carte |
+| **erreur de l'export** (toast d'échec, §5.12) | « Voir le premier problème » | idem |
+| **carte d'un diagramme en échec** (§4.34) | clic sur « Ligne 4 : … » | curseur dans le bloc, à cette ligne |
+
+**Clavier :**
+- **F8 / Maj+F8** : problème suivant ou précédent, dans tout le projet. Ce sont les touches de
+  VS Code, la convention de fait [S22].
+  - Pas de conflit : F2, F3/F4 (recherche), F5 (présenter), F6 (zones), F7 (différences), F9,
+    F10 et F1 ont d'autres usages, F8 était libre (§8.2).
+  - Le registre (K-6) le vérifie.
+- **Ctrl+.** : ouvrir les corrections rapides à la position du curseur (convention de VS Code).
+  Libre dans le registre.
+
+**Corrections rapides.**
+- Quand tinymist propose une **action de code** (`textDocument/codeAction` du LSP, par exemple
+  « Importer `x` depuis… » ou « Corriger en « titre » ») [S19] :
+  - une **ampoule** apparaît dans la marge, sur la ligne du curseur ;
+  - la carte du problème liste les corrections en boutons (« Corriger : remplacer par
+    « titre » »).
+- Ctrl+., ou un clic sur l'ampoule, ouvre le même menu (APG *Menu*).
+- **Appliquer une correction = une modification**, annulable par Ctrl+Z (ND-8), attribuée à la
+  personne.
+- Une extension qui fournit des diagnostics peut fournir des corrections par le même point
+  (`diagnostics`, §4.31 ligne 10). Elles portent « via X ».
+
+**Le même comportement pour tous les langages.** Un **modèle de diagnostic unique** :
+`{fichier, plage, gravité, message en clair, message d'origine, conseils, corrections, trace,
+source}`. Il est alimenté par :
+
+| Source | Langage | Exemples |
+|---|---|---|
+| tinymist (LSP) et compilation Typst | Typst ; Markdown mis en page par Typst, ramené à la ligne du `.md` | variable inconnue, fichier manquant |
+| analyseur Markdown | Markdown | lien ou image introuvable (avertissement) |
+| assainisseur CSS (B8) | CSS | `@import` ou `url()` externe retirés |
+| analyseur CSV (`editor/csv/dialect.ts`) | CSV, TSV | guillemet non fermé à la ligne n, nombre de colonnes irrégulier (avertissement) ; dans le tableur, la cellule est marquée et le clic y amène |
+| point `diagnostics` des extensions (architecture §15.4) | langages fournis par une extension | préfixe « X : » dans la carte et la liste |
+
+Soulignement, marge, carte, liste, F8, Ctrl+. et annonces sont **identiques** quelle que soit la
+source.
+
+**La liste « Problèmes »** n'ajoute pas de panneau (cohérence). C'est le **popover de la barre
+d'état** qui existe déjà (`ui/shell/StatusBar.svelte:84-129`), étendu :
+- groupée **par fichier**, le fichier actif d'abord, puis l'ordre des lignes ; chaque élément a
+  son icône, sa phrase en clair et « fichier, ligne n » ;
+- un clic ou Entrée **ouvre le fichier** (onglet, §4.25) et place le curseur sur la plage, avec la
+  carte ouverte ;
+- **erreurs dans un fichier importé** (`#import`, `#include`) : groupées sous ce fichier, avec
+  « appelé depuis main.typ, ligne 3 » ;
+- **erreurs dans un modèle ou une charte** (paquet dans `.typstdeps/` ou `@local`, §5.19) : sous
+  « Modèle « Rapport ACME » » ou « Charte « ACME » ». Le fichier s'ouvre **en lecture**, et la
+  ligne de **votre** fichier qui l'appelle est donnée en premier : c'est souvent là qu'on corrige ;
+- F8 / Maj+F8 vont au problème suivant ou précédent, d'un fichier à l'autre ;
+- si la liste dépasse 200 éléments : « Et 37 autres : corrigez les premiers, la liste se mettra
+  à jour » (le code tronque déjà : `preview.truncated`).
+
+**Messages en clair (fr et en).**
+- Une **table de traduction**, versionnée avec tinymist, associe les messages fréquents de Typst
+  à une phrase et à un conseil :
+
+  | Message d'origine | Phrase | Conseil |
+  |---|---|---|
+  | `unknown variable: x` | « x » n'est défini nulle part. | Vérifiez l'orthographe, ou définissez-le avec `#let`. |
+  | `file not found` | Le fichier « logo.png » est introuvable dans le projet. | Ajoutez-le, ou corrigez le chemin. |
+  | `unclosed delimiter` | Une parenthèse ou un crochet n'est pas fermé. | Cherchez son partenaire avant la fin de la ligne. |
+  | `expected expression` | Il manque une valeur ici. | — |
+  | `unknown font family` | La police « X » n'est pas disponible : une autre est utilisée. | Ajoutez-la au projet, ou choisissez-en une autre. |
+  | paquet introuvable | Le paquet « X » n'est ni fourni ni dans le projet. | Inkwell ne télécharge jamais de paquet ; ajoutez-le dans le dossier du projet. |
+
+- **Un message absent de la table** s'affiche tel quel, précédé de « Message du compilateur : ».
+  Il n'est jamais caché, et le conseil de tinymist s'ajoute s'il existe.
+- Les nouvelles traductions s'écrivent à partir des messages relevés en test utilisateur.
+
+**Aperçu** (§4.18) : en cas d'erreur, **la dernière version correcte reste affichée**, sous un
+bandeau **local à l'aperçu**, discret (`--info-bg`) : « 2 erreurs : l'aperçu montre la dernière
+version correcte. · Voir le premier problème ». Pas de bandeau global, pas de toast.
+L'**export** refusé dit la même chose, avec la même action (§5.12).
+
+**Lecteur d'écran :**
+- la barre d'état annonce le compte, en région **polie**, **seulement** quand il passe de 0 à n,
+  ou de n à 0, et au plus une fois toutes les 2s ;
+- jamais à chaque frappe ;
+- entrer dans une plage fautive lie la carte à l'éditeur par `aria-describedby` : le message se
+  lit à la demande ;
+- F8 annonce « Erreur, ligne 12 : … ».
+
+**Données nécessaires** (inventaire G-81) : chaque diagnostic porte la plage (ligne et colonne
+de début et de fin), la gravité, le message d'origine, le conseil, le fichier et la trace.
+Aujourd'hui, le protocole de l'aperçu n'a que la gravité, le message (tronqué à 400
+caractères), le fichier et la ligne (`preview/protocol.ts:10-12`, `:134-137`).
+
+### 4.37 Aide à l'écriture : complétion, signatures, aide au survol (N29)
+
+**But :** quand on importe une charte faite de nombreux fichiers Typst, l'éditeur propose ses
+fonctions et dit **exactement quoi leur passer** : noms, types, valeurs par défaut,
+documentation. Cela vaut aussi pour les fonctions qu'on écrit soi-même.
+
+**Ton :** c'est un outil d'**écriture**, pas un IDE. L'aide vient quand on la demande, ou quand
+on tape là où elle sert. Elle ne clignote jamais, et ne recouvre jamais la ligne en cours.
+
+**Sources, réutilisées.**
+- Toute l'intelligence vient de **tinymist**, déjà embarqué, par le LSP [S19] :
+  - complétion ;
+  - aide de signature ;
+  - survol, avec la documentation rendue ;
+  - aller à la définition ;
+  - indices de noms de paramètres (*inlay hints*).
+
+  Son branchement à l'éditeur relève de l'architecture (point « Complétion, survol, aide de
+  signature », §15.4, budget p95 ≤ 100ms, sinon résultats abandonnés).
+- L'affichage passe par **`@codemirror/autocomplete`** (fenêtre de complétion, `info`,
+  Ctrl+Espace) et par les **infobulles de survol** de `@codemirror/view` (`hoverTooltip`) [S23].
+  Seul le style change : jetons Adwaita, popover (§4.7).
+
+**1. Fenêtre de complétion.**
+- **Quand elle s'ouvre :**
+  - après `#` et un début de nom ;
+  - après `.` (champ d'un module ou d'un dictionnaire) ;
+  - dans les arguments d'un appel ;
+  - après `@` (étiquettes et références, T11 B7) ;
+  - dans une chaîne de chemin (`#image("`, `#include "`) ;
+  - ou sur demande, avec **Ctrl+Espace**.
+
+  Jamais sur une lettre isolée en plein texte.
+- **Ligne** :
+  - une **icône de genre** (fonction, variable, module, paramètre, étiquette, fichier,
+    symbole), symbolique en 16px, **doublée d'un nom accessible** (« fonction ») ;
+  - le nom, avec les lettres tapées en gras ;
+  - à droite, en `--fg-dim`, la **provenance** (« charte ACME », « ce fichier », « Typst »).
+- **Aperçu de la documentation** : à côté de la liste, si la place le permet, sinon dessous.
+  Il montre la signature (`titre-section(texte, niveau: 1)`) et la **première phrase** de la
+  documentation, en `--text-small`, puis « Plus d'aide : Ctrl+Maj+Espace ».
+- **Ordre** : ce qui vient du projet et des chartes importées d'abord, puis Typst. Au plus 50
+  éléments affichés, filtrés au fil de la frappe.
+
+**2. Aide de signature**, pendant qu'on tape les arguments :
+- une bulle **au-dessus** de la ligne (jamais dessus), qui montre la signature complète ;
+- le **paramètre courant en gras et souligné** (pas en couleur seule) ;
+- sous la signature, ce paramètre : **type**, **valeur par défaut** (« par défaut : 1 ») et sa
+  phrase de documentation ;
+- elle suit la virgule. Échap la ferme ; Ctrl+Maj+Espace la rouvre.
+
+**3. Carte de survol** (souris), ou au clavier par **Ctrl+Maj+Espace**. Ce raccourci ouvre l'aide
+de signature dans des arguments, et la carte ailleurs :
+- la **documentation rendue** : titre et signature en mono, description en `--text-body`,
+  **paramètres en tableau** (nom, type, défaut, description), valeur rendue, exemple s'il y en a ;
+- le lien « **Aller à la définition** » (aussi **F12**) **ouvre le fichier source dans un
+  onglet** (§4.25), curseur sur la définition. Une charte ou un modèle dans `.typstdeps/`
+  s'ouvre **en lecture** ;
+- Alt+← revient où l'on était (§3.2) ;
+- une fonction **sans documentation** montre quand même sa signature, puis la phrase « Pas de
+  description. Ajoutez un commentaire `///` au-dessus de sa définition pour en écrire une. » ;
+- la carte apparaît après 500ms de survol, reste tant que le pointeur est dessus, et Échap la
+  ferme (1.4.13). Elle ne s'affiche jamais pendant la frappe.
+
+**4. Indices de noms de paramètres** (*inlay hints*) :
+- **désactivés par défaut** ; Préférences › Éditeur › « Afficher le nom des arguments » ;
+- discrets : `--text-caption`, `--fg-dim`, sur fond `--hover-bg`, rayon `--radius-small` ;
+- seulement pour les arguments positionnels de plus de deux caractères ;
+- `aria-hidden` : ils ne sont pas du texte.
+
+**5. Documenter une charte ou un modèle : la convention `///`.**
+- On reprend la convention de **tidy**, l'outil de documentation de Typst, que tinymist lit
+  [S24] : des lignes `///` au-dessus d'un `#let`.
+  - La première phrase sert de résumé.
+  - Chaque paramètre s'écrit `- nom (type): description`, et le retour `-> type`.
+  - Exemple :
+
+    ```typ
+    /// Titre de section aux couleurs de la charte.
+    /// - texte (content): le titre lui-même.
+    /// - niveau (int): 1 pour une partie, 2 pour une sous-partie.
+    /// -> content
+    #let titre-section(texte, niveau: 1) = { … }
+    ```
+- **Insérer › Documentation de fonction** écrit ce squelette, rempli à partir de la signature
+  sous le curseur.
+- L'**assistant « Enregistrer comme modèle »** (§5.19, étape 2) **compte les fonctions
+  exportées sans documentation**. Il le dit sans bloquer : « 4 fonctions de la charte n'ont pas
+  de description : les personnes qui utiliseront ce modèle ne sauront pas quoi leur passer. ·
+  Les voir ». « Les voir » ouvre la première dans un onglet.
+
+**6. Clavier et lecteur d'écran** (APG *Combobox* avec `listbox` [S5], déjà suivi par
+`@codemirror/autocomplete`) :
+- l'éditeur porte `aria-autocomplete="list"`, `aria-expanded` et `aria-controls`. La liste est
+  un `listbox` ; l'option active est désignée par `aria-activedescendant` ; le focus ne quitte
+  jamais le texte ;
+- **↑ ↓** se déplacent ; Page↑ Page↓ ; **Entrée** ou **Tab** insèrent ; **Échap** ferme sans
+  rien changer ;
+- l'insertion d'une fonction place le curseur **entre les parenthèses**, et ouvre l'aide de
+  signature ;
+- annonces, en région polie : « 12 suggestions » à l'ouverture, puis le nom et le genre de
+  l'option active (« titre-section, fonction, charte ACME »). L'aide de signature et la carte se
+  lisent à la demande (`aria-describedby`) ;
+- tout se fait au clavier : Ctrl+Espace, Ctrl+Maj+Espace, F12, Alt+←.
+
+**7. Langues.**
+- Les libellés de l'interface sont en fr et en en : genres, « par défaut », « Pas de
+  description », « Aller à la définition ».
+- La **documentation** s'affiche dans la langue où l'auteur l'a écrite.
+- La documentation de **Typst lui-même** vient de tinymist, en anglais ; elle est signalée
+  « (en anglais) » dans l'interface française.
+
+**8. Markdown, et les autres langages.**
+- **Markdown**, là où cela a du sens :
+  - chemins après `](` et `![` (fichiers du projet, avec icône de type) ;
+  - ancres de titres après `#` dans un lien ;
+  - même fenêtre et même clavier.
+
+  Pas d'aide de signature.
+- **Fichiers de code** (§4.28) : **aucune** complétion. Ils restent en lecture d'abord, sans
+  outils d'atelier (FT-5).
+- **Langages fournis par une extension** : par le même point (`completion`, `hover`, et
+  `language-server` en API 1.1, architecture §15.12), avec le même rendu. La provenance affiche
+  le nom de l'extension.
+
+**Réglages** (Préférences › Éditeur) :
+
+| Réglage | Défaut |
+|---|---|
+| « Proposer des suggestions en tapant » | activé ; désactivé, Ctrl+Espace reste |
+| « Aide sur les arguments » | activée |
+| « Afficher le nom des arguments » | désactivé |
 
 ## 5. Écrans et parcours
 
@@ -1221,7 +1848,13 @@ exporter**. Chaque parcours a son entrée, ses étapes, ses messages et sa sorti
 - **Accueil** : `StatusPage` plein écran.
   - Titre « Bienvenue dans Inkwell ».
   - « Écrivez seul ou à plusieurs, sans compte et sans serveur. »
-  - **Votre nom** (obligatoire, 40 caractères au plus).
+  - **Votre nom** (obligatoire, 1 à 40 caractères ; espaces de bord retirés).
+    - Vide : « Commencer » reste actif. Le clic affiche sous le champ « Donnez un nom : les
+      autres personnes le verront. », avec `aria-invalid` (3.3.1), et le focus revient au
+      champ.
+    - Trop long : la saisie s'arrête à 40 caractères, et un compteur « 40 / 40 » s'affiche.
+    - **Abandon** (fenêtre fermée) : rien n'est gardé ; l'accueil revient au lancement
+      suivant.
   - **Votre couleur** : 8 pastilles en groupe radio, chacune nommée ; le créneau libre est
     proposé (C-PERSON-2).
   - « Commencer ».
@@ -1232,17 +1865,24 @@ exporter**. Chaque parcours a son entrée, ses étapes, ses messages et sa sorti
 
 ### 5.2 Projets
 
-- **Écran Projets** (menu › Projets…, Ctrl+O) :
-  - projets récents en liste encadrée (nom, dernière modification relative, personnes) ;
-  - « Nouveau projet » (suggéré) ;
-  - « Ouvrir un dossier… » ;
-  - « Rejoindre avec une invitation ».
-- **Nouveau projet** (dialogue `small`) :
-  - nom ;
-  - modèle (Document, Rapport, Lettre, Diapositives, Notes Markdown) ;
-  - le chemin s'affiche en `--text-small` ;
-  - « Créer ».
-- **Fermer un projet** : rien à confirmer. On revient à l'écran Projets.
+- **Écran Projets** (menu › Projets…, Ctrl+O). En tête, un sélecteur de vue **Projets ·
+  Modèles** (§4.5) : la gestion des modèles vit ici (§5.19).
+  - Vue **Projets** :
+    - projets récents en liste encadrée (nom, dernière modification relative, personnes) ;
+    - « Nouveau projet » (suggéré) ;
+    - « Ouvrir un dossier… » ;
+    - « Rejoindre avec une invitation ».
+- **Nouveau projet** (dialogue `medium`) :
+  - **Vide par défaut.** Inkwell ne fournit **aucun** modèle (N27). Les choix sont :
+    - **Nom** ;
+    - **Format du fichier principal** : « Typst » (documents, diapositives) ou « Markdown »
+      (notes) ;
+    - une section **« Partir d'un de mes modèles »**, qui n'apparaît que si la personne en a, ou
+      si son équipe en partage. C'est la galerie, §5.19.
+  - Le chemin du dossier s'affiche en `--text-small`. « Créer ».
+- **Fermer un projet** : rien à confirmer ; retour à l'écran Projets.
+- Le **projet d'exemple** du premier lancement (§5.1) n'est pas un modèle : c'est un projet
+  ordinaire, qu'on peut supprimer.
 
 ### 5.3 Partager (inviter)
 
@@ -1315,8 +1955,9 @@ Le Go fournit déjà tout cela (`internal/app/invites.go`).
   - Ctrl+S : un point dans l'onglet et dans le titre, « Non enregistré » dans la barre d'état.
 
   Fermer ne pose jamais de question.
-- **Modifications hors d'Inkwell :** toast « 3 lignes intégrées depuis le disque · Voir ·
-  Annuler ». En mode « Demander » : bandeau-question (§5.16).
+- **Modifications hors d'Inkwell :** toast « 3 lignes intégrées depuis le disque · Annuler ».
+  Les lignes intégrées restent teintées 12s, ce qui remplace « Voir ». L'annulation durable est
+  Ctrl+Z (TO-1). En mode « Demander » : bandeau-question (§5.16).
 - **Zoom du texte** (50–300 %) : Ctrl+= / - / 0, et l'indicateur dans la barre d'état.
 - **Rechercher :** Ctrl+F et Ctrl+H dans le fichier (barre au-dessus de l'éditeur) ;
   Ctrl+Maj+F dans le projet (onglet Rechercher du tiroir). Le module existe mais n'est pas
@@ -1359,7 +2000,8 @@ Le Go fournit déjà tout cela (`internal/app/invites.go`).
   - Typst, ou Markdown en mise en page Typst : PDF ;
   - Markdown en mise en page CSS : HTML autonome (B8) ;
   - toujours possible : PDF de toutes les pages, ou de la page courante.
-- **Résultat :** toast « PDF enregistré · Ouvrir · Afficher dans le dossier ». Le chemin
+- **Résultat :** toast « PDF enregistré · Ouvrir ». « Afficher le dernier export dans le dossier » est dans le menu
+  Document. Le chemin
   s'affiche dans l'infobulle, **pas dans la phrase**. Écart actuel :
   `fr.json:450` (« PDF enregistré : {path} »).
 - **Erreurs :**
@@ -1375,12 +2017,13 @@ Le Go fournit déjà tout cela (`internal/app/invites.go`).
 
 | Groupe | Réglages | Portée |
 |---|---|---|
-| **Apparence** | Thème : Système, Clair, Sombre ; taille du texte ; ligatures de code | cet ordinateur |
+| **Apparence** | **Thème** : Adwaita, puis les thèmes installés, avec vignette, refus expliqué et « Revenir au thème par défaut » (§2.10) ; **Variante** : Système, Clair, Sombre ; taille du texte ; ligatures de code | cet ordinateur |
 | **Enregistrement** | Automatique, Avec Ctrl+S ; délai ; modifications hors d'Inkwell : Intégrer, Demander | ce projet |
+| **Éditeur** | « Proposer des suggestions en tapant », « Aide sur les arguments », « Afficher le nom des arguments » (§4.37) ; retour à la ligne | cet ordinateur |
 | **Moi** | nom, couleur souhaitée, empreinte ; « Me rendre invisible » | cet ordinateur |
 | **Projet** (admin) | suppression des fichiers : sur accord d'un admin, librement | ce projet, signé |
-| **Avancé** | Détails techniques ; langue de l'interface : Système, Français, English | cet ordinateur |
-| **Extensions** (page à part) | installer, activer, autorisations, mettre à jour, retirer (§4.29) | cet ordinateur |
+| **Avancé** | Détails techniques ; langue de l'interface : Système, Français, English (chaque nom de langue porte son propre `lang`, WCAG 3.1.2) ; Mode développeur (§4.35) | cet ordinateur |
+| **Extensions** (page à part) | extensions de ce projet, les miennes, les intégrées ; installer, activer, autorisations, raccourcis et conflits, mettre à jour, retirer, effacer les données ; redémarrer sans extensions (§4.29 à §4.33) | cet ordinateur ; extensions de projet : par projet |
 
 Chaque réglage s'applique tout de suite. Aujourd'hui, seuls les réglages d'enregistrement
 existent (G-42).
@@ -1465,6 +2108,127 @@ d'état).
 
 ---
 
+### 5.19 Modèles de projet (N27)
+
+**Principe :**
+- **Ce sont les personnes qui créent les modèles.** Inkwell n'en fournit aucun.
+- **Un modèle est un projet**, montré clairement, pour qu'on comprenne ce qu'il est et ce qu'il
+  fait.
+- On réutilise les conventions existantes au lieu d'en inventer.
+
+**Format : celui de Typst, et rien de plus** [S20].
+- Un modèle est un **dossier de projet** qui contient un `typst.toml`, avec :
+  - la section `[template]` de Typst : `path` (le contenu de départ), `entrypoint` (le fichier
+    principal) et `thumbnail` (la vignette, PNG ou WebP, plus grand côté ≥ 1080px) ;
+  - la section `[package]` (nom, version, description).
+
+  C'est le format des modèles de Typst Universe, et `typst init` sait déjà l'employer.
+- Ce qui est propre à Inkwell va sous `[tool.inkwell]`, la section réservée aux outils par le
+  manifeste de Typst :
+  - le type (« diapositives », « document officiel », « rapport », « lettre », « notes ») ;
+  - la description en fr et en en, et les étiquettes ;
+  - les polices requises ;
+  - la charte utilisée ;
+  - le format (`typst`, ou `markdown` + style CSS).
+- **Diapositives** : le modèle importe un paquet de diapositives fourni, **Touying** (épinglé,
+  `.typstdeps/`, comme en T11 C4). Polylux reste possible, si le projet le fournit.
+- **Markdown + CSS** : un modèle de notes est un `.md` de départ, avec un style `.css` (assaini,
+  B8) ou une mise en page Typst (`cmarker`). C'est l'équivalent des « formats personnalisés » de
+  Quarto, qui regroupent gabarit, style et métadonnées [S21] ; on n'adopte pas Quarto.
+
+**Charte d'entreprise, partagée par plusieurs modèles.**
+- Une **charte** est un **paquet Typst local** (`@local/charte-acme:1.0.0`, copié dans
+  `.typstdeps/`) : couleurs, polices, logo, et fonctions (`#let charte = (...)`).
+- Un modèle « Diapositives ACME » et un modèle « Document officiel ACME » **importent la même
+  charte**. La charte est déclarée dans `[tool.inkwell]`, et la carte du modèle l'affiche.
+- **Créer une charte** : dans l'assistant d'enregistrement (ci-dessous), si le projet définit
+  une charte, l'étape 2 propose « Enregistrer aussi la charte « ACME » séparément ». Les autres
+  modèles peuvent alors l'importer.
+
+**Le projet suit-il son modèle ?**
+- **Le contenu de départ est copié** à la création, comme `typst init` : modifier le modèle ne
+  touche jamais un projet existant. C'est simple et prévisible.
+- **La charte est une dépendance versionnée** : le projet importe une version précise. Quand une
+  version plus récente de la charte est disponible (chez soi, ou partagée par l'équipe), un
+  bandeau d'information s'affiche dans le projet : « La charte ACME a une nouvelle version
+  (1.1). · Voir les changements · Mettre à jour ».
+  - Mettre à jour change l'import en **une** modification, annulable.
+  - Rien ne se met à jour tout seul.
+- La charte et les paquets sont **copiés dans le projet** (`.typstdeps/`). Le projet se compile
+  donc chez chaque personne, même sans le modèle, et hors ligne (invariant « jamais de
+  téléchargement »).
+
+**Où vivent les modèles :**
+
+| Groupe dans la galerie | Où | Qui le voit |
+|---|---|---|
+| **Mes modèles** | un dossier personnel de cet ordinateur (`Documents/Inkwell/Modèles/`) | moi |
+| **Modèles de l'équipe** | un **projet de modèles** partagé comme tout projet (invitation, rôles) ; ses sous-dossiers sont des modèles | les membres de ce projet |
+
+Un admin de l'équipe gère les modèles partagés ; un écrivain peut en proposer.
+
+**Galerie, dans Nouveau projet** (section « Partir d'un de mes modèles ») :
+- **Cartes**, en `listbox` APG à deux dimensions, flèches, Entrée. Chaque carte montre :
+  - la **vignette** (nom accessible « Aperçu de la première page de Rapport ACME ») ;
+  - le **titre** ;
+  - une **phrase** en clair (« Rapport mensuel aux couleurs d'ACME, avec page de garde et
+    sommaire. ») ;
+  - **Ce que vous obtenez** :
+    - le type (Diapositives, Document officiel…) ;
+    - la charte (pastilles de couleur, nom) ;
+    - les polices requises, chacune « fournie » ou « **manquante** » (icône `warn` + texte) ;
+  - les **étiquettes** ;
+  - la provenance : « Mes modèles » ou « Équipe ACME ».
+- **Filtres** :
+  - type, en groupe de bascules ;
+  - recherche dans les titres, les descriptions et les étiquettes.
+- **Détail** de la carte choisie : grand **aperçu d'une page d'exemple** (jusqu'à 3 pages, avec
+  flèches), la description complète, puis « **Utiliser ce modèle** ».
+- **Écran vide** (§4.20), quand on n'a encore aucun modèle : « Vous n'avez pas encore de modèle.
+  Préparez un projet comme vous l'aimez (charte, page de garde, styles), puis choisissez
+  **Projet › Enregistrer comme modèle…**. Il apparaîtra ici. » Avec l'action « Comment faire »
+  (Aide).
+
+**Enregistrer ce projet comme modèle** : menu Projet › « Enregistrer comme modèle… », un
+dialogue `medium` en **trois étapes**. Chaque étape a « Précédent » et « Suivant ».
+1. **Ce que c'est** :
+   - nom (obligatoire) ;
+   - phrase de description (obligatoire, 160 caractères au plus, avec un exemple en texte
+     indicatif) ;
+   - type (groupe radio) ;
+   - étiquettes.
+2. **Ce qui est inclus** :
+   - la liste des fichiers du projet, tous cochés par défaut ;
+   - « Remplacer le texte par un texte d'exemple » (décoché) ;
+   - la charte détectée (« Ce modèle utilise la charte ACME 1.0 : elle sera liée, pas
+     recopiée »), et « Enregistrer aussi la charte séparément » ;
+   - les polices requises, détectées, avec leur statut.
+3. **Vignette et emplacement** :
+   - la vignette est **générée automatiquement** depuis la première page de l'aperçu (PNG,
+     plus grand côté 1080px) ; « Choisir une autre page » ;
+   - l'emplacement : « Mes modèles » (par défaut) ou « Équipe ACME » (si l'on peut écrire dans
+     le projet de modèles) ;
+   - « Enregistrer ».
+
+   Un toast suit : « Modèle « Rapport ACME » enregistré · Voir ».
+
+**Gérer les modèles : écran Projets › vue Modèles.** C'est la même liste que la galerie, avec
+un menu par carte (aussi en menu contextuel) :
+
+| Action | Comportement |
+|---|---|
+| **Modifier** | ouvre le modèle comme un projet ; on y travaille normalement ; « Enregistrer la nouvelle version » incrémente la version, et les projets déjà créés ne changent pas |
+| **Renommer** | champ en place (§4.13) |
+| **Dupliquer** | « Copie de Rapport ACME », ouverte en mode Modifier |
+| **Supprimer** | toast « Modèle supprimé · Annuler » ; la corbeille garde le modèle 30 jours. Les projets créés à partir de lui ne sont pas touchés. |
+| **Exporter…** | un fichier `.zip` qui contient le dossier et son `typst.toml` (réutilisable par `typst init`) |
+| **Importer…** | depuis un `.zip` ou un dossier ; le manifeste est vérifié, et un modèle invalide est refusé avec la raison (« Il manque la vignette », « `typst.toml` illisible ») |
+| **Partager avec l'équipe…** | copie le modèle dans le projet de modèles choisi ; si l'on n'y a pas le droit d'écrire, une **demande** part aux admins |
+| **Voir les projets créés avec** | liste des projets locaux qui l'ont utilisé (traçabilité de la charte) |
+
+Toutes ces actions passent aussi par la palette et par le clavier : Suppr, F2, menu
+contextuel par Maj+F10.
+
 ## 6. Contenu et ton
 
 ### 6.1 Voix
@@ -1527,6 +2291,10 @@ Il complète le glossaire.
 | fichiers ouverts | **onglets** / « Fichiers ouverts » | buffers |
 | demande en attente | **demande** | requête |
 | greffon | **extension** | plugin, module, WASI, bac à sable |
+| template | **modèle** | template, gabarit, squelette |
+| identité visuelle partagée | **charte** | thème (réservé à l'apparence d'Inkwell), brand kit |
+| diagnostic | **problème** : erreur, avertissement, conseil | diagnostic, lint, warning |
+| quick fix | **correction rapide** | code action |
 | droit d'une extension | **ce qu'elle peut faire**, **autorisation** | capacité, permission système |
 | fichier de code | « Python », « JavaScript »… · **lecture** / **Modifier** | IDE, LSP, linter |
 
@@ -1558,7 +2326,9 @@ WCAG 2.2 AA. Le relevé critère par critère des 55 critères A et AA est dans
 | A-17 | `forced-colors` : tous les états restent visibles. | — |
 | A-18 | Repères et F6 : panneau de gauche → onglets → barre de mise en forme → texte → aperçu → tiroir → toasts → barre d'état. | 1.3.1, 2.4.1 |
 | A-19 | L'éditeur est nommé (« Texte de main.typ ») ; la présence est annoncée en `log`, sans les curseurs. | 4.1.2 |
-| A-20 | Raccourcis d'une seule touche (B, W en présentation ; lettres dans un arbre) : actifs seulement quand leur composant a le focus. | 2.1.4 |
+| A-20 | Raccourcis d'une seule touche (B, W, L en présentation, `present/keys.ts:61-69` ; lettres dans un arbre ou une liste) : actifs seulement quand leur composant a le focus. | 2.1.4 |
+| A-21 | Tout ce qu'une extension affiche est rendu par l'hôte en composants Adwaita (§4.31) et suit ces exigences ; une vue libre (`ui.canvas`) est un cadre nommé, et son contenu interne est de la responsabilité de l'extension, signalé comme tel. | 4.1.2, 1.4.3 |
+| A-22 | Un thème ne peut pas faire baisser un contraste sous les seuils (TH-D2). | 1.4.3, 1.4.11 |
 
 ---
 
@@ -1593,7 +2363,11 @@ raccourcis. `Ctrl` vaut `Cmd` sur macOS.
 | Aller au fichier | Ctrl+P | à faire |
 | Aller à la ligne | Ctrl+G | à faire |
 | Sommaire, filtrer | Ctrl+Maj+O | à faire (B10) |
-| Problème suivant, précédent | F8 / Maj+F8 | à faire |
+| Problème suivant, précédent | F8 / Maj+F8 (convention VS Code ; F8 est libre) | à faire |
+| Corrections rapides | Ctrl+. | à faire |
+| Suggestions | Ctrl+Espace | à faire (N29) |
+| Aide sur la fonction (signature ou carte) | Ctrl+Maj+Espace | à faire |
+| Aller à la définition | F12 | à faire (libre dans le registre) |
 | Panneau de gauche | F9 | à faire |
 | Historique | Ctrl+Maj+H | à faire |
 | Aperçu | Ctrl+Maj+Entrée | à faire (*à confirmer*) |
@@ -1641,6 +2415,7 @@ départager avant le code.
 | `task` | Tâches |
 | `at` | personne citée |
 | `folder` | Fichiers |
+| `puzzle` | Extensions, attribution d'une extension |
 
 Toute nouvelle icône est ajoutée ici.
 
@@ -1670,35 +2445,61 @@ Toute nouvelle icône est ajoutée ici.
 | une question à la fermeture | SAV-03 | rien : tout est gardé |
 | le réseau qui ralentit la frappe | PERF-1 | l'écho local d'abord |
 | du jargon (pair, commit, conflit, fusion, CRDT, hash) | P5 | le glossaire |
+| une extension qui s'épingle, se met dans une zone protégée ou imite un dialogue d'accord | §4.30, §4.33 | la personne épingle ; zones protégées ; bande d'attribution |
+| un raccourci d'extension qui en prend un du cœur en silence | ND-3 | conflit montré, la personne tranche |
+| un thème appliqué à moitié, ou qui affaiblit le contraste élevé | TH-D2 | refus complet, avec la raison |
+| une extension de projet qui agit sans le geste de la personne | PP-2 | sur commande seulement |
+| une erreur de diagramme dans un toast | §4.34 | en ligne, sous le bloc |
+| un mode développeur discret | §4.35 | une pastille rouge permanente |
 
 ---
 
 ## 10. Preuves
 
-Une règle sans assertion n'est pas finie. Traçabilité règle → assertion :
+Une règle sans assertion n'est pas finie.
+- **Existant** : le fichier existe aujourd'hui, et la ligne citée le prouve.
+- **À écrire** : c'est un test planifié. Son nom est réservé ; il n'est pas une preuve tant
+  qu'il n'existe pas.
 
-| Règles | Assertion | Où |
-|---|---|---|
-| T-1 (CSS) | stylelint : pas de couleur, d'ombre, de rayon ni de durée bruts dans `*.svelte` ni dans `theme/adwaita.css` hors `var()` | `mise run lint` (à ajouter) |
-| T-1 (TS) | test Vitest qui analyse `editor/*.ts` : aucune couleur `#…`, `rgb(` ni `px` de police dans les objets de thème CodeMirror | `editor/theme.lint.test.ts` (à ajouter) |
-| T-5, §2.2, C-SEL, C-GUT | parité `tokens.json` ↔ `tokens.css` ; chaque paire à `min`, composée sur `over` ; chaque paire `forbidden` échoue **et** son motif n'apparaît pas dans le code | `theme/tokens.test.ts` (à étendre) |
-| T-2 | e2e **sous WebKitGTK** (application réelle) : `getComputedStyle(body).backgroundColor` vaut `--window-bg` en clair, puis en sombre (`data-theme`) | `frontend/e2e/theme.spec.ts` |
-| A-1, A-2, A-17 | axe-core en clair, en sombre et sous `forced-colors`, sur chaque écran de §5, **avec les états concurrents** (bandeau, toast et popover ouverts ensemble) | `e2e/a11y.spec.ts` |
-| L-8, L-8b, L-8c, L-9, TO-1 | tests unitaires de la file de `BannerHost` et de `ToastHost` : priorités, une question avant un état, « +N », remplacement, suspension de la minuterie, annulation durable rejouée après expiration | `ui/messages.test.ts` |
-| §4.11, §4.12, A-10 | test DOM : les régions `status` et `alert` existent avant le premier message et reçoivent son texte ensuite ; **plus** une passe Orca manuelle par vague | test + `ux-walkthrough` |
-| A-4, F-1, SB-1, §4.2, §4.5, §4.22, §4.25 | tests de composants avec `userEvent.keyboard`, par motif APG : touches, focus, `aria-*` | `*.test.ts` |
-| A-5, TT-1 | e2e : focaliser chaque bouton de barre et attendre l'infobulle ; vérifier que son rectangle ne coupe ni celui de l'élément ni son anneau ; même vérification pour les toasts et les bandeaux | `e2e/focus.spec.ts` |
-| A-7, §2.5 | e2e : chaque élément focalisable (boutons, champs, onglets, lignes, poignées) ≥ 24px ; ceux des barres ≥ 34px de zone active ; ceux des dialogues ≥ 44px | `e2e/targets.spec.ts` |
-| A-11, L-5, §3.4 | captures à 360×480, 800×600, 1280×800 à 200 %, et 320px CSS sans défilement horizontal de la fenêtre | e2e |
-| T-11, A-12 | e2e en `reducedMotion: "reduce"` : `document.getAnimations()` ne contient que des fondus ≤ 150ms | e2e |
-| K-4, §6.3, §6.4 | parité fr/en ; espaces insécables ; « … » et non « ... » ; mots interdits absents de `fr.json` | `i18n.test.ts` (à étendre) |
-| K-6 | test du registre : pas de doublon de raccourci par contexte | `commands.test.ts` |
-| PERF-1, §5.17 | benchmark de latence de frappe sur un document de 512 Ki et de 2 Mi caractères ; e2e netsim WAN : frappe locale < 50ms pendant une synchronisation lente | `e2e/perf.spec.ts`, netsim |
-| §5 parcours | `ux-walkthrough` : cinq tâches chronométrées, personas | `docs/ux/walkthrough-*.md` |
+`coverage.md` ne met l'état S que sur une preuve **existante**.
 
----
+| Règles | Assertion | Fichier | État |
+|---|---|---|---|
+| syntaxe ≥ 4,5:1 (§2.2) | 9 couleurs `--hl-*` en clair et en sombre | `frontend/src/theme/tokens.test.ts:44-50` | existant |
+| A-1, A-2 (coque) | axe-core en clair et en sombre sur la fenêtre | `frontend/e2e/shell.spec.ts:253` (UI-06) | existant (coque seulement) |
+| M-1, §4.2 (menu principal) | flèches et Échap dans le menu | `frontend/e2e/shell.spec.ts:24` (UI-03) | existant ; le retour du focus à l'éditeur y est **attendu**, à changer avec G-25 |
+| UI-07 | encodage masqué en UTF-8 + LF | `frontend/e2e/shell.spec.ts:151` | existant |
+| parité fr/en | les clés des deux langues | `frontend/src/ui/i18n.test.ts`, `frontend/src/i18n/i18n.test.ts` | existant (parité seulement) |
+| 2.1.2 | `showModal()` dans les sept dialogues | `ui/ShareDialog.svelte:12`, `ui/AboutDialog.svelte:21`, `ui/prefs/Preferences.svelte:21`, `ui/people/PeopleDialog.svelte:21`, `ui/history/ApplyDialog.svelte:19`, `ui/sheet/PasteDialog.svelte:13`, `ui/history/DiffView.svelte:47` | existant (mécanisme natif ; sans test de piège) |
+| 2.2.2, T-11 (en partie) | animations infinies coupées sous `reduce` | `ui/shell/HeaderBar.svelte:293`, `preview/Preview.svelte:306`, `ui/sheet/Grid.svelte:1025` | existant (CSS) ; test à écrire |
+| T-1 (CSS) | stylelint : pas de valeur brute dans `*.svelte` | `mise run lint` | **à écrire** |
+| T-1 (TS) | pas de couleur ni d'ombre brute dans les thèmes CodeMirror (`editor/*.ts`) | `editor/theme.lint.test.ts` | **à écrire** |
+| T-5, §2.2, C-SEL, C-GUT | parité `tokens.json` ↔ `tokens.css` ; paires non interdites ≥ `min` dans les quatre modes ; paires interdites absentes du code | `theme/tokens.test.ts` (extension) | **à écrire** |
+| TH-D1 à TH-D3 | validation d'un thème : refus complet sur une paire en échec (cas : bon en clair, mauvais en sombre ; HC affaibli ; ΔE trop faible) ; ≤ 20ms | `theme/contract.test.ts` | **à écrire** |
+| T-2 | sous WebKitGTK, couleur calculée en clair puis en sombre | `frontend/e2e/theme.spec.ts` | **à écrire** |
+| A-1, A-2, A-17 | axe-core sur chaque écran de §5, en sombre et sous `forced-colors`, avec bandeau, toast et popover ouverts ensemble | `frontend/e2e/a11y.spec.ts` | **à écrire** (étend UI-06) |
+| L-8 à L-9, TO-1 | file de `BannerHost` et `ToastHost` : état critique avant question, question avant état, « +1 question », remplacement, pause, annulation durable après expiration | `ui/messages.test.ts` | **à écrire** |
+| §4.11, A-10 | régions présentes avant le premier message ; passe Orca à chaque vague | `ui/messages.test.ts` + `ux-walkthrough` | **à écrire** |
+| A-4, F-1, SB-1, §4.2, §4.5, §4.22, §4.25 | motifs APG au clavier (`userEvent.keyboard`) | `*.test.ts` par composant | **à écrire** |
+| §4 « Retour du focus » | retour au déclencheur, puis les quatre replis | `ui/focus.test.ts` | **à écrire** |
+| A-5, TT-1 | l'infobulle, le toast ou le bandeau ne recouvrent ni l'élément focalisé ni son anneau | `frontend/e2e/focus.spec.ts` | **à écrire** |
+| A-7, §2.5 | tout élément focalisable ≥ 24px ; zones des barres ≥ 34px ; dialogues ≥ 44px | `frontend/e2e/targets.spec.ts` | **à écrire** |
+| A-11, L-5 | 320px CSS sans défilement horizontal, dans les quatre formats ; captures 360×480 et 1280×800 à 200 % | `frontend/e2e/reflow.spec.ts` | **à écrire** |
+| T-11, A-12 | `reducedMotion: "reduce"` : seuls des fondus ≤ 150ms en cours | `frontend/e2e/motion.spec.ts` | **à écrire** |
+| §6.3, §6.4, K-4 | espaces insécables ; « … » ; mots interdits absents | `ui/i18n.test.ts` (extension) | **à écrire** |
+| K-6, ND-3 | aucun doublon de raccourci ; conflit d'extension signalé, raccourci inactif | `commands.test.ts` | **à écrire** |
+| G-0, §4.16 | clic et Entrée ouvrent le fichier, onglet actif, focus dans l'éditeur | `frontend/e2e/files.spec.ts` | **à écrire** |
+| PERF-1, §5.17 | latence de frappe à 512 Ki et 2 Mi caractères ; frappe locale < 50ms pendant une synchronisation lente (netsim) | `frontend/e2e/perf.spec.ts` | **à écrire** (`e2e/netsim.spec.ts` existe, sans mesure de frappe) |
+| §4.29 à §4.35 | consentement, états du gestionnaire, épinglage par la personne seulement, attribution par point, mode sans extensions, repère du mode développeur, repli d'une extension de projet, erreur de diagramme en ligne ; densité d'attribution à 360px | `frontend/e2e/extensions.spec.ts` + tests d'API de l'architecture (`EXT-ND1` à `ND8`) | **à écrire** |
+| §5 parcours | cinq tâches chronométrées, personas | `docs/ux/walkthrough-*.md` | existant pour les personnes et la présentation (2026-10-26) ; à refaire |
 
 ## 11. Décisions à confirmer par l'utilisatrice
+
+**Rien de ce tableau n'est ratifié.** Les amendements de `ux-principles.md` (règle 3 : palette ;
+règle 9 : cibles) et du glossaire (« variante » au lieu de « brouillon ») restent **en attente**.
+Ces documents ne sont pas modifiés tant que l'utilisatrice n'a pas tranché (Codex R2-m2). Les
+constats C12, F5 et F8 de la revue n°1 sont donc fermés **en spécification**, avec une décision
+en attente.
 
 Les deux revues convergent sur chacune de ces recommandations.
 
@@ -1715,6 +2516,11 @@ Les deux revues convergent sur chacune de ces recommandations.
 | Q9 | Amendements de `ux-principles.md` et du glossaire | règle 9 (cibles, §2.5) ; règle 3 (palette, Q1) ; « variante » au lieu de « brouillon » (§4.22). |
 | Q10 | Imprimer | Par l'export PDF et la boîte d'impression du système, sans raccourci (§5.12). |
 | Q11 | Fichiers de code | Ouverts **en lecture**, « Modifier » sur demande, mémorisé par fichier ; coloration avec les 10 jetons existants ; `language-data` paresseux, avec une liste blanche d'environ 25 langages (§4.28). |
+| Q13 | Thèmes (N22) | Thème et variante choisis séparément dans Apparence ; refus complet d'un thème qui échoue dans un mode ; aucun thème imposé par un projet (§2.10). |
+| Q14 | Extensions de projet (N23) | Bandeau de provenance non bloquant ; mode restreint pour ce qui dépasse le niveau « projet » ; « Désactiver pour moi » (§4.32). |
+| Q15 | Développement (N25) | Mode développeur local, signalé par une pastille rouge permanente ; Inspecteur dans le tiroir (§4.35). |
+| Q16 | Mises en page Markdown fournies (T11 B8 : « Note », « Rapport »…) contre N27 (« aucun modèle fourni ») | Les mises en page B8 restent des **mises en page** d'un fichier `.md` (§5.9), pas des modèles de projet. Garder les styles « Adwaita » et « Lecture » comme valeurs par défaut lisibles ; retirer « Rapport » et « Lettre » de B8 si l'utilisatrice veut aucun contenu fourni. |
+| Q17 | Compte des problèmes dans la barre d'état | Bouton partagé : un clic va au premier problème, ⌄ ouvre la liste (§4.36). |
 | Q12 | Extensions | Mot « extension » ; gestion dans Préférences › Extensions ; consentement en phrases simples, révocable ; jamais d'installation venue d'une autre personne (§4.29). |
 
 ---
@@ -1764,4 +2570,29 @@ documentation en ligne.
   sémantiques de tinymist : https://github.com/Myriad-Dreamin/tinymist
 - [S15] GNOME Extensions (application et site) : https://apps.gnome.org/Extensions/ ;
   https://extensions.gnome.org/
+- [S16] Firefox, bouton Extensions unifié (version 109) :
+  https://support.mozilla.org/kb/extensions-button
+- [S17] VS Code, *Workspace Trust* (mode restreint) :
+  https://code.visualstudio.com/docs/editing/workspaces/workspace-trust
+- [S19] tinymist (diagnostics, conseils, actions de code par le LSP) :
+  https://github.com/Myriad-Dreamin/tinymist ; LSP 3.17, `textDocument/codeAction`,
+  `publishDiagnostics` :
+  https://microsoft.github.io/language-server-protocol/specifications/lsp/3.17/specification/
+- [S20] Manifeste des paquets et modèles Typst (`[package]`, `[template]` : `path`,
+  `entrypoint`, `thumbnail` ; `[tool]`) : https://github.com/typst/packages/blob/main/docs/manifest.md ;
+  `typst init` : https://typst.app/docs/reference/ (CLI) ; Touying : https://touying-typ.github.io/ ;
+  Polylux : https://github.com/polylux-typ/polylux
+- [S21] Quarto, formats personnalisés et modèles de démarrage :
+  https://quarto.org/docs/extensions/formats.html ;
+  https://quarto.org/docs/extensions/starter-templates.html ; modèles de Pandoc :
+  https://pandoc.org/MANUAL.html#templates
+- [S22] VS Code, raccourcis par défaut (F8 « Go to Next Problem », Ctrl+. « Quick Fix ») :
+  https://code.visualstudio.com/docs/getstarted/keybindings
+- [S23] CodeMirror 6 : `@codemirror/autocomplete` (complétion, `info`, Ctrl+Espace) :
+  https://codemirror.net/docs/ref/#autocomplete ; `hoverTooltip` :
+  https://codemirror.net/docs/ref/#view.hoverTooltip
+- [S24] tidy (documentation Typst, commentaires `///`) : https://github.com/Mc-Zen/tidy ;
+  documentation de tinymist : https://myriad-dreamin.github.io/tinymist/
+- [S18] Architecture d'Inkwell, §15 (points d'extension, capacités, thèmes, greffons de projet,
+  noyau fermé, surfaces, diagrammes, outils) : [`../architecture/spec.md`](../architecture/spec.md)
 - [RFC 2119] https://www.rfc-editor.org/rfc/rfc2119 · [RFC 8174] https://www.rfc-editor.org/rfc/rfc8174
