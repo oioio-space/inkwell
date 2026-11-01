@@ -1222,9 +1222,14 @@ identique à l'original. La personne n'a jamais à se demander quels fichiers so
 | **Dupliquer le projet**… | menu Projet | un **nouveau projet** (HI-7). Intégrer entre deux projets n'existe pas en v1, et on le dit. |
 
 **Variantes isolées** (N46, rév. 7.1) :
-- **La variante sur laquelle je suis est personnelle.** En changer ne modifie que **ma** vue, jamais
-  celle des autres. Plusieurs personnes peuvent travailler en même temps sur des variantes
-  différentes, et plusieurs peuvent partager la même.
+- **Les variantes ne sont pas privées.** Tout le monde dans le projet **voit toutes les
+  variantes**, et chacun peut **ouvrir n'importe laquelle** et y écrire **avec les autres**.
+  Plusieurs personnes travaillent en même temps sur des variantes différentes, et plusieurs sur la
+  même.
+- **La liste des variantes**, dans le sélecteur de l'en-tête et dans la frise, est visible par tous.
+  Elle montre **qui est sur chacune** en ce moment (avatars, et « Paul, Léa »).
+- **Seul le choix de la variante courante est personnel** : changer de variante ne modifie que
+  **ma** vue, jamais celle des autres.
 - **On voit toujours où l'on est** :
   - le sélecteur de l'en-tête dit « **Variante : Version courte** », ou « Variante : Original » ;
   - la frise met en avant la voie de la variante courante, « Vous êtes ici ».

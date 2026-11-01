@@ -466,3 +466,7 @@ ci-dessus) :
   - aucune notification par modification : seules les propositions d'intégrer vers ma variante
     arrivent ;
   - `coverage.md` a sa ligne.
+- **Précision N46** (demande de l'utilisatrice) : les variantes **ne sont pas privées**.
+  - Tout le monde voit toutes les variantes, avec qui est sur chacune.
+  - Chacun peut ouvrir n'importe quelle variante et y écrire avec les autres.
+  - Seul le choix de la variante courante est personnel (§4.22).
