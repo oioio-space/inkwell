@@ -2781,6 +2781,20 @@ Projet, et non une nouvelle fenêtre), aussi par la palette et par le lien des m
   - boutons de 44px ;
   - fr et en.
 
+**Au moment de partager, et d'exporter en un seul fichier** (rév. 7.1) :
+- Inkwell repère les polices que les documents du projet emploient, qui viennent de **cet
+  ordinateur** et ne sont **pas** dans le projet.
+- Il les propose **dans le parcours en cours**, par **une section** et non par un nouveau dialogue :
+  « **Ces polices viennent de votre ordinateur : les ajouter au projet pour que tout le monde voie
+  la même chose ?** ».
+  - Chaque police est listée, avec son échantillon, et **cochée d'avance**.
+  - **Une seule confirmation** : « Ajouter au projet ».
+  - On peut **passer**, sans rien ajouter.
+- Elle apparaît dans « Écrire à plusieurs » (§5.3) et dans « Exporter… », pour la copie lisible et
+  l'archive complète (§5.12).
+- À Rejoindre (§5.4), rien de tel : la personne qui rejoint reçoit les polices du projet
+  automatiquement.
+
 **Police à risque, au point d'écriture** (gravité « avertissement », §4.36). Le message est **local**
 et **calme**, le soulignement en pointillé, jamais rouge.
 - Police **venue de cet ordinateur**, absente du projet : « **Cette police vient de votre
@@ -2860,6 +2874,10 @@ Dialogue « Écrire à plusieurs » :
    Protéger » (§4.43 point 2), **non cochée**. Si la personne choisit de protéger et n'a pas
    encore de phrase de secours, « Mettre mon secours en lieu sûr » est proposé **après**
    l'invitation, jamais avant.
+   **Polices** (§4.46) : si les documents emploient des polices venues de cet ordinateur et absentes
+   du projet, une section les liste, cochées d'avance : « Ces polices viennent de votre
+   ordinateur : les ajouter au projet pour que tout le monde voie la même chose ? · Ajouter au
+   projet ». On peut la passer.
 2. « Créer une invitation » : le texte de l'invitation, « Copier » (toast), et sa validité en
    clair.
 3. Personnes à proximité, avec leur empreinte en 4 mots et « Inviter » ; l'interrupteur « Me
@@ -2878,7 +2896,7 @@ Le Go fournit déjà tout cela (`internal/app/invites.go`).
 4. Réception, avec sa progression. Le fichier principal s'ouvre dès qu'il est là. Une ligne :
    « Protéger ce projet sur cet ordinateur · Protéger » (§4.43 point 2), **non cochée** ; si la
    personne protège et n'a pas de phrase, le secours est proposé plus tard, jamais pendant la
-   réception.
+   réception. Les **polices du projet** arrivent avec lui, sans rien faire (§4.46).
 5. Toast « Vous avez rejoint « Rapport » ».
 
 | Erreur | Texte | Action |
@@ -2986,7 +3004,8 @@ Le Go fournit déjà tout cela (`internal/app/invites.go`).
 - **Exporter…** propose **deux contenus** et rien de plus (N40, §4.45 : aucun format bureautique) :
   - **PDF** (ou HTML pour un document Markdown en mise en page CSS) : le document mis en page ;
   - **Copie lisible** ou **Archive complète** (avec l'historique), protégées par mot de passe ou
-    non (§4.43).
+    non (§4.43). La même section « Ces polices viennent de votre ordinateur… » apparaît si besoin,
+    cochée d'avance et facultative (§4.46).
 
   L'export de l'historique en dépôt technique n'est **pas** ici (§4.22 point 8). Les préréglages du projet
   (§4.38) sont en tête.

@@ -419,3 +419,8 @@ ci-dessus) :
   « **Installer pour tous mes projets** » en option. Cette installation dépasse le projet, et
   ouvre donc le **consentement habituel** (§4.29).
 - `coverage.md` (lignes N43 et N23) et `inventory.md` (G-102, G-72) sont alignés.
+- **Au partage et à l'export** (rév. 7.1, demande de l'utilisatrice) : les polices venues de cet
+  ordinateur et absentes du projet sont proposées dans le parcours en cours (§5.3 « Écrire à
+  plusieurs », §5.12 « Exporter… »), par une section et non par un dialogue : chaque police cochée
+  d'avance, une confirmation, toujours facultative. À Rejoindre (§5.4), les polices du projet
+  arrivent seules. §4.46 est complété.
