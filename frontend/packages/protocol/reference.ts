@@ -22,9 +22,13 @@ const d = mod(-121665n * pow(121666n, p - 2n));
 // Extended Edwards coordinates avoid modular inversions in the subgroup check.
 type Point = [bigint, bigint, bigint, bigint];
 function add([x, y, z, t]: Point, [u, v, w, q]: Point): Point {
-  const a = mod((y - x) * (v - u)), b = mod((y + x) * (v + u));
-  const c = mod(2n * d * t * q), e = b - a;
-  const f = mod(2n * z * w - c), g = mod(2n * z * w + c), h = b + a;
+  const a = mod((y - x) * (v - u)),
+    b = mod((y + x) * (v + u));
+  const c = mod(2n * d * t * q),
+    e = b - a;
+  const f = mod(2n * z * w - c),
+    g = mod(2n * z * w + c),
+    h = b + a;
   return [mod(e * f), mod(g * h), mod(f * g), mod(e * h)];
 }
 const validKeys = new Set<string>();
