@@ -64,6 +64,20 @@ sans apprendre, et que l'application suit le thème clair ou sombre du système.
    grandes polices.
 7. **Mesuré, pas supposé** : chaque règle a sa preuve (un test, une capture, une revue).
 
+## Révision 6, en bref
+
+- **Raccourcis écrits pour chaque système** :
+  - jamais Ctrl+Alt (c'est AltGr sous Windows) ;
+  - rien de ce que macOS, Windows ou GNOME se réservent ;
+  - Cmd sur Mac, avec ses conventions (⌥⌘F pour remplacer, ⌘P pour imprimer).
+- **Le secours est simple** : une phrase par personne, une fois ; le kit est mis à jour en silence ;
+  on peut récupérer avec la phrase seule.
+- **Relire une proposition** : on choisit morceau par morceau, puis on applique **en une fois**.
+- **L'historique** se parcourt au clavier, et aucun mot de Git n'apparaît. Une variante couvre
+  toujours tout le projet.
+- **161 paires de contraste**, dont le texte secondaire sur les survols, qui a reçu son propre
+  jeton.
+
 ## Les grandes décisions (révision 5)
 
 - **La carte calme** (passe de cohérence, `architecture/coherence.md`). À l'ouverture : Fichiers,

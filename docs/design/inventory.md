@@ -1,4 +1,4 @@
-# Inventaire de l'interface et écarts avec la spécification (N17, révision 5)
+# Inventaire de l'interface et écarts avec la spécification (N17, révision 6)
 
 - **Relevé du 2026-11-01** sur `main` (`3841ff2`), dans `frontend/src` ; les chemins sont
   relatifs à ce dossier, sauf mention contraire.
@@ -201,6 +201,15 @@ Ces fonctions n'existent pas encore. Chaque ligne nomme ce que le code devra mon
 | G-96 | m | Panneau de gauche : la spec rév. 4 prévoyait quatre onglets ; il en faut deux (Fichiers, Sommaire), avec Liens dans les détails et Tâches en filtre | `coherence.md` §6.3 | spec rév. 4 §4.16 (corrigé) ; code : un seul panneau Fichiers (`ui/shell/Sidebar.svelte`) | spec §4.16 |
 | G-97 | m | Aucune entrée bureautique dans le code ; le collage riche n'est pas converti | N40, M05 | aucun gestionnaire de collage HTML dans `frontend/src/editor` | spec §4.45 |
 
+### 2.11 Révision 6 : raccourcis par système, contraste des états, résidus
+
+| # | Grav. | Écart | Norme | Preuve | Correction |
+|---|---|---|---|---|---|
+| G-98 | M | `Mod-Alt-0` (paragraphe) est une combinaison Ctrl+Alt : sous Windows, elle tape un caractère (AltGr) | Microsoft UX Guide « Don't use Ctrl+Alt » [S31] | `editor/format/keymap.ts:22` | le raccourci de titre, une seconde fois, rend paragraphe (§8.2) |
+| G-99 | M | Sous macOS, `Mod-m` (formule) donnerait ⌘M (réduire la fenêtre) et `Mod-e` (code) ⌘E (utiliser la sélection pour chercher) ; le registre traduit `Mod` en Cmd sans table par système | Apple, raccourcis du Mac [S30] ; K-7 | `editor/format/keymap.ts:14`, `:17` ; `ui/toolbar/spec.ts:106`, `:126` | liaisons macOS explicites ⌃⌘E et ⇧⌘M (§8.2) |
+| G-100 | M | Texte secondaire en `--fg-dim` sur survol : raccourcis des menus à 4,22:1 sur un popover sombre | 1.4.3 ; Codex R5-B1 | `theme/adwaita.css` (`.mi .k` en `--fg-dim`, `.mi:hover` en `--hover-bg`) | `--fg-dim-on-state` |
+| G-101 | m | L'icône de l'historique est une branche | N39 (zéro imagerie de Git) | `ui/shell/HeaderBar.svelte:126` (`<Icon name="branch" />`) | `clock` (§8.3) |
+
 ## 3. Corrections, dans l'ordre
 
 L'ordre suit la valeur (parcours cassé et accessibilité d'abord), puis le coût, puis les
@@ -228,7 +237,7 @@ par une passe Orca.
   - G-8, G-9.
 - **Vague 4, clavier :** G-20, G-54, G-25, G-23, G-24, G-51, G-22, G-34, G-33, G-63 (registre).
 - **Vague 5, architecture de l'information et mise en page :**
-  - **G-55** (onglets de fichiers, sélecteur de gauche avec Sommaire, Tâches et Liens) ;
+  - **G-55** (onglets de fichiers ; panneau de gauche à **deux** onglets, Fichiers et Sommaire, avec Tâches en filtre et Liens dans les détails, G-96) ;
   - G-62 ;
   - G-36, G-37 ;
   - G-38 (Rechercher, après Q5).
@@ -252,6 +261,8 @@ par une passe Orca.
   - G-84 (aide à l'écriture, après le branchement du LSP).
 - **Vague 11, écriture, IA, ressources :** G-85 et G-85b avec la vague 1 (contraste) ; G-88
   (écriture) ; G-87 (ressources, avec la vague 8) ; G-86 (IA, après PD-1 et les ADR 0040 et 0041).
+- **Vague 13, rév. 6** : G-100 avec la vague 1 (contraste) ; G-98, G-99 avec le registre (G-63) ;
+  G-101 avec G-89.
 - **Vague 12, cohérence** (MVP de `coherence.md` §5) :
   - G-0a, puis G-0b ;
   - G-93, G-94 ;

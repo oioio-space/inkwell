@@ -260,3 +260,69 @@ pas été relu en ligne pour cette révision. L'architecture (HI-6) s'appuie aus
    - Ce design en fait une fenêtre non modale, pour voir l'effet d'un arrêt à côté du travail.
    - Si l'utilisatrice préfère une page dans la fenêtre principale, la table reste identique.
 4. **Ctrl+; et Ctrl+Espace** : inchangés depuis la rév. 4 (désaccords n°2 et n°3), toujours ouverts.
+
+---
+
+# Révision 6 — revues n°5
+
+Revues : [Fable n°5](reviews/07-fable-r5.md) (ACCEPT : 4 majeurs, 11 mineurs) et
+[Codex n°5](reviews/08-codex-r5.md) (NOT ACCEPTED : R5-B1, R5-M1 à M4, R5-m1). Les contrastes ont été
+recalculés : **161 paires** dans les quatre modes, aucun échec hors des paires interdites.
+
+**Deux défauts réels**, trouvés par les nouvelles paires :
+- le texte secondaire sur un survol (`--fg-dim` à **4,22:1** sur un popover sombre, **4,35:1** sur la
+  barre latérale claire) : `--fg-dim-on-state` et G-100 ;
+- l'anneau de focus intérieur sur une sélection : vérifié à 4,08:1 au moins, donc conforme.
+
+## Codex n°5
+
+| # | Constat | Correction |
+|---|---|---|
+| R5-B1 | Texte secondaire sur `--hover-bg` hors contrat ; le thème `#bbbbbb` passe | 30 paires d'états ajoutées : `--fg-dim` interdit sur survol et sélection, `--fg-dim-on-state` sur 12 fonds, anneau intérieur sur `--hover-bg` et `--selected-bg` ; combinaisons non vérifiables interdites (TH-D2) ; contre-exemple `#bbbbbb` dans §10 ; §4.37 (indices) en `--fg-dim-on-state` |
+| R5-M1 | Secours trop lourd ; phrase seule refusée ; promesses trop absolues | §4.43 réécrit : phrase **une fois par personne** ; « Mettre mon secours en lieu sûr » (écrite, imprimée, ou fichier ; vérification avec complétion et collage) ; kit à un endroit choisi, **réécrit en silence**, avertissement seulement en échec ; **récupération par la phrase seule** (ST-8) avec l'avertissement de fraîcheur ; états précis de ce qui manque ; quand la perte est définitive, dit exactement ; copie lisible durable exclue de la promesse |
+| R5-M2 | Focus et transaction des propositions | §4.41 réécrit : entrer, sortir (Échap, proposition gardée en attente), morceaux focalisables nommés, touches **seulement sur un morceau, jamais dans un champ** ; **choix locaux, puis une seule modification** à « Appliquer » ; Tout accepter laisse les divergences ; choix gardés après recalcul ; un seul morceau = « Accepter et appliquer » |
+| R5-M3 | Historique au clavier ; jargon Git | §4.22 : options en texte seul, focus itinérant (pas `aria-activedescendant`), **barre d'actions** externe, comparaison par **deux sélecteurs**, `aria-valuetext` du curseur, résumés en faits mesurés ; « Exporter l'historique en dépôt Git » **retiré de l'interface d'écriture** (outils du mode développeur) |
+| R5-M4 | Collisions macOS | §8.2 réécrit : **une liaison par système** pour chaque commande (plus de traduction Ctrl→Cmd) ; Remplacer ⌥⌘F, suivant ⌘G, aller à la ligne ⌘L, aller au fichier ⇧⌘O (⌘P = Imprimer), code ⌃⌘E, formule ⇧⌘M, etc. ; table réservée macOS ; G-99 |
+| R5-m1 | Résidus | §4.36 (liste dans Relire), §4.38 (« brouillons » retiré), §4.37 (« étape 2 » retirée), inventaire vague 5, §4.40 (« En cours » retiré) |
+
+## Fable n°5
+
+| # | Constat | Correction |
+|---|---|---|
+| M1 | Raccourcis : Ctrl+Alt (AltGr sous Windows), ⌥⌘H, ⌃Espace | **K-7** : aucune combinaison Ctrl+Alt sur aucun système ; aucun Alt+alphanumérique sous Windows ; ⌥+lettre jamais seul sous macOS. Les sept Ctrl+Alt sont réattribués : Versions par Relire, enregistrer une version Ctrl+Maj+S / ⌥⌘S, IA et caractère spécial sans raccourci par défaut, concentration Ctrl+Maj+D, source → aperçu Ctrl+Maj+J, paragraphe = titre répété. **Trois tables réservées** (Linux, macOS, Windows) tirées de [S2], [S30] et [S31], vérifiées en ligne pour [S30] et [S31] ; test K-6 sur les trois systèmes ; suggestions : ⌥Échap sous macOS. |
+| M2 | Portée des variantes | **une variante est toujours celle du projet** ; repère des fichiers modifiés ; sous-titre « 2 fichiers modifiés ». L'alignement avec HI-6 (variantes par document) reste à faire dans l'architecture (voir plus bas). |
+| M3 | Phrase par personne contre cérémonie par projet ; défaut à Rejoindre | une phrase par personne, une fois ; défaut au moment où le projet devient partagé (§5.3) et à Rejoindre (§5.4), par une ligne et non par un dialogue ; §4.43 est la référence unique |
+| M4 | Résidus de la passe de cohérence | Exporter sans Ctrl+Maj+E (§5.12) ; §6.4 : « Restaurer cette version » et « Revenir au présent » autorisés ; deux entrées « Intégrer », chacune avec son objet ; Q15, Q17 et Q18 mis à jour ; `coverage.md` ligne N28 ; « Préférences › Avancé » devient « Application » |
+| m1 | Chaque flèche recharge le passé | 300ms de calme, ou Entrée ; seul l'arrêt est annoncé |
+| m2 | Trois confirmations pour restaurer | l'aperçu est la confirmation ; plus de dialogue |
+| m3 | Toast de kit ; saisie de la phrase sans aide | kit réécrit en silence ; 24 champs, complétion, collage |
+| m4 | Repères violets proches | voie de variante en `--fg-dim` avec son nom ; version nommée en losange (forme) ; violet réservé à l'IA |
+| m5 | Sélecteur de variante dans l'en-tête | ajouté à l'anatomie du centre (§4.1), dans la zone protégée |
+| m6 | Question « Proposer d'intégrer », touches dans un champ, mot « Git » | ajoutée aux questions de L-8 ; touches inactives dans un champ (§4.41) ; le mot Git n'apparaît plus du tout (choix plus strict que l'exception proposée, pour suivre Codex R5-M3) |
+| m7 | §5.13 | six pages exactes, portée de chaque ligne ; enregistrement et destination de sauvegarde = **cet appareil** |
+| m8 | Quatrième destination | règle écrite : au plus une, « Extensions », seulement si nécessaire |
+| m9 | « Rapport » en §5.9 | retiré ; « Adwaita » et « Lecture » restent |
+| m10 | Icône `branch` | `clock` ; G-101 |
+| m11 | [S28], Time Machine | [S28] cite les entrées 01 et 02 du carnet, vérifiées en ligne. §4.22 dit que la règle d'Inkwell (ajouter, jamais remplacer) **dépasse** Time Machine. |
+
+## Désaccords : positions communes des deux revues, appliquées
+
+1. **Barre de mise en forme fixe** : gardée, puisqu'elle a été validée par l'utilisatrice (T11).
+   Deux textes sont **à corriger, hors de ce dossier**, et ne sont pas modifiés ici :
+   - `architecture/coherence.md` §4 : « la barre de mise en forme se masque » devient « la barre
+     de mise en forme suit le choix de la personne (fixe, repliable par Ctrl+Maj+T) » ;
+   - `ux-principles.md` règle 2 : « La barre de formatage apparaît sur la sélection » devient « La
+     barre de mise en forme est fixe et repliable (choix de l'utilisatrice, T11) ».
+2. **Ressources** : une fenêtre auxiliaire non modale, ouverte sur geste ; **dans la fenêtre sous
+   900px** ; une seule à la fois ; « Voir » la met au premier plan (§4.40).
+3. **Ctrl+Espace** : sous Linux seulement, en attendant l'e2e WebKitGTK avec IBus actif (repli
+   Alt+/) ; **⌥Échap** sous macOS ; Ctrl+Espace sous Windows, avec le repli Ctrl+J. Ctrl+; n'est pris
+   sur aucun système. Le caractère spécial n'a plus de raccourci par défaut, ce qui clôt le
+   désaccord n°2 de la rév. 4.
+
+## À aligner dans l'architecture (hors de ce dossier)
+
+- **HI-6** : les variantes sont tenues par document ; l'interface présente une **variante du
+  projet**, c'est-à-dire l'ensemble de ces variantes, créé et intégré en une fois.
+- **HI-5** : l'export en dépôt Git sort de l'interface d'écriture (outils du mode développeur ou
+  extension).
