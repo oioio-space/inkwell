@@ -269,7 +269,7 @@ func (v *Service) deliver(peer transport.PeerID, h Hash, m Message) {
 	w := v.waiting[reqKey{peer, h}]
 	v.mu.Unlock()
 	if w == nil {
-		v.log.Debug("blob: unsolicited answer", "peer", peer, "hash", h.short())
+		v.log.Debug("blob: unsolicited answer", "peer", peer, "hash", h.Short())
 		return
 	}
 	select {
@@ -291,7 +291,7 @@ func (v *Service) serve(ctx context.Context, peer transport.PeerID, w Want) {
 	case errors.Is(err, ErrNotFound), errors.Is(err, ErrCorrupt):
 		v.send(ctx, peer, Missing{Hash: w.Hash})
 	default:
-		v.log.Warn("blob: serving a slice", "hash", w.Hash.short(), "err", err)
+		v.log.Warn("blob: serving a slice", "hash", w.Hash.Short(), "err", err)
 		v.send(ctx, peer, Missing{Hash: w.Hash})
 	}
 }
@@ -323,7 +323,7 @@ func (v *Service) misbehaved(peer transport.PeerID, h Hash, why string) {
 		delete(v.faults, peer)
 	}
 	v.mu.Unlock()
-	v.log.Warn("blob: peer misbehaved", "event", "security", "peer", peer, "hash", h.short(), "why", why, "faults", n)
+	v.log.Warn("blob: peer misbehaved", "event", "security", "peer", peer, "hash", h.Short(), "why", why, "faults", n)
 	if drop {
 		v.log.Warn("blob: peer dropped", "event", "security", "peer", peer, "faults", n)
 		if v.opt.Drop != nil {
@@ -351,7 +351,7 @@ func (v *Service) open(peer transport.PeerID, h Hash) (*pending, error) {
 	v.mu.Lock()
 	defer v.mu.Unlock()
 	if _, taken := v.waiting[key]; taken {
-		return nil, fmt.Errorf("blob: a request for %s to %s is outstanding", h.short(), peer)
+		return nil, fmt.Errorf("blob: a request for %s to %s is outstanding", h.Short(), peer)
 	}
 	v.waiting[key] = p.wt
 	return p, nil
@@ -464,7 +464,7 @@ func (v *Service) fetch(ctx context.Context, ref Ref) (err error) {
 	if (ref.Size == 0) != (ref.Hash == emptyHash) {
 		return fmt.Errorf("%w: %d bytes announced for %v", ErrSizeMismatch, ref.Size, ref.Hash)
 	}
-	if err := v.store.hold(ref.Hash.hex(), ref.Size); err != nil {
+	if err := v.store.hold(ref.Hash.Hex(), ref.Size); err != nil {
 		return err
 	}
 	defer v.store.settle(ref.Hash) // the hold stays while a partial download is on disk
@@ -567,7 +567,7 @@ func (v *Service) exchange(ctx context.Context, d *download, st *fetchState, pee
 		if cerr := ctx.Err(); cerr != nil {
 			return false, true, cerr
 		}
-		v.log.Debug("blob: request failed", "peer", peer, "hash", d.h.short(), "err", err)
+		v.log.Debug("blob: request failed", "peer", peer, "hash", d.h.Short(), "err", err)
 		v.strike(peer)
 		return false, true, nil
 	}
@@ -577,7 +577,7 @@ func (v *Service) exchange(ctx context.Context, d *download, st *fetchState, pee
 			return false, true, cerr
 		}
 		if err != nil {
-			v.log.Debug("blob: request failed", "peer", peer, "hash", d.h.short(), "err", err)
+			v.log.Debug("blob: request failed", "peer", peer, "hash", d.h.Short(), "err", err)
 			v.strike(peer)
 			return false, true, nil
 		}

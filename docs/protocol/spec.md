@@ -1729,9 +1729,10 @@ est retiré (bascule nette). Une nouvelle classe s'ajoute par une mineure, liée
   `enforce` : l'étape de migration de l'[ADR 0034] à partir de laquelle les exécuteurs
   l'exigent (avant, ils l'exécutent et signalent sans échouer) ; `current_go` : comportement
   actuel quand il diffère.
-- **Générateurs.** `vectors/generate.go.txt` (Go, vrais codecs : `trust`, `blob`, `invite`,
-  `policy`, `bridge`, `crypto/ed25519`, `filippo.io/edwards25519`) et
-  `vectors/generate-repo.cjs.txt` (Node : `cbor-x` 1.6.7, `@automerge/automerge` 3.5.0) ; les
+- **Générateurs.** `protocol/cmd/vectors` (Go, vrais codecs : `trust`, `blob`, `invite`,
+  `bridge`, `sig`, `crypto/ed25519` ; `policy.json` conservé tant que le codec
+  `policy` est absent de cette branche) et
+  `protocol/cmd/repo-vectors/main.cjs` (Node : `cbor-x` 1.6.7, `@automerge/automerge` 3.5.0) ; les
   vecteurs `proposed` d'un format qui n'a pas encore de codec sont produits par des encodeurs
   écrits d'après cette spec, dans ces mêmes fichiers. Les cas `speccheck-*` viennent de
   `novifinancial/ed25519-speccheck` (`cases.json`, SHA-256 `08e47a36…3540450`).

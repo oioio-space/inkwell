@@ -97,8 +97,8 @@ func TestScanCountsWrittenGroups(t *testing.T) {
 	}
 	again.mu.Lock()
 	defer again.mu.Unlock()
-	if again.holds[h.hex()] != 4*GroupSize || again.wrote[h.hex()] != 2*GroupSize {
+	if again.holds[h.Hex()] != 4*GroupSize || again.wrote[h.Hex()] != 2*GroupSize {
 		t.Errorf("hold %d, written %d after a restart, want %d and %d",
-			again.holds[h.hex()], again.wrote[h.hex()], 4*GroupSize, 2*GroupSize)
+			again.holds[h.Hex()], again.wrote[h.Hex()], 4*GroupSize, 2*GroupSize)
 	}
 }

@@ -25,37 +25,21 @@ package transport
 import (
 	"context"
 	"errors"
+
+	"github.com/oioio-space/inkwell/protocol"
 )
 
 // MaxFrame is the largest payload a transport accepts or delivers, in bytes.
 //
 // Wails rejects stream frames above 64 MiB, and the bridge wraps each payload
-// in an envelope that adds a 3-byte header and a peer ID of at most
-// maxPeerIDLen (64) bytes. MaxFrame is 64 MiB minus those 67 bytes, so a
-// payload that crossed the network always fits one bridge frame.
-const MaxFrame = 64<<20 - 3 - maxPeerIDLen
+// in an envelope that adds a 3-byte header and a peer ID of at most 64 bytes.
+const MaxFrame = protocol.MaxFrame
 
-// maxPeerIDLen bounds a [PeerID] so it fits a one-byte length prefix.
-const maxPeerIDLen = 64
+// PeerID identifies an opaque peer.
+type PeerID = protocol.PeerID
 
-// PeerID identifies a peer. It is opaque to callers and is valid when
-// [ValidPeerID] reports true.
-type PeerID string
-
-// ValidPeerID reports whether id is 1 to 64 bytes of printable,
-// non-space ASCII. Anything a remote peer claims as its identity must pass
-// this check before it is used as a map key, logged or displayed.
-func ValidPeerID(id PeerID) bool {
-	if len(id) == 0 || len(id) > maxPeerIDLen {
-		return false
-	}
-	for i := range len(id) {
-		if c := id[i]; c <= ' ' || c > '~' {
-			return false
-		}
-	}
-	return true
-}
+// ValidPeerID reports whether a peer identifier is valid.
+var ValidPeerID = protocol.ValidPeerID
 
 // Kind tells what an [Event] reports.
 type Kind uint8

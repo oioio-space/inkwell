@@ -104,12 +104,12 @@ run = "go run ./cmd/sidecar-fetch"
 [tasks.test]
 description = "Run tests (gotestsum, readable output)"
 depends = ["sidecar:fetch"]
-run = "./scripts/heavy.sh ./scripts/rtkx.sh gotestsum --format pkgname -- ./..."
+run = ["./scripts/heavy.sh ./scripts/rtkx.sh gotestsum --format pkgname -- ./...", "cd protocol && ../scripts/heavy.sh go test -race ./..."]
 
 [tasks."test:ci"]
 description = "Run tests once, producing a JUnit report AND coverage.out"
 depends = ["sidecar:fetch"]
-run = "./scripts/heavy.sh ./scripts/rtkx.sh gotestsum --junitfile junit.xml --format pkgname -- -short -timeout=8m -covermode=atomic -coverpkg=./... -coverprofile=coverage.out ./..."
+run = ["./scripts/heavy.sh ./scripts/rtkx.sh gotestsum --junitfile junit.xml --format pkgname -- -short -timeout=8m -covermode=atomic -coverpkg=./... -coverprofile=coverage.out ./...", "cd protocol && ../scripts/heavy.sh go test -race -short -timeout=8m -covermode=atomic -coverpkg=./... -coverprofile=../coverage.protocol.out ./..."]
 
 [tasks."test:watch"]
 description = "Re-run tests on every file change (TDD loop)"
@@ -186,7 +186,7 @@ run = "./scripts/rtkx.sh grype sbom:sbom.cdx.json --fail-on high"
 
 
 [tasks.arch]
-description = "Dependency rules: libp2p only in transport/p2p, wormhole only in invite, no Go automerge, no network code in sidecar/typst"
+description = "Dependency rules: pure protocol core; libp2p only in transport/p2p and protocol/libp2p; no private codecs, Go automerge or sidecar network code"
 run = "./scripts/arch-check.sh"
 
 [tasks.deadcode]

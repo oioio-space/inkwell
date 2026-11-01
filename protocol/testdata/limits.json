@@ -1,0 +1,423 @@
+[
+  {
+    "row": "| connexions | 2 par pair (passage) ; 128 entrantes, 128 sortantes au total (impl., 64 membres × 2) | — | refusée | à la fermeture d'une autre |",
+    "constants": {
+      "MaxConnectionsPerPeer": "2",
+      "MaxInboundConnections": "128",
+      "MaxOutboundConnections": "128",
+      "MaxConnectedMembers": "64"
+    }
+  },
+  {
+    "row": "| flux par pair et par sens (gestionnaire de ressources libp2p, portées *protocol* × *peer*) | control 1, repo 1 (+1 en fermeture), presence 1, large 1 non lu ; vrac 1 ; salon 4 | — | violation (salon : réinitialisé) | Tenu |",
+    "constants": {
+      "ControlStreams": "1",
+      "RepoStreams": "1",
+      "ClosingRepoStreams": "1",
+      "PresenceStreams": "1",
+      "UnreadLargeStreams": "1",
+      "BulkStreams": "1",
+      "LobbyStreams": "4"
+    }
+  },
+  {
+    "row": "| trame sync | 98 304 o | — | violation | Tenu |",
+    "constants": {
+      "MaxSyncFrame": "98304"
+    }
+  },
+  {
+    "row": "| trame vrac | 1 065 005 o | — | violation | Tenu |",
+    "constants": {
+      "MaxBulkFrame": "1065005"
+    }
+  },
+  {
+    "row": "| salon | requête 4096 o / 10 s ; réponse 262 144 o ; traitement 3 min | — | flux fermé | nouvelle requête |",
+    "constants": {
+      "MaxLobbyRequest": "4096",
+      "LobbyRequestTimeout": "10000000000",
+      "MaxLobbyReply": "262144",
+      "LobbyProcessingTimeout": "180000000000"
+    }
+  },
+  {
+    "row": "| HELLO | 1024 o ; 10 s | — | GOAWAY | Tenu |",
+    "constants": {
+      "MaxHello": "1024",
+      "HelloTimeout": "10000000000"
+    }
+  },
+  {
+    "row": "| file d'entrée REPO d'un pair | 4 Mio et 1024 trames (impl.) | par pair | lecture du flux suspendue | dès que la webview consomme |",
+    "constants": {
+      "RepoInputBytes": "4194304",
+      "RepoInputFrames": "1024"
+    }
+  },
+  {
+    "row": "| file d'entrée CONTROL d'un pair | 512 Kio (impl.) | par pair | lecture suspendue **seulement** le temps que l'acteur `Wiring` traite (CPU et disque locaux) ; jamais à cause du réseau ni de la webview — « toujours lu » au sens de §5.1 (a) | immédiate |",
+    "constants": {
+      "ControlInputBytes": "524288"
+    }
+  },
+  {
+    "row": "| flux annulés en attente de RESET_STREAM | 1 par session ; 10 s | par session | GOAWAY PROTOCOL_VIOLATION, session fermée | reconnexion |",
+    "constants": {
+      "MaxPendingResets": "1",
+      "ResetTimeout": "10000000000"
+    }
+  },
+  {
+    "row": "| modifications indivisibles en attente (disque, §14 point 7) | par `root` ; **un emplacement de 16 Mio par pair connecté** ; active ⇔ occupe l'emplacement d'un pair connecté qui la détient ; attribution seulement dans un emplacement libre, réservation atomique, **à l'entrée éligible de plus petit rang d'attente** (FIFO, persisté) avant toute nouvelle annonce ; rangs : ≤ 64 par pair ; **plafond global 1 Gio, pairs absents compris** (retrait, §8.1 : finies ou plus voulues, puis inactives sans détenteur connecté en LRU, puis éligibles du plus grand rang au plus petit ; octets retirés, rang gardé ; jamais une active) ; jamais remplacé, jamais sur un délai ; quota N10 de l'auteur crédité après vérification | par pair annonceur | l'annonce suivante du même pair attend ; la règle H continue auprès des autres détenteurs | reprise des groupes vérifiés, même après 24 h |",
+    "constants": {
+      "IndivisibleSlotBytes": "16777216",
+      "IndivisibleRanksPerPeer": "64",
+      "IndivisibleDiskBytes": "1073741824"
+    }
+  },
+  {
+    "row": "| index des modifications indivisibles | entrées vérifiées seulement ; ≤ 1 par ≈ 4 Mio d'historique stocké ; retirée avec le document ou la modification | par auteur (N10) | — | — |",
+    "constants": {
+      "IndivisibleIndexHistoryBytes": "4194304"
+    }
+  },
+  {
+    "row": "| annonce indivisible | ≤ 16 777 216 octets (G1) | — | violation | — |",
+    "constants": {
+      "MaxIndivisibleBytes": "16777216"
+    }
+  },
+  {
+    "row": "| flux LARGE | ≤ `r` = 4 194 304 octets ; une annonce ordinaire plus grande n'est qu'un avis (`LARGE_REPLY` 0, pages) | — | violation si un flux dépasse `r` | pages d'historique |",
+    "constants": {
+      "MaxLargeBytes": "4194304"
+    }
+  },
+  {
+    "row": "| PRESENCE par pair | 16 entrées, dernière par `sessionId` | par pair | la plus ancienne remplacée | — |",
+    "constants": {
+      "MaxPresenceEntries": "16"
+    }
+  },
+  {
+    "row": "| file de sortie CONTROL d'un pair | 1 Mio (impl.) | par pair | curseurs SET différés ; réponses ATTEST_WANT ignorées ; commérage ATTEST jeté | tour suivant (15 s) |",
+    "constants": {
+      "ControlOutputBytes": "1048576"
+    }
+  },
+  {
+    "row": "| curseurs SET | 1 par (pair, set) ; 2 nouveaux par 15 s | par pair | demande ignorée | tour suivant |",
+    "constants": {
+      "SetCursorsPerPeerSet": "1",
+      "SetCursorsPerPeriod": "2",
+      "ReconcilePeriod": "15000000000"
+    }
+  },
+  {
+    "row": "| ATTEST_WANT | 64 demandes émises et 64 servies par pair et par 15 s ; attente 30 s | par pair | demande non émise / ignorée | 15 s ; règle H à 30 s |",
+    "constants": {
+      "AttestWantSentPerPeriod": "64",
+      "AttestWantServedPerPeriod": "64",
+      "AttestWantTimeout": "30000000000"
+    }
+  },
+  {
+    "row": "| sortie dépôt d'un pair (pont) | voie en ligne 4 Mio ; voie LARGE 1 objet | par pair | la webview attend | crédit rendu |",
+    "constants": {
+      "BridgeInlineBytes": "4194304",
+      "BridgeLargeObjects": "1"
+    }
+  },
+  {
+    "row": "| objets LARGE annoncés (émetteur) | 1 par pair, en attente de `LARGE_REPLY`, ≤ 10 min (dans la voie LARGE de la webview) | par pair | oublié au refus ou après 10 min ; état de synchronisation de ce document réinitialisé | règle H chez le receveur |",
+    "constants": {
+      "LargeAnnouncementsPerPeer": "1",
+      "LargeAnnouncementTimeout": "600000000000"
+    }
+  },
+  {
+    "row": "| objets LARGE réservés (receveur) | 1 par pair ; ≤ part fixe `r` = 4 Mio ; plus grand : refus (`LARGE_REPLY` 0), ou vrac si indivisible | 4 Mio (fixe) | refus | pages d'historique ≤ `r` (§9.6) |",
+    "constants": {
+      "LargeReservationsPerPeer": "1"
+    }
+  },
+  {
+    "row": "| sessions par pair | 2 pendant un passage ; limites du gestionnaire de ressources = 2 × celles d'une session | — | la plus ancienne fermée | — |",
+    "constants": {
+      "MaxSessionsPerPeer": "2"
+    }
+  },
+  {
+    "row": "| fenêtres QUIC | maximum de connexion ≥ maximum de flux + fenêtre initiale de flux + 1 Mio (go-libp2p v0.51.0 et quic-go v0.64.1 : 15 ≥ 10 + 0,5 + 1 Mio ; initiales 512 / 768 Kio) | — | démarrage refusé (porte P-QUIC) | — |",
+    "constants": {
+      "QUICConnectionHeadroom": "1048576",
+      "QUICMaxConnectionWindow": "15728640",
+      "QUICMaxStreamWindow": "10485760",
+      "QUICInitialStreamWindow": "524288",
+      "QUICInitialConnectionWindow": "786432"
+    }
+  },
+  {
+    "row": "| trames ignorables | 256 trames et 256 Kio par minute et par pair | par pair | OVERLOADED | — |",
+    "constants": {
+      "IgnorableFramesPerMinute": "256",
+      "IgnorableBytesPerMinute": "262144"
+    }
+  },
+  {
+    "row": "| progrès d'un flux LARGE | 60 s sans octet alors que réservé et lu | — | flux réinitialisé | règle L |",
+    "constants": {
+      "LargeIdleTimeout": "60000000000"
+    }
+  },
+  {
+    "row": "| génération | engagements et réessais 1 / 2 s par pair, doublé jusqu'à 60 s (mémoire 10 min) ; flux REPO entrants ≤ 2 / 2 s ; `gen ≤ 2^32 − 1` | — | retardé ; OVERLOADED ; fin de session (règle W) | — |",
+    "constants": {
+      "GenerationInitialBackoff": "2000000000",
+      "GenerationMaxBackoff": "60000000000",
+      "GenerationBackoffMemory": "600000000000",
+      "IncomingRepoStreamsPerPeriod": "2",
+      "MaxGeneration": "4294967295"
+    }
+  },
+  {
+    "row": "| vrac (demandeur) | 1 demande par (pair, hash), 2 par pair ; 30 s sans octet ; 3 échecs par plage ; 5 BUSY de suite | par pair | échec | autre détenteur |",
+    "constants": {
+      "BulkRequestsPerPeerHash": "1",
+      "BulkRequestsPerPeer": "2",
+      "BulkIdleTimeout": "30000000000",
+      "BulkRangeFailures": "3",
+      "BulkConsecutiveBusy": "5"
+    }
+  },
+  {
+    "row": "| vrac (serveur) | 2 par pair ; `max(8, 2n)` au total ; 32 BUSY par pair et par minute ; 3 fautes → 10 min | ≥ 1 par pair | BUSY, puis silence | délai |",
+    "constants": {
+      "BulkServesPerPeer": "2",
+      "BulkMinGlobalServes": "8",
+      "BulkGlobalServesPerPeer": "2",
+      "BulkBusyPerMinute": "32",
+      "BulkFaultsBeforeBan": "3",
+      "BulkBanDuration": "600000000000"
+    }
+  },
+  {
+    "row": "| transferts de blobs | 4 à la fois (impl.) | — | file d'attente | — |",
+    "constants": {
+      "ConcurrentBlobTransfers": "4"
+    }
+  },
+  {
+    "row": "| connexion réinitialisée | attente 2 s, doublée jusqu'à 60 s (mémoire 10 min) | — | refusée | après l'attente |",
+    "constants": {
+      "ReconnectInitialBackoff": "2000000000",
+      "ReconnectMaxBackoff": "60000000000",
+      "ReconnectBackoffMemory": "600000000000"
+    }
+  },
+  {
+    "row": "| liste des membres | 1024 ops (scellée) ; `have` ≤ 256 têtes | — | refus (scellée) | nouveau projet |",
+    "constants": {
+      "MaxMemberOps": "1024",
+      "MaxHaveHeads": "256"
+    }
+  },
+  {
+    "row": "| objets en attente de parents | 256, 2 périodes | par pair livreur | oubli | tour suivant |",
+    "constants": {
+      "MaxParentPendingObjects": "256",
+      "ParentPendingPeriods": "2"
+    }
+  },
+  {
+    "row": "| journal de décisions | 8192, 1024 par auteur | par auteur | refus | compaction (S2-R2) |",
+    "constants": {
+      "MaxDecisions": "8192",
+      "MaxDecisionsPerAuthor": "1024"
+    }
+  },
+  {
+    "row": "| annonces | `Q* + 2` par auteur (ADR 0031) ; attente L2 : 4 par auteur | par auteur | refus ; plus ancienne de l'auteur évincée | — |",
+    "constants": {
+      "AnnouncementQuotaSlack": "2",
+      "PendingAnnouncementsPerAuthor": "4"
+    }
+  },
+  {
+    "row": "| preuves | 1 par (key, epoch), 4 par key | par clé | ignorée | — |",
+    "constants": {
+      "EvidencePerKeyEpoch": "1",
+      "EvidencePerKey": "4"
+    }
+  },
+  {
+    "row": "| op / attestation / décision / accusé / annonce | 4096 / 4096 / 8192 / 8192 / 4096 o ; 64 parents ; 64 têtes ; 96 entrées | — | refus | — |",
+    "constants": {
+      "MaxOpBytes": "4096",
+      "MaxAttestationBytes": "4096",
+      "MaxDecisionBytes": "8192",
+      "MaxAcknowledgmentBytes": "8192",
+      "MaxAnnouncementBytes": "4096",
+      "MaxParents": "64",
+      "MaxHeads": "64",
+      "MaxEntries": "96"
+    }
+  },
+  {
+    "row": "| attestations gardées | par (doc, signataire) : acceptée si elle apporte une tête nouvelle, éviction par plus petit `seq` au-delà de 256 têtes distinctes ; 65 536 clés et 64 Mio au total (impl. ≥) | ⌊C / signataires debout⌋ | reprise (§10.6) | réconciliation |",
+    "constants": {
+      "AttestationDistinctHeads": "256",
+      "AttestationKeys": "65536",
+      "AttestationBytes": "67108864"
+    }
+  },
+  {
+    "row": "| attestations en attente de leur signataire | 2 périodes | par pair livreur | oubli | réconciliation |",
+    "constants": {
+      "UnknownSignerPendingPeriods": "2"
+    }
+  },
+  {
+    "row": "| refus notés (règle H) | 1 drapeau par (pair, document admis) ; `history-request` ≤ 1 par (pair, document) et par 60 s | par pair | — | page d'historique |",
+    "constants": {
+      "HistoryRequestInterval": "60000000000"
+    }
+  },
+  {
+    "row": "| ticket | 1024 caractères ; 15 min ; usage unique | — | refus | nouveau ticket |",
+    "constants": {
+      "MaxTicketCharacters": "1024",
+      "TicketLifetime": "900000000000"
+    }
+  },
+  {
+    "row": "| profil CBOR | profondeur 8 ; 4096 éléments ; map 64 ; tableau 256 ; entiers ≤ 2^53 − 1 | — | refus | — |",
+    "constants": {
+      "CBORMaxDepth": "8",
+      "CBORMaxItems": "4096",
+      "CBORMaxMap": "64",
+      "CBORMaxArray": "256",
+      "MaxExactInteger": "9007199254740991"
+    }
+  },
+  {
+    "row": "| poignée de main | 1024 o ; 3 `arrive` puis 1 / 20 s | par pair | jetée | attente |",
+    "constants": {
+      "MaxHandshakeBytes": "1024",
+      "HandshakeBurst": "3",
+      "HandshakeInterval": "20000000000"
+    }
+  },
+  {
+    "row": "| identifiants | PeerID, DocumentId ≤ 64 ; `projectUrl` ≤ 80 | — | refus | — |",
+    "constants": {
+      "MaxPeerIDBytes": "64",
+      "MaxDocumentIDBytes": "64",
+      "MaxProjectURLBytes": "80"
+    }
+  },
+  {
+    "row": "| éphémère | `data` ≤ 1024 o ; 128 en rafale, 64/s | par pair | jeté | seau |",
+    "constants": {
+      "MaxEphemeralBytes": "1024",
+      "EphemeralBurst": "128",
+      "EphemeralPerSecond": "64"
+    }
+  },
+  {
+    "row": "| attente document non prêt | 4 par document, 8 Mio par pair | par pair | refus, règle H | page d'historique |",
+    "constants": {
+      "DocumentPendingMessages": "4",
+      "DocumentPendingBytesPerPeer": "8388608"
+    }
+  },
+  {
+    "row": "| attente de couverture | 4 messages par document et par pair, 8 Mio par pair, 30 s | par pair | refus, règle H | idem |",
+    "constants": {
+      "CoveragePendingMessages": "4",
+      "CoveragePendingBytesPerPeer": "8388608",
+      "CoveragePendingTimeout": "30000000000"
+    }
+  },
+  {
+    "row": "| attente de tuple d'auteur (G12) | 4 par auteur, 30 s | par auteur | refus, règle H | idem |",
+    "constants": {
+      "AuthorPendingMessages": "4",
+      "AuthorPendingTimeout": "30000000000"
+    }
+  },
+  {
+    "row": "| attente de dépendances (G2) | quota par émetteur, ses plus anciennes évincées | par pair | refus, règle H | idem |",
+    "constants": {}
+  },
+  {
+    "row": "| couverture | 256 têtes par (doc, signataire) ; 1024 documents par signataire ; 10 000 documents | par signataire | les plus anciennes oubliées | réconciliation |",
+    "constants": {
+      "CoverageHeads": "256",
+      "CoverageDocumentsPerSigner": "1024",
+      "CoverageDocuments": "10000"
+    }
+  },
+  {
+    "row": "| garde | ≤ 65 536 opérations et 16 Mio décompressés par modification ; Worker 256 Mio | — | refus (avant Automerge) | pages d'historique |",
+    "constants": {
+      "MaxChangeOperations": "65536",
+      "MaxDecompressedChangeBytes": "16777216",
+      "GuardWorkerBytes": "268435456"
+    }
+  },
+  {
+    "row": "| file de sortie d'un pair | **au plus 1 message en attente de crédit par (pair, document)** ; au plus 64 documents en synchronisation initiale par pair (les autres entrent à mesure) ; 16 Mio (impl.) | par pair | un nouveau message pour un (pair, document) qui en a déjà un en attente le **remplace**, et l'état de synchronisation Automerge de ce seul (pair, document) est réinitialisé (correctif de cycle de vie, ADR 0031) ; au-delà de 16 Mio, plus aucun document n'entre en synchronisation ; **jamais de règle L** | à mesure des crédits |",
+    "constants": {
+      "PendingCreditMessagesPerDocument": "1",
+      "InitialSyncDocumentsPerPeer": "64",
+      "RepoOutputBytesPerPeer": "16777216"
+    }
+  },
+  {
+    "row": "| enveloppe `net` | 64 Mio (limite Wails) ; pair ≤ 64 o | refus |",
+    "constants": {
+      "MaxNetEnvelopeBytes": "67108864"
+    }
+  },
+  {
+    "row": "| crédit par (pair, époque, voie) | en ligne : fenêtre 4 Mio ; LARGE : 1 objet | violation : session du pont fermée, la webview se recharge |",
+    "constants": {}
+  },
+  {
+    "row": "| présence | pas de crédit ; 16 par pair coalescées côté Go | la plus ancienne remplacée |",
+    "constants": {}
+  },
+  {
+    "row": "| notifications d'état (rôles, attestations, suspension, ensemble admis) | coalescées : dernière valeur par clé | — |",
+    "constants": {}
+  },
+  {
+    "row": "| `store` | 1026 voies ; page ≤ 1 Mio ; valeur ≤ 32 Mio ; clé ≤ 4 composants de 128 o | refus |",
+    "constants": {
+      "StoreLanes": "1026",
+      "MaxStorePageBytes": "1048576",
+      "MaxStoreValueBytes": "33554432",
+      "MaxStoreKeyComponents": "4",
+      "MaxStoreKeyComponentBytes": "128"
+    }
+  },
+  {
+    "row": "| `preview` | requête ≤ 1 Kio ; 40 pages ; trame ≤ 48 Mio | refus |",
+    "constants": {
+      "MaxPreviewRequestBytes": "1024",
+      "MaxPreviewPages": "40",
+      "MaxPreviewFrameBytes": "50331648"
+    }
+  },
+  {
+    "row": "| `present` | trame ≤ 8 Mio ; 6 fenêtres ; 256 trames / 32 Mio par fenêtre | trame suivante jetée |",
+    "constants": {
+      "MaxPresentFrameBytes": "8388608",
+      "MaxPresentWindows": "6",
+      "PresentFramesPerWindow": "256",
+      "PresentBytesPerWindow": "33554432"
+    }
+  }
+]

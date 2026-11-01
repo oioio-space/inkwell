@@ -1,0 +1,155 @@
+// SPDX-License-Identifier: MPL-2.0
+
+package trust
+
+import (
+	"bytes"
+	"crypto/ed25519"
+	"encoding/binary"
+	"fmt"
+	"slices"
+	"unicode/utf8"
+
+	transport "github.com/oioio-space/inkwell/protocol"
+
+	"github.com/oioio-space/inkwell/protocol/sig"
+)
+
+// Limits of the canonical attestation encoding.
+const (
+	// MaxAttestationSize is the largest canonical encoding of an [Attestation].
+	MaxAttestationSize = transport.MaxAttestationBytes
+	// MaxDoc bounds Attestation.Doc, in bytes.
+	MaxDoc = 256
+	// MaxHeads bounds the number of heads of an attestation.
+	MaxHeads = transport.MaxHeads
+
+	attestVersion = 1
+)
+
+// Attestation is a writer's signed statement of the heads of one document: a
+// peer accepts a change only if the heads attested by current writers cover it.
+type Attestation struct {
+	// Doc names the document.
+	Doc string
+	// Heads are the change hashes, strictly ascending.
+	Heads []Hash
+	// Signer is the writer's key.
+	Signer ed25519.PublicKey
+	// Seq increases with each attestation of the same (Doc, Signer); receivers
+	// keep the highest.
+	Seq uint64
+	// Project is the project the attestation belongs to.
+	Project ProjectID
+	// Sig is the signature of Project and the fields above.
+	Sig [64]byte
+}
+
+func (a Attestation) validate() error {
+	if sig.ValidatePublicKey(a.Signer) != nil || a.Doc == "" || len(a.Doc) > MaxDoc || !utf8.ValidString(a.Doc) || len(a.Heads) > MaxHeads {
+		return fmt.Errorf("%w: attestation fields", ErrMalformed)
+	}
+	if !strictlyAscending(a.Heads) {
+		return fmt.Errorf("%w: heads not strictly ascending", ErrMalformed)
+	}
+	return nil
+}
+
+// body encodes everything the signature covers, project included.
+func (a Attestation) body() []byte {
+	doc := a.Doc[:min(len(a.Doc), MaxDoc)]
+	heads := a.Heads[:min(len(a.Heads), MaxHeads)]
+	b := make([]byte, 0, 128)
+	b = append(b, attestVersion)
+	b = append(b, a.Project[:]...)
+	b = appendKey(b, a.Signer)
+	b = binary.BigEndian.AppendUint64(b, a.Seq)
+	b = binary.BigEndian.AppendUint16(b, uint16(len(doc))) // #nosec G115 -- bounded by MaxDoc.
+	b = append(b, doc...)
+	b = binary.BigEndian.AppendUint16(b, uint16(len(heads))) // #nosec G115 -- bounded by MaxHeads.
+	for _, h := range heads {
+		b = append(b, h[:]...)
+	}
+	return b
+}
+
+// NewAttestation signs the heads of doc as the writer s. The heads are
+// sorted and deduplicated.
+func NewAttestation(s Signer, project ProjectID, doc string, heads []Hash, seq uint64) (Attestation, error) {
+	hs := slices.Clone(heads)
+	slices.SortFunc(hs, cmpHash)
+	hs = slices.Compact(hs)
+	a := Attestation{Project: project, Doc: doc, Heads: hs, Signer: bytes.Clone(s.Public()), Seq: seq}
+	if err := a.validate(); err != nil {
+		return Attestation{}, err
+	}
+	copy(a.Sig[:], s.Sign(domainAttest, a.body()))
+	return a, nil
+}
+
+// EncodeAttestation returns the canonical encoding of a.
+func EncodeAttestation(a Attestation) []byte { return append(a.body(), a.Sig[:]...) }
+
+// DecodeAttestation parses the canonical encoding of an attestation, strictly.
+// The signature is not checked; [List.Verify] does.
+func DecodeAttestation(b []byte) (Attestation, error) {
+	if len(b) > MaxAttestationSize {
+		return Attestation{}, fmt.Errorf("%w: too large", ErrMalformed)
+	}
+	r := &reader{b: b}
+	var a Attestation
+	if v := r.u8(); r.err == nil && v != attestVersion {
+		return Attestation{}, fmt.Errorf("%w: version %d", ErrMalformed, v)
+	}
+	a.Project = ProjectID(r.hash())
+	a.Signer = bytes.Clone(r.take(keyLen))
+	a.Seq = r.u64()
+	a.Doc = r.str(MaxDoc)
+	n := r.u16()
+	if r.err == nil && n > MaxHeads {
+		return Attestation{}, fmt.Errorf("%w: too many heads", ErrMalformed)
+	}
+	a.Heads = r.hashes(n)
+	copy(a.Sig[:], r.take(len(a.Sig)))
+	if r.err != nil {
+		return Attestation{}, r.err
+	}
+	if len(r.b) != 0 {
+		return Attestation{}, fmt.Errorf("%w: trailing bytes", ErrMalformed)
+	}
+	if err := a.validate(); err != nil {
+		return Attestation{}, err
+	}
+	return a, nil
+}
+
+// Verify checks that a belongs to this project, is correctly signed, and that
+// its signer is currently a writer or an admin ([ErrNotWriter] otherwise) and
+// not suspended ([ErrSuspended]).
+//
+// A consumer that gates document writes on Verify MUST also check
+// [List.Sealed] and, when it is true, tell the user "liste de membres
+// saturée — créez un nouveau projet": a sealed list is frozen and may be
+// stale with respect to other replicas, and Verify does not report it.
+func (l *List) Verify(a Attestation) error {
+	if a.Project != l.id {
+		return ErrWrongProject
+	}
+	if err := a.validate(); err != nil {
+		return err
+	}
+	if !ed25519.Verify(a.Signer, signingMessage(domainAttest, a.body()), a.Sig[:]) {
+		return ErrBadSignature
+	}
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	v := l.current()
+	i, ok := v.memberAt[string(a.Signer)]
+	switch {
+	case !ok || v.members[i].Role < RoleWriter:
+		return ErrNotWriter
+	case v.members[i].Suspended:
+		return ErrSuspended
+	}
+	return nil
+}

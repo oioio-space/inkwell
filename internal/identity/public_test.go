@@ -5,15 +5,16 @@ import (
 	"crypto/ed25519"
 	"encoding/hex"
 	"encoding/json"
-	"os"
 	"testing"
+
+	"github.com/oioio-space/inkwell/protocol/vectors"
 
 	"filippo.io/edwards25519"
 )
 
 func publicVectors(t testing.TB) (valid, invalid [][]byte) {
 	t.Helper()
-	data, err := os.ReadFile("../../docs/protocol/vectors/crypto.json")
+	data, err := vectors.FS.ReadFile("crypto.json")
 	if err != nil {
 		t.Fatal(err)
 	}

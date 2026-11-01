@@ -3,6 +3,7 @@ module github.com/oioio-space/inkwell
 go 1.27.3
 
 require (
+	github.com/oioio-space/inkwell/protocol v0.1.0
 	filippo.io/edwards25519 v1.2.0
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/google/go-cmp v0.7.0
@@ -115,3 +116,5 @@ require (
 	nhooyr.io/websocket v1.8.17 // indirect
 	salsa.debian.org/vasudev/gospake2 v0.0.0-20210510093858-d91629950ad1 // indirect
 )
+
+replace github.com/oioio-space/inkwell/protocol => ./protocol
