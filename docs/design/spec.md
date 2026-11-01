@@ -1233,6 +1233,16 @@ identique à l'original. La personne n'a jamais à se demander quels fichiers so
 - **On voit toujours où l'on est** :
   - le sélecteur de l'en-tête dit « **Variante : Version courte** », ou « Variante : Original » ;
   - la frise met en avant la voie de la variante courante, « Vous êtes ici ».
+- **Versions enregistrées dans une variante** (points d'étape, rév. 7.1) :
+  - n'importe qui peut « **Enregistrer une version** » **dans la variante où il se trouve**. La
+    version enregistrée **appartient à cette variante** ;
+  - la frise montre, sur la voie de chaque variante, **ses propres** versions enregistrées ;
+  - **tous ceux qui travaillent sur cette variante** la voient, et peuvent y **revenir** par
+    « Restaurer cette version » : c'est le même retour sans rien détruire, qui crée une nouvelle
+    version **dans la variante** ;
+  - on peut aussi **créer une nouvelle variante à partir de n'importe quelle version
+    enregistrée** (« Créer une variante à partir d'ici », barre de la frise) ;
+  - les mots sont « version enregistrée » et « point d'étape », jamais « push » ni « commit ».
 - **Une modification ne va que dans la variante où elle est faite.** Les modifications ne passent
   d'une variante à l'autre **que** par « Proposer d'intégrer » puis « Intégrer » (§4.41).
 - **Présence** :

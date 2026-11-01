@@ -470,3 +470,9 @@ ci-dessus) :
   - Tout le monde voit toutes les variantes, avec qui est sur chacune.
   - Chacun peut ouvrir n'importe quelle variante et y écrire avec les autres.
   - Seul le choix de la variante courante est personnel (§4.22).
+- **Versions enregistrées dans une variante** (rév. 7.1, demande de l'utilisatrice, §4.22) :
+  - « Enregistrer une version » crée un point d'étape **dans la variante courante**, et la frise
+    montre les versions de chaque variante ;
+  - tous ceux qui travaillent sur cette variante peuvent y revenir, sans rien détruire ;
+  - on peut créer une variante à partir de n'importe quelle version enregistrée ;
+  - vocabulaire : « version enregistrée », « point d'étape », jamais push ni commit.
