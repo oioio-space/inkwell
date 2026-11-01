@@ -59,6 +59,8 @@ Rien n'est « fait » sans tests verts et sans une passe `ux-walkthrough` réuss
 | N14 | 2026-11-01 | Protocole versionné et évolutif : compatible avec les anciennes et les nouvelles versions, extensible sans casser l'existant (extensions compatibles sans changement de version, champs et types inconnus ignorés sauf marqueur « à comprendre », GREASE anti-ossification, négociation authentifiée, matrice de compatibilité testée) | ADR 0034, `docs/protocol/` | 🔨 |
 | N15 | 2026-11-01 | Le protocole répond à tous les besoins en restant clair et simple, sans réinventer la roue : réutiliser tels quels les standards et bibliothèques compatibles (COSE, automerge-repo, protocoles libp2p, QUIC/yamux, BLAKE3/Bao, Resource Manager…), couche maison seulement si rien ne convient, avec justification | ADR 0034, `docs/protocol/` | 🔨 |
 | N16 | 2026-11-01 | ADR 0034 acceptée (protocole unifié, révision 10 acceptée par Fable et Codex) ; session = connexion (resynchro au passage relais → direct) ; pointeur en dix-millièmes entiers ; module `protocol` sous-module MPL-2.0 ; règle d'ordre premier des clés | ADR 0034, `docs/protocol/` | 🔨 migration |
+| N17 | 2026-11-01 | Design graphique de l'application spécifié et validé par la même boucle de revue Fable + Codex (jusqu'à accord) | `docs/design/` | 🔨 |
+| N18 | 2026-11-01 | Architecture de l'application entièrement spécifiée, tous les doutes levés, fidèle à la finalité (`docs/conception.pdf`), validée par la boucle Fable + Codex | `docs/architecture/` | 🔨 |
 
 ## Interface et édition
 
