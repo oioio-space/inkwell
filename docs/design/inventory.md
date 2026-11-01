@@ -216,6 +216,18 @@ Ces fonctions n'existent pas encore. Chaque ligne nomme ce que le code devra mon
 |---|---|---|---|---|---|
 | G-102 | M | Pas de gestionnaire de polices ni de dossier `polices/` du projet ; pas d'installation « pour tous mes projets » ; une police venue de cet ordinateur n'est pas signalée, et une police absente n'a que le message brut du compilateur, sans correction | N43, N28, Nielsen 9 | aucun composant ; `preview/protocol.ts` (message seul) ; `ui/shell/StatusBar.svelte:120` | spec §4.46 (signalement **local**, sans donnée des autres appareils) |
 
+### 2.13 Addendum rév. 7.1 : synchronisation texte ↔ aperçu (N44)
+
+| # | Grav. | Écart | Norme | Preuve | Correction |
+|---|---|---|---|---|---|
+| G-103 | M | Le saut existe dans les deux sens, mais à la demande seulement : pas de suivi continu du curseur ni du défilement, pas de garde contre les boucles, pas d'interrupteur, pas d'ouverture en onglet d'un fichier inclus | N44 | `preview/actions.ts` (`jumpFromCursor`, `jumpFromPage`) ; `App.svelte:138-142` (Ctrl+Alt+J) | spec §4.18 |
+
+### 2.14 Addendum rév. 7.1 : vue indépendante et suivre une personne (N45)
+
+| # | Grav. | Écart | Norme | Preuve | Correction |
+|---|---|---|---|---|---|
+| G-104 | M | Rien ne garantit qu'une modification reçue ne déplace pas ma vue : pas d'ancrage du défilement déclaré. Pas de mode « Suivre » : la présence n'a que les curseurs. | N45 | `editor/remoteCursors.ts` (curseurs seulement) ; aucun `overflow-anchor` ni mode Suivre dans `frontend/src` | spec §4.18, §4.47 |
+
 ## 3. Corrections, dans l'ordre
 
 L'ordre suit la valeur (parcours cassé et accessibilité d'abord), puis le coût, puis les

@@ -134,6 +134,13 @@ Pour chacun : la question, les choix possibles, la recommandation des relecteurs
 - Recommandation : **A**.
 - Pourquoi : il sert à quelques-unes, sans troubler les autres.
 
+**21. Quand quelqu'un vous « suit » (sa vue suit la vôtre), le voyez-vous ?**
+- Choix :
+  - A. Oui, discrètement : un petit œil sur son avatar, et « Paul vous suit » au survol.
+  - B. Non, rien n'est montré.
+- Recommandation : **A**. Qui ne veut pas être suivi peut se rendre invisible.
+- Pourquoi : être suivi sans le savoir serait une observation cachée.
+
 ## Déjà tranché (pour mémoire)
 
 - Ctrl+K crée un lien ; la palette des commandes est sur Ctrl+Maj+P.
@@ -149,3 +156,5 @@ Pour chacun : la question, les choix possibles, la recommandation des relecteurs
 | IA | Absente tant que non configurée ; un admin l'autorise dans un projet partagé (recommandation suivie) |
 | Variantes | Toujours tout le projet (recommandation suivie) |
 | Extensions de projet | Chargement automatique, droits limités, interrupteur personnel (recommandation suivie) |
+| Suivi en direct (n° 21) | La personne suivie le voit : un petit œil sur l'avatar de qui la suit (recommandation suivie) |
+| Polices / export / veille Linux | Projet d'abord ; fichiers hors projet listés non cochés ; veille (b′) autorisée avec risque résiduel documenté |

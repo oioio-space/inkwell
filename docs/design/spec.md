@@ -1045,6 +1045,49 @@ des extensions.
   - ↑ ↓ et Page↑ Page↓ défilent ;
   - Ctrl+Maj+J (⇧⌘J sur macOS) saute de la source à l'aperçu ;
   - Entrée sur une page saute à la source.
+
+**Synchronisation texte ↔ aperçu** (N44, rév. 7.1). Elle s'appuie sur le saut existant :
+- Ctrl+Maj+J et le clic dans une page (`preview/actions.ts` : `jumpFromCursor`, `jumpFromPage`) ;
+- le défilement doux, déjà coupé sous mouvement réduit (`preview/Preview.svelte:79-80`).
+
+Repères : synchronisation du défilement de l'aperçu Markdown de VS Code, saut dans les deux sens de
+l'aperçu de tinymist, SyncTeX d'Overleaf [S33].
+- **Le texte mène** : l'aperçu montre l'endroit du **curseur** et suit le **défilement** du texte.
+  - Pendant la frappe, il ne bouge que si le curseur **sort** de la zone visible de l'aperçu, et
+    seulement **après 300ms de calme**, sans à-coups.
+  - Une mise à jour de la mise en page ne déplace pas la vue : elle reste sur le même passage.
+- **L'aperçu mène** : faire défiler l'aperçu amène le texte au même endroit. **Cliquer** dans une
+  page y place le curseur, avec un **surlignage bref** de la ligne (fondu `--duration-fade`, 1s,
+  `--hover-bg`).
+- **Les modifications des autres ne déplacent jamais ma vue** (N45) : seules **mes** actions
+  mènent ma synchronisation.
+  - Une modification reçue ne déplace ni mon curseur, ni mon défilement, ni ma position dans
+    l'aperçu.
+  - **Ancrage du défilement** : un texte inséré **au-dessus** de ce que je lis, dans le texte comme
+    dans l'aperçu, ne pousse pas ma vue. Le passage visible reste en place, comme
+    `overflow-anchor` des navigateurs [S34].
+  - Une nouvelle mise en page provoquée par quelqu'un d'autre garde ma page et mon endroit.
+- **Pas de boucle** : **la direction de la dernière action de la personne gagne**.
+  - Un défilement **provoqué** par la synchronisation ne déclenche jamais la synchronisation
+    inverse.
+  - L'autre côté ne mène de nouveau qu'après une **vraie** action de la personne : frappe, clic,
+    molette ou clavier.
+- **Interrupteur « Suivre le texte »** : un bouton bascule dans la barre d'outils de l'aperçu
+  (`aria-pressed`, icône de chaîne, infobulle « Suivre le texte »), et dans le menu Affichage.
+  - Désactivé, l'aperçu **garde sa page**, pour garder une page en vue, et le texte ne suit plus
+    l'aperçu.
+  - Le clic et Ctrl+Maj+J sautent toujours, à la demande.
+  - Le choix est mémorisé par projet, sur cet appareil. Il est activé par défaut.
+- **Typst** : correspondance fine, ligne par ligne, par les positions de la mise en page.
+  **Markdown** : par blocs (titre, paragraphe, liste), aussi bien en mise en page Typst qu'en
+  aperçu HTML (§5.9).
+- **Plusieurs fichiers** : un clic dans un passage venu d'un fichier inclus (`#include`) **ouvre ce
+  fichier dans un onglet** (§4.25), à la ligne. Le texte d'un fichier inclus amène l'aperçu au
+  passage où il est inclus.
+- **Mouvement réduit** : tous les déplacements sont instantanés ; le surlignage reste, en fondu
+  seulement.
+- **Lecteur d'écran** : aucune annonce pour la synchronisation automatique. Après un saut demandé
+  (clic, Ctrl+Maj+J), on annonce « Ligne 40, main.typ », ou « Page 3 ».
 - **Lecteur d'écran :** chaque page est une image « Page n sur N ». Le PDF exporté est la
   version accessible.
 
@@ -2837,6 +2880,54 @@ et **calme**, le soulignement en pointillé, jamais rouge.
 dossier `polices/`, et propose d'y ajouter les polices **système** que le document utilise. La
 galerie dit « polices fournies » ou « **manque** : X ».
 
+### 4.47 Suivre une personne (N45, addendum rév. 7.1)
+
+Repères : le « suivre » de Figma, de Google Docs, du mode Suivre de VS Code Live Share et de Zed
+[S35].
+
+- **Entrer** :
+  - un clic sur l'**avatar** d'une personne (pile de la barre d'en-tête), puis « **Suivre Marie** » ;
+  - ou sa ligne dans le dialogue Personnes ;
+  - ou la palette (« Suivre une personne… »).
+
+  Une personne absente ne peut pas être suivie : l'action est inactive, avec l'infobulle « Marie
+  n'est pas en ligne ».
+- **Ce qui suit** :
+  - ma vue du **texte** suit la position de Marie ;
+  - si elle change de fichier, il s'**ouvre dans un onglet** chez moi (§4.25) ;
+  - mon **aperçu** suit aussi (§4.18) ;
+  - les mouvements sont doux, et instantanés sous mouvement réduit.
+- **La barre « Vous suivez Marie »** : une barre fine sous les onglets, à la couleur de Marie
+  (`--person-N-line` en liseré, avec son nom écrit), et le bouton « **Arrêter** ». Ce n'est pas un
+  bandeau (L-8) : elle ne prend la place d'aucun message.
+- **Arrêter, calmement** : **toute action de ma part** (taper, défiler, cliquer, changer d'onglet)
+  arrête le suivi. Échap aussi, et le bouton.
+  - Un message **discret** dans la barre, pendant 2s : « Vous ne suivez plus Marie ». Pas de toast,
+    pas de dialogue.
+  - Le texte que je viens de taper reste à l'endroit où je l'ai tapé.
+- **Suivre ne touche jamais l'autre** : je ne déplace ni sa vue ni son curseur. Elle n'a rien à
+  faire.
+- **Suivre est en lecture seule** pour ma vue tant que je ne fais rien : pas de modification
+  implicite.
+- Si **Marie se déconnecte** : « Marie n'est plus en ligne », et le suivi s'arrête.
+- **Clavier** : « Suivre Marie » dans le menu de son avatar et dans la palette ; Échap arrête ; le
+  focus reste là où il était.
+- **Lecteur d'écran**, en région **polie** :
+  - « Vous suivez Marie » au début, « Vous ne suivez plus Marie » à la fin ;
+  - un changement de fichier : « main.typ ouvert, Marie y écrit » ;
+  - **aucune annonce** pour chaque mouvement du curseur.
+
+**La personne suivie le voit-elle ?** C'est une **décision de l'utilisatrice**
+(`decisions-utilisatrice.md`, n° 21). Recommandation : **oui, discrètement**.
+- Sur l'avatar de qui me suit, dans ma pile, une petite pastille en forme d'œil, et l'infobulle
+  « Paul vous suit ».
+- Pas de toast, pas de son.
+- Raison de vie privée : suivre montre en continu où l'autre lit et écrit. Le faire **sans
+  qu'elle le sache** serait une observation cachée. Figma, Zed et Live Share l'affichent ; la
+  présence est déjà partagée dans Inkwell, et l'indication ne révèle rien de plus que « je
+  regarde ».
+- Qui ne veut être ni vu ni suivi a déjà « **Me rendre invisible** ».
+
 ## 5. Écrans et parcours
 
 Les cinq tâches de référence (`ux-principles.md`) sont : **créer, partager, relire, présenter,
@@ -3074,8 +3165,7 @@ réglage s'applique tout de suite. Aujourd'hui, seuls les réglages d'enregistre
 - **Présence :**
   - pile d'avatars, curseurs nommés ;
   - « Paul a rejoint » annoncé une fois ;
-  - Suivre une personne (menu de son avatar) : la vue suit son curseur ; une touche ou un
-    défilement arrête de suivre, avec un toast.
+  - Suivre une personne : §4.47 (barre « Vous suivez Marie », arrêt calme par toute action).
 - **Divergence** (modifications concurrentes au même endroit) :
   - les deux textes sont gardés (CRDT) ;
   - marque `warn` dans la marge ;
@@ -3736,6 +3826,15 @@ documentation en ligne.
   Alt+alphanumeric key combinations for shortcut keys ») :
   https://learn.microsoft.com/windows/win32/uxguide/inter-keyboard
 - [S32] Typst, `--font-path` et polices du système : https://typst.app/docs/reference/text/text/#parameters-font
+- [S33] VS Code, synchronisation du défilement de l'aperçu Markdown
+  (`markdown.preview.scrollPreviewWithEditor`, `scrollEditorWithPreview`) :
+  https://code.visualstudio.com/docs/languages/markdown ; tinymist, aperçu et saut dans les deux
+  sens : https://myriad-dreamin.github.io/tinymist/ ; Overleaf, SyncTeX :
+  https://www.overleaf.com/learn/how-to/Code_Check
+- [S34] CSS Scroll Anchoring (`overflow-anchor`) : https://drafts.csswg.org/css-scroll-anchoring/
+- [S35] Figma, *Follow* (observation mode) : https://help.figma.com/hc/en-us/articles/360040322673 ;
+  VS Code Live Share, *Follow* : https://learn.microsoft.com/visualstudio/liveshare/use/coedit-follow-focus-visual-studio-code ;
+  Zed, collaboration et *follow* : https://zed.dev/docs/collaboration
 - [S18] Architecture d'Inkwell, §15 (points d'extension, capacités, thèmes, greffons de projet,
   noyau fermé, surfaces, diagrammes, outils) : [`../architecture/spec.md`](../architecture/spec.md)
 - [RFC 2119] https://www.rfc-editor.org/rfc/rfc2119 · [RFC 8174] https://www.rfc-editor.org/rfc/rfc8174

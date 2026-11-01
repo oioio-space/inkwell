@@ -439,3 +439,20 @@ ci-dessus) :
   **hors du dossier du projet** sont listés mais **non cochés** (vie privée). Les autres éléments
   restent cochés d'avance. Ordre des polices : **le projet d'abord**, puis l'ordinateur, puis
   Inkwell (§4.46, §5.12).
+- **N44, synchronisation texte ↔ aperçu** (rév. 7.1), dans §4.18, sur le saut existant :
+  - l'aperçu suit le curseur et le défilement, après 300ms de calme pendant la frappe ;
+  - l'aperçu mène au texte par défilement ou par clic, avec un surlignage bref ;
+  - pas de boucle : la dernière action de la personne gagne ;
+  - interrupteur « Suivre le texte », mémorisé par projet ;
+  - Typst ligne à ligne, Markdown par blocs ; un fichier inclus s'ouvre en onglet ;
+  - mouvement réduit respecté ; repères VS Code, tinymist et Overleaf [S33] ;
+  - `coverage.md` (ligne N44) et `inventory.md` (G-103) mis à jour.
+- **N45** (rév. 7.1) :
+  - **mes actions seules mènent ma vue** : une modification reçue ne déplace ni curseur, ni
+    défilement, ni aperçu, grâce à l'ancrage du défilement [S34] (§4.18) ;
+  - **suivre une personne** (§4.47) : entrées par l'avatar, Personnes ou la palette ; barre « Vous
+    suivez Marie · Arrêter » ; toute action de ma part arrête, calmement ; je ne touche jamais sa
+    vue ; annonces polies ; repères Figma, Live Share et Zed [S35] ;
+  - « la personne suivie le voit-elle ? » est la **décision n° 21** de
+    `decisions-utilisatrice.md` ; recommandation : oui, discrètement, pour la vie privée ;
+  - §5.15 renvoie à §4.47 ; `coverage.md` (deux lignes) et `inventory.md` (G-104) mis à jour.
