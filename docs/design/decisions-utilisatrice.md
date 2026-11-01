@@ -140,3 +140,12 @@ Pour chacun : la question, les choix possibles, la recommandation des relecteurs
 - La recherche dans le projet est dans le panneau de droite.
 - Aucun modèle n'est fourni : ce sont les personnes qui créent les leurs.
 - Les problèmes s'affichent dans « Relire », avec un seul compteur en bas.
+
+## Réponses de l'utilisatrice (2026-11-01)
+
+| Décision | Réponse |
+|----------|---------|
+| Protection des projets partagés | **Au choix, non protégé par défaut** : on coche « Protéger ce projet » si on le souhaite (contre la recommandation des relecteurs) |
+| IA | Absente tant que non configurée ; un admin l'autorise dans un projet partagé (recommandation suivie) |
+| Variantes | Toujours tout le projet (recommandation suivie) |
+| Extensions de projet | Chargement automatique, droits limités, interrupteur personnel (recommandation suivie) |
