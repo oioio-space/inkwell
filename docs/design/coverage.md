@@ -1,4 +1,4 @@
-# Matrice de couverture du système de design (N17, révision 3)
+# Matrice de couverture du système de design (N17, révision 4)
 
 C'est la grille de contrôle des reviewers. Chaque ligne dit :
 - où [`spec.md`](spec.md) traite le point ;
@@ -44,7 +44,7 @@ Il y a 55 critères ; le 4.1.1 est retiré de WCAG 2.2.
 
 | Critère | Niv. | Où | État | Preuve existante, ou écart |
 |---|---|---|---|---|
-| 1.1.1 Contenu non textuel | A | I-2, `FileIcon`, pages de l'aperçu, §4.34 (diagramme) | S→G | G-34, G-26 |
+| 1.1.1 Contenu non textuel | A | I-2, `FileIcon`, pages de l'aperçu, §4.34 (description de chaque diagramme, partagée, dans `image(alt:)`, l'export et la Vue lecture), §4.38 (texte alternatif obligatoire d'une figure) | S→G | G-34, G-26, G-75 |
 | 1.2.1–1.2.5 Médias temporels | A/AA | — | NA | Inkwell n'affiche ni audio ni vidéo. **À réexaminer** si une vue d'extension en introduit : elle relève alors de A-21. |
 | 1.3.1 Information et relations | A | A-18, motifs APG | S→G | G-22, G-23, G-51 |
 | 1.3.2 Ordre séquentiel logique | A | A-4 | S→N | `e2e/a11y.spec.ts` (à écrire) |
@@ -57,12 +57,12 @@ Il y a 55 critères ; le 4.1.1 est retiré de WCAG 2.2.
 | 1.4.4 Redimensionnement du texte | AA | T-9, A-11 | S→N | `e2e/reflow.spec.ts` (à écrire) |
 | 1.4.5 Texte en image | AA | §4.18 | **S** (exception) | Les pages de l'aperçu sont le rendu exact, ce qui est essentiel ; le texte est dans la source, à côté. L'accessibilité du PDF exporté n'est pas prouvée (architecture `AD-44`, PDF/UA). |
 | 1.4.10 Redistribution | AA | L-5 (texte qui revient à la ligne ; exemption limitée au 2D) | S→G | G-37. Le retour à la ligne de l'éditeur existe : `editor/setup.ts:122` (`EditorView.lineWrapping`). |
-| 1.4.11 Contraste non textuel | AA | §2.2, §2.10 | S→G | G-1, G-3, G-4, G-53, G-71 |
+| 1.4.11 Contraste non textuel | AA | §2.2 (dont `--border` HC en `hcOnly`, `--suggestion-line`, `--ai-mark`), §2.10 | S→G | G-1, G-3, G-4, G-53, G-71 |
 | 1.4.12 Espacement du texte | AA | T-9 | S→N | `e2e/reflow.spec.ts` (à écrire) |
 | 1.4.13 Contenu au survol ou au focus | AA | §4.6 | S→G | G-18 |
 | 2.1.1 Clavier | A | A-4, §4 | S→G | G-20, G-22, G-23, G-54 |
 | 2.1.2 Pas de piège au clavier | A | §4.8 | **S** (mécanisme) | `showModal()` natif dans les sept dialogues : `ui/ShareDialog.svelte:12`, `ui/AboutDialog.svelte:21`, `ui/prefs/Preferences.svelte:21`, `ui/people/PeopleDialog.svelte:21`, `ui/history/ApplyDialog.svelte:19`, `ui/sheet/PasteDialog.svelte:13`, `ui/history/DiffView.svelte:47`. Le test de piège reste à écrire. |
-| 2.1.4 Raccourcis d'une seule touche | A | A-20 | **S** (présentation) | B, W, L ne sont lus que par le clavier de la vue de présentation : `present/keys.ts:61-69`. Lettres de l'arbre : S→N (G-22). |
+| 2.1.4 Raccourcis d'une seule touche | A | A-20 (aucun raccourci à une touche ajouté en rév. 4 ; les raccourcis réservés de la plate-forme, K-6) | **S** (présentation) | B, W, L ne sont lus que par le clavier de la vue de présentation : `present/keys.ts:61-69`. Lettres de l'arbre : S→N (G-22). |
 | 2.2.1 Délai réglable | A | TO-1, A-13 | S→G | G-17, G-15 |
 | 2.2.2 Mettre en pause, arrêter, masquer | A | T-11 | **S** | animations infinies coupées sous `reduce` : `ui/shell/HeaderBar.svelte:293`, `preview/Preview.svelte:306`, `ui/sheet/Grid.svelte:1025` |
 | 2.3.1 Trois flashs | A | T-12 | S→N | aucun clignotement dans le code relevé ; pas de test |
@@ -94,7 +94,7 @@ Il y a 55 critères ; le 4.1.1 est retiré de WCAG 2.2.
 | 3.3.7 Saisie redondante | A | A-16 | S→N | — |
 | 3.3.8 Authentification accessible | AA | A-16 | S→N | G-41 |
 | 4.1.2 Nom, rôle et valeur | A | §4, A-19, FT-7, A-21 | S→G | G-22, G-23, G-24, G-26, G-51 |
-| 4.1.3 Messages d'état | AA | A-10, §4.11, §4.36 (compte annoncé 0↔n, au plus toutes les 2 s) | S→G | G-60 |
+| 4.1.3 Messages d'état | AA | A-10, §4.11, §4.36 (compte annoncé 0↔n), §4.39 (réponses d'IA annoncées une fois terminées), §4.40 (changement d'état seulement) | S→G | G-60 |
 
 **Au-delà de AA :** 2.4.13 (A-6) et 2.3.3 (T-11), visés, en S→N.
 
@@ -104,14 +104,15 @@ Il y a 55 critères ; le 4.1.1 est retiré de WCAG 2.2.
 |---|---|---|---|
 | Dialog (Modal) | `Dialog` §4.8, Aide et fenêtre des raccourcis §4.26, dialogues d'extension §4.31 | S→G | G-12, G-59 |
 | Alert Dialog | §4.9, consentement §4.29, mode sans extensions §4.33 | S→G | G-64 |
-| Menu Button, Menu | §4.2, menu Extensions §4.30, contributions de menu §4.31, corrections rapides §4.36, menu d'un modèle §5.19 | S→G | G-25, G-54 |
+| Menu Button, Menu | §4.2, contributions de menu §4.31, corrections rapides §4.36, « Plus d'actions » d'un modèle §5.19, liste des problèmes §4.36 | S→G | G-25, G-54 |
+| Dialog (non modal) et popover | popover Extensions §4.30 (deux boutons par ligne), cartes de problème et d'aide §4.36–§4.37 (le focus y entre par Ctrl+Maj+Espace), popover « Demander à l'IA » §4.39 | S→N | G-73, G-80, G-84, G-86 |
 | Toolbar | §4.3 | S→G | G-20, G-54 |
 | Tabs | sélecteurs §4.5 (activation automatique) ; onglets de fichiers §4.25 (activation **manuelle**) | S→G / S→N | G-23 ; G-55 |
 | Tree View | §4.16 (Fichiers, Sommaire) | S→G | G-22 |
-| Listbox | §4.22, §4.24, galerie des modèles §5.19 | S→G | G-51 ; galerie : S→N (G-83) |
-| Grid | §4.19 | **S** | `e2e/sheet.spec.ts:613` (CSV-20 : grille ARIA, clavier, axe sans violation) |
+| Listbox | §4.22, §4.24, morceaux d'une proposition d'IA §4.39, caractères spéciaux §4.38 | S→G | G-51 ; nouveaux : S→N |
+| Grid | §4.19 ; table des ressources §4.40 (S→N, G-87) | **S** (tableur) | `e2e/sheet.spec.ts:613` (CSV-20 : grille ARIA, clavier, axe sans violation) |
 | Combobox | §4.24 (palette), §4.37 (complétion dans l'éditeur) | S→N | G-84 |
-| Radio Group | §4.5, thèmes §2.10, couleurs à l'accueil §5.1 | S→G | G-54 |
+| Radio Group | §4.5, thèmes §2.10, couleurs à l'accueil §5.1, **galerie de modèles** §5.19 (cartes sans contrôle interne), politique IA §4.39 | S→G | G-54 ; galerie : S→N (G-83) |
 | Switch | §4.5, interrupteurs d'extension §4.29 | S→G | G-24 |
 | Tooltip | §4.6 | S→G | G-18 |
 | Window Splitter | §3.3 (nom et orientation inclus) | S→N | G-36 |
@@ -163,7 +164,7 @@ Il y a 55 critères ; le 4.1.1 est retiré de WCAG 2.2.
 | **Performance perçue** | §5.17, PERF-1 | **S→N** (corrigé) | Les paliers existent (`store/limits.ts:15-26`), mais aucune mesure de latence n'est faite : `e2e/perf.spec.ts` est à écrire. |
 | **Types de fichiers et code (N20)** | §4.28 (FT-3 simplifié ; budget de chargement) | S→N | G-65 à G-69 |
 | **Extensions : gestion, consentement, données (N21)** | §4.29 | S→N | G-70 |
-| **Thèmes (N22)** : contrat, validation au chargement, Apparence, refus, retour au défaut | §2.10, `tokens.json` (`contract`, `themeContract`) | S→N | **G-71** |
+| **Thèmes (N22)** : contrat (toute valeur classée, bornes typées, version), validation de chaque état interactif dans les quatre modes, planchers HC (7:1 pour le texte principal), `--border` HC, refus exact, Apparence, retour au défaut | §2.10, `tokens.json` (`contract`, `themeContract`) | S→N | **G-71** |
 | **Stockage distant, miroir, cycle de vie (N22)** | §4.29 | S→N | G-70 |
 | **Points d'affichage et attribution** (architecture §15.4, §15.13) | §4.31 | S→N | G-77 |
 | **Bouton Extensions et épinglage** | §4.30 | S→N | G-73 |
@@ -172,8 +173,11 @@ Il y a 55 critères ; le 4.1.1 est retiré de WCAG 2.2.
 | **Diagrammes (N24)** : bloc, aperçu en ligne et dans l'aperçu, dernier rendu partagé, erreurs en ligne | §4.34 | S→N | G-75 |
 | **Outils de développement (N25)** : mode développeur signalé et local, Inspecteur | §4.35 | S→N | G-76 |
 | **Modèles de projet (N27)** : aucun modèle fourni ; galerie à « Nouveau projet » (vignette, description, ce que vous obtenez, page d'exemple, étiquettes) ; écran vide ; enregistrer en 3 étapes avec vignette automatique ; modifier, dupliquer, renommer, supprimer, importer, exporter, partager ; charte partagée entre modèles ; copie contre dépendance ; personnel ou d'équipe | §5.2, §5.19 | S→N | G-83 ; Q16 |
-| **Erreurs de compilation claires (N28)** : soulignement et marge, liste Problèmes (popover existant), un clic jusqu'à l'erreur depuis chaque signal, fichiers importés et modèles, messages en clair avec le texte d'origine, conseils, corrections rapides, F8 et Ctrl+., aperçu qui garde le dernier bon rendu, gravités, compte annoncé poliment, calme pendant la frappe, même comportement pour Typst, Markdown, CSS, CSV et les extensions | §4.36, §4.18 | S→G | G-80, G-81, G-82. Existant : le compte et la liste (`ui/shell/StatusBar.svelte:84-129`) ; la dernière bonne version de l'aperçu (`preview/Preview.svelte:143`, `preview.stale`). |
+| **Erreurs de compilation claires (N28)** (rév. 4 : Alt+Entrée au lieu de Ctrl+., réservé par GTK ; deux boutons pour le compte ; cartes au clavier ; résultats périmés ; sans position ; service absent) : soulignement et marge, liste Problèmes (popover existant), un clic jusqu'à l'erreur depuis chaque signal, fichiers importés et modèles, messages en clair avec le texte d'origine, conseils, corrections rapides, F8 et Ctrl+., aperçu qui garde le dernier bon rendu, gravités, compte annoncé poliment, calme pendant la frappe, même comportement pour Typst, Markdown, CSS, CSV et les extensions | §4.36, §4.18 | S→G | G-80, G-81, G-82. Existant : le compte et la liste (`ui/shell/StatusBar.svelte:84-129`) ; la dernière bonne version de l'aperçu (`preview/Preview.svelte:143`, `preview.stale`). |
 | **Aide à l'écriture Typst (N29)** : complétion avec icônes de genre et aperçu de la documentation, aide de signature (paramètre courant, type, défaut), carte de survol rendue et « Aller à la définition » vers un onglet, indices de noms discrets, convention `///` encouragée par l'assistant de modèle, combobox et listbox APG, fr et en, Markdown (chemins, ancres), point d'extension | §4.37 | S→N | G-84 |
+| **Outils d'écriture (N30)** : orthographe discrète (pointillé, jamais rouge ni comptée), dictionnaire du projet partagé ; Relecture à la demande dans le tiroir, gravité « suggestion », aucun score ; concentration, machine à écrire, plein écran ; mots et temps de lecture ; objectifs locaux sans série ; recherche et remplacement de projet, regex masqué ; typographie française (rendu, et saisie en option) ; insertion : figure, tableau, équation, caractère, citation, note, renvoi ; comparaison par mots ; préréglages d'export | §4.38 | S→N | G-88 ; existant : compte de mots (`ui/popover/StatsPopover.svelte`) |
+| **IA (N31)** : onglet IA du tiroir ; « Demander à l'IA » sur la sélection ; propositions par morceau, annulables, « via IA » visible des collègues ; texte en flux local ; fournisseurs compatibles OpenAI (adresse, AC, proxy, clé, test) ; politique du projet par un admin ; aperçu de ce qui part ; contexte marqué quand il contient le texte d'autrui ; MCP et agents désactivés par défaut, repère permanent ; coût, durée, arrêt, hors ligne | §4.39 | S→N | G-86 |
+| **Ressources des extensions (N32)** : vue « En cours » ; mémoire, calcul, délai contre le budget, état, projet ; arrêter, relancer, désactiver, journal, désinstaller ; services relançables seulement ; limites appliquées → toast « Voir », jamais de dialogue ; table APG triable, annonce sur changement d'état | §4.40 | S→N | G-87 |
 | **Commentaires** | §4.27 | H, et S→G sur l'onglet | Hors périmètre (Q8). L'onglet **est encore affiché** (`ui/history/HistoryDrawer.svelte:206-207`) : G-62. |
 | **Présentation** | §4.23, §5.11 | S→G | G-7 |
 

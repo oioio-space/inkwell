@@ -1,4 +1,4 @@
-# Inventaire de l'interface et écarts avec la spécification (N17, révision 3)
+# Inventaire de l'interface et écarts avec la spécification (N17, révision 4)
 
 - **Relevé du 2026-11-01** sur `main` (`3841ff2`), dans `frontend/src` ; les chemins sont
   relatifs à ce dossier, sauf mention contraire.
@@ -171,10 +171,20 @@ Ces fonctions n'existent pas encore. Chaque ligne nomme ce que le code devra mon
 | # | Grav. | Écart | Norme | Preuve | Correction |
 |---|---|---|---|---|---|
 | G-80 | M | Aucun soulignement ni marqueur de marge pour les problèmes dans l'éditeur | N28, Nielsen 9, 3.3.1 | `@codemirror/lint` absent (`frontend/package.json`) ; aucun `setDiagnostics` dans `src` | spec §4.36 |
-| G-81 | M | Le diagnostic n'a ni colonne, ni plage, ni conseil, ni correction, ni trace ; le message est coupé à 400 caractères | N28, 3.3.3 | `preview/protocol.ts:10-12`, `:134-137` | modèle de diagnostic unique (§4.36) ; à porter au protocole de l'aperçu (N18) |
+| G-81 | M | Le diagnostic a la ligne et la **colonne** de début (message coupé à **4 000** caractères), mais ni fin de plage, ni conseil, ni correction, ni trace ; les problèmes CSV n'ont que la ligne | N28, 3.3.3 | `preview/protocol.ts:8-19`, `:134-142` ; `editor/csv/problems.ts:17` (`findProblems`) | modèle de diagnostic unique (§4.36) ; à porter au protocole de l'aperçu (N18) |
 | G-82 | M | Messages du compilateur bruts, en anglais ; pas de phrase en clair ni de conseil ; le compte de la barre d'état n'amène pas à l'erreur (il ouvre une liste) | N28, P5, Nielsen 9 | `ui/shell/StatusBar.svelte:120` (`d.message.split("\n")[0]`), `:84-101` | table de traduction, bouton partagé, F8, Ctrl+. |
 | G-83 | M | Aucun modèle de projet : ni galerie, ni enregistrement, ni gestion. « Nouveau projet » n'existe pas (G-40). | N27 | aucun composant | spec §5.2, §5.19 |
 | G-84 | M | tinymist est embarqué, mais son LSP n'est pas relié à l'éditeur : ni complétion, ni aide de signature, ni survol, ni définition | N29 | `@codemirror/autocomplete` absent de `frontend/package.json` ; aucun appel LSP dans `frontend/src/editor` | spec §4.37 ; branchement (architecture N18) |
+
+### 2.9 Révision 4 : contrastes nouveaux, écriture, IA, ressources (N30 à N32)
+
+| # | Grav. | Écart | Norme | Preuve | Correction |
+|---|---|---|---|---|---|
+| G-85 | **B** | Texte secondaire d'une ligne de préférences (`.sub`, `--fg-dim`) sur une carte dans un dialogue : **4,13:1** en sombre | 1.4.3 | `ui/prefs/Preferences.svelte:86` (`.sub`, dans `.card.boxed`, dans `<dialog>`) ; paire de `tokens.json` | `--fg-dim-on-card` (5,07:1) |
+| G-85b | M | Texte posé sur le papier de l'aperçu : la couleur brute `#55555a` est juste, mais n'est pas un jeton ; `--fg` y donnerait 1,00:1 en sombre | T-1, 1.4.3 | `preview/Preview.svelte:292` (déjà dans G-7) | `--page-fg` |
+| G-86 | M | Pas d'IA : ni onglet, ni proposition, ni fournisseur, ni politique, ni dialogue d'envoi | N31 | aucun code ; architecture §15.18 | spec §4.39 |
+| G-87 | M | Pas de vue des ressources des extensions | N32, ND-5 | aucun code | spec §4.40 |
+| G-88 | M | Pas d'orthographe, de Relecture, de mode concentration, d'objectifs, de typographie française à la frappe, de dialogues d'insertion de figure ni de citation | N30 | aucun correcteur dans `frontend/package.json` ; le compte de mots existe (`ui/popover/StatsPopover.svelte`) | spec §4.38 |
 
 ## 3. Corrections, dans l'ordre
 
@@ -192,7 +202,7 @@ par une passe Orca.
 - **Vague 2, messages et infobulles :**
   - G-60 (régions persistantes) ;
   - G-16, G-17, G-15 (`ToastHost`, annulation durable) ;
-  - G-13, G-14, G-44 (`BannerHost`, questions d'abord) ;
+  - G-13, G-14, G-44 (`BannerHost` : états critiques, puis questions, puis états, puis information, L-8) ;
   - **G-18, G-19** (`Tooltip`) : remonté depuis la vague 3 à la demande de Fable, car c'est un
     échec AA ;
   - G-45, G-46, G-47, G-61 (textes).
@@ -225,5 +235,7 @@ par une passe Orca.
   - G-80, G-81, G-82 (problèmes, avec N18 pour le protocole) ;
   - G-83 (modèles, après G-40) ;
   - G-84 (aide à l'écriture, après le branchement du LSP).
+- **Vague 11, écriture, IA, ressources :** G-85 et G-85b avec la vague 1 (contraste) ; G-88
+  (écriture) ; G-87 (ressources, avec la vague 8) ; G-86 (IA, après PD-1 et les ADR 0040 et 0041).
 - **Transverses**, à mener avec la vague 4 : G-78 (replis du focus), G-79 (langue des
   passages).

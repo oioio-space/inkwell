@@ -64,28 +64,36 @@ sans apprendre, et que l'application suit le thème clair ou sombre du système.
    grandes polices.
 7. **Mesuré, pas supposé** : chaque règle a sa preuve (un test, une capture, une revue).
 
-## Les grandes décisions (révision 3)
+## Les grandes décisions (révision 4)
 
-- **Jetons libadwaita 1.8, corrigés pour WCAG 2.2 AA.** `tokens.json` est aussi le **contrat
-  de thème** : chaque jeton est remplaçable, dérivé ou verrouillé. Un thème qui échoue dans un
-  seul mode est refusé en entier, avec la raison.
-- **La structure à gauche, le temps et les autres à droite**, et des onglets de fichiers. Le
-  clic sur un fichier, encore cassé (G-0, ouvert), a son comportement attendu écrit.
-- **Messages :** un état critique d'abord, puis les questions, puis le reste. Un toast n'a
-  qu'une action, et ce qu'il annule reste annulable après.
+- **Jetons libadwaita 1.8, corrigés pour WCAG 2.2 AA.** `tokens.json` est le **contrat de
+  thème** :
+  - chaque jeton est classé, avec des bornes typées et une version ;
+  - l'hôte vérifie 128 paires, **états interactifs compris**, dans les quatre modes, avec des
+    planchers HC (7:1 pour le texte principal) ;
+  - un seul échec, et le thème est refusé, avec la raison exacte.
+- **La structure à gauche** (Fichiers, Sommaire, Tâches, Liens) ; **le temps et les autres à
+  droite** (Historique, Activité, Rechercher, Relecture, IA) ; des onglets de fichiers. G-0 (le
+  clic sur un fichier) reste ouvert.
+- **Messages :** état critique, puis questions, puis états. Un toast n'a qu'une action, et
+  l'annulation dure.
 - **Extensions :**
-  - une ligne par point de l'architecture, chacune avec son attribution visible ;
-  - les extensions sont rendues par Inkwell, en Adwaita ;
-  - épinglées par la personne, jamais par elles-mêmes ;
-  - des zones protégées, et un mode sans extensions ;
-  - les extensions de projet sont annoncées et désactivables pour soi.
-- **Modèles :** aucun n'est fourni. On enregistre un projet comme modèle, au format de Typst ;
-  une charte se partage entre plusieurs modèles.
-- **Problèmes :** un clic amène à l'erreur, partout. Les messages sont en clair, avec le texte
-  d'origine, des conseils et des corrections rapides. F8 et Ctrl+. sont libres.
-- **Aide à l'écriture Typst :** complétion, signatures et documentation `///`, par tinymist.
-  C'est calme : un outil d'écriture, pas un IDE.
-- **Rien n'est ratifié** : les recommandations attendent l'utilisatrice (`spec.md` §11).
+  - une ligne par point de l'architecture, avec son attribution ;
+  - rendues par Inkwell, en Adwaita ;
+  - épinglées par la personne seulement (6 au plus) ;
+  - zones protégées ; mode sans extensions ;
+  - vue **En cours** pour voir et arrêter ce qui consomme.
+- **Écrire, c'est calme :** orthographe en pointillé gris-bleu, Relecture à la demande, aucun
+  score ni rouge, objectifs locaux sans série, typographie française.
+- **L'IA propose, la personne dispose :**
+  - diff par morceau, « via IA » visible ;
+  - rien ne part sans voir quoi et vers où ;
+  - la politique est décidée par un admin ;
+  - désactivée par défaut dans les projets partagés.
+- **Problèmes :** un clic jusqu'à l'erreur ; F8 ; corrections rapides sur **Alt+Entrée** (Ctrl+.
+  est pris par GTK).
+- **Modèles :** aucun fourni ; enregistrés en un dialogue, au format de Typst.
+- **Rien n'est ratifié** (`spec.md` §11) ; les désaccords sont dans `CHANGES.md`.
 
 ## Comment s'en servir
 

@@ -48,7 +48,11 @@
    ni `terminal`, l'agent recevant **notre serveur MCP** pour voir et proposer ; A2A, AG-UI,
    WebMCP, lsp-ai, MCP Apps : **ne pas adopter** (inspiration ou veille seulement) ; **UTCP** : pas
    de client ; au plus un **manuel exporté** (P3, §11.6), MCP restant l'interface de référence.
-10. **Feuille de route** : P0 fournisseurs + propositions + commandes (reformuler, corriger) →
+10. **RAG natif (N33, §12)** : d'abord **recherche agentique lexicale** (SQLite FTS5 + outils plan /
+    chercher / lire une plage / références / fichiers), **sans vecteurs** ; embeddings en **option**
+    (modèle fourni par la personne ou point `/v1/embeddings` de l'entreprise, sous politique) ;
+    index **local, dérivé, jamais synchronisé**, reconstructible, chaque extrait étiqueté `soi`/`autrui`.
+11. **Feuille de route** : P0 fournisseurs + propositions + commandes (reformuler, corriger) →
    P1 politique + marques d'autorat + panneau de discussion → P2 MCP stdio lecture/proposition →
    P3 MCP HTTP → P3 aussi : client ACP (option, politique admin) → P4 discussion « appli » + client MCP + génération de greffons + dictée locale.
 
@@ -642,7 +646,206 @@ un client réel le demande ; à réévaluer si un hôte majeur ou une fondation 
 portée (MCP), absence de serveur à « ne pas écrire » chez nous, sécurité (manuels exécutables,
 transports larges), gouvernance (communautaire, sans fondation), licence (MPL-2.0 du SDK Go).
 
-## 12. Sources
+## 12. RAG natif : indexer les documents que l'IA peut lire (N33)
+
+> Exigence N33 : l'IA va droit au bon fichier et retrouve les éléments à l'intérieur. Sources
+> lues le 2026-11-01 ; [vérifié] / [mémoire] / [avis] comme plus haut. Les chiffres de
+> performance et de taille marqués [avis] sont des **cibles à mesurer** (`PERF-IDX-*`), pas des
+> mesures.
+
+### 12.1 Options de récupération
+
+| Option | Ce que c'est | Faits et sources | Sé | Pr | Va | Co | In |
+|---|---|---|---|---|---|---|---|
+| **A. Lexical : SQLite FTS5** | index inversé BM25 dans le SQLite local | `bm25()` (k1 = 1,2, b = 0,75 figés), pondération par colonne, tokenizers `unicode61` (casse et **diacritiques** retirés par défaut), `trigram` (sous-chaînes), `porter` (**anglais seulement**), tables à contenu externe, `snippet()`, option `detail` ; sur 1 636 Mio de courriels l'index fait 743 Mio (`detail=full`), 340 (`column`), 134 (`none`) [vérifié, sqlite.org/fts5.html] | ++ | ++ | + | ++ | ++ |
+| **B. Lexical : bleve** | bibliothèque d'indexation Go | Apache-2.0 ; BM25 et tf-idf ; **kNN approximatif sur vecteurs** ; « en Go » (dépendances non Go non vérifiées) [vérifié, github.com/blevesearch/bleve] | ++ | ++ | + | + | + |
+| **C. Vecteurs, modèle local** | embeddings calculés sur la machine | voir §12.2 | + | ++ | ++ | − | + |
+| **D. Vecteurs, point de terminaison** | `/v1/embeddings` de l'entreprise (NIM, vLLM…) | NIM : le **reranking** a sa propre route `/v1/ranking`, pas le schéma OpenAI ; l'API `/v1/embeddings` de NIM n'a pas été confirmée ce jour [vérifié pour `/v1/ranking`, **non confirmé** pour embeddings] | + | −/+ (selon classe `org`) | ++ | + | + |
+| **E. Hybride + fusion** | lexical ∪ vecteurs, fusion par **rangs réciproques** (RRF : somme de 1/(60 + rang) [mémoire, Cormack 2009]) | Contextual Retrieval d'Anthropic (2024-09-19) : taux d'échec de rappel@20 de 5,7 % ramené à 3,7 % (embeddings contextuels), 2,9 % (+ BM25), **1,9 % avec reranking** ; l'hybride bat les embeddings seuls [vérifié, anthropic.com/news/contextual-retrieval] | + | selon D | ++ | − | + |
+| **F. Reranker** | second passage sur les ~50 meilleurs | NIM `/v1/ranking` [vérifié] ; modèles locaux de type bge-reranker [mémoire] ; **envoie aussi les extraits** au point de terminaison | + | selon la classe | + | − | 0 |
+| **G. Agentique** | l'IA reçoit des **outils** (plan, chercher, lire, références, fichiers) et itère | voir ci-dessous | ++ | ++ | ++ | + | ++ |
+| **H. Tout dans le prompt** | si le corpus tient dans la fenêtre | Anthropic : sous ≈ 200 000 jetons (≈ 500 pages), on peut **sauter le RAG** et mettre la base entière, avec cache de prompt [vérifié] | − (tout part) | − | + | ++ | + |
+
+**Preuves sur l'agentique lexical** (à lire avec leurs limites) :
+- Amazon (Subramanian et coauteurs), *Keyword search is all you need*, arXiv 2602.23368 :
+  une recherche par mots-clés **à outils** atteint **plus de 90 %** des métriques d'un RAG classique
+  sans base vectorielle, utile quand la base change souvent ; base de comparaison : Bedrock
+  Knowledge Base, Titan Embeddings V2, morceaux de 300 jetons, 5 extraits ; agent ReAct avec
+  ripgrep-all [vérifié, arxiv.org/abs/2602.23368 ; date de dépôt ambiguë, déc. 2025 ou fév. 2026].
+- A-RAG (fév. 2026) et GRASP : les agents reçoivent **à la fois** recherche par mots-clés,
+  sémantique et lecture de passage ; l'agentique bat le RAG en un coup [secondaire, résumés de
+  recherche].
+- Cursor : ajouter la recherche sémantique au grep donne **+12,5 %** de précision sur son banc
+  interne [secondaire, **chiffre du fournisseur**] ; Claude Code et Codex CLI livrent sans index
+  sémantique, Copilot et Cursor en ont un [secondaire].
+- **Limite importante** : les preuves portent surtout sur du **code** (identifiants exacts) ; aucun
+  test rigoureux trouvé sur du **texte français riche en paraphrases** ni à très grande échelle
+  [secondaire]. Pour de la prose, le lexical manque les synonymes : atténuation par **reformulation
+  de requête par l'IA** (l'agent essaie plusieurs formulations), accents repliés, et option
+  vecteurs.
+
+**Recommandation (le plus simple qui marche, d'après la taille d'un projet d'écrivaine : dizaines
+à milliers de fichiers)** [avis] :
+1. **R0 (P1)** : G + A. Index FTS5 local, outils agentiques, **aucun vecteur**, aucun
+   téléchargement, aucune sortie réseau pour l'indexation. Couvre la majorité des demandes
+   (« où ai-je parlé de… », « reprends la section Méthodes »).
+2. **R1 (P2, option)** : ajouter des vecteurs (C ou D) et la fusion RRF, **seulement** si la
+   mesure sur un corpus réel français montre un manque de rappel (banc `RAG-*` : questions,
+   passages attendus, rappel@10). Mesurer avant d'ajouter (règle « pas d'empirisme »).
+3. **R2 (P3, option)** : reranker, si D est disponible sur la DGX.
+4. Pour un petit projet (< 200 000 jetons) **et** une politique qui autorise l'envoi (classe
+   `local` ou `org`), le mode « tout le projet dans le prompt » (H) peut être le plus simple ; à
+   garder comme **stratégie choisie par la taille**, pas comme défaut.
+5. FTS5 plutôt que bleve [avis] : une dépendance de moins si SQLite est déjà là (à confirmer
+   dans l'ADR du stockage ; piège : `porter` ne stemme que l'anglais, donc pas de racinisation
+   française native ; prévoir `unicode61 remove_diacritics` + `trigram` pour les identifiants
+   et noms de labels Typst, ou un tokenizer Go si besoin).
+
+### 12.2 Embeddings : local ou fourni, sans téléchargement à l'exécution
+
+| Modèle | Taille | Licence | Notes [secondaire sauf mention] |
+|---|---|---|---|
+| Qwen3-Embedding 0.6B / 4B / 8B | 0,6 / 4 / 8 Md de paramètres | **Apache-2.0** | MMTEB multilingue : 64,33 / 69,45 / 70,58 (fiche du modèle) ; meilleur choix multilingue d'après les sources |
+| EmbeddingGemma | ≈ 300 M | **conditions Gemma** (pas Apache) | MTEB multilingue 61,15 (Google) |
+| BGE-M3 | ≈ 568 M, contexte 8 192 | non lue ce jour [mémoire : MIT] | MMTEB 59,56 ; dense + lexical + multi-vecteurs |
+| nomic-embed-text-v2-moe | 475 M (305 M actifs), contexte 512 | non lue | MMTEB ≈ 67,7 (non confirmé) |
+
+Aucun score **français** précis trouvé : choisir par **banc sur notre corpus**.
+- **Invariant** : ni téléchargement à l'exécution, ni modèle caché. Deux voies : (i) **fichier
+  fourni par la personne** (sélecteur de fichier) dont l'empreinte SHA-256 est comparée à un
+  manifeste, comme pour typst/tinymist (`internal/sidecar/manifest.json`) ; (ii) **point de
+  terminaison** (D). Embarquer un modèle de 0,6 Md alourdit le paquet (≈ 0,6 à 1,2 Go selon la
+  quantification [avis, arithmétique]) : **pas embarqué par défaut**.
+- **Exécution en Go** : *hugot* (knights-analytics) : backend **Go pur** par défaut, pensé pour
+  de petits modèles (all-MiniLM-L6-v2) et des lots d'environ 32 ; backends ONNX Runtime/XLA par
+  étiquettes de compilation, ORT demandant une bibliothèque de tokenisation en Rust ; v0.7.x, mai
+  2026 [vérifié, pkg.go.dev]. Un modèle de 0,6 Md en Go pur sera lent [avis, à mesurer].
+  Alternative alignée sur nos habitudes : **sidecar épinglé** `llama-server` (GGUF, embeddings)
+  comme typst, SHA-256 vérifié avant chaque lancement, 127.0.0.1, jeton, éphémère [avis ; à
+  confirmer dans une ADR : ajoute un binaire à fournir].
+- **Stockage des vecteurs** : `sqlite-vec` est **avant v1** (« attendez-vous à des ruptures »),
+  Apache-2.0/MIT, liaison Go, vecteurs float/int8/binaire [vérifié, github.com/asg017/sqlite-vec]
+  : **inutile ici** [avis] : 10 000 extraits × 1 024 dimensions × 4 octets ≈ 40 Mo ; le calcul
+  exhaustif en Go (10 M multiplications-additions, de l'ordre de la dizaine de ms [avis]) suffit ;
+  vecteurs en BLOB dans le SQLite, quantifiés int8 au besoin.
+- **Fuite par vecteurs** : un vecteur n'est **pas** anonyme (des attaques d'inversion
+  reconstruisent du texte [mémoire]) : mêmes règles que le texte (§12.5).
+
+### 12.3 Découpage selon la structure
+
+Un extrait = une unité sémantique, **avec son fil d'Ariane** (« Chapitre 3 › Méthodes › Échantillon »)
+préfixé à l'indexation : c'est l'idée de Contextual Retrieval (§12.1) obtenue **sans LLM** [avis].
+
+| Type | Découpage | Métadonnées |
+|---|---|---|
+| **Typst** | symboles de document de **tinymist** (`textDocument/documentSymbol` : « plan/table des matières » ; tinymist expose aussi symboles d'espace de travail et repli de titres [vérifié, README tinymist, détails d'implémentation non lus]) : titres, fonctions `#let`, **étiquettes** `<label>` ; section entre deux titres, coupée par paragraphes à ≈ 400 jetons si trop longue | fichier, plage de lignes, type (titre, fonction, figure, bibliographie), étiquette, fil d'Ariane |
+| **Markdown** | titres (analyse maison ou bibliothèque), blocs de code et tableaux gardés entiers | idem, ancres de titre |
+| **CSV / tableaux** | en-tête répété dans chaque groupe de lignes ; **outil** `interroger_tableau` (filtre, tri) plutôt que vecteurs | colonnes, plage de lignes |
+| **PDF** | texte par page, avec numéro de page ; extraction par bibliothèque Go ou le sidecar de compilation si adapté [avis] | page |
+| **Images** | légendes et texte alternatif seulement ; **pas d'OCR** en v1 (différé) | — |
+| **Code (listes fermées)** | symboles LSP | — |
+
+Rappels : le texte vient d'un **instantané** (§12.4), jamais d'Automerge ; les extraits portent
+la **révision** (`rev`) et un condensat pour détecter qu'ils sont périmés.
+
+### 12.4 Indexation incrémentale, CRDT dans la webview
+
+1. La webview émet, après **800 ms d'inactivité** ou à l'enregistrement, un message `index` sur
+   un Stream Wails (codec borné, fuzzé, vecteurs dorés, §15.1 point 6) : `{doc, rev,
+   texte (ou plage modifiée + texte), provenance par intervalles}`. Les changements **venant des
+   autres personnes** passent par le même chemin (ils arrivent aussi dans la webview). Go
+   ne voit aucun type Automerge.
+2. Go découpe, compare au condensat **par extrait**, et ne **réindexe que les extraits modifiés** :
+   FTS5 en une transaction ; vecteurs (si R1) en file d'arrière-plan annulable.
+3. **Budgets cibles** [avis, à fixer en `PERF-IDX-*`] : instantané → FTS à jour **≤ 50 ms p95**
+   (document de 100 Ko) ; indexation initiale de 1 000 fichiers **≤ 5 s** (FTS seul) ; priorité
+   basse, **≤ 1 cœur** et **≤ 150 Mo** de mémoire pour l'indexeur ; jamais sur le fil d'affichage ;
+   mise en pause quand la personne tape vite ou sur batterie. Vecteurs : coût **mesuré** sur le
+   matériel de référence avant toute promesse.
+4. **Taille de l'index** [avis, d'après l'exemple FTS5 : 743/1 636 ≈ 45 %] : texte de 50 Mo →
+   index lexical ≈ 25 Mo ; vecteurs : 40 Mo pour 10 000 extraits en float32. **Quota** par projet
+   (par exemple 200 Mo) avec message clair : un pair Byzantin ne doit pas pouvoir gonfler l'index
+   (porte de taille du §15.5, bornes d'extraits par document).
+5. Emplacement : **données de l'appareil**, dans le dossier d'état de l'application, clé = projet ;
+   **jamais** dans le dossier du projet, la projection go-git, ni le protocole.
+6. Cohérence : un résultat renvoie `rev` ; `lire_plage` vérifie le condensat de la plage et relit
+   si le texte a changé entre-temps (la webview reste la vérité).
+
+### 12.5 Sécurité et vie privée de l'index
+
+- **Dérivé, local, jetable** : jamais synchronisé, absent du protocole ; **« Reconstruire
+  l'index »** et suppression à tout moment ; reconstruction automatique si absent, corrompu ou de
+  schéma différent ; supprimé quand la personne **quitte ou supprime** le projet ; schéma versionné.
+- **Chiffrement au repos** : l'index contient une copie du texte (FTS5 sans contenu externe, ou
+  extraits) : il doit avoir **le même niveau de protection que le magasin du projet** (§6.7)
+  sinon il l'annule [avis]. Options : chiffrement du disque + dossier `0700` (v1) ; chiffrement par
+  fichier avec clé du trousseau de l'OS, ou SQLite chiffré (SQLCipher, cgo) [mémoire] ; **à trancher
+  par ADR**. Contenu sans texte (`content=''`) : plus petit mais pas de `snippet()` [vérifié].
+- **Droits de lecture** : l'index d'une personne ne contient que **ce qu'elle peut lire** (le v1 n'a
+  pas de permissions par dossier, NG4) ; les fichiers `ai: never` (§5.1) sont **exclus de
+  l'index d'IA** (ils peuvent rester dans la recherche humaine par une vue séparée). Un outil de
+  récupération applique **aussi** la portée de la session (projet ouvert, fichiers autorisés).
+- **Politique IA** : l'**indexation lexicale** n'envoie rien (toujours permise) ; les **embeddings**
+  et le **reranking** envoient des extraits : uniquement vers un profil que la politique autorise
+  (`local`, `org`, `libre`, §5.1), avec l'aperçu de charge utile à la première utilisation ; sous
+  `off`, retombée sur le lexical seul. Vecteurs stockés = données sensibles comme le texte.
+- **Provenance** : chaque extrait porte `soi | autrui | externe`, calculé par la webview dans les
+  intervalles de l'instantané (acteurs Automerge → personnes) ; un extrait **mixte** est `autrui`
+  (conservateur). Dès qu'un extrait `autrui` entre dans le contexte, la **réduction dynamique des
+  droits** du §5.3 s'applique. Le classement **ne confère aucune confiance** : un pair peut écrire
+  un passage fait pour remonter en tête (empoisonnement d'index [mémoire, PoisonedRAG]) ; la défense
+  est l'étiquette et la réduction de droits, pas le score.
+- **Journal** : requêtes d'IA sur l'index dans le journal local de l'appareil (sans le texte des
+  extraits si la personne le demande).
+
+### 12.6 Exposition : un service, plusieurs surfaces, citations cliquables
+
+Un paquet `internal/index` (rôle unique : instantané → extraits → requêtes) et **cinq commandes du
+registre** (§15.4, donc les mêmes pour palette, greffons, IA, MCP, ACP) :
+
+| Commande / outil | Rôle | Capacité |
+|---|---|---|
+| `index.plan(fichier?)` | plan (symboles tinymist/titres) d'un fichier ou du projet | `document.read` |
+| `index.chercher(requête, {fichier, type, confiance, k})` | recherche lexicale (+ vecteurs si R1), extraits courts | `document.read` |
+| `index.lire_plage(fichier, de, à)` | texte exact d'une plage, vérifié contre la révision | `document.read` |
+| `index.references(étiquette \| symbole)` | où une étiquette Typst, une note, un lien est utilisé (tinymist `references`) | `document.read` |
+| `index.fichiers(motif?)` | liste des fichiers avec type, taille, dernière modification | `project.read` |
+
+- **Résultat** : `{fichier, ligne_début, ligne_fin, rev, fil_d'Ariane, score, confiance,
+  extrait}` ; **citation** `inkwell://projet/{id}/{chemin}#L12-L18@rev` ; **un clic ouvre le
+  passage** (même mécanisme de navigation que les erreurs de compilation, N28). Les réponses de
+  l'IA citent ces liens ; si `rev` a changé, le clic ouvre l'état actuel et le **signale**.
+- **IA interne** : ces cinq outils sont le contenu du mode « Discuter » ; **bornes** : k ≤ 20,
+  ≤ 8 Ko par résultat, ≤ 32 Ko cumulés par tour, nombre d'appels par tour plafonné.
+- **MCP** (§5.5) : mêmes outils ; **ressources** `inkwell://projet/{id}/{chemin}#L..` avec
+  `_meta` de provenance ; portée `lecture` ; politique du projet ; texte `autrui` étiqueté
+  dans les métadonnées pour les clients qui les respectent.
+- **ACP** (§11.3) : l'agent reçoit ces outils **par notre serveur MCP de session** (pas de `fs`) ;
+  mêmes bornes, même étiquetage ; une session qui a lu du `autrui` est contaminée.
+- **Test** [avis] : banc de questions-passages en français (`RAG-*`), propriété « tout résultat
+  cité existe à `rev` ou est signalé périmé », fuzz du codec `index`, test d'injection
+  « passage `autrui` remonté en tête ⇒ aucun outil hors classe lecture/proposer ».
+
+### 12.7 Grille et points à ouvrir
+
+| Décision | Sé | Pr | Va | Co | In | Verdict |
+|---|---|---|---|---|---|---|
+| FTS5 + outils agentiques, sans vecteurs (R0) | ++ | ++ | + | ++ | ++ | **retenu (P1)** |
+| + embeddings (modèle fourni ou point `/v1/embeddings`) + RRF (R1) | + | −/+ selon la classe | ++ | − | + | **option P2**, sur mesure du rappel |
+| + reranker (R2) | + | selon la classe | + | − | 0 | option P3 |
+| bleve à la place de FTS5 | ++ | ++ | + | + | + | écarté par défaut (dépendance) |
+| `sqlite-vec` | + | ++ | + | − (avant v1) | + | écarté (calcul exhaustif en Go) |
+| Modèle embarqué dans le paquet | + | ++ | + | −− (taille) | − | écarté |
+| Index synchronisé entre appareils | −− | −− | + | − | −− | **interdit** |
+| Tout le projet dans le prompt (H) | − | − | + | ++ | + | stratégie **par taille et politique**, pas défaut |
+
+Points à ouvrir : (17) pilote SQLite et FTS5 sans cgo ou avec (cgo déjà requis par Wails) ;
+(18) chiffrement de l'index ; (19) choix et banc du modèle d'embeddings sur du français ;
+(20) **vérifier** `/v1/embeddings` des NIM de la DGX et le schéma de `/v1/ranking` ; (21)
+extraction PDF en Go ; (22) provenance par intervalles dans le message `index` (coût sur
+gros historiques) ; (23) OCR (différé) ; (24) sidecar `llama-server` pour embeddings.
+
+## 13. Sources
 
 - MCP, spécification 2026-07-28 : https://modelcontextprotocol.io/specification/latest
   (transports : …/basic/transports ; Streamable HTTP : …/2026-07-28/basic/transports/streamable-http ;
@@ -678,3 +881,13 @@ transports larges), gouvernance (communautaire, sans fondation), licence (MPL-2.
   statut des adaptateurs Claude/Codex, dates de la fusion IBM/A2A et de l'entrée dans l'AAIF,
   nom et statut de l'API WebMCP, licence d'ACP et des poids de Zeta2.
 - UTCP : https://www.utcp.io/ , https://utcp.io/utcp-vs-mcp , https://github.com/universal-tool-calling-protocol (dépôts `utcp-specification`, `go-utcp`, `python-utcp`) ; critique indépendante : https://feedbagel.com/post/utcp-a-scalable-secure-alternative-to-mcp-for-ai-tool-calling (secondaire). **Non lu** : sections de sécurité de la spécification UTCP, numéros de version des SDK, adoption réelle (aucun chiffre d'usage trouvé).
+- RAG (§12) : https://www.sqlite.org/fts5.html ; https://github.com/blevesearch/bleve ;
+  https://github.com/asg017/sqlite-vec ; https://github.com/knights-analytics/hugot ;
+  https://www.anthropic.com/news/contextual-retrieval ; https://arxiv.org/abs/2602.23368 ;
+  tinymist : https://github.com/Myriad-Dreamin/tinymist ; NeMo Retriever reranking :
+  https://docs.nvidia.com/nim/nemo-retriever/text-reranking/latest/getting-started.html ;
+  comparatifs de modèles d'embeddings (blogs, **secondaire**) : https://surrealdb.com/blog/embedding-models-comparison.md ,
+  https://regolo.ai/embeddinggemma-2-vs-qwen3-embedding-benchmarks.md (fiches officielles à lire avant ADR).
+  **Non vérifiés** : licence de BGE-M3, scores français, API `/v1/embeddings` de NIM, A-RAG/GRASP
+  (résumés seulement), chiffre Cursor (fournisseur), attaques d'inversion et PoisonedRAG
+  (mémoire), RRF (Cormack 2009, mémoire).

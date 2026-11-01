@@ -107,3 +107,78 @@ Ce qui suit répond aux revues n°2 de [Fable](reviews/03-fable-r2.md) et de
 | N27 (modèles de projet, créés par les personnes) | §5.2 (« Nouveau projet » vide par défaut), **§5.19** : format `typst.toml` `[template]` + `[tool.inkwell]` ; Touying ; Markdown + CSS ; charte = paquet local partagé ; contenu copié, charte en dépendance versionnée ; galerie ; écran vide ; enregistrer en 3 étapes avec vignette automatique ; gestion dans Projets › Modèles ; personnel ou d'équipe ; G-83 ; Q16 |
 | N28 (erreurs de compilation claires, « comme un IDE ») | **§4.36** : soulignement et marge ; liste Problèmes dans le popover existant ; **un clic** jusqu'à l'erreur depuis chaque signal, y compris les fichiers importés et les modèles ; F8 / Maj+F8 (libres) ; corrections rapides (Ctrl+., ampoule) ; messages en clair avec le texte d'origine et les conseils ; aperçu qui garde le dernier bon rendu ; gravités ; annonces polies ; calme pendant la frappe ; un modèle de diagnostic unique pour Typst, Markdown, CSS, CSV et les extensions ; G-80 à G-82 ; Q17 |
 | N29 (aide à l'écriture Typst) | **§4.37** : complétion (icônes de genre, aperçu de la documentation), aide de signature, carte de survol avec « Aller à la définition » (F12, onglet), indices discrets désactivés par défaut, convention `///` de tidy encouragée par l'assistant de modèle, combobox et listbox APG, fr et en, Markdown (chemins, ancres), point d'extension, réglages ; G-84 |
+
+---
+
+# Révision 4 — revues n°3, puis N30 à N32
+
+Revues : [Fable n°3](reviews/05-fable-r3.md) (ACCEPT, 3 majeurs et 10 mineurs) ;
+[Codex n°3](reviews/06-codex-r3.md) (NOT ACCEPTED : 1 bloquant, 7 majeurs, 2 mineurs). Tous les
+contrastes ont été recalculés par script : **128 paires** dans les quatre modes, aucun échec hors
+des paires interdites.
+
+## Revue Fable n°3
+
+| # | Constat | Correction |
+|---|---|---|
+| M1 | La règle HC « ≥ Adwaita » rend le HC inthémable ; le message de refus est faux | §2.10 TH-D2 point 3 : **planchers** et non plus comparaison. `hcMin` = 7:1 pour le texte principal (WCAG 1.4.6), sinon `min` ; `themeContract.hcRule`. Le thème « papier » (15,56:1) est accepté. Le message de refus cite le rapport et le seuil. |
+| M2 | Ctrl+. est pris par GTK (`insert-emoji`) | Corrections rapides sur **Alt+Entrée** (§4.36, §8.2). **Liste des raccourcis réservés par la plate-forme** dans K-6 : Ctrl+., Ctrl+;, Ctrl+Maj+U, Ctrl+Maj+I, raccourcis de GNOME Shell ; Ctrl+Espace « à risque », avec le repli Alt+/. Source [S25]. |
+| M3 | La paire `--border` HC a disparu | Trois paires `--border` (vue, barre latérale, dialogue), `min: 3`, **`hcOnly: true`** (3,83 à 5,14). §2.2 explique l'exemption 1.4.11 en clair et en sombre. |
+| m1 | Doublon et compte des paires | Doublon retiré ; le compte vient du fichier (128). |
+| m2 | Cinq jetons sans classe ; `--on-dark-fg` | **Tout jeton a un `contract`** (vérifié par script : 0 manquant). Les délais d'accessibilité, `--text-editor` et la taille minimale sont verrouillés. `--tooltip-fg` est verrouillé comme `--on-dark-fg` ; la règle « toasts, infobulles et scène restent sombres » est écrite dans TH-D1. |
+| m3 | Coupure à 4 000 caractères ; `problems.ts` | §4.36 et G-81 : 4 000, colonne déjà présente (`protocol.ts:8-19`, `:134-142`) ; source CSV `editor/csv/problems.ts` (`findProblems`). |
+| m4 | Paquet incompatible : détails et cas trop ancien | §4.29 : deux lignes (trop récent PV-1, trop ancien PV-4), avec « Détails techniques ». |
+| m5 | Texte alternatif des diagrammes hors de l'éditeur | §4.34 : **description** partagée, dans `image(alt:)`, à l'export HTML et dans la Vue lecture (voir aussi Codex R3-M1). |
+| m6 | Mode débogage par extension sans interface | §4.35 : « Enregistrer pour rejouer », pastille « Débogage de X », « Exporter une trace expurgée… », expurgation cochée par défaut. |
+| m7 | Bouton partagé sans motif APG | §4.36 : deux boutons voisins, deux arrêts de tabulation, *Menu Button* pour la liste, 34px chacun. |
+| m8 | §5.19 sur-ingénieux | Partage d'équipe = rôle Écriture, sans nouvelle sorte de demande ; « Voir les projets créés avec » repoussé en v2 (PEUT) ; une seule corbeille (§5.6). |
+| m9 | « Désactiver pour moi » ambigu ; cartes « Démarrer avec » | §4.32 : interrupteur sur chaque ligne, bandeau avec « Voir » seulement ; §4.31 ligne 21 : les cartes vont dans « Nouveau projet ». |
+| m10 | Tab dans la complétion ; casse des types | Entrée seule insère, dans la palette comme dans la complétion ; Tab garde l'indentation. Les noms de type de §5.19 suivent la majuscule de phrase (§6.2). |
+| §5 (crochets N30, N31) | Gravité « suggestion », onglet Relecture ; règle d'exclusion, MCP visible, propositions | §4.36 (quatrième gravité), §4.38, §4.39 (MCP en pastille L-8d ; « via IA » ; envoi conditionné à la politique et à l'architecture §15.18). |
+
+## Revue Codex n°3
+
+| # | Constat | Correction |
+|---|---|---|
+| R3-B1 | Le validateur ignore les états interactifs (`--hover-bg` noir accepté) | 21 paires d’**états** ajoutées : texte sur `--btn-bg` et `--hover-bg` sur 6 surfaces, sur `--selected-bg` sur 4 de plus, et sur `--card-bg`. Le contre-exemple est un cas de test (§10). La phrase « illisible par construction » est retirée. Le calcul a révélé **deux défauts réels**, corrigés : `--fg-dim` sur carte de dialogue en sombre à 4,13:1 (→ `--fg-dim-on-card`, G-85), et `--fg` sur papier en sombre à 1,00:1 (→ `--page-fg`). |
+| R3-M1 | Diagramme sans alternative au dessin | §4.34 : description en phrases, proposée par le moteur, éditable, écrite dans la source, partagée et exportée ; son absence est un avertissement. Le code n'est qu'un supplément. |
+| R3-M2 | Mode sans extensions, arrêt, anciens rangs de bandeaux | §4.33 : extensions **intégrées** chargées telles que livrées, registre d'une installation neuve. Arrêt : **1s au total**, en parallèle. §5.4, §5.16 et la vague 2 de l'inventaire suivent les rangs de L-8 (critique, questions, états, information). |
+| R3-M3 | Menu Extensions : deux actions par ligne | §4.30 : un **popover** et non un menu ; action et punaise sont deux boutons ; clavier défini (↑ ↓ entre lignes, ← → dans la ligne, Tab, Échap) ; plafond de **6** épinglées, avec la septième désactivée et expliquée. |
+| R3-M4 | Cartes dans une listbox ; cartes riches inaccessibles | Galerie = **groupe radio** de cartes sans contrôle interne ; gestion = liste de cartes avec un *Menu Button* chacune. Cartes de problème et d'aide : popover non modal où le **focus entre** par Ctrl+Maj+Espace ; Tab, Échap, retour au texte. |
+| R3-M5 | Exception de reflow fondée sur une préférence | L'exception « ligne de code non repliée » est retirée ; le code revient à la ligne sous 560px. |
+| R3-M6 | Compatibilité du contrat | TH-D2 point 1 : `contract: "^1.0"`, majeure refusée avec sa phrase, mineure tolérée, jetons `required` ; **bornes typées** dans `tokens.json` (objets `{min, max, unit}`, `type: color`, `type: font`). |
+| R3-M7 | États des nouveaux parcours ; résultats périmés ; tinymist absent | §5.19 : table d'états de l'enregistrement. §4.36 et §4.37 : résultats liés à la version (LSP-3), correction périmée grisée et jamais appliquée, service indisponible sans indicateur permanent, essais bornés. |
+| R3-m1 | Relevé obsolète | Comme Fable m3. |
+| R3-m2 | Enregistrer comme modèle trop lourd | Un dialogue : nom, une phrase dans la langue de la personne, emplacement ; le reste est automatique, ou replié dans « Options avancées ». |
+| Notes de la §4 | « Donner à X » ; §5.12 « Voir les problèmes » ; diagnostic sans position ; tests N27–N29 | « Donner à X » **déplace** l'action d'Inkwell, sans jamais la laisser sans raccourci ni menu. §5.12 emploie « Aller au premier problème », la commande de F8. Le cas « sans position » est défini (§4.36). §10 a des lignes de test pour les modèles, les problèmes, l'aide, l'écriture, l'IA et les ressources. |
+
+## Exigences N30 à N32
+
+| Exigence | Correction |
+|---|---|
+| N30, outils d'écriture | §4.38 : orthographe Hunspell, pointillé `--suggestion-line` jamais rouge ni compté, dictionnaire du projet partagé ; onglet **Relecture** du tiroir, à la demande, gravité « suggestion », aucun score ; concentration, machine à écrire, F11 ; mots et temps de lecture ; objectifs locaux sans série ; chercher et remplacer, regex masqué, aperçu ; typographie française au rendu et à la frappe (réglage du projet) ; Insérer : figure (texte alternatif obligatoire), tableau, équation, caractère (Ctrl+Alt+C), citation, note, renvoi, table des matières ; comparaison par mots ; préréglages d'export ; G-88 |
+| N31, IA | §4.39 : onglet IA du tiroir (modes Corriger, Discuter, Réglages ; puces de contexte) ; « Demander à l'IA » sur la sélection (Ctrl+Alt+I) ; propositions par morceau, une modification « via IA », périmées grisées ; autorat « marqué IA par Camille » ; texte fantôme local, désactivé par défaut ; fournisseurs compatibles OpenAI (adresse, modèle, clé au trousseau, AC, proxy, mTLS, classe, prix, « Tester la connexion ») ; politique du projet (Désactivée, Sur cet ordinateur, Organisation, Libre), désactivée dans les projets partagés avant PD-1 ; dialogue d'envoi du cœur, avec le texte d'autrui marqué ; repère « contexte d'autres personnes », outils retirés ; confirmations ciblées ; coût, durée, arrêt, hors ligne ; MCP et agents désactivés par défaut, consentement par application, pastille permanente ; G-86 |
+| N32, ressources | §4.40 : vue « En cours » de Préférences › Extensions ; table APG *Grid* triable (nom, projet, état, mémoire, calcul, délai contre le budget, activité facultative) ; arrêter, relancer, désactiver (aussi pour ce projet), journal, désinstaller ; services relançables mais non désactivables ; limites → toasts « Voir » regroupés, jamais de dialogue ; annonce sur changement d'état ; vocabulaire sans jargon ; G-87 |
+
+## Désaccords à débattre
+
+1. **Liste des problèmes : popover de la barre d'état ou onglet du tiroir ?**
+   - L'architecture §15.17 ER-1 prévoit « un seul onglet « Problèmes à corriger » dans le
+     tiroir ; compteur dans la **barre d'en-tête** ». Ce design garde le **popover existant** de la
+     barre d'état (§4.36).
+   - *Preuves :*
+     - le popover existe et fonctionne (`ui/shell/StatusBar.svelte:84-129`) ;
+     - les deux revues n°3 l'ont approuvé (Fable §6 ; Codex, ligne « Diagnostics N28 » : « Bon choix
+       du popover existant ») ;
+     - la barre d'en-tête est une **zone protégée** limitée à six contrôles du cœur (H-2, ND-1),
+       sans compteur de problèmes ;
+     - la règle de cohérence de `CLAUDE.md` demande de réutiliser l'existant avant d'ajouter un
+       panneau.
+   - *Proposition :* corriger ER-1 en « liste dans le popover de la barre d'état, compteur dans la
+     barre d'état ». Q18.
+2. **Ctrl+; pour les caractères spéciaux** (étude `editor-features.md` §9.5) : réservé par GTK 4 (même
+   signal que Ctrl+., [S25]). Ce design prend **Ctrl+Alt+C**. L'étude est à corriger.
+3. **Ctrl+Espace** : Fable le signale « à vérifier » (IBus). Il est **gardé**, parce que c'est la
+   convention de CodeMirror et de VS Code, et que GNOME règle IBus sur Super+Espace par défaut
+   [à confirmer par un e2e sous WebKitGTK]. Le repli Alt+/ est documenté. Si l'e2e montre une
+   interception par défaut, on inverse.
