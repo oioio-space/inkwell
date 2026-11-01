@@ -145,7 +145,7 @@ function parse(bytes, c) {
   if (type === "history-request") {
     const have = own(v, "have"), max = own(v, "max");
     if (!Array.isArray(have) || have.length > 256 || !have.every((h) => h instanceof Uint8Array && h.length === 32)) throw new Error("have");
-    if (!uint(max, 4194304) || max < 65536) throw new Error("max");
+    if (max !== 4194304) throw new Error("max must be r = 4194304");
     out.have = have.map(hex); out.max = max; return out;
   }
   if (type === "history-page") {
@@ -217,8 +217,9 @@ add("presence-update", "Éphémère : __presence update du canal name.", encode(
 add("presence-snapshot", "Éphémère : __presence snapshot de deux canaux.", encode(eph({ __presence: { type: "snapshot", state: { name: "Béa", head: "12" } } })));
 add("present-laser", "Éphémère : pointeur de présentation en dix-millièmes (entiers, aucun flottant).", encode(eph({ __present: { t: "laser", epoch: 3, x: 5000, y: 2500 } })));
 add("present-laser-off", "Pointeur éteint : x et y tous deux null.", encode(eph({ __present: { t: "laser", epoch: 3, x: null, y: null } })));
-add("history-request", "Demande de pages d'historique (§9.6) : têtes du demandeur et taille maximale d'une page (sa part, ici 4 Mio) ; la réponse contient toute modification hors du passé causal de ces têtes, branches concurrentes comprises.", encode({ ...base("history-request"), have: [unhex("31919abffa533f3b405001b59201b02a4ea3a18e318a49de0fd04e6eefe3d338")], max: 4194304 }));
+add("history-request", "Demande de pages d'historique (§9.6) : têtes du demandeur et max = r = 4 Mio ; la réponse contient toute modification hors du passé causal de ces têtes, branches concurrentes comprises.", encode({ ...base("history-request"), have: [unhex("31919abffa533f3b405001b59201b02a4ea3a18e318a49de0fd04e6eefe3d338")], max: 4194304 }));
 add("history-request-no-max", "Demande sans « max » : refusé (champ obligatoire).", encode({ ...base("history-request"), have: [] }));
+add("history-request-wrong-max", "Demande avec max = 65 536 : refusé (max est fixé à r = 4 194 304 dans cette version).", encode({ ...base("history-request"), have: [], max: 65536 }));
 add("history-page", "Page d'historique : modifications Automerge entières, ordre topologique, last = true.", encode({ ...base("history-page"), changes: [CHANGE], last: true }));
 add("liberal-cbor-x-map-header", "Même message sync encodé par cbor-x (en-tête de map sur 2 octets, ordre d'insertion des clés) : accepté ; la sérialisation préférée est RECOMMANDÉE à l'émission, non exigée à la réception (§9.2).",
   new cborx.Encoder({ tagUint8Array: false, useRecords: false }).encode({ ...base("sync"), data: SYNC }));
@@ -310,17 +311,30 @@ for (const v of gvec) vectors.push(v);
   binding("indivisible-binding-ok", "Modification indivisible reçue par le vrac : empreinte Automerge et taille conformes à l'annonce : admise à la chaîne de réception.", info.hash, ch.length);
   const bad = info.hash.slice(0, 63) + (info.hash[63] === "0" ? "1" : "0");
   binding("indivisible-hash-mismatch", "Octets dont l'empreinte Automerge n'est pas celle de l'annonce : refusé.", bad, ch.length);
-  vectors.push({ id: "indivisible-tuple-false-root", status: "proposed", enforce: "step-8", description: "Rejeu : un relais associe le tuple d'auteur honnête (qui signe change) à une fausse racine et sert d'autres octets ; Bao vérifie contre cette fausse racine, mais l'empreinte Automerge finale n'est pas change : refusé, imputé au pair annonceur (son emplacement est libéré), quota de l'auteur non crédité.", decoder: "indivisible_binding",
-    context: { expected_change_hash: info.hash, expected_size: ch.length - 1, announcer: "relay", tuple_author: "honest" }, input_hex: hex(ch.subarray(0, ch.length - 1)), verdict: "reject",
-    expect: { charged_to: "announcer", author_quota_credited: false, reason: "Automerge change hash differs from the announce" } });
+  let other = A.init({ actor: "4142434445464748494a4b4c4d4e4f50" });
+  other = A.change(other, { time: 0, message: "" }, (x) => { x.t = text.split("").reverse().join(""); });
+  const forged = A.getLastLocalChange(other), forgedInfo = A.decodeChange(forged);
+  vectors.push({ id: "indivisible-tuple-false-root", status: "proposed", enforce: "step-8", description: "Rejeu : un relais associe le tuple d'auteur honnête (qui signe change) à la racine d'une AUTRE modification valide qu'il sert ; Bao vérifie contre cette racine, mais l'empreinte Automerge finale n'est pas change : refusé, imputé au pair annonceur (son emplacement est libéré), quota de l'auteur non crédité.", decoder: "indivisible_binding",
+    context: { expected_change_hash: info.hash, expected_size: forged.length, announcer: "relay", tuple_author: "honest" }, input_hex: hex(forged), verdict: "reject",
+    expect: { charged_to: "announcer", author_quota_credited: false, received_change_hash: forgedInfo.hash, reason: "Automerge change hash differs from the announce" } });
   binding("indivisible-size-mismatch", "Octets dont la longueur n'est pas la taille annoncée : refusé.", info.hash, ch.length + 1);
   vectors.push({ id: "indivisible-serve-unadmitted", status: "proposed", enforce: "step-8", description: "WANT par racine d'une modification d'un document hors de l'ensemble admis du serveur : réponse MISSING (indiscernable d'un objet absent).", decoder: "bulk_serve",
     context: { holds_root: true, doc_admitted: false, requester_active_member: true }, verdict: "reject", expect: { answer: "MISSING" } });
-  const page = encode({ type: "history-page", senderId: FROM, targetId: ME, documentId: DOCID, changes: [ch], last: true });
-  const route = (id, desc, max) => vectors.push({ id, status: "proposed", enforce: "step-8", description: desc, decoder: "page_route",
-    context: { max, change_len: ch.length, singleton_page_len: page.length }, input_hex: hex(ch), verdict: "accept", expect: { route: page.length <= max ? "page" : "indivisible" } });
-  route("page-route-fits", "max = taille de la page singleton encodée : la modification part dans une page.", page.length);
-  route("page-route-envelope-overflow", "max = taille encodée − 1 : la modification brute tient (≤ max) mais pas sa page encodée : indivisible, tirée par le vrac (Codex, débordement d'enveloppe).", page.length - 1);
+  // Boundary at max = r (fixed): find texts whose change fits r while its encoded singleton
+  // page does not (envelope overflow), and one whose page fits exactly.
+  const R = 4194304;
+  const pageOf = (c) => encode({ type: "history-page", senderId: FROM, targetId: ME, documentId: DOCID, changes: [c], last: true });
+  const big = Array.from({ length: 4300000 }, () => String.fromCharCode(97 + (rnd() % 26))).join("");
+  const mk = (n) => { let x = A.init({ actor: "5152535455565758595a5b5c5d5e5f60" }); x = A.change(x, { time: 0, message: "" }, (y) => { y.t = big.slice(0, n); }); return A.getLastLocalChange(x); };
+  let lo = 4000000, hi = 4300000;           // largest n whose page fits r
+  while (lo < hi) { const mid = Math.ceil((lo + hi) / 2); if (pageOf(mk(mid)).length <= R) lo = mid; else hi = mid - 1; }
+  const fit = mk(lo), over = mk(lo + 1);
+  const route = (id, desc, c) => { const pl = pageOf(c).length; vectors.push({ id, status: "proposed", enforce: "step-8", description: desc, decoder: "page_route",
+    context: { max: R, change_len: c.length, singleton_page_len: pl }, input_sha256: require("crypto").createHash("sha256").update(c).digest("hex"),
+    recipe: "4 Mio : octets non recopiés ; les régénérer avec generate-repo.cjs.txt (acteur 5152…5f60, time 0, texte pseudo-aléatoire graine 7 tronqué à text_len)", text_len: c === fit ? lo : lo + 1, verdict: "accept", expect: { route: pl <= R ? "page" : "indivisible" } }); };
+  route("page-route-fits", "max = r : la plus grande modification dont la page singleton encodée tient dans r part dans une page.", fit);
+  if (!(over.length <= R && pageOf(over).length > R)) throw new Error("no envelope-overflow witness");
+  route("page-route-envelope-overflow", "max = r : un caractère de plus ; la modification brute tient (≤ r) mais pas sa page encodée : indivisible, tirée par le vrac (Codex, débordement d'enveloppe).", over);
 }
 
 process.stdout.write(JSON.stringify({ spec: "inkwell protocol", spec_version: "2.0.0-draft.2",

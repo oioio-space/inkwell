@@ -41,6 +41,20 @@
       }
     },
     {
+      "id": "bridge-advice",
+      "status": "proposed",
+      "enforce": "step-6",
+      "description": "Advice (kind 19, webview → Go) : session u32 || generation u32 || size u32 || doc str16 ; un avis de 200 Mio annoncé sans faire passer les octets par le pont (§7.2).",
+      "decoder": "bridge_envelope",
+      "input_hex": "011334313244334b6f6f57514b31776e65666f4c7263564862626e6635744c7a626f705564334b336246416f4a704137594a674c35705600000007000000020c800000001c344e4d4e6e6b4d684c386a5872644a396a616d533538504156645875",
+      "verdict": "accept",
+      "expect": {
+        "generation": 2,
+        "session": 7,
+        "size": 209715200
+      }
+    },
+    {
       "id": "bridge-peerdown-epoch",
       "status": "proposed",
       "enforce": "step-6",

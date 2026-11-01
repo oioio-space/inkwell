@@ -329,3 +329,26 @@ l'étape 8 » ; la suspension de la règle H disparaît.
 
 - `RepoGen.cfg` non exhaustif ; passage entre sessions et crédits du pont argumentés, non
   modélisés ; codecs `sync2` et objets proposés sans implémentation (étapes 4 et 8).
+
+---
+
+# Tour 7 : révision 8 (2.0.0-brouillon.7 → 2.0.0-brouillon.8)
+
+Revues [14-codex](reviews/14-codex.md) et [15-fable](reviews/15-fable.md) : « revise », aucune
+Critique, aucune divergence ; le même Majeur trouvé par les deux (borne de l'index fausse si
+`max` < `r`). Codex confirme fermés : rejeu tuple/racine, principal provisoire.
+
+| # | Source | Constat | Changement | Où |
+|---|---|---|---|---|
+| T7-1 | Fable F15-2, Codex (Majeur) | L'indivisibilité dépend du `max` du demandeur, l'index et sa borne supposent `max = r` | **`max` fixé à `r` = 4 194 304** (CDDL, spec ; autre valeur refusée, `repo.json#history-request-wrong-max` ; le champ reste pour N14) ; « annoncée ou détenue » remplacé par « présente dans l'index du serveur » ; borne de l'index juste ; vecteurs de bord **à `max = r`** : `#page-route-fits` (modification de 4 194 098 o, page 4 194 304 o → page) et `#page-route-envelope-overflow` (4 194 099 o, page 4 194 305 o → indivisible), octets non recopiés (empreinte SHA-256 et recette de régénération) | spec §7.2, §8.1, §9.6 ; CDDL ; `repo.json` |
+| T7-2 | Codex (nouveau Majeur) | 64 pairs actifs ne bornent pas les attentes laissées par des pairs déconnectés | **Plafond global de 1 Gio, pairs absents compris** ; une entrée est active si un détenteur connecté la sert ; au plafond : d'abord les finies ou plus voulues, puis les inactives en LRU ; jamais une active ; un pair connecté obtient toujours son emplacement (actives ≤ 64 × 16 Mio) ; scénario « 65 membres successifs » dans P-BYZ | spec §8.1, §14 (7), §16.1 ; ADR P-BYZ |
+| T7-3 | Fable F15-3 | Un relais pressé goutte une plage, le détenteur honnête n'est jamais interrogé | **Plages doublées** : après 30 s, une plage en cours peut être demandée aussi à un autre détenteur ; la première réponse complète gagne ; scénario dans P-BYZ | spec §8.1 ; ADR P-BYZ |
+| T7-4 | Fable F15-4 | État de synchronisation après un avis | Réinitialisé pour ce (pair, document), comme un message remplacé | spec §7.2 |
+| T7-5 | Fable F15-5 | Attente liée au premier annonceur, perdue à son retrait | Attente indexée **par `root`** avec ses détenteurs ; l'imputation passe à un autre détenteur annonceur | spec §8.1, §14 (7) |
+| T7-6 | Fable F15-5 | kind 19 `doc str8` contre kind 4 `doc str16` | `doc str16 (1–64)` ; vecteur `bridge-internal.json#bridge-advice` (Codex) | spec Annexe A |
+| T7-7 | Codex (Mineur) | Le vecteur de rejeu tronquait la modification (« not enough data ») | Rejeu avec une **autre modification valide** : l'empreinte reçue est calculée, différente de `change`, imputation à l'annonceur vérifiée | `repo.json#indivisible-tuple-false-root` |
+
+## Reste ouvert après ce tour
+
+- `RepoGen.cfg` non exhaustif ; passage entre sessions et crédits du pont argumentés, non
+  modélisés ; codecs `sync2` et objets proposés sans implémentation (étapes 4 et 8).

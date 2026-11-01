@@ -2,10 +2,10 @@
 
 | | |
 |---|---|
-| Version | **2.0.0-brouillon.7** (SemVer, §1.4) |
+| Version | **2.0.0-brouillon.8** (SemVer, §1.4) |
 | Date | 2026-11-01 |
 | Statut | proposé ([ADR 0034](../adr/0034-protocole-unifie.md)) ; les parties marquées *existant* décrivent des octets déjà émis par inkwell et sont figées |
-| Révision | 7 : revues [01-codex](reviews/01-codex.md), [02-fable](reviews/02-fable.md), [03-codex](reviews/03-codex.md), [04-fable](reviews/04-fable.md), [05-codex](reviews/05-codex.md), [06-fable](reviews/06-fable.md), [07-codex](reviews/07-codex.md), [08-fable](reviews/08-fable.md), le débat [09-debate-D1](reviews/09-debate-D1.md) (accord), [10-codex](reviews/10-codex.md), [11-fable](reviews/11-fable.md), [12-codex](reviews/12-codex.md) et [13-fable](reviews/13-fable.md) intégrés ; correspondance dans [CHANGES.md](CHANGES.md) |
+| Révision | 8 : revues [01-codex](reviews/01-codex.md), [02-fable](reviews/02-fable.md), [03-codex](reviews/03-codex.md), [04-fable](reviews/04-fable.md), [05-codex](reviews/05-codex.md), [06-fable](reviews/06-fable.md), [07-codex](reviews/07-codex.md), [08-fable](reviews/08-fable.md), le débat [09-debate-D1](reviews/09-debate-D1.md) (accord), [10-codex](reviews/10-codex.md), [11-fable](reviews/11-fable.md), [12-codex](reviews/12-codex.md), [13-fable](reviews/13-fable.md), [14-codex](reviews/14-codex.md) et [15-fable](reviews/15-fable.md) intégrés ; correspondance dans [CHANGES.md](CHANGES.md) |
 | Aperçu | [README.md](README.md) |
 | Vecteurs, modèle | [vectors/](vectors/) (§21), [tla/](tla/) (§7.3) |
 | Paquets | module Go `github.com/oioio-space/inkwell/protocol`, paquet TypeScript `@inkwell/protocol` (§1.6) |
@@ -809,7 +809,7 @@ plafonne un message à 67 108 797 octets (2^26 − 67).
    génération, à partir de 1 ; `size` la taille de l'objet ; `root` = BLAKE3 (racine Bao) de ses
    octets ; `doc` son document. Le bit **indivisible** n'est posé que dans une réponse à
    `history-request` (§9.6) dont la page ne contiendrait qu'**une seule modification** et
-   dont l'**encodage** (enveloppe CBOR comprise) dépasse le `max` demandé : l'objet est alors
+   dont l'**encodage** (enveloppe CBOR comprise) dépasse `max` = `r` = 4 194 304 octets : l'objet est alors
    les octets bruts de la modification, et `change` son empreinte Automerge, couverte par le
    tuple d'auteur qui précède (§4.7) ; sinon `change` est nul (32 zéros,
    `#large-indivisible-no-change`). Une annonce indivisible de plus de 16 777 216 octets est une
@@ -819,7 +819,9 @@ plafonne un message à 67 108 797 octets (2^26 − 67).
    y sont nuls (32 zéros), l'émetteur l'annonce d'après la seule taille, sans faire passer les
    octets par le pont ni les garder (un message de synchronisation de 200 Mio n'a donc pas
    besoin de franchir le plafond de 64 Mio du pont, `#large-advice`) ; le receveur répond
-   `verdict = 0` et redemande le document par pages (règle H). Une annonce ordinaire ≤ `r`
+   `verdict = 0` et redemande le document par pages (règle H). Après un avis, l'émetteur
+   réinitialise l'état de synchronisation Automerge de ce (pair, document), comme pour un
+   message remplacé (§7.4). Une annonce ordinaire ≤ `r`
    **DOIT** avoir un `root` non nul (`#large-ordinary-zero-root`). Seuls les objets ordinaires
    ≤ `r` passent par un flux LARGE.
 2. Le receveur répond sur CONTROL par `LARGE_REPLY{gen, id, verdict}` (la génération lie la
@@ -1017,21 +1019,32 @@ busy    { kind u8 = 4 ; hash [32] ; retry_ms u32 ≤ 60 000 }
     **index persistant** `root → (document, empreinte)` des modifications indivisibles qu'il a
     produites ou **vérifiées et admises** (jamais avant), et la sert tant que le document est
     admis ; une entrée est retirée quand le document n'est plus admis ou est purgé, ou quand la
-    modification n'y est plus. **Borne** : une modification indivisible fait plus de 4 Mio
-    encodée, donc l'index a au plus une entrée par 4 Mio d'historique vérifié et stocké
+    modification n'y est plus. **Borne** : `max` étant fixé à `r` (§9.6), une modification
+    indivisible a une page singleton encodée de plus de 4 Mio, donc l'index a au plus une
+    entrée par 4 Mio d'historique vérifié et stocké (`repo.json#page-route-*`, à `max = r`)
     (~70 octets par entrée), imputée au quota N10 de l'auteur avec sa modification ; aucune
     fenêtre de temps, ce qui couvre l'intervalle entre `LARGE_REPLY` et le premier WANT et un
     redémarrage. On la demande à l'annonceur d'abord, puis aux autres à tour de rôle ;
   - **attente sur disque** : les tranches reçues sont rangées sous le dossier de données du
-    projet (§14, point 7), **par pair annonceur** : au plus **un tirage en cours par pair
-    annonceur et par receveur** (≤ 16 Mio). Un tirage en cours n'est **jamais** remplacé : une
-    deuxième annonce du même pair attend (la règle H la redemandera) ; une entrée n'est retirée
-    que **finie** ou **plus voulue** (document plus admis, modification obtenue autrement,
-    annonceur retiré de la liste) ; jamais sur un délai. **Borne honnête** : au plus 64 pairs ×
-    16 Mio = 1 Gio d'attente sur disque chez un receveur ; plusieurs relais peuvent faire
-    tirer la même modification d'un même auteur chacun dans son emplacement (rien ne limite
-    *par auteur réel* avant vérification), mais chacun reste borné par pair, et le
+    projet (§14, point 7), **par `root`**, avec la liste de ses détenteurs connus. Chaque
+    entrée est imputée à un pair annonceur : au plus **un tirage actif par pair annonceur et
+    par receveur** (≤ 16 Mio) ; si ce pair est retiré de la liste, l'entrée passe à un autre
+    détenteur qui l'a annoncée (sinon elle devient inactive). Un tirage n'est **jamais**
+    remplacé : une deuxième annonce du même pair attend (la règle H la redemandera).
+    **Plafond global** : 1 Gio d'attente au total, pairs absents compris. Une entrée est
+    **active** si un de ses détenteurs est connecté et la sert ; à la limite, on retire d'abord
+    les entrées finies ou plus voulues (document plus admis, modification obtenue autrement),
+    puis les entrées **inactives**, de la moins récemment avancée à la plus récente ; une entrée
+    active n'est **jamais** retirée. Comme les entrées actives sont au plus une par pair
+    connecté (≤ 64 × 16 Mio = 1 Gio), un pair connecté obtient toujours son emplacement, et 65
+    membres successifs ne dépassent pas le plafond. Jamais sur un délai. Plusieurs relais
+    peuvent faire tirer la même modification d'un même auteur chacun dans son emplacement (rien
+    ne limite *par auteur réel* avant vérification), mais chacun reste borné par pair, et le
     dédoublonnage par `root` évite les copies d'une même racine ;
+  - **plages doublées** : une plage en cours depuis plus de 30 s chez un détenteur **PEUT** être
+    demandée aussi à un autre détenteur (la règle « une demande par (pair, hash) » vaut par
+    pair) ; la première réponse complète gagne, les autres sont annulées. Un relais pressé qui
+    annonce le premier une vraie racine puis « goutte » une plage ne retarde donc rien ;
   - **reprise** : l'état (groupes vérifiés) est persisté et repris après un redémarrage ou un
     changement de détenteur, comme les têtes de l'historique, sans limite de durée ;
   - **règle H non suspendue** : pendant un tirage pour le document D, le receveur peut
@@ -1042,7 +1055,7 @@ busy    { kind u8 = 4 ; hash [32] ; retry_ms u32 ≤ 60 000 }
   - **échecs** : trois échecs sur une plage chez un détenteur → un autre détenteur ; plus aucun
     détenteur → règle H (le document est redemandé plus tard).
 - **Service.** Un blob n'est servi que s'il est référencé par le projet, **ou** une modification
-  indivisible annoncée ou détenue, par son `root`, si elle appartient à un document admis et que
+  indivisible **présente dans l'index du serveur** (ci-dessus), par son `root`, si elle appartient à un document admis et que
   le demandeur est un membre actif non suspendu ; sinon MISSING (`repo.json#indivisible-serve-unadmitted`) ;
   un blob de projet n'est servi que si le demandeur
   est un membre actif non suspendu ; sinon MISSING (indiscernable d'un blob absent). Chaque
@@ -1203,8 +1216,9 @@ pointeur de présentation est en **dix-millièmes entiers** de la diapositive
 - Un receveur qui n'a aucune copie d'un document admis, qui refuse un message de
   synchronisation au-delà des bornes de la garde avec une erreur récupérable, ou qui applique
   la règle H, envoie `history-request {documentId, have, max}` (`have` : ses têtes, ≤ 256 ;
-  `max` : la taille maximale d'une page qu'il accepte, sa part `r` au plus, enveloppe CBOR
-  comprise).
+  `max` : la taille maximale d'une page, enveloppe CBOR comprise, **fixée à `r` = 4 194 304**
+  dans cette version — une autre valeur est refusée, `#history-request-wrong-max` ; le champ
+  reste pour qu'une mineure future puisse l'assouplir, §1.4).
 - Le destinataire répond par **une** page `history-page {documentId, changes, last}` : des
   modifications entières (0 à 256), formant un **préfixe causalement clos** (chaque dépendance
   d'une modification est dans le passé causal de `have` ou plus tôt dans la même page), dans
@@ -1460,10 +1474,10 @@ courtoisie : le récepteur **NE DOIT PAS** en dépendre.
 6. **Caches** : sous le cache utilisateur (`inkwell/…`), `0700`, confinés par `os.Root`,
    nettoyés à la fin, à l'abandon et après 24 h ; jamais dans un `/tmp` en mémoire.
 7. **Attente des modifications indivisibles** (§8.1) : sous le dossier de données du projet
-   (`.inkwell/staging/<pair annonceur>/<root>`, avec la carte des groupes vérifiés écrite par
+   (`.inkwell/staging/<root>`, avec la liste de ses détenteurs et la carte des groupes vérifiés écrite par
    remplacement atomique), `0700`, `os.Root` ; **pas** un cache : conservée à travers les
    redémarrages et sans limite de durée, retirée seulement quand la modification est obtenue ou
-   n'est plus voulue (§8.1) ; ces règles priment le point 6. Une reprise après plus de 24 h est
+   n'est plus voulue, ou, au plafond global de 1 Gio, si elle est inactive (§8.1) ; ces règles priment le point 6. Une reprise après plus de 24 h est
    testée (porte P-BORNES).
 
 ## 15. Propriété (informatif : organisation retenue par inkwell)
@@ -1501,7 +1515,7 @@ de `protocol` ; un test par ligne vérifie la borne, la borne + 1 et la reprise.
 | file d'entrée REPO d'un pair | 4 Mio et 1024 trames (impl.) | par pair | lecture du flux suspendue | dès que la webview consomme |
 | file d'entrée CONTROL d'un pair | 512 Kio (impl.) | par pair | lecture suspendue **seulement** le temps que l'acteur `Wiring` traite (CPU et disque locaux) ; jamais à cause du réseau ni de la webview — « toujours lu » au sens de §5.1 (a) | immédiate |
 | flux annulés en attente de RESET_STREAM | 1 par session ; 10 s | par session | GOAWAY PROTOCOL_VIOLATION, session fermée | reconnexion |
-| modifications indivisibles en attente (disque, §14 point 7) | 1 tirage en cours ≤ 16 Mio **par pair annonceur** et par receveur (≤ 1 Gio au total) ; dédoublonnage par `root` ; jamais remplacé, jamais sur un délai ; quota N10 de l'auteur crédité après vérification | par pair annonceur | l'annonce suivante du même pair attend ; la règle H continue auprès des autres détenteurs | reprise des groupes vérifiés, même après 24 h |
+| modifications indivisibles en attente (disque, §14 point 7) | par `root` ; 1 tirage actif ≤ 16 Mio **par pair annonceur** et par receveur ; **plafond global 1 Gio, pairs absents compris** (retrait : finies ou plus voulues, puis inactives en LRU ; jamais une active) ; jamais remplacé, jamais sur un délai ; quota N10 de l'auteur crédité après vérification | par pair annonceur | l'annonce suivante du même pair attend ; la règle H continue auprès des autres détenteurs | reprise des groupes vérifiés, même après 24 h |
 | index des modifications indivisibles | entrées vérifiées seulement ; ≤ 1 par 4 Mio d'historique stocké ; retirée avec le document ou la modification | par auteur (N10) | — | — |
 | annonce indivisible | ≤ 16 777 216 octets (G1) | — | violation | — |
 | flux LARGE | ≤ `r` = 4 194 304 octets ; une annonce ordinaire plus grande n'est qu'un avis (`LARGE_REPLY` 0, pages) | — | violation si un flux dépasse `r` | pages d'historique |
@@ -1676,7 +1690,7 @@ est retiré (bascule nette). Une nouvelle classe s'ajoute par une mineure, liée
 
 - **Vecteurs.** Les fichiers [vectors/](vectors/) sont normatifs :
   `{spec, spec_version, generator, keys?, vectors: [{id, status, enforce?, description,
-  decoder, context?, input_hex, verdict, expect?, current_go?}]}`. `verdict` : `accept` ou
+  decoder, context?, input_hex | inputs_hex | (input_sha256, recipe), verdict, expect?, current_go?}]}`. Un vecteur trop gros pour être recopié (≥ 4 Mio) donne l'empreinte SHA-256 de son entrée et la recette exacte pour la régénérer avec le générateur. `verdict` : `accept` ou
   `reject` ou `ignore` (jeté sans erreur ni sanction) ; `expect` : ce qu'une implémentation
 **DOIT** reproduire ; `context` : l'état du
   receveur dont le verdict dépend (pair authentifié, receveur, ensemble admis, génération et
@@ -1856,7 +1870,7 @@ enveloppe { version u8 = 1 ; kind u8 ; peer str8 (PeerID, 1–64) ; payload [res
 | 16 | Authored | Go → webview | tuples d'auteur vérifiés (§4.7) |
 | 17 | Listed | Go → webview | ensemble admis (§4.10), avec projet et époque |
 | 18 | WantAttest | webview → Go | `doc str16` : demander ATTEST_WANT au pair `peer` (§6.2) |
-| 19 | Advice | webview → Go | `session u32 ; generation u32 ; size u32 ; doc str8` : annoncer un avis (§7.2) sans en envoyer les octets |
+| 19 | Advice | webview → Go | `session u32 ; generation u32 ; size u32 ; doc str16 (1–64)` (`bridge-internal.json#bridge-advice`) : annoncer un avis (§7.2) sans en envoyer les octets |
 
 - **Crédits** : pour chaque (pair, génération, voie), l'émetteur compte les octets de
   `message` envoyés (`sent`) ; le receveur annonce `consumed` et `window`. Voie 0 :

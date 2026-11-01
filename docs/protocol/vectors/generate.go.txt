@@ -719,6 +719,9 @@ func main() {
 	gv = append(gv, V{ID: "bridge-bad-version", Status: "normative", Desc: "Version d'enveloppe 2 : refusée.", Decoder: "bridge_envelope", Input: hx(append([]byte{2}, env[1:]...)), Verdict: verdict(err)})
 	msgGen := append(binary.BigEndian.AppendUint32(binary.BigEndian.AppendUint32(nil, 7), 2), payload...) // session 7, generation 2
 	gv = append(gv, V{ID: "bridge-message-gen", Status: "proposed", Enforce: "step-6", Desc: "Message (kind 3) avec époque : payload = session u32 || generation u32 || message.", Decoder: "bridge_envelope", Input: hx(append(append([]byte{1, 3, byte(len(hostID))}, hostID...), msgGen...)), Verdict: "accept", Expect: map[string]any{"session": 7, "generation": 2}})
+	adv := binary.BigEndian.AppendUint32(binary.BigEndian.AppendUint32(binary.BigEndian.AppendUint32(nil, 7), 2), 200<<20)
+	adv = append(binary.BigEndian.AppendUint16(adv, uint16(len("4NMNnkMhL8jXrdJ9jamS58PAVdXu"))), "4NMNnkMhL8jXrdJ9jamS58PAVdXu"...)
+	gv = append(gv, V{ID: "bridge-advice", Status: "proposed", Enforce: "step-6", Desc: "Advice (kind 19, webview → Go) : session u32 || generation u32 || size u32 || doc str16 ; un avis de 200 Mio annoncé sans faire passer les octets par le pont (§7.2).", Decoder: "bridge_envelope", Input: hx(append(append([]byte{1, 19, byte(len(hostID))}, hostID...), adv...)), Verdict: "accept", Expect: map[string]any{"session": 7, "generation": 2, "size": 200 << 20}})
 	pd := binary.BigEndian.AppendUint32(binary.BigEndian.AppendUint32(nil, 7), 2)
 	gv = append(gv, V{ID: "bridge-peerdown-epoch", Status: "proposed", Enforce: "step-6", Desc: "PeerDown (kind 2) : session u32 || generation u32 ; un PeerDown ou un Credit d'une autre époque que la courante est ignoré (règle T).", Decoder: "bridge_envelope", Input: hx(append(append([]byte{1, 2, byte(len(hostID))}, hostID...), pd...)), Verdict: "accept", Expect: map[string]any{"session": 7, "generation": 2}})
 	for _, lane := range []byte{0, 2} {
