@@ -1,0 +1,961 @@
+{
+  "samples": [
+    {
+      "start": 279.89999997615814,
+      "events": [
+        {
+          "name": "keyup",
+          "entryType": "event",
+          "startTime": 289.10000002384186,
+          "duration": 16,
+          "navigationId": 2776,
+          "interactionId": 4761,
+          "processingStart": 289.7999999523163,
+          "processingEnd": 289.7999999523163,
+          "cancelable": true
+        }
+      ],
+      "textCharacters": 249
+    },
+    {
+      "start": 373.39999997615814,
+      "events": [
+        {
+          "name": "keydown",
+          "entryType": "event",
+          "startTime": 374.2999999523163,
+          "duration": 16,
+          "navigationId": 2776,
+          "interactionId": 4768,
+          "processingStart": 374.60000002384186,
+          "processingEnd": 374.7000000476837,
+          "cancelable": true
+        },
+        {
+          "name": "keypress",
+          "entryType": "event",
+          "startTime": 374.2999999523163,
+          "duration": 16,
+          "navigationId": 2776,
+          "interactionId": 4768,
+          "processingStart": 374.7999999523163,
+          "processingEnd": 377.2000000476837,
+          "cancelable": true
+        }
+      ],
+      "textCharacters": 250
+    },
+    {
+      "start": 461.5,
+      "events": [],
+      "textCharacters": 251
+    },
+    {
+      "start": 547.5,
+      "events": [
+        {
+          "name": "keyup",
+          "entryType": "event",
+          "startTime": 551.2000000476837,
+          "duration": 16,
+          "navigationId": 2776,
+          "interactionId": 4782,
+          "processingStart": 552.1000000238419,
+          "processingEnd": 552.1000000238419,
+          "cancelable": true
+        }
+      ],
+      "textCharacters": 252
+    },
+    {
+      "start": 634.1000000238419,
+      "events": [
+        {
+          "name": "keydown",
+          "entryType": "event",
+          "startTime": 634.5,
+          "duration": 16,
+          "navigationId": 2776,
+          "interactionId": 4789,
+          "processingStart": 634.7000000476837,
+          "processingEnd": 634.7999999523163,
+          "cancelable": true
+        },
+        {
+          "name": "keypress",
+          "entryType": "event",
+          "startTime": 634.5,
+          "duration": 16,
+          "navigationId": 2776,
+          "interactionId": 4789,
+          "processingStart": 634.7999999523163,
+          "processingEnd": 637.7000000476837,
+          "cancelable": true
+        },
+        {
+          "name": "beforeinput",
+          "entryType": "event",
+          "startTime": 634.7999999523163,
+          "duration": 16,
+          "navigationId": 2776,
+          "interactionId": 0,
+          "processingStart": 634.7999999523163,
+          "processingEnd": 634.7999999523163,
+          "cancelable": true
+        },
+        {
+          "name": "input",
+          "entryType": "event",
+          "startTime": 635.1000000238419,
+          "duration": 16,
+          "navigationId": 2776,
+          "interactionId": 0,
+          "processingStart": 635.1000000238419,
+          "processingEnd": 637.2999999523163,
+          "cancelable": false
+        },
+        {
+          "name": "keyup",
+          "entryType": "event",
+          "startTime": 638.2000000476837,
+          "duration": 16,
+          "navigationId": 2776,
+          "interactionId": 4789,
+          "processingStart": 638.2000000476837,
+          "processingEnd": 638.2000000476837,
+          "cancelable": true
+        }
+      ],
+      "textCharacters": 253
+    },
+    {
+      "start": 722.7000000476837,
+      "events": [
+        {
+          "name": "keydown",
+          "entryType": "event",
+          "startTime": 723.7999999523163,
+          "duration": 16,
+          "navigationId": 2776,
+          "interactionId": 4796,
+          "processingStart": 724,
+          "processingEnd": 724.1000000238419,
+          "cancelable": true
+        },
+        {
+          "name": "keypress",
+          "entryType": "event",
+          "startTime": 723.7999999523163,
+          "duration": 16,
+          "navigationId": 2776,
+          "interactionId": 4796,
+          "processingStart": 724.1000000238419,
+          "processingEnd": 726.7999999523163,
+          "cancelable": true
+        },
+        {
+          "name": "beforeinput",
+          "entryType": "event",
+          "startTime": 724.2000000476837,
+          "duration": 16,
+          "navigationId": 2776,
+          "interactionId": 0,
+          "processingStart": 724.2000000476837,
+          "processingEnd": 724.2000000476837,
+          "cancelable": true
+        }
+      ],
+      "textCharacters": 254
+    },
+    {
+      "start": 810.6000000238419,
+      "events": [],
+      "textCharacters": 255
+    },
+    {
+      "start": 898.2999999523163,
+      "events": [
+        {
+          "name": "keyup",
+          "entryType": "event",
+          "startTime": 901.6000000238419,
+          "duration": 16,
+          "navigationId": 2776,
+          "interactionId": 4810,
+          "processingStart": 902.2000000476837,
+          "processingEnd": 902.2000000476837,
+          "cancelable": true
+        }
+      ],
+      "textCharacters": 256
+    },
+    {
+      "start": 984.5,
+      "events": [
+        {
+          "name": "keydown",
+          "entryType": "event",
+          "startTime": 984.7999999523163,
+          "duration": 16,
+          "navigationId": 2776,
+          "interactionId": 4817,
+          "processingStart": 985.2000000476837,
+          "processingEnd": 985.2999999523163,
+          "cancelable": true
+        },
+        {
+          "name": "keypress",
+          "entryType": "event",
+          "startTime": 984.7999999523163,
+          "duration": 16,
+          "navigationId": 2776,
+          "interactionId": 4817,
+          "processingStart": 985.2999999523163,
+          "processingEnd": 988.1000000238419,
+          "cancelable": true
+        },
+        {
+          "name": "beforeinput",
+          "entryType": "event",
+          "startTime": 985.2999999523163,
+          "duration": 16,
+          "navigationId": 2776,
+          "interactionId": 0,
+          "processingStart": 985.2999999523163,
+          "processingEnd": 985.2999999523163,
+          "cancelable": true
+        },
+        {
+          "name": "input",
+          "entryType": "event",
+          "startTime": 985.5,
+          "duration": 16,
+          "navigationId": 2776,
+          "interactionId": 0,
+          "processingStart": 985.6000000238419,
+          "processingEnd": 987.7000000476837,
+          "cancelable": false
+        },
+        {
+          "name": "keyup",
+          "entryType": "event",
+          "startTime": 988.2999999523163,
+          "duration": 16,
+          "navigationId": 2776,
+          "interactionId": 4817,
+          "processingStart": 988.6000000238419,
+          "processingEnd": 988.6000000238419,
+          "cancelable": true
+        }
+      ],
+      "textCharacters": 257
+    },
+    {
+      "start": 1070.6000000238419,
+      "events": [
+        {
+          "name": "keydown",
+          "entryType": "event",
+          "startTime": 1071,
+          "duration": 16,
+          "navigationId": 2776,
+          "interactionId": 4824,
+          "processingStart": 1071.2999999523163,
+          "processingEnd": 1071.3999999761581,
+          "cancelable": true
+        },
+        {
+          "name": "keypress",
+          "entryType": "event",
+          "startTime": 1071,
+          "duration": 16,
+          "navigationId": 2776,
+          "interactionId": 4824,
+          "processingStart": 1071.3999999761581,
+          "processingEnd": 1073.3999999761581,
+          "cancelable": true
+        },
+        {
+          "name": "beforeinput",
+          "entryType": "event",
+          "startTime": 1071.3999999761581,
+          "duration": 16,
+          "navigationId": 2776,
+          "interactionId": 0,
+          "processingStart": 1071.3999999761581,
+          "processingEnd": 1071.3999999761581,
+          "cancelable": true
+        },
+        {
+          "name": "input",
+          "entryType": "event",
+          "startTime": 1071.6000000238419,
+          "duration": 16,
+          "navigationId": 2776,
+          "interactionId": 0,
+          "processingStart": 1071.7000000476837,
+          "processingEnd": 1073.2999999523163,
+          "cancelable": false
+        },
+        {
+          "name": "keyup",
+          "entryType": "event",
+          "startTime": 1073.7000000476837,
+          "duration": 16,
+          "navigationId": 2776,
+          "interactionId": 4824,
+          "processingStart": 1073.8999999761581,
+          "processingEnd": 1073.8999999761581,
+          "cancelable": true
+        }
+      ],
+      "textCharacters": 258
+    },
+    {
+      "start": 1156.7999999523163,
+      "events": [
+        {
+          "name": "keydown",
+          "entryType": "event",
+          "startTime": 1157.5,
+          "duration": 16,
+          "navigationId": 2776,
+          "interactionId": 4831,
+          "processingStart": 1157.6000000238419,
+          "processingEnd": 1157.7999999523163,
+          "cancelable": true
+        },
+        {
+          "name": "keypress",
+          "entryType": "event",
+          "startTime": 1157.5,
+          "duration": 16,
+          "navigationId": 2776,
+          "interactionId": 4831,
+          "processingStart": 1157.7999999523163,
+          "processingEnd": 1159.3999999761581,
+          "cancelable": true
+        }
+      ],
+      "textCharacters": 259
+    },
+    {
+      "start": 1243.3999999761581,
+      "events": [],
+      "textCharacters": 260
+    },
+    {
+      "start": 1330.7999999523163,
+      "events": [
+        {
+          "name": "keyup",
+          "entryType": "event",
+          "startTime": 1334.6000000238419,
+          "duration": 16,
+          "navigationId": 2776,
+          "interactionId": 4845,
+          "processingStart": 1335.3999999761581,
+          "processingEnd": 1335.3999999761581,
+          "cancelable": true
+        }
+      ],
+      "textCharacters": 261
+    },
+    {
+      "start": 1417.5,
+      "events": [
+        {
+          "name": "keydown",
+          "entryType": "event",
+          "startTime": 1418,
+          "duration": 16,
+          "navigationId": 2776,
+          "interactionId": 4852,
+          "processingStart": 1418,
+          "processingEnd": 1418.1000000238419,
+          "cancelable": true
+        },
+        {
+          "name": "keypress",
+          "entryType": "event",
+          "startTime": 1418,
+          "duration": 16,
+          "navigationId": 2776,
+          "interactionId": 4852,
+          "processingStart": 1418.1000000238419,
+          "processingEnd": 1419.7000000476837,
+          "cancelable": true
+        },
+        {
+          "name": "beforeinput",
+          "entryType": "event",
+          "startTime": 1418.2000000476837,
+          "duration": 16,
+          "navigationId": 2776,
+          "interactionId": 0,
+          "processingStart": 1418.2000000476837,
+          "processingEnd": 1418.2000000476837,
+          "cancelable": true
+        },
+        {
+          "name": "input",
+          "entryType": "event",
+          "startTime": 1418.2999999523163,
+          "duration": 16,
+          "navigationId": 2776,
+          "interactionId": 0,
+          "processingStart": 1418.3999999761581,
+          "processingEnd": 1419.5,
+          "cancelable": false
+        },
+        {
+          "name": "keyup",
+          "entryType": "event",
+          "startTime": 1420.1000000238419,
+          "duration": 16,
+          "navigationId": 2776,
+          "interactionId": 4852,
+          "processingStart": 1420.1000000238419,
+          "processingEnd": 1420.1000000238419,
+          "cancelable": true
+        }
+      ],
+      "textCharacters": 262
+    },
+    {
+      "start": 1502.7000000476837,
+      "events": [
+        {
+          "name": "keydown",
+          "entryType": "event",
+          "startTime": 1503.2000000476837,
+          "duration": 16,
+          "navigationId": 2776,
+          "interactionId": 4859,
+          "processingStart": 1503.2999999523163,
+          "processingEnd": 1503.3999999761581,
+          "cancelable": true
+        },
+        {
+          "name": "keypress",
+          "entryType": "event",
+          "startTime": 1503.2000000476837,
+          "duration": 16,
+          "navigationId": 2776,
+          "interactionId": 4859,
+          "processingStart": 1503.3999999761581,
+          "processingEnd": 1505.2999999523163,
+          "cancelable": true
+        },
+        {
+          "name": "beforeinput",
+          "entryType": "event",
+          "startTime": 1503.3999999761581,
+          "duration": 16,
+          "navigationId": 2776,
+          "interactionId": 0,
+          "processingStart": 1503.3999999761581,
+          "processingEnd": 1503.5,
+          "cancelable": true
+        },
+        {
+          "name": "input",
+          "entryType": "event",
+          "startTime": 1503.6000000238419,
+          "duration": 16,
+          "navigationId": 2776,
+          "interactionId": 0,
+          "processingStart": 1503.7000000476837,
+          "processingEnd": 1505.1000000238419,
+          "cancelable": false
+        },
+        {
+          "name": "keyup",
+          "entryType": "event",
+          "startTime": 1505.7999999523163,
+          "duration": 16,
+          "navigationId": 2776,
+          "interactionId": 4859,
+          "processingStart": 1505.8999999761581,
+          "processingEnd": 1505.8999999761581,
+          "cancelable": true
+        }
+      ],
+      "textCharacters": 263
+    },
+    {
+      "start": 1589.3999999761581,
+      "events": [
+        {
+          "name": "keydown",
+          "entryType": "event",
+          "startTime": 1590.3999999761581,
+          "duration": 16,
+          "navigationId": 2776,
+          "interactionId": 4866,
+          "processingStart": 1590.5,
+          "processingEnd": 1590.6000000238419,
+          "cancelable": true
+        },
+        {
+          "name": "keypress",
+          "entryType": "event",
+          "startTime": 1590.3999999761581,
+          "duration": 16,
+          "navigationId": 2776,
+          "interactionId": 4866,
+          "processingStart": 1590.6000000238419,
+          "processingEnd": 1592.5,
+          "cancelable": true
+        },
+        {
+          "name": "beforeinput",
+          "entryType": "event",
+          "startTime": 1590.6000000238419,
+          "duration": 16,
+          "navigationId": 2776,
+          "interactionId": 0,
+          "processingStart": 1590.6000000238419,
+          "processingEnd": 1590.6000000238419,
+          "cancelable": true
+        },
+        {
+          "name": "input",
+          "entryType": "event",
+          "startTime": 1590.7999999523163,
+          "duration": 16,
+          "navigationId": 2776,
+          "interactionId": 0,
+          "processingStart": 1590.8999999761581,
+          "processingEnd": 1592.2000000476837,
+          "cancelable": false
+        }
+      ],
+      "textCharacters": 264
+    },
+    {
+      "start": 1677.6000000238419,
+      "events": [],
+      "textCharacters": 265
+    },
+    {
+      "start": 1764.2999999523163,
+      "events": [],
+      "textCharacters": 266
+    },
+    {
+      "start": 1849.2000000476837,
+      "events": [
+        {
+          "name": "keyup",
+          "entryType": "event",
+          "startTime": 1852,
+          "duration": 16,
+          "navigationId": 2776,
+          "interactionId": 4887,
+          "processingStart": 1852.7000000476837,
+          "processingEnd": 1852.7000000476837,
+          "cancelable": true
+        }
+      ],
+      "textCharacters": 267
+    },
+    {
+      "start": 1934.7000000476837,
+      "events": [
+        {
+          "name": "keydown",
+          "entryType": "event",
+          "startTime": 1935.1000000238419,
+          "duration": 16,
+          "navigationId": 2776,
+          "interactionId": 4894,
+          "processingStart": 1935.2999999523163,
+          "processingEnd": 1935.2999999523163,
+          "cancelable": true
+        },
+        {
+          "name": "keypress",
+          "entryType": "event",
+          "startTime": 1935.1000000238419,
+          "duration": 16,
+          "navigationId": 2776,
+          "interactionId": 4894,
+          "processingStart": 1935.2999999523163,
+          "processingEnd": 1937.6000000238419,
+          "cancelable": true
+        },
+        {
+          "name": "beforeinput",
+          "entryType": "event",
+          "startTime": 1935.2999999523163,
+          "duration": 16,
+          "navigationId": 2776,
+          "interactionId": 0,
+          "processingStart": 1935.2999999523163,
+          "processingEnd": 1935.2999999523163,
+          "cancelable": true
+        },
+        {
+          "name": "input",
+          "entryType": "event",
+          "startTime": 1935.6000000238419,
+          "duration": 16,
+          "navigationId": 2776,
+          "interactionId": 0,
+          "processingStart": 1935.7000000476837,
+          "processingEnd": 1937.2999999523163,
+          "cancelable": false
+        },
+        {
+          "name": "keyup",
+          "entryType": "event",
+          "startTime": 1937.7000000476837,
+          "duration": 16,
+          "navigationId": 2776,
+          "interactionId": 4894,
+          "processingStart": 1937.8999999761581,
+          "processingEnd": 1937.8999999761581,
+          "cancelable": true
+        }
+      ],
+      "textCharacters": 268
+    },
+    {
+      "start": 2019.7000000476837,
+      "events": [
+        {
+          "name": "keydown",
+          "entryType": "event",
+          "startTime": 2020,
+          "duration": 16,
+          "navigationId": 2776,
+          "interactionId": 4901,
+          "processingStart": 2020.1000000238419,
+          "processingEnd": 2020.2000000476837,
+          "cancelable": true
+        },
+        {
+          "name": "keypress",
+          "entryType": "event",
+          "startTime": 2020,
+          "duration": 16,
+          "navigationId": 2776,
+          "interactionId": 4901,
+          "processingStart": 2020.2000000476837,
+          "processingEnd": 2022,
+          "cancelable": true
+        },
+        {
+          "name": "beforeinput",
+          "entryType": "event",
+          "startTime": 2020.2000000476837,
+          "duration": 16,
+          "navigationId": 2776,
+          "interactionId": 0,
+          "processingStart": 2020.2000000476837,
+          "processingEnd": 2020.2000000476837,
+          "cancelable": true
+        },
+        {
+          "name": "input",
+          "entryType": "event",
+          "startTime": 2020.5,
+          "duration": 16,
+          "navigationId": 2776,
+          "interactionId": 0,
+          "processingStart": 2020.5,
+          "processingEnd": 2021.8999999761581,
+          "cancelable": false
+        },
+        {
+          "name": "keyup",
+          "entryType": "event",
+          "startTime": 2022.3999999761581,
+          "duration": 16,
+          "navigationId": 2776,
+          "interactionId": 4901,
+          "processingStart": 2022.3999999761581,
+          "processingEnd": 2022.3999999761581,
+          "cancelable": true
+        }
+      ],
+      "textCharacters": 269
+    },
+    {
+      "start": 2104.7000000476837,
+      "events": [
+        {
+          "name": "keydown",
+          "entryType": "event",
+          "startTime": 2105.100000023842,
+          "duration": 16,
+          "navigationId": 2776,
+          "interactionId": 4908,
+          "processingStart": 2105.2000000476837,
+          "processingEnd": 2105.2000000476837,
+          "cancelable": true
+        },
+        {
+          "name": "keypress",
+          "entryType": "event",
+          "startTime": 2105.100000023842,
+          "duration": 16,
+          "navigationId": 2776,
+          "interactionId": 4908,
+          "processingStart": 2105.2000000476837,
+          "processingEnd": 2107,
+          "cancelable": true
+        },
+        {
+          "name": "beforeinput",
+          "entryType": "event",
+          "startTime": 2105.2000000476837,
+          "duration": 16,
+          "navigationId": 2776,
+          "interactionId": 0,
+          "processingStart": 2105.2000000476837,
+          "processingEnd": 2105.2999999523163,
+          "cancelable": true
+        },
+        {
+          "name": "input",
+          "entryType": "event",
+          "startTime": 2105.399999976158,
+          "duration": 16,
+          "navigationId": 2776,
+          "interactionId": 0,
+          "processingStart": 2105.5,
+          "processingEnd": 2106.7999999523163,
+          "cancelable": false
+        },
+        {
+          "name": "keyup",
+          "entryType": "event",
+          "startTime": 2107.2999999523163,
+          "duration": 16,
+          "navigationId": 2776,
+          "interactionId": 4908,
+          "processingStart": 2107.399999976158,
+          "processingEnd": 2107.5,
+          "cancelable": true
+        }
+      ],
+      "textCharacters": 270
+    },
+    {
+      "start": 2190.600000023842,
+      "events": [],
+      "textCharacters": 271
+    },
+    {
+      "start": 2275,
+      "events": [],
+      "textCharacters": 272
+    },
+    {
+      "start": 2359.600000023842,
+      "events": [],
+      "textCharacters": 273
+    },
+    {
+      "start": 2446.100000023842,
+      "events": [],
+      "textCharacters": 274
+    },
+    {
+      "start": 2532.600000023842,
+      "events": [
+        {
+          "name": "keyup",
+          "entryType": "event",
+          "startTime": 2535.7999999523163,
+          "duration": 16,
+          "navigationId": 2776,
+          "interactionId": 4943,
+          "processingStart": 2536.100000023842,
+          "processingEnd": 2536.100000023842,
+          "cancelable": true
+        }
+      ],
+      "textCharacters": 275
+    },
+    {
+      "start": 2619.100000023842,
+      "events": [
+        {
+          "name": "keydown",
+          "entryType": "event",
+          "startTime": 2620,
+          "duration": 16,
+          "navigationId": 2776,
+          "interactionId": 4950,
+          "processingStart": 2620.100000023842,
+          "processingEnd": 2620.2999999523163,
+          "cancelable": true
+        },
+        {
+          "name": "keypress",
+          "entryType": "event",
+          "startTime": 2620,
+          "duration": 16,
+          "navigationId": 2776,
+          "interactionId": 4950,
+          "processingStart": 2620.2999999523163,
+          "processingEnd": 2621.899999976158,
+          "cancelable": true
+        },
+        {
+          "name": "beforeinput",
+          "entryType": "event",
+          "startTime": 2620.2999999523163,
+          "duration": 16,
+          "navigationId": 2776,
+          "interactionId": 0,
+          "processingStart": 2620.2999999523163,
+          "processingEnd": 2620.2999999523163,
+          "cancelable": true
+        },
+        {
+          "name": "input",
+          "entryType": "event",
+          "startTime": 2620.399999976158,
+          "duration": 16,
+          "navigationId": 2776,
+          "interactionId": 0,
+          "processingStart": 2620.399999976158,
+          "processingEnd": 2621.600000023842,
+          "cancelable": false
+        },
+        {
+          "name": "keyup",
+          "entryType": "event",
+          "startTime": 2622.399999976158,
+          "duration": 16,
+          "navigationId": 2776,
+          "interactionId": 4950,
+          "processingStart": 2622.600000023842,
+          "processingEnd": 2622.600000023842,
+          "cancelable": true
+        }
+      ],
+      "textCharacters": 276
+    },
+    {
+      "start": 2704.7999999523163,
+      "events": [
+        {
+          "name": "keydown",
+          "entryType": "event",
+          "startTime": 2705.2000000476837,
+          "duration": 16,
+          "navigationId": 2776,
+          "interactionId": 4957,
+          "processingStart": 2705.2000000476837,
+          "processingEnd": 2705.399999976158,
+          "cancelable": true
+        },
+        {
+          "name": "keypress",
+          "entryType": "event",
+          "startTime": 2705.2000000476837,
+          "duration": 16,
+          "navigationId": 2776,
+          "interactionId": 4957,
+          "processingStart": 2705.399999976158,
+          "processingEnd": 2707.100000023842,
+          "cancelable": true
+        },
+        {
+          "name": "beforeinput",
+          "entryType": "event",
+          "startTime": 2705.399999976158,
+          "duration": 16,
+          "navigationId": 2776,
+          "interactionId": 0,
+          "processingStart": 2705.399999976158,
+          "processingEnd": 2705.399999976158,
+          "cancelable": true
+        },
+        {
+          "name": "input",
+          "entryType": "event",
+          "startTime": 2705.600000023842,
+          "duration": 16,
+          "navigationId": 2776,
+          "interactionId": 0,
+          "processingStart": 2705.7000000476837,
+          "processingEnd": 2706.899999976158,
+          "cancelable": false
+        }
+      ],
+      "textCharacters": 277
+    },
+    {
+      "start": 2791.100000023842,
+      "events": [],
+      "textCharacters": 278
+    }
+  ],
+  "slowLayoutControl": {
+    "events": [
+      {
+        "name": "keydown",
+        "entryType": "event",
+        "startTime": 2877.7000000476837,
+        "duration": 128,
+        "navigationId": 2776,
+        "interactionId": 4971,
+        "processingStart": 2877.899999976158,
+        "processingEnd": 2999.399999976158,
+        "cancelable": true
+      },
+      {
+        "name": "keypress",
+        "entryType": "event",
+        "startTime": 2877.7000000476837,
+        "duration": 128,
+        "navigationId": 2776,
+        "interactionId": 4971,
+        "processingStart": 2999.399999976158,
+        "processingEnd": 3001.2999999523163,
+        "cancelable": true
+      },
+      {
+        "name": "keyup",
+        "entryType": "event",
+        "startTime": 3002,
+        "duration": 16,
+        "navigationId": 2776,
+        "interactionId": 4971,
+        "processingStart": 3002.600000023842,
+        "processingEnd": 3002.600000023842,
+        "cancelable": true
+      }
+    ],
+    "longTasks": [
+      {
+        "name": "self",
+        "entryType": "longtask",
+        "startTime": 2877.7999999523163,
+        "duration": 123,
+        "navigationId": 2776,
+        "attribution": [
+          {
+            "name": "unknown",
+            "entryType": "taskattribution",
+            "startTime": 0,
+            "duration": 0,
+            "navigationId": 2776,
+            "containerType": "window",
+            "containerSrc": "",
+            "containerId": "",
+            "containerName": ""
+          }
+        ]
+      }
+    ],
+    "detected": true
+  },
+  "method": "30 warm Chromium inputs; EventTiming minimum threshold 16 ms, 8 ms granularity; not native WebKit, no certified exact p95"
+}

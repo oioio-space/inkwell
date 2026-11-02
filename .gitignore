@@ -45,3 +45,8 @@ frontend/playwright-report/
 # Agent worktrees (Claude Code)
 .claude/worktrees/
 /.playwright-mcp/
+
+# Gate execution logs (manifest remains versioned).
+/gates/*/
+__pycache__/
+/testdata/perf/generated/

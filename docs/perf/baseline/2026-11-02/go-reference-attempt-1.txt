@@ -1,0 +1,344 @@
+goos: linux
+goarch: amd64
+pkg: github.com/oioio-space/inkwell/internal/blob
+cpu: 13th Gen Intel(R) Core(TM) i7-1370P
+BenchmarkPut-20          	      60	  19622458 ns/op	 855.00 MB/s	  120520 B/op	    2161 allocs/op
+BenchmarkPut-20          	      61	  19676072 ns/op	 852.67 MB/s	  120514 B/op	    2160 allocs/op
+BenchmarkPut-20          	      62	  19739318 ns/op	 849.94 MB/s	  120514 B/op	    2160 allocs/op
+BenchmarkPut-20          	      60	  19447505 ns/op	 862.69 MB/s	  120514 B/op	    2160 allocs/op
+BenchmarkPut-20          	      58	  19437248 ns/op	 863.15 MB/s	  120514 B/op	    2160 allocs/op
+BenchmarkPut-20          	      62	  19776896 ns/op	 848.32 MB/s	  120515 B/op	    2160 allocs/op
+BenchmarkPut-20          	      61	  19713399 ns/op	 851.06 MB/s	  120514 B/op	    2160 allocs/op
+BenchmarkPut-20          	      60	  19553472 ns/op	 858.02 MB/s	  120514 B/op	    2160 allocs/op
+BenchmarkPut-20          	      62	  20171021 ns/op	 831.75 MB/s	  120514 B/op	    2160 allocs/op
+BenchmarkPut-20          	      57	  19597596 ns/op	 856.09 MB/s	  120514 B/op	    2160 allocs/op
+BenchmarkPut-20          	      62	  19735521 ns/op	 850.10 MB/s	  120514 B/op	    2160 allocs/op
+BenchmarkPut-20          	      61	  20555548 ns/op	 816.19 MB/s	  120514 B/op	    2160 allocs/op
+BenchmarkPut-20          	      61	  23514543 ns/op	 713.48 MB/s	  120514 B/op	    2160 allocs/op
+BenchmarkPut-20          	      28	  35750327 ns/op	 469.29 MB/s	  120508 B/op	    2160 allocs/op
+BenchmarkPut-20          	      22	 122232809 ns/op	 137.26 MB/s	  120503 B/op	    2160 allocs/op
+BenchmarkPut-20          	      12	  95532677 ns/op	 175.62 MB/s	  120492 B/op	    2160 allocs/op
+BenchmarkPut-20          	      20	  61791262 ns/op	 271.51 MB/s	  120501 B/op	    2160 allocs/op
+BenchmarkPut-20          	      15	  72788690 ns/op	 230.49 MB/s	  120497 B/op	    2160 allocs/op
+BenchmarkPut-20          	      14	  78769086 ns/op	 212.99 MB/s	  120497 B/op	    2160 allocs/op
+BenchmarkPut-20          	      22	  50062938 ns/op	 335.12 MB/s	  120504 B/op	    2160 allocs/op
+BenchmarkReadSlice-20    	     416	   2612329 ns/op	 401.40 MB/s	 1095609 B/op	      32 allocs/op
+BenchmarkReadSlice-20    	     708	   1642145 ns/op	 638.54 MB/s	 1095596 B/op	      32 allocs/op
+BenchmarkReadSlice-20    	    1064	   1067281 ns/op	 982.47 MB/s	 1095604 B/op	      32 allocs/op
+BenchmarkReadSlice-20    	    1156	   1014763 ns/op	1033.32 MB/s	 1095602 B/op	      32 allocs/op
+BenchmarkReadSlice-20    	    1290	   4959231 ns/op	 211.44 MB/s	 1095612 B/op	      32 allocs/op
+BenchmarkReadSlice-20    	     169	   6738243 ns/op	 155.62 MB/s	 1095612 B/op	      32 allocs/op
+BenchmarkReadSlice-20    	     184	   7915019 ns/op	 132.48 MB/s	 1095610 B/op	      32 allocs/op
+BenchmarkReadSlice-20    	     200	   5719897 ns/op	 183.32 MB/s	 1095606 B/op	      32 allocs/op
+BenchmarkReadSlice-20    	     162	   6763854 ns/op	 155.03 MB/s	 1095606 B/op	      32 allocs/op
+BenchmarkReadSlice-20    	     337	   4414144 ns/op	 237.55 MB/s	 1095609 B/op	      32 allocs/op
+BenchmarkReadSlice-20    	     252	   5316755 ns/op	 197.22 MB/s	 1095618 B/op	      32 allocs/op
+BenchmarkReadSlice-20    	     174	   7808377 ns/op	 134.29 MB/s	 1095606 B/op	      32 allocs/op
+BenchmarkReadSlice-20    	     298	   4288675 ns/op	 244.50 MB/s	 1095604 B/op	      32 allocs/op
+BenchmarkReadSlice-20    	     186	   5406522 ns/op	 193.95 MB/s	 1095606 B/op	      32 allocs/op
+BenchmarkReadSlice-20    	     267	   4336560 ns/op	 241.80 MB/s	 1095602 B/op	      32 allocs/op
+BenchmarkReadSlice-20    	     668	   1671873 ns/op	 627.19 MB/s	 1095596 B/op	      32 allocs/op
+BenchmarkReadSlice-20    	     735	   1837581 ns/op	 570.63 MB/s	 1095595 B/op	      32 allocs/op
+BenchmarkReadSlice-20    	     675	   1659890 ns/op	 631.71 MB/s	 1095595 B/op	      32 allocs/op
+BenchmarkReadSlice-20    	     824	   1352171 ns/op	 775.48 MB/s	 1095597 B/op	      32 allocs/op
+BenchmarkReadSlice-20    	    1176	    951853 ns/op	1101.62 MB/s	 1095601 B/op	      32 allocs/op
+BenchmarkFetch-20        	      14	  82130591 ns/op	 204.27 MB/s	68507484 B/op	    3247 allocs/op
+BenchmarkFetch-20        	      14	  74149118 ns/op	 226.26 MB/s	68507073 B/op	    3244 allocs/op
+BenchmarkFetch-20        	      15	  71966627 ns/op	 233.12 MB/s	68506844 B/op	    3244 allocs/op
+BenchmarkFetch-20        	      15	  71964255 ns/op	 233.13 MB/s	68506398 B/op	    3243 allocs/op
+BenchmarkFetch-20        	      16	  69465019 ns/op	 241.52 MB/s	68505952 B/op	    3242 allocs/op
+BenchmarkFetch-20        	      16	  74091742 ns/op	 226.44 MB/s	68506682 B/op	    3243 allocs/op
+BenchmarkFetch-20        	      16	  66452116 ns/op	 252.47 MB/s	68505917 B/op	    3241 allocs/op
+BenchmarkFetch-20        	      15	  69827341 ns/op	 240.27 MB/s	68506256 B/op	    3242 allocs/op
+BenchmarkFetch-20        	      15	  72669448 ns/op	 230.87 MB/s	68507163 B/op	    3243 allocs/op
+BenchmarkFetch-20        	      15	  73058656 ns/op	 229.64 MB/s	68506181 B/op	    3246 allocs/op
+BenchmarkFetch-20        	      14	  72473698 ns/op	 231.49 MB/s	68506228 B/op	    3248 allocs/op
+BenchmarkFetch-20        	      18	  71278389 ns/op	 235.38 MB/s	68506602 B/op	    3249 allocs/op
+BenchmarkFetch-20        	      16	  72281678 ns/op	 232.11 MB/s	68506882 B/op	    3245 allocs/op
+BenchmarkFetch-20        	      16	  74288405 ns/op	 225.84 MB/s	68507187 B/op	    3250 allocs/op
+BenchmarkFetch-20        	      16	  70339936 ns/op	 238.52 MB/s	68506249 B/op	    3248 allocs/op
+BenchmarkFetch-20        	      14	  72652268 ns/op	 230.92 MB/s	68506108 B/op	    3247 allocs/op
+BenchmarkFetch-20        	      15	  70840943 ns/op	 236.83 MB/s	68506430 B/op	    3250 allocs/op
+BenchmarkFetch-20        	      18	  69141408 ns/op	 242.65 MB/s	68506094 B/op	    3245 allocs/op
+BenchmarkFetch-20        	      18	  71207152 ns/op	 235.61 MB/s	68505397 B/op	    3240 allocs/op
+BenchmarkFetch-20        	      16	  69593533 ns/op	 241.07 MB/s	68505295 B/op	    3240 allocs/op
+PASS
+ok  	github.com/oioio-space/inkwell/internal/blob	82.816s
+goos: linux
+goarch: amd64
+pkg: github.com/oioio-space/inkwell/internal/transport/frame
+cpu: 13th Gen Intel(R) Core(TM) i7-1370P
+BenchmarkWrite/256-20         	17520675	        75.97 ns/op	3369.79 MB/s	     288 B/op	       1 allocs/op
+BenchmarkWrite/256-20         	16594382	        77.51 ns/op	3302.98 MB/s	     288 B/op	       1 allocs/op
+BenchmarkWrite/256-20         	15918888	        72.09 ns/op	3551.03 MB/s	     288 B/op	       1 allocs/op
+BenchmarkWrite/256-20         	19803574	        63.47 ns/op	4033.10 MB/s	     288 B/op	       1 allocs/op
+BenchmarkWrite/256-20         	18399925	        63.19 ns/op	4051.34 MB/s	     288 B/op	       1 allocs/op
+BenchmarkWrite/256-20         	18487851	        63.67 ns/op	4020.59 MB/s	     288 B/op	       1 allocs/op
+BenchmarkWrite/256-20         	18567285	        63.16 ns/op	4053.18 MB/s	     288 B/op	       1 allocs/op
+BenchmarkWrite/256-20         	18866532	        65.54 ns/op	3905.85 MB/s	     288 B/op	       1 allocs/op
+BenchmarkWrite/256-20         	20118231	        61.74 ns/op	4146.46 MB/s	     288 B/op	       1 allocs/op
+BenchmarkWrite/256-20         	20003158	        62.27 ns/op	4110.89 MB/s	     288 B/op	       1 allocs/op
+BenchmarkWrite/256-20         	19699448	        63.39 ns/op	4038.48 MB/s	     288 B/op	       1 allocs/op
+BenchmarkWrite/256-20         	19020057	        62.48 ns/op	4097.10 MB/s	     288 B/op	       1 allocs/op
+BenchmarkWrite/256-20         	20088374	        64.61 ns/op	3962.46 MB/s	     288 B/op	       1 allocs/op
+BenchmarkWrite/256-20         	18623640	        62.98 ns/op	4064.85 MB/s	     288 B/op	       1 allocs/op
+BenchmarkWrite/256-20         	18319627	        63.75 ns/op	4015.85 MB/s	     288 B/op	       1 allocs/op
+BenchmarkWrite/256-20         	21233416	        60.25 ns/op	4249.25 MB/s	     288 B/op	       1 allocs/op
+BenchmarkWrite/256-20         	18701500	        62.07 ns/op	4124.33 MB/s	     288 B/op	       1 allocs/op
+BenchmarkWrite/256-20         	18372320	        62.44 ns/op	4100.26 MB/s	     288 B/op	       1 allocs/op
+BenchmarkWrite/256-20         	19128283	        62.91 ns/op	4069.37 MB/s	     288 B/op	       1 allocs/op
+BenchmarkWrite/256-20         	19579236	        62.24 ns/op	4113.25 MB/s	     288 B/op	       1 allocs/op
+BenchmarkWrite/16384-20       	  561078	      2296 ns/op	7135.88 MB/s	   18432 B/op	       1 allocs/op
+BenchmarkWrite/16384-20       	  516477	      2282 ns/op	7179.88 MB/s	   18432 B/op	       1 allocs/op
+BenchmarkWrite/16384-20       	  507214	      2427 ns/op	6750.40 MB/s	   18432 B/op	       1 allocs/op
+BenchmarkWrite/16384-20       	  490820	      2378 ns/op	6890.09 MB/s	   18432 B/op	       1 allocs/op
+BenchmarkWrite/16384-20       	  561049	      2273 ns/op	7207.16 MB/s	   18432 B/op	       1 allocs/op
+BenchmarkWrite/16384-20       	  524246	      2302 ns/op	7118.51 MB/s	   18432 B/op	       1 allocs/op
+BenchmarkWrite/16384-20       	  555774	      2163 ns/op	7576.39 MB/s	   18432 B/op	       1 allocs/op
+BenchmarkWrite/16384-20       	  561979	      2197 ns/op	7456.45 MB/s	   18432 B/op	       1 allocs/op
+BenchmarkWrite/16384-20       	  550807	      2181 ns/op	7512.55 MB/s	   18432 B/op	       1 allocs/op
+BenchmarkWrite/16384-20       	  555184	      2308 ns/op	7099.81 MB/s	   18432 B/op	       1 allocs/op
+BenchmarkWrite/16384-20       	  572251	      2187 ns/op	7490.30 MB/s	   18432 B/op	       1 allocs/op
+BenchmarkWrite/16384-20       	  438822	      2659 ns/op	6162.80 MB/s	   18432 B/op	       1 allocs/op
+BenchmarkWrite/16384-20       	  481749	      2228 ns/op	7352.67 MB/s	   18432 B/op	       1 allocs/op
+BenchmarkWrite/16384-20       	  522145	      2287 ns/op	7163.89 MB/s	   18432 B/op	       1 allocs/op
+BenchmarkWrite/16384-20       	  499845	      2880 ns/op	5688.38 MB/s	   18432 B/op	       1 allocs/op
+BenchmarkWrite/16384-20       	  515979	      2309 ns/op	7095.33 MB/s	   18432 B/op	       1 allocs/op
+BenchmarkWrite/16384-20       	  503338	      2213 ns/op	7404.60 MB/s	   18432 B/op	       1 allocs/op
+BenchmarkWrite/16384-20       	  500124	      2168 ns/op	7556.94 MB/s	   18432 B/op	       1 allocs/op
+BenchmarkWrite/16384-20       	  527601	      2194 ns/op	7466.66 MB/s	   18432 B/op	       1 allocs/op
+BenchmarkWrite/16384-20       	  594480	      2212 ns/op	7408.34 MB/s	   18432 B/op	       1 allocs/op
+BenchmarkWrite/65536-20       	  121050	      9124 ns/op	7182.67 MB/s	   73728 B/op	       1 allocs/op
+BenchmarkWrite/65536-20       	  130716	      8988 ns/op	7291.35 MB/s	   73728 B/op	       1 allocs/op
+BenchmarkWrite/65536-20       	  132199	      9037 ns/op	7251.77 MB/s	   73728 B/op	       1 allocs/op
+BenchmarkWrite/65536-20       	  132838	      8738 ns/op	7499.91 MB/s	   73728 B/op	       1 allocs/op
+BenchmarkWrite/65536-20       	  147987	      9031 ns/op	7256.39 MB/s	   73728 B/op	       1 allocs/op
+BenchmarkWrite/65536-20       	  126073	      9336 ns/op	7019.95 MB/s	   73728 B/op	       1 allocs/op
+BenchmarkWrite/65536-20       	  130743	      9309 ns/op	7040.02 MB/s	   73728 B/op	       1 allocs/op
+BenchmarkWrite/65536-20       	  125691	      9425 ns/op	6953.36 MB/s	   73728 B/op	       1 allocs/op
+BenchmarkWrite/65536-20       	  128583	      9198 ns/op	7124.70 MB/s	   73728 B/op	       1 allocs/op
+BenchmarkWrite/65536-20       	  133788	      9131 ns/op	7177.11 MB/s	   73728 B/op	       1 allocs/op
+BenchmarkWrite/65536-20       	  132982	      9438 ns/op	6944.17 MB/s	   73728 B/op	       1 allocs/op
+BenchmarkWrite/65536-20       	  129375	      9079 ns/op	7218.76 MB/s	   73728 B/op	       1 allocs/op
+BenchmarkWrite/65536-20       	  133090	      8974 ns/op	7302.83 MB/s	   73728 B/op	       1 allocs/op
+BenchmarkWrite/65536-20       	  131338	      9380 ns/op	6986.82 MB/s	   73728 B/op	       1 allocs/op
+BenchmarkWrite/65536-20       	  132560	      9719 ns/op	6743.35 MB/s	   73728 B/op	       1 allocs/op
+BenchmarkWrite/65536-20       	  121735	      9703 ns/op	6754.23 MB/s	   73728 B/op	       1 allocs/op
+BenchmarkWrite/65536-20       	  122864	      9553 ns/op	6860.23 MB/s	   73728 B/op	       1 allocs/op
+BenchmarkWrite/65536-20       	  126175	      9656 ns/op	6787.10 MB/s	   73728 B/op	       1 allocs/op
+BenchmarkWrite/65536-20       	  136947	      9314 ns/op	7036.53 MB/s	   73728 B/op	       1 allocs/op
+BenchmarkWrite/65536-20       	  137640	      9467 ns/op	6922.82 MB/s	   73728 B/op	       1 allocs/op
+BenchmarkWrite/1048576-20     	123134485	         9.724 ns/op	107832398.98 MB/s	       4 B/op	       1 allocs/op
+BenchmarkWrite/1048576-20     	121445966	         9.916 ns/op	105742968.92 MB/s	       4 B/op	       1 allocs/op
+BenchmarkWrite/1048576-20     	124015146	         9.623 ns/op	108960515.03 MB/s	       4 B/op	       1 allocs/op
+BenchmarkWrite/1048576-20     	126745376	         9.489 ns/op	110498560.36 MB/s	       4 B/op	       1 allocs/op
+BenchmarkWrite/1048576-20     	125814327	         9.503 ns/op	110338408.03 MB/s	       4 B/op	       1 allocs/op
+BenchmarkWrite/1048576-20     	129638809	         9.306 ns/op	112672731.27 MB/s	       4 B/op	       1 allocs/op
+BenchmarkWrite/1048576-20     	127307202	         9.446 ns/op	111007424.68 MB/s	       4 B/op	       1 allocs/op
+BenchmarkWrite/1048576-20     	128318757	         9.381 ns/op	111782318.82 MB/s	       4 B/op	       1 allocs/op
+BenchmarkWrite/1048576-20     	127858606	         9.419 ns/op	111328924.83 MB/s	       4 B/op	       1 allocs/op
+BenchmarkWrite/1048576-20     	127769760	         9.386 ns/op	111719364.68 MB/s	       4 B/op	       1 allocs/op
+BenchmarkWrite/1048576-20     	126970468	         9.448 ns/op	110983572.28 MB/s	       4 B/op	       1 allocs/op
+BenchmarkWrite/1048576-20     	127740550	         9.408 ns/op	111450604.34 MB/s	       4 B/op	       1 allocs/op
+BenchmarkWrite/1048576-20     	99704210	        11.59 ns/op	90441789.33 MB/s	       4 B/op	       1 allocs/op
+BenchmarkWrite/1048576-20     	126166827	         9.423 ns/op	111279530.89 MB/s	       4 B/op	       1 allocs/op
+BenchmarkWrite/1048576-20     	127191810	         9.405 ns/op	111492296.06 MB/s	       4 B/op	       1 allocs/op
+BenchmarkWrite/1048576-20     	127932314	         9.408 ns/op	111454806.11 MB/s	       4 B/op	       1 allocs/op
+BenchmarkWrite/1048576-20     	129753877	         9.402 ns/op	111527225.26 MB/s	       4 B/op	       1 allocs/op
+BenchmarkWrite/1048576-20     	120528920	         9.851 ns/op	106444286.46 MB/s	       4 B/op	       1 allocs/op
+BenchmarkWrite/1048576-20     	128626555	         9.374 ns/op	111863548.06 MB/s	       4 B/op	       1 allocs/op
+BenchmarkWrite/1048576-20     	130163665	         9.319 ns/op	112517507.87 MB/s	       4 B/op	       1 allocs/op
+BenchmarkRead/256-20          	17472176	        73.50 ns/op	3483.14 MB/s	     260 B/op	       2 allocs/op
+BenchmarkRead/256-20          	15866245	        74.93 ns/op	3416.53 MB/s	     260 B/op	       2 allocs/op
+BenchmarkRead/256-20          	16270746	        74.69 ns/op	3427.38 MB/s	     260 B/op	       2 allocs/op
+BenchmarkRead/256-20          	17196072	        73.38 ns/op	3488.75 MB/s	     260 B/op	       2 allocs/op
+BenchmarkRead/256-20          	15966385	        73.32 ns/op	3491.58 MB/s	     260 B/op	       2 allocs/op
+BenchmarkRead/256-20          	16139694	        75.00 ns/op	3413.13 MB/s	     260 B/op	       2 allocs/op
+BenchmarkRead/256-20          	14072643	        75.53 ns/op	3389.30 MB/s	     260 B/op	       2 allocs/op
+BenchmarkRead/256-20          	16286784	        75.24 ns/op	3402.30 MB/s	     260 B/op	       2 allocs/op
+BenchmarkRead/256-20          	16666293	        75.12 ns/op	3407.73 MB/s	     260 B/op	       2 allocs/op
+BenchmarkRead/256-20          	15897057	        72.97 ns/op	3508.19 MB/s	     260 B/op	       2 allocs/op
+BenchmarkRead/256-20          	16090663	        74.38 ns/op	3441.81 MB/s	     260 B/op	       2 allocs/op
+BenchmarkRead/256-20          	16013535	        75.15 ns/op	3406.73 MB/s	     260 B/op	       2 allocs/op
+BenchmarkRead/256-20          	15737990	        73.18 ns/op	3498.31 MB/s	     260 B/op	       2 allocs/op
+BenchmarkRead/256-20          	16695446	        73.68 ns/op	3474.39 MB/s	     260 B/op	       2 allocs/op
+BenchmarkRead/256-20          	16486684	        77.00 ns/op	3324.87 MB/s	     260 B/op	       2 allocs/op
+BenchmarkRead/256-20          	16540472	        73.10 ns/op	3502.07 MB/s	     260 B/op	       2 allocs/op
+BenchmarkRead/256-20          	15605379	        74.54 ns/op	3434.20 MB/s	     260 B/op	       2 allocs/op
+BenchmarkRead/256-20          	16259322	        73.55 ns/op	3480.51 MB/s	     260 B/op	       2 allocs/op
+BenchmarkRead/256-20          	16244139	        73.41 ns/op	3487.16 MB/s	     260 B/op	       2 allocs/op
+BenchmarkRead/256-20          	16620016	        73.78 ns/op	3469.62 MB/s	     260 B/op	       2 allocs/op
+BenchmarkRead/16384-20        	  552672	      2539 ns/op	6452.88 MB/s	   16388 B/op	       2 allocs/op
+BenchmarkRead/16384-20        	  456410	      2490 ns/op	6579.81 MB/s	   16388 B/op	       2 allocs/op
+BenchmarkRead/16384-20        	  464583	      2483 ns/op	6599.72 MB/s	   16388 B/op	       2 allocs/op
+BenchmarkRead/16384-20        	  524978	      2610 ns/op	6277.32 MB/s	   16388 B/op	       2 allocs/op
+BenchmarkRead/16384-20        	  450180	      2544 ns/op	6439.95 MB/s	   16388 B/op	       2 allocs/op
+BenchmarkRead/16384-20        	  523670	      2493 ns/op	6573.23 MB/s	   16388 B/op	       2 allocs/op
+BenchmarkRead/16384-20        	  496495	      2537 ns/op	6459.02 MB/s	   16388 B/op	       2 allocs/op
+BenchmarkRead/16384-20        	  515154	      2456 ns/op	6671.38 MB/s	   16388 B/op	       2 allocs/op
+BenchmarkRead/16384-20        	  497546	      2460 ns/op	6661.16 MB/s	   16388 B/op	       2 allocs/op
+BenchmarkRead/16384-20        	  497872	      2450 ns/op	6686.60 MB/s	   16388 B/op	       2 allocs/op
+BenchmarkRead/16384-20        	  442772	      2492 ns/op	6575.47 MB/s	   16388 B/op	       2 allocs/op
+BenchmarkRead/16384-20        	  456832	      2525 ns/op	6488.16 MB/s	   16388 B/op	       2 allocs/op
+BenchmarkRead/16384-20        	  389364	      2588 ns/op	6331.85 MB/s	   16388 B/op	       2 allocs/op
+BenchmarkRead/16384-20        	  486577	      2460 ns/op	6660.42 MB/s	   16388 B/op	       2 allocs/op
+BenchmarkRead/16384-20        	  484148	      2513 ns/op	6518.52 MB/s	   16388 B/op	       2 allocs/op
+BenchmarkRead/16384-20        	  458208	      2515 ns/op	6514.39 MB/s	   16388 B/op	       2 allocs/op
+BenchmarkRead/16384-20        	  508454	      2453 ns/op	6678.87 MB/s	   16388 B/op	       2 allocs/op
+BenchmarkRead/16384-20        	  443379	      2421 ns/op	6766.76 MB/s	   16388 B/op	       2 allocs/op
+BenchmarkRead/16384-20        	  502766	      2455 ns/op	6672.63 MB/s	   16388 B/op	       2 allocs/op
+BenchmarkRead/16384-20        	  454562	      2472 ns/op	6628.80 MB/s	   16388 B/op	       2 allocs/op
+BenchmarkRead/65536-20        	  146864	      8573 ns/op	7644.67 MB/s	   65540 B/op	       2 allocs/op
+BenchmarkRead/65536-20        	  129519	      8901 ns/op	7363.07 MB/s	   65540 B/op	       2 allocs/op
+BenchmarkRead/65536-20        	  121465	     12169 ns/op	5385.42 MB/s	   65540 B/op	       2 allocs/op
+BenchmarkRead/65536-20        	  129590	      9478 ns/op	6914.66 MB/s	   65540 B/op	       2 allocs/op
+BenchmarkRead/65536-20        	  131227	      9371 ns/op	6993.78 MB/s	   65540 B/op	       2 allocs/op
+BenchmarkRead/65536-20        	  139869	      9230 ns/op	7100.68 MB/s	   65540 B/op	       2 allocs/op
+BenchmarkRead/65536-20        	  130338	      9340 ns/op	7016.67 MB/s	   65540 B/op	       2 allocs/op
+BenchmarkRead/65536-20        	  122323	      9780 ns/op	6700.95 MB/s	   65540 B/op	       2 allocs/op
+BenchmarkRead/65536-20        	  129650	      9537 ns/op	6871.42 MB/s	   65540 B/op	       2 allocs/op
+BenchmarkRead/65536-20        	  112240	      9949 ns/op	6586.92 MB/s	   65540 B/op	       2 allocs/op
+BenchmarkRead/65536-20        	  132470	      9290 ns/op	7054.12 MB/s	   65540 B/op	       2 allocs/op
+BenchmarkRead/65536-20        	  126459	      9604 ns/op	6823.67 MB/s	   65540 B/op	       2 allocs/op
+BenchmarkRead/65536-20        	  132991	      9687 ns/op	6765.25 MB/s	   65540 B/op	       2 allocs/op
+BenchmarkRead/65536-20        	  125896	      9904 ns/op	6616.92 MB/s	   65540 B/op	       2 allocs/op
+BenchmarkRead/65536-20        	  119227	      9719 ns/op	6743.15 MB/s	   65540 B/op	       2 allocs/op
+BenchmarkRead/65536-20        	  117259	     10043 ns/op	6525.25 MB/s	   65540 B/op	       2 allocs/op
+BenchmarkRead/65536-20        	  119332	     10055 ns/op	6517.46 MB/s	   65540 B/op	       2 allocs/op
+BenchmarkRead/65536-20        	  115381	      9903 ns/op	6617.60 MB/s	   65540 B/op	       2 allocs/op
+BenchmarkRead/65536-20        	  114870	     10144 ns/op	6460.57 MB/s	   65540 B/op	       2 allocs/op
+BenchmarkRead/65536-20        	  131072	      9490 ns/op	6905.79 MB/s	   65540 B/op	       2 allocs/op
+BenchmarkRead/1048576-20      	    3291	    386534 ns/op	2712.77 MB/s	 2031634 B/op	       6 allocs/op
+BenchmarkRead/1048576-20      	    3088	    424703 ns/op	2468.96 MB/s	 2031637 B/op	       6 allocs/op
+BenchmarkRead/1048576-20      	    2652	    434902 ns/op	2411.07 MB/s	 2031640 B/op	       6 allocs/op
+BenchmarkRead/1048576-20      	    2769	    432667 ns/op	2423.52 MB/s	 2031637 B/op	       6 allocs/op
+BenchmarkRead/1048576-20      	    2972	    439628 ns/op	2385.14 MB/s	 2031638 B/op	       6 allocs/op
+BenchmarkRead/1048576-20      	    2932	    423354 ns/op	2476.83 MB/s	 2031638 B/op	       6 allocs/op
+BenchmarkRead/1048576-20      	    2740	    445579 ns/op	2353.29 MB/s	 2031638 B/op	       6 allocs/op
+BenchmarkRead/1048576-20      	    2516	    448492 ns/op	2338.01 MB/s	 2031639 B/op	       6 allocs/op
+BenchmarkRead/1048576-20      	    2743	    440391 ns/op	2381.01 MB/s	 2031640 B/op	       6 allocs/op
+BenchmarkRead/1048576-20      	    2505	    429943 ns/op	2438.87 MB/s	 2031638 B/op	       6 allocs/op
+BenchmarkRead/1048576-20      	    2466	    441900 ns/op	2372.88 MB/s	 2031640 B/op	       6 allocs/op
+BenchmarkRead/1048576-20      	    2468	    437151 ns/op	2398.66 MB/s	 2031639 B/op	       6 allocs/op
+BenchmarkRead/1048576-20      	    2828	    417372 ns/op	2512.33 MB/s	 2031638 B/op	       6 allocs/op
+BenchmarkRead/1048576-20      	    2829	    447366 ns/op	2343.89 MB/s	 2031641 B/op	       6 allocs/op
+BenchmarkRead/1048576-20      	    2934	    410828 ns/op	2552.35 MB/s	 2031638 B/op	       6 allocs/op
+BenchmarkRead/1048576-20      	    3032	    411517 ns/op	2548.07 MB/s	 2031638 B/op	       6 allocs/op
+BenchmarkRead/1048576-20      	    2348	    463344 ns/op	2263.06 MB/s	 2031641 B/op	       6 allocs/op
+BenchmarkRead/1048576-20      	    2402	    447031 ns/op	2345.64 MB/s	 2031640 B/op	       6 allocs/op
+BenchmarkRead/1048576-20      	    3049	    414083 ns/op	2532.28 MB/s	 2031638 B/op	       6 allocs/op
+BenchmarkRead/1048576-20      	    2682	    421381 ns/op	2488.43 MB/s	 2031639 B/op	       6 allocs/op
+PASS
+ok  	github.com/oioio-space/inkwell/internal/transport/frame	193.184s
+goos: linux
+goarch: amd64
+pkg: github.com/oioio-space/inkwell/internal/transport/mux
+cpu: 13th Gen Intel(R) Core(TM) i7-1370P
+BenchmarkSend/256-20         	59129896	        16.94 ns/op	15111.41 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/256-20         	74780966	        16.84 ns/op	15204.19 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/256-20         	78629611	        16.38 ns/op	15633.27 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/256-20         	72726510	        16.34 ns/op	15663.34 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/256-20         	68779914	        16.28 ns/op	15724.62 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/256-20         	74336334	        16.22 ns/op	15782.02 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/256-20         	71979556	        16.32 ns/op	15683.39 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/256-20         	79235022	        16.21 ns/op	15791.38 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/256-20         	79761194	        16.14 ns/op	15865.99 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/256-20         	79299609	        16.10 ns/op	15904.05 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/256-20         	76626022	        16.21 ns/op	15792.03 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/256-20         	73879897	        16.20 ns/op	15806.87 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/256-20         	77284838	        16.36 ns/op	15646.86 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/256-20         	73812690	        16.27 ns/op	15730.63 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/256-20         	78336104	        16.20 ns/op	15806.10 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/256-20         	84961682	        16.10 ns/op	15901.88 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/256-20         	76982293	        16.17 ns/op	15834.33 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/256-20         	75564232	        16.12 ns/op	15877.00 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/256-20         	77780491	        16.02 ns/op	15978.57 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/256-20         	68973984	        16.21 ns/op	15789.26 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/16384-20       	 8877333	       134.3 ns/op	122031.28 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/16384-20       	 8933612	       132.8 ns/op	123343.81 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/16384-20       	 8902873	       134.4 ns/op	121892.40 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/16384-20       	 9384421	       131.2 ns/op	124924.46 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/16384-20       	 9025107	       133.6 ns/op	122596.53 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/16384-20       	 9007827	       132.6 ns/op	123545.30 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/16384-20       	 9110146	       134.0 ns/op	122309.93 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/16384-20       	 8961998	       132.1 ns/op	124055.91 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/16384-20       	 9070923	       133.1 ns/op	123132.22 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/16384-20       	 9150649	       131.5 ns/op	124550.19 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/16384-20       	 8768234	       134.2 ns/op	122046.96 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/16384-20       	 9421280	       131.2 ns/op	124839.22 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/16384-20       	 9266442	       132.7 ns/op	123502.63 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/16384-20       	 9255234	       131.9 ns/op	124179.40 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/16384-20       	 9108033	       133.3 ns/op	122893.06 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/16384-20       	 9034365	       132.6 ns/op	123514.18 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/16384-20       	 9222843	       133.4 ns/op	122790.32 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/16384-20       	 9160440	       131.9 ns/op	124216.20 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/16384-20       	 9096171	       132.8 ns/op	123400.09 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/16384-20       	 8867845	       133.1 ns/op	123135.68 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/1048576-20     	  125350	      9413 ns/op	111392.26 MB/s	     483 B/op	       6 allocs/op
+BenchmarkSend/1048576-20     	   57519	     20110 ns/op	52141.71 MB/s	     484 B/op	       6 allocs/op
+BenchmarkSend/1048576-20     	   57952	     20712 ns/op	50626.71 MB/s	     484 B/op	       6 allocs/op
+BenchmarkSend/1048576-20     	   56659	     20738 ns/op	50563.13 MB/s	     481 B/op	       6 allocs/op
+BenchmarkSend/1048576-20     	   56052	     20791 ns/op	50433.46 MB/s	     482 B/op	       6 allocs/op
+BenchmarkSend/1048576-20     	   57570	     20525 ns/op	51087.53 MB/s	     481 B/op	       6 allocs/op
+BenchmarkSend/1048576-20     	   59227	     20173 ns/op	51980.05 MB/s	     482 B/op	       6 allocs/op
+BenchmarkSend/1048576-20     	   58074	     20447 ns/op	51283.49 MB/s	     482 B/op	       6 allocs/op
+BenchmarkSend/1048576-20     	   57787	     20349 ns/op	51530.54 MB/s	     482 B/op	       6 allocs/op
+BenchmarkSend/1048576-20     	   58774	     20377 ns/op	51457.94 MB/s	     482 B/op	       6 allocs/op
+BenchmarkSend/1048576-20     	   59510	     20127 ns/op	52098.76 MB/s	     481 B/op	       6 allocs/op
+BenchmarkSend/1048576-20     	   55560	     21627 ns/op	48484.99 MB/s	     481 B/op	       6 allocs/op
+BenchmarkSend/1048576-20     	   53656	     21234 ns/op	49382.10 MB/s	     482 B/op	       6 allocs/op
+BenchmarkSend/1048576-20     	   55887	     20931 ns/op	50096.92 MB/s	     482 B/op	       6 allocs/op
+BenchmarkSend/1048576-20     	   58586	     20304 ns/op	51644.50 MB/s	     482 B/op	       6 allocs/op
+BenchmarkSend/1048576-20     	   55100	     20892 ns/op	50190.50 MB/s	     482 B/op	       6 allocs/op
+BenchmarkSend/1048576-20     	   56094	     20985 ns/op	49966.78 MB/s	     481 B/op	       6 allocs/op
+BenchmarkSend/1048576-20     	   55627	     21064 ns/op	49780.97 MB/s	     485 B/op	       6 allocs/op
+BenchmarkSend/1048576-20     	   56920	     20819 ns/op	50365.47 MB/s	     482 B/op	       6 allocs/op
+BenchmarkSend/1048576-20     	   56960	     20714 ns/op	50621.02 MB/s	     482 B/op	       6 allocs/op
+PASS
+ok  	github.com/oioio-space/inkwell/internal/transport/mux	72.200s
+goos: linux
+goarch: amd64
+pkg: github.com/oioio-space/inkwell/internal/app
+cpu: 13th Gen Intel(R) Core(TM) i7-1370P
+BenchmarkRelay/Idle-20         	 5022624	       237.0 ns/op	       0 B/op	       0 allocs/op
+BenchmarkRelay/Idle-20         	 5102313	       236.5 ns/op	       0 B/op	       0 allocs/op
+BenchmarkRelay/Idle-20         	 5020930	       237.6 ns/op	       0 B/op	       0 allocs/op
+BenchmarkRelay/Idle-20         	 5041383	       238.5 ns/op	       0 B/op	       0 allocs/op
+BenchmarkRelay/Idle-20         	 5202913	       235.1 ns/op	       0 B/op	       0 allocs/op
+BenchmarkRelay/Idle-20         	 4930342	       239.0 ns/op	       0 B/op	       0 allocs/op
+BenchmarkRelay/Idle-20         	 5163199	       235.2 ns/op	       0 B/op	       0 allocs/op
+BenchmarkRelay/Idle-20         	 5063784	       236.8 ns/op	       0 B/op	       0 allocs/op
+BenchmarkRelay/Idle-20         	 5100714	       240.1 ns/op	       0 B/op	       0 allocs/op
+BenchmarkRelay/Idle-20         	 5035035	       235.0 ns/op	       0 B/op	       0 allocs/op
+BenchmarkRelay/Idle-20         	 5073622	       236.7 ns/op	       0 B/op	       0 allocs/op
+BenchmarkRelay/Idle-20         	 5144781	       235.0 ns/op	       0 B/op	       0 allocs/op
+BenchmarkRelay/Idle-20         	 5061931	       234.1 ns/op	       0 B/op	       0 allocs/op
+BenchmarkRelay/Idle-20         	 5032876	       238.9 ns/op	       0 B/op	       0 allocs/op
+BenchmarkRelay/Idle-20         	 5007240	       237.6 ns/op	       0 B/op	       0 allocs/op
+BenchmarkRelay/Idle-20         	 5054656	       235.9 ns/op	       0 B/op	       0 allocs/op
+BenchmarkRelay/Idle-20         	 5075274	       235.7 ns/op	       0 B/op	       0 allocs/op
+BenchmarkRelay/Idle-20         	 5175715	       234.4 ns/op	       0 B/op	       0 allocs/op
+BenchmarkRelay/Idle-20         	 5104857	       236.8 ns/op	       0 B/op	       0 allocs/op
+BenchmarkRelay/Idle-20         	 5075000	       237.4 ns/op	       0 B/op	       0 allocs/op
+BenchmarkRelay/Message-20      	 1278344	       937.4 ns/op	      48 B/op	       1 allocs/op
+BenchmarkRelay/Message-20      	 1255360	       957.3 ns/op	      48 B/op	       1 allocs/op
+BenchmarkRelay/Message-20      	 1257984	       954.0 ns/op	      48 B/op	       1 allocs/op
+BenchmarkRelay/Message-20      	 1287148	       937.8 ns/op	      48 B/op	       1 allocs/op
+BenchmarkRelay/Message-20      	 1249869	       965.0 ns/op	      48 B/op	       1 allocs/op
+BenchmarkRelay/Message-20      	 1000000	      1005 ns/op	      48 B/op	       1 allocs/op
+BenchmarkRelay/Message-20      	 1000000	      1261 ns/op	      48 B/op	       1 allocs/op
+BenchmarkRelay/Message-20      	 1000000	      1016 ns/op	      48 B/op	       1 allocs/op
+BenchmarkRelay/Message-20      	 1000000	      1061 ns/op	      48 B/op	       1 allocs/op
+BenchmarkRelay/Message-20      	 1209681	       991.6 ns/op	      48 B/op	       1 allocs/op
+BenchmarkRelay/Message-20      	 1213939	       987.5 ns/op	      48 B/op	       1 allocs/op
+BenchmarkRelay/Message-20      	 1000000	      1006 ns/op	      48 B/op	       1 allocs/op
+BenchmarkRelay/Message-20      	 1000000	      1066 ns/op	      48 B/op	       1 allocs/op
+BenchmarkRelay/Message-20      	 1210173	       986.7 ns/op	      48 B/op	       1 allocs/op
+BenchmarkRelay/Message-20      	 1239034	       967.0 ns/op	      48 B/op	       1 allocs/op
+BenchmarkRelay/Message-20      	 1230986	       974.6 ns/op	      48 B/op	       1 allocs/op
+BenchmarkRelay/Message-20      	 1211384	       996.1 ns/op	      48 B/op	       1 allocs/op
+BenchmarkRelay/Message-20      	 1000000	      1034 ns/op	      48 B/op	       1 allocs/op
+BenchmarkRelay/Message-20      	 1217989	       991.6 ns/op	      48 B/op	       1 allocs/op
+BenchmarkRelay/Message-20      	 1210288	       989.8 ns/op	      48 B/op	       1 allocs/op
+PASS
+ok  	github.com/oioio-space/inkwell/internal/app	47.125s
