@@ -1291,8 +1291,8 @@ toujours **tout le projet**.
 **8. Hors de l'interface d'écriture.** « **Exporter l'historique (format technique)…** » (HI-5) ne
 figure **ni** dans Exporter, **ni** dans les menus. Le nom du format n'apparaît que sous « Détails
 techniques » de ce dialogue. Il vit dans les **outils du mode développeur**
-(Préférences › Application › Mode développeur › « Outils », §4.35), ou dans une extension. HI-5 est
-à aligner (`CHANGES.md`).
+(Préférences › Application › Mode développeur › « Outils », §4.35), ou dans une extension. Il
+clone la projection Git de l'historique (HI-5 : dépôt reconstructible, jamais une autorité).
 
 **Vide :** « Pas encore de modification. Chaque séance de travail apparaîtra ici. »
 
@@ -3103,8 +3103,11 @@ personne choisie, par exemple une responsable.
     est ignorée (« Décision après retrait, sans effet ») ; un retrait fait **après** une décision n'a
     aucun effet.
   - « **Validation contestée** » (losange `warn`, `--warning`), **uniquement** en cas
-    d'**équivocation** : la même personne a signé, depuis deux appareils, des décisions en conflit
-    **en même temps** (sa chaîne de signatures est fourchée ; architecture VD-2, VD-3, PD-8).
+    d'**équivocation** : la même personne a signé **deux actions contradictoires en même temps**
+    (par exemple deux décisions en conflit, ou, pour l'auteur de la demande, deux versions
+    contradictoires de sa propre soumission), depuis deux appareils ; sa chaîne de signatures est
+    fourchée (architecture VD-2, VD-3, PD-8). Une décision contraire prise **après** coup n'y change
+    rien.
     - « Voir » montre **les deux** décisions, avec leurs dates et leurs notes, au clavier (deux
       éléments d'une liste) ;
     - le nom accessible dit « Validation contestée : deux décisions en conflit signées par Anne,

@@ -560,4 +560,5 @@ Réponse à [19-codex-confirm2](../architecture/reviews/19-codex-confirm2.md) et
 
 - **§4.48, « Validation contestée »** : uniquement l'**équivocation** (chaîne de signatures fourchée) ; une décision est définitive, la seconde est montrée « Décision déjà rendue — soumettre à nouveau » ; états décision ∥ retrait, décision après retrait vu, retrait après décision ; statut de la version sur plusieurs demandes (ordre de l'architecture VD-3) ; reprise = modifier le texte et soumettre la nouvelle version.
 - **§4.22, présence** : repli sans PD-5 ou pair ancien = aucune présence émise (architecture §6.11), plus de curseurs affichés pour tous.
+- **§4.48 / §8 (HI-5)** : « Validation contestée » couvre aussi la fourche de l'auteur de la soumission (VD-3, PD-8), dite « deux actions contradictoires signées en même temps par la même personne » ; « à aligner » de HI-5 retiré (export = clone de la projection Git).
 - **Mineurs** : phrases « à aligner » retirées (§4.18, §4.22) ; attributions R9-M1 corrigées (Fable) ; `coverage.md` (⇧⌘K) et `inventory.md` (`fonts/`, G-107).
