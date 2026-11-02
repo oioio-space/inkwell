@@ -2,9 +2,9 @@
 
 | | |
 |---|---|
-| Version | **1.0.0-brouillon.11** (révision 8.2, delta de confirmation : N46 variantes isolées, N47 commentaires, N48 validation, constats du tour 8 ; révision 8.1 **acceptée** : N44, N45 ; révision 8 : tour 7, N42, N43 ; [CHANGES.md](CHANGES.md), [coherence.md](coherence.md)) |
+| Version | **1.0.0-brouillon.12** (révision 8.3 : constats du tour de confirmation ; révision 8.2, delta de confirmation : N46 variantes isolées, N47 commentaires, N48 validation, constats du tour 8 ; révision 8.1 **acceptée** : N44, N45 ; révision 8 : tour 7, N42, N43 ; [CHANGES.md](CHANGES.md), [coherence.md](coherence.md)) |
 | Date | 2026-11-01 |
-| Statut | **acceptée (rév. 8.1)** par Fable et Codex au tour 8 ([15](reviews/15-fable-r8.md), [16](reviews/16-codex-r8.md)) ; la révision 8.2 est un **delta de confirmation** (constats non bloquants du tour 8, N46) à confirmer par les deux revues ; acceptation au sens du §0.5 (les portes restent à passer) |
+| Statut | **acceptée (rév. 8.1)** par Fable et Codex au tour 8 ([15](reviews/15-fable-r8.md), [16](reviews/16-codex-r8.md)) ; la révision 8.2 est un **delta de confirmation** (constats non bloquants du tour 8, N46 à N48) ; le tour de confirmation ([17](reviews/17-fable-confirm.md) ACCEPT, [18](reviews/18-codex-confirm.md) NOT ACCEPTED) est traité en révision 8.3 ; acceptation au sens du §0.5 (les portes restent à passer) |
 | Remplace | [`docs/architecture.md`](../architecture.md) (devenu un renvoi) |
 | Finalité | [document de conception](../conception.pdf) (24 oct. 2026) |
 | Décisions | [ADR](../adr/README.md) ; doutes et options : [decisions.md](decisions.md) (`AD-xx`) |
@@ -779,6 +779,7 @@ repose sur I1–I4 (§10).
 | Chose | Vérité | Propriétaire en mémoire | Persistance | Vues dérivées (jamais écrites ailleurs) |
 |---|---|---|---|---|
 | Texte d'un fichier texte et ses verrous (ADR 0022) ; ses **commentaires** dans un document frère dérivé (§6.14, PD-7) | un document Automerge par fichier (`{text, meta}`), plus son document `comments` | `Repo` (Worker) | `.inkwell/repo/` par le Stream `store` | fichier projeté sur le disque, aperçu, recherche, sommaire |
+| Soumissions et décisions de validation (N48) | ensemble signé d'ops `review_op_v1` (PD-8) | `internal/ledger` | `.inkwell/sets/review/` | états (VD-3), étiquettes Git (VD-6) |
 | Arbre du projet, références des blobs, paquets `@preview`, demandes de suppression | document racine Automerge (index, `schema: 1`, ADR 0023/0030) | `Repo` | idem | arborescence matérialisée (fonction pure TS, vecteurs partagés avec Go) |
 | Versions nommées | entrée Automerge (nom, note, auteur, date, têtes par document) | `Repo` | idem | projection Git par go-git *[cible, `AD-13`]* ; PDF daté |
 | Membres, rôles, suspensions, groupes d'appareils | ops signées (ADR 0017, 0021) | ledger | `.inkwell/trust/<hash>` | liste pliée, filtre de connexion, kind `Roles` |
@@ -1580,9 +1581,14 @@ annoncée par une `listing_op` `variant` ancrée sur une modification de l'index
 `VariantId` = `DocId` de cette fourche. Métadonnées dans la fourche : `meta.variant {nom, créée par,
 date}`. Les fichiers de V sont les nœuds de l'index fourché ; un fichier **non modifié** dans V
 pointe vers l'original et se lit **figé** au point de départ (`view(heads)`, lecture seule) ; à la
-première modification, il est **fourché paresseusement** (copie à l'écriture) : nouvelle
-`listing_op` `variant` ancrée sur les têtes de départ (le créateur rend d'abord les têtes uniques par
-une modification d'ancrage vide), et le nœud de l'index fourché pointe vers la fourche.
+première modification, il est **fourché paresseusement** (copie à l'écriture) sous une identité
+**dérivée, la même pour tous** : `DocId = BLAKE3("inkwell/doc-variant-file/v1" ‖ ProjectID ‖
+VariantId ‖ DocId d'origine)[:16]` (PD-6), dont l'état initial est **l'original aux têtes du
+manifeste de départ** (`meta.variant.depart`), sans modification d'ancrage. Deux personnes qui
+écrivent pour la première fois le même fichier de V en même temps créent donc **la même** fourche,
+depuis le même état : leurs modifications se fusionnent comme d'ordinaire et les deux écritures du
+pointeur dans l'index fourché portent la même valeur (aucune perte, aucun arbitrage). Seule la
+fourche de l'index est annoncée (`listing_op`, un emplacement).
 - **VA-1** La variante courante est un **état local** de l'appareil (réglage, jamais synchronisé).
 - **VA-2** Une modification s'applique **seulement** aux documents de la variante courante : l'éditeur
   est lié aux poignées des fourches de V ; jamais d'écriture dans l'original depuis V.
@@ -1613,8 +1619,8 @@ préchargement borné.**
   1 Mio de modifications propres : premier fichier visible ≤ 1 s sur le profil WAN de référence
   (ADR 0028) ; octets échangés ≈ modifications propres de V (amorçage ci-dessous), jamais
   l'historique commun ; préchargement jamais pendant la frappe (HP-*).
-- Amorçage sans retransmission : le receveur fourche **sa propre copie** de l'original à l'ancre de
-  la `listing_op` (les têtes de départ), puis la synchronisation n'échange que les modifications
+- Amorçage sans retransmission : le receveur fourche **sa propre copie** de l'original aux têtes du
+  manifeste de départ, puis la synchronisation n'échange que les modifications
   propres à V. Stockage : une fourche = (original, ancre) + ses propres morceaux (P-VAR : coût mesuré
   contre une copie complète). Durabilité : une variante dont personne d'autre n'a tiré le contenu
   n'existe que chez son auteur ; l'interface le dit (« seulement sur l'ordinateur de Paul ») et la
@@ -1625,8 +1631,11 @@ sont naturellement limités à V. Un fichier **non fourché** lu dans V porte l'
 sans champ nouveau, un curseur d'une personne dans V s'y mêlerait à ceux de l'original. Donc : **PD-5**
 (même mineure que PD-4) : canal de présence `variant` (valeur `VariantId`, ou `""` pour l'original),
 en `update` seulement (jamais en `snapshot` : map fermée). Sans PD-5 : aucune présence émise sur un
-fichier non fourché d'une variante (limite écrite). Le suivi (RV-3) qui suit une personne dans une
-autre variante y bascule la variante courante, avec le bandeau « Vous êtes dans la variante « X » ».
+fichier non fourché d'une variante (limite écrite). Suivre (RV-3) une personne qui est dans une
+**autre** variante **demande d'abord** (« Marie travaille dans « Version courte ». Passer et suivre ·
+Annuler ») ; rien ne change sans cet accord, et le suivi est **suspendu** pendant la question. Si la
+personne suivie change de variante **pendant** le suivi, la même question revient (suivi suspendu
+jusqu'à la réponse ; « Annuler » arrête le suivi).
 
 **Versions nommées par variante (N39 × N46).**
 - **VA-5 Portée.** Les versions nommées vivent dans `meta.versions` du document racine (HI-3) ; la
@@ -1644,9 +1653,9 @@ autre variante y bascule la variante courante, avec le bandeau « Vous êtes dan
   « Intégrer depuis cette version » (VA-4), avec sa prévisualisation et ses droits.
 - **VA-8 Nouvelle variante depuis une version** (de l'original ou de n'importe quelle variante) :
   l'index est fourché aux têtes de la version ; le **manifeste de départ** (fichier → (DocId,
-  têtes)) est recopié dans `meta.variant.depart` ; un fichier non fourché se lit à ces têtes-là, et
-  sa fourche paresseuse part de là (son ancre est la modification d'ancrage de la fourche, dont les
-  dépendances sont ces têtes ; le receveur amorce depuis sa copie du document désigné). Une variante
+  têtes), **et les têtes de son document de commentaires**, CM-4) est recopié dans
+  `meta.variant.depart` ; un fichier non fourché se lit à ces têtes-là, et sa fourche dérivée part
+  de là (le receveur amorce depuis sa copie du document désigné). Une variante
   peut ainsi partir d'une autre variante.
 - **VA-9 Épingles et ménage** (§6.5 M-6, HI-9). Racines du ménage : chaque variante **vivante**
   (sa fourche d'index, ses fourches, et les documents que son manifeste de départ désigne,
@@ -1670,18 +1679,17 @@ autre variante y bascule la variante courante, avec le bandeau « Vous êtes dan
   projetées, et l'export le dit. Test : reconstruire la projection depuis zéro → mêmes identifiants
   de commits sur deux appareils qui ont les mêmes variantes.
 
-**Rôles et confiance.** Créer une variante = écrire : **personnes qui écrivent** (et admins) ; chaque
-fourche consomme un emplacement de l'auteur (borne `Q = 32 + 32 × octrois`, protocole §4.10) : une
-variante qui touche n fichiers coûte 1 + n emplacements → borne serrée, à relever par octroi ou par
-une annonce **par variante** plutôt que par fichier (question au protocole, PD-6 éventuel). Écrire
+**Rôles et confiance.** Créer une variante = écrire : **personnes qui écrivent** (et admins) ;  la
+variante consomme **un** emplacement de son auteur (fourche de l'index, `Q = 32 + 32 × octrois`,
+protocole §4.10) ; ses fichiers fourchés, d'identité dérivée (PD-6), n'en consomment aucun. Écrire
 dans une variante : toute personne qui écrit (même couverture que l'original). Lecteurs : lisent les
 variantes, n'en créent pas. Intégrer dans l'original : qui peut écrire **l'original** (zones
 verrouillées respectées, HI-6) ; sinon « Proposer d'intégrer ». Abandonner : l'auteur, ou un admin.
 
-**Impact sur le protocole.** Identité et synchronisation : **aucun** changement (fourches = documents
-annoncés, `request` existant, rien dans les messages de synchronisation). Delta proposé : **PD-5**
-(présence `variant`). À vérifier par la boucle du protocole : une `listing_op` `variant` sur le
-document d'index (`sort 3 node` réservé, ADR 0023) ; budget d'emplacements par variante (PD-6).
+**Impact sur le protocole.** Synchronisation : aucun changement (`request` existant, rien dans les
+messages de synchronisation). Deltas proposés : **PD-5** (présence `variant`) ; **PD-6** (fourches de
+fichiers d'identité dérivée, admises avec la variante). À vérifier par la boucle du protocole : une
+`listing_op` `variant` sur le document d'index (`sort 3 node` réservé, ADR 0023).
 
 **Tests.** Modèle : deux personnes dans V et W, une dans l'original, modifications entrelacées → aucun
 octet de V dans W ni l'original sans « Intégrer » ; convergence de V entre ses deux auteurs ; amorçage
@@ -1880,7 +1888,9 @@ en est une **projection** reconstructible, pour chercher et lister vite.
 - **CM-3 Typst et Markdown** : les ancres portent sur la source ; l'aperçu peut montrer une marque
   en marge par la table de SY-3, jamais dans le rendu exporté.
 - **CM-4 Variantes (N46).** Le document de commentaires d'un fichier se fourche **avec** lui (copie à
-  l'écriture) : les fils créés dans V restent dans V ; ceux de l'original jusqu'au départ s'y voient.
+  l'écriture, identité dérivée de la fourche du fichier), **aux têtes enregistrées** dans
+  `meta.variant.depart` (VA-8) : deux appareils qui fourchent à des moments différents partent du
+  même état, et rien de l'original postérieur au départ n'entre dans V ; les fils créés dans V restent dans V ; ceux de l'original jusqu'au départ s'y voient.
   « Intégrer » propose, case **non cochée**, de recopier dans l'original les fils **ouverts** dont
   l'ancre survit, écrits par la personne qui intègre avec la mention « fil de Paul dans la variante
   X » et un lien ; l'auteur d'origine reste signé dans V.
@@ -1888,13 +1898,27 @@ en est une **projection** reconstructible, pour chercher et lister vite.
   p. 11–12, `AD-14`) dès que PD-7 est accepté, sinon le dit. Réglage d'admin « Les lecteurs peuvent
   commenter » (activé par défaut). Les zones verrouillées (ADR 0022) ne bloquent pas un commentaire.
   Résoudre ou rouvrir : l'auteur du fil et quiconque écrit. Document purgé → ses commentaires aussi.
-- **CM-6 Pair byzantin.** Chaque modification est **signée par son auteur** (§4.7 du protocole) ; la
-  **garde** du document `comments` (PD-7) n'admet que : créer un fil ou un message dont le champ
-  `auteur` est la clé qui signe ; modifier ou supprimer **seulement** ses objets ; changer `état`
-  si l'on est auteur du fil ou si l'on écrit ; ses propres réactions. Le nom affiché vient de la liste
-  signée. **Bornes** : ≤ 4 Kio par message, ≤ 16 mentions par message, ≤ 2 000 objets vivants par
-  auteur et par document, document ≤ 16 Mio, le tout dans le quota N10 de l'auteur ; au-delà, refus
-  par la garde. Côté personne : « Masquer les commentaires de X » ; côté admin : retirer le membre.
+- **CM-6 Pair byzantin.** Chaque modification est **signée par son auteur** (§4.7 du protocole). La
+  **garde** du document `comments` (PD-7) décide sur `c` et `before(c)` seulement (protocole §9.7) et
+  ne vérifie que : schéma ; créer un fil ou un message dont le champ `auteur` est la clé qui signe ;
+  modifier ou supprimer **seulement** ses objets ; ses propres réactions. Changer l'`état` du fil
+  **d'autrui** (résoudre, rouvrir) dépend du **rôle**, que la garde ne connaît pas : c'est la
+  **couverture** (protocole §9.4, étape 3) qui l'exige, par l'attestation d'un appareil qui écrit ; un
+  lecteur ne résout que ses propres fils. Le nom affiché vient de la liste signée.
+  **Bornes, toutes stables par réunion** (deux branches valides réunies restent valides) :
+  - **par modification** : ≤ 64 Kio encodée, ≤ 4 Kio par corps de message, ≤ 16 mentions ;
+  - **par acteur** `(clé, epoch)` et par document de commentaires : ≤ 8 192 modifications et ≤ 8 Mio
+    encodés **le long de sa propre chaîne** (les modifications d'un acteur sont totalement ordonnées,
+    chacune dépend de la précédente : la somme est une fonction de `before(c)` ; deux modifications du
+    même acteur au même `seq` sont l'équivoque déjà prouvée, §4.8). Au-delà, refus des **seules**
+    modifications de cet acteur, jamais des autres : boucler sur son propre message n'épuise que sa
+    part (`repo.json#comments-author-history`) ;
+  - **par clé**, toutes générations : le **quota N10** de l'auteur (cumulé, crédité après
+    vérification, protocole §8), réduit à **64 Mio** pour un lecteur ;
+  - **taille totale** du document : **jamais un refus**, un **palier de chargement local** (ADR
+    0028 : au-delà de 16 Mio, chargé par pages, marques limitées à la vue) ; aucune borne sur les
+    objets vivants.
+  Côté personne : « Masquer les commentaires de X » ; côté admin : retirer le membre.
 - **CM-7 Rapidité** (N38, **PF-15**) : le document de commentaires se charge **après** le texte,
   sans retarder le premier affichage ; marques de marge pour la seule zone visible ; l'**index
   dérivé** (SQLite de N33 : `fils(fichier, variante, état, auteur, mentions, mis à jour, extrait)` +
@@ -1914,7 +1938,9 @@ en est une **projection** reconstructible, pour chercher et lister vite.
   Windows ; INV-14), regroupées, seulement quand l'application tourne ; rien par courriel.
 - **CM-10 Tests** : propriétés des ancres (modifications aléatoires → ancre suivie, ou orpheline si
   et seulement si le passage a disparu) ; garde : modification d'un objet d'autrui, auteur usurpé,
-  dépassement de borne → refus ; index reconstruit = index incrémental ; e2e : lecteur qui commente
+  dépassement de borne d'acteur → refus de cet acteur seul ; **deux branches valides réunies** au-delà
+  de 16 Mio → admises, palier de chargement ; création et suppression répétées → borne d'acteur
+  atteinte, les autres auteurs continuent ; index reconstruit = index incrémental ; e2e : lecteur qui commente
   (après PD-7), variante, export sans commentaires.
 
 ### 6.15 Validation d'une version (N48)
@@ -1922,28 +1948,58 @@ en est une **projection** reconstructible, pour chercher et lister vite.
 *[cible ; `AD-107` ; deltas proposés **PD-8**, **PD-9**]* Une version nommée peut être **soumise** à
 une personne, qui la **valide** ou la **refuse**, avec une note facultative.
 
-- **VD-1 Objet validé.** `VersionId = BLAKE3("inkwell-ext:version:1\0" ‖ manifeste canonique)` : têtes
-  de l'index et de chaque fichier (DocId et têtes), empreintes des blobs, fichier principal, variante
-  (HI-3, VA-5). Toute modification ultérieure fait une autre version, donc **une nouvelle soumission**.
-- **VD-2 Opérations signées** (PD-8, Ed25519, liste des membres) : `submit {VersionId, assignee: clé de
-  membre, note?}` par une personne qui écrit ; `decide {submit, verdict: approve | reject, note?}`
-  par **la personne désignée** seulement ; `withdraw {submit}` par l'auteur de la soumission, avant
-  toute décision. Graphe ajout seul (`prev` par auteur, comme les annonces), bornes : note ≤ 4 Kio,
-  ≤ 64 soumissions ouvertes par auteur. Validité **causale** : le signataire est membre, du bon rôle,
-  au point causal de l'op (pli de la liste, protocole §4.9) ; deux décisions contraires du même
-  signataire sur la même soumission = **équivoque** (preuve existante, protocole §4.8) → état
-  « contesté », les deux montrées.
-- **VD-3 États** : `soumise` → `validée` | `refusée` | `retirée` ; une décision est définitive pour
-  cette `VersionId` ; après un refus, on corrige et on soumet une nouvelle version.
+- **VD-1 Objet validé.** `VersionId = BLAKE3("inkwell-ext:version:1\0" ‖ manifeste)`, le manifeste
+  en **CBOR déterministe** (RFC 8949 §4.2.1, comme PD-1) : têtes de l'index et de chaque fichier
+  (DocId et têtes), empreintes des blobs, fichier principal, variante (HI-3, VA-5). Toute
+  modification ultérieure fait une autre version, donc **une nouvelle soumission**.
+- **VD-2 Opérations signées** (PD-8, Ed25519, domaine `"inkwell/review-op/v1" ‖ 0x00 ‖ ProjectID ‖
+  message`) : `submit {VersionId, assignee, note?}` par une personne qui écrit ; `decide {soumission,
+  verdict: approve | reject, note?}` par **la personne désignée** ; `withdraw {soumission}` par
+  l'auteur de la soumission. Chaque op porte sa **chaîne d'auteur** (`position`, `prev`, comme les
+  annonces) et ses **frontières vues** (`members`, `decisions`, `reviews`). **Toute validité est
+  une fonction de l'op et de son passé déclaré** (protocole §4.9, §9.7), jamais de l'ordre
+  d'arrivée :
+  - `submit` valide si l'auteur écrit et **`assignee` est membre** (tout rôle) dans le pli de
+    `members` de l'op, et si l'auteur a **< 64 soumissions ouvertes** évaluées à la frontière
+    `reviews` déclarée (ouverte = sans `decide` ni `withdraw` valides dans ce passé) ;
+  - `decide` valide si le signataire est l'`assignee` de la soumission et membre à sa frontière ;
+    une **seule** décision compte par soumission : la première sur la **chaîne** du signataire
+    (plus petite `position`) ; une décision ultérieure sur la même soumission est ignorée et montrée
+    « décision ultérieure sans effet » ;
+  - `withdraw` valide si son passé déclaré ne contient **aucune** décision valide de la soumission.
+- **VD-3 États, pli déterministe** (fonction de l'ensemble des ops valides) : une soumission est
+  **`validée`** ou **`refusée`** si une décision valide existe (**la décision l'emporte** sur un retrait
+  concurrent, montré « retrait concurrent, sans effet ») ; sinon **`retirée`** si un retrait valide
+  existe ; sinon **`soumise`**. **`contestée`** : la chaîne du signataire d'une décision (ou de
+  l'auteur de la soumission) est **fourchée** (deux ops valides à la même `position`) ; la preuve est
+  `review_equivocation_v1` (PD-8 : les deux ops signées, même auteur, même `position`, contenus
+  différents, vérifiables sans autre donnée) ; comme pour les annonces (protocole §4.10, point de
+  gel), la chaîne est **gelée** à la fourche et toute soumission ou décision au-delà est
+  `contestée`. Une `VersionId` peut avoir plusieurs soumissions : son **statut** est `validée` si au
+  moins une soumission est `validée` et aucune `refusée` ni `contestée` ; `avis contraires` si l'on
+  a des deux ; sinon l'état de sa soumission la plus récente sur la chaîne de son auteur. Tous les
+  ordres de réception donnent le même état (`review.json#withdraw-concurrent-decide`,
+  `#two-decisions-same-signer`, `#chain-fork-contested`, `#assignee-not-member`,
+  `#open-count-at-frontier`, `#permutations`).
 - **VD-4 Qui valide.** Pas de rôle nouveau dans la liste des membres : la **personne désignée** par
-  la demande (tout membre, lecteur compris : un manager n'écrit pas forcément). En option, une
-  **politique d'admin** `review/policy` (PD-9, espace de décisions comme PD-1) : liste des personnes
-  qui peuvent valider, et « Intégrer dans l'original exige une version validée ».
-- **VD-5 Variantes.** Avec cette politique, « Intégrer » depuis une variante exige que le point
-  d'intégration soit une version **validée** par une personne de la liste. C'est une **garde de
-  l'application** (clients honnêtes) et un **contrôle vérifiable après coup** : l'intégration étant
-  faite de modifications ordinaires (HI-6), la garde d'admission ne peut pas l'imposer ; l'audit
-  marque « intégrée sans validation » toute intégration dont la source n'est pas une version validée.
+  la demande (tout membre, lecteur compris : un manager n'écrit pas forcément ; décidé par
+  l'utilisatrice le 2026-11-02). En option, une **politique d'admin** `review/policy` (PD-9) : liste
+  des personnes qui peuvent valider, et « Intégrer dans l'original exige une version validée » ;
+  l'appartenance à la liste s'évalue à la frontière `decisions` de la décision.
+- **VD-5 Variantes.** Avec cette politique, « Intégrer » intègre **cette version validée
+  exactement** (« Intégrer depuis cette version », VA-7) : la différence va du point de départ (ou de
+  la dernière intégration) **au manifeste validé**, même si la variante a continué ; la relecture le
+  dit (« Vous intégrez la version « Envoyée au comité », validée par Anne ; 2 modifications plus
+  récentes ne sont pas intégrées »). Seul le statut `validée` (VD-3) par une personne de la liste
+  ouvre ce chemin ; `contestée`, `avis contraires`, `refusée`, `retirée`, `soumise` ne l'ouvrent pas.
+  Sans politique, c'est l'état actuel qui est intégré et le statut le dit (« validée · le texte a
+  changé depuis »). C'est une **garde de l'application** (clients honnêtes) et un **contrôle
+  vérifiable après coup** : l'intégration étant faite de modifications ordinaires (HI-6), la garde
+  d'admission ne peut pas l'imposer ; l'audit marque « intégrée sans validation » toute intégration
+  dont la source n'est pas une version validée, et « validation contestée ensuite » si le statut
+  change **après** l'intégration (une contestation arrivée tard ne défait rien, elle se voit). Tout
+  changement de statut émet `review.statusChanged` pour que l'interface se mette à jour et
+  l'annonce (rendu : « Pour le design », `CHANGES.md`).
 - **VD-6 Trace.** L'historique (HI-1) montre soumissions et décisions sur la ligne du temps ; la
   projection Git (HI-5) les écrit en **étiquettes annotées** déterministes
   `validations/<version>-<n>` (auteur = signataire, corps = op et signature en base64) ; l'export du
@@ -3489,8 +3545,8 @@ passage de mise en page à chaque compilation) appariées au texte par leurs mot
   l'entrée la plus proche. Défilement : recherche dichotomique dans l'index du volet meneur →
   segment → position cible. Coût O(log n) par image, aucun appel à Go.
 - **SY-4 Clic et curseur** : clic dans l'aperçu → `jumpFromClick` (une requête) ou table → curseur et
-  ligne visibles dans l'éditeur ; commande « Montrer dans l'aperçu » et, en option, « suivre le
-  curseur » → marque brève sur la page. Le texte d'un autre fichier ouvre ce fichier (SY-6).
+  ligne visibles dans l'éditeur ; commande « Montrer dans l'aperçu » et « Suivre le texte »
+  (**activé par défaut**) → marque brève sur la page. Le texte d'un autre fichier ouvre ce fichier (SY-6).
 - **SY-5 Pas de boucle : la dernière action de la personne gagne.** Chaque volet note ses entrées
   **humaines** (molette, toucher, clavier, glissé de la barre, déplacement du curseur) : le volet
   touché devient **meneur** pour 300 ms, renouvelées à chaque entrée. Un défilement fait par
@@ -3504,7 +3560,9 @@ passage de mise en page à chaque compilation) appariées au texte par leurs mot
   plusieurs fois (fichier inclus deux fois) : la position la plus proche de la vue actuelle de
   l'aperçu.
 - **SY-7 Rythme et budget** (N38, **PF-12**) : défilement limité à une image d'animation
-  (`requestAnimationFrame`) ; « suivre le curseur » attend 100 ms de calme ; clic immédiat. Aucune
+  (`requestAnimationFrame`) ; « Suivre le texte » attend **300 ms** de calme, délai **unique** (celui de la conception) ; clic immédiat.
+  Deux mesures distinctes : ce **délai de calme** dit *quand* le suivi part ; le **budget de latence** du
+  saut, une fois déclenché (≤ 50 ms p95, ci-dessous), dit en combien de temps il aboutit. Aucune
   compilation ni appel à Go par défilement ; ≤ 1 ms par image pour 10 000 lignes ; saut au clic ≤ 50
   ms p95 ; la construction de la table ≤ 5 % du temps de compilation (le second passage de (iii)
   est mesuré et dit).
@@ -3547,7 +3605,9 @@ pour suivre ; **l'annonce du suivi** n'existe pas.
   **fichier actif** et garde **sa tête de sélection** visible (révélée avec une marge, sans recentrer
   à chaque frappe) ; mon aperçu suit par la table de SY-3. Toute entrée humaine locale (frappe, clic,
   défilement, changement de fichier) **arrête** le suivi (la dernière action de la personne gagne,
-  SY-5) ; bandeau discret « Vous suivez Marie · Arrêter ». À l'activation d'un fichier, un client
+  SY-5) ; bandeau discret « Vous suivez Marie · Arrêter ». Si la personne suivie est (ou passe) dans
+  une **autre variante**, rien ne change sans **accord explicite** (« Passer et suivre · Annuler »,
+  suivi suspendu pendant la question ; §6.11, PD-5). À l'activation d'un fichier, un client
   inkwell **réémet** `anchor`/`head` de sa sélection dans ce document : le fichier actif se lit sans
   nouveau champ.
 - **RV-4 Annonce du suivi** *(décision de l'utilisatrice, 2026-11-01)* : la personne suivie **voit**
@@ -3577,7 +3637,9 @@ pour suivre ; **l'annonce du suivi** n'existe pas.
 - **RV-8 Tests** : propriété de RV-1 (insertions et suppressions distantes aléatoires au-dessus, dans
   et sous la vue → premier caractère visible et sélection locale conservés, ou plus proche
   survivant) ; modèle du suivi (entrées locales et présences entrelacées → le suivi s'arrête à la
-  première entrée locale ; aucune émission de synchronisation par une présence) ; présence hostile
+  première entrée locale ; aucune émission de synchronisation par une présence ; suivi vers une
+  autre variante : « Passer et suivre » bascule, « Annuler » ne change rien, changement de variante
+  de la personne suivie pendant le suivi → question, suivi suspendu) ; présence hostile
   (curseur invalide, document non admis, rafale de 1 000 messages) → bornes de RV-5 et RV-6 ; e2e à
   deux pairs.
 
@@ -3820,28 +3882,39 @@ dépend pas).
 4. **Vecteurs** : `repo.json#presence-variant`, `#presence-variant-original`,
    `#presence-variant-old-peer` (jeté seul).
 
-**PD-6 — Budget d'emplacements par variante** (N46 ; *à décider par la boucle du protocole*). Une
-variante de projet coûte aujourd'hui 1 + n emplacements de son auteur (fourche de l'index + une
-`listing_op` par fichier fourché ; `Q = 32 + 32 × octrois`, protocole §4.10) : quelques variantes
-touchant beaucoup de fichiers épuisent la borne. Options : (a) relever `Q` par octroi (aucun
-changement de format) ; (b) une fourche de fichier **dans** une variante déjà annoncée ne consomme
-pas d'emplacement, bornée par variante (≤ 1 024 fichiers fourchés) — règle d'admission nouvelle à
-revoir sous le modèle byzantin (amendement de l'ADR 0031). Recommandation : (a) en v1, (b) proposé.
-Question liée : une `listing_op` `variant` sur le document d'index (la racine, ADR 0023) est-elle
-admise telle quelle ? à confirmer par la boucle.
+**PD-6 — Fourches de fichiers d'identité dérivée** (N46, Codex C4). Une fourche de fichier d'une
+variante annoncée V n'a **pas** d'annonce : `DocId = BLAKE3("inkwell/doc-variant-file/v1" ‖ ProjectID
+‖ VariantId ‖ DocId d'origine)[:16]` (étiquette propre, ligne au tableau §3.4) ; ensemble admis :
+`∪ { fork(V, d) : V variante admise, d admis } \ purgés` ; état initial = `d` aux têtes du manifeste
+de départ de V ; ses modifications **antérieures** au départ sont celles de `d` (mêmes empreintes,
+déjà admises) ; les nouvelles suivent la couverture ordinaire. Aucun emplacement consommé : seule la
+fourche de l'index de V en consomme un (L5 inchangée). Remplace l'idée d'une `listing_op` par fichier
+(qui donnait deux fourches à deux premiers auteurs concurrents). Vecteurs :
+`repo.json#variant-file-fork-derived`, `#variant-file-fork-concurrent-first-write`.
 
 **PD-7 — Document de commentaires** (N47). Un type de document **dérivé** du document d'un
-fichier : `DocId = BLAKE3("inkwell/doc/v1" ‖ ProjectID ‖ "comments" ‖ DocId du texte)[:16]`, admis
-avec lui (aucun emplacement d'annonce consommé), purgé avec lui ; couverture : admins, personnes
-qui écrivent **et lecteurs** ; garde de schéma CM-6 (auteur = clé qui signe, objets propres, bornes).
-Vecteurs : `repo.json#comments-*` (lecteur admis, objet d'autrui refusé, auteur usurpé refusé, borne).
+fichier : `DocId = BLAKE3("inkwell/doc-comments/v1" ‖ ProjectID ‖ DocId du texte)[:16]` (étiquette
+propre, séparation des domaines du protocole §3.3, ligne au tableau §3.4) ; ensemble admis :
+`∪ { comments(d) : d admis } \ { comments(d) : doc/d = purged }` ; G11 (ancrage) ne s'applique pas
+(aucune annonce) ; couverture : admins, personnes qui écrivent **et lecteurs**, sauf l'`état` d'un fil
+d'autrui (couverture d'un appareil qui écrit) ; garde CM-6 (auteur = clé qui signe, objets propres,
+bornes par modification et **par acteur sur sa chaîne**, jamais de borne globale). Vecteurs :
+`repo.json#comments-reader-admitted`, `#comments-foreign-object`, `#comments-author-spoofed`,
+`#comments-author-history`, `#comments-two-branches-over-16MiB` (admises).
 
-**PD-8 — Opérations de validation** (N48). Classe nouvelle `review_op_v1 {version u8 = 1 ; kind u8 1
-submit | 2 decide | 3 withdraw ; author [32] ; position u32 ; nprev ; prev [32] ; target [32]
+**PD-8 — Opérations de validation** (N48). `review_op_v1 {version u8 = 1 ; kind u8 1 submit |
+2 decide | 3 withdraw ; author [32] ; position u32 ≥ 1 ; nprev u8 ; prev [32] × nprev ; target [32]
 (VersionId pour submit, empreinte de la soumission sinon) ; assignee [32] (submit) ; verdict u8
-(decide) ; note ≤ 4096 ; members [32] × n et decisions [32] × n (frontières vues) ; sig [64] domaine
-« review-op »}`, ≤ 8192 octets ; règles de VD-2 ; équivoque par la preuve existante. Vecteurs :
-`review.json#*`.
+(decide) ; note ≤ 4096 octets ; nmembers ; members [32] × n ; ndecisions ; decisions [32] × n ;
+nreviews ≤ 64 ; reviews [32] × n (frontière des ops de validation vues) ; sig [64]}`, ≤ 8192 octets ;
+signature `Ed25519(key, "inkwell/review-op/v1" ‖ 0x00 ‖ ProjectID ‖ tout ce qui précède sig)` ; ligne
+au registre des domaines (protocole §20.4). Règles et pli : VD-2, VD-3. **Preuve de fourche**
+`review_equivocation_v1 {version u8 = 1 ; op_a ; op_b}` : deux `review_op_v1` complètes, même
+`author`, même `position`, octets différents, chacune vérifiable ; gardée la première par
+`(author, position)`, au plus 4 par clé ; diffusée comme la preuve §4.8 ; effet : gel de la chaîne à
+cette position (comme le point de gel du §4.10). Deux décisions contraires à des positions
+**différentes** ne sont **pas** une équivoque (la première sur la chaîne compte). Stockage :
+ensemble signé `.inkwell/sets/review/` (§6.1). Vecteurs : `review.json#*` (VD-3).
 
 **PD-9 — Espace de décisions `review/`** (N48, comme PD-1) : `review/policy {v:1, approvers:[clé],
 integrate_requires_approval: bool}`.

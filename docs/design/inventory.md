@@ -235,6 +235,12 @@ Ces fonctions n'existent pas encore. Chaque ligne nomme ce que le code devra mon
 | G-105 | M | Aucun commentaire : ni sélection commentée, ni fil, ni mention, ni résolution ; l'onglet existe vide | N47 | `ui/history/HistoryDrawer.svelte:206-207` (`history.comments.empty`) | spec §4.27 ; modèle de données dans l'architecture (étape 4, `AD-14`) |
 | G-106 | M | Aucune validation de version : ni soumission, ni badge, ni liste « À valider » | N48 | `history/versions.ts` (versions nommées sans statut) | spec §4.48 ; décision signée à prévoir dans l'architecture |
 
+### 2.16 Rév. 7.2 : revue de confirmation
+
+| # | Grav. | Écart | Norme | Preuve | Correction |
+|---|---|---|---|---|---|
+| G-107 | M | Le clavier de CodeMirror installé par défaut contient des liaisons qui rencontrent le registre : ⇧⌘K efface la ligne, ⌘[ et ⌘] indentent, Alt+← et Alt+→ déplacent par syntaxe, Ctrl+M bascule le mode Tab, Ctrl+U annule la sélection | K-6, Codex R9-M1 | `editor/setup.ts:127` (`defaultKeymap`, `historyKeymap`) | table « Clavier de l'éditeur » de K-6 (§8.2) |
+
 ## 3. Corrections, dans l'ordre
 
 L'ordre suit la valeur (parcours cassé et accessibilité d'abord), puis le coût, puis les

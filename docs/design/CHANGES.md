@@ -496,3 +496,60 @@ ci-dessus) :
   - Le statut est affiché avant d'intégrer dans l'Original ; un admin peut l'exiger.
 - `coverage.md` (deux lignes), `inventory.md` (G-105, G-106) et §10 (deux lignes de test) sont mis
   à jour.
+
+---
+
+# Addendum rév. 7.2 — revue de confirmation (17-fable-confirm, 18-codex-confirm)
+
+| Constat | Correction |
+|---|---|
+| R9-M1 : ⇧⌘K « Commenter » = `deleteLine` de CodeMirror | Commenter sous macOS = **⌃⌘M**. K-6 reçoit la **table du clavier de l'éditeur** : chaque liaison de `defaultKeymap` et `historyKeymap` qui touche le registre est résolue (⇧⌘K, ⌘[ / ⌘], Alt+← / Alt+→, Ctrl+M, Ctrl+U, Ctrl+I, Ctrl+Entrée). Navigation arrière et avant sous macOS = ⌃⌘← / ⌃⌘→. G-107. |
+| R9-M3 : gestes de l'architecture absents | §4.27 : réactions (8 fixes), « Ré-ancrer », message supprimé, mise en forme minimale, « Masquer les commentaires de X », droits et réglage « Les lecteurs peuvent commenter », recopie des fils à l'intégration (case **non cochée**), export, notifications acceptées (CM-1 à CM-9). §4.22 : « Mettre à jour depuis l'original », « Intégrer depuis cette version », variante depuis n'importe quelle version (VA-4, VA-7, VA-8). §4.48 : liste d'admin des personnes qui valident, tout membre désignable (VD-4), rappel à 7 jours (VD-7). |
+| Codex C5 : suivi inter-variante sans accord | accord **avant** tout changement ; si la personne suivie change de variante pendant le suivi, il est suspendu et l'accord redemandé. **L'architecture §6.11 et RV-3 sont à aligner** (« bascule, avec le bandeau »). |
+| Codex C6 : état « contesté » | badge « Validation contestée » (forme, mot), les deux décisions au clavier, nom accessible, annonce polie, l'ancienne coche remplacée ; une validation contestée **ne compte pas** pour la règle d'admin |
+| Codex C7 : restes | §4.22 : variantes **décidées** (VA, `AD-106/107`), plus « à confirmer » ; §4.27 : modèle CM-1 à CM-10, plus « reste à écrire » ; dossier de polices **`fonts/`**, comme l'architecture |
+| Fable R9-M2 : validation obligatoire | « Intégrer » part **exactement de la version validée** ; les modifications faites depuis sont annoncées comme non incluses, avec « Soumettre l'état actuel » ; inactif sans version validée (VD-5) |
+| Fable : 300 contre 100ms | « suivre le curseur » attend **100ms** de calme (SY-7) ; meneur 300ms (SY-5) |
+| Fable : défaut du suivi | décision n° 21 **prise** (RV-4) : l'œil s'affichera ; d'ici le champ de présence PD-4, le suivi marche sans l'œil |
+| Fable : ⇧F2 contre K-7 | la cellule se commente par le même raccourci que Commenter (⌃⌘M sous macOS) ; Maj+F2 en plus sous Linux et Windows seulement |
+| Fable : quatre points ARIA | annonce par `EditorView.announce` ; popover de cellule selon 1.4.13, **pas** une infobulle ; barre de suivi = zone de A-18, atteinte par F6 ; « Vous êtes ici » dans le nom accessible de l'option |
+| Codex : Ctrl+Entrée | inscrit au registre par système, avec son contexte (champ de commentaire seulement), ⌘↩ sous macOS |
+
+**Contrôle contre la revue Fable de confirmation** (`17-fable-confirm.md`, relue en entier) : en plus
+du tableau ci-dessus,
+- **R9-m1** : la rév. 7.2 avait pris 100ms d'après l'architecture. Fable demande **une seule
+  valeur, 300ms**, celle de toutes les temporisations du design, et « Suivre le texte » **activé
+  par défaut**. Corrigé en §4.18 ; l'architecture (SY-7, SY-4) est à aligner. La ligne « 300
+  contre 100ms » du tableau ci-dessus est remplacée par celle-ci.
+- **R9-M3**, compléments :
+  - « seulement sur l'ordinateur de Paul » et l'option « Garder toutes les variantes sur cet
+    ordinateur » (§4.22, §5.13) ;
+  - « Soumettre » inactif pour un lecteur, avec sa raison (§4.48) ;
+  - « Les lecteurs peuvent commenter » et la liste des personnes qui valident dans §5.13 ;
+  - « Sans les commentaires » et « Exporter les commentaires » dans §5.12.
+
+  Les réactions et la mise en forme des commentaires sont **gardées** dans l'interface. Fable
+  admettait les deux voies.
+- **R9-m3** : la limite du canal `variant` (PD-5) est écrite, « d'ici là », comme RV-4.
+- **R9-m7** :
+  - `aria-describedby` est posé sur le **repère de marge** (bouton), et l'éditeur annonce le
+    commentaire **à l'entrée du curseur** par `EditorView.announce` ;
+  - un seul libellé pour le sélecteur, « Variante : … ⌄ » ;
+  - `aria-current="true"` sur l'option courante de la frise.
+
+**Contrôle contre la liste « Pour le design » de l'architecture (rév. 8.3, 12 points)** : les
+points 2, 3, 6, 8, 9, 10 et 12 étaient déjà couverts par la rév. 7.2. Compléments :
+- **Point 11, ordre des polices** (conflit réel) : §4.46 suit la **décision de l'utilisatrice du
+  2026-11-01** : projet (`fonts/`) → Inkwell → mes polices (« pour tous mes projets ») →
+  ordinateur. Quatre sources au lieu de trois. Remplace l'ordre de la rév. 7.1 (projet →
+  ordinateur → Inkwell).
+- **Points 1 et 7, Commenter sous macOS** : retour à **⇧⌘K** (Pages, Numbers), registre en
+  `Prec.high` qui masque sciemment `deleteLine` ; aussi pour la cellule. K-6 traite
+  `defaultKeymap`, `historyKeymap` et `searchKeymap` comme une quatrième table réservée du
+  contexte « texte », avec la liste des liaisons masquées sciemment (§8.2). Remplace ⌃⌘M de la
+  rév. 7.2, y compris dans la ligne « ⇧F2 contre K-7 » ci-dessus.
+- **Point 4** : badge « **Avis contraires** » (statut de la version), nom accessible, annonce
+  polie du verdict tardif (`review.statusChanged`) ; ni lui ni « Validation contestée »
+  n'ouvrent l'intégration (§4.48).
+- **Point 5** : texte d'intégration aligné : « Vous intégrez la version « Envoyée au comité »,
+  validée par Anne ; 2 modifications plus récentes ne sont pas intégrées. »

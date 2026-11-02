@@ -1,5 +1,76 @@
 # Changements de l'architecture
 
+## 1.0.0-brouillon.12 — révision 8.3 (2026-11-02)
+
+Réponse au tour de confirmation de la révision 8.2 : [Fable](reviews/17-fable-confirm.md) **ACCEPT**
+(5 majeurs de texte, 7 mineurs) ; [Codex](reviews/18-codex-confirm.md) **NOT ACCEPTED** (C1–C3
+bloquants, C4–C6 majeurs, C7 mineur). Aucune décision de l'utilisatrice rouverte. Aucune modification
+de `docs/protocol/` ni de `docs/design/`.
+
+### Côté architecture
+
+| Constat | Changement |
+|---|---|
+| Codex C1, Fable R9-M5.3 PD-8 ne peut pas réutiliser la preuve §4.8 | PD-8 : preuve propre `review_equivocation_v1` (deux ops complètes, même auteur, même `position`), gardée et diffusée comme §4.8, effet = gel de la chaîne ; deux décisions à des positions différentes ne sont pas une équivoque (la première sur la chaîne compte) ; octets signés `"inkwell/review-op/v1" ‖ 0x00 ‖ ProjectID ‖ …` |
+| Codex C2, Fable R9-M5.1/.2/.4 pli non déterministe | VD-2 et VD-3 : validité fonction de l'op et de ses frontières déclarées (`members`, `decisions`, `reviews`) ; **la décision l'emporte** sur un retrait concurrent ; « ouvertes » évaluées à la frontière `reviews` ; `assignee` membre ; plusieurs soumissions d'une même `VersionId` (`avis contraires`) ; vecteurs de toutes les permutations |
+| Codex C3, Fable R9-M4 borne globale de CM-6 (gel par un lecteur ; non stable par réunion) | CM-6 et PD-7 : bornes par modification et **par acteur le long de sa chaîne** (≤ 8 192 modifications, ≤ 8 Mio), quota N10 par clé (64 Mio pour un lecteur), taille totale = **palier de chargement**, jamais un refus ; plus de borne d'objets vivants ; tests des deux branches réunies et des boucles création/suppression |
+| Codex C4 première écriture concurrente dans une variante | fourches de fichiers d'**identité dérivée** (`inkwell/doc-variant-file/v1`), état initial = têtes du manifeste de départ : même fourche pour tous, aucune perte ; PD-6 réécrit (une variante = un emplacement) ; scénario dans P-VAR |
+| Codex C5, Fable R9-m2 suivre dans une autre variante | §6.11 et RV-3 : **accord explicite** d'abord (« Passer et suivre · Annuler »), suivi suspendu pendant la question, et de nouveau si la personne suivie change de variante ; RV-8 |
+| Codex C6 état « contesté » | VD-3 : règle (fourche de chaîne → gel → `contestée`) ; VD-5 : `contestée` et `avis contraires` n'ouvrent jamais l'intégration ; contestation tardive = audit « validation contestée ensuite » ; événement `review.statusChanged` ; rendu accessible → « Pour le design » |
+| Fable R9-M2 intégration avec validation obligatoire | VD-5 : on intègre **la version validée exactement** (VA-7), la relecture le dit ; sans politique, l'état actuel avec « validée · le texte a changé depuis » |
+| Fable R9-m1 délai et défaut du suivi du texte | SY-4, SY-7 : « Suivre le texte » activé par défaut, **300 ms** de calme |
+| Fable R9-m4 identité, ensemble admis, rôle, têtes de fourche | PD-7 : étiquette `inkwell/doc-comments/v1`, clause de l'ensemble admis, G11 sans objet ; CM-6 : l'`état` du fil d'autrui relève de la couverture ; CM-4 et VA-8 : têtes du document de commentaires dans `meta.variant.depart` |
+| Fable R9-m5 encodage, domaine, vérité | VD-1 : manifeste en CBOR déterministe ; PD-8 : domaine exact et ligne au registre §20.4 ; §6.1 : ligne « Soumissions et décisions de validation » |
+| Codex C7 restes documentaires (côté architecture) | `AD-106`, `AD-107` : « décidé par l'utilisatrice le 2026-11-02 » dans la prose ; chemin des polices du projet : **`fonts/`** (code actuel, convention de typst, nom identique pour des personnes de langues différentes) |
+
+### Pour le design (auteur de `docs/design/`)
+
+1. **Fable R9-M1** : ⇧⌘K masque `deleteLine` de CodeMirror (`defaultKeymap`) dans le texte. Règle à
+   écrire au §8.2 : registre enregistré à `Prec.high` ; K-6 teste aussi `defaultKeymap`,
+   `historyKeymap`, `searchKeymap` comme quatrième table réservée et liste les liaisons masquées
+   sciemment (⇧⌘K, Ctrl+I, Ctrl+M) ; recommandation de Fable : garder ⇧⌘K (convention de Pages) en
+   écrivant le masquage.
+2. **Fable R9-M3** : gestes et réglages nommés par l'architecture, absents de la conception — pour
+   chacun, l'ajouter à l'endroit existant **ou** le marquer « sans interface en v1 » : réactions et
+   Markdown des corps (Fable recommande « sans interface en v1 ») ; « Ré-ancrer » ; réglage « Les
+   lecteurs peuvent commenter » (§5.13) ; « Masquer les commentaires de X » ; « Exporter les
+   commentaires » et « Sans les commentaires » (§5.12) ; « Mettre à jour depuis l'original »
+   (§4.22) ; « Garder toutes les variantes » et « seulement sur l'ordinateur de Paul » ; liste des
+   personnes qui peuvent valider (`review/policy`) et « Soumettre » inactif pour un lecteur (§4.48).
+3. **Codex C5** : l'accord avant de suivre dans une autre variante est maintenant dans l'architecture
+   (§6.11, RV-3) ; la conception rév. 7.2 l'a ; vérifier le cas « la personne suivie change de
+   variante pendant le suivi ».
+4. **Codex C6** : rendu de « Validation contestée » et d'« Avis contraires » : badge (forme + icône +
+   mot), nom accessible, annonce polie à l'arrivée tardive d'un second verdict
+   (`review.statusChanged`), accès clavier aux deux décisions ; une ancienne coche ne reste jamais
+   la seule information exposée (WCAG 2.2 SC 1.3.1, 4.1.2, 4.1.3).
+5. **Fable R9-M2** (texte de la relecture) : avec validation obligatoire, « Vous intégrez la version
+   « Envoyée au comité », validée par Anne ; 2 modifications plus récentes ne sont pas intégrées ».
+6. **ARIA** (Fable R9-m7, Codex) : annoncer « Commentaire de Marie, 2 réponses » par
+   `EditorView.announce` à l'entrée du curseur dans un passage commenté, et garder `aria-describedby`
+   sur le **repère de marge** (bouton), référencé même fil replié ; fil d'une cellule = **popover**
+   (§4.7, fermable par Échap, survolable, persistant ; pas un `tooltip`, SC 1.4.13) ; barre « Vous
+   suivez Marie · Arrêter » placée dans l'ordre A-18 après les onglets ; « Vous êtes ici » dans le nom
+   accessible de l'option ou `aria-current="true"`, et un seul libellé du sélecteur (« Original ⌄ »
+   ou « Variante : Original »).
+7. **⇧F2** (Fable R9-m6) : sur macOS, donner **⇧⌘K dans le contexte de la grille** (convention de
+   Numbers), garder Maj+F2 sous Linux et Windows ; ou écrire l'exception comme pour Zones (K-7).
+8. **Codex (raccourcis)** : inscrire Ctrl+Entrée du composeur au registre par système, avec son
+   contexte et sa liaison macOS (K-6).
+9. **Fable R9-m3** : écrire « d'ici PD-5, … » pour la présence sur un fichier non fourché (§4.22) ;
+   retirer les notes périmées (§4.22 « variantes par document … à confirmer », §4.27 « le modèle
+   de données reste à écrire ») au profit d'un renvoi à l'architecture.
+10. **Codex C7** : dossier des polices du projet **`fonts/`** (pas `polices/`, §4.46).
+11. **Ordre des polices** (constaté en préparant cette révision) : la conception §4.46 écrit
+    « projet, puis ordinateur, puis Inkwell » ; la décision de l'utilisatrice du 2026-11-01 (FT-1,
+    `AD-100`) est **projet → Inkwell → mes polices → ordinateur**. À aligner sur la décision.
+12. **Fable R9-m1** : 300 ms et « Suivre le texte » activé par défaut, comme l'architecture.
+
+### Désaccords à débattre
+
+Aucun.
+
+
 ## 1.0.0-brouillon.11 — révision 8.2, delta de confirmation (2026-11-02)
 
 **Révision 8.1 acceptée** au tour 8 : [Fable](reviews/15-fable-r8.md) **ACCEPT** (1 majeur de
@@ -37,9 +108,9 @@ confirmer par les deux revues. Exigence N18 : acceptée en révision 8.1. Aucune
 
 ### Désaccords à débattre
 
-Aucun. Trois choix attendent l'utilisatrice : place des commentaires (`AD-106`), validation par
-personne désignée sans rôle nouveau (`AD-107`), et les deltas PD-5 à PD-9 passent par la boucle du
-protocole.
+Aucun. Place des commentaires (`AD-106`) et validation par personne désignée sans rôle nouveau
+(`AD-107`) : décidées par l'utilisatrice le 2026-11-02. Les deltas PD-5 à PD-9 passent par la boucle
+du protocole.
 
 
 ## 1.0.0-brouillon.10 — révision 8.1 (2026-11-01)

@@ -134,7 +134,7 @@ Pour chacun : la question, les choix possibles, la recommandation des relecteurs
 - Recommandation : **A**.
 - Pourquoi : il sert à quelques-unes, sans troubler les autres.
 
-**21. Quand quelqu'un vous « suit » (sa vue suit la vôtre), le voyez-vous ?**
+**21. Quand quelqu'un vous « suit » (sa vue suit la vôtre), le voyez-vous ?** — ✅ **décidé : A**
 - Choix :
   - A. Oui, discrètement : un petit œil sur son avatar, et « Paul vous suit » au survol.
   - B. Non, rien n'est montré.

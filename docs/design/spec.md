@@ -1,6 +1,6 @@
 # Système de design d'Inkwell — spécification (N17)
 
-- **Statut :** **acceptée (rév. 7)**, avec l'addendum **rév. 7.1** (polices, N43, §4.46), par Fable et Codex (revues n°7), le 2026-11-01. Les décisions
+- **Statut :** **acceptée (rév. 7)**, avec les addenda **rév. 7.1** (polices N43, §4.46 ; et N44 à N48) et **rév. 7.2** (revue de confirmation), par Fable et Codex (revues n°7), le 2026-11-01. Les décisions
   restantes de l'utilisatrice sont dans [`decisions-utilisatrice.md`](decisions-utilisatrice.md).
 - Révision 7 : Elle ferme les revues n°6 ; la révision 6
   fermait les revues n°5.
@@ -647,7 +647,7 @@ contenu, pas au déclencheur.
 - **Anatomie, au centre :**
   - **nom du projet** (H-1, recommandation Q2, *à confirmer*) ;
   - en dessous, le fichier actif, précédé d'un point s'il n'est pas enregistré ;
-  - quand des variantes existent, le sélecteur **« Variante »** (*Menu Button*, « Original ⌄ ») à côté
+  - quand des variantes existent, le sélecteur **« Variante : Original ⌄ »** (*Menu Button*) à côté
     du fichier (§4.22). Il fait partie de la zone centrale protégée et ne compte pas dans les six
     contrôles de droite.
 - **Anatomie, à droite :**
@@ -1054,7 +1054,10 @@ Repères : synchronisation du défilement de l'aperçu Markdown de VS Code, saut
 l'aperçu de tinymist, SyncTeX d'Overleaf [S33].
 - **Le texte mène** : l'aperçu montre l'endroit du **curseur** et suit le **défilement** du texte.
   - Pendant la frappe, il ne bouge que si le curseur **sort** de la zone visible de l'aperçu, et
-    seulement **après 300ms de calme**, sans à-coups.
+    seulement **après 300ms de calme**, la valeur commune des temporisations de cette spec (§4.21,
+    §4.22), sans à-coups. Le volet touché par la personne reste **meneur** 300ms, renouvelées à
+    chaque entrée (SY-5). L'architecture (SY-7 : 100ms ; SY-4 : « en option ») est à aligner sur
+    300ms et sur « Suivre le texte » **activé par défaut** (Fable R9-m1).
   - Une mise à jour de la mise en page ne déplace pas la vue : elle reste sur le même passage.
 - **L'aperçu mène** : faire défiler l'aperçu amène le texte au même endroit. **Cliquer** dans une
   page y place le curseur, avec un **surlignage bref** de la ligne (fondu `--duration-fade`, 1s,
@@ -1213,7 +1216,7 @@ identique à l'original. La personne n'a jamais à se demander quels fichiers so
 | Geste | Où | Ce qui se passe |
 |---|---|---|
 | **Créer une variante**… | menu Projet, barre de la frise, palette | un nom (« Ton plus court ») ; on passe dans la variante |
-| **Dans quelle variante suis-je ?** | **sélecteur « Variante » sous le titre de la barre d'en-tête** : un *Menu Button* « Original ⌄ » qui fait partie de l'anatomie du centre (§4.1) et compte dans la zone centrale protégée | « Original », ou une variante ; les onglets, Fichiers et l'aperçu suivent |
+| **Dans quelle variante suis-je ?** | **sélecteur « Variante » sous le titre de la barre d'en-tête** : un *Menu Button* « Variante : Original ⌄ » qui fait partie de l'anatomie du centre (§4.1) et compte dans la zone centrale protégée | « Original », ou une variante ; les onglets, Fichiers et l'aperçu suivent |
 | **Ce qui diffère** | Fichiers | un fichier **modifié par la variante** porte un repère (point `--fg-dim` et infobulle « modifié dans Ton plus court ») ; les autres n'en ont pas. Le sous-titre dit « variante Ton plus court · 2 fichiers modifiés ». |
 | **Comparer avec l'original** | menu Projet | la vue des différences entre la variante et l'original |
 | **Proposer d'intégrer** | menu Projet | une **demande**, en **bandeau-question** chez qui peut écrire l'original : « Paul propose d'intégrer « Ton plus court » · Voir » (rang « questions » de L-8) |
@@ -1232,7 +1235,9 @@ identique à l'original. La personne n'a jamais à se demander quels fichiers so
   **ma** vue, jamais celle des autres.
 - **On voit toujours où l'on est** :
   - le sélecteur de l'en-tête dit « **Variante : Version courte** », ou « Variante : Original » ;
-  - la frise met en avant la voie de la variante courante, « Vous êtes ici ».
+  - la frise met en avant la voie de la variante courante, « Vous êtes ici ». Ces mots font partie
+    du **nom accessible** de l'option (« Ton plus court, vous êtes ici »), et l'option porte
+    `aria-current="true"`. Le libellé du sélecteur est unique partout : « Variante : … ⌄ ».
 - **Versions enregistrées dans une variante** (points d'étape, rév. 7.1) :
   - n'importe qui peut « **Enregistrer une version** » **dans la variante où il se trouve**. La
     version enregistrée **appartient à cette variante** ;
@@ -1243,6 +1248,11 @@ identique à l'original. La personne n'a jamais à se demander quels fichiers so
   - on peut aussi **créer une nouvelle variante à partir de n'importe quelle version
     enregistrée** (« Créer une variante à partir d'ici », barre de la frise) ;
   - les mots sont « version enregistrée » et « point d'étape », jamais « push » ni « commit ».
+- **Disponibilité** (architecture §6.11) : une variante que personne d'autre n'a encore ouverte
+  n'existe que chez son auteur. Le sélecteur le dit : « Ton plus court · **seulement sur
+  l'ordinateur de Paul** » ; la sauvegarde la couvre (§4.44). Une grosse variante se télécharge à
+  l'ouverture, avec une progression. Préférences › Projet › « **Garder toutes les variantes sur
+  cet ordinateur** » (désactivé par défaut) sert à un ordinateur d'archive.
 - **Une modification ne va que dans la variante où elle est faite.** Les modifications ne passent
   d'une variante à l'autre **que** par « Proposer d'intégrer » puis « Intégrer » (§4.41).
 - **Présence** :
@@ -1250,17 +1260,34 @@ identique à l'original. La personne n'a jamais à se demander quels fichiers so
     Version courte ») ;
   - les **curseurs** visibles dans le texte ne sont que ceux des personnes **sur la même
     variante** ;
+  - **d'ici le canal de présence `variant`** (architecture PD-5), pour un fichier qu'aucune
+    variante n'a encore modifié, on ne sait pas qui est sur quelle variante : la liste dit alors
+    « dans ce fichier » sans nom de variante, et les curseurs de ce fichier s'affichent pour tous
+    (même règle que RV-4 pour l'œil) ;
   - **Suivre** (§4.47) une personne sur une autre variante demande d'abord : « Marie travaille sur
     « Version courte ». Passer sur cette variante pour la suivre ? · Passer et suivre · Annuler ».
-    Rien ne change sans cet accord.
+    Rien ne change sans cet accord (Codex C5).
+  - **Pendant le suivi**, si Marie passe sur **une autre** variante : le suivi est **suspendu**, ma
+    vue reste où elle est, et la barre demande « Marie est passée sur « Ton plus court » · Passer et
+    suivre · Arrêter ». Jamais de changement de variante sans mon accord. (L'architecture §6.11 et
+    RV-3 sont à aligner : elle disait « bascule, avec le bandeau ».)
 - **Pas de notification pour chaque modification** dans une autre variante. Seule une **proposition
   d'intégrer** vers **ma** variante arrive, en bandeau-question (L-8).
 - **Lecteur d'écran** : changer de variante annonce « Variante : Version courte » ; le nom de la
   variante courante fait partie du nom accessible du sous-titre.
 
-L'architecture et le code tiennent les variantes **par document** (HI-6, `doc.meta.variants`). La
-variante « du projet » est donc l'ensemble cohérent de ces variantes de documents, créé et
-intégré en une fois. Ce point d'alignement est à confirmer dans HI-6 (`CHANGES.md`).
+**Décidé** (architecture VA-1 à VA-10, `AD-106`, `AD-107`) : une variante est une fourche de
+l'index du projet, et ses fichiers se fourchent à la première écriture. Pour la personne, c'est
+toujours **tout le projet**.
+
+**Gestes entre variantes** (architecture VA-4, VA-7, VA-8) :
+- « **Mettre à jour depuis l'original** » (menu Projet, dans une variante) : l'original est intégré
+  **dans** la variante, par la même relecture (§4.41) ;
+- « **Intégrer depuis cette version** » : restaurer dans **une autre** variante (ou l'original) une
+  version enregistrée de V, c'est franchir une frontière ; donc une intégration relue, avec ses
+  droits (« Restaurer » reste dans la variante de la version) ;
+- « Créer une variante à partir d'ici » marche depuis une version de l'original **ou** de n'importe
+  quelle variante.
 
 **8. Hors de l'interface d'écriture.** « **Exporter l'historique (format technique)…** » (HI-5) ne
 figure **ni** dans Exporter, **ni** dans les menus. Le nom du format n'apparaît que sous « Détails
@@ -1367,13 +1394,12 @@ des onglets, et cette section est la proposition de design pour cette décision)
 ### 4.27 Commentaires (N47, rév. 7.1)
 
 Les commentaires sont **dans l'interface d'écriture**, sur le texte source, jamais sur le rendu.
-Ils remplacent la décision « hors périmètre » des révisions précédentes (Q8). Le modèle de données
-(ancre, fil, résolution) reste à écrire dans l'architecture (étape 4, M03) ; cette section fixe ce
-que la personne voit.
+Ils remplacent la décision « hors périmètre » des révisions précédentes (Q8). Le modèle est celui
+de l'architecture (CM-1 à CM-10) ; cette section fixe ce que la personne voit.
 
 **Commenter :**
 - sélectionner du texte, puis « **Commenter** » (menu contextuel, barre de mise en forme, palette ;
-  Ctrl+Maj+M ; ⇧⌘K sous macOS, comme Pages, car ⌥⌘M est réservé ; §8.2) ;
+  Ctrl+Maj+M ; ⇧⌘K sous macOS, comme Pages et Numbers, §8.2) ;
 - un champ s'ouvre dans la **marge droite**, à hauteur du passage : « Écrire un commentaire… », avec
   « Commenter » (Ctrl+Entrée) et « Annuler » (Échap) ;
 - le passage reçoit un **surlignage doux** (`--hover-bg`, souligné pointillé à la couleur de
@@ -1386,7 +1412,13 @@ que la personne voit.
   mentionnée le voit dans son filtre « Me mentionnent » ;
 - **Résoudre** : le fil se replie, et le surlignage disparaît. **Rouvrir** le rend. Résoudre n'efface
   rien ;
-- modifier ou supprimer **son** commentaire, avec un toast « Annuler ».
+- modifier ou supprimer **son** commentaire, avec un toast « Annuler ». Un message supprimé reste
+  marqué « message supprimé » dans le fil, puisque l'historique le garde (CM-1) ;
+- **réactions** : 8 réactions fixes (👍 ❤️ 😀 🎉 😮 🙏 👀 ✅), une par personne, sous chaque message.
+  Ce sont des boutons bascules (`aria-pressed`), nommés « J'approuve, 3 personnes » ; le nom écrit
+  vient avec l'icône (CM-1) ;
+- **mise en forme minimale** du corps : gras, italique, code, lien (CM-1), sans HTML ;
+- « **Masquer les commentaires de X** » (menu d'un message), pour soi seulement (CM-6).
 
 **Relire › Commentaires** (la sous-vue du tiroir, désormais active) :
 - une liste groupée par fichier ;
@@ -1395,14 +1427,39 @@ que la personne voit.
   et ouvre le fil.
 
 **Commentaire orphelin** : si le texte commenté est supprimé, le commentaire **n'est pas perdu**.
-Il passe en tête de la liste, dans « **Texte supprimé** », avec la citation du passage d'origine et
-« Voir dans les versions », qui ouvre la vue du passé (§4.22).
+Il passe en tête de la liste, dans « **Passage supprimé** » (CM-2), avec la citation du passage
+d'origine et deux actions :
+- « **Ré-ancrer** » : choisir un nouveau passage ; le focus va au texte, et Entrée valide la
+  sélection ;
+- « Voir dans les versions » ouvre la vue du passé (§4.22).
 
-**Par variante** (N46) : un commentaire appartient à la variante où il est fait. On voit ceux de sa
-variante courante. L'intégration d'une variante propose aussi d'intégrer ses commentaires ouverts.
+Une ligne de tableau déplacée par un tri rend son commentaire orphelin, avec l'extrait « ligne
+Dupont, colonne Prix ».
 
-**Tableau (CSV)** : « Commenter » sur une **cellule** ; un petit triangle dans son coin (forme, pas
-seulement couleur), et le fil s'ouvre au survol ou au focus de la cellule (Maj+F2).
+**Par variante** (N46, CM-4) : un commentaire appartient à la variante où il est fait. On voit ceux
+de sa variante courante, et ceux de l'original jusqu'au départ de la variante. L'intégration propose
+de recopier dans l'original les fils **ouverts**, par une case **non cochée** ; la recopie porte
+« fil de Paul dans la variante X ».
+
+**Droits** (CM-5) : commentent les admins, les personnes qui écrivent et, si le réglage d'admin
+« **Les lecteurs peuvent commenter** » est activé (par défaut), les lecteurs. Résoudre ou rouvrir :
+l'auteur du fil, et quiconque écrit.
+
+**Export** (CM-8) : jamais dans le PDF. Dans l'export en un fichier, une case « Sans les
+commentaires ». « **Exporter les commentaires** » produit un rapport Markdown ou CSV.
+
+**Notifications** (CM-9) : une mention de moi, une réponse dans un fil où j'ai écrit, ou la
+résolution de mon fil arrivent dans Relire › Activité (non lus). Une notification du système n'est
+envoyée que si la personne l'a acceptée (Préférences › Application) ; jamais de courriel.
+
+**Tableau (CSV)** : « Commenter » sur une **cellule**, avec le même raccourci que Commenter (§8.2),
+plus Maj+F2 sous Linux et Windows (convention des tableurs).
+- Un petit triangle dans son coin : une forme, pas seulement une couleur.
+- Le fil s'ouvre dans un **popover** (`role="dialog"`), et **non** une infobulle : il contient des
+  réponses et des boutons (APG *Tooltip* l'exclut).
+- Le popover suit WCAG 1.4.13 : il se ferme par Échap, reste ouvert sous le pointeur et ne
+  disparaît pas seul. Il s'ouvre au survol, et au focus de la cellule par le raccourci ; le focus y
+  entre, et Échap le rend à la cellule.
 
 **Calme** :
 - pendant la frappe, **aucun** fil ne s'ouvre seul, et les repères restent dans la marge ;
@@ -1414,8 +1471,14 @@ seulement couleur), et le fil s'ouvre au survol ou au focus de la cellule (Maj+F
   GNOME) ; Entrée ouvre le fil ; Échap
   revient au texte ;
 - le fil est une région nommée (« Commentaire de Marie, 2 réponses ») ;
-- le texte commenté porte un `aria-describedby` vers le commentaire ;
-- un nouveau commentaire reçu est annoncé poliment, **une fois**, seulement s'il me mentionne.
+- un nouveau commentaire reçu est annoncé poliment, **une fois**, seulement s'il me mentionne,
+  par l'annonce de l'éditeur (`EditorView.announce`, région polie de CodeMirror) quand le focus
+  est dans le texte ;
+- **à l'entrée du curseur** dans un passage commenté, l'éditeur annonce une fois par fil, par
+  `EditorView.announce` et au rythme de A-10 : « Commentaire de Marie, 2 réponses » ;
+  `aria-describedby` est posé sur le **repère de marge** (un bouton focalisable, atteint par
+  Ctrl+Maj+N), pas sur le texte, que le lecteur d'écran ne lit pas comme élément focalisé (Fable
+  R9-m7). L'élément visé existe toujours, même fil replié.
 
 **Lecteurs** : avec le rôle Lecture, on peut commenter seulement quand la version du protocole le
 permet (architecture `AD-14`). Sinon, l'action est inactive et son infobulle le dit.
@@ -2857,11 +2920,12 @@ Typst emploie.
 **Responsabilité** (décision de l'utilisatrice) : Inkwell **ne vérifie aucune licence** et n'affiche
 **aucun avertissement de licence**. La personne qui ajoute une police en est responsable.
 
-**Trois sources**, dites en mots :
+**Quatre sources**, dites en mots :
 - **Inkwell** : fournies avec l'application, présentes partout ;
-- **Système** : installées sur **cet ordinateur**, ou installées par la personne « pour tous mes
-  projets » (plus bas). Typst les voit ici, mais les autres personnes ne les ont peut-être pas ;
-- **Projet** : les fichiers du dossier `polices/` du projet. Ils sont **disponibles
+- **Mes polices** : installées par la personne « pour tous mes projets » (plus bas) ;
+- **Ordinateur** : installées sur **cet ordinateur**. Typst voit ces deux sources ici, mais les
+  autres personnes ne les ont peut-être pas ;
+- **Projet** : les fichiers du dossier `fonts/` du projet. Ils sont **disponibles
   automatiquement chez toutes les personnes du projet**, puisqu'ils voyagent avec lui, et sont
   passés à Typst (architecture : `--font-path`, et rien n'est jamais téléchargé).
 
@@ -2883,7 +2947,7 @@ Projet, et non une nouvelle fenêtre), aussi par la palette et par le lien des m
   Une police **Système** utilisée par le document porte la mention « Vient de votre ordinateur »,
   avec `warn` et le texte.
 - **Actions** sur une ligne :
-  - « **Ajouter au projet** » (police système) : une copie du fichier entre dans `polices/`, et la
+  - « **Ajouter au projet** » (police système) : une copie du fichier entre dans `fonts/`, et la
     police devient disponible pour tout le projet ;
   - « **Installer pour tous mes projets** » (police du projet) : une installation **permanente**,
     pour cette personne, sur cet ordinateur, à faire quand on veut. La police reste aussi dans le
@@ -2895,7 +2959,7 @@ Projet, et non une nouvelle fenêtre), aussi par la palette et par le lien des m
 - **Ajouter une police au projet** :
   - « **Ajouter un fichier de police…** » (`.ttf`, `.otf`, `.ttc`, `.woff2`) ;
   - ou **glisser-déposer** un fichier sur la liste, ou sur Fichiers. Un fichier de police déposé
-    sur Fichiers est rangé dans `polices/`, et un toast le dit.
+    sur Fichiers est rangé dans `fonts/`, et un toast le dit.
 - **Accessibilité** :
   - liste encadrée, une ligne = un groupe nommé par la famille ;
   - l'échantillon est décoratif pour le lecteur d'écran (`aria-hidden`), le nom porte
@@ -2928,11 +2992,13 @@ vérification, qui sert pour les polices comme pour tout le reste.
   - **Une seule confirmation** : « Ajouter au projet ».
   - On peut **passer** sans rien ajouter. L'export le dit alors dans son récapitulatif : « 3
     éléments n'ont pas été inclus ».
-- **Où vont les éléments** : polices dans `polices/` ; paquets dans `.typstdeps/` ; images et
+- **Où vont les éléments** : polices dans `fonts/` ; paquets dans `.typstdeps/` ; images et
   fichiers dans le projet, avec mise à jour de leur chemin (une modification, annulable).
 - Extensions et modèle : extensions de projet (§4.32) ; le modèle est rangé avec le projet.
-- **Ordre des polices** : à nom égal, la police **du projet** passe avant celle de l'ordinateur,
-  puis avant celle d'Inkwell. Tout le monde voit ainsi la même chose.
+- **Ordre des polices** (décision de l'utilisatrice, 2026-11-01 ; architecture FT-1, AD-100) : à
+  nom égal, la police **du projet** (`fonts/`) passe en premier, puis celle **d'Inkwell**, puis
+  **mes polices** (« pour tous mes projets »), puis celle de **l'ordinateur**. Les deux premières
+  sont les mêmes chez tout le monde : tout le monde voit ainsi la même chose.
 - **À Rejoindre** (§5.4) : rien de tel. La personne qui rejoint reçoit tout ce que le projet
   contient.
 
@@ -2956,7 +3022,7 @@ et **calme**, le soulignement en pointillé, jamais rouge.
 - le lecteur d'écran lit le nom et la source.
 
 **Modèles** (N27, §5.19) : un modèle **emporte ses polices**. « Enregistrer comme modèle » inclut le
-dossier `polices/`, et propose d'y ajouter les polices **système** que le document utilise. La
+dossier `fonts/`, et propose d'y ajouter les polices **système** que le document utilise. La
 galerie dit « polices fournies » ou « **manque** : X ».
 
 ### 4.47 Suivre une personne (N45, addendum rév. 7.1)
@@ -2978,7 +3044,9 @@ Repères : le « suivre » de Figma, de Google Docs, du mode Suivre de VS Code L
   - les mouvements sont doux, et instantanés sous mouvement réduit.
 - **La barre « Vous suivez Marie »** : une barre fine sous les onglets, à la couleur de Marie
   (`--person-N-line` en liseré, avec son nom écrit), et le bouton « **Arrêter** ». Ce n'est pas un
-  bandeau (L-8) : elle ne prend la place d'aucun message.
+  bandeau (L-8) : elle ne prend la place d'aucun message. C'est une **zone** au sens de A-18
+  (région nommée « Suivi de Marie »), atteinte par F6 entre les onglets et la barre de mise en
+  forme.
 - **Arrêter, calmement** : **toute action de ma part** (taper, défiler, cliquer, changer d'onglet)
   arrête le suivi. Échap aussi, et le bouton.
   - Un message **discret** dans la barre, pendant 2s : « Vous ne suivez plus Marie ». Pas de toast,
@@ -2996,8 +3064,9 @@ Repères : le « suivre » de Figma, de Google Docs, du mode Suivre de VS Code L
   - un changement de fichier : « main.typ ouvert, Marie y écrit » ;
   - **aucune annonce** pour chaque mouvement du curseur.
 
-**La personne suivie le voit-elle ?** C'est une **décision de l'utilisatrice**
-(`decisions-utilisatrice.md`, n° 21). Recommandation : **oui, discrètement**.
+**La personne suivie le voit-elle ?** **Décidé par l'utilisatrice : oui, discrètement**
+(architecture RV-4 ; `decisions-utilisatrice.md`, n° 21). Il faut pour cela un nouveau champ de
+présence (PD-4). **D'ici là, le suivi marche sans l'œil**, et l'interface ne l'affiche pas.
 - Sur l'avatar de qui me suit, dans ma pile, une petite pastille en forme d'œil, et l'infobulle
   « Paul vous suit ».
 - Pas de toast, pas de son.
@@ -3013,7 +3082,11 @@ Un **point d'étape** (version enregistrée, §4.22) peut être **soumis pour va
 personne choisie, par exemple une responsable.
 
 - **Soumettre** : sur une version enregistrée de la frise, « **Soumettre pour validation…** ».
-  - Choisir la personne (avec la complétion des noms du projet).
+  Seule une personne **qui écrit** peut soumettre (VD-2) : pour un lecteur, l'action est inactive
+  (`aria-disabled`), avec l'infobulle « Il faut le rôle Écriture pour soumettre ».
+  - Choisir la personne : **tout membre** peut être désigné, lecteurs compris (VD-4). Si un admin a
+    fixé la **liste des personnes qui peuvent valider** (Préférences › Projet, VD-4), seule cette
+    liste est proposée.
   - Un message facultatif (« Peux-tu relire la partie 2 ? »).
   - « Soumettre ».
 - **Badge de statut** sur la version, dans la frise : une forme, une icône et un mot (la couleur
@@ -3021,7 +3094,24 @@ personne choisie, par exemple une responsable.
   - « **En attente** » (horloge, `--fg-dim`) ;
   - « **Validée** » (coche, `--success`) ;
   - « **Refusée** » (croix, `--error`) ;
-  - « **Retirée** » (barré, `--fg-dim`), quand la personne qui a soumis annule sa demande.
+  - « **Retirée** » (barré, `--fg-dim`), quand la personne qui a soumis annule sa demande ;
+  - « **Validation contestée** » (losange `warn`, `--warning`), quand la personne désignée a
+    signé **deux décisions contraires** sur la même demande (architecture VD-2, Codex C6).
+    - « Voir » montre **les deux** décisions, avec leurs dates et leurs notes, au clavier (deux
+      éléments d'une liste) ;
+    - le nom accessible dit « Validation contestée : validée le 3, refusée le 4 » ;
+    - l'arrivée tardive de la seconde décision remplace l'ancienne coche, et elle est annoncée
+      poliment. Une ancienne coche ne reste jamais la seule information.
+    - **Une validation contestée ne compte pas comme une validation** pour la règle d'admin
+      ci-dessous.
+  - « **Avis contraires** » (losange `warn`, `--warning`), quand **la même version** a reçu une
+    demande validée et une autre refusée, par des personnes différentes (architecture VD-3, VD-5 ;
+    statut de la version). C'est le statut de la **version**, à côté de ceux des demandes :
+    - « Voir » liste les demandes et leurs décisions, au clavier ;
+    - le nom accessible dit « Avis contraires : validée par Anne, refusée par Paul » ;
+    - un verdict arrivé tard (`review.statusChanged`) est annoncé poliment ;
+    - ni « Avis contraires » ni « Validation contestée » **n'ouvre l'intégration** : il faut une
+      nouvelle demande, validée sans avis contraire.
 - **Ce que voit la personne sollicitée** :
   - un **bandeau-question** (rang « questions », L-8) : « Marie vous demande de valider « Envoyée
     au comité » · Voir » ;
@@ -3037,7 +3127,21 @@ personne choisie, par exemple une responsable.
 - **Avant d'intégrer dans la variante « Original »** : la relecture d'intégration (§4.41) affiche en
   tête le statut de validation de la dernière version de la variante (« Validée par Anne, hier » ou
   « Pas de validation »). C'est une **information**, pas un blocage. Un admin PEUT rendre la
-  validation obligatoire pour intégrer dans l'Original (Préférences › Projet).
+  validation obligatoire pour intégrer dans l'Original (Préférences › Projet, VD-4).
+- **Avec la validation obligatoire, on intègre exactement la version validée** (Fable R9-M2 ;
+  VD-5) :
+  - « Intégrer » part de la **dernière version validée** de la variante, et non de son état
+    actuel ;
+  - si la variante a changé depuis, la relecture le dit en tête : « Vous intégrez la version
+    « Envoyée au comité », validée par Anne ; 2 modifications plus récentes ne sont pas
+    intégrées. · Soumettre l'état actuel pour validation » ;
+  - sans version validée, ni contestée, « Intégrer » est inactif (`aria-disabled`), avec
+    l'infobulle « Une version validée est nécessaire ».
+
+  C'est une règle de l'application, vérifiable après coup : l'audit marque « intégrée sans
+  validation » ce qui l'aurait contournée (VD-5).
+- **Rappel** : sans décision au bout de 7 jours, un rappel local (Relire › Activité) chez la
+  personne désignée (VD-7).
 - **Mots** : « soumettre », « valider », « refuser », « retirer ». Jamais « approve », « PR » ni
   « workflow ».
 - **Clavier et lecteur d'écran** : le badge fait partie du nom de l'option de la frise (« Envoyée au
@@ -3232,7 +3336,9 @@ Le Go fournit déjà tout cela (`internal/app/invites.go`).
 - **Exporter…** propose **deux contenus** et rien de plus (N40, §4.45 : aucun format bureautique) :
   - **PDF** (ou HTML pour un document Markdown en mise en page CSS) : le document mis en page ;
   - **Copie lisible** ou **Archive complète** (avec l'historique), protégées par mot de passe ou
-    non (§4.43). La même **vérification des ressources** apparaît si besoin (polices, paquets, charte, fichiers
+    non (§4.43), avec la case « **Sans les commentaires** » (CM-8) ;
+  - « **Exporter les commentaires** » : un rapport Markdown ou CSV (fichier, ligne, extrait,
+    auteur, état, messages). La même **vérification des ressources** apparaît si besoin (polices, paquets, charte, fichiers
     hors du projet, extensions, modèle) : cochée d'avance, **sauf les fichiers hors du projet**,
     avec la taille totale, facultative (§4.46).
 
@@ -3251,7 +3357,7 @@ Le Go fournit déjà tout cela (`internal/app/invites.go`).
 |---|---|---|
 | **Écriture** | **Enregistrement** : Automatique, Avec Ctrl+S, délai ; modifications hors d'Inkwell : Intégrer, Demander · **Éditeur** : suggestions en tapant, aide sur les arguments, nom des arguments (§4.37), retour à la ligne · **Orthographe** et dictionnaire personnel · objectif de mots, vitesse de lecture, concentration · **Raccourcis** (assigner, conflits) | **cet appareil**, pour ce projet (le mode d'enregistrement n'est **pas** partagé ni signé : c'est un choix de chaque personne) |
 | **Apparence et moi** | **Thème** (§2.10), **Variante** (Système, Clair, Sombre), taille du texte, ligatures · nom, couleur souhaitée, empreinte, « Me rendre invisible » · **Secours** (phrase, kit, §4.43) · **appareils** (ajouter, remplacer, retirer, M02) | cet appareil ; nom, couleur et secours : **mes appareils** |
-| **Projet** | fichier principal ; rôles ; verrous ; **polices** (§4.46) ; **protection** (§4.43) ; **fichiers non synchronisés** (§4.42 : règles du projet et mes règles) ; règles partagées : typographie, dictionnaire, extraits ; pour un admin : suppression des fichiers, **IA dans ce projet**, agents et applications permis · **Sauvegarde** : la destination | règles partagées et décisions d'admin : **ce projet, signé** ; protection, mes règles et **destination de sauvegarde** : **cet appareil** |
+| **Projet** | fichier principal ; rôles ; verrous ; **polices** (§4.46) ; **protection** (§4.43) ; **fichiers non synchronisés** (§4.42 : règles du projet et mes règles) ; règles partagées : typographie, dictionnaire, extraits ; pour un admin : suppression des fichiers, **IA dans ce projet**, agents et applications permis, « **Les lecteurs peuvent commenter** » (CM-5), **personnes qui peuvent valider** et « intégrer exige une version validée » (VD-4) · « **Garder toutes les variantes sur cet ordinateur** » · **Sauvegarde** : la destination | règles partagées et décisions d'admin : **ce projet, signé** ; protection, mes règles et **destination de sauvegarde** : **cet appareil** |
 | **IA** (N31) | utiliser l'IA ; fournisseurs et « Tester la connexion » ; texte fantôme ; autres applications (MCP) ; agents (§4.39) | cet appareil |
 | **Extensions** | installées (ce projet, les miennes, les intégrées) ; autorisations ; raccourcis et conflits ; « Appliquer sans relire » ; mettre à jour, retirer, effacer les données ; redémarrer sans extensions (§4.29 à §4.33). La consommation est dans la vue **Ressources** (§4.40). | cet appareil ; extensions de projet : ce projet |
 | **Application** | langue de l'interface (chaque nom de langue porte son `lang`) ; mises à jour ; réseau ; confidentialité ; nettoyage (M09) ; profil sans secrets (M11) ; Détails techniques ; **Mode développeur** et ses outils (§4.35) | cet appareil |
@@ -3407,7 +3513,7 @@ Fable m8).
 - **Automatiques** :
   - vignette tirée de la page 1 de l'aperçu ;
   - type deviné (Touying → « Diapositives ») ;
-  - polices et charte détectées ; le dossier `polices/` est inclus, et les polices système
+  - polices et charte détectées ; le dossier `fonts/` est inclus, et les polices système
     utilisées sont proposées à l'ajout (§4.46).
 - **« Options avancées »**, repliées :
   - type et étiquettes ;
@@ -3547,7 +3653,7 @@ WCAG 2.2 AA. Le relevé critère par critère des 55 critères A et AA est dans
 | A-15 | Aide et raccourcis toujours au même endroit du menu. | 3.2.6 |
 | A-16 | Pas de saisie redondante ; l'empreinte se compare, elle ne se retape pas. | 3.3.7, 3.3.8 |
 | A-17 | `forced-colors` : tous les états restent visibles. | — |
-| A-18 | Repères et F6 : panneau de gauche → onglets → barre de mise en forme → texte → aperçu → tiroir → toasts → barre d'état. | 1.3.1, 2.4.1 |
+| A-18 | Repères et F6 : panneau de gauche → onglets → barre « Vous suivez … » (si elle est là) → barre de mise en forme → texte → aperçu → tiroir → toasts → barre d'état. | 1.3.1, 2.4.1 |
 | A-19 | L'éditeur est nommé (« Texte de main.typ ») ; la présence est annoncée en `log`, sans les curseurs. | 4.1.2 |
 | A-20 | Raccourcis d'une seule touche (B, W, L en présentation, `present/keys.ts:61-69` ; lettres dans un arbre ou une liste) : actifs seulement quand leur composant a le focus. | 2.1.4 |
 | A-21 | Tout ce qu'une extension affiche est rendu par l'hôte en composants Adwaita (§4.31) et suit ces exigences ; une vue libre (`ui.canvas`) est un cadre nommé, et son contenu interne est de la responsabilité de l'extension, signalé comme tel. | 4.1.2, 1.4.3 |
@@ -3625,9 +3731,10 @@ et la personne peut lui en donner une (Préférences › Écriture › Raccourci
 | Source → aperçu | Ctrl+Maj+J | ⇧⌘J | Ctrl+Maj+J | à faire (était Ctrl+Alt+J) |
 | Demander à l'IA | — (menu contextuel, palette ; assignable) | — | — | **retiré** (était Ctrl+Alt+I) |
 | Mode concentration | Ctrl+Maj+D | ⇧⌘D | Ctrl+Maj+D | à faire (était Ctrl+Alt+F) |
-| Commenter | Ctrl+Maj+M | ⇧⌘K (⌥⌘M est réservé) | Ctrl+Maj+M | à faire (N47) |
+| Commenter (texte et cellule) | Ctrl+Maj+M | **⇧⌘K** (Pages, Numbers ; masque « effacer la ligne » de CodeMirror, `Prec.high`) | Ctrl+Maj+M | à faire (N47) |
 | Commentaire suivant | Ctrl+Maj+N | ⇧⌘N | Ctrl+Maj+N | à faire (N47) |
-| Commentaire d'une cellule | Maj+F2 | ⇧F2 | Maj+F2 | à faire (N47, convention des tableurs) |
+| Commentaire d'une cellule (en plus) | Maj+F2 | — (⇧⌘K, K-7 : pas de touche de fonction seule sous macOS) | Maj+F2 | à faire (N47) |
+| Envoyer le commentaire (**dans le champ de commentaire seulement**) | Ctrl+Entrée | ⌘↩ | Ctrl+Entrée | à faire (N47) |
 | Caractère spécial | — (Insérer, palette ; assignable) | — (le Visualiseur de caractères du système, ⌃⌘Espace, reste disponible) | — (Win+. reste disponible) | **retiré** (était Ctrl+Alt+C) |
 | Coller sans mise en forme | Ctrl+Maj+V | **⌥⇧⌘V** (convention) | Ctrl+Maj+V | à faire |
 | Nouveau fichier | Ctrl+N | ⌘N | Ctrl+N | à faire |
@@ -3635,7 +3742,7 @@ et la personne peut lui en donner une (Préférences › Écriture › Raccourci
 | Onglet suivant, précédent | Ctrl+Page↓ / Page↑, Ctrl+Tab | ⌃Tab, ⇧⌘] / ⇧⌘[ | Ctrl+Tab, Ctrl+Page↓ / Page↑ | à faire |
 | Déplacer l'onglet | Ctrl+Maj+Page↓ / Page↑ | ⌃⇧⌘→ / ← | Ctrl+Maj+Page↓ / Page↑ | à faire |
 | Onglet n | Alt+1…9 | — (⌥1 tape un caractère) | — (Alt+chiffre : touches d'accès) | à faire |
-| Navigation arrière, avant | Alt+← / Alt+→ | ⌘[ / ⌘] | Alt+← / Alt+→ | à faire |
+| Navigation arrière, avant | Alt+← / Alt+→ (priorité sur `cursorSyntaxLeft/Right` de CodeMirror) | **⌃⌘← / ⌃⌘→** (⌘[ et ⌘] indentent dans CodeMirror) | Alt+← / Alt+→ | à faire |
 | Renommer | F2 | ↩ sur la ligne de Fichiers (convention du Finder) ; F2 | F2 | à faire |
 | Présenter / depuis ici | F5 / Maj+F5 | **⌥⌘P / ⇧⌥⌘P** (Keynote) | F5 / Maj+F5 | fait (F5) |
 | Différence suivante | F7 / Maj+F7 | ⌥⌘↓ / ⌥⌘↑ | F7 / Maj+F7 | fait (F7) |
@@ -3660,10 +3767,29 @@ la table de **chaque** système.
 
 **K-6.** Le registre DOIT refuser, par un test **sur chacun des trois systèmes** :
 - deux actions sur un même raccourci dans un même contexte ;
+- un raccourci du **clavier de l'éditeur** (table ci-dessous) qui n'est pas résolu explicitement ;
 - un raccourci de la table réservée de ce système, **sauf** une commande **déléguée au système**
   (Aide sous macOS, Quitter), que le registre décrit sans la capturer et que le test reconnaît ;
 - toute combinaison Ctrl+Alt ;
 - Alt+alphanumérique sous Windows.
+
+**Clavier de l'éditeur (CodeMirror) : collisions et règles** (Codex R9-M1). Inkwell installe le
+clavier par défaut de CodeMirror (`defaultKeymap`, `historyKeymap`, `searchKeymap`,
+`editor/setup.ts:127`). Le registre d'Inkwell est installé en **`Prec.high`**. Pour le contexte
+« texte », le test K-6 traite ces trois claviers comme une **quatrième table réservée** : toute
+liaison qui touche le registre est **résolue ici**, soit parce que le registre change, soit parce
+que la liaison est **masquée sciemment** et listée ci-dessous (⇧⌘K `deleteLine`, Ctrl+I
+`selectParentSyntax`, Ctrl+M `toggleTabFocusMode`, …). Une collision absente du tableau fait échouer K-6.
+
+| Liaison de CodeMirror | Commande | Rencontre | Règle |
+|---|---|---|---|
+| ⇧⌘K (`Shift-Mod-k`) | effacer la ligne | « Commenter » sous macOS | **masquée sciemment** (`Prec.high`) : Commenter = ⇧⌘K, comme Pages et Numbers ; effacer la ligne reste dans la palette |
+| ⌘[ / ⌘] (`Mod-[`, `Mod-]`) | indenter | navigation arrière et avant sous macOS | le registre change : ⌃⌘← / ⌃⌘→ |
+| Alt+← / Alt+→ (`cursorSyntaxLeft/Right`, Linux et Windows) | déplacer le curseur par élément de syntaxe | navigation arrière et avant | `Prec.high` pour la navigation |
+| Ctrl+M (`toggleTabFocusMode`, Linux et Windows) | Tab sort de l'éditeur | Formule | `Prec.high` pour Formule ; le mode reste accessible par **Échap puis Tab** (comportement de CodeMirror), par ⇧⌥M sous macOS, et dans la palette (« Tab sort du texte ») |
+| Ctrl+U (`undoSelection`, historique) | annuler la sélection | Souligné | `Prec.high` pour Souligné (déjà, `editor/format/keymap.ts:12`) |
+| Ctrl+I (`selectParentSyntax`) | sélectionner l'élément parent | Italique | `Prec.high` pour Italique (déjà, `editor/format/keymap.ts:28`) |
+| Ctrl+Entrée (`insertBlankLine`) | insérer une ligne | Envoyer le commentaire | **contextes distincts** : le champ de commentaire n'est pas l'éditeur |
 
 Les noms des touches affichés suivent le système (« ⌥⌘F », « Ctrl+H »).
 

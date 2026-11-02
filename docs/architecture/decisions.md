@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Version | 1.0.0-brouillon.11 (2026-11-02, révision 8.2 : N46 à N48, tour 8 ; révision 8.1 acceptée : N44, N45 ; révision 8 : tour 7, N42, N43 ; [CHANGES.md](CHANGES.md), [coherence.md](coherence.md)) |
+| Version | 1.0.0-brouillon.12 (2026-11-02, révision 8.3 : tour de confirmation ; révision 8.2 : N46 à N48, tour 8 ; révision 8.1 acceptée : N44, N45 ; révision 8 : tour 7, N42, N43 ; [CHANGES.md](CHANGES.md), [coherence.md](coherence.md)) |
 | Rôle | lever chaque doute trouvé en écrivant [spec.md](spec.md) : une question, ses options, une recommandation, sa raison |
 | Sources des doutes | [conception](../conception.pdf), [questions ouvertes](../open-questions.md), [audit](../plans/2026-10-31-architecture-audit.md), ADR 0001–0034, [protocole](../protocol/spec.md), [design](../design/spec.md), code (`main` à `362cb4d`, chantier `proto1`), `TODO` et `t.Skip` |
 
@@ -1540,6 +1540,11 @@ Le détail des contradictions, manques, doublons, carte produit et phasage est d
   Automerge : `clone`, `view(heads)`, `forkAt(heads)`.
 - **Utilisatrice.** Exigence N46 et précisions (partagées ; versions par variante) : décidé ;
   PD-5 et PD-6 par la boucle du protocole.
+- **Révision 8.3 (Codex C4, C5 ; Fable R9-m2).** Fourches de fichiers d'**identité dérivée**
+  (`inkwell/doc-variant-file/v1` ‖ VariantId ‖ DocId) depuis les têtes du manifeste de départ : deux
+  premiers auteurs concurrents écrivent la même fourche ; une variante ne coûte qu'un emplacement
+  (PD-6 réécrit). Suivre dans une autre variante **demande d'abord** (« Passer et suivre · Annuler »),
+  suivi suspendu pendant la question, et de nouveau si la personne suivie change de variante.
 
 ### AD-106 — Commentaires (N47)
 
@@ -1550,8 +1555,13 @@ Le détail des contradictions, manques, doublons, carte produit et phasage est d
   (`AD-14`) ; la « base de données » demandée = l'index SQLite **dérivé** de N33 (reconstructible).
   (B) écartée : seconde vérité à synchroniser, fusionner, signer et garder. Spec §6.14 CM-1 à CM-10,
   PF-15, P-COMMENT, PD-7.
-- **Utilisatrice.** Exigence N47 ; la place des commentaires (C) est à confirmer ; PD-7 par la
-  boucle du protocole.
+- **Utilisatrice.** Exigence N47 ; place des commentaires (C) **décidée par l'utilisatrice le
+  2026-11-02** ; PD-7 par la boucle du protocole.
+- **Révision 8.3 (Codex C3, Fable R9-M4, R9-m4).** Plus de borne globale (un lecteur pouvait geler
+  le document) : bornes par modification et **par acteur le long de sa chaîne** (stables par
+  réunion), quota N10 par clé (64 Mio pour un lecteur), taille totale = palier de chargement local ;
+  étiquette propre `inkwell/doc-comments/v1` ; clause de l'ensemble admis ; l'`état` du fil d'autrui
+  relève de la couverture ; têtes du document de commentaires dans le manifeste de départ.
 
 ### AD-107 — Validation d'une version (N48)
 
@@ -1561,8 +1571,15 @@ Le détail des contradictions, manques, doublons, carte produit et phasage est d
   d'admin facultative `review/policy` (PD-9) ; « valider avant d'intégrer » = garde de l'application
   et audit vérifiable, pas une règle d'admission ; trace dans l'historique et en étiquettes Git ;
   portée juridique écrite (signature électronique simple au sens d'eIDAS, sans heure prouvée).
-- **Utilisatrice.** Exigence N48 ; « personne désignée sans rôle nouveau » à confirmer ; PD-8 et
-  PD-9 par la boucle du protocole.
+- **Utilisatrice.** Exigence N48 ; personne désignée sans rôle nouveau **décidée par l'utilisatrice
+  le 2026-11-02** ; PD-8 et PD-9 par la boucle du protocole.
+- **Révision 8.3 (Codex C1, C2, C6 ; Fable R9-M2, R9-M5, R9-m5).** Validité fonction de l'op et de
+  ses frontières déclarées (`members`, `decisions`, `reviews`) ; la décision l'emporte sur un retrait
+  concurrent ; une décision par soumission (la première sur la chaîne) ; « ouvertes » à la frontière ;
+  `assignee` membre ; preuve propre `review_equivocation_v1` (même auteur, même position) et gel ;
+  état `contestée` défini et sans effet pour l'intégration ; statut d'une version à plusieurs
+  soumissions (`avis contraires`) ; validation obligatoire → on intègre **la version validée
+  exactement** ; domaine `inkwell/review-op/v1`, manifeste en CBOR déterministe, ligne au §6.1.
 
 ## Sources consultées pour ces décisions
 
