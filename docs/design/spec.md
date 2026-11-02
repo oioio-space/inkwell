@@ -3103,11 +3103,13 @@ personne choisie, par exemple une responsable.
     est ignorée (« Décision après retrait, sans effet ») ; un retrait fait **après** une décision n'a
     aucun effet.
   - « **Validation contestée** » (losange `warn`, `--warning`), **uniquement** en cas
-    d'**équivocation** : la même personne a signé **deux actions contradictoires pour la même étape
-    de la demande**, quels que soient le moment et l'appareil. Cela couvre deux soumissions
+    d'**équivocation** : la même personne a signé **deux actions différentes au même rang de sa
+    chaîne de signatures**, quels que soient le moment, l'appareil et la demande concernée (même si
+    les deux actions portent sur des demandes différentes). Cela couvre deux soumissions
     contradictoires, un retrait et une décision de la même personne, deux décisions, et tout autre
-    couple d'actions de cette personne à la même étape (architecture VD-2, VD-3, PD-8). Sa chaîne de
-    signatures est alors fourchée. Une décision contraire prise **après** coup, à une étape
+    couple d'actions valides de cette personne au même rang (architecture VD-2, VD-3, PD-8). Sa
+    chaîne de signatures est alors fourchée, et toute demande touchée par l'une des deux actions
+    affiche ce badge. Une décision contraire prise **après** coup, à une étape
     différente, n'y change rien : elle est ignorée (« Décision déjà rendue — soumettre à nouveau »).
     - **Seuil** (point de gel, VD-3) : la demande n'est contestée que si l'action concernée se situe
       **à l'étape où la chaîne se divise, ou après**. Ce qui a été signé **avant** cette étape garde
