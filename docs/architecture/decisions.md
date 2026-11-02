@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Version | 1.0.0-brouillon.10 (2026-11-01, révision 8.1 : N44, N45 ; révision 8 : tour 7, N42, N43 ; [CHANGES.md](CHANGES.md), [coherence.md](coherence.md)) |
+| Version | 1.0.0-brouillon.11 (2026-11-02, révision 8.2 : N46 à N48, tour 8 ; révision 8.1 acceptée : N44, N45 ; révision 8 : tour 7, N42, N43 ; [CHANGES.md](CHANGES.md), [coherence.md](coherence.md)) |
 | Rôle | lever chaque doute trouvé en écrivant [spec.md](spec.md) : une question, ses options, une recommandation, sa raison |
 | Sources des doutes | [conception](../conception.pdf), [questions ouvertes](../open-questions.md), [audit](../plans/2026-10-31-architecture-audit.md), ADR 0001–0034, [protocole](../protocol/spec.md), [design](../design/spec.md), code (`main` à `362cb4d`, chantier `proto1`), `TODO` et `t.Skip` |
 
@@ -166,6 +166,9 @@ tant qu'elles sont ouvertes, la spécification n'affirme pas sa fidélité compl
 | AD-102 | installation permanente d'une police ou d'un greffon du projet | **décidé par l'utilisatrice (2026-11-01)** | — | — |
 | AD-103 | synchronisation texte ↔ aperçu : table par compilation, LSP amont ou sidecar `inkwell-typst` | technique, après P-SYNC | — | — |
 | AD-104 | vue stable ; suivre une personne ; œil sur l'avatar de qui suit | **décidé par l'utilisatrice (2026-11-01)** (annonce) | **PD-4** (présence) | — |
+| AD-105 | variantes du projet : fourches, partagées, contenu à la demande, versions par variante | **décidé par l'utilisatrice (2026-11-01)** (N46) | **PD-5**, **PD-6** | — |
+| AD-106 | commentaires dans un document dérivé par fichier ; index SQLite dérivé | utilisatrice (place des commentaires) | **PD-7** | — |
+| AD-107 | validation signée liée à la `VersionId` ; personne désignée, politique facultative | utilisatrice (sans rôle nouveau) | **PD-8**, **PD-9** | — |
 
 ---
 
@@ -1517,6 +1520,49 @@ Le détail des contradictions, manques, doublons, carte produit et phasage est d
   `update` seulement, jamais en `snapshot`, pour qu'un appareil 2.0 ne jette que ce message).
   Recommandation complémentaire : « Ne pas partager ma position ».
 - **Utilisatrice.** Annonce décidée ; PD-4 par la boucle du protocole.
+
+## Révision 8.2 : variantes isolées (N46), commentaires (N47), validation (N48)
+
+### AD-105 — Variantes isolées, concurrentes et partagées (N46)
+
+- **Doute.** Les variantes actuelles sont par document (ADR 0031) ; N46 veut des variantes du
+  projet, isolées, où plusieurs personnes travaillent en même temps, visibles par tous.
+- **Options.** (1) Un document partagé portant toutes les variantes : aucune isolation au niveau
+  du CRDT, tout se synchronise chez tous. (2) **Une famille de fourches par variante** : fourche de
+  l'index (identité, métadonnées, versions) et fourche paresseuse de chaque fichier modifié, sur les
+  annonces `variant` existantes.
+- **Recommandation.** (2), spec §6.11 « Variantes isolées » et VA-1 à VA-10 : variante courante
+  locale ; écriture seulement dans les fourches de V ; « Intégrer » seul passage ; liste et
+  métadonnées chez tous tout de suite, contenu à la demande avec préchargement borné (PF-14) ;
+  amorçage depuis la copie locale ; versions nommées par variante, épingles et ménage, branches
+  Git ; deltas PD-5 (présence `variant`), PD-6 (emplacements par variante).
+- **Norme et preuve.** Patchwork (Ink & Switch) : une branche = un document cloné lié à sa source ;
+  Automerge : `clone`, `view(heads)`, `forkAt(heads)`.
+- **Utilisatrice.** Exigence N46 et précisions (partagées ; versions par variante) : décidé ;
+  PD-5 et PD-6 par la boucle du protocole.
+
+### AD-106 — Commentaires (N47)
+
+- **Options.** (A) dans le document du fichier (`meta.comments`) ; (B) base SQLite du projet
+  synchronisée ; (C) **document Automerge de commentaires par fichier**, dérivé du document du texte.
+- **Recommandation.** (C) : une seule vérité (INV-3), synchronisation et signatures existantes,
+  chargement à la demande, règle d'admission propre qui ouvre enfin les commentaires aux lecteurs
+  (`AD-14`) ; la « base de données » demandée = l'index SQLite **dérivé** de N33 (reconstructible).
+  (B) écartée : seconde vérité à synchroniser, fusionner, signer et garder. Spec §6.14 CM-1 à CM-10,
+  PF-15, P-COMMENT, PD-7.
+- **Utilisatrice.** Exigence N47 ; la place des commentaires (C) est à confirmer ; PD-7 par la
+  boucle du protocole.
+
+### AD-107 — Validation d'une version (N48)
+
+- **Recommandation.** Spec §6.15 VD-1 à VD-9 : opérations signées `submit`, `decide`, `withdraw`
+  (PD-8) liées à la `VersionId` exacte ; états soumise, validée, refusée, retirée ; **personne
+  désignée** par la demande plutôt qu'un rôle nouveau (un manager peut être lecteur), politique
+  d'admin facultative `review/policy` (PD-9) ; « valider avant d'intégrer » = garde de l'application
+  et audit vérifiable, pas une règle d'admission ; trace dans l'historique et en étiquettes Git ;
+  portée juridique écrite (signature électronique simple au sens d'eIDAS, sans heure prouvée).
+- **Utilisatrice.** Exigence N48 ; « personne désignée sans rôle nouveau » à confirmer ; PD-8 et
+  PD-9 par la boucle du protocole.
 
 ## Sources consultées pour ces décisions
 

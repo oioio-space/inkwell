@@ -2,9 +2,9 @@
 
 | | |
 |---|---|
-| Version | **1.0.0-brouillon.10** (révision 8.1 : N44 synchronisation texte ↔ aperçu, N45 vue stable et suivi ; révision 8 : tour 7, N42, N43 ; [CHANGES.md](CHANGES.md), [coherence.md](coherence.md)) |
+| Version | **1.0.0-brouillon.11** (révision 8.2, delta de confirmation : N46 variantes isolées, N47 commentaires, N48 validation, constats du tour 8 ; révision 8.1 **acceptée** : N44, N45 ; révision 8 : tour 7, N42, N43 ; [CHANGES.md](CHANGES.md), [coherence.md](coherence.md)) |
 | Date | 2026-11-01 |
-| Statut | proposé (exigence N18) ; à valider par la boucle de revue Fable + Codex, puis par l'utilisatrice |
+| Statut | **acceptée (rév. 8.1)** par Fable et Codex au tour 8 ([15](reviews/15-fable-r8.md), [16](reviews/16-codex-r8.md)) ; la révision 8.2 est un **delta de confirmation** (constats non bloquants du tour 8, N46) à confirmer par les deux revues ; acceptation au sens du §0.5 (les portes restent à passer) |
 | Remplace | [`docs/architecture.md`](../architecture.md) (devenu un renvoi) |
 | Finalité | [document de conception](../conception.pdf) (24 oct. 2026) |
 | Décisions | [ADR](../adr/README.md) ; doutes et options : [decisions.md](decisions.md) (`AD-xx`) |
@@ -76,6 +76,8 @@ n'en dépend (`AD-95`). Règles de toutes les portes :
 | Rendu à DOM (Mermaid complet) | **P-FRAME** : processus web dédié et tuable, réseau et navigation refusés par l'hôte, boucle infinie tuée sans gêner la frappe, source canari jamais vue hors de l'appareil — sur **chaque** moteur de cible (WebKitGTK, WKWebView, WebView2), ou refus écrit sur la cible | Mermaid complet absent | §15.14 |
 | Polices (N43) | **P-FONT** : priorité FT-1 prouvée (même famille et variante dans le projet et le système → projet) ; listes identiques vues par typst et tinymist ; `getDocumentMetrics` rend la source (chemin) de chaque police utilisée, replis de glyphes compris ; PF-11 ≤ 50 ms p95 pour 1 000 fichiers ; RA-T1 (PDF identique après export et import sur image vierge) | FT-8 : compilation de contrôle et avertissements `unknown font family` ; FT-6 : vue réduite | §6.12, §6.13 |
 | Synchronisation texte ↔ aperçu (N44) | **P-SYNC** : (i) requête LSP de tinymist publiée, ou (ii) sidecar `inkwell-typst` construit et mesuré (compilation incrémentale, saut exact) ; PF-12 ; modèle SY-5 | (iii) ancres de blocs appariées (code actuel), précises au paragraphe | §15.17, SY-1 à SY-8 |
+| Commentaires (N47) | **P-COMMENT** : propriétés des ancres ; garde CM-6 ; PF-15 sur 1 000 et 10 000 fils | lecteurs sans commentaire tant que PD-7 n'est pas accepté | §6.14 |
+| Variantes (N46) | **P-VAR** : modèle d'isolation (aucun octet d'une variante ailleurs sans « Intégrer ») ; amorçage depuis la copie locale (octets ≈ modifications propres) ; stockage (original, ancre) + morceaux contre copie complète ; PF-14 ; ménage après abandon | contenu tiré en entier à l'ouverture ; stockage en copie complète | §6.11 |
 | Dépendances garanties (N42) | **P-DEPS** : installation et fumée réseau coupé sur chaque image de DG-3 ; Windows sans WebView2 hors ligne ; contrôles `GLIBC_*`, `DT_NEEDED`, `LC_LOAD_DYLIB` ; lanceur DG-2 qui nomme le paquet manquant | cible retirée de DG-3 (jamais promise sans preuve) | §14.1 |
 | Deltas du protocole PD-* | boucle de revue du protocole ; vecteurs | fonctions bloquées (N23, politique IA partagée, règle de projet de N34) | §15.19 |
 
@@ -148,7 +150,7 @@ Ces invariants reprennent ceux de [`CLAUDE.md`](../../CLAUDE.md) ; les changer e
 | INV-11 | *[proposé, ADR 0039]* Le noyau fermé est la liste K-1 à K-10 (§15.3) ; tout le reste est un point d'extension ; une extension intégrée n'a aucun droit qu'un greffon ne puisse demander (sauf `ui.native`) ; aucune extension ne retire une zone protégée (ND-1 à ND-8) | AC-16, FE-3, P-EXT-*, `EXT-ND*` |
 | INV-12 | *[proposé]* Aucun outil externe à l'exécution : l'historique Git est produit par go-git (Go pur), jamais par un binaire `git`, `ssh` ou de compression ; aucun `os/exec` d'un outil absent de l'exécutable (sauf ceux que la personne désigne elle-même : agent ACP, `AD-82`) | AC-17, AC-18 (§4.5) |
 | INV-13 | *[proposé]* Une garantie d'enfermement vaut sur les six cibles, ou la capacité qu'elle protège est **refusée** sur la cible qui ne la tient pas (échec fermé, réduction écrite dans §9.11) | P-SANDBOX-* |
-| INV-14 | *[proposé, exigence de l'utilisatrice 2026-11-01]* **Autoporteur** : à l'exécution, aucun programme externe n'est lancé ; seules exceptions : **nos** binaires embarqués et revérifiés (SHA-256) avant chaque lancement — `typst`, `tinymist`, `inkwell-sandbox` —, le **lanceur Linux** qui exécute l'exécutable d'inkwell lui-même (DG-2), et la commande d'agent ACP qu'une personne désigne elle-même (`AD-82`, hors du cœur, reportée). Seules sont permises les interfaces du système : appels système, API du trousseau (Secret Service par D-Bus, Security.framework, Credential Manager), cadres de la plate-forme (IOKit, DiskArbitration, AppKit, WMI par COM, registre, portails XDG). Ni shell, ni util-linux, ni `fc-list`/`fc-match`, ni `open`/`start`, ni `pmset`, `diskutil`, `fdesetup`, `hdiutil`, `manage-bde`, PowerShell, `xdg-open`, `git`, `age`. LanguageTool et les agents ACP restent des ajouts **optionnels** fournis par la personne, hors du cœur. Exceptions **de test et de construction** seulement : `git check-ignore` (jeu de conformité d'IG-3), `strace` (dérivation de la liste seccomp), `tar` de `cmd/sidecar-fetch` (à la construction, jamais lié au produit, AC-6) | AC-18, AC-19 ; e2e « sans shell ni util-linux » ; bibliothèques et composants : §14.1 (« Dépendances garanties ») |
+| INV-14 | *[proposé, exigence de l'utilisatrice 2026-11-01]* **Autoporteur** : à l'exécution, aucun programme externe n'est lancé ; seules exceptions : **nos** binaires embarqués et revérifiés (SHA-256) avant chaque lancement — `typst`, `tinymist`, `inkwell-sandbox` —, le **lanceur Linux** qui exécute l'exécutable d'inkwell lui-même (DG-2), les **processus auxiliaires des bibliothèques garanties** du §14.1, lancés par la bibliothèque et jamais par notre code (WebKitGTK : `WebKitWebProcess`, `WebKitNetworkProcess`, `WebKitGPUProcess`, `bwrap`, `xdg-dbus-proxy` ; WebView2 : ses processus de navigateur et de rendu ; AC-18 reste intact), et la commande d'agent ACP qu'une personne désigne elle-même (`AD-82`, hors du cœur, reportée). Seules sont permises les interfaces du système : appels système, API du trousseau (Secret Service par D-Bus, Security.framework, Credential Manager), cadres de la plate-forme (IOKit, DiskArbitration, AppKit, WMI par COM, registre, portails XDG). Ni shell, ni util-linux, ni `fc-list`/`fc-match`, ni `open`/`start`, ni `pmset`, `diskutil`, `fdesetup`, `hdiutil`, `manage-bde`, PowerShell, `xdg-open`, `git`, `age`. LanguageTool et les agents ACP restent des ajouts **optionnels** fournis par la personne, hors du cœur. Exceptions **de test et de construction** seulement : `git check-ignore` (jeu de conformité d'IG-3), `strace` (dérivation de la liste seccomp), `tar` de `cmd/sidecar-fetch` (à la construction, jamais lié au produit, AC-6) | AC-18, AC-19 ; e2e « sans shell ni util-linux » ; bibliothèques et composants : §14.1 (« Dépendances garanties ») |
 
 ## 2. Attributs de qualité (ISO/IEC 25010:2023) et budgets
 
@@ -569,8 +571,9 @@ l'index des polices passe par `typst fonts` enfermé (FT-5).
 
 **`cmd/inkwell-launch`** *[cible, Linux seulement ; `AD-99`]* — lanceur **statique** installé comme
 `/usr/bin/inkwell` : vérifie la présence de GTK 4, de WebKitGTK 6.0 et la version de la glibc, puis
-`unix.Exec` de l'exécutable d'inkwell ; sinon un message en mots simples (§14.1 DG-2). N'importe
-que la bibliothèque standard et `golang.org/x/sys`.
+`unix.Exec` de l'exécutable d'inkwell ; sinon un message en mots simples (§14.1 DG-2), sur la
+sortie d'erreur et dans un fichier, sans D-Bus. N'importe que la bibliothèque standard et
+`golang.org/x/sys`.
 
 **`internal/sandbox`** *[cible, N35]* — le port d'enfermement des processus enfants, commun aux
 sidecars et aux hôtes de greffons.
@@ -674,8 +677,8 @@ donnée (seulement des constantes, `ui/icons`). Vérifiées par Biome `noRestric
 | FE-3 | `src/ext/**` n'importe que `@inkwell/extension-api` et `src/ui/kit` | Biome *[cible, ADR 0039]* |
 | AC-16 | seul `internal/plugin/host` importe wazero, et il n'est lié que dans `cmd/inkwell-sandbox`, construit `CGO_ENABLED=0` sans Wails ; aucun paquet du noyau fermé (§15.3) n'importe `internal/plugin` | `arch-check.sh`, `go version -m` *[cible, ADR 0039]* |
 | AC-17 | seul `internal/milestone` importe go-git | `arch-check.sh` *[cible]* |
-| AC-18 | dans le code de production (hors `_test.go`, hors `cmd/sidecar-fetch`), **seul** `internal/sandbox` importe `os/exec` ou appelle `syscall.Exec`, `os.StartProcess`, `unix.Exec` ; aucun littéral de chemin absolu d'exécutable (`"/bin/…"`, `"/usr/bin/…"`, `"…\\System32\\…"`) ni nom de programme du système (`sh`, `setpriv`, `prlimit`, `unshare`, `mount`, `tar`, `git`, `pmset`, `diskutil`, `powershell`…) dans un appel de lancement | `arch-check.sh` (graphe d'imports + recherche des littéraux dans les paquets de production) *[cible, INV-14]* |
-| AC-19 | `internal/sandbox.Start` n'accepte qu'un **binaire vérifié** (type `sidecar.Verified`, obtenu seulement par l'extraction et la vérification SHA-256 du manifeste embarqué), jamais une chaîne de chemin ; seule exception typée : la commande d'agent ACP désignée par la personne (reportée) | compilation (types) + revue ; e2e dans un conteneur **sans shell ni util-linux** (`/bin/sh`, `/usr/bin/*` absents) : aperçu, export, greffon, sauvegarde fonctionnent *[cible]* |
+| AC-18 | dans le code de production (hors `_test.go`, hors `cmd/sidecar-fetch`), **seul** `internal/sandbox` importe `os/exec` ou appelle `syscall.Exec`, `os.StartProcess`, `unix.Exec` — exception étroite : `cmd/inkwell-launch` appelle `unix.Exec` sur l'exécutable **installé** d'inkwell seulement (DG-2) ; aucun littéral de chemin absolu d'exécutable (`"/bin/…"`, `"/usr/bin/…"`, `"…\\System32\\…"`) ni nom de programme du système (`sh`, `setpriv`, `prlimit`, `unshare`, `mount`, `tar`, `git`, `pmset`, `diskutil`, `powershell`…) dans un appel de lancement | `arch-check.sh` (graphe d'imports + recherche des littéraux dans les paquets de production) *[cible, INV-14]* |
+| AC-19 | `internal/sandbox.Start` n'accepte qu'un **binaire vérifié** (type `sidecar.Verified`, obtenu seulement par l'extraction et la vérification SHA-256 du manifeste embarqué), jamais une chaîne de chemin ; seule exception typée : la commande d'agent ACP désignée par la personne (reportée) | compilation (types) + revue ; e2e dans un conteneur où les programmes que le code lançait sont **absents** (`/bin/sh`, `/usr/bin/{sh,setpriv,prlimit,unshare,mount,tar,git,fc-list,fc-match,xdg-open}`), le reste du système présent (dont `bwrap` et `xdg-dbus-proxy`, exigés par WebKitGTK) : aperçu, export, greffon, sauvegarde fonctionnent *[cible]* |
 
 ## 5. Concurrence, cycle de vie, arrêt
 
@@ -775,7 +778,7 @@ repose sur I1–I4 (§10).
 
 | Chose | Vérité | Propriétaire en mémoire | Persistance | Vues dérivées (jamais écrites ailleurs) |
 |---|---|---|---|---|
-| Texte d'un fichier texte, ses commentaires, ses verrous (ADR 0022) | un document Automerge par fichier (`{text, meta}`) | `Repo` (Worker) | `.inkwell/repo/` par le Stream `store` | fichier projeté sur le disque, aperçu, recherche, sommaire |
+| Texte d'un fichier texte et ses verrous (ADR 0022) ; ses **commentaires** dans un document frère dérivé (§6.14, PD-7) | un document Automerge par fichier (`{text, meta}`), plus son document `comments` | `Repo` (Worker) | `.inkwell/repo/` par le Stream `store` | fichier projeté sur le disque, aperçu, recherche, sommaire |
 | Arbre du projet, références des blobs, paquets `@preview`, demandes de suppression | document racine Automerge (index, `schema: 1`, ADR 0023/0030) | `Repo` | idem | arborescence matérialisée (fonction pure TS, vecteurs partagés avec Go) |
 | Versions nommées | entrée Automerge (nom, note, auteur, date, têtes par document) | `Repo` | idem | projection Git par go-git *[cible, `AD-13`]* ; PDF daté |
 | Membres, rôles, suspensions, groupes d'appareils | ops signées (ADR 0017, 0021) | ledger | `.inkwell/trust/<hash>` | liste pliée, filtre de connexion, kind `Roles` |
@@ -1123,7 +1126,8 @@ seul secret pour tous les projets de la personne ; la déduplication est réelle
     échoue ou ne peut être lu, la cérémonie est **refusée** : « Sur cet ordinateur, la mémoire peut
     être copiée en clair sur le disque. Activez le chiffrement du disque (ou désactivez la mémoire
     d'échange et la mise en veille prolongée), puis réessayez ; ou faites-le sur un autre appareil
-    dont le disque est chiffré. » Création et restauration suivent la même règle.
+    dont le disque est chiffré. » Création et restauration suivent la même règle. Périmètre : celui
+    d'OV-1 (b′) et du résiduel écrit au §9.9 (D-17, décidé par l'utilisatrice).
   - Réductions supplémentaires (sans valeur de garantie) : champ sans saisie automatique, sans
     correcteur, sans presse-papiers (copier et coller bloqués) ; fenêtre exclue des captures quand
     le système le permet (SR-3) ; avertissement sur les méthodes de saisie qui apprennent ; mots
@@ -1376,7 +1380,9 @@ de l'étude (§7.2) :
     - **(a) impossible** : `/sys/power/state` ne contient pas `disk`, ou `/sys/power/disk` vaut
       `[disabled]` (noyau verrouillé, `nohibernate`) ;
     - **(b′) possible, par les mécanismes connus seulement** : l'hibernation du noyau (`swsusp`)
-      n'écrit l'image que dans un swap **actif**, désigné par `/sys/power/resume` ; donc chaque swap
+      n'écrit l'image que dans un swap **actif** : si `/sys/power/resume` est nul (`0:0`), le noyau
+      prend le **premier swap actif** ; s'il désigne un périphérique qui n'est pas un swap actif,
+      l'hibernation **échoue** (`kernel/power/swap.c`, `swsusp_swap_check`) ; donc chaque swap
       actif passe l'oracle ci-dessus, `/sys/power/resume` vaut `0:0` ou désigne un `CRYPT-` ; et aucun
       outil d'hibernation en espace utilisateur n'est configuré vers une destination en clair :
       `/etc/uswsusp.conf` et `/etc/suspend.conf` absents, ou leur `resume device` résolu `CRYPT-` ;
@@ -1384,11 +1390,16 @@ de l'étude (§7.2) :
       **abandonnée** : sysfs n'expose aucune signature de système de fichiers d'une partition non
       montée, et toute installation UEFI a une partition EFI (et souvent `/boot`) en clair, donc elle
       ne pouvait ni être lue ni passer.
-    - **Pendant la cérémonie** (défense en plus) : verrou d'inhibition `sleep` de `systemd-logind`
-      (`Inhibit("sleep", …, "block")` par D-Bus) ; la cérémonie se fait dans une **fenêtre dont le
-      processus de rendu est dédié** et **terminé** à la fin (les pages libérées ne sont pas écrites
-      par l'hibernation du noyau) ; la durée d'exposition est celle de la cérémonie (*à prouver* par
-      P-VAULT : processus dédié sur chaque moteur).
+    - **Pendant la cérémonie** (exigé en branche (b′), inutile en (a)) : verrou d'inhibition `sleep`
+      de `systemd-logind` (`Inhibit("sleep", …, "block")` par D-Bus) ; **verrou impossible à obtenir**
+      (pas de `logind`, pas de bus) → **cérémonie refusée** (échec fermé). La cérémonie se fait dans
+      une **fenêtre dont le processus de rendu est dédié** et **terminé** à la fin (les pages libérées
+      ne sont pas écrites par l'hibernation du noyau) ; la durée d'exposition est celle de la
+      cérémonie. Conditions, *à prouver* par P-VAULT : WebView2 attribue les processus de rendu par
+      site, donc la fenêtre de cérémonie vient d'un **`CoreWebView2Environment` distinct** (dossier de
+      données à elle, placé par OV-4, purgé) ; WebKitGTK : une `WebKitWebView` créée **sans**
+      `related-view` a son propre processus web, et Wails v3 ne doit pas lier les fenêtres entre
+      elles (vérifié avant adoption).
     - **Résiduel écrit** (§9.9, `AD-91`) : un outil **installé et configuré avec les droits
       d'administration**, hors des mécanismes connus, qui contourne `logind` et écrit une image brute
       vers une partition en clair **pendant** la cérémonie, n'est pas détectable depuis
@@ -1441,7 +1452,7 @@ de l'étude (§7.2) :
 - **EN-9 Budget du dossier de travail.** Matérialisation **par dépendances réelles** de la
   compilation (`typst compile --deps` du principal, plus les fichiers que la personne ouvre), jamais
   tout le projet ; tmpfs borné (`size=`, comme `mount_linux.go`), part du budget global du §2 :
-  **≤ 512 Mio** par projet ; disque en mémoire macOS de la même taille ; au-delà : aperçu refusé
+  **≤ 512 Mio** par projet (Linux ; macOS et Windows : volume chiffré vérifié, même borne) ; au-delà : aperçu refusé
   avec « Ce document utilise trop de fichiers volumineux pour être compilé dans un projet protégé
   (512 Mio au plus) », jamais un débordement silencieux vers le disque. Un projet de 2 Go d'images
   se compile donc seulement si les dépendances du document principal tiennent dans la borne.
@@ -1526,8 +1537,10 @@ projection ; la personne n'a besoin de connaître ni l'une ni l'autre.
 - **HI-7 Variante de projet** : « Dupliquer le projet » crée un **nouveau projet** (nouvel
   identifiant, membres choisis, historique copié ou non). Intégrer les changements d'un autre
   projet est hors v1 (NG10) : les identités de documents diffèrent.
-- **HI-8** Rien de ceci n'exige de nouveau format entre appareils : versions et variantes sont des
-  documents et des modifications Automerge admis par les règles existantes (ADR 0031).
+- **HI-8** Versions et variantes sont des documents et des modifications Automerge admis par les
+  règles existantes (ADR 0031) : leur identité et leur synchronisation n'exigent aucun format
+  nouveau ; la présence par variante et le budget d'emplacements par variante sont des **deltas
+  proposés** (PD-5, PD-6, §15.19 ; variantes isolées ci-dessous).
 - **HI-9 Ce que l'historique garde** (rétention compatible avec le ménage, §6.5). Une **version
   nommée** épingle tout ce que son manifeste désigne (documents, index, blobs, rendus, paquets) :
   l'épingle est posée **avant** la publication du manifeste (le blob est marqué retenu, puis le
@@ -1547,6 +1560,133 @@ projection ; la personne n'a besoin de connaître ni l'une ni l'autre.
 - **HI-10 Horloge du voyage dans le temps.** Le curseur suit l'**ordre de réception sur cet
   appareil** (honnête et déterministe localement) ; l'heure affichée est l'heure **déclarée** par
   l'auteur, marquée comme telle (un pair peut la falsifier).
+
+#### Variantes isolées, concurrentes et partagées (N46)
+
+*[cible ; `AD-105` ; porte **P-VAR** ; deltas proposés PD-5, PD-6]* Précise HI-6 : une variante
+est désormais une variante **du projet** (ses fichiers), pas d'un seul document.
+
+**Choix : une famille de documents par variante (fourche Automerge), pas un document partagé.**
+- Document partagé (toutes les variantes dans un même doc, sous-arbres ou marques) : aucune
+  isolation au niveau du CRDT, tout le monde synchronise tout, rôles et admission non séparables :
+  écarté.
+- Fourche (Patchwork d'Ink & Switch : une branche = un document cloné, avec métadonnées vers sa
+  source et ses têtes ; Automerge : `clone`, `view(heads)`, `forkAt(heads)` côté Rust/wasm) :
+  retenue. Elle s'appuie sur ce que le protocole a déjà : annonce `listing_op_v1` sort = `variant`,
+  `DocId = BLAKE3("inkwell/doc/v1" ‖ ProjectID ‖ author ‖ sort ‖ slot ‖ anchor)[:16]` (protocole §4.6).
+
+**Identité.** Une variante V = la **fourche de l'index du projet** (document `nodes`, ADR 0023)
+annoncée par une `listing_op` `variant` ancrée sur une modification de l'index ;
+`VariantId` = `DocId` de cette fourche. Métadonnées dans la fourche : `meta.variant {nom, créée par,
+date}`. Les fichiers de V sont les nœuds de l'index fourché ; un fichier **non modifié** dans V
+pointe vers l'original et se lit **figé** au point de départ (`view(heads)`, lecture seule) ; à la
+première modification, il est **fourché paresseusement** (copie à l'écriture) : nouvelle
+`listing_op` `variant` ancrée sur les têtes de départ (le créateur rend d'abord les têtes uniques par
+une modification d'ancrage vide), et le nœud de l'index fourché pointe vers la fourche.
+- **VA-1** La variante courante est un **état local** de l'appareil (réglage, jamais synchronisé).
+- **VA-2** Une modification s'applique **seulement** aux documents de la variante courante : l'éditeur
+  est lié aux poignées des fourches de V ; jamais d'écriture dans l'original depuis V.
+- **VA-3** Concurrence : plusieurs personnes dans des variantes différentes écrivent des documents
+  différents ; plusieurs dans la même variante collaborent comme dans l'original (même fourche).
+- **VA-4** Seul chemin entre variantes : **Intégrer** (HI-6, différence appliquée), dans les deux
+  sens (« Mettre à jour depuis l'original » = intégrer l'original dans V) ; rien ne fuit sinon :
+  l'original avance sans toucher V, qui reste figé à son départ.
+
+**Partagées, pas privées.** Chaque membre voit **toutes** les variantes et peut en rejoindre une ;
+seul le choix de la variante courante est personnel (VA-1).
+
+**Synchronisation (N38) : liste et métadonnées tout de suite, contenu à la demande avec
+préchargement borné.**
+- **Toujours, chez tous** : les `listing_op` des variantes et la **fourche de l'index** de chaque
+  variante (nom, auteur, date, fichiers modifiés : quelques Kio) → la liste des variantes est la même
+  partout, hors ligne compris.
+- **Contenu des fichiers fourchés : à la demande**, quand une personne ouvre la variante (`request`,
+  protocole §9 ; fourches non annoncées par `sharePolicy`), puis gardé synchronisé chez elle.
+  **Préchargement** en arrière-plan, seulement au repos, lien non facturé au volume, ≤ 10 % du débit
+  mesuré, et seulement pour les variantes ≤ 5 Mio de modifications propres (≤ 64 Mio au total par
+  projet) : rejoindre une petite variante est instantané et marche hors ligne ; une grosse se tire
+  à l'ouverture, avec progression. Option « Garder toutes les variantes » (appareil d'archive).
+- Pourquoi pas tout, tout de suite : le coût croît avec (variantes × fichiers modifiés × membres)
+  alors que la plupart des membres n'ouvrent qu'une variante ; pourquoi pas tout à la demande : la
+  liste doit être identique chez tous et une petite variante doit s'ouvrir sans attente.
+- **Budgets (PF-14, porte P-VAR)** : métadonnées ≤ 4 Kio par variante ; rejoindre une variante de
+  1 Mio de modifications propres : premier fichier visible ≤ 1 s sur le profil WAN de référence
+  (ADR 0028) ; octets échangés ≈ modifications propres de V (amorçage ci-dessous), jamais
+  l'historique commun ; préchargement jamais pendant la frappe (HP-*).
+- Amorçage sans retransmission : le receveur fourche **sa propre copie** de l'original à l'ancre de
+  la `listing_op` (les têtes de départ), puis la synchronisation n'échange que les modifications
+  propres à V. Stockage : une fourche = (original, ancre) + ses propres morceaux (P-VAR : coût mesuré
+  contre une copie complète). Durabilité : une variante dont personne d'autre n'a tiré le contenu
+  n'existe que chez son auteur ; l'interface le dit (« seulement sur l'ordinateur de Paul ») et la
+  sauvegarde distante (§6.7) la couvre.
+
+**Présence.** Les messages éphémères sont déjà **par document** : sur une fourche, curseurs et suivi
+sont naturellement limités à V. Un fichier **non fourché** lu dans V porte l'identité de l'original :
+sans champ nouveau, un curseur d'une personne dans V s'y mêlerait à ceux de l'original. Donc : **PD-5**
+(même mineure que PD-4) : canal de présence `variant` (valeur `VariantId`, ou `""` pour l'original),
+en `update` seulement (jamais en `snapshot` : map fermée). Sans PD-5 : aucune présence émise sur un
+fichier non fourché d'une variante (limite écrite). Le suivi (RV-3) qui suit une personne dans une
+autre variante y bascule la variante courante, avec le bandeau « Vous êtes dans la variante « X » ».
+
+**Versions nommées par variante (N39 × N46).**
+- **VA-5 Portée.** Les versions nommées vivent dans `meta.versions` du document racine (HI-3) ; la
+  racine **est** l'index (ADR 0023), donc la fourche de l'index d'une variante porte **ses**
+  versions : celles de l'original jusqu'au départ (passé commun, en lecture), puis les siennes. Une
+  version de V = manifeste figé `{index de V : têtes ; par fichier : (DocId, têtes) — la fourche si
+  le fichier est fourché, sinon le document d'origine aux têtes de départ ; blobs ; principal}`,
+  avec nom, note, auteur, date.
+- **VA-6 Visible par tous** : la fourche de l'index se synchronise tout de suite chez tous (liste et
+  métadonnées) ; chacun voit donc les versions de toutes les variantes, même sans en avoir tiré le
+  contenu (l'ouvrir le tire, comme rejoindre la variante).
+- **VA-7 Restaurer sans détruire** (HI-2), **dans la variante de la version** : nouvelle
+  modification dans les documents de cette variante, prévisualisée, annulable. Restaurer dans une
+  **autre** variante (ou l'original) une version de V, c'est franchir une frontière : c'est
+  « Intégrer depuis cette version » (VA-4), avec sa prévisualisation et ses droits.
+- **VA-8 Nouvelle variante depuis une version** (de l'original ou de n'importe quelle variante) :
+  l'index est fourché aux têtes de la version ; le **manifeste de départ** (fichier → (DocId,
+  têtes)) est recopié dans `meta.variant.depart` ; un fichier non fourché se lit à ces têtes-là, et
+  sa fourche paresseuse part de là (son ancre est la modification d'ancrage de la fourche, dont les
+  dépendances sont ces têtes ; le receveur amorce depuis sa copie du document désigné). Une variante
+  peut ainsi partir d'une autre variante.
+- **VA-9 Épingles et ménage** (§6.5 M-6, HI-9). Racines du ménage : chaque variante **vivante**
+  (sa fourche d'index, ses fourches, et les documents que son manifeste de départ désigne,
+  transitivement) ; chaque version nommée de chaque variante, qui épingle documents et **blobs** de
+  son manifeste, **avant** la publication du manifeste (règle de HI-9 inchangée). Un appareil
+  épingle ce qu'il **a** ; il ne va chercher le reste que pour une variante qu'il a ouverte ou
+  préchargée, ou s'il « garde toutes les variantes » (pas de téléchargement forcé par une version
+  d'une variante jamais ouverte). **Abandonner** une variante : corbeille 30 jours ; ensuite ses
+  épingles tombent, **sauf** ce qu'une variante vivante partie d'une de ses versions désigne encore,
+  ou une version gardée ailleurs ; une purge (ADR 0031) l'emporte toujours. Tests : version de V qui
+  épingle un blob remplacé ensuite dans l'original ; ménage après abandon de V quand W est partie
+  d'une version de V ; appareil qui n'a jamais ouvert V.
+- **VA-10 Projection Git** (HI-5) : une branche par variante (`variantes/<nom>-<id court>`) ; un
+  commit **déterministe** par version nommée de la variante, sur sa branche ; une variante partie
+  d'une version part du **commit de cette version** (sur `main` ou sur la branche d'une autre
+  variante) ; **Intégrer** crée automatiquement une version sur la cible (« Intégré depuis la
+  variante X ») et note le point d'intégration dans la source, projetés en commit de fusion sur la
+  branche cible (second parent = commit du point d'intégration de la source), en-tête
+  `Inkwell-Variant: <VariantId>` ; noms de versions en étiquettes `<branche>/<nom>` ; abandon →
+  branche retirée après la corbeille. Seules les variantes dont l'appareil a les documents sont
+  projetées, et l'export le dit. Test : reconstruire la projection depuis zéro → mêmes identifiants
+  de commits sur deux appareils qui ont les mêmes variantes.
+
+**Rôles et confiance.** Créer une variante = écrire : **personnes qui écrivent** (et admins) ; chaque
+fourche consomme un emplacement de l'auteur (borne `Q = 32 + 32 × octrois`, protocole §4.10) : une
+variante qui touche n fichiers coûte 1 + n emplacements → borne serrée, à relever par octroi ou par
+une annonce **par variante** plutôt que par fichier (question au protocole, PD-6 éventuel). Écrire
+dans une variante : toute personne qui écrit (même couverture que l'original). Lecteurs : lisent les
+variantes, n'en créent pas. Intégrer dans l'original : qui peut écrire **l'original** (zones
+verrouillées respectées, HI-6) ; sinon « Proposer d'intégrer ». Abandonner : l'auteur, ou un admin.
+
+**Impact sur le protocole.** Identité et synchronisation : **aucun** changement (fourches = documents
+annoncés, `request` existant, rien dans les messages de synchronisation). Delta proposé : **PD-5**
+(présence `variant`). À vérifier par la boucle du protocole : une `listing_op` `variant` sur le
+document d'index (`sort 3 node` réservé, ADR 0023) ; budget d'emplacements par variante (PD-6).
+
+**Tests.** Modèle : deux personnes dans V et W, une dans l'original, modifications entrelacées → aucun
+octet de V dans W ni l'original sans « Intégrer » ; convergence de V entre ses deux auteurs ; amorçage
+(octets échangés ≈ modifications propres à V, banc P-VAR) ; présence sur fichier non fourché ;
+projection Git (branches, fusion d'intégration).
 
 ### 6.12 Polices (N43)
 
@@ -1602,7 +1742,9 @@ sur l'appareil de développement, 432 fichiers de polices, 128 familles) :
   `<include>` (XML borné : 1 Mio par fichier, profondeur 8, 64 inclusions) ; sous Flatpak,
   `/run/host/fonts`. macOS : `/System/Library/Fonts`, `/Library/Fonts`, `~/Library/Fonts` et les
   dossiers des URL rendues par CoreText (`CTFontManagerCopyAvailableFontURLs`, polices
-  téléchargeables du système). Windows : `SHGetKnownFolderPath(FOLDERID_Fonts)`,
+  téléchargeables du système), et, comme typst (`typst-kit` `load_adobe_fonts`), les polices Adobe
+  (`<données>/Adobe/CoreSync/plugins/livetype/.r`, `<données>/Adobe/.User Owned Fonts` ; sous Windows,
+  les mêmes sans le point). Windows : `SHGetKnownFolderPath(FOLDERID_Fonts)`,
   `%LOCALAPPDATA%\Microsoft\Windows\Fonts` et les dossiers des valeurs de
   `HKCU\Software\Microsoft\Windows NT\CurrentVersion\Fonts` (API du registre). Ces dossiers sont
   ouverts **en lecture seule** aux sidecars (Landlock ; Seatbelt `file-read*` ; AppContainer :
@@ -1617,9 +1759,10 @@ sur l'appareil de développement, 432 fichiers de polices, 128 familles) :
   chaque montée de version. L'index sert au gestionnaire (FT-14) et à la vue réduite (FT-6) ; il ne
   décide jamais du rendu : c'est typst qui résout.
 - **FT-6 Coût par compilation** (N38, budget **PF-11**) : la découverte des dossiers de FT-2 est
-  payée à chaque `typst compile` ; budget ≤ 50 ms p95 avec 1 000 fichiers de polices sur la machine
-  de référence (P-FONT). Au-delà, repli nommé : **vue réduite**, un dossier de session qui contient
-  des liens vers les seuls fichiers du système des familles **utilisées** par le projet (FT-8) ou
+  payée à chaque `typst compile`, ≈ 0,14 ms par fichier (mesuré par la revue Fable du tour 8 :
+  1 000 fichiers ≈ 140 ms) : la liste complète ne tient pas le budget. La **vue réduite est donc la
+  règle** ; la liste complète, l'exception (gestionnaire, index FT-5 en arrière-plan). Vue réduite :
+  un dossier de session qui contient des liens vers les seuls fichiers du système des familles **utilisées** par le projet (FT-8) ou
   **nommées** par ses documents (avertissements `unknown font family` de la vue), recalculé quand
   une famille nouvelle apparaît ; liens symboliques sous Linux et macOS ; sous Windows, liens
   physiques sur le même volume, sinon les dossiers entiers. tinymist, résident, ne paie la découverte
@@ -1701,6 +1844,124 @@ dépend hors de lui. La découverte passe par **la résolution de typst et de ti
   **image propre** (aucune police installée, réseau coupé ; autre architecture si disponible) →
   compilation → **SHA-256 du PDF identique** à celui de la machine source (`--creation-timestamp`,
   `SOURCE_DATE_EPOCH` fixés). Témoin négatif : sans l'étape, RA-2 détecte la police manquante.
+
+### 6.14 Commentaires (N47)
+
+*[cible ; `AD-106` ; delta proposé **PD-7** ; porte **P-COMMENT**]* Les commentaires se voient dans
+l'interface d'écriture, jamais dans le rendu ni le PDF ; ils sont rangés avec le projet ; ils
+doivent être pratiques et rapides.
+
+**Où ils vivent : comparaison.**
+
+| Option | Pour | Contre | Verdict |
+|---|---|---|---|
+| (A) dans le document du fichier (`meta.comments`, état actuel de la spec, ADR 0022) | ancres dans le même document ; aucun document nouveau | chaque réponse grossit l'histoire du texte et se charge avec lui (paliers d'ADR 0028) ; un lecteur ne peut pas écrire ce document sans rendre le texte inscriptible pour lui | écarté |
+| (B) base de données du projet (SQLite synchronisée) | requêtes faciles | **seconde vérité** (INV-3) : il faudrait sa propre synchronisation, sa fusion, ses signatures, sa garde byzantine, son ménage — tout ce qu'Automerge et le protocole donnent déjà | écarté comme vérité ; **retenu comme index dérivé local** |
+| (C) **un document Automerge de commentaires par fichier**, frère du document du texte | même vérité, même synchronisation, signatures d'auteur existantes (§4.7 du protocole) ; chargé **à la demande** ; une règle d'admission propre (lecteurs, schéma) ; un curseur Automerge est l'identifiant d'un élément du texte, valable aussi quand il est rangé dans un autre document | un type de document nouveau (PD-7) | **retenu** |
+
+La « base de données attachée au projet » de la demande est tenue ainsi : la vérité est dans les
+documents de commentaires (synchronisés, signés) ; la **base locale** (l'index SQLite de N33, §15.18)
+en est une **projection** reconstructible, pour chercher et lister vite.
+
+- **CM-1 Modèle.** Document `comments` d'un fichier : `threads: {id → fil}` ; fil =
+  `{id (128 bits aléatoires), ancre, auteur, créé, état: ouvert | résolu (par, quand), messages:
+  [{id, auteur, corps, créé, modifié?, supprimé?}], mentions: [clé de membre], réactions:
+  {emoji → [clé]}}`. Corps : texte simple, mentions, Markdown minimal (gras, italique, code, lien),
+  ≤ 4 Kio, rendu sans HTML. Réactions : 8 emojis fixes, une entrée par personne (une map, coût
+  négligeable). Modifier ou supprimer son message : « message supprimé » (l'histoire Automerge le
+  garde, et l'interface le dit).
+- **CM-2 Ancres.** Texte : curseurs Automerge de début et de fin dans le document du texte, plus un
+  **extrait** (≤ 280 caractères) gardé à la création. Les ancres suivent toutes les modifications.
+  Passage entièrement supprimé (début ≥ fin, ou éléments supprimés) → fil **orphelin** : listé
+  « Passage supprimé » avec son extrait, « Ré-ancrer » (choisir un nouveau passage). CSV : la cellule
+  est un passage du texte CSV (curseurs de début et de fin) avec le nom de la colonne ; une ligne
+  déplacée par un tri devient orpheline, avec l'extrait « ligne Dupont, colonne Prix ». Fichier
+  entier ou image : ancre « fichier ». Version nommée : ancre « version » (sert à N48).
+- **CM-3 Typst et Markdown** : les ancres portent sur la source ; l'aperçu peut montrer une marque
+  en marge par la table de SY-3, jamais dans le rendu exporté.
+- **CM-4 Variantes (N46).** Le document de commentaires d'un fichier se fourche **avec** lui (copie à
+  l'écriture) : les fils créés dans V restent dans V ; ceux de l'original jusqu'au départ s'y voient.
+  « Intégrer » propose, case **non cochée**, de recopier dans l'original les fils **ouverts** dont
+  l'ancre survit, écrits par la personne qui intègre avec la mention « fil de Paul dans la variante
+  X » et un lien ; l'auteur d'origine reste signé dans V.
+- **CM-5 Droits.** Commentent : admins et personnes qui écrivent ; **lecteurs** aussi (conception
+  p. 11–12, `AD-14`) dès que PD-7 est accepté, sinon le dit. Réglage d'admin « Les lecteurs peuvent
+  commenter » (activé par défaut). Les zones verrouillées (ADR 0022) ne bloquent pas un commentaire.
+  Résoudre ou rouvrir : l'auteur du fil et quiconque écrit. Document purgé → ses commentaires aussi.
+- **CM-6 Pair byzantin.** Chaque modification est **signée par son auteur** (§4.7 du protocole) ; la
+  **garde** du document `comments` (PD-7) n'admet que : créer un fil ou un message dont le champ
+  `auteur` est la clé qui signe ; modifier ou supprimer **seulement** ses objets ; changer `état`
+  si l'on est auteur du fil ou si l'on écrit ; ses propres réactions. Le nom affiché vient de la liste
+  signée. **Bornes** : ≤ 4 Kio par message, ≤ 16 mentions par message, ≤ 2 000 objets vivants par
+  auteur et par document, document ≤ 16 Mio, le tout dans le quota N10 de l'auteur ; au-delà, refus
+  par la garde. Côté personne : « Masquer les commentaires de X » ; côté admin : retirer le membre.
+- **CM-7 Rapidité** (N38, **PF-15**) : le document de commentaires se charge **après** le texte,
+  sans retarder le premier affichage ; marques de marge pour la seule zone visible ; l'**index
+  dérivé** (SQLite de N33 : `fils(fichier, variante, état, auteur, mentions, mis à jour, extrait)` +
+  FTS sur les corps), tenu à jour par les correctifs Automerge, sert « Mes commentaires ouverts »,
+  « Me mentionnent » et la recherche sans charger les documents. Budgets : fichier de 1 000 fils →
+  marques ≤ 4 ms par image ; document de commentaires de 1 Mio chargé ≤ 100 ms ; mise à jour de
+  l'index ≤ 5 ms par modification ; liste de 10 000 fils ≤ 50 ms.
+- **CM-8 Export.** PDF : **jamais** de commentaire (ils ne sont pas dans la source Typst). Export en
+  un fichier (EN-6, §6.13) : documents de commentaires inclus par défaut, case « Sans les
+  commentaires » ; « Exporter les commentaires » en rapport Markdown ou CSV (fichier, ligne, extrait,
+  auteur, état, messages). Projection Git (HI-5) : non projetés (une seule vérité ; le rapport sert à
+  qui en veut une trace).
+- **CM-9 Notifications**, sans serveur : à la réception, l'appareil calcule ce qui **me** concerne
+  (mention de moi, réponse dans un fil que j'ai ouvert ou où j'ai écrit, résolution de mon fil) →
+  liste « Activité » (non-lus locaux) et, si la personne l'accepte, notification du système par API
+  (portail `org.freedesktop.portal.Notification`, `UNUserNotificationCenter`, notifications toast de
+  Windows ; INV-14), regroupées, seulement quand l'application tourne ; rien par courriel.
+- **CM-10 Tests** : propriétés des ancres (modifications aléatoires → ancre suivie, ou orpheline si
+  et seulement si le passage a disparu) ; garde : modification d'un objet d'autrui, auteur usurpé,
+  dépassement de borne → refus ; index reconstruit = index incrémental ; e2e : lecteur qui commente
+  (après PD-7), variante, export sans commentaires.
+
+### 6.15 Validation d'une version (N48)
+
+*[cible ; `AD-107` ; deltas proposés **PD-8**, **PD-9**]* Une version nommée peut être **soumise** à
+une personne, qui la **valide** ou la **refuse**, avec une note facultative.
+
+- **VD-1 Objet validé.** `VersionId = BLAKE3("inkwell-ext:version:1\0" ‖ manifeste canonique)` : têtes
+  de l'index et de chaque fichier (DocId et têtes), empreintes des blobs, fichier principal, variante
+  (HI-3, VA-5). Toute modification ultérieure fait une autre version, donc **une nouvelle soumission**.
+- **VD-2 Opérations signées** (PD-8, Ed25519, liste des membres) : `submit {VersionId, assignee: clé de
+  membre, note?}` par une personne qui écrit ; `decide {submit, verdict: approve | reject, note?}`
+  par **la personne désignée** seulement ; `withdraw {submit}` par l'auteur de la soumission, avant
+  toute décision. Graphe ajout seul (`prev` par auteur, comme les annonces), bornes : note ≤ 4 Kio,
+  ≤ 64 soumissions ouvertes par auteur. Validité **causale** : le signataire est membre, du bon rôle,
+  au point causal de l'op (pli de la liste, protocole §4.9) ; deux décisions contraires du même
+  signataire sur la même soumission = **équivoque** (preuve existante, protocole §4.8) → état
+  « contesté », les deux montrées.
+- **VD-3 États** : `soumise` → `validée` | `refusée` | `retirée` ; une décision est définitive pour
+  cette `VersionId` ; après un refus, on corrige et on soumet une nouvelle version.
+- **VD-4 Qui valide.** Pas de rôle nouveau dans la liste des membres : la **personne désignée** par
+  la demande (tout membre, lecteur compris : un manager n'écrit pas forcément). En option, une
+  **politique d'admin** `review/policy` (PD-9, espace de décisions comme PD-1) : liste des personnes
+  qui peuvent valider, et « Intégrer dans l'original exige une version validée ».
+- **VD-5 Variantes.** Avec cette politique, « Intégrer » depuis une variante exige que le point
+  d'intégration soit une version **validée** par une personne de la liste. C'est une **garde de
+  l'application** (clients honnêtes) et un **contrôle vérifiable après coup** : l'intégration étant
+  faite de modifications ordinaires (HI-6), la garde d'admission ne peut pas l'imposer ; l'audit
+  marque « intégrée sans validation » toute intégration dont la source n'est pas une version validée.
+- **VD-6 Trace.** L'historique (HI-1) montre soumissions et décisions sur la ligne du temps ; la
+  projection Git (HI-5) les écrit en **étiquettes annotées** déterministes
+  `validations/<version>-<n>` (auteur = signataire, corps = op et signature en base64) ; l'export du
+  projet les inclut. Les commentaires d'une demande s'ancrent sur la version (CM-2).
+- **VD-7 Notifications** (comme CM-9) : soumission → la personne désignée ; décision → l'auteur de la
+  soumission ; rappel local après 7 jours sans décision.
+- **VD-8 Ce que cela prouve, ce que cela ne prouve pas** (à faire relire par un juriste) : prouve que
+  la clé d'un appareil inscrit comme membre X a signé « valider (ou refuser) exactement le contenu
+  `VersionId` », et l'ordre causal par rapport à l'histoire ; le contenu se reconstruit tant qu'il
+  n'est pas purgé. Ne prouve **pas** : l'identité de l'humain derrière l'appareil (appareil partagé ou
+  compromis) ; une **signature électronique qualifiée** (au mieux une signature électronique simple,
+  eIDAS, règlement (UE) n° 910/2014 modifié par 2024/1183, art. 3(10) ; recevable en justice,
+  art. 25(1), sans la présomption de la signature qualifiée, art. 25(2)) ; l'**heure** (déclarée,
+  sans horodatage qualifié, art. 41) ; l'intégrité d'un PDF exporté à part (il n'est pas signé ; un
+  PDF signé PAdES relève d'un greffon) ; le consentement ni la portée juridique de la validation.
+- **VD-9 Tests** : vecteurs PD-8 (décision par un non-désigné → refusée ; retrait après décision →
+  refusé ; équivoque → contestée ; version modifiée → la décision ne la couvre pas) ; e2e soumettre,
+  refuser, corriger, resoumettre, valider, intégrer.
 
 ## 7. Pont Go ↔ webview
 
@@ -1960,7 +2221,9 @@ R1 (auto-équivoque, ADR 0031) ; R7 (admins en place de confiance) ; projets non
 gestion des membres par un ancien admin compromis (ADR 0017) ; risque de dépendance
 compromise après revue. ; **hibernation hors des mécanismes connus** (OV-1 (b′)) : un outil installé et
 configuré avec les droits d'administration, qui contourne `logind` et écrit une image brute vers
-une partition en clair pendant une cérémonie, n'est pas détectable depuis l'application (il suppose
+une partition en clair pendant une cérémonie, **ou un mécanisme connu configuré hors de ses
+fichiers standard** (`s2disk -f <autre.conf>`, `/sys/power/resume` réécrit par la racine après la
+vérification), n'est pas détectable depuis l'application (il suppose
 la maîtrise de l'administration de l'appareil, hors du modèle du Voleur ; D-17) ; rendu différent
 chez un pair quand un document utilise une police locale non ajoutée au projet (FT-9 l'avertit).
 
@@ -2283,10 +2546,16 @@ référence sur le matériel de CI (amd64 et arm64), puis tenues.
   l'index, go-git contre écrivain minimal, mode de compilation de wazero ; chaque choix a son banc
   comparatif dans `docs/plans/`.
 - **PF-11** Polices (N43) : découverte des polices par compilation ≤ 50 ms p95 avec 1 000 fichiers
-  de polices (mesuré aujourd'hui : ≈ 80 ms pour 432 fichiers, d'où la vue réduite de FT-6) ; index
+  de polices sur l'ordinateur, **par la vue réduite** (FT-6, voie normale) ou par le sidecar résident
+  de SY-1 (ii) (découverte payée une fois) : P-FONT et P-SYNC se décident **ensemble** ; index
   (FT-5) jamais sur le chemin du démarrage ; lanceur DG-2 ≤ 5 ms.
 - **PF-12** Synchronisation texte ↔ aperçu (N44) : aucune compilation ni appel à Go par
   défilement ; ≤ 1 ms par image pour 10 000 lignes ; saut au clic ≤ 50 ms p95 (SY-7).
+- **PF-15** Commentaires (N47) : chargés après le texte ; marques ≤ 4 ms par image pour 1 000 fils ;
+  index dérivé ≤ 5 ms par modification ; liste de 10 000 fils ≤ 50 ms (CM-7).
+- **PF-14** Variantes (N46) : métadonnées ≤ 4 Kio par variante ; rejoindre une variante de 1 Mio de
+  modifications propres → premier fichier visible ≤ 1 s sur le profil WAN de référence ; octets
+  échangés ≈ modifications propres ; préchargement ≤ 10 % du débit, jamais pendant la frappe.
 - **PF-13** Présence et suivi (N45) : ≤ 10 émissions par seconde et par document ; ≤ 0,5 ms par
   message reçu ; vue du suiveur ≤ 10 déplacements par seconde (RV-5).
 
@@ -2355,14 +2624,15 @@ chaque composant nécessaire a une garantie de présence **et** un test qui la p
 | Bibliothèques liées par cgo | Linux, macOS | seules permises : GTK 4, WebKitGTK 6.0 et leurs dépendances, libc (Linux) ; cadres du système (macOS) ; Windows : pas de cgo (Wails v3, chargeur WebView2 en Go, *à vérifier*) | contrôle de construction : `DT_NEEDED` (`debug/elf`) et `LC_LOAD_DYLIB` (`debug/macho`) comparés à une liste permise |
 | `typst`, `tinymist` | toutes | sidecars embarqués, revérifiés (SHA-256, ADR 0024) ; Linux : binaires **musl statiques** | AC-19 ; tests de `internal/sidecar` |
 | `inkwell-sandbox` | toutes | Go statique (`CGO_ENABLED=0`), embarqué, revérifié | AC-18, AC-19 |
-| Runtime **WebView2** (Evergreen) | Windows | préinstallé sur Windows 11 et diffusé par Microsoft sur Windows 10 ; s'il manque, l'installateur exécute **à l'installation** le **programme d'installation autonome Evergreen** qu'il embarque (hors ligne, signé par Microsoft). Aujourd'hui l'amorce de Wails le **télécharge** (`build/windows/nsis/wails_tools.nsh`, `MicrosoftEdgeWebview2Setup.exe`) : à remplacer (§16). Version fixe écartée : inkwell devrait livrer lui-même les correctifs de sécurité de Chromium | image Windows sans WebView2 : installation hors ligne, puis fumée ; DG-1 |
+| Runtime **WebView2** (Evergreen) | Windows | préinstallé sur Windows 11 et diffusé par Microsoft sur Windows 10 ; s'il manque, l'installateur exécute **à l'installation** le **programme d'installation autonome Evergreen** qu'il embarque (hors ligne, signé par Microsoft) — **un installateur par architecture** (x64, ARM64), chacun avec l'autonome de son architecture (≈ 150–200 Mio) ; le contrôle DG-1 est commun. Aujourd'hui l'amorce de Wails le **télécharge** (`build/windows/nsis/wails_tools.nsh`, `MicrosoftEdgeWebview2Setup.exe`) : à remplacer (§16). Version fixe écartée : inkwell devrait livrer lui-même les correctifs de sécurité de Chromium | image Windows sans WebView2 : installation hors ligne, puis fumée ; DG-1 |
 | WKWebView, Security, IOKit, DiskArbitration, CoreText | macOS | cadres du système ; **macOS 12 minimum** (`LSMinimumSystemVersion` 12.0.0, `build/darwin/Info.plist`), plancher que Go impose aussi ; en dessous, macOS refuse l'ouverture avec son propre message | fumée sur macOS amd64 et arm64 |
 | Version du système | Windows | Windows 10 (22H2) ou 11 ; plancher de Go ; WebView2 n'existe plus pour 7 et 8 | fumée Windows amd64 et arm64 |
 | Polices pour Typst | toutes | Inter et polices de `typst-assets` embarquées (FT-1) ; celles du projet dans le projet (§6.12) | RA-T1 (machine sans aucune police) |
 | Paquets Typst | toutes | fournis ou dans `.typstdeps/` (ADR 0024, §6.13) | RA-T1 ; NG6 réseau coupé |
 | Trousseau | Linux | Secret Service par D-Bus (`godbus`, sans `libsecret`) : **non garanti** (aucun démon sur un bureau minimal) ; détecté ; absent → VK-1 propose le mot de passe ou le disque chiffré vérifié | test : session D-Bus sans `org.freedesktop.secrets` |
 | Trousseau | macOS, Windows | Security.framework ; Credential Manager : parties du système | e2e |
-| Bus de session, portails XDG, `logind` | Linux | **facultatifs** : absents → repli dit (« Copier le chemin » au lieu d'« Afficher dans le dossier » ; pas de verrou d'inhibition, OV-1) | test sans bus de session |
+| `bubblewrap` (`bwrap`), `xdg-dbus-proxy`, processus auxiliaires de WebKitGTK (`WebKitWebProcess`, `WebKitNetworkProcess`, `WebKitGPUProcess`) | Linux | dépendances **obligatoires** du paquet WebKitGTK 6.0 (chemins fixes `/usr/bin/bwrap`, `/usr/bin/xdg-dbus-proxy` dans la bibliothèque) ; l'API GTK 4 de WebKitGTK garde son bac à sable **toujours actif** (*à vérifier* sous Wails v3, P-DEPS) : `bwrap` est donc une dépendance de la webview elle-même ; `tar.gz` : le lanceur DG-2 les cherche ; lancés par la bibliothèque, jamais par notre code (INV-14) | e2e d'AC-19 (présents) ; P-DEPS |
+| Bus de session, portails XDG, `logind` | Linux | **facultatifs** pour l'usage : absents → repli dit (« Copier le chemin » au lieu d'« Afficher dans le dossier ») ; **`logind` exigé** pour une cérémonie de la phrase quand l'hibernation est possible (OV-1 (b′)) : sinon cérémonie refusée | test sans bus de session |
 | Intégration au bureau (« Afficher dans le dossier », ouvrir le PDF, imprimer) | toutes | API, jamais `xdg-open`, `open` ni `start` : Linux, portail `org.freedesktop.portal.OpenURI` ou `org.freedesktop.FileManager1` (D-Bus) ; macOS, `NSWorkspace` ; Windows, `ShellExecuteExW` et `SHOpenFolderAndSelectItems` | AC-18 |
 
 - **DG-1 Contrôle au démarrage** : avant la première fenêtre, l'application vérifie ses composants
@@ -2377,9 +2647,9 @@ chaque composant nécessaire a une garantie de présence **et** un test qui la p
   dossiers standard (lecture bornée) pour trouver `libgtk-4.so.1` et `libwebkitgtk-6.0.so.4`, lit la
   version de la glibc dans les définitions de versions de `libc.so.6` (`debug/elf`), puis
   `unix.Exec` de l'exécutable d'inkwell (`/usr/lib/inkwell/inkwell`). Un manque → message en mots
-  simples nommant les paquets à installer pour la distribution détectée (`/etc/os-release`), par une
-  notification (`org.freedesktop.Notifications`, D-Bus) quand un bus existe, sur la sortie d'erreur,
-  et dans `$XDG_STATE_HOME/inkwell/demarrage.txt`. Coût ≤ 5 ms, mesuré (PM-1).
+  simples nommant les paquets à installer pour la distribution détectée (`/etc/os-release`), sur la
+  sortie d'erreur et dans `$XDG_STATE_HOME/inkwell/demarrage.txt` (pas de D-Bus : le lanceur
+  n'importe que la bibliothèque standard et `x/sys`) ; il cherche aussi `bwrap` et `xdg-dbus-proxy`. Coût ≤ 5 ms, mesuré (PM-1).
 - **DG-3 Matrice minimale** : Linux amd64 et arm64 : **Ubuntu 24.04 LTS, Debian 13, Fedora** (deux
   dernières versions) ; candidates mesurées avant d'être promises : Debian 12 (WebKitGTK 6.0 présent,
   GTK 4.8 : symboles exigés par Wails à vérifier ; glibc 2.36, donc construction dans une image
@@ -3208,10 +3478,16 @@ passage de mise en page à chaque compilation) appariées au texte par leurs mot
   "inkwell-"`) dont la position est lue avec les ancres → titres **exacts** ; les paragraphes entre
   deux titres par appariement du texte. L'export HTML (Typst ≥ 0.15), s'il est montré, porte
   `data-source-line` sur chaque bloc.
-- **SY-3 Table de correspondance** : liste triée `(ligne source, page, y)` construite **une fois par
-  compilation** (pour (i) et (ii), une requête groupée sur les débuts de blocs), jamais par
-  défilement. Défilement : ligne en haut de la vue → recherche dichotomique → interpolation entre les
-  deux paires voisines → position cible ; et l'inverse. Coût O(log n) par image, aucun appel à Go.
+- **SY-3 Table de correspondance**, construite **une fois par compilation** (pour (i) et (ii), une
+  requête groupée sur les débuts de blocs), jamais par défilement. Une entrée = `(nœud du fichier,
+  ligne, colonne, occurrence, révision ; page, x, y, colonne de mise en page)` : il n'y a **pas**
+  d'ordre global (deux fichiers ont chacun une ligne 10, deux colonnes partagent un y, un contenu
+  peut être rendu ailleurs que là où il est écrit). Deux index séparés : **source** (par fichier, trié
+  par ligne) et **rendu** (par page, trié par colonne puis y) ; ils sont découpés en **segments
+  compatibles** (même fichier, même occurrence, ordre source et ordre de rendu monotones ensemble) et
+  l'**interpolation n'a lieu qu'à l'intérieur d'un segment** ; entre segments, on se cale sur
+  l'entrée la plus proche. Défilement : recherche dichotomique dans l'index du volet meneur →
+  segment → position cible. Coût O(log n) par image, aucun appel à Go.
 - **SY-4 Clic et curseur** : clic dans l'aperçu → `jumpFromClick` (une requête) ou table → curseur et
   ligne visibles dans l'éditeur ; commande « Montrer dans l'aperçu » et, en option, « suivre le
   curseur » → marque brève sur la page. Le texte d'un autre fichier ouvre ce fichier (SY-6).
@@ -3232,8 +3508,10 @@ passage de mise en page à chaque compilation) appariées au texte par leurs mot
   compilation ni appel à Go par défilement ; ≤ 1 ms par image pour 10 000 lignes ; saut au clic ≤ 50
   ms p95 ; la construction de la table ≤ 5 % du temps de compilation (le second passage de (iii)
   est mesuré et dit).
-- **SY-8 Tests** : propriétés de la table (monotone, interpolation bornée, aller-retour ligne →
-  position → ligne stable à un bloc près) ; **modèle** de SY-5 (entrelacements aléatoires d'entrées
+- **SY-8 Tests** : propriétés de la table (monotone **par segment**, interpolation bornée à un
+  segment, aller-retour ligne → position → ligne stable à un bloc près) ; cas de P-SYNC : **texte en
+  colonnes**, **contenu réordonné** (stocké puis rendu ailleurs, figure flottante), **inclusions
+  répétées**, deux fichiers inclus ; **modèle** de SY-5 (entrelacements aléatoires d'entrées
   humaines sur les deux volets → aucun ping-pong : défilements programmés ≤ entrées humaines,
   meneur = dernière entrée) ; e2e : défiler jusqu'au titre N → l'aperçu le montre ; clic sur un
   paragraphe → bonne ligne ; fichier inclus ; fichier hors compilation.
@@ -3260,9 +3538,11 @@ pour suivre ; **l'annonce du suivi** n'existe pas.
   premier caractère visible **comme curseur Automerge** et son décalage en pixels ; après, si ce
   caractère a bougé, elle se recale dessus (effet `EditorView.scrollIntoView(pos, {y: "start",
   yMargin})`) ; s'il a été supprimé, sur le plus proche survivant. L'aperçu garde de même le bloc
-  sous son bord haut à chaque recompilation.
-- **RV-2** La synchronisation texte ↔ aperçu (SY-5) n'est déclenchée **que par une entrée humaine
-  locale** ; une modification distante ou une recompilation n'en déclenche aucune.
+  sous son bord haut à chaque recompilation. `@codemirror/view` fait déjà un ancrage de défilement
+  interne ; RV-1 le **complète** d'un ancrage sémantique (meilleur sous suppression) et ne doit pas
+  se battre contre lui : le recalage n'a lieu que si le caractère retenu a bougé.
+- **RV-2** En mode ordinaire, la synchronisation texte ↔ aperçu (SY-5) n'est déclenchée **que par une
+  entrée humaine locale** (le suivi, RV-3, est l'exception choisie par la personne) ; une modification distante ou une recompilation n'en déclenche aucune.
 - **RV-3 Suivre une personne** (menu de son avatar : « Suivre Marie ») : mon éditeur ouvre son
   **fichier actif** et garde **sa tête de sélection** visible (révélée avec une marge, sans recentrer
   à chaque frappe) ; mon aperçu suit par la table de SY-3. Toute entrée humaine locale (frappe, clic,
@@ -3468,7 +3748,8 @@ marques, panneau de discussion → MCP stdio → MCP HTTP et client ACP en optio
 
 ### 15.19 Ce que l'extensibilité demande au protocole (PD-*)
 
-Le protocole accepté (2.0.0-brouillon.10) ne contient **aucun** de ces ajouts. Ils sont proposés
+Le protocole accepté (2.0.0-brouillon.10) ne contient **aucun** de ces ajouts ; PD-4 à PD-9
+viennent des fonctions N45 à N48, pas de l'extensibilité, et suivent la même règle. Ils sont proposés
 ici pour une **mineure 2.1**, à écrire et à faire accepter par la boucle du protocole
 (`docs/protocol/`) ; cette spécification ne la modifie pas. Tout ce qui en dépend est bloqué
 d'ici là et le dit.
@@ -3511,13 +3792,59 @@ dépend pas).
    suivi, ou `""` pour « je ne suis plus personne » ; émis sur la présence du **document racine** du
    projet (chargé par chaque membre).
 2. **Jamais dans un `snapshot`.** `snapshot-state` est une map fermée : un appareil 2.0 jetterait le
-   `snapshot` entier (nom et curseur compris). `follow` voyage donc seulement en `update` ; un
-   appareil 2.0 jette ce seul message (classe à perte, sans sanction : protocole, tableau des refus,
-   « map CBOR fermée (présence) → message jeté ») et garde le reste.
-3. **Rythme** : au plus 1 `follow` par seconde et par pair ; un `follow` vers un pair absent est
-   ignoré ; le dernier gagne par `sessionId`.
-4. **Vecteurs** : `repo.json#presence-follow`, `#presence-follow-stop`, `#presence-follow-in-snapshot`
-   (refusé), `#presence-follow-old-peer` (jeté seul).
+   `snapshot` entier (nom et curseur compris). `follow` voyage donc seulement en `update`. Règle 2.0
+   exacte : `update` est une map **ouverte** (`repo.cddl:80`), mais la **valeur** de `channel` hors de
+   `channel-pair` (`:83–84`) rend le message invalide au CDDL → classe à perte, jeté seul, sans
+   sanction ; à épingler par un vecteur **côté 2.0** `#presence-update-unknown-channel`.
+3. **Rythme et durée de vie** : émis au début du suivi, **renouvelé** à chaque battement (15 s)
+   tant qu'il dure et **réémis à la reconnexion** ; il **expire** 45 s après le dernier renouvellement
+   (un arrêt perdu n'est donc qu'un œil périmé ≤ 45 s) ; `""` à l'arrêt ; au plus 1 `follow` par
+   seconde et par pair ; un `follow` vers un pair absent est ignoré ; le dernier gagne par
+   `sessionId`.
+4. **Vecteurs** (tous à écrire : `docs/protocol/vectors/` ne contient qu'un `README.md`) :
+   `repo.json#presence-follow`, `#presence-follow-stop`, `#presence-follow-in-snapshot` (refusé),
+   `#presence-follow-old-peer` (jeté seul), `#presence-update-unknown-channel` (2.0),
+   `#presence-follow-expiry`, `#presence-follow-reconnect`.
+
+**PD-5 — Variante dans la présence** (N46 ; même mineure que PD-4).
+
+1. **Champ.** Canal de présence nouveau `variant`, en `update` seulement (mêmes raisons et même
+   règle 2.0 que PD-4) : `value` = `VariantId` (le `DocId` bs58check de la fourche de l'index,
+   ≤ 64 caractères) ou `""` pour l'original.
+2. **Pourquoi.** Sur un fichier **fourché**, la présence est déjà propre à la variante (son
+   `documentId`). Sur un fichier **non fourché** lu dans une variante, l'en-tête porte le document
+   d'origine : sans ce champ, un curseur de la variante se mêlerait à ceux de l'original. Sans PD-5,
+   aucune présence n'est émise sur un tel fichier (limite écrite au §6.11).
+3. **Durée de vie** : comme `follow` (émis au changement de variante, renouvelé au battement, réémis
+   à la reconnexion, expire après 45 s).
+4. **Vecteurs** : `repo.json#presence-variant`, `#presence-variant-original`,
+   `#presence-variant-old-peer` (jeté seul).
+
+**PD-6 — Budget d'emplacements par variante** (N46 ; *à décider par la boucle du protocole*). Une
+variante de projet coûte aujourd'hui 1 + n emplacements de son auteur (fourche de l'index + une
+`listing_op` par fichier fourché ; `Q = 32 + 32 × octrois`, protocole §4.10) : quelques variantes
+touchant beaucoup de fichiers épuisent la borne. Options : (a) relever `Q` par octroi (aucun
+changement de format) ; (b) une fourche de fichier **dans** une variante déjà annoncée ne consomme
+pas d'emplacement, bornée par variante (≤ 1 024 fichiers fourchés) — règle d'admission nouvelle à
+revoir sous le modèle byzantin (amendement de l'ADR 0031). Recommandation : (a) en v1, (b) proposé.
+Question liée : une `listing_op` `variant` sur le document d'index (la racine, ADR 0023) est-elle
+admise telle quelle ? à confirmer par la boucle.
+
+**PD-7 — Document de commentaires** (N47). Un type de document **dérivé** du document d'un
+fichier : `DocId = BLAKE3("inkwell/doc/v1" ‖ ProjectID ‖ "comments" ‖ DocId du texte)[:16]`, admis
+avec lui (aucun emplacement d'annonce consommé), purgé avec lui ; couverture : admins, personnes
+qui écrivent **et lecteurs** ; garde de schéma CM-6 (auteur = clé qui signe, objets propres, bornes).
+Vecteurs : `repo.json#comments-*` (lecteur admis, objet d'autrui refusé, auteur usurpé refusé, borne).
+
+**PD-8 — Opérations de validation** (N48). Classe nouvelle `review_op_v1 {version u8 = 1 ; kind u8 1
+submit | 2 decide | 3 withdraw ; author [32] ; position u32 ; nprev ; prev [32] ; target [32]
+(VersionId pour submit, empreinte de la soumission sinon) ; assignee [32] (submit) ; verdict u8
+(decide) ; note ≤ 4096 ; members [32] × n et decisions [32] × n (frontières vues) ; sig [64] domaine
+« review-op »}`, ≤ 8192 octets ; règles de VD-2 ; équivoque par la preuve existante. Vecteurs :
+`review.json#*`.
+
+**PD-9 — Espace de décisions `review/`** (N48, comme PD-1) : `review/policy {v:1, approvers:[clé],
+integrate_requires_approval: bool}`.
 
 **PD-2 — retiré.** Les signatures des paquets de greffons, des têtes de sauvegarde et des exports
 ne sont **pas** des objets du protocole : elles utilisent des préfixes **externes**
@@ -3656,12 +3983,14 @@ proposition de bout en bout → Graphviz jusqu'au PDF → reste.
 | versions dans `meta.versions` du document racine seulement, aucune vue « voyager dans le temps », aucune projection Git (N39) | §6.11 | `AD-13`, `AD-92` |
 | `MaxOutput` de `typst` : sous Linux il dimensionne la borne noyau (tmpfs, `RLIMIT_FSIZE`, parts Landlock) et la vérification finale est une seconde admission ; ailleurs ce n'est qu'une vérification *a posteriori* (`engine.go:658`, `:706`) et le lancement borné est refusé | §9.5 | P-SANDBOX |
 | variantes de document présentes (`history/graph.ts`) ; « intégrer » fait aujourd'hui `A.merge` (`versions.ts:234–271`), alors que la cible est une différence appliquée (HI-6) ; vocabulaire « fusion » dans l'interface (N41) | §6.11 HI-6 | `AD-96` |
-| lecteurs : la conception permet leurs commentaires, la couverture (ADR 0018) les refuse | mécanisme dédié | `AD-14` |
+| lecteurs : la conception permet leurs commentaires, la couverture (ADR 0018) les refuse | document de commentaires dérivé, PD-7 (§6.14) | `AD-14`, `AD-106` |
+| aucun commentaire implémenté ; aucune validation de version (N47, N48) | §6.14, §6.15 ; PD-7 à PD-9 | `AD-106`, `AD-107` |
 | programmes externes lancés à l'exécution (N42) : `/bin/sh -c 'ulimit …; exec …'` (`internal/sidecar/limit_linux.go`), `/bin/sh` comme sonde d'isolation (`netns_linux.go`), `/usr/bin/setpriv --landlock-access`, `/usr/bin/prlimit`, `/bin/true` (`dir_linux.go`), `/usr/bin/unshare`, `/bin/sh`, `/usr/bin/mount`, `setpriv`, `prlimit` (`mount_linux.go`) | `inkwell-sandbox exec` et appels système (§9.5) | `AD-99` |
 | `tar` lancé par `internal/sidecar/fetch/fetch.go` | reste un outil de **construction** (jamais lié au produit, AC-6) ; extraction par `archive/tar` + décompression xz en Go si l'outil manque sur un hôte de construction | `AD-99` |
 | installateur Windows : l'amorce WebView2 **télécharge** le runtime (`build/windows/nsis/wails_tools.nsh`) | programme d'installation autonome Evergreen embarqué (§14.1) | `AD-99` |
 | aucune garantie écrite des bibliothèques (GTK 4, WebKitGTK 6.0, glibc), aucun contrôle au démarrage, `/usr/bin/inkwell` lié dynamiquement | §14.1 (DG-1 à DG-5), `cmd/inkwell-launch` | `AD-99` |
 | manifeste des sidecars sans cible Windows (`internal/sidecar/manifest.json` : Linux et macOS seulement) | six cibles (N35) | `AD-94` |
+| variantes par document seulement (ADR 0031, `history/graph.ts`) ; aucune variante du projet, aucune variante courante locale, aucune version par variante (N46) | §6.11 « Variantes isolées » ; PD-5, PD-6 | `AD-105` |
 | présence : curseur et nom seulement ; aucun mode « suivre », aucune annonce du suivi ; ancrage de la vue sous les modifications distantes non spécifié ni testé (N45) | §15.17 RV-1 à RV-8 ; PD-4 | `AD-104` |
 | saut au clic seulement, au paragraphe près, par `typst eval` (second passage de mise en page, `anchors.go`) ; aucun défilement suivi (N44) | §15.17 SY-1 à SY-8 | `AD-103` |
 | polices : `--ignore-system-fonts` (`engine.go:463`), polices de l'ordinateur inaccessibles ; polices de `typst-assets` avant celles du projet ; aucun gestionnaire de polices (N43) | §6.12, §6.13 | `AD-100`, `AD-101` |

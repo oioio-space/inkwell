@@ -1,5 +1,47 @@
 # Changements de l'architecture
 
+## 1.0.0-brouillon.11 — révision 8.2, delta de confirmation (2026-11-02)
+
+**Révision 8.1 acceptée** au tour 8 : [Fable](reviews/15-fable-r8.md) **ACCEPT** (1 majeur de
+texte, 7 mineurs) ; [Codex](reviews/16-codex-r8.md) **ACCEPT** (1 majeur avant P-SYNC, 3 mineurs).
+La révision 8.2 applique ces constats et trois exigences nouvelles (N46, N47, N48) ; elle est à
+confirmer par les deux revues. Exigence N18 : acceptée en révision 8.1. Aucune modification de
+`docs/protocol/` ni de `docs/design/`.
+
+### Revues du tour 8
+
+| Constat | Changement |
+|---|---|
+| Fable R8-M1 INV-14 et l'e2e d'AC-19 ignorent les processus auxiliaires de WebKitGTK | INV-14 : exception « processus auxiliaires des bibliothèques garanties » (`WebKitWebProcess`, `WebKitNetworkProcess`, `WebKitGPUProcess`, `bwrap`, `xdg-dbus-proxy` ; processus de WebView2), lancés par la bibliothèque ; AC-19 : liste exacte des programmes absents, le reste présent ; §14.1 : ligne `bubblewrap`/`xdg-dbus-proxy` (bac à sable toujours actif dans l'API GTK 4, à vérifier sous Wails) ; DG-2 les cherche |
+| Fable R8-m1 phrase du noyau ; résiduel | OV-1 : `0:0` → premier swap actif ; périphérique qui n'est pas un swap actif → échec (`kernel/power/swap.c`) ; §9.9 : mécanisme connu configuré hors de ses fichiers standard |
+| Fable R8-m2 PF-11 intenable par la liste complète | FT-6 : **vue réduite = règle**, liste complète = exception ; PF-11 lié à la vue réduite ou au sidecar résident de SY-1 (ii) ; P-FONT et P-SYNC décidés ensemble |
+| Fable R8-m3 lanceur et D-Bus | DG-2 et §4.2 : sortie d'erreur et fichier, sans D-Bus |
+| Fable R8-m4 WebView2 par architecture | §14.1 : un installateur par architecture (x64, ARM64) avec l'autonome de son architecture |
+| Fable R8-m5 règle 2.0 citée par PD-4 | PD-4 : `update` est ouverte ; c'est la valeur de `channel` hors `channel-pair` qui invalide le message ; vecteur côté 2.0 `#presence-update-unknown-channel` ; vecteurs tous à écrire |
+| Fable R8-m6 polices Adobe | FT-4 : dossiers Adobe comme `typst-kit` (`load_adobe_fonts`) |
+| Fable R8-m7 processus de rendu dédié | OV-1 : `CoreWebView2Environment` distinct (WebView2) ; `WebKitWebView` sans `related-view` (WebKitGTK) ; Wails ne lie pas les fenêtres, à vérifier |
+| Fable (note) ancrage interne de CodeMirror | RV-1 : l'ancrage sémantique complète celui de `@codemirror/view` et ne se recale que si le caractère retenu a bougé |
+| Codex R8-M1 la table de SY-3 suppose un ordre global | SY-3 : entrées `(nœud, ligne, colonne, occurrence, révision ; page, x, y, colonne)`, index source et rendu séparés, **segments compatibles**, interpolation dans un segment seulement ; SY-8 et P-SYNC : colonnes, contenu réordonné, inclusions répétées |
+| Codex R8-m1 AC-18 interdit le lancement de DG-2 | AC-18 : exception étroite `cmd/inkwell-launch` → exécutable installé d'inkwell |
+| Codex R8-m2 rafraîchissement de PD-4 | PD-4 : émis au début, renouvelé au battement, réémis à la reconnexion, expire après 45 s, `""` à l'arrêt ; vecteurs expiration et reconnexion |
+| Codex R8-m3 formulations héritées | EN-9 et `coherence.md` C03 : plus de disque en mémoire macOS ; SR-5 renvoie au périmètre D-17 ; `logind` **exigé** pour une cérémonie en branche (b′), sinon refus (OV-1, §14.1) |
+| Codex (note) RV-2 | RV-2 : mode ordinaire ; le suivi est l'exception choisie |
+
+### Exigences nouvelles
+
+| Exigence | Changement |
+|---|---|
+| N46 variantes isolées, concurrentes, partagées ; versions nommées par variante | §6.11 « Variantes isolées » : une famille de fourches par variante (index fourché = identité, métadonnées et versions ; fichiers fourchés à la première modification) ; variante courante locale ; « Intégrer » seul passage ; liste et métadonnées chez tous, contenu à la demande avec préchargement borné ; amorçage depuis la copie locale ; VA-1 à VA-10 (versions par variante, restauration, variante depuis une version, épingles et ménage, branches Git) ; rôles ; PF-14, P-VAR ; **PD-5** (présence `variant`), **PD-6** (emplacements par variante) ; HI-8 ajusté ; `AD-105` |
+| N47 commentaires | §6.14 CM-1 à CM-10 : **document de commentaires dérivé par fichier** (ni `meta.comments`, ni base synchronisée : la base demandée est l'index SQLite dérivé de N33) ; fils, réponses, résoudre, mentions, réactions fixes ; ancres par curseurs Automerge, orphelins ; Typst, Markdown, CSV ; variantes ; lecteurs (`AD-14`) ; garde byzantine et bornes ; index et budgets PF-15 ; export sans PDF ; notifications locales ; **PD-7** ; `AD-106` |
+| N48 validation | §6.15 VD-1 à VD-9 : `VersionId` exacte ; opérations signées `submit`, `decide`, `withdraw` (**PD-8**) ; états ; personne désignée, politique `review/policy` (**PD-9**) ; « valider avant d'intégrer » = garde de l'application + audit ; trace en étiquettes Git ; ce que cela prouve et ne prouve pas (eIDAS) ; `AD-107` |
+
+### Désaccords à débattre
+
+Aucun. Trois choix attendent l'utilisatrice : place des commentaires (`AD-106`), validation par
+personne désignée sans rôle nouveau (`AD-107`), et les deltas PD-5 à PD-9 passent par la boucle du
+protocole.
+
+
 ## 1.0.0-brouillon.10 — révision 8.1 (2026-11-01)
 
 Deux exigences nouvelles (N44, N45) et une décision de l'utilisatrice. Aucune modification de

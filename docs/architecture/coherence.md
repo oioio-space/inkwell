@@ -2,7 +2,7 @@
 
 | | |
 |---|---|
-| Date | 2026-11-01 (révision 8.1 de l’architecture, `spec.md` 1.0.0-brouillon.10) |
+| Date | 2026-11-01 (révision 8.2 de l’architecture, `spec.md` 1.0.0-brouillon.11, acceptée en révision 8.1) |
 | But | relire ensemble tout ce qui a été demandé à la volée (N17–N41, U*, L*), résoudre les contradictions, combler ou différer explicitement les manques, fusionner les doublons, et ramener le tout à la finalité : **des personnes qui aiment écrire, ensemble, sans serveur** |
 | Entrées | [audit de cohérence de Codex](reviews/coherence-codex.md) ; revues du tour 2 ([Fable](reviews/03-fable-r2.md) §4, [Codex](reviews/04-codex-r2.md) §4) ; études [encryption](research/encryption.md), [sync-ignore](research/sync-ignore.md), [ai §12](research/ai.md), [editor-features](research/editor-features.md), [plugins](research/plugins.md) ; [design rév. 4](../design/spec.md) ; [exigences](../exigences.md) |
 | Règle de tri | à valeur égale, ce qui sert d'abord le parcours **écrire → partager → retrouver → corriger → exporter** passe devant ; une plate-forme (extensions, IA, coffre) se construit sur ce parcours, jamais à sa place |
@@ -17,7 +17,7 @@ greffon (`importers`, `exporters`) peut l'offrir. Le reste de cet écart est not
 |---|---|---|---|
 | C01 | Projet chiffré (N37) contre projet en clair (NG3, §6.2) | NG3 retiré ; coffre par objet, sans montage ; G13 | spec §1.3, §6.10 ; `AD-91` |
 | C02 | Chiffrement contre BLAKE3/Bao et révocation | identifiants du protocole **dans** les objets chiffrés, noms physiques opaques ; DEK par appareil, aucune clé de groupe ; un membre retiré garde ce qu'il a reçu | §6.10 EN-1, EN-2, EN-7 |
-| C03 | Coffre contre fichiers réels (Typst, LSP, Git, recherche, export) | dossier de travail **en mémoire** (tmpfs sans swap en clair ; disque en mémoire sous macOS) ou sur un disque **chiffré par le système, vérifié** ; sinon compilation refusée pour un projet protégé ; borne de 512 Mio et matérialisation par dépendances ; Git dans le coffre (billy) ; index dans le dossier de travail ; projection lisible durable = choix explicite | §6.10 EN-3–EN-5 |
+| C03 | Coffre contre fichiers réels (Typst, LSP, Git, recherche, export) | dossier de travail **en mémoire** (tmpfs sans swap en clair, Linux seulement) ou sur un disque **chiffré par le système, vérifié** ; sinon compilation refusée pour un projet protégé ; borne de 512 Mio et matérialisation par dépendances ; Git dans le coffre (billy) ; index dans le dossier de travail ; projection lisible durable = choix explicite | §6.10 EN-3–EN-5 |
 | C04 | « Annuaire » contre aucun serveur | l'annuaire **est** la liste signée des membres ; annuaire d'entreprise = suggestion, jamais autorité ; clé X25519 dans les ops de membres reportée (PD-3) | §6.10 EN-8, §15.19 |
 | C05 | Linux seulement (AD-18) contre N35 | port `internal/sandbox` à trois implémentations ; capacité **refusée** sur une cible non prouvée (INV-13) ; Linux seul = alpha annoncée | §9.11 ; `AD-18`, `AD-94` |
 | C06 | « Jamais installé depuis un pair » contre N23 | réception d'un paquet ≠ activation ≠ installation globale ; jamais d'installation globale ; greffon de projet borné ; « aucun code reçu » banni des promesses | §15.10 |
