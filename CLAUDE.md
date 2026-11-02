@@ -134,6 +134,12 @@ Un seul hook (`pre-commit-simplify.sh`) bloque un commit tant que la revue n'est
 - Réponses à l'utilisatrice brèves.
 - Ne jamais écrire le mot-clé de commit de git dans une commande qui n'en est pas une : les hooks se déclencheraient.
 
+**Discipline de modification (règle, d'après andrej-karpathy-skills, MIT) :**
+- énoncer ses hypothèses avant d'agir ; en cas de doute, vérifier dans le code ou demander ;
+- modifications chirurgicales : chaque ligne changée se rattache à une exigence ou à une porte, pas de nettoyage opportuniste hors du périmètre (le `/simplify` porte sur le diff du lot) ;
+- critère de réussite vérifiable par une machine avant d'écrire du code (porte du lot, test) ;
+- ne jamais affaiblir un test, un seuil ou un délai pour faire passer une porte.
+
 **Cohérence (règle) :** une fonctionnalité nouvelle s'intègre à l'existant, jamais en « verrue ». Elle doit :
 - réutiliser les composants, jetons et motifs Adwaita déjà présents (barre d'en-tête, panneaux à onglets, bannières, toasts, popovers) ;
 - reprendre le même vocabulaire et les mêmes raccourcis ;
