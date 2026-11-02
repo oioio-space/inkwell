@@ -476,3 +476,23 @@ ci-dessus) :
   - tous ceux qui travaillent sur cette variante peuvent y revenir, sans rien détruire ;
   - on peut créer une variante à partir de n'importe quelle version enregistrée ;
   - vocabulaire : « version enregistrée », « point d'étape », jamais push ni commit.
+- **N47, commentaires** (rév. 7.1) : §4.27 réécrit. Les commentaires entrent dans le périmètre
+  (Q8 décidée).
+  - Commenter une sélection, avec un repère de marge et un surlignage doux.
+  - Fils, réponses, résoudre et rouvrir, @mention.
+  - Relire › Commentaires, avec des filtres et un clic jusqu'au texte.
+  - Un commentaire orphelin est conservé, avec sa citation.
+  - Commentaires par variante, et sur une cellule CSV.
+  - « Masquer les commentaires ».
+  - Raccourcis : Ctrl+Maj+M (⇧⌘K sous macOS), Ctrl+Maj+N (⇧⌘N) pour le suivant, Maj+F2 pour une
+    cellule. Pas Alt+F2, réservé par GNOME, ni ⌥⌘M, réservé par macOS.
+  - L-2b est mis à jour.
+- **N48, soumettre pour validation** (rév. 7.1) : §4.48.
+  - Un point d'étape est soumis à une personne choisie, qui le valide ou le refuse, avec une note.
+  - Badge En attente, Validée, Refusée ou Retirée dans la frise.
+  - La validation reste liée à la version exacte : un nouveau texte demande une nouvelle
+    soumission.
+  - Liste « À valider » dans Relire › Activité, avec un bandeau-question.
+  - Le statut est affiché avant d'intégrer dans l'Original ; un admin peut l'exiger.
+- `coverage.md` (deux lignes), `inventory.md` (G-105, G-106) et §10 (deux lignes de test) sont mis
+  à jour.

@@ -193,7 +193,8 @@ Il y a 55 critères ; le 4.1.1 est retiré de WCAG 2.2.
 | **Mes actions seules mènent ma vue (N45)** : une modification reçue ne déplace ni mon curseur, ni mon défilement, ni mon aperçu ; ancrage du défilement | §4.18 | S→N | G-104 |
 | **Suivre une personne (N45)** : « Suivre Marie » (avatar, Personnes, palette) ; texte, onglets et aperçu suivent ; barre « Vous suivez Marie · Arrêter » ; toute action arrête calmement ; je ne touche jamais sa vue ; annonces polies ; la personne suivie le voit (décision n° 21) | §4.47 | S→N | G-104 |
 | **Variantes isolées (N46, rév. 7.1)** : la variante courante est personnelle ; « Variante : … » toujours visible ; une modification ne va que dans sa variante ; seule l'intégration traverse ; présence par variante, curseurs de la même variante seulement ; suivre sur une autre variante demande de passer dessus ; aucune notification par modification, seulement les propositions d'intégrer | §4.22, §4.47 | S→N | G-90 |
-| **Commentaires** | §4.27 | H, et S→G sur l'onglet | Hors périmètre (Q8). L'onglet **est encore affiché** (`ui/history/HistoryDrawer.svelte:206-207`) : G-62. |
+| **Commentaires (N47, rév. 7.1)** : commenter une sélection (repère de marge, surlignage) ; fils, réponses, résoudre et rouvrir, @mention ; filtres Ouverts, Les miens, Me mentionnent ; clic jusqu'au texte ; commentaire orphelin conservé ; par variante ; cellules CSV ; masquer les repères ; clavier et annonces polies | §4.27 | S→G | G-62 (onglet vide aujourd'hui, `ui/history/HistoryDrawer.svelte:206-207`), G-105 |
+| **Soumettre pour validation (N48, rév. 7.1)** : point d'étape soumis à une personne ; Valider ou Refuser avec note ; badge En attente, Validée, Refusée, Retirée ; validation liée à la version exacte ; liste « À valider » ; statut affiché avant d'intégrer dans l'Original | §4.48 | S→N | G-106 |
 | **Présentation** | §4.23, §5.11 | S→G | G-7 |
 
 ## 6. Revues

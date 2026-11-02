@@ -111,7 +111,7 @@
 | G-37 | M | Sous 900px, l'aperçu reste côte à côte (seuil à 560px) | T11 A6, 1.4.10 | `App.svelte:357-364` | §3.4 |
 | G-38 | M | Recherche dans le projet non montée | T11 B6 | `ui/search/SearchPanel.svelte` (aucun import hors test) ; `editor/search/keymap.ts:22-40` jamais branché | onglet Rechercher (Q5) |
 | G-55 | **B** | Pas de modèle d'onglets de fichiers ni de sélecteur à gauche (Sommaire, Tâches, Liens absents) | HIG *Tabs*, `AdwViewSwitcher` ; T11 B7, B10 | `workspace/workspace.svelte.ts:120` (un seul `current`) ; `Sidebar.svelte:29-61` | §4.25, §4.16 |
-| G-62 | M | Onglet Commentaires affiché, sans fonction | Nielsen 8, L-2b | `HistoryDrawer.svelte:46`, `:206-207` | le masquer (Q8) |
+| G-62 | M | Onglet Commentaires affiché, sans fonction (à remplir par G-105, N47) | Nielsen 8, L-2b | `HistoryDrawer.svelte:46`, `:206-207` | le masquer (Q8) |
 
 ### 2.4 Parcours, contenu, aide
 
@@ -227,6 +227,13 @@ Ces fonctions n'existent pas encore. Chaque ligne nomme ce que le code devra mon
 | # | Grav. | Écart | Norme | Preuve | Correction |
 |---|---|---|---|---|---|
 | G-104 | M | Rien ne garantit qu'une modification reçue ne déplace pas ma vue : pas d'ancrage du défilement déclaré. Pas de mode « Suivre » : la présence n'a que les curseurs. | N45 | `editor/remoteCursors.ts` (curseurs seulement) ; aucun `overflow-anchor` ni mode Suivre dans `frontend/src` | spec §4.18, §4.47 |
+
+### 2.15 Addendum rév. 7.1 : commentaires et validation (N47, N48)
+
+| # | Grav. | Écart | Norme | Preuve | Correction |
+|---|---|---|---|---|---|
+| G-105 | M | Aucun commentaire : ni sélection commentée, ni fil, ni mention, ni résolution ; l'onglet existe vide | N47 | `ui/history/HistoryDrawer.svelte:206-207` (`history.comments.empty`) | spec §4.27 ; modèle de données dans l'architecture (étape 4, `AD-14`) |
+| G-106 | M | Aucune validation de version : ni soumission, ni badge, ni liste « À valider » | N48 | `history/versions.ts` (versions nommées sans statut) | spec §4.48 ; décision signée à prévoir dans l'architecture |
 
 ## 3. Corrections, dans l'ordre
 

@@ -476,8 +476,8 @@ Ctrl+Maj+T). Une fonction absente ou non installée **n'affiche rien**.
   retour au texte est garanti (§3.4).
 - **L-2.** Un nouveau panneau entre dans un sélecteur existant : à gauche s'il décrit la
   structure, sous Relire s'il décrit le temps ou les autres personnes. Sinon, une ADR.
-- **L-2b.** **Commentaires** : sous-vue de Relire. Elle reste masquée tant que la fonction
-  n'existe pas (étape 4 de l'architecture, M03).
+- **L-2b.** **Commentaires** : sous-vue de Relire, **dans le périmètre** depuis la rév. 7.1
+  (N47, §4.27).
 
 ### 3.2 Navigation
 
@@ -1364,19 +1364,61 @@ des onglets, et cette section est la proposition de design pour cette décision)
 - Chaque écran vide et chaque message d'erreur PEUT pointer vers sa page d'aide (« En savoir
   plus »).
 
-### 4.27 Commentaires — hors du périmètre de N17
+### 4.27 Commentaires (N47, rév. 7.1)
 
-Il n'y a ni modèle de données, ni plan, ni code au-delà d'un texte vide. Ancres, fils,
-résolution et @mentions demandent une décision d'architecture : N18 ou un plan dédié, puis une
-ADR.
+Les commentaires sont **dans l'interface d'écriture**, sur le texte source, jamais sur le rendu.
+Ils remplacent la décision « hors périmètre » des révisions précédentes (Q8). Le modèle de données
+(ancre, fil, résolution) reste à écrire dans l'architecture (étape 4, M03) ; cette section fixe ce
+que la personne voit.
 
-N17 fixe seulement :
-- l'onglet est masqué tant que la fonction n'existe pas (L-2b) ;
-- le jour venu, les commentaires seront la sous-vue **Commentaires** de Relire, réutiliseront l'avatar, le champ,
-  la liste APG et le toast, et le texte commenté sera surligné selon C-PERSON.
+**Commenter :**
+- sélectionner du texte, puis « **Commenter** » (menu contextuel, barre de mise en forme, palette ;
+  Ctrl+Maj+M ; ⇧⌘K sous macOS, comme Pages, car ⌥⌘M est réservé ; §8.2) ;
+- un champ s'ouvre dans la **marge droite**, à hauteur du passage : « Écrire un commentaire… », avec
+  « Commenter » (Ctrl+Entrée) et « Annuler » (Échap) ;
+- le passage reçoit un **surlignage doux** (`--hover-bg`, souligné pointillé à la couleur de
+  l'auteur `--person-N-line`), et la marge un **repère** (bulle `comment`, avec le nombre de
+  réponses).
 
-La tâche « relire » s'appuie en attendant sur l'Historique, les versions et les différences.
-Question Q8.
+**Fils** :
+- **répondre** sous un commentaire ;
+- **@mentionner** une personne du projet : la complétion propose les noms, et la personne
+  mentionnée le voit dans son filtre « Me mentionnent » ;
+- **Résoudre** : le fil se replie, et le surlignage disparaît. **Rouvrir** le rend. Résoudre n'efface
+  rien ;
+- modifier ou supprimer **son** commentaire, avec un toast « Annuler ».
+
+**Relire › Commentaires** (la sous-vue du tiroir, désormais active) :
+- une liste groupée par fichier ;
+- filtres en groupe de bascules : « **Ouverts** · **Les miens** · **Me mentionnent** · Résolus » ;
+- **un clic mène au texte** : il ouvre le fichier dans un onglet, place le curseur sur le passage
+  et ouvre le fil.
+
+**Commentaire orphelin** : si le texte commenté est supprimé, le commentaire **n'est pas perdu**.
+Il passe en tête de la liste, dans « **Texte supprimé** », avec la citation du passage d'origine et
+« Voir dans les versions », qui ouvre la vue du passé (§4.22).
+
+**Par variante** (N46) : un commentaire appartient à la variante où il est fait. On voit ceux de sa
+variante courante. L'intégration d'une variante propose aussi d'intégrer ses commentaires ouverts.
+
+**Tableau (CSV)** : « Commenter » sur une **cellule** ; un petit triangle dans son coin (forme, pas
+seulement couleur), et le fil s'ouvre au survol ou au focus de la cellule (Maj+F2).
+
+**Calme** :
+- pendant la frappe, **aucun** fil ne s'ouvre seul, et les repères restent dans la marge ;
+- « **Masquer les commentaires** » (menu Affichage, et l'en-tête de la sous-vue) retire repères et
+  surlignages du texte. Le compte reste dans l'onglet Relire.
+
+**Clavier et lecteur d'écran** :
+- Ctrl+Maj+N (⇧⌘N sous macOS) va au commentaire suivant dans le texte (pas Alt+F2, réservé par
+  GNOME) ; Entrée ouvre le fil ; Échap
+  revient au texte ;
+- le fil est une région nommée (« Commentaire de Marie, 2 réponses ») ;
+- le texte commenté porte un `aria-describedby` vers le commentaire ;
+- un nouveau commentaire reçu est annoncé poliment, **une fois**, seulement s'il me mentionne.
+
+**Lecteurs** : avec le rôle Lecture, on peut commenter seulement quand la version du protocole le
+permet (architecture `AD-14`). Sinon, l'action est inactive et son infobulle le dit.
 
 ### 4.28 Vues par type de fichier, et code (N20)
 
@@ -2965,6 +3007,43 @@ Repères : le « suivre » de Figma, de Google Docs, du mode Suivre de VS Code L
   regarde ».
 - Qui ne veut être ni vu ni suivi a déjà « **Me rendre invisible** ».
 
+### 4.48 Soumettre pour validation (N48, rév. 7.1)
+
+Un **point d'étape** (version enregistrée, §4.22) peut être **soumis pour validation** à une
+personne choisie, par exemple une responsable.
+
+- **Soumettre** : sur une version enregistrée de la frise, « **Soumettre pour validation…** ».
+  - Choisir la personne (avec la complétion des noms du projet).
+  - Un message facultatif (« Peux-tu relire la partie 2 ? »).
+  - « Soumettre ».
+- **Badge de statut** sur la version, dans la frise : une forme, une icône et un mot (la couleur
+  n'est jamais seule) :
+  - « **En attente** » (horloge, `--fg-dim`) ;
+  - « **Validée** » (coche, `--success`) ;
+  - « **Refusée** » (croix, `--error`) ;
+  - « **Retirée** » (barré, `--fg-dim`), quand la personne qui a soumis annule sa demande.
+- **Ce que voit la personne sollicitée** :
+  - un **bandeau-question** (rang « questions », L-8) : « Marie vous demande de valider « Envoyée
+    au comité » · Voir » ;
+  - sa **liste « À valider »**, dans Relire › Activité, filtre « À valider » ;
+  - « Voir » ouvre la **vue du passé** sur cette version exacte (§4.22), avec la comparaison
+    depuis la dernière version validée ;
+  - deux boutons : « **Valider** » et « **Refuser** », chacun avec une **note** facultative.
+
+  La réponse arrive chez Marie par un toast, et dans la frise.
+- **Le texte change après la soumission** : la validation porte **toujours sur cette version
+  exacte**. Si le texte continue de changer, la frise le dit (« Validée · le texte a changé depuis »).
+  Pour faire valider le nouveau texte, il faut **soumettre à nouveau** une nouvelle version.
+- **Avant d'intégrer dans la variante « Original »** : la relecture d'intégration (§4.41) affiche en
+  tête le statut de validation de la dernière version de la variante (« Validée par Anne, hier » ou
+  « Pas de validation »). C'est une **information**, pas un blocage. Un admin PEUT rendre la
+  validation obligatoire pour intégrer dans l'Original (Préférences › Projet).
+- **Mots** : « soumettre », « valider », « refuser », « retirer ». Jamais « approve », « PR » ni
+  « workflow ».
+- **Clavier et lecteur d'écran** : le badge fait partie du nom de l'option de la frise (« Envoyée au
+  comité, validée par Anne ») ; le bandeau-question suit L-8 ; les réponses sont annoncées
+  poliment.
+
 ## 5. Écrans et parcours
 
 Les cinq tâches de référence (`ux-principles.md`) sont : **créer, partager, relire, présenter,
@@ -3546,6 +3625,9 @@ et la personne peut lui en donner une (Préférences › Écriture › Raccourci
 | Source → aperçu | Ctrl+Maj+J | ⇧⌘J | Ctrl+Maj+J | à faire (était Ctrl+Alt+J) |
 | Demander à l'IA | — (menu contextuel, palette ; assignable) | — | — | **retiré** (était Ctrl+Alt+I) |
 | Mode concentration | Ctrl+Maj+D | ⇧⌘D | Ctrl+Maj+D | à faire (était Ctrl+Alt+F) |
+| Commenter | Ctrl+Maj+M | ⇧⌘K (⌥⌘M est réservé) | Ctrl+Maj+M | à faire (N47) |
+| Commentaire suivant | Ctrl+Maj+N | ⇧⌘N | Ctrl+Maj+N | à faire (N47) |
+| Commentaire d'une cellule | Maj+F2 | ⇧F2 | Maj+F2 | à faire (N47, convention des tableurs) |
 | Caractère spécial | — (Insérer, palette ; assignable) | — (le Visualiseur de caractères du système, ⌃⌘Espace, reste disponible) | — (Win+. reste disponible) | **retiré** (était Ctrl+Alt+C) |
 | Coller sans mise en forme | Ctrl+Maj+V | **⌥⇧⌘V** (convention) | Ctrl+Maj+V | à faire |
 | Nouveau fichier | Ctrl+N | ⌘N | Ctrl+N | à faire |
@@ -3725,6 +3807,8 @@ Une règle sans assertion n'est pas finie.
 | §8.4 (N35) | Cmd sur macOS (registre), barre de menus générée du registre, fiche « aperçu indisponible » sur une cible sans porte | `e2e/platform.spec.ts` sur les trois systèmes | **à écrire** |
 | H-HON (C19) | aucun texte « rien n'est perdu » ; chaque état du popover correspond à un état acquitté | `ui/i18n.test.ts` (extension), `ui/messages.test.ts` | **à écrire** |
 | M07 | script lecteur d'écran de collaboration : identifier une personne sans la couleur, atteindre sa modification, commenter, suivre et quitter (Orca, puis VoiceOver et NVDA) | `ux-walkthrough` | **à écrire** |
+| §4.27 (N47) | commenter une sélection ; fil, réponse, mention, résoudre et rouvrir ; filtres ; clic jusqu'au texte ; commentaire orphelin conservé ; par variante ; cellule CSV ; masquer ; clavier et annonces | `e2e/comments.spec.ts` (deux instances) | **à écrire** |
+| §4.48 (N48) | soumettre, valider, refuser avec note, retirer ; badge dans la frise ; validation liée à la version exacte ; liste « À valider » ; statut affiché avant d'intégrer dans l'Original | `e2e/approval.spec.ts` (deux instances) | **à écrire** |
 | §5 parcours | cinq tâches chronométrées, personas | `docs/ux/walkthrough-*.md` | existant pour les personnes et la présentation (2026-10-26) ; à refaire |
 
 ## 11. Décisions à confirmer par l'utilisatrice
@@ -3752,7 +3836,7 @@ Les deux revues convergent sur chacune de ces recommandations.
 | Q5 | Recherche dans le projet | **Tranché** : une destination du **tiroir**, en cohérence avec B10 : la structure à gauche, le temps et les autres à droite (§3.1). |
 | Q6 | S'écarter de libadwaita pour l'anneau | Oui, 1.4.11 l'exige, avec la variante pour fond sombre. |
 | Q7 | Langues | fr et en, propriétés logiques dès maintenant, pas de RTL pour l'instant. |
-| Q8 | Commentaires | Hors de N17 ; onglet masqué ; un plan dédié et une ADR avant toute interface (§4.27). |
+| Q8 | Commentaires | **Décidé** (N47) : dans le périmètre, §4.27. Ancienne recommandation : | Hors de N17 ; onglet masqué ; un plan dédié et une ADR avant toute interface (§4.27). |
 | Q9 | Amendements de `ux-principles.md` | règle 3 et glossaire : **faits** (C14, §6.20) ; règle 9 (cibles, §2.5) : en attente ; règle 2 (barre de mise en forme fixe, T11) : correction à faire, notée dans `CHANGES.md` rév. 6. |
 | Q10 | Imprimer | Par l'export PDF et la boîte d'impression du système, sans raccourci (§5.12). |
 | Q11 | Fichiers de code | Ouverts **en lecture**, « Modifier » sur demande, mémorisé par fichier ; coloration avec les 10 jetons existants ; `language-data` paresseux, avec une liste blanche d'environ 25 langages (§4.28). |

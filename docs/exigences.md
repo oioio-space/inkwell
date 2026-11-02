@@ -89,6 +89,8 @@ Rien n'est « fait » sans tests verts et sans une passe `ux-walkthrough` réuss
 | N44 | 2026-11-01 | Synchronisation texte ↔ aperçu dans les deux sens : l'aperçu suit l'endroit où l'on est dans le texte, et inversement | `docs/architecture/`, `docs/design/` | 🔨 |
 | N45 | 2026-11-01 | La synchronisation texte ↔ aperçu ne doit jamais entrer en conflit avec l'édition des autres (leurs modifications ne déplacent pas ma vue) ; mode « suivre » : suivre en direct l'édition d'une autre personne, texte et aperçu suivant sa position | `docs/architecture/`, `docs/design/` | 🔨 |
 | N46 | 2026-11-01 | Variantes (branches) isolées : travailler sur une variante ne change pas le travail des autres sur leurs variantes ; plusieurs personnes peuvent travailler en même temps sur des variantes différentes (et à plusieurs sur la même) ; les variantes ne sont pas privées : tout le monde les voit et peut les rejoindre pour y collaborer ; seul le choix de sa variante courante est personnel | `docs/architecture/`, `docs/design/` | 🔨 |
+| N47 | 2026-11-01 | Système de commentaires dans l'interface d'écriture (pas forcément sur le rendu), stocké avec le projet, pratique et performant | `docs/architecture/`, `docs/design/` | 🔨 |
+| N48 | 2026-11-01 | Validation : une étape (point d'étape) peut être soumise à une personne qui la valide ou la refuse (ex. un manager qui valide une production) | `docs/architecture/`, `docs/design/` | 🔨 |
 
 ## Interface et édition
 
