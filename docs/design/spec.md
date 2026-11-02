@@ -3103,17 +3103,26 @@ personne choisie, par exemple une responsable.
     est ignorée (« Décision après retrait, sans effet ») ; un retrait fait **après** une décision n'a
     aucun effet.
   - « **Validation contestée** » (losange `warn`, `--warning`), **uniquement** en cas
-    d'**équivocation** : la même personne a signé **deux actions contradictoires en même temps**
-    (par exemple deux décisions en conflit, ou, pour l'auteur de la demande, deux versions
-    contradictoires de sa propre soumission), depuis deux appareils ; sa chaîne de signatures est
-    fourchée (architecture VD-2, VD-3, PD-8). Une décision contraire prise **après** coup n'y change
-    rien.
-    - « Voir » montre **les deux** décisions, avec leurs dates et leurs notes, au clavier (deux
-      éléments d'une liste) ;
-    - le nom accessible dit « Validation contestée : deux décisions en conflit signées par Anne,
-      validée le 3 et refusée le 3 » (les dates réelles des deux) ;
-    - l'arrivée tardive de la seconde décision remplace l'ancienne coche, et elle est annoncée
-      poliment (`review.statusChanged`). Une ancienne coche ne reste jamais la seule information.
+    d'**équivocation** : la même personne a signé **deux actions contradictoires pour la même étape
+    de la demande**, quels que soient le moment et l'appareil. Cela couvre deux soumissions
+    contradictoires, un retrait et une décision de la même personne, deux décisions, et tout autre
+    couple d'actions de cette personne à la même étape (architecture VD-2, VD-3, PD-8). Sa chaîne de
+    signatures est alors fourchée. Une décision contraire prise **après** coup, à une étape
+    différente, n'y change rien : elle est ignorée (« Décision déjà rendue — soumettre à nouveau »).
+    - **Seuil** (point de gel, VD-3) : la demande n'est contestée que si l'action concernée se situe
+      **à l'étape où la chaîne se divise, ou après**. Ce qui a été signé **avant** cette étape garde
+      sa valeur ; ce qui vient ensuite sur la chaîne divisée ne compte plus. L'écran dit seulement
+      « Validation contestée » et montre, dans « Voir », les deux actions.
+    - « Voir » montre **les deux** actions contradictoires, avec leurs dates et leurs notes, au
+      clavier (deux éléments d'une liste) ;
+    - le nom accessible suit un seul modèle : « Validation contestée : <personne> a signé deux
+      actions contradictoires (<action A>, <action B>) », par exemple « … Anne a signé deux actions
+      contradictoires (validée le 3, refusée le 3) » ou « … (soumission du 2, soumission du 2) » ;
+      les actions sont nommées « soumission », « retrait », « validée » ou « refusée », avec leur date
+      réelle ;
+    - l'arrivée tardive de la seconde action remplace l'ancienne coche, et elle est annoncée
+      poliment par le même modèle (`review.statusChanged`). Une ancienne coche ne reste jamais la
+      seule information.
     - **Une validation contestée ne compte pas comme une validation** pour la règle d'admin
       ci-dessous.
   - « **Avis contraires** » (losange `warn`, `--warning`), quand **la même version** a reçu une
