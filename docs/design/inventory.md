@@ -214,7 +214,7 @@ Ces fonctions n'existent pas encore. Chaque ligne nomme ce que le code devra mon
 
 | # | Grav. | Écart | Norme | Preuve | Correction |
 |---|---|---|---|---|---|
-| G-102 | M | Pas de gestionnaire de polices ni de dossier `polices/` du projet ; pas d'installation « pour tous mes projets » ; une police venue de cet ordinateur n'est pas signalée, et une police absente n'a que le message brut du compilateur, sans correction | N43, N28, Nielsen 9 | aucun composant ; `preview/protocol.ts` (message seul) ; `ui/shell/StatusBar.svelte:120` | spec §4.46 (signalement **local**, sans donnée des autres appareils) |
+| G-102 | M | Pas de gestionnaire de polices ni de dossier `fonts/` du projet ; pas d'installation « pour tous mes projets » ; une police venue de cet ordinateur n'est pas signalée, et une police absente n'a que le message brut du compilateur, sans correction | N43, N28, Nielsen 9 | aucun composant ; `preview/protocol.ts` (message seul) ; `ui/shell/StatusBar.svelte:120` | spec §4.46 (signalement **local**, sans donnée des autres appareils) |
 
 ### 2.13 Addendum rév. 7.1 : synchronisation texte ↔ aperçu (N44)
 
@@ -239,7 +239,7 @@ Ces fonctions n'existent pas encore. Chaque ligne nomme ce que le code devra mon
 
 | # | Grav. | Écart | Norme | Preuve | Correction |
 |---|---|---|---|---|---|
-| G-107 | M | Le clavier de CodeMirror installé par défaut contient des liaisons qui rencontrent le registre : ⇧⌘K efface la ligne, ⌘[ et ⌘] indentent, Alt+← et Alt+→ déplacent par syntaxe, Ctrl+M bascule le mode Tab, Ctrl+U annule la sélection | K-6, Codex R9-M1 | `editor/setup.ts:127` (`defaultKeymap`, `historyKeymap`) | table « Clavier de l'éditeur » de K-6 (§8.2) |
+| G-107 | M | Le clavier de CodeMirror installé par défaut contient des liaisons qui rencontrent le registre : ⇧⌘K efface la ligne, ⌘[ et ⌘] indentent, Alt+← et Alt+→ déplacent par syntaxe, Ctrl+M bascule le mode Tab, Ctrl+U annule la sélection | K-6, Fable R9-M1 | `editor/setup.ts:127` (`defaultKeymap`, `historyKeymap`) | table « Clavier de l'éditeur » de K-6 (§8.2) |
 
 ## 3. Corrections, dans l'ordre
 

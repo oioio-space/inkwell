@@ -1,5 +1,12 @@
 # Changements de l'architecture
 
+## Alignement final (confirmation 2)
+
+Réponse à [19-codex-confirm2](reviews/19-codex-confirm2.md) et [20-sonnet-confirm2](reviews/20-sonnet-confirm2.md). Aucune décision de l'utilisatrice rouverte ; aucune modification de `docs/protocol/`.
+
+- **VD-2, VD-3, PD-8** : une décision est **définitive** (la suivante, même contraire, est ignorée : « décision déjà rendue — soumettre à nouveau ») ; `contestée` = **équivocation seule** (chaîne fourchée) ; table de précédence par soumission (contestée > validée/refusée > retirée > soumise) avec les cas décision ∥ retrait (la décision gagne), décision après retrait vu (invalide), retrait après décision (sans effet) ; statut d'une `VersionId` défini sur le multiensemble des états (contestée > avis contraires > refusée > validée > soumise > retirée), indépendant de l'ordre ; nouveaux vecteurs ; renvoi au rendu accessible (design §4.48).
+- **CM-6** : le quota N10 est un plafond de ressource local, pas un prédicat d'admission (Sonnet m3).
+
 ## 1.0.0-brouillon.12 — révision 8.3 (2026-11-02)
 
 Réponse au tour de confirmation de la révision 8.2 : [Fable](reviews/17-fable-confirm.md) **ACCEPT**

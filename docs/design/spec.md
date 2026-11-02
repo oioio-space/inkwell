@@ -1056,8 +1056,7 @@ l'aperçu de tinymist, SyncTeX d'Overleaf [S33].
   - Pendant la frappe, il ne bouge que si le curseur **sort** de la zone visible de l'aperçu, et
     seulement **après 300ms de calme**, la valeur commune des temporisations de cette spec (§4.21,
     §4.22), sans à-coups. Le volet touché par la personne reste **meneur** 300ms, renouvelées à
-    chaque entrée (SY-5). L'architecture (SY-7 : 100ms ; SY-4 : « en option ») est à aligner sur
-    300ms et sur « Suivre le texte » **activé par défaut** (Fable R9-m1).
+    chaque entrée (SY-5). « Suivre le texte » est **activé par défaut** (architecture SY-4, SY-7).
   - Une mise à jour de la mise en page ne déplace pas la vue : elle reste sur le même passage.
 - **L'aperçu mène** : faire défiler l'aperçu amène le texte au même endroit. **Cliquer** dans une
   page y place le curseur, avec un **surlignage bref** de la ligne (fondu `--duration-fade`, 1s,
@@ -1260,17 +1259,17 @@ identique à l'original. La personne n'a jamais à se demander quels fichiers so
     Version courte ») ;
   - les **curseurs** visibles dans le texte ne sont que ceux des personnes **sur la même
     variante** ;
-  - **d'ici le canal de présence `variant`** (architecture PD-5), pour un fichier qu'aucune
-    variante n'a encore modifié, on ne sait pas qui est sur quelle variante : la liste dit alors
-    « dans ce fichier » sans nom de variante, et les curseurs de ce fichier s'affichent pour tous
-    (même règle que RV-4 pour l'œil) ;
+  - **sans le canal de présence `variant`** (architecture PD-5, ou si la présence d'un pair plus
+    ancien n'a pas ces champs), pour un fichier qu'aucune variante n'a encore modifié, **aucun
+    curseur ni aucune présence n'est émis** depuis une variante (architecture §6.11) : on n'affiche
+    jamais de curseurs mélangés ; la liste dit « dans ce fichier » sans nom de variante, sans
+    curseur ;
   - **Suivre** (§4.47) une personne sur une autre variante demande d'abord : « Marie travaille sur
     « Version courte ». Passer sur cette variante pour la suivre ? · Passer et suivre · Annuler ».
-    Rien ne change sans cet accord (Codex C5).
+    Rien ne change sans cet accord.
   - **Pendant le suivi**, si Marie passe sur **une autre** variante : le suivi est **suspendu**, ma
     vue reste où elle est, et la barre demande « Marie est passée sur « Ton plus court » · Passer et
-    suivre · Arrêter ». Jamais de changement de variante sans mon accord. (L'architecture §6.11 et
-    RV-3 sont à aligner : elle disait « bascule, avec le bandeau ».)
+    suivre · Arrêter ». Jamais de changement de variante sans mon accord.
 - **Pas de notification pour chaque modification** dans une autre variante. Seule une **proposition
   d'intégrer** vers **ma** variante arrive, en bandeau-question (L-8).
 - **Lecteur d'écran** : changer de variante annonce « Variante : Version courte » ; le nom de la
@@ -3095,23 +3094,37 @@ personne choisie, par exemple une responsable.
   - « **Validée** » (coche, `--success`) ;
   - « **Refusée** » (croix, `--error`) ;
   - « **Retirée** » (barré, `--fg-dim`), quand la personne qui a soumis annule sa demande ;
-  - « **Validation contestée** » (losange `warn`, `--warning`), quand la personne désignée a
-    signé **deux décisions contraires** sur la même demande (architecture VD-2, Codex C6).
+  - **Une décision est définitive.** Si la personne désignée change d'avis plus tard, sa seconde
+    décision est **ignorée** et montrée « Décision déjà rendue — soumettre à nouveau » : pour
+    changer d'avis, il faut **soumettre à nouveau** la version, afin qu'une validation prouve
+    exactement ce qui a été validé. Ce n'est **pas** une « validation contestée ».
+  - **Retrait et décision** (architecture VD-3) : une décision prise **en même temps** qu'un retrait
+    l'emporte (« Retrait concurrent, sans effet ») ; une décision prise **après avoir vu** le retrait
+    est ignorée (« Décision après retrait, sans effet ») ; un retrait fait **après** une décision n'a
+    aucun effet.
+  - « **Validation contestée** » (losange `warn`, `--warning`), **uniquement** en cas
+    d'**équivocation** : la même personne a signé, depuis deux appareils, des décisions en conflit
+    **en même temps** (sa chaîne de signatures est fourchée ; architecture VD-2, VD-3, PD-8).
     - « Voir » montre **les deux** décisions, avec leurs dates et leurs notes, au clavier (deux
       éléments d'une liste) ;
-    - le nom accessible dit « Validation contestée : validée le 3, refusée le 4 » ;
+    - le nom accessible dit « Validation contestée : deux décisions en conflit signées par Anne,
+      validée le 3 et refusée le 3 » (les dates réelles des deux) ;
     - l'arrivée tardive de la seconde décision remplace l'ancienne coche, et elle est annoncée
-      poliment. Une ancienne coche ne reste jamais la seule information.
+      poliment (`review.statusChanged`). Une ancienne coche ne reste jamais la seule information.
     - **Une validation contestée ne compte pas comme une validation** pour la règle d'admin
       ci-dessous.
   - « **Avis contraires** » (losange `warn`, `--warning`), quand **la même version** a reçu une
-    demande validée et une autre refusée, par des personnes différentes (architecture VD-3, VD-5 ;
-    statut de la version). C'est le statut de la **version**, à côté de ceux des demandes :
+    demande validée et une autre refusée (architecture VD-3, VD-5 ; statut de la version). C'est le statut de la **version**, à côté de ceux des demandes :
     - « Voir » liste les demandes et leurs décisions, au clavier ;
     - le nom accessible dit « Avis contraires : validée par Anne, refusée par Paul » ;
     - un verdict arrivé tard (`review.statusChanged`) est annoncé poliment ;
-    - ni « Avis contraires » ni « Validation contestée » **n'ouvre l'intégration** : il faut une
-      nouvelle demande, validée sans avis contraire.
+    - **Statut de la version, sur plusieurs demandes** (indépendant de l'ordre d'arrivée) :
+      « Validation contestée » s'il y a une demande contestée ; sinon « Avis contraires » s'il y a une
+      validée et une refusée ; sinon « Refusée » s'il y a une refusée ; sinon « Validée » s'il y en a
+      une validée ; sinon « En attente » ; « Retirée » seulement si toutes le sont ;
+    - ni « Avis contraires », ni « Refusée », ni « Validation contestée » **n'ouvre
+      l'intégration** : une demande refusée ou contestée reste prise en compte ; il faut **modifier**
+      le texte et soumettre la nouvelle version.
 - **Ce que voit la personne sollicitée** :
   - un **bandeau-question** (rang « questions », L-8) : « Marie vous demande de valider « Envoyée
     au comité » · Voir » ;
@@ -3773,7 +3786,7 @@ la table de **chaque** système.
 - toute combinaison Ctrl+Alt ;
 - Alt+alphanumérique sous Windows.
 
-**Clavier de l'éditeur (CodeMirror) : collisions et règles** (Codex R9-M1). Inkwell installe le
+**Clavier de l'éditeur (CodeMirror) : collisions et règles** (Fable R9-M1). Inkwell installe le
 clavier par défaut de CodeMirror (`defaultKeymap`, `historyKeymap`, `searchKeymap`,
 `editor/setup.ts:127`). Le registre d'Inkwell est installé en **`Prec.high`**. Pour le contexte
 « texte », le test K-6 traite ces trois claviers comme une **quatrième table réservée** : toute

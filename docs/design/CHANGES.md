@@ -553,3 +553,11 @@ points 2, 3, 6, 8, 9, 10 et 12 étaient déjà couverts par la rév. 7.2. Compl�
   n'ouvrent l'intégration (§4.48).
 - **Point 5** : texte d'intégration aligné : « Vous intégrez la version « Envoyée au comité »,
   validée par Anne ; 2 modifications plus récentes ne sont pas intégrées. »
+
+# Alignement final (confirmation 2)
+
+Réponse à [19-codex-confirm2](../architecture/reviews/19-codex-confirm2.md) et [20-sonnet-confirm2](../architecture/reviews/20-sonnet-confirm2.md). Décisions utilisatrice inchangées.
+
+- **§4.48, « Validation contestée »** : uniquement l'**équivocation** (chaîne de signatures fourchée) ; une décision est définitive, la seconde est montrée « Décision déjà rendue — soumettre à nouveau » ; états décision ∥ retrait, décision après retrait vu, retrait après décision ; statut de la version sur plusieurs demandes (ordre de l'architecture VD-3) ; reprise = modifier le texte et soumettre la nouvelle version.
+- **§4.22, présence** : repli sans PD-5 ou pair ancien = aucune présence émise (architecture §6.11), plus de curseurs affichés pour tous.
+- **Mineurs** : phrases « à aligner » retirées (§4.18, §4.22) ; attributions R9-M1 corrigées (Fable) ; `coverage.md` (⇧⌘K) et `inventory.md` (`fonts/`, G-107).

@@ -1905,7 +1905,7 @@ en est une **projection** reconstructible, pour chercher et lister vite.
   **d'autrui** (résoudre, rouvrir) dépend du **rôle**, que la garde ne connaît pas : c'est la
   **couverture** (protocole §9.4, étape 3) qui l'exige, par l'attestation d'un appareil qui écrit ; un
   lecteur ne résout que ses propres fils. Le nom affiché vient de la liste signée.
-  **Bornes, toutes stables par réunion** (deux branches valides réunies restent valides) :
+  **Bornes d'admission, toutes stables par réunion** (deux branches valides réunies restent valides) :
   - **par modification** : ≤ 64 Kio encodée, ≤ 4 Kio par corps de message, ≤ 16 mentions ;
   - **par acteur** `(clé, epoch)` et par document de commentaires : ≤ 8 192 modifications et ≤ 8 Mio
     encodés **le long de sa propre chaîne** (les modifications d'un acteur sont totalement ordonnées,
@@ -1914,7 +1914,10 @@ en est une **projection** reconstructible, pour chercher et lister vite.
     modifications de cet acteur, jamais des autres : boucler sur son propre message n'épuise que sa
     part (`repo.json#comments-author-history`) ;
   - **par clé**, toutes générations : le **quota N10** de l'auteur (cumulé, crédité après
-    vérification, protocole §8), réduit à **64 Mio** pour un lecteur ;
+    vérification, protocole §8), réduit à **64 Mio** pour un lecteur. Ce n'est **pas** un prédicat
+    d'admission : c'est un **plafond de ressource local**, jamais un verdict de validité (il ne
+    dépend pas du seul `before(c)` d'un acteur et ne fait donc pas partie des bornes stables
+    ci-dessus) ;
   - **taille totale** du document : **jamais un refus**, un **palier de chargement local** (ADR
     0028 : au-delà de 16 Mio, chargé par pages, marques limitées à la vue) ; aucune borne sur les
     objets vivants.
@@ -1964,23 +1967,52 @@ une personne, qui la **valide** ou la **refuse**, avec une note facultative.
     `reviews` déclarée (ouverte = sans `decide` ni `withdraw` valides dans ce passé) ;
   - `decide` valide si le signataire est l'`assignee` de la soumission et membre à sa frontière ;
     une **seule** décision compte par soumission : la première sur la **chaîne** du signataire
-    (plus petite `position`) ; une décision ultérieure sur la même soumission est ignorée et montrée
-    « décision ultérieure sans effet » ;
-  - `withdraw` valide si son passé déclaré ne contient **aucune** décision valide de la soumission.
-- **VD-3 États, pli déterministe** (fonction de l'ensemble des ops valides) : une soumission est
-  **`validée`** ou **`refusée`** si une décision valide existe (**la décision l'emporte** sur un retrait
-  concurrent, montré « retrait concurrent, sans effet ») ; sinon **`retirée`** si un retrait valide
-  existe ; sinon **`soumise`**. **`contestée`** : la chaîne du signataire d'une décision (ou de
-  l'auteur de la soumission) est **fourchée** (deux ops valides à la même `position`) ; la preuve est
+    (plus petite `position`) ; une décision ultérieure sur la même soumission, **même contraire**,
+    est ignorée et montrée « décision déjà rendue — soumettre à nouveau » : **une décision est
+    définitive** ; changer d'avis exige une **nouvelle soumission** de la version, de sorte qu'une
+    approbation prouve exactement ce qui a été validé ; une décision dont le passé déclaré
+    (frontière `reviews`) contient déjà un `withdraw` valide de la soumission est **invalide**
+    (le décideur l'avait vu) et ignorée, montrée « décision après retrait, sans effet » ;
+  - `withdraw` valide si son passé déclaré ne contient **aucune** décision valide de la soumission ;
+    un retrait fait **après** une décision (dans son futur) est sans effet.
+- **VD-3 États, pli déterministe** (fonction de l'ensemble des ops valides, jamais de l'ordre
+  d'arrivée). **Par soumission**, première ligne applicable de la table (précédence décroissante) :
+
+  | État | Condition |
+  |---|---|
+  | `contestée` | la chaîne du signataire de la décision qui compterait, ou celle de l'auteur de la soumission, est **fourchée** (deux ops valides à la même `position`) et l'op concernée est **à la position de gel ou au-delà** ; **seule l'équivocation** (même personne, décisions concurrentes en conflit) donne cet état, jamais une décision séquentielle contraire |
+  | `validée` / `refusée` | une décision valide existe (la première sur la chaîne) ; elle **l'emporte** sur un retrait **causalement concurrent** (« retrait concurrent, sans effet ») |
+  | `retirée` | un retrait valide existe et aucune décision valide |
+  | `soumise` | sinon |
+
+  Cas écrits : décision **concurrente** au retrait → la décision gagne ; décision **causalement
+  après** un retrait vu → décision invalide, ignorée ; retrait **après** une décision → sans effet ;
+  décision ultérieure sur la même chaîne, même contraire → ignorée (« décision déjà rendue —
+  soumettre à nouveau »), la soumission reste `validée` ou `refusée`. La fourche est prouvée par
   `review_equivocation_v1` (PD-8 : les deux ops signées, même auteur, même `position`, contenus
   différents, vérifiables sans autre donnée) ; comme pour les annonces (protocole §4.10, point de
-  gel), la chaîne est **gelée** à la fourche et toute soumission ou décision au-delà est
-  `contestée`. Une `VersionId` peut avoir plusieurs soumissions : son **statut** est `validée` si au
-  moins une soumission est `validée` et aucune `refusée` ni `contestée` ; `avis contraires` si l'on
-  a des deux ; sinon l'état de sa soumission la plus récente sur la chaîne de son auteur. Tous les
-  ordres de réception donnent le même état (`review.json#withdraw-concurrent-decide`,
-  `#two-decisions-same-signer`, `#chain-fork-contested`, `#assignee-not-member`,
-  `#open-count-at-frontier`, `#permutations`).
+  gel), la chaîne est **gelée** à la fourche. **Statut d'une `VersionId`** (plusieurs soumissions,
+  par des auteurs ou des assignees quelconques) : fonction du seul **multiensemble** des états de ses
+  soumissions, donc indépendante de l'arrivée et de tout ordre entre chaînes ; première ligne
+  applicable :
+
+  | Statut | Condition |
+  |---|---|
+  | `contestée` | au moins une soumission `contestée` |
+  | `avis contraires` | au moins une `validée` et au moins une `refusée` (aucune `contestée`) |
+  | `refusée` | au moins une `refusée` |
+  | `validée` | au moins une `validée` |
+  | `soumise` | au moins une `soumise` |
+  | `retirée` | toutes `retirées` |
+
+  Une soumission `refusée` ou `contestée` reste prise en compte : une nouvelle soumission de la même
+  `VersionId` n'efface rien ; pour obtenir un statut `validée`, il faut **modifier** le texte (VD-1,
+  autre `VersionId`) et le soumettre. Rendu accessible de tous ces états (forme, mot, nom accessible,
+  annonce `review.statusChanged`) : **design §4.48**. Vecteurs : `review.json#withdraw-concurrent-decide`,
+  `#decide-after-seen-withdraw`, `#withdraw-after-decide`, `#two-decisions-same-signer`,
+  `#chain-fork-contested`, `#assignee-not-member`, `#open-count-at-frontier`,
+  `#version-status-no-verdict` (soumise + retirée), `#version-status-contested-plus-approved`,
+  `#two-requests-same-assignee`, `#permutations` (toutes permutations d'arrivée).
 - **VD-4 Qui valide.** Pas de rôle nouveau dans la liste des membres : la **personne désignée** par
   la demande (tout membre, lecteur compris : un manager n'écrit pas forcément ; décidé par
   l'utilisatrice le 2026-11-02). En option, une **politique d'admin** `review/policy` (PD-9) : liste
@@ -3913,7 +3945,8 @@ au registre des domaines (protocole §20.4). Règles et pli : VD-2, VD-3. **Preu
 `author`, même `position`, octets différents, chacune vérifiable ; gardée la première par
 `(author, position)`, au plus 4 par clé ; diffusée comme la preuve §4.8 ; effet : gel de la chaîne à
 cette position (comme le point de gel du §4.10). Deux décisions contraires à des positions
-**différentes** ne sont **pas** une équivoque (la première sur la chaîne compte). Stockage :
+**différentes** ne sont **pas** une équivoque : la première sur la chaîne compte et l'autre est
+ignorée (« décision déjà rendue — soumettre à nouveau »). Stockage :
 ensemble signé `.inkwell/sets/review/` (§6.1). Vecteurs : `review.json#*` (VD-3).
 
 **PD-9 — Espace de décisions `review/`** (N48, comme PD-1) : `review/policy {v:1, approvers:[clé],
