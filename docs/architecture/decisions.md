@@ -167,8 +167,8 @@ tant qu'elles sont ouvertes, la spécification n'affirme pas sa fidélité compl
 | AD-103 | synchronisation texte ↔ aperçu : table par compilation, LSP amont ou sidecar `inkwell-typst` | technique, après P-SYNC | — | — |
 | AD-104 | vue stable ; suivre une personne ; œil sur l'avatar de qui suit | **décidé par l'utilisatrice (2026-11-01)** (annonce) | **PD-4** (présence) | — |
 | AD-105 | variantes du projet : fourches, partagées, contenu à la demande, versions par variante | **décidé par l'utilisatrice (2026-11-01)** (N46) | **PD-5**, **PD-6** | — |
-| AD-106 | commentaires dans un document dérivé par fichier ; index SQLite dérivé | utilisatrice (place des commentaires) | **PD-7** | — |
-| AD-107 | validation signée liée à la `VersionId` ; personne désignée, politique facultative | utilisatrice (sans rôle nouveau) | **PD-8**, **PD-9** | — |
+| AD-106 | commentaires dans un document dérivé par fichier ; index SQLite dérivé | **décidé par l'utilisatrice le 2026-11-02** (avec chaque fichier) | **PD-7** | — |
+| AD-107 | validation signée liée à la `VersionId` ; personne désignée, politique facultative | **décidé par l'utilisatrice le 2026-11-02** (personne nommée, sans rôle nouveau) | **PD-8**, **PD-9** | — |
 
 ---
 
