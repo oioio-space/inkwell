@@ -4,20 +4,20 @@
     {
       "name": "first-paint",
       "entryType": "paint",
-      "startTime": 20,
+      "startTime": 24,
       "duration": 0,
-      "navigationId": 2776,
-      "paintTime": 9.299999952316284,
-      "presentationTime": 20
+      "navigationId": 368,
+      "paintTime": 12.699999928474426,
+      "presentationTime": 24
     },
     {
       "name": "first-contentful-paint",
       "entryType": "paint",
-      "startTime": 140,
+      "startTime": 180,
       "duration": 0,
-      "navigationId": 2776,
-      "paintTime": 135.5,
-      "presentationTime": 140
+      "navigationId": 368,
+      "paintTime": 172.79999995231628,
+      "presentationTime": 180
     }
   ],
   "warning": "Diagnostic only, not PM-2/PM-4 compliant"

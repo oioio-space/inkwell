@@ -42,7 +42,7 @@ Path("testdata/perf/corpus.json").write_text(json.dumps({
     "memory_blobs": "blobs/00.bin through blobs/19.bin (20 MiB)",
     "git_benchmark_blobs": "all 50 blobs (50 MiB)", "files": files}, indent=2)+"\n")
 commands = [
-    ["pnpm", "--dir", "frontend", "exec", "vite", "build", "--configLoader", "runner", "--mode", "production", "--outDir", str(Path.home() / ".cache/inkwell/l0-frontend")],
+    ["pnpm", "--config.verifyDepsBeforeRun=false", "--dir", "frontend", "exec", "vite", "build", "--configLoader", "runner", "--mode", "production", "--outDir", "dist"],
     ["go", "build", "-tags", "server", "-o", "bin/inkwell-server", "./cmd/inkwell"],
     ["node", "scripts/perf/browser.cjs"],
     ["node", "scripts/perf/start.cjs"],

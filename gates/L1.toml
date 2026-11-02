@@ -1,0 +1,18 @@
+# Five acceptance criteria from docs/objectif-en-cours.md.
+known_failures = ["Sandbox re-execs the cgo GUI binary instead of static inkwell-sandbox (spec 9.5/9.10); target lot: Fondations extensibles (plugin host needs the same static launcher)"]
+raw_results = ["gates/guard-overrides.json", "docs/objectif-en-cours.md", "docs/plans/2026-11-02-L1-implementation.md", "gates/L0.json"]
+[[criteria]]
+id = "architecture"
+command = "mise run arch"
+[[criteria]]
+id = "syscall-confinement"
+command = "python3 scripts/arch-exec-check.py --self-test && python3 scripts/arch-exec-check.py && ./scripts/heavy.sh go test -race ./internal/sidecar"
+[[criteria]]
+id = "without-tools"
+command = "./scripts/heavy.sh bash scripts/sidecar-no-tools.sh"
+[[criteria]]
+id = "anti-weakening"
+command = "python3 scripts/gate-guard.py --self-test && python3 scripts/gate-guard.py"
+[[criteria]]
+id = "L0"
+command = "mise run gate -- L0"

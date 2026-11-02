@@ -120,7 +120,7 @@ func run(ctx context.Context, spec Spec, prepareMount func(Spec) (*directoryMoun
 		spec, prefix, err = directoryLimits(spec)
 	} else {
 		defer mount.close()
-		spec.FileSizeLimit = 0 // exact byte cap is applied inside the mount wrapper
+		spec.FileSizeLimit, spec.MemoryLimit = 0, 0 // applied by the mount launcher
 	}
 	if err != nil {
 		return Output{}, err

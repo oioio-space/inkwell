@@ -8,13 +8,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
-	"strconv"
 	"sync"
+	"syscall"
 
 	"golang.org/x/sys/unix"
 )
-
-const unshare = "/usr/bin/unshare"
 
 // See Documentation/filesystems/tmpfs (size= and nr_inodes=),
 // https://docs.kernel.org/filesystems/tmpfs.html, and user_namespaces(7) /
@@ -28,7 +26,13 @@ var probeOutputMount = cachedMountProbe(func() bool {
 		return false
 	}
 	defer func() { _ = os.RemoveAll(dir) }()
-	cmd := exec.Command(unshare, "--user", "--map-root-user", "--mount", shell, "-c", `exec /usr/bin/mount -t tmpfs -o size=4096,nr_inodes=2,nosuid,nodev,noexec tmpfs "$1"`, "probe", dir) // #nosec G204 -- fixed binary paths, constant script, empty environment.
+	path, args, err := sandboxPrefix(sandboxConfig{Directory: dir, MountBytes: 4096, Probe: true})
+	if err != nil {
+		return false
+	}
+	cmd := exec.Command(path, args...) // #nosec G204 -- re-exec our own binary.
+	setProcAttr(cmd)
+	mountNamespace(cmd)
 	cmd.Env = []string{}
 	return cmd.Run() == nil
 })
@@ -87,44 +91,19 @@ func (m *directoryMount) configure(cmd *exec.Cmd) error {
 	cwd := cmd.Dir
 	if cwd == "" {
 		cwd, err = os.Getwd()
-		if err != nil {
-			return err
-		}
+	} else {
+		cwd, err = filepath.Abs(cwd)
 	}
-	// Round down: tmpfs accounts pages and must never round the budget up.
-	size := m.spec.MaxDirBytes / int64(os.Getpagesize()) * int64(os.Getpagesize())
-	files := len(m.spec.WriteFiles)
-	capBytes := directoryFileCap(m.spec, 1)
-	// All untrusted values are positional arguments. Close handshake descriptors
-	// before exec, and drop namespace capabilities so the child cannot remount.
-	script := `umask 077
-/usr/bin/mount --make-rprivate / || exit 125
-/usr/bin/mount -t tmpfs -o "$2" tmpfs "$1" || exit 125
-dir="$1"; cwd="$3"; count="$4"
-shift 4
-while [ "$count" -gt 0 ]; do
- : > "$dir/$1" || exit 125
- shift; count=$((count-1))
-done
-printf r >&3
-read -r go <&4 || exit 125
-exec 3>&- 4<&-
-cd "$cwd" || exit 125
-exec "$@"`
-	// SELinux labels can consume an additional inode-quota unit per file.
-	// The fixed writable inode set still contains exactly len(WriteFiles) files.
-	args := []string{
-		"--user", "--map-root-user", "--mount", shell, "-c", script, "sidecar-output", dir,
-		fmt.Sprintf("size=%d,nr_inodes=%d,mode=0700,nosuid,nodev,noexec", size, 2*files+1), cwd, strconv.Itoa(files),
+	if err != nil {
+		return err
 	}
-	args = append(args, m.spec.WriteFiles...)
-	args = append(args, setpriv, "--no-new-privs", "--bounding-set=-all", "--inh-caps=-all", "--ambient-caps=-all", "--landlock-access", directoryAccess)
-	for _, name := range m.spec.WriteFiles {
-		args = append(args, "--landlock-rule", "path-beneath:write-file,truncate:"+filepath.Join(dir, name))
+	path, args, err := sandboxPrefix(sandboxConfig{WorkingDir: cwd, Directory: dir, Names: m.spec.WriteFiles, MountBytes: m.spec.MaxDirBytes, File: directoryFileCap(m.spec, 1), Memory: m.spec.MemoryLimit})
+	if err != nil {
+		return err
 	}
-	args = append(args, prlimit, "--fsize="+strconv.FormatUint(capBytes, 10), "--", cmd.Path)
-	cmd.Args = append(append([]string{unshare}, args...), cmd.Args[1:]...)
-	cmd.Path = unshare
+	cmd.Args = append(append([]string{path}, args...), cmd.Args...)
+	cmd.Path = path
+	mountNamespace(cmd)
 	cmd.ExtraFiles = []*os.File{m.readyChild, m.proceedChild}
 	return nil
 }
@@ -253,4 +232,13 @@ func (m *directoryMount) limitHit(out Output) bool {
 		}
 	}
 	return false
+}
+
+// Mount privileges exist only in the child's private user namespace.
+func mountNamespace(cmd *exec.Cmd) {
+	a := cmd.SysProcAttr
+	a.Cloneflags |= syscall.CLONE_NEWUSER | syscall.CLONE_NEWNS
+	a.UidMappings = []syscall.SysProcIDMap{{ContainerID: 0, HostID: os.Getuid(), Size: 1}}
+	a.GidMappings = []syscall.SysProcIDMap{{ContainerID: 0, HostID: os.Getgid(), Size: 1}}
+	a.GidMappingsEnableSetgroups = false
 }

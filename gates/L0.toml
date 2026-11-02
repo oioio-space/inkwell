@@ -24,7 +24,7 @@ command = "mise run test"
 
 [[criteria]]
 id = "regression-guard"
-command = "python3 scripts/perf/regression.py --self-test && python3 scripts/perf/regression.py --bench docs/perf/baseline/2026-11-02/go-bench.txt"
+command = "./scripts/heavy.sh python3 scripts/perf/regression.py --self-test && ./scripts/heavy.sh python3 scripts/perf/regression.py --bench"
 [[criteria]]
 id = "PERF-START-plugins"
 status = "deferred"

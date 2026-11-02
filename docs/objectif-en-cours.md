@@ -31,6 +31,10 @@ change plus que par une décision consignée dans `docs/architecture/decisions.m
 
 ## Journal de pilotage
 
+2026-11-03 — décision technique : TYP-10 vérifie la propriété la plus forte du noyau, avec la même sonde ABI Landlock que le lanceur. ABI ≥ 4 : aucun TCP ne quitte le bac à sable, y compris vers le proxy espion local (aucune connexion pendant la compilation). ABI < 4 : la tentative doit atteindre uniquement le proxy refusant. Dans les deux cas, ErrMissingPackage doit guider vers `.typstdeps` en moins de 20 s. Cette adaptation renforce la preuve de confinement ; elle ne retire aucun test ni ne relève aucun délai. Toute dérogation du garde est documentée dans `gates/guard-overrides.json`, référencé par le manifeste L1.
+
+2026-11-02 — décision technique : le gate Go compare la branche à son merge-base(main), mesurés dans la même session sur la même machine sous scripts/heavy.sh : 10 tours A/B entrelacés de count=2, ordre inversé à chaque tour. Régression si delta > +5 % en temps ou allocs/op et p < 0,05. Paquets et dépendances identiques : comparaison informative, exécutée et rapportée. Référence stockée conservée pour budgets absolus et tendances ; seuils e2e p95 × 1,10 inchangés. Le changement de méthode élimine le biais de charge entre sessions sans relever les seuils ; un autotest injecte +20 % de sommeil et exige sa détection.
+
 | Date | Décision |
 |---|---|
 | 2026-11-02 | Spécifications closes : design rév. 7.2 et architecture rév. 8.3 confirmées (Codex + Sonnet, plus de Fable) ; on ne les change plus que par décision consignée |
@@ -56,3 +60,15 @@ avec borne supérieure du p95, jamais une certification du p95 WebKitGTK natif.
 | 2026-11-02 — décision technique (boucle extérieure) | PERF-RELAY-ALLOC: 1 alloc/op vs 0 target — to fix in a later perf lot ; 48 B/op ; cible zéro inchangée, échec connu conservé. |
 | 2026-11-02 — décision technique (boucle extérieure) | Critères pass, fail ou deferred ; deferred exige lot cible nommé et raison, liste séparée au manifeste. Tous les non-différés doivent passer ; autotests : report sans lot, sans raison et échec coexistant avec report. Un report ne masque jamais un échec. |
 | 2026-11-02 — décision technique (boucle extérieure) | Annulation de la modification N38 dans exigences.md ; état du lot consultable via gates/L0.json ici, sans modifier l'état du registre. |
+
+### Déviation connue L1 — audit de sécurité non approuvé
+
+Le sandbox redémarre depuis le binaire GUI cgo au lieu du binaire statique
+`inkwell-sandbox` prévu aux sections 9.5/9.10. Correction différée au lot
+**Fondations extensibles (plugin host needs the same static launcher)**.
+
+Décision L1 : les nouveaux tests IPC ignorent uniquement les protections absentes du
+ noyau (signal : ABI < 6 ; socket Unix par chemin : ABI < 9), comme demandé par
+ l'audit. Aucun test existant n'est ignoré. Sur ABI suffisante, un échec de
+ confinement reste bloquant. L'exception anti-affaiblissement est liée au contenu
+ exact du fichier de tests, et ne change aucun seuil ni aucune porte.

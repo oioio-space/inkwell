@@ -1,0 +1,76 @@
+{
+  "lot": "L1",
+  "criteria": [
+    {
+      "id": "architecture",
+      "command": "mise run arch",
+      "status": "pass",
+      "exit_code": 0,
+      "duration_seconds": 1.1976050860248506,
+      "log": "gates/L1/architecture.log"
+    },
+    {
+      "id": "syscall-confinement",
+      "command": "python3 scripts/arch-exec-check.py --self-test && python3 scripts/arch-exec-check.py && ./scripts/heavy.sh go test -race ./internal/sidecar",
+      "status": "pass",
+      "exit_code": 0,
+      "duration_seconds": 0.31630460801534355,
+      "log": "gates/L1/syscall-confinement.log"
+    },
+    {
+      "id": "without-tools",
+      "command": "./scripts/heavy.sh bash scripts/sidecar-no-tools.sh",
+      "status": "pass",
+      "exit_code": 0,
+      "duration_seconds": 42.05040502699558,
+      "log": "gates/L1/without-tools.log"
+    },
+    {
+      "id": "anti-weakening",
+      "command": "python3 scripts/gate-guard.py --self-test && python3 scripts/gate-guard.py",
+      "status": "pass",
+      "exit_code": 0,
+      "duration_seconds": 0.20587958593387157,
+      "log": "gates/L1/anti-weakening.log"
+    },
+    {
+      "id": "L0",
+      "command": "mise run gate -- L0",
+      "status": "pass",
+      "exit_code": 0,
+      "duration_seconds": 1831.987885069917,
+      "log": "gates/L1/L0.log"
+    }
+  ],
+  "versions": {
+    "go": "go version go1.27.3 linux/amd64",
+    "node": "v24.22.1",
+    "typst": "unavailable: /bin/sh: line 1: typst: command not found",
+    "tinymist": "unavailable: /bin/sh: line 1: tinymist: command not found",
+    "os": "Linux-7.2.11-200.fc44.x86_64-x86_64-with-glibc2.43",
+    "embedded_sidecars": {
+      "typst": "0.15.1",
+      "tinymist": "0.15.10"
+    }
+  },
+  "sha256": {
+    "docs/objectif-en-cours.md": "c8bdffc90894366a633c22a76689a22925ed741a6fdf31c7602343d1bd25b105",
+    "docs/plans/2026-11-02-L1-implementation.md": "9cb230c37c55916ee043e43fc03f1f5ddd476bc057d7509582c971e1ee5e4629",
+    "gates/L0.json": "d14dec10ad91ae2f91fb67fa6f480f14e1457427106d1a2793a9139e2ebe5064",
+    "gates/L1/L0.log": "1f35d589d6265d53b8d19c204b7b3ffc81e1c331d37161790a0f7583e6b0c95c",
+    "gates/L1/anti-weakening.log": "99b64ef1e2431474b8861999d11f8d204902e555e436f2fcbd04e0b3c7b0f8db",
+    "gates/L1/architecture.log": "a80dd87d85ef8e8ae8c7936aee1ece3ffbcdea1811b02d92326fd60fae4b8585",
+    "gates/L1/failed-attempt-2-bench.txt": "89599ca960efedd1428fb3c510364cfe4a1c3e6de9e9d1dc69f373173254b372",
+    "gates/L1/failed-attempt-2-regression.log": "cb4fd7efeddfaba9acef0b45017e91e9c335ebda7d284ca3fd1a05f2bef11c2a",
+    "gates/L1/failed-attempt-2-test.log": "255706333eba078f6914cb0a624cf2f5c21bc771d5fa1cea66034ac83befc486",
+    "gates/L1/failed-attempt-2.json": "25f01e9760a8e7d061788cc2f94f3f8275505338f71cf4bcc6a51abde6d73a65",
+    "gates/L1/syscall-confinement.log": "171c76fce0235cdc97f43262ba8a2cbe983b6c378963fcecaf6da4df1ec9daf0",
+    "gates/L1/without-tools.log": "c99621efa7a562904af42e13b1943ef27e6c6911fca5829461239a05aab1c874",
+    "gates/guard-overrides.json": "d60aecb316d4f917ceee0e2b0ebdb261a79a6e852bd9445094e52d401875f801"
+  },
+  "status": "pass",
+  "deferrals": [],
+  "known_failures": [
+    "Sandbox re-execs the cgo GUI binary instead of static inkwell-sandbox (spec 9.5/9.10); target lot: Fondations extensibles (plugin host needs the same static launcher)"
+  ]
+}

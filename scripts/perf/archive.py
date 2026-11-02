@@ -32,8 +32,8 @@ PM-5: thresholds.json freezes the outer-loop decision: Go >+5% AND p<0.05; e2e p
 PERF-START measures current no-plugin cold app process to usable Chromium editor (warm OS caches).
 Plugin load deferred to Fondations-extensibles; PERF-MEM and native PERF-TYPE deferred to L2.
 Chromium PERF-TYPE remains proxy, never native certification. See thresholds.json for censor bounds.
-Regression guard: python3 scripts/perf/regression.py --bench FRESH_GO --e2e FRESH_P95_JSON.
-FRESH_P95_JSON maps PERF-START/PERF-TYPE to p95_ms; same measurement scope required.
+Regression guard: python3 scripts/perf/regression.py --bench --e2e FRESH_P95_JSON.
+Go gate: merge-base(main) and branch built in ~/.cache/inkwell temporary git worktree;\n10 interleaved rounds, count=2, pair order reversed each round, same machine under heavy.sh.\nUnchanged package and dependency comparisons are informational, always measured and reported.\nStored reference remains for absolute budgets and trends; e2e thresholds unchanged.\nMethod: [benchstat documentation](https://pkg.go.dev/golang.org/x/perf/cmd/benchstat#hdr-Tips)\nrecommends interleaving to distribute machine noise evenly.\nFRESH_P95_JSON maps PERF-START/PERF-TYPE to p95_ms; same measurement scope required.
 PERF-RELAY-ALLOC remains 1 alloc/op (48 B) versus the unchanged zero target.
 Known failures F10/F11/F12 are retained in gates/L0.json, never waived.
 SHA256SUMS covers all archived files except itself; corpus.json covers generated inputs.

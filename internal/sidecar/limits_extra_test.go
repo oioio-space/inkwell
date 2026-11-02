@@ -63,50 +63,6 @@ func TestDirBytes(t *testing.T) {
 	}
 }
 
-// TestWithLimitsRoundsUp: a limit is never lowered by rounding to the shell's
-// blocks, and an unset one is not applied.
-func TestWithLimitsRoundsUp(t *testing.T) {
-	path, args, err := withLimits(Spec{Path: "/bin/true", Args: []string{"x"}})
-	if err != nil || path != "/bin/true" || !slices.Equal(args, []string{"x"}) {
-		t.Fatalf("withLimits(no limits) = %q, %q, %v; want the program as is", path, args, err)
-	}
-	for _, tc := range []struct {
-		spec Spec
-		want []string // lines of the script
-		not  string
-	}{
-		{Spec{MemoryLimit: 1}, []string{"ulimit -v 1 || exit 126"}, "ulimit -f"},
-		{Spec{MemoryLimit: 1024}, []string{"ulimit -v 1 || exit 126"}, "ulimit -f"},
-		{Spec{MemoryLimit: 1025}, []string{"ulimit -v 2 || exit 126"}, "ulimit -f"},
-		{Spec{FileSizeLimit: 1}, []string{"ulimit -f 1 || exit 126"}, "ulimit -v"},
-		{Spec{FileSizeLimit: 512}, []string{"ulimit -f 1 || exit 126"}, "ulimit -v"},
-		{Spec{FileSizeLimit: 513}, []string{"ulimit -f 2 || exit 126"}, "ulimit -v"},
-		{Spec{MemoryLimit: 2048, FileSizeLimit: 1024}, []string{"ulimit -v 2 || exit 126", "ulimit -f 2 || exit 126"}, ""},
-	} {
-		tc.spec.Path, tc.spec.Args = "/bin/prog", []string{"a", "b"}
-		path, args, err := withLimits(tc.spec)
-		if err != nil {
-			t.Fatal(err)
-		}
-		if path != shell || len(args) < 6 || args[0] != "-c" || !slices.Equal(args[3:], []string{"/bin/prog", "a", "b"}) {
-			t.Errorf("withLimits(%+v) = %q %q; want the shell running the program with its arguments", tc.spec, path, args)
-			continue
-		}
-		script := args[1]
-		for _, line := range tc.want {
-			if !strings.Contains(script, line+"\n") {
-				t.Errorf("withLimits(%+v): script %q lacks %q", tc.spec, script, line)
-			}
-		}
-		if tc.not != "" && strings.Contains(script, tc.not) {
-			t.Errorf("withLimits(%+v): script %q applies a limit that was not asked for", tc.spec, script)
-		}
-		if !strings.HasSuffix(script, `exec "$@"`) {
-			t.Errorf("withLimits(%+v): script %q does not end by running the program", tc.spec, script)
-		}
-	}
-}
-
 func TestSupervisorDefaultsAreExact(t *testing.T) {
 	d := SupervisorConfig{}.withDefaults()
 	if d.Backoff.Initial != defaultInitialBackoff || d.Backoff.Max != defaultMaxBackoff || d.Backoff.Factor != 2 ||

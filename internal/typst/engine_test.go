@@ -375,44 +375,71 @@ func TestCompilePackages(t *testing.T) {
 		}
 	})
 
-	t.Run("TYP-10 a download attempt reaches the refused proxy and nothing else", func(t *testing.T) {
-		ln, err := net.Listen("tcp", "127.0.0.1:0")
-		if err != nil {
-			t.Fatal(err)
+	t.Run("TYP-10 download confinement", func(t *testing.T) {
+		netConfined := landlockTCPConfinement(t)
+		name := "ABI below 4: attempt reaches only the refusing proxy"
+		if netConfined {
+			name = "ABI at least 4: attempt cannot leave the sandbox"
 		}
-		requests := make(chan string, 8)
-		var wg sync.WaitGroup
-		wg.Go(func() {
-			for {
-				conn, err := ln.Accept()
-				if err != nil {
-					return
+		t.Run(name, func(t *testing.T) {
+			ln, err := net.Listen("tcp", "127.0.0.1:0")
+			if err != nil {
+				t.Fatal(err)
+			}
+			requests := make(chan string, 8)
+			var wg sync.WaitGroup
+			wg.Go(func() {
+				for {
+					conn, err := ln.Accept()
+					if err != nil {
+						return
+					}
+					buf := make([]byte, 512)
+					_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+					n, _ := conn.Read(buf)
+					requests <- string(buf[:n])
+					_ = conn.Close() // the proxy refuses
 				}
-				buf := make([]byte, 512)
-				_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
-				n, _ := conn.Read(buf)
-				requests <- string(buf[:n])
-				_ = conn.Close() // the proxy refuses
-			}
-		})
-		t.Cleanup(func() {
-			_ = ln.Close()
-			wg.Wait()
-		})
+			})
+			t.Cleanup(func() {
+				_ = ln.Close()
+				wg.Wait()
+			})
 
-		spy := newEngine(t, func(c *Config) { c.egressProxy, c.proxyOnly = "http://"+ln.Addr().String(), true })
-		p := writeProject(t, map[string]string{"main.typ": ghost})
-		if _, err := spy.Compile(t.Context(), p, "main.typ", WithFormats(FormatPDF)); !errors.Is(err, ErrMissingPackage) {
-			t.Fatalf("Compile = %v, want ErrMissingPackage", err)
-		}
-		select {
-		case req := <-requests:
-			if !strings.HasPrefix(req, "CONNECT packages.typst.org:443") {
-				t.Errorf("the proxy received %q, want a CONNECT to packages.typst.org", req)
+			spy := newEngine(t, func(c *Config) { c.egressProxy, c.proxyOnly = "http://"+ln.Addr().String(), true })
+			p := writeProject(t, map[string]string{"main.typ": ghost})
+			begin := time.Now()
+			_, err = spy.Compile(t.Context(), p, "main.typ", WithFormats(FormatPDF))
+			if !errors.Is(err, ErrMissingPackage) {
+				t.Fatalf("Compile = %v, want ErrMissingPackage", err)
 			}
-		case <-time.After(5 * time.Second):
-			t.Error("Typst did not try to download through the configured proxy: the environment is not what the engine set")
-		}
+			if !strings.Contains(err.Error(), ".typstdeps") {
+				t.Errorf("Compile = %v, want clear .typstdeps guidance", err)
+			}
+			if took := time.Since(begin); took > 20*time.Second {
+				t.Errorf("took %v: Typst waited on the network", took)
+			}
+			if netConfined {
+				// Drain the accept loop before checking: every connection accepted
+				// during compilation must be accounted for, even without a request.
+				_ = ln.Close()
+				wg.Wait()
+				select {
+				case req := <-requests:
+					t.Errorf("TCP confinement leaked a connection to the proxy: %q", req)
+				default:
+				}
+				return
+			}
+			select {
+			case req := <-requests:
+				if !strings.HasPrefix(req, "CONNECT packages.typst.org:443") {
+					t.Errorf("the proxy received %q, want a CONNECT to packages.typst.org", req)
+				}
+			case <-time.After(5 * time.Second):
+				t.Error("Typst did not try to download through the configured proxy: the environment is not what the engine set")
+			}
+		})
 	})
 
 	t.Run("the environment of Inkwell does not leak into the compilation", func(t *testing.T) {
@@ -471,7 +498,7 @@ func TestCompilePackages(t *testing.T) {
 func TestCompileHostile(t *testing.T) {
 	t.Run("TYP-14 an endless loop stops at the timeout, leaving no process", func(t *testing.T) {
 		e := newEngine(t, func(c *Config) { c.Timeout = time.Second })
-		p := writeProject(t, map[string]string{"main.typ": "#for i in range(3000000000) { let x = i * 2 }\n"})
+		p := writeProject(t, map[string]string{"main.typ": "#for i in range(10000) { for j in range(10000) { let x = i * j } }\n"})
 		begin := time.Now()
 		_, err := e.Compile(t.Context(), p, "main.typ")
 		if !errors.Is(err, ErrTimeout) {
@@ -492,7 +519,7 @@ func TestCompileHostile(t *testing.T) {
 
 	t.Run("TYP-15 cancelling the context stops the compilation", func(t *testing.T) {
 		e := newEngine(t, nil)
-		p := writeProject(t, map[string]string{"main.typ": "#for i in range(3000000000) { let x = i * 2 }\n"})
+		p := writeProject(t, map[string]string{"main.typ": "#for i in range(10000) { for j in range(10000) { let x = i * j } }\n"})
 		ctx, cancel := context.WithCancel(t.Context())
 		time.AfterFunc(400*time.Millisecond, cancel)
 		begin := time.Now()
@@ -727,7 +754,7 @@ func TestCompileInputs(t *testing.T) {
 	})
 
 	t.Run("TYP-27 Query honours cancellation and the timeout", func(t *testing.T) {
-		slow := writeProject(t, map[string]string{"main.typ": "#for i in range(3000000000) { let x = i * 2 }\n"})
+		slow := writeProject(t, map[string]string{"main.typ": "#for i in range(10000) { for j in range(10000) { let x = i * j } }\n"})
 		short := newEngine(t, func(c *Config) { c.Timeout = time.Second })
 		if _, err := short.Query(t.Context(), slow, "main.typ", "heading"); !errors.Is(err, ErrTimeout) {
 			t.Errorf("Query(slow) = %v, want ErrTimeout", err)

@@ -25,7 +25,11 @@ func isolate(cmd *exec.Cmd) {
 // and distributions may forbid unprivileged user namespaces (sysctl, AppArmor
 // on Ubuntu 24.04, containers).
 var probeIsolation = sync.OnceValue(func() bool {
-	cmd := exec.Command(shell, "-c", "exit 0") // #nosec G204 -- constant command
+	path, args, err := sandboxPrefix(sandboxConfig{Probe: true})
+	if err != nil {
+		return false
+	}
+	cmd := exec.Command(path, args...) // #nosec G204 -- re-exec our own binary.
 	cmd.Env = []string{}
 	setProcAttr(cmd)
 	isolate(cmd)
