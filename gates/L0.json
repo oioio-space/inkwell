@@ -1,0 +1,512 @@
+{
+  "lot": "L0",
+  "criteria": [
+    {
+      "id": "harness",
+      "command": "python3 scripts/gate-selftest.py",
+      "status": "pass",
+      "exit_code": 0,
+      "duration_seconds": 0.11857421998865902,
+      "log": "gates/L0/harness.log"
+    },
+    {
+      "id": "baseline",
+      "command": "./scripts/heavy.sh python3 scripts/perf/baseline.py",
+      "status": "pass",
+      "exit_code": 0,
+      "duration_seconds": 19.439872635994107,
+      "log": "gates/L0/baseline.log"
+    },
+    {
+      "id": "hot-paths",
+      "command": "./scripts/heavy.sh bash scripts/perf/bench.sh",
+      "status": "pass",
+      "exit_code": 0,
+      "duration_seconds": 193.71097986097448,
+      "log": "gates/L0/hot-paths.log"
+    },
+    {
+      "id": "archive",
+      "command": "python3 scripts/perf/archive.py",
+      "status": "pass",
+      "exit_code": 0,
+      "duration_seconds": 0.02513172698672861,
+      "log": "gates/L0/archive.log"
+    },
+    {
+      "id": "lint",
+      "command": "./scripts/heavy.sh mise run lint",
+      "status": "pass",
+      "exit_code": 0,
+      "duration_seconds": 7.117039811098948,
+      "log": "gates/L0/lint.log"
+    },
+    {
+      "id": "test",
+      "command": "mise run test",
+      "status": "pass",
+      "exit_code": 0,
+      "duration_seconds": 3.082321740919724,
+      "log": "gates/L0/test.log"
+    },
+    {
+      "id": "regression-guard",
+      "command": "python3 scripts/perf/regression.py --self-test && python3 scripts/perf/regression.py --bench docs/perf/baseline/2026-11-02/go-bench.txt",
+      "status": "pass",
+      "exit_code": 0,
+      "duration_seconds": 0.09219260409008712,
+      "log": "gates/L0/regression-guard.log"
+    },
+    {
+      "id": "PERF-START-plugins",
+      "status": "deferred",
+      "target_lot": "Fondations-extensibles",
+      "reason": "Plugins do not exist yet; pinned plugin loading belongs to the plugin lot (Fondations extensibles)."
+    },
+    {
+      "id": "PERF-MEM",
+      "status": "deferred",
+      "target_lot": "L2",
+      "reason": "Real multi-file corpus opening requires G-0 delivered in L2."
+    },
+    {
+      "id": "PERF-TYPE-native",
+      "status": "deferred",
+      "target_lot": "L2",
+      "reason": "Chromium proxy cannot certify native WebKitGTK keystroke-to-paint p95."
+    }
+  ],
+  "versions": {
+    "go": "go version go1.27.3 linux/amd64",
+    "node": "v24.22.1",
+    "typst": "unavailable: /bin/sh: line 1: typst: command not found",
+    "tinymist": "unavailable: /bin/sh: line 1: tinymist: command not found",
+    "os": "Linux-7.2.11-200.fc44.x86_64-x86_64-with-glibc2.43",
+    "embedded_sidecars": {
+      "typst": "0.15.1",
+      "tinymist": "0.15.10"
+    }
+  },
+  "sha256": {
+    "docs/perf/baseline/2026-11-02/README.md": "19be59fe8f8204c2b3bcaffa936d205bc4d9bc3b21150d76e7db6f9c107bc220",
+    "docs/perf/baseline/2026-11-02/SHA256SUMS": "0b78a378ef7da28ff4a57e06a3ca2f14f0e7053af94d10db374452a6ea78c912",
+    "docs/perf/baseline/2026-11-02/benchstat.txt": "6491faf31e17c0a90831589774af02ede4cf401640b5f2c5633dff06af5b1f6a",
+    "docs/perf/baseline/2026-11-02/browser-attempt-0.log": "803839fc0127ef19c1be94c39c1c0740c5ef49d54c883259c38d8a2b21b98b80",
+    "docs/perf/baseline/2026-11-02/browser-attempt-1.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "docs/perf/baseline/2026-11-02/browser-attempt-2.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "docs/perf/baseline/2026-11-02/browser-attempt-3.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "docs/perf/baseline/2026-11-02/browser.json": "673310df7c106372ba8526d16a618d7095202bfa38a924189b3a25e63216ea65",
+    "docs/perf/baseline/2026-11-02/browser.png": "59dec0863c082f4e213a2b1771cca01d9aaa040538fcaaee5f788800ed992180",
+    "docs/perf/baseline/2026-11-02/corpus-build.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "docs/perf/baseline/2026-11-02/go-bench.txt": "42fc9f05195eabb06475ded18c34f7f12dc397ac246acd8a9ecf2a6349926744",
+    "docs/perf/baseline/2026-11-02/go-reference-attempt-1.txt": "ce968d1b31d478a823c8b90c004a8741ad6d40c11a4e5b5164c0227c1e6be634",
+    "docs/perf/baseline/2026-11-02/go-reference-attempt-2.txt": "4060f9f2d4f5837887c6bd2fe3fb2c7c8aee53297d815f98b4b3912b67317670",
+    "docs/perf/baseline/2026-11-02/go-reference-attempt-3.txt": "67b9d9c05d9488b1665025a38e7e4bcc0c97754ab8feace12de78ed41301e66c",
+    "docs/perf/baseline/2026-11-02/go-reference.txt": "67b9d9c05d9488b1665025a38e7e4bcc0c97754ab8feace12de78ed41301e66c",
+    "docs/perf/baseline/2026-11-02/machine.json": "505a1198c9966ffdc4772fd345756c874a2e16aa1fee2e28b2432472fd0c85ce",
+    "docs/perf/baseline/2026-11-02/measurements.json": "3996761c28f88130c1aa7cd97f07e909b46c0e6d99bbbaa7dc742e62e395becf",
+    "docs/perf/baseline/2026-11-02/reference-quality.json": "1f73373846646c1dd905b237d8462706a89ffc250cfa87591fcd2872de6c26f6",
+    "docs/perf/baseline/2026-11-02/server.log": "dafbad716c061023d27410378e516cb6e91e851d3d8bdac1166d496d30b9692e",
+    "docs/perf/baseline/2026-11-02/start-reference.json": "086a3da180ebe3815e3c91d09d470a49c37fd7ec10085b147461a898d6717d85",
+    "docs/perf/baseline/2026-11-02/start.json": "55716ab433907ad1424441ae7836342b8a1a9b4a46d412bd0c946ba8f09f59ec",
+    "docs/perf/baseline/2026-11-02/summary.json": "e375e79094df2a9ca6e5f1a29c4856725f0df46a8f0f62995a5fd45b7bf9619e",
+    "docs/perf/baseline/2026-11-02/test-first-failure.log": "f04ce3ebdea4cb51eea161a17310b0b93ef40869911c7e6810096a2ddb8c1178",
+    "docs/perf/baseline/2026-11-02/test-retry.log": "47c46e894db027ec67b671325d91ae7eae74a725e25b252f4e639c4d04d2433c",
+    "docs/perf/baseline/2026-11-02/thresholds.json": "f08c459266013976463dc637e60aa1529e9f4b36d20084234135d7ea4380001a",
+    "docs/perf/baseline/2026-11-02/type-diagnostic.json": "38587d3b41da4fd468afc4587f472ca82d254d7ab72afa7a96fa6f17b5018281",
+    "gates/L0/archive.log": "2e033c38ecafbb6757271b0ec302ec855d7dd951e6787778d91ea1ffc3b06771",
+    "gates/L0/baseline.log": "3996761c28f88130c1aa7cd97f07e909b46c0e6d99bbbaa7dc742e62e395becf",
+    "gates/L0/harness.log": "28b5410facaebebd529db2d515f45a11e1511e266ae601c46b37ab015d78ac14",
+    "gates/L0/hot-paths.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "gates/L0/lint.log": "0524c927db1e816271da2090b353ff17a4c042eecd5cf744f075a36e5b5c4a5e",
+    "gates/L0/regression-guard.log": "2eef8ffca0408f6104851424c08729259863cca1a34f7a3da08043a3fc4e76c3",
+    "gates/L0/test.log": "1020d46d330a55793aa24f66485327efa0ed610579767492513b49d34700be2f",
+    "testdata/perf/README.md": "c45e147a2f5c936a495315a6e542ee4ecf4021293d813f072b33b877907c741f",
+    "testdata/perf/corpus.json": "eae8ab7967e1972a694cb35660b94e77ae01b62dfa9fac55809d8c52f865f834"
+  },
+  "status": "pass",
+  "deferrals": [
+    {
+      "id": "PERF-START-plugins",
+      "status": "deferred",
+      "target_lot": "Fondations-extensibles",
+      "reason": "Plugins do not exist yet; pinned plugin loading belongs to the plugin lot (Fondations extensibles)."
+    },
+    {
+      "id": "PERF-MEM",
+      "status": "deferred",
+      "target_lot": "L2",
+      "reason": "Real multi-file corpus opening requires G-0 delivered in L2."
+    },
+    {
+      "id": "PERF-TYPE-native",
+      "status": "deferred",
+      "target_lot": "L2",
+      "reason": "Chromium proxy cannot certify native WebKitGTK keystroke-to-paint p95."
+    }
+  ],
+  "known_failures": [
+    "PERF-RELAY-ALLOC: 1 alloc/op vs 0 target \u2014 to fix in a later perf lot",
+    "F10: intermittent libp2p panic",
+    "F11: sidecar test /tmp quota",
+    "F12: vector generator differs from corpus",
+    "L0 observation: concurrent Typst package installation failed with directory not empty on first test run; full retry passed (archived logs)"
+  ],
+  "measurements": [
+    {
+      "GOMAXPROCS": 20,
+      "count": 20,
+      "cv_definition": "sample standard deviation / mean, ns/op",
+      "attempts": [
+        {
+          "attempt": 1,
+          "load_before": [
+            2.5166015625,
+            6.24560546875,
+            5.92919921875
+          ],
+          "cpu_frequency_before": [
+            "cpu MHz\t\t: 400.924",
+            "cpu MHz\t\t: 1821.394",
+            "cpu MHz\t\t: 2461.215",
+            "cpu MHz\t\t: 400.169",
+            "cpu MHz\t\t: 3702.958",
+            "cpu MHz\t\t: 2436.136",
+            "cpu MHz\t\t: 3705.856",
+            "cpu MHz\t\t: 4549.309",
+            "cpu MHz\t\t: 3720.950",
+            "cpu MHz\t\t: 400.000",
+            "cpu MHz\t\t: 3348.911",
+            "cpu MHz\t\t: 612.538",
+            "cpu MHz\t\t: 399.926",
+            "cpu MHz\t\t: 2026.822",
+            "cpu MHz\t\t: 399.293",
+            "cpu MHz\t\t: 2421.170",
+            "cpu MHz\t\t: 399.874",
+            "cpu MHz\t\t: 1980.048",
+            "cpu MHz\t\t: 399.925",
+            "cpu MHz\t\t: 400.000"
+          ],
+          "load_after": [
+            1.81689453125,
+            4.6162109375,
+            5.6416015625
+          ],
+          "cpu_frequency_after": [
+            "cpu MHz\t\t: 400.089",
+            "cpu MHz\t\t: 399.675",
+            "cpu MHz\t\t: 2319.894",
+            "cpu MHz\t\t: 1594.535",
+            "cpu MHz\t\t: 4109.652",
+            "cpu MHz\t\t: 401.068",
+            "cpu MHz\t\t: 400.000",
+            "cpu MHz\t\t: 399.566",
+            "cpu MHz\t\t: 399.786",
+            "cpu MHz\t\t: 400.000",
+            "cpu MHz\t\t: 4281.949",
+            "cpu MHz\t\t: 4300.000",
+            "cpu MHz\t\t: 649.968",
+            "cpu MHz\t\t: 1041.676",
+            "cpu MHz\t\t: 814.776",
+            "cpu MHz\t\t: 400.104",
+            "cpu MHz\t\t: 559.328",
+            "cpu MHz\t\t: 400.079",
+            "cpu MHz\t\t: 628.833",
+            "cpu MHz\t\t: 669.734"
+          ],
+          "cv_percent": {
+            "BenchmarkPut-20": 79.58559831977632,
+            "BenchmarkReadSlice-20": 61.965149223036335,
+            "BenchmarkFetch-20": 4.27880527025141,
+            "BenchmarkWrite/256-20": 7.255075314020141,
+            "BenchmarkWrite/16384-20": 7.659113367017984,
+            "BenchmarkWrite/65536-20": 2.8946591689836323,
+            "BenchmarkWrite/1048576-20": 5.202804525780682,
+            "BenchmarkRead/256-20": 1.418472216479189,
+            "BenchmarkRead/16384-20": 1.9481378019708433,
+            "BenchmarkRead/65536-20": 7.226407041587484,
+            "BenchmarkRead/1048576-20": 4.073468242092047,
+            "BenchmarkSend/256-20": 1.403166116811322,
+            "BenchmarkSend/16384-20": 0.7453575406748635,
+            "BenchmarkSend/1048576-20": 12.673407493175603,
+            "BenchmarkRelay/Idle-20": 0.6952850002060693,
+            "BenchmarkRelay/Message-20": 6.950965629457105
+          },
+          "status": "noisy"
+        },
+        {
+          "attempt": 2,
+          "load_before": [
+            1.81689453125,
+            4.6162109375,
+            5.6416015625
+          ],
+          "cpu_frequency_before": [
+            "cpu MHz\t\t: 400.305",
+            "cpu MHz\t\t: 400.000",
+            "cpu MHz\t\t: 399.484",
+            "cpu MHz\t\t: 399.749",
+            "cpu MHz\t\t: 4109.652",
+            "cpu MHz\t\t: 813.627",
+            "cpu MHz\t\t: 4300.000",
+            "cpu MHz\t\t: 4115.929",
+            "cpu MHz\t\t: 400.309",
+            "cpu MHz\t\t: 400.264",
+            "cpu MHz\t\t: 952.487",
+            "cpu MHz\t\t: 400.753",
+            "cpu MHz\t\t: 473.409",
+            "cpu MHz\t\t: 400.084",
+            "cpu MHz\t\t: 489.866",
+            "cpu MHz\t\t: 400.181",
+            "cpu MHz\t\t: 1307.258",
+            "cpu MHz\t\t: 915.199",
+            "cpu MHz\t\t: 399.947",
+            "cpu MHz\t\t: 937.573"
+          ],
+          "load_after": [
+            1.91748046875,
+            2.6484375,
+            4.345703125
+          ],
+          "cpu_frequency_after": [
+            "cpu MHz\t\t: 521.924",
+            "cpu MHz\t\t: 400.422",
+            "cpu MHz\t\t: 2005.990",
+            "cpu MHz\t\t: 3249.855",
+            "cpu MHz\t\t: 400.181",
+            "cpu MHz\t\t: 400.378",
+            "cpu MHz\t\t: 4467.643",
+            "cpu MHz\t\t: 4491.362",
+            "cpu MHz\t\t: 399.203",
+            "cpu MHz\t\t: 403.515",
+            "cpu MHz\t\t: 400.695",
+            "cpu MHz\t\t: 492.117",
+            "cpu MHz\t\t: 400.025",
+            "cpu MHz\t\t: 399.617",
+            "cpu MHz\t\t: 400.311",
+            "cpu MHz\t\t: 400.216",
+            "cpu MHz\t\t: 1496.673",
+            "cpu MHz\t\t: 1407.946",
+            "cpu MHz\t\t: 1453.794",
+            "cpu MHz\t\t: 1501.940"
+          ],
+          "cv_percent": {
+            "BenchmarkPut-20": 4.1442347739062075,
+            "BenchmarkReadSlice-20": 4.282869866887832,
+            "BenchmarkFetch-20": 5.038945907786897,
+            "BenchmarkWrite/256-20": 2.47447433728366,
+            "BenchmarkWrite/16384-20": 4.241624190348317,
+            "BenchmarkWrite/65536-20": 8.14754986873508,
+            "BenchmarkWrite/1048576-20": 1.8512323804632598,
+            "BenchmarkRead/256-20": 5.466848874762921,
+            "BenchmarkRead/16384-20": 2.2250876290192125,
+            "BenchmarkRead/65536-20": 5.584989542651226,
+            "BenchmarkRead/1048576-20": 10.148519791247706,
+            "BenchmarkSend/256-20": 1.5758123562613433,
+            "BenchmarkSend/16384-20": 1.3933178001242585,
+            "BenchmarkSend/1048576-20": 12.747286286586675,
+            "BenchmarkRelay/Idle-20": 0.8745116301145778,
+            "BenchmarkRelay/Message-20": 3.1149886723042277
+          },
+          "status": "noisy"
+        },
+        {
+          "attempt": 3,
+          "load_before": [
+            1.91748046875,
+            2.6484375,
+            4.345703125
+          ],
+          "cpu_frequency_before": [
+            "cpu MHz\t\t: 825.737",
+            "cpu MHz\t\t: 1174.481",
+            "cpu MHz\t\t: 1046.178",
+            "cpu MHz\t\t: 1628.308",
+            "cpu MHz\t\t: 716.204",
+            "cpu MHz\t\t: 2566.028",
+            "cpu MHz\t\t: 4510.975",
+            "cpu MHz\t\t: 4456.079",
+            "cpu MHz\t\t: 2807.949",
+            "cpu MHz\t\t: 2340.838",
+            "cpu MHz\t\t: 400.783",
+            "cpu MHz\t\t: 400.263",
+            "cpu MHz\t\t: 678.658",
+            "cpu MHz\t\t: 649.599",
+            "cpu MHz\t\t: 1060.909",
+            "cpu MHz\t\t: 644.879",
+            "cpu MHz\t\t: 2662.455",
+            "cpu MHz\t\t: 564.440",
+            "cpu MHz\t\t: 585.774",
+            "cpu MHz\t\t: 569.242"
+          ],
+          "load_after": [
+            1.548828125,
+            2.15087890625,
+            3.56005859375
+          ],
+          "cpu_frequency_after": [
+            "cpu MHz\t\t: 1594.963",
+            "cpu MHz\t\t: 2013.833",
+            "cpu MHz\t\t: 399.568",
+            "cpu MHz\t\t: 400.000",
+            "cpu MHz\t\t: 4304.908",
+            "cpu MHz\t\t: 4500.000",
+            "cpu MHz\t\t: 4510.392",
+            "cpu MHz\t\t: 4334.849",
+            "cpu MHz\t\t: 3284.944",
+            "cpu MHz\t\t: 3730.416",
+            "cpu MHz\t\t: 639.489",
+            "cpu MHz\t\t: 672.309",
+            "cpu MHz\t\t: 2105.671",
+            "cpu MHz\t\t: 1438.306",
+            "cpu MHz\t\t: 395.205",
+            "cpu MHz\t\t: 388.666",
+            "cpu MHz\t\t: 399.301",
+            "cpu MHz\t\t: 397.787",
+            "cpu MHz\t\t: 399.123",
+            "cpu MHz\t\t: 399.467"
+          ],
+          "cv_percent": {
+            "BenchmarkPut-20": 4.32457489514137,
+            "BenchmarkReadSlice-20": 6.135879535415091,
+            "BenchmarkFetch-20": 2.904242864188632,
+            "BenchmarkWrite/256-20": 1.921541095134272,
+            "BenchmarkWrite/16384-20": 7.420545582630117,
+            "BenchmarkWrite/65536-20": 2.179137418677869,
+            "BenchmarkWrite/1048576-20": 4.719101791672968,
+            "BenchmarkRead/256-20": 1.4449984151383675,
+            "BenchmarkRead/16384-20": 2.248329113674427,
+            "BenchmarkRead/65536-20": 6.5283072332545,
+            "BenchmarkRead/1048576-20": 8.38647242749954,
+            "BenchmarkSend/256-20": 1.8375765451778652,
+            "BenchmarkSend/16384-20": 1.8570886148127939,
+            "BenchmarkSend/1048576-20": 12.647370079215673,
+            "BenchmarkRelay/Idle-20": 0.984192032747128,
+            "BenchmarkRelay/Message-20": 2.431250209519454
+          },
+          "status": "noisy"
+        }
+      ],
+      "status": "noisy"
+    },
+    {
+      "corpus": "testdata/perf/corpus.json version 1",
+      "attempts": [
+        {
+          "command": [
+            "pnpm",
+            "--dir",
+            "frontend",
+            "exec",
+            "vite",
+            "build",
+            "--configLoader",
+            "runner",
+            "--mode",
+            "production",
+            "--outDir",
+            "/home/mathieu/.cache/inkwell/l0-frontend"
+          ],
+          "exit_code": 0
+        },
+        {
+          "command": [
+            "go",
+            "build",
+            "-tags",
+            "server",
+            "-o",
+            "bin/inkwell-server",
+            "./cmd/inkwell"
+          ],
+          "exit_code": 0
+        },
+        {
+          "command": [
+            "node",
+            "scripts/perf/browser.cjs"
+          ],
+          "exit_code": 0
+        },
+        {
+          "command": [
+            "node",
+            "scripts/perf/start.cjs"
+          ],
+          "exit_code": 0
+        }
+      ],
+      "PERF-TYPE": {
+        "status": "proxy",
+        "reason": "Warm Chromium EventTiming only; censored and rounded entries cannot certify native WebKitGTK keystroke-to-paint p95; native measurement deferred to L2.",
+        "p95_upper_bound_ms": 20,
+        "bound_method": "Censored entries <16ms bounded at 16ms; rounded durations +4ms. Same-bound proxy comparison only.",
+        "diagnostic": {
+          "rounded_p95_ms": null,
+          "censored_samples": 10,
+          "conditions": "warm browser; concurrent Go jobs; no noise subtraction; not a native acceptance result",
+          "samples": 30,
+          "slow_layout_control_detected": true,
+          "raw_results": "docs/perf/baseline/2026-11-02/type-diagnostic.json",
+          "engine": "Chromium (not native WebKit)"
+        }
+      },
+      "PERF-START": {
+        "status": "pass",
+        "plugins": 0,
+        "scope": "Today's app cold process, server build to usable editor; prelaunched Chromium and warm OS caches, not native window timing.",
+        "measurement": {
+          "samples_ms": [
+            301.874803,
+            288.52601100000004,
+            289.52672400000006,
+            287.907068,
+            322.12324800000033,
+            299.14253299999973,
+            291.7353699999999,
+            297.1875210000003,
+            288.85560900000064,
+            285.7982350000002,
+            303.7863010000001,
+            311.9500990000006,
+            287.6291220000003,
+            295.75725799999964,
+            290.3228339999996,
+            293.65894500000013,
+            298.07926300000054,
+            296.3074950000009,
+            297.2913630000003,
+            283.85883900000044,
+            288.658179,
+            292.3773609999989,
+            285.99436100000094,
+            290.8449049999999,
+            293.22752799999944,
+            296.0795509999989,
+            287.8029630000001,
+            295.3110769999985,
+            293.71300599999995,
+            294.99757300000056
+          ],
+          "p95_ms": 311.9500990000006,
+          "plugins": 0,
+          "scope": "Current app server build: cold process to usable Chromium editor; browser prelaunched; warm OS caches; not native WebKitGTK window timing"
+        }
+      },
+      "PERF-MEM": {
+        "status": "deferred",
+        "target_lot": "L2",
+        "reason": "Real corpus opening requires G-0 in L2."
+      },
+      "PERF-START-plugins": {
+        "status": "deferred",
+        "target_lot": "Fondations-extensibles",
+        "reason": "Pinned plugins do not exist yet; plugin-load measurement belongs to the plugin lot."
+      },
+      "PM-5": {
+        "status": "pass",
+        "thresholds": "docs/perf/baseline/2026-11-02/thresholds.json"
+      }
+    }
+  ]
+}

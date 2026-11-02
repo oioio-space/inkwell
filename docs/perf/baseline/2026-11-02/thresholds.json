@@ -1,0 +1,33 @@
+{
+  "decision": "2026-11-02 \u2014 d\u00e9cision technique (boucle ext\u00e9rieure)",
+  "go": {
+    "delta_percent": 5,
+    "p_less_than": 0.05,
+    "reference": "docs/perf/baseline/2026-11-02/go-reference.txt",
+    "metrics": [
+      "sec/op",
+      "allocs/op"
+    ],
+    "reference_sha256": "67b9d9c05d9488b1665025a38e7e4bcc0c97754ab8feace12de78ed41301e66c"
+  },
+  "e2e_multiplier": 1.1,
+  "e2e": {
+    "PERF-START": {
+      "status": "pass",
+      "baseline_p95_ms": 328.15759599999996,
+      "limit_p95_ms": 360.9733556,
+      "scope": "Cold no-plugin server app process to usable Chromium editor; prelaunched browser, warm OS caches"
+    },
+    "PERF-TYPE": {
+      "status": "proxy",
+      "baseline_p95_ms": 20,
+      "limit_p95_ms": 22.0,
+      "validity": "Conservative Chromium EventTiming p95 upper bound: censored entries <16ms bounded at 16ms, rounded entries +4ms. Not exact p95, not native WebKitGTK. Compare same bound only."
+    },
+    "PERF-MEM": {
+      "status": "deferred",
+      "target_lot": "L2",
+      "reason": "Real corpus opening G-0 not yet delivered; no numeric memory baseline available."
+    }
+  }
+}

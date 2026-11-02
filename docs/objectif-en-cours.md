@@ -27,7 +27,7 @@ change plus que par une décision consignée dans `docs/architecture/decisions.m
    `mount` ; appels système directs ou lanceur embarqué ; porte : contrôle d'architecture « aucun
    `os/exec` hors sidecars embarqués » + tests du confinement.
 2. **L2 — Écrire et retrouver** : G-0a puis G-0b (ouvrir vraiment un fichier), puis onglets
-   (G-0c, N19) ; porte : FM-OPEN-1…8.
+   (G-0c, N19) ; porte : FM-OPEN-1…8, PERF-MEM sur ouverture réelle du corpus et PERF-TYPE natif WebKitGTK (frappe → peinture, froid/chaud).
 3. **L3 — Comprendre, corriger, produire** : tinymist branché (N28, N29) ; porte : `problems.spec.ts`,
    `PERF-LSP`.
 4. Puis : Collaborer sans perdre, Première minute et secours, Revenir en arrière, Fondations
@@ -40,3 +40,23 @@ change plus que par une décision consignée dans `docs/architecture/decisions.m
 | 2026-11-02 | Spécifications closes : design rév. 7.2 et architecture rév. 8.3 confirmées (Codex + Sonnet, plus de Fable) ; on ne les change plus que par décision consignée |
 | 2026-11-02 | Idées reprises de 10 dépôts externes, rien d'installé (`docs/plans/2026-11-02-outils-externes.md`) : discipline de modification dans CLAUDE.md, garde anti-affaiblissement des portes, check-list anti-tics en français, notation 0–10 et trois largeurs dans `ux-walkthrough` |
 | 2026-11-02 | Méthode HDAE adoptée ; on passe à la construction ; commentaires avec chaque fichier (AD-106) ; validation par la personne nommée (AD-107) |
+
+### Preuves L0 — 2026-11-02
+
+État vérifiable : `gates/L0.json` (critères pass/fail/deferred, reports séparés, raisons et lots cibles).
+Références, limites de validité et seuils : `docs/perf/baseline/2026-11-02/README.md`
+et `docs/perf/baseline/2026-11-02/thresholds.json`. Le registre N38 reste géré séparément.
+Le démarrage mesure l'application actuelle sans plugins, processus froid du build serveur
+jusqu'à l'éditeur Chromium utilisable ; navigateur pré-lancé, caches OS chauds : cette
+référence locale ne certifie pas une fenêtre native. PERF-TYPE est un proxy Chromium censuré,
+avec borne supérieure du p95, jamais une certification du p95 WebKitGTK natif.
+
+| Date | Décision |
+|---|---|
+| 2026-11-02 — décision technique (boucle extérieure) | PERF-START : application actuelle sans plugins ; chargement des plugins différé au lot Fondations-extensibles (Fondations extensibles), jamais compté réussi. |
+| 2026-11-02 — décision technique (boucle extérieure) | PERF-MEM : deferred: L2 ; ouverture réelle de plusieurs fichiers G-0 livrée en L2, ajoutée à sa porte. |
+| 2026-11-02 — décision technique (boucle extérieure) | PERF-TYPE : référence proxy Chromium, avec réserve de validité ; frappe → peinture WebKitGTK natif ajoutée à la porte L2. |
+| 2026-11-02 — décision technique (boucle extérieure) | PM-5 : Go, delta benchstat strictement > +5 % en temps ou allocs/op ET p < 0,05 ; latences e2e et mémoire : p95 de référence × 1,10. Seuils figés dans thresholds.json ; mémoire sans valeur tant que différée. regression-guard compare les nouvelles mesures ; L0 exige chargement et autotest. |
+| 2026-11-02 — décision technique (boucle extérieure) | PERF-RELAY-ALLOC: 1 alloc/op vs 0 target — to fix in a later perf lot ; 48 B/op ; cible zéro inchangée, échec connu conservé. |
+| 2026-11-02 — décision technique (boucle extérieure) | Critères pass, fail ou deferred ; deferred exige lot cible nommé et raison, liste séparée au manifeste. Tous les non-différés doivent passer ; autotests : report sans lot, sans raison et échec coexistant avec report. Un report ne masque jamais un échec. |
+| 2026-11-02 — décision technique (boucle extérieure) | Annulation de la modification N38 dans exigences.md ; état du lot consultable via gates/L0.json ici, sans modifier l'état du registre. |

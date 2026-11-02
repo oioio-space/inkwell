@@ -1,0 +1,132 @@
+goos: linux
+goarch: amd64
+pkg: github.com/oioio-space/inkwell/internal/app
+cpu: 13th Gen Intel(R) Core(TM) i7-1370P
+                 │ docs/perf/baseline/2026-11-02/go-bench.txt │
+                 │                   sec/op                   │
+Relay/Idle-20                                     233.7n ± 1%
+Relay/Message-20                                  955.9n ± 9%
+geomean                                           472.6n
+
+                 │ docs/perf/baseline/2026-11-02/go-bench.txt │
+                 │                    B/op                    │
+Relay/Idle-20                                    0.000 ± 0%
+Relay/Message-20                                 48.00 ± 0%
+geomean                                                     ¹
+¹ summaries must be >0 to compute geomean
+
+                 │ docs/perf/baseline/2026-11-02/go-bench.txt │
+                 │                 allocs/op                  │
+Relay/Idle-20                                    0.000 ± 0%
+Relay/Message-20                                 1.000 ± 0%
+geomean                                                     ¹
+¹ summaries must be >0 to compute geomean
+
+pkg: github.com/oioio-space/inkwell/internal/blob
+             │ docs/perf/baseline/2026-11-02/go-bench.txt │
+             │                   sec/op                   │
+Put-20                                        19.53m ± 1%
+ReadSlice-20                                  656.4µ ± 5%
+Fetch-20                                      62.21m ± 6%
+geomean                                       9.273m
+
+             │ docs/perf/baseline/2026-11-02/go-bench.txt │
+             │                    B/s                     │
+Put-20                                       819.5Mi ± 1%
+ReadSlice-20                                 1.488Gi ± 5%
+Fetch-20                                     257.2Mi ± 6%
+geomean                                      684.8Mi
+
+             │ docs/perf/baseline/2026-11-02/go-bench.txt │
+             │                    B/op                    │
+Put-20                                       117.7Ki ± 0%
+ReadSlice-20                                 1.045Mi ± 0%
+Fetch-20                                     65.33Mi ± 0%
+geomean                                      1.987Mi
+
+             │ docs/perf/baseline/2026-11-02/go-bench.txt │
+             │                 allocs/op                  │
+Put-20                                        2.160k ± 0%
+ReadSlice-20                                   32.00 ± 0%
+Fetch-20                                      3.244k ± 0%
+geomean                                        607.6
+
+pkg: github.com/oioio-space/inkwell/internal/transport/frame
+                 │ docs/perf/baseline/2026-11-02/go-bench.txt │
+                 │                   sec/op                   │
+Write/256-20                                     60.59n ±  3%
+Write/16384-20                                   2.211µ ±  4%
+Write/65536-20                                   9.180µ ± 15%
+Write/1048576-20                                 9.342n ±  5%
+Read/256-20                                      72.51n ±  3%
+Read/16384-20                                    2.436µ ±  3%
+Read/65536-20                                    8.899µ ±  9%
+Read/1048576-20                                  374.0µ ± 20%
+geomean                                          1.270µ
+
+                 │ docs/perf/baseline/2026-11-02/go-bench.txt │
+                 │                    B/s                     │
+Write/256-20                                    3.935Gi ±  3%
+Write/16384-20                                  6.902Gi ±  4%
+Write/65536-20                                  6.649Gi ± 13%
+Write/1048576-20                                102.1Ti ±  4%
+Read/256-20                                     3.288Gi ±  3%
+Read/16384-20                                   6.264Gi ±  3%
+Read/65536-20                                   6.858Gi ±  8%
+Read/1048576-20                                 2.611Gi ± 17%
+geomean                                         17.00Gi
+
+                 │ docs/perf/baseline/2026-11-02/go-bench.txt │
+                 │                    B/op                    │
+Write/256-20                                       288.0 ± 0%
+Write/16384-20                                   18.00Ki ± 0%
+Write/65536-20                                   72.00Ki ± 0%
+Write/1048576-20                                   4.000 ± 0%
+Read/256-20                                        260.0 ± 0%
+Read/16384-20                                    16.00Ki ± 0%
+Read/65536-20                                    64.00Ki ± 0%
+Read/1048576-20                                  1.938Mi ± 0%
+geomean                                          5.411Ki
+
+                 │ docs/perf/baseline/2026-11-02/go-bench.txt │
+                 │                 allocs/op                  │
+Write/256-20                                       1.000 ± 0%
+Write/16384-20                                     1.000 ± 0%
+Write/65536-20                                     1.000 ± 0%
+Write/1048576-20                                   1.000 ± 0%
+Read/256-20                                        2.000 ± 0%
+Read/16384-20                                      2.000 ± 0%
+Read/65536-20                                      2.000 ± 0%
+Read/1048576-20                                    6.000 ± 0%
+geomean                                            1.622
+
+pkg: github.com/oioio-space/inkwell/internal/transport/mux
+                │ docs/perf/baseline/2026-11-02/go-bench.txt │
+                │                   sec/op                   │
+Send/256-20                                      16.02n ± 4%
+Send/16384-20                                    132.0n ± 1%
+Send/1048576-20                                  20.41µ ± 2%
+geomean                                          350.7n
+
+                │ docs/perf/baseline/2026-11-02/go-bench.txt │
+                │                    B/s                     │
+Send/256-20                                     14.89Gi ± 4%
+Send/16384-20                                   115.6Gi ± 1%
+Send/1048576-20                                 47.86Gi ± 2%
+geomean                                         43.50Gi
+
+                │ docs/perf/baseline/2026-11-02/go-bench.txt │
+                │                    B/op                    │
+Send/256-20                                     0.000 ± 0%
+Send/16384-20                                   0.000 ± 0%
+Send/1048576-20                                 482.5 ± 0%
+geomean                                                    ¹
+¹ summaries must be >0 to compute geomean
+
+                │ docs/perf/baseline/2026-11-02/go-bench.txt │
+                │                 allocs/op                  │
+Send/256-20                                     0.000 ± 0%
+Send/16384-20                                   0.000 ± 0%
+Send/1048576-20                                 6.000 ± 0%
+geomean                                                    ¹
+¹ summaries must be >0 to compute geomean

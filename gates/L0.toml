@@ -1,0 +1,42 @@
+# Failures are recorded, never waived.
+known_failures = ["PERF-RELAY-ALLOC: 1 alloc/op vs 0 target — to fix in a later perf lot", "F10: intermittent libp2p panic", "F11: sidecar test /tmp quota", "F12: vector generator differs from corpus", "L0 observation: concurrent Typst package installation failed with directory not empty on first test run; full retry passed (archived logs)"]
+raw_results = ["docs/perf/baseline/2026-11-02/*", "testdata/perf/*"]
+measurement_reports = ["docs/perf/baseline/2026-11-02/reference-quality.json", "docs/perf/baseline/2026-11-02/measurements.json"]
+
+[[criteria]]
+id = "harness"
+command = "python3 scripts/gate-selftest.py"
+[[criteria]]
+id = "baseline"
+command = "./scripts/heavy.sh python3 scripts/perf/baseline.py"
+[[criteria]]
+id = "hot-paths"
+command = "./scripts/heavy.sh bash scripts/perf/bench.sh"
+[[criteria]]
+id = "archive"
+command = "python3 scripts/perf/archive.py"
+[[criteria]]
+id = "lint"
+command = "./scripts/heavy.sh mise run lint"
+[[criteria]]
+id = "test"
+command = "mise run test"
+
+[[criteria]]
+id = "regression-guard"
+command = "python3 scripts/perf/regression.py --self-test && python3 scripts/perf/regression.py --bench docs/perf/baseline/2026-11-02/go-bench.txt"
+[[criteria]]
+id = "PERF-START-plugins"
+status = "deferred"
+target_lot = "Fondations-extensibles"
+reason = "Plugins do not exist yet; pinned plugin loading belongs to the plugin lot (Fondations extensibles)."
+[[criteria]]
+id = "PERF-MEM"
+status = "deferred"
+target_lot = "L2"
+reason = "Real multi-file corpus opening requires G-0 delivered in L2."
+[[criteria]]
+id = "PERF-TYPE-native"
+status = "deferred"
+target_lot = "L2"
+reason = "Chromium proxy cannot certify native WebKitGTK keystroke-to-paint p95."

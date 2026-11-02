@@ -1,0 +1,15 @@
+mise WARN  tracking config: failed to ln -sf /home/mathieu/GolandProjects/inkwell/.claude/worktrees/l0/mise.toml /home/mathieu/.local/state/mise/tracked-configs/ff9fa0308e6271a7: Read-only file system (os error 30)
+[sidecar:fetch] $ go run ./cmd/sidecar-fetch
+tinymist linux_amd64: up to date
+typst linux_amd64: up to date
+[test] $ ./scripts/heavy.sh ./scripts/rtkx.sh gotestsum --format pkgname -- ./.…
+    files_test.go:713: TODO ADR 0021 (t11-b3a-suspend, not merged): Wiring.isActive must say false for a suspended member; then drive Wire + Files with a suspend op and assert no slice is served
+
+[test] $ cd protocol && ../scripts/heavy.sh go test -race ./...
+ok  	github.com/oioio-space/inkwell/protocol	1.212s
+ok  	github.com/oioio-space/inkwell/protocol/blob	1.059s
+?   	github.com/oioio-space/inkwell/protocol/bridge	[no test files]
+?   	github.com/oioio-space/inkwell/protocol/cmd/vectors	[no test files]
+ok  	github.com/oioio-space/inkwell/protocol/conformance	11.086s
+ok  	github.com/oioio-space/inkwell/protocol/invite	1.152s
+?   	github.com/oioio-space/inkwell/protocol/sig	[no test files]

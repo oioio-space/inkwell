@@ -1,0 +1,98 @@
+{
+  "BenchmarkPut-20": {
+    "samples": 10,
+    "median_ns_per_op": 19525063.5,
+    "median_bytes_per_op": 120514.0,
+    "median_allocs_per_op": 2160.0
+  },
+  "BenchmarkReadSlice-20": {
+    "samples": 10,
+    "median_ns_per_op": 656369.0,
+    "median_bytes_per_op": 1095617.0,
+    "median_allocs_per_op": 32.0
+  },
+  "BenchmarkFetch-20": {
+    "samples": 10,
+    "median_ns_per_op": 62214680.5,
+    "median_bytes_per_op": 68506891.5,
+    "median_allocs_per_op": 3244.5
+  },
+  "BenchmarkWrite/256-20": {
+    "samples": 10,
+    "median_ns_per_op": 60.585,
+    "median_bytes_per_op": 288.0,
+    "median_allocs_per_op": 1.0
+  },
+  "BenchmarkWrite/16384-20": {
+    "samples": 10,
+    "median_ns_per_op": 2211.0,
+    "median_bytes_per_op": 18432.0,
+    "median_allocs_per_op": 1.0
+  },
+  "BenchmarkWrite/65536-20": {
+    "samples": 10,
+    "median_ns_per_op": 9179.5,
+    "median_bytes_per_op": 73728.0,
+    "median_allocs_per_op": 1.0
+  },
+  "BenchmarkWrite/1048576-20": {
+    "samples": 10,
+    "median_ns_per_op": 9.342500000000001,
+    "median_bytes_per_op": 4.0,
+    "median_allocs_per_op": 1.0
+  },
+  "BenchmarkRead/256-20": {
+    "samples": 10,
+    "median_ns_per_op": 72.51499999999999,
+    "median_bytes_per_op": 260.0,
+    "median_allocs_per_op": 2.0
+  },
+  "BenchmarkRead/16384-20": {
+    "samples": 10,
+    "median_ns_per_op": 2435.5,
+    "median_bytes_per_op": 16388.0,
+    "median_allocs_per_op": 2.0
+  },
+  "BenchmarkRead/65536-20": {
+    "samples": 10,
+    "median_ns_per_op": 8899.5,
+    "median_bytes_per_op": 65540.0,
+    "median_allocs_per_op": 2.0
+  },
+  "BenchmarkRead/1048576-20": {
+    "samples": 10,
+    "median_ns_per_op": 373951.0,
+    "median_bytes_per_op": 2031635.0,
+    "median_allocs_per_op": 6.0
+  },
+  "BenchmarkSend/256-20": {
+    "samples": 10,
+    "median_ns_per_op": 16.015,
+    "median_bytes_per_op": 0.0,
+    "median_allocs_per_op": 0.0
+  },
+  "BenchmarkSend/16384-20": {
+    "samples": 10,
+    "median_ns_per_op": 132.0,
+    "median_bytes_per_op": 0.0,
+    "median_allocs_per_op": 0.0
+  },
+  "BenchmarkSend/1048576-20": {
+    "samples": 10,
+    "median_ns_per_op": 20405.0,
+    "median_bytes_per_op": 482.5,
+    "median_allocs_per_op": 6.0
+  },
+  "BenchmarkRelay/Idle-20": {
+    "samples": 10,
+    "median_ns_per_op": 233.65,
+    "median_bytes_per_op": 0.0,
+    "median_allocs_per_op": 0.0
+  },
+  "BenchmarkRelay/Message-20": {
+    "samples": 10,
+    "median_ns_per_op": 955.95,
+    "median_bytes_per_op": 48.0,
+    "median_allocs_per_op": 1.0
+  }
+}

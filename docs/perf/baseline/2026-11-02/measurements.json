@@ -1,0 +1,119 @@
+{
+  "corpus": "testdata/perf/corpus.json version 1",
+  "attempts": [
+    {
+      "command": [
+        "pnpm",
+        "--dir",
+        "frontend",
+        "exec",
+        "vite",
+        "build",
+        "--configLoader",
+        "runner",
+        "--mode",
+        "production",
+        "--outDir",
+        "/home/mathieu/.cache/inkwell/l0-frontend"
+      ],
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "go",
+        "build",
+        "-tags",
+        "server",
+        "-o",
+        "bin/inkwell-server",
+        "./cmd/inkwell"
+      ],
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "node",
+        "scripts/perf/browser.cjs"
+      ],
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "node",
+        "scripts/perf/start.cjs"
+      ],
+      "exit_code": 0
+    }
+  ],
+  "PERF-TYPE": {
+    "status": "proxy",
+    "reason": "Warm Chromium EventTiming only; censored and rounded entries cannot certify native WebKitGTK keystroke-to-paint p95; native measurement deferred to L2.",
+    "p95_upper_bound_ms": 20,
+    "bound_method": "Censored entries <16ms bounded at 16ms; rounded durations +4ms. Same-bound proxy comparison only.",
+    "diagnostic": {
+      "rounded_p95_ms": null,
+      "censored_samples": 10,
+      "conditions": "warm browser; concurrent Go jobs; no noise subtraction; not a native acceptance result",
+      "samples": 30,
+      "slow_layout_control_detected": true,
+      "raw_results": "docs/perf/baseline/2026-11-02/type-diagnostic.json",
+      "engine": "Chromium (not native WebKit)"
+    }
+  },
+  "PERF-START": {
+    "status": "pass",
+    "plugins": 0,
+    "scope": "Today's app cold process, server build to usable editor; prelaunched Chromium and warm OS caches, not native window timing.",
+    "measurement": {
+      "samples_ms": [
+        301.874803,
+        288.52601100000004,
+        289.52672400000006,
+        287.907068,
+        322.12324800000033,
+        299.14253299999973,
+        291.7353699999999,
+        297.1875210000003,
+        288.85560900000064,
+        285.7982350000002,
+        303.7863010000001,
+        311.9500990000006,
+        287.6291220000003,
+        295.75725799999964,
+        290.3228339999996,
+        293.65894500000013,
+        298.07926300000054,
+        296.3074950000009,
+        297.2913630000003,
+        283.85883900000044,
+        288.658179,
+        292.3773609999989,
+        285.99436100000094,
+        290.8449049999999,
+        293.22752799999944,
+        296.0795509999989,
+        287.8029630000001,
+        295.3110769999985,
+        293.71300599999995,
+        294.99757300000056
+      ],
+      "p95_ms": 311.9500990000006,
+      "plugins": 0,
+      "scope": "Current app server build: cold process to usable Chromium editor; browser prelaunched; warm OS caches; not native WebKitGTK window timing"
+    }
+  },
+  "PERF-MEM": {
+    "status": "deferred",
+    "target_lot": "L2",
+    "reason": "Real corpus opening requires G-0 in L2."
+  },
+  "PERF-START-plugins": {
+    "status": "deferred",
+    "target_lot": "Fondations-extensibles",
+    "reason": "Pinned plugins do not exist yet; plugin-load measurement belongs to the plugin lot."
+  },
+  "PM-5": {
+    "status": "pass",
+    "thresholds": "docs/perf/baseline/2026-11-02/thresholds.json"
+  }
+}
