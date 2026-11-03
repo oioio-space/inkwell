@@ -10,18 +10,18 @@ require (
 	github.com/marcopolo/simnet v0.0.7
 	github.com/multiformats/go-multiaddr v0.16.1
 	github.com/oioio-space/inkwell/protocol v0.1.0
+	github.com/pbnjay/memory v0.0.0-20210728143218-7b4eea64cf58
 	github.com/psanford/wormhole-william v1.0.8
 	github.com/quic-go/quic-go v0.64.1
-	github.com/wailsapp/wails/v3 v3.0.0-beta.34
+	github.com/ulikunitz/xz v0.5.15
+	github.com/wailsapp/wails/v3 v3.0.0
 	go.uber.org/fx v1.24.0
 	go.uber.org/goleak v1.3.0
 	golang.org/x/crypto v0.58.0
 	golang.org/x/sys v0.49.0
 	golang.org/x/text v0.43.0
 	golang.org/x/tools v0.51.0
-	github.com/ulikunitz/xz v0.5.15
 	lukechampine.com/blake3 v1.4.1
-	pgregory.net/rapid v1.3.0
 )
 
 require (
@@ -75,7 +75,6 @@ require (
 	github.com/multiformats/go-multistream v0.6.1 // indirect
 	github.com/multiformats/go-varint v0.1.0 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
-	github.com/pbnjay/memory v0.0.0-20210728143218-7b4eea64cf58 // indirect
 	github.com/pion/datachannel v1.5.10 // indirect
 	github.com/pion/dtls/v3 v3.1.4 // indirect
 	github.com/pion/ice/v4 v4.0.10 // indirect
