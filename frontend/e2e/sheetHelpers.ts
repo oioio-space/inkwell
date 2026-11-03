@@ -40,9 +40,18 @@ export async function openSheet(
     if (!/store stream closed/.test(e.message)) violations.push(`pageerror: ${e.message}`);
   });
   (page as Page & { csp?: string[] }).csp = violations;
-  await page.goto(`${url}?file=data.csv`);
-  await expect(grid(page)).toBeVisible({ timeout: 20_000 });
+  await page.goto(url);
+  await showAsTable(page);
   return page;
+}
+
+/** Shows the open document as a table: the view mode is not kept across a reload. */
+async function showAsTable(page: Page): Promise<void> {
+  await page.locator(".cm-content").waitFor();
+  await page.evaluate(() =>
+    (globalThis as typeof globalThis & { __inkwellTestTable: () => void }).__inkwellTestTable(),
+  );
+  await expect(grid(page)).toBeVisible({ timeout: 20_000 });
 }
 
 /** The text of the file as the text view shows it, newlines included. */

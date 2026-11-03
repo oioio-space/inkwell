@@ -24,6 +24,7 @@ import { type SizeTier, sizeTier } from "../store/limits";
 import { type Projection, startProjection } from "../store/projection";
 import { safeGet, safeSet } from "../store/safeStorage";
 import { settings } from "../store/settings.svelte";
+import { notice } from "../ui/notice.svelte";
 import { accessOf, type Member } from "../ui/people/roster";
 import { BootstrapLoader } from "./loader";
 import { observeVariantHeads } from "./observe";
@@ -41,28 +42,27 @@ export function statusOf(peerCount: number, joining: boolean): Exclude<Status, "
 /** The projection of the document, in the project folder. */
 const MAIN_FILE = "main.typ";
 
-/**
- * Which file the editor area presents. Until the multi-file project (B4) opens a file per
- * document, the single document stands for whichever file is named by `?file=` (a plain
- * relative path): this is how a table is shown as a sheet in development and in the
- * end-to-end tests. Without it, the main document.
- */
-function openedFile(): string {
-  try {
-    const wanted = new URLSearchParams(globalThis.location?.search ?? "").get("file");
-    if (wanted && /^[\p{L}\p{N}_.-]+(\/[\p{L}\p{N}_.-]+)*$/u.test(wanted) && !wanted.includes(".."))
-      return wanted;
-  } catch {
-    // No location (a unit test): the main document.
-  }
-  return MAIN_FILE;
-}
 const NAME_KEY = "inkwell.name";
 
 /** How long the lines taken from the disk stay marked in the gutter. */
 const MARKS_MS = 60_000;
 
 /** The open project and who is in it — the single source of UI state. */
+/**
+ * Fetches a project file from Go's asset handler. The page carries a per-launch token (a meta
+ * tag Go fills in); the handler refuses a request without it. It travels in a header so it
+ * never lands in a URL.
+ */
+export function assetFetch(url: string, method: "GET" | "HEAD" = "GET"): Promise<Response> {
+  const token = document.querySelector<HTMLMetaElement>('meta[name="asset-token"]')?.content ?? "";
+  return fetch(url, { method, headers: { "X-Inkwell-Token": token } });
+}
+
+/** How often an open file other than main.typ is checked for changes made outside Inkwell. */
+const WATCH_MS = 2000;
+
+type Opened = { text?: string; image?: string; failed?: boolean };
+
 class Workspace {
   peers = $state<string[]>([]);
   /** True while an invitation is being followed, until the inviting person's project is open. */
@@ -81,6 +81,7 @@ class Workspace {
   #knownAtInvite = new Set<string>();
   /** Display names of present people, by peer id (from presence). */
   names = $state<Record<string, string>>({});
+  peerFiles = $state<Record<string, string>>({});
   /** Every name heard since the start, kept when the person goes quiet (UX-S7-3). */
   #heard: Record<string, string> = {};
   error = $state("");
@@ -117,7 +118,104 @@ class Workspace {
   /** How big the open document is: "large" earns a discreet notice (ADR 0028 D1). */
   tier = $state<SizeTier>("fluid");
   /** The file shown in the editor (today the project's main document). */
-  current = $state(openedFile());
+  current = $state(MAIN_FILE);
+  opened = $state.raw<Opened>();
+  #openTicket = 0;
+  /** Polls the open file (not main.typ, which Go watches) while it is shown. */
+  #watch: ReturnType<typeof setInterval> | undefined;
+  /** The version the open file had when last read (its ETag). */
+  #version: string | null | undefined;
+  #checking = false;
+
+  /** Only the latest file click may install its projection. */
+  async openFile(path: string): Promise<void> {
+    if (!this.files.some((file) => file.path === path)) return;
+    const ticket = ++this.#openTicket;
+    clearInterval(this.#watch);
+    this.current = path;
+    this.opened = undefined;
+    if (path === MAIN_FILE) {
+      // Back on the main document: its encoding and line ending show again.
+      void this.refreshInfo();
+      return;
+    }
+    const version = await this.#versionOf(path);
+    const result = await this.#load(path);
+    if (ticket !== this.#openTicket) return;
+    this.opened = result;
+    this.#version = version;
+    this.#watch = setInterval(() => void this.#checkOpened(ticket), WATCH_MS);
+    void this.refreshInfo();
+  }
+
+  /** Reads path for its view: an image, a text, or nothing (its card). */
+  async #load(path: string): Promise<Opened> {
+    const file = this.files.find((file) => file.path === path);
+    if (file?.kind === FileKind.image) {
+      try {
+        const response = await assetFetch(`/project-image?path=${encodeURIComponent(path)}`);
+        if (!response.ok) throw new Error("image unavailable");
+        return { image: await response.text() };
+      } catch {
+        return { failed: true };
+      }
+    }
+    if (
+      [
+        FileKind.typst,
+        FileKind.markdown,
+        FileKind.text,
+        FileKind.csv,
+        FileKind.bib,
+        FileKind.data,
+      ].includes(file?.kind as (typeof FileKind)["typst"])
+    ) {
+      const text = await this.readFile(path);
+      return text === undefined ? { failed: true } : { text };
+    }
+    return {};
+  }
+
+  /** The version Go reports for path: null once it is gone, undefined when it cannot tell. */
+  async #versionOf(path: string): Promise<string | null | undefined> {
+    try {
+      const response = await assetFetch(`/project-text?path=${encodeURIComponent(path)}`, "HEAD");
+      if (response.status === 404) return null;
+      return response.ok ? (response.headers.get("ETag") ?? undefined) : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  /**
+   * Follows the open file: a new version is read again; a file deleted or renamed outside Inkwell
+   * gives a toast (design §4.16) and the main document comes back.
+   */
+  async #checkOpened(ticket: number): Promise<void> {
+    if (this.#checking) return;
+    this.#checking = true;
+    try {
+      const path = this.current;
+      const version = await this.#versionOf(path);
+      if (ticket !== this.#openTicket) return;
+      if (version === null) {
+        clearInterval(this.#watch);
+        notice.show(t("file.gone", { name: path }));
+        await this.refreshFiles();
+        // Another file may have been opened while the list refreshed.
+        if (ticket !== this.#openTicket) return;
+        await this.openFile(MAIN_FILE);
+        return;
+      }
+      if (version === undefined || version === this.#version) return;
+      const result = await this.#load(path);
+      if (ticket !== this.#openTicket) return;
+      this.#version = version;
+      this.opened = result;
+    } finally {
+      this.#checking = false;
+    }
+  }
   /** The project's files, for the sidebar and the Insert menu. */
   files = $state.raw<ProjectFile[]>([]);
   /** How the current file is stored on disk; undefined until Go has written it. */
@@ -147,6 +245,8 @@ class Workspace {
 
   async stop(): Promise<void> {
     this.#generation++;
+    this.#openTicket++;
+    clearInterval(this.#watch);
     for (const cancel of this.#projectWaits) cancel();
     this.#offScope?.();
     this.#offScope = undefined;
@@ -252,6 +352,10 @@ class Workspace {
     const generation = this.#generation;
     const handle = await this.#repo.find<Doc>(url);
     if (generation !== this.#generation || epoch !== this.#admitted.epoch) return;
+    this.#openTicket++;
+    clearInterval(this.#watch);
+    this.current = MAIN_FILE;
+    this.opened = undefined;
     const refresh = () => this.#admitted.refresh(handle.doc());
     refresh();
     handle.on("change", refresh);
@@ -412,11 +516,14 @@ class Workspace {
       this.fileInfo = undefined;
       return;
     }
+    let info: FileInfo | undefined;
     try {
-      this.fileInfo = await this.#storage.fileInfo(this.current);
+      info = await this.#storage.fileInfo(this.current);
     } catch {
-      this.fileInfo = undefined;
+      info = undefined;
     }
+    // Another file may have been opened meanwhile: its (absent) info stands.
+    if (this.current === MAIN_FILE) this.fileInfo = info;
   }
 
   /** Writes the document to the project folder now, if a write is still waiting for a pause in typing. */
@@ -427,7 +534,8 @@ class Workspace {
   /** The text of a project file as UTF-8 with LF; undefined if absent or not text. */
   async readFile(path: string): Promise<string | undefined> {
     try {
-      return await this.#storage?.readProjection(path);
+      const response = await assetFetch(`/project-text?path=${encodeURIComponent(path)}`);
+      return response.ok ? await response.text() : undefined;
     } catch {
       return undefined;
     }
@@ -493,8 +601,9 @@ class Workspace {
   }
 
   /** The people present, from presence: a name once heard is remembered when they leave. */
-  hearNames(people: readonly { peerId: string; name: string }[]): void {
+  hearNames(people: readonly { peerId: string; name: string; file?: string }[]): void {
     this.names = Object.fromEntries(people.map((p) => [p.peerId, p.name]));
+    this.peerFiles = Object.fromEntries(people.map((p) => [p.peerId, p.file ?? "main.typ"]));
     for (const p of people) if (p.name) this.#heard[p.peerId] = p.name;
   }
 

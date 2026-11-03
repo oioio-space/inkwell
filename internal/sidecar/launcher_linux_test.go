@@ -72,6 +72,9 @@ func TestSandboxPrivileges(t *testing.T) {
 
 // The helper is the final exec target, so checks run after all confinement.
 func init() {
+	if len(os.Args) > 1 && os.Args[1] == "--sidecar-test=sandboxstatus:seccomp" {
+		_ = os.Setenv("INKWELL_ATTACK", "seccomp")
+	}
 	if os.Getenv("INKWELL_ATTACK") == "" {
 		return
 	}
@@ -426,8 +429,7 @@ func TestEveryInvocationConfined(t *testing.T) {
 	}
 	var output bytes.Buffer
 	sup := NewSupervisor(SupervisorConfig{Command: func(_ context.Context) (*exec.Cmd, error) {
-		cmd := helperCmd("sandboxstatus")
-		cmd.Env = append(cmd.Env, "INKWELL_ATTACK=seccomp")
+		cmd := helperCmd("sandboxstatus:seccomp")
 		cmd.Stdout = &output
 		return cmd, nil
 	}})

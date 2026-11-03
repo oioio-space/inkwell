@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/http"
 	"os"
 	"strconv"
 	"time"
@@ -90,6 +91,7 @@ func main() {
 	presentHub := app.NewPresent(log)
 
 	var loops shutdownLoops
+	assetToken := app.NewAssetToken()
 	wails = application.New(application.Options{
 		Name:        "Inkwell",
 		Description: "Éditeur collaboratif Typst, sans serveur",
@@ -100,8 +102,10 @@ func main() {
 			application.NewService(app.NewPresentService(winService)),
 		},
 		Assets: application.AssetOptions{
-			Handler:    application.AssetFileServerFS(inkwell.Assets),
-			Middleware: app.CSPNonce(),
+			Handler: app.ProjectImages(proj, assetToken, application.AssetFileServerFS(inkwell.Assets)),
+			Middleware: func(next http.Handler) http.Handler {
+				return app.CSPNonce()(app.PageToken(assetToken)(next))
+			},
 		},
 		// Used only by `-tags server` builds (headless end-to-end tests): bound to
 		// loopback, port from INKWELL_SERVER_PORT.

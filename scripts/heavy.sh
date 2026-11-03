@@ -15,11 +15,27 @@ set -euo pipefail
 
 [[ $# -gt 0 ]] || { sed -n '2,13p' "$0" | sed 's/^# \{0,1\}//'; exit 2; }
 
+dir="${XDG_RUNTIME_DIR:-/tmp}/inkwell-heavy" # slot locks
+
 # /tmp is a RAM-backed tmpfs: Go's link and test scratch goes to disk instead, and scratch
-# left by killed jobs (go-build*, gremlins-*) is removed once it is an hour old.
+# left by killed jobs (go-build*, gremlins-*) is removed once it is an hour old. GOTMPDIR is
+# also where t.TempDir() creates its folders (the testing package reads it directly, Go ≥ 1.26;
+# TMPDIR only moves os.TempDir()). Tests create their projects there, so it stays outside the
+# XDG base directories, whatever the sidecar's protected-directory policy says of them.
 if [[ -z "${CI:-}" ]]; then
-  export GOTMPDIR="${GOTMPDIR:-${XDG_CACHE_HOME:-$HOME/.cache}/inkwell/gotmp}"
+  export GOTMPDIR="${GOTMPDIR:-$HOME/.inkwell-scratch/gotmp}"
   mkdir -p "$GOTMPDIR"
+  # The previous scratch location (it held ~1.6 GB). An older checkout's heavy.sh may still
+  # use it, so it is purged only while no heavy job holds a slot.
+  old="${XDG_CACHE_HOME:-$HOME/.cache}/inkwell/gotmp"
+  if [[ -d "$old" ]]; then
+    idle=1
+    for lock in "$dir"/slot-*.lock; do
+      [[ -e "$lock" ]] || continue
+      flock -n "$lock" true || { idle=0; break; }
+    done
+    if ((idle)); then rm -rf -- "$old"; fi
+  fi
   find /tmp "$GOTMPDIR" -maxdepth 1 -mindepth 1 -user "$(id -u)" \
     \( -name 'go-build*' -o -name 'gremlins-*' \) -mmin +60 -exec rm -rf {} + 2>/dev/null || true
 fi
@@ -30,7 +46,6 @@ fi
 
 slots="${INKWELL_HEAVY_SLOTS:-2}"
 mem="${INKWELL_HEAVY_MEM:-8G}"
-dir="${XDG_RUNTIME_DIR:-/tmp}/inkwell-heavy"
 mkdir -p "$dir"
 
 # Take the first free slot; the lock is released when this process exits.

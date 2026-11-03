@@ -34,7 +34,9 @@ WebKitGPUProcess, bwrap and xdg-dbus-proxy. Those are guaranteed library helpers
 
 scripts/sidecar-no-tools.sh compiles the race-instrumented test binary, then runs
 the entire existing sidecar suite with PATH empty. arch-exec-check complements
-the dependency graph with a scan of all platform sources.
+the dependency graph with a scan of all platform sources. (2026-11-03: the
+dependency-graph scan was removed by the user's N42 clarification; only our own
+code is checked. See docs/objectif-en-cours.md.)
 
 scripts/gate-guard.py compares main with working-tree content (including untracked
 files). It rejects removed/deferred criteria, loosened or deleted thresholds,

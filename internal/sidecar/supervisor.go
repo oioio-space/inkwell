@@ -7,6 +7,7 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"syscall"
@@ -216,7 +217,7 @@ func (s *Supervisor) runOnce(ctx context.Context) (time.Duration, error) {
 		return 0, err
 	}
 	cmd.Dir = dir
-	cmd.Env = append([]string{}, cmd.Env...) // Explicit environment only; nil must never inherit the app environment.
+	cmd.Env = supervisorEnv(cmd.Env)
 	setProcAttr(cmd)
 	path, args, err := withLimits(Spec{Path: cmd.Path, Args: cmd.Args[1:], Dir: cmd.Dir})
 	if err != nil {
@@ -286,4 +287,21 @@ func sleep(ctx context.Context, d time.Duration) bool {
 	case <-t.C:
 		return true
 	}
+}
+
+// supervisorEnv permits only locale and text rendering settings, never credentials,
+// loader injection, proxy configuration or inherited application settings.
+func supervisorEnv(env []string) []string {
+	clean := []string{}
+	for _, entry := range env {
+		key, _, ok := strings.Cut(entry, "=")
+		if !ok {
+			continue
+		}
+		switch key {
+		case "LANG", "LANGUAGE", "LC_ALL", "LC_CTYPE", "TZ", "FONTCONFIG_FILE", "FONTCONFIG_PATH":
+			clean = append(clean, entry)
+		}
+	}
+	return clean
 }

@@ -6,11 +6,11 @@
   "license": "MPL-2.0",
   "scripts": {
     "dev": "vite",
-    "build:dev": "vite build --minify false --mode development && node scripts/keep-dist.mjs",
-    "build": "vite build --mode production && node scripts/keep-dist.mjs",
-    "check": "biome check . && svelte-check --tsconfig ./tsconfig.json && vitest run",
+    "build:dev": "vite build --configLoader runner --minify false --mode development && node scripts/keep-dist.mjs",
+    "build": "vite build --configLoader runner --mode production && node scripts/keep-dist.mjs",
+    "check": "biome check . && svelte-check --tsconfig ./tsconfig.json && vitest run --configLoader runner",
     "fmt": "biome check --write .",
-    "test": "vitest run",
+    "test": "vitest run --configLoader runner",
     "test:watch": "vitest",
     "vectors:repo": "NODE_PATH=./node_modules node ../protocol/cmd/repo-vectors/main.cjs"
   },

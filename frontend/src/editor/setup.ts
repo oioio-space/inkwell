@@ -159,7 +159,7 @@ export function createEditor(
 export function createReadOnlyEditor(
   parent: HTMLElement,
   text: string,
-  { onState, onView }: Pick<EditorOptions, "onState" | "onView"> = {},
+  { onState, onView, lang = "plain" }: Pick<EditorOptions, "onState" | "onView" | "lang"> = {},
 ): { destroy: () => void } {
   const view = new EditorView({
     parent,
@@ -168,6 +168,7 @@ export function createReadOnlyEditor(
       cspNonce(),
       lineNumbers(),
       EditorState.readOnly.of(true),
+      languageExtension(lang),
       EditorView.lineWrapping,
       keymap.of(defaultKeymap),
       EditorView.contentAttributes.of({ "aria-label": t("editor.label"), "aria-readonly": "true" }),

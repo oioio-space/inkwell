@@ -7,10 +7,10 @@ import { type RemoteCursor, setRemoteCursors } from "./remoteCursors";
 type Doc = { text: string };
 
 /** What each person broadcasts: who they are and where their selection is. */
-export type CursorState = { name: string; anchor?: string; head?: string };
+export type CursorState = { name: string; file?: string; anchor?: string; head?: string };
 
 /** A person currently present in the document. */
-export type Person = { peerId: string; name: string };
+export type Person = { peerId: string; name: string; file?: string };
 
 const PATH = ["text"];
 
@@ -26,17 +26,24 @@ export function presenceSync(
   onPeople: (people: Person[]) => void = () => {},
 ): { extension: Extension; rename: (name: string) => void; stop: () => void } {
   const presence = new Presence<CursorState, Doc>({ handle });
-  presence.start({ initialState: { name: me.name } });
+  presence.start({ initialState: { name: me.name, file: "main.typ" } });
 
   const refresh = () => {
     const states = Object.values(presence.getPeerStates().value);
-    onPeople(states.map((p) => ({ peerId: p.peerId, name: p.value.name })));
+    onPeople(
+      states.map((p) => ({
+        peerId: p.peerId,
+        name: p.value.name,
+        ...(p.value.file ? { file: p.value.file } : {}),
+      })),
+    );
     const view = getView();
     const doc = handle.doc();
     if (!view || !doc) return;
     const cursors: RemoteCursor[] = [];
     for (const peer of states) {
       const { name, anchor, head } = peer.value;
+      if (peer.value.file && peer.value.file !== "main.typ") continue;
       if (!anchor || !head) continue;
       try {
         cursors.push({
@@ -54,6 +61,14 @@ export function presenceSync(
   for (const event of ["update", "snapshot", "goodbye", "pruning"] as const)
     presence.on(event, refresh);
 
+  // A cursor may arrive before the text it refers to. Retry once that text arrives.
+  let stopped = false;
+  const onDocumentChange = () =>
+    queueMicrotask(() => {
+      if (!stopped) refresh();
+    });
+  handle.on("change", onDocumentChange);
+
   const extension = EditorView.updateListener.of((u) => {
     if (!u.selectionSet && !u.docChanged) return;
     const doc = handle.doc();
@@ -66,6 +81,10 @@ export function presenceSync(
   return {
     extension,
     rename: (name) => presence.broadcast("name", name),
-    stop: () => presence.stop(),
+    stop: () => {
+      stopped = true;
+      handle.off("change", onDocumentChange);
+      presence.stop();
+    },
   };
 }

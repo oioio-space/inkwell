@@ -2,10 +2,10 @@
 
 import * as repoModule from "@automerge/automerge-repo";
 import { generateAutomergeUrl, Repo } from "@automerge/automerge-repo";
-import { encode } from "cbor-x";
+import { decode, encode } from "cbor-x";
 import fc from "fast-check";
 import { expect, it, vi } from "vitest";
-import { Admission, parsePeerMessage } from "./admission";
+import { Admission, parsePeerMessage, validFilePath, validPresenceName } from "./admission";
 import { AdmittedSet } from "./scope";
 
 vi.mock("@automerge/automerge-repo", { spy: true });
@@ -71,6 +71,161 @@ it("2 validates handshakes and presence", () => {
     { data: new Uint8Array(1025) },
   ])
     expect(parse({ ...ephemeral(), ...patch })).toBeUndefined();
+});
+const presenceOf = (p: unknown) => ({
+  ...ephemeral(),
+  data: encode({ __presence: p }),
+});
+const fileUpdate = (value: unknown) => presenceOf({ type: "update", channel: "file", value });
+const fileSnapshot = (file: unknown) =>
+  presenceOf({ type: "snapshot", state: { name: "Bob", file } });
+it("2 admits a presence file that is a safe project path", () => {
+  for (const file of [
+    "main.typ",
+    "figures.csv",
+    "docs/a b/é.md",
+    "x".repeat(800),
+    "日本語/ノート.md",
+  ]) {
+    expect(parse(fileUpdate(file)), file).toBeDefined();
+    expect(parse(fileSnapshot(file)), file).toBeDefined();
+  }
+});
+it("2 drops a presence file that is not a safe project path", () => {
+  for (const file of [
+    "",
+    "/etc/passwd",
+    "a/../b",
+    "..",
+    ".",
+    "a/./b",
+    "a//b",
+    "a/",
+    "a\\b",
+    "a\u0000b",
+    "a\nb",
+    "a\u007fb",
+    "a\u0085b",
+    "x".repeat(1025),
+    "é".repeat(600),
+    "e\u0301.md",
+    42,
+    null,
+    ["main.typ"],
+    { a: 1 },
+    ...SPOOFING.map((c) => `a${c}b.md`),
+  ]) {
+    expect(parse(fileUpdate(file))).toBeUndefined();
+    // A snapshot loses the bad file only: the person's name still arrives, unless the whole
+    // message is over the 1024-byte ephemeral bound.
+    const snapshot = fileSnapshot(file);
+    const want = snapshot.data.length > 1024 ? undefined : { name: "Bob" };
+    expect(stateOf(parse(snapshot)), JSON.stringify(file)).toEqual(want);
+  }
+});
+/** Bidirectional and format controls that make one name or path look like another. */
+const SPOOFING = [
+  "\u202a",
+  "\u202b",
+  "\u202c",
+  "\u202d",
+  "\u202e",
+  "\u2066",
+  "\u2067",
+  "\u2068",
+  "\u2069",
+  "\u200e",
+  "\u200f",
+  "\u200b",
+  "\u2060",
+  "\ufeff",
+  "\u00ad",
+  "\u061c",
+];
+/** The presence state an admitted snapshot carries, as the repository will decode it. */
+function stateOf(msg: unknown): unknown {
+  const data = (msg as { data?: Uint8Array } | undefined)?.data;
+  if (!data) return undefined;
+  return (decode(data) as { __presence: { state: unknown } }).__presence.state;
+}
+it("2 drops a presence name with hidden or reordering characters", () => {
+  for (const c of SPOOFING) {
+    const name = `Ali${c}ce`;
+    expect(validPresenceName(name), JSON.stringify(name)).toBe(false);
+    expect(
+      parse(presenceOf({ type: "update", channel: "name", value: name })),
+      JSON.stringify(name),
+    ).toBeUndefined();
+    expect(
+      stateOf(parse(presenceOf({ type: "snapshot", state: { name, file: "main.typ" } }))),
+    ).toEqual({ file: "main.typ" });
+  }
+  for (const name of ["Alice", "Zoë", "李雷", "אבי", "مریم", "", "x".repeat(128)])
+    expect(validPresenceName(name), name).toBe(true);
+  expect(validPresenceName("x".repeat(129))).toBe(false);
+  expect(validPresenceName("a\nb")).toBe(false);
+  expect(validPresenceName("\ud800")).toBe(false);
+});
+it("2 keeps the valid keys of a snapshot and drops the others", () => {
+  const msg = parse(
+    presenceOf({
+      type: "snapshot",
+      state: { name: "Bob", file: "e\u0301.md", anchor: "a".repeat(65), head: "h", extra: 1 },
+    }),
+  );
+  expect(stateOf(msg)).toEqual({ name: "Bob", head: "h" });
+  const untouched = presenceOf({ type: "snapshot", state: { name: "Bob", file: "main.typ" } });
+  expect([...(parse(untouched) as { data: Uint8Array }).data]).toEqual([...untouched.data]);
+  expect(stateOf(parse(presenceOf({ type: "snapshot", state: "x" })))).toBeUndefined();
+});
+it("2 an admitted snapshot only ever carries safe values", () => {
+  const value = fc.oneof(
+    fc.string({ unit: "binary" }),
+    fc.constantFrom(...SPOOFING, "main.typ", "a/../b", "Bob", "e\u0301"),
+    fc.anything(),
+  );
+  fc.assert(
+    fc.property(
+      fc.dictionary(fc.constantFrom("name", "file", "anchor", "head", "extra"), value),
+      (state) => {
+        const s = stateOf(parse(presenceOf({ type: "snapshot", state })));
+        if (s === undefined) return;
+        for (const [k, v] of Object.entries(s as Record<string, unknown>)) {
+          expect(["name", "file", "anchor", "head"]).toContain(k);
+          expect(state[k]).toEqual(v);
+          if (k === "name") expect(validPresenceName(v)).toBe(true);
+          if (k === "file") expect(validFilePath(v)).toBe(true);
+        }
+      },
+    ),
+    { examples: [[{ name: "Ali\u202ece", file: "x\u2066.md" }], [{ name: "Bob", file: "a\\b" }]] },
+  );
+});
+it("2 validFilePath refuses what CBOR cannot carry, such as a lone surrogate", () => {
+  expect(validFilePath("\ud800.md")).toBe(false);
+  expect(validFilePath("a".repeat(1024))).toBe(true);
+  expect(validFilePath("a".repeat(1025))).toBe(false);
+  expect(validFilePath("é".repeat(513))).toBe(false);
+});
+it("2 never admits a presence file that a property finds unsafe", () => {
+  fc.assert(
+    fc.property(fc.string({ unit: "binary" }), (file) => {
+      const admitted = parse(fileUpdate(file)) !== undefined;
+      if (admitted) {
+        expect(new TextEncoder().encode(file).length).toBeLessThanOrEqual(1024);
+        expect(file.normalize("NFC")).toBe(file);
+        expect(file.split("/")).not.toContain("..");
+        expect(file.startsWith("/")).toBe(false);
+        expect([...file].some((c) => c.charCodeAt(0) < 32 || c === "\u007f")).toBe(false);
+        expect(/[\p{Cf}\p{Cs}\\]/u.test(file)).toBe(false);
+      }
+    }),
+  );
+  fc.assert(
+    fc.property(fc.anything(), (file) => {
+      expect(() => parse(fileSnapshot(file))).not.toThrow();
+    }),
+  );
 });
 it("3 P2 drops 50,000 invented ids", () => {
   for (let i = 0; i < 50000; i++)

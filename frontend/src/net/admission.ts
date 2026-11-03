@@ -1,5 +1,5 @@
 import { isValidAutomergeUrl, type Message, type PeerId } from "@automerge/automerge-repo";
-import { decode } from "cbor-x";
+import { decode, encode } from "cbor-x";
 import { MARKER, parseWire } from "../present/wire";
 
 export type Handshake = {
@@ -9,6 +9,34 @@ export type Handshake = {
   projectUrl?: import("@automerge/automerge-repo").AutomergeUrl;
 };
 export const MAX_PROJECT_URL_LENGTH = 80;
+/** Longest project-relative path, in UTF-8 bytes (project.MaxPathLen on the Go side). */
+export const MAX_FILE_PATH_BYTES = 1024;
+/**
+ * Characters a presence name or file may not hold: controls (Cc: C0, DEL, C1), format characters
+ * (Cf: the bidirectional embeddings, overrides and isolates U+202A–U+202E and U+2066–U+2069, the
+ * marks U+200E/U+200F, zero-width characters, U+FEFF…) and lone surrogates (Cs, which CBOR cannot
+ * carry). They are invisible or reorder text, so one person or file could pass for another in the
+ * people list. Property escapes keep the check portable (no ES2024 isWellFormed).
+ */
+const HIDDEN_CHAR = /[\p{Cc}\p{Cf}\p{Cs}]/u;
+/** Longest presence name, in UTF-16 units. */
+export const MAX_PRESENCE_NAME = 128;
+/** Whether a peer-announced display name is safe to show: short, without hidden characters. */
+export function validPresenceName(v: unknown): v is string {
+  return typeof v === "string" && v.length <= MAX_PRESENCE_NAME && !HIDDEN_CHAR.test(v);
+}
+/**
+ * Whether a peer-announced file is a plausible project-relative path: Unicode in NFC, at most
+ * 1024 bytes, no hidden character (see HIDDEN_CHAR) and no backslash (a separator on Windows), no
+ * leading, trailing or doubled "/", and no "." or ".." segment. It is only ever a display and
+ * filter key, never a filesystem path. The sender applies the same test before announcing a file.
+ */
+export function validFilePath(v: unknown): v is string {
+  if (typeof v !== "string" || v.length === 0 || v.length > MAX_FILE_PATH_BYTES) return false;
+  if (HIDDEN_CHAR.test(v) || v.includes("\\") || v.normalize("NFC") !== v) return false;
+  if (new TextEncoder().encode(v).length > MAX_FILE_PATH_BYTES) return false;
+  return v.split("/").every((part) => part !== "" && part !== "." && part !== "..");
+}
 type Context = { from: string; me: string; announced: boolean; has: (id: string) => boolean };
 const plain = (v: unknown): v is Record<string, unknown> =>
   v !== null &&
@@ -20,31 +48,55 @@ const plain = (v: unknown): v is Record<string, unknown> =>
 const own = (v: Record<string, unknown>, k: string): unknown =>
   Object.hasOwn(v, k) ? v[k] : undefined;
 const id = (v: unknown): v is string => typeof v === "string" && v.length > 0 && v.length <= 64;
-function ephemeralPayload(data: Uint8Array): boolean {
+/** Whether a presence channel (a key of the person's state) carries an acceptable value. */
+function presenceValue(k: string, v: unknown): boolean {
+  switch (k) {
+    case "name":
+      return validPresenceName(v);
+    case "file":
+      return validFilePath(v);
+    case "anchor":
+    case "head":
+      return typeof v === "string" && v.length <= 64;
+    default:
+      return false;
+  }
+}
+/**
+ * The ephemeral payload to forward: data itself when it is valid, a re-encoded snapshot without its
+ * invalid keys (one bad field must not hide the rest of a person's state), or undefined.
+ */
+function admitEphemeral(data: Uint8Array): Uint8Array | undefined {
   const envelope: unknown = decode(data);
-  if (!plain(envelope)) return false;
+  if (!plain(envelope)) return;
   if (Object.hasOwn(envelope, MARKER)) {
     const message = own(envelope, MARKER);
-    return Object.keys(envelope).length === 1 && plain(message) && parseWire(message) !== undefined;
+    const ok =
+      Object.keys(envelope).length === 1 && plain(message) && parseWire(message) !== undefined;
+    return ok ? data : undefined;
   }
   const p = own(envelope, "__presence");
-  if (!plain(p)) return false;
-  const channel = (k: string, v: unknown) =>
-    ["name", "anchor", "head"].includes(k) &&
-    typeof v === "string" &&
-    v.length <= (k === "name" ? 128 : 64);
+  if (!plain(p)) return;
   switch (own(p, "type")) {
     case "heartbeat":
     case "goodbye":
-      return true;
-    case "update":
-      return typeof own(p, "channel") === "string" && channel(p.channel as string, own(p, "value"));
+      return data;
+    case "update": {
+      const channel = own(p, "channel");
+      return typeof channel === "string" && presenceValue(channel, own(p, "value"))
+        ? data
+        : undefined;
+    }
     case "snapshot": {
       const s = own(p, "state");
-      return plain(s) && Object.entries(s).every(([k, v]) => channel(k, v));
+      if (!plain(s)) return;
+      const kept = Object.entries(s).filter(([k, v]) => presenceValue(k, v));
+      if (kept.length === Object.keys(s).length) return data;
+      // Only the four known keys survive the filter, so no prototype key is rebuilt.
+      return encode({ ...envelope, __presence: { ...p, state: Object.fromEntries(kept) } });
     }
     default:
-      return false;
+      return;
   }
 }
 /** Decode untrusted bytes without retaining extra fields or peer metadata. */
@@ -91,11 +143,12 @@ export function parsePeerMessage(payload: Uint8Array, c: Context): Handshake | M
       !/^[0-9a-z]{1,16}$/.test(sessionId) ||
       !Number.isSafeInteger(count) ||
       (count as number) < 1 ||
-      data.length > 1024 ||
-      !ephemeralPayload(data)
+      data.length > 1024
     )
       return;
-    return { ...base, data, sessionId, count } as unknown as Message;
+    const admitted = admitEphemeral(data);
+    if (!admitted) return;
+    return { ...base, data: admitted, sessionId, count } as unknown as Message;
   } catch {
     return;
   }

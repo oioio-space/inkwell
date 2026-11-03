@@ -119,6 +119,3 @@ require (
 )
 
 replace github.com/oioio-space/inkwell/protocol => ./protocol
-
-// Native memory queries only: upstream darwin FreeMemory launches vm_stat.
-replace github.com/pbnjay/memory => ./third_party/memory

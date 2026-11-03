@@ -1,7 +1,9 @@
 package project
 
 import (
+	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
@@ -200,6 +202,94 @@ func BenchmarkList(b *testing.B) {
 	for b.Loop() {
 		if _, err := p.List(); err != nil {
 			b.Fatal(err)
+		}
+	}
+}
+
+func TestReadImageProjection(t *testing.T) {
+	p := create(t, newBase(t), "images")
+	put(t, p, "pic.png", "image bytes")
+	data, err := p.ReadImage("pic.png")
+	if err != nil || string(data) != "image bytes" {
+		t.Fatalf("image: %q %v", data, err)
+	}
+	put(t, p, "note.txt", "secret")
+	put(t, p, ".hidden.png", "image bytes")
+	put(t, p, "assets/.cache/pic.png", "image bytes")
+	for _, rel := range []string{"../pic.png", ".inkwell/private.png", "note.txt", ".hidden.png", "assets/.cache/pic.png"} {
+		if _, err := p.ReadImage(rel); err == nil {
+			t.Fatalf("accepted %s", rel)
+		}
+	}
+	if err := p.root.Symlink("pic.png", "link.png"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.ReadImage("link.png"); err == nil {
+		t.Fatal("accepted image symlink")
+	}
+}
+
+func TestReadUnownedProjectText(t *testing.T) {
+	p := create(t, newBase(t), "local")
+	put(t, p, "local.md", "# Local\n")
+	text, err := p.ReadProjectText("local.md")
+	if err != nil || text.Body != "# Local\n" {
+		t.Fatalf("local projection: %+v %v", text, err)
+	}
+	if _, err := p.ReadText("local.md"); err == nil {
+		t.Fatal("read admitted a local file for shared writes")
+	}
+	for _, path := range []string{"../outside.txt", ".inkwell/project.json", ".typstdeps/private.txt"} {
+		if _, err := p.ReadProjectText(path); err == nil {
+			t.Fatalf("accepted %s", path)
+		}
+	}
+	// Only what List shows is readable: not dotfiles, dot folders or temporary files.
+	for _, path := range []string{".env", "notes/.secret.md", ".git/config", "draft.md.tmp"} {
+		put(t, p, path, "hidden\n")
+		if _, err := p.ReadProjectText(path); err == nil {
+			t.Errorf("ReadProjectText(%q) read a file List does not show", path)
+		}
+	}
+	files, err := p.List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range files {
+		if _, err := p.ReadProjectText(f.Path); err != nil {
+			t.Errorf("ReadProjectText(%q) of a listed file: %v", f.Path, err)
+		}
+	}
+}
+
+func TestVersionFollowsTheListedFile(t *testing.T) {
+	p := create(t, newBase(t), "version")
+	put(t, p, "notes.md", "one\n")
+	v1, err := p.Version("notes.md")
+	if err != nil || v1 == "" {
+		t.Fatalf("Version(notes.md) = %q, %v", v1, err)
+	}
+	if again, err := p.Version("notes.md"); err != nil || again != v1 {
+		t.Errorf("Version(notes.md) unchanged file = %q, %v; want %q", again, err, v1)
+	}
+	put(t, p, "notes.md", "two, longer\n")
+	if v2, err := p.Version("notes.md"); err != nil || v2 == v1 {
+		t.Errorf("Version(notes.md) after an edit = %q, %v; want a new version", v2, err)
+	}
+	if err := p.root.Remove("notes.md"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.Version("notes.md"); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("Version(notes.md) after deletion: %v, want fs.ErrNotExist", err)
+	}
+	put(t, p, ".env", "hidden\n")
+	put(t, p, "pic.png", "x")
+	if err := p.root.Symlink("pic.png", "link.png"); err != nil {
+		t.Fatal(err)
+	}
+	for _, rel := range []string{".env", "../x", "link.png"} {
+		if _, err := p.Version(rel); err == nil {
+			t.Errorf("Version(%q) of a file the readers refuse succeeded", rel)
 		}
 	}
 }

@@ -1,0 +1,20 @@
+# G-0a and the five acceptance criteria from docs/objectif-en-cours.md.
+raw_results = ["docs/plans/2026-11-03-L2-implementation.md", "docs/objectif-en-cours.md", "gates/L2/*", "gates/L0.json", "gates/L1.json"]
+measurement_reports = ["gates/L2/PERF-TYPE.json"]
+[[criteria]]
+id = "FM-OPEN-1-2-3"
+command = "mise run --skip-deps e2e:build && cd frontend && ../scripts/heavy.sh ./node_modules/.bin/playwright test files.spec.ts --output ../gates/L2/playwright-results"
+[[criteria]]
+id = "no-file-query"
+command = "python3 scripts/check-no-file-query.py"
+[[criteria]]
+id = "L1-security-followups"
+command = "./scripts/heavy.sh go test ./tools/archexec ./internal/sidecar ./internal/project && bash scripts/arch-exec-check.sh"
+[[criteria]]
+id = "PERF-TYPE-native"
+status = "deferred"
+target_lot = "L3"
+reason = "Native desktop build succeeds; WebKitGTK cannot create its sandbox runtime sockets under the managed filesystem. A writable XDG_RUNTIME_DIR/X11 retry creates a native window with a blank WebView; no measurable editor is established. No native cold/warm paint samples exist; L3 needs a native runner with working WebKit sandbox and compositor/input instrumentation. See gates/L2/native-launch*.log and PERF-TYPE.json."
+[[criteria]]
+id = "L0-L1"
+command = "mise run gate -- L1"

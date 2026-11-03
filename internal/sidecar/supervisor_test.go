@@ -6,6 +6,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"maps"
 	"os"
 	"os/exec"
 	"strconv"
@@ -447,16 +448,39 @@ func waitGrandchild(t *testing.T, b *syncBuffer) int {
 
 func TestSupervisorDoesNotInheritEnvironment(t *testing.T) {
 	t.Setenv("INKWELL_APP_SECRET", "must-not-leak")
+	t.Setenv("LD_PRELOAD", "/untrusted.so")
+	t.Setenv("HTTPS_PROXY", "https://untrusted.invalid")
 	cmd := exec.Command(os.Args[0], "-test.run=^$")
 	cmd.Dir = t.TempDir()
+	cmd.Env = os.Environ()
 	sup := NewSupervisor(SupervisorConfig{Command: func(context.Context) (*exec.Cmd, error) { return cmd, nil }})
 	_, _ = sup.runOnce(t.Context())
 	if cmd.Env == nil {
 		t.Fatal("nil environment inherits application secrets")
 	}
 	for _, entry := range cmd.Environ() {
-		if strings.HasPrefix(entry, "INKWELL_APP_SECRET=") {
+		if strings.HasPrefix(entry, "INKWELL_APP_SECRET=") || strings.HasPrefix(entry, "LD_PRELOAD=") || strings.HasPrefix(entry, "HTTPS_PROXY=") {
 			t.Fatal("application environment leaked")
 		}
+	}
+}
+
+// The locale and font settings typst needs to render text are kept as given.
+func TestSupervisorKeepsLocaleAndFonts(t *testing.T) {
+	kept := map[string]string{
+		"LANG": "fr_FR.UTF-8", "LANGUAGE": "fr:en", "LC_ALL": "fr_FR.UTF-8", "LC_CTYPE": "fr_FR.UTF-8",
+		"TZ": "Europe/Paris", "FONTCONFIG_FILE": "/etc/fonts/fonts.conf", "FONTCONFIG_PATH": "/etc/fonts",
+	}
+	env := []string{"INKWELL_APP_SECRET=must-not-leak", "malformed"}
+	for k, v := range kept {
+		env = append(env, k+"="+v)
+	}
+	got := map[string]string{}
+	for _, entry := range supervisorEnv(env) {
+		k, v, _ := strings.Cut(entry, "=")
+		got[k] = v
+	}
+	if !maps.Equal(got, kept) {
+		t.Errorf("supervisorEnv kept %v, want exactly %v", got, kept)
 	}
 }

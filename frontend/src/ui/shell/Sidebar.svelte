@@ -14,7 +14,8 @@ let {
 }: {
   files: readonly ProjectFile[];
   current: string;
-  onOpen: (path: string) => void;
+  /** `keepFocus`: opened with Space, the focus stays on the tree. */
+  onOpen: (path: string, keepFocus?: boolean) => void;
 } = $props();
 
 const collapsed = new SvelteSet<string>();
@@ -47,6 +48,14 @@ function toggle(path: string) {
               aria-current={node.path === current ? "page" : undefined}
               data-path={node.path}
               onclick={() => onOpen(node.path)}
+              onkeydown={(e) => {
+                if (e.key !== " ") return;
+                e.preventDefault();
+                onOpen(node.path, true);
+              }}
+              onkeyup={(e) => {
+                if (e.key === " ") e.preventDefault();
+              }}
             >
               <span class="chev spacer"></span>
               <FileIcon kind={node.file.kind} />

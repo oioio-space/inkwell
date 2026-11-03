@@ -1,4 +1,11 @@
-// Package archexec enforces the production process-launch boundary.
+// Package archexec enforces one rule on inkwell's own code: outside the sidecar
+// launcher (internal/sidecar), no package imports os/exec or starts a process,
+// in any build configuration. The rule covers the module's own packages only;
+// dependencies are not scanned (requirement N42 as clarified on 2026-11-03:
+// using platform libraries is fine, requiring an installed program is not).
+//
+// [Analyzer] type-checks each build configuration through go vet; [ScanSources]
+// parses every Go file regardless of build tags.
 package archexec
 
 import (
@@ -13,7 +20,9 @@ import (
 	"golang.org/x/tools/go/analysis"
 )
 
-// Analyzer rejects alternate launch paths, raw syscalls and native code.
+// Analyzer reports, in production files outside internal/sidecar, imports of
+// os/exec or C, process-start and raw syscall functions, go:linkname
+// directives and native sources: the ways own code could start a process.
 var Analyzer = &analysis.Analyzer{Name: "archexec", Doc: "enforce the sidecar launcher boundary", Run: run}
 
 func run(pass *analysis.Pass) (any, error) {
@@ -63,7 +72,7 @@ func checkSource(pass *analysis.Pass, f *ast.File, anchor token.Pos) {
 	}
 	for _, imp := range f.Imports {
 		path, _ := strconv.Unquote(imp.Path.Value)
-		if path == "C" || reachesExec(importedPackage(pass.Pkg, path), make(map[string]bool)) {
+		if path == "C" || path == "os/exec" {
 			report(imp.Pos(), "forbidden import %s outside launcher", path)
 		}
 	}
@@ -87,38 +96,10 @@ func checkReference(pass *analysis.Pass, id *ast.Ident) {
 		forbidden = name == "Exec" || name == "ForkExec" || name == "StartProcess" ||
 			strings.HasPrefix(name, "Syscall") || strings.HasPrefix(name, "RawSyscall")
 	}
+	if p == "golang.org/x/sys/windows" {
+		forbidden = strings.HasPrefix(name, "CreateProcess") || strings.HasPrefix(name, "ShellExecute")
+	}
 	if forbidden {
 		pass.Reportf(id.Pos(), "forbidden launch or syscall %s.%s", p, name)
 	}
-}
-
-// Stop at the audited launcher boundary and the desktop framework, whose
-// native platform helpers are part of Wails rather than application launch code.
-func reachesExec(pkg *types.Package, seen map[string]bool) bool {
-	if pkg == nil || seen[pkg.Path()] {
-		return false
-	}
-	path := pkg.Path()
-	if path == "github.com/oioio-space/inkwell/internal/sidecar" || strings.HasPrefix(path, "github.com/wailsapp/wails/v3/") {
-		return false
-	}
-	if path == "os/exec" {
-		return true
-	}
-	seen[path] = true
-	for _, child := range pkg.Imports() {
-		if reachesExec(child, seen) {
-			return true
-		}
-	}
-	return false
-}
-
-func importedPackage(pkg *types.Package, path string) *types.Package {
-	for _, child := range pkg.Imports() {
-		if child.Path() == path {
-			return child
-		}
-	}
-	return nil
 }
