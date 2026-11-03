@@ -47,7 +47,10 @@ func TestMain(m *testing.M) {
 			}
 			fmt.Printf("gc=%d\n", pid)
 		}
-		os.Exit(runHelper(mode))
+		// syscall.Exit skips the coverage runtime's exit hook that os.Exit runs:
+		// a -cover helper confined by the sandbox cannot write its data files,
+		// and the resulting error would pollute the stderr the tests assert on.
+		syscall.Exit(runHelper(mode))
 	}
 	dir, err := os.MkdirTemp("", "inkwell-sidecar-test-")
 	if err != nil {
@@ -66,9 +69,9 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-// helperEnv is the whole environment of a re-executed test binary. A binary
-// built with -cover warns on stderr at exit unless GOCOVERDIR is set, which
-// would pollute the output the tests assert on.
+// helperEnv is the whole environment of a re-executed test binary. GOCOVERDIR
+// is set only to silence the -cover startup warning on stderr; the helper exits
+// through syscall.Exit and never writes coverage data.
 func helperEnv(mode string) []string {
 	return []string{modeEnv + "=" + mode, "GOCOVERDIR=" + sharedCache}
 }
