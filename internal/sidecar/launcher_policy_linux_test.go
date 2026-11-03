@@ -5,12 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"flag"
+	"fmt"
 	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strings"
 	"testing"
 
 	"golang.org/x/sys/unix"
@@ -127,10 +129,15 @@ func TestConfinementOnDisposableThread(t *testing.T) {
 				err = unix.Close(fd)
 			}
 			if err == nil {
+				// Landlock denies the sibling with EACCES; any other error would
+				// mean the policy was never exercised.
 				fd, e := unix.Open(filepath.Join(output, "other"), unix.O_CREAT|unix.O_WRONLY, 0o600)
-				if e == nil {
+				switch {
+				case e == nil:
 					_ = unix.Close(fd)
-					err = unix.EACCES
+					err = errors.New("created a sibling of the granted output")
+				case !errors.Is(e, unix.EACCES):
+					err = fmt.Errorf("creating a sibling: %w, want EACCES", e)
 				}
 			}
 		}
@@ -241,6 +248,20 @@ func TestLauncherMountConstruction(t *testing.T) {
 }
 
 func TestSandboxExecDeniedTarget(t *testing.T) {
+	if os.Getenv("INKWELL_EXEC_DENIED") != "1" {
+		// sandboxExec sets RLIMIT_CORE to 0, soft and hard, for the whole process,
+		// and an unprivileged process cannot raise a hard limit back: run the case
+		// in a child and prove this process keeps its limit.
+		var before, after unix.Rlimit
+		if err := unix.Getrlimit(unix.RLIMIT_CORE, &before); err != nil {
+			t.Fatal(err)
+		}
+		runChild(t, childTest("TestSandboxExecDeniedTarget", "INKWELL_EXEC_DENIED=1"), "TestSandboxExecDeniedTarget")
+		if err := unix.Getrlimit(unix.RLIMIT_CORE, &after); err != nil || after != before {
+			t.Fatalf("RLIMIT_CORE changed: %+v -> %+v (%v)", before, after, err)
+		}
+		return
+	}
 	// A valid ELF without execute permission traverses the whole setup while
 	// guaranteeing exec cannot replace the process or run untrusted code.
 	dir := t.TempDir()
@@ -384,12 +405,25 @@ func TestWorkingDirectoryRelativeXDG(t *testing.T) {
 }
 
 func TestSandboxMountErrors(t *testing.T) {
-	if err := sandboxExec(sandboxConfig{MountBytes: 1}, nil); err == nil {
-		t.Fatal("sub-page mount accepted")
+	if os.Getenv("INKWELL_MOUNT_ERRORS") == "1" {
+		// Root of a private user and mount namespace (below): making "/" private
+		// and mounting over /dev/null cannot touch the host's mounts.
+		runtime.LockOSThread()
+		defer runtime.UnlockOSThread()
+		err := sandboxExec(sandboxConfig{Overlay: true, RuntimeDir: "/dev/null"}, nil)
+		if !errors.Is(err, unix.ENOTDIR) {
+			t.Fatalf("tmpfs over a file: %v, want ENOTDIR", err)
+		}
+		return
 	}
-	if err := sandboxExec(sandboxConfig{Overlay: true, RuntimeDir: "/dev/null"}, nil); err == nil {
-		t.Fatal("invalid overlay accepted")
+	// Rejected before any mount, so this case is safe in-process.
+	if err := sandboxExec(sandboxConfig{MountBytes: 1}, nil); err == nil || !strings.Contains(err.Error(), "at least one page") {
+		t.Fatalf("sub-page mount: %v, want the one-page error", err)
 	}
+	cmd := childTest("TestSandboxMountErrors", "INKWELL_MOUNT_ERRORS=1")
+	setProcAttr(cmd)
+	mountNamespace(cmd)
+	runChild(t, cmd, "TestSandboxMountErrors")
 }
 
 func TestSymlinkLoopAuthorities(t *testing.T) {

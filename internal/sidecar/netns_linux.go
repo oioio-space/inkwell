@@ -1,10 +1,11 @@
 package sidecar
 
 import (
+	"context"
 	"os"
 	"os/exec"
-	"sync"
 	"syscall"
+	"time"
 )
 
 // isolate gives the child a private user and network namespace: it sees only a
@@ -26,15 +27,14 @@ func isolate(cmd *exec.Cmd) {
 
 // probeIsolation tries to start a harmless program in the namespaces. Kernels
 // and distributions may forbid unprivileged user namespaces (sysctl, AppArmor
-// on Ubuntu 24.04, containers).
-var probeIsolation = sync.OnceValue(func() bool {
+// on Ubuntu 24.04, containers). As for probeOutputMount (spec §9.11): only a
+// definitive refusal is cached as "no isolation", which leaves NoNetwork to the
+// caller's proxy settings; a timeout or transient error refuses the launch with
+// ErrProbeInconclusive and is probed again after a backoff.
+var probeIsolation = cachedProbe(func(ctx context.Context) (bool, error) {
 	path, args, err := sandboxPrefix(sandboxConfig{Probe: true})
 	if err != nil {
-		return false
+		return false, err
 	}
-	cmd := exec.Command(path, args...) // #nosec G204 -- re-exec our own binary.
-	cmd.Env = []string{}
-	setProcAttr(cmd)
-	isolate(cmd)
-	return cmd.Run() == nil
-})
+	return runNamespaceProbe(ctx, isolate, []string{}, path, args...)
+}, probeTimeout, time.Now)

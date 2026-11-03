@@ -35,7 +35,24 @@ change plus que par une décision consignée dans `docs/architecture/decisions.m
 3. Puis : Collaborer sans perdre, Première minute et secours, Revenir en arrière, Fondations
    extensibles (`coherence.md` §5).
 
+### Lots connus et critères reçus en report
+
+Chaque report (`status = "deferred"`) d'une porte vise un lot de cette liste ou un `gates/<lot>.toml`
+existant, qui doit lister le critère à nouveau ; sinon `scripts/gate.py` le compte en échec. Un
+critère reporté plusieurs fois figure dans chaque lot de la chaîne (PERF-MEM : L0 → L2 → G-0b).
+
+```gate-lots
+L2: PERF-TYPE-native PERF-MEM
+G-0b: PERF-MEM
+N35: native-cgo-darwin-windows seccomp-trace-arm64
+Fondations-extensibles: PERF-START-plugins
+```
+
 ## Journal de pilotage
+
+2026-11-03 — décision technique (boucle extérieure), modèle de menace des portes : le garde anti-affaiblissement (`scripts/gate-guard.py`) protège contre un agent qui affaiblit une porte **par commodité ou par erreur** (test sauté, délai relevé, commande assouplie, exécuteur modifié), pas contre un agent délibérément malveillant ; il reste proportionné à la demande de l'utilisatrice (règles explicites et relisibles, dérogations revues, aucun bac à sable du dépôt ; `.git/info/exclude` hors périmètre). `mise run gate` exécute le `scripts/gate.py` de la base de fusion (copie temporaire, `python3 -I`), et celui-ci exécute le garde de la base de fusion hors du dépôt ; amorçage : si la base n'a pas d'exécuteur au protocole, celui de l'arbre tourne et le manifeste l'indique. Le garde protège aussi tout ce que les critères appellent : tâches mise, scripts et configurations d'outils, déterminés à partir des commandes de la base de fusion.
+
+2026-11-03 — décision de sécurité (spec §9.11, refuser plutôt qu'affaiblir) : la sonde des espaces de noms (`probeOutputMount`) a un délai de 5 s. Seul un refus **définitif** choisit le lancement sans espaces de noms et est mis en cache : `clone`/`unshare` ou la pose des correspondances d'identifiants refusés par EPERM, EINVAL ou ENOSPC (sysctl, AppArmor, noyau sans espaces de noms utilisateur), ou l'enfant de sonde qui reçoit l'une de ces erreurs en montant (code de sortie 120). Ce repli garde no_new_privs, les capacités retirées, les limites de ressources, Landlock et seccomp (tous deux obligatoires), mais n'a ni espace de noms utilisateur, montage, PID ou IPC, ni surcouche IPC. Un dépassement du délai ou toute autre erreur passagère refuse **ce** lancement (`ErrProbeInconclusive`, à réessayer), n'est jamais mis en cache comme « non pris en charge », et la sonde est relancée après un recul exponentiel (1 s à 30 s). Même traitement pour la sonde d'isolement réseau (`probeIsolation`) : un refus définitif laisse `NoNetwork` au seul proxy, un résultat non concluant refuse le lancement (et le moteur Typst). Tests : `TestOutputMountProbeHungChildRefusesLaunch`, `TestOutputMountProbeDefinitiveRefusalSelectsFallback`, `TestIsolationProbeHungChildRefusesLaunch`, `TestIsolationProbeDefinitiveRefusalSelectsFallback`.
 
 2026-11-03 — décision technique : TYP-10 vérifie la propriété la plus forte du noyau, avec la même sonde ABI Landlock que le lanceur. ABI ≥ 4 : aucun TCP ne quitte le bac à sable, y compris vers le proxy espion local (aucune connexion pendant la compilation). ABI < 4 : la tentative doit atteindre uniquement le proxy refusant. Dans les deux cas, ErrMissingPackage doit guider vers `.typstdeps` en moins de 20 s. Cette adaptation renforce la preuve de confinement ; elle ne retire aucun test ni ne relève aucun délai. Toute dérogation du garde est documentée dans `gates/guard-overrides.json`, référencé par le manifeste L1.
 

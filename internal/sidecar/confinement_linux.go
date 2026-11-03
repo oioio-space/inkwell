@@ -4,7 +4,11 @@ import "os/exec"
 
 // configureConfinement matches the overlay policy encoded by withLimits.
 func configureConfinement(cmd *exec.Cmd) error {
-	if probeOutputMount() {
+	supported, err := probeOutputMount()
+	if err != nil {
+		return err
+	}
+	if supported {
 		mountNamespace(cmd)
 	}
 	return nil

@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
@@ -103,8 +104,55 @@ func start(t *testing.T, cfg SupervisorConfig) (sup *Supervisor, stop, wait func
 
 var quick = Backoff{Initial: 5 * time.Millisecond, Max: 20 * time.Millisecond, Factor: 2}
 
+// supervisorDeadline bounds one TestSupervisor case: each takes at most about
+// 3 s (one SIGTERM grace, see TestSupervisor), so this is ample headroom under
+// load while failing a hang long before the package's -timeout.
+const supervisorDeadline = 90 * time.Second
+
+// watchdog crashes the test binary with every goroutine's stack if t is still
+// running after d. A hang in code that ignores contexts (a blocked wait or
+// probe) then fails in d, naming the test, instead of at the package timeout.
+func watchdog(t *testing.T, d time.Duration) {
+	t.Helper()
+	name := t.Name()
+	timer := time.AfterFunc(d, func() {
+		stacks := make([]byte, 1<<20)
+		stacks = stacks[:runtime.Stack(stacks, true)]
+		panic(fmt.Sprintf("%s still running after its %v deadline: hang\n\n%s", name, d, stacks))
+	})
+	t.Cleanup(func() { timer.Stop() })
+}
+
+func TestWatchdogFailsAHang(t *testing.T) {
+	if os.Getenv("INKWELL_WATCHDOG_HANG") == "1" {
+		watchdog(t, 100*time.Millisecond)
+		select {} // a hang that no context or test helper would ever end
+	}
+	begin := time.Now()
+	out, err := childTest("TestWatchdogFailsAHang", "INKWELL_WATCHDOG_HANG=1").CombinedOutput()
+	if err == nil || !bytes.Contains(out, []byte("TestWatchdogFailsAHang still running after its 100ms deadline: hang")) {
+		t.Fatalf("hung child: %v\n%s", err, out)
+	}
+	if took := time.Since(begin); took > supervisorDeadline {
+		t.Fatalf("hang reported after %v", took)
+	}
+}
+
+// A TestSupervisor case that stops a child within milliseconds of its start
+// can wait the full StopGrace and end in SIGKILL: the kernel delivers a signal
+// from an outer PID namespace to the namespace init only if the init has a
+// handler, and the sandbox launcher installs it shortly after start, so an
+// earlier SIGTERM is discarded (measured: a stop issued from the start event
+// takes 3 s and exits -1; one issued 500 ms later takes 2 ms and exits 143).
 func TestSupervisor(t *testing.T) {
-	t.Run("SIDE-20 runs until cancelled, then the child is gone", func(t *testing.T) {
+	bounded := func(name string, f func(t *testing.T)) {
+		t.Helper()
+		t.Run(name, func(t *testing.T) {
+			watchdog(t, supervisorDeadline)
+			f(t)
+		})
+	}
+	bounded("SIDE-20 runs until cancelled, then the child is gone", func(t *testing.T) {
 		rec := &recorder{}
 		var calls atomic.Int32
 		_, stop, _ := start(t, SupervisorConfig{Name: "sleeper", Command: script(&calls, "sleep"), Backoff: quick, OnEvent: rec.on})
@@ -120,7 +168,7 @@ func TestSupervisor(t *testing.T) {
 		}
 	})
 
-	t.Run("SIDE-21 a crash is followed by a restart", func(t *testing.T) {
+	bounded("SIDE-21 a crash is followed by a restart", func(t *testing.T) {
 		rec := &recorder{}
 		var calls atomic.Int32
 		sup, _, _ := start(t, SupervisorConfig{Name: "crashy", Command: script(&calls, "exit:7", "sleep"), Backoff: quick, OnEvent: rec.on})
@@ -137,7 +185,7 @@ func TestSupervisor(t *testing.T) {
 		}
 	})
 
-	t.Run("SIDE-22 backoff grows, is capped and resets after a stable run", func(t *testing.T) {
+	bounded("SIDE-22 backoff grows, is capped and resets after a stable run", func(t *testing.T) {
 		rec := &recorder{}
 		var calls atomic.Int32
 		cfg := SupervisorConfig{
@@ -155,7 +203,7 @@ func TestSupervisor(t *testing.T) {
 		}
 	})
 
-	t.Run("SIDE-22 the delay never exceeds the cap", func(t *testing.T) {
+	bounded("SIDE-22 the delay never exceeds the cap", func(t *testing.T) {
 		rec := &recorder{}
 		var calls atomic.Int32
 		cfg := SupervisorConfig{
@@ -176,7 +224,7 @@ func TestSupervisor(t *testing.T) {
 		}
 	})
 
-	t.Run("SIDE-23 gives up after N consecutive failures", func(t *testing.T) {
+	bounded("SIDE-23 gives up after N consecutive failures", func(t *testing.T) {
 		rec := &recorder{}
 		var calls atomic.Int32
 		_, _, wait := start(t, SupervisorConfig{Name: "dead", Command: script(&calls, "exit:1"), Backoff: quick, MaxFailures: 3, OnEvent: rec.on})
@@ -192,7 +240,7 @@ func TestSupervisor(t *testing.T) {
 		}
 	})
 
-	t.Run("SIDE-24 a failed integrity check launches nothing and counts as a failure", func(t *testing.T) {
+	bounded("SIDE-24 a failed integrity check launches nothing and counts as a failure", func(t *testing.T) {
 		rec := &recorder{}
 		var calls atomic.Int32
 		cfg := SupervisorConfig{
@@ -215,7 +263,7 @@ func TestSupervisor(t *testing.T) {
 		}
 	})
 
-	t.Run("SIDE-25 Command runs again before every launch", func(t *testing.T) {
+	bounded("SIDE-25 Command runs again before every launch", func(t *testing.T) {
 		rec := &recorder{}
 		var calls atomic.Int32
 		start(t, SupervisorConfig{Name: "reverify", Command: script(&calls, "exit:1", "exit:1", "exit:1", "sleep"), Backoff: quick, OnEvent: rec.on})
@@ -225,7 +273,7 @@ func TestSupervisor(t *testing.T) {
 		}
 	})
 
-	t.Run("SIDE-27 the whole process group stops with the supervisor", func(t *testing.T) {
+	bounded("SIDE-27 the whole process group stops with the supervisor", func(t *testing.T) {
 		out := &syncBuffer{}
 		cfg := SupervisorConfig{
 			Name: "tree", Backoff: quick,
@@ -248,7 +296,7 @@ func TestSupervisor(t *testing.T) {
 		}
 	})
 
-	t.Run("a child that ignores SIGTERM is killed after the grace period", func(t *testing.T) {
+	bounded("a child that ignores SIGTERM is killed after the grace period", func(t *testing.T) {
 		rec := &recorder{}
 		var calls atomic.Int32
 		_, stop, _ := start(t, SupervisorConfig{
@@ -269,7 +317,7 @@ func TestSupervisor(t *testing.T) {
 		}
 	})
 
-	t.Run("SIDE-28 events come in order", func(t *testing.T) {
+	bounded("SIDE-28 events come in order", func(t *testing.T) {
 		rec := &recorder{}
 		var calls atomic.Int32
 		_, stop, _ := start(t, SupervisorConfig{Name: "ordered", Command: script(&calls, "exit:2", "sleep"), Backoff: quick, OnEvent: rec.on})
@@ -288,7 +336,7 @@ func TestSupervisor(t *testing.T) {
 		}
 	})
 
-	t.Run("an already cancelled context launches nothing", func(t *testing.T) {
+	bounded("an already cancelled context launches nothing", func(t *testing.T) {
 		var calls atomic.Int32
 		ctx, cancel := context.WithCancel(t.Context())
 		cancel()
@@ -301,7 +349,7 @@ func TestSupervisor(t *testing.T) {
 		}
 	})
 
-	t.Run("a program that cannot start counts as a failure", func(t *testing.T) {
+	bounded("a program that cannot start counts as a failure", func(t *testing.T) {
 		rec := &recorder{}
 		cfg := SupervisorConfig{
 			Name: "ghost", Backoff: quick, MaxFailures: 2, OnEvent: rec.on,
@@ -318,13 +366,13 @@ func TestSupervisor(t *testing.T) {
 		}
 	})
 
-	t.Run("a nil Command is refused", func(t *testing.T) {
+	bounded("a nil Command is refused", func(t *testing.T) {
 		if err := NewSupervisor(SupervisorConfig{Name: "x"}).Run(t.Context()); err == nil {
 			t.Fatal("Run without Command = nil, want an error")
 		}
 	})
 
-	t.Run("defaults fill the zero configuration", func(t *testing.T) {
+	bounded("defaults fill the zero configuration", func(t *testing.T) {
 		cfg := SupervisorConfig{}.withDefaults()
 		if cfg.Backoff.Initial <= 0 || cfg.Backoff.Max < cfg.Backoff.Initial || cfg.Backoff.Factor < 1 ||
 			cfg.StableAfter <= 0 || cfg.MaxFailures <= 0 || cfg.StopGrace <= 0 {

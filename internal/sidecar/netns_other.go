@@ -9,4 +9,4 @@ import "os/exec"
 // deprecated) and the callers' proxy settings remain the only barrier.
 func isolate(*exec.Cmd) {}
 
-func probeIsolation() bool { return false }
+func probeIsolation() (bool, error) { return false, nil }

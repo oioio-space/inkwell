@@ -122,8 +122,12 @@ func TestRunNoNetwork(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	t.Logf("network isolation available: %v", NetworkIsolation())
-	if NetworkIsolation() {
+	available, err := NetworkIsolation()
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Logf("network isolation available: %v", available)
+	if available {
 		if !out.Isolated || strings.TrimSpace(string(out.Stdout)) != "unreachable" {
 			t.Errorf("isolated=%v output %q; want a private network where the loopback is unreachable", out.Isolated, out.Stdout)
 		}
@@ -135,7 +139,7 @@ func TestRunNoNetwork(t *testing.T) {
 func TestRunNoNetworkFallsBack(t *testing.T) {
 	t.Parallel()
 	s := spec("echo")
-	s.isolationProbe = func() bool { return false }
+	s.isolationProbe = func() (bool, error) { return false, nil }
 	s.NoNetwork = true
 	out, err := Run(t.Context(), s)
 	if err != nil || out.ExitCode != 0 || out.Isolated {

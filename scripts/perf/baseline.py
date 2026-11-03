@@ -7,6 +7,25 @@ import platform
 import math
 import subprocess
 
+THRESHOLDS = Path("docs/perf/baseline/2026-11-02/thresholds.json")
+
+
+def start_verdict(measurement, thresholds):
+    """Compare a fresh PERF-START p95 with the archived limit (baseline p95 x 1.10)."""
+    rule = thresholds["e2e"]["PERF-START"]
+    p95, limit = measurement["p95_ms"], rule["limit_p95_ms"]
+    assert isinstance(p95, (int, float)) and p95 >= 0, measurement
+    return {"status": "pass" if p95 <= limit else "fail", "p95_ms": p95, "limit_p95_ms": limit,
+            "baseline_p95_ms": rule["baseline_p95_ms"]}
+
+
+if os.environ.get("INKWELL_BASELINE_SELF_TEST") == "1":
+    limits = {"e2e": {"PERF-START": {"limit_p95_ms": 110, "baseline_p95_ms": 100}}}
+    assert start_verdict({"p95_ms": 110}, limits)["status"] == "pass"
+    assert start_verdict({"p95_ms": 110.01}, limits)["status"] == "fail"
+    print("baseline self-test passed")
+    raise SystemExit(0)
+
 out = Path(os.environ.get("INKWELL_PERF_OUT", "gates/L0"))
 out.mkdir(parents=True, exist_ok=True)
 corpus = Path("testdata/perf/generated")
@@ -58,13 +77,16 @@ report = {
     "corpus": "testdata/perf/corpus.json version 1",
     "attempts": attempts,
     "PERF-TYPE": {"status": "proxy", "reason": "Warm Chromium EventTiming only; censored and rounded entries cannot certify native WebKitGTK keystroke-to-paint p95; native measurement deferred to L2."},
-    "PERF-START": {"status": "pass", "plugins": 0, "scope": "Today's app cold process, server build to usable editor; prelaunched Chromium and warm OS caches, not native window timing."},
+    "PERF-START": {"status": "unmeasured", "plugins": 0, "scope": "Today's app cold process, server build to usable editor; prelaunched Chromium and warm OS caches, not native window timing."},
     "PERF-MEM": {"status": "deferred", "target_lot": "L2", "reason": "Real corpus opening requires G-0 in L2."},
     "PERF-START-plugins": {"status": "deferred", "target_lot": "Fondations-extensibles", "reason": "Pinned plugins do not exist yet; plugin-load measurement belongs to the plugin lot."},
-    "PM-5": {"status": "pass", "thresholds": "docs/perf/baseline/2026-11-02/thresholds.json"}}
+    # This script compares nothing for PM-5: the verdict is the regression-guard criterion.
+    "PM-5": {"status": "measured", "verdict": "gate criterion regression-guard (scripts/perf/regression.py --bench)",
+             "thresholds": "docs/perf/baseline/2026-11-02/thresholds.json"}}
 if len(attempts) != len(commands) or any(a["exit_code"] for a in attempts):
     raise SystemExit("baseline command failed")
 report["PERF-START"]["measurement"] = json.loads((out / "start.json").read_text())
+report["PERF-START"].update(start_verdict(report["PERF-START"]["measurement"], json.loads(THRESHOLDS.read_text())))
 diagnostic = out / "type-diagnostic.json"
 if diagnostic.exists() and len(attempts) == len(commands) and attempts[-1]["exit_code"] == 0:
     data = json.loads(diagnostic.read_text())
@@ -94,4 +116,5 @@ for name, command in {"go":["go","version"],"node":["node","--version"],"typst":
 print(json.dumps(report, indent=2))
 # Non-deferred baseline evidence must exist; proxy remains explicitly limited.
 assert report["PERF-TYPE"].get("diagnostic", {}).get("slow_layout_control_detected")
+assert report["PERF-START"]["status"] == "pass", report["PERF-START"]
 raise SystemExit(0)

@@ -52,6 +52,9 @@ func init() {
 	}
 	if err != nil {
 		_, _ = fmt.Fprintln(os.Stderr, "sidecar: sandbox:", err)
+		if c.Probe && definitiveRefusal(err) {
+			os.Exit(probeUnsupportedExit)
+		}
 		os.Exit(125)
 	}
 	os.Exit(0)

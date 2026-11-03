@@ -8,10 +8,12 @@ id = "harness"
 command = "python3 scripts/gate-selftest.py"
 [[criteria]]
 id = "baseline"
-command = "./scripts/heavy.sh python3 scripts/perf/baseline.py"
+command = "./scripts/heavy.sh --exclusive python3 scripts/perf/baseline.py"
+exclusive = true
 [[criteria]]
 id = "hot-paths"
-command = "./scripts/heavy.sh bash scripts/perf/bench.sh"
+command = "./scripts/heavy.sh --exclusive bash scripts/perf/bench.sh"
+exclusive = true
 [[criteria]]
 id = "archive"
 command = "python3 scripts/perf/archive.py"
@@ -24,7 +26,8 @@ command = "mise run test"
 
 [[criteria]]
 id = "regression-guard"
-command = "./scripts/heavy.sh python3 scripts/perf/regression.py --self-test && ./scripts/heavy.sh python3 scripts/perf/regression.py --bench"
+command = "./scripts/heavy.sh --exclusive python3 scripts/perf/regression.py --self-test && ./scripts/heavy.sh --exclusive python3 scripts/perf/regression.py --bench"
+exclusive = true
 [[criteria]]
 id = "PERF-START-plugins"
 status = "deferred"

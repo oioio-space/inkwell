@@ -241,7 +241,14 @@ func New(cfg Config) (*Engine, error) {
 	if err := e.ensureCaches(); err != nil {
 		return nil, err
 	}
-	e.noNet = !cfg.proxyOnly && sidecar.NetworkIsolation()
+	if !cfg.proxyOnly {
+		// An inconclusive probe refuses the engine rather than run proxy-only.
+		isolated, err := sidecar.NetworkIsolation()
+		if err != nil {
+			return nil, fmt.Errorf("typst: %w", err)
+		}
+		e.noNet = isolated
+	}
 	e.log.Info("typst: offline", "network", e.NetworkMode())
 	return e, nil
 }

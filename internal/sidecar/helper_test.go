@@ -1,7 +1,9 @@
 package sidecar
 
 import (
+	"bytes"
 	"errors"
+	"flag"
 	"fmt"
 	"io"
 	"net"
@@ -47,10 +49,7 @@ func TestMain(m *testing.M) {
 			}
 			fmt.Printf("gc=%d\n", pid)
 		}
-		// syscall.Exit skips the coverage runtime's exit hook that os.Exit runs:
-		// a -cover helper confined by the sandbox cannot write its data files,
-		// and the resulting error would pollute the stderr the tests assert on.
-		syscall.Exit(runHelper(mode))
+		helperExit(runHelper(mode))
 	}
 	dir, err := os.MkdirTemp("", "inkwell-sidecar-test-")
 	if err != nil {
@@ -69,9 +68,63 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
-// helperEnv is the whole environment of a re-executed test binary. GOCOVERDIR
-// is set only to silence the -cover startup warning on stderr; the helper exits
-// through syscall.Exit and never writes coverage data.
+// helperExit ends a helper process. Under -cover it uses syscall.Exit, which
+// skips the coverage exit hook: a confined helper cannot write its coverage
+// files, and the resulting error would pollute the stderr the tests assert on.
+// Otherwise it uses os.Exit, whose exit hooks include the race detector's: a
+// helper that raced must exit 66, not the code it returned.
+func helperExit(code int) {
+	if testing.CoverMode() != "" {
+		syscall.Exit(code)
+	}
+	os.Exit(code)
+}
+
+func TestHelperExitKeepsRaceVerdict(t *testing.T) {
+	err := helperCmd("race").Run()
+	got := 0
+	if exitErr, ok := errors.AsType[*exec.ExitError](err); ok {
+		got = exitErr.ExitCode()
+	} else if err != nil {
+		t.Fatal(err)
+	}
+	// The race detector's exit hook turns a race into status 66. Under -cover the
+	// helper skips every exit hook (helperExit), so it keeps the code it returned.
+	want := 0
+	if raceEnabled && testing.CoverMode() == "" {
+		want = 66
+	}
+	if got != want {
+		t.Fatalf("racy helper exited %d, want %d (race %v, cover %q)", got, want, raceEnabled, testing.CoverMode())
+	}
+}
+
+// childTest returns a command that re-executes this test binary to run only
+// the test called name, with env added, so that process-wide effects (mounts,
+// resource limits) never reach this process.
+func childTest(name string, env ...string) *exec.Cmd {
+	args := []string{"-test.run=^" + name + "$", "-test.v"}
+	if f := flag.Lookup("test.gocoverdir"); f != nil && f.Value.String() != "" {
+		args = append(args, "-test.gocoverdir="+f.Value.String())
+	}
+	cmd := exec.Command(os.Args[0], args...) // #nosec G204 -- re-executes the test binary
+	cmd.Env = append(os.Environ(), env...)
+	return cmd
+}
+
+// runChild runs cmd and fails unless the child really ran and passed name.
+func runChild(t *testing.T, cmd *exec.Cmd, name string) {
+	t.Helper()
+	out, err := cmd.CombinedOutput()
+	if err != nil || !bytes.Contains(out, []byte("--- PASS: "+name)) {
+		t.Fatalf("child %s: %v\n%s", name, err, out)
+	}
+}
+
+// helperEnv is the whole environment of a re-executed test binary. A -cover
+// test binary prints "GOCOVERDIR not set" from its os.Exit hook, at exit: the
+// helper itself skips that hook, but the sandbox launcher, which is this same
+// binary, exits through os.Exit and needs GOCOVERDIR to keep stderr clean.
 func helperEnv(mode string) []string {
 	return []string{modeEnv + "=" + mode, "GOCOVERDIR=" + sharedCache}
 }
@@ -246,6 +299,17 @@ func runHelper(mode string) int {
 		return 0
 	case "supervise-forever": // the parent that gets killed in the orphan test
 		return superviseForever()
+	case "race": // two unsynchronised writes; the race detector must flag them
+		var shared int
+		done := make(chan struct{})
+		go func() {
+			shared = 1
+			close(done)
+		}()
+		shared = 2
+		<-done
+		sink = make([]byte, shared) // uses the value, so neither write is dead
+		return 0
 	}
 	return 0
 }

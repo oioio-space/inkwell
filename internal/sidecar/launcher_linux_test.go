@@ -58,14 +58,14 @@ func TestSandboxPrivileges(t *testing.T) {
 			t.Errorf("missing %s in %s", field, out.Stdout)
 		}
 	}
-	if probeOutputMount() {
+	if mountSupported(t) {
 		for line := range strings.SplitSeq(string(out.Stdout), "\n") {
 			if strings.HasPrefix(line, "NSpid:") && strings.HasSuffix(line, "\t1") {
 				t.Errorf("workload incorrectly runs as PID 1: %s", line)
 			}
 		}
 	}
-	if probeOutputMount() && !strings.Contains(string(out.Stdout), "CapBnd:\t0000000000000000") {
+	if mountSupported(t) && !strings.Contains(string(out.Stdout), "CapBnd:\t0000000000000000") {
 		t.Errorf("bounding set retained: %s", out.Stdout)
 	}
 }
@@ -415,7 +415,7 @@ func TestEveryInvocationConfined(t *testing.T) {
 			case "bounded":
 				s.WatchDir, s.MaxDirBytes, s.WriteFiles = t.TempDir(), 8192, []string{"out"}
 			case "fallback":
-				s.isolationProbe = func() bool { return false }
+				s.isolationProbe = func() (bool, error) { return false, nil }
 			}
 			out, err := Run(t.Context(), s)
 			if err != nil || out.ExitCode != 0 {
@@ -445,7 +445,7 @@ func assertConfined(t *testing.T, output []byte) {
 }
 
 func TestIPCOverlays(t *testing.T) {
-	if !probeOutputMount() {
+	if !mountSupported(t) {
 		t.Fatal("cannot verify IPC overlays: user/mount/PID namespaces unavailable")
 	}
 	runtimeDir := t.TempDir()
