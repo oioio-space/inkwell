@@ -9,16 +9,17 @@ Les spécifications sont acceptées (design rév. 7 + 7.1, architecture rév. 8.
 change plus que par une décision consignée dans `docs/architecture/decisions.md` ou
 `docs/design/decisions-utilisatrice.md`.
 
-## Lot actif : L1 — Autoporteur (N42)
+## Lot actif : L2 — Ouvrir vraiment un fichier (G-0a)
 
 | | |
 |---|---|
-| But | aucun programme externe lancé à l'exécution (seuls nos sidecars embarqués et vérifiés) ; aucune porte ne peut être affaiblie en douce |
-| Exigences | N42 ; architecture §9.4–§9.11, INV-14, AC-19, §14.1 « Dépendances garanties » |
-| Porte | `mise run gate -- L1` : (1) contrôle d'architecture « aucun `os/exec` hors sidecars embarqués » (exemption documentée des processus internes de WebKitGTK) ; (2) `internal/sidecar` sans `setpriv`, `prlimit`, `unshare`, `mount` — appels système Go ou lanceur embarqué `inkwell-sandbox` ; (3) tests du confinement existants verts + test qui prouve que le confinement tient sans ces outils (PATH vide) ; (4) garde anti-affaiblissement : échoue si le diff d'un lot affaiblit un test, un seuil ou un délai (`gates/*.toml`, `thresholds.json`, `t.Skip`, délais) ; (5) porte L0 toujours verte |
-| Condition d'arrêt | porte verte, ou décision humaine (fonction de confinement impossible sans outil externe sur une cible) |
-| Revue | sécurité (Opus) obligatoire avant fusion : c'est le bac à sable |
-| Lot terminé | L0 (2026-11-02) : harnais de portes, référence de performance, `gates/L0.json` |
+| But | un clic dans la liste des fichiers ouvre vraiment le bon fichier ; suivis de sécurité de L1 ; mesure native de la frappe |
+| Exigences | N19 (début), N20, G-0 ; architecture §6.6 lot **G-0a** (le reste, G-0b/G-0c, dépend d'ADR 0031, de l'étape 8 d'ADR 0034 et du Worker) ; suivis LOW de L1 ci-dessous |
+| Porte | `mise run gate -- L2` : (1) e2e `files.spec.ts` FM-OPEN-1 (clic → contenu du bon fichier), FM-OPEN-2 (sous-titre), FM-OPEN-3 (txt, csv, md, typ distingués ; lecture seule avec bandeau pour les autres que `main.typ`) ; (2) `?file=` supprimé ; (3) les trois suivis de sécurité de L1 faits et testés ; (4) **PERF-TYPE natif** WebKitGTK (frappe → peinture, froid/chaud) mesuré, seuil = p95 × 1,10 ; (5) portes L0 et L1 vertes |
+| Reports | PERF-MEM → lot G-0b (ouverture réelle de plusieurs fichiers) |
+| Condition d'arrêt | porte verte, ou décision humaine (comportement de l'interface non prévu par le design) |
+| Revue | Sonnet (code) + test en personne `ux-walkthrough` (règle du projet pour toute modification d'interface) |
+| Lots terminés | L0 (2026-11-02) ; L1 (2026-11-03) : confinement sans programme externe, approuvé après six revues de sécurité Opus |
 
 ### Suivis de sécurité de L1 (LOW, revue Opus n° 6, à traiter au début de L2)
 
@@ -28,10 +29,9 @@ change plus que par une décision consignée dans `docs/architecture/decisions.m
 
 ## Lots suivants (MVP, dans l'ordre)
 
-1. **L2 — Écrire et retrouver** : G-0a puis G-0b (ouvrir vraiment un fichier), puis onglets
-   (G-0c, N19) ; porte : FM-OPEN-1…8, PERF-MEM sur ouverture réelle du corpus et PERF-TYPE natif WebKitGTK (frappe → peinture, froid/chaud).
-2. **L3 — Comprendre, corriger, produire** : tinymist branché (N28, N29) ; porte : `problems.spec.ts`,
+1. **L3 — Comprendre, corriger, produire** : tinymist branché (N28, N29) ; porte : `problems.spec.ts`,
    `PERF-LSP`.
+2. **Protocole, étapes 2 à 8 d'ADR 0034** puis **G-0b** (index `G`, un document par fichier, FM-OPEN-4…8, PERF-MEM) et **G-0c** (onglets, Worker).
 3. Puis : Collaborer sans perdre, Première minute et secours, Revenir en arrière, Fondations
    extensibles (`coherence.md` §5).
 
