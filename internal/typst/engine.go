@@ -477,7 +477,8 @@ func (e *Engine) args(sub string, j *job, o options, extra ...string) []string {
 // renders gigabytes is stopped long before the compilation ends.
 func (e *Engine) run(ctx context.Context, j *job, args []string, maxOut int, watch string, first, last int) (sidecar.Output, error) {
 	spec := sidecar.Spec{
-		Path: j.typst, Args: args, Dir: j.root, Env: e.env(), NoNetwork: e.noNet,
+		ReadPaths: append(append([]string{}, j.fonts...), e.local, e.pkgs.root, j.pkgPath),
+		Path:      j.typst, Args: args, Dir: j.root, Env: e.env(), NoNetwork: e.noNet,
 		MemoryLimit: e.cfg.MemoryLimit, MaxOutput: maxOut,
 	}
 	if watch != "" {
@@ -514,6 +515,9 @@ func ended(ctx context.Context, timeout time.Duration) error {
 // [ErrTimeout], [ErrMemoryLimit], [ErrOutputTooLarge]; or the context's error
 // when ctx ends first.
 func (e *Engine) Compile(ctx context.Context, p Project, main string, opts ...Option) (*Result, error) {
+	if err := previewAvailable(); err != nil {
+		return nil, err
+	}
 	o := applyOptions(opts)
 	if o.formats&(FormatPDF|FormatSVG) == 0 {
 		return nil, errors.New("typst: no output format requested")

@@ -102,14 +102,14 @@ while read -r pkg imports; do
   for imp in $imports; do
     if [[ "$imp" == "os/exec" ]]; then
       case "$pkg" in
-        "$module/internal/sidecar"|"$module/internal/sidecar/fetch") ;;
+        "$module/internal/sidecar") ;;
         *) report "$pkg imports os/exec outside the embedded sidecar/sandbox allowlist" ;;
       esac
     fi
   done
 done <<< "$runtime_imports"
 # Scan all build targets, not just the host-selected dependency graph.
-python3 scripts/arch-exec-check.py || report "forbidden production process launch"
+./scripts/arch-exec-check.sh || report "forbidden production process launch"
 
 # Any automerge Go package in the full dependency graph, tests included.
 all_deps="$(go list -deps -test ./...)"

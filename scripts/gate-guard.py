@@ -63,7 +63,8 @@ def inspect(name, old, new):
                 issues.append("deferred criterion " + ident)
         # Thresholds may be nested anywhere in a gate, including criteria.
         for key in a:
-            if key != "criteria":
+            if key not in ("criteria", "measurement_reports"):
+                # Report locations are evidence paths, not acceptance thresholds.
                 issues += numeric_changes(a[key], b.get(key), key)
         for ident in previous.keys() & current.keys():
             for key in previous[ident]:

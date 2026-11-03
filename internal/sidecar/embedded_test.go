@@ -38,7 +38,7 @@ func TestEmbeddedSidecarsRun(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Resolve(typst) = %v", err)
 		}
-		out, err := Run(t.Context(), Spec{Path: path, Args: []string{"--version"}})
+		out, err := Run(t.Context(), Spec{Path: path, Dir: t.TempDir(), Args: []string{"--version"}})
 		if err != nil || out.ExitCode != 0 {
 			t.Fatalf("typst --version = %v exit %d stderr %q", err, out.ExitCode, out.Stderr)
 		}
@@ -52,7 +52,7 @@ func TestEmbeddedSidecarsRun(t *testing.T) {
 		if err != nil {
 			t.Fatalf("Resolve(tinymist) = %v", err)
 		}
-		out, err := Run(t.Context(), Spec{Path: path, Args: []string{"--version"}, Env: []string{"HOME=" + t.TempDir()}})
+		out, err := Run(t.Context(), Spec{Path: path, Dir: t.TempDir(), Args: []string{"--version"}, Env: []string{"HOME=" + t.TempDir()}})
 		if err != nil || out.ExitCode != 0 {
 			t.Fatalf("tinymist --version = %v exit %d stderr %q", err, out.ExitCode, out.Stderr)
 		}
@@ -89,7 +89,7 @@ func TestEmbeddedSidecarsRun(t *testing.T) {
 		if err != nil || again != path {
 			t.Fatalf("Resolve after tampering = %q, %v; want %q", again, err, path)
 		}
-		out, err := Run(t.Context(), Spec{Path: again, Args: []string{"--version"}})
+		out, err := Run(t.Context(), Spec{Path: again, Dir: t.TempDir(), Args: []string{"--version"}})
 		if err != nil || out.ExitCode != 0 {
 			t.Fatalf("restored typst --version = %v exit %d", err, out.ExitCode)
 		}
@@ -129,7 +129,8 @@ func TestSupervisedTinymistLSP(t *testing.T) {
 			if err != nil {
 				return nil, err
 			}
-			cmd := exec.Command(path, "lsp") // #nosec G204 -- path from Store.Resolve
+			cmd := exec.Command(path, "lsp")
+			cmd.Dir = t.TempDir() // #nosec G204 -- path from Store.Resolve
 			cmd.Env = []string{"HOME=" + home}
 			in, err := cmd.StdinPipe()
 			if err != nil {

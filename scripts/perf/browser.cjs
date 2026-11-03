@@ -3,7 +3,7 @@ const { chromium } = require("../../frontend/node_modules/@playwright/test");
 const { spawn } = require("node:child_process");
 const fs = require("node:fs");
 (async () => {
-  const out = "docs/perf/baseline/2026-11-02";
+  const out = process.env.INKWELL_PERF_OUT || "gates/L0";
   const server = spawn("./bin/inkwell-server", [], {env:{...process.env,
     INKWELL_SERVER_PORT:"39127", INKWELL_RENDEZVOUS:"off",
     INKWELL_HOME:process.cwd()+"/.task/perf/home",

@@ -11,6 +11,11 @@ spec.loader.exec_module(gate)
 with tempfile.TemporaryDirectory() as tmp:
     root = Path(tmp)
     (root / "gates").mkdir()
+    archive = root / "docs/perf/baseline/2026-11-02"
+    archive.mkdir(parents=True)
+    (archive / "measurements.json").write_bytes(b'{"archived":true}\n')
+    digest = hashlib.sha256((archive / "measurements.json").read_bytes()).hexdigest()
+    (archive / "SHA256SUMS").write_text(digest + "  measurements.json\n")
     config = root / "gates/T.toml"
     config.write_text('[[criteria]]\nid="bad"\ncommand="echo failure; exit 7"\n[[criteria]]\nid="after"\ncommand="echo continued"\n')
     assert gate.run("T", root) == 1
@@ -33,6 +38,28 @@ with tempfile.TemporaryDirectory() as tmp:
     config.write_text('[[criteria]]\nid="declared-failure"\nstatus="fail"\ncommand="true"\n')
     assert gate.run("T", root) == 1
     assert json.loads((root / "gates/T.json").read_text())["criteria"][0]["status"] == "fail"
+    # A complete gate writes fresh evidence while the sealed archive is byte-identical.
+    before = {p.name: p.read_bytes() for p in archive.iterdir()}
+    config.write_text('[[criteria]]\nid="fresh"\ncommand="echo fresh > \\"$INKWELL_PERF_OUT/measurements.json\\""\n')
+    assert gate.run("T", root) == 0
+    assert (root / "gates/T/measurements.json").read_text() == "fresh\n"
+    assert {p.name: p.read_bytes() for p in archive.iterdir()} == before
+    # A criterion that corrupts the archive fails the post-run check, never reseals.
+    config.write_text('[[criteria]]\nid="tamper"\ncommand="echo tampered > docs/perf/baseline/2026-11-02/measurements.json"\n')
+    try:
+        gate.run("T", root)
+        raise AssertionError("accepted archive mutation by criterion")
+    except ValueError:
+        pass
+    assert (archive / "SHA256SUMS").read_bytes() == before["SHA256SUMS"]
+    # Corruption must fail verification rather than update SHA256SUMS.
+    (archive / "measurements.json").write_text("tampered")
+    try:
+        gate.run("T", root)
+        raise AssertionError("accepted corrupt archive")
+    except ValueError:
+        pass
+    (archive / "measurements.json").write_bytes(before["measurements.json"])
     try:
         gate.run("../escape", root)
         raise AssertionError("accepted invalid lot")

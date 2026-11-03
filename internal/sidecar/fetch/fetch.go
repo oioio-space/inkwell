@@ -12,6 +12,8 @@
 package fetch
 
 import (
+	"archive/tar"
+	"bufio"
 	"compress/gzip"
 	"context"
 	"crypto/sha256"
@@ -24,13 +26,13 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
 	"time"
 
 	"github.com/oioio-space/inkwell/internal/sidecar"
+	"github.com/ulikunitz/xz"
 )
 
 // ErrMismatch is returned when downloaded or extracted bytes do not match
@@ -268,37 +270,55 @@ func extract(ctx context.Context, archive, out string, art sidecar.Artifact) (er
 		}
 	}()
 
-	cmd := exec.CommandContext(ctx, "tar", "-xOf", archive, art.Member) // #nosec G204 -- fixed program; archive is our cache file, member is pinned
-	stderr := &boundedBuffer{max: stderrKept}
-	cmd.Stderr = stderr
-	stdout, err := cmd.StdoutPipe()
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	input, err := os.Open(archive) // #nosec G304 -- checksum-verified archive in the private build cache.
 	if err != nil {
 		return err
 	}
-	if err := cmd.Start(); err != nil {
-		return fmt.Errorf("start tar (needed to read the archives): %w", err)
+	defer func() { _ = input.Close() }()
+	buffered := bufio.NewReader(input)
+	magic, err := buffered.Peek(6)
+	if err != nil {
+		return err
 	}
+	var reader io.Reader
+	if string(magic) == "\xfd7zXZ\x00" {
+		reader, err = xz.NewReader(buffered)
+	} else {
+		reader, err = gzip.NewReader(buffered)
+	}
+	if err != nil {
+		return fmt.Errorf("extract %s: %w", art.Member, err)
+	}
+	tr := tar.NewReader(reader)
+	for {
+		header, nextErr := tr.Next()
+		if nextErr != nil {
+			return fmt.Errorf("extract member %s: %w", art.Member, nextErr)
+		}
+		if header.Name == art.Member {
+			if header.Typeflag != tar.TypeReg {
+				return errors.New("archive member is not a regular file")
+			}
+			break
+		}
+	}
+	stdout := tr
 
 	// Level and header are fixed so the same input gives the same bytes.
 	zw, err := gzip.NewWriterLevel(tmp, gzip.BestCompression)
 	if err != nil {
-		_ = cmd.Process.Kill()
-		_ = cmd.Wait()
 		return err
 	}
 	h := sha256.New()
 	n, copyErr := io.Copy(io.MultiWriter(zw, h), io.LimitReader(stdout, art.Size+1))
-	if n > art.Size || copyErr != nil {
-		_ = cmd.Process.Kill() // tar may be blocked writing more than we will read
-	}
-	waitErr := cmd.Wait()
 	switch {
 	case copyErr != nil:
 		return copyErr
 	case n > art.Size:
 		return fmt.Errorf("%w: %s is larger than the pinned %d bytes", ErrMismatch, art.Member, art.Size)
-	case waitErr != nil:
-		return fmt.Errorf("extract %s: %w: %s", art.Member, waitErr, strings.TrimSpace(stderr.String()))
 	case n != art.Size:
 		return fmt.Errorf("%w: %s is %d bytes, pinned %d (not a regular file?)", ErrMismatch, art.Member, n, art.Size)
 	case hex.EncodeToString(h.Sum(nil)) != art.SHA256:

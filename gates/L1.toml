@@ -1,12 +1,12 @@
 # Five acceptance criteria from docs/objectif-en-cours.md.
-known_failures = ["Sandbox re-execs the cgo GUI binary instead of static inkwell-sandbox (spec 9.5/9.10); target lot: Fondations extensibles (plugin host needs the same static launcher)"]
+known_failures = ["macOS: preview, query and export refused (including personal documents), confinement unproven; target: Six plates-formes (N35)", "Windows: preview, query and export refused (including personal documents), confinement unproven; target: Six plates-formes (N35)", "Sandbox re-execs the cgo GUI binary instead of static inkwell-sandbox (spec 9.5/9.10); target lot: Fondations extensibles (plugin host needs the same static launcher)"]
 raw_results = ["gates/guard-overrides.json", "docs/objectif-en-cours.md", "docs/plans/2026-11-02-L1-implementation.md", "gates/L0.json"]
 [[criteria]]
 id = "architecture"
 command = "mise run arch"
 [[criteria]]
 id = "syscall-confinement"
-command = "python3 scripts/arch-exec-check.py --self-test && python3 scripts/arch-exec-check.py && ./scripts/heavy.sh go test -race ./internal/sidecar"
+command = "./scripts/heavy.sh go test ./tools/archexec && ./scripts/arch-exec-check.sh && ./scripts/heavy.sh go test -race ./internal/sidecar"
 [[criteria]]
 id = "without-tools"
 command = "./scripts/heavy.sh bash scripts/sidecar-no-tools.sh"
@@ -16,3 +16,15 @@ command = "python3 scripts/gate-guard.py --self-test && python3 scripts/gate-gua
 [[criteria]]
 id = "L0"
 command = "mise run gate -- L0"
+[[criteria]]
+id = "native-cgo-darwin-windows"
+status = "deferred"
+target_lot = "N35"
+target_lot_name = "Six plates-formes (N35) — CI natif par OS/arch"
+reason = "ADR 0003 : le type-check complet avec cgo exige les SDK et runners natifs darwin/windows ; CGO_ENABLED=0 ne le remplace pas."
+[[criteria]]
+id = "seccomp-trace-arm64"
+status = "deferred"
+target_lot = "N35"
+target_lot_name = "Six plates-formes (N35) — CI natif par OS/arch"
+reason = "ADR 0003 : la validation des traces seccomp arm64 exige un runner Linux arm64 natif."

@@ -2,8 +2,9 @@
 
 package sidecar
 
-// withLimits does nothing: the memory and file size limits are only enforced
+// The former unconfined fallback relied on this insufficient guarantee:
 // on Linux. The timeout, the output bounds and the directory watch still apply.
-func withLimits(spec Spec) (string, []string, error) {
-	return spec.Path, spec.Args, nil
+// Spec 9.11 now requires refusal before launch instead.
+func withLimits(_ Spec) (string, []string, error) {
+	return "", nil, confinementAvailable()
 }

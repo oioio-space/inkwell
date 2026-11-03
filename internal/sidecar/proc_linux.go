@@ -15,5 +15,5 @@ const orphanSafe = true
 // callers keep their goroutine on that thread with runtime.LockOSThread from
 // Start to Wait (golang/go#27505).
 func setProcAttr(cmd *exec.Cmd) {
-	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true, Pdeathsig: syscall.SIGKILL}
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setsid: true, Pdeathsig: syscall.SIGKILL}
 }

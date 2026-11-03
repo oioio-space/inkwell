@@ -8,7 +8,8 @@ import re
 import statistics
 import subprocess
 
-out = Path('docs/perf/baseline/2026-11-02')
+out = Path(os.environ.get("INKWELL_PERF_OUT", "gates/L0"))
+out.mkdir(parents=True, exist_ok=True)
 
 # heavy.sh holds slot 0. Also wait for and hold every other slot (default: 2),
 # so an already running default-slot job cannot contaminate the reference.
@@ -45,7 +46,7 @@ for attempt in range(1, 4):
         break
 (out / 'go-reference.txt').write_bytes(target.read_bytes())
 p = out / 'thresholds.json'
-thresholds = json.loads(p.read_text())
+thresholds = json.loads(Path('docs/perf/baseline/2026-11-02/thresholds.json').read_text())
 thresholds['go'].pop('limits', None)
 thresholds['go']['reference_sha256'] = hashlib.sha256(target.read_bytes()).hexdigest()
 p.write_text(json.dumps(thresholds, indent=2)+'\n')

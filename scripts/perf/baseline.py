@@ -7,7 +7,7 @@ import platform
 import math
 import subprocess
 
-out = Path("docs/perf/baseline/2026-11-02")
+out = Path(os.environ.get("INKWELL_PERF_OUT", "gates/L0"))
 out.mkdir(parents=True, exist_ok=True)
 corpus = Path("testdata/perf/generated")
 corpus.mkdir(parents=True, exist_ok=True)
@@ -36,7 +36,7 @@ if p.returncode:
     raise SystemExit(p.returncode)
 for path in (corpus / "automerge").glob("*"):
     files[str(path.relative_to(corpus))] = {"bytes": path.stat().st_size, "sha256": hashlib.sha256(path.read_bytes()).hexdigest()}
-Path("testdata/perf/corpus.json").write_text(json.dumps({
+(out / "corpus.json").write_text(json.dumps({
     "version": 1, "generator": "python3 scripts/perf/baseline.py + scripts/perf/automerge.cjs",
     "text_bytes": 2097152, "text_characters": 2097152, "automerge_operations": 50000,
     "memory_blobs": "blobs/00.bin through blobs/19.bin (20 MiB)",
@@ -61,7 +61,7 @@ report = {
     "PERF-START": {"status": "pass", "plugins": 0, "scope": "Today's app cold process, server build to usable editor; prelaunched Chromium and warm OS caches, not native window timing."},
     "PERF-MEM": {"status": "deferred", "target_lot": "L2", "reason": "Real corpus opening requires G-0 in L2."},
     "PERF-START-plugins": {"status": "deferred", "target_lot": "Fondations-extensibles", "reason": "Pinned plugins do not exist yet; plugin-load measurement belongs to the plugin lot."},
-    "PM-5": {"status": "pass", "thresholds": str(out / "thresholds.json")}}
+    "PM-5": {"status": "pass", "thresholds": "docs/perf/baseline/2026-11-02/thresholds.json"}}
 if len(attempts) != len(commands) or any(a["exit_code"] for a in attempts):
     raise SystemExit("baseline command failed")
 report["PERF-START"]["measurement"] = json.loads((out / "start.json").read_text())

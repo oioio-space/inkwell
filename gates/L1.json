@@ -6,15 +6,15 @@
       "command": "mise run arch",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 1.1976050860248506,
+      "duration_seconds": 8.658719629049301,
       "log": "gates/L1/architecture.log"
     },
     {
       "id": "syscall-confinement",
-      "command": "python3 scripts/arch-exec-check.py --self-test && python3 scripts/arch-exec-check.py && ./scripts/heavy.sh go test -race ./internal/sidecar",
+      "command": "./scripts/heavy.sh go test ./tools/archexec && ./scripts/arch-exec-check.sh && ./scripts/heavy.sh go test -race ./internal/sidecar",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 0.31630460801534355,
+      "duration_seconds": 6.132807293906808,
       "log": "gates/L1/syscall-confinement.log"
     },
     {
@@ -22,7 +22,7 @@
       "command": "./scripts/heavy.sh bash scripts/sidecar-no-tools.sh",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 42.05040502699558,
+      "duration_seconds": 98.90406553598586,
       "log": "gates/L1/without-tools.log"
     },
     {
@@ -30,7 +30,7 @@
       "command": "python3 scripts/gate-guard.py --self-test && python3 scripts/gate-guard.py",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 0.20587958593387157,
+      "duration_seconds": 0.31283463700674474,
       "log": "gates/L1/anti-weakening.log"
     },
     {
@@ -38,8 +38,22 @@
       "command": "mise run gate -- L0",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 1831.987885069917,
+      "duration_seconds": 985.6417530139443,
       "log": "gates/L1/L0.log"
+    },
+    {
+      "id": "native-cgo-darwin-windows",
+      "status": "deferred",
+      "target_lot": "N35",
+      "target_lot_name": "Six plates-formes (N35) \u2014 CI natif par OS/arch",
+      "reason": "ADR 0003 : le type-check complet avec cgo exige les SDK et runners natifs darwin/windows ; CGO_ENABLED=0 ne le remplace pas."
+    },
+    {
+      "id": "seccomp-trace-arm64",
+      "status": "deferred",
+      "target_lot": "N35",
+      "target_lot_name": "Six plates-formes (N35) \u2014 CI natif par OS/arch",
+      "reason": "ADR 0003 : la validation des traces seccomp arm64 exige un runner Linux arm64 natif."
     }
   ],
   "versions": {
@@ -54,23 +68,55 @@
     }
   },
   "sha256": {
-    "docs/objectif-en-cours.md": "c8bdffc90894366a633c22a76689a22925ed741a6fdf31c7602343d1bd25b105",
-    "docs/plans/2026-11-02-L1-implementation.md": "9cb230c37c55916ee043e43fc03f1f5ddd476bc057d7509582c971e1ee5e4629",
-    "gates/L0.json": "d14dec10ad91ae2f91fb67fa6f480f14e1457427106d1a2793a9139e2ebe5064",
-    "gates/L1/L0.log": "1f35d589d6265d53b8d19c204b7b3ffc81e1c331d37161790a0f7583e6b0c95c",
-    "gates/L1/anti-weakening.log": "99b64ef1e2431474b8861999d11f8d204902e555e436f2fcbd04e0b3c7b0f8db",
-    "gates/L1/architecture.log": "a80dd87d85ef8e8ae8c7936aee1ece3ffbcdea1811b02d92326fd60fae4b8585",
+    "docs/objectif-en-cours.md": "64c0f216a8590afc9f0ea53cfc1b475c9b64ab7f5b8bb3901a537ba8e04c9e37",
+    "docs/plans/2026-11-02-L1-implementation.md": "8a26ba28cea440bcd19929a885ded0f2c391a5259f74ae008ab497b2d5721ea9",
+    "gates/L0.json": "9d4f2ae5febadd10342498c49eac82df1e314f00749df40b350119df3b4b9ef5",
+    "gates/L1/L0.log": "23544bd112e35f06bb3e1ecf49dfb2206e355c47c0c1a32c636e700f12e9b544",
+    "gates/L1/anti-weakening.log": "6a0f4c423a00ef40a28efe4611a1f8558dacd1b49d8abd06bfa43fe4ddf54329",
+    "gates/L1/architecture.log": "d40d23ca7272344598ea602bfba558dc668b05d10abb7e05005632d78b3b4d57",
+    "gates/L1/audit-3/L0.json": "e9fad4f0af358ff521e9ac9f4a10e138b39854741acc858761e0eed67f4b4073",
+    "gates/L1/audit-3/analyzer-fixtures.log": "427e6650727b17f707c5d2f11fd6b915b44b37232682a4b8367fdb30c1a62b4e",
+    "gates/L1/audit-3/architecture.log": "fc1eec524f5e71cfa69f24461bc954313c3c689da9915ce3333d999e4ea1fafc",
+    "gates/L1/audit-3/empty-path.log": "a7246c2b49f3139caffa742fccb090a5c56a84c9f38d3cf5683667059e6dbaaf",
+    "gates/L1/audit-3/gate-L0.log": "e0149958c6a9bb143d1022d39b2a5c164f12d0f215469d9143f3f9171ae9f874",
+    "gates/L1/audit-3/gosec.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "gates/L1/audit-3/lint.log": "d3cfba19723af47f8731634e9e209584cf17750ff3dc3c1f6b0bc8fe66a8d138",
+    "gates/L1/audit-3/race.log": "9c1737c162a782e0d89975aecf153e2ddadc66fd53602164f518752020cd8da6",
+    "gates/L1/audit-3/results.json": "5cdc54d8096beacfd28a7fbc9e15e8eed677a34f829eab0909e27d136a184e25",
+    "gates/L1/audit-3/test.log": "0c3002fd56a0b23fce83057e8606ab9dbf01c5d431cca1cdc646d5e8b0137318",
     "gates/L1/failed-attempt-2-bench.txt": "89599ca960efedd1428fb3c510364cfe4a1c3e6de9e9d1dc69f373173254b372",
     "gates/L1/failed-attempt-2-regression.log": "cb4fd7efeddfaba9acef0b45017e91e9c335ebda7d284ca3fd1a05f2bef11c2a",
     "gates/L1/failed-attempt-2-test.log": "255706333eba078f6914cb0a624cf2f5c21bc771d5fa1cea66034ac83befc486",
     "gates/L1/failed-attempt-2.json": "25f01e9760a8e7d061788cc2f94f3f8275505338f71cf4bcc6a51abde6d73a65",
-    "gates/L1/syscall-confinement.log": "171c76fce0235cdc97f43262ba8a2cbe983b6c378963fcecaf6da4df1ec9daf0",
-    "gates/L1/without-tools.log": "c99621efa7a562904af42e13b1943ef27e6c6911fca5829461239a05aab1c874",
+    "gates/L1/seccomp-traces/compile.trace.gz": "8ed2b43684369f0debc309547ece35761d55c09149517f52cb5fa37ba52ef2e4",
+    "gates/L1/seccomp-traces/eval.trace.gz": "fb548721b9a88a43833100ce70fdac871d01920b980bea49c77b20d9485cf8d7",
+    "gates/L1/seccomp-traces/lsp.trace.gz": "76d4a3d37bb35790194f7be1c15b89231b9e5688a3bb1542960eabe2eb4c628b",
+    "gates/L1/seccomp-traces/provenance.json": "33bae8f427e496129e5301f322e24a0241aa4a46db782739b6734f305e183c7f",
+    "gates/L1/seccomp-traces/query.trace.gz": "788f58f14922d5794d66511f951769bc489bdb033c4476510becc1017f8dd9eb",
+    "gates/L1/syscall-confinement.log": "4a89c9478a91d8015f2d807170b4fb43ee7f0657e3cf9d4be457eb21d61c22c2",
+    "gates/L1/without-tools.log": "b6f9fb8748e4116fb5609077be100b65a0333ac716ad7ddbada583cd71c85529",
     "gates/guard-overrides.json": "d60aecb316d4f917ceee0e2b0ebdb261a79a6e852bd9445094e52d401875f801"
   },
   "status": "pass",
-  "deferrals": [],
+  "deferrals": [
+    {
+      "id": "native-cgo-darwin-windows",
+      "status": "deferred",
+      "target_lot": "N35",
+      "target_lot_name": "Six plates-formes (N35) \u2014 CI natif par OS/arch",
+      "reason": "ADR 0003 : le type-check complet avec cgo exige les SDK et runners natifs darwin/windows ; CGO_ENABLED=0 ne le remplace pas."
+    },
+    {
+      "id": "seccomp-trace-arm64",
+      "status": "deferred",
+      "target_lot": "N35",
+      "target_lot_name": "Six plates-formes (N35) \u2014 CI natif par OS/arch",
+      "reason": "ADR 0003 : la validation des traces seccomp arm64 exige un runner Linux arm64 natif."
+    }
+  ],
   "known_failures": [
+    "macOS: preview, query and export refused (including personal documents), confinement unproven; target: Six plates-formes (N35)",
+    "Windows: preview, query and export refused (including personal documents), confinement unproven; target: Six plates-formes (N35)",
     "Sandbox re-execs the cgo GUI binary instead of static inkwell-sandbox (spec 9.5/9.10); target lot: Fondations extensibles (plugin host needs the same static launcher)"
   ]
 }

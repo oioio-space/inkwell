@@ -26,7 +26,7 @@ var probeOutputMount = cachedMountProbe(func() bool {
 		return false
 	}
 	defer func() { _ = os.RemoveAll(dir) }()
-	path, args, err := sandboxPrefix(sandboxConfig{Directory: dir, MountBytes: 4096, Probe: true})
+	path, args, err := sandboxPrefix(sandboxConfig{Directory: dir, MountBytes: 4096, Probe: true, Overlay: true})
 	if err != nil {
 		return false
 	}
@@ -88,16 +88,11 @@ func (m *directoryMount) configure(cmd *exec.Cmd) error {
 	if err != nil {
 		return err
 	}
-	cwd := cmd.Dir
-	if cwd == "" {
-		cwd, err = os.Getwd()
-	} else {
-		cwd, err = filepath.Abs(cwd)
-	}
+	cwd, err := workingDirectory(cmd.Dir)
 	if err != nil {
 		return err
 	}
-	path, args, err := sandboxPrefix(sandboxConfig{WorkingDir: cwd, Directory: dir, Names: m.spec.WriteFiles, MountBytes: m.spec.MaxDirBytes, File: directoryFileCap(m.spec, 1), Memory: m.spec.MemoryLimit})
+	path, args, err := sandboxPrefix(sandboxConfig{ReadPaths: m.spec.ReadPaths, WorkingDir: cwd, Directory: dir, Names: m.spec.WriteFiles, Overlay: true, MountBytes: m.spec.MaxDirBytes, File: directoryFileCap(m.spec, 1), Memory: m.spec.MemoryLimit})
 	if err != nil {
 		return err
 	}
@@ -237,7 +232,7 @@ func (m *directoryMount) limitHit(out Output) bool {
 // Mount privileges exist only in the child's private user namespace.
 func mountNamespace(cmd *exec.Cmd) {
 	a := cmd.SysProcAttr
-	a.Cloneflags |= syscall.CLONE_NEWUSER | syscall.CLONE_NEWNS
+	a.Cloneflags |= syscall.CLONE_NEWUSER | syscall.CLONE_NEWNS | syscall.CLONE_NEWPID | syscall.CLONE_NEWIPC | syscall.CLONE_NEWNS
 	a.UidMappings = []syscall.SysProcIDMap{{ContainerID: 0, HostID: os.Getuid(), Size: 1}}
 	a.GidMappings = []syscall.SysProcIDMap{{ContainerID: 0, HostID: os.Getgid(), Size: 1}}
 	a.GidMappingsEnableSetgroups = false

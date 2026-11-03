@@ -17,6 +17,6 @@ const fs=require('node:fs');
    samples.push(performance.now()-start);
   } finally { const exited=new Promise(r=>child.once('exit',r)); child.kill(); await exited; await page.close(); }
  }
- fs.writeFileSync('docs/perf/baseline/2026-11-02/start.json',JSON.stringify({samples_ms:samples,p95_ms:[...samples].sort((a,b)=>a-b)[Math.ceil(samples.length*.95)-1],plugins:0,scope:'Current app server build: cold process to usable Chromium editor; browser prelaunched; warm OS caches; not native WebKitGTK window timing'},null,2));
+ fs.writeFileSync((process.env.INKWELL_PERF_OUT || 'gates/L0')+'/start.json',JSON.stringify({samples_ms:samples,p95_ms:[...samples].sort((a,b)=>a-b)[Math.ceil(samples.length*.95)-1],plugins:0,scope:'Current app server build: cold process to usable Chromium editor; browser prelaunched; warm OS caches; not native WebKitGTK window timing'},null,2));
  } finally {await browser.close();}
 })().catch(e=>{console.error(e);process.exitCode=1});

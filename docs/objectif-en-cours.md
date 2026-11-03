@@ -72,3 +72,26 @@ Décision L1 : les nouveaux tests IPC ignorent uniquement les protections absent
  l'audit. Aucun test existant n'est ignoré. Sur ABI suffisante, un échec de
  confinement reste bloquant. L'exception anti-affaiblissement est liée au contenu
  exact du fichier de tests, et ne change aucun seuil ni aucune porte.
+
+### 2026-11-03 — décision technique
+
+Pour L1, l'analyse typée tourne maintenant nativement sur Linux avec cgo activé,
+avec les tags desktop (`production`) et `server`. Sur darwin et windows (amd64 et
+arm64), elle tourne maintenant avec `CGO_ENABLED=0` et les tags desktop.
+Une passe `go/parser` indépendante des tags parcourt les sources Go, y compris
+celles qui importent `C`, et interdit `C` et `os/exec` hors de l'allowlist
+`internal/sidecar` (les helpers de tests gardent leur exemption existante).
+Les fixtures négatives `testdata` ne sont pas du code applicatif.
+
+| Validation | Statut | Lot cible | Raison |
+| --- | --- | --- | --- |
+| Type-check complet avec cgo sur darwin/windows | deferred | Six plates-formes (N35) — CI natif par OS/arch | Nécessite les SDK et runners natifs par OS selon ADR 0003 ; la passe sans cgo ne valide pas ces fichiers. |
+| Validation des traces seccomp arm64 | deferred | Six plates-formes (N35) — CI natif par OS/arch | Nécessite un runner Linux arm64 natif ; une analyse statique ne prouve pas les appels réellement exécutés. |
+
+Ces reports ne sont jamais des passes et figurent séparément dans le manifeste L1.
+
+Précision darwin : Wails ne compile pas son package `application` sans cgo
+(même ses fichiers Go référencent les définitions natives exclues). Le root
+`cmd/inkwell` est donc couvert maintenant par la passe syntaxique ; son analyse
+typée complète relève explicitement du report cgo N35. Les autres packages
+restent analysés sans cgo ; aucune erreur de ceux-ci n'est ignorée.

@@ -22,6 +22,9 @@ const (
 //
 // It has the same limits and the same errors as [Engine.Compile].
 func (e *Engine) Query(ctx context.Context, p Project, main, selector string, opts ...Option) (json.RawMessage, error) {
+	if err := previewAvailable(); err != nil {
+		return nil, err
+	}
 	if selector == "" || len(selector) > maxSelectorBytes {
 		return nil, errors.New("typst: query: the selector must be 1 to 4096 bytes")
 	}

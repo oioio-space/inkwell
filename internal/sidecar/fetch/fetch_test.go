@@ -500,7 +500,7 @@ func TestFetchRejectsBadBinaries(t *testing.T) {
 		assertEmpty(t, f.cfg.OutDir)
 	})
 
-	t.Run("corrupt archive reports tar's complaint", func(t *testing.T) {
+	t.Run("corrupt archive reports reader failure", func(t *testing.T) {
 		garbage := bytes.Repeat([]byte("not a tar archive "), 100)
 		f := newFixture(t, garbage, nil)
 		err := Fetch(t.Context(), f.cfg)

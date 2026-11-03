@@ -37,6 +37,7 @@ func TestRunFileSizeLimit(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "big")
 	s := spec("writefile:" + path + ",32")
 	s.FileSizeLimit = 2 << 20
+	s.WatchDir, s.MaxDirBytes, s.WriteFiles = filepath.Dir(path), 2<<20, []string{"big"}
 	out, err := Run(t.Context(), s)
 	if err != nil {
 		t.Fatal(err)
@@ -111,8 +112,8 @@ func TestRunNoNetwork(t *testing.T) {
 	addr := ln.Addr().String()
 
 	out, err := Run(t.Context(), spec("dial:"+addr))
-	if err != nil || strings.TrimSpace(string(out.Stdout)) != "connected" {
-		t.Fatalf("without isolation: %v %q, want the loopback to answer", err, out.Stdout)
+	if err != nil || strings.TrimSpace(string(out.Stdout)) != "unreachable" {
+		t.Fatalf("without isolation: %v %q, want mandatory seccomp to deny loopback", err, out.Stdout)
 	}
 
 	s := spec("dial:" + addr)

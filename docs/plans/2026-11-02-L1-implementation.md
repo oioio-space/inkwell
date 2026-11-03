@@ -66,3 +66,47 @@ Failed gate attempts are retained under gates/L1/failed-attempt-2-*.
 A diagnostic performance-core affinity run removed the frame benchmark
 regressions observed with default scheduling. The acceptance gate keeps its
 original scheduling, sample counts, frozen reference and thresholds.
+
+## Part 2: mandatory launch confinement
+
+Every Linux Run and Supervisor target enters sandboxExec, including unlimited
+query/eval commands. There is no limits-dependent exemption. The child mounts
+IPC overlays before dropping capabilities, sets no_new_privs, installs a pure Go
+seccomp-BPF filter, applies the ABI-sized Landlock policy, and then execs.
+Failure to install either mandatory policy refuses the target with an explicit
+sandbox error. Landlock ABI 3 remains the minimum filesystem policy; ABIs 4, 5,
+6, 9 and 10 add TCP, device ioctl, IPC scopes, pathname UNIX sockets and UDP.
+UDP constants follow Linux's include/uapi/linux/landlock.h, bits 2 and 3.
+
+Available user/mount namespaces also use CLONE_NEWPID. Without namespaces,
+seccomp independently blocks external signals and all socket creation, regardless
+of the Landlock ABI's IPC or TCP support. Self-directed tgkill remains available
+for runtime preemption. Audit architecture mismatch and x32 kill the process;
+ordinary prohibited calls return EPERM. io_uring_setup is denied to avoid its
+alternate socket/IPC operations.
+
+The real tinymist stdio initialize test established that Tokio's signal handler
+requires an unnamed AF_UNIX SOCK_STREAM socketpair. Only that pair type is
+permitted; connect, bind, sendto, sendmsg and sendmmsg stay denied. Typst download
+tests assert an actual failed connection with EPERM/EACCES, rather than inferring
+an attempted download from an idle listener. The namespace-free syscall probe,
+ABI mismatch tests and unlimited/limited/bounded/supervised child-status tests
+exercise the independent filter. Both unlimited and bounded runs test hidden
+host sentinels and tmpfs identity at XDG_RUNTIME_DIR and /tmp/.X11-unix.
+
+The architecture gate now builds a go/analysis vet tool and type-checks all four
+shipped OS/architecture targets in server mode. Function identities catch aliases,
+dot imports and function values. It rejects raw syscall APIs, linkname, import C,
+and native C/assembly sources outside internal/sidecar. Ignored files are also
+checked for C imports, linkname and native sources. Analysistest covers syscall 59,
+aliased API values, linkname to unix.Exec, C syscall(SYS_execve), token-pasted
+system macros and wordexp. The build-time downloader now reads tar, gzip and xz
+in Go, so it needs no process-launch allowlist exemption.
+
+
+The archived 2026-11-02 baseline is immutable. Gate entry and completion verify
+its complete file set and SHA256SUMS without resealing it. All fresh acquisition
+scripts default to gates/L0 and inherit INKWELL_PERF_OUT from the current lot.
+The archive self-test runs a gate, compares every archived byte, and proves
+corruption is rejected without updating checksums. Evidence report paths are
+not acceptance thresholds; the guard continues to protect threshold values.

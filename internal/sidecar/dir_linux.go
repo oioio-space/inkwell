@@ -49,7 +49,7 @@ func directoryLimits(spec Spec) (Spec, []string, error) {
 			return spec, nil, err
 		}
 	}
-	path, args, err := sandboxPrefix(sandboxConfig{Directory: dir, Names: spec.WriteFiles, File: directoryFileCap(spec, len(spec.WriteFiles)), Memory: spec.MemoryLimit})
+	path, args, err := sandboxPrefix(sandboxConfig{ReadPaths: spec.ReadPaths, WorkingDir: spec.Dir, Overlay: probeOutputMount(), Directory: dir, Names: spec.WriteFiles, File: directoryFileCap(spec, len(spec.WriteFiles)), Memory: spec.MemoryLimit})
 	spec.FileSizeLimit, spec.MemoryLimit = 0, 0
 	return spec, append([]string{path}, args...), err
 }

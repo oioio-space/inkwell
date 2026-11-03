@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -376,9 +377,13 @@ func TestCompilePackages(t *testing.T) {
 	})
 
 	t.Run("TYP-10 download confinement", func(t *testing.T) {
-		netConfined := landlockTCPConfinement(t)
+		tcpConfined := landlockTCPConfinement(t)
+		netConfined := runtime.GOOS == "linux"
 		name := "ABI below 4: attempt reaches only the refusing proxy"
 		if netConfined {
+			name = "seccomp: attempt cannot leave the sandbox"
+		}
+		if tcpConfined {
 			name = "ABI at least 4: attempt cannot leave the sandbox"
 		}
 		t.Run(name, func(t *testing.T) {
@@ -407,6 +412,14 @@ func TestCompilePackages(t *testing.T) {
 			})
 
 			spy := newEngine(t, func(c *Config) { c.egressProxy, c.proxyOnly = "http://"+ln.Addr().String(), true })
+			// Linux must wire all proxy spellings even when seccomp prevents
+			// observing a CONNECT at the listener.
+			for _, key := range []string{"HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"} {
+				if !slices.Contains(spy.env(), key+"=http://"+ln.Addr().String()) {
+					t.Errorf("missing proxy wiring for %s", key)
+				}
+			}
+
 			p := writeProject(t, map[string]string{"main.typ": ghost})
 			begin := time.Now()
 			_, err = spy.Compile(t.Context(), p, "main.typ", WithFormats(FormatPDF))
@@ -420,6 +433,23 @@ func TestCompilePackages(t *testing.T) {
 				t.Errorf("took %v: Typst waited on the network", took)
 			}
 			if netConfined {
+				j, prepErr := spy.prepare(p, "main.typ")
+				if prepErr != nil {
+					t.Fatal(prepErr)
+				}
+				defer j.cleanup()
+				out, runErr := spy.run(t.Context(), j, spy.args("query", j, applyOptions(nil), "--format", "json", "--", filepath.ToSlash(j.main), "heading"), maxQueryBytes, "", 0, 0)
+				if runErr != nil {
+					t.Fatal(runErr)
+				}
+				text := strings.ToLower(string(out.Stderr))
+				t.Logf("denied download: %s", text)
+				if !strings.Contains(text, "operation not permitted") && !strings.Contains(text, "permission denied") {
+					t.Fatalf("no observable denied network attempt: %s", out.Stderr)
+				}
+				if out.ExitCode == 0 || !strings.Contains(text, "failed to download package") || !strings.Contains(text, "connect error") {
+					t.Fatalf("Typst did not attempt a denied package connection: %s", out.Stderr)
+				}
 				// Drain the accept loop before checking: every connection accepted
 				// during compilation must be accounted for, even without a request.
 				_ = ln.Close()
@@ -818,5 +848,26 @@ func TestCompileErrorIs(t *testing.T) {
 	ce = &CompileError{Diagnostics: []Diagnostic{{Severity: Warning, Message: "w"}, {Severity: Error, Message: "boom"}}}
 	if got := ce.Error(); got != "typst: boom" {
 		t.Errorf("Error() = %q, want the first error without position", got)
+	}
+}
+
+// Derived from audit 5: every document entry point must reject a project
+// that grants the sidecar the user's entire home directory.
+func TestDocumentEntryPointsRefuseHome(t *testing.T) {
+	e := newEngine(t, nil)
+	p := writeProject(t, map[string]string{"main.typ": "= Home"})
+	t.Setenv("HOME", p.Root)
+	t.Setenv("USERPROFILE", p.Root)
+	if _, err := e.Compile(t.Context(), p, "main.typ"); err == nil {
+		t.Fatal("Compile accepted home")
+	}
+	if _, err := e.Query(t.Context(), p, "main.typ", "heading"); err == nil {
+		t.Fatal("Query accepted home")
+	}
+	if _, err := e.Anchors(t.Context(), p, "main.typ"); err == nil {
+		t.Fatal("Anchors accepted home")
+	}
+	if _, err := e.Deck(t.Context(), p, "main.typ"); err == nil {
+		t.Fatal("Deck accepted home")
 	}
 }

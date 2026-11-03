@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"os/signal"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"syscall"
@@ -27,6 +28,25 @@ var sharedCache string
 
 func TestMain(m *testing.M) {
 	if mode := os.Getenv(modeEnv); mode != "" {
+		if os.Getenv("INKWELL_REPORT_HOST_PID") == "1" {
+			pid := os.Getpid()
+			if data, err := os.ReadFile("/proc/self/status"); err == nil {
+				for line := range strings.SplitSeq(string(data), "\n") {
+					if strings.HasPrefix(line, "Pid:") {
+						_, _ = fmt.Sscanf(line, "Pid: %d", &pid)
+					}
+				}
+			}
+			// A fresh procfs intentionally hides outer PIDs. Report the PID
+			// namespace inode instead so the parent can verify its destruction.
+			if ns, err := os.Readlink("/proc/self/ns/pid"); err == nil && os.Getenv("INKWELL_PRIVATE_PID") == "1" {
+				inode, parseErr := strconv.Atoi(strings.TrimSuffix(strings.TrimPrefix(ns, "pid:["), "]"))
+				if parseErr == nil {
+					pid = -inode
+				}
+			}
+			fmt.Printf("gc=%d\n", pid)
+		}
 		os.Exit(runHelper(mode))
 	}
 	dir, err := os.MkdirTemp("", "inkwell-sidecar-test-")
@@ -105,12 +125,15 @@ func runHelper(mode string) int {
 		return 0
 	case "grandchild": // start a child in the same process group, tell its pid, wait
 		c := exec.Command(os.Args[0]) // #nosec G204 -- re-executes the test binary
-		c.Env = append(os.Environ(), modeEnv+"=sleep")
+		c.Env = append(os.Environ(), modeEnv+"=sleep", "INKWELL_REPORT_HOST_PID=1")
+		if os.Getppid() == 1 {
+			c.Env = append(c.Env, "INKWELL_PRIVATE_PID=1")
+		}
+		c.Stdout = os.Stdout
 		if err := c.Start(); err != nil {
 			fmt.Fprintln(os.Stderr, err)
 			return 2
 		}
-		fmt.Printf("gc=%d\n", c.Process.Pid)
 		time.Sleep(time.Hour)
 	case "alloc": // reserve arg MiB of address space (the pages stay untouched)
 		mib, _ := strconv.Atoi(arg)
@@ -141,7 +164,7 @@ func runHelper(mode string) int {
 		}
 		// Ignore SIGXFSZ so that both files reach their caps and every attempted
 		// escape runs even after a failed write. Also exercise a forked writer.
-		signal.Ignore(syscall.SIGXFSZ)
+		ignoreFileSizeSignal()
 		for range 20 {
 			for _, name := range []string{"a", "b", "undeclared"} {
 				f, err := os.OpenFile(arg+"/"+name, os.O_CREATE|os.O_WRONLY, 0o600)
@@ -158,6 +181,7 @@ func runHelper(mode string) int {
 		}
 		if name == "boundattack" {
 			child := helperCmd("boundattack-child:" + arg)
+			child.Dir = "" // Already in the sandbox project; no chdir syscall is needed.
 			if out, err := child.CombinedOutput(); err != nil {
 				fmt.Fprintf(os.Stderr, "descendant: %v: %s", err, out)
 				return 3
@@ -227,13 +251,21 @@ func runHelper(mode string) int {
 func helperCmd(mode string) *exec.Cmd {
 	cmd := exec.Command(os.Args[0]) // #nosec G204 -- re-executes the test binary
 	cmd.Env = helperEnv(mode)
+	cmd.Dir = sharedCache
+	if cmd.Dir == "" {
+		cmd.Dir, _ = os.Getwd()
+	}
 	return cmd
 }
 
 // alive reports whether pid is a running process (a zombie awaiting its
 // reaper counts as dead).
 func alive(pid int) bool {
-	if err := syscall.Kill(pid, 0); err != nil {
+	p, err := os.FindProcess(pid)
+	if err != nil {
+		return false
+	}
+	if err := p.Signal(syscall.Signal(0)); err != nil {
 		return false
 	}
 	stat, err := os.ReadFile(fmt.Sprintf("/proc/%d/stat", pid))
@@ -248,16 +280,34 @@ func alive(pid int) bool {
 	return true
 }
 
-func syscallKill(pid int) error { return syscall.Kill(pid, syscall.SIGKILL) }
-
 // waitGone waits up to d for pid to die.
 func waitGone(pid int, d time.Duration) bool {
+	stillAlive := func() bool {
+		if pid >= 0 {
+			return alive(pid)
+		}
+		entries, err := os.ReadDir("/proc")
+		if err != nil {
+			return true
+		}
+		want := fmt.Sprintf("pid:[%d]", -pid)
+		for _, entry := range entries {
+			if _, err := strconv.Atoi(entry.Name()); err != nil {
+				continue
+			}
+			ns, _ := os.Readlink(filepath.Join("/proc", entry.Name(), "ns/pid"))
+			if ns == want {
+				return true
+			}
+		}
+		return false
+	}
 	deadline := time.Now().Add(d)
 	for time.Now().Before(deadline) {
-		if !alive(pid) {
+		if !stillAlive() {
 			return true
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	return !alive(pid)
+	return !stillAlive()
 }
