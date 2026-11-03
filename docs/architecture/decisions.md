@@ -169,6 +169,7 @@ tant qu'elles sont ouvertes, la spécification n'affirme pas sa fidélité compl
 | AD-105 | variantes du projet : fourches, partagées, contenu à la demande, versions par variante | **décidé par l'utilisatrice (2026-11-01)** (N46) | **PD-5**, **PD-6** | — |
 | AD-106 | commentaires dans un document dérivé par fichier ; index SQLite dérivé | **décidé par l'utilisatrice le 2026-11-02** (avec chaque fichier) | **PD-7** | — |
 | AD-107 | validation signée liée à la `VersionId` ; personne désignée, politique facultative | **décidé par l'utilisatrice le 2026-11-02** (personne nommée, sans rôle nouveau) | **PD-8**, **PD-9** | — |
+| AD-108 | langage de conditions **CEL** (Common Expression Language, `cel-go`, https://cel.dev) recommandé comme option pour (1) les conditions « quand » des contributions d'extension et (2) les règles de projet signées (ex. validation avant intégration) : non Turing-complet, coût borné, typé, déterministe entre pairs, sans E/S ; à comparer le moment venu à une mini-grammaire maison (`&&`, `\|\|`, `==`) et, côté interface, à l'évaluation en Go (aller-retour) versus une bibliothèque JS moins mûre | utilisatrice d'accord le 2026-11-03 pour l'inscrire comme option ; décision au lot « Fondations extensibles » / « politiques de projet », sur mesures | — | — |
 
 ---
 
