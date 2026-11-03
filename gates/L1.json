@@ -6,7 +6,7 @@
       "command": "mise run arch",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 3.4922237129649147,
+      "duration_seconds": 2.257949540973641,
       "log": "gates/L1/architecture.log"
     },
     {
@@ -14,7 +14,7 @@
       "command": "./scripts/heavy.sh go test ./tools/archexec && ./scripts/arch-exec-check.sh && ./scripts/heavy.sh go test -race ./internal/sidecar",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 802.6797570970375,
+      "duration_seconds": 1.7193354620831087,
       "log": "gates/L1/syscall-confinement.log"
     },
     {
@@ -22,15 +22,15 @@
       "command": "./scripts/heavy.sh bash scripts/sidecar-no-tools.sh",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 86.4454696259927,
+      "duration_seconds": 108.50651447696146,
       "log": "gates/L1/without-tools.log"
     },
     {
       "id": "anti-weakening",
-      "command": "python3 scripts/gate-guard.py --self-test && python3 scripts/gate-guard.py",
+      "command": "python3 scripts/gate-guard.py --self-test && python3 scripts/gate.py --base-guard",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 0.2538524119881913,
+      "duration_seconds": 0.2501451140269637,
       "log": "gates/L1/anti-weakening.log"
     },
     {
@@ -38,7 +38,7 @@
       "command": "mise run gate -- L0",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 996.8715506390436,
+      "duration_seconds": 1007.2815897070104,
       "log": "gates/L1/L0.log"
     },
     {
@@ -68,15 +68,16 @@
     }
   },
   "sha256": {
-    "docs/objectif-en-cours.md": "57b0922e1fe33a9c43db3ace2f7d1c46d49db62afbd62a0af6cdbc9040fe295e",
+    "docs/objectif-en-cours.md": "3ee34c098e957249a36374e82ad5dce852254f34baf020880a98dfa12433a99e",
     "docs/plans/2026-11-02-L1-implementation.md": "6f21f8178ed76cddef99512c8d6139c268d3258dbb8ab2bbe34971005f2d845b",
-    "gates/L0.json": "a0ad63ff34926ca5462ee05dd2804bfdd5b6c042469092c372b181855ed11f1b",
-    "gates/L1/L0.log": "e0149958c6a9bb143d1022d39b2a5c164f12d0f215469d9143f3f9171ae9f874",
+    "gates/L0.json": "4d6a8309342cafd9b0a2b8d124dc9e50f1acf4f01d81604be5ecebddc4eb5bf3",
+    "gates/L1/L0.log": "2b0da7f547f69b8e8b603a745e19d4e6bc6be6df9920cb8cc7c67bdb27d738b7",
     "gates/L1/anti-weakening.log": "6a0f4c423a00ef40a28efe4611a1f8558dacd1b49d8abd06bfa43fe4ddf54329",
     "gates/L1/architecture.log": "d5279db7270e45e6e09608c189240a60867492858fba89f802a85f3029c5e59b",
-    "gates/L1/syscall-confinement.log": "f085a2d6164f3239a972a665864efe28e68e7a2b75f0f488bdb441fe365e81f2",
-    "gates/L1/without-tools.log": "b2870b864b802146c08017a8530ad71c66131e73566303b48f036fa23640e46b",
-    "gates/guard-overrides.json": "5ad68b80ee10b90ac02b47344b095704fcf1992ab62ca792ec3b1be9c2cdf864"
+    "gates/L1/base-guard.log": "4d6bf6524e2d6c13f1fc68b65c159f7e95fa78b4a6da2ee1f6f157a0011ee05d",
+    "gates/L1/syscall-confinement.log": "4a89c9478a91d8015f2d807170b4fb43ee7f0657e3cf9d4be457eb21d61c22c2",
+    "gates/L1/without-tools.log": "be02507fd6fc5de6e8207af74e243c313e2849a53e187325ef1b73fcaa0f7a9f",
+    "gates/guard-overrides.json": "94eda712523a0cd93ae0076e53b841c2f4a228300e8c1bee144af3949fdd71ad"
   },
   "status": "pass",
   "deferrals": [
@@ -99,5 +100,34 @@
     "macOS: preview, query and export refused (including personal documents), confinement unproven; target: Six plates-formes (N35)",
     "Windows: preview, query and export refused (including personal documents), confinement unproven; target: Six plates-formes (N35)",
     "Sandbox re-execs the cgo GUI binary instead of static inkwell-sandbox (spec 9.5/9.10); target lot: Fondations extensibles (plugin host needs the same static launcher)"
+  ],
+  "base_guard": {
+    "ref": "main",
+    "base": "2a4f3c06934ac811168bed082c3e564b23298743",
+    "source_sha256": "c306265111e4c8b0ad94a1867d797b7a20be7d814161b7b9dd6200ab7feb259c",
+    "exit_code": 0,
+    "status": "pass",
+    "log": "gates/L1/base-guard.log"
+  },
+  "runner": {
+    "source": "base 2a4f3c06934ac811168bed082c3e564b23298743",
+    "sha256": "99e00a0d51d35601e02b096e77ff41013fad14b082afea97fcba920cba71042e"
+  },
+  "guard_overrides": [
+    {
+      "id": "f22057e36244ddd6ef648864ff0df369f85e2b26277fdddf52102c6426784b16",
+      "reason": "Audit explicitly requires clear skips on kernels below the required ABI; only new IPC tests are capability-gated. Existing tests and thresholds are unchanged.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "n42-scope-2026-11-03",
+      "reason": "Scope correction decided by the user (N42 clarified), not a weakening; the guard reports no finding for it, this entry records the removal. Removed: tools/archexec dependency scan (go list -deps graph walk from L1; L2 audited.json deny/exception/via audits pinned to go.sum, raw-syscall, assembly, go:linkname and DLL-lookup heuristics; arch-exec -deps mode; dependencies*.go, audits.go, l2_contract_test.go and their testdata), the analyzer's transitive os/exec import rule and its Wails OpenURL/OpenFile/OpenFileManager/pkg/updater rules, app.RuntimeGuard, app.DisarmFrameworkLaunchers (D-Bus address pinning, WAILS_UPDATER_HELPER* clearing), the third_party/memory fork with its replace directive and internal/memorytest. Kept: own-code no-exec rule outside internal/sidecar, sandbox and all L1/L2 security checks.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "8df04b9301a401d51f6d06f2e36e9f89b875f0f59efc049644ea41982dfd062a",
+      "reason": "PERF-MEM was deferred from L0 to L2, and L2 re-deferred it to G-0b because L2 delivered only G-0a (no multi-file corpus opening). Pointing L0 at the lot that actually owns it; the criterion stays deferred, never counted as a pass.",
+      "decision": "docs/objectif-en-cours.md"
+    }
   ]
 }
