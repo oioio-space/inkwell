@@ -20,7 +20,7 @@ func TestRunLimitsHoldFromStartup(t *testing.T) {
 	if err != nil || out.ExitCode != 0 {
 		t.Fatalf("Run = %v exit %d stderr %q", err, out.ExitCode, out.Stderr)
 	}
-	// ulimit counts the file size in blocks of 512 or 1024 bytes, by shell.
+	// The launcher applies byte-exact limits before exec.
 	var as, fsize int64
 	if _, err := fmt.Sscanf(string(out.Stdout), "as=%d fsize=%d", &as, &fsize); err != nil {
 		t.Fatalf("limits %q: %v", out.Stdout, err)
@@ -28,8 +28,8 @@ func TestRunLimitsHoldFromStartup(t *testing.T) {
 	if as != 3<<30 {
 		t.Errorf("address space limit = %d, want %d", as, int64(3<<30))
 	}
-	if fsize < 5<<20 || fsize > 10<<20 {
-		t.Errorf("file size limit = %d, want 5 MiB (up to 2x with a 1 KiB-block shell)", fsize)
+	if fsize != 5<<20 {
+		t.Errorf("file size limit = %d, want exactly 5 MiB", fsize)
 	}
 }
 
@@ -37,6 +37,7 @@ func TestRunFileSizeLimit(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "big")
 	s := spec("writefile:" + path + ",32")
 	s.FileSizeLimit = 2 << 20
+	s.WatchDir, s.MaxDirBytes, s.WriteFiles = filepath.Dir(path), 2<<20, []string{"big"}
 	out, err := Run(t.Context(), s)
 	if err != nil {
 		t.Fatal(err)
@@ -111,8 +112,8 @@ func TestRunNoNetwork(t *testing.T) {
 	addr := ln.Addr().String()
 
 	out, err := Run(t.Context(), spec("dial:"+addr))
-	if err != nil || strings.TrimSpace(string(out.Stdout)) != "connected" {
-		t.Fatalf("without isolation: %v %q, want the loopback to answer", err, out.Stdout)
+	if err != nil || strings.TrimSpace(string(out.Stdout)) != "unreachable" {
+		t.Fatalf("without isolation: %v %q, want mandatory seccomp to deny loopback", err, out.Stdout)
 	}
 
 	s := spec("dial:" + addr)

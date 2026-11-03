@@ -3,13 +3,13 @@ module github.com/oioio-space/inkwell
 go 1.27.3
 
 require (
-	github.com/oioio-space/inkwell/protocol v0.1.0
 	filippo.io/edwards25519 v1.2.0
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/google/go-cmp v0.7.0
 	github.com/libp2p/go-libp2p v0.51.0
 	github.com/marcopolo/simnet v0.0.7
 	github.com/multiformats/go-multiaddr v0.16.1
+	github.com/oioio-space/inkwell/protocol v0.1.0
 	github.com/psanford/wormhole-william v1.0.8
 	github.com/quic-go/quic-go v0.64.1
 	github.com/wailsapp/wails/v3 v3.0.0-beta.34
@@ -18,6 +18,8 @@ require (
 	golang.org/x/crypto v0.58.0
 	golang.org/x/sys v0.49.0
 	golang.org/x/text v0.43.0
+	golang.org/x/tools v0.51.0
+	github.com/ulikunitz/xz v0.5.15
 	lukechampine.com/blake3 v1.4.1
 	pgregory.net/rapid v1.3.0
 )
@@ -111,10 +113,12 @@ require (
 	golang.org/x/sync v0.24.0 // indirect
 	golang.org/x/telemetry v0.0.0-20260924152758-ed294f943157 // indirect
 	golang.org/x/time v0.15.0 // indirect
-	golang.org/x/tools v0.51.0 // indirect
 	google.golang.org/protobuf v1.36.11 // indirect
 	nhooyr.io/websocket v1.8.17 // indirect
 	salsa.debian.org/vasudev/gospake2 v0.0.0-20210510093858-d91629950ad1 // indirect
 )
 
 replace github.com/oioio-space/inkwell/protocol => ./protocol
+
+// Native memory queries only: upstream darwin FreeMemory launches vm_stat.
+replace github.com/pbnjay/memory => ./third_party/memory

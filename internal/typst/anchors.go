@@ -63,6 +63,9 @@ func (e *Engine) Anchors(ctx context.Context, p Project, main string, opts ...Op
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
+	if err := previewAvailable(); err != nil {
+		return nil, err
+	}
 	o := applyOptions(opts)
 	release, err := e.acquire(ctx)
 	if err != nil {

@@ -20,6 +20,12 @@ change plus que par une décision consignée dans `docs/architecture/decisions.m
 | Revue | sécurité (Opus) obligatoire avant fusion : c'est le bac à sable |
 | Lot terminé | L0 (2026-11-02) : harnais de portes, référence de performance, `gates/L0.json` |
 
+### Suivis de sécurité de L1 (LOW, revue Opus n° 6, à traiter au début de L2)
+
+- Analyse des dépendances : traiter comme dangereux tout appel `Syscall*`/`RawSyscall*`, tout fichier `.s` (`SFiles`) et tout `go:linkname` dans une dépendance, avec une liste blanche des paquets qui livrent légitimement de l'assembleur (`tools/archexec/dependencies.go:107-128`).
+- Environnement de tinymist : filtrer `cmd.Env` contre une liste blanche dans `runOnce`, même si l'appelant passe `os.Environ()` (`internal/sidecar/supervisor.go:215`).
+- Dossier de projet : refuser aussi les dossiers situés **dans** un dossier protégé (`~/.ssh`, `~/.gnupg`), pas seulement ceux qui en contiennent un (`internal/sidecar/workdir.go:44-76`).
+
 ## Lots suivants (MVP, dans l'ordre)
 
 1. **L2 — Écrire et retrouver** : G-0a puis G-0b (ouvrir vraiment un fichier), puis onglets
@@ -30,6 +36,10 @@ change plus que par une décision consignée dans `docs/architecture/decisions.m
    extensibles (`coherence.md` §5).
 
 ## Journal de pilotage
+
+2026-11-03 — décision technique : TYP-10 vérifie la propriété la plus forte du noyau, avec la même sonde ABI Landlock que le lanceur. ABI ≥ 4 : aucun TCP ne quitte le bac à sable, y compris vers le proxy espion local (aucune connexion pendant la compilation). ABI < 4 : la tentative doit atteindre uniquement le proxy refusant. Dans les deux cas, ErrMissingPackage doit guider vers `.typstdeps` en moins de 20 s. Cette adaptation renforce la preuve de confinement ; elle ne retire aucun test ni ne relève aucun délai. Toute dérogation du garde est documentée dans `gates/guard-overrides.json`, référencé par le manifeste L1.
+
+2026-11-02 — décision technique : le gate Go compare la branche à son merge-base(main), mesurés dans la même session sur la même machine sous scripts/heavy.sh : 10 tours A/B entrelacés de count=2, ordre inversé à chaque tour. Régression si delta > +5 % en temps ou allocs/op et p < 0,05. Paquets et dépendances identiques : comparaison informative, exécutée et rapportée. Référence stockée conservée pour budgets absolus et tendances ; seuils e2e p95 × 1,10 inchangés. Le changement de méthode élimine le biais de charge entre sessions sans relever les seuils ; un autotest injecte +20 % de sommeil et exige sa détection.
 
 | Date | Décision |
 |---|---|
@@ -56,3 +66,38 @@ avec borne supérieure du p95, jamais une certification du p95 WebKitGTK natif.
 | 2026-11-02 — décision technique (boucle extérieure) | PERF-RELAY-ALLOC: 1 alloc/op vs 0 target — to fix in a later perf lot ; 48 B/op ; cible zéro inchangée, échec connu conservé. |
 | 2026-11-02 — décision technique (boucle extérieure) | Critères pass, fail ou deferred ; deferred exige lot cible nommé et raison, liste séparée au manifeste. Tous les non-différés doivent passer ; autotests : report sans lot, sans raison et échec coexistant avec report. Un report ne masque jamais un échec. |
 | 2026-11-02 — décision technique (boucle extérieure) | Annulation de la modification N38 dans exigences.md ; état du lot consultable via gates/L0.json ici, sans modifier l'état du registre. |
+
+### Déviation connue L1 — audit de sécurité non approuvé
+
+Le sandbox redémarre depuis le binaire GUI cgo au lieu du binaire statique
+`inkwell-sandbox` prévu aux sections 9.5/9.10. Correction différée au lot
+**Fondations extensibles (plugin host needs the same static launcher)**.
+
+Décision L1 : les nouveaux tests IPC ignorent uniquement les protections absentes du
+ noyau (signal : ABI < 6 ; socket Unix par chemin : ABI < 9), comme demandé par
+ l'audit. Aucun test existant n'est ignoré. Sur ABI suffisante, un échec de
+ confinement reste bloquant. L'exception anti-affaiblissement est liée au contenu
+ exact du fichier de tests, et ne change aucun seuil ni aucune porte.
+
+### 2026-11-03 — décision technique
+
+Pour L1, l'analyse typée tourne maintenant nativement sur Linux avec cgo activé,
+avec les tags desktop (`production`) et `server`. Sur darwin et windows (amd64 et
+arm64), elle tourne maintenant avec `CGO_ENABLED=0` et les tags desktop.
+Une passe `go/parser` indépendante des tags parcourt les sources Go, y compris
+celles qui importent `C`, et interdit `C` et `os/exec` hors de l'allowlist
+`internal/sidecar` (les helpers de tests gardent leur exemption existante).
+Les fixtures négatives `testdata` ne sont pas du code applicatif.
+
+| Validation | Statut | Lot cible | Raison |
+| --- | --- | --- | --- |
+| Type-check complet avec cgo sur darwin/windows | deferred | Six plates-formes (N35) — CI natif par OS/arch | Nécessite les SDK et runners natifs par OS selon ADR 0003 ; la passe sans cgo ne valide pas ces fichiers. |
+| Validation des traces seccomp arm64 | deferred | Six plates-formes (N35) — CI natif par OS/arch | Nécessite un runner Linux arm64 natif ; une analyse statique ne prouve pas les appels réellement exécutés. |
+
+Ces reports ne sont jamais des passes et figurent séparément dans le manifeste L1.
+
+Précision darwin : Wails ne compile pas son package `application` sans cgo
+(même ses fichiers Go référencent les définitions natives exclues). Le root
+`cmd/inkwell` est donc couvert maintenant par la passe syntaxique ; son analyse
+typée complète relève explicitement du report cgo N35. Les autres packages
+restent analysés sans cgo ; aucune erreur de ceux-ci n'est ignorée.

@@ -352,7 +352,7 @@ func TestSupervisorNoOrphanAfterParentDies(t *testing.T) {
 		t.Skip("this platform has no parent-death signal (see docs/plans/2026-10-25-etape-3-typst.md, D4)")
 	}
 	parent := exec.CommandContext(t.Context(), os.Args[0]) // #nosec G204 -- re-executes the test binary
-	parent.Env = helperEnv("supervise-forever")
+	parent.Env = append(helperEnv("supervise-forever"), "HOME="+os.Getenv("HOME"), "USERPROFILE="+os.Getenv("USERPROFILE"), "APPDATA="+os.Getenv("APPDATA"))
 	stdout, err := parent.StdoutPipe()
 	if err != nil {
 		t.Fatal(err)
@@ -443,4 +443,20 @@ func waitGrandchild(t *testing.T, b *syncBuffer) int {
 	}
 	t.Fatal("the child never reported its grandchild")
 	return 0
+}
+
+func TestSupervisorDoesNotInheritEnvironment(t *testing.T) {
+	t.Setenv("INKWELL_APP_SECRET", "must-not-leak")
+	cmd := exec.Command(os.Args[0], "-test.run=^$")
+	cmd.Dir = t.TempDir()
+	sup := NewSupervisor(SupervisorConfig{Command: func(context.Context) (*exec.Cmd, error) { return cmd, nil }})
+	_, _ = sup.runOnce(t.Context())
+	if cmd.Env == nil {
+		t.Fatal("nil environment inherits application secrets")
+	}
+	for _, entry := range cmd.Environ() {
+		if strings.HasPrefix(entry, "INKWELL_APP_SECRET=") {
+			t.Fatal("application environment leaked")
+		}
+	}
 }

@@ -1,20 +1,20 @@
-2026/11/02 21:53:36 INFO removed obsolete sync caches directories=0
-9:53PM INF AssetServer Info: middleware=true handler=true
-9:53PM INF Platform Info: mode=server
-9:53PM INF Build Info: Wails=v3.0.0-beta.34 Compiler=go1.27.3 -compiler=gc CGO_ENABLED=1 vcs.time=2026-11-02T19:59:47Z -tags=server CGO_LDFLAGS= GOARCH=amd64 GOAMD64=v1 vcs.modified=true CGO_CPPFLAGS= CGO_CXXFLAGS= GOOS=linux vcs=git vcs.revision=19711af6d926d419d1648eb0c71bc43eb28a84d1 -buildmode=exe CGO_CFLAGS=-O2 -Wno-deprecated-declarations
-9:53PM INF Server mode enabled (built with -tags server)
-9:53PM INF Server mode starting address=127.0.0.1:39127
-9:53PM INF [AssetFileServerFS] Handling request url=/ file=.
-9:53PM INF [AssetFileServerFS] Handling request url=/assets/index-Bz6FWV1z.js file=assets/index-Bz6FWV1z.js
-9:53PM INF [AssetFileServerFS] Handling request url=/assets/index-CktCWi0U.css file=assets/index-CktCWi0U.css
-9:53PM INF [AssetFileServerFS] Handling request url=/assets/index-client-Bpgto3GC.js file=assets/index-client-Bpgto3GC.js
-9:53PM INF [AssetFileServerFS] Handling request url=/assets/App-rloZj09L.js file=assets/App-rloZj09L.js
-9:53PM INF [AssetFileServerFS] Handling request url=/assets/SlideStage-Dq8CCSZ3.css file=assets/SlideStage-Dq8CCSZ3.css
-9:53PM INF [AssetFileServerFS] Handling request url=/assets/SlideStage-DzdhxkRp.js file=assets/SlideStage-DzdhxkRp.js
-9:53PM INF [AssetFileServerFS] Handling request url=/assets/App-jDxzaFA_.css file=assets/App-jDxzaFA_.css
-9:53PM INF [AssetFileServerFS] Handling request url=/assets/automerge_wasm_bg-LjMxZKTS.wasm file=assets/automerge_wasm_bg-LjMxZKTS.wasm
-9:53PM INF WebSocket client connected id=browser-1 clients=1
-time=2026-11-02T21:53:37.208+01:00 level=INFO msg="typst: offline" network=namespace
-9:53PM INF [AssetFileServerFS] Handling request url=/assets/analysis.worker-2p9RWk3Z.js file=assets/analysis.worker-2p9RWk3Z.js
-9:53PM INF [AssetFileServerFS] Handling request url=/assets/automerge_wasm_bg-LjMxZKTS.wasm file=assets/automerge_wasm_bg-LjMxZKTS.wasm
-9:53PM INF WebSocket client disconnected id=browser-1 clients=0
+2026/11/03 00:16:38 INFO removed obsolete sync caches directories=0
+12:16AM INF AssetServer Info: middleware=true handler=true
+12:16AM INF Build Info: Wails=v3.0.0-beta.34 Compiler=go1.27.3 GOOS=linux GOAMD64=v1 vcs=git vcs.time=2026-11-02T21:00:54Z -buildmode=exe -compiler=gc -tags=server CGO_CPPFLAGS= CGO_CXXFLAGS= CGO_LDFLAGS= vcs.modified=true CGO_CFLAGS=-O2 -Wno-deprecated-declarations GOARCH=amd64 vcs.revision=2404963039d131927c7a124722168b0dd2af7ac7 CGO_ENABLED=1
+12:16AM INF Platform Info: mode=server
+12:16AM INF Server mode enabled (built with -tags server)
+12:16AM INF Server mode starting address=127.0.0.1:39127
+12:16AM INF [AssetFileServerFS] Handling request url=/ file=.
+12:16AM INF [AssetFileServerFS] Handling request url=/assets/index-Bz6FWV1z.js file=assets/index-Bz6FWV1z.js
+12:16AM INF [AssetFileServerFS] Handling request url=/assets/index-CktCWi0U.css file=assets/index-CktCWi0U.css
+12:16AM INF [AssetFileServerFS] Handling request url=/assets/index-client-Bpgto3GC.js file=assets/index-client-Bpgto3GC.js
+12:16AM INF [AssetFileServerFS] Handling request url=/assets/App-rloZj09L.js file=assets/App-rloZj09L.js
+12:16AM INF [AssetFileServerFS] Handling request url=/assets/SlideStage-Dq8CCSZ3.css file=assets/SlideStage-Dq8CCSZ3.css
+12:16AM INF [AssetFileServerFS] Handling request url=/assets/SlideStage-DzdhxkRp.js file=assets/SlideStage-DzdhxkRp.js
+12:16AM INF [AssetFileServerFS] Handling request url=/assets/App-jDxzaFA_.css file=assets/App-jDxzaFA_.css
+12:16AM INF [AssetFileServerFS] Handling request url=/assets/automerge_wasm_bg-LjMxZKTS.wasm file=assets/automerge_wasm_bg-LjMxZKTS.wasm
+12:16AM INF WebSocket client connected id=browser-1 clients=1
+time=2026-11-03T00:16:39.203+01:00 level=INFO msg="typst: offline" network=namespace
+12:16AM INF [AssetFileServerFS] Handling request url=/assets/analysis.worker-2p9RWk3Z.js file=assets/analysis.worker-2p9RWk3Z.js
+12:16AM INF [AssetFileServerFS] Handling request url=/assets/automerge_wasm_bg-LjMxZKTS.wasm file=assets/automerge_wasm_bg-LjMxZKTS.wasm
+12:16AM INF WebSocket client disconnected id=browser-1 clients=0

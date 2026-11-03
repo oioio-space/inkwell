@@ -7,6 +7,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"runtime"
 	"slices"
 	"strings"
 	"sync"
@@ -375,44 +376,100 @@ func TestCompilePackages(t *testing.T) {
 		}
 	})
 
-	t.Run("TYP-10 a download attempt reaches the refused proxy and nothing else", func(t *testing.T) {
-		ln, err := net.Listen("tcp", "127.0.0.1:0")
-		if err != nil {
-			t.Fatal(err)
+	t.Run("TYP-10 download confinement", func(t *testing.T) {
+		tcpConfined := landlockTCPConfinement(t)
+		netConfined := runtime.GOOS == "linux"
+		name := "ABI below 4: attempt reaches only the refusing proxy"
+		if netConfined {
+			name = "seccomp: attempt cannot leave the sandbox"
 		}
-		requests := make(chan string, 8)
-		var wg sync.WaitGroup
-		wg.Go(func() {
-			for {
-				conn, err := ln.Accept()
-				if err != nil {
-					return
+		if tcpConfined {
+			name = "ABI at least 4: attempt cannot leave the sandbox"
+		}
+		t.Run(name, func(t *testing.T) {
+			ln, err := net.Listen("tcp", "127.0.0.1:0")
+			if err != nil {
+				t.Fatal(err)
+			}
+			requests := make(chan string, 8)
+			var wg sync.WaitGroup
+			wg.Go(func() {
+				for {
+					conn, err := ln.Accept()
+					if err != nil {
+						return
+					}
+					buf := make([]byte, 512)
+					_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
+					n, _ := conn.Read(buf)
+					requests <- string(buf[:n])
+					_ = conn.Close() // the proxy refuses
 				}
-				buf := make([]byte, 512)
-				_ = conn.SetReadDeadline(time.Now().Add(5 * time.Second))
-				n, _ := conn.Read(buf)
-				requests <- string(buf[:n])
-				_ = conn.Close() // the proxy refuses
-			}
-		})
-		t.Cleanup(func() {
-			_ = ln.Close()
-			wg.Wait()
-		})
+			})
+			t.Cleanup(func() {
+				_ = ln.Close()
+				wg.Wait()
+			})
 
-		spy := newEngine(t, func(c *Config) { c.egressProxy, c.proxyOnly = "http://"+ln.Addr().String(), true })
-		p := writeProject(t, map[string]string{"main.typ": ghost})
-		if _, err := spy.Compile(t.Context(), p, "main.typ", WithFormats(FormatPDF)); !errors.Is(err, ErrMissingPackage) {
-			t.Fatalf("Compile = %v, want ErrMissingPackage", err)
-		}
-		select {
-		case req := <-requests:
-			if !strings.HasPrefix(req, "CONNECT packages.typst.org:443") {
-				t.Errorf("the proxy received %q, want a CONNECT to packages.typst.org", req)
+			spy := newEngine(t, func(c *Config) { c.egressProxy, c.proxyOnly = "http://"+ln.Addr().String(), true })
+			// Linux must wire all proxy spellings even when seccomp prevents
+			// observing a CONNECT at the listener.
+			for _, key := range []string{"HTTP_PROXY", "HTTPS_PROXY", "ALL_PROXY", "http_proxy", "https_proxy", "all_proxy"} {
+				if !slices.Contains(spy.env(), key+"=http://"+ln.Addr().String()) {
+					t.Errorf("missing proxy wiring for %s", key)
+				}
 			}
-		case <-time.After(5 * time.Second):
-			t.Error("Typst did not try to download through the configured proxy: the environment is not what the engine set")
-		}
+
+			p := writeProject(t, map[string]string{"main.typ": ghost})
+			begin := time.Now()
+			_, err = spy.Compile(t.Context(), p, "main.typ", WithFormats(FormatPDF))
+			if !errors.Is(err, ErrMissingPackage) {
+				t.Fatalf("Compile = %v, want ErrMissingPackage", err)
+			}
+			if !strings.Contains(err.Error(), ".typstdeps") {
+				t.Errorf("Compile = %v, want clear .typstdeps guidance", err)
+			}
+			if took := time.Since(begin); took > 20*time.Second {
+				t.Errorf("took %v: Typst waited on the network", took)
+			}
+			if netConfined {
+				j, prepErr := spy.prepare(p, "main.typ")
+				if prepErr != nil {
+					t.Fatal(prepErr)
+				}
+				defer j.cleanup()
+				out, runErr := spy.run(t.Context(), j, spy.args("query", j, applyOptions(nil), "--format", "json", "--", filepath.ToSlash(j.main), "heading"), maxQueryBytes, "", 0, 0)
+				if runErr != nil {
+					t.Fatal(runErr)
+				}
+				text := strings.ToLower(string(out.Stderr))
+				t.Logf("denied download: %s", text)
+				if !strings.Contains(text, "operation not permitted") && !strings.Contains(text, "permission denied") {
+					t.Fatalf("no observable denied network attempt: %s", out.Stderr)
+				}
+				if out.ExitCode == 0 || !strings.Contains(text, "failed to download package") || !strings.Contains(text, "connect error") {
+					t.Fatalf("Typst did not attempt a denied package connection: %s", out.Stderr)
+				}
+				// Drain the accept loop before checking: every connection accepted
+				// during compilation must be accounted for, even without a request.
+				_ = ln.Close()
+				wg.Wait()
+				select {
+				case req := <-requests:
+					t.Errorf("TCP confinement leaked a connection to the proxy: %q", req)
+				default:
+				}
+				return
+			}
+			select {
+			case req := <-requests:
+				if !strings.HasPrefix(req, "CONNECT packages.typst.org:443") {
+					t.Errorf("the proxy received %q, want a CONNECT to packages.typst.org", req)
+				}
+			case <-time.After(5 * time.Second):
+				t.Error("Typst did not try to download through the configured proxy: the environment is not what the engine set")
+			}
+		})
 	})
 
 	t.Run("the environment of Inkwell does not leak into the compilation", func(t *testing.T) {
@@ -471,7 +528,7 @@ func TestCompilePackages(t *testing.T) {
 func TestCompileHostile(t *testing.T) {
 	t.Run("TYP-14 an endless loop stops at the timeout, leaving no process", func(t *testing.T) {
 		e := newEngine(t, func(c *Config) { c.Timeout = time.Second })
-		p := writeProject(t, map[string]string{"main.typ": "#for i in range(3000000000) { let x = i * 2 }\n"})
+		p := writeProject(t, map[string]string{"main.typ": "#for i in range(10000) { for j in range(10000) { let x = i * j } }\n"})
 		begin := time.Now()
 		_, err := e.Compile(t.Context(), p, "main.typ")
 		if !errors.Is(err, ErrTimeout) {
@@ -492,7 +549,7 @@ func TestCompileHostile(t *testing.T) {
 
 	t.Run("TYP-15 cancelling the context stops the compilation", func(t *testing.T) {
 		e := newEngine(t, nil)
-		p := writeProject(t, map[string]string{"main.typ": "#for i in range(3000000000) { let x = i * 2 }\n"})
+		p := writeProject(t, map[string]string{"main.typ": "#for i in range(10000) { for j in range(10000) { let x = i * j } }\n"})
 		ctx, cancel := context.WithCancel(t.Context())
 		time.AfterFunc(400*time.Millisecond, cancel)
 		begin := time.Now()
@@ -727,7 +784,7 @@ func TestCompileInputs(t *testing.T) {
 	})
 
 	t.Run("TYP-27 Query honours cancellation and the timeout", func(t *testing.T) {
-		slow := writeProject(t, map[string]string{"main.typ": "#for i in range(3000000000) { let x = i * 2 }\n"})
+		slow := writeProject(t, map[string]string{"main.typ": "#for i in range(10000) { for j in range(10000) { let x = i * j } }\n"})
 		short := newEngine(t, func(c *Config) { c.Timeout = time.Second })
 		if _, err := short.Query(t.Context(), slow, "main.typ", "heading"); !errors.Is(err, ErrTimeout) {
 			t.Errorf("Query(slow) = %v, want ErrTimeout", err)
@@ -791,5 +848,26 @@ func TestCompileErrorIs(t *testing.T) {
 	ce = &CompileError{Diagnostics: []Diagnostic{{Severity: Warning, Message: "w"}, {Severity: Error, Message: "boom"}}}
 	if got := ce.Error(); got != "typst: boom" {
 		t.Errorf("Error() = %q, want the first error without position", got)
+	}
+}
+
+// Derived from audit 5: every document entry point must reject a project
+// that grants the sidecar the user's entire home directory.
+func TestDocumentEntryPointsRefuseHome(t *testing.T) {
+	e := newEngine(t, nil)
+	p := writeProject(t, map[string]string{"main.typ": "= Home"})
+	t.Setenv("HOME", p.Root)
+	t.Setenv("USERPROFILE", p.Root)
+	if _, err := e.Compile(t.Context(), p, "main.typ"); err == nil {
+		t.Fatal("Compile accepted home")
+	}
+	if _, err := e.Query(t.Context(), p, "main.typ", "heading"); err == nil {
+		t.Fatal("Query accepted home")
+	}
+	if _, err := e.Anchors(t.Context(), p, "main.typ"); err == nil {
+		t.Fatal("Anchors accepted home")
+	}
+	if _, err := e.Deck(t.Context(), p, "main.typ"); err == nil {
+		t.Fatal("Deck accepted home")
 	}
 }

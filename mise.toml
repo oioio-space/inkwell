@@ -397,3 +397,8 @@ run = [
 [tasks.gate]
 description = "Run a lot's acceptance criteria and write its evidence manifest"
 run = "./scripts/gate.sh"
+
+[tasks."sidecar:trace"]
+description = "Trace pinned Linux sidecars on PM-1 and retain syscall derivation evidence"
+depends = ["sidecar:fetch"]
+run = "./scripts/heavy.sh bash scripts/sidecar-trace-ci.sh"

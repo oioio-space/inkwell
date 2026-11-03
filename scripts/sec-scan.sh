@@ -20,7 +20,9 @@ fi
 
 # gosec: static analysis for insecure Go patterns.
 # Agent worktrees under .claude/ are nested checkouts with work in progress, not this module.
-gosec -quiet -exclude-dir=.claude ./...
+# The analyzer GOPATH fixtures intentionally use fake syscall packages and are
+# not module-buildable production code. analysistest checks their diagnostics.
+gosec -quiet -exclude-dir=.claude -exclude-dir=tools/archexec/testdata ./...
 
 # govulncheck: only reports vulnerabilities reachable from this module's code.
 govulncheck ./...

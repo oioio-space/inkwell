@@ -4,22 +4,11 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"os/exec"
 	"path/filepath"
-	"strconv"
 	"strings"
 
 	"golang.org/x/sys/unix"
 )
-
-const (
-	setpriv = "/usr/bin/setpriv"
-	prlimit = "/usr/bin/prlimit"
-)
-
-// Handling creation, removal and cross-directory links fixes the inode set.
-// Denying writes elsewhere also prevents moving in an already populated file.
-const directoryAccess = "fs:write-file,remove-dir,remove-file,make-char,make-dir,make-reg,make-sock,make-fifo,make-block,make-sym,refer,truncate"
 
 // directoryLimits prepares an empty, caller-owned private directory. The caller
 // must not mutate it concurrently, including through another Run.
@@ -34,17 +23,7 @@ func directoryLimits(spec Spec) (Spec, []string, error) {
 	if errno != 0 || abi < 3 {
 		return spec, nil, errors.New("sidecar: directory bound requires Landlock ABI >= 3")
 	}
-	capBytes := directoryFileCap(spec, len(spec.WriteFiles))
-	// prlimit uses bytes, with equal hard and soft limits; no shell rounding.
-	args := []string{"--no-new-privs", "--landlock-access", directoryAccess}
-	probe := exec.Command(setpriv, append(args, "/bin/true")...) // #nosec G204 -- fixed system utility and arguments
-	probe.Env = []string{}
-	if out, err := probe.CombinedOutput(); err != nil {
-		return spec, nil, fmt.Errorf("sidecar: directory bound requires Landlock and setpriv: %w: %s", err, out)
-	}
-	if _, err := os.Stat(prlimit); err != nil {
-		return spec, nil, fmt.Errorf("sidecar: directory bound requires prlimit: %w", err)
-	}
+
 	dir, err := filepath.Abs(spec.WatchDir)
 	if err != nil {
 		return spec, nil, err
@@ -69,11 +48,10 @@ func directoryLimits(spec Spec) (Spec, []string, error) {
 		if err := f.Close(); err != nil {
 			return spec, nil, err
 		}
-		args = append(args, "--landlock-rule", "path-beneath:write-file,truncate:"+filepath.Join(dir, name))
 	}
-	args = append(args, prlimit, "--fsize="+strconv.FormatUint(capBytes, 10), "--")
-	spec.FileSizeLimit = 0 // applied exactly by prlimit instead of ulimit
-	return spec, append([]string{setpriv}, args...), nil
+	path, args, err := sandboxPrefix(sandboxConfig{ReadPaths: spec.ReadPaths, WorkingDir: spec.Dir, Overlay: probeOutputMount(), Directory: dir, Names: spec.WriteFiles, File: directoryFileCap(spec, len(spec.WriteFiles)), Memory: spec.MemoryLimit})
+	spec.FileSizeLimit, spec.MemoryLimit = 0, 0
+	return spec, append([]string{path}, args...), err
 }
 
 // A failed write may return EFBIG instead of terminating with SIGXFSZ.

@@ -15,7 +15,10 @@ func isolate(cmd *exec.Cmd) {
 		cmd.SysProcAttr = &syscall.SysProcAttr{}
 	}
 	a := cmd.SysProcAttr
-	a.Cloneflags |= syscall.CLONE_NEWUSER | syscall.CLONE_NEWNET
+	a.Cloneflags |= syscall.CLONE_NEWUSER | syscall.CLONE_NEWNET | syscall.CLONE_NEWPID | syscall.CLONE_NEWIPC | syscall.CLONE_NEWNS
+	if len(a.UidMappings) > 0 {
+		return
+	}
 	a.UidMappings = []syscall.SysProcIDMap{{ContainerID: os.Getuid(), HostID: os.Getuid(), Size: 1}}
 	a.GidMappings = []syscall.SysProcIDMap{{ContainerID: os.Getgid(), HostID: os.Getgid(), Size: 1}}
 	a.GidMappingsEnableSetgroups = false
@@ -25,7 +28,11 @@ func isolate(cmd *exec.Cmd) {
 // and distributions may forbid unprivileged user namespaces (sysctl, AppArmor
 // on Ubuntu 24.04, containers).
 var probeIsolation = sync.OnceValue(func() bool {
-	cmd := exec.Command(shell, "-c", "exit 0") // #nosec G204 -- constant command
+	path, args, err := sandboxPrefix(sandboxConfig{Probe: true})
+	if err != nil {
+		return false
+	}
+	cmd := exec.Command(path, args...) // #nosec G204 -- re-exec our own binary.
 	cmd.Env = []string{}
 	setProcAttr(cmd)
 	isolate(cmd)

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"io/fs"
+	"os"
 	"os/exec"
 	"path/filepath"
 	"runtime"
@@ -27,11 +28,13 @@ const waitDelay = 2 * time.Second
 type Spec struct {
 	// isolationProbe replaces the platform probe for this run in tests.
 	isolationProbe func() bool
+	// ReadPaths lists verified package and font directories needed by the workload.
+	ReadPaths []string
 	// Stdin is the child's standard input; nil means none.
 	Stdin io.Reader
 	// Path is the executable, as returned by [Store.Resolve].
 	Path string
-	// Dir is the working directory; empty means the caller's.
+	// Dir is the mandatory project directory; home and its ancestors are refused.
 	Dir string
 	// Args are the arguments after the program name.
 	Args []string
@@ -61,10 +64,10 @@ type Spec struct {
 	// Linux (see withLimits for the rounding); zero means no limit. A write past
 	// it ends the child with SIGXFSZ.
 	FileSizeLimit uint64
-	// NoNetwork runs the child in a private network namespace, where not even
-	// the loopback answers, when the system allows it (Linux with unprivileged
-	// user namespaces). Otherwise it runs normally and [Output.Isolated] is false:
-	// the caller must keep its other barriers. See [NetworkIsolation].
+	// NoNetwork adds a private network namespace when supported. Every Linux
+	// invocation independently requires seccomp (no socket creation or external
+	// signals) and Landlock, including when namespaces are unavailable.
+	// Output.Isolated reports the additional network namespace only.
 	NoNetwork bool
 	// MaxOutput is how many bytes of each of stdout and stderr are kept; the
 	// rest is read and dropped so the child never blocks. Zero means
@@ -94,14 +97,14 @@ type Output struct {
 // first, the child's whole process group is killed and Run returns ctx.Err()
 // with what was captured so far.
 func Run(ctx context.Context, spec Spec) (Output, error) {
+	if err := confinementAvailable(); err != nil {
+		return Output{}, err
+	}
 	return run(ctx, spec, newDirectoryMount)
 }
 
 func run(ctx context.Context, spec Spec, prepareMount func(Spec) (*directoryMount, error)) (Output, error) {
-	if spec.Path == "" {
-		return Output{}, errors.New("sidecar: run: no executable")
-	}
-	if err := ctx.Err(); err != nil {
+	if err := validateLaunch(ctx, &spec); err != nil {
 		return Output{}, err
 	}
 	maxOut := spec.MaxOutput
@@ -120,18 +123,14 @@ func run(ctx context.Context, spec Spec, prepareMount func(Spec) (*directoryMoun
 		spec, prefix, err = directoryLimits(spec)
 	} else {
 		defer mount.close()
-		spec.FileSizeLimit = 0 // exact byte cap is applied inside the mount wrapper
+		spec.FileSizeLimit, spec.MemoryLimit = 0, 0 // applied by the mount launcher
 	}
 	if err != nil {
 		return Output{}, err
 	}
-	path, args, err := withLimits(spec)
+	path, args, err := launchCommand(spec, mount != nil, prefix)
 	if err != nil {
 		return Output{}, err
-	}
-	if len(prefix) > 0 {
-		args = slices.Concat(prefix[1:], []string{path}, args)
-		path = prefix[0]
 	}
 	cmd := exec.CommandContext(ctx, path, args...) // #nosec G204 -- Path comes from Store.Resolve, never from user input
 	cmd.Dir = spec.Dir
@@ -140,6 +139,9 @@ func run(ctx context.Context, spec Spec, prepareMount func(Spec) (*directoryMoun
 	cmd.Stdout, cmd.Stderr = stdout, stderr
 	cmd.WaitDelay = waitDelay
 	setProcAttr(cmd)
+	if err := configureConfinement(cmd); err != nil {
+		return Output{}, err
+	}
 	isolated := spec.NoNetwork && spec.networkIsolation()
 	if isolated {
 		isolate(cmd)
@@ -149,6 +151,11 @@ func run(ctx context.Context, spec Spec, prepareMount func(Spec) (*directoryMoun
 			return Output{}, err
 		}
 	}
+	finishReport, closeReport, err := signalReport(cmd)
+	if err != nil {
+		return Output{}, err
+	}
+	defer closeReport()
 	cmd.Cancel = func() error { return signalGroup(cmd.Process.Pid, syscall.SIGKILL) }
 
 	// The parent-death signal follows the thread that forks the child.
@@ -181,6 +188,7 @@ func run(ctx context.Context, spec Spec, prepareMount func(Spec) (*directoryMoun
 
 		OutputLimit: overflow.Load(),
 	}
+	finishReport(&out)
 	if mount != nil {
 		out.OutputLimit = out.OutputLimit || mount.limitHit(out)
 		if err := mount.export(); err != nil {
@@ -278,4 +286,39 @@ func (c *capped) Write(p []byte) (int, error) {
 		c.dropped = true
 	}
 	return len(p), nil
+}
+
+// launchCommand selects exactly one confinement wrapper.
+func launchCommand(spec Spec, mounted bool, prefix []string) (string, []string, error) {
+	path, args := spec.Path, spec.Args
+	var err error
+	if !mounted && len(prefix) == 0 {
+		path, args, err = withLimits(spec)
+	}
+	if len(prefix) > 0 {
+		args = slices.Concat(prefix[1:], []string{path}, args)
+		path = prefix[0]
+	}
+	return path, args, err
+}
+
+func validateSpecDirectory(spec *Spec) error {
+	dir, err := workingDirectory(spec.Dir)
+	if err == nil {
+		spec.Dir = dir
+	}
+	return err
+}
+
+func validateLaunch(ctx context.Context, spec *Spec) error {
+	if spec.Path == "" {
+		return errors.New("sidecar: run: no executable")
+	}
+	if _, err := os.Stat(spec.Path); err != nil {
+		return err
+	}
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	return validateSpecDirectory(spec)
 }

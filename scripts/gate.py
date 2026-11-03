@@ -1,6 +1,8 @@
 """Small sequential gate runner; commands are trusted repository configuration."""
 import hashlib
 import json
+import os
+from perf.archive import verify
 import pathlib
 import platform
 import re
@@ -23,6 +25,7 @@ def version(command):
 def run(lot, root=ROOT):
     if not re.fullmatch(r"[A-Za-z0-9_-]+", lot):
         raise ValueError("invalid lot name")
+    sealed = verify(root)
     config = tomllib.loads((root / "gates" / (lot + ".toml")).read_text())
     out = root / "gates" / lot
     out.mkdir(parents=True, exist_ok=True)
@@ -41,11 +44,14 @@ def run(lot, root=ROOT):
         log = out / (c["id"] + ".log")
         start = time.monotonic()
         with log.open("wb") as stream:
-            p = subprocess.run(c["command"], shell=True, cwd=root, stdout=stream, stderr=subprocess.STDOUT)
+            p = subprocess.run(c["command"], shell=True, cwd=root, stdout=stream, stderr=subprocess.STDOUT,
+                               env=dict(os.environ, INKWELL_PERF_OUT=str(out)))
         entries.append(dict(id=c["id"], command=c["command"], status="pass" if p.returncode == 0 and c.get("status") != "fail" else "fail",
                             exit_code=p.returncode, duration_seconds=time.monotonic()-start,
                             log=str(log.relative_to(root))))
         print(c["id"], entries[-1]["status"], flush=True)
+    if verify(root) != sealed:
+        raise ValueError("gate modified immutable archive")
     files = list(out.rglob("*"))
     for pattern in config.get("raw_results", []):
         files.extend(root.glob(pattern))

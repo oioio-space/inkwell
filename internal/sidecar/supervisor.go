@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"os/exec"
 	"runtime"
 	"sync"
@@ -154,6 +155,9 @@ func (s *Supervisor) Restarts() int { return int(s.restarts.Load()) }
 // after MaxFailures consecutive failed launches. It blocks: run it in its own
 // goroutine.
 func (s *Supervisor) Run(ctx context.Context) error {
+	if err := confinementAvailable(); err != nil {
+		return err
+	}
 	if s.cfg.Command == nil {
 		return errors.New("sidecar: supervisor: Command is required")
 	}
@@ -195,12 +199,33 @@ func (s *Supervisor) Run(ctx context.Context) error {
 // runOnce performs one launch and returns how long the program ran and why it
 // ended; the error is never nil.
 func (s *Supervisor) runOnce(ctx context.Context) (time.Duration, error) {
+	if err := confinementAvailable(); err != nil {
+		return 0, err
+	}
 	cmd, err := s.cfg.Command(ctx)
 	if err != nil {
 		s.emit(Event{Kind: EventPrepareFailed, Err: err})
 		return 0, fmt.Errorf("prepare: %w", err)
 	}
+	if _, err := os.Stat(cmd.Path); err != nil {
+		s.emit(Event{Kind: EventStartFailed, Err: err})
+		return 0, err
+	}
+	dir, err := workingDirectory(cmd.Dir)
+	if err != nil {
+		return 0, err
+	}
+	cmd.Dir = dir
+	cmd.Env = append([]string{}, cmd.Env...) // Explicit environment only; nil must never inherit the app environment.
 	setProcAttr(cmd)
+	path, args, err := withLimits(Spec{Path: cmd.Path, Args: cmd.Args[1:], Dir: cmd.Dir})
+	if err != nil {
+		return 0, err
+	}
+	cmd.Path, cmd.Args = path, append([]string{path}, args...)
+	if err := configureConfinement(cmd); err != nil {
+		return 0, err
+	}
 	if cmd.WaitDelay == 0 {
 		cmd.WaitDelay = waitDelay
 	}

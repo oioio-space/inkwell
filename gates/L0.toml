@@ -1,7 +1,7 @@
 # Failures are recorded, never waived.
 known_failures = ["PERF-RELAY-ALLOC: 1 alloc/op vs 0 target — to fix in a later perf lot", "F10: intermittent libp2p panic", "F11: sidecar test /tmp quota", "F12: vector generator differs from corpus", "L0 observation: concurrent Typst package installation failed with directory not empty on first test run; full retry passed (archived logs)"]
 raw_results = ["docs/perf/baseline/2026-11-02/*", "testdata/perf/*"]
-measurement_reports = ["docs/perf/baseline/2026-11-02/reference-quality.json", "docs/perf/baseline/2026-11-02/measurements.json"]
+measurement_reports = ["gates/L0/measurements.json"]
 
 [[criteria]]
 id = "harness"
@@ -24,7 +24,7 @@ command = "mise run test"
 
 [[criteria]]
 id = "regression-guard"
-command = "python3 scripts/perf/regression.py --self-test && python3 scripts/perf/regression.py --bench docs/perf/baseline/2026-11-02/go-bench.txt"
+command = "./scripts/heavy.sh python3 scripts/perf/regression.py --self-test && ./scripts/heavy.sh python3 scripts/perf/regression.py --bench"
 [[criteria]]
 id = "PERF-START-plugins"
 status = "deferred"

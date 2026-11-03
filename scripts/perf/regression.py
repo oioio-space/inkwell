@@ -1,5 +1,6 @@
-"""PM-5 guard: fixed reference, benchstat significance, and measured p95 limits."""
+"""PM-5 guard: same-session interleaving, benchstat significance, and measured p95 limits."""
 import argparse
+import fcntl
 import hashlib
 import csv
 import io
@@ -7,6 +8,8 @@ import json
 from pathlib import Path
 import re
 import subprocess
+import tempfile
+import os
 
 BASE = Path('docs/perf/baseline/2026-11-02')
 
@@ -15,7 +18,7 @@ def significant(delta, p):
     return delta > 5 and p < 0.05
 
 
-def compare_benchstat(output):
+def compare_benchstat(output, informational=False):
     metric = None
     checked = 0
     failures = []
@@ -33,7 +36,8 @@ def compare_benchstat(output):
             if significant(delta, float(match[1])):
                 failures.append(row)
     assert checked, 'no comparable time/alloc benchmarks'
-    assert not failures, failures
+    assert informational or not failures, failures
+    return failures
 
 
 def compare_e2e(thresholds, fresh):
@@ -45,10 +49,125 @@ def compare_e2e(thresholds, fresh):
         assert isinstance(value, (int, float)) and 0 <= value <= rule['limit_p95_' + unit], (name, value, rule)
 
 
+def command(args, cwd=None):
+    return subprocess.check_output(args, cwd=cwd, text=True)
+
+
+def interleaved(binaries, roots, outputs, extra=()):
+    for output in outputs:
+        output.write_text('')
+    for round_number in range(10):
+        # Reverse each pair to balance linear drift as well as alternating A/B.
+        for side in ((0, 1) if round_number % 2 == 0 else (1, 0)):
+            with outputs[side].open('a') as stream:
+                subprocess.run([str(binaries[side]), '-test.run=^$', '-test.bench=.',
+                                '-test.benchmem', '-test.count=2', *extra],
+                               cwd=roots[side], stdout=stream, check=True)
+
+
+def slowdown_test():
+    with tempfile.TemporaryDirectory(prefix='slowdown-', dir=cache()) as folder:
+        root = Path(folder)
+        source = root / 'fixture_test.go'
+        source.write_text('package fixture\nimport ("testing"; "time"; "os")\n'
+                          'func BenchmarkSleep(b *testing.B) { d := 10*time.Millisecond; '
+                          'if os.Getenv("PERF_SLOW") == "1" { d = 12*time.Millisecond }; '
+                          'for i:=0; i<b.N; i++ { time.Sleep(d) } }\n')
+        binary = root / 'fixture'
+        subprocess.run(['go', 'test', '-c', '-o', str(binary), str(source)], check=True)
+        outputs = [root / 'base.txt', root / 'branch.txt']
+        for output in outputs:
+            output.write_text('')
+        for i in range(10):
+            for side in ((0, 1) if i % 2 == 0 else (1, 0)):
+                with outputs[side].open('a') as stream:
+                    subprocess.run([str(binary), '-test.run=^$', '-test.bench=.',
+                                    '-test.count=2', '-test.benchtime=5x'],
+                                   env=dict(os.environ, PERF_SLOW=str(side)), stdout=stream, check=True)
+        result = command(['benchstat', '-format', 'csv', *map(str, outputs)])
+        try:
+            compare_benchstat(result)
+        except AssertionError as exc:
+            assert exc.args[0] and isinstance(exc.args[0], list), exc
+        else:
+            raise AssertionError('injected 20% sleep slowdown accepted')
+        print(result, flush=True)
+
+
+def cache():
+    path = Path.home() / '.cache/inkwell'
+    path.mkdir(parents=True, exist_ok=True)
+    return path
+
+
+def session(output):
+    # Concurrent L0/L1 invocations share an artifact directory; serialize A/B sessions.
+    with (cache() / "perf-ab.lock").open("w") as lock:
+        fcntl.flock(lock, fcntl.LOCK_EX)
+        measure_session(output)
+
+
+def measure_session(output):
+    root = Path.cwd()
+    base = command(['git', 'merge-base', 'HEAD', 'main']).strip()
+    packages = re.search(r'^HOT_PATHS: (.+)$', (root / 'CLAUDE.md').read_text(), re.M)[1].split()
+    output.mkdir(parents=True, exist_ok=True)
+    report = {'merge_base': base, 'rounds': 10, 'count': 2, 'packages': []}
+    failed = False
+    with tempfile.TemporaryDirectory(prefix='perf-ab-', dir=cache()) as folder:
+        temporary = Path(folder)
+        worktree = temporary / 'base'
+        # Private metadata: never write the source checkout's .git.
+        repository = temporary / 'repository.git'
+        subprocess.run(['git', 'clone', '--bare', '--shared', str(root), str(repository)], check=True)
+        git_worktree = ['git', '--git-dir=' + str(repository), 'worktree']
+        subprocess.run([*git_worktree, 'add', '--detach', str(worktree), base], check=True)
+        try:
+            changed = set(command(['git', 'diff', '--name-only', base, '--']).splitlines())
+            changed.update(command(['git', 'ls-files', '--others', '--exclude-standard']).splitlines())
+            for package in packages:
+                paths = {'go.mod', 'go.sum', 'go.work', 'go.work.sum'}
+                for tree in (worktree, root):
+                    dirs = command(['go', 'list', '-deps', '-test', '-f', '{{.Dir}}', './' + package], tree).splitlines()
+                    for directory in dirs:
+                        try:
+                            relative = Path(directory).relative_to(tree)
+                        except ValueError:
+                            continue
+                        paths.update(name for name in changed if name.startswith(str(relative) + '/'))
+                informational = not bool(paths & changed)
+                binaries = [temporary / 'base.test', temporary / 'branch.test']
+                for tree, binary in zip((worktree, root), binaries):
+                    subprocess.run(['go', 'test', '-c', '-o', str(binary), './' + package], cwd=tree, check=True)
+                name = package.replace('/', '-')
+                outputs = [output / (name + '-' + side + '.txt') for side in ('base', 'branch')]
+                interleaved(binaries, [worktree, root], outputs)
+                csv_output = command(['benchstat', '-format', 'csv', *map(str, outputs)])
+                (output / (name + '.csv')).write_text(csv_output)
+                text = command(['benchstat', *map(str, outputs)])
+                (output / (name + '-benchstat.txt')).write_text(text)
+                status = 'pass'
+                try:
+                    failures = compare_benchstat(csv_output, informational=True)
+                    if failures:
+                        status = 'regression'
+                        if not informational:
+                            failed = True
+                except AssertionError:
+                    raise  # Missing/incomparable samples fail even for unchanged code.
+                report['packages'].append(dict(package=package, informational=informational, comparison=status))
+                print(package, 'informational' if informational else 'enforced', status, text, flush=True)
+        finally:
+            subprocess.run([*git_worktree, 'remove', '--force', str(worktree)], check=True)
+    (output / 'session.json').write_text(json.dumps(report, indent=2) + '\n')
+    assert not failed, 'significant regression in changed package/dependencies'
+
+
 def main():
     parser = argparse.ArgumentParser()
     parser.add_argument('--self-test', action='store_true')
-    parser.add_argument('--bench')
+    parser.add_argument('--bench', action='store_true', help='measure merge-base and branch in this session')
+    parser.add_argument('--output', default='gates/L0/perf-ab')
     parser.add_argument('--e2e')
     args = parser.parse_args()
     thresholds = json.loads((BASE / 'thresholds.json').read_text())
@@ -81,12 +200,12 @@ def main():
             pass
         else:
             raise AssertionError('latency regression accepted')
-        print('regression-guard thresholds loaded; self-test passed (no L0 comparison claimed)')
+        slowdown_test()
+        print('regression-guard self-test passed: injected slowdown detected')
     else:
         assert args.bench or args.e2e, 'fresh --bench or --e2e required'
         if args.bench:
-            result = subprocess.run(['benchstat', '-format', 'csv', str(BASE / 'go-reference.txt'), args.bench], check=True, capture_output=True, text=True)
-            compare_benchstat(result.stdout)
+            session(Path(args.output).resolve())
         if args.e2e:
             compare_e2e(thresholds, json.loads(Path(args.e2e).read_text()))
         print('regression-guard passed')

@@ -11,7 +11,7 @@ import (
 )
 
 func spec(mode string) Spec {
-	return Spec{Path: os.Args[0], Env: helperEnv(mode)}
+	return Spec{Path: os.Args[0], Dir: sharedCache, Env: helperEnv(mode)}
 }
 
 func TestRun(t *testing.T) {
@@ -99,7 +99,7 @@ func TestRun(t *testing.T) {
 		start := time.Now()
 		out, err := Run(ctx, spec("grandchild"))
 		if !errors.Is(err, context.DeadlineExceeded) {
-			t.Fatalf("Run = %v, want DeadlineExceeded", err)
+			t.Fatalf("Run = %v, want DeadlineExceeded: %+v stderr=%s", err, out, out.Stderr)
 		}
 		if took := time.Since(start); took > 5*time.Second {
 			t.Errorf("Run took %v after a 500ms timeout", took)

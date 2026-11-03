@@ -93,6 +93,24 @@ while read -r pkg imports; do
   done
 done <<< "$network"
 
+# L1 / INV-14: only the embedded sidecar runner (including its own hidden
+# sandbox re-exec) launches production processes. fetch is build-time only,
+# isolated by AC-6. WebKitGTK launches its internal helpers itself (bwrap,
+# xdg-dbus-proxy, WebKit*Process); our code never launches these helpers.
+runtime_imports="$(go list -f '{{.ImportPath}} {{join .Imports " "}}' ./...)"
+while read -r pkg imports; do
+  for imp in $imports; do
+    if [[ "$imp" == "os/exec" ]]; then
+      case "$pkg" in
+        "$module/internal/sidecar") ;;
+        *) report "$pkg imports os/exec outside the embedded sidecar/sandbox allowlist" ;;
+      esac
+    fi
+  done
+done <<< "$runtime_imports"
+# Scan all build targets, not just the host-selected dependency graph.
+./scripts/arch-exec-check.sh || report "forbidden production process launch"
+
 # Any automerge Go package in the full dependency graph, tests included.
 all_deps="$(go list -deps -test ./...)"
 automerge="$(grep -i automerge <<< "$all_deps" || true)"
