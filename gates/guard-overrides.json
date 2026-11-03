@@ -9,6 +9,11 @@
       "id": "n42-scope-2026-11-03",
       "reason": "Scope correction decided by the user (N42 clarified), not a weakening; the guard reports no finding for it, this entry records the removal. Removed: tools/archexec dependency scan (go list -deps graph walk from L1; L2 audited.json deny/exception/via audits pinned to go.sum, raw-syscall, assembly, go:linkname and DLL-lookup heuristics; arch-exec -deps mode; dependencies*.go, audits.go, l2_contract_test.go and their testdata), the analyzer's transitive os/exec import rule and its Wails OpenURL/OpenFile/OpenFileManager/pkg/updater rules, app.RuntimeGuard, app.DisarmFrameworkLaunchers (D-Bus address pinning, WAILS_UPDATER_HELPER* clearing), the third_party/memory fork with its replace directive and internal/memorytest. Kept: own-code no-exec rule outside internal/sidecar, sandbox and all L1/L2 security checks.",
       "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "8df04b9301a401d51f6d06f2e36e9f89b875f0f59efc049644ea41982dfd062a",
+      "reason": "PERF-MEM was deferred from L0 to L2, and L2 re-deferred it to G-0b because L2 delivered only G-0a (no multi-file corpus opening). Pointing L0 at the lot that actually owns it; the criterion stays deferred, never counted as a pass.",
+      "decision": "docs/objectif-en-cours.md"
     }
   ]
 }

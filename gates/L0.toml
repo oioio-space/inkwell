@@ -36,8 +36,8 @@ reason = "Plugins do not exist yet; pinned plugin loading belongs to the plugin 
 [[criteria]]
 id = "PERF-MEM"
 status = "deferred"
-target_lot = "L2"
-reason = "Real multi-file corpus opening requires G-0 delivered in L2."
+target_lot = "G-0b"
+reason = "Real multi-file corpus opening requires G-0b (index G, one document per file); L2 delivered only G-0a."
 [[criteria]]
 id = "PERF-TYPE-native"
 status = "deferred"
