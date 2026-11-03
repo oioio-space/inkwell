@@ -1,0 +1,64 @@
+# Seccomp trace evidence, lot L-maj, 2026-11-03T16:49Z
+# Command: STRACE=<strace> ./scripts/heavy.sh bash scripts/sidecar-trace-ci.sh <dir>; then python3 scripts/sidecar-allowlist.py --check <dir> (exit 0)
+# and python3 scripts/sidecar-allowlist.py <dir>: internal/sidecar/syscalls-linux.txt and syscalls_linux_{amd64,arm64}.go unchanged.
+# strace: strace -- version 7.3, from strace-7.3-1.fc44.x86_64.rpm (rpm -K: signatures OK)
+# host: Linux 7.2.11-200.fc44.x86_64 x86_64
+# pinned binaries (sha256 of the decompressed internal/sidecar/bin/linux_amd64/*.gz, equal to manifest.json):
+#   typst 0.15.1 29273eaa04f6d00edd0c2bec578f565fc9c65be856bfbffc894567c68ed0b237
+#   tinymist 0.15.10 b030af8966d2759949e33aa0fed518c1667431e1d551014034ccf3f94eac9746
+# trace files (sha256):
+#   70590e620b9b4e6f11ccf11090e1299f1f9506c7f82674ed3242e6e1b43e1371  compile.trace
+#   c5a662be5814745d285e52cc529239b8f8d030b1db83e13d2acce00938d25875  eval.trace
+#   6cad2ff9428698ec0845b94c81a8544e06cfa45bcaea3c5b6e32d2530bc46cbc  lsp.trace
+#   9d0f9dccc6d74d1152081167878ff3ff8e1604118b7fbbeaec17ebbb2fc81a80  query.trace
+#   07e888b6372821df419722072de57e31fdd901949b5db3d856789f21fc7a9f5d  syscalls.txt
+# observed syscalls (syscalls.txt):
+access
+arch_prctl
+brk
+clone
+clone3
+close
+epoll_create1
+epoll_ctl
+epoll_wait
+eventfd2
+execve
+exit
+exit_group
+fcntl
+fstat
+futex
+getcwd
+getdents64
+getrandom
+gettid
+inotify_init1
+ioctl
+lseek
+lstat
+madvise
+mmap
+mprotect
+mremap
+munmap
+open
+openat
+poll
+prctl
+pread64
+prlimit64
+read
+readlink
+rseq
+rt_sigaction
+rt_sigprocmask
+sched_getaffinity
+sched_yield
+set_robust_list
+set_tid_address
+sigaltstack
+socketpair
+stat
+statx
+write

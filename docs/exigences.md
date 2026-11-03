@@ -37,6 +37,7 @@ Rien n'est « fait » sans tests verts et sans une passe `ux-walkthrough` réuss
 | W19 | 2026-10-31 | Se placer en architecte : vérifier et réorganiser pour un code performant, conforme aux normes de l'industrie et aux design patterns ; planifier, corriger, continuer | [audit](plans/2026-10-31-architecture-audit.md) | 🔨 |
 | W20 | 2026-10-31 | Rien au hasard ni à l'intuition : chaque constat et chaque décision a une preuve, une règle et une gravité | référentiel de l'audit | ✅ en continu |
 | W21 | 2026-10-31 | Toujours répartir le travail entre les modèles, Claude et Codex, avec modèle et effort explicites | CLAUDE.md (routage) | ✅ en continu |
+| W22 | 2026-11-03 | « Les dernières versions des packages » : chaque dépendance (Go, frontend, outils mise, sidecars) à sa dernière version stable | lot L-maj, [note](plans/2026-11-03-L-maj-upgrades.md) | 🔨 |
 | W13 | 2026-10-25 | Noter toutes les demandes pour les reprendre | ce registre | ✅ |
 
 ## Réseau, droits, sécurité

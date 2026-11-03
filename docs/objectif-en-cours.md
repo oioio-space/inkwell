@@ -32,7 +32,12 @@ change plus que par une décision consignée dans `docs/architecture/decisions.m
 1. **L3 — Comprendre, corriger, produire** : tinymist branché (N28, N29) ; porte : `problems.spec.ts`,
    `PERF-LSP`.
 2. **Protocole, étapes 2 à 8 d'ADR 0034** puis **G-0b** (index `G`, un document par fichier, FM-OPEN-4…8, PERF-MEM) et **G-0c** (onglets, Worker).
-3. Puis : Collaborer sans perdre, Première minute et secours, Revenir en arrière, Fondations
+3. **S13 — Fenêtres étroites** (problème connu, présent sur `main`) : sous 1300 px, ouvrir le tiroir
+   Historique pousse la mise en page (titre, boutons de l'en-tête et barre d'état se chevauchent) au
+   lieu de couvrir l'aperçu (spec §3.4) ; un menu plus haut que la fenêtre passe sous la barre
+   d'état. Porte : UX-LUP-1 (`frontend/e2e/ux/lup.spec.ts`, 1100 et 950 px) repasse de `test.fixme`
+   à `test` et passe.
+4. Puis : Collaborer sans perdre, Première minute et secours, Revenir en arrière, Fondations
    extensibles (`coherence.md` §5).
 
 ### Lots connus et critères reçus en report

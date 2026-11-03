@@ -422,6 +422,7 @@
   "preview.zoomIn": "Zoom in",
   "preview.zoomOut": "Zoom out",
   "preview.zoomFit": "Fit to width",
+  "preview.zoomFitLabel": "{percent} %, fit to width",
   "preview.jumpToCursor": "Go to the cursor",
   "preview.pages": "Pages of the document",
   "preview.pageAlt": "Page {page} of {count}",

@@ -11,6 +11,7 @@ export { expect } from "@playwright/test";
  * page at a time) and takes it from the page under test, writes its own text to main.typ, and
  * keeps the CPU busy retrying. Specs share the instances, so each must leave nothing behind.
  */
+// biome-ignore lint/suspicious/noConfusingVoidType: Playwright types a value-less auto fixture as void
 export const test = base.extend<{ closeContexts: void }>({
   closeContexts: [
     async ({ browser }, use) => {

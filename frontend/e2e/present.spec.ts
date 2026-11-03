@@ -72,6 +72,7 @@ test("PRS-31 PRS-32 PRS-40 the public window follows the presenter, and shows on
   expect(await pub.locator("button, input, textarea, select, a, [contenteditable]").count()).toBe(
     0,
   );
+  // biome-ignore lint/performance/useDomNodeTextContent: Playwright's Locator.innerText(), not a DOM node property
   expect(await pub.locator("body").innerText()).not.toMatch(/Souriez|Notes|Commentaire/);
   await expect(pub.getByTestId("notes")).toHaveCount(0);
 
@@ -229,6 +230,7 @@ test("PRS-33 PRS-35 PRS-36 PRS-37 PRS-39 one machine pilots another; control is 
   await expect(counter(alice)).toHaveText(/Étape 2|Diapositive 3 sur 4/);
   await expect(counter(bob)).toHaveText("Diapositive 4 sur 4"); // not dragged along
   await bob.getByTestId("present-follow").click();
+  // biome-ignore lint/performance/useDomNodeTextContent: Playwright's Locator.innerText(), not a DOM node property
   await expect(counter(bob)).toHaveText(await counter(alice).innerText());
 
   await bob.getByTestId("present-ask").click();

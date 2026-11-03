@@ -2697,8 +2697,9 @@ déclaré instable sans taux mesuré et cause prouvée (D14) ; les tests lourds 
    peut changer (§6.4).
 9. **Mises à jour** : selon `AD-17` (gestionnaire de paquets pour `.deb`/`.rpm` ; outil de
    Wails v3 vérifié par signature pour l'exécutable autonome).
-10. **Wails** : `v3.0.0-beta.34` aujourd'hui ; passage à la v3.0.x stable par la procédure de
-    l'ADR 0008 (`AD-19`).
+10. **Wails** : `v3.0.0` stable épinglée depuis le lot L-maj (2026-11-03) ; `AD-19` reste ouvert
+    tant que le rejeu d'historique et la comparaison PDF de référence de l'ADR 0008 ne sont pas
+    outillés.
 
 ### 14.1 Dépendances garanties (N42)
 
@@ -4064,7 +4065,7 @@ proposition de bout en bout → Graphviz jusqu'au PDF → reste.
 | réglages en `localStorage` et variables d'environnement | fichier de réglages en Go | `AD-21` |
 | `bridge` importe `project` et `store` | ports à lui | `AD-29` |
 | `tinymist` embarqué mais jamais lancé | LSP par Stream `lsp` | `AD-20` |
-| Wails `v3.0.0-beta.34` (stable publiée le 2026-10-26) | v3.0.x | `AD-19` |
+| Wails `v3.0.0` (lot L-maj ; rejeu et comparaison PDF de l'ADR 0008 à outiller) | v3.0.x | `AD-19` |
 | aucune règle de couches dans le frontend | Biome `noRestrictedImports` | `AD-30` |
 | statuts d'ADR incohérents (index, 0021–0029 proposées mais livrées) | acceptations | `AD-07` |
 | `files_test.go:713` ignoré (suspension et blobs) | test actif | `AD-36` |

@@ -12,6 +12,7 @@ const instanceDocs = join(docsRoot, String(PORT));
 
 const editor = (p: Page) => p.locator(".cm-content");
 const docText = (p: Page) =>
+  // biome-ignore lint/performance/useDomNodeTextContent: the assertion is about the text as rendered (innerText), not the raw DOM text
   editor(p).evaluate((el) => el.innerText.replace(/ /g, " ").replace(/[​⁠\n]/g, ""));
 
 /** The project folder the instance created, and its main.typ. */
