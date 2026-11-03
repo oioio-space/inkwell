@@ -9,20 +9,29 @@ import (
 	"golang.org/x/tools/go/analysis/singlechecker"
 )
 
+var analyzerMain = singlechecker.Main
+
 func main() {
-	if len(os.Args) == 2 && os.Args[1] == "-deps" {
+	if code := run(os.Args[1:]); code != 0 {
+		os.Exit(code)
+	}
+}
+
+func run(args []string) int {
+	if len(args) == 1 && args[0] == "-deps" {
 		if err := archexec.ScanDependencies(os.Stdin); err != nil {
 			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
+			return 1
 		}
-		return
+		return 0
 	}
-	if len(os.Args) == 3 && os.Args[1] == "-syntax" {
-		if err := archexec.ScanSources(os.Args[2]); err != nil {
+	if len(args) == 2 && args[0] == "-syntax" {
+		if err := archexec.ScanSources(args[1]); err != nil {
 			fmt.Fprintln(os.Stderr, err)
-			os.Exit(1)
+			return 1
 		}
-		return
+		return 0
 	}
-	singlechecker.Main(archexec.Analyzer)
+	analyzerMain(archexec.Analyzer)
+	return 0
 }

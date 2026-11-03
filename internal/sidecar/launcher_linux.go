@@ -358,16 +358,24 @@ func restrictReadsConfig(c *sandboxConfig, target string) error {
 }
 
 // PID 1 remains a small trusted init; only the exec child handles documents.
-func sandboxInit(c sandboxConfig, args []string) error {
+func sandboxInitCommand(c sandboxConfig, args []string) (*exec.Cmd, error) {
 	data, err := json.Marshal(c)
+	if err != nil {
+		return nil, err
+	}
+	cmd := exec.Command("/proc/self/exe", append([]string{sandboxMode, string(data)}, args...)...) // #nosec G204 G702 -- fixed own launcher path and serialized policy.
+	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
+	cmd.Env = os.Environ()
+	return cmd, nil
+}
+
+func sandboxInit(c sandboxConfig, args []string) error {
+	cmd, err := sandboxInitCommand(c, args)
 	if err != nil {
 		return err
 	}
 	signals := make(chan os.Signal, 8)
 	signal.Notify(signals, syscall.SIGTERM, syscall.SIGINT)
-	cmd := exec.Command("/proc/self/exe", append([]string{sandboxMode, string(data)}, args...)...) // #nosec G204 G702 -- fixed own launcher path; serialized policy and target args are not interpreted by a shell.
-	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
-	cmd.Env = os.Environ()
 	if err := cmd.Start(); err != nil {
 		return err
 	}
@@ -386,15 +394,7 @@ func sandboxInit(c sandboxConfig, args []string) error {
 			return err
 		}
 		if pid == cmd.Process.Pid {
-			if status.Signaled() {
-				// Report signal death explicitly: PID 1 cannot reliably re-raise
-				// default-action signals in its PID namespace.
-				if c.ReportFD >= 3 {
-					_, _ = unix.Write(c.ReportFD, []byte{byte(status.Signal())}) // #nosec G115 -- Linux wait status signals are in [1,64].
-				}
-				os.Exit(128 + int(status.Signal()))
-			}
-			os.Exit(status.ExitStatus())
+			os.Exit(sandboxExitStatus(status, c.ReportFD))
 		}
 	}
 }
@@ -463,4 +463,15 @@ func readReportFD(c *sandboxConfig) error {
 	}
 
 	return nil
+}
+
+// sandboxExitStatus preserves signal death across the PID namespace boundary.
+func sandboxExitStatus(status unix.WaitStatus, reportFD int) int {
+	if status.Signaled() {
+		if reportFD >= 3 {
+			_, _ = unix.Write(reportFD, []byte{byte(status.Signal())}) // #nosec G115 -- Linux signal numbers are 1..64, so they fit in a byte
+		}
+		return 128 + int(status.Signal())
+	}
+	return status.ExitStatus()
 }
