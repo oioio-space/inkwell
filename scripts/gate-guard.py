@@ -66,19 +66,31 @@ CRITERION_FIELDS = ("command", "status", "target_lot")
 CONFIGS = (".golangci.yml", "frontend/vite.config.ts", "frontend/playwright.config.ts",
            "frontend/playwright.netsim.config.ts", "frontend/svelte.config.js")
 SCRIPT_REF = re.compile(r'(?<![\w/])(?:\.{1,2}/)*(scripts/[\w./-]+\.(?:sh|py|cjs|mjs|js))')
-TASK_REF = re.compile(r'\bmise\s+run\s+([\w:.-]+)')
+TASK_REF = re.compile(r'\bmise\s+run\s+(?:--?[\w-]+\s+)*([\w:.][\w:.-]*)')  # skip flags such as --skip-deps
 TEST_FILE = re.compile(r'(?:_test\.go|\.(?:test|spec)\.[cm]?[jt]sx?)$')
 Dependencies = collections.namedtuple("Dependencies", "tasks files")
 # Local mise configuration that mise merges over mise.toml (often gitignored),
-# so it can silently replace a gate task: its mere presence is a finding.
+# so it can silently replace a gate task. A local TOML file is a finding only when
+# it touches tasks (an env-only file, e.g. holding a personal API key, is not);
+# file tasks under a tasks directory always are.
 MISE_OVERRIDES = ("mise.local.toml", ".mise.toml", ".mise.local.toml", "mise.*.toml", ".mise.*.toml",
                   ".config/mise*.toml", ".config/mise/**/*", "mise/**/*", ".mise/**/*",
                   "mise-tasks/**/*", ".mise-tasks/**/*")
+TASK_KEYS = {"tasks", "task_config"}
+
+
+def overrides_tasks(path):
+    if path.suffix != ".toml":
+        return True
+    try:
+        return bool(TASK_KEYS & tomllib.loads(path.read_text()).keys())
+    except (OSError, tomllib.TOMLDecodeError, UnicodeDecodeError):
+        return True  # unreadable: assume it may replace tasks
 
 
 def mise_overrides(root):
     found = {p for pattern in MISE_OVERRIDES for p in root.glob(pattern) if p.is_file() or p.is_symlink()}
-    return sorted(str(p.relative_to(root)) for p in found)
+    return sorted(str(p.relative_to(root)) for p in found if overrides_tasks(p))
 IGNORED = re.compile(r'^(?:frontend/node_modules|frontend/bindings)/|^gates/[^/]+/')
 
 
@@ -409,6 +421,10 @@ def end_to_end_test():
                 failed, log = guard()
                 assert failed and name + ": mise override present" in log, (name, log)
                 (root / name).unlink()
+            # An env-only local file (personal settings, API keys) replaces no task.
+            (root / "mise.local.toml").write_text('[env]\nSOME_KEY = "x"\n')
+            assert guard() == (False, "gate guard: pass\n"), "env-only mise.local.toml must pass"
+            (root / "mise.local.toml").unlink()
         finally:
             ROOT = saved
 

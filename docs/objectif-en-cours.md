@@ -43,6 +43,7 @@ critère reporté plusieurs fois figure dans chaque lot de la chaîne (PERF-MEM 
 
 ```gate-lots
 L2: PERF-TYPE-native PERF-MEM
+L3: PERF-TYPE-native
 G-0b: PERF-MEM
 N35: native-cgo-darwin-windows seccomp-trace-arm64
 Fondations-extensibles: PERF-START-plugins
