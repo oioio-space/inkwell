@@ -20,7 +20,8 @@ func ScanSources(root string) error {
 		}
 		if entry.IsDir() {
 			switch entry.Name() {
-			case ".git", "node_modules", "bindings", "vendor", "testdata":
+			// .claude holds other git worktrees (other branches), not this tree's sources.
+			case ".git", ".claude", "node_modules", "bindings", "vendor", "testdata":
 				return filepath.SkipDir
 			}
 			return nil
