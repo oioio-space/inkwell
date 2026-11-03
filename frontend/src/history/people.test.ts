@@ -1,4 +1,3 @@
-import { next as A } from "@automerge/automerge";
 import { describe, expect, it } from "vitest";
 import { changeMarks } from "./gutter";
 import { claimsOf, history, stepsOf } from "./log";

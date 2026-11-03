@@ -111,7 +111,7 @@ const packages = $derived(preview.failure?.packages.join(", ") ?? "");
     <button
       type="button"
       class="fb lbl zoom"
-      aria-label={t("preview.zoomFit")}
+      aria-label={t("preview.zoomFitLabel", { percent })}
       title={t("preview.zoomFit")}
       aria-pressed={mode === "fit"}
       onclick={() => setZoom("fit")}

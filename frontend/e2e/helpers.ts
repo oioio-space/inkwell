@@ -8,6 +8,7 @@ export const docText = (p: Page) =>
     const copy = el.cloneNode(true) as HTMLElement;
     for (const label of copy.querySelectorAll(".cm-remote-caret, .cm-placeholder")) label.remove();
     // CodeMirror renders trailing spaces as NBSP and may insert zero-width breaks.
+    // biome-ignore lint/performance/useDomNodeTextContent: the assertion is about the text as rendered (innerText), not the raw DOM text
     return copy.innerText.replace(/ /g, " ").replace(/[​⁠\n]/g, "");
   });
 

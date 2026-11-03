@@ -92,4 +92,10 @@ describe("people panel", () => {
     expect(labels).not.toContain("Déconnecter");
     expect(host.textContent).toContain("Déconnecté par Alice");
   });
+
+  it("UX-LUP-3 an online person's state and file are apart: « En ligne · main.typ »", () => {
+    workspace.current = "main.typ";
+    const host = show([member("alice", { role: "admin", self: true })]);
+    expect(host.querySelector(".state")?.textContent).toBe("En ligne · main.typ");
+  });
 });

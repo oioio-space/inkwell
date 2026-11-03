@@ -115,7 +115,7 @@ const manages = $derived(
             >
             <span class="who">
               <span class="name">{name}{#if m.self}&nbsp;<span class="dim">({t("people.you")})</span>{/if}</span>
-              <span class="state" class:online={row.online}>{stateOf(row)}{#if row.online} · {m.self ? workspace.current : workspace.peerFiles[peer] ?? "main.typ"}{/if}</span>
+              <span class="state" class:online={row.online}>{stateOf(row)}{#if row.online}{" · "}{m.self ? workspace.current : workspace.peerFiles[peer] ?? "main.typ"}{/if}</span>
             </span>
             <span class="controls">
             {#if row.actions.roles.length > 0}

@@ -6,7 +6,7 @@
       "command": "mise run --skip-deps e2e:build && cd frontend && ../scripts/heavy.sh ./node_modules/.bin/playwright test files.spec.ts --output ../gates/L2/playwright-results",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 13.999952835962176,
+      "duration_seconds": 12.043179712956771,
       "log": "gates/L2/FM-OPEN-1-2-3.log"
     },
     {
@@ -14,7 +14,7 @@
       "command": "python3 scripts/check-no-file-query.py",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 0.021572794998064637,
+      "duration_seconds": 0.020921726943925023,
       "log": "gates/L2/no-file-query.log"
     },
     {
@@ -22,7 +22,7 @@
       "command": "./scripts/heavy.sh go test ./tools/archexec ./internal/sidecar ./internal/project && bash scripts/arch-exec-check.sh",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 10.650098997051828,
+      "duration_seconds": 31.29452444508206,
       "log": "gates/L2/L1-security-followups.log"
     },
     {
@@ -36,7 +36,7 @@
       "command": "mise run gate -- L1",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 1120.2014373629354,
+      "duration_seconds": 1223.5436227299506,
       "log": "gates/L2/L0-L1.log"
     }
   ],
@@ -52,18 +52,18 @@
     }
   },
   "sha256": {
-    "docs/objectif-en-cours.md": "3ee34c098e957249a36374e82ad5dce852254f34baf020880a98dfa12433a99e",
+    "docs/objectif-en-cours.md": "2f01444ae41ef0dce99f71568ba454a100b82b9a519746527d5ad7ecda52c89f",
     "docs/plans/2026-11-03-L2-implementation.md": "3e52973742b43a8ebaeedd52cd5e2f9fc6ab55ff1739d6c6ea12a0021c7dc7ed",
-    "gates/L0.json": "4d6a8309342cafd9b0a2b8d124dc9e50f1acf4f01d81604be5ecebddc4eb5bf3",
-    "gates/L1.json": "ef10a19df370d921665c045f95b4e6db4cd362729757792042af19fa9c375162",
-    "gates/L2/FM-OPEN-1-2-3.log": "8a835543955688a33b70bb398eeeb0dc3e3ffc12b0ba1a9fc87788ec53378748",
+    "gates/L0.json": "7de32e06dd55565ea8403bf16c190b6895d40e6fc12b1c52339d800869638830",
+    "gates/L1.json": "1528dfc363dcb73bd2b49e24d3b5fbe0bc9e330e87793addecf237ccf2d9aa2a",
+    "gates/L2/FM-OPEN-1-2-3.log": "624c8a9da5ad1aa109384f78929a3b3915f0272c136d7178dba7ca17270af748",
     "gates/L2/L0-L1.log": "f7a1207687ef1a2447457343fe6d72f0b4fb31ded81efda72b64e1dccd5f5f1e",
-    "gates/L2/L1-security-followups.log": "e390ca51fb2689b7f722f54c23545c4ef1e7561cc41753d28181f57654922128",
-    "gates/L2/base-guard.log": "4d6bf6524e2d6c13f1fc68b65c159f7e95fa78b4a6da2ee1f6f157a0011ee05d",
+    "gates/L2/L1-security-followups.log": "7ae8ec7279ba442de9110e042486803dab47da5b25aa5ba7d73ecc2139c60343",
+    "gates/L2/base-guard.log": "2329b11326ff3be785c4d76572017e0686fadbc421f0d52b32f413fd89aa4cb2",
     "gates/L2/no-file-query.log": "5ad7deb415e1dcb57ab3fc0e61433964a3f34f6035e4787f551681ae24a88c49",
     "gates/L2/playwright-results/.last-run.json": "91d1c43004802cd49950d78eb11c8fa7d05da8ffffe219a8b13b2f561bc00903",
-    "gates/L2/playwright-results/files-FM-OPEN-1-FM-OPEN-2--8846c-n-and-names-the-active-file-chromium/files-readonly-dark.png": "4e2f12d00bafe0f1f190b187843abc65fcac0a8e387a0dfb6daa47fb0fa2f17e",
-    "gates/L2/playwright-results/files-FM-OPEN-1-FM-OPEN-2--8846c-n-and-names-the-active-file-chromium/files-readonly-light.png": "a250aabccf5de1afd9f576afccf956186b3f7962d049b1fca50b397048d7e393"
+    "gates/L2/playwright-results/files-FM-OPEN-1-FM-OPEN-2--8846c-n-and-names-the-active-file-chromium/files-readonly-dark.png": "f0a8b95b2b54362e6db6506a8008baf75ce7d95095bcbd362352c6191512b5a8",
+    "gates/L2/playwright-results/files-FM-OPEN-1-FM-OPEN-2--8846c-n-and-names-the-active-file-chromium/files-readonly-light.png": "89803b7f8c7d628b3ebb67972e098318b6e3d21d378bf9b57d12721ab5f99f80"
   },
   "status": "pass",
   "deferrals": [
@@ -77,14 +77,14 @@
   "known_failures": [],
   "base_guard": {
     "ref": "main",
-    "base": "2a4f3c06934ac811168bed082c3e564b23298743",
+    "base": "12c3917599704437c140231582e54ea83f8a1f70",
     "source_sha256": "c306265111e4c8b0ad94a1867d797b7a20be7d814161b7b9dd6200ab7feb259c",
     "exit_code": 0,
     "status": "pass",
     "log": "gates/L2/base-guard.log"
   },
   "runner": {
-    "source": "base 2a4f3c06934ac811168bed082c3e564b23298743",
+    "source": "base 12c3917599704437c140231582e54ea83f8a1f70",
     "sha256": "99e00a0d51d35601e02b096e77ff41013fad14b082afea97fcba920cba71042e"
   },
   "guard_overrides": [
@@ -101,6 +101,11 @@
     {
       "id": "8df04b9301a401d51f6d06f2e36e9f89b875f0f59efc049644ea41982dfd062a",
       "reason": "PERF-MEM was deferred from L0 to L2, and L2 re-deferred it to G-0b because L2 delivered only G-0a (no multi-file corpus opening). Pointing L0 at the lot that actually owns it; the criterion stays deferred, never counted as a pass.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "052e1f994d2cd5baffa57aa34d7e2d93d705040a87478421e88c5387769cea36",
+      "reason": "UX-LUP-1 (new walkthrough test, frontend/e2e/ux/lup.spec.ts) exposes the known narrow-window defect S13, present on main and not caused by the L-maj upgrade. It is test.fixme until its own lot S13 (docs/objectif-en-cours.md, Lots suivants), whose gate turns it back into test. No existing test, threshold or timeout changes.",
       "decision": "docs/objectif-en-cours.md"
     }
   ],

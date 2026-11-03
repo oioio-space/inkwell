@@ -1,5 +1,11 @@
+<script module lang="ts">
+/** Where the caret was in each document, so coming back to a file goes on where it stopped. */
+const carets = new Map<string, number>();
+</script>
+
 <script lang="ts">
 import type { DocHandle } from "@automerge/automerge-repo";
+import { EditorView } from "@codemirror/view";
 import { untrack } from "svelte";
 import type { Lang } from "../editor/format";
 import { createEditor } from "../editor/setup";
@@ -29,6 +35,8 @@ let editor: ReturnType<typeof createEditor> | undefined;
 $effect(() => {
   const h = handle;
   const l = untrack(() => lang);
+  const start = untrack(() => at) ?? carets.get(h.url);
+  let mine: EditorView | undefined;
   editor = untrack(() =>
     createEditor(
       host,
@@ -39,8 +47,14 @@ $effect(() => {
       },
       {
         lang: l,
-        ...(at !== undefined ? { at } : {}),
-        onView: (view) => (session.view = view),
+        ...(start !== undefined ? { at: start } : {}),
+        onView: (view) => {
+          mine = view;
+          session.view = view;
+          if (start === undefined) return;
+          const head = view.state.selection.main.head;
+          view.dispatch({ effects: EditorView.scrollIntoView(head, { y: "center" }) });
+        },
         onState: (state) => (session.state = state),
         onUndoKey: () => workspace.undoWithKey(),
         onRefused: (chars) =>
@@ -55,6 +69,7 @@ $effect(() => {
     ),
   );
   return () => {
+    if (mine) carets.set(h.url, mine.state.selection.main.head);
     editor?.destroy();
     session.view = undefined;
     session.state = undefined;

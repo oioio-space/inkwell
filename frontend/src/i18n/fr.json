@@ -422,6 +422,7 @@
   "preview.zoomIn": "Agrandir",
   "preview.zoomOut": "Réduire",
   "preview.zoomFit": "Ajuster à la largeur",
+  "preview.zoomFitLabel": "{percent} %, ajuster à la largeur",
   "preview.jumpToCursor": "Aller à l'endroit du curseur",
   "preview.pages": "Pages du document",
   "preview.pageAlt": "Page {page} sur {count}",

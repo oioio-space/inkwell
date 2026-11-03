@@ -38,7 +38,7 @@ Règles :
 | AD-16 | Journaux, rapport de bug | fichier tournant local ; rapport = archive locale + page de ticket préremplie | **oui** (envoi) | ADR 0037 |
 | AD-17 | Mises à jour | manifeste signé ; `.deb`/`.rpm` : avertir seulement ; activée par défaut | **oui** | ADR 0038 |
 | AD-18 | Plates-formes | **six cibles** (N35) ; port d'enfermement par OS, capacité refusée tant qu'une porte manque ; Linux seul = alpha | non (N35 a tranché) | spec §9.11 |
-| AD-19 | Wails beta.34 | passer à v3.0.x stable par la procédure de l'ADR 0008 | non | lot dédié |
+| AD-19 | Wails v3.0.0 (depuis beta.34, lot L-maj) | finir la procédure de l'ADR 0008 : rejeu d'historique et comparaison PDF à outiller | non | ouvert |
 | AD-20 | LSP tinymist | remplacée par `AD-80` | non | spec §15.17 |
 | AD-21 | Réglages de l'appareil | `settings.json` en Go, versionné ; `INKWELL_*` pour les tests | non | ADR 0037 |
 | AD-22 | Étiquettes de test dans l'exécutable publié | porte AC-14 (`go version -m`) | non | job de publication |
@@ -645,6 +645,13 @@ tant qu'elles sont ouvertes, la spécification n'affirme pas sa fidélité compl
 - **Recommandation.** Lot dédié avant l'étape 6, procédure de l'ADR 0008 : lire le journal des
   changements (Streams, instance unique, mise à jour), e2e complets, `pkg:test`, puis épingler
   v3.0.x.
+- **Lot L-maj (2026-11-03) : en partie fait, AD-19 reste ouvert.** Épinglé en v3.0.0 stable
+  (la v3.1.0 n'a pas 7 jours ; reprise le 2026-11-08). Notes lues, aucun changement d'API utilisé
+  par nous, e2e complets et `pkg:test` (debian:13, ubuntu:24.04, fedora:44, amd64, paquets non
+  signés) verts. Manque le rejeu d'historique et la comparaison PDF de référence de l'ADR 0008 :
+  le dépôt n'a ni corpus d'historiques `.automerge` réels ni PDF de référence, ni tâche pour les
+  rejouer ; il faut les outiller. Détail dans
+  [la note L-maj](../plans/2026-11-03-L-maj-upgrades.md).
 
 ### AD-33 — Import et export DOCX, RTF, LaTeX
 

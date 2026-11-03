@@ -150,7 +150,10 @@ describe("Preview pane", () => {
     click(host.querySelector('button[aria-label="Réduire"]') as HTMLElement);
     click(host.querySelector('button[aria-label="Réduire"]') as HTMLElement);
     expect(Number.parseInt(percent() ?? "0", 10)).toBeLessThan(bigger);
-    click(host.querySelector('button[aria-label="Ajuster à la largeur"]') as HTMLElement);
+    const fitButton = host.querySelector('button[title="Ajuster à la largeur"]') as HTMLElement;
+    // WCAG 2.5.3 (label in name): the spoken name starts with the visible percentage.
+    expect(fitButton.getAttribute("aria-label")).toBe(`${percent()}, ajuster à la largeur`);
+    click(fitButton);
     expect(percent()).toBe(fit);
   });
 
