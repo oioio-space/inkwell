@@ -4,6 +4,11 @@
       "id": "f22057e36244ddd6ef648864ff0df369f85e2b26277fdddf52102c6426784b16",
       "reason": "Audit explicitly requires clear skips on kernels below the required ABI; only new IPC tests are capability-gated. Existing tests and thresholds are unchanged.",
       "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "n42-scope-2026-11-03",
+      "reason": "Scope correction decided by the user (N42 clarified), not a weakening; the guard reports no finding for it, this entry records the removal. Removed: tools/archexec dependency scan (go list -deps graph walk from L1; L2 audited.json deny/exception/via audits pinned to go.sum, raw-syscall, assembly, go:linkname and DLL-lookup heuristics; arch-exec -deps mode; dependencies*.go, audits.go, l2_contract_test.go and their testdata), the analyzer's transitive os/exec import rule and its Wails OpenURL/OpenFile/OpenFileManager/pkg/updater rules, app.RuntimeGuard, app.DisarmFrameworkLaunchers (D-Bus address pinning, WAILS_UPDATER_HELPER* clearing), the third_party/memory fork with its replace directive and internal/memorytest. Kept: own-code no-exec rule outside internal/sidecar, sandbox and all L1/L2 security checks.",
+      "decision": "docs/objectif-en-cours.md"
     }
   ]
 }

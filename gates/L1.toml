@@ -6,6 +6,7 @@ id = "architecture"
 command = "mise run arch"
 [[criteria]]
 id = "syscall-confinement"
+# Own code only since 2026-11-03 (N42 clarified): dependencies are not scanned.
 command = "./scripts/heavy.sh go test ./tools/archexec && ./scripts/arch-exec-check.sh && ./scripts/heavy.sh go test -race ./internal/sidecar"
 [[criteria]]
 id = "without-tools"

@@ -79,3 +79,66 @@ func TestXDGBaseDirectoriesRefused(t *testing.T) {
 		}
 	}
 }
+
+func TestProtectedDescendantsRefused(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	for _, name := range []string{".ssh", ".gnupg", ".config", filepath.Join(".local", "share"), filepath.Join(".local", "state")} {
+		dir := filepath.Join(home, name, "nested")
+		if err := os.MkdirAll(dir, 0o700); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := workingDirectory(dir); err == nil {
+			t.Fatalf("accepted protected descendant %s", dir)
+		}
+		alias := filepath.Join(t.TempDir(), "alias")
+		if err := os.Symlink(dir, alias); err == nil {
+			if _, err := workingDirectory(alias); err == nil {
+				t.Fatal("accepted protected symlink")
+			}
+		}
+	}
+	project := filepath.Join(home, "projects", "safe")
+	if err := os.MkdirAll(project, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := workingDirectory(project); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// Only secret directories refuse what is inside them: removable drives under
+// /run/media, Silverblue homes under /var/home and caches hold user folders.
+func TestBroadDirectoriesAllowDescendants(t *testing.T) {
+	home := filepath.Join(t.TempDir(), "u")
+	t.Setenv("HOME", home)
+	t.Setenv("USERPROFILE", home)
+	for _, key := range []string{"XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME", "XDG_RUNTIME_DIR", "INKWELL_HOME", "XDG_DATA_DIRS", "XDG_CONFIG_DIRS"} {
+		t.Setenv(key, "")
+	}
+	secret, broad, err := protectedDirs()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, tc := range []struct {
+		path   string
+		accept bool
+	}{
+		{"/run/media/u/x", true},
+		{"/var/home/u/proj", true},
+		{filepath.Join(home, ".cache", "inkwell", "proj"), true},
+		{filepath.Join(home, "Documents", "proj"), true},
+		{filepath.Join(home, ".ssh", "x"), false},
+		{filepath.Join(home, ".gnupg", "x"), false},
+		{filepath.Join(home, ".config", "x"), false},
+		{"/proc/self/cwd", false},
+		{"/run", false},
+		{"/var", false},
+		{home, false},
+	} {
+		if err := checkWorkdir(tc.path, secret, broad); (err == nil) != tc.accept {
+			t.Errorf("checkWorkdir(%q) = %v, want accepted %v", tc.path, err, tc.accept)
+		}
+	}
+}

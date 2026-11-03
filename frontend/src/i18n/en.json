@@ -1,4 +1,9 @@
 {
+  "file.readOnly": "In this version, this file is read-only",
+  "file.info": "No preview for this file type.",
+  "file.loading": "Loading…",
+  "file.unavailable": "This file cannot be opened.",
+  "file.gone": "{name} is no longer in the project: deleted or renamed outside Inkwell",
   "app.title": "Untitled",
   "status.alone": "On your own",
   "status.connecting": "Connecting…",

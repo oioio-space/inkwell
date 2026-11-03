@@ -348,6 +348,23 @@ func (p *Project) ReadText(rel string) (Text, error) {
 	if _, err := p.owned(rel); err != nil {
 		return Text{}, err
 	}
+	return p.readTextLocked(rel)
+}
+
+// ReadProjectText reads a listed local file without admitting it for shared writes.
+func (p *Project) ReadProjectText(rel string) (Text, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if err := ValidatePath(rel); err != nil {
+		return Text{}, err
+	}
+	if !listedPath(rel) {
+		return Text{}, fmt.Errorf("project: %s: %w", rel, fs.ErrNotExist)
+	}
+	return p.readTextLocked(rel)
+}
+
+func (p *Project) readTextLocked(rel string) (Text, error) {
 	if exists, err := p.regular(rel); err != nil {
 		return Text{}, err
 	} else if !exists {

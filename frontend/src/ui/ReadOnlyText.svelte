@@ -1,18 +1,20 @@
 <script lang="ts">
 import { untrack } from "svelte";
+import type { Lang } from "../editor/format";
 import { createReadOnlyEditor } from "../editor/setup";
 import { megabytesOf, t } from "../i18n";
 import Banner from "./Banner.svelte";
 import { session } from "./editorSession.svelte";
 
 /** A text too big for a document (ADR 0028): shown whole, read-only, in no Automerge document. */
-let { text }: { text: string } = $props();
+let { text, message, lang = "plain" }: { text: string; message?: string; lang?: Lang } = $props();
 let host: HTMLDivElement;
 
 $effect(() => {
   const shown = text;
   const editor = untrack(() =>
     createReadOnlyEditor(host, shown, {
+      lang,
       onView: (view) => (session.view = view),
       onState: (state) => (session.state = state),
     }),
@@ -27,7 +29,7 @@ $effect(() => {
 
 <div class="wrap">
   <Banner role="status">
-    <span data-testid="readonly">{t("limit.tooBig", { size: megabytesOf(text.length) })}</span>
+    <span data-testid="readonly">{message ?? t("limit.tooBig", { size: megabytesOf(text.length) })}</span>
   </Banner>
   <div class="page" bind:this={host}></div>
 </div>

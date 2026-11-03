@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 )
 
@@ -28,58 +29,116 @@ func workingDirectory(dir string) (string, error) {
 	if !info.IsDir() {
 		return "", errors.New("sidecar: project directory is not a directory")
 	}
-	home, err := os.UserHomeDir()
+	secret, broad, err := protectedDirs()
 	if err != nil {
 		return "", err
+	}
+	if err := checkWorkdir(path, secret, broad); err != nil {
+		return "", err
+	}
+	return path, nil
+}
+
+// protectedDirs returns two resolved lists. A project may never be inside a
+// secret directory: keys, the user's configuration, data and state, Inkwell's
+// identity, and the kernel's pseudo-filesystems. A project may sit inside a
+// broad directory but never contain one: home, caches, the runtime directory
+// and the system tree, whose /run/media holds removable drives and /var/home
+// the homes of image-based systems (Fedora Silverblue).
+func protectedDirs() (secret, broad []string, err error) {
+	home, err := os.UserHomeDir()
+	if err != nil {
+		return nil, nil, err
 	}
 	config, err := os.UserConfigDir()
 	if err != nil {
-		return "", err
+		return nil, nil, err
 	}
 	cache, err := os.UserCacheDir()
 	if err != nil {
-		return "", err
+		return nil, nil, err
 	}
-	protected := []string{home, config, cache, filepath.Join(home, ".local", "share"), filepath.Join(home, ".local", "state"), os.Getenv("XDG_DATA_HOME"), os.Getenv("XDG_STATE_HOME"), os.Getenv("XDG_RUNTIME_DIR"), "/etc", "/usr", "/var", "/proc", "/sys", "/dev", "/boot", "/run", os.Getenv("INKWELL_HOME"), os.Getenv("APPDATA"), os.Getenv("LOCALAPPDATA"), os.Getenv("XDG_CONFIG_HOME")}
-	if dirs := os.Getenv("XDG_DATA_DIRS"); dirs != "" {
-		protected = append(protected, filepath.SplitList(dirs)...)
+	secret = []string{
+		filepath.Join(home, ".ssh"), filepath.Join(home, ".gnupg"),
+		config, os.Getenv("XDG_CONFIG_HOME"), os.Getenv("APPDATA"),
+		filepath.Join(home, ".local", "share"), os.Getenv("XDG_DATA_HOME"),
+		filepath.Join(home, ".local", "state"), os.Getenv("XDG_STATE_HOME"),
+		os.Getenv("INKWELL_HOME"),
+		"/proc", "/sys", "/dev",
 	}
-	if dirs := os.Getenv("XDG_CONFIG_DIRS"); dirs != "" {
-		protected = append(protected, filepath.SplitList(dirs)...)
+	broad = []string{
+		home, cache, os.Getenv("XDG_RUNTIME_DIR"), os.Getenv("LOCALAPPDATA"),
+		"/etc", "/usr", "/var", "/boot", "/run",
 	}
-	if filepath.Dir(path) == path {
-		return "", errors.New("sidecar: root directory refused")
+	broad = append(broad, filepath.SplitList(os.Getenv("XDG_DATA_DIRS"))...)
+	broad = append(broad, filepath.SplitList(os.Getenv("XDG_CONFIG_DIRS"))...)
+	if secret, err = resolveAll(secret); err != nil {
+		return nil, nil, err
 	}
-	for _, sensitive := range protected {
-		if sensitive == "" {
+	if broad, err = resolveAll(broad); err != nil {
+		return nil, nil, err
+	}
+	return secret, broad, nil
+}
+
+// resolveAll makes each non-empty path absolute and resolves its symbolic links.
+func resolveAll(paths []string) ([]string, error) {
+	var out []string
+	for _, p := range paths {
+		if p == "" {
 			continue
 		}
-		sensitive, err = filepath.Abs(sensitive)
+		p, err := filepath.Abs(p)
 		if err != nil {
-			return "", err
+			return nil, err
 		}
-		// Resolve existing symlink prefixes even when the config directory is absent.
-		tail := ""
-		for {
-			resolved, resolveErr := filepath.EvalSymlinks(sensitive)
-			if resolveErr == nil {
-				sensitive = filepath.Join(resolved, tail)
-				break
-			}
-			if !os.IsNotExist(resolveErr) {
-				return "", resolveErr
-			}
-			parent := filepath.Dir(sensitive)
-			if parent == sensitive {
-				return "", resolveErr
-			}
-			tail = filepath.Join(filepath.Base(sensitive), tail)
-			sensitive = parent
+		if p, err = resolveProtected(p); err != nil {
+			return nil, err
 		}
-		rel, err := filepath.Rel(path, sensitive)
-		if err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && !filepath.IsAbs(rel) {
-			return "", fmt.Errorf("sidecar: directory contains home, system or XDG base directory")
+		out = append(out, p)
+	}
+	return out, nil
+}
+
+// checkWorkdir applies the policy of [protectedDirs] to the resolved path.
+func checkWorkdir(path string, secret, broad []string) error {
+	if filepath.Dir(path) == path {
+		return errors.New("sidecar: root directory refused")
+	}
+	for _, sensitive := range secret {
+		if within(sensitive, path) {
+			return fmt.Errorf("sidecar: directory %q is inside protected directory %q", path, sensitive)
 		}
 	}
-	return path, nil
+	for _, sensitive := range slices.Concat(secret, broad) {
+		if within(path, sensitive) {
+			return errors.New("sidecar: directory contains home, system or XDG base directory")
+		}
+	}
+	return nil
+}
+
+func within(base, path string) bool {
+	rel, err := filepath.Rel(base, path)
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator)) && !filepath.IsAbs(rel)
+}
+
+// Resolve existing prefixes even when the sensitive directory is absent.
+func resolveProtected(path string) (string, error) {
+	tail := ""
+	for {
+		resolved, err := filepath.EvalSymlinks(path)
+		if err == nil {
+			return filepath.Join(resolved, tail), nil
+		}
+		if !os.IsNotExist(err) {
+			return "", err
+		}
+		parent := filepath.Dir(path)
+		if parent == path {
+			return "", err
+		}
+		tail = filepath.Join(filepath.Base(path), tail)
+		path = parent
+	}
 }

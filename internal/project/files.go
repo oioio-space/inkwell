@@ -9,6 +9,7 @@ import (
 	"os"
 	"path"
 	"slices"
+	"strconv"
 	"strings"
 	"unicode/utf8"
 )
@@ -139,7 +140,7 @@ func (p *Project) listDir(dir *os.Root, prefix string, depth int, out *[]File) e
 	var files []File
 	for _, e := range entries {
 		name := e.Name()
-		if strings.HasPrefix(name, ".") || strings.HasSuffix(name, tmpSuffix) {
+		if !listedName(name) {
 			continue
 		}
 		rel := prefix + name
@@ -159,6 +160,54 @@ func (p *Project) listDir(dir *os.Root, prefix string, depth int, out *[]File) e
 	}
 	*out = append(*out, files...)
 	return nil
+}
+
+// listedName reports whether [Project.List] shows an entry (file or folder)
+// with this name: not Inkwell's, not hidden, not a temporary file.
+func listedName(name string) bool {
+	return !strings.HasPrefix(name, ".") && !strings.HasSuffix(name, tmpSuffix)
+}
+
+// listedPath reports whether [Project.List] can show the file rel (a
+// [ValidatePath] path): every component is listed and the folder depth is
+// within maxListDepth. The readers of the user's files accept no other path.
+func listedPath(rel string) bool {
+	depth := strings.Count(rel, "/")
+	if depth > maxListDepth {
+		return false
+	}
+	for part := range strings.SplitSeq(rel, "/") {
+		if !listedName(part) {
+			return false
+		}
+	}
+	return true
+}
+
+// Version identifies the content of the listed file rel without reading it:
+// its size and modification time. It changes when the file is edited outside
+// Inkwell, and fails with [fs.ErrNotExist] once the file is deleted or
+// renamed. The rules of the readers ([Project.ReadProjectText],
+// [Project.ReadImage]) apply: a valid, listed, regular file.
+func (p *Project) Version(rel string) (string, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if err := ValidatePath(rel); err != nil {
+		return "", err
+	}
+	if !listedPath(rel) {
+		return "", fmt.Errorf("project: %s: %w", rel, fs.ErrNotExist)
+	}
+	info, err := p.lstatPath(rel)
+	switch {
+	case err != nil:
+		return "", fmt.Errorf("project: %s: %w", rel, err)
+	case !info.Mode().IsRegular():
+		return "", fmt.Errorf("%w: %q", ErrNotRegular, rel)
+	case hardLinks(info) > 1:
+		return "", fmt.Errorf("%w: %q", ErrHardLink, rel)
+	}
+	return strconv.FormatInt(info.Size(), 10) + "-" + strconv.FormatInt(info.ModTime().UnixNano(), 10), nil
 }
 
 // listSub lists the folder name of dir.
@@ -256,4 +305,26 @@ func digitsEnd(s string, from int) int {
 		from++
 	}
 	return from
+}
+
+// ReadImage returns a bounded image projection. Access stays inside os.Root and
+// excludes symlinks and private application files just like ReadText.
+func (p *Project) ReadImage(rel string) ([]byte, error) {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if err := ValidatePath(rel); err != nil {
+		return nil, err
+	}
+	if extKinds[strings.ToLower(path.Ext(rel))] != KindImage {
+		return nil, errors.New("project: not an image")
+	}
+	if !listedPath(rel) {
+		return nil, fmt.Errorf("project: %s: %w", rel, fs.ErrNotExist)
+	}
+	if exists, err := p.regular(rel); err != nil {
+		return nil, err
+	} else if !exists {
+		return nil, fs.ErrNotExist
+	}
+	return readLimited(p.root, rel, 64<<20)
 }

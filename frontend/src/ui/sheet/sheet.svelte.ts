@@ -76,6 +76,8 @@ export interface Remote {
 
 export interface SheetOptions {
   readOnly?: boolean;
+  /** Why the sheet is read-only when it is not the person's role (a file this version only shows). */
+  readOnlyReason?: string;
   /** Record/column coordinates of a cell in a locked zone (ADR 0022). */
   isLocked?: (record: number, col: number) => boolean;
   /**
@@ -184,10 +186,10 @@ export class SheetController {
     this.tick;
     return this.opts.readOnly === true || this.doc.tooBig;
   }
-  /** Why the sheet cannot be edited: the file is too big, or the person may only read. */
+  /** Why the sheet cannot be edited: the file is too big, the given reason, or the person may only read. */
   get readOnlyText(): string {
     this.tick;
-    if (!this.doc.tooBig) return t("sheet.readOnly");
+    if (!this.doc.tooBig) return this.opts.readOnlyReason ?? t("sheet.readOnly");
     return t("limit.tooBig", { size: megabytesOf(this.model.text.length) });
   }
   /** Displayed data rows. */

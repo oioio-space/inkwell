@@ -289,7 +289,7 @@ run = "wails3 generate bindings -ts -i ./cmd/inkwell"
 description = "Frontend gate: Biome, svelte-check, Vitest"
 depends = ["fe:install", "fe:bindings"]
 dir = "frontend"
-run = "pnpm run check"
+run = "pnpm --config.verifyDepsBeforeRun=false run check"
 
 [tasks."fe:fmt"]
 description = "Format and fix the frontend with Biome"
@@ -309,11 +309,15 @@ run = "wails3 task build"
 description = "Build what the end-to-end tests run: frontend, bin/inkwell-server, bin/inkwell-relay, the Playwright browser"
 depends = ["fe:install", "fe:bindings", "sidecar:fetch"]
 run = """
-(cd frontend && VITE_E2E_OBSERVE=1 pnpm run build)
+(cd frontend && VITE_E2E_OBSERVE=1 pnpm --config.verifyDepsBeforeRun=false run build)
 go build -tags server -o bin/inkwell-server ./cmd/inkwell
 CGO_ENABLED=0 go build -o bin/inkwell-relay ./cmd/inkwell-relay
 cd frontend
-pnpm exec playwright install ${CI:+--with-deps} "${INKWELL_E2E_BROWSER:-$([ -n "${CI:-}" ] && echo webkit || echo chromium)}" >/dev/null
+browser="${INKWELL_E2E_BROWSER:-$([ -n "${CI:-}" ] && echo webkit || echo chromium)}"
+# Shared browser caches may be read-only: an installed engine needs no install lock.
+if ! node -e 'const fs = require("node:fs"); const pw = require("@playwright/test"); process.exit(fs.existsSync(pw[process.argv[1]].executablePath()) ? 0 : 1)' "$browser"; then
+  ./node_modules/.bin/playwright install ${CI:+--with-deps} "$browser" >/dev/null
+fi
 """
 
 [tasks."e2e"]
@@ -322,7 +326,7 @@ depends = ["e2e:build"]
 dir = "frontend"
 run = """
 browser="${INKWELL_E2E_BROWSER:-$([ -n "${CI:-}" ] && echo webkit || echo chromium)}"
-INKWELL_E2E_BROWSER="$browser" ../scripts/heavy.sh pnpm exec playwright test
+INKWELL_E2E_BROWSER="$browser" ../scripts/heavy.sh ./node_modules/.bin/playwright test
 """
 
 [tasks."e2e:webkit"]

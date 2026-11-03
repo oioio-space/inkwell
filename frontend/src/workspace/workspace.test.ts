@@ -1,5 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Session } from "../../bindings/github.com/oioio-space/inkwell/internal/app/index";
+import { FileKind } from "../store/files";
+import { notice } from "../ui/notice.svelte";
 import { statusOf, workspace } from "./workspace.svelte";
 
 // The Wails runtime dials its host on import; the status logic never needs it.
@@ -23,6 +25,63 @@ describe("names (UX-S7-3)", () => {
     expect(workspace.nameOf("paul")).toBe("Paul");
     expect(workspace.knownName("nobody")).toBeUndefined();
     expect(workspace.nameOf("nobody")).toBe("Personne nobo");
+  });
+});
+
+describe("openFile", () => {
+  it("refreshes the file info when going back to the main document", async () => {
+    const refresh = vi.spyOn(workspace, "refreshInfo").mockResolvedValue();
+    const fetch = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null));
+    workspace.files = [
+      { path: "main.typ", kind: FileKind.typst, size: 0, main: true },
+      { path: "notes.bin", kind: FileKind.other, size: 1, main: false },
+    ];
+    await workspace.openFile("notes.bin");
+    refresh.mockClear();
+    await workspace.openFile("main.typ");
+    expect(workspace.current).toBe("main.typ");
+    expect(refresh).toHaveBeenCalledTimes(1);
+    refresh.mockRestore();
+    fetch.mockRestore();
+    workspace.files = [];
+  });
+});
+
+describe("an open file changed outside Inkwell", () => {
+  it("reloads on a new version, and goes back to main.typ with a toast once gone", async () => {
+    vi.useFakeTimers();
+    const disk = { version: '"1"', text: "one", gone: false };
+    const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (_url, init) => {
+      if (disk.gone) return new Response(null, { status: 404 });
+      if (init?.method === "HEAD")
+        return new Response(null, { status: 200, headers: { ETag: disk.version } });
+      return new Response(disk.text, { status: 200 });
+    });
+    try {
+      workspace.files = [
+        { path: "main.typ", kind: FileKind.typst, size: 0, main: true },
+        { path: "notes.md", kind: FileKind.markdown, size: 3, main: false },
+      ];
+      await workspace.openFile("notes.md");
+      expect(workspace.opened?.text).toBe("one");
+      await vi.advanceTimersByTimeAsync(2500);
+      expect(workspace.opened?.text).toBe("one"); // same version: not read again
+      Object.assign(disk, { version: '"2"', text: "two" });
+      await vi.advanceTimersByTimeAsync(2500);
+      expect(workspace.opened?.text).toBe("two");
+      disk.gone = true;
+      await vi.advanceTimersByTimeAsync(2500);
+      expect(workspace.current).toBe("main.typ");
+      expect(notice.text).toContain("notes.md");
+      const calls = fetch.mock.calls.length;
+      await vi.advanceTimersByTimeAsync(5000);
+      expect(fetch.mock.calls.length).toBe(calls); // main.typ is not polled
+    } finally {
+      fetch.mockRestore();
+      notice.hide();
+      vi.useRealTimers();
+      workspace.files = [];
+    }
   });
 });
 

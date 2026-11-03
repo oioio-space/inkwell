@@ -115,6 +115,21 @@ describe("editing", () => {
     expect(text()).toBe("nom;qte;prix\nA;1;1,5\nB;2;2,5\nC;3;3,5\nD;40;4,5\n");
   });
 
+  it("says why it is read-only: the reader role by default, else the reason given", () => {
+    expect(open(BASE, { readOnly: true }).sheet.readOnlyText).toBe(
+      "Vous pouvez lire ce tableau mais pas le modifier.",
+    );
+    const projection = open(BASE, {
+      readOnly: true,
+      readOnlyReason: "Dans cette version, ce fichier s'affiche en lecture seule",
+    }).sheet;
+    expect(projection.readOnlyText).toBe(
+      "Dans cette version, ce fichier s'affiche en lecture seule",
+    );
+    projection.startEdit("x");
+    expect(projection.notice?.text).toBe(projection.readOnlyText);
+  });
+
   it("CSV-18 a reader cannot edit, but can copy, sort and filter locally", () => {
     const { sheet, text } = open(BASE, { readOnly: true });
     sheet.startEdit("x");

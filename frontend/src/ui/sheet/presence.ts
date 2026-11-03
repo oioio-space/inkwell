@@ -25,17 +25,24 @@ export function sheetPresence(
   stop: () => void;
 } {
   const presence = new Presence<CursorState, Doc>({ handle });
-  presence.start({ initialState: { name: me.name } });
+  presence.start({ initialState: { name: me.name, file: "main.typ" } });
 
   const refresh = () => {
     const states = Object.values(presence.getPeerStates().value);
-    onPeople(states.map((p) => ({ peerId: p.peerId, name: p.value.name })));
+    onPeople(
+      states.map((p) => ({
+        peerId: p.peerId,
+        name: p.value.name,
+        ...(p.value.file ? { file: p.value.file } : {}),
+      })),
+    );
     const doc = handle.doc();
     if (!doc) return;
     const m = sheet.model;
     const remotes: Remote[] = [];
     for (const peer of states) {
       const { name, anchor, head } = peer.value;
+      if (peer.value.file && peer.value.file !== "main.typ") continue;
       if (!anchor || !head) continue;
       try {
         const a = getCursorPosition(doc, PATH, anchor);

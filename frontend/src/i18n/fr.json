@@ -1,4 +1,9 @@
 {
+  "file.readOnly": "Dans cette version, ce fichier s'affiche en lecture seule",
+  "file.info": "Aucun aperçu pour ce type de fichier.",
+  "file.loading": "Chargement…",
+  "file.unavailable": "Ce fichier ne peut pas être ouvert.",
+  "file.gone": "{name} n'est plus dans le projet : supprimé ou renommé en dehors d'Inkwell",
   "app.title": "Sans titre",
   "status.alone": "Seul",
   "status.connecting": "Connexion…",

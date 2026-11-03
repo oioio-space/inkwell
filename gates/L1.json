@@ -6,7 +6,7 @@
       "command": "mise run arch",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 7.332030156976543,
+      "duration_seconds": 3.4922237129649147,
       "log": "gates/L1/architecture.log"
     },
     {
@@ -14,7 +14,7 @@
       "command": "./scripts/heavy.sh go test ./tools/archexec && ./scripts/arch-exec-check.sh && ./scripts/heavy.sh go test -race ./internal/sidecar",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 113.99401192495134,
+      "duration_seconds": 802.6797570970375,
       "log": "gates/L1/syscall-confinement.log"
     },
     {
@@ -22,15 +22,15 @@
       "command": "./scripts/heavy.sh bash scripts/sidecar-no-tools.sh",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 107.27835736703128,
+      "duration_seconds": 86.4454696259927,
       "log": "gates/L1/without-tools.log"
     },
     {
       "id": "anti-weakening",
-      "command": "python3 scripts/gate-guard.py --self-test && python3 scripts/gate.py --base-guard",
+      "command": "python3 scripts/gate-guard.py --self-test && python3 scripts/gate-guard.py",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 0.20861868700012565,
+      "duration_seconds": 0.2538524119881913,
       "log": "gates/L1/anti-weakening.log"
     },
     {
@@ -38,7 +38,7 @@
       "command": "mise run gate -- L0",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 1017.9249217800098,
+      "duration_seconds": 996.8715506390436,
       "log": "gates/L1/L0.log"
     },
     {
@@ -68,16 +68,15 @@
     }
   },
   "sha256": {
-    "docs/objectif-en-cours.md": "cd22058415823ae2b7d855781b645f2baa3c79a64d8b0fb7e343fd4ff54a6f62",
-    "docs/plans/2026-11-02-L1-implementation.md": "8a26ba28cea440bcd19929a885ded0f2c391a5259f74ae008ab497b2d5721ea9",
-    "gates/L0.json": "b076791ddf5e8fbbb4fd054675d4caded570c48a576d2d389db85876d7d85762",
-    "gates/L1/L0.log": "2b0da7f547f69b8e8b603a745e19d4e6bc6be6df9920cb8cc7c67bdb27d738b7",
+    "docs/objectif-en-cours.md": "57b0922e1fe33a9c43db3ace2f7d1c46d49db62afbd62a0af6cdbc9040fe295e",
+    "docs/plans/2026-11-02-L1-implementation.md": "6f21f8178ed76cddef99512c8d6139c268d3258dbb8ab2bbe34971005f2d845b",
+    "gates/L0.json": "a0ad63ff34926ca5462ee05dd2804bfdd5b6c042469092c372b181855ed11f1b",
+    "gates/L1/L0.log": "e0149958c6a9bb143d1022d39b2a5c164f12d0f215469d9143f3f9171ae9f874",
     "gates/L1/anti-weakening.log": "6a0f4c423a00ef40a28efe4611a1f8558dacd1b49d8abd06bfa43fe4ddf54329",
     "gates/L1/architecture.log": "d5279db7270e45e6e09608c189240a60867492858fba89f802a85f3029c5e59b",
-    "gates/L1/base-guard.log": "4d6bf6524e2d6c13f1fc68b65c159f7e95fa78b4a6da2ee1f6f157a0011ee05d",
-    "gates/L1/syscall-confinement.log": "b283e2232b273cbc1e78d64837a46615df279a8113f40e7395dafc967108775b",
-    "gates/L1/without-tools.log": "295afb09229357621631e3595f5a7427d18d2bccc1f68154076f8aa8e0b7fe08",
-    "gates/guard-overrides.json": "d60aecb316d4f917ceee0e2b0ebdb261a79a6e852bd9445094e52d401875f801"
+    "gates/L1/syscall-confinement.log": "f085a2d6164f3239a972a665864efe28e68e7a2b75f0f488bdb441fe365e81f2",
+    "gates/L1/without-tools.log": "b2870b864b802146c08017a8530ad71c66131e73566303b48f036fa23640e46b",
+    "gates/guard-overrides.json": "5ad68b80ee10b90ac02b47344b095704fcf1992ab62ca792ec3b1be9c2cdf864"
   },
   "status": "pass",
   "deferrals": [
@@ -100,24 +99,5 @@
     "macOS: preview, query and export refused (including personal documents), confinement unproven; target: Six plates-formes (N35)",
     "Windows: preview, query and export refused (including personal documents), confinement unproven; target: Six plates-formes (N35)",
     "Sandbox re-execs the cgo GUI binary instead of static inkwell-sandbox (spec 9.5/9.10); target lot: Fondations extensibles (plugin host needs the same static launcher)"
-  ],
-  "base_guard": {
-    "ref": "main",
-    "base": "b3c83eef87bac362d8276394efc6bdcc30cdd064",
-    "source_sha256": "77c0526c4fc771f2d86b0ba417d88550c3ae382898f873fb6a75c3e47078d5eb",
-    "exit_code": 0,
-    "status": "pass",
-    "log": "gates/L1/base-guard.log"
-  },
-  "runner": {
-    "source": "working-tree (bootstrap: no runner protocol at b3c83eef87bac362d8276394efc6bdcc30cdd064)",
-    "sha256": "99e00a0d51d35601e02b096e77ff41013fad14b082afea97fcba920cba71042e"
-  },
-  "guard_overrides": [
-    {
-      "id": "f22057e36244ddd6ef648864ff0df369f85e2b26277fdddf52102c6426784b16",
-      "reason": "Audit explicitly requires clear skips on kernels below the required ABI; only new IPC tests are capability-gated. Existing tests and thresholds are unchanged.",
-      "decision": "docs/objectif-en-cours.md"
-    }
   ]
 }

@@ -28,6 +28,8 @@ let {
   editorState,
   info,
   showPage = false,
+  ofMain = true,
+  hasText = true,
   onProblem = () => {},
   unsaved = false,
 }: {
@@ -39,6 +41,10 @@ let {
   info: FileInfo | undefined;
   /** Says "Page X sur Y": true while the preview is shown. */
   showPage?: boolean;
+  /** The open file is main.typ: only then do its problems and pages apply. */
+  ofMain?: boolean;
+  /** The open file shows text: a picture or an info card has no caret, words or language. */
+  hasText?: boolean;
   /** The person chose a problem in the list: go to its place. */
   onProblem?: (d: Diagnostic) => void;
   /** The text is not in the file yet (saving with Ctrl+S, or a write that failed). */
@@ -80,7 +86,7 @@ $effect(() => {
     {peerCount === 0 ? t("status.alone") : tn("people.count", peerCount + 1)}
   </span>
   <span class="sp"></span>
-  {#if preview.hasResult}
+  {#if ofMain && preview.hasResult}
     <MenuButton
       bind:open={problemsOpen}
       up
@@ -128,7 +134,7 @@ $effect(() => {
       {/snippet}
     </MenuButton>
   {/if}
-  {#if showPage && preview.pageCount > 0}
+  {#if ofMain && showPage && preview.pageCount > 0}
     <span class="fb page" data-testid="page-indicator">
       {t("status.page", { page: Math.max(1, preview.currentPage), total: preview.pageCount })}
     </span>
@@ -136,18 +142,20 @@ $effect(() => {
   {#if unsaved}
     <span class="fb unsaved" data-testid="unsaved" title={t("save.unsaved.hint")}>{t("save.unsaved")}</span>
   {/if}
-  <span class="fb pos" data-testid="position">{t("status.position", { line: position.line, column: position.column })}</span>
-  <MenuButton bind:open={statsOpen} role="dialog" up align="end" label={t("stats.title")}>
-    {#snippet trigger()}<span data-testid="words">{words}</span>{/snippet}
-    {#snippet children()}
-      {#if computed}
-        <StatsPopover stats={computed} />
-      {/if}
-    {/snippet}
-  </MenuButton>
+  {#if hasText}
+    <span class="fb pos" data-testid="position">{t("status.position", { line: position.line, column: position.column })}</span>
+    <MenuButton bind:open={statsOpen} role="dialog" up align="end" label={t("stats.title")}>
+      {#snippet trigger()}<span data-testid="words">{words}</span>{/snippet}
+      {#snippet children()}
+        {#if computed}
+          <StatsPopover stats={computed} />
+        {/if}
+      {/snippet}
+    </MenuButton>
+  {/if}
   <ZoomMenu />
   <EncodingMenu {info} />
-  <span class="fb lang" data-testid="language">{language}</span>
+  {#if hasText}<span class="fb lang" data-testid="language">{language}</span>{/if}
 </footer>
 
 <style>

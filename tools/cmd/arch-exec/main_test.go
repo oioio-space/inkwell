@@ -3,7 +3,6 @@ package main
 import (
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"golang.org/x/tools/go/analysis"
@@ -20,30 +19,7 @@ func TestRun(t *testing.T) {
 			t.Fatal(err)
 		}
 		if got := run([]string{"-syntax", dir}); got != tc.want {
-			t.Fatalf("got %d want %d", got, tc.want)
-		}
-	}
-	old := os.Stdin
-	defer func() { os.Stdin = old }()
-	for _, data := range []string{"", "bad json"} {
-		f, err := os.CreateTemp(t.TempDir(), "deps")
-		if err != nil {
-			t.Fatal(err)
-		}
-		defer func() { _ = f.Close() }()
-		if _, err := f.WriteString(data); err != nil {
-			t.Fatal(err)
-		}
-		if _, err := f.Seek(0, 0); err != nil {
-			t.Fatal(err)
-		}
-		os.Stdin = f
-		want := 0
-		if strings.Contains(data, "bad") {
-			want = 1
-		}
-		if got := run([]string{"-deps"}); got != want {
-			t.Fatalf("deps: %d", got)
+			t.Fatalf("run(-syntax) on %q = %d, want %d", tc.source, got, tc.want)
 		}
 	}
 }

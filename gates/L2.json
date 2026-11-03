@@ -1,0 +1,121 @@
+{
+  "lot": "L2",
+  "criteria": [
+    {
+      "id": "FM-OPEN-1-2-3",
+      "command": "mise run --skip-deps e2e:build && cd frontend && ../scripts/heavy.sh ./node_modules/.bin/playwright test files.spec.ts --output ../gates/L2/playwright-results",
+      "status": "pass",
+      "exit_code": 0,
+      "duration_seconds": 218.83954507100862,
+      "log": "gates/L2/FM-OPEN-1-2-3.log"
+    },
+    {
+      "id": "no-file-query",
+      "command": "python3 scripts/check-no-file-query.py",
+      "status": "pass",
+      "exit_code": 0,
+      "duration_seconds": 0.02290328999515623,
+      "log": "gates/L2/no-file-query.log"
+    },
+    {
+      "id": "L1-security-followups",
+      "command": "./scripts/heavy.sh go test ./tools/archexec ./internal/sidecar ./internal/project && bash scripts/arch-exec-check.sh",
+      "status": "pass",
+      "exit_code": 0,
+      "duration_seconds": 20.646915344987065,
+      "log": "gates/L2/L1-security-followups.log"
+    },
+    {
+      "id": "PERF-TYPE-native",
+      "status": "deferred",
+      "target_lot": "L3",
+      "reason": "Native desktop build succeeds; WebKitGTK cannot create its sandbox runtime sockets under the managed filesystem. A writable XDG_RUNTIME_DIR/X11 retry creates a native window with a blank WebView; no measurable editor is established. No native cold/warm paint samples exist; L3 needs a native runner with working WebKit sandbox and compositor/input instrumentation. See gates/L2/native-launch*.log and PERF-TYPE.json."
+    },
+    {
+      "id": "L0-L1",
+      "command": "mise run gate -- L1",
+      "status": "pass",
+      "exit_code": 0,
+      "duration_seconds": 1889.8350768210366,
+      "log": "gates/L2/L0-L1.log"
+    }
+  ],
+  "versions": {
+    "go": "go version go1.27.3 linux/amd64",
+    "node": "v24.22.1",
+    "typst": "unavailable: /bin/sh: ligne 1: typst: commande introuvable",
+    "tinymist": "unavailable: /bin/sh: ligne 1: tinymist: commande introuvable",
+    "os": "Linux-7.2.11-200.fc44.x86_64-x86_64-with-glibc2.43",
+    "embedded_sidecars": {
+      "typst": "0.15.1",
+      "tinymist": "0.15.10"
+    }
+  },
+  "sha256": {
+    "docs/objectif-en-cours.md": "57b0922e1fe33a9c43db3ace2f7d1c46d49db62afbd62a0af6cdbc9040fe295e",
+    "docs/plans/2026-11-03-L2-implementation.md": "3e52973742b43a8ebaeedd52cd5e2f9fc6ab55ff1739d6c6ea12a0021c7dc7ed",
+    "gates/L0.json": "a0ad63ff34926ca5462ee05dd2804bfdd5b6c042469092c372b181855ed11f1b",
+    "gates/L1.json": "61ca8b91bc957cab3431cb86779f4a90e720f1ef1f8f908d7f64cf99ea3fab04",
+    "gates/L2/FM-OPEN-1-2-3.log": "999efd67cef86c6f759b4c729b1689af063a176dfc3738e309d5d405bdb1f533",
+    "gates/L2/L0-L1.log": "fd533645a7c6ee55578437bf255d687e408b4c44471b08106681fe63c985ad44",
+    "gates/L2/L1-security-followups.log": "8ddd74d29fe198683d705b6eed03c7beb0d7e18754293af9da2e3bd42147284c",
+    "gates/L2/PERF-TYPE.json": "084ac9c85e8fe28c3a17c66d50440ea9fbdb25e51437bbbfb8b90dc9a6145495",
+    "gates/L2/README.md": "cace6de42a794b65d37a9cdbc911144da1740616be5788f89060a8a5ab8911b4",
+    "gates/L2/fe-check.log": "c9392fe4c05ca1d66f76ddaaf23a3d0229f8065b24a58ce9d93183a393d161dc",
+    "gates/L2/lint.log": "1af53ca304df1865da50da1815b2c965dd1b0b643ae6656b4a7366f2438f3226",
+    "gates/L2/native-attempt.log": "d997516bdcc9f9f7b9e36aeccdbfafaec92d3253c22018fcca45b1a10330a923",
+    "gates/L2/native-build.log": "23af499cf823d34afb949e43b8c8f947a262befff9457928226ed9fdef0ca6c3",
+    "gates/L2/native-launch-writable-runtime.log": "8298b5f9e2dc764025db21d2ffaf6f8f7d712f2d448008411fc8963fb5280448",
+    "gates/L2/native-launch.log": "eccf7f7dd4a1ac572583dee423f94fc9cd669d5679c9d4859cdeaccfc19c5dea",
+    "gates/L2/native-probe.log": "08160f1072373dc1734c48bf1b098d840da8c93a48a782a8bb00faad7a9fc750",
+    "gates/L2/native-window-probe.log": "b5ec0f4b9186d716e9f81dbb9f21bd9b1846cac28a10f3469de881a79f23e478",
+    "gates/L2/native-window.png": "653cee26034cd60e784199e1c64a1536ce96103746ff087920b168b79bf32743",
+    "gates/L2/no-file-query.log": "5ad7deb415e1dcb57ab3fc0e61433964a3f34f6035e4787f551681ae24a88c49",
+    "gates/L2/playwright-results/.last-run.json": "91d1c43004802cd49950d78eb11c8fa7d05da8ffffe219a8b13b2f561bc00903",
+    "gates/L2/playwright-results/files-FM-OPEN-1-FM-OPEN-2--8846c-n-and-names-the-active-file-chromium/files-readonly-dark.png": "4e2f12d00bafe0f1f190b187843abc65fcac0a8e387a0dfb6daa47fb0fa2f17e",
+    "gates/L2/playwright-results/files-FM-OPEN-1-FM-OPEN-2--8846c-n-and-names-the-active-file-chromium/files-readonly-light.png": "a250aabccf5de1afd9f576afccf956186b3f7962d049b1fca50b397048d7e393",
+    "gates/L2/test.log": "f5f5290fe72d0560d6bfb95c8c0184dd11439ca31ad190adb2bc00da40ab1bf3"
+  },
+  "status": "pass",
+  "deferrals": [
+    {
+      "id": "PERF-TYPE-native",
+      "status": "deferred",
+      "target_lot": "L3",
+      "reason": "Native desktop build succeeds; WebKitGTK cannot create its sandbox runtime sockets under the managed filesystem. A writable XDG_RUNTIME_DIR/X11 retry creates a native window with a blank WebView; no measurable editor is established. No native cold/warm paint samples exist; L3 needs a native runner with working WebKit sandbox and compositor/input instrumentation. See gates/L2/native-launch*.log and PERF-TYPE.json."
+    }
+  ],
+  "known_failures": [],
+  "measurements": [
+    {
+      "id": "PERF-TYPE-native",
+      "status": "deferred",
+      "target_lot": "L3",
+      "engine": "native Wails WebKitGTK 6.0, installed WebKitGTK 2.54.1",
+      "cold": {
+        "samples_ms": [],
+        "p95_ms": null
+      },
+      "warm": {
+        "samples_ms": [],
+        "p95_ms": null
+      },
+      "threshold": {
+        "multiplier": 1.1,
+        "formula": "native reference p95_ms * 1.10",
+        "limit_p95_ms": null
+      },
+      "reason": "Desktop build succeeds. Default launch cannot create WebKit sandbox sockets under the managed filesystem. Retrying with a writable private XDG_RUNTIME_DIR and X11 software rendering creates a native window but its WebView remains blank (native-window.png); no usable editor or native paint oracle was established. No Chromium proxy values are substituted.",
+      "required_runner": "L3: working native WebKitGTK sandbox/compositor, editor readiness, OS input injection, validated glyph-paint oracle; measure cold and warm separately and derive numeric thresholds from native p95 only",
+      "evidence": [
+        "native-build.log",
+        "native-launch.log",
+        "native-launch-writable-runtime.log",
+        "native-probe.log",
+        "native-window.png",
+        "native-window-probe.log"
+      ],
+      "immutable_baseline_modified": false
+    }
+  ]
+}

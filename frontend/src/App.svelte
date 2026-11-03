@@ -1,11 +1,14 @@
 <script lang="ts">
+import { Presence } from "@automerge/automerge-repo";
 import { Stream } from "@wailsio/runtime";
-import { onMount } from "svelte";
+import { onMount, tick } from "svelte";
 import { Session } from "../bindings/github.com/oioio-space/inkwell/internal/app/index";
 import { looksTabular } from "./editor/csv/dialect";
 import { markExternal } from "./editor/external";
 import { langOf } from "./editor/format";
+import type { CursorState } from "./editor/presence";
 import { t } from "./i18n";
+import { validFilePath } from "./net/admission";
 import type { SocketLike } from "./net/WailsNetworkAdapter";
 import PresentBanner from "./present/PresentBanner.svelte";
 import PresentHost from "./present/PresentHost.svelte";
@@ -55,7 +58,7 @@ const tabular = $derived(sheetView.tabular(workspace.current));
 const offerTable = $derived(
   !tabular &&
     /\.txt$/i.test(workspace.current) &&
-    looksTabular(workspace.handle?.doc()?.text ?? ""),
+    looksTabular(workspace.opened?.text ?? workspace.handle?.doc()?.text ?? ""),
 );
 const showSheet = $derived(showsSheet(workspace.current));
 
@@ -65,12 +68,13 @@ function showTable() {
 }
 /** Only Typst and Markdown have a formatting bar; csv, bib and txt are just the editor. */
 const barLanguage = $derived(barLang(workspace.current));
-const hasBar = $derived(barLanguage !== undefined);
+const mainFile = $derived(workspace.current === "main.typ");
+const hasBar = $derived(mainFile && barLanguage !== undefined);
 const barVisible = $derived(hasBar && !workspace.big && settings.toolbarVisible(workspace.project));
 const sidebarOpen = $derived(settings.sidebarVisible(workspace.project));
 const previewOpen = $derived(settings.previewVisible(workspace.project));
 /** Only a Typst document is presented: its pages are the slides. */
-const canPresent = $derived(lang === "typst");
+const canPresent = $derived(mainFile && lang === "typst");
 /** The presentation takes the preview's place: it is the one that asks Go for pages. */
 const presenting = $derived(presentSession.current !== undefined);
 
@@ -100,7 +104,8 @@ function togglePreview() {
 
 /** Not in the file yet: shown when saving with Ctrl+S, or when a write failed or has no file to go to. */
 const unsaved = $derived(
-  workspace.dirty &&
+  mainFile &&
+    workspace.dirty &&
     (settings.saveMode === "manual" ||
       workspace.projectionFailed ||
       workspace.notice?.kind === "deleted"),
@@ -122,6 +127,31 @@ $effect(() => {
   const marks = workspace.marks;
   const view = session.view;
   if (view) markExternal(view, marks?.spans ?? null);
+});
+
+// Projection views announce the active file without publishing main-document cursors. A file
+// name peers would refuse (List does not validate names: NFD, a backslash, hidden characters) is
+// not announced at all, rather than letting peers place this person on main.typ.
+$effect(() => {
+  const handle = workspace.handle;
+  const file = workspace.current;
+  const name = workspace.myName;
+  if (!handle || file === "main.typ" || !validFilePath(file)) return;
+  const presence = new Presence<CursorState, import("./workspace/workspace.svelte").Doc>({
+    handle,
+  });
+  presence.start({ initialState: { name, file } });
+  const refresh = () =>
+    workspace.hearNames(
+      Object.values(presence.getPeerStates().value).map((p) => ({
+        peerId: p.peerId,
+        name: p.value.name,
+        ...(p.value.file ? { file: p.value.file } : {}),
+      })),
+    );
+  for (const event of ["update", "snapshot", "goodbye", "pruning"] as const)
+    presence.on(event, refresh);
+  return () => presence.stop();
 });
 
 function onKey(e: KeyboardEvent) {
@@ -172,6 +202,10 @@ $effect(() => {
 });
 
 onMount(() => {
+  if (import.meta.env.VITE_E2E_OBSERVE === "1") {
+    (globalThis as typeof globalThis & { __inkwellTestTable?: () => void }).__inkwellTestTable =
+      () => sheetView.openAsTable("main.typ");
+  }
   preview.start(() => Stream("preview") as unknown as SocketLike);
   void workspace.start().then(refresh);
   // The About dialog just stays without a version if Go does not answer.
@@ -194,7 +228,7 @@ onMount(() => {
 <!-- A presentation covers the window: what is under it neither takes keys nor focus. -->
 <div class="window" inert={presenting}>
   {#if sidebarOpen}
-    <Sidebar files={workspace.files} current={workspace.current} onOpen={() => session.focus()} />
+    <Sidebar files={workspace.files} current={workspace.current} onOpen={(path, keepFocus) => { sheetView.toGrid(undefined); void workspace.openFile(path).then(() => tick()).then(() => { if (keepFocus) return; if (session.view) session.focus(); else document.querySelector<HTMLElement>(".file-view, [role=grid]")?.focus(); }); }} />
   {/if}
   <div class="column">
     <HeaderBar
@@ -260,8 +294,22 @@ onMount(() => {
     <PresentBanner />
     <HistoryBars />
     <main>
-      <div class="pane side-source">
-        {#if workspace.big}
+      <div class="pane side-source" class:projection={!mainFile}>
+        {#if !mainFile}
+          {#key workspace.current}
+            {#if workspace.opened?.text !== undefined}
+              {#if showSheet}
+                <Sheet big={{ text: workspace.opened.text }} {me} path={workspace.current} readOnly readOnlyReason={t("file.readOnly")} onshowtext={(offset) => sheetView.toText(offset)} />
+              {:else}
+                <ReadOnlyText text={workspace.opened.text} message={t("file.readOnly")} {lang} />
+              {/if}
+            {:else if workspace.opened?.image}
+              <div class="file-view" tabindex="-1"><img src={workspace.opened.image} alt={workspace.current} /></div>
+            {:else}
+              <div class="file-view" tabindex="-1" role="status"><h2>{workspace.current}</h2><p>{t(workspace.opened?.failed ? "file.unavailable" : workspace.opened ? "file.info" : "file.loading")}</p></div>
+            {/if}
+          {/key}
+        {:else if workspace.big}
           {#key workspace.big}
             {#if showSheet}
               <Sheet
@@ -292,7 +340,7 @@ onMount(() => {
           {/key}
         {/if}
       </div>
-      {#if previewOpen && !showSheet && !presenting && !workspace.big}
+      {#if mainFile && previewOpen && !showSheet && !presenting && !workspace.big}
         <div class="pane side-preview">
           <Preview onSourceJump={jumpFromPage} onCursorJump={jumpFromCursor} />
         </div>
@@ -306,6 +354,8 @@ onMount(() => {
         editorState={session.state}
         info={workspace.fileInfo}
         showPage={previewOpen}
+        ofMain={mainFile}
+        hasText={mainFile || workspace.opened?.text !== undefined}
         onProblem={jumpToProblem}
         {unsaved}
       />
@@ -322,6 +372,9 @@ onMount(() => {
 <ExternalChangeToast />
 
 <style>
+ .projection { display: flex; flex-direction: column; }
+ .file-view { flex: 1; min-height: 0; overflow: auto; padding: 24px; color: var(--fg-dim); background: var(--view-bg); }
+ .file-view img { max-width: 100%; max-height: 100%; object-fit: contain; }
   .window {
     display: flex;
     height: 100vh;

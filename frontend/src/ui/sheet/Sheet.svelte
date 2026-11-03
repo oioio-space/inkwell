@@ -34,6 +34,7 @@ let {
   me,
   path,
   readOnly = false,
+  readOnlyReason,
   isLocked,
   startOffset,
   onshowtext,
@@ -45,6 +46,8 @@ let {
   me: { id: string; name: string };
   path: string;
   readOnly?: boolean;
+  /** Shown instead of the reader-role wording when the sheet is read-only for another reason. */
+  readOnlyReason?: string | undefined;
   isLocked?: SheetOptions["isLocked"];
   /** Where the text view had its caret, to open on the matching cell. */
   startOffset?: number | undefined;
@@ -121,6 +124,7 @@ $effect(() => {
         const sheetDoc = new SheetDoc(port, model, hint);
         const made = new SheetController(sheetDoc, {
           readOnly: readOnly || b !== undefined,
+          ...(readOnlyReason ? { readOnlyReason } : {}),
           onUndoKey: () => workspace.undoWithKey(),
           onDialect: (d) => rememberDelimiter(workspace.project, p, d.delimiter),
           ...(isLocked ? { isLocked } : {}),

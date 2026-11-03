@@ -1,11 +1,11 @@
 import { mkdtempSync, readdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import AxeBuilder from "@axe-core/playwright";
 import type { Page } from "@playwright/test";
 import { docsRoot, mainTypIn, readDisk } from "./disk";
 import { expect, test } from "./fixtures";
-import { clear, open, pair } from "./helpers";
+import { clear, editor, open, pair } from "./helpers";
 import { startInstance, stopInstance } from "./instance";
 import { ALICE_PORT, ALICE_URL, BOB_URL, SPARE_PORT, SPARE_URL } from "./ports";
 import {
@@ -1041,20 +1041,33 @@ test.describe("two people on one sheet (SHEET-MU)", () => {
   test("CSV-DIALECT a .csv that is really tab-separated says so, offers the choice, and remembers it", async ({
     browser,
   }) => {
-    const page = await openSheet(browser, ALICE_URL);
-    await setText(page, "nom\tqte\nA\t1\nB\t2\nC\t3\n");
-    await page.reload();
-    await expect(grid(page)).toBeVisible();
-    await expect(page.getByTestId("detected")).toHaveText(
-      /Séparateur détecté : tabulation \(l'extension indique virgule\)/,
-    );
-    await expect(cell(page, 0, 1)).toHaveText("1");
-    await page.getByRole("button", { name: "Séparer par tabulation" }).click();
-    await expect(page.getByTestId("detected")).toBeHidden();
-    await page.reload();
-    await expect(grid(page)).toBeVisible();
-    await expect(page.getByTestId("detected")).toBeHidden();
-    await expect(page.getByTestId("dialect")).toContainText("Tabulation");
+    // The file is a real one of the project, opened from the sidebar (the page cannot name a file).
+    const page = await open(browser, ALICE_URL);
+    await editor(page).fill("= Main\n");
+    await page.keyboard.press("ControlOrMeta+s");
+    await expect.poll(() => mainTypIn(join(docsRoot, String(ALICE_PORT)))).toBeTruthy();
+    const file = join(dirname(mainTypIn(join(docsRoot, String(ALICE_PORT)))), "tabs.csv");
+    const openFile = async () => {
+      await page.locator('[data-path="tabs.csv"]').click();
+      await expect(grid(page)).toBeVisible();
+    };
+    try {
+      writeFileSync(file, "nom\tqte\nA\t1\nB\t2\nC\t3\n");
+      await openFile();
+      await expect(page.getByTestId("detected")).toHaveText(
+        /Séparateur détecté : tabulation \(l'extension indique virgule\)/,
+      );
+      await expect(cell(page, 0, 1)).toHaveText("1");
+      await page.getByRole("button", { name: "Séparer par tabulation" }).click();
+      await expect(page.getByTestId("detected")).toBeHidden();
+      await page.reload();
+      await openFile();
+      await expect(page.getByTestId("detected")).toBeHidden();
+      await expect(page.getByTestId("dialect")).toContainText("Tabulation");
+    } finally {
+      rmSync(file, { force: true });
+      await page.context().close();
+    }
   });
 
   test("CSV-14 a file edited outside Inkwell is merged, its cells highlighted; Ctrl+Z takes it back", async ({

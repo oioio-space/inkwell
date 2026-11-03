@@ -29,7 +29,11 @@ const modeEnv = "INKWELL_SIDECAR_TEST_MODE"
 var sharedCache string
 
 func TestMain(m *testing.M) {
-	if mode := os.Getenv(modeEnv); mode != "" {
+	mode := os.Getenv(modeEnv)
+	if len(os.Args) > 1 && strings.HasPrefix(os.Args[1], "--sidecar-test=") {
+		mode = strings.TrimPrefix(os.Args[1], "--sidecar-test=")
+	}
+	if mode != "" {
 		if os.Getenv("INKWELL_REPORT_HOST_PID") == "1" {
 			pid := os.Getpid()
 			if data, err := os.ReadFile("/proc/self/status"); err == nil {
@@ -316,7 +320,7 @@ func runHelper(mode string) int {
 
 // helperCmd returns a command that runs the test binary in the given mode.
 func helperCmd(mode string) *exec.Cmd {
-	cmd := exec.Command(os.Args[0]) // #nosec G204 -- re-executes the test binary
+	cmd := exec.Command(os.Args[0], "--sidecar-test="+mode) // #nosec G204 -- re-executes the test binary
 	cmd.Env = helperEnv(mode)
 	cmd.Dir = sharedCache
 	if cmd.Dir == "" {
