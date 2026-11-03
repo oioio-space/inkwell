@@ -83,7 +83,11 @@ func TestCompilePageWindow(t *testing.T) {
 // FINDING 3: Typst runs without network when the system allows it.
 func TestCompileNetworkMode(t *testing.T) {
 	e := newEngine(t, nil)
-	if want := map[bool]string{true: "namespace", false: "proxy only"}[sidecar.NetworkIsolation()]; e.NetworkMode() != want {
+	isolated, err := sidecar.NetworkIsolation()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if want := map[bool]string{true: "namespace", false: "proxy only"}[isolated]; e.NetworkMode() != want {
 		t.Errorf("NetworkMode() = %q, want %q", e.NetworkMode(), want)
 	}
 	proxyOnly := newEngine(t, func(c *Config) { c.proxyOnly = true })

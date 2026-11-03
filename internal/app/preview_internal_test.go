@@ -5,12 +5,14 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log/slog"
 	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/oioio-space/inkwell/internal/bridge"
+	"github.com/oioio-space/inkwell/internal/sidecar"
 	"github.com/oioio-space/inkwell/internal/typst"
 )
 
@@ -217,4 +219,38 @@ func (c *publicationConn) Send(b []byte) error {
 	}
 	c.messages = append(c.messages, m)
 	return nil
+}
+
+func TestPreviewRetriesInconclusiveEngineStart(t *testing.T) {
+	// An inconclusive sandbox probe refuses one start, not every later preview;
+	// any other start failure is remembered as before.
+	saved := startTypst
+	t.Cleanup(func() { startTypst = saved })
+	inconclusive := fmt.Errorf("typst: %w: timeout", sidecar.ErrProbeInconclusive)
+	for _, c := range []struct {
+		first      error
+		wantStarts int
+	}{
+		{first: inconclusive, wantStarts: 2},
+		{first: errors.New("typst: broken"), wantStarts: 1},
+	} {
+		starts := 0
+		startTypst = func(*slog.Logger) (Compiler, error) {
+			starts++
+			if starts == 1 {
+				return nil, c.first
+			}
+			return nil, nil
+		}
+		p := NewPreview(PreviewOptions{Root: t.TempDir()})
+		if _, err := p.engine(); !errors.Is(err, c.first) {
+			t.Fatalf("first start: %v, want %v", err, c.first)
+		}
+		_, second := p.engine()
+		_, _ = p.engine()
+		p.Close()
+		if starts != c.wantStarts || (c.wantStarts == 2) != (second == nil) {
+			t.Errorf("after %v: %d starts, second error %v; want %d starts", c.first, starts, second, c.wantStarts)
+		}
+	}
 }

@@ -27,7 +27,7 @@ const waitDelay = 2 * time.Second
 // Spec describes one launch of a verified sidecar.
 type Spec struct {
 	// isolationProbe replaces the platform probe for this run in tests.
-	isolationProbe func() bool
+	isolationProbe func() (bool, error)
 	// ReadPaths lists verified package and font directories needed by the workload.
 	ReadPaths []string
 	// Stdin is the child's standard input; nil means none.
@@ -142,7 +142,10 @@ func run(ctx context.Context, spec Spec, prepareMount func(Spec) (*directoryMoun
 	if err := configureConfinement(cmd); err != nil {
 		return Output{}, err
 	}
-	isolated := spec.NoNetwork && spec.networkIsolation()
+	isolated, err := spec.isolated()
+	if err != nil {
+		return Output{}, err
+	}
 	if isolated {
 		isolate(cmd)
 	}
@@ -256,7 +259,15 @@ func dirBytes(dir string) int64 {
 	return total
 }
 
-func (s Spec) networkIsolation() bool {
+// isolated reports whether this launch runs in a private network namespace.
+func (s Spec) isolated() (bool, error) {
+	if !s.NoNetwork {
+		return false, nil
+	}
+	return s.networkIsolation()
+}
+
+func (s Spec) networkIsolation() (bool, error) {
 	if s.isolationProbe != nil {
 		return s.isolationProbe()
 	}
@@ -264,8 +275,9 @@ func (s Spec) networkIsolation() bool {
 }
 
 // NetworkIsolation reports whether [Spec.NoNetwork] can be honoured on this
-// machine, probing once.
-func NetworkIsolation() bool {
+// machine. The answer is probed once it is conclusive; until then it returns
+// an error wrapping [ErrProbeInconclusive], and the launch must be refused.
+func NetworkIsolation() (bool, error) {
 	return probeIsolation()
 }
 

@@ -49,6 +49,10 @@ var (
 	// ErrIntegrity is returned when an embedded binary does not match its
 	// pinned SHA-256 or size. It is never executed.
 	ErrIntegrity = errors.New("sidecar: integrity check failed")
+	// ErrProbeInconclusive is returned when the namespace probe neither
+	// succeeded nor failed definitively (a timeout, a transient error): the
+	// launch is refused rather than run with weaker isolation. Retry later.
+	ErrProbeInconclusive = errors.New("sidecar: namespace probe inconclusive; launch refused, retry")
 )
 
 // Store extracts and verifies the embedded sidecars. The zero value is ready

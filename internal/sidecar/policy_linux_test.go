@@ -2,6 +2,7 @@ package sidecar
 
 import (
 	"encoding/binary"
+	"slices"
 	"testing"
 
 	"golang.org/x/sys/unix"
@@ -59,27 +60,47 @@ func TestSeccompPolicyVM(t *testing.T) {
 	}
 	allow := uint32(unix.SECCOMP_RET_ALLOW)
 	deny := uint32(unix.SECCOMP_RET_ERRNO | unix.EPERM)
-	for _, nr := range allowedSyscalls {
-		want := allow
-		if nr == unix.SYS_SOCKETPAIR || nr == unix.SYS_TGKILL {
-			want = deny
-		}
-		check(nr, arch, want)
-	}
-	for _, nr := range []uint32{unix.SYS_READ, unix.SYS_WRITE, unix.SYS_MMAP, unix.SYS_FUTEX, unix.SYS_EXIT_GROUP} {
+	// Hand-written, independent of the generated allowedSyscalls table: what a
+	// Go or Rust sidecar cannot run without, and what it must never get.
+	for _, nr := range []uint32{
+		unix.SYS_READ, unix.SYS_WRITE, unix.SYS_CLOSE, unix.SYS_OPENAT, unix.SYS_MMAP, unix.SYS_MUNMAP,
+		unix.SYS_MPROTECT, unix.SYS_BRK, unix.SYS_FUTEX, unix.SYS_EXIT, unix.SYS_EXIT_GROUP, unix.SYS_EXECVE,
+		unix.SYS_RT_SIGACTION, unix.SYS_RT_SIGPROCMASK, unix.SYS_RT_SIGRETURN, unix.SYS_SIGALTSTACK,
+		unix.SYS_GETPID, unix.SYS_GETTID, unix.SYS_SCHED_YIELD, unix.SYS_NANOSLEEP, unix.SYS_GETRANDOM,
+		unix.SYS_EPOLL_PWAIT, unix.SYS_PIPE2, unix.SYS_WAIT4,
+	} {
 		check(nr, arch, allow)
 		check(nr, 0, unix.SECCOMP_RET_KILL_PROCESS)
 		check(nr|0x40000000, arch, unix.SECCOMP_RET_KILL_PROCESS)
 	}
-	for nr := uint32(0); nr < 1024; nr++ {
-		if nr == unix.SYS_SOCKET {
-			for domain := uint64(0); domain < 64; domain++ {
-				check(nr, arch, deny, domain)
+	for _, nr := range []uint32{
+		unix.SYS_SOCKET, unix.SYS_CONNECT, unix.SYS_BIND, unix.SYS_LISTEN, unix.SYS_ACCEPT4, unix.SYS_SENDTO,
+		unix.SYS_SENDMSG, unix.SYS_PTRACE, unix.SYS_PROCESS_VM_READV, unix.SYS_PROCESS_VM_WRITEV,
+		unix.SYS_MOUNT, unix.SYS_UMOUNT2, unix.SYS_UNSHARE, unix.SYS_SETNS, unix.SYS_PIVOT_ROOT, unix.SYS_CHROOT,
+		unix.SYS_BPF, unix.SYS_KEXEC_LOAD, unix.SYS_INIT_MODULE, unix.SYS_FINIT_MODULE, unix.SYS_DELETE_MODULE,
+		unix.SYS_REBOOT, unix.SYS_SWAPON, unix.SYS_KEYCTL, unix.SYS_ADD_KEY, unix.SYS_PERF_EVENT_OPEN,
+		unix.SYS_USERFAULTFD, unix.SYS_OPEN_BY_HANDLE_AT, unix.SYS_KILL, unix.SYS_TKILL, unix.SYS_SHMAT,
+		unix.SYS_IO_URING_SETUP, unix.SYS_IO_URING_ENTER, unix.SYS_FSOPEN, unix.SYS_MOVE_MOUNT, unix.SYS_PIDFD_GETFD,
+		unix.SYS_PERSONALITY, unix.SYS_SETUID, unix.SYS_CAPSET, 10000,
+	} {
+		check(nr, arch, deny)
+	}
+	for domain := uint64(0); domain < 64; domain++ {
+		check(unix.SYS_SOCKET, arch, deny, domain, unix.SOCK_STREAM)
+	}
+	// Exhaustive sweep with zero arguments: a jump-offset slip in the emitted
+	// program cannot open anything beyond the table, and every refusal is a
+	// plain EPERM (ENOSYS for clone3), never a kill or another verdict.
+	conditional := map[uint32]uint32{unix.SYS_SOCKETPAIR: deny, unix.SYS_TGKILL: deny, unix.SYS_CLONE3: unix.SECCOMP_RET_ERRNO | uint32(unix.ENOSYS)}
+	for nr := range uint32(1024) {
+		want, ok := conditional[nr]
+		if !ok {
+			want = deny
+			if slices.Contains(allowedSyscalls, nr) {
+				want = allow
 			}
 		}
-	}
-	for _, nr := range []uint32{unix.SYS_CONNECT, unix.SYS_BIND, unix.SYS_PTRACE, unix.SYS_MOUNT, unix.SYS_UNSHARE, unix.SYS_BPF, unix.SYS_KILL, unix.SYS_SHMAT, unix.SYS_IO_URING_SETUP, 10000} {
-		check(nr, arch, deny)
+		check(nr, arch, want)
 	}
 	check(unix.SYS_CLONE3, arch, unix.SECCOMP_RET_ERRNO|uint32(unix.ENOSYS))
 	for _, flags := range []uint64{0, unix.CLONE_VM | unix.CLONE_THREAD | unix.CLONE_SIGHAND} {

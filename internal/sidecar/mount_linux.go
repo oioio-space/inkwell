@@ -1,6 +1,7 @@
 package sidecar
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"io"
@@ -8,8 +9,11 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
+	"strings"
 	"sync"
 	"syscall"
+	"time"
 
 	"golang.org/x/sys/unix"
 )
@@ -18,35 +22,118 @@ import (
 // https://docs.kernel.org/filesystems/tmpfs.html, and user_namespaces(7) /
 // mount_namespaces(7). The probe includes the mount: namespace creation alone
 // does not detect all AppArmor, container and sysctl restrictions.
-// A command failure does not reliably distinguish unsupported namespaces from
-// temporary resource exhaustion. Cache success only; retry every failed probe.
-var probeOutputMount = cachedMountProbe(func() bool {
+// Spec §9.11, refuse rather than weaken: only a DEFINITIVE negative result
+// selects the launch without namespaces, and it is cached. Definitive means
+// clone/unshare (or the id-map setup) refused with EPERM or EINVAL (sysctl
+// kernel.unprivileged_userns_clone=0, no CONFIG_USER_NS), or with ENOSPC while
+// user.max_user_namespaces is 0 (ENOSPC under a positive limit only means the
+// limit is reached for now: transient), or the probe child itself got one of those errors setting
+// up its mounts (AppArmor's restricted unprivileged namespaces) and said so
+// with probeUnsupportedExit. That fallback keeps no_new_privs, the dropped
+// capabilities, the resource limits and the two mandatory layers, Landlock and
+// seccomp, but has no user, mount, PID or IPC namespace and no IPC overlay.
+//
+// Anything else (the probe outlives probeTimeout, a crash, a fork failure on
+// EAGAIN) is inconclusive: the launch is refused with ErrProbeInconclusive and
+// nothing is cached; the probe runs again once a backoff has elapsed, and
+// launches before then are refused with the same retryable error.
+const (
+	probeTimeout    = 5 * time.Second
+	probeBackoffMin = time.Second
+	probeBackoffMax = 30 * time.Second
+	// probeUnsupportedExit is the probe child's exit status for a definitive refusal.
+	probeUnsupportedExit = 120
+)
+
+var probeOutputMount = cachedProbe(func(ctx context.Context) (bool, error) {
 	dir, err := os.MkdirTemp("", "sidecar-mount-probe-")
 	if err != nil {
-		return false
+		return false, err
 	}
 	defer func() { _ = os.RemoveAll(dir) }()
 	path, args, err := sandboxPrefix(sandboxConfig{Directory: dir, MountBytes: 4096, Probe: true, Overlay: true})
 	if err != nil {
-		return false
+		return false, err
 	}
-	cmd := exec.Command(path, args...) // #nosec G204 -- re-exec our own binary.
-	setProcAttr(cmd)
-	mountNamespace(cmd)
-	cmd.Env = []string{}
-	return cmd.Run() == nil
-})
+	return runMountProbe(ctx, []string{}, path, args...)
+}, probeTimeout, time.Now)
 
-func cachedMountProbe(probe func() bool) func() bool {
+// definitiveRefusal reports whether err is a kernel or policy refusal of
+// unprivileged namespaces rather than a transient failure.
+func definitiveRefusal(err error) bool {
+	if errors.Is(err, unix.ENOSPC) {
+		limit, readErr := userNamespaceLimit()
+		return readErr == nil && limit == 0
+	}
+	return errors.Is(err, unix.EPERM) || errors.Is(err, unix.EINVAL)
+}
+
+// userNamespaceLimit reads user.max_user_namespaces; tests replace it.
+var userNamespaceLimit = func() (int, error) {
+	data, err := os.ReadFile("/proc/sys/user/max_user_namespaces")
+	if err != nil {
+		return 0, err
+	}
+	return strconv.Atoi(strings.TrimSpace(string(data)))
+}
+
+// runMountProbe runs one probe child in the sandbox's mount namespaces.
+func runMountProbe(ctx context.Context, env []string, path string, args ...string) (bool, error) {
+	return runNamespaceProbe(ctx, mountNamespace, env, path, args...)
+}
+
+// runNamespaceProbe runs one probe child in the namespaces that namespaces
+// requests; ctx kills it. It returns (true, nil) on success, (false, nil) on a
+// definitive refusal and an error when the result is inconclusive.
+func runNamespaceProbe(ctx context.Context, namespaces func(*exec.Cmd), env []string, path string, args ...string) (bool, error) {
+	cmd := exec.CommandContext(ctx, path, args...) // #nosec G204 -- re-exec our own binary.
+	setProcAttr(cmd)
+	namespaces(cmd)
+	cmd.Env = env
+	err := cmd.Run()
+	exitErr, exited := errors.AsType[*exec.ExitError](err)
+	switch {
+	case err == nil:
+		return true, nil
+	case ctx.Err() != nil:
+		return false, ctx.Err()
+	case exited && exitErr.ExitCode() == probeUnsupportedExit:
+		return false, nil // the child's mounts were refused
+	case !exited && definitiveRefusal(err):
+		return false, nil // Start itself was refused: clone or the id maps
+	}
+	return false, err
+}
+
+// cachedProbe serialises probe calls and bounds each to timeout. A
+// conclusive answer is cached for good; an inconclusive one is returned as
+// ErrProbeInconclusive, retried once a backoff measured on now has elapsed.
+func cachedProbe(probe func(context.Context) (bool, error), timeout time.Duration, now func() time.Time) func() (bool, error) {
 	var mu sync.Mutex
-	var supported bool
-	return func() bool {
+	var decided, supported bool
+	var lastErr error
+	var retryAt time.Time
+	var backoff time.Duration
+	return func() (bool, error) {
 		mu.Lock()
 		defer mu.Unlock()
-		if !supported {
-			supported = probe()
+		if decided {
+			return supported, nil
 		}
-		return supported
+		if lastErr != nil && now().Before(retryAt) {
+			return false, lastErr
+		}
+		ctx, cancel := context.WithTimeout(context.Background(), timeout)
+		defer cancel()
+		ok, err := probe(ctx)
+		if err == nil {
+			decided, supported = true, ok
+			return ok, nil
+		}
+		backoff = min(max(2*backoff, probeBackoffMin), probeBackoffMax)
+		retryAt = now().Add(backoff)
+		lastErr = fmt.Errorf("%w: %w", ErrProbeInconclusive, err)
+		return false, lastErr
 	}
 }
 
@@ -57,8 +144,11 @@ type directoryMount struct {
 }
 
 func newDirectoryMount(s Spec) (*directoryMount, error) {
-	if s.WatchDir == "" || s.MaxDirBytes <= 0 || s.MaxDirBytes < int64(os.Getpagesize()) || !probeOutputMount() {
+	if s.WatchDir == "" || s.MaxDirBytes <= 0 || s.MaxDirBytes < int64(os.Getpagesize()) {
 		return nil, nil
+	}
+	if supported, err := probeOutputMount(); err != nil || !supported {
+		return nil, err
 	}
 	entries, err := os.ReadDir(s.WatchDir)
 	if err != nil {

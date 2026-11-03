@@ -16,6 +16,7 @@ import (
 
 	"github.com/oioio-space/inkwell/internal/bridge"
 	"github.com/oioio-space/inkwell/internal/project"
+	"github.com/oioio-space/inkwell/internal/sidecar"
 	"github.com/oioio-space/inkwell/internal/typst"
 )
 
@@ -180,13 +181,37 @@ func NewPreview(o PreviewOptions) *Preview {
 		p.opt.Main = project.MainFile
 	}
 	p.ctx, p.stop = context.WithCancel(context.Background())
-	p.engine = sync.OnceValues(func() (Compiler, error) {
+	p.engine = engineOnce(func() (Compiler, error) {
 		if o.Engine != nil {
 			return o.Engine, nil
 		}
-		return typst.New(typst.Config{Logger: p.log})
+		return startTypst(p.log)
 	})
 	return p
+}
+
+// startTypst starts the embedded Typst; tests replace it.
+var startTypst = func(log *slog.Logger) (Compiler, error) {
+	return typst.New(typst.Config{Logger: log})
+}
+
+// engineOnce runs start once and remembers its result, like sync.OnceValues,
+// except an inconclusive sandbox probe ([sidecar.ErrProbeInconclusive]): that
+// refusal is transient, so the next preview tries to start the engine again.
+func engineOnce(start func() (Compiler, error)) func() (Compiler, error) {
+	var mu sync.Mutex
+	var done bool
+	var eng Compiler
+	var err error
+	return func() (Compiler, error) {
+		mu.Lock()
+		defer mu.Unlock()
+		if !done {
+			eng, err = start()
+			done = !errors.Is(err, sidecar.ErrProbeInconclusive)
+		}
+		return eng, err
+	}
 }
 
 // Close stops the compilations and waits for them. It is idempotent.

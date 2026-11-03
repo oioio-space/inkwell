@@ -12,7 +12,7 @@ id = "without-tools"
 command = "./scripts/heavy.sh bash scripts/sidecar-no-tools.sh"
 [[criteria]]
 id = "anti-weakening"
-command = "python3 scripts/gate-guard.py --self-test && python3 scripts/gate-guard.py"
+command = "python3 scripts/gate-guard.py --self-test && python3 scripts/gate.py --base-guard"
 [[criteria]]
 id = "L0"
 command = "mise run gate -- L0"
