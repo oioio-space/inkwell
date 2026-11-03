@@ -20,6 +20,12 @@ change plus que par une décision consignée dans `docs/architecture/decisions.m
 | Revue | sécurité (Opus) obligatoire avant fusion : c'est le bac à sable |
 | Lot terminé | L0 (2026-11-02) : harnais de portes, référence de performance, `gates/L0.json` |
 
+### Suivis de sécurité de L1 (LOW, revue Opus n° 6, à traiter au début de L2)
+
+- Analyse des dépendances : traiter comme dangereux tout appel `Syscall*`/`RawSyscall*`, tout fichier `.s` (`SFiles`) et tout `go:linkname` dans une dépendance, avec une liste blanche des paquets qui livrent légitimement de l'assembleur (`tools/archexec/dependencies.go:107-128`).
+- Environnement de tinymist : filtrer `cmd.Env` contre une liste blanche dans `runOnce`, même si l'appelant passe `os.Environ()` (`internal/sidecar/supervisor.go:215`).
+- Dossier de projet : refuser aussi les dossiers situés **dans** un dossier protégé (`~/.ssh`, `~/.gnupg`), pas seulement ceux qui en contiennent un (`internal/sidecar/workdir.go:44-76`).
+
 ## Lots suivants (MVP, dans l'ordre)
 
 1. **L2 — Écrire et retrouver** : G-0a puis G-0b (ouvrir vraiment un fichier), puis onglets
