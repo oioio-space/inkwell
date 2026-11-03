@@ -332,18 +332,3 @@ func extract(ctx context.Context, archive, out string, art sidecar.Artifact) (er
 	}
 	return os.Rename(tmp.Name(), out)
 }
-
-// boundedBuffer keeps the first max bytes written to it.
-type boundedBuffer struct {
-	sb  strings.Builder
-	max int
-}
-
-func (b *boundedBuffer) Write(p []byte) (int, error) {
-	if room := b.max - b.sb.Len(); room > 0 {
-		b.sb.Write(p[:min(room, len(p))])
-	}
-	return len(p), nil
-}
-
-func (b *boundedBuffer) String() string { return b.sb.String() }

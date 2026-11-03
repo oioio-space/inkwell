@@ -553,15 +553,3 @@ func TestFetchUnwritableDirectories(t *testing.T) {
 		}
 	})
 }
-
-func TestBoundedBufferKeepsTheStart(t *testing.T) {
-	b := &boundedBuffer{max: 5}
-	for _, s := range []string{"abc", "defgh", "ij"} {
-		if n, err := b.Write([]byte(s)); n != len(s) || err != nil {
-			t.Fatalf("Write(%q) = %d, %v, want %d, nil", s, n, err, len(s))
-		}
-	}
-	if got, want := b.String(), "abcde"; got != want {
-		t.Errorf("kept %q, want %q", got, want)
-	}
-}
