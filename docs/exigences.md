@@ -92,6 +92,9 @@ Rien n'est « fait » sans tests verts et sans une passe `ux-walkthrough` réuss
 | N46 | 2026-11-01 | Variantes (branches) isolées : travailler sur une variante ne change pas le travail des autres sur leurs variantes ; plusieurs personnes peuvent travailler en même temps sur des variantes différentes (et à plusieurs sur la même) ; les variantes ne sont pas privées : tout le monde les voit et peut les rejoindre pour y collaborer ; seul le choix de sa variante courante est personnel | `docs/architecture/`, `docs/design/` | 🔨 |
 | N47 | 2026-11-01 | Système de commentaires dans l'interface d'écriture (pas forcément sur le rendu), stocké avec le projet, pratique et performant | `docs/architecture/`, `docs/design/` | 🔨 |
 | N48 | 2026-11-01 | Validation : une étape (point d'étape) peut être soumise à une personne qui la valide ou la refuse (ex. un manager qui valide une production) | `docs/architecture/`, `docs/design/` | 🔨 |
+| N49 | 2026-11-07 | Pas de barre de titre du système : la fenêtre est gérée par l'application, avec ses propres boutons réduire, agrandir et fermer dans la barre d'en-tête | `docs/design/` (S13) | 🔨 |
+| N50 | 2026-11-07 | L'aperçu montre la page à la même hauteur que la zone d'écriture (la page entière tient dans la hauteur de l'aperçu) | `docs/design/` (S13) | 🔨 |
+| N51 | 2026-11-07 | Dans une petite fenêtre, tout menu (par exemple « Insérer ») reste entièrement accessible : il défile ou se replace, jamais coupé | `docs/design/` (S13) | 🔨 |
 
 ## Interface et édition
 
