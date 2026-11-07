@@ -31,7 +31,7 @@ change plus que par une décision consignée dans `docs/architecture/decisions.m
 
 1. **L3 — Comprendre, corriger, produire** : tinymist branché (N28, N29) ; porte : `problems.spec.ts`,
    `PERF-LSP`.
-2. **Protocole, étapes 2 à 8 d'ADR 0034** puis **G-0b** (index `G`, un document par fichier, FM-OPEN-4…8, PERF-MEM) et **G-0c** (onglets, Worker).
+2. **Protocole, étapes 2 à 8 d'ADR 0034** puis **G-0b** (index `G`, un document par fichier, FM-OPEN-4…8, PERF-MEM) et **G-0c** (onglets, Worker). Rappel de l'utilisatrice (2026-11-07, U13) : créer, supprimer, renommer, déplacer fichiers et dossiers, menu contextuel, onglets ; G-0b (un document par fichier) en est le prérequis, puis les opérations FM-* et les onglets de G-0c.
 3. **S13 — Fenêtre et mise en page** (N49, N50, décision de l'utilisatrice du 2026-11-07 : « je préférerais ne pas avoir la bande de la fenêtre tout en haut, que ce soit géré par notre app, les trois boutons » ; aperçu « de la même hauteur » que la zone d'écriture ; portes à écrire : e2e des boutons de fenêtre et du déplacement, e2e page ajustée à la hauteur ; N51 : e2e menu « Insérer » entièrement atteignable dans une fenêtre basse) et **fenêtres étroites** (problème connu, présent sur `main`) : sous 1300 px, ouvrir le tiroir
    Historique pousse la mise en page (titre, boutons de l'en-tête et barre d'état se chevauchent) au
    lieu de couvrir l'aperçu (spec §3.4) ; un menu plus haut que la fenêtre passe sous la barre

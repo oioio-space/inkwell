@@ -112,7 +112,7 @@ Rien n'est « fait » sans tests verts et sans une passe `ux-walkthrough` réuss
 | U10 | 2026-10-25 | Présentations : diapositives, vue présentateur (chronomètre, suivante, notes, commentaires) | C4 PRS-* ; [plan](plans/2026-10-26-c4-present.md) : PRS-04 à 08, 10 à 13 faits ; PRS-01 à 03 et 09 non faits | ◐ |
 | U11 | 2026-10-25 | Bande de modifications dans la marge (style Git) | B2 HIS-* | 🧪 fait et testé : bande ancrée par curseurs Automerge, minicarte, par type ou par personne |
 | U12 | 2026-10-25 | Visualiser l'historique et les branches, revenir en arrière | B2 HIS-*, B2+ DIF-*, ZOOM-* | 🧪 tiroir Historique, différences lisibles, « Qui a écrit quoi », variantes, zoom du texte ; reste : onglet Commentaires (vide) et différences des autres fichiers (B5) |
-| U13 | 2026-10-25 | Gestionnaire de fichiers : ajouter, supprimer (sur accord), répliqué, historisé, restaurable | B5 FM-* | ⏳ |
+| U13 | 2026-10-25 | Gestionnaire de fichiers : ajouter, supprimer (sur accord), répliqué, historisé, restaurable. **Rappel (2026-11-07) :** créer un fichier ou un dossier, supprimer, renommer, déplacer, menu contextuel, et onglets pour voir plusieurs fichiers (N19) | B5 FM-* | ⏳ |
 | U14 | 2026-10-25 | Recherche normale, joker, regex ; liste des lignes à la Notepad++ ; atteindre chaque résultat | B6 SRC-* | 🧪 moteur et panneau fusionnés ; branchement dans la coque à faire |
 | U15 | 2026-10-25 | Inclure des documents dans d'autres (Typst), liens internes, référencer un document | B7 LNK-* | ⏳ |
 | U16 | 2026-10-25 | Voir dans la liste des fichiers qui édite quoi | B7 PRS-21…26 | ⏳ |
