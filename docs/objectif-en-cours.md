@@ -37,7 +37,8 @@ change plus que par une décision consignée dans `docs/architecture/decisions.m
    lieu de couvrir l'aperçu (spec §3.4) ; un menu plus haut que la fenêtre passe sous la barre
    d'état. Porte : UX-LUP-1 (`frontend/e2e/ux/lup.spec.ts`, 1100 et 950 px) repasse de `test.fixme`
    à `test` et passe.
-4. Puis : Collaborer sans perdre, Première minute et secours, Revenir en arrière, Fondations
+4. Étude de conception N53 (mode « enhance », éditions facilitées sur place, d'abord les tableaux) : passe design puis architecture, avant de fixer son lot.
+5. Puis : Collaborer sans perdre, Première minute et secours, Revenir en arrière, Fondations
    extensibles (`coherence.md` §5).
 
 ### Lots connus et critères reçus en report
