@@ -95,6 +95,7 @@ Rien n'est « fait » sans tests verts et sans une passe `ux-walkthrough` réuss
 | N49 | 2026-11-07 | Pas de barre de titre du système : la fenêtre est gérée par l'application, avec ses propres boutons réduire, agrandir et fermer dans la barre d'en-tête | `docs/design/` (S13) | 🔨 |
 | N50 | 2026-11-07 | L'aperçu montre la page à la même hauteur que la zone d'écriture (la page entière tient dans la hauteur de l'aperçu) | `docs/design/` (S13) | 🔨 |
 | N51 | 2026-11-07 | Dans une petite fenêtre, tout menu (par exemple « Insérer ») reste entièrement accessible : il défile ou se replace, jamais coupé | `docs/design/` (S13) | 🔨 |
+| N52 | 2026-11-07 | Numéros de ligne pas collés à droite d'une large colonne : colonne ajustée au nombre de chiffres, petite marge avant le texte | `frontend/src/editor/setup.ts` (S13) | 🔨 |
 
 ## Interface et édition
 
