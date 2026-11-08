@@ -14,7 +14,7 @@ démontré (test, démo enregistrée ou tâche utilisateur chronométrée).
 - **Étape 0 — Fondations** : terminée.
 - **Étape 1 — Noyau** : terminée — critère de sortie démontré en local (deux instances réelles, Playwright ; `mise run app:duo`).
   Plan : [docs/plans/2026-10-25-etape-1-noyau.md](docs/plans/2026-10-25-etape-1-noyau.md).
-- **Étape 2 — Réseau** : code livré (p2p, identité, invitation, confiance, relais, store, projet) ; reste le panneau d'état (type de lien) et la **démonstration enregistrée** du critère de sortie (`mise run e2e:netsim`, scénarios 3 et 4 : jamais archivée).
+- **Étape 2 — Réseau** : code livré (p2p, identité, invitation, confiance, relais, store, projet) ; exit criterion **demonstrated and archived** on 2026-11-08 (`docs/perf/2026-11-08-netsim.md`); remaining: the status panel (link type).
 - **Lots HDAE (méthode `docs/plans/2026-11-02-methode-hdae.md`, portes figées `gates/<lot>.toml`)** :
   L0 (mesure de référence, garde anti-affaiblissement), L1 (autoportance : bac à sable des sidecars sans programme externe, N42), L2 (G-0a : un clic dans la barre latérale ouvre le fichier), L3 (LSP : problèmes cliquables, F8, aide Typst, N28/N29) — tous `pass` dans `gates/L{0,1,2,3}.json` ; reports : PERF-MEM → G-0b, native darwin/windows → N35, PERF-START-plugins → Fondations extensibles.
 - **Protocole ADR 0034** : étape 1 (module `protocol/`), étape 2 (P2 : `protocol/sig`, Ed25519 strict, N-1) et étape 3 (P3 : TLC épinglé `mise run tla`, profil CBOR et schémas §9 dans `@inkwell/protocol`) faites, portes `gates/P2.json` et `gates/P3.json` vertes ; **prochaine : étape 4** (`protocol/sync2`, `protocol/libp2p`), à spécifier d'abord en exécutable (`docs/plans/2026-11-08-spec-executable.md`). Ensuite : G-0b, G-0c, S13. Suivi : [docs/objectif-en-cours.md](docs/objectif-en-cours.md).
@@ -56,7 +56,7 @@ Plan : [docs/plans/2026-10-25-etape-2-reseau.md](docs/plans/2026-10-25-etape-2-r
 - [x] `project` : index, projection `.typ` sur disque, règle de propriété fsnotify, bac à sable E/S
 - [x] Relais libp2p auto-hébergeable en une commande — `cmd/inkwell-relay`, `docs/relay.md`
 - [ ] Panneau d'état : reste l'indicateur global et le type de lien par pair (la barre d'état ne montre que le nombre de personnes)
-- [ ] Critère de sortie démontré et archivé : **non démontré** — `mise run e2e:netsim` scénarios 3 (hors ligne 60 s) et 4 (changement de réseau nat-a → nat-c) + `offline.spec.ts` ; tests présents, **journal d'exécution absent**. Reste : lancer `mise run e2e:netsim` machine au repos, archiver les notes des scénarios 3 et 4, puis cocher.
+- [x] Exit criterion demonstrated and archived (2026-11-08): `mise run e2e:netsim`, 4 scenarios PASS, including 3 (offline 60 s, converged 9 s after coming back) and 4 (network change nat-a → nat-c, converged 25 s after) — [docs/perf/2026-11-08-netsim.md](docs/perf/2026-11-08-netsim.md).
 
 ## Étape 3 — Typst
 

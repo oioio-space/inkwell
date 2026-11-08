@@ -116,7 +116,8 @@ un bloc = un lot, une étape du protocole ou un lot d'outillage. Il suit cet ord
 - une règle vit à un seul endroit — on complète la règle existante, on n'en écrit pas une seconde ;
 - tout ce qui est cité existe (tâches, chemins, agents, skills, hooks) ; un chemin à venir porte son
   échéance « (étape N) » ; `mise run lint:claude-md` le vérifie et fait partie de `ci` ;
-- une seule langue, le français (identifiants et commandes exceptés) ;
+- ce qui est nouvellement écrit dans le projet (code, nouveaux docs, commits, rapports) est en anglais ;
+  les docs existantes restent en français (pas de traduction) ; les messages à l'utilisatrice sont en français ;
 - après la modification, relire le fichier entier pour les contradictions ; audit périodique avec
   `/claude-md-management:claude-md-improver`.
 
@@ -220,7 +221,9 @@ l'effort le plus bas qui gardent la qualité, choisis explicitement à chaque la
 - lire peu : jamais un fichier déjà en contexte ; journaux via `rtk` ; code via gortex ou gopls ;
   `grep`, `head` ou `tail` ciblés plutôt qu'un fichier entier ;
 - briefs d'agent courts, rapports de 10 lignes au plus, tâches indépendantes en parallèle ;
-- réponses à l'utilisatrice brèves ; pousser avec `scripts/qpush.sh` (verdict seul) ;
+- réponses à l'utilisatrice brèves, en français (le reste en anglais), et chacune compréhensible seule (elle ne suit pas en
+  continu ni n'a les documents sous les yeux) : quelle tâche et pourquoi, où on en est, ce qui reste ;
+  pousser avec `scripts/qpush.sh` (verdict seul) ;
 - ne jamais écrire le mot-clé de commit de git dans une commande qui n'en est pas une : les hooks se
   déclencheraient.
 
