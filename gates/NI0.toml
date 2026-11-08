@@ -1,0 +1,47 @@
+# Frozen acceptance for block NI0 (W32 impaired-network tooling + W33 link metrics v1, lot « Collaborer sans
+# perdre »), written before the code. Plan: docs/plans/2026-11-08-netsim-impaired-plan.md (tests G-0, NI-1..4,
+# metrics contract §7, user decisions Q1-Q5). Each test names the risk it guards and is proven by a mutant.
+raw_results = ["docs/plans/2026-11-08-netsim-impaired-plan.md", "docs/objectif-en-cours.md", "gates/NI0/*"]
+
+[[criteria]]
+# Scenarios 1-4 (cone NAT direct, symmetric NAT relayed, 60 s offline, NAT move) are unchanged.
+id = "netsim-regression"
+command = "NETSIM_SCENARIOS='1 2 3 4' mise run e2e:netsim"
+
+[[criteria]]
+# G-0: relay -> direct swap under bursty loss keeps every frame, in order (sync/1), 20 seeds, virtual time.
+id = "G-0"
+command = "./scripts/heavy.sh go test ./internal/transport/p2p -run 'TestRelayThenDirect' -count=1"
+
+[[criteria]]
+# Link metrics contract v1 (plan §7): snapshot, windows, clamping, privacy (no address leaves Go), and the
+# plain quality grades with their thresholds (decision Q4).
+id = "links-contract"
+command = "./scripts/heavy.sh go test ./internal/transport/p2p ./internal/bridge -run 'Link' -count=1"
+
+[[criteria]]
+# NI-1 (bad Wi-Fi that changes: converge, stay up, metrics match the injected delay and loss) and NI-4
+# (three devices, Alice-Bob down: converge through Carol, bounded sync messages, quiet once converged;
+# Carol as editor, then as reader — decision Q3), pass/fail on 3 seeds.
+id = "NI-1-NI-4"
+command = "NETSIM_SCENARIOS='5 8' NETSIM_SEEDS='1 2 3' mise run e2e:netsim:impaired"
+
+[[criteria]]
+# NI-2 (25 s outage during a large paste) and NI-3 (8 KiB/s relay) run as characterization: their other
+# clauses pass/fail now; NI-2 C2 and NI-3 C1 are declared known failures until ADR 0034 step 6 (decision Q2).
+id = "NI-2-NI-3-characterized"
+command = "NETSIM_SCENARIOS='6 7' NETSIM_EXPECT=characterize mise run e2e:netsim:impaired"
+
+[[criteria]]
+# Every NI0 mutant (M0a, M0b, M5a-c, M7c, M8a, M8b) turns its clause red: the tests detect their risk.
+id = "mutants"
+command = "mise run netsim:mutants -- NI0"
+
+[[criteria]]
+# Decision Q2: the impaired scenarios run on every push (pre-push CI).
+id = "ci-runs-impaired"
+command = "python3 -c \"import tomllib,sys; d=tomllib.load(open('mise.toml','rb')); sys.exit(0 if 'e2e:netsim:impaired' in d['tasks']['ci']['depends'] else 1)\""
+
+[[criteria]]
+id = "P3-regression"
+command = "mise run gate -- P3"
