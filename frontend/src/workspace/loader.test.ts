@@ -30,7 +30,9 @@ it("7 loader caps concurrency, deduplicates and cancels stale epochs", async () 
 it("7 real blocked storage: one find, flood resets once, no delivery after unblock", async () => {
   const { WailsNetworkAdapter } = await import("../net/WailsNetworkAdapter");
   const { encodeEnvelope, encodeRoles, Kind } = await import("../net/envelope");
-  const { encode } = await import("cbor-x");
+  // Peers exchange the protocol's CBOR profile (spec §9.2.1): untagged byte strings, no cbor-x tags.
+  const { encodeCBOR } = await import("@inkwell/protocol");
+  const encode = (v: unknown) => encodeCBOR(v as import("@inkwell/protocol").CBORValue);
   const source = new Repo();
   const url = source.create({}).url;
   const set = new AdmittedSet();
@@ -91,7 +93,7 @@ it("7 real blocked storage: one find, flood resets once, no delivery after unblo
     payload: encodeRoles([{ peer: "peer", role: "writer", suspended: false }]),
   });
   socket.onmessage?.(new MessageEvent("message", { data: roles.buffer }));
-  deliver({ type: "arrive", senderId: "peer" });
+  deliver({ type: "arrive", senderId: "peer", targetId: "me" });
   const frame = encodeEnvelope({
     kind: Kind.Message,
     peer: "peer",

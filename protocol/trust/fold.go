@@ -444,8 +444,8 @@ func (s *sweep) members() []memberRec {
 		}
 		// The run is what follows the latest surviving Remove.
 		run := l
-		for k := len(l) - 1; k >= 0; k-- {
-			if v.nodes[l[k]].op.Kind == OpRemove {
+		for k, v0 := range slices.Backward(l) {
+			if v.nodes[v0].op.Kind == OpRemove {
 				run = l[k+1:]
 				break
 			}

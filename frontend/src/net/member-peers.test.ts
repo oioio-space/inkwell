@@ -4,6 +4,7 @@ import { encodeCBOR } from "@inkwell/protocol";
 import { expect, it, vi } from "vitest";
 import { Admission } from "./admission";
 import { encodeEnvelope, encodeRoles, Kind } from "./envelope";
+import { peerMessage } from "./testkit";
 import { type SocketLike, WailsNetworkAdapter } from "./WailsNetworkAdapter";
 
 it("A14 admission allocates only members and prunes departed devices and cooldowns", () => {
@@ -58,19 +59,11 @@ it.each(["removed", "suspended", "self-suspended", "down"])(
         ]),
       );
     for (let i = 0; i < 2000; i++)
-      frame(
-        Kind.Message,
-        `s${i}`,
-        encodeCBOR({ type: "arrive", senderId: `s${i}`, targetId: "me" }),
-      );
+      frame(Kind.Message, `s${i}`, encodeCBOR(peerMessage("arrive", `s${i}`, "me")));
     expect(up).not.toHaveBeenCalled();
     roles();
     const arrive = () =>
-      frame(
-        Kind.Message,
-        "member",
-        encodeCBOR({ type: "arrive", senderId: "member", targetId: "me" }),
-      );
+      frame(Kind.Message, "member", encodeCBOR(peerMessage("arrive", "member", "me")));
     arrive();
     expect(up).toHaveBeenCalledTimes(1);
     frame(

@@ -3,22 +3,14 @@
 package conformance_test
 
 import (
-	"os"
-	"strconv"
 	"testing"
 
 	"github.com/oioio-space/inkwell/protocol/conformance"
 )
 
+// Spec: TestCorpus runs the corpus at CurrentStep (default) or INKWELL_PROTOCOL_STEP.
 func TestCorpus(t *testing.T) {
-	step := 1
-	if raw := os.Getenv("INKWELL_PROTOCOL_STEP"); raw != "" {
-		n, err := strconv.Atoi(raw)
-		if err != nil {
-			t.Fatalf("INKWELL_PROTOCOL_STEP=%q: %v", raw, err)
-		}
-		step = n
-	}
+	step := conformance.StepFromEnv()
 	results, err := conformance.Run(step, conformance.Strict)
 	if err != nil {
 		t.Fatal(err)

@@ -67,7 +67,7 @@ vérifie (test, porte, revue). Une ligne sans preuve est un trou : colonne « É
 | N33 | RAG natif | §15.18 RG-1–RG-5, `AD-89` | P-IDX (corpus français versionné, rappel@10 ≥ 0,8, MRR ≥ 0,6, `PERF-IDX-*`) ; propriété « citation existe à `rev` ou dite périmée » ; injection « extrait `autrui` en tête ⇒ aucun outil hors classe » | ⏳ expérimentation |
 | N34 | fichiers non synchronisés | §6.9 IG-1–IG-6, `AD-90` | conformité contre `git check-ignore` ; fuzz du parseur ; « fichier exclu référencé par Typst signalé » | ⏳ (projet : PD-1) |
 | N35 | Linux, macOS, Windows, amd64 et arm64 | §9.11, `internal/sandbox`, INV-13, `AD-18`, `AD-94` | P-SANDBOX-LINUX, -MAC, -WIN ; CI native sur six cibles | ⏳ expérimentation (macOS, Windows) |
-| N36 | passe de cohérence | [coherence.md](coherence.md) | revue Fable + Codex | 🔨 |
+| N36 | passe de cohérence | [coherence.md](coherence.md) | revue Codex + Sonnet (2026-11-02) | ✅ |
 | N37 | projet chiffré, export en un fichier | §6.10 EN-1–EN-8, `AD-91` | P-VAULT ; « export chiffré lisible par `age -d` » ; canari « aucun clair sur disque après fermeture » | ⏳ expérimentation |
 | N38 | performance mesurée | §12.5, PF-5–PF-10, `AD-93` | `bench:compare` en CI ; `PERF-*` la nuit sur amd64 et arm64 ; `goleak` ; PGO prouvé | 🔨 |
 | N39 | historique sans Git, autoporteur | §6.11 HI-1–HI-5, INV-12, `AD-13`, `AD-92` | P-GIT-BENCH ; test sans `git` dans `PATH` ; e2e « voyager, restaurer, annuler » | ⏳ |

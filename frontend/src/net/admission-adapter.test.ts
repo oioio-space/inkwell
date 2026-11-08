@@ -3,6 +3,7 @@ import { type PeerId, Repo } from "@automerge/automerge-repo";
 import { type CBORValue, encodeCBOR } from "@inkwell/protocol";
 import { expect, it, vi } from "vitest";
 import { encodeEnvelope, encodeRoles, Kind } from "./envelope";
+import { peerMessage } from "./testkit";
 import { type SocketLike, WailsNetworkAdapter } from "./WailsNetworkAdapter";
 
 function setup(ready = () => true) {
@@ -16,7 +17,7 @@ function setup(ready = () => true) {
   };
   const load = vi.fn();
   const adapter = new WailsNetworkAdapter(() => socket, {
-    admitted: (id) => id === "doc",
+    admitted: new Set(["doc"]),
     ready,
     load,
   });
@@ -36,12 +37,11 @@ function setup(ready = () => true) {
   });
   socket.onmessage?.(new MessageEvent("message", { data: rolesFrame.buffer }));
   const handshake = () =>
-    deliver({
-      type: "arrive",
-      senderId: "peer",
-      targetId: "me",
-      peerMetadata: { storageId: Math.random().toString() },
-    });
+    deliver(
+      peerMessage("arrive", "peer", "me", {
+        peerMetadata: { storageId: Math.random().toString() },
+      }),
+    );
   const messages: unknown[] = [];
   adapter.on("message", (m) => messages.push(m));
   const up = vi.fn();
@@ -151,7 +151,7 @@ it("5 duplicate welcomes cannot refill the ephemeral bucket", () => {
     data: encodeCBOR({ __presence: { type: "heartbeat" } }),
   };
   for (let i = 1; i <= 128; i++) x.deliver({ ...message, count: i });
-  x.deliver({ type: "welcome", senderId: "peer", targetId: "me", peerMetadata: {} });
+  x.deliver(peerMessage("welcome", "peer", "me", { peerMetadata: {} }));
   x.deliver({ ...message, count: 129 });
   expect(x.messages).toHaveLength(128);
   x.adapter.disconnect();

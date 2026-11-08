@@ -16,17 +16,29 @@ change plus que par une décision consignée dans `docs/architecture/decisions.m
 | But | erreurs cliquables et ancrées, F8 / Maj+F8, aide Typst depuis tinymist embarqué |
 | Exigences | N28, N29 ; architecture §15.17 ER-1–4, LSP-1–5 ; AD-79, AD-80 |
 | Porte | `INKWELL_NATIVE_PERF_RUN=1 mise run gate -- L3` verte : problèmes e2e, positions UTF-16 / Automerge, LSP-STALE, service hors ligne, PERF-LSP p95 ≤ 100 ms, PERF-TYPE natif (chaud p95 ≤ 8 ms, froid p95 ≤ 50 ms), régression L2 |
-| Preuves | `gates/L3.json` (compact) ; mesures brutes dans `gates/L3-setup/native-raw-*`, citées par chemin et SHA-256 ; `gates/L3-setup/SUMMARY-premerge2.md`, `UX-walkthrough.md`, `SIMPLIFY.md` |
-| Avant fusion | rebaser sur `main` (7 commits de retard) |
+| Preuves | `gates/L3.json` (compact) ; mesures brutes dans `gates/L3-setup/native-raw-*`, citées par chemin et SHA-256 ; rapport perdu le 2026-11-08 (non versionné, worktree supprimé); reconstitution : `gates/L3/RECONSTRUCTED.md` ; résultat de la porte : `gates/L3.json` |
+| Fusion | fusionné sur `main` (f66524f) |
 
 ## Lot actif : Protocole, étapes 2 à 8 d'ADR 0034
 
 Ensuite G-0b, puis G-0c (liste ci-dessous). **Étape 2 (N-1, `protocol/sig`) faite** le 2026-11-08 : porte `gates/P2.toml` verte
-(7/7, régression L3 comprise) ; plan `docs/plans/2026-11-08-P2-implementation.md`, résumé
-`gates/P2/SUMMARY-impl.md`. **Étape 3 faite** le 2026-11-08 (porte `gates/P3.toml` verte, régressions comprises ; `mise run tla`,
+(6/6, régression L3 comprise ; `gates/P2.json`) ; plan `docs/plans/2026-11-08-P2-implementation.md`, résumé : rapport perdu le 2026-11-08 (non versionné, worktree supprimé); reconstitution : `gates/P2/RECONSTRUCTED.md` ; résultat de la porte : `gates/P2.json`. **Étape 3 faite** le 2026-11-08 (porte `gates/P3.toml` verte, régressions comprises ; `mise run tla`,
 profil CBOR et schémas §9). **Étape suivante : 4**, à spécifier d'abord en exécutable
 (`docs/plans/2026-11-08-spec-executable.md`). Les étapes 3 à 8
 auront chacune leur porte, écrite avant leur implémentation.
+
+**Dérogations de la porte P3 (2026-11-08, `gates/guard-overrides.json`).** Quatre dépendances de porte
+changent sans rien affaiblir : `.golangci.yml` ajoute le linter `modernize` (W26) ; `mise.toml`
+(`mutate:go`) installe gremlins épinglé, pose `-count=1` et un plafond de 1,8 Go par binaire de test,
+et passe le coefficient de délai de 3 à 10 — un mutant expiré sort du score, donc un délai plus long ne
+peut pas le relever, il fait seulement juger plus de mutants (278 sur 278 expirés à 3 : mesure nulle),
+et `done` refuse désormais plus de 10 % d'expirés ; `scripts/alloy_check.py` et `scripts/tla-check.sh`
+délèguent le téléchargement épinglé à `scripts/fetch_pinned.py` (même empreinte, même délai de 120 s).
+`protocol/trust` (92,4 %, 21 survivants antérieurs à P3) sort de P3 par décision de l'utilisatrice
+et devient le bloc W31.
+`scripts/gate.py` ne vide plus que les preuves de `gates/<lot>/` et garde les rapports `*.md` (son
+`rmtree` avait effacé le rapport `/simplify` de P3 et les reconstitutions L3/P2, restaurés depuis les
+transcriptions) ; testé par `scripts/gate_reset_test.py`.
 
 ### Suivis de sécurité de L1 (LOW, revue Opus n° 6, à traiter au début de L2)
 

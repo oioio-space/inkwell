@@ -22,6 +22,32 @@ import (
 // ErrUnsupported identifies a future case without an implementation in this release.
 var ErrUnsupported = errors.New("conformance: decoder not implemented")
 
+type decoderSpec struct {
+	required []string
+	hasInput bool
+	check    func(*referenceCase) error
+}
+
+var decoderTable = map[string]decoderSpec{
+	"bulk":               {hasInput: true, check: (*referenceCase).bulk},
+	"bridge_envelope":    {hasInput: true, check: (*referenceCase).bridge},
+	"trust_op":           {hasInput: true, check: (*referenceCase).op},
+	"trust_op+apply":     {hasInput: true, check: (*referenceCase).op},
+	"trust_sync":         {hasInput: true, check: (*referenceCase).sync},
+	"attestation":        {hasInput: true, check: (*referenceCase).attestation},
+	"attestation+verify": {hasInput: true, check: (*referenceCase).attestation},
+	"lobby_request":      {hasInput: true, check: (*referenceCase).request},
+	"lobby_reply":        {hasInput: true, check: (*referenceCase).reply},
+	"repo_message":       {hasInput: true, check: (*referenceCase).repo},
+	"ticket_text":        {required: []string{"text"}, check: (*referenceCase).ticket},
+	"public_key":         {check: (*referenceCase).key},
+	"signature":          {required: []string{"public_hex", "signed_bytes_hex"}, check: (*referenceCase).signature},
+	"signature+key":      {required: []string{"public_hex", "signature_hex"}, check: (*referenceCase).signature},
+	"":                   {required: []string{"public_hex", "signature_hex", "domain", "message_hex"}, check: (*referenceCase).signature},
+	"peer_id":            {required: []string{"peer_id"}, check: (*referenceCase).peer},
+	"trust_fold":         {required: []string{"members"}, check: (*referenceCase).fold},
+}
+
 func fixture() (*trust.List, trust.ProjectID, error) {
 	data, err := vectorsData("trust.json")
 	if err != nil {
@@ -99,17 +125,13 @@ func newReferenceCase(v Vector) (*referenceCase, error) {
 	return c, nil
 }
 
-var requiredExpectations = map[string][]string{
-	"ticket_text": {"text"}, "peer_id": {"peer_id"},
-	"signature":     {"public_hex", "signed_bytes_hex"},
-	"signature+key": {"public_hex", "signature_hex"},
-	"":              {"public_hex", "signature_hex", "domain", "message_hex"},
-	"trust_fold":    {"members"},
-}
-
-func (c *referenceCase) prepare() error {
+func (c *referenceCase) run() error {
 	v := c.vector
-	for _, k := range requiredExpectations[v.Decoder] {
+	spec, ok := decoderTable[v.Decoder]
+	if !ok {
+		return fmt.Errorf("%w: %s", ErrUnsupported, v.Decoder)
+	}
+	for _, k := range spec.required {
 		if raw, ok := c.expect[k]; !ok || bytes.Equal(raw, []byte("null")) {
 			return fmt.Errorf("missing expectation %s", k)
 		}
@@ -121,50 +143,20 @@ func (c *referenceCase) prepare() error {
 			}
 		}
 	}
-	switch v.Decoder {
-	case "ticket_text", "peer_id", "signature", "signature+key", "", "trust_fold":
-	case "public_key":
+	if v.Decoder == "public_key" {
 		if _, ok := c.expect["keys_hex"]; !ok {
-			c.input = c.unhex(c.inputHex())
+			if spec.hasInput && c.input == nil {
+				c.input = c.unhex(c.inputHex())
+			}
 		}
-	default:
+	} else if spec.hasInput && c.input == nil {
 		c.input = c.unhex(c.inputHex())
 	}
-	return nil
-}
-
-func (c *referenceCase) run() error {
-	v := c.vector
-	if err := c.prepare(); err != nil {
-		return err
-	}
-	checks := map[string]func() error{
-		"bulk":               c.bulk,
-		"bridge_envelope":    c.bridge,
-		"trust_op":           c.op,
-		"trust_op+apply":     c.op,
-		"trust_sync":         c.sync,
-		"attestation":        c.attestation,
-		"attestation+verify": c.attestation,
-		"lobby_request":      c.request,
-		"lobby_reply":        c.reply,
-		"repo_message":       c.repo,
-		"ticket_text":        c.ticket,
-		"public_key":         c.key,
-		"signature":          c.signature,
-		"signature+key":      c.signature,
-		"":                   c.signature,
-		"peer_id":            c.peer,
-		"trust_fold":         c.fold,
-	}
-	check, ok := checks[v.Decoder]
-	if !ok {
-		return fmt.Errorf("%w: %s", ErrUnsupported, v.Decoder)
-	}
-	return check()
+	return spec.check(c)
 }
 
 func (c *referenceCase) verify() error {
+	wantHash := c.exp("blake3_hex") // read first: a malformed expectation must set fieldErr
 	if c.fieldErr != nil {
 		return c.fieldErr
 	}
@@ -177,10 +169,12 @@ func (c *referenceCase) verify() error {
 		}
 		return fmt.Errorf("expected %s, decoder accepted input", c.vector.Verdict)
 	}
-	if c.err == nil && c.encoded != nil && !bytes.Equal(c.encoded, c.input) {
+	// Spec (ADR 0034, verdict): an accepted input of a kind with an encoder re-encodes to the same
+	// bytes. A missing re-encoding is a mismatch, never a skipped check.
+	if c.err == nil && c.roundTrip && !bytes.Equal(c.encoded, c.input) {
 		return errors.New("binary round trip mismatch")
 	}
-	if c.err == nil && c.exp("blake3_hex") != "" && (len(c.input) < 33 || hex.EncodeToString(c.input[1:33]) != c.exp("blake3_hex")) {
+	if c.err == nil && wantHash != "" && (len(c.input) < 33 || hex.EncodeToString(c.input[1:33]) != wantHash) {
 		return errors.New("blob hash mismatch")
 	}
 	return nil
@@ -189,6 +183,7 @@ func (c *referenceCase) verify() error {
 type referenceCase struct {
 	vector         Vector
 	input, encoded []byte
+	roundTrip      bool // the decoder has an encoder: an accepted input must re-encode identically
 	list           *trust.List
 	project        trust.ProjectID
 	err            error
@@ -230,6 +225,7 @@ func (c *referenceCase) exp(k string) string {
 }
 
 func (c *referenceCase) bulk() error {
+	c.roundTrip = true
 	var m blob.Message
 	m, c.err = blob.Decode(c.input)
 	if c.err == nil {
@@ -239,6 +235,7 @@ func (c *referenceCase) bulk() error {
 }
 
 func (c *referenceCase) bridge() error {
+	c.roundTrip = true
 	var e bridge.Envelope
 	e, c.err = bridge.Decode(c.input)
 	if c.err == nil {
@@ -252,7 +249,7 @@ func (c *referenceCase) repo() error {
 	if err := c.vector.Decode("context", &ctx); err != nil {
 		return err
 	}
-	result, err := repo.Decode(c.input, repo.Context{From: ctx.From, Me: ctx.Me, Admitted: ctx.Admitted})
+	result, err := repo.Decode(c.input, ctx)
 	switch c.vector.Verdict {
 	case "accept":
 		if err != nil {
@@ -335,6 +332,7 @@ func (c *referenceCase) repoExpect(m repo.Message) error {
 }
 
 func (c *referenceCase) op() error {
+	c.roundTrip = true
 	var o trust.Op
 	o, c.err = trust.Decode(c.input)
 	if c.err == nil {
@@ -355,6 +353,7 @@ func (c *referenceCase) sync() error {
 }
 
 func (c *referenceCase) attestation() error {
+	c.roundTrip = true
 	var a trust.Attestation
 	a, c.err = trust.DecodeAttestation(c.input)
 	if c.err == nil {
@@ -367,6 +366,7 @@ func (c *referenceCase) attestation() error {
 }
 
 func (c *referenceCase) request() error {
+	c.roundTrip = true
 	var r invite.Request
 	r, c.err = invite.DecodeRequest(c.input)
 	if c.err == nil {
@@ -376,6 +376,7 @@ func (c *referenceCase) request() error {
 }
 
 func (c *referenceCase) reply() error {
+	c.roundTrip = true
 	var r invite.Reply
 	r, c.err = invite.DecodeReply(c.input)
 	if c.err == nil {
@@ -465,7 +466,7 @@ func (c *referenceCase) fold() error {
 	if len(wanted) == 0 {
 		return errors.New("empty expected members")
 	}
-	for pass := 0; pass < 2; pass++ {
+	for pass := range 2 {
 		fold := trust.New(c.project)
 		ops := make([]trust.Op, 0, len(inputs))
 		for _, s := range inputs {

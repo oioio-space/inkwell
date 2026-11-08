@@ -1,4 +1,5 @@
-import { type PeerId, Repo } from "@automerge/automerge-repo";
+import { type Message, type PeerId, Repo } from "@automerge/automerge-repo";
+import type { Handshake } from "./admission";
 import type { SimNet } from "./simnet";
 import { WailsNetworkAdapter } from "./WailsNetworkAdapter";
 
@@ -34,6 +35,42 @@ export class Kit {
   async shutdown(): Promise<void> {
     await Promise.all(this.#repos.splice(0).map((r) => r.shutdown()));
   }
+}
+
+/** Creates a handshake message (arrive/welcome) with required fields filled to the spec. */
+export function peerMessage(
+  type: Handshake["type"],
+  from: string,
+  to: string,
+  over?: Omit<Partial<Handshake>, "peerMetadata"> & { peerMetadata?: Record<string, unknown> },
+): Handshake {
+  const overPeerMetadata = over?.peerMetadata ?? {};
+  const msg = {
+    type,
+    senderId: from as PeerId,
+    targetId: to as PeerId,
+    peerMetadata: { isEphemeral: true, ...overPeerMetadata },
+    ...over,
+  };
+  return msg as Handshake;
+}
+
+/** Creates a generic repo message with required fields filled to the spec. */
+export function repoMessage(
+  type: Message["type"],
+  from: string,
+  to: string,
+  documentId: string,
+  over?: Partial<Message>,
+): Message {
+  return {
+    type,
+    senderId: from as PeerId,
+    targetId: to as PeerId,
+    documentId: documentId as import("@automerge/automerge-repo").DocumentId,
+    data: new Uint8Array(),
+    ...over,
+  };
 }
 
 /** Polls `cond` every few milliseconds; throws `what` if it is still false after `ms`. */

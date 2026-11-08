@@ -9,7 +9,7 @@ const heap = () => {
   return process.memoryUsage().heapUsed;
 };
 it.skipIf(!gc)("3 invented-id flood retains less than 4 MiB after GC", () => {
-  const c = { from: "p", me: "me", announced: true, has: () => false };
+  const c = { from: "p", me: "me", announced: true, admitted: new Set<string>() };
   const before = heap();
   let accepted = 0;
   for (let i = 0; i < 50000; i++)

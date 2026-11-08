@@ -320,7 +320,10 @@ function repoFields(m: RepoMessage): Record<string, unknown> {
 }
 
 function repoReference(v: Vector, b: Buffer) {
-  const ctx = v.context as RepoContext;
+  const ctx = {
+    ...(v.context as RepoContext),
+    admitted: new Set((v.context as RepoContext).admitted),
+  };
   if (v.verdict === "ignore") {
     const r = decodeRepoMessage(b, ctx);
     assert(r.kind === "ignored", "expected ignore");

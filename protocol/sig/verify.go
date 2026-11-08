@@ -28,7 +28,8 @@ var ErrInvalidSignature = errors.New("sig: invalid Ed25519 signature")
 // equation runs. R is accepted exactly when it equals the canonical encoding of
 // [S]B − [k]A, so a non-canonical or torsion-bearing R never matches.
 func Verify(key, msg, sig []byte) error {
-	if err := ValidatePublicKey(key); err != nil {
+	a, err := validatePoint(key)
+	if err != nil {
 		return err
 	}
 	if len(sig) != ed25519.SignatureSize {
@@ -38,15 +39,12 @@ func Verify(key, msg, sig []byte) error {
 	if err != nil {
 		return fmt.Errorf("%w: non-canonical S", ErrInvalidSignature)
 	}
-	a, err := new(edwards25519.Point).SetBytes(key)
-	if err != nil {
-		return fmt.Errorf("%w: %w", ErrInvalidSignature, err)
-	}
+	var buf [64]byte
 	h := sha512.New()
 	h.Write(sig[:32])
-	h.Write(key)
+	h.Write(a.Bytes())
 	h.Write(msg)
-	k, err := new(edwards25519.Scalar).SetUniformBytes(h.Sum(nil))
+	k, err := new(edwards25519.Scalar).SetUniformBytes(h.Sum(buf[:0]))
 	if err != nil {
 		return fmt.Errorf("%w: challenge", ErrInvalidSignature)
 	}

@@ -12,6 +12,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"maps"
 	"math"
 	"math/big"
 	"os"
@@ -467,9 +468,7 @@ func generate(dir, casesPath string) {
 	}
 	withProto := func(ctx map[string]any) map[string]any {
 		out := map[string]any{"protocol": protoOf[lastClass]}
-		for k, v := range ctx {
-			out[k] = v
-		}
+		maps.Copy(out, ctx)
 		return out
 	}
 	tlv := func(b []byte, id uint16, v []byte) []byte {

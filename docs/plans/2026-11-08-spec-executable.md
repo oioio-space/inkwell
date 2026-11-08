@@ -76,3 +76,45 @@ ferme en rejouant les traces du modèle sur le code, ou en prouvant le code lui-
 
 Ordre : Alloy (confiance et arborescence) → traces TLA+ (étapes 4–6) → essai Gobra → XState (S13).
 Outils de développement uniquement (Java pour TLC, Alloy, Gobra), épinglés par SHA-256, jamais livrés.
+
+## Usage garanti (2026-11-08)
+
+- `mise run formal` (TLA+ et Alloy, mutants compris) et `mise run lint:env` sont dans `mise run ci`,
+  donc dans chaque push et dans la CI GitHub (Java 17 du runner).
+- Chaque porte d'étape du protocole (P4 et suivantes) contient : les vecteurs à l'étape courante en Go
+  et en TS ; `mise run formal` ; un critère de mutation (gremlins) sur les paquets `protocol/*`
+  touchés, efficacité ≥ 95 %, survivants justifiés comme équivalents dans le résumé.
+- La conformité de la CI tourne à l'**étape courante** (constante partagée Go/TS, relevée à chaque
+  étape), plus seulement dans les portes : une régression d'une étape passée échoue à la CI.
+- `CLAUDE.md` porte la règle pour tous les agents (Claude, Codex, opencode).
+
+## Couverture formelle : existant et à venir (état au 2026-11-08)
+
+Constat : les modèles formels écrits jusqu'ici décrivent surtout du **futur** ; le code déjà livré n'est
+presque pas formalisé. Deux listes, chacune avec son lien modèle ↔ code (instances ou traces du modèle
+→ vecteurs que le vrai code doit reproduire), ajouté à `mise run formal` donc à la CI.
+
+**Déjà produit (formalisation rétroactive, par risque) :**
+
+| Ordre | Brique livrée | Modèle à écrire | Lien au code |
+|---|---|---|---|
+| 1 | Liste de membres et rôles (ADR 0017, `protocol/trust`) | Alloy : règles 1–5, S1–S3, scellement | instances → vecteurs de pli, en plus de `fold.json` |
+| 2 | Admission et couverture (ADR 0031, `frontend/src/net`) | Alloy ou TLA+ selon la concurrence | traces → tests de `admission.ts` / `coverage.ts` |
+| 3 | Écriture différée Automerge (`amSync`, L3) | test à modèle fast-check contre une référence Automerge directe | suites d'éditions concurrentes, pairs compris |
+| 4 | Arborescence par chemins (`internal/project` `checkTree`, `ApplyTree`) | Alloy : collisions, profondeur, propriété des fichiers | instances → vecteurs de `checkTree` |
+| 5 | Bac à sable tinymist (L1 : Landlock, seccomp) | table de politique vérifiée | chaque appel et chaque chemin testé autorisé/refusé |
+| 6 | Magasin BLAKE3 et Bao (`internal/blob`) | propriétés | une tranche falsifiée est toujours rejetée |
+
+**À produire (le modèle d'abord, puis le code) :**
+
+| Lot | Modèle | État |
+|---|---|---|
+| Protocole étapes 4–6 | TLA+ `RepoGen`, `ConnCredit` + traces → vecteurs | modèles prêts, traces à générer |
+| Protocole étape 8 (SET) | modèle du curseur SET | à écrire |
+| G-0b (index par nœuds, ADR 0023) | Alloy `Tree.als` (prêt), `Registry.als` (prêt) → vecteurs de la porte G-0b | à relier au code quand il sera écrit |
+| Décisions d'administration (ADR 0030) | Alloy `Decisions.als` (prêt) | code à venir |
+| S13 (interface) | statecharts XState | à écrire |
+- Chaque porte de bloc contient le critère `simplify-report` :
+  `test -s gates/<bloc>/SIMPLIFY.md` (rapport `/simplify` versionné : constats, appliqué, écarté).
+- Seule la session Claude commite ; `scripts/opencode-free.sh` injecte « ne jamais commiter ni
+  stasher » dans chaque consigne déléguée.

@@ -3,10 +3,10 @@
 package sig_test
 
 import (
-	"encoding/hex"
 	"encoding/json"
 	"testing"
 
+	"github.com/oioio-space/inkwell/protocol/internal/testutil"
 	"github.com/oioio-space/inkwell/protocol/sig"
 	"github.com/oioio-space/inkwell/protocol/vectors"
 )
@@ -43,15 +43,7 @@ func cryptoVectors(t testing.TB) []cryptoVector {
 	return file.Vectors
 }
 
-func unhex(t testing.TB, s string) []byte {
-	t.Helper()
-	b, err := hex.DecodeString(s)
-	if err != nil {
-		t.Fatal(err)
-	}
-	return b
-}
-
+// Spec 3.2-3.3: Verify vectors from crypto corpus.
 func TestVerifyVectors(t *testing.T) {
 	for _, v := range cryptoVectors(t) {
 		switch v.Decoder {
@@ -61,20 +53,20 @@ func TestVerifyVectors(t *testing.T) {
 				keys = []string{v.Input}
 			}
 			for _, k := range keys {
-				err := sig.ValidatePublicKey(unhex(t, k))
+				err := sig.ValidatePublicKey(testutil.Unhex(t, k))
 				if (err == nil) != (v.Verdict == "accept") {
 					t.Errorf("%s: ValidatePublicKey verdict = %v, want %s", v.ID, err, v.Verdict)
 				}
 			}
 		case "signature", "signature+key", "":
-			key := unhex(t, v.Expected.Public)
-			signature := unhex(t, v.Expected.Signature)
+			key := testutil.Unhex(t, v.Expected.Public)
+			signature := testutil.Unhex(t, v.Expected.Signature)
 			if v.Expected.Signature == "" {
-				signature = unhex(t, v.Input)
+				signature = testutil.Unhex(t, v.Input)
 			}
-			msg := unhex(t, v.Expected.SignedBytes)
+			msg := testutil.Unhex(t, v.Expected.SignedBytes)
 			if v.Decoder == "" {
-				msg = append([]byte("inkwell/"+v.Expected.Domain+"/v1\x00"), unhex(t, v.Expected.Message)...)
+				msg = append([]byte("inkwell/"+v.Expected.Domain+"/v1\x00"), testutil.Unhex(t, v.Expected.Message)...)
 			}
 			err := sig.Verify(key, msg, signature)
 			if (err == nil) != (v.Verdict == "accept") {
@@ -84,14 +76,15 @@ func TestVerifyVectors(t *testing.T) {
 	}
 }
 
+// Spec 3.3: Verify rejects malformed inputs.
 func TestVerifyRejectsMalformed(t *testing.T) {
 	valid := cryptoVectors(t)
 	var key, msg, signature []byte
 	for _, v := range valid {
 		if v.ID == "sig-domain-1" {
-			key = unhex(t, v.Expected.Public)
-			msg = unhex(t, v.Expected.SignedBytes)
-			signature = unhex(t, v.Expected.Signature)
+			key = testutil.Unhex(t, v.Expected.Public)
+			msg = testutil.Unhex(t, v.Expected.SignedBytes)
+			signature = testutil.Unhex(t, v.Expected.Signature)
 		}
 	}
 	if sig.Verify(key, msg, signature) != nil {
@@ -110,19 +103,20 @@ func TestVerifyRejectsMalformed(t *testing.T) {
 	}
 }
 
+// Spec 3.3: Fuzz Verify with corpus vectors.
 func FuzzVerify(f *testing.F) {
 	for _, v := range cryptoVectors(f) {
 		if v.Expected.Public == "" {
 			continue
 		}
-		key := unhex(f, v.Expected.Public)
-		signature := unhex(f, v.Expected.Signature)
+		key := testutil.Unhex(f, v.Expected.Public)
+		signature := testutil.Unhex(f, v.Expected.Signature)
 		if v.Expected.Signature == "" {
-			signature = unhex(f, v.Input)
+			signature = testutil.Unhex(f, v.Input)
 		}
-		msg := unhex(f, v.Expected.SignedBytes)
+		msg := testutil.Unhex(f, v.Expected.SignedBytes)
 		if v.Decoder == "" {
-			msg = append([]byte("inkwell/"+v.Expected.Domain+"/v1\x00"), unhex(f, v.Expected.Message)...)
+			msg = append([]byte("inkwell/"+v.Expected.Domain+"/v1\x00"), testutil.Unhex(f, v.Expected.Message)...)
 		}
 		f.Add(key, msg, signature)
 	}

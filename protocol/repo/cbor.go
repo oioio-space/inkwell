@@ -8,7 +8,7 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"sort"
+	"slices"
 	"unicode/utf8"
 )
 
@@ -238,24 +238,41 @@ func encode(out []byte, v any) ([]byte, error) {
 		}
 		return out, nil
 	case map[string]any:
-		type pair struct{ key, value []byte }
-		pairs := make([]pair, 0, len(x))
-		for k, value := range x {
-			key, err := encode(nil, k)
-			if err != nil {
-				return nil, err
-			}
-			encoded, err := encode(nil, value)
-			if err != nil {
-				return nil, err
-			}
-			pairs = append(pairs, pair{key, encoded})
+		// Encode all keys and values into a temporary buffer with (start, end) offsets,
+		// then sort by the key bytes using slices.SortFunc, then write header and copy.
+		type kv struct {
+			keyStart, keyEnd int
+			valStart, valEnd int
 		}
-		sort.Slice(pairs, func(i, j int) bool { return bytes.Compare(pairs[i].key, pairs[j].key) < 0 })
-		out = appendHead(out, 5, uint64(len(pairs)))
-		for _, p := range pairs {
-			out = append(out, p.key...)
-			out = append(out, p.value...)
+		var buf []byte
+		keys := make([]kv, 0, len(x))
+		for k, value := range x {
+			keyBytes, err := encode(nil, k)
+			if err != nil {
+				return nil, err
+			}
+			keyStart := len(buf)
+			buf = append(buf, keyBytes...)
+			keyEnd := len(buf)
+			valBytes, err := encode(nil, value)
+			if err != nil {
+				return nil, err
+			}
+			valStart := len(buf)
+			buf = append(buf, valBytes...)
+			valEnd := len(buf)
+			keys = append(keys, kv{keyStart, keyEnd, valStart, valEnd})
+		}
+		// Sort by key bytes (lexicographic)
+		slices.SortFunc(keys, func(a, b kv) int {
+			return bytes.Compare(buf[a.keyStart:a.keyEnd], buf[b.keyStart:b.keyEnd])
+		})
+		// Write map header to output
+		out = appendHead(out, 5, uint64(len(keys)))
+		// Copy sorted key-value pairs from temp buffer to output
+		for _, kv := range keys {
+			out = append(out, buf[kv.keyStart:kv.keyEnd]...)
+			out = append(out, buf[kv.valStart:kv.valEnd]...)
 		}
 		return out, nil
 	case int:

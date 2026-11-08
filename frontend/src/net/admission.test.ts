@@ -11,7 +11,7 @@ import { AdmittedSet } from "./scope";
 
 vi.mock("@automerge/automerge-repo", { spy: true });
 
-const context = { from: "peer", me: "me", announced: true, has: (id: string) => id === "doc" };
+const context = { from: "peer", me: "me", announced: true, admitted: new Set(["doc"]) };
 const request = {
   type: "request",
   senderId: "peer",

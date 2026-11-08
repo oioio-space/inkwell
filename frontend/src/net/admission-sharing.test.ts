@@ -14,7 +14,7 @@ it.each([false, true])(
     const net = new SimNet(6);
     const peers = ["a", "b", "c"].map((id) => {
       const set = new AdmittedSet();
-      const adapter = new WailsNetworkAdapter(() => net.socket(id), { admitted: set.has });
+      const adapter = new WailsNetworkAdapter(() => net.socket(id), { admitted: set.ids });
       const repo = new Repo({
         peerId: id as PeerId,
         network: [adapter],
@@ -64,7 +64,7 @@ it("R1 root listing changes admit and bootstrap variants without opening them", 
     let repo: Repo;
     let loader: BootstrapLoader;
     const adapter = new WailsNetworkAdapter(() => net.socket(id), {
-      admitted: set.has,
+      admitted: set.ids,
       ready: (id) =>
         !!repo.handles[id as import("@automerge/automerge-repo").DocumentId]?.inState([
           "ready",

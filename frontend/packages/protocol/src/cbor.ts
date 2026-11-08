@@ -9,6 +9,9 @@
 export type CBORMap = { [key: string]: CBORValue };
 export type CBORValue = null | boolean | number | string | Uint8Array | CBORValue[] | CBORMap;
 
+/** Input type for encodeCBOR: accepts CBORValue and message-like objects with compatible fields. */
+export type EncodableValue = CBORValue | { [key: string]: unknown } | unknown[];
+
 export const CBOR_MAX_DEPTH = 8;
 export const CBOR_MAX_ITEMS = 4096;
 export const CBOR_MAX_MAP = 64;
@@ -83,7 +86,6 @@ class Reader {
         const n = this.#arg(ai);
         if (n > CBOR_MAX_MAP) throw new InvalidCBOR("map > 64 pairs");
         const out: CBORMap = {};
-        const seen = new Set<string>();
         for (let k = 0; k < n; k++) {
           if (this.#i >= this.b.length) truncated();
           const byte = this.b[this.#i];
@@ -91,15 +93,18 @@ class Reader {
           if (byte >> 5 !== 3) throw new InvalidCBOR("map key not a text string");
           const key = this.#item(depth + 1);
           if (typeof key !== "string") throw new InvalidCBOR("map key not a text string");
-          if (seen.has(key)) throw new InvalidCBOR("duplicate map key");
-          seen.add(key);
+          if (Object.hasOwn(out, key)) throw new InvalidCBOR("duplicate map key");
           const value = this.#item(depth + 1);
-          Object.defineProperty(out, key, {
-            value,
-            enumerable: true,
-            configurable: true,
-            writable: true,
-          });
+          if (key === "__proto__") {
+            Object.defineProperty(out, key, {
+              value,
+              enumerable: true,
+              configurable: true,
+              writable: true,
+            });
+          } else {
+            out[key] = value;
+          }
         }
         return out;
       }
@@ -127,17 +132,122 @@ export function decodeCBOR(b: Uint8Array): CBORValue {
   return new Reader(b).read();
 }
 
-function head(major: number, n: number): number[] {
-  if (n < 24) return [(major << 5) | n];
-  if (n < 0x100) return [(major << 5) | 24, n];
-  if (n < 0x10000) return [(major << 5) | 25, n >> 8, n & 0xff];
-  if (n < 0x100000000) {
-    return [(major << 5) | 26, (n >>> 24) & 0xff, (n >>> 16) & 0xff, (n >>> 8) & 0xff, n & 0xff];
+class Writer {
+  #buf = new Uint8Array(256);
+  #len = 0;
+
+  get buffer(): Uint8Array {
+    return this.#buf.subarray(0, this.#len);
   }
-  const out = [(major << 5) | 27];
-  const x = BigInt(n);
-  for (let k = 7; k >= 0; k--) out.push(Number((x >> BigInt(8 * k)) & 255n));
-  return out;
+
+  #ensure(cap: number): void {
+    if (this.#len + cap <= this.#buf.length) return;
+    let newCap = this.#buf.length * 2;
+    while (this.#len + cap > newCap) newCap *= 2;
+    const newBuf = new Uint8Array(newCap);
+    newBuf.set(this.#buf);
+    this.#buf = newBuf;
+  }
+
+  #writeByte(byte: number): void {
+    this.#ensure(1);
+    this.#buf[this.#len++] = byte;
+  }
+
+  #writeBytes(bytes: Uint8Array): void {
+    this.#ensure(bytes.length);
+    this.#buf.set(bytes, this.#len);
+    this.#len += bytes.length;
+  }
+
+  #writeHead(major: number, n: number): void {
+    if (n < 24) {
+      this.#writeByte((major << 5) | n);
+      return;
+    }
+    if (n < 0x100) {
+      this.#ensure(2);
+      this.#buf[this.#len++] = (major << 5) | 24;
+      this.#buf[this.#len++] = n;
+      return;
+    }
+    if (n < 0x10000) {
+      this.#ensure(3);
+      this.#buf[this.#len++] = (major << 5) | 25;
+      this.#buf[this.#len++] = (n >> 8) & 0xff;
+      this.#buf[this.#len++] = n & 0xff;
+      return;
+    }
+    if (n < 0x100000000) {
+      this.#ensure(5);
+      this.#buf[this.#len++] = (major << 5) | 26;
+      this.#buf[this.#len++] = (n >>> 24) & 0xff;
+      this.#buf[this.#len++] = (n >>> 16) & 0xff;
+      this.#buf[this.#len++] = (n >>> 8) & 0xff;
+      this.#buf[this.#len++] = n & 0xff;
+      return;
+    }
+    this.#ensure(9);
+    this.#buf[this.#len++] = (major << 5) | 27;
+    const hi = Math.floor(n / 2 ** 32);
+    const lo = n >>> 0;
+    this.#buf[this.#len++] = (hi >>> 24) & 0xff;
+    this.#buf[this.#len++] = (hi >>> 16) & 0xff;
+    this.#buf[this.#len++] = (hi >>> 8) & 0xff;
+    this.#buf[this.#len++] = hi & 0xff;
+    this.#buf[this.#len++] = (lo >>> 24) & 0xff;
+    this.#buf[this.#len++] = (lo >>> 16) & 0xff;
+    this.#buf[this.#len++] = (lo >>> 8) & 0xff;
+    this.#buf[this.#len++] = lo & 0xff;
+  }
+
+  writeNull(): void {
+    this.#writeByte(0xf6);
+  }
+
+  writeBool(value: boolean): void {
+    this.#writeByte(value ? 0xf5 : 0xf4);
+  }
+
+  writeInt(value: number): void {
+    if (!Number.isSafeInteger(value) || value < 0) throw new InvalidCBOR("unsigned integer only");
+    this.#writeHead(0, value);
+  }
+
+  writeString(value: string): void {
+    const bytes = utf8.encode(value);
+    this.#writeHead(3, bytes.length);
+    this.#writeBytes(bytes);
+  }
+
+  writeBytes(value: Uint8Array): void {
+    this.#writeHead(2, value.length);
+    this.#writeBytes(value);
+  }
+
+  writeArray(value: unknown[]): void {
+    this.#writeHead(4, value.length);
+    for (const item of value) encodeInto(item, this);
+  }
+
+  writeMap(value: { [key: string]: unknown }): void {
+    const keys = Object.keys(value);
+    const encodedPairs: { key: Uint8Array; value: Uint8Array }[] = [];
+    for (const key of keys) {
+      const kw = new Writer();
+      kw.writeString(key);
+      const vw = new Writer();
+      const val = value[key];
+      if (val !== undefined) encodeInto(val, vw);
+      encodedPairs.push({ key: kw.buffer, value: vw.buffer });
+    }
+    encodedPairs.sort((a, b) => compareBytes(a.key, b.key));
+    this.#writeHead(5, encodedPairs.length);
+    for (const pair of encodedPairs) {
+      this.#writeBytes(pair.key);
+      this.#writeBytes(pair.value);
+    }
+  }
 }
 
 function compareBytes(a: Uint8Array, b: Uint8Array): number {
@@ -149,50 +259,45 @@ function compareBytes(a: Uint8Array, b: Uint8Array): number {
   return a.length - b.length;
 }
 
-function encodeInto(value: CBORValue, out: number[]): void {
+function encodeInto(value: unknown, out: Writer): void {
   if (value === null) {
-    out.push(0xf6);
+    out.writeNull();
     return;
   }
   if (value === false) {
-    out.push(0xf4);
+    out.writeBool(false);
     return;
   }
   if (value === true) {
-    out.push(0xf5);
+    out.writeBool(true);
     return;
   }
   if (typeof value === "number") {
-    if (!Number.isSafeInteger(value) || value < 0) throw new InvalidCBOR("unsigned integer only");
-    out.push(...head(0, value));
+    out.writeInt(value);
     return;
   }
   if (typeof value === "string") {
-    const bytes = utf8.encode(value);
-    out.push(...head(3, bytes.length), ...bytes);
+    out.writeString(value);
     return;
   }
   if (value instanceof Uint8Array) {
-    out.push(...head(2, value.length), ...value);
+    out.writeBytes(value);
     return;
   }
   if (Array.isArray(value)) {
-    out.push(...head(4, value.length));
-    for (const item of value) encodeInto(item, out);
+    out.writeArray(value);
     return;
   }
-  const pairs = Object.keys(value)
-    .map((key) => ({ key, encoded: encodeCBOR(key), value: encodeCBOR(value[key] as CBORValue) }))
-    .sort((a, b) => compareBytes(a.encoded, b.encoded));
-  out.push(...head(5, pairs.length));
-  for (const pair of pairs) {
-    out.push(...pair.encoded, ...pair.value);
+  if (value !== null && typeof value === "object") {
+    out.writeMap(value as { [key: string]: unknown });
+    return;
   }
+  throw new InvalidCBOR("unsupported value type");
 }
 
 /** Encodes one value in the core deterministic form (§4.2.1); no floats, tags or negatives. */
-export function encodeCBOR(value: CBORValue): Uint8Array {
-  const out: number[] = [];
-  encodeInto(value, out);
-  return Uint8Array.from(out);
+export function encodeCBOR(value: EncodableValue): Uint8Array {
+  const w = new Writer();
+  encodeInto(value, w);
+  return w.buffer;
 }

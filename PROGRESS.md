@@ -11,11 +11,13 @@ démontré (test, démo enregistrée ou tâche utilisateur chronométrée).
 - **Audit d'architecture (2026-10-31)** : référentiel, constats, décisions D1–D14, état des lots et
   marche à suivre pour reprendre : [docs/plans/2026-10-31-architecture-audit.md](docs/plans/2026-10-31-architecture-audit.md).
 - **Audit admission — étape 2.0** : pairs du Repo limités aux appareils membres non suspendus ; retrait explicite, annulation des files et suppression des cooldowns (A14). TDD et tests ciblés race, Vitest, svelte-check, lint et architecture verts ; invitations/relay à valider hors sandbox (sockets interdits).
-- **Étape 0 — Fondations** : terminée. Squelette go-starter, gates verts, architecture, ADR,
-  feuille de route, outillage IA.
-- **Étape 1 — Noyau** : terminée — critère de sortie démontré en local par un test de bout
-  en bout (deux instances réelles, Playwright) et `mise run app:duo` (deux fenêtres).
+- **Étape 0 — Fondations** : terminée.
+- **Étape 1 — Noyau** : terminée — critère de sortie démontré en local (deux instances réelles, Playwright ; `mise run app:duo`).
   Plan : [docs/plans/2026-10-25-etape-1-noyau.md](docs/plans/2026-10-25-etape-1-noyau.md).
+- **Étape 2 — Réseau** : code livré (p2p, identité, invitation, confiance, relais, store, projet) ; reste le panneau d'état (type de lien) et la **démonstration enregistrée** du critère de sortie (`mise run e2e:netsim`, scénarios 3 et 4 : jamais archivée).
+- **Lots HDAE (méthode `docs/plans/2026-11-02-methode-hdae.md`, portes figées `gates/<lot>.toml`)** :
+  L0 (mesure de référence, garde anti-affaiblissement), L1 (autoportance : bac à sable des sidecars sans programme externe, N42), L2 (G-0a : un clic dans la barre latérale ouvre le fichier), L3 (LSP : problèmes cliquables, F8, aide Typst, N28/N29) — tous `pass` dans `gates/L{0,1,2,3}.json` ; reports : PERF-MEM → G-0b, native darwin/windows → N35, PERF-START-plugins → Fondations extensibles.
+- **Protocole ADR 0034** : étape 1 (module `protocol/`), étape 2 (P2 : `protocol/sig`, Ed25519 strict, N-1) et étape 3 (P3 : TLC épinglé `mise run tla`, profil CBOR et schémas §9 dans `@inkwell/protocol`) faites, portes `gates/P2.json` et `gates/P3.json` vertes ; **prochaine : étape 4** (`protocol/sync2`, `protocol/libp2p`), à spécifier d'abord en exécutable (`docs/plans/2026-11-08-spec-executable.md`). Ensuite : G-0b, G-0c, S13. Suivi : [docs/objectif-en-cours.md](docs/objectif-en-cours.md).
 
 ## Étape 0 — Fondations ✅
 
@@ -46,14 +48,15 @@ Plan : [docs/plans/2026-10-25-etape-2-reseau.md](docs/plans/2026-10-25-etape-2-r
 
 > Sortie : **hors ligne puis retour, sur deux réseaux différents**, sans perte.
 
-- [ ] `transport/p2p` : go-libp2p (QUIC, Noise, mDNS, hole punching, relais circuit v2)
-- [ ] `identity` : Ed25519 par machine, empreinte en 4 mots, groupes d'appareils
-- [ ] `invite` : code Wormhole + acceptation LAN (un inconnu ne voit que nom de machine et titre)
-- [ ] `trust` : liste de membres signée, rôles, révocation, lots signés
+- [x] `transport/p2p` : go-libp2p (QUIC, Noise, mDNS, hole punching, relais circuit v2) — `internal/transport/p2p`, `sim_test.go`, suite de contrat `transporttest`
+- [x] `identity` : Ed25519 par machine, empreinte en mots, appareils — `internal/identity`, `protocol/sig` (N-1, P2)
+- [x] `invite` : code Wormhole + salon LAN — `internal/invite`, `protocol/invite`, ADR 0032
+- [x] `trust` : liste de membres signée, rôles, révocation, suspension, lots signés — `protocol/trust`, `internal/trust`, ADR 0017/0018/0021/0030
 - [x] `store` : persistance Automerge atomique, sauvegardes horodatées, contrôle d'intégrité
 - [x] `project` : index, projection `.typ` sur disque, règle de propriété fsnotify, bac à sable E/S
-- [ ] Relais libp2p auto-hébergeable en une commande
-- [ ] Panneau d'état (indicateur global, liste des pairs, type de lien)
+- [x] Relais libp2p auto-hébergeable en une commande — `cmd/inkwell-relay`, `docs/relay.md`
+- [ ] Panneau d'état : reste l'indicateur global et le type de lien par pair (la barre d'état ne montre que le nombre de personnes)
+- [ ] Critère de sortie démontré et archivé : **non démontré** — `mise run e2e:netsim` scénarios 3 (hors ligne 60 s) et 4 (changement de réseau nat-a → nat-c) + `offline.spec.ts` ; tests présents, **journal d'exécution absent**. Reste : lancer `mise run e2e:netsim` machine au repos, archiver les notes des scénarios 3 et 4, puis cocher.
 
 ## Étape 3 — Typst
 
@@ -62,7 +65,7 @@ Plan : [docs/plans/2026-10-25-etape-2-reseau.md](docs/plans/2026-10-25-etape-2-r
 
 - [x] `sidecar` : tinymist et typst embarqués, SHA-256 vérifié, supervision, backoff — [plan](docs/plans/2026-10-25-etape-3-typst.md), [ADR 0024](docs/adr/0024-sidecars-typst-tinymist.md)
 - [x] Aperçu (C2) : pages SVG des seules pages visibles, par un Stream sans port ; « Page X sur Y », problèmes dans la barre d'état, saut source ↔ aperçu par paragraphe (`typst eval`), export PDF — [plan](docs/plans/2026-10-25-etape-3-typst.md). Recompilation complète par `typst` (pas d'aperçu incrémental par `tinymist` : reste avec le LSP)
-- [x] Lot L3 — LSP via le pont : problèmes cliquables et ancrés, F8 / Maj+F8 (N28) ; complétion, aide sur les arguments et survol, hors ligne (N29). Critère de sortie : `mise run gate -- L3` vert avec la mesure native de la frappe (`INKWELL_NATIVE_PERF_RUN=1`) : problèmes e2e, positions, réponses périmées rejetées, service hors ligne, PERF-LSP p95 ≤ 100 ms, PERF-TYPE natif (chaud p95 ≤ 8 ms, froid p95 ≤ 50 ms), régression L2. Preuves : `gates/L3.json`, `gates/L3-setup/` (SUMMARY-premerge2.md, UX-walkthrough.md, SIMPLIFY.md), [plan](docs/plans/2026-11-05-L3-implementation.md)
+- [x] Lot L3 — LSP via le pont : problèmes cliquables et ancrés, F8 / Maj+F8 (N28) ; complétion, aide sur les arguments et survol, hors ligne (N29). Critère de sortie : `mise run gate -- L3` vert avec la mesure native de la frappe (`INKWELL_NATIVE_PERF_RUN=1`) : problèmes e2e, positions, réponses périmées rejetées, service hors ligne, PERF-LSP p95 ≤ 100 ms, PERF-TYPE natif (chaud p95 ≤ 8 ms, froid p95 ≤ 50 ms), régression L2. Preuves : rapport perdu le 2026-11-08 (non versionné, worktree supprimé); reconstitution : `gates/L3/RECONSTRUCTED.md` ; résultat de la porte : `gates/L3.json`, [plan](docs/plans/2026-11-05-L3-implementation.md)
 - [ ] Formatage par le LSP (hors L3)
 - [x] Export PDF déterministe, polices embarquées (`typst compile`, `pdf.attach` vérifié dans le PDF)
 - [x] `typst` : vente des paquets `@preview` dans `.typstdeps/`, message clair si absent (paquets fournis : cmarker, touying, lilaq)
@@ -98,6 +101,11 @@ Plan : [docs/plans/2026-10-25-etape-2-reseau.md](docs/plans/2026-10-25-etape-2-r
 
 | Date | Changement |
 |------|------------|
+| 2026-11-08 | ADR 0034 étape 2 (P2) : `protocol/sig`, Ed25519 strict, porte `gates/P2.json` verte. |
+| 2026-11-08 | ADR 0034 étape 3 (P3) : TLC épinglé, profil CBOR, schémas §9 ; porte `gates/P3.json` verte. |
+| 2026-11-08 | Triage du registre (exigences 🔨) et mise à jour de PROGRESS. |
+| 2026-11-03 | Lots L1, L2 (N42 précisée : rien à installer à part), L-maj (dépendances). |
+| 2026-11-02 | Lot L0 : portes HDAE et mesure de référence ; spécifications closes, méthode HDAE. |
 | 2026-10-25 | Bootstrap go-starter ; fondations : architecture, 8 ADR, glossaire, UX, roadmap, gopls MCP, Dependabot. |
 | 2026-10-25 | Étape 3 (C1, compilation de C2) : sidecars `typst`/`tinymist` épinglés, embarqués et supervisés ; `internal/typst` compile hors ligne (PDF, SVG, diagnostics, `query`, `Watch`). Reste : aperçu incrémental et LSP par `tinymist` (stdio), présentations. |
 | 2026-10-26 | Étape 3 (C2) : aperçu, problèmes, saut source ↔ aperçu, « Exporter en PDF » et mode réseau (À propos) ; `internal/app.Preview`, `typst.PageCount`/`Anchors`. Reste : LSP `tinymist` (diagnostics à la frappe, aperçu incrémental), ouverture des autres fichiers depuis un problème (B4 côté webview). |

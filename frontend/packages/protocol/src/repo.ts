@@ -15,7 +15,7 @@ export interface RepoContext {
   /** The receiver. */
   me: string;
   /** Documents this receiver currently serves. */
-  admitted: readonly string[];
+  admitted: ReadonlySet<string>;
 }
 
 /** A message that passed the profile and its §9 schema. */
@@ -80,6 +80,16 @@ function hex(bytes: Uint8Array): string {
   return Array.from(bytes, (x) => x.toString(16).padStart(2, "0")).join("");
 }
 
+function hasKeys(m: CBORMap, ...expected: string[]): boolean {
+  if (Object.keys(m).length !== expected.length) return false;
+  for (const k of expected) if (!Object.hasOwn(m, k)) return false;
+  return true;
+}
+
+const epoch = (v: CBORValue | undefined) => uint(v, 2147483648);
+const peer = (v: CBORValue | undefined) => typeof v === "string" && PEER.test(v);
+const coord = (v: CBORValue | undefined) => uint(v, 10000);
+
 /** N14: a key whose name starts with "!" is must-understand, at any depth. */
 function critical(v: CBORValue): boolean {
   if (Array.isArray(v)) return v.some(critical);
@@ -113,14 +123,10 @@ function presence(p: CBORMap): boolean {
 }
 
 function present(m: CBORMap): boolean {
-  const keys = Object.keys(m).sort().join(",");
-  const epoch = (v: CBORValue | undefined) => uint(v, 2147483648);
-  const peer = (v: CBORValue | undefined) => typeof v === "string" && PEER.test(v);
-  const coord = (v: CBORValue | undefined) => uint(v, 10000);
   switch (own(m, "t")) {
     case "state":
       return (
-        keys === "epoch,screen,seq,slide,step,t" &&
+        hasKeys(m, "epoch", "screen", "seq", "slide", "step", "t") &&
         epoch(own(m, "epoch")) &&
         uint(own(m, "seq"), Number.MAX_SAFE_INTEGER) &&
         uint(own(m, "slide"), 100000) &&
@@ -130,21 +136,21 @@ function present(m: CBORMap): boolean {
       );
     case "laser":
       return (
-        keys === "epoch,t,x,y" &&
+        hasKeys(m, "epoch", "t", "x", "y") &&
         epoch(own(m, "epoch")) &&
         ((own(m, "x") === null && own(m, "y") === null) ||
           (coord(own(m, "x")) && coord(own(m, "y"))))
       );
     case "take":
     case "end":
-      return keys === "epoch,t" && epoch(own(m, "epoch"));
+      return hasKeys(m, "epoch", "t") && epoch(own(m, "epoch"));
     case "hello":
     case "ask":
-      return keys === "t";
+      return hasKeys(m, "t");
     case "give":
-      return keys === "epoch,t,to" && epoch(own(m, "epoch")) && peer(own(m, "to"));
+      return hasKeys(m, "epoch", "t", "to") && epoch(own(m, "epoch")) && peer(own(m, "to"));
     case "deny":
-      return keys === "t,to" && peer(own(m, "to"));
+      return hasKeys(m, "t", "to") && peer(own(m, "to"));
     default:
       return false;
   }
@@ -185,7 +191,7 @@ export function decodeRepoMessage(bytes: Uint8Array, ctx: RepoContext): RepoDeco
 
   const documentId = own(value, "documentId");
   if (typeof documentId !== "string" || !DOC.test(documentId)) invalid("documentId");
-  if (!ctx.admitted.includes(documentId)) invalid("document not in the admitted set");
+  if (!ctx.admitted.has(documentId)) invalid("document not in the admitted set");
   out.documentId = documentId;
   if (type === "doc-unavailable") return { kind: "message", message: out };
 

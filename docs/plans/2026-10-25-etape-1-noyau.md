@@ -47,8 +47,8 @@ pnpm 12, Biome 2, Vitest, `@automerge/automerge-repo` 2.5.6, `@automerge/automer
 |---|---|
 | `internal/transport/transport.go` | `PeerID`, `Kind`, `Event`, interface `Transport`, erreurs sentinelles |
 | `internal/transport/memnet/memnet.go` | Réseau en mémoire avec fautes injectées (graine) |
-| `internal/transport/tcp/frame.go` | Trames longueur-préfixées (lecture/écriture bornées) |
-| `internal/transport/tcp/tcp.go` | `Node` : écoute, numérotation, poignée de main, pairs |
+| `internal/transport/tcp/frame.go` | Trames longueur-préfixées (lecture/écriture bornées) (supprimé à l'étape 2) |
+| `internal/transport/tcp/tcp.go` | `Node` : écoute, numérotation, poignée de main, pairs (supprimé à l'étape 2) |
 | `internal/bridge/envelope.go` | Enveloppe binaire webview ↔ Go (encode/decode) |
 | `internal/bridge/router.go` | Routeur : une connexion Stream attachée ↔ `Transport` |
 | `internal/bridge/testdata/envelopes.json` | Vecteurs dorés partagés Go/TS |

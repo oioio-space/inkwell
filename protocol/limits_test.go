@@ -38,7 +38,7 @@ func TestLimitsMatchSpecification(t *testing.T) {
 	}
 	var rows []string
 	inSection := false
-	for _, line := range strings.Split(string(doc), "\n") {
+	for line := range strings.SplitSeq(string(doc), "\n") {
 		if line == "## 16. Table des bornes" {
 			inSection = true
 			continue

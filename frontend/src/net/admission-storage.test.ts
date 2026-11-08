@@ -4,6 +4,7 @@ import { type PeerId, Repo } from "@automerge/automerge-repo";
 import { type CBORValue, encodeCBOR } from "@inkwell/protocol";
 import { expect, it, vi } from "vitest";
 import { encodeEnvelope, encodeRoles, Kind } from "./envelope";
+import { peerMessage } from "./testkit";
 import { type SocketLike, WailsNetworkAdapter } from "./WailsNetworkAdapter";
 
 it("6 forty storageIds never load, save or setSyncInfo, even with delayed saves", async () => {
@@ -51,7 +52,7 @@ it("6 forty storageIds never load, save or setSyncInfo, even with delayed saves"
   socket.onmessage?.(new MessageEvent("message", { data: rolesFrame.buffer }));
   const [, data] = A.generateSyncMessage(A.init(), A.initSyncState());
   for (let i = 0; i < 40; i++) {
-    deliver({ type: "arrive", senderId: "peer", peerMetadata: { storageId: `store${i}` } });
+    deliver(peerMessage("arrive", "peer", "me", { peerMetadata: { storageId: `store${i}` } }));
     deliver({ type: "sync", senderId: "peer", targetId: "me", documentId: doc.documentId, data });
   }
   await new Promise((r) => setTimeout(r, 1200));

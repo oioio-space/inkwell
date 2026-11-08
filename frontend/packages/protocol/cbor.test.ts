@@ -76,4 +76,29 @@ describe("CBOR validity profile (§9.2.1)", () => {
   ])("rejects %s", (_name, bytes) => {
     expect(() => decodeCBOR(Uint8Array.from(bytes))).toThrow(InvalidCBOR);
   });
+
+  // Exact byte comparison in one linear pass: toEqual walks a 2 MiB array element by element
+  // (about 3.4 s each), which made the test time out under the full suite.
+  const sameBytes = (a: Uint8Array, b: Uint8Array): boolean =>
+    a.length === b.length && a.every((x, i) => x === b[i]);
+
+  test("encodes and decodes a 2 MiB Uint8Array inside a sync-like map without spreading", () => {
+    const largeData = new Uint8Array(2 * 1024 * 1024);
+    for (let i = 0; i < largeData.length; i++) largeData[i] = i & 0xff;
+    const syncMap: CBORValue = {
+      type: "sync",
+      senderId: "peer1",
+      targetId: "peer2",
+      documentId: "doc1",
+      data: largeData,
+    };
+    const encoded = encodeCBOR(syncMap);
+    const decoded = decodeCBOR(encoded) as Record<string, CBORValue>;
+    const { data, ...fields } = decoded;
+    const { data: _sent, ...sentFields } = syncMap as Record<string, CBORValue>;
+    expect(fields).toEqual(sentFields);
+    expect(data).toBeInstanceOf(Uint8Array);
+    expect(sameBytes(data as Uint8Array, largeData)).toBe(true);
+    expect(sameBytes(encodeCBOR(decoded), encoded)).toBe(true);
+  });
 });

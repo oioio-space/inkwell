@@ -71,7 +71,7 @@ Les références au code sont de la forme `fichier:symbole` et ont été vérifi
 ### N53 — Mode « enhance » : éditions facilitées sur place
 - **Livrable de S13.7.** Comme le demande le registre (« design + architecture »), ce lot livre seulement deux documents :
   - `docs/design/enhance-mode.md` ;
-  - `docs/architecture/enhance-mode.md`.
+  - `docs/architecture/enhance-mode.md` (document à écrire).
 
   Le code viendra dans un lot ultérieur.
 - **État actuel.**

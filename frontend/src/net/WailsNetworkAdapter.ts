@@ -7,7 +7,7 @@ import {
   type PeerMetadata,
 } from "@automerge/automerge-repo";
 import { type CBORValue, encodeCBOR } from "@inkwell/protocol";
-import { Admission, type Handshake, parsePeerMessage } from "./admission";
+import { Admission, type Context, type Handshake, parsePeerMessage } from "./admission";
 import { Coverage } from "./coverage";
 import {
   decodeEnvelope,
@@ -34,7 +34,7 @@ export interface SocketLike {
 }
 
 export interface AdapterOptions {
-  admitted?: (id: string) => boolean;
+  admitted?: ReadonlySet<string> | ((id: string) => boolean);
   ready?: (id: string) => boolean;
   load?: (id: string) => void;
   /** Project document announced to peers (the host sets it; a joiner learns it). */
@@ -335,12 +335,17 @@ export class WailsNetworkAdapter extends NetworkAdapter {
   }
 
   #receiveMessage(from: PeerId, payload: Uint8Array): void {
-    const msg = parsePeerMessage(payload, {
+    const admitted = this.#opts.admitted;
+    const admittedSet = admitted instanceof Set ? admitted : new Set();
+    const admittedFn = typeof admitted === "function" ? admitted : undefined;
+    const ctx: Context = {
       from,
       me: this.peerId ?? "",
       announced: this.#announced.has(from),
-      has: this.#opts.admitted ?? (() => false),
-    });
+      admitted: admittedSet,
+    };
+    if (admittedFn) ctx.admittedFn = admittedFn;
+    const msg = parsePeerMessage(payload, ctx);
     if (!msg) {
       this.#drop("invalid peer message");
       return;

@@ -6,7 +6,7 @@ export type Handshake = {
   type: "arrive" | "welcome";
   senderId: PeerId;
   targetId: PeerId;
-  peerMetadata: { isEphemeral: true };
+  peerMetadata: { isEphemeral: true } & Record<string, unknown>;
   projectUrl?: import("@automerge/automerge-repo").AutomergeUrl;
 };
 export const MAX_PROJECT_URL_LENGTH = 80;
@@ -38,7 +38,13 @@ export function validFilePath(v: unknown): v is string {
   if (new TextEncoder().encode(v).length > MAX_FILE_PATH_BYTES) return false;
   return v.split("/").every((part) => part !== "" && part !== "." && part !== "..");
 }
-type Context = { from: string; me: string; announced: boolean; has: (id: string) => boolean };
+export type Context = {
+  from: string;
+  me: string;
+  announced: boolean;
+  admitted: ReadonlySet<string>;
+  admittedFn?: (id: string) => boolean;
+};
 const plain = (v: unknown): v is Record<string, unknown> =>
   v !== null &&
   typeof v === "object" &&
@@ -145,7 +151,12 @@ export function parsePeerMessage(payload: Uint8Array, c: Context): Handshake | M
     }
     if (!["sync", "request", "ephemeral", "doc-unavailable"].includes(type as string)) return;
     const documentId = own(v, "documentId");
-    if (!c.announced || !id(documentId) || !c.has(documentId)) return;
+    if (
+      !c.announced ||
+      !id(documentId) ||
+      !(c.admittedFn ? c.admittedFn(documentId) : c.admitted.has(documentId))
+    )
+      return;
     const base = { type, senderId, targetId, documentId };
     if (type === "doc-unavailable") return base as Message;
     const data = own(v, "data");

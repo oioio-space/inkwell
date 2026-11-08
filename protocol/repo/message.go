@@ -19,13 +19,18 @@ var (
 	sessionRE = regexp.MustCompile(`^[0-9a-z]{1,16}$`)
 )
 
-var knownTypes = map[string]bool{
-	"sync":            true,
-	"request":         true,
-	"doc-unavailable": true,
-	"ephemeral":       true,
-	"history-request": true,
-	"history-page":    true,
+type msgSpec struct {
+	docScoped bool
+	decode    func(map[string]any, Message) (Result, error)
+}
+
+var msgTable = map[string]msgSpec{
+	"sync":            {docScoped: true, decode: decodeSyncOrRequest},
+	"request":         {docScoped: true, decode: decodeSyncOrRequest},
+	"doc-unavailable": {docScoped: true, decode: decodeDocUnavailable},
+	"ephemeral":       {docScoped: true, decode: decodeEphemeral},
+	"history-request": {docScoped: true, decode: decodeHistoryRequest},
+	"history-page":    {docScoped: true, decode: decodeHistoryPage},
 }
 
 // Context is what the transport authenticated and the receiver admits.
@@ -89,7 +94,8 @@ func Decode(b []byte, ctx Context) (Result, error) {
 	if t == "remote-subscription-change" || t == "remote-heads-changed" {
 		return Result{}, errors.New("type not admitted")
 	}
-	if !knownTypes[t] {
+	spec, known := msgTable[t]
+	if !known {
 		return Result{Ignored: true}, nil
 	}
 
@@ -101,22 +107,15 @@ func Decode(b []byte, ctx Context) (Result, error) {
 		return Result{}, errors.New("document not in the admitted set")
 	}
 	out.DocumentID = doc
-	if t == "doc-unavailable" {
-		return Result{Message: out}, nil
-	}
 
-	switch t {
-	case "history-request":
-		return decodeHistoryRequest(m, out)
-	case "history-page":
-		return decodeHistoryPage(m, out)
-	case "sync", "request":
-		return decodeSyncOrRequest(m, out)
-	case "ephemeral":
-		return decodeEphemeral(m, out)
-	default:
-		return Result{Message: out}, nil
+	if spec.decode != nil {
+		return spec.decode(m, out)
 	}
+	return Result{Message: out}, nil
+}
+
+func decodeDocUnavailable(m map[string]any, out Message) (Result, error) {
+	return Result{Message: out}, nil
 }
 
 func decodeHistoryRequest(m map[string]any, out Message) (Result, error) {
@@ -241,10 +240,8 @@ func handshake(m map[string]any, out Message, size int) (Result, error) {
 func critical(v any) bool {
 	switch x := v.(type) {
 	case []any:
-		for _, item := range x {
-			if critical(item) {
-				return true
-			}
+		if slices.ContainsFunc(x, critical) {
+			return true
 		}
 	case map[string]any:
 		for key, item := range x {

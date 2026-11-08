@@ -94,6 +94,46 @@
       "id": "a6ef791eb160117c5477e1e84b2dfbfaf345e0c3244c75659e40861347000dbc",
       "reason": "P2 gate written the same day with a command that could not run: protocol/sig and protocol/trust are in the nested protocol module (go test ./protocol/sig from the root fails) and internal/policy does not exist. The corrected command runs the same packages plus protocol/trust; no criterion, threshold or test was weakened.",
       "decision": "docs/plans/2026-11-08-P2-implementation.md"
+    },
+    {
+      "id": "2d1ae6c4d45b872d0ba92150f4da1e0859246a9ae6de2e209e08b23c23f2c71c",
+      "reason": ".golangci.yml: adds the modernize linter (W26, go fix modernizers enforced). Strengthens lint; no linter removed, no setting relaxed.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "e2de7e0f2da435d43919e6edf5006bf4a72c9cc859e61284be2167516e1ce76a",
+      "reason": "mise.toml mutate:go: gremlins installed once (pinned v0.6.0) instead of go run, -count=1 and a 1.8 GB per-test-binary cap (memcap.sh); timeout coefficient 3 -> 10. The coefficient only decides when a mutant counts as timed out, and timed-out mutants are excluded from efficacy, so a longer limit cannot raise the score: it lets more mutants be judged (2026-11-08: 278/278 timed out at 3, a void run). block_done.py now refuses a run with >10% timeouts. No test, threshold or efficacy target changed.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "29a279f369ec1be00b74db74acbdbf6a97d40c443a0e20925e6d91e52732e5d8",
+      "reason": "scripts/alloy_check.py: the pinned download moved to scripts/fetch_pinned.py, which keeps the same timeout=120 and adds an atomic rename; the timeout is moved, not removed.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "0d9b6e4b873ac2d6b4b24d7643210bab0f9ec292584ed32d05930c808f992c35",
+      "reason": "scripts/tla-check.sh: cache check, SHA-256 verification and rename delegated to scripts/fetch_pinned.py (same pin, same SHA-256, timeout=120); verified by mise run formal from an empty cache. No model, mutant or check removed.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "977129d226f06fa8fa41e1b9fb12df6873c613ab557aeafdfa56c5accc68fc26",
+      "reason": "mise.toml: same mutate:go change as override e2de7e0f (pinned gremlins binary, -count=1, 1.8 GB per-test cap, coefficient 3 -> 10; a timed-out mutant is excluded from efficacy, so a longer limit cannot raise the score) plus scripts/gate_reset_test.py added to test:py. No test, threshold or efficacy target changed.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "e4f1dddf8e395e784e1e0bd29b8db314d566c77a12ceb3bb4a7e911b289d778a",
+      "reason": "scripts/gate.py: reset_evidence keeps the block's reports (gates/<lot>/*.md) instead of an rmtree of the whole folder, which erased the P3 report and the L3/P2 reconstructions on 2026-11-08. Every other entry (logs, playwright results, JSON, subfolders, symlinks) is still removed before the run, so evidence is still only what this run produced; no criterion, threshold or verdict logic changed. Tested by scripts/gate_reset_test.py; scripts/gate-selftest.py passes.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "0c05bb58c3dcd947cd378850fad0ba22a49642584859ca7e7e9a8b2baa7b2674",
+      "reason": "scripts/gate.py: reset_evidence keeps the block's reports (gates/<lot>/*.md) instead of an rmtree of the whole folder, which erased the P3 report and the L3/P2 reconstructions on 2026-11-08. Every other entry (logs, playwright results, JSON, subfolders, symlinks) is still removed before the run, so evidence is still only what this run produced; no criterion, threshold or verdict logic changed. Tested by scripts/gate_reset_test.py; scripts/gate-selftest.py passes.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "f4e233f366ad0939cf1e932ca5e87fcd1685bd87118c45d2bcb46f3c9d8f3b3a",
+      "reason": "scripts/gate_reset_test.py: new test file for gate.reset_evidence (reports kept, evidence cleared, symlinks not followed); adds checks, changes none.",
+      "decision": "docs/objectif-en-cours.md"
     }
   ]
 }

@@ -7,11 +7,26 @@ import (
 	"encoding/json"
 	"fmt"
 	"io/fs"
+	"os"
 	"strconv"
 	"strings"
 
 	"github.com/oioio-space/inkwell/protocol/vectors"
 )
+
+// CurrentStep is the current ADR 0034 migration step, raised by each step.
+// Plain `go test` (the CI) enforces every vector up to this step.
+const CurrentStep = 3
+
+// StepFromEnv reads INKWELL_PROTOCOL_STEP, defaulting to CurrentStep.
+func StepFromEnv() int {
+	if s := os.Getenv("INKWELL_PROTOCOL_STEP"); s != "" {
+		if n, err := strconv.Atoi(s); err == nil {
+			return n
+		}
+	}
+	return CurrentStep
+}
 
 // Vector is a corpus case. Fields retains the complete schema for implementation-specific checks.
 type Vector struct {

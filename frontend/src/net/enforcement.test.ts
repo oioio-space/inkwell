@@ -12,7 +12,7 @@ import {
   Kind,
 } from "./envelope";
 import { rng, SimNet } from "./simnet";
-import { Kit, type TestPeer, until } from "./testkit";
+import { Kit, peerMessage, type TestPeer, until } from "./testkit";
 import { type SocketLike, WailsNetworkAdapter } from "./WailsNetworkAdapter";
 
 type Doc = { text: string };
@@ -309,7 +309,7 @@ function wire() {
       encodeEnvelope({
         kind: Kind.Message,
         peer,
-        payload: encodeCBOR({ type: "arrive", senderId: peer, targetId: "me", peerMetadata: {} }),
+        payload: encodeCBOR(peerMessage("arrive", peer, "me")),
       }),
     );
   };

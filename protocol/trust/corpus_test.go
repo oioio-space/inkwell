@@ -39,7 +39,7 @@ func TestCorpusTruncation(t *testing.T) {
 				if err != nil {
 					t.Fatal(err)
 				}
-				for n := 0; n < len(b); n++ {
+				for n := range b {
 					if v.Decoder == "trust_op" {
 						_, err = trust.Decode(b[:n])
 					} else {

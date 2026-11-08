@@ -5,6 +5,7 @@ import { encodeCBOR } from "@inkwell/protocol";
 import { afterEach, describe, expect, it } from "vitest";
 import { decodeEnvelope, encodeEnvelope, encodeRoles, Kind } from "./envelope";
 import { rng, SimNet } from "./simnet";
+import { peerMessage } from "./testkit";
 import { type SocketLike, WailsNetworkAdapter } from "./WailsNetworkAdapter";
 
 type Doc = { text: string };
@@ -102,12 +103,7 @@ describe("WailsNetworkAdapter", () => {
       encodeEnvelope({
         kind: Kind.Message,
         peer: "mallory",
-        payload: encodeCBOR({
-          type: "arrive",
-          senderId: "alice",
-          targetId: "me",
-          peerMetadata: {},
-        }),
+        payload: encodeCBOR(peerMessage("arrive", "alice", "me", { peerMetadata: {} })),
       }),
     );
     expect(drops).toEqual(["unsupported version 9", "invalid peer message"]);
@@ -178,12 +174,12 @@ describe("WailsNetworkAdapter", () => {
     const arrive = encodeEnvelope({
       kind: Kind.Message,
       peer: "alice",
-      payload: encodeCBOR({ type: "arrive", senderId: "alice", targetId: "me", peerMetadata: {} }),
+      payload: encodeCBOR(peerMessage("arrive", "alice", "me")),
     });
     const welcome = encodeEnvelope({
       kind: Kind.Message,
       peer: "alice",
-      payload: encodeCBOR({ type: "welcome", senderId: "alice", targetId: "me", peerMetadata: {} }),
+      payload: encodeCBOR(peerMessage("welcome", "alice", "me")),
     });
     const deliver = (b: Uint8Array) =>
       socket?.onmessage?.(new MessageEvent("message", { data: b.buffer }));
@@ -219,7 +215,7 @@ describe("WailsNetworkAdapter", () => {
     const arrive = encodeEnvelope({
       kind: Kind.Message,
       peer: "alice",
-      payload: encodeCBOR({ type: "arrive", senderId: "alice", targetId: "me", peerMetadata: {} }),
+      payload: encodeCBOR(peerMessage("arrive", "alice", "me")),
     });
     const deliver = (b: Uint8Array) =>
       socket?.onmessage?.(new MessageEvent("message", { data: b.buffer }));
