@@ -6,7 +6,7 @@
       "command": "cd protocol && INKWELL_PROTOCOL_STEP=2 ../scripts/heavy.sh go test ./conformance -run TestCorpus -count=1",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 0.294263844989473,
+      "duration_seconds": 0.2665245730022434,
       "log": "gates/P2/P-VEC-2-go.log"
     },
     {
@@ -14,7 +14,7 @@
       "command": "cd frontend && INKWELL_PROTOCOL_STEP=2 ../scripts/heavy.sh ./node_modules/.bin/vitest run packages/protocol",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 0.6653199840075104,
+      "duration_seconds": 0.6715306980040623,
       "log": "gates/P2/P-VEC-2-ts.log"
     },
     {
@@ -22,7 +22,7 @@
       "command": "(cd protocol && ../scripts/heavy.sh go test -count=1 ./sig ./trust) && ./scripts/heavy.sh go test -count=1 ./internal/transport/p2p ./internal/trust ./internal/invite ./internal/identity",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 15.325448837000295,
+      "duration_seconds": 15.354463813011535,
       "log": "gates/P2/N-1-callers.log"
     },
     {
@@ -30,7 +30,7 @@
       "command": "cd protocol && ../scripts/heavy.sh go test ./sig -run '^$' -fuzz '^FuzzVerify$' -fuzztime 120s",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 120.87612983799772,
+      "duration_seconds": 120.65306430601049,
       "log": "gates/P2/P-FUZZ-sig.log"
     },
     {
@@ -38,7 +38,7 @@
       "command": "bash scripts/arch-check.sh",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 2.863770130992634,
+      "duration_seconds": 18.260890587000176,
       "log": "gates/P2/P-ARCH.log"
     },
     {
@@ -46,7 +46,7 @@
       "command": "mise run gate -- L3",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 1432.8705072099983,
+      "duration_seconds": 1428.5986180290056,
       "log": "gates/P2/L3-regression.log"
     }
   ],
@@ -62,15 +62,16 @@
     }
   },
   "sha256": {
-    "docs/objectif-en-cours.md": "4d4e9f7071b692a9f2799698698f4c33bcc9f90ce59cc1fb22729e2444b1e567",
+    "docs/objectif-en-cours.md": "2fe1a8992387dc50fa4035e36c9b74990cb646d243e45927f57d51cacba44786",
     "docs/plans/2026-11-08-P2-implementation.md": "2614a6ae91e3ead59c1574fb7e36d99431a8c35190e3f6fbfffc3da5a60d7347",
-    "gates/L3.json": "de1a2c5acdec6b3e0512f8c3736b9794e628a4ab182f455782987444f4afb9b8",
+    "gates/L3.json": "60e1813e0c770a174a5e03496d2ea991231b303dfaaefb3eb8e3c609bcc227c7",
     "gates/P2/L3-regression.log": "e04a7a10b17f554c2c49368c3ff7d00366475d22908d3f41685b615fa5fe86a1",
-    "gates/P2/N-1-callers.log": "0f02a73bd395c9886fcc78428c275c3451713f415d9b09a7ff6a324e268205e9",
+    "gates/P2/N-1-callers.log": "8d38ebce330da7559eb54bdb5e2e7568f7b8b47f1db61a347e1c85c73788eec0",
     "gates/P2/P-ARCH.log": "fa489540f4ad789887b77c36f95084173f64ac5085fe5f0b1c60acdc69066738",
-    "gates/P2/P-FUZZ-sig.log": "f5d1408c300cb3a0e3129d5559fae9471ea3f52d900374d224c6e1d9a0dfd1ec",
-    "gates/P2/P-VEC-2-go.log": "ef7bc4f53f5e49b61274dde2b1daeccaaae7c6416ab7dfd82aae29a869d31be9",
-    "gates/P2/P-VEC-2-ts.log": "22fb6013419136bbad82ecccab5ed4561f98182cd66de8a9a9568c0fba5c35cf",
+    "gates/P2/P-FUZZ-sig.log": "dd7126085b6a87e0254c0636069c8621c6f618c11f438f8a5b36733ce4708d75",
+    "gates/P2/P-VEC-2-go.log": "4b681a8eff58ad7078ce709a54d07b0af42e9eec83992fda140e52f0696c491e",
+    "gates/P2/P-VEC-2-ts.log": "2cae688f4a3151ce0aa310baf412a26bb9c87b4e369d0f1719fa64cf79173228",
+    "gates/P2/RECONSTRUCTED.md": "11cc5b0f5bc8fa5f35e889cc17d0902e9c69c9cb242dd4a330f0cd582c0c7e61",
     "gates/P2/base-guard.log": "4d6bf6524e2d6c13f1fc68b65c159f7e95fa78b4a6da2ee1f6f157a0011ee05d"
   },
   "status": "pass",
@@ -78,15 +79,15 @@
   "known_failures": [],
   "base_guard": {
     "ref": "main",
-    "base": "5765331c780b3cd5727e528ff8cdc2d8301157b8",
+    "base": "265ff643ccb6c7984fa8f73fe8a3926c5f2af6a1",
     "source_sha256": "c306265111e4c8b0ad94a1867d797b7a20be7d814161b7b9dd6200ab7feb259c",
     "exit_code": 0,
     "status": "pass",
     "log": "gates/P2/base-guard.log"
   },
   "runner": {
-    "source": "base 5765331c780b3cd5727e528ff8cdc2d8301157b8",
-    "sha256": "99e00a0d51d35601e02b096e77ff41013fad14b082afea97fcba920cba71042e"
+    "source": "base 265ff643ccb6c7984fa8f73fe8a3926c5f2af6a1",
+    "sha256": "b27c4c15b51712a94fe8280e60d0abd1efc431723999c7da8e3de63029522bcb"
   },
   "guard_overrides": [
     {
@@ -183,6 +184,46 @@
       "id": "a6ef791eb160117c5477e1e84b2dfbfaf345e0c3244c75659e40861347000dbc",
       "reason": "P2 gate written the same day with a command that could not run: protocol/sig and protocol/trust are in the nested protocol module (go test ./protocol/sig from the root fails) and internal/policy does not exist. The corrected command runs the same packages plus protocol/trust; no criterion, threshold or test was weakened.",
       "decision": "docs/plans/2026-11-08-P2-implementation.md"
+    },
+    {
+      "id": "2d1ae6c4d45b872d0ba92150f4da1e0859246a9ae6de2e209e08b23c23f2c71c",
+      "reason": ".golangci.yml: adds the modernize linter (W26, go fix modernizers enforced). Strengthens lint; no linter removed, no setting relaxed.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "e2de7e0f2da435d43919e6edf5006bf4a72c9cc859e61284be2167516e1ce76a",
+      "reason": "mise.toml mutate:go: gremlins installed once (pinned v0.6.0) instead of go run, -count=1 and a 1.8 GB per-test-binary cap (memcap.sh); timeout coefficient 3 -> 10. The coefficient only decides when a mutant counts as timed out, and timed-out mutants are excluded from efficacy, so a longer limit cannot raise the score: it lets more mutants be judged (2026-11-08: 278/278 timed out at 3, a void run). block_done.py now refuses a run with >10% timeouts. No test, threshold or efficacy target changed.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "29a279f369ec1be00b74db74acbdbf6a97d40c443a0e20925e6d91e52732e5d8",
+      "reason": "scripts/alloy_check.py: the pinned download moved to scripts/fetch_pinned.py, which keeps the same timeout=120 and adds an atomic rename; the timeout is moved, not removed.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "0d9b6e4b873ac2d6b4b24d7643210bab0f9ec292584ed32d05930c808f992c35",
+      "reason": "scripts/tla-check.sh: cache check, SHA-256 verification and rename delegated to scripts/fetch_pinned.py (same pin, same SHA-256, timeout=120); verified by mise run formal from an empty cache. No model, mutant or check removed.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "977129d226f06fa8fa41e1b9fb12df6873c613ab557aeafdfa56c5accc68fc26",
+      "reason": "mise.toml: same mutate:go change as override e2de7e0f (pinned gremlins binary, -count=1, 1.8 GB per-test cap, coefficient 3 -> 10; a timed-out mutant is excluded from efficacy, so a longer limit cannot raise the score) plus scripts/gate_reset_test.py added to test:py. No test, threshold or efficacy target changed.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "e4f1dddf8e395e784e1e0bd29b8db314d566c77a12ceb3bb4a7e911b289d778a",
+      "reason": "scripts/gate.py: reset_evidence keeps the block's reports (gates/<lot>/*.md) instead of an rmtree of the whole folder, which erased the P3 report and the L3/P2 reconstructions on 2026-11-08. Every other entry (logs, playwright results, JSON, subfolders, symlinks) is still removed before the run, so evidence is still only what this run produced; no criterion, threshold or verdict logic changed. Tested by scripts/gate_reset_test.py; scripts/gate-selftest.py passes.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "0c05bb58c3dcd947cd378850fad0ba22a49642584859ca7e7e9a8b2baa7b2674",
+      "reason": "scripts/gate.py: reset_evidence keeps the block's reports (gates/<lot>/*.md) instead of an rmtree of the whole folder, which erased the P3 report and the L3/P2 reconstructions on 2026-11-08. Every other entry (logs, playwright results, JSON, subfolders, symlinks) is still removed before the run, so evidence is still only what this run produced; no criterion, threshold or verdict logic changed. Tested by scripts/gate_reset_test.py; scripts/gate-selftest.py passes.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "f4e233f366ad0939cf1e932ca5e87fcd1685bd87118c45d2bcb46f3c9d8f3b3a",
+      "reason": "scripts/gate_reset_test.py: new test file for gate.reset_evidence (reports kept, evidence cleared, symlinks not followed); adds checks, changes none.",
+      "decision": "docs/objectif-en-cours.md"
     }
   ]
 }

@@ -170,7 +170,9 @@ jamais attendue à l'aveugle ni sondée à coups de `sleep` :
   expiration jusqu'à la fin ;
 - les scripts longs écrivent leur progression ligne à ligne, sans la retenir (`block_done.py` diffuse la
   sortie de gremlins) ; un code de sortie non nul est toujours rapporté, jamais avalé ;
-- l'utilisatrice sait ce qui tourne et comment c'est surveillé ; un échec est traité dès qu'il remonte.
+- l'utilisatrice est tenue au courant **au fur et à mesure** : chaque étape franchie, chaque résultat, et,
+  quand une étape longue reste silencieuse, un point de progression toutes les 5 minutes (ce qui tourne,
+  depuis combien de temps, dernier résultat) ; un échec est traité dès qu'il remonte.
 Le hook `long-task-monitor.sh` le rappelle à chaque lancement en arrière-plan.
 
 **Mémoire (règle) :** tout travail lourd (tests Go, Python et frontend, couverture, bout en bout,
