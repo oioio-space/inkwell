@@ -194,6 +194,10 @@ description = "Audit unreachable exported functions (x/tools v0.52.0 pinned in g
 depends = ["sidecar:fetch"]
 run = "./scripts/deadcode.sh"
 
+[tasks.alloy]
+description = "Alloy models (docs/protocol/alloy): checks hold, runs are satisfiable, every mutant is caught (jar pinned by SHA-256)"
+run = "./scripts/heavy.sh python3 scripts/alloy_check.py"
+
 [tasks."lint:env"]
 description = "Every environment variable the code reads is declared in .env.reference"
 run = "python3 scripts/check-env-reference.py"
