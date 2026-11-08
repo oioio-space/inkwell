@@ -1,0 +1,10 @@
+# Renewal dates read by scripts/quotas.sh. Update when a plan renews or the limits move.
+# Times are Paris time. Names only, never keys.
+
+[renewals.codex]
+when = "2026-11-12 08:41"
+note = "quota back"
+
+[renewals.antigravity]
+when = "2026-11-14 16:21"
+note = "quota back"

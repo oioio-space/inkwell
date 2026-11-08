@@ -200,7 +200,7 @@ run = "./scripts/deadcode.sh"
 
 [tasks."test:py"]
 description = "Python tests of the gate, perf and formal tooling (unittest)"
-run = ["cd scripts/perf && ../heavy.sh python3 -m unittest discover -p '*_test.py'", "./scripts/heavy.sh python3 -m unittest scripts/alloy_check_test.py scripts/block_done_test.py scripts/fetch_pinned_test.py scripts/check_claude_md_test.py scripts/gate_reset_test.py"]
+run = ["cd scripts/perf && ../heavy.sh python3 -m unittest discover -p '*_test.py'", "./scripts/heavy.sh python3 -m unittest scripts/alloy_check_test.py scripts/block_done_test.py scripts/fetch_pinned_test.py scripts/check_claude_md_test.py scripts/gate_reset_test.py scripts/llm_test.py"]
 
 [tasks."lint:claude-md"]
 description = "Everything CLAUDE.md cites exists: mise tasks, paths, agents, skills, Claude hooks"
@@ -420,7 +420,7 @@ wait
 
 # ── Hosted open-weight models (mechanical text only — see CLAUDE.md routing) ──
 [tasks."llm:commit-msg"]
-description = "Draft a Conventional Commit message from the staged diff (OpenRouter, ZDR)"
+description = "Draft a Conventional Commit message from the staged diff (Groq, Cloudflare, then OpenRouter)"
 run = "./scripts/llm.sh commit-msg"
 
 [tasks."ci:triage"]
@@ -433,6 +433,10 @@ id=$(./scripts/ghx.sh run list --status failure -L 1 --json databaseId --jq '.[0
 [tasks."llm:triage"]
 description = "Reduce a long CI/test log (stdin) to its failing items (OpenRouter, ZDR)"
 run = "./scripts/llm.sh triage"
+
+[tasks.quotas]
+description = "Show remaining quota and renewal times of the free model providers (Groq, OpenRouter, Cloudflare, Gemini, Codex, Antigravity); no key is printed"
+run = "./scripts/quotas.sh"
 
 [tasks.icons]
 description = "Render the app icon (build/icons/*.svg) to PNG, .ico and .icns; the pre-release (nightly) tree too"
