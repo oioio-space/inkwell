@@ -198,6 +198,23 @@ description = "Audit unreachable exported functions (x/tools v0.52.0 pinned in g
 depends = ["sidecar:fetch"]
 run = "./scripts/deadcode.sh"
 
+[tasks."test:py"]
+description = "Python tests of the gate, perf and formal tooling (unittest)"
+run = ["cd scripts/perf && ../heavy.sh python3 -m unittest discover -p '*_test.py'", "./scripts/heavy.sh python3 -m unittest scripts/alloy_check_test.py scripts/block_done_test.py scripts/fetch_pinned_test.py scripts/check_claude_md_test.py scripts/gate_reset_test.py"]
+
+[tasks."lint:claude-md"]
+description = "Everything CLAUDE.md cites exists: mise tasks, paths, agents, skills, Claude hooks"
+run = "python3 scripts/check_claude_md.py"
+
+[tasks.done]
+description = "Definition of done for one block, in order: gate first, /simplify report, lint, formal, tests, mutation, full gate, docs (usage: mise run done -- <block>)"
+run = "python3 scripts/block_done.py"
+
+[tasks.formal]
+description = "Formal models must hold and every mutant must be caught: TLA+ (TLC) and Alloy; needs Java >= 17 (dev tool, never shipped)"
+depends = ["tla", "alloy"]
+run = "java -version 2>&1 | head -1"
+
 [tasks.alloy]
 description = "Alloy models (docs/protocol/alloy): checks hold, runs are satisfiable, every mutant is caught (jar pinned by SHA-256)"
 run = "./scripts/heavy.sh python3 scripts/alloy_check.py"
@@ -208,7 +225,7 @@ run = "python3 scripts/check-env-reference.py"
 
 [tasks.ci]
 description = "Everything CI must pass"
-depends = ["lint:env", "arch", "deadcode", "scan:secrets", "scan:code", "scan:sbom", "lint", "lint:sh", "lint:yaml", "lint:actions", "pkg:lint", "test:ci", "cover:check", "fe:check"]
+depends = ["test:py", "formal", "lint:env", "lint:claude-md", "arch", "deadcode", "scan:secrets", "scan:code", "scan:sbom", "lint", "lint:sh", "lint:yaml", "lint:actions", "pkg:lint", "test:ci", "cover:check", "fe:check"]
 
 # ── Versions and packages (ADR 0025) ──────────────────────────────────────────
 # The release is cut by a human: `mise run changelog:next`, `mise run changelog -- --tag vX.Y.Z`,
@@ -301,7 +318,7 @@ run = "wails3 generate bindings -ts -i ./cmd/inkwell"
 description = "Frontend gate: Biome, svelte-check, Vitest"
 depends = ["fe:install", "fe:bindings"]
 dir = "frontend"
-run = "pnpm --config.verifyDepsBeforeRun=false run check"
+run = "../scripts/heavy.sh pnpm --config.verifyDepsBeforeRun=false run check"
 
 [tasks."fe:fmt"]
 description = "Format and fix the frontend with Biome"
@@ -362,7 +379,11 @@ INKWELL_E2E_BROWSER=webkit INKWELL_E2E_WS="ws://127.0.0.1:$port/" ../scripts/hea
 
 [tasks."mutate:go"]
 description = "Mutation testing of Go packages (gremlins), memory-capped: mise run mutate:go -- ./internal/trust"
-run = "./scripts/heavy.sh go run github.com/go-gremlins/gremlins/cmd/gremlins@v0.6.0 unleash --workers 4 --timeout-coefficient 3"
+run = "GOBIN=${XDG_CACHE_HOME:-$HOME/.cache}/inkwell/gremlins-v0.6.0 GOFLAGS=-mod=mod go install github.com/go-gremlins/gremlins/cmd/gremlins@v0.6.0 && ./scripts/heavy.sh ${XDG_CACHE_HOME:-$HOME/.cache}/inkwell/gremlins-v0.6.0/gremlins unleash --workers 4 --timeout-coefficient 10"
+# -count=1: the timeout is a multiple of the coverage run, which must not come from the test cache.
+# memcap.sh caps each test binary (4 workers x 1.8 GB < the 8 GB of heavy.sh): a mutant that
+# allocates without bound fails alone instead of getting the whole run killed. Keeps -mod=readonly.
+env = { GOFLAGS = "-mod=readonly -count=1 -exec={{config_root}}/scripts/memcap.sh", INKWELL_AS_LIMIT = "1800000000" }
 
 [tasks."e2e:netsim"]
 description = "Network simulation (Chromium; set INKWELL_E2E_BROWSER=chromium in CI), no root: two instances behind NATs (cone, symmetric) and a relay in network namespaces (scripts/netsim); skips with the reason when namespaces or nftables are unavailable (fails in CI)"

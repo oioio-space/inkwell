@@ -31,6 +31,21 @@ SCRIPTS = pathlib.Path(__file__).resolve().parent
 ROOT = pathlib.Path(os.environ.get("INKWELL_GATE_ROOT") or SCRIPTS.parent).resolve()
 
 
+def reset_evidence(out):
+    """Empties gates/<lot>/ for a new run: evidence is only what this run produced. The block's
+    reports (*.md: SIMPLIFY, reconstructions, reviews) are versioned documents, not evidence, and
+    are kept (2026-11-08: an rmtree of the whole folder erased them). Symlinks are removed, never
+    followed."""
+    out.mkdir(parents=True, exist_ok=True)
+    for entry in out.iterdir():
+        if entry.suffix == ".md" and entry.is_file() and not entry.is_symlink():
+            continue
+        if entry.is_dir() and not entry.is_symlink():
+            shutil.rmtree(entry)
+        else:
+            entry.unlink()
+
+
 def _load(name, path):
     spec = importlib.util.spec_from_file_location(name, path)
     module = importlib.util.module_from_spec(spec)
@@ -118,10 +133,7 @@ def run(lot, root=ROOT, pins=None, guard=True):
     out = root / "gates" / lot
     if out.is_symlink():
         raise ValueError("gates/" + lot + " must not be a symlink")
-    # Evidence is only what this run produced.
-    if out.exists():
-        shutil.rmtree(out)
-    out.mkdir(parents=True)
+    reset_evidence(out)
     entries = []
     ids = [c["id"] for c in config["criteria"]]
     if len(set(ids)) != len(ids) or any(not NAME.fullmatch(i) for i in ids):

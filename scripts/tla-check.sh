@@ -31,50 +31,25 @@ workers="${INKWELL_TLA_WORKERS:-2}"
 
 die() { printf 'tla: %s\n' "$*" >&2; exit 1; }
 
-sha256() { sha256sum "$1" | cut -d' ' -f1; }
-
-fetch() {
-  if command -v curl >/dev/null 2>&1; then
-    curl -fsSL --retry 3 --max-time 180 -o "$2" "$1"
-  elif command -v wget >/dev/null 2>&1; then
-    wget -q -O "$2" "$1"
-  else
-    die "curl or wget is required to fetch the pinned TLA+ tools"
-  fi
-}
-
-extract_jar() {
-  if command -v unzip >/dev/null 2>&1; then
-    unzip -p "$1" extension/tools/tla2tools.jar
-  elif command -v python3 >/dev/null 2>&1; then
-    python3 -I -c 'import sys, zipfile; sys.stdout.buffer.write(zipfile.ZipFile(sys.argv[1]).read(sys.argv[2]))' "$1" extension/tools/tla2tools.jar
-  else
-    die "unzip or python3 is required to extract the pinned TLA+ tools"
-  fi
-}
-
 command -v java >/dev/null 2>&1 || die "java (11+) is required"
 command -v sha256sum >/dev/null 2>&1 || die "sha256sum is required"
 
 mkdir -p "$cache" "$logs"
 
-if [[ ! -f "$jar" ]] || [[ "$(sha256 "$jar")" != "$jar_sha" ]]; then
+if [[ ! -f "$jar" ]] || [[ "$(sha256sum "$jar" | cut -d' ' -f1)" != "$jar_sha" ]]; then
   rm -f "$jar"
   vsix="$cache/tlaplus-vscode-ide-${vsix_version}.vsix"
-  if [[ ! -f "$vsix" ]] || [[ "$(sha256 "$vsix")" != "$vsix_sha" ]]; then
-    rm -f "$vsix"
-    printf 'tla: fetching pinned TLA+ tools (%s)…\n' "$vsix_version" >&2
-    fetch "$vsix_url" "$vsix.part"
-    got="$(sha256 "$vsix.part")"
-    if [[ "$got" != "$vsix_sha" ]]; then
-      rm -f "$vsix.part"
-      die "refusing $vsix_url: sha256 $got, want $vsix_sha"
-    fi
-    mv "$vsix.part" "$vsix"
-  fi
+  # fetch_pinned reuses a valid cached copy, else downloads, verifies and renames atomically.
+  python3 -I "$root/scripts/fetch_pinned.py" "$vsix_url" "$vsix_sha" "$vsix"
   tmp="$(mktemp "$cache/tla2tools.jar.XXXXXX")"
-  extract_jar "$vsix" >"$tmp"
-  got="$(sha256 "$tmp")"
+  if command -v unzip >/dev/null 2>&1; then
+    unzip -p "$vsix" extension/tools/tla2tools.jar >"$tmp"
+  elif command -v python3 >/dev/null 2>&1; then
+    python3 -I -c 'import sys, zipfile; sys.stdout.buffer.write(zipfile.ZipFile(sys.argv[1]).read(sys.argv[2]))' "$vsix" extension/tools/tla2tools.jar >"$tmp"
+  else
+    die "unzip or python3 is required to extract the pinned TLA+ tools"
+  fi
+  got="$(sha256sum "$tmp" | cut -d' ' -f1)"
   if [[ "$got" != "$jar_sha" ]]; then
     rm -f "$tmp"
     die "refusing extracted tla2tools.jar: sha256 $got, want $jar_sha"

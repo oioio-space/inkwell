@@ -7,18 +7,20 @@ the assertion constrains the rule. The Alloy jar is pinned by SHA-256 and cached
 """
 import hashlib
 import json
+import os
 import pathlib
-import shutil
 import subprocess
 import sys
 import tempfile
-import urllib.request
+
+sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
+import fetch_pinned  # noqa: E402
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 MODELS = ROOT / "docs/protocol/alloy"
 JAR_URL = "https://github.com/AlloyTools/org.alloytools.alloy/releases/download/v6.2.0/org.alloytools.alloy.dist.jar"
 JAR_SHA256 = "6b8c1cb5bc93bedfc7c61435c4e1ab6e688a242dc702a394628d9a9801edb78d"
-CACHE = pathlib.Path.home() / ".cache/inkwell/tools/alloy-6.2.0.jar"
+CACHE = pathlib.Path(os.environ.get("INKWELL_ALLOY_CACHE", pathlib.Path.home() / ".cache/inkwell/tools")) / "alloy-6.2.0.jar"
 
 # (model, assertion that must now fail, original text, mutated text)
 MUTANTS = [
@@ -43,18 +45,14 @@ MUTANTS = [
 ]
 
 
+def java_ok():
+    out = subprocess.run(["java", "-version"], capture_output=True, text=True)
+    if out.returncode != 0:
+        sys.exit("alloy: Java >= 17 is required (dev tool only): install a JDK or use the CI runner's")
+
+
 def jar():
-    if not CACHE.exists() or hashlib.sha256(CACHE.read_bytes()).hexdigest() != JAR_SHA256:
-        CACHE.parent.mkdir(parents=True, exist_ok=True)
-        tmp = CACHE.with_suffix(".part")
-        with urllib.request.urlopen(JAR_URL, timeout=120) as r, open(tmp, "wb") as f:
-            shutil.copyfileobj(r, f)
-        digest = hashlib.sha256(tmp.read_bytes()).hexdigest()
-        if digest != JAR_SHA256:
-            tmp.unlink()
-            sys.exit(f"alloy: jar SHA-256 {digest} differs from the pinned {JAR_SHA256}")
-        tmp.replace(CACHE)
-    return CACHE
+    return fetch_pinned.fetch(JAR_URL, JAR_SHA256, CACHE)
 
 
 def run(model: pathlib.Path):
@@ -72,6 +70,7 @@ def run(model: pathlib.Path):
 
 
 def main():
+    java_ok()
     failures = []
     for model in sorted(MODELS.glob("*.als")):
         for name, (kind, solved) in run(model).items():
