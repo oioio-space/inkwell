@@ -4,6 +4,7 @@ import (
 	"encoding/binary"
 	"fmt"
 	"math"
+	"time"
 	"unicode/utf8"
 
 	"github.com/oioio-space/inkwell/internal/project"
@@ -209,3 +210,8 @@ var (
 	LinkEntryOf = linkEntry
 	LinkEntries = linkEntries
 )
+
+// SetLinksPeriod sets the period of the Links notifications, 0 turning them
+// off, attach included, for tests that are not about Links. Call it before
+// [Router.Serve].
+func (r *Router) SetLinksPeriod(d time.Duration) { r.linksPeriod = d }

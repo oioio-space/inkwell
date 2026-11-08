@@ -61,10 +61,6 @@ func stableLinks(es []LinkEntry) []LinkEntry {
 // LinksPushPeriod is the shortest time between two Links notifications.
 const LinksPushPeriod = time.Second
 
-// SetLinksPeriod sets the period of the Links notifications, 0 turning them
-// off, attach included. Call it before [Router.Serve].
-func (r *Router) SetLinksPeriod(d time.Duration) { r.linksPeriod = d }
-
 // linksEnvelope encodes the Links envelope of es.
 func (r *Router) linksEnvelope(es []LinkEntry) (Envelope, bool) {
 	payload, err := EncodeLinks(es)
