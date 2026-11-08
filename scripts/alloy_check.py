@@ -31,6 +31,15 @@ MUTANTS = [
     ("Decisions.als", "NoEscalation",
      "adminAt[d.author, knownMembers[d]]                          -- (a)",
      "some d.author                                                -- (a) removed"),
+    ("Registry.als", "RefusalWins",
+     "fun rank[v: Value]: Int { v = Kept => 2 else (v = Trashed => 1 else 0) }",
+     "fun rank[v: Value]: Int { v = Purged => 2 else (v = Trashed => 1 else 0) }"),
+    ("Tree.als", "Acyclic",
+     "(no n.parent or n in breakers) => p = Root else p = n.parent",
+     "(no n.parent) => p = Root else p = n.parent"),
+    ("Tree.als", "OneParent",
+     "(no n.parent or n in breakers) => p = Root else p = n.parent",
+     "(n in breakers) => p = Root else p = n.parent"),
 ]
 
 
