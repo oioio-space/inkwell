@@ -102,6 +102,9 @@ export class WailsNetworkAdapter extends NetworkAdapter {
   #roles = new Map<string, MemberRole>();
   #roleListeners: (() => void)[] = [];
   #linkListeners: ((links: PeerLink[]) => void)[] = [];
+  /** Sync messages written to / accepted from each peer, over the life of this adapter. */
+  #syncSent = new Map<string, number>();
+  #syncRecv = new Map<string, number>();
 
   constructor(open: () => SocketLike, opts: AdapterOptions = {}) {
     super();
@@ -149,6 +152,16 @@ export class WailsNetworkAdapter extends NetworkAdapter {
   /** Calls cb whenever Go reports the roles of the members (when they change). */
   onRoles(cb: () => void): void {
     this.#roleListeners.push(cb);
+  }
+
+  /**
+   * How many automerge-repo sync messages ("sync" and "request", the two that carry sync data)
+   * were written to and accepted from a peer. Cumulative since the adapter was built, not reset
+   * at PeerUp: the e2e clauses (NI-4 C4, C5) take differences of two readings, which a reset
+   * would turn negative; a peer never met reads 0.
+   */
+  syncCounts(peer: string): { sent: number; recv: number } {
+    return { sent: this.#syncSent.get(peer) ?? 0, recv: this.#syncRecv.get(peer) ?? 0 };
   }
 
   /** Calls cb with the state of the links whenever Go reports it (Links, kind 20). */
@@ -376,6 +389,7 @@ export class WailsNetworkAdapter extends NetworkAdapter {
       this.#drop("reset cooldown");
       return;
     }
+    if (isSyncData(msg.type)) bump(this.#syncRecv, from);
     if (msg.type === "arrive" || msg.type === "welcome") {
       const hs = msg as Handshake;
       if (hs.type === "arrive" && !this.#admission.arrive(from, hs)) {
@@ -497,8 +511,13 @@ export class WailsNetworkAdapter extends NetworkAdapter {
     socket.send(
       encodeEnvelope({ kind: Kind.Message, peer: to, payload: encodeCBOR(value as CBORValue) }),
     );
+    if (isSyncData(value.type)) bump(this.#syncSent, to);
   }
 }
+
+const isSyncData = (type: string | undefined) => type === "sync" || type === "request";
+const bump = (counts: Map<string, number>, peer: string) =>
+  counts.set(peer, (counts.get(peer) ?? 0) + 1);
 
 function sameHeads(a: string[] | undefined, b: string[]): boolean {
   return a !== undefined && a.length === b.length && a.every((h, i) => h === b[i]);

@@ -9,6 +9,10 @@ export type LinkView = Omit<PeerLink, "quality" | "rttMs" | "lossPermille" | "lo
   /** Percent, null while too few packets were sent to tell. */
   lossPct: number | null;
   lossScope: "path" | "firstHop" | null;
+  /** Sync messages written to this peer since this device started (webview count, plan section 7). */
+  syncSent: number;
+  /** Sync messages accepted from this peer since this device started. */
+  syncRecv: number;
 };
 
 /** Converts the wire units to the ones of {@link LinkView}. */
@@ -17,6 +21,8 @@ export function toLinkView(l: PeerLink): LinkView {
   const known = lossPermille !== LOSS_UNKNOWN;
   return {
     ...rest,
+    syncSent: 0,
+    syncRecv: 0,
     quality: quality === "unknown" ? null : quality,
     rttMs: rttMs === 0 ? null : rttMs,
     lossPct: known ? lossPermille / 10 : null,
@@ -30,6 +36,8 @@ class Links {
   /** When the list was received (ms): Go resends only on a change, so ages are as of then. */
   #at = 0;
   #byPeer = new Map<string, LinkView>();
+  /** Where the sync message counts come from (the adapter); they change between two reports. */
+  syncCounts: (peer: string) => { sent: number; recv: number } = () => ({ sent: 0, recv: 0 });
 
   /** Replaces the whole list: the notification carries the last value only. */
   set(links: readonly PeerLink[], now = Date.now()): void {
@@ -43,6 +51,8 @@ class Links {
     const dt = Math.max(0, now - this.#at);
     return this.list.map((l) => ({
       ...l,
+      syncSent: this.syncCounts(l.peer).sent,
+      syncRecv: this.syncCounts(l.peer).recv,
       pathAgeMs: l.pathAgeMs + dt,
       rttAgeMs: l.rttMs === null ? l.rttAgeMs : l.rttAgeMs + dt,
       upMs: l.upMs > 0 ? l.upMs + dt : 0,

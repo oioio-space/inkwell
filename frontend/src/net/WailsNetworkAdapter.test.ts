@@ -263,6 +263,50 @@ describe("WailsNetworkAdapter", () => {
     expect(learned[0]).toBe(handle.url);
     expect(removed).toEqual([]);
   });
+
+  it("NI-4 C4: counts the sync messages sent to and accepted from each peer", async () => {
+    const net = new SimNet(1);
+    const a = peer(net, "a");
+    const b = peer(net, "b");
+    expect(a.adapter.syncCounts("b")).toEqual({ sent: 0, recv: 0 });
+    net.link("a", "b");
+    await until(() => a.connected.has("b") && b.connected.has("a"));
+    const handle = a.repo.create<Doc>({ text: "" });
+    const other = await b.repo.find<Doc>(handle.url);
+    const before = a.adapter.syncCounts("b");
+    handle.change((d) => A.splice(d, ["text"], 0, 0, "x"));
+    await until(() => other.doc()?.text === "x");
+    const after = a.adapter.syncCounts("b");
+    // A change costs at least one sync message sent; handshakes and ephemerals are not counted.
+    expect(after.sent).toBeGreaterThan(before.sent);
+    // What one side sent the other accepted, once the network is empty.
+    await until(() => b.adapter.syncCounts("a").recv === a.adapter.syncCounts("b").sent);
+    await until(() => a.adapter.syncCounts("b").recv === b.adapter.syncCounts("a").sent);
+    expect(a.adapter.syncCounts("c")).toEqual({ sent: 0, recv: 0 });
+  });
+
+  it("NI-4 C5: converged peers exchange no sync message, and the counts survive a reconnect", async () => {
+    const net = new SimNet(1);
+    const a = peer(net, "a");
+    const b = peer(net, "b");
+    net.link("a", "b");
+    await until(() => a.connected.has("b") && b.connected.has("a"));
+    const handle = a.repo.create<Doc>({ text: "" });
+    const other = await b.repo.find<Doc>(handle.url);
+    handle.change((d) => A.splice(d, ["text"], 0, 0, "x"));
+    await until(() => other.doc()?.text === "x");
+    await new Promise((r) => setTimeout(r, 300)); // the tail of the exchange is not idle traffic
+    const settled = { a: a.adapter.syncCounts("b"), b: b.adapter.syncCounts("a") };
+    await new Promise((r) => setTimeout(r, 500));
+    expect(a.adapter.syncCounts("b")).toEqual(settled.a);
+    expect(b.adapter.syncCounts("a")).toEqual(settled.b);
+    // Cumulative, not reset at PeerUp: a reading never goes down, so differences stay positive.
+    net.partition("a", "b");
+    net.link("a", "b");
+    await until(() => a.connected.has("b") && b.connected.has("a"));
+    expect(a.adapter.syncCounts("b").sent).toBeGreaterThanOrEqual(settled.a.sent);
+    expect(a.adapter.syncCounts("b").recv).toBeGreaterThanOrEqual(settled.a.recv);
+  });
 });
 
 describe("convergence under link flaps (seeded)", () => {

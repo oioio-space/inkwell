@@ -300,6 +300,7 @@ class Workspace {
       void this.refreshRoster();
     });
     adapter.onLinks((list) => links.set(list));
+    links.syncCounts = (peer) => adapter.syncCounts(peer);
     adapter.onSealed(() => {
       this.sealed = true;
     });

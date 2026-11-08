@@ -259,6 +259,27 @@ const only = async (p: Page): Promise<Link> => {
   if (ls.length !== 1) throw new Error(`expected 1 link, got ${ls.length}: ${JSON.stringify(ls)}`);
   return ls[0];
 };
+/**
+ * Polls the link list until `ok` holds for exactly one link, for at most `timeoutMs` (the bound of
+ * the clause that waits, never longer). A miss comes back as data (`count`, `link` of the last
+ * read); a harness error (metrics missing, page gone) propagates.
+ */
+async function awaitOnly(
+  p: Page,
+  timeoutMs: number,
+  ok: (l: Link) => boolean = () => true,
+  everyMs = 1000,
+): Promise<{ ms?: number; link?: Link; count: number }> {
+  const t0 = Date.now();
+  let last: { link?: Link; count: number } = { count: -1 };
+  for (;;) {
+    const ls = await links(p);
+    last = { link: ls.length === 1 ? ls[0] : undefined, count: ls.length };
+    if (last.link && ok(last.link)) return { ...last, ms: Date.now() - t0 };
+    if (Date.now() - t0 + everyMs > timeoutMs) return last;
+    await sleep(everyMs);
+  }
+}
 const field = (l: Link, key: string): number | undefined =>
   typeof l[key] === "number" ? (l[key] as number) : undefined;
 const isDirect = (l: Link) => l.path === "direct" || l.path === "lan";
@@ -378,16 +399,24 @@ const probe = (p: Page, key: string) =>
   }, key);
 
 /** What the two outage clauses compare: the counters of every page's link before and after. */
-type Snapshot = { rows?: { downs?: number; resyncs?: number }[]; error?: unknown };
-async function snapshot(pages: Page[]): Promise<Snapshot> {
+type Snapshot = {
+  rows?: { downs?: number; resyncs?: number }[];
+  /** A measured miss: the peer is not an active member (one link) within the wait. */
+  missing?: string;
+  /** A harness error. */
+  error?: unknown;
+};
+/** Reads each page's link counters, waiting up to `waitMs` (the clause's own bound) for the link to exist. */
+async function snapshot(pages: Page[], waitMs = 0): Promise<Snapshot> {
   try {
+    const reads = await Promise.all(pages.map((p) => awaitOnly(p, waitMs)));
+    const gone = reads.find((r) => !r.link);
+    if (gone) return { missing: `expected 1 link, got ${gone.count} (waited ${secs(waitMs)})` };
     return {
-      rows: await Promise.all(
-        pages.map(async (p) => {
-          const l = await only(p);
-          return { downs: field(l, "downsTotal"), resyncs: field(l, "resyncs") };
-        }),
-      ),
+      rows: reads.map(({ link: l }) => ({
+        downs: field(l as Link, "downsTotal"),
+        resyncs: field(l as Link, "resyncs"),
+      })),
     };
   } catch (error) {
     return { error };
@@ -400,6 +429,8 @@ async function snapshot(pages: Page[]): Promise<Snapshot> {
  */
 function notTornDown(before: Snapshot, after: Snapshot) {
   for (const s of [before, after]) if (s.error) throw s.error;
+  const gone = [before, after].find((s) => s.missing);
+  if (gone) return { ok: false, measured: gone.missing as string };
   const b = before.rows ?? [];
   const a = after.rows ?? [];
   const newDowns = a.map((r, i) => (r.downs ?? Number.NaN) - (b[i]?.downs ?? Number.NaN));
@@ -446,8 +477,12 @@ test("scenario 5: NI-1 bad Wi-Fi that changes (converge, stay up, report the tru
     let path = "metrics not read";
     if (t !== undefined) {
       try {
-        path = `path ${(await only(alice)).path}`;
-        if (!isDirect(await only(alice))) return { ok: false, measured: `${secs(t)}, but ${path}` };
+        // The link may not exist yet (the peer is not an active member): poll within what is
+        // left of the 90 s bound, a miss is reported as measured.
+        const r = await awaitOnly(alice, Math.max(0, 90_000 - t), isDirect);
+        path = r.link ? `path ${r.link.path}` : `${r.count} links`;
+        if (!r.link || !isDirect(r.link))
+          return { ok: false, measured: `${secs(t)}, but ${path} within 90 s` };
       } catch (e) {
         if (!(e instanceof MetricsMissing)) throw e;
         return { ok: true, measured: `${secs(t)} (counter only: ${e.message})` };
@@ -655,7 +690,9 @@ test("scenario 7: NI-3 8 KiB/s relay (the transfer finishes, typing is not held 
   // different actors), so they can overtake it, which is what the clause measures.
   const paste = cjk(300_000, rng(7));
   await stash(bob, "paste", [paste]);
-  const before = await snapshot([alice, bob]);
+  // The profile starts at once; the baseline is read as soon as both links exist, within the
+  // scenario's 175 s window (a person who is not an active member yet has no link).
+  const beforeRead = snapshot([alice, bob], 175_000);
   topo("profile", "slowrelay");
   const t0 = Date.now();
   await pasteAtEnd(alice, paste);
@@ -685,7 +722,8 @@ test("scenario 7: NI-3 8 KiB/s relay (the transfer finishes, typing is not held 
   const heldBack: string[] = [];
   for (const [i, token] of b.tokens.entries())
     if (!seen.has(token)) heldBack.push(`${token.trim()} (${secs(Date.now() - b.times[i])})`);
-  const after = await snapshot([alice, bob]);
+  const before = await beforeRead;
+  const after = await snapshot([alice, bob], Math.max(0, deadline - Date.now()));
   const stats = qstats("slowrelay");
   const worst = Math.max(0, ...seen.values());
 

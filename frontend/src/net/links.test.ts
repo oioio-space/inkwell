@@ -92,6 +92,19 @@ describe("view", () => {
   });
 });
 
+describe("view sync counts", () => {
+  it("NI-4 C4, C5: merges the adapter's per-peer sync counts into each link", () => {
+    const [l] = decodeLinks(list(entry("a"))) as [PeerLink];
+    const counts = new Map([["a", { sent: 7, recv: 3 }]]);
+    links.syncCounts = (peer) => counts.get(peer) ?? { sent: 0, recv: 0 };
+    links.set([l], 10_000);
+    expect(links.view(10_000)[0]).toMatchObject({ syncSent: 7, syncRecv: 3 });
+    counts.set("a", { sent: 9, recv: 3 }); // counts move between two reports from Go
+    expect(links.view(10_000)[0]).toMatchObject({ syncSent: 9, syncRecv: 3 });
+    links.syncCounts = () => ({ sent: 0, recv: 0 });
+  });
+});
+
 describe("adapter", () => {
   it("hands the links of a Links frame to onLinks and drops a malformed one", () => {
     const socket: SocketLike = {
