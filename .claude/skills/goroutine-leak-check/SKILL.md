@@ -1,6 +1,6 @@
 ---
 name: goroutine-leak-check
-description: Use when adding/changing concurrent Go (goroutines, channels, worker fan-out, context cancellation) or when asked to find/verify/fix goroutine leaks — instruments tests with uber-go/goleak (and the Go 1.26 goroutineleak profile), runs the suite, diagnoses leaks against known patterns, and fixes the production code.
+description: Use when adding/changing concurrent Go (goroutines, channels, worker fan-out, context cancellation) or when asked to find/verify/fix goroutine leaks — instruments tests with uber-go/goleak (and the Go 1.27 goroutineleak profile, GA), runs the suite, diagnoses leaks against known patterns, and fixes the production code.
 ---
 
 # Goroutine-leak verification & repair
@@ -11,9 +11,9 @@ no runnable goroutine can release. A leaked goroutine is a real correctness and 
 skill verifies there are none, and fixes any it finds.
 
 State of the art (2026): **[uber-go/goleak](https://github.com/uber-go/goleak)** at test
-boundaries (the portable default), and **Go 1.26's experimental `goroutineleak` pprof
-profile** (GC-based, *no false positives* — it reports only goroutines it can prove are
-stuck). This project is on Go 1.26, so both are available.
+boundaries (the portable default), and **the `goroutineleak` pprof profile** (experimental in
+Go 1.26, GA since 1.27, no GOEXPERIMENT) (GC-based, *no false positives* — it reports only goroutines it can prove are
+stuck). This project is on Go 1.27, so both are available.
 
 ## Checklist (create a todo per item)
 
@@ -64,13 +64,13 @@ existing `m.Run()` and propagate its exit code; do not add a second one.
 Per-test, sequential checks can use `defer goleak.VerifyNone(t)` — but **never** with
 `t.Parallel`.
 
-### Go 1.26 profile (deeper, no false positives)
+### `goroutineleak` profile (deeper, no false positives)
 
 For a hard-to-pin leak, capture the GC-backed profile (proves stuck goroutines):
 
 ```go
 import "runtime/pprof"
-pprof.Lookup("goroutineleak").WriteTo(os.Stderr, 1) // Go 1.26+, experimental
+pprof.Lookup("goroutineleak").WriteTo(os.Stderr, 1) // GA since Go 1.27; also /debug/pprof/goroutineleak
 ```
 
 Use it to confirm a goleak finding is genuinely blocked (and on what) before fixing.

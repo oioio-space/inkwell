@@ -33,6 +33,7 @@ linters:
     - gocognit # audit M3: cognitive complexity > 30 is major
     - gocyclo # audit referential: cyclomatic complexity, temporary gate 30; target 15
     - dupl # audit referential: duplication >= 100 tokens
+    - modernize # use-modern-go: the go fix modernizers, newest idioms for the go version of go.mod
   settings:
     gocognit:
       min-complexity: 30

@@ -17,7 +17,7 @@ sid="$(printf '%s' "$HOOK_INPUT" | jq -r '.session_id // "nosession"')"
 marker="${TMPDIR:-/tmp}/moderngo-${sid}"
 
 if [[ -f "$marker" ]]; then
-  hook_emit_context "Go ${ver} — apply use-modern-go idioms to this edit (slices/maps/cmp, min/max, range-over-int, t.Context, omitzero, wg.Go, new(val), errors.AsType). Avoid outdated patterns."
+  hook_emit_context "Go ${ver} — apply use-modern-go idioms to this edit (slices/maps/cmp, min/max, range-over-int, t.Context, omitzero, wg.Go, new(val), errors.AsType; 1.27: embedded-field keys, generic methods, strings.CutLast, slices.Backward, json/v2 for new code). Run go fix ./... before lint (modernize linter on)."
 else
   : > "$marker" 2>/dev/null || true
   hook_emit_context "MODERN GO (use-modern-go skill) — this project targets Go ${ver}. Write modern idioms in this and subsequent Go edits:
@@ -25,6 +25,8 @@ else
 - any (not interface{}); cmp.Or for defaults; errors.Is/As, errors.AsType[T] (1.26)
 - tests: t.Context(); JSON: omitzero (not omitempty) for Duration/Time/struct/slice/map
 - benchmarks: b.Loop(); goroutines: wg.Go(); iterate with strings.SplitSeq; new(val) for *T
+- 1.27: struct keys through embedded fields, generic methods, strings/bytes.CutLast, slices.Backward,
+  encoding/json/v2 for new JSON, synctest.Sleep; go fix ./... then lint (modernize linter enforces it)
 Avoid outdated patterns when a modern equivalent exists.
 Full reference: .claude/skills/use-modern-go/SKILL.md"
 fi

@@ -51,8 +51,10 @@ frontend/playwright-report/
 .claude/worktrees/
 /.playwright-mcp/
 
-# Gate execution logs (manifest remains versioned).
-/gates/*/
+# Gate execution logs are regenerable and stay ignored; the gate (gates/<bloc>.toml, .json) and its
+# reports (SIMPLIFY.md, SUMMARY*.md, REVIEW*.md, UX-walkthrough.md) are evidence and are versioned.
+/gates/*/*
+!/gates/*/*.md
 __pycache__/
 /testdata/perf/generated/
 

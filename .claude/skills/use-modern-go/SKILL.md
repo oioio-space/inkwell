@@ -289,3 +289,55 @@ if pathErr, ok := errors.AsType[*os.PathError](err); ok {
     handle(pathErr)
 }
 ```
+
+### Go 1.27+
+
+Source: https://go.dev/doc/go1.27. `go fix ./...` applies the modernizers, and the golangci-lint
+`modernize` linter (`.golangci.yml`) refuses outdated idioms: run `go fix` before linting.
+
+- Struct literal keys may name a promoted field through an embedded struct (modernizer `embedlit`).
+
+Before:
+```go
+p := Project{Meta: Meta{ID: id, Title: title}, Root: root}
+```
+After:
+```go
+p := Project{ID: id, Title: title, Root: root}
+```
+
+- Generic methods: a method may declare its own type parameters (not on interface methods, and a
+  generic method cannot implement an interface method). Prefer one generic method over N copies.
+
+```go
+func (c *Cache) Get[T any](key string) (T, bool) { ... }
+```
+
+- `strings.CutLast` / `bytes.CutLast`: cut around the LAST separator instead of `LastIndex` + slicing.
+
+```go
+dir, base, ok := strings.CutLast(path, "/")
+```
+
+- `slices.Backward` instead of a reverse index loop (modernizer `slicesbackward`).
+
+```go
+for i, x := range slices.Backward(items) { ... } // not: for i := len(items)-1; i >= 0; i--
+```
+
+- `atomic.Int64`/`atomic.Bool`/`atomic.Pointer[T]` instead of `atomic.AddInt64(&x, 1)` on plain
+  fields (modernizer `atomictypes`); `unsafe.Slice`/`unsafe.String`/`unsafe.StringData` instead of
+  `reflect.SliceHeader` tricks (modernizer `unsafefuncs`).
+- `encoding/json/v2` (`json.Marshal(v, opts...)`, `UnmarshalRead`) for NEW JSON code: it rejects
+  invalid UTF-8 and duplicate object names by default. `encoding/json` v1 is now backed by v2;
+  don't migrate existing v1 code without a reason (error texts differ).
+- `testing/synctest.Sleep(d)` instead of `time.Sleep(d)` followed by `synctest.Wait()`.
+- `net/url.URL.Clone` / `url.Values.Clone` instead of copying by hand; `math/rand/v2`:
+  `r.N(10*time.Second)` (generic method).
+- `httptest.NewTestServer`: an HTTP server on an in-memory network, for `testing/synctest`.
+- `pprof.Lookup("goroutineleak")` is GA (no GOEXPERIMENT): see skill `goroutine-leak-check`.
+- `go vet`: `fmt.Errorf("…: %w", p)` with `p` of type `*E` where `E` implements `error` is now
+  reported: wrap the value whose type implements `error`.
+- `go test` runs `stdversion`: no standard-library symbol newer than the file's `go` version.
+- Do NOT use `fmt.Appendf` just to replace `[]byte(fmt.Sprintf(...))`: the `fmtappendf` modernizer
+  was removed in 1.27 for stylistic reasons; use it only when appending to an existing buffer.

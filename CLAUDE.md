@@ -1,52 +1,69 @@
-# inkwell — project guidance
+# inkwell — consignes du projet
 
-State & roadmap: see `PROGRESS.md`. Tooling is managed by **mise** — run everything with
-`mise run …` (lint, test, ci, fmt, scan:*, sbom, …). Commits go through git hooks
-(janitor → secrets → vulns → style → **/simplify review attestation**) and Claude
-PreToolUse hooks (style/simplify/secret/vuln review, modern-Go injection on `.go` edits).
-The `/simplify` review is a **mandatory gate on every commit path**: `.githooks/pre-commit`
-requires the approval marker (`$GIT_DIR/claude-simplify-ok`, keyed to the exact staged
-diff) — arm it only after genuinely completing the review; `--no-verify` bypasses
-(emergency only).
+État et feuille de route : `PROGRESS.md`. L'outillage est géré par **mise** : tout se lance par
+`mise run …`. Garde-fous automatiques :
+- hooks git (`.githooks/pre-commit`) : nettoyage → secrets (gitleaks) → vulnérabilités (gosec,
+  govulncheck) → style Go → **attestation `/simplify`** (marqueur `$GIT_DIR/claude-simplify-ok`, lié au
+  diff indexé exact ; voir « Définition de fini », étape 3) ; `--no-verify` en urgence seulement ;
+- hooks Claude (`.claude/settings.json`) : `pre-commit-simplify.sh` (bloque le commit sans revue
+  attestée), `heavy-guard.sh` (refuse un test non plafonné, voir « Mémoire »), `long-task-monitor.sh` (rappelle
+  la surveillance de toute commande lancée en arrière-plan, voir « Tâches longues »), `gate-freeze.sh`
+  (refuse de modifier une porte `gates/<bloc>.toml` déjà commitée), `post-edit-check.sh` (après chaque
+  édition : gofmt et go vet pour un `.go`, Biome pour le frontend, `lint:claude-md` pour les fichiers
+  IA ; un problème revient aussitôt à Claude), `modern-go-context.sh`
+  et `benchmark-context.sh` (consignes injectées à l'édition d'un `.go`), `research-grounding.sh`
+  (rappel research-first à chaque demande), `openrouter-check.sh` (délégation du texte mécanique au
+  démarrage).
 
-## Commands (all via mise)
+## Commandes (toutes via mise)
 
 ```bash
-mise run setup           # bootstrap toolchain + wire git hooks
-mise run test            # unit tests        | mise run test:watch  (TDD)
-mise run sidecar:fetch   # typst + tinymist (SHA-256 épinglés, build-time) ; -- -target all
-mise run lint            # golangci-lint v2  | mise run fmt
-mise run cover:check     # coverage gate (COVER_MIN=85)
-mise run ci              # full gate = what CI runs (lint+test+scans)
-mise run bench:baseline  # then change code, then: mise run bench:compare (benchstat)
+mise run setup           # installe l'outillage et branche les hooks git
+mise run test            # tests unitaires Go  | mise run test:watch (TDD)
+mise run sidecar:fetch   # typst + tinymist (SHA-256 épinglés, à la construction) ; -- -target all
+mise run lint            # golangci-lint v2    | mise run fmt
+mise run cover:check     # porte de couverture (COVER_MIN=85)
+mise run ci              # porte complète = ce que lance la CI (lint, tests, scans, formal, lint:env, test:py)
+mise run bench:baseline  # puis modifier le code, puis : mise run bench:compare (benchstat)
 mise run scan:code       # gosec + govulncheck | scan:secrets | scan:sbom (grype)
-mise run clean           # remove regenerable artifacts
-mise run mutate:go -- ./internal/trust   # mutation testing (gremlins), memory-capped
-INKWELL_GOFLAGS=-exec=$PWD/scripts/memcap.sh mise run mutate:go -- ./internal/trust  # + per-test address-space cap (INKWELL_AS_LIMIT)
+mise run clean           # supprime les artefacts régénérables
+mise run mutate:go -- ./internal/trust   # mutation testing (gremlins), mémoire plafonnée
+INKWELL_GOFLAGS=-exec=$PWD/scripts/memcap.sh mise run mutate:go -- ./internal/trust  # + plafond par test (INKWELL_AS_LIMIT)
+mise run done -- <bloc>  # définition de « fini », dans l'ordre ; --skip-gate = boucle rapide
+mise run gate -- <lot>   # porte figée gates/<lot>.toml ; mesure native : INKWELL_NATIVE_PERF_RUN=1, machine au repos
+mise run formal          # TLA+ (tla) + Alloy (alloy), mutants compris ; Java ≥ 17 (outil de dev)
+mise run lint:env        # toute variable lue est déclarée dans .env.reference
+mise run lint:claude-md  # tout ce que cite ce fichier existe (tâches, chemins, agents, skills, hooks)
+mise run test:py         # tests Python de l'outillage | mise run fe:check (Biome, svelte-check, Vitest)
+cd protocol && ../scripts/heavy.sh go test ./...   # module imbriqué : `go test ./protocol/...` depuis la racine échoue
+INKWELL_PROTOCOL_STEP=N  # étape de conformité imposée (défaut : conformance.CurrentStep, à relever à chaque étape)
 ```
 
 ## Architecture
 
 Module `github.com/oioio-space/inkwell` — éditeur de bureau collaboratif Typst/Markdown,
 **sans serveur** (Wails v3 + CodeMirror 6 + Automerge + go-libp2p). Finalité :
-`docs/conception.pdf` ; feuille de route : `PROGRESS.md` (étapes 0→6, critère de sortie
-par étape). Détail : `docs/architecture.md` (paquets, règles de dépendance),
-`docs/adr/` (décisions — lire avant de remettre une frontière en cause),
-`docs/glossary.md`, `docs/ux-principles.md`, `docs/open-questions.md`.
+`docs/conception.pdf` ; feuille de route : `PROGRESS.md` (étapes 0→6, critère de sortie par étape).
+Détail : `docs/architecture.md` (paquets, règles de dépendance), `docs/adr/` (décisions — les lire
+avant de remettre une frontière en cause), `docs/glossary.md`, `docs/ux-principles.md`,
+`docs/open-questions.md`. Docs des briques : skill `inkwell-stack` (Wails v3
+`https://v3.wails.io/llms.txt`, Automerge `https://automerge.org/llms.txt`, Go via le MCP gopls de
+`.mcp.json` : `go_workspace`, `go_package_api`, `go_diagnostics` après chaque édition).
 
-**Règle : conception moderne, modulaire, performante et sécurisée.** Chaque principe a sa
-preuve (gate, test, revue) dans `docs/engineering-principles.md` — le lire avant de
-concevoir ou de revoir quoi que ce soit ; une exception exige une ADR.
+**Règle : conception moderne, modulaire, performante et sécurisée.** Chaque principe a sa preuve
+(porte, test, revue) dans `docs/engineering-principles.md` — le lire avant de concevoir ou de revoir
+quoi que ce soit ; une exception exige une ADR.
 
 **Invariants — ne jamais les violer sans nouvelle ADR :**
 
 - Le CRDT vit dans la webview ; Go ne transporte que des **octets opaques**. Aucun code Go
   n'importe Automerge (ADR 0011) ; la convergence se teste en TypeScript.
-- La synchronisation entre pairs passe par l'interface `internal/transport.Transport` ; seuls
-  `internal/transport/p2p` et le module `protocol/libp2p` importent libp2p. Le rendez-vous d'invitation
-  Wormhole est un canal séparé, limité à `internal/invite` (ADR 0032).
-- Le protocole est spécifié publiquement dans `docs/protocol/` (ADR 0034). Le module `protocol` (cœur pur,
-  sans E/S) n'importe rien d'inkwell ; inkwell importe `protocol` et n'a aucune copie privée de ses codecs.
+- La synchronisation entre pairs passe par l'interface `Transport` de `internal/transport` ; seuls
+  `internal/transport/p2p` et le module `protocol/libp2p` (étape 4 de l'ADR 0034) importent libp2p.
+  Le rendez-vous d'invitation Wormhole est un canal séparé, limité à `internal/invite` (ADR 0032).
+- Le protocole est spécifié publiquement dans `docs/protocol/` (ADR 0034). Le module `protocol` (cœur
+  pur, sans E/S) n'importe rien d'inkwell ; inkwell importe `protocol` et n'a aucune copie privée de
+  ses codecs.
 - Une seule source de vérité par chose : texte → Automerge, binaires → magasin BLAKE3,
   membres → liste signée, versions → go-git (projection).
 - Tout octet venu d'un pair est vérifié (signature, rôle) et son décodeur est fuzzé.
@@ -59,97 +76,172 @@ concevoir ou de revoir quoi que ce soit ; une exception exige une ADR.
 - « pair » dans le code, « personne » dans l'UI ; zéro jargon dans l'interface (glossaire).
 - Un paquet = un rôle, créé à l'étape qui en a besoin — pas de paquet vide « pour plus tard ».
 
-**Registre des exigences :** chaque demande de l'utilisatrice est dans `docs/exigences.md` (date, où, état) — l'y ajouter dès qu'elle arrive, le mettre à jour à chaque fusion.
+## Processus
 
-**Tester comme un humain :** toute modification d'interface passe par le skill `ux-walkthrough` (agent `ux-tester`) avant fusion et avant release.
+**Par étape :** recherche en ligne (« Research-first ») → `superpowers:brainstorming` → plan dans
+`docs/plans/` → chaque bloc suit la définition de « fini » ci-dessous → démontrer le critère de sortie.
 
-**Processus par étape :** `superpowers:brainstorming` → plan dans `docs/plans/` →
-TDD (`superpowers:test-driven-development`) → revue → cocher `PROGRESS.md` → démontrer
-le critère de sortie. Toute brique se recherche d'abord en ligne (règle research-first).
+**Définition de « fini » d'un bloc (règle unique, 2026-11-08 ; vaut quel que soit le modèle) :**
+un bloc = un lot, une étape du protocole ou un lot d'outillage. Il suit cet ordre, et
+`mise run done -- <bloc>` (`scripts/block_done.py`) vérifie les étapes 1 à 8 dans le même ordre :
+1. **Spécifier d'abord, en exécutable** : vecteurs (`protocol/vectors`), modèles TLA+ (`docs/protocol/tla`)
+   et Alloy (`docs/protocol/alloy`) avec mutants, tests à modèle ; puis la porte figée `gates/<bloc>.toml`,
+   commitée **avant** le code puis gelée (méthode : `docs/plans/2026-11-08-spec-executable.md` ;
+   gabarit : skill `new-gate` ; modèles : agent `formal-modeler`).
+2. **Implémenter** jusqu'à ce que la porte passe, en TDD (`superpowers:test-driven-development`) ;
+   tout modèle ; un agent délégué ne commite ni ne stashe jamais ; aucune de ses affirmations
+   (« déjà cassé », « instable ») n'est crue sans preuve rejouée, par exemple sur un arbre d'avant
+   le changement.
+3. **`/simplify`** sur tout le diff du bloc (réutilisation, simplification, efficacité, altitude),
+   dans le respect des invariants, des portes et des exigences ; constats, appliqué et écarté dans
+   `gates/<bloc>/SIMPLIFY.md`. Il passe **avant** les vérifications, qui portent ainsi sur le code
+   final. Listes de contrôle : skills `go-style-guide`, `vuln-guard`, `secret-guard`, `simplify`,
+   `helper-ergonomics`. C'est cette revue qu'atteste le marqueur du hook pre-commit — ne jamais
+   l'armer sans l'avoir faite.
+4. Vérifications rapides : lint, `fe:check`, `lint:env`, `lint:claude-md` ; puis `mise run formal`
+   (TLA+, Alloy, mutants) ; puis les tests (Go, frontend, `test:py`) ; toute modification d'interface
+   passe en plus par le skill `ux-walkthrough` (agent `ux-tester`), avant fusion et avant release.
+5. **Mutation** (gremlins) sur les paquets `protocol/*` touchés : efficacité ≥ 95 %, ou survivants
+   justifiés comme équivalents dans `SIMPLIFY.md` (« mutation <paquet> »). Un test nomme la règle de
+   la spec qu'il prouve ; l'utilité se mesure à la mutation, pas à la couverture.
+6. **Porte complète** (`mise run gate -- <bloc>`, régressions et mesure native comprises), en dernier
+   car la plus longue.
+7. Documents : `docs/objectif-en-cours.md`, `PROGRESS.md`, `docs/exigences.md` à jour.
+8. **Seule la session Claude commite**, après relecture du diff ; le push relance `mise run ci`.
 
-**Docs des briques** (skill `inkwell-stack`) : Wails v3 `https://v3.wails.io/llms.txt`,
-Automerge `https://automerge.org/llms.txt`, Go via **gopls MCP** (`.mcp.json` — suivre
-ses instructions : `go_workspace`, `go_package_api`, `go_diagnostics` après chaque édition).
+**Registre des exigences :** chaque demande de l'utilisatrice est dans `docs/exigences.md` (date, où,
+état) — l'y ajouter dès qu'elle arrive, le mettre à jour à chaque fusion.
 
+**Cohérence de ce fichier (règle) :** toute modification de `CLAUDE.md` le garde cohérent :
+- une règle vit à un seul endroit — on complète la règle existante, on n'en écrit pas une seconde ;
+- tout ce qui est cité existe (tâches, chemins, agents, skills, hooks) ; un chemin à venir porte son
+  échéance « (étape N) » ; `mise run lint:claude-md` le vérifie et fait partie de `ci` ;
+- une seule langue, le français (identifiants et commandes exceptés) ;
+- après la modification, relire le fichier entier pour les contradictions ; audit périodique avec
+  `/claude-md-management:claude-md-improver`.
 
-## ⚡ Benchmark the hot path & prove perf changes
+## Règles de travail
 
-Any perf-affecting change to a hot-path package is proven with benchstat — never by feel
-(go-benchmark skill): `mise run bench:baseline` → change → `mise run bench:compare`
-(`-count` ≥ 10, `-benchmem`); keep the change only on a statistically significant gain
-with no alloc/throughput regression. Hot-path packages carry `Benchmark…` tests.
-List them on the line below (space-separated package paths; read by
-`.claude/hooks/benchmark-context.sh` — keep the exact `HOT_PATHS:` prefix):
+**Research-first :** fonder toute réponse technique non triviale sur des sources externes actuelles
+(WebSearch/WebFetch pour l'état de l'art, GitHub via `scripts/ghx.sh` pour l'existant, docs
+officielles), **puis aller au-delà** : critiquer l'existant, chercher mieux, envisager des approches
+neuves ; comparer, recommander la meilleure (même peu courante), citer. Le hook
+`research-grounding.sh` le rappelle ; inutile pour une demande triviale.
 
-HOT_PATHS: internal/blob internal/transport/frame internal/transport/mux internal/app
+**Go moderne (règle) :** toujours la dernière version stable de Go (`go.mod` des deux modules et
+`mise.toml` alignés sur https://go.dev/dl, montée à chaque version) et ses capacités nouvelles quand
+elles sont cohérentes avec le code. Le skill `use-modern-go` porte une section par version, mise à
+jour depuis les notes officielles (`https://go.dev/doc/go1.N`) à chaque montée, comme
+`modern-go-context.sh` ; `go fix ./...` applique les modernisations et le linter `modernize`
+(`.golangci.yml`) refuse les idiomes dépassés.
 
-## Research-first
-
-Ground non-trivial / technical answers in CURRENT external sources before answering —
-WebSearch/WebFetch for the state of the art, GitHub (`scripts/ghx.sh`) for prior art &
-libraries, official docs. **Then go beyond the existing**: critique it, look for
-improvements, and consider out-of-the-box / novel approaches. Prefer sources over memory,
-compare alternatives, recommend the best (even if uncommon), cite. A `UserPromptSubmit`
-hook (`.claude/hooks/research-grounding.sh`) reinforces this every prompt; skip for
-trivial asks.
-
-## Sub-agent routing (token-economical, no quality loss)
-
-Each agent in `.claude/agents/` pins its own tier via frontmatter.
-
-| Task | Agent | Model / effort |
-|------|-------|----------------|
-| Commit-message draft, long-log triage, i18n translation draft | `scripts/llm.sh` (OpenRouter: DeepSeek V4.1 Flash / Mistral Large 4, ZDR — ADR 0013) | hosted open-weight |
-| Well-scoped implementation, bug investigation, second-opinion / adversarial review (no Claude tokens) | Codex plugin: `codex:codex-rescue` agent, `/codex:rescue`, `/codex:review`, `/codex:adversarial-review` | ChatGPT login by default; `--profile openrouter` once OpenRouter is credited. Claude still reviews before merge. |
-| Run checks (lint/test/ci/scan), trivial format fixes | `quality-runner` | Haiku / low |
-| Docs, PROGRESS.md, commit messages | `scribe` | Haiku / low |
-| Code/file search, fan-out, "where is X" | `explorer` (or built-in `Explore`) | Haiku / low |
-| Implement Go code & tests, refactors | `go-dev` | Sonnet / medium |
-| Review a Go diff | `go-reviewer` | Sonnet / medium |
-| Novel algorithm / architecture design | `architect` | Opus / high |
-| Deep security / vuln audit | `security-auditor` | Opus / high |
-
-**Règle — router modèle ET effort pour chaque tâche** (agent, sous-tâche, skill, revue, audit) : le modèle le moins cher et l'effort le plus bas qui gardent la qualité, choisis explicitement à chaque lancement (`model:` + `effort:`). Défauts : mécanique → Haiku/`llm.sh`, effort low ; code, revue, simplify, UX → Sonnet, medium ; sécurité, architecture → Opus, high (xhigh seulement pour un audit final de release). **Même règle pour Codex** : chaque appel `/codex:*` ou `codex:codex-rescue` précise `--model` et `--effort` (mécanique → `--model spark`, `--effort low` ; `--profile openrouter-cheap` seulement en CLI `codex` ; code et revue → modèle par défaut, `--effort medium` ; diagnostic difficile → `--effort high`).
-
-**Économie de tokens, pratique :** pousser avec `scripts/qpush.sh` (verdict seul) ; préciser `model:` à chaque agent lancé (Opus seulement pour sécurité/architecture) ; rapports courts ; textes mécaniques via `scripts/llm.sh`.
-
-**Rule — token economy without quality loss:** cheapest tier that keeps quality; never
-re-read a file already in context; read logs through `rtk` / `llm.sh triage`, code through
-gopls MCP (`go_package_api`, `go_search`) rather than whole files. Hosted open-weight models
-(`scripts/llm.sh`, exit 3 → fall back to Haiku) take mechanical text only — never security,
-design or code review. No local models.
-
-Rule of thumb: mechanical → hosted open-weight or Haiku; writing/reviewing Go → Sonnet; novel algorithm design
-or security judgement → Opus. Never use Opus for what a cheaper tier handles at equal
-quality. Run independent sub-tasks in parallel.
-
-### Revue avant commit
-
-Un seul hook (`pre-commit-simplify.sh`) bloque un commit tant que la revue n'est pas attestée. Il affiche une seule ligne : les points à vérifier, avec les points Go seulement si du Go est indexé. Les listes complètes sont dans les skills `go-style-guide`, `vuln-guard`, `secret-guard`, `simplify` et `helper-ergonomics`. Un gros diff Go va à `go-reviewer` (Sonnet) ; un petit diff se revoit dans la boucle principale.
-
-**Économie de tokens dans la boucle principale (Opus) :**
-- La boucle principale orchestre ; elle ne débogue pas, ne lit pas de journaux et ne résout pas de gros conflits. Tout cela va à un agent Sonnet ou Haiku.
-- Lire peu : `grep`, `head` ou `tail` ciblés, jamais un fichier entier quand quelques lignes suffisent.
-- Briefs d'agent courts ; rapports de 10 lignes au plus.
-- Réponses à l'utilisatrice brèves.
-- Ne jamais écrire le mot-clé de commit de git dans une commande qui n'en est pas une : les hooks se déclencheraient.
-
-**Discipline de modification (règle, d'après andrej-karpathy-skills, MIT) :**
+**Discipline de modification (d'après andrej-karpathy-skills, MIT) :**
 - énoncer ses hypothèses avant d'agir ; en cas de doute, vérifier dans le code ou demander ;
-- modifications chirurgicales : chaque ligne changée se rattache à une exigence ou à une porte, pas de nettoyage opportuniste hors du périmètre (le `/simplify` porte sur le diff du lot) ;
+- modifications chirurgicales : chaque ligne changée se rattache à une exigence ou à une porte, pas de
+  nettoyage opportuniste hors du périmètre (le `/simplify` porte sur le diff du lot) ;
 - critère de réussite vérifiable par une machine avant d'écrire du code (porte du lot, test) ;
 - ne jamais affaiblir un test, un seuil ou un délai pour faire passer une porte.
 
-**Cohérence (règle) :** une fonctionnalité nouvelle s'intègre à l'existant, jamais en « verrue ». Elle doit :
-- réutiliser les composants, jetons et motifs Adwaita déjà présents (barre d'en-tête, panneaux à onglets, bannières, toasts, popovers) ;
+**Cohérence de l'interface :** une fonctionnalité nouvelle s'intègre à l'existant, jamais en « verrue ».
+Elle doit :
+- réutiliser les composants, jetons et motifs Adwaita déjà présents (barre d'en-tête, panneaux à
+  onglets, bannières, toasts, popovers) ;
 - reprendre le même vocabulaire et les mêmes raccourcis ;
 - trouver sa place dans un panneau ou un menu existant avant d'en créer un ;
-- passer une revue de cohérence visuelle (captures clair et sombre, comparées aux écrans voisins) avant la fusion.
+- passer une revue de cohérence visuelle (captures clair et sombre, comparées aux écrans voisins)
+  avant la fusion.
 
-**Mémoire (règle) :** tout travail lourd passe par `scripts/heavy.sh` :
-- Concerne les tests Go, la couverture, les tests de bout en bout, netsim et le mutation testing (gremlins, Stryker).
-- Les tâches mise `test`, `test:ci`, `cover`, `e2e*` et `mutate:go` l'appellent déjà.
-- Au plus 2 tâches lourdes tournent en même temps sur la machine ; chacune est plafonnée à 8 Go, sans swap, dans son propre cgroup. Un dépassement tue la tâche seule, pas la session.
-- Pas plus de 4 agents en parallèle.
-- Le mutation testing se limite à 4 workers et à un paquet à la fois.
-- Deux plantages globaux faute de mémoire le 2026-10-26 sont à l'origine de cette règle.
+**Performance mesurée :** tout changement qui touche la performance d'un paquet du chemin critique se
+prouve avec benchstat, jamais au jugé (skill `go-benchmark`) : `mise run bench:baseline` → changement →
+`mise run bench:compare` (`-count` ≥ 10, `-benchmem`) ; on ne garde le changement que sur un gain
+statistiquement significatif sans régression d'allocations ni de débit. Ces paquets portent des tests
+`Benchmark…` ; la ligne ci-dessous les liste (lue par `.claude/hooks/benchmark-context.sh` — garder
+le préfixe exact `HOT_PATHS:`) :
+
+HOT_PATHS: internal/blob internal/transport/frame internal/transport/mux internal/app
+
+**Tâches longues (règle) :** toute tâche longue (plus de 2 minutes ou lancée en arrière-plan :
+`done`, `gate`, `ci`, tests complets, mutation, fuzz, mesure native, agent) est **toujours surveillée**,
+jamais attendue à l'aveugle ni sondée à coups de `sleep` :
+- sa sortie va dans un journal du scratchpad (`cmd > LOG 2>&1; echo "exit $?" >> LOG`) ;
+- un Monitor est armé aussitôt avec `scripts/watch-log.sh LOG [secondes]` : il remonte la progression
+  (étapes, scores par paquet, compte de mutants), **toute** signature d'échec (ERROR, FAIL, panic,
+  OOM, 137, expirations, mesure nulle), le silence prolongé (« stalled ») et la fin ; réarmé à chaque
+  expiration jusqu'à la fin ;
+- les scripts longs écrivent leur progression ligne à ligne, sans la retenir (`block_done.py` diffuse la
+  sortie de gremlins) ; un code de sortie non nul est toujours rapporté, jamais avalé ;
+- l'utilisatrice sait ce qui tourne et comment c'est surveillé ; un échec est traité dès qu'il remonte.
+Le hook `long-task-monitor.sh` le rappelle à chaque lancement en arrière-plan.
+
+**Mémoire (règle) :** tout travail lourd (tests Go, Python et frontend, couverture, bout en bout,
+netsim, mutation testing gremlins et Stryker) passe par `scripts/heavy.sh` :
+- au plus 2 tâches lourdes en même temps sur la machine, chacune dans son cgroup, plafonnée à 8 Go
+  sans swap : un dépassement tue la tâche seule, pas la session ;
+- les tâches mise `test`, `test:ci`, `test:py`, `fe:check`, `cover`, `e2e*` et `mutate:go` l'appellent
+  déjà ; toute autre commande de test, à la main ou par un agent, passe par `heavy.sh` (ou
+  `systemd-run --user --scope -p MemoryMax=…`) avec un `timeout` ;
+- le hook `heavy-guard.sh` refuse toute commande de test non plafonnée (Claude et ses sous-agents ;
+  Codex et opencode n'y sont pas soumis, d'où les tâches mise plafonnées) ;
+- pas plus de 4 agents en parallèle ; mutation testing limité à 4 workers et à un paquet à la fois ;
+- origine : deux plantages globaux le 2026-10-26 (mutant à 8,7 Go, Chrome à 3,4 Go), un troisième le
+  2026-11-08 (test Python non plafonné à 21 Go, voir « Pièges connus »).
+
+## Routage des modèles et économie de tokens
+
+**Règle :** pour chaque tâche (agent, sous-tâche, skill, revue, audit), le modèle le moins cher et
+l'effort le plus bas qui gardent la qualité, choisis explicitement à chaque lancement (`model:` +
+`effort:`). Chaque agent de `.claude/agents/` fixe son niveau dans son en-tête.
+
+| Tâche | Exécutant | Modèle / effort |
+|-------|-----------|-----------------|
+| Brouillon de message de commit, tri de longs journaux, brouillon de traduction i18n | `scripts/llm.sh` (OpenRouter : DeepSeek V4.1 Flash / Mistral Large 4, ZDR — ADR 0013) ; texte mécanique seulement, jamais sécurité, conception ni revue de code ; code de sortie 3 → Haiku | open-weight hébergé |
+| Implémentation bien bornée, enquête sur un bogue, second avis, revue adverse (sans tokens Claude) | Codex : agent `codex:codex-rescue`, `/codex:rescue`, `/codex:review`, `/codex:adversarial-review` | connexion ChatGPT (quota limité) ; Claude relit avant fusion |
+| Implémentation guidée par une porte, sans crédit | `mise x -- bash scripts/opencode-free.sh -m <modèle> < consigne.md` (modèles gratuits OpenRouter ou Zen ; gortex branché, rtk injecté) | gratuit ; jamais de sécurité ; ne commite jamais |
+| Relecture critique d'une spécification de sécurité (crédit compté) | `scripts/claude-or.sh -t opus` ou `scripts/claude-api.sh` | un seul appel ciblé |
+| Lancer les vérifications (lint, tests, ci, scans), corrections de format triviales | `quality-runner` | Haiku / low |
+| Docs, `PROGRESS.md`, messages de commit | `scribe` | Haiku / low |
+| Recherche de code ou de fichiers, « où est X » | `explorer` (ou `Explore` intégré) | Haiku / low |
+| Écrire du Go et ses tests, refactorisations | `go-dev` | Sonnet / medium |
+| Relire un diff Go | `go-reviewer` | Sonnet / medium |
+| Parcours d'interface comme une personne | `ux-tester` | Sonnet / medium (comme simplify) |
+| Algorithme nouveau, architecture | `architect` | Opus / high |
+| Modèles TLA+ et Alloy, mutants (étape 1 d'un bloc) | `formal-modeler` | Opus / high |
+| Audit de sécurité approfondi | `security-auditor` | Opus / high (xhigh seulement pour l'audit final de release) |
+
+**Codex, même règle :** chaque appel `/codex:*` ou `codex:codex-rescue` précise `--model` et
+`--effort` (mécanique → `--model spark`, `--effort low` ; `--profile openrouter-cheap` seulement en CLI
+`codex` ; code et revue → modèle par défaut, `--effort medium` ; diagnostic difficile → `--effort high`).
+
+**Boucle principale (Opus) :**
+- elle orchestre ; elle ne débogue pas, ne lit pas de journaux et ne résout pas de gros conflits : tout
+  cela va à un agent Sonnet ou Haiku ;
+- lire peu : jamais un fichier déjà en contexte ; journaux via `rtk` ; code via gortex ou gopls ;
+  `grep`, `head` ou `tail` ciblés plutôt qu'un fichier entier ;
+- briefs d'agent courts, rapports de 10 lignes au plus, tâches indépendantes en parallèle ;
+- réponses à l'utilisatrice brèves ; pousser avec `scripts/qpush.sh` (verdict seul) ;
+- ne jamais écrire le mot-clé de commit de git dans une commande qui n'en est pas une : les hooks se
+  déclencheraient.
+
+## Pièges connus
+
+- La mesure native échoue si la machine est chargée (CI en parallèle : « cadence slower than
+  nominal ») : la relancer au repos, ne pas conclure.
+- `gates/guard-overrides.json` est indexé par empreinte de contenu : modifier un fichier couvert exige
+  une nouvelle entrée justifiée.
+- Les tests qui fabriquent des messages entre pairs utilisent `encodeCBOR` de `@inkwell/protocol`,
+  jamais `cbor-x` (étiquettes refusées par le profil) ; `targetId` partout.
+- gremlins marque « non couvertes » les conditions de `case` : vérifier par une mutation manuelle
+  avant d'écrire un test. Son délai est un multiple de la mesure de couverture : sans
+  `GOFLAGS=-count=1` (posé par `mutate:go` et `done`), le cache de tests la rend instantanée et tous
+  les mutants finissent « timed out » ; coefficient de délai 10 ; chaque binaire de test plafonné à
+  1,8 Go par `memcap.sh` (4 workers sous les 8 Go de `heavy.sh` : un mutant qui alloue sans fin échoue
+  seul au lieu de faire tuer la mesure entière) ; `done` refuse une mesure où plus de
+  10 % des mutants expirent (ils sortent du score et peuvent cacher des survivants). Le module
+  `protocol` se mute depuis `protocol/` (`mutate:go` depuis la racine ne le voit pas ; `done` le fait).
+- Avant de supprimer un worktree ou un dossier, lister aussi les fichiers ignorés
+  (`git status --porcelain --ignored`) : « ignoré » ne veut pas dire « régénérable ». Les rapports de
+  porte de L3 et P2, alors ignorés, ont été perdus ainsi le 2026-11-08 ; les rapports `gates/*/*.md`
+  sont désormais versionnés, seuls les journaux bruts restent ignorés. Une porte (`gate.py`) ne vide que
+  les preuves de `gates/<lot>/` et garde ses `*.md` : son ancien `rmtree` avait effacé un rapport.
+- Simuler un flux d'E/S avec `io.BytesIO`, jamais un `MagicMock` dont `read()` rend toujours la même
+  valeur : `shutil.copyfileobj` boucle sans fin (21 Go le 2026-11-08 ; `/tmp` est un tmpfs, donc en RAM).
