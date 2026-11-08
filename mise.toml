@@ -194,9 +194,13 @@ description = "Audit unreachable exported functions (x/tools v0.52.0 pinned in g
 depends = ["sidecar:fetch"]
 run = "./scripts/deadcode.sh"
 
+[tasks."lint:env"]
+description = "Every environment variable the code reads is declared in .env.reference"
+run = "python3 scripts/check-env-reference.py"
+
 [tasks.ci]
 description = "Everything CI must pass"
-depends = ["arch", "deadcode", "scan:secrets", "scan:code", "scan:sbom", "lint", "lint:sh", "lint:yaml", "lint:actions", "pkg:lint", "test:ci", "cover:check", "fe:check"]
+depends = ["lint:env", "arch", "deadcode", "scan:secrets", "scan:code", "scan:sbom", "lint", "lint:sh", "lint:yaml", "lint:actions", "pkg:lint", "test:ci", "cover:check", "fe:check"]
 
 # ── Versions and packages (ADR 0025) ──────────────────────────────────────────
 # The release is cut by a human: `mise run changelog:next`, `mise run changelog -- --tag vX.Y.Z`,
