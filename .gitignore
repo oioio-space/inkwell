@@ -21,6 +21,8 @@ docs/protocol/tla/mutants/*_TTrace_*
 # Local-only
 .env
 .env.*
+# Inventory of env var names only; scripts/check-env-reference.py refuses any value in it.
+!.env.reference
 mise.local.toml
 .DS_Store
 
