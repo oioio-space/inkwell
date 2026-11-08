@@ -110,7 +110,10 @@ un bloc = un lot, une étape du protocole ou un lot d'outillage. Il suit cet ord
 8. **Seule la session Claude commite**, après relecture du diff ; le push relance `mise run ci`.
 
 **Registre des exigences :** chaque demande de l'utilisatrice est dans `docs/exigences.md` (date, où,
-état) — l'y ajouter dès qu'elle arrive, le mettre à jour à chaque fusion.
+état) — l'y ajouter dès qu'elle arrive, le mettre à jour à chaque fusion. Elle reçoit aussitôt **sa place
+dans le plan global** : un lot de `docs/architecture/coherence.md` §5 (et l'ordre de `docs/objectif-en-cours.md`),
+rattachée à un écran ou un mécanisme existant — jamais une tâche isolée ni une « verrue » (voir « Cohérence de
+l'interface »).
 
 **Cohérence de ce fichier (règle) :** toute modification de `CLAUDE.md` le garde cohérent :
 - une règle vit à un seul endroit — on complète la règle existante, on n'en écrit pas une seconde ;
