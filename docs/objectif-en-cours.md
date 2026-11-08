@@ -27,8 +27,8 @@ Ensuite G-0b, puis G-0c (liste ci-dessous). La porte de ce lot reste à écrire
 ### Suivis de sécurité de L1 (LOW, revue Opus n° 6, à traiter au début de L2)
 
 - ~~Analyse des dépendances~~ : retirée, avec toute l'analyse des dépendances, par la décision de l'utilisatrice du 2026-11-03 (N42 précisée, journal ci-dessous). Seul notre propre code est contrôlé.
-- Environnement de tinymist : filtrer `cmd.Env` contre une liste blanche dans `runOnce`, même si l'appelant passe `os.Environ()` (`internal/sidecar/supervisor.go:215`).
-- Dossier de projet : refuser aussi les dossiers situés **dans** un dossier protégé (`~/.ssh`, `~/.gnupg`), pas seulement ceux qui en contiennent un (`internal/sidecar/workdir.go:44-76`).
+- ~~Environnement de tinymist~~ : fait. `runOnce` applique `supervisorEnv` (liste blanche : langue, fuseau, polices) à `cmd.Env` (`internal/sidecar/supervisor.go`, vérifié le 2026-11-08).
+- ~~Dossier de projet~~ : fait. `checkWorkdir` refuse un dossier situé dans un dossier secret (`~/.ssh`, `~/.gnupg`, configuration, données et état XDG) et un dossier qui contient un dossier large (`internal/sidecar/workdir.go`, vérifié le 2026-11-08).
 
 ## Lots suivants (MVP, dans l'ordre)
 
