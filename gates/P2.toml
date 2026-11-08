@@ -1,0 +1,27 @@
+# Frozen acceptance for ADR 0034 migration step 2 (N-1: protocol/sig), written before implementation.
+# Plan: docs/plans/2026-11-08-P2-implementation.md. Step table: docs/adr/0034-protocole-unifie.md, "Migration".
+raw_results = ["docs/plans/2026-11-08-P2-implementation.md", "docs/objectif-en-cours.md", "gates/P2/*", "gates/L3.json"]
+[[criteria]]
+# P-VEC at step 2, Go: every vector with enforce <= step-2 passes through the real decoders (protocol/sig).
+id = "P-VEC-2-go"
+command = "cd protocol && INKWELL_PROTOCOL_STEP=2 ../scripts/heavy.sh go test ./conformance -run TestCorpus -count=1"
+[[criteria]]
+# P-VEC at step 2, TypeScript: the same vector files through @inkwell/protocol.
+id = "P-VEC-2-ts"
+command = "cd frontend && INKWELL_PROTOCOL_STEP=2 ../scripts/heavy.sh ./node_modules/.bin/vitest run packages/protocol"
+[[criteria]]
+# N-1: strict Ed25519 verification and key validation at every entry point named by the step
+# (connection filter, KeyFromID, ops, attestations, decisions, ticket, reload and import).
+id = "N-1-callers"
+command = "./scripts/heavy.sh go test -count=1 ./protocol/sig ./internal/transport/p2p ./internal/trust ./internal/policy ./internal/invite ./internal/identity"
+[[criteria]]
+# P-FUZZ (short form for this step; the 1 h runs belong to step 9): no panic on hostile keys and signatures.
+id = "P-FUZZ-sig"
+command = "cd protocol && ../scripts/heavy.sh go test ./sig -run '^$' -fuzz '^FuzzVerify$' -fuzztime 120s"
+[[criteria]]
+# P-ARCH: dependency rules of spec section 1.6 (protocol imports nothing from inkwell).
+id = "P-ARCH"
+command = "bash scripts/arch-check.sh"
+[[criteria]]
+id = "L3-regression"
+command = "mise run gate -- L3"
