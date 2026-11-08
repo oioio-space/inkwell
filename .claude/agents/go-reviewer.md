@@ -1,7 +1,7 @@
 ---
 name: go-reviewer
 description: Use PROACTIVELY to review a Go diff for correctness bugs, modern-Go/Google-style adherence, and security smells, reporting only high-confidence findings. Read-only, balanced model.
-tools: Read, Grep, Glob, Bash
+tools: Read, Grep, Glob, Bash, mcp__gortex__capabilities, mcp__gortex__explore, mcp__gortex__search, mcp__gortex__read, mcp__gortex__relations, mcp__gortex__trace, mcp__gortex__analyze, mcp__gortex__change, mcp__gortex__recall
 model: sonnet
 effort: medium
 skills:

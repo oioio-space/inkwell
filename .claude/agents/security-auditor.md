@@ -1,7 +1,7 @@
 ---
 name: security-auditor
 description: Use for deep adversarial security/vulnerability review beyond the deterministic scanners — logic-level auth/crypto flaws, injection, unsafe input handling, DoS, supply-chain risk, and triaging gosec/govulncheck/grype findings. Top model; reserve for security judgment.
-tools: Read, Grep, Glob, Bash
+tools: Read, Grep, Glob, Bash, mcp__gortex__capabilities, mcp__gortex__explore, mcp__gortex__search, mcp__gortex__read, mcp__gortex__relations, mcp__gortex__trace, mcp__gortex__analyze, mcp__gortex__change, mcp__gortex__recall
 model: opus
 effort: high
 skills:

@@ -1,7 +1,7 @@
 ---
 name: formal-modeler
 description: Use for step 1 of a block ("spécifier d'abord, en exécutable") — writes or extends the TLA+ models (docs/protocol/tla) and Alloy models (docs/protocol/alloy) of a protocol rule, with mutants that each model must catch, and checks them with `mise run formal`. Correctness reasoning, top model.
-tools: Read, Write, Edit, Grep, Glob, Bash, WebSearch, WebFetch
+tools: Read, Write, Edit, Grep, Glob, Bash, WebSearch, WebFetch, mcp__gortex__capabilities, mcp__gortex__explore, mcp__gortex__search, mcp__gortex__read, mcp__gortex__relations, mcp__gortex__trace, mcp__gortex__analyze, mcp__gortex__change, mcp__gortex__recall, mcp__gortex__edit, mcp__gortex__refactor
 model: opus
 effort: high
 skills:

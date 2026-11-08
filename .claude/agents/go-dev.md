@@ -1,7 +1,7 @@
 ---
 name: go-dev
 description: Use PROACTIVELY to implement Go code and tests for this project (TDD) and refactors. Follows the go-style-guide and use-modern-go skills and passes the pre-commit gates. Balanced, cost-efficient model for standard development.
-tools: Read, Write, Edit, Bash, Grep, Glob
+tools: Read, Write, Edit, Bash, Grep, Glob, mcp__gortex__capabilities, mcp__gortex__explore, mcp__gortex__search, mcp__gortex__read, mcp__gortex__relations, mcp__gortex__trace, mcp__gortex__analyze, mcp__gortex__change, mcp__gortex__recall, mcp__gortex__edit, mcp__gortex__refactor
 model: sonnet
 effort: medium
 skills:

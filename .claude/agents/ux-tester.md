@@ -1,7 +1,7 @@
 ---
 name: ux-tester
 description: Use PROACTIVELY before merging any UI change, after each wave, and before a release, to test inkwell as a person would. It plays personas through real task scenarios in the running app (two to three instances), judges each step with a cognitive walkthrough and Nielsen's heuristics while looking at every screenshot, and turns each defect into a failing e2e test, then a fix.
-tools: Read, Write, Edit, Bash, Grep, Glob
+tools: Read, Write, Edit, Bash, Grep, Glob, mcp__gortex__capabilities, mcp__gortex__explore, mcp__gortex__search, mcp__gortex__read, mcp__gortex__relations, mcp__gortex__trace, mcp__gortex__analyze, mcp__gortex__change, mcp__gortex__recall, mcp__gortex__edit, mcp__gortex__refactor
 model: sonnet
 effort: medium
 skills:

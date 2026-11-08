@@ -1,7 +1,7 @@
 ---
 name: scribe
 description: Use PROACTIVELY for documentation chores — updating PROGRESS.md (narrative sections), README/docs, and drafting Conventional-Commit messages from a staged diff. Low-reasoning writing, cheap model.
-tools: Read, Edit, Bash
+tools: Read, Edit, Bash, mcp__gortex__capabilities, mcp__gortex__explore, mcp__gortex__search, mcp__gortex__read, mcp__gortex__relations, mcp__gortex__trace, mcp__gortex__analyze, mcp__gortex__change, mcp__gortex__recall, mcp__gortex__edit, mcp__gortex__refactor
 model: haiku
 effort: low
 skills:
