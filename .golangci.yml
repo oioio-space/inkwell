@@ -92,18 +92,19 @@ linters:
         text: '^(cognitive|cyclomatic) complexity [0-9]+ of func `\(Op\)\.validate` is high \(> 30\)$'
         linters:
           - gocyclo
-      # audit m1–m11: existing p2p duplication, deferred to lot 8.
+      # audit m1–m11: existing p2p duplication, deferred to lot 8. Matched by file pair, not by line
+      # number: line numbers shift with every edit of these files (2026-11-08, broke twice in a day).
       - path: ^internal/transport/p2p/bulk\.go$
-        text: '^(100-121 lines are duplicate of .*internal/transport/p2p/node\.go:669-690`|162-183 lines are duplicate of .*internal/transport/p2p/stream\.go:230-251`)$'
+        text: '^[0-9]+-[0-9]+ lines are duplicate of .*internal/transport/p2p/(node|stream)\.go:[0-9]+-[0-9]+`$'
         linters:
           - dupl
       # audit m1–m11: existing p2p duplication, deferred to lot 8.
       - path: ^internal/transport/p2p/node\.go$
-        text: '669-690 lines are duplicate of .*internal/transport/p2p/bulk\.go:100-121'
+        text: '^[0-9]+-[0-9]+ lines are duplicate of .*internal/transport/p2p/bulk\.go:[0-9]+-[0-9]+`$'
         linters:
           - dupl
       # audit m1–m11: existing p2p duplication, deferred to lot 8.
       - path: ^internal/transport/p2p/stream\.go$
-        text: '230-251 lines are duplicate of .*internal/transport/p2p/bulk\.go:162-183'
+        text: '^[0-9]+-[0-9]+ lines are duplicate of .*internal/transport/p2p/bulk\.go:[0-9]+-[0-9]+`$'
         linters:
           - dupl

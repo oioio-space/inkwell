@@ -32,7 +32,7 @@ type vector struct {
 var kinds = map[string]bridge.Kind{
 	"PeerUp": bridge.PeerUp, "PeerDown": bridge.PeerDown, "Message": bridge.Message,
 	"Attest": bridge.Attest, "Attested": bridge.Attested, "Revoked": bridge.Revoked, "Sealed": bridge.Sealed,
-	"Roles": bridge.Roles, "Suspended": bridge.Suspended,
+	"Roles": bridge.Roles, "Suspended": bridge.Suspended, "Links": bridge.Links,
 }
 
 func TestEnvelopeVectors(t *testing.T) {
@@ -258,6 +258,7 @@ func FuzzDecode(f *testing.F) {
 	f.Add([]byte{1, 8, 1, 'a', 0, 2, 1, 'p', 3, 1, 2, 'q', 'r', 1, 0})
 	f.Add([]byte{1, 9, 1, 'a', 1})
 	f.Add([]byte{1, 9, 1, 'a', 0})
+	f.Add([]byte{1, 20, 1, 'a', 0, 0})
 	f.Add([]byte{2, 3, 0})
 	f.Add([]byte{})
 	f.Fuzz(func(t *testing.T, b []byte) {
@@ -348,6 +349,35 @@ func FuzzDecodeRoles(f *testing.F) {
 			return
 		}
 		again, err := bridge.EncodeRoles(rs)
+		if err != nil || !bytes.Equal(again, b) {
+			t.Fatalf("round trip of %x = %x, %v", b, again, err)
+		}
+	})
+}
+
+func FuzzDecodeLinks(f *testing.F) {
+	one, err := bridge.EncodeLinks([]bridge.LinkEntry{{Peer: "p", Path: 2, Quality: 2, LossPermille: bridge.LossUnknown}})
+	if err != nil {
+		f.Fatal(err)
+	}
+	two, err := bridge.EncodeLinks([]bridge.LinkEntry{{Peer: "p", Path: 1, Quality: 1}, {Peer: "q", Path: 3, Quality: 3, LossScope: 2}})
+	if err != nil {
+		f.Fatal(err)
+	}
+	f.Add([]byte{0, 0})
+	f.Add(one)
+	f.Add(two)
+	f.Add([]byte{0xff, 0xff})
+	f.Add([]byte{0x04, 0x01})
+	f.Fuzz(func(t *testing.T, b []byte) {
+		ls, err := bridge.DecodeLinks(b)
+		if err != nil {
+			if !errors.Is(err, bridge.ErrMalformed) {
+				t.Fatalf("DecodeLinks(%x) error %v is not ErrMalformed", b, err)
+			}
+			return
+		}
+		again, err := bridge.EncodeLinks(ls)
 		if err != nil || !bytes.Equal(again, b) {
 			t.Fatalf("round trip of %x = %x, %v", b, again, err)
 		}

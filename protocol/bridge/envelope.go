@@ -43,12 +43,13 @@ type Envelope struct {
 
 // validate checks the invariants shared by Encode and Decode.
 func (e Envelope) validate() error {
+	known, payload := kindInfo(e.Kind)
 	switch {
-	case e.Kind < PeerUp || e.Kind > lastKind:
+	case !known:
 		return fmt.Errorf("%w: kind %d", ErrMalformed, e.Kind)
 	case !transport.ValidPeerID(e.Peer):
 		return fmt.Errorf("%w: invalid peer", ErrMalformed)
-	case !carriesPayload(e.Kind) && len(e.Payload) > 0:
+	case !payload && len(e.Payload) > 0:
 		return fmt.Errorf("%w: payload on %v", ErrMalformed, e.Kind)
 	case len(e.Payload) > transport.MaxFrame:
 		return fmt.Errorf("%w: payload of %d bytes", ErrMalformed, len(e.Payload))
@@ -60,19 +61,27 @@ func (e Envelope) validate() error {
 		if _, err := DecodeRoles(e.Payload); err != nil {
 			return err
 		}
+	case e.Kind == Links:
+		if _, err := DecodeLinks(e.Payload); err != nil {
+			return err
+		}
 	case e.Kind == Suspended && (len(e.Payload) != 1 || e.Payload[0] > 1):
 		return fmt.Errorf("%w: suspended payload", ErrMalformed)
 	}
 	return nil
 }
 
-// carriesPayload reports whether envelopes of kind k have a payload.
-func carriesPayload(k Kind) bool {
+// kindInfo says whether k is a kind of this package and whether its envelopes
+// carry a payload. The kinds 10 to 19 belong to the protocol but are not
+// carried by it.
+func kindInfo(k Kind) (known, payload bool) {
 	switch k {
-	case Message, Attest, Attested, Roles, Suspended:
-		return true
+	case PeerUp, PeerDown, Revoked, Sealed:
+		return true, false
+	case Message, Attest, Attested, Roles, Suspended, Links:
+		return true, true
 	}
-	return false
+	return false, false
 }
 
 // Encode serializes e into a freshly allocated slice the caller may hand over
@@ -83,7 +92,7 @@ func Encode(e Envelope) ([]byte, error) {
 		return nil, err
 	}
 	b := make([]byte, 0, headerLen+len(e.Peer)+len(e.Payload))
-	b = append(b, version, byte(e.Kind), byte(len(e.Peer))) // #nosec G115 -- validate bounds Kind ≤ lastKind and len(Peer) ≤ 64.
+	b = append(b, version, byte(e.Kind), byte(len(e.Peer))) // #nosec G115 -- validate bounds Kind to the known ones and len(Peer) ≤ 64.
 	b = append(b, e.Peer...)
 	b = append(b, e.Payload...)
 	return b, nil

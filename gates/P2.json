@@ -6,7 +6,7 @@
       "command": "cd protocol && INKWELL_PROTOCOL_STEP=2 ../scripts/heavy.sh go test ./conformance -run TestCorpus -count=1",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 0.2665245730022434,
+      "duration_seconds": 0.267791688995203,
       "log": "gates/P2/P-VEC-2-go.log"
     },
     {
@@ -14,7 +14,7 @@
       "command": "cd frontend && INKWELL_PROTOCOL_STEP=2 ../scripts/heavy.sh ./node_modules/.bin/vitest run packages/protocol",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 0.6715306980040623,
+      "duration_seconds": 0.6756212179898284,
       "log": "gates/P2/P-VEC-2-ts.log"
     },
     {
@@ -22,7 +22,7 @@
       "command": "(cd protocol && ../scripts/heavy.sh go test -count=1 ./sig ./trust) && ./scripts/heavy.sh go test -count=1 ./internal/transport/p2p ./internal/trust ./internal/invite ./internal/identity",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 15.354463813011535,
+      "duration_seconds": 16.364826802004245,
       "log": "gates/P2/N-1-callers.log"
     },
     {
@@ -30,7 +30,7 @@
       "command": "cd protocol && ../scripts/heavy.sh go test ./sig -run '^$' -fuzz '^FuzzVerify$' -fuzztime 120s",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 120.65306430601049,
+      "duration_seconds": 121.22070968899061,
       "log": "gates/P2/P-FUZZ-sig.log"
     },
     {
@@ -38,7 +38,7 @@
       "command": "bash scripts/arch-check.sh",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 18.260890587000176,
+      "duration_seconds": 2.6475869660062017,
       "log": "gates/P2/P-ARCH.log"
     },
     {
@@ -46,7 +46,7 @@
       "command": "mise run gate -- L3",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 1428.5986180290056,
+      "duration_seconds": 1430.1492372290086,
       "log": "gates/P2/L3-regression.log"
     }
   ],
@@ -62,31 +62,31 @@
     }
   },
   "sha256": {
-    "docs/objectif-en-cours.md": "2fe1a8992387dc50fa4035e36c9b74990cb646d243e45927f57d51cacba44786",
+    "docs/objectif-en-cours.md": "bf9b83a163015ddbcef650ceaf3f377768c8ab0d63297032421251256e4e90e3",
     "docs/plans/2026-11-08-P2-implementation.md": "2614a6ae91e3ead59c1574fb7e36d99431a8c35190e3f6fbfffc3da5a60d7347",
-    "gates/L3.json": "60e1813e0c770a174a5e03496d2ea991231b303dfaaefb3eb8e3c609bcc227c7",
+    "gates/L3.json": "907345dbf970d07e941cb472e1267f49c6a11df491913f7a26bd95584d437eef",
     "gates/P2/L3-regression.log": "e04a7a10b17f554c2c49368c3ff7d00366475d22908d3f41685b615fa5fe86a1",
-    "gates/P2/N-1-callers.log": "8d38ebce330da7559eb54bdb5e2e7568f7b8b47f1db61a347e1c85c73788eec0",
+    "gates/P2/N-1-callers.log": "1379d2098601610a510f145f00ca5ff00b8ed83a794c4d3f0890d19d56139767",
     "gates/P2/P-ARCH.log": "fa489540f4ad789887b77c36f95084173f64ac5085fe5f0b1c60acdc69066738",
-    "gates/P2/P-FUZZ-sig.log": "dd7126085b6a87e0254c0636069c8621c6f618c11f438f8a5b36733ce4708d75",
-    "gates/P2/P-VEC-2-go.log": "4b681a8eff58ad7078ce709a54d07b0af42e9eec83992fda140e52f0696c491e",
-    "gates/P2/P-VEC-2-ts.log": "2cae688f4a3151ce0aa310baf412a26bb9c87b4e369d0f1719fa64cf79173228",
+    "gates/P2/P-FUZZ-sig.log": "cc4346983fc80ec73e02e75cfab7c520dd650709a058cd01e4a37bacf91b4388",
+    "gates/P2/P-VEC-2-go.log": "213c49f267401b21a6fc091f82b9ac50facba0c424383c5d29b8cd7a0145d1ec",
+    "gates/P2/P-VEC-2-ts.log": "3aadc709bbbd97cfe5577e938ebb523d48f4261218abe7de1d1ac760a2d606b9",
     "gates/P2/RECONSTRUCTED.md": "11cc5b0f5bc8fa5f35e889cc17d0902e9c69c9cb242dd4a330f0cd582c0c7e61",
-    "gates/P2/base-guard.log": "4d6bf6524e2d6c13f1fc68b65c159f7e95fa78b4a6da2ee1f6f157a0011ee05d"
+    "gates/P2/base-guard.log": "b896d737c5847dff585283acc65812ed8e73d84f0a157254973cdaaf518b7245"
   },
   "status": "pass",
   "deferrals": [],
   "known_failures": [],
   "base_guard": {
     "ref": "main",
-    "base": "265ff643ccb6c7984fa8f73fe8a3926c5f2af6a1",
+    "base": "809efeca2983ffc27213628f03f11810b9682ff5",
     "source_sha256": "c306265111e4c8b0ad94a1867d797b7a20be7d814161b7b9dd6200ab7feb259c",
     "exit_code": 0,
     "status": "pass",
     "log": "gates/P2/base-guard.log"
   },
   "runner": {
-    "source": "base 265ff643ccb6c7984fa8f73fe8a3926c5f2af6a1",
+    "source": "base 809efeca2983ffc27213628f03f11810b9682ff5",
     "sha256": "b27c4c15b51712a94fe8280e60d0abd1efc431723999c7da8e3de63029522bcb"
   },
   "guard_overrides": [
@@ -223,6 +223,31 @@
     {
       "id": "f4e233f366ad0939cf1e932ca5e87fcd1685bd87118c45d2bcb46f3c9d8f3b3a",
       "reason": "scripts/gate_reset_test.py: new test file for gate.reset_evidence (reports kept, evidence cleared, symlinks not followed); adds checks, changes none.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "37de64a21345dfc3a211d1ec0e1b422f3400af968ddee210568e0e29934c0743",
+      "reason": "RL1/NI0: CI job timeout raised because the job now also runs the impaired-network scenarios (decision Q2, ~17 min added); no test threshold or test timeout changes.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "edc8aa9c784242aee624ba6a760f855dcdaac2ad0a98954c62b4bcc09e7c26a4",
+      "reason": "RL1: the existing p2p dupl exclusions (audit m1-m11, lot 8) are matched by file pair instead of line numbers, which shifted with every edit; same files, same linter, no new exclusion.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "bd21f8db785e3fa73d708433b88dd22746f68955fddc41d19d095c4aecc06332",
+      "reason": "RL1/NI0: pingTimeout moved into a const block with the other link-metric constants; value unchanged (5 s).",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "02130de200bd248ae9ccb49f5b20204473ea79f3af441023655ef1e438f58489",
+      "reason": "NI0 G-0: a redundant one-hour per-Recv timeout replaced by the test context (bounded by the test deadline, virtual time in synctest); the receiver still ends with the test.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "da127e92eba0fd067f86e42bb83b886c17bea3e0f7df263c31dd3d424341a592",
+      "reason": "NI0: netsim run.sh gains the impaired scenarios and fails fast when the topology does not come up (was hidden by `if start_stack`); scenarios 1-4 and their bounds unchanged.",
       "decision": "docs/objectif-en-cours.md"
     }
   ]

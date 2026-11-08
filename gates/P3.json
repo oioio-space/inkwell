@@ -6,7 +6,7 @@
       "command": "mise run tla",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 8.10665482499462,
+      "duration_seconds": 8.626633748004679,
       "log": "gates/P3/P-TLA.log"
     },
     {
@@ -14,7 +14,7 @@
       "command": "cd protocol && INKWELL_PROTOCOL_STEP=3 ../scripts/heavy.sh go test ./conformance -run TestCorpus -count=1",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 0.2690173019946087,
+      "duration_seconds": 0.258180203003576,
       "log": "gates/P3/P-VEC-3-go.log"
     },
     {
@@ -22,7 +22,7 @@
       "command": "cd frontend && INKWELL_PROTOCOL_STEP=3 ../scripts/heavy.sh ./node_modules/.bin/vitest run packages/protocol",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 0.6784314179967623,
+      "duration_seconds": 0.8157874230091693,
       "log": "gates/P3/P-VEC-3-ts.log"
     },
     {
@@ -30,7 +30,7 @@
       "command": "cd frontend && ../scripts/heavy.sh ./node_modules/.bin/vitest run src/net",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 26.16356648200599,
+      "duration_seconds": 26.353335243999027,
       "log": "gates/P3/adapter-profile.log"
     },
     {
@@ -38,7 +38,7 @@
       "command": "mise run gate -- P2",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 1584.0155540689884,
+      "duration_seconds": 1571.7896915080055,
       "log": "gates/P3/P2-regression.log"
     }
   ],
@@ -54,30 +54,30 @@
     }
   },
   "sha256": {
-    "docs/objectif-en-cours.md": "2fe1a8992387dc50fa4035e36c9b74990cb646d243e45927f57d51cacba44786",
+    "docs/objectif-en-cours.md": "bf9b83a163015ddbcef650ceaf3f377768c8ab0d63297032421251256e4e90e3",
     "docs/plans/2026-11-08-P3-implementation.md": "2a885f94f6d109a2357aa594f93648cd31c23a293b88921192a214178ab9bbf4",
-    "gates/P2.json": "a9af046cef555f3bf0f0d4237b2e21f8d69f41bf4d0aa0f72a0312e980990b4a",
+    "gates/P2.json": "8f769db9a168a3f4934478f893cf94eb41ae7773a2d8f573bc3748cfe77c845d",
     "gates/P3/P-TLA.log": "ca02516a7e95e60361b4cd364af6fac8ba4305aebb97c0019c5f3d9354b6dac3",
-    "gates/P3/P-VEC-3-go.log": "895ebf3f2bcbd917f1199829f89ecd8563e756651638d5a475098a6f56f3b48f",
-    "gates/P3/P-VEC-3-ts.log": "b15289fddf89bf408b961c60d00c6b60972c8da1e6495fc970d1b6a858477d3a",
+    "gates/P3/P-VEC-3-go.log": "03e3d74ad568cb61f917daa34b4d64682706d3c7dd8bf6e5e37d2d8b2052decf",
+    "gates/P3/P-VEC-3-ts.log": "65832de179aad05414aa2f0277969b46bdd1133a452da1501fcbc417c97239fb",
     "gates/P3/P2-regression.log": "4a781d466f1c4a7c820dc5124825de8f33b723d752ceda6b68db7e382727295e",
     "gates/P3/SIMPLIFY.md": "1977c6eaa01e740f25631a775724f0e673a6908915ce16b2e3b10eecda35a6ce",
-    "gates/P3/adapter-profile.log": "714eac5a25a1d72d5c3f880e5c9306a525434fc01489162bd5bd76b5c5279f82",
-    "gates/P3/base-guard.log": "4d6bf6524e2d6c13f1fc68b65c159f7e95fa78b4a6da2ee1f6f157a0011ee05d"
+    "gates/P3/adapter-profile.log": "fdc216f1da0a06919aaba8fad5a9c4a29cc1d03a3c6d9de6944e9ac227fa7df5",
+    "gates/P3/base-guard.log": "b896d737c5847dff585283acc65812ed8e73d84f0a157254973cdaaf518b7245"
   },
   "status": "pass",
   "deferrals": [],
   "known_failures": [],
   "base_guard": {
     "ref": "main",
-    "base": "265ff643ccb6c7984fa8f73fe8a3926c5f2af6a1",
+    "base": "809efeca2983ffc27213628f03f11810b9682ff5",
     "source_sha256": "c306265111e4c8b0ad94a1867d797b7a20be7d814161b7b9dd6200ab7feb259c",
     "exit_code": 0,
     "status": "pass",
     "log": "gates/P3/base-guard.log"
   },
   "runner": {
-    "source": "base 265ff643ccb6c7984fa8f73fe8a3926c5f2af6a1",
+    "source": "base 809efeca2983ffc27213628f03f11810b9682ff5",
     "sha256": "b27c4c15b51712a94fe8280e60d0abd1efc431723999c7da8e3de63029522bcb"
   },
   "guard_overrides": [
@@ -214,6 +214,31 @@
     {
       "id": "f4e233f366ad0939cf1e932ca5e87fcd1685bd87118c45d2bcb46f3c9d8f3b3a",
       "reason": "scripts/gate_reset_test.py: new test file for gate.reset_evidence (reports kept, evidence cleared, symlinks not followed); adds checks, changes none.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "37de64a21345dfc3a211d1ec0e1b422f3400af968ddee210568e0e29934c0743",
+      "reason": "RL1/NI0: CI job timeout raised because the job now also runs the impaired-network scenarios (decision Q2, ~17 min added); no test threshold or test timeout changes.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "edc8aa9c784242aee624ba6a760f855dcdaac2ad0a98954c62b4bcc09e7c26a4",
+      "reason": "RL1: the existing p2p dupl exclusions (audit m1-m11, lot 8) are matched by file pair instead of line numbers, which shifted with every edit; same files, same linter, no new exclusion.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "bd21f8db785e3fa73d708433b88dd22746f68955fddc41d19d095c4aecc06332",
+      "reason": "RL1/NI0: pingTimeout moved into a const block with the other link-metric constants; value unchanged (5 s).",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "02130de200bd248ae9ccb49f5b20204473ea79f3af441023655ef1e438f58489",
+      "reason": "NI0 G-0: a redundant one-hour per-Recv timeout replaced by the test context (bounded by the test deadline, virtual time in synctest); the receiver still ends with the test.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "da127e92eba0fd067f86e42bb83b886c17bea3e0f7df263c31dd3d424341a592",
+      "reason": "NI0: netsim run.sh gains the impaired scenarios and fails fast when the topology does not come up (was hidden by `if start_stack`); scenarios 1-4 and their bounds unchanged.",
       "decision": "docs/objectif-en-cours.md"
     }
   ]

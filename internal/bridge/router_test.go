@@ -71,6 +71,14 @@ func (c *fakeConn) next(t *testing.T) bridge.Envelope {
 	return env
 }
 
+// newRouter returns a router over t with the Links notifications off, which
+// the tests about Links turn on.
+func newRouter(t transport.Transport, log *slog.Logger) *bridge.Router {
+	r := bridge.NewRouter(t, log)
+	r.SetLinksPeriod(0)
+	return r
+}
+
 func mustEncode(t *testing.T, e bridge.Envelope) []byte {
 	t.Helper()
 	b, err := bridge.Encode(e)
@@ -98,7 +106,7 @@ func TestServeAnnouncesExistingPeers(t *testing.T) {
 		n.Link("a", "b")
 		n.Link("a", "c")
 
-		r := bridge.NewRouter(a, quietLogger())
+		r := newRouter(a, quietLogger())
 		c := newFakeConn(t)
 		done := wait(func() { r.Serve(c) })
 
@@ -116,7 +124,7 @@ func TestRouterForwardsBothWays(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		n := memnet.New(1, memnet.Faults{})
 		a, b := n.Join("a"), n.Join("b")
-		r := bridge.NewRouter(a, quietLogger())
+		r := newRouter(a, quietLogger())
 		c := newFakeConn(t)
 		ctx, cancel := context.WithCancel(t.Context())
 		runDone := wait(func() { _ = r.Run(ctx) })
@@ -169,7 +177,7 @@ func TestRunDropsWithoutConn(t *testing.T) {
 		n := memnet.New(1, memnet.Faults{})
 		a := n.Join("a")
 		n.Join("b")
-		r := bridge.NewRouter(a, quietLogger())
+		r := newRouter(a, quietLogger())
 		ctx, cancel := context.WithCancel(t.Context())
 		runDone := wait(func() { _ = r.Run(ctx) })
 
@@ -185,7 +193,7 @@ func TestRunReturnsOnTransportClose(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		n := memnet.New(1, memnet.Faults{})
 		a := n.Join("a")
-		r := bridge.NewRouter(a, quietLogger())
+		r := newRouter(a, quietLogger())
 		var err error
 		runDone := wait(func() { err = r.Run(t.Context()) })
 		synctest.Wait()
@@ -202,7 +210,7 @@ func TestMalformedFrameIsDroppedAndConnStaysOpen(t *testing.T) {
 		n := memnet.New(1, memnet.Faults{})
 		a, b := n.Join("a"), n.Join("b")
 		n.Link("a", "b")
-		r := bridge.NewRouter(a, quietLogger())
+		r := newRouter(a, quietLogger())
 		c := newFakeConn(t)
 		done := wait(func() { r.Serve(c) })
 		if got := c.next(t); got.Kind != bridge.PeerUp {
@@ -240,7 +248,7 @@ func TestReattachReplacesConnAndReannounces(t *testing.T) {
 		n := memnet.New(1, memnet.Faults{})
 		a, b := n.Join("a"), n.Join("b")
 		n.Link("a", "b")
-		r := bridge.NewRouter(a, quietLogger())
+		r := newRouter(a, quietLogger())
 		ctx, cancel := context.WithCancel(t.Context())
 		runDone := wait(func() { _ = r.Run(ctx) })
 
@@ -296,7 +304,7 @@ func TestServeDetachesOnExit(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		n := memnet.New(1, memnet.Faults{})
 		a, b := n.Join("a"), n.Join("b")
-		r := bridge.NewRouter(a, quietLogger())
+		r := newRouter(a, quietLogger())
 		ctx, cancel := context.WithCancel(t.Context())
 		runDone := wait(func() { _ = r.Run(ctx) })
 		c := newFakeConn(t)
@@ -347,7 +355,7 @@ func TestServeAnnouncesBeforeRunForwards(t *testing.T) {
 		n.Partition("a", "b")             // PeerDown queued after the snapshot holds b
 		time.Sleep(50 * time.Millisecond) // let Run reach the session
 	}}
-	r := bridge.NewRouter(hook, quietLogger())
+	r := newRouter(hook, quietLogger())
 	ctx, cancel := context.WithCancel(t.Context())
 	runDone := wait(func() { _ = r.Run(ctx) })
 	c := newFakeConn(t)
@@ -370,7 +378,7 @@ func TestMalformedFrameLogsAreRateLimited(t *testing.T) {
 		var buf syncBuffer
 		log := slog.New(slog.NewTextHandler(&buf, nil))
 		n := memnet.New(1, memnet.Faults{})
-		r := bridge.NewRouter(n.Join("a"), log)
+		r := newRouter(n.Join("a"), log)
 		c := newFakeConn(t)
 		done := wait(func() { r.Serve(c) })
 		for range 5 {
@@ -470,7 +478,7 @@ func TestAttestRunsBeforeTheNextFrame(t *testing.T) {
 		enf := &enforcer{Node: n.Join("a"), feed: make(chan bridge.Envelope, 4)}
 		n.Join("b")
 		n.Link("a", "b")
-		r := bridge.NewRouter(enf, quietLogger())
+		r := newRouter(enf, quietLogger())
 		c := newFakeConn(t)
 		done := wait(func() { r.Serve(c) })
 		c.next(t) // PeerUp b
@@ -494,7 +502,7 @@ func TestRefusedAttestKeepsServing(t *testing.T) {
 		enf := &enforcer{Node: n.Join("a"), refuse: errors.New("reader"), feed: make(chan bridge.Envelope)}
 		n.Join("b")
 		n.Link("a", "b")
-		r := bridge.NewRouter(enf, quietLogger())
+		r := newRouter(enf, quietLogger())
 		c := newFakeConn(t)
 		done := wait(func() { r.Serve(c) })
 		c.next(t)
@@ -517,7 +525,7 @@ func TestAttestWithoutEnforcementAndWrongDirectionAreDropped(t *testing.T) {
 		a := n.Join("a")
 		n.Join("b")
 		n.Link("a", "b")
-		r := bridge.NewRouter(a, quietLogger())
+		r := newRouter(a, quietLogger())
 		c := newFakeConn(t)
 		done := wait(func() { r.Serve(c) })
 		c.next(t)
@@ -541,7 +549,7 @@ func TestNoticesAndEnvelopesReachTheWebview(t *testing.T) {
 		past := bridge.Envelope{Kind: bridge.Attested, Peer: "b", Payload: heads1("d1")}
 		enf.notices = []bridge.Envelope{{Kind: bridge.Roles, Peer: "a", Payload: []byte{0, 0}}, past, {Kind: bridge.Sealed, Peer: "a"}}
 
-		r := bridge.NewRouter(enf, quietLogger())
+		r := newRouter(enf, quietLogger())
 		c := newFakeConn(t)
 		ctx, cancel := context.WithCancel(t.Context())
 		runDone := wait(func() { _ = r.Run(ctx) })

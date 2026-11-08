@@ -6,7 +6,7 @@ import { ed25519 } from "@noble/curves/ed25519.js";
 import { bytesToNumberLE, concatBytes } from "@noble/curves/utils.js";
 import { sha512 } from "@noble/hashes/sha2.js";
 import type { Vector } from "./src/conformance";
-import { decodeEnvelope, encodeEnvelope } from "./src/envelope";
+import { decodeEnvelope, decodeLinks, encodeEnvelope, Kind } from "./src/envelope";
 import { decodeRepoMessage, type RepoContext, type RepoMessage } from "./src/repo";
 
 const hex = (s = "") => Buffer.from(s, "hex");
@@ -364,7 +364,17 @@ export function reference(v: Vector, corpus: Vector[]) {
   try {
     switch (v.decoder) {
       case "bridge_envelope":
-        assert(equal(encodeEnvelope(decodeEnvelope(b)), b));
+        {
+          const env = decodeEnvelope(b);
+          assert(equal(encodeEnvelope(env), b));
+          if (env.kind === Kind.Links) {
+            const ls = decodeLinks(env.payload);
+            if (e.n !== undefined) assert(ls.length === e.n);
+            if (e.peers !== undefined) {
+              assert(JSON.stringify(ls.map((l) => l.peer)) === JSON.stringify(e.peers));
+            }
+          }
+        }
         break;
       case "bulk":
         bulk(b);

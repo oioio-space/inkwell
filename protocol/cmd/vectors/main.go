@@ -783,7 +783,56 @@ func generate(dir, casesPath string) {
 		c = binary.BigEndian.AppendUint32(c, 4<<20)
 		gv = append(gv, vector{ID: map[byte]string{0: "bridge-credit-lane", 2: "bridge-credit-bad-lane"}[lane], Status: "proposed", Enforce: "step-6", Desc: "Credit (kind 12) : session, génération, voie (0 en ligne, 1 LARGE), consommé, fenêtre.", Decoder: "bridge_envelope", Input: hx(append(append([]byte{1, 12, u8(len(hostID))}, hostID...), c...)), Verdict: map[byte]string{0: "accept", 2: "reject"}[lane], Expect: map[byte]map[string]any{0: {"session": 7, "generation": 2, "lane": 0, "window": 4 << 20}}[lane]})
 	}
+	gv = append(gv, linkVectors(hostID)...)
 	write(root, "bridge-internal.json", vectorFile{Vectors: gv})
 
 	fmt.Println("ok")
+}
+
+// linkVectors are the Links (kind 20) cases: two peers, one direct with
+// figures and one relayed with no measure, and the payloads the decoder
+// refuses.
+func linkVectors(local transport.PeerID) []vector {
+	direct := bridge.Link{
+		Peer: "peer-a", Path: bridge.PathDirect, Quality: bridge.QualityFair, PathAgeMs: 61000,
+		Upgrades: 2, Fallbacks: 1, RTTMs: 180, RTTVarMs: 25, RTTAgeMs: 900, LossPermille: 42,
+		LossScope: bridge.LossScopePath, UpMs: 120000, Downs10m: 1, DownsTotal: 4, LastDownMs: 8000,
+		Resyncs10m: 1, Resyncs: 3, PendingMsgs: 2, PendingBytes: 4096, OldestPendingMs: 150,
+		SendFailures: 5, Resets: 1,
+	}
+	relayed := bridge.Link{
+		Peer: "peer-b", Path: bridge.PathRelayed, Quality: bridge.QualityUnknown, PathAgeMs: 2000,
+		LossPermille: bridge.LossUnknown, LossScope: bridge.LossScopeFirstHop, UpMs: 2000,
+	}
+	frameOf := func(kind byte, payload []byte) string {
+		return hx(append(append([]byte{1, kind, u8(len(local))}, local...), payload...))
+	}
+	enc := func(ls ...bridge.Link) []byte {
+		b, err := bridge.EncodeLinks(ls)
+		must(err)
+		return b
+	}
+	// entry is the encoding of one link alone, without its count.
+	entry := func(l bridge.Link) []byte { return enc(l)[2:] }
+	count := func(n int, entries ...[]byte) []byte {
+		return append(binary.BigEndian.AppendUint16(nil, u16(n)), bytes.Join(entries, nil)...)
+	}
+	// withPQ patches the path and quality bytes, which follow the peer.
+	withPQ := func(l bridge.Link, path, quality byte) []byte {
+		e := entry(l)
+		e[1+len(l.Peer)], e[2+len(l.Peer)] = path, quality
+		return e
+	}
+	const desc = "Links (kind 20, Go → webview) : n u16 || n × Link ; "
+	bad := func(id, why string, payload []byte) vector {
+		return vector{ID: id, Status: "proposed", Enforce: "step-3", Desc: desc + why + " : refusé.", Decoder: "bridge_envelope", Input: frameOf(20, payload), Verdict: "reject"}
+	}
+	return []vector{
+		{ID: "bridge-links", Status: "proposed", Enforce: "step-3", Desc: desc + "deux pairs triés, l'un direct avec ses mesures, l'autre par relais sans mesure (qualité 0 inconnue, rtt 0, perte 0xFFFF, portée firstHop).", Decoder: "bridge_envelope", Input: frameOf(20, enc(direct, relayed)), Verdict: "accept", Expect: map[string]any{"n": 2, "peers": []string{"peer-a", "peer-b"}}},
+		bad("bridge-links-bad-unsorted", "pairs non triés", count(2, entry(relayed), entry(direct))),
+		bad("bridge-links-bad-duplicate", "pair en double", count(2, entry(direct), entry(direct))),
+		bad("bridge-links-bad-path", "chemin 4 hors domaine", count(1, withPQ(direct, 4, 2))),
+		bad("bridge-links-bad-quality", "qualité 4 hors domaine", count(1, withPQ(direct, 2, 4))),
+		bad("bridge-links-bad-count", "n = 1025 > 1024", count(1025)),
+	}
 }

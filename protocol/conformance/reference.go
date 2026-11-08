@@ -241,7 +241,24 @@ func (c *referenceCase) bridge() error {
 	if c.err == nil {
 		c.encoded, c.err = bridge.Encode(e)
 	}
+	if c.err == nil && e.Kind == bridge.Links {
+		return c.linksExpect(e.Payload)
+	}
 	return nil
+}
+
+// linksExpect checks the figures a Links vector announces: the number of
+// entries n and their peers.
+func (c *referenceCase) linksExpect(payload []byte) error {
+	ls, err := bridge.DecodeLinks(payload)
+	if err != nil {
+		return err
+	}
+	peers := make([]string, len(ls))
+	for i, l := range ls {
+		peers[i] = string(l.Peer)
+	}
+	return c.matchExpect(map[string]any{"n": len(ls), "peers": peers})
 }
 
 func (c *referenceCase) repo() error {
@@ -308,6 +325,12 @@ func (c *referenceCase) repoExpect(m repo.Message) error {
 		actual["sessionId"] = m.SessionID
 		actual["count"] = m.Count
 	}
+	return c.matchExpect(actual)
+}
+
+// matchExpect checks that each expectation of the vector (but its reason) equals
+// the actual value of the same key, compared as JSON.
+func (c *referenceCase) matchExpect(actual map[string]any) error {
 	encoded, err := json.Marshal(actual)
 	if err != nil {
 		return err

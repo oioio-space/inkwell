@@ -6,7 +6,7 @@
       "command": "mise run --skip-deps e2e:build && cd frontend && ../scripts/heavy.sh ./node_modules/.bin/playwright test problems.spec.ts --output ../gates/L3/playwright-results",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 8.43623113501235,
+      "duration_seconds": 6.029319455992663,
       "log": "gates/L3/ER-1-4.log"
     },
     {
@@ -14,7 +14,7 @@
       "command": "cd frontend && ../scripts/heavy.sh ./node_modules/.bin/vitest run src/language",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 1.1252603290049592,
+      "duration_seconds": 1.4104178950074129,
       "log": "gates/L3/LSP-positions-STALE.log"
     },
     {
@@ -22,7 +22,7 @@
       "command": "./scripts/heavy.sh go test ./internal/language ./internal/sidecar ./tools/archexec && bash scripts/arch-exec-check.sh",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 2.0791699640103616,
+      "duration_seconds": 1.9564603100006934,
       "log": "gates/L3/LSP-sidecar-offline.log"
     },
     {
@@ -30,7 +30,7 @@
       "command": "./scripts/heavy.sh --exclusive python3 scripts/perf/lsp.py",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 88.31422374999966,
+      "duration_seconds": 93.6693180220027,
       "log": "gates/L3/PERF-LSP.log",
       "exclusive": true,
       "exclusive_steps": [
@@ -39,17 +39,17 @@
           "exclusive": true,
           "slots": 2,
           "load_before": [
-            4.84,
-            7.22,
-            3.42
+            4.96,
+            7.05,
+            4.0
           ],
           "load_after": [
-            4.09,
-            6.98,
-            3.38
+            4.27,
+            6.84,
+            3.97
           ],
           "max_load": 5,
-          "waited_seconds": 75,
+          "waited_seconds": 80,
           "exit_code": 0
         }
       ]
@@ -59,7 +59,7 @@
       "command": "bash scripts/perf/type-native.sh",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 192.59631455999624,
+      "duration_seconds": 192.5339828240103,
       "log": "gates/L3/PERF-TYPE-native.log",
       "exclusive": true,
       "exclusive_steps": [
@@ -68,14 +68,14 @@
           "exclusive": true,
           "slots": 2,
           "load_before": [
-            4.09,
-            6.98,
-            3.38
+            4.27,
+            6.84,
+            3.97
           ],
           "load_after": [
-            1.95,
-            4.24,
-            2.96
+            2.48,
+            4.38,
+            3.51
           ],
           "max_load": 5,
           "waited_seconds": 0,
@@ -88,7 +88,7 @@
       "command": "mise run gate -- L2",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 1135.786714597998,
+      "duration_seconds": 1134.029860679002,
       "log": "gates/L3/L2-regression.log"
     }
   ],
@@ -104,7 +104,7 @@
     }
   },
   "sha256": {
-    "docs/objectif-en-cours.md": "2fe1a8992387dc50fa4035e36c9b74990cb646d243e45927f57d51cacba44786",
+    "docs/objectif-en-cours.md": "bf9b83a163015ddbcef650ceaf3f377768c8ab0d63297032421251256e4e90e3",
     "docs/perf/2026-11-05-native-readiness/PERF-TYPE.json": "2145c7cabd3cee22053ebad2f9e07f1add9151b1e937115be5af0d50095a348f",
     "docs/perf/2026-11-05-native-readiness/exclusive.jsonl": "e185244dd39db4d7e1b8c373ee3d19ae0fdeb8ebca1fc4e5533b5267804a3fc7",
     "docs/perf/2026-11-05-native-readiness/native-attempt.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
@@ -113,24 +113,24 @@
     "docs/perf/2026-11-05-native-readiness/native-window-probe.log": "b5ec0f4b9186d716e9f81dbb9f21bd9b1846cac28a10f3469de881a79f23e478",
     "docs/perf/2026-11-05-native-readiness/native-window.png": "653cee26034cd60e784199e1c64a1536ce96103746ff087920b168b79bf32743",
     "docs/plans/2026-11-05-L3-implementation.md": "eba75c46285d5cd560b7c313e0c58be85e21b42693c405d41465c379ef63260f",
-    "gates/L2.json": "a5b82513293e102f0c975874fa4d8ae05c3ff5db728446f5ad2ae78c0c0eaac9",
-    "gates/L3/ER-1-4.log": "448507d35b7c21ce1dbe91158bcc25b492a0b522e015480d6ad1af7d5351984e",
+    "gates/L2.json": "7a09ade60d763fb39b7985ddfa0a216d72ef19b89fee4d0bf503527fae654dd7",
+    "gates/L3/ER-1-4.log": "7bd1a42f70c285c8c1a0e43054d0f55b1f4ece72e4c4e15bdf916a9968a06b46",
     "gates/L3/L2-regression.log": "42c367a87d93b5c4d9e32f809398fdf6fb7336abf0191cc09bb50e870a0fc0f1",
-    "gates/L3/LSP-positions-STALE.log": "4e02dfc72960de41aa6d6bd9fe98c901586175304d15b58276863b959723428f",
+    "gates/L3/LSP-positions-STALE.log": "31d88b73b3941d1dcfc105436e7d4188782520f9dbdc93e20ff64099b43c023d",
     "gates/L3/LSP-sidecar-offline.log": "e3e6f39fb457f9aaba730acb484922de8e5fb420fefd2d2bb6487d925efb7332",
-    "gates/L3/PERF-LSP-browser.json": "79b9e078ab97ceda6c0938f24131e9d57e421eefd3c8375419ef7e8a3472129a",
-    "gates/L3/PERF-LSP.json": "da45bd717152326b834b2a7fb8d0dbf7fc4ed2b7e8b6f61d733b6a87d1890b1b",
-    "gates/L3/PERF-LSP.log": "386eff6d918c2ec9b80ef8324217c6aa4a445d2f933d3694eed78766896aa13e",
-    "gates/L3/PERF-TYPE-detail.json": "0a446511d3f4596ef62ab252222a616ea276b1e22f6d411fee0679141901b063",
-    "gates/L3/PERF-TYPE-native.log": "a6ea958937da1bbd83da4a6e86f4a4203de89184ccf82d5410ab02c87bdb677a",
-    "gates/L3/PERF-TYPE.json": "6a3b009ead74157cb0026fe7c5e9ca5ff7fa95bd6dd30d34a45f60f46e27983c",
+    "gates/L3/PERF-LSP-browser.json": "2dc6afe3853dd39e1c9c9f6250fc3a4d00a6c20bc835783fac5603cdf774db8d",
+    "gates/L3/PERF-LSP.json": "6dbe6357adaf3e4d3e0d205f6bc3b678362c39cad483d1812910cb15cbf23375",
+    "gates/L3/PERF-LSP.log": "b16651bcfa55c15603a379f6043c624123e15c3e91728deffad423d41e08ea1d",
+    "gates/L3/PERF-TYPE-detail.json": "e530ea99ec86b4361f45776425835f4c56abc82d814b20bbcd9945dc57287044",
+    "gates/L3/PERF-TYPE-native.log": "0e79d815577cdb888ca403949fe1051047417b00b6492a3e5a14ecb6261d6d9c",
+    "gates/L3/PERF-TYPE.json": "15a5e2b18f66122d663215491aaf183f3a293fd94ffd13dc1e263fc35c76eaaa",
     "gates/L3/RECONSTRUCTED.md": "b64a597f93be01339a59ace3a8db041f132f87eeff00a1357c7147fc32556b80",
-    "gates/L3/base-guard.log": "4d6bf6524e2d6c13f1fc68b65c159f7e95fa78b4a6da2ee1f6f157a0011ee05d",
-    "gates/L3/exclusive.jsonl": "3e50a8e5ea2c78c5806d8fc178ccb3bde1ac07e5795537f416642df31e2f4459",
-    "gates/L3/lsp-browser-server.log": "4e02514be9c187e9d318b92c8b94d2d693fc452d6b54d2cecb95d4372eec4af9",
+    "gates/L3/base-guard.log": "b896d737c5847dff585283acc65812ed8e73d84f0a157254973cdaaf518b7245",
+    "gates/L3/exclusive.jsonl": "cff18ece3b644e056439986b5ca49e67022570af1b99302cc6aadd4aa4626e34",
+    "gates/L3/lsp-browser-server.log": "a855d5fe6e4a034319b241586e0a20beb85a5ffc3dbf3fc307f060caf59d29aa",
     "gates/L3/playwright-results/.last-run.json": "91d1c43004802cd49950d78eb11c8fa7d05da8ffffe219a8b13b2f561bc00903",
-    "gates/L3/playwright-results/problems-ER-1\u20134-one-count--2a5e0-select-the-diagnostic-range-chromium/problems-dark.png": "0ad6c001977dec23de3cff374b41f2fc5aa73e233b0276ae434b3b9ec5bd7d15",
-    "gates/L3/playwright-results/problems-ER-1\u20134-one-count--2a5e0-select-the-diagnostic-range-chromium/problems-light.png": "2119bdac3d2a7f1f9ce5d4cfbf9fa9bc2cc799233c8b75b2eaa00daa606e822e",
+    "gates/L3/playwright-results/problems-ER-1\u20134-one-count--2a5e0-select-the-diagnostic-range-chromium/problems-dark.png": "f23eca574a3f870fed19bf51a7692b6a549d53101d072d6748367d7112b79f38",
+    "gates/L3/playwright-results/problems-ER-1\u20134-one-count--2a5e0-select-the-diagnostic-range-chromium/problems-light.png": "14e38305eaf0cf693c19462188aab725e50d66c6a7d20d1a44cd0c02c73c0ade",
     "gates/L3-setup/native-raw-khp6ktk5/cold-01.json": "580463d8a0a02c8a24e06ef10ad70091c7527cf08c47a657b3133599e1a16f1c",
     "gates/L3-setup/native-raw-khp6ktk5/cold-01.log": "579b15e746635aa39e4a0f5e158fbbf664436b968277c78f73b8db3622c9f4f9",
     "gates/L3-setup/native-raw-khp6ktk5/cold-02.json": "cbf056550fbc019f0dbc76636b11f36ed172cc12e1881f785d630f97ae3065b2",
@@ -194,6 +194,132 @@
     "gates/L3-setup/native-raw-khp6ktk5/driver.json": "fdfa0c9513fee7f84e58f75f7778ede73478139ddfa79349ff52e202f50726e0",
     "gates/L3-setup/native-raw-khp6ktk5/warm-01.json": "7161a109fc8a2fc9e96d3bc7b65a166911d19f5fc83ca28ba72febdf3283a8c0",
     "gates/L3-setup/native-raw-khp6ktk5/warm-01.log": "f7fae6faf09a2a640c11089dfd880b6bcbf908983e143bd0a30e1ebe2157042b",
+    "gates/L3-setup/native-raw-lzs11t_i/cold-01.json": "783f2b8ac44d6418929f4d0426eca5d30e90dfc029c819d88619e8a7ec37a499",
+    "gates/L3-setup/native-raw-lzs11t_i/cold-01.log": "e49e1f93adbd5cede5f43e1789cb3b65035bdcbcb7ad002047046f29da5c4aad",
+    "gates/L3-setup/native-raw-lzs11t_i/cold-02.json": "19e2c6e94f85ed4682ed73c5b0d4dca641e0a1ae99775decaffff64b37d90a9b",
+    "gates/L3-setup/native-raw-lzs11t_i/cold-02.log": "c81989c5f0e429d43dc8913ba5491ad7195c3916d1509453db17ce737ed98900",
+    "gates/L3-setup/native-raw-lzs11t_i/cold-03.json": "76f2ed7bc05c8255ba25fd3641b262a08aea1d6177cccefaffa60fce6db7a0f7",
+    "gates/L3-setup/native-raw-lzs11t_i/cold-03.log": "eb094111e655483297e3fdeee7976342218eb29ea4d38e9ab1551c1762f8116b",
+    "gates/L3-setup/native-raw-lzs11t_i/cold-04.json": "55b932512dbae2c2269f00252c19151b372db7bd3b3e6337ad8e38dd42e661ca",
+    "gates/L3-setup/native-raw-lzs11t_i/cold-04.log": "b5e99b77dcf52ea983d053e4a880a5e18f77b7b4b9e3a652f4085cd80bb184ca",
+    "gates/L3-setup/native-raw-lzs11t_i/cold-05.json": "d5863c7bf618f5323bdae6d87634f24857e41ef3cbb692cbf62220e3f5ba7de0",
+    "gates/L3-setup/native-raw-lzs11t_i/cold-05.log": "bddcd426417a98f8cb75092243f41ab6f14cd569e8da0a424c30487414271867",
+    "gates/L3-setup/native-raw-lzs11t_i/cold-06.json": "6c67e898bf0c535fb57ab4069657a642dde1e0ec615fb8a6f4d7ad23c675bb2a",
+    "gates/L3-setup/native-raw-lzs11t_i/cold-06.log": "000cc595fe0bb33898bc32938603a995ade0de5898e5cb7e120707decb1d57ff",
+    "gates/L3-setup/native-raw-lzs11t_i/cold-07.json": "0f6919f704cc1704c7cceb786fe65fc734159e72f235089e55f038d4312cb7e6",
+    "gates/L3-setup/native-raw-lzs11t_i/cold-07.log": "0bc4880e1cd1e1b44d565bba5125d8f98f1ab27a98677cb8125af02e06a24e40",
+    "gates/L3-setup/native-raw-lzs11t_i/cold-08.json": "4ccf495f3c9d9b12ac7c3ea3669d339b4d4e5c9ca735266cd3b6178c9245730c",
+    "gates/L3-setup/native-raw-lzs11t_i/cold-08.log": "71f17162bd400f3ac5439f7ff88d77056d8b9d7ae6ac13fe5c69ca93a1ca4ee2",
+    "gates/L3-setup/native-raw-lzs11t_i/cold-09.json": "02e4268412a5ec34cf1f7ccad275ecacce02c1d20e21679cdbb6254701d5edce",
+    "gates/L3-setup/native-raw-lzs11t_i/cold-09.log": "406d55b0aa8e126fda3d7fb71cb12304836c8f891068386acfdfd25a3f0d2dde",
+    "gates/L3-setup/native-raw-lzs11t_i/cold-10.json": "9f807055e3ec0212cb850a090ea70bb7d7e259621e7fdefa3c2cdab75a3b3960",
+    "gates/L3-setup/native-raw-lzs11t_i/cold-10.log": "47a54b2d51374b8a02e9ad8c61c4fa663c377cfa865e037680498ba16a2bc6ec",
+    "gates/L3-setup/native-raw-lzs11t_i/cold-11.json": "de1146997ad4cb40e2aea88f12771c5d181273cd844444fb66121c25cfbf139f",
+    "gates/L3-setup/native-raw-lzs11t_i/cold-11.log": "656c1e713d72860e6297ea4c34bea28a1e678acf216d281780c18723880e40d4",
+    "gates/L3-setup/native-raw-lzs11t_i/cold-12.json": "d6c7d4accb68e25ea06bf5d0b9a00c7a8079e3f46620f660aa5bc6d0b71335a6",
+    "gates/L3-setup/native-raw-lzs11t_i/cold-12.log": "354f68bb6e546df89b1b181071e6dc422ee4fee3a4b5d9ec92839254fce3143d",
+    "gates/L3-setup/native-raw-lzs11t_i/cold-13.json": "b8977dd4027111a7955158b5da4adff2860690d7aa6670538dd5f6df288c68d1",
+    "gates/L3-setup/native-raw-lzs11t_i/cold-13.log": "00a8943e9d36090088fb55bf282babe34413155ce008f4edce4ca7305a626699",
+    "gates/L3-setup/native-raw-lzs11t_i/cold-14.json": "edf1c91f565d27393e38fcba0c3f0bb50bcc3fafa2d993f4e38125b61336b8c1",
+    "gates/L3-setup/native-raw-lzs11t_i/cold-14.log": "aa49e9a3f6ab5da120c90773cdf458bae648cbca25a7432342065c1f2a0f9ce8",
+    "gates/L3-setup/native-raw-lzs11t_i/cold-15.json": "8cf6b492ebe4dcbb597ac93a633677475fefd6ec9b6d41e3b78604fe43d8e9f5",
+    "gates/L3-setup/native-raw-lzs11t_i/cold-15.log": "d8921c43694cb57ae023c1e11c4c1709fabfbf8244fe34d8b5f59382ed29d2d3",
+    "gates/L3-setup/native-raw-lzs11t_i/cold-16.json": "357fe537c7e07cf14adf988cb38d09bfb3ea99d42e55502c2f01c4135b3e606a",
+    "gates/L3-setup/native-raw-lzs11t_i/cold-16.log": "eaa744b05f92c50207e6c5cc654e1470a1b211d797781ca7360eb027d0f10ad2",
+    "gates/L3-setup/native-raw-lzs11t_i/cold-17.json": "58a79d7aafdc33e0a1ecc6cef33a3fa999cdf6e87b2e50dd2b17efcfee03301a",
+    "gates/L3-setup/native-raw-lzs11t_i/cold-17.log": "f4d5ee792825169e9a42a10ff88ffcbe58925d63edb5de02662add965111bb05",
+    "gates/L3-setup/native-raw-lzs11t_i/cold-18.json": "393f2d7c1780d98edcc8e59d8f1516847ab58cf04b764401b52d1ac7b4aaa351",
+    "gates/L3-setup/native-raw-lzs11t_i/cold-18.log": "dad5cdde67d1d92d9617f320c25bf80ae183c37e79fbbf10a8808873f7a7be51",
+    "gates/L3-setup/native-raw-lzs11t_i/cold-19.json": "e53f5a27d75ec55374d7e1430f20de24a52bb4df7ad8288db91080e07dfb08e2",
+    "gates/L3-setup/native-raw-lzs11t_i/cold-19.log": "95ce1ce84e4fa58d43acedb0ae98822de14f8ccdb13dd93d1d141cc736552e62",
+    "gates/L3-setup/native-raw-lzs11t_i/cold-20.json": "d50fed6053ec71356a360bf29b80d5f2f894861238317fe00cb56e7df473c59e",
+    "gates/L3-setup/native-raw-lzs11t_i/cold-20.log": "1e63231f19f7c14322a40b7cf0fb6c0cc4392cf04783e4f52a0ae48f7eda328e",
+    "gates/L3-setup/native-raw-lzs11t_i/cold-21.json": "3f33a565f9d78641f8a4f3746602feeb2cc694c3a8852d25f6bae80840e6653e",
+    "gates/L3-setup/native-raw-lzs11t_i/cold-21.log": "33710131fea404ce1ff2205d0835d4531a4826c7e49f3017071ea9370af681b1",
+    "gates/L3-setup/native-raw-lzs11t_i/cold-22.json": "9707764c758bf15451ca49bf0645767891a2015e5b58bb37aae3bf7819d84b1a",
+    "gates/L3-setup/native-raw-lzs11t_i/cold-22.log": "64aad3e2c39e0c1adeaeb3bbba798072278177bb4a3eeb07a21adfb9cd787717",
+    "gates/L3-setup/native-raw-lzs11t_i/cold-23.json": "d5117c15e970e1c9dca9291e1175f93c1f3685a293e2a20fa298ef0fff9c7010",
+    "gates/L3-setup/native-raw-lzs11t_i/cold-23.log": "ffab9b6c4962e006d4632a3392bc9c47b2776c0b5dff4513ec28045dc2de2a2d",
+    "gates/L3-setup/native-raw-lzs11t_i/cold-24.json": "e3fe4b56b697057a49eab7cc692931c51355f6292c1e32fea069c6bd363bcffb",
+    "gates/L3-setup/native-raw-lzs11t_i/cold-24.log": "646691f4024290e9f3aa05d6bc58150f231efbf0fe539f8f34f636b12511d217",
+    "gates/L3-setup/native-raw-lzs11t_i/cold-25.json": "43eaf814840b9f0f7621184678eca25d0133e00dea0575c38f73c31818bb35eb",
+    "gates/L3-setup/native-raw-lzs11t_i/cold-25.log": "3f9fdc42891c4da4d33f7a13bcf9195607fdfd9426fd49a06d36149b99774b93",
+    "gates/L3-setup/native-raw-lzs11t_i/cold-26.json": "78eda288b99993ba518328450b6ed631ede22626a4e532ef3d3898ea7e45e062",
+    "gates/L3-setup/native-raw-lzs11t_i/cold-26.log": "0a25e0d90e8d5a5c960798c0bb6d272c4d4e49de35a3601c828193f491c82858",
+    "gates/L3-setup/native-raw-lzs11t_i/cold-27.json": "ddf7a42ef8a94b377b7552b27f2e48c1d938fef820a51ca7cc4b85650ac410d1",
+    "gates/L3-setup/native-raw-lzs11t_i/cold-27.log": "398e74962ef3845e3789e5d4ac6525a9ea5c0ba97ff1dae798e28c664f7b3df0",
+    "gates/L3-setup/native-raw-lzs11t_i/cold-28.json": "6e0b8a7eedfec3c2513c31b7b2a5a33dd59078003386db8b45a6c83ddb8da95d",
+    "gates/L3-setup/native-raw-lzs11t_i/cold-28.log": "c99ab0d6fa84a58c690a66a046676dff285864a75ef52dc7a0cbf00447487746",
+    "gates/L3-setup/native-raw-lzs11t_i/cold-29.json": "0f2b03d0f7d3682931009943264eb580c985f555aafb4d7ccfc945d9d2b2f513",
+    "gates/L3-setup/native-raw-lzs11t_i/cold-29.log": "0cb77a084a8354ba4e0a86b3fa30ac28c78fe73f584e8a7253c6db1530b5e429",
+    "gates/L3-setup/native-raw-lzs11t_i/cold-30.json": "9e27e0256edbab5397e20f4db3f0fa10453357c30c4c33b8ed9309179bd889fd",
+    "gates/L3-setup/native-raw-lzs11t_i/cold-30.log": "55b158436e35759bbdc6bad5e610a13ec5a3404b682c778439bb6c82e848f3e5",
+    "gates/L3-setup/native-raw-lzs11t_i/driver.json": "ebd13f91c56bd7d64be4175c3773c682c7eeb5f0be2bf1787f06cb9f8c5edb9d",
+    "gates/L3-setup/native-raw-lzs11t_i/warm-01.json": "e8988b1788cbcd707c4dc50fdd59e4bfb1c747edde16205536a490af656f609c",
+    "gates/L3-setup/native-raw-lzs11t_i/warm-01.log": "67d377cdb56d32fdef20d841fd89cb7b4050e4af6e057d2ede31038800e84462",
+    "gates/L3-setup/native-raw-nu7pg2x_/cold-01.json": "ebbf07ea2b891e17b4487ab205e480140429298e36fb298c45fc64b51a620646",
+    "gates/L3-setup/native-raw-nu7pg2x_/cold-01.log": "31626226a12458a14086cbbd9f8f5545641556db06317968563b839c3a105e38",
+    "gates/L3-setup/native-raw-nu7pg2x_/cold-02.json": "8ee3b65f267a0cc170c026ec2cad0d2dd9f4c725243d6c65881975399ab7c107",
+    "gates/L3-setup/native-raw-nu7pg2x_/cold-02.log": "b2ea36889df611f18d3bed0e849346e160d92e300a16ef108b0597f27a5f7250",
+    "gates/L3-setup/native-raw-nu7pg2x_/cold-03.json": "9ec928ce5601da3791f24357c479d11ad183393e04f9932e093face3e4cf1dab",
+    "gates/L3-setup/native-raw-nu7pg2x_/cold-03.log": "526cc3af73554de1752681dd405eed1086ca62c1b19bf5671b905b956031d0b4",
+    "gates/L3-setup/native-raw-nu7pg2x_/cold-04.json": "de9ea69b67ef36768978058bbf5d4076b95f57fa1832baea89ff1c8117f142c5",
+    "gates/L3-setup/native-raw-nu7pg2x_/cold-04.log": "8dd55fc304906b44d81fbdc0ab89e39682985bba11aff217b0dc85412af81cd4",
+    "gates/L3-setup/native-raw-nu7pg2x_/cold-05.json": "50515447382091cb946e38d7084c4770de0839c30b0bbc28dcdc4deab6a97bc3",
+    "gates/L3-setup/native-raw-nu7pg2x_/cold-05.log": "6bb1af508f838ebf45e8ae84205eecf69c5f3c71353cf0e2c39a6db290b2cf0f",
+    "gates/L3-setup/native-raw-nu7pg2x_/cold-06.json": "7f3436781c52e1458f5522dfde35a98a264b20ac46112a3440cd12230aa1f26a",
+    "gates/L3-setup/native-raw-nu7pg2x_/cold-06.log": "ba3a93543195826d69fdcc2f7e6e9b3d398c0fe7bcf492ace1c3c3f66edde0cd",
+    "gates/L3-setup/native-raw-nu7pg2x_/cold-07.json": "8fdbedc99fbb626e6b0bed0f9a10b170622fc053f89de2c840cec0ddf5145bdf",
+    "gates/L3-setup/native-raw-nu7pg2x_/cold-07.log": "a344ab733c2abddbc3a0d2110da187cb7fc052962130b4d2a5eefbea8dd90350",
+    "gates/L3-setup/native-raw-nu7pg2x_/cold-08.json": "9e1b70a43e379049b06dc7b052b43e74095c2fdb28e79ba0f1e51916a155a8c7",
+    "gates/L3-setup/native-raw-nu7pg2x_/cold-08.log": "5e145e60ab80adfc012bbae88a565f8835b050adaf051f293f87b5543977781e",
+    "gates/L3-setup/native-raw-nu7pg2x_/cold-09.json": "e02bf6bbe8b75803f0096f605b43090af88f79ab4660115d68c7b7ae4d565f5c",
+    "gates/L3-setup/native-raw-nu7pg2x_/cold-09.log": "0b8c9fe91894eda98e61d51e6815d363fee7d2ec8c2f565dd4d4fdf173144d72",
+    "gates/L3-setup/native-raw-nu7pg2x_/cold-10.json": "d996ad7621505a9561a38399e8decf4f3edf2869b7cfbc4d464645db7fb67ffd",
+    "gates/L3-setup/native-raw-nu7pg2x_/cold-10.log": "1324ae0014ef19e2598c302e89d6b757ce85a6b541989371eaab9023d0151f6c",
+    "gates/L3-setup/native-raw-nu7pg2x_/cold-11.json": "a2423569a5481f5fb21ff259867fcaefbb0c228717a9815c3381b3e3aa785aa6",
+    "gates/L3-setup/native-raw-nu7pg2x_/cold-11.log": "95009fd11d2b5d72692f23b1c0b612402d7d8c8ce3e7fac23f3065da6100e57c",
+    "gates/L3-setup/native-raw-nu7pg2x_/cold-12.json": "68993c593cb6a24a2385fc00d60426a62302f9a8adbb6f531020ce604d2127c9",
+    "gates/L3-setup/native-raw-nu7pg2x_/cold-12.log": "3b4b7337aa9f8246faf77ff87af163d67bd371ca11acaacb49134780f5e885b4",
+    "gates/L3-setup/native-raw-nu7pg2x_/cold-13.json": "ee2a9666a90cf5fe42f467a5fd4c4cc01c1bf40cf1da4548430d18ce299ab55b",
+    "gates/L3-setup/native-raw-nu7pg2x_/cold-13.log": "74b700efe32a6a1e24f027d714226c5b247f4cee4c8d4ea81db9ab909de4bf1a",
+    "gates/L3-setup/native-raw-nu7pg2x_/cold-14.json": "2a1f02daa7dfec306969eb9a90a3463d729119ee3b18368497af2aa72c458e07",
+    "gates/L3-setup/native-raw-nu7pg2x_/cold-14.log": "1085a4c39b4fe65164473f979f1bf4908231b65991f1ad980f12711864681907",
+    "gates/L3-setup/native-raw-nu7pg2x_/cold-15.json": "367543e0874baa178f6dfba96c322153ce7d1994da442f8939051929303eaaa9",
+    "gates/L3-setup/native-raw-nu7pg2x_/cold-15.log": "d890f871ef97bde93d7ca6faeb57a2507626d87adb4e06d9944e845f4f7a0f0e",
+    "gates/L3-setup/native-raw-nu7pg2x_/cold-16.json": "2ec7625a9fa9c66cc7d3cf9d4f05b277fd90b55a5399dd3b92062319212a6e7a",
+    "gates/L3-setup/native-raw-nu7pg2x_/cold-16.log": "16a293e6c661a855dfa57c7460810b82dc88ba122c9f64cb6e35b3515fbd75a9",
+    "gates/L3-setup/native-raw-nu7pg2x_/cold-17.json": "4236a3ba7863fd58b69efa8acfa2bd6bea944fcc0a038797b67d255c8697081b",
+    "gates/L3-setup/native-raw-nu7pg2x_/cold-17.log": "e3347ac52c8e19936f1c92549d7b8b5e002b4e56301e5aedf4807c42a8a6e1e9",
+    "gates/L3-setup/native-raw-nu7pg2x_/cold-18.json": "029560cd14084acb7de4c6d42f0dfb6c1fe2e87b24951ce1b879f78970473446",
+    "gates/L3-setup/native-raw-nu7pg2x_/cold-18.log": "59bc4c181f327b2f6e4791f08a96057c57c19fe9e63619095011c077bc039b55",
+    "gates/L3-setup/native-raw-nu7pg2x_/cold-19.json": "6d51de4c51be7eea9ac6226f680ab324ff474b40c32d8ed8b11b168ff9a370e3",
+    "gates/L3-setup/native-raw-nu7pg2x_/cold-19.log": "5cde6918763706d180e8341a5a3d7f5dd6b461f309ff14d20816aba62518524c",
+    "gates/L3-setup/native-raw-nu7pg2x_/cold-20.json": "7bebe33bddfb55ae478460a00537bcd35a7623ed4a6eb7a719dc7ad056ae0be2",
+    "gates/L3-setup/native-raw-nu7pg2x_/cold-20.log": "f39067fa01ef263a6a8841d9e41e1eb4ea418e25301e636c981201bdb74aa883",
+    "gates/L3-setup/native-raw-nu7pg2x_/cold-21.json": "6b052019c84df03182d8b51d0d7383ba81a38868013b7383b4bd45130bb1ad3b",
+    "gates/L3-setup/native-raw-nu7pg2x_/cold-21.log": "72117716634ff8ded1479cc9de9e52ad3f3bbce486c77d68a341a5d601cd2ad3",
+    "gates/L3-setup/native-raw-nu7pg2x_/cold-22.json": "033f8ff0dae2772ddb58e50cb00602db8362612e6ddb1e33839ac37282b6f6a7",
+    "gates/L3-setup/native-raw-nu7pg2x_/cold-22.log": "da519dbf0f384849386a475f7953e5eafe5a3777223cf7c4b14cbc14449e6018",
+    "gates/L3-setup/native-raw-nu7pg2x_/cold-23.json": "4300d975672c1182f5903ac0bcc430660f342d47d3bcf0ea1d43fb78de2da5f9",
+    "gates/L3-setup/native-raw-nu7pg2x_/cold-23.log": "d942575a8f859b134a9d9e45a32fa1466bedb88fcedc9891eeeb2789547293f2",
+    "gates/L3-setup/native-raw-nu7pg2x_/cold-24.json": "ebf6c7c72f5178f9f3ceb00310c8030b86224ca1dc99acace8b538410e897f75",
+    "gates/L3-setup/native-raw-nu7pg2x_/cold-24.log": "5b755c1718a7f3bd804e23dd6b8d232630427a34a5dcc36022775a68457ed25b",
+    "gates/L3-setup/native-raw-nu7pg2x_/cold-25.json": "fcd8c1d21d3996934d1512e31ed80466655734061c6647ac0246f2bbdac8224c",
+    "gates/L3-setup/native-raw-nu7pg2x_/cold-25.log": "e59f3e37abc591a88a9c8f9b3621e4fde3348d8883c2c275101b87a65c0d7a49",
+    "gates/L3-setup/native-raw-nu7pg2x_/cold-26.json": "9303081edde1d764a1b47f00e6f0df93ffafcb339469cfc2b60d470346776aae",
+    "gates/L3-setup/native-raw-nu7pg2x_/cold-26.log": "3975b242fe46e40ec40002f076e93be47374dbc29b4f46a514a3fef7480da6e8",
+    "gates/L3-setup/native-raw-nu7pg2x_/cold-27.json": "54a287f1d4ad56a1ee164ef3497055641258ba04d2aed83b12694ca3102a87d1",
+    "gates/L3-setup/native-raw-nu7pg2x_/cold-27.log": "000d2a3ed4134b2dd5dd8eb71d39c40265284c1958d765e804c6bb5ea49552d4",
+    "gates/L3-setup/native-raw-nu7pg2x_/cold-28.json": "3bda2e52965ddf4e688965b19f93296ff9481e98000e90697f5ae09a5289e93c",
+    "gates/L3-setup/native-raw-nu7pg2x_/cold-28.log": "946c91db2668e64d7bf47c8bad892e9720ccef4c7c1c4fe9b604650f03ee59d9",
+    "gates/L3-setup/native-raw-nu7pg2x_/cold-29.json": "8902408373f904a00da5d34d99a8eae1ae2c66ed33619798bf3275410acac334",
+    "gates/L3-setup/native-raw-nu7pg2x_/cold-29.log": "5dd55bf5838e9d034d55a833cf564d71923c21cf8a91856a6799b648af90ac2d",
+    "gates/L3-setup/native-raw-nu7pg2x_/cold-30.json": "9b2e81b5ad2ef68f20f885707f822bb79bf44382ce33abb3f155d0514b40e1f2",
+    "gates/L3-setup/native-raw-nu7pg2x_/cold-30.log": "457d2959d84a8246eccf09f18841a9d6fd9eb8263c4cd7eab36a7132dade8f79",
+    "gates/L3-setup/native-raw-nu7pg2x_/driver.json": "43236aab7e9cb7ffe32e673e1b70640bf18ebda325efe8bd20f791239a64b8a9",
+    "gates/L3-setup/native-raw-nu7pg2x_/warm-01.json": "e26de6da4cf8600acae063c42af0df6a18628f9dbfab68a60c44d9fde6cab8df",
+    "gates/L3-setup/native-raw-nu7pg2x_/warm-01.log": "7f79df545953ec45b3994be852410eca49e11bf1ab5395788f666aecb702a4d1",
     "gates/L3-setup/native-raw-pte7ytz9/cold-01.json": "269e539338dd81c17a67544b72509cf6bd1508cc03b6250dc6027c098b465d43",
     "gates/L3-setup/native-raw-pte7ytz9/cold-01.log": "4dd270ea33b4f6012b5d9bdb88102dbfc96d92da493e3e310d66a5799367c371",
     "gates/L3-setup/native-raw-pte7ytz9/cold-02.json": "753b64d3c309b9aaa163246266ef438e222c4df328835e3c6654c7b3d9d7d662",
@@ -320,7 +446,7 @@
     "gates/L3-setup/native-raw-ydoceu3w/driver.json": "a1bb60aedb0c570301d4ae9c8dc3daefc2e1b0406e8a2662706095da46553509",
     "gates/L3-setup/native-raw-ydoceu3w/warm-01.json": "5fa233ed42864c35064ecc2010c8198452b495847c40bdfffa65100386b7cc44",
     "gates/L3-setup/native-raw-ydoceu3w/warm-01.log": "05b6675abb7f0f55606520877623b87511a19099335d813b2f0fc7a3571e16fd",
-    "gates/guard-overrides.json": "814a66b1e4be2ab968cda9cf44bb4e819467ca698e0ca2c6abf34d5c7e496eba",
+    "gates/guard-overrides.json": "cb5bb193c02398516f5aec607eaf304f1b471076b364e04d3a4480d1a6c31614",
     "testdata/perf/lsp/chapter-one.typ": "496a56cc0126ea9ddeaefcdd52b71933023b087db129f586da1fbf20b2e222ad",
     "testdata/perf/lsp/chapter-two.typ": "849fdeb96c808d84e230541bf2a076f83bb3147bd85c7c99430b1e4dfdbdbfcb",
     "testdata/perf/lsp/charter.typ": "85803f555aea66011f1c27649c0e1201242bac3c054e6aeace71a94d5624d01e",
@@ -331,14 +457,14 @@
   "known_failures": [],
   "base_guard": {
     "ref": "main",
-    "base": "265ff643ccb6c7984fa8f73fe8a3926c5f2af6a1",
+    "base": "809efeca2983ffc27213628f03f11810b9682ff5",
     "source_sha256": "c306265111e4c8b0ad94a1867d797b7a20be7d814161b7b9dd6200ab7feb259c",
     "exit_code": 0,
     "status": "pass",
     "log": "gates/L3/base-guard.log"
   },
   "runner": {
-    "source": "base 265ff643ccb6c7984fa8f73fe8a3926c5f2af6a1",
+    "source": "base 809efeca2983ffc27213628f03f11810b9682ff5",
     "sha256": "b27c4c15b51712a94fe8280e60d0abd1efc431723999c7da8e3de63029522bcb"
   },
   "guard_overrides": [
@@ -476,52 +602,77 @@
       "id": "f4e233f366ad0939cf1e932ca5e87fcd1685bd87118c45d2bcb46f3c9d8f3b3a",
       "reason": "scripts/gate_reset_test.py: new test file for gate.reset_evidence (reports kept, evidence cleared, symlinks not followed); adds checks, changes none.",
       "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "37de64a21345dfc3a211d1ec0e1b422f3400af968ddee210568e0e29934c0743",
+      "reason": "RL1/NI0: CI job timeout raised because the job now also runs the impaired-network scenarios (decision Q2, ~17 min added); no test threshold or test timeout changes.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "edc8aa9c784242aee624ba6a760f855dcdaac2ad0a98954c62b4bcc09e7c26a4",
+      "reason": "RL1: the existing p2p dupl exclusions (audit m1-m11, lot 8) are matched by file pair instead of line numbers, which shifted with every edit; same files, same linter, no new exclusion.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "bd21f8db785e3fa73d708433b88dd22746f68955fddc41d19d095c4aecc06332",
+      "reason": "RL1/NI0: pingTimeout moved into a const block with the other link-metric constants; value unchanged (5 s).",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "02130de200bd248ae9ccb49f5b20204473ea79f3af441023655ef1e438f58489",
+      "reason": "NI0 G-0: a redundant one-hour per-Recv timeout replaced by the test context (bounded by the test deadline, virtual time in synctest); the receiver still ends with the test.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "da127e92eba0fd067f86e42bb83b886c17bea3e0f7df263c31dd3d424341a592",
+      "reason": "NI0: netsim run.sh gains the impaired scenarios and fails fast when the topology does not come up (was hidden by `if start_stack`); scenarios 1-4 and their bounds unchanged.",
+      "decision": "docs/objectif-en-cours.md"
     }
   ],
   "measurements": [
     {
       "completion": {
         "samples_ms": [
-          12.558153,
-          2.255472,
-          3.431991,
-          2.328828,
-          3.129922,
-          1.711048,
-          2.932596,
-          2.450731,
-          3.714888,
-          2.005172,
-          3.750833,
-          1.770553,
-          3.124086,
-          2.410466,
-          3.339187,
-          1.818429,
-          3.246117,
-          1.992728,
-          3.017652,
-          1.880597,
-          3.237095,
-          1.791608,
-          3.031068,
-          2.00101,
-          3.65655,
-          1.897237,
-          3.911647,
-          1.844272,
-          3.207077,
-          2.731814,
-          3.086548,
-          1.669345,
-          2.988261,
-          2.678623,
-          3.861309,
-          2.171145,
-          4.149232,
-          2.443521,
-          3.408726,
-          2.344091
+          11.841512,
+          1.984821,
+          3.468144,
+          1.803412,
+          3.316957,
+          1.736687,
+          3.940359,
+          2.386458,
+          3.096932,
+          1.840299,
+          3.685998,
+          1.92072,
+          3.076344,
+          2.290331,
+          3.111172,
+          2.119287,
+          3.389876,
+          2.285667,
+          3.257822,
+          1.901187,
+          3.629242,
+          1.894536,
+          3.34251,
+          2.304169,
+          2.917724,
+          1.966372,
+          3.300864,
+          2.323311,
+          3.036312,
+          2.302279,
+          3.177347,
+          2.910756,
+          3.412073,
+          2.055136,
+          3.815251,
+          2.236949,
+          2.913878,
+          2.688148,
+          4.097144,
+          2.302722
         ],
         "revisions": [
           2,
@@ -727,53 +878,53 @@
             "line": 4
           }
         ],
-        "p95_ms": 3.911647
+        "p95_ms": 3.940359
       },
       "edit_cycles": 40,
       "fixture_files": 4,
       "fixture_lines": 3019,
       "hover": {
         "samples_ms": [
-          51.791981,
-          7.187616,
-          8.798995,
-          8.999313,
-          8.531103,
-          8.257794,
-          9.62189,
-          7.453084,
-          12.147093,
-          8.702575,
-          8.05388,
-          7.216677,
-          8.606771,
-          8.782208,
-          7.782328,
-          7.002056,
-          9.036591,
-          8.215768,
-          8.029546,
-          7.781083,
-          7.614097,
-          8.299323,
-          7.337285,
-          6.835101,
-          7.626604,
-          8.670479,
-          7.022216,
-          6.937854,
-          5.8852,
-          8.25723,
-          6.609296,
-          8.359121,
-          8.17137,
-          11.710722,
-          7.335496,
-          6.556389,
-          7.782723,
-          7.361626,
-          5.064744,
-          7.85078
+          49.559684,
+          8.36376,
+          7.436988,
+          10.250441,
+          7.101774,
+          7.227825,
+          7.838732,
+          7.74965,
+          8.344607,
+          7.279174,
+          9.534068,
+          7.668049,
+          5.944672,
+          6.615921,
+          6.034672,
+          8.782482,
+          5.091491,
+          8.382513,
+          7.402982,
+          7.580767,
+          7.371273,
+          7.08413,
+          6.182645,
+          7.444994,
+          7.295482,
+          7.529278,
+          5.512042,
+          8.820146,
+          7.372694,
+          7.767745,
+          5.881669,
+          7.879735,
+          7.34023,
+          8.679664,
+          7.741943,
+          7.784146,
+          8.762056,
+          6.361615,
+          8.763092,
+          8.569552
         ],
         "revisions": [
           2,
@@ -979,53 +1130,53 @@
             "line": 3
           }
         ],
-        "p95_ms": 11.710722
+        "p95_ms": 9.534068
       },
       "id": "PERF-LSP",
       "runner": "pinned tinymist over Wails-compatible Stream, stdio sandbox",
       "scope": "40 incremental expression edits at the imported charter call; alternating completion-prefix and argument positions, varying hover positions; no measured request retries",
       "signature": {
         "samples_ms": [
-          0.272176,
-          0.347985,
-          0.266169,
-          0.221966,
-          0.38864,
-          0.174408,
-          0.163247,
-          0.181209,
-          0.190161,
-          0.297177,
-          0.179608,
-          0.148429,
-          0.362416,
-          0.281778,
-          0.182139,
-          0.356567,
-          0.343514,
-          0.280373,
-          0.499435,
-          0.315225,
-          0.253096,
-          0.294533,
-          0.22903,
-          0.189557,
-          0.210136,
-          0.147662,
-          0.196528,
-          0.171593,
-          0.220024,
-          0.497477,
-          0.207442,
-          0.149917,
-          0.231392,
-          0.184286,
-          0.196227,
-          0.2552,
-          0.206832,
-          0.343143,
-          0.277134,
-          0.329092
+          0.453424,
+          0.328148,
+          0.255217,
+          0.335917,
+          0.403908,
+          0.19321,
+          0.308896,
+          0.301762,
+          0.208034,
+          0.154594,
+          0.190469,
+          0.206036,
+          0.267751,
+          0.265185,
+          0.302336,
+          0.223815,
+          0.382855,
+          0.44272,
+          0.24468,
+          0.168948,
+          0.377859,
+          0.144435,
+          0.323901,
+          0.275626,
+          0.267524,
+          0.251827,
+          0.306105,
+          0.14785,
+          0.293551,
+          0.264434,
+          0.196359,
+          0.208315,
+          0.333499,
+          0.255111,
+          0.461028,
+          0.360228,
+          0.431844,
+          0.554166,
+          0.426946,
+          0.544513
         ],
         "revisions": [
           2,
@@ -1231,7 +1382,7 @@
             "line": 3
           }
         ],
-        "p95_ms": 0.38864
+        "p95_ms": 0.461028
       },
       "status": "pass",
       "threshold_ms": 100
@@ -1529,46 +1680,46 @@
       "status": "pass",
       "completion": {
         "samples_ms": [
-          11.700000002980232,
-          12.5,
-          13.899999991059303,
-          14.099999994039536,
-          18.600000008940697,
-          3.8999999910593033,
-          19.299999997019768,
-          18.200000002980232,
-          13.200000002980232,
-          14,
-          14,
-          13.5,
-          13.400000005960464,
-          13.300000011920929,
-          13.799999997019768,
-          13.399999991059303,
-          13.899999991059303,
+          14.400000005960464,
           12.700000002980232,
-          12.799999997019768,
+          21.099999994039536,
+          13.5,
+          13,
+          11.800000011920929,
+          13.599999994039536,
           13.799999997019768,
+          14.100000008940697,
+          13.400000005960464,
           13.099999994039536,
-          13.700000002980232,
+          13.600000008940697,
+          5.399999991059303,
           14.099999994039536,
-          14.300000011920929,
-          4.699999988079071,
-          14,
-          19.799999997019768,
-          14.300000011920929,
-          4.4000000059604645,
-          4.199999988079071,
-          13.199999988079071,
-          4,
-          6.0999999940395355,
-          4.4000000059604645,
-          5.100000008940697,
+          5.5,
+          13.299999997019768,
+          13.5,
+          13.5,
+          14.099999994039536,
+          13.200000002980232,
           14.299999997019768,
-          5.800000011920929,
-          5.300000011920929,
-          19.200000002980232,
-          12.400000005960464
+          13.700000002980232,
+          12,
+          16.900000005960464,
+          19.19999998807907,
+          14.299999997019768,
+          4.200000002980232,
+          14.299999997019768,
+          17.5,
+          13.899999991059303,
+          13,
+          14,
+          12.900000005960464,
+          13.899999991059303,
+          13.5,
+          12.600000008940697,
+          14,
+          14.099999994039536,
+          12.799999997019768,
+          13.900000005960464
         ],
         "revisions": [
           3,
@@ -1654,50 +1805,50 @@
           115,
           116
         ],
-        "p95_ms": 19.200000002980232
+        "p95_ms": 17.5
       },
       "signature": {
         "samples_ms": [
-          7.4000000059604645,
-          14.5,
-          10,
-          15.399999991059303,
-          9.5,
-          15.5,
-          11,
+          7.300000011920929,
+          14.800000011920929,
+          9.099999994039536,
+          15.300000011920929,
+          7.200000002980232,
           15.200000002980232,
-          10.300000011920929,
+          9.100000008940697,
+          15.600000008940697,
+          10.599999994039536,
+          15.200000002980232,
+          9.800000011920929,
+          15,
+          10.100000008940697,
           15.599999994039536,
-          11.200000002980232,
-          15.200000002980232,
-          10,
+          10.899999991059303,
+          15.199999988079071,
+          7.5,
           14.900000005960464,
-          10.800000011920929,
+          10.599999994039536,
+          15.299999997019768,
+          9.200000002980232,
           15.200000002980232,
           9.700000002980232,
-          15.099999994039536,
-          9.400000005960464,
-          15.199999988079071,
-          9.200000002980232,
-          15.400000005960464,
-          11.099999994039536,
-          15.699999988079071,
-          10.799999997019768,
-          15.599999994039536,
-          10.700000002980232,
           15.200000002980232,
+          8.900000005960464,
+          15.600000008940697,
           10.700000002980232,
-          15.299999997019768,
-          10.899999991059303,
           15.799999997019768,
-          11.099999994039536,
+          8.900000005960464,
+          15.199999988079071,
+          9.700000002980232,
           15,
-          10.399999991059303,
-          15.399999991059303,
+          9.900000005960464,
+          15.199999988079071,
+          10.299999997019768,
+          15.100000008940697,
+          10.400000005960464,
+          15.5,
           9.200000002980232,
-          15.300000011920929,
-          10.900000005960464,
-          15.299999997019768
+          15.700000002980232
         ],
         "revisions": [
           3,
@@ -1783,50 +1934,50 @@
           105,
           108
         ],
-        "p95_ms": 15.599999994039536
+        "p95_ms": 15.600000008940697
       },
       "hover": {
         "samples_ms": [
           15.599999994039536,
-          15.399999991059303,
+          15.5,
+          15.700000002980232,
           15.799999997019768,
+          15.899999991059303,
           15.799999997019768,
-          15.200000002980232,
+          15.699999988079071,
+          15.899999991059303,
+          15.899999991059303,
+          16.099999994039536,
+          15.799999997019768,
+          15.900000005960464,
           15.800000011920929,
+          15.600000008940697,
+          16.100000008940697,
+          15.700000002980232,
+          15.299999997019768,
+          15.400000005960464,
           15.799999997019768,
           15.599999994039536,
-          15.5,
-          15.700000002980232,
-          15.400000005960464,
-          15.599999994039536,
-          15.399999991059303,
+          16,
+          15.299999997019768,
+          15.799999997019768,
+          15.799999997019768,
           15.900000005960464,
           16,
-          16.099999994039536,
-          16.099999994039536,
           15.5,
-          15.400000005960464,
+          15.900000005960464,
+          15.800000011920929,
+          15.700000002980232,
+          15.900000005960464,
+          15.399999991059303,
           15.200000002980232,
           15.900000005960464,
+          15.299999997019768,
           15.5,
-          15.900000005960464,
-          15.700000002980232,
-          16,
-          15.599999994039536,
-          15.300000011920929,
           15.700000002980232,
           15.899999991059303,
-          15.600000008940697,
-          15.700000002980232,
-          15.200000002980232,
-          15.700000002980232,
-          15.700000002980232,
-          15.800000011920929,
-          15.700000002980232,
-          15.800000011920929,
-          15.900000005960464,
-          15.800000011920929,
-          15.800000011920929
+          15.799999997019768,
+          16.100000008940697
         ],
         "revisions": [
           3,
@@ -1912,7 +2063,7 @@
           102,
           103
         ],
-        "p95_ms": 16
+        "p95_ms": 16.099999994039536
       }
     },
     {
@@ -1934,22 +2085,22 @@
       "objective_met": false,
       "p95_ms": {
         "coarse_handler_diagnostic": 6,
-        "cold_frame_wait": 12,
-        "cold_frame_work_upper_bound": 19,
-        "cold_handler": 9,
+        "cold_frame_wait": 11,
+        "cold_frame_work_upper_bound": 17,
+        "cold_handler": 8,
         "cold_paint_upper_bound": null,
-        "frame_interval": 44,
-        "frame_wait": 12,
-        "frame_work": 15,
-        "frame_work_upper_bound": 16,
+        "frame_interval": 43,
+        "frame_wait": 14,
+        "frame_work": 14,
+        "frame_work_upper_bound": 15,
         "handler": 6,
         "handler_upper_bound": 7,
         "null_handler": 2,
         "null_handler_upper_bound": 3,
         "paint_upper_bound": 21,
-        "warm_frame_wait": 14,
+        "warm_frame_wait": 16,
         "warm_frame_work_upper_bound": 12,
-        "warm_handler": 6,
+        "warm_handler": 5,
         "warm_paint_upper_bound": 21
       },
       "max_gaps_ms": {
@@ -1960,35 +2111,35 @@
         "warm_max_gap_ms": 22,
         "warm_max_gap_upper_bound_ms": 23
       },
-      "dropped_frames": 18,
+      "dropped_frames": 17,
       "controls": [
         {
           "kind": "handler",
           "validated": true,
-          "frame_work_ms": 95,
+          "frame_work_ms": 93,
           "dropped_frame": true,
-          "event_timing_upper_ms": 94
+          "event_timing_upper_ms": 93
         },
         {
           "kind": "layout",
           "validated": true,
-          "frame_work_ms": 170,
+          "frame_work_ms": 169,
           "dropped_frame": true,
-          "event_timing_upper_ms": 85
+          "event_timing_upper_ms": 84
         },
         {
           "kind": "early-raf",
           "validated": true,
-          "frame_work_ms": 89,
+          "frame_work_ms": 90,
           "dropped_frame": true,
           "event_timing_upper_ms": 93
         },
         {
           "kind": "measure",
           "validated": true,
-          "frame_work_ms": 93,
+          "frame_work_ms": 90,
           "dropped_frame": true,
-          "event_timing_upper_ms": 93
+          "event_timing_upper_ms": 101
         },
         {
           "kind": "document",
@@ -2007,7 +2158,7 @@
         {
           "kind": "deferred",
           "validated": true,
-          "frame_work_ms": 38,
+          "frame_work_ms": 37,
           "dropped_frame": true,
           "event_timing_upper_ms": 0
         }
@@ -2020,181 +2171,181 @@
           1,
           1,
           1,
-          1,
-          1,
-          1,
-          2,
-          1,
-          1,
-          2,
-          1,
-          1,
-          1,
-          1,
-          2,
-          1,
-          1,
-          2,
-          1,
-          1,
-          1,
-          1,
           0,
           1,
           1,
           1,
           1,
+          2,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          1,
+          2,
+          1,
+          1,
           1
         ],
-        "probes_on_mean_ms": 1.0666666666666667,
-        "probes_off_mean_ms": 1.1,
-        "difference_ms": -0.03333333333333344,
-        "upper_bound_95_ms": 0.15092002294396478,
-        "degrees_of_freedom": 57.30147275694595,
+        "probes_on_mean_ms": 1.1333333333333333,
+        "probes_off_mean_ms": 1.0333333333333334,
+        "difference_ms": 0.09999999999999987,
+        "upper_bound_95_ms": 0.2648086498626593,
+        "degrees_of_freedom": 53.31478875262086,
         "n_on": 30,
         "n_off": 30
       },
       "missed_refresh": {
         "method": "warm: trials with >=1 missed refresh, editor vs NULL (recording hooks on); one-sided Fisher exact test, H1 editor proportion > NULL proportion, fail if p < 0.05; cold (diagnostic, not gating): fresh processes with a missed refresh besides one pause <=70 ms (first preview presentation)",
-        "editor_missed": 3,
+        "editor_missed": 1,
         "editor_trials": 30,
-        "editor_rate": 0.1,
-        "null_missed": 0,
+        "editor_rate": 0.03333333333333333,
+        "null_missed": 1,
         "null_trials": 30,
-        "null_rate": 0,
-        "p_value": 0.1186440677966071,
+        "null_rate": 0.03333333333333333,
+        "p_value": 0.7542372881355999,
         "cold_startup_exempt": 30,
-        "cold_missed_diagnostic": 15
+        "cold_missed_diagnostic": 16
       },
       "detail": "gates/L3/PERF-TYPE-detail.json",
       "raw_evidence": [
         {
-          "path": "gates/L3-setup/native-raw-ydoceu3w/cold-01.json",
-          "sha256": "ae70450b38e1c44d603baf6fedc8f42a83cb8b66f61b9c74e9cd1f0d69f3b93b"
+          "path": "gates/L3-setup/native-raw-lzs11t_i/cold-01.json",
+          "sha256": "783f2b8ac44d6418929f4d0426eca5d30e90dfc029c819d88619e8a7ec37a499"
         },
         {
-          "path": "gates/L3-setup/native-raw-ydoceu3w/cold-02.json",
-          "sha256": "db728abe1de5893be12b7897be67917db3d0156fc1a656b9e9925b2a0a6aba13"
+          "path": "gates/L3-setup/native-raw-lzs11t_i/cold-02.json",
+          "sha256": "19e2c6e94f85ed4682ed73c5b0d4dca641e0a1ae99775decaffff64b37d90a9b"
         },
         {
-          "path": "gates/L3-setup/native-raw-ydoceu3w/cold-03.json",
-          "sha256": "24f3009d32a8a0d57df54bb973e61635ea82747c70a41af9b8c254fef0d7b845"
+          "path": "gates/L3-setup/native-raw-lzs11t_i/cold-03.json",
+          "sha256": "76f2ed7bc05c8255ba25fd3641b262a08aea1d6177cccefaffa60fce6db7a0f7"
         },
         {
-          "path": "gates/L3-setup/native-raw-ydoceu3w/cold-04.json",
-          "sha256": "865e49805707aaa27c513d8ccc50e2bafc7914d2fe26b16ee3b52944ec13eb47"
+          "path": "gates/L3-setup/native-raw-lzs11t_i/cold-04.json",
+          "sha256": "55b932512dbae2c2269f00252c19151b372db7bd3b3e6337ad8e38dd42e661ca"
         },
         {
-          "path": "gates/L3-setup/native-raw-ydoceu3w/cold-05.json",
-          "sha256": "af7f909834d8f4087529e4ae6998864aa7918285678ae7c202bc92ff9a30180b"
+          "path": "gates/L3-setup/native-raw-lzs11t_i/cold-05.json",
+          "sha256": "d5863c7bf618f5323bdae6d87634f24857e41ef3cbb692cbf62220e3f5ba7de0"
         },
         {
-          "path": "gates/L3-setup/native-raw-ydoceu3w/cold-06.json",
-          "sha256": "084d5edebcb39f5e6b73ad957e89a1a9f3e3b3fe54fd2ccf8ad8054f045b8716"
+          "path": "gates/L3-setup/native-raw-lzs11t_i/cold-06.json",
+          "sha256": "6c67e898bf0c535fb57ab4069657a642dde1e0ec615fb8a6f4d7ad23c675bb2a"
         },
         {
-          "path": "gates/L3-setup/native-raw-ydoceu3w/cold-07.json",
-          "sha256": "aa4a271ae925c69dc9224a5be0da5b3d3d6c3f707ad3b0fc348389176e2fb5d5"
+          "path": "gates/L3-setup/native-raw-lzs11t_i/cold-07.json",
+          "sha256": "0f6919f704cc1704c7cceb786fe65fc734159e72f235089e55f038d4312cb7e6"
         },
         {
-          "path": "gates/L3-setup/native-raw-ydoceu3w/cold-08.json",
-          "sha256": "ef4153f96085ef646941edb9c79609361163fdd2d553f91477413f612003f0dc"
+          "path": "gates/L3-setup/native-raw-lzs11t_i/cold-08.json",
+          "sha256": "4ccf495f3c9d9b12ac7c3ea3669d339b4d4e5c9ca735266cd3b6178c9245730c"
         },
         {
-          "path": "gates/L3-setup/native-raw-ydoceu3w/cold-09.json",
-          "sha256": "1086c4b65951bcf6687fd5f5917064e64d2cb583f1e3fe326f59e3a8be4156a7"
+          "path": "gates/L3-setup/native-raw-lzs11t_i/cold-09.json",
+          "sha256": "02e4268412a5ec34cf1f7ccad275ecacce02c1d20e21679cdbb6254701d5edce"
         },
         {
-          "path": "gates/L3-setup/native-raw-ydoceu3w/cold-10.json",
-          "sha256": "db5bddfae2698e41380bef8f8000d38175c7a383ef34f372ff439d54fd3f91fa"
+          "path": "gates/L3-setup/native-raw-lzs11t_i/cold-10.json",
+          "sha256": "9f807055e3ec0212cb850a090ea70bb7d7e259621e7fdefa3c2cdab75a3b3960"
         },
         {
-          "path": "gates/L3-setup/native-raw-ydoceu3w/cold-11.json",
-          "sha256": "437713f5e4c0c406ef07cd8d67558ef3ecbee05d4eef8708315b20e5f352f5c1"
+          "path": "gates/L3-setup/native-raw-lzs11t_i/cold-11.json",
+          "sha256": "de1146997ad4cb40e2aea88f12771c5d181273cd844444fb66121c25cfbf139f"
         },
         {
-          "path": "gates/L3-setup/native-raw-ydoceu3w/cold-12.json",
-          "sha256": "b8913dac7ebc98f67ce02921467b04d9b856dc6168a0832f98d615f48aedcf9e"
+          "path": "gates/L3-setup/native-raw-lzs11t_i/cold-12.json",
+          "sha256": "d6c7d4accb68e25ea06bf5d0b9a00c7a8079e3f46620f660aa5bc6d0b71335a6"
         },
         {
-          "path": "gates/L3-setup/native-raw-ydoceu3w/cold-13.json",
-          "sha256": "38a560ccb5beffcfe4fbb4bfad7ec7ce97a4dc109ceef66b879bee5de6c43e47"
+          "path": "gates/L3-setup/native-raw-lzs11t_i/cold-13.json",
+          "sha256": "b8977dd4027111a7955158b5da4adff2860690d7aa6670538dd5f6df288c68d1"
         },
         {
-          "path": "gates/L3-setup/native-raw-ydoceu3w/cold-14.json",
-          "sha256": "54914bfc934560d157fd36ee23f2bf3575840332029dc9873d82f5915893da78"
+          "path": "gates/L3-setup/native-raw-lzs11t_i/cold-14.json",
+          "sha256": "edf1c91f565d27393e38fcba0c3f0bb50bcc3fafa2d993f4e38125b61336b8c1"
         },
         {
-          "path": "gates/L3-setup/native-raw-ydoceu3w/cold-15.json",
-          "sha256": "9bd1c82e7ae0e45e1736e09cd7bb3284674e6f53a40243b0daeab8a0fffc1be9"
+          "path": "gates/L3-setup/native-raw-lzs11t_i/cold-15.json",
+          "sha256": "8cf6b492ebe4dcbb597ac93a633677475fefd6ec9b6d41e3b78604fe43d8e9f5"
         },
         {
-          "path": "gates/L3-setup/native-raw-ydoceu3w/cold-16.json",
-          "sha256": "ae8cf0f17ec6bcca7e56394e7d95e0d6754fe362e2c4cb6d46680939d7dcf086"
+          "path": "gates/L3-setup/native-raw-lzs11t_i/cold-16.json",
+          "sha256": "357fe537c7e07cf14adf988cb38d09bfb3ea99d42e55502c2f01c4135b3e606a"
         },
         {
-          "path": "gates/L3-setup/native-raw-ydoceu3w/cold-17.json",
-          "sha256": "aca3ccb9620867b71de95565f109b55e912628cddc7ea0a57c9856f8125e7fe1"
+          "path": "gates/L3-setup/native-raw-lzs11t_i/cold-17.json",
+          "sha256": "58a79d7aafdc33e0a1ecc6cef33a3fa999cdf6e87b2e50dd2b17efcfee03301a"
         },
         {
-          "path": "gates/L3-setup/native-raw-ydoceu3w/cold-18.json",
-          "sha256": "9bcbb1758b2c97c2d91457aaeb18498365bbad75bbd12638a488cb6dbfa5c099"
+          "path": "gates/L3-setup/native-raw-lzs11t_i/cold-18.json",
+          "sha256": "393f2d7c1780d98edcc8e59d8f1516847ab58cf04b764401b52d1ac7b4aaa351"
         },
         {
-          "path": "gates/L3-setup/native-raw-ydoceu3w/cold-19.json",
-          "sha256": "2332c79c0babb66634d56e6ade659bbcececa8662ecbf40d52a481889fa853e9"
+          "path": "gates/L3-setup/native-raw-lzs11t_i/cold-19.json",
+          "sha256": "e53f5a27d75ec55374d7e1430f20de24a52bb4df7ad8288db91080e07dfb08e2"
         },
         {
-          "path": "gates/L3-setup/native-raw-ydoceu3w/cold-20.json",
-          "sha256": "f57c9fb0b2f14cf6496eb45a14ace02a309910447c0fcdfbbcee28c4bc95525d"
+          "path": "gates/L3-setup/native-raw-lzs11t_i/cold-20.json",
+          "sha256": "d50fed6053ec71356a360bf29b80d5f2f894861238317fe00cb56e7df473c59e"
         },
         {
-          "path": "gates/L3-setup/native-raw-ydoceu3w/cold-21.json",
-          "sha256": "d70c75cdfcbf445e06dbbf22a45389d75710949f8e754ce802ede9fa2f729d0a"
+          "path": "gates/L3-setup/native-raw-lzs11t_i/cold-21.json",
+          "sha256": "3f33a565f9d78641f8a4f3746602feeb2cc694c3a8852d25f6bae80840e6653e"
         },
         {
-          "path": "gates/L3-setup/native-raw-ydoceu3w/cold-22.json",
-          "sha256": "1486fe9965efc248412b055e5b6b1791f54c4e772954714a99611ed58451947e"
+          "path": "gates/L3-setup/native-raw-lzs11t_i/cold-22.json",
+          "sha256": "9707764c758bf15451ca49bf0645767891a2015e5b58bb37aae3bf7819d84b1a"
         },
         {
-          "path": "gates/L3-setup/native-raw-ydoceu3w/cold-23.json",
-          "sha256": "df53489e719cf335012bae19531a46aa4b70a0eccdd80128a88ae45d5606101c"
+          "path": "gates/L3-setup/native-raw-lzs11t_i/cold-23.json",
+          "sha256": "d5117c15e970e1c9dca9291e1175f93c1f3685a293e2a20fa298ef0fff9c7010"
         },
         {
-          "path": "gates/L3-setup/native-raw-ydoceu3w/cold-24.json",
-          "sha256": "63076b4c0fb63af624e6245ac71dbb98abad66a47f32930bc439ebefb55732a2"
+          "path": "gates/L3-setup/native-raw-lzs11t_i/cold-24.json",
+          "sha256": "e3fe4b56b697057a49eab7cc692931c51355f6292c1e32fea069c6bd363bcffb"
         },
         {
-          "path": "gates/L3-setup/native-raw-ydoceu3w/cold-25.json",
-          "sha256": "dd161f80e13e78ab91142ab3c86f4a4a65f5030782beffdf566a192afe6a9c30"
+          "path": "gates/L3-setup/native-raw-lzs11t_i/cold-25.json",
+          "sha256": "43eaf814840b9f0f7621184678eca25d0133e00dea0575c38f73c31818bb35eb"
         },
         {
-          "path": "gates/L3-setup/native-raw-ydoceu3w/cold-26.json",
-          "sha256": "c89a341517ec1dbf0cd173f27f9db852fed07412af123940e118aecc08bd2647"
+          "path": "gates/L3-setup/native-raw-lzs11t_i/cold-26.json",
+          "sha256": "78eda288b99993ba518328450b6ed631ede22626a4e532ef3d3898ea7e45e062"
         },
         {
-          "path": "gates/L3-setup/native-raw-ydoceu3w/cold-27.json",
-          "sha256": "5b600c243fe6a1fcbcb82136dadc12dfc7a901caf03195f4e9994284be67edf5"
+          "path": "gates/L3-setup/native-raw-lzs11t_i/cold-27.json",
+          "sha256": "ddf7a42ef8a94b377b7552b27f2e48c1d938fef820a51ca7cc4b85650ac410d1"
         },
         {
-          "path": "gates/L3-setup/native-raw-ydoceu3w/cold-28.json",
-          "sha256": "44e76d29a49fcc2385b0f92ec30f4fbb1b35feb1ae98238d514fcc6651d14222"
+          "path": "gates/L3-setup/native-raw-lzs11t_i/cold-28.json",
+          "sha256": "6e0b8a7eedfec3c2513c31b7b2a5a33dd59078003386db8b45a6c83ddb8da95d"
         },
         {
-          "path": "gates/L3-setup/native-raw-ydoceu3w/cold-29.json",
-          "sha256": "2159c6c1da6585e6d983c2d8791f2f69691d8875cc4c3baddf0685e2e4ba0f47"
+          "path": "gates/L3-setup/native-raw-lzs11t_i/cold-29.json",
+          "sha256": "0f2b03d0f7d3682931009943264eb580c985f555aafb4d7ccfc945d9d2b2f513"
         },
         {
-          "path": "gates/L3-setup/native-raw-ydoceu3w/cold-30.json",
-          "sha256": "54dc4bda0ad96acb01c825a8a639838ee1d9721c069891c0b858a4c051fb9bf2"
+          "path": "gates/L3-setup/native-raw-lzs11t_i/cold-30.json",
+          "sha256": "9e27e0256edbab5397e20f4db3f0fa10453357c30c4c33b8ed9309179bd889fd"
         },
         {
-          "path": "gates/L3-setup/native-raw-ydoceu3w/driver.json",
-          "sha256": "a1bb60aedb0c570301d4ae9c8dc3daefc2e1b0406e8a2662706095da46553509"
+          "path": "gates/L3-setup/native-raw-lzs11t_i/driver.json",
+          "sha256": "ebd13f91c56bd7d64be4175c3773c682c7eeb5f0be2bf1787f06cb9f8c5edb9d"
         },
         {
-          "path": "gates/L3-setup/native-raw-ydoceu3w/warm-01.json",
-          "sha256": "5fa233ed42864c35064ecc2010c8198452b495847c40bdfffa65100386b7cc44"
+          "path": "gates/L3-setup/native-raw-lzs11t_i/warm-01.json",
+          "sha256": "e8988b1788cbcd707c4dc50fdd59e4bfb1c747edde16205536a490af656f609c"
         }
       ]
     }

@@ -225,7 +225,7 @@ run = "python3 scripts/check-env-reference.py"
 
 [tasks.ci]
 description = "Everything CI must pass"
-depends = ["test:py", "formal", "lint:env", "lint:claude-md", "arch", "deadcode", "scan:secrets", "scan:code", "scan:sbom", "lint", "lint:sh", "lint:yaml", "lint:actions", "pkg:lint", "test:ci", "cover:check", "fe:check"]
+depends = ["test:py", "formal", "lint:env", "lint:claude-md", "arch", "deadcode", "scan:secrets", "scan:code", "scan:sbom", "lint", "lint:sh", "lint:yaml", "lint:actions", "pkg:lint", "test:ci", "cover:check", "fe:check", "e2e:netsim:impaired"]
 
 # ── Versions and packages (ADR 0025) ──────────────────────────────────────────
 # The release is cut by a human: `mise run changelog:next`, `mise run changelog -- --tag vX.Y.Z`,
@@ -389,6 +389,15 @@ env = { GOFLAGS = "-mod=readonly -count=1 -exec={{config_root}}/scripts/memcap.s
 description = "Network simulation (Chromium; set INKWELL_E2E_BROWSER=chromium in CI), no root: two instances behind NATs (cone, symmetric) and a relay in network namespaces (scripts/netsim); skips with the reason when namespaces or nftables are unavailable (fails in CI)"
 depends = ["e2e:build"]
 run = "INKWELL_E2E_BROWSER=chromium ./scripts/heavy.sh ./scripts/netsim/run.sh"
+
+[tasks."e2e:netsim:impaired"]
+description = "Impaired-network scenarios NI-1..NI-4 (netem, seeded; docs/plans/2026-11-08-netsim-impaired-plan.md): NETSIM_SCENARIOS (default 5 6 7 8), NETSIM_SEEDS (one run per seed; default: one seed from the date), NETSIM_EXPECT=characterize (default: declared known failures are reported, not blocking) or strict. Skips with the reason without netem/nftables (fails in CI)"
+depends = ["e2e:build"]
+run = "NETSIM_SCENARIOS=\"${NETSIM_SCENARIOS:-5 6 7 8}\" INKWELL_E2E_BROWSER=chromium ./scripts/heavy.sh ./scripts/netsim/run.sh"
+
+[tasks."netsim:mutants"]
+description = "Mutation check of the impaired-network tests: applies each mutant of scripts/netsim/mutants.toml to a copy of the tree, runs its scenario, requires its clause red (usage: -- NI0 [mutant id...]; --check validates the anchors only); builds the e2e bundle itself, only for e2e mutants; modelled on alloy_check.py"
+run = "python3 scripts/netsim/mutants.py"
 
 [tasks."app:duo"]
 description = "Run two isolated instances to try collaboration on one machine (Invite in one, paste the invitation in the other)"

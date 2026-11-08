@@ -21,20 +21,37 @@
 # range 203.0.113.0/24. Nothing here is routed outside the namespaces, so the choice
 # cannot reach a real host.
 #
+# mesh mode (scenario 8) adds carol, a desk machine on the wan with no NAT (11.0.0.20), and makes
+# nat-a and nat-b symmetric: alice and bob can only reach each other through the relay.
+#
+# Impairment (docs/plans/2026-11-08-netsim-impaired-plan.md section 3): netem sits on the egress
+# of both interfaces of a forwarding namespace (a NAT, or the relay), never on an endpoint.
+# `profile NAME` applies a named profile with the seed NETSIM_SEED; `impair` is the raw form.
+#
 # Must run inside user+net+mount namespaces (run.sh sets them up); touches nothing else.
 #
-# Usage: topology.sh up cone|symmetric
+# Usage: topology.sh up cone|symmetric|mesh
 #        topology.sh down
 #        topology.sh alice-detach
 #        topology.sh alice-attach nat-a|nat-c
 #        topology.sh relay-ip                              # prints the relay's wan address
 #        topology.sh counter nat-a|nat-b|nat-c direct|egress   # prints a packet count
+#        topology.sh impair NS DEV NETEM_ARGS...           # tc qdisc add dev DEV root netem ARGS
+#        topology.sh clear NS DEV
+#        topology.sh qstat NS DEV                          # prints "bytes=N sent=N dropped=N overlimits=N"
+#        topology.sh profile wifi|wifi-far|wifi-clean|blackout|slowrelay   # needs NETSIM_SEED
+#        topology.sh unprofile wifi|blackout|slowrelay     # removes the qdiscs of a profile
+#        topology.sh qstats wifi|blackout|slowrelay        # "NS DEV bytes= sent= dropped= overlimits=" lines
+#        topology.sh relay-down | relay-up                 # the relay's network card
 set -euo pipefail
 
 WAN=11.0.0
 declare -A WAN_HOST=([relay]=10 [nat-a]=2 [nat-b]=3 [nat-c]=4)
+# carol only exists in mesh mode (see up).
+CAROL_HOST=20
 declare -A LAN=([nat-a]=10.1.0 [nat-b]=10.2.0 [nat-c]=10.3.0)
-NAMESPACES=(relay nat-a nat-b nat-c alice bob)
+NAMESPACES=(relay nat-a nat-b nat-c alice bob carol)
+MESH=0
 
 # lan NAT HOST HOST_IF: a point-to-point link from the NAT's eth1 to HOST_IF.
 lan() {
@@ -80,8 +97,12 @@ up() {
   case $mode in
     cone) ;;
     symmetric) random=fully-random ;;
+    mesh)
+      random=fully-random
+      MESH=1
+      ;;
     *)
-      echo "topology: unknown NAT mode '$mode' (cone or symmetric)" >&2
+      echo "topology: unknown NAT mode '$mode' (cone, symmetric or mesh)" >&2
       exit 2
       ;;
   esac
@@ -91,13 +112,17 @@ up() {
   ip link set br-wan up
   local ns
   for ns in "${NAMESPACES[@]}"; do
+    [[ $ns == carol && $MESH == 0 ]] && continue
     ip netns add "$ns"
     ip -n "$ns" link set lo up
   done
-  for ns in "${!WAN_HOST[@]}"; do
+  local -A hosts=()
+  for ns in "${!WAN_HOST[@]}"; do hosts[$ns]=${WAN_HOST[$ns]}; done
+  ((MESH)) && hosts[carol]=$CAROL_HOST
+  for ns in "${!hosts[@]}"; do
     ip link add "w-$ns" type veth peer name eth0 netns "$ns"
     ip link set "w-$ns" master br-wan up
-    ip -n "$ns" addr add "$WAN.${WAN_HOST[$ns]}/24" dev eth0
+    ip -n "$ns" addr add "$WAN.${hosts[$ns]}/24" dev eth0
     ip -n "$ns" link set eth0 up
   done
   lan nat-a alice eth0
@@ -144,6 +169,74 @@ down() {
   ip link del br-wan 2>/dev/null || true
 }
 
+# impair NS DEV ARGS...: netem on the egress of DEV. Always `del` then `add`: `replace` keeps the
+# options of the previous profile (corrupt survived a change to a profile without it).
+impair() {
+  local ns=$1 dev=$2
+  shift 2
+  ip netns exec "$ns" tc qdisc del dev "$dev" root 2>/dev/null || true
+  ip netns exec "$ns" tc qdisc add dev "$dev" root netem "$@"
+}
+
+clear_qdisc() {
+  ip netns exec "$1" tc qdisc del dev "$2" root 2>/dev/null || true
+}
+
+# qstat NS DEV: "bytes=<n> sent=<packets> dropped=<n> overlimits=<n>" of the root qdisc, so a scenario can
+# prove its impairment really happened (a netem rule that failed to install must turn it red).
+qstat() {
+  ip netns exec "$1" tc -s qdisc show dev "$2" |
+    sed -n 's/.*Sent \([0-9]*\) bytes \([0-9]*\) pkt (dropped \([0-9]*\), overlimits \([0-9]*\).*/bytes=\1 sent=\2 dropped=\3 overlimits=\4/p' |
+    head -n1
+}
+
+# The interfaces a profile acts on: NS:DEV pairs (plan section 3). Both directions of a host's
+# access link are the egress of its NAT's eth0 and eth1.
+profile_ifaces() {
+  case $1 in
+    wifi | wifi-far | wifi-clean) echo "nat-a:eth0 nat-a:eth1 nat-b:eth0 nat-b:eth1" ;;
+    blackout) echo "nat-a:eth0 nat-a:eth1" ;;
+    slowrelay) echo "relay:eth0" ;;
+    *)
+      echo "topology: unknown profile '$1'" >&2
+      exit 2
+      ;;
+  esac
+}
+
+# profile NAME: apply a named profile. Every limit is sized explicitly (netem's default of 1000
+# packets under `rate` is a queue of minutes) and the seed makes the loss draws replayable.
+profile() {
+  local name=$1 seed=${NETSIM_SEED:-1} args pair
+  case $name in
+    wifi) args="delay 15ms 5ms distribution normal loss gemodel 1% 30% 50% 0.1% duplicate 0.5% corrupt 0.1% limit 10000 seed $seed" ;;
+    wifi-far) args="delay 75ms 10ms distribution normal loss gemodel 1% 30% 50% 0.1% duplicate 0.5% corrupt 0.1% limit 10000 seed $seed" ;;
+    wifi-clean) args="delay 15ms 5ms distribution normal limit 10000 seed $seed" ;;
+    blackout) args="loss 100% limit 1000 seed $seed" ;;
+    slowrelay) args="delay 20ms rate 65536bit limit 24 seed $seed" ;;
+    *)
+      echo "topology: unknown profile '$name'" >&2
+      exit 2
+      ;;
+  esac
+  for pair in $(profile_ifaces "$name"); do
+    # shellcheck disable=SC2086 # args is a word list on purpose
+    impair "${pair%%:*}" "${pair##*:}" $args
+  done
+}
+
+unprofile() {
+  local pair
+  for pair in $(profile_ifaces "$1"); do clear_qdisc "${pair%%:*}" "${pair##*:}"; done
+}
+
+qstats() {
+  local pair
+  for pair in $(profile_ifaces "$1"); do
+    echo "${pair%%:*} ${pair##*:} $(qstat "${pair%%:*}" "${pair##*:}")"
+  done
+}
+
 # counter NAT NAME: the packet count of one of the NAT's counters.
 counter() {
   ip netns exec "$1" nft list counter ip count "$2" | awk '/packets/ { print $2 }'
@@ -154,6 +247,14 @@ case ${1:-} in
   down) down ;;
   alice-detach) alice_detach ;;
   alice-attach) alice_attach "${2:?usage: topology.sh alice-attach nat-a|nat-c}" ;;
+  impair) impair "${2:?usage: topology.sh impair NS DEV ARGS...}" "${3:?usage: topology.sh impair NS DEV ARGS...}" "${@:4}" ;;
+  clear) clear_qdisc "${2:?usage: topology.sh clear NS DEV}" "${3:?usage: topology.sh clear NS DEV}" ;;
+  qstat) qstat "${2:?usage: topology.sh qstat NS DEV}" "${3:?usage: topology.sh qstat NS DEV}" ;;
+  profile) profile "${2:?usage: topology.sh profile NAME}" ;;
+  unprofile) unprofile "${2:?usage: topology.sh unprofile NAME}" ;;
+  qstats) qstats "${2:?usage: topology.sh qstats NAME}" ;;
+  relay-down) ip -n relay link set eth0 down ;;
+  relay-up) ip -n relay link set eth0 up ;;
   relay-ip) echo "$WAN.${WAN_HOST[relay]}" ;;
   counter) counter "${2:?usage: topology.sh counter NAT direct|egress}" "${3:?usage: topology.sh counter NAT direct|egress}" ;;
   *)

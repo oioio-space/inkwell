@@ -21,6 +21,10 @@
  *   3 admin) | flags u8 (bit 0: suspended)
  *
  * The payload of Suspended is one byte: 1 if this device was suspended, 0 if it was let back.
+ *
+ * The payload of Links (Go → webview only, peer = this device) is count u16 big endian, then per
+ * peer len(peer) u8 | peer | the figures of `Link`, in order (spec Annex A.1); peers sorted, no
+ * duplicate, no network address.
  */
 
 export const Kind = {
@@ -33,6 +37,7 @@ export const Kind = {
   Sealed: 7,
   Roles: 8,
   Suspended: 9,
+  Links: 20,
 } as const;
 export type Kind = (typeof Kind)[keyof typeof Kind];
 
@@ -73,7 +78,8 @@ function carriesPayload(kind: Kind): boolean {
     kind === Kind.Attest ||
     kind === Kind.Attested ||
     kind === Kind.Roles ||
-    kind === Kind.Suspended
+    kind === Kind.Suspended ||
+    kind === Kind.Links
   );
 }
 
@@ -90,6 +96,7 @@ function check(kind: number, peer: string, payload: Uint8Array): asserts kind is
   if (carriesHeads(kind as Kind)) decodeHeads(payload);
   if (kind === Kind.Roles) decodeRoles(payload);
   if (kind === Kind.Suspended) decodeSuspended(payload);
+  if (kind === Kind.Links) decodeLinks(payload);
 }
 
 export function encodeEnvelope(e: Envelope): Uint8Array {
@@ -202,28 +209,63 @@ export function encodeRoles(members: MemberRole[]): Uint8Array {
   return Uint8Array.from(parts);
 }
 
+/** A cursor over a payload: reads fields in order and throws at the first overrun. */
+class Cursor {
+  #at = 0;
+  constructor(readonly b: Uint8Array) {}
+
+  take(n: number): Uint8Array {
+    if (this.#at + n > this.b.length) throw new MalformedEnvelope("truncated");
+    this.#at += n;
+    return this.b.subarray(this.#at - n, this.#at);
+  }
+
+  u8(): number {
+    return this.take(1)[0] as number;
+  }
+
+  u16(): number {
+    const [h, l] = this.take(2) as unknown as [number, number];
+    return (h << 8) | l;
+  }
+
+  u32(): number {
+    const [a, b, c, d] = this.take(4) as unknown as [number, number, number, number];
+    return ((a << 24) | (b << 16) | (c << 8) | d) >>> 0;
+  }
+
+  /** Reads an entry count and refuses one above `max`. */
+  count(max: number, what: string): number {
+    const n = this.u16();
+    if (n > max) throw new MalformedEnvelope(`too many ${what}`);
+    return n;
+  }
+
+  /** Reads a peer as len u8 | peer, and refuses an invalid one. */
+  peer(): string {
+    const peer = String.fromCharCode(...this.take(this.u8()));
+    if (!validPeer(peer)) throw new MalformedEnvelope("invalid peer id");
+    return peer;
+  }
+
+  done(): void {
+    if (this.#at !== this.b.length) throw new MalformedEnvelope("trailing bytes");
+  }
+}
+
 /** Parses the payload of Roles, strictly (same rules as Go). */
 export function decodeRoles(b: Uint8Array): MemberRole[] {
-  if (b.length < 2) throw new MalformedEnvelope("truncated roles");
-  const count = ((b[0] as number) << 8) | (b[1] as number);
-  if (count > MAX_MEMBERS) throw new MalformedEnvelope("too many members");
+  const c = new Cursor(b);
   const out: MemberRole[] = [];
-  let at = 2;
-  for (let n = 0; n < count; n++) {
-    const len = b[at] as number | undefined;
-    if (len === undefined || at + 1 + len + 2 > b.length) {
-      throw new MalformedEnvelope("truncated member entry");
-    }
-    const peer = String.fromCharCode(...b.subarray(at + 1, at + 1 + len));
-    const role = ROLE_NAMES[b[at + 1 + len] as number];
-    const flags = b[at + 2 + len] as number;
-    if (!validPeer(peer) || role === undefined || (flags & ~1) !== 0) {
+  for (let n = c.count(MAX_MEMBERS, "members"); n > 0; n--) {
+    const peer = c.peer();
+    const role = ROLE_NAMES[c.u8()];
+    const flags = c.u8();
+    if (role === undefined || (flags & ~1) !== 0)
       throw new MalformedEnvelope("invalid member entry");
-    }
     out.push({ peer, role, suspended: (flags & 1) === 1 });
-    at += 3 + len;
   }
-  if (at !== b.length) throw new MalformedEnvelope("trailing bytes");
+  c.done();
   return out;
 }
 
@@ -231,4 +273,101 @@ export function decodeRoles(b: Uint8Array): MemberRole[] {
 export function decodeSuspended(b: Uint8Array): boolean {
   if (b.length !== 1 || (b[0] as number) > 1) throw new MalformedEnvelope("bad suspended payload");
   return b[0] === 1;
+}
+
+/** Bound of a Links payload (bridge.MaxLinks). */
+export const MAX_LINKS = 1024;
+/** lossPermille of a link with too few packets to tell. */
+export const LOSS_UNKNOWN = 0xffff;
+
+export type LinkPath = "unknown" | "lan" | "direct" | "relayed";
+export type LinkQuality = "unknown" | "good" | "fair" | "poor";
+export type LossScope = "none" | "path" | "firstHop";
+
+/** One peer of a Links payload, with the wire's units (instants are ages in ms). */
+export interface PeerLink {
+  peer: string;
+  path: LinkPath;
+  quality: LinkQuality;
+  pathAgeMs: number;
+  upgrades: number;
+  fallbacks: number;
+  rttMs: number;
+  rttVarMs: number;
+  rttAgeMs: number;
+  lossPermille: number;
+  lossScope: LossScope;
+  upMs: number;
+  downs10m: number;
+  downsTotal: number;
+  lastDownMs: number;
+  resyncs10m: number;
+  resyncs: number;
+  pendingMsgs: number;
+  pendingBytes: number;
+  oldestPendingMs: number;
+  sendFailures: number;
+  resets: number;
+}
+
+const PATHS: readonly LinkPath[] = ["unknown", "lan", "direct", "relayed"];
+const QUALITIES: readonly LinkQuality[] = ["unknown", "good", "fair", "poor"];
+const SCOPES: readonly LossScope[] = ["none", "path", "firstHop"];
+
+/** The numeric fields of a link after its peer, in wire order, with their width in bytes. */
+const FIGURES = [
+  ["path", 1],
+  ["quality", 1],
+  ["pathAgeMs", 4],
+  ["upgrades", 2],
+  ["fallbacks", 2],
+  ["rttMs", 4],
+  ["rttVarMs", 4],
+  ["rttAgeMs", 4],
+  ["lossPermille", 2],
+  ["lossScope", 1],
+  ["upMs", 4],
+  ["downs10m", 2],
+  ["downsTotal", 4],
+  ["lastDownMs", 4],
+  ["resyncs10m", 2],
+  ["resyncs", 4],
+  ["pendingMsgs", 4],
+  ["pendingBytes", 4],
+  ["oldestPendingMs", 4],
+  ["sendFailures", 4],
+  ["resets", 4],
+] as const;
+type Figure = (typeof FIGURES)[number][0];
+
+/** Size of a Link entry without its peer, derived from the field list. */
+export const LINK_FIXED = FIGURES.reduce((n, [, width]) => n + width, 0);
+
+/** Parses the payload of Links, strictly (same rules as Go). */
+export function decodeLinks(b: Uint8Array): PeerLink[] {
+  const c = new Cursor(b);
+  const out: PeerLink[] = [];
+  for (let n = c.count(MAX_LINKS, "links"); n > 0; n--) {
+    const peer = c.peer();
+    const f = {} as Record<Figure, number>;
+    for (const [name, width] of FIGURES)
+      f[name] = width === 1 ? c.u8() : width === 2 ? c.u16() : c.u32();
+    const { path, quality, lossScope, ...rest } = f;
+    const link = {
+      ...rest,
+      peer,
+      path: PATHS[path],
+      quality: QUALITIES[quality],
+      lossScope: SCOPES[lossScope],
+    };
+    if (link.path === undefined || link.quality === undefined || link.lossScope === undefined) {
+      throw new MalformedEnvelope("invalid link entry");
+    }
+    if (out.length > 0 && (out[out.length - 1] as PeerLink).peer >= peer) {
+      throw new MalformedEnvelope("links not sorted");
+    }
+    out.push(link as PeerLink);
+  }
+  c.done();
+  return out;
 }

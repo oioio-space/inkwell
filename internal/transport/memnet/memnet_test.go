@@ -473,3 +473,19 @@ func BenchmarkSyncLatencyDuringBulk(b *testing.B) {
 		})
 	}
 }
+
+// Plan §7 ownership: memnet implements the optional link-metrics interface.
+func TestLinkSourceListsLinkedPeers(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		n := memnet.New(1, memnet.Faults{})
+		a, b := n.Join("a"), n.Join("b")
+		n.Link("a", "b")
+		var src transport.LinkSource = a
+		got := src.Links()
+		if len(got) != 1 || got[0].Peer != "b" || got[0].Kind != transport.LinkDirect {
+			t.Errorf("a.Links() = %+v, want one direct link to b", got)
+		}
+		_ = a.Close()
+		_ = b.Close()
+	})
+}

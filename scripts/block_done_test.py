@@ -10,9 +10,9 @@ import block_done  # noqa: E402
 class CodeFilter(unittest.TestCase):
     def test_docs_gates_and_markdown_are_not_code(self):
         files = ["docs/a.md", "gates/P3.toml", "gates/P3/SIMPLIFY.md", "README.md",
-                 "protocol/repo/cbor.go", "frontend/src/net/admission.ts", "scripts/x.py"]
+                 "protocol/repo/cbor.go", "frontend/src/net/admission.ts", "scripts/gate.py"]
         self.assertEqual(block_done.code(files),
-                         ["protocol/repo/cbor.go", "frontend/src/net/admission.ts", "scripts/x.py"])
+                         ["protocol/repo/cbor.go", "frontend/src/net/admission.ts", "scripts/gate.py"])
 
 
 class Efficacy(unittest.TestCase):

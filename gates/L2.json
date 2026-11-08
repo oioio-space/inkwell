@@ -6,7 +6,7 @@
       "command": "mise run --skip-deps e2e:build && cd frontend && ../scripts/heavy.sh ./node_modules/.bin/playwright test files.spec.ts --output ../gates/L2/playwright-results",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 11.599223504992551,
+      "duration_seconds": 12.111243186998763,
       "log": "gates/L2/FM-OPEN-1-2-3.log"
     },
     {
@@ -14,7 +14,7 @@
       "command": "python3 scripts/check-no-file-query.py",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 0.037295512011041865,
+      "duration_seconds": 0.04024770100659225,
       "log": "gates/L2/no-file-query.log"
     },
     {
@@ -22,7 +22,7 @@
       "command": "./scripts/heavy.sh go test ./tools/archexec ./internal/sidecar ./internal/project && bash scripts/arch-exec-check.sh",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 2.4546734979958273,
+      "duration_seconds": 2.5153230629948666,
       "log": "gates/L2/L1-security-followups.log"
     },
     {
@@ -36,7 +36,7 @@
       "command": "mise run gate -- L1",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 1121.4773644150118,
+      "duration_seconds": 1118.8536902900087,
       "log": "gates/L2/L0-L1.log"
     }
   ],
@@ -52,14 +52,14 @@
     }
   },
   "sha256": {
-    "docs/objectif-en-cours.md": "2fe1a8992387dc50fa4035e36c9b74990cb646d243e45927f57d51cacba44786",
+    "docs/objectif-en-cours.md": "bf9b83a163015ddbcef650ceaf3f377768c8ab0d63297032421251256e4e90e3",
     "docs/plans/2026-11-03-L2-implementation.md": "3e52973742b43a8ebaeedd52cd5e2f9fc6ab55ff1739d6c6ea12a0021c7dc7ed",
-    "gates/L0.json": "883de29212e951d1cf06cf9f94072895d4976e06c75ddf1c8ee04b68ec2f3937",
-    "gates/L1.json": "978640121cd273417c876c87f07cf72bacb33df6d364fd9b16e1da297c903e0e",
-    "gates/L2/FM-OPEN-1-2-3.log": "6a3c621e97a04c3ad37cc42f2b4fe6178ede245ae0428f81c55103613fa2f1e1",
+    "gates/L0.json": "3dc965de344fc9c1b7de5fd82e9a5b97b8db5d1c773e3bbaf7f161caa2f391e2",
+    "gates/L1.json": "f511a32d6af949bc15cb23b784d84c22e8ad5bc210cd68af2e3923ae4df49209",
+    "gates/L2/FM-OPEN-1-2-3.log": "1884f448f7b8da93a2349cee7eff1280bbf92890d3fad9859120e3c85f5c58b3",
     "gates/L2/L0-L1.log": "f7a1207687ef1a2447457343fe6d72f0b4fb31ded81efda72b64e1dccd5f5f1e",
     "gates/L2/L1-security-followups.log": "e390ca51fb2689b7f722f54c23545c4ef1e7561cc41753d28181f57654922128",
-    "gates/L2/base-guard.log": "4d6bf6524e2d6c13f1fc68b65c159f7e95fa78b4a6da2ee1f6f157a0011ee05d",
+    "gates/L2/base-guard.log": "b896d737c5847dff585283acc65812ed8e73d84f0a157254973cdaaf518b7245",
     "gates/L2/no-file-query.log": "5ad7deb415e1dcb57ab3fc0e61433964a3f34f6035e4787f551681ae24a88c49",
     "gates/L2/playwright-results/.last-run.json": "91d1c43004802cd49950d78eb11c8fa7d05da8ffffe219a8b13b2f561bc00903",
     "gates/L2/playwright-results/files-FM-OPEN-1-FM-OPEN-2--8846c-n-and-names-the-active-file-chromium/files-readonly-dark.png": "4e2f12d00bafe0f1f190b187843abc65fcac0a8e387a0dfb6daa47fb0fa2f17e",
@@ -77,14 +77,14 @@
   "known_failures": [],
   "base_guard": {
     "ref": "main",
-    "base": "265ff643ccb6c7984fa8f73fe8a3926c5f2af6a1",
+    "base": "809efeca2983ffc27213628f03f11810b9682ff5",
     "source_sha256": "c306265111e4c8b0ad94a1867d797b7a20be7d814161b7b9dd6200ab7feb259c",
     "exit_code": 0,
     "status": "pass",
     "log": "gates/L2/base-guard.log"
   },
   "runner": {
-    "source": "base 265ff643ccb6c7984fa8f73fe8a3926c5f2af6a1",
+    "source": "base 809efeca2983ffc27213628f03f11810b9682ff5",
     "sha256": "b27c4c15b51712a94fe8280e60d0abd1efc431723999c7da8e3de63029522bcb"
   },
   "guard_overrides": [
@@ -221,6 +221,31 @@
     {
       "id": "f4e233f366ad0939cf1e932ca5e87fcd1685bd87118c45d2bcb46f3c9d8f3b3a",
       "reason": "scripts/gate_reset_test.py: new test file for gate.reset_evidence (reports kept, evidence cleared, symlinks not followed); adds checks, changes none.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "37de64a21345dfc3a211d1ec0e1b422f3400af968ddee210568e0e29934c0743",
+      "reason": "RL1/NI0: CI job timeout raised because the job now also runs the impaired-network scenarios (decision Q2, ~17 min added); no test threshold or test timeout changes.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "edc8aa9c784242aee624ba6a760f855dcdaac2ad0a98954c62b4bcc09e7c26a4",
+      "reason": "RL1: the existing p2p dupl exclusions (audit m1-m11, lot 8) are matched by file pair instead of line numbers, which shifted with every edit; same files, same linter, no new exclusion.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "bd21f8db785e3fa73d708433b88dd22746f68955fddc41d19d095c4aecc06332",
+      "reason": "RL1/NI0: pingTimeout moved into a const block with the other link-metric constants; value unchanged (5 s).",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "02130de200bd248ae9ccb49f5b20204473ea79f3af441023655ef1e438f58489",
+      "reason": "NI0 G-0: a redundant one-hour per-Recv timeout replaced by the test context (bounded by the test deadline, virtual time in synctest); the receiver still ends with the test.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "da127e92eba0fd067f86e42bb83b886c17bea3e0f7df263c31dd3d424341a592",
+      "reason": "NI0: netsim run.sh gains the impaired scenarios and fails fast when the topology does not come up (was hidden by `if start_stack`); scenarios 1-4 and their bounds unchanged.",
       "decision": "docs/objectif-en-cours.md"
     }
   ],

@@ -1903,6 +1903,26 @@ enveloppe { version u8 = 1 ; kind u8 ; peer str8 (PeerID, 1–64) ; payload [res
 | 17 | Listed | Go → webview | ensemble admis (§4.10), avec projet et époque |
 | 18 | WantAttest | webview → Go | `doc str16` : demander ATTEST_WANT au pair `peer` (§6.2) |
 | 19 | Advice | webview → Go | `session u32 ; generation u32 ; size u32 ; doc str16 (1–64)` (`bridge-internal.json#bridge-advice`) : annoncer un avis (§7.2) sans en envoyer les octets |
+| 20 | Links | Go → webview | `n u16 ≤ 1024 ; n × Link` (`bridge-internal.json#bridge-links`) : état des liens vers chaque pair, `peer` = pair local (W33, contrat v1) |
+
+- **Links** : `Link = peer str8 (1–64) ; path u8 (0 inconnu, 1 lan, 2 direct, 3 relayed) ;
+  quality u8 (0 inconnue — rien de mesuré —, 1 good, 2 fair, 3 poor) ; pathAgeMs u32 ; upgrades u16 ; fallbacks u16 ;
+  rttMs u32 ; rttVarMs u32 ; rttAgeMs u32 (rttMs = 0 : pas de mesure) ; lossPermille u16
+  (0xFFFF : moins de 50 paquets, inconnu) ; lossScope u8 (0 aucun, 1 path, 2 firstHop) ;
+  upMs u32 (0 : déconnecté) ; downs10m u16 ; downsTotal u32 ; lastDownMs u32 ; resyncs10m u16 ;
+  resyncs u32 ; pendingMsgs u32 ; pendingBytes u32 ; oldestPendingMs u32 ; sendFailures u32 ;
+  resets u32`, grand-boutiste. Les instants sont envoyés en **âges** (ms écoulées) : aucune
+  horloge partagée. Toute valeur hors bornes est **saturée** au maximum de son type, jamais
+  tronquée ; `lossPermille` sature à 0xFFFE (0xFFFF veut dire inconnu) ; un RTT mesuré sous
+  1 ms s'écrit 1 (0 veut dire « pas de mesure »). Pairs triés par `peer`, sans doublon ; un
+  `path`, `quality` ou `lossScope` hors domaine, un doublon, un ordre non trié ou un `n` > 1024
+  est refusé (`#bridge-links-bad-*`, un vecteur par défaut). **Aucune adresse réseau** (IP,
+  multiadresse) n'y figure, seulement le type de chemin (§18).
+- **Coalescence de Links** : dernière valeur seulement ; au plus une par seconde, et seulement
+  si le contenu a changé — les âges (`pathAgeMs`, `rttAgeMs`, `upMs`, `oldestPendingMs`) ne
+  comptent que par leur passage de zéro à non nul ou l'inverse, la webview les fait vieillir
+  elle-même depuis la réception ; un webview qui se (re)connecte reçoit l'état courant aussitôt. Une
+  notification Links n'ouvre ni ne ferme d'époque : elle n'est pas soumise à la règle T.
 
 - **Crédits** : pour chaque (pair, génération, voie), l'émetteur compte les octets de
   `message` envoyés (`sent`) ; le receveur annonce `consumed` et `window`. Voie 0 :

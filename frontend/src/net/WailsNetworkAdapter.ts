@@ -12,12 +12,14 @@ import { Coverage } from "./coverage";
 import {
   decodeEnvelope,
   decodeHeads,
+  decodeLinks,
   decodeRoles,
   encodeEnvelope,
   encodeHeads,
   Kind,
   MalformedEnvelope,
   type MemberRole,
+  type PeerLink,
 } from "./envelope";
 
 /**
@@ -99,6 +101,7 @@ export class WailsNetworkAdapter extends NetworkAdapter {
   #sealedListeners: (() => void)[] = [];
   #roles = new Map<string, MemberRole>();
   #roleListeners: (() => void)[] = [];
+  #linkListeners: ((links: PeerLink[]) => void)[] = [];
 
   constructor(open: () => SocketLike, opts: AdapterOptions = {}) {
     super();
@@ -146,6 +149,11 @@ export class WailsNetworkAdapter extends NetworkAdapter {
   /** Calls cb whenever Go reports the roles of the members (when they change). */
   onRoles(cb: () => void): void {
     this.#roleListeners.push(cb);
+  }
+
+  /** Calls cb with the state of the links whenever Go reports it (Links, kind 20). */
+  onLinks(cb: (links: PeerLink[]) => void): void {
+    this.#linkListeners.push(cb);
   }
 
   /** Calls cb whenever a peer announces its project. */
@@ -244,11 +252,25 @@ export class WailsNetworkAdapter extends NetworkAdapter {
       case Kind.Roles:
         this.#receiveRoles(env.payload);
         return;
+      case Kind.Links:
+        this.#receiveLinks(env.payload);
+        return;
       case Kind.Sealed:
         this.#sealed = true;
         for (const cb of this.#sealedListeners) cb();
         return;
     }
+  }
+
+  #receiveLinks(payload: Uint8Array): void {
+    let links: PeerLink[];
+    try {
+      links = decodeLinks(payload);
+    } catch {
+      this.#drop("undecodable links");
+      return;
+    }
+    for (const cb of this.#linkListeners) cb(links);
   }
 
   #receiveRoles(payload: Uint8Array): void {

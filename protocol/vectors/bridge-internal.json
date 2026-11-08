@@ -90,6 +90,67 @@
       "decoder": "bridge_envelope",
       "input_hex": "010c34313244334b6f6f57514b31776e65666f4c7263564862626e6635744c7a626f705564334b336246416f4a704137594a674c357056000000070000000202000000000000000000400000",
       "verdict": "reject"
+    },
+    {
+      "id": "bridge-links",
+      "status": "proposed",
+      "enforce": "step-3",
+      "description": "Links (kind 20, Go → webview) : n u16 || n × Link ; deux pairs triés, l'un direct avec ses mesures, l'autre par relais sans mesure (qualité 0 inconnue, rtt 0, perte 0xFFFF, portée firstHop).",
+      "decoder": "bridge_envelope",
+      "input_hex": "011434313244334b6f6f57514b31776e65666f4c7263564862626e6635744c7a626f705564334b336246416f4a704137594a674c357056000206706565722d6102020000ee4800020001000000b40000001900000384002a010001d4c000010000000400001f40000100000003000000020000100000000096000000050000000106706565722d620300000007d000000000000000000000000000000000ffff02000007d0000000000000000000000000000000000000000000000000000000000000000000000000",
+      "verdict": "accept",
+      "expect": {
+        "n": 2,
+        "peers": [
+          "peer-a",
+          "peer-b"
+        ]
+      }
+    },
+    {
+      "id": "bridge-links-bad-unsorted",
+      "status": "proposed",
+      "enforce": "step-3",
+      "description": "Links (kind 20, Go → webview) : n u16 || n × Link ; pairs non triés : refusé.",
+      "decoder": "bridge_envelope",
+      "input_hex": "011434313244334b6f6f57514b31776e65666f4c7263564862626e6635744c7a626f705564334b336246416f4a704137594a674c357056000206706565722d620300000007d000000000000000000000000000000000ffff02000007d000000000000000000000000000000000000000000000000000000000000000000000000006706565722d6102020000ee4800020001000000b40000001900000384002a010001d4c000010000000400001f400001000000030000000200001000000000960000000500000001",
+      "verdict": "reject"
+    },
+    {
+      "id": "bridge-links-bad-duplicate",
+      "status": "proposed",
+      "enforce": "step-3",
+      "description": "Links (kind 20, Go → webview) : n u16 || n × Link ; pair en double : refusé.",
+      "decoder": "bridge_envelope",
+      "input_hex": "011434313244334b6f6f57514b31776e65666f4c7263564862626e6635744c7a626f705564334b336246416f4a704137594a674c357056000206706565722d6102020000ee4800020001000000b40000001900000384002a010001d4c000010000000400001f40000100000003000000020000100000000096000000050000000106706565722d6102020000ee4800020001000000b40000001900000384002a010001d4c000010000000400001f400001000000030000000200001000000000960000000500000001",
+      "verdict": "reject"
+    },
+    {
+      "id": "bridge-links-bad-path",
+      "status": "proposed",
+      "enforce": "step-3",
+      "description": "Links (kind 20, Go → webview) : n u16 || n × Link ; chemin 4 hors domaine : refusé.",
+      "decoder": "bridge_envelope",
+      "input_hex": "011434313244334b6f6f57514b31776e65666f4c7263564862626e6635744c7a626f705564334b336246416f4a704137594a674c357056000106706565722d6104020000ee4800020001000000b40000001900000384002a010001d4c000010000000400001f400001000000030000000200001000000000960000000500000001",
+      "verdict": "reject"
+    },
+    {
+      "id": "bridge-links-bad-quality",
+      "status": "proposed",
+      "enforce": "step-3",
+      "description": "Links (kind 20, Go → webview) : n u16 || n × Link ; qualité 4 hors domaine : refusé.",
+      "decoder": "bridge_envelope",
+      "input_hex": "011434313244334b6f6f57514b31776e65666f4c7263564862626e6635744c7a626f705564334b336246416f4a704137594a674c357056000106706565722d6102040000ee4800020001000000b40000001900000384002a010001d4c000010000000400001f400001000000030000000200001000000000960000000500000001",
+      "verdict": "reject"
+    },
+    {
+      "id": "bridge-links-bad-count",
+      "status": "proposed",
+      "enforce": "step-3",
+      "description": "Links (kind 20, Go → webview) : n u16 || n × Link ; n = 1025 > 1024 : refusé.",
+      "decoder": "bridge_envelope",
+      "input_hex": "011434313244334b6f6f57514b31776e65666f4c7263564862626e6635744c7a626f705564334b336246416f4a704137594a674c3570560401",
+      "verdict": "reject"
     }
   ]
 }

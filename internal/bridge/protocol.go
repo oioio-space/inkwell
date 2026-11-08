@@ -81,3 +81,24 @@ var EncodeRoles = p.EncodeRoles
 var DecodeRoles = p.DecodeRoles
 
 const maxWire = 64 << 20
+
+// Links is defined by the protocol.
+const Links = p.Links
+
+// MaxLinks is defined by the protocol.
+const MaxLinks = p.MaxLinks
+
+// LossUnknown is defined by the protocol.
+const LossUnknown = p.LossUnknown
+
+// LinkEntry is the protocol's Link, one peer of a Links payload.
+type LinkEntry = p.Link
+
+// EncodeLinks forwards to the protocol.
+var EncodeLinks = p.EncodeLinks
+
+// DecodeLinks forwards to the protocol.
+var DecodeLinks = p.DecodeLinks
+
+// LinkFixed is defined by the protocol.
+var LinkFixed = p.LinkFixed

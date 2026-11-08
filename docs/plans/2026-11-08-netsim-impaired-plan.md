@@ -432,3 +432,88 @@ command = "mise run gate -- P3"
   (e.g. good / fair / poor) and their thresholds, derived from the shared metrics; the UX design of the
   people popover and status bar refines them later.
 - **Q5 — NAT rebinding:** deferred; listed with the rejected-for-now candidates, to revisit after NI-4.
+
+## Addition (user, 2026-11-08): sleep and resume
+
+A laptop that sleeps is not a network outage: the app's process is frozen (no timers, no keepalives, no
+reads), then resumes with a clock jump, possibly on another network. Planned scenario **NI-5 — sleep then
+resume**, inside the existing netsim structure: freeze Alice's app process with SIGSTOP (her namespace's
+network stays up, as on a real suspend the NIC goes down too — so both variants: with and without
+`alice-detach`), while Bob keeps typing; then SIGCONT and, in the variant, `alice-attach`.
+- Durations: 20 s (QUIC connection may survive: the same risk as NI-2 C3, frames sent around the freeze)
+  and 90 s (beyond QUIC's idle timeout and the 15 s keepalive: the connection must be torn down and redialed).
+- Oracles: both texts converge with every token typed by both sides; reconnection within the dial backoff
+  bound after resume (`maxBackoff` = 1 min, `stableAfter` rule in internal/transport/p2p/dial.go); no
+  honest peer counted as a violator (ties to Q1).
+- Mutation proof: disable the redial on resume (or keep a stale session after the clock jump) — NI-5 must fail.
+
+## Addition (user, 2026-11-08): an honest sync indicator (part of W33)
+
+Today `statusOf` (frontend/src/workspace/workspace.svelte.ts) returns « synced » as soon as one peer is
+connected: the header says « Synchronisé » even while changes are pending or lost. The metrics contract (§7)
+therefore also feeds a truthful two-way sync state, in the existing header status (no new component):
+- outgoing: pending messages and the age of the oldest (bridge `PendingMsgs`, `OldestPending`) →
+  « Envoi en cours (n) »; stuck beyond a bound → a calm explicit message;
+- incoming: per peer, whether the peer's heads are known to be ahead of ours (automerge-repo sync state:
+  their heads vs. our heads) → « Pas encore à jour »;
+- « Synchronisé » only when both are empty for every connected member.
+Test oracle: in NI-1 and NI-2 the indicator must never read « Synchronisé » while a token typed on the
+other side is missing; mutation proof: the current peer-count rule (`peerCount > 0`) must fail it.
+
+## Formal specification first (definition of done, step 1)
+
+Tests are not the spec. Every behaviour change in this plan is modelled and checked before its code, with
+mutants the model must reject (method: docs/plans/2026-11-08-spec-executable.md; tools: `mise run formal`):
+- **Q1 — deadlines count only while the peer's packets arrive:** extend the TLA+ model that owns the HELLO
+  and RESET_STREAM deadlines (docs/protocol/tla) with an outage action; property: no honest peer is ever
+  counted as a violator because of an outage; liveness: the session recovers after the outage. Mutant: the
+  wall-clock deadline (today's rule) — the model must find the violation. Spec text updated with the model.
+- **Honest sync indicator (W33):** model the indicator as a state machine (TLA+, or Alloy for the static
+  rule) over pending-out, missing-in and connected members; safety: « Synchronisé » ⇒ nothing pending
+  either way for any connected member; liveness: once the network is back and quiet, it reaches
+  « Synchronisé ». Mutant: `peerCount > 0` ⇒ « Synchronisé » — the model must find the counterexample.
+- **NI-5 sleep and resume:** model the redial after a frozen period with a clock jump (liveness: reconnected
+  within the backoff bound); mutant: no redial on resume.
+Each model, its properties and its mutants are frozen in the gate of the block that changes the behaviour
+(agent `formal-modeler`), before that block's code — as P3's models were.
+
+## Clarification after RL1 (2026-11-08): NI-2 C1 and rule L
+
+RL1 applies spec rule L on sync/1: a send that fails while the QUIC connection survives now raises PeerDown then
+PeerUp, so automerge-repo resets its sync state and re-sends the lost change. NI-2 C1 (« zero PeerDown on either
+side ») therefore contradicts rule L as worded. Its intent is that the **connection** survives a blackout shorter
+than QUIC's idle timeout: C1 is re-stated as « the transport connection is not torn down » (link metrics: no new
+`DownsTotal` from a QUIC close; a rule-L resync is counted separately and expected). The metrics contract (§7)
+distinguishes the two causes so the people popover can say « reconnexion » only for a real one.
+
+## As built (2026-11-08): deviations from §4, justified
+
+- **NI-3:** only `main.typ` is editable in this build, so Bob types the tokens into the shared file instead of
+  Alice typing into a second file; the oracle (typing not held back beyond the bound, read from the document
+  state) is unchanged. Revisit when G-0b (one document per file) lands.
+- **NI-4 reader pass:** Alice hosts and makes Carol a reader, because the host cannot be demoted after a
+  hand-over; the risk tested (a change relayed through a member without write access) is the same.
+- **NI-1 C6:** `tc -s qdisc` does not report duplicated packets, so C6 checks drops only; duplication is still
+  injected and its effect is covered by the convergence clauses.
+- **Tokens:** each token is one atomic edit (concurrent keystrokes at the same place interleave and split them).
+- **Oracles read the editor's document state, never the rendered page** (CodeMirror does not render parts of
+  lines over 20 000 characters — this misread produced the false « lost tokens » of the first NI-2 run).
+
+## Addition (user, 2026-11-08): editing mix — big pastes and deletions, undo/redo, single characters
+
+Two buffers already exist: the editor coalesces keystrokes before writing the Automerge document
+(frontend/src/editor/amSync.ts: deferred write, flushed on blur, visibilitychange, pagehide and by
+`flushTyped`), and the bridge keeps a bounded per-peer outbox (internal/bridge/router.go; large messages are
+fragmented by internal/transport/mux). The risks sit at their edges: undo/redo while typed text is still
+buffered, a multi-MiB paste immediately undone, a large deletion during an outage, redo after the other side
+edited the same range, outbox overflow under a burst.
+- **EM-1 — model-based property test, no network (fast-check, already a dependency):** random sequences of
+  {type one char, paste 1 B…4 MiB, delete a large range, undo, redo, flush, sync} on two editors joined by an
+  in-memory automerge-repo; reference model: per editor a plain string plus its own undo/redo stack.
+  Invariants: each editor always shows exactly its Automerge document; sequential runs match the reference
+  model; after a sync both texts are equal; undo/redo never resurrects or loses the other side's text.
+  Shrinking reports the shortest failing sequence. Mutation proof: undo without flushing the typed buffer,
+  and a redo stack not cleared by a new edit — EM-1 must fail.
+- **EM-2 — the same mix under impairment (netsim):** the bad-Wi-Fi and blackout profiles of NI-1/NI-2 with
+  two and three devices; oracle: convergence, no lost token, document-state reads only.
+EM-1 runs in the frontend unit tests (seconds); EM-2 joins the impaired scenarios on every push.

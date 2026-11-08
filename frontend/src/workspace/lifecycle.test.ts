@@ -24,6 +24,7 @@ vi.mock("../net/WailsNetworkAdapter", () => ({
   WailsNetworkAdapter: class {
     on() {}
     onRoles() {}
+    onLinks() {}
     onSealed() {}
     disconnect() {}
     projectOf() {

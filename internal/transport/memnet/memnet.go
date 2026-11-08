@@ -324,6 +324,20 @@ func (nd *Node) Peers() []transport.PeerID {
 	return peers
 }
 
+// Links reports a link to each linked peer, sorted by peer: a direct path of
+// the in-memory network, whose RTT is unknown, so that code written against
+// [transport.LinkSource] can be tested without a network.
+func (nd *Node) Links() []transport.Link {
+	peers := nd.Peers()
+	links := make([]transport.Link, len(peers))
+	for i, p := range peers {
+		links[i] = transport.Link{Peer: p, Kind: transport.LinkDirect}
+	}
+	return links
+}
+
+var _ transport.LinkSource = (*Node)(nil)
+
 // Close unlinks the peer from every other, which each observe a PeerDown, and
 // makes Send and Recv return ErrClosed. It closes both lanes of the peer.
 func (nd *Node) Close() error {

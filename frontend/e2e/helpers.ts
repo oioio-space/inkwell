@@ -2,14 +2,19 @@ import { type Browser, expect, type Page } from "@playwright/test";
 
 export const editor = (p: Page) => p.locator(".cm-content");
 
-/** The document text as typed, without remote-cursor name labels. */
+/**
+ * The document text as typed, read from the editor's state through the `__inkwellDocText` hook of
+ * instrumented builds (VITE_E2E_OBSERVE=1, what `mise run e2e:build` makes), not from the page:
+ * CodeMirror does not render the parts of lines beyond 20 000 characters, so the rendered text of a
+ * long paste is incomplete. Line breaks are dropped, as the callers compare lines joined.
+ */
 export const docText = (p: Page) =>
-  editor(p).evaluate((el) => {
-    const copy = el.cloneNode(true) as HTMLElement;
-    for (const label of copy.querySelectorAll(".cm-remote-caret, .cm-placeholder")) label.remove();
-    // CodeMirror renders trailing spaces as NBSP and may insert zero-width breaks.
-    // biome-ignore lint/performance/useDomNodeTextContent: the assertion is about the text as rendered (innerText), not the raw DOM text
-    return copy.innerText.replace(/ /g, " ").replace(/[​⁠\n]/g, "");
+  p.evaluate(() => {
+    const f = (globalThis as { __inkwellDocText?: () => string | undefined }).__inkwellDocText;
+    const text = typeof f === "function" ? f() : undefined;
+    if (text === undefined)
+      throw new Error("docText: no __inkwellDocText (build with VITE_E2E_OBSERVE=1)");
+    return text.replace(/[\u200b\u2060\n]/g, "");
   });
 
 export async function rename(p: Page, name: string) {
@@ -54,8 +59,25 @@ export async function freshInvitation(host: Page, name?: string): Promise<string
   return text;
 }
 
-/** Alice invites, Bob joins with the invitation text; both end up "Synchronisé". */
-export async function pair(alice: Page, bob: Page) {
+/**
+ * `host` invites and `guest` joins under `guestName` with the invitation text; the guest ends
+ * up "Synchronisé". The dialog is closed afterwards.
+ */
+export async function joinAs(host: Page, guest: Page, guestName: string, hostName?: string) {
+  const text = await freshInvitation(host, hostName);
+  await guest.getByRole("button", { name: "Partager" }).click();
+  await rename(guest, guestName);
+  await guest.getByPlaceholder("Collez l'invitation ici").fill(text);
+  await guest.getByRole("button", { name: "Rejoindre" }).click();
+  await expect(guest.getByRole("status").first()).toHaveText(/Synchronisé/, { timeout: 60_000 });
+  await guest.keyboard.press("Escape");
+}
+
+/**
+ * Alice invites, Bob joins with the invitation text; both end up "Synchronisé" and every given
+ * page counts `people` people (2 for a pair; 3 when a third person has joined `alice`).
+ */
+export async function pair(alice: Page, bob: Page, people = 2) {
   const text = await freshInvitation(alice, "Alice");
 
   await bob.getByRole("button", { name: "Partager" }).click();
@@ -69,10 +91,17 @@ export async function pair(alice: Page, bob: Page) {
   // The header and the status bar come from the same list of people: they never disagree.
   for (const page of [alice, bob]) {
     const bar = page.getByRole("contentinfo", { name: "Barre d'état" });
-    await expect(bar).toContainText("2 personnes");
+    await expect(bar).toContainText(`${people} personnes`);
     await expect(bar).not.toContainText("Seul");
     await expect(page.getByRole("status")).not.toHaveText(/Seul/);
   }
+}
+
+/** Pastes `text` at the end of the document as one edit (one change, one clipboard insertion). */
+export async function pasteAtEnd(p: Page, text: string) {
+  await editor(p).click();
+  await p.keyboard.press("ControlOrMeta+End");
+  await p.keyboard.insertText(text);
 }
 
 /** Types at the end of the document. */

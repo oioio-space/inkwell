@@ -48,7 +48,10 @@ const (
 	// this device was suspended and 0 if it was let back.
 	Suspended Kind = 9
 
-	lastKind = Suspended
+	// Links (Go to webview) reports the state of the link to each peer, see
+	// [EncodeLinks]. Peer is the local device. Kinds 10 to 19 belong to the
+	// protocol but are not carried by this package.
+	Links Kind = 20
 )
 
 // String returns the name of k.
@@ -72,6 +75,8 @@ func (k Kind) String() string {
 		return "Roles"
 	case Suspended:
 		return "Suspended"
+	case Links:
+		return "Links"
 	}
 	return fmt.Sprintf("Kind(%d)", uint8(k))
 }
@@ -175,7 +180,7 @@ func EncodeRoles(rs []MemberRole) ([]byte, error) {
 	if len(rs) > MaxMembers {
 		return nil, fmt.Errorf("%w: %d members", ErrMalformed, len(rs))
 	}
-	b := binary.BigEndian.AppendUint16(make([]byte, 0, 2+len(rs)*8), uint16(len(rs))) // #nosec G115 -- bounded by MaxMembers.
+	b := binary.BigEndian.AppendUint16(nil, uint16(len(rs))) // #nosec G115 -- bounded by MaxMembers.
 	for _, r := range rs {
 		if !transport.ValidPeerID(r.Peer) || r.Role < 1 || r.Role > 3 {
 			return nil, fmt.Errorf("%w: member entry", ErrMalformed)
@@ -184,9 +189,7 @@ func EncodeRoles(rs []MemberRole) ([]byte, error) {
 		if r.Suspended {
 			flags = flagSuspended
 		}
-		b = append(b, byte(len(r.Peer))) // #nosec G115 -- ValidPeerID bounds it to 64.
-		b = append(b, r.Peer...)
-		b = append(b, r.Role, flags)
+		b = append(appendPeer(b, r.Peer), r.Role, flags)
 	}
 	return b, nil
 }
@@ -195,34 +198,23 @@ func EncodeRoles(rs []MemberRole) ([]byte, error) {
 // error wrapping [ErrMalformed] for a truncated or oversized list, an invalid
 // peer, an unknown role or flag, or trailing bytes.
 func DecodeRoles(b []byte) ([]MemberRole, error) {
-	if len(b) < 2 {
-		return nil, fmt.Errorf("%w: truncated roles", ErrMalformed)
-	}
-	n := int(binary.BigEndian.Uint16(b))
-	if n > MaxMembers {
-		return nil, fmt.Errorf("%w: %d members", ErrMalformed, n)
-	}
-	rest := b[2:]
+	r := reader{b: b}
+	n := r.count(MaxMembers)
 	var out []MemberRole
-	if n > 0 {
-		out = make([]MemberRole, 0, n)
-	}
 	for range n {
-		if len(rest) < 1 || len(rest) < 1+int(rest[0])+2 {
-			return nil, fmt.Errorf("%w: truncated member entry", ErrMalformed)
+		m := MemberRole{Peer: r.peer(), Role: r.u8()}
+		flags := r.u8()
+		if r.err == nil && (m.Role < 1 || m.Role > 3 || flags&^flagSuspended != 0) {
+			r.err = fmt.Errorf("%w: member entry", ErrMalformed)
 		}
-		pl := int(rest[0])
-		r := MemberRole{Peer: transport.PeerID(rest[1 : 1+pl]), Role: rest[1+pl]}
-		flags := rest[2+pl]
-		rest = rest[3+pl:]
-		if !transport.ValidPeerID(r.Peer) || r.Role < 1 || r.Role > 3 || flags&^flagSuspended != 0 {
-			return nil, fmt.Errorf("%w: member entry", ErrMalformed)
+		if r.err != nil {
+			return nil, r.err
 		}
-		r.Suspended = flags&flagSuspended != 0
-		out = append(out, r)
+		m.Suspended = flags&flagSuspended != 0
+		out = append(out, m)
 	}
-	if len(rest) != 0 {
-		return nil, fmt.Errorf("%w: trailing bytes", ErrMalformed)
+	if err := r.done(); err != nil {
+		return nil, err
 	}
 	return out, nil
 }

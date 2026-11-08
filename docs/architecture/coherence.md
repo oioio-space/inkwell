@@ -118,7 +118,7 @@ dernier). Une alpha Linux ne clôt ni N35, ni N37, ni L5.
 | Comprendre, corriger, produire | N28, N29 (socle), U4, U9, U15, U17, U18, L1 | erreurs cliquables, F8, complétion et survol de la charte, aperçu et PDF hors ligne | tinymist non branché | `problems.spec.ts`, `PERF-LSP` |
 | Première minute et secours | N17, N19, U31, U32 ; sauvegarde locale et restauration à côté ; aide embarquée ; fr et en | ne jamais avoir peur de perdre | confiance | tests en personne, Orca |
 | Revenir en arrière | N39 (voyager, restaurer, comparer, versions nommées), **après** les épingles des versions dans le ménage (HI-9) et la sémantique d'« Intégrer » (HI-6) | se tromper et revenir sans Git | perte perçue | e2e Historique |
-| Fondations extensibles | registre unique, extensions intégrées TypeScript (N21, N24 socle) | ajouter sans « verrue » | réécriture plus tard | P-EXT-1, P-EXT-2 |
+| Fondations extensibles | registre unique, extensions intégrées TypeScript (N21, N24 socle) ; W34 (portage mobile : étude, garder Typst derrière une interface) | ajouter sans « verrue » | réécriture plus tard | P-EXT-1, P-EXT-2 |
 
 ### v1 (première version générale) — finir les étapes 3 et 4, industrialiser 5 et 6
 

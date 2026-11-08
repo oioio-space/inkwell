@@ -4,6 +4,8 @@ import (
 	"context"
 	"log/slog"
 	"sync"
+	"sync/atomic"
+	"time"
 
 	"github.com/oioio-space/inkwell/internal/transport"
 )
@@ -29,7 +31,13 @@ type Router struct {
 	log *slog.Logger
 	cur *session // attached connection, nil if none
 	lim limiter
-	mu  sync.Mutex
+	// counts are the per-peer failure counters, which outlive a session.
+	counts map[transport.PeerID]*peerCounts
+	// epoch is the origin of the stamps.
+	epoch time.Time
+	// linksPeriod is the period of the Links notifications, 0 for none.
+	linksPeriod time.Duration
+	mu          sync.Mutex
 }
 
 // session is one attached connection; mu serializes its writes, which come
@@ -48,8 +56,17 @@ type session struct {
 // outbox is the queue of the messages for one peer and the stop of the
 // goroutine that sends them.
 type outbox struct {
-	q      chan []byte
+	q      chan queuedMsg
 	cancel context.CancelFunc
+	// msgs and bytes are what waits to be sent, the message being sent
+	// included; head is when that one was enqueued (see [Router.stamp]), or 0.
+	msgs, bytes, head atomic.Int64
+}
+
+// queuedMsg is a payload with the stamp of the time it was handed to the router.
+type queuedMsg struct {
+	payload []byte
+	at      int64 // [Router.stamp]
 }
 
 // Resetter is implemented by a transport that can reset a peer: close its
@@ -62,11 +79,15 @@ type Resetter interface{ Reset(who transport.PeerID) }
 // [Source] the router relays its envelopes, and if it implements [Attester]
 // it signs the Attest envelopes of the webview; otherwise those are refused.
 func NewRouter(t transport.Transport, log *slog.Logger) *Router {
-	r := &Router{t: t, log: log}
+	r := &Router{t: t, log: log, counts: make(map[transport.PeerID]*peerCounts), linksPeriod: LinksPushPeriod, epoch: time.Now()}
 	r.src, _ = t.(Source)
 	r.att, _ = t.(Attester)
 	return r
 }
+
+// stamp returns the nanoseconds since the router's epoch plus one, so that it
+// is never zero: a monotonic reading that is cheaper to queue than a time.Time.
+func (r *Router) stamp() int64 { return int64(time.Since(r.epoch)) + 1 }
 
 func (r *Router) current() *session {
 	r.mu.Lock()
@@ -141,6 +162,10 @@ func (r *Router) sendLocked(s *session, e Envelope) {
 // unknown peers are logged, never their payloads, and skipped. Serve detaches
 // c on return unless a newer connection already replaced it.
 func (r *Router) Serve(c Conn) {
+	var links []LinkEntry // the current links, for the first notification
+	if r.linksPeriod > 0 {
+		links = linkEntries(r.Links(), time.Now())
+	}
 	s := &session{c: c, out: make(map[transport.PeerID]*outbox)}
 	// Hold the send lock from before s is published until the announce is
 	// done, so events Run forwards cannot overtake the initial PeerUps.
@@ -164,6 +189,11 @@ func (r *Router) Serve(c Conn) {
 	for _, p := range r.t.Peers() {
 		r.sendLocked(s, Envelope{Kind: PeerUp, Peer: p})
 	}
+	if r.linksPeriod > 0 { // the current links go out at once; later ones when they change
+		if e, ok := r.linksEnvelope(links); ok {
+			r.sendLocked(s, e)
+		}
+	}
 	s.mu.Unlock()
 
 	// One sender per peer, so that a slow link delays only its own peer, and
@@ -172,6 +202,10 @@ func (r *Router) Serve(c Conn) {
 	var cancel context.CancelFunc
 	s.ctx, cancel = context.WithCancel(c.Context())
 	defer func() { cancel(); s.wg.Wait() }()
+	if r.linksPeriod > 0 {
+		last := stableLinks(links)
+		s.wg.Go(func() { r.pushLinks(s, last) })
+	}
 	for {
 		b, err := c.Receive()
 		if err != nil {
@@ -209,15 +243,22 @@ func (r *Router) enqueue(s *session, peer transport.PeerID, payload []byte) {
 	o := s.out[peer]
 	if o == nil {
 		pctx, cancel := context.WithCancel(s.ctx)
-		o = &outbox{q: make(chan []byte, outboxDepth), cancel: cancel}
+		o = &outbox{q: make(chan queuedMsg, outboxDepth), cancel: cancel}
 		s.out[peer] = o
-		s.wg.Go(func() { r.sendTo(pctx, peer, o.q) })
+		s.wg.Go(func() { r.sendTo(pctx, peer, o) })
 	}
 	s.omu.Unlock()
+	// Count before queueing, so that the sender never sees a message it was
+	// not told about.
+	o.msgs.Add(1)
+	o.bytes.Add(int64(len(payload)))
 	select {
-	case o.q <- payload:
+	case o.q <- queuedMsg{payload: payload, at: r.stamp()}:
 	default:
+		o.msgs.Add(-1)
+		o.bytes.Add(-int64(len(payload)))
 		r.warn("bridge: peer does not read, resetting it", "peer", peer)
+		r.countsOf(peer).resets.Add(1)
 		r.stopPeer(s, peer)
 		if d, ok := r.t.(Resetter); ok {
 			d.Reset(peer)
@@ -236,15 +277,23 @@ func (r *Router) stopPeer(s *session, peer transport.PeerID) {
 	}
 }
 
-// sendTo sends the payloads of q to peer, in order, until ctx is done.
-func (r *Router) sendTo(ctx context.Context, peer transport.PeerID, q <-chan []byte) {
+// sendTo sends the payloads of o to peer, in order, until ctx is done.
+func (r *Router) sendTo(ctx context.Context, peer transport.PeerID, o *outbox) {
 	for {
 		select {
-		case p := <-q:
+		case m := <-o.q:
 			if ctx.Err() != nil {
+				o.msgs.Add(-1)
+				o.bytes.Add(-int64(len(m.payload)))
 				return
 			}
-			if err := r.t.Send(ctx, peer, p); err != nil {
+			o.head.Store(m.at)
+			err := r.t.Send(ctx, peer, m.payload)
+			o.head.Store(0)
+			o.msgs.Add(-1)
+			o.bytes.Add(-int64(len(m.payload)))
+			if err != nil {
+				r.countsOf(peer).sendFailures.Add(1)
 				r.warn("bridge: send to peer", "peer", peer, "err", err)
 			}
 		case <-ctx.Done():

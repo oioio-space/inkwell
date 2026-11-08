@@ -203,3 +203,9 @@ func EncodeTree(entries []project.TreeEntry) ([]byte, error) {
 	}
 	return b, nil
 }
+
+// LinkEntryOf and LinkEntries expose the conversion of the Links notification.
+var (
+	LinkEntryOf = linkEntry
+	LinkEntries = linkEntries
+)

@@ -40,6 +40,18 @@ et devient le bloc W31.
 `rmtree` avait effacé le rapport `/simplify` de P3 et les reconstitutions L3/P2, restaurés depuis les
 transcriptions) ; testé par `scripts/gate_reset_test.py`.
 
+**Bloc RL1 (2026-11-08, porte `gates/RL1.toml`) — règle L de la spec sur sync/1, perte silencieuse
+corrigée.** Trouvée par NI-2 (coupure de 25 s pendant un gros collage) : une écriture qui expire après
+WriteIdle réinitialisait le flux sortant sans PeerDown, donc automerge-repo ne renvoyait jamais le
+changement perdu. Correctif : un envoi échoué (hors annulation par l'appelant) annonce PeerDown puis
+PeerUp, ce qui relance la synchronisation ; compté à part (`Resyncs`), ce n'est pas une coupure.
+Revue : `gates/RL1/SIMPLIFY.md`. Le bloc embarque l'outillage réseau perturbé et les mesures de lien v1
+de NI0 (encore ouvert : exposition à la webview, 3 graines, EM-1/EM-2, NI-5). Dérogations de porte
+(`gates/guard-overrides.json`), sans rien affaiblir : `.golangci.yml` (exclusions `dupl` de p2p
+indexées par paire de fichiers et non plus par numéro de ligne, qui bougeait à chaque édition),
+`mise.toml` (tâches `e2e:netsim:impaired` et `netsim:mutants`, `ci` les lance — décision Q2),
+`.github/workflows/ci.yml` (charge `sch_netem`, échec franc s'il manque, délai porté à 45 min).
+
 ### Suivis de sécurité de L1 (LOW, revue Opus n° 6, à traiter au début de L2)
 
 - ~~Analyse des dépendances~~ : retirée, avec toute l'analyse des dépendances, par la décision de l'utilisatrice du 2026-11-03 (N42 précisée, journal ci-dessous). Seul notre propre code est contrôlé.

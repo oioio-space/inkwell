@@ -15,6 +15,7 @@ import { resolveRange, toOffset, toPosition } from "./language/positions";
 import { problems } from "./language/problems.svelte";
 import { configureLanguage, language } from "./language/service";
 import { validFilePath } from "./net/admission";
+import { links } from "./net/links.svelte";
 import type { SocketLike } from "./net/WailsNetworkAdapter";
 import { profileNativeStage } from "./perf/nativeDispatch";
 import PresentBanner from "./present/PresentBanner.svelte";
@@ -49,6 +50,7 @@ import Sidebar from "./ui/shell/Sidebar.svelte";
 import StatusBar from "./ui/shell/StatusBar.svelte";
 import FormatBar from "./ui/toolbar/FormatBar.svelte";
 import { barLang } from "./ui/toolbar/spec";
+import { observeDocText, observeLinks } from "./workspace/observe";
 import { workspace } from "./workspace/workspace.svelte";
 
 let languageMounted = $state(false);
@@ -284,6 +286,8 @@ $effect(() => {
 });
 
 onMount(() => {
+  observeDocText(() => session.state?.doc.toString());
+  observeLinks(() => links.view());
   if (import.meta.env.VITE_E2E_OBSERVE === "1") {
     (
       globalThis as typeof globalThis & { __inkwellLanguageVersion?: () => number }

@@ -1,0 +1,143 @@
+# Mutants of the impaired-network tests (docs/plans/2026-11-08-netsim-impaired-plan.md section 4).
+# A mutant is a text substitution (anchor -> replacement) applied to a copy of the tree; it must turn
+# the named clause red. An anchor that is not found exactly once is itself a failure, as in
+# scripts/alloy_check.py. Runner: scripts/netsim/mutants.py (`mise run netsim:mutants -- NI0`).
+#
+#   kind "go"   run `go test PKG -run TEST` in the copy; red = the test fails (the Go agent's
+#               G-0 test names the clause; its output is printed).
+#   kind "e2e"  build the copy's binaries (server and relay), run scenario SCENARIO (seed 1, VARIANT;
+#               required for scenario 8) against them (NETSIM_BIN_DIR) and require results/<run>.json
+#               to show CLAUSE as "fail" (a measured miss: a harness error does not count).
+#   A "go" mutant is caught only by a real test failure ("--- FAIL"), never by a build failure or a
+#   timeout.
+# An edit with create = true writes a new file (`after` is its content).
+
+[[mutant]]
+id = "M0a"
+block = "NI0"
+kind = "go"
+pkg = "./internal/transport/p2p"
+test = "TestRelayThenDirect"
+clause = "G-0 C1 (gap)"
+why = "the old stream is reset instead of closed for writing: frames in flight are lost"
+[[mutant.edit]]
+file = "internal/transport/p2p/stream.go"
+before = "_ = old.CloseWrite()"
+after = "_ = old.Reset()"
+
+[[mutant]]
+id = "M0b"
+block = "NI0"
+kind = "go"
+pkg = "./internal/transport/p2p"
+test = "TestRelayThenDirect"
+clause = "G-0 C1 (reorder)"
+why = "no wait for the old stream to drain: the new stream's frames overtake the old one's"
+[[mutant.edit]]
+file = "internal/transport/p2p/node.go"
+before = "reorderWait = time.Minute"
+after = "reorderWait = 0"
+
+# M5a and M5b target the link metrics estimators of plan section 7 (linkstat.go). A no-op edit
+# (before == after) is rejected by the runner; if an anchor is not found exactly once, adjust it
+# to the final code, never the clause. `mutants.py --check BLOCK` validates every anchor without
+# running anything.
+[[mutant]]
+id = "M5a"
+block = "NI0"
+kind = "e2e"
+scenario = 5
+clause = "C4"
+why = "the QUIC RTT is recorded once and never refreshed: the reported RTT does not follow the phase change to 300 ms"
+[[mutant.edit]]
+file = "internal/transport/p2p/linkstat.go"
+before = "e.srtt, e.dev, e.at, e.ok = srtt, dev, now, true"
+after = "if e.ok {\n\t\treturn\n\t}\n\te.srtt, e.dev, e.at, e.ok = srtt, dev, now, true"
+
+[[mutant]]
+id = "M5b"
+block = "NI0"
+kind = "e2e"
+scenario = 5
+clause = "C5"
+why = "loss computed since the connection started instead of over a 30 s window: P3 still shows the loss of P1 and P2"
+[[mutant.edit]]
+file = "internal/transport/p2p/linkstat.go"
+before = "for i < len(w.steps) && now.Sub(w.steps[i].at) > transport.LossWindow {"
+after = "for i < len(w.steps) && false {"
+[[mutant.edit]]
+file = "internal/transport/p2p/linkstat.go"
+before = "if now.Sub(s.at) <= transport.LossWindow {"
+after = "if true {"
+
+[[mutant]]
+id = "M5c"
+block = "NI0"
+kind = "e2e"
+scenario = 5
+clause = "C1"
+why = "hole punching disabled: the path never becomes direct"
+[[mutant.edit]]
+file = "internal/transport/p2p/relay.go"
+before = "opts = append(opts, libp2p.EnableHolePunching())"
+after = "_ = opts"
+
+[[mutant]]
+id = "M7c"
+block = "NI0"
+kind = "e2e"
+scenario = 7
+clause = "C3"
+why = "yamux closes the relayed session when its write is blocked for 1 s: the slow relay's queue (4 s) flaps the link"
+[[mutant.edit]]
+file = "internal/transport/p2p/zz_mutant_yamux.go"
+create = true
+after = """package p2p
+
+import (
+	"time"
+
+	libp2pyamux "github.com/libp2p/go-libp2p/p2p/muxer/yamux"
+)
+
+func init() { libp2pyamux.DefaultTransport.ConnectionWriteTimeout = time.Second }
+"""
+
+[[mutant]]
+id = "M8a"
+block = "NI0"
+kind = "e2e"
+scenario = 8
+variant = "reader"
+clause = "C3"
+why = "a third member stores an attestation but no longer relays it: B's coverage refuses A's changes relayed by Carol (a reader cannot attest them herself)"
+[[mutant.edit]]
+file = "internal/app/attest.go"
+before = "		if p != from {\n			w.sendAttest(p, data)\n		}\n	}\n	return nil\n}\n\n// sendAttestations"
+after = "		if p != from && false {\n			w.sendAttest(p, data)\n		}\n	}\n	return nil\n}\n\n// sendAttestations"
+
+[[mutant]]
+id = "M8b"
+block = "NI0"
+kind = "e2e"
+scenario = 8
+variant = "editor"
+clause = "C4"
+why = "the adapter announces a peer as gone and back on every message received from it, which resets the sync state: sync messages multiply and never stop"
+[[mutant.edit]]
+file = "frontend/src/net/WailsNetworkAdapter.ts"
+before = "    this.#deliver(message);\n  }\n\n  #scheduleReset"
+after = "    if (this.#announced.has(from)) {\n      this.emit(\"peer-disconnected\", { peerId: from });\n      this.emit(\"peer-candidate\", { peerId: from, peerMetadata: {} });\n    }\n    this.#deliver(message);\n  }\n\n  #scheduleReset"
+
+[[mutant]]
+id = "RL1a"
+block = "RL1"
+kind = "go"
+pkg = "./internal/transport/p2p"
+test = "TestRuleLSendFailureResyncs"
+clause = "rule L (a failed send resyncs the peer)"
+why = "a send that fails on a surviving connection resets the stream without announcing the peer down and up: the repo layer keeps its sync state and never resends the lost change"
+[[mutant.edit]]
+file = "internal/transport/p2p/stream.go"
+before = "n.outLost(ps, s, true, !canceled)"
+after = "n.outLost(ps, s, true, false)"

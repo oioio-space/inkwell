@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"slices"
+	"sync/atomic"
 	"time"
 
 	"github.com/libp2p/go-libp2p/core/event"
@@ -86,6 +87,10 @@ func (n *Node) openOut(ps *peerState) {
 	ctx = network.WithAllowLimitedConn(ctx, "inkwell sync")
 	ctx = network.WithNoDial(ctx, "the peer is connected")
 	s, err := n.h.NewStream(ctx, ps.id, ProtocolSync)
+	var sample linkSample
+	if err == nil {
+		sample = n.probeLink(ps.id) // before mu: it calls into libp2p
+	}
 
 	n.mu.Lock()
 	ps.opening = false
@@ -105,12 +110,15 @@ func (n *Node) openOut(ps *peerState) {
 	ps.out = s
 	if !ps.up {
 		ps.up = true
+		n.linkUp(ps.id, sample)
 		n.h.ConnManager().Protect(ps.id, memberTag)
 		n.pushLocked(transport.Event{Kind: transport.PeerUp, Peer: ps.name}, 0)
 	}
 	n.changedLocked()
 	n.wg.Go(func() { n.watchOut(ps, s) })
-	n.wg.Go(func() { n.measureRTT(ps.id) })
+	if isCircuit(s.Conn().RemoteMultiaddr()) { // QUIC tells the RTT of a direct link
+		n.wg.Go(func() { n.measureRTT(ps.id) })
+	}
 	n.mu.Unlock()
 	// A direct connection may have been made while the stream was opening.
 	n.maybeUpgrade(ps)
@@ -123,14 +131,17 @@ func (n *Node) watchOut(ps *peerState, s network.Stream) {
 	// The remote never writes on this stream; if it does, it is hostile.
 	_, _ = s.Read(b[:])
 	connGone := s.Conn().IsClosed()
-	n.outLost(ps, s, connGone)
+	n.outLost(ps, s, connGone, false)
 	_ = s.Reset()
 }
 
 // outLost retires the outbound stream s of ps. With reopen, a new one is
 // opened if the peer is still connected; without, the peer is disconnected,
 // since a stream reset on a healthy connection means the remote refuses us.
-func (n *Node) outLost(ps *peerState, s network.Stream, reopen bool) {
+// With resync, a peer that was announced is announced down first and up again
+// when the new stream opens, so that the repo layer drops its sync state and
+// sends again what the lost stream carried (spec rule L).
+func (n *Node) outLost(ps *peerState, s network.Stream, reopen, resync bool) {
 	n.mu.Lock()
 	if ps.out != s {
 		n.mu.Unlock()
@@ -141,6 +152,9 @@ func (n *Node) outLost(ps *peerState, s network.Stream, reopen bool) {
 	closePeer := false
 	if ps.connected && !n.closed {
 		if reopen {
+			if resync {
+				n.announceDownLocked(ps, true)
+			}
 			n.startOpenLocked(ps)
 		} else {
 			closePeer = true
@@ -162,16 +176,26 @@ func (n *Node) settleLocked(ps *peerState) {
 	if n.peers[ps.id] == ps {
 		delete(n.peers, ps.id)
 	}
-	if ps.up {
-		ps.up = false
-		if ps.bulkOut != nil {
-			_ = ps.bulkOut.Reset()
-			ps.bulkOut = nil
-		}
-		n.h.ConnManager().Unprotect(ps.id, memberTag)
-		n.pushLocked(transport.Event{Kind: transport.PeerDown, Peer: ps.name}, 0)
-	}
+	n.announceDownLocked(ps, false)
 	n.changedLocked()
+}
+
+// announceDownLocked announces ps down if it was announced up, and ends its
+// bulk stream. The peer is announced up again when its outbound stream opens.
+// With resync the connection survived and only the session restarts (spec rule
+// L), which the link figures count apart from an outage.
+func (n *Node) announceDownLocked(ps *peerState, resync bool) {
+	if !ps.up {
+		return
+	}
+	ps.up = false
+	n.linkDown(ps.id, resync)
+	if ps.bulkOut != nil {
+		_ = ps.bulkOut.Reset()
+		ps.bulkOut = nil
+	}
+	n.h.ConnManager().Unprotect(ps.id, memberTag)
+	n.pushLocked(transport.Event{Kind: transport.PeerDown, Peer: ps.name}, 0)
 }
 
 // handleBulkStream serves a bulk stream opened by a remote, or resets it if
@@ -305,9 +329,12 @@ func (n *Node) outStream(ctx context.Context, p peer.ID) (*peerState, network.St
 // Send writes payload to peer to as one frame. Writes to one peer are
 // serialised and a write fails only after writeTimeout without progress, so
 // a large frame on a slow link completes; canceling ctx interrupts a write in
-// progress. A failed or interrupted write leaves the stream in an unknown
-// state, so it is replaced by a new one: the peer stays up and later sends
-// work, but the interrupted payload is lost.
+// progress. A failed write leaves the stream in an unknown state and its frame
+// lost, so the stream is replaced and the peer is announced down then up again
+// (spec rule L), which has the layer above send again what was lost. The
+// exception is a write the caller canceled: its frame is lost with no event,
+// and the caller that cancels owns that loss (the bridge ends the peer's
+// sender and resets the peer, or ends its whole session).
 func (n *Node) Send(ctx context.Context, to transport.PeerID, payload []byte) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -338,20 +365,45 @@ func (n *Node) Send(ctx context.Context, to transport.PeerID, payload []byte) er
 		return err
 	}
 
+	finished := watchCancel(ctx)
 	err = frame.WriteProgress(ctx, s, writeTimeout, frame.MinRate, payload)
-	if err != nil {
-		return n.sendFailed(ctx, ps, s, to, err)
+	if canceled := finished(); err != nil {
+		return n.sendFailed(ctx, ps, s, to, err, canceled)
 	}
 	return nil
 }
 
+// watchCancel watches ctx while a write runs. The returned func ends the watch
+// and reports whether ctx was canceled before the write returned: a failure is
+// then the caller's doing. A failure that comes first (no progress for
+// writeTimeout, a dead connection) is not one, even if the caller cancels right
+// after. A cancellation always wins when it is what interrupted the write: the
+// func waits for the watch's callback if it already started.
+func watchCancel(ctx context.Context) (canceled func() bool) {
+	const running, returned, interrupted = 0, 1, 2
+	var state atomic.Int32
+	ran := make(chan struct{})
+	stop := context.AfterFunc(ctx, func() {
+		defer close(ran)
+		state.CompareAndSwap(running, interrupted)
+	})
+	return func() bool {
+		if !stop() {
+			<-ran
+		}
+		return !state.CompareAndSwap(running, returned)
+	}
+}
+
 // sendFailed replaces the stream s after a failed write. It retires s before
 // resetting it, so that watchOut sees a stream we gave up, not a refusal.
-func (n *Node) sendFailed(ctx context.Context, ps *peerState, s network.Stream, to transport.PeerID, err error) error {
-	n.outLost(ps, s, true)
+// Unless the caller canceled, the frame is lost for good: the peer is
+// announced down and up again (spec rule L, §5.5).
+func (n *Node) sendFailed(ctx context.Context, ps *peerState, s network.Stream, to transport.PeerID, err error, canceled bool) error {
+	n.outLost(ps, s, true, !canceled)
 	_ = s.Reset()
-	if cerr := ctx.Err(); cerr != nil {
-		err = cerr
+	if canceled {
+		err = ctx.Err()
 	}
 	return fmt.Errorf("p2p: send to %s: %w", to, err)
 }

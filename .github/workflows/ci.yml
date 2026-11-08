@@ -14,7 +14,8 @@ env:
 jobs:
   ci:
     runs-on: ubuntu-latest
-    timeout-minutes: 25
+    # 25 min of checks + ~17 min of impaired-network scenarios (e2e:netsim:impaired is part of `ci`).
+    timeout-minutes: 45
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -65,7 +66,21 @@ jobs:
           name: seccomp-traces
           path: gates/L1/ci-seccomp-traces/
           retention-days: 7
+      # `mise run ci` runs the impaired-network scenarios (scripts/netsim): they need netns tools,
+      # unprivileged user namespaces and the sch_netem / nf_tables kernel modules, which a user
+      # namespace cannot load. A module that is missing here is a hard failure, never a skip.
+      - name: Prepare the impaired-network scenarios (netem, nftables)
+        run: |
+          sudo apt-get install -y -qq socat nftables iproute2 "linux-modules-extra-$(uname -r)"
+          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+          sudo modprobe sch_netem
+          sudo modprobe nf_tables
+          for m in sch_netem nf_tables; do
+            test -d "/sys/module/$m" || { echo "::error::kernel module $m is not loaded"; exit 1; }
+          done
       - run: mise run ci
+        env:
+          INKWELL_E2E_BROWSER: chromium # e2e:netsim:impaired drives Chromium; the e2e step below keeps WebKit
       - name: Build the desktop app (Linux)
         run: mise run app:build
       - name: End-to-end (two instances, Playwright/WebKit)
@@ -87,7 +102,7 @@ jobs:
   # root by the script itself (scripts/netsim); the same command runs locally.
   netsim:
     runs-on: ubuntu-24.04
-    timeout-minutes: 25
+    timeout-minutes: 50
     env:
       INKWELL_E2E_BROWSER: chromium
     steps:
@@ -117,8 +132,17 @@ jobs:
           path: ~/.local/share/pnpm/store
           key: ${{ runner.os }}-pnpm-${{ hashFiles('frontend/pnpm-lock.yaml') }}
           restore-keys: ${{ runner.os }}-pnpm-
+      # sch_netem (traffic impairment) is in the extra kernel modules of the runner image, and a user
+      # namespace cannot load a module: the job loads it, with nf_tables (scripts/netsim checks both).
+      - name: Load the netem and nftables kernel modules
+        run: |
+          sudo apt-get install -y -qq "linux-modules-extra-$(uname -r)" iproute2
+          sudo modprobe sch_netem
+          sudo modprobe nf_tables
       - name: Network simulation (cone and symmetric NAT, offline, change of network)
         run: mise run e2e:netsim
+      - name: Impaired network (bad Wi-Fi, blackout, slow relay, three-device mesh)
+        run: mise run e2e:netsim:impaired
       - name: Keep Playwright traces and instance logs on failure
         if: failure()
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2

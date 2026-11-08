@@ -70,7 +70,7 @@ func TestRelayOnlyLoopback(t *testing.T) {
 	}
 	for _, n := range []*p2p.Node{a, b} {
 		links := n.Links()
-		if len(links) != 1 || links[0].Kind != p2p.LinkRelayed {
+		if len(links) != 1 || links[0].Kind != transport.LinkRelayed {
 			t.Errorf("%s links = %v, want one relayed link", n.Local(), links)
 		}
 	}
@@ -91,7 +91,7 @@ func TestLinksLAN(t *testing.T) {
 	deadline := time.Now().Add(wait)
 	for {
 		links := b.Links()
-		if len(links) == 1 && links[0].Peer == a.Local() && links[0].Kind == p2p.LinkLAN && links[0].RTT > 0 {
+		if len(links) == 1 && links[0].Peer == a.Local() && links[0].Kind == transport.LinkLAN && links[0].RTT > 0 {
 			break
 		}
 		if time.Now().After(deadline) {
@@ -103,12 +103,12 @@ func TestLinksLAN(t *testing.T) {
 
 func TestLinkKindString(t *testing.T) {
 	tests := []struct {
-		kind p2p.LinkKind
+		kind transport.LinkKind
 		want string
 	}{
-		{p2p.LinkLAN, "LinkLAN"},
-		{p2p.LinkDirect, "LinkDirect"},
-		{p2p.LinkRelayed, "LinkRelayed"},
+		{transport.LinkLAN, "LinkLAN"},
+		{transport.LinkDirect, "LinkDirect"},
+		{transport.LinkRelayed, "LinkRelayed"},
 		{0, "LinkKind(?)"},
 	}
 	for _, tc := range tests {

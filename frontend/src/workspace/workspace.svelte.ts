@@ -14,6 +14,7 @@ import {
 import type { Span } from "../editor/external";
 import type { Meta } from "../history/types";
 import { t } from "../i18n";
+import { links } from "../net/links.svelte";
 import { AdmittedSet } from "../net/scope";
 import { shareAdmitted } from "../net/sharing";
 import { type SocketLike, WailsNetworkAdapter } from "../net/WailsNetworkAdapter";
@@ -298,6 +299,7 @@ class Workspace {
       this.rolesVersion++;
       void this.refreshRoster();
     });
+    adapter.onLinks((list) => links.set(list));
     adapter.onSealed(() => {
       this.sealed = true;
     });

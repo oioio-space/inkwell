@@ -20,6 +20,7 @@ import (
 	"go.uber.org/fx"
 
 	"github.com/oioio-space/inkwell/internal/transport"
+	"github.com/oioio-space/inkwell/internal/transport/frame"
 	"github.com/oioio-space/inkwell/internal/transport/p2p"
 )
 
@@ -57,7 +58,31 @@ type natNet struct {
 	mu     sync.Mutex
 	nextIP int
 	cut    bool
+	// impair is the loss and duplication profile; bad holds the Gilbert-Elliott
+	// state per sending end; dark holds the ends in blackout; directBlocked
+	// drops every packet between two ends that are not public.
+	impair        impairment
+	bad           map[*natEnd]bool
+	dark          map[*natEnd]bool
+	directBlocked bool
 }
+
+// impairment is a bursty loss and duplication profile for every packet of the
+// network, the relay's included. Loss follows a Gilbert-Elliott chain per
+// sending end: the good state goes bad with probability enterBad per packet
+// and returns with probability leaveBad; a packet is lost with lossBad in the
+// bad state and lossGood in the good one. dup is the chance a packet is
+// delivered twice. The zero value impairs nothing and draws no random number,
+// so the other tests replay as before.
+type impairment struct {
+	enterBad, leaveBad float64
+	lossBad, lossGood  float64
+	dup                float64
+}
+
+// burstyWiFi is the profile of plan §4 G-0: GE (p 1 %, r 30 %, 50 % / 0.1 %),
+// 0.5 % duplicates.
+var burstyWiFi = impairment{enterBad: 0.01, leaveBad: 0.30, lossBad: 0.50, lossGood: 0.001, dup: 0.005}
 
 // newNatNet returns a network whose latencies come from seed.
 func newNatNet(seed uint64) *natNet {
@@ -65,6 +90,8 @@ func newNatNet(seed uint64) *natNet {
 		rng:   rand.New(rand.NewPCG(seed, 1)), // #nosec G404 -- latencies must replay from a seed.
 		byInt: make(map[string]*natEnd),
 		byExt: make(map[string]*natEnd),
+		bad:   make(map[*natEnd]bool),
+		dark:  make(map[*natEnd]bool),
 	}
 }
 
@@ -79,7 +106,7 @@ func forSeeds(t *testing.T, f func(t *testing.T, nn *natNet)) {
 }
 
 // RecvPacket routes a packet sent by a node: translate its source, apply the
-// firewall of the destination, delay it.
+// firewall of the destination, the impairment and the blackouts, delay it.
 func (nn *natNet) RecvPacket(p *simnet.Packet) {
 	nn.mu.Lock()
 	src := nn.byInt[p.From.String()]
@@ -92,13 +119,68 @@ func (nn *natNet) RecvPacket(p *simnet.Packet) {
 	src.sent[dstExt] = struct{}{}
 	dst := nn.byExt[dstExt]
 	replied := dst.sentTo(p.From.String())
+	if dst == nil || nn.dark[src] || nn.dark[dst] || (nn.directBlocked && !src.public && !dst.public) {
+		nn.mu.Unlock()
+		return
+	}
+	lost, dup := nn.impairLocked(src)
 	delay := baseDelay + time.Duration(nn.rng.Int64N(int64(jitterMax)))
+	var dupDelay time.Duration
+	if dup {
+		dupDelay = baseDelay + time.Duration(nn.rng.Int64N(int64(jitterMax)))
+	}
 	nn.mu.Unlock()
 
-	if dst == nil || (!dst.public && !replied) {
+	if lost || (!dst.public && !replied) {
 		return
 	}
 	time.AfterFunc(delay, func() { dst.conn.RecvPacket(p) })
+	if dup {
+		q := *p // the buffer is only read downstream, so the copy shares it
+		time.AfterFunc(dupDelay, func() { dst.conn.RecvPacket(&q) })
+	}
+}
+
+// impairLocked draws the fate of a packet sent by src: lost, and duplicated.
+func (nn *natNet) impairLocked(src *natEnd) (lost, dup bool) {
+	im := nn.impair
+	if im == (impairment{}) {
+		return false, false
+	}
+	if nn.bad[src] {
+		if nn.rng.Float64() < im.leaveBad {
+			nn.bad[src] = false
+		}
+	} else if nn.rng.Float64() < im.enterBad {
+		nn.bad[src] = true
+	}
+	loss := im.lossGood
+	if nn.bad[src] {
+		loss = im.lossBad
+	}
+	return nn.rng.Float64() < loss, nn.rng.Float64() < im.dup
+}
+
+// setImpairment changes the loss and duplication profile.
+func (nn *natNet) setImpairment(im impairment) {
+	nn.mu.Lock()
+	nn.impair = im
+	nn.mu.Unlock()
+}
+
+// setBlackout loses every packet to and from end, or stops doing so.
+func (nn *natNet) setBlackout(end *natEnd, dark bool) {
+	nn.mu.Lock()
+	nn.dark[end] = dark
+	nn.mu.Unlock()
+}
+
+// blockDirect makes the firewalls drop every packet between two nodes that are
+// not public, so that only the relay can be reached, or lifts the block.
+func (nn *natNet) blockDirect(block bool) {
+	nn.mu.Lock()
+	nn.directBlocked = block
+	nn.mu.Unlock()
 }
 
 // sentTo reports whether the end has sent a packet to addr (nil-safe).
@@ -266,7 +348,7 @@ func (nn *natNet) relay(t *testing.T, o p2p.RelayOptions) []string {
 }
 
 // linkTo returns the kind of the link from n to peer, or 0 if there is none.
-func linkTo(n *simNode, peer transport.PeerID) p2p.LinkKind {
+func linkTo(n *simNode, peer transport.PeerID) transport.LinkKind {
 	for _, l := range n.Links() {
 		if l.Peer == peer {
 			return l.Kind
@@ -276,7 +358,7 @@ func linkTo(n *simNode, peer transport.PeerID) p2p.LinkKind {
 }
 
 // waitLink waits until n reaches peer with the kind of link.
-func waitLink(t *testing.T, n *simNode, peer transport.PeerID, kind p2p.LinkKind, d time.Duration) {
+func waitLink(t *testing.T, n *simNode, peer transport.PeerID, kind transport.LinkKind, d time.Duration) {
 	t.Helper()
 	deadline := time.Now().Add(d)
 	for linkTo(n, peer) != kind {
@@ -302,8 +384,14 @@ func wantEachOther(a, b *simNode) {
 	b.Want(map[transport.PeerID][]string{a.Local(): nil})
 }
 
+// TestRelayThenDirect is G-0 of the impaired-network plan: a relay to direct
+// swap under bursty loss, duplication and a late hole punch keeps every frame
+// of sync/1, in order (risk R5, stream.go upgrade and handleStream).
 func TestRelayThenDirect(t *testing.T) {
 	forSeeds(t, func(t *testing.T, nn *natNet) {
+		nn.setImpairment(burstyWiFi)
+		nn.blockDirect(true)
+		time.AfterFunc(directBlockedFor, func() { nn.blockDirect(false) })
 		relays := nn.relay(t, p2p.RelayOptions{})
 		a := nn.node(t, 1, p2p.Options{Relays: relays})
 		b := nn.node(t, 2, p2p.Options{Relays: relays})
@@ -311,20 +399,19 @@ func TestRelayThenDirect(t *testing.T) {
 
 		// The two cannot reach each other: the first link is through the relay.
 		expectUp(t, a, b)
-		if got := linkTo(a, b.Local()); got != p2p.LinkRelayed {
-			t.Fatalf("first link a->b = %v, want %v", got, p2p.LinkRelayed)
+		if got := linkTo(a, b.Local()); got != transport.LinkRelayed {
+			t.Fatalf("first link a->b = %v, want %v", got, transport.LinkRelayed)
 		}
 
-		// Frames flow while the link is upgraded: none is lost or reordered,
-		// and nobody goes down.
+		// C1: frames 1..N flow while the link is upgraded; b receives exactly
+		// those, in order, with no gap and no duplicate. C2: a and b see no
+		// event, so nobody goes down.
 		var wg sync.WaitGroup
 		var sent, received atomic.Uint64
 		stop := make(chan struct{})
 		wg.Go(func() { // a: nothing to receive, and no event
 			for {
-				ctx, cancel := context.WithTimeout(t.Context(), time.Hour)
-				ev, err := a.Recv(ctx)
-				cancel()
+				ev, err := a.Recv(t.Context())
 				if err != nil {
 					return
 				}
@@ -332,7 +419,7 @@ func TestRelayThenDirect(t *testing.T) {
 			}
 		})
 		wg.Go(func() {
-			for next := uint64(0); ; next++ {
+			for next := uint64(1); ; next++ {
 				ev, err := b.Recv(t.Context())
 				if err != nil {
 					return
@@ -357,24 +444,26 @@ func TestRelayThenDirect(t *testing.T) {
 		})
 
 		var buf [8]byte
-		directSince := time.Time{}
-		deadline := time.Now().Add(time.Minute)
-		for directSince.IsZero() || time.Since(directSince) < 3*time.Second {
+		var directSince time.Time
+		deadline := time.Now().Add(2 * time.Minute)
+		for directSince.IsZero() || time.Since(directSince) < afterDirect {
 			if time.Now().After(deadline) {
-				t.Fatalf("links after a minute: a->b %v, b->a %v, want %v", linkTo(a, b.Local()), linkTo(b, a.Local()), p2p.LinkDirect)
+				t.Fatalf("links after 2 minutes: a->b %v, b->a %v, want %v", linkTo(a, b.Local()), linkTo(b, a.Local()), transport.LinkDirect)
 			}
-			binary.BigEndian.PutUint64(buf[:], sent.Load())
+			binary.BigEndian.PutUint64(buf[:], sent.Load()+1)
 			if err := a.Send(t.Context(), b.Local(), buf[:]); err != nil {
-				t.Fatalf("Send frame %d: %v", sent.Load(), err)
+				t.Fatalf("Send frame %d: %v", sent.Load()+1, err)
 			}
 			sent.Add(1)
-			if directSince.IsZero() && linkTo(a, b.Local()) == p2p.LinkDirect && linkTo(b, a.Local()) == p2p.LinkDirect {
+			if directSince.IsZero() && linkTo(a, b.Local()) == transport.LinkDirect && linkTo(b, a.Local()) == transport.LinkDirect {
 				directSince = time.Now()
 			}
-			time.Sleep(20 * time.Millisecond)
+			time.Sleep(frameEvery)
 		}
 		close(stop)
-		time.Sleep(time.Second)
+		for end := time.Now().Add(time.Minute); received.Load() != sent.Load() && time.Now().Before(end); {
+			time.Sleep(100 * time.Millisecond)
+		}
 		if got, want := received.Load(), sent.Load(); got != want {
 			t.Errorf("b received %d frames, a sent %d", got, want)
 		}
@@ -389,6 +478,13 @@ func TestRelayThenDirect(t *testing.T) {
 	})
 }
 
+// The timing of G-0.
+const (
+	directBlockedFor = 5 * time.Second       // direct paths are blocked until then
+	frameEvery       = 50 * time.Millisecond // a sends one frame this often
+	afterDirect      = 30 * time.Second      // and keeps going this long after LinkDirect
+)
+
 func TestPartitionThenHeal(t *testing.T) {
 	forSeeds(t, func(t *testing.T, nn *natNet) {
 		relays := nn.relay(t, p2p.RelayOptions{})
@@ -396,7 +492,7 @@ func TestPartitionThenHeal(t *testing.T) {
 		b := nn.node(t, 2, p2p.Options{Relays: relays})
 		wantEachOther(a, b)
 		expectUp(t, a, b)
-		waitLink(t, a, b.Local(), p2p.LinkDirect, time.Minute)
+		waitLink(t, a, b.Local(), transport.LinkDirect, time.Minute)
 
 		// Longer than QUIC's idle timeout (30 s): each side concludes that the
 		// other is gone.
@@ -434,7 +530,7 @@ func TestRoamToNewAddress(t *testing.T) {
 		a.Want(map[transport.PeerID][]string{b.Local(): b.Addrs()})
 		b.Want(map[transport.PeerID][]string{a.Local(): a.Addrs()})
 		expectUp(t, a, b)
-		waitLink(t, a, b.Local(), p2p.LinkDirect, time.Minute)
+		waitLink(t, a, b.Local(), transport.LinkDirect, time.Minute)
 
 		// b is offline for two minutes and comes back on another network.
 		nn.setCut(true)
@@ -451,12 +547,12 @@ func TestRoamToNewAddress(t *testing.T) {
 			t.Errorf("PeerUp %v after b came back, want at most 30s", d)
 		}
 		// Its old address is useless: the way back is through the relay.
-		if got := linkTo(a, b.Local()); got != p2p.LinkRelayed {
-			t.Errorf("link a->b right after the return = %v, want %v", got, p2p.LinkRelayed)
+		if got := linkTo(a, b.Local()); got != transport.LinkRelayed {
+			t.Errorf("link a->b right after the return = %v, want %v", got, transport.LinkRelayed)
 		}
 		expectQuietFor(t, a, 10*time.Second)
 		expectQuietFor(t, b, 10*time.Second)
-		waitLink(t, a, b.Local(), p2p.LinkDirect, time.Minute) // and the new address is punched
+		waitLink(t, a, b.Local(), transport.LinkDirect, time.Minute) // and the new address is punched
 	})
 }
 
@@ -489,8 +585,8 @@ func TestRelayOnlyRefusesDirect(t *testing.T) {
 			if n == b {
 				other = a.Local()
 			}
-			if got := linkTo(n, other); got != p2p.LinkRelayed {
-				t.Errorf("%s: link = %v, want %v", n.Local(), got, p2p.LinkRelayed)
+			if got := linkTo(n, other); got != transport.LinkRelayed {
+				t.Errorf("%s: link = %v, want %v", n.Local(), got, transport.LinkRelayed)
 			}
 			for _, c := range n.Host().Network().Conns() {
 				if _, err := c.RemoteMultiaddr().ValueForProtocol(ma.P_CIRCUIT); err != nil && c.RemotePeer().String() != string(idOf(key(0))) {
@@ -562,10 +658,10 @@ func TestRelayOnlyGate(t *testing.T) {
 				t.Errorf("%s has no link", n.Local())
 			}
 		}
-		waitLink(t, open, hidden.Local(), p2p.LinkRelayed, time.Second)
+		waitLink(t, open, hidden.Local(), transport.LinkRelayed, time.Second)
 		time.Sleep(30 * time.Second) // time to hole punch, if it were to
-		if got := linkTo(open, hidden.Local()); got != p2p.LinkRelayed {
-			t.Errorf("link open->hidden after 30s = %v, want %v", got, p2p.LinkRelayed)
+		if got := linkTo(open, hidden.Local()); got != transport.LinkRelayed {
+			t.Errorf("link open->hidden after 30s = %v, want %v", got, transport.LinkRelayed)
 		}
 	})
 }
@@ -585,6 +681,117 @@ func TestRelayAllowlist(t *testing.T) {
 		expectQuietFor(t, a, quiet)
 		if got := c.Peers(); len(got) != 0 {
 			t.Errorf("c.Peers() = %v, want none: the relay does not serve it", got)
+		}
+	})
+}
+
+// linkOf returns the full link from n to peer.
+func linkOf(t *testing.T, n *simNode, peer transport.PeerID) transport.Link {
+	t.Helper()
+	for _, l := range n.Links() {
+		if l.Peer == peer {
+			return l
+		}
+	}
+	t.Fatalf("%s: no link to %s", n.Local(), peer)
+	return transport.Link{}
+}
+
+// TestLinkMetricsFollowPath proves plan §7 on a real node: the relayed link has
+// an end-to-end RTT and a first-hop loss scope; after the hole punch the path
+// is direct, counted as one upgrade, with QUIC's RTT and a loss over the path;
+// a blackout makes no outage on the stable session; nothing but the kind of
+// path is exposed.
+func TestLinkMetricsFollowPath(t *testing.T) {
+	forSeeds(t, func(t *testing.T, nn *natNet) {
+		nn.setImpairment(impairment{lossGood: 0.01})
+		nn.blockDirect(true)
+		time.AfterFunc(5*time.Second, func() { nn.blockDirect(false) })
+		relays := nn.relay(t, p2p.RelayOptions{})
+		a := nn.node(t, 1, p2p.Options{Relays: relays})
+		b := nn.node(t, 2, p2p.Options{Relays: relays})
+		a.Want(map[transport.PeerID][]string{b.Local(): nil})
+		expectUp(t, a, b)
+
+		// Relayed: traffic for the first hop's loss, and a few seconds for pings.
+		payload := make([]byte, 1000)
+		go func() {
+			for {
+				if _, err := b.Recv(t.Context()); err != nil {
+					return
+				}
+			}
+		}()
+		for range 40 {
+			if err := a.Send(t.Context(), b.Local(), payload); err != nil {
+				t.Fatalf("Send: %v", err)
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+		l := linkOf(t, a, b.Local())
+		if l.Kind != transport.LinkRelayed || l.RTT <= 0 || l.Upgrades != 0 || l.UpSince.IsZero() {
+			t.Fatalf("relayed link = %+v, want kind relayed, an RTT, no upgrade, an UpSince", l)
+		}
+		if l.LossPct != nil && l.LossScope != transport.LossFirstHop {
+			t.Errorf("relayed loss scope = %v, want %v", l.LossScope, transport.LossFirstHop)
+		}
+
+		waitLink(t, a, b.Local(), transport.LinkDirect, time.Minute)
+		for range 100 {
+			if err := a.Send(t.Context(), b.Local(), payload); err != nil {
+				t.Fatalf("Send: %v", err)
+			}
+			time.Sleep(100 * time.Millisecond)
+		}
+		l = linkOf(t, a, b.Local())
+		if l.Upgrades != 1 || l.Fallbacks != 0 || l.DownsTotal != 0 || l.Downs10m != 0 {
+			t.Errorf("direct link counters = upgrades %d fallbacks %d downs %d/%d, want 1 0 0 0", l.Upgrades, l.Fallbacks, l.DownsTotal, l.Downs10m)
+		}
+		if l.RTT <= 0 || l.RTT > time.Second {
+			t.Errorf("direct RTT = %v, want within (0, 1s]", l.RTT)
+		}
+		if l.LossPct == nil || *l.LossPct < 0 || *l.LossPct > 100 || l.LossScope != transport.LossPath {
+			t.Errorf("direct loss = %v scope %v, want a percentage over the path", l.LossPct, l.LossScope)
+		}
+		if l.Quality() == transport.QualityUnknown {
+			t.Errorf("quality of a measured link = %v", l.Quality())
+		}
+		if !l.PathSince.After(l.UpSince) {
+			t.Errorf("pathSince %v is not after upSince %v: the path changed after the session began", l.PathSince, l.UpSince)
+		}
+	})
+}
+
+// TestRuleLSendFailureResyncs is spec rule L (§5.5, §7.3) on the sync/1 path:
+// a write that makes no progress for WriteIdle fails and resets the outbound
+// stream while the connection survives a shorter blackout. The peer must then
+// leave and come back (PeerDown, PeerUp), or the repo layer keeps its sync
+// state and never sends the lost change again.
+func TestRuleLSendFailureResyncs(t *testing.T) {
+	forSeeds(t, func(t *testing.T, nn *natNet) {
+		relays := nn.relay(t, p2p.RelayOptions{})
+		a := nn.node(t, 1, p2p.Options{Relays: relays})
+		b := nn.node(t, 2, p2p.Options{Relays: relays})
+		wantEachOther(a, b)
+		expectUp(t, a, b)
+
+		nn.setBlackout(b.end, true)
+		sent := make(chan error, 1)
+		go func() { sent <- a.Send(t.Context(), b.Local(), make([]byte, 32<<20)) }()
+		time.Sleep(frame.WriteIdle + 2*time.Second)
+		nn.setBlackout(b.end, false)
+
+		if err := <-sent; err == nil {
+			t.Fatal("Send through a blackout longer than WriteIdle succeeded, want an error")
+		}
+		expectEventWithin(t, a, transport.PeerDown, b.Local(), 30*time.Second)
+		expectEventWithin(t, a, transport.PeerUp, b.Local(), 30*time.Second)
+		if err := a.Send(t.Context(), b.Local(), []byte("again")); err != nil {
+			t.Fatalf("Send after the resync: %v", err)
+		}
+		// The connection survived: a resync, not an outage.
+		if l := linkOf(t, a, b.Local()); l.Resyncs != 1 || l.DownsTotal != 0 || l.Downs10m != 0 {
+			t.Errorf("after the resync: resyncs %d, downs total %d, downs10m %d; want 1, 0, 0", l.Resyncs, l.DownsTotal, l.Downs10m)
 		}
 	})
 }

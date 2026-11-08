@@ -217,7 +217,11 @@ type Node struct {
 	chg    chan struct{}
 	budget *frame.Budget
 	peers  map[peer.ID]*peerState
-	stop   func() bool // stops the close-on-context-cancel hook; under mu
+	// lmu guards stats, the link metrics. Order: mu, then lmu. lmu is a leaf:
+	// nothing under it takes mu or calls into libp2p or QUIC.
+	lmu   sync.Mutex
+	stats map[peer.ID]*peerLink
+	stop  func() bool // stops the close-on-context-cancel hook; under mu
 	// relays are the configured relays, never peers; circuit has the address
 	// prefix that leads through each of them. Both are read-only.
 	relays    map[peer.ID]peer.AddrInfo
@@ -322,6 +326,7 @@ func New(ctx context.Context, key ed25519.PrivateKey, o Options) (*Node, error) 
 		chg:       make(chan struct{}),
 		budget:    frame.NewBudget(maxBuffered),
 		peers:     make(map[peer.ID]*peerState),
+		stats:     make(map[peer.ID]*peerLink),
 		want:      make(map[peer.ID]*wanted),
 		held:      make(map[peer.ID]hold),
 		found:     make(map[peer.ID]nearbyEntry),
@@ -407,6 +412,7 @@ func New(ctx context.Context, key ed25519.PrivateKey, o Options) (*Node, error) 
 	for _, ai := range relayList(relays) {
 		n.dialWG.Go(func() { n.keepRelay(ai, n.relayDown[ai.ID]) })
 	}
+	n.wg.Go(n.sampleLinks)
 	if o.LAN {
 		n.lanErr = n.startLAN(o.LANService)
 	}
