@@ -59,3 +59,20 @@ passaient) est ce qu'un modèle léger ne voit pas : elle doit devenir exécutab
 Uniquement des relectures en un appel d'Opus 5.5 sur une spécification (pas sur du code généré, que
 les portes jugent) : sécurité (étapes 4 et 6 : préambules, crédits, règles L/H), et la spec du SET.
 Estimation : 4 à 6 relectures, ~1 $ chacune ; le reste en réserve. Jamais d'agent payant en boucle.
+
+## Outils formels retenus (accord de l'utilisatrice, 2026-11-08)
+
+Rappel : une méthode formelle prouve le **modèle** dans les bornes choisies ; l'écart avec le code se
+ferme en rejouant les traces du modèle sur le code, ou en prouvant le code lui-même.
+
+| Partie | Outil | Garantie |
+|---|---|---|
+| Concurrence réseau (générations, crédits, sessions) | TLA+ / TLC + traces rejouées sur l'automate Go | invariants dans l'espace exploré ; code conforme au modèle |
+| Confiance, rôles, admission, arborescence, suppression sur accord (ADR 0023, 0030, 0031) | Alloy 6 | pas de contre-exemple jusqu'à la borne (élévation de privilège, cycle, homonyme) |
+| Go pur et critique (`protocol/sig`, codecs, bornes §16) | Gobra (essai) | preuve sur le code : pas de panique, de débordement, de course ; contrats |
+| Formats du fil | CDDL + vecteurs | conformité à la grammaire |
+| Automates de l'interface (S13) | statecharts XState + tests générés depuis le modèle | tout état et toute transition exercés |
+| Convergence CRDT | propriétés (fast-check) sur notre usage d'Automerge | convergence sur les suites aléatoires |
+
+Ordre : Alloy (confiance et arborescence) → traces TLA+ (étapes 4–6) → essai Gobra → XState (S13).
+Outils de développement uniquement (Java pour TLC, Alloy, Gobra), épinglés par SHA-256, jamais livrés.
