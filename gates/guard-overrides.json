@@ -159,6 +159,11 @@
       "id": "da127e92eba0fd067f86e42bb83b886c17bea3e0f7df263c31dd3d424341a592",
       "reason": "NI0: netsim run.sh gains the impaired scenarios and fails fast when the topology does not come up (was hidden by `if start_stack`); scenarios 1-4 and their bounds unchanged.",
       "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "da7d137b82965e4518ab88cb83174b5be8e1bc61cb0b26d5d744db22a3a198d2",
+      "reason": "RL1 follow-up: e2e:build gains wait_for on the tasks that compile the root package, so the vite build cannot empty frontend/dist while they embed it (race seen in the pre-push ci on 2026-11-08); the build commands and every e2e bound are unchanged.",
+      "decision": "docs/objectif-en-cours.md"
     }
   ]
 }

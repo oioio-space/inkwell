@@ -337,6 +337,10 @@ run = "wails3 task build"
 [tasks."e2e:build"]
 description = "Build what the end-to-end tests run: frontend, bin/inkwell-server, bin/inkwell-relay, the Playwright browser"
 depends = ["fe:install", "fe:bindings", "sidecar:fetch"]
+# The vite build empties frontend/dist, which the root package embeds: when `ci` also runs the
+# impaired e2e (decision Q2), every task that compiles the root package must finish first, or it
+# sees an empty dist (« cannot embed directory frontend/dist », 2026-11-08).
+wait_for = ["arch", "deadcode", "scan:code", "scan:sbom", "lint", "pkg:lint", "test:ci", "cover:check"]
 run = """
 (cd frontend && VITE_E2E_OBSERVE=1 pnpm --config.verifyDepsBeforeRun=false run build)
 go build -tags server -o bin/inkwell-server ./cmd/inkwell

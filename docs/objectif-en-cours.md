@@ -50,7 +50,7 @@ de NI0 (encore ouvert : exposition à la webview, 3 graines, EM-1/EM-2, NI-5). D
 (`gates/guard-overrides.json`), sans rien affaiblir : `.golangci.yml` (exclusions `dupl` de p2p
 indexées par paire de fichiers et non plus par numéro de ligne, qui bougeait à chaque édition),
 `mise.toml` (tâches `e2e:netsim:impaired` et `netsim:mutants`, `ci` les lance — décision Q2),
-`.github/workflows/ci.yml` (charge `sch_netem`, échec franc s'il manque, délai porté à 45 min).
+`.github/workflows/ci.yml` (charge `sch_netem`, échec franc s'il manque, délai porté à 45 min). Après la porte : `e2e:build` attend (`wait_for`) les tâches qui compilent le paquet racine, car la construction vite vidait `frontend/dist` pendant qu'elles l'embarquaient (course vue par la CI avant push).
 
 ### Suivis de sécurité de L1 (LOW, revue Opus n° 6, à traiter au début de L2)
 
