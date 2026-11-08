@@ -32,7 +32,7 @@ ok()   { printf '\033[32m✓ %s\033[0m\n' "$1"; }
 if [[ $staged_only -eq 1 ]]; then
   mapfile -t go_files < <(git diff --cached --name-only --diff-filter=ACM -- '*.go')
 else
-  files="$(find . -type d \( -name .git -o -path './frontend/bindings' -o -path './frontend/node_modules' \) -prune -o -type f -name '*.go' -print)"
+  files="$(find . -type d \( -name .git -o -path './.claude' -o -path './frontend/bindings' -o -path './frontend/node_modules' \) -prune -o -type f -name '*.go' -print)"
   go_files=()
   [[ -z "$files" ]] || mapfile -t go_files <<< "$files"
 fi

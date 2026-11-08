@@ -34,13 +34,14 @@ Ensuite G-0b, puis G-0c (liste ci-dessous). La porte de ce lot reste à écrire
 
 1. ~~**L3 — Comprendre, corriger, produire**~~ ✅ (2026-11-08) : tinymist branché (N28, N29) ; preuves dans
    `docs/plans/2026-11-05-L3-implementation.md`, statut machine : `gates/L3.json`.
-2. **Protocole, étapes 2 à 8 d'ADR 0034** puis **G-0b** (index `G`, un document par fichier, FM-OPEN-4…8, PERF-MEM) et **G-0c** (onglets, Worker).
-3. **S13 — Fenêtres étroites** (problème connu, présent sur `main`) : sous 1300 px, ouvrir le tiroir
+2. **Protocole, étapes 2 à 8 d'ADR 0034** puis **G-0b** (index `G`, un document par fichier, FM-OPEN-4…8, PERF-MEM) et **G-0c** (onglets, Worker). Rappel de l'utilisatrice (2026-11-07, U13) : créer, supprimer, renommer, déplacer fichiers et dossiers, menu contextuel, onglets ; G-0b (un document par fichier) en est le prérequis, puis les opérations FM-* et les onglets de G-0c.
+3. **S13 — Fenêtre et mise en page** (spec : `docs/design/S13-spec.md` ; N49 à N57 : barre système retirée et boutons gérés par l'app, aperçu façon visionneuse PDF synchronisé avec le texte, icônes d'une seule source, icône de l'app ; N51 menus atteignables dans une fenêtre basse ; N52 numéros de ligne) et **fenêtres étroites** (problème connu, présent sur `main`) : sous 1300 px, ouvrir le tiroir
    Historique pousse la mise en page (titre, boutons de l'en-tête et barre d'état se chevauchent) au
    lieu de couvrir l'aperçu (spec §3.4) ; un menu plus haut que la fenêtre passe sous la barre
    d'état. Porte : UX-LUP-1 (`frontend/e2e/ux/lup.spec.ts`, 1100 et 950 px) repasse de `test.fixme`
    à `test` et passe.
-4. Puis : Collaborer sans perdre, Première minute et secours, Revenir en arrière, Fondations
+4. Étude de conception N53 (mode « enhance », éditions facilitées sur place, d'abord les tableaux) : passe design puis architecture, avant de fixer son lot.
+5. Puis : Collaborer sans perdre, Première minute et secours, Revenir en arrière, Fondations
    extensibles (`coherence.md` §5).
 
 ### Lots connus et critères reçus en report
