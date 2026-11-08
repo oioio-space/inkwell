@@ -187,7 +187,8 @@ for n in $scenarios; do
           cd "$repo/frontend"
           NETSIM_SCENARIO=$n NETSIM_RUN=$run NETSIM_VARIANT=$variant NETSIM_SEED=${seed:-0} \
             NETSIM_OUT=$out NETSIM_TOPOLOGY=$topology \
-            pnpm exec playwright test -c playwright.netsim.config.ts --grep "scenario $n:"
+            pnpm exec playwright test -c playwright.netsim.config.ts --grep "scenario $n:" \
+            --output "$state/artifacts/$run" # traces survive the next scenario (Playwright wipes its output dir)
         ) || status=FAIL
       else
         status=FAIL

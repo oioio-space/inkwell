@@ -517,3 +517,147 @@ edited the same range, outbox overflow under a burst.
 - **EM-2 — the same mix under impairment (netsim):** the bad-Wi-Fi and blackout profiles of NI-1/NI-2 with
   two and three devices; oracle: convergence, no lost token, document-state reads only.
 EM-1 runs in the frontend unit tests (seconds); EM-2 joins the impaired scenarios on every push.
+
+## Honest sync indicator: executable specification (W33, step 1, 2026-11-08)
+
+Step 1 of the definition of done for the « Honest sync indicator » addition above: the rule, its TLA+
+model and mutants, and the test the code must pass. The model is checked by `mise run tla`
+(`docs/protocol/tla/SyncIndicator.tla`, README section "SyncIndicator").
+
+### What the webview can observe
+
+- **Presence of a peer:** `peer-candidate` / `peer-disconnected` from `WailsNetworkAdapter` (Go PeerUp/PeerDown,
+  a re-`arrive`, and the PeerDown/PeerUp pair of a rule-L resync, spec §5.5). On `peer-disconnected`
+  automerge-repo drops its sync state with that peer.
+- **The peer's heads, per document:** the adapter already decodes every outgoing sync message
+  (`A.decodeSyncMessage(data).heads` in `#attest`); it decodes incoming ones the same way, in
+  `#receiveMessage` *before* `#enforce`, so that changes stripped by the coverage filter still count as
+  known. This is the only acknowledgement there is: the peer's reply after applying my changes carries its
+  new heads. automerge-repo's own `getSyncInfo` is not usable: it is kept per `storageId`, and our peers are
+  ephemeral.
+- **My heads:** `A.getHeads(handle.doc())`.
+- **Links notification (§7):** `pendingMsgs`, `oldestPendingMs`. It is a ≤ 1 Hz coalesced snapshot that
+  also counts presence messages. It never decides « Synchronisé ».
+
+### The rule, per peer p and document d
+
+`theirHeads[p][d]` is the heads of the last sync message received from p for d since p was announced.
+It is cleared on `peer-disconnected`.
+
+| State | Condition (first that holds) | Header wording |
+|---|---|---|
+| offline | p not announced | (p not counted) |
+| checking | p announced, and no sync message from p yet for a document we sync with p | « Vérification… » (UX to word) |
+| behind | some d with `!A.hasHeads(myDoc[d], theirHeads[p][d])`: I know p has changes I lack | « Pas encore à jour » |
+| sending | some d with `!sameHeads(A.getHeads(myDoc[d]), theirHeads[p][d])`: p has not acknowledged a change of mine | « Envoi en cours (n) », n from `pendingMsgs` when > 0 |
+| synced | otherwise | « Synchronisé » |
+
+**Globally:**
+
+- With no announced peer, the header keeps today's `alone` / `connecting`. It is never « Synchronisé »,
+  because an empty `every` is true (mutant M-EveryVacuous).
+- Otherwise it shows the worst state among the announced peers, in the order behind > sending > checking >
+  synced.
+- « Synchronisé » requires every announced peer to be synced.
+- `oldestPendingMs` > 2000 keeps adding « Lien lent » (ADR 0028 D8).
+
+**Two limits that hold by construction, and the wording must not hide them:**
+
+- A change the peer made but has not sent yet is not known. « Synchronisé » means "everything I know of".
+- The rule speaks only of connected members. A member who is offline and lacks my changes does not prevent
+  « Synchronisé » (Q-UX3).
+
+### Model and properties (`SyncIndicator.tla`)
+
+**What the model contains:**
+
+- **Devices:** Me plus 1 or 2 peers.
+- **Sync protocol:** one ordered stream per direction, Automerge `sentHashes`, and causal application of changes.
+- **Environment:**
+  - bounded edits, online or offline;
+  - transport losses, each one owing a rule-L resync;
+  - connection drops and returns;
+  - Links samples.
+- **Properties:** they are checked against the ground truth (the peer's real document), which the indicator
+  never reads.
+
+| Property | Proves |
+|---|---|
+| `PeerHonest` | per peer: « Synchronisé » ⇒ the peer is connected and has been heard since the (re)connection, it really holds every change of mine, and I hold every change it reported |
+| `GlobalHonest` | header « Synchronisé » ⇒ at least one connected member, and `PeerHonest`'s condition for each connected member |
+| `EventuallySynced` | under weak fairness on sending, receiving, rule-L resync, reconnection and Links samples, with bounded edits, losses and outages (the network becomes quiet and connected), the header reaches « Synchronisé » and stays there |
+
+**Results (TLC 1.8.0, 2 workers):**
+
+- One peer (MaxEdits 2, MaxLoss 1, MaxDown 1, QMax 2): exhaustive, no error, 118 301 distinct states, 11 s.
+- Two peers (MaxEdits 1, MaxLoss 0, MaxDown 1, QMax 1): exhaustive, no error, 530 696 distinct states, 60 s.
+- Every mutant below is caught; the whole `mise run tla` run takes about 1 min 33 s.
+
+**Mutants, each caught:**
+
+| Mutant | What it breaks | Property that catches it |
+|---|---|---|
+| M-PeerCount | today's `statusOf` | `PeerHonest` |
+| M-IgnoreRemote | the peer's heads are ignored. Counterexample: p's first change is lost, its second arrives without its dependency, Me still shows « Synchronisé ». | `PeerHonest` |
+| M-SentIsAcked | `lastSentHeads` counts as acknowledged | `PeerHonest` |
+| M-QueueOnly | `pendingMsgs = 0` | `PeerHonest` |
+| M-EveryVacuous | `every` on an empty list | `GlobalHonest` |
+| M-AnyPeer | `some` instead of `every` | `GlobalHonest` |
+| M-NoRuleL | no PeerDown/PeerUp after a loss | `EventuallySynced` |
+
+### The executable test the code must pass
+
+- **Code shape:** `frontend/src/net/syncIndicator.ts` exports two pure functions, `peerSyncState(observed)` and
+  `globalSyncState(states)`.
+  - `observed` holds exactly the observables above: announced, the heads per document, my docs, and Links.
+  - The adapter stores the heads; `Workspace.status` derives from `globalSyncState` instead of `statusOf(peers.length)`.
+- **Test:** Vitest, `frontend/src/net/syncIndicator.model.test.ts`, a fast-check `fc.commands` model-based test.
+  - **Name:** `W33 sync indicator follows SyncIndicator.tla: PeerHonest, GlobalHonest, EventuallySynced`.
+  - **System under test:** three real automerge-repo `Repo`s (me, p1, p2), each behind a real
+    `WailsNetworkAdapter`, joined by a step-by-step variant of `SimNet` (frames are held per directed link until a
+    command delivers them).
+  - **Commands:**
+    - `Edit(node)`;
+    - `Deliver(link)`;
+    - `Lose(link)`: drops the head frame and owes a resync;
+    - `Resync(p)`: PeerDown then PeerUp on both sides;
+    - `Down(p)` and `Up(p)`;
+    - `Links(p)`: sends `Kind.Links` with `pendingMsgs` set to the held frame count.
+- **Oracle, after every command (safety)**, for each peer p whose state is `synced`, with peer docs read from the
+  peer repos:
+  - p is announced at me;
+  - `A.hasHeads(peerDoc, myHeads)` for every document;
+  - `A.hasHeads(myDoc, theirHeads)`.
+- **Global oracle:** `synced` ⇒ at least one announced peer, and every announced peer satisfies the above.
+- **Liveness oracle:** after the sequence comes the quiet phase:
+  - every peer is brought up and every owed resync is done;
+  - frames are delivered until none is held, at most 50 rounds;
+  - then `globalSyncState` must be `synced`.
+- **Runs and seeds:** 200 runs, with a seed printed on failure and shrinking on.
+- **Mutation proof:**
+  - the seven mutants above, as anchor → replacement substitutions on `syncIndicator.ts`, are listed in the
+    block's frozen gate;
+  - each must turn the test red;
+  - M-PeerCount is the current rule, `peerCount > 0` ⇒ `synced`.
+- **End to end:** the NI-1/NI-2 clause « never Synchronisé while a token of the other side is missing » reads
+  `globalSyncState` through `__inkwellLinks`' store.
+
+### Open questions for the UX design
+
+- **Q-UX1, the meaning of n:** what does « (n) » count?
+  - bridge `pendingMsgs` (messages, presence included), as planned;
+  - or my unacknowledged changes (`A.getChanges(doc, theirHeads).length`, exact but large while typing);
+  - or the people still waiting?
+- **Q-UX2, behind and sending at once:** the model shows « Pas encore à jour ». Should both be shown?
+- **Q-UX3, offline members:** « Synchronisé » covers connected members only. Should a known member who is
+  offline and lacks my changes be named (e.g. « Bob n'a pas encore vos modifications »)?
+- **Q-UX4, the checking state:** what wording, and after what delay should it be shown, to avoid a flicker
+  right after each (re)connection or rule-L resync?
+- **Q-UX5, hysteresis while typing:** every keystroke batch makes the state « sending » until the reply comes
+  (one RTT). Should « Envoi en cours » show only after, say, 1 s?
+- **Q-UX6, changes stripped by coverage:** changes the coverage filter strips (a reader's forgery, or an
+  attestation that never arrives, NI-4 M8a) leave the peer « Pas encore à jour » for good.
+  - Count only covered heads?
+  - Or say why?
+- **Q-UX7, stuck bound:** after how long in behind or sending does the calm explicit message replace the
+  state? ADR 0028 D8 already gives « Lien lent » at 2 s of `oldestPendingMs`.

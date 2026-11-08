@@ -77,3 +77,55 @@ java -cp tla2tools.jar tlc2.TLC -workers 2 ConnCredit                          #
 
 `mise run tla` (ADR 0034, étape 3) récupère `tla2tools.jar` épinglé par SHA-256 et lance les
 deux configurations ; c'est une porte avant la bascule.
+
+## SyncIndicator (W33, honest sync indicator)
+
+Rule: `docs/plans/2026-11-08-netsim-impaired-plan.md`, section "Honest sync indicator: executable
+specification". When may the header of this device (`Me`) say « Synchronisé », per peer and
+globally? `SyncIndicator.tla` models `Me` and its peers running the automerge-repo sync protocol
+over one ordered stream per direction: a document is a causally closed set of changes; a sync
+message carries the sender's heads and the changes the sender believes the receiver lacks, minus
+those already sent (Automerge `sentHashes`, so a lost change is never resent until the sync state is
+reset, plan R1); a change is applied only once its dependencies are present. The environment edits
+(online or offline), loses messages (each loss owes spec §5.5 rule L: PeerDown then PeerUp, both
+repos reset their sync state), drops and restores connections, and publishes the coalesced Links
+notification (`pendingMsgs`, stale between samples). The indicator is a pure function of what the
+webview observes: `up[p]` (peer-candidate / peer-disconnected), the heads of the last sync message
+received from `p`, my own heads, and `snap[p]` (Links `pendingMsgs`). The properties are checked
+against the ground truth (the peer's real document), which the indicator never reads.
+
+Not covered: several documents (the rule is applied per document and joined per peer, see the plan),
+peers that sync with each other directly (`Me` is the hub; a change of `p1` reaches `p2` through
+`Me`), Automerge's bloom-filter `have`/`need` rounds (changes are sent at once), a reset that is not
+atomic on both sides, Byzantine peers lying about their heads (it only hurts their own indicator),
+a peer that loses its history (heads only grow), presence and other ephemeral messages.
+
+| Property | Rule | Meaning |
+|---|---|---|
+| `PeerHonest` | W33 per peer | « Synchronisé » for `p` only if `p` is connected, really holds every change of mine, has been heard since the (re)connection, and every change it reported is in my document |
+| `GlobalHonest` | W33 global | « Synchronisé » in the header only with at least one connected member, and then the above for every connected member |
+| `TheirSound` | lemma | what a device heard another has, that one has |
+| `EventuallySynced` (weak fairness on sending, receiving, rule L resync, reconnection, Links samples) | W33 liveness, spec §5.5 rule L | with finitely many edits, losses and outages, the header ends at « Synchronisé » and stays there |
+
+| Configuration | Result |
+|---|---|
+| `SyncIndicator.cfg`: one peer, MaxEdits 2, MaxLoss 1, MaxDown 1, QMax 2 | **exhaustive, no error**: 469 897 states, 118 301 distinct, depth 23, liveness included, 11 s |
+| `SyncIndicatorMesh.cfg`: two peers, MaxEdits 1, MaxLoss 0, MaxDown 1, QMax 1 | **exhaustive, no error**: 2 671 195 states, 530 696 distinct, depth 28, liveness included, 60 s (losses are covered by the one-peer configuration; with MaxLoss 1 it exceeds 1.1 million distinct states) |
+
+Mutants (`mutants/SyncIndicatorMutants.tla`, each config overrides one definition of the sound
+model, anchor = the override line in the config; the sound module is never edited):
+
+| Mutant | Anchor (config line) | Broken rule | Caught by |
+|---|---|---|---|
+| `SyncIndicatorPeerCount` | `PeerState <- PeerCountState` | today's `statusOf`: « Synchronisé » as soon as a person is connected | `PeerHonest` |
+| `SyncIndicatorIgnoreRemote` | `PeerState <- IgnoreRemoteState` | the peer's reported heads are ignored (a known remote change is missing after a lost message) | `PeerHonest` |
+| `SyncIndicatorSentIsAcked` | `PeerState <- SentIsAckedState` | what I sent counts as acknowledged (`lastSentHeads` instead of the peer's heads) | `PeerHonest` |
+| `SyncIndicatorQueueOnly` | `PeerState <- QueueOnlyState` | my side read from the Links `pendingMsgs = 0` | `PeerHonest` |
+| `SyncIndicatorEveryVacuous` | `Global <- EveryGlobal` | `peers.every(synced)`, true when nobody is connected | `GlobalHonest` |
+| `SyncIndicatorAnyPeer` | `Global <- AnyGlobal` | `peers.some(synced)`: one synced member is enough (mesh config) | `GlobalHonest` |
+| `SyncIndicatorNoRuleL` | `Resync <- NoResync` | a transport loss raises no PeerDown/PeerUp (sync/1 before RL1) | `EventuallySynced` |
+
+```
+java -cp tla2tools.jar tlc2.TLC -workers 2 -config SyncIndicator.cfg SyncIndicator
+java -cp tla2tools.jar tlc2.TLC -workers 2 -config mutants/SyncIndicatorPeerCount.cfg mutants/SyncIndicatorMutants
+```

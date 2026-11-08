@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # P-TLA (ADR 0034 step 3, docs/protocol/tla/README.md): fetch the pinned TLA+ tools
-# (tla2tools.jar SHA-256 checked, never committed) and model-check the two models.
+# (tla2tools.jar SHA-256 checked, never committed) and model-check the models
+# (RepoGen, ConnCredit, SyncIndicator).
 #
 # Sound models must finish with no error; every mutant listed in the README must be
 # detected (a violation). The task fails if a sound model violates a property OR if a
@@ -100,6 +101,8 @@ run RepoGenSmall RepoGenSmall.cfg RepoGen sound
 run ConnCredit ConnCredit.cfg ConnCredit sound
 run ConnCreditHonest ConnCreditHonest.cfg ConnCredit sound
 run ConnCreditDishonest ConnCreditDishonest.cfg ConnCredit sound
+run SyncIndicator SyncIndicator.cfg SyncIndicator sound
+run SyncIndicatorMesh SyncIndicatorMesh.cfg SyncIndicator sound
 
 # Mutants (README "Contre-épreuve" and the ConnCredit table): each must be detected.
 run RepoGenLossNoBump mutants/RepoGenLossNoBump.cfg mutants/RepoGenLossNoBump mutant
@@ -107,5 +110,9 @@ run RepoGenDeliverNoCheck mutants/RepoGenDeliverNoCheck.cfg mutants/RepoGenDeliv
 run RepoGenNoRuleB mutants/RepoGenNoRuleB.cfg mutants/RepoGenNoRuleB mutant
 run ConnCreditNoResetNoTeardown mutants/ConnCreditNoResetNoTeardown.cfg ConnCredit mutant
 run ConnCreditNoPullLarge mutants/ConnCreditNoPullLarge.cfg ConnCredit mutant
+# SyncIndicator mutants (README "SyncIndicator"): definition overrides from SyncIndicatorMutants.
+for m in PeerCount IgnoreRemote SentIsAcked QueueOnly EveryVacuous AnyPeer NoRuleL; do
+  run "SyncIndicator$m" "mutants/SyncIndicator$m.cfg" mutants/SyncIndicatorMutants mutant
+done
 
 exit "$fail"
