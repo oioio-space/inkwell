@@ -1,0 +1,38 @@
+# Frozen acceptance for block RL1: spec rule L (docs/protocol/spec.md §5.5 — no silent loss in the repo class;
+# a transport loss MUST change the generation, §7.3) applied to today's sync/1 path, written before the code.
+# Found by NI-2 (docs/plans/2026-11-08-netsim-impaired-plan.md): a write that times out after WriteIdle (20 s)
+# resets the outbound stream while the connection survives; no PeerDown is raised (settleLocked only fires on a
+# gone connection), so automerge-repo keeps its sync state and never re-sends the lost change (R-Evict, N-15).
+# Formal model: TLA+ RepoGen with mutant RepoGenLossNoBump (loss without a generation bump), caught by `mise run tla`.
+raw_results = ["docs/plans/2026-11-08-netsim-impaired-plan.md", "docs/objectif-en-cours.md", "gates/RL1/*"]
+
+[[criteria]]
+# The model still holds and still catches the « loss without resync » mutant.
+id = "model-RepoGen"
+command = "mise run tla"
+
+[[criteria]]
+# Unit: a send that fails while the connection survives makes the peer's sync state reset (the adapter sees the
+# peer leave and come back, or an explicit resync), so the lost change is sent again; named after rule L.
+id = "rule-L-unit"
+command = "./scripts/heavy.sh go test ./internal/transport/p2p ./internal/bridge -run 'RuleL' -count=1"
+
+[[criteria]]
+# Mutant: without the resync on a failed send, rule-L-unit must fail (applied and restored by the runner).
+id = "rule-L-mutant"
+command = "mise run netsim:mutants -- RL1"
+
+[[criteria]]
+# End to end: NI-2 (25 s blackout during a large paste) — the paste reaches the other side; the e2e oracle reads
+# the editor's document state, not the rendered page (long lines are not fully rendered by CodeMirror).
+id = "NI-2-paste-arrives"
+command = "NETSIM_SCENARIOS='6' NETSIM_SEEDS='1 2 3' mise run e2e:netsim:impaired"
+
+[[criteria]]
+# No regression: scenarios 1-4 and the P3 gate.
+id = "netsim-regression"
+command = "NETSIM_SCENARIOS='1 2 3 4' mise run e2e:netsim"
+
+[[criteria]]
+id = "P3-regression"
+command = "mise run gate -- P3"
