@@ -1,7 +1,7 @@
 import { next as A } from "@automerge/automerge";
+import { Text } from "@codemirror/state";
 import fc from "fast-check";
 import { describe, expect, it } from "vitest";
-import { Text } from "@codemirror/state";
 import {
   anchorRange,
   docPosition,

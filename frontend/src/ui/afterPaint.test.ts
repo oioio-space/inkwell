@@ -2,7 +2,9 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import { afterPaint } from "./afterPaint";
 
 const paintThenTask = () =>
-  new Promise<void>((done) => requestAnimationFrame(() => setTimeout(() => setTimeout(done, 0), 0)));
+  new Promise<void>((done) =>
+    requestAnimationFrame(() => setTimeout(() => setTimeout(done, 0), 0)),
+  );
 
 describe("afterPaint", () => {
   afterEach(() => vi.restoreAllMocks());

@@ -5,7 +5,13 @@ export function enterNativeTrace() {
   const parent = current;
   const call = ++sequence;
   current = call;
-  return { call, parent, close: () => { current = parent; } };
+  return {
+    call,
+    parent,
+    close: () => {
+      current = parent;
+    },
+  };
 }
 /** The synchronously executing recorded call (0 = none): who scheduled a callback. */
 export const currentNativeCall = () => current;

@@ -1,14 +1,22 @@
 import { currentNativeCall, enterNativeTrace, nativeProbesOn } from "./nativeTrace";
 export interface CallbackIdentity {
-  id: number; target: string; event: string; capture: boolean;
-  name: string; registration: string;
+  id: number;
+  target: string;
+  event: string;
+  capture: boolean;
+  name: string;
+  registration: string;
   /** Recorded call that scheduled this timer/microtask/rAF (0 = none). */
   scheduledBy?: number;
 }
 /** Registration-time only (never inside an executing callback): a few caller frames. */
 const registrationStack = () => (new Error().stack ?? "").split("\n").slice(0, 8).join("\n");
 export interface NativeTaskSpan {
-  start: number; end: number; call: number; parent: number; callback: CallbackIdentity;
+  start: number;
+  end: number;
+  call: number;
+  parent: number;
+  callback: CallbackIdentity;
 }
 type Span = NativeTaskSpan;
 const internal = new WeakSet<object>();
@@ -24,8 +32,15 @@ export function installNativeTaskHooks(record: (span: Span) => void): () => void
   let next = 0;
   function wrap<T>(callback: T, detail: Partial<CallbackIdentity> = {}): T {
     if (typeof callback !== "function" || internal.has(callback)) return callback;
-    const identity: CallbackIdentity = { id: ++next, target: "scheduler", event: "callback", capture: false,
-      name: callback.name || "anonymous", registration: "", ...detail };
+    const identity: CallbackIdentity = {
+      id: ++next,
+      target: "scheduler",
+      event: "callback",
+      capture: false,
+      name: callback.name || "anonymous",
+      registration: "",
+      ...detail,
+    };
     return function (this: unknown, ...args: unknown[]) {
       if (!nativeProbesOn()) return Reflect.apply(callback, this, args);
       const trace = enterNativeTrace();
@@ -58,20 +73,32 @@ export function installNativeTaskHooks(record: (span: Span) => void): () => void
       ...args,
     ])) as unknown as typeof window.setInterval;
   window.requestAnimationFrame = (callback) =>
-    raf.call(window, wrap(callback, { event: "requestAnimationFrame", scheduledBy: currentNativeCall() }));
+    raf.call(
+      window,
+      wrap(callback, { event: "requestAnimationFrame", scheduledBy: currentNativeCall() }),
+    );
   window.queueMicrotask = (callback) =>
-    microtask.call(window, wrap(callback, { event: "queueMicrotask", scheduledBy: currentNativeCall() }));
+    microtask.call(
+      window,
+      wrap(callback, { event: "queueMicrotask", scheduledBy: currentNativeCall() }),
+    );
   // Observer callbacks (CodeMirror's DOM observer reads WebKit's text edit) are App work too.
   const observers: [string, unknown][] = [];
   for (const name of ["MutationObserver", "ResizeObserver", "IntersectionObserver"] as const) {
     const Original = (window as unknown as Record<string, unknown>)[name] as
-      | (new (callback: (...args: unknown[]) => void, ...rest: unknown[]) => object)
+      | (new (
+          callback: (...args: unknown[]) => void,
+          ...rest: unknown[]
+        ) => object)
       | undefined;
     if (typeof Original !== "function") continue;
     observers.push([name, Original]);
     (window as unknown as Record<string, unknown>)[name] = class extends Original {
       constructor(callback: (...args: unknown[]) => void, ...rest: unknown[]) {
-        super(wrap(callback, { target: name, event: "observer", registration: registrationStack() }), ...rest);
+        super(
+          wrap(callback, { target: name, event: "observer", registration: registrationStack() }),
+          ...rest,
+        );
       }
     };
   }
@@ -99,13 +126,25 @@ export function installNativeTaskHooks(record: (span: Span) => void): () => void
     if (!wrapped) {
       const callback =
         typeof listener === "function" ? listener : (event: Event) => listener.handleEvent(event);
-      const owner = target === window ? "window" : target === document ? "document" :
-        target instanceof Element ? (target.classList.contains("cm-content") ? "view.contentDOM" :
-          target.closest(".cm-editor") ? "view." + (target.className || target.tagName) : target.tagName.toLowerCase()) : target.constructor.name;
-      wrapped = wrap(callback, { target: owner, event: type,
+      const owner =
+        target === window
+          ? "window"
+          : target === document
+            ? "document"
+            : target instanceof Element
+              ? target.classList.contains("cm-content")
+                ? "view.contentDOM"
+                : target.closest(".cm-editor")
+                  ? "view." + (target.className || target.tagName)
+                  : target.tagName.toLowerCase()
+              : target.constructor.name;
+      wrapped = wrap(callback, {
+        target: owner,
+        event: type,
         capture: typeof options === "boolean" ? options : !!options?.capture,
         // Registration only: never create stacks inside an executing listener.
-        registration: registrationStack() });
+        registration: registrationStack(),
+      });
       group.set(listener, wrapped);
     }
     return wrapped;
@@ -139,7 +178,10 @@ export function installNativeTaskHooks(record: (span: Span) => void): () => void
       },
       set(callback) {
         assigned.set(this, callback);
-        message.set?.call(this, wrap(callback, { target: prototype.constructor.name, event: "message" }));
+        message.set?.call(
+          this,
+          wrap(callback, { target: prototype.constructor.name, event: "message" }),
+        );
       },
     });
     undoMessages.push(() => Object.defineProperty(prototype, "onmessage", message));

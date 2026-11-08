@@ -16,8 +16,7 @@ export type LanguageDiagnostic = {
   severity?: number;
   range: { start: Position; end: Position };
 };
-const uriOf = (file: string) =>
-  `file:///${file.split("/").map(encodeURIComponent).join("/")}`;
+const uriOf = (file: string) => `file:///${file.split("/").map(encodeURIComponent).join("/")}`;
 /**
  * How long to wait before reconnecting after `failures` connections in a row closed before the
  * service answered `initialize`: exponential from 1 s, capped at 30 s, with jitter in the upper
