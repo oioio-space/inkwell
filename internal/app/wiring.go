@@ -643,10 +643,11 @@ func (w *Wiring) sendTrust(out []trust.Outbound[transport.PeerID]) {
 type repoPort Wiring
 
 var (
-	_ transport.Transport = (*repoPort)(nil)
-	_ bridge.Source       = (*repoPort)(nil)
-	_ bridge.Attester     = (*repoPort)(nil)
-	_ bridge.Resetter     = (*repoPort)(nil)
+	_ transport.Transport  = (*repoPort)(nil)
+	_ bridge.Source        = (*repoPort)(nil)
+	_ bridge.Attester      = (*repoPort)(nil)
+	_ bridge.Resetter      = (*repoPort)(nil)
+	_ transport.LinkSource = (*repoPort)(nil)
 )
 
 func (p *repoPort) Local() transport.PeerID { return p.raw.Local() }
@@ -658,6 +659,29 @@ func (p *repoPort) Send(ctx context.Context, to transport.PeerID, payload []byte
 		return transport.ErrUnknownPeer
 	}
 	return p.repoCh.Send(ctx, to, payload)
+}
+
+// Links forwards the node's link figures, see [transport.LinkSource], for the
+// peers [repoPort.Peers] shows only: a peer that is not an active member has no
+// link here, as it has no frame. Without a LinkSource below, the active peers
+// are listed with no figure.
+func (p *repoPort) Links() []transport.Link {
+	src, ok := p.raw.(transport.LinkSource)
+	if !ok {
+		var links []transport.Link
+		for _, peer := range p.Peers() {
+			links = append(links, transport.Link{Peer: peer})
+		}
+		return links
+	}
+	all := src.Links()
+	links := make([]transport.Link, 0, len(all))
+	for _, l := range all {
+		if (*Wiring)(p).isActive(l.Peer) {
+			links = append(links, l)
+		}
+	}
+	return links
 }
 
 // Reset resets peer without banning it, see [bridge.Resetter].
