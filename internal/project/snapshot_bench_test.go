@@ -21,12 +21,12 @@ func BenchmarkProjectionSnapshotLarge(b *testing.B) {
 	for i := range asset {
 		asset[i] = byte(i % 256)
 	}
-	for i := 0; i < 16; i++ {
+	for i := range 16 {
 		if err := os.WriteFile(filepath.Join(p.Path(), fmt.Sprintf("asset-%02d.bin", i)), asset, 0o600); err != nil {
 			b.Fatal(err)
 		}
 	}
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		if err := os.WriteFile(filepath.Join(p.Path(), fmt.Sprintf("chapter-%03d.typ", i)), []byte("#let chapter = 1\n"), 0o600); err != nil {
 			b.Fatal(err)
 		}

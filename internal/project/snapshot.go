@@ -61,7 +61,7 @@ func (p *Project) MatchesSnapshot(ctx context.Context, want ProjectionSnapshot) 
 }
 
 func snapshotVisible(name string, entry fs.DirEntry) bool {
-	for _, part := range strings.Split(name, "/") {
+	for part := range strings.SplitSeq(name, "/") {
 		if strings.HasPrefix(part, ".") && part != ".typstdeps" {
 			return false
 		}

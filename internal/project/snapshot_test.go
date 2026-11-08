@@ -182,7 +182,7 @@ func TestFailedSnapshotsBoundObjectsAndKeepActiveInputs(t *testing.T) {
 	if err := late.Close(); err != nil {
 		t.Fatal(err)
 	}
-	for i := 0; i < 12; i++ {
+	for i := range 12 {
 		if err := p.root.WriteFile("main.typ", fmt.Appendf(nil, "#let changed = %d", i), 0o600); err != nil {
 			t.Fatal(err)
 		}

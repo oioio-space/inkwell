@@ -40,12 +40,7 @@ func rejectsEveryPrefixAndExtension(t *testing.T, name string, valid []byte, dec
 }
 
 func slicesContain(s []int, n int) bool {
-	for _, x := range s {
-		if x == n {
-			return true
-		}
-	}
-	return false
+	return slices.Contains(s, n)
 }
 
 func sampleFiles() []project.File {

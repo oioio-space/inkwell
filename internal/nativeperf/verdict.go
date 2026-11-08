@@ -13,6 +13,7 @@ import (
 	"math"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 )
 
@@ -425,10 +426,8 @@ type verifier struct {
 }
 
 func (v *verifier) fail(reason string) {
-	for _, existing := range v.report.Reasons {
-		if existing == reason {
-			return
-		}
+	if slices.Contains(v.report.Reasons, reason) {
+		return
 	}
 	v.report.Reasons = append(v.report.Reasons, reason)
 }

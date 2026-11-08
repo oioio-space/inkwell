@@ -137,7 +137,7 @@ func hashes(tree []project.TreeEntry) [][bridge.HashSize]byte {
 // waitStored waits until every blob of the tree is stored at p, in virtual time.
 func waitStored(t *testing.T, p *filesPeer, want int) {
 	t.Helper()
-	for i := 0; i < 100_000; i++ {
+	for range 100_000 {
 		synctest.Wait()
 		if st := p.files.Status(); st.Stored == want {
 			return

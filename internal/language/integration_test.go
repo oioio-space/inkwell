@@ -200,7 +200,7 @@ func BenchmarkLanguageLatency(t *testing.B) {
 	}
 	defer writeReport()
 	id := 10
-	for cycle := 0; cycle < 40; cycle++ {
+	for cycle := range 40 {
 		lines := strings.Split(text, "\n")
 		oldCall := lines[3]
 		edit := fmt.Sprintf("#l3add(1, %d)", cycle+3)

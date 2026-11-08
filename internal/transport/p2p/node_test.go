@@ -441,7 +441,7 @@ func TestConnectRejectsBadInput(t *testing.T) {
 			}
 		}
 		// A bare address, without /p2p/, works: the peer is the one asked for.
-		bare := strings.SplitN(b.Addrs()[0], "/p2p/", 2)[0]
+		bare, _, _ := strings.Cut(b.Addrs()[0], "/p2p/")
 		if err := a.Connect(t.Context(), b.Local(), []string{bare}); err != nil {
 			t.Errorf("Connect(bare %s) = %v", bare, err)
 		}

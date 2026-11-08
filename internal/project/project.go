@@ -134,7 +134,7 @@ func Create(base *os.Root, title, rootURL string) (*Project, error) {
 	}
 	p := &Project{dir: dir, root: root, notified: map[string]string{}, treeChanged: make(chan struct{}, 1), claimed: map[string]bool{}, points: map[string]json.RawMessage{}}
 	p.m = manifest{
-		Meta:  Meta{ID: rand.Text(), Title: title, RootURL: rootURL},
+		ID: rand.Text(), Title: title, RootURL: rootURL,
 		Files: map[string]string{MainFile: ""},
 		Tree:  map[string]string{},
 	}

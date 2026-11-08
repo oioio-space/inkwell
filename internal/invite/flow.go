@@ -399,8 +399,8 @@ func (h *Host) addAsk(from transport.PeerID, key ed25519.PublicKey, name string)
 	}
 	h.nextID++
 	a := &pendingAsk{
-		Pending: Pending{ID: h.nextID, Peer: from, Name: identity.CleanName(name), Fingerprint: strings.Join(fp[:], " · ")},
-		answer:  make(chan decision, 1),
+		ID: h.nextID, Peer: from, Name: identity.CleanName(name), Fingerprint: strings.Join(fp[:], " · "),
+		answer: make(chan decision, 1),
 	}
 	h.asks[a.ID] = a
 	return a

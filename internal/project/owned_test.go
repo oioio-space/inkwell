@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"strings"
 	"testing"
 	"time"
@@ -98,9 +99,7 @@ func TestMigratesOwnedFilesOutOfTheManifest(t *testing.T) {
 		"files": p.m.Files, "tree": p.m.Tree,
 	}
 	files := map[string]string{}
-	for k, v := range p.m.Files {
-		files[k] = v
-	}
+	maps.Copy(files, p.m.Files)
 	p.mu.Unlock()
 	if err := p.Close(); err != nil {
 		t.Fatal(err)

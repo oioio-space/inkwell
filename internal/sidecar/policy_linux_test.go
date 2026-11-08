@@ -85,7 +85,7 @@ func TestSeccompPolicyVM(t *testing.T) {
 	} {
 		check(nr, arch, deny)
 	}
-	for domain := uint64(0); domain < 64; domain++ {
+	for domain := range uint64(64) {
 		check(unix.SYS_SOCKET, arch, deny, domain, unix.SOCK_STREAM)
 	}
 	// Exhaustive sweep with zero arguments: a jump-offset slip in the emitted
