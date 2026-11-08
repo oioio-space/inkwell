@@ -340,9 +340,13 @@ depends = ["fe:install", "fe:bindings", "sidecar:fetch"]
 # The vite build empties frontend/dist, which the root package embeds: when `ci` also runs the
 # impaired e2e (decision Q2), every task that compiles the root package must finish first, or it
 # sees an empty dist (« cannot embed directory frontend/dist », 2026-11-08).
+# The build goes to a side directory swapped in at the end, so an interrupted build never leaves
+# dist empty (which broke every later Go build until a rebuild).
 wait_for = ["arch", "deadcode", "scan:code", "scan:sbom", "lint", "pkg:lint", "test:ci", "cover:check"]
 run = """
-(cd frontend && VITE_E2E_OBSERVE=1 pnpm --config.verifyDepsBeforeRun=false run build)
+(cd frontend && rm -rf ../.e2e-dist-next \
+  && VITE_E2E_OBSERVE=1 pnpm --config.verifyDepsBeforeRun=false exec vite build --configLoader runner --mode production --outDir ../.e2e-dist-next --emptyOutDir \
+  && touch ../.e2e-dist-next/.gitkeep && rm -rf ../.e2e-dist-old && { [ ! -d dist ] || mv dist ../.e2e-dist-old; } && mv ../.e2e-dist-next dist && rm -rf ../.e2e-dist-old)
 go build -tags server -o bin/inkwell-server ./cmd/inkwell
 CGO_ENABLED=0 go build -o bin/inkwell-relay ./cmd/inkwell-relay
 cd frontend

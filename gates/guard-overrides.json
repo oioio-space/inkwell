@@ -161,8 +161,8 @@
       "decision": "docs/objectif-en-cours.md"
     },
     {
-      "id": "da7d137b82965e4518ab88cb83174b5be8e1bc61cb0b26d5d744db22a3a198d2",
-      "reason": "RL1 follow-up: e2e:build gains wait_for on the tasks that compile the root package, so the vite build cannot empty frontend/dist while they embed it (race seen in the pre-push ci on 2026-11-08); the build commands and every e2e bound are unchanged.",
+      "id": "6c7fb901e4dd90b2f5f129a18391ae8d23e7c07b32d80d3db9c5a8f8a17987ee",
+      "reason": "RL1 follow-up: e2e:build waits (wait_for) for the tasks that compile the root package, and builds the frontend into a side directory swapped into frontend/dist at the end, so neither a concurrent build nor an interrupted one leaves dist empty (seen in the pre-push ci on 2026-11-08). Same vite build, same mode and VITE_E2E_OBSERVE flag; the server and relay builds and every e2e bound are unchanged.",
       "decision": "docs/objectif-en-cours.md"
     }
   ]

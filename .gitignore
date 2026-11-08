@@ -63,3 +63,5 @@ __pycache__/
 
 # pnpm content-addressable store (created by pnpm in the worktree; 248 MB).
 /.pnpm-store/
+/.e2e-dist-next/
+/.e2e-dist-old/
