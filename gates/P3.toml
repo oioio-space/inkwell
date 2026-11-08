@@ -1,0 +1,24 @@
+# Frozen acceptance for ADR 0034 migration step 3 ("model first": TLC, CBOR profile, schemas), written
+# before implementation. Plan: docs/plans/2026-11-08-P3-implementation.md. Closes N-12.
+raw_results = ["docs/plans/2026-11-08-P3-implementation.md", "docs/objectif-en-cours.md", "gates/P3/*", "gates/P2.json"]
+[[criteria]]
+# P-TLA (step-3 form): `mise run tla` runs TLC pinned by SHA-256 (docs/protocol/tla/README.md): RepoGen on
+# RepoGenSmall.cfg and ConnCredit exhaustive with liveness, no error; every mutation listed in the README
+# must be detected (the task fails if a mutant passes).
+id = "P-TLA"
+command = "mise run tla"
+[[criteria]]
+# P-VEC at step 3, Go: every vector with enforce <= step-3 passes (repo.json repo_message cases included).
+id = "P-VEC-3-go"
+command = "cd protocol && INKWELL_PROTOCOL_STEP=3 ../scripts/heavy.sh go test ./conformance -run TestCorpus -count=1"
+[[criteria]]
+# P-VEC at step 3, TypeScript: the CBOR validity profile and the section 9 schemas in @inkwell/protocol.
+id = "P-VEC-3-ts"
+command = "cd frontend && INKWELL_PROTOCOL_STEP=3 ../scripts/heavy.sh ./node_modules/.bin/vitest run packages/protocol"
+[[criteria]]
+# The network adapter uses the profile: targetId everywhere, a conforming encoder, an integer pointer.
+id = "adapter-profile"
+command = "cd frontend && ../scripts/heavy.sh ./node_modules/.bin/vitest run src/net"
+[[criteria]]
+id = "P2-regression"
+command = "mise run gate -- P2"
