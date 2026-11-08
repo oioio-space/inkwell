@@ -11,7 +11,10 @@ cmd="$(jq -r '.tool_input.command // empty')"
 # timeout / env / VAR=value / rtk / mise x --, so words inside echo or printf text do not match.
 runner='(^|[;&|(]|\$\()[[:space:]]*((timeout( -[a-zA-Z]+)* [^ ]+|env|[A-Za-z_][A-Za-z0-9_]*=[^ ]*|rtk|mise x --|pnpm( exec)?|npx|cd [^;&|]+&&)[[:space:]]+)*((go|rtk go) test|gotestsum|python3? (-I )?-m (unittest|pytest)|pytest|vitest|\./node_modules/\.bin/vitest|pnpm( [^;&|]*)? (run )?(test|check)\b|npm (run )?test|playwright test|gremlins|go run [^;&|]*gremlins|stryker|python3? [^;&|]*_test\.py)'
 # Quoted text (grep patterns, echo/printf messages) is not run: strip it before matching.
-bare="$(sed -E "s/'[^']*'//g; s/\"[^\"]*\"//g" <<<"$cmd")"
+# Here-document bodies (<<EOF … EOF) are data, not commands: drop them before matching.
+strip_heredocs() { awk '{ if (t != "") { if ($0 == t) t = ""; next } print; if (match($0, /<<-?[[:space:]]*["'"'"']?[A-Za-z_][A-Za-z0-9_]*["'"'"']?/)) { t = substr($0, RSTART, RLENGTH); sub(/^<<-?[[:space:]]*/, "", t); gsub(/["'"'"']/, "", t) } }'; }
+bare="$(strip_heredocs <<<"$cmd" | sed -E "s/'[^']*'//g; s/\"[^\"]*\"//g")"
+bare="${bare//$'\n'/;}" # a new line starts a new command, like ;
 [[ $bare =~ $runner ]] || exit 0
 [[ $cmd =~ (heavy\.sh|memcap\.sh|systemd-run) ]] && exit 0
 cat >&2 <<'MSG'

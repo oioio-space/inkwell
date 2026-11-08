@@ -22,7 +22,9 @@ refuse() {
 if [[ $tool == Bash ]]; then
   cmd="$(jq -r '.tool_input.command // empty' <<<"$input")"
   # Quoted text (messages, patterns) is not a write target: strip it before matching.
-  cmd="$(sed -E "s/'[^']*'//g; s/\"[^\"]*\"//g" <<<"$cmd")"
+  # Here-document bodies (<<EOF … EOF) are data, not commands: drop them before matching.
+  strip_heredocs() { awk '{ if (t != "") { if ($0 == t) t = ""; next } print; if (match($0, /<<-?[[:space:]]*["'"'"']?[A-Za-z_][A-Za-z0-9_]*["'"'"']?/)) { t = substr($0, RSTART, RLENGTH); sub(/^<<-?[[:space:]]*/, "", t); gsub(/["'"'"']/, "", t) } }'; }
+  cmd="$(strip_heredocs <<<"$cmd" | sed -E "s/'[^']*'//g; s/\"[^\"]*\"//g")"
   while read -r path; do
     [[ -n $path ]] && frozen "$path" && refuse "$path"
   done < <(grep -oE '(sed -i[^;&|]*|>>?|tee( -a)?|mv|rm( -f)?|cp)[[:space:]]+[^;&|]*gates/[^[:space:];&|]+\.toml' <<<"$cmd" |
