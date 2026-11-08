@@ -21,8 +21,10 @@ change plus que par une décision consignée dans `docs/architecture/decisions.m
 
 ## Lot actif : Protocole, étapes 2 à 8 d'ADR 0034
 
-Ensuite G-0b, puis G-0c (liste ci-dessous). **Étape en cours : 2 (N-1, `protocol/sig`)** ; porte figée
-`gates/P2.toml` (2026-11-08) ; plan `docs/plans/2026-11-08-P2-implementation.md`. Les étapes 3 à 8
+Ensuite G-0b, puis G-0c (liste ci-dessous). **Étape 2 (N-1, `protocol/sig`) faite** le 2026-11-08 : porte `gates/P2.toml` verte
+(7/7, régression L3 comprise) ; plan `docs/plans/2026-11-08-P2-implementation.md`, résumé
+`gates/P2/SUMMARY-impl.md`. **Étape suivante : 3** (modèle d'abord : `mise run tla`, profil CBOR et
+schémas §9 dans `@inkwell/protocol`), porte à écrire. Les étapes 3 à 8
 auront chacune leur porte, écrite avant leur implémentation.
 
 ### Suivis de sécurité de L1 (LOW, revue Opus n° 6, à traiter au début de L2)

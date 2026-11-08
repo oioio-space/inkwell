@@ -6,7 +6,7 @@
       "command": "mise run arch",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 2.2895461529988097,
+      "duration_seconds": 2.2560834259929834,
       "log": "gates/L1/architecture.log"
     },
     {
@@ -14,7 +14,7 @@
       "command": "./scripts/heavy.sh go test ./tools/archexec && ./scripts/arch-exec-check.sh && ./scripts/heavy.sh go test -race ./internal/sidecar",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 1.7820879380014958,
+      "duration_seconds": 1.7295480140019208,
       "log": "gates/L1/syscall-confinement.log"
     },
     {
@@ -22,7 +22,7 @@
       "command": "./scripts/heavy.sh bash scripts/sidecar-no-tools.sh",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 109.76647889000014,
+      "duration_seconds": 108.23602813300386,
       "log": "gates/L1/without-tools.log"
     },
     {
@@ -30,7 +30,7 @@
       "command": "python3 scripts/gate-guard.py --self-test && python3 scripts/gate.py --base-guard",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 0.6226750819914741,
+      "duration_seconds": 0.305581559005077,
       "log": "gates/L1/anti-weakening.log"
     },
     {
@@ -38,7 +38,7 @@
       "command": "mise run gate -- L0",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 1006.1163547869946,
+      "duration_seconds": 1001.8801990799984,
       "log": "gates/L1/L0.log"
     },
     {
@@ -68,16 +68,16 @@
     }
   },
   "sha256": {
-    "docs/objectif-en-cours.md": "6bab91c6310cc8531378e1dc8684a073dfda5451f94c3a3ce61a4ebe0ddf54d0",
+    "docs/objectif-en-cours.md": "bcfc59e7766b233a41af7e91920506482f2ba763a8a88a76b69b1650d873a0e2",
     "docs/plans/2026-11-02-L1-implementation.md": "6f21f8178ed76cddef99512c8d6139c268d3258dbb8ab2bbe34971005f2d845b",
-    "gates/L0.json": "1f8a5e2650fd207d4c26a73b8f010b128170eaa65a845ccbcf36f0f8efa148c6",
+    "gates/L0.json": "fa3ded7c4f8b98cbf436825f3b0d246e7fa6bc79c33ab46ffd791ab2f6bc42a8",
     "gates/L1/L0.log": "2b0da7f547f69b8e8b603a745e19d4e6bc6be6df9920cb8cc7c67bdb27d738b7",
-    "gates/L1/anti-weakening.log": "581b7d3821d6f7ae687be2ff476ea8f4afede1b176456f6ccc0ae22cfff83e82",
+    "gates/L1/anti-weakening.log": "94f41eb93133dae65811198ff4afeed9189c3b8006fbd16b750bc5e1a323a358",
     "gates/L1/architecture.log": "d5279db7270e45e6e09608c189240a60867492858fba89f802a85f3029c5e59b",
-    "gates/L1/base-guard.log": "47b3c02ab1c6c240b0b108e106db90d372387d76984f073eb682715a6ea23455",
+    "gates/L1/base-guard.log": "f185bec68dd9e724a4fcd856e2ac73ccd7bdec8fdffdc3e2e8aa107de8c78cbb",
     "gates/L1/syscall-confinement.log": "4a89c9478a91d8015f2d807170b4fb43ee7f0657e3cf9d4be457eb21d61c22c2",
-    "gates/L1/without-tools.log": "1f5f7f94f183038e0d246a49befd0696b38b702d78eac91f9ae8b4530a59c336",
-    "gates/guard-overrides.json": "e5fa1a488b9bd82773cbd160a266903265664385ff7e826fb44b391b88b84454"
+    "gates/L1/without-tools.log": "ec0a249a2126abe258cfa98af73ae4c51767923af8459710cdac520c4c60262a",
+    "gates/guard-overrides.json": "55c6fe72804bcf3691710e0a3e033ab02ac6ce04479b64bf1cc8b59270d0bf6f"
   },
   "status": "pass",
   "deferrals": [
@@ -103,14 +103,14 @@
   ],
   "base_guard": {
     "ref": "main",
-    "base": "e959ebb29540190a0766ea7ff72b1505fdaaf81d",
+    "base": "229420d5f6b0e5b4f6b7aa3817da7cf4bd2156ff",
     "source_sha256": "c306265111e4c8b0ad94a1867d797b7a20be7d814161b7b9dd6200ab7feb259c",
     "exit_code": 0,
     "status": "pass",
     "log": "gates/L1/base-guard.log"
   },
   "runner": {
-    "source": "base e959ebb29540190a0766ea7ff72b1505fdaaf81d",
+    "source": "base 229420d5f6b0e5b4f6b7aa3817da7cf4bd2156ff",
     "sha256": "99e00a0d51d35601e02b096e77ff41013fad14b082afea97fcba920cba71042e"
   },
   "guard_overrides": [
@@ -203,6 +203,11 @@
       "id": "8ebea8bdde8f2f8155068c4d1db359c684ba6a0c78c6f4f49e49457db3066663",
       "reason": "New file for L3, absent at the merge base, so the guard reports it as changed gate machinery: unit tests of type_native.py; no display, no native desktop. Adding it changes no existing test, threshold, delay or criterion command.",
       "decision": "docs/plans/2026-11-05-L3-implementation.md"
+    },
+    {
+      "id": "a6ef791eb160117c5477e1e84b2dfbfaf345e0c3244c75659e40861347000dbc",
+      "reason": "P2 gate written the same day with a command that could not run: protocol/sig and protocol/trust are in the nested protocol module (go test ./protocol/sig from the root fails) and internal/policy does not exist. The corrected command runs the same packages plus protocol/trust; no criterion, threshold or test was weakened.",
+      "decision": "docs/plans/2026-11-08-P2-implementation.md"
     }
   ]
 }

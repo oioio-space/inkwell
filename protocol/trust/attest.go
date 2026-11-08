@@ -138,7 +138,7 @@ func (l *List) Verify(a Attestation) error {
 	if err := a.validate(); err != nil {
 		return err
 	}
-	if !ed25519.Verify(a.Signer, signingMessage(domainAttest, a.body()), a.Sig[:]) {
+	if err := sig.Verify(a.Signer, signingMessage(domainAttest, a.body()), a.Sig[:]); err != nil {
 		return ErrBadSignature
 	}
 	l.mu.Lock()

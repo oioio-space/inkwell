@@ -1,7 +1,10 @@
 // SPDX-License-Identifier: MPL-2.0
 // Test-side reference for the extracted formats. Node crypto verifies signatures;
 // the exported runner accepts any implementation, including browser implementations.
-import { createHash, createPublicKey, verify } from "node:crypto";
+import { createHash } from "node:crypto";
+import { ed25519 } from "@noble/curves/ed25519.js";
+import { bytesToNumberLE, concatBytes } from "@noble/curves/utils.js";
+import { sha512 } from "@noble/hashes/sha2.js";
 import type { Vector } from "./src/conformance";
 import { decodeEnvelope, encodeEnvelope } from "./src/envelope";
 
@@ -52,21 +55,23 @@ function keyValid(b: Buffer) {
   assert(r[2] !== 0n && r[0] === 0n && r[1] === r[2]);
   validKeys.add(b.toString("hex"));
 }
+// Strict Ed25519 verdict of spec §3.3: A is a valid prime-order key, S < L,
+// and the encoding of [S]B − [k]A is byte-for-byte R (cofactorless, RFC 8032
+// §5.1.7). @noble/curves (audited, https://github.com/paulmillr/noble-curves)
+// exposes the strict `{ zip215: false }` branch, but its verify() checks the
+// *cofactored* equation ([8][S]B = [8]R + [8][k]A). The protocol mandates the
+// cofactorless equation with an encoding comparison, so we apply that rule
+// with noble's audited point arithmetic instead.
+const L = ed25519.Point.CURVE().n;
 function signature(pub: Buffer, msg: Buffer, sig: Buffer) {
-  assert(pub.length === 32);
-  assert(
-    verify(
-      null,
-      msg,
-      createPublicKey({
-        key: Buffer.concat([hex("302a300506032b6570032100"), pub]),
-        format: "der",
-        type: "spki",
-      }),
-      sig,
-    ),
-    "signature",
-  );
+  keyValid(pub);
+  assert(sig.length === 64);
+  const s = bytesToNumberLE(sig.subarray(32));
+  assert(s < L, "signature S");
+  const a = ed25519.Point.fromBytes(pub, false);
+  const k = bytesToNumberLE(sha512(concatBytes(sig.subarray(0, 32), pub, msg))) % L;
+  const expected = ed25519.Point.BASE.multiplyUnsafe(s).subtract(a.multiplyUnsafe(k)).toBytes();
+  assert(equal(expected, sig.subarray(0, 32)), "signature");
 }
 class Reader {
   i = 0;
@@ -428,7 +433,7 @@ export function reference(v: Vector, corpus: Vector[]) {
           pub,
           v.decoder === undefined
             ? domain(String(e.domain), hex(String(e.message_hex)))
-            : hex(String(e.signed_bytes_hex)),
+            : hex(String(e.signed_bytes_hex ?? e.message_hex)),
           hex(String(e.signature_hex)),
         );
         break;

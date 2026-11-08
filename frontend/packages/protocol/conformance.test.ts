@@ -11,8 +11,9 @@ const vectors: Vector[] = readdirSync(dir)
   .filter((f) => f.endsWith(".json"))
   .sort()
   .flatMap((f) => JSON.parse(readFileSync(`${dir}/${f}`, "utf8")).vectors);
-test("shared protocol corpus, step 1", async () => {
-  const results = await runConformance(vectors, (v) => reference(v, vectors));
+const step = Number(process.env.INKWELL_PROTOCOL_STEP ?? 1);
+test(`shared protocol corpus, step ${step}`, async () => {
+  const results = await runConformance(vectors, (v) => reference(v, vectors), step);
   const failures = results
     .filter((r) => r.required && !r.passed)
     .map((r) => `${r.vector.id}: ${r.error}`);

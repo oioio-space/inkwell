@@ -4,7 +4,6 @@ package conformance
 
 import (
 	"bytes"
-	"crypto/ed25519"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
@@ -68,9 +67,20 @@ func fixture() (*trust.List, trust.ProjectID, error) {
 
 // Reference checks a vector against this release's codecs, signatures and fold.
 func Reference(v Vector) error {
-	list, id, err := fixture()
+	c, err := newReferenceCase(v)
 	if err != nil {
 		return err
+	}
+	if err := c.run(); err != nil {
+		return err
+	}
+	return c.verify()
+}
+
+func newReferenceCase(v Vector) (*referenceCase, error) {
+	list, id, err := fixture()
+	if err != nil {
+		return nil, err
 	}
 	c := &referenceCase{vector: v, list: list, project: id}
 	if _, ok := v.Fields["input_hex"]; ok {
@@ -78,11 +88,53 @@ func Reference(v Vector) error {
 	}
 	if _, ok := v.Fields["expect"]; ok {
 		if err := v.Decode("expect", &c.expect); err != nil {
-			return err
+			return nil, err
 		}
 		if c.expect == nil {
-			return errors.New("null expectations")
+			return nil, errors.New("null expectations")
 		}
+	}
+	return c, nil
+}
+
+var requiredExpectations = map[string][]string{
+	"ticket_text": {"text"}, "peer_id": {"peer_id"},
+	"signature":     {"public_hex", "signed_bytes_hex"},
+	"signature+key": {"public_hex", "signature_hex"},
+	"":              {"public_hex", "signature_hex", "domain", "message_hex"},
+	"trust_fold":    {"members"},
+}
+
+func (c *referenceCase) prepare() error {
+	v := c.vector
+	for _, k := range requiredExpectations[v.Decoder] {
+		if raw, ok := c.expect[k]; !ok || bytes.Equal(raw, []byte("null")) {
+			return fmt.Errorf("missing expectation %s", k)
+		}
+	}
+	if v.Decoder == "signature+key" {
+		if _, signed := c.expect["signed_bytes_hex"]; !signed {
+			if _, plain := c.expect["message_hex"]; !plain {
+				return errors.New("missing expectation signed_bytes_hex or message_hex")
+			}
+		}
+	}
+	switch v.Decoder {
+	case "ticket_text", "peer_id", "signature", "signature+key", "", "trust_fold":
+	case "public_key":
+		if _, ok := c.expect["keys_hex"]; !ok {
+			c.input = c.unhex(c.inputHex())
+		}
+	default:
+		c.input = c.unhex(c.inputHex())
+	}
+	return nil
+}
+
+func (c *referenceCase) run() error {
+	v := c.vector
+	if err := c.prepare(); err != nil {
+		return err
 	}
 	checks := map[string]func() error{
 		"bulk":               c.bulk,
@@ -102,45 +154,25 @@ func Reference(v Vector) error {
 		"peer_id":            c.peer,
 		"trust_fold":         c.fold,
 	}
-	required := map[string][]string{
-		"ticket_text": {"text"}, "peer_id": {"peer_id"},
-		"signature":     {"public_hex", "signed_bytes_hex"},
-		"signature+key": {"public_hex", "signed_bytes_hex", "signature_hex"},
-		"":              {"public_hex", "signature_hex", "domain", "message_hex"},
-		"trust_fold":    {"members"},
-	}
-	for _, k := range required[v.Decoder] {
-		if raw, ok := c.expect[k]; !ok || bytes.Equal(raw, []byte("null")) {
-			return fmt.Errorf("missing expectation %s", k)
-		}
-	}
-	switch v.Decoder {
-	case "ticket_text", "peer_id", "signature", "signature+key", "", "trust_fold":
-	case "public_key":
-		if _, ok := c.expect["keys_hex"]; !ok {
-			c.input = c.unhex(c.inputHex())
-		}
-	default:
-		c.input = c.unhex(c.inputHex())
-	}
 	check, ok := checks[v.Decoder]
 	if !ok {
 		return fmt.Errorf("%w: %s", ErrUnsupported, v.Decoder)
 	}
-	if err := check(); err != nil {
-		return err
-	}
+	return check()
+}
+
+func (c *referenceCase) verify() error {
 	if c.fieldErr != nil {
 		return c.fieldErr
 	}
 	if c.verdictChecked {
 		return nil
 	}
-	if (c.err == nil) != (v.Verdict == "accept") {
+	if (c.err == nil) != (c.vector.Verdict == "accept") {
 		if c.err != nil {
-			return fmt.Errorf("verdict %s: %w", v.Verdict, c.err)
+			return fmt.Errorf("verdict %s: %w", c.vector.Verdict, c.err)
 		}
-		return fmt.Errorf("expected %s, decoder accepted input", v.Verdict)
+		return fmt.Errorf("expected %s, decoder accepted input", c.vector.Verdict)
 	}
 	if c.err == nil && c.encoded != nil && !bytes.Equal(c.encoded, c.input) {
 		return errors.New("binary round trip mismatch")
@@ -297,6 +329,9 @@ func (c *referenceCase) key() error {
 func (c *referenceCase) signature() error {
 	key := c.unhex(c.exp("public_hex"))
 	msg := c.unhex(c.exp("signed_bytes_hex"))
+	if _, ok := c.expect["signed_bytes_hex"]; !ok {
+		msg = c.unhex(c.exp("message_hex"))
+	}
 	signature := c.unhex(c.exp("signature_hex"))
 	if _, ok := c.expect["signature_hex"]; !ok {
 		signature = c.unhex(c.inputHex())
@@ -304,7 +339,7 @@ func (c *referenceCase) signature() error {
 	if c.vector.Decoder == "" {
 		msg = append([]byte("inkwell/"+c.exp("domain")+"/v1\x00"), c.unhex(c.exp("message_hex"))...)
 	}
-	if len(key) != 32 || (c.vector.Decoder == "signature+key" && sig.ValidatePublicKey(key) != nil) || !ed25519.Verify(key, msg, signature) {
+	if len(key) != 32 || sig.Verify(key, msg, signature) != nil {
 		c.err = errors.New("signature rejected")
 	}
 	return nil

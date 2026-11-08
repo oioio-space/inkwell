@@ -3,13 +3,23 @@
 package conformance_test
 
 import (
+	"os"
+	"strconv"
 	"testing"
 
 	"github.com/oioio-space/inkwell/protocol/conformance"
 )
 
 func TestCorpus(t *testing.T) {
-	results, err := conformance.Run(1, nil)
+	step := 1
+	if raw := os.Getenv("INKWELL_PROTOCOL_STEP"); raw != "" {
+		n, err := strconv.Atoi(raw)
+		if err != nil {
+			t.Fatalf("INKWELL_PROTOCOL_STEP=%q: %v", raw, err)
+		}
+		step = n
+	}
+	results, err := conformance.Run(step, conformance.Strict)
 	if err != nil {
 		t.Fatal(err)
 	}

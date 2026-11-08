@@ -388,7 +388,7 @@ func (o Op) verify(project ProjectID) error {
 	if o.Kind == OpGenesis {
 		project = ProjectID{}
 	}
-	if !ed25519.Verify(o.Author, signingMessage(domainOp, signedBytes(project, o)), o.Sig[:]) {
+	if err := sig.Verify(o.Author, signingMessage(domainOp, signedBytes(project, o)), o.Sig[:]); err != nil {
 		return ErrBadSignature
 	}
 	return nil

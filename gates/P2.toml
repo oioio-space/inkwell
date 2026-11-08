@@ -13,7 +13,9 @@ command = "cd frontend && INKWELL_PROTOCOL_STEP=2 ../scripts/heavy.sh ./node_mod
 # N-1: strict Ed25519 verification and key validation at every entry point named by the step
 # (connection filter, KeyFromID, ops, attestations, decisions, ticket, reload and import).
 id = "N-1-callers"
-command = "./scripts/heavy.sh go test -count=1 ./protocol/sig ./internal/transport/p2p ./internal/trust ./internal/policy ./internal/invite ./internal/identity"
+# Corrected 2026-11-08: protocol/sig and protocol/trust live in the nested protocol module, and
+# internal/policy does not exist; the command could not run as first written (no criterion weakened).
+command = "(cd protocol && ../scripts/heavy.sh go test -count=1 ./sig ./trust) && ./scripts/heavy.sh go test -count=1 ./internal/transport/p2p ./internal/trust ./internal/invite ./internal/identity"
 [[criteria]]
 # P-FUZZ (short form for this step; the 1 h runs belong to step 9): no panic on hostile keys and signatures.
 id = "P-FUZZ-sig"

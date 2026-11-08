@@ -89,6 +89,11 @@
       "id": "8ebea8bdde8f2f8155068c4d1db359c684ba6a0c78c6f4f49e49457db3066663",
       "reason": "New file for L3, absent at the merge base, so the guard reports it as changed gate machinery: unit tests of type_native.py; no display, no native desktop. Adding it changes no existing test, threshold, delay or criterion command.",
       "decision": "docs/plans/2026-11-05-L3-implementation.md"
+    },
+    {
+      "id": "a6ef791eb160117c5477e1e84b2dfbfaf345e0c3244c75659e40861347000dbc",
+      "reason": "P2 gate written the same day with a command that could not run: protocol/sig and protocol/trust are in the nested protocol module (go test ./protocol/sig from the root fails) and internal/policy does not exist. The corrected command runs the same packages plus protocol/trust; no criterion, threshold or test was weakened.",
+      "decision": "docs/plans/2026-11-08-P2-implementation.md"
     }
   ]
 }

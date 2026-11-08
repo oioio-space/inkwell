@@ -6,7 +6,7 @@
       "command": "mise run --skip-deps e2e:build && cd frontend && ../scripts/heavy.sh ./node_modules/.bin/playwright test files.spec.ts --output ../gates/L2/playwright-results",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 11.740492001001257,
+      "duration_seconds": 12.083902140991995,
       "log": "gates/L2/FM-OPEN-1-2-3.log"
     },
     {
@@ -14,7 +14,7 @@
       "command": "python3 scripts/check-no-file-query.py",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 0.02243644899863284,
+      "duration_seconds": 0.02063949299918022,
       "log": "gates/L2/no-file-query.log"
     },
     {
@@ -22,7 +22,7 @@
       "command": "./scripts/heavy.sh go test ./tools/archexec ./internal/sidecar ./internal/project && bash scripts/arch-exec-check.sh",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 2.9143999480002094,
+      "duration_seconds": 2.805804979012464,
       "log": "gates/L2/L1-security-followups.log"
     },
     {
@@ -36,7 +36,7 @@
       "command": "mise run gate -- L1",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 1121.1391807850014,
+      "duration_seconds": 1114.6467432100035,
       "log": "gates/L2/L0-L1.log"
     }
   ],
@@ -52,14 +52,14 @@
     }
   },
   "sha256": {
-    "docs/objectif-en-cours.md": "6bab91c6310cc8531378e1dc8684a073dfda5451f94c3a3ce61a4ebe0ddf54d0",
+    "docs/objectif-en-cours.md": "bcfc59e7766b233a41af7e91920506482f2ba763a8a88a76b69b1650d873a0e2",
     "docs/plans/2026-11-03-L2-implementation.md": "3e52973742b43a8ebaeedd52cd5e2f9fc6ab55ff1739d6c6ea12a0021c7dc7ed",
-    "gates/L0.json": "1f8a5e2650fd207d4c26a73b8f010b128170eaa65a845ccbcf36f0f8efa148c6",
-    "gates/L1.json": "3e646387736ddced74bd6afb9f7fc3567213aba6f623a7668d6e0eb996d9a668",
-    "gates/L2/FM-OPEN-1-2-3.log": "a43ced941ad450c0ffaa33a00657c8af0af39f624c0ae6cead63d184cccd812f",
+    "gates/L0.json": "fa3ded7c4f8b98cbf436825f3b0d246e7fa6bc79c33ab46ffd791ab2f6bc42a8",
+    "gates/L1.json": "de5b9fbdf6cba8bc055ba301f1bdf747e4a0c77580e8c1efa1559da68ace5216",
+    "gates/L2/FM-OPEN-1-2-3.log": "b26db0c5b254bdd84d3a773bbdde129fa54ba333f22adfe7b580499d515f793c",
     "gates/L2/L0-L1.log": "f7a1207687ef1a2447457343fe6d72f0b4fb31ded81efda72b64e1dccd5f5f1e",
     "gates/L2/L1-security-followups.log": "e390ca51fb2689b7f722f54c23545c4ef1e7561cc41753d28181f57654922128",
-    "gates/L2/base-guard.log": "47b3c02ab1c6c240b0b108e106db90d372387d76984f073eb682715a6ea23455",
+    "gates/L2/base-guard.log": "f185bec68dd9e724a4fcd856e2ac73ccd7bdec8fdffdc3e2e8aa107de8c78cbb",
     "gates/L2/no-file-query.log": "5ad7deb415e1dcb57ab3fc0e61433964a3f34f6035e4787f551681ae24a88c49",
     "gates/L2/playwright-results/.last-run.json": "91d1c43004802cd49950d78eb11c8fa7d05da8ffffe219a8b13b2f561bc00903",
     "gates/L2/playwright-results/files-FM-OPEN-1-FM-OPEN-2--8846c-n-and-names-the-active-file-chromium/files-readonly-dark.png": "f0a8b95b2b54362e6db6506a8008baf75ce7d95095bcbd362352c6191512b5a8",
@@ -77,14 +77,14 @@
   "known_failures": [],
   "base_guard": {
     "ref": "main",
-    "base": "e959ebb29540190a0766ea7ff72b1505fdaaf81d",
+    "base": "229420d5f6b0e5b4f6b7aa3817da7cf4bd2156ff",
     "source_sha256": "c306265111e4c8b0ad94a1867d797b7a20be7d814161b7b9dd6200ab7feb259c",
     "exit_code": 0,
     "status": "pass",
     "log": "gates/L2/base-guard.log"
   },
   "runner": {
-    "source": "base e959ebb29540190a0766ea7ff72b1505fdaaf81d",
+    "source": "base 229420d5f6b0e5b4f6b7aa3817da7cf4bd2156ff",
     "sha256": "99e00a0d51d35601e02b096e77ff41013fad14b082afea97fcba920cba71042e"
   },
   "guard_overrides": [
@@ -177,6 +177,11 @@
       "id": "8ebea8bdde8f2f8155068c4d1db359c684ba6a0c78c6f4f49e49457db3066663",
       "reason": "New file for L3, absent at the merge base, so the guard reports it as changed gate machinery: unit tests of type_native.py; no display, no native desktop. Adding it changes no existing test, threshold, delay or criterion command.",
       "decision": "docs/plans/2026-11-05-L3-implementation.md"
+    },
+    {
+      "id": "a6ef791eb160117c5477e1e84b2dfbfaf345e0c3244c75659e40861347000dbc",
+      "reason": "P2 gate written the same day with a command that could not run: protocol/sig and protocol/trust are in the nested protocol module (go test ./protocol/sig from the root fails) and internal/policy does not exist. The corrected command runs the same packages plus protocol/trust; no criterion, threshold or test was weakened.",
+      "decision": "docs/plans/2026-11-08-P2-implementation.md"
     }
   ],
   "measurements": [

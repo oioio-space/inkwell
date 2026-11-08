@@ -6,7 +6,7 @@
       "command": "python3 scripts/gate-selftest.py",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 7.708719456990366,
+      "duration_seconds": 7.703832988991053,
       "log": "gates/L0/harness.log"
     },
     {
@@ -14,7 +14,7 @@
       "command": "./scripts/heavy.sh --exclusive python3 scripts/perf/baseline.py",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 19.42262190800102,
+      "duration_seconds": 19.623449057995458,
       "log": "gates/L0/baseline.log",
       "exclusive": true,
       "exclusive_steps": [
@@ -23,14 +23,14 @@
           "exclusive": true,
           "slots": 2,
           "load_before": [
-            0.76,
-            0.87,
-            0.67
+            0.58,
+            2.88,
+            3.49
           ],
           "load_after": [
-            1.21,
-            0.97,
-            0.7
+            0.84,
+            2.79,
+            3.45
           ],
           "max_load": 5,
           "waited_seconds": 0,
@@ -43,7 +43,7 @@
       "command": "./scripts/heavy.sh --exclusive bash scripts/perf/bench.sh",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 193.94314829500217,
+      "duration_seconds": 190.76584861900483,
       "log": "gates/L0/hot-paths.log",
       "exclusive": true,
       "exclusive_steps": [
@@ -52,14 +52,14 @@
           "exclusive": true,
           "slots": 2,
           "load_before": [
-            1.21,
-            0.97,
-            0.7
+            0.84,
+            2.79,
+            3.45
           ],
           "load_after": [
-            1.69,
-            1.26,
-            0.87
+            1.16,
+            2.04,
+            3.03
           ],
           "max_load": 5,
           "waited_seconds": 0,
@@ -72,7 +72,7 @@
       "command": "python3 scripts/perf/archive.py",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 0.017056823999155313,
+      "duration_seconds": 0.0193064589984715,
       "log": "gates/L0/archive.log"
     },
     {
@@ -80,7 +80,7 @@
       "command": "./scripts/heavy.sh mise run lint",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 3.5729753670020727,
+      "duration_seconds": 3.4842103559931275,
       "log": "gates/L0/lint.log"
     },
     {
@@ -88,7 +88,7 @@
       "command": "mise run test",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 2.6096141589951003,
+      "duration_seconds": 2.4415138339973055,
       "log": "gates/L0/test.log"
     },
     {
@@ -96,7 +96,7 @@
       "command": "./scripts/heavy.sh --exclusive python3 scripts/perf/regression.py --self-test && ./scripts/heavy.sh --exclusive python3 scripts/perf/regression.py --bench",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 778.2698527189932,
+      "duration_seconds": 777.5950522889907,
       "log": "gates/L0/regression-guard.log",
       "exclusive": true,
       "exclusive_steps": [
@@ -105,14 +105,14 @@
           "exclusive": true,
           "slots": 2,
           "load_before": [
-            1.64,
-            1.25,
-            0.87
+            2.03,
+            2.21,
+            3.08
           ],
           "load_after": [
-            1.59,
-            1.25,
-            0.87
+            1.94,
+            2.18,
+            3.06
           ],
           "max_load": 5,
           "waited_seconds": 0,
@@ -123,14 +123,14 @@
           "exclusive": true,
           "slots": 2,
           "load_before": [
-            1.59,
-            1.25,
-            0.87
+            1.94,
+            2.18,
+            3.06
           ],
           "load_after": [
-            1.39,
-            1.73,
-            1.49
+            1.2,
+            1.47,
+            2.15
           ],
           "max_load": 5,
           "waited_seconds": 0,
@@ -196,46 +196,46 @@
     "docs/perf/baseline/2026-11-02/thresholds.json": "f08c459266013976463dc637e60aa1529e9f4b36d20084234135d7ea4380001a",
     "docs/perf/baseline/2026-11-02/type-diagnostic.json": "3190a7e367a3e2ded18ec60fdf063603a3b25a068d585a203064b3563dc05736",
     "gates/L0/archive.log": "4029e75ffc92071ac73b296cb91b2c5596b4d773d0d060c52778338088985c35",
-    "gates/L0/base-guard.log": "47b3c02ab1c6c240b0b108e106db90d372387d76984f073eb682715a6ea23455",
-    "gates/L0/baseline.log": "5e8f729e4e5724329a9fcef10ed3a0564922cd4ef2c81ca0c6f817f67dd6fb3e",
-    "gates/L0/benchstat.txt": "54faed6b8a7f53f982627eb787cbdf656979b0bc81d2905f2d8ae3a1351b9907",
-    "gates/L0/browser-attempt-0.log": "910ff8acb46a587eadc4cbe49f700923352e36b5c9a13924d6f1923c2889b0ec",
+    "gates/L0/base-guard.log": "f185bec68dd9e724a4fcd856e2ac73ccd7bdec8fdffdc3e2e8aa107de8c78cbb",
+    "gates/L0/baseline.log": "3affcbe2bc9e299391e5303d8623118ebd273d9a663605e69e95ac56ff644e10",
+    "gates/L0/benchstat.txt": "134e5158d02707aa6f3577e8e5ecb1fbf3b3fb9238a664dc8514ca2d88456a2b",
+    "gates/L0/browser-attempt-0.log": "cfc341ac582c5d2a6b5e64bfc3bc522df137acc94ec05a487cd1c213810a4651",
     "gates/L0/browser-attempt-1.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "gates/L0/browser-attempt-2.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "gates/L0/browser-attempt-3.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "gates/L0/browser.json": "bf409df2d3b2489f50a875c6dba3022052705d3b28752978008f7b65f75eba5d",
-    "gates/L0/browser.png": "e44249c25dd180f77f91b168ea7de40e7f44519f97125604cb46f13e41dcaf01",
+    "gates/L0/browser.json": "3f852ce54414887a6b01f8f36ea33c3828f89b86e7ca809e7bb38aac03244dbf",
+    "gates/L0/browser.png": "8999dd5048409827fb2a809578ec5185e5bf83511d77a0057c0380697465a5f7",
     "gates/L0/corpus-build.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
     "gates/L0/corpus.json": "eae8ab7967e1972a694cb35660b94e77ae01b62dfa9fac55809d8c52f865f834",
-    "gates/L0/exclusive.jsonl": "587ff7d0b7a4ce20ba1c67d409412d8e2496e88c1cc2bed6a4906f791e4806cb",
-    "gates/L0/go-bench.txt": "8d8d8d74bf4e115dda6219607e420a0a96a777867601b727de67085e24f86687",
-    "gates/L0/harness.log": "6ac3f312dbdfbb13c987f4c002eafe815a41e111667479238747ee16f1de670d",
+    "gates/L0/exclusive.jsonl": "62306861e08966ddfab58fc09867476383723a3b35383840a01ee51702764c6a",
+    "gates/L0/go-bench.txt": "f1d292f0102748b077aba9cee096c4ce5c86d28627e6d32a7c2aacc83fff2993",
+    "gates/L0/harness.log": "5ed009f805a92bb9d3dba4b5fbfbf9bd70bf185bffa7a2433f0e3dbd943f2212",
     "gates/L0/hot-paths.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
-    "gates/L0/lint.log": "6e05bffd818c38c3fbc2fe2695d79ed7101c7c24be8384056da87f07947f7abd",
-    "gates/L0/machine.json": "a359502789b491bb5d17fc199ff2998fb456e6ed53dc7e1bb120642958694d27",
-    "gates/L0/measurements.json": "5e8f729e4e5724329a9fcef10ed3a0564922cd4ef2c81ca0c6f817f67dd6fb3e",
-    "gates/L0/perf-ab/internal-app-base.txt": "0174e8681d2ac4d9a3f75fd246c9d3d5955d6273bbbad2d4b4c266d40df16b81",
-    "gates/L0/perf-ab/internal-app-benchstat.txt": "ce96b7f5ca652d74bc853b76902bbb3aea4e2994c40cb312d827b97986954606",
-    "gates/L0/perf-ab/internal-app-branch.txt": "a3854a996c279801da243f49cf8d7d8b1a70d28fafdd0d1b38b7df69a61daa95",
-    "gates/L0/perf-ab/internal-app.csv": "441cc177ae4fe51dc34fdc3546d010efbf5c9568b306748b95065135437e6372",
-    "gates/L0/perf-ab/internal-blob-base.txt": "1719920995c8b475fe18ece524cd5bf50f2cb0e7fc296fbe6c7d05795e436247",
-    "gates/L0/perf-ab/internal-blob-benchstat.txt": "035a918b8a431320bbfd7504bcae31d1d8e7e4641ef5c80083767716730fe0b3",
-    "gates/L0/perf-ab/internal-blob-branch.txt": "6f324d8d11ddc6fad338b4aa487d46a2519e5f4c8d27b0f38965179d76535d4b",
-    "gates/L0/perf-ab/internal-blob.csv": "bd23967a357ff576701ebf9e783dd675eb89597969b71479829726d63b30d6fc",
-    "gates/L0/perf-ab/internal-transport-frame-base.txt": "6862c7f3bf0fb6fc36ea5ae01fb8751078780f9ab37a99c8d9ad6a126887aaeb",
-    "gates/L0/perf-ab/internal-transport-frame-benchstat.txt": "98f1df2fb56c49ab6338d686e8eacb1b86b499ae7e6e264eac996bce2b118724",
-    "gates/L0/perf-ab/internal-transport-frame-branch.txt": "e3428fecea1bb0e2058baa4ccbbaa9d19572876b58508f34f84aa86bdb257a1c",
-    "gates/L0/perf-ab/internal-transport-frame.csv": "24d5793789f57fe6619529c29dadd44a9c26a602197996a380c35fdbc4a67103",
-    "gates/L0/perf-ab/internal-transport-mux-base.txt": "0dcde7e622fd1e018154edbe827c058c2dec82ff3c45f2e876a45731e6d618ff",
-    "gates/L0/perf-ab/internal-transport-mux-benchstat.txt": "9f2c0de916e74d918c3ac9949a436fbb4d40711a11fde42a270d4b03df321679",
-    "gates/L0/perf-ab/internal-transport-mux-branch.txt": "4c7100207a9abb5c5117edbe867164ec55dfae0ef87a03e286bbc617487561bd",
-    "gates/L0/perf-ab/internal-transport-mux.csv": "581547c11d3ee397f3549d7822c3adecb45e77b5ecae7d204f6ba6da665304fe",
-    "gates/L0/perf-ab/session.json": "9b658ce190b93118ea45de5c114d55140b48a6642547123db34b86c5d5588f87",
-    "gates/L0/regression-guard.log": "f60cc39df7b8c2e8815fd6543a9b1bdb551d56305f706a5f5a720057d1ee5557",
-    "gates/L0/server.log": "cee067b04e0162ac6fbca2a6067a4ba5c2566d9c23b577a8f1e1236628b91171",
-    "gates/L0/start.json": "bd0ccdb3676a3003d062f703c9f459d21de749b98f9493b86293473af6957a7f",
-    "gates/L0/test.log": "2e2ed103c70073de9e5bc578b21c1224be8230a21541ae082ed4c06ff604d7e8",
-    "gates/L0/type-diagnostic.json": "e13ac690d702134ac5160d7a47599722b7bbbc3d8843f25ea6bba8289811be03",
+    "gates/L0/lint.log": "97906061d3b38be608384b5012b5875f02cfbf555fcec91593ee3985929568c3",
+    "gates/L0/machine.json": "55213856db26ce27f0a81221eb4b7c3eca9c3c335dafc7d60790f729ddf47a39",
+    "gates/L0/measurements.json": "3affcbe2bc9e299391e5303d8623118ebd273d9a663605e69e95ac56ff644e10",
+    "gates/L0/perf-ab/internal-app-base.txt": "f2a0177b48a2dcaa1ddafea7568b787041671dbe290856b45d297a3389670e2a",
+    "gates/L0/perf-ab/internal-app-benchstat.txt": "8bafa68b818372422a8236e25a5e81c332fa44092da4ca272fec8e825c455e0c",
+    "gates/L0/perf-ab/internal-app-branch.txt": "cd83c0baa3a3baf9e4fe2c99c53e81802c13d9a67589b3875285986927d01075",
+    "gates/L0/perf-ab/internal-app.csv": "307ff027c764ba111f2fb1fdc6a41b2a587b62cb6eb09ba7a0e61cc0282b19bb",
+    "gates/L0/perf-ab/internal-blob-base.txt": "7cea170d6059b7ea759f87bf3ae208d4ef3c5fc45ba7eff617190e908ab3f18c",
+    "gates/L0/perf-ab/internal-blob-benchstat.txt": "c65d6f3da2d03d515190428f6f223fb3e92a24acae6120d76f313aa94afd47c2",
+    "gates/L0/perf-ab/internal-blob-branch.txt": "dd589e4c4d7c284f79049be21addf7a0db45c6aa0dfbc20ee792cba98081ccda",
+    "gates/L0/perf-ab/internal-blob.csv": "92139541501796ee2c2c7e298708aee7ccdd4c85cdb0b6c81168f1958f8e89a9",
+    "gates/L0/perf-ab/internal-transport-frame-base.txt": "642c21ef03950a93a30960bebbc3cb64676969aea5870bfdab11c3bcc5063aa6",
+    "gates/L0/perf-ab/internal-transport-frame-benchstat.txt": "46a83d324459e0674a297de4d12523c1f68996e338b3650ff5903637ad3b5f85",
+    "gates/L0/perf-ab/internal-transport-frame-branch.txt": "0843f989c682f24f2ba9d098152e630cca9ad175810fd03990c814b7015ea7af",
+    "gates/L0/perf-ab/internal-transport-frame.csv": "35768d5e3355c3ce72fd596dc5ba656c56b9628e9a22f4fc6f58f019e15e2d16",
+    "gates/L0/perf-ab/internal-transport-mux-base.txt": "e0fde62d9369d6c70992a1ad1378c0b131affa313f9e99602064a89838a1514b",
+    "gates/L0/perf-ab/internal-transport-mux-benchstat.txt": "67705f35cf5616c1a43d3c97b60dd964f5ceb575e3143107242b66f81698a0e1",
+    "gates/L0/perf-ab/internal-transport-mux-branch.txt": "c25d162ba2a502d3971b6593c342f7b5e69916135393d658ce7adcaa175a60d2",
+    "gates/L0/perf-ab/internal-transport-mux.csv": "24702b70f40166da0771d2235298d99a25591b63ab197f17d56c162353c25a46",
+    "gates/L0/perf-ab/session.json": "20c1f1445a2da580ba948b85aeee052edd774957cd4a7849b576701404ed8135",
+    "gates/L0/regression-guard.log": "91d900702c9557b10ef88b09569bd2aa17b3d0e4e649df86099a0e39eb1a7279",
+    "gates/L0/server.log": "7d9ca051fe1503d23d5e2b1f777f8864140de9dd954a27715fb723a9ffdd5aa9",
+    "gates/L0/start.json": "5938efd9337e8380ec66c5d73426de71d8eb88c256904d59d119f1c1e67c4f02",
+    "gates/L0/test.log": "b01465cc9bd7bcb9481af5d619b42183e355029e281bc8e9a41de4eab4192722",
+    "gates/L0/type-diagnostic.json": "8049fecf95f6d4506fc819773999ca856601674ab3fe43a124adce9827aca6a3",
     "testdata/perf/README.md": "c45e147a2f5c936a495315a6e542ee4ecf4021293d813f072b33b877907c741f",
     "testdata/perf/corpus.json": "eae8ab7967e1972a694cb35660b94e77ae01b62dfa9fac55809d8c52f865f834"
   },
@@ -269,14 +269,14 @@
   ],
   "base_guard": {
     "ref": "main",
-    "base": "e959ebb29540190a0766ea7ff72b1505fdaaf81d",
+    "base": "229420d5f6b0e5b4f6b7aa3817da7cf4bd2156ff",
     "source_sha256": "c306265111e4c8b0ad94a1867d797b7a20be7d814161b7b9dd6200ab7feb259c",
     "exit_code": 0,
     "status": "pass",
     "log": "gates/L0/base-guard.log"
   },
   "runner": {
-    "source": "base e959ebb29540190a0766ea7ff72b1505fdaaf81d",
+    "source": "base 229420d5f6b0e5b4f6b7aa3817da7cf4bd2156ff",
     "sha256": "99e00a0d51d35601e02b096e77ff41013fad14b082afea97fcba920cba71042e"
   },
   "guard_overrides": [
@@ -369,6 +369,11 @@
       "id": "8ebea8bdde8f2f8155068c4d1db359c684ba6a0c78c6f4f49e49457db3066663",
       "reason": "New file for L3, absent at the merge base, so the guard reports it as changed gate machinery: unit tests of type_native.py; no display, no native desktop. Adding it changes no existing test, threshold, delay or criterion command.",
       "decision": "docs/plans/2026-11-05-L3-implementation.md"
+    },
+    {
+      "id": "a6ef791eb160117c5477e1e84b2dfbfaf345e0c3244c75659e40861347000dbc",
+      "reason": "P2 gate written the same day with a command that could not run: protocol/sig and protocol/trust are in the nested protocol module (go test ./protocol/sig from the root fails) and internal/policy does not exist. The corrected command runs the same packages plus protocol/trust; no criterion, threshold or test was weakened.",
+      "decision": "docs/plans/2026-11-08-P2-implementation.md"
     }
   ],
   "measurements": [
@@ -427,11 +432,11 @@
         "bound_method": "Censored entries <16ms bounded at 16ms; rounded durations +4ms. Same-bound proxy comparison only.",
         "diagnostic": {
           "rounded_p95_ms": null,
-          "censored_samples": 17,
+          "censored_samples": 15,
           "conditions": "warm browser; concurrent Go jobs; no noise subtraction; not a native acceptance result",
           "samples": 30,
           "slow_layout_control_detected": true,
-          "raw_results": "/home/mathieu/GolandProjects/inkwell/.claude/worktrees/l3/gates/L0/type-diagnostic.json",
+          "raw_results": "/home/mathieu/GolandProjects/inkwell/.claude/worktrees/p2/gates/L0/type-diagnostic.json",
           "engine": "Chromium (not native WebKit)"
         }
       },
@@ -441,42 +446,42 @@
         "scope": "Today's app cold process, server build to usable editor; prelaunched Chromium and warm OS caches, not native window timing.",
         "measurement": {
           "samples_ms": [
-            294.3312,
-            289.628774,
-            282.6086750000002,
-            282.78784300000007,
-            285.2079859999999,
-            284.49379299999964,
-            286.40330600000016,
-            284.8602060000003,
-            280.51875199999995,
-            283.09112900000036,
-            283.2501599999996,
-            286.7951890000004,
-            276.8014299999995,
-            290.46910800000023,
-            283.9117189999997,
-            282.2712510000001,
-            295.80354199999965,
-            280.89439799999946,
-            284.7406810000002,
-            274.9368220000015,
-            287.52658599999995,
-            280.6188110000003,
-            281.84907699999894,
-            282.711976999999,
-            281.62600399999974,
-            284.1765200000009,
-            279.7601249999989,
-            285.5347409999995,
-            314.43009299999903,
-            290.59891400000015
+            302.610888,
+            281.78267199999993,
+            280.1132809999999,
+            281.041565,
+            281.65281600000003,
+            284.15304300000025,
+            275.4918210000001,
+            279.83775799999967,
+            286.876389,
+            280.02089399999977,
+            284.56303899999966,
+            282.36231899999984,
+            280.00659499999983,
+            282.1399760000004,
+            281.6397200000001,
+            278.2949600000002,
+            281.7336329999998,
+            277.96392900000046,
+            282.52817799999957,
+            308.25013599999875,
+            285.0295509999996,
+            278.29597099999955,
+            276.18539299999975,
+            278.85258199999953,
+            279.3877160000011,
+            277.6863379999995,
+            285.5218910000003,
+            278.34324000000015,
+            281.4389659999997,
+            285.4783819999993
           ],
-          "p95_ms": 295.80354199999965,
+          "p95_ms": 302.610888,
           "plugins": 0,
           "scope": "Current app server build: cold process to usable Chromium editor; browser prelaunched; warm OS caches; not native WebKitGTK window timing"
         },
-        "p95_ms": 295.80354199999965,
+        "p95_ms": 302.610888,
         "limit_p95_ms": 360.9733556,
         "baseline_p95_ms": 328.15759599999996
       },

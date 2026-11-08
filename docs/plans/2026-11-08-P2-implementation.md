@@ -38,3 +38,10 @@ venu d'un pair est vérifié. Clôt **N-1**.
 
 `P-VEC-2-go`, `P-VEC-2-ts`, `N-1-callers`, `P-FUZZ-sig` (120 s ici ; 1 h à l'étape 9), `P-ARCH`,
 régression `L3`. Revue indépendante (Codex ou Opus) avant fusion.
+
+## Correction de la porte (2026-11-08)
+
+`N-1-callers` ne pouvait pas s'exécuter tel qu'écrit : `protocol/sig` et `protocol/trust` sont dans le
+module imbriqué `protocol`, et `internal/policy` n'existe pas. La commande corrigée teste les mêmes
+paquets, plus `protocol/trust`. Aucun critère ni seuil n'est affaibli (dérogation dans
+`gates/guard-overrides.json`).
