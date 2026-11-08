@@ -1,10 +1,11 @@
 import { isValidAutomergeUrl, type Message, type PeerId } from "@automerge/automerge-repo";
-import { decode, encode } from "cbor-x";
+import { type CBORValue, decodeCBOR, encodeCBOR, InvalidCBOR } from "@inkwell/protocol";
 import { MARKER, parseWire } from "../present/wire";
 
 export type Handshake = {
   type: "arrive" | "welcome";
   senderId: PeerId;
+  targetId: PeerId;
   peerMetadata: { isEphemeral: true };
   projectUrl?: import("@automerge/automerge-repo").AutomergeUrl;
 };
@@ -67,7 +68,7 @@ function presenceValue(k: string, v: unknown): boolean {
  * invalid keys (one bad field must not hide the rest of a person's state), or undefined.
  */
 function admitEphemeral(data: Uint8Array): Uint8Array | undefined {
-  const envelope: unknown = decode(data);
+  const envelope: unknown = decodeCBOR(data);
   if (!plain(envelope)) return;
   if (Object.hasOwn(envelope, MARKER)) {
     const message = own(envelope, MARKER);
@@ -93,7 +94,14 @@ function admitEphemeral(data: Uint8Array): Uint8Array | undefined {
       const kept = Object.entries(s).filter(([k, v]) => presenceValue(k, v));
       if (kept.length === Object.keys(s).length) return data;
       // Only the four known keys survive the filter, so no prototype key is rebuilt.
-      return encode({ ...envelope, __presence: { ...p, state: Object.fromEntries(kept) } });
+      try {
+        return encodeCBOR({
+          ...envelope,
+          __presence: { ...p, state: Object.fromEntries(kept) },
+        } as CBORValue);
+      } catch {
+        return;
+      }
     }
     default:
       return;
@@ -102,11 +110,19 @@ function admitEphemeral(data: Uint8Array): Uint8Array | undefined {
 /** Decode untrusted bytes without retaining extra fields or peer metadata. */
 export function parsePeerMessage(payload: Uint8Array, c: Context): Handshake | Message | undefined {
   try {
-    const v: unknown = decode(payload);
+    let v: unknown;
+    try {
+      v = decodeCBOR(payload);
+    } catch (e) {
+      if (e instanceof InvalidCBOR) return;
+      throw e;
+    }
     if (!plain(v)) return;
     const senderId = own(v, "senderId");
     const type = own(v, "type");
     if (!id(senderId) || senderId !== c.from) return;
+    const targetId = own(v, "targetId");
+    if (!id(targetId) || targetId !== c.me) return;
     if (type === "arrive" || type === "welcome") {
       if (payload.length > 1024) return;
       const metadata = own(v, "peerMetadata");
@@ -122,15 +138,14 @@ export function parsePeerMessage(payload: Uint8Array, c: Context): Handshake | M
       return {
         type,
         senderId: senderId as PeerId,
+        targetId: targetId as PeerId,
         peerMetadata: { isEphemeral: true },
         ...(url ? { projectUrl: url as NonNullable<Handshake["projectUrl"]> } : {}),
       };
     }
     if (!["sync", "request", "ephemeral", "doc-unavailable"].includes(type as string)) return;
-    const targetId = own(v, "targetId"),
-      documentId = own(v, "documentId");
-    if (!c.announced || !id(targetId) || targetId !== c.me || !id(documentId) || !c.has(documentId))
-      return;
+    const documentId = own(v, "documentId");
+    if (!c.announced || !id(documentId) || !c.has(documentId)) return;
     const base = { type, senderId, targetId, documentId };
     if (type === "doc-unavailable") return base as Message;
     const data = own(v, "data");

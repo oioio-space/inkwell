@@ -20,6 +20,8 @@ func Strict(v Vector) error {
 		check = c.peer
 	case "signature", "signature+key", "":
 		check = c.signature
+	case "repo_message":
+		check = c.repo
 	default:
 		return Reference(v)
 	}

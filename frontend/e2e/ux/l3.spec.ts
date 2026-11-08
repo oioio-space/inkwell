@@ -3,7 +3,7 @@ import { expect, test } from "../fixtures";
 import { editor, open } from "../helpers";
 import { ALICE_URL } from "../ports";
 
-const SHOT = "../gates/L3-setup/ux";
+const _SHOT = "../gates/L3-setup/ux";
 
 /** The person can see and click the editor: what sits at its centre is the editor itself. */
 const editorReachable = (p: Page) =>

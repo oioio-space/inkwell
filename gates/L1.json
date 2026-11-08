@@ -6,7 +6,7 @@
       "command": "mise run arch",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 2.2560834259929834,
+      "duration_seconds": 2.2644126230006805,
       "log": "gates/L1/architecture.log"
     },
     {
@@ -14,7 +14,7 @@
       "command": "./scripts/heavy.sh go test ./tools/archexec && ./scripts/arch-exec-check.sh && ./scripts/heavy.sh go test -race ./internal/sidecar",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 1.7295480140019208,
+      "duration_seconds": 1.7175152630079538,
       "log": "gates/L1/syscall-confinement.log"
     },
     {
@@ -22,7 +22,7 @@
       "command": "./scripts/heavy.sh bash scripts/sidecar-no-tools.sh",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 108.23602813300386,
+      "duration_seconds": 109.4536000060034,
       "log": "gates/L1/without-tools.log"
     },
     {
@@ -30,7 +30,7 @@
       "command": "python3 scripts/gate-guard.py --self-test && python3 scripts/gate.py --base-guard",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 0.305581559005077,
+      "duration_seconds": 0.3913785650074715,
       "log": "gates/L1/anti-weakening.log"
     },
     {
@@ -38,7 +38,7 @@
       "command": "mise run gate -- L0",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 1001.8801990799984,
+      "duration_seconds": 1002.0085669010004,
       "log": "gates/L1/L0.log"
     },
     {
@@ -68,15 +68,15 @@
     }
   },
   "sha256": {
-    "docs/objectif-en-cours.md": "bcfc59e7766b233a41af7e91920506482f2ba763a8a88a76b69b1650d873a0e2",
+    "docs/objectif-en-cours.md": "4d4e9f7071b692a9f2799698698f4c33bcc9f90ce59cc1fb22729e2444b1e567",
     "docs/plans/2026-11-02-L1-implementation.md": "6f21f8178ed76cddef99512c8d6139c268d3258dbb8ab2bbe34971005f2d845b",
-    "gates/L0.json": "fa3ded7c4f8b98cbf436825f3b0d246e7fa6bc79c33ab46ffd791ab2f6bc42a8",
+    "gates/L0.json": "33023b537daa386eafc19bedd03228d43f912b939c2a229028def79ec4d11d7e",
     "gates/L1/L0.log": "2b0da7f547f69b8e8b603a745e19d4e6bc6be6df9920cb8cc7c67bdb27d738b7",
-    "gates/L1/anti-weakening.log": "94f41eb93133dae65811198ff4afeed9189c3b8006fbd16b750bc5e1a323a358",
+    "gates/L1/anti-weakening.log": "6a0f4c423a00ef40a28efe4611a1f8558dacd1b49d8abd06bfa43fe4ddf54329",
     "gates/L1/architecture.log": "d5279db7270e45e6e09608c189240a60867492858fba89f802a85f3029c5e59b",
-    "gates/L1/base-guard.log": "f185bec68dd9e724a4fcd856e2ac73ccd7bdec8fdffdc3e2e8aa107de8c78cbb",
+    "gates/L1/base-guard.log": "4d6bf6524e2d6c13f1fc68b65c159f7e95fa78b4a6da2ee1f6f157a0011ee05d",
     "gates/L1/syscall-confinement.log": "4a89c9478a91d8015f2d807170b4fb43ee7f0657e3cf9d4be457eb21d61c22c2",
-    "gates/L1/without-tools.log": "ec0a249a2126abe258cfa98af73ae4c51767923af8459710cdac520c4c60262a",
+    "gates/L1/without-tools.log": "9204f61d867928832ad10c6fcd9df4e463aa111d9959781b239430300fb9275c",
     "gates/guard-overrides.json": "55c6fe72804bcf3691710e0a3e033ab02ac6ce04479b64bf1cc8b59270d0bf6f"
   },
   "status": "pass",
@@ -103,14 +103,14 @@
   ],
   "base_guard": {
     "ref": "main",
-    "base": "229420d5f6b0e5b4f6b7aa3817da7cf4bd2156ff",
+    "base": "5765331c780b3cd5727e528ff8cdc2d8301157b8",
     "source_sha256": "c306265111e4c8b0ad94a1867d797b7a20be7d814161b7b9dd6200ab7feb259c",
     "exit_code": 0,
     "status": "pass",
     "log": "gates/L1/base-guard.log"
   },
   "runner": {
-    "source": "base 229420d5f6b0e5b4f6b7aa3817da7cf4bd2156ff",
+    "source": "base 5765331c780b3cd5727e528ff8cdc2d8301157b8",
     "sha256": "99e00a0d51d35601e02b096e77ff41013fad14b082afea97fcba920cba71042e"
   },
   "guard_overrides": [

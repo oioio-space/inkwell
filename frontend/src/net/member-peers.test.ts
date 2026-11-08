@@ -1,6 +1,6 @@
 // @vitest-environment node
 import type { PeerId } from "@automerge/automerge-repo";
-import { encode } from "cbor-x";
+import { encodeCBOR } from "@inkwell/protocol";
 import { expect, it, vi } from "vitest";
 import { Admission } from "./admission";
 import { encodeEnvelope, encodeRoles, Kind } from "./envelope";
@@ -58,17 +58,30 @@ it.each(["removed", "suspended", "self-suspended", "down"])(
         ]),
       );
     for (let i = 0; i < 2000; i++)
-      frame(Kind.Message, `s${i}`, encode({ type: "arrive", senderId: `s${i}` }));
+      frame(
+        Kind.Message,
+        `s${i}`,
+        encodeCBOR({ type: "arrive", senderId: `s${i}`, targetId: "me" }),
+      );
     expect(up).not.toHaveBeenCalled();
     roles();
     const arrive = () =>
-      frame(Kind.Message, "member", encode({ type: "arrive", senderId: "member" }));
+      frame(
+        Kind.Message,
+        "member",
+        encodeCBOR({ type: "arrive", senderId: "member", targetId: "me" }),
+      );
     arrive();
     expect(up).toHaveBeenCalledTimes(1);
     frame(
       Kind.Message,
       "member",
-      encode({ type: "doc-unavailable", senderId: "member", targetId: "me", documentId: "doc" }),
+      encodeCBOR({
+        type: "doc-unavailable",
+        senderId: "member",
+        targetId: "me",
+        documentId: "doc",
+      }),
     );
     for (let i = 0; i < 4; i++) arrive(); // one deferred handshake
     down.mockClear();

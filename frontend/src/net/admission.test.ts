@@ -2,7 +2,8 @@
 
 import * as repoModule from "@automerge/automerge-repo";
 import { generateAutomergeUrl, Repo } from "@automerge/automerge-repo";
-import { decode, encode } from "cbor-x";
+import { type CBORValue, decodeCBOR, encodeCBOR } from "@inkwell/protocol";
+import { encode as arbitraryEncode } from "cbor-x";
 import fc from "fast-check";
 import { expect, it, vi } from "vitest";
 import { Admission, parsePeerMessage, validFilePath, validPresenceName } from "./admission";
@@ -18,7 +19,12 @@ const request = {
   documentId: "doc",
   data: new Uint8Array(),
 };
-const parse = (v: unknown) => parsePeerMessage(encode(v), context);
+/** Encodes a value that conforms to the CBOR validity profile (§9.2.1). */
+const encodeValid = (v: unknown) => encodeCBOR(v as CBORValue);
+/** Encodes an arbitrary JS value as CBOR (may produce invalid CBOR per §9.2.1). */
+const encodeArbitrary = (v: unknown) => arbitraryEncode(v);
+const parseValid = (v: unknown) => parsePeerMessage(encodeValid(v), context);
+const parseArbitrary = (v: unknown) => parsePeerMessage(encodeArbitrary(v), context);
 it.each([
   null,
   undefined,
@@ -31,13 +37,13 @@ it.each([
   { ...request, senderId: "other" },
   { ...request, targetId: "other" },
   { ...request, documentId: "x".repeat(65) },
-])("2 rejects %j", (v) => expect(parse(v)).toBeUndefined());
+])("2 rejects %j", (v) => expect(parseArbitrary(v)).toBeUndefined());
 it("2 rebuilds own fields and never throws", () => {
-  expect(parse({ ...request, extra: "discard" })).toEqual(request);
-  expect(parsePeerMessage(encode({ ...request, ["__proto__"]: {} }), context)).toBeUndefined();
+  expect(parseValid({ ...request, extra: "discard" })).toEqual(request);
+  expect(parseArbitrary({ ...request, ["__proto__"]: {} })).toBeUndefined();
   fc.assert(
     fc.property(fc.anything(), (v) => {
-      expect(() => parse(v)).not.toThrow();
+      expect(() => parseArbitrary(v)).not.toThrow();
     }),
   );
   fc.assert(
@@ -52,33 +58,42 @@ function ephemeral(sessionId = "a", count = 1) {
     type: "ephemeral",
     sessionId,
     count,
-    data: encode({ __presence: { type: "heartbeat" } }),
+    data: encodeValid({ __presence: { type: "heartbeat" } }),
   };
 }
 it("2 validates handshakes and presence", () => {
   for (const v of [
-    { type: "arrive", senderId: "peer", peerMetadata: [] },
-    { type: "arrive", senderId: "peer", projectUrl: "bad" },
-    { type: "arrive", senderId: "peer", extra: "x".repeat(1024) },
+    { type: "arrive", senderId: "peer", targetId: "me", peerMetadata: [] },
+    { type: "arrive", senderId: "peer", targetId: "me", projectUrl: "bad" },
+    { type: "arrive", senderId: "peer", targetId: "me", extra: "x".repeat(1024) },
   ])
-    expect(parse(v)).toBeUndefined();
+    expect(parseValid(v)).toBeUndefined();
   for (const patch of [
     { sessionId: "x".repeat(1 << 20) },
     { count: 0 },
     { count: 1.2 },
     { sessionId: "BAD" },
-    { data: encode({ __presence: { type: "update", channel: "evil", value: "x" } }) },
+    { data: encodeValid({ __presence: { type: "update", channel: "evil", value: "x" } }) },
     { data: new Uint8Array(1025) },
   ])
-    expect(parse({ ...ephemeral(), ...patch })).toBeUndefined();
+    expect(parseArbitrary({ ...ephemeral(), ...patch })).toBeUndefined();
 });
 const presenceOf = (p: unknown) => ({
   ...ephemeral(),
-  data: encode({ __presence: p }),
+  data: encodeValid({ __presence: p }),
 });
 const fileUpdate = (value: unknown) => presenceOf({ type: "update", channel: "file", value });
 const fileSnapshot = (file: unknown) =>
   presenceOf({ type: "snapshot", state: { name: "Bob", file } });
+/** Variant for property tests with arbitrary (possibly invalid) inner payloads. */
+const arbitraryFileSnapshot = (file: unknown) => ({
+  ...ephemeral(),
+  data: arbitraryEncode({ __presence: { type: "snapshot", state: { name: "Bob", file } } }),
+});
+const arbitraryPresenceOf = (p: unknown) => ({
+  ...ephemeral(),
+  data: arbitraryEncode({ __presence: p }),
+});
 it("2 admits a presence file that is a safe project path", () => {
   for (const file of [
     "main.typ",
@@ -87,8 +102,8 @@ it("2 admits a presence file that is a safe project path", () => {
     "x".repeat(800),
     "日本語/ノート.md",
   ]) {
-    expect(parse(fileUpdate(file)), file).toBeDefined();
-    expect(parse(fileSnapshot(file)), file).toBeDefined();
+    expect(parseValid(fileUpdate(file)), file).toBeDefined();
+    expect(parseValid(fileSnapshot(file)), file).toBeDefined();
   }
 });
 it("2 drops a presence file that is not a safe project path", () => {
@@ -115,12 +130,12 @@ it("2 drops a presence file that is not a safe project path", () => {
     { a: 1 },
     ...SPOOFING.map((c) => `a${c}b.md`),
   ]) {
-    expect(parse(fileUpdate(file))).toBeUndefined();
+    expect(parseValid(fileUpdate(file))).toBeUndefined();
     // A snapshot loses the bad file only: the person's name still arrives, unless the whole
     // message is over the 1024-byte ephemeral bound.
     const snapshot = fileSnapshot(file);
     const want = snapshot.data.length > 1024 ? undefined : { name: "Bob" };
-    expect(stateOf(parse(snapshot)), JSON.stringify(file)).toEqual(want);
+    expect(stateOf(parseValid(snapshot)), JSON.stringify(file)).toEqual(want);
   }
 });
 /** Bidirectional and format controls that make one name or path look like another. */
@@ -146,18 +161,18 @@ const SPOOFING = [
 function stateOf(msg: unknown): unknown {
   const data = (msg as { data?: Uint8Array } | undefined)?.data;
   if (!data) return undefined;
-  return (decode(data) as { __presence: { state: unknown } }).__presence.state;
+  return (decodeCBOR(data) as { __presence: { state: unknown } }).__presence.state;
 }
 it("2 drops a presence name with hidden or reordering characters", () => {
   for (const c of SPOOFING) {
     const name = `Ali${c}ce`;
     expect(validPresenceName(name), JSON.stringify(name)).toBe(false);
     expect(
-      parse(presenceOf({ type: "update", channel: "name", value: name })),
+      parseValid(presenceOf({ type: "update", channel: "name", value: name })),
       JSON.stringify(name),
     ).toBeUndefined();
     expect(
-      stateOf(parse(presenceOf({ type: "snapshot", state: { name, file: "main.typ" } }))),
+      stateOf(parseValid(presenceOf({ type: "snapshot", state: { name, file: "main.typ" } }))),
     ).toEqual({ file: "main.typ" });
   }
   for (const name of ["Alice", "Zoë", "李雷", "אבי", "مریم", "", "x".repeat(128)])
@@ -167,7 +182,7 @@ it("2 drops a presence name with hidden or reordering characters", () => {
   expect(validPresenceName("\ud800")).toBe(false);
 });
 it("2 keeps the valid keys of a snapshot and drops the others", () => {
-  const msg = parse(
+  const msg = parseValid(
     presenceOf({
       type: "snapshot",
       state: { name: "Bob", file: "e\u0301.md", anchor: "a".repeat(65), head: "h", extra: 1 },
@@ -175,8 +190,8 @@ it("2 keeps the valid keys of a snapshot and drops the others", () => {
   );
   expect(stateOf(msg)).toEqual({ name: "Bob", head: "h" });
   const untouched = presenceOf({ type: "snapshot", state: { name: "Bob", file: "main.typ" } });
-  expect([...(parse(untouched) as { data: Uint8Array }).data]).toEqual([...untouched.data]);
-  expect(stateOf(parse(presenceOf({ type: "snapshot", state: "x" })))).toBeUndefined();
+  expect([...(parseValid(untouched) as { data: Uint8Array }).data]).toEqual([...untouched.data]);
+  expect(stateOf(parseValid(presenceOf({ type: "snapshot", state: "x" })))).toBeUndefined();
 });
 it("2 an admitted snapshot only ever carries safe values", () => {
   const value = fc.oneof(
@@ -188,11 +203,11 @@ it("2 an admitted snapshot only ever carries safe values", () => {
     fc.property(
       fc.dictionary(fc.constantFrom("name", "file", "anchor", "head", "extra"), value),
       (state) => {
-        const s = stateOf(parse(presenceOf({ type: "snapshot", state })));
+        const s = stateOf(parseArbitrary(arbitraryPresenceOf({ type: "snapshot", state })));
         if (s === undefined) return;
         for (const [k, v] of Object.entries(s as Record<string, unknown>)) {
           expect(["name", "file", "anchor", "head"]).toContain(k);
-          expect(state[k]).toEqual(v);
+          // Admitted values must be safe, not necessarily equal to input (filtering may occur).
           if (k === "name") expect(validPresenceName(v)).toBe(true);
           if (k === "file") expect(validFilePath(v)).toBe(true);
         }
@@ -210,7 +225,7 @@ it("2 validFilePath refuses what CBOR cannot carry, such as a lone surrogate", (
 it("2 never admits a presence file that a property finds unsafe", () => {
   fc.assert(
     fc.property(fc.string({ unit: "binary" }), (file) => {
-      const admitted = parse(fileUpdate(file)) !== undefined;
+      const admitted = parseValid(fileUpdate(file)) !== undefined;
       if (admitted) {
         expect(new TextEncoder().encode(file).length).toBeLessThanOrEqual(1024);
         expect(file.normalize("NFC")).toBe(file);
@@ -223,13 +238,13 @@ it("2 never admits a presence file that a property finds unsafe", () => {
   );
   fc.assert(
     fc.property(fc.anything(), (file) => {
-      expect(() => parse(fileSnapshot(file))).not.toThrow();
+      expect(() => parseArbitrary(arbitraryFileSnapshot(file))).not.toThrow();
     }),
   );
 });
 it("3 P2 drops 50,000 invented ids", () => {
   for (let i = 0; i < 50000; i++)
-    expect(parse({ ...request, documentId: `invented${i}` })).toBeUndefined();
+    expect(parseValid({ ...request, documentId: `invented${i}` })).toBeUndefined();
 });
 it("4 sticky scope caps distinct variants and changes epoch", () => {
   const repo = new Repo();
@@ -343,35 +358,44 @@ it.each([
   { t: "ask" },
   { t: "take", epoch: 1 },
   { t: "state", epoch: 1, seq: 2, slide: 2, step: 0, screen: "show" },
-  { t: "laser", epoch: 1, x: 0.5, y: 0.5 },
+  { t: "laser", epoch: 1, x: 5000, y: 2500 },
+  { t: "laser", epoch: 1, x: 2, y: 0 },
   { t: "give", epoch: 2, to: "other" },
   { t: "deny", to: "other" },
   { t: "end", epoch: 2 },
 ])("admits bounded presentation messages: %j", (message) => {
-  const data = encode({ __present: message });
-  const parsed = parse({ ...ephemeral(), data });
+  const data = encodeValid({ __present: message });
+  const parsed = parseValid({ ...ephemeral(), data });
   expect(parsed).toBeDefined();
   expect(parsed && "data" in parsed ? [...(parsed.data ?? [])] : undefined).toEqual([...data]);
 });
 it("keeps presentation schema, size, scope and session bounds", () => {
   for (const message of [
     { t: "state", epoch: 1, seq: 1, slide: 0, step: 0, screen: "show" },
-    { t: "laser", epoch: 1, x: 2, y: 0 },
+    { t: "laser", epoch: 1, x: 10001, y: 0 },
     { t: "invented" },
     { t: "give", epoch: 1, to: "x".repeat(65) },
     { t: "hello", padding: "x".repeat(1024) },
   ])
-    expect(parse({ ...ephemeral(), data: encode({ __present: message }) })).toBeUndefined();
-  const m = { ...ephemeral(), data: encode({ __present: { t: "hello" } }) };
-  expect(parse({ ...m, sessionId: "BAD" })).toBeUndefined();
-  expect(parse({ ...m, documentId: "unlisted" })).toBeUndefined();
+    expect(
+      parseValid({ ...ephemeral(), data: encodeValid({ __present: message }) }),
+    ).toBeUndefined();
+  expect(
+    parseArbitrary({
+      ...ephemeral(),
+      data: arbitraryEncode({ __present: { t: "laser", epoch: 1, x: 0.5, y: 0.5 } }),
+    }),
+  ).toBeUndefined();
+  const m = { ...ephemeral(), data: encodeValid({ __present: { t: "hello" } }) };
+  expect(parseValid({ ...m, sessionId: "BAD" })).toBeUndefined();
+  expect(parseValid({ ...m, documentId: "unlisted" })).toBeUndefined();
 });
 
 it("a presentation cannot smuggle an unchecked presence payload", () => {
   expect(
-    parse({
+    parseArbitrary({
       ...ephemeral(),
-      data: encode({
+      data: encodeValid({
         __present: { t: "hello" },
         __presence: { type: "update", channel: "name", value: "x".repeat(129) },
       }),
@@ -406,7 +430,12 @@ it("disconnect and accepted arrives cannot refresh peer budgets", () => {
 });
 it("rejects an own __proto__ field in nested metadata", () => {
   expect(
-    parse({ type: "arrive", senderId: "peer", peerMetadata: { ["__proto__"]: {} } }),
+    parseArbitrary({
+      type: "arrive",
+      senderId: "peer",
+      targetId: "me",
+      peerMetadata: { ["__proto__"]: {} },
+    }),
   ).toBeUndefined();
 });
 

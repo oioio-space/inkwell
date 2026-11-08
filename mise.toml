@@ -189,6 +189,10 @@ run = "./scripts/rtkx.sh grype sbom:sbom.cdx.json --fail-on high"
 description = "Dependency rules: pure protocol core; libp2p only in transport/p2p and protocol/libp2p; no private codecs, Go automerge or sidecar network code"
 run = "./scripts/arch-check.sh"
 
+[tasks.tla]
+description = "Model-check the protocol models (TLC 1.8.0 pinned by SHA-256: RepoGen, ConnCredit, every README mutant)"
+run = "./scripts/tla-check.sh"
+
 [tasks.deadcode]
 description = "Audit unreachable exported functions (x/tools v0.52.0 pinned in go.mod)"
 depends = ["sidecar:fetch"]

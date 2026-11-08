@@ -7,6 +7,7 @@ import { bytesToNumberLE, concatBytes } from "@noble/curves/utils.js";
 import { sha512 } from "@noble/hashes/sha2.js";
 import type { Vector } from "./src/conformance";
 import { decodeEnvelope, encodeEnvelope } from "./src/envelope";
+import { decodeRepoMessage, type RepoContext, type RepoMessage } from "./src/repo";
 
 const hex = (s = "") => Buffer.from(s, "hex");
 const hash = (b: Uint8Array) => createHash("sha256").update(b).digest("hex");
@@ -300,9 +301,59 @@ function fold(inputs: string[], id: Buffer) {
   }
   throw new Error("fold did not stabilize");
 }
+function repoFields(m: RepoMessage): Record<string, unknown> {
+  const got: Record<string, unknown> = {
+    type: m.type,
+    senderId: m.senderId,
+    targetId: m.targetId,
+  };
+  if (m.projectUrl !== undefined) got.projectUrl = m.projectUrl;
+  if (m.documentId !== undefined) got.documentId = m.documentId;
+  if (m.data !== undefined) got.data_len = m.data.length;
+  if (m.have !== undefined) got.have = m.have;
+  if (m.max !== undefined) got.max = m.max;
+  if (m.changes !== undefined) got.changes = m.changes;
+  if (m.last !== undefined) got.last = m.last;
+  if (m.sessionId !== undefined) got.sessionId = m.sessionId;
+  if (m.count !== undefined) got.count = m.count;
+  return got;
+}
+
+function repoReference(v: Vector, b: Buffer) {
+  const ctx = v.context as RepoContext;
+  if (v.verdict === "ignore") {
+    const r = decodeRepoMessage(b, ctx);
+    assert(r.kind === "ignored", "expected ignore");
+    return;
+  }
+  if (v.verdict === "accept") {
+    const r = decodeRepoMessage(b, ctx);
+    assert(r.kind === "message", "expected message");
+    const got = repoFields(r.message);
+    for (const [key, want] of Object.entries(v.expect ?? {})) {
+      assert(
+        JSON.stringify(got[key]) === JSON.stringify(want),
+        `expect ${key}: got ${JSON.stringify(got[key])}`,
+      );
+    }
+    return;
+  }
+  let rejected = false;
+  try {
+    decodeRepoMessage(b, ctx);
+  } catch {
+    rejected = true;
+  }
+  assert(rejected, "expected rejection");
+}
+
 export function reference(v: Vector, corpus: Vector[]) {
   const b = hex(v.input_hex),
     e = v.expect ?? {};
+  if (v.decoder === "repo_message") {
+    repoReference(v, b);
+    return;
+  }
   const genesis = corpus.find((v) => v.id === "op-genesis");
   assert(genesis, "missing genesis fixture");
   const id = hex(hash(hex(genesis.input_hex)));

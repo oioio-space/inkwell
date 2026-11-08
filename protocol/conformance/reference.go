@@ -8,11 +8,13 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"reflect"
 	"slices"
 
 	"github.com/oioio-space/inkwell/protocol/blob"
 	"github.com/oioio-space/inkwell/protocol/bridge"
 	"github.com/oioio-space/inkwell/protocol/invite"
+	"github.com/oioio-space/inkwell/protocol/repo"
 	"github.com/oioio-space/inkwell/protocol/sig"
 	"github.com/oioio-space/inkwell/protocol/trust"
 )
@@ -146,6 +148,7 @@ func (c *referenceCase) run() error {
 		"attestation+verify": c.attestation,
 		"lobby_request":      c.request,
 		"lobby_reply":        c.reply,
+		"repo_message":       c.repo,
 		"ticket_text":        c.ticket,
 		"public_key":         c.key,
 		"signature":          c.signature,
@@ -240,6 +243,93 @@ func (c *referenceCase) bridge() error {
 	e, c.err = bridge.Decode(c.input)
 	if c.err == nil {
 		c.encoded, c.err = bridge.Encode(e)
+	}
+	return nil
+}
+
+func (c *referenceCase) repo() error {
+	var ctx repo.Context
+	if err := c.vector.Decode("context", &ctx); err != nil {
+		return err
+	}
+	result, err := repo.Decode(c.input, repo.Context{From: ctx.From, Me: ctx.Me, Admitted: ctx.Admitted})
+	switch c.vector.Verdict {
+	case "accept":
+		if err != nil {
+			return err
+		}
+		if result.Ignored {
+			return errors.New("unknown type ignored")
+		}
+		if err := c.repoExpect(result.Message); err != nil {
+			return err
+		}
+	case "reject":
+		if err == nil {
+			return errors.New("decoder accepted a rejected message")
+		}
+	case "ignore":
+		if err != nil {
+			return fmt.Errorf("expected ignore: %w", err)
+		}
+		if !result.Ignored {
+			return errors.New("expected an ignored message type")
+		}
+	default:
+		return fmt.Errorf("unknown verdict %q", c.vector.Verdict)
+	}
+	c.verdictChecked = true
+	return nil
+}
+
+func (c *referenceCase) repoExpect(m repo.Message) error {
+	actual := map[string]any{"type": m.Type, "senderId": m.SenderID, "targetId": m.TargetID}
+	switch m.Type {
+	case "arrive", "welcome":
+		if m.ProjectURL != "" {
+			actual["projectUrl"] = m.ProjectURL
+		}
+	case "sync", "request", "ephemeral":
+		actual["documentId"] = m.DocumentID
+		actual["data_len"] = len(m.Data)
+	case "doc-unavailable":
+		actual["documentId"] = m.DocumentID
+	case "history-request":
+		have := make([]string, len(m.Have))
+		for i, h := range m.Have {
+			have[i] = hex.EncodeToString(h)
+		}
+		actual["documentId"] = m.DocumentID
+		actual["have"] = have
+		actual["max"] = m.Max
+	case "history-page":
+		actual["documentId"] = m.DocumentID
+		actual["changes"] = m.Changes
+		actual["last"] = m.Last
+	}
+	if m.Type == "ephemeral" {
+		actual["sessionId"] = m.SessionID
+		actual["count"] = m.Count
+	}
+	encoded, err := json.Marshal(actual)
+	if err != nil {
+		return err
+	}
+	var got map[string]any
+	if err := json.Unmarshal(encoded, &got); err != nil {
+		return err
+	}
+	for key, raw := range c.expect {
+		if key == "reason" {
+			continue
+		}
+		var want any
+		if err := json.Unmarshal(raw, &want); err != nil {
+			return err
+		}
+		if !reflect.DeepEqual(got[key], want) {
+			return fmt.Errorf("expectation %s: got %v, want %v", key, got[key], want)
+		}
 	}
 	return nil
 }

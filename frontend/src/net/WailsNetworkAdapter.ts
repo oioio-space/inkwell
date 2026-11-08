@@ -6,7 +6,7 @@ import {
   type PeerId,
   type PeerMetadata,
 } from "@automerge/automerge-repo";
-import { encode } from "cbor-x";
+import { type CBORValue, encodeCBOR } from "@inkwell/protocol";
 import { Admission, type Handshake, parsePeerMessage } from "./admission";
 import { Coverage } from "./coverage";
 import {
@@ -447,6 +447,7 @@ export class WailsNetworkAdapter extends NetworkAdapter {
     const hs: Handshake = {
       type,
       senderId: this.peerId,
+      targetId: to,
       peerMetadata: { isEphemeral: true },
       ...(this.#projectUrl ? { projectUrl: this.#projectUrl } : {}),
     };
@@ -466,7 +467,9 @@ export class WailsNetworkAdapter extends NetworkAdapter {
   #sendTo(to: PeerId, value: Handshake | Message): void {
     const socket = this.#socket;
     if (!socket || !this.#member(to)) return;
-    socket.send(encodeEnvelope({ kind: Kind.Message, peer: to, payload: encode(value) }));
+    socket.send(
+      encodeEnvelope({ kind: Kind.Message, peer: to, payload: encodeCBOR(value as CBORValue) }),
+    );
   }
 }
 

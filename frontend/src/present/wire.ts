@@ -18,7 +18,7 @@ export interface ViewState {
 
 export type WireMessage =
   | ({ t: "state"; epoch: number; seq: number } & ViewState)
-  /** The laser pointer, as fractions of the slide (0 to 1); null when it is off. */
+  /** The laser pointer, in integer ten-thousandths of the slide (0..10000); null when off. */
   | { t: "laser"; epoch: number; x: number | null; y: number | null }
   /** "I am the pilot now." */
   | { t: "take"; epoch: number }
@@ -42,8 +42,7 @@ const isObject = (v: unknown): v is Record<string, unknown> =>
 const int = (v: unknown, max: number): number | undefined =>
   typeof v === "number" && Number.isInteger(v) && v >= 0 && v <= max ? v : undefined;
 
-const fraction = (v: unknown): number | undefined =>
-  typeof v === "number" && Number.isFinite(v) && v >= 0 && v <= 1 ? v : undefined;
+const coord = (v: unknown): number | undefined => int(v, 10_000);
 
 function peer(v: unknown): string | undefined {
   if (typeof v !== "string" || v.length === 0 || v.length > MAX_PEER) return undefined;
@@ -72,8 +71,8 @@ export function parseWire(v: unknown): WireMessage | undefined {
       const epoch = int(v.epoch, MAX_EPOCH);
       if (epoch === undefined) return undefined;
       if (v.x === null && v.y === null) return { t: "laser", epoch, x: null, y: null };
-      const x = fraction(v.x);
-      const y = fraction(v.y);
+      const x = coord(v.x);
+      const y = coord(v.y);
       return x === undefined || y === undefined ? undefined : { t: "laser", epoch, x, y };
     }
     case "take":

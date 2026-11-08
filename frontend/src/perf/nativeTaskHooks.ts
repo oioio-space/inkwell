@@ -135,7 +135,7 @@ export function installNativeTaskHooks(record: (span: Span) => void): () => void
               ? target.classList.contains("cm-content")
                 ? "view.contentDOM"
                 : target.closest(".cm-editor")
-                  ? "view." + (target.className || target.tagName)
+                  ? `view.${target.className || target.tagName}`
                   : target.tagName.toLowerCase()
               : target.constructor.name;
       wrapped = wrap(callback, {

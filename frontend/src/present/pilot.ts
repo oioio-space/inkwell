@@ -151,7 +151,12 @@ export class Pilot {
   publishLaser(point: { x: number; y: number } | null): void {
     if (!this.isPilot) return;
     this.laser = point;
-    this.#env.send({ t: "laser", epoch: this.epoch, x: point?.x ?? null, y: point?.y ?? null });
+    this.#env.send({
+      t: "laser",
+      epoch: this.epoch,
+      x: point === null ? null : Math.round(point.x * 10_000),
+      y: point === null ? null : Math.round(point.y * 10_000),
+    });
   }
 
   /** Repeats the state: call every {@link BEAT_MS} while piloting. */
@@ -218,7 +223,7 @@ export class Pilot {
         return;
       case "laser":
         if (from !== this.pilot || m.epoch !== this.epoch || !this.#env.canPilot(from)) return;
-        this.laser = m.x === null || m.y === null ? null : { x: m.x, y: m.y };
+        this.laser = m.x === null || m.y === null ? null : { x: m.x / 10_000, y: m.y / 10_000 };
         this.#alive();
         return;
       case "take":

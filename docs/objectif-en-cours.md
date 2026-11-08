@@ -23,9 +23,9 @@ change plus que par une décision consignée dans `docs/architecture/decisions.m
 
 Ensuite G-0b, puis G-0c (liste ci-dessous). **Étape 2 (N-1, `protocol/sig`) faite** le 2026-11-08 : porte `gates/P2.toml` verte
 (7/7, régression L3 comprise) ; plan `docs/plans/2026-11-08-P2-implementation.md`, résumé
-`gates/P2/SUMMARY-impl.md`. **Étape en cours : 3** (modèle d'abord : `mise run tla`, profil CBOR et
-schémas §9 dans `@inkwell/protocol`) ; porte figée `gates/P3.toml`, plan
-`docs/plans/2026-11-08-P3-implementation.md`. Les étapes 3 à 8
+`gates/P2/SUMMARY-impl.md`. **Étape 3 faite** le 2026-11-08 (porte `gates/P3.toml` verte, régressions comprises ; `mise run tla`,
+profil CBOR et schémas §9). **Étape suivante : 4**, à spécifier d'abord en exécutable
+(`docs/plans/2026-11-08-spec-executable.md`). Les étapes 3 à 8
 auront chacune leur porte, écrite avant leur implémentation.
 
 ### Suivis de sécurité de L1 (LOW, revue Opus n° 6, à traiter au début de L2)

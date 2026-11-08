@@ -1,5 +1,5 @@
 // @vitest-environment node
-import { encode } from "cbor-x";
+import { encodeCBOR } from "@inkwell/protocol";
 import { expect, it } from "vitest";
 import { Admission, parsePeerMessage } from "./admission";
 
@@ -15,7 +15,7 @@ it.skipIf(!gc)("3 invented-id flood retains less than 4 MiB after GC", () => {
   for (let i = 0; i < 50000; i++)
     if (
       parsePeerMessage(
-        encode({
+        encodeCBOR({
           type: "request",
           senderId: "p",
           targetId: "me",

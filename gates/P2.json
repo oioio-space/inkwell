@@ -6,7 +6,7 @@
       "command": "cd protocol && INKWELL_PROTOCOL_STEP=2 ../scripts/heavy.sh go test ./conformance -run TestCorpus -count=1",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 0.31658503899234347,
+      "duration_seconds": 0.294263844989473,
       "log": "gates/P2/P-VEC-2-go.log"
     },
     {
@@ -14,7 +14,7 @@
       "command": "cd frontend && INKWELL_PROTOCOL_STEP=2 ../scripts/heavy.sh ./node_modules/.bin/vitest run packages/protocol",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 0.5455562099959934,
+      "duration_seconds": 0.6653199840075104,
       "log": "gates/P2/P-VEC-2-ts.log"
     },
     {
@@ -22,7 +22,7 @@
       "command": "(cd protocol && ../scripts/heavy.sh go test -count=1 ./sig ./trust) && ./scripts/heavy.sh go test -count=1 ./internal/transport/p2p ./internal/trust ./internal/invite ./internal/identity",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 15.58836493299168,
+      "duration_seconds": 15.325448837000295,
       "log": "gates/P2/N-1-callers.log"
     },
     {
@@ -30,7 +30,7 @@
       "command": "cd protocol && ../scripts/heavy.sh go test ./sig -run '^$' -fuzz '^FuzzVerify$' -fuzztime 120s",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 120.95459354399645,
+      "duration_seconds": 120.87612983799772,
       "log": "gates/P2/P-FUZZ-sig.log"
     },
     {
@@ -38,7 +38,7 @@
       "command": "bash scripts/arch-check.sh",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 2.810180674001458,
+      "duration_seconds": 2.863770130992634,
       "log": "gates/P2/P-ARCH.log"
     },
     {
@@ -46,7 +46,7 @@
       "command": "mise run gate -- L3",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 1430.524821383995,
+      "duration_seconds": 1432.8705072099983,
       "log": "gates/P2/L3-regression.log"
     }
   ],
@@ -62,30 +62,30 @@
     }
   },
   "sha256": {
-    "docs/objectif-en-cours.md": "bcfc59e7766b233a41af7e91920506482f2ba763a8a88a76b69b1650d873a0e2",
+    "docs/objectif-en-cours.md": "4d4e9f7071b692a9f2799698698f4c33bcc9f90ce59cc1fb22729e2444b1e567",
     "docs/plans/2026-11-08-P2-implementation.md": "2614a6ae91e3ead59c1574fb7e36d99431a8c35190e3f6fbfffc3da5a60d7347",
-    "gates/L3.json": "779df44039d3062792cd50a5e6d8263774e40fd6c58951c6d43e813390a51ed8",
+    "gates/L3.json": "de1a2c5acdec6b3e0512f8c3736b9794e628a4ab182f455782987444f4afb9b8",
     "gates/P2/L3-regression.log": "e04a7a10b17f554c2c49368c3ff7d00366475d22908d3f41685b615fa5fe86a1",
-    "gates/P2/N-1-callers.log": "11d7087e198e1ec841d8688bd40823a8791b06e90a2285ed778b0614f64ed1a2",
+    "gates/P2/N-1-callers.log": "0f02a73bd395c9886fcc78428c275c3451713f415d9b09a7ff6a324e268205e9",
     "gates/P2/P-ARCH.log": "fa489540f4ad789887b77c36f95084173f64ac5085fe5f0b1c60acdc69066738",
-    "gates/P2/P-FUZZ-sig.log": "75cec46950163b0925d096df14b84f58a46e7c5521f4536fe93677dbf225a1e0",
-    "gates/P2/P-VEC-2-go.log": "a9dc0f83d5d559a4a34d69a0bf9758e976f3eeeffbdc8f748f325a8c9f4c3c86",
-    "gates/P2/P-VEC-2-ts.log": "af25562cdb33cce800771caf3633f0b0cbc06608e4aee13d8799940e9012f350",
-    "gates/P2/base-guard.log": "f185bec68dd9e724a4fcd856e2ac73ccd7bdec8fdffdc3e2e8aa107de8c78cbb"
+    "gates/P2/P-FUZZ-sig.log": "f5d1408c300cb3a0e3129d5559fae9471ea3f52d900374d224c6e1d9a0dfd1ec",
+    "gates/P2/P-VEC-2-go.log": "ef7bc4f53f5e49b61274dde2b1daeccaaae7c6416ab7dfd82aae29a869d31be9",
+    "gates/P2/P-VEC-2-ts.log": "22fb6013419136bbad82ecccab5ed4561f98182cd66de8a9a9568c0fba5c35cf",
+    "gates/P2/base-guard.log": "4d6bf6524e2d6c13f1fc68b65c159f7e95fa78b4a6da2ee1f6f157a0011ee05d"
   },
   "status": "pass",
   "deferrals": [],
   "known_failures": [],
   "base_guard": {
     "ref": "main",
-    "base": "229420d5f6b0e5b4f6b7aa3817da7cf4bd2156ff",
+    "base": "5765331c780b3cd5727e528ff8cdc2d8301157b8",
     "source_sha256": "c306265111e4c8b0ad94a1867d797b7a20be7d814161b7b9dd6200ab7feb259c",
     "exit_code": 0,
     "status": "pass",
     "log": "gates/P2/base-guard.log"
   },
   "runner": {
-    "source": "base 229420d5f6b0e5b4f6b7aa3817da7cf4bd2156ff",
+    "source": "base 5765331c780b3cd5727e528ff8cdc2d8301157b8",
     "sha256": "99e00a0d51d35601e02b096e77ff41013fad14b082afea97fcba920cba71042e"
   },
   "guard_overrides": [

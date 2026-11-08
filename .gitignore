@@ -14,6 +14,10 @@ sbom.cdx.json
 bench-*.txt
 *.prof
 
+# TLC trace files (regenerable model-checking artifacts)
+docs/protocol/tla/*_TTrace_*
+docs/protocol/tla/mutants/*_TTrace_*
+
 # Local-only
 .env
 .env.*

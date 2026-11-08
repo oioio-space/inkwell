@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { type PeerId, Repo } from "@automerge/automerge-repo";
-import { encode } from "cbor-x";
+import { type CBORValue, encodeCBOR } from "@inkwell/protocol";
 import { expect, it, vi } from "vitest";
 import { encodeEnvelope, encodeRoles, Kind } from "./envelope";
 import { type SocketLike, WailsNetworkAdapter } from "./WailsNetworkAdapter";
@@ -22,7 +22,11 @@ function setup(ready = () => true) {
   });
   adapter.connect("me" as PeerId);
   const deliver = (message: unknown) => {
-    const frame = encodeEnvelope({ kind: Kind.Message, peer: "peer", payload: encode(message) });
+    const frame = encodeEnvelope({
+      kind: Kind.Message,
+      peer: "peer",
+      payload: encodeCBOR(message as CBORValue),
+    });
     socket.onmessage?.(new MessageEvent("message", { data: frame.buffer }));
   };
   const rolesFrame = encodeEnvelope({
@@ -35,6 +39,7 @@ function setup(ready = () => true) {
     deliver({
       type: "arrive",
       senderId: "peer",
+      targetId: "me",
       peerMetadata: { storageId: Math.random().toString() },
     });
   const messages: unknown[] = [];
@@ -77,7 +82,7 @@ it("5 filters presence before Repo, rewrites one session and drops outbound rela
       documentId: "doc",
       sessionId: i.toString(36),
       count: 1,
-      data: encode({ __presence: { type: "heartbeat" } }),
+      data: encodeCBOR({ __presence: { type: "heartbeat" } }),
     });
   expect(x.messages).toHaveLength(128);
   expect(new Set(x.messages.map((m) => (m as { sessionId: string }).sessionId)).size).toBe(1);
@@ -143,10 +148,10 @@ it("5 duplicate welcomes cannot refill the ephemeral bucket", () => {
     documentId: "doc",
     sessionId: "a",
     count: 1,
-    data: encode({ __presence: { type: "heartbeat" } }),
+    data: encodeCBOR({ __presence: { type: "heartbeat" } }),
   };
   for (let i = 1; i <= 128; i++) x.deliver({ ...message, count: i });
-  x.deliver({ type: "welcome", senderId: "peer", peerMetadata: {} });
+  x.deliver({ type: "welcome", senderId: "peer", targetId: "me", peerMetadata: {} });
   x.deliver({ ...message, count: 129 });
   expect(x.messages).toHaveLength(128);
   x.adapter.disconnect();
@@ -180,7 +185,7 @@ it("presentation navigation survives session rewriting and shares the presence r
         documentId: "doc",
         sessionId: "presenter",
         count,
-        data: encode(message),
+        data: encodeCBOR(message as CBORValue),
       });
     send(1, { __present: { t: "take", epoch: 1 } });
     send(2, { __present: { t: "state", epoch: 1, seq: 1, slide: 2, step: 0, screen: "show" } });
@@ -212,7 +217,7 @@ it("drops loading-document cursor bursts without cooldown", () => {
         documentId: "doc",
         sessionId: "cursor",
         count,
-        data: encode({ __presence: { type: "heartbeat" } }),
+        data: encodeCBOR({ __presence: { type: "heartbeat" } }),
       });
     expect(x.down).not.toHaveBeenCalled();
     expect(x.load).not.toHaveBeenCalled();
@@ -237,7 +242,7 @@ it("PeerDown reconnect loops cannot refill admission budgets", () => {
         documentId: "doc",
         sessionId: "cursor",
         count,
-        data: encode({ __presence: { type: "heartbeat" } }),
+        data: encodeCBOR({ __presence: { type: "heartbeat" } }),
       });
     for (let i = 1; i <= 128; i++) presence(i);
     for (let i = 0; i < 10; i++) {

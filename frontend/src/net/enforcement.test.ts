@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { next as A } from "@automerge/automerge";
 import type { DocHandle, DocumentId, Message, PeerId } from "@automerge/automerge-repo";
-import { encode } from "cbor-x";
+import { encodeCBOR } from "@inkwell/protocol";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import {
   decodeEnvelope,
@@ -309,7 +309,7 @@ function wire() {
       encodeEnvelope({
         kind: Kind.Message,
         peer,
-        payload: encode({ type: "arrive", senderId: peer, peerMetadata: {} }),
+        payload: encodeCBOR({ type: "arrive", senderId: peer, targetId: "me", peerMetadata: {} }),
       }),
     );
   };
@@ -399,7 +399,7 @@ describe("l'adaptateur filtre ce qu'il reçoit", () => {
       return encodeEnvelope({
         kind: Kind.Message,
         peer: "peer",
-        payload: encode({
+        payload: encodeCBOR({
           type: "sync",
           senderId: "peer",
           targetId: "me",

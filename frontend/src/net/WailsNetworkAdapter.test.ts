@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { next as A } from "@automerge/automerge";
 import { type DocHandle, type DocumentId, type PeerId, Repo } from "@automerge/automerge-repo";
-import { encode } from "cbor-x";
+import { encodeCBOR } from "@inkwell/protocol";
 import { afterEach, describe, expect, it } from "vitest";
 import { decodeEnvelope, encodeEnvelope, encodeRoles, Kind } from "./envelope";
 import { rng, SimNet } from "./simnet";
@@ -102,7 +102,12 @@ describe("WailsNetworkAdapter", () => {
       encodeEnvelope({
         kind: Kind.Message,
         peer: "mallory",
-        payload: encode({ type: "arrive", senderId: "alice", peerMetadata: {} }),
+        payload: encodeCBOR({
+          type: "arrive",
+          senderId: "alice",
+          targetId: "me",
+          peerMetadata: {},
+        }),
       }),
     );
     expect(drops).toEqual(["unsupported version 9", "invalid peer message"]);
@@ -173,12 +178,12 @@ describe("WailsNetworkAdapter", () => {
     const arrive = encodeEnvelope({
       kind: Kind.Message,
       peer: "alice",
-      payload: encode({ type: "arrive", senderId: "alice", peerMetadata: {} }),
+      payload: encodeCBOR({ type: "arrive", senderId: "alice", targetId: "me", peerMetadata: {} }),
     });
     const welcome = encodeEnvelope({
       kind: Kind.Message,
       peer: "alice",
-      payload: encode({ type: "welcome", senderId: "alice", peerMetadata: {} }),
+      payload: encodeCBOR({ type: "welcome", senderId: "alice", targetId: "me", peerMetadata: {} }),
     });
     const deliver = (b: Uint8Array) =>
       socket?.onmessage?.(new MessageEvent("message", { data: b.buffer }));
@@ -214,7 +219,7 @@ describe("WailsNetworkAdapter", () => {
     const arrive = encodeEnvelope({
       kind: Kind.Message,
       peer: "alice",
-      payload: encode({ type: "arrive", senderId: "alice", peerMetadata: {} }),
+      payload: encodeCBOR({ type: "arrive", senderId: "alice", targetId: "me", peerMetadata: {} }),
     });
     const deliver = (b: Uint8Array) =>
       socket?.onmessage?.(new MessageEvent("message", { data: b.buffer }));

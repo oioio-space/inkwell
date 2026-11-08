@@ -6,7 +6,7 @@
       "command": "mise run --skip-deps e2e:build && cd frontend && ../scripts/heavy.sh ./node_modules/.bin/playwright test files.spec.ts --output ../gates/L2/playwright-results",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 12.083902140991995,
+      "duration_seconds": 12.075494781995076,
       "log": "gates/L2/FM-OPEN-1-2-3.log"
     },
     {
@@ -14,7 +14,7 @@
       "command": "python3 scripts/check-no-file-query.py",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 0.02063949299918022,
+      "duration_seconds": 0.021133367001311854,
       "log": "gates/L2/no-file-query.log"
     },
     {
@@ -22,7 +22,7 @@
       "command": "./scripts/heavy.sh go test ./tools/archexec ./internal/sidecar ./internal/project && bash scripts/arch-exec-check.sh",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 2.805804979012464,
+      "duration_seconds": 2.8415384249965427,
       "log": "gates/L2/L1-security-followups.log"
     },
     {
@@ -36,7 +36,7 @@
       "command": "mise run gate -- L1",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 1114.6467432100035,
+      "duration_seconds": 1116.1543632749963,
       "log": "gates/L2/L0-L1.log"
     }
   ],
@@ -52,18 +52,18 @@
     }
   },
   "sha256": {
-    "docs/objectif-en-cours.md": "bcfc59e7766b233a41af7e91920506482f2ba763a8a88a76b69b1650d873a0e2",
+    "docs/objectif-en-cours.md": "4d4e9f7071b692a9f2799698698f4c33bcc9f90ce59cc1fb22729e2444b1e567",
     "docs/plans/2026-11-03-L2-implementation.md": "3e52973742b43a8ebaeedd52cd5e2f9fc6ab55ff1739d6c6ea12a0021c7dc7ed",
-    "gates/L0.json": "fa3ded7c4f8b98cbf436825f3b0d246e7fa6bc79c33ab46ffd791ab2f6bc42a8",
-    "gates/L1.json": "de5b9fbdf6cba8bc055ba301f1bdf747e4a0c77580e8c1efa1559da68ace5216",
-    "gates/L2/FM-OPEN-1-2-3.log": "b26db0c5b254bdd84d3a773bbdde129fa54ba333f22adfe7b580499d515f793c",
+    "gates/L0.json": "33023b537daa386eafc19bedd03228d43f912b939c2a229028def79ec4d11d7e",
+    "gates/L1.json": "41dc86bb084617136dbd0ea68c0f7cf8d7b21f0e367d660e8176f87053dafba4",
+    "gates/L2/FM-OPEN-1-2-3.log": "9813e06f24b4aee2634b702487f80fb5bc0e0976075481b39d33276e7b353148",
     "gates/L2/L0-L1.log": "f7a1207687ef1a2447457343fe6d72f0b4fb31ded81efda72b64e1dccd5f5f1e",
     "gates/L2/L1-security-followups.log": "e390ca51fb2689b7f722f54c23545c4ef1e7561cc41753d28181f57654922128",
-    "gates/L2/base-guard.log": "f185bec68dd9e724a4fcd856e2ac73ccd7bdec8fdffdc3e2e8aa107de8c78cbb",
+    "gates/L2/base-guard.log": "4d6bf6524e2d6c13f1fc68b65c159f7e95fa78b4a6da2ee1f6f157a0011ee05d",
     "gates/L2/no-file-query.log": "5ad7deb415e1dcb57ab3fc0e61433964a3f34f6035e4787f551681ae24a88c49",
     "gates/L2/playwright-results/.last-run.json": "91d1c43004802cd49950d78eb11c8fa7d05da8ffffe219a8b13b2f561bc00903",
-    "gates/L2/playwright-results/files-FM-OPEN-1-FM-OPEN-2--8846c-n-and-names-the-active-file-chromium/files-readonly-dark.png": "f0a8b95b2b54362e6db6506a8008baf75ce7d95095bcbd362352c6191512b5a8",
-    "gates/L2/playwright-results/files-FM-OPEN-1-FM-OPEN-2--8846c-n-and-names-the-active-file-chromium/files-readonly-light.png": "89803b7f8c7d628b3ebb67972e098318b6e3d21d378bf9b57d12721ab5f99f80"
+    "gates/L2/playwright-results/files-FM-OPEN-1-FM-OPEN-2--8846c-n-and-names-the-active-file-chromium/files-readonly-dark.png": "ca5b5f52d43a180e8cd8bf10b8ef5dd1d9d59dfc6c3299593636f8f6d2dd420e",
+    "gates/L2/playwright-results/files-FM-OPEN-1-FM-OPEN-2--8846c-n-and-names-the-active-file-chromium/files-readonly-light.png": "dfe7399eebefb9720bc648d36c7304ccae846c9e122a5b5566ae018c4fc524df"
   },
   "status": "pass",
   "deferrals": [
@@ -77,14 +77,14 @@
   "known_failures": [],
   "base_guard": {
     "ref": "main",
-    "base": "229420d5f6b0e5b4f6b7aa3817da7cf4bd2156ff",
+    "base": "5765331c780b3cd5727e528ff8cdc2d8301157b8",
     "source_sha256": "c306265111e4c8b0ad94a1867d797b7a20be7d814161b7b9dd6200ab7feb259c",
     "exit_code": 0,
     "status": "pass",
     "log": "gates/L2/base-guard.log"
   },
   "runner": {
-    "source": "base 229420d5f6b0e5b4f6b7aa3817da7cf4bd2156ff",
+    "source": "base 5765331c780b3cd5727e528ff8cdc2d8301157b8",
     "sha256": "99e00a0d51d35601e02b096e77ff41013fad14b082afea97fcba920cba71042e"
   },
   "guard_overrides": [

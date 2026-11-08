@@ -1,7 +1,7 @@
 // @vitest-environment node
 import { next as A } from "@automerge/automerge";
 import { type PeerId, Repo } from "@automerge/automerge-repo";
-import { encode } from "cbor-x";
+import { type CBORValue, encodeCBOR } from "@inkwell/protocol";
 import { expect, it, vi } from "vitest";
 import { encodeEnvelope, encodeRoles, Kind } from "./envelope";
 import { type SocketLike, WailsNetworkAdapter } from "./WailsNetworkAdapter";
@@ -36,7 +36,11 @@ it("6 forty storageIds never load, save or setSyncInfo, even with delayed saves"
   const syncInfo = vi.spyOn(doc, "setSyncInfo");
   await new Promise((r) => setTimeout(r, 0));
   const deliver = (value: unknown) => {
-    const frame = encodeEnvelope({ kind: Kind.Message, peer: "peer", payload: encode(value) });
+    const frame = encodeEnvelope({
+      kind: Kind.Message,
+      peer: "peer",
+      payload: encodeCBOR(value as CBORValue),
+    });
     socket.onmessage?.(new MessageEvent("message", { data: frame.buffer }));
   };
   const rolesFrame = encodeEnvelope({

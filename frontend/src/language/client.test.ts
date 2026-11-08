@@ -21,7 +21,13 @@ function setup(
     onclose: null,
     // The client handles a message after the next paint; the test plays that paint at once.
     get onmessage() {
-      return receive && ((e: MessageEvent) => (receive?.(e), drainAfterPaint()));
+      return (
+        receive &&
+        ((e: MessageEvent) => {
+          receive?.(e);
+          drainAfterPaint();
+        })
+      );
     },
     set onmessage(handler) {
       receive = handler;
