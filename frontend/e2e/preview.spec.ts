@@ -68,8 +68,12 @@ test("PRV-101 an error shows in the status bar and jumps to its line; the previe
   await editor(page).click();
   await page.keyboard.press("ControlOrMeta+Home");
   await expect(position(page)).toHaveText("Ligne 1, colonne 1");
-  await problems(page).click();
-  const entry = page.getByRole("menuitem", { name: /unknown variable/ });
+  // ER-1: the counter goes to the next problem; Shift+click opens Relire's list.
+  await problems(page).click({ modifiers: ["Shift"] });
+  const entry = page.getByRole("button", { name: /Ce nom n'est pas défini/ });
+  const details = page.getByRole("region", { name: "Problèmes" }).locator("details").first();
+  await details.locator("summary").click();
+  await expect(details).toContainText("unknown variable: fonctioninconnue");
   await expect(entry).toContainText("main.typ, ligne 3");
   await page.screenshot({ path: "test-results/preview-problems.png" });
   await entry.click();
@@ -81,6 +85,8 @@ test("PRV-101 an error shows in the status bar and jumps to its line; the previe
   await page.keyboard.press("Delete");
   await expect(problems(page)).toContainText("Aucun problème", SLOW);
   await expect(page.locator(".notice")).toHaveCount(0);
+  // Relire remains open after navigation, unlike the former transient menu.
+  await page.getByRole("button", { name: "Masquer Relire" }).click();
   await clear(page);
 });
 

@@ -49,3 +49,9 @@ frontend/playwright-report/
 /gates/*/
 __pycache__/
 /testdata/perf/generated/
+
+# Dedicated native performance assets; never embedded by a normal build.
+/frontend/perf-dist/
+
+# pnpm content-addressable store (created by pnpm in the worktree; 248 MB).
+/.pnpm-store/

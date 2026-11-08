@@ -43,6 +43,8 @@ export class PreviewModel {
   pages = $state.raw<ReadonlyMap<number, Page>>(new Map());
   diagnostics = $state.raw<readonly Diagnostic[]>([]);
   truncated = $state(false);
+  sourceHashes = $state.raw<Record<string, string>>({});
+  diagnosticRevision = $state(0);
   /** Why there is no new document; undefined when the last compilation succeeded. */
   failure = $state.raw<Failure | undefined>();
   /** The page that fills most of the preview, 0 when the preview is not shown. */
@@ -140,6 +142,8 @@ export class PreviewModel {
     this.compiling = false;
     this.hasResult = true;
     this.diagnostics = m.diagnostics;
+    this.sourceHashes = m.sourceHashes ?? {};
+    this.diagnosticRevision = m.rev;
     this.truncated = m.truncated;
     this.failure = m.failure;
     if (m.failure) return; // the pages of the last good version stay on screen

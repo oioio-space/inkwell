@@ -9,17 +9,20 @@ Les spécifications sont acceptées (design rév. 7 + 7.1, architecture rév. 8.
 change plus que par une décision consignée dans `docs/architecture/decisions.md` ou
 `docs/design/decisions-utilisatrice.md`.
 
-## Lot actif : L2 — Ouvrir vraiment un fichier (G-0a)
+## Lot terminé : L3 — Comprendre, corriger, produire ✅
 
 | | |
 |---|---|
-| But | un clic dans la liste des fichiers ouvre vraiment le bon fichier ; suivis de sécurité de L1 ; mesure native de la frappe |
-| Exigences | N19 (début), N20, G-0 ; architecture §6.6 lot **G-0a** (le reste, G-0b/G-0c, dépend d'ADR 0031, de l'étape 8 d'ADR 0034 et du Worker) ; suivis LOW de L1 ci-dessous |
-| Porte | `mise run gate -- L2` : (1) e2e `files.spec.ts` FM-OPEN-1 (clic → contenu du bon fichier), FM-OPEN-2 (sous-titre), FM-OPEN-3 (txt, csv, md, typ distingués ; lecture seule avec bandeau pour les autres que `main.typ`) ; (2) `?file=` supprimé ; (3) les suivis de sécurité de L1 faits et testés (environnement de tinymist, dossiers protégés ; l'analyse des dépendances est retirée par décision de l'utilisatrice, N42 précisée) ; (4) **PERF-TYPE natif** WebKitGTK (frappe → peinture, froid/chaud) mesuré, seuil = p95 × 1,10 ; (5) portes L0 et L1 vertes |
-| Reports | PERF-MEM → lot G-0b (ouverture réelle de plusieurs fichiers) |
-| Condition d'arrêt | porte verte, ou décision humaine (comportement de l'interface non prévu par le design) |
-| Revue | Sonnet (code) + test en personne `ux-walkthrough` (règle du projet pour toute modification d'interface) |
-| Lots terminés | L0 (2026-11-02) ; L1 (2026-11-03) : confinement sans programme externe, approuvé après six revues de sécurité Opus |
+| But | erreurs cliquables et ancrées, F8 / Maj+F8, aide Typst depuis tinymist embarqué |
+| Exigences | N28, N29 ; architecture §15.17 ER-1–4, LSP-1–5 ; AD-79, AD-80 |
+| Porte | `INKWELL_NATIVE_PERF_RUN=1 mise run gate -- L3` verte : problèmes e2e, positions UTF-16 / Automerge, LSP-STALE, service hors ligne, PERF-LSP p95 ≤ 100 ms, PERF-TYPE natif (chaud p95 ≤ 8 ms, froid p95 ≤ 50 ms), régression L2 |
+| Preuves | `gates/L3.json` (compact) ; mesures brutes dans `gates/L3-setup/native-raw-*`, citées par chemin et SHA-256 ; `gates/L3-setup/SUMMARY-premerge2.md`, `UX-walkthrough.md`, `SIMPLIFY.md` |
+| Avant fusion | rebaser sur `main` (7 commits de retard) |
+
+## Lot actif : Protocole, étapes 2 à 8 d'ADR 0034
+
+Ensuite G-0b, puis G-0c (liste ci-dessous). La porte de ce lot reste à écrire
+(`gates/<lot>.toml`) avant l'implémentation.
 
 ### Suivis de sécurité de L1 (LOW, revue Opus n° 6, à traiter au début de L2)
 
@@ -29,8 +32,8 @@ change plus que par une décision consignée dans `docs/architecture/decisions.m
 
 ## Lots suivants (MVP, dans l'ordre)
 
-1. **L3 — Comprendre, corriger, produire** : tinymist branché (N28, N29) ; porte : `problems.spec.ts`,
-   `PERF-LSP`.
+1. ~~**L3 — Comprendre, corriger, produire**~~ ✅ (2026-11-08) : tinymist branché (N28, N29) ; preuves dans
+   `docs/plans/2026-11-05-L3-implementation.md`, statut machine : `gates/L3.json`.
 2. **Protocole, étapes 2 à 8 d'ADR 0034** puis **G-0b** (index `G`, un document par fichier, FM-OPEN-4…8, PERF-MEM) et **G-0c** (onglets, Worker).
 3. **S13 — Fenêtres étroites** (problème connu, présent sur `main`) : sous 1300 px, ouvrir le tiroir
    Historique pousse la mise en page (titre, boutons de l'en-tête et barre d'état se chevauchent) au
@@ -264,3 +267,144 @@ après 15 s, capture et journaux archivés. Report explicite vers **L3**, sans v
 p95 inventée ; seuil à établir sur la mesure native : p95 × 1,10.
 Le signalement COM Windows (go-ole) est sans objet depuis la décision N42 précisée ;
 les résultats des vérifications complètes sont conservés au manifeste.
+
+
+### 2026-11-05 — L3 : comprendre, corriger, produire
+
+Service tinymist épinglé relié au Stream `lsp`, complétion, signature et survol
+avec tickets de révision et abandon à 100 ms. Diagnostics unifiés dans Relire,
+compteur unique, F8 / Maj+F8, navigation au fichier et à la plage. Les notifications
+sans version du tinymist épinglé sont rejetées ; les diagnostics actifs proviennent
+de copies immuables des sources compilées, vérifiées dans la webview puis à
+nouveau au saut. Des tests couvrent A→B→A, fichier secondaire modifié et changement
+d'une dépendance ouverte. La nouvelle connexion remplace aussi l'ancien flux
+Wails abandonné. `x/net` v0.62.0 respecte les sept jours de refroidissement.
+
+Porte et résultats courants : `gates/L3.toml`, `gates/L3.json` ; détails, mesures et
+limites : `docs/plans/2026-11-05-L3-implementation.md`. La chaîne L2/L1/L0 est
+réexécutée sans modifier ses tests, seuils ou délais. Le navigateur mesure le vrai
+aller-retour du service, en exclusif. **PERF-TYPE-native → G-0b : PENDING USER DECISION**, après build et
+lancement réels donnant une WebView blanche ; aucune valeur native inventée.
+La revue humaine avant fusion reste à faire ; aucun commit dans cette boucle.
+
+
+### 2026-11-05 — correction L3 après revue Opus
+
+Instructions de l’utilisatrice, citées pour délimiter cette passe :
+
+> Keep slow but current answers, and send $/cancelRequest for superseded requests.
+
+> Use a realistic document (thousands of lines, several files, imports), interleave edits with requests, and require a non-empty useful result.
+
+> Shrink the allowlist to the methods actually used, and add a test that no response sent to the webview contains the absolute project path.
+
+> Make it assert something real, or remove the criterion.
+
+> For 5ce8 (PERF-TYPE-native deferred to G-0b), set reason "PENDING USER DECISION" and do not claim approval anywhere.
+
+La passe retire donc `NATIVE-readiness`, qui ne prouvait pas de latence native.
+Le report proposé PERF-TYPE-native reste **PENDING USER DECISION**. Les raisons des
+trois scripts décrivent uniquement l’ajout de fichiers. La latence p95 ≤100 ms
+reste une mesure exigée ; une réponse courante lente reste affichable, tandis
+qu’une réponse périmée est annulée et rejetée. Les autres corrections portent
+sur le bouton unique, le clic simple, la synchronisation incrémentale annoncée
+par le serveur, les chemins sortants et le coût des copies des sources.
+
+### 2026-11-05 — décision de l'utilisatrice (PERF-TYPE natif)
+
+Question posée : reporter encore PERF-TYPE natif (de L3 à G-0b) ? Réponse : « Bloquer L3 ». L3 ne
+fusionne pas tant que PERF-TYPE natif n'est pas mesuré dans l'application de bureau réelle. Constat
+du 2026-11-05 : la vue web native reste blanche aussi hors du bac à sable de Codex, depuis la session
+graphique réelle (GNOME Wayland, XWayland, rendu par défaut et cairo) ; c'est un défaut à corriger,
+pas seulement un banc de mesure à construire.
+
+
+### 2026-11-05 — diagnostic confirmé et harnais natif, décision de l’utilisatrice
+
+> The native app is NOT blank — all assets load and the DOM holds the full UI; XGetImage under XWayland cannot capture any WebKitGTK content (a bare GTK4+WebKit red page gives the same blank PNG).
+
+> Your sandbox cannot open a window: write and unit-test it, then stop and say exactly which command to run outside the sandbox; I will run it.
+
+> Turn PERF-TYPE-native in gates/L3.toml into a real command criterion running that harness, with the spec thresholds unchanged.
+
+L’ancienne interprétation des PNG blancs est invalidée : ils ne prouvent pas une
+vue vide. La mesure abandonne cette capture. **L3 reste BLOQUÉ** jusqu’à mesure
+dans la vraie webview native avec oracles validés. Le critère devient une commande
+réelle et conserve mot pour mot sa raison de blocage. Sans opt-in explicite du
+poste graphique, cette commande écrit un résultat échoué sans ouvrir de fenêtre.
+Le build de mesure utilise le tag distinct `perf_native`, des ressources séparées,
+des entrées natives dans CodeMirror et le Stream Wails existant ; aucune
+instrumentation n’est activée dans le produit normal. Rappel PM-4 : rAF/double-rAF
+sont enregistrés mais ne prouvent pas la peinture ; absence d’oracle validé,
+contrôle lent manqué, vue masquée ou perte de focus font échouer le cas.
+
+### 2026-11-07 — reprise du harnais après échec sur le poste graphique
+
+> Try running it yourself first: your sandbox shares the network namespace, so DISPLAY=:0 (abstract X11 socket) may be reachable; if it is not, stop and give me the exact command, and I will run it and send you the result.
+
+Le nouvel essai confirme que `DISPLAY=:0` est accessible. L'ancien champ `ready`
+vide résultait du rejet sans conservation d'une vraie réponse du navigateur ;
+GTK déclarait la fenêtre inactive. Le pilote active maintenant la fenêtre du
+processus mesuré et vérifie le focus, sans injecter de touche pendant cette
+activation. Les erreurs de fin anticipée restent des échecs avec leur vraie cause.
+WebKitGTK 2.54.1 annonce Event Timing ; l'oracle demeure soumis aux témoins lents.
+Dans le bac à sable, GTK et le navigateur deviennent visibles/focalisés mais aucun
+premier rAF n'arrive, même au diagnostic logiciel séparé. Ce cas échoue avec une
+raison conservée et ne fournit aucune latence native. **L3 reste BLOQUÉ** ; ni
+seuil ni raison du critère natif ne changent. Le plan L3 donne la commande exacte
+à réexécuter sur le poste graphique.
+
+### 2026-11-07 — décision technique fournie par l’utilisatrice (lecture Claude, PERF-TYPE)
+
+> Spec reading (Claude decision, record it in docs/objectif-en-cours.md as a technical decision): spec.md:2568 "≤ 16 ms par image" is a per-frame budget (frame work/interval; no dropped or long frame), not input-to-next-vsync latency.
+
+> Use Event Timing to validate the oracle on the slow-layout positive control (which must exceed the threshold and must be detected), and use the handler/frame measurement for normal keystrokes.
+
+> You cannot open a window: write, unit-test, then give me the exact command; I run it on the host.
+
+Application : budget de travail par image **16 ms**, gestionnaire **4 ms**, aucune
+pause **>50 ms**, inchangés. L’attente du prochain rafraîchissement et les durées
+Event Timing sont des diagnostics séparés, pas des mesures du travail par image.
+Les intervalles réels sont conservés et les images manquées sont recherchées par
+rapport à la cadence observée ; aucune attente vsync n’est soustraite d’un budget
+de travail. L’oracle de travail d’image doit détecter le témoin lent, corroboré
+par Event Timing ; l’absence d’entrées rapides (seuil minimal 16 ms) n’est pas un
+échec d’oracle. Aucun témoin absent/manqué ne donne un succès.
+Le poste doit avoir l’écran allumé et déverrouillé ; le dialogue GNOME autorisant
+XTest peut voler le focus. Cette passe n’ouvre aucune fenêtre. L3 reste bloqué
+jusqu’à la nouvelle mesure native ; aucune optimisation ni réussite n’est déduite
+des seuls tests unitaires.
+
+### 2026-11-07 — décisions de l'utilisatrice (banc PERF-TYPE natif, après l'optimisation)
+
+Questions posées après la passe d'optimisation (`docs/perf/2026-11-07-mutter-instrumentation.md`) ; réponses :
+
+1. **Règle à vide.** La règle « NULL upper p95 ≤ 1 ms » (ajoutée par le banc, pas par la spec) est impossible : une frappe à vide coûte ~1,3 ms de vrai travail du navigateur. Remplacée par : **surcoût de l'instrument ≤ 1 ms**, mesuré par essais NULL entrelacés sondes actives / inactives (mêmes deux lectures externes), critère sur la borne haute unilatérale à 95 % de l'écart des moyennes.
+2. **Départ d'une frappe.** `event.timeStamp` dérive de −4 à +5 ms contre `performance.now()`. Le départ devient **la première lecture `performance.now()` de l'écouteur `window` en capture** ; `event.timeStamp` reste un diagnostic.
+3. **Première frappe.** Les budgets 4 ms (gestionnaire) et 16 ms (travail par image) valent pour la frappe à chaud. **La première frappe d'un processus neuf** a son propre seuil, mesuré et suivi : gestionnaire p95 ≤ 50 ms et travail d'image p95 ≤ 50 ms (pratique INP : le démarrage n'est pas la réactivité). La règle « aucune pause > 50 ms » est inchangée.
+
+Aucun autre seuil ne change. L3 reste bloqué jusqu'à une mesure native qui passe avec ces règles.
+
+### 2026-11-07 (soir) — décisions de l'utilisatrice (« je suis tes recommandations »)
+
+1. **Gestionnaire à chaud :** la porte L3 passe à **p95 ≤ 8 ms** ; **4 ms reste l'objectif**, suivi par le banc à chaque lot (valeur affichée à côté du verdict). Raison : sur WebKitGTK la moyenne est ~5 ms (3,7 ms avec le prototype) mais le p95 reste 6–9 ms ; ce qui se perçoit est l'image dans les 16 ms.
+2. **Prototype « CodeMirror insère le texte » :** reste **désactivé** pour la fusion de L3 (aucun risque de régression de saisie) ; il sera activé après une vérification à la main par l'utilisatrice (ibus, touche morte, Orca), procédure à fournir.
+3. **Premier affichage de l'aperçu (~50 ms, présentation WebKit, une fois par lancement) :** exception de démarrage, comme la première frappe : seuil séparé **≤ 70 ms** pour la phase froide ; « aucune pause > 50 ms » reste la règle de la phase chaude.
+4. Commit des documents (registre N54–N70, études, spec S13) autorisé.
+
+Les autres budgets (travail d'image ≤ 16 ms à chaud, rafraîchissements manqués, phase froide ≤ 50 ms) sont inchangés.
+
+### 2026-11-07 (soir, 2) — décision de l'utilisatrice (rafraîchissements manqués)
+
+Question posée : la règle « aucun rafraîchissement manqué » échoue à cause du premier affichage de l'aperçu (froid, déjà sous l'exception de 70 ms) et parce que la frappe à vide (sans éditeur) manque elle-même 1 à 3 images sur 30 (WebKit et machine). Réponse : **relatif à la frappe à vide.**
+- Froid : le premier affichage de l'aperçu relève de l'exception de démarrage (pause ≤ 70 ms) et n'est pas compté comme rafraîchissement manqué de la frappe.
+- Chaud : l'éditeur ne doit pas manquer **significativement plus** d'images que la frappe à vide de la même session (test exact unilatéral sur les proportions, p < 0,05) ; les deux taux sont publiés.
+- La frappe à vide ne bloque plus la certification par ses propres images manquées ; la certification de l'instrument reste le surcoût ≤ 1 ms (borne haute à 95 %).
+Rien d'autre ne change.
+
+### 2026-11-07 (nuit) — décision de l'utilisatrice (cohérence de la phase froide)
+
+Constat : la première frappe acceptée jusqu'à 50 ms couvre forcément plus d'un rafraîchissement (16 ms) ; la règle « aucun rafraîchissement manqué » contredit donc l'exception de démarrage déjà décidée. Réponse : « je suis tes recommandations ».
+- **Froid :** la règle des rafraîchissements manqués est remplacée par les seuils de démarrage déjà décidés (gestionnaire p95 ≤ 50 ms, travail d'image p95 ≤ 50 ms, pause ≤ 70 ms). Les rafraîchissements manqués à froid restent **publiés en diagnostic**.
+- **Chaud :** inchangé (gestionnaire p95 ≤ 8 ms, objectif 4 ms ; travail d'image ≤ 16 ms ; manqués de l'éditeur pas significativement plus que la frappe à vide ; pause ≤ 50 ms).
+- **Fusion de L3 : 3 mesures réussies sur 3**, d'affilée, sur le code final.

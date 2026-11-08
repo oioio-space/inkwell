@@ -1,0 +1,24 @@
+# Frozen L3 acceptance, written before feature implementation.
+raw_results = ["gates/guard-overrides.json", "docs/plans/2026-11-05-L3-implementation.md", "docs/objectif-en-cours.md", "gates/L3/*", "gates/L3-setup/*", "gates/L3-setup/native-raw-*/*", "gates/L3-setup/native-software-diagnostic/**/*", "docs/perf/2026-11-05-native-readiness/*", "gates/L2.json", "testdata/perf/lsp/*"]
+measurement_reports = ["gates/L3/PERF-LSP.json", "gates/L3/PERF-LSP-browser.json", "gates/L3/PERF-TYPE.json"]
+[[criteria]]
+id = "ER-1-4"
+command = "mise run --skip-deps e2e:build && cd frontend && ../scripts/heavy.sh ./node_modules/.bin/playwright test problems.spec.ts --output ../gates/L3/playwright-results"
+[[criteria]]
+id = "LSP-positions-STALE"
+command = "cd frontend && ../scripts/heavy.sh ./node_modules/.bin/vitest run src/language"
+[[criteria]]
+id = "LSP-sidecar-offline"
+command = "./scripts/heavy.sh go test ./internal/language ./internal/sidecar ./tools/archexec && bash scripts/arch-exec-check.sh"
+[[criteria]]
+id = "PERF-LSP"
+command = "./scripts/heavy.sh --exclusive python3 scripts/perf/lsp.py"
+exclusive = true
+[[criteria]]
+id = "PERF-TYPE-native"
+command = "bash scripts/perf/type-native.sh"
+exclusive = true
+reason = "PENDING: user decided 2026-11-05 to block L3 until PERF-TYPE-native is measured (docs/objectif-en-cours.md); this deferral must be replaced by a real criterion."
+[[criteria]]
+id = "L2-regression"
+command = "mise run gate -- L2"

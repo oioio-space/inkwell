@@ -79,6 +79,9 @@ var ErrNoDialog = errors.New("no way to choose where to save")
 
 // PreviewOptions tunes [NewPreview]. Root is required.
 type PreviewOptions struct {
+	// Snapshot provides immutable project inputs for diagnostic identities.
+	// Failure retains live preview compilation without active diagnostic identities.
+	Snapshot func(context.Context) (SourceSnapshot, error)
 	// Engine compiles. Nil starts the embedded Typst on first use.
 	Engine Compiler
 	// Root is the project folder on disk: what is compiled.
@@ -318,10 +321,19 @@ func (p *Preview) compile(ctx context.Context, run compilation) {
 	if run.reuse {
 		opts = append(opts, typst.WithFormats(typst.FormatSVG))
 	}
+	root := p.opt.Root
+	var source SourceSnapshot
+	if p.opt.Snapshot != nil {
+		if captured, captureErr := p.opt.Snapshot(ctx); captureErr == nil {
+			source = captured
+			root = captured.Root
+			defer captured.Cleanup()
+		}
+	}
 	var res *typst.Result
 	eng, err := p.engine()
 	if err == nil {
-		res, err = eng.Compile(ctx, typst.Project{Root: p.opt.Root}, p.opt.Main, opts...)
+		res, err = eng.Compile(ctx, typst.Project{Root: root}, p.opt.Main, opts...)
 	} else {
 		err = fmt.Errorf("%w: %w", errUnavailable, err)
 	}
@@ -332,6 +344,9 @@ func (p *Preview) compile(ctx context.Context, run compilation) {
 	snap := snapshot{srcGen: run.srcGen, ok: err == nil}
 	if res != nil {
 		msg.Diagnostics = res.Diagnostics
+		if source.Current != nil && source.Current(ctx) {
+			msg.SourceHashes = source.Hashes
+		}
 		msg.Truncated = res.DiagnosticsTruncated
 		if res.PDF != nil {
 			snap.pdf = res.PDF
@@ -386,6 +401,8 @@ var errUnavailable = errors.New("typst could not start")
 
 // PreviewMessage is a frame from Go on the preview stream, as JSON.
 type PreviewMessage struct {
+	// SourceHashes identifies unchanged projected source text for diagnostic anchors.
+	SourceHashes map[string]string `json:"sourceHashes,omitzero"`
 	// Type is "compiling" (a compilation started), "result", "anchors" or "deck".
 	Type string `json:"type"`
 	// Seq numbers the compilation; a higher Seq supersedes a lower one.

@@ -32,6 +32,9 @@ type Spec struct {
 	ReadPaths []string
 	// Stdin is the child's standard input; nil means none.
 	Stdin io.Reader
+	// Stdout receives live output, in addition to the bounded retained copy.
+	// A protocol consumer must bound and validate each message it accepts.
+	Stdout io.Writer
 	// Path is the executable, as returned by [Store.Resolve].
 	Path string
 	// Dir is the mandatory project directory; home and its ancestors are refused.
@@ -136,7 +139,7 @@ func run(ctx context.Context, spec Spec, prepareMount func(Spec) (*directoryMoun
 	cmd.Dir = spec.Dir
 	cmd.Env = append([]string{}, spec.Env...) // non-nil: an empty environment, not the caller's
 	cmd.Stdin = spec.Stdin
-	cmd.Stdout, cmd.Stderr = stdout, stderr
+	cmd.Stdout, cmd.Stderr = streamOutput(stdout, spec.Stdout), stderr
 	cmd.WaitDelay = waitDelay
 	setProcAttr(cmd)
 	if err := configureConfinement(cmd); err != nil {
@@ -333,4 +336,12 @@ func validateLaunch(ctx context.Context, spec *Spec) error {
 		return err
 	}
 	return validateSpecDirectory(spec)
+}
+
+// streamOutput preserves the bounded transcript while feeding a live protocol reader.
+func streamOutput(retained, live io.Writer) io.Writer {
+	if live == nil {
+		return retained
+	}
+	return io.MultiWriter(retained, live)
 }

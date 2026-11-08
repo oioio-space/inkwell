@@ -1,0 +1,30 @@
+[
+  {
+    "keyDownAt": 337, "docChangedAt": 431,
+    "handlers": [
+      {"event":"keydown","eventTimeStamp":337,"start":338,"end":339,"trusted":true},
+      {"event":"beforeinput","eventTimeStamp":340,"start":340,"end":340,"trusted":true},
+      {"event":"input","eventTimeStamp":341,"start":341,"end":432,"trusted":true},
+      {"event":"codemirror-input","start":423,"end":431,"trusted":true}
+    ],
+    "eventTiming": [
+      {"name":"beforeinput","startTime":340,"duration":96,"processingStart":340,"processingEnd":340,"interactionId":0},
+      {"name":"input","startTime":341,"duration":96,"processingStart":341,"processingEnd":432,"interactionId":0}
+    ],
+    "control":{"kind":"handler","start":341,"end":421,"iterations":279}
+  },
+  {
+    "keyDownAt": 557, "docChangedAt": 565,
+    "handlers": [
+      {"event":"keydown","eventTimeStamp":557,"start":557,"end":557,"trusted":true},
+      {"event":"beforeinput","eventTimeStamp":558,"start":558,"end":558,"trusted":true},
+      {"event":"input","eventTimeStamp":559,"start":559,"end":566,"trusted":true},
+      {"event":"codemirror-input","start":559,"end":565,"trusted":true}
+    ],
+    "eventTiming": [
+      {"name":"beforeinput","startTime":558,"duration":96,"processingStart":558,"processingEnd":558,"interactionId":0},
+      {"name":"input","startTime":559,"duration":88,"processingStart":559,"processingEnd":566,"interactionId":0}
+    ],
+    "control":{"kind":"layout","start":571,"end":651,"iterations":262}
+  }
+]

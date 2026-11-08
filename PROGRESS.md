@@ -62,7 +62,8 @@ Plan : [docs/plans/2026-10-25-etape-2-reseau.md](docs/plans/2026-10-25-etape-2-r
 
 - [x] `sidecar` : tinymist et typst embarqués, SHA-256 vérifié, supervision, backoff — [plan](docs/plans/2026-10-25-etape-3-typst.md), [ADR 0024](docs/adr/0024-sidecars-typst-tinymist.md)
 - [x] Aperçu (C2) : pages SVG des seules pages visibles, par un Stream sans port ; « Page X sur Y », problèmes dans la barre d'état, saut source ↔ aperçu par paragraphe (`typst eval`), export PDF — [plan](docs/plans/2026-10-25-etape-3-typst.md). Recompilation complète par `typst` (pas d'aperçu incrémental par `tinymist` : reste avec le LSP)
-- [ ] LSP via le pont : complétion, survol, diagnostics, formatage
+- [x] Lot L3 — LSP via le pont : problèmes cliquables et ancrés, F8 / Maj+F8 (N28) ; complétion, aide sur les arguments et survol, hors ligne (N29). Critère de sortie : `mise run gate -- L3` vert avec la mesure native de la frappe (`INKWELL_NATIVE_PERF_RUN=1`) : problèmes e2e, positions, réponses périmées rejetées, service hors ligne, PERF-LSP p95 ≤ 100 ms, PERF-TYPE natif (chaud p95 ≤ 8 ms, froid p95 ≤ 50 ms), régression L2. Preuves : `gates/L3.json`, `gates/L3-setup/` (SUMMARY-premerge2.md, UX-walkthrough.md, SIMPLIFY.md), [plan](docs/plans/2026-11-05-L3-implementation.md)
+- [ ] Formatage par le LSP (hors L3)
 - [x] Export PDF déterministe, polices embarquées (`typst compile`, `pdf.attach` vérifié dans le PDF)
 - [x] `typst` : vente des paquets `@preview` dans `.typstdeps/`, message clair si absent (paquets fournis : cmarker, touying, lilaq)
 - [ ] Édition niveau 1 : barre contextuelle, titres, listes, paires, plan, blocs de code, orthographe webview
@@ -100,4 +101,5 @@ Plan : [docs/plans/2026-10-25-etape-2-reseau.md](docs/plans/2026-10-25-etape-2-r
 | 2026-10-25 | Bootstrap go-starter ; fondations : architecture, 8 ADR, glossaire, UX, roadmap, gopls MCP, Dependabot. |
 | 2026-10-25 | Étape 3 (C1, compilation de C2) : sidecars `typst`/`tinymist` épinglés, embarqués et supervisés ; `internal/typst` compile hors ligne (PDF, SVG, diagnostics, `query`, `Watch`). Reste : aperçu incrémental et LSP par `tinymist` (stdio), présentations. |
 | 2026-10-26 | Étape 3 (C2) : aperçu, problèmes, saut source ↔ aperçu, « Exporter en PDF » et mode réseau (À propos) ; `internal/app.Preview`, `typst.PageCount`/`Anchors`. Reste : LSP `tinymist` (diagnostics à la frappe, aperçu incrémental), ouverture des autres fichiers depuis un problème (B4 côté webview). |
+| 2026-11-08 | Lot L3 : tinymist branché sur l'éditeur (N28, N29). Porte L3 verte, mesure native de la frappe comprise. Le manifeste `gates/L3.json` reste compact : les mesures brutes sont dans `gates/L3-setup/`, citées par chemin et SHA-256. |
 | 2026-10-25 | Étape 1 : transport (memnet, tcp), pont Streams, éditeur collaboratif Svelte/CodeMirror/Automerge, présence, undo local, e2e deux instances ; ADR 0009–0013. |

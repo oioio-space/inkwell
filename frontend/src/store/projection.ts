@@ -1,5 +1,6 @@
 import { next as A } from "@automerge/automerge";
 import type { DocHandle } from "@automerge/automerge-repo";
+import { flushTyped } from "../editor/amSync";
 import { encodeSyncPoint } from "./syncPoint";
 
 /** Where the projection goes: the project's `.typ` file, written by Go. */
@@ -109,9 +110,15 @@ export function startProjection(
   let held = false;
   let wasDirty = false;
 
-  const isDirty = () => (handle.doc()?.text ?? "") !== (last ?? "");
+  const textDirty = () => (handle.doc()?.text ?? "") !== (last ?? "");
+  // A reader takes the keys still waiting for the paint in the editors (save, export, compile);
+  // the change listener does not write from inside the change.
+  const isDirty = () => {
+    flushTyped(handle);
+    return textDirty();
+  };
   const emitDirty = () => {
-    const now = isDirty();
+    const now = textDirty();
     if (now === wasDirty) return;
     wasDirty = now;
     opts.onDirty?.(now);
@@ -123,6 +130,7 @@ export function startProjection(
     try {
       while (again) {
         again = false;
+        flushTyped(handle);
         const doc = handle.doc();
         const text = doc?.text ?? "";
         if (text === last) continue;

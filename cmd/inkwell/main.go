@@ -17,6 +17,7 @@ import (
 	"github.com/oioio-space/inkwell"
 	"github.com/oioio-space/inkwell/internal/app"
 	"github.com/oioio-space/inkwell/internal/bridge"
+	"github.com/oioio-space/inkwell/internal/language"
 	"github.com/oioio-space/inkwell/internal/project"
 	"github.com/oioio-space/inkwell/internal/transport"
 	"github.com/oioio-space/inkwell/internal/version"
@@ -37,7 +38,7 @@ const (
 	exportDirEnv = "INKWELL_EXPORT_DIR"
 )
 
-func main() {
+func run(configure func(*application.App, *application.WebviewWindow)) {
 	if versionRequested(os.Args[1:]) {
 		fmt.Println(version.Current())
 		return
@@ -89,6 +90,7 @@ func main() {
 		winService = windows
 	}
 	presentHub := app.NewPresent(log)
+	languageService := language.New(proj.Path())
 
 	var loops shutdownLoops
 	assetToken := app.NewAssetToken()
@@ -123,6 +125,7 @@ func main() {
 	wails.HandleStream(bridge.StreamName, func(c *application.StreamConn) { router.Serve(c) })
 	wails.HandleStream(bridge.StoreStreamName, func(c *application.StreamConn) { storeServer.Serve(c) })
 	wails.HandleStream(app.PreviewStreamName, func(c *application.StreamConn) { rt.Preview.Serve(c) })
+	wails.HandleStream(language.StreamName, func(c *application.StreamConn) { languageService.Serve(c) })
 	wails.HandleStream(app.PresentStreamName, func(c *application.StreamConn) { presentHub.Serve(c) })
 
 	loops.Go("project watch", func() {
@@ -155,6 +158,9 @@ func main() {
 		windows.bind(wails, main)
 	}
 
+	if configure != nil {
+		configure(wails, main)
+	}
 	if err := wails.Run(); err != nil {
 		log.Error("inkwell stopped", "err", err)
 		os.Exit(1)

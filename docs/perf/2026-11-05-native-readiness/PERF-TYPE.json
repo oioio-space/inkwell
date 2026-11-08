@@ -1,0 +1,19 @@
+{
+  "id": "PERF-TYPE-native",
+  "status": "unavailable",
+  "engine": "native Wails WebKitGTK",
+  "build_exit_code": 0,
+  "probe_exit_code": 0,
+  "cold_samples_ms": [],
+  "warm_samples_ms": [],
+  "p95_ms": null,
+  "threshold": "native reference p95 \u00d7 1.10; no native reference established",
+  "reason": "Native readiness attempt is recorded; no native compositor/input timing instrumentation or certified cold/warm keystroke-to-paint samples exist. A captured window alone cannot certify PERF-TYPE-native.",
+  "evidence": {
+    "native-build.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "native-attempt.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "native-probe.log": "935add0561d9159628a7466ea5c7a18fb2f6ba9129f15f715a1e08929310e551",
+    "native-window-probe.log": "b5ec0f4b9186d716e9f81dbb9f21bd9b1846cac28a10f3469de881a79f23e478",
+    "native-window.png": "653cee26034cd60e784199e1c64a1536ce96103746ff087920b168b79bf32743"
+  }
+}

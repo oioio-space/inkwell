@@ -1,4 +1,5 @@
 import type { SocketLike } from "../net/WailsNetworkAdapter";
+import { afterPaint } from "../ui/afterPaint";
 import { encodeRequest, type PreviewMessage, type PreviewRequest, parseMessage } from "./protocol";
 
 export interface PreviewClientOptions {
@@ -92,8 +93,12 @@ export class PreviewClient {
     socket.onmessage = (ev) => {
       const data = ev.data as ArrayBuffer | string;
       const m = parseMessage(typeof data === "string" ? data : new Uint8Array(data));
-      if (m) this.#onMessage(m);
-      else console.warn("preview: dropped an undecodable frame");
+      if (!m) console.warn("preview: dropped an undecodable frame");
+      // After the next paint: a result's first render must not straddle a refresh.
+      else
+        afterPaint(() => {
+          if (this.#socket === socket) this.#onMessage(m);
+        });
     };
     socket.onclose = () => {
       if (this.#socket !== socket) return;

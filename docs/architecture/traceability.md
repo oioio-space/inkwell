@@ -59,8 +59,8 @@ vérifie (test, porte, revue). Une ligne sans preuve est un trou : colonne « É
 | N25 | API claire, débogage | §15.15, `AD-71`, `AD-74` | TTFP chronométré, `api:surface`, `api:doc`, rejeu | ⏳ |
 | N26 | protocole des greffons, versions compatibles | §15.16, `AD-72` | vecteurs `docs/plugin-api/`, matrice de compatibilité | ⏳ (spécification à écrire) |
 | N27 | modèles créés par les personnes | §6.8, `AD-78` | e2e `templates.spec.ts` (créer, dupliquer, importer, nouveau projet sans réseau) ; test « aucun `typst init` » | ⏳ ❓ `AD-78` |
-| N28 | erreurs comme un IDE | §15.17 ER-1–4, `AD-79` | e2e `problems.spec.ts` (F8, clic → fichier et plage) ; table de messages (unitaire) | ⏳ |
-| N29 | aide à la saisie Typst (tinymist) | §15.17 LSP-1–5, `AD-80` | propriété UTF-16 ↔ Automerge ; réponses périmées jetées (`LSP-STALE`) ; `PERF-LSP` p95 ≤ 100 ms ; test réseau coupé | ⏳ |
+| N28 | erreurs comme un IDE | §15.17 ER-1–4, `AD-79` | e2e `problems.spec.ts` (F8, clic → fichier et plage) ; table de messages (unitaire) | ✅ socle L3 — `gates/L3.json` ; copie compilée immuable et identité revérifiée au saut  PERF-TYPE natif bloquant pour L3 |
+| N29 | aide à la saisie Typst (tinymist) | §15.17 LSP-1–5, `AD-80` | propriété UTF-16 ↔ Automerge ; réponses périmées jetées (`LSP-STALE`) ; `PERF-LSP` p95 ≤ 100 ms ; test réseau coupé | ✅ socle L3 — `gates/L3.json` ; mesures service et vrai Stream navigateur ; notifications sans version rejetées  PERF-TYPE natif bloquant pour L3 |
 | N30 | outils d'écriture | §15.17, `AD-81` | `ux-walkthrough` ; tests en personne (étude §5 point 6) | ⏳ |
 | N31 | IA de premier rang, MCP, serveurs de l'entreprise | §15.18, `AD-82` | propriété IA-5 ; corpus d'injections fuzzé ; fuzz SSE et arguments MCP ; « une proposition acceptée = une modification annulable » ; MCP : `Origin`, jeton, portées | ⏳ ❓ `AD-82`, PD-1 |
 | N32 | ressources des greffons, gestionnaire de tâches | §11.1, §9.10 H-7, `AD-88` | test « Arrêter sous saturation » ; boucle infinie native et WebAssembly ; canari O-7 sur la vue | ⏳ |

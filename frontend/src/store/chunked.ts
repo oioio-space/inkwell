@@ -40,32 +40,42 @@ export function applyEdits(
     if (opts.message) handle.change(run, { message: opts.message });
     else handle.change(run);
   };
+  for (const batch of chunkEdits(edits)) change((d) => spliceAll(d, path, batch));
+  // Only a first write and no edit (nothing to change but a version): still one change.
+  if (first) change(() => undefined);
+}
+
+/**
+ * The edits cut into the changes they are written in (ADR 0028 D3): small edits in a row share
+ * one change; an addition of more than 64 Ki characters goes in changes of at most 64 Ki each.
+ * Every write of edits to a document goes through this cut, whatever heads it is made on.
+ */
+export function chunkEdits(edits: readonly Edit[]): Edit[][] {
+  const batches: Edit[][] = [];
   let small: Edit[] = [];
-  const flush = () => {
-    if (small.length === 0) return;
-    const batch = small;
+  const close = () => {
+    if (small.length > 0) batches.push(small);
     small = [];
-    change((d) => {
-      for (const e of batch) A.splice(d, path.slice(), e.at, e.remove, e.put);
-    });
   };
   for (const e of edits) {
     if (e.put.length <= CHUNK_CHARS) {
       small.push(e);
       continue;
     }
-    flush();
+    close();
     let at = e.at;
     let remove = e.remove;
     for (const piece of chunksOf(e.put)) {
-      const from = at;
-      const del = remove;
-      change((d) => A.splice(d, path.slice(), from, del, piece));
+      batches.push([{ at, remove, put: piece }]);
       at += piece.length;
       remove = 0;
     }
   }
-  flush();
-  // Only a first write and no edit (nothing to change but a version): still one change.
-  if (first) change(() => undefined);
+  close();
+  return batches;
+}
+
+/** Applies one batch of edits, in order, inside a change. */
+export function spliceAll(d: unknown, path: readonly string[], batch: readonly Edit[]): void {
+  for (const e of batch) A.splice(d as { text: string }, path.slice(), e.at, e.remove, e.put);
 }

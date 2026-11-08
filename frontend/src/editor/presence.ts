@@ -2,6 +2,7 @@ import { getCursor, getCursorPosition } from "@automerge/automerge";
 import { type DocHandle, Presence } from "@automerge/automerge-repo";
 import type { Extension } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
+import { whenWritten } from "./amSync";
 import { type RemoteCursor, setRemoteCursors } from "./remoteCursors";
 
 type Doc = { text: string };
@@ -69,13 +70,22 @@ export function presenceSync(
     });
   handle.on("change", onDocumentChange);
 
-  const extension = EditorView.updateListener.of((u) => {
-    if (!u.selectionSet && !u.docChanged) return;
+  // A cursor is a place in the document: it is taken once the keys typed before it are written
+  // (amSync writes them after the paint), else it would point one character off.
+  let cursorQueued = false;
+  const sendCursor = () => {
+    cursorQueued = false;
+    const view = getView();
     const doc = handle.doc();
-    if (!doc) return;
-    const sel = u.state.selection.main;
+    if (stopped || !view || !doc) return;
+    const sel = view.state.selection.main;
     presence.broadcast("anchor", getCursor(doc, PATH, sel.anchor));
     presence.broadcast("head", getCursor(doc, PATH, sel.head));
+  };
+  const extension = EditorView.updateListener.of((u) => {
+    if ((!u.selectionSet && !u.docChanged) || cursorQueued) return;
+    cursorQueued = true;
+    whenWritten(handle, sendCursor);
   });
 
   return {

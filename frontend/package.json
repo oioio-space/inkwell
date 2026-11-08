@@ -30,7 +30,8 @@
     "codemirror": "6.0.2",
     "codemirror-lang-typst": "0.6.0",
     "papaparse": "5.7.0",
-    "@inkwell/protocol": "workspace:*"
+    "@inkwell/protocol": "workspace:*",
+    "@codemirror/autocomplete": "6.20.4"
   },
   "devDependencies": {
     "@axe-core/playwright": "4.14.0",

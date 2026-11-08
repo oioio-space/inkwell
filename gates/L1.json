@@ -6,7 +6,7 @@
       "command": "mise run arch",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 2.394174742978066,
+      "duration_seconds": 2.2895461529988097,
       "log": "gates/L1/architecture.log"
     },
     {
@@ -14,7 +14,7 @@
       "command": "./scripts/heavy.sh go test ./tools/archexec && ./scripts/arch-exec-check.sh && ./scripts/heavy.sh go test -race ./internal/sidecar",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 109.0916797730606,
+      "duration_seconds": 1.7820879380014958,
       "log": "gates/L1/syscall-confinement.log"
     },
     {
@@ -22,7 +22,7 @@
       "command": "./scripts/heavy.sh bash scripts/sidecar-no-tools.sh",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 108.32270453695673,
+      "duration_seconds": 109.76647889000014,
       "log": "gates/L1/without-tools.log"
     },
     {
@@ -30,7 +30,7 @@
       "command": "python3 scripts/gate-guard.py --self-test && python3 scripts/gate.py --base-guard",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 0.37235634005628526,
+      "duration_seconds": 0.6226750819914741,
       "log": "gates/L1/anti-weakening.log"
     },
     {
@@ -38,7 +38,7 @@
       "command": "mise run gate -- L0",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 1003.0519912879681,
+      "duration_seconds": 1006.1163547869946,
       "log": "gates/L1/L0.log"
     },
     {
@@ -68,16 +68,16 @@
     }
   },
   "sha256": {
-    "docs/objectif-en-cours.md": "2f01444ae41ef0dce99f71568ba454a100b82b9a519746527d5ad7ecda52c89f",
+    "docs/objectif-en-cours.md": "6bab91c6310cc8531378e1dc8684a073dfda5451f94c3a3ce61a4ebe0ddf54d0",
     "docs/plans/2026-11-02-L1-implementation.md": "6f21f8178ed76cddef99512c8d6139c268d3258dbb8ab2bbe34971005f2d845b",
-    "gates/L0.json": "7de32e06dd55565ea8403bf16c190b6895d40e6fc12b1c52339d800869638830",
+    "gates/L0.json": "1f8a5e2650fd207d4c26a73b8f010b128170eaa65a845ccbcf36f0f8efa148c6",
     "gates/L1/L0.log": "2b0da7f547f69b8e8b603a745e19d4e6bc6be6df9920cb8cc7c67bdb27d738b7",
-    "gates/L1/anti-weakening.log": "d67f3f2678c71b1cd837f1ea44d1c3b3853e5ddd6cbda0b562cd06acf2b75ecc",
+    "gates/L1/anti-weakening.log": "581b7d3821d6f7ae687be2ff476ea8f4afede1b176456f6ccc0ae22cfff83e82",
     "gates/L1/architecture.log": "d5279db7270e45e6e09608c189240a60867492858fba89f802a85f3029c5e59b",
-    "gates/L1/base-guard.log": "2329b11326ff3be785c4d76572017e0686fadbc421f0d52b32f413fd89aa4cb2",
-    "gates/L1/syscall-confinement.log": "23e440daaee383fc7bf6ee1cd7d56b5b18bf985f111cb873cef0017aacd8da98",
-    "gates/L1/without-tools.log": "4ec0448aebd7b14d4995d34e24f950ed32d9f39e0f9ca22355765d81546e0310",
-    "gates/guard-overrides.json": "7a31f1e2976ecf583c389ecaec2fcd6d7e40f9cc18e668c674f453a50efd4f13"
+    "gates/L1/base-guard.log": "47b3c02ab1c6c240b0b108e106db90d372387d76984f073eb682715a6ea23455",
+    "gates/L1/syscall-confinement.log": "4a89c9478a91d8015f2d807170b4fb43ee7f0657e3cf9d4be457eb21d61c22c2",
+    "gates/L1/without-tools.log": "1f5f7f94f183038e0d246a49befd0696b38b702d78eac91f9ae8b4530a59c336",
+    "gates/guard-overrides.json": "e5fa1a488b9bd82773cbd160a266903265664385ff7e826fb44b391b88b84454"
   },
   "status": "pass",
   "deferrals": [
@@ -103,14 +103,14 @@
   ],
   "base_guard": {
     "ref": "main",
-    "base": "12c3917599704437c140231582e54ea83f8a1f70",
+    "base": "e959ebb29540190a0766ea7ff72b1505fdaaf81d",
     "source_sha256": "c306265111e4c8b0ad94a1867d797b7a20be7d814161b7b9dd6200ab7feb259c",
     "exit_code": 0,
     "status": "pass",
     "log": "gates/L1/base-guard.log"
   },
   "runner": {
-    "source": "base 12c3917599704437c140231582e54ea83f8a1f70",
+    "source": "base e959ebb29540190a0766ea7ff72b1505fdaaf81d",
     "sha256": "99e00a0d51d35601e02b096e77ff41013fad14b082afea97fcba920cba71042e"
   },
   "guard_overrides": [
@@ -133,6 +133,76 @@
       "id": "052e1f994d2cd5baffa57aa34d7e2d93d705040a87478421e88c5387769cea36",
       "reason": "UX-LUP-1 (new walkthrough test, frontend/e2e/ux/lup.spec.ts) exposes the known narrow-window defect S13, present on main and not caused by the L-maj upgrade. It is test.fixme until its own lot S13 (docs/objectif-en-cours.md, Lots suivants), whose gate turns it back into test. No existing test, threshold or timeout changes.",
       "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "4eb54f3a3de7ad041a91971d04609618f8050ab9bf85d4cf1b36207a66731ac0",
+      "reason": "new gate script for L3 (added file, no existing test/threshold/delay/reference changed)",
+      "decision": "docs/plans/2026-11-05-L3-implementation.md"
+    },
+    {
+      "id": "d3ae81d5374485ce6de4aa4526d6319a9eaf73f5b8312ceda5a5a1b06ab68070",
+      "reason": "new gate script for L3 (added file, no existing test/threshold/delay/reference changed)",
+      "decision": "docs/plans/2026-11-05-L3-implementation.md"
+    },
+    {
+      "id": "7c17e71f13ea93d8a39a0747b8686916d7d676b1b4d247737ee921c803d06fa0",
+      "reason": "New file for L3, absent at the merge base, so the guard reports it as changed gate machinery: the PERF-TYPE-native keyboard driver: types through Mutter on the native host after verifying the X11 target window, and collects raw evidence only (it declares no verdict). Adding it changes no existing test, threshold, delay or criterion command.",
+      "decision": "docs/plans/2026-11-05-L3-implementation.md"
+    },
+    {
+      "id": "56498dfcefa00e368a87264e7b733d36a85a0fe0ddfc85dbb9a18642079a3472",
+      "reason": "New file for L3, absent at the merge base, so the guard reports it as changed gate machinery: unit tests of native_input.py; no X connection, native process, window or key injection. Adding it changes no existing test, threshold, delay or criterion command.",
+      "decision": "docs/plans/2026-11-05-L3-implementation.md"
+    },
+    {
+      "id": "03e87f0046f7939b199baeb7293009a121aa01a2921d519dd5484a3e599689c1",
+      "reason": "New file for L3, absent at the merge base, so the guard reports it as changed gate machinery: the GNOME Mutter RemoteDesktop D-Bus keyboard injection used by native_input.py (one owned connection per run, no token stored). Adding it changes no existing test, threshold, delay or criterion command.",
+      "decision": "docs/plans/2026-11-05-L3-implementation.md"
+    },
+    {
+      "id": "8386049e39a5d3d669590b2788ab7ec5e2e22aca37ab66f7bc359be681eb8a52",
+      "reason": "New file for L3, absent at the merge base, so the guard reports it as changed gate machinery: unit tests of native_mutter.py; no real bus, session, display, key or dialog. Adding it changes no existing test, threshold, delay or criterion command.",
+      "decision": "docs/plans/2026-11-05-L3-implementation.md"
+    },
+    {
+      "id": "fa14c2ee20d0f2fa4c1090df8cb8c3f18574d53e37a779f59b52278247a96d0e",
+      "reason": "New file for L3, absent at the merge base, so the guard reports it as changed gate machinery: diagnostic only: resolves the native attribution table's minified frames to source through the perf_native build's sourcemaps; it changes no verdict. Adding it changes no existing test, threshold, delay or criterion command.",
+      "decision": "docs/plans/2026-11-05-L3-implementation.md"
+    },
+    {
+      "id": "aec7d2e3d6ec704b93baeeb399b350068b7a70acfc5735df0a63e0047a881d55",
+      "reason": "New file for L3, absent at the merge base, so the guard reports it as changed gate machinery: unit tests of sourcemap.py. Adding it changes no existing test, threshold, delay or criterion command.",
+      "decision": "docs/plans/2026-11-05-L3-implementation.md"
+    },
+    {
+      "id": "0409d1bafdf67d623691f8a828c7fb23a750090e344ea4d65e6ca6f6caa4fff1",
+      "reason": "New file for L3, absent at the merge base, so the guard reports it as changed gate machinery: the PERF-TYPE-native criterion command: runs type_native.py under heavy.sh --exclusive; without the explicit host opt-in INKWELL_NATIVE_PERF_RUN=1 it writes a failed verdict. Adding it changes no existing test, threshold, delay or criterion command.",
+      "decision": "docs/plans/2026-11-05-L3-implementation.md"
+    },
+    {
+      "id": "0af3a9f66d55ce43bdfb6d75a4f2cf8c2279e960e3dc593630f28114b2fe2f6c",
+      "reason": "New file for L3, absent at the merge base, so the guard reports it as changed gate machinery: builds the tagged native collector and runs it only with the native-host opt-in; the Go verifier (internal/nativeperf) writes every PERF-TYPE verdict, this script invents no sample. Adding it changes no existing test, threshold, delay or criterion command.",
+      "decision": "docs/plans/2026-11-05-L3-implementation.md"
+    },
+    {
+      "id": "f600ff5157acf4bfb0840f043ae2eec3047cd321ded844994d2edd9aa9f46832",
+      "reason": "New file for L3, absent at the merge base, so the guard reports it as changed gate machinery: diagnostic tool behind mise run perf:typing-checks (typing checks in the perf-build window, CodeMirror-owned typing on then off); no gate criterion calls it. Adding it changes no existing test, threshold, delay or criterion command.",
+      "decision": "docs/plans/2026-11-05-L3-implementation.md"
+    },
+    {
+      "id": "f52f5153350032a80f733dfd7677f4fcce6ee287ec67bb456725163149ef39ed",
+      "reason": "New file for L3, absent at the merge base, so the guard reports it as changed gate machinery: unit tests of typing_checks.py; no window, bus, key or build. Adding it changes no existing test, threshold, delay or criterion command.",
+      "decision": "docs/plans/2026-11-05-L3-implementation.md"
+    },
+    {
+      "id": "354394131951ab6c2c02fea36bebbb62f74ab30681d98963770719888eeefc2e",
+      "reason": "New file for L3, absent at the merge base, so the guard reports it as changed gate machinery: the PERF-TYPE-native orchestrator (builds the perf_native app, runs the cold, warm and NULL trials through the native input driver, writes the verdict from internal/nativeperf). Adding it changes no existing test, threshold, delay or criterion command.",
+      "decision": "docs/plans/2026-11-05-L3-implementation.md"
+    },
+    {
+      "id": "8ebea8bdde8f2f8155068c4d1db359c684ba6a0c78c6f4f49e49457db3066663",
+      "reason": "New file for L3, absent at the merge base, so the guard reports it as changed gate machinery: unit tests of type_native.py; no display, no native desktop. Adding it changes no existing test, threshold, delay or criterion command.",
+      "decision": "docs/plans/2026-11-05-L3-implementation.md"
     }
   ]
 }

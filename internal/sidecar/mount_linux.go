@@ -1,6 +1,7 @@
 package sidecar
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -90,6 +91,8 @@ func runNamespaceProbe(ctx context.Context, namespaces func(*exec.Cmd), env []st
 	setProcAttr(cmd)
 	namespaces(cmd)
 	cmd.Env = env
+	var stderr bytes.Buffer
+	cmd.Stderr = &stderr
 	err := cmd.Run()
 	exitErr, exited := errors.AsType[*exec.ExitError](err)
 	switch {
@@ -101,6 +104,9 @@ func runNamespaceProbe(ctx context.Context, namespaces func(*exec.Cmd), env []st
 		return false, nil // the child's mounts were refused
 	case !exited && definitiveRefusal(err):
 		return false, nil // Start itself was refused: clone or the id maps
+	}
+	if detail := strings.TrimSpace(stderr.String()); detail != "" {
+		return false, fmt.Errorf("%w: %s", err, detail)
 	}
 	return false, err
 }

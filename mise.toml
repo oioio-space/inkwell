@@ -406,3 +406,11 @@ run = "./scripts/gate.sh"
 description = "Trace pinned Linux sidecars on PM-1 and retain syscall derivation evidence"
 depends = ["sidecar:fetch"]
 run = "./scripts/heavy.sh bash scripts/sidecar-trace-ci.sh"
+
+[tasks."perf:type-native"]
+description = "Build the dedicated native collector; INKWELL_NATIVE_PERF_RUN=1 on the graphical host is required for measurement"
+run = "bash scripts/perf/type-native.sh"
+
+[tasks."perf:typing-checks"]
+description = "Real-window typing checks (dead keys, ibus, undo, AT-SPI, completion, cursors, read-only, paste), CodeMirror-owned typing ON and OFF; INKWELL_NATIVE_PERF_RUN=1 on the graphical host"
+run = "./scripts/heavy.sh --exclusive python3 scripts/perf/typing_checks.py"

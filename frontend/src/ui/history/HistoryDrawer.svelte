@@ -2,6 +2,7 @@
 import type { Period } from "../../history/filters";
 import { stamp } from "../../history/stamp";
 import { t, tn } from "../../i18n";
+import Problems from "../../language/Problems.svelte";
 import { workspace } from "../../workspace/workspace.svelte";
 import ApplyDialog from "./ApplyDialog.svelte";
 import DiffView from "./DiffView.svelte";
@@ -43,7 +44,7 @@ function onListKey(e: KeyboardEvent) {
   }
 }
 
-const tabs = ["history", "comments", "activity"] as const;
+const tabs = ["problems", "history", "comments", "activity"] as const;
 
 /** Events other than text changes, newest first: the feed of the « Activité » tab. */
 const activity = $derived.by(() => {
@@ -78,16 +79,18 @@ const activity = $derived.by(() => {
 </script>
 
 {#if history.open}
-  <aside class="drawer" aria-label={t("history.title")} data-testid="history-drawer">
-    <div class="tg tabs" role="tablist" aria-label={t("history.title")}>
+  <aside class="drawer" aria-label={t("review.title")} data-testid="history-drawer">
+    <div class="tg tabs" role="tablist" aria-label={t("review.title")}>
       {#each tabs as tab}
         <button type="button" role="tab" aria-selected={history.tab === tab} onclick={() => (history.tab = tab)}>
-          {t(`history.tab.${tab}`)}
+          {tab === "problems" ? t("problems.tab") : t(`history.tab.${tab}`)}
         </button>
       {/each}
     </div>
 
-    {#if history.tab === "history"}
+    {#if history.tab === "problems"}
+      <Problems />
+    {:else if history.tab === "history"}
       <div class="filters">
         <label>
           <span class="vh">{t("history.filter.person")}</span>

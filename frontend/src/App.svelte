@@ -1,15 +1,22 @@
 <script lang="ts">
+import { next as A } from "@automerge/automerge";
 import { Presence } from "@automerge/automerge-repo";
-import { Stream } from "@wailsio/runtime";
-import { onMount, tick } from "svelte";
+import { Stream, WailsSocket } from "@wailsio/runtime";
+import { onMount, tick, untrack } from "svelte";
 import { Session } from "../bindings/github.com/oioio-space/inkwell/internal/app/index";
+import { whenWritten } from "./editor/amSync";
 import { looksTabular } from "./editor/csv/dialect";
 import { markExternal } from "./editor/external";
 import { langOf } from "./editor/format";
 import type { CursorState } from "./editor/presence";
 import { t } from "./i18n";
+import { problemMarks } from "./language/marks";
+import { resolveRange, toOffset, toPosition } from "./language/positions";
+import { problems } from "./language/problems.svelte";
+import { configureLanguage, language } from "./language/service";
 import { validFilePath } from "./net/admission";
 import type { SocketLike } from "./net/WailsNetworkAdapter";
+import { profileNativeStage } from "./perf/nativeDispatch";
 import PresentBanner from "./present/PresentBanner.svelte";
 import PresentHost from "./present/PresentHost.svelte";
 import { presentSession } from "./present/session.svelte";
@@ -44,6 +51,7 @@ import FormatBar from "./ui/toolbar/FormatBar.svelte";
 import { barLang } from "./ui/toolbar/spec";
 import { workspace } from "./workspace/workspace.svelte";
 
+let languageMounted = $state(false);
 let sharing = $state(false);
 let people = $state(false);
 let preferences = $state(false);
@@ -129,6 +137,40 @@ $effect(() => {
   if (view) markExternal(view, marks?.spans ?? null);
 });
 
+$effect(() => {
+  const view = session.view;
+  const file = workspace.current;
+  const entries = problems.entries;
+  if (!view) return;
+  const handle = file === "main.typ" ? workspace.handle : undefined;
+  // Anchors are places in the document: resolved once the keys typed since the paint are in it.
+  const mark = () => {
+    if (view !== session.view) return;
+    const doc = handle?.doc();
+    const text = view.state.doc.toString();
+    const marks = entries
+      .filter((d) => d.file === file && !d.stale)
+      .map((d) => ({
+        ...d,
+        ...(doc && d.anchor
+          ? resolveRange(doc, d.anchor)
+          : d.position
+            ? { from: toOffset(text, d.position.start), to: toOffset(text, d.position.end) }
+            : {}),
+      }));
+    view.dispatch({ effects: problemMarks.of(marks) });
+  };
+  if (handle) whenWritten(handle, mark);
+  else mark();
+});
+
+$effect(() => {
+  const diagnostics = preview.diagnostics;
+  const revision = preview.diagnosticRevision;
+  const hashes = preview.sourceHashes;
+  untrack(() => void problems.compilerVerified(diagnostics, revision, hashes));
+});
+
 // Projection views announce the active file without publishing main-document cursors. A file
 // name peers would refuse (List does not validate names: NFD, a backslash, hidden characters) is
 // not announced at all, rather than letting peers place this person on main.typ.
@@ -155,6 +197,11 @@ $effect(() => {
 });
 
 function onKey(e: KeyboardEvent) {
+  if (e.key === "F8" && !e.ctrlKey && !e.metaKey && !e.altKey) {
+    e.preventDefault();
+    problems.next(e.shiftKey);
+    return;
+  }
   if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "s") {
     e.preventDefault();
     void workspace.save();
@@ -193,21 +240,135 @@ $effect(() => {
   const handle = workspace.handle;
   if (!handle) return;
   const note = () => {
+    if (import.meta.env.VITE_PERF_NATIVE === "1") {
+      // Same work, split into labelled stages for the native attribution table only.
+      profileNativeStage("app-change-note", () => {
+        const doc = handle.doc();
+        if (!doc) return;
+        profileNativeStage("preview-noteEdit", () => preview.noteEdit(lastChangeSeconds(doc)));
+        const text = profileNativeStage("automerge-doc-text", () => doc.text);
+        const heads = profileNativeStage("automerge-getHeads", () => A.getHeads(doc).join(","));
+        profileNativeStage("language-didChange", () => language.open("main.typ", text, heads));
+        profileNativeStage("problems-edit", () => problems.edit(text));
+      });
+      return;
+    }
     const doc = handle.doc();
     if (doc) preview.noteEdit(lastChangeSeconds(doc));
+    if (doc) {
+      language.open("main.typ", doc.text, A.getHeads(doc).join(","));
+      problems.edit(doc.text);
+    }
   };
-  note();
+  untrack(note);
   handle.on("change", note);
   return () => handle.off("change", note);
 });
 
+$effect(() => {
+  const file = workspace.current;
+  const text = workspace.opened?.text;
+  if (file !== "main.typ" && file.endsWith(".typ") && text !== undefined) language.open(file, text);
+});
+
+$effect(() => {
+  const project = workspace.project;
+  if (!languageMounted || !project) return;
+  untrack(() => {
+    problems.reset();
+    language.reset();
+    const doc = workspace.handle?.doc();
+    if (doc) language.open("main.typ", doc.text, A.getHeads(doc).join(","));
+  });
+  return () => language.stop();
+});
+
 onMount(() => {
   if (import.meta.env.VITE_E2E_OBSERVE === "1") {
+    (
+      globalThis as typeof globalThis & { __inkwellLanguageVersion?: () => number }
+    ).__inkwellLanguageVersion = () => language.version(workspace.current);
+    (
+      globalThis as typeof globalThis & { __inkwellLanguageReady?: () => boolean }
+    ).__inkwellLanguageReady = () => language.ready;
+    (
+      globalThis as typeof globalThis & {
+        __inkwellLanguageRequest?: (method: string, offset: number) => Promise<unknown>;
+      }
+    ).__inkwellLanguageRequest = (method, offset) => {
+      if (
+        !["textDocument/completion", "textDocument/signatureHelp", "textDocument/hover"].includes(
+          method,
+        ) ||
+        !Number.isInteger(offset)
+      )
+        return Promise.resolve(undefined);
+      const text = session.state?.doc.toString();
+      return text === undefined
+        ? Promise.resolve(undefined)
+        : language.request(method, workspace.current, toPosition(text, offset));
+    };
+
+    (globalThis as typeof globalThis & { __inkwellSelection?: () => string }).__inkwellSelection =
+      () =>
+        session.state
+          ? session.state.doc.sliceString(
+              session.state.selection.main.from,
+              session.state.selection.main.to,
+            )
+          : "";
     (globalThis as typeof globalThis & { __inkwellTestTable?: () => void }).__inkwellTestTable =
       () => sheetView.openAsTable("main.typ");
   }
   preview.start(() => Stream("preview") as unknown as SocketLike);
-  void workspace.start().then(refresh);
+  configureLanguage(
+    () => Stream("lsp") as unknown as SocketLike,
+    (file, version, items) => problems.publish(file, version, items),
+    () => workspace.current,
+  );
+  languageMounted = true;
+  let nativePerfStop: (() => void) | undefined;
+  let mounted = true;
+  const started = workspace.start().then(refresh);
+  if (import.meta.env.VITE_PERF_NATIVE === "1") {
+    void started
+      .then(() => tick())
+      .then(async () => {
+        if (!mounted) return;
+        if (new URLSearchParams(location.search).has("typing-check")) {
+          // Typing checks (scripts/perf/typing_checks.py): no measurement in this mode.
+          const { startTypingCheck } = await import("./perf/typingCheck");
+          const { readOnlyFacets } = await import("./editor/setup");
+          if (!mounted) return;
+          nativePerfStop = startTypingCheck({
+            open: () => Stream("typing-check") as unknown as SocketLike,
+            view: () => session.view,
+            readOnly: readOnlyFacets,
+          });
+          return;
+        }
+        const { startNativePerf } = await import("./perf/native");
+        if (!mounted) return;
+        nativePerfStop = startNativePerf({
+          open: () => Stream("native-perf") as unknown as SocketLike,
+          streams: WailsSocket.prototype,
+          view: () => session.view,
+          revision: () => {
+            const doc = workspace.active?.doc();
+            return doc ? A.getHeads(doc).join(",") : "";
+          },
+          foreignChange: (before, after) => {
+            const doc = workspace.active?.doc();
+            if (!doc || !before || !after) return undefined;
+            try {
+              return A.diff(doc, before.split(","), after.split(",")).map((p) => p.path.join("/"));
+            } catch {
+              return undefined;
+            }
+          },
+        });
+      });
+  }
   // The About dialog just stays without a version if Go does not answer.
   Session.AppVersion()
     .then((info) => (buildInfo = info))
@@ -216,8 +377,11 @@ onMount(() => {
     if (!document.hidden) void refresh();
   }, 4000);
   return () => {
+    mounted = false;
+    nativePerfStop?.();
     clearInterval(timer);
     preview.stop();
+    language.stop();
     void workspace.stop();
   };
 });
@@ -357,6 +521,7 @@ onMount(() => {
         ofMain={mainFile}
         hasText={mainFile || workspace.opened?.text !== undefined}
         onProblem={jumpToProblem}
+        onNextProblem={(reverse)=>problems.next(reverse)}
         {unsaved}
       />
     {/if}
@@ -385,6 +550,7 @@ onMount(() => {
     flex: 1;
     flex-direction: column;
     min-width: 0;
+    container-type: inline-size;
   }
   main {
     position: relative;

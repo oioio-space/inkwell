@@ -10,6 +10,9 @@ import {
   placeholder,
 } from "@codemirror/view";
 import { t } from "../i18n";
+import { writingHelp } from "../language/extension";
+import { diagnosticMarks } from "../language/marks";
+import { dispatchNativeTransactions, profileNativeStage } from "../perf/nativeDispatch";
 import { amSync } from "./amSync";
 import { blameMarks } from "./blameMarks";
 import { changeGutter } from "./changeGutter";
@@ -17,7 +20,9 @@ import { externalMarks } from "./external";
 import { formatKeymap, type Lang } from "./format";
 import { languageExtension } from "./highlight";
 import { localHistoryOnly } from "./localHistory";
+import { ownTyping } from "./ownTyping";
 import { type Person, presenceSync } from "./presence";
+import { prewarmTyping } from "./prewarm";
 import { remoteCursors } from "./remoteCursors";
 
 type Doc = { text: string };
@@ -31,7 +36,14 @@ const theme = EditorView.theme({
     // The zoom of the text (50 to 300 %) is a setting of this device: a variable on the page.
     fontSize: "calc(14px * var(--text-zoom, 1))",
   },
-  ".cm-scroller": { fontFamily: "var(--font-mono)", lineHeight: "1.75" },
+  ".cm-scroller": {
+    fontFamily: "var(--font-mono)",
+    lineHeight: "1.75",
+    // The scroller's size comes from the page, never from the text: a typed key then lays out and
+    // paints only inside it (warm handler -0.46 ms, fewer missed refreshes when a key straddles
+    // a refresh; docs/perf/2026-11-07-mutter-instrumentation.md, "Warm frames").
+    contain: "strict",
+  },
   ".cm-content": { padding: "20px 28px 20px 0", caretColor: "var(--fg)" },
   "&.cm-editor .cm-line": { padding: "0 0 0 16px" },
   ".cm-gutters": {
@@ -54,11 +66,12 @@ const theme = EditorView.theme({
  */
 export const forLang = (lang: Lang): Extension => [
   languageExtension(lang),
+  ...(lang === "typst" ? [writingHelp] : []),
   Prec.high(keymap.of(formatKeymap(lang))),
 ];
 
 /** A reader or a disconnected person: the text can be read, selected and copied, not typed in. */
-const readOnlyFacets = (on: boolean): Extension =>
+export const readOnlyFacets = (on: boolean): Extension =>
   on
     ? [EditorState.readOnly.of(true), EditorView.contentAttributes.of({ "aria-readonly": "true" })]
     : [];
@@ -105,14 +118,39 @@ export function createEditor(
   const access = new Compartment();
   const presence = presenceSync(handle, me, () => view, onPeople);
   const initial = handle.doc()?.text ?? "";
+  // Once per window: the first key typed must not pay for code never run (PERF-TYPE-native cold).
+  prewarmTyping([
+    cspNonce(),
+    diagnosticMarks,
+    lineNumbers(),
+    changeGutter,
+    history(),
+    localHistoryOnly,
+    drawSelection(),
+    highlightActiveLine(),
+    EditorView.lineWrapping,
+    forLang(lang),
+    keymap.of([...defaultKeymap, ...historyKeymap]),
+    externalMarks,
+    blameMarks(),
+    theme,
+  ]);
   view = new EditorView({
     parent,
+    ...(import.meta.env.VITE_PERF_NATIVE === "1"
+      ? { dispatchTransactions: dispatchNativeTransactions }
+      : {}),
     doc: initial,
     ...(at !== undefined
       ? { selection: { anchor: Math.max(0, Math.min(at, initial.length)) } }
       : {}),
     extensions: [
       cspNonce(),
+      // Prototype measured in perf builds only; off unless the build sets the flag (user decision).
+      import.meta.env.VITE_PERF_NATIVE === "1" && import.meta.env.VITE_PERF_CM_TYPING === "1"
+        ? ownTyping()
+        : [],
+      diagnosticMarks,
       lineNumbers(),
       changeGutter,
       history(),
@@ -129,7 +167,10 @@ export function createEditor(
       blameMarks(),
       EditorView.contentAttributes.of({ "aria-label": t("editor.label") }),
       EditorView.updateListener.of((u) => {
-        if (u.docChanged || u.selectionSet) onState?.(u.state);
+        if (!(u.docChanged || u.selectionSet)) return;
+        if (import.meta.env.VITE_PERF_NATIVE === "1")
+          profileNativeStage("app-onState", () => onState?.(u.state));
+        else onState?.(u.state);
       }),
       amSync({ handle, path: ["text"], ...(onRefused ? { onRefused } : {}) }),
       remoteCursors(),
@@ -166,6 +207,7 @@ export function createReadOnlyEditor(
     doc: text,
     extensions: [
       cspNonce(),
+      diagnosticMarks,
       lineNumbers(),
       EditorState.readOnly.of(true),
       languageExtension(lang),

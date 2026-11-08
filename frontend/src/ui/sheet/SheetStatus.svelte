@@ -2,6 +2,7 @@
 import type { Delimiter } from "../../editor/csv/records";
 import { formatFr } from "../../editor/csv/stats";
 import { t, tn } from "../../i18n";
+import { problems } from "../../language/problems.svelte";
 import type { FileInfo } from "../../store/files";
 import type { Status } from "../../workspace/workspace.svelte";
 import EncodingMenu from "../popover/EncodingMenu.svelte";
@@ -70,11 +71,11 @@ const STAT_KEYS = ["count", "sum", "mean", "min", "max"] as const;
   {/if}
   {#if ctrl.problems.length > 0}
     {@const first = ctrl.problems[0]}
-    <span class="fb warn" aria-live="polite" data-testid="problems" title={first ? t(`sheet.problem.${first.kind}`) : ""}>
+    <button type="button" class="fb warn" aria-live="polite" data-testid="problems" title={first ? t(`sheet.problem.${first.kind}`) : ""} onclick={(event)=>event.shiftKey?problems.show():problems.next()}>
       {ctrl.problems.length === 1
         ? t("sheet.problems.one", { line: first?.line ?? 0 })
         : t("sheet.problems.other", { count: ctrl.problems.length, line: first?.line ?? 0 })}
-    </span>
+    </button>
   {/if}
   <span class="sp"></span>
   <MenuButton bind:open={statsOpen} up align="end" label={t("sheet.stat.choose")}>

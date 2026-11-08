@@ -4,6 +4,7 @@ import type { Lang } from "../../editor/format";
 import { cursorPosition } from "../../editor/stats/position";
 import { stats as computeStats, type Stats } from "../../editor/stats/stats";
 import { t, tn } from "../../i18n";
+import { problems } from "../../language/problems.svelte";
 import { preview } from "../../preview/preview.svelte";
 import type { Diagnostic } from "../../preview/protocol";
 import type { FileInfo } from "../../store/files";
@@ -31,6 +32,7 @@ let {
   ofMain = true,
   hasText = true,
   onProblem = () => {},
+  onNextProblem,
   unsaved = false,
 }: {
   lang: Lang;
@@ -47,6 +49,7 @@ let {
   hasText?: boolean;
   /** The person chose a problem in the list: go to its place. */
   onProblem?: (d: Diagnostic) => void;
+  onNextProblem?: ((reverse?: boolean) => void) | undefined;
   /** The text is not in the file yet (saving with Ctrl+S, or a write that failed). */
   unsaved?: boolean;
 } = $props();
@@ -58,12 +61,14 @@ let computed = $state.raw<Stats | undefined>();
 const position = $derived(editorState ? cursorPosition(editorState) : { line: 1, column: 1 });
 const words = $derived(computed ? count(computed.words, "mot") : "…");
 const language = $derived(t(`lang.${lang}`));
+const errors = $derived(onNextProblem ? problems.errors : preview.errors);
+const warnings = $derived(onNextProblem ? problems.warnings : preview.warnings);
 const problemsName = $derived(
-  preview.errors + preview.warnings === 0
+  errors + warnings === 0
     ? t("problems.none")
     : [
-        preview.errors > 0 ? tn("problems.errors", preview.errors) : "",
-        preview.warnings > 0 ? tn("problems.warnings", preview.warnings) : "",
+        errors > 0 ? tn("problems.errors", errors) : "",
+        warnings > 0 ? tn("problems.warnings", warnings) : "",
       ]
         .filter(Boolean)
         .join(", "),
@@ -86,6 +91,20 @@ $effect(() => {
     {peerCount === 0 ? t("status.alone") : tn("people.count", peerCount + 1)}
   </span>
   <span class="sp"></span>
+  {#if onNextProblem}
+  {#if hasText && (preview.hasResult || problems.entries.length > 0)}
+    <button type="button" class="fb" title={t("problems.hint")} aria-label={`${t("problems.label")} : ${t("problems.next")}, ${problemsName}`} onclick={(event) => event.shiftKey ? problems.show() : onNextProblem?.()} oncontextmenu={(event) => {event.preventDefault();problems.show();}}>
+      <span class="problems" data-testid="problems" data-errors={problems.errors} data-warnings={problems.warnings}>
+        {#if problems.errors + problems.warnings === 0}
+          <Icon name="check" size={13} /><span class="ptext">{t("problems.none")}</span>
+        {:else}
+          {#if problems.errors > 0}<span class="n err"><Icon name="fail" size={13} />{problems.errors}</span>{/if}
+          {#if problems.warnings > 0}<span class="n warn"><Icon name="warn" size={13} />{problems.warnings}</span>{/if}
+        {/if}
+      </span>
+    </button>
+  {/if}
+  {:else}
   {#if ofMain && preview.hasResult}
     <MenuButton
       bind:open={problemsOpen}
@@ -133,6 +152,7 @@ $effect(() => {
         {#if preview.truncated}<p class="none">{t("problems.more")}</p>{/if}
       {/snippet}
     </MenuButton>
+  {/if}
   {/if}
   {#if ofMain && showPage && preview.pageCount > 0}
     <span class="fb page" data-testid="page-indicator">
@@ -220,6 +240,13 @@ $effect(() => {
       display: none;
     }
   }
+  /* Squeezed by the side panels, the bar keeps what matters: the rest would overlap. */
+  @container (max-width: 640px) {
+    .bot :global(.fb.page),
+    .bot :global(.fb.lang) {
+      display: none;
+    }
+  }
   .problems .n {
     display: inline-flex;
     align-items: center;
@@ -231,18 +258,5 @@ $effect(() => {
   }
   .problems .warn {
     color: var(--warning);
-  }
-  .problem {
-    gap: 8px;
-  }
-  .problem[data-severity="error"] :global(svg) {
-    color: var(--error);
-  }
-  .problem[data-severity="warning"] :global(svg) {
-    color: var(--warning);
-  }
-  .none {
-    margin: 8px 12px;
-    color: var(--fg-dim);
   }
 </style>

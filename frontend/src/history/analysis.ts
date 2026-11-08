@@ -1,5 +1,6 @@
 import { next as A } from "@automerge/automerge";
 import { SLOW_CHARS } from "../store/limits";
+import { afterPaint } from "../ui/afterPaint";
 import {
   claimsOf,
   type DeviceClaim,
@@ -198,7 +199,7 @@ export function workerAnalyzer(
       w.onmessage = (e) => {
         if ((e.data as { ready?: boolean } | null)?.ready) {
           resolve();
-          w.onmessage = receive;
+          w.onmessage = (e) => afterPaint(() => receive(e));
         }
       };
     });

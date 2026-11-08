@@ -231,9 +231,28 @@ for (const dark of [false, true]) {
     const style = (text: string, prop: "color" | "fontWeight") =>
       expect.poll(() =>
         editor(page)
-          .locator(".cm-line span", { hasText: text })
+          .locator(".cm-line", { hasText: text })
           .first()
-          .evaluate((el, p) => getComputedStyle(el)[p], prop),
+          // Style of the element that renders the token's first character: a diagnostic mark
+          // (L3, N28) may wrap or split the token, so no single span need hold the whole text.
+          .evaluate(
+            (line, [t, p]) => {
+              const walker = document.createTreeWalker(line, NodeFilter.SHOW_TEXT);
+              const nodes: Text[] = [];
+              for (let n = walker.nextNode(); n; n = walker.nextNode()) nodes.push(n as Text);
+              let at = nodes
+                .map((n) => n.data)
+                .join("")
+                .indexOf(t);
+              for (const n of nodes) {
+                if (at < n.data.length)
+                  return getComputedStyle(n.parentElement as Element)[p as "color"];
+                at -= n.data.length;
+              }
+              return "";
+            },
+            [text, prop] as const,
+          ),
       );
     const colour = async (text: string, variable: string) =>
       style(text, "color").toBe(await resolved(page, variable));

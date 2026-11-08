@@ -1,0 +1,7 @@
+MESA: error: Failed to query drm device.
+MESA-EGL: warning: egl: failed to create dri2 screen
+MESA: error: Failed to query drm device.
+MESA-EGL: warning: egl: failed to create dri2 screen
+Overriding existing handler for signal 10. Set JSC_SIGNAL_FOR_GC if you want WebKit to use a different signal
+2026/11/05 08:53:05 INFO typst: offline network=namespace
+time=2026-11-05T08:53:05.246+01:00 level=INFO msg="typst: offline" network=namespace

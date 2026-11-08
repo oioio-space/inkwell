@@ -1,3 +1,5 @@
+//go:build !perf_native
+
 // Package inkwell is the root of the inkwell desktop application: a
 // serverless, collaborative Typst editor (see docs/architecture.md).
 //

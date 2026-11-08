@@ -93,6 +93,10 @@ type manifest struct {
 // .inkwell/ directory. Create or open one with [Create] or [Open]; methods
 // are safe for concurrent use.
 type Project struct {
+	// snapshotMu protects immutable snapshot reuse, independently of document writes.
+	snapshotMu      sync.Mutex
+	snapshotEntries map[string]snapshotEntry
+	snapshotObjects string
 	*store.KV
 	dir      string
 	root     *os.Root // the project folder

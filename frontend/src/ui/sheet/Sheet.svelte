@@ -7,6 +7,7 @@ import { patchWindow } from "../../editor/csv/patchWindow";
 import type { Delimiter } from "../../editor/csv/records";
 import { type DocPort, handlePort, plainPort, SheetDoc } from "../../editor/csv/sheetDoc";
 import { t, tn } from "../../i18n";
+import { problems } from "../../language/problems.svelte";
 import { type Doc, workspace } from "../../workspace/workspace.svelte";
 import Icon from "../icons/Icon.svelte";
 import type { IconName } from "../icons/paths";
@@ -64,6 +65,18 @@ let context = $state<{ x: number; y: number } | undefined>();
 let finding = $state<{ replace: boolean } | undefined>();
 let gridHost: HTMLDivElement | undefined = $state();
 let presence: ReturnType<typeof sheetPresence> | undefined;
+
+$effect(() => {
+  const controller = ctrl;
+  const file = path;
+  if (!controller) return;
+  const entries = controller.problems.map((p) => ({
+    line: p.line,
+    message: t(`sheet.problem.${p.kind}`),
+  }));
+  const text = controller.model.text;
+  untrack(() => problems.csv(file, text, entries));
+});
 
 // Open: parse (in a worker for big files), then build the sheet over the document.
 $effect(() => {

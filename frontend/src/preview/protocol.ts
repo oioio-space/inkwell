@@ -54,6 +54,7 @@ export interface ResultMessage {
   first: number;
   pages: string[];
   diagnostics: Diagnostic[];
+  sourceHashes?: Record<string, string>;
   truncated: boolean;
   failure?: Failure | undefined;
 }
@@ -205,6 +206,20 @@ export function parseMessage(frame: Uint8Array | string): PreviewMessage | undef
         first: int(v.first, MAX_PAGE_COUNT) ?? 1,
         pages: list(v.pages, MAX_PAGES, (p) => (typeof p === "string" ? p : undefined)),
         diagnostics: list(v.diagnostics, MAX_DIAGNOSTICS, parseDiagnostic),
+        ...(isObject(v.sourceHashes)
+          ? {
+              sourceHashes: Object.fromEntries(
+                Object.entries(v.sourceHashes)
+                  .filter(
+                    ([path, hash]) =>
+                      path.length <= 4096 &&
+                      typeof hash === "string" &&
+                      /^[a-f0-9]{64}$/.test(hash),
+                  )
+                  .slice(0, 500),
+              ) as Record<string, string>,
+            }
+          : {}),
         truncated: v.truncated === true,
         failure: parseFailure(v.failure),
       };

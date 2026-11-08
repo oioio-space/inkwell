@@ -1,0 +1,1 @@
+{"criterion":"NATIVE-readiness","exclusive":true,"slots":2,"load_before":[0.96,1.42,0.91],"load_after":[2.59,1.71,1.02],"max_load":5,"waited_seconds":0,"exit_code":0}

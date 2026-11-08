@@ -118,8 +118,8 @@ let menuOpen = $state(false);
       class="fb"
       class:on={historyOpen}
       aria-pressed={historyOpen}
-      aria-label={t(historyOpen ? "history.hide" : "history.show")}
-      title={t(historyOpen ? "history.hide" : "history.show")}
+      aria-label={t(historyOpen ? "review.hide" : "review.show")}
+      title={t(historyOpen ? "review.hide" : "review.show")}
       data-testid="history-toggle"
       onclick={onToggleHistory}
     >

@@ -37,7 +37,7 @@ import { settings } from "../../store/settings.svelte";
 import { lastVisit, myActors, rememberActor, saveVisit } from "../../store/visit";
 import { workspace } from "../../workspace/workspace.svelte";
 
-export type Tab = "history" | "comments" | "activity";
+export type Tab = "problems" | "history" | "comments" | "activity";
 export type ColorBy = "type" | "person";
 
 /** What the differences window shows: two texts, and the history that explains them. */

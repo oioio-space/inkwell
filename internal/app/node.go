@@ -190,11 +190,14 @@ func Start(ctx context.Context, home *os.Root, o Options) (*Runtime, error) {
 	s := NewSession(node)
 	s.inv = inv
 	fctx, cancel := context.WithCancel(ctx)
+	// Acquire this process's snapshot lease and reclaim abandoned sessions at startup.
+	_, _ = sourceSnapshotPool()
 	pv := NewPreview(PreviewOptions{
-		Root:   o.Project.Path(),
-		Title:  func() string { return o.Project.Meta().Title },
-		Choose: o.ExportChoose,
-		Log:    log,
+		Snapshot: func(ctx context.Context) (SourceSnapshot, error) { return snapshotProject(ctx, o.Project) },
+		Root:     o.Project.Path(),
+		Title:    func() string { return o.Project.Meta().Title },
+		Choose:   o.ExportChoose,
+		Log:      log,
 	})
 	files.SetOnWrite(pv.Changed)
 	r := &Runtime{Node: node, Session: s, Repo: w.Repo(), Files: files, Preview: pv, wiring: w, inv: inv, cancel: cancel}

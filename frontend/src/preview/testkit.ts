@@ -1,4 +1,5 @@
 import type { SocketLike } from "../net/WailsNetworkAdapter";
+import { drainAfterPaint } from "../ui/afterPaint";
 import type { Diagnostic, ResultMessage } from "./protocol";
 
 /** A page of Typst's output in miniature: an A4 SVG whose root carries the size in points. */
@@ -56,9 +57,10 @@ export class FakeSocket implements SocketLike {
     this.onclose?.(new Event("close"));
   }
 
-  /** Go sends a message. */
+  /** Go sends a message; the client handles it after the next paint, played here at once. */
   receive(message: unknown): void {
     const bytes = new TextEncoder().encode(JSON.stringify(message));
     this.onmessage?.({ data: bytes.buffer } as MessageEvent);
+    drainAfterPaint();
   }
 }

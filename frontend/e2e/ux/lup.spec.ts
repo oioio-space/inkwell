@@ -66,8 +66,8 @@ for (const width of [1100, 950]) {
   }) => {
     const page = await open(browser, ALICE_URL);
     await page.setViewportSize({ width, height: 640 });
-    await page.getByRole("button", { name: "Afficher l'historique" }).click();
-    await expect(page.getByRole("complementary", { name: "Historique" })).toBeVisible();
+    await page.getByRole("button", { name: "Afficher Relire" }).click();
+    await expect(page.getByRole("complementary", { name: "Relire" })).toBeVisible();
     // Spec §3.4: from 900 to 1199px the drawer covers the preview; the title, the header
     // buttons and the status bar stay readable and apart.
     await expect.poll(() => statusClashes(page)).toEqual([]);
