@@ -162,9 +162,20 @@ alice_attach() {
 }
 
 down() {
-  local ns
+  local ns pid link
+  # A namespace is only freed once its last process exits: a server or socat still running from the
+  # previous scenario keeps its veth (w-<ns>) alive, and the next `up` fails with « File exists »
+  # (scenario 8 after 7, 2026-11-09). Stop the processes first, then delete everything by name.
   for ns in "${NAMESPACES[@]}"; do
+    for pid in $(ip netns pids "$ns" 2>/dev/null); do kill -TERM "$pid" 2>/dev/null || true; done
+  done
+  sleep 0.5
+  for ns in "${NAMESPACES[@]}"; do
+    for pid in $(ip netns pids "$ns" 2>/dev/null); do kill -KILL "$pid" 2>/dev/null || true; done
     ip netns del "$ns" 2>/dev/null || true
+  done
+  for link in $(ip -o link show 2>/dev/null | awk -F': ' '$2 ~ /^w-/ {sub(/@.*/, "", $2); print $2}'); do
+    ip link del "$link" 2>/dev/null || true
   done
   ip link del br-wan 2>/dev/null || true
 }
