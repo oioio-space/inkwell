@@ -507,3 +507,47 @@ window pinned):
 
 Block WB is superseded by SP1: `gates/WB.toml` stays frozen as history and is not run; its WB-2 floor, tests and
 mutants are carried by `gates/SP1.toml` (netsim plan, section "Block WB").
+
+## E3 results (2026-11-09, measurement only, no fix)
+
+Setup: scratch worktree of the working tree (HEAD 94ef691 plus the uncommitted SP1 code), binaries rebuilt per
+variant (`inkwell-server`, `inkwell-relay`) and run with `NETSIM_BIN_DIR`; `NETSIM_SCENARIOS='7'`, the NI-3 scenario of
+the impaired netsim (8 KiB/s relay, 300 000-character paste). Only `streamWindow` in `internal/transport/p2p/muxer.go`
+changed between variants.
+
+| yamux window | seed | C1 (arrived, <= 175 s) | C2 (seen, worst) | held back | C3 (outages, resyncs) | C4 (qdisc bytes, dropped) |
+|---|---|---|---|---|---|---|
+| 256 KiB (as is) | 1 | pass, 94.6 s | 47/47, **44.8 s** | 0 | 0, 0 / 0, 0 | 832 334 B, 423 |
+| 256 KiB | 2 | pass, 94.0 s | 46/46, **53.3 s** | 0 | 0, 0 / 0, 0 | 801 913 B |
+| 256 KiB | 3 | pass, 95.3 s | 47/47, **49.0 s** | 0 | 0, 0 / 0, 0 | 796 339 B |
+| 192 KiB | 1 | FAIL: peers never connect (status stays « Seul ») | - | - | - | - |
+| 128 KiB | 1 | FAIL: same | - | - | - | - |
+
+192 and 128 KiB were run on seed 1 only: the failure is structural, not statistical. go-yamux v5.1.0 `VerifyConfig`
+(`mux.go:99`) rejects `InitialStreamWindowSize` < 256 KiB (« must be larger or equal 256 kB »), so no session is ever
+established. A smaller window is therefore not reachable by configuration; it would need a fork of go-yamux, which
+D-SP1-2 did not consider. 256 KiB is the floor, which is why the design pins it.
+
+Relay qdisc backlog during the paste: not obtainable. The netsim only records `bytes sent / dropped / overlimits` of the
+root qdisc at the end (`topology.sh qstat`), not a time series of `backlog`. What the data shows: the qdisc dropped
+packets (423 on seed 1), so its buffer was full at some point and TCP lost segments on the 8 KiB/s hop.
+
+**Verdict.** No window keeps C2 worst under 44.0 s on the 3 seeds. 256 KiB gives 44.8 / 53.3 / 49.0 s (seed 1 misses by
+0.8 s, the others by 5-9 s) and no smaller window can be set. C1 (about 95 s, with room to 175 s), C3 (0 outages, 0
+resyncs) and C4 pass on all three seeds, and no token is held back, so the SP1 criteria other than NI-3-SP1's
+`worst < 44.0` hold. The criterion NI-3-SP1 as written fails on 3 of 3 seeds in the current tree (the RL1 baseline it
+compares to is 44-49 s: SP1 does not improve C2 here, it only removes the resyncs).
+
+**The gap between the model's 36 s `InteractiveBound` and the 45-53 s measured.** The model counts one blocked 32 KiB
+fragment Write plus one 256 KiB window at 8 KiB/s (32 s) plus 2D. The data does not prove which of these is missing;
+candidates, ordered by evidence:
+1. Loss on the hop (423 qdisc drops, measured): TCP retransmission timeouts and backoff on the relay hop stall the
+   queue beyond `bytes / R`, which the model does not represent (it has no loss on the path). This explains the
+   seed-to-seed spread (44.8 to 53.3 s) better than a constant extra queue.
+2. Typing frames queue behind fragments already handed to yamux's own send queue (a stream's window is
+   per stream, but the session `sendLoop` writes in FIFO order to one circuit): not measured; E3 would need a
+   probe inside the muxer to separate it from 1.
+3. A relay buffer larger than one window: not supported by the data (the qdisc drops, so its limit is reached); the
+   `backlog` series that would settle it is not recorded.
+Next measurement if the bound matters: record `tc -s qdisc` backlog at 1 Hz during the paste and log per-frame
+enqueue and write times in the muxer, then re-fit the model with loss.
