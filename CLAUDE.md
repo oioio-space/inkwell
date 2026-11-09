@@ -156,9 +156,9 @@ Elle doit :
 - reprendre le même vocabulaire et les mêmes raccourcis ;
 - trouver sa place dans un panneau ou un menu existant avant d'en créer un ;
 - passer une revue de cohérence visuelle (captures clair et sombre, comparées aux écrans voisins)
-  avant la fusion.
-Ce qui s'y énonce comme règle est exécutable (états affichés suivant un modèle, accessibilité, cliquabilité,
-parcours en machines à états) : `docs/engineering-principles.md` §5.
+  avant la fusion ;
+- respecter les règles exécutables de l'interface (états affichés suivant un modèle, accessibilité,
+  cliquabilité, parcours en machines à états) : `docs/engineering-principles.md` §5.
 
 **Performance mesurée :** tout changement qui touche la performance d'un paquet du chemin critique se
 prouve avec benchstat, jamais au jugé (skill `go-benchmark`) : `mise run bench:baseline` → changement →
@@ -205,7 +205,7 @@ l'effort le plus bas qui gardent la qualité, choisis explicitement à chaque la
 
 | Tâche | Exécutant | Modèle / effort |
 |-------|-----------|-----------------|
-| Brouillon de message de commit, tri de longs journaux, brouillon de traduction i18n | `scripts/llm.sh` (OpenRouter : DeepSeek V4.1 Flash / Mistral Large 4, ZDR — ADR 0013) ; texte mécanique seulement, jamais sécurité, conception ni revue de code ; code de sortie 3 → Haiku | open-weight hébergé |
+| Brouillon de message de commit, tri de longs journaux, brouillon de traduction i18n | `scripts/llm.sh` (ordre : Groq → Cloudflare Workers AI → OpenRouter gratuit → OpenRouter payant ZDR ; traduction et rédaction : OpenRouter payant seul — ADR 0013 ; quotas : `mise run quotas`) ; texte mécanique seulement, jamais secret, sécurité, conception ni revue de code ; code de sortie 3 → Haiku | open-weight hébergé |
 | Implémentation bien bornée, enquête sur un bogue, second avis, revue adverse (sans tokens Claude) | Codex : agent `codex:codex-rescue`, `/codex:rescue`, `/codex:review`, `/codex:adversarial-review` | connexion ChatGPT (quota limité) ; Claude relit avant fusion |
 | Implémentation guidée par une porte, sans crédit | `mise x -- bash scripts/opencode-free.sh -m <modèle> < consigne.md` (modèles gratuits OpenRouter ou Zen ; gortex branché, rtk injecté) | gratuit ; jamais de sécurité ; ne commite jamais |
 | Relecture critique d'une spécification de sécurité (crédit compté) | `scripts/claude-or.sh -t opus` ou `scripts/claude-api.sh` | un seul appel ciblé |
