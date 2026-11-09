@@ -878,3 +878,54 @@ the display layer on top of it.
 - **D-SI7, Q-UX7:** ADR 0028 D8 unchanged: « Lien lent » is added after 2 s of `oldestPendingMs`.
 - **Scope of SI1:** the indicator (header, status bar, the per-person line of the existing people popover). The link
   type and quality in the popover (the rest of W33) are the next block.
+
+### Spec amendment SI1-A (2026-11-09, found by the NI-2 run of block SI1)
+
+- **The documents shared with p** are the documents of my current admitted scope (`AdmittedSet`). Only these count
+  in `peerSyncState`. A change of scope (a new epoch: joining a project, switching project) clears every peer's
+  heard heads, as `peer-disconnected` does.
+- **Why:** the first SI1 e2e run showed Bob stuck at « Vérification… » after joining. Just before
+  `setRoot(Alice's project)` he sent Alice a first sync message for his own pre-join root: its id and heads, no
+  changes. Alice drops it, because it is outside her scope (`admission.ts`, silent drop of unvalidated input). The
+  entry stayed « nothing heard » forever.
+- **Rejected:** a timeout on unanswered documents (it can claim « Synchronisé » early, and it is not in the model).
+  Also rejected: answering `doc-unavailable` to an out-of-scope message. It would reply to unvalidated input,
+  against the silent-drop rule, and it would reveal the receiver's scope.
+- **Same run, second finding:** the indicator was not recomputed on a local edit. It listened to a Repo event that
+  automerge-repo 2.5.6 never emits. It now listens to `heads-changed` on each handle. Both are pinned by unit tests
+  and mutants (SI1-ScopeKept, SI1-NoLocalRefresh) in addition to the gate's.
+- **Security note:** no document content leaves for an out-of-scope document; `shareAdmitted` limits announce and
+  access to the admitted set, and the dropped first message held no changes.
+
+### Spec amendment SI1-B: the display layer (2026-11-09, found by the SI1 ux-walkthrough)
+
+The walkthrough (`gates/SI1/UX.md`) blocked block SI1. With two people typing, the header changed label about 60 times
+in 5 s: « Envoi en cours (1) », « Envoi en cours (0) », « Pas encore à jour ». Two causes:
+
+- D-SI5 showed every non-synced state at once. With both sides typing, sending and behind alternate honestly,
+  message by message.
+- During the hold before « Synchronisé », the previous label stayed on screen with a live n already back at 0.
+
+D-SI5 is replaced by the display rule DS-1..DS-5. It is pure: (truth, n, time) ↦ (label, n shown). It holds for every
+timed sequence of true states, which a fast-check property test proves:
+
+- **DS-1, honesty:** « Synchronisé » is shown only if the true state has been synced continuously for the last
+  SyncedHoldMs = 1000 ms.
+- **DS-2, leaving at once:** when the true state stops being synced, the label changes at once.
+- **DS-3, calm:** every other change of label waits until the current label has been on screen for MinShowMs =
+  1000 ms. The label then shown is the latest true state (latest wins). This is honest, because no non-synced label
+  claims anything is synced, and none hides that something is not.
+- **DS-4, n frozen and meaningful:** n is taken with its label and changes only when the label changes or when n grows.
+  « Envoi en cours (n) » is shown only with n ≥ 1. If the latest truth is sending with n = 0, the label is « Envoi en
+  cours » without a count.
+- **DS-5, liveness:** once the true state stays constant, the shown label equals it within MinShowMs + SyncedHoldMs.
+
+Not changed by SI1-B:
+
+- **UX-SI1-3:** « Seul » while every other member is offline is true. Who has what is the job of R1, the sync-state
+  popover, in the next block.
+- **UX-SI1-4:** a dead peer is noticed after the transport's idle timeout (about 35 s). « Synchronisé » meanwhile is
+  true for what was acknowledged, and any new edit leaves it at once.
+
+Filed as a separate defect: after Bob's instance restarts, the two did not find each other again without a new
+invitation. It is outside the indicator and has priority after SI1b.
