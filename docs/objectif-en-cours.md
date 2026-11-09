@@ -54,6 +54,8 @@ indexées par paire de fichiers et non plus par numéro de ligne, qui bougeait �
 
 **Bloc WB (ouvert le 2026-11-09, porte `gates/WB.toml`).** Budget d'écriture de sync/1 : 20 s sans progrès (inchangé), plus un total de 20 s + taille / 2 Kio/s au lieu de 16 Kio/s, pour qu'un gros collage sur un lien lent mais qui avance ne soit plus échoué puis renvoyé en boucle devant la frappe (NI-3 C2). Modèle `docs/protocol/tla/WriteBudget.tla`, quatre mutants ; décision « plancher seul plutôt qu'estimation du débit » justifiée dans le plan (un lecteur malveillant fait baisser toute estimation, seul le plancher protège). `scripts/tla-check.sh` ajoute ce modèle (dérogation consignée).
 
+**Chemin d'envoi remis à plat (W38, 2026-11-09).** Le bloc WB est clos, remplacé par SP1 (décision de l'utilisatrice). Conception `docs/plans/2026-11-09-send-path-design.md` (causes RC1–RC10 mesurées par E1 et E1b), modèle `docs/protocol/tla/SendPath.tla` (règles SP-1 à SP-9, 12 propriétés, un mutant chacune) et configurations SP1 ; `scripts/tla-check.sh` les ajoute (dérogation consignée). Porte SP1 en brouillon (`docs/plans/2026-11-09-SP1-gate-draft.toml`) tant que les décisions D-SP1-1 à 4 ne sont pas prises.
+
 ### Suivis de sécurité de L1 (LOW, revue Opus n° 6, à traiter au début de L2)
 
 - ~~Analyse des dépendances~~ : retirée, avec toute l'analyse des dépendances, par la décision de l'utilisatrice du 2026-11-03 (N42 précisée, journal ci-dessous). Seul notre propre code est contrôlé.

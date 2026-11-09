@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # P-TLA (ADR 0034 step 3, docs/protocol/tla/README.md): fetch the pinned TLA+ tools
 # (tla2tools.jar SHA-256 checked, never committed) and model-check the models
-# (RepoGen, ConnCredit, SyncIndicator, WriteBudget).
+# (RepoGen, ConnCredit, SyncIndicator, WriteBudget, SendPath).
 #
 # Sound models must finish with no error; every mutant listed in the README must be
 # detected (a violation). The task fails if a sound model violates a property OR if a
@@ -105,6 +105,11 @@ run SyncIndicator SyncIndicator.cfg SyncIndicator sound
 run SyncIndicatorMesh SyncIndicatorMesh.cfg SyncIndicator sound
 run WriteBudget WriteBudget.cfg WriteBudget sound
 run WriteBudgetAny WriteBudgetAny.cfg WriteBudget sound
+# SendPath (README "SendPath", design W38) and block SP1 (README "SP1"): one module, two rule sets.
+for c in SendPathHonest SendPathHop SendPathAny SP1Relay SP1Floor SP1RelayKeepalive SP1FloorKeepalive \
+         SP1Grown90 SP1Hop90 SP1Blackout SP1Any; do
+  run "$c" "$c.cfg" SendPath sound
+done
 
 # Mutants (README "Contre-épreuve" and the ConnCredit table): each must be detected.
 run RepoGenLossNoBump mutants/RepoGenLossNoBump.cfg mutants/RepoGenLossNoBump mutant
@@ -119,6 +124,17 @@ done
 # WriteBudget mutants (README "WriteBudget", block WB): definition overrides from WriteBudgetMutants.
 for m in FixedFloor IdleOnly TotalOnly NoCut; do
   run "WriteBudget$m" "mutants/WriteBudget$m.cfg" mutants/WriteBudgetMutants mutant
+done
+# SendPath mutants and SP1 mutants (README "SendPath", "SP1"); SP1TypingResidual and SP1FloorKeepaliveBigHop
+# are residual witnesses: they must violate, so that the README never claims a bound SP1 does not give.
+for m in SendPathWriteReturn SendPathFixedFloor SendPathNoCap SendPathCapAboveWindow \
+         SendPathSharedWriter SendPathFromZero SendPathStackedWindows SendPathMuxWriteTimeout \
+         SendPathKeepaliveBehindData SendPathSilentAbandon \
+         SendPathNoCut SendPathNoCutLive SendPathZeroOnly SendPathTrustCredit \
+         SP1Idle20 SP1FixedFloor SP1FloorGrown SP1HopValve10 SP1KeepaliveBehindData SP1PartialTTL30 \
+         SP1NoTotal SP1NoCut SP1FloorKeepaliveBigHop SP1GrownKeepalive \
+         SP1TypingResidual; do
+  run "$m" "mutants/$m.cfg" mutants/SendPathMutants mutant
 done
 
 exit "$fail"

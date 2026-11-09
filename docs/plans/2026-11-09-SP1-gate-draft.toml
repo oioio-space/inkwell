@@ -1,0 +1,106 @@
+# DRAFT frozen acceptance for block SP1 (v1 sync/1 interim of the send path, W38): WriteIdle 20 s -> 90 s per
+# Write call, WB-2 total WriteIdle + S / FloorRate with FloorRate 2 KiB/s (folded from block WB), the receiver's
+# partialTTL raised above WriteIdle, and the muxer's write valve stated as a constant; transport windows otherwise
+# as they are. Written before the code. Plan: docs/plans/2026-11-09-send-path-design.md, sections 6 (decision 2)
+# and "SP1: executable specification". Formal model: docs/protocol/tla/SendPath.tla, configurations SP1* (README
+# "SP1"). Refines spec §5.5 rule L (« flux sans progrès ») and §7.2.5 for sync/1 only; v2 is SendPath's SP-1..SP-8.
+#
+# NOT FREEZABLE YET. Open decisions (design doc, "SP1: executable specification", D-SP1-1..D-SP1-4) must be taken
+# by the user after experiment E1b (several seeds on yamux's `connection write timeout` and `keepalive timeout`)
+# before this file is committed: the criterion marked OPEN below is kept, changed or removed accordingly, and the
+# numbers 90 s (WriteIdle, ConnectionWriteTimeout) and 120 s (partialTTL) are confirmed or changed.
+raw_results = ["docs/plans/2026-11-09-send-path-design.md", "docs/objectif-en-cours.md", "gates/SP1/*"]
+
+[[criteria]]
+# Model: SendPath, block SP1 configurations, exhaustive with liveness, and every mutant caught (scripts/tla-check.sh
+# fails if one passes). Sound: SP1Relay (NI-3, 8 KiB/s), SP1Floor (2 KiB/s, D 5 s), SP1RelayKeepalive,
+# SP1FloorKeepalive, SP1Grown90, SP1Hop90, SP1Blackout, SP1Any. Caught: SP1Idle20 (NoFalseCut: scenario 7),
+# SP1FixedFloor (DeliveredHonest), SP1FloorGrown (NoFalseCut: yamux auto-tuning), SP1HopValve10 (NoSessionLoss:
+# E1's write-valve close), SP1KeepaliveBehindData (NoSessionLoss: E1b's keepalive timeout), SP1PartialTTL30
+# (NoSilentDrop), SP1NoTotal (HoldBound), SP1NoCut (StopCut), and the residual witnesses SP1TypingResidual (SP1
+# does not give NI-3 C2's 10 s) and SP1FloorKeepaliveBigHop (nor the keepalive at the floor through a relay that
+# buffers a whole window) and SP1GrownKeepalive (nor behind a grown 512 KiB window). The v2 SendPath configurations
+# and mutants run in the same task.
+id = "model-SendPath-SP1"
+command = "mise run tla"
+
+[[criteria]]
+# Unit tests in virtual time (testing/synctest), each named after the rule and the model property it proves. Shared
+# helper (internal/transport/frame, test only): `windowConn`, a DeadlineWriter that emulates a yamux stream: it
+# accepts at most W = 256 KiB beyond the reader's last window update, the reader consumes at rate R after a one-way
+# delay d, and sends an update once it has consumed W/2 since the last one, which reaches the writer after d; Write
+# blocks while the window is closed and honours SetWriteDeadline.
+# 1. TestRuleSP1FloorLinkNotCut (frame; SP1Floor: NoFalseCut, DeliveredHonest): R = FloorRate, d = 5 s; 879 KiB
+#    written as 32 KiB frames with WriteProgress(ctx, c, WriteIdle, FloorRate, frame): every frame succeeds; the
+#    longest blocked frame is <= W/2 / R + 2d + 1 s (75 s) < WriteIdle; the whole message ends within
+#    WriteIdle + S / FloorRate (WB-2). The model's smallest safe WriteIdle here is 76 s (19 ticks of 4 s).
+# 2. TestRuleSP1Scenario7NotCut (frame; SP1Relay, mutant SP1Idle20): R = 8 KiB/s, d = 3 s (E1: first-stall excess
+#    5.8 s): every frame succeeds at the first attempt; the first stall lies in [W/2 / R, W/2 / R + 2d + 1 s] =
+#    [16 s, 23 s] (E1 measured 21.8 s). With WriteIdle 20 s (code mutant SP1a) the first stall fails it.
+# 3. TestRuleSP1StoppedReaderCutWithinWriteIdle (frame; SP1Any: StopCut): the reader stops after 300 KiB; the next
+#    blocked frame fails with a timeout no later than WriteIdle + d after the last window update.
+# 4. TestRuleWBDripReaderCutWithinHoldBound and TestRuleWBSlowLinkDeliversWithoutResend (mux, block WB, unchanged
+#    names; SP1Any: HoldBound; SP1Floor: DeliveredHonest), with the new WriteIdle: a drip below FloorRate is cut
+#    within WriteIdle + S / FloorRate + one drip interval; 879 KiB at 8 KiB/s and at FloorRate arrive at once.
+# 5. TestRuleSP1BlackoutNoSilentDrop (mux; SP1Blackout, mutant SP1PartialTTL30: NoSilentDrop): two muxers over a fake
+#    transport that goes silent for 50 s (NI-2: 25 s blackout + up to 25 s before QUIC's next probe) in the middle
+#    of an 879 KiB message: the sender's send returns nil AND the receiver delivers the message. With partialTTL
+#    30 s (code mutant SP1b) the send still returns nil but the message is never delivered: a silent loss.
+# 6. TestRuleSP1PartialTTLAboveWriteIdle (mux): partialTTL >= frame.WriteIdle + 2 * 5 s + margin (the reader never
+#    gives up on a message before its sender would have been cut).
+id = "rule-SP1-unit"
+command = "./scripts/heavy.sh go test ./internal/transport/frame ./internal/transport/mux -run 'RuleSP1|RuleWB' -count=1"
+
+[[criteria]]
+# OPEN (D-SP1-1, D-SP1-2, D-SP1-3; keep, change or delete after E1b): the node's yamux transport is built from a
+# stated config, not the package default: ConnectionWriteTimeout = the stated constant (proposal 90 s; it bounds
+# the write valve and both ping timeouts: SP1HopValve10, SP1KeepaliveBehindData fail at 10 s), the keepalive as
+# D-SP1-3 decides (on at 30 s, or EnableKeepAlive = false), and, if D-SP1-2 is accepted, MaxStreamWindowSize =
+# InitialStreamWindowSize = 256 KiB (no auto-tuning: SP1FloorGrown shows a grown 512 KiB window makes the quantum
+# 256 KiB and WriteIdle 90 s insufficient at the floor).
+# TestRuleSP1MuxValve (p2p): reads the transport the node passes to libp2p and checks these values.
+id = "rule-SP1-mux-valve"
+command = "./scripts/heavy.sh go test ./internal/transport/p2p -run 'RuleSP1' -count=1"
+
+[[criteria]]
+# Code mutants (scripts/netsim/mutants.toml, block SP1; each applied to a copy, each must turn its test red):
+# SP1a WriteIdle back to 20 s (TestRuleSP1Scenario7NotCut), SP1b partialTTL back to 30 s
+# (TestRuleSP1BlackoutNoSilentDrop), SP1c FloorRate back to 16 KiB/s (TestRuleWBSlowLinkDeliversWithoutResend),
+# and, if the OPEN criterion stays, SP1d the stated yamux config removed (TestRuleSP1MuxValve).
+id = "rule-SP1-mutants"
+command = "mise run netsim:mutants -- SP1"
+
+[[criteria]]
+# Unchanged behaviour elsewhere in the transport (fragmentation, preemption, rule L, bulk, link metrics).
+id = "transport-regression"
+command = "./scripts/heavy.sh go test ./internal/transport/... ./internal/bridge -count=1"
+
+[[criteria]]
+# End to end, NI-3 (scenario 7, 8 KiB/s relay), seeds 1-3, on the impaired netsim. Expected clause outcomes, from the
+# model (SP1Relay) and E1:
+#   C1 pass on every seed (the paste arrives: no false cut, so no resend loop);
+#   C3 pass on every seed, with « resyncs 0, 0 » (no rule-L resync during the transfer, and no session teardown);
+#   C2 stays a DECLARED KNOWN FAILURE (SP1's residual, SP1TypingResidual): every token arrives, and the worst delay
+#      is under the RL1 baseline 44.0 s; the model bounds the path's share at 36 s (a typed frame waits for the
+#      blocked 32 KiB fragment Write, then behind up to one 256 KiB stream window in the relay), application and
+#      Automerge time excluded. A pass is reported XPASS and not required;
+#   C4 pass (anti-vacuity).
+# If C3 fails by a session close (« connection write timeout ») and D-SP1-1 kept today's 10 s valve, that is the
+# known E1 finding, not a flake: the gate stays red.
+id = "NI-3-SP1"
+command = "NETSIM_SCENARIOS='7' NETSIM_SEEDS='1 2 3' mise run e2e:netsim:impaired && python3 -I -c \"import json,re,sys; R=[{c['id']:c for c in json.load(open(f'.task/netsim/results/7-s{s}.json'))['clauses']} for s in (1,2,3)]; worst=lambda d: float(re.search(r'worst ([0-9.]+) s', d['C2']['measured']).group(1)); resyncs=lambda d: [x.strip() for x in re.search(r'resyncs ([^(]*)[(]', d['C3']['measured']).group(1).split(',')]; bad=[(i+1, d['C1']['status'], d['C2']['measured'], d['C3']['measured']) for i, d in enumerate(R) if d['C1']['status'] != 'pass' or d['C3']['status'] != 'pass' or d['C4']['status'] != 'pass' or 'held back' in d['C2']['measured'] or worst(d) >= 44.0 or any(x != '0' for x in resyncs(d))]; sys.exit(f'NI-3 under SP1: {bad}' if bad else 0)\""
+
+[[criteria]]
+# No regression: netsim scenarios 1-8. NI-1 (5), NI-2 (6, C2 strict: a blackout during the paste is delivered with
+# no resync, SP1Blackout) and NI-4 (8) on 3 seeds; scenarios 1-4 on the default network.
+id = "netsim-regression"
+command = "NETSIM_SCENARIOS='5 6 8' NETSIM_SEEDS='1 2 3' mise run e2e:netsim:impaired && NETSIM_SCENARIOS='1 2 3 4' mise run e2e:netsim"
+
+[[criteria]]
+# The /simplify report of the block's diff (CLAUDE.md, definition of done, step 3).
+id = "simplify-report"
+command = "test -s gates/SP1/SIMPLIFY.md"
+
+[[criteria]]
+id = "RL1-regression"
+command = "mise run gate -- RL1"

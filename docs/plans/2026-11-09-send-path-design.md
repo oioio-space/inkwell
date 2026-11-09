@@ -37,6 +37,9 @@ to Bob and the window updates and ACKs going to Alice share one FIFO (assumption
 | RC5 | **Head-of-line blocking in v1.** `Router.sendTo` sends one message at a time and `ps.wsem` admits one writer per stream: a typed message waits behind the blocked fragment `Write` (≤ 20 s), then behind RC3's queue, then behind the resync. | typing waits 44-49 s | consistent |
 | RC6 | **The WB model is unsound for this failure.** `WriteBudget.tla` lets the sender see progress at the reader's rate on every tick. With no window and no reverse path, `Delivered` holds in the model and fails in reality. WB-2 (the total) was never the trigger, so WB's own NI-3 criterion (0 resyncs) is expected to stay red. | `WriteBudget.tla` header; RC1 | expected; measured by E1 |
 | RC7 | **v2 as written inherits RC1 and RC3.** §7.2.5 « aucun progrès pendant 60 s » does not say *whose* progress. Measured at the sender's `Write`, it cuts honest links under `U/(60 − 2·D)` ≈ 2.6 KiB/s, which is above the 2 KiB/s floor. §5.6.3 (« un gros transfert ne retarde pas la frappe ») is false on a relayed circuit: the REPO and LARGE streams are separate, but they share the relay FIFO, and LARGE can fill it with 256 KiB. | §1, RC3 | design finding |
+| RC8 | **The muxer's write valve is a cut of its own.** go-yamux `Config.ConnectionWriteTimeout` (10 s, the go-libp2p default; `session.go` `sendLoop`: the conn deadline is extended to now + 10 s only when the loop picks a frame and less than 5 s remain) closes the **whole session** — every stream, the typing lane and CONTROL included — when one frame write to the circuit blocks for 5-10 s, i.e. when the relay hop is full and reopens slower than that. Independent of `WriteIdle` and of any `frame` constant. | E1: 2 runs of 8 (6 KiB/s; the 512 KiB run); E1b seed 1: 6 of 12 runs lost the session within 100 s at 4-8 KiB/s | **to measure (E1b)**; modelled: `SendPath` `NoSessionLoss`, mutants M-MuxWriteTimeout, M-StackedWindows, SP1HopValve10 |
+| RC9 | **The muxer's keepalive is another.** Every 30 s (`KeepAliveInterval`) yamux pings; the ping must be flushed and then answered, each within `ConnectionWriteTimeout` (10 s), else the session is closed (`keepalive timeout`). On a relayed slow link the ping queues behind every byte already in the relay (up to a stream window: 32 s at 8 KiB/s, 128 s at the floor) and the pong behind data in the shared bottleneck. | E1b: at 4 KiB/s, default window, session closed at 53.8 s by `keepalive timeout` | **to measure (E1b)**; modelled: mutants M-KeepaliveBehindData, SP1KeepaliveBehindData, residual SP1FloorKeepaliveBigHop |
+| RC10 | **Raising `WriteIdle` alone creates a silent loss in v1.** The reader drops a partial message after `partialTTL` (30 s) without a fragment, and silently ignores its continuations (`fragment.go` `reassemble`: « the continuation of a message we dropped »). Today the sender is cut first (20 s < 30 s, then rule L). With `WriteIdle` 90 s, a 50 s silence (NI-2's blackout plus QUIC's probe backoff) makes the reader drop the message while the sender, not cut, goes on: no rule L anywhere. | code reading; modelled: mutant SP1PartialTTL30 (`NoSilentDrop`) | design finding |
 
 Lesson for the model (§4): it must contain the transport window with its update quantum, a FIFO bottleneck that
 both directions share, and the reverse path.
@@ -128,6 +131,16 @@ Progress, pacing and resumption all read **one** number, `consumed`, reported by
     receiver is the one waiting for the sender's typing.
   - A relay can only delay or drop (the end-to-end Noise/TLS protects the content). That looks like a slow path or a
     lost session.
+- **SP-9, the session's own timers never cut an honest link** (added 2026-11-09 after E1 and E1b, RC8, RC9;
+  checked by `SendPath` `NoSessionLoss`).
+  - SP-3's cap also counts the hop: the credit in flight on a session stays under what the relay hop takes before
+    it reopens (`Win ≤ H − Uh + D` in the model's units), so the muxer's send loop never blocks on the circuit
+    (mutant M-StackedWindows). Since a relay's hop is not ours to know, this is a margin, not a proof.
+  - The muxer's write valve and ping timeouts are a stated constant `T_mux`, not the package default, at least the
+    longest honest wait of a session frame: `L_int` + `D` (a ping queues like a typed frame, SP-7; its pong in the
+    shared bottleneck). The model needs 20 s at the floor with `Wmax` = 3C (12 s with 2C): today's 10 s is short
+    even on v2 (mutant M-KeepaliveBehindData). Proposal: `T_mux` = `T_p` = 40 s; keepalive interval 30 s
+    unchanged.
 
 ### 3.4 Timers: one meaning each
 
@@ -137,7 +150,8 @@ Progress, pacing and resumption all read **one** number, `consumed`, reported by
 | `T_ack` credit delay (SP-2) | maximum delay of a report | 1 s | the receiver sends LARGE_CREDIT |
 | LARGE_REPLY wait (§7.2) | total, waiting for a reservation | 10 min | forgotten, sync state reset |
 | RESET_STREAM after STOP_SENDING, HELLO (§5.1, §5.3) | total, protocol deadline | 10 s | GOAWAY (G-1 stays open) |
-| QUIC idle 30 s, keepalive 15 s; yamux keepalive 30 s, write valve 10 s | connection liveness, owned by the transport | pinned | session lost |
+| QUIC idle 30 s, keepalive 15 s | connection liveness, owned by the transport | pinned | session lost |
+| yamux write valve and ping timeouts (`ConnectionWriteTimeout`), keepalive every 30 s (RC8, RC9) | session liveness: **each is a cut of the whole session** | today 10 s, the package default; **SP-9**: a stated constant `T_mux` ≥ the longest honest wait of a session frame (v2: ≥ `L_int` + `D`, proposal `T_mux` = `T_p` = 40 s; SP1: open decision D-SP1-1) | session lost: rule L for every stream |
 | rule I/R cadence | rate limit | 2 s doubling to 60 s | delayed |
 
 Removed by v2: `WriteIdle`, `FloorRate` per frame and per message, `partialTTL`, the reset on `outboxDepth`
@@ -311,3 +325,151 @@ Intervention: Bob's `InitialStreamWindowSize` = 512 KiB, R = 8 KiB/s (same probe
 2. netem tail-drops 250-520 packets in every run (`limit 24` against bursts from the QUIC hop): QUIC loss recovery
    hides them, but they add to the first-stall excess.
 3. Not done: E1's 3 seeds, the rate 12 sweep repeated, and the `tc -s` counters during a stall (only the final counters are kept).
+
+## SP1: executable specification (step 1 of block SP1, 2026-11-09)
+
+Block SP1 is decision 2: the v1 interim on sync/1, before credits exist. Its rule, its model and its draft gate
+are written before any code. Model: `docs/protocol/tla/SendPath.tla`, configurations `SP1*` (README "SP1"). The
+same module checks the v2 rules SP-1..SP-9 (README "SendPath"): SP1 and v2 are checked against one path, with the
+window, the hop, the shared bottleneck, the reverse path and the muxer's timers (RC1-RC10).
+
+### The rule (v1, sync/1 only)
+
+- **SP1-1:** `frame.WriteIdle` = 90 s per `Write` call (one 32 KiB fragment), from `U/F + 2D` = 64 + 10 = 74 s,
+  × 1.2.
+- **SP1-2 (WB-2, folded from block WB):** a message of S bytes fails at `WriteIdle + S / FloorRate`, `FloorRate`
+  = 2 KiB/s.
+- **SP1-3:** the reader's `partialTTL` is above `WriteIdle + 2D`: proposal 120 s (RC10; otherwise SP1-1 creates a
+  silent loss).
+- **SP1-4 (open, D-SP1-1 and D-SP1-3):** the muxer's `ConnectionWriteTimeout`, which bounds the write valve and
+  both ping timeouts, is a stated constant in the node's yamux config, not the package default.
+- **SP1-5 (open, D-SP1-2):** the yamux stream window is pinned at 256 KiB (`MaxStreamWindowSize` =
+  `InitialStreamWindowSize`), so that `U` stays 128 KiB.
+- The transport windows are otherwise as they are.
+
+### What the model proves, and what it does not
+
+Numbers: one unit = 8 KiB; ticks of 1 s at 8 KiB/s, 4 s at the floor, 4/3 s at 6 KiB/s; rounding conservative.
+The relay hop (128 KiB, reopened in 64 KiB quanta) is a hypothesis fitted to E1's 10.0 s block at 6 KiB/s.
+
+| Claim | Configuration | Result |
+|---|---|---|
+| no false cut, one attempt (NI-3 C1, C3 « resyncs 0 ») at 8 KiB/s and at the floor | `SP1Relay`, `SP1Floor` | holds; smallest safe `WriteIdle` 22 s and 76 s (bisection) |
+| a 50 s silence (NI-2) cuts nothing and loses nothing | `SP1Blackout` | holds with `partialTTL` 120 s; `SP1PartialTTL30` (30 s) is a silent loss |
+| the session survives the muxer's timers at 90 s | `SP1RelayKeepalive`, `SP1FloorKeepalive`, `SP1Hop90` | holds; today's 10 s fails (`SP1HopValve10`, `SP1KeepaliveBehindData`: E1, E1b) |
+| a grown 512 KiB window at 6 KiB/s is not cut by `WriteIdle` 90 s | `SP1Grown90` (keepalive off) | holds |
+| a stopped reader is cut within `WriteIdle` + D; a drip within WB-2 | `SP1Any` | holds |
+| **residual:** typing on the relay | `SP1TypingResidual` | up to **36 s** at 8 KiB/s from the path alone (144 s at the floor); NI-3 C2 stays a known failure until step 6 |
+| **residual:** keepalive at the floor through a relay that buffers a whole window | `SP1FloorKeepaliveBigHop` | needs 140 s; 90 s fails |
+| **residual:** keepalive behind a grown 512 KiB window | `SP1GrownKeepalive` | the ping waits 89 s at 6 KiB/s; 90 s fails without D-SP1-2 |
+| **residual:** resent bytes | (none) | a lost session still resends the whole message (no SP-5 in v1) |
+
+### Open decisions (the user's, after E1b; nothing is assumed)
+
+E1b (several seeds, the muxer's two timeouts, `tc -s` during a stall, the relay hop's buffering) must come first:
+SP1's numbers, `WriteIdle` 90 s included, are final only after it. E1 saw the session close in 2 runs of 8, E1b's
+first seed in 6 of 12: raising `WriteIdle` alone does not make NI-3 pass.
+
+- **D-SP1-1, the muxer's timeout.** (a) keep 10 s: NI-3 C3 can fail by a session close on an honest link (RC8,
+  RC9), so SP1 cannot pass its gate; (b) 90 s: covers 8 KiB/s, 6 KiB/s through the E1 hop and the floor through a
+  128 KiB hop (model), not the floor through a whole-window relay buffer; (c) ≥ 150 s: covers that too, but a dead
+  path is then noticed by the muxer only after 150 s (QUIC's 30 s idle timeout on each hop still notices a dead
+  hop). Recommended: (b), with (c) if E1b shows relays that buffer a whole window.
+- **D-SP1-2, pin the yamux window at 256 KiB.** Needed for `WriteIdle` 90 s at the floor (`SP1FloorGrown`: a
+  512 KiB window doubles the quantum) and for the keepalive at 90 s (`SP1GrownKeepalive`), and it halves the worst
+  bufferbloat. Cost: one stream's throughput is capped
+  at 256 KiB per RTT (2.5 MiB/s at 100 ms). Recommended.
+- **D-SP1-3, the keepalive.** (a) bounded by D-SP1-1 (one config field); (b) disabled on the yamux session
+  (`EnableKeepAlive` = false), the hops' QUIC idle timeouts and the relay's circuit teardown detecting a dead path
+  (not modelled); (c) a residual that only ADR 0034 steps 4-6 remove (the credit keeps the relay queue under
+  `Wmax`, SP-9). Giving pings priority does not help on v1: the bytes they wait behind are already in the relay.
+  Recommended: (a); (b) if E1b shows keepalive closes even at 90 s.
+- **D-SP1-4, `partialTTL` 120 s.** Required by SP1-1 (RC10). Recommended.
+
+### Draft gate
+
+`gates/SP1.toml` (draft, not frozen: its criterion `rule-SP1-mux-valve` waits for D-SP1-1..3):
+`mise run tla`; the RuleSP1 unit tests in virtual time (`windowConn`, a test DeadlineWriter emulating a yamux
+stream window with its half-window updates and a one-way delay) and the RuleWB tests; the code mutants SP1a-SP1d;
+the transport regression; NI-3 on seeds 1-3 with C1 pass, C3 pass with « resyncs 0, 0 », C4 pass, C2 a declared
+known failure with every token delivered under the RL1 baseline (44.0 s); netsim scenarios 1-8; RL1.
+
+## E1b results (2026-11-09): why yamux closes the session on a slow relayed circuit
+
+**Semantics, from go-yamux v5.1.0** (`mux.go`, `session.go`; go-libp2p v0.51.0 `p2p/muxer/yamux/transport.go` keeps the
+defaults: `ConnectionWriteTimeout` 10 s, `KeepAliveInterval` 30 s, and the `Transport` *is* a `yamux.Config`, so both can be
+set from our own `libp2p.Muxer(...)`).
+- `ConnectionWriteTimeout` (CWT) is **not** a timer on a stream or on a window update. The session's single send loop calls
+  `conn.SetWriteDeadline(now + CWT)` when it picks up a frame, but only if more than CWT/2 has passed since the last
+  extension, then does one `conn.Write(frame)` (a header plus body in one call, 12 B to 64 KiB) on the secured conn, that is
+  on the relay stream. A timeout there ends the session (`connection write timeout`) and resets every stream. So the real
+  limit is **between 5 s and 10 s of blocking on one frame write**, depending on when the deadline was last extended.
+- Keepalive: a timer of 30 s that is **reset by every inbound header**. When it fires, `Ping()` must flush the ping and receive
+  the ack, each within CWT (the same constant). Failure closes the session (`keepalive timeout`). The 30 s RTT pings
+  (`measureRTT`) use `Ping()` too but ignore the failure.
+- The send loop writes pings and pongs before queued data, but only ahead of data still inside yamux. Everything already
+  written to the conn (Noise, the QUIC stream to the relay, the relay's buffer, the relay to Bob hop) is ahead of them.
+
+**Method.** Probe as in E1 (4 KiB writes, 1 MiB offered, run cut at 100 s; netem `delay 20ms rate R limit 24` on
+`relay:eth0`), plus a logging wrapper on the conn under yamux: every frame write with type, length, start, end and error,
+every `SetWriteDeadline`, and `tc` backlog once per second. Matrix: R in {4, 6, 8} KiB/s, Bob's window 256 or 512 KiB, with
+or without a typing stream (50 B every 200 ms), **3 repeats each (36 runs)**. netem has no random draws in this profile, so
+the repeats differ by timing only, not by seed. « In flight » = bytes Alice's `Write` had accepted minus bytes Bob had read.
+
+| R | window | typing | sessions dead (of 3) | how, when (s), in flight (KiB) |
+|---|---|---|---|---|
+| 4 | 256 | no / yes | 1 / 1 | keepalive: 54 s, 204 / 40 s, 124 |
+| 4 | 512 | no | 2 | keepalive: 70 s, 292 and 70 s, 276 |
+| 4 | 512 | yes | 3 | write timeout 32 s, 404; keepalive 70 s, 276; write timeout 31 s, 440 |
+| 6 | 256 | no / yes | 1 / 0 | write timeout: 15 s, 184 |
+| 6 | 512 | no / yes | 3 / 3 | write timeout, 15-70 s, 308-464 |
+| 8 | 256 | no / yes | 0 / 0 | - |
+| 8 | 512 | no / yes | 2 / 2 | write timeout, 49-53 s, 408-428 |
+
+Total: **18 of 36 dead; 3 of 18 with the 256 KiB window against 15 of 18 with 512 KiB**. The typing stream changes nothing
+in the counts (9 against 9). In every run that lived, the tail of the 100 s still looked the same (stalls of one quantum).
+
+**Mechanism, from the frame log.**
+1. *Write timeout (13 of 18 deaths).* The frame that times out is always a **data** frame (4108 B, one 4 KiB write plus
+   header), blocked 5.4-9.2 s with the deadline 10 s after the last extension. Window updates and pings were never the
+   blocked write (their writes take under 1 ms: they are written first, but into an open pipe). So the Alice-to-relay hop
+   itself stops accepting bytes for 5-10 s: the relay's hop buffer and QUIC stream window are full because the relay
+   drains toward Bob at R. It happens when the bytes in the path exceed what that hop can hold, which is the case when the yamux
+   window is 512 KiB (in flight 300-464 KiB at death) and rare at 256 KiB (once, at 184 KiB).
+2. *Keepalive (5 of 18, all at 4 KiB/s).* The quantum stall `U/R` is longer than the 30 s keepalive interval (128 KiB / 4 =
+   32 s for 256 KiB windows, 256 KiB / 4 = 64 s for 512), so Alice receives nothing for 30 s and the timer fires. The ping
+   is written at once (0.00 s) but Bob never receives it within 10 s (no ack written by Bob): it sits behind the data
+   already in the relay path, whose drain time is `bytes / R` (observed ping delays on the RTT-pings that were answered:
+   up to 33-65 s). Death comes exactly 10.0 s after the keepalive ping.
+3. Not a window update or a ping write; not tied to a rate alone (two runs of the same cell can differ).
+
+**With CWT = 120 s (Bob and Alice both).** 4 and 6 KiB/s, 512 KiB window, no typing, 3 repeats each, run cut at 150 s:
+**6 of 6 alive**, whereas the same cells died 5 of 6 with the default. The longest single data write in these runs was
+9.3-20.3 s: 5 of the 6 runs had a write above 10 s, which the default would have cut or come close to cutting.
+Keepalive survived because the ping now has 120 s to be answered.
+
+**Verdict.**
+- The trigger is **any single write of the yamux send loop that waits more than CWT/2 to CWT (5-10 s) on the conn, or a
+  keepalive ping unanswered for CWT after a 30 s silence**. Both are measurements of the *relay path's queue*, `bytes_in_path / R`,
+  not of the peer's liveness. The queue is made of whatever the sender has put in the pipe: the transport window (256 KiB;
+  512 KiB makes it worse). So an honest slow link is cut as soon as `bytes_in_path / R` exceeds 5-10 s, i.e. below about
+  `window / 10 s` = 26 KiB/s for a 256 KiB window. This is RC1 and RC3 again, seen from the session instead of the stream.
+- It can be avoided in two ways, and only the first is a constant. (a) SP-2/SP-3 keep the bytes in the path small, so the
+  queue is `window / R`: with 16 KiB at 2 KiB/s that is 8 s of queue, still close to the limit, so also
+  (b) raise CWT (our own `yamux.Config`): `CWT >= (path bytes at the floor F) / F + 2D`. With the SP-3 cap of 128 KiB and
+  F = 2 KiB/s that is 64 + 10 = 74 s; 120 s leaves a 1.6 margin and was shown to hold in the 6 runs above for 4-6 KiB/s
+  with a 512 KiB window. A rule should state it as `CWT = 120 s` (and keepalive interval 30 s, which then does no harm), not as a
+  consequence of `WriteIdle`. Neither can be claimed for 2 KiB/s: not run.
+- Consequences for the design: (1) decision 2 (`WriteIdle` 90 s) is not enough on its own, add `ConnectionWriteTimeout`
+  to the amended constants (§3.4: it is listed as « pinned »; it must be set, not pinned to the default). (2) SP-3 is
+  confirmed in spirit: the 256 KiB window already cuts the death rate from 15/18 to 3/18, and Wmax = 128 KiB should lower it more
+  (not measured: E4). (3) A raised CWT also lengthens the time to detect a really dead relay hop, which QUIC's own 30 s idle
+  timeout still bounds.
+
+**Unexpected.**
+- The typing stream is starved by the same queue, whatever the session does: where it was delivered, the median latency was
+  24-52 s and the maximum 80 s (R = 4 and 8 KiB/s); in 12 of 18 typing runs its first message never arrived (the stream
+  open waits behind the queue as well). This supports RC5/RC7 and the lane design of §3.2 more than the session cut itself.
+- Windows of 512 KiB are strictly worse than 256 KiB for session survival (15/18 against 3/18), the opposite of what a larger window
+  suggests for throughput.
+- The CWT = 120 s experiment is 6 runs on 2 rates only; it is a confirmation of the mechanism, not a validation of the constant.
