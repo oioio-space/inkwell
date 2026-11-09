@@ -1,0 +1,53 @@
+# Frozen acceptance for block CI1 (tooling, W35): the impaired netsim runs at pre-push only when the pushed diff
+# touches its inputs (user decision 2026-11-08: « Seulement si touché »), it always runs in full on GitHub and in
+# `done`, and GitHub no longer runs it twice. Plan: docs/plans/2026-11-08-ci-cd-study.md, R2 and R3. Written before
+# the code.
+#
+# The rule (selector scripts/netsim/affected.py; exit 0 = run, 10 = skip, anything else = run):
+#   CI1-1  the input set is computed, not hand-listed: the non-test Go files (GoFiles, CgoFiles, EmbedFiles and the
+#          embed patterns' targets) of every package in `go list -deps` of the binaries the netsim launches (the app
+#          built by e2e:build and cmd/inkwell-relay), plus go.mod, go.sum, mise.toml, frontend/** except unit tests
+#          (*.test.ts outside frontend/e2e), scripts/netsim/**, scripts/heavy.sh, scripts/memcap.sh;
+#   CI1-2  a path is inert only if it matches the explicit inert list (docs/**, gates/**, .claude/**, .remember/**,
+#          *.md outside frontend/src, docs/protocol/tla/** and alloy/**, scripts/perf/**, the *_test.go of any
+#          package, a Go package outside the dependency set) — an unknown path runs the netsim;
+#   CI1-3  the diff is base..pushed tip for every ref pushed (pre-push stdin); a rename counts both paths, a deletion
+#          counts the old path; an all-zero remote sha (new branch) uses the merge-base with origin/main; an
+#          unresolvable base, a `go list` failure or a crash of the selector runs the netsim (fail towards running);
+#   CI1-4  the decision and its reason (the first triggering path, or « inert: N paths ») are printed by the hook;
+#   CI1-5  `mise run ci` is unchanged in content: ci = ci:core + e2e:netsim:impaired, where ci:core depends on
+#          exactly the previous `ci` list minus e2e:netsim:impaired; GitHub's ci job runs ci:core, its netsim job
+#          runs e2e:netsim and e2e:netsim:impaired (scenarios 1-8 once, in parallel with ci); `done` is untouched.
+raw_results = ["docs/plans/2026-11-08-ci-cd-study.md", "docs/objectif-en-cours.md", "gates/CI1/*"]
+
+[[criteria]]
+# Unit tests of the selector, each named after the rule it proves (TestCI1_n...), on a temporary git repository and
+# a fake `go list`: docs-only diff -> skip; a non-test .go file of a dependency -> run; a *_test.go of a dependency
+# -> skip; a .go file of a package outside the dependency set -> skip; go.mod -> run; frontend/src/x.ts -> run;
+# frontend/src/x.test.ts -> skip; frontend/e2e/x.test.ts -> run; scripts/netsim/run.sh -> run; an unknown path ->
+# run; a rename from an inert to an input path -> run; a deleted input file -> run; an all-zero remote sha ->
+# merge-base; an unresolvable base -> run; `go list` failing -> run; an embedded asset (embed pattern) -> run.
+id = "rule-CI1-unit"
+command = "./scripts/heavy.sh timeout 300 python3 -I -m unittest scripts/netsim/affected_test.py"
+
+[[criteria]]
+# Real tree, seeded red-team: on HEAD, the selector run against HEAD with a simulated diff decides run for
+# internal/transport/frame/progress.go, internal/app/wiring.go, frontend/src/net/links.svelte.ts and go.sum, and skip
+# for docs/exigences.md and internal/transport/frame/progress_test.go (CI1-1 on the real dependency graph).
+id = "rule-CI1-real-graph"
+command = "for p in internal/transport/frame/progress.go internal/app/wiring.go frontend/src/net/links.svelte.ts go.sum; do python3 -I scripts/netsim/affected.py --paths \"$p\"; test $? -eq 0 || exit 1; done; for p in docs/exigences.md internal/transport/frame/progress_test.go; do python3 -I scripts/netsim/affected.py --paths \"$p\"; test $? -eq 10 || exit 1; done"
+
+[[criteria]]
+# Wiring (CI1-5): the task graph and the workflow, checked structurally.
+id = "rule-CI1-wiring"
+command = "python3 -I -c \"import tomllib,sys; t=tomllib.load(open('mise.toml','rb'))['tasks']; old=['test:py','formal','lint:env','lint:claude-md','arch','deadcode','scan:secrets','scan:code','scan:sbom','lint','lint:sh','lint:yaml','lint:actions','pkg:lint','test:ci','cover:check','fe:check']; e=[]; e+=[] if sorted(t['ci:core']['depends'])==sorted(old) else ['ci:core']; e+=[] if sorted(t['ci']['depends'])==['ci:core','e2e:netsim:impaired'] else ['ci']; w=open('.github/workflows/ci.yml').read(); e+=[] if 'run: mise run ci:core' in w and 'run: mise run ci\\n' not in w else ['ci.yml ci job']; e+=[] if 'run: mise run e2e:netsim:impaired' in w and 'run: mise run e2e:netsim\\n' in w else ['ci.yml netsim job']; h=open('.githooks/pre-push').read(); e+=[] if 'scripts/netsim/affected.py' in h and 'mise run ci:core' in h else ['pre-push']; sys.exit(f'CI1 wiring: {e}' if e else 0)\""
+
+[[criteria]]
+# The tooling's own checks.
+id = "tooling-checks"
+command = "mise run lint:sh && mise run lint:actions && mise run lint:yaml && mise run lint:claude-md && mise run test:py"
+
+[[criteria]]
+# The /simplify report of the block's diff (CLAUDE.md, definition of done, step 3).
+id = "simplify-report"
+command = "test -s gates/CI1/SIMPLIFY.md"
