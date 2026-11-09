@@ -144,7 +144,10 @@ jour depuis les notes officielles (`https://go.dev/doc/go1.N`) à chaque montée
 - modifications chirurgicales : chaque ligne changée se rattache à une exigence ou à une porte, pas de
   nettoyage opportuniste hors du périmètre (le `/simplify` porte sur le diff du lot) ;
 - critère de réussite vérifiable par une machine avant d'écrire du code (porte du lot, test) ;
-- ne jamais affaiblir un test, un seuil ou un délai pour faire passer une porte.
+- ne jamais affaiblir un test, un seuil ou un délai pour faire passer une porte ;
+- quand un problème devient trop difficile ou que les correctifs s'enchaînent, on s'arrête : on redéfinit
+  le problème, on remet à plat, on reformalise (spec, modèle, mutants, nouvelle porte), puis on fait bien ;
+  jamais de rustine au coup par coup (2026-11-09).
 
 **Cohérence de l'interface :** une fonctionnalité nouvelle s'intègre à l'existant, jamais en « verrue ».
 Elle doit :
