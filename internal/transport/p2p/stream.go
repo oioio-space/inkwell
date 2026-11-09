@@ -366,7 +366,7 @@ func (n *Node) Send(ctx context.Context, to transport.PeerID, payload []byte) er
 	}
 
 	finished := watchCancel(ctx)
-	err = frame.WriteProgress(ctx, s, writeTimeout, frame.MinRate, payload)
+	err = frame.WriteProgress(ctx, s, writeTimeout, frame.FloorRate, payload)
 	if canceled := finished(); err != nil {
 		return n.sendFailed(ctx, ps, s, to, err, canceled)
 	}

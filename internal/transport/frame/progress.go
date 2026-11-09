@@ -16,12 +16,17 @@ import (
 const progressChunk = 32 << 10
 
 const (
-	// WriteIdle is how long a write may go without progress.
-	WriteIdle = 20 * time.Second
-	// MinRate is the slowest sustained rate, in bytes per second, at which a
-	// write is still worth waiting for: about 128 kbit/s. A whole frame gets
-	// WriteIdle plus its length at this rate, however steadily it progresses.
-	MinRate = 16 << 10
+	// MaxOneWayDelay is the one-way network delay the sync/1 timers are sized
+	// for (send-path design, SP1-1): 5 s, a relayed path on a poor link.
+	MaxOneWayDelay = 5 * time.Second
+	// WriteIdle is how long one Write (a 32 KiB fragment) may go without
+	// progress on sync/1 (SP1-1 of docs/plans/2026-11-09-send-path-design.md):
+	// the window update quantum U = 128 KiB read at the floor takes U/F = 64 s,
+	// plus 2 * MaxOneWayDelay is 74 s, times 1.2.
+	WriteIdle = 90 * time.Second
+	// FloorRate is the slowest sustained rate, in bytes per second, at which a
+	// write is still worth waiting for (SP1-2, folded from WB-2): 2 KiB/s.
+	FloorRate = 2 << 10
 )
 
 // DeadlineWriter is a stream with write deadlines, such as a libp2p stream or
@@ -35,17 +40,17 @@ type DeadlineWriter interface {
 // write by progress rather than by size: it fails only if no chunk was
 // written for idle, so a large frame on a slow link still completes as long
 // as bytes keep flowing. A receiver that drips just inside idle is still cut
-// off: the whole frame gets idle plus len(payload)/minRate (bytes per second,
-// see [MinRate]). Canceling ctx interrupts a write in progress. It
+// off: the whole frame gets idle plus len(payload)/floorRate (bytes per
+// second; callers pass [FloorRate]). Canceling ctx interrupts a write in progress. It
 // returns [transport.ErrFrameTooLarge] if payload exceeds [transport.MaxFrame].
 // Like [Write], it must not run concurrently on the same w.
-func WriteProgress(ctx context.Context, w DeadlineWriter, idle time.Duration, minRate int, payload []byte) error {
+func WriteProgress(ctx context.Context, w DeadlineWriter, idle time.Duration, floorRate int, payload []byte) error {
 	if len(payload) > transport.MaxFrame {
 		return transport.ErrFrameTooLarge
 	}
 	// The deadline is updated under mu, so that re-arming it can never undo
 	// the interruption a cancellation asked for.
-	last := time.Now().Add(idle + time.Duration(len(payload))*time.Second/time.Duration(max(minRate, 1)))
+	last := time.Now().Add(idle + time.Duration(len(payload))*time.Second/time.Duration(max(floorRate, 1)))
 	var mu sync.Mutex
 	arm := func() error {
 		mu.Lock()

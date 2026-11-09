@@ -32,7 +32,7 @@ func TestWriteProgressCanceledWritesNothing(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())
 		cancel()
 		var w countingWriter
-		err := frame.WriteProgress(ctx, &w, time.Minute, frame.MinRate, make([]byte, size))
+		err := frame.WriteProgress(ctx, &w, time.Minute, frame.FloorRate, make([]byte, size))
 		if !errors.Is(err, context.Canceled) || w.writes != 0 {
 			t.Errorf("WriteProgress(canceled, %d bytes) = %v after %d writes, want context.Canceled and 0", size, err, w.writes)
 		}
@@ -45,7 +45,7 @@ func TestWriteProgressCancelStopsBetweenChunks(t *testing.T) {
 	ctx, cancel := context.WithCancel(t.Context())
 	defer cancel()
 	w := countingWriter{onWrite: cancel}
-	err := frame.WriteProgress(ctx, &w, time.Minute, frame.MinRate, make([]byte, 1<<20))
+	err := frame.WriteProgress(ctx, &w, time.Minute, frame.FloorRate, make([]byte, 1<<20))
 	if !errors.Is(err, context.Canceled) || w.writes != 1 {
 		t.Errorf("WriteProgress(canceled while writing) = %v after %d writes, want context.Canceled after the header", err, w.writes)
 	}

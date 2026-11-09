@@ -181,13 +181,13 @@ func TestFragmentJumpGrowsToFit(t *testing.T) {
 }
 
 // TestStaleExactlyAtTTL: a partial message is dropped when it has gone
-// exactly 30 s without a fragment, not one tick later.
+// exactly PartialTTL without a fragment, not one tick later.
 func TestStaleExactlyAtTTL(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		rig, raws := newHostileRig(t, "x")
 		sendFrag(t, raws["x"], frag(chRepo, 1, 1<<20, 0, make([]byte, 1024)))
 		synctest.Wait()
-		time.Sleep(30*time.Second - time.Nanosecond)
+		time.Sleep(mux.PartialTTL - time.Nanosecond)
 		synctest.Wait()
 		if rig.res.inUse() == 0 {
 			t.Fatal("dropped before the TTL")

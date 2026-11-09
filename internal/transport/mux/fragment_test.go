@@ -83,6 +83,19 @@ func recv(t *testing.T, c transport.Transport) transport.Event {
 	return ev
 }
 
+// recvFor is the next event of c, reported as an error (and the zero event)
+// if none comes within d of virtual time.
+func recvFor(t *testing.T, c transport.Transport, d time.Duration) transport.Event {
+	t.Helper()
+	ctx, cancel := context.WithTimeout(t.Context(), d)
+	defer cancel()
+	ev, err := c.Recv(ctx)
+	if err != nil {
+		t.Errorf("Recv within %v = %v", d, err)
+	}
+	return ev
+}
+
 func TestFragmentRoundTrip(t *testing.T) {
 	for _, size := range []int{64 << 10, 64<<10 + 1, 1<<20 + 17, 5 << 20} {
 		t.Run("", func(t *testing.T) {

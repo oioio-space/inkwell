@@ -40,7 +40,7 @@ mutants first, frozen gate before code).
 Timers and limits as they are today (`sync/1`), with sources:
 
 - **Write and stream timeouts.**
-  - `frame.WriteIdle` = 20 s without progress, plus a total budget of 20 s + len / `MinRate` (16 KiB/s) (`internal/transport/frame/progress.go`).
+  - `frame.WriteIdle` = 20 s without progress, plus a total budget of 20 s + len / `FloorRate` (2 KiB/s since block WB; 16 KiB/s `MinRate` before) (`internal/transport/frame/progress.go`).
   - `openTimeout` 15 s, `upTimeout` 30 s, `reorderWait` 1 min (`p2p/node.go`).
   - mux fragments of 32 KiB, `partialTTL` 30 s; fragments get 1 turn in 4 (`mux/fragment.go`).
 - **Dialing and holds.**
@@ -666,7 +666,7 @@ It is cleared on `peer-disconnected`.
 
 - **Measured** (scenario 7, 8 KiB/s relay, two seeds per tree): worst delay of a typed token 48.9 s and
   44.0 s with rule L (block RL1, 1-2 resyncs), 21.0 s and 18.7 s before it (809efec). Cause: a write
-  may take at most `frame.WriteIdle` + size / `frame.MinRate` (20 s + size / 16 KiB/s); a 300 KB paste
+  may take at most `frame.WriteIdle` + size / `frame.MinRate` before block WB (20 s + size / 16 KiB/s; now `frame.FloorRate`, 2 KiB/s); a 300 KB paste
   on a link under 16 KiB/s always exceeds it, the failed write resyncs (rule L) and the paste is sent
   again from the start, ahead of the typing. Before RL1 the paste was silently lost instead.
 - **Decision (user, 2026-11-09):** NI-3 C2 is a declared known failure until ADR 0034 step 6 (a
@@ -680,6 +680,12 @@ It is cleared on `peer-disconnected`.
 
 
 ## Block WB: executable specification (step 1, 2026-11-09)
+
+> **Superseded by block SP1 (user decision, 2026-11-09), not passed.** WB fixed the right loop with the wrong
+> trigger: its model has no transport window and no reverse path (send-path design W38, RC1, RC6), so its NI-3
+> criterion « 0 resyncs » stays red while `WriteIdle` is 20 s. `gates/WB.toml` stays frozen as history and is not
+> run; its WB-2 floor (2 KiB/s) and its tests and mutants are folded into `gates/SP1.toml`
+> (`docs/plans/2026-11-09-send-path-design.md`, "SP1: executable specification").
 
 Step 1 of the definition of done for block WB: the rule, its TLA+ model and mutants, the tests the code must
 pass, and the draft gate `gates/WB.toml`. The model is checked by `mise run tla`

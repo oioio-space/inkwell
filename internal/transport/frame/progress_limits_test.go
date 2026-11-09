@@ -65,7 +65,7 @@ func TestWriteProgressWaitsForCancelCallback(t *testing.T) {
 		defer cancel()
 		var returned, late atomic.Bool
 		w := &lateWriter{cancel: cancel, returned: &returned, late: &late}
-		_ = frame.WriteProgress(ctx, w, time.Minute, frame.MinRate, make([]byte, 1<<20))
+		_ = frame.WriteProgress(ctx, w, time.Minute, frame.FloorRate, make([]byte, 1<<20))
 		returned.Store(true)
 		time.Sleep(2 * time.Second)
 		if late.Load() {

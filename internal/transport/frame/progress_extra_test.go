@@ -38,14 +38,14 @@ func (r *recorder) SetWriteDeadline(t time.Time) error {
 
 func TestWriteProgressTooLarge(t *testing.T) {
 	var ok recorder
-	if err := frame.WriteProgress(t.Context(), &ok, time.Second, frame.MinRate, make([]byte, transport.MaxFrame)); err != nil {
+	if err := frame.WriteProgress(t.Context(), &ok, time.Second, frame.FloorRate, make([]byte, transport.MaxFrame)); err != nil {
 		t.Errorf("WriteProgress(MaxFrame) = %v, want nil", err)
 	}
 	if ok.buf.Len() != 4+transport.MaxFrame {
 		t.Errorf("WriteProgress(MaxFrame) wrote %d bytes, want %d", ok.buf.Len(), 4+transport.MaxFrame)
 	}
 	var r recorder
-	err := frame.WriteProgress(t.Context(), &r, time.Second, frame.MinRate, make([]byte, transport.MaxFrame+1))
+	err := frame.WriteProgress(t.Context(), &r, time.Second, frame.FloorRate, make([]byte, transport.MaxFrame+1))
 	if !errors.Is(err, transport.ErrFrameTooLarge) || r.armCalls != 0 || r.buf.Len() != 0 {
 		t.Errorf("WriteProgress(MaxFrame+1) = %v, armed %d times, wrote %d bytes; want ErrFrameTooLarge and no side effect", err, r.armCalls, r.buf.Len())
 	}
@@ -69,7 +69,7 @@ func TestWriteProgressWire(t *testing.T) {
 				payload[i] = byte(i * 7)
 			}
 			var r recorder
-			if err := frame.WriteProgress(t.Context(), &r, time.Second, frame.MinRate, payload); err != nil {
+			if err := frame.WriteProgress(t.Context(), &r, time.Second, frame.FloorRate, payload); err != nil {
 				t.Fatal(err)
 			}
 			if !slices.Equal(r.sizes, tc.sizes) {
@@ -171,7 +171,7 @@ func TestWriteProgressMinRateZero(t *testing.T) {
 // any byte goes out, and the cause is kept.
 func TestWriteProgressArmError(t *testing.T) {
 	r := recorder{armErr: io.ErrClosedPipe}
-	err := frame.WriteProgress(t.Context(), &r, time.Second, frame.MinRate, []byte("hi"))
+	err := frame.WriteProgress(t.Context(), &r, time.Second, frame.FloorRate, []byte("hi"))
 	if !errors.Is(err, io.ErrClosedPipe) || r.buf.Len() != 0 {
 		t.Errorf("WriteProgress(arm fails) = %v, wrote %d bytes; want ErrClosedPipe and nothing written", err, r.buf.Len())
 	}
@@ -193,13 +193,13 @@ func (w *failAt) Write(p []byte) (int, error) {
 func TestWriteProgressWriteErrors(t *testing.T) {
 	for n, stage := range []string{"header", "first chunk", "second chunk"} {
 		w := &failAt{n: n}
-		err := frame.WriteProgress(t.Context(), w, time.Second, frame.MinRate, make([]byte, 100<<10))
+		err := frame.WriteProgress(t.Context(), w, time.Second, frame.FloorRate, make([]byte, 100<<10))
 		if !errors.Is(err, io.ErrClosedPipe) {
 			t.Errorf("fail at %s: WriteProgress = %v, want ErrClosedPipe", stage, err)
 		}
 	}
 	w := &failAt{n: 0}
-	if err := frame.WriteProgress(t.Context(), w, time.Second, frame.MinRate, []byte("hi")); !errors.Is(err, io.ErrClosedPipe) {
+	if err := frame.WriteProgress(t.Context(), w, time.Second, frame.FloorRate, []byte("hi")); !errors.Is(err, io.ErrClosedPipe) {
 		t.Errorf("small frame: WriteProgress = %v, want ErrClosedPipe", err)
 	}
 }

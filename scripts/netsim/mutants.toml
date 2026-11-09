@@ -141,3 +141,72 @@ why = "a send that fails on a surviving connection resets the stream without ann
 file = "internal/transport/p2p/stream.go"
 before = "n.outLost(ps, s, true, !canceled)"
 after = "n.outLost(ps, s, true, false)"
+
+[[mutant]]
+id = "SP1a"
+block = "SP1"
+kind = "go"
+pkg = "./internal/transport/p2p"
+test = "TestRuleSP1SessionSurvivesSlowHop"
+clause = "rule SP1-4 (NoSessionLoss; model SP1HopValve10, SP1KeepaliveBehindData)"
+why = "yamux ConnectionWriteTimeout back to the package default of 10 s: a frame write blocked for 55 s behind a relay hop closes the session"
+[[mutant.edit]]
+file = "internal/transport/p2p/muxer.go"
+before = "cfg.ConnectionWriteTimeout = muxWriteTimeout"
+after = "cfg.ConnectionWriteTimeout = 10 * time.Second"
+
+[[mutant]]
+id = "SP1b"
+block = "SP1"
+kind = "go"
+pkg = "./internal/transport/p2p"
+test = "TestRuleSP1WindowPinned"
+clause = "rule SP1-5 (window pinned; model SP1FloorGrown)"
+why = "MaxStreamWindowSize back to the package default of 16 MiB: the window auto-tunes and the writer runs ahead of the reader by megabytes"
+[[mutant.edit]]
+file = "internal/transport/p2p/muxer.go"
+before = "cfg.MaxStreamWindowSize = streamWindow"
+after = "cfg.MaxStreamWindowSize = 16 << 20"
+
+[[mutant]]
+id = "SP1c"
+block = "SP1"
+kind = "go"
+pkg = "./internal/transport/mux"
+test = "TestRuleSP1PartialKeptPastWriteIdle"
+clause = "rule SP1-3 (NoSilentDrop; model SP1PartialTTL30, SP1PartialTTLAtIdle)"
+why = "the reader expires partial messages after 30 s, below WriteIdle: it drops a partial message its sender is still writing"
+[[mutant.edit]]
+file = "internal/transport/mux/fragment.go"
+before = "if now.Sub(cur.last) >= PartialTTL {"
+after = "if now.Sub(cur.last) >= 30*time.Second {"
+[[mutant.edit]]
+file = "internal/transport/mux/fragment.go"
+before = "return max(time.Until(oldest.Add(PartialTTL)), time.Nanosecond)"
+after = "return max(time.Until(oldest.Add(30*time.Second)), time.Nanosecond)"
+
+[[mutant]]
+id = "SP1d"
+block = "SP1"
+kind = "go"
+pkg = "./internal/transport/frame"
+test = "TestRuleSP1NoFalseCut"
+clause = "rule SP1-1 (NoFalseCut; model SP1Idle20)"
+why = "WriteIdle back to 20 s: the first window stall of a healthy 8 KiB/s link (21.8 s) cuts the write"
+[[mutant.edit]]
+file = "internal/transport/frame/progress.go"
+before = "WriteIdle = 90 * time.Second"
+after = "WriteIdle = 20 * time.Second"
+
+[[mutant]]
+id = "SP1e"
+block = "SP1"
+kind = "go"
+pkg = "./internal/transport/mux"
+test = "TestRuleSP1SlowLinkDeliversWithoutResend"
+clause = "rule SP1-2 (DeliveredHonest; model SP1FixedFloor; block WB's WBa)"
+why = "FloorRate back to the old fixed 16 KiB/s: an 879 KiB message on an 8 KiB/s link exceeds its total budget, fails and is resent"
+[[mutant.edit]]
+file = "internal/transport/frame/progress.go"
+before = "FloorRate = 2 << 10"
+after = "FloorRate = 16 << 10"

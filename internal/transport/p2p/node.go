@@ -350,7 +350,7 @@ func New(ctx context.Context, key ed25519.PrivateKey, o Options) (*Node, error) 
 		// wrong process. A busy port must fail the bind, so the caller falls back to a free one.
 		libp2p.Transport(tcp.NewTCPTransport, tcp.DisableReuseport()),
 		libp2p.Security(noise.ID, noise.New),
-		libp2p.DefaultMuxers,
+		muxer(),
 		libp2p.ListenAddrStrings(
 			fmt.Sprintf("/ip4/0.0.0.0/udp/%d/quic-v1", o.Port),
 			fmt.Sprintf("/ip6/::/udp/%d/quic-v1", o.Port),

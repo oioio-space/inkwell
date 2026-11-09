@@ -27,9 +27,11 @@ const (
 	// maxReassembly bounds the bytes held in partial messages, across peers,
 	// when the transport has no budget of its own (see [Reserver]).
 	maxReassembly = 128 << 20
-	// partialTTL is how long a partial message may go without a new fragment.
-	// It is above the 20 s a sender waits for progress (frame.WriteIdle).
-	partialTTL = 30 * time.Second
+	// PartialTTL is how long a partial message may go without a new fragment
+	// (SP1-3, D-SP1-4 of docs/plans/2026-11-09-send-path-design.md): 120 s.
+	PartialTTL = frame.WriteIdle + 2*frame.MaxOneWayDelay + partialSlack
+	// partialSlack is the margin above WriteIdle plus the round trip.
+	partialSlack = 20 * time.Second
 	// backgroundShare is the "one in n" turn the background class is
 	// guaranteed while interactive messages wait: 25 % of the frames.
 	backgroundShare = 4
@@ -45,6 +47,11 @@ type Reserver interface {
 	// Unreserve gives back bytes taken with Reserve.
 	Unreserve(size int)
 }
+
+// The reader keeps a partial message longer than its sender waits for
+// progress, or it would drop a message still being written; this fails to
+// compile otherwise.
+const _ = uint(PartialTTL - frame.WriteIdle - 1)
 
 // A fragment must fit a pooled send buffer; this fails to compile otherwise.
 const _ = uint(maxPooled - fragHeader - fragSize)
@@ -186,7 +193,7 @@ func (s *sub) sendFragmented(ctx context.Context, to transport.PeerID, payload [
 	}
 	// The whole message has a deadline, however steadily the receiver makes
 	// progress: a drip-feed must not keep the send, and its buffers, alive.
-	ctx, cancel := context.WithTimeout(ctx, frame.WriteIdle+time.Duration(len(payload))*time.Second/frame.MinRate)
+	ctx, cancel := context.WithTimeout(ctx, frame.WriteIdle+time.Duration(len(payload))*time.Second/frame.FloorRate)
 	defer cancel()
 	id := m.msgID.Add(1)
 	bp := m.getBuf()
@@ -286,14 +293,28 @@ func (m *muxer) drop(peer transport.PeerID) {
 	}
 }
 
-// expire drops the messages that made no progress for partialTTL.
+// expire drops the messages that made no progress for PartialTTL.
 func (m *muxer) expire() {
 	now := time.Now()
 	for peer, cur := range m.partials {
-		if now.Sub(cur.last) >= partialTTL {
+		if now.Sub(cur.last) >= PartialTTL {
 			m.drop(peer)
 		}
 	}
+}
+
+// untilExpiry is how long until the partial message that made progress least
+// recently reaches PartialTTL, so that none lives much longer than that
+// whatever else wakes the reader. It is only called with partials, none of
+// them yet expired.
+func (m *muxer) untilExpiry() time.Duration {
+	oldest := time.Now()
+	for _, cur := range m.partials {
+		if cur.last.Before(oldest) {
+			oldest = cur.last
+		}
+	}
+	return max(time.Until(oldest.Add(PartialTTL)), time.Nanosecond)
 }
 
 // grow makes room in cur for n more bytes, at most cur.total in all, doubling
@@ -359,9 +380,9 @@ func (m *muxer) evictStalest(keep transport.PeerID) bool {
 func (m *muxer) recv() (transport.Event, error) {
 	for {
 		ctx, cancel := m.ctx, context.CancelFunc(func() {})
+		m.expire()
 		if len(m.partials) > 0 {
-			m.expire()
-			ctx, cancel = context.WithTimeout(m.ctx, partialTTL)
+			ctx, cancel = context.WithTimeout(m.ctx, m.untilExpiry())
 		}
 		ev, err := m.t.Recv(ctx)
 		cancel()

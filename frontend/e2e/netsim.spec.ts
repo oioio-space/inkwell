@@ -146,11 +146,11 @@ function cjk(n: number, random: () => number) {
 // block, unless NETSIM_EXPECT=strict. Only a measured miss is downgraded: a harness error stays
 // red. A known failure that passes is reported as XPASS, the signal to flip it to strict.
 // Scenario 6 C2 was flipped to strict on 2026-11-09: rule L (block RL1) closed the silent loss and
-// it passed on every run since (seeds 1-3 and a random seed).
+// it passed on every run since (seeds 1-3 and a random seed). Scenario 7 C1 was flipped to strict the
+// same day: block SP1 delivers the paste at the first attempt (94-95 s on seeds 1-3, E3).
 const KNOWN_FAILURES: Record<string, Record<string, string>> = {
   "7": {
-    C1: "N-15 (total write budget 20 s + size / 16 KiB/s on sync/1), closed by ADR 0034 step 6",
-    C2: "head-of-line behind a paste larger than the write budget on a link under 16 KiB/s: each failed write resyncs (rule L) and resends it; worst 44-49 s measured vs 19-21 s before RL1 (2026-11-09); closed by ADR 0034 step 6 (separate lane for large objects), mitigated by block WB (write budget follows measured throughput)",
+    C2: "typed frames wait behind a paste in the relay path on a link under ~10 KiB/s: worst 44.8-53.3 s with block SP1 (E3, 2026-11-09; no resend, no outage, every token arrives); closed by ADR 0034 steps 4-6 (a priority lane for typing)",
   },
 };
 

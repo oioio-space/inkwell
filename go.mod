@@ -7,6 +7,7 @@ require (
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/google/go-cmp v0.7.0
 	github.com/libp2p/go-libp2p v0.51.0
+	github.com/libp2p/go-yamux/v5 v5.1.0
 	github.com/marcopolo/simnet v0.0.7
 	github.com/multiformats/go-multiaddr v0.16.1
 	github.com/oioio-space/inkwell/protocol v0.1.0
@@ -55,7 +56,6 @@ require (
 	github.com/libp2p/go-msgio v0.3.0 // indirect
 	github.com/libp2p/go-netroute v0.4.0 // indirect
 	github.com/libp2p/go-reuseport v0.4.0 // indirect
-	github.com/libp2p/go-yamux/v5 v5.1.0 // indirect
 	github.com/libp2p/zeroconf/v2 v2.2.0 // indirect
 	github.com/marten-seemann/tcp v0.0.0-20210406111302-dfbc87cc63fd // indirect
 	github.com/mattn/go-colorable v0.1.14 // indirect
@@ -121,3 +121,8 @@ require (
 )
 
 replace github.com/oioio-space/inkwell/protocol => ./protocol
+
+// Fork of go-libp2p v0.51.0 with a one-commit fix: Swarm.nonProxyAddr panics (nil
+// transport) when a hole-punch dial races with Swarm.Close. Upstream issue/PR:
+// https://github.com/libp2p/go-libp2p/issues/3575 (fix: https://github.com/libp2p/go-libp2p/pull/3576). Remove this replace once the fix is released upstream.
+replace github.com/libp2p/go-libp2p => github.com/oioio-space/go-libp2p v0.51.1-0.20261109121346-cae49c803966

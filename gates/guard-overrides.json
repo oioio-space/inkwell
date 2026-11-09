@@ -299,6 +299,26 @@
       "id": "7df636c05f8ae7a7533eaf887582cab0a9b8aa2aff1a9d01f84fc9bab37265b7",
       "reason": "Block SP1: tla-check.sh renames SP1Hop90 to SP1Hop, adds the sound SP1Silence and SP1GrownKeepalive (a residual witness closed by the decided 120 s) and the mutant SP1PartialTTLAtIdle; every other model and mutant run is unchanged (62 runs, all as expected).",
       "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "320c24c2933b463c1051e13c6a6c33c5b09a42b0e1675b1af9f048508819252d",
+      "reason": "Block SP1b (D-SP1, rule SP1-2): sendFragmented's total deadline uses frame.FloorRate (2 KiB/s) instead of MinRate (16 KiB/s), so a large message on an honest slow link is not cut and resent; proven by TestRuleSP1SlowLinkDeliversWithoutResend (mutant SP1e) and the SendPath/SP1 TLA+ model; the 90 s no-progress cut still bounds a stopped reader.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "0c138dcc2f7d2217751da972c599728b0daf6cbe80fe6a586783f0e2a79bd97f",
+      "reason": "Block SP1b (D-SP1-4, /simplify): the reassembly sweep now wakes at the oldest partial's deadline instead of a full partialTTL, so a partial is freed at partialTTL (120 s) instead of up to twice that; stricter, proven by TestRuleSP1PartialFreedAfterTTL (red before) and the tightened TestStalePartialExpires.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "751a0eb80e6b7d8897570fe06ac31de7fc23172d4cfa03be692102b829752818",
+      "reason": "Block SP1b (rule SP1-2): bulk lane WriteProgress takes frame.FloorRate (2 KiB/s) instead of MinRate (16 KiB/s), same rule as sync/1; the no-progress cut (WriteIdle) is unchanged in kind and stated in the spec.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "56c03e0de40304b3b341188f377e357177d48b2ed1c6d4d08b5558dfd5f7e5da",
+      "reason": "Block SP1b (rule SP1-2): sync/1 WriteProgress takes frame.FloorRate (2 KiB/s) instead of MinRate (16 KiB/s) — the root fix of the NI-3 resend loop (E1, E3: paste delivered at the first attempt, 0 resyncs); WriteIdle 90 s per D-SP1, proven by the RuleSP1 tests and the TLA+ model.",
+      "decision": "docs/objectif-en-cours.md"
     }
   ]
 }

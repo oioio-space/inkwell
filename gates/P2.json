@@ -6,7 +6,7 @@
       "command": "cd protocol && INKWELL_PROTOCOL_STEP=2 ../scripts/heavy.sh go test ./conformance -run TestCorpus -count=1",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 0.267791688995203,
+      "duration_seconds": 0.25963802202022634,
       "log": "gates/P2/P-VEC-2-go.log"
     },
     {
@@ -14,7 +14,7 @@
       "command": "cd frontend && INKWELL_PROTOCOL_STEP=2 ../scripts/heavy.sh ./node_modules/.bin/vitest run packages/protocol",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 0.6756212179898284,
+      "duration_seconds": 0.6842355480184779,
       "log": "gates/P2/P-VEC-2-ts.log"
     },
     {
@@ -22,7 +22,7 @@
       "command": "(cd protocol && ../scripts/heavy.sh go test -count=1 ./sig ./trust) && ./scripts/heavy.sh go test -count=1 ./internal/transport/p2p ./internal/trust ./internal/invite ./internal/identity",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 16.364826802004245,
+      "duration_seconds": 17.093247514014365,
       "log": "gates/P2/N-1-callers.log"
     },
     {
@@ -30,7 +30,7 @@
       "command": "cd protocol && ../scripts/heavy.sh go test ./sig -run '^$' -fuzz '^FuzzVerify$' -fuzztime 120s",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 121.22070968899061,
+      "duration_seconds": 121.21085495100124,
       "log": "gates/P2/P-FUZZ-sig.log"
     },
     {
@@ -38,7 +38,7 @@
       "command": "bash scripts/arch-check.sh",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 2.6475869660062017,
+      "duration_seconds": 17.6694561909826,
       "log": "gates/P2/P-ARCH.log"
     },
     {
@@ -46,7 +46,7 @@
       "command": "mise run gate -- L3",
       "status": "pass",
       "exit_code": 0,
-      "duration_seconds": 1430.1492372290086,
+      "duration_seconds": 1441.1942986600043,
       "log": "gates/P2/L3-regression.log"
     }
   ],
@@ -62,31 +62,31 @@
     }
   },
   "sha256": {
-    "docs/objectif-en-cours.md": "bf9b83a163015ddbcef650ceaf3f377768c8ab0d63297032421251256e4e90e3",
+    "docs/objectif-en-cours.md": "acbbc44457f9c222b064604f5911fa64b982d721d0db62f65ead1f0c2f90e42c",
     "docs/plans/2026-11-08-P2-implementation.md": "2614a6ae91e3ead59c1574fb7e36d99431a8c35190e3f6fbfffc3da5a60d7347",
-    "gates/L3.json": "907345dbf970d07e941cb472e1267f49c6a11df491913f7a26bd95584d437eef",
+    "gates/L3.json": "5e7ec72a8626ac1d66442f3e6d22b3857d30da7e6a65076ee8313aaf5c9ce378",
     "gates/P2/L3-regression.log": "e04a7a10b17f554c2c49368c3ff7d00366475d22908d3f41685b615fa5fe86a1",
-    "gates/P2/N-1-callers.log": "1379d2098601610a510f145f00ca5ff00b8ed83a794c4d3f0890d19d56139767",
+    "gates/P2/N-1-callers.log": "56c76659d7c03b8b2185aab36a284b27582fd727a91fb8e42ad974b968a59439",
     "gates/P2/P-ARCH.log": "fa489540f4ad789887b77c36f95084173f64ac5085fe5f0b1c60acdc69066738",
-    "gates/P2/P-FUZZ-sig.log": "cc4346983fc80ec73e02e75cfab7c520dd650709a058cd01e4a37bacf91b4388",
-    "gates/P2/P-VEC-2-go.log": "213c49f267401b21a6fc091f82b9ac50facba0c424383c5d29b8cd7a0145d1ec",
-    "gates/P2/P-VEC-2-ts.log": "3aadc709bbbd97cfe5577e938ebb523d48f4261218abe7de1d1ac760a2d606b9",
+    "gates/P2/P-FUZZ-sig.log": "201a7edf594d3a5d5565871a09bd98e4ca8b3986c1404289ee481f524228fde3",
+    "gates/P2/P-VEC-2-go.log": "9d14a9f834a28ee4458ea18827463aadecbe9279977bad8b38e82fedab686199",
+    "gates/P2/P-VEC-2-ts.log": "60ecda0d91e9b6a52bf18c0ba68915042eea7b2a2619731f77d090b96f30555e",
     "gates/P2/RECONSTRUCTED.md": "11cc5b0f5bc8fa5f35e889cc17d0902e9c69c9cb242dd4a330f0cd582c0c7e61",
-    "gates/P2/base-guard.log": "b896d737c5847dff585283acc65812ed8e73d84f0a157254973cdaaf518b7245"
+    "gates/P2/base-guard.log": "361ba33787732077293b236e50566bfafdbadee7d11570641c47b0817b1f913f"
   },
   "status": "pass",
   "deferrals": [],
   "known_failures": [],
   "base_guard": {
     "ref": "main",
-    "base": "809efeca2983ffc27213628f03f11810b9682ff5",
+    "base": "900125ba757f1906f9406aefc571dea95d09db3d",
     "source_sha256": "c306265111e4c8b0ad94a1867d797b7a20be7d814161b7b9dd6200ab7feb259c",
     "exit_code": 0,
     "status": "pass",
     "log": "gates/P2/base-guard.log"
   },
   "runner": {
-    "source": "base 809efeca2983ffc27213628f03f11810b9682ff5",
+    "source": "base 900125ba757f1906f9406aefc571dea95d09db3d",
     "sha256": "b27c4c15b51712a94fe8280e60d0abd1efc431723999c7da8e3de63029522bcb"
   },
   "guard_overrides": [
@@ -248,6 +248,166 @@
     {
       "id": "da127e92eba0fd067f86e42bb83b886c17bea3e0f7df263c31dd3d424341a592",
       "reason": "NI0: netsim run.sh gains the impaired scenarios and fails fast when the topology does not come up (was hidden by `if start_stack`); scenarios 1-4 and their bounds unchanged.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "6c7fb901e4dd90b2f5f129a18391ae8d23e7c07b32d80d3db9c5a8f8a17987ee",
+      "reason": "RL1 follow-up: e2e:build waits (wait_for) for the tasks that compile the root package, and builds the frontend into a side directory swapped into frontend/dist at the end, so neither a concurrent build nor an interrupted one leaves dist empty (seen in the pre-push ci on 2026-11-08). Same vite build, same mode and VITE_E2E_OBSERVE flag; the server and relay builds and every e2e bound are unchanged.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "4c1f4ca28b37b744f08d243db2f85daee15f57c44112722c582ba06b8d7584cc",
+      "reason": "W36 C2/C7: netsim run.sh gives each scenario its own Playwright --output directory so the traces of a failure survive the next scenario (Playwright wipes its output dir); scenarios, clauses and bounds unchanged.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "f9bfbcfd9a66e8d7fa94acaa563d30c21bc8b6c55cf850f3d960d1f81fcf26fc",
+      "reason": "W33: tla-check.sh adds the SyncIndicator model (two sound configs) and its seven mutants; the RepoGen and ConnCredit runs are unchanged.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "f6b85cdffb23c71a10e3e33ba4a9c885e131125fb753f50f73d5321aac63782d",
+      "reason": "Free model providers (user rule \u00ab au juste besoin \u00bb): test:py also runs scripts/llm_test.py (provider fall-through with a fake curl, no network); every existing test still runs.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "290cdcc795f0c151c586028ee5eecca3b75dd4d5b421e38e950579fc08ac9157",
+      "reason": "NI-4 C5 unit test (new): two waits in a NEW test (300 ms for the tail of the exchange, 500 ms quiet window) to prove sync counters stay still once converged; no existing wait or bound is changed.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "95e2b4b1837f01eb2779e060f7478a585a1ca574dc6ae4df6e3b6c934ba9c6d2",
+      "reason": "Block WB: tla-check.sh adds the WriteBudget model (two sound configs) and its four mutants; every earlier model and mutant run is unchanged.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "61f62ed836abe55cdf30414e854c39f01e25c40bbec73eded4d067af74ff1402",
+      "reason": "W38: tla-check.sh adds the SendPath model (target send path, rules SP-1..SP-9) and the SP1 interim configurations with their mutants and residual witnesses; every earlier model and mutant run is unchanged.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "f7483447df96767dfbbc3a73db499fe85cd997bdc56d719695e362bcff61f7fa",
+      "reason": "Block SP1: the draft gate is deleted, replaced by gates/SP1.toml written after decisions D-SP1-1..4; the matched lines are comments of the draft (no executed timeout), and every criterion moved to the new gate.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "49ab05eb831a779272a0cab2862ef0670e046a41a19fd36550cf88490376443d",
+      "reason": "Block SP1: the draft gate is deleted, replaced by gates/SP1.toml written after decisions D-SP1-1..4; the matched lines are comments of the draft (no executed timeout), and every criterion moved to the new gate.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "6bc586746be08a856572e83cc4a17945a3abeff8b89c1f81cd9485364f536472",
+      "reason": "Block SP1: the draft gate is deleted, replaced by gates/SP1.toml written after decisions D-SP1-1..4; the matched lines are comments of the draft (no executed timeout), and every criterion moved to the new gate.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "cad02420d6f688add0c8c1c11025c05f3aca38d9ba5c3b15b3738fc8a9e0887d",
+      "reason": "Block SP1: the draft gate is deleted, replaced by gates/SP1.toml written after decisions D-SP1-1..4; the matched lines are comments of the draft (no executed timeout), and every criterion moved to the new gate.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "15e62d0ec178835d4e9918f13267d89db52d015c05c6c93f97c470a089faa4a9",
+      "reason": "Block SP1: the draft gate is deleted, replaced by gates/SP1.toml written after decisions D-SP1-1..4; the matched lines are comments of the draft (no executed timeout), and every criterion moved to the new gate.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "e00ad5be9b539b640e8877c99d95b72b3c5a6523cf716f0d0b6d5a6021ef617f",
+      "reason": "Block SP1: the draft gate is deleted, replaced by gates/SP1.toml written after decisions D-SP1-1..4; the matched lines are comments of the draft (no executed timeout), and every criterion moved to the new gate.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "70b8c6b498d7f0584d11bd18baf9f62ee199a1a65bdee0f51669ff923c9c0705",
+      "reason": "Block SP1: the draft gate is deleted, replaced by gates/SP1.toml written after decisions D-SP1-1..4; the matched lines are comments of the draft (no executed timeout), and every criterion moved to the new gate.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "11bbf6b3035554cbab31fb9e0dcbcf1a2b0fe156fe8b9d23a16493ec1eafdd51",
+      "reason": "Block SP1: the draft gate is deleted, replaced by gates/SP1.toml written after decisions D-SP1-1..4; the matched lines are comments of the draft (no executed timeout), and every criterion moved to the new gate.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "b2f893dff0d44d96674a9d830587e4fa082a3fbdcbc588d8e2f753e16295c36e",
+      "reason": "Block SP1: prose of the design doc updated to the decided yamux ConnectionWriteTimeout 120 s (was an open decision); no executed timeout.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "eba6dab413a0d756b9653880eec9a9bb315e36ea1da03e47721663a98395bf00",
+      "reason": "Block SP1: prose of the design doc updated to the decided yamux ConnectionWriteTimeout 120 s (was an open decision); no executed timeout.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "bc05bbe67a25e3895ceb82117d3d28e16ab776249589843233fa13003cb414d7",
+      "reason": "Block SP1: README SP1 section rewritten for the decided constants (ConnectionWriteTimeout 120 s, pings 120 s, partialTTL 120 s, window pinned), with the new state counts; prose only, no executed timeout.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "d839eef3376b8c8680d57f680c9fbe414822042b837e1f7c8c41fd78cf9f121a",
+      "reason": "Block SP1: README SP1 section rewritten for the decided constants (ConnectionWriteTimeout 120 s, pings 120 s, partialTTL 120 s, window pinned), with the new state counts; prose only, no executed timeout.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "8772c7cb953b828cf527d1c49c41846b196df970e8a774955b8126720a9ba602",
+      "reason": "Block SP1: README SP1 section rewritten for the decided constants (ConnectionWriteTimeout 120 s, pings 120 s, partialTTL 120 s, window pinned), with the new state counts; prose only, no executed timeout.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "ef589c3a4c1e6975106b008caeba0c94c9747e5ed1961d67102df4644cff28fc",
+      "reason": "Block SP1: README SP1 section rewritten for the decided constants (ConnectionWriteTimeout 120 s, pings 120 s, partialTTL 120 s, window pinned), with the new state counts; prose only, no executed timeout.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "4b5c5d320ce88fdfa698eaa5a3ed13d661e73272e9c7cc8cc80bbe0847ba2d05",
+      "reason": "Block SP1: header comment of a TLA+ config updated to the decided ping timeouts (120 s); TLC ignores comments; the model constants are checked by mise run tla.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "e08275093c19656cf837cfecf2bead27a6c59676367c1350c6cdac3f530c404f",
+      "reason": "Block SP1: header comment of a TLA+ config updated to the decided ping timeouts (120 s); TLC ignores comments; the model constants are checked by mise run tla.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "b3dce09ab218dd267c45d64f8d67a9cc126ad215b15b4a3bc3ad39354b8ccadf",
+      "reason": "Block SP1: header comment of a residual witness updated to the decided 120 s; it still violates under mise run tla.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "091e0b9e6868a6e932cc71710f310306629b9d1558c6e7bfcf02730e9e0b7cce",
+      "reason": "Block SP1: this residual witness holds at the decided 120 s, so it became the sound configuration docs/protocol/tla/SP1GrownKeepalive.cfg (run by tla-check.sh); nothing is weakened.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "0045e8b2d04dc6c2dd09222a86ae75e8105299b8e4ccb99efe973b04310b5568",
+      "reason": "Block SP1: header comment of a mutant renamed after its twin SP1Hop (was SP1Hop90); the mutant still violates under mise run tla.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "6bd225c9c99932f1b2fc2c3c1ca75b88b26510c6951781e107807e0d29065dea",
+      "reason": "Block SP1: header comment of a mutant updated to its twin SP1RelayKeepalive; the mutant still violates under mise run tla.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "7df636c05f8ae7a7533eaf887582cab0a9b8aa2aff1a9d01f84fc9bab37265b7",
+      "reason": "Block SP1: tla-check.sh renames SP1Hop90 to SP1Hop, adds the sound SP1Silence and SP1GrownKeepalive (a residual witness closed by the decided 120 s) and the mutant SP1PartialTTLAtIdle; every other model and mutant run is unchanged (62 runs, all as expected).",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "320c24c2933b463c1051e13c6a6c33c5b09a42b0e1675b1af9f048508819252d",
+      "reason": "Block SP1b (D-SP1, rule SP1-2): sendFragmented's total deadline uses frame.FloorRate (2 KiB/s) instead of MinRate (16 KiB/s), so a large message on an honest slow link is not cut and resent; proven by TestRuleSP1SlowLinkDeliversWithoutResend (mutant SP1e) and the SendPath/SP1 TLA+ model; the 90 s no-progress cut still bounds a stopped reader.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "0c138dcc2f7d2217751da972c599728b0daf6cbe80fe6a586783f0e2a79bd97f",
+      "reason": "Block SP1b (D-SP1-4, /simplify): the reassembly sweep now wakes at the oldest partial's deadline instead of a full partialTTL, so a partial is freed at partialTTL (120 s) instead of up to twice that; stricter, proven by TestRuleSP1PartialFreedAfterTTL (red before) and the tightened TestStalePartialExpires.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "751a0eb80e6b7d8897570fe06ac31de7fc23172d4cfa03be692102b829752818",
+      "reason": "Block SP1b (rule SP1-2): bulk lane WriteProgress takes frame.FloorRate (2 KiB/s) instead of MinRate (16 KiB/s), same rule as sync/1; the no-progress cut (WriteIdle) is unchanged in kind and stated in the spec.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "56c03e0de40304b3b341188f377e357177d48b2ed1c6d4d08b5558dfd5f7e5da",
+      "reason": "Block SP1b (rule SP1-2): sync/1 WriteProgress takes frame.FloorRate (2 KiB/s) instead of MinRate (16 KiB/s) \u2014 the root fix of the NI-3 resend loop (E1, E3: paste delivered at the first attempt, 0 resyncs); WriteIdle 90 s per D-SP1, proven by the RuleSP1 tests and the TLA+ model.",
       "decision": "docs/objectif-en-cours.md"
     }
   ]

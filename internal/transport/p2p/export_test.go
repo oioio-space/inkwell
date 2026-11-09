@@ -4,6 +4,7 @@ import (
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/libp2p/go-yamux/v5"
 	ma "github.com/multiformats/go-multiaddr"
 
 	"github.com/oioio-space/inkwell/internal/transport"
@@ -62,3 +63,26 @@ func (n *Node) OutDirect(id transport.PeerID) (direct, ok bool) {
 	}
 	return !isCircuit(ps.out.Conn().RemoteMultiaddr()), true
 }
+
+// MuxConfig is the yamux configuration the node and the relay pass to libp2p.
+func MuxConfig() *yamux.Config { return muxConfig() }
+
+// The muxer's constants, for the tests that derive their scenarios from them.
+const (
+	MuxWriteTimeout = muxWriteTimeout
+	MuxKeepAlive    = muxKeepAlive
+	StreamWindow    = streamWindow
+)
+
+// StallReading makes the node's application stop reading: it takes the whole
+// receive budget, so the readers of its inbound streams wait for a frame's
+// bytes while the connection and its keepalives carry on. It panics if the
+// budget was not entirely free. ResumeReading undoes it.
+func (n *Node) StallReading() {
+	if !n.budget.TryAcquire(maxBuffered) {
+		panic("p2p: StallReading: the receive budget is not free")
+	}
+}
+
+// ResumeReading gives back the budget taken by StallReading.
+func (n *Node) ResumeReading() { n.budget.Release(maxBuffered) }

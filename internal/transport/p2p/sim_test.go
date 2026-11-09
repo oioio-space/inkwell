@@ -3,6 +3,7 @@ package p2p_test
 import (
 	"context"
 	"encoding/binary"
+	"errors"
 	"fmt"
 	"math/rand/v2"
 	"net"
@@ -13,6 +14,7 @@ import (
 	"time"
 
 	"github.com/libp2p/go-libp2p"
+	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/p2p/transport/quicreuse"
 	"github.com/marcopolo/simnet"
 	ma "github.com/multiformats/go-multiaddr"
@@ -762,11 +764,14 @@ func TestLinkMetricsFollowPath(t *testing.T) {
 	})
 }
 
-// TestRuleLSendFailureResyncs is spec rule L (§5.5, §7.3) on the sync/1 path:
-// a write that makes no progress for WriteIdle fails and resets the outbound
-// stream while the connection survives a shorter blackout. The peer must then
-// leave and come back (PeerDown, PeerUp), or the repo layer keeps its sync
-// state and never sends the lost change again.
+// TestRuleLSendFailureResyncs is spec rule L (§5.5, §7.3) on the sync/1 path,
+// as block SP1 defines it (decision of 2026-11-09: a silence of 60 s or more
+// is outside the v1 contract and closes the session, so rule L is reached by
+// a peer whose application stops reading while the connection stays alive).
+// The write then makes no progress and fails at WriteIdle (90 s of virtual
+// time) with the connection up, and resets the outbound stream. The peer must
+// then leave and come back (PeerDown, PeerUp), or the repo layer keeps its
+// sync state and never sends the lost change again.
 func TestRuleLSendFailureResyncs(t *testing.T) {
 	forSeeds(t, func(t *testing.T, nn *natNet) {
 		relays := nn.relay(t, p2p.RelayOptions{})
@@ -775,15 +780,19 @@ func TestRuleLSendFailureResyncs(t *testing.T) {
 		wantEachOther(a, b)
 		expectUp(t, a, b)
 
-		nn.setBlackout(b.end, true)
-		sent := make(chan error, 1)
-		go func() { sent <- a.Send(t.Context(), b.Local(), make([]byte, 32<<20)) }()
-		time.Sleep(frame.WriteIdle + 2*time.Second)
-		nn.setBlackout(b.end, false)
-
-		if err := <-sent; err == nil {
-			t.Fatal("Send through a blackout longer than WriteIdle succeeded, want an error")
+		b.StallReading()
+		start := time.Now()
+		err := a.Send(t.Context(), b.Local(), make([]byte, 32<<20))
+		if ne, ok := errors.AsType[net.Error](err); !ok || !ne.Timeout() {
+			t.Fatalf("Send to a peer that stopped reading = %v, want a write-deadline timeout", err)
 		}
+		if d := time.Since(start); d < frame.WriteIdle {
+			t.Errorf("Send failed after %v, before WriteIdle (%v)", d, frame.WriteIdle)
+		}
+		if id, ok := p2p.LibP2PID(b.Local()); !ok || a.Host().Network().Connectedness(id) != network.Connected {
+			t.Fatal("the connection is down after the failed send, want it alive (rule L, not an outage)")
+		}
+		b.ResumeReading()
 		expectEventWithin(t, a, transport.PeerDown, b.Local(), 30*time.Second)
 		expectEventWithin(t, a, transport.PeerUp, b.Local(), 30*time.Second)
 		if err := a.Send(t.Context(), b.Local(), []byte("again")); err != nil {

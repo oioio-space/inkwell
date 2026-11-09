@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/oioio-space/inkwell/internal/transport"
+	"github.com/oioio-space/inkwell/internal/transport/frame"
 	"github.com/oioio-space/inkwell/internal/transport/memnet"
 	"github.com/oioio-space/inkwell/internal/transport/mux"
 )
@@ -62,9 +63,9 @@ func TestStalePartialExpires(t *testing.T) {
 		if res.inUse() == 0 {
 			t.Fatal("a partial message holds no reserved memory")
 		}
-		time.Sleep(time.Minute)
+		time.Sleep(mux.PartialTTL + time.Second)
 		if got := res.inUse(); got != 0 {
-			t.Errorf("%d bytes still reserved a minute after the last fragment", got)
+			t.Errorf("%d bytes still reserved just after PartialTTL", got)
 		}
 	})
 }
@@ -135,7 +136,7 @@ func (d drip) Send(ctx context.Context, to transport.PeerID, p []byte) error {
 }
 
 // TestDripFeedIsCutOff: a large message to a receiver that takes a fragment
-// every 19 s fails after idle + len/minRate, not after hours.
+// every 19 s fails after idle + len/FloorRate (rule SP1-2), not after hours.
 func TestDripFeedIsCutOff(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		a, _ := linked(t, memnet.Faults{}, func(t transport.Transport) transport.Transport { return drip{t} })
@@ -144,8 +145,8 @@ func TestDripFeedIsCutOff(t *testing.T) {
 		if !errors.Is(err, context.DeadlineExceeded) {
 			t.Fatalf("Send(1 MiB, 19 s per fragment) = %v, want DeadlineExceeded", err)
 		}
-		if d := time.Since(start); d > 2*time.Minute {
-			t.Errorf("gave up after %v, want about 20 s + 1 MiB / 16 KiB/s = 84 s", d)
+		if bound := frame.WriteIdle + (1<<20)*time.Second/frame.FloorRate; time.Since(start) > bound {
+			t.Errorf("gave up after %v, want about WriteIdle + 1 MiB / FloorRate = %v", time.Since(start), bound)
 		}
 	})
 }

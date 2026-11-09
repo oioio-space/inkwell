@@ -121,7 +121,7 @@ func RunRelay(ctx context.Context, key ed25519.PrivateKey, o RelayOptions) error
 		// wrong process. A busy port must fail the bind, so the caller falls back to a free one.
 		libp2p.Transport(tcp.NewTCPTransport, tcp.DisableReuseport()),
 		libp2p.Security(noise.ID, noise.New),
-		libp2p.DefaultMuxers,
+		muxer(),
 		libp2p.ListenAddrStrings(listen...),
 		libp2p.ConnectionManager(cm),
 		libp2p.ConnectionGater(gate{BasicConnectionGater: base, admit: func(peer.ID) bool { return true }}),
