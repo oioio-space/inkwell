@@ -86,8 +86,10 @@ un bloc = un lot, une étape du protocole ou un lot d'outillage. Il suit cet ord
 `mise run done -- <bloc>` (`scripts/block_done.py`) vérifie les étapes 1 à 8 dans le même ordre :
 1. **Spécifier d'abord, en exécutable** : vecteurs (`protocol/vectors`), modèles TLA+ (`docs/protocol/tla`)
    et Alloy (`docs/protocol/alloy`) avec mutants, tests à modèle ; puis la porte figée `gates/<bloc>.toml`,
-   commitée **avant** le code puis gelée (méthode : `docs/plans/2026-11-08-spec-executable.md` ;
-   gabarit : skill `new-gate` ; modèles : agent `formal-modeler`).
+   commitée **avant** le code puis gelée, une fois chacune de ses commandes lancée et rouge pour la bonne raison
+   (méthode : `docs/plans/2026-11-08-spec-executable.md` ; gabarit : skill `new-gate` ; modèles : agent
+   `formal-modeler`). Le niveau de rigueur du bloc (léger, standard, complet) est choisi d'abord
+   (`docs/engineering-principles.md` § 0).
 2. **Implémenter** jusqu'à ce que la porte passe, en TDD (`superpowers:test-driven-development`) ;
    tout modèle ; un agent délégué ne commite ni ne stashe jamais ; aucune de ses affirmations
    (« déjà cassé », « instable ») n'est crue sans preuve rejouée, par exemple sur un arbre d'avant
@@ -100,7 +102,8 @@ un bloc = un lot, une étape du protocole ou un lot d'outillage. Il suit cet ord
    l'armer sans l'avoir faite.
 4. Vérifications rapides : lint, `fe:check`, `lint:env`, `lint:claude-md` ; puis `mise run formal`
    (TLA+, Alloy, mutants) ; puis les tests (Go, frontend, `test:py`) ; toute modification d'interface
-   passe en plus par le skill `ux-walkthrough` (agent `ux-tester`), avant fusion et avant release.
+   passe en plus par le skill `ux-walkthrough` (agent `ux-tester`), avant fusion et avant release, et toute
+   fonction visible par une courte séance avec l'utilisatrice devant l'application (SEQ consigné, R14).
 5. **Mutation** (gremlins) sur les paquets `protocol/*` touchés : efficacité ≥ 95 %, ou survivants
    justifiés comme équivalents dans `SIMPLIFY.md` (« mutation <paquet> »). Un test nomme la règle de
    la spec qu'il prouve ; l'utilité se mesure à la mutation, pas à la couverture.
@@ -208,7 +211,7 @@ l'effort le plus bas qui gardent la qualité, choisis explicitement à chaque la
 | Brouillon de message de commit, tri de longs journaux, brouillon de traduction i18n | `scripts/llm.sh` (ordre : Groq → Cloudflare Workers AI → OpenRouter gratuit → OpenRouter payant ZDR ; traduction et rédaction : OpenRouter payant seul — ADR 0013 ; quotas : `mise run quotas`) ; texte mécanique seulement, jamais secret, sécurité, conception ni revue de code ; code de sortie 3 → Haiku | open-weight hébergé |
 | Implémentation bien bornée, enquête sur un bogue, second avis, revue adverse (sans tokens Claude) | Codex : agent `codex:codex-rescue`, `/codex:rescue`, `/codex:review`, `/codex:adversarial-review` | connexion ChatGPT (quota limité) ; Claude relit avant fusion |
 | Implémentation guidée par une porte, sans crédit | `mise x -- bash scripts/opencode-free.sh -m <modèle> < consigne.md` (modèles gratuits OpenRouter ou Zen ; gortex branché, rtk injecté) | gratuit ; jamais de sécurité ; ne commite jamais |
-| Relecture critique d'une spécification de sécurité (crédit compté) | `scripts/claude-or.sh -t opus` ou `scripts/claude-api.sh` | un seul appel ciblé |
+| Relecture critique d'une spécification de sécurité ou d'une ADR (crédit compté) | `scripts/claude-or.sh -t opus` ou `scripts/claude-api.sh`, et Codex (`/codex:adversarial-review`) dès qu'il est disponible : deux familles de modèles | un seul appel ciblé chacun |
 | Lancer les vérifications (lint, tests, ci, scans), corrections de format triviales | `quality-runner` | Haiku / low |
 | Docs, `PROGRESS.md`, messages de commit | `scribe` | Haiku / low |
 | Recherche de code ou de fichiers, « où est X » | `explorer` (ou `Explore` intégré) | Haiku / low |

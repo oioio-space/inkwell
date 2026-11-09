@@ -25,6 +25,16 @@ ailleurs ; elle y renvoie :
 Ce qui existe déjà est audité au regard de ce tableau : le protocole (bloc PA), puis le reste de l'application,
 écran par écran et paquet par paquet (bloc AA).
 
+**Proportion (décision du 2026-11-09).** Le tableau s'applique selon le risque, choisi au début du bloc et écrit
+dans sa porte :
+
+- **léger** (documentation, petit outillage sans état) : relecture, vérifications rapides ;
+- **standard** (fonction sans état complexe) : table de décision, tests nommés, walkthrough si l'interface change ;
+- **complet** (état, concurrence, protocole, sécurité, données venues d'un pair) : tout le tableau, modèle formel avec
+  mutants et relecture indépendante (une autre famille de modèles quand elle est disponible).
+
+En cas de doute, on prend le niveau au-dessus.
+
 ## 1. Moderne
 
 | Règle | Preuve |
