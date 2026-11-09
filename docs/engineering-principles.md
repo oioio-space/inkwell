@@ -45,7 +45,7 @@ un test ou une revue. Un principe sans preuve n'est qu'un vœu. Une exception ex
 | Moindre privilège : fichiers `0o600`/`0o700`, aucune élévation, aucune donnée de document dans les logs ou rapports de bug | revue ; `gosec` |
 | Chaîne d'approvisionnement : versions exactes, `govulncheck`, SBOM + `grype`, `gitleaks`, Dependabot sans auto-merge | gates `mise run ci` (ADR 0008) |
 
-## 5. Interface (W39, 2026-11-09)
+## 5. Interface (W39, W40, 2026-11-09)
 
 | Règle | Preuve |
 |---|---|
@@ -53,6 +53,11 @@ un test ou une revue. Un principe sans preuve n'est qu'un vœu. Une exception ex
 | Accessibilité WCAG 2.2 AA dans **chaque** spec Playwright, dialogues et popovers compris (UF-1) | fixture axe-core commune ; violation semée ⇒ rouge (bloc UF1) |
 | Ce qui doit être cliquable l'est : chaque élément interactif visible est la cible de son centre (UF-2) | invariant `elementFromPoint` dans la fixture ; mutant de recouvrement attrapé (bloc UF1) |
 | Un parcours de plus de trois états est une machine XState v5, ses tests Playwright en sont générés (UF-3) | `xstate/graph` chemins les plus courts, assertions par état, mutant par machine (blocs UF2…) |
+| Composants Adwaita, jetons sémantiques seuls, aucune valeur brute (UF-4) | lint dans `fe:check` ; couleur brute semée ⇒ rouge (bloc UF1) |
+| Effort borné pour les cinq tâches (créer, partager, relire, présenter, exporter) (UF-5) | comptes d'opérateurs et temps KLM par tâche, budgets figés ; étape ajoutée ⇒ rouge (bloc UF2) |
+| Simple à voir, rien d'inaccessible : budget de commandes visibles par vue ; chaque commande dans la palette et à deux pas au plus d'un menu (UF-6) | énumération du registre de commandes |
+| Annuler plutôt que confirmer (UF-7) | toute transition destructive d'une machine a son « Annuler » |
+| L'apparence ne dérive pas (UF-8) | captures de référence par vue, clair et sombre (bloc UF1) |
 | L'utilisabilité se mesure, ne se prouve pas | skill `ux-walkthrough` (agent `ux-tester`), captures clair et sombre |
 
 ## Sources

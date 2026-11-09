@@ -58,7 +58,7 @@ indexées par paire de fichiers et non plus par numéro de ligne, qui bougeait �
 
 **CI plus rapide (W35, 2026-11-09).** Bloc CI1b (porte `gates/CI1b.toml`, remplace CI1 dont une commande de test ne pouvait pas importer son module) : le netsim dégradé au pré-push seulement quand le diff touche ses entrées (décision de l'utilisatrice), toujours complet sur GitHub et dans `done`, plus de double exécution sur GitHub. Suite de l'étude : R9 (préconditions rapides de `done`), R8+R4 (reçus, couverture au commit), R1, R7.
 
-**Ordre suivant (2026-11-09).** SI1 (indicateur de synchronisation honnête, W33, porte `gates/SI1.toml`) ; puis UF1 (accessibilité dans chaque spec et invariant de cliquabilité, W39/W36 C2) ; puis UF2 (parcours en machines à états, l'invitation d'abord) ; puis le reste de W33 (type et qualité du lien dans le popover des personnes) ; ensuite ADR 0034 étapes 4-6 (crédit commun au rattrapage, décision Q1 de l'ADR 0035).
+**Ordre suivant (2026-11-09).** SI1 (indicateur de synchronisation honnête, W33, porte `gates/SI1.toml`) ; puis UF1 (accessibilité dans chaque spec, cliquabilité, jetons Adwaita seuls, captures de référence ; W39, W40, W36 C2) ; puis UF2 (parcours en machines à états avec « Annuler » et budgets d'effort, l'invitation et le partage d'abord) ; puis le reste de W33 (type et qualité du lien dans le popover des personnes) ; ensuite ADR 0034 étapes 4-6 (crédit commun au rattrapage, décision Q1 de l'ADR 0035).
 
 ### Suivis de sécurité de L1 (LOW, revue Opus n° 6, à traiter au début de L2)
 

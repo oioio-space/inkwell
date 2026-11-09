@@ -43,6 +43,11 @@ mesuré en tests utilisateurs à chaque étape.
 - **Lecture longue** : style « document » (police document, interligne augmenté) pour
   l'aperçu et les panneaux de texte, comme `.document` de libadwaita 1.8.
 
+## Preuves
+
+Ce qui, dans ces règles, se vérifie par une machine a sa preuve dans
+[engineering-principles.md](engineering-principles.md) §5 (plan : `docs/plans/2026-11-09-ui-formal.md`).
+
 ## Références assumées
 
 libadwaita / GNOME HIG (structure), typst.app (source ↔ aperçu), Figma (présence),

@@ -157,8 +157,8 @@ Elle doit :
 - trouver sa place dans un panneau ou un menu existant avant d'en créer un ;
 - passer une revue de cohérence visuelle (captures clair et sombre, comparées aux écrans voisins)
   avant la fusion ;
-- respecter les règles exécutables de l'interface (états affichés suivant un modèle, accessibilité,
-  cliquabilité, parcours en machines à états) : `docs/engineering-principles.md` §5.
+- respecter les règles de `docs/ux-principles.md` et leurs preuves exécutables (jetons Adwaita,
+  accessibilité, cliquabilité, effort par tâche, parcours en machines à états) : `docs/engineering-principles.md` §5.
 
 **Performance mesurée :** tout changement qui touche la performance d'un paquet du chemin critique se
 prouve avec benchstat, jamais au jugé (skill `go-benchmark`) : `mise run bench:baseline` → changement →
