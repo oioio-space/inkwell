@@ -398,3 +398,18 @@ has no long-task API.
 | 9 | D4 paged view above 64 Mi | unchanged from ADR | L | medium |
 
 Items 1 to 4 give most of the felt speed without new architecture; item 5 makes « plusieurs Mo » true for unshared files.
+
+## Decision: stay on Wails; Gio studied only on evidence (2026-11-09)
+
+The user asked whether Gio should replace Wails if Wails is too heavy. Decision of the main session: stay on Wails.
+- **Not the bottleneck:** with the Typst highlighter off, CodeMirror in Chromium opens 50 MB in 50 ms and types at
+  p95 ≤ 18 ms (§4.2). The measured costs are the Typst grammar and Automerge, which a toolkit change does not remove.
+- **Cost of a switch:** a move to Gio would rewrite the editor, the Svelte interface with its Adwaita components, and
+  the CRDT layer, which today is JavaScript in the webview (ADR 0011).
+- **Gio is no better on large files today:** Gio's own editor lays out the whole document, and gvcode, a code editor
+  built on Gio, lists « large file rendering » as planned (https://pkg.go.dev/github.com/oligo/gvcode). Its
+  accessibility layer (gioui.org/io/semantic) exists, but nothing shows that its editor uses it.
+- **Reopening condition:** the LF1 gate also measures what depends on the webview (startup, idle memory, input latency).
+  If those miss their budgets with the webview as the measured cause, an ADR compares the options with numbers.
+- **Constraint on any alternative:** it must keep the Adwaita look and behaviour of `docs/ux-principles.md` (user,
+  2026-11-09: « toujours avec un style Adwaita »).
