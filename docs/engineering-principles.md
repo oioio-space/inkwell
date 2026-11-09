@@ -3,6 +3,28 @@
 **Règle du projet, non négociable.** Chaque principe ci-dessous a une **preuve** : un gate,
 un test ou une revue. Un principe sans preuve n'est qu'un vœu. Une exception exige une ADR.
 
+## 0. Béton armé, pour toute l'application (2026-11-09)
+
+**Le but** (demande de l'utilisatrice) : que tout soit reproductible par d'autres, très clair et très performant, et
+qu'on découvre les problèmes *avant* de les coder, jamais par des correctifs hasardeux. Cette section dit **ce
+qu'une fonction, un mécanisme ou un écran doit avoir** pour être accepté. Elle ne redit pas les règles qui vivent
+ailleurs ; elle y renvoie :
+
+| Ce qu'il faut | Où c'est appliqué (source unique) |
+|---|---|
+| Un comportement écrit et sans ambiguïté avant le code (table de décision, machine à états ou règle normative, cas limites compris), puis une porte figée | `CLAUDE.md`, définition de « fini », étape 1 |
+| Un modèle formel avec mutants dès qu'il y a un état, de la concurrence ou un parcours à plus de trois états | même étape ; pour l'interface : § 5 (UF-3) ; pour le protocole : `docs/protocol/README.md`, point 9 |
+| Des entrées bornées, chaque valeur hors plage traitée, chaque erreur dite avec une action | § 4 (octets venus d'un pair) ; `docs/ux-principles.md`, règle 5 |
+| Des tests qui prouvent la règle, pas la couverture | `CLAUDE.md`, étapes 2 et 5 (TDD, mutation) |
+| Des budgets de performance chiffrés avant le code, puis mesurés | § 3 ; `CLAUDE.md`, « Performance mesurée » |
+| Sécurité et confidentialité pensées pour chaque fonction | § 4 ; agent `security-auditor` |
+| Ce qui arrive est observable : événements, santé visible | W44, `docs/plans/2026-11-09-diagnostics.md` |
+| Le texte suffit pour que quelqu'un d'autre le refasse (liste vide de « ce qu'il faudrait deviner ») | pour le protocole : `docs/protocol/README.md`, point 10 ; pour le reste : la relecture du plan à l'étape 1 |
+| Quand ça devient difficile : on s'arrête, on reformalise, jamais de rustine | `CLAUDE.md`, « Discipline de modification » |
+
+Ce qui existe déjà est audité au regard de ce tableau : le protocole (bloc PA), puis le reste de l'application,
+écran par écran et paquet par paquet (bloc AA).
+
 ## 1. Moderne
 
 | Règle | Preuve |

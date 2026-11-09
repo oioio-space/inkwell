@@ -50,8 +50,8 @@ avant de remettre une frontière en cause), `docs/glossary.md`, `docs/ux-princip
 `https://v3.wails.io/llms.txt`, Automerge `https://automerge.org/llms.txt`, Go via le MCP gopls de
 `.mcp.json` : `go_workspace`, `go_package_api`, `go_diagnostics` après chaque édition).
 
-**Règle : conception moderne, modulaire, performante et sécurisée.** Chaque principe a sa preuve
-(porte, test, revue) dans `docs/engineering-principles.md` — le lire avant de concevoir ou de revoir
+**Règle : conception moderne, modulaire, performante et sécurisée, « en béton armé » partout.** Chaque
+principe a sa preuve (porte, test, revue) dans `docs/engineering-principles.md` (§ 0 pour toute fonction) — le lire avant de concevoir ou de revoir
 quoi que ce soit ; une exception exige une ADR.
 
 **Invariants — ne jamais les violer sans nouvelle ADR :**
