@@ -661,3 +661,19 @@ It is cleared on `peer-disconnected`.
   - Or say why?
 - **Q-UX7, stuck bound:** after how long in behind or sending does the calm explicit message replace the
   state? ADR 0028 D8 already gives « Lien lent » at 2 s of `oldestPendingMs`.
+
+## Decision 2026-11-09: NI-3 C2 declared known, NI-2 C2 strict, block WB opened
+
+- **Measured** (scenario 7, 8 KiB/s relay, two seeds per tree): worst delay of a typed token 48.9 s and
+  44.0 s with rule L (block RL1, 1-2 resyncs), 21.0 s and 18.7 s before it (809efec). Cause: a write
+  may take at most `frame.WriteIdle` + size / `frame.MinRate` (20 s + size / 16 KiB/s); a 300 KB paste
+  on a link under 16 KiB/s always exceeds it, the failed write resyncs (rule L) and the paste is sent
+  again from the start, ahead of the typing. Before RL1 the paste was silently lost instead.
+- **Decision (user, 2026-11-09):** NI-3 C2 is a declared known failure until ADR 0034 step 6 (a
+  separate lane for large objects, so typing is never queued behind them), next to NI-3 C1. NI-2 C2 is
+  flipped to strict: rule L closed the silent loss and it passed on every run since.
+- **Block WB (opened, spec first):** the sender's write budget follows the link's measured throughput
+  (link metrics v1) instead of the fixed 16 KiB/s floor, with a lower bound that keeps the slow-reader
+  protection, so a large message on a slow but progressing link is not failed and resent in a loop.
+  Executable spec first: a TLA+ or model-based test showing no resend loop while bytes progress, the
+  mutant « fixed floor » caught, and NI-3 C2 measured again (expected back under the RL1 baseline).

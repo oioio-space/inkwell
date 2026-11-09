@@ -141,14 +141,16 @@ function cjk(n: number, random: () => number) {
 
 // Clauses. A scenario records one verdict per clause of the plan (C1, C2, ...), keeps going when
 // one is red, and writes them all to results/<run>.json before failing the test: a red clause
-// never hides the others. Scenarios 6 and 7 carry one declared known failure each (decision Q2,
-// until ADR 0034 step 6): it is executed and reported on every run, but does not block, unless
-// NETSIM_EXPECT=strict. Only a measured miss is downgraded: a harness error stays red. A known
-// failure that passes is reported as XPASS, the signal to flip it to strict.
+// never hides the others. Scenario 7 carries declared known failures (decisions Q2 and
+// 2026-11-09, until ADR 0034 step 6): they are executed and reported on every run, but do not
+// block, unless NETSIM_EXPECT=strict. Only a measured miss is downgraded: a harness error stays
+// red. A known failure that passes is reported as XPASS, the signal to flip it to strict.
+// Scenario 6 C2 was flipped to strict on 2026-11-09: rule L (block RL1) closed the silent loss and
+// it passed on every run since (seeds 1-3 and a random seed).
 const KNOWN_FAILURES: Record<string, Record<string, string>> = {
-  "6": { C2: "R-Evict and N-15 (silent loss after a stalled write), closed by ADR 0034 step 6" },
   "7": {
     C1: "N-15 (total write budget 20 s + size / 16 KiB/s on sync/1), closed by ADR 0034 step 6",
+    C2: "head-of-line behind a paste larger than the write budget on a link under 16 KiB/s: each failed write resyncs (rule L) and resends it; worst 44-49 s measured vs 19-21 s before RL1 (2026-11-09); closed by ADR 0034 step 6 (separate lane for large objects), mitigated by block WB (write budget follows measured throughput)",
   },
 };
 
