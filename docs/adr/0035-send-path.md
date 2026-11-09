@@ -167,6 +167,8 @@ violation codes) · §16.1 (rows « progress of a LARGE stream » and « bulk 30
 1. **Q1, REPO under the credit.** REPO is paced only by the transport window: an initial sync burst puts up to
    256 KiB ahead of typing (32 s at 8 KiB/s). Recommended: a lane field in the credit (`REPO`, `LARGE`) so REPO
    draws on the same session budget (backpressure only, never a cut); otherwise SP-7 holds behind LARGE and bulk only.
+   **Decided (user, 2026-11-09): yes, the same credit** — the credit message gains a lane field; to be specified,
+   modelled in `SendPath.tla` (SP-7 over REPO too) and given mutants before steps 4-6.
 2. **Q2, `T_mux` on sync/2:** 40 s (faster detection of a black-holing relay) or SP1b's 120 s; after E4.
 3. **Q3, webview replay** of the unfinished object so its root stays stable (decision 5), after E5.
 4. **Q4, the strict C2 bound:** 10 s (plan) or a tighter one once E4 measures the credit path.
