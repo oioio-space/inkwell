@@ -107,7 +107,7 @@ run WriteBudget WriteBudget.cfg WriteBudget sound
 run WriteBudgetAny WriteBudgetAny.cfg WriteBudget sound
 # SendPath (README "SendPath", design W38) and block SP1 (README "SP1"): one module, two rule sets.
 for c in SendPathHonest SendPathHop SendPathAny SP1Relay SP1Floor SP1RelayKeepalive SP1FloorKeepalive \
-         SP1Grown90 SP1Hop90 SP1Blackout SP1Any; do
+         SP1Grown90 SP1GrownKeepalive SP1Hop SP1Blackout SP1Silence SP1Any; do
   run "$c" "$c.cfg" SendPath sound
 done
 
@@ -132,7 +132,7 @@ for m in SendPathWriteReturn SendPathFixedFloor SendPathNoCap SendPathCapAboveWi
          SendPathKeepaliveBehindData SendPathSilentAbandon \
          SendPathNoCut SendPathNoCutLive SendPathZeroOnly SendPathTrustCredit \
          SP1Idle20 SP1FixedFloor SP1FloorGrown SP1HopValve10 SP1KeepaliveBehindData SP1PartialTTL30 \
-         SP1NoTotal SP1NoCut SP1FloorKeepaliveBigHop SP1GrownKeepalive \
+         SP1PartialTTLAtIdle SP1NoTotal SP1NoCut SP1FloorKeepaliveBigHop \
          SP1TypingResidual; do
   run "$m" "mutants/$m.cfg" mutants/SendPathMutants mutant
 done

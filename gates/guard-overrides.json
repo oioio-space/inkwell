@@ -194,6 +194,111 @@
       "id": "61f62ed836abe55cdf30414e854c39f01e25c40bbec73eded4d067af74ff1402",
       "reason": "W38: tla-check.sh adds the SendPath model (target send path, rules SP-1..SP-9) and the SP1 interim configurations with their mutants and residual witnesses; every earlier model and mutant run is unchanged.",
       "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "f7483447df96767dfbbc3a73db499fe85cd997bdc56d719695e362bcff61f7fa",
+      "reason": "Block SP1: the draft gate is deleted, replaced by gates/SP1.toml written after decisions D-SP1-1..4; the matched lines are comments of the draft (no executed timeout), and every criterion moved to the new gate.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "49ab05eb831a779272a0cab2862ef0670e046a41a19fd36550cf88490376443d",
+      "reason": "Block SP1: the draft gate is deleted, replaced by gates/SP1.toml written after decisions D-SP1-1..4; the matched lines are comments of the draft (no executed timeout), and every criterion moved to the new gate.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "6bc586746be08a856572e83cc4a17945a3abeff8b89c1f81cd9485364f536472",
+      "reason": "Block SP1: the draft gate is deleted, replaced by gates/SP1.toml written after decisions D-SP1-1..4; the matched lines are comments of the draft (no executed timeout), and every criterion moved to the new gate.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "cad02420d6f688add0c8c1c11025c05f3aca38d9ba5c3b15b3738fc8a9e0887d",
+      "reason": "Block SP1: the draft gate is deleted, replaced by gates/SP1.toml written after decisions D-SP1-1..4; the matched lines are comments of the draft (no executed timeout), and every criterion moved to the new gate.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "15e62d0ec178835d4e9918f13267d89db52d015c05c6c93f97c470a089faa4a9",
+      "reason": "Block SP1: the draft gate is deleted, replaced by gates/SP1.toml written after decisions D-SP1-1..4; the matched lines are comments of the draft (no executed timeout), and every criterion moved to the new gate.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "e00ad5be9b539b640e8877c99d95b72b3c5a6523cf716f0d0b6d5a6021ef617f",
+      "reason": "Block SP1: the draft gate is deleted, replaced by gates/SP1.toml written after decisions D-SP1-1..4; the matched lines are comments of the draft (no executed timeout), and every criterion moved to the new gate.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "70b8c6b498d7f0584d11bd18baf9f62ee199a1a65bdee0f51669ff923c9c0705",
+      "reason": "Block SP1: the draft gate is deleted, replaced by gates/SP1.toml written after decisions D-SP1-1..4; the matched lines are comments of the draft (no executed timeout), and every criterion moved to the new gate.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "11bbf6b3035554cbab31fb9e0dcbcf1a2b0fe156fe8b9d23a16493ec1eafdd51",
+      "reason": "Block SP1: the draft gate is deleted, replaced by gates/SP1.toml written after decisions D-SP1-1..4; the matched lines are comments of the draft (no executed timeout), and every criterion moved to the new gate.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "b2f893dff0d44d96674a9d830587e4fa082a3fbdcbc588d8e2f753e16295c36e",
+      "reason": "Block SP1: prose of the design doc updated to the decided yamux ConnectionWriteTimeout 120 s (was an open decision); no executed timeout.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "eba6dab413a0d756b9653880eec9a9bb315e36ea1da03e47721663a98395bf00",
+      "reason": "Block SP1: prose of the design doc updated to the decided yamux ConnectionWriteTimeout 120 s (was an open decision); no executed timeout.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "bc05bbe67a25e3895ceb82117d3d28e16ab776249589843233fa13003cb414d7",
+      "reason": "Block SP1: README SP1 section rewritten for the decided constants (ConnectionWriteTimeout 120 s, pings 120 s, partialTTL 120 s, window pinned), with the new state counts; prose only, no executed timeout.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "d839eef3376b8c8680d57f680c9fbe414822042b837e1f7c8c41fd78cf9f121a",
+      "reason": "Block SP1: README SP1 section rewritten for the decided constants (ConnectionWriteTimeout 120 s, pings 120 s, partialTTL 120 s, window pinned), with the new state counts; prose only, no executed timeout.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "8772c7cb953b828cf527d1c49c41846b196df970e8a774955b8126720a9ba602",
+      "reason": "Block SP1: README SP1 section rewritten for the decided constants (ConnectionWriteTimeout 120 s, pings 120 s, partialTTL 120 s, window pinned), with the new state counts; prose only, no executed timeout.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "ef589c3a4c1e6975106b008caeba0c94c9747e5ed1961d67102df4644cff28fc",
+      "reason": "Block SP1: README SP1 section rewritten for the decided constants (ConnectionWriteTimeout 120 s, pings 120 s, partialTTL 120 s, window pinned), with the new state counts; prose only, no executed timeout.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "4b5c5d320ce88fdfa698eaa5a3ed13d661e73272e9c7cc8cc80bbe0847ba2d05",
+      "reason": "Block SP1: header comment of a TLA+ config updated to the decided ping timeouts (120 s); TLC ignores comments; the model constants are checked by mise run tla.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "e08275093c19656cf837cfecf2bead27a6c59676367c1350c6cdac3f530c404f",
+      "reason": "Block SP1: header comment of a TLA+ config updated to the decided ping timeouts (120 s); TLC ignores comments; the model constants are checked by mise run tla.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "b3dce09ab218dd267c45d64f8d67a9cc126ad215b15b4a3bc3ad39354b8ccadf",
+      "reason": "Block SP1: header comment of a residual witness updated to the decided 120 s; it still violates under mise run tla.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "091e0b9e6868a6e932cc71710f310306629b9d1558c6e7bfcf02730e9e0b7cce",
+      "reason": "Block SP1: this residual witness holds at the decided 120 s, so it became the sound configuration docs/protocol/tla/SP1GrownKeepalive.cfg (run by tla-check.sh); nothing is weakened.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "0045e8b2d04dc6c2dd09222a86ae75e8105299b8e4ccb99efe973b04310b5568",
+      "reason": "Block SP1: header comment of a mutant renamed after its twin SP1Hop (was SP1Hop90); the mutant still violates under mise run tla.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "6bd225c9c99932f1b2fc2c3c1ca75b88b26510c6951781e107807e0d29065dea",
+      "reason": "Block SP1: header comment of a mutant updated to its twin SP1RelayKeepalive; the mutant still violates under mise run tla.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "7df636c05f8ae7a7533eaf887582cab0a9b8aa2aff1a9d01f84fc9bab37265b7",
+      "reason": "Block SP1: tla-check.sh renames SP1Hop90 to SP1Hop, adds the sound SP1Silence and SP1GrownKeepalive (a residual witness closed by the decided 120 s) and the mutant SP1PartialTTLAtIdle; every other model and mutant run is unchanged (62 runs, all as expected).",
+      "decision": "docs/objectif-en-cours.md"
     }
   ]
 }

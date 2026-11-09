@@ -281,58 +281,82 @@ the changed config line):
 
 ## SP1 (block SP1: the v1 sync/1 interim, on the SendPath model)
 
-Rule: the design doc's section "SP1: executable specification". sync/1 as it is (no credit, progress = a 32 KiB
-fragment `Write` returned, one stream, resend from byte 0), with `WriteIdle` 90 s, the WB-2 total
-`WriteIdle + S / 2 KiB/s`, `partialTTL` 120 s, and the muxer's `ConnectionWriteTimeout` stated (90 s: an open
-decision). The 879 KiB paste is `S` = 110 units; the yamux stream window 256 KiB is `Wt` = 32, update 128 KiB.
-The relay hop is a **hypothesis fitted to E1** (128 KiB, reopened in 64 KiB quanta: 10.7 s at 6 KiB/s against E1's
-10.0 s block before the session closed); E1b must measure it. Rounding is conservative: timers down, delays up.
+Rule: the design doc's sections "SP1: executable specification" and "SP1 decisions". sync/1 as it is (no credit,
+progress = a 32 KiB fragment `Write` returned, one stream, resend from byte 0), with the decided constants:
+`WriteIdle` 90 s, the WB-2 total `WriteIdle + S / 2 KiB/s`, `partialTTL` 120 s, the yamux stream window pinned at
+256 KiB (`Wt` = 32, update 128 KiB), and the muxer's `ConnectionWriteTimeout` stated at 120 s, keepalive every 30 s.
+The 879 KiB paste is `S` = 110 units. The relay hop is a **hypothesis fitted to E1** (128 KiB, reopened in 64 KiB
+quanta: 10.7 s at 6 KiB/s against E1's 10.0 s block before the session closed). Rounding is conservative: timers
+down, delays up.
+
+How the muxer's one constant becomes model timers (go-yamux v5.1.0 `session.go`):
+
+- the **write valve** `Tw` is the earliest firing, `ConnectionWriteTimeout` / 2 = 60 s of blocking on one frame
+  (`sendLoop` extends the conn deadline to now + 120 s only once less than 60 s remains, so a blocked frame write
+  fails after 60 to 120 s): 60 ticks at 8 KiB/s, 45 at 6 KiB/s, 15 at the floor;
+- the **ping timeouts** `Tk` get the full 120 s each (`Ping`: one timer for the flush, reset for the answer): 120,
+  90 and 30 ticks; the keepalive interval `Ka` 30 s is rounded down (28 s at the floor).
 
 | Configuration (sound) | Link | Result (TLC 1.8.0, 2 workers) |
 |---|---|---|
 | `SP1Relay.cfg` | NI-3: 8 KiB/s, queue 6 s (E1's first-stall excess 5.8 s), one typed unit, `Lmax` 36 s | **exhaustive, no error**: 1 100 747 states, 410 949 distinct, depth 590, liveness included, 22s |
 | `SP1Floor.cfg` | F = 2 KiB/s, D = 5 s (queue 8 s), `Lmax` 36 ticks (144 s) | **exhaustive, no error**: 286 975 states, 140 354 distinct, depth 590, liveness included, 06s |
-| `SP1RelayKeepalive.cfg` | SP1Relay with the keepalive (30 s, any phase), ping timeouts 90 s | **exhaustive, no error**: 1 100 747 states, 410 949 distinct, depth 590, liveness included, 22sKeepalive |
-| `SP1FloorKeepalive.cfg` | SP1Floor with the keepalive (28 s), ping timeouts 88 s, relay hop 128 KiB | **exhaustive, no error**: 286 975 states, 140 354 distinct, depth 590, liveness included, 06sKeepalive |
-| `SP1Grown90.cfg` | 6 KiB/s, stream window grown to 512 KiB, hop 512 KiB, `WriteIdle` and write valve 90 s, keepalive off | **exhaustive, no error**: 56 099 states, 20 495 distinct, depth 582, liveness included, 01s |
-| `SP1Hop90.cfg` | 6 KiB/s, window 256 KiB, hop 128 KiB, write valve and pings 90 s, keepalive on | **exhaustive, no error**: 607 469 states, 251 064 distinct, depth 604, liveness included, 12s |
+| `SP1RelayKeepalive.cfg` | SP1Relay with the keepalive (30 s, any phase) | **exhaustive, no error**: 1 716 522 states, 620 782 distinct, depth 600, liveness included, 35s |
+| `SP1FloorKeepalive.cfg` | SP1Floor with the keepalive (28 s) | **exhaustive, no error**: 221 814 states, 95 344 distinct, depth 614, liveness included, 04s |
+| `SP1Hop.cfg` | 6 KiB/s, window 256 KiB, hop 128 KiB, keepalive on | **exhaustive, no error**: 607 469 states, 251 064 distinct, depth 604, liveness included, 12s |
+| `SP1Grown90.cfg` | 6 KiB/s, stream window grown to 512 KiB, hop 512 KiB, keepalive off (a margin beyond the pin) | **exhaustive, no error**: 56 099 states, 20 495 distinct, depth 582, liveness included, 01s |
+| `SP1GrownKeepalive.cfg` | SP1Grown90 with the keepalive (a residual at 90 s, closed by 120 s) | **exhaustive, no error**: 4 150 710 states, 1 460 463 distinct, depth 596, liveness included, 01min 34s |
 | `SP1Blackout.cfg` | SP1Relay plus one 50 s silence during the paste (keepalive off: NI-2 is direct QUIC, no yamux) | **exhaustive, no error**: 134 560 states, 45 191 distinct, depth 636, liveness included, 03s |
-| `SP1Any.cfg` | any reader, small sizes (S 6, Wt 2, idle 3, total 9) | **exhaustive, no error**: 17 854 states, 9 486 distinct, depth 88, liveness included, 01s |
+| `SP1Silence.cfg` | one silence as long as `WriteIdle` (90 s), no write valve (direct QUIC), `NoSilentDrop` and `CutEventually` only (such a silence may cut the sender) | **exhaustive, no error**: 129 574 states, 42 745 distinct, depth 676, liveness included, 03s |
+| `SP1Any.cfg` | any reader, small sizes (S 6, Wt 2, idle 3, total 9) | **exhaustive, no error**: 17 854 states, 9 486 distinct, depth 88, liveness included, 00s |
 
-**What SP1 guarantees (proved on these configurations):** an honest link at 8 KiB/s or at the 2 KiB/s floor is
-never cut by `WriteIdle` and delivers the paste in one attempt (no resend loop: NI-3 C1, and C3's « resyncs 0 »);
-a 50 s silence (NI-2) during the paste neither cuts it nor makes the reader drop it; with the muxer's timers at
-90 s the session survives at 8 KiB/s, at 6 KiB/s through the E1 hop, and at the floor through a 128 KiB hop; a
-stopped reader is cut within `WriteIdle` + D, a drip within the WB-2 total. Smallest safe `WriteIdle` found by
-bisection: 22 s at 8 KiB/s (E1's first stall is 21.8 s), 76 s at the floor; 90 s keeps 14 s of margin there.
+**What SP1 guarantees (proved on these configurations):**
+
+- an honest link at 8 KiB/s or at the 2 KiB/s floor is never cut by `WriteIdle` and delivers the paste in one
+  attempt: no resend loop (NI-3 C1, and C3's « resyncs 0 ») (`NoFalseCut`, `DeliveredHonest`; SP1-1, SP1-2);
+- the session survives the muxer's timers at 120 s: at 8 KiB/s, at 6 KiB/s through the E1 hop, at the floor through
+  a 128 KiB hop (`NoSessionLoss`; SP1-4, SP1-5);
+- a 50 s silence (NI-2) during the paste neither cuts it nor makes the reader drop it, and no silence as long as
+  `WriteIdle` makes the reader drop a message its sender still writes (`NoSilentDrop`; SP1-3);
+- a stopped reader is cut within `WriteIdle` + D, a drip within the WB-2 total (`StopCut`, `HoldBound`,
+  `CutEventually`; SP1-1, SP1-2).
+
+Smallest safe values found by bisection (invariants only; the value below each one fails): `WriteIdle` 22 s at
+8 KiB/s (E1's first stall is 21.8 s) and 76 s at the floor, so 90 s keeps 14 s of margin there; the write valve 9 s
+of blocking at 8 KiB/s and 36 s at the floor (so `ConnectionWriteTimeout` ≥ 72 s; 120 s gives a valve of 60 s at
+its earliest); the ping timeouts 28 s at 8 KiB/s and 80 s at the floor (120 s); `partialTTL` 91 s against a 90 s
+silence (`SP1Silence`). The model has no reverse propagation delay, so the last bound has no margin: the design keeps
+`WriteIdle` + 2D + 10 s = 120 s.
 
 **What SP1 does not guarantee (residual witnesses, which must violate):**
 
 - typing latency on the relay: the path alone holds a typed frame up to **36 s at 8 KiB/s** (smallest bound by
   bisection; 144 s at the floor): it waits for the blocked fragment `Write`, then behind a stream window in the
   relay. NI-3 C2 (10 s) stays a declared known failure until ADR 0034 step 6 (`SP1TypingResidual`);
-- the keepalive when the relay buffers a whole 256 KiB window at the floor: the ping then needs 140 s (35 ticks),
-  above 90 s (`SP1FloorKeepaliveBigHop`). Whether a relay buffers that much is for E1b to measure;
-- the keepalive behind a grown window: with yamux auto-tuning to 512 KiB, a ping waits 89 s at 6 KiB/s, so 90 s
-  is not enough without pinning the window (`SP1GrownKeepalive`, decision D-SP1-2);
-- resent bytes: a lost session still resends the whole message (v1 has no SP-5).
+- the keepalive when the relay buffers a whole 256 KiB window at the floor: the ping then needs 140 s (35 ticks;
+  34 fail), above the decided 120 s (`SP1FloorKeepaliveBigHop`). E1b did not measure a relay buffering that much,
+  and did not run at 2 KiB/s; the gate's NI-3 runs at 8 KiB/s;
+- resent bytes: a lost session still resends the whole message (v1 has no SP-5);
+- a silence of 60 s or more while the session's send loop is blocked closes the session (the valve at its
+  earliest): that is outside the contract (D = 5 s) and goes through rule L, never silently.
 
 | Mutant | Anchor (config line) | Broken rule | Caught by |
 |---|---|---|---|
 | `SP1Idle20` | `Tp = 20` | `WriteIdle` back to 20 s: scenario 7's false cut (first stall 16 + 5 s) | `NoFalseCut` |
 | `SP1FixedFloor` | `Total = 36` | the WB-2 total at the old 16 KiB/s | `DeliveredHonest` |
-| `SP1FloorGrown` | `Wt = 64` | yamux auto-tuning to 512 KiB: the quantum doubles and 90 s is short at the floor | `NoFalseCut` |
-| `SP1HopValve10` | `Tw = 7` | today's 10 s write valve, hop 128 KiB at 6 KiB/s (E1's session close) | `NoSessionLoss` |
-| `SP1KeepaliveBehindData` | `Tk = 10` | today's 10 s ping timeouts at 8 KiB/s (E1b's keepalive timeout) | `NoSessionLoss` |
+| `SP1FloorGrown` | `Wt = 64` | window auto-tuning (512 KiB): the quantum doubles and 90 s is short at the floor | `NoFalseCut` |
+| `SP1HopValve10` | `Tw = 7` | yamux 10 s: today's write valve, hop 128 KiB at 6 KiB/s (E1's session close) | `NoSessionLoss` |
+| `SP1KeepaliveBehindData` | `Tk = 10` | yamux 10 s: today's ping timeouts at 8 KiB/s (E1b's keepalive timeout) | `NoSessionLoss` |
 | `SP1PartialTTL30` | `Tpart = 30` | today's `partialTTL` under `WriteIdle` 90 s: a silent loss after a 50 s silence | `NoSilentDrop` |
+| `SP1PartialTTLAtIdle` | `Tpart = 90` | `partialTTL` = `WriteIdle`: the reader's timer and the sender's re-arming meet at the end of a 90 s silence | `NoSilentDrop` |
 | `SP1NoTotal` | `TotalBound <- NoTotal` | no WB-2 total | `HoldBound` |
 | `SP1NoCut` | `Expired <- NeverExpired` | neither bound | `StopCut` |
 | `SP1TypingResidual` | `Lmax = 10` | residual witness: NI-3 C2's 10 s | `InteractiveBound` |
 | `SP1FloorKeepaliveBigHop` | `H = 64` | residual witness: a relay that buffers a whole window | `NoSessionLoss` |
-| `SP1GrownKeepalive` | `Ka = 22` | residual witness: the keepalive behind a grown 512 KiB window | `NoSessionLoss` |
 
-The whole `./scripts/tla-check.sh` (every model of this directory, 60 runs) took 232 s on 2 workers
-(2026-11-09); every sound configuration above held and every mutant and residual witness was caught.
+The whole `mise run formal` (TLA+: every model of this directory, 62 runs; then Alloy) took 320 s on 2 workers
+(2026-11-09, after the SP1 decisions); every sound configuration above held and every mutant and residual witness
+was caught.
 
 ```
 java -cp tla2tools.jar tlc2.TLC -workers 2 -config SendPathHonest.cfg SendPath
