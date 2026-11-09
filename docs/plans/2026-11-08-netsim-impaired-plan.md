@@ -850,3 +850,31 @@ NI-3 C2 itself stays a declared known failure until ADR 0034 step 6. If it passe
   from the Links `sendFailures` count?
 - **WB-Q3, not modelled:** the rule I cadence (it delays a resend, never prevents one), and several peers (each has
   its own sender).
+
+## Honest sync indicator: UX decisions (block SI1, 2026-11-09)
+
+Decided by the main session under the user's mandate of 2026-11-09 (« fais ce qui est le mieux, l'objectif est la
+qualité »), from current save/sync indicator practice: a persistent, honest state; « saved » only when nothing local
+is unsent (Google Docs' « All changes saved » rule); no toggling on every key; failures said plainly
+(https://www.saasui.design/blog/saas-autosave-save-states-ux-patterns,
+https://www.techinterview.org/post/3233475354/frontend-real-time-ux-liveness-activity-saving/,
+https://talk.dynalist.io/t/says-synced-isnt-synced/6280). The model's state rule is unchanged; these decisions are
+the display layer on top of it.
+
+- **D-SI1, Q-UX1 (n):** n counts the connected people who do not have all my changes yet (people, not messages: it
+  is bounded, stable while typing and meaningful). « Envoi en cours (n) » with n ≥ 1; never the bridge message count.
+- **D-SI2, Q-UX2:** the header shows the worst state (behind > sending > checking > synced), so « Pas encore à jour »
+  wins; the people popover gives each person's own state.
+- **D-SI3, Q-UX3:** « Synchronisé » covers the connected people; an offline member is shown « Hors ligne » in the
+  popover, with no claim about their copy (the webview cannot know it).
+- **D-SI4, Q-UX4:** checking reads « Vérification… »; it is a non-synced state like the others (D-SI5).
+- **D-SI5, Q-UX5 (hysteresis, honest in both directions):** a non-synced state is shown at once; « Synchronisé » is
+  shown only once the true state has been synced continuously for `SyncedHoldMs` = 1000 ms, and leaves at once when
+  it stops being true. So the label never claims more than the model's state (PeerHonest/GlobalHonest hold for the
+  display), and while typing it reads « Envoi en cours » until one second after the last acknowledgement, without
+  flicker between keystrokes.
+- **D-SI6, Q-UX6:** residual, model unchanged: a change the coverage filter refuses (a reader's forgery) leaves that
+  peer « Pas encore à jour »; rare, honest (I do not hold what it claims), revisited with the security wording.
+- **D-SI7, Q-UX7:** ADR 0028 D8 unchanged: « Lien lent » is added after 2 s of `oldestPendingMs`.
+- **Scope of SI1:** the indicator (header, status bar, the per-person line of the existing people popover). The link
+  type and quality in the popover (the rest of W33) are the next block.
