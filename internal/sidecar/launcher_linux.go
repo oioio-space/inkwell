@@ -11,6 +11,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"runtime"
+	"runtime/debug"
 	"slices"
 	"strconv"
 	"syscall"
@@ -115,6 +116,37 @@ func sandboxExec(c sandboxConfig, args []string) error {
 		return fmt.Errorf("mandatory Landlock unavailable; refusing peer document: %w", err)
 	}
 
+	return limitAndExec(c, args)
+}
+
+// limitAndExec applies the resource limits and seccomp, then execs args[0].
+func limitAndExec(c sandboxConfig, args []string) error {
+	// Everything that allocates happens before RLIMIT_AS: this Go runtime
+	// shares the limit until exec, and a heap growth past it is a fatal
+	// "runtime: out of memory" that looks like a typst limit hit (TYP-16
+	// failed about 2% of runs). GC is off for the same reason, and the exec
+	// is a raw execve on pointers prepared here (syscall.Exec allocates).
+	prog, err := seccompProgram()
+	if err != nil {
+		return fmt.Errorf("mandatory seccomp unavailable; refusing peer document: %w", err)
+	}
+	path, err := unix.BytePtrFromString(args[0])
+	if err != nil {
+		return err
+	}
+	argv, err := syscall.SlicePtrFromStrings(args)
+	if err != nil {
+		return err
+	}
+	envp, err := syscall.SlicePtrFromStrings(os.Environ())
+	if err != nil {
+		return err
+	}
+	type rlimit struct {
+		resource int
+		value    unix.Rlimit
+	}
+	limits := make([]rlimit, 0, 3) // built now: Setrlimit's argument must not be allocated after RLIMIT_AS
 	for _, limit := range []struct {
 		resource int
 		value    uint64
@@ -124,14 +156,22 @@ func sandboxExec(c sandboxConfig, args []string) error {
 		if limit.value == 0 && limit.resource == unix.RLIMIT_AS || limit.value == 0 && limit.resource == unix.RLIMIT_FSIZE && c.Directory == "" {
 			continue
 		}
-		if err := unix.Setrlimit(limit.resource, &unix.Rlimit{Cur: limit.value, Max: limit.value}); err != nil {
+		limits = append(limits, rlimit{limit.resource, unix.Rlimit{Cur: limit.value, Max: limit.value}})
+	}
+	debug.SetGCPercent(-1)
+	for i := range limits {
+		if err := unix.Setrlimit(limits[i].resource, &limits[i].value); err != nil {
 			return err
 		}
 	}
-	if err := installSeccomp(); err != nil {
+	if err := installSeccompProgram(prog); err != nil {
 		return fmt.Errorf("mandatory seccomp unavailable; refusing peer document: %w", err)
 	}
-	return unix.Exec(args[0], args, os.Environ())
+	_, _, errno := unix.RawSyscall(unix.SYS_EXECVE, uintptr(unsafe.Pointer(path)), uintptr(unsafe.Pointer(&argv[0])), uintptr(unsafe.Pointer(&envp[0]))) // #nosec G103 -- NUL-terminated pointers prepared above; execve returns only on failure.
+	runtime.KeepAlive(path)
+	runtime.KeepAlive(argv)
+	runtime.KeepAlive(envp)
+	return errno
 }
 
 func mountOutput(c sandboxConfig) error {

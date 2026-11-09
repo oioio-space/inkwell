@@ -100,6 +100,16 @@ func seccompFilter(arch uint32, pid uint32) []unix.SockFilter {
 }
 
 func installSeccomp() error {
+	f, err := seccompProgram()
+	if err != nil {
+		return err
+	}
+	return installSeccompProgram(f)
+}
+
+// seccompProgram builds the filter. The launcher builds it before applying
+// RLIMIT_AS: an allocation after the limit can fail in the Go runtime itself.
+func seccompProgram() ([]unix.SockFilter, error) {
 	var arch uint32
 	switch runtime.GOARCH {
 	case "amd64":
@@ -107,9 +117,13 @@ func installSeccomp() error {
 	case "arm64":
 		arch = unix.AUDIT_ARCH_AARCH64
 	default:
-		return errors.New("unsupported seccomp audit architecture")
+		return nil, errors.New("unsupported seccomp audit architecture")
 	}
-	f := seccompFilter(arch, uint32(unix.Getpid()))                                                        // #nosec G115 -- positive Linux PID fits uint32.
+	return seccompFilter(arch, uint32(unix.Getpid())), nil // #nosec G115 -- positive Linux PID fits uint32.
+}
+
+// installSeccompProgram does not allocate: it only passes f to the kernel.
+func installSeccompProgram(f []unix.SockFilter) error {
 	prog := unix.SockFprog{Len: uint16(len(f)), Filter: &f[0]}                                             // #nosec G115 -- fixed small filter.
 	return unix.Prctl(unix.PR_SET_SECCOMP, unix.SECCOMP_MODE_FILTER, uintptr(unsafe.Pointer(&prog)), 0, 0) // #nosec G103 -- synchronous kernel copy of BPF program.
 }
