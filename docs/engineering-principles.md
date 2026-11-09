@@ -45,6 +45,16 @@ un test ou une revue. Un principe sans preuve n'est qu'un vœu. Une exception ex
 | Moindre privilège : fichiers `0o600`/`0o700`, aucune élévation, aucune donnée de document dans les logs ou rapports de bug | revue ; `gosec` |
 | Chaîne d'approvisionnement : versions exactes, `govulncheck`, SBOM + `grype`, `gitleaks`, Dependabot sans auto-merge | gates `mise run ci` (ADR 0008) |
 
+## 5. Interface (W39, 2026-11-09)
+
+| Règle | Preuve |
+|---|---|
+| Ce que l'interface affiche comme vrai (« Synchronisé », rôles, états) suit un modèle d'état formel | modèle TLA+ et test fast-check à modèle, mutants (`docs/plans/2026-11-09-ui-formal.md`, bloc SI1) |
+| Accessibilité WCAG 2.2 AA dans **chaque** spec Playwright, dialogues et popovers compris (UF-1) | fixture axe-core commune ; violation semée ⇒ rouge (bloc UF1) |
+| Ce qui doit être cliquable l'est : chaque élément interactif visible est la cible de son centre (UF-2) | invariant `elementFromPoint` dans la fixture ; mutant de recouvrement attrapé (bloc UF1) |
+| Un parcours de plus de trois états est une machine XState v5, ses tests Playwright en sont générés (UF-3) | `xstate/graph` chemins les plus courts, assertions par état, mutant par machine (blocs UF2…) |
+| L'utilisabilité se mesure, ne se prouve pas | skill `ux-walkthrough` (agent `ux-tester`), captures clair et sombre |
+
 ## Sources
 
 [Go security best practices](https://go.dev/security/best-practices) ·
