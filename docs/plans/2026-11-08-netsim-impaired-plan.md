@@ -677,3 +677,170 @@ It is cleared on `peer-disconnected`.
   protection, so a large message on a slow but progressing link is not failed and resent in a loop.
   Executable spec first: a TLA+ or model-based test showing no resend loop while bytes progress, the
   mutant « fixed floor » caught, and NI-3 C2 measured again (expected back under the RL1 baseline).
+
+
+## Block WB: executable specification (step 1, 2026-11-09)
+
+Step 1 of the definition of done for block WB: the rule, its TLA+ model and mutants, the tests the code must
+pass, and the draft gate `gates/WB.toml`. The model is checked by `mise run tla`
+(`docs/protocol/tla/WriteBudget.tla`, README section "WriteBudget").
+
+- **Scope:** sync/1, i.e. `mux.sendFragmented` (one budget per large message) over `frame.WriteProgress` (one budget
+  per frame).
+- **Spec link:** it refines spec §5.5 rule L's « flux … sans progrès » for sync/1.
+- **Out of scope:** v2's LARGE lane is not changed (WB-Q1).
+
+### Why the current budget loops
+
+- Today a large message of S bytes must be written within `WriteIdle + S / MinRate` (20 s + S / 16 KiB/s), however
+  steadily it progresses (`fragment.go`, `progress.go`).
+- On a link slower than 16 KiB/s, every S above about 270 KiB therefore fails. Rule L (`stream.go`, `sendFailed`)
+  resyncs the peer, and automerge-repo sends the message again from its first byte, ahead of the typing.
+- The next attempt has the same budget on the same link, so it fails the same way: a resend loop. Only the rule I
+  cadence slows it down. This is NI-3 C2 (worst 44-49 s).
+
+### Decision (main session, 2026-11-09; the user may overrule): the simplest rule that satisfies every property
+
+The first draft of this section had a third part: a per-peer throughput estimate `est`, with the budget
+`WriteIdle + S / max(FloorRate, est / 2)`, learnt after each attempt. Checking that draft showed that a floor-only
+rule satisfies every property just as well, and it was dropped, for four reasons:
+
+- **The estimate adds machinery without adding protection.** An adaptive Byzantine reader lowers it anyway: by
+  dripping, it makes `est` small, so the only bound that protects against it is the floor.
+- **A stopped reader is still cut at 20 s** by WB-1, whatever the total bound.
+- **A drip reader only holds its own sender.** The router has one sender per peer (`internal/bridge/router.go`,
+  one `outbox` and one `sendTo` loop per peer), so it holds that peer's queue and none of the others.
+- **A legitimate slow link above `FloorRate` now always completes**, at the first attempt.
+
+### The rule
+
+- **WB-1, idle bound (unchanged):** a write fails after `WriteIdle` (20 s) without progress.
+- **WB-2, total bound:**
+  - an attempt of S bytes fails once its elapsed time reaches `WriteIdle + S / FloorRate`;
+  - this lowers `frame.MinRate` from 16 KiB/s to `FloorRate`, both in `sendFragmented` (per message) and in
+    `frame.WriteProgress` (per frame);
+  - it applies to every user of `MinRate`, the bulk lane (`p2p/bulk.go`) included.
+
+**`FloorRate` = 2 KiB/s, from the evidence:**
+
+- The slowest link the plan promises to complete over is NI-3's relay, at 8 KiB/s.
+- On that link the fragments of a large message compete with the typing. When interactive frames wait, the mux
+  guarantees the background class one frame in four (`backgroundShare` = 4, `fragment.go`).
+- So, in the worst case of interactive frames as large as fragments, the large message progresses at
+  8 / 4 = 2 KiB/s.
+- Measured typing is far smaller than that, so NI-3 in practice runs well above the floor.
+- At 2 KiB/s, one 32 KiB fragment takes 16 s, under its per-frame budget of 20 + 16 s.
+
+**The hold a drip reader can impose (WB-2, `WriteIdle + S / FloorRate`), stated honestly:**
+
+| S | Hold | Where this size comes from |
+|---|---|---|
+| 879 KiB | 7.5 min | the NI-3 paste on the wire |
+| 4 MiB | 34 min | the v2 inline window and per-peer share `r` (spec §10.3, §10.6) |
+| 16 MiB | 2.3 h | the v2 inline-lane limit (spec §7, LARGE) |
+| 64 MiB | 9.1 h | `MaxFrame` |
+
+**A cap on S for sync/1 is not proposed:**
+
+- sync/1 has no LARGE lane to fall back on, so a capped message could never be sent and its document would stop
+  syncing for good;
+- that is worse than a drip reader holding its own sender for 9 h.
+- The real bound on large objects is ADR 0034 step 6: the LARGE lane, with its per-peer share of 4 MiB and its
+  refusal above it (spec §16.1).
+
+### Model and properties (`WriteBudget.tla`)
+
+**What the model contains:**
+
+- one peer and one large message;
+- time as a variable with upper-bound timers (Lamport, "Real Time is Really Simple"): `Tick` is disabled once a
+  deadline has expired, so the cut cannot be overtaken by time;
+- rule L: a failure resends from byte 0;
+- the scale is free: one tick = `WriteIdle / 2`, and one unit = `FloorRate` × one tick;
+- an **honest** link is a token bucket at `FloorRate` with slack `Burst ≤ FloorRate · Idle` that never stalls for
+  `WriteIdle`;
+- **any** reader takes 0..`MaxRate` units per tick (it may drip just inside the idle bound), and may stop for
+  good:
+  - `Stop` has no fairness, because weak fairness on `Tick` is fairness on time, not a promise that the reader
+    reads again;
+  - the first draft missed this, and M-NoCut passed until it was fixed.
+
+| Property | Rule | Meaning |
+|---|---|---|
+| `Delivered` (weak fairness on Tick, Fail, Deliver) | WB-2, §5.5 rule L | no resend loop: on a link with sustained progress ≥ `FloorRate`, every message is eventually delivered |
+| `StopCut` | WB-1 | a reader that stops reading is cut within `WriteIdle` |
+| `HoldBound` | WB-2 | whatever the reader does, one attempt holds the sender at most `WriteIdle + S / FloorRate` |
+| `CutEventually` | WB-1, WB-2 | whatever the reader does, every started attempt ends (delivered or cut) |
+
+**Results (TLC 1.8.0, 2 workers):**
+
+- honest link (`WriteBudget.cfg`): 68 distinct states;
+- any reader (`WriteBudgetAny.cfg`): 290 distinct states;
+- both exhaustive, liveness included, no error, under 1 s each;
+- the four mutants are caught;
+- the whole `./scripts/tla-check.sh` ran in 192 s, on a loaded machine (93 s at rest).
+
+**Mutants, each caught by `mise run tla`:**
+
+| Mutant | What it breaks | Property that catches it |
+|---|---|---|
+| M-FixedFloor | today's rule, `WriteIdle + S / MinRate`, with an honest link at half of `MinRate` (NI-3: 8 vs 16 KiB/s) | `Delivered` (a lasso: fail, resend, fail) |
+| M-IdleOnly | no total bound (nginx `send_timeout` style): a drip-feed holds the write | `HoldBound` |
+| M-TotalOnly | no idle bound: a reader that stops is only cut at the total deadline | `StopCut` |
+| M-NoCut | neither bound | `CutEventually` |
+
+### The executable tests the code must pass
+
+**Shared setup:**
+
+- `testing/synctest`, for virtual time;
+- in `internal/transport/mux`, a fake `transport.Transport`, `rateLink`, whose `Send` sleeps
+  `len(payload) / rate`, honours its context and records the bytes it accepted;
+- a `drip` variant that accepts one fragment per `WriteIdle − 1 s`.
+
+**The tests:**
+
+1. `TestRuleWBSlowLinkDeliversWithoutResend` (mux), which proves `Delivered`:
+   - an 879 KiB message is delivered at the first attempt;
+   - at 8 KiB/s, and at exactly `FloorRate` (2 KiB/s);
+   - each within `WriteIdle + S / FloorRate` of virtual time.
+2. `TestRuleWBDripReaderCutWithinHoldBound` (mux), which proves `HoldBound`:
+   - `drip` link, at about 1.7 KiB/s, below `FloorRate`;
+   - `sendFragmented` of 879 KiB returns an error after at most `WriteIdle + S / FloorRate` + one drip interval of
+     virtual time;
+   - the large-message slot (`gate.big`) is then released: a following small `Send` to that peer proceeds at
+     once.
+3. `TestRuleWBStoppedReaderCutWithinIdle` (`internal/transport/frame`), which proves `StopCut`: a `DeadlineWriter`
+   that never accepts makes `WriteProgress` of 879 KiB fail after exactly `WriteIdle` of virtual time.
+4. `TestRuleWBFragmentAtFloor` (`internal/transport/frame`): a 32 KiB frame written at `FloorRate` succeeds.
+
+**Mutation proof** (`scripts/netsim/mutants.toml`, block WB; the anchors are taken from the code this block
+writes):
+
+| Mutant | Edit | Test it turns red |
+|---|---|---|
+| WBa | fixed floor: `FloorRate` back to 16 KiB/s | test 1 |
+| WBb | no total bound: `sendFragmented` without its deadline | test 2 |
+
+**End to end (unchanged):** NI-3 on seeds 1-3 must show:
+
+- C1 pass;
+- every token seen, with the worst C2 delay under the RL1 baseline (44.0 s);
+- C3 pass, with zero rule-L resyncs during the transfer.
+
+NI-3 C2 itself stays a declared known failure until ADR 0034 step 6. If it passes on every seed (expected: about
+4 s per fragment plus 4.1 s of netem queue), it is reported XPASS, the signal to flip it to strict.
+
+### Open design questions
+
+- **WB-Q1, v2:**
+  - Spec §7 makes v2's LARGE lane idle-only: 60 s without progress, and « un pair qui goutte ne retient que sa
+    propre part ». NI-3 mutant M7a even forbids a rate-based total deadline there.
+  - WB keeps a total bound on sync/1 only, where one ordered stream per peer carries everything.
+  - Proposal: WB is a v1 rule, and v2's protection is the per-peer share (§10.6). To decide before ADR 0034
+    step 6.
+- **WB-Q2, below the floor:** an honest link slower than 2 KiB/s (or 8 KiB/s with large competing frames) still
+  loops, which is out of contract. Should the people popover then say so (« Lien trop lent pour ce fichier »),
+  from the Links `sendFailures` count?
+- **WB-Q3, not modelled:** the rule I cadence (it delays a resend, never prevents one), and several peers (each has
+  its own sender).

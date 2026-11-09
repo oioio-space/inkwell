@@ -1,0 +1,56 @@
+# Frozen acceptance for block WB (rule WB: the sync/1 write budget is WriteIdle without progress, plus a
+# total WriteIdle + size / FloorRate, FloorRate = 2 KiB/s instead of MinRate = 16 KiB/s), written before the code.
+# Plan: docs/plans/2026-11-08-netsim-impaired-plan.md, section "Block WB: executable specification". Refines spec
+# §5.5 rule L (« flux sans progrès ») for sync/1. Formal model: docs/protocol/tla/WriteBudget.tla (README
+# "WriteBudget"). Found by NI-3 C2 (worst typed-token delay 48.9 s and 44.0 s under RL1): a paste larger than the
+# fixed budget 20 s + size / 16 KiB/s on a link under 16 KiB/s always failed, resynced (rule L) and was resent.
+raw_results = ["docs/plans/2026-11-08-netsim-impaired-plan.md", "docs/objectif-en-cours.md", "gates/WB/*"]
+
+[[criteria]]
+# Model: WriteBudget (honest link, any reader) holds exhaustively with liveness (Delivered, CutEventually), and its
+# four mutants are caught: M-FixedFloor (Delivered), M-IdleOnly (HoldBound), M-TotalOnly (StopCut), M-NoCut
+# (CutEventually). The task fails if a mutant passes.
+id = "model-WriteBudget"
+command = "mise run tla"
+
+[[criteria]]
+# Unit, virtual time (testing/synctest), each test named after the rule and the model property it proves: an
+# 879 KiB message is delivered at the first attempt at 8 KiB/s and at FloorRate (Delivered); a drip reader below
+# FloorRate is cut within WriteIdle + S / FloorRate and releases the large-message slot (HoldBound); a stopped
+# reader is cut within WriteIdle (StopCut); a 32 KiB frame at FloorRate is written (WB-2 per frame).
+id = "rule-WB-unit"
+command = "./scripts/heavy.sh go test ./internal/transport/mux ./internal/transport/frame -run 'RuleWB' -count=1"
+
+[[criteria]]
+# Mutants of the code (scripts/netsim/mutants.toml, block WB; applied to a copy, each must turn its test red):
+# WBa FloorRate back to 16 KiB/s (TestRuleWBSlowLinkDeliversWithoutResend), WBb sendFragmented without its total
+# deadline (TestRuleWBDripReaderCutWithinHoldBound).
+id = "rule-WB-mutants"
+command = "mise run netsim:mutants -- WB"
+
+[[criteria]]
+# Unchanged behaviour elsewhere in the transport (fragmentation, preemption, rule L, bulk, link metrics).
+id = "transport-regression"
+command = "./scripts/heavy.sh go test ./internal/transport/... ./internal/bridge -count=1"
+
+[[criteria]]
+# End to end, NI-3 (scenario 7, 8 KiB/s relay), seeds 1-3, measured on the impaired netsim: on every seed the
+# paste arrives (C1 pass, so the known failure turns XPASS), every typed token arrives and the worst delay is
+# under the RL1 baseline (44.0 s, the lower of the two RL1 measurements of 2026-11-09), the connection stays up
+# (C3 pass) and no rule-L resync happened during the transfer (C3 « resyncs 0, 0 »: no resend loop).
+id = "NI-3-under-RL1-baseline"
+command = "NETSIM_SCENARIOS='7' NETSIM_SEEDS='1 2 3' mise run e2e:netsim:impaired && python3 -I -c \"import json,re,sys; R=[{c['id']:c for c in json.load(open(f'.task/netsim/results/7-s{s}.json'))['clauses']} for s in (1,2,3)]; worst=lambda d: float(re.search(r'worst ([0-9.]+) s', d['C2']['measured']).group(1)); resyncs=lambda d: [x.strip() for x in re.search(r'resyncs ([^(]*)[(]', d['C3']['measured']).group(1).split(',')]; bad=[(i+1, d['C1']['status'], d['C2']['measured'], d['C3']['measured']) for i, d in enumerate(R) if d['C1']['status'] != 'pass' or d['C3']['status'] != 'pass' or 'held back' in d['C2']['measured'] or worst(d) >= 44.0 or any(x != '0' for x in resyncs(d))]; sys.exit(f'NI-3 under WB: {bad}' if bad else 0)\""
+
+[[criteria]]
+# No regression: NI-1, NI-2 (C2 strict since 2026-11-09) and NI-4 on 3 seeds, scenarios 1-4.
+id = "netsim-regression"
+command = "NETSIM_SCENARIOS='5 6 8' NETSIM_SEEDS='1 2 3' mise run e2e:netsim:impaired && NETSIM_SCENARIOS='1 2 3 4' mise run e2e:netsim"
+
+[[criteria]]
+# The /simplify report of the block's diff (CLAUDE.md, definition of done, step 3).
+id = "simplify-report"
+command = "test -s gates/WB/SIMPLIFY.md"
+
+[[criteria]]
+id = "RL1-regression"
+command = "mise run gate -- RL1"

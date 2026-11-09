@@ -129,3 +129,61 @@ model, anchor = the override line in the config; the sound module is never edite
 java -cp tla2tools.jar tlc2.TLC -workers 2 -config SyncIndicator.cfg SyncIndicator
 java -cp tla2tools.jar tlc2.TLC -workers 2 -config mutants/SyncIndicatorPeerCount.cfg mutants/SyncIndicatorMutants
 ```
+
+## WriteBudget (block WB, sync/1 write budget)
+
+Rule: `docs/plans/2026-11-08-netsim-impaired-plan.md`, section "Block WB: executable specification". It has two
+parts, WB-1 and WB-2, and refines spec §5.5 rule L's « flux … sans progrès » for sync/1.
+
+`WriteBudget.tla` models one large message sent to one peer: `mux.sendFragmented` over `frame.WriteProgress`.
+
+- **Time** is a variable advanced by `Tick`, with upper-bound timers (Lamport, "Real Time is Really Simple"):
+  `Tick` is disabled once a deadline has expired, so the cut happens before time can pass it.
+- **Rule L:** a failed write loses the message, which is resent from its first byte.
+- **The rule:**
+  - WB-1: fail after `Idle` ticks without progress;
+  - WB-2: fail once elapsed ≥ `Idle + S / Floor`, `Floor` being `FloorRate`.
+- **Scale-free:** one tick = `WriteIdle / Idle`, and one unit = `Floor` × one tick.
+- **An honest link** is a token bucket at `Floor` (slack `Burst ≤ Floor · Idle`) that never stalls for `Idle`
+  ticks.
+- **Any other reader** takes 0..`MaxRate` units per tick, and may stop for good:
+  - `Stop` has no fairness, as ConnCredit's `Stall`;
+  - weak fairness on `Tick` is fairness on time, never a promise that such a reader reads again.
+
+Not covered:
+
+- the interactive frames between fragments: the mux guarantees fragments one frame in four, and `FloorRate`
+  accounts for it;
+- the rule I cadence: it delays a resend, never prevents one;
+- several peers: there is one sender per peer, each with its own budget;
+- the v2 LARGE lane.
+
+| Property | Rule | Meaning |
+|---|---|---|
+| `Delivered` (weak fairness on `Tick`, `Fail`, `Deliver`) | WB-2, §5.5 rule L | no resend loop: on a link with sustained progress ≥ `Floor`, every message is eventually delivered |
+| `StopCut` | WB-1 | a reader that stops reading is cut within `Idle` ticks |
+| `HoldBound` | WB-2 | whatever the reader does, one attempt holds the sender at most `HoldMax = Idle + S / Floor` |
+| `CutEventually` | WB-1, WB-2 | whatever the reader does, every started attempt ends (delivered or cut) |
+
+| Configuration | Result |
+|---|---|
+| `WriteBudget.cfg`: honest; S 8, Idle 2, Floor 1, MaxRate 4, Burst 1, MaxMsg 1 | **exhaustive, no error**: 295 states, 68 distinct, depth 10, liveness included, < 1 s |
+| `WriteBudgetAny.cfg`: any reader, constants of `WriteBudget.cfg` | **exhaustive, no error**: 700 states, 290 distinct, depth 12, liveness (`CutEventually`) included, < 1 s |
+
+Reachability witnesses were checked once, outside the task: an idle cut and a hold of exactly `HoldMax` are
+reachable, so the properties are not vacuous.
+
+Mutants (`mutants/WriteBudgetMutants.tla`, each config overrides one definition of the sound model, anchor = the
+override line in the config; the sound module is never edited):
+
+| Mutant | Anchor (config line) | Broken rule | Caught by |
+|---|---|---|---|
+| `WriteBudgetFixedFloor` | `Limit <- FixedLimit` | today's `WriteIdle + S / MinRate`, with the link at half of `MinRate` (NI-3: 8 vs 16 KiB/s) | `Delivered` (fail, resend, fail: a lasso) |
+| `WriteBudgetIdleOnly` | `Expired <- IdleOnlyExpired` | no total bound (nginx `send_timeout` style): a drip-feed holds the write | `HoldBound` |
+| `WriteBudgetTotalOnly` | `Expired <- TotalOnlyExpired` | no idle bound: a reader that stops is cut only at the total deadline | `StopCut` |
+| `WriteBudgetNoCut` | `Expired <- NeverExpired` | neither bound (a plain blocking write) | `CutEventually` |
+
+```
+java -cp tla2tools.jar tlc2.TLC -workers 2 -config WriteBudget.cfg WriteBudget
+java -cp tla2tools.jar tlc2.TLC -workers 2 -config mutants/WriteBudgetFixedFloor.cfg mutants/WriteBudgetMutants
+```
