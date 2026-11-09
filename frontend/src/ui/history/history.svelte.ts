@@ -143,8 +143,14 @@ class HistoryState {
     }
   }
 
-  /** The signed list says this device's person only reads. */
-  readOnly = $derived(this.members.some((m) => m.self && m.role === "reader"));
+  /**
+   * This device's person only reads, or is disconnected. It follows the live role of the signed list
+   * (reactive through the workspace), never the `members` snapshot loaded at attach: that one goes
+   * stale at the first demotion.
+   */
+  get readOnly(): boolean {
+    return workspace.access !== undefined;
+  }
 
   /** The actors this device has written under in the open document (kept on this device only). */
   myActors = $state.raw<ReadonlySet<string>>(new Set());

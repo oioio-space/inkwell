@@ -21,13 +21,21 @@ vi.mock("../../../bindings/github.com/oioio-space/inkwell/internal/app/index", (
   },
 }));
 
+/** The live role of this device, as the adapter reports it (workspace.access). */
+const live = vi.hoisted(() => ({ access: undefined as "reader" | "suspended" | undefined }));
+function setAccess(access: "reader" | "suspended" | undefined) {
+  live.access = access;
+  workspace.rolesVersion++;
+}
+
 const labels = (host: HTMLElement) =>
   [...host.querySelectorAll("button")].map((b) => b.textContent?.trim());
 const button = (host: HTMLElement, text: string) =>
   [...host.querySelectorAll("button")].find((b) => b.textContent?.trim() === text);
 
 async function open(role: "writer" | "reader") {
-  members.role = role;
+  members.role = "writer"; // the snapshot loaded at attach must not decide
+  live.access = role === "reader" ? "reader" : undefined;
   const repo = new Repo({});
   const handle = repo.create<HDoc>({
     text: "Un.\n",
@@ -43,10 +51,17 @@ async function open(role: "writer" | "reader") {
 }
 
 beforeEach(() => {
+  vi.spyOn(Object.getPrototypeOf(workspace), "access", "get").mockImplementation(() => {
+    void workspace.rolesVersion;
+    return live.access;
+  });
+  live.access = undefined;
   history.diff = undefined;
   history.apply = undefined;
 });
 afterEach(() => {
+  vi.restoreAllMocks();
+  vi.useRealTimers();
   history.detach();
   history.open = false;
   cleanup();
@@ -106,8 +121,7 @@ describe("the differences window", () => {
     expect(labels(host)).not.toContain("Revenir à ce moment");
     expect(labels(host)).not.toContain("Annuler cette modification");
     cleanup();
-    members.role = "writer";
-    await history.loadMembers();
+    setAccess(undefined); // promoted: no reload needed
     const again = render(DiffView, { req });
     expect(labels(again)).toContain("Revenir à ce moment");
     expect(labels(again)).toContain("Annuler cette modification");
@@ -151,5 +165,27 @@ describe("the differences window", () => {
       file: "stock.csv",
     });
     expect(host.querySelector("[data-testid=diff-cells]")?.textContent).toContain("B2 : 12 → 15");
+  });
+});
+
+describe("history follows the live role", () => {
+  it("a demoted writer's history becomes read-only without reload", async () => {
+    await open("writer");
+    expect(history.readOnly).toBe(false);
+    setAccess("reader");
+    expect(history.readOnly).toBe(true);
+    setAccess("suspended");
+    expect(history.readOnly).toBe(true);
+    setAccess(undefined);
+    expect(history.readOnly).toBe(false);
+  });
+
+  it("NI-4 C5: a reader demoted after attach writes no claimedAt, so adds no sync traffic once converged", async () => {
+    vi.useFakeTimers();
+    const handle = await open("writer");
+    setAccess("reader"); // demoted after the document was attached
+    handle.change((d) => A.splice(d, ["text"], 0, 0, "x")); // a change arrives: the claim timer arms
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(handle.doc()?.meta?.claimedAt).toBeUndefined();
   });
 });
