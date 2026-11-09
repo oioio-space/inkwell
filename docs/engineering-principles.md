@@ -58,7 +58,10 @@ un test ou une revue. Un principe sans preuve n'est qu'un vœu. Une exception ex
 | Simple à voir, rien d'inaccessible : budget de commandes visibles par vue ; chaque commande dans la palette et à deux pas au plus d'un menu (UF-6) | énumération du registre de commandes |
 | Annuler plutôt que confirmer (UF-7) | toute transition destructive d'une machine a son « Annuler » |
 | L'apparence ne dérive pas (UF-8) | captures de référence par vue, clair et sombre (bloc UF1) |
-| L'utilisabilité se mesure, ne se prouve pas | skill `ux-walkthrough` (agent `ux-tester`), captures clair et sombre |
+| Tout geste qui lance une action a un retour visible en moins de 100 ms (UF-9) | invariant de la fixture ; mutant de toast retardé attrapé |
+| Chaque mode d'un parcours a son propre arbre d'accessibilité ; chaque vue a son instantané ARIA (UF-10, UF-11) | `toMatchAriaSnapshot` par état ; bouton renommé ⇒ rouge |
+| Chaque widget suit le contrat clavier de l'APG WAI-ARIA (UF-12) | tests générés par type de widget ; Échap cassé ⇒ rouge |
+| L'utilisabilité se mesure, ne se prouve pas | skill `ux-walkthrough` (agent `ux-tester`), captures clair et sombre ; en personne à chaque version : SEQ par tâche, SUS et UEQ-S (jamais bloquant en CI) |
 
 ## Sources
 
