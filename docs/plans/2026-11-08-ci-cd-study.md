@@ -131,6 +131,10 @@ instead of a hand list. Prove: mutation test in `netsim:mutants` still runs; a s
 job repeats it). Make `ci` exclude it (`CI_SKIP_NETSIM=1` gives a `ci:core` task) and let the `netsim` job own
 scenarios 1-8 in parallel with `ci`. Gain [M-based]: -17 min of the serial `ci` job; GitHub wall time becomes
 max(ci, netsim). Cost: low (10 lines). Risk: none, nothing is removed. Prove: workflow run times before/after.
+**Status (2026-11-09): R2 and R3 are done in block CI1** (frozen gate `gates/CI1.toml`). `scripts/netsim/affected.py`
+computes the input set from `go list -deps` of the netsim binaries (no hand list) and the pre-push hook runs the
+impaired netsim only when the pushed diff touches it; `ci` = `ci:core` + `e2e:netsim:impaired`, GitHub's `ci` job runs
+`ci:core` and its `netsim` job owns scenarios 1-8 once, in parallel.
 **R4. Shift coverage left: `mise run ci:fast` in the pre-commit for the touched packages.**
 `go test -short -cover` of the packages touched by the staged diff (+ reverse deps from `go list -deps`) against
 the per-package floor in `cover.sh` (85 %). The coverage failure tonight cost one push (2.3 min) and an

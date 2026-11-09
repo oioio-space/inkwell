@@ -14,8 +14,8 @@ env:
 jobs:
   ci:
     runs-on: ubuntu-latest
-    # 25 min of checks + ~17 min of impaired-network scenarios (e2e:netsim:impaired is part of `ci`).
-    timeout-minutes: 45
+    # ~25 min of checks (`ci:core`); the impaired-network scenarios run once, in the `netsim` job.
+    timeout-minutes: 35
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
         with:
@@ -66,21 +66,7 @@ jobs:
           name: seccomp-traces
           path: gates/L1/ci-seccomp-traces/
           retention-days: 7
-      # `mise run ci` runs the impaired-network scenarios (scripts/netsim): they need netns tools,
-      # unprivileged user namespaces and the sch_netem / nf_tables kernel modules, which a user
-      # namespace cannot load. A module that is missing here is a hard failure, never a skip.
-      - name: Prepare the impaired-network scenarios (netem, nftables)
-        run: |
-          sudo apt-get install -y -qq socat nftables iproute2 "linux-modules-extra-$(uname -r)"
-          sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-          sudo modprobe sch_netem
-          sudo modprobe nf_tables
-          for m in sch_netem nf_tables; do
-            test -d "/sys/module/$m" || { echo "::error::kernel module $m is not loaded"; exit 1; }
-          done
-      - run: mise run ci
-        env:
-          INKWELL_E2E_BROWSER: chromium # e2e:netsim:impaired drives Chromium; the e2e step below keeps WebKit
+      - run: mise run ci:core
       - name: Build the desktop app (Linux)
         run: mise run app:build
       - name: End-to-end (two instances, Playwright/WebKit)

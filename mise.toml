@@ -200,7 +200,7 @@ run = "./scripts/deadcode.sh"
 
 [tasks."test:py"]
 description = "Python tests of the gate, perf and formal tooling (unittest)"
-run = ["cd scripts/perf && ../heavy.sh python3 -m unittest discover -p '*_test.py'", "./scripts/heavy.sh python3 -m unittest scripts/alloy_check_test.py scripts/block_done_test.py scripts/fetch_pinned_test.py scripts/check_claude_md_test.py scripts/gate_reset_test.py scripts/llm_test.py"]
+run = ["cd scripts/perf && ../heavy.sh python3 -m unittest discover -p '*_test.py'", "./scripts/heavy.sh python3 -m unittest scripts/alloy_check_test.py scripts/block_done_test.py scripts/fetch_pinned_test.py scripts/check_claude_md_test.py scripts/gate_reset_test.py scripts/llm_test.py scripts/netsim/affected_test.py"]
 
 [tasks."lint:claude-md"]
 description = "Everything CLAUDE.md cites exists: mise tasks, paths, agents, skills, Claude hooks"
@@ -223,9 +223,13 @@ run = "./scripts/heavy.sh python3 scripts/alloy_check.py"
 description = "Every environment variable the code reads is declared in .env.reference"
 run = "python3 scripts/check-env-reference.py"
 
+[tasks."ci:core"]
+description = "Everything CI must pass except the impaired network simulation (what GitHub's ci job and the pre-push hook run first; scripts/netsim/affected.py decides about the netsim)"
+depends = ["test:py", "formal", "lint:env", "lint:claude-md", "arch", "deadcode", "scan:secrets", "scan:code", "scan:sbom", "lint", "lint:sh", "lint:yaml", "lint:actions", "pkg:lint", "test:ci", "cover:check", "fe:check"]
+
 [tasks.ci]
-description = "Everything CI must pass"
-depends = ["test:py", "formal", "lint:env", "lint:claude-md", "arch", "deadcode", "scan:secrets", "scan:code", "scan:sbom", "lint", "lint:sh", "lint:yaml", "lint:actions", "pkg:lint", "test:ci", "cover:check", "fe:check", "e2e:netsim:impaired"]
+description = "Everything CI must pass: ci:core and the impaired network simulation"
+depends = ["ci:core", "e2e:netsim:impaired"]
 
 # ── Versions and packages (ADR 0025) ──────────────────────────────────────────
 # The release is cut by a human: `mise run changelog:next`, `mise run changelog -- --tag vX.Y.Z`,

@@ -319,6 +319,26 @@
       "id": "56c03e0de40304b3b341188f377e357177d48b2ed1c6d4d08b5558dfd5f7e5da",
       "reason": "Block SP1b (rule SP1-2): sync/1 WriteProgress takes frame.FloorRate (2 KiB/s) instead of MinRate (16 KiB/s) — the root fix of the NI-3 resend loop (E1, E3: paste delivered at the first attempt, 0 resyncs); WriteIdle 90 s per D-SP1, proven by the RuleSP1 tests and the TLA+ model.",
       "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "9a9fbc0657f7af9f3179b29802df8ab9a326846019d334befd51962d658cebce",
+      "reason": "Block CI1b (W35, user decision « netsim seulement si touché »): `ci` now depends on ci:core + e2e:netsim:impaired, where ci:core is exactly the previous list minus the netsim; the content of `mise run ci` is unchanged (gate criterion rule-CI1-wiring checks it). Nothing removed or weakened.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "e9ab19538005856322916542a823208f5b6b6c693b900623004417fad2d14ba2",
+      "reason": "Block CI1b: test:py gains scripts/netsim/affected_test.py (28 new tests); every existing test file still runs.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "1f650fcd7621017e13281cb0aa969b1d4a6a6c99152ab9edcce756267291677a",
+      "reason": "Block CI1b: new netsim selector scripts/netsim/affected.py, written for gate CI1b (rules CI1-1..CI1-4, fails towards running).",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "14006af3b852de0386db1be0359e9daaafa4aea51f0a9712e77ebfb95ef45869",
+      "reason": "Block CI1b: new unit tests of the selector, one per case of gate criterion rule-CI1-unit.",
+      "decision": "docs/objectif-en-cours.md"
     }
   ]
 }
