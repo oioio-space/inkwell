@@ -43,6 +43,7 @@ un test ou une revue. Un principe sans preuve n'est qu'un vœu. Une exception ex
 | Webview : CSP stricte (`default-src 'self'`, styles par **nonce par lancement** — `internal/app/csp.go` + `EditorView.cspNonce`, jamais `'unsafe-inline'` en production ; seul `'wasm-unsafe-eval'` pour Automerge), aucun contenu distant, aucun `eval` ; chaque message du pont validé et typé côté Go | test du pont ; inspiration [checklist sécurité Electron](https://www.electronjs.org/docs/latest/tutorial/security) |
 | Sidecars : hachage SHA-256 vérifié avant chaque lancement, timeouts, mort avec le parent | test d'altération du binaire → refus |
 | Moindre privilège : fichiers `0o600`/`0o700`, aucune élévation, aucune donnée de document dans les logs ou rapports de bug | revue ; `gosec` |
+| Chaque partie du protocole est publique, complète et réutilisable par d'autres (les dix points de `docs/protocol/README.md`) | vecteurs en fichiers de données, décodeur fuzzé, modèle formel avec mutants, liste vide de « ce qu'il faudrait deviner » ; audit des parties existantes (bloc PA) |
 | Chaîne d'approvisionnement : versions exactes, `govulncheck`, SBOM + `grype`, `gitleaks`, Dependabot sans auto-merge | gates `mise run ci` (ADR 0008) |
 
 ## 5. Interface (W39, W40, 2026-11-09)

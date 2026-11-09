@@ -47,6 +47,29 @@ HTTP/2 et QUIC le font pour chaque flux. Un flux lent ne gêne donc jamais les a
 7. **On ne réinvente rien qui existe** (spec §22) : libp2p, QUIC, automerge-repo, CBOR, BLAKE3,
    Bao, magic-wormhole, TLA+.
 
+## Ce que doit être chaque partie du protocole (exigence, 2026-11-09)
+
+Demande de l'utilisatrice : « tout doit être en béton armé », un protocole bien défini et réutilisable par d'autres,
+« comme pour tout le reste ». Chaque partie du protocole (message, flux, règle) n'est acceptée que si elle a :
+
+1. un texte normatif dans [spec.md](spec.md), avec les mots DOIT, DEVRAIT, PEUT (RFC 2119/8174) ;
+2. un identifiant versionné, inscrit au registre des types et des protocoles de la spec, et une entrée dans
+   [CHANGES.md](CHANGES.md) ;
+3. la forme de chaque message octet par octet, ou selon le profil CBOR et les schémas (§9) : la plage de chaque
+   champ, et ce qu'on fait de chaque valeur hors plage ;
+4. la machine à états de chaque rôle : minuteries, redémarrage d'une connexion, envois croisés ;
+5. le traitement des erreurs : message mal formé, trop grand, rejoué ou désordonné, pair muet, inondation ; et
+   des limites de débit ;
+6. des considérations de sécurité (modèle de menace : écrivains pleinement byzantins) et de confidentialité ;
+7. des règles d'interopérabilité : la négociation de version, et le comportement face à un appareil qui ne connaît
+   pas cette partie ;
+8. des vecteurs de conformité sous forme de fichiers de données (entrées et sorties attendues) dans
+   [vectors/](vectors/), qu'une implémentation tierce exécute sans inkwell ; un décodeur fuzzé ;
+9. un modèle formel (TLA+ ou Alloy, avec mutants) dès qu'il y a un état ou de la concurrence ; sinon, la raison
+   écrite dans l'ADR ;
+10. la preuve que le texte suffit : une lecture du seul texte, par quelqu'un qui ne l'a pas écrit, produit la
+    liste de ce qu'un implémenteur devrait deviner, et cette liste est vide.
+
 ## Versions et compatibilité
 
 - Ajouter une fonction (un champ facultatif, un nouveau type de message, une capacité) ne change

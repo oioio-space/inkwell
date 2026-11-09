@@ -61,9 +61,9 @@ quoi que ce soit ; une exception exige une ADR.
 - La synchronisation entre pairs passe par l'interface `Transport` de `internal/transport` ; seuls
   `internal/transport/p2p` et le module `protocol/libp2p` (étape 4 de l'ADR 0034) importent libp2p.
   Le rendez-vous d'invitation Wormhole est un canal séparé, limité à `internal/invite` (ADR 0032).
-- Le protocole est spécifié publiquement dans `docs/protocol/` (ADR 0034). Le module `protocol` (cœur
-  pur, sans E/S) n'importe rien d'inkwell ; inkwell importe `protocol` et n'a aucune copie privée de
-  ses codecs.
+- Le protocole est spécifié publiquement dans `docs/protocol/` (ADR 0034), chaque partie selon les dix
+  points de `docs/protocol/README.md`. Le module `protocol` (cœur pur, sans E/S) n'importe rien
+  d'inkwell ; inkwell importe `protocol` et n'a aucune copie privée de ses codecs.
 - Une seule source de vérité par chose : texte → Automerge, binaires → magasin BLAKE3,
   membres → liste signée, versions → go-git (projection).
 - Tout octet venu d'un pair est vérifié (signature, rôle) et son décodeur est fuzzé.
