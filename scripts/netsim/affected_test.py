@@ -16,8 +16,15 @@ RUN, SKIP = 0, 10
 ZERO = "0" * 40
 
 
+def clean_env():
+    """The environment without git's repository-location variables: a git hook (pre-push) exports GIT_DIR and
+    friends, which would make every git command of these tests act on the pushing repository instead of the
+    temporary one (seen when pushing from a linked worktree, where GIT_DIR is absolute)."""
+    return {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+
+
 def git(root, *args):
-    env = {**os.environ, "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t",
+    env = {**clean_env(), "GIT_AUTHOR_NAME": "t", "GIT_AUTHOR_EMAIL": "t@t", "GIT_COMMITTER_NAME": "t",
            "GIT_COMMITTER_EMAIL": "t@t", "GIT_CONFIG_GLOBAL": os.devnull, "GIT_CONFIG_SYSTEM": os.devnull}
     done = subprocess.run(["git", "-C", root, *args], capture_output=True, text=True, env=env, check=True)
     return done.stdout.strip()
@@ -56,7 +63,7 @@ class Base(unittest.TestCase):
             f.write("\n".join(json.dumps(p, indent=1) for p in packages))
 
     def select(self, *args, stdin="", golist=None):
-        env = {**os.environ, "INKWELL_AFFECTED_GOLIST": golist or self.golist}
+        env = {**clean_env(), "INKWELL_AFFECTED_GOLIST": golist or self.golist}
         done = subprocess.run([sys.executable, "-I", SELECTOR, "--root", self.root, *args],
                               input=stdin, capture_output=True, text=True, env=env, check=False)
         return done.returncode, done.stdout.strip()
@@ -197,3 +204,17 @@ class TestCI1_3_GoListFailure(Base):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestCleanEnv(unittest.TestCase):
+    def test_git_location_variables_from_a_hook_do_not_leak(self):
+        os.environ["GIT_DIR"] = "/nonexistent/hook/git-dir"
+        try:
+            self.assertNotIn("GIT_DIR", clean_env())
+            root = tempfile.mkdtemp()
+            git(root, "init", "-q")
+            write(root, "a.txt")
+            git(root, "add", "-A")
+            git(root, "commit", "-q", "-m", "base")
+        finally:
+            del os.environ["GIT_DIR"]
