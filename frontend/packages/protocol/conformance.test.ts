@@ -10,7 +10,10 @@ const dir = fileURLToPath(new URL("../../../protocol/vectors/", import.meta.url)
 const vectors: Vector[] = readdirSync(dir)
   .filter((f) => f.endsWith(".json"))
   .sort()
-  .flatMap((f) => JSON.parse(readFileSync(`${dir}/${f}`, "utf8")).vectors);
+  .flatMap((f) => JSON.parse(readFileSync(`${dir}/${f}`, "utf8")).vectors)
+  // Spec §21: scope "transport" is the libp2p layer (linkprobe, §8.5), which never reaches the
+  // webview; @inkwell/protocol does not implement it, the Go runner does.
+  .filter((v: Vector) => v.scope !== "transport");
 const step = Number(process.env.INKWELL_PROTOCOL_STEP ?? 1);
 test(`shared protocol corpus, step ${step}`, async () => {
   const results = await runConformance(vectors, (v) => reference(v, vectors), step);

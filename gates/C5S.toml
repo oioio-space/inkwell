@@ -1,0 +1,60 @@
+# Frozen acceptance for block C5S (rigour: complete — protocol, data from peers), written before the product code.
+# User decisions 2026-11-09/10: fix C5 before SI1b; measure loss with the link probe (D2) now; show link quality in three
+# levels (good, fair, poor; unknown), not a ‰ figure. Spec: docs/adr/0036-link-probe.md, docs/protocol/spec.md §8.5,
+# docs/plans/2026-11-09-c5-sound.md (model, acceptance rule, changes). Every protocol part meets the ten points of
+# docs/protocol/README.md. A `go test -run` that matches nothing passes, so every Go criterion requires its named tests
+# to have run and passed.
+raw_results = ["docs/plans/2026-11-09-c5-sound.md", "docs/objectif-en-cours.md", "gates/C5S/*"]
+
+[[criteria]]
+# The statistical model of the probe and of the C5 rule: accuracy bound over 10 seeds, levels, false-failure <= 1e-3,
+# power >= 0.999 against every mutant estimator. Run here and by `done`, not in test:py (4-8 min of simulation).
+id = "model"
+command = "./scripts/heavy.sh timeout 900 python3 -m unittest scripts/netsim/c5model_test.py"
+
+[[criteria]]
+# The protocol part: specified (spec §8.5, ADR 0036), the pure module's tests and vectors (step 3, the corpus regenerated
+# identically), the TypeScript runner (scope transport skipped), both fuzz targets.
+id = "protocol"
+command = "grep -q '/inkwell/linkprobe/1.0.0' docs/protocol/spec.md && test -s docs/adr/0036-link-probe.md && (cd protocol && ../scripts/heavy.sh timeout 600 go test -count=1 ./... && ../scripts/heavy.sh timeout 300 go test -run '^$' -fuzz FuzzDecode -fuzztime 120s ./linkprobe/ && ../scripts/heavy.sh timeout 300 go test -run '^$' -fuzz FuzzHost -fuzztime 120s ./linkprobe/) && (cd frontend && ../scripts/heavy.sh timeout 300 pnpm exec vitest run --configLoader runner packages/protocol/conformance.test.ts)"
+
+[[criteria]]
+# Models: LinkProbeHonest, LinkProbeAny, LinkProbeGreedy, LinkProbeAccept exhaustive, every LinkProbe* mutant detected;
+# every other model of the directory too.
+id = "tla"
+command = "timeout 900 mise run tla"
+
+[[criteria]]
+# Product, in natNet (synctest, every latency seed): under burstyWiFi the level is fair and the figure within 15 ‰ of
+# the connection's exact drops; under jitter alone the level is good while quic-go's PacketsLost > 0 (anti-vacuity);
+# a late echo is discarded; a new connection restarts at unknown. Integration: the probe streams are always read (a
+# bulk transfer does not move a clean link's level); PacketsReceived counted after the stream data is handed over
+# (pinned for each quic-go upgrade); the resource manager admits 4 inbound and 2 outbound probe streams per peer; roles
+# applied to the real connection; an architecture test proves only internal/bridge reads the figure and the level.
+id = "go-product"
+command = "out=$(./scripts/heavy.sh timeout 900 go test -count=1 -v -run 'TestLinkLevel|TestLinkProbe' ./internal/... 2>&1) || { echo \"$out\" | tail -40; exit 1; }; for t in TestLinkLevelBurstyWiFi TestLinkLevelIgnoresReordering TestLinkLevelLateEchoDiscarded TestLinkLevelRestartsUnknown TestLinkProbeAlwaysRead TestLinkProbeReceivedCounter TestLinkProbeResourceLimits TestLinkProbeRoles TestLinkProbeOnlyBridgeReads TestLinkLevelLogsEverySample TestLinkLevelRelayedUnknown; do echo \"$out\" | grep -q -- \"--- PASS: $t\" || { echo \"missing or not passing: $t\"; exit 1; }; done"
+
+[[criteria]]
+# End to end: scenario 5 on seeds 1-3, ten repeats each (30 runs), strict: every clause passes on every run, the new C5
+# (the level replayed exactly from the figures logged at every sampler step, the figure within tolerance of the qdisc
+# truth) included. Each repeat writes
+# .task/netsim/results/5-s<seed>-r<repeat>.json (r = 1..10); the check requires all 30, every clause passing, and C5's
+# bound naming the level rule (the old ‰ clause could pass by chance).
+id = "e2e-C5"
+command = "rm -f .task/netsim/results/5-s*-r*.json; NETSIM_SCENARIOS=5 NETSIM_SEEDS='1 2 3' NETSIM_REPEAT=10 NETSIM_EXPECT=strict mise run e2e:netsim:impaired && python3 -I -c \"import json,sys; bad=[]; n=0\nfor s in (1,2,3):\n for r in range(1,11):\n  f=f'.task/netsim/results/5-s{s}-r{r}.json'\n  try: c={x['id']:x for x in json.load(open(f))['clauses']}\n  except OSError: bad.append((f,'missing')); continue\n  n+=1; bad+=[(f,k) for k,v in c.items() if v['status']!='pass']\n  if 'level' not in c.get('C5',{}).get('bound',''): bad.append((f,'C5 is not the level rule'))\nsys.exit(f'e2e-C5: {n}/30 runs, {bad[:6]}' if bad or n!=30 else 0)\""
+
+[[criteria]]
+# Code mutants (scripts/netsim/mutants.toml, block C5S): M5b, M5d..M5h, M5k..M5n (e2e, scenario 5, C5) and M5i, M5j (go):
+# each turns its test red.
+id = "mutants"
+command = "for m in M5d M5e M5f M5g M5h M5i M5j M5k M5l M5m M5n; do grep -q \"id = \\\"$m\\\"\" scripts/netsim/mutants.toml || { echo \"missing mutant $m\"; exit 1; }; done && mise run netsim:mutants -- C5S"
+
+[[criteria]]
+# No regression: the transport and bridge, the other impaired scenarios (6, 8) and the default ones (1-4), and the
+# frozen gates RL1 and SP1b.
+id = "regression"
+command = "./scripts/heavy.sh timeout 1200 go test -count=1 ./internal/transport/... ./internal/bridge && NETSIM_SCENARIOS='6 8' NETSIM_SEEDS='1 2 3' mise run e2e:netsim:impaired && NETSIM_SCENARIOS='1 2 3 4' mise run e2e:netsim && mise run gate -- RL1 && mise run gate -- SP1b"
+
+[[criteria]]
+id = "simplify-report"
+command = "test -s gates/C5S/SIMPLIFY.md"

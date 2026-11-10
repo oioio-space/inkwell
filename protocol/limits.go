@@ -289,3 +289,68 @@ const (
 	// PresentBytesPerWindow is the maximum size of `present` frames per window, in bytes (§16, `present` row).
 	PresentBytesPerWindow = 32 << 20
 )
+
+// Bounds and timers of the link probe, /inkwell/linkprobe/1.0.0 (§16, link probe row; §8.5.7).
+const (
+	// LinkProbeMaxLen is the largest len of a link probe message, type byte included (§8.5.4).
+	LinkProbeMaxLen = 64
+	// LinkProbeMaxBuffered is the most bytes a reader keeps of an incomplete message (§8.5.4).
+	LinkProbeMaxBuffered = 65
+	// LinkProbeInboundStreamsPerPeer is the resource-manager limit of inbound probe streams per peer: 2 connections × (1 + 1 closing) (§16.1).
+	LinkProbeInboundStreamsPerPeer = 4
+	// LinkProbeOutboundStreamsPerPeer is the resource-manager limit of outbound probe streams per peer: 2 connections × 1 (§16.1).
+	LinkProbeOutboundStreamsPerPeer = 2
+	// LinkProbeInterval is the prober's interval between two PROBEs (§8.5.5).
+	LinkProbeInterval = time.Second
+	// LinkProbeMinSpacing is the shortest time between two PROBEs of a connection (§8.5.5).
+	LinkProbeMinSpacing = 500 * time.Millisecond
+	// LinkProbeSeqSlack is the margin of the responder's bound seq <= elapsed / MinSpacing + slack (§8.5.6).
+	LinkProbeSeqSlack = 2
+	// LinkProbeSeqDropMax is how far above that bound a PROBE is dropped without fault; beyond, a violation (§8.5.6): NegotiationTimeout / MinSpacing.
+	LinkProbeSeqDropMax = 20
+	// LinkProbeSeqSkew sets the margin of that bound against the rates of the two clocks: the elapsed time counts 1 + 1/64 (§8.5.6).
+	LinkProbeSeqSkew = 64
+	// LinkProbeClosingMaxBytes is the most bytes the prober reads and discards after its FIN before it resets the stream (§8.5.3).
+	LinkProbeClosingMaxBytes = 1024
+	// LinkProbeMaxOutstanding is the number of PROBEs waiting for their ECHO (§8.5.5).
+	LinkProbeMaxOutstanding = 8
+	// LinkProbeMaxSamples is the number of accepted samples kept per connection (§8.5.5).
+	LinkProbeMaxSamples = 64
+	// LinkProbeWindow is the span of the loss figure (§8.5.5; transport.LossWindow).
+	LinkProbeWindow = 30 * time.Second
+	// LinkProbeMinSpan is the least time between the two samples of a figure (§8.5.5, ADR 0036 « Levels »).
+	LinkProbeMinSpan = 15 * time.Second
+	// LinkProbeMinPackets is the number of packets sent in the window under which the figure is unknown (§8.5.5, ADR 0036 « Levels »).
+	LinkProbeMinPackets = 200
+	// LinkProbeCredit is the responder's largest echo credit, per connection (§8.5.6).
+	LinkProbeCredit = 1500 * time.Millisecond
+	// LinkProbeCreditPerEcho is the credit one ECHO costs the responder (§8.5.6).
+	LinkProbeCreditPerEcho = 500 * time.Millisecond
+	// LinkProbeBackoff is the wait before a new probe stream after one ended, and the responder's refusal after a violation (§8.5.5, §8.5.6).
+	LinkProbeBackoff = 60 * time.Second
+	// LinkProbeReopenGap is the responder's refusal of a new inbound stream after the previous one ended, whatever ended it (§8.5.6).
+	LinkProbeReopenGap = 30 * time.Second
+	// LinkProbeNegotiationTimeout bounds the outbound negotiation (§8.5.5).
+	LinkProbeNegotiationTimeout = 10 * time.Second
+	// LinkProbeDefaultMaxAckDelay is the max_ack_delay used when the QUIC stack does not expose the peer's (§8.5.5): quic-go advertises 26 ms (MaxAckDelayInclGranularity), above RFC 9000's 25 ms default.
+	LinkProbeDefaultMaxAckDelay = 26 * time.Millisecond
+)
+
+// The quality levels of a link (§8.5.5 step 6, ADR 0036 « Levels »): each boundary has a midpoint
+// (the first level after « unknown »), a rise threshold (a lower level rises at or above it) and a
+// fall threshold (an upper level falls back below it). Loss in permille, round trip as a duration.
+const (
+	LinkProbeLossFairDown = 5   // fair falls back to good below 0.5 %
+	LinkProbeLossFair     = 10  // good|fair boundary: 1 %
+	LinkProbeLossFairUp   = 25  // good rises to fair at 2.5 %
+	LinkProbeLossPoorDown = 50  // poor falls back to fair below 5 %
+	LinkProbeLossPoor     = 100 // fair|poor boundary: 10 %
+	LinkProbeLossPoorUp   = 150 // fair rises to poor at 15 %
+
+	LinkProbeRTTFairDown = 400 * time.Millisecond
+	LinkProbeRTTFair     = 500 * time.Millisecond
+	LinkProbeRTTFairUp   = 625 * time.Millisecond
+	LinkProbeRTTPoorDown = 1600 * time.Millisecond
+	LinkProbeRTTPoor     = 2 * time.Second
+	LinkProbeRTTPoorUp   = 2500 * time.Millisecond
+)

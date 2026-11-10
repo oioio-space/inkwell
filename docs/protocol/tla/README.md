@@ -362,3 +362,100 @@ was caught.
 java -cp tla2tools.jar tlc2.TLC -workers 2 -config SendPathHonest.cfg SendPath
 java -cp tla2tools.jar tlc2.TLC -workers 2 -config mutants/SP1Idle20.cfg mutants/SendPathMutants
 ```
+
+## LinkProbe (spec §8.5, ADR 0036: `/inkwell/linkprobe/1.0.0`)
+
+`LinkProbe.tla` models one direction of one QUIC connection over several probe streams: the prober P sends data
+packets and PROBEs on its stream; the responder R counts **every** packet of P it receives (the PROBE's own
+included), answers PROBEs from a credit kept **per connection**, bounds the PROBE rate by the stream's age, holds
+at most one inbound stream and refuses a new one for `Gap` (B/2) after any end and `B` after a violation, and may
+accept a stream up to `AccDelay` ticks after P opened it (PROBEs above the rate bound by at most `DropMax` are
+then dropped, not a fault: review 3, F6); P keeps
+outstanding PROBEs and accepted samples and computes the figure from two samples at least `W/2` apart. Each rule
+of §8.5.5 and §8.5.6 is a named operator, so that a mutant overrides exactly one (16 properties, 19 mutants,
+4 configurations; revised for reviews 2 and 3 of the probe). An honest configuration needs `MaxOut` above the round
+trip in intervals (`O = 8` against `PTO / I` in the spec): with `MaxOut = 1`, TLC finds echoes that always
+arrive after the next PROBE and a figure that never becomes known.
+
+- **Time** is ages in ticks (one tick = E = 500 ms, the cost of one echo and the fastest PROBE rate). Each age is
+  capped where nothing distinguishes larger values (an in-flight item at `D`, an outstanding PROBE at `PTO + 1`,
+  a sample at `2W + 1`, a stream's age at `MaxProbes + 2`, the elapsed time at `MaxStreams × MaxProbes`), so the
+  state space is finite while time is unbounded. `Tick` is disabled while the prober's timer is due (a PROBE per
+  interval, a stream as soon as it may open, a reset to see) and, on an honest network out of a stall, while an
+  item has been in flight `D` ticks (Lamport's upper-bound timer).
+- **Honest = TRUE:** R answers truthfully from its credit (refilled one echo per tick, at most `CreditMax`),
+  drops a PROBE without credit and without fault, resets the stream on a seq not increasing or above the rate
+  bound; data packets may be lost or overtake PROBEs (a ghost records each crossing); the network may **stall**
+  (holds everything, then delivers in a burst); the transport may end a stream; the connection may restart
+  (bounded by `MaxRestarts`).
+- **Greedy = TRUE:** the prober ignores the spacing and the backoff, reopens at once and opens a second stream
+  while one is open (a flooding peer, honest otherwise): the credit, the rate bound, the single inbound stream
+  and the refusal must still hold (`CreditMax = 1`, so that the credit, not the rate bound, bounds the echoes;
+  `DropMax = 0`, so that three PROBEs at once exceed the bound).
+- **Honest = FALSE:** R is Byzantine: for each PROBE it answers the right seq, the one before or the one after,
+  with a count of 0, the truth or more than was ever sent, or does not answer; the network has no deadline.
+- **Streams:** a stream ends by a violation either side detects (P's samples cleared on its own), by a reset R
+  raised, or by the transport (samples kept); P reopens after `B` ticks; whatever was in flight on an ended stream
+  has no effect when it arrives (§8.5.3).
+
+Not covered (corpus `linkprobe.json` instead): the negotiation and `na`, the transport and role table, the
+one-message writer, ignorable messages and their budget, bytes read in chunks, the 10 s negotiation and closing
+timeouts, the 1024 bytes read after the FIN, the 1/64 clock margin of the rate bound (it only widens the bound), the level of §8.5.5 step 6 (pure arithmetic: vectors and
+`TestStepBoundaries`). The size of the figure's error under crossings is statistical (`scripts/netsim/c5model.py
+errors`, ADR 0036 « Levels »); the model proves its zero point (`Exact`).
+
+| Property | Rule | Meaning |
+|---|---|---|
+| `Bounded` | §8.5.7 | at most `MaxOut` outstanding PROBEs and `MaxSamples` samples |
+| `SampleBounded` | §8.5.5 step 3 | no accepted count exceeds what P sent, whatever R says |
+| `NoLateSample` | §8.5.5 step 3 | no ECHO more than one PTO after its PROBE becomes a sample |
+| `Monotone` | §8.5.5 step 3 | samples never go backwards in sent or received counts |
+| `CurrentConnection` | §8.5.5, restart | every sample belongs to the current connection |
+| `FigureInRange` | §8.5.5 step 5 | a known figure is in 0..1000 ‰, against a hostile responder with data packets (Any) and when a data packet overtakes a PROBE (Honest) |
+| `SampleMatches` | §8.5.3, post-end rule | (honest) a sample pairs an ECHO with the very PROBE it answers, never one of an ended stream |
+| `HonestNoViolation` | §8.5.6 steps 1, 3, 4, 5, §8.5.8 | an honest responder and an honest prober never raise a violation and the prober is never refused, a stall and its burst included, and an acceptance delay (`LinkProbeAccept`) |
+| `EchoBound` | §8.5.6 step 3, §8.5.10 | (honest responder, flooding prober included) at most `CreditMax + t` echoes in `t` ticks on a connection, across its streams |
+| `Exact` | §8.5.5 « Exactitude », §8.5.6 | (honest) with no loss and no packet crossing a PROBE (delivered or still in flight), a known figure is exactly 0 |
+| `OneInbound` | §8.5.6 step 1 | (any responder, flooding prober) R never holds two inbound streams |
+| `BanHolds` | §8.5.6 steps 1, 5 | R never accepts a stream while it is refusing |
+| `RateBound` | §8.5.6 step 3 | (honest) R never reads a seq more than `DropMax` above `age / E + 2` on its stream (a flood is cut) |
+| `Live` (weak fairness on opening, sending, delivery, `Tick`, seeing a reset, the end of a stall) | §8.5.5 | (honest) once no stall, stream end or restart remains and a fresh stream is open, the figure becomes known |
+| `Reopens` | §8.5.5 step 7 | (honest) a stream that ended reopens |
+| `NeverBlocked` | §8.5.5 step 2 | (any responder) an open stream sends all its PROBEs or ends: P never waits on R |
+
+| Configuration | Result |
+|---|---|
+| `LinkProbeHonest.cfg`: honest; 3 PROBEs per stream, 2 streams, 1 data packet, MaxOut 2, MaxSamples 2, PTO 2, W 3, NMin 1, D 1, B 1, Gap 1, AccDelay 0, DropMax 1, CreditMax 2, 1 stall, 1 transport end, no restart (checked in the Byzantine configuration) | **exhaustive, no error**: 3 605 582 states, 1 677 688 distinct, depth 40, liveness (`Live`, `Reopens`) included, 95 s (2 workers) |
+| `LinkProbeGreedy.cfg`: honest responder, **flooding prober**; 3 PROBEs per stream, 2 streams, no data, CreditMax 1, DropMax 0, 1 transport end | **exhaustive, no error**: 8 127 states, 4 588 distinct, depth 22, `NeverBlocked` included, 1 s |
+| `LinkProbeAny.cfg`: Byzantine responder, untimed network; 2 PROBEs per stream, 2 streams, 1 data packet, MaxOut 1, NMin 2, 1 restart, no stall and no transport end (checked in the honest configuration) | **exhaustive, no error**: 1 997 816 states, 546 786 distinct, depth 27, liveness (`NeverBlocked`) included, 26 s |
+| `LinkProbeAccept.cfg`: honest; the responder accepts the stream up to 2 ticks after the prober opened it (AccDelay 2, DropMax 1); 4 PROBEs, 1 stream, no data, no stall (`Live` is checked by the honest configuration: here all 4 PROBEs may go to the delay) | **exhaustive, no error**: 1 530 states, 1 024 distinct, depth 24, `NeverBlocked` included, 1 s |
+
+Mutants (`mutants/LinkProbeMutants.tla`, each config overrides one rule of the sound model with the constants of
+the configuration named, anchor = the override line in the config):
+
+| Mutant | Anchor (config line) | Broken rule | Configuration | Caught by |
+|---|---|---|---|---|
+| `LinkProbeAcceptLate` | `LateOK <- AcceptLate` | no late rule: the count of a held PROBE is taken | Any | `NoLateSample` |
+| `LinkProbeZeroPTO` | `LateOK <- NeverOnTime` | a late bound too small for the path: every echo is late | Honest | `Live` |
+| `LinkProbeNoSentBound` | `SentOK <- NoSentBound` | a forged count above what was sent is taken | Any | `SampleBounded` |
+| `LinkProbeStrictSentBound` | `SentOK <- StrictSentBound` | `r < sent` instead of `r ≤ sent`: a peer that received everything is a violation | Honest | `HonestNoViolation` |
+| `LinkProbeNoMonotone` | `MonoOK <- NoMonotone` | a forged decreasing count is taken | Any | `Monotone` |
+| `LinkProbeNoClamp` | `Clamp <- NoClamp` | the loss without `min(ΔR, ΔS)`: negative when a data packet overtakes a PROBE | Honest | `FigureInRange` |
+| `LinkProbeNoPendingBound` | `KeepPending <- NoPendingBound` | outstanding PROBEs never forgotten | Any | `Bounded` |
+| `LinkProbeKeepAcrossRestart` | `RestartSamples <- KeepAcrossRestart` | samples survive a new connection (state keyed by peer, not by connection) | Any | `CurrentConnection` |
+| `LinkProbeNoReopen` | `MayOpen <- OpenOnce` | a stream that ended never reopens | Honest | `Reopens` |
+| `LinkProbeStopAndWait` | `MayProbe <- StopAndWait` | a PROBE waits for the ECHO of the previous one: a silent responder stops the prober | Any | `NeverBlocked` |
+| `LinkProbeNoStreamCheck` | `SameStream <- AnyStream` | an ECHO of an ended stream is taken against the new stream's PROBE | Honest | `SampleMatches` |
+| `LinkProbeFloodLimit` | `DropFault <- AnyDropFault` | a dropped PROBE is a fault (review 1, finding 4): a stall's burst resets the stream | Honest | `HonestNoViolation` |
+| `LinkProbeNoCredit` | `CreditOK <- UnlimitedCredit` | no credit: every PROBE is echoed (replaces review 1's per-stream bucket, equivalent once the refusal holds) | Greedy | `EchoBound` |
+| `LinkProbeNoRefusal` | `Accepts <- NoRefusal` | a new stream is accepted during the refusal (review 2) | Greedy | `BanHolds` |
+| `LinkProbeAcceptSecond` | `Accepts <- AnyCount` | a second stream is accepted while one is open (review 2) | Greedy | `OneInbound` |
+| `LinkProbeLongRefusal` | `EndRefusal <- LongRefusal` | the refusal after an ordinary end outlasts the prober's backoff: an honest prober is refused (review 2) | Honest | `HonestNoViolation` |
+| `LinkProbeNoSeqBound` | `SeqOK <- NoSeqBound` | no bound on the PROBE rate: a flood is processed (review 2, finding 1) | Greedy | `RateBound` |
+| `LinkProbeDataOnly` | `Counted <- DataOnly` | the responder counts data packets only, not the PROBE's own packet (review 2) | Honest | `Exact` |
+| `LinkProbeNoDropBand` | `SeqOK <- NoDropBand` | every PROBE above the rate bound is a fault: an honest prober behind a slow accept is reset (review 3, F6) | Accept | `HonestNoViolation` |
+
+```
+java -cp tla2tools.jar tlc2.TLC -workers 2 -config LinkProbeHonest.cfg LinkProbe
+java -cp tla2tools.jar tlc2.TLC -workers 2 -config mutants/LinkProbeFloodLimit.cfg mutants/LinkProbeMutants
+```

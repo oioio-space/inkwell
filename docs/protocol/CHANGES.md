@@ -429,3 +429,110 @@ Codex (`reviews/21-codex.md`) et Fable (`reviews/22-fable.md`) **acceptent** la 
 mineure : la cellule « modifications indivisibles en attente » du §16.1 résumait l'éviction en « inactives en LRU » ;
 elle reprend désormais l'ordre complet du §8.1 (finies ou plus voulues, puis inactives sans détenteur connecté en LRU,
 puis éligibles du plus grand rang au plus petit ; octets retirés, rang gardé). Aucun changement de règle.
+
+# Révision 11 (2.0.0-brouillon.10 → 2.0.0-brouillon.11, 2026-11-09) : sonde de lien
+
+Bloc C5S ([ADR 0036](../adr/0036-link-probe.md), docs/plans/2026-11-09-c5-sound.md). Le chiffre de perte
+du W33 (Annexe A.1, `lossPermille`) comptait les déclarations de perte de l'émetteur (quic-go v0.64.1
+`PacketsLost`, déclarations à tort et marques ECN-CE comprises) sur tous ses paquets envoyés (ACK seuls
+compris) : il ne mesurait pas ce que le réseau perd. Il vient désormais de ce que le pair a reçu.
+
+| Changement | Où |
+|---|---|
+| Protocole autonome `/inkwell/linkprobe/1.0.0` : compteurs `sent(C)` et `received(C)`, flux par connexion, messages PROBE et ECHO, sondeur et répondeur, bornes, erreurs, versions et absence, sécurité et confidentialité | spec §8.5 (nouveau), §2 |
+| `quality` : le niveau de la sonde (bon, moyen, mauvais, inconnu), seul montré à la personne ; `lossPermille` et `lossScope` définis par la sonde, `lossPermille` gardé comme diagnostic ; 0xFFFF veut dire inconnu, plus « moins de 50 paquets » | §8.5.5 étape 6, Annexe A.1 |
+| Bornes de la sonde | §16.1 |
+| Pair byzantin et confidentialité de la sonde | §17, §18 |
+| Identifiant de protocole ; registre des types de message de la sonde | §20.6, §20.8 (nouveau) |
+| Schéma des vecteurs : `events` (scripts de machines à états) et `scope` (`transport`) ; trois décodeurs | §21, `vectors/linkprobe.json` |
+| Modèle TLA+ `LinkProbe` (16 propriétés, 4 configurations, 19 mutants) | §21, `tla/` |
+
+## Revue indépendante 1 de la sonde (2026-11-09) : 17 constats, conception du répondeur revue
+
+| # | Constat | Changement | Où |
+|---|---|---|---|
+| 1 | Bornes du répondeur par flux, promises par connexion | crédit et refus par connexion, à travers les flux ; refus 60 s des nouveaux flux après une violation du répondeur ; op `stream` des scripts | §8.5.6, §8.5.10, `linkprobe-responder-per-connection`, `-replay`, `linkprobe-host-ban` |
+| 2 | Flux de sonde sans limite du gestionnaire de ressources | ligne du §16.1 : 1 entrant (+1 en fermeture), 1 sortant par connexion | §8.5.3, §16.1 |
+| 3 | Lecture après la fin du flux : texte, code, vecteur et modèle en désaccord | octets lus après la fin jetés sans effet, partout | §8.5.3, vecteurs `-ended`, TLA+ `SameStream` |
+| 4 | Un sondeur honnête bloqué par le réseau déclenchait la règle d'inondation | sondes jetées sans faute (état constant) ; TLA+ : blocage puis rafale, `HonestNoViolation` | §8.5.6, `linkprobe-responder-drops-free`, mutant `FloodLimit` |
+| 5 | « Bloquerait » non défini | écrivain d'un message ; PROBE sauté, ECHO jeté sans crédit ; vecteurs `blocked` | §8.5.3, `-blocked`, `-one-message` |
+| 6 | GREASE sans débit contre un budget d'ignorables | ignorables sautés sans compte ; au plus un GREASE par flux ; phrase de budget au §20.8 | §8.5.4, §8.5.9, §20.8 |
+| 7 | Issue de la négociation ambiguë | négociation menée avant le premier PROBE ; `na` → plus jamais ; vecteurs hôte | §8.5.3, §8.5.5, `linkprobe-host-negotiate`, `-unsupported`, `-open-failed` |
+| 8 | MUST sans vecteur ; cas de longueur incomplets | type de script `linkprobe_host` (sans E/S) ; tableau de couverture §8.5.11 ; longueurs et types ajoutés | §8.5.11, §21 |
+| 9 | Modèle TLA+ plus étroit que les garanties | crédit par connexion, plusieurs flux, fins et réouverture, blocage, règle après la fin, un sondeur qui inonde (`LinkProbeGreedy`) ; `EchoBound`, `SampleMatches`, `Reopens` ; `FigureInRange` avec données et NMin 2 face à un pair hostile | `tla/LinkProbe.tla` |
+| 10 | « À l'établissement de C » non défini | dès le premier paquet de C, Initial compris | §8.5.2 |
+| 11 | Espacement absent de l'état | `dernier_envoi` par connexion ; vecteur après fin et réouverture | §8.5.5, `-reopen-spacing` |
+| 12 | FIN du sondeur contre la règle de lecture | lit et jette jusqu'à la fin du pair, sans violation | §8.5.3, `linkprobe-host-close` |
+| 13 | Troncature puis FIN | verdict `incomplete` ; fin ordinaire, échantillons gardés | §8.5.4, §21, `linkprobe-host-truncated-end` |
+| 14 | Relais tiers et invités du salon | table des rôles ; relais dans §8.5.10 | §8.5.1, §8.5.10 |
+| 15 | Détails de temps | `max_ack_delay` 25 ms par défaut ; horloge ≤ 1 ms ; premier PROBE à la fin de la négociation ; `r` lu à la délivrance ou après (biais vers moins de perte) ; temps écoulé plafonné avant le crédit | §8.5.2, §8.5.5, §8.5.6 |
+| 16 | Le délai de l'écho révèle la charge du répondeur | dit, résiduel accepté | §8.5.10, §18 |
+| 17 | Tampons de version | README et vecteurs à 2.0.0-brouillon.11 / 2.0.0-draft.11 | `README.md`, `vectors/*.json` |
+
+## Revue indépendante 2 de la sonde (2026-11-09) : 18 constats ; l'exactitude décidée par les chiffres
+
+| # | Constat | Changement | Où |
+|---|---|---|---|
+| 4 | L'affirmation d'exactitude était fausse ; rien ne bornait l'erreur | erreur `(C_fin − C_début)/ΔS`, des deux signes ; mesurée (c5model `accuracy`) : 33,0 ‰ au 99,9ᵉ centile quand la sonde attend derrière des données (croisement, et deux échantillons rapprochés par les sondes tardives) ; **priorité la plus haute (DOIT)** : 10,6 ‰ ; **échantillons à au moins W/2 = 15 s l'un de l'autre (DOIT, `LinkProbeMinSpan`)** : 2,7 ‰ ; `received` lu à la délivrance (DOIT) ; N 50 → 200 ; borne énoncée ; TLA+ `Exact` ; règle C5 inchangée (σ_z 0,55-0,64 ≤ 1,14) | §8.5.3, §8.5.5 « Exactitude », §8.5.6, ADR 0036 « Levels » (ex-« Accuracy ») |
+| 8 | Tous les échos tardifs sous une liaison montante saturée | mesuré : 0,04 tardif par accepté avec un émetteur cadencé, 4,9 si la sonde attend 300 ms ; le PTO reste la borne (l'élargir laisserait passer une sonde retransmise, qui croise) : chiffre inconnu plutôt que faux (0,20 des fenêtres) | ADR 0036 « Levels » (ex-« Accuracy ») |
+| 1 | Inondation sans borne côté lecteur | borne de `seq` insensible aux retards (la négociation précède la première sonde) ; un ignorable par message critique, plus un ; `Decode` sans copie | §8.5.4, §8.5.6, `-seq-bound`, `-stall`, `-ignorable-*`, `linkprobe-host-inbound-flood` |
+| 2 | Flux de sonde non lus | « toujours lu », comme le §5.1 (a) | §8.5.3 |
+| 3 | Limite du gestionnaire de ressources inexprimable par connexion | 4 entrants et 2 sortants par pair ; l'hôte garde 1 et 1 par connexion | §16.1 |
+| 5 | Flux rouvert aussitôt | refus 30 s après toute fin | §8.5.6, `-reopen-gap`, `linkprobe-host-inbound-fin` |
+| 6 | Pas de délai pour la négociation ni la fermeture | 10 s ; réinitialisation `B` après le FIN ; un flux à demi fermé existe encore | §8.5.3, §8.5.5, `-negotiation-timeout`, `-closing-timeout` |
+| 7 | Formule du PTO sans vecteur, arrondi non dit | vecteurs `linkprobe_pto` ; arrondi vers le haut à la ms | §8.5.5, §21 |
+| 9 | Sémantique des scripts d'hôte absente | valeurs par défaut, une lecture par événement, au plus un ECHO par lecture | §8.5.3, §21 |
+| 10 | Pas d'identité de flux | identités des flux entrants ; un flux refusé est sans effet | §8.5.3, `linkprobe-host-second-inbound` |
+| 11 | Rôles sous-spécifiés | union, évaluation à l'ouverture, réinitialisation au changement ; client de relais défini ; QUIC brut v1 ou v2 | §8.5.1, `-two-roles`, `-roles-change`, `-webtransport` |
+| 12 | Couverture incomplète | test d'architecture (porte) ; `-stale-above-sent` ; limite GREASE tenue par le lecteur | §8.5.11 |
+| 13 | TLA+ plus étroit que les garanties | refus et réouverture, second flux d'un sondeur qui inonde, réinitialisation vue par le sondeur, borne de débit, `Exact` | `tla/LinkProbe.tla` |
+| 14 | Fermeture pendant la négociation ignorée | FIN dès qu'elle réussit | §8.5.3, `-close-negotiating` |
+| 15 | `fini` dans l'hôte seulement | par connexion, dans le sondeur | §8.5.5, `TestProberExhaustedForGood` |
+| 16 | Le lecteur gardait plus que dit | tampon fixe de 65 octets ; `FuzzHost` | §8.5.4 |
+| 17 | Une reconnexion efface refus et crédit | dit, borné par les connexions | §8.5.10 |
+| 18 | Échantillons comparés par valeur | par indice | `machines.go` |
+
+## Revue indépendante 3 de la sonde (2026-11-10) : 13 constats ; décision de l'utilisatrice : un niveau, plus de promesse au pour mille
+
+Deux constats graves : la priorité exigée n'est pas réalisable sur go-libp2p v0.51 et quic-go v0.64.1 (et le
+modèle supposait son propre résultat), et les 99,9ᵉ centiles reposaient sur une seule graine. Suivant la règle du
+projet (quand c'est trop difficile, on redéfinit le problème), l'utilisatrice a changé la promesse : la personne
+voit la qualité d'un lien en trois niveaux, bon, moyen ou mauvais, plus inconnu (W33 : simple, sans jargon) ; la
+promesse de précision au pour mille est abandonnée ([ADR 0036](../adr/0036-link-probe.md) « Levels »).
+
+| # | Constat | Changement | Où |
+|---|---|---|---|
+| — | Ce que la personne voit | niveau du §8.5.5 étape 6 : seuils 1 % et 10 % de perte, 500 ms et 2 s d'aller-retour, bandes d'hystérésis 0,5 / 2,5 % et 5 / 15 %, 400 / 625 ms et 1,6 / 2,5 s, tirées du modèle (`c5model.py flicker`) ; `quality` d'Annexe A.1 ; `lossPermille` gardé comme diagnostic, jamais montré comme une qualité ; C5 devient un test de classement (3000 parcours : 0 faux échec, ≤ 1,0e-3 ; puissance ≥ 0,999 contre « toujours bon », « toujours mauvais », niveaux inversés, sans hystérésis, ancien chiffre) | §8.5.5, §8.5.7, §16.1, Annexe A.1, ADR 0036, plan C5S §4 |
+| 1 | Priorité irréalisable ; le modèle la supposait | **PEUT** au lieu de DOIT ; le modèle n'en a aucune et fait croiser retransmissions et paquets d'ACK seuls | §8.5.3, `c5model.py` |
+| 2 | 99,9ᵉ centiles d'une seule graine | 10 graines × 500 fenêtres, borne supérieure à 95 % ; les tests vérifient chaque graine ; borne prudente `(p₀ + p₁ + 2) / ΔS` et ≤ 15 ‰ dans chaque condition modélisée | §8.5.5 « Exactitude », `c5model.py errors` |
+| 3 | `received` « dans l'étape de délivrance » irréalisable (±1) | « aussitôt après l'appel de lecture qui a rendu le PROBE » ; ±1 et lecture tardive modélisés ; test d'intégration du compteur à chaque montée de quic-go (porte C5S) | §8.5.6 |
+| 4 | Fermeture : tuyau à déchets | au plus 1024 octets lus et jetés après le FIN, puis réinitialisation | §8.5.3, `-closing-junk` |
+| 5 | « Cesser de mesurer » contradictoire | définitif pour la connexion (état `arrêté`), le sondeur répond toujours ; vecteurs corrigés | §8.5.3, §8.5.5, `-close`, `-closing-timeout`, `-close-negotiating` |
+| 6 | Borne de `seq` trop stricte (acceptation lente), temps négatif | `ouvert_à` défini (acceptation) ; temps ramené à 0 ; au-dessus de la borne, 20 de marge jetés sans faute, violation au-delà ; TLA+ : retard d'acceptation (`LinkProbeAccept`, mutant `LinkProbeNoDropBand`) | §8.5.6, `-seq-bound`, `-accept-delay`, `TestSeqBoundClampsBeforeOpening` |
+| 7 | DOIT sans vecteur | octets sur un flux refusé (`-second-inbound`) ; `attente` vidée à la fin (`-end-clears-pending`) ; `dernier_r` remis à 0 après violation, gardé après une fin (`-violation-forgets-received`, `-end-keeps-received`) ; `r = sent(C)` (`-received-equals-sent`) ; refus de 30 s après un changement de rôle (`-roles-refusal`) ; `dernier_envoi` et `M` inobservables : dits informatifs ; GREASE de l'émetteur : ligne de couverture | §8.5.5, §8.5.11 |
+| 8 | Points à deviner | §21 : un vecteur de message porte un seul message, `roles` nul, `pto_ms` par défaut 0, minuteries aux événements ; « 10 s » inclusif ; messages critiques comptés au budget ; ordre épuisé → trop tôt → occupé ; instant d'établissement ; retours de `open` (`already_open`, `exhausted`), d'une fin sans flux, d'une négociation non demandée | §8.5.3 à §8.5.6, §21 |
+| 9 | Biais du `min` attribué aux retardataires | dit : le `min` coupe les erreurs négatives | §8.5.5 « Exactitude », ADR 0036 |
+| 10 | Chiffres incohérents entre spec, ADR et modèle | une seule source, les commandes de `c5model.py`, avec graines et bornes | ADR 0036 « Levels » |
+| 11 | Refus non comptés | résiduel dit (borné par `MAX_STREAMS` et le gestionnaire de ressources) | §8.5.10 |
+| 12 | Négociation réussie mais ouverture impossible : flux laissé ouvert | réinitialisé | `host.go` |
+| 13 | Limite du gestionnaire de ressources conditionnelle | dite : tant que les portées *peer* et *transient* laissent de la place | §16.1 |
+
+## Revue indépendante 4 de la sonde (2026-11-10) : la règle C5 ne voyait pas un niveau qui ne redescend jamais
+
+Le terme de croisement de la tolérance (P3 ≈ 6,7 ‰, P4 ≈ 13 ‰) dépassait le seuil de descente de 5 ‰ : la règle
+permettait toujours de rester « moyen ». Corrigé à la racine : C5 lit chaque pas de l'échantillonneur (niveau et
+chiffre), et le niveau doit être **exactement** celui du §8.5.5 étape 6 appliqué aux chiffres montrés (R1) ; le
+chiffre, lui, doit suivre la vérité des qdiscs (R2). 3000 parcours : 0 faux échec (≤ 1,0e-3) ; chaque mutant exigé rejeté 3000 fois sur 3000 (≥ 0,999), dont « toujours moyen », collant, entrée au seuil de montée, seuils ×2, M5b et fenêtre de 60 s.
+
+| # | Constat | Changement | Où |
+|---|---|---|---|
+| 1 | Un niveau qui ne redescend jamais passait C5 | R1 exact ; phase d'entrée P0 (perte indépendante de 1,75 %, trafic doublé) ; trafic de 120 paquets/s ; mutants « toujours moyen », collant, entrée au seuil de montée, seuils ×2 et ×0,5, aller-retour ÷10, M5b, fenêtre de 60 s | plan C5S §4, `c5model.py`, ADR 0036 « Levels » |
+| 2 | DOIT sans vecteur | refus `B/2` après une réinitialisation du pair, borne de `seq` depuis l'acceptation, fermeture sans flux, `dernier_seq` avancé par une sonde jetée, budget des ignorables avec sondes jetées et échos périmés, `kGranularity`, crédit exact, table `linkprobe_level` (chaque seuil et un en dessous) ; surdéclarations du §8.5.11 corrigées, équivalents nommés | §8.5.11, §21, `vectors/linkprobe.json` |
+| 3 | Points de l'hôte et du sondeur | ordre trop tôt / occupé, rôle changé pendant la négociation ou sur un flux ouvert (`reprise = B`), le niveau avance à chaque nouveau chiffre | §8.5.5, `-spacing`, `-roles-negotiating`, `-roles-open` |
+| 4 | Entrée depuis inconnu | milieu gardé ; l'hystérésis survit à moins de `W` d'inconnu, oubliée au-delà | §8.5.5 étape 6, `-level-short-unknown` |
+| 5 | Borne de `seq` sensible aux horloges | marge multiplicative de 1/64 | §8.5.6, `-seq-skew` |
+| 6 | `ouvert_à` flou | fin de la négociation du répondeur | §8.5.6 |
+| 7 | Mise en œuvre go-libp2p, `max_ack_delay`, PMTUD | recette (`Conn.NewStream`, `SelectProtoOrFail`, `SetProtocol`) ; 26 ms par défaut (quic-go) ; biais des sondes PMTUD borné | §8.5.3, §8.5.5 |
+| 8 | Niveau d'un lien relayé | `quality = 0` (le premier saut n'est pas le lien) ; `lossPermille` du premier saut en diagnostic | Annexe A.1, §8.5.10 |
+| 9 | Aller-retour | médiane basse dans le modèle ; mutant aller-retour ÷10 dans C5 ; vecteurs `linkprobe_level` `rtt` | `c5model.py`, §21 |
+| 10 | Incohérences | ADR sur les ignorables (comptés dans un budget) ; « Accuracy » → « Levels » ; 1,75 changement par heure partout ; vecteurs `proposed` ; citation de `sync/1` d'Annexe A.1 ; octets de fermeture exacts (762) | ADR 0036, Annexe A.1, §8.5.3, §21 |

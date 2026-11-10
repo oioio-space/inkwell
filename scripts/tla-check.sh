@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # P-TLA (ADR 0034 step 3, docs/protocol/tla/README.md): fetch the pinned TLA+ tools
 # (tla2tools.jar SHA-256 checked, never committed) and model-check the models
-# (RepoGen, ConnCredit, SyncIndicator, WriteBudget, SendPath).
+# (RepoGen, ConnCredit, SyncIndicator, WriteBudget, SendPath, LinkProbe).
 #
 # Sound models must finish with no error; every mutant listed in the README must be
 # detected (a violation). The task fails if a sound model violates a property OR if a
@@ -111,6 +111,12 @@ for c in SendPathHonest SendPathHop SendPathAny SP1Relay SP1Floor SP1RelayKeepal
   run "$c" "$c.cfg" SendPath sound
 done
 
+# LinkProbe (README "LinkProbe", spec §8.5, ADR 0036): honest responder with liveness, Byzantine safety.
+run LinkProbeHonest LinkProbeHonest.cfg LinkProbe sound
+run LinkProbeAny LinkProbeAny.cfg LinkProbe sound
+run LinkProbeGreedy LinkProbeGreedy.cfg LinkProbe sound
+run LinkProbeAccept LinkProbeAccept.cfg LinkProbe sound
+
 # Mutants (README "Contre-épreuve" and the ConnCredit table): each must be detected.
 run RepoGenLossNoBump mutants/RepoGenLossNoBump.cfg mutants/RepoGenLossNoBump mutant
 run RepoGenDeliverNoCheck mutants/RepoGenDeliverNoCheck.cfg mutants/RepoGenDeliverNoCheck mutant
@@ -135,6 +141,12 @@ for m in SendPathWriteReturn SendPathFixedFloor SendPathNoCap SendPathCapAboveWi
          SP1PartialTTLAtIdle SP1NoTotal SP1NoCut SP1FloorKeepaliveBigHop \
          SP1TypingResidual; do
   run "$m" "mutants/$m.cfg" mutants/SendPathMutants mutant
+done
+# LinkProbe mutants (README "LinkProbe"): definition overrides from LinkProbeMutants.
+for m in AcceptLate ZeroPTO NoSentBound StrictSentBound NoMonotone NoClamp NoPendingBound KeepAcrossRestart \
+         NoReopen StopAndWait NoStreamCheck FloodLimit NoCredit NoRefusal AcceptSecond LongRefusal NoSeqBound \
+         DataOnly NoDropBand; do
+  run "LinkProbe$m" "mutants/LinkProbe$m.cfg" mutants/LinkProbeMutants mutant
 done
 
 exit "$fail"

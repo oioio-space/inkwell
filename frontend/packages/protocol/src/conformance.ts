@@ -5,6 +5,8 @@ export interface Vector {
   decoder?: string;
   status: string;
   enforce?: string;
+  /** "transport": run only by implementations of the libp2p layer (spec §21). */
+  scope?: string;
   verdict: string;
   input_hex?: string;
   inputs_hex?: string[];

@@ -56,7 +56,13 @@ type vector struct {
 	Expect  map[string]any `json:"expect,omitempty"`
 	Inputs  []string       `json:"inputs_hex,omitempty"` // several inputs (fold: ops in causal order)
 	Current string         `json:"current_go,omitempty"` // behaviour of today's Go code when it differs
+	Scope   string         `json:"scope,omitempty"`      // "transport": run only by implementations of the libp2p layer (spec §21)
+	Events  []event        `json:"events,omitempty"`     // a state-machine script: inputs in order, each with its expected result
 }
+
+// event is one step of a state-machine script (linkprobe.json): the operation, its inputs and
+// what the machine must answer.
+type event map[string]any
 
 type vectorFile struct {
 	Spec    string   `json:"spec"`
@@ -125,7 +131,7 @@ func u32(n uint64) uint32 {
 
 func write(root *os.Root, name string, f vectorFile) {
 	f.Spec = "inkwell protocol"
-	f.Version = "2.0.0-draft.2"
+	f.Version = "2.0.0-draft.11" // spec.md revision 11
 	f.Gen = "docs/protocol/vectors/generate.go.txt (real codecs; proposed vectors use encoders written from spec.md)"
 	var buf bytes.Buffer
 	enc := json.NewEncoder(&buf)
@@ -785,6 +791,9 @@ func generate(dir, casesPath string) {
 	}
 	gv = append(gv, linkVectors(hostID)...)
 	write(root, "bridge-internal.json", vectorFile{Vectors: gv})
+
+	// ---- linkprobe (spec §8.5) ----
+	write(root, "linkprobe.json", vectorFile{Vectors: linkprobeVectors()})
 
 	fmt.Println("ok")
 }

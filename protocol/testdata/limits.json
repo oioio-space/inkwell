@@ -166,6 +166,44 @@
     }
   },
   {
+    "row": "| sonde de lien (§8.5.7) | message : `len` ≤ 64, au plus 65 o gardés d'un message incomplet ; flux (gestionnaire de ressources libp2p, portées *protocol* × *peer*) : 4 entrants et 2 sortants par pair (2 connexions × (1 + 1 en fermeture), 2 × 1), tant que les portées *peer* et *transient* laissent de la place (la portée du protocole n'en réserve pas) ; par connexion, l'hôte en tient 1 entrant et 1 sortant ; négociation ≤ 10 s ; 1 PROBE par seconde, jamais à moins de 500 ms, `seq` ≤ (temps depuis l'acceptation, + 1/64) / 500 ms + 2 répondu, jusqu'à 20 de plus jeté ; 8 en attente ; 64 échantillons ; fenêtre 30 s, chiffre inconnu sous 200 paquets ou à moins de 15 s entre ses deux échantillons ; niveaux : perte 5 / 10 / 25 ‰ et 50 / 100 / 150 ‰, aller-retour 400 / 500 / 625 ms et 1,6 / 2 / 2,5 s ; crédit d'écho 1500 ms par connexion, 500 ms par écho ; `max_ack_delay` 26 ms s'il n'est pas exposé ; un ignorable par message, plus un, par flux ; nouveau flux entrant refusé 30 s après la fin du précédent ; 1024 o lus et jetés après le FIN du sondeur | par connexion | sonde jetée sans faute ; violation : flux de sonde réinitialisé (jamais la session), nouveaux flux du pair refusés 60 s ; fermeture sans réponse ou trop bavarde : réinitialisée | 60 s |",
+    "constants": {
+      "LinkProbeMaxLen": "64",
+      "LinkProbeMaxBuffered": "65",
+      "LinkProbeInboundStreamsPerPeer": "4",
+      "LinkProbeOutboundStreamsPerPeer": "2",
+      "LinkProbeNegotiationTimeout": "10000000000",
+      "LinkProbeInterval": "1000000000",
+      "LinkProbeMinSpacing": "500000000",
+      "LinkProbeSeqSlack": "2",
+      "LinkProbeMaxOutstanding": "8",
+      "LinkProbeMaxSamples": "64",
+      "LinkProbeWindow": "30000000000",
+      "LinkProbeMinPackets": "200",
+      "LinkProbeCredit": "1500000000",
+      "LinkProbeCreditPerEcho": "500000000",
+      "LinkProbeDefaultMaxAckDelay": "26000000",
+      "LinkProbeReopenGap": "30000000000",
+      "LinkProbeBackoff": "60000000000",
+      "LinkProbeMinSpan": "15000000000",
+      "LinkProbeSeqDropMax": "20",
+      "LinkProbeClosingMaxBytes": "1024",
+      "LinkProbeLossFairDown": "5",
+      "LinkProbeLossFair": "10",
+      "LinkProbeLossFairUp": "25",
+      "LinkProbeLossPoorDown": "50",
+      "LinkProbeLossPoor": "100",
+      "LinkProbeLossPoorUp": "150",
+      "LinkProbeRTTFairDown": "400000000",
+      "LinkProbeRTTFair": "500000000",
+      "LinkProbeRTTFairUp": "625000000",
+      "LinkProbeRTTPoorDown": "1600000000",
+      "LinkProbeRTTPoor": "2000000000",
+      "LinkProbeRTTPoorUp": "2500000000",
+      "LinkProbeSeqSkew": "64"
+    }
+  },
+  {
     "row": "| progrès d'un flux LARGE | 60 s sans octet alors que réservé et lu | — | flux réinitialisé | règle L |",
     "constants": {
       "LargeIdleTimeout": "60000000000"

@@ -1,6 +1,6 @@
 {
   "spec": "inkwell protocol",
-  "spec_version": "2.0.0-draft.2",
+  "spec_version": "2.0.0-draft.11",
   "generator": "docs/protocol/vectors/generate.go.txt (real codecs; proposed vectors use encoders written from spec.md)",
   "keys": {
     "A": {

@@ -328,5 +328,5 @@ for (const v of gvec) vectors.push(v);
   route("page-route-envelope-overflow", "max = r : un caractère de plus ; la modification brute tient (≤ r) mais pas sa page encodée : indivisible, tirée par le vrac (Codex, débordement d'enveloppe).", over);
 }
 
-process.stdout.write(JSON.stringify({ spec: "inkwell protocol", spec_version: "2.0.0-draft.2",
+process.stdout.write(JSON.stringify({ spec: "inkwell protocol", spec_version: "2.0.0-draft.11",
   generator: "vectors/generate-repo.cjs.txt (cbor-x 1.6.7, @automerge/automerge 3.5.0)", vectors }, null, 2) + "\n");

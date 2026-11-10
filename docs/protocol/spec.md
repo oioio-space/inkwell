@@ -2,10 +2,10 @@
 
 | | |
 |---|---|
-| Version | **2.0.0-brouillon.10** (SemVer, §1.4) |
-| Date | 2026-11-01 |
+| Version | **2.0.0-brouillon.11** (SemVer, §1.4) |
+| Date | 2026-11-09 |
 | Statut | proposé ([ADR 0034](../adr/0034-protocole-unifie.md)) ; les parties marquées *existant* décrivent des octets déjà émis par inkwell et sont figées |
-| Révision | 10 : revues [01-codex](reviews/01-codex.md), [02-fable](reviews/02-fable.md), [03-codex](reviews/03-codex.md), [04-fable](reviews/04-fable.md), [05-codex](reviews/05-codex.md), [06-fable](reviews/06-fable.md), [07-codex](reviews/07-codex.md), [08-fable](reviews/08-fable.md), le débat [09-debate-D1](reviews/09-debate-D1.md) (accord), [10-codex](reviews/10-codex.md), [11-fable](reviews/11-fable.md), [12-codex](reviews/12-codex.md), [13-fable](reviews/13-fable.md), [14-codex](reviews/14-codex.md), [15-fable](reviews/15-fable.md), [16-codex](reviews/16-codex.md), [17-fable](reviews/17-fable.md), [18-codex](reviews/18-codex.md), [19-fable](reviews/19-fable.md) et le débat [20-debate-D2](reviews/20-debate-D2.md) (accord) intégrés ; correspondance dans [CHANGES.md](CHANGES.md) |
+| Révision | 10 : revues [01-codex](reviews/01-codex.md), [02-fable](reviews/02-fable.md), [03-codex](reviews/03-codex.md), [04-fable](reviews/04-fable.md), [05-codex](reviews/05-codex.md), [06-fable](reviews/06-fable.md), [07-codex](reviews/07-codex.md), [08-fable](reviews/08-fable.md), le débat [09-debate-D1](reviews/09-debate-D1.md) (accord), [10-codex](reviews/10-codex.md), [11-fable](reviews/11-fable.md), [12-codex](reviews/12-codex.md), [13-fable](reviews/13-fable.md), [14-codex](reviews/14-codex.md), [15-fable](reviews/15-fable.md), [16-codex](reviews/16-codex.md), [17-fable](reviews/17-fable.md), [18-codex](reviews/18-codex.md), [19-fable](reviews/19-fable.md) et le débat [20-debate-D2](reviews/20-debate-D2.md) (accord) intégrés ; révision 11 : sonde de lien `/inkwell/linkprobe/1.0.0` (§8.5, [ADR 0036]) ; correspondance dans [CHANGES.md](CHANGES.md) |
 | Aperçu | [README.md](README.md) |
 | Vecteurs, modèle | [vectors/](vectors/) (§21), [tla/](tla/) (§7.3) |
 | Paquets | module Go `github.com/oioio-space/inkwell/protocol`, paquet TypeScript `@inkwell/protocol` (§1.6) |
@@ -187,6 +187,7 @@ reste possible à la 1.0 sans changer le chemin d'import si le module est servi 
                   préambule), /inkwell/presence/2.0.0, /inkwell/large/2.0.0 (> 64 Kio)
                   /inkwell/bulk/1.0.0 : blobs (WANT/SLICE/MISSING/BUSY, Bao, BLAKE3)
                   /inkwell/lobby/1.0.0 : une requête, une réponse (inconnus invités)
+                  /inkwell/linkprobe/1.0.0 : sonde de perte d'une connexion QUIC (§8.5)
  L1  transport    libp2p : QUIC v1 (TLS 1.3) ou TCP + Noise + yamux ; relais circuit v2 ;
                   DCUtR ; mDNS « _inkwell._udp » ; contrôle de flux par flux et par connexion
  L0  identité     clé Ed25519 par appareil · PeerID · signatures à domaine séparé
@@ -954,7 +955,7 @@ Flux LARGE sortant (le délai de 60 s sans progrès court seulement **après** L
 réinitialisation par le pair, 60 s sans progrès) → règle L. L'objet est gardé, dans la part
 du pair (§10.6), jusqu'à `Fini` ou `Réinitialisé`.
 
-## 8. Vrac et salon
+## 8. Vrac, salon et sonde de lien
 
 ### 8.1 `/inkwell/bulk/1.0.0` : blobs (*existant*, règles précisées)
 
@@ -1131,6 +1132,511 @@ un secret : quiconque le détient peut rejoindre le projet une fois.
 Le texte du ticket peut voyager par magic-wormhole ([Wormhole]) : `AppID =
 "inkwell.app/invite/v1"`, texte seul, sans relais de transit ; code `^[0-9]+(-[a-z]+)+$`,
 ≤ 64 caractères. Ce canal ne transporte rien d'autre.
+
+### 8.5 `/inkwell/linkprobe/1.0.0` : sonde de perte d'un lien ([ADR 0036])
+
+**Objet.** La sonde donne à un point d'une connexion QUIC la part des paquets qu'il y a envoyés
+et que le pair n'a **pas reçus**, mesurée par le pair lui-même, et en tire le **niveau** du lien
+que la personne voit : bon, moyen ou mauvais, ou inconnu (§8.5.5, étape 6 ; Annexe A.1,
+`quality`). Le chiffre de perte en ‰ n'est qu'un **diagnostic** : sa précision, bornée
+honnêtement (§8.5.5, « Exactitude »), suffit à placer un lien dans un niveau, pas à le décrire au
+pour mille. Une déclaration de perte de
+l'émetteur ([RFC 9002 §6.1]) n'en est pas une mesure : elle compte des paquets réordonnés
+(déclarations à tort), jamais les paquets qui ne contiennent que des ACK, et, chez certaines
+implémentations, des marques ECN-CE. La sonde est un protocole autonome : elle ne dépend ni du
+HELLO, ni des capacités, ni de la session (§5), et peut servir à d'autres programmes que inkwell.
+Le paquet `protocol/linkprobe` en donne une implémentation de référence **sans E/S** (des
+événements entrent, des actions sortent : `Host`, `Prober`, `Responder`), que les vecteurs
+exercent (§8.5.11).
+
+#### 8.5.1 Portée et rôles
+
+La sonde ne se parle que sur une **connexion QUIC brute, version 1 ([RFC 9000]) ou 2
+([RFC 9369])**. Sur une connexion TCP, dans un circuit de relais (ce n'est pas une connexion QUIC
+de bout en bout) ou dans une session WebTransport, un point **NE DOIT PAS** ouvrir de flux de sonde
+et **DOIT** refuser (réinitialiser sans le lire) tout flux de sonde du pair. Sur une connexion
+QUIC, les rôles du pair décident :
+
+| Le pair est | Ce point le sonde | Ce point lui répond |
+|---|---|---|
+| un membre d'un projet partagé (§4.9) | oui | oui |
+| un relais que ce point utilise (premier saut d'un lien relayé) | oui | non |
+| un client de ce point, qui est un relais : il y tient une réservation, ou un circuit actif passe par lui | non | oui |
+| un invité qui n'a droit qu'au salon (§8.2), ou tout autre pair | non | non |
+
+Un pair qui a **plusieurs rôles** reçoit leur union (il est sondé si l'un de ses rôles le veut,
+et de même pour la réponse). Les rôles sont évalués à l'ouverture de chaque flux ; quand ils
+changent (membre retiré, réservation finie), un flux de sonde que les nouveaux rôles excluent
+**DOIT** être réinitialisé. « Répondre : non » veut dire : tout flux de sonde du pair est refusé.
+La sonde n'ajoute aucune autorisation : elle suit celle que la connexion a déjà.
+
+#### 8.5.2 Compteurs
+
+Pour une connexion C, chaque point tient deux compteurs `u64`, qui partent de 0 **au premier
+paquet de C, Initial compris**, ne décroissent jamais et ne passent jamais d'une connexion à une
+autre (une migration de chemin, [RFC 9000 §9], reste la même connexion) :
+
+- `sent(C)` : nombre de paquets QUIC que ce point a envoyés sur C ([RFC 9000 §12.3] : un paquet
+  par numéro de paquet attribué), tous espaces de numéros confondus, chaque paquet d'un
+  datagramme coalescé compté à part, y compris les retransmissions, les paquets qui ne contiennent
+  que des ACK, les sondes PTO et PMTUD, et les paquets ensuite déclarés perdus ;
+- `received(C)` : nombre de paquets QUIC reçus du pair sur C dont la protection d'en-tête a été
+  retirée et dont la charge a été déchiffrée et authentifiée ([RFC 9001 §5]), et dont le numéro de
+  paquet n'avait pas déjà été traité (un doublon, [RFC 9000 §12.3], n'est pas compté), tous
+  espaces de numéros confondus, chaque paquet d'un datagramme coalescé compté à part. Un paquet
+  jeté avant ou pendant le déchiffrement (corrompu, clé indisponible) n'est pas compté.
+
+*Informatif :* quic-go v0.64.1 fournit exactement ces deux compteurs, `ConnectionStats().
+PacketsSent` et `.PacketsReceived` (`connection.go:796-857`, `:1229`, `:1745`, `:1765`).
+
+**Horloge.** Les instants sont lus sur une horloge monotone locale de résolution au plus 1 ms ;
+toutes les comparaisons de ce paragraphe portent sur ces valeurs, exactement (les vecteurs
+donnent des millisecondes entières).
+
+#### 8.5.3 Flux, priorité et écrivain
+
+- **Sortant.** Le sondeur ouvre **un** flux bidirectionnel d'identifiant
+  `/inkwell/linkprobe/1.0.0` **sur la connexion C qu'il mesure** (libp2p : `Conn.NewStream` sur
+  cette connexion), une fois la poignée de main confirmée ([RFC 9001 §4.1.2]), donc avec un
+  échantillon de RTT ([RFC 9002 §5]). Il **DOIT** mener la négociation multistream-select à son
+  terme — le pair a confirmé l'identifiant ou l'a refusé (`na`) — **avant** d'écrire le premier
+  PROBE (pas de négociation paresseuse : un `na` ne serait vu qu'à la première lecture) ; si elle
+  n'a pas abouti **10 s** après l'ouverture (à 10 s tout juste ou plus tard), il réinitialise le
+  flux : c'est un autre échec (§8.5.5, étape 1). *Informatif, go-libp2p v0.51 :* `Conn.NewStream`
+  sur la connexion mesurée, puis `multistream.SelectProtoOrFail` (non paresseux : il attend la
+  confirmation du pair), puis `Stream.SetProtocol` ; côté répondeur, le gestionnaire de
+  `SetStreamHandler` est appelé à la fin de sa négociation.
+  Il écrit le premier PROBE dès que la négociation réussit. Sur ce flux, il n'écrit que des PROBE.
+- **Entrant.** Le répondeur n'ouvre jamais de flux de sonde ; sur le flux du sondeur, il n'écrit
+  que des ECHO. Il a au plus **un** flux de sonde entrant ouvert par connexion : un second flux
+  ouvert pendant que le premier vit **DOIT** être refusé (réinitialisé sans être lu) ; le premier
+  continue. Un flux refusé n'a plus aucun effet : ses événements suivants (fin, octets) sont
+  ignorés, et ne touchent pas le flux ouvert (l'implémentation distingue les flux par leur
+  identité). Un flux entrant est fini quand le répondeur a lu son FIN, ou quand l'un des deux côtés
+  l'a réinitialisé.
+- **Toujours lu.** Les deux côtés **DOIVENT** lire leurs flux de sonde sans jamais s'arrêter, même
+  quand leur écrivain est occupé (comme les flux du §5.1 (a)) : un flux de sonde non lu
+  immobiliserait la fenêtre de connexion de QUIC (§16.1, fenêtres QUIC) et freinerait la session.
+- **Priorité.** Un point **PEUT** donner aux flux de sonde une priorité d'envoi plus haute que
+  celle des autres flux ([RFC 9218]) ; rien ne l'exige, et la borne d'erreur du §8.5.5
+  (« Exactitude ») n'en suppose aucune. *Informatif :* go-libp2p v0.51 n'expose pas de priorité de
+  flux (`network.Stream` n'a ni `SetPriority` ni accès au flux QUIC, sauf `Conn.As`, qui
+  court-circuiterait multistream-select et le gestionnaire de ressources) ; et même avec elle,
+  quic-go v0.64.1 envoie les retransmissions, de toute urgence, avant les nouvelles données de
+  flux (`framer.go:141-175`), et des paquets ne portant que des ACK quand la fenêtre de congestion
+  est pleine (`sent_packet_handler.go:1128-1133`) : ces paquets croisent le PROBE de toute façon.
+- **Après la fin d'un flux** (FIN lu, réinitialisation par l'un ou l'autre côté, violation, ou
+  FIN écrit par le sondeur qui cesse de mesurer), tout octet encore lu sur ce flux est **jeté sans
+  effet** : ni violation, ni changement d'état. Un message incomplet à la fin du flux est jeté de
+  même : c'est une fin de flux ordinaire.
+- **Fermeture.** **Cesser de mesurer** C est définitif pour C : le sondeur écrit FIN et n'ouvre
+  plus de flux de sonde sur C (il répond toujours à ceux du pair) ; il lit et jette ensuite jusqu'à
+  la fin du côté du répondeur, au plus **1024 octets** (un répondeur honnête n'envoie plus que les
+  ECHO des `O` sondes en attente, leurs ignorables et un message incomplet : au plus
+  8 × 14 + 9 × 65 + 65 = 762 octets) ; au-delà, ou si cette
+  fin n'est pas venue `B` après le FIN, il réinitialise le flux. S'il cesse de mesurer pendant la
+  négociation, il écrit FIN dès qu'elle réussit, sans PROBE. Une fin de négociation annoncée sans
+  négociation en cours est sans effet. Un flux à demi fermé existe encore : aucun autre flux
+  sortant ne s'ouvre avant sa fin. Le répondeur qui lit le FIN ferme son sens (FIN) à son tour.
+- **Réinitialiser** un flux, c'est l'abandonner dans les deux sens (libp2p `Reset` : RESET_STREAM
+  et STOP_SENDING, [RFC 9000 §19.4], [RFC 9000 §19.5]) avec le code d'erreur d'application 0 ; le
+  pair **NE DOIT PAS** interpréter le code : toute réinitialisation se traite de la même façon.
+- **Écrivain.** Chaque côté d'un flux a un écrivain qui tient **au plus un message** : un message
+  est remis au transport en entier, et l'écrivain redevient **libre** quand le transport l'a accepté
+  en entier (copié dans son tampon d'envoi), jamais pendant le traitement de la lecture qui l'a
+  produit (d'où au plus un ECHO par lecture). Un message ne se coupe jamais par un autre. Tant que
+  l'écrivain n'est pas libre, aucun autre message n'est écrit : le PROBE de cet intervalle est
+  **sauté**, l'ECHO de ce PROBE est **jeté** ; rien n'est mis en file. *Informatif :* avec
+  quic-go, dont `Write` peut bloquer (contrôle de flux), l'écriture se fait sur une tâche à part
+  qui ne tient qu'un message.
+
+#### 8.5.4 Messages
+
+Le flux est une suite de messages, sans autre en-tête :
+
+```
+message { len u8 (1 ≤ len ≤ 64, compte type + corps) ; type u8 ; corps [len − 1] }
+```
+
+| type | Nom | Écrit par | Corps | `len` |
+|---|---|---|---|---|
+| `0x01` | PROBE | sondeur | `seq u32` (1 ≤ seq ≤ 2³² − 1) | 5 exactement |
+| `0x02` | ECHO | répondeur | `seq u32` (1 ≤ seq ≤ 2³² − 1) ; `received u64` (0 ≤ received ≤ 2⁶⁴ − 1) | 13 exactement |
+
+- **Plages de types** (comme §5.2) : `0x00` réservé ; `0x01`–`0x3F` **critiques** (`0x03`–`0x3F`
+  non attribués) ; `0x40`–`0x7F` **ignorables** (sautés grâce à `len`, sans état ni réponse ;
+  GREASE `0x4A`, `0x5A`, `0x6A`, `0x7A`) ; `0x80`–`0xFF` réservés à une majeure.
+- **Budget des ignorables.** Sur un flux, un lecteur accepte au plus **un ignorable par message
+  critique lu, plus un** (le sondeur compte les ECHO lus, le répondeur les PROBE lus : tout message
+  critique qui n'est pas une violation compte, un PROBE jeté ou un ECHO périmé ou tardif compris) ;
+  un ignorable de plus est une violation. Le débit des ignorables est ainsi borné par celui des sondes, que le
+  répondeur borne lui-même (§8.5.6, étape 3).
+- **Décodage strict** (§1.3). Le lecteur lit `len` et **DOIT** refuser `len = 0` ou `len > 64`
+  dès cet octet, sans attendre le corps ; il **DOIT** refuser un type `0x00`, un type critique
+  autre que PROBE et ECHO, un type `≥ 0x80`, un PROBE ou un ECHO dont `len` n'est pas celle du
+  tableau, et un `seq = 0`. Tout refus est une violation (§8.5.8). `received` n'a pas de borne de
+  décodage : la règle du sondeur en juge (§8.5.5, étape 3). L'encodage est unique.
+- Un lecteur garde au plus `1 + 64` octets d'un message incomplet, dans un tampon fixe : rien
+  n'est alloué au-delà (*informatif :* `linkprobe.Decode` ne copie rien, le corps d'un ignorable
+  est une tranche des octets lus).
+- Exemples : PROBE seq 1 = `05 01 00000001` ; ECHO seq 7, received 1000 =
+  `0d 02 00000007 00000000000003e8` ; un ignorable `0x4A` à corps `aa bb` = `03 4a aa bb`.
+
+#### 8.5.5 Sondeur
+
+**Constantes** (§8.5.7) : `I = 1 s`, `E = 500 ms`, `W = 30 s`, `M = 64`, `O = 8`, `N = 200`,
+`B = 60 s` ; les bandes des niveaux (étape 6).
+
+**État par connexion C** (une nouvelle connexion part d'un état neuf ; rien ne passe d'une
+connexion à l'autre) : `dernier_envoi` (instant du dernier PROBE écrit sur C, tous flux
+confondus ; aucun au départ) ; `dernier_r` (plus grand `received` lu sur C, 0 au départ) ;
+`échantillons` (au plus `M` quadruplets `(t, s, r, rtt)`, par `t` croissant) ; `reprise` (instant avant
+lequel aucun flux ne s'ouvre, 0 au départ) ; `refusé` (le pair a répondu `na`) ; `fini` (`seq`
+épuisé : la connexion ne sera plus sondée) ; `arrêté` (le sondeur a cessé de mesurer C, §8.5.3) ;
+`niveau_perte` et `niveau_rtt` (inconnus au départ). **État du flux ouvert** : `prochain` (prochain `seq`,
+1 à l'ouverture), `plus_haut` (plus grand `seq` écrit, 0), `dernier_écho` (plus grand `seq` lu en
+ECHO, 0), `attente` (au plus `O` PROBE sans écho : `seq`, instant d'écriture `t`, `s = sent(C)`),
+le nombre d'ECHO et d'ignorables lus.
+
+1. **Ouverture.** Quand aucun flux sortant n'existe (un flux à demi fermé existe encore), que
+   `maintenant ≥ reprise` et que ni `refusé`, ni `fini`, ni `arrêté`, le sondeur ouvre le flux et
+   négocie (§8.5.3). L'ouverture de l'état est refusée, sans rien changer, si un flux est déjà
+   ouvert (`already_open` dans les vecteurs), si `fini` (`exhausted`) ou avant `reprise`
+   (`backoff`). Si le pair répond `na` : `refusé` ; le sondeur **NE DOIT PLUS** ouvrir de flux de
+   sonde sur C (le chiffre reste inconnu, §8.5.9). Tout autre échec (flux fini ou réinitialisé
+   avant la fin de la négociation, négociation de plus de 10 s, erreur du transport) :
+   `reprise = maintenant + B`.
+2. **Envoi.** Le minuteur du sondeur se déclenche une fois par intervalle `I`, avec un écart
+   aléatoire uniforme dans [−10 %, +10 %] tiré à chaque intervalle (**DEVRAIT** : deux points ne se
+   synchronisent pas) ; il se déclenche aussi à la fin réussie de la négociation. Les règles de
+   temps de ce paragraphe ne s'appliquent qu'à un déclenchement ou à une lecture : rien ne se passe
+   entre deux. À chaque déclenchement, **dans cet ordre** : si `prochain` dépasserait 2³² − 1
+   (136 ans à 1 Hz), le sondeur écrit FIN au lieu du PROBE et devient `fini` (`exhausted`) ; sinon,
+   si `dernier_envoi` existe et `maintenant − dernier_envoi < E`, rien (`too_soon`) ; sinon, si
+   l'écrivain n'est pas libre, le PROBE est **sauté** (`skipped` : aucun `seq` consommé, rien ne
+   change) ; sinon le sondeur lit `s = sent(C)` **juste avant** de remettre le PROBE au flux, écrit
+   `PROBE { seq = prochain }`, ajoute `(prochain, maintenant, s)` à `attente` (en retirant d'abord
+   la plus ancienne entrée si `attente` en compte déjà `O`), et fait `plus_haut = prochain`,
+   `prochain + 1`, `dernier_envoi = maintenant`.
+3. **Réception d'un ECHO `{seq, r}`** à l'instant `maintenant`, `envoyés = sent(C)` lu à cet
+   instant, dans cet ordre :
+   1. si `seq > plus_haut` (jamais envoyé) ou `seq ≤ dernier_écho` (doublon, rejeu ou désordre :
+      impossible d'un répondeur honnête sur un flux ordonné) : **violation** ;
+   2. `dernier_écho = seq` ;
+   3. si `r < dernier_r` (un compteur ne décroît pas) ou `r > envoyés` (le pair ne peut pas avoir
+      reçu plus de paquets qu'il n'en a été envoyé) : **violation**, même pour un écho qui serait
+      ensuite périmé ou tardif ;
+   4. `dernier_r = r` ;
+   5. les entrées d'`attente` de `seq` plus petit sont retirées (sondes jetées par le répondeur ou
+      sans écho) ; si `seq` n'est pas dans `attente` (oublié parmi les `O` plus récents) : **périmé**,
+      l'écho est jeté, sans faute ;
+   6. l'entrée `(seq, t, s)` est retirée ; si `maintenant − t > PTO` : **tardif**, l'écho est jeté,
+      sans faute (la sonde a attendu ou a été retransmise : des paquets l'ont croisée). `PTO =
+      smoothed_rtt + max(4 × rttvar, kGranularity) + max_ack_delay` de C à cet instant
+      ([RFC 9002 §6.2.1], sans recul exponentiel ; `kGranularity` = 1 ms ; `max_ack_delay` est
+      celui qu'annonce le pair dans ses paramètres de transport, ou 26 ms si l'implémentation QUIC
+      ne l'expose pas : ce qu'annonce quic-go, `MaxAckDelayInclGranularity`, au-dessus des 25 ms
+      par défaut de [RFC 9000 §18.2] ; plus grand, il ne rend tardif aucun écho à l'heure), calculé à la précision des estimations de RTT puis
+      **arrondi vers le haut à la milliseconde** ;
+   7. sinon **accepté** : `(t, s, r, maintenant − t)` s'ajoute à `échantillons` (en retirant le
+      plus ancien s'il y en a déjà `M` ; *informatif :* comme deux PROBE sont à `E` au moins l'un
+      de l'autre, une fenêtre en compte au plus `W/E + 1 = 61` : `M` ne retire jamais un
+      échantillon utile, il borne la mémoire).
+4. **Autre message lu** : un ignorable est sauté, dans le budget du §8.5.4 ; un PROBE ou tout
+   autre type est une **violation**.
+5. **Chiffre de perte** à l'instant `maintenant` : soit `s₁` le plus récent échantillon. Le
+   chiffre est **inconnu** s'il y a moins de deux échantillons, ou si `maintenant − t(s₁) > W`.
+   Sinon, `s₀` est l'échantillon le plus ancien tel que `t(s₁) − t(s₀) ≤ W` ; il est inconnu si
+   `s₀` est `s₁` lui-même, si `t(s₁) − t(s₀) < W/2` (des sondes tardives ont rapproché les deux
+   bornes : un croisement y pèserait trop), ou si `ΔS = s(s₁) − s(s₀) < N`. Sinon, avec `ΔR = r(s₁) − r(s₀)` et
+   `L = ΔS − min(ΔR, ΔS)` (jamais négatif), le chiffre est l'entier `⌊(1000 × L + ⌊ΔS / 2⌋) / ΔS⌋` ‰
+   (0 à 1000, arrondi au plus proche, la moitié vers le haut), calculé exactement (produit sur
+   128 bits).
+6. **Niveau** du lien. Il avance à **chaque nouveau chiffre**, c'est-à-dire à chaque écho accepté
+   dont le chiffre est connu (étape 3.7), quelle que soit la cadence de l'échantillonneur qui le
+   lit. Tant que le chiffre est inconnu, le niveau montré est **inconnu**, et `niveau_perte` et
+   `niveau_rtt` sont gardés ; si le chiffre redevient connu plus de `W` après le dernier chiffre
+   connu, ils repartent d'**inconnu** (l'hystérésis survit à un court passage par l'inconnu, pas à
+   un long). Pour avancer, avec `x` le chiffre (‰) pour la perte,
+   et pour l'aller-retour la **médiane basse** des `rtt` des échantillons de la fenêtre (de `s₀` à
+   `s₁` ; l'élément de rang `⌊(n − 1)/2⌋` dans l'ordre croissant), chaque niveau avance d'un pas
+   selon ses deux frontières, qui ont chacune un **milieu**, un seuil de **montée** et un seuil de
+   **descente** :
+
+   | Frontière | descente | milieu | montée |
+   |---|---|---|---|
+   | perte, bon \| moyen | 5 ‰ | 10 ‰ | 25 ‰ |
+   | perte, moyen \| mauvais | 50 ‰ | 100 ‰ | 150 ‰ |
+   | aller-retour, bon \| moyen | 400 ms | 500 ms | 625 ms |
+   | aller-retour, moyen \| mauvais | 1600 ms | 2 s | 2500 ms |
+
+   Depuis **inconnu** : mauvais si `x ≥` milieu 2, sinon moyen si `x ≥` milieu 1, sinon bon. Sinon,
+   dans cet ordre : un niveau qui n'est pas mauvais devient **mauvais** si `x ≥` montée 2 ; bon
+   devient **moyen** si `x ≥` montée 1 ; un niveau qui n'est pas bon devient **bon** si
+   `x <` descente 1 ; mauvais devient **moyen** si `x <` descente 2 ; sinon il ne change pas. Le
+   niveau du lien est le **pire** des deux (Annexe A.1, `quality` : 1 bon, 2 moyen, 3 mauvais,
+   0 inconnu). Les seuils et les bandes viennent de l'ADR 0036 (« Levels ») : pour les seuils, ce
+   qu'une personne remarque ; pour les bandes, l'erreur du chiffre et le scintillement d'un lien
+   posé sur une frontière.
+7. **Fin du flux** (réinitialisé ou fermé par le pair, erreur du transport, ou FIN écrit par le
+   sondeur) : `attente` est vidée, les échantillons et `dernier_r` restent, `reprise = maintenant
+   + B`.
+8. **Violation** : le sondeur **DOIT** réinitialiser le flux, vider `attente` et `échantillons`,
+   remettre `dernier_r` à 0, et faire `reprise = maintenant + B`. Le chiffre est inconnu jusqu'à
+   deux nouveaux échantillons.
+
+*Informatif :* `dernier_envoi` est par connexion, mais comme un nouveau flux attend `B ≥ E`,
+l'espacement ne retient jamais la première sonde d'un flux rouvert : la règle n'est observable
+qu'à l'intérieur d'un flux.
+
+**Exactitude.** Le chiffre compare deux comptes pris à deux instants différents : `s = sent(C)`
+lu par le sondeur quand il remet le PROBE au flux, `r = received(C)` lu par le répondeur après
+avoir lu ce PROBE. Un paquet **croise** le PROBE quand il est compté d'un seul côté de cette
+borne : envoyé après la lecture de `s` mais arrivé avant la lecture de `r` (paquets construits
+avant celui du PROBE : retransmissions, paquets d'ACK seuls, autres flux ; paquets arrivés entre
+la délivrance du PROBE et la lecture de `r` ; paquets arrivés pendant que le PROBE attendait une
+retransmission devant lui sur son flux), ou envoyé avant et arrivé après (réordonnancement).
+L'erreur du chiffre sur sa fenêtre est `(C_fin − C_début) / ΔS`, `C` étant le nombre net de
+croisements à chaque borne, **des deux signes** ; le `min(ΔR, ΔS)` coupe les erreurs négatives,
+d'où un léger biais vers plus de perte près de zéro. Comme un écho n'est accepté que dans un PTO
+(étape 3.6), tout paquet qui croise le PROBE de ce côté a été envoyé dans le PTO qui suit sa
+remise au flux : **borne prudente**, `|erreur| ≤ (p₀ + p₁ + 2) / ΔS`, `pᵢ` étant le nombre de
+paquets que le sondeur a envoyés dans le PTO qui précède et dans celui qui suit la remise du PROBE
+de la borne `i` (le 2 : le paquet du PROBE compté ou non par le répondeur), un réordonnancement de
+plus d'un PTO mis à part. Les sondes PMTUD de QUIC trop grandes pour le chemin sont perdues
+exprès et comptent comme perdues : quic-go v0.64.1 en envoie une toutes les 5 RTT pendant sa
+recherche dichotomique, qui finit en quelques secondes après la poignée de main (au plus 3 pertes
+par pas, 4 pas environ) ; le premier chiffre d'un lien peu actif peut en porter une douzaine, soit
+6 % sur 200 paquets : le premier niveau d'un lien au repos peut lire « moyen », et retombe à bon
+dans la fenêtre suivante. Sur les profils de netsim, le modèle de l'ADR 0036 (« Levels » : ni
+priorité, retransmissions et ACK qui croisent, ±1 à la lecture, lecture jusqu'à 20 ms plus tard,
+blocage en tête de ligne ; 10 graines × 500 fenêtres, borne supérieure à 95 % du 99,9ᵉ centile)
+donne au plus **15 ‰**, le pire cas étant un trafic de frappe (17 paquets/s) sous un fort
+réordonnancement ; 4,5 ‰ sur un Wi-Fi ordinaire à 60 paquets/s. C'est pourquoi la personne voit un
+niveau, dont les bandes absorbent cette erreur, et non le chiffre.
+
+Un sondeur **NE DOIT PAS** se servir du chiffre ni du niveau pour une décision du protocole (choix de chemin,
+admission, contrôle de flux, sanction) : il ne sert qu'à le montrer (§8.5.10).
+
+#### 8.5.6 Répondeur
+
+**État par connexion C** (il survit aux flux) : `crédit` (une durée, 1500 ms à l'établissement
+de C, plafonnée à 1500 ms ; l'établissement est l'instant où le point apprend la connexion,
+libp2p : la notification `Connected`), `mis_à_jour` (instant de la dernière mise à jour du
+crédit, l'établissement au départ), `refus_jusqu_à` (0 au départ). **État du flux entrant
+ouvert** : `ouvert_à` (instant où le répondeur **accepte** le flux : la **fin de sa négociation**
+multistream-select, quand son gestionnaire du protocole reçoit le flux et commence à le lire), `dernier_seq` (0), le nombre
+de PROBE et d'ignorables lus. Une fin de flux annoncée sans flux ouvert est sans effet.
+
+1. **Flux entrant.** Il est refusé si un flux entrant vit déjà, si `maintenant < refus_jusqu_à`,
+   ou si les rôles du pair l'excluent (§8.5.1) ; sinon il est ouvert. À la fin d'un flux entrant,
+   quelle qu'elle soit, `refus_jusqu_à = max(refus_jusqu_à, maintenant + B/2)` : un sondeur
+   honnête rouvre au plus tôt `B` après la fin, donc ce refus ne le touche jamais, et un pair ne
+   peut pas renouveler son flux en boucle.
+2. À chaque message lu à l'instant `maintenant` sur le flux ouvert, le crédit gagne le temps
+   écoulé depuis `mis_à_jour`, ce temps étant d'abord plafonné à 1500 ms (pas de dépassement de
+   capacité), et le total plafonné à 1500 ms ; `mis_à_jour = maintenant`.
+3. Un ignorable est sauté, dans le budget du §8.5.4. Un ECHO ou tout autre type est une
+   **violation**. **PROBE `{seq}`** : si `seq ≤ dernier_seq` (rejeu ou désordre) : **violation**.
+   Soit `d = max(0, maintenant − ouvert_à)` (ramené à 0 s'il est négatif) et `borne = ⌊(d + ⌊d/64⌋)
+   / E⌋ + 2` (en millisecondes ; le `d/64` est une marge de 1/64 contre les vitesses des deux
+   horloges, bien au-delà des 500 ppm qu'admet NTP). Si `seq > borne + 20` (plus de sondes que le sondeur n'a pu en écrire, même
+   avant que le répondeur n'accepte le flux) : **violation**. Sinon `dernier_seq = seq`, et le PROBE
+   est **jeté**, sans réponse et sans dépenser de crédit, si `seq > borne`, si l'écrivain n'est pas
+   libre ou si `crédit < 500 ms`. *Pourquoi 20 :* le sondeur écrit au plus une sonde par `E` ; il
+   peut en avoir écrit avant que le répondeur n'accepte le flux (négociation paresseuse d'un
+   client, acceptation lente), au plus pendant le délai de négociation de 10 s, soit 20. Sinon
+   `crédit − 500 ms` (trois échos d'un coup au plus, puis deux par seconde, sur la connexion
+   entière), le répondeur lit `r = received(C)` **aussitôt après l'appel de lecture qui lui a rendu
+   le PROBE**, avant de construire l'ECHO, et **DOIT** écrire aussitôt `ECHO { seq, r }`, sans le
+   retarder ni le regrouper (il **DEVRAIT** le faire en moins de 5 ms) ; au plus un ECHO part par
+   lecture (§8.5.3, écrivain).
+4. **Une sonde jetée n'est jamais une faute** : des PROBE retenus par le réseau puis délivrés
+   d'un coup (après un blocage) sont jetés au-delà du crédit, sans autre effet.
+5. **Violation** : le répondeur **DOIT** réinitialiser le flux et faire `refus_jusqu_à =
+   max(refus_jusqu_à, maintenant + B)` : tout nouveau flux de sonde du pair sur C est refusé sans
+   être lu pendant `B`.
+
+**Lecture de `received`.** L'instant exact de la délivrance n'est pas observable : quic-go
+v0.64.1 remet les données au lecteur pendant le traitement des trames, puis seulement incrémente
+`PacketsReceived` (`connection.go:1739-1765`), si bien que le paquet du PROBE est compté ou non
+selon l'ordonnancement (±1 à chaque borne), et que les paquets arrivés avant la lecture comptent
+aussi. Chacun croise le PROBE (§8.5.5, « Exactitude ») ; la borne d'erreur et le modèle de
+l'ADR 0036 les comptent. *Informatif :* un test d'intégration fixe ce comportement du compteur, à
+refaire à chaque montée de quic-go (porte C5S).
+
+Le répondeur répond pour la connexion par laquelle le flux est arrivé, et seulement pour elle.
+
+#### 8.5.7 Bornes et minuteries
+
+| Nom | Valeur | Rôle |
+|---|---|---|
+| `I` | 1 s (±10 % **RECOMMANDÉ**) | intervalle des sondes |
+| `E` | 500 ms | écart minimal entre deux PROBE d'une connexion ; borne de `seq` du répondeur |
+| `W` | 30 s | fenêtre du chiffre (`transport.LossWindow`) |
+| `N` | 200 paquets | en dessous, chiffre inconnu (ADR 0036 « Levels ») |
+| `W/2` | 15 s | écart minimal entre les deux échantillons d'un chiffre |
+| `O` | 8 | PROBE en attente d'écho par flux |
+| `M` | 64 | échantillons gardés par connexion (une fenêtre en compte au plus 61 : borne de mémoire) |
+| `B` | 60 s | attente avant de rouvrir un flux sortant ; refus des flux entrants après une violation du répondeur ; réinitialisation d'une fermeture sans réponse |
+| `B/2` | 30 s | refus d'un flux entrant après la fin du précédent |
+| négociation | 10 s | au-delà, autre échec |
+| crédit du répondeur | 1500 ms au plus, 500 ms par écho, par connexion | trois échos d'un coup, puis deux par seconde |
+| `seq` reçu | ≤ ⌊(d + ⌊d/64⌋) / E⌋ + 2 répondu, `d = max(0, maintenant − ouvert_à)` ; jusqu'à 20 de plus, jeté ; au-delà, violation | anti-inondation, insensible aux retards, à une acceptation lente et aux horloges |
+| fermeture | 1024 octets lus et jetés après le FIN du sondeur, puis réinitialisation | §8.5.3 |
+| niveaux | perte 5 / 10 / 25 ‰ et 50 / 100 / 150 ‰ ; aller-retour 400 / 500 / 625 ms et 1,6 / 2 / 2,5 s (descente / milieu / montée) | §8.5.5, étape 6 |
+| ignorables | un par message critique lu, plus un, par flux | anti-inondation |
+| message | `len ≤ 64` ; au plus 65 octets gardés d'un message incomplet | décodage |
+| flux | l'hôte : 1 sortant et 1 entrant par connexion ; le gestionnaire de ressources : 4 entrants et 2 sortants par pair | §8.5.3, §16.1 |
+| écrivain | 1 message | §8.5.3 |
+
+Débit d'une connexion, dans un sens : au plus 2 PROBE par seconde (6 octets) et, en réponse,
+au plus `3 + 2 × t` ECHO (14 octets) en `t` secondes depuis l'établissement de C, plus l'en-tête
+QUIC ; les ignorables au plus autant, plus un par flux.
+
+#### 8.5.8 Erreurs
+
+| Cas | Qui | Effet |
+|---|---|---|
+| `len` 0 ou > 64 ; type `0x00`, critique non attribué, ou `≥ 0x80` ; PROBE ou ECHO de mauvaise `len` ; `seq = 0` | lecteur | violation |
+| message incomplet, puis fin du flux | lecteur | fin du flux ordinaire (sondeur : §8.5.5, étape 7) |
+| octets lus après la fin du flux, ou sur un flux refusé | lecteur | jetés sans effet |
+| PROBE lu par le sondeur, ECHO lu par le répondeur | lecteur | violation |
+| ignorable dans le budget / au-delà | lecteur | sauté / violation |
+| PROBE de `seq` qui ne croît pas, ou de plus de 20 au-dessus de la borne de débit | répondeur | violation |
+| PROBE au-dessus de la borne de débit, de 20 au plus | répondeur | jeté, sans faute |
+| PROBE sans crédit, ou écrivain occupé | répondeur | jeté, sans faute |
+| PROBE dont l'écrivain est occupé | sondeur | sauté |
+| ECHO de `seq` jamais envoyé, en double ou dans le désordre | sondeur | violation |
+| ECHO de `received` qui décroît ou qui dépasse `sent(C)` | sondeur | violation (avant les règles périmé et tardif) |
+| ECHO d'un PROBE oublié | sondeur | périmé : jeté sans faute |
+| ECHO plus d'un PTO après son PROBE | sondeur | tardif : jeté sans faute |
+| pair qui ne répond jamais | sondeur | chiffre inconnu dès `W` sans échantillon ; les PROBE continuent (au plus `O` en attente, rien en file) |
+| pair muet pendant la négociation (10 s) | sondeur | flux réinitialisé, `reprise = maintenant + B` |
+| pair qui ne ferme jamais son sens après le FIN du sondeur (`B`), ou qui envoie plus de 1024 octets après lui | sondeur | flux réinitialisé |
+| second flux de sonde du pair | répondeur | refusé ; le premier continue |
+| flux de sonde du pair moins de `B/2` après la fin du précédent, ou moins de `B` après une violation du répondeur | répondeur | refusé sans être lu |
+| rôles du pair qui ne permettent plus un flux ouvert | les deux | flux réinitialisé |
+| identifiant refusé (`na`) | sondeur | plus de sonde sur C ; chiffre inconnu |
+| autre échec d'ouverture | sondeur | `reprise = maintenant + B` |
+
+Une violation ne touche que le flux de sonde : elle **NE DOIT** entraîner ni GOAWAY, ni fin de
+session, ni changement de rôle ; un point **PEUT** la compter (sans journaliser d'octet du flux).
+
+#### 8.5.9 Versions et absence
+
+- La version est dans l'identifiant, négocié par multistream-select (§1.4.2) : le sondeur propose
+  ses majeures de la plus récente à la plus ancienne (aujourd'hui seulement `1.0.0`).
+- Une **mineure** (`1.x`) ne peut ajouter que des types ignorables, dans leur budget (§8.5.4,
+  §20.8) ; un nouveau type critique, un autre corps ou une autre règle prend une majeure
+  (`/inkwell/linkprobe/2.0.0`).
+- Un pair sans la sonde refuse l'identifiant (`na`) : rien d'autre ne change ; le sondeur ne
+  réessaie pas sur cette connexion, et le chiffre et le niveau sont **inconnus** (Links : `quality
+  = 0`, `lossPermille = 0xFFFF`, `lossScope = 0`, Annexe A.1). Un point **DOIT** accepter de ne
+  jamais avoir de chiffre.
+- La sonde ne se négocie pas dans le HELLO et n'est pas dans `core/2` : son absence n'affaiblit
+  aucune garantie, puisque le chiffre n'est qu'affiché.
+- Un émetteur **DEVRAIT** envoyer, sur au moins un flux sur huit, **un** message ignorable GREASE
+  (un des quatre types, corps aléatoire ≤ 8 octets) après son premier message critique, et
+  **NE DOIT PAS** en envoyer plus d'un par flux ; un lecteur **DOIT** le sauter. La limite est
+  tenue par le lecteur : un ignorable au-delà de son budget (§8.5.4) est une violation.
+
+#### 8.5.10 Sécurité et confidentialité
+
+- **Pair byzantin (répondeur).** Il peut mentir sur `received`. Cela ne fausse que le chiffre
+  de **son propre lien** chez le sondeur : borné à 0–1000 ‰, jamais au-delà de ce qui a été envoyé
+  (`r ≤ sent(C)`), jamais à reculons (`r ≥ dernier_r`), et sans effet sur une décision (§8.5.5).
+  Il peut le faire paraître bon ou mauvais ; il le pourrait aussi en jetant ou en retardant des
+  paquets. Pendant une fermeture, ce qu'il envoie est lu et jeté, au plus 1024 octets et au plus
+  `B` (§8.5.3).
+- **Relais qui répond.** Le relais fixe le chiffre de premier saut (`lossScope = 2`) de **chaque**
+  pair qui passe par lui, sans être membre d'aucun projet. Il voit et achemine déjà tous ces
+  paquets : il pourrait de même les retarder ou les jeter. Le chiffre est marqué « premier saut »
+  et n'est qu'affiché ; le niveau d'un lien relayé reste inconnu (Annexe A.1). Un point ne répond qu'aux membres et, s'il est relais, à ses clients
+  (§8.5.1) ; il refuse la sonde d'un invité du salon.
+- **Pair byzantin (sondeur).** Il obtient au plus `3 + 2 × t` échos par connexion en `t` secondes,
+  de 14 octets contre 6 : une amplification bornée à ≈ 2,3 dans une connexion authentifiée (pas de
+  réflexion vers un tiers, QUIC valide l'adresse). Il ne peut pas inonder le répondeur : au-delà de
+  la borne de `seq` (plus 20) ou du budget des ignorables, son flux est réinitialisé, et un nouveau
+  flux est refusé `B/2` après chaque fin, `B` après une violation. *Résiduel :* un refus n'est pas
+  gratuit (une négociation multistream-select, puis une réinitialisation), et la sonde ne compte
+  pas les refus ; un pair qui ouvre et se fait refuser en boucle n'est borné que par les limites de
+  flux de QUIC (`MAX_STREAMS`) et du gestionnaire de ressources (§16.1), comme pour tout autre
+  protocole de libp2p. Rouvrir le flux ne remplit pas le crédit
+  (il est par connexion). **Une nouvelle connexion** repart d'un état neuf (crédit plein, aucun
+  refus) : c'est voulu (rien ne passe d'une connexion à l'autre), et c'est borné par les limites de
+  connexions du §16.1 (2 par pair) et par le temps d'établir une connexion authentifiée.
+- **Sondeur honnête sur un réseau qui bloque.** Ses PROBE retenus puis délivrés d'un coup ne
+  causent aucune violation : une sonde jetée n'est pas une faute, la borne de `seq` part de
+  l'acceptation du flux par le répondeur, et les sondes écrites avant elle sont jetées
+  (§8.5.6, étape 3).
+- **Rejeu et désordre.** Impossibles par un tiers (TLS 1.3) ; d'un pair, ils sont des violations
+  (`seq` strictement croissant dans chaque flux).
+- **Épuisement.** Tout est borné (§8.5.7) ; aucun message n'est mis en file (écrivain d'un
+  message) ; les flux de sonde sont toujours lus (§8.5.3) et ont leur propre limite du gestionnaire
+  de ressources (§16.1).
+- **Exactitude.** L'erreur du chiffre est bornée par les croisements du PROBE (§8.5.5,
+  « Exactitude ») ; ce qu'un point fait de ses propres envois ne fausse que son propre chiffre, pas
+  celui des autres. La personne ne voit que le niveau (Annexe A.1).
+- **Confidentialité** ([RFC 6973]). La sonde ne porte aucun contenu, aucune adresse, aucun
+  identifiant ni horodatage. `received` dit au sondeur combien de ses paquets sont arrivés, ce que
+  les trames ACK lui disent déjà en grande partie ([RFC 9000 §19.3]) ; le relais qui répond sur son
+  premier saut voit déjà tous ces paquets. Le délai de l'écho au niveau applicatif, au-delà du
+  RTT, laisse deviner la charge du répondeur (son ordonnanceur, sa machine) : c'est un résiduel
+  accepté, que l'écriture immédiate de l'écho (§8.5.6, étape 3) réduit et que le PTO borne (un écho
+  plus lent est jeté). Le chiffre reste local (Annexe A.1, jamais envoyé à un pair).
+
+#### 8.5.11 Conformité
+
+`vectors/linkprobe.json` (portée `transport`, §21) : les messages (`linkprobe_message` : `accept`,
+`reject`, `ignore`, `incomplete`), le PTO (`linkprobe_pto`), et des scripts d'événements avec les
+réponses attendues pour le sondeur (`linkprobe_prober`), le répondeur d'une connexion
+(`linkprobe_responder`) et l'hôte d'une connexion, sans E/S (`linkprobe_host` : transport, rôles,
+négociation, octets lus par morceaux, identités des flux entrants, fins de flux, écrivain,
+minuteries, actions demandées). Modèle : [tla/LinkProbe.tla](tla/LinkProbe.tla) (README
+« LinkProbe »). Référence : paquet `protocol/linkprobe`. Exactitude et niveaux :
+`scripts/netsim/c5model.py errors`, `flicker`, `report` (ADR 0036, « Levels »).
+
+Ce que chaque règle normative a pour preuve :
+
+| Règle | Preuve |
+|---|---|
+| transport : QUIC brut seulement, sinon jamais ouvert et flux du pair refusé (§8.5.1) | `linkprobe-host-tcp`, `-circuit`, `-webtransport` |
+| table des rôles, union de rôles, changement de rôle (réinitialisation, puis `reprise = B` pendant la négociation comme sur un flux ouvert) (§8.5.1, §8.5.5) | `linkprobe-host-guest`, `-relay`, `-relay-client`, `-two-roles`, `-roles-change`, `-roles-negotiating`, `-roles-open`, `-unsupported` (réponse) |
+| négociation avant le premier PROBE, premier PROBE aussitôt ; `na` → plus jamais ; autre échec ou 10 s → `B` ; fin de négociation sans négociation : sans effet (§8.5.3, §8.5.5 étape 1) | `linkprobe-host-negotiate`, `-unsupported`, `-open-failed`, `-negotiation-timeout`, `-negotiated-unasked` |
+| le répondeur n'ouvre jamais de flux ; second flux refusé ; flux refusé sans effet (§8.5.3) | `linkprobe-host-relay-client`, `-second-inbound`, `linkprobe-responder-second-stream` |
+| après la fin : octets jetés sans effet ; message incomplet puis fin = fin ordinaire (§8.5.3) | `linkprobe-prober-ended`, `-unknown-seq`, `linkprobe-host-truncated-end`, `-close`, `-inbound-fin`, `linkprobe-responder-ended` |
+| fermeture : définitive pour la connexion, même sans flux ouvert, FIN, lecture jetée au plus 1024 octets, réinitialisation après `B`, FIN reporté pendant la négociation ; FIN en réponse (§8.5.3) | `linkprobe-host-close`, `-close-idle`, `-closing-timeout`, `-closing-junk`, `-close-negotiating`, `-inbound-fin` |
+| toujours lu, même écrivain occupé (§8.5.3) | `linkprobe-host-blocked` (lecture et sondes jetées, écrivain occupé) ; porte C5S : test d'intégration des fenêtres QUIC |
+| priorité facultative (§8.5.3) | rien à prouver ; la borne d'erreur ne la suppose pas : `test_error_bound_without_priority` |
+| écrivain d'un message, au plus un ECHO par lecture, rien en file (§8.5.3, §8.5.6) | `linkprobe-prober-blocked`, `linkprobe-responder-blocked`, `linkprobe-host-blocked`, `-one-message` |
+| refus de `len` dès le premier octet ; longueurs, types, `seq = 0` ; tampon de 65 octets ; lectures par morceaux (§8.5.4) | `linkprobe-len-only`, `-len-zero`, `-len-max-byte`, `-probe-short`, `-probe-long`, `-echo-short`, `-echo-long`, `-type-zero`, `-critical-*`, `-reserved-*`, `-*-seq-zero` ; `FuzzDecode`, `FuzzHost` |
+| budget des ignorables, sondes jetées et échos périmés compris ; la limite GREASE tenue par le lecteur (§8.5.4, §8.5.9) | `linkprobe-prober-ignorable-*` (dont `-ignorable-stale`), `linkprobe-responder-ignorable-*` (dont `-ignorable-dropped`), `linkprobe-host-inbound-ignorables` |
+| GREASE de l'émetteur : au plus un par flux (§8.5.9) | par construction : la référence n'en écrit pas ; un émetteur qui en écrirait plus se heurte au budget du lecteur (vecteurs ci-dessus) |
+| incomplet n'est pas une faute (§8.5.4) | `linkprobe-head`, `-truncated`, `linkprobe-host-chunks` |
+| espacement (§8.5.5) ; dans l'ordre : épuisé, trop tôt, écrivain occupé (étape 2) | `linkprobe-prober-spacing` (trop tôt avant occupé), `-blocked` ; `TestProberExhaustedForGood` (épuisé avant tout) |
+| ouverture refusée : déjà ouvert, épuisé, avant `reprise` (§8.5.5 étape 1) | `linkprobe-prober-open-twice`, `-unknown-seq`, `-ended` ; `TestProberExhaustedForGood` |
+| règles de l'ECHO, étapes 1 à 7, dans cet ordre (§8.5.5) | `linkprobe-prober-*` (périmé, tardif, doublon, désordre, `received` qui décroît ou dépasse, `-received-equals-sent`, `-stale-above-sent`) ; TLA+ `SampleBounded`, `NoLateSample`, `Monotone` |
+| fin du flux : `attente` vidée, échantillons et `dernier_r` gardés ; violation : tout vidé, `dernier_r` à 0 (§8.5.5 étapes 7 et 8) | `linkprobe-prober-end-clears-pending`, `-end-keeps-received`, `-violation-forgets-received`, `-ended`, `-unknown-seq` |
+| PTO, `kGranularity`, arrondi à la milliseconde, `max_ack_delay` par défaut de 26 ms (§8.5.5 étape 3.6) | `linkprobe-pto`, `-granularity`, `-granularity-zero`, `-round-up`, `-no-max-ack-delay`, `-zero-max-ack-delay` ; `TestPTO` |
+| chiffre, fenêtre, arrondi, minimum de 200, écart de 15 s, borne 0–1000 (§8.5.5 étape 5) | `linkprobe-prober-basic`, `-window`, `-rounding`, `-min-packets`, `-min-span`, `-more-received` ; `TestLossExactNearMaxUint64` ; TLA+ `FigureInRange`, `Exact` |
+| exactitude, borne prudente (§8.5.5, §8.5.6) | `c5model.py errors`, `test_error_bound_without_priority` ; TLA+ `Exact` (mutant `LinkProbeDataOnly`) |
+| niveau : chaque seuil et un en dessous, depuis chaque niveau (§8.5.5 étape 6) | `linkprobe-level-*` (32 vecteurs `linkprobe_level`) ; `TestStepBoundaries`, `TestStepMonotoneAndIdempotent` |
+| niveau : à chaque nouveau chiffre, milieu après inconnu, pire de la perte et de l'aller-retour (médiane basse), hystérésis gardée moins de `W` d'inconnu, oubliée au-delà (§8.5.5 étape 6) | `linkprobe-prober-level`, `-level-rtt`, `-level-short-unknown`, `linkprobe-host-chunks` ; `c5model_test.py` (`Levels`) ; netsim C5 (porte C5S) |
+| `seq` épuisé : FIN, plus jamais sur la connexion (§8.5.5 étape 2) | `TestHostExhausted`, `TestProberExhaustedForGood` (2³² sondes : hors de portée d'un script) |
+| crédit par connexion, exact à la milliseconde, plafond du temps écoulé, sondes jetées sans faute, borne de `seq` (depuis l'acceptation, ramenée à 0, marge de 1/64, 20 de marge jetés, `dernier_seq` avancé par une sonde jetée), refus `B/2` après toute fin (réinitialisation du pair comprise) et `B` après une violation, fin sans flux sans effet (§8.5.6) | `linkprobe-responder-bucket`, `-credit-exact`, `-drops-free`, `-stall`, `-seq-bound`, `-seq-from-accept`, `-seq-skew`, `-drop-updates-seq`, `-accept-delay`, `-reopen-gap`, `-replay`, `-end-without-stream`, `linkprobe-host-ban`, `-peer-reset-refusal`, `-inbound-flood`, `-inbound-malformed`, `-roles-refusal` ; `TestResponderCreditCapped`, `TestSeqBoundClampsBeforeOpening` ; TLA+ `EchoBound`, `HonestNoViolation`, `BanHolds`, `RateBound` (configuration `LinkProbeAccept`, mutant `LinkProbeNoDropBand`) |
+| code de réinitialisation jamais interprété ; jamais de GOAWAY ni de fin de session (§8.5.3, §8.5.8) | par construction : l'interface `Host` ne reçoit aucun code et n'a aucune action de session |
+| le chiffre n'entre dans aucune décision (§8.5.5) | porte C5S : test d'architecture (seul `internal/bridge` lit le chiffre) |
+| compteurs `sent(C)`, `received(C)` ; `received` lu après la lecture du PROBE, ±1 (§8.5.2, §8.5.6) | lus du transport : tests de l'intégration (porte C5S, simulateur `natNet`), dont celui qui fixe le comportement de `PacketsReceived` à chaque montée de quic-go |
+| rôles appliqués à la connexion réelle ; gestionnaire de ressources, 4 + 2 par pair (§8.5.1, §16.1) | tests de l'intégration (porte C5S) |
+
+Sans effet observable, donc sans vecteur (une variante qui les enfreint se comporte comme la règle) :
+le plafond `M` (une fenêtre compte au plus 61 échantillons), `dernier_envoi` d'un flux à l'autre
+(`B ≥ E`), le retrait des entrées d'`attente` de `seq` plus petit (les plus anciennes sortent en
+premier), un crédit rempli à chaque flux (il se remplit en 1,5 s, un flux rouvre 30 s plus tôt au
+mieux), et l'écrivain gardé libre après une sonde jetée dans une même lecture (aucune sonde plus
+loin dans la lecture ne peut avoir d'écho). Côté décodeur, un type `0x00` ou `≥ 0x80` refusé comme réservé ou comme critique non attribué
+donne le même verdict.
 
 ## 9. Couche dépôt : messages automerge-repo
 
@@ -1558,6 +2064,7 @@ de `protocol` ; un test par ligne vérifie la borne, la borne + 1 et la reprise.
 | sessions par pair | 2 pendant un passage ; limites du gestionnaire de ressources = 2 × celles d'une session | — | la plus ancienne fermée | — |
 | fenêtres QUIC | maximum de connexion ≥ maximum de flux + fenêtre initiale de flux + 1 Mio (go-libp2p v0.51.0 et quic-go v0.64.1 : 15 ≥ 10 + 0,5 + 1 Mio ; initiales 512 / 768 Kio) | — | démarrage refusé (porte P-QUIC) | — |
 | trames ignorables | 256 trames et 256 Kio par minute et par pair | par pair | OVERLOADED | — |
+| sonde de lien (§8.5.7) | message : `len` ≤ 64, au plus 65 o gardés d'un message incomplet ; flux (gestionnaire de ressources libp2p, portées *protocol* × *peer*) : 4 entrants et 2 sortants par pair (2 connexions × (1 + 1 en fermeture), 2 × 1), tant que les portées *peer* et *transient* laissent de la place (la portée du protocole n'en réserve pas) ; par connexion, l'hôte en tient 1 entrant et 1 sortant ; négociation ≤ 10 s ; 1 PROBE par seconde, jamais à moins de 500 ms, `seq` ≤ (temps depuis l'acceptation, + 1/64) / 500 ms + 2 répondu, jusqu'à 20 de plus jeté ; 8 en attente ; 64 échantillons ; fenêtre 30 s, chiffre inconnu sous 200 paquets ou à moins de 15 s entre ses deux échantillons ; niveaux : perte 5 / 10 / 25 ‰ et 50 / 100 / 150 ‰, aller-retour 400 / 500 / 625 ms et 1,6 / 2 / 2,5 s ; crédit d'écho 1500 ms par connexion, 500 ms par écho ; `max_ack_delay` 26 ms s'il n'est pas exposé ; un ignorable par message, plus un, par flux ; nouveau flux entrant refusé 30 s après la fin du précédent ; 1024 o lus et jetés après le FIN du sondeur | par connexion | sonde jetée sans faute ; violation : flux de sonde réinitialisé (jamais la session), nouveaux flux du pair refusés 60 s ; fermeture sans réponse ou trop bavarde : réinitialisée | 60 s |
 | progrès d'un flux LARGE | 60 s sans octet alors que réservé et lu | — | flux réinitialisé | règle L |
 | génération | engagements et réessais 1 / 2 s par pair, doublé jusqu'à 60 s (mémoire 10 min) ; flux REPO entrants ≤ 2 / 2 s ; `gen ≤ 2^32 − 1` | — | retardé ; OVERLOADED ; fin de session (règle W) | — |
 | vrac (demandeur) | 1 demande par (pair, hash), 2 par pair ; 30 s sans octet ; 3 échecs par plage ; 5 BUSY de suite | par pair | échec | autre détenteur |
@@ -1638,6 +2145,10 @@ de `protocol` ; un test par ligne vérifie la borne, la borne + 1 et la reprise.
   maintenant)`.
 - **Secrets** : le secret du ticket est comparé en temps constant, à usage unique, jamais
   journalisé ; aucun octet de charge n'est journalisé.
+- **Sonde de lien** (§8.5.10) : un pair qui ment sur ses compteurs ne fausse que le chiffre de
+  son propre lien, borné à 0–1000 ‰ et jamais au-delà de ce qui a été envoyé ; un relais qui
+  répond fixe le chiffre de premier saut de ceux qu'il relaie ; le chiffre n'entre dans aucune
+  décision ; au plus `3 + 2 × t` échos par connexion ; une sonde jetée n'est jamais une faute.
 
 ## 18. Considérations de confidentialité
 
@@ -1653,6 +2164,10 @@ Selon [RFC 6973] :
 - **Entre membres** : HELLO révèle le `ProjectID` ; attestations et tuples d'auteur révèlent
   l'heure et le volume des modifications ; la présence, curseur et nom affiché. Rien ne sort
   du projet.
+- **Sonde de lien** (§8.5.10) : aucun contenu, adresse, identifiant ni horodatage ; `received`
+  dit au sondeur combien de ses paquets sont arrivés, ce que les ACK lui disent déjà en grande
+  partie ; le délai de l'écho laisse deviner la charge du répondeur (résiduel accepté) ; le
+  chiffre reste local.
 
 ## 19. Écarts avec le code au 2026-11-01
 
@@ -1710,25 +2225,72 @@ triées, séparées par des virgules, ≤ 64) · `equiv/<hex32>/<seq décimal �
 ### 20.6 Identifiants de protocole
 
 `/inkwell/control/2.0.0` · `/inkwell/repo/2.0.0` · `/inkwell/presence/2.0.0` ·
-`/inkwell/large/2.0.0` · `/inkwell/bulk/1.0.0` · `/inkwell/lobby/1.0.0`. `/inkwell/sync/1.0.0`
-est retiré (bascule nette). Une nouvelle classe s'ajoute par une mineure, liée à une capacité.
+`/inkwell/large/2.0.0` · `/inkwell/bulk/1.0.0` · `/inkwell/lobby/1.0.0` ·
+`/inkwell/linkprobe/1.0.0` (§8.5 ; hors session, sans capacité : son absence est permise,
+§8.5.9). `/inkwell/sync/1.0.0` est retiré (bascule nette). Une nouvelle classe de session
+s'ajoute par une mineure, liée à une capacité.
 
 ### 20.7 Raisons de refus du salon
 
 `1` Invalid · `2` Declined · `3` Busy · `4` Failed · `5` TooLarge.
 
+### 20.8 Types de message de la sonde de lien (`/inkwell/linkprobe/1.x`)
+
+`0x00` réservé ; `0x01` PROBE, `0x02` ECHO (§8.5.4) ; `0x03`–`0x3F` (critiques) : à attribuer
+par une majeure seulement ; `0x40`–`0x7F` (ignorables) : à attribuer par une mineure, dont GREASE
+`0x4A`, `0x5A`, `0x6A`, `0x7A` ; `0x80`–`0xFF` : réservés à une majeure. Une extension ignorable
+doit tenir dans le budget des ignorables (§8.5.4 : un par message critique, plus un, par flux) et
+ne demande au lecteur que de la sauter, sans état ni réponse ; plus bavarde, ou exigeant un
+traitement, elle prend une majeure.
+
 ## 21. Conformité, vecteurs et modèle
 
 - **Vecteurs.** Les fichiers [vectors/](vectors/) sont normatifs :
   `{spec, spec_version, generator, keys?, vectors: [{id, status, enforce?, description,
-  decoder, context?, input_hex | inputs_hex | (input_sha256, recipe), verdict, expect?, current_go?}]}`. Un vecteur trop gros pour être recopié (≥ 4 Mio) donne l'empreinte SHA-256 de son entrée et la recette exacte pour la régénérer avec le générateur. `verdict` : `accept` ou
-  `reject` ou `ignore` (jeté sans erreur ni sanction) ; `expect` : ce qu'une implémentation
+  decoder, context?, input_hex | inputs_hex | (input_sha256, recipe) | events, verdict, expect?,
+  current_go?, scope?}]}`. Un vecteur trop gros pour être recopié (≥ 4 Mio) donne l'empreinte SHA-256 de son entrée et la recette exacte pour la régénérer avec le générateur. `verdict` : `accept` ou
+  `reject` ou `ignore` (jeté sans erreur ni sanction) ou `incomplete` (il faut lire la suite :
+  ni accepté ni refusé) ; `expect` : ce qu'une implémentation
 **DOIT** reproduire ; `context` : l'état du
   receveur dont le verdict dépend (pair authentifié, receveur, ensemble admis, génération et
   mode, annonces lues) ; `status` : `normative` (octets déjà émis par inkwell) ou `proposed` ;
   `enforce` : l'étape de migration de l'[ADR 0034] à partir de laquelle les exécuteurs
   l'exigent (avant, ils l'exécutent et signalent sans échouer) ; `current_go` : comportement
-  actuel quand il diffère.
+  actuel quand il diffère ; `scope` : `transport` pour un format de la couche libp2p qui
+  n'atteint jamais la webview (la sonde, §8.5) — seules les implémentations de cette couche
+  l'exécutent, `@inkwell/protocol` non ; `events` : un script de machine à états, des
+  événements dans l'ordre `{op, at_ms, …, expect}` (`at_ms` : instant en ms d'une horloge
+  monotone ; `context`, pour l'hôte, le transport et les rôles du pair). Les minuteries
+  n'agissent qu'à un événement (un `tick` ou une lecture), jamais entre deux. Valeurs par défaut
+  d'un champ absent : `writable` vrai, `sent`, `sent_now`, `received` et `pto_ms` 0, `roles` (un
+  événement ou le contexte) vide si absent ou `null` ; un vecteur de message (`linkprobe_message`)
+  porte **exactement un message** : des octets en trop sont un refus. Sondeur (`linkprobe_prober`,
+  état d'une connexion neuve) : `open` (`expect` : `ok`, `backoff`, `already_open` ou
+  `exhausted`), `probe` (`sent`, `writable` ;
+  `expect` : le PROBE en hexadécimal, ou `no_stream`, `too_soon`, `skipped`, `exhausted`),
+  `receive` (`message_hex`, `sent_now`, `pto_ms` ; `expect` : `accepted`, `late`, `stale`,
+  `ignored`, `violation` ou `discarded`), `ended` (fin du flux), `restart` (nouvelle connexion),
+  `loss` (`expect` : le chiffre en ‰, 65535 = inconnu), `level` (`expect` : `good`, `fair`,
+  `poor` ou `unknown` ; l'événement fait avancer l'hystérésis, §8.5.5 étape 6). Répondeur
+  (`linkprobe_responder`, une
+  connexion établie au premier événement) : `stream` (`action` : `open` ou `end` ; `expect` : `ok`
+  ou `refused`), `receive` (`message_hex`, `received`, `writable` ; `expect` : l'ECHO en
+  hexadécimal, ou `dropped`, `ignored`, `violation`, `discarded`). Hôte (`linkprobe_host`,
+  connexion établie au premier événement, `context` : `transport` `quic` (v1 ou v2, brut) | `tcp` |
+  `circuit` | `webtransport`, `roles` : liste parmi `member`, `relay`, `relay_client`, vide pour un
+  invité) : `tick` (`sent`, `writable`), `negotiated` (`ok`, `sent`, `writable`), `outbound_data`
+  (`data_hex`, `sent_now`, `pto_ms`), `outbound_ended`, `close`, `inbound_opened` (`stream`),
+  `inbound_data` (`stream`, `data_hex`, `received`, `writable`), `inbound_ended` (`stream`,
+  `fin`), `roles` (`roles`), `loss`, `level` ; un événement `inbound_data` est **une lecture** : ses octets
+  peuvent contenir plusieurs messages ou un morceau, et `writable` vaut pour le premier message
+  écrit, l'écrivain étant ensuite occupé jusqu'à l'événement suivant ; `expect` : la liste ordonnée
+  des actions demandées (`open_out`, `write_out:<hex>`, `reset_out`, `fin_out`,
+  `write_in:<flux>:<hex>`, `reset_in:<flux>`, `refuse_in:<flux>`, `fin_in:<flux>`). PTO
+  (`linkprobe_pto`, `context` : `srtt_us`, `rttvar_us`, `max_ack_delay_us` ou `null` s'il n'est pas
+  exposé ; `expect` : `pto_ms`). Niveau (`linkprobe_level`, `context` : `kind` `loss` (valeur en ‰)
+  ou `rtt` (en ms), `from` : le niveau d'avant (`unknown`, `good`, `fair`, `poor`), `value` ;
+  `expect` : `level`, le niveau après un pas, §8.5.5 étape 6). Les vecteurs de la sonde sont
+  `proposed` : inkwell ne les émet pas encore.
 - **Générateurs.** `protocol/cmd/vectors` (Go, vrais codecs : `trust`, `blob`, `invite`,
   `bridge`, `sig`, `crypto/ed25519` ; `policy.json` conservé tant que le codec
   `policy` est absent de cette branche) et
@@ -1741,7 +2303,8 @@ est retiré (bascule nette). Une nouvelle classe s'ajoute par une mineure, liée
   `bulk+expect`, `ticket_text`, `lobby_request`, `lobby_reply`, `sync2_stream` (dont
   `compat.json`), `trust_fold` (`fold.json`), `author_batch+verify`, `evidence+verify`,
   `listing_op+verify`, `final_ack+verify`, `listing_admit` (`objects.json`), `guard_schema`,
-  `repo_message`, `bridge_envelope` (interne).
+  `repo_message`, `bridge_envelope` (interne), `linkprobe_message`, `linkprobe_prober`,
+  `linkprobe_responder`, `linkprobe_host`, `linkprobe_pto`, `linkprobe_level` (`linkprobe.json`, portée `transport`).
 - **Matrice de compatibilité** (N14) : `compat.json` (session) et `repo.json#compat-*`
   (couche dépôt) disent ce qu'un décodeur 2.0 fait d'octets d'une mineure future ou d'une
   autre majeure (extension ignorée, « à comprendre » refusé, rétrogradation détectée, GREASE
@@ -1749,7 +2312,8 @@ est retiré (bascule nette). Une nouvelle classe s'ajoute par une mineure, liée
   qu'un décodeur 2.0 **doit** rendre, et un test croisé fait décoder les vecteurs de N+1 par
   le décodeur N (paquets `protocol/sync2` de deux versions du module).
 - **Modèles.** [tla/RepoGen.tla](tla/RepoGen.tla) (`RepoGenSmall.cfg` exhaustif, `RepoGen.cfg`
-  long) et [tla/ConnCredit.tla](tla/ConnCredit.tla) ; `mise run tla` (TLC épinglé, SHA-256) ;
+  long), [tla/ConnCredit.tla](tla/ConnCredit.tla) et [tla/LinkProbe.tla](tla/LinkProbe.tla)
+  (§8.5) ; `mise run tla` (TLC épinglé, SHA-256) ;
   c'est une porte de l'ADR 0034 avant la bascule. §7.3 dit exactement ce qu'ils couvrent.
 - **Conformité.** Une implémentation est conforme si elle donne le verdict attendu sur tous les
   vecteurs de la version qu'elle annonce, reproduit chaque `expect`, et passe l'exécuteur
@@ -1850,6 +2414,19 @@ déterministe envisagé (→ validité de [RFC 8949 §5.3.1]).
 [RFC 9420]: https://www.rfc-editor.org/rfc/rfc9420
 [RFC 6709]: https://www.rfc-editor.org/rfc/rfc6709
 [RFC 9000 §15]: https://www.rfc-editor.org/rfc/rfc9000#section-15
+[RFC 9000 §9]: https://www.rfc-editor.org/rfc/rfc9000#section-9
+[RFC 9000 §18.2]: https://www.rfc-editor.org/rfc/rfc9000#section-18.2
+[RFC 9218]: https://www.rfc-editor.org/rfc/rfc9218
+[RFC 9369]: https://www.rfc-editor.org/rfc/rfc9369
+[RFC 9000 §12.3]: https://www.rfc-editor.org/rfc/rfc9000#section-12.3
+[RFC 9000 §19.3]: https://www.rfc-editor.org/rfc/rfc9000#section-19.3
+[RFC 9000 §19.4]: https://www.rfc-editor.org/rfc/rfc9000#section-19.4
+[RFC 9000 §19.5]: https://www.rfc-editor.org/rfc/rfc9000#section-19.5
+[RFC 9001 §4.1.2]: https://www.rfc-editor.org/rfc/rfc9001#section-4.1.2
+[RFC 9001 §5]: https://www.rfc-editor.org/rfc/rfc9001#section-5
+[RFC 9002 §5]: https://www.rfc-editor.org/rfc/rfc9002#section-5
+[RFC 9002 §6.1]: https://www.rfc-editor.org/rfc/rfc9002#section-6.1
+[RFC 9002 §6.2.1]: https://www.rfc-editor.org/rfc/rfc9002#section-6.2.1
 [Chalkias 2020]: https://eprint.iacr.org/2020/1244
 [DRR]: https://doi.org/10.1109/90.502236
 [Bao]: https://github.com/oconnor663/bao/blob/master/docs/spec.md
@@ -1867,6 +2444,7 @@ déterministe envisagé (→ validité de [RFC 8949 §5.3.1]).
 [ADR 0031]: ../adr/0031-frontiere-admission-chaines-documents.md
 [ADR 0032]: ../adr/0032-canal-invitation-wormhole.md
 [ADR 0034]: ../adr/0034-protocole-unifie.md
+[ADR 0036]: ../adr/0036-link-probe.md
 
 ## Annexe A — Pont interne Go ↔ webview (hors contrat public)
 
@@ -1908,7 +2486,7 @@ enveloppe { version u8 = 1 ; kind u8 ; peer str8 (PeerID, 1–64) ; payload [res
 - **Links** : `Link = peer str8 (1–64) ; path u8 (0 inconnu, 1 lan, 2 direct, 3 relayed) ;
   quality u8 (0 inconnue — rien de mesuré —, 1 good, 2 fair, 3 poor) ; pathAgeMs u32 ; upgrades u16 ; fallbacks u16 ;
   rttMs u32 ; rttVarMs u32 ; rttAgeMs u32 (rttMs = 0 : pas de mesure) ; lossPermille u16
-  (0xFFFF : moins de 50 paquets, inconnu) ; lossScope u8 (0 aucun, 1 path, 2 firstHop) ;
+  (0xFFFF : inconnu) ; lossScope u8 (0 aucun, 1 path, 2 firstHop) ;
   upMs u32 (0 : déconnecté) ; downs10m u16 ; downsTotal u32 ; lastDownMs u32 ; resyncs10m u16 ;
   resyncs u32 ; pendingMsgs u32 ; pendingBytes u32 ; oldestPendingMs u32 ; sendFailures u32 ;
   resets u32`, grand-boutiste. Les instants sont envoyés en **âges** (ms écoulées) : aucune
@@ -1918,6 +2496,22 @@ enveloppe { version u8 = 1 ; kind u8 ; peer str8 (PeerID, 1–64) ; payload [res
   `path`, `quality` ou `lossScope` hors domaine, un doublon, un ordre non trié ou un `n` > 1024
   est refusé (`#bridge-links-bad-*`, un vecteur par défaut). **Aucune adresse réseau** (IP,
   multiadresse) n'y figure, seulement le type de chemin (§18).
+- **Sens de `quality`, `lossPermille` et `lossScope`** (depuis la révision 11, [ADR 0036]) :
+  `quality` est le **niveau** du lien (§8.5.5, étape 6 : 1 bon, 2 moyen, 3 mauvais, 0 inconnu),
+  le seul que l'interface montre à la personne ; `lossPermille` est le chiffre de perte de la sonde
+  (§8.5.5, étape 5), jamais une déclaration de perte de l'émetteur, gardé comme **diagnostic**
+  (journal, panneau de diagnostic, aide au dépannage) avec sa borne d'erreur (§8.5.5,
+  « Exactitude ») : l'interface **NE DOIT PAS** le montrer comme une qualité, et rien d'autre ne
+  doit en dépendre. Chemin `lan` ou `direct` : le sondeur sur la connexion QUIC directe qui porte
+  la session du pair (§5.1 ; avant 2.0, celle qui porte `/inkwell/sync/1.0.0`, retiré en 2.0,
+  §20.6), `lossScope = 1`, et `quality` est le niveau de cette connexion ; quand la session passe à
+  une autre connexion, chiffre et niveau repartent de celle-ci (inconnus d'abord). Chemin
+  `relayed` : `lossPermille` est le chiffre du sondeur sur la connexion QUIC vers le relais, si le
+  relais répond à la sonde (`lossScope = 2`, premier saut seulement), mais **`quality = 0`** : la
+  sonde ne mesure pas le chemin de bout en bout, et montrer le premier saut comme la qualité du
+  lien tromperait la personne (une étiquette « premier saut » serait du jargon). Sinon, ou tant
+  que le chiffre est inconnu : `quality = 0`, `lossPermille = 0xFFFF` et `lossScope = 0`. Le
+  chiffre ne dépasse jamais 1000.
 - **Coalescence de Links** : dernière valeur seulement ; au plus une par seconde, et seulement
   si le contenu a changé — les âges (`pathAgeMs`, `rttAgeMs`, `upMs`, `oldestPendingMs`) ne
   comptent que par leur passage de zéro à non nul ou l'inverse, la webview les fait vieillir
