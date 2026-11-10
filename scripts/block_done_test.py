@@ -42,5 +42,28 @@ class Efficacy(unittest.TestCase):
         self.assertEqual(block_done.MIN_EFFICACY, 95.0)
 
 
+class PreflightTest(unittest.TestCase):
+    def test_a_failing_base_guard_stops_done_before_the_long_steps(self):
+        import types
+        calls = []
+        def fake_sh(cmd, **kw):
+            calls.append(cmd)
+            return types.SimpleNamespace(returncode=1 if "--base-guard" in cmd else 0)
+        orig = block_done.sh
+        block_done.sh = fake_sh
+        try:
+            with self.assertRaises(SystemExit) as e:
+                block_done.preflight("ANY")
+            self.assertIn("base guard failed", str(e.exception))
+            self.assertEqual(len(calls), 1)
+        finally:
+            block_done.sh = orig
+
+    def test_preflight_runs_right_after_step_2(self):
+        src = (block_done.ROOT / "scripts/block_done.py").read_text()
+        main = src[src.index("def main():"):]
+        self.assertLess(main.index("preflight(a.block)"), main.index('must("mise run lint'))
+
+
 if __name__ == "__main__":
     unittest.main()

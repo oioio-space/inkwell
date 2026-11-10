@@ -78,6 +78,18 @@ def step1_gate_first(block, base):
     print("done: 1 gate written before the code: ok")
 
 
+def preflight(block):
+    """Cheap checks a long run would only fail at its end (CI study R9): the gate's base guard (dependencies of
+    frozen gates changed without a justified override) and the docs mention of step 8. Fails in seconds, before
+    the hours of steps 3-7."""
+    if sh(f"{sys.executable} scripts/gate.py --base-guard").returncode != 0:
+        sys.exit("done: preflight: base guard failed (a frozen gate's dependency changed without a justified "
+                 "entry in gates/guard-overrides.json); fix it before the long steps")
+    if block not in (ROOT / "docs/objectif-en-cours.md").read_text():
+        sys.exit(f"done: preflight: docs/objectif-en-cours.md does not mention {block} (step 8 would fail)")
+    print("done: preflight (base guard, docs): ok")
+
+
 def step2_simplify(block, files):
     report = ROOT / f"gates/{block}/SIMPLIFY.md"
     if not report.exists() or report.stat().st_size == 0:
@@ -166,6 +178,7 @@ def main():
     files = changed_files(a.base)
     step1_gate_first(a.block, a.base)
     step2_simplify(a.block, files)
+    preflight(a.block)
     must("mise run lint && mise run fe:check && mise run lint:env && mise run lint:claude-md", 3)
     must("mise run formal", 4)
     must("mise run test && mise run test:py", 5)
