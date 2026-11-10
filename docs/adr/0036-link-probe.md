@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 date: 2026-11-09
 amends: 0034 (spec revision 11); W33 link metrics contract v1 (Annex A.1, quality and lossPermille)
 decision-makers: [Mathieu]
