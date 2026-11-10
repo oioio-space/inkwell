@@ -86,7 +86,8 @@ un bloc = un lot, une étape du protocole ou un lot d'outillage. Il suit cet ord
 `mise run done -- <bloc>` (`scripts/block_done.py`) vérifie les étapes 1 à 8 dans le même ordre :
 1. **Spécifier d'abord, en exécutable** : vecteurs (`protocol/vectors`), modèles TLA+ (`docs/protocol/tla`)
    et Alloy (`docs/protocol/alloy`) avec mutants, tests à modèle ; puis la porte figée `gates/<bloc>.toml`,
-   commitée **avant** le code puis gelée, une fois chacune de ses commandes lancée et rouge pour la bonne raison
+   commitée **avant** le code puis gelée, une fois chacune de ses commandes lancée, rouge pour la bonne raison et
+   capable de passer avec les vrais outils (où ils écrivent, ce qu'ils produisent)
    (méthode : `docs/plans/2026-11-08-spec-executable.md` ; gabarit : skill `new-gate` ; modèles : agent
    `formal-modeler`). Le niveau de rigueur du bloc (léger, standard, complet) est choisi d'abord
    (`docs/engineering-principles.md` § 0).

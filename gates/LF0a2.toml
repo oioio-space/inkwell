@@ -1,0 +1,46 @@
+# Frozen acceptance for block LF0a2, superseding LF0a (kept frozen as history). Only change: pnpm >= 10 records
+# patchedDependencies in pnpm-workspace.yaml when it exists (frontend/ has one), so the pinned-patch check accepts the
+# file pnpm actually writes (https://pnpm.io/cli/patch). LF0a, superseding LF0 (gates/LF0.toml stays frozen as history). Found before any code:
+# with an unclosed delimiter (`$`, `#[`, fence, `/*`) the recursive-descent parser cannot reuse work inside the open
+# element (its state is the JS call stack), so « colours within 16 ms in the viewport » for that case needs a parser
+# with explicit state: block LF0b (parser choice, own spec and gate). LF0a keeps every other requirement of LF0 and,
+# for the unclosed case, the no-freeze ones (no step > 50 ms, the whole file eventually coloured). PERF-HL-TYPST-OPEN is
+# opening the file (first highlight, sliced, viewport first); PERF-HL-TYPST-UNCLOSED is a file with an early unclosed
+# delimiter, typing near its end.
+#
+# Block LF0 (rigour: standard; W42): syntax highlighting stays incremental and never freezes the
+# editor, for every highlighted language and any file size, by fixing the causes, never by a size cap. Root causes and
+# proof: docs/plans/2026-11-10-typst-highlight-root-cause.md. Typst: codemirror-lang-typst 0.6.0's hand-written parser
+# ignores the old tree on every edit; fixed by a pinned `pnpm patch` (chunked reuse, a text window, and a parse that
+# yields to CodeMirror's work budget, viewport first), proposed upstream to kxxt/codemirror-lang-typst. Markdown: the
+# two whole-tree walks (@lezer/markdown, parseMixed) fixed at their cause the same way, reported upstream.
+raw_results = ["docs/plans/2026-11-10-typst-highlight-root-cause.md", "docs/objectif-en-cours.md", "gates/LF0a2/*"]
+
+[[criteria]]
+# Same colours: the patched parsers give exactly the original per-node colour tags and tree structure on the corpus
+# (typst test suite + the repo's Typst and Markdown files) and on >= 50 000 random edits over >= 6 seeds; the mutant
+# that removes the window guard is caught. Named tests, all passing.
+id = "equivalence"
+command = "cd frontend && ../scripts/heavy.sh timeout 1800 pnpm exec vitest run --configLoader runner --reporter=json --outputFile=../.task/lf0a2-eq.json src/editor/highlight.equivalence.test.ts && cd .. && python3 -I -c \"import json,sys; r=json.load(open('.task/lf0a2-eq.json')); ok={a['title'] for f in r['testResults'] for a in f['assertionResults'] if a['status']=='passed'}; need=['LF0 Typst patched parser equals the original on the corpus','LF0 Typst patched parser equals the original on random edits','LF0 Markdown fixed parser equals the original on the corpus','LF0 Markdown fixed parser equals the original on random edits','LF0 the window-guard mutant is caught']; miss=[n for n in need if n not in ok]; sys.exit(f'LF0 equivalence missing: {miss}' if miss else 0)\""
+
+[[criteria]]
+# Never a freeze: PERF-HL-TYPST, PERF-HL-TYPST-OPEN, PERF-HL-TYPST-UNCLOSED, PERF-HL-MD, PERF-HL-MD-HTML, PERF-HL-NESTED
+# at 2, 10 and 50 MB, keystroke at 10 %, 50 % and 90 % of the file: no single parse step on the main thread longer
+# than 50 ms, keystroke-to-visible-colours p95 <= 16 ms in the viewport, the whole file eventually coloured; the
+# unclosed-delimiter case: no step > 50 ms and the whole file eventually coloured (its 16 ms viewport colours: LF0b). INKWELL_PERF=1 makes a budget miss fail.
+id = "no-freeze"
+command = "cd frontend && INKWELL_PERF=1 ../scripts/heavy.sh timeout 3600 pnpm exec vitest run --configLoader runner --reporter=json --outputFile=../.task/lf0a2-perf.json src/editor/highlight.perf.test.ts && cd .. && python3 -I -c \"import json,sys; r=json.load(open('.task/lf0a2-perf.json')); ok={a['title'] for f in r['testResults'] for a in f['assertionResults'] if a['status']=='passed'}; need=[f'{c} within budget at {s} MB' for c in ('PERF-HL-TYPST','PERF-HL-TYPST-OPEN','PERF-HL-MD','PERF-HL-MD-HTML','PERF-HL-NESTED') for s in (2,10,50)]+[f'PERF-HL-TYPST-UNCLOSED never freezes at {s} MB' for s in (2,10,50)]; miss=[n for n in need if n not in ok]; sys.exit(f'LF0 perf missing: {miss}' if miss else 0)\""
+
+[[criteria]]
+# The fixes are pinned patches with an upstream route, and no size cap was added for highlighting.
+id = "pinned-no-cap"
+command = "grep -q 'codemirror-lang-typst' frontend/package.json && ls frontend/patches/ | grep -q 'codemirror-lang-typst' && grep -qs 'patchedDependencies' frontend/pnpm-workspace.yaml frontend/package.json && ! grep -rnE 'TypstHighlightMax|highlightOff|HIGHLIGHT_CAP' frontend/src --include=*.ts && grep -q 'upstream' docs/plans/2026-11-10-typst-highlight-root-cause.md"
+
+[[criteria]]
+# No regression: every frontend check and test.
+id = "regression"
+command = "mise run fe:check"
+
+[[criteria]]
+id = "simplify-report"
+command = "test -s gates/LF0a2/SIMPLIFY.md"
