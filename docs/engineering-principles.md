@@ -38,6 +38,10 @@ de portée) et teste l'usage lors d'une courte séance devant l'application.
 
 En cas de doute, on prend le niveau au-dessus.
 
+**Borne de temps (décision du 2026-11-10).** Au plus deux relectures indépendantes par bloc ; après la seconde,
+seuls les constats graves bloquent, les autres deviennent des suivis écrits dans le plan du bloc. Une tâche simple
+reste simple : la rigueur se règle sur le risque, pas sur le temps disponible.
+
 ## 1. Moderne
 
 | Règle | Preuve |
