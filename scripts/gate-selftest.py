@@ -58,6 +58,17 @@ with tempfile.TemporaryDirectory() as tmp:
     m = json.loads((root / "gates/T.json").read_text())
     assert len(m["criteria"]) == 1
     assert not (root / "gates/T/stale.txt").exists() and "gates/T/stale.txt" not in m["sha256"]
+    # A failing base guard stops the gate before any criterion runs: it can no longer pass (fail fast).
+    real_guard = gate.base_guard
+    gate.base_guard = lambda root, stream, ref="main": {"status": "fail"}
+    try:
+        config.write_text('[[criteria]]\nid="long"\ncommand="touch ran.marker"\n')
+        assert gate.run("T", root, pins=pins, guard=True) == 1
+        m = json.loads((root / "gates/T.json").read_text())
+        assert not (root / "ran.marker").exists(), "a criterion ran after the base guard failed"
+        assert [e["status"] for e in m["criteria"]] == ["fail"] and "base guard" in m["criteria"][0]["problem"]
+    finally:
+        gate.base_guard = real_guard
     assert not any(path.endswith("bad.log") for path in m["sha256"]), m["sha256"]
 
     # A deferral must target an existing lot that lists the criterion again.

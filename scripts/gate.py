@@ -144,7 +144,15 @@ def run(lot, root=ROOT, pins=None, guard=True):
         with log.open("wb") as stream:
             guard_record = dict(base_guard(root, stream), log=str(log.relative_to(root)))
         print("base-guard", guard_record["status"], flush=True)
+    # A failing base guard means the gate can no longer pass: stop before the criteria (some run for hours)
+    # instead of failing at the end. Each criterion is recorded as not run.
+    stop = guard_record is not None and guard_record["status"] == "fail"
     for c in config["criteria"]:
+        if stop:
+            entries.append(dict(id=c["id"], command=c.get("command", ""), status="fail",
+                                problem="not run: the base guard failed (see base-guard.log)"))
+            print(c["id"], "fail", "not run: base guard failed", flush=True)
+            continue
         if c.get("status") == "deferred":
             problem = deferral_problem(c, lot, root)
             entries.append(dict(c, status="fail", problem=problem) if problem else dict(c))
