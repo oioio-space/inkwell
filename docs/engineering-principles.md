@@ -38,9 +38,15 @@ de portée) et teste l'usage lors d'une courte séance devant l'application.
 
 En cas de doute, on prend le niveau au-dessus.
 
-**Borne de temps (décision du 2026-11-10).** Au plus deux relectures indépendantes par bloc ; après la seconde,
-seuls les constats graves bloquent, les autres deviennent des suivis écrits dans le plan du bloc. Une tâche simple
-reste simple : la rigueur se règle sur le risque, pas sur le temps disponible.
+**Bien faire du premier coup (décision du 2026-11-10).** Ce n'est pas le nombre de relectures qui fait la qualité :
+une relecture doit confirmer, pas découvrir. Avant toute relecture, l'auteur d'une spécification a :
+
+1. parti du besoin de la personne (ce qu'elle voit et fait), avant toute précision technique ;
+2. vérifié que chaque DOIT est réalisable sur la pile épinglée, en lisant le code des bibliothèques (versions de
+   `go.mod`, `package.json`) ;
+3. réimplémenté sa spécification à partir du seul texte, puis muté cette réimplémentation contre les vecteurs : toute
+   règle dont le mutant survit reçoit un vecteur ;
+4. fondé tout chiffre sur plusieurs graines, avec un intervalle de confiance.
 
 ## 1. Moderne
 
