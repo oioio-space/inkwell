@@ -148,9 +148,10 @@ jour depuis les notes officielles (`https://go.dev/doc/go1.N`) à chaque montée
   nettoyage opportuniste hors du périmètre (le `/simplify` porte sur le diff du lot) ;
 - critère de réussite vérifiable par une machine avant d'écrire du code (porte du lot, test) ;
 - ne jamais affaiblir un test, un seuil ou un délai pour faire passer une porte ;
-- quand un problème devient trop difficile ou que les correctifs s'enchaînent, on s'arrête : on redéfinit
-  le problème, on remet à plat, on reformalise (spec, modèle, mutants, nouvelle porte), puis on fait bien ;
-  jamais de rustine au coup par coup (2026-11-09).
+- **règle d'or** : on traite chaque problème à la racine, clairement et simplement, une fois et bien ; quand
+  un problème devient trop difficile ou que les correctifs s'enchaînent, on s'arrête, on redéfinit le problème,
+  on remet à plat, on reformalise (spec, modèle, mutants, nouvelle porte), puis on fait bien ; jamais de
+  rustine ni de bidouille au coup par coup (2026-11-09, précisée le 2026-11-10).
 
 **Cohérence de l'interface :** une fonctionnalité nouvelle s'intègre à l'existant, jamais en « verrue ».
 Elle doit :
