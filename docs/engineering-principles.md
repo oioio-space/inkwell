@@ -33,6 +33,9 @@ dans sa porte :
 - **complet** (état, concurrence, protocole, sécurité, données venues d'un pair) : tout le tableau, modèle formel avec
   mutants et relecture indépendante (une autre famille de modèles quand elle est disponible).
 
+Les relectures indépendantes sont faites par des agents neufs, jamais par l'utilisatrice ; elle décide (ADR, choix
+de portée) et teste l'usage lors d'une courte séance devant l'application.
+
 En cas de doute, on prend le niveau au-dessus.
 
 ## 1. Moderne
