@@ -1,0 +1,119 @@
+# Frozen acceptance for block PB (rigour: complete — the machinery that judges every later block's performance),
+# written before the code. User decision 2026-11-11: fix the performance method at the root. A regression criterion
+# compares the change with its committed reference (merge-base with main), both built and measured on this machine
+# in one session, pair by pair in a random order; the 10 % budget is an effect size judged by an exact one-sided
+# bound; absolute budgets are certified by order statistics; an environmental fault makes a run invalid and retried,
+# never a pass or a regression. Spec: docs/plans/2026-11-11-pb-paired-perf.md, docs/adr/0038-paired-performance.md,
+# scripts/perf/pbmodel.py (the formal model, with mutant rules). Frozen gates keep their commands: the change lives
+# in the scripts they call, under gates/guard-overrides.json. A unittest or `go test -run` that selects nothing
+# passes, so every criterion requires each named test to be listed by `unittest -v` (nothing skipped, exit 0), to
+# print `--- PASS` (Go), or to be `passed` in Vitest's JSON report.
+raw_results = ["docs/plans/2026-11-11-pb-paired-perf.md", "docs/adr/0038-paired-performance.md", "docs/objectif-en-cours.md", "gates/guard-overrides.json", "docs/perf/2026-11-11-start-drift/*", "gates/PB/*"]
+measurement_reports = ["gates/PB/measurements.json"]
+
+[[criteria]]
+# The decision is written down and the evidence of the fit is archived, sealed and complete (nine sets).
+id = "spec"
+command = '''test -s docs/adr/0038-paired-performance.md && grep -q 'non-inferiority' docs/adr/0038-paired-performance.md && grep -q 'median <= 350 ms' docs/adr/0038-paired-performance.md && grep -q 'ADR 0038' docs/engineering-principles.md && grep -q 'PB' docs/exigences.md && grep -q 'PB' docs/architecture/coherence.md && test "$(ls docs/perf/2026-11-11-start-drift/*.json | wc -l)" -eq 9 && (cd docs/perf/2026-11-11-start-drift && sha256sum --quiet --strict -c SHA256SUMS)'''
+
+[[criteria]]
+# The statistical model (plan sections 2-6): exact signed-rank null, bound coverage under symmetric heavy tails,
+# validity by precision only, the fit refitted from the archive, false regression 0/3000 in seven environments,
+# power >= 0.99 at +10 % (multiplicative and fixed cost), +5 % passes, every mutant rule rejected, order-statistic
+# budgets. Run here and by `done`, not in test:py (one minute).
+id = "model"
+command = '''out=$(./scripts/heavy.sh timeout 900 python3 -m unittest -v scripts/perf/pbmodel_test.py 2>&1) || { echo "$out" | tail -40; exit 1; }; if echo "$out" | grep -q -- '\.\.\. skipped'; then echo "skipped tests"; exit 1; fi; for t in test_signed_rank_null_matches_enumeration test_critical_value_is_the_alpha_quantile test_bounds_cover_a_symmetric_centre test_validity_depends_on_precision_only test_imprecise_run_is_invalid_not_judged test_budget_is_the_archived_multiplier test_constants_match_disk test_incumbent_fails_on_unchanged_code test_stress_environments_dominate_the_fit test_no_false_regression test_power_against_ten_percent test_heavy_environment_is_invalid_not_judged test_changes_well_inside_the_budget_pass test_every_mutant_is_rejected test_quantile_index_matches_binomial test_bound_covers_the_true_p95 test_p95_of_30_accepts_a_noncompliant_product; do echo "$out" | grep -q -- "^$t (" || { echo "missing or not run: $t"; exit 1; }; done'''
+
+[[criteria]]
+# The rule as the scripts run it (scripts/perf/paired.py): shared with the model, the attempt machine (plan section 8)
+# enumerated exhaustively, a valid verdict never retried, at most three attempts, cooling, replayable random orders,
+# warm-up dropped, budgets by order statistic (the startup budget: median 350 ms at order 48 of 80, p95 400 ms at 80 of
+# 80), a self-test that starts no process.
+id = "rule"
+command = '''out=$(./scripts/heavy.sh timeout 300 python3 -m unittest -v scripts/perf/paired_test.py 2>&1) || { echo "$out" | tail -40; exit 1; }; if echo "$out" | grep -q -- '\.\.\. skipped'; then echo "skipped tests"; exit 1; fi; for t in test_model_shares_the_rule test_verdict_matches_model_vectors test_attempt_machine_exhaustive test_valid_verdict_is_never_retried test_invalid_retried_at_most_three_times test_cooling_waits_for_load test_orders_replay_from_seed test_orders_are_independent_fair_coins test_warmup_pairs_dropped test_budget_needs_enough_samples test_budget_uses_order_statistic test_startup_budget_median_and_p95_orders test_self_test_mode_runs_no_process; do echo "$out" | grep -q -- "^$t (" || { echo "missing or not run: $t"; exit 1; }; done'''
+
+[[criteria]]
+# The reference build (plan section 7), on a temporary repository with a stub build vector: the merge-base, the cache
+# key, digest verification and rebuild, atomic publication, the source .git never written, one build vector for both
+# sides, sidecars copied only under a matching manifest, serialised builds, eviction, fail closed.
+id = "reference-build"
+command = '''out=$(./scripts/heavy.sh timeout 600 python3 -m unittest -v scripts/perf/refbuild_test.py 2>&1) || { echo "$out" | tail -40; exit 1; }; if echo "$out" | grep -q -- '\.\.\. skipped'; then echo "skipped tests"; exit 1; fi; for t in test_reference_is_the_merge_base test_cache_key_covers_commit_and_toolchain test_hit_verifies_digest test_tampered_entry_is_rebuilt test_publish_is_atomic test_source_git_is_never_written test_both_sides_share_the_build_vector test_sidecars_copied_only_when_manifest_matches test_concurrent_builds_are_serialised test_eviction_keeps_six_recent test_unbuildable_reference_fails_closed; do echo "$out" | grep -q -- "^$t (" || { echo "missing or not run: $t"; exit 1; }; done'''
+
+[[criteria]]
+# The real driver (start.cjs --plan, Playwright Chromium) against the fake server of scripts/perf/testdata: A/A
+# passes, +300 ms is a regression, +2 ms passes, heavy noise is invalid and retried three times, a busy port is
+# invalid, a crash is a not-ready failure, every slot records its order, load and pressure, both sides get paths and
+# environments of equal length.
+id = "driver"
+command = '''out=$(./scripts/heavy.sh --exclusive timeout 2400 python3 -m unittest -v -k FakeServer scripts/perf/paired_e2e_test.py 2>&1) || { echo "$out" | tail -40; exit 1; }; if echo "$out" | grep -q -- '\.\.\. skipped'; then echo "skipped tests"; exit 1; fi; for t in test_aa_passes test_injected_slowdown_is_a_regression test_tiny_change_passes test_noise_is_invalid_and_retried test_port_busy_is_invalid test_crash_is_not_ready_failure test_slots_record_order_load_and_pressure test_sides_get_equal_length_paths_and_env; do echo "$out" | grep -q -- "^$t (" || { echo "missing or not run: $t"; exit 1; }; done'''
+exclusive = true
+
+[[criteria]]
+# PERF-START for real, by the unchanged L0 command: the merge-base built (or taken from the cache), 2 + 80 pairs in a
+# random order, the paired verdict passes, and the absolute startup budget of user decision Q1 (2026-11-11) passes:
+# median <= 350 ms (order statistic 48 of 80 at 95 %) and p95 <= 400 ms (order statistic 80 of 80), judged on the 80
+# judged starts of B; only invalid attempts were retried.
+id = "perf-start"
+command = '''./scripts/heavy.sh --exclusive python3 scripts/perf/baseline.py && python3 -I -c "
+import json, subprocess, sys
+p = json.load(open('gates/PB/measurements.json'))['PERF-START']
+base = subprocess.check_output(['git', 'merge-base', 'HEAD', 'main'], text=True).strip()
+a = p['attempts']; v = p['verdict']; b = p['budget']
+bad = []
+bad += [] if p['design'] == 'paired-randomized' else ['design']
+bad += [] if p['reference']['commit'] == base else ['reference is not the merge-base']
+bad += [] if 1 <= len(a) <= 3 and all(x['outcome'] == 'invalid' for x in a[:-1]) and a[-1]['outcome'] == 'pass' else ['attempts']
+bad += [] if v['status'] == 'pass' and v['pairs'] == 80 and v['alpha'] == 0.001 and v['upper'] < 1.10 else ['verdict']
+m, q = b['median'], b['p95']
+bad += [] if b['status'] == 'pass' and b['samples'] == 80 else ['budget']
+bad += [] if m['limit_ms'] == 350 and m['order'] == 48 and m['bound_ms'] <= 350 else ['budget median']
+bad += [] if q['limit_ms'] == 400 and q['order'] == 80 and q['bound_ms'] <= 400 else ['budget p95']
+slots = json.load(open(a[-1]['raw']))['slots']
+bad += [] if len(slots) == 164 and sum(s['side'] == 'a' for s in slots) == 82 and all(s['ready'] for s in slots) else ['slots']
+sys.exit('perf-start: ' + ', '.join(bad) if bad else 0)
+"'''
+exclusive = true
+
+[[criteria]]
+# The real server on both sides: the same bin/inkwell-server is an A/A pass, and a 120 ms start delay wrapped around
+# side B (about +30 %) is a regression. Runs after perf-start, which builds bin/inkwell-server.
+id = "real-server"
+command = '''out=$(./scripts/heavy.sh --exclusive timeout 1800 python3 -m unittest -v -k RealServer scripts/perf/paired_e2e_test.py 2>&1) || { echo "$out" | tail -40; exit 1; }; if echo "$out" | grep -q -- '\.\.\. skipped'; then echo "skipped tests"; exit 1; fi; for t in test_real_server_aa_passes test_real_server_delay_is_a_regression; do echo "$out" | grep -q -- "^$t (" || { echo "missing or not run: $t"; exit 1; }; done'''
+exclusive = true
+
+[[criteria]]
+# Native typing (plan section 8): focus loss, lost delivery and failed activation are environment faults (exit 75,
+# driver.json), retried with a fresh raw directory, invalid after three, a valid failure never retried, a setup error
+# not an environment fault; the frontend codes its focus loss; the Go verifier writes status invalid for a coded
+# fault and for --native-perf-invalid. No native window is opened here.
+id = "native-invalid"
+command = '''out=$(./scripts/heavy.sh timeout 600 python3 -m unittest -v scripts/perf/type_native_test.py scripts/perf/native_input_test.py 2>&1) || { echo "$out" | tail -40; exit 1; }; if echo "$out" | grep -q -- '\.\.\. skipped'; then echo "skipped tests"; exit 1; fi; for t in test_environment_fault_is_retried_with_fresh_raw test_three_faults_are_invalid_not_fail test_valid_fail_is_never_retried test_focus_loss_raises_environment_fault test_delivery_loss_raises_environment_fault test_activation_failure_raises_environment_fault test_engine_mismatch_is_not_environment test_driver_exit_75_writes_fault; do echo "$out" | grep -q -- "^$t (" || { echo "missing or not run: $t"; exit 1; }; done && gout=$(./scripts/heavy.sh timeout 600 go test -count=1 -v -run 'TestVerdictInvalid' ./internal/nativeperf 2>&1) || { echo "$gout" | tail -40; exit 1; }; for t in TestVerdictInvalidOnCodedFocusLoss TestVerdictInvalidFlag TestVerdictInvalidAddsNoPerformanceReason; do echo "$gout" | grep -q -- "--- PASS: $t" || { echo "missing or not passing: $t"; exit 1; }; done && (cd frontend && ../scripts/heavy.sh timeout 300 pnpm exec vitest run --configLoader runner --reporter=json --outputFile=../gates/PB/vitest-native.json src/perf) && python3 -I -c "
+import json, sys
+r = json.load(open('gates/PB/vitest-native.json'))
+ok = {a['title'] for f in r['testResults'] for a in f['assertionResults'] if a['status'] == 'passed'}
+need = {'reports focus loss with the code focus-lost'}
+sys.exit(f'vitest: missing or not passing {sorted(need - ok)}' if need - ok else 0)
+"'''
+
+[[criteria]]
+# User decision Q2 (2026-11-11): native p95 budgets certified at 95 % confidence on the order-statistic bound (warm 100
+# samples, k 99; cold 59 fresh processes, k 59); the Go index is the twin of quantile_upper_index (shared vector).
+id = "native-budget"
+command = '''gout=$(./scripts/heavy.sh timeout 600 go test -count=1 -v -run 'TestQuantileUpper|TestBudget|TestMetric' ./internal/nativeperf 2>&1) || { echo "$gout" | tail -40; exit 1; }; for t in TestQuantileUpperIndexMatchesPythonVector TestBudgetUsesOrderStatisticBound TestMetricMinimumSamples TestMetricKeepsPointP95AsDiagnostic; do echo "$gout" | grep -q -- "--- PASS: $t" || { echo "missing or not passing: $t"; exit 1; }; done'''
+
+[[criteria]]
+# The gate harness self-test, which runs baseline.py's self-test on synthetic pairs, no process. The old self-test
+# (absolute limit) prints a bare `baseline self-test passed` and must not satisfy this criterion: the paired one
+# prints `baseline self-test passed: paired-randomized (A/A pass, x1.2 regression, wide run invalid)`.
+id = "selftest"
+command = '''out=$(python3 scripts/gate-selftest.py 2>&1) || { echo "$out" | tail -40; exit 1; }; echo "$out" | grep -q 'baseline self-test passed: paired-randomized (A/A pass, x1.2 regression, wide run invalid)' && echo "$out" | grep -q 'gate self-test passed' '''
+
+[[criteria]]
+# No regression: every Python test of the tooling, the native verifier package, and the frozen L0 gate, whose
+# `baseline` criterion is now the paired PERF-START.
+id = "regression"
+command = "mise run test:py && ./scripts/heavy.sh timeout 900 go test -count=1 ./internal/nativeperf && mise run gate -- L0"
+
+[[criteria]]
+id = "simplify-report"
+command = "test -s gates/PB/SIMPLIFY.md"
