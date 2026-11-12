@@ -10,10 +10,8 @@
   la surveillance de toute commande lancée en arrière-plan, voir « Tâches longues »), `gate-freeze.sh`
   (refuse de modifier une porte `gates/<bloc>.toml` déjà commitée), `post-edit-check.sh` (après chaque
   édition : gofmt et go vet pour un `.go`, Biome pour le frontend, `lint:claude-md` pour les fichiers
-  IA ; un problème revient aussitôt à Claude), `modern-go-context.sh`
-  et `benchmark-context.sh` (consignes injectées à l'édition d'un `.go`), `research-grounding.sh`
-  (rappel research-first à chaque demande), `openrouter-check.sh` (délégation du texte mécanique au
-  démarrage).
+  IA ; un problème revient aussitôt à Claude), `research-grounding.sh` (rappel research-first à
+  l'écriture d'un plan ou d'une ADR, là où une décision s'écrit).
 
 ## Commandes (toutes via mise)
 
@@ -83,6 +81,10 @@ quoi que ce soit ; une exception exige une ADR.
 `docs/plans/` → chaque bloc suit la définition de « fini » ci-dessous → démontrer le critère de sortie.
 
 **Définition de « fini » d'un bloc (règle unique, 2026-11-08 ; vaut quel que soit le modèle) :**
+la méthode v2 (`docs/plans/2026-11-12-method-v2.md`, issue d'un débat entre deux familles de modèles) en fixe
+l'exécution : travail en cours limité, revue avant gel puis après le smoke, rigueur selon le risque (liste fermée
+pour « complet »), niveaux T0–T3 aux obligations inchangées, `next` → `main` sur le candidat exact, outillage
+sur gain démontré.
 un bloc = un lot, une étape du protocole ou un lot d'outillage. Il suit cet ordre, et
 `mise run done -- <bloc>` (`scripts/block_done.py`) vérifie les étapes 1 à 8 dans le même ordre :
 1. **Spécifier d'abord, en exécutable** : vecteurs (`protocol/vectors`), modèles TLA+ (`docs/protocol/tla`)
@@ -117,7 +119,7 @@ un bloc = un lot, une étape du protocole ou un lot d'outillage. Il suit cet ord
 6. **Porte complète** (`mise run gate -- <bloc>`, régressions et mesure native comprises), en dernier
    car la plus longue, seule sur la machine, lancée dès qu'elle est libre ; après un incident,
    `mise run gate -- --resume <bloc>` ne refait que les critères inachevés.
-7. Documents : `docs/objectif-en-cours.md`, `PROGRESS.md`, `docs/exigences.md` à jour.
+7. Documents : `PROGRESS.md` (la liste courante unique) et `docs/exigences.md` à jour.
 8. **Seule la session Claude commite**, après relecture du diff ; le push relance `mise run ci`. On pousse
    après chaque bloc commité (hors mesure en cours) : la CI part d'une copie propre et attrape ce qu'un
    arbre de travail chargé de blocs non commités masque (un test dépendant de fichiers non commités est
@@ -145,14 +147,15 @@ l'interface »).
 **Research-first :** fonder toute réponse technique non triviale sur des sources externes actuelles
 (WebSearch/WebFetch pour l'état de l'art, GitHub via `scripts/ghx.sh` pour l'existant, docs
 officielles), **puis aller au-delà** : critiquer l'existant, chercher mieux, envisager des approches
-neuves ; comparer, recommander la meilleure (même peu courante), citer. Le hook
-`research-grounding.sh` le rappelle ; inutile pour une demande triviale.
+neuves ; comparer, recommander la meilleure (même peu courante), citer. Toute décision technique nouvelle
+s'écrit avec ses sources dans `docs/plans/` ou `docs/adr/` (le hook `research-grounding.sh` le rappelle à
+l'écriture ; la revue après le smoke vérifie qu'aucune décision du diff n'y manque) ; inutile pour une demande
+triviale.
 
 **Go moderne (règle) :** toujours la dernière version stable de Go (`go.mod` des deux modules et
 `mise.toml` alignés sur https://go.dev/dl, montée à chaque version) et ses capacités nouvelles quand
 elles sont cohérentes avec le code. Le skill `use-modern-go` porte une section par version, mise à
-jour depuis les notes officielles (`https://go.dev/doc/go1.N`) à chaque montée, comme
-`modern-go-context.sh` ; `go fix ./...` applique les modernisations et le linter `modernize`
+jour depuis les notes officielles (`https://go.dev/doc/go1.N`) à chaque montée ; `go fix ./...` applique les modernisations et le linter `modernize`
 (`.golangci.yml`) refuse les idiomes dépassés.
 
 **Discipline de modification (d'après andrej-karpathy-skills, MIT) :**
@@ -181,7 +184,7 @@ Elle doit :
 prouve avec benchstat, jamais au jugé (skill `go-benchmark`) : `mise run bench:baseline` → changement →
 `mise run bench:compare` (`-count` ≥ 10, `-benchmem`) ; on ne garde le changement que sur un gain
 statistiquement significatif sans régression d'allocations ni de débit. Ces paquets portent des tests
-`Benchmark…` ; la ligne ci-dessous les liste (lue par `.claude/hooks/benchmark-context.sh` — garder
+`Benchmark…` ; la ligne ci-dessous les liste (lue par `scripts/perf/regression.py` — garder
 le préfixe exact `HOT_PATHS:`) :
 
 HOT_PATHS: internal/blob internal/transport/frame internal/transport/mux internal/app

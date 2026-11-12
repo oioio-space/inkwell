@@ -36,7 +36,7 @@ dans sa porte :
 Les relectures indépendantes sont faites par des agents neufs, jamais par l'utilisatrice ; elle décide (ADR, choix
 de portée) et teste l'usage lors d'une courte séance devant l'application.
 
-En cas de doute, on prend le niveau au-dessus.
+Le niveau « complet » est réservé à une liste fermée : protocole et état entre pairs, confiance et admission, frontière du bac à sable, octets venus d'un pair, et trois acteurs concurrents ou plus sur un état durable partagé ; toute autre exception nomme l'invariant et une défaillance concrète, revue avant le gel. En cas de doute : « standard » plus une revue du plan (méthode v2, `docs/plans/2026-11-12-method-v2.md`, règle 4, avec ses plafonds de taille de plan et de durée de porte).
 
 **Bien faire du premier coup (décision du 2026-11-10).** Ce n'est pas le nombre de relectures qui fait la qualité :
 une relecture doit confirmer, pas découvrir. Avant toute relecture, l'auteur d'une spécification a :

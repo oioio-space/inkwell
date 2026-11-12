@@ -29,12 +29,8 @@
       {
         "hooks": [
           {
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/modern-go-context.sh",
-            "type": "command"
-          },
-          {
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/benchmark-context.sh",
-            "type": "command"
+            "type": "command",
+            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/research-grounding.sh"
           },
           {
             "type": "command",
@@ -42,28 +38,6 @@
           }
         ],
         "matcher": "Write|Edit|MultiEdit"
-      }
-    ],
-    "SessionStart": [
-      {
-        "hooks": [
-          {
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/openrouter-check.sh",
-            "timeout": 30,
-            "type": "command"
-          }
-        ]
-      }
-    ],
-    "UserPromptSubmit": [
-      {
-        "hooks": [
-          {
-            "command": "$CLAUDE_PROJECT_DIR/.claude/hooks/research-grounding.sh",
-            "timeout": 10,
-            "type": "command"
-          }
-        ]
       }
     ],
     "PostToolUse": [

@@ -919,6 +919,16 @@
       "id": "5c8f7dad032201e94abecc3611d5ef52cf9fb6a79875eaef98c5266f6c407b1e",
       "reason": "Block GR: same change to the gate machinery scripts/gate.py (--resume); no check, threshold or delay weakened, a recorded failure stays blocking and native-performance criteria always re-run.",
       "decision": "docs/plans/2026-11-12-gr-gate-resume.md"
+    },
+    {
+      "id": "5d73e43648d13eaff9000d26242095c894787cfbc7b11790af9434c4c761fa16",
+      "reason": ".claude/hooks/openrouter-check.sh: Method v2 (two-family debate, 2026-11-12): the session-start OpenRouter ping and the per-prompt/per-edit reminder hooks are removed; their timeouts go with them. No test, threshold or gate delay is involved: these are advisory Claude hooks, and research is now required where decisions are written (research-grounding on docs/plans and docs/adr).",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "12555cd80b3cccfc5f74f00e5b4f503a6c3694c90ecefd66a93ad9902d9d15b7",
+      "reason": ".claude/settings.json: Method v2 (two-family debate, 2026-11-12): the session-start OpenRouter ping and the per-prompt/per-edit reminder hooks are removed; their timeouts go with them. No test, threshold or gate delay is involved: these are advisory Claude hooks, and research is now required where decisions are written (research-grounding on docs/plans and docs/adr).",
+      "decision": "docs/objectif-en-cours.md"
     }
   ]
 }
