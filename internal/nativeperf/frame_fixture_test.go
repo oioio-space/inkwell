@@ -95,10 +95,10 @@ func frameFixture(kind string, id int, runID, phase string) Sample {
 
 func completeFrameFixture() []Run {
 	runs := []Run{}
-	for n := 0; n <= 30; n++ {
+	for n := 0; n <= ColdReplicates; n++ {
 		id := fmt.Sprint("run", n)
 		run := Run{
-			Protocol: 1, RunID: id, PID: 100 + n, StartedNS: int64(1000 + n), Phase: "cold", ReplicateIndex: n, ReplicateCount: 30,
+			Protocol: 1, RunID: id, PID: 100 + n, StartedNS: int64(1000 + n), Phase: "cold", ReplicateIndex: n, ReplicateCount: ColdReplicates,
 			Host:  Host{Engine: "WebKitGTK", Native: true, GOOS: "linux", WebKitVersion: "2.54.1", GTKVersion: "4.22.5", Backend: "x11", XID: uint64(100 + n), RefreshHz: 60},
 			Ready: Ready{Type: "ready", Visible: true, Focused: true, PaintOracle: "event-timing", EarlyCapture: true, InputVerified: true, Clock: Clock{RefreshHz: 60, ResolutionMS: .1, DeltasMS: []float64{.1, .1, .1}, Rule: "upper:+quantum-per-disjoint-interval"}},
 		}
@@ -106,7 +106,7 @@ func completeFrameFixture() []Run {
 		run.Host.InputPermissionVerified = true
 		if n == 0 {
 			run.Phase = "warm"
-			for k := 1; k <= 30+len(ControlKinds); k++ {
+			for k := 1; k <= WarmSamples+len(ControlKinds); k++ {
 				kind := "none"
 				if k <= len(ControlKinds) {
 					kind = ControlKinds[k-1]
@@ -159,7 +159,7 @@ func TestCompleteFrameVerdictAcceptsCensoredFastEventsOnlyWithBothValidatedContr
 	if got.Status != "pass" {
 		t.Fatal(got.Reasons)
 	}
-	if got.Paint.P95MS != nil || got.FrameWorkUpper.P95MS == nil || len(got.ColdHandler.SamplesMS) != 30 {
+	if got.Paint.P95MS != nil || got.FrameWorkUpper.P95MS == nil || len(got.ColdHandler.SamplesMS) != ColdReplicates {
 		t.Fatal("censored paint invented or cold/frame evidence lost")
 	}
 	runs[0].Samples[1].Frames[0].End = 112

@@ -1,9 +1,44 @@
 {
   "overrides": [
     {
-      "id": "f22057e36244ddd6ef648864ff0df369f85e2b26277fdddf52102c6426784b16",
-      "reason": "Audit explicitly requires clear skips on kernels below the required ABI; only new IPC tests are capability-gated. Existing tests and thresholds are unchanged.",
-      "decision": "docs/objectif-en-cours.md"
+      "id": "9d89d3de349a698eaaf2aacd34a7bd3d27fbd0bda750b126538d21939d818a7c",
+      "reason": "fault handling in verdict.go: collectionTimeout += time.Duration(nativeperf.NullCount) * # * time.Second removed or rewritten; re-added constants WarmSamples=100 and ColdReplicates=59, fault handling logic, validation updates to use those constants, Invalid verdict function, etc.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "e1468cfc5b75fe7b2f16641ab0f901d18859435dee21ce05449f7a396701f679",
+      "reason": "mise.toml: gate dependency changed: mise task test:py (new ref to scripts/perf/paired_test.py)",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "a296e13122f51e8b248638fa3b53ffd3670af7beeea66f69f743f4ab17da3052",
+      "reason": "scripts/gate-selftest.py: gate dependency changed (paired.randomized self-test)",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "50d6bcddf99adca7a71f663757affcb9fc7d9a010a1a324d1b2f65bd8875ed1f",
+      "reason": "scripts/gate-selftest.py: gate machinery changed (paired.randomized logic)",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "7458573fbae437488fc5edf5b0e56cfecfc11633bddfd0263c1322460d90335c",
+      "reason": "scripts/perf/baseline.py: gate dependency changed (paired performance driver)",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "1fe6031eac9abc056e929a92773350e76155a3496fbfa120f2336d9f803d6643",
+      "reason": "scripts/perf/baseline.py: gate machinery changed (paired performance driver, run_criterion, config)",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "aecdf30c6895c8c8c57b1a54cd22bb377d72d691782f53c97531f87340d1b3c8",
+      "reason": "scripts/perf/paired_e2e_test.py: gate dependency changed (FakeServer, RealServer tests)",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "8642a7ce90d391e01f9e848d4a64150d036f3e99179ca2491e4e5989cdf10811",
+      "reason": "scripts/perf/paired.py: gate machinery changed (rule implementation, self-test)",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
     },
     {
       "id": "n42-scope-2026-11-03",
@@ -339,6 +374,411 @@
       "id": "14006af3b852de0386db1be0359e9daaafa4aea51f0a9712e77ebfb95ef45869",
       "reason": "Block CI1b: new unit tests of the selector, one per case of gate criterion rule-CI1-unit.",
       "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "d393a94f90bf97fdb0e92d3e5de905378dc16ce5362abd09a4d983e21808b4ad",
+      "reason": "Block C5S: docs/protocol/tla/README.md describes the reworked LinkProbe model (timeouts, closing bytes, rate-bound clock margin, level arithmetic); documentation of the model, no model bound or check removed (mise run tla runs every config and mutant).",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "4198b84cbf5faf72986e8ef2c59b0bdf8158e5186ebe8cfd9eac12d5568f79f0",
+      "reason": "Block C5S: scenario 5's whole-test Playwright timeout grows 480 s -> 900 s because the scenario itself grew (new P0 entry phase, P5 of 180 s, filler traffic); no clause bound changes, every clause keeps its own bound.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "4a9d25e8758445336f3a8800b3a84ba66043bd8fda996fe2aa70f1028f76cc06",
+      "reason": "Block C5S: scripts/netsim/c5model.py is the C5 statistical model of this block (spec reformalized: late discards, filler traffic); its guarantees are re-proven by c5model_test.py (0 false failures in 3000 runs, every mutant rejected).",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "6e6f71fdc5bebb32acde8a79613b9940916a0facd306848f3115b347a6dd12ab",
+      "reason": "Block C5S: scripts/netsim/c5model_test.py, the model's tests for this block; they check the false-failure bound and the power against every mutant estimator.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "ba63bc2264354dbbcb17654443cb7dad0a1832e2042d36f59a72b841f742b5ae",
+      "reason": "Block C5S: scripts/netsim/run.sh gains NETSIM_REPEAT and per-repeat result files (gate criterion e2e-C5); a run without it behaves as before.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "e3735c10c0e1206b58a4f60eeab20fc65bf7b83b64feabc795e1be1ed73ad969",
+      "reason": "Block C5S (security review finding 9): scripts/pkg/selftest.sh covers the new AC-14 check that a release binary was not built with tags server; existing selftests unchanged.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "2f16525d27dc2136ee0622eda0de30eb552b3f458029dfa50338e63196672c14",
+      "reason": "Fail fast (user, 2026-11-10: « monitore à chaque fois pour pas que ça arrive »): block_done.py gains a preflight right after step 2 that runs the gate's base guard and the step-8 docs check, so a run that would fail at its end after hours fails in seconds; every step is unchanged and still runs.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "702c3ec6b331272ca2fd29d0c8d1c1194492d9d561c092a8dab3507ef0467a38",
+      "reason": "Fail fast: block_done_test.py pins the preflight (a failing base guard stops done before the long steps; it runs right after step 2); existing tests unchanged.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "63c08e7c3565ddbc9b3f0b4263f73a2f7a1f44fd2d0c23fa31939e38a22f6e19",
+      "reason": "Fail fast at the source (user, 2026-11-10: « corrige la source, pas les effets »): a gate whose base guard fails can no longer pass, so gate.py now records every criterion as not run and stops instead of running hours of criteria first; the guard itself and every criterion are unchanged. Pinned by gate-selftest.py (no criterion runs after a failing base guard; red before the fix).",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "942d53f7dd6caa50bc751f20e861ab1013ad02143b50d36742a18aa41e1d3db3",
+      "reason": "Fail fast at the source (user, 2026-11-10: « corrige la source, pas les effets »): a gate whose base guard fails can no longer pass, so gate.py now records every criterion as not run and stops instead of running hours of criteria first; the guard itself and every criterion are unchanged. Pinned by gate-selftest.py (no criterion runs after a failing base guard; red before the fix).",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "fd250db474038aafd0c39cb19afb15d5b85b6879aecbceafef0da24057b2f0c7",
+      "reason": "Fail fast at the source (user, 2026-11-10: « corrige la source, pas les effets »): a gate whose base guard fails can no longer pass, so gate.py now records every criterion as not run and stops instead of running hours of criteria first; the guard itself and every criterion are unchanged. Pinned by gate-selftest.py (no criterion runs after a failing base guard; red before the fix).",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "7fcc7b9b00f050e2866a040a166466f7f7063c575225174afa454aec5cb80720",
+      "reason": "Fail fast at the source (user, 2026-11-10: « corrige la source, pas les effets »): a gate whose base guard fails can no longer pass, so gate.py now records every criterion as not run and stops instead of running hours of criteria first; the guard itself and every criterion are unchanged. Pinned by gate-selftest.py (no criterion runs after a failing base guard; red before the fix).",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "891e206f2ff5286e1ef362fd3aa7101c56e6f9425d7b0a5006353c89314cd34a",
+      "reason": "Block C5S: block_done.py preflight also runs `mutants.py --check <block>`, so a netsim mutant whose anchor moved with the code fails done in seconds instead of hours into the gate (found 2026-11-11: M5b, M5h, M5j). Adds a check; nothing weakened.",
+      "decision": "docs/plans/2026-11-09-c5-sound.md"
+    },
+    {
+      "id": "1d8454828c12a99f85fe76f20b1269b61696ed3f171bbf99962a75de4270d775",
+      "reason": "Block C5S: block_done_test.py adds PreflightTest.test_a_mutant_whose_anchor_moved_stops_done_before_the_long_steps (red without the preflight check); existing tests unchanged.",
+      "decision": "docs/plans/2026-11-09-c5-sound.md"
+    },
+    {
+      "id": "600d3f47e2e1d6e97217ef2a98878a30e7c0900b456cfe6c1f0f0b655c289414",
+      "reason": "Block C5S: gate-guard.py's dependency walk added every scripts/*.py path named anywhere in a dependency's text, so a test fixture path (scripts/perf/p.py in scripts/netsim/affected_test.py) became a 'dependency' and the self-test failed (L1 anti-weakening, found through RL1 > P3 > P2 > L2 > L1, 2026-11-11). A transitively named path that is no file is no longer a dependency; a criterion naming a missing script still fails the self-test, and a self-test assertion pins the case. Nothing guarded is dropped: every existing file stays covered.",
+      "decision": "docs/plans/2026-11-09-c5-sound.md"
+    },
+    {
+      "id": "ce1158c0905ac65e37ab804d2c230b4f30c395fd53b2ab174381a1f8e83f879f",
+      "reason": "Block C5S: gate-guard.py's dependency walk added every scripts/*.py path named anywhere in a dependency's text, so a test fixture path (scripts/perf/p.py in scripts/netsim/affected_test.py) became a 'dependency' and the self-test failed (L1 anti-weakening, found through RL1 > P3 > P2 > L2 > L1, 2026-11-11). A transitively named path that is no file is no longer a dependency; a criterion naming a missing script still fails the self-test, and a self-test assertion pins the case. Nothing guarded is dropped: every existing file stays covered.",
+      "decision": "docs/plans/2026-11-09-c5-sound.md"
+    },
+    {
+      "id": "61b44de0cf99d9080472ae3bb941a9113eba35ff049ca83d40c20d2660d89627",
+      "reason": "Block C5S: c5model.py simulates a PROBE across a change of round trip as the stack does (RFC 9002 estimator fed across phases, PTO read at the ECHO, quic-go's resend time threshold, head-of-line order); R2's crossing term for transition labels is derived from it (transition_lag), not hand-widened. Found by e2e-C5 runs 5-s1-r8 and 5-s3-r6 (one step each at the P2>P3 drop); both replay green, the old rule fails 3 of 200 corrected-model runs. Guarantees re-proven: 0 false failures in 3000 runs, every mutant rejected.",
+      "decision": "docs/plans/2026-11-09-c5-sound.md"
+    },
+    {
+      "id": "0231bea19170282540c60688f7379337bb64549f90cfcb1764b29635687b8592",
+      "reason": "Block C5S: c5model_test.py adds Transition.test_single_step_spike_at_the_p2_p3_drop (red with the old tolerance) and test_pto_climbs_after_the_drop; existing guarantees tests unchanged (24 tests, 597 s at rest).",
+      "decision": "docs/plans/2026-11-09-c5-sound.md"
+    },
+    {
+      "id": "f22057e36244ddd6ef648864ff0df369f85e2b26277fdddf52102c6426784b16",
+      "reason": "Audit explicitly requires clear skips on kernels below the required ABI; only new IPC tests are capability-gated. Existing tests and thresholds are unchanged.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "5467a9137b41485c53dcf9abfea36f2ea0cd66b032899ef8befcd119360d29bd",
+      "reason": "Block PB (ADR 0038, paired performance): scripts/perf/native_input.py: gate machinery changed. Proven by native_input_test (environment faults exit 75, bounded retries, fresh raw directory). No threshold is weakened: the 10 % budget is kept and the absolute limit is replaced by a stronger bound.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "2e74ad3d5207a7f8a60e7ebeb9e1a7334280bbf3a657ff1d1886b9a225c24fb8",
+      "reason": "Block PB (ADR 0038, paired performance): scripts/perf/native_input.py: timeout expression removed or rewritten: deadline, pending, complete = time.monotonic() + timeout + (# * NULL_COUNT * # if phase == \"warm\" else #), b\"\", None. Proven by native_input_test (environment faults exit 75, bounded retries, fresh raw directory). No threshold is weakened: the 10 % budget is kept and the absolute limit is replaced by a stronger bound.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "a1a051b8a2c9442443a79bbf77e0cd1adccb143612884d856ba0d475aa69b71a",
+      "reason": "Block PB (ADR 0038, paired performance): scripts/perf/native_input_test.py: gate dependency changed. Proven by native_input_test (environment faults exit 75, bounded retries, fresh raw directory). No threshold is weakened: the 10 % budget is kept and the absolute limit is replaced by a stronger bound.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "c2a988db0ca2d76be5f18e427cd5d915c02ada62b53912b82d5478ed4112baac",
+      "reason": "Block PB (ADR 0038, paired performance): scripts/perf/native_input_test.py: gate machinery changed. Proven by native_input_test (environment faults exit 75, bounded retries, fresh raw directory). No threshold is weakened: the 10 % budget is kept and the absolute limit is replaced by a stronger bound.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "14a60de14d315d22eb826d0a1cd2f87a325fdb840ec4735c1fbc35ce23ee91b5",
+      "reason": "Block PB (ADR 0038, paired performance): scripts/perf/paired_e2e_test.py: gate machinery changed. Proven by the FakeServer and RealServer driver tests (A/A pass, injected slowdown, noise invalid). No threshold is weakened: the 10 % budget is kept and the absolute limit is replaced by a stronger bound.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "47baf8bfaffe8adecbbf775d8decc014c5eef4671f07860823075a5e9a536b7f",
+      "reason": "Block PB (ADR 0038, paired performance): scripts/perf/paired_test.py: gate dependency changed. Proven by paired_test (attempt machine, order statistics, replayable orders). No threshold is weakened: the 10 % budget is kept and the absolute limit is replaced by a stronger bound.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "bba4bc2777b535930ce85bbe052247c08f33f097c61283f4b7a5627676e010e2",
+      "reason": "Block PB (ADR 0038, paired performance): scripts/perf/paired_test.py: gate machinery changed. Proven by paired_test (attempt machine, order statistics, replayable orders). No threshold is weakened: the 10 % budget is kept and the absolute limit is replaced by a stronger bound.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "4e52584628ac824921b4dc8aa6a52e5aa6f5f51b0ca8888069011eeec524f6e9",
+      "reason": "Block PB (ADR 0038, paired performance): scripts/perf/pbmodel.py: gate machinery changed. Proven by pbmodel_test (false regression 0/3000, power, every mutant rule rejected). No threshold is weakened: the 10 % budget is kept and the absolute limit is replaced by a stronger bound.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "966eb31d4e86ed349cf8787bd433a16976b442fe4b4ffa86211ac7279ac37acb",
+      "reason": "Block PB (ADR 0038, paired performance): scripts/perf/refbuild_test.py: gate dependency changed. Proven by refbuild_test (merge-base reference, digest, atomic publication, fail closed). No threshold is weakened: the 10 % budget is kept and the absolute limit is replaced by a stronger bound.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "aa68c3a1ca31f0da26f952fa5b6d5d01c34e276764b9f0797de754bc1be57b24",
+      "reason": "Block PB (ADR 0038, paired performance): scripts/perf/refbuild_test.py: gate machinery changed. Proven by refbuild_test (merge-base reference, digest, atomic publication, fail closed). No threshold is weakened: the 10 % budget is kept and the absolute limit is replaced by a stronger bound.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "2c73d7e5a43e8fae7cc5b58b78a68117d7c6d6a3e9a6b3a3dd0b8d00cb60b35a",
+      "reason": "Block PB (ADR 0038, paired performance): scripts/perf/start.cjs: gate dependency changed. Proven by paired_e2e_test (the plan driver run against the fake and the real server). No threshold is weakened: the 10 % budget is kept and the absolute limit is replaced by a stronger bound.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "8ac7173e0ca26e0db8c5d2119aea339fabe66bb8a8e0c031b98962005784daf2",
+      "reason": "Block PB (ADR 0038, paired performance): scripts/perf/start.cjs: gate machinery changed. Proven by paired_e2e_test (the plan driver run against the fake and the real server). No threshold is weakened: the 10 % budget is kept and the absolute limit is replaced by a stronger bound.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "c08f09fc4517c1d3c2c45e2c63cfca4c42100fee7f1939830137c50ce1e34622",
+      "reason": "Block PB (ADR 0038, paired performance): scripts/perf/start.cjs: timeout expression removed or rewritten: for(let j=#;j<#;j++){try{if((await fetch('http://#.#:#/health')).ok){ready=true;break;}}catch{} await new Promise(r=>setTimeout(r,#));}. Proven by paired_e2e_test (the plan driver run against the fake and the real server). No threshold is weakened: the 10 % budget is kept and the absolute limit is replaced by a stronger bound.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "36a8e9a1f6e3fbc1b3c5e38e486d9d30aca6760048a75b5e91b4c12b6638d529",
+      "reason": "Block PB (ADR 0038, paired performance): scripts/perf/testdata/fakeserver.py: gate machinery changed. Proven by paired_e2e_test (the fake server is the driver test fixture). No threshold is weakened: the 10 % budget is kept and the absolute limit is replaced by a stronger bound.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "ab554781046f18d9abba8eb8d61f8046445d6cea08812b5868540fc2774e4d55",
+      "reason": "Block PB (ADR 0038, paired performance): scripts/perf/testdata/quantile-index.json: gate machinery changed. Proven by paired_test and Go TestQuantileUpperIndexMatchesPythonVector (shared vector). No threshold is weakened: the 10 % budget is kept and the absolute limit is replaced by a stronger bound.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "cd1bcf46aec134382b652681d781251ef01566690877b56033286bd40674cabb",
+      "reason": "Block PB (ADR 0038, paired performance): scripts/perf/type_native.py: gate machinery changed. Proven by type_native_test (environment fault retry, invalid after three, valid failure never retried). No threshold is weakened: the 10 % budget is kept and the absolute limit is replaced by a stronger bound.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "4b7a14d48489e5af7eb4a5ab553e512a997cbb7d6fb59e585b309e815f3b3784",
+      "reason": "Block PB (ADR 0038, paired performance): scripts/perf/type_native_test.py: gate dependency changed. Proven by type_native_test (environment fault retry, invalid after three, valid failure never retried). No threshold is weakened: the 10 % budget is kept and the absolute limit is replaced by a stronger bound.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "31b1cf1a4da8fd0039fcf3376591f7a6c2320580ff388dd081ce2d05d10642ec",
+      "reason": "Block PB (ADR 0038, paired performance): scripts/perf/type_native_test.py: gate machinery changed. Proven by type_native_test (environment fault retry, invalid after three, valid failure never retried). No threshold is weakened: the 10 % budget is kept and the absolute limit is replaced by a stronger bound.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "096caa77960b9f2bcebfd03119a2eb90a1ed9137a10b3df4e40fdaffccdf567f",
+      "reason": "Block PB (ADR 0038, paired performance): scripts/perf/refbuild.py: gate machinery changed. Now also generates the gitignored Wails bindings in the reference worktree (the build vector is shared by both sides). Proven by refbuild_test (reference is the merge-base, one build vector for both sides, fail closed) and the perf-start criterion. No threshold is weakened.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "a3c9c9f1617971fb3f4dffc6201d5b31661c11c7edd884ed0b809ae5fdd2f413",
+      "reason": "Block OI (ADR 0037, single instance): scripts/tla-check.sh adds the OISingleInstance model (two sound configs, OISingleInstance and OISingleInstanceHang) and its fourteen mutant and witness configs (NoDrain, caught by AckedApplied, added 2026-11-12), each of which must be detected; no existing model, mutant or bound is removed or weakened.",
+      "decision": "docs/plans/2026-11-11-oi-single-instance-open.md"
+    },
+    {
+      "id": "fb80c6a741e9e760cd92e0865c62bed54cdd144941ffc003704adb453a5ffd1a",
+      "reason": "docs/protocol/tla/README.md prose, not block PB: block C5S extends one sentence (the responder stack discarding a late packet is LoseData) and block OI adds the OISingleInstance section (its fairness table names the per-try Timeout that A2 must outlast); documentation of the models only, no model bound or check removed. Added by PB because the guard listed it while PB was gated; its owners should confirm.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "af472f1cd03c389c66d959913d41ce69798ac22693d825202565f80b600611dd",
+      "reason": "Block PB per-sample interference (ADR 0038 amendment 2026-11-12): scripts/perf/baseline.py: PERF-START report gains `interference` (the bound, the raw background share of every kept and every discarded start, the invalid rate per side); tests: paired_test.Interference.test_report_keeps_every_raw_share, paired_e2e_test.FakeServer.test_every_slot_records_its_background_cpu",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "fdccc02ce1b4eb272b7fa826e8f27b4246299bf171c4551c46d7b6b807178501",
+      "reason": "Block PB per-sample interference (ADR 0038 amendment 2026-11-12): scripts/perf/baseline.py: PERF-START report gains `interference` (the bound, the raw background share of every kept and every discarded start, the invalid rate per side); tests: paired_test.Interference.test_report_keeps_every_raw_share, paired_e2e_test.FakeServer.test_every_slot_records_its_background_cpu",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "196f0c38ca86a22007bed9e4523d6b74b2a2cd3e72631f741b633959b42e6189",
+      "reason": "Block PB per-sample interference (ADR 0038 amendment 2026-11-12): scripts/perf/cpu.cjs: new: per-start background CPU accounting from /proc (machine busy jiffies minus the measured tree); tests: cpu_test.py (fake /proc, ten rules)",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "a8cc9c69977d0c355a3bc44141f41fd4dac51ec7c88e000ee638449b928af252",
+      "reason": "Block PB per-sample interference (ADR 0038 amendment 2026-11-12): scripts/perf/cpu_test.py: new tests of cpu.cjs on a fake /proc",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "1fb82a436a3da061faa9d0699f3ba961efc9083fc4af958a45e0b2f249456137",
+      "reason": "Block PB per-sample interference (ADR 0038 amendment 2026-11-12): scripts/perf/paired.py: per-sample interference: BG_SHARE_MAX 1.5 CPUs, INVALID_MAX 20 %, MAX_TRIES 5, invalid_start, run_interfered, interference_report, classify maps the interference fault to an invalid attempt, plan carries the rule; tests: paired_test.Interference, pbmodel_test.Interference",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "ab91b4dd44221827c0e62a6ad7484ce5b25e9d2f104721d65d17c04149fcefd0",
+      "reason": "Block PB per-sample interference (ADR 0038 amendment 2026-11-12): scripts/perf/paired_e2e_test.py: driver tests for per-sample interference (a real burner process is discarded and re-measured in its slot, a slow start is not invalid, the 20 % cap and the five tries stop the run); the existing timing tests pass bg_share_max=None so ambient load cannot fail them. No test weakened",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "b803faf00e0cf5aaf4db6faa4e0a31e0db2a3de8fa5c2fac7019ef7b6a4ee0a6",
+      "reason": "Block PB per-sample interference (ADR 0038 amendment 2026-11-12): scripts/perf/paired_e2e_test.py: driver tests for per-sample interference (a real burner process is discarded and re-measured in its slot, a slow start is not invalid, the 20 % cap and the five tries stop the run); the existing timing tests pass bg_share_max=None so ambient load cannot fail them. No test weakened",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "92c618ec8b28b68f2b60ce69f44e5ed349732a139d42d2d8960a72b376a206de",
+      "reason": "Block PB per-sample interference (ADR 0038 amendment 2026-11-12): scripts/perf/paired_test.py: new class Interference (bound, cap, classify, plan, report); no existing test changed",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "37bb1599f382e345e6581d0b4036a3687eeff74f643fd9d02501c7a7e682fa7b",
+      "reason": "Block PB per-sample interference (ADR 0038 amendment 2026-11-12): scripts/perf/paired_test.py: new class Interference (bound, cap, classify, plan, report); no existing test changed",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "2ca2b29c6bc29151c1e8ee5ea29fb6cbf4f77374ae033eeda90e01b31014fa68",
+      "reason": "Block PB per-sample interference (ADR 0038 amendment 2026-11-12): scripts/perf/pbmodel.py: burst model fitted to docs/perf/2026-11-12-start-bg (Bursts, bg_session, BG_SCENARIOS, BG_MUTANTS, bgfit, threshold); the existing rule, environments and mutants are untouched",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "e3a02ef5a77b63f5524976983712f296a5262fb6437a42a3fc11b4249a300100",
+      "reason": "Block PB per-sample interference (ADR 0038 amendment 2026-11-12): scripts/perf/pbmodel_test.py: new class Interference (archive sealed, constants refit, quiet-edge bound, false failure <= 1e-3 under bursts, truly slow application still fails, three mutants rejected); no existing test changed",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "6f352aa8b2516cdb2ac9f9a16da1afbfaa3165bbff31137bf48cd8e71a19984c",
+      "reason": "Block PB per-sample interference (ADR 0038 amendment 2026-11-12): scripts/perf/pbmodel_test.py: new class Interference (archive sealed, constants refit, quiet-edge bound, false failure <= 1e-3 under bursts, truly slow application still fails, three mutants rejected); no existing test changed",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "24ed17094b908254f15a61608bf5ffcae34840ba03ed3622296b01a3ad3b9508",
+      "reason": "Block PB per-sample interference (ADR 0038 amendment 2026-11-12): scripts/perf/start.cjs: per-sample interference: window around each start, bg_share recorded, an invalid start re-measured in its slot after a quiet wait, fault `interference` above 20 % of the plan or five tries; the readiness loop and timeouts are unchanged",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "d8c7a287b8e2a2f8b2d9eb98daa1009fa9b29243881eb997d72038b01b9636a8",
+      "reason": "Block PB per-sample interference (ADR 0038 amendment 2026-11-12): scripts/perf/start.cjs: per-sample interference: window around each start, bg_share recorded, an invalid start re-measured in its slot after a quiet wait, fault `interference` above 20 % of the plan or five tries; the readiness loop and timeouts are unchanged",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "d4219dcb86e8f55829873a947d887cb39c992efd3e890751b95b8578b76f5e7e",
+      "reason": "Block PB per-sample interference (ADR 0038 amendment 2026-11-12): scripts/perf/start.cjs: per-sample interference: window around each start, bg_share recorded, an invalid start re-measured in its slot after a quiet wait, fault `interference` above 20 % of the plan or five tries; the readiness loop and timeouts are unchanged",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "137d9459bd16b0816c6d3baa25445a4a8d8424965b70dfd00dbfdb872eb9e5e2",
+      "reason": "Block PB review fixes (ADR 0038 amendment 2026-11-12): scripts/perf/native_input.py: gate machinery changed: focus taken by a window of the measured process or a descendant is a product failure, another program's window stays the fault focus-lost (focus_moved, descends, parent_pid); the timeout expression is unchanged, re-keyed by the file edit; test: native_input_test.test_focus_taken_by_the_product_is_a_failure",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "df0b72d935214f69f13fe54c29165d93085df6dad98e0f339cf6de55949e6545",
+      "reason": "Block PB review fixes (ADR 0038 amendment 2026-11-12): scripts/perf/native_input.py: timeout expression removed or rewritten: deadline, pending, complete = time.monotonic() + timeout + (# * NULL_COUNT * # if phase == \"warm\" else #), b\"\", None: focus taken by a window of the measured process or a descendant is a product failure, another program's window stays the fault focus-lost (focus_moved, descends, parent_pid); the timeout expression is unchanged, re-keyed by the file edit; test: native_input_test.test_focus_taken_by_the_product_is_a_failure",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "643e515c15115bc4ae66e15183bc9926140fe49de7ea724318d74680233efede",
+      "reason": "Block PB review fixes (ADR 0038 amendment 2026-11-12): scripts/perf/native_input_test.py: gate dependency changed: adds test_focus_taken_by_the_product_is_a_failure; test_same_pid_but_wrong_active_xid_is_rejected again asserts a failure (as committed before PB: rejected, not an environment fault), now RuntimeError; nothing weakened",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "0b1f511430e25066dd352b2aba7c4ddeb093446b30d54e68a323ea41455a8ac0",
+      "reason": "Block PB review fixes (ADR 0038 amendment 2026-11-12): scripts/perf/native_input_test.py: gate machinery changed: adds test_focus_taken_by_the_product_is_a_failure; test_same_pid_but_wrong_active_xid_is_rejected again asserts a failure (as committed before PB: rejected, not an environment fault), now RuntimeError; nothing weakened",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "b74ee324fc4eeb8e5fbeeb7f03de1ab11c4480566d3b0b496e8ab034672087fa",
+      "reason": "Block PB review fixes (ADR 0038 amendment 2026-11-12): scripts/perf/paired.py: gate machinery changed: slot_step (the per-start rule, twin of start.cjs slotStep, shared vector testdata/slot-rule.json), Fisher side test of the discards (IMBALANCE_ALPHA 1e-3, significant imbalance = regression even when the cap stopped the run), classify: accounting fault invalid, fewer judged pairs than the plan fail, interference_report counts over the planned slots and reports discarded durations per side; tests: paired_test.Interference, Accounting, Discards",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "92bd6d4e222a0f59c045f7146d38c0402184e69a21f0f6ec4f351ba124ce0f72",
+      "reason": "Block PB review fixes (ADR 0038 amendment 2026-11-12): scripts/perf/paired_e2e_test.py: gate dependency changed: ambient() reads the cgroup accounting; adds test_a_detached_helper_is_measured_not_background; no existing test or tolerance changed",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "7ec10356e27d5841df4bab175843183e5704dbfccdc319ea5791150dddfbf380",
+      "reason": "Block PB review fixes (ADR 0038 amendment 2026-11-12): scripts/perf/paired_e2e_test.py: gate machinery changed: ambient() reads the cgroup accounting; adds test_a_detached_helper_is_measured_not_background; no existing test or tolerance changed",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "6b52b6175716cb2f18512a9aa759c952da9be8a93302c373ee8bb85493dbfc1e",
+      "reason": "Block PB review fixes (ADR 0038 amendment 2026-11-12): scripts/perf/paired_test.py: gate dependency changed: adds test_driver_and_model_share_the_slot_rule and classes Accounting and Discards; test_report_keeps_every_raw_share now checks the planned size, discarded durations and side test; no gate test changed",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "b7ca91f3455403823eb90e11d446b8732c26e6e9d185027796ebd2eb95022038",
+      "reason": "Block PB review fixes (ADR 0038 amendment 2026-11-12): scripts/perf/paired_test.py: gate machinery changed: adds test_driver_and_model_share_the_slot_rule and classes Accounting and Discards; test_report_keeps_every_raw_share now checks the planned size, discarded durations and side test; no gate test changed",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "2e9c517b8eeffb9e0a7142efcec18ad2c9ab2f1109552c2fa54ead9cc108739f",
+      "reason": "Block PB review fixes (ADR 0038 amendment 2026-11-12): scripts/perf/pbmodel.py: gate machinery changed: bg_session runs paired.slot_step, the side test and the cgroup accounting (where: app, helper, outside); bg_session and bg_rates default to BG_SHARE_MAX (was 2.0); scenarios 4/8/12 % detached helper and 30 % outside; mutants tree-accounting and no-side-test added; tests: pbmodel_test.Interference",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "3ecbecf7b71313a7cf0346aadbb059ca38473c73adba34094aee3d0dc6c9325b",
+      "reason": "Block PB review fixes (ADR 0038 amendment 2026-11-12): scripts/perf/pbmodel_test.py: gate dependency changed: Interference tests at the gate bound passed explicitly: side-test false alarm <= 1e-3 (30000 runs), detached helper judged as in-process slowness (power >= 0.99 at 8 and 12 %), five mutants rejected with disjoint bounds; existing claims kept",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "4a503adb3dbec6d100532ef76308c853e1a7f3e8c14d08a4af152e704ba91358",
+      "reason": "Block PB review fixes (ADR 0038 amendment 2026-11-12): scripts/perf/pbmodel_test.py: gate machinery changed: Interference tests at the gate bound passed explicitly: side-test false alarm <= 1e-3 (30000 runs), detached helper judged as in-process slowness (power >= 0.99 at 8 and 12 %), five mutants rejected with disjoint bounds; existing claims kept",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "a76a1a9424e4c24c67d6a34e3b1cdd413ed346e2d7392086450f15272e2bc535",
+      "reason": "Block PB review fixes (ADR 0038 amendment 2026-11-12): scripts/perf/refbuild.py: gate machinery changed: every vector step on both sides (frozen pnpm install, bindings regenerated), -buildvcs=false, cache key with go env -json at the reference's go.mod, wails3 and cc versions; dirtied worktree, missing manifest and failed sidecar fetch raise ReferenceBuildError; kept-* evicted, never nested; tests: refbuild_test (test_dirtied_reference_worktree_fails_closed, test_cache_key_covers_the_build_environment, test_missing_manifest_or_failed_fetch_fails_closed, test_build_vector_is_reproducible_across_trees)",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "5987d5158d6b419b7908089bb0576480e08fcdaf6354032393bfea2601eb06e1",
+      "reason": "Block PB review fixes (ADR 0038 amendment 2026-11-12): scripts/perf/refbuild_test.py: gate dependency changed: adds five tests (dirtied worktree, vector steps, build environment key, manifest and fetch failures, reproducible build across trees); no existing test changed",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "f83c3b6c98bf6e5bbe86c73d8e8134761d6d1c8dbcb64876d6c8b9c4cde51c5f",
+      "reason": "Block PB review fixes (ADR 0038 amendment 2026-11-12): scripts/perf/refbuild_test.py: gate machinery changed: adds five tests (dirtied worktree, vector steps, build environment key, manifest and fetch failures, reproducible build across trees); no existing test changed",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "6ce348e537eefd7b5772f1382cdc3be183278d19ecb447ddd19ebc53adf21543",
+      "reason": "Block PB review fixes (ADR 0038 amendment 2026-11-12): scripts/perf/testdata/slot-rule.json: gate machinery changed: new shared vector of the per-start rule, read by paired_test for paired.slot_step and start.cjs slotStep",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "973f6eebccfb62828a313ba2de47436b56729f81dad5685d5ab8b1e097c4cbd9",
+      "reason": "Block PB review fixes (ADR 0038 amendment 2026-11-12): scripts/perf/cpu.cjs: gate machinery changed: the measured set is the run's cgroup v2 (driver, browser, one cgroup per start joined by the launcher before exec): background = /proc/stat busy minus cpu.stat usage_usec, a detached or reaped child stays measured, leftovers killed by cgroup.kill, no writable cgroup is the fault `accounting`; tests: cpu_test (fake cgroup arithmetic, real-cgroup test_a_detached_helper_stays_in_the_measured_cgroup, test_a_reaped_child_counts); adopt moves back into the run's cgroup every descendant of the driver that left it (Chromium's own systemd scope), test_an_escaped_descendant_is_brought_back",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "1e42766df5a5139354fd16e61795d99ed732a785943c0ffa703836c4c095fc65",
+      "reason": "Block PB review fixes (ADR 0038 amendment 2026-11-12): scripts/perf/cpu_test.py: gate machinery changed: tests rewritten for the cgroup accounting (fake cgroup arithmetic, real-kernel detached helper, reaped child, launcher pid/argv, launch failure); no bound or timeout weakened; adds test_an_escaped_descendant_is_brought_back",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "b676de981639ae21d3d1da95b3fbd92361363159d46d05eb6afc86555b6f6e88",
+      "reason": "Block PB review fixes (ADR 0038 amendment 2026-11-12): scripts/perf/start.cjs: gate dependency changed: for(let j=#;j<#;j++){try{if((await fetch('http://#.#:#/health')).ok){ready=true;break;}}catch{} await new Promise(r=>setTimeout(r,#));}: launches each start in its own cgroup (cpu.launcher), decision by slotStep (twin of paired.slot_step), fault `accounting`, writes planned/bg_share_max/invalid_max, /proc diagnostics moved to cpu.cjs; the readiness loop and its timeouts are unchanged (re-keyed by the file edit); tests: paired_e2e_test, paired_test.test_driver_and_model_share_the_slot_rule; adopt after the launch and before every start, recorded in `adopted`, a failure is the fault `accounting`",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "84ae843d8e127694f5c3bd81dc6141a6b1e64c161b3d677aed843e4fdb8f1c57",
+      "reason": "Block PB review fixes (ADR 0038 amendment 2026-11-12): scripts/perf/start.cjs: gate machinery changed: for(let j=#;j<#;j++){try{if((await fetch('http://#.#:#/health')).ok){ready=true;break;}}catch{} await new Promise(r=>setTimeout(r,#));}: launches each start in its own cgroup (cpu.launcher), decision by slotStep (twin of paired.slot_step), fault `accounting`, writes planned/bg_share_max/invalid_max, /proc diagnostics moved to cpu.cjs; the readiness loop and its timeouts are unchanged (re-keyed by the file edit); tests: paired_e2e_test, paired_test.test_driver_and_model_share_the_slot_rule; adopt after the launch and before every start, recorded in `adopted`, a failure is the fault `accounting`",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "2cd60bb8a3b8d0c785a3fbaf9f4ac2dc3364c1e857394b85c169e7f4c1fa6b0a",
+      "reason": "Block PB review fixes (ADR 0038 amendment 2026-11-12): scripts/perf/start.cjs: timeout expression removed or rewritten: for(let j=#;j<#;j++){try{if((await fetch('http://#.#:#/health')).ok){ready=true;break;}}catch{} await new Promise(r=>setTimeout(r,#));}: for(let j=#;j<#;j++){try{if((await fetch('http://#.#:#/health')).ok){ready=true;break;}}catch{} await new Promise(r=>setTimeout(r,#));}: launches each start in its own cgroup (cpu.launcher), decision by slotStep (twin of paired.slot_step), fault `accounting`, writes planned/bg_share_max/invalid_max, /proc diagnostics moved to cpu.cjs; the readiness loop and its timeouts are unchanged (re-keyed by the file edit); tests: paired_e2e_test, paired_test.test_driver_and_model_share_the_slot_rule; adopt after the launch and before every start, recorded in `adopted`, a failure is the fault `accounting`",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "33abbd7dead4bb5506c03ed57ffd2257f97fb70adad6b89d77fff942a86764bc",
+      "reason": "scripts/perf/baseline.py: Block PB (ADR 0038): the reference build record's cache field is renamed from key to cache_digest (a SHA-256 cache digest that secret scanners read as an API key), and a cache entry is a hit only when its record names that entry; no check, threshold or delay changes. Pinned by refbuild_test.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "28b93923e3ec43e44583a25e0ca7192cc8ae7577c464c49275d9975b631b057b",
+      "reason": "scripts/perf/baseline.py: Block PB (ADR 0038): the reference build record's cache field is renamed from key to cache_digest (a SHA-256 cache digest that secret scanners read as an API key), and a cache entry is a hit only when its record names that entry; no check, threshold or delay changes. Pinned by refbuild_test.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "02302ecb0a1d58d10417649a66dfda4647e8be9e8a2667dd971de4a508465dac",
+      "reason": "scripts/perf/refbuild.py: Block PB (ADR 0038): the reference build record's cache field is renamed from key to cache_digest (a SHA-256 cache digest that secret scanners read as an API key), and a cache entry is a hit only when its record names that entry; no check, threshold or delay changes. Pinned by refbuild_test.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "bde2a28a2a6490bb4fa612699a4542795da2cb08cf475e0708f4857be459a5d2",
+      "reason": "scripts/perf/refbuild_test.py: Block PB (ADR 0038): the reference build record's cache field is renamed from key to cache_digest (a SHA-256 cache digest that secret scanners read as an API key), and a cache entry is a hit only when its record names that entry; no check, threshold or delay changes. Pinned by refbuild_test.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "facf1b3a9921945089d64bbd6dcf2595256042a5a8800847624e77dd28c38af4",
+      "reason": "scripts/perf/refbuild_test.py: Block PB (ADR 0038): the reference build record's cache field is renamed from key to cache_digest (a SHA-256 cache digest that secret scanners read as an API key), and a cache entry is a hit only when its record names that entry; no check, threshold or delay changes. Pinned by refbuild_test.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
     }
   ]
 }

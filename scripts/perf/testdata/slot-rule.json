@@ -1,0 +1,18 @@
+{
+"comment": "The per-start rule of the paired startup driver (plan section 18.2), one decision per measured start: keep, retry, stop-cap or stop-tries. Both implementations read these rows: paired.slot_step (the gate and the model, pbmodel.bg_session) and slotStep of start.cjs (the driver); paired_test.Interference.test_driver_and_model_share_the_slot_rule runs both. discarded counts the invalid starts of the run before this one.",
+"rule": {"bg_share_max": 1.5, "invalid_max": 0.2, "max_tries": 5},
+"rows": [
+{"bg_share": 1.5, "tries": 1, "discarded": 0, "planned": 164, "want": "keep"},
+{"bg_share": 0.0, "tries": 5, "discarded": 32, "planned": 164, "want": "keep"},
+{"bg_share": 1.5000001, "tries": 1, "discarded": 0, "planned": 164, "want": "retry"},
+{"bg_share": 9.4, "tries": 4, "discarded": 31, "planned": 164, "want": "retry"},
+{"bg_share": 9.4, "tries": 1, "discarded": 31, "planned": 164, "want": "retry"},
+{"bg_share": 9.4, "tries": 1, "discarded": 32, "planned": 164, "want": "stop-cap"},
+{"bg_share": 9.4, "tries": 5, "discarded": 32, "planned": 164, "want": "stop-cap"},
+{"bg_share": 9.4, "tries": 5, "discarded": 3, "planned": 164, "want": "stop-tries"},
+{"bg_share": 2.0, "tries": 1, "discarded": 1, "planned": 8, "want": "stop-cap"},
+{"bg_share": 2.0, "tries": 1, "discarded": 0, "planned": 8, "want": "retry"}
+],
+"off": {"rule": {"bg_share_max": null, "invalid_max": 0.2, "max_tries": 5},
+        "rows": [{"bg_share": 99.0, "tries": 5, "discarded": 1000, "planned": 8, "want": "keep"}]}
+}

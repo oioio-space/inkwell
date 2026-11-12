@@ -201,23 +201,34 @@ measurements, not regression comparisons; a paired native comparison is follow-u
 - **Reference commit**: `git merge-base HEAD main`, as `regression.py` (on main with uncommitted work: HEAD). The
   change under test is the working tree, uncommitted files included. If the working tree's build is byte-identical
   to the reference (same binary SHA-256), the run is an A/A comparison, reported `identity: true`; it must pass.
-- **Build**: one function `refbuild.build_server(tree, out)` builds both sides with the same command vector (the
-  vite production build into `frontend/dist`, then `go build -tags server -trimpath -o <out> ./cmd/inkwell`; the
-  `-trimpath` keeps the two binaries free of their checkout paths). The branch build still also produces
-  `bin/inkwell-server` for the other L0 steps.
+- **Build**: one function `refbuild.build_server(tree, out)` builds both sides with the same command vector, every
+  step on both (review of 2026-11-12): `pnpm install --frozen-lockfile --prefer-offline` (the checkout under test is
+  verified against its own lockfile too), `wails3 generate bindings` (always regenerated from the tree's Go code), the
+  vite production build into `frontend/dist`, then `go build -tags server -trimpath -buildvcs=false -o <out>
+  ./cmd/inkwell` (`-trimpath` and `-buildvcs=false` keep checkout paths and the VCS stamp out of the binary, so the
+  same source gives the same binary in both trees: `refbuild_test.test_build_vector_is_reproducible_across_trees`).
+  The branch build still also produces `bin/inkwell-server` for the other L0 steps.
 - **Worktree**: a private `git clone --bare --shared` in the cache, then `git worktree add --detach` at the reference
   (the source checkout's `.git` is never written, as in `regression.py`). Frontend dependencies:
   `pnpm install --frozen-lockfile --prefer-offline` in the worktree (the global store makes it a link farm).
   Sidecars (`internal/sidecar/bin/<goos>_<goarch>`, ignored by git, embedded by `go:embed`): copied from the source
   checkout when the reference's `internal/sidecar/manifest.json` equals the source's and every copied file matches
-  its pinned SHA-256; otherwise `mise run sidecar:fetch` in the worktree. Never a download at run time (ADR 0024).
+  its pinned SHA-256; otherwise `mise run sidecar:fetch` in the worktree. Never a download at run time (ADR 0024). A
+  missing manifest on either side or a failed fetch is a `ReferenceBuildError`.
 - **Cache**: `~/.cache/inkwell/perf-ref/<key>/` holding `inkwell-server` and `build.json` (commit, key inputs,
   binary SHA-256, build time). `key = SHA-256` of: reference commit, `go version`, `node --version`,
-  `pnpm --version`, the build command vector, `GOFLAGS`/`CGO_ENABLED`/`GOAMD64`/`GOARCH`, the sidecar manifest.
+  `pnpm --version`, `wails3 version`, the C compiler's `--version`, `go env -json` taken in a directory holding the
+  reference commit's `go.mod` (and `go.work`), which is what selects the toolchain (GOVERSION, GOTOOLCHAIN,
+  GOEXPERIMENT, CC, CXX, the cgo flags, GOFLAGS, GOAMD64...; without the keys that name a location or a download
+  policy, and with GOGCCFLAGS's random build directory removed), the build command vector, the same variables from
+  the environment, the sidecar manifest.
   Built in a temporary sibling directory, published by `os.rename` (atomic), under `flock` on
   `~/.cache/inkwell/perf-ref.lock`; a hit re-hashes the binary against `build.json` and rebuilds on mismatch; the 6
   most recent entries are kept. The worktree is removed after the build; only the binary is cached.
-- A reference that does not build fails the criterion with "reference build failed" (fail closed, never invalid).
+- A reference that does not build fails the criterion with "reference build failed" (fail closed, never invalid). A
+  build that modifies a tracked file or leaves an untracked one in the reference worktree is no reference build:
+  `ReferenceBuildError`, nothing published, the worktree moved to `kept-<key>` in the cache (replacing an older copy,
+  never nested), the two most recent kept.
 
 ## 8. Interleaving, cooling, invalid runs, retries
 
@@ -250,6 +261,20 @@ loss (`frontend/src/perf/native.ts`) carries the code `focus-lost` next to its m
 environment fault into status `invalid` instead of adding performance reasons; `type_native.py` retries with a fresh
 raw directory under the same cooling and attempt limit, and after 3 writes the verdict through a new
 `--native-perf-invalid=<reasons>` flag. A setup error (wrong engine, missing binary) is not an environment fault.
+
+A fault explains only what is missing (review of 2026-11-12): the verifier records the reasons that say evidence is
+absent (samples, controls, replicates, a p95 that too few samples cannot certify) apart from every other reason; a run
+with a fault and only reasons of the first kind is `invalid`, and any other reason (a budget exceeded on the samples
+that were measured, an integrity check, an uncoded failure) makes it `fail`, with the fault among its reasons
+(`TestVerdictFaultKeepsPerformanceFailure`, `TestMergeFaultKeepsRunFailures`; the driver's `driver.json` fault goes
+through the same rule). Focus taken by the product is a failure, not a fault: the driver reads the PID of the window
+that took the focus, and a window of the measured process or of one of its descendants (a dialog the application
+opened) raises a failure, another program's window the fault `focus-lost` (`native_input_test.
+test_focus_taken_by_the_product_is_a_failure`); inside the page, the frontend codes `focus-lost` only when the
+window is hidden or unfocused, and a focus moved away from the editor in a focused window is an uncoded failure
+(vitest "reports a focus the page moved itself as a product failure"). What stays undistinguished: a product that
+makes another program (a portal, a desktop service) take the focus is seen as that program and the run is invalid
+after three attempts, never a pass; the cost is time, not a wrong verdict.
 
 ## 9. What changes where (blueprint for go-dev)
 
@@ -342,6 +367,7 @@ criterion requires `--- PASS: <name>`; the Vitest criterion reads the JSON repor
 - F1 — `regression.py --bench`: align its rule (5 %, p < 0.05, confirmation) with the same non-inferiority bound
   per benchmark, with a family-wise level over the benchmarks.
 - F2 — a paired native typing comparison (reference and change windows interleaved run by run).
+- F6 — make the bound on background CPU relative to a quiet level measured in the run (section 18.4, limit 2).
 
 ## 15. Open questions for the user (product choices)
 
@@ -417,6 +443,197 @@ benchmarking (parallel starts contend and change the quantity).
 - Hollander, Wolfe & Chicken, Nonparametric Statistical Methods, 3rd ed. (signed-rank bounds, Hodges-Lehmann, § 3.3);
   David & Nagaraja, Order Statistics, 3rd ed. (distribution-free quantile bounds, § 7.1); Schuirmann, "A comparison
   of the two one-sided tests procedure…", J. Pharmacokinet. Biopharm. 1987 (non-inferiority / TOST).
+
+## 18. Per-sample interference (2026-11-12)
+
+**Need.** `perf-start` passed the paired verdict (upper bound 1.018) and the median (326-330 ms against 350) but failed
+the absolute p95: the budget is judged on the 80th of 80 starts (section 6), so one start over 400 ms fails the run.
+About 7 % of the starts of a run were at 430-640 ms on the reference and on the change alike. They coincide with the
+gortex daemon, which bursts every ~7.7 s: for about 0.12 s all 20 CPUs are busy, around a shoulder of 1-2 CPUs. The
+order statistic that certifies a p95 is the maximum, so on this host it measures interference, not the application.
+ADR 0038 already says an environmental fault makes a run invalid; this applies it to one start instead of the run
+(autonomous-decisions, last PB row). The limits (350 and 400 ms) and every other threshold are unchanged.
+
+### 18.1 Measurement
+
+`scripts/perf/cpu.cjs`, called by `start.cjs` around each start (a window from just before the spawn to the editor being
+usable):
+
+    background CPU = (busy CPU of the machine, /proc/stat: user nice system irq softirq steal)
+                   - (CPU of the run's cgroup, cpu.stat usage_usec)
+
+The measured set is a cgroup v2 subtree (review of 2026-11-12, replacing the process tree of the first version, which
+missed a helper detached by `setsid` or a double fork and lost the CPU of children that exited or were reaped): the
+driver creates `<own cgroup>/pb-<pid>/` and moves itself into `driver/` before it launches the browser, so the browser
+and its renderers are there too; every start gets a fresh `start-<index>-<try>/`, which a two-line launcher (`/bin/sh -c
+'echo $$ > <cgroup>/cgroup.procs || exit 125; exec <binary>'`) joins before it executes the binary in the same process,
+so the application and everything it spawns are in the cgroup from their first instruction (the application's own
+argv and environment are unchanged; the launcher costs the same ~1 ms on both sides). A process cannot leave a cgroup
+by forking or calling `setsid`, and `usage_usec` keeps the CPU of every process that ever ran there. After the start the
+driver kills what is left (`cgroup.kill`), waits until the cgroup is empty, records `app_cpu_ms` and `leftover` (the
+processes that outlived the application) and removes it. A cgroup writer can still move a process out: Chromium asks
+systemd over D-Bus to put its browser process in a scope of its own (`app-org.chromium.Chromium-<pid>.scope`), found by
+the first gate run of the cgroup accounting (2026-11-12: every share rose by about 0.12 CPU, the browser's, and the three
+attempts ended invalid at the 20 % cap). The driver therefore keeps the invariant itself: `cpu.adopt`, after the browser
+launch and before every start (outside the timed window), moves every descendant of the driver that left the run's
+cgroup back into `driver/` and records it in `adopted` (the smoke run after the fix: the browser's main process moved
+back before slot 0, median share 1.26 CPUs against 1.27-1.31 in the archive); a descendant that cannot be moved back is
+the fault `accounting` (`cpu_test.test_an_escaped_descendant_is_brought_back`). Under `scripts/heavy.sh` the driver's cgroup is a user-owned
+systemd scope; without a writable cgroup v2, or a launcher that cannot join (exit 125), the driver writes the fault
+`accounting` and the attempt is invalid ("environment: cgroup CPU accounting unavailable"), never measured
+(`cpu_test.py`: arithmetic on a fake cgroup and /proc, the kernel semantics on the real cgroup:
+`test_a_detached_helper_stays_in_the_measured_cgroup`, `test_a_reaped_child_counts`; `paired_e2e_test.
+test_a_detached_helper_is_measured_not_background` through the driver). `bg_share` = background CPU / window, in CPUs
+(4.0 = four CPUs busy for the whole window); a negative difference (tick sampling against the exact `usage_usec`) is
+clamped to 0. Resolution: /proc/stat is tick sampled, about one jiffy (10 ms) per busy CPU, 0.03 CPU on a 330 ms window.
+The measured set only grows from the process tree to the cgroup, so a share can only move from background to measured:
+the archive of 18.3, taken with the process tree, is at worst conservative for the new accounting.
+
+Every start records `window_ms`, `bg_cpu_ms`, `bg_share`, `app_cpu_ms`, `leftover`, `valid` and `try` in the raw file;
+the starts that were discarded are kept in `discarded` (same fields), the driver writes the plan's size and bound
+(`planned`, `bg_share_max`, `invalid_max`), and `PERF-START.interference` of the report holds the bound, the raw share
+of every kept start, every discarded start with its share and duration, the invalid rate over the planned slots, the
+invalid count and the discarded durations per side (`discarded_ms`), and the side test (`imbalance`).
+
+### 18.2 Rule
+
+- A start is **invalid** iff `bg_share > BG_SHARE_MAX` (`paired.invalid_start`). It reads background CPU, never the
+  duration.
+- An invalid start is **re-measured in its own slot** (same side, same place in the pair order, so the randomisation is
+  untouched), after the cooling gap and a wait until two consecutive 100 ms windows are quiet (at most `QUIET_WAIT_MS`,
+  10 s): the retry does not start inside the burst that spoiled it. At most `MAX_TRIES` = 5 measurements of a slot;
+  a slot invalid five times is the fault `interference`.
+- The run is **invalid** (`run_interfered`) when more than `INVALID_MAX` = 20 % of the plan's slots were invalid
+  starts (counted over all tries, so 33 of 164); the driver stops there with the fault `interference`, `classify` calls
+  the attempt invalid ("environment: background CPU interference"), never a pass, and the existing retry (three
+  attempts, cooling) applies.
+- Retrying only the invalid starts is label-blind: the test never looks at the side or at the duration. A discarded
+  start never enters the verdict or the budget; the kept start of the slot does.
+- The per-start decision is one function, `paired.slot_step` (keep, retry, stop on the cap, stop on the tries), which
+  the model runs; the driver's `slotStep` is its twin, and both are checked against the shared vector
+  `scripts/perf/testdata/slot-rule.json` (`paired_test.Interference.test_driver_and_model_share_the_slot_rule`); the
+  driver holds no constant of its own, the plan carries them.
+- **The discards must not depend on the side** (review of 2026-11-12). On an unchanged application the bound discards
+  both sides alike; an application whose slowness lands in CPU outside its cgroup (a service it wakes) is discarded
+  on its own side. Fisher's exact test, two-sided, on the table (side x discarded or kept, every measured start)
+  (`paired.discard_imbalance`): p <= `IMBALANCE_ALPHA` = 1e-3 makes the attempt a **regression** ("suspected
+  regression: the discarded starts depend on the side"), never invalid and never a pass, even when the 20 % cap
+  stopped the run. The level is the one of the paired bound (`ALPHA`); its false alarm on a null application under
+  the fitted bursts, retries in a slot included, is 7 in 30000 runs (2.3e-4, 95 % upper bound 4.4e-4:
+  `pbmodel_test.Interference.test_side_test_false_alarm_under_bursts`), below the nominal level because Fisher's test
+  is conservative. It adds at most 1e-3 to the false failure of the absolute check (each is bounded by 1e-3 on its
+  own, so an unchanged application fails a run with probability at most 2e-3). A level of 1e-2 would detect more
+  (33 alarms in 12000 null runs, 2.8e-3) at a false-failure cost above the budget; 1e-4 halves the failures of the
+  "outside" scenario below.
+- A run without the plan's 80 judged pairs and without a fault is a failure ("incomplete"), never judged on what is
+  left (`paired_test.Discards.test_incomplete_run_is_a_failure`).
+
+### 18.3 Data: where the bound sits
+
+Four A/A runs of the same build on both sides (2 warm-up + 80 pairs each, no invalidation), archived with their SHA-256 in
+`docs/perf/2026-11-12-start-bg/` (640 judged starts; `python3 scripts/perf/pbmodel.py bgfit`). The share of the
+machine without the application is not zero: median 1.27 CPUs, robust sd 0.096. Duration by share:
+
+| share (CPUs) | starts | median ms | max ms | starts over 400 ms |
+|--------------|-------:|----------:|-------:|-------------------:|
+| <= 1.5       | 535    | 329       | 370    | 0                  |
+| 1.5-1.75     | 21     | 342       | 391    | 0                  |
+| 1.75-2       | 15     | 393       | 409    | 3                  |
+| 2-2.5        | 19     | 373       | 424    | 2                  |
+| 2.5-3        | 10     | 395       | 439    | 4                  |
+| 3-6          | 9      | 461       | 608    | 9                  |
+| > 6          | 31     | 595       | 964    | 31                 |
+
+All 49 starts over 400 ms are above 1.5 CPUs; none of the 535 at or below it exceeds 370 ms (sd of their log 0.032).
+Above the quiet level a start costs about **41 ms per CPU** of background (median of (ms - 329) / (share - 1.27) over the
+105 hits; quartiles 33 and 62 ms), residual sd 23 ms below 3 CPUs, 39 ms to 6, 120 ms above. The peaks (31 starts at
+6.3-10.2, mode 9.4 CPUs, 2.7 CPU-s) recur every 12.2 slots = 7.7 s, the cadence of the daemon.
+
+### 18.4 Why 1.5 CPUs
+
+The p95 budget leaves 400 - 370 = 30 ms over the slowest quiet start, i.e. under one CPU of background (41 ms/CPU), and
+the bound is judged on the worst of 80 starts, so a bound looser than the quiet edge admits starts that break it. The sweep
+of the model (`python3 scripts/perf/pbmodel.py threshold`, 3000 runs per row; false failure = runs not interfered whose
+absolute p95 check fails; the stressed bursts have a longer, stronger shoulder and 1.5 x the slope):
+
+| bound (CPUs) | false failures, fitted | interfered runs, fitted | false failures, stressed | interfered, stressed |
+|-------------:|-----------------------:|------------------------:|-------------------------:|---------------------:|
+| 1.40 | 0/3000 | 1707 | 0/3000 | 2002 |
+| 1.45 | 1/3000 | 2    | 0/3000 | 2    |
+| **1.50** | **1/3000** | **0** | 5/3000 | 0 |
+| 1.55 | 0/3000 | 0 | 2/3000 | 0 |
+| 1.60 | 4/3000 | 0 | 9/3000 | 0 |
+| 1.75 | 26/3000 | 0 | 61/3000 | 0 |
+| 2.0  | 123/3000 | 0 | 269/3000 | 0 |
+| 2.5  | 1130/3000 | 0 | 1320/3000 | 0 |
+| none | 2993/3000 | 0 | 3000/3000 | 0 |
+
+1.5 is the largest bound that keeps the false failure of the absolute check at the level of the bulk alone (and it is the
+quiet edge of the archive); below 1.45 the quiet starts themselves (base 1.27 + 2 sd) are discarded and the 20 % cap is
+reached. Two limits are stated, not hidden:
+
+0. Observed with the rule on (2026-11-12): two real `perf-start` runs had 29 and 32 invalid starts of 164 (17.7 % and
+   19.5 %; cap 33), each passed with a p95 bound of 357.5 and 359.2 ms (before: 589-643 ms), a median bound of 332.6 and
+   330.2 ms and an upper ratio of 1.009 and 1.020; no kept start exceeded 1.49 CPUs. The margin to the cap is thin.
+1. The archive's own invalid rates at 1.5 are 14, 15, 20 and 16 % per session (the model, which has a regular cadence,
+   reproduces the 16 % mean but not the spread): a session can reach the 20 % cap. A run that does is invalid and retried
+   (three attempts), never a pass; the cost is time, not a wrong verdict.
+2. The bound is absolute and the quiet level is a property of the host (here 1.27). On a host whose ambient load is above
+   1.5 CPUs every start is invalid and the run ends invalid after 33 starts, loudly and early. Making the bound relative
+   to a measured quiet level is a follow-up (F6), not done here: it needs its own data on a second host.
+
+### 18.5 Model (`pbmodel.py`, `Interference` tests)
+
+`Bursts` is the background process: a cycle of 7.7 s (jitter 0.15 s), a peak of 20 CPUs for 0.12 s with a shoulder of
+1.25 CPUs for 0.4 s on each side. The three shape parameters were chosen by a grid search on the share statistics of the
+archive; the fitted model reproduces them (hits above 1.5: 16.0 % against 16.4 %; peaks above 6: 4.4 % against 4.8 %;
+shoulders 1.5-2.5: 8.8 % against 8.6 %; 99th percentile 9.45 against 9.47 CPUs), and `test_constants_match_disk` refits and
+compares. A start's duration is the bulk of the fitted environment plus 41.4 ms per CPU of burst it overlapped, with the
+fitted residual. `bg_session` runs the driver's rule (warm-up and judged pairs in random order, re-measurement in the slot,
+the cap at 20 %, five tries) on that timeline.
+
+Review of 2026-11-12: the first table was computed by `bg_rates` at a bound of 2.0 CPUs, not the gate's 1.5; `bg_session`
+and `bg_rates` now default to `BG_SHARE_MAX` and the tests pass it explicitly (`test_model_runs_the_gate_bound`). The model
+runs the driver's decision (`paired.slot_step`), the side test and the accounting: `where` places the slowness in the
+application's process ("app"), in a detached helper ("helper": in the start's cgroup under the cgroup accounting, outside
+the measured set under the old process-tree accounting, mutant "tree-accounting"), or in a service outside the cgroup
+("outside", background under any accounting). At 1.5 CPUs:
+
+| claim | result (95 % bounds) |
+|-------|----------------------|
+| false failure of the absolute p95 check on a null application, 12000 runs, fitted bursts | 5 failures, 0 runs interfered; upper bound 8.8e-4 <= 1e-3 |
+| false alarm of the side test on a null application, 30000 runs | 7 alarms; upper bound 4.4e-4 <= 1e-3 |
+| application 20 % slower on every start | 1000 / 1000 fail; power >= 0.997 |
+| 10 % of B starts 35 % slower, not tied to a burst | 1000 / 1000 fail; power >= 0.997 |
+| 4 % of B starts 35 % slower in a detached helper | 965 / 1000 fail, 35 pass (power >= 0.95); identical, seed for seed, to the same slowness in the application's process |
+| 8 % / 12 % of B starts 35 % slower in a detached helper | 998 / 1000 and 1000 / 1000 fail; power >= 0.99; identical to the application's process |
+| 30 % of B starts 35 % slower in a service outside the cgroup | 857 fail (side test), 142 invalid (cap), 1 pass / 1000; pass rate <= 0.005 |
+| mutant, no invalidation | 1000 / 1000 false failures |
+| mutant, invalidate when the duration exceeds 400 ms | the 10 % slow application passes 952 / 1000 |
+| mutant, process-tree accounting | the 12 % detached helper passes 902 / 1000 (rule: 0) |
+| mutant, no 20 % cap | the 30 % outside slowness passes 70 / 1000 (rule: 0 on the same seeds) |
+| mutant, no side test | the 30 % outside slowness ends invalid 998 / 1000 instead of failing (rule: 870 fail) |
+
+At 4 % the limit is the absolute check's, not the accounting's: no slow start falls in the 80 judged starts in
+0.96^80 = 3.8 % of the runs. The cgroup is what keeps a detached helper (setsid, double fork) from hiding its slowness: its
+CPU is the application's, its slow starts are kept and judged. A slowness in a process outside the cgroup is the residual:
+its starts are discarded one by one; the side test fails the run when the discards concentrate on B, and the cap stops it
+at 20 %; at 20 % of slow starts outside, 14 % of the criteria still pass (142 / 1000 in the model): a product that wakes a
+desktop service on start is not covered below that size, and the server build measured here does not wake one. The
+stressed bursts (not claimed at 1e-3) give 5 false failures in 3000 at the chosen bound; the stress is already 1.5 x the
+fitted slope and a 50 % longer shoulder. What the model does not cover: bursts of another cadence (a different daemon), and
+a host with a different quiet level.
+
+### 18.6 Where it lives
+
+`scripts/perf/cpu.cjs` (cgroup accounting, the launcher, the /proc diagnostics; `cpu_test.py` on a fake cgroup and /proc
+and on the real cgroup), `start.cjs` (window, `slotStep`, retry in the slot, quiet wait, faults `interference` and
+`accounting`), `paired.py` (`BG_SHARE_MAX`, `INVALID_MAX`, `MAX_TRIES`, `QUIET_WAIT_MS`, `IMBALANCE_ALPHA`,
+`invalid_start`, `run_interfered`, `slot_step`, `fisher_two_sided`, `discard_imbalance`, `interference_report`,
+`classify`), `testdata/slot-rule.json` (the shared vector), `baseline.py` (the report), `pbmodel.py` (the model),
+`paired_e2e_test.py` (driver against a fake server, a real burner and a detached helper). The driver tests of the gate pass
+`bg_share_max=None` (they judge timing, not the machine's ambient load); only the `Interference` tests and the real
+`perf-start` apply the bound.
 
 ## Decisions of the user (2026-11-11)
 

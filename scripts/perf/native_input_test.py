@@ -119,7 +119,7 @@ class DriverProtocolTests(unittest.TestCase):
              mock.patch.object(driver, "collect_run", collect):
             driver.main()
             create.assert_called_once_with()
-            self.assertEqual(calls, [("warm", 1)] + [("cold", n) for n in range(1, 31)])
+            self.assertEqual(calls, [("warm", 1)] + [("cold", n) for n in range(1, driver.COLD_REPLICATES + 1)])
             backend.close.assert_called_once_with()
             manifest = json.loads((Path(directory) / "driver.json").read_text())
             self.assertEqual(manifest["driver"], "Mutter RemoteDesktop trusted ASCII x")
@@ -160,8 +160,11 @@ class DriverProtocolTests(unittest.TestCase):
              mock.patch("sys.argv", ["native_input", "--binary", __file__, "--output", directory]), \
              mock.patch.object(driver, "MutterKeyboard", return_value=backend), \
              mock.patch.object(driver, "collect_run", return_value=dict(status="fail", inputUnavailable=True)) as collect:
-            with self.assertRaisesRegex(RuntimeError, "Mutter target/permission not validated by trusted keydown"):
+            with self.assertRaises(SystemExit) as exit_:
                 driver.main()
+            self.assertEqual(exit_.exception.code, driver.EX_TEMPFAIL)
+            self.assertRegex(json.loads((Path(directory) / "driver.json").read_text())["error"],
+                             "Mutter target/permission not validated by trusted keydown")
             collect.assert_called_once()
             self.assertEqual(collect.call_args.args[2:4], ("warm", 1))
             backend.close.assert_called_once_with()
@@ -177,7 +180,7 @@ class DriverProtocolTests(unittest.TestCase):
                 driver.main()
             manifest = json.loads((Path(directory) / "driver.json").read_text())
             self.assertEqual(manifest["status"], "fail")
-            self.assertEqual(len(manifest["runs"]), 31)
+            self.assertEqual(len(manifest["runs"]), driver.COLD_REPLICATES + 1)
 
     def test_mutter_backend_never_initializes_xtest_and_only_delegates_injection(self):
         session = SimpleNamespace(send_keysym=mock.Mock(), close=mock.Mock())
@@ -199,8 +202,10 @@ class DriverProtocolTests(unittest.TestCase):
         backend.target = dict(pid=42, xid=100)
         backend.window_pid = lambda _: 42
         backend.active_window = lambda: 200
-        with self.assertRaisesRegex(ValueError, "Active window is not the measured X11 XID"):
+        # Another window of the measured process is active: the product took the focus, a failure, not a fault.
+        with self.assertRaisesRegex(RuntimeError, "Active window is not the measured X11 XID") as raised:
             backend.validate_target(42)
+        self.assertNotIsInstance(raised.exception, driver.EnvironmentFault)
 
     def test_mutter_start_failure_releases_target_verifier_without_other_injector(self):
         module = SimpleNamespace(MutterSession=mock.Mock(side_effect=RuntimeError("Start failed")))
@@ -227,7 +232,7 @@ class DriverProtocolTests(unittest.TestCase):
 
     def test_focus_change_during_probe_or_post_key_target_change_is_fatal(self):
         backend = SimpleNamespace(focus_pid=mock.Mock(side_effect=[42, 43]), send_keysym=mock.Mock())
-        with self.assertRaises(ValueError):
+        with self.assertRaises(driver.EnvironmentFault):
             driver.FocusedKeyboard(backend).probe_for(42)
         backend = SimpleNamespace(validate_target=mock.Mock(side_effect=[None, ValueError("XID changed")]),
                                   focus_pid=lambda: 42, send_key=mock.Mock())
@@ -267,17 +272,19 @@ class DriverProtocolTests(unittest.TestCase):
              mock.patch("sys.argv", ["native_input", "--input-backend", "xtest", "--binary", __file__, "--output", directory]), \
              mock.patch.object(driver, "X11Keyboard", return_value=SimpleNamespace(close=mock.Mock())), \
              mock.patch.object(driver, "collect_run", collect):
-            with self.assertRaisesRegex(RuntimeError,"XTest target/permission not validated"):
+            with self.assertRaises(SystemExit) as exit_:
                 driver.main()
+            self.assertEqual(exit_.exception.code, driver.EX_TEMPFAIL)
+            self.assertRegex(json.loads((Path(directory)/"driver.json").read_text())["error"],"XTest target/permission not validated")
             self.assertEqual(calls,[("warm",1)])
-            self.assertEqual(json.loads((Path(directory)/"driver.json").read_text())["status"],"fail")
+            self.assertEqual(json.loads((Path(directory)/"driver.json").read_text())["status"],"fault")
 
     def test_permission_probe_is_a_modifier_and_checks_measured_focus(self):
         backend=SimpleNamespace(focus_pid=lambda:42,send_keysym=mock.Mock())
         keyboard=driver.FocusedKeyboard(backend)
         keyboard.probe_for(42)
         backend.send_keysym.assert_called_once_with(0xffe1)
-        with self.assertRaises(ValueError): keyboard.probe_for(43)
+        with self.assertRaises(driver.EnvironmentFault): keyboard.probe_for(43)
 
     def test_failed_completion_preserves_raw_evidence_and_returns_to_collection_loop(self):
         class FailedProcess:
@@ -317,7 +324,7 @@ class DriverProtocolTests(unittest.TestCase):
              mock.patch.object(driver, "collect_run", collect):
             with self.assertRaises(SystemExit):
                 driver.main()
-            self.assertEqual(calls, [("warm", 1)] + [("cold", n) for n in range(1, 31)])
+            self.assertEqual(calls, [("warm", 1)] + [("cold", n) for n in range(1, driver.COLD_REPLICATES + 1)])
             self.assertEqual(json.loads((Path(directory) / "driver.json").read_text())["status"], "fail")
 
     def test_raw_warm_budget_failure_does_not_suppress_thirty_cold_processes(self):
@@ -332,10 +339,10 @@ class DriverProtocolTests(unittest.TestCase):
              mock.patch.object(driver, "X11Keyboard", return_value=SimpleNamespace(close=mock.Mock())), \
              mock.patch.object(driver, "collect_run", collect):
             driver.main()
-            self.assertEqual(calls, [("warm",1)]+[("cold",n) for n in range(1,31)])
+            self.assertEqual(calls, [("warm",1)]+[("cold",n) for n in range(1,driver.COLD_REPLICATES + 1)])
 
     def test_early_failed_completion_preserves_collector_reason(self):
-        protocol = driver.TrialProtocol("a" * 32, "warm", 30, lambda: None)
+        protocol = driver.TrialProtocol("a" * 32, "warm", driver.WARM_COUNT, lambda: None)
         raw = Path("warm-01.json")
         marker = dict(type="complete", runId="a" * 32, rawPath=str(raw), status="fail")
         driver.validate_completion(marker, protocol, "a" * 32, raw)
@@ -362,13 +369,13 @@ class DriverProtocolTests(unittest.TestCase):
         self.assertTrue(protocol.finished)
 
     def test_invisible_unfocused_untrusted_engine_wrong_run_never_injects(self):
-        for field, value in [("visible", False), ("focused", False),
-                             ("engine", "Chromium"), ("runId", "b" * 32)]:
+        for field, value, error in [("visible", False, driver.EnvironmentFault), ("focused", False, driver.EnvironmentFault),
+                                    ("engine", "Chromium", ValueError), ("runId", "b" * 32, ValueError)]:
             keys = []
             protocol = driver.TrialProtocol("a" * 32, "cold", 1, lambda: keys.append("x"))
             marker = self.marker("armed")
             marker[field] = value
-            with self.assertRaises(ValueError):
+            with self.assertRaises(error):
                 protocol.consume(marker)
             self.assertEqual(keys, [])
 
@@ -379,16 +386,16 @@ class DriverProtocolTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             protocol.consume(self.marker("armed", trial=2))
 
-    def test_warm_controls_precede_thirty_normal_trials(self):
+    def test_warm_controls_precede_the_normal_trials(self):
         keys = []
-        protocol = driver.TrialProtocol("a" * 32, "warm", 30, lambda: keys.append("x"))
-        sequence = driver.CONTROLS + ["none"] * 30 + driver.null_schedule()
+        protocol = driver.TrialProtocol("a" * 32, "warm", driver.WARM_COUNT, lambda: keys.append("x"))
+        sequence = driver.CONTROLS + ["none"] * driver.WARM_COUNT + driver.null_schedule()
         for trial, control in enumerate(sequence, 1):
             for kind in ["armed", "sample"]:
                 protocol.consume(dict(type=kind, runId="a" * 32, id=trial, phase="warm",
                                       control=control, engine="WebKitGTK", visible=True, focused=True))
         self.assertTrue(protocol.finished)
-        self.assertEqual(len(keys), 30 + len(driver.CONTROLS) + 2 * driver.NULL_COUNT)
+        self.assertEqual(len(keys), driver.WARM_COUNT + len(driver.CONTROLS) + 2 * driver.NULL_COUNT)
         nulls = sequence[-2 * driver.NULL_COUNT:]
         self.assertEqual(nulls.count("null"), driver.NULL_COUNT)
         self.assertEqual(nulls[:4], ["null", "null-off", "null-off", "null"])
@@ -400,7 +407,7 @@ class DriverProtocolTests(unittest.TestCase):
             def send_key(self, char): self.sent.append(char)
         backend = FakeX()
         keyboard = driver.FocusedKeyboard(backend)
-        with self.assertRaises(ValueError):
+        with self.assertRaises(driver.EnvironmentFault):
             keyboard.press_for(43)
         self.assertEqual(backend.sent, [])
         keyboard.press_for(42)
@@ -413,7 +420,7 @@ class DriverProtocolTests(unittest.TestCase):
         keyboard.activate_for(42)
         backend.activate.assert_called_once_with(42)
         backend.send_key.assert_not_called()
-        with self.assertRaisesRegex(ValueError, "activation did not establish focus"):
+        with self.assertRaisesRegex(driver.EnvironmentFault, "activation did not establish focus"):
             keyboard.activate_for(43)
 
     def test_host_guard_never_opens_display_or_process(self):
@@ -428,7 +435,7 @@ class DriverProtocolTests(unittest.TestCase):
                 self.assertEqual(json.loads((Path(directory) / "driver.json").read_text())["status"], "blocked")
 
     def test_undersampled_warm_or_non_single_cold_rejected(self):
-        for phase, count in [("warm", 29), ("cold", 2), ("cold", True)]:
+        for phase, count in [("warm", driver.WARM_COUNT - 1), ("cold", 2), ("cold", True)]:
             with self.assertRaises(ValueError):
                 driver.TrialProtocol("a" * 32, phase, count, lambda: None)
 
@@ -469,6 +476,116 @@ class DriverProtocolTests(unittest.TestCase):
                                         SimpleNamespace(press_for=lambda pid: keys.append(pid)))
             self.assertEqual(result["status"], "collected")
             self.assertEqual(keys, [123])
+
+
+class EnvironmentFaultTests(unittest.TestCase):
+    """Plan section 8: the host's faults are named, signalled by exit 75 and never a performance failure."""
+
+    def test_focus_loss_raises_environment_fault(self):
+        backend = SimpleNamespace(focus_pid=lambda: 43, send_key=mock.Mock())
+        with self.assertRaises(driver.EnvironmentFault) as raised:
+            driver.FocusedKeyboard(backend).press_for(42)
+        self.assertEqual(raised.exception.kind, "focus-lost")
+        backend.send_key.assert_not_called()
+        moved = SimpleNamespace(focus_pid=mock.Mock(side_effect=[42, 43]), send_key=mock.Mock())
+        with self.assertRaises(driver.EnvironmentFault) as raised:
+            driver.FocusedKeyboard(moved).press_for(42)  # focus taken while the key was being sent
+        self.assertEqual(raised.exception.kind, "focus-lost")
+        protocol = driver.TrialProtocol("a" * 32, "cold", 1, lambda: None)
+        marker = dict(type="armed", runId="a" * 32, id=1, phase="cold", control="none", engine="WebKitGTK",
+                      visible=True, focused=False)
+        with self.assertRaises(driver.EnvironmentFault) as raised:
+            protocol.consume(marker)
+        self.assertEqual(raised.exception.kind, "focus-lost")
+
+    def test_focus_taken_by_the_product_is_a_failure(self):
+        """A focus that moved to a window of the measured process, or of one of its descendants, is the product's
+        own doing: a failure (never retried), not the environment fault focus-lost."""
+        tree = {43: 42, 42: 1, 99: 1}  # pid -> parent: 43 is a child of the measured 42, 99 is another program
+        parent = tree.get
+        child = SimpleNamespace(focus_pid=lambda: 43, send_key=mock.Mock())
+        with mock.patch.object(driver, "parent_pid", parent):
+            with self.assertRaises(RuntimeError) as raised:
+                driver.FocusedKeyboard(child).press_for(42)
+            self.assertNotIsInstance(raised.exception, driver.EnvironmentFault)
+            self.assertIn("product", str(raised.exception))
+            other = SimpleNamespace(focus_pid=lambda: 99, send_key=mock.Mock())
+            with self.assertRaises(driver.EnvironmentFault):
+                driver.FocusedKeyboard(other).press_for(42)
+            self.assertTrue(driver.descends(43, 42) and driver.descends(42, 42))
+            self.assertFalse(driver.descends(99, 42) or driver.descends(None, 42))
+        # X11: the active window is another top-level of the measured process (a dialog it opened).
+        x11 = driver.X11Keyboard.__new__(driver.X11Keyboard)
+        x11.target = dict(pid=42, xid=7, refreshHz=60.0)
+        x11.window_pid = lambda window: {7: 42, 8: 42, 9: 99}[window]
+        for active, kind in ((8, RuntimeError), (9, driver.EnvironmentFault)):
+            x11.active_window = lambda active=active: active
+            with mock.patch.object(driver, "parent_pid", parent), self.assertRaises(kind) as raised:
+                x11.validate_target(42)
+            if kind is RuntimeError:
+                self.assertNotIsInstance(raised.exception, driver.EnvironmentFault)
+
+    def test_delivery_loss_raises_environment_fault(self):
+        for backend_name in ("mutter", "xtest"):
+            for phase_failing in ("warm", "cold"):
+                def collect(binary, out, phase, index, keyboard, failing=phase_failing):
+                    return dict(status="fail", inputUnavailable=(phase == failing))
+                with tempfile.TemporaryDirectory(dir=driver.ROOT) as directory, \
+                     mock.patch.dict(os.environ, INKWELL_NATIVE_PERF_RUN="1"), \
+                     mock.patch("sys.argv", ["native_input", "--input-backend", backend_name, "--binary", __file__, "--output", directory]), \
+                     mock.patch.object(driver, "MutterKeyboard", return_value=SimpleNamespace(close=mock.Mock())), \
+                     mock.patch.object(driver, "X11Keyboard", return_value=SimpleNamespace(close=mock.Mock())), \
+                     mock.patch.object(driver, "collect_run", collect):
+                    with self.assertRaises(SystemExit) as exit_:
+                        driver.main()
+                    self.assertEqual(exit_.exception.code, driver.EX_TEMPFAIL)
+                    fault = json.loads((Path(directory) / "driver.json").read_text())["fault"]
+                    self.assertEqual(fault["kind"], "delivery-lost" if backend_name == "mutter" or phase_failing == "cold" else "permission-dialog")
+
+    def test_activation_failure_raises_environment_fault(self):
+        backend = SimpleNamespace(activate=mock.Mock(), focus_pid=lambda: 43)
+        with self.assertRaises(driver.EnvironmentFault) as raised:
+            driver.FocusedKeyboard(backend).activate_for(42)
+        self.assertEqual(raised.exception.kind, "activation-failed")
+
+    def test_engine_mismatch_is_not_environment(self):
+        """A wrong engine or run identity is a setup error: a plain ValueError, never retried."""
+        for field, value in (("engine", "Chromium"), ("runId", "b" * 32)):
+            protocol = driver.TrialProtocol("a" * 32, "cold", 1, lambda: None)
+            marker = dict(type="armed", runId="a" * 32, id=1, phase="cold", control="none", engine="WebKitGTK",
+                          visible=True, focused=True)
+            marker[field] = value
+            with self.assertRaises(ValueError) as raised:
+                protocol.consume(marker)
+            self.assertNotIsInstance(raised.exception, driver.EnvironmentFault)
+        with self.assertRaises(RuntimeError) as raised:
+            driver.validate_activation(dict(runId="a", pid=42, backend="wayland"), "a", 42)
+        self.assertNotIsInstance(raised.exception, driver.EnvironmentFault)
+
+    def test_driver_exit_75_writes_fault(self):
+        backend = SimpleNamespace(close=mock.Mock())
+        failure = driver.EnvironmentFault("focus-lost", "another window took the focus")
+        with tempfile.TemporaryDirectory(dir=driver.ROOT) as directory, \
+             mock.patch.dict(os.environ, INKWELL_NATIVE_PERF_RUN="1"), \
+             mock.patch("sys.argv", ["native_input", "--binary", __file__, "--output", directory]), \
+             mock.patch.object(driver, "MutterKeyboard", return_value=backend), \
+             mock.patch.object(driver, "collect_run", side_effect=failure):
+            with self.assertRaises(SystemExit) as exit_:
+                driver.main()
+            self.assertEqual(exit_.exception.code, 75)
+            manifest = json.loads((Path(directory) / "driver.json").read_text())
+            self.assertEqual(manifest["status"], "fault")
+            self.assertEqual(manifest["fault"], dict(kind="focus-lost", message="another window took the focus"))
+            backend.close.assert_called_once_with()
+        # A genuine failure keeps its own status and exit.
+        with tempfile.TemporaryDirectory(dir=driver.ROOT) as directory, \
+             mock.patch.dict(os.environ, INKWELL_NATIVE_PERF_RUN="1"), \
+             mock.patch("sys.argv", ["native_input", "--binary", __file__, "--output", directory]), \
+             mock.patch.object(driver, "MutterKeyboard", return_value=SimpleNamespace(close=mock.Mock())), \
+             mock.patch.object(driver, "collect_run", side_effect=RuntimeError("input failed")):
+            with self.assertRaises(RuntimeError):
+                driver.main()
+            self.assertEqual(json.loads((Path(directory) / "driver.json").read_text())["status"], "fail")
 
 
 if __name__ == "__main__":

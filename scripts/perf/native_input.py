@@ -21,6 +21,52 @@ ROOT = Path(__file__).resolve().parents[2]
 PREFIX = b"INKWELL_NATIVE_PERF "
 CONTROLS = ["handler", "layout", "early-raf", "measure", "document", "task", "deferred"]
 NULL_COUNT = 30  # per arm: recording hooks on ("null") and off ("null-off")
+# p95 budgets are certified at 95 % confidence by an order statistic (ADR 0038): 100 warm keystrokes (the bound
+# is the second largest) and 59 fresh cold processes (the maximum). Mirrors nativeperf.WarmSamples/ColdReplicates.
+WARM_COUNT = 100
+COLD_REPLICATES = 59
+EX_TEMPFAIL = 75  # exit status of an environment fault: the run is invalid, not failed, and is retried
+FAULT_KINDS = ("focus-lost", "delivery-lost", "activation-failed", "permission-dialog")
+
+
+class EnvironmentFault(Exception):
+    """The host, not the product, failed: focus lost, input not delivered, window not activated, a permission
+    dialog. The driver exits 75 and writes the fault to driver.json; the harness retries with a fresh raw
+    directory, and after three faults the verdict is `invalid`, never a pass or a performance failure."""
+
+    def __init__(self, kind, message):
+        assert kind in FAULT_KINDS, kind
+        super().__init__(message)
+        self.kind = kind
+
+
+def parent_pid(pid):
+    """The parent of `pid` from /proc/<pid>/stat (fields after the command name), None if it is gone."""
+    try:
+        return int(Path(f"/proc/{pid}/stat").read_text().rsplit(")", 1)[1].split()[1])
+    except (OSError, IndexError, ValueError):
+        return None
+
+
+def descends(pid, ancestor, parent=None):
+    """`pid` is `ancestor` or one of its descendants."""
+    parent = parent or parent_pid
+    for _ in range(64):
+        if pid is None or pid <= 1:
+            return False
+        if pid == ancestor:
+            return True
+        pid = parent(pid)
+    return False
+
+
+def focus_moved(focused_pid, pid, message):
+    """The exception for a focus that left the measured window. A window of the measured process or of one of its
+    descendants took it: the product's own doing, a failure (never retried). Another program took it: the
+    environment fault focus-lost (retried, invalid after three)."""
+    if descends(focused_pid, pid, parent_pid):
+        return RuntimeError(f"product: the measured application moved the focus to another of its windows. {message}")
+    return EnvironmentFault("focus-lost", message)
 
 
 def null_schedule():
@@ -79,7 +125,7 @@ def validate_activation(marker, run_id, pid):
 class TrialProtocol:
     """One outstanding, attested trial at a time; malformed markers fail closed."""
     def __init__(self, run_id, phase, count, inject):
-        if phase not in ("cold", "warm") or type(count) is not int or (phase == "cold" and count != 1) or (phase == "warm" and count < 30):
+        if phase not in ("cold", "warm") or type(count) is not int or (phase == "cold" and count != 1) or (phase == "warm" and count < WARM_COUNT):
             raise ValueError("invalid native input phase/count")
         self.run_id, self.phase, self.inject = run_id, phase, inject
         self.controls = ["none"] if phase == "cold" else CONTROLS + ["none"] * count + null_schedule()
@@ -99,8 +145,10 @@ class TrialProtocol:
         if marker.get("type") == "armed":
             if self.pending:
                 raise ValueError("duplicate arm before sample acknowledgement")
-            if marker.get("visible") is not True or marker.get("focused") is not True or marker.get("engine") != "WebKitGTK":
+            if marker.get("engine") != "WebKitGTK":
                 raise ValueError("native input requires a focused visible WebKitGTK window")
+            if marker.get("visible") is not True or marker.get("focused") is not True:
+                raise EnvironmentFault("focus-lost", "native window lost visibility or focus before arming")
             self.inject()
             self.pending = True
         elif marker.get("type") == "sample":
@@ -120,18 +168,18 @@ class FocusedKeyboard:
         if hasattr(self.backend, "validate_target"):
             self.backend.validate_target(pid)
         # Check the actual X11 focus independently of the application attestation.
-        if self.backend.focus_pid() != pid:
-            raise ValueError(FOCUS_INTERRUPTED + " Aucune touche injectée.")
+        if (focused := self.backend.focus_pid()) != pid:
+            raise focus_moved(focused, pid, FOCUS_INTERRUPTED + " Aucune touche injectée.")
         self.backend.send_key("x")
-        if self.backend.focus_pid() != pid:
-            raise ValueError(FOCUS_INTERRUPTED + " Focus modifié pendant l’injection.")
+        if (focused := self.backend.focus_pid()) != pid:
+            raise focus_moved(focused, pid, FOCUS_INTERRUPTED + " Focus modifié pendant l’injection.")
         if hasattr(self.backend, "validate_target"):
             self.backend.validate_target(pid)
 
     def activate_for(self, pid):
         target = self.backend.activate(pid)
         if self.backend.focus_pid() != pid:
-            raise ValueError("native X11 window activation did not establish focus")
+            raise EnvironmentFault("activation-failed", "native X11 window activation did not establish focus")
         if hasattr(self.backend, "validate_target"):
             self.backend.validate_target(pid)
         return target
@@ -140,10 +188,10 @@ class FocusedKeyboard:
         if hasattr(self.backend, "validate_target"):
             self.backend.validate_target(pid)
         if self.backend.focus_pid() != pid:
-            raise ValueError(FOCUS_INTERRUPTED + " XTest permission probe not injected.")
+            raise EnvironmentFault("permission-dialog", FOCUS_INTERRUPTED + " XTest permission probe not injected.")
         self.backend.send_keysym(0xffe1)  # Shift_L: no text edit, cold first input preserved.
         if self.backend.focus_pid() != pid:
-            raise ValueError(FOCUS_INTERRUPTED + " Focus modifié pendant la preuve de saisie.")
+            raise EnvironmentFault("focus-lost", FOCUS_INTERRUPTED + " Focus modifié pendant la preuve de saisie.")
         if hasattr(self.backend, "validate_target"):
             self.backend.validate_target(pid)
 
@@ -261,7 +309,7 @@ class X11Keyboard:
             deadline = time.monotonic() + 2
             while True:
                 if time.monotonic() >= deadline:
-                    raise RuntimeError("X11 did not return an activation timestamp")
+                    raise EnvironmentFault("activation-failed", "X11 did not return an activation timestamp")
                 if x.XPending(self.display):
                     x.XNextEvent(self.display, c.byref(event))
                     if event.property.type == 28 and event.property.window == temporary:
@@ -295,8 +343,9 @@ class X11Keyboard:
         target = getattr(self, "target", None)
         if not target or target["pid"] != pid or self.window_pid(target["xid"]) != pid:
             raise RuntimeError("Measured X11 target XID/PID changed; no key injected")
-        if self.active_window() != target["xid"]:
-            raise ValueError(FOCUS_INTERRUPTED + " Active window is not the measured X11 XID; no key injected.")
+        if (active := self.active_window()) != target["xid"]:
+            raise focus_moved(self.window_pid(active) if active not in (None, 0, 1) else None, pid,
+                              FOCUS_INTERRUPTED + " Active window is not the measured X11 XID; no key injected.")
         window = self.focus_window()
         for _ in range(32):
             if window == target["xid"]:
@@ -305,7 +354,7 @@ class X11Keyboard:
             status = self.x.XQueryTree(self.display, window, c.byref(root), c.byref(parent), c.byref(children), c.byref(count))
             if children: self.x.XFree(children)
             if not status or window in (0,1) or window == root.value or window == parent.value:
-                raise ValueError(FOCUS_INTERRUPTED + " Focus is outside the measured X11 XID; no key injected.")
+                raise EnvironmentFault("focus-lost", FOCUS_INTERRUPTED + " Focus is outside the measured X11 XID; no key injected.")
             window = parent.value
         else:
             raise RuntimeError("X11 target focus ancestry unverified; no key injected")
@@ -484,15 +533,16 @@ def collect_run(binary, out, phase, index, keyboard, timeout=120):
                    INKWELL_HOME=str(profile / "home"), INKWELL_DOCS=str(profile / "docs"),
                    XDG_CACHE_HOME=str(profile / "cache"), XDG_DATA_HOME=str(profile / "data"),
                    INKWELL_NATIVE_PERF_PHASE=phase, INKWELL_NATIVE_PERF_INDEX=str(index),
-                   INKWELL_NATIVE_PERF_REPLICATES="30", INKWELL_NATIVE_PERF_COUNT="1" if phase == "cold" else "30",
+                   INKWELL_NATIVE_PERF_REPLICATES=str(COLD_REPLICATES),
+                   INKWELL_NATIVE_PERF_COUNT="1" if phase == "cold" else str(WARM_COUNT),
                    INKWELL_NATIVE_PERF_RUN_ID=run_id, INKWELL_NATIVE_PERF_OUT=str(raw_path))
         target_path = profile / "native-target.json"
         env["INKWELL_NATIVE_PERF_TARGET"] = str(target_path)
         child = subprocess.Popen([str(binary)], cwd=ROOT, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT)
-        protocol = TrialProtocol(run_id, phase, 1 if phase == "cold" else 30,
+        protocol = TrialProtocol(run_id, phase, 1 if phase == "cold" else WARM_COUNT,
                                  lambda: keyboard.press_for(child.pid))
         # Added mandatory NULL trials retain the same 3s per-trial watchdog.
-        deadline, pending, complete = time.monotonic() + timeout + (2 * NULL_COUNT * 3 if phase == "warm" else 0), b"", None
+        deadline, pending, complete = time.monotonic() + timeout + (3 * (WARM_COUNT - 30 + 2 * NULL_COUNT) if phase == "warm" else 0), b"", None
         probe_pending, probe_due = False, 0.0
         with selectors.DefaultSelector() as selector, (out / f"{phase}-{index:02d}.log").open("wb") as log:
             selector.register(child.stdout, selectors.EVENT_READ)
@@ -599,14 +649,17 @@ def main():
         manifest["runs"].append(warm)
         if warm.get("inputUnavailable"):
             if args.input_backend == "mutter":
-                raise RuntimeError("Mutter target/permission not validated by trusted keydown; stopping before cold replicates")
-            raise RuntimeError("XTest target/permission not validated; stopping before cold replicates. Grant GNOME remote-interaction permission and rerun.")
-        for index in range(1, 31):
+                raise EnvironmentFault("delivery-lost", "Mutter target/permission not validated by trusted keydown; stopping before cold replicates")
+            raise EnvironmentFault("permission-dialog", "XTest target/permission not validated; stopping before cold replicates. Grant GNOME remote-interaction permission and rerun.")
+        for index in range(1, COLD_REPLICATES + 1):
             run = collect_run(binary, out, "cold", index, keyboard)
             manifest["runs"].append(run)
             if run.get("inputUnavailable"):
-                raise RuntimeError("Native X11 input delivery lost; refusing further injection")
-        manifest["status"] = "collected" if len(manifest["runs"]) == 31 and all(run["status"] == "collected" for run in manifest["runs"]) else "fail"
+                raise EnvironmentFault("delivery-lost", "Native X11 input delivery lost; refusing further injection")
+        manifest["status"] = "collected" if len(manifest["runs"]) == COLD_REPLICATES + 1 and all(run["status"] == "collected" for run in manifest["runs"]) else "fail"
+    except EnvironmentFault as fault:
+        # Not a failure of the product: driver.json carries the fault, the exit status is 75.
+        manifest.update(status="fault", error=str(fault), fault=dict(kind=fault.kind, message=str(fault)))
     except BaseException as error:
         manifest.update(status="fail", error=str(error))
         raise
@@ -619,6 +672,8 @@ def main():
             raise
         finally:
             target.write_text(json.dumps(manifest, indent=2) + "\n")
+    if manifest["status"] == "fault":
+        raise SystemExit(EX_TEMPFAIL)
     if manifest["status"] != "collected":
         raise SystemExit("Native evidence contains a failed run; no performance pass claimed")
     print("Native raw evidence collected; validate with the native report verifier. No paint budget certified by this driver.")

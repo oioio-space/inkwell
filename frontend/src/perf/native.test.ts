@@ -287,6 +287,37 @@ it("keeps a stopped heartbeat fatal after arming", () => {
   }
 });
 
+it("reports focus loss with the code focus-lost", () => {
+  const h = runningHarness("warm");
+  try {
+    h.start();
+    // Another window takes the focus between the handshake and the first armed trial.
+    vi.mocked(document.hasFocus).mockReturnValue(false);
+    h.deliver({ type: "trial", id: 1, control: "handler" });
+    const failure = h.sent.find((message) => message.type === "failure");
+    expect(failure?.reason).toMatch(/^\[fault:focus-lost\] native editor must be visible and focused/);
+    expect(h.sent.some((message) => message.type === "armed")).toBe(false);
+  } finally {
+    h.close();
+  }
+});
+
+it("reports a focus the page moved itself as a product failure, without the fault code", () => {
+  const h = runningHarness("warm");
+  try {
+    h.start();
+    // The window keeps the focus; the editor lost it inside the page: the product moved it, not the host.
+    vi.spyOn(h.view, "hasFocus", "get").mockReturnValue(false);
+    h.deliver({ type: "trial", id: 1, control: "handler" });
+    const failure = h.sent.find((message) => message.type === "failure");
+    expect(failure?.reason).toMatch(/^native editor lost the focus inside the page/);
+    expect(String(failure?.reason)).not.toContain("[fault:");
+    expect(h.sent.some((message) => message.type === "armed")).toBe(false);
+  } finally {
+    h.close();
+  }
+});
+
 it("measures a trusted NULL key through identical brackets without editing CodeMirror or doing synchronous I/O", () => {
   const h = runningHarness("warm");
   try {

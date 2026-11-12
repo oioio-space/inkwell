@@ -86,7 +86,7 @@ func TestMutationObserverWorkCanFollowDOMProcessingBeforePaint(t *testing.T) {
 func TestIndependentRawMetricsRemainWhenPaintUnknown(t *testing.T) {
 	s := rawSample()
 	s.EventTiming = nil
-	run := Run{Protocol: 1, RunID: "native", PID: 1, StartedNS: 1, Phase: "cold", ReplicateIndex: 1, ReplicateCount: 30, Host: Host{Native: true, Engine: "WebKitGTK", GOOS: "linux", WebKitVersion: "2.52", GTKVersion: "4.22"}, Ready: Ready{Type: "ready", Visible: true, Focused: true, PaintOracle: "unavailable"}, Samples: []Sample{s}}
+	run := Run{Protocol: 1, RunID: "native", PID: 1, StartedNS: 1, Phase: "cold", ReplicateIndex: 1, ReplicateCount: ColdReplicates, Host: Host{Native: true, Engine: "WebKitGTK", GOOS: "linux", WebKitVersion: "2.52", GTKVersion: "4.22"}, Ready: Ready{Type: "ready", Visible: true, Focused: true, PaintOracle: "unavailable"}, Samples: []Sample{s}}
 	report := Validate([]Run{run})
 	if report.Status != "fail" || report.Paint.P95MS != nil || report.Handler.P95MS == nil || report.FrameWait.P95MS == nil {
 		t.Fatal("missing paint was fabricated or independent raw metrics discarded")
@@ -100,7 +100,8 @@ func TestDuplicateTrialsAndRevisionsFail(t *testing.T) {
 	s := rawSample()
 	failures := []string{}
 	run := Run{Phase: "warm", Samples: []Sample{s, s}}
-	validateRunShape(run, func(reason string) { failures = append(failures, reason) })
+	collect := func(reason string) { failures = append(failures, reason) }
+	validateRunShape(run, collect, collect)
 	if len(failures) == 0 {
 		t.Fatal("duplicate raw trial accepted")
 	}

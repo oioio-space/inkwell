@@ -1,0 +1,1604 @@
+{
+  "lot": "PB",
+  "criteria": [
+    {
+      "id": "spec",
+      "command": "test -s docs/adr/0038-paired-performance.md && grep -q 'non-inferiority' docs/adr/0038-paired-performance.md && grep -q 'median <= 350 ms' docs/adr/0038-paired-performance.md && grep -q 'ADR 0038' docs/engineering-principles.md && grep -q 'PB' docs/exigences.md && grep -q 'PB' docs/architecture/coherence.md && test \"$(ls docs/perf/2026-11-11-start-drift/*.json | wc -l)\" -eq 9 && (cd docs/perf/2026-11-11-start-drift && sha256sum --quiet --strict -c SHA256SUMS)",
+      "status": "pass",
+      "exit_code": 0,
+      "duration_seconds": 0.008940644969698042,
+      "log": "gates/PB/spec.log"
+    },
+    {
+      "id": "model",
+      "command": "out=$(./scripts/heavy.sh timeout 900 python3 -m unittest -v scripts/perf/pbmodel_test.py 2>&1) || { echo \"$out\" | tail -40; exit 1; }; if echo \"$out\" | grep -q -- '\\.\\.\\. skipped'; then echo \"skipped tests\"; exit 1; fi; for t in test_signed_rank_null_matches_enumeration test_critical_value_is_the_alpha_quantile test_bounds_cover_a_symmetric_centre test_validity_depends_on_precision_only test_imprecise_run_is_invalid_not_judged test_budget_is_the_archived_multiplier test_constants_match_disk test_incumbent_fails_on_unchanged_code test_stress_environments_dominate_the_fit test_no_false_regression test_power_against_ten_percent test_heavy_environment_is_invalid_not_judged test_changes_well_inside_the_budget_pass test_every_mutant_is_rejected test_quantile_index_matches_binomial test_bound_covers_the_true_p95 test_p95_of_30_accepts_a_noncompliant_product; do echo \"$out\" | grep -q -- \"^$t (\" || { echo \"missing or not run: $t\"; exit 1; }; done",
+      "status": "pass",
+      "exit_code": 0,
+      "duration_seconds": 152.38163085700944,
+      "log": "gates/PB/model.log"
+    },
+    {
+      "id": "rule",
+      "command": "out=$(./scripts/heavy.sh timeout 300 python3 -m unittest -v scripts/perf/paired_test.py 2>&1) || { echo \"$out\" | tail -40; exit 1; }; if echo \"$out\" | grep -q -- '\\.\\.\\. skipped'; then echo \"skipped tests\"; exit 1; fi; for t in test_model_shares_the_rule test_verdict_matches_model_vectors test_attempt_machine_exhaustive test_valid_verdict_is_never_retried test_invalid_retried_at_most_three_times test_cooling_waits_for_load test_orders_replay_from_seed test_orders_are_independent_fair_coins test_warmup_pairs_dropped test_budget_needs_enough_samples test_budget_uses_order_statistic test_startup_budget_median_and_p95_orders test_self_test_mode_runs_no_process; do echo \"$out\" | grep -q -- \"^$t (\" || { echo \"missing or not run: $t\"; exit 1; }; done",
+      "status": "pass",
+      "exit_code": 0,
+      "duration_seconds": 0.25689056800911203,
+      "log": "gates/PB/rule.log"
+    },
+    {
+      "id": "reference-build",
+      "command": "out=$(./scripts/heavy.sh timeout 600 python3 -m unittest -v scripts/perf/refbuild_test.py 2>&1) || { echo \"$out\" | tail -40; exit 1; }; if echo \"$out\" | grep -q -- '\\.\\.\\. skipped'; then echo \"skipped tests\"; exit 1; fi; for t in test_reference_is_the_merge_base test_cache_key_covers_commit_and_toolchain test_hit_verifies_digest test_tampered_entry_is_rebuilt test_publish_is_atomic test_source_git_is_never_written test_both_sides_share_the_build_vector test_sidecars_copied_only_when_manifest_matches test_concurrent_builds_are_serialised test_eviction_keeps_six_recent test_unbuildable_reference_fails_closed; do echo \"$out\" | grep -q -- \"^$t (\" || { echo \"missing or not run: $t\"; exit 1; }; done",
+      "status": "pass",
+      "exit_code": 0,
+      "duration_seconds": 1.8541138549917378,
+      "log": "gates/PB/reference-build.log"
+    },
+    {
+      "id": "driver",
+      "command": "out=$(./scripts/heavy.sh --exclusive timeout 2400 python3 -m unittest -v -k FakeServer scripts/perf/paired_e2e_test.py 2>&1) || { echo \"$out\" | tail -40; exit 1; }; if echo \"$out\" | grep -q -- '\\.\\.\\. skipped'; then echo \"skipped tests\"; exit 1; fi; for t in test_aa_passes test_injected_slowdown_is_a_regression test_tiny_change_passes test_noise_is_invalid_and_retried test_port_busy_is_invalid test_crash_is_not_ready_failure test_slots_record_order_load_and_pressure test_sides_get_equal_length_paths_and_env; do echo \"$out\" | grep -q -- \"^$t (\" || { echo \"missing or not run: $t\"; exit 1; }; done",
+      "status": "pass",
+      "exit_code": 0,
+      "duration_seconds": 898.2163638360216,
+      "log": "gates/PB/driver.log",
+      "exclusive": true,
+      "exclusive_steps": [
+        {
+          "criterion": "driver",
+          "exclusive": true,
+          "slots": 2,
+          "load_before": [
+            2.1,
+            2.46,
+            2.83
+          ],
+          "load_after": [
+            1.77,
+            2.07,
+            2.33
+          ],
+          "max_load": 5,
+          "waited_seconds": 0,
+          "exit_code": 0
+        }
+      ]
+    },
+    {
+      "id": "perf-start",
+      "command": "./scripts/heavy.sh --exclusive python3 scripts/perf/baseline.py && python3 -I -c \"\nimport json, subprocess, sys\np = json.load(open('gates/PB/measurements.json'))['PERF-START']\nbase = subprocess.check_output(['git', 'merge-base', 'HEAD', 'main'], text=True).strip()\na = p['attempts']; v = p['verdict']; b = p['budget']\nbad = []\nbad += [] if p['design'] == 'paired-randomized' else ['design']\nbad += [] if p['reference']['commit'] == base else ['reference is not the merge-base']\nbad += [] if 1 <= len(a) <= 3 and all(x['outcome'] == 'invalid' for x in a[:-1]) and a[-1]['outcome'] == 'pass' else ['attempts']\nbad += [] if v['status'] == 'pass' and v['pairs'] == 80 and v['alpha'] == 0.001 and v['upper'] < 1.10 else ['verdict']\nm, q = b['median'], b['p95']\nbad += [] if b['status'] == 'pass' and b['samples'] == 80 else ['budget']\nbad += [] if m['limit_ms'] == 350 and m['order'] == 48 and m['bound_ms'] <= 350 else ['budget median']\nbad += [] if q['limit_ms'] == 400 and q['order'] == 80 and q['bound_ms'] <= 400 else ['budget p95']\nslots = json.load(open(a[-1]['raw']))['slots']\nbad += [] if len(slots) == 164 and sum(s['side'] == 'a' for s in slots) == 82 and all(s['ready'] for s in slots) else ['slots']\nsys.exit('perf-start: ' + ', '.join(bad) if bad else 0)\n\"",
+      "status": "pass",
+      "exit_code": 0,
+      "duration_seconds": 132.74870551098138,
+      "log": "gates/PB/perf-start.log",
+      "exclusive": true,
+      "exclusive_steps": [
+        {
+          "criterion": "perf-start",
+          "exclusive": true,
+          "slots": 2,
+          "load_before": [
+            1.77,
+            2.07,
+            2.33
+          ],
+          "load_after": [
+            2.67,
+            2.55,
+            2.49
+          ],
+          "max_load": 5,
+          "waited_seconds": 0,
+          "exit_code": 0
+        }
+      ]
+    },
+    {
+      "id": "real-server",
+      "command": "out=$(./scripts/heavy.sh --exclusive timeout 1800 python3 -m unittest -v -k RealServer scripts/perf/paired_e2e_test.py 2>&1) || { echo \"$out\" | tail -40; exit 1; }; if echo \"$out\" | grep -q -- '\\.\\.\\. skipped'; then echo \"skipped tests\"; exit 1; fi; for t in test_real_server_aa_passes test_real_server_delay_is_a_regression; do echo \"$out\" | grep -q -- \"^$t (\" || { echo \"missing or not run: $t\"; exit 1; }; done",
+      "status": "pass",
+      "exit_code": 0,
+      "duration_seconds": 149.1327736270032,
+      "log": "gates/PB/real-server.log",
+      "exclusive": true,
+      "exclusive_steps": [
+        {
+          "criterion": "real-server",
+          "exclusive": true,
+          "slots": 2,
+          "load_before": [
+            2.67,
+            2.55,
+            2.49
+          ],
+          "load_after": [
+            4.67,
+            3.32,
+            2.79
+          ],
+          "max_load": 5,
+          "waited_seconds": 0,
+          "exit_code": 0
+        }
+      ]
+    },
+    {
+      "id": "native-invalid",
+      "command": "out=$(./scripts/heavy.sh timeout 600 python3 -m unittest -v scripts/perf/type_native_test.py scripts/perf/native_input_test.py 2>&1) || { echo \"$out\" | tail -40; exit 1; }; if echo \"$out\" | grep -q -- '\\.\\.\\. skipped'; then echo \"skipped tests\"; exit 1; fi; for t in test_environment_fault_is_retried_with_fresh_raw test_three_faults_are_invalid_not_fail test_valid_fail_is_never_retried test_focus_loss_raises_environment_fault test_delivery_loss_raises_environment_fault test_activation_failure_raises_environment_fault test_engine_mismatch_is_not_environment test_driver_exit_75_writes_fault; do echo \"$out\" | grep -q -- \"^$t (\" || { echo \"missing or not run: $t\"; exit 1; }; done && gout=$(./scripts/heavy.sh timeout 600 go test -count=1 -v -run 'TestVerdictInvalid' ./internal/nativeperf 2>&1) || { echo \"$gout\" | tail -40; exit 1; }; for t in TestVerdictInvalidOnCodedFocusLoss TestVerdictInvalidFlag TestVerdictInvalidAddsNoPerformanceReason; do echo \"$gout\" | grep -q -- \"--- PASS: $t\" || { echo \"missing or not passing: $t\"; exit 1; }; done && (cd frontend && ../scripts/heavy.sh timeout 300 pnpm exec vitest run --configLoader runner --reporter=json --outputFile=../gates/PB/vitest-native.json src/perf) && python3 -I -c \"\nimport json, sys\nr = json.load(open('gates/PB/vitest-native.json'))\nok = {a['title'] for f in r['testResults'] for a in f['assertionResults'] if a['status'] == 'passed'}\nneed = {'reports focus loss with the code focus-lost'}\nsys.exit(f'vitest: missing or not passing {sorted(need - ok)}' if need - ok else 0)\n\"",
+      "status": "pass",
+      "exit_code": 0,
+      "duration_seconds": 1.8208645840059035,
+      "log": "gates/PB/native-invalid.log"
+    },
+    {
+      "id": "native-budget",
+      "command": "gout=$(./scripts/heavy.sh timeout 600 go test -count=1 -v -run 'TestQuantileUpper|TestBudget|TestMetric' ./internal/nativeperf 2>&1) || { echo \"$gout\" | tail -40; exit 1; }; for t in TestQuantileUpperIndexMatchesPythonVector TestBudgetUsesOrderStatisticBound TestMetricMinimumSamples TestMetricKeepsPointP95AsDiagnostic; do echo \"$gout\" | grep -q -- \"--- PASS: $t\" || { echo \"missing or not passing: $t\"; exit 1; }; done",
+      "status": "pass",
+      "exit_code": 0,
+      "duration_seconds": 0.2871185130206868,
+      "log": "gates/PB/native-budget.log"
+    },
+    {
+      "id": "selftest",
+      "command": "out=$(python3 scripts/gate-selftest.py 2>&1) || { echo \"$out\" | tail -40; exit 1; }; echo \"$out\" | grep -q 'baseline self-test passed: paired-randomized (A/A pass, x1.2 regression, wide run invalid)' && echo \"$out\" | grep -q 'gate self-test passed' ",
+      "status": "pass",
+      "exit_code": 0,
+      "duration_seconds": 7.986584579979535,
+      "log": "gates/PB/selftest.log"
+    },
+    {
+      "id": "regression",
+      "command": "mise run test:py && ./scripts/heavy.sh timeout 900 go test -count=1 ./internal/nativeperf && mise run gate -- L0",
+      "status": "pass",
+      "exit_code": 0,
+      "duration_seconds": 1152.6549268329982,
+      "log": "gates/PB/regression.log"
+    },
+    {
+      "id": "simplify-report",
+      "command": "test -s gates/PB/SIMPLIFY.md",
+      "status": "pass",
+      "exit_code": 0,
+      "duration_seconds": 0.0014549220213666558,
+      "log": "gates/PB/simplify-report.log"
+    }
+  ],
+  "versions": {
+    "go": "go version go1.27.3 linux/amd64",
+    "node": "v24.22.1",
+    "typst": "unavailable: /bin/sh: ligne 1: typst: commande introuvable",
+    "tinymist": "unavailable: /bin/sh: ligne 1: tinymist: commande introuvable",
+    "os": "Linux-7.2.11-200.fc44.x86_64-x86_64-with-glibc2.43",
+    "embedded_sidecars": {
+      "typst": "0.15.1",
+      "tinymist": "0.15.10"
+    }
+  },
+  "sha256": {
+    "docs/adr/0038-paired-performance.md": "972eeab0ec8151f3de08a6eebfeb33e54e67da2bb95c3eb815c0537d87dc0f57",
+    "docs/objectif-en-cours.md": "ab6b49c8bde5744d58a5af5eba17c094e7cf621a6497f17988cee1776634b915",
+    "docs/perf/2026-11-11-start-drift/2026-11-02-reference-start.json": "086a3da180ebe3815e3c91d09d470a49c37fd7ec10085b147461a898d6717d85",
+    "docs/perf/2026-11-11-start-drift/2026-11-03-baseline-start.json": "89919ead98f3afbab9fcd600ae2b77cf8e3e0aeb3640b0e415db40c03565b78f",
+    "docs/perf/2026-11-11-start-drift/2026-11-03-mergebase-start.json": "55716ab433907ad1424441ae7836342b8a1a9b4a46d412bd0c946ba8f09f59ec",
+    "docs/perf/2026-11-11-start-drift/2026-11-11-L0-gate-start.json": "a308795665da20425e81acfbb890b49ed1f3fc3620ba28cba03727d68e321cc9",
+    "docs/perf/2026-11-11-start-drift/2026-11-11-a-head-start.json": "55098416836f96576f079bcd24dfbca430efaad0f923be111f029e0b9d2442e5",
+    "docs/perf/2026-11-11-start-drift/2026-11-11-a2-head-start.json": "399023f92d744e5fe83df5c4bb04e5d2e90767ef0d1da723336e5c73a0e72c4d",
+    "docs/perf/2026-11-11-start-drift/2026-11-11-b-lf-start.json": "4fa7a647be9fe9ddd5ce6a43dd0f9f02f57a1effe6a8dddba276f7002fdbcf68",
+    "docs/perf/2026-11-11-start-drift/2026-11-11-c-c5s-start.json": "97de0df64cb452fdfa0567406e320d6308dd373e9038edd15d9991e18716e832",
+    "docs/perf/2026-11-11-start-drift/2026-11-11-d-both-start.json": "a2cdd3f7857a410a329cd6098db783d34d3a4074c06bb37b156017e3ff140c06",
+    "docs/perf/2026-11-11-start-drift/README.md": "e3b54802ea8a15158ff69f0cf866e837839fc69e22a61605f749448e2c1114c1",
+    "docs/perf/2026-11-11-start-drift/SHA256SUMS": "ba4937d9d15e3bafe96a101c8b3d3df87a8037fb6c0f975fb17f33d00c6c39cb",
+    "docs/plans/2026-11-11-pb-paired-perf.md": "b8c836f9ccbc6d690276292658621ee3cee349d396b9bc6aea126511c571df77",
+    "gates/PB/SIMPLIFY.md": "81dbc063ddea2858f91463a8f56028c4fd2a01c95cb7d850ebe6bf78c288368c",
+    "gates/PB/base-guard.log": "2e6d4153e439ee2a93200a80f1904e429eec2bfbd7d2b76379e67c3899cab476",
+    "gates/PB/browser-attempt-0.log": "d7b22c579a62650264dad3e4914f910a300753b56884c13709a16c548aa24236",
+    "gates/PB/browser-attempt-1.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "gates/PB/browser.json": "6db4c0674996235af2f6a7d4dd3a9b1fd49d093d7902a8e6aa1869b30b43bb7c",
+    "gates/PB/browser.png": "92c6e10bde673b2b08da5b93e09008f299e6b55e582c7f0f4f092a8165c8b2ce",
+    "gates/PB/corpus-build.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "gates/PB/corpus.json": "eae8ab7967e1972a694cb35660b94e77ae01b62dfa9fac55809d8c52f865f834",
+    "gates/PB/driver.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "gates/PB/exclusive.jsonl": "5e1591da45a45110fda608a4a8b3249709ad582b654270ce7ecb59f50a90862e",
+    "gates/PB/machine.json": "0ca1eaa6811e6750a44dbcff5488c4dfac7a9557e34b105771a78ba572bda2e4",
+    "gates/PB/measurements.json": "cf54148259fcb325b986a848f25c74169d12a7dab37e0233e12e80ffeca6b8ce",
+    "gates/PB/model.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "gates/PB/native-budget.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "gates/PB/native-invalid.log": "65b6ea85215cdec6adf258b3e6a49b53c0cefc7b292442982535d8c5469234fd",
+    "gates/PB/perf-start.log": "cf54148259fcb325b986a848f25c74169d12a7dab37e0233e12e80ffeca6b8ce",
+    "gates/PB/real-server.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "gates/PB/reference-build.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "gates/PB/regression.log": "3445e8cdf02aadc8f178a51f7d299ded87708e702afa32c5e17e6aa6d0bc4a3f",
+    "gates/PB/rule.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "gates/PB/selftest.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "gates/PB/server.log": "48b10bcab0b3167b0582e70433aeeaf975403a7dba4cb2e37465389b7b20ac03",
+    "gates/PB/simplify-report.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "gates/PB/spec.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "gates/PB/start-pairs-1.json": "c256cc3cc60fe1c17f48f6aed08914130f9f697d36e06a2c306e9e0abde04728",
+    "gates/PB/start-plan-1.json": "6a06926762d678886d6774bf0e679771263fd58ffa41eec6ea37968a348fde78",
+    "gates/PB/start.json": "21febdb18e964a6a6cd1588a887bdc0b0372c7e87660dc3ec99c30a1a7b58c3e",
+    "gates/PB/type-diagnostic.json": "43f2ae378b4adab6ca133a3ae3d3183d518c615a3cbc739e2d17aed9430d4bbe",
+    "gates/PB/vitest-native.json": "b99a715a6af5e197b33faf6d585e11c3dde1c9853c5a6cd2b341023f16dbc722",
+    "gates/guard-overrides.json": "429abdd3d4216d16f42c32d88d997f33018178d2f0fef6e26ab0ee8dcf8e2601"
+  },
+  "status": "pass",
+  "deferrals": [],
+  "known_failures": [],
+  "base_guard": {
+    "ref": "main",
+    "base": "5c1cfb2a17774fb8c792850d89307ce276307361",
+    "source_sha256": "c306265111e4c8b0ad94a1867d797b7a20be7d814161b7b9dd6200ab7feb259c",
+    "exit_code": 0,
+    "status": "pass",
+    "log": "gates/PB/base-guard.log"
+  },
+  "runner": {
+    "source": "base 5c1cfb2a17774fb8c792850d89307ce276307361",
+    "sha256": "53dde1f051c345120968f74873910509ac7d2b3912871dbecca17644dee23c98"
+  },
+  "guard_overrides": [
+    {
+      "id": "9d89d3de349a698eaaf2aacd34a7bd3d27fbd0bda750b126538d21939d818a7c",
+      "reason": "fault handling in verdict.go: collectionTimeout += time.Duration(nativeperf.NullCount) * # * time.Second removed or rewritten; re-added constants WarmSamples=100 and ColdReplicates=59, fault handling logic, validation updates to use those constants, Invalid verdict function, etc.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "e1468cfc5b75fe7b2f16641ab0f901d18859435dee21ce05449f7a396701f679",
+      "reason": "mise.toml: gate dependency changed: mise task test:py (new ref to scripts/perf/paired_test.py)",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "a296e13122f51e8b248638fa3b53ffd3670af7beeea66f69f743f4ab17da3052",
+      "reason": "scripts/gate-selftest.py: gate dependency changed (paired.randomized self-test)",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "50d6bcddf99adca7a71f663757affcb9fc7d9a010a1a324d1b2f65bd8875ed1f",
+      "reason": "scripts/gate-selftest.py: gate machinery changed (paired.randomized logic)",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "7458573fbae437488fc5edf5b0e56cfecfc11633bddfd0263c1322460d90335c",
+      "reason": "scripts/perf/baseline.py: gate dependency changed (paired performance driver)",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "1fe6031eac9abc056e929a92773350e76155a3496fbfa120f2336d9f803d6643",
+      "reason": "scripts/perf/baseline.py: gate machinery changed (paired performance driver, run_criterion, config)",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "aecdf30c6895c8c8c57b1a54cd22bb377d72d691782f53c97531f87340d1b3c8",
+      "reason": "scripts/perf/paired_e2e_test.py: gate dependency changed (FakeServer, RealServer tests)",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "8642a7ce90d391e01f9e848d4a64150d036f3e99179ca2491e4e5989cdf10811",
+      "reason": "scripts/perf/paired.py: gate machinery changed (rule implementation, self-test)",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "n42-scope-2026-11-03",
+      "reason": "Scope correction decided by the user (N42 clarified), not a weakening; the guard reports no finding for it, this entry records the removal. Removed: tools/archexec dependency scan (go list -deps graph walk from L1; L2 audited.json deny/exception/via audits pinned to go.sum, raw-syscall, assembly, go:linkname and DLL-lookup heuristics; arch-exec -deps mode; dependencies*.go, audits.go, l2_contract_test.go and their testdata), the analyzer's transitive os/exec import rule and its Wails OpenURL/OpenFile/OpenFileManager/pkg/updater rules, app.RuntimeGuard, app.DisarmFrameworkLaunchers (D-Bus address pinning, WAILS_UPDATER_HELPER* clearing), the third_party/memory fork with its replace directive and internal/memorytest. Kept: own-code no-exec rule outside internal/sidecar, sandbox and all L1/L2 security checks.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "8df04b9301a401d51f6d06f2e36e9f89b875f0f59efc049644ea41982dfd062a",
+      "reason": "PERF-MEM was deferred from L0 to L2, and L2 re-deferred it to G-0b because L2 delivered only G-0a (no multi-file corpus opening). Pointing L0 at the lot that actually owns it; the criterion stays deferred, never counted as a pass.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "052e1f994d2cd5baffa57aa34d7e2d93d705040a87478421e88c5387769cea36",
+      "reason": "UX-LUP-1 (new walkthrough test, frontend/e2e/ux/lup.spec.ts) exposes the known narrow-window defect S13, present on main and not caused by the L-maj upgrade. It is test.fixme until its own lot S13 (docs/objectif-en-cours.md, Lots suivants), whose gate turns it back into test. No existing test, threshold or timeout changes.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "4eb54f3a3de7ad041a91971d04609618f8050ab9bf85d4cf1b36207a66731ac0",
+      "reason": "new gate script for L3 (added file, no existing test/threshold/delay/reference changed)",
+      "decision": "docs/plans/2026-11-05-L3-implementation.md"
+    },
+    {
+      "id": "d3ae81d5374485ce6de4aa4526d6319a9eaf73f5b8312ceda5a5a1b06ab68070",
+      "reason": "new gate script for L3 (added file, no existing test/threshold/delay/reference changed)",
+      "decision": "docs/plans/2026-11-05-L3-implementation.md"
+    },
+    {
+      "id": "7c17e71f13ea93d8a39a0747b8686916d7d676b1b4d247737ee921c803d06fa0",
+      "reason": "New file for L3, absent at the merge base, so the guard reports it as changed gate machinery: the PERF-TYPE-native keyboard driver: types through Mutter on the native host after verifying the X11 target window, and collects raw evidence only (it declares no verdict). Adding it changes no existing test, threshold, delay or criterion command.",
+      "decision": "docs/plans/2026-11-05-L3-implementation.md"
+    },
+    {
+      "id": "56498dfcefa00e368a87264e7b733d36a85a0fe0ddfc85dbb9a18642079a3472",
+      "reason": "New file for L3, absent at the merge base, so the guard reports it as changed gate machinery: unit tests of native_input.py; no X connection, native process, window or key injection. Adding it changes no existing test, threshold, delay or criterion command.",
+      "decision": "docs/plans/2026-11-05-L3-implementation.md"
+    },
+    {
+      "id": "03e87f0046f7939b199baeb7293009a121aa01a2921d519dd5484a3e599689c1",
+      "reason": "New file for L3, absent at the merge base, so the guard reports it as changed gate machinery: the GNOME Mutter RemoteDesktop D-Bus keyboard injection used by native_input.py (one owned connection per run, no token stored). Adding it changes no existing test, threshold, delay or criterion command.",
+      "decision": "docs/plans/2026-11-05-L3-implementation.md"
+    },
+    {
+      "id": "8386049e39a5d3d669590b2788ab7ec5e2e22aca37ab66f7bc359be681eb8a52",
+      "reason": "New file for L3, absent at the merge base, so the guard reports it as changed gate machinery: unit tests of native_mutter.py; no real bus, session, display, key or dialog. Adding it changes no existing test, threshold, delay or criterion command.",
+      "decision": "docs/plans/2026-11-05-L3-implementation.md"
+    },
+    {
+      "id": "fa14c2ee20d0f2fa4c1090df8cb8c3f18574d53e37a779f59b52278247a96d0e",
+      "reason": "New file for L3, absent at the merge base, so the guard reports it as changed gate machinery: diagnostic only: resolves the native attribution table's minified frames to source through the perf_native build's sourcemaps; it changes no verdict. Adding it changes no existing test, threshold, delay or criterion command.",
+      "decision": "docs/plans/2026-11-05-L3-implementation.md"
+    },
+    {
+      "id": "aec7d2e3d6ec704b93baeeb399b350068b7a70acfc5735df0a63e0047a881d55",
+      "reason": "New file for L3, absent at the merge base, so the guard reports it as changed gate machinery: unit tests of sourcemap.py. Adding it changes no existing test, threshold, delay or criterion command.",
+      "decision": "docs/plans/2026-11-05-L3-implementation.md"
+    },
+    {
+      "id": "0409d1bafdf67d623691f8a828c7fb23a750090e344ea4d65e6ca6f6caa4fff1",
+      "reason": "New file for L3, absent at the merge base, so the guard reports it as changed gate machinery: the PERF-TYPE-native criterion command: runs type_native.py under heavy.sh --exclusive; without the explicit host opt-in INKWELL_NATIVE_PERF_RUN=1 it writes a failed verdict. Adding it changes no existing test, threshold, delay or criterion command.",
+      "decision": "docs/plans/2026-11-05-L3-implementation.md"
+    },
+    {
+      "id": "0af3a9f66d55ce43bdfb6d75a4f2cf8c2279e960e3dc593630f28114b2fe2f6c",
+      "reason": "New file for L3, absent at the merge base, so the guard reports it as changed gate machinery: builds the tagged native collector and runs it only with the native-host opt-in; the Go verifier (internal/nativeperf) writes every PERF-TYPE verdict, this script invents no sample. Adding it changes no existing test, threshold, delay or criterion command.",
+      "decision": "docs/plans/2026-11-05-L3-implementation.md"
+    },
+    {
+      "id": "f600ff5157acf4bfb0840f043ae2eec3047cd321ded844994d2edd9aa9f46832",
+      "reason": "New file for L3, absent at the merge base, so the guard reports it as changed gate machinery: diagnostic tool behind mise run perf:typing-checks (typing checks in the perf-build window, CodeMirror-owned typing on then off); no gate criterion calls it. Adding it changes no existing test, threshold, delay or criterion command.",
+      "decision": "docs/plans/2026-11-05-L3-implementation.md"
+    },
+    {
+      "id": "f52f5153350032a80f733dfd7677f4fcce6ee287ec67bb456725163149ef39ed",
+      "reason": "New file for L3, absent at the merge base, so the guard reports it as changed gate machinery: unit tests of typing_checks.py; no window, bus, key or build. Adding it changes no existing test, threshold, delay or criterion command.",
+      "decision": "docs/plans/2026-11-05-L3-implementation.md"
+    },
+    {
+      "id": "354394131951ab6c2c02fea36bebbb62f74ab30681d98963770719888eeefc2e",
+      "reason": "New file for L3, absent at the merge base, so the guard reports it as changed gate machinery: the PERF-TYPE-native orchestrator (builds the perf_native app, runs the cold, warm and NULL trials through the native input driver, writes the verdict from internal/nativeperf). Adding it changes no existing test, threshold, delay or criterion command.",
+      "decision": "docs/plans/2026-11-05-L3-implementation.md"
+    },
+    {
+      "id": "8ebea8bdde8f2f8155068c4d1db359c684ba6a0c78c6f4f49e49457db3066663",
+      "reason": "New file for L3, absent at the merge base, so the guard reports it as changed gate machinery: unit tests of type_native.py; no display, no native desktop. Adding it changes no existing test, threshold, delay or criterion command.",
+      "decision": "docs/plans/2026-11-05-L3-implementation.md"
+    },
+    {
+      "id": "a6ef791eb160117c5477e1e84b2dfbfaf345e0c3244c75659e40861347000dbc",
+      "reason": "P2 gate written the same day with a command that could not run: protocol/sig and protocol/trust are in the nested protocol module (go test ./protocol/sig from the root fails) and internal/policy does not exist. The corrected command runs the same packages plus protocol/trust; no criterion, threshold or test was weakened.",
+      "decision": "docs/plans/2026-11-08-P2-implementation.md"
+    },
+    {
+      "id": "2d1ae6c4d45b872d0ba92150f4da1e0859246a9ae6de2e209e08b23c23f2c71c",
+      "reason": ".golangci.yml: adds the modernize linter (W26, go fix modernizers enforced). Strengthens lint; no linter removed, no setting relaxed.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "e2de7e0f2da435d43919e6edf5006bf4a72c9cc859e61284be2167516e1ce76a",
+      "reason": "mise.toml mutate:go: gremlins installed once (pinned v0.6.0) instead of go run, -count=1 and a 1.8 GB per-test-binary cap (memcap.sh); timeout coefficient 3 -> 10. The coefficient only decides when a mutant counts as timed out, and timed-out mutants are excluded from efficacy, so a longer limit cannot raise the score: it lets more mutants be judged (2026-11-08: 278/278 timed out at 3, a void run). block_done.py now refuses a run with >10% timeouts. No test, threshold or efficacy target changed.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "29a279f369ec1be00b74db74acbdbf6a97d40c443a0e20925e6d91e52732e5d8",
+      "reason": "scripts/alloy_check.py: the pinned download moved to scripts/fetch_pinned.py, which keeps the same timeout=120 and adds an atomic rename; the timeout is moved, not removed.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "0d9b6e4b873ac2d6b4b24d7643210bab0f9ec292584ed32d05930c808f992c35",
+      "reason": "scripts/tla-check.sh: cache check, SHA-256 verification and rename delegated to scripts/fetch_pinned.py (same pin, same SHA-256, timeout=120); verified by mise run formal from an empty cache. No model, mutant or check removed.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "977129d226f06fa8fa41e1b9fb12df6873c613ab557aeafdfa56c5accc68fc26",
+      "reason": "mise.toml: same mutate:go change as override e2de7e0f (pinned gremlins binary, -count=1, 1.8 GB per-test cap, coefficient 3 -> 10; a timed-out mutant is excluded from efficacy, so a longer limit cannot raise the score) plus scripts/gate_reset_test.py added to test:py. No test, threshold or efficacy target changed.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "e4f1dddf8e395e784e1e0bd29b8db314d566c77a12ceb3bb4a7e911b289d778a",
+      "reason": "scripts/gate.py: reset_evidence keeps the block's reports (gates/<lot>/*.md) instead of an rmtree of the whole folder, which erased the P3 report and the L3/P2 reconstructions on 2026-11-08. Every other entry (logs, playwright results, JSON, subfolders, symlinks) is still removed before the run, so evidence is still only what this run produced; no criterion, threshold or verdict logic changed. Tested by scripts/gate_reset_test.py; scripts/gate-selftest.py passes.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "0c05bb58c3dcd947cd378850fad0ba22a49642584859ca7e7e9a8b2baa7b2674",
+      "reason": "scripts/gate.py: reset_evidence keeps the block's reports (gates/<lot>/*.md) instead of an rmtree of the whole folder, which erased the P3 report and the L3/P2 reconstructions on 2026-11-08. Every other entry (logs, playwright results, JSON, subfolders, symlinks) is still removed before the run, so evidence is still only what this run produced; no criterion, threshold or verdict logic changed. Tested by scripts/gate_reset_test.py; scripts/gate-selftest.py passes.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "f4e233f366ad0939cf1e932ca5e87fcd1685bd87118c45d2bcb46f3c9d8f3b3a",
+      "reason": "scripts/gate_reset_test.py: new test file for gate.reset_evidence (reports kept, evidence cleared, symlinks not followed); adds checks, changes none.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "37de64a21345dfc3a211d1ec0e1b422f3400af968ddee210568e0e29934c0743",
+      "reason": "RL1/NI0: CI job timeout raised because the job now also runs the impaired-network scenarios (decision Q2, ~17 min added); no test threshold or test timeout changes.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "edc8aa9c784242aee624ba6a760f855dcdaac2ad0a98954c62b4bcc09e7c26a4",
+      "reason": "RL1: the existing p2p dupl exclusions (audit m1-m11, lot 8) are matched by file pair instead of line numbers, which shifted with every edit; same files, same linter, no new exclusion.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "bd21f8db785e3fa73d708433b88dd22746f68955fddc41d19d095c4aecc06332",
+      "reason": "RL1/NI0: pingTimeout moved into a const block with the other link-metric constants; value unchanged (5 s).",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "02130de200bd248ae9ccb49f5b20204473ea79f3af441023655ef1e438f58489",
+      "reason": "NI0 G-0: a redundant one-hour per-Recv timeout replaced by the test context (bounded by the test deadline, virtual time in synctest); the receiver still ends with the test.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "da127e92eba0fd067f86e42bb83b886c17bea3e0f7df263c31dd3d424341a592",
+      "reason": "NI0: netsim run.sh gains the impaired scenarios and fails fast when the topology does not come up (was hidden by `if start_stack`); scenarios 1-4 and their bounds unchanged.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "6c7fb901e4dd90b2f5f129a18391ae8d23e7c07b32d80d3db9c5a8f8a17987ee",
+      "reason": "RL1 follow-up: e2e:build waits (wait_for) for the tasks that compile the root package, and builds the frontend into a side directory swapped into frontend/dist at the end, so neither a concurrent build nor an interrupted one leaves dist empty (seen in the pre-push ci on 2026-11-08). Same vite build, same mode and VITE_E2E_OBSERVE flag; the server and relay builds and every e2e bound are unchanged.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "4c1f4ca28b37b744f08d243db2f85daee15f57c44112722c582ba06b8d7584cc",
+      "reason": "W36 C2/C7: netsim run.sh gives each scenario its own Playwright --output directory so the traces of a failure survive the next scenario (Playwright wipes its output dir); scenarios, clauses and bounds unchanged.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "f9bfbcfd9a66e8d7fa94acaa563d30c21bc8b6c55cf850f3d960d1f81fcf26fc",
+      "reason": "W33: tla-check.sh adds the SyncIndicator model (two sound configs) and its seven mutants; the RepoGen and ConnCredit runs are unchanged.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "f6b85cdffb23c71a10e3e33ba4a9c885e131125fb753f50f73d5321aac63782d",
+      "reason": "Free model providers (user rule \u00ab au juste besoin \u00bb): test:py also runs scripts/llm_test.py (provider fall-through with a fake curl, no network); every existing test still runs.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "290cdcc795f0c151c586028ee5eecca3b75dd4d5b421e38e950579fc08ac9157",
+      "reason": "NI-4 C5 unit test (new): two waits in a NEW test (300 ms for the tail of the exchange, 500 ms quiet window) to prove sync counters stay still once converged; no existing wait or bound is changed.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "95e2b4b1837f01eb2779e060f7478a585a1ca574dc6ae4df6e3b6c934ba9c6d2",
+      "reason": "Block WB: tla-check.sh adds the WriteBudget model (two sound configs) and its four mutants; every earlier model and mutant run is unchanged.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "61f62ed836abe55cdf30414e854c39f01e25c40bbec73eded4d067af74ff1402",
+      "reason": "W38: tla-check.sh adds the SendPath model (target send path, rules SP-1..SP-9) and the SP1 interim configurations with their mutants and residual witnesses; every earlier model and mutant run is unchanged.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "f7483447df96767dfbbc3a73db499fe85cd997bdc56d719695e362bcff61f7fa",
+      "reason": "Block SP1: the draft gate is deleted, replaced by gates/SP1.toml written after decisions D-SP1-1..4; the matched lines are comments of the draft (no executed timeout), and every criterion moved to the new gate.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "49ab05eb831a779272a0cab2862ef0670e046a41a19fd36550cf88490376443d",
+      "reason": "Block SP1: the draft gate is deleted, replaced by gates/SP1.toml written after decisions D-SP1-1..4; the matched lines are comments of the draft (no executed timeout), and every criterion moved to the new gate.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "6bc586746be08a856572e83cc4a17945a3abeff8b89c1f81cd9485364f536472",
+      "reason": "Block SP1: the draft gate is deleted, replaced by gates/SP1.toml written after decisions D-SP1-1..4; the matched lines are comments of the draft (no executed timeout), and every criterion moved to the new gate.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "cad02420d6f688add0c8c1c11025c05f3aca38d9ba5c3b15b3738fc8a9e0887d",
+      "reason": "Block SP1: the draft gate is deleted, replaced by gates/SP1.toml written after decisions D-SP1-1..4; the matched lines are comments of the draft (no executed timeout), and every criterion moved to the new gate.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "15e62d0ec178835d4e9918f13267d89db52d015c05c6c93f97c470a089faa4a9",
+      "reason": "Block SP1: the draft gate is deleted, replaced by gates/SP1.toml written after decisions D-SP1-1..4; the matched lines are comments of the draft (no executed timeout), and every criterion moved to the new gate.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "e00ad5be9b539b640e8877c99d95b72b3c5a6523cf716f0d0b6d5a6021ef617f",
+      "reason": "Block SP1: the draft gate is deleted, replaced by gates/SP1.toml written after decisions D-SP1-1..4; the matched lines are comments of the draft (no executed timeout), and every criterion moved to the new gate.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "70b8c6b498d7f0584d11bd18baf9f62ee199a1a65bdee0f51669ff923c9c0705",
+      "reason": "Block SP1: the draft gate is deleted, replaced by gates/SP1.toml written after decisions D-SP1-1..4; the matched lines are comments of the draft (no executed timeout), and every criterion moved to the new gate.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "11bbf6b3035554cbab31fb9e0dcbcf1a2b0fe156fe8b9d23a16493ec1eafdd51",
+      "reason": "Block SP1: the draft gate is deleted, replaced by gates/SP1.toml written after decisions D-SP1-1..4; the matched lines are comments of the draft (no executed timeout), and every criterion moved to the new gate.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "b2f893dff0d44d96674a9d830587e4fa082a3fbdcbc588d8e2f753e16295c36e",
+      "reason": "Block SP1: prose of the design doc updated to the decided yamux ConnectionWriteTimeout 120 s (was an open decision); no executed timeout.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "eba6dab413a0d756b9653880eec9a9bb315e36ea1da03e47721663a98395bf00",
+      "reason": "Block SP1: prose of the design doc updated to the decided yamux ConnectionWriteTimeout 120 s (was an open decision); no executed timeout.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "bc05bbe67a25e3895ceb82117d3d28e16ab776249589843233fa13003cb414d7",
+      "reason": "Block SP1: README SP1 section rewritten for the decided constants (ConnectionWriteTimeout 120 s, pings 120 s, partialTTL 120 s, window pinned), with the new state counts; prose only, no executed timeout.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "d839eef3376b8c8680d57f680c9fbe414822042b837e1f7c8c41fd78cf9f121a",
+      "reason": "Block SP1: README SP1 section rewritten for the decided constants (ConnectionWriteTimeout 120 s, pings 120 s, partialTTL 120 s, window pinned), with the new state counts; prose only, no executed timeout.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "8772c7cb953b828cf527d1c49c41846b196df970e8a774955b8126720a9ba602",
+      "reason": "Block SP1: README SP1 section rewritten for the decided constants (ConnectionWriteTimeout 120 s, pings 120 s, partialTTL 120 s, window pinned), with the new state counts; prose only, no executed timeout.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "ef589c3a4c1e6975106b008caeba0c94c9747e5ed1961d67102df4644cff28fc",
+      "reason": "Block SP1: README SP1 section rewritten for the decided constants (ConnectionWriteTimeout 120 s, pings 120 s, partialTTL 120 s, window pinned), with the new state counts; prose only, no executed timeout.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "4b5c5d320ce88fdfa698eaa5a3ed13d661e73272e9c7cc8cc80bbe0847ba2d05",
+      "reason": "Block SP1: header comment of a TLA+ config updated to the decided ping timeouts (120 s); TLC ignores comments; the model constants are checked by mise run tla.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "e08275093c19656cf837cfecf2bead27a6c59676367c1350c6cdac3f530c404f",
+      "reason": "Block SP1: header comment of a TLA+ config updated to the decided ping timeouts (120 s); TLC ignores comments; the model constants are checked by mise run tla.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "b3dce09ab218dd267c45d64f8d67a9cc126ad215b15b4a3bc3ad39354b8ccadf",
+      "reason": "Block SP1: header comment of a residual witness updated to the decided 120 s; it still violates under mise run tla.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "091e0b9e6868a6e932cc71710f310306629b9d1558c6e7bfcf02730e9e0b7cce",
+      "reason": "Block SP1: this residual witness holds at the decided 120 s, so it became the sound configuration docs/protocol/tla/SP1GrownKeepalive.cfg (run by tla-check.sh); nothing is weakened.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "0045e8b2d04dc6c2dd09222a86ae75e8105299b8e4ccb99efe973b04310b5568",
+      "reason": "Block SP1: header comment of a mutant renamed after its twin SP1Hop (was SP1Hop90); the mutant still violates under mise run tla.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "6bd225c9c99932f1b2fc2c3c1ca75b88b26510c6951781e107807e0d29065dea",
+      "reason": "Block SP1: header comment of a mutant updated to its twin SP1RelayKeepalive; the mutant still violates under mise run tla.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "7df636c05f8ae7a7533eaf887582cab0a9b8aa2aff1a9d01f84fc9bab37265b7",
+      "reason": "Block SP1: tla-check.sh renames SP1Hop90 to SP1Hop, adds the sound SP1Silence and SP1GrownKeepalive (a residual witness closed by the decided 120 s) and the mutant SP1PartialTTLAtIdle; every other model and mutant run is unchanged (62 runs, all as expected).",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "320c24c2933b463c1051e13c6a6c33c5b09a42b0e1675b1af9f048508819252d",
+      "reason": "Block SP1b (D-SP1, rule SP1-2): sendFragmented's total deadline uses frame.FloorRate (2 KiB/s) instead of MinRate (16 KiB/s), so a large message on an honest slow link is not cut and resent; proven by TestRuleSP1SlowLinkDeliversWithoutResend (mutant SP1e) and the SendPath/SP1 TLA+ model; the 90 s no-progress cut still bounds a stopped reader.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "0c138dcc2f7d2217751da972c599728b0daf6cbe80fe6a586783f0e2a79bd97f",
+      "reason": "Block SP1b (D-SP1-4, /simplify): the reassembly sweep now wakes at the oldest partial's deadline instead of a full partialTTL, so a partial is freed at partialTTL (120 s) instead of up to twice that; stricter, proven by TestRuleSP1PartialFreedAfterTTL (red before) and the tightened TestStalePartialExpires.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "751a0eb80e6b7d8897570fe06ac31de7fc23172d4cfa03be692102b829752818",
+      "reason": "Block SP1b (rule SP1-2): bulk lane WriteProgress takes frame.FloorRate (2 KiB/s) instead of MinRate (16 KiB/s), same rule as sync/1; the no-progress cut (WriteIdle) is unchanged in kind and stated in the spec.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "56c03e0de40304b3b341188f377e357177d48b2ed1c6d4d08b5558dfd5f7e5da",
+      "reason": "Block SP1b (rule SP1-2): sync/1 WriteProgress takes frame.FloorRate (2 KiB/s) instead of MinRate (16 KiB/s) \u2014 the root fix of the NI-3 resend loop (E1, E3: paste delivered at the first attempt, 0 resyncs); WriteIdle 90 s per D-SP1, proven by the RuleSP1 tests and the TLA+ model.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "9a9fbc0657f7af9f3179b29802df8ab9a326846019d334befd51962d658cebce",
+      "reason": "Block CI1b (W35, user decision \u00ab netsim seulement si touch\u00e9 \u00bb): `ci` now depends on ci:core + e2e:netsim:impaired, where ci:core is exactly the previous list minus the netsim; the content of `mise run ci` is unchanged (gate criterion rule-CI1-wiring checks it). Nothing removed or weakened.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "e9ab19538005856322916542a823208f5b6b6c693b900623004417fad2d14ba2",
+      "reason": "Block CI1b: test:py gains scripts/netsim/affected_test.py (28 new tests); every existing test file still runs.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "1f650fcd7621017e13281cb0aa969b1d4a6a6c99152ab9edcce756267291677a",
+      "reason": "Block CI1b: new netsim selector scripts/netsim/affected.py, written for gate CI1b (rules CI1-1..CI1-4, fails towards running).",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "14006af3b852de0386db1be0359e9daaafa4aea51f0a9712e77ebfb95ef45869",
+      "reason": "Block CI1b: new unit tests of the selector, one per case of gate criterion rule-CI1-unit.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "d393a94f90bf97fdb0e92d3e5de905378dc16ce5362abd09a4d983e21808b4ad",
+      "reason": "Block C5S: docs/protocol/tla/README.md describes the reworked LinkProbe model (timeouts, closing bytes, rate-bound clock margin, level arithmetic); documentation of the model, no model bound or check removed (mise run tla runs every config and mutant).",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "4198b84cbf5faf72986e8ef2c59b0bdf8158e5186ebe8cfd9eac12d5568f79f0",
+      "reason": "Block C5S: scenario 5's whole-test Playwright timeout grows 480 s -> 900 s because the scenario itself grew (new P0 entry phase, P5 of 180 s, filler traffic); no clause bound changes, every clause keeps its own bound.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "4a9d25e8758445336f3a8800b3a84ba66043bd8fda996fe2aa70f1028f76cc06",
+      "reason": "Block C5S: scripts/netsim/c5model.py is the C5 statistical model of this block (spec reformalized: late discards, filler traffic); its guarantees are re-proven by c5model_test.py (0 false failures in 3000 runs, every mutant rejected).",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "6e6f71fdc5bebb32acde8a79613b9940916a0facd306848f3115b347a6dd12ab",
+      "reason": "Block C5S: scripts/netsim/c5model_test.py, the model's tests for this block; they check the false-failure bound and the power against every mutant estimator.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "ba63bc2264354dbbcb17654443cb7dad0a1832e2042d36f59a72b841f742b5ae",
+      "reason": "Block C5S: scripts/netsim/run.sh gains NETSIM_REPEAT and per-repeat result files (gate criterion e2e-C5); a run without it behaves as before.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "e3735c10c0e1206b58a4f60eeab20fc65bf7b83b64feabc795e1be1ed73ad969",
+      "reason": "Block C5S (security review finding 9): scripts/pkg/selftest.sh covers the new AC-14 check that a release binary was not built with tags server; existing selftests unchanged.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "2f16525d27dc2136ee0622eda0de30eb552b3f458029dfa50338e63196672c14",
+      "reason": "Fail fast (user, 2026-11-10: \u00ab monitore \u00e0 chaque fois pour pas que \u00e7a arrive \u00bb): block_done.py gains a preflight right after step 2 that runs the gate's base guard and the step-8 docs check, so a run that would fail at its end after hours fails in seconds; every step is unchanged and still runs.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "702c3ec6b331272ca2fd29d0c8d1c1194492d9d561c092a8dab3507ef0467a38",
+      "reason": "Fail fast: block_done_test.py pins the preflight (a failing base guard stops done before the long steps; it runs right after step 2); existing tests unchanged.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "63c08e7c3565ddbc9b3f0b4263f73a2f7a1f44fd2d0c23fa31939e38a22f6e19",
+      "reason": "Fail fast at the source (user, 2026-11-10: \u00ab corrige la source, pas les effets \u00bb): a gate whose base guard fails can no longer pass, so gate.py now records every criterion as not run and stops instead of running hours of criteria first; the guard itself and every criterion are unchanged. Pinned by gate-selftest.py (no criterion runs after a failing base guard; red before the fix).",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "942d53f7dd6caa50bc751f20e861ab1013ad02143b50d36742a18aa41e1d3db3",
+      "reason": "Fail fast at the source (user, 2026-11-10: \u00ab corrige la source, pas les effets \u00bb): a gate whose base guard fails can no longer pass, so gate.py now records every criterion as not run and stops instead of running hours of criteria first; the guard itself and every criterion are unchanged. Pinned by gate-selftest.py (no criterion runs after a failing base guard; red before the fix).",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "fd250db474038aafd0c39cb19afb15d5b85b6879aecbceafef0da24057b2f0c7",
+      "reason": "Fail fast at the source (user, 2026-11-10: \u00ab corrige la source, pas les effets \u00bb): a gate whose base guard fails can no longer pass, so gate.py now records every criterion as not run and stops instead of running hours of criteria first; the guard itself and every criterion are unchanged. Pinned by gate-selftest.py (no criterion runs after a failing base guard; red before the fix).",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "7fcc7b9b00f050e2866a040a166466f7f7063c575225174afa454aec5cb80720",
+      "reason": "Fail fast at the source (user, 2026-11-10: \u00ab corrige la source, pas les effets \u00bb): a gate whose base guard fails can no longer pass, so gate.py now records every criterion as not run and stops instead of running hours of criteria first; the guard itself and every criterion are unchanged. Pinned by gate-selftest.py (no criterion runs after a failing base guard; red before the fix).",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "891e206f2ff5286e1ef362fd3aa7101c56e6f9425d7b0a5006353c89314cd34a",
+      "reason": "Block C5S: block_done.py preflight also runs `mutants.py --check <block>`, so a netsim mutant whose anchor moved with the code fails done in seconds instead of hours into the gate (found 2026-11-11: M5b, M5h, M5j). Adds a check; nothing weakened.",
+      "decision": "docs/plans/2026-11-09-c5-sound.md"
+    },
+    {
+      "id": "1d8454828c12a99f85fe76f20b1269b61696ed3f171bbf99962a75de4270d775",
+      "reason": "Block C5S: block_done_test.py adds PreflightTest.test_a_mutant_whose_anchor_moved_stops_done_before_the_long_steps (red without the preflight check); existing tests unchanged.",
+      "decision": "docs/plans/2026-11-09-c5-sound.md"
+    },
+    {
+      "id": "600d3f47e2e1d6e97217ef2a98878a30e7c0900b456cfe6c1f0f0b655c289414",
+      "reason": "Block C5S: gate-guard.py's dependency walk added every scripts/*.py path named anywhere in a dependency's text, so a test fixture path (scripts/perf/p.py in scripts/netsim/affected_test.py) became a 'dependency' and the self-test failed (L1 anti-weakening, found through RL1 > P3 > P2 > L2 > L1, 2026-11-11). A transitively named path that is no file is no longer a dependency; a criterion naming a missing script still fails the self-test, and a self-test assertion pins the case. Nothing guarded is dropped: every existing file stays covered.",
+      "decision": "docs/plans/2026-11-09-c5-sound.md"
+    },
+    {
+      "id": "ce1158c0905ac65e37ab804d2c230b4f30c395fd53b2ab174381a1f8e83f879f",
+      "reason": "Block C5S: gate-guard.py's dependency walk added every scripts/*.py path named anywhere in a dependency's text, so a test fixture path (scripts/perf/p.py in scripts/netsim/affected_test.py) became a 'dependency' and the self-test failed (L1 anti-weakening, found through RL1 > P3 > P2 > L2 > L1, 2026-11-11). A transitively named path that is no file is no longer a dependency; a criterion naming a missing script still fails the self-test, and a self-test assertion pins the case. Nothing guarded is dropped: every existing file stays covered.",
+      "decision": "docs/plans/2026-11-09-c5-sound.md"
+    },
+    {
+      "id": "61b44de0cf99d9080472ae3bb941a9113eba35ff049ca83d40c20d2660d89627",
+      "reason": "Block C5S: c5model.py simulates a PROBE across a change of round trip as the stack does (RFC 9002 estimator fed across phases, PTO read at the ECHO, quic-go's resend time threshold, head-of-line order); R2's crossing term for transition labels is derived from it (transition_lag), not hand-widened. Found by e2e-C5 runs 5-s1-r8 and 5-s3-r6 (one step each at the P2>P3 drop); both replay green, the old rule fails 3 of 200 corrected-model runs. Guarantees re-proven: 0 false failures in 3000 runs, every mutant rejected.",
+      "decision": "docs/plans/2026-11-09-c5-sound.md"
+    },
+    {
+      "id": "0231bea19170282540c60688f7379337bb64549f90cfcb1764b29635687b8592",
+      "reason": "Block C5S: c5model_test.py adds Transition.test_single_step_spike_at_the_p2_p3_drop (red with the old tolerance) and test_pto_climbs_after_the_drop; existing guarantees tests unchanged (24 tests, 597 s at rest).",
+      "decision": "docs/plans/2026-11-09-c5-sound.md"
+    },
+    {
+      "id": "f22057e36244ddd6ef648864ff0df369f85e2b26277fdddf52102c6426784b16",
+      "reason": "Audit explicitly requires clear skips on kernels below the required ABI; only new IPC tests are capability-gated. Existing tests and thresholds are unchanged.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "5467a9137b41485c53dcf9abfea36f2ea0cd66b032899ef8befcd119360d29bd",
+      "reason": "Block PB (ADR 0038, paired performance): scripts/perf/native_input.py: gate machinery changed. Proven by native_input_test (environment faults exit 75, bounded retries, fresh raw directory). No threshold is weakened: the 10 % budget is kept and the absolute limit is replaced by a stronger bound.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "2e74ad3d5207a7f8a60e7ebeb9e1a7334280bbf3a657ff1d1886b9a225c24fb8",
+      "reason": "Block PB (ADR 0038, paired performance): scripts/perf/native_input.py: timeout expression removed or rewritten: deadline, pending, complete = time.monotonic() + timeout + (# * NULL_COUNT * # if phase == \"warm\" else #), b\"\", None. Proven by native_input_test (environment faults exit 75, bounded retries, fresh raw directory). No threshold is weakened: the 10 % budget is kept and the absolute limit is replaced by a stronger bound.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "a1a051b8a2c9442443a79bbf77e0cd1adccb143612884d856ba0d475aa69b71a",
+      "reason": "Block PB (ADR 0038, paired performance): scripts/perf/native_input_test.py: gate dependency changed. Proven by native_input_test (environment faults exit 75, bounded retries, fresh raw directory). No threshold is weakened: the 10 % budget is kept and the absolute limit is replaced by a stronger bound.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "c2a988db0ca2d76be5f18e427cd5d915c02ada62b53912b82d5478ed4112baac",
+      "reason": "Block PB (ADR 0038, paired performance): scripts/perf/native_input_test.py: gate machinery changed. Proven by native_input_test (environment faults exit 75, bounded retries, fresh raw directory). No threshold is weakened: the 10 % budget is kept and the absolute limit is replaced by a stronger bound.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "14a60de14d315d22eb826d0a1cd2f87a325fdb840ec4735c1fbc35ce23ee91b5",
+      "reason": "Block PB (ADR 0038, paired performance): scripts/perf/paired_e2e_test.py: gate machinery changed. Proven by the FakeServer and RealServer driver tests (A/A pass, injected slowdown, noise invalid). No threshold is weakened: the 10 % budget is kept and the absolute limit is replaced by a stronger bound.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "47baf8bfaffe8adecbbf775d8decc014c5eef4671f07860823075a5e9a536b7f",
+      "reason": "Block PB (ADR 0038, paired performance): scripts/perf/paired_test.py: gate dependency changed. Proven by paired_test (attempt machine, order statistics, replayable orders). No threshold is weakened: the 10 % budget is kept and the absolute limit is replaced by a stronger bound.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "bba4bc2777b535930ce85bbe052247c08f33f097c61283f4b7a5627676e010e2",
+      "reason": "Block PB (ADR 0038, paired performance): scripts/perf/paired_test.py: gate machinery changed. Proven by paired_test (attempt machine, order statistics, replayable orders). No threshold is weakened: the 10 % budget is kept and the absolute limit is replaced by a stronger bound.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "4e52584628ac824921b4dc8aa6a52e5aa6f5f51b0ca8888069011eeec524f6e9",
+      "reason": "Block PB (ADR 0038, paired performance): scripts/perf/pbmodel.py: gate machinery changed. Proven by pbmodel_test (false regression 0/3000, power, every mutant rule rejected). No threshold is weakened: the 10 % budget is kept and the absolute limit is replaced by a stronger bound.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "966eb31d4e86ed349cf8787bd433a16976b442fe4b4ffa86211ac7279ac37acb",
+      "reason": "Block PB (ADR 0038, paired performance): scripts/perf/refbuild_test.py: gate dependency changed. Proven by refbuild_test (merge-base reference, digest, atomic publication, fail closed). No threshold is weakened: the 10 % budget is kept and the absolute limit is replaced by a stronger bound.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "aa68c3a1ca31f0da26f952fa5b6d5d01c34e276764b9f0797de754bc1be57b24",
+      "reason": "Block PB (ADR 0038, paired performance): scripts/perf/refbuild_test.py: gate machinery changed. Proven by refbuild_test (merge-base reference, digest, atomic publication, fail closed). No threshold is weakened: the 10 % budget is kept and the absolute limit is replaced by a stronger bound.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "2c73d7e5a43e8fae7cc5b58b78a68117d7c6d6a3e9a6b3a3dd0b8d00cb60b35a",
+      "reason": "Block PB (ADR 0038, paired performance): scripts/perf/start.cjs: gate dependency changed. Proven by paired_e2e_test (the plan driver run against the fake and the real server). No threshold is weakened: the 10 % budget is kept and the absolute limit is replaced by a stronger bound.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "8ac7173e0ca26e0db8c5d2119aea339fabe66bb8a8e0c031b98962005784daf2",
+      "reason": "Block PB (ADR 0038, paired performance): scripts/perf/start.cjs: gate machinery changed. Proven by paired_e2e_test (the plan driver run against the fake and the real server). No threshold is weakened: the 10 % budget is kept and the absolute limit is replaced by a stronger bound.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "c08f09fc4517c1d3c2c45e2c63cfca4c42100fee7f1939830137c50ce1e34622",
+      "reason": "Block PB (ADR 0038, paired performance): scripts/perf/start.cjs: timeout expression removed or rewritten: for(let j=#;j<#;j++){try{if((await fetch('http://#.#:#/health')).ok){ready=true;break;}}catch{} await new Promise(r=>setTimeout(r,#));}. Proven by paired_e2e_test (the plan driver run against the fake and the real server). No threshold is weakened: the 10 % budget is kept and the absolute limit is replaced by a stronger bound.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "36a8e9a1f6e3fbc1b3c5e38e486d9d30aca6760048a75b5e91b4c12b6638d529",
+      "reason": "Block PB (ADR 0038, paired performance): scripts/perf/testdata/fakeserver.py: gate machinery changed. Proven by paired_e2e_test (the fake server is the driver test fixture). No threshold is weakened: the 10 % budget is kept and the absolute limit is replaced by a stronger bound.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "ab554781046f18d9abba8eb8d61f8046445d6cea08812b5868540fc2774e4d55",
+      "reason": "Block PB (ADR 0038, paired performance): scripts/perf/testdata/quantile-index.json: gate machinery changed. Proven by paired_test and Go TestQuantileUpperIndexMatchesPythonVector (shared vector). No threshold is weakened: the 10 % budget is kept and the absolute limit is replaced by a stronger bound.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "cd1bcf46aec134382b652681d781251ef01566690877b56033286bd40674cabb",
+      "reason": "Block PB (ADR 0038, paired performance): scripts/perf/type_native.py: gate machinery changed. Proven by type_native_test (environment fault retry, invalid after three, valid failure never retried). No threshold is weakened: the 10 % budget is kept and the absolute limit is replaced by a stronger bound.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "4b7a14d48489e5af7eb4a5ab553e512a997cbb7d6fb59e585b309e815f3b3784",
+      "reason": "Block PB (ADR 0038, paired performance): scripts/perf/type_native_test.py: gate dependency changed. Proven by type_native_test (environment fault retry, invalid after three, valid failure never retried). No threshold is weakened: the 10 % budget is kept and the absolute limit is replaced by a stronger bound.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "31b1cf1a4da8fd0039fcf3376591f7a6c2320580ff388dd081ce2d05d10642ec",
+      "reason": "Block PB (ADR 0038, paired performance): scripts/perf/type_native_test.py: gate machinery changed. Proven by type_native_test (environment fault retry, invalid after three, valid failure never retried). No threshold is weakened: the 10 % budget is kept and the absolute limit is replaced by a stronger bound.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "096caa77960b9f2bcebfd03119a2eb90a1ed9137a10b3df4e40fdaffccdf567f",
+      "reason": "Block PB (ADR 0038, paired performance): scripts/perf/refbuild.py: gate machinery changed. Now also generates the gitignored Wails bindings in the reference worktree (the build vector is shared by both sides). Proven by refbuild_test (reference is the merge-base, one build vector for both sides, fail closed) and the perf-start criterion. No threshold is weakened.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "a3c9c9f1617971fb3f4dffc6201d5b31661c11c7edd884ed0b809ae5fdd2f413",
+      "reason": "Block OI (ADR 0037, single instance): scripts/tla-check.sh adds the OISingleInstance model (two sound configs, OISingleInstance and OISingleInstanceHang) and its fourteen mutant and witness configs (NoDrain, caught by AckedApplied, added 2026-11-12), each of which must be detected; no existing model, mutant or bound is removed or weakened.",
+      "decision": "docs/plans/2026-11-11-oi-single-instance-open.md"
+    },
+    {
+      "id": "fb80c6a741e9e760cd92e0865c62bed54cdd144941ffc003704adb453a5ffd1a",
+      "reason": "docs/protocol/tla/README.md prose, not block PB: block C5S extends one sentence (the responder stack discarding a late packet is LoseData) and block OI adds the OISingleInstance section (its fairness table names the per-try Timeout that A2 must outlast); documentation of the models only, no model bound or check removed. Added by PB because the guard listed it while PB was gated; its owners should confirm.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "af472f1cd03c389c66d959913d41ce69798ac22693d825202565f80b600611dd",
+      "reason": "Block PB per-sample interference (ADR 0038 amendment 2026-11-12): scripts/perf/baseline.py: PERF-START report gains `interference` (the bound, the raw background share of every kept and every discarded start, the invalid rate per side); tests: paired_test.Interference.test_report_keeps_every_raw_share, paired_e2e_test.FakeServer.test_every_slot_records_its_background_cpu",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "fdccc02ce1b4eb272b7fa826e8f27b4246299bf171c4551c46d7b6b807178501",
+      "reason": "Block PB per-sample interference (ADR 0038 amendment 2026-11-12): scripts/perf/baseline.py: PERF-START report gains `interference` (the bound, the raw background share of every kept and every discarded start, the invalid rate per side); tests: paired_test.Interference.test_report_keeps_every_raw_share, paired_e2e_test.FakeServer.test_every_slot_records_its_background_cpu",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "196f0c38ca86a22007bed9e4523d6b74b2a2cd3e72631f741b633959b42e6189",
+      "reason": "Block PB per-sample interference (ADR 0038 amendment 2026-11-12): scripts/perf/cpu.cjs: new: per-start background CPU accounting from /proc (machine busy jiffies minus the measured tree); tests: cpu_test.py (fake /proc, ten rules)",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "a8cc9c69977d0c355a3bc44141f41fd4dac51ec7c88e000ee638449b928af252",
+      "reason": "Block PB per-sample interference (ADR 0038 amendment 2026-11-12): scripts/perf/cpu_test.py: new tests of cpu.cjs on a fake /proc",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "1fb82a436a3da061faa9d0699f3ba961efc9083fc4af958a45e0b2f249456137",
+      "reason": "Block PB per-sample interference (ADR 0038 amendment 2026-11-12): scripts/perf/paired.py: per-sample interference: BG_SHARE_MAX 1.5 CPUs, INVALID_MAX 20 %, MAX_TRIES 5, invalid_start, run_interfered, interference_report, classify maps the interference fault to an invalid attempt, plan carries the rule; tests: paired_test.Interference, pbmodel_test.Interference",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "ab91b4dd44221827c0e62a6ad7484ce5b25e9d2f104721d65d17c04149fcefd0",
+      "reason": "Block PB per-sample interference (ADR 0038 amendment 2026-11-12): scripts/perf/paired_e2e_test.py: driver tests for per-sample interference (a real burner process is discarded and re-measured in its slot, a slow start is not invalid, the 20 % cap and the five tries stop the run); the existing timing tests pass bg_share_max=None so ambient load cannot fail them. No test weakened",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "b803faf00e0cf5aaf4db6faa4e0a31e0db2a3de8fa5c2fac7019ef7b6a4ee0a6",
+      "reason": "Block PB per-sample interference (ADR 0038 amendment 2026-11-12): scripts/perf/paired_e2e_test.py: driver tests for per-sample interference (a real burner process is discarded and re-measured in its slot, a slow start is not invalid, the 20 % cap and the five tries stop the run); the existing timing tests pass bg_share_max=None so ambient load cannot fail them. No test weakened",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "92c618ec8b28b68f2b60ce69f44e5ed349732a139d42d2d8960a72b376a206de",
+      "reason": "Block PB per-sample interference (ADR 0038 amendment 2026-11-12): scripts/perf/paired_test.py: new class Interference (bound, cap, classify, plan, report); no existing test changed",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "37bb1599f382e345e6581d0b4036a3687eeff74f643fd9d02501c7a7e682fa7b",
+      "reason": "Block PB per-sample interference (ADR 0038 amendment 2026-11-12): scripts/perf/paired_test.py: new class Interference (bound, cap, classify, plan, report); no existing test changed",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "2ca2b29c6bc29151c1e8ee5ea29fb6cbf4f77374ae033eeda90e01b31014fa68",
+      "reason": "Block PB per-sample interference (ADR 0038 amendment 2026-11-12): scripts/perf/pbmodel.py: burst model fitted to docs/perf/2026-11-12-start-bg (Bursts, bg_session, BG_SCENARIOS, BG_MUTANTS, bgfit, threshold); the existing rule, environments and mutants are untouched",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "e3a02ef5a77b63f5524976983712f296a5262fb6437a42a3fc11b4249a300100",
+      "reason": "Block PB per-sample interference (ADR 0038 amendment 2026-11-12): scripts/perf/pbmodel_test.py: new class Interference (archive sealed, constants refit, quiet-edge bound, false failure <= 1e-3 under bursts, truly slow application still fails, three mutants rejected); no existing test changed",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "6f352aa8b2516cdb2ac9f9a16da1afbfaa3165bbff31137bf48cd8e71a19984c",
+      "reason": "Block PB per-sample interference (ADR 0038 amendment 2026-11-12): scripts/perf/pbmodel_test.py: new class Interference (archive sealed, constants refit, quiet-edge bound, false failure <= 1e-3 under bursts, truly slow application still fails, three mutants rejected); no existing test changed",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "24ed17094b908254f15a61608bf5ffcae34840ba03ed3622296b01a3ad3b9508",
+      "reason": "Block PB per-sample interference (ADR 0038 amendment 2026-11-12): scripts/perf/start.cjs: per-sample interference: window around each start, bg_share recorded, an invalid start re-measured in its slot after a quiet wait, fault `interference` above 20 % of the plan or five tries; the readiness loop and timeouts are unchanged",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "d8c7a287b8e2a2f8b2d9eb98daa1009fa9b29243881eb997d72038b01b9636a8",
+      "reason": "Block PB per-sample interference (ADR 0038 amendment 2026-11-12): scripts/perf/start.cjs: per-sample interference: window around each start, bg_share recorded, an invalid start re-measured in its slot after a quiet wait, fault `interference` above 20 % of the plan or five tries; the readiness loop and timeouts are unchanged",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "d4219dcb86e8f55829873a947d887cb39c992efd3e890751b95b8578b76f5e7e",
+      "reason": "Block PB per-sample interference (ADR 0038 amendment 2026-11-12): scripts/perf/start.cjs: per-sample interference: window around each start, bg_share recorded, an invalid start re-measured in its slot after a quiet wait, fault `interference` above 20 % of the plan or five tries; the readiness loop and timeouts are unchanged",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "137d9459bd16b0816c6d3baa25445a4a8d8424965b70dfd00dbfdb872eb9e5e2",
+      "reason": "Block PB review fixes (ADR 0038 amendment 2026-11-12): scripts/perf/native_input.py: gate machinery changed: focus taken by a window of the measured process or a descendant is a product failure, another program's window stays the fault focus-lost (focus_moved, descends, parent_pid); the timeout expression is unchanged, re-keyed by the file edit; test: native_input_test.test_focus_taken_by_the_product_is_a_failure",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "df0b72d935214f69f13fe54c29165d93085df6dad98e0f339cf6de55949e6545",
+      "reason": "Block PB review fixes (ADR 0038 amendment 2026-11-12): scripts/perf/native_input.py: timeout expression removed or rewritten: deadline, pending, complete = time.monotonic() + timeout + (# * NULL_COUNT * # if phase == \"warm\" else #), b\"\", None: focus taken by a window of the measured process or a descendant is a product failure, another program's window stays the fault focus-lost (focus_moved, descends, parent_pid); the timeout expression is unchanged, re-keyed by the file edit; test: native_input_test.test_focus_taken_by_the_product_is_a_failure",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "643e515c15115bc4ae66e15183bc9926140fe49de7ea724318d74680233efede",
+      "reason": "Block PB review fixes (ADR 0038 amendment 2026-11-12): scripts/perf/native_input_test.py: gate dependency changed: adds test_focus_taken_by_the_product_is_a_failure; test_same_pid_but_wrong_active_xid_is_rejected again asserts a failure (as committed before PB: rejected, not an environment fault), now RuntimeError; nothing weakened",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "0b1f511430e25066dd352b2aba7c4ddeb093446b30d54e68a323ea41455a8ac0",
+      "reason": "Block PB review fixes (ADR 0038 amendment 2026-11-12): scripts/perf/native_input_test.py: gate machinery changed: adds test_focus_taken_by_the_product_is_a_failure; test_same_pid_but_wrong_active_xid_is_rejected again asserts a failure (as committed before PB: rejected, not an environment fault), now RuntimeError; nothing weakened",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "b74ee324fc4eeb8e5fbeeb7f03de1ab11c4480566d3b0b496e8ab034672087fa",
+      "reason": "Block PB review fixes (ADR 0038 amendment 2026-11-12): scripts/perf/paired.py: gate machinery changed: slot_step (the per-start rule, twin of start.cjs slotStep, shared vector testdata/slot-rule.json), Fisher side test of the discards (IMBALANCE_ALPHA 1e-3, significant imbalance = regression even when the cap stopped the run), classify: accounting fault invalid, fewer judged pairs than the plan fail, interference_report counts over the planned slots and reports discarded durations per side; tests: paired_test.Interference, Accounting, Discards",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "92bd6d4e222a0f59c045f7146d38c0402184e69a21f0f6ec4f351ba124ce0f72",
+      "reason": "Block PB review fixes (ADR 0038 amendment 2026-11-12): scripts/perf/paired_e2e_test.py: gate dependency changed: ambient() reads the cgroup accounting; adds test_a_detached_helper_is_measured_not_background; no existing test or tolerance changed",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "7ec10356e27d5841df4bab175843183e5704dbfccdc319ea5791150dddfbf380",
+      "reason": "Block PB review fixes (ADR 0038 amendment 2026-11-12): scripts/perf/paired_e2e_test.py: gate machinery changed: ambient() reads the cgroup accounting; adds test_a_detached_helper_is_measured_not_background; no existing test or tolerance changed",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "6b52b6175716cb2f18512a9aa759c952da9be8a93302c373ee8bb85493dbfc1e",
+      "reason": "Block PB review fixes (ADR 0038 amendment 2026-11-12): scripts/perf/paired_test.py: gate dependency changed: adds test_driver_and_model_share_the_slot_rule and classes Accounting and Discards; test_report_keeps_every_raw_share now checks the planned size, discarded durations and side test; no gate test changed",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "b7ca91f3455403823eb90e11d446b8732c26e6e9d185027796ebd2eb95022038",
+      "reason": "Block PB review fixes (ADR 0038 amendment 2026-11-12): scripts/perf/paired_test.py: gate machinery changed: adds test_driver_and_model_share_the_slot_rule and classes Accounting and Discards; test_report_keeps_every_raw_share now checks the planned size, discarded durations and side test; no gate test changed",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "2e9c517b8eeffb9e0a7142efcec18ad2c9ab2f1109552c2fa54ead9cc108739f",
+      "reason": "Block PB review fixes (ADR 0038 amendment 2026-11-12): scripts/perf/pbmodel.py: gate machinery changed: bg_session runs paired.slot_step, the side test and the cgroup accounting (where: app, helper, outside); bg_session and bg_rates default to BG_SHARE_MAX (was 2.0); scenarios 4/8/12 % detached helper and 30 % outside; mutants tree-accounting and no-side-test added; tests: pbmodel_test.Interference",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "3ecbecf7b71313a7cf0346aadbb059ca38473c73adba34094aee3d0dc6c9325b",
+      "reason": "Block PB review fixes (ADR 0038 amendment 2026-11-12): scripts/perf/pbmodel_test.py: gate dependency changed: Interference tests at the gate bound passed explicitly: side-test false alarm <= 1e-3 (30000 runs), detached helper judged as in-process slowness (power >= 0.99 at 8 and 12 %), five mutants rejected with disjoint bounds; existing claims kept",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "4a503adb3dbec6d100532ef76308c853e1a7f3e8c14d08a4af152e704ba91358",
+      "reason": "Block PB review fixes (ADR 0038 amendment 2026-11-12): scripts/perf/pbmodel_test.py: gate machinery changed: Interference tests at the gate bound passed explicitly: side-test false alarm <= 1e-3 (30000 runs), detached helper judged as in-process slowness (power >= 0.99 at 8 and 12 %), five mutants rejected with disjoint bounds; existing claims kept",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "a76a1a9424e4c24c67d6a34e3b1cdd413ed346e2d7392086450f15272e2bc535",
+      "reason": "Block PB review fixes (ADR 0038 amendment 2026-11-12): scripts/perf/refbuild.py: gate machinery changed: every vector step on both sides (frozen pnpm install, bindings regenerated), -buildvcs=false, cache key with go env -json at the reference's go.mod, wails3 and cc versions; dirtied worktree, missing manifest and failed sidecar fetch raise ReferenceBuildError; kept-* evicted, never nested; tests: refbuild_test (test_dirtied_reference_worktree_fails_closed, test_cache_key_covers_the_build_environment, test_missing_manifest_or_failed_fetch_fails_closed, test_build_vector_is_reproducible_across_trees)",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "5987d5158d6b419b7908089bb0576480e08fcdaf6354032393bfea2601eb06e1",
+      "reason": "Block PB review fixes (ADR 0038 amendment 2026-11-12): scripts/perf/refbuild_test.py: gate dependency changed: adds five tests (dirtied worktree, vector steps, build environment key, manifest and fetch failures, reproducible build across trees); no existing test changed",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "f83c3b6c98bf6e5bbe86c73d8e8134761d6d1c8dbcb64876d6c8b9c4cde51c5f",
+      "reason": "Block PB review fixes (ADR 0038 amendment 2026-11-12): scripts/perf/refbuild_test.py: gate machinery changed: adds five tests (dirtied worktree, vector steps, build environment key, manifest and fetch failures, reproducible build across trees); no existing test changed",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "6ce348e537eefd7b5772f1382cdc3be183278d19ecb447ddd19ebc53adf21543",
+      "reason": "Block PB review fixes (ADR 0038 amendment 2026-11-12): scripts/perf/testdata/slot-rule.json: gate machinery changed: new shared vector of the per-start rule, read by paired_test for paired.slot_step and start.cjs slotStep",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "973f6eebccfb62828a313ba2de47436b56729f81dad5685d5ab8b1e097c4cbd9",
+      "reason": "Block PB review fixes (ADR 0038 amendment 2026-11-12): scripts/perf/cpu.cjs: gate machinery changed: the measured set is the run's cgroup v2 (driver, browser, one cgroup per start joined by the launcher before exec): background = /proc/stat busy minus cpu.stat usage_usec, a detached or reaped child stays measured, leftovers killed by cgroup.kill, no writable cgroup is the fault `accounting`; tests: cpu_test (fake cgroup arithmetic, real-cgroup test_a_detached_helper_stays_in_the_measured_cgroup, test_a_reaped_child_counts); adopt moves back into the run's cgroup every descendant of the driver that left it (Chromium's own systemd scope), test_an_escaped_descendant_is_brought_back",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "1e42766df5a5139354fd16e61795d99ed732a785943c0ffa703836c4c095fc65",
+      "reason": "Block PB review fixes (ADR 0038 amendment 2026-11-12): scripts/perf/cpu_test.py: gate machinery changed: tests rewritten for the cgroup accounting (fake cgroup arithmetic, real-kernel detached helper, reaped child, launcher pid/argv, launch failure); no bound or timeout weakened; adds test_an_escaped_descendant_is_brought_back",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "b676de981639ae21d3d1da95b3fbd92361363159d46d05eb6afc86555b6f6e88",
+      "reason": "Block PB review fixes (ADR 0038 amendment 2026-11-12): scripts/perf/start.cjs: gate dependency changed: for(let j=#;j<#;j++){try{if((await fetch('http://#.#:#/health')).ok){ready=true;break;}}catch{} await new Promise(r=>setTimeout(r,#));}: launches each start in its own cgroup (cpu.launcher), decision by slotStep (twin of paired.slot_step), fault `accounting`, writes planned/bg_share_max/invalid_max, /proc diagnostics moved to cpu.cjs; the readiness loop and its timeouts are unchanged (re-keyed by the file edit); tests: paired_e2e_test, paired_test.test_driver_and_model_share_the_slot_rule; adopt after the launch and before every start, recorded in `adopted`, a failure is the fault `accounting`",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "84ae843d8e127694f5c3bd81dc6141a6b1e64c161b3d677aed843e4fdb8f1c57",
+      "reason": "Block PB review fixes (ADR 0038 amendment 2026-11-12): scripts/perf/start.cjs: gate machinery changed: for(let j=#;j<#;j++){try{if((await fetch('http://#.#:#/health')).ok){ready=true;break;}}catch{} await new Promise(r=>setTimeout(r,#));}: launches each start in its own cgroup (cpu.launcher), decision by slotStep (twin of paired.slot_step), fault `accounting`, writes planned/bg_share_max/invalid_max, /proc diagnostics moved to cpu.cjs; the readiness loop and its timeouts are unchanged (re-keyed by the file edit); tests: paired_e2e_test, paired_test.test_driver_and_model_share_the_slot_rule; adopt after the launch and before every start, recorded in `adopted`, a failure is the fault `accounting`",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "2cd60bb8a3b8d0c785a3fbaf9f4ac2dc3364c1e857394b85c169e7f4c1fa6b0a",
+      "reason": "Block PB review fixes (ADR 0038 amendment 2026-11-12): scripts/perf/start.cjs: timeout expression removed or rewritten: for(let j=#;j<#;j++){try{if((await fetch('http://#.#:#/health')).ok){ready=true;break;}}catch{} await new Promise(r=>setTimeout(r,#));}: for(let j=#;j<#;j++){try{if((await fetch('http://#.#:#/health')).ok){ready=true;break;}}catch{} await new Promise(r=>setTimeout(r,#));}: launches each start in its own cgroup (cpu.launcher), decision by slotStep (twin of paired.slot_step), fault `accounting`, writes planned/bg_share_max/invalid_max, /proc diagnostics moved to cpu.cjs; the readiness loop and its timeouts are unchanged (re-keyed by the file edit); tests: paired_e2e_test, paired_test.test_driver_and_model_share_the_slot_rule; adopt after the launch and before every start, recorded in `adopted`, a failure is the fault `accounting`",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    }
+  ],
+  "measurements": [
+    {
+      "corpus": "testdata/perf/corpus.json version 1",
+      "attempts": [
+        {
+          "command": [
+            "refbuild.build_server",
+            "bin/inkwell-server"
+          ],
+          "exit_code": 0
+        },
+        {
+          "command": [
+            "node",
+            "scripts/perf/browser.cjs"
+          ],
+          "exit_code": 0
+        }
+      ],
+      "PERF-TYPE": {
+        "status": "proxy",
+        "reason": "Warm Chromium EventTiming only; censored and rounded entries cannot certify native WebKitGTK keystroke-to-paint p95; native measurement deferred to L2.",
+        "p95_upper_bound_ms": 20,
+        "bound_method": "Censored entries <16ms bounded at 16ms; rounded durations +4ms. Same-bound proxy comparison only.",
+        "diagnostic": {
+          "rounded_p95_ms": null,
+          "censored_samples": 16,
+          "conditions": "warm browser; concurrent Go jobs; no noise subtraction; not a native acceptance result",
+          "samples": 30,
+          "slow_layout_control_detected": true,
+          "raw_results": "/home/mathieu/GolandProjects/inkwell/gates/PB/type-diagnostic.json",
+          "engine": "Chromium (not native WebKit)"
+        }
+      },
+      "PERF-START": {
+        "status": "pass",
+        "design": "paired-randomized",
+        "scope": "Today's app cold process, server build to usable editor; prelaunched Chromium and warm OS caches, not native window timing.",
+        "plugins": 0,
+        "reference": {
+          "commit": "5c1cfb2a17774fb8c792850d89307ce276307361",
+          "cache_digest": "48930922087e892756f57b97676175f449b2e6efd32f94cb0337e2ea27dd99d3",
+          "sha256": "757723ed4fe662218d7567a30ff6a408079aea143b6e8fbf80e152235e9a2619",
+          "cache_hit": true,
+          "build_seconds": 7.2
+        },
+        "branch": {
+          "sha256": "8b33bc6032b4bc9d3d84c78be5c329e1db319039c12613a4f17671093b59585d"
+        },
+        "identity": false,
+        "outcome": "pass",
+        "reasons": [
+          "upper bound of the median ratio below the budget"
+        ],
+        "attempts": [
+          {
+            "outcome": "pass",
+            "reasons": [
+              "upper bound of the median ratio below the budget"
+            ],
+            "verdict": {
+              "status": "pass",
+              "reason": "upper bound of the median ratio below the budget",
+              "pairs": 80,
+              "alpha": 0.001,
+              "budget": 1.1,
+              "ratio": 0.9939392815667796,
+              "lower": 0.9861333526015592,
+              "upper": 1.0018143713115146,
+              "half_width": 0.007919401278492666,
+              "contaminated": 0.0
+            },
+            "seed": 7010675685611554933,
+            "raw": "/home/mathieu/GolandProjects/inkwell/gates/PB/start-pairs-1.json"
+          }
+        ],
+        "interference": {
+          "limit": 1.5,
+          "invalid_max": 0.2,
+          "planned": 164,
+          "kept_bg_share": [
+            1.3739634861215406,
+            1.458216885790369,
+            1.2721372329725544,
+            1.4092968097656955,
+            1.2176648426459702,
+            1.204759071422053,
+            1.4260397470016215,
+            1.163559515187856,
+            1.1762350345525092,
+            1.224200788941343,
+            1.3482770293826463,
+            1.27505295556771,
+            1.222970806700352,
+            1.3066304660040302,
+            1.2818122078281762,
+            1.242538841185024,
+            1.3018576203707175,
+            1.2367858762155175,
+            1.2620476489903738,
+            1.3158651289998708,
+            1.2804965700542907,
+            1.4089401824672185,
+            1.2795269323439118,
+            1.2795555944689412,
+            1.2642491449074864,
+            1.3084821960015016,
+            1.2584352385259967,
+            1.224863406803356,
+            1.2060062262409685,
+            1.2886430173555157,
+            1.1824596775822325,
+            1.2293049403104186,
+            1.2039242814491165,
+            1.072745503652859,
+            1.3241960518152252,
+            1.194605002564673,
+            1.2604697880057074,
+            1.3390156282417918,
+            1.2260488287976945,
+            1.3429445405274139,
+            1.3086387241912683,
+            1.2014678013016478,
+            1.259598721520829,
+            1.1795655882285152,
+            1.4318445155918782,
+            1.2425197960888505,
+            1.299942634545551,
+            1.2064478551219016,
+            1.312332313068969,
+            1.2364746960587099,
+            1.3036400112956283,
+            1.3318114033205273,
+            1.2554956069880017,
+            1.2807677872373022,
+            1.1806690882332285,
+            1.3175945497419805,
+            1.2025731105984403,
+            1.3150116136470527,
+            1.2420271196068995,
+            1.2950791958663876,
+            1.2177119604697124,
+            1.2837855466190442,
+            1.2499675134451478,
+            1.2411895700862419,
+            1.2371871343691467,
+            1.2031570932552074,
+            1.2768695980492786,
+            1.246345597913063,
+            1.2136396363773467,
+            1.2814213584268024,
+            1.268802095697429,
+            1.2819370111058932,
+            1.2052277017409807,
+            1.2755353742127378,
+            1.2633648287747778,
+            1.309812306148226,
+            1.2703649995363164,
+            1.297352764760884,
+            1.2708147985778366,
+            1.303233295505876,
+            1.2898297957409413,
+            1.4178046857225937,
+            1.2804628938748588,
+            1.0826657203044134,
+            1.20319338935436,
+            1.348756647596976,
+            1.2965137939962392,
+            1.321896451631964,
+            1.2303743836717211,
+            1.3779601012925562,
+            1.3203745845824204,
+            1.4009222101823975,
+            1.1011274114540301,
+            1.4088026327075664,
+            1.214434318512771,
+            1.2622774026201975,
+            1.3295051079149365,
+            1.2105465965821878,
+            1.3567256912949457,
+            1.2461833068548551,
+            1.2586110940251343,
+            1.314698212889447,
+            1.1707293642722865,
+            1.2773044445744244,
+            1.2711206796817904,
+            1.287224775383204,
+            1.1080841836592275,
+            1.1782280042991085,
+            1.1575269707115319,
+            1.3510998214873728,
+            1.236658269756893,
+            1.1728328688409841,
+            1.3273308082352129,
+            1.145443984135313,
+            1.299284736353673,
+            1.300850980568782,
+            1.3243830138294812,
+            1.2344437289772274,
+            1.2705005566949736,
+            1.116331173482433,
+            1.2519466954801672,
+            1.2857177456285942,
+            1.2859304394687592,
+            1.3250829776510094,
+            1.2444493304438824,
+            1.230810044698454,
+            1.2162663020873627,
+            1.3071009086590657,
+            1.1824929889054532,
+            1.2278049812389376,
+            1.3033183368465724,
+            1.3734663083225624,
+            1.1117181618354008,
+            1.2954608952925188,
+            1.3269571825425779,
+            1.1088733801357986,
+            1.2512230880392532,
+            1.306116248190155,
+            1.3152570007895008,
+            1.3380527570682794,
+            1.2249681430242667,
+            1.2098088640066598,
+            1.2552419093347114,
+            1.3247836696402384,
+            1.238079172284368,
+            1.2373704465407047,
+            1.3293590460226872,
+            1.2629853850933042,
+            1.2581100583984248,
+            1.2499676161375712,
+            1.243949724549862,
+            1.1655436204287024,
+            1.3195601264909604,
+            1.2396584832218562,
+            1.4470116092598613,
+            1.3550391976900373,
+            1.3322412464923772,
+            1.1439219849422133,
+            1.3388322429940684,
+            1.2904347531307725,
+            1.3314785418622097,
+            1.3819467928560598,
+            1.2446319941284247,
+            1.3568211157123349
+          ],
+          "discarded": [
+            {
+              "index": 0,
+              "side": "a",
+              "ms": 468.377323,
+              "bg_share": 2.695335854438064,
+              "tries": 1
+            },
+            {
+              "index": 0,
+              "side": "a",
+              "ms": 380.0621339999998,
+              "bg_share": 2.843313502252318,
+              "tries": 2
+            },
+            {
+              "index": 7,
+              "side": "a",
+              "ms": 571.3575529999998,
+              "bg_share": 8.668220040285284,
+              "tries": 1
+            },
+            {
+              "index": 18,
+              "side": "a",
+              "ms": 582.8991220000007,
+              "bg_share": 9.289596852217702,
+              "tries": 1
+            },
+            {
+              "index": 19,
+              "side": "b",
+              "ms": 381.494877000001,
+              "bg_share": 2.2843215839748905,
+              "tries": 1
+            },
+            {
+              "index": 28,
+              "side": "a",
+              "ms": 584.1088979999986,
+              "bg_share": 8.838698189469966,
+              "tries": 1
+            },
+            {
+              "index": 39,
+              "side": "a",
+              "ms": 655.9364930000011,
+              "bg_share": 9.83490830465893,
+              "tries": 1
+            },
+            {
+              "index": 40,
+              "side": "b",
+              "ms": 384.9087269999982,
+              "bg_share": 2.6779585036468907,
+              "tries": 1
+            },
+            {
+              "index": 49,
+              "side": "b",
+              "ms": 595.1341719999982,
+              "bg_share": 8.842383195857956,
+              "tries": 1
+            },
+            {
+              "index": 60,
+              "side": "a",
+              "ms": 959.2426140000025,
+              "bg_share": 6.14083840059933,
+              "tries": 1
+            },
+            {
+              "index": 72,
+              "side": "b",
+              "ms": 403.30864900000597,
+              "bg_share": 1.7882195081005865,
+              "tries": 1
+            },
+            {
+              "index": 75,
+              "side": "b",
+              "ms": 358.24075599999924,
+              "bg_share": 2.211994575615946,
+              "tries": 1
+            },
+            {
+              "index": 82,
+              "side": "b",
+              "ms": 420.9505659999995,
+              "bg_share": 3.095404529768326,
+              "tries": 1
+            },
+            {
+              "index": 93,
+              "side": "a",
+              "ms": 569.9833470000012,
+              "bg_share": 8.853209520950022,
+              "tries": 1
+            },
+            {
+              "index": 97,
+              "side": "a",
+              "ms": 380.48449000000255,
+              "bg_share": 2.2092314510084314,
+              "tries": 1
+            },
+            {
+              "index": 103,
+              "side": "b",
+              "ms": 524.2422360000055,
+              "bg_share": 7.234598689029765,
+              "tries": 1
+            },
+            {
+              "index": 114,
+              "side": "b",
+              "ms": 570.0120270000043,
+              "bg_share": 9.065922147449717,
+              "tries": 1
+            },
+            {
+              "index": 118,
+              "side": "a",
+              "ms": 363.66701900000044,
+              "bg_share": 2.3276177722327995,
+              "tries": 1
+            },
+            {
+              "index": 124,
+              "side": "a",
+              "ms": 585.8887309999991,
+              "bg_share": 9.087111726926372,
+              "tries": 1
+            },
+            {
+              "index": 135,
+              "side": "b",
+              "ms": 591.2035350000078,
+              "bg_share": 9.50922766597955,
+              "tries": 1
+            },
+            {
+              "index": 139,
+              "side": "b",
+              "ms": 355.0430580000102,
+              "bg_share": 1.6110369430759979,
+              "tries": 1
+            },
+            {
+              "index": 145,
+              "side": "a",
+              "ms": 584.545425999997,
+              "bg_share": 8.76306371225261,
+              "tries": 1
+            },
+            {
+              "index": 156,
+              "side": "a",
+              "ms": 582.0347820000025,
+              "bg_share": 9.301546279948482,
+              "tries": 1
+            },
+            {
+              "index": 160,
+              "side": "a",
+              "ms": 351.1618099999905,
+              "bg_share": 1.5705899777293935,
+              "tries": 1
+            },
+            {
+              "index": 161,
+              "side": "b",
+              "ms": 355.6522810000024,
+              "bg_share": 1.5628817878530643,
+              "tries": 1
+            }
+          ],
+          "invalid_rate": 0.1524390243902439,
+          "invalid_by_side": {
+            "a": 14,
+            "b": 11
+          },
+          "discarded_ms": {
+            "a": [
+              468.377323,
+              380.0621339999998,
+              571.3575529999998,
+              582.8991220000007,
+              584.1088979999986,
+              655.9364930000011,
+              959.2426140000025,
+              569.9833470000012,
+              380.48449000000255,
+              363.66701900000044,
+              585.8887309999991,
+              584.545425999997,
+              582.0347820000025,
+              351.1618099999905
+            ],
+            "b": [
+              381.494877000001,
+              384.9087269999982,
+              595.1341719999982,
+              403.30864900000597,
+              358.24075599999924,
+              420.9505659999995,
+              524.2422360000055,
+              570.0120270000043,
+              591.2035350000078,
+              355.0430580000102,
+              355.6522810000024
+            ]
+          },
+          "imbalance": {
+            "discarded": {
+              "a": 14,
+              "b": 11
+            },
+            "kept": {
+              "a": 82,
+              "b": 82
+            },
+            "p": 0.6694580475083514,
+            "alpha": 0.001,
+            "imbalanced": false
+          }
+        },
+        "verdict": {
+          "status": "pass",
+          "reason": "upper bound of the median ratio below the budget",
+          "pairs": 80,
+          "alpha": 0.001,
+          "budget": 1.1,
+          "ratio": 0.9939392815667796,
+          "lower": 0.9861333526015592,
+          "upper": 1.0018143713115146,
+          "half_width": 0.007919401278492666,
+          "contaminated": 0.0
+        },
+        "budget": {
+          "status": "pass",
+          "samples": 80,
+          "median": {
+            "status": "pass",
+            "order": 48,
+            "bound_ms": 340.8613869999972,
+            "limit_ms": 350.0,
+            "quantile": 0.5,
+            "confidence": 0.95
+          },
+          "p95": {
+            "status": "pass",
+            "order": 80,
+            "bound_ms": 358.44043399999646,
+            "limit_ms": 400.0,
+            "quantile": 0.95,
+            "confidence": 0.95
+          }
+        },
+        "e2e_multiplier": 1.1,
+        "measurement": {
+          "samples_ms": [
+            337.4452249999995,
+            341.41111,
+            341.08374000000003,
+            340.14604099999997,
+            330.7123499999998,
+            327.2669480000004,
+            339.64184899999964,
+            339.63200100000176,
+            335.87771799999973,
+            345.4452289999972,
+            338.8266650000005,
+            341.1299480000016,
+            344.16132899999866,
+            330.9683100000002,
+            335.6266859999996,
+            337.81438499999786,
+            327.6472040000008,
+            334.46662899999865,
+            335.75911199999973,
+            337.12693500000023,
+            358.44043399999646,
+            340.35680899999716,
+            339.61868400000094,
+            342.32980799999496,
+            342.0758879999994,
+            337.2213369999954,
+            333.0016739999992,
+            336.7426290000003,
+            349.84675699999934,
+            352.52129600000626,
+            326.8707379999978,
+            345.65272600000026,
+            332.8759050000008,
+            337.3909530000019,
+            339.7669489999971,
+            339.9746109999978,
+            338.6014719999948,
+            336.74058800000057,
+            337.78372800000216,
+            335.9331979999988,
+            342.332859999995,
+            345.0698279999924,
+            338.9982219999947,
+            340.99298300000373,
+            333.33613100000366,
+            339.9120649999968,
+            343.4068600000028,
+            340.8613869999972,
+            334.8964799999958,
+            343.86572600000363,
+            343.3006299999979,
+            336.11847699999635,
+            341.770199999999,
+            339.8010979999963,
+            334.93123899999773,
+            336.5510429999995,
+            331.7940660000022,
+            345.0321810000023,
+            342.52909300000465,
+            331.70695500000147,
+            335.9244420000032,
+            332.1065249999956,
+            344.8128849999921,
+            332.0064679999923,
+            332.0427519999939,
+            343.0739909999975,
+            343.42260600000736,
+            346.20991499999946,
+            344.6986429999961,
+            342.57333199999994,
+            337.2173349999939,
+            348.32631999999285,
+            348.52679499999795,
+            333.6416670000035,
+            342.91020800000115,
+            354.5195480000111,
+            348.5328860000009,
+            348.8346719999972,
+            318.1789959999878,
+            339.8493739999976
+          ],
+          "p95_ms": 348.8346719999972,
+          "plugins": 0,
+          "scope": "Today's app cold process, server build to usable editor; prelaunched Chromium and warm OS caches, not native window timing."
+        }
+      },
+      "PERF-MEM": {
+        "status": "deferred",
+        "target_lot": "L2",
+        "reason": "Real corpus opening requires G-0 in L2."
+      },
+      "PERF-START-plugins": {
+        "status": "deferred",
+        "target_lot": "Fondations-extensibles",
+        "reason": "Pinned plugins do not exist yet; plugin-load measurement belongs to the plugin lot."
+      },
+      "PM-5": {
+        "status": "measured",
+        "verdict": "gate criterion regression-guard (scripts/perf/regression.py --bench)",
+        "thresholds": "docs/perf/baseline/2026-11-02/thresholds.json"
+      }
+    }
+  ]
+}

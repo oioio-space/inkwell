@@ -31,7 +31,7 @@ func TestReceiverRecordsOnlyArmedNativeRawInput(t *testing.T) {
 	host := func() (Host, bool, bool) {
 		return Host{Engine: "WebKitGTK", Native: true, GOOS: "linux", WebKitVersion: "2.52.0", GTKVersion: "4.22.0", InputPermissionVerified: true}, true, true
 	}
-	service, err := New(Config{Phase: "cold", Count: 1, Index: 1, Replicates: 30, RunID: "native", Output: out, Host: host, Marker: func(v any) { markers <- v.(map[string]any) }})
+	service, err := New(Config{Phase: "cold", Count: 1, Index: 1, Replicates: ColdReplicates, RunID: "native", Output: out, Host: host, Marker: func(v any) { markers <- v.(map[string]any) }})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -78,23 +78,23 @@ func TestReceiverRecordsOnlyArmedNativeRawInput(t *testing.T) {
 }
 
 func TestWarmTrialOrderingAndNonNativeRejection(t *testing.T) {
-	if _, err := New(Config{Phase: "warm", Count: 30, Output: "unused", Host: func() (Host, bool, bool) { return Host{Engine: "Chromium"}, true, true }}); err == nil {
+	if _, err := New(Config{Phase: "warm", Count: WarmSamples, Output: "unused", Host: func() (Host, bool, bool) { return Host{Engine: "Chromium"}, true, true }}); err == nil {
 		t.Fatal("server engine accepted")
 	}
-	s := &Service{cfg: Config{Phase: "warm", Count: 30}}
+	s := &Service{cfg: Config{Phase: "warm", Count: WarmSamples}}
 	for i, want := range append(append([]string{}, ControlKinds...), "none") {
 		if got := s.kind(i + 1); got != want {
 			t.Fatalf("trial%d=%s", i+1, got)
 		}
 	}
-	if s.total() != 30+len(ControlKinds)+2*NullCount {
+	if s.total() != WarmSamples+len(ControlKinds)+2*NullCount {
 		t.Fatal("missing warm raw inputs after controls")
 	}
 	arms := map[string]int{}
-	for id := 30 + len(ControlKinds) + 1; id <= s.total(); id++ {
+	for id := WarmSamples + len(ControlKinds) + 1; id <= s.total(); id++ {
 		arms[s.kind(id)]++
 	}
-	first := 30 + len(ControlKinds) + 1
+	first := WarmSamples + len(ControlKinds) + 1
 	if arms["null"] != NullCount || arms[NullOff] != NullCount || s.kind(first) != "null" || s.kind(first+1) != NullOff || s.kind(first+2) != NullOff || s.kind(first+3) != "null" {
 		t.Fatal("NULL arms missing, unbalanced or not interleaved", arms)
 	}
@@ -104,7 +104,7 @@ func TestWarmPermissionProofIsTrustedAndColdNeverReceivesWarmupKeys(t *testing.T
 	host := func() (Host, bool, bool) {
 		return Host{Engine: "WebKitGTK", Native: true, GOOS: "linux", WebKitVersion: "2.54.1", GTKVersion: "4.22.5"}, true, true
 	}
-	s := &Service{cfg: Config{Phase: "warm", Count: 30, RunID: "proof", Host: host}, run: Run{Host: Host{}}}
+	s := &Service{cfg: Config{Phase: "warm", Count: WarmSamples, RunID: "proof", Host: host}, run: Run{Host: Host{}}}
 	call := func(typ string, value any) error {
 		data, _ := json.Marshal(value)
 		_, err := s.receive(nil, typ, data)
@@ -136,7 +136,7 @@ func TestNativeHostVisibilityOverridesRendererClaim(t *testing.T) {
 	host := func() (Host, bool, bool) {
 		return Host{Engine: "WebKitGTK", Native: true, GOOS: "linux", WebKitVersion: "2.52", GTKVersion: "4.22"}, false, true
 	}
-	s, err := New(Config{Phase: "warm", Count: 30, Output: filepath.Join(t.TempDir(), "raw.json"), Host: host})
+	s, err := New(Config{Phase: "warm", Count: WarmSamples, Output: filepath.Join(t.TempDir(), "raw.json"), Host: host})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -161,7 +161,7 @@ func TestNativePreparationPrecedesRendererCapability(t *testing.T) {
 	prepared := false
 	c := &fakeConn{ctx: t.Context(), in: make(chan []byte, 2), out: make(chan []byte, 2)}
 	s, err := New(Config{
-		Phase: "warm", Count: 30, Output: filepath.Join(t.TempDir(), "raw.json"),
+		Phase: "warm", Count: WarmSamples, Output: filepath.Join(t.TempDir(), "raw.json"),
 		Host: func() (Host, bool, bool) {
 			return Host{Engine: "WebKitGTK", Native: true, GOOS: "linux", WebKitVersion: "2.54.1", GTKVersion: "4.22.5"}, true, true
 		},

@@ -35,13 +35,13 @@ func skipInWarm(t *testing.T, runs []Run, editor, null int) {
 
 func TestWarmEditorMissingMoreRefreshesThanNullFails(t *testing.T) {
 	runs := completeFrameFixture()
-	skipInWarm(t, runs, 12, 1)
+	skipInWarm(t, runs, 40, 1)
 	got := Validate(runs)
 	m := got.MissedRefresh
 	if got.Status != "fail" || !slices.Contains(got.Reasons, relativeMissReason) || m == nil || m.PValue >= missedRefreshAlpha {
-		t.Fatal("editor missing 12/30 vs NULL 1/30 passed", got.Reasons, m)
+		t.Fatal("editor missing 40/100 vs NULL 1/30 passed", got.Reasons, m)
 	}
-	if m.EditorMissed != 12 || m.EditorTrials != 30 || m.NullMissed != 1 || m.NullTrials != 30 || m.EditorRate != .4 || math.Abs(m.NullRate-1.0/30) > 1e-12 {
+	if m.EditorMissed != 40 || m.EditorTrials != WarmSamples || m.NullMissed != 1 || m.NullTrials != 30 || m.EditorRate != .4 || math.Abs(m.NullRate-1.0/30) > 1e-12 {
 		t.Fatalf("rates not published: %+v", m)
 	}
 }
@@ -70,7 +70,7 @@ func TestColdFirstPreviewPauseIsNotAMissedRefresh(t *testing.T) {
 		skipRefreshes(&runs[n].Samples[0], 300, 3) // one 64 ms pause: the first preview presentation
 	}
 	got := Validate(runs)
-	if got.Status != "pass" || got.DroppedFrames != 0 || got.MissedRefresh.ColdExempt != 30 || got.MissedRefresh.ColdMissed != 0 {
+	if got.Status != "pass" || got.DroppedFrames != 0 || got.MissedRefresh.ColdExempt != ColdReplicates || got.MissedRefresh.ColdMissed != 0 {
 		t.Fatal("cold first-preview pause counted as a missed refresh", got.Reasons, got.MissedRefresh)
 	}
 }

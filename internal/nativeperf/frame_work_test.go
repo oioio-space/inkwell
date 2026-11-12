@@ -47,7 +47,7 @@ func TestRawCollectionContinuesDespitePerformanceBudgetFailure(t *testing.T) {
 	s := rawSample()
 	s.Handlers[0].End = 109
 	s.Phase = "cold"
-	run := Run{Phase: "cold", ReplicateCount: 30, ReplicateIndex: 1, RunID: s.RunID, Samples: []Sample{s}}
+	run := Run{Phase: "cold", ReplicateCount: ColdReplicates, ReplicateIndex: 1, RunID: s.RunID, Samples: []Sample{s}}
 	if reasons := collectedFailures(run); len(reasons) != 0 {
 		t.Fatal("raw collection must not abort cold replication because a budget failed", reasons)
 	}

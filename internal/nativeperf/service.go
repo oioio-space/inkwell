@@ -71,11 +71,11 @@ func New(cfg Config) (*Service, error) {
 	if cfg.Phase != "cold" && cfg.Phase != "warm" {
 		return nil, errors.New("native phase must be cold or warm")
 	}
-	if cfg.Phase == "cold" && (cfg.Count != 1 || cfg.Replicates < 30 || cfg.Index < 1 || cfg.Index > cfg.Replicates) {
-		return nil, errors.New("cold requires one sample and a valid >=30-process replicate")
+	if cfg.Phase == "cold" && (cfg.Count != 1 || cfg.Replicates < ColdReplicates || cfg.Index < 1 || cfg.Index > cfg.Replicates) {
+		return nil, fmt.Errorf("cold requires one sample and a valid >=%d-process replicate", ColdReplicates)
 	}
-	if cfg.Phase == "warm" && cfg.Count < 30 {
-		return nil, errors.New("warm requires >=30 samples after controls")
+	if cfg.Phase == "warm" && cfg.Count < WarmSamples {
+		return nil, fmt.Errorf("warm requires >=%d samples after controls", WarmSamples)
 	}
 	if cfg.Host == nil || cfg.Output == "" {
 		return nil, errors.New("native host and raw output required")

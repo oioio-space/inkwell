@@ -33,6 +33,13 @@ func main() {
 			}
 			return
 		}
+		if reasons, ok := strings.CutPrefix(arg, "--native-perf-invalid="); ok {
+			// Written by the driver after three environment faults: invalid, never a pass.
+			if err := nativeperf.WriteReport(output, nativeperf.Invalid(nativeperf.InvalidReasons(reasons))); err != nil {
+				fmt.Fprintln(os.Stderr, err)
+			}
+			os.Exit(1)
+		}
 		if reason, ok := strings.CutPrefix(arg, "--native-perf-unavailable="); ok {
 			report := nativeperf.Validate(nil)
 			report.Reasons = append(report.Reasons, reason)
@@ -89,7 +96,8 @@ func main() {
 		app.Event.OnApplicationEvent(events.Common.ApplicationStarted, func(*application.ApplicationEvent) { window.Show(); window.Focus() })
 		collectionTimeout := 90 * time.Second
 		if config.Phase == "warm" {
-			collectionTimeout += time.Duration(nativeperf.NullCount) * 3 * time.Second
+			// The 90 s base covers the first 30 samples; every further trial (samples and NULL keystrokes) gets 3 s.
+			collectionTimeout += time.Duration(max(config.Count-30, 0)+nativeperf.NullCount) * 3 * time.Second
 		}
 		time.AfterFunc(collectionTimeout, func() { service.Expire("native webview did not complete evidence collection") })
 	})

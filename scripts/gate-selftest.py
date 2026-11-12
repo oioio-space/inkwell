@@ -241,7 +241,8 @@ with tempfile.TemporaryDirectory() as tmp:
     entry = json.loads((root / "gates/T.json").read_text())["criteria"][0]
     assert entry["exclusive"] is True and entry["exclusive_steps"][0]["load_before"], entry
 
-# baseline.py compares PERF-START with the archived limit instead of writing "pass".
+# baseline.py judges PERF-START by the paired, randomised rule of ADR 0038 (and its self-test, on synthetic pairs, starts no
+# process): an unchanged product passes, a x1.2 regression regresses, a wide run is invalid. Never a bare "pass".
 subprocess.run([sys.executable, str(HERE / "perf/baseline.py")], check=True,
                env=dict(os.environ, INKWELL_BASELINE_SELF_TEST="1"))
 print("gate self-test passed")

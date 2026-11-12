@@ -1,5 +1,5 @@
 ---
-status: proposed
+status: accepted
 date: 2026-11-11
 amends: docs/engineering-principles.md section 3 (performance proofs); gate L0 criterion `baseline` (PERF-START)
 decision-makers: [Mathieu]
@@ -61,6 +61,35 @@ option whose error rates are exact under any drift (derivation: plan section 3.3
 5. An environmental fault (port busy, focus lost, input delivery lost, activation failed, imprecise run) makes a run
    invalid; an invalid run is retried up to three times after cooling, then the criterion fails as invalid. A valid
    verdict is never retried. A server that does not become ready is a failure, not an invalid run.
+
+   **Amendment (2026-11-12): the invalid-run rule applies per start.** The absolute p95 budget is judged on the 80th of
+   80 starts, so a single start that coincides with a burst of another process (the gortex daemon: all CPUs for ~0.12 s
+   every ~7.7 s) fails a run whose paired verdict and median pass. The driver therefore records, for each start, the
+   background CPU of its window: the busy CPU of the machine (`/proc/stat`) minus the CPU of the run's cgroup v2
+   subtree (`cpu.stat` `usage_usec`), which holds the driver, the browser and, in a fresh cgroup per start joined
+   before the binary executes, the application. A process cannot leave its cgroup by forking or calling `setsid`, and
+   the cgroup keeps the CPU of reaped children, so a detached helper's CPU is the application's; whatever is left in a
+   start's cgroup is killed with it (`cgroup.kill`). A descendant of the driver moved out by a cgroup writer (Chromium puts
+   its browser process in its own systemd scope) is moved back before every start. Without a writable cgroup v2, or a
+   descendant that cannot be moved back, the attempt is invalid, never measured.
+   A start whose background CPU over its window exceeds 1.5 CPUs is invalid and is re-measured in its own slot, so the
+   randomised order is kept; the bound reads background CPU, never the duration. A run in which more than 20 % of the
+   plan's starts were invalid is invalid, never a pass, and the retry above applies. The discards must not depend on
+   the side: Fisher's exact test (two-sided) on the discarded and kept starts of A and B at level 1e-3 makes a
+   significant imbalance a failure, a suspected regression whose slowness lands outside the cgroup (a service the
+   application wakes), even when the 20 % cap stopped the run. The 350 ms and 400 ms limits and every other threshold
+   are unchanged. The bound is the quiet edge of 640 archived starts (none of the 535 at or below it exceeds 370 ms; all
+   49 over 400 ms are above it). At the bound, the model shows a false failure of the absolute check of at most 1e-3
+   and a false alarm of the side test of at most 1e-3 (7 in 30000 runs), while a truly slow application fails: +20 % on
+   every start and 10 % of slow starts with probability >= 0.99, 8 % and 12 % of slow starts in a detached helper with
+   probability >= 0.99 (judged exactly as the same slowness in the application's own process); 30 % of slow starts in
+   a service outside the cgroup pass in at most 1 % of the criteria. Derivation and limits: plan section 18.
+
+   **Native typing (2026-11-12).** An environment fault explains only what is missing: a native run whose other
+   reasons are all missing samples, controls or replicates is invalid; any genuine failure beside the fault (a budget
+   exceeded on the samples that were measured, an integrity check, an uncoded failure) makes it fail, with the fault
+   among its reasons. Focus taken by the product is not a fault: a window of the measured process or of one of its
+   descendants that takes the focus, or a focus moved inside the page, is a failure.
 
 ### Consequences
 

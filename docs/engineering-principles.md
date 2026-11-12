@@ -71,6 +71,7 @@ une relecture doit confirmer, pas découvrir. Avant toute relecture, l'auteur d'
 
 | Règle | Preuve |
 |---|---|
+| Une régression de performance se juge par comparaison appariée, entrelacée et aléatoire à la référence validée (merge-base), borne exacte unilatérale ; un budget absolu se certifie par statistique d'ordre ; une erreur d'environnement rend la mesure invalide et rejouée, jamais réussie ni régressée (ADR 0038) | bloc PB : `scripts/perf/paired.py`, `pbmodel_test.py`, porte `gates/PB.toml` |
 | Mesurer avant d'optimiser ; toute optimisation est prouvée par `benchstat` (`-count ≥ 10`) | `mise run bench:compare` ; paquets listés dans `HOT_PATHS:` (CLAUDE.md) |
 | Budgets explicites : frappe → affichage distant < 100 ms en LAN ; aperçu Typst < 300 ms après la dernière frappe ; démarrage < 1 s ; document de 50 000 opérations ouvert < 2 s | tests de charge et e2e (étapes 1, 3, 5) |
 | Pas d'allocation dans les boucles chaudes (relais d'updates, hachage de blobs) ; flux plutôt que `ReadAll` | `-benchmem` ; revue |

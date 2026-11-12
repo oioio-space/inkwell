@@ -17,14 +17,20 @@ Standard library only. Every number of the plan comes from here:
 * `quantile_upper_index` and `budget_verdict` are the absolute-budget rule: the distribution-free
   upper confidence bound of a quantile is an order statistic (David & Nagaraja, Order Statistics,
   section 7.1), so a p95 budget is certified only by enough samples, never by the p95 of 30.
-* The rule section moves verbatim to scripts/perf/paired.py; this model then imports it from there,
-  so the gate and the specification share one implementation.
+* The rule lives in scripts/perf/paired.py; this model imports it from there, so the gate and the
+  specification share one implementation.
+* `Bursts`, `bg_session` and `BG_MUTANTS` are the per-sample interference rule of the plan's section 18: a
+  background process that bursts every ~7.7 s, a start invalid above BG_SHARE_MAX CPUs of background and
+  re-measured (`slot_step`, the driver's rule), a run invalid above 20 % invalid starts, side-dependent
+  discards a failure (`discard_imbalance`), and the cgroup accounting of the measured set (a detached helper's
+  CPU is the application's).
 * `Env` and `session` are the measurement noise of this host, fitted to the nine startup sample sets
   on disk (`fit`): a lognormal bulk, independent or bursty contamination with the observed excesses or
   a Pareto tail, warm-up, linear drift, level steps, a carry-over between the two slots of a pair and
   AR(1) correlation. `MUTANTS` are the rules the plan rejects, among them the incumbent one.
 
-Commands: `fit` (the noise parameters of sample files), `report` (false failures and power of the
+Commands: `fit` (the noise parameters of sample files), `bgfit` and `threshold` (the burst process and the
+bound on background CPU: plan section 18), `report` (false failures and power of the
 rule and of every mutant), `calibrate` (the sample size sweep), `budget` (order-statistic table and
 operating characteristic of the absolute rule).
 """
@@ -32,7 +38,6 @@ operating characteristic of the absolute rule).
 from __future__ import annotations
 
 import argparse
-import functools
 import glob
 import json
 import math
@@ -42,109 +47,13 @@ import statistics
 import sys
 from dataclasses import dataclass, replace
 
-# ── The rule (moves verbatim to scripts/perf/paired.py) ──────────────────────────────────────────
+# ── The rule: one implementation, shared with the gate (scripts/perf/paired.py) ───────────────────
 
-MARGIN = math.log(1.10)  # thresholds.json e2e_multiplier: the 10 % budget, now an effect size
-ALPHA = 1e-3  # one-sided level of each bound: P(pass | true ratio 1.10) <= ALPHA per valid run
-PAIRS = 80  # judged pairs per run: the smallest N of `calibrate` whose "worst" environment ends invalid in <= 1e-3 of null runs
-WARMUP_PAIRS = 2  # dropped: first-sample excess +0.32 and +0.38 (log) in two of the nine sets
-ATTEMPTS = 3  # runs per criterion; only an invalid run is retried
-HALF_WIDTH_MAX = math.log(1.04)  # half the two-sided interval wider than 4 %: too imprecise to judge (plan 3.4)
-RISE = math.log(1.15)  # diagnostic only: a pair whose faster start is 15 % above the median minimum
-
-
-@functools.cache
-def signed_rank_cdf(n: int) -> tuple[float, ...]:
-    """Exact null distribution of the Wilcoxon signed-rank statistic T+ for n pairs: cdf[w] = P(T+ <= w).
-    Counting subsets of {1..n} by sum (integers, exact), then one division."""
-    top = n * (n + 1) // 2
-    counts = [1] + [0] * top
-    for k in range(1, n + 1):
-        for w in range(top, k - 1, -1):
-            counts[w] += counts[w - k]
-    total, acc, cdf = 2**n, 0, []
-    for c in counts:
-        acc += c
-        cdf.append(acc / total)
-    return tuple(cdf)
-
-
-def critical(n: int, alpha: float) -> int:
-    """The largest c with P(T+ <= c) <= alpha; -1 if even T+ = 0 is more likely than alpha."""
-    cdf = signed_rank_cdf(n)
-    c = -1
-    while c + 1 < len(cdf) and cdf[c + 1] <= alpha:
-        c += 1
-    return c
-
-
-def hl_bounds(d: list[float], alpha: float = ALPHA) -> tuple[float, float, float]:
-    """(lower, Hodges-Lehmann estimate, upper) of the centre of d. With W the M = n(n+1)/2 sorted Walsh
-    averages, U = W[M-1-c] and L = W[c] (0-based) satisfy P(U < theta) = P(L > theta) <= alpha when d
-    is symmetric about theta (Tukey: T+(theta) counts the Walsh averages above theta)."""
-    n = len(d)
-    c = critical(n, alpha)
-    if c < 0:
-        raise ValueError(f"{n} pairs cannot give a bound at alpha {alpha}")
-    w = sorted(x + y for i, x in enumerate(d) for y in d[i:])
-    m = len(w)
-    centre = (w[(m - 1) // 2] + w[m // 2]) / 4
-    return w[c] / 2, centre, w[m - 1 - c] / 2
-
-
-def paired_verdict(pairs: list[tuple[float, float]], alpha: float = ALPHA, margin: float = MARGIN) -> dict:
-    """pairs = [(reference ms, change ms)] after the warm-up pairs. Status pass, regression or invalid.
-
-    Validity comes first and depends only on precision: the half-width is unchanged by any shift of d,
-    so a slowdown never makes a run invalid. The bound's coverage does not depend on the check; the check
-    keeps an imprecise run from being called a regression (plan 3.4). `contaminated`, the share of pairs
-    whose faster start is disturbed, is symmetric in the labels and reported for diagnosis only."""
-    if not pairs or any(not (a > 0 and b > 0) for a, b in pairs):
-        raise ValueError("every start needs a positive duration")
-    minima = [min(a, b) for a, b in pairs]
-    floor = statistics.median(minima) * math.exp(RISE)
-    contaminated = sum(x > floor for x in minima) / len(pairs)
-    lower, centre, upper = hl_bounds([math.log(b / a) for a, b in pairs], alpha)
-    half = (upper - lower) / 2
-    if half > HALF_WIDTH_MAX:
-        status, reason = "invalid", "imprecise: the interval is too wide to judge the budget"
-    elif upper < margin:
-        status, reason = "pass", "upper bound of the median ratio below the budget"
-    else:
-        status, reason = "regression", "the change is not shown to stay within the budget"
-    return dict(status=status, reason=reason, pairs=len(pairs), alpha=alpha, budget=math.exp(margin),
-                ratio=math.exp(centre), lower=math.exp(lower), upper=math.exp(upper),
-                half_width=math.exp(half) - 1, contaminated=contaminated)
-
-
-def binomial_pmf(n: int, j: int, p: float) -> float:
-    """P(Binomial(n, p) = j), in log space so that no term overflows (n in the thousands)."""
-    if p in (0.0, 1.0):
-        return float(j == (0 if p == 0.0 else n))
-    return math.exp(math.lgamma(n + 1) - math.lgamma(j + 1) - math.lgamma(n - j + 1)
-                    + j * math.log(p) + (n - j) * math.log1p(-p))
-
-
-def quantile_upper_index(n: int, p: float = 0.95, confidence: float = 0.95) -> int | None:
-    """Smallest 1-based k with P(X_(k) >= x_p) = P(Binomial(n, p) <= k-1) >= confidence, for any
-    continuous distribution; None when no order statistic of n samples reaches the confidence."""
-    acc = 0.0
-    for j in range(n):
-        acc += binomial_pmf(n, j, p)
-        if acc >= confidence:
-            return j + 1
-    return None
-
-
-def budget_verdict(samples: list[float], budget: float, p: float = 0.95, confidence: float = 0.95) -> dict:
-    """An absolute budget on the p-quantile passes iff its distribution-free upper bound is within it."""
-    k = quantile_upper_index(len(samples), p, confidence)
-    if k is None:
-        raise ValueError(f"{len(samples)} samples cannot bound the {p} quantile at {confidence}")
-    bound = sorted(samples)[k - 1]
-    return dict(status="pass" if bound <= budget else "fail", bound=bound, order=k, samples=len(samples),
-                quantile=p, confidence=confidence, budget=budget)
-
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+from paired import (ALPHA, ATTEMPTS, BG_SHARE_MAX, HALF_WIDTH_MAX, IMBALANCE_ALPHA, INVALID_MAX, MARGIN,  # noqa: E402,F401
+                    MAX_TRIES, PAIRS, STARTUP_P95_MS, WARMUP_PAIRS, binomial_pmf, budget_verdict, critical,
+                    fisher_two_sided, hl_bounds, invalid_start, paired_verdict, quantile_upper_index,
+                    run_interfered, signed_rank_cdf, slot_step, startup_budget)
 
 # ── Noise of this host (fitted to the startup samples on disk, 2026-11-11) ────────────────────────
 
@@ -339,6 +248,237 @@ MUTANTS = {
     "fixed-order": (lambda rng, env, ch: criterion(rng, env, ch, design="fixed"), "carry", "power"),
 }
 
+# ── Background bursts and per-sample interference (plan « Per-sample interference ») ───────────────
+#
+# The host runs a daemon that bursts every ~7.7 s: for about 0.14 s all 20 CPUs are busy, with a lower
+# shoulder of 1-4 CPUs around the peak. A start that meets it gets slower in proportion to the CPU the
+# burst took during its window. The driver measures that CPU (`bg_share`, in CPUs), and the rule calls a
+# start invalid, and re-measures it in its slot, when it exceeds BG_SHARE_MAX. The constants below are
+# fitted to the four archived A/A sets of docs/perf/2026-11-12-start-bg (`python3 pbmodel.py bgfit`);
+# BgFit.test_constants_match_disk refits them.
+
+BG_ARCHIVE = os.path.join(HERE, "..", "..", "docs", "perf", "2026-11-12-start-bg")
+SLOT_S = 0.63  # one slot: 164 starts in 104 s, cooling and tear-down included
+BG_BASE, BG_SD = 1.27, 0.096  # CPUs used by everything else in a quiet window: median and robust sd
+BG_HIT = BG_SHARE_MAX  # a share above this is a burst hit (535 of 640 starts are at or below it, and none above 370 ms)
+BG_SLOPE_MS = 41.4  # wall-clock cost of one CPU of background over the window: median of (ms - 329) / (share - BASE) over the 105 hits
+# (quartiles about 33 and 62: the stressed environment uses 1.5 x). Residual sd 23 ms for shares 1.5-3 (65 hits), 39 ms for 3-6, 120 ms above (the peaks).
+BG_PEAK_ABOVE = 6.0  # share of a start that holds the whole peak: 31 starts at 6.3-10.2 CPUs (mode 9.4)
+
+
+def fit_bg(paths: list[str]) -> dict:
+    """The statistics the burst model is fitted to, from the archived A/A sets (judged starts only)."""
+    rows = []
+    for path in paths:
+        with open(path) as f:
+            rows += [(x["bg_share"], x["ms"]) for x in json.load(f)["slots"] if not x["warmup"]]
+    quiet = [(sh, ms) for sh, ms in rows if sh <= BG_HIT]
+    base = statistics.median(sh for sh, _ in quiet)
+    level = statistics.median(ms for _, ms in quiet)
+    hits = [(sh, ms) for sh, ms in rows if sh > BG_HIT]
+    shares = sorted(sh for sh, _ in rows)
+    return dict(starts=len(rows), base=base, sd=1.4826 * statistics.median(abs(sh - base) for sh, _ in quiet),
+                level_ms=level, quiet_max_ms=max(ms for _, ms in quiet),
+                hit_rate=len(hits) / len(rows), peak_rate=sum(sh > BG_PEAK_ABOVE for sh, _ in rows) / len(rows),
+                shoulder_rate=sum(BG_HIT < sh <= 2.5 for sh, _ in rows) / len(rows),
+                slope_ms=statistics.median((ms - level) / (sh - base) for sh, ms in hits),
+                p99=shares[int(0.99 * len(shares))])
+
+
+def simulated_bg(runs: int = 60, bursts: "Bursts | None" = None) -> dict:
+    """The same statistics of the model, without invalidation, on `runs` runs."""
+    rng, trace = random.Random("bgfit"), []
+    for _ in range(runs):
+        bg_session(rng, BG_ENV, bursts or Bursts(), limit=math.inf, trace=trace)
+    shares = sorted(sh for sh, _ in trace)
+    n = len(shares)
+    return dict(starts=n, hit_rate=sum(x > BG_HIT for x in shares) / n, peak_rate=sum(x > BG_PEAK_ABOVE for x in shares) / n,
+                shoulder_rate=sum(BG_HIT < x <= 2.5 for x in shares) / n, p99=shares[int(0.99 * n)])
+
+
+@dataclass(frozen=True)
+class Bursts:
+    """The background process: a cycle of `period_s` (12.2 slots between peaks in the sets), firing with
+    probability `fire`; a fired cycle is a peak (`core_cpus` for `core_s`, 2.7 CPU-s: the 9.4 CPUs of a
+    start that holds it) with a shoulder of `shoulder_cpus` for `shoulder_s` on each side."""
+
+    period_s: float = 7.7
+    fire: float = 1.0
+    core_s: float = 0.12
+    core_cpus: float = 20.0
+    shoulder_s: float = 0.4
+    shoulder_cpus: float = 1.25
+    jitter_s: float = 0.15
+
+
+def overlap(a0: float, a1: float, b0: float, b1: float) -> float:
+    return max(0.0, min(a1, b1) - max(a0, b0))
+
+
+def burst_cycles(rng: random.Random, b: Bursts, span_s: float) -> list[tuple[float, bool]]:
+    """(peak start time, fired) of every cycle across span_s, with a random phase."""
+    t = rng.uniform(0, b.period_s)
+    out = []
+    while t < span_s + b.period_s:
+        out.append((t + rng.gauss(0, b.jitter_s), rng.random() < b.fire))
+        t += b.period_s
+    return out
+
+
+def burst_cpu(cycles, b: Bursts, t0: float, t1: float) -> float:
+    """CPU-seconds the bursts took in [t0, t1]."""
+    total = 0.0
+    for c, fired in cycles:
+        if fired and c - b.shoulder_s < t1 and t0 < c + b.core_s + b.shoulder_s:
+            total += b.core_cpus * overlap(t0, t1, c, c + b.core_s)
+            total += b.shoulder_cpus * (overlap(t0, t1, c - b.shoulder_s, c) + overlap(t0, t1, c + b.core_s, c + b.core_s + b.shoulder_s))
+    return total
+
+
+def burst_end(cycles, b: Bursts, t: float) -> float:
+    """The time at which no burst covers t any more (t itself when none does)."""
+    for c, fired in cycles:
+        if fired and c - b.shoulder_s <= t < c + b.core_s + b.shoulder_s:
+            return c + b.core_s + b.shoulder_s
+    return t
+
+
+def hit_slowdown_ms(rng: random.Random, extra_share: float, stress: float = 1.0) -> float:
+    """Wall-clock cost of a start that shared its window with `extra_share` CPUs of background burst: the
+    fitted slope, scaled by `stress`, with the fitted residual (ramped in over the first 0.4 CPUs)."""
+    if extra_share <= 0:
+        return 0.0
+    sd = 23.0 if extra_share < 1.7 else 39.0 if extra_share < 4.7 else 120.0
+    return max(0.0, stress * BG_SLOPE_MS * extra_share + rng.gauss(0, sd * min(1.0, extra_share / 0.4)))
+
+
+HELPER_CPUS = 8.0  # background share added to a slow start whose CPU the accounting does not see
+
+
+def driver_step(share: float, ms: float, tries: int, discarded: int, planned: int, rule: dict) -> str:
+    """The driver's per-start decision: paired.slot_step, which reads the share only (start.cjs runs its twin)."""
+    return slot_step(share, tries, discarded, planned, rule)
+
+
+def bg_session(rng: random.Random, env: Env, bursts: Bursts | None, *, limit: float | None = BG_SHARE_MAX,
+               cap: float = INVALID_MAX, step=driver_step, side_test: bool = True, accounting: str = "cgroup",
+               slow: float = 0.0, slow_factor: float = 1.35, where: str = "app", level: float = 1.0,
+               median_ms: float = 330.0, stress: float = 1.0, pairs: int = PAIRS, trace: list | None = None) -> dict:
+    """One run of the per-sample rule as start.cjs applies it: warm-up + judged pairs in random order, each slot
+    measured until `step` keeps its start (paired.slot_step: at most MAX_TRIES, with a wait for quiet in between,
+    the run interfered when more than `cap` of the plan's slots were invalid), then the side test of the discards.
+    `slow` is the share of B starts that are `slow_factor` slower; `where` is where that slowness spends its CPU:
+    "app" (the application's own process), "helper" (a detached helper: inside the start's cgroup under the
+    "cgroup" accounting, outside the measured set under the old process-tree accounting, "tree"), or "outside"
+    (a service outside the cgroup that the application wakes, background under any accounting). CPU the
+    accounting does not see adds HELPER_CPUS to the start's background share. `level` multiplies every B start
+    (a uniformly slow application). `trace` collects (share, ms) of every measurement. Returns the judged B
+    starts, the discards and kept starts per side, the side test and whether the run is interfered."""
+    rule = dict(bg_share_max=limit, invalid_max=cap, max_tries=MAX_TRIES)
+    unseen = where == "outside" or (where == "helper" and accounting == "tree")
+    total = pairs + WARMUP_PAIRS
+    planned = 2 * total
+    off = environment(rng, env, planned * MAX_TRIES)
+    cycles = burst_cycles(rng, bursts, planned * (SLOT_S + 1) * MAX_TRIES) if bursts else []
+    t, k = rng.uniform(0, 5.0), 0
+    kept_b, interfered = [], False
+    dropped, kept = {"a": 0, "b": 0}, {"a": 0, "b": 0}
+    for pair in range(total):
+        order = ("a", "b") if rng.random() < 0.5 else ("b", "a")
+        for side in order:
+            for tries in range(1, MAX_TRIES + 1):
+                v = off[k]
+                k += 1
+                ms = median_ms * math.exp(v)
+                is_slow = side == "b" and rng.random() < slow
+                if side == "b":
+                    ms *= level * (slow_factor if is_slow else 1.0)
+                w = ms / 1000
+                extra = burst_cpu(cycles, bursts, t, t + w) / w if bursts else 0.0
+                ms += hit_slowdown_ms(rng, extra, stress)
+                share = max(0.8, rng.gauss(BG_BASE, BG_SD)) + extra + (HELPER_CPUS if unseen and is_slow else 0.0)
+                decision = step(share, ms, tries, dropped["a"] + dropped["b"], planned, rule)
+                if trace is not None:
+                    trace.append((share, ms))
+                t += SLOT_S
+                if decision == "keep":
+                    break
+                dropped[side] += 1
+                if decision != "retry":
+                    interfered = True
+                    break
+                t = burst_end(cycles, bursts, t) + 0.4 if bursts else t + 0.4
+            if interfered:
+                break
+            kept[side] += 1
+            if side == "b" and pair >= WARMUP_PAIRS:
+                kept_b.append(ms)
+        if interfered:
+            break
+    p = fisher_two_sided(dropped["a"], kept["a"], dropped["b"], kept["b"])
+    return dict(b=kept_b, invalid=dropped["a"] + dropped["b"], discarded=dropped, kept=kept, p=p,
+                imbalanced=side_test and p <= IMBALANCE_ALPHA, interfered=interfered, planned=planned)
+
+
+def bg_outcome(session: dict, check=None) -> str:
+    """'fail' when the discards depend on the side (a suspected regression, even if the cap stopped the run),
+    'invalid' for an interfered run, else the absolute startup budget: pass or fail."""
+    if session["imbalanced"]:
+        return "fail"
+    if session["interfered"]:
+        return "invalid"
+    return "pass" if (check or startup_budget)(session["b"])["status"] == "pass" else "fail"
+
+
+def bg_criterion(rng: random.Random, env: Env, bursts, *, check=None, **kw) -> tuple[str, int]:
+    """Up to ATTEMPTS runs; an invalid run is retried, a valid outcome is final."""
+    for attempt in range(1, ATTEMPTS + 1):
+        status = bg_outcome(bg_session(rng, env, bursts, **kw), check)
+        if status != "invalid":
+            return status, attempt
+    return "invalid", ATTEMPTS
+
+
+BG_ENV = Env("bg", eps=0.0, warmup=0.0)  # the bulk of the fitted environment; its contamination is the bursts
+
+
+def p95_check(b: list[float]) -> dict:
+    """The absolute p95 budget alone: the 80th of 80 starts within STARTUP_P95_MS."""
+    return budget_verdict(b, STARTUP_P95_MS, p=0.95)
+
+
+def bg_rates(runs: int, seed: str, *, bursts: "Bursts | None" = None, check=None, env: Env = BG_ENV,
+             limit: float | None = BG_SHARE_MAX, **kw) -> dict:
+    """pass / fail / invalid of `runs` criteria (up to ATTEMPTS runs each) under the per-sample rule, at the
+    gate's bound unless `limit` says otherwise."""
+    counts = {"pass": 0, "fail": 0, "invalid": 0}
+    for r in range(runs):
+        counts[bg_criterion(random.Random(f"{seed}:{r}"), env, bursts or Bursts(), check=check, limit=limit, **kw)[0]] += 1
+    return dict(runs=runs, **counts)
+
+
+# What a truly slow application looks like: every start 20 % slower; one B start in ten 35 % slower in its own
+# process (not correlated with any burst); 4, 8 or 12 % of the B starts 35 % slower in a detached helper (setsid,
+# double fork), which the cgroup keeps in the measured set; three in ten slower in a service outside the cgroup
+# that the application wakes, which the driver can only see as background CPU.
+BG_SCENARIOS = {
+    "slow-all+20%": dict(level=1.20),
+    "slow-10%": dict(slow=0.10),
+    **{f"{where}-{pct}%": dict(slow=pct / 100, where=where) for where in ("app", "helper") for pct in (4, 8, 12)},
+    "outside-30%": dict(slow=0.30, where="outside"),
+}
+BG_MUTANTS = {
+    # name: (rule override, the scenario that rejects it or "false" for the null, the outcome that shows the
+    # violation, what it violates). The rule gives that outcome clearly less often than the mutant.
+    "no-invalidation": (dict(limit=None), "false", "fail", "false failures"),
+    "wall-time": (dict(step=lambda share, ms, *a: slot_step(math.inf if ms > STARTUP_P95_MS else 0.0, *a)), "slow-10%",
+                  "pass", "a slow application passes"),
+    "tree-accounting": (dict(accounting="tree"), "helper-12%", "pass", "a detached helper hides the slowness"),
+    "no-cap": (dict(cap=math.inf), "outside-30%", "pass", "a slowness outside the cgroup passes"),
+    "no-side-test": (dict(side_test=False), "outside-30%", "invalid", "side-dependent discards end invalid, not failed"),
+}
+
+
 # ── Simulation ──────────────────────────────────────────────────────────────────────────────────
 
 
@@ -425,16 +565,41 @@ def budget(runs: int) -> dict:
     return dict(order_statistic=table, false_failure=oc)
 
 
+def threshold(runs: int) -> dict:
+    """The sweep behind BG_SHARE_MAX: per bound, the false failures of the absolute p95 check among the runs
+    that are not interfered, and the runs interfered, on the fitted bursts and on stressed ones (a longer,
+    stronger shoulder and a 1.5 x slope)."""
+    cases = {"fitted": (Bursts(), 1.0), "stressed": (Bursts(shoulder_s=0.6, shoulder_cpus=1.5), 1.5)}
+    out = {}
+    for name, (bursts, stress) in cases.items():
+        for limit in (1.4, 1.45, 1.5, 1.55, 1.6, 1.75, 2.0, 2.5, math.inf):
+            rng = random.Random(f"threshold/{name}/{limit}")
+            fail = interfered = 0
+            for _ in range(runs):
+                s = bg_session(rng, BG_ENV, bursts, limit=limit, stress=stress)
+                interfered += s["interfered"]
+                fail += not s["interfered"] and p95_check(s["b"])["status"] != "pass"
+            out[f"{name}/{limit}"] = dict(false_failure=fail, interfered=interfered, runs=runs)
+    return out
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.split("\n\n")[0])
     sub = parser.add_subparsers(dest="cmd", required=True)
     f = sub.add_parser("fit")
     f.add_argument("paths", nargs="*")
+    g = sub.add_parser("bgfit")
+    g.add_argument("paths", nargs="*")
+    sub.add_parser("threshold").add_argument("--runs", type=int, default=3000)
     for name in ("report", "calibrate", "budget", "curve"):
         sub.add_parser(name).add_argument("--runs", type=int, default=3000)
     args = parser.parse_args(argv)
     if args.cmd == "fit":
         result = fit(args.paths or sorted(glob.glob(os.path.join(ARCHIVE, "*.json"))))
+    elif args.cmd == "bgfit":
+        result = dict(archive=fit_bg(args.paths or sorted(glob.glob(os.path.join(BG_ARCHIVE, "set-*.json")))), model=simulated_bg())
+    elif args.cmd == "threshold":
+        result = threshold(args.runs)
     else:
         result = {"report": report, "calibrate": calibrate, "budget": budget, "curve": operating_curve}[args.cmd](args.runs)
     json.dump(result, sys.stdout, indent=1, default=str)

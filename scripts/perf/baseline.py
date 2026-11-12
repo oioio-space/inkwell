@@ -5,25 +5,37 @@ import os
 from pathlib import Path
 import platform
 import math
+import shutil
 import subprocess
+import sys
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import paired  # noqa: E402
+import refbuild  # noqa: E402
 
 THRESHOLDS = Path("docs/perf/baseline/2026-11-02/thresholds.json")
+WORK = Path(".task/perf/paired")  # binaries and homes of the two sides: equal-length paths, outside the evidence folder
+PORT = 39128
 
 
-def start_verdict(measurement, thresholds):
-    """Compare a fresh PERF-START p95 with the archived limit (baseline p95 x 1.10)."""
-    rule = thresholds["e2e"]["PERF-START"]
-    p95, limit = measurement["p95_ms"], rule["limit_p95_ms"]
-    assert isinstance(p95, (int, float)) and p95 >= 0, measurement
-    return {"status": "pass" if p95 <= limit else "fail", "p95_ms": p95, "limit_p95_ms": limit,
-            "baseline_p95_ms": rule["baseline_p95_ms"]}
+def start_record(ref, branch_sha, result):
+    """The PERF-START entry (ADR 0038): the paired verdict against the merge-base build, then the absolute
+    startup budget on the change's judged starts. Both must pass; only invalid attempts were retried."""
+    budget = result.get("budget")
+    ok = result["outcome"] == "pass" and budget is not None and budget["status"] == "pass"
+    status = "pass" if ok else "invalid" if result["outcome"] == "invalid" else "fail"
+    return {"status": status, "design": "paired-randomized", "scope": "Today's app cold process, server build to usable editor; "
+            "prelaunched Chromium and warm OS caches, not native window timing.", "plugins": 0,
+            "reference": {k: ref[k] for k in ("commit", "cache_digest", "sha256", "cache_hit", "build_seconds")},
+            "branch": {"sha256": branch_sha}, "identity": ref["sha256"] == branch_sha,
+            "outcome": result["outcome"], "reasons": result["reasons"],
+            "attempts": result["attempts"], "interference": result.get("interference"),
+            "verdict": result["verdict"], "budget": budget,
+            "e2e_multiplier": json.loads(THRESHOLDS.read_text())["e2e_multiplier"]}
 
 
 if os.environ.get("INKWELL_BASELINE_SELF_TEST") == "1":
-    limits = {"e2e": {"PERF-START": {"limit_p95_ms": 110, "baseline_p95_ms": 100}}}
-    assert start_verdict({"p95_ms": 110}, limits)["status"] == "pass"
-    assert start_verdict({"p95_ms": 110.01}, limits)["status"] == "fail"
-    print("baseline self-test passed")
+    print("baseline self-test passed: " + paired.self_test())
     raise SystemExit(0)
 
 out = Path(os.environ.get("INKWELL_PERF_OUT", "gates/L0"))
@@ -60,14 +72,17 @@ for path in (corpus / "automerge").glob("*"):
     "text_bytes": 2097152, "text_characters": 2097152, "automerge_operations": 50000,
     "memory_blobs": "blobs/00.bin through blobs/19.bin (20 MiB)",
     "git_benchmark_blobs": "all 50 blobs (50 MiB)", "files": files}, indent=2)+"\n")
-commands = [
-    ["pnpm", "--config.verifyDepsBeforeRun=false", "--dir", "frontend", "exec", "vite", "build", "--configLoader", "runner", "--mode", "production", "--outDir", "dist"],
-    ["go", "build", "-tags", "server", "-o", "bin/inkwell-server", "./cmd/inkwell"],
-    ["node", "scripts/perf/browser.cjs"],
-    ["node", "scripts/perf/start.cjs"],
-]
+# The change under test is built by the function that builds the reference (refbuild.build_server): one
+# command vector for both sides. bin/inkwell-server stays the artefact of the other L0 steps.
 attempts = []
-for i, command in enumerate(commands):
+try:
+    with (out / "browser-attempt-0.log").open("w") as log:
+        refbuild.build_server(Path.cwd(), Path("bin/inkwell-server"), log=log)
+    attempts.append({"command": ["refbuild.build_server", "bin/inkwell-server"], "exit_code": 0})
+except refbuild.ReferenceBuildError as error:
+    raise SystemExit(f"baseline command failed: {error}")
+commands = [["node", "scripts/perf/browser.cjs"]]
+for i, command in enumerate(commands, 1):
     with (out / f"browser-attempt-{i}.log").open("w") as log:
         result = subprocess.run(command, stdout=log, stderr=subprocess.STDOUT)
     attempts.append({"command": command, "exit_code": result.returncode})
@@ -83,12 +98,30 @@ report = {
     # This script compares nothing for PM-5: the verdict is the regression-guard criterion.
     "PM-5": {"status": "measured", "verdict": "gate criterion regression-guard (scripts/perf/regression.py --bench)",
              "thresholds": "docs/perf/baseline/2026-11-02/thresholds.json"}}
-if len(attempts) != len(commands) or any(a["exit_code"] for a in attempts):
+if len(attempts) != len(commands) + 1 or any(a["exit_code"] for a in attempts):
     raise SystemExit("baseline command failed")
-report["PERF-START"]["measurement"] = json.loads((out / "start.json").read_text())
-report["PERF-START"].update(start_verdict(report["PERF-START"]["measurement"], json.loads(THRESHOLDS.read_text())))
+# PERF-START, paired (ADR 0038): the merge-base build (cached by commit and toolchain), then 2 + 80 pairs in a
+# random order, then the absolute startup budget. The hot path of every later gate.
+try:
+    reference = refbuild.ensure_reference(Path.cwd(), refbuild.default_cache())
+except refbuild.ReferenceBuildError as error:
+    raise SystemExit(f"reference build failed: {error}")
+shutil.rmtree(WORK, ignore_errors=True)
+for side, source in (("a", reference["binary"]), ("b", "bin/inkwell-server")):
+    (WORK / side).mkdir(parents=True)
+    shutil.copy2(source, WORK / side / refbuild.BINARY)
+branch_sha = refbuild.sha256(WORK / "b" / refbuild.BINARY)
+# Equal-length paths and environment values on both sides: directories differ by one letter.
+measured = paired.run_criterion(out, str(WORK / "a" / refbuild.BINARY), str(WORK / "b" / refbuild.BINARY), port=PORT, work=WORK)
+final_slots = json.loads(Path(measured["attempts"][-1]["raw"]).read_text())["slots"]
+report["PERF-START"] = start_record(reference, branch_sha, measured)
+samples = [b for _, b in paired.judged_pairs(final_slots)]
+if samples:
+    report["PERF-START"]["measurement"] = {"samples_ms": samples, "p95_ms": sorted(samples)[math.ceil(len(samples) * 0.95) - 1],
+                                           "plugins": 0, "scope": report["PERF-START"]["scope"]}
+    (out / "start.json").write_text(json.dumps(report["PERF-START"]["measurement"], indent=2))
 diagnostic = out / "type-diagnostic.json"
-if diagnostic.exists() and len(attempts) == len(commands) and attempts[-1]["exit_code"] == 0:
+if diagnostic.exists():
     data = json.loads(diagnostic.read_text())
     durations = [max((e["duration"] for e in s["events"]), default=None) for s in data["samples"]]
     bounds = sorted(max([e["duration"] + 4 for e in sample["events"]] or [16]) for sample in data["samples"])

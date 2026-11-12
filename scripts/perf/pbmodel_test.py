@@ -8,6 +8,7 @@ Run from the repository root: ./scripts/heavy.sh timeout 900 python3 -m unittest
 """
 
 import glob
+import inspect
 import importlib.util
 import itertools
 import json
@@ -203,6 +204,120 @@ class Mutants(unittest.TestCase):
             else:
                 r = m.rates(runner, env, SLOW, RUNS, f"mutant/{name}")
                 self.assertLess(m.clopper_pearson(RUNS - r["pass"], RUNS)[1], 0.99, (name, r))
+
+
+class Interference(unittest.TestCase):
+    """Plan section 18: per-sample interference. A start whose background CPU exceeds BG_SHARE_MAX is invalid and
+    re-measured; a run with more than 20 % invalid starts is invalid, never a pass."""
+
+    BG_RUNS = 12000  # 0 to 6 failures in 12000 runs bound a rate by 1e-3 (95 %)
+    SLOW_RUNS = 1000  # 0 passes in 1000 runs bound the pass rate by 0.0030: power >= 0.997
+
+    @classmethod
+    def setUpClass(cls):
+        cls.paths = sorted(glob.glob(os.path.join(m.BG_ARCHIVE, "set-*.json")))
+        cls.fit = m.fit_bg(cls.paths)
+
+    def test_archive_is_sealed(self):
+        """The four sets are the ones the constants were fitted to (SHA256SUMS next to them)."""
+        with open(os.path.join(m.BG_ARCHIVE, "SHA256SUMS")) as f:
+            sums = dict(reversed(line.split()) for line in f)
+        self.assertEqual(sorted(sums), [os.path.basename(p) for p in self.paths])
+        import hashlib
+        for path in self.paths:
+            with open(path, "rb") as f:
+                self.assertEqual(hashlib.sha256(f.read()).hexdigest(), sums[os.path.basename(path)], path)
+
+    def test_constants_match_disk(self):
+        """The burst constants are the refit of the archive, and the model reproduces its share statistics."""
+        self.assertEqual(self.fit["starts"], 640)
+        self.assertAlmostEqual(self.fit["base"], m.BG_BASE, delta=0.01)
+        self.assertAlmostEqual(self.fit["sd"], m.BG_SD, delta=0.005)
+        self.assertAlmostEqual(self.fit["slope_ms"], m.BG_SLOPE_MS, delta=0.5)
+        sim = m.simulated_bg()
+        self.assertAlmostEqual(sim["hit_rate"], self.fit["hit_rate"], delta=0.02)
+        self.assertAlmostEqual(sim["peak_rate"], self.fit["peak_rate"], delta=0.01)
+        self.assertAlmostEqual(sim["shoulder_rate"], self.fit["shoulder_rate"], delta=0.015)
+        self.assertAlmostEqual(sim["p99"], self.fit["p99"], delta=0.5)
+
+    def test_bound_is_the_quiet_edge(self):
+        """BG_SHARE_MAX is where the archive says no start is slowed: every start at or below it is within the
+        p95 budget with 25 ms to spare, and every start above 400 ms is above it."""
+        rows = []
+        for path in self.paths:
+            with open(path) as f:
+                rows += [(x["bg_share"], x["ms"]) for x in json.load(f)["slots"] if not x["warmup"]]
+        self.assertEqual(m.BG_HIT, m.BG_SHARE_MAX)
+        self.assertLess(max(ms for sh, ms in rows if sh <= m.BG_SHARE_MAX), m.STARTUP_P95_MS - 25)
+        self.assertTrue(all(sh > m.BG_SHARE_MAX for sh, ms in rows if ms > m.STARTUP_P95_MS))
+        invalid = sum(sh > m.BG_SHARE_MAX for sh, _ in rows) / len(rows)
+        self.assertLess(invalid, m.INVALID_MAX)  # on average; a session can approach the cap (plan 18.4)
+
+    def test_no_false_failure_under_bursts(self):
+        """The absolute p95 check (80th of 80 starts within 400 ms) on a null application, on the fitted
+        bursts at the gate's bound: false failure <= 1e-3 among the runs not interfered (95 % bound)."""
+        fail = interfered = 0
+        rng = random.Random("bg/null")
+        for _ in range(self.BG_RUNS):
+            s = m.bg_session(rng, m.BG_ENV, m.Bursts(), limit=m.BG_SHARE_MAX)
+            interfered += s["interfered"]
+            fail += not s["interfered"] and m.p95_check(s["b"])["status"] != "pass"
+        self.assertLessEqual(m.clopper_pearson(fail, self.BG_RUNS)[1], 1e-3, (fail, interfered))
+        self.assertLess(interfered, self.BG_RUNS // 100)
+
+    SIDE_RUNS = 30000  # the side test's own false alarm, certified <= 1e-3 at 95 % (plan 18.2)
+
+    def test_side_test_false_alarm_under_bursts(self):
+        """On a null application the bound is label-blind, so Fisher's test of the discards per side (two-sided,
+        IMBALANCE_ALPHA 1e-3) rarely fires: <= 1e-3 of the runs (95 % bound), retries in a slot included."""
+        rng = random.Random("bg/side")
+        alarms = sum(m.bg_session(rng, m.BG_ENV, m.Bursts(), limit=m.BG_SHARE_MAX)["imbalanced"] for _ in range(self.SIDE_RUNS))
+        self.assertEqual(m.IMBALANCE_ALPHA, 1e-3)
+        self.assertLessEqual(m.clopper_pearson(alarms, self.SIDE_RUNS)[1], 1e-3, alarms)
+
+    def test_model_runs_the_gate_bound(self):
+        """bg_session and bg_rates default to BG_SHARE_MAX (review 2026-11-12: bg_rates once ran 2.0)."""
+        for f in (m.bg_session, m.bg_rates):
+            self.assertEqual(inspect.signature(f).parameters["limit"].default, m.BG_SHARE_MAX, f.__name__)
+        self.assertIs(m.slot_step, sys.modules["paired"].slot_step)
+
+    def test_truly_slow_application_still_fails(self):
+        """At the gate's bound: +20 % on every start, one B start in ten 35 % slower: fail, power >= 0.99. 4, 8 and
+        12 % of the B starts 35 % slower in a detached helper: the cgroup keeps the helper in the measured set, so
+        the run is judged exactly as when the slowness is in the application's own process (same seeds, same
+        outcomes), power >= 0.99 at 8 and 12 %; at 4 % no slow start falls in the 80 judged ones in 0.96^80 = 3.8 %
+        of the runs, so the absolute p95 check fails 96 % of them (power >= 0.93). 30 % slower in a service outside
+        the cgroup: the cap and the side test leave a pass in <= 1 % of the criteria, mostly failed by the side test."""
+        limit = m.BG_SHARE_MAX
+        for name in ("slow-all+20%", "slow-10%", "app-8%", "app-12%"):
+            r = m.bg_rates(self.SLOW_RUNS, f"bg/{name}", limit=limit, **m.BG_SCENARIOS[name])
+            self.assertGreaterEqual(power_lower(r["pass"], self.SLOW_RUNS), 0.99, (name, r))
+            self.assertEqual(r["invalid"], 0, (name, r))  # a visible slowness is judged, not discarded
+        for pct, power in ((4, 0.93), (8, 0.99), (12, 0.99)):
+            app = m.bg_rates(self.SLOW_RUNS, f"bg/detached-{pct}", limit=limit, **m.BG_SCENARIOS[f"app-{pct}%"])
+            helper = m.bg_rates(self.SLOW_RUNS, f"bg/detached-{pct}", limit=limit, **m.BG_SCENARIOS[f"helper-{pct}%"])
+            self.assertEqual(helper, app, pct)
+            self.assertGreaterEqual(power_lower(helper["pass"], self.SLOW_RUNS), power, (pct, helper))
+        r = m.bg_rates(self.SLOW_RUNS, "bg/outside-30%", limit=limit, **m.BG_SCENARIOS["outside-30%"])
+        self.assertLess(m.clopper_pearson(r["pass"], self.SLOW_RUNS)[1], 0.01, r)
+        self.assertGreater(m.clopper_pearson(r["fail"], self.SLOW_RUNS)[0], 0.8, r)
+
+    def test_every_mutant_is_rejected(self):
+        """No invalidation fails an unchanged application; invalidating on wall time lets a 10 % share of slow
+        starts pass; the process-tree accounting lets a detached helper's slow starts pass; without the 20 % cap a
+        slowness outside the cgroup passes; without the side test it ends invalid instead of failed. Each mutant
+        shows its outcome clearly more often than the rule (disjoint 95 % bounds)."""
+        limit = m.BG_SHARE_MAX
+        for name, (rule, scenario, bad, _) in m.BG_MUTANTS.items():
+            if scenario == "false":
+                r = m.bg_rates(self.SLOW_RUNS, f"mutant/{name}", check=m.p95_check, **dict(dict(limit=limit), **rule))
+                self.assertGreater(m.clopper_pearson(r[bad], self.SLOW_RUNS)[0], 1e-3, (name, r))
+                continue
+            kw = m.BG_SCENARIOS[scenario]
+            base = m.bg_rates(self.SLOW_RUNS, f"mutant/{name}", limit=limit, **kw)
+            r = m.bg_rates(self.SLOW_RUNS, f"mutant/{name}", **dict(dict(limit=limit, **kw), **rule))
+            self.assertLess(m.clopper_pearson(base[bad], self.SLOW_RUNS)[1], m.clopper_pearson(r[bad], self.SLOW_RUNS)[0],
+                            (name, base, r))
 
 
 class Budget(unittest.TestCase):

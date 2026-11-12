@@ -15,6 +15,7 @@ import (
 	"path/filepath"
 	"slices"
 	"sort"
+	"strings"
 )
 
 // StreamName exists only in the explicitly tagged native performance harness.
@@ -23,6 +24,57 @@ const StreamName = "native-perf"
 // ControlKinds lists the positive-control kinds a run is expected to cover,
 // one sample per kind.
 var ControlKinds = []string{"handler", "layout", "early-raf", "measure", "document", "task", "deferred"}
+
+// WarmSamples and ColdReplicates are the sample sizes at which a p95 budget is certified at 95 % confidence by
+// its order-statistic upper bound (quantileUpperIndex): 100 warm keystrokes (the bound is the second largest) and
+// 59 fresh cold processes (the maximum). User decision 2026-11-11, ADR 0038; thirty samples never certify a p95.
+const (
+	WarmSamples    = 100
+	ColdReplicates = 59
+)
+
+// An environment fault is a failure of the host, not of the product: focus lost to another program, a key not
+// delivered, the window not activated, a permission dialog. A fault explains only what is missing (samples,
+// controls, replicates): a run whose other reasons are all of that kind is invalid (retried with a fresh raw
+// directory), never a pass; any genuine failure beside it (a budget exceeded on the samples that were
+// measured, an integrity check, an uncoded failure) makes the run fail, with the fault among its reasons. The
+// frontend and the driver tag the fault in the failure text as "[fault:<code>]"; the driver also records it in
+// driver.json. Focus taken by the product itself is not a fault: the driver reports a focus that moved to
+// another window of the measured process as a failure, and the frontend reports a focus that moved inside the
+// page without the code (plan section 8).
+var faultCodes = []string{"focus-lost", "delivery-lost", "activation-failed", "permission-dialog"}
+
+// FaultCode returns the environment-fault code carried by a failure reason.
+func FaultCode(reason string) (string, bool) {
+	_, rest, found := strings.Cut(reason, "[fault:")
+	code, _, closed := strings.Cut(rest, "]")
+	if !found || !closed || !slices.Contains(faultCodes, code) {
+		return "", false
+	}
+	return code, true
+}
+
+// Invalid is the verdict of a run the environment made unmeasurable: status invalid and only the fault
+// reasons, never a performance reason (the missing samples are a consequence of the fault).
+func Invalid(reasons []string) Report {
+	report := Validate(nil)
+	report.Status, report.Reasons = "invalid", uniqueReasons(reasons)
+	return report
+}
+
+// InvalidReasons splits the value of the --native-perf-invalid flag (reasons joined by " | ").
+func InvalidReasons(flag string) []string {
+	reasons := []string{}
+	for part := range strings.SplitSeq(flag, " | ") {
+		if part = strings.TrimSpace(part); part != "" {
+			reasons = append(reasons, part)
+		}
+	}
+	if len(reasons) == 0 {
+		reasons = append(reasons, "environment fault: native run invalid")
+	}
+	return reasons
+}
 
 // NullCount is the number of NULL trials per arm: recording hooks on ("null") and off (NullOff).
 const NullCount = 30
@@ -164,10 +216,14 @@ type (
 		Samples        []Sample `json:"samples"`
 		Failures       []string `json:"failures"`
 	}
-	// Metric contains raw values and a recomputed nearest-rank p95.
+	// Metric contains raw values, the nearest-rank point p95 (a diagnostic) and the distribution-free
+	// 95 %-confidence upper bound of the p95, the order statistic of rank P95BoundOrder, which the budgets judge
+	// (nil while fewer than 59 samples exist).
 	Metric struct {
-		SamplesMS []float64 `json:"samples_ms"`
-		P95MS     *float64  `json:"p95_ms"`
+		SamplesMS       []float64 `json:"samples_ms"`
+		P95MS           *float64  `json:"p95_ms"`
+		P95UpperBoundMS *float64  `json:"p95_upper_bound_ms"`
+		P95BoundOrder   int       `json:"p95_bound_order,omitempty"`
 	}
 	// Report is the full fail-closed verdict with its diagnostics; the raw runs
 	// stay in their files, referenced by RawEvidence.
@@ -247,8 +303,29 @@ func metric(values []float64) Metric {
 		sort.Float64s(sorted)
 		p := sorted[int(math.Ceil(.95*float64(len(sorted))))-1]
 		m.P95MS = &p
+		if k := quantileUpperIndex(len(sorted)); k > 0 {
+			bound := sorted[k-1]
+			m.P95UpperBoundMS, m.P95BoundOrder = &bound, k
+		}
 	}
 	return m
+}
+
+// quantileUpperIndex is the smallest 1-based k such that the k-th smallest of n samples is a 95 %-quantile upper
+// bound with 95 % confidence for any continuous distribution: P(Binomial(n, q) <= k-1) >= confidence
+// (David and Nagaraja, Order Statistics, section 7.1). 0 when no order statistic of n samples reaches it. The
+// twin of quantile_upper_index in scripts/perf/paired.py; both read scripts/perf/testdata/quantile-index.json.
+func quantileUpperIndex(n int) int {
+	const q, confidence = .95, .95
+	cumulative := 0.0
+	for j := range n {
+		lg := func(x int) float64 { v, _ := math.Lgamma(float64(x) + 1); return v }
+		cumulative += math.Exp(lg(n) - lg(j) - lg(n-j) + float64(j)*math.Log(q) + float64(n-j)*math.Log1p(-q))
+		if cumulative >= confidence {
+			return j + 1
+		}
+	}
+	return 0
 }
 
 func gap(values []float64) (float64, error) {
@@ -397,12 +474,23 @@ func paintBound(s Sample) (float64, error) {
 }
 
 // Validate recomputes the verdict from raw, authenticated native-session records.
-func Validate(runs []Run) Report {
-	v := verifier{report: Report{ID: "PERF-TYPE-native", Measurement: "native-work-v6-overhead-bound-phases", Status: "fail", ObjectiveWarmHandlerMS: objectiveWarmHandlerMS, Thresholds: map[string]float64{"frame_work_ms": warmFrameWorkMS, "frame_work_p95_ms": warmFrameWorkMS, "handler_p95_ms": warmHandlerP95MS, "cold_handler_p95_ms": coldHandlerP95MS, "cold_frame_work_p95_ms": coldFrameWorkP95MS, "frame_gap_ms": warmGapMS, "cold_frame_gap_ms": coldGapMS, "instrument_overhead_upper95_ms": overheadBoundMS}}, coldIndices: map[int]bool{}, ids: map[string]bool{}, processes: map[string]bool{}}
+func Validate(runs []Run) Report { return validate(runs, nil) }
+
+// validate is Validate with the environment faults recorded outside the runs (the driver's driver.json).
+func validate(runs []Run, faults []string) Report {
+	v := verifier{faults: slices.Clone(faults), report: Report{ID: "PERF-TYPE-native", Measurement: "native-work-v6-overhead-bound-phases", Status: "fail", ObjectiveWarmHandlerMS: objectiveWarmHandlerMS, Thresholds: map[string]float64{"frame_work_ms": warmFrameWorkMS, "frame_work_p95_ms": warmFrameWorkMS, "handler_p95_ms": warmHandlerP95MS, "cold_handler_p95_ms": coldHandlerP95MS, "cold_frame_work_p95_ms": coldFrameWorkP95MS, "frame_gap_ms": warmGapMS, "cold_frame_gap_ms": coldGapMS, "instrument_overhead_upper95_ms": overheadBoundMS}}, coldIndices: map[int]bool{}, ids: map[string]bool{}, processes: map[string]bool{}}
 	for _, run := range runs {
 		v.addRun(run)
 	}
-	return v.finish()
+	report := v.finish()
+	switch {
+	case len(v.faults) == 0:
+		return report
+	case !v.genuine: // every other reason is something the fault left unmeasured
+		return Invalid(v.faults)
+	}
+	report.Reasons = uniqueReasons(append(report.Reasons, v.faults...))
+	return report
 }
 
 type verifier struct {
@@ -412,6 +500,8 @@ type verifier struct {
 	stages                                                                         map[string][]float64
 	uppers, works, workUppers, intervals, coldWork, warmWork, coldUpper, warmUpper []float64
 	report                                                                         Report
+	faults                                                                         []string
+	genuine                                                                        bool // a reason no fault can explain
 	handlers, waits, paints, cold, warm                                            []float64
 	coldHandlers, warmHandlers, coldWaits, warmWaits                               []float64
 	coldIndices                                                                    map[int]bool
@@ -425,11 +515,18 @@ type verifier struct {
 	controls                                                                       map[string]bool
 }
 
+// fail records a genuine failure: one measured on the evidence, which no environment fault explains.
 func (v *verifier) fail(reason string) {
-	if slices.Contains(v.report.Reasons, reason) {
-		return
+	v.genuine = true
+	v.missing(reason)
+}
+
+// missing records evidence that is absent (samples, controls, replicates): a failure, unless an environment
+// fault stopped the run, which then explains it.
+func (v *verifier) missing(reason string) {
+	if !slices.Contains(v.report.Reasons, reason) {
+		v.report.Reasons = append(v.report.Reasons, reason)
 	}
-	v.report.Reasons = append(v.report.Reasons, reason)
 }
 
 func validHost(h Host) bool {
@@ -473,9 +570,13 @@ func (v *verifier) addRun(run Run) {
 		v.table.PluginSources[label] = source
 	}
 	for _, reason := range run.Failures {
+		if code, ok := FaultCode(reason); ok {
+			v.faults = append(v.faults, code+": "+reason)
+			continue
+		}
 		v.fail(reason)
 	}
-	validateRunShape(run, v.fail)
+	validateRunShape(run, v.fail, v.missing)
 	if run.Phase == "cold" {
 		v.addCold(run)
 	}
@@ -674,7 +775,7 @@ func (v *verifier) recordTimings(phase string, clock Clock, h, w, g, upper float
 
 func (v *verifier) finish() Report {
 	if len(v.nulls) < NullCount || len(v.nullOffs) < NullCount {
-		v.fail("missing >=30 NULL keystrokes per arm (recording hooks on and off): instrument overhead cannot be bounded")
+		v.missing("missing >=30 NULL keystrokes per arm (recording hooks on and off): instrument overhead cannot be bounded")
 	}
 	if o, ok := overheadBound(v.nulls, v.nullOffs); ok {
 		v.report.Overhead = &o
@@ -682,15 +783,15 @@ func (v *verifier) finish() Report {
 			v.fail("instrument overhead (recording hooks on minus off) one-sided 95% upper bound exceeds1ms")
 		}
 	}
-	if v.replicates < 30 || len(v.coldIndices) != v.replicates || len(v.coldHandlers) < 30 || v.warmCount < 30 || len(v.coldWork) < 30 || len(v.warmWork) < 30 {
-		v.fail("missing >=30 fresh-process cold and >=30 warm samples")
+	if v.replicates < ColdReplicates || len(v.coldIndices) != v.replicates || len(v.coldHandlers) < ColdReplicates || v.warmCount < WarmSamples || len(v.coldWork) < ColdReplicates || len(v.warmWork) < WarmSamples {
+		v.missing(fmt.Sprintf("missing >=%d fresh-process cold and >=%d warm samples", ColdReplicates, WarmSamples))
 	}
 	if !v.handlerControl || !v.layoutControl {
-		v.fail("missing independently validated handler and post-handler layout controls")
+		v.missing("missing independently validated handler and post-handler layout controls")
 	}
 	for _, kind := range ControlKinds {
 		if !v.controls[kind] {
-			v.fail("missing validated positive control: " + kind)
+			v.missing("missing validated positive control: " + kind)
 		}
 	}
 	r := &v.report
@@ -751,15 +852,22 @@ func (v *verifier) finish() Report {
 	return *r
 }
 
-func validateRunShape(run Run, fail func(string)) {
+// validateRunShape checks the identity and the size of a run: `fail` for a run that is wrong, `missing` for one
+// that stopped short (fewer samples than its phase needs).
+func validateRunShape(run Run, fail, missing func(string)) {
 	if run.Phase != "cold" && run.Phase != "warm" {
 		fail("invalid phase")
 	}
-	if run.Phase == "cold" && (len(run.Samples) != 1 || run.ReplicateCount < 30 || run.ReplicateIndex < 1 || run.ReplicateIndex > run.ReplicateCount) {
-		fail("cold run is not one first-input fresh-process replicate")
+	replicate := run.ReplicateCount >= ColdReplicates && run.ReplicateIndex >= 1 && run.ReplicateIndex <= run.ReplicateCount
+	if run.Phase == "cold" && (len(run.Samples) != 1 || !replicate) {
+		report := fail
+		if len(run.Samples) == 0 && replicate {
+			report = missing
+		}
+		report("cold run is not one first-input fresh-process replicate")
 	}
-	if run.Phase == "warm" && len(run.Samples) < 30+len(ControlKinds) {
-		fail("warm controls and >=30 subsequent inputs missing")
+	if run.Phase == "warm" && len(run.Samples) < WarmSamples+len(ControlKinds) {
+		missing(fmt.Sprintf("warm controls and >=%d subsequent inputs missing", WarmSamples))
 	}
 	changes := map[string]bool{}
 	for i, s := range run.Samples {
@@ -812,7 +920,7 @@ func Merge(directory, out string) Report {
 		return Report{ID: "PERF-TYPE-native", Status: "fail", Reasons: []string{err.Error()}}
 	}
 	runs := []Run{}
-	failures := []string{}
+	failures, faults := []string{}, []string{}
 	raw := []Evidence{}
 	for _, name := range files {
 		data, err := os.ReadFile(name) // #nosec G304 -- perf_native harness: evidence files listed by the operator's own run, never peer input
@@ -826,10 +934,16 @@ func Merge(directory, out string) Report {
 			var driver struct {
 				Status string `json:"status"`
 				Error  string `json:"error"`
+				Fault  *struct {
+					Kind    string `json:"kind"`
+					Message string `json:"message"`
+				} `json:"fault"`
 			}
 			switch {
 			case json.Unmarshal(data, &driver) != nil:
 				failures = append(failures, "invalid native driver metadata")
+			case driver.Fault != nil:
+				faults = append(faults, driver.Fault.Kind+": "+driver.Fault.Message)
 			case driver.Status != "collected" && driver.Error != "":
 				failures = append(failures, "native driver: "+driver.Error)
 			}
@@ -842,7 +956,7 @@ func Merge(directory, out string) Report {
 		}
 		runs = append(runs, run)
 	}
-	report := Validate(runs)
+	report := validate(runs, faults)
 	report.RawEvidence = raw
 	report.Reasons = uniqueReasons(append(report.Reasons, failures...))
 	if len(failures) > 0 {
@@ -860,7 +974,11 @@ func actualInput(s Sample) bool {
 }
 
 func (v *verifier) checkBudget(name string, m Metric, budget float64) {
-	if m.P95MS != nil && *m.P95MS > budget {
+	switch {
+	case m.P95MS == nil: // no sample: the missing-sample reason says so
+	case m.P95UpperBoundMS == nil:
+		v.missing(fmt.Sprintf("%s: %d samples cannot certify a p95 at 95%% confidence", name, len(m.SamplesMS)))
+	case *m.P95UpperBoundMS > budget:
 		v.fail(fmt.Sprintf("%s p95 exceeds%.0fms", name, budget))
 	}
 }
@@ -869,7 +987,8 @@ func (v *verifier) checkBudget(name string, m Metric, budget float64) {
 // the required thirty fresh-process cold samples of a complete verdict.
 func collectedFailures(run Run) []string {
 	reasons := []string{}
-	validateRunShape(run, func(reason string) { reasons = append(reasons, reason) })
+	collect := func(reason string) { reasons = append(reasons, reason) }
+	validateRunShape(run, collect, collect)
 	for _, s := range run.Samples {
 		// Collection is distinct from acceptance: even failed controls or budgets
 		// must not suppress the thirty first-key cold replicates.

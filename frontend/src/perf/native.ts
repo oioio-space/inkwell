@@ -38,6 +38,8 @@ import { enterNativeTrace, setNativeProbes } from "./nativeTrace";
 
 const CONTROL_MS = 80;
 const TRIAL_TIMEOUT_MS = 3000;
+/** Code of an environment fault in a failure reason; mirrors nativeperf.FaultCode. */
+const FAULT_FOCUS_LOST = "[fault:focus-lost]";
 const SETTLE_MS = 1200;
 /** Oracle delivery grace is not a latency sample: only engine timestamps are reported. */
 const ORACLE_DELIVERY_MS = 100;
@@ -494,7 +496,14 @@ export function startNativePerf(options: NativePerfOptions): () => void {
       nullTarget.setSelectionRange(0, 0);
     }
     if (!capability || !view || !environment()) {
-      fail("native editor must be visible and focused before arming");
+      // The window hidden or unfocused is a host fault (another program took it): the Go verifier turns the code
+      // into status `invalid` (plan section 8). The window still focused but the editor not is the page's own
+      // doing (the product moved the focus): a failure, without the code.
+      fail(
+        visibleAndFocused(document.visibilityState, document.hasFocus())
+          ? "native editor lost the focus inside the page: the product moved it"
+          : `${FAULT_FOCUS_LOST} native editor must be visible and focused before arming`,
+      );
       return;
     }
     if (
