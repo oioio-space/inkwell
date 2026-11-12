@@ -4,11 +4,15 @@ import math
 import os
 from pathlib import Path
 import subprocess
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import refbuild  # noqa: E402  (the pinned Go, never the first `go` on PATH)
 
 ROOT = Path(__file__).resolve().parents[2]
 out = Path(os.environ.get("INKWELL_PERF_OUT", ROOT / "gates/L3"))
 out.mkdir(parents=True, exist_ok=True)
-env = dict(os.environ, INKWELL_PERF_OUT=str(out.resolve()), INKWELL_LSP_PERF="1")
+env = dict(refbuild.tree_go_env(ROOT), INKWELL_PERF_OUT=str(out.resolve()), INKWELL_LSP_PERF="1")
 reports = [out / "PERF-LSP.json", out / "PERF-LSP-browser.json"]
 for report in reports:
     report.unlink(missing_ok=True)

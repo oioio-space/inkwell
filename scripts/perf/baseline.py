@@ -140,7 +140,7 @@ machine = platform.platform() + "\n" + Path("/proc/cpuinfo").read_text().split("
 versions = {}
 for name, command in {"go":["go","version"],"node":["node","--version"],"typst":["typst","--version"],"tinymist":["tinymist","--version"]}.items():
     try:
-        r = subprocess.run(command, capture_output=True, text=True)
+        r = subprocess.run(command, capture_output=True, text=True, env=refbuild.tree_go_env(Path.cwd()))
         versions[name] = (r.stdout+r.stderr).strip()
     except FileNotFoundError:
         versions[name] = "unavailable on PATH; embedded versions: internal/sidecar/manifest.json"

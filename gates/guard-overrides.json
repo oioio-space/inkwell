@@ -789,6 +789,71 @@
       "id": "70927f30087b15ecb150148a8ac4ff1666ce6ac3559c9f144b9e3faf6242c8a2",
       "reason": "Block C5S: docs/protocol/tla/README.md describes the reworked LinkProbe model (timeouts, closing bytes, rate-bound clock margin, level arithmetic); documentation of the model, no model bound or check removed (mise run tla runs every config and mutant). Re-keyed after the OI gate commit changed the file's committed baseline; same C5S hunk.",
       "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "2f9175f2c779ddf04773cae039d752d1bccd21d0919c293bc1f00b779bfe660c",
+      "reason": "internal/transport/p2p/dial.go: Block RC1 (second review, finding 1): pause's timer `time.NewTimer(jitter(*backoff))` becomes `*due = time.Now().Add(jitter(*backoff))` then `time.NewTimer(time.Until(*due))`: the same jittered backoff, now kept as an absolute deadline across mDNS wakes so forged sightings cannot postpone the next normal attempt. No delay, bound or backoff constant changes. Pinned by TestReconnectUnderSightingFlood and mutant MC1ac; the dial tests (TestWant*, TestAddressChangeRetriesNow, TestRefusedPeerIsNotHammered) keep passing unchanged.",
+      "decision": "docs/plans/2026-11-12-rc1-reconnect.md"
+    },
+    {
+      "id": "9207694b26715477629c1fa4fd4313104b98a74feed77fdfd114042bcd70b615",
+      "reason": "scripts/perf/baseline.py: records the pinned go version. Block PB toolchain fix: Go is resolved from the tree's mise.toml pin (refbuild.go_env/tree_go_env: mise where go@<pin>, GOROOT set, its bin first on PATH, GOTOOLCHAIN=local), never the first `go` on PATH; an IDE SDK (go1.27.3) ahead of mise's shims with mise's GOROOT=1.27.4 broke builds (compile: version mismatch). Absent or uninstalled pin fails closed (ReferenceBuildError). No threshold, criterion or vector changed.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "6ff15abced19d1b3eea213a7d386758bcbc156f2f7419c2c85af731be6ab6028",
+      "reason": "scripts/perf/baseline.py: records the pinned go version. Block PB toolchain fix: Go is resolved from the tree's mise.toml pin (refbuild.go_env/tree_go_env: mise where go@<pin>, GOROOT set, its bin first on PATH, GOTOOLCHAIN=local), never the first `go` on PATH; an IDE SDK (go1.27.3) ahead of mise's shims with mise's GOROOT=1.27.4 broke builds (compile: version mismatch). Absent or uninstalled pin fails closed (ReferenceBuildError). No threshold, criterion or vector changed.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "39bd3e9d1af6d13e310fb75f8dc6cd08e0bf295a56a1e57cde3b7fb82c7e2cc1",
+      "reason": "scripts/perf/lsp.py: go test with the pinned Go. Block PB toolchain fix: Go is resolved from the tree's mise.toml pin (refbuild.go_env/tree_go_env: mise where go@<pin>, GOROOT set, its bin first on PATH, GOTOOLCHAIN=local), never the first `go` on PATH; an IDE SDK (go1.27.3) ahead of mise's shims with mise's GOROOT=1.27.4 broke builds (compile: version mismatch). Absent or uninstalled pin fails closed (ReferenceBuildError). No threshold, criterion or vector changed.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "1dc843ec76e21441ddf8a440e5e9c233ddc055aee4669cc980dbd2d7e2f31ed0",
+      "reason": "scripts/perf/lsp.py: go test with the pinned Go. Block PB toolchain fix: Go is resolved from the tree's mise.toml pin (refbuild.go_env/tree_go_env: mise where go@<pin>, GOROOT set, its bin first on PATH, GOTOOLCHAIN=local), never the first `go` on PATH; an IDE SDK (go1.27.3) ahead of mise's shims with mise's GOROOT=1.27.4 broke builds (compile: version mismatch). Absent or uninstalled pin fails closed (ReferenceBuildError). No threshold, criterion or vector changed.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "528f5ebcf82fa8a79284d4831e612d47998dfde64943aa6aa80751e8a3b11818",
+      "reason": "scripts/perf/refbuild.py: go_env/tree_go_env; build vector and toolchain record (cache key) use the pinned Go. Block PB toolchain fix: Go is resolved from the tree's mise.toml pin (refbuild.go_env/tree_go_env: mise where go@<pin>, GOROOT set, its bin first on PATH, GOTOOLCHAIN=local), never the first `go` on PATH; an IDE SDK (go1.27.3) ahead of mise's shims with mise's GOROOT=1.27.4 broke builds (compile: version mismatch). Absent or uninstalled pin fails closed (ReferenceBuildError). No threshold, criterion or vector changed.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "2236078bcdc70a20cc4126f42a8bd30947b84e1353ca7916b2caaeca9554c0e6",
+      "reason": "scripts/perf/refbuild_test.py: test_build_uses_the_pinned_go_whatever_path_holds (fake older go first on PATH, red on the old code) and test_unpinned_or_uninstalled_go_fails_closed; fixture repo pins Go; existing assertions unchanged. Block PB toolchain fix: Go is resolved from the tree's mise.toml pin (refbuild.go_env/tree_go_env: mise where go@<pin>, GOROOT set, its bin first on PATH, GOTOOLCHAIN=local), never the first `go` on PATH; an IDE SDK (go1.27.3) ahead of mise's shims with mise's GOROOT=1.27.4 broke builds (compile: version mismatch). Absent or uninstalled pin fails closed (ReferenceBuildError). No threshold, criterion or vector changed.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "b14a77494a63fcbeb995f68a21e6a689390023093ebc42fdae72af86e909b0e5",
+      "reason": "scripts/perf/refbuild_test.py: as above. Block PB toolchain fix: Go is resolved from the tree's mise.toml pin (refbuild.go_env/tree_go_env: mise where go@<pin>, GOROOT set, its bin first on PATH, GOTOOLCHAIN=local), never the first `go` on PATH; an IDE SDK (go1.27.3) ahead of mise's shims with mise's GOROOT=1.27.4 broke builds (compile: version mismatch). Absent or uninstalled pin fails closed (ReferenceBuildError). No threshold, criterion or vector changed.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "c5af7fa8cf6e21188f9776b8641b5be9aa3dcdd19846cf33daad9cfd23a07a71",
+      "reason": "scripts/perf/reference.py: go test with the pinned Go. Block PB toolchain fix: Go is resolved from the tree's mise.toml pin (refbuild.go_env/tree_go_env: mise where go@<pin>, GOROOT set, its bin first on PATH, GOTOOLCHAIN=local), never the first `go` on PATH; an IDE SDK (go1.27.3) ahead of mise's shims with mise's GOROOT=1.27.4 broke builds (compile: version mismatch). Absent or uninstalled pin fails closed (ReferenceBuildError). No threshold, criterion or vector changed.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "78697ac686b958b629084d38c0f53e6fb68f8a71b9ce0b7233bc187f648f7502",
+      "reason": "scripts/perf/regression.py: each side (merge-base worktree, checkout) builds with its own pinned Go. Block PB toolchain fix: Go is resolved from the tree's mise.toml pin (refbuild.go_env/tree_go_env: mise where go@<pin>, GOROOT set, its bin first on PATH, GOTOOLCHAIN=local), never the first `go` on PATH; an IDE SDK (go1.27.3) ahead of mise's shims with mise's GOROOT=1.27.4 broke builds (compile: version mismatch). Absent or uninstalled pin fails closed (ReferenceBuildError). No threshold, criterion or vector changed.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "04dfc03734e8ed06a474de77eb5e31089eda28918fb6565740403aa525fb357c",
+      "reason": "scripts/perf/regression.py: each side builds with its own pinned Go. Block PB toolchain fix: Go is resolved from the tree's mise.toml pin (refbuild.go_env/tree_go_env: mise where go@<pin>, GOROOT set, its bin first on PATH, GOTOOLCHAIN=local), never the first `go` on PATH; an IDE SDK (go1.27.3) ahead of mise's shims with mise's GOROOT=1.27.4 broke builds (compile: version mismatch). Absent or uninstalled pin fails closed (ReferenceBuildError). No threshold, criterion or vector changed.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "734b51071c4bf6ad7cb059b40060942d6c773ed99cfe6ff5827c652bdcdfe1ab",
+      "reason": "scripts/perf/type_native.py: go build with the pinned Go. Block PB toolchain fix: Go is resolved from the tree's mise.toml pin (refbuild.go_env/tree_go_env: mise where go@<pin>, GOROOT set, its bin first on PATH, GOTOOLCHAIN=local), never the first `go` on PATH; an IDE SDK (go1.27.3) ahead of mise's shims with mise's GOROOT=1.27.4 broke builds (compile: version mismatch). Absent or uninstalled pin fails closed (ReferenceBuildError). No threshold, criterion or vector changed.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "d96a860eba9999bf3a01aa8d7f8b17ed49ba2cd3bcd867f1902ab9dd57e77f47",
+      "reason": "scripts/perf/typing_checks.py: go build with the pinned Go. Block PB toolchain fix: Go is resolved from the tree's mise.toml pin (refbuild.go_env/tree_go_env: mise where go@<pin>, GOROOT set, its bin first on PATH, GOTOOLCHAIN=local), never the first `go` on PATH; an IDE SDK (go1.27.3) ahead of mise's shims with mise's GOROOT=1.27.4 broke builds (compile: version mismatch). Absent or uninstalled pin fails closed (ReferenceBuildError). No threshold, criterion or vector changed.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
     }
   ]
 }

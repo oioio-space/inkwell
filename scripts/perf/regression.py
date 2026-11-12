@@ -11,6 +11,8 @@ import subprocess
 import tempfile
 import os
 
+import refbuild  # the Go a tree pins (go_env), never the first `go` on PATH
+
 BASE = Path('docs/perf/baseline/2026-11-02')
 
 
@@ -99,8 +101,8 @@ def compare_e2e(thresholds, fresh):
         assert isinstance(value, (int, float)) and 0 <= value <= rule['limit_p95_' + unit], (name, value, rule)
 
 
-def command(args, cwd=None):
-    return subprocess.check_output(args, cwd=cwd, text=True)
+def command(args, cwd=None, env=None):
+    return subprocess.check_output(args, cwd=cwd, text=True, env=env)
 
 
 def interleaved(binaries, roots, outputs, extra=(), envs=(None, None)):
@@ -151,7 +153,8 @@ def slowdown_test():
                           'if os.Getenv("PERF_SLOW") == "1" { d = 12*time.Millisecond }; '
                           'b.SetBytes(1 << 20); for b.Loop() { for start := time.Now(); time.Since(start) < d; {} } }\n')
         binary = root / 'fixture'
-        subprocess.run(['go', 'test', '-c', '-o', str(binary), str(source)], check=True)
+        subprocess.run(['go', 'test', '-c', '-o', str(binary), str(source)], check=True,
+                       env=refbuild.tree_go_env(Path(__file__).resolve().parents[2]))
         envs = [dict(os.environ, PERF_SLOW=side) for side in ('0', '1')]
         status, report = ab_compare([binary, binary], [root, root], root, 'slow', ['-test.benchtime=5x'], envs)
         # benchstat names carry the GOMAXPROCS suffix (Sleep-8).
@@ -223,10 +226,11 @@ def measure_session(output):
         try:
             changed = set(command(['git', 'diff', '--name-only', base, '--']).splitlines())
             changed.update(command(['git', 'ls-files', '--others', '--exclude-standard']).splitlines())
+            goenv = {tree: refbuild.tree_go_env(tree) for tree in (worktree, root)}  # each side's pinned Go
             for package in packages:
                 paths = {'go.mod', 'go.sum', 'go.work', 'go.work.sum'}
                 for tree in (worktree, root):
-                    dirs = command(['go', 'list', '-deps', '-test', '-f', '{{.Dir}}', './' + package], tree).splitlines()
+                    dirs = command(['go', 'list', '-deps', '-test', '-f', '{{.Dir}}', './' + package], tree, goenv[tree]).splitlines()
                     for directory in dirs:
                         try:
                             relative = Path(directory).relative_to(tree)
@@ -236,7 +240,8 @@ def measure_session(output):
                 informational = not bool(paths & changed)
                 binaries = [temporary / 'base.test', temporary / 'branch.test']
                 for tree, binary in zip((worktree, root), binaries):
-                    subprocess.run(['go', 'test', '-c', '-o', str(binary), './' + package], cwd=tree, check=True)
+                    subprocess.run(['go', 'test', '-c', '-o', str(binary), './' + package], cwd=tree, check=True,
+                                   env=goenv[tree])
                 name = package.replace('/', '-')
                 # Missing/incomparable samples raise, even for unchanged code.
                 status, comparison = ab_compare(binaries, [worktree, root], output, name)

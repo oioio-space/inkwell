@@ -22,6 +22,8 @@ import time
 
 ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(Path(__file__).resolve().parent))
+import refbuild  # noqa: E402  (the pinned Go, never the first `go` on PATH)
+
 PREFIX = b"INKWELL_TYPING_CHECK "
 # linux/input-event-codes.h: evdev codes, no X11 +8 offset.
 KEY_LEFTCTRL, KEY_LEFTSHIFT, BTN_LEFT = 29, 42, 0x110
@@ -72,7 +74,7 @@ def build(mode, runner=subprocess.run):
     runner(["pnpm", "--config.verifyDepsBeforeRun=false", "exec", "vite", "build", "--configLoader",
             "runner", "--mode", "production", "--outDir", "perf-dist"], cwd=ROOT / "frontend", env=env, check=True)
     runner(["go", "build", "-tags", "perf_native", "-buildvcs=false", "-o", str(binary), "./cmd/inkwell"],
-           cwd=ROOT, check=True)
+           cwd=ROOT, env=refbuild.tree_go_env(ROOT), check=True)
     return binary
 
 

@@ -15,6 +15,7 @@ import tempfile
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 import paired  # noqa: E402
+import refbuild  # noqa: E402  (the pinned Go, never the first `go` on PATH)
 
 ROOT = Path(__file__).resolve().parents[2]
 BINARY = ROOT / "bin/inkwell-native-perf"
@@ -32,7 +33,7 @@ def build(runner=subprocess.run):
            cwd=ROOT / "frontend", env=env, check=True)
     BINARY.parent.mkdir(parents=True, exist_ok=True)
     runner(["go", "build", "-tags", "perf_native", "-buildvcs=false", "-o", str(BINARY),
-            "./cmd/inkwell"], cwd=ROOT, check=True)
+            "./cmd/inkwell"], cwd=ROOT, env=refbuild.tree_go_env(ROOT), check=True)
 
 
 def report_status(output):

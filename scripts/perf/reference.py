@@ -7,6 +7,10 @@ from pathlib import Path
 import re
 import statistics
 import subprocess
+import sys
+
+sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import refbuild  # noqa: E402  (the pinned Go, never the first `go` on PATH)
 
 out = Path(os.environ.get("INKWELL_PERF_OUT", "gates/L0"))
 out.mkdir(parents=True, exist_ok=True)
@@ -22,7 +26,7 @@ for path in sorted(set(lockdir.glob('slot-*.lock')) | {lockdir / 'slot-0.lock', 
     fcntl.flock(stream, fcntl.LOCK_EX)
     locks.append(stream)
 packages = re.search(r'^HOT_PATHS: (.+)$', Path('CLAUDE.md').read_text(), re.M)[1].split()
-env = dict(os.environ, GOMAXPROCS='20')
+env = dict(refbuild.tree_go_env(Path.cwd()), GOMAXPROCS='20')
 report = {'GOMAXPROCS': 20, 'count': 20, 'cv_definition': 'sample standard deviation / mean, ns/op', 'attempts': []}
 def frequency():
     return [line.strip() for line in Path('/proc/cpuinfo').read_text().splitlines() if line.startswith('cpu MHz')]

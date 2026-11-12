@@ -8,7 +8,8 @@ and C compiler versions). Only the binary is cached. The source checkout's `.git
 or whose build dirties its worktree, fails the criterion (`ReferenceBuildError`), it is never skipped.
 Nothing is downloaded at run time: the sidecars are copied from the source checkout when the pinned
 manifest matches, else fetched at build time by `mise run sidecar:fetch` (ADR 0024); a missing manifest
-or a failed fetch fails closed too.
+or a failed fetch fails closed too. Go is the toolchain the tree pins (`[tools] go` of its mise.toml, installed by
+mise), never the first `go` on PATH, and runs with GOTOOLCHAIN=local (`go_env`); an absent pin fails closed.
 
 Standard library only. Command line: `python3 scripts/perf/refbuild.py` prints the reference record.
 """
@@ -26,6 +27,7 @@ import shutil
 import subprocess
 import tempfile
 import time
+import tomllib
 from pathlib import Path
 
 BINARY = "inkwell-server"
@@ -59,6 +61,37 @@ class ReferenceBuildError(RuntimeError):
     """The reference could not be built: the criterion fails (never invalid, never skipped)."""
 
 
+def go_env(mise_toml: str, base=None, run=subprocess.run) -> dict:
+    """The environment that runs the Go toolchain a tree pins (`[tools] go` of its mise.toml, as mise installed it),
+    whatever PATH holds: its bin directory first on PATH, GOROOT set to it, and GOTOOLCHAIN=local so that go.mod
+    can never switch silently to another toolchain (a go.mod newer than the pin then fails the build)."""
+    try:
+        pin = tomllib.loads(mise_toml)["tools"]["go"]
+        pin = pin["version"] if isinstance(pin, dict) else pin
+    except (tomllib.TOMLDecodeError, KeyError, TypeError) as error:
+        raise ReferenceBuildError(f"no Go pin in mise.toml ([tools] go): {error!r}") from None
+    try:
+        done = run(["mise", "where", f"go@{pin}"], capture_output=True, text=True)
+    except OSError as error:
+        raise ReferenceBuildError(f"mise unavailable, cannot resolve the pinned Go {pin}: {error}") from None
+    root = Path(done.stdout.strip())
+    if done.returncode or not done.stdout.strip() or not (root / "bin" / "go").is_file():
+        raise ReferenceBuildError(f"Go {pin} pinned by mise.toml is not installed (mise install go@{pin}): "
+                                  f"{done.stderr.strip()}")
+    base = dict(os.environ if base is None else base)
+    return dict(base, GOROOT=str(root), GOTOOLCHAIN="local",
+                PATH=f"{root / 'bin'}{os.pathsep}{base.get('PATH', '')}")
+
+
+def tree_go_env(tree: Path, base=None) -> dict:
+    """`go_env` of the mise.toml at the root of `tree`."""
+    try:
+        text = (tree / "mise.toml").read_text()
+    except OSError as error:
+        raise ReferenceBuildError(f"no mise.toml in {tree}, so no pinned Go: {error}") from None
+    return go_env(text, base)
+
+
 def git(repo, *args, check=True) -> str:
     done = subprocess.run(["git", "-C", str(repo), *args], capture_output=True, text=True)
     if check and done.returncode:
@@ -71,13 +104,14 @@ def merge_base(repo: Path, main: str = "main") -> str:
     return git(repo, "merge-base", "HEAD", main)
 
 
-def toolchain(run=subprocess.run, tree: Path | None = None) -> dict:
+def toolchain(run=subprocess.run, tree: Path | None = None, env=None) -> dict:
     """The versions and settings the build depends on: go, node, pnpm, wails3, the C compiler, and `go env -json`
     taken in `tree` (a directory holding the reference's go.mod, which selects the toolchain), without its
-    location and download keys; the random build directory of GOGCCFLAGS is removed."""
+    location and download keys; the random build directory of GOGCCFLAGS is removed. `env` (`go_env`) selects the
+    pinned Go; its GOROOT and GOVERSION are then in the record, hence in the cache key."""
     def version(*cmd, cwd=None):
         try:
-            done = run(list(cmd), capture_output=True, text=True, cwd=cwd)
+            done = run(list(cmd), capture_output=True, text=True, cwd=cwd, env=env)
         except OSError as error:
             raise ReferenceBuildError(f"{cmd[0]} unavailable: {error}") from None
         return (done.stdout + done.stderr).strip()
@@ -97,13 +131,13 @@ def toolchain(run=subprocess.run, tree: Path | None = None) -> dict:
 
 def reference_toolchain(repo: Path, commit: str) -> dict:
     """`toolchain` where the reference selects it: a scratch directory holding the commit's go.mod (and go.work
-    when it has one), which is what decides GOTOOLCHAIN's choice; no checkout is needed before a cache hit."""
+    when it has one), with the Go its mise.toml pins (`go_env`); no checkout is needed before a cache hit."""
     with tempfile.TemporaryDirectory(prefix="refbuild-env-") as scratch:
-        for name in ("go.mod", "go.work"):
+        for name in ("go.mod", "go.work", "mise.toml"):
             done = subprocess.run(["git", "-C", str(repo), "show", f"{commit}:{name}"], capture_output=True)
             if done.returncode == 0:
                 (Path(scratch) / name).write_bytes(done.stdout)
-        return toolchain(tree=Path(scratch))
+        return toolchain(tree=Path(scratch), env=tree_go_env(Path(scratch)))
 
 
 def cache_key(commit: str, tools: dict, vector=VECTOR, env=None, manifest: bytes = b"") -> str:
@@ -123,14 +157,15 @@ def sha256(path: Path) -> str:
 
 
 def build_server(tree: Path, out: Path, vector=VECTOR, run=subprocess.run, log=None) -> None:
-    """Build the server of `tree` into `out` with the shared command vector. `log`, a file object,
-    receives the output of the commands."""
+    """Build the server of `tree` into `out` with the shared command vector, every step with the Go the tree
+    pins (`tree_go_env`). `log`, a file object, receives the output of the commands."""
+    env = tree_go_env(tree)
     out.parent.mkdir(parents=True, exist_ok=True)
     for step in vector:
         if step.get("unless_exists") and (tree / step["unless_exists"]).exists():
             continue
         argv = [a.replace("{out}", str(out)) for a in step["argv"]]
-        done = run(argv, cwd=tree, stdout=log, stderr=subprocess.STDOUT if log else None)
+        done = run(argv, cwd=tree, env=env, stdout=log, stderr=subprocess.STDOUT if log else None)
         if done.returncode:
             raise ReferenceBuildError(f"reference build failed at {step['name']}: exit {done.returncode}")
     if not out.is_file():

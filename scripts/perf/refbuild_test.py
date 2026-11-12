@@ -12,7 +12,9 @@ import sys
 import tempfile
 import threading
 import time
+import tomllib
 import unittest
+import unittest.mock
 from pathlib import Path
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -21,6 +23,9 @@ import refbuild  # noqa: E402
 TOOLS = dict(go="go1.27", node="v24", pnpm="11", platform="test")
 STUB = (dict(name="stub", argv=["sh", "-c", 'cat VERSION > "$1"', "sh", "{out}"]),)
 ENV = {}
+ROOT = Path(__file__).resolve().parents[2]
+MISE = (ROOT / "mise.toml").read_text()  # the checkout's own pin: installed wherever the tests run
+PIN = tomllib.loads(MISE)["tools"]["go"]
 
 
 def git(repo, *args):
@@ -53,6 +58,7 @@ class Fixture(unittest.TestCase):
         pinned = hashlib.sha256(sidecar_payload()).hexdigest()
         self.manifest = {"schema": 1, "sidecars": {"typst": {"targets": {refbuild.target(): {"sha256": pinned}}}}}
         (self.repo / refbuild.MANIFEST).write_text(json.dumps(self.manifest))
+        (self.repo / "mise.toml").write_text(f'[tools]\ngo = "{PIN}"\n')
         self.base = commit(self.repo, "v1")
         bindir = self.repo / "internal/sidecar/bin" / refbuild.target()
         bindir.mkdir(parents=True)
@@ -306,7 +312,7 @@ class Reference(Fixture):
         commit(self.repo, "with go.mod")
         seen = []
         real = refbuild.toolchain
-        refbuild.toolchain = lambda run=None, tree=None: (seen.append((tree / "go.mod").read_text()), TOOLS)[1]
+        refbuild.toolchain = lambda run=None, tree=None, env=None: (seen.append((tree / "go.mod").read_text()), TOOLS)[1]
         try:
             refbuild.ensure_reference(self.repo, self.cache, vector=STUB, env=ENV)
         finally:
@@ -358,7 +364,8 @@ class Reference(Fixture):
             for tree in trees:
                 out = tree.parent / f"{tree.name}.bin"
                 cmd = [a.replace("{out}", str(out)).replace("./cmd/inkwell", ".") for a in argv]
-                subprocess.run(cmd, cwd=tree, check=True, capture_output=True, env=dict(os.environ, GOFLAGS=""))
+                subprocess.run(cmd, cwd=tree, check=True, capture_output=True,
+                               env=dict(refbuild.go_env(MISE), GOFLAGS=""))
                 digests.append(refbuild.sha256(out))
             return digests
 
@@ -366,6 +373,42 @@ class Reference(Fixture):
         self.assertEqual(same[0], same[1])
         stamped = build([a for a in server if a != "-buildvcs=false"])
         self.assertNotEqual(stamped[0], stamped[1])
+
+    def fake_go_first(self):
+        """An older `go` first on PATH and a foreign GOROOT, as an IDE-provided SDK leaves them."""
+        bindir = Path(self.tmp.name) / "fake-sdk" / "bin"
+        bindir.mkdir(parents=True)
+        (bindir / "go").write_text("#!/bin/sh\necho 'go version go1.0.0 fake'\n")
+        (bindir / "go").chmod(0o755)
+        path = f"{bindir}{os.pathsep}{os.environ.get('PATH', '')}"
+        return unittest.mock.patch.dict(os.environ, PATH=path, GOROOT=str(bindir.parent), GOTOOLCHAIN="auto")
+
+    def test_build_uses_the_pinned_go_whatever_path_holds(self):
+        """Every step of the vector, and the toolchain record, run the Go the tree pins in mise.toml, with
+        GOTOOLCHAIN=local (no silent switch), never the first `go` on PATH."""
+        probe = (dict(name="probe", argv=["sh", "-c", 'go version > "$1"; echo "$GOTOOLCHAIN" >> "$1"', "sh",
+                                          "{out}"]),)
+        out = Path(self.tmp.name) / "probe.txt"
+        with self.fake_go_first():
+            refbuild.build_server(self.repo, out, probe)
+            tools = refbuild.reference_toolchain(self.repo, self.base)
+        printed = out.read_text().split("\n")
+        self.assertIn(f"go{PIN} ", printed[0])
+        self.assertEqual(printed[1], "local")
+        self.assertIn(f"go{PIN} ", tools["go"])
+        self.assertEqual(tools["goenv"]["GOTOOLCHAIN"], "local")
+        self.assertEqual(tools["goenv"]["GOVERSION"], f"go{PIN}")  # the resolved toolchain is in the cache key
+
+    def test_unpinned_or_uninstalled_go_fails_closed(self):
+        for text, reason in (('[tools]\ngo = "0.0.1"\n', "not installed"), ("[tools]\n", "no Go pin"),
+                             ("not toml [", "no Go pin")):
+            with self.subTest(reason=reason), self.assertRaises(refbuild.ReferenceBuildError) as cm:
+                refbuild.go_env(text)
+            self.assertIn(reason, str(cm.exception))
+        (self.repo / "mise.toml").unlink()
+        with self.assertRaises(refbuild.ReferenceBuildError) as cm:
+            refbuild.build_server(self.repo, Path(self.tmp.name) / "x", STUB)
+        self.assertIn("mise.toml", str(cm.exception))
 
     def test_unbuildable_reference_fails_closed(self):
         with self.assertRaises(refbuild.ReferenceBuildError) as cm:
