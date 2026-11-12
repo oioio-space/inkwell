@@ -1,0 +1,57 @@
+# Frozen acceptance for block RC1 (reconnect after restart; rigour: complete — location data on disk, bytes a peer influenced),
+# written before the product code. Spec: docs/plans/2026-11-12-rc1-reconnect.md (design, file format, eviction, privacy,
+# reconnection bound R, failure modes, test plan). Root cause reproduced: Admission.dialTargets passes Want no address, no
+# default relay, so two members never reconnect after a restart. A `go test -run` that matches nothing passes, so every Go
+# criterion requires its named tests to have run and passed (a SKIP is a failure).
+raw_results = ["docs/plans/2026-11-12-rc1-reconnect.md", "docs/objectif-en-cours.md", "gates/RC1/*"]
+
+[[criteria]]
+# The restart without a relay (the repro made permanent), through the real Want-with-nil-addresses path, under every
+# latency seed of the sim: bound R = 15 s when the restarted device holds a valid address, 90 s when only the sleeping
+# survivor does; after a 1 h outage (beyond libp2p's 15 min address expiry); a stale address answered by another peer
+# never gives a link.
+id = "go-sim"
+command = "out=$(./scripts/heavy.sh timeout 900 go test -count=1 -v -run 'TestReconnect' ./internal/transport/p2p/ 2>&1) || { echo \"$out\" | tail -40; exit 1; }; for t in TestReconnectAfterRestartNoRelay/samePort TestReconnectAfterRestartNoRelay/restartedMovedPort TestReconnectAfterRestartNoRelay/survivorSleeping TestReconnectAfterLongOutage TestReconnectStaleAddressWrongPeer; do echo \"$out\" | grep -q -- \"--- PASS: $t\" || { echo \"missing or not passing: $t\"; exit 1; }; done"
+
+[[criteria]]
+# The address book: recording (admitted peers only, mDNS sightings, no relay or unspecified address), bounds (64 peers,
+# 8 addresses, 128 B), eviction (90 days), coalesced saves, round trip, and the decoder's rejection table.
+id = "go-book"
+command = "out=$(./scripts/heavy.sh timeout 600 go test -count=1 -v -run 'TestBook' ./internal/transport/p2p/ 2>&1) || { echo \"$out\" | tail -40; exit 1; }; for t in TestBookRecordsAdmittedOnly TestBookRecordsMDNSSighting TestBookSkipsCircuitAndUnspecified TestBookBounds TestBookEvictsOld TestBookSaveCoalesced TestBookRoundTrip TestBookDecodeRejects; do echo \"$out\" | grep -q -- \"--- PASS: $t\" || { echo \"missing or not passing: $t\"; exit 1; }; done"
+
+[[criteria]]
+# The decoder of the address-book file is fuzzed (seeds = the rejection table); 120 s here, 1 h in the nightly.
+id = "go-fuzz"
+command = "./scripts/heavy.sh timeout 300 go test -run '^$' -fuzz FuzzDecodeBook -fuzztime 120s ./internal/transport/p2p/ && ./scripts/heavy.sh timeout 300 go test -count=1 -v -run 'FuzzDecodeBook' ./internal/transport/p2p/ | grep -q -- '--- PASS: FuzzDecodeBook'"
+
+[[criteria]]
+# The Drop fix and the fallback: Hangup keeps the member wanted, Drop un-wants and forgets the entry, known empty falls back
+# to the book, RelayOnly dials none of it.
+id = "go-drop-fallback"
+command = "out=$(./scripts/heavy.sh timeout 600 go test -count=1 -v -run 'TestHangupKeepsWant|TestDropUnwantsAndForgetsBook|TestDialFallback' ./internal/transport/p2p/ 2>&1) || { echo \"$out\" | tail -40; exit 1; }; for t in TestHangupKeepsWant TestDropUnwantsAndForgetsBook TestDialFallbackUsesBook TestDialFallbackRelayOnly; do echo \"$out\" | grep -q -- \"--- PASS: $t\" || { echo \"missing or not passing: $t\"; exit 1; }; done"
+
+[[criteria]]
+# The app side: the file store (mode 0600, atomic, corrupt file quarantined), the LAN probe no longer ends a member's
+# reconnection, and two real runtimes reconnect after a restart on one profile, no relay.
+id = "go-app"
+command = "out=$(./scripts/heavy.sh timeout 900 go test -count=1 -v -run 'TestAddrBookFile|TestAddrBookCorrupt|TestLANProbeKeepsMember|TestRestartReconnectsMembers' ./internal/app/ 2>&1) || { echo \"$out\" | tail -40; exit 1; }; for t in TestAddrBookFileMode TestAddrBookFileAtomic TestAddrBookCorruptQuarantined TestLANProbeKeepsMember TestRestartReconnectsMembers; do echo \"$out\" | grep -q -- \"--- PASS: $t\" || { echo \"missing or not passing: $t\"; exit 1; }; done"
+
+[[criteria]]
+# Code mutants (scripts/netsim/mutants.toml, block RC1, kind go): each turns its named test red.
+id = "mutants"
+command = "for m in MC1a MC1b MC1c MC1d MC1e MC1f MC1g MC1h MC1i MC1j MC1k MC1l MC1m MC1n; do grep -q \"id = \\\"$m\\\"\" scripts/netsim/mutants.toml || { echo \"missing mutant $m\"; exit 1; }; done && mise run netsim:mutants -- RC1"
+
+[[criteria]]
+# Architecture rules (libp2p only in p2p, transport independent, nothing imports app).
+id = "arch"
+command = "mise run arch"
+
+[[criteria]]
+# No regression: the transport, app and bridge packages, the default netsim scenarios (1-4), and the frozen gates of the
+# earlier network blocks: NI0 (impaired tooling, link metrics), RL1 (rule L), WB (write budget), SP1b (send path), C5S (link level).
+id = "regression"
+command = "./scripts/heavy.sh timeout 1800 go test -count=1 ./internal/transport/... ./internal/app ./internal/bridge && NETSIM_SCENARIOS='1 2 3 4' mise run e2e:netsim && mise run gate -- NI0 && mise run gate -- RL1 && mise run gate -- WB && mise run gate -- SP1b && mise run gate -- C5S"
+
+[[criteria]]
+id = "simplify-report"
+command = "test -s gates/RC1/SIMPLIFY.md"
