@@ -1,0 +1,51 @@
+# Frozen acceptance for block GR (tooling; rigour: standard), written before the code: `gate.py --resume` re-uses a
+# finished criterion only on the same candidate. Decision: docs/autonomous-decisions.md, row « process (after Codex) »,
+# item 4. Rule: docs/plans/2026-11-12-gr-gate-resume.md.
+#   - every run records each finished criterion atomically (gates/<lot>/resume/<id>.json, self-checksummed): verdict,
+#     evidence SHA-256, criterion table, runner identity, tool versions, INKWELL_* environment, candidate digest
+#     (tracked + untracked non-ignored content, minus gates/<lot>.json and the cleared files of gates/<lot>/; the
+#     gates/<lot>/*.md reports are inputs);
+#   - --resume re-uses a criterion only if its record is intact and every recorded input still matches when the
+#     criterion is reached; a valid failure stays blocking; an interrupted criterion (no record) re-runs; a native
+#     performance criterion (declared exclusive, or with an exclusive measurement step) always re-runs;
+#   - without --resume nothing changes but the record files; the base guard and deferral checks always run.
+# gate.sh runs the merge-base's runner: the flag takes effect once GR is on main, so this gate tests the working-tree
+# runner directly, never through gate.sh. A unittest that selects nothing passes, so each named test must be listed
+# by `unittest -v` (nothing skipped, exit 0).
+raw_results = ["docs/plans/2026-11-12-gr-gate-resume.md", "gates/guard-overrides.json", "gates/GR/*"]
+
+[[criteria]]
+# The rule is written down and the flag is discoverable where every agent reads the commands.
+id = "spec"
+command = "test -s docs/plans/2026-11-12-gr-gate-resume.md && grep -q 'gate -- --resume' CLAUDE.md"
+
+[[criteria]]
+# One test per input class and per outcome, on temporary git repositories, plus the digest mutant: a runner whose
+# candidate_digest is constant re-uses a changed candidate in the scenario where the real runner re-runs.
+id = "unit"
+command = '''out=$(./scripts/heavy.sh timeout 600 python3 -m unittest -v scripts/gate_resume_test.py 2>&1) || { echo "$out" | tail -60; exit 1; }; if echo "$out" | grep -q -- '\.\.\. skipped'; then echo "skipped tests"; exit 1; fi; for t in test_hit_on_identical_candidate test_miss_on_tracked_change test_miss_on_untracked_change test_miss_on_mode_change test_miss_on_report_md_change test_non_inputs_do_not_miss test_miss_on_command_change test_miss_on_runner_change test_miss_on_tool_version_change test_miss_on_environment_change test_miss_on_evidence_changed_or_missing test_corrupted_record_reruns test_recorded_failure_stays_blocking test_interrupted_criterion_reruns test_exclusive_criterion_always_reruns test_resume_removes_stale_evidence test_validity_checked_when_reached test_without_flag_behaviour_unchanged test_base_guard_always_runs_on_resume test_cli_accepts_resume_flag test_mutant_skipping_digest_check_is_caught; do echo "$out" | grep -q -- "^$t (" || { echo "missing or not run: $t"; exit 1; }; done'''
+
+[[criteria]]
+# No regression of the runner without the flag: its self-test, the anti-weakening guard's self-test, evidence reset.
+# gate-selftest.py runs bare, as in RG: it takes scripts/heavy.sh --exclusive itself, which refuses a shared slot.
+id = "regression"
+command = "python3 scripts/gate-selftest.py && python3 scripts/gate-guard.py --self-test && ./scripts/heavy.sh timeout 300 python3 -m unittest scripts/gate_reset_test.py"
+
+[[criteria]]
+# The new tests run in test:py, hence in every `mise run ci` (they were simply not listed during the freeze).
+id = "test-py-inclusion"
+command = '''python3 -I -c "
+import sys, tomllib
+run = ' '.join(tomllib.load(open('mise.toml', 'rb'))['tasks']['test:py']['run'])
+sys.exit(0 if 'scripts/gate_resume_test.py' in run else 'scripts/gate_resume_test.py is not in test:py')
+"'''
+
+[[criteria]]
+# The tooling's own checks.
+id = "tooling-checks"
+command = "mise run lint:claude-md && mise run test:py"
+
+[[criteria]]
+# The /simplify report of the block's diff (CLAUDE.md, definition of done, step 3).
+id = "simplify-report"
+command = "test -s gates/GR/SIMPLIFY.md"

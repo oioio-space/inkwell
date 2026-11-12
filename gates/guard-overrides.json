@@ -899,6 +899,11 @@
       "id": "69eeda1e218addc8c3040b9dab3415598e777bb3af5fc4ddf0832c4a00930df0",
       "reason": "scripts/block_done_test.py: the preflight test named block C5S, whose netsim mutants are not on main yet, so it failed on a clean checkout; it now names NI0, which has mutants on main. Same assertion (the preflight runs mutants.py --check for a block with mutants and stops on failure); nothing weakened.",
       "decision": "docs/plans/2026-11-09-c5-sound.md"
+    },
+    {
+      "id": "0e586b2231f53818a75834aa5638c93976a5ed65104720e2314d01a05051d06d",
+      "reason": "Block GR (gate --resume): scripts/gate_resume_test.py is the new test module named by the frozen gate gates/GR.toml, committed with the gate before the implementation (red for the right reason); it changes no existing check, threshold or delay.",
+      "decision": "docs/plans/2026-11-12-gr-gate-resume.md"
     }
   ]
 }
