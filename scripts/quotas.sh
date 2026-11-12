@@ -74,6 +74,26 @@ else
 fi
 
 # Known renewals (static)
+# Codex: the latest session log carries the rate-limit windows (5 h and weekly) as reported by the server.
+python3 -I - <<'PY' 2>/dev/null || echo "codex       rate limits unreadable"
+import glob, json, os, time
+logs = sorted(glob.glob(os.path.expanduser("~/.codex/sessions/*/*/*/*.jsonl")), key=os.path.getmtime)
+last = None
+for line in open(logs[-1]) if logs else []:
+    if '"rate_limits"' in line:
+        last = line
+def find(o):
+    if isinstance(o, dict):
+        if "rate_limits" in o: return o["rate_limits"]
+        for v in o.values():
+            r = find(v)
+            if r: return r
+    return None
+r = find(json.loads(last)) if last else None
+at = lambda t: time.strftime("%a %d %H:%M", time.localtime(t))
+print(f"codex       5 h window {r['primary']['used_percent']}% used (reset {at(r['primary']['resets_at'])}); "
+      f"week {r['secondary']['used_percent']}% used (reset {at(r['secondary']['resets_at'])})" if r else "codex       no rate limits logged yet")
+PY
 echo "renewal     gemini daily reset at midnight Pacific (09:00 Paris)"
 echo "renewal     cloudflare daily reset at 00:00 UTC"
 if [[ -r "$QUOTAS_FILE" ]]; then
