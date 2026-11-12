@@ -13,6 +13,7 @@ repo_root="$(git rev-parse --show-toplevel)"
 # temporary repositories would then act on this one. Clear them, as git's own documentation advises
 # (`git rev-parse --local-env-vars`).
 cd "$repo_root"
+# shellcheck disable=SC2046 # one variable name per word, split on purpose
 unset $(git rev-parse --local-env-vars)
 
 if command -v mise >/dev/null 2>&1 && [[ -f "$repo_root/mise.toml" ]]; then
