@@ -53,6 +53,10 @@ gate "Scanning staged Go for vulnerabilities (gosec + govulncheck)…" \
   "Commit blocked: a security vulnerability was found. Fix it or annotate //nolint:gosec." \
   "scan:code:staged" "$repo_root/scripts/sec-scan.sh" --staged
 
+gate "Checking staged frontend files (Biome)…" \
+  "Commit blocked: Biome reports formatting or lint errors in the staged frontend files (run: cd frontend && npx biome check --write <file>)." \
+  "fe:check:staged" "$repo_root/scripts/fe-staged.sh"
+
 gate "Running Google Go style-guide checks…" \
   "Commit blocked: fix the style-guide violations above." \
   "lint:staged" "$repo_root/scripts/lint.sh" --staged

@@ -146,6 +146,10 @@ run = "./scripts/rtkx.sh ./scripts/lint.sh"
 description = "Style-guide gate on staged files only (used by the git pre-commit hook)"
 run = "./scripts/rtkx.sh ./scripts/lint.sh --staged"
 
+[tasks."fe:check:staged"]
+description = "Biome check of the staged frontend files only (used by the git pre-commit hook)"
+run = "./scripts/fe-staged.sh"
+
 [tasks."lint:sh"]
 description = "Lint the bash hook scripts with shellcheck"
 run = "shellcheck -x --source-path=SCRIPTDIR .githooks/* .claude/hooks/*.sh .claude/hooks/lib/*.sh scripts/*.sh scripts/netsim/*.sh scripts/pkg/*.sh scripts/pkgtest/*.sh"
