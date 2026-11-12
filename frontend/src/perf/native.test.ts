@@ -295,7 +295,9 @@ it("reports focus loss with the code focus-lost", () => {
     vi.mocked(document.hasFocus).mockReturnValue(false);
     h.deliver({ type: "trial", id: 1, control: "handler" });
     const failure = h.sent.find((message) => message.type === "failure");
-    expect(failure?.reason).toMatch(/^\[fault:focus-lost\] native editor must be visible and focused/);
+    expect(failure?.reason).toMatch(
+      /^\[fault:focus-lost\] native editor must be visible and focused/,
+    );
     expect(h.sent.some((message) => message.type === "armed")).toBe(false);
   } finally {
     h.close();
