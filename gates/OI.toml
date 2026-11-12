@@ -1,0 +1,96 @@
+# Frozen acceptance for block OI (OS integration, part 1: open a file from the OS, one Inkwell per profile), written
+# before the product code. Rigour: complete (processes racing on one profile, the identity key, bytes from another
+# process, a new local server under ADR 0037). Plan: docs/plans/2026-11-11-oi-single-instance-open.md (decision table
+# R1-R18, section 2.1, model section 6, tests section 9). Closes W41 parts OI1 and OI2, and the part of OI0 that this
+# block ships. User decisions of 2026-11-11 (plan section 11): Q1 a file outside the open project opens at once in a
+# light single-file window with « Ajouter à un projet… » (block OI3, the direct successor: this block ships the
+# interim toast of rows R5 and R6, and its criteria prove exactly that); Q2 « Ouvrir avec » lists only Typst, Markdown
+# and separated-value formats (.csv .tsv .tab .psv).
+# A `go test -run` that matches nothing passes, so every Go criterion requires its named tests to have run and passed;
+# the Vitest and Playwright criteria require their named tests in the JSON report. Commands run under /bin/sh (dash in
+# CI): no bashisms.
+raw_results = ["docs/plans/2026-11-11-oi-single-instance-open.md", "docs/adr/0037-single-instance.md", "docs/protocol/tla/README.md", "docs/objectif-en-cours.md", "gates/OI/*"]
+
+[[criteria]]
+# The specification is complete where the code will need it: every row of the decision table, the decided behaviour
+# of rows R5 and R6 and its successor block OI3, ADR 0037 (the Unix-domain socket amends the local-server invariant,
+# and CLAUDE.md carries the amended line), the model's README section, and the variables the code reads declared for
+# lint:env. Red until step 7 (CLAUDE.md edited) and step 2 (.env.reference declares the new variables).
+id = "spec"
+command = "f=docs/plans/2026-11-11-oi-single-instance-open.md; for r in R1 R2 R3 R4 R5 R6 R7 R8 R9 R10 R11 R12 R13 R14 R15 R16 R17 R18; do grep -q \"^| $r |\" \"$f\" || { echo \"plan lacks row $r\"; exit 1; }; done; grep -q 'Ajouter à un projet' \"$f\" && grep -q 'OI3' \"$f\" || { echo 'plan lacks the decided out-of-project behaviour or OI3'; exit 1; }; ls docs/adr/0037-*.md >/dev/null 2>&1 || { echo 'missing ADR 0037'; exit 1; }; grep -q '^status: ' docs/adr/0037-single-instance.md || { echo 'ADR 0037 has no status'; exit 1; }; grep -q 'ADR 0037' CLAUDE.md || { echo 'CLAUDE.md does not cite ADR 0037'; exit 1; }; grep -q '^## OISingleInstance' docs/protocol/tla/README.md || { echo 'no OISingleInstance section in the TLA+ README'; exit 1; }; for v in XDG_RUNTIME_DIR XDG_ACTIVATION_TOKEN DESKTOP_STARTUP_ID LC_MESSAGES; do grep -q \"^$v\" .env.reference || { echo \"$v not declared\"; exit 1; }; done"
+
+[[criteria]]
+# The model (plan section 6): both sound configurations exhaustive with liveness (Settles, AckedApplied), the nine
+# mutants each detected, the four witnesses each violated (anti-vacuity); every other model of the directory too. The
+# check reads tla-check.sh's own verdict lines, so a model that is not run fails here.
+id = "tla"
+command = "out=$(timeout 1800 mise run tla 2>&1) || { echo \"$out\" | tail -40; exit 1; }; for n in OISingleInstance OISingleInstanceHang; do echo \"$out\" | grep -q \"✓ $n: no error\" || { echo \"sound model not checked: $n\"; exit 1; }; done; for m in NoLock EarlyIdentity AckNoQueue FireAndForget LockReleasedEarly CrashKeepsLock GiveUpOnClosing SecondUnlinks NoRetryLock WitnessHandoff WitnessGiveUp WitnessTakeover WitnessHandover; do echo \"$out\" | grep -q \"✓ OISingleInstance$m: violation detected\" || { echo \"mutant or witness not detected: $m\"; exit 1; }; done"
+
+[[criteria]]
+# Decision table (rows R1-R9, R16; R2 at startup): one test per row family on real temporary trees, the forwarded
+# working directory, symlinks resolved, the walk's stop rules, one toast per request (R5 and R6 give the interim notice
+# naming the file and show nothing: the light window is OI3), and a seeded property over 10 seeds (total,
+# deterministic, every shown file inside its project's root).
+id = "go-launch"
+command = "out=$(./scripts/heavy.sh timeout 600 go test -count=1 -v -run 'Test(Resolve|Plan)' ./internal/launch/ 2>&1) || { echo \"$out\" | tail -40; exit 1; }; for t in TestResolveNoArgs TestResolveFileInCurrentProject TestResolveCurrentProjectFolder TestResolveFileInOtherProject TestResolveProjectOutsideDocs TestResolveLooseFile TestResolvePlainFolder TestResolveSeveralPaths TestResolveRefused TestResolveRelativeToForwardedCwd TestResolveSymlinkResolved TestResolveWalkStops TestResolveStartupPicksProject TestPlanOneToastPerRequest TestPlanOutsideProjectNotice TestResolveProperty; do echo \"$out\" | grep -q -- \"--- PASS: $t\" || { echo \"missing or not passing: $t\"; exit 1; }; done"
+
+[[criteria]]
+# The profile lock and the hand-off, with real processes (the test binary re-executed), under the race detector: lock
+# exclusive, per profile, released by a crash, not inherited; hand-off delivered, before listen, over a stale socket,
+# during closing, refused when the holder hangs; 15 concurrent launches x 10 rounds; duplicates, busy, malformed,
+# slow clients, peer credentials, other version, Unix socket only, socket path fallbacks, v1 vectors, back-off table.
+# Then the request decoder fuzzed for 120 s.
+id = "go-instance"
+command = "out=$(./scripts/heavy.sh timeout 900 go test -count=1 -race -v -run 'Test(Claim|Handoff|Socket|Request|Backoff)' ./internal/instance/ 2>&1) || { echo \"$out\" | tail -40; exit 1; }; for t in TestClaimFirstIsPrimary TestClaimSecondIsNotPrimary TestClaimSeparateProfiles TestClaimSameProfileThroughSymlink TestClaimReleasedByCrash TestClaimNotInheritedByChild TestClaimNoLock TestHandoffDelivers TestHandoffBeforeListen TestHandoffStaleSocket TestHandoffDuringClosing TestHandoffUnresponsive TestHandoffConcurrentLaunches TestHandoffDuplicateIgnored TestHandoffBusy TestHandoffRejectsMalformed TestHandoffSlowClient TestHandoffPeerCheck TestHandoffOtherVersion TestHandoffListensUnixOnly TestSocketPathFallback TestSocketBindFallback TestSocketPathVectors TestRequestVectors TestBackoffSchedule; do echo \"$out\" | grep -q -- \"--- PASS: $t\" || { echo \"missing or not passing: $t\"; exit 1; }; done; ./scripts/heavy.sh timeout 300 go test -run '^$' -fuzz FuzzDecodeRequest -fuzztime 120s ./internal/instance/"
+
+[[criteria]]
+# The command: --version takes no lock (R15); a second launch exits 0 within 5 s having touched neither the profile nor
+# Docs (R10) and forwarding its arguments, working directory and activation token; an unresponsive holder gives the
+# notification and exit code 3 (R11); the claim comes before the identity; the primary survives the GC; shutdown
+# answers "closing" first and releases last; the open queue is bounded.
+id = "go-cmd"
+command = "out=$(./scripts/heavy.sh timeout 600 go test -count=1 -v -run 'Test(VersionDoesNotClaim|SecondLaunch|UnresponsiveTellsPerson|PrimaryClaimsBeforeIdentity|PrimaryHeldUntilExit|ShutdownStopsHandoffFirst|OpenQueueBounded)' ./cmd/inkwell/ 2>&1) || { echo \"$out\" | tail -40; exit 1; }; for t in TestVersionDoesNotClaim TestSecondLaunchTouchesNothing TestSecondLaunchForwardsArgsAndCwd TestUnresponsiveTellsPerson TestPrimaryClaimsBeforeIdentity TestPrimaryHeldUntilExit TestShutdownStopsHandoffFirst TestOpenQueueBounded; do echo \"$out\" | grep -q -- \"--- PASS: $t\" || { echo \"missing or not passing: $t\"; exit 1; }; done"
+
+[[criteria]]
+# The webview applies an open request: shows the file, raises only, one toast with the catalogue's text, waits for the
+# workspace.
+id = "frontend"
+command = "mkdir -p .task && rm -f .task/oi-vitest.json && cd frontend && ../scripts/heavy.sh timeout 300 pnpm exec vitest run --configLoader runner --reporter=json --outputFile=../.task/oi-vitest.json src/workspace/openRequests.test.ts; cd .. && python3 -I -c \"import json,sys; r=json.load(open('.task/oi-vitest.json')); ok={a['title'] for f in r['testResults'] for a in f['assertionResults'] if a['status']=='passed'}; need=['OI open request shows a file of the current project','OI open request with no file only raises','OI open request shows one toast with the catalogue text','OI open request before the workspace is ready waits']; miss=[n for n in need if n not in ok]; sys.exit(f'OI vitest missing or failing: {miss}' if miss else 0)\""
+
+[[criteria]]
+# End to end with real inkwell-server processes (Chromium): a second launch shows a file in the running window and exits
+# 0 within 5 s (R3, R10), a second launch with no file changes nothing (R16), a loose file gives the toast (R6), a first
+# launch with a file opens its project (R2), another profile runs separately (R14).
+id = "e2e"
+command = "mise run e2e:build && mkdir -p .task && rm -f .task/oi-e2e.json && cd frontend && PLAYWRIGHT_JSON_OUTPUT_NAME=../.task/oi-e2e.json INKWELL_E2E_BROWSER=chromium ../scripts/heavy.sh timeout 900 ./node_modules/.bin/playwright test openWith.spec.ts --reporter=json >/dev/null; cd .. && python3 -I -c \"import json,sys\nr=json.load(open('.task/oi-e2e.json')); ok=set()\ndef walk(s):\n for sp in s.get('specs',[]):\n  if sp.get('ok') and sp.get('tests') and all(t.get('status')=='expected' for t in sp['tests']): ok.add(sp['title'])\n for c in s.get('suites',[]): walk(c)\nfor s in r.get('suites',[]): walk(s)\nneed=['OI second launch shows a file of the current project in the running window','OI second launch with no file changes nothing','OI second launch with a loose file shows the toast','OI first launch with a file opens its project','OI another profile runs separately']\nmiss=[n for n in need if n not in ok]\nsys.exit(f'OI e2e missing or failing: {miss}' if miss else 0)\""
+
+[[criteria]]
+# OI1: the packaged desktop entry passes the files (%F) and lists exactly the formats Inkwell handles (user decision Q2:
+# Typst, Markdown, CSV, TSV and the pipe-separated type; never text/plain nor inode/directory); the MIME package adds the
+# globs shared-mime-info lacks (*.tab, *.psv); pkg:lint checks all of it and its selftest refuses an entry without %F
+# and one listing text/plain; the manual page documents the arguments; desktop-file-validate and the AppStream and MIME
+# checks stay.
+id = "pkg"
+command = "d=build/linux/io.github.oioio_space.Inkwell.desktop; x=build/linux/mime/io.github.oioio_space.Inkwell.xml; grep -qx 'Exec=inkwell %F' $d && grep -qx 'MimeType=text/x-typst;text/markdown;text/csv;text/tab-separated-values;text/x-psv;' $d && ! grep -Eq 'text/plain|inode/directory' $d && grep -Fq 'glob pattern=\"*.tab\"' $x && grep -Fq 'glob pattern=\"*.psv\"' $x && grep -q 'Exec=inkwell %F' scripts/pkg/lint.sh && grep -q 'x-psv' scripts/pkg/lint.sh && grep -q 'without %F' scripts/pkg/selftest.sh && grep -q 'listing text/plain' scripts/pkg/selftest.sh && grep -q 'FILE' build/linux/inkwell.1 && mise run pkg:lint"
+
+[[criteria]]
+# Go mutation (gremlins, memory-capped): >= 95 % on both new packages (plan section 9: every duration and back-off step is
+# a pure, table-tested function, so no arithmetic mutant survives by timing).
+id = "mutation"
+command = "for p in ./internal/launch ./internal/instance; do out=$(mise run mutate:go -- $p 2>&1) || { echo \"$out\" | tail -30; exit 1; }; e=$(echo \"$out\" | grep -oE 'Test efficacy: [0-9.]+%' | tail -1 | grep -oE '[0-9.]+'); python3 -I -c 'import sys; e=float(sys.argv[1] or 0); sys.exit(0 if e >= 95 else \"efficacy %s%% < 95%% for %s\" % (sys.argv[1], sys.argv[2]))' \"${e:-0}\" \"$p\" || exit 1; done"
+
+[[criteria]]
+# Rigour complete: an independent review by another model family, and the ux-walkthrough with light and dark captures
+# of R3, R5, R6 (the interim notices of this block) and the SEQ of the short session with the user.
+id = "review"
+command = "test -s gates/OI/REVIEW.md && test -s gates/OI/UX.md && grep -q 'SEQ' gates/OI/UX.md"
+
+[[criteria]]
+# No regression: every Go and frontend unit test, lint, the variable and architecture checks, and the default end-to-end
+# suite (it includes openWith.spec.ts and every spec that starts instances, which now take the profile lock).
+id = "regression"
+command = "mise run test && mise run fe:check && mise run lint && mise run lint:env && mise run arch && mise run e2e"
+
+[[criteria]]
+id = "simplify-report"
+command = "test -s gates/OI/SIMPLIFY.md"

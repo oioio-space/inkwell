@@ -459,3 +459,84 @@ the configuration named, anchor = the override line in the config):
 java -cp tla2tools.jar tlc2.TLC -workers 2 -config LinkProbeHonest.cfg LinkProbe
 java -cp tla2tools.jar tlc2.TLC -workers 2 -config mutants/LinkProbeFloodLimit.cfg mutants/LinkProbeMutants
 ```
+
+## OISingleInstance (W41, block OI, ADR 0037: one Inkwell per profile and the hand-off)
+
+`OISingleInstance.tla` models several launches of Inkwell on one profile folder (not a peer protocol: a local
+interface, kept here because `scripts/tla-check.sh`, `mise run tla`, `formal` and `done` check this directory).
+Each launch is a process: it tries the profile lock (`flock` or `LockFileEx`: released by the kernel when its holder
+dies); the holder (primary) removes any leftover socket file, binds, then opens the identity, serves, and on closing
+answers « closing » until it closes the identity and exits; a launch that does not get the lock dials the socket,
+waits for the acknowledgement, and exits 0, or backs off and tries the lock again. Faults: `Crash` (any process, any
+time, bounded by `MaxCrashes`), `Hang` (a primary stops answering and keeps the lock). Time is abstract: a per-try
+timeout is always allowed while no reply came; giving up (the 5 s deadline) is allowed only while the lock holder is
+hung. The initial socket file is absent or stale (a crash of a previous run).
+
+Fairness: three terms per launch, none on `CloseStart` (the person decides), `Hang` or `Crash` (faults). Each is an
+assumption on the real system, and each strong term is shown necessary (weakened to `WF`, the sound model violates
+`Settles`, measured 2026-11-12):
+
+| Term | Assumes | Why this strength |
+|---|---|---|
+| A1 `WF_vars(Step(p))`, `Step` = the launch's own steps (`TryLock` … `Backoff`) | the OS keeps running every live process that is not hung | the steps are enabled in disjoint control states and stay enabled until the launch moves, so weak fairness on the disjunction is weak fairness on each step |
+| A2 `SF_vars(Answered(p))`, `Answered(q)` = `\E p : Accept(p, q) \/ ReplyClosing(p, q)` | a primary that keeps answering answers a client that keeps reconnecting | the client's per-try `Timeout` disables the answer between tries; with `WF`, a launch times out forever against a serving primary |
+| A3 `SF_vars(GiveUp(p))` | a client whose retries keep meeting a hung lock holder reaches its 5 s deadline | each retry (`Backoff`) disables it; with `WF`, a launch retries forever against a hung holder (`OISingleInstanceHang.cfg`) |
+
+A2 is implied by strong fairness on every `Accept(p, q)` and `ReplyClosing(p, q)` (SF(A) /\ SF(B) implies SF(A \/ B)),
+so the grouped form admits more behaviours and proves at least as much. Why grouped (measured): TLC puts
+`Fairness /\ ~Property` in disjunctive normal form, and each SF term (`<>[]~ENABLED A \/ []<>A`) doubles it. The first
+draft had one SF per pair and per `GiveUp`, 21 SF terms for 3 launches, i.e. 2^21 disjuncts per branch: TLC ran out
+of heap (2–6 GB) in `LNConj.toDNF` (`Liveness.processLiveness`) before exploring a state; with 2 launches (10 SF
+terms) it finished in 2 s. Six SF terms now (2^6). No `SYMMETRY` (unsound with liveness in TLC).
+
+Not covered (named tests instead, plan section 9): the wire format and its decoder (`FuzzDecodeRequest`, vectors),
+the socket path rule and its fallback (`TestSocketPathFallback`), peer credentials (`TestHandoffPeerCheck`), the
+bounds (queue, connections, sizes), the 15 s closing budget as a duration, what the window does with a request
+(`internal/launch`).
+
+| Property | Rule | Meaning |
+|---|---|---|
+| `MutualExclusion` (S1) | D-LOCK, D-ORDER | at most one process has the identity open (the defect this block removes) |
+| `IdentityNeedsLock` (S2) | D-ORDER | the identity is open only by the lock holder |
+| `OnlyHolderListens` (S3) | D-UNLINK | a live socket belongs to the lock holder |
+| `ExitOkImpliesQueued` (S4) | D-ACK | a launch that exits 0 was queued by a primary: no silent loss |
+| `GaveUpJustified` (S5) | D-CLOSING | a launch gives up only on a hung holder, never on « closing » |
+| `Settles` (L1) | D-KERNEL, D-RETRY | every launch eventually serves, hands off, gives up on a hung holder, or crashed |
+| `AckedApplied` (L2) | D-ACK, D-DRAIN | a queued request is applied unless its primary stopped serving |
+
+| Configuration | Result |
+|---|---|
+| `OISingleInstance.cfg`: 3 launches, 1 crash, no hang | no error, liveness included: 28,022 states generated, 11,832 distinct, depth 32, 12 temporal branches over 141,984 behaviour-graph nodes; 14 s (2 workers, 2 GB heap, 2026-11-12) |
+| `OISingleInstanceHang.cfg`: as above, a primary may hang | no error, liveness included: 35,702 states generated, 15,234 distinct, depth 32, 12 temporal branches over 182,808 behaviour-graph nodes; 18 s |
+
+Every mutant below is caught by its listed property and every witness is violated (the 16 OI runs of
+`scripts/tla-check.sh` take 56 s); the `AckedApplied` counterexample of NoDrain ends with a primary serving forever
+with an acknowledged request queued and never applied; the three `Settles` counterexamples end in a fair cycle: launches retrying against a
+lock held by a crashed process (CrashKeepsLock), a launch redialling a stale socket with the lock free (NoRetryLock),
+a launch looping on an absent socket while the primary it unlinked serves (SecondUnlinks).
+
+Mutants (`mutants/OISingleInstanceMutants.tla`, each config overrides one rule of the sound model with the constants of
+`OISingleInstance.cfg`, anchor = the override line in the config) and witnesses (anti-vacuity: the sound model must
+violate them):
+
+| Mutant | Anchor (config line) | Broken rule | Caught by |
+|---|---|---|---|
+| `OISingleInstanceNoLock` | `MayLead <- NoLockLead` | primary = « no socket answers » (the socket-only design) | `MutualExclusion` |
+| `OISingleInstanceEarlyIdentity` | `IdentityAtStart <- EarlyIdentity` | identity opened before the lock (today's order) | `MutualExclusion` |
+| `OISingleInstanceAckNoQueue` | `Enqueue <- AckNoQueue` | acknowledged before queueing | `ExitOkImpliesQueued` |
+| `OISingleInstanceFireAndForget` | `WaitsForReply <- FireAndForget` | exit 0 after sending, no acknowledgement (Wails macOS) | `ExitOkImpliesQueued` |
+| `OISingleInstanceLockReleasedEarly` | `ReleaseOnClose <- ReleaseEarly` | lock released when closing starts | `MutualExclusion` |
+| `OISingleInstanceCrashKeepsLock` | `ReleaseOnCrash <- KeepLockOnCrash` | pid file or `O_EXCL` file left by a crash | `Settles` |
+| `OISingleInstanceGiveUpOnClosing` | `GiveUpOnClosing <- GiveUpClosing` | « closing » read as « already running » | `GaveUpJustified` |
+| `OISingleInstanceSecondUnlinks` | `UnlinksStale <- SecondUnlinksStale` | a second launch removes a « stale » socket (it may be the new primary's) | `Settles` |
+| `OISingleInstanceNoRetryLock` | `AfterBackoff <- DialAgain` | retries reconnect without retrying the lock | `Settles` |
+| `OISingleInstanceNoDrain` | `ToApply <- NoDrain` | requests acknowledged and queued, never read by the window (D-DRAIN) | `AckedApplied` |
+| `OISingleInstanceWitnessHandoff` | invariant `NoHandoff` | witness: some launch exits 0 | (must violate) |
+| `OISingleInstanceWitnessGiveUp` | invariant `NoGiveUp`, `Hangs = TRUE` | witness: some launch gives up on a hung holder | (must violate) |
+| `OISingleInstanceWitnessTakeover` | invariant `NoTakeover` | witness: a launch serves after a primary that served crashed | (must violate) |
+| `OISingleInstanceWitnessHandover` | invariant `NoHandover` | witness: a launch serves after a primary closed normally | (must violate) |
+
+```
+java -cp tla2tools.jar tlc2.TLC -workers 2 -config OISingleInstance.cfg OISingleInstance
+java -cp tla2tools.jar tlc2.TLC -workers 2 -config mutants/OISingleInstanceNoLock.cfg mutants/OISingleInstanceMutants
+```

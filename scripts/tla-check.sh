@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # P-TLA (ADR 0034 step 3, docs/protocol/tla/README.md): fetch the pinned TLA+ tools
 # (tla2tools.jar SHA-256 checked, never committed) and model-check the models
-# (RepoGen, ConnCredit, SyncIndicator, WriteBudget, SendPath, LinkProbe).
+# (RepoGen, ConnCredit, SyncIndicator, WriteBudget, SendPath, LinkProbe, OISingleInstance).
 #
 # Sound models must finish with no error; every mutant listed in the README must be
 # detected (a violation). The task fails if a sound model violates a property OR if a
@@ -117,6 +117,10 @@ run LinkProbeAny LinkProbeAny.cfg LinkProbe sound
 run LinkProbeGreedy LinkProbeGreedy.cfg LinkProbe sound
 run LinkProbeAccept LinkProbeAccept.cfg LinkProbe sound
 
+# OISingleInstance (README "OISingleInstance", block OI, ADR 0037): one process per profile and the hand-off.
+run OISingleInstance OISingleInstance.cfg OISingleInstance sound
+run OISingleInstanceHang OISingleInstanceHang.cfg OISingleInstance sound
+
 # Mutants (README "Contre-épreuve" and the ConnCredit table): each must be detected.
 run RepoGenLossNoBump mutants/RepoGenLossNoBump.cfg mutants/RepoGenLossNoBump mutant
 run RepoGenDeliverNoCheck mutants/RepoGenDeliverNoCheck.cfg mutants/RepoGenDeliverNoCheck mutant
@@ -147,6 +151,12 @@ for m in AcceptLate ZeroPTO NoSentBound StrictSentBound NoMonotone NoClamp NoPen
          NoReopen StopAndWait NoStreamCheck FloodLimit NoCredit NoRefusal AcceptSecond LongRefusal NoSeqBound \
          DataOnly NoDropBand; do
   run "LinkProbe$m" "mutants/LinkProbe$m.cfg" mutants/LinkProbeMutants mutant
+done
+# OISingleInstance mutants and witnesses (README "OISingleInstance"): definition overrides from OISingleInstanceMutants;
+# a witness is an invariant the sound model must violate (anti-vacuity).
+for m in NoLock EarlyIdentity AckNoQueue FireAndForget LockReleasedEarly CrashKeepsLock GiveUpOnClosing SecondUnlinks \
+         NoRetryLock NoDrain WitnessHandoff WitnessGiveUp WitnessTakeover WitnessHandover; do
+  run "OISingleInstance$m" "mutants/OISingleInstance$m.cfg" mutants/OISingleInstanceMutants mutant
 done
 
 exit "$fail"

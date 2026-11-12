@@ -779,6 +779,11 @@
       "id": "facf1b3a9921945089d64bbd6dcf2595256042a5a8800847624e77dd28c38af4",
       "reason": "scripts/perf/refbuild_test.py: Block PB (ADR 0038): the reference build record's cache field is renamed from key to cache_digest (a SHA-256 cache digest that secret scanners read as an API key), and a cache entry is a hit only when its record names that entry; no check, threshold or delay changes. Pinned by refbuild_test.",
       "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "513f55db20a31d312e4b8e96b3b84bd6f82e31f56e462297fabe0fd9cf6363ba",
+      "reason": "internal/app/addrbook_file_test.go: Block RC1, new test TestAddrBookFileMode skips on Windows only, where files have no Unix mode bits (0600 cannot be set or read back); the test runs on Linux and macOS, and the gate's go-app criterion requires its PASS. No existing test, threshold or delay changes.",
+      "decision": "docs/plans/2026-11-12-rc1-reconnect.md"
     }
   ]
 }
