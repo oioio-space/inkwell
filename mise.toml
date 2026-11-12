@@ -18,7 +18,7 @@ experimental = true
 # ── Tools ─────────────────────────────────────────────────────────────────────
 [tools]
 jq            = "1.8.2" # pinned: JSON filtering in deadcode.sh and llm.sh
-go            = "1.27.3"
+go            = "1.27.4"
 gh            = "2.103.3" # pinned: used by the release workflow (supply chain)
 golangci-lint = "2.15.0"
 gofumpt       = "latest"

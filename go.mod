@@ -1,6 +1,6 @@
 module github.com/oioio-space/inkwell
 
-go 1.27.3
+go 1.27.4
 
 require (
 	filippo.io/edwards25519 v1.2.0
