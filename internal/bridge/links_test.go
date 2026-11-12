@@ -85,12 +85,13 @@ func TestLinkPendingWhileSendBlocked(t *testing.T) {
 		if l.OldestPending < 3*time.Second || l.OldestPending > 4*time.Second {
 			t.Errorf("OldestPending = %v, want about 3s", l.OldestPending)
 		}
-		if got := l.Quality(); got != transport.QualityFair {
-			t.Errorf("Quality() with a message waiting 3 s = %v, want fair (« Lien lent »)", got)
+		// « Lien lent » is the sync indicator's signal (OldestPending), never the link's level.
+		if got := l.Quality(); got != transport.QualityUnknown {
+			t.Errorf("Quality() with a message waiting 3 s = %v, want the probe's level (unknown here)", got)
 		}
 		time.Sleep(8 * time.Second)
-		if got := linkTo(t, r, "b").Quality(); got != transport.QualityPoor {
-			t.Errorf("Quality() with a message waiting 11 s = %v, want poor", got)
+		if got := linkTo(t, r, "b").Quality(); got != transport.QualityUnknown {
+			t.Errorf("Quality() with a message waiting 11 s = %v, want the probe's level (unknown here)", got)
 		}
 
 		close(node.release)
@@ -185,4 +186,22 @@ func TestLinkHasNoAddress(t *testing.T) {
 		}
 	}
 	check("PeerLink", reflect.TypeFor[bridge.PeerLink]())
+}
+
+// Spec Annex A.1: the level of a relayed link is unknown, always, whatever figure the first hop gave.
+func TestPeerLinkQualityIsTheProbeLevelNeverOnARelay(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		l    bridge.PeerLink
+		want transport.Quality
+	}{
+		{"direct, fair", bridge.PeerLink{Kind: transport.LinkDirect, ProbeLevel: transport.QualityFair}, transport.QualityFair},
+		{"direct, unknown, a message waiting", bridge.PeerLink{Kind: transport.LinkDirect, OldestPending: time.Minute}, transport.QualityUnknown},
+		{"relayed, poor figure", bridge.PeerLink{Kind: transport.LinkRelayed, ProbeLevel: transport.QualityPoor}, transport.QualityUnknown},
+		{"relayed, a message waiting", bridge.PeerLink{Kind: transport.LinkRelayed, OldestPending: time.Minute}, transport.QualityUnknown},
+	} {
+		if got := tc.l.Quality(); got != tc.want {
+			t.Errorf("%s: Quality() = %v, want %v", tc.name, got, tc.want)
+		}
+	}
 }

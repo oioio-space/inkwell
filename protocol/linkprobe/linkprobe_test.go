@@ -176,6 +176,26 @@ func TestLossExactNearMaxUint64(t *testing.T) {
 	}
 }
 
+// Spec §8.5.5 step 5, computed exactly: 1000 × L + ⌊ΔS / 2⌋ overflows 64 bits (the carry of the
+// 128-bit sum) for these counters; 17 446 744 073 709 551 lost of 3e18 is 5.8 permille, rounds to 6.
+func TestLossRoundingCarry(t *testing.T) {
+	p := open(t)
+	const dS, lost = 3_000_000_000_000_000_000, 17_446_744_073_709_551
+	if _, err := p.Probe(0, 10, true); err != nil {
+		t.Fatal(err)
+	}
+	p.Receive(ms, echo(1, 0), 10, time.Second)
+	if _, err := p.Probe(linkprobe.MinSpan, 10+dS, true); err != nil {
+		t.Fatal(err)
+	}
+	if got := p.Receive(linkprobe.MinSpan+ms, echo(2, dS-lost), math.MaxUint64, time.Second); got != linkprobe.Accepted {
+		t.Fatalf("receive: %v", got)
+	}
+	if l := p.Loss(linkprobe.MinSpan + ms); l != 6 {
+		t.Fatalf("loss %d permille, want 6", l)
+	}
+}
+
 // Spec §8.5.6: the credit is per connection; the elapsed time is capped before it is added,
 // so an instant far in the future cannot overflow it.
 func TestResponderCreditCapped(t *testing.T) {

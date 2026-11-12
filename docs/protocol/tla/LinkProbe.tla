@@ -168,6 +168,8 @@ DeliverData(i) ==
   /\ UNCHANGED <<epoch, sent, ndata, sid, out, wait, toR, echoes, probes, pending, lastEchoed,
                  lastR, samples, ticked, r, echoesSent, elapsed, stalled, stalls, ends>>
 
+\* A data packet the network loses, or that the responder's QUIC stack discards as a late possible
+\* duplicate (spec §8.5.2: quic-go's IgnorePacketsBelow): either way it is never counted.
 LoseData(i) ==
   /\ i \in 1..Len(data)
   /\ data' = Remove(data, i) /\ g' = [g EXCEPT !.lost = TRUE]

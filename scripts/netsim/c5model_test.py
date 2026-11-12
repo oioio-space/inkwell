@@ -8,6 +8,7 @@ the false-failure rate by 1e-3, and 3000 rejections out of 3000 bound the power 
 0.999. Run: ./scripts/heavy.sh timeout 600 python3 -m unittest scripts/netsim/c5model_test.py
 """
 
+import dataclasses
 import io
 import json
 import math
@@ -22,6 +23,7 @@ from contextlib import redirect_stdout
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import c5model as m  # noqa: E402
 
+SPIKE_SEED = 158  # a run of Transition.PLAN with one step outside the tolerance without the lag term
 RUNS = 3000  # the fewest runs for which 0 / RUNS bounds a rate by 1e-3 (95 %)
 DESIGN_RATE = 60.0  # packets/s of the accuracy findings (the C5 rule runs at m.DESIGN_RATE, plan section 5)
 LIMITS_GO = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "..", "protocol", "limits.go")
@@ -63,7 +65,7 @@ class Netem(unittest.TestCase):
         out, _, _ = m.netem_hop(sent, m.PROFILES["wifi-clean"], rng, 0, 100)
         order = [tag for _, tag, _ in sorted(out)]
         self.assertGreater(sum(a > b for a, b in zip(order, order[1:])), 100)
-        out, _, _ = m.netem_hop(sent, m.PROFILES["wifi-reorder"], rng, 0, 100)
+        out, _, _ = m.netem_hop(sent, m.PROFILES["wifi-reorder-deep"], rng, 0, 100)
         at_once = sum(1 for (t, tag, _) in out if t == sent[tag][0])
         self.assertAlmostEqual(at_once / len(out), 0.80, delta=0.03)
 
@@ -91,10 +93,12 @@ class Detector(unittest.TestCase):
         self.assertEqual(self.run_detector(arrivals, adapted=False), 1)
 
     def test_adaptation_lowers_but_does_not_end_spurious_losses(self):
-        """After spurious losses quic-go waits up to 2 RTT; the proposed P4 still exceeds it."""
+        """After spurious losses quic-go waits up to 2 RTT; the first P4 (a fifth held 60 ms) still
+        exceeds it."""
+        m.PHASES["P4D"] = "wifi-reorder-deep"
         tr = m.Traffic(rate=DESIGN_RATE)
         rng = random.Random(5)
-        ws = [m.loss_window("P4", tr, rng, detect=True) for _ in range(20)]
+        ws = [m.loss_window("P4D", tr, rng, detect=True) for _ in range(20)]
         rates = [w.spurious / w.sent for w in ws]
         self.assertGreater(min(rates), 0.03, rates)  # above the 2.5 % that turns good into fair
 
@@ -200,6 +204,57 @@ class Rule(unittest.TestCase):
         return code, json.loads(out.getvalue())["ok"]
 
 
+class Transition(unittest.TestCase):
+    """Spec §8.5.5 step 3.6 and « Exactitude » (run 5-s1-r8): a sample at a change of the round trip."""
+
+    PLAN = (("P1", 40.0), ("P2", 40.0), ("P3", 40.0))  # the profiles of the run, its drop at t = 80
+
+    def test_pto_climbs_after_the_drop(self):
+        """RFC 9002 §5.3, as quic-go updates it: after P2 (300 ms) falls to P3 (60 ms) rttvar takes a
+        quarter of the gap at once, so the PTO of C, steady at about 390 ms, reaches 0.6 to 0.8 s for
+        a few hundred milliseconds, then settles near P3's 117 ms; `pto_peak` bounds it from above."""
+        a, b = m.PROFILES[m.PHASES["P2"]], m.PROFILES[m.PHASES["P3"]]
+        steady, peak = m.pto_peak(a, b)
+        self.assertAlmostEqual(steady, m.pto_peak(b, b)[1], places=9)  # no change: no lag
+        self.assertEqual(m.transition_lag(b, b), 0.0)
+        highest = []
+        for seed in range(6):
+            t_ = m.trace(m.design_traffic(), random.Random(seed), plan=self.PLAN, detect=False)
+            r = t_.path.rtt
+            before = r.pto(79.9)
+            after = [r.pto(80.0 + k / 100) for k in range(100)]
+            self.assertLess(abs(before - m.pto_peak(a, a)[0]), 0.05, before)
+            highest.append(max(after))
+            self.assertLess(r.pto(83.0), 0.16)
+        self.assertGreater(min(highest), 0.6, highest)
+        self.assertLessEqual(max(highest), peak, (highest, peak))
+
+    def test_single_step_spike_at_the_p2_p3_drop(self):
+        """Run 5-s1-r8: one step of P2>P3, its oldest sample a PROBE of the end of P2 resent (or held
+        behind a resent one) across the drop and accepted within the inflated PTO, reads a figure above
+        the tolerance without the lag term, while its neighbours stay inside; with the lag of
+        `transition_lag` (the crossing term of a sample at a change) it is inside."""
+        rule, old = m.RULE, dataclasses.replace(m.RULE, lags=())
+        t_ = m.trace(m.design_traffic(), random.Random(SPIKE_SEED), plan=self.PLAN, detect=False)
+        bad = []
+        for t, figs, _, label, n, lo_t, hi_t in t_.steps:
+            if math.isnan(lo_t) or math.isnan(figs["honest"]):
+                continue
+            lo, hi = m.tolerance(old, label, lo_t, hi_t, n)
+            if not lo <= figs["honest"] <= hi:
+                bad.append((t, figs, label, n, lo_t, hi_t))
+        self.assertEqual(len(bad), 1, [b[0] for b in bad])  # red with the old tolerance: one step
+        t, figs, label, n, lo_t, hi_t = bad[0]
+        self.assertEqual(label, "P2>P3")
+        s0 = figs["s0"]  # (hand-over, r read at, counted, round trip, transmissions, held)
+        self.assertGreater(figs["honest"], m.tolerance(old, label, lo_t, hi_t, n)[1])  # too much loss
+        self.assertTrue(79.0 < s0[0] < 80.0, s0)  # handed over at the end of P2
+        self.assertTrue(s0[4] > 1 or s0[5], s0)  # resent, or held behind a resent PROBE
+        self.assertGreater(s0[3], m.pto_peak(m.PROFILES["wifi-far"], m.PROFILES["wifi-far"])[0], s0)
+        lo, hi = m.tolerance(rule, label, lo_t, hi_t, n)
+        self.assertTrue(lo <= figs["honest"] <= hi, (figs["honest"], lo, hi))  # green with the lag
+
+
 class Statistics(unittest.TestCase):
     """Plan section 4: false failures <= 1e-3 per run, power >= 0.999 against every mutant."""
 
@@ -257,6 +312,26 @@ class Findings(unittest.TestCase):
         self.assertLess(max(r["error_p999_per_seed"]), 0.015, r)
         r = m.errors(m.Traffic(rate=DESIGN_RATE), "P1", 400, range(41, 44))
         self.assertLess(max(r["error_p999_per_seed"]), 0.008, r)
+
+    def test_late_packets_beyond_the_ack_loop_are_loss(self):
+        """Spec §8.5.2 (implementation of C5S): quic-go discards a packet that arrives more than its ACK
+        loop after a higher-numbered one, before counting it. With no network loss and an RTT of
+        25 ms, 20 % of the packets 60 ms late give about 15 % (measured: 15 %); P4, reordered within the
+        loop, reads no loss; the first P4, beyond it, reads more than 10 %."""
+        m.PROFILES["ack-loop"] = m.Netem(0.00625, 0.0)
+        rng = random.Random(4)
+        ours = m._poisson_times(rng, 120, 0, 60)
+        late = [t + 0.0125 + (0.060 if rng.random() < 0.2 else 0.0) for t in ours]
+        share = m._discard_late(late, lambda _t: m.PROFILES["ack-loop"], rng) / len(ours)
+        self.assertGreater(share, 0.12)
+        self.assertLess(share, 0.20)
+        for prof, lo, hi in (("wifi-reorder", 0.0, 0.003), ("wifi-reorder-deep", 0.10, 0.25)):
+            m.PHASES["PX"] = prof
+            t_ = m.trace(m.Traffic(rate=120), random.Random(5), plan=(("PX", 60.0),), detect=False)
+            figs = sorted(s[1]["honest"] for s in t_.steps if not math.isnan(s[1]["honest"]))
+            with self.subTest(profile=prof):
+                self.assertGreaterEqual(figs[len(figs) // 2], lo)
+                self.assertLessEqual(figs[len(figs) // 2], hi)
 
     def test_paced_sender_keeps_its_echoes(self):
         """F8: with a paced sender (waits of a few ms) few echoes are late; a 300 ms stack wait

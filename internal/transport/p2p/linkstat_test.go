@@ -5,8 +5,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/libp2p/go-libp2p/core/peer"
-
 	"github.com/oioio-space/inkwell/internal/transport"
 )
 
@@ -40,56 +38,6 @@ func TestLinkRTTEstimatorEmpty(t *testing.T) {
 	var e rttEstimator
 	if rtt, dev, age := e.get(t0); rtt != 0 || dev != 0 || age != 0 {
 		t.Errorf("empty estimator = %v %v %v, want zeros", rtt, dev, age)
-	}
-}
-
-// Plan §7, lossPct: lost / sent packets over the last 30 s, null under 50 packets.
-func TestLinkLossWindowNullUnderMinimum(t *testing.T) {
-	var w lossWindow
-	w.observe(t0, 0, 0)
-	w.observe(t0.Add(time.Second), 49, 10)
-	if _, ok := w.pct(t0.Add(time.Second)); ok {
-		t.Error("loss reported under 50 packets, want none")
-	}
-	w.observe(t0.Add(2*time.Second), 100, 10)
-	got, ok := w.pct(t0.Add(2 * time.Second))
-	if !ok || got != 10 {
-		t.Errorf("loss = %v (ok %v), want 10%%", got, ok)
-	}
-}
-
-// Plan §7, lossPct: only the last 30 s count; older loss ages out.
-func TestLinkLossWindowAgesOut(t *testing.T) {
-	var w lossWindow
-	w.observe(t0, 0, 0)
-	w.observe(t0.Add(time.Second), 100, 50) // a bad second
-	for i := 2; i <= 40; i++ {
-		w.observe(t0.Add(time.Duration(i)*time.Second), uint64(100+i*10), 50)
-	}
-	got, ok := w.pct(t0.Add(40 * time.Second))
-	if !ok || got != 0 {
-		t.Errorf("loss 39 s after the bad second = %v (ok %v), want 0", got, ok)
-	}
-}
-
-// Plan §7, lossPct: the counters are not monotonic (lost packets may be
-// received later; a new connection restarts them), so deltas clamp at 0.
-func TestLinkLossWindowClampsDecreases(t *testing.T) {
-	var w lossWindow
-	w.observe(t0, 0, 0)
-	w.observe(t0.Add(time.Second), 100, 20)
-	w.observe(t0.Add(2*time.Second), 150, 15) // lost went down: late arrivals
-	w.observe(t0.Add(3*time.Second), 10, 0)   // new connection: counters restart
-	w.observe(t0.Add(4*time.Second), 60, 0)
-	got, ok := w.pct(t0.Add(4 * time.Second))
-	if !ok {
-		t.Fatal("no loss figure with 200 packets")
-	}
-	if got < 0 || got > 100 {
-		t.Errorf("loss = %v, want within [0, 100]", got)
-	}
-	if want := 20.0 / 200 * 100; got != want {
-		t.Errorf("loss = %v, want %v (steps clamped at 0)", got, want)
 	}
 }
 
@@ -139,34 +87,6 @@ func TestLinkPathTracking(t *testing.T) {
 	}
 }
 
-// Decision Q4: plain grades and their thresholds.
-func TestLinkQualityGrades(t *testing.T) {
-	pct := func(v float64) *float64 { return &v }
-	ms := time.Millisecond
-	tests := []struct {
-		name string
-		l    transport.Link
-		want transport.Quality
-	}{
-		{"nothing measured", transport.Link{}, transport.QualityUnknown},
-		{"fast and clean", transport.Link{RTT: 30 * ms, LossPct: pct(0)}, transport.QualityGood},
-		{"rtt at fair", transport.Link{RTT: transport.FairRTT}, transport.QualityFair},
-		{"rtt just under fair", transport.Link{RTT: transport.FairRTT - ms}, transport.QualityGood},
-		{"rtt at poor", transport.Link{RTT: transport.PoorRTT}, transport.QualityPoor},
-		{"loss at fair", transport.Link{RTT: 20 * ms, LossPct: pct(transport.FairLoss)}, transport.QualityFair},
-		{"loss at poor", transport.Link{RTT: 20 * ms, LossPct: pct(transport.PoorLoss)}, transport.QualityPoor},
-		{"loss alone grades", transport.Link{LossPct: pct(12)}, transport.QualityPoor},
-		{"one recent outage", transport.Link{RTT: 20 * ms, Downs10m: 1}, transport.QualityFair},
-		{"flapping", transport.Link{RTT: 20 * ms, Downs10m: 3}, transport.QualityPoor},
-		{"worst figure wins", transport.Link{RTT: 500 * ms, LossPct: pct(0)}, transport.QualityPoor},
-	}
-	for _, tt := range tests {
-		if got := tt.l.Quality(); got != tt.want {
-			t.Errorf("%s: Quality() = %v, want %v", tt.name, got, tt.want)
-		}
-	}
-}
-
 // Spec rule L: a resync restarts the session but is no outage.
 func TestLinkResyncIsNotAnOutage(t *testing.T) {
 	var s stability
@@ -186,41 +106,6 @@ func TestLinkResyncIsNotAnOutage(t *testing.T) {
 	}
 	if got := s.resyncsWithin(t0.Add(20 * time.Minute)); got != 0 {
 		t.Errorf("resyncs10m after 20 min = %d, want 0 (aged out)", got)
-	}
-}
-
-// A resync does not lower the grade of a link.
-func TestLinkQualityIgnoresResyncs(t *testing.T) {
-	l := transport.Link{RTT: time.Millisecond, Resyncs10m: 50, Resyncs: 50}
-	if got := l.Quality(); got != transport.QualityGood {
-		t.Errorf("Quality with 50 resyncs = %v, want %v", got, transport.QualityGood)
-	}
-}
-
-// The loss window starts again when the connection or the scope it reads
-// changes: counters of another connection do not continue the old ones.
-func TestLinkLossWindowResetsOnNewConnection(t *testing.T) {
-	n := &Node{stats: make(map[peer.ID]*peerLink)}
-	pl := new(peerLink)
-	sample := func(conn string, scope transport.LossScope, sent uint64) linkSample {
-		return linkSample{kind: transport.LinkDirect, quic: true, connID: conn, scope: scope, sent: sent}
-	}
-	step := func(i int, s linkSample) {
-		n.applyLinkLocked("p", pl, t0.Add(time.Duration(i)*time.Second), s)
-	}
-	step(0, sample("c1", transport.LossPath, 100))
-	step(1, sample("c1", transport.LossPath, 200))
-	if got := len(pl.loss.steps); got != 1 {
-		t.Fatalf("steps on one connection = %d, want 1", got)
-	}
-	step(2, sample("c2", transport.LossPath, 10)) // a new connection
-	if got := len(pl.loss.steps); got != 0 {
-		t.Errorf("steps after a new connection = %d, want 0", got)
-	}
-	step(3, sample("c2", transport.LossPath, 20))
-	step(4, sample("c2", transport.LossFirstHop, 30)) // same connection, new scope
-	if got := len(pl.loss.steps); got != 0 {
-		t.Errorf("steps after a new scope = %d, want 0", got)
 	}
 }
 

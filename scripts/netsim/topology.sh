@@ -1,7 +1,10 @@
 #!/usr/bin/env bash
 # Network-namespace topology for the netsim scenarios (see run.sh, docs/relay.md).
 #
-#   wan 11.0.0.0/24: bridge br-wan in the current namespace (the test runner)
+#   wan 11.0.0.0/24: bridge br-wan in its own namespace `wan` (the switch). The test runner's
+#   namespace holds only `lo` and never changes during a run: the browser lives there, and an
+#   interface appearing or settling (carrier, IPv6 DAD, bridge port state) makes Chromium report
+#   ERR_NETWORK_CHANGED in the middle of a page load.
 #     relay   11.0.0.10
 #     nat-a   11.0.0.2   lan 10.1.0.0/24  -- alice (eth0, 10.1.0.2)
 #     nat-b   11.0.0.3   lan 10.2.0.0/24  -- bob   (eth0, 10.2.0.2)
@@ -39,9 +42,9 @@
 #        topology.sh impair NS DEV NETEM_ARGS...           # tc qdisc add dev DEV root netem ARGS
 #        topology.sh clear NS DEV
 #        topology.sh qstat NS DEV                          # prints "bytes=N sent=N dropped=N overlimits=N"
-#        topology.sh profile wifi|wifi-far|wifi-clean|blackout|slowrelay   # needs NETSIM_SEED
-#        topology.sh unprofile wifi|blackout|slowrelay     # removes the qdiscs of a profile
-#        topology.sh qstats wifi|blackout|slowrelay        # "NS DEV bytes= sent= dropped= overlimits=" lines
+#        topology.sh profile wifi|wifi-far|wifi-clean|wifi-entry|wifi-reorder|wifi-edge|blackout|slowrelay [PHASE]   # needs NETSIM_SEED
+#        topology.sh unprofile wifi|blackout|slowrelay     # removes the qdiscs of a profile (a wifi-* name: the same four)
+#        topology.sh qstats wifi|blackout|slowrelay        # "NS DEV bytes= sent= dropped= overlimits=" lines, in profile_ifaces order
 #        topology.sh relay-down | relay-up                 # the relay's network card
 set -euo pipefail
 
@@ -50,7 +53,7 @@ declare -A WAN_HOST=([relay]=10 [nat-a]=2 [nat-b]=3 [nat-c]=4)
 # carol only exists in mesh mode (see up).
 CAROL_HOST=20
 declare -A LAN=([nat-a]=10.1.0 [nat-b]=10.2.0 [nat-c]=10.3.0)
-NAMESPACES=(relay nat-a nat-b nat-c alice bob carol)
+NAMESPACES=(wan relay nat-a nat-b nat-c alice bob carol)
 MESH=0
 
 # lan NAT HOST HOST_IF: a point-to-point link from the NAT's eth1 to HOST_IF.
@@ -107,21 +110,21 @@ up() {
       ;;
   esac
   ip link set lo up
-  ip link add br-wan type bridge
-  ip addr add "$WAN.1/24" dev br-wan
-  ip link set br-wan up
   local ns
   for ns in "${NAMESPACES[@]}"; do
     [[ $ns == carol && $MESH == 0 ]] && continue
     ip netns add "$ns"
     ip -n "$ns" link set lo up
   done
+  ip -n wan link add br-wan type bridge
+  ip -n wan addr add "$WAN.1/24" dev br-wan
+  ip -n wan link set br-wan up
   local -A hosts=()
   for ns in "${!WAN_HOST[@]}"; do hosts[$ns]=${WAN_HOST[$ns]}; done
   ((MESH)) && hosts[carol]=$CAROL_HOST
   for ns in "${!hosts[@]}"; do
-    ip link add "w-$ns" type veth peer name eth0 netns "$ns"
-    ip link set "w-$ns" master br-wan up
+    ip link add "w-$ns" netns wan type veth peer name eth0 netns "$ns"
+    ip -n wan link set "w-$ns" master br-wan up
     ip -n "$ns" addr add "$WAN.${hosts[$ns]}/24" dev eth0
     ip -n "$ns" link set eth0 up
   done
@@ -162,7 +165,7 @@ alice_attach() {
 }
 
 down() {
-  local ns pid link
+  local ns pid
   # A namespace is only freed once its last process exits: a server or socat still running from the
   # previous scenario keeps its veth (w-<ns>) alive, and the next `up` fails with « File exists »
   # (scenario 8 after 7, 2026-11-09). Stop the processes first, then delete everything by name.
@@ -174,10 +177,7 @@ down() {
     for pid in $(ip netns pids "$ns" 2>/dev/null); do kill -KILL "$pid" 2>/dev/null || true; done
     ip netns del "$ns" 2>/dev/null || true
   done
-  for link in $(ip -o link show 2>/dev/null | awk -F': ' '$2 ~ /^w-/ {sub(/@.*/, "", $2); print $2}'); do
-    ip link del "$link" 2>/dev/null || true
-  done
-  ip link del br-wan 2>/dev/null || true
+  # Deleting the namespace `wan` (done above) removes br-wan and the w-<ns> ends with it.
 }
 
 # impair NS DEV ARGS...: netem on the egress of DEV. Always `del` then `add`: `replace` keeps the
@@ -205,7 +205,7 @@ qstat() {
 # access link are the egress of its NAT's eth0 and eth1.
 profile_ifaces() {
   case $1 in
-    wifi | wifi-far | wifi-clean) echo "nat-a:eth0 nat-a:eth1 nat-b:eth0 nat-b:eth1" ;;
+    wifi | wifi-far | wifi-clean | wifi-entry | wifi-reorder | wifi-edge) echo "nat-a:eth0 nat-a:eth1 nat-b:eth0 nat-b:eth1" ;;
     blackout) echo "nat-a:eth0 nat-a:eth1" ;;
     slowrelay) echo "relay:eth0" ;;
     *)
@@ -215,16 +215,28 @@ profile_ifaces() {
   esac
 }
 
-# profile NAME: apply a named profile. Every limit is sized explicitly (netem's default of 1000
-# packets under `rate` is a queue of minutes) and the seed makes the loss draws replayable.
+# profile NAME [PHASE]: apply a named profile. Every limit is sized explicitly (netem's default of 1000
+# packets under `rate` is a queue of minutes). The seed makes the draws replayable, and it is one per
+# qdisc and per phase, `seed * 64 + 8 * PHASE + index of the interface in profile_ifaces`: with the same
+# seed everywhere, the four Gilbert-Elliott chains made the same draws (nat-a/eth0 and nat-b/eth0 dropped
+# exactly 21 and 21 packets) and each phase replayed the previous one's losses (plan C5S, harness 1).
 profile() {
-  local name=$1 seed=${NETSIM_SEED:-1} args pair
+  local name=$1 phase=${2:-0} seed=${NETSIM_SEED:-1} args pair i=0
   case $name in
-    wifi) args="delay 15ms 5ms distribution normal loss gemodel 1% 30% 50% 0.1% duplicate 0.5% corrupt 0.1% limit 10000 seed $seed" ;;
-    wifi-far) args="delay 75ms 10ms distribution normal loss gemodel 1% 30% 50% 0.1% duplicate 0.5% corrupt 0.1% limit 10000 seed $seed" ;;
-    wifi-clean) args="delay 15ms 5ms distribution normal limit 10000 seed $seed" ;;
-    blackout) args="loss 100% limit 1000 seed $seed" ;;
-    slowrelay) args="delay 20ms rate 65536bit limit 24 seed $seed" ;;
+    wifi) args="delay 15ms 5ms distribution normal loss gemodel 1% 30% 50% 0.1% duplicate 0.5% corrupt 0.1% limit 10000" ;;
+    wifi-far) args="delay 75ms 10ms distribution normal loss gemodel 1% 30% 50% 0.1% duplicate 0.5% corrupt 0.1% limit 10000" ;;
+    wifi-clean) args="delay 15ms 5ms distribution normal limit 10000" ;;
+    # P0: independent loss of 1.75 % on the path (0.88 % on each of the two hops), between the good | fair
+    # midpoint (1 %) and its rise threshold (2.5 %), so that the first level, entered from unknown, is judged.
+    wifi-entry) args="loss random 0.88% limit 10000" ;;
+    # P4: no loss; a 40 ms delay with 8 ms of jitter per hop reorders packets several deep at 120 packets/s,
+    # but never later than the ACK loop after which the peer's quic-go discards a late packet as a possible
+    # duplicate (spec 8.5.2): the level stays good.
+    wifi-reorder) args="delay 40ms 8ms distribution normal limit 10000" ;;
+    # P5: wifi with a bad state three times less likely: path loss 0.99 %, on the good | fair boundary.
+    wifi-edge) args="delay 15ms 5ms distribution normal loss gemodel 0.18% 30% 50% 0.1% duplicate 0.5% corrupt 0.1% limit 10000" ;;
+    blackout) args="loss 100% limit 1000" ;;
+    slowrelay) args="delay 20ms rate 65536bit limit 24" ;;
     *)
       echo "topology: unknown profile '$name'" >&2
       exit 2
@@ -232,7 +244,8 @@ profile() {
   esac
   for pair in $(profile_ifaces "$name"); do
     # shellcheck disable=SC2086 # args is a word list on purpose
-    impair "${pair%%:*}" "${pair##*:}" $args
+    impair "${pair%%:*}" "${pair##*:}" $args seed $((seed * 64 + 8 * phase + i))
+    i=$((i + 1))
   done
 }
 
@@ -261,7 +274,7 @@ case ${1:-} in
   impair) impair "${2:?usage: topology.sh impair NS DEV ARGS...}" "${3:?usage: topology.sh impair NS DEV ARGS...}" "${@:4}" ;;
   clear) clear_qdisc "${2:?usage: topology.sh clear NS DEV}" "${3:?usage: topology.sh clear NS DEV}" ;;
   qstat) qstat "${2:?usage: topology.sh qstat NS DEV}" "${3:?usage: topology.sh qstat NS DEV}" ;;
-  profile) profile "${2:?usage: topology.sh profile NAME}" ;;
+  profile) profile "${2:?usage: topology.sh profile NAME [PHASE]}" "${3:-0}" ;;
   unprofile) unprofile "${2:?usage: topology.sh unprofile NAME}" ;;
   qstats) qstats "${2:?usage: topology.sh qstats NAME}" ;;
   relay-down) ip -n relay link set eth0 down ;;

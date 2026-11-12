@@ -153,19 +153,32 @@ own window|` over the 5000 windows, with the per-seed 99.9th percentiles in brac
 | Traffic | P1 `wifi` | P2 `wifi-far` | P4 `wifi-reorder` | largest net crossing (P1, P2, P4) |
 |---|---|---|---|---|
 | idle, 4 packets/s | unknown: under 200 packets | unknown | unknown | — |
-| typing, 17/s | 9.6 ‰ (7.2-9.6) | 9.9 ‰ (6.6-9.9) | **14.0 ‰** (8.0-14.0) | 5, 5, 9 packets |
-| design, 60/s | 4.5 ‰ (3.1-4.5) | 5.6 ‰ (3.7-5.6) | 8.0 ‰ (5.0-8.0) | 8, 10, 16 |
-| saturated, 300/s, the PROBE waiting up to 300 ms | per seed 3.5-5.5 ‰, 25 % unknown | 7.9 ‰ (5.1-7.9) | 11.0 ‰ (7.0-11.0) | 28, 44, 82 |
-| 60/s, the count read 50 ms late | 6.3 ‰ | 6.3 ‰ | 9.0 ‰ | 11, 12, 19 |
+| typing, 17/s | 10.3 ‰ (6.3-10.3) | **15.0 ‰** (7.2-15.0) | 8.0 ‰ (6.0-8.0) | 5, 8, 7 packets |
+| design, 60/s | 4.8 ‰ (3.0-4.8) | 5.8 ‰ (3.7-5.8) | 5.0 ‰ (3.0-5.0) | 8, 10, 11 |
+| saturated, 300/s, the PROBE waiting up to 300 ms | per seed 3.2-5.6 ‰, 27 % unknown | 7.9 ‰ (5.2-7.9) | 7.0 ‰ (4.0-7.0), 9 % unknown | 28, 45, 36 |
+| 60/s, the count read 50 ms late | 5.1 ‰ | 5.8 ‰ | 6.0 ‰ | 9, 10, 11 |
 
-So **the figure is within 15 ‰ of its window's loss at the 99.9th percentile in every modelled condition**. The
-worst case is typing traffic under heavy reordering, a few crossings over few packets. Structurally, an accepted
+(Rerun after the implementation of C5S: the loss of a window now includes the packets the peer's stack discards as
+late, see below, and P4 reorders within quic-go's tolerance.) So **the figure is within 15 ‰ of its window's loss at the 99.9th percentile in every modelled condition** (15.4 ‰ after the C5S model correction of 2026-11-11, which simulates a probe resent across a sudden drop of the round trip, accepted while rttvar is inflated; up to 18.4 ‰ for a window whose oldest sample is within 2 s of such a drop; spec §8.5.5 « Exactitude »). The
+worst case is typing traffic on the far Wi-Fi, a few crossings over few packets. Structurally, an accepted
 echo bounds the sender-side crossings by the packets sent in one PTO after the PROBE was handed over; the spec
 states the conservative bound `(p₀ + p₁ + 2) / ΔS` (§8.5.5, « Exactitude »). The clamp `min(ΔR, ΔS)` cuts
 negative errors, so near zero loss the figure leans upward (review 3, F9; P4's positive mean comes from it, not
 from stragglers). Under load (review 2, F8), a paced sender has 0.05 late probes per accepted one; with the PROBE
 waiting up to 300 ms, 5.8 are late, so the figure goes unknown (25 % of the windows) rather than wrong. Widening
 the late bound would let resent PROBEs through, with their crossings: it stays one PTO (`test_paced_sender_keeps_its_echoes`).
+
+**What `received` counts (found at the implementation of C5S).** quic-go v0.64.1 discards, before counting it, any
+packet whose number is below a limit it raises to `L + 1` once the sender has acknowledged a packet carrying its ACK
+of `L` (`IgnorePacketsBelow`, `IsPotentiallyDuplicate`): a packet that arrives more than about one round trip after
+a higher-numbered one is never received. Measured with no network loss and an RTT of about 25 ms: 20 % of the
+packets 30 ms late gave a figure of 5 %, 60 ms late 15 %. The definition follows the code: the figure is the share
+of our packets **the peer's QUIC stack did not accept** (spec §8.5.2). Those packets are not acknowledged, so the
+sender declares them lost and resends their data: for the person they are loss. Reordering shorter than that ACK
+loop is not loss: netsim P4 now reorders within it (40 ms ± 8 ms per hop) and stays good; the first P4 (a fifth of
+the packets held 60 ms) went beyond it and reads about 16 % in the model (`_discard_late`, which reproduces the
+60 ms measurement and errs low at 30 ms, 0.6 % against 5 %: the ACK loop is somewhat shorter in quic-go than one
+modelled RTT).
 
 **The thresholds, for a person** (loss over the 30 s window; round trip: the lower median of its samples):
 
@@ -212,11 +225,11 @@ two netem hops; the truth of the 30 s windows, 0.1 %-99.9 %):
 | P1 `wifi`, bursty | 3.57 % (1.8 % per hop) | 2.1 %-5.3 % | fair | fair 100 % |
 | P2 `wifi-far` (RTT ≈ 300 ms) | 3.57 % | 2.3 %-5.9 % | fair | fair 100 % |
 | P3 `wifi-clean` | 0 | 0-0.03 % | good | good 100 % |
-| P4 `wifi-reorder` | 0 | 0 | good (the figure reads up to ≈ 1 % under heavy reordering, below the 2.5 % rise) | good 100 % |
+| P4 `wifi-reorder` (40 ms ± 8 ms per hop: reordered several deep, within quic-go's tolerance) | 0 | 0 | good | good 100 % |
 | P5 `wifi-edge` (proposed) | 0.99 % | 0.4 %-1.8 % | on the boundary: the hysteresis decides | good 100 % |
 
 **C5 becomes a classification test** (plan section 4; `c5model.py report`, 3000 runs of the six phases, both
-directions, 120 packets/s, 240 during P0, 10 % foreign traffic on the qdiscs). Review 4 showed that the first
+directions, 120 packets/s, 360 during P0, 10 % foreign traffic on the qdiscs). Review 4 showed that the first
 version, which judged each read against the truth plus a tolerance, could not see a level that never falls back:
 its crossing term (about 6.7 ‰ on P3) was above the 5 ‰ fall threshold. The rule is now built from what the
 prober itself reports:
@@ -227,15 +240,15 @@ prober itself reports:
   place differs at the first figure where it should not.
 - **R2, the figure follows the truth.** From 33 s on, the figure must lie within `1.5·√(T*/n) + c/n` of the range
   of qdisc truths its window may cover, with at least 3000 packets. `c` is the crossings in packets: 22 on P0, P1
-  and P5, 32 on P2, 24 on P3, 52 on P4, about 1.5 times the largest needed over 4000 traces. **R3:** P0, P1 and P2
+  and P5, 32 on P2, 24 on P3, 34 on P4, about 1.5 times the largest needed over 4000 traces. **R3:** P0, P1 and P2
   were impaired (mean `T* ≥ 1 %`).
 - **0 false failures in 3000 runs: ≤ 1.0e-3 per run (95 %).** Each mutant is rejected in 3000 of 3000 runs, a
   power **≥ 0.999**: always good, always poor, always fair, swapped, no hysteresis, sticky (never falls back), the
   entry against `up`, the thresholds doubled, the round-trip thresholds divided by 10 (R1); the old figure from
   quic-go's `PacketsLost / PacketsSent`, M5b (a window since the connection started) and a 60 s window (R2).
-  Halved thresholds are caught in 2997 of 3000 runs (power ≥ 0.997, reported, not required). The entry is judged
-  on P0, whose independent loss puts the first figure between the midpoint and the rise threshold in 99.8 % of
-  the directions, hence the doubled traffic there.
+  Halved thresholds are caught in 2995 of 3000 runs (power ≥ 0.996, reported, not required). The entry is judged
+  on P0, whose independent loss puts the first figure between the midpoint and the rise threshold in 99.9 % of
+  the directions, hence the tripled traffic there.
 
 **What happens to `lossPermille`** (Annex A.1). Removing it was considered. It would change the Links contract v1
 and its vectors, and lose the one number a diagnostic needs; and the level is computed from it, so the two stay

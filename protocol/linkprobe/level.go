@@ -105,8 +105,32 @@ func medianRTT(ws []sample) time.Duration {
 	for _, s := range ws {
 		rs = append(rs, s.rtt)
 	}
-	slices.Sort(rs)
-	return rs[(len(rs)-1)/2]
+	return lowMedian(rs)
+}
+
+// lowMedian returns the element of rank ⌊(n−1)/2⌋ of ds, sorted ascending in place; ds is not empty.
+func lowMedian(ds []time.Duration) time.Duration {
+	slices.Sort(ds)
+	return ds[(len(ds)-1)/2]
+}
+
+// RTT returns the round trip of the link at now (Annex A.1 rttMs, rttVarMs, rttAgeMs): the lower
+// median of the window's samples' rtt (the value that drives the round-trip level), the lower
+// median of their absolute deviations from it, and the time since the newest ECHO. ok false means
+// the figure is unknown (§8.5.5 step 5), and the caller keeps another source.
+func (p *Prober) RTT(now time.Duration) (rtt, dev, age time.Duration, ok bool) {
+	ws, ok := p.window(now)
+	if !ok {
+		return 0, 0, 0, false
+	}
+	rtt = medianRTT(ws)
+	var buf [MaxSamples]time.Duration
+	ds := buf[:0]
+	for _, s := range ws {
+		ds = append(ds, max(s.rtt-rtt, rtt-s.rtt))
+	}
+	last := ws[len(ws)-1]
+	return rtt, lowMedian(ds), max(now-(last.at+last.rtt), 0), true
 }
 
 // StepLoss is one step of the loss level (§8.5.5 step 6): the level after from for a figure in

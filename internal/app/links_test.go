@@ -35,12 +35,12 @@ func TestRouterLinksCarryTheTransportFigures(t *testing.T) {
 			t.Fatal(err)
 		}
 		idA, idB, idX := p2p.IDFromKey(devA.Public()), p2p.IDFromKey(devB.Public()), p2p.IDFromKey(stranger.Public())
-		loss := 2.5
+		loss := uint16(25)
 		since := time.Unix(1_000, 0)
 		node := &scriptedLinks{
 			dropNode: &dropNode{Node: net.Join(idA), net: net, drops: make(chan transport.PeerID, 8)},
 			script: []transport.Link{
-				{Peer: idB, Kind: transport.LinkRelayed, PathSince: since, RTT: 120 * time.Millisecond, LossPct: &loss},
+				{Peer: idB, Kind: transport.LinkRelayed, PathSince: since, RTT: 120 * time.Millisecond, ProbeLoss: &loss},
 				{Peer: idX, Kind: transport.LinkDirect, RTT: time.Millisecond},
 			},
 		}
@@ -58,7 +58,7 @@ func TestRouterLinksCarryTheTransportFigures(t *testing.T) {
 			t.Fatalf("Links() = %+v, want the member B only (the stranger is not admitted)", got)
 		}
 		l := got[0]
-		if l.Kind != transport.LinkRelayed || l.RTT != 120*time.Millisecond || l.LossPct == nil || *l.LossPct != loss || !l.PathSince.Equal(since) {
+		if l.Kind != transport.LinkRelayed || l.RTT != 120*time.Millisecond || l.ProbeLoss == nil || *l.ProbeLoss != loss || !l.PathSince.Equal(since) {
 			t.Errorf("Links()[0] = %+v, want the transport's relayed link, 120ms, 2.5%% loss", l)
 		}
 	})

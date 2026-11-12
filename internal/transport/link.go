@@ -68,10 +68,16 @@ type Link struct {
 	// time since the last sample. RTT is zero if none was measured yet.
 	RTT, RTTVar, RTTAge time.Duration
 
-	// LossPct is the percentage of packets lost over the last [LossWindow],
-	// or nil while fewer than [MinLossPackets] were sent. LossScope says what
-	// it measures.
-	LossPct   *float64
+	// ProbeLevel is the quality of the link a person is shown: the level of
+	// the link probe (spec §8.5.5 step 6), [QualityUnknown] while the probe has
+	// no figure and on a relayed link, which it does not measure end to end.
+	// Only the bridge reads it (TestLinkProbeOnlyBridgeReads).
+	ProbeLevel Quality
+	// ProbeLoss is the probe's loss figure over the last [LossWindow], in
+	// permille (spec §8.5.5 step 5), or nil while it is unknown. It is a
+	// diagnostic, never shown as a quality. LossScope says what it measures.
+	// Only the bridge reads it.
+	ProbeLoss *uint16
 	LossScope LossScope
 
 	// UpSince is when the current session began. Downs10m counts the outages
@@ -85,22 +91,19 @@ type Link struct {
 	// Resyncs10m and Resyncs count the times the session was restarted over a
 	// healthy connection because a write failed (spec rule L): the peer leaves
 	// and returns, but the connection never went down, so it is no outage.
-	// [Link.Quality] ignores them.
 	Resyncs10m, Resyncs int
 }
 
-// Window and minimum sample of the loss figure.
+// Windows of the link figures.
 const (
-	// LossWindow is the period a loss percentage covers.
+	// LossWindow is the period the loss figure of the probe covers.
 	LossWindow = 30 * time.Second
-	// MinLossPackets is the number of packets below which no loss is reported.
-	MinLossPackets = 50
 	// DownsWindow is the period Downs10m covers.
 	DownsWindow = 10 * time.Minute
 )
 
-// Quality is a plain grade of a link, for the people popover and the status
-// bar. The first proposal of decision Q4; the UX design refines it.
+// Quality is the level of a link, for the people popover and the status bar:
+// the probe's level (spec §8.5.5 step 6, ADR 0036 « Levels »).
 type Quality uint8
 
 const (
@@ -125,38 +128,6 @@ func (q Quality) String() string {
 		return "poor"
 	default:
 		return "unknown"
-	}
-}
-
-// Thresholds of the grades: a link is graded by its worst figure, a figure
-// at or above the Poor threshold makes it poor, at or above Fair, fair.
-const (
-	FairRTT   = 150 * time.Millisecond
-	PoorRTT   = 400 * time.Millisecond
-	FairLoss  = 3.0 // percent
-	PoorLoss  = 10.0
-	FairDowns = 1 // outages in the last ten minutes
-	PoorDowns = 3
-)
-
-// Quality grades the link by its worst figure among RTT, loss and recent
-// outages. Resyncs are not graded: a failed write already shows in the loss and
-// RTT. It is [QualityUnknown] until an RTT or a loss figure exists.
-func (l Link) Quality() Quality {
-	if l.RTT == 0 && l.LossPct == nil {
-		return QualityUnknown
-	}
-	loss := 0.0
-	if l.LossPct != nil {
-		loss = *l.LossPct
-	}
-	switch {
-	case l.RTT >= PoorRTT || loss >= PoorLoss || l.Downs10m >= PoorDowns:
-		return QualityPoor
-	case l.RTT >= FairRTT || loss >= FairLoss || l.Downs10m >= FairDowns:
-		return QualityFair
-	default:
-		return QualityGood
 	}
 }
 

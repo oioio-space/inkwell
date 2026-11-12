@@ -1136,7 +1136,7 @@ Le texte du ticket peut voyager par magic-wormhole ([Wormhole]) : `AppID =
 ### 8.5 `/inkwell/linkprobe/1.0.0` : sonde de perte d'un lien ([ADR 0036])
 
 **Objet.** La sonde donne à un point d'une connexion QUIC la part des paquets qu'il y a envoyés
-et que le pair n'a **pas reçus**, mesurée par le pair lui-même, et en tire le **niveau** du lien
+et que la pile QUIC du pair n'a **pas acceptés** (§8.5.2), mesurée par le pair lui-même, et en tire le **niveau** du lien
 que la personne voit : bon, moyen ou mauvais, ou inconnu (§8.5.5, étape 6 ; Annexe A.1,
 `quality`). Le chiffre de perte en ‰ n'est qu'un **diagnostic** : sa précision, bornée
 honnêtement (§8.5.5, « Exactitude »), suffit à placer un lien dans un niveau, pas à le décrire au
@@ -1180,14 +1180,26 @@ autre (une migration de chemin, [RFC 9000 §9], reste la même connexion) :
   par numéro de paquet attribué), tous espaces de numéros confondus, chaque paquet d'un
   datagramme coalescé compté à part, y compris les retransmissions, les paquets qui ne contiennent
   que des ACK, les sondes PTO et PMTUD, et les paquets ensuite déclarés perdus ;
-- `received(C)` : nombre de paquets QUIC reçus du pair sur C dont la protection d'en-tête a été
-  retirée et dont la charge a été déchiffrée et authentifiée ([RFC 9001 §5]), et dont le numéro de
-  paquet n'avait pas déjà été traité (un doublon, [RFC 9000 §12.3], n'est pas compté), tous
-  espaces de numéros confondus, chaque paquet d'un datagramme coalescé compté à part. Un paquet
-  jeté avant ou pendant le déchiffrement (corrompu, clé indisponible) n'est pas compté.
+- `received(C)` : nombre de paquets QUIC du pair sur C que la pile QUIC de ce point a
+  **acceptés** : protection d'en-tête retirée, charge déchiffrée et authentifiée ([RFC 9001 §5]),
+  et traités, tous espaces de numéros confondus, chaque paquet d'un datagramme coalescé compté à
+  part. Un paquet que la pile jette sans le traiter n'est pas compté, quelle qu'en soit la raison :
+  corrompu, clé indisponible, doublon ([RFC 9000 §12.3]), ou paquet en retard qu'elle tient pour un
+  doublon possible.
 
-*Informatif :* quic-go v0.64.1 fournit exactement ces deux compteurs, `ConnectionStats().
-PacketsSent` et `.PacketsReceived` (`connection.go:796-857`, `:1229`, `:1745`, `:1765`).
+Le chiffre est donc la part des paquets que la pile du pair **n'a pas acceptés**. Un paquet en
+retard qu'elle jette n'est pas acquitté : l'émetteur le déclare perdu et renvoie ses données ; pour
+la personne c'est une perte, et il compte comme tel. *Informatif :* quic-go v0.64.1 fournit
+exactement ces deux compteurs, `ConnectionStats().PacketsSent` et `.PacketsReceived`
+(`connection.go:796-857`, `:1745`, `:1765`, `internal/ackhandler/sent_packet_handler.go:288`), et
+jette avant de le compter tout paquet dont le numéro est sous une limite qu'il relève à `L + 1`
+quand le pair a acquitté un paquet portant son ACK de `L` (`IgnorePacketsBelow`,
+`sent_packet_handler.go:684` ; `IsPotentiallyDuplicate`, `connection.go:1229`,
+`received_packet_history.go:146`) : un paquet arrivé plus d'environ un aller-retour (plus un
+`max_ack_delay`) après un paquet de numéro plus grand n'est pas accepté. Mesuré à la réalisation
+de C5S, sur un RTT d'environ 25 ms et sans aucune perte du réseau : 20 % des paquets en retard de
+30 ms donnent 5 % ; de 60 ms, 15 %. Un réordonnancement plus court que cette boucle n'est pas une
+perte (netsim P4).
 
 **Horloge.** Les instants sont lus sur une horloge monotone locale de résolution au plus 1 ms ;
 toutes les comparaisons de ce paragraphe portent sur ces valeurs, exactement (les vecteurs
@@ -1410,9 +1422,16 @@ par pas, 4 pas environ) ; le premier chiffre d'un lien peu actif peut en porter 
 6 % sur 200 paquets : le premier niveau d'un lien au repos peut lire « moyen », et retombe à bon
 dans la fenêtre suivante. Sur les profils de netsim, le modèle de l'ADR 0036 (« Levels » : ni
 priorité, retransmissions et ACK qui croisent, ±1 à la lecture, lecture jusqu'à 20 ms plus tard,
-blocage en tête de ligne ; 10 graines × 500 fenêtres, borne supérieure à 95 % du 99,9ᵉ centile)
-donne au plus **15 ‰**, le pire cas étant un trafic de frappe (17 paquets/s) sous un fort
-réordonnancement ; 4,5 ‰ sur un Wi-Fi ordinaire à 60 paquets/s. C'est pourquoi la personne voit un
+blocage en tête de ligne, estimation du RTT de [RFC 9002 §5.3] nourrie par les ACK simulés et PTO
+pris à la lecture de l'écho ; 10 graines × 500 fenêtres, borne supérieure à 95 % du 99,9ᵉ centile)
+donne au plus **15,4 ‰** sur un profil fixe, le pire cas étant un trafic de frappe (17 paquets/s)
+sur le Wi-Fi lointain ; 4,5 ‰ sur un Wi-Fi ordinaire à 60 paquets/s (la perte d'une fenêtre
+comptant les paquets que la pile du pair a jetés, §8.5.2). Une fenêtre dont une borne tombe dans
+les 2 s d'un changement de l'aller-retour va jusqu'à **16,2 ‰** (300 parcours du scénario par
+débit, de 17 à 120 paquets/s ; 18,4 ‰ au plus haut) : juste après une baisse de l'aller-retour,
+`rttvar` prend d'un coup le quart de l'écart et porte le PTO vers 0,7 s, si bien qu'une sonde
+perdue à la fin de l'ancien profil, retransmise sur le nouveau chemin, est encore acceptée alors
+que les paquets envoyés pendant son retard l'ont croisée. C'est pourquoi la personne voit un
 niveau, dont les bandes absorbent cette erreur, et non le chiffre.
 
 Un sondeur **NE DOIT PAS** se servir du chiffre ni du niveau pour une décision du protocole (choix de chemin,
@@ -1619,10 +1638,10 @@ Ce que chaque règle normative a pour preuve :
 | règles de l'ECHO, étapes 1 à 7, dans cet ordre (§8.5.5) | `linkprobe-prober-*` (périmé, tardif, doublon, désordre, `received` qui décroît ou dépasse, `-received-equals-sent`, `-stale-above-sent`) ; TLA+ `SampleBounded`, `NoLateSample`, `Monotone` |
 | fin du flux : `attente` vidée, échantillons et `dernier_r` gardés ; violation : tout vidé, `dernier_r` à 0 (§8.5.5 étapes 7 et 8) | `linkprobe-prober-end-clears-pending`, `-end-keeps-received`, `-violation-forgets-received`, `-ended`, `-unknown-seq` |
 | PTO, `kGranularity`, arrondi à la milliseconde, `max_ack_delay` par défaut de 26 ms (§8.5.5 étape 3.6) | `linkprobe-pto`, `-granularity`, `-granularity-zero`, `-round-up`, `-no-max-ack-delay`, `-zero-max-ack-delay` ; `TestPTO` |
-| chiffre, fenêtre, arrondi, minimum de 200, écart de 15 s, borne 0–1000 (§8.5.5 étape 5) | `linkprobe-prober-basic`, `-window`, `-rounding`, `-min-packets`, `-min-span`, `-more-received` ; `TestLossExactNearMaxUint64` ; TLA+ `FigureInRange`, `Exact` |
+| chiffre, fenêtre, arrondi, minimum de 200, écart de 15 s, borne 0–1000 (§8.5.5 étape 5) | `linkprobe-prober-basic`, `-window`, `-rounding`, `-min-packets`, `-min-span`, `-min-span-late`, `-more-received` ; `TestLossExactNearMaxUint64`, `TestLossRoundingCarry` ; TLA+ `FigureInRange`, `Exact` |
 | exactitude, borne prudente (§8.5.5, §8.5.6) | `c5model.py errors`, `test_error_bound_without_priority` ; TLA+ `Exact` (mutant `LinkProbeDataOnly`) |
 | niveau : chaque seuil et un en dessous, depuis chaque niveau (§8.5.5 étape 6) | `linkprobe-level-*` (32 vecteurs `linkprobe_level`) ; `TestStepBoundaries`, `TestStepMonotoneAndIdempotent` |
-| niveau : à chaque nouveau chiffre, milieu après inconnu, pire de la perte et de l'aller-retour (médiane basse), hystérésis gardée moins de `W` d'inconnu, oubliée au-delà (§8.5.5 étape 6) | `linkprobe-prober-level`, `-level-rtt`, `-level-short-unknown`, `linkprobe-host-chunks` ; `c5model_test.py` (`Levels`) ; netsim C5 (porte C5S) |
+| niveau : à chaque nouveau chiffre, milieu après inconnu, pire de la perte et de l'aller-retour (médiane basse), hystérésis gardée moins de `W` d'inconnu, oubliée au-delà (§8.5.5 étape 6) | `linkprobe-prober-level`, `-level-rtt`, `-level-short-unknown`, `-level-unknown-boundary`, `linkprobe-host-chunks` ; `c5model_test.py` (`Levels`) ; netsim C5 (porte C5S) |
 | `seq` épuisé : FIN, plus jamais sur la connexion (§8.5.5 étape 2) | `TestHostExhausted`, `TestProberExhaustedForGood` (2³² sondes : hors de portée d'un script) |
 | crédit par connexion, exact à la milliseconde, plafond du temps écoulé, sondes jetées sans faute, borne de `seq` (depuis l'acceptation, ramenée à 0, marge de 1/64, 20 de marge jetés, `dernier_seq` avancé par une sonde jetée), refus `B/2` après toute fin (réinitialisation du pair comprise) et `B` après une violation, fin sans flux sans effet (§8.5.6) | `linkprobe-responder-bucket`, `-credit-exact`, `-drops-free`, `-stall`, `-seq-bound`, `-seq-from-accept`, `-seq-skew`, `-drop-updates-seq`, `-accept-delay`, `-reopen-gap`, `-replay`, `-end-without-stream`, `linkprobe-host-ban`, `-peer-reset-refusal`, `-inbound-flood`, `-inbound-malformed`, `-roles-refusal` ; `TestResponderCreditCapped`, `TestSeqBoundClampsBeforeOpening` ; TLA+ `EchoBound`, `HonestNoViolation`, `BanHolds`, `RateBound` (configuration `LinkProbeAccept`, mutant `LinkProbeNoDropBand`) |
 | code de réinitialisation jamais interprété ; jamais de GOAWAY ni de fin de session (§8.5.3, §8.5.8) | par construction : l'interface `Host` ne reçoit aucun code et n'a aucune action de session |
@@ -2425,6 +2444,7 @@ déterministe envisagé (→ validité de [RFC 8949 §5.3.1]).
 [RFC 9001 §4.1.2]: https://www.rfc-editor.org/rfc/rfc9001#section-4.1.2
 [RFC 9001 §5]: https://www.rfc-editor.org/rfc/rfc9001#section-5
 [RFC 9002 §5]: https://www.rfc-editor.org/rfc/rfc9002#section-5
+[RFC 9002 §5.3]: https://www.rfc-editor.org/rfc/rfc9002#section-5.3
 [RFC 9002 §6.1]: https://www.rfc-editor.org/rfc/rfc9002#section-6.1
 [RFC 9002 §6.2.1]: https://www.rfc-editor.org/rfc/rfc9002#section-6.2.1
 [Chalkias 2020]: https://eprint.iacr.org/2020/1244
@@ -2512,6 +2532,19 @@ enveloppe { version u8 = 1 ; kind u8 ; peer str8 (PeerID, 1–64) ; payload [res
   lien tromperait la personne (une étiquette « premier saut » serait du jargon). Sinon, ou tant
   que le chiffre est inconnu : `quality = 0`, `lossPermille = 0xFFFF` et `lossScope = 0`. Le
   chiffre ne dépasse jamais 1000.
+  Le signal « lien lent » (un message attend d'être envoyé depuis longtemps, `oldestPendingMs`) est
+  distinct : l'indicateur de synchronisation le montre, et il n'entre jamais dans `quality`.
+- **Sens de `rttMs` et `rttVarMs`** (depuis la révision 11) : une seule mesure d'aller-retour par
+  lien. Chemin `lan` ou `direct` avec le chiffre de la sonde connu (`lossScope = 1`), `rttMs` est la
+  **médiane basse** des `rtt` des échantillons de la même fenêtre (§8.5.5, étape 6 : celle qui
+  fait avancer le niveau) et `rttVarMs` la médiane basse des écarts absolus `|rtt − rttMs|` de ces
+  échantillons ; `rttAgeMs` est l'âge du plus récent échantillon. Sinon (le chemin relayé compris : la
+  sonde n'y mesure que le premier saut), `rttMs` et `rttVarMs` sont l'estimation de la pile QUIC (`smoothed_rtt`, `rttvar` de [RFC 9002 §5.3]) ou, à défaut,
+  le dernier ping. *Informatif :* `smoothed_rtt` ne prend un échantillon que lorsque le plus grand
+  paquet acquitté avance ([RFC 9002 §5.1]) ; quand le trafic est dense et que les paquets se
+  doublent (Wi-Fi), il retient surtout ceux qui ont doublé et sous-estime l'aller-retour (−15 %
+  mesuré en netsim, 60 ms ± 10 ms et 120 paquets/s) ; chaque sonde, elle, est mesurée, sauf les
+  tardives (étape 3.6).
 - **Coalescence de Links** : dernière valeur seulement ; au plus une par seconde, et seulement
   si le contenu a changé — les âges (`pathAgeMs`, `rttAgeMs`, `upMs`, `oldestPendingMs`) ne
   comptent que par leur passage de zéro à non nul ou l'inverse, la webview les fait vieillir

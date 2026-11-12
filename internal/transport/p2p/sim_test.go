@@ -67,6 +67,17 @@ type natNet struct {
 	bad           map[*natEnd]bool
 	dark          map[*natEnd]bool
 	directBlocked bool
+	// sent and dropped count, per sending end, the packets that entered the
+	// network and the packets it did not deliver (loss, blackout, firewall, cut):
+	// the exact truth the link probe is judged against.
+	sent, dropped map[*natEnd]uint64
+	// jitter is the spread of the latency of a packet; jitterMax by default.
+	// holdShare of the packets are held holdFor longer than the others, as
+	// netem's "delay D reorder P%" does.
+	jitter    time.Duration
+	extra     time.Duration // added to every packet's latency, beyond baseDelay
+	holdFor   time.Duration
+	holdShare float64
 }
 
 // impairment is a bursty loss and duplication profile for every packet of the
@@ -94,6 +105,9 @@ func newNatNet(seed uint64) *natNet {
 		byExt: make(map[string]*natEnd),
 		bad:   make(map[*natEnd]bool),
 		dark:  make(map[*natEnd]bool),
+
+		sent: make(map[*natEnd]uint64), dropped: make(map[*natEnd]uint64),
+		jitter: jitterMax,
 	}
 }
 
@@ -113,23 +127,35 @@ func (nn *natNet) RecvPacket(p *simnet.Packet) {
 	nn.mu.Lock()
 	src := nn.byInt[p.From.String()]
 	if src == nil || nn.cut {
+		if src != nil {
+			nn.sent[src]++
+			nn.dropped[src]++
+		}
 		nn.mu.Unlock()
 		return
 	}
+	nn.sent[src]++
 	dstExt := p.To.String()
 	p.From = udpAddr(fmt.Sprintf("%s:%d", src.external, simPort))
 	src.sent[dstExt] = struct{}{}
 	dst := nn.byExt[dstExt]
 	replied := dst.sentTo(p.From.String())
 	if dst == nil || nn.dark[src] || nn.dark[dst] || (nn.directBlocked && !src.public && !dst.public) {
+		nn.dropped[src]++
 		nn.mu.Unlock()
 		return
 	}
 	lost, dup := nn.impairLocked(src)
-	delay := baseDelay + time.Duration(nn.rng.Int64N(int64(jitterMax)))
+	if lost || (!dst.public && !replied) {
+		nn.dropped[src]++
+	}
+	delay := baseDelay + nn.extra + time.Duration(nn.rng.Int64N(int64(nn.jitter)))
+	if nn.holdShare > 0 && nn.rng.Float64() < nn.holdShare {
+		delay += nn.holdFor
+	}
 	var dupDelay time.Duration
 	if dup {
-		dupDelay = baseDelay + time.Duration(nn.rng.Int64N(int64(jitterMax)))
+		dupDelay = baseDelay + nn.extra + time.Duration(nn.rng.Int64N(int64(nn.jitter)))
 	}
 	nn.mu.Unlock()
 
@@ -161,6 +187,39 @@ func (nn *natNet) impairLocked(src *natEnd) (lost, dup bool) {
 		loss = im.lossBad
 	}
 	return nn.rng.Float64() < loss, nn.rng.Float64() < im.dup
+}
+
+// counts returns the packets end has sent into the network and the packets the
+// network did not deliver, since the start.
+func (nn *natNet) counts(end *natEnd) (sent, dropped uint64) {
+	nn.mu.Lock()
+	defer nn.mu.Unlock()
+	return nn.sent[end], nn.dropped[end]
+}
+
+// setJitter changes the spread of the latency of a packet: the more, the more
+// packets overtake each other.
+func (nn *natNet) setJitter(d time.Duration) {
+	nn.mu.Lock()
+	nn.jitter = d
+	nn.mu.Unlock()
+}
+
+// setLatency adds d to the one-way latency of every packet, so that a path can have the round
+// trip of a real one while its jitter stays what makes the packets overtake each other.
+func (nn *natNet) setLatency(d time.Duration) {
+	nn.mu.Lock()
+	nn.extra = d
+	nn.mu.Unlock()
+}
+
+// setReorder holds a share of the packets for d longer than the others, so that
+// they arrive after packets sent later: reordering with no loss, the shape of
+// netem's "delay D reorder P%".
+func (nn *natNet) setReorder(share float64, d time.Duration) {
+	nn.mu.Lock()
+	nn.holdShare, nn.holdFor = share, d
+	nn.mu.Unlock()
 }
 
 // setImpairment changes the loss and duplication profile.
@@ -734,7 +793,7 @@ func TestLinkMetricsFollowPath(t *testing.T) {
 		if l.Kind != transport.LinkRelayed || l.RTT <= 0 || l.Upgrades != 0 || l.UpSince.IsZero() {
 			t.Fatalf("relayed link = %+v, want kind relayed, an RTT, no upgrade, an UpSince", l)
 		}
-		if l.LossPct != nil && l.LossScope != transport.LossFirstHop {
+		if l.ProbeLoss != nil && l.LossScope != transport.LossFirstHop {
 			t.Errorf("relayed loss scope = %v, want %v", l.LossScope, transport.LossFirstHop)
 		}
 
@@ -752,11 +811,8 @@ func TestLinkMetricsFollowPath(t *testing.T) {
 		if l.RTT <= 0 || l.RTT > time.Second {
 			t.Errorf("direct RTT = %v, want within (0, 1s]", l.RTT)
 		}
-		if l.LossPct == nil || *l.LossPct < 0 || *l.LossPct > 100 || l.LossScope != transport.LossPath {
-			t.Errorf("direct loss = %v scope %v, want a percentage over the path", l.LossPct, l.LossScope)
-		}
-		if l.Quality() == transport.QualityUnknown {
-			t.Errorf("quality of a measured link = %v", l.Quality())
+		if l.ProbeLoss != nil && (*l.ProbeLoss > 1000 || l.LossScope != transport.LossPath) {
+			t.Errorf("direct loss = %v scope %v, want a figure in permille over the path", *l.ProbeLoss, l.LossScope)
 		}
 		if !l.PathSince.After(l.UpSince) {
 			t.Errorf("pathSince %v is not after upSince %v: the path changed after the session began", l.PathSince, l.UpSince)

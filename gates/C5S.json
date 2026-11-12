@@ -1,0 +1,541 @@
+{
+  "lot": "C5S",
+  "criteria": [
+    {
+      "id": "model",
+      "command": "./scripts/heavy.sh timeout 900 python3 -m unittest scripts/netsim/c5model_test.py",
+      "status": "pass",
+      "exit_code": 0,
+      "duration_seconds": 585.107904687,
+      "log": "gates/C5S/model.log"
+    },
+    {
+      "id": "protocol",
+      "command": "grep -q '/inkwell/linkprobe/1.0.0' docs/protocol/spec.md && test -s docs/adr/0036-link-probe.md && (cd protocol && ../scripts/heavy.sh timeout 600 go test -count=1 ./... && ../scripts/heavy.sh timeout 300 go test -run '^$' -fuzz FuzzDecode -fuzztime 120s ./linkprobe/ && ../scripts/heavy.sh timeout 300 go test -run '^$' -fuzz FuzzHost -fuzztime 120s ./linkprobe/) && (cd frontend && ../scripts/heavy.sh timeout 300 pnpm exec vitest run --configLoader runner packages/protocol/conformance.test.ts)",
+      "status": "pass",
+      "exit_code": 0,
+      "duration_seconds": 250.45357749500545,
+      "log": "gates/C5S/protocol.log"
+    },
+    {
+      "id": "tla",
+      "command": "timeout 900 mise run tla",
+      "status": "pass",
+      "exit_code": 0,
+      "duration_seconds": 484.15536161803175,
+      "log": "gates/C5S/tla.log"
+    },
+    {
+      "id": "go-product",
+      "command": "out=$(./scripts/heavy.sh timeout 900 go test -count=1 -v -run 'TestLinkLevel|TestLinkProbe' ./internal/... 2>&1) || { echo \"$out\" | tail -40; exit 1; }; for t in TestLinkLevelBurstyWiFi TestLinkLevelIgnoresReordering TestLinkLevelLateEchoDiscarded TestLinkLevelRestartsUnknown TestLinkProbeAlwaysRead TestLinkProbeReceivedCounter TestLinkProbeResourceLimits TestLinkProbeRoles TestLinkProbeOnlyBridgeReads TestLinkLevelLogsEverySample TestLinkLevelRelayedUnknown; do echo \"$out\" | grep -q -- \"--- PASS: $t\" || { echo \"missing or not passing: $t\"; exit 1; }; done",
+      "status": "pass",
+      "exit_code": 0,
+      "duration_seconds": 33.664566689985804,
+      "log": "gates/C5S/go-product.log"
+    },
+    {
+      "id": "e2e-C5",
+      "command": "rm -f .task/netsim/results/5-s*-r*.json; NETSIM_SCENARIOS=5 NETSIM_SEEDS='1 2 3' NETSIM_REPEAT=10 NETSIM_EXPECT=strict mise run e2e:netsim:impaired && python3 -I -c \"import json,sys; bad=[]; n=0\nfor s in (1,2,3):\n for r in range(1,11):\n  f=f'.task/netsim/results/5-s{s}-r{r}.json'\n  try: c={x['id']:x for x in json.load(open(f))['clauses']}\n  except OSError: bad.append((f,'missing')); continue\n  n+=1; bad+=[(f,k) for k,v in c.items() if v['status']!='pass']\n  if 'level' not in c.get('C5',{}).get('bound',''): bad.append((f,'C5 is not the level rule'))\nsys.exit(f'e2e-C5: {n}/30 runs, {bad[:6]}' if bad or n!=30 else 0)\"",
+      "status": "pass",
+      "exit_code": 0,
+      "duration_seconds": 9892.18181203102,
+      "log": "gates/C5S/e2e-C5.log"
+    },
+    {
+      "id": "mutants",
+      "command": "for m in M5d M5e M5f M5g M5h M5i M5j M5k M5l M5m M5n; do grep -q \"id = \\\"$m\\\"\" scripts/netsim/mutants.toml || { echo \"missing mutant $m\"; exit 1; }; done && mise run netsim:mutants -- C5S",
+      "status": "pass",
+      "exit_code": 0,
+      "duration_seconds": 3633.189297724981,
+      "log": "gates/C5S/mutants.log"
+    },
+    {
+      "id": "regression",
+      "command": "./scripts/heavy.sh timeout 1200 go test -count=1 ./internal/transport/... ./internal/bridge && NETSIM_SCENARIOS='6 8' NETSIM_SEEDS='1 2 3' mise run e2e:netsim:impaired && NETSIM_SCENARIOS='1 2 3 4' mise run e2e:netsim && mise run gate -- RL1 && mise run gate -- SP1b",
+      "status": "fail",
+      "exit_code": 1,
+      "duration_seconds": 4445.813946512993,
+      "log": "gates/C5S/regression.log"
+    },
+    {
+      "id": "simplify-report",
+      "command": "test -s gates/C5S/SIMPLIFY.md",
+      "status": "pass",
+      "exit_code": 0,
+      "duration_seconds": 0.0013951620203442872,
+      "log": "gates/C5S/simplify-report.log"
+    }
+  ],
+  "versions": {
+    "go": "go version go1.27.3 linux/amd64",
+    "node": "v24.22.1",
+    "typst": "unavailable: /bin/sh: ligne 1: typst: commande introuvable",
+    "tinymist": "unavailable: /bin/sh: ligne 1: tinymist: commande introuvable",
+    "os": "Linux-7.2.11-200.fc44.x86_64-x86_64-with-glibc2.43",
+    "embedded_sidecars": {
+      "typst": "0.15.1",
+      "tinymist": "0.15.10"
+    }
+  },
+  "sha256": {
+    "docs/objectif-en-cours.md": "06e7dc1387fe0b60738f899d7e83a76ed272be61c6926aeca2f3ecd6fe95e0fa",
+    "docs/plans/2026-11-09-c5-sound.md": "caaf384ae2b93abe681637c3fe2a8afb58b5f24fcd62e154f697258fbddc0f6e",
+    "gates/C5S/SIMPLIFY.md": "88cea38120d571aebe9f2f1cb1670dbb2ce009c7950227add639819fa5a1d49c",
+    "gates/C5S/base-guard.log": "7a9dc76ed6e76cbcde47d0a682b31c62165639f5fee3664dfe779e8a6554d4ff",
+    "gates/C5S/e2e-C5.log": "534f027d4a5f5a4454bf979fb3473b6e34da6df9bc96bd5a66d96f3a224d6f43",
+    "gates/C5S/go-product.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "gates/C5S/model.log": "719bc40f17f5b2113cbc5ac37c8c1d63f494f303901c7d107c56588662bf8c00",
+    "gates/C5S/mutants.log": "31426643a72abd5df2ac4e781874c551c5a02621fe236bfb95dd86d023b203ba",
+    "gates/C5S/protocol.log": "89be691813634b22f84adf184a47dab3bc5740c5b4d7eaa40d26515b92998116",
+    "gates/C5S/regression.log": "82ec113cd835567e671841cd5638cb16bb421ec52a719865ae9e2917116a4867",
+    "gates/C5S/simplify-report.log": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+    "gates/C5S/tla.log": "5d991e22c1b47fa4c963ca6eb5b6cbe54cd0128e0af7a160371e80667586a791"
+  },
+  "status": "fail",
+  "deferrals": [],
+  "known_failures": [],
+  "base_guard": {
+    "ref": "main",
+    "base": "f78949bb15b86c0736c6215153d4c08bf4f0269e",
+    "source_sha256": "c306265111e4c8b0ad94a1867d797b7a20be7d814161b7b9dd6200ab7feb259c",
+    "exit_code": 0,
+    "status": "pass",
+    "log": "gates/C5S/base-guard.log"
+  },
+  "runner": {
+    "source": "base f78949bb15b86c0736c6215153d4c08bf4f0269e",
+    "sha256": "53dde1f051c345120968f74873910509ac7d2b3912871dbecca17644dee23c98"
+  },
+  "guard_overrides": [
+    {
+      "id": "f22057e36244ddd6ef648864ff0df369f85e2b26277fdddf52102c6426784b16",
+      "reason": "Audit explicitly requires clear skips on kernels below the required ABI; only new IPC tests are capability-gated. Existing tests and thresholds are unchanged.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "n42-scope-2026-11-03",
+      "reason": "Scope correction decided by the user (N42 clarified), not a weakening; the guard reports no finding for it, this entry records the removal. Removed: tools/archexec dependency scan (go list -deps graph walk from L1; L2 audited.json deny/exception/via audits pinned to go.sum, raw-syscall, assembly, go:linkname and DLL-lookup heuristics; arch-exec -deps mode; dependencies*.go, audits.go, l2_contract_test.go and their testdata), the analyzer's transitive os/exec import rule and its Wails OpenURL/OpenFile/OpenFileManager/pkg/updater rules, app.RuntimeGuard, app.DisarmFrameworkLaunchers (D-Bus address pinning, WAILS_UPDATER_HELPER* clearing), the third_party/memory fork with its replace directive and internal/memorytest. Kept: own-code no-exec rule outside internal/sidecar, sandbox and all L1/L2 security checks.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "8df04b9301a401d51f6d06f2e36e9f89b875f0f59efc049644ea41982dfd062a",
+      "reason": "PERF-MEM was deferred from L0 to L2, and L2 re-deferred it to G-0b because L2 delivered only G-0a (no multi-file corpus opening). Pointing L0 at the lot that actually owns it; the criterion stays deferred, never counted as a pass.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "052e1f994d2cd5baffa57aa34d7e2d93d705040a87478421e88c5387769cea36",
+      "reason": "UX-LUP-1 (new walkthrough test, frontend/e2e/ux/lup.spec.ts) exposes the known narrow-window defect S13, present on main and not caused by the L-maj upgrade. It is test.fixme until its own lot S13 (docs/objectif-en-cours.md, Lots suivants), whose gate turns it back into test. No existing test, threshold or timeout changes.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "4eb54f3a3de7ad041a91971d04609618f8050ab9bf85d4cf1b36207a66731ac0",
+      "reason": "new gate script for L3 (added file, no existing test/threshold/delay/reference changed)",
+      "decision": "docs/plans/2026-11-05-L3-implementation.md"
+    },
+    {
+      "id": "d3ae81d5374485ce6de4aa4526d6319a9eaf73f5b8312ceda5a5a1b06ab68070",
+      "reason": "new gate script for L3 (added file, no existing test/threshold/delay/reference changed)",
+      "decision": "docs/plans/2026-11-05-L3-implementation.md"
+    },
+    {
+      "id": "7c17e71f13ea93d8a39a0747b8686916d7d676b1b4d247737ee921c803d06fa0",
+      "reason": "New file for L3, absent at the merge base, so the guard reports it as changed gate machinery: the PERF-TYPE-native keyboard driver: types through Mutter on the native host after verifying the X11 target window, and collects raw evidence only (it declares no verdict). Adding it changes no existing test, threshold, delay or criterion command.",
+      "decision": "docs/plans/2026-11-05-L3-implementation.md"
+    },
+    {
+      "id": "56498dfcefa00e368a87264e7b733d36a85a0fe0ddfc85dbb9a18642079a3472",
+      "reason": "New file for L3, absent at the merge base, so the guard reports it as changed gate machinery: unit tests of native_input.py; no X connection, native process, window or key injection. Adding it changes no existing test, threshold, delay or criterion command.",
+      "decision": "docs/plans/2026-11-05-L3-implementation.md"
+    },
+    {
+      "id": "03e87f0046f7939b199baeb7293009a121aa01a2921d519dd5484a3e599689c1",
+      "reason": "New file for L3, absent at the merge base, so the guard reports it as changed gate machinery: the GNOME Mutter RemoteDesktop D-Bus keyboard injection used by native_input.py (one owned connection per run, no token stored). Adding it changes no existing test, threshold, delay or criterion command.",
+      "decision": "docs/plans/2026-11-05-L3-implementation.md"
+    },
+    {
+      "id": "8386049e39a5d3d669590b2788ab7ec5e2e22aca37ab66f7bc359be681eb8a52",
+      "reason": "New file for L3, absent at the merge base, so the guard reports it as changed gate machinery: unit tests of native_mutter.py; no real bus, session, display, key or dialog. Adding it changes no existing test, threshold, delay or criterion command.",
+      "decision": "docs/plans/2026-11-05-L3-implementation.md"
+    },
+    {
+      "id": "fa14c2ee20d0f2fa4c1090df8cb8c3f18574d53e37a779f59b52278247a96d0e",
+      "reason": "New file for L3, absent at the merge base, so the guard reports it as changed gate machinery: diagnostic only: resolves the native attribution table's minified frames to source through the perf_native build's sourcemaps; it changes no verdict. Adding it changes no existing test, threshold, delay or criterion command.",
+      "decision": "docs/plans/2026-11-05-L3-implementation.md"
+    },
+    {
+      "id": "aec7d2e3d6ec704b93baeeb399b350068b7a70acfc5735df0a63e0047a881d55",
+      "reason": "New file for L3, absent at the merge base, so the guard reports it as changed gate machinery: unit tests of sourcemap.py. Adding it changes no existing test, threshold, delay or criterion command.",
+      "decision": "docs/plans/2026-11-05-L3-implementation.md"
+    },
+    {
+      "id": "0409d1bafdf67d623691f8a828c7fb23a750090e344ea4d65e6ca6f6caa4fff1",
+      "reason": "New file for L3, absent at the merge base, so the guard reports it as changed gate machinery: the PERF-TYPE-native criterion command: runs type_native.py under heavy.sh --exclusive; without the explicit host opt-in INKWELL_NATIVE_PERF_RUN=1 it writes a failed verdict. Adding it changes no existing test, threshold, delay or criterion command.",
+      "decision": "docs/plans/2026-11-05-L3-implementation.md"
+    },
+    {
+      "id": "0af3a9f66d55ce43bdfb6d75a4f2cf8c2279e960e3dc593630f28114b2fe2f6c",
+      "reason": "New file for L3, absent at the merge base, so the guard reports it as changed gate machinery: builds the tagged native collector and runs it only with the native-host opt-in; the Go verifier (internal/nativeperf) writes every PERF-TYPE verdict, this script invents no sample. Adding it changes no existing test, threshold, delay or criterion command.",
+      "decision": "docs/plans/2026-11-05-L3-implementation.md"
+    },
+    {
+      "id": "f600ff5157acf4bfb0840f043ae2eec3047cd321ded844994d2edd9aa9f46832",
+      "reason": "New file for L3, absent at the merge base, so the guard reports it as changed gate machinery: diagnostic tool behind mise run perf:typing-checks (typing checks in the perf-build window, CodeMirror-owned typing on then off); no gate criterion calls it. Adding it changes no existing test, threshold, delay or criterion command.",
+      "decision": "docs/plans/2026-11-05-L3-implementation.md"
+    },
+    {
+      "id": "f52f5153350032a80f733dfd7677f4fcce6ee287ec67bb456725163149ef39ed",
+      "reason": "New file for L3, absent at the merge base, so the guard reports it as changed gate machinery: unit tests of typing_checks.py; no window, bus, key or build. Adding it changes no existing test, threshold, delay or criterion command.",
+      "decision": "docs/plans/2026-11-05-L3-implementation.md"
+    },
+    {
+      "id": "354394131951ab6c2c02fea36bebbb62f74ab30681d98963770719888eeefc2e",
+      "reason": "New file for L3, absent at the merge base, so the guard reports it as changed gate machinery: the PERF-TYPE-native orchestrator (builds the perf_native app, runs the cold, warm and NULL trials through the native input driver, writes the verdict from internal/nativeperf). Adding it changes no existing test, threshold, delay or criterion command.",
+      "decision": "docs/plans/2026-11-05-L3-implementation.md"
+    },
+    {
+      "id": "8ebea8bdde8f2f8155068c4d1db359c684ba6a0c78c6f4f49e49457db3066663",
+      "reason": "New file for L3, absent at the merge base, so the guard reports it as changed gate machinery: unit tests of type_native.py; no display, no native desktop. Adding it changes no existing test, threshold, delay or criterion command.",
+      "decision": "docs/plans/2026-11-05-L3-implementation.md"
+    },
+    {
+      "id": "a6ef791eb160117c5477e1e84b2dfbfaf345e0c3244c75659e40861347000dbc",
+      "reason": "P2 gate written the same day with a command that could not run: protocol/sig and protocol/trust are in the nested protocol module (go test ./protocol/sig from the root fails) and internal/policy does not exist. The corrected command runs the same packages plus protocol/trust; no criterion, threshold or test was weakened.",
+      "decision": "docs/plans/2026-11-08-P2-implementation.md"
+    },
+    {
+      "id": "2d1ae6c4d45b872d0ba92150f4da1e0859246a9ae6de2e209e08b23c23f2c71c",
+      "reason": ".golangci.yml: adds the modernize linter (W26, go fix modernizers enforced). Strengthens lint; no linter removed, no setting relaxed.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "e2de7e0f2da435d43919e6edf5006bf4a72c9cc859e61284be2167516e1ce76a",
+      "reason": "mise.toml mutate:go: gremlins installed once (pinned v0.6.0) instead of go run, -count=1 and a 1.8 GB per-test-binary cap (memcap.sh); timeout coefficient 3 -> 10. The coefficient only decides when a mutant counts as timed out, and timed-out mutants are excluded from efficacy, so a longer limit cannot raise the score: it lets more mutants be judged (2026-11-08: 278/278 timed out at 3, a void run). block_done.py now refuses a run with >10% timeouts. No test, threshold or efficacy target changed.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "29a279f369ec1be00b74db74acbdbf6a97d40c443a0e20925e6d91e52732e5d8",
+      "reason": "scripts/alloy_check.py: the pinned download moved to scripts/fetch_pinned.py, which keeps the same timeout=120 and adds an atomic rename; the timeout is moved, not removed.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "0d9b6e4b873ac2d6b4b24d7643210bab0f9ec292584ed32d05930c808f992c35",
+      "reason": "scripts/tla-check.sh: cache check, SHA-256 verification and rename delegated to scripts/fetch_pinned.py (same pin, same SHA-256, timeout=120); verified by mise run formal from an empty cache. No model, mutant or check removed.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "977129d226f06fa8fa41e1b9fb12df6873c613ab557aeafdfa56c5accc68fc26",
+      "reason": "mise.toml: same mutate:go change as override e2de7e0f (pinned gremlins binary, -count=1, 1.8 GB per-test cap, coefficient 3 -> 10; a timed-out mutant is excluded from efficacy, so a longer limit cannot raise the score) plus scripts/gate_reset_test.py added to test:py. No test, threshold or efficacy target changed.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "e4f1dddf8e395e784e1e0bd29b8db314d566c77a12ceb3bb4a7e911b289d778a",
+      "reason": "scripts/gate.py: reset_evidence keeps the block's reports (gates/<lot>/*.md) instead of an rmtree of the whole folder, which erased the P3 report and the L3/P2 reconstructions on 2026-11-08. Every other entry (logs, playwright results, JSON, subfolders, symlinks) is still removed before the run, so evidence is still only what this run produced; no criterion, threshold or verdict logic changed. Tested by scripts/gate_reset_test.py; scripts/gate-selftest.py passes.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "0c05bb58c3dcd947cd378850fad0ba22a49642584859ca7e7e9a8b2baa7b2674",
+      "reason": "scripts/gate.py: reset_evidence keeps the block's reports (gates/<lot>/*.md) instead of an rmtree of the whole folder, which erased the P3 report and the L3/P2 reconstructions on 2026-11-08. Every other entry (logs, playwright results, JSON, subfolders, symlinks) is still removed before the run, so evidence is still only what this run produced; no criterion, threshold or verdict logic changed. Tested by scripts/gate_reset_test.py; scripts/gate-selftest.py passes.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "f4e233f366ad0939cf1e932ca5e87fcd1685bd87118c45d2bcb46f3c9d8f3b3a",
+      "reason": "scripts/gate_reset_test.py: new test file for gate.reset_evidence (reports kept, evidence cleared, symlinks not followed); adds checks, changes none.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "37de64a21345dfc3a211d1ec0e1b422f3400af968ddee210568e0e29934c0743",
+      "reason": "RL1/NI0: CI job timeout raised because the job now also runs the impaired-network scenarios (decision Q2, ~17 min added); no test threshold or test timeout changes.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "edc8aa9c784242aee624ba6a760f855dcdaac2ad0a98954c62b4bcc09e7c26a4",
+      "reason": "RL1: the existing p2p dupl exclusions (audit m1-m11, lot 8) are matched by file pair instead of line numbers, which shifted with every edit; same files, same linter, no new exclusion.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "bd21f8db785e3fa73d708433b88dd22746f68955fddc41d19d095c4aecc06332",
+      "reason": "RL1/NI0: pingTimeout moved into a const block with the other link-metric constants; value unchanged (5 s).",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "02130de200bd248ae9ccb49f5b20204473ea79f3af441023655ef1e438f58489",
+      "reason": "NI0 G-0: a redundant one-hour per-Recv timeout replaced by the test context (bounded by the test deadline, virtual time in synctest); the receiver still ends with the test.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "da127e92eba0fd067f86e42bb83b886c17bea3e0f7df263c31dd3d424341a592",
+      "reason": "NI0: netsim run.sh gains the impaired scenarios and fails fast when the topology does not come up (was hidden by `if start_stack`); scenarios 1-4 and their bounds unchanged.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "6c7fb901e4dd90b2f5f129a18391ae8d23e7c07b32d80d3db9c5a8f8a17987ee",
+      "reason": "RL1 follow-up: e2e:build waits (wait_for) for the tasks that compile the root package, and builds the frontend into a side directory swapped into frontend/dist at the end, so neither a concurrent build nor an interrupted one leaves dist empty (seen in the pre-push ci on 2026-11-08). Same vite build, same mode and VITE_E2E_OBSERVE flag; the server and relay builds and every e2e bound are unchanged.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "4c1f4ca28b37b744f08d243db2f85daee15f57c44112722c582ba06b8d7584cc",
+      "reason": "W36 C2/C7: netsim run.sh gives each scenario its own Playwright --output directory so the traces of a failure survive the next scenario (Playwright wipes its output dir); scenarios, clauses and bounds unchanged.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "f9bfbcfd9a66e8d7fa94acaa563d30c21bc8b6c55cf850f3d960d1f81fcf26fc",
+      "reason": "W33: tla-check.sh adds the SyncIndicator model (two sound configs) and its seven mutants; the RepoGen and ConnCredit runs are unchanged.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "f6b85cdffb23c71a10e3e33ba4a9c885e131125fb753f50f73d5321aac63782d",
+      "reason": "Free model providers (user rule \u00ab au juste besoin \u00bb): test:py also runs scripts/llm_test.py (provider fall-through with a fake curl, no network); every existing test still runs.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "290cdcc795f0c151c586028ee5eecca3b75dd4d5b421e38e950579fc08ac9157",
+      "reason": "NI-4 C5 unit test (new): two waits in a NEW test (300 ms for the tail of the exchange, 500 ms quiet window) to prove sync counters stay still once converged; no existing wait or bound is changed.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "95e2b4b1837f01eb2779e060f7478a585a1ca574dc6ae4df6e3b6c934ba9c6d2",
+      "reason": "Block WB: tla-check.sh adds the WriteBudget model (two sound configs) and its four mutants; every earlier model and mutant run is unchanged.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "61f62ed836abe55cdf30414e854c39f01e25c40bbec73eded4d067af74ff1402",
+      "reason": "W38: tla-check.sh adds the SendPath model (target send path, rules SP-1..SP-9) and the SP1 interim configurations with their mutants and residual witnesses; every earlier model and mutant run is unchanged.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "f7483447df96767dfbbc3a73db499fe85cd997bdc56d719695e362bcff61f7fa",
+      "reason": "Block SP1: the draft gate is deleted, replaced by gates/SP1.toml written after decisions D-SP1-1..4; the matched lines are comments of the draft (no executed timeout), and every criterion moved to the new gate.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "49ab05eb831a779272a0cab2862ef0670e046a41a19fd36550cf88490376443d",
+      "reason": "Block SP1: the draft gate is deleted, replaced by gates/SP1.toml written after decisions D-SP1-1..4; the matched lines are comments of the draft (no executed timeout), and every criterion moved to the new gate.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "6bc586746be08a856572e83cc4a17945a3abeff8b89c1f81cd9485364f536472",
+      "reason": "Block SP1: the draft gate is deleted, replaced by gates/SP1.toml written after decisions D-SP1-1..4; the matched lines are comments of the draft (no executed timeout), and every criterion moved to the new gate.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "cad02420d6f688add0c8c1c11025c05f3aca38d9ba5c3b15b3738fc8a9e0887d",
+      "reason": "Block SP1: the draft gate is deleted, replaced by gates/SP1.toml written after decisions D-SP1-1..4; the matched lines are comments of the draft (no executed timeout), and every criterion moved to the new gate.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "15e62d0ec178835d4e9918f13267d89db52d015c05c6c93f97c470a089faa4a9",
+      "reason": "Block SP1: the draft gate is deleted, replaced by gates/SP1.toml written after decisions D-SP1-1..4; the matched lines are comments of the draft (no executed timeout), and every criterion moved to the new gate.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "e00ad5be9b539b640e8877c99d95b72b3c5a6523cf716f0d0b6d5a6021ef617f",
+      "reason": "Block SP1: the draft gate is deleted, replaced by gates/SP1.toml written after decisions D-SP1-1..4; the matched lines are comments of the draft (no executed timeout), and every criterion moved to the new gate.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "70b8c6b498d7f0584d11bd18baf9f62ee199a1a65bdee0f51669ff923c9c0705",
+      "reason": "Block SP1: the draft gate is deleted, replaced by gates/SP1.toml written after decisions D-SP1-1..4; the matched lines are comments of the draft (no executed timeout), and every criterion moved to the new gate.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "11bbf6b3035554cbab31fb9e0dcbcf1a2b0fe156fe8b9d23a16493ec1eafdd51",
+      "reason": "Block SP1: the draft gate is deleted, replaced by gates/SP1.toml written after decisions D-SP1-1..4; the matched lines are comments of the draft (no executed timeout), and every criterion moved to the new gate.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "b2f893dff0d44d96674a9d830587e4fa082a3fbdcbc588d8e2f753e16295c36e",
+      "reason": "Block SP1: prose of the design doc updated to the decided yamux ConnectionWriteTimeout 120 s (was an open decision); no executed timeout.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "eba6dab413a0d756b9653880eec9a9bb315e36ea1da03e47721663a98395bf00",
+      "reason": "Block SP1: prose of the design doc updated to the decided yamux ConnectionWriteTimeout 120 s (was an open decision); no executed timeout.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "bc05bbe67a25e3895ceb82117d3d28e16ab776249589843233fa13003cb414d7",
+      "reason": "Block SP1: README SP1 section rewritten for the decided constants (ConnectionWriteTimeout 120 s, pings 120 s, partialTTL 120 s, window pinned), with the new state counts; prose only, no executed timeout.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "d839eef3376b8c8680d57f680c9fbe414822042b837e1f7c8c41fd78cf9f121a",
+      "reason": "Block SP1: README SP1 section rewritten for the decided constants (ConnectionWriteTimeout 120 s, pings 120 s, partialTTL 120 s, window pinned), with the new state counts; prose only, no executed timeout.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "8772c7cb953b828cf527d1c49c41846b196df970e8a774955b8126720a9ba602",
+      "reason": "Block SP1: README SP1 section rewritten for the decided constants (ConnectionWriteTimeout 120 s, pings 120 s, partialTTL 120 s, window pinned), with the new state counts; prose only, no executed timeout.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "ef589c3a4c1e6975106b008caeba0c94c9747e5ed1961d67102df4644cff28fc",
+      "reason": "Block SP1: README SP1 section rewritten for the decided constants (ConnectionWriteTimeout 120 s, pings 120 s, partialTTL 120 s, window pinned), with the new state counts; prose only, no executed timeout.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "4b5c5d320ce88fdfa698eaa5a3ed13d661e73272e9c7cc8cc80bbe0847ba2d05",
+      "reason": "Block SP1: header comment of a TLA+ config updated to the decided ping timeouts (120 s); TLC ignores comments; the model constants are checked by mise run tla.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "e08275093c19656cf837cfecf2bead27a6c59676367c1350c6cdac3f530c404f",
+      "reason": "Block SP1: header comment of a TLA+ config updated to the decided ping timeouts (120 s); TLC ignores comments; the model constants are checked by mise run tla.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "b3dce09ab218dd267c45d64f8d67a9cc126ad215b15b4a3bc3ad39354b8ccadf",
+      "reason": "Block SP1: header comment of a residual witness updated to the decided 120 s; it still violates under mise run tla.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "091e0b9e6868a6e932cc71710f310306629b9d1558c6e7bfcf02730e9e0b7cce",
+      "reason": "Block SP1: this residual witness holds at the decided 120 s, so it became the sound configuration docs/protocol/tla/SP1GrownKeepalive.cfg (run by tla-check.sh); nothing is weakened.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "0045e8b2d04dc6c2dd09222a86ae75e8105299b8e4ccb99efe973b04310b5568",
+      "reason": "Block SP1: header comment of a mutant renamed after its twin SP1Hop (was SP1Hop90); the mutant still violates under mise run tla.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "6bd225c9c99932f1b2fc2c3c1ca75b88b26510c6951781e107807e0d29065dea",
+      "reason": "Block SP1: header comment of a mutant updated to its twin SP1RelayKeepalive; the mutant still violates under mise run tla.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "7df636c05f8ae7a7533eaf887582cab0a9b8aa2aff1a9d01f84fc9bab37265b7",
+      "reason": "Block SP1: tla-check.sh renames SP1Hop90 to SP1Hop, adds the sound SP1Silence and SP1GrownKeepalive (a residual witness closed by the decided 120 s) and the mutant SP1PartialTTLAtIdle; every other model and mutant run is unchanged (62 runs, all as expected).",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "320c24c2933b463c1051e13c6a6c33c5b09a42b0e1675b1af9f048508819252d",
+      "reason": "Block SP1b (D-SP1, rule SP1-2): sendFragmented's total deadline uses frame.FloorRate (2 KiB/s) instead of MinRate (16 KiB/s), so a large message on an honest slow link is not cut and resent; proven by TestRuleSP1SlowLinkDeliversWithoutResend (mutant SP1e) and the SendPath/SP1 TLA+ model; the 90 s no-progress cut still bounds a stopped reader.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "0c138dcc2f7d2217751da972c599728b0daf6cbe80fe6a586783f0e2a79bd97f",
+      "reason": "Block SP1b (D-SP1-4, /simplify): the reassembly sweep now wakes at the oldest partial's deadline instead of a full partialTTL, so a partial is freed at partialTTL (120 s) instead of up to twice that; stricter, proven by TestRuleSP1PartialFreedAfterTTL (red before) and the tightened TestStalePartialExpires.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "751a0eb80e6b7d8897570fe06ac31de7fc23172d4cfa03be692102b829752818",
+      "reason": "Block SP1b (rule SP1-2): bulk lane WriteProgress takes frame.FloorRate (2 KiB/s) instead of MinRate (16 KiB/s), same rule as sync/1; the no-progress cut (WriteIdle) is unchanged in kind and stated in the spec.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "56c03e0de40304b3b341188f377e357177d48b2ed1c6d4d08b5558dfd5f7e5da",
+      "reason": "Block SP1b (rule SP1-2): sync/1 WriteProgress takes frame.FloorRate (2 KiB/s) instead of MinRate (16 KiB/s) \u2014 the root fix of the NI-3 resend loop (E1, E3: paste delivered at the first attempt, 0 resyncs); WriteIdle 90 s per D-SP1, proven by the RuleSP1 tests and the TLA+ model.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "9a9fbc0657f7af9f3179b29802df8ab9a326846019d334befd51962d658cebce",
+      "reason": "Block CI1b (W35, user decision \u00ab netsim seulement si touch\u00e9 \u00bb): `ci` now depends on ci:core + e2e:netsim:impaired, where ci:core is exactly the previous list minus the netsim; the content of `mise run ci` is unchanged (gate criterion rule-CI1-wiring checks it). Nothing removed or weakened.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "e9ab19538005856322916542a823208f5b6b6c693b900623004417fad2d14ba2",
+      "reason": "Block CI1b: test:py gains scripts/netsim/affected_test.py (28 new tests); every existing test file still runs.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "1f650fcd7621017e13281cb0aa969b1d4a6a6c99152ab9edcce756267291677a",
+      "reason": "Block CI1b: new netsim selector scripts/netsim/affected.py, written for gate CI1b (rules CI1-1..CI1-4, fails towards running).",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "14006af3b852de0386db1be0359e9daaafa4aea51f0a9712e77ebfb95ef45869",
+      "reason": "Block CI1b: new unit tests of the selector, one per case of gate criterion rule-CI1-unit.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "d393a94f90bf97fdb0e92d3e5de905378dc16ce5362abd09a4d983e21808b4ad",
+      "reason": "Block C5S: docs/protocol/tla/README.md describes the reworked LinkProbe model (timeouts, closing bytes, rate-bound clock margin, level arithmetic); documentation of the model, no model bound or check removed (mise run tla runs every config and mutant).",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "4198b84cbf5faf72986e8ef2c59b0bdf8158e5186ebe8cfd9eac12d5568f79f0",
+      "reason": "Block C5S: scenario 5's whole-test Playwright timeout grows 480 s -> 900 s because the scenario itself grew (new P0 entry phase, P5 of 180 s, filler traffic); no clause bound changes, every clause keeps its own bound.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "4a9d25e8758445336f3a8800b3a84ba66043bd8fda996fe2aa70f1028f76cc06",
+      "reason": "Block C5S: scripts/netsim/c5model.py is the C5 statistical model of this block (spec reformalized: late discards, filler traffic); its guarantees are re-proven by c5model_test.py (0 false failures in 3000 runs, every mutant rejected).",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "6e6f71fdc5bebb32acde8a79613b9940916a0facd306848f3115b347a6dd12ab",
+      "reason": "Block C5S: scripts/netsim/c5model_test.py, the model's tests for this block; they check the false-failure bound and the power against every mutant estimator.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "ba63bc2264354dbbcb17654443cb7dad0a1832e2042d36f59a72b841f742b5ae",
+      "reason": "Block C5S: scripts/netsim/run.sh gains NETSIM_REPEAT and per-repeat result files (gate criterion e2e-C5); a run without it behaves as before.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "e3735c10c0e1206b58a4f60eeab20fc65bf7b83b64feabc795e1be1ed73ad969",
+      "reason": "Block C5S (security review finding 9): scripts/pkg/selftest.sh covers the new AC-14 check that a release binary was not built with tags server; existing selftests unchanged.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "2f16525d27dc2136ee0622eda0de30eb552b3f458029dfa50338e63196672c14",
+      "reason": "Fail fast (user, 2026-11-10: \u00ab monitore \u00e0 chaque fois pour pas que \u00e7a arrive \u00bb): block_done.py gains a preflight right after step 2 that runs the gate's base guard and the step-8 docs check, so a run that would fail at its end after hours fails in seconds; every step is unchanged and still runs.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "702c3ec6b331272ca2fd29d0c8d1c1194492d9d561c092a8dab3507ef0467a38",
+      "reason": "Fail fast: block_done_test.py pins the preflight (a failing base guard stops done before the long steps; it runs right after step 2); existing tests unchanged.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "63c08e7c3565ddbc9b3f0b4263f73a2f7a1f44fd2d0c23fa31939e38a22f6e19",
+      "reason": "Fail fast at the source (user, 2026-11-10: \u00ab corrige la source, pas les effets \u00bb): a gate whose base guard fails can no longer pass, so gate.py now records every criterion as not run and stops instead of running hours of criteria first; the guard itself and every criterion are unchanged. Pinned by gate-selftest.py (no criterion runs after a failing base guard; red before the fix).",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "942d53f7dd6caa50bc751f20e861ab1013ad02143b50d36742a18aa41e1d3db3",
+      "reason": "Fail fast at the source (user, 2026-11-10: \u00ab corrige la source, pas les effets \u00bb): a gate whose base guard fails can no longer pass, so gate.py now records every criterion as not run and stops instead of running hours of criteria first; the guard itself and every criterion are unchanged. Pinned by gate-selftest.py (no criterion runs after a failing base guard; red before the fix).",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "fd250db474038aafd0c39cb19afb15d5b85b6879aecbceafef0da24057b2f0c7",
+      "reason": "Fail fast at the source (user, 2026-11-10: \u00ab corrige la source, pas les effets \u00bb): a gate whose base guard fails can no longer pass, so gate.py now records every criterion as not run and stops instead of running hours of criteria first; the guard itself and every criterion are unchanged. Pinned by gate-selftest.py (no criterion runs after a failing base guard; red before the fix).",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "7fcc7b9b00f050e2866a040a166466f7f7063c575225174afa454aec5cb80720",
+      "reason": "Fail fast at the source (user, 2026-11-10: \u00ab corrige la source, pas les effets \u00bb): a gate whose base guard fails can no longer pass, so gate.py now records every criterion as not run and stops instead of running hours of criteria first; the guard itself and every criterion are unchanged. Pinned by gate-selftest.py (no criterion runs after a failing base guard; red before the fix).",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "891e206f2ff5286e1ef362fd3aa7101c56e6f9425d7b0a5006353c89314cd34a",
+      "reason": "Block C5S: block_done.py preflight also runs `mutants.py --check <block>`, so a netsim mutant whose anchor moved with the code fails done in seconds instead of hours into the gate (found 2026-11-11: M5b, M5h, M5j). Adds a check; nothing weakened.",
+      "decision": "docs/plans/2026-11-09-c5-sound.md"
+    },
+    {
+      "id": "1d8454828c12a99f85fe76f20b1269b61696ed3f171bbf99962a75de4270d775",
+      "reason": "Block C5S: block_done_test.py adds PreflightTest.test_a_mutant_whose_anchor_moved_stops_done_before_the_long_steps (red without the preflight check); existing tests unchanged.",
+      "decision": "docs/plans/2026-11-09-c5-sound.md"
+    },
+    {
+      "id": "600d3f47e2e1d6e97217ef2a98878a30e7c0900b456cfe6c1f0f0b655c289414",
+      "reason": "Block C5S: gate-guard.py's dependency walk added every scripts/*.py path named anywhere in a dependency's text, so a test fixture path (scripts/perf/p.py in scripts/netsim/affected_test.py) became a 'dependency' and the self-test failed (L1 anti-weakening, found through RL1 > P3 > P2 > L2 > L1, 2026-11-11). A transitively named path that is no file is no longer a dependency; a criterion naming a missing script still fails the self-test, and a self-test assertion pins the case. Nothing guarded is dropped: every existing file stays covered.",
+      "decision": "docs/plans/2026-11-09-c5-sound.md"
+    },
+    {
+      "id": "ce1158c0905ac65e37ab804d2c230b4f30c395fd53b2ab174381a1f8e83f879f",
+      "reason": "Block C5S: gate-guard.py's dependency walk added every scripts/*.py path named anywhere in a dependency's text, so a test fixture path (scripts/perf/p.py in scripts/netsim/affected_test.py) became a 'dependency' and the self-test failed (L1 anti-weakening, found through RL1 > P3 > P2 > L2 > L1, 2026-11-11). A transitively named path that is no file is no longer a dependency; a criterion naming a missing script still fails the self-test, and a self-test assertion pins the case. Nothing guarded is dropped: every existing file stays covered.",
+      "decision": "docs/plans/2026-11-09-c5-sound.md"
+    },
+    {
+      "id": "61b44de0cf99d9080472ae3bb941a9113eba35ff049ca83d40c20d2660d89627",
+      "reason": "Block C5S: c5model.py simulates a PROBE across a change of round trip as the stack does (RFC 9002 estimator fed across phases, PTO read at the ECHO, quic-go's resend time threshold, head-of-line order); R2's crossing term for transition labels is derived from it (transition_lag), not hand-widened. Found by e2e-C5 runs 5-s1-r8 and 5-s3-r6 (one step each at the P2>P3 drop); both replay green, the old rule fails 3 of 200 corrected-model runs. Guarantees re-proven: 0 false failures in 3000 runs, every mutant rejected.",
+      "decision": "docs/plans/2026-11-09-c5-sound.md"
+    },
+    {
+      "id": "0231bea19170282540c60688f7379337bb64549f90cfcb1764b29635687b8592",
+      "reason": "Block C5S: c5model_test.py adds Transition.test_single_step_spike_at_the_p2_p3_drop (red with the old tolerance) and test_pto_climbs_after_the_drop; existing guarantees tests unchanged (24 tests, 597 s at rest).",
+      "decision": "docs/plans/2026-11-09-c5-sound.md"
+    }
+  ]
+}

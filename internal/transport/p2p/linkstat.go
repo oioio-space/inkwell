@@ -46,62 +46,6 @@ func (e *rttEstimator) get(now time.Time) (rtt, dev, age time.Duration) {
 
 func abs(d time.Duration) time.Duration { return max(d, -d) }
 
-// lossStep is the packets sent and lost between two observations.
-type lossStep struct {
-	at         time.Time
-	sent, lost uint64
-}
-
-// lossWindow turns the cumulative packet counters of a connection into a loss
-// percentage over [transport.LossWindow]. The counters do not only grow (a
-// packet declared lost can be received later, and a new connection restarts
-// them), so each step is clamped at zero.
-type lossWindow struct {
-	steps              []lossStep
-	prevSent, prevLost uint64
-	primed             bool
-}
-
-// observe records the cumulative counters at now.
-func (w *lossWindow) observe(now time.Time, sent, lost uint64) {
-	if w.primed {
-		w.steps = append(w.steps, lossStep{at: now, sent: clampSub(sent, w.prevSent), lost: clampSub(lost, w.prevLost)})
-	}
-	w.prevSent, w.prevLost, w.primed = sent, lost, true
-	w.trim(now)
-}
-
-func (w *lossWindow) trim(now time.Time) {
-	i := 0
-	for i < len(w.steps) && now.Sub(w.steps[i].at) > transport.LossWindow {
-		i++
-	}
-	w.steps = slices.Delete(w.steps, 0, i)
-}
-
-// pct returns the percentage of packets lost over the window; ok is false
-// while fewer than [transport.MinLossPackets] were sent in it.
-func (w *lossWindow) pct(now time.Time) (pct float64, ok bool) {
-	var sent, lost uint64
-	for _, s := range w.steps {
-		if now.Sub(s.at) <= transport.LossWindow {
-			sent += s.sent
-			lost += s.lost
-		}
-	}
-	if sent < transport.MinLossPackets {
-		return 0, false
-	}
-	return min(100, float64(lost)/float64(sent)*100), true
-}
-
-func clampSub(a, b uint64) uint64 {
-	if a < b {
-		return 0
-	}
-	return a - b
-}
-
 // stability counts the outages of a peer from its PeerUp and PeerDown, and
 // apart from them the resyncs: a PeerDown the transport announced itself, over
 // a connection that survived (spec rule L).

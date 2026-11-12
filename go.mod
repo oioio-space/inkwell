@@ -10,6 +10,7 @@ require (
 	github.com/libp2p/go-yamux/v5 v5.1.0
 	github.com/marcopolo/simnet v0.0.7
 	github.com/multiformats/go-multiaddr v0.16.1
+	github.com/multiformats/go-multistream v0.6.1
 	github.com/oioio-space/inkwell/protocol v0.1.0
 	github.com/psanford/wormhole-william v1.0.8
 	github.com/quic-go/quic-go v0.64.1
@@ -72,7 +73,6 @@ require (
 	github.com/multiformats/go-multibase v0.3.0 // indirect
 	github.com/multiformats/go-multicodec v0.10.0 // indirect
 	github.com/multiformats/go-multihash v0.2.3 // indirect
-	github.com/multiformats/go-multistream v0.6.1 // indirect
 	github.com/multiformats/go-varint v0.1.0 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
 	github.com/pandatix/go-abnf v0.5.1 // indirect

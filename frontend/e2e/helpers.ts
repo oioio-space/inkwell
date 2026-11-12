@@ -32,8 +32,29 @@ export async function open(browser: Browser, url: string, dark = false): Promise
       colorScheme: dark ? "dark" : "light",
     })
   ).newPage();
-  await page.goto(url);
-  await expect(editor(page)).toBeVisible();
+  // A page resource that fails to load (ERR_NETWORK_CHANGED, reset, ...) breaks the page: fail at once,
+  // naming it, instead of letting a later wait run to its timeout. Only the page's own resources: the
+  // app may abort its own fetches on purpose.
+  const origin = new URL(url).origin;
+  const pageResources = new Set(["document", "stylesheet", "script", "font"]);
+  const broken = new Promise<never>((_, reject) => {
+    page.on("requestfailed", (req) => {
+      if (new URL(req.url()).origin !== origin || !pageResources.has(req.resourceType())) return;
+      reject(
+        new Error(
+          `open ${url}: request ${req.method()} ${req.url()} failed: ${req.failure()?.errorText}`,
+        ),
+      );
+    });
+  });
+  broken.catch(() => {}); // a failure after the load is not an unhandled rejection
+  await Promise.race([
+    (async () => {
+      await page.goto(url);
+      await expect(editor(page)).toBeVisible();
+    })(),
+    broken,
+  ]);
   return page;
 }
 

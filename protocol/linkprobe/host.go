@@ -151,8 +151,8 @@ func (h *Host) endOut(now time.Duration) {
 	h.negotiating, h.closing, h.closeAsked, h.out.n = false, false, false, 0
 	if h.prober.open {
 		h.prober.Ended(now)
-	} else if h.prober.resumeAt < now+Backoff {
-		h.prober.resumeAt = now + Backoff
+	} else {
+		h.prober.resumeAt = max(h.prober.resumeAt, now+Backoff)
 	}
 }
 
@@ -345,3 +345,9 @@ func (h *Host) Loss(now time.Duration) uint16 { return h.prober.Loss(now) }
 // Level returns the level of the connection at now (Annex A.1 quality); call it once per sampler
 // step (see [Prober.Level]).
 func (h *Host) Level(now time.Duration) Level { return h.prober.Level(now) }
+
+// RTT returns the round trip of the connection at now (Annex A.1 rttMs, rttVarMs, rttAgeMs); ok
+// false while the figure is unknown (see [Prober.RTT]).
+func (h *Host) RTT(now time.Duration) (rtt, dev, age time.Duration, ok bool) {
+	return h.prober.RTT(now)
+}

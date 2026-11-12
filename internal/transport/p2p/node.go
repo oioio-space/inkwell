@@ -74,6 +74,7 @@ import (
 
 	"github.com/oioio-space/inkwell/internal/transport"
 	"github.com/oioio-space/inkwell/internal/transport/frame"
+	wire "github.com/oioio-space/inkwell/protocol"
 )
 
 // ProtocolSync is the libp2p protocol of the unidirectional sync streams.
@@ -138,6 +139,11 @@ type Options struct {
 	// fast, safe for concurrent use and must not call back into the Node.
 	// Nil admits everyone, which is for tests only.
 	Admit func(transport.PeerID) bool
+	// OnLinkStep, if not nil, receives what the link sampler saw of each link at
+	// every step (once a second), from the sampler's goroutine, so it must not
+	// block. The network-simulation build logs them. It never influences the
+	// node.
+	OnLinkStep func(LinkStep)
 	// extra is applied after the node's own libp2p options; tests use it to
 	// run on a simulated network.
 	extra []libp2p.Option
@@ -221,7 +227,9 @@ type Node struct {
 	// nothing under it takes mu or calls into libp2p or QUIC.
 	lmu   sync.Mutex
 	stats map[peer.ID]*peerLink
-	stop  func() bool // stops the close-on-context-cancel hook; under mu
+	// probes runs the link probe on every QUIC connection.
+	probes *probeSet
+	stop   func() bool // stops the close-on-context-cancel hook; under mu
 	// relays are the configured relays, never peers; circuit has the address
 	// prefix that leads through each of them. Both are read-only.
 	relays    map[peer.ID]peer.AddrInfo
@@ -386,11 +394,21 @@ func New(ctx context.Context, key ed25519.PrivateKey, o Options) (*Node, error) 
 		return nil, fmt.Errorf("p2p: subscribe: %w", err)
 	}
 	n.addrSub = addrSub
+	n.probes = newProbeSet(n.ctx, h, n.probeRoles)
+	n.fillRegister()
 	n.notifee = &network.NotifyBundle{
-		ConnectedF:    func(_ network.Network, c network.Conn) { n.onConn(c) },
-		DisconnectedF: func(_ network.Network, c network.Conn) { n.onDisconn(c) },
+		ConnectedF: func(_ network.Network, c network.Conn) {
+			n.probes.attach(c)
+			n.fillAttach(c)
+			n.onConn(c)
+		},
+		DisconnectedF: func(_ network.Network, c network.Conn) {
+			n.probes.detach(c)
+			n.onDisconn(c)
+		},
 	}
 	h.Network().Notify(n.notifee)
+	n.attachExisting()
 	h.SetStreamHandler(ProtocolSync, n.handleStream)
 	h.SetStreamHandler(ProtocolBulk, n.handleBulkStream)
 	h.SetStreamHandler(ProtocolLobby, n.handleLobbyStream)
@@ -453,6 +471,10 @@ func newResourceManager() (network.ResourceManager, error) {
 				StreamsInbound:  maxLobbyStreams,
 				StreamsOutbound: maxLobbyStreams,
 			},
+			// The link probe (spec §16.1): per connection the host keeps one inbound and one
+			// outbound stream, and the limit allows two connections to the peer, one of them still
+			// closing.
+			ProtocolProbe: probeStreamLimits(wire.LinkProbeInboundStreamsPerPeer, wire.LinkProbeOutboundStreamsPerPeer),
 		},
 	}
 	cfg := limits.Build(scaling.Scale(memoryLimit, fdLimit))
@@ -754,6 +776,7 @@ func (n *Node) Close() error {
 		if err := n.h.Close(); err != nil {
 			n.closeErr = fmt.Errorf("p2p: close: %w", err)
 		}
+		n.probes.close()
 	})
 	n.wg.Wait()
 	return n.closeErr
@@ -807,4 +830,40 @@ func portFree(port int) error {
 	}
 	_ = c.Close()
 	return nil
+}
+
+// probeStreamLimits is the resource-manager limit of the probe's streams per peer: in inbound and out
+// outbound, the total their sum. Zero blocks the direction.
+func probeStreamLimits(in, out int) rcmgr.ResourceLimits {
+	limit := func(n int) rcmgr.LimitVal {
+		if n == 0 {
+			return rcmgr.BlockAllLimit
+		}
+		return rcmgr.LimitVal(n)
+	}
+	return rcmgr.ResourceLimits{Streams: limit(in + out), StreamsInbound: limit(in), StreamsOutbound: limit(out)}
+}
+
+// newRelayResourceManager is libp2p's default resource manager, with the link probe's limit: a
+// relay answers its clients (4 inbound streams per peer) and never opens a probe stream.
+func newRelayResourceManager() (network.ResourceManager, error) {
+	scaling := rcmgr.DefaultLimits
+	libp2p.SetDefaultServiceLimits(&scaling)
+	limits := rcmgr.PartialLimitConfig{ProtocolPeer: map[protocol.ID]rcmgr.ResourceLimits{
+		ProtocolProbe: probeStreamLimits(wire.LinkProbeInboundStreamsPerPeer, 0),
+	}}
+	rm, err := rcmgr.NewResourceManager(rcmgr.NewFixedLimiter(limits.Build(scaling.AutoScale())))
+	if err != nil {
+		return nil, fmt.Errorf("p2p: relay resource manager: %w", err)
+	}
+	return rm, nil
+}
+
+// attachExisting starts the per-connection services on the connections that were there before the
+// notifee: the probe, and in the server build the filler.
+func (n *Node) attachExisting() {
+	for _, c := range n.h.Network().Conns() {
+		n.probes.attach(c)
+		n.fillAttach(c)
+	}
 }

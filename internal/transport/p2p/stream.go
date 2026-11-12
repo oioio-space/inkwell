@@ -89,7 +89,7 @@ func (n *Node) openOut(ps *peerState) {
 	s, err := n.h.NewStream(ctx, ps.id, ProtocolSync)
 	var sample linkSample
 	if err == nil {
-		sample = n.probeLink(ps.id) // before mu: it calls into libp2p
+		sample = n.probeLink(ps.id, s, nil) // before mu: it calls into libp2p
 	}
 
 	n.mu.Lock()
@@ -349,28 +349,36 @@ func (n *Node) Send(ctx context.Context, to transport.PeerID, payload []byte) er
 	if !ok {
 		return transport.ErrUnknownPeer
 	}
-	ps, _, err := n.outStream(ctx, p)
-	if err != nil {
-		return err
-	}
-	select {
-	case ps.wsem <- struct{}{}:
+	for {
+		ps, _, err := n.outStream(ctx, p)
+		if err != nil {
+			return err
+		}
+		select {
+		case ps.wsem <- struct{}{}:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+		// The peer may have gone and come back while we waited for the other writers: its state
+		// is then another one, with its own writer lock, and the lock held is the old one's.
+		ps2, s, err := n.outStream(ctx, p)
+		if err == nil && ps2 != ps {
+			<-ps.wsem
+			continue
+		}
+		if err != nil {
+			<-ps.wsem
+			return err
+		}
 		defer func() { <-ps.wsem }()
-	case <-ctx.Done():
-		return ctx.Err()
-	}
-	// The stream may have been replaced while waiting for the other writers.
-	ps, s, err := n.outStream(ctx, p)
-	if err != nil {
-		return err
-	}
 
-	finished := watchCancel(ctx)
-	err = frame.WriteProgress(ctx, s, writeTimeout, frame.FloorRate, payload)
-	if canceled := finished(); err != nil {
-		return n.sendFailed(ctx, ps, s, to, err, canceled)
+		finished := watchCancel(ctx)
+		err = frame.WriteProgress(ctx, s, writeTimeout, frame.FloorRate, payload)
+		if canceled := finished(); err != nil {
+			return n.sendFailed(ctx, ps, s, to, err, canceled)
+		}
+		return nil
 	}
-	return nil
 }
 
 // watchCancel watches ctx while a write runs. The returned func ends the watch

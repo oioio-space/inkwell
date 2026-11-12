@@ -86,3 +86,18 @@ func (n *Node) StallReading() {
 
 // ResumeReading gives back the budget taken by StallReading.
 func (n *Node) ResumeReading() { n.budget.Release(maxBuffered) }
+
+// RelayViews is how many times the link sampler looked at the probe of the connection to the
+// relay, since the node started.
+func (n *Node) RelayViews() uint64 {
+	var total uint64
+	for _, c := range n.h.Network().Conns() {
+		if _, ok := n.relays[c.RemotePeer()]; !ok {
+			continue
+		}
+		if pc := n.probes.of(c.ID()); pc != nil {
+			total += pc.views.Load()
+		}
+	}
+	return total
+}

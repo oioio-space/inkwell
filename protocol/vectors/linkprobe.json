@@ -533,6 +533,57 @@
       ]
     },
     {
+      "id": "linkprobe-prober-min-span-late",
+      "status": "proposed",
+      "enforce": "step-3",
+      "description": "L'écart minimal se mesure entre les deux échantillons, pas depuis l'ouverture : à 20 s puis 30 s (10 s d'écart), inconnu, même si les instants sont grands.",
+      "decoder": "linkprobe_prober",
+      "verdict": "accept",
+      "scope": "transport",
+      "events": [
+        {
+          "at_ms": 0,
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 20000,
+          "expect": "050100000001",
+          "op": "probe",
+          "sent": 0,
+          "writable": true
+        },
+        {
+          "at_ms": 20010,
+          "expect": "accepted",
+          "message_hex": "0d02000000010000000000000000",
+          "op": "receive",
+          "pto_ms": 200,
+          "sent_now": 1
+        },
+        {
+          "at_ms": 30000,
+          "expect": "050100000002",
+          "op": "probe",
+          "sent": 400,
+          "writable": true
+        },
+        {
+          "at_ms": 30010,
+          "expect": "accepted",
+          "message_hex": "0d02000000020000000000000168",
+          "op": "receive",
+          "pto_ms": 200,
+          "sent_now": 401
+        },
+        {
+          "at_ms": 30010,
+          "expect": 65535,
+          "op": "loss"
+        }
+      ]
+    },
+    {
       "id": "linkprobe-prober-window",
       "status": "proposed",
       "enforce": "step-3",
@@ -2015,6 +2066,97 @@
         },
         {
           "at_ms": 44010,
+          "expect": "fair",
+          "op": "level"
+        }
+      ]
+    },
+    {
+      "id": "linkprobe-prober-level-unknown-boundary",
+      "status": "proposed",
+      "enforce": "step-3",
+      "description": "L'hystérésis est oubliée **plus** de 30 s après le dernier chiffre connu : à 30 s tout juste, elle est gardée (7 ‰ reste moyen).",
+      "decoder": "linkprobe_prober",
+      "verdict": "accept",
+      "scope": "transport",
+      "events": [
+        {
+          "at_ms": 0,
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "expect": "050100000001",
+          "op": "probe",
+          "sent": 0,
+          "writable": true
+        },
+        {
+          "at_ms": 10,
+          "expect": "accepted",
+          "message_hex": "0d02000000010000000000000000",
+          "op": "receive",
+          "pto_ms": 200,
+          "sent_now": 1
+        },
+        {
+          "at_ms": 15000,
+          "expect": "050100000002",
+          "op": "probe",
+          "sent": 1000,
+          "writable": true
+        },
+        {
+          "at_ms": 15010,
+          "expect": "accepted",
+          "message_hex": "0d020000000200000000000003d4",
+          "op": "receive",
+          "pto_ms": 200,
+          "sent_now": 1001
+        },
+        {
+          "at_ms": 15010,
+          "expect": "fair",
+          "op": "level"
+        },
+        {
+          "at_ms": 40000,
+          "expect": "050100000003",
+          "op": "probe",
+          "sent": 1050,
+          "writable": true
+        },
+        {
+          "at_ms": 40010,
+          "expect": "accepted",
+          "message_hex": "0d02000000030000000000000406",
+          "op": "receive",
+          "pto_ms": 200,
+          "sent_now": 1051
+        },
+        {
+          "at_ms": 40010,
+          "expect": "unknown",
+          "op": "level"
+        },
+        {
+          "at_ms": 45000,
+          "expect": "050100000004",
+          "op": "probe",
+          "sent": 1300,
+          "writable": true
+        },
+        {
+          "at_ms": 45010,
+          "expect": "accepted",
+          "message_hex": "0d020000000400000000000004fe",
+          "op": "receive",
+          "pto_ms": 200,
+          "sent_now": 1301
+        },
+        {
+          "at_ms": 45010,
           "expect": "fair",
           "op": "level"
         }

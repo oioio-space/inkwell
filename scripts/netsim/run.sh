@@ -21,7 +21,9 @@
 #   8  NI-4  three devices, alice-bob down: converge through carol (editor pass, then reader pass)
 #
 # Variables: NETSIM_SCENARIOS ("1 2 3 4"), NETSIM_SEEDS (impaired scenarios run once per seed;
-# default: one seed derived from the date), NETSIM_EXPECT (characterize, the default: the declared
+# default: one seed derived from the date), NETSIM_REPEAT (each seed K times, the runs named
+# <scenario>-s<seed>-r<k> with k = 1..K and results/<run>.json each; repeat k draws netem's chains
+# from seed + 100 (k - 1), so the repeats are independent; unset: once, no -r suffix), NETSIM_EXPECT (characterize, the default: the declared
 # known failures are reported, not blocking; strict: they block), NETSIM_BIN_DIR (binaries to run;
 # the mutant runner points it at a mutated build), NETSIM_VARIANTS (scenario 8: editor reader).
 set -euo pipefail
@@ -162,6 +164,11 @@ scenarios=${NETSIM_SCENARIOS:-1 2 3 4} # e.g. NETSIM_SCENARIOS="1 2" to run some
 # The CI seed rotates daily and is recorded in every results file.
 seeds=${NETSIM_SEEDS:-$(($(date +%s) / 86400))}
 export NETSIM_EXPECT=${NETSIM_EXPECT:-characterize}
+repeat=${NETSIM_REPEAT:-}
+[[ -z $repeat || $repeat =~ ^[1-9][0-9]*$ ]] || {
+  echo "netsim: NETSIM_REPEAT must be a positive integer, not '$repeat'" >&2
+  exit 2
+}
 declare -A RESULT DETAIL TITLE_OF
 runs=()
 failed=0
@@ -176,28 +183,33 @@ for n in $scenarios; do
   if ((n == 8)); then read -r -a variants <<<"${NETSIM_VARIANTS:-editor reader}"; fi
   for seed in "${seed_list[@]}"; do
     for variant in "${variants[@]}"; do
-      run=$n${variant:+-$variant}${seed:+-s$seed}
-      runs+=("$run")
-      TITLE_OF[$run]="${TITLE[$n]}${variant:+ ($variant)}${seed:+ seed $seed}"
-      echo "netsim: scenario $run, ${TITLE_OF[$run]}" >&2
-      start=$SECONDS
-      status=PASS
-      if start_stack "$n" "$run"; then
-        (
-          cd "$repo/frontend"
-          NETSIM_SCENARIO=$n NETSIM_RUN=$run NETSIM_VARIANT=$variant NETSIM_SEED=${seed:-0} \
-            NETSIM_OUT=$out NETSIM_TOPOLOGY=$topology \
-            pnpm exec playwright test -c playwright.netsim.config.ts --grep "scenario $n:" \
-            --output "$state/artifacts/$run" # traces survive the next scenario (Playwright wipes its output dir)
-        ) || status=FAIL
-      else
-        status=FAIL
-      fi
-      RESULT[$run]=$status
-      DETAIL[$run]=$(cat "$out/$run.txt" 2>/dev/null || echo "-")
-      [[ $status == PASS ]] || failed=1
-      DETAIL[$run]+=" ($((SECONDS - start)) s)"
-      stop_stack
+      reps=("")
+      if ((n >= 5)) && [[ -n $repeat ]]; then read -r -a reps <<<"$(seq -s ' ' "$repeat")"; fi
+      for rep in "${reps[@]}"; do
+        run=$n${variant:+-$variant}${seed:+-s$seed}${rep:+-r$rep}
+        runs+=("$run")
+        TITLE_OF[$run]="${TITLE[$n]}${variant:+ ($variant)}${seed:+ seed $seed}${rep:+ repeat $rep}"
+        echo "netsim: scenario $run, ${TITLE_OF[$run]}" >&2
+        start=$SECONDS
+        status=PASS
+        if start_stack "$n" "$run"; then
+          (
+            cd "$repo/frontend"
+            NETSIM_SCENARIO=$n NETSIM_RUN=$run NETSIM_VARIANT=$variant \
+              NETSIM_SEED=$((${seed:-0} + 100 * (${rep:-1} - 1))) \
+              NETSIM_OUT=$out NETSIM_TOPOLOGY=$topology \
+              pnpm exec playwright test -c playwright.netsim.config.ts --grep "scenario $n:" \
+              --output "$state/artifacts/$run" # traces survive the next scenario (Playwright wipes its output dir)
+          ) || status=FAIL
+        else
+          status=FAIL
+        fi
+        RESULT[$run]=$status
+        DETAIL[$run]=$(cat "$out/$run.txt" 2>/dev/null || echo "-")
+        [[ $status == PASS ]] || failed=1
+        DETAIL[$run]+=" ($((SECONDS - start)) s)"
+        stop_stack
+      done
     done
   done
 done

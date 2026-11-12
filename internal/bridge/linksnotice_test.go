@@ -16,15 +16,15 @@ import (
 // tested there; this is the mapping of a PeerLink onto them.
 func TestLinksNotificationMapsPeerLink(t *testing.T) {
 	now := time.Date(2026, 11, 8, 12, 0, 0, 0, time.UTC)
-	loss := 4.25
+	loss := uint16(43)
 	got := bridge.LinkEntryOf(bridge.PeerLink{
 		Peer: "peer-a", Kind: transport.LinkRelayed, PathSince: now.Add(-61 * time.Second), Upgrades: 2,
-		RTT: 500 * time.Millisecond, LossPct: &loss, LossScope: transport.LossFirstHop,
+		RTT: 500 * time.Millisecond, ProbeLevel: transport.QualityPoor, ProbeLoss: &loss, LossScope: transport.LossFirstHop,
 		UpSince: now.Add(-2 * time.Minute), Downs10m: 1,
 		PendingMsgs: 2, PendingBytes: 4096, OldestPending: 3 * time.Second, SendFailures: 5, Resets: 1,
 	}, now)
-	// The grade is the router's: poor RTT, and a message waiting more than SlowSend.
-	if got.Path != 3 || got.Quality != 3 || got.LossScope != 2 || got.LossPermille != 43 ||
+	// A relayed link's level is unknown whatever the first hop's figure (Annex A.1); the figure stays.
+	if got.Path != 3 || got.Quality != 0 || got.LossScope != 2 || got.LossPermille != 43 ||
 		got.PathAgeMs != 61000 || got.UpMs != 120000 || got.PendingBytes != 4096 || got.OldestPendingMs != 3000 || got.Resets != 1 {
 		t.Errorf("entry = %+v", got)
 	}

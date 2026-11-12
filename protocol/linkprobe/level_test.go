@@ -73,3 +73,69 @@ func TestSeqBoundClampsBeforeOpening(t *testing.T) {
 		t.Fatalf("seq above the drop band before the opening: %v, want violation", o)
 	}
 }
+
+// windowProber returns a prober whose window holds one sample per rtt, evenly spread over twice
+// MinSpan and ending at the returned instant (the newest ECHO), with enough packets sent for the
+// figure to be known.
+func windowProber(rtts ...time.Duration) (*Prober, time.Duration) {
+	p := NewProber()
+	step := 2 * MinSpan / time.Duration(len(rtts)-1)
+	var at time.Duration
+	for i, r := range rtts {
+		at = time.Duration(i) * step
+		p.samples = append(p.samples, sample{at: at, rtt: r, sent: uint64(i) * 2 * MinPackets, received: uint64(i) * 2 * MinPackets})
+	}
+	return p, at + rtts[len(rtts)-1]
+}
+
+// Spec Annex A.1 « Sens de rttMs et rttVarMs »: the link's round trip is the lower median of the
+// window's samples' rtt (element of rank ⌊(n−1)/2⌋), its variance the lower median of the
+// absolute deviations from it, its age the age of the newest sample; odd n, even n, ties.
+func TestProberRTTLowMedian(t *testing.T) {
+	ms := time.Millisecond
+	cases := []struct {
+		name     string
+		rtts     []time.Duration
+		rtt, dev time.Duration
+	}{
+		{"odd", []time.Duration{50 * ms, 90 * ms, 60 * ms}, 60 * ms, 10 * ms},
+		{"even takes the lower of the middle two", []time.Duration{40 * ms, 80 * ms, 60 * ms, 100 * ms}, 60 * ms, 20 * ms},
+		{"ties", []time.Duration{60 * ms, 60 * ms, 60 * ms, 60 * ms}, 60 * ms, 0},
+		{"two samples", []time.Duration{70 * ms, 50 * ms}, 50 * ms, 0},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			p, end := windowProber(tc.rtts...)
+			now := end + 3*time.Second
+			rtt, dev, age, ok := p.RTT(now)
+			if !ok {
+				t.Fatalf("RTT(%v) unknown with a known figure (loss %d)", now, p.Loss(now))
+			}
+			if rtt != tc.rtt || dev != tc.dev {
+				t.Errorf("RTT = %v ± %v, want %v ± %v", rtt, dev, tc.rtt, tc.dev)
+			}
+			if age != 3*time.Second {
+				t.Errorf("age = %v, want 3s (since the newest ECHO)", age)
+			}
+			if got := medianRTT(p.samples); got != rtt {
+				t.Errorf("RTT %v differs from the median that drives the level, %v", rtt, got)
+			}
+		})
+	}
+}
+
+// Spec Annex A.1 « Sens de rttMs et rttVarMs »: while the figure is unknown there is no probe
+// round trip (the link keeps the QUIC stack's).
+func TestProberRTTUnknownFigure(t *testing.T) {
+	p, end := windowProber(50*time.Millisecond, 60*time.Millisecond)
+	if _, _, _, ok := p.RTT(end + 2*Window); ok {
+		t.Error("RTT known after the window went by")
+	}
+	if _, _, _, ok := NewProber().RTT(0); ok {
+		t.Error("RTT known with no sample")
+	}
+	h := NewHost(QUIC, Member, 0)
+	if _, _, _, ok := h.RTT(0); ok {
+		t.Error("Host.RTT known with no sample")
+	}
+}

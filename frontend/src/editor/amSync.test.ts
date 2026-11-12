@@ -419,6 +419,28 @@ describe("amSync: the editor and the document, with the size gate and chunks (AD
         p.view.destroy();
       });
 
+      it("whenWritten callbacks never run inside a CodeMirror update: one that dispatches does not disable the plugin", async () => {
+        const p = atEnd("abc");
+        const errors: unknown[] = [];
+        const spy = vi.spyOn(console, "error").mockImplementation((...a) => void errors.push(a));
+        type(p.view, "d"); // waits for the paint
+        let ran = 0;
+        whenWritten(p.handle, () => {
+          ran++;
+          p.view.dispatch({ effects: [] }); // as the problem marks do
+        });
+        // A paste is not deferred: the update writes what waits, then the callback.
+        p.view.dispatch({ changes: { from: 4, insert: "P" }, userEvent: "input.paste" });
+        await Promise.resolve();
+        expect(ran).toBe(1);
+        p.view.dispatch({ changes: { from: 5, insert: "Q" }, userEvent: "input.paste" });
+        expect(p.handle.doc().text).toBe("abcdPQ");
+        expect(p.view.state.doc.toString()).toBe("abcdPQ");
+        expect(errors).toEqual([]);
+        spy.mockRestore();
+        p.view.destroy();
+      });
+
       it("whenWritten waits for the keys of every editor open on the document", async () => {
         const a = atEnd("abc");
         const b = attach(a.handle);
@@ -429,6 +451,8 @@ describe("amSync: the editor and the document, with the size gate and chunks (AD
           seen = a.handle.doc().text;
         });
         a.view.contentDOM.dispatchEvent(new FocusEvent("blur"));
+        // Callbacks run once the current call ends, never inside it (a CodeMirror update).
+        await Promise.resolve();
         expect(seen).toBe("#abcd");
         a.view.destroy();
         b.destroy();

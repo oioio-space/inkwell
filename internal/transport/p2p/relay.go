@@ -9,7 +9,9 @@ import (
 	"time"
 
 	"github.com/libp2p/go-libp2p"
+	libp2pconnmgr "github.com/libp2p/go-libp2p/core/connmgr"
 	"github.com/libp2p/go-libp2p/core/crypto"
+	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/p2p/host/autorelay"
 	"github.com/libp2p/go-libp2p/p2p/net/conngater"
@@ -22,6 +24,7 @@ import (
 	ma "github.com/multiformats/go-multiaddr"
 
 	"github.com/oioio-space/inkwell/internal/transport"
+	"github.com/oioio-space/inkwell/protocol/linkprobe"
 )
 
 // DefaultRelayPort is the port a relay listens on, over UDP (QUIC) and TCP,
@@ -112,8 +115,13 @@ func RunRelay(ctx context.Context, key ed25519.PrivateKey, o RelayOptions) error
 			fmt.Sprintf("/ip4/0.0.0.0/tcp/%d", DefaultRelayPort),
 		}
 	}
+	rm, err := newRelayResourceManager()
+	if err != nil {
+		return err
+	}
 	opts := []libp2p.Option{
 		libp2p.Identity(priv),
+		libp2p.ResourceManager(rm),
 		libp2p.NoTransports,
 		libp2p.Transport(libp2pquic.NewTransport),
 		// No SO_REUSEPORT: with it, a second Inkwell on the machine binds the same TCP port and
@@ -132,16 +140,31 @@ func RunRelay(ctx context.Context, key ed25519.PrivateKey, o RelayOptions) error
 	}
 	h, err := libp2p.New(append(opts, o.extra...)...)
 	if err != nil {
+		_ = rm.Close()
 		_ = cm.Close()
 		return fmt.Errorf("p2p: start relay: %w", err)
 	}
-	defer func() { _ = h.Close() }()
 
 	res := relay.DefaultResources()
 	res.Limit = nil
 	res.MaxReservations = relayMaxReservations
 	res.MaxCircuits = relayMaxCircuits
 	res.MaxReservationsPerIP = relayMaxReservationsPerIP
+	// The relay answers the link probe of its clients (spec §8.5.1): the peers its own connection
+	// manager tags as holding a reservation or an active circuit.
+	probes := newProbeSet(ctx, h, relayRoles(cm))
+	notifee := &network.NotifyBundle{
+		ConnectedF:    func(_ network.Network, c network.Conn) { probes.attach(c) },
+		DisconnectedF: func(_ network.Network, c network.Conn) { probes.detach(c) },
+	}
+	h.Network().Notify(notifee)
+	for _, c := range h.Network().Conns() { // connected before the notifee
+		probes.attach(c)
+	}
+	// Order of the deferred calls, last first: the probes stop, then the host closes, so no stream
+	// arrives at a probe set that is closing (and handle refuses one that does).
+	defer func() { _ = h.Close() }()
+	defer probes.close()
 	ropts := []relay.Option{relay.WithResources(res)}
 	if acl != nil {
 		ropts = append(ropts, relay.WithACL(acl))
@@ -165,6 +188,42 @@ func RunRelay(ctx context.Context, key ed25519.PrivateKey, o RelayOptions) error
 	}
 	<-ctx.Done()
 	return nil
+}
+
+// The tags the circuit relay puts on a peer in its connection manager: a peer holds a
+// reservation, or an active circuit goes through the relay on its behalf. They are the relay's own
+// bookkeeping of who its clients are (spec §8.5.1), set and removed with the reservation and the
+// circuit, so the probe keeps no list of its own.
+const (
+	relayReservationTag = "relay-reservation"
+	relayHopTag         = "relay-v2-hop"
+)
+
+// tagSource is the part of a connection manager that tells the tags of a peer.
+type tagSource interface {
+	GetTagInfo(peer.ID) *libp2pconnmgr.TagInfo
+}
+
+// relayRoles says what the peer of a connection is to the relay: a client while the relay's
+// connection manager tags it as holding a reservation or an active circuit, nothing otherwise
+// (a refused requester was never tagged). A lookup keeps no state.
+func relayRoles(cm tagSource) probeRoles {
+	return func(c network.Conn) linkprobe.Roles {
+		return relayRolesOf(cm, c.RemotePeer())
+	}
+}
+
+func relayRolesOf(cm tagSource, p peer.ID) linkprobe.Roles {
+	ti := cm.GetTagInfo(p)
+	if ti == nil {
+		return 0
+	}
+	_, reserved := ti.Tags[relayReservationTag]
+	_, circuit := ti.Tags[relayHopTag]
+	if reserved || circuit {
+		return linkprobe.RelayClient
+	}
+	return 0
 }
 
 // allowList is the relay's access control: the listed peers only.

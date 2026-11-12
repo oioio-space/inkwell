@@ -190,6 +190,11 @@ func linkprobeVectors() []vector {
 		lpOpen(15100),
 		lpSend(15100, 0, 1), lpRecv(15110, lpEcho(1, 0), 1, "accepted"),
 		lpSend(30100, 400, 2), lpRecv(30110, lpEcho(2, 360), 401, "accepted"), lpLoss(30110, 100))
+	prober("linkprobe-prober-min-span-late",
+		"L'écart minimal se mesure entre les deux échantillons, pas depuis l'ouverture : à 20 s puis 30 s (10 s d'écart), inconnu, même si les instants sont grands.",
+		lpOpen(0),
+		lpSend(20000, 0, 1), lpRecv(20010, lpEcho(1, 0), 1, "accepted"),
+		lpSend(30000, 400, 2), lpRecv(30010, lpEcho(2, 360), 401, "accepted"), lpLoss(30010, 65535))
 	prober("linkprobe-prober-window",
 		"La fenêtre part du plus ancien échantillon à au plus 30 s du plus récent : à 31 s, l'échantillon de 0 s sort ; (1000 − 950) / 1000 = 50 ‰ (75 ‰ s'il restait).",
 		lpOpen(0),
@@ -323,6 +328,13 @@ func linkprobeVectors() []vector {
 		lpSend(15000, 1000, 2), lpRecv(15010, lpEcho(2, 980), 1001, "accepted"), lpLevel(15010, "fair"),
 		lpSend(40000, 1050, 3), lpRecv(40010, lpEcho(3, 1030), 1051, "accepted"), lpLevel(40010, "unknown"),
 		lpSend(44000, 1300, 4), lpRecv(44010, lpEcho(4, 1278), 1301, "accepted"), lpLevel(44010, "fair"))
+	prober("linkprobe-prober-level-unknown-boundary",
+		"L'hystérésis est oubliée **plus** de 30 s après le dernier chiffre connu : à 30 s tout juste, elle est gardée (7 ‰ reste moyen).",
+		lpOpen(0),
+		lpSend(0, 0, 1), lpRecv(10, lpEcho(1, 0), 1, "accepted"),
+		lpSend(15000, 1000, 2), lpRecv(15010, lpEcho(2, 980), 1001, "accepted"), lpLevel(15010, "fair"),
+		lpSend(40000, 1050, 3), lpRecv(40010, lpEcho(3, 1030), 1051, "accepted"), lpLevel(40010, "unknown"),
+		lpSend(45000, 1300, 4), lpRecv(45010, lpEcho(4, 1278), 1301, "accepted"), lpLevel(45010, "fair"))
 	stalePlus := func(last ...event) []event {
 		es := []event{lpOpen(0)}
 		for i := range 9 {

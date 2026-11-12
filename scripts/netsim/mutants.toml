@@ -38,7 +38,8 @@ file = "internal/transport/p2p/node.go"
 before = "reorderWait = time.Minute"
 after = "reorderWait = 0"
 
-# M5a and M5b target the link metrics estimators of plan section 7 (linkstat.go). A no-op edit
+# M5a targets the RTT estimator of plan section 7 (linkstat.go); M5b and M5d to M5n (block C5S, plan
+# docs/plans/2026-11-09-c5-sound.md section 6) target the link probe and its levels. A no-op edit
 # (before == after) is rejected by the runner; if an anchor is not found exactly once, adjust it
 # to the final code, never the clause. `mutants.py --check BLOCK` validates every anchor without
 # running anything.
@@ -56,19 +57,185 @@ after = "if e.ok {\n\t\treturn\n\t}\n\te.srtt, e.dev, e.at, e.ok = srtt, dev, no
 
 [[mutant]]
 id = "M5b"
-block = "NI0"
+block = "C5S"
 kind = "e2e"
 scenario = 5
 clause = "C5"
-why = "loss computed since the connection started instead of over a 30 s window: P3 still shows the loss of P1 and P2"
+why = "the loss window is never trimmed (the figure covers every sample kept, since the connection started): P2 and P3 still show the loss of P0 and P1"
 [[mutant.edit]]
-file = "internal/transport/p2p/linkstat.go"
-before = "for i < len(w.steps) && now.Sub(w.steps[i].at) > transport.LossWindow {"
-after = "for i < len(w.steps) && false {"
+file = "protocol/linkprobe/machines.go"
+before = "return s1.at-s.at <= Window })"
+after = "return s.at >= 0 })"
+
+[[mutant]]
+id = "M5d"
+block = "C5S"
+kind = "e2e"
+scenario = 5
+clause = "C5"
+why = "quality is always good: the level never follows the loss"
 [[mutant.edit]]
-file = "internal/transport/p2p/linkstat.go"
-before = "if now.Sub(s.at) <= transport.LossWindow {"
-after = "if true {"
+file = "internal/transport/p2p/probe.go"
+before = "level: transport.Quality(pc.host.Level(now))}"
+after = "level: transport.QualityGood}"
+
+[[mutant]]
+id = "M5e"
+block = "C5S"
+kind = "e2e"
+scenario = 5
+clause = "C5"
+why = "quality is always poor"
+[[mutant.edit]]
+file = "internal/transport/p2p/probe.go"
+before = "level: transport.Quality(pc.host.Level(now))}"
+after = "level: transport.QualityPoor}"
+
+[[mutant]]
+id = "M5f"
+block = "C5S"
+kind = "e2e"
+scenario = 5
+clause = "C5"
+why = "good and poor are swapped"
+[[mutant.edit]]
+file = "internal/transport/p2p/probe.go"
+before = "level: transport.Quality(pc.host.Level(now))}"
+after = "level: (4 - transport.Quality(pc.host.Level(now))) % 4}"
+
+[[mutant]]
+id = "M5g"
+block = "C5S"
+kind = "e2e"
+scenario = 5
+clause = "C5"
+why = "the window is 60 s instead of 30 s: the figure still holds the loss of the previous phase"
+[[mutant.edit]]
+file = "protocol/limits.go"
+before = "LinkProbeWindow = 30 * time.Second"
+after = "LinkProbeWindow = 60 * time.Second"
+
+[[mutant]]
+id = "M5h"
+block = "C5S"
+kind = "e2e"
+scenario = 5
+clause = "C5"
+why = "the figure and the level come from quic-go's PacketsLost / PacketsSent again (the old figure): spurious declarations under reordering, and ACK-only packets in the denominator"
+[[mutant.edit]]
+file = "internal/transport/p2p/probe.go"
+before = "	v := probeView{loss: pc.host.Loss(now), level: transport.Quality(pc.host.Level(now))}\n	v.hasLoss = v.loss != linkprobe.Unknown"
+after = "	st := pc.qc.ConnectionStats()\n	v := probeView{loss: uint16(min(1000*st.PacketsLost/max(st.PacketsSent, 1), 1000)), hasLoss: st.PacketsSent >= linkprobe.MinPackets}\n	if v.hasLoss {\n		v.level = transport.Quality(linkprobe.StepLoss(linkprobe.LevelUnknown, int64(v.loss)))\n	}\n	_ = now"
+
+[[mutant]]
+id = "M5i"
+block = "C5S"
+kind = "go"
+pkg = "./internal/transport/p2p"
+test = "TestLinkLevelLateEchoDiscarded"
+clause = "spec 8.5.5 step 3.6 (late echoes)"
+why = "the late-echo filter is removed (the PTO is an hour): an echo that waited behind a retransmission is accepted"
+[[mutant.edit]]
+file = "internal/transport/p2p/probe.go"
+before = "pto := linkprobe.PTO(st.SmoothedRTT, st.MeanDeviation, -1)"
+after = "pto := time.Hour"
+
+[[mutant]]
+id = "M5j"
+block = "C5S"
+kind = "go"
+pkg = "./internal/transport/p2p"
+test = "TestLinkLevelIgnoresReordering"
+clause = "spec 8.5 (the figure is the receiver's count)"
+why = "the figure is computed from quic-go's PacketsLost (declarations) instead of the receiver's echoes: reordering reads as loss"
+[[mutant.edit]]
+file = "internal/transport/p2p/probe.go"
+before = "	v := probeView{loss: pc.host.Loss(now), level: transport.Quality(pc.host.Level(now))}\n	v.hasLoss = v.loss != linkprobe.Unknown"
+after = "	st := pc.qc.ConnectionStats()\n	v := probeView{loss: uint16(min(1000*st.PacketsLost/max(st.PacketsSent, 1), 1000)), hasLoss: st.PacketsSent >= linkprobe.MinPackets}\n	if v.hasLoss {\n		v.level = transport.Quality(linkprobe.StepLoss(linkprobe.LevelUnknown, int64(v.loss)))\n	}\n	_ = now"
+
+[[mutant]]
+id = "M5k"
+block = "C5S"
+kind = "e2e"
+scenario = 5
+clause = "C5"
+why = "no hysteresis: the bands' fall and rise thresholds are set to their midpoint"
+[[mutant.edit]]
+file = "protocol/limits.go"
+before = "LinkProbeLossFairDown = 5 "
+after = "LinkProbeLossFairDown = 10 "
+[[mutant.edit]]
+file = "protocol/limits.go"
+before = "LinkProbeLossFairUp   = 25 "
+after = "LinkProbeLossFairUp   = 10 "
+[[mutant.edit]]
+file = "protocol/limits.go"
+before = "LinkProbeLossPoorDown = 50 "
+after = "LinkProbeLossPoorDown = 100 "
+[[mutant.edit]]
+file = "protocol/limits.go"
+before = "LinkProbeLossPoorUp   = 150 "
+after = "LinkProbeLossPoorUp   = 100 "
+
+[[mutant]]
+id = "M5l"
+block = "C5S"
+kind = "e2e"
+scenario = 5
+clause = "C5"
+why = "a level that never falls back once known: the rules that lower it are removed"
+[[mutant.edit]]
+file = "protocol/linkprobe/level.go"
+before = "	case prev != LevelGood && x < b[0].down:\n		return LevelGood\n	case prev == LevelPoor && x < b[1].down:\n		return LevelFair\n"
+after = ""
+
+[[mutant]]
+id = "M5m"
+block = "C5S"
+kind = "e2e"
+scenario = 5
+clause = "C5"
+why = "the entry from unknown is placed against the rise threshold instead of the midpoint"
+[[mutant.edit]]
+file = "protocol/linkprobe/level.go"
+before = "case prev == LevelUnknown && x >= b[1].mid:"
+after = "case prev == LevelUnknown && x >= b[1].up:"
+[[mutant.edit]]
+file = "protocol/linkprobe/level.go"
+before = "case prev == LevelUnknown && x >= b[0].mid:"
+after = "case prev == LevelUnknown && x >= b[0].up:"
+
+[[mutant]]
+id = "M5n"
+block = "C5S"
+kind = "e2e"
+scenario = 5
+clause = "C5"
+why = "the loss thresholds are doubled"
+[[mutant.edit]]
+file = "protocol/limits.go"
+before = "LinkProbeLossFairDown = 5 "
+after = "LinkProbeLossFairDown = 10"
+[[mutant.edit]]
+file = "protocol/limits.go"
+before = "LinkProbeLossFair     = 10 "
+after = "LinkProbeLossFair     = 20 "
+[[mutant.edit]]
+file = "protocol/limits.go"
+before = "LinkProbeLossFairUp   = 25 "
+after = "LinkProbeLossFairUp   = 50 "
+[[mutant.edit]]
+file = "protocol/limits.go"
+before = "LinkProbeLossPoorDown = 50 "
+after = "LinkProbeLossPoorDown = 100"
+[[mutant.edit]]
+file = "protocol/limits.go"
+before = "LinkProbeLossPoor     = 100 "
+after = "LinkProbeLossPoor     = 200 "
+[[mutant.edit]]
+file = "protocol/limits.go"
+before = "LinkProbeLossPoorUp   = 150 "
+after = "LinkProbeLossPoorUp   = 300 "
 
 [[mutant]]
 id = "M5c"

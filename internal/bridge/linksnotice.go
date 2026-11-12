@@ -22,12 +22,22 @@ var (
 	_ = [1]struct{}{}[uint8(transport.LossFirstHop)-p.LossScopeFirstHop]
 )
 
+// lossPct is the probe's figure as the percentage [p.Measures] takes: the
+// permille figure divided by ten, which [p.LinkOf] rounds back to the same
+// permille.
+func lossPct(permille *uint16) *float64 {
+	if permille == nil {
+		return nil
+	}
+	return new(float64(*permille) / 10)
+}
+
 // linkEntry converts a [PeerLink] to its wire form, instants as ages at now.
 func linkEntry(l PeerLink, now time.Time) LinkEntry {
 	return p.LinkOf(p.Measures{
 		Peer: l.Peer, Path: uint8(l.Kind), Quality: uint8(l.Quality()), LossScope: uint8(l.LossScope),
 		PathSince: l.PathSince, UpSince: l.UpSince,
-		RTT: l.RTT, RTTVar: l.RTTVar, RTTAge: l.RTTAge, LossPct: l.LossPct,
+		RTT: l.RTT, RTTVar: l.RTTVar, RTTAge: l.RTTAge, LossPct: lossPct(l.ProbeLoss),
 		LastDown: l.LastDown, OldestPending: l.OldestPending,
 		Upgrades: l.Upgrades, Fallbacks: l.Fallbacks, Downs10m: l.Downs10m, DownsTotal: l.DownsTotal,
 		Resyncs10m: l.Resyncs10m, Resyncs: l.Resyncs, PendingMsgs: l.PendingMsgs, PendingBytes: l.PendingBytes,

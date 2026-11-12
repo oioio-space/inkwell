@@ -20,12 +20,18 @@ Standard library only. Every claim of the plan that is a number comes from here:
   3 PTO; received_packet_tracker.go: an ACK every 2 ack-eliciting packets, at once for a
   reordered or a gap-opening packet, else after 25 ms). It counts the spurious declarations that
   reordering causes.
+* `ProbePath` is the PROBE's way across the netem hops, with the profile active at each instant:
+  the sender's RTT estimate (`RttStats`, RFC 9002 §5.3 as quic-go v0.64.1 updates it) fed by the
+  simulated ACKs, a lost PROBE resent when quic-go declares it lost (time threshold), the probe and
+  echo streams in order (head-of-line blocking), and the PTO of step 3.6 taken when the ECHO is read,
+  so a sample at a change of the round trip is what the stack makes of it (run 5-s1-r8).
 * `RULE` is the acceptance rule of C5; `verdict` applies it to the values a run measured, so the
   end-to-end test and this specification share one implementation of the rule.
 
 Commands: `report` (false-failure rate and power), `calibrate` (the statistics the constants of
-`RULE` are read from), `verdict` (JSON on stdin, from netsim.spec.ts), `spread` (the measured
-spread of the residual over the gate's runs, against the model's).
+`RULE` are read from), `transitions` (the figure's error at a change of the round trip),
+`verdict` (JSON on stdin, from netsim.spec.ts), `spread` (the measured spread of the residual over
+the gate's runs, against the model's).
 """
 
 from __future__ import annotations
@@ -43,6 +49,7 @@ from dataclasses import dataclass, field
 # ── What the product does (internal/transport/link.go, p2p/links.go, bridge) ─────────────────
 
 WINDOW = 30.0  # transport.LossWindow
+INTERVAL = 1.0  # spec §8.5.5 I: one PROBE a second, ± 10 %
 SAMPLE = 1.0  # p2p sampleEvery: the window is a whole number of sampler steps
 PUSH = 1.0  # bridge.LinksPushPeriod: the webview holds the last value pushed
 MIN_PACKETS = 200  # spec §8.5.5 N, linkprobe.MinPackets (was transport.MinLossPackets = 50)
@@ -98,8 +105,13 @@ PROFILES = {
     "wifi": Netem(0.015, 0.005, WIFI_GE, 0.005, 0.001),
     "wifi-far": Netem(0.075, 0.010, WIFI_GE, 0.005, 0.001),
     "wifi-clean": Netem(0.015, 0.005),
-    # Proposed P4 (plan section 4): no loss, a minority of packets held 60 ms on each hop.
-    "wifi-reorder": Netem(0.060, 0.0, reorder=0.80),
+    # P4 (plan section 4): no loss, reordering within quic-go's tolerance: a 40 ms path with an 8 ms
+    # jitter on each hop reorders packets several deep, but no packet arrives later than the ACK
+    # loop that would make the peer's stack discard it (see _discard_late).
+    "wifi-reorder": Netem(0.040, 0.008),
+    # Beyond the tolerance (the first P4, review of the C5S implementation): a fifth of the packets
+    # held 60 ms on each hop while the rest go at once; the peer's stack discards many as duplicates.
+    "wifi-reorder-deep": Netem(0.060, 0.0, reorder=0.80),
 }
 PHASES = {"P1": "wifi", "P2": "wifi-far", "P3": "wifi-clean", "P4": "wifi-reorder"}
 
@@ -214,9 +226,12 @@ class Traffic:
     read_delay: float = 0.020
     race: bool = True
     # Head-of-line blocking on the probe stream (review 3, F10): a PROBE whose own packet is lost is
-    # resent after the time threshold (9/8 RTT, RFC 9002 §6.1.2), and one that follows a lost PROBE
-    # waits for that one's retransmission. Either may still come back within one PTO.
+    # resent when quic-go declares it lost (`ProbePath`), and one that follows a lost PROBE waits for
+    # that one's retransmission. Either may still come back within one PTO. Off: a lost PROBE is lost.
     hol: bool = True
+    # quic-go v0.64.1 time threshold (sent_packet_handler.go:598): max(latest_rtt, smoothed_rtt) ×
+    # (8 + e)/8, e = 1 on a new connection, doubled up to 8 after each spurious loss.
+    time_threshold: float = 9 / 8
     min_span: float = WINDOW / 2  # spec §8.5.5 step 5: the two samples at least W/2 apart
     phase_rates: tuple = ()  # ((phase, rate), ...): phases the test drives at another rate (trace)
 
@@ -256,14 +271,211 @@ def _arrivals(ours, prof: Netem, tr: Traffic, rng: random.Random, t0: float, t1:
         _, tag, bad1 = out1[k]
         if not (bad1 or bad2) and t2 < arrival[tag]:
             arrival[tag] = t2
+    _discard_late(arrival, lambda _t: prof, rng)
     return arrival, (a1, d1), (a2, d2)
 
 
-def _figure(ours, got, arrival, prof, tr, rng, start, end):
+MAX_ACK_DELAY = 0.025
+
+
+def _discard_late(arrival, prof_of, rng: random.Random) -> int:
+    """quic-go v0.64.1 discards a packet whose number is below `deletedBelow`, before counting it
+    (connection.go:1229, IsPotentiallyDuplicate; received_packet_history.go:146): the receiver moves
+    that limit to L + 1 once the sender has acknowledged a packet carrying the receiver's ACK of L
+    (sent_packet_handler.go:684, IgnorePacketsBelow). A packet that arrives after a higher-numbered
+    one by more than that ACK loop (the receiver acknowledges the out-of-order packet at once, the ACK
+    crosses the path, the sender acknowledges it within max_ack_delay, that ACK crosses back) is
+    therefore never received: it is lost for the figure (spec §8.5.2), and the sender resends its data.
+    Sets those arrivals to inf; returns how many."""
+    rnd, gauss = rng.random, rng.gauss
+    first_higher, n = math.inf, 0  # earliest arrival among the packets of higher number
+    for p in range(len(arrival) - 1, -1, -1):
+        a = arrival[p]
+        if a < math.inf and a > first_higher:
+            prof = prof_of(first_higher)
+            loop = sum(_delay(prof, rnd, gauss) for _ in range(4)) + rng.uniform(0, MAX_ACK_DELAY)
+            if a > first_higher + loop:
+                arrival[p] = math.inf
+                n += 1
+                continue
+        if a < first_higher:
+            first_higher = a
+    return n
+
+
+# ── The PROBE's path: the sender's RTT estimate, retransmission, head-of-line blocking ─────────
+
+GRANULARITY = 0.001  # RFC 9002 kGranularity, quic-go protocol.TimerGranularity
+PEER_MAX_ACK_DELAY = 0.026  # spec §8.5.5 step 3.6: quic-go's MaxAckDelayInclGranularity
+INITIAL_RTT = 0.100  # quic-go utils.DefaultInitialRTT: PTO = 2 × 100 ms before the first sample
+MAX_TRIES = 8  # transmissions of one STREAM frame the model follows (8 losses in a row: p ≈ 1e-12)
+
+
+def ceil_ms(x: float) -> float:
+    """Spec §8.5.5 step 3.6: the PTO rounded up to the millisecond."""
+    return math.ceil(x * 1000 - 1e-9) / 1000
+
+
+def _ack_samples(ours, arrival, ae, prof_at, rng: random.Random) -> list:
+    """The RTT samples the sender of one direction takes (RFC 9002 §5.1): the peer acknowledges
+    every second ack-eliciting packet it receives, at once for a reordered one
+    (received_packet_tracker.go; the 25 ms alarm is left out: at the modelled rates the next
+    ack-eliciting packet comes first); the ACK crosses the two hops of the other direction, each
+    with the profile active when the ACK enters it (so an ACK sent before a change of the round
+    trip and one sent after it differ), and may be lost there. An ACK whose largest acknowledged
+    packet is new gives a sample: (instant the sender reads it, send delta, ack delay, send time
+    of that packet), by instant read."""
+    rnd, gauss = rng.random, rng.gauss
+    order = sorted((arrival[i], i) for i in range(len(ours)) if ae[i] and arrival[i] < math.inf)
+    out, since, largest, largest_t, acked = [], 0, -1, 0.0, -1
+    for a, i in order:
+        reordered = i < largest
+        if i > largest:
+            largest, largest_t = i, a
+        since += 1
+        if since < 2 and not reordered:
+            continue
+        since = 0
+        if largest == acked:
+            continue
+        x = a
+        for _ in range(2):
+            prof = prof_at(x)
+            if rnd() < prof.hop_loss():
+                x = math.inf
+                break
+            x += _delay(prof, rnd, gauss)
+        if x == math.inf:
+            continue  # the next ACK acknowledges this packet too
+        out.append((x, x - ours[largest], min(a - largest_t, MAX_ACK_DELAY), ours[largest]))
+        acked = largest
+    out.sort()
+    return out
+
+
+class RttStats:
+    """quic-go v0.64.1 utils.RTTStats (RFC 9002 §5.3) of one sender, fed by `_ack_samples` in the
+    order the ACKs are read: min_rtt from the raw delta, the ack delay subtracted when the delta
+    stays above min_rtt, rttvar updated from the old smoothed_rtt before smoothed_rtt itself
+    (rtt_stats.go:111). An ACK whose largest acknowledged packet was sent before one already
+    acknowledged gives no sample. Each array holds the state after the sample of the same index."""
+
+    def __init__(self, samples, threshold: float = 9 / 8):
+        self.threshold = threshold
+        self.t, self.sent, self.srtt, self.var, self.latest = [], [], [], [], []
+        has, min_rtt, srtt, var, newest_send = False, math.inf, 0.0, 0.0, -math.inf
+        for t, delta, ack_delay, send in samples:
+            if send <= newest_send or delta <= 0:
+                continue
+            newest_send = send
+            min_rtt = min(min_rtt, delta)
+            x = delta - ack_delay if delta - min_rtt >= ack_delay else delta
+            if not has:
+                srtt, var, has = x, x / 2, True
+            else:
+                var = 0.75 * var + 0.25 * abs(srtt - x)
+                srtt = 0.875 * srtt + 0.125 * x
+            self.t.append(t)
+            self.sent.append(send)
+            self.srtt.append(srtt)
+            self.var.append(var)
+            self.latest.append(x)
+
+    def pto(self, now: float) -> float:
+        """Spec §8.5.5 step 3.6 at `now`: smoothed_rtt + max(4 rttvar, kGranularity) + max_ack_delay,
+        rounded up to the millisecond."""
+        i = bisect.bisect_right(self.t, now) - 1
+        if i < 0:
+            return 2 * INITIAL_RTT
+        return ceil_ms(self.srtt[i] + max(4 * self.var[i], GRANULARITY) + PEER_MAX_ACK_DELAY)
+
+    def declared_lost(self, x: float) -> float:
+        """When quic-go declares lost a packet sent at x (detectLostPackets, RFC 9002 §6.1.2): at the
+        first ACK of a later packet read at or after x + loss_delay, or when the loss timer, armed at
+        x + loss_delay by the last ACK, fires first; loss_delay = max(latest_rtt, smoothed_rtt) ×
+        threshold, re-evaluated with each ACK (it shrinks after a drop of the round trip). With no
+        later ACK, at the PTO (the probe packets of RFC 9002 §6.2.4)."""
+        j, n = bisect.bisect_right(self.t, x), len(self.t)
+        while j < n and self.sent[j] <= x:
+            j += 1
+        if j >= n:
+            return x + self.pto(x)
+        while True:
+            due = x + max(max(self.latest[j], self.srtt[j]) * self.threshold, GRANULARITY)
+            if self.t[j] >= due:
+                return self.t[j]
+            if j + 1 < n and self.t[j + 1] < due:
+                j += 1
+                continue
+            return due
+
+
+class ProbePath:
+    """The probe stream of one direction (spec §8.5.5 steps 2 and 3): each PROBE leaves up to
+    `stack` after its hand-over, crosses the two hops with the profile active when it enters each,
+    and, lost, is resent when quic-go declares it lost, the retransmission taking the profile of its
+    own instant; the stream delivers PROBEs in order (head-of-line blocking, also across a change
+    of profile), the responder reads received(C) up to `read_delay` later, the ECHO comes back the
+    same way on its own ordered stream, and the prober accepts it within the PTO of C at the
+    instant it reads it (step 3.6). The two directions share profiles, so the responder's
+    retransmissions follow the same RTT estimate."""
+
+    def __init__(self, ours, arrival, ae, prof_at, rng: random.Random, tr: Traffic):
+        self.prof_at, self.rng, self.tr = prof_at, rng, tr
+        self.rtt = RttStats(_ack_samples(ours, arrival, ae, prof_at, rng), tr.time_threshold)
+        self.reset()
+
+    def reset(self):
+        """A new stream: nothing ahead of the next PROBE or ECHO."""
+        self.fwd = self.back = -math.inf
+
+    def _hops(self, x: float) -> float:
+        rnd, gauss = self.rng.random, self.rng.gauss
+        for _ in range(2):
+            prof = self.prof_at(x)
+            if rnd() < prof.hop_loss():
+                return math.inf
+            x += _delay(prof, rnd, gauss)
+        return x
+
+    def _carry(self, x: float, ahead: float) -> tuple[float, int, bool]:
+        """(instant the stream data first sent at x is delivered to the reader, inf if lost and
+        `hol` is off; its transmissions; held behind the data ahead of it): after every
+        retransmission, and after the data ahead of it."""
+        if not self.tr.hol:
+            return self._hops(x), 1, False
+        for tries in range(1, MAX_TRIES + 1):
+            a = self._hops(x)
+            if a < math.inf:
+                return max(a, ahead), tries, ahead > a
+            x = self.rtt.declared_lost(x)
+        return math.inf, MAX_TRIES, False
+
+    def attempt(self, h: float):
+        """The PROBE handed over at h: None if lost or late, else (read of received(C) after h, own
+        packet counted at that read, round trip = instant the ECHO is read − h, transmissions of the
+        PROBE, held behind an earlier PROBE)."""
+        tr, rnd = self.tr, self.rng.random
+        x = h + (self.rng.uniform(0, tr.stack) if tr.stack else 0.0)
+        a, tries, held = self._carry(x, self.fwd)
+        if a == math.inf:
+            return None
+        self.fwd = a
+        read = a + (self.rng.uniform(0, tr.read_delay) if tr.read_delay else 0.0)
+        e, _, _ = self._carry(read, self.back)
+        if e == math.inf:
+            return None
+        self.back = e
+        if e - h > self.rtt.pto(e):
+            return None
+        return read - h, ((rnd() < 0.5) if tr.race else 1), e - h, tries, held
+
+
+def _figure(ours, got, arrival, path: ProbePath, tr, start, end):
     """The prober's figure over a window [start, end] (spec §8.5.5 steps 3 to 5) against the loss
     of the same window: (figure or nan, sent, lost, crossing, late, span, rtt of the newest)."""
-    start, read_a, late_a, c_a, _ = _probe(prof, rng, start, tr, SAMPLE)
-    end, read_b, late_b, c_b, rtt = _probe(prof, rng, end, tr, -SAMPLE)
+    start, read_a, late_a, c_a, _ = _probe(path, start, SAMPLE)
+    end, read_b, late_b, c_b, rtt = _probe(path, end, -SAMPLE)
     lo_i, hi_i = bisect.bisect_right(ours, start), bisect.bisect_right(ours, end)
     sent = hi_i - lo_i
     received = bisect.bisect_right(got, read_b) - bisect.bisect_right(got, read_a) + c_b - c_a
@@ -287,9 +499,10 @@ def loss_window(phase: str, tr: Traffic, rng: random.Random, detect: bool = Fals
     q1, q2 = d1 / a1 if a1 else 0.0, d2 / a2 if a2 else 0.0
     truth = 1 - (1 - q1) * (1 - q2) * (1 - prof.corrupt) ** 2
     got = sorted(a for a in arrival if a < math.inf)
-    honest, sent, lost, crossing, late, span, rtt = _figure(ours, got, arrival, prof, tr, rng, start, end)
-    lo_i, hi_i = bisect.bisect_right(ours, start), bisect.bisect_right(ours, end)
     types = _types(rng, len(ours), tr.ae, tr.flight)
+    path = ProbePath(ours, arrival, types, lambda _t: prof, rng, tr)
+    honest, sent, lost, crossing, late, span, rtt = _figure(ours, got, arrival, path, tr, start, end)
+    lo_i, hi_i = bisect.bisect_right(ours, start), bisect.bisect_right(ours, end)
     ae_sent = sum(1 for i in range(lo_i, hi_i) if types[i])
     ae_lost = sum(1 for i in range(lo_i, hi_i) if types[i] and arrival[i] == math.inf)
     w = Window(
@@ -307,27 +520,28 @@ def loss_window(phase: str, tr: Traffic, rng: random.Random, detect: bool = Fals
     return w
 
 
-def pto(prof: Netem) -> float:
-    """RFC 9002 §6.2.1 PTO of a path of four hops of prof: srtt + 4 rttvar + max_ack_delay, with
-    srtt the mean round trip and rttvar its mean deviation (0.8 sd for a normal-ish sum)."""
-    m = (1 - prof.reorder) * prof.delay
-    v = (1 - prof.reorder) * (prof.jitter**2 + prof.delay**2) - m * m
-    return 4 * m + 4 * 0.8 * math.sqrt(4 * v) + 0.025
-
-
-def _probe(prof: Netem, rng: random.Random, t: float, tr: Traffic, step: float):
+def _probe(path: ProbePath, t: float, step: float):
     """(instant sent(C) is read, instant received(C) is read, late probes skipped, PROBE's own packet
     counted at the read (0 or 1), round trip) of the nearest probe from t, moving by step (+1 s for
     the oldest sample of the window, −1 s for the newest: the product takes the newest accepted
-    sample, never a later one), whose echo comes back within one PTO (spec §8.5.5 step 3)."""
-    late = 0
+    sample, never a later one), whose echo comes back within one PTO (spec §8.5.5 step 3). The
+    PROBEs go on one stream in time order, the one a second before the first included (it may hold
+    the next one up)."""
+    back = 8
     while True:
-        res = _attempt(prof, rng, tr)
-        if res is not None:
-            read, counted, rtt = res
-            return t, t + read, late, counted, rtt
-        late += 1
-        t += step
+        if step > 0:
+            times = [t + (k - 1) * step for k in range(back + 1)]  # the one before, then t, t + 1, ...
+            order = range(1, len(times))
+        else:
+            times = [t + (back - k) * step for k in range(back + 1)]  # ..., t − 1, t
+            order = range(len(times) - 1, 0, -1)
+        path.reset()
+        res = [path.attempt(x) for x in times]
+        for late, k in enumerate(order):
+            if res[k] is not None:
+                read, counted, rtt = res[k][:3]
+                return times[k], times[k] + read, late, counted, rtt
+        back *= 2
 
 
 # ── quic-go v0.64.1 loss detection, to count spurious declarations ───────────────────────────
@@ -581,39 +795,21 @@ EDGE_GE = GE(0.0018, 0.30, 0.50, 0.001)
 PROFILES["wifi-edge"] = Netem(0.015, 0.005, EDGE_GE, 0.005, 0.001)
 PHASES["P5"] = "wifi-edge"
 PLAN = (("P0", 40.0), ("P1", 40.0), ("P2", 40.0), ("P3", 40.0), ("P4", 40.0), ("P5", 120.0))
-DESIGN_RATE = 120.0  # packets/s per direction the test produces (plan section 5)
-# The test types twice as fast during P0, so that the first figure (a 15 s window) falls between the
+DESIGN_RATE = 120.0  # packets/s per direction of the netsim filler (plan section 5); the typists add about 8
+# The netsim filler (plan section 5, harness item 3; -tags server only) runs three times as fast during P0, so that the first figure (a 15 s window) falls between the
 # midpoint and the rise threshold in nearly every run: the entry is then judged.
-DESIGN_PHASE_RATES = (("P0", 240.0),)
+DESIGN_PHASE_RATES = (("P0", 360.0),)
 
 
-def design_traffic(rate: float = DESIGN_RATE, foreign: float = 0.10) -> "Traffic":
-    return Traffic(rate=rate, foreign=foreign, phase_rates=tuple((p, r * rate / DESIGN_RATE) for p, r in DESIGN_PHASE_RATES))
+# By P2 the connection has seen the reordering of P0 and P1 (5 ms of jitter per hop), so quic-go's time
+# threshold is at its maximum, 16/8 (as `simulate_run` assumes for the old figure): a lost PROBE is
+# resent the latest, the worst case for a sample at a drop of the round trip (run 5-s1-r8).
+DESIGN_TIME_THRESHOLD = 2.0
 
 
-def _attempt(prof: Netem, rng: random.Random, tr: Traffic):
-    """One PROBE: None if lost or late, else (read delay after the hand-over, own packet counted,
-    round trip). sent(C) is read when the PROBE is handed to the stream; its packet leaves up to
-    `stack` later (no priority: every packet of ours sent meanwhile crosses it). A lost PROBE packet
-    is resent after the time threshold, 9/8 of the round trip; a PROBE after a lost one waits for
-    that one's retransmission (head-of-line blocking). Either may still be accepted, within one PTO."""
-    rnd, gauss = rng.random, rng.gauss
-    loss, rtt0 = prof.path_loss(), 4 * (1 - prof.reorder) * prof.delay
-    wait = rng.uniform(0, tr.stack) if tr.stack else 0.0
-    out = _delay(prof, rnd, gauss) + _delay(prof, rnd, gauss)
-    if rnd() < loss:
-        if not tr.hol or rnd() < loss:
-            return None
-        out = 9 / 8 * max(rtt0, 0.001) + _delay(prof, rnd, gauss) + _delay(prof, rnd, gauss)
-    deliver = wait + out
-    if tr.hol and rnd() < loss:
-        prev = -0.5 + rng.uniform(0, tr.stack) + 9 / 8 * max(rtt0, 0.001)
-        deliver = max(deliver, prev + _delay(prof, rnd, gauss) + _delay(prof, rnd, gauss))
-    read = deliver + (rng.uniform(0, tr.read_delay) if tr.read_delay else 0.0)
-    back = _delay(prof, rnd, gauss) + _delay(prof, rnd, gauss)
-    if read + back > pto(prof):
-        return None
-    return read, ((rnd() < 0.5) if tr.race else 1), read + back
+def design_traffic(rate: float = DESIGN_RATE, foreign: float = 0.10, time_threshold: float = DESIGN_TIME_THRESHOLD) -> "Traffic":
+    return Traffic(rate=rate, foreign=foreign, phase_rates=tuple((p, r * rate / DESIGN_RATE) for p, r in DESIGN_PHASE_RATES),
+                   time_threshold=time_threshold)
 
 
 # The figures a trace computes at each sampler step: the prober's, and those of three mutants.
@@ -627,6 +823,8 @@ class Trace:
 
     steps: list  # (t, {figure name: figure or nan}, rtt low median, label, n, lowest T*, highest T*)
     counters: list = field(default_factory=list)  # (whole second, [(sent, dropped)] per hop, cumulative)
+    path: object = None  # the ProbePath: its RTT estimate (RttStats) over the run
+    samples: list = field(default_factory=list)  # accepted PROBEs: (t, r read at, counted, rtt, tries, held)
 
 
 READ_BACK = 3  # a step's window ends 0 to 3 s before it (the newest accepted sample, a late PROBE)
@@ -686,23 +884,36 @@ def trace(tr: Traffic, rng: random.Random, plan=PLAN, detect: bool = True, adapt
             _, tag, bad1, _ = out1[j]
             if not (bad1 or bad2) and x2 < arrival[tag]:
                 arrival[tag] = x2
-    got = sorted(x for x in arrival if x < math.inf)
+
+    starts = [a for a, _, _ in edges]
 
     def phase_at(x):
-        for a, b, name in edges:
-            if a <= x < b:
-                return name
-        return edges[-1][2]
+        return edges[max(0, bisect.bisect_right(starts, x) - 1)][2]
 
-    # The PROBEs, one per Interval: (hand-over, received(C) read at, counted, round trip) or None.
-    probes = []
-    for k in range(int(total) + 1):
-        res = _attempt(PROFILES[PHASES[phase_at(float(k))]], rng, tr)
-        probes.append(None if res is None else (float(k), k + res[0], res[1], res[2]))
-    acc = [p for p in probes if p is not None]
-    acc_t = [p[0] for p in acc]
-    # The incumbent (« the old figure »): ack-eliciting packets declared lost, spurious ones kept.
+    def prof_at(x):
+        return PROFILES[PHASES[phase_at(x)]]
+
+    _discard_late(arrival, prof_at, rng)
+    got = sorted(x for x in arrival if x < math.inf)
     types = _types(rng, len(ours), tr.ae, tr.flight)
+
+    # The PROBEs, one per Interval I = 1 s ± 10 % (spec §8.5.5 step 2) from a random phase, on one
+    # stream: (hand-over, received(C) read at, counted, round trip) of each accepted one, the RTT
+    # estimate and the retransmissions running across phases.
+    path = ProbePath(ours, arrival, types, prof_at, rng, tr)
+    acc = []
+    h = rng.uniform(0.0, INTERVAL)
+    while h <= total:
+        res = path.attempt(h)
+        if res is not None:
+            acc.append((h, h + res[0], *res[1:]))
+        h += rng.uniform(0.9 * INTERVAL, 1.1 * INTERVAL)
+    acc_t = [p[0] for p in acc]
+    acc_read = [p[0] + p[3] for p in acc]  # the prober holds a sample once it has read its ECHO
+    lost_prefix = [0]
+    for x in arrival:
+        lost_prefix.append(lost_prefix[-1] + (x == math.inf))
+    # The incumbent (« the old figure »): ack-eliciting packets declared lost, spurious ones kept.
     ae_lost_prefix = [0]
     for i, x in enumerate(arrival):
         ae_lost_prefix.append(ae_lost_prefix[-1] + (types[i] and x == math.inf))
@@ -725,6 +936,7 @@ def trace(tr: Traffic, rng: random.Random, plan=PLAN, detect: bool = True, adapt
         rec = bisect.bisect_right(got, new[1]) - bisect.bisect_right(got, old_s[1]) + new[2] - old_s[2]
         k_sp = bisect.bisect_right(spur, new[0]) - bisect.bisect_right(spur, old_s[0])
         old = permille((ae_lost_prefix[hi_i] - ae_lost_prefix[lo_i] + k_sp) / sent)
+        own[0] = (lost_prefix[hi_i] - lost_prefix[lo_i]) / sent
         return permille((sent - min(rec, sent)) / sent), old
 
     # qdisc counters by time, per hop: prefix sums over each hop's log.
@@ -748,13 +960,17 @@ def trace(tr: Traffic, rng: random.Random, plan=PLAN, detect: bool = True, adapt
 
     steps = []
     s_t = 0.0
+    own = [math.nan]
     while s_t <= total:
         figs = dict.fromkeys(FIGURES, math.nan)
         rtt = math.nan
-        j = bisect.bisect_right(acc_t, s_t) - 1  # the newest accepted sample
+        j = bisect.bisect_right(acc_read, s_t) - 1  # the newest accepted sample
         if j >= 0 and s_t - acc[j][0] <= WINDOW:
             i0 = bisect.bisect_left(acc_t, acc[j][0] - WINDOW)  # the oldest within the window
+            own[0] = math.nan
             figs["honest"], figs["old"] = figure(i0, j)
+            # Not figures: the window's own loss, and its two samples.
+            figs["own"], figs["s0"], figs["s1"] = own[0], acc[i0], acc[j]
             if not math.isnan(figs["honest"]):
                 rs = sorted(acc[i][3] for i in range(i0, j + 1))
                 rtt = rs[(len(rs) - 1) // 2]  # the lower median (§8.5.5 step 6)
@@ -774,7 +990,7 @@ def trace(tr: Traffic, rng: random.Random, plan=PLAN, detect: bool = True, adapt
             k = bisect.bisect_right(ts, sec)
             hops.append((k - dr[k], dr[k]))
         counters.append((sec, hops))
-    return Trace(steps, counters)
+    return Trace(steps, counters, path, acc)
 
 
 def levels_of(tr_: Trace, levels: Levels = LEVELS, figure: str = "honest", rtt: bool = True) -> list:
@@ -805,25 +1021,77 @@ def scaled(levels: Levels, f: float, entry_up: bool = False, rtt_f: float = 1.0)
 # ── The C5 rule: a classification test (derived by `report`, checked by c5model_test.py) ───────
 
 
+def _rtt_moments(prof: Netem) -> tuple[float, float]:
+    """(mean round trip, rttvar it settles at) of a path of four hops of prof: rttvar is the mean
+    absolute deviation of the samples, 0.8 sd for a normal-ish sum."""
+    m = (1 - prof.reorder) * prof.delay
+    v = (1 - prof.reorder) * (prof.jitter**2 + prof.delay**2) - m * m
+    return 4 * m, 0.8 * math.sqrt(4 * v)
+
+
+def pto_peak(a: Netem, b: Netem) -> tuple[float, float]:
+    """(steady PTO of b, highest PTO after a change of the round trip from a to b): the RFC 9002
+    §5.3 recursion run from the steady state of a on samples of b, |smoothed_rtt − sample| taken
+    as |smoothed_rtt − mean of b| + rttvar of b (the mean deviation it cannot fall below)."""
+    ra, va = _rtt_moments(a)
+    rb, vb = _rtt_moments(b)
+    srtt, var, peak = ra, va, ra + 4 * va
+    for _ in range(400):  # 7/8 per sample: 400 samples bring smoothed_rtt within 1e-23 of rb
+        var = 0.75 * var + 0.25 * (abs(srtt - rb) + vb)
+        srtt = 0.875 * srtt + 0.125 * rb
+        peak = max(peak, srtt + 4 * var)
+    return rb + 4 * vb + PEER_MAX_ACK_DELAY, peak + PEER_MAX_ACK_DELAY
+
+
+def transition_lag(a: Netem, b: Netem) -> float:
+    """Seconds of our traffic a sample at a change of the round trip from a to b may cross beyond
+    what the crossing term c of b covers. Derivation (spec §8.5.5 « Exactitude », run 5-s1-r8): a
+    packet crosses the PROBE handed over at t when it is sent after t and received before the
+    responder reads r, so a sample whose ECHO is read at e carries at most rate × (e − t) crossing
+    packets; step 3.6 accepts it while e − t ≤ PTO(e). On a steady profile b the PTO stays at its
+    steady value, which bounds the samples behind c(b). After a change, smoothed_rtt moves by 1/8 of
+    the gap per sample while rttvar takes 1/4 of it at once (rtt_stats.go:111): the PTO climbs to
+    `pto_peak` for some tens of samples (from 389 ms to about 790 ms when 300 ms falls to 60 ms), and
+    a PROBE delayed in that span, resent at 9/8 of the old round trip or held behind a resent one,
+    still comes back within it. Its extra crossing is at most rate × (peak − steady PTO of b): this
+    lag. Zero when the round trip does not change."""
+    steady, peak = pto_peak(a, b)
+    return max(0.0, peak - steady)
+
+
 @dataclass(frozen=True)
 class Rule:
     n_min: int  # qdisc packets of the first hop in every window judged against the truth
-    q: float  # accuracy tolerance: q * sqrt(T* / n) + c / n around the range of T*
+    q: float  # accuracy tolerance: q * sqrt(T* / n) + c / n + lag / (W − 2) around the range of T*
     crossings: tuple  # ((phase, c), ...): the crossing term, in packets, per profile
     t_min: float  # P0, P1, P2: mean T* below this means the impairment did not happen (anti-vacuity)
+    lags: tuple = ()  # (("A>B", seconds), ...): `transition_lag` of each change of the plan
 
     def c(self, label: str) -> float:
         return max(dict(self.crossings)[p] for p in label.split(">"))
 
+    def lag(self, label: str) -> float:
+        return dict(self.lags).get(label, 0.0)
+
+
+def _plan_lags(plan=PLAN) -> tuple:
+    names = [p for p, _ in plan]
+    return tuple((f"{a}>{b}", transition_lag(PROFILES[PHASES[a]], PROFILES[PHASES[b]])) for a, b in zip(names, names[1:]))
+
 
 RULE = Rule(n_min=3000, q=1.5,
-            crossings=(("P0", 22), ("P1", 22), ("P2", 32), ("P3", 24), ("P4", 52), ("P5", 22)), t_min=0.01)
+            crossings=(("P0", 22), ("P1", 22), ("P2", 32), ("P3", 24), ("P4", 34), ("P5", 22)), t_min=0.01,
+            lags=_plan_lags())
 
 
 def tolerance(rule: Rule, label: str, lo_t: float, hi_t: float, n: int) -> tuple[float, float]:
     """The figures an honest prober may compute for a step whose windows have qdisc truth in
-    [lo_t, hi_t]: the range widened by the foreign packets of the qdisc and the crossings."""
-    tol = rule.q * math.sqrt(hi_t / n) + rule.c(label) / n
+    [lo_t, hi_t]: the range widened by the foreign packets of the qdisc, the crossings, and, for a
+    window across a change of the round trip, the lag of a sample at that change. The lag is in
+    seconds of our traffic, the window's ΔS at least rate × (W − 2) packets (`window_range`), so its
+    share of the figure is lag / (W − 2), whatever the rate (either sign: the oldest sample's
+    crossings raise the figure, the newest's lower it)."""
+    tol = rule.q * math.sqrt(hi_t / n) + rule.c(label) / n + rule.lag(label) / (WINDOW - 2)
     return lo_t - tol, hi_t + tol
 
 
@@ -864,7 +1132,7 @@ def judge_run(rule: Rule, rows) -> tuple[bool, list]:
 MUTANTS = ("always_good", "always_poor", "always_fair", "swapped", "no_hysteresis", "sticky", "entry_rise",
            "thresholds_x2", "rtt_tenth", "old_figure", "m5b", "window_60s")
 # Measured but not required at 0.999: halved thresholds differ from the rule only between 0.25 % and 0.5 %
-# on a fall, or from 1.25 % to 2.5 % on P5's rises (power 0.9974 over 3000 runs).
+# on a fall, or from 1.25 % to 2.5 % on P5's rises (2995 of 3000 runs, power >= 0.996).
 EXTRA_MUTANTS = ("thresholds_half",)
 ESTIMATORS = ("honest", *MUTANTS, *EXTRA_MUTANTS)
 
@@ -1025,6 +1293,29 @@ def errors(tr: Traffic, phase: str, windows: int, seeds) -> dict:
     }
 
 
+def transition_errors(tr: Traffic, runs: int, seed: int, plan=PLAN, near: float = 2.0) -> dict:
+    """The figure against the loss of its own window over whole runs of `plan`, the windows split by
+    whether one of their two samples was handed over within `near` seconds of a change of the round
+    trip (spec §8.5.5 « Exactitude », run 5-s1-r8): the 95 % upper bound of the 99.9th percentile of
+    the error and its maximum, for each kind."""
+    changes, t = [], 0.0
+    for (a, d), (b, _) in zip(plan, plan[1:]):
+        t += d
+        if transition_lag(PROFILES[PHASES[a]], PROFILES[PHASES[b]]) > 0:
+            changes.append(t)
+    err: dict = {"at a change": [], "elsewhere": []}
+    rng = random.Random(seed)
+    for _ in range(runs):
+        t_ = trace(tr, rng, plan=plan, detect=False)
+        for _, figs, *_ in t_.steps:
+            if math.isnan(figs["honest"]) or math.isnan(figs.get("own", math.nan)):
+                continue
+            at = any(abs(s[0] - c) <= near for s in (figs["s0"], figs["s1"]) for c in changes)
+            err["at a change" if at else "elsewhere"].append(abs(figs["honest"] - figs["own"]))
+    return {k: {"windows": len(v), "error_p999_upper95": quantile_upper(v, 0.999) if v else math.nan,
+                "error_max": max(v) if v else math.nan} for k, v in err.items()}
+
+
 def steady_changes(loss: float, rate: float, hours: float, levels: Levels, seed: int) -> float:
     """Level changes per hour on a steady wifi-like link whose path loss is `loss` (the bursts of
     WIFI_GE, made rarer or more frequent), at `rate` packets/s, classified every second."""
@@ -1057,7 +1348,7 @@ def old_rule_fails(rows) -> bool:
 
 
 def cmd_report(args):
-    tr = design_traffic(args.rate, args.foreign)
+    tr = design_traffic(args.rate, args.foreign, args.time_threshold)
     a = assess(RULE, tr, args.runs, args.seed, args.workers)
     print(json.dumps({"rule": RULE.__dict__, "levels": {"loss": [b.__dict__ for b in LEVELS.loss],
                                                         "rtt": [b.__dict__ for b in LEVELS.rtt]},
@@ -1083,6 +1374,21 @@ def cmd_errors(args):
     for name, p, r in res:
         out.setdefault(name, {})[p] = r
     print(json.dumps(out, indent=1))
+
+
+def _transition_job(job):
+    rate, runs, seed = job
+    return rate, transition_errors(Traffic(rate=rate, time_threshold=DESIGN_TIME_THRESHOLD), runs, seed)
+
+
+def cmd_transitions(args):
+    """The figure's error at the changes of the round trip of scenario 5, against elsewhere."""
+    jobs = [(rate, args.runs, args.seed + k) for k, rate in enumerate(args.rates)]
+    import multiprocessing
+
+    with multiprocessing.Pool(args.workers) as pool:
+        res = pool.map(_transition_job, jobs)
+    print(json.dumps({f"{rate:g}/s": r for rate, r in res}, indent=1))
 
 
 def cmd_flicker(args):
@@ -1174,6 +1480,7 @@ def main(argv=None):
     r.add_argument("--foreign", type=float, default=0.10)
     r.add_argument("--seed", type=int, default=11)
     r.add_argument("--workers", type=int, default=4)
+    r.add_argument("--time-threshold", type=float, default=DESIGN_TIME_THRESHOLD)
     e = sub.add_parser("errors")
     e.add_argument("--windows", type=int, default=2000)
     e.add_argument("--seeds", type=int, default=10)
@@ -1188,10 +1495,15 @@ def main(argv=None):
     p.add_argument("--runs", type=int, default=200)
     p.add_argument("--rate", type=float, default=DESIGN_RATE)
     p.add_argument("--seed", type=int, default=19)
+    x = sub.add_parser("transitions")
+    x.add_argument("--rates", type=float, nargs="+", default=[17.0, 60.0, DESIGN_RATE])
+    x.add_argument("--runs", type=int, default=300)
+    x.add_argument("--seed", type=int, default=23)
+    x.add_argument("--workers", type=int, default=4)
     sub.add_parser("verdict")
     args = ap.parse_args(argv)
     cmds = {"report": cmd_report, "errors": cmd_errors, "flicker": cmd_flicker, "profiles": cmd_profiles,
-            "verdict": cmd_verdict}
+            "transitions": cmd_transitions, "verdict": cmd_verdict}
     return cmds[args.cmd](args) or 0
 
 

@@ -15,6 +15,7 @@ import (
 	"github.com/quic-go/quic-go"
 
 	"github.com/oioio-space/inkwell/internal/transport"
+	"github.com/oioio-space/inkwell/protocol/linkprobe"
 )
 
 var _ transport.LinkSource = (*Node)(nil)
@@ -24,32 +25,75 @@ var _ transport.LinkSource = (*Node)(nil)
 // sampler forgets it once the peer has been gone for [transport.DownsWindow].
 type peerLink struct {
 	rtt      rttEstimator
-	loss     lossWindow
 	path     pathTrack
 	stab     stability
-	scope    transport.LossScope // what loss measures
-	connID   string              // the connection loss is read from
+	probe    probeView           // what the link probe showed at the last step
+	scope    transport.LossScope // what the figure measures
 	quicRTT  bool                // the RTT comes from QUIC, so pings are not folded in
 	lastPing time.Time           // when the last ping started
 	pinging  bool
 }
 
+// probeView is what the link probe of a connection showed at one sampler step.
+type probeView struct {
+	level   transport.Quality
+	loss    uint16
+	hasLoss bool
+	// rtt, rttDev and rttAge are the window's round trip (Annex A.1 « Sens de rttMs et
+	// rttVarMs »), only if hasRTT is set, which is when the figure is known.
+	rtt, rttDev, rttAge time.Duration
+	hasRTT              bool
+}
+
+// LinkStep is what one step of the link sampler saw of a link: the level and the
+// figure of its probe, known or not. A diagnostics build records every step, so
+// that a test can replay the level from the figures (plan C5S, R1).
+type LinkStep struct {
+	Peer transport.PeerID
+	At   time.Time
+	// Kind is the path the link is on; the level of a relayed link is unknown
+	// whatever its first hop's figure says.
+	Kind transport.LinkKind
+	// Level is the quality shown for the link, [transport.QualityUnknown]
+	// when the probe has no figure or the link is relayed.
+	Level transport.Quality
+	// LossPermille is the probe's figure, [LossUnknown] while it is unknown.
+	LossPermille uint16
+}
+
+// LossUnknown is the LossPermille of a step whose figure is unknown (Annex A.1).
+const LossUnknown = linkprobe.Unknown
+
+// step returns what the sampler saw of the peer id at now; the caller holds n.lmu.
+func (pl *peerLink) step(id peer.ID, now time.Time) LinkStep {
+	name, _ := peerName(id)
+	st := LinkStep{Peer: name, At: now, Kind: pl.path.kind, Level: pl.probe.level, LossPermille: LossUnknown}
+	if pl.probe.hasLoss {
+		st.LossPermille = pl.probe.loss
+	}
+	return st
+}
+
 // linkSample is what one look at the connections to a peer shows. It is plain
 // values, taken without any lock, and applied to a peerLink under Node.lmu.
 type linkSample struct {
+	id peer.ID // the peer it is of
+	// out is the stream the peer's session ran on when the sample was taken: a sample
+	// of an ended session, or of a session moved to another stream since, is stale.
+	out  network.Stream
 	kind transport.LinkKind // zero: no connection
 	// The remaining fields are meaningful only if quic is set.
-	quic       bool
-	scope      transport.LossScope
-	connID     string
-	sent, lost uint64
+	quic  bool
+	scope transport.LossScope
+	probe probeView
 	// srtt and dev are the QUIC round trip, only if rttFromQUIC is set.
 	srtt, dev   time.Duration
 	rttFromQUIC bool
 }
 
 // The lock order is Node.mu, then Node.lmu. lmu is a leaf: code under it never
-// takes mu and never calls into libp2p or QUIC; probeLink does that before.
+// takes mu and never calls into libp2p or QUIC; probeLink does that before, under
+// neither.
 
 // linkUp records a PeerUp, with a first look at the connection so that Links
 // has the path as soon as the peer is announced. The caller may hold n.mu.
@@ -83,6 +127,7 @@ func (n *Node) linkDown(id peer.ID, resync bool) {
 		return
 	}
 	pl.stab.down(time.Now())
+	pl.probe = probeView{} // the connection is gone with its probe: what it showed is not the link's
 }
 
 // Links returns the link to each peer announced with a PeerUp, sorted by peer.
@@ -90,12 +135,13 @@ func (n *Node) linkDown(id peer.ID, resync bool) {
 // poll, but a relayed link upgraded by hole punching shows up within a second
 // or so. No address is part of a Link.
 func (n *Node) Links() []transport.Link {
-	ids := n.upPeers()
+	ups := n.upLinks()
 	now := time.Now()
-	links := make([]transport.Link, 0, len(ids))
+	links := make([]transport.Link, 0, len(ups))
 	n.lmu.Lock()
 	defer n.lmu.Unlock()
-	for _, id := range ids {
+	for _, u := range ups {
+		id := u.id
 		name, ok := peerName(id)
 		pl := n.stats[id]
 		if !ok || pl == nil || pl.path.kind == 0 {
@@ -110,8 +156,9 @@ func (n *Node) Links() []transport.Link {
 			DownsTotal: pl.stab.total, LastDown: pl.stab.last,
 			Resyncs10m: pl.stab.resyncsWithin(now), Resyncs: pl.stab.resyncTotal,
 		}
-		if v, ok := pl.loss.pct(now); ok {
-			l.LossPct, l.LossScope = &v, pl.scope
+		l.ProbeLevel = pl.probe.level
+		if pl.probe.hasLoss {
+			l.ProbeLoss, l.LossScope = new(pl.probe.loss), pl.scope
 		}
 		links = append(links, l)
 	}
@@ -119,49 +166,76 @@ func (n *Node) Links() []transport.Link {
 	return links
 }
 
-// upPeers returns the peers announced with a PeerUp.
-func (n *Node) upPeers() []peer.ID {
-	n.mu.Lock()
-	defer n.mu.Unlock()
-	var ids []peer.ID
-	for _, ps := range n.peers {
-		if ps.up {
-			ids = append(ids, ps.id)
-		}
-	}
-	return ids
+// upLink is a peer announced with a PeerUp, and the stream its session runs on at
+// that instant: nil while a lost stream is being replaced.
+type upLink struct {
+	id  peer.ID
+	out network.Stream
 }
 
-// probeLink reads the connections to id. It takes no lock of ours. The best
-// direct connection tells the path; behind a relay only the hop to the relay
-// can be seen.
-func (n *Node) probeLink(id peer.ID) linkSample {
+// upLinks returns the peers announced with a PeerUp.
+func (n *Node) upLinks() []upLink {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	var ups []upLink
+	for _, ps := range n.peers {
+		if ps.up {
+			ups = append(ups, upLink{id: ps.id, out: ps.out})
+		}
+	}
+	return ups
+}
+
+// stepViews holds what the probes showed in one sampler step, by connection: the peers behind one
+// relay share its connection, which is looked at once. A nil map looks every time.
+type stepViews map[string]probeView
+
+func (v stepViews) of(id string, pc *probeConn) probeView {
+	if pv, ok := v[id]; ok {
+		return pv
+	}
+	pv := pc.view()
+	if v != nil {
+		v[id] = pv
+	}
+	return pv
+}
+
+// probeLink reads the connections to id, whose session runs on the stream out (nil:
+// none at the moment). It takes no lock of ours. The best connection tells the
+// path; the figures are those of the connection that carries the session (Annex
+// A.1), and behind a relay only the hop to the relay can be seen. A session on a
+// connection the probe does not run on (TCP, or a circuit while a direct
+// connection waits for the session to move to it) has no figure.
+func (n *Node) probeLink(id peer.ID, out network.Stream, views stepViews) linkSample {
 	conns := n.h.Network().ConnsToPeer(id)
-	s := linkSample{kind: bestKind(conns)}
-	if s.kind == 0 {
+	s := linkSample{id: id, out: out, kind: bestKind(conns)}
+	if s.kind == 0 || out == nil {
 		return s
 	}
 	var c network.Conn
-	if s.kind != transport.LinkRelayed {
-		for _, d := range conns {
-			if isCircuit(d.RemoteMultiaddr()) {
-				continue
-			}
-			if st, ok := quicStats(d); ok {
-				c, s.scope = d, transport.LossPath
-				s.sent, s.lost = st.PacketsSent, st.PacketsLost
-				s.srtt, s.dev, s.rttFromQUIC = st.SmoothedRTT, st.MeanDeviation, true
-				break
-			}
+	switch sc, relayed := out.Conn(), s.kind == transport.LinkRelayed; {
+	case !relayed && !isCircuit(sc.RemoteMultiaddr()):
+		if st, ok := quicStats(sc); ok {
+			c, s.scope = sc, transport.LossPath
+			s.srtt, s.dev, s.rttFromQUIC = st.SmoothedRTT, st.MeanDeviation, true
 		}
-	} else if rc := n.relayConn(conns); rc != nil {
-		if st, ok := quicStats(rc); ok {
-			c, s.scope = rc, transport.LossFirstHop
-			s.sent, s.lost = st.PacketsSent, st.PacketsLost
+	case relayed:
+		if rc := n.relayConn([]network.Conn{sc}); rc != nil {
+			if _, ok := quicStats(rc); ok {
+				c, s.scope = rc, transport.LossFirstHop
+			}
 		}
 	}
-	if c != nil {
-		s.quic, s.connID = true, c.ID()
+	if c == nil {
+		return s
+	}
+	s.quic = true
+	if pc := n.probes.of(c.ID()); pc != nil {
+		s.probe = views.of(c.ID(), pc)
+		if s.kind == transport.LinkRelayed {
+			s.probe.level = transport.QualityUnknown // the hop to the relay is not the link
+		}
 	}
 	return s
 }
@@ -174,18 +248,17 @@ func (n *Node) applyLinkLocked(id peer.ID, pl *peerLink, now time.Time, s linkSa
 	}
 	pl.path.observe(now, s.kind)
 	pl.quicRTT = s.rttFromQUIC
-	if s.rttFromQUIC {
+	switch {
+	case s.kind != transport.LinkRelayed && s.probe.hasRTT:
+		// The probe measures every ECHO; QUIC's smoothed RTT samples only the newly largest
+		// acknowledged packet, which under reordering favours the fast ones (RFC 9002 §5.1).
+		pl.rtt.set(now.Add(-s.probe.rttAge), s.probe.rtt, s.probe.rttDev)
+	case s.rttFromQUIC:
 		pl.rtt.set(now, s.srtt, s.dev)
 	}
-	if s.quic {
-		// Counters of another connection, or of another scope, do not continue
-		// these: start the window again.
-		if s.connID != pl.connID || s.scope != pl.scope {
-			pl.loss = lossWindow{}
-			pl.connID, pl.scope = s.connID, s.scope
-		}
-		pl.loss.observe(now, s.sent, s.lost)
-	}
+	// A new connection has a probe of its own, which starts unknown: the view
+	// is the connection's, whatever the last one showed.
+	pl.probe, pl.scope = s.probe, s.scope
 	if s.kind == transport.LinkRelayed && !pl.pinging && now.Sub(pl.lastPing) >= pingEvery {
 		pl.lastPing = now
 		n.wg.Go(func() { n.measureRTT(id) })
@@ -232,32 +305,57 @@ func (n *Node) sampleLinks() {
 	for {
 		select {
 		case <-t.C:
-			ids := n.upPeers()
-			samples := make([]linkSample, len(ids))
-			for i, id := range ids {
-				samples[i] = n.probeLink(id)
-			}
-			now := time.Now()
-			n.lmu.Lock()
-			for i, id := range ids {
-				if pl := n.stats[id]; pl != nil { // gone since upPeers: leave it
-					n.applyLinkLocked(id, pl, now, samples[i])
+			steps := n.applyLinks(n.readLinks(make(stepViews)))
+			if n.opts.OnLinkStep != nil {
+				for _, st := range steps {
+					n.opts.OnLinkStep(st)
 				}
 			}
-			n.forgetLinksLocked(ids, now)
-			n.lmu.Unlock()
 		case <-n.ctx.Done():
 			return
 		}
 	}
 }
 
-// forgetLinksLocked drops the state of the peers that are not in up and have
+// readLinks is the first half of a sampler step: it looks at the links of the peers that are up,
+// without any lock of ours, through views.
+func (n *Node) readLinks(views stepViews) []linkSample {
+	ups := n.upLinks()
+	samples := make([]linkSample, len(ups))
+	for i, u := range ups {
+		samples[i] = n.probeLink(u.id, u.out, views)
+	}
+	return samples
+}
+
+// applyLinks is the second half of a sampler step: it folds the samples into the links' state and
+// returns what the step saw of each link it updated. A sample whose session ended or moved to
+// another stream since it was read is dropped: the next step sees the new one.
+func (n *Node) applyLinks(samples []linkSample) []LinkStep {
+	now := time.Now()
+	var steps []LinkStep
+	n.mu.Lock() // the session a sample was read for is still the peer's (lock order: mu, then lmu)
+	defer n.mu.Unlock()
+	n.lmu.Lock()
+	defer n.lmu.Unlock()
+	for _, s := range samples {
+		ps, pl := n.peers[s.id], n.stats[s.id]
+		if ps == nil || !ps.up || ps.out != s.out || pl == nil {
+			continue
+		}
+		n.applyLinkLocked(s.id, pl, now, s)
+		steps = append(steps, pl.step(s.id, now))
+	}
+	n.forgetLinksLocked(samples, now)
+	return steps
+}
+
+// forgetLinksLocked drops the state of the peers that no sample of up is of and have
 // been gone for longer than the window of the outage counters. The caller
 // holds n.lmu.
-func (n *Node) forgetLinksLocked(up []peer.ID, now time.Time) {
+func (n *Node) forgetLinksLocked(up []linkSample, now time.Time) {
 	maps.DeleteFunc(n.stats, func(id peer.ID, pl *peerLink) bool {
-		return !slices.Contains(up, id) && now.Sub(pl.stab.seen) > transport.DownsWindow
+		return !slices.ContainsFunc(up, func(s linkSample) bool { return s.id == id }) && now.Sub(pl.stab.seen) > transport.DownsWindow
 	})
 }
 

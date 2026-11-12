@@ -1,6 +1,6 @@
-import { execFileSync } from "node:child_process";
-import { writeFileSync } from "node:fs";
-import { join } from "node:path";
+import { execFileSync, spawnSync } from "node:child_process";
+import { readFileSync, writeFileSync } from "node:fs";
+import { dirname, join } from "node:path";
 import type { Browser, Page } from "@playwright/test";
 import { expect, test } from "./fixtures";
 import { docText, joinAs, open, pair, pasteAtEnd, typeAtEnd } from "./helpers";
@@ -460,16 +460,77 @@ const secs = (ms: number | undefined) =>
 const range = (v: number | null | undefined, lo: number, hi: number) =>
   typeof v === "number" && v >= lo && v <= hi;
 
-test("scenario 5: NI-1 bad Wi-Fi that changes (converge, stay up, report the truth)", async ({
+/** What the product's sampler logged for one link at one step (`-tags server`, internal/app/linklog_server.go). */
+interface LinkStepLog {
+  t: number;
+  kind: string;
+  quality: string;
+  lossPermille: number;
+}
+const QUALITY = { unknown: 0, good: 1, fair: 2, poor: 3 } as const;
+
+/** How many steps the instance `who` dropped before logging them (a gap in the replay, not a quiet second). */
+function droppedSteps(who: "alice" | "bob"): number {
+  const log = readFileSync(join(out, "..", run, `${who}.log`), "utf8");
+  let n = 0;
+  for (const m of log.matchAll(/msg=linkstepdropped count=(\d+)/g)) n += Number(m[1]);
+  return n;
+}
+
+/** Every step the instance `who` logged for its link, in order (the netsim build logs each one). */
+function linkSteps(who: "alice" | "bob"): LinkStepLog[] {
+  const log = readFileSync(join(out, "..", run, `${who}.log`), "utf8");
+  const steps: LinkStepLog[] = [];
+  for (const m of log.matchAll(
+    /msg=linkstep peer=\S+ t=(\d+) kind=(\S+) quality=(\S+) lossPermille=(\d+)/g,
+  ))
+    steps.push({ t: Number(m[1]), kind: m[2], quality: m[3], lossPermille: Number(m[4]) });
+  return steps;
+}
+
+/**
+ * The qdisc counters of the four hops of a profile, cumulative over the phases: a qdisc is replaced
+ * at every phase change and its counters restart at zero, so the totals of the replaced ones are
+ * carried over. Read in path order: hops[0] of a direction is the first hop its packets cross.
+ */
+function qdiscTotals() {
+  const carried = new Map<string, { sent: number; dropped: number }>();
+  const read = (profile: string) =>
+    qstats(profile).map((q) => {
+      const c = carried.get(`${q.ns}/${q.dev}`) ?? { sent: 0, dropped: 0 };
+      return { ns: q.ns, dev: q.dev, sent: c.sent + q.sent, dropped: c.dropped + q.dropped };
+    });
+  return {
+    read,
+    /** Called just before the profile is replaced: the qdiscs of `profile` are about to restart. */
+    carry(profile: string) {
+      for (const q of read(profile)) carried.set(`${q.ns}/${q.dev}`, q);
+    },
+  };
+}
+
+test("scenario 5: NI-1 bad Wi-Fi that changes (converge, stay up, the level follows the loss)", async ({
   browser,
 }) => {
-  test.setTimeout(480_000);
-  const PHASE = 40_000;
-  // The profile is on before the pair meets, so hole punching itself runs under jitter (R6).
-  topo("profile", "wifi");
+  test.setTimeout(900_000);
+  // C5S (plan docs/plans/2026-11-09-c5-sound.md section 5): six phases, the first judged from
+  // "unknown", P5 on a boundary. 40 s each, P5 120 s.
+  const PHASES = [
+    ["P0", "wifi-entry", 40_000],
+    ["P1", "wifi", 40_000],
+    ["P2", "wifi-far", 40_000],
+    ["P3", "wifi-clean", 40_000],
+    ["P4", "wifi-reorder", 40_000],
+    ["P5", "wifi-edge", 120_000],
+  ] as const;
+  // The profile is on before the pair meets, so hole punching itself runs under impairment (R6).
+  topo("profile", PHASES[0][1], "0");
   const { alice, bob } = await twoPeople(browser);
   const tPair = Date.now();
 
+  // Typing is what the person does; the packets R2 needs (3000 per 30 s window) come from the
+  // netsim build's filler (/inkwell/netsim-fill/1.0.0, 120 a second, three times that in P0), which
+  // goes around the bridge. P4 is judged good: its reordering stays within quic-go's tolerance.
   const a = typist(alice, "a", 500, 51);
   const b = typist(bob, "b", 500, 52);
 
@@ -496,43 +557,92 @@ test("scenario 5: NI-1 bad Wi-Fi that changes (converge, stay up, report the tru
     };
   })();
   const c1 = c1Run.catch((e) => ({ ok: false, measured: `error: ${String(e).slice(0, 300)}` }));
-  // The P1 timer starts once C1 has seen the direct path (or given up at 90 s): a relayed link
-  // reports a relayed RTT, which is not what C4 judges.
+  // The phases start once C1 has seen the direct path (or given up at 90 s): a relayed link reports
+  // a relayed RTT and no level, which is not what C4 and C5 judge.
   await c1;
 
-  // Phases: wifi, wifi-far, wifi-clean. Metrics are sampled 20 s and 40 s into each; C4 and C5 judge
-  // the end of each phase (the last sample), once the estimators have had time to follow the change.
+  // Every second, the cumulative counters of each direction's two hops; at 20 s and 40 s into P1,
+  // P2 and P3 the RTT the people popover reads (C4 judges the end of each phase).
+  const totals = qdiscTotals();
+  type Hops = { sent: number; dropped: number }[];
+  const counters: Record<"AB" | "BA", { t: number; hops: Hops }[]> = { AB: [], BA: [] };
   const truth = { P1: 60, P2: 300, P3: 60 };
-  const samples: Record<
-    string,
-    { rtt: (number | null | undefined)[]; loss: (number | null | undefined)[] }
-  > = {};
+  const samples: Record<string, { rtt: (number | null | undefined)[] }> = {
+    P1: { rtt: [] },
+    P2: { rtt: [] },
+    P3: { rtt: [] },
+  };
   let metricsMissing: MetricsMissing | undefined;
   let p1Stats: ReturnType<typeof qstats> = [];
-  for (const [phase, profile] of [
-    ["P1", "wifi"],
-    ["P2", "wifi-far"],
-    ["P3", "wifi-clean"],
-  ] as const) {
-    if (phase !== "P1") topo("profile", profile);
-    samples[phase] = { rtt: [], loss: [] };
-    for (let half = 0; half < 2; half++) {
-      await sleep(PHASE / 2);
-      try {
-        for (const page of [alice, bob]) {
-          const l = await only(page);
-          samples[phase].rtt.push(field(l, "rttMs"));
-          samples[phase].loss.push(field(l, "lossPct"));
+  const tZero = Date.now();
+  let profileNow: string = PHASES[0][1];
+  const record = (sec: number) => {
+    const q = totals.read(profileNow); // nat-a/eth0, nat-a/eth1, nat-b/eth0, nat-b/eth1
+    counters.AB.push({ t: sec, hops: [q[0], q[3]] }); // alice -> bob: nat-a/eth0, then nat-b/eth1
+    counters.BA.push({ t: sec, hops: [q[2], q[1]] }); // bob -> alice: nat-b/eth0, then nat-a/eth1
+  };
+  record(0); // the window of the first judged step starts at t = 0
+  let phaseStart = 0;
+  for (const [k, [phase, profile, duration]] of PHASES.entries()) {
+    if (k > 0) {
+      totals.carry(profileNow);
+      topo("profile", profile, String(k));
+      profileNow = profile;
+    }
+    for (let sec = Math.floor(phaseStart / 1000) + 1; sec * 1000 <= phaseStart + duration; sec++) {
+      await sleep(Math.max(0, tZero + sec * 1000 - Date.now()));
+      record(sec);
+      const into = sec * 1000 - phaseStart;
+      if (phase in samples && (into === 20_000 || into === 40_000)) {
+        try {
+          for (const page of [alice, bob])
+            samples[phase].rtt.push(field(await only(page), "rttMs"));
+        } catch (e) {
+          if (!(e instanceof MetricsMissing)) throw e;
+          metricsMissing = e;
         }
-      } catch (e) {
-        if (!(e instanceof MetricsMissing)) throw e;
-        metricsMissing = e;
       }
     }
+    phaseStart += duration;
     if (phase === "P1") p1Stats = qstats("wifi");
   }
   await Promise.all([a.stop(), b.stop()]);
   const all = [...a.tokens, ...b.tokens];
+
+  // The level, replayed: every step the prober logged, with the phase its window lies in.
+  const edges = PHASES.map(([name], k) => ({
+    name,
+    from: PHASES.slice(0, k).reduce((n, p) => n + p[2], 0) / 1000,
+    to:
+      (PHASES.slice(0, k + 1).reduce((n, p) => n + p[2], 0) +
+        (k === PHASES.length - 1 ? 1000 : 0)) /
+      1000,
+  }));
+  const phaseAt = (t: number) =>
+    (edges.find((e) => e.from <= t && t < e.to) ?? edges[edges.length - 1]).name;
+  const WINDOW = 30;
+  const READ_BACK = 3;
+  const label = (t: number) => {
+    if (t < WINDOW + READ_BACK) return phaseAt(t);
+    const names = new Set([phaseAt(t - WINDOW - READ_BACK), phaseAt(t - 1e-9)]);
+    return edges
+      .filter((e) => names.has(e.name))
+      .map((e) => e.name)
+      .join(">");
+  };
+  const stepsFor = (who: "alice" | "bob", dir: "AB" | "BA") =>
+    linkSteps(who)
+      .filter((s) => s.kind === "LinkDirect" || s.kind === "LinkLAN")
+      .map((s) => ({ ...s, t: (s.t - tZero) / 1000 }))
+      .filter((s) => s.t >= 0 && s.t <= 320)
+      .map((s) => ({
+        t: s.t,
+        phase: label(s.t),
+        dir,
+        quality: QUALITY[s.quality as keyof typeof QUALITY] ?? 0,
+        lossPermille: s.lossPermille,
+      }));
+  const steps = [...stepsFor("alice", "AB"), ...stepsFor("bob", "BA")].sort((x, y) => x.t - y.t);
 
   await clause("C1", "path direct within 90 s of pairing", "direct <= 90 s", () => c1);
   await clause(
@@ -571,21 +681,26 @@ test("scenario 5: NI-1 bad Wi-Fi that changes (converge, stay up, report the tru
   );
   await clause(
     "C5",
-    "reported loss follows the injected loss (30 s window)",
-    "P1, P2 in [1 %, 10 %]; P3 <= 0.5 %",
+    "the level shown follows the injected loss: replayed exactly from every sampler step (level rule R1), the figure within tolerance of the qdisc truth (R2), the impairment happened (R3)",
+    "c5model.py verdict: level = spec 8.5.5 step 6 applied to the figures; |figure - T*| <= 1.5 sqrt(T*/n) + c/n, n >= 3000",
     async () => {
-      if (metricsMissing) throw metricsMissing;
-      const bad: string[] = [];
-      for (const phase of ["P1", "P2"])
-        for (const v of samples[phase].loss.slice(-2))
-          if (!range(v, 1, 10)) bad.push(`${phase} ${v}`);
-      for (const v of samples.P3.loss.slice(-2)) if (!range(v, 0, 0.5)) bad.push(`P3 ${v}`);
+      const input = JSON.stringify({ counters, steps });
+      writeFileSync(join(out, `${run}-c5.json`), input);
+      const r = spawnSync("python3", ["-I", join(dirname(topology), "c5model.py"), "verdict"], {
+        input,
+        encoding: "utf8",
+      });
+      if (r.error) throw r.error;
+      let why: unknown = r.stderr.slice(0, 300);
+      try {
+        why = (JSON.parse(r.stdout) as { why: string[] }).why;
+      } catch {
+        // the verdict could not be read: the exit status and stderr say why
+      }
+      const dropped = droppedSteps("alice") + droppedSteps("bob");
       return {
-        ok: bad.length === 0,
-        measured:
-          Object.entries(samples)
-            .map(([k, v]) => `${k}: ${v.loss.join("/")}`)
-            .join("; ") + (bad.length ? ` OUT ${bad.join(", ")}` : ""),
+        ok: r.status === 0 && dropped === 0,
+        measured: `${dropped} steps dropped by the logger; ${steps.length} sampler steps (${steps.filter((x) => x.quality > 0).length} with a level); ${JSON.stringify(why).slice(0, 600)}`,
       };
     },
   );

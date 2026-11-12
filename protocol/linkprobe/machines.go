@@ -6,6 +6,7 @@ import (
 	"errors"
 	"math"
 	"math/bits"
+	"slices"
 	"time"
 
 	transport "github.com/oioio-space/inkwell/protocol"
@@ -247,15 +248,11 @@ func (p *Prober) window(now time.Duration) (ws []sample, ok bool) {
 	if now-s1.at > Window {
 		return nil, false
 	}
-	i0 := n - 1
-	for i, s := range p.samples {
-		if s1.at-s.at <= Window {
-			i0 = i
-			break
-		}
-	}
+	// The oldest sample at most Window older than s1 (s1 itself at least); with s1 alone, the span
+	// is 0, under MinSpan.
+	i0 := slices.IndexFunc(p.samples, func(s sample) bool { return s1.at-s.at <= Window })
 	s0 := p.samples[i0]
-	if i0 == n-1 || s1.at-s0.at < MinSpan || s1.sent < s0.sent || s1.sent-s0.sent < MinPackets {
+	if s1.at-s0.at < MinSpan || s1.sent < s0.sent || s1.sent-s0.sent < MinPackets {
 		return nil, false
 	}
 	return p.samples[i0:], true
@@ -293,10 +290,8 @@ type Responder struct {
 func NewResponder(now time.Duration) *Responder { return &Responder{credit: Credit, at: now} }
 
 func (r *Responder) refill(now time.Duration) {
-	if now > r.at {
-		r.credit = min(Credit, r.credit+min(now-r.at, Credit)) // the elapsed time is capped first: no overflow
-		r.at = now
-	}
+	r.credit = min(Credit, r.credit+min(max(now-r.at, 0), Credit)) // the elapsed time is capped first: no overflow
+	r.at = max(r.at, now)
 }
 
 // StreamOpened records an inbound probe stream; false means reset it unread: one is already

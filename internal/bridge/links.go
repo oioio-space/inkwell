@@ -28,13 +28,6 @@ func (r *Router) countsOf(peer transport.PeerID) *peerCounts {
 	return c
 }
 
-// SlowSend is how long a message may wait to be sent before the link is called
-// slow (« Lien lent », ADR 0028 D8); VerySlowSend makes it poor.
-const (
-	SlowSend     = 2 * time.Second
-	VerySlowSend = 10 * time.Second
-)
-
 // PeerLink is the transport's [transport.Link] to a peer with what the router
 // holds back for it. No network address is part of it.
 type PeerLink struct {
@@ -49,20 +42,15 @@ type PeerLink struct {
 	SendFailures, Resets uint64
 }
 
-// Quality is the transport's grade, lowered to fair when a message has waited
-// more than [SlowSend], and to poor after [VerySlowSend].
+// Quality is the level of the link the person is shown: the probe's, unknown while it has no figure
+// and always on a relayed link, whose end-to-end quality nothing measures (spec Annex A.1). A message
+// that waits a long time to be sent is another signal, [PeerLink.OldestPending], which the sync
+// indicator shows as « Lien lent » (ADR 0028 D8); it never changes the level.
 func (p PeerLink) Quality() transport.Quality {
-	q := p.Link.Quality()
-	var slow transport.Quality
-	switch {
-	case p.OldestPending >= VerySlowSend:
-		slow = transport.QualityPoor
-	case p.OldestPending >= SlowSend:
-		slow = transport.QualityFair
-	default:
-		return q
+	if p.Kind == transport.LinkRelayed {
+		return transport.QualityUnknown
 	}
-	return max(q, slow)
+	return p.ProbeLevel
 }
 
 // Links returns the state of the link to each peer, sorted by peer: the

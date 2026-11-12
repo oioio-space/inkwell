@@ -175,10 +175,19 @@ export function amSync({
         }
         this.written();
       };
+      /**
+       * Runs the callbacks waiting for the write once the current call ends (a microtask), never
+       * during it: a flush may run inside a CodeMirror update (this plugin's, or another's calling
+       * flushTyped), where a callback that dispatches is forbidden and the view answers by
+       * disabling this plugin for good. The write itself is already done.
+       */
       written() {
         const fns = this.afterWrite;
         this.afterWrite = [];
-        for (const fn of fns) fn();
+        if (fns.length > 0)
+          queueMicrotask(() => {
+            for (const fn of fns) fn();
+          });
       }
       onChange = () => {
         if (this.isProcessingCmTransaction || !handle.isReady()) return;

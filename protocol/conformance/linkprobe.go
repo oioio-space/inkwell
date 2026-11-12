@@ -77,7 +77,7 @@ func (c *referenceCase) linkprobePTO() error {
 func (c *referenceCase) linkprobeMessage() error {
 	m, n, err := linkprobe.Decode(c.input)
 	if err == nil && n != len(c.input) {
-		err = fmt.Errorf("%w: %d trailing bytes", linkprobe.ErrMalformed, len(c.input)-n)
+		err = fmt.Errorf("%w: trailing bytes", linkprobe.ErrMalformed)
 	}
 	got := "accept"
 	switch {

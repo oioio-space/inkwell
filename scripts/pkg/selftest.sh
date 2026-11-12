@@ -126,5 +126,14 @@ guard() { PATH="$work/bin:$PATH" FAKE_RELEASE="$1" scripts/pkg/release-guard.sh 
 refuse "release-guard.sh must refuse a published release" guard published
 refuse "release-guard.sh must refuse when gh fails for another reason" guard error
 
+# --- no-test-tags.sh (AC-14) ----------------------------------------------------------------------
+mkdir -p "$work/tagged"
+printf 'module tagged\n\ngo 1.22\n' >"$work/tagged/go.mod"
+printf 'package main\n\nfunc main() {}\n' >"$work/tagged/main.go"
+(cd "$work/tagged" && go build -o plain . && go build -tags server -o srv . && go build -tags production,faultinject -o fault . && go build -tags production -o prod .)
+expect "no-test-tags.sh must accept an executable built without a test tag" scripts/pkg/no-test-tags.sh "$work/tagged/plain" "$work/tagged/prod"
+refuse "no-test-tags.sh must refuse -tags server" scripts/pkg/no-test-tags.sh "$work/tagged/plain" "$work/tagged/srv"
+refuse "no-test-tags.sh must refuse -tags faultinject" scripts/pkg/no-test-tags.sh "$work/tagged/fault"
+
 if ((fail)); then exit 1; fi
-echo "✓ selftest: notes, assemble, verify, sizes, on-main and release-guard behave"
+echo "✓ selftest: notes, assemble, verify, sizes, on-main, release-guard and no-test-tags behave"

@@ -152,6 +152,8 @@ jobs:
             mise run pkg:build
           fi
           scripts/pkg/build-prev.sh prev
+      - name: No test tag in the executables (AC-14)
+        run: scripts/pkg/no-test-tags.sh dist/inkwell-*/inkwell
       - name: Collect the assets
         run: |
           mkdir -p assets

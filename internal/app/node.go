@@ -85,6 +85,7 @@ func netOptions(port int) p2p.Options {
 }
 
 func startNode(ctx context.Context, dev *identity.Device, o p2p.Options) (*p2p.Node, error) {
+	withLinkStepLog(ctx, &o)
 	node, err := p2p.New(ctx, dev.Libp2pKey(), o)
 	if err != nil && o.Port != 0 {
 		o.Port = 0
