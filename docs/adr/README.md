@@ -36,3 +36,8 @@ connaître la raison — pas pour le reste. Modèle : [`template.md`](template.m
 | [0032](0032-canal-invitation-wormhole.md) | Le rendez-vous d'invitation Wormhole est un canal séparé, limité à `internal/invite` |
 | [0033](0033-sidecar-directory-bound.md) | F5 : tmpfs privé borné, vérification des sorties et repli Landlock à parts fixes (limite des fichiers creux documentée) | proposée |
 | [0034](0034-protocole-unifie.md) | Protocole unique et public : flux ordonné de petites trames, tirage par le receveur, crédits sur le pont, HELLO et générations | proposée |
+| [0035](0035-send-path.md) | One send path: receiver-consumed progress, one credit per hop, one cut timer, resume by hash, a typing lane | proposée |
+| [0036](0036-link-probe.md) | Link loss is counted by the receiver: protocol `/inkwell/linkprobe/1.0.0` | acceptée |
+| [0037](0037-single-instance.md) | One Inkwell per profile: a kernel lock and a private local socket, not Wails' single instance | acceptée |
+| [0038](0038-paired-performance.md) | Performance criteria are paired and interleaved, and judged as non-inferiority bounds | acceptée |
+| [0042](0042-sandbox-memory-scope-and-no-core-helper.md) | The sandboxed sidecar gets its memory limit from a transient systemd user scope, and never reaches a crash helper | acceptée |

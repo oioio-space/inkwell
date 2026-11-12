@@ -784,6 +784,11 @@
       "id": "513f55db20a31d312e4b8e96b3b84bd6f82e31f56e462297fabe0fd9cf6363ba",
       "reason": "internal/app/addrbook_file_test.go: Block RC1, new test TestAddrBookFileMode skips on Windows only, where files have no Unix mode bits (0600 cannot be set or read back); the test runs on Linux and macOS, and the gate's go-app criterion requires its PASS. No existing test, threshold or delay changes.",
       "decision": "docs/plans/2026-11-12-rc1-reconnect.md"
+    },
+    {
+      "id": "70927f30087b15ecb150148a8ac4ff1666ce6ac3559c9f144b9e3faf6242c8a2",
+      "reason": "Block C5S: docs/protocol/tla/README.md describes the reworked LinkProbe model (timeouts, closing bytes, rate-bound clock margin, level arithmetic); documentation of the model, no model bound or check removed (mise run tla runs every config and mutant). Re-keyed after the OI gate commit changed the file's committed baseline; same C5S hunk.",
+      "decision": "docs/objectif-en-cours.md"
     }
   ]
 }

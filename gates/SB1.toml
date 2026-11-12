@@ -1,0 +1,80 @@
+# Frozen acceptance for block SB1 (requirement W49, rigour: complete — the sandbox that confines documents from peers), written before the code.
+# User decisions 2026-11-11: D1 keep SECCOMP_RET_KILL_PROCESS; D2 the cgroup memory.max bound is in this block; D3 wording confirmed at the UX review.
+# Spec: docs/plans/2026-11-11-sandbox-crash-reports.md (sections 5, 8 and "Gate SB1"). A `go test -run` that matches nothing passes, so every Go
+# criterion requires each named test to print `--- PASS` (a SKIP is a failure: nothing passes silently on a machine that cannot exercise the sandbox);
+# the Vitest criterion requires each named test to be reported as passed.
+raw_results = ["docs/plans/2026-11-11-sandbox-crash-reports.md", "docs/objectif-en-cours.md", "gates/SB1/*"]
+
+[[criteria]]
+# W49 / study 5.0 / T1. The target's RLIMIT_CORE is exactly {1,1} (the kernel's "never dump" sentinel on pipe core_pattern; Max = 1 so
+# the target cannot raise it), read by the target itself at startup with the other limits. Red now: the launcher sets {0,0}, and the test does not exist.
+id = "core-limit"
+command = '''out=$(./scripts/heavy.sh timeout 600 go test -count=1 -v -run '^(TestTargetCoreLimitIsSentinel|TestRunLimitsHoldFromStartup)$' ./internal/sidecar 2>&1) || { echo "$out" | tail -40; exit 1; }; for t in TestTargetCoreLimitIsSentinel TestRunLimitsHoldFromStartup; do echo "$out" | grep -q -- "--- PASS: $t (" || { echo "missing, skipped or failing: $t"; exit 1; }; done'''
+
+[[criteria]]
+# W49 / 5.0, 5.4 R3 R4 R7 / T2. For the attacks arch, x32 (SIGSYS), xfsz (SIGXFSZ reset to SIG_DFL) and segv: the INTENDED signal
+# still kills (the security guarantee stays: D1 keeps SECCOMP_RET_KILL_PROCESS) and the pidfd's PIDFD_INFO_COREDUMP mask has no PIDFD_COREDUMPED bit, i.e.
+# the kernel never started systemd-coredump. A skip is not a pass (the machine must have a pipe core_pattern with %F and the pidfd info). Red now: RLIMIT_CORE
+# is 0, which a pipe ignores.
+id = "no-core-helper"
+command = '''out=$(./scripts/heavy.sh timeout 600 go test -count=1 -v -run '^(TestSandboxDeathStartsNoCoreHelper|TestSeccompKillsABIMismatch|TestInitPreservesFileSizeSignal)$' ./internal/sidecar 2>&1) || { echo "$out" | tail -40; exit 1; }; for t in TestSandboxDeathStartsNoCoreHelper TestSeccompKillsABIMismatch TestInitPreservesFileSizeSignal; do echo "$out" | grep -q -- "--- PASS: $t (" || { echo "missing, skipped or failing: $t"; exit 1; }; done'''
+
+[[criteria]]
+# W49 / 5.1 / T3, T4. SIGXFSZ is ignored in the target (and only it, plus SIGPIPE which Rust sets): a write past FileSizeLimit fails with EFBIG,
+# the process exits with status 1 and NO signal, stderr says os error 27, the output stays at the cap and Compile still returns ErrOutputTooLarge (TYP-19, PDF
+# and SVG). The existing byte-cap guarantees are kept (TestRunFileSizeLimit, TestRunDirectoryBound). Red now: the child dies of SIGXFSZ (25).
+id = "sigxfsz"
+command = '''out=$(./scripts/heavy.sh timeout 600 go test -count=1 -v -run '^(TestRunFileSizeLimitExitsWithoutSignal|TestRunFileSizeLimit|TestRunDirectoryBound)$' ./internal/sidecar 2>&1) || { echo "$out" | tail -40; exit 1; }; for t in TestRunFileSizeLimitExitsWithoutSignal TestRunFileSizeLimit TestRunDirectoryBound; do echo "$out" | grep -q -- "--- PASS: $t (" || { echo "missing, skipped or failing: $t"; exit 1; }; done; out=$(./scripts/heavy.sh timeout 600 go test -count=1 -v -run '^(TestTargetIgnoresOnlyFileSizeSignal|TestHostileOutputCapIsAnExitNotASignal)$' ./internal/typst 2>&1) || { echo "$out" | tail -40; exit 1; }; for t in TestTargetIgnoresOnlyFileSizeSignal TestHostileOutputCapIsAnExitNotASignal; do echo "$out" | grep -q -- "--- PASS: $t (" || { echo "missing, skipped or failing: $t"; exit 1; }; done'''
+
+[[criteria]]
+# W49 / 5.2 / T6. SIGSYS (31) is a security event: Engine.failure maps it to the new typst.ErrBlocked (not "stopped by a signal"), and the preview maps
+# ErrBlocked to the new kind "blocked". SIGSEGV with "memory allocation of N bytes failed" stays ErrMemoryLimit; SIGSEGV alone stays a generic stop.
+# Red now: ErrBlocked and FailBlocked do not exist (the packages do not compile against the tests).
+id = "blocked"
+command = '''out=$(./scripts/heavy.sh timeout 600 go test -count=1 -v -run '^(TestFailureBlocked)$' ./internal/typst 2>&1) || { echo "$out" | tail -40; exit 1; }; for t in TestFailureBlocked; do echo "$out" | grep -q -- "--- PASS: $t (" || { echo "missing, skipped or failing: $t"; exit 1; }; done; out=$(./scripts/heavy.sh timeout 600 go test -count=1 -v -run '^(TestFailureOfBlocked)$' ./internal/app 2>&1) || { echo "$out" | tail -40; exit 1; }; for t in TestFailureOfBlocked; do echo "$out" | grep -q -- "--- PASS: $t (" || { echo "missing, skipped or failing: $t"; exit 1; }; done'''
+
+[[criteria]]
+# W49 D2 / study 5.3 (cgroup memory bound, in this block). With a usable cgroup v2 (the user manager's delegated subtree), the target runs in its own
+# cgroup: memory.max = Spec.MemoryLimit exactly, memory.swap.max = 0, memory.oom.group = 1; a document that grows resident memory past it dies of SIGKILL
+# (never a dump), memory.events shows oom_kill >= 1, and the engine reports ErrMemoryLimit; the cgroup is removed after the run; RLIMIT_AS remains a bound that is
+# never lower than the cgroup's. FALLBACK: with cgroups unavailable (forced by a test seam) the run is unchanged from today (RLIMIT_AS, R3, no core helper),
+# never an error and never a weaker bound. Red now: none of these tests exist and the launcher has no cgroup code.
+id = "memory-cgroup"
+command = '''out=$(./scripts/heavy.sh timeout 600 go test -count=1 -v -run '^(TestCgroupLimitValues|TestCgroupMemoryLimitKillsWithSIGKILL|TestCgroupRemovedAfterRun|TestCgroupFallbackWithoutCgroups)$' ./internal/sidecar 2>&1) || { echo "$out" | tail -40; exit 1; }; for t in TestCgroupLimitValues TestCgroupMemoryLimitKillsWithSIGKILL TestCgroupRemovedAfterRun TestCgroupFallbackWithoutCgroups; do echo "$out" | grep -q -- "--- PASS: $t (" || { echo "missing, skipped or failing: $t"; exit 1; }; done; out=$(./scripts/heavy.sh timeout 600 go test -count=1 -v -run '^(TestHostileCgroupMemoryIsMemoryLimit|TestHostileMemoryDeathStartsNoCoreHelper)$' ./internal/typst 2>&1) || { echo "$out" | tail -40; exit 1; }; for t in TestHostileCgroupMemoryIsMemoryLimit TestHostileMemoryDeathStartsNoCoreHelper; do echo "$out" | grep -q -- "--- PASS: $t (" || { echo "missing, skipped or failing: $t"; exit 1; }; done'''
+
+[[criteria]]
+# G4, the user-visible criterion (study 8.2). Note the time, run every hostile test (sidecar attacks, TYP-14 to TYP-19 with real typst), then count the
+# systemd-coredump journal entries (MESSAGE_ID fc2e22bc...) of those runs for sidecar.test, typst or tinymist, and the new abrt problems: both must be 0. Where
+# there is no systemd-coredump the step prints "not applicable"; it never passes silently otherwise. Red now: about ten records per run (SIGSYS, SIGXFSZ, SIGSEGV).
+id = "no-coredump-record"
+command = '''t0=$(date +%s); ./scripts/heavy.sh timeout 900 go test -count=1 -run 'TestSeccompKillsABIMismatch|TestInitPreservesFileSizeSignal|TestSandboxDeathStartsNoCoreHelper|TestRunFileSizeLimit|TestRunDirectoryBound' ./internal/sidecar >/dev/null 2>&1; ./scripts/heavy.sh timeout 900 go test -count=1 -run 'TestCompileHostile' ./internal/typst >/dev/null 2>&1; if ! command -v coredumpctl >/dev/null 2>&1 || ! grep -q systemd-coredump /proc/sys/kernel/core_pattern; then echo "G4 not applicable: no systemd-coredump on this machine"; exit 0; fi; sleep 3; n=$(journalctl MESSAGE_ID=fc2e22bc6ee647b6b90729ab34a250b1 --since "@$t0" -o json 2>/dev/null | python3 -I -c "import sys,json; print(sum(1 for l in sys.stdin if l.strip() and any(x in json.loads(l).get('COREDUMP_EXE','') for x in ('sidecar.test','typst','tinymist'))))") || { echo "G4: journal unreadable"; exit 1; }; a=0; if command -v abrt-cli >/dev/null 2>&1; then a=$(abrt-cli list --since "$t0" 2>/dev/null | grep -c -E 'typst|tinymist|sidecar'); fi; echo "coredump records: $n, abrt problems: $a"; test "$n" = 0 && test "$a" = 0'''
+
+[[criteria]]
+# W49 / study 7 (D3: final wording confirmed at the UX review, the keys and the rules are frozen here). Every PreviewFailureKind, "blocked" included, has a
+# non-empty English and French message with no raw key shown; memory, tooLarge and blocked say what to do (UX rule 5) and use no jargon (sandbox, signal,
+# seccomp, crash, core); the two language files hold the same keys. Red now: the test file does not exist.
+id = "messages"
+command = '''out=$(cd frontend && ../scripts/heavy.sh timeout 300 pnpm exec vitest run --reporter=verbose src/preview/failureMessages.test.ts 2>&1) || { echo "$out" | tail -40; exit 1; }; for t in 'SB1 every failure kind has an English and a French message' 'SB1 memory, tooLarge and blocked say what to do' 'SB1 failure messages use no jargon' 'SB1 both languages hold the same preview.fail keys'; do echo "$out" | grep -q -- "✓.*$t" || { echo "missing or not passing: $t"; exit 1; }; done'''
+
+[[criteria]]
+# The hostile tests keep their guarantees, unchanged in what they assert (the whole sandbox suite and TYP-14..TYP-19, uncached).
+id = "hostile-kept"
+command = '''./scripts/heavy.sh timeout 1500 go test -count=1 -run 'TestSeccomp|TestSandbox|TestCompileHostile' ./internal/sidecar ./internal/typst'''
+
+[[criteria]]
+# Mutants (scripts/netsim/mutants.toml, block SB1, kind go; the runner catches only a real "--- FAIL"): SB1a RLIMIT_CORE {1,1}->{0,0}; SB1b RLIMIT_CORE entry removed;
+# SB1c Max unlimited; SB1d signal.Ignore(SIGXFSZ) removed; SB1e ignores SIGXCPU instead; SB1f seccomp ABI action KILL_PROCESS->ERRNO; SB1g failure(): SIGSYS branch
+# removed; SB1h failureKinds ErrBlocked row removed; SB1i memory.max not written; SB1j memory.oom.group not set; SB1k memory.swap.max not 0; SB1l cgroup
+# failure returns an error instead of falling back. Each turns a named test red. Red now: the entries do not exist.
+id = "mutants"
+command = '''for m in SB1a SB1b SB1c SB1d SB1e SB1f SB1g SB1h SB1i SB1j SB1k SB1l; do grep -q "id = \"$m\"" scripts/netsim/mutants.toml || { echo "missing mutant $m"; exit 1; }; done && mise run netsim:mutants -- SB1'''
+
+[[criteria]]
+# No regression: the sidecar, typst and app packages (every test, uncached), the frontend gate, lint, the declared environment, and the frozen gate of the
+# block that introduced the sandbox (L1: syscall confinement, tools-free run, arm64 seccomp trace).
+id = "regression"
+command = '''./scripts/heavy.sh timeout 1800 go test -count=1 ./internal/sidecar/... ./internal/typst/... ./internal/app/... && mise run fe:check && mise run lint && mise run lint:env && mise run gate -- L1'''
+
+[[criteria]]
+id = "simplify-report"
+command = '''test -s gates/SB1/SIMPLIFY.md'''
