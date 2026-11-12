@@ -889,6 +889,16 @@
       "id": "40920710060104df56fcf29ffc4476144846991675dbe797ec53e06333fb08b9",
       "reason": "docs/protocol/tla/README.md prose: the flagged hunk is block C5S's LinkProbe sentence already overridden as 70927f30 (timeouts, closing bytes, rate-bound clock margin, level arithmetic), re-keyed only because block SB1b appends the SandboxScope section (updated for ADR 0042 A9) (gates/SB1b.toml criterion tla requires it); both are documentation of the models, no model bound or check removed (mise run tla runs every config and mutant).",
       "decision": "docs/plans/2026-11-11-sandbox-crash-reports.md"
+    },
+    {
+      "id": "8285a7a536b7cffd654ba687c2d96faeb9a23b8acfe1d4a599d1168465455c17",
+      "reason": "Block C5S: docs/protocol/tla/README.md describes the reworked LinkProbe model (timeouts, closing bytes, rate-bound clock margin, level arithmetic); documentation of the model, no model bound or check is changed. Re-keyed after the SandboxScope commit (818f3ac) changed the file's committed baseline; same C5S hunk.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "69eeda1e218addc8c3040b9dab3415598e777bb3af5fc4ddf0832c4a00930df0",
+      "reason": "scripts/block_done_test.py: the preflight test named block C5S, whose netsim mutants are not on main yet, so it failed on a clean checkout; it now names NI0, which has mutants on main. Same assertion (the preflight runs mutants.py --check for a block with mutants and stops on failure); nothing weakened.",
+      "decision": "docs/plans/2026-11-09-c5-sound.md"
     }
   ]
 }

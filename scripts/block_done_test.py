@@ -69,9 +69,9 @@ class PreflightTest(unittest.TestCase):
         block_done.sh = fake_sh
         try:
             with self.assertRaises(SystemExit) as e:
-                block_done.preflight("C5S")  # a block with netsim mutants
+                block_done.preflight("NI0")  # a block with netsim mutants on main
             self.assertIn("no longer applies", str(e.exception))
-            self.assertTrue(any("mutants.py --check C5S" in c for c in calls))
+            self.assertTrue(any("mutants.py --check NI0" in c for c in calls))
         finally:
             block_done.sh = orig
 
