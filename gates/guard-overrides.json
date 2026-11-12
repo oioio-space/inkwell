@@ -929,6 +929,46 @@
       "id": "12555cd80b3cccfc5f74f00e5b4f503a6c3694c90ecefd66a93ad9902d9d15b7",
       "reason": ".claude/settings.json: Method v2 (two-family debate, 2026-11-12): the session-start OpenRouter ping and the per-prompt/per-edit reminder hooks are removed; their timeouts go with them. No test, threshold or gate delay is involved: these are advisory Claude hooks, and research is now required where decisions are written (research-grounding on docs/plans and docs/adr).",
       "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "7c668eb0178abae288f7ca66a1865e2cbeece9b1bb78605d0f1180be02221c6c",
+      "reason": "scripts/gate-selftest.py: No nested gates (user decision 2026-11-12, method v2 rules 6 and 9): a gate invoked from inside another gate's criterion (INKWELL_GATE_PARENT set) runs nothing; the criterion keeps its own commands' status and records the chained lot as a deferred obligation (manifest deferred_obligations, never a pass of that lot), validated, ledgered in gates/deferred.jsonl until a passing top-level run closes it; gate.py --deferred fails on obligations older than 7 days and blocks the release (T3). No criterion, threshold, timeout or test is weakened; scripts/gate_nested_test.py (in test:py) proves it, including a mutant that skips without recording.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "b19868d39d5c91a53df78dbb4b91355f2e66487dfdff83551fee66fb078d7a8a",
+      "reason": "scripts/gate-selftest.py: No nested gates (user decision 2026-11-12, method v2 rules 6 and 9): a gate invoked from inside another gate's criterion (INKWELL_GATE_PARENT set) runs nothing; the criterion keeps its own commands' status and records the chained lot as a deferred obligation (manifest deferred_obligations, never a pass of that lot), validated, ledgered in gates/deferred.jsonl until a passing top-level run closes it; gate.py --deferred fails on obligations older than 7 days and blocks the release (T3). No criterion, threshold, timeout or test is weakened; scripts/gate_nested_test.py (in test:py) proves it, including a mutant that skips without recording.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "715aec4831b31984b6e2725183fad123c09b45ed96698866291bb2b8c8b3b03e",
+      "reason": "scripts/gate.py: No nested gates (user decision 2026-11-12, method v2 rules 6 and 9): a gate invoked from inside another gate's criterion (INKWELL_GATE_PARENT set) runs nothing; the criterion keeps its own commands' status and records the chained lot as a deferred obligation (manifest deferred_obligations, never a pass of that lot), validated, ledgered in gates/deferred.jsonl until a passing top-level run closes it; gate.py --deferred fails on obligations older than 7 days and blocks the release (T3). No criterion, threshold, timeout or test is weakened; scripts/gate_nested_test.py (in test:py) proves it, including a mutant that skips without recording.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "ec1325acd0fffc0abc3e415c1ed326bded1e2dbccb992862d01505d811940060",
+      "reason": "scripts/gate.py: No nested gates (user decision 2026-11-12, method v2 rules 6 and 9): a gate invoked from inside another gate's criterion (INKWELL_GATE_PARENT set) runs nothing; the criterion keeps its own commands' status and records the chained lot as a deferred obligation (manifest deferred_obligations, never a pass of that lot), validated, ledgered in gates/deferred.jsonl until a passing top-level run closes it; gate.py --deferred fails on obligations older than 7 days and blocks the release (T3). No criterion, threshold, timeout or test is weakened; scripts/gate_nested_test.py (in test:py) proves it, including a mutant that skips without recording.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "30b7b91646f5c6764963152504efb35c87bd2770dfaf135cb236139d56374864",
+      "reason": "scripts/gate_nested_test.py: No nested gates (user decision 2026-11-12, method v2 rules 6 and 9): a gate invoked from inside another gate's criterion (INKWELL_GATE_PARENT set) runs nothing; the criterion keeps its own commands' status and records the chained lot as a deferred obligation (manifest deferred_obligations, never a pass of that lot), validated, ledgered in gates/deferred.jsonl until a passing top-level run closes it; gate.py --deferred fails on obligations older than 7 days and blocks the release (T3). No criterion, threshold, timeout or test is weakened; scripts/gate_nested_test.py (in test:py) proves it, including a mutant that skips without recording.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "edb10e615775aa3bfb72b239b3649b8906f7184fecc101fbe61e479377e78eee",
+      "reason": "mise.toml: No nested gates (user decision 2026-11-12, method v2 rules 6 and 9): a gate invoked from inside another gate's criterion (INKWELL_GATE_PARENT set) runs nothing; the criterion keeps its own commands' status and records the chained lot as a deferred obligation (manifest deferred_obligations, never a pass of that lot), validated, ledgered in gates/deferred.jsonl until a passing top-level run closes it; gate.py --deferred fails on obligations older than 7 days and blocks the release (T3). No criterion, threshold, timeout or test is weakened; scripts/gate_nested_test.py (in test:py) proves it, including a mutant that skips without recording.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "2b1ad06fe7a213e3bd1f2758ab76d44bb644f7841d8a161813a776cdd7338ef8",
+      "reason": "scripts/gate.sh: No nested gates (user decision 2026-11-12, method v2 rules 6 and 9): a gate invoked from inside another gate's criterion (INKWELL_GATE_PARENT set) runs nothing; the criterion keeps its own commands' status and records the chained lot as a deferred obligation (manifest deferred_obligations, never a pass of that lot), validated, ledgered in gates/deferred.jsonl until a passing top-level run closes it; gate.py --deferred fails on obligations older than 7 days and blocks the release (T3). No criterion, threshold, timeout or test is weakened; scripts/gate_nested_test.py (in test:py) proves it, including a mutant that skips without recording.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "f4384f321b40b3c88841466bf5565d6c9daa1f263a17ca2cea005c1a534d3be0",
+      "reason": "scripts/gate.sh: No nested gates (user decision 2026-11-12, method v2 rules 6 and 9): a gate invoked from inside another gate's criterion (INKWELL_GATE_PARENT set) runs nothing; the criterion keeps its own commands' status and records the chained lot as a deferred obligation (manifest deferred_obligations, never a pass of that lot), validated, ledgered in gates/deferred.jsonl until a passing top-level run closes it; gate.py --deferred fails on obligations older than 7 days and blocks the release (T3). No criterion, threshold, timeout or test is weakened; scripts/gate_nested_test.py (in test:py) proves it, including a mutant that skips without recording.",
+      "decision": "docs/objectif-en-cours.md"
     }
   ]
 }

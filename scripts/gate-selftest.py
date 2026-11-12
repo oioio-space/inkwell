@@ -21,6 +21,9 @@ def load(name, path):
 
 HERE = Path(__file__).resolve().parent
 gate = load("gate", HERE / "gate.py")
+# Run inside a gate's criterion, the parent's variables would make every gate.run() below a deferral returning 0.
+os.environ.pop("INKWELL_GATE_PARENT", None)
+os.environ.pop("INKWELL_GATE_PARENT_OUT", None)
 
 
 def rejects(call, what):

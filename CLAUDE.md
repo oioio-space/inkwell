@@ -116,7 +116,8 @@ un bloc = un lot, une étape du protocole ou un lot d'outillage. Il suit cet ord
 5. **Mutation** (gremlins) sur les paquets `protocol/*` touchés : efficacité ≥ 95 %, ou survivants
    justifiés comme équivalents dans `SIMPLIFY.md` (« mutation <paquet> »). Un test nomme la règle de
    la spec qu'il prouve ; l'utilité se mesure à la mutation, pas à la couverture.
-6. **Porte complète** (`mise run gate -- <bloc>`, régressions et mesure native comprises), en dernier
+6. **Porte complète** (`mise run gate -- <bloc>`, régressions et mesure native comprises ; aucune porte n'en
+   lance une autre : un `gate -- X` imbriqué est consigné « différé » et X tourne seul au besoin), en dernier
    car la plus longue, seule sur la machine, lancée dès qu'elle est libre ; après un incident,
    `mise run gate -- --resume <bloc>` ne refait que les critères inachevés.
 7. Documents : `PROGRESS.md` (la liste courante unique) et `docs/exigences.md` à jour.

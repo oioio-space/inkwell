@@ -13,7 +13,11 @@ Every run records each finished criterion (gates/<lot>/resume/<id>.json). With
 --resume, a criterion whose record still matches the same candidate is re-used
 instead of run (docs/plans/2026-11-12-gr-gate-resume.md).
 
-Usage: gate.py [--resume] <lot> | gate.py --base-guard
+No gate runs another gate (docs/plans/2026-11-12-method-v2.md, rule 6): a gate invoked from inside a criterion
+(INKWELL_GATE_PARENT set) runs nothing; the parent records it as a deferred obligation (manifest, and the ledger
+gates/deferred.jsonl), closed by the next passing top-level run of that lot. --deferred lists open obligations.
+
+Usage: gate.py [--resume] <lot> | gate.py --base-guard | gate.py --deferred
 """
 import hashlib
 import importlib.util
@@ -27,6 +31,7 @@ import subprocess
 import sys
 import tempfile
 import time
+from datetime import datetime, timezone
 import tomllib
 
 # gate.sh runs only a base runner that declares this protocol.
@@ -151,7 +156,7 @@ def candidate_digest(root, lot):
     own = f"gates/{lot}/"
     digest = hashlib.sha256()
     for path in sorted({os.fsdecode(p) for p in listed.split(b"\0") if p}):
-        if path == f"gates/{lot}.json" or (path.startswith(own) and not is_report(path[len(own):])):
+        if path in (f"gates/{lot}.json", LEDGER) or (path.startswith(own) and not is_report(path[len(own):])):
             continue
         file = root / path
         if file.is_symlink():
@@ -260,9 +265,108 @@ def discard(root, out, cid, body):
     (out / RECORDS / (cid + ".json")).unlink(missing_ok=True)
 
 
+# A nested gate hands its lot name to the parent through this file of gates/<parent>/, read after each criterion.
+NESTED = "nested-deferred.txt"
+NESTED_REASON = "no gate runs another gate (docs/plans/2026-11-12-method-v2.md rule 6, user decision 2026-11-12)"
+# Deferred obligations, one JSON object per line, tracked; open until a passing top-level run of the lot closes them.
+LEDGER = "gates/deferred.jsonl"
+OVERDUE_DAYS = 7
+
+
+def defer_nested(lot, root, parent, parent_out):
+    """Hands `lot` to the parent gate as a deferred obligation instead of running it. Refuses when the parent is not
+    a gate directory of this checkout (the deferral could not be recorded) or the lot has no gate; the parent
+    re-validates every handed line."""
+    expected = (root / "gates" / parent).resolve() if NAME.fullmatch(parent) else None
+    if expected is None or not parent_out or pathlib.Path(parent_out).resolve() != expected or not expected.is_dir():
+        print(f"nested gate {lot} refused: INKWELL_GATE_PARENT_OUT is not gates/{parent} of {root}", flush=True)
+        return 1
+    with (expected / NESTED).open("a") as handoff:
+        handoff.write(lot + "\n")
+    if not (root / "gates" / (lot + ".toml")).is_file():
+        print(f"nested gate {lot} refused: no gates/{lot}.toml", flush=True)
+        return 1
+    print(f"nested gate {lot} deferred: no nested gates (method v2, user decision 2026-11-12)", flush=True)
+    return 0
+
+
+def take_nested(root, lot, out):
+    """(obligations, problem) handed by nested gates during the last criterion; clears the hand-off. Each valid lot
+    once, in order; any invalid line is a problem that fails the criterion, never dropped."""
+    path = out / NESTED
+    if not path.is_file():
+        return [], None
+    lines = path.read_text().splitlines()
+    path.unlink()
+    bad = [line for line in lines
+           if not NAME.fullmatch(line) or line == lot or not (root / "gates" / (line + ".toml")).is_file()]
+    obligations = [dict(lot=name, reason=NESTED_REASON) for name in dict.fromkeys(lines) if name not in bad]
+    return obligations, ("invalid nested deferral: " + ", ".join(map(repr, bad))) if bad else None
+
+
+def _now():
+    return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def _head(root):
+    try:
+        return subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=root, text=True,
+                                       stderr=subprocess.DEVNULL).strip()
+    except (OSError, subprocess.CalledProcessError):
+        return None
+
+
+def read_ledger(root):
+    path = root / LEDGER
+    return [json.loads(line) for line in path.read_text().splitlines() if line.strip()] if path.exists() else []
+
+
+def ledger_open(root, gate, cid, obligations):
+    """Appends each obligation not already open for the same (lot, gate, criterion): the oldest date is kept."""
+    open_keys = {(r["lot"], r["from_gate"], r["criterion"]) for r in read_ledger(root) if "closed_commit" not in r}
+    rows = [dict(lot=o["lot"], from_gate=gate, criterion=cid, commit=_head(root), date=_now())
+            for o in obligations if (o["lot"], gate, cid) not in open_keys]
+    if rows:
+        with (root / LEDGER).open("a") as ledger:
+            ledger.writelines(json.dumps(r, sort_keys=True) + "\n" for r in rows)
+
+
+def ledger_close(root, lot):
+    """A passing top-level run of `lot` closes its open obligations, recording the closing commit."""
+    rows = read_ledger(root)
+    closing = [r for r in rows if r["lot"] == lot and "closed_commit" not in r]
+    if not closing:
+        return
+    for r in closing:
+        r.update(closed_commit=_head(root), closed_date=_now())
+    temporary = (root / LEDGER).with_suffix(".jsonl.tmp")
+    temporary.write_text("".join(json.dumps(r, sort_keys=True) + "\n" for r in rows))
+    temporary.replace(root / LEDGER)
+
+
+def deferred_report(root, stream):
+    """Lists open obligations; 1 if any is older than OVERDUE_DAYS or the ledger is unreadable (fail closed)."""
+    try:
+        rows = [r for r in read_ledger(root) if "closed_commit" not in r]
+        now = datetime.now(timezone.utc)
+        overdue = 0
+        for r in rows:
+            age = (now - datetime.fromisoformat(r["date"])).total_seconds() / 86400
+            overdue += age > OVERDUE_DAYS
+            stream.write(f"open {r['lot']}: deferred by {r['from_gate']}/{r['criterion']} at {r['commit']}, "
+                         f"{r['date']} ({age:.1f} days){' overdue' if age > OVERDUE_DAYS else ''}\n")
+    except (OSError, ValueError, KeyError, TypeError) as exc:
+        stream.write(f"unreadable ledger {LEDGER}: {exc}\n")
+        return 1
+    stream.write(f"{len(rows)} open deferred obligation(s), {overdue} overdue (> {OVERDUE_DAYS} days)\n")
+    return int(overdue > 0)
+
+
 def run(lot, root=ROOT, pins=None, guard=True, resume=False):
     if not NAME.fullmatch(lot):
         raise ValueError("invalid lot name")
+    if "INKWELL_GATE_PARENT" in os.environ:
+        return defer_nested(lot, root, os.environ["INKWELL_GATE_PARENT"], os.environ.get("INKWELL_GATE_PARENT_OUT", ""))
     sealed = verify(root, pins)
     config = tomllib.loads((root / "gates" / (lot + ".toml")).read_text())
     out = root / "gates" / lot
@@ -321,7 +425,8 @@ def run(lot, root=ROOT, pins=None, guard=True, resume=False):
         start = time.monotonic()
         with log.open("wb") as stream:
             p = subprocess.run(c["command"], shell=True, cwd=root, stdout=stream, stderr=subprocess.STDOUT,
-                               env=dict(os.environ, INKWELL_PERF_OUT=str(out), INKWELL_GATE_CRITERION=c["id"]))
+                               env=dict(os.environ, INKWELL_PERF_OUT=str(out), INKWELL_GATE_CRITERION=c["id"],
+                                        INKWELL_GATE_PARENT=lot, INKWELL_GATE_PARENT_OUT=str(out)))
         entry = dict(id=c["id"], command=c["command"], status="pass" if p.returncode == 0 and c.get("status") != "fail" else "fail",
                      exit_code=p.returncode, duration_seconds=time.monotonic()-start,
                      log=str(log.relative_to(root)))
@@ -332,6 +437,13 @@ def run(lot, root=ROOT, pins=None, guard=True, resume=False):
             entry["exclusive_steps"] = records
         if c.get("exclusive") and not entry.get("exclusive"):
             entry.update(status="fail", problem="performance measurement ran without the exclusive heavy lock")
+        # The criterion keeps its own commands' status; a chained gate is an obligation, never a pass for that lot.
+        obligations, problem = take_nested(root, lot, out)
+        if obligations:
+            entry["deferred_obligations"] = obligations
+            ledger_open(root, lot, c["id"], obligations)
+        if problem:
+            entry.update(status="fail", problem="; ".join(filter(None, (entry.get("problem"), problem))))
         entries.append(entry)
         if digest is not None:
             after = snapshot(root, out)
@@ -351,7 +463,9 @@ def run(lot, root=ROOT, pins=None, guard=True, resume=False):
     manifest = dict(lot=lot, criteria=entries, versions=context["tools"], sha256=hashes,
         status="fail" if failed else "pass",
         deferrals=[e for e in entries if e["status"] == "deferred"],
-        known_failures=config.get("known_failures", []))
+        known_failures=config.get("known_failures", []),
+        # Chained gates that were not run (rule 6): each runs on its own when needed.
+        deferred_obligations=[dict(o, criterion=e["id"]) for e in entries for o in e.get("deferred_obligations", [])])
     if guard_record:
         manifest["base_guard"] = guard_record
     if resume:
@@ -370,12 +484,16 @@ def run(lot, root=ROOT, pins=None, guard=True, resume=False):
     temporary = target.with_suffix(".json.tmp")
     temporary.write_text(json.dumps(manifest, indent=2) + "\n")
     temporary.replace(target)
+    if not failed:
+        ledger_close(root, lot)
     return int(failed)
 
 
 def main(argv):
     if argv == ["--base-guard"]:
         return base_guard(ROOT, sys.stdout.buffer)["status"] != "pass"
+    if argv == ["--deferred"]:
+        return deferred_report(ROOT, sys.stdout)
     lots = [a for a in argv if a != "--resume"]
     if len(lots) != 1 or len(argv) - len(lots) > 1 or lots[0].startswith("-"):
         return 2

@@ -9,6 +9,11 @@
 # Bootstrap escape hatch: when the base runner is absent or predates this
 # protocol (no "GATE_RUNNER_PROTOCOL = 1" line), the working tree's runner runs
 # instead and the manifest says so: runner.source = "working-tree (bootstrap…)".
+#
+# The environment reaches the runner unchanged (python3 -I ignores only
+# PYTHON* variables): a gate called from a criterion of another gate sees the
+# parent's INKWELL_GATE_PARENT and INKWELL_GATE_PARENT_OUT and is deferred,
+# not run (no gate runs another gate, docs/plans/2026-11-12-method-v2.md rule 6).
 set -euo pipefail
 root="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$root"
