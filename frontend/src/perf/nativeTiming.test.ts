@@ -73,6 +73,10 @@ it("reads the fine native clock synchronously with a unique cache path for every
       }
     },
   );
+  // observe() times each read with performance.now(); pin that clock so a loaded machine cannot turn this
+  // functional test into a timing failure (the 4 ms bound has its own test below, with pinned spans).
+  let wall = 0;
+  vi.spyOn(performance, "now").mockImplementation(() => (wall += 0.01));
   const clock = new NativeClock("capability-nonce");
   expect(clock.observe().resolutionMs).toBe(0.000001);
   expect(clock.read()).toBeGreaterThan(1);
@@ -121,4 +125,23 @@ it("explains the display and GNOME permission interruptions separately", () => {
   expect(FRAME_UNAVAILABLE).toContain("écran éteint ou verrouillé");
   expect(FOCUS_INTERRUPTED).toContain("GNOME");
   expect(FOCUS_INTERRUPTED).toContain("XTest");
+});
+
+it("refuses a native clock whose read takes more than 4 ms", () => {
+  let time = 1;
+  vi.stubGlobal(
+    "XMLHttpRequest",
+    class {
+      status = 200;
+      responseText = "";
+      open() {}
+      send() {
+        time += 0.000001;
+        this.responseText = JSON.stringify({ ms: time, resolutionMs: 0.000001 });
+      }
+    },
+  );
+  let wall = 0;
+  vi.spyOn(performance, "now").mockImplementation(() => (wall += 2.5)); // each read spans 2.5 ms; with a 2 ms quantum, 4.5 ms
+  expect(() => new NativeClock("capability-nonce").observe(2)).toThrow(/exceeds 4ms/);
 });
