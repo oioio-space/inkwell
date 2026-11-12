@@ -7,3 +7,6 @@ github.com/oioio-space/inkwell/internal/sidecar.NewSupervisor
 github.com/oioio-space/inkwell/internal/sidecar.Supervisor.Restarts
 github.com/oioio-space/inkwell/internal/sidecar.Supervisor.Run
 github.com/oioio-space/inkwell/internal/typst.Attachments
+# Public protocol API (ADR 0034: the protocol module is a reusable library): used by protocol/conformance's link-probe runner and vectors, not by inkwell's binaries.
+github.com/oioio-space/inkwell/protocol/linkprobe.StepLoss
+github.com/oioio-space/inkwell/protocol/linkprobe.StepRTT
