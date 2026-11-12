@@ -347,7 +347,19 @@ func (nn *natNet) node(t *testing.T, seed byte, o p2p.Options) *simNode {
 // anyone, at 1.2.<seed>.1.
 func (nn *natNet) nodeAt(t *testing.T, seed byte, public bool, o p2p.Options) *simNode {
 	t.Helper()
-	end := nn.newEnd(seed, public)
+	return nn.nodeKeyAt(t, seed, seed, public, o)
+}
+
+// nodeKeyAt is nodeAt with the identity of keySeed on the endpoint of endSeed: a node that
+// restarts on the same network, or on another one, or another node at a former address.
+func (nn *natNet) nodeKeyAt(t *testing.T, keySeed, endSeed byte, public bool, o p2p.Options) *simNode {
+	t.Helper()
+	return nn.nodeOn(t, keySeed, nn.newEnd(endSeed, public), o)
+}
+
+// nodeOn is nodeAt with the identity of keySeed on the endpoint end.
+func (nn *natNet) nodeOn(t *testing.T, keySeed byte, end *natEnd, o p2p.Options) *simNode {
+	t.Helper()
 	p2p.SetRewrite(&o, func(addrs []ma.Multiaddr) []ma.Multiaddr {
 		out := make([]ma.Multiaddr, 0, len(addrs))
 		for _, a := range addrs {
@@ -367,9 +379,9 @@ func (nn *natNet) nodeAt(t *testing.T, seed byte, public bool, o p2p.Options) *s
 		libp2p.DisableIdentifyAddressDiscovery(), // it stalls synctest
 		nn.quic(end),
 	)
-	n, err := p2p.New(t.Context(), key(seed), o)
+	n, err := p2p.New(t.Context(), key(keySeed), o)
 	if err != nil {
-		t.Fatalf("New(seed %d): %v", seed, err)
+		t.Fatalf("New(seed %d): %v", keySeed, err)
 	}
 	t.Cleanup(func() { _ = n.Close() })
 	return &simNode{Node: n, end: end}

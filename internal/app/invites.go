@@ -50,6 +50,7 @@ type lobbyNode interface {
 	SetOpen(until time.Time)
 	Nearby() []p2p.Nearby
 	Drop(who transport.PeerID)
+	Hangup(who transport.PeerID)
 }
 
 // Invitation is what [Session.Invite] returns: the two ways to give a ticket.
@@ -381,9 +382,15 @@ func (inv *invites) adopt(j *invite.Joined) error {
 	return nil
 }
 
+// probeTargets are the nearby devices worth greeting: those not linked already. A
+// linked peer is known, and a failed greeting must not hang up a working link.
+func probeTargets(found []p2p.Nearby, linked []transport.PeerID) []p2p.Nearby {
+	return slices.DeleteFunc(found, func(n p2p.Nearby) bool { return slices.Contains(linked, n.ID) })
+}
+
 // nearby greets the visible devices of the local network.
 func (inv *invites) nearby(ctx context.Context) []NearbyPerson {
-	found := inv.node.Nearby()
+	found := probeTargets(inv.node.Nearby(), inv.node.Peers())
 	found = found[:min(len(found), maxProbes)]
 	if len(found) == 0 {
 		return nil
@@ -403,7 +410,7 @@ func (inv *invites) nearby(ctx context.Context) []NearbyPerson {
 			}
 			h, err := inv.joiner("").Hello(ctx, n.ID)
 			if err != nil {
-				inv.node.Drop(n.ID) // not visible, or not an inkwell that answers
+				inv.node.Hangup(n.ID) // not visible, or not an inkwell that answers; a member stays wanted
 				return
 			}
 			mu.Lock()

@@ -377,3 +377,422 @@ why = "FloorRate back to the old fixed 16 KiB/s: an 879 KiB message on an 8 KiB/
 file = "internal/transport/frame/progress.go"
 before = "FloorRate = 2 << 10"
 after = "FloorRate = 16 << 10"
+
+# Block RC1 (reconnect after restart, docs/plans/2026-11-12-rc1-reconnect.md section 9, and the security review
+# of gates/RC1/SIMPLIFY.md): each code mutant turns its named test red.
+
+[[mutant]]
+id = "MC1a"
+block = "RC1"
+kind = "go"
+pkg = "./internal/transport/p2p"
+test = "TestDialFallbackUsesBook"
+clause = "plan 2.4 (fallback to the book)"
+why = "dialOnce ignores the address book: a peer wanted with no address is never dialed"
+[[mutant.edit]]
+file = "internal/transport/p2p/dial.go"
+before = "book, lan = n.book.dialAddrs(w.id)"
+after = "book, lan = nil, nil"
+
+[[mutant]]
+id = "MC1b"
+block = "RC1"
+kind = "go"
+pkg = "./internal/transport/p2p"
+test = "TestHangupKeepsWant"
+clause = "plan 2.6 (Hangup keeps the member wanted)"
+why = "Hangup un-wants the peer, as Drop does: a member the LAN probe hung up on is never dialed again"
+[[mutant.edit]]
+file = "internal/transport/p2p/node.go"
+before = "\tn.mu.Lock()\n\t_, wanted := n.want[id]\n\tn.mu.Unlock()\n\t_ = n.h.Network().ClosePeer(id)\n\tif !wanted {"
+after = "\tn.unwant(id)\n\twanted := false\n\t_ = n.h.Network().ClosePeer(id)\n\tif !wanted {"
+
+[[mutant]]
+id = "MC1c"
+block = "RC1"
+kind = "go"
+pkg = "./internal/transport/p2p"
+test = "TestBookRecordsAdmittedOnly"
+clause = "plan 2.3 (members only)"
+why = "recording skips Admit: a stranger let in by the invitation window has its address kept"
+[[mutant.edit]]
+file = "internal/transport/p2p/addrbook.go"
+before = "n.book.note(id, addrs, time.Now(), n.scope(), func() bool { return n.member(id) })"
+after = "n.book.note(id, addrs, time.Now(), n.scope(), func() bool { return true })"
+
+[[mutant]]
+id = "MC1d"
+block = "RC1"
+kind = "go"
+pkg = "./internal/transport/p2p"
+test = "TestBookBounds"
+clause = "plan 4 (8 addresses per peer)"
+why = "the per-peer cap is removed: a peer announcing 10 000 addresses fills the book"
+[[mutant.edit]]
+file = "internal/transport/p2p/addrbook.go"
+before = "\t\tif len(out) == limit {\n\t\t\tbreak\n\t\t}\n"
+after = ""
+
+[[mutant]]
+id = "MC1e"
+block = "RC1"
+kind = "go"
+pkg = "./internal/transport/p2p"
+test = "TestBookEvictsOld"
+clause = "plan 4 (90 days, exactly 90 kept)"
+why = "the age is compared with >= instead of >: an entry seen exactly 90 days ago is dropped"
+[[mutant.edit]]
+file = "internal/transport/p2p/addrbook.go"
+before = "if e.seen < oldest && len(e.addrs) > 0 {"
+after = "if e.seen <= oldest && len(e.addrs) > 0 {"
+
+[[mutant]]
+id = "MC1f"
+block = "RC1"
+kind = "go"
+pkg = "./internal/transport/p2p"
+test = "TestDropUnwantsAndForgetsBook"
+clause = "plan 2.6 and 4 (revocation deletes the entry)"
+why = "Drop leaves the book entry: the removed person's address stays on disk"
+[[mutant.edit]]
+file = "internal/transport/p2p/node.go"
+before = "\tif !n.member(id) && n.book.forget(id, n.scope()) {"
+after = "\tif !n.member(id) && false {"
+
+[[mutant]]
+id = "MC1g"
+block = "RC1"
+kind = "go"
+pkg = "./internal/transport/p2p"
+test = "TestBookDecodeRejects"
+clause = "plan 3 (v MUST be 1)"
+why = "the decoder accepts any version"
+[[mutant.edit]]
+file = "internal/transport/p2p/addrbook.go"
+before = "if f.V != bookVersion {"
+after = "if f.V < 0 {"
+
+[[mutant]]
+id = "MC1h"
+block = "RC1"
+kind = "go"
+pkg = "./internal/transport/p2p"
+test = "TestBookSkipsCircuitAndUnspecified"
+clause = "plan 2.3 (no relay path recorded)"
+why = "circuit addresses are recorded"
+[[mutant.edit]]
+file = "internal/transport/p2p/addrbook.go"
+before = "|| !ok(direct) {"
+after = "|| (!ok(direct) && !isCircuit(direct)) {"
+
+[[mutant]]
+id = "MC1i"
+block = "RC1"
+kind = "go"
+pkg = "./internal/transport/p2p"
+test = "TestReconnectAfterLongOutage"
+clause = "plan 2.4 (the fallback reads the book, not the peerstore)"
+why = "the fallback reads the peerstore only: after a restart (or 15 min away) it holds nothing"
+[[mutant.edit]]
+file = "internal/transport/p2p/dial.go"
+before = "book, lan = n.book.dialAddrs(w.id)"
+after = "book, lan = n.h.Peerstore().Addrs(w.id), nil"
+
+[[mutant]]
+id = "MC1j"
+block = "RC1"
+kind = "go"
+pkg = "./internal/app"
+test = "TestAddrBookFileAtomic"
+clause = "plan 3 (atomic write)"
+why = "the book is written in place: a reader can see a partial file"
+[[mutant.edit]]
+file = "internal/app/addrbook_file.go"
+before = "store.WriteAtomic(f.root, addrBookName, data, 0o600)"
+after = "f.root.WriteFile(addrBookName, data, 0o600)"
+
+[[mutant]]
+id = "MC1k"
+block = "RC1"
+kind = "go"
+pkg = "./internal/app"
+test = "TestAddrBookFileMode"
+clause = "plan 3 and 5 (mode 0600)"
+why = "the book is created 0644: readable by every user of the machine"
+[[mutant.edit]]
+file = "internal/app/addrbook_file.go"
+before = "store.WriteAtomic(f.root, addrBookName, data, 0o600)"
+after = "store.WriteAtomic(f.root, addrBookName, data, 0o644)"
+
+[[mutant]]
+id = "MC1l"
+block = "RC1"
+kind = "go"
+pkg = "./internal/app"
+test = "TestLANProbeKeepsMember"
+clause = "plan 1 (second defect: the probe ends a member's reconnection)"
+why = "the LAN probe drops the device it could not greet again, instead of hanging up"
+[[mutant.edit]]
+file = "internal/app/invites.go"
+before = "inv.node.Hangup(n.ID)"
+after = "inv.node.Drop(n.ID)"
+
+[[mutant]]
+id = "MC1m"
+block = "RC1"
+kind = "go"
+pkg = "./internal/transport/p2p"
+test = "TestReconnectAfterRestartNoRelay"
+clause = "plan 6 (bound R: the first dialOnce runs at T0)"
+why = "a new dial loop pauses its longest backoff before its first attempt"
+[[mutant.edit]]
+file = "internal/transport/p2p/dial.go"
+before = "\tbackoff := minBackoff\n\tvar since time.Time"
+after = "\tbackoff := minBackoff\n\tif _, ok := n.pause(ctx, nil, nil, new(maxBackoff), new(time.Time)); !ok {\n\t\treturn\n\t}\n\tvar since time.Time"
+
+[[mutant]]
+id = "MC1n"
+block = "RC1"
+kind = "go"
+pkg = "./internal/transport/p2p"
+test = "TestBookDecodeRejects"
+clause = "plan 3 (the whole file is refused)"
+why = "a bad entry is skipped and the rest of the book kept"
+[[mutant.edit]]
+file = "internal/transport/p2p/addrbook.go"
+before = "\t\tif err != nil {\n\t\t\treturn nil, &bookRefusal{reason: \"bounds\", err: err}\n\t\t}"
+after = "\t\tif err != nil {\n\t\t\tcontinue\n\t\t}"
+
+[[mutant]]
+id = "MC1o"
+block = "RC1"
+kind = "go"
+pkg = "./internal/transport/p2p"
+test = "TestBookLANSpoofKeepsAuthenticated"
+clause = "mDNS is not authenticated (coordinator review)"
+why = "mDNS sightings are recorded as authenticated addresses: a LAN spoofer pushes the member's real addresses out and onto disk"
+[[mutant.edit]]
+file = "internal/transport/p2p/addrbook.go"
+before = "return !n.opts.RelayOnly && n.book.noteLAN(id, addrs, time.Now(), func() bool { return n.member(id) })"
+after = "return !n.opts.RelayOnly && func() bool { n.book.note(id, addrs, time.Now(), n.scope(), func() bool { return n.member(id) }); return true }()"
+
+[[mutant]]
+id = "MC1p"
+block = "RC1"
+kind = "go"
+pkg = "./internal/transport/p2p"
+test = "TestBookLANCannotOutrankAuthenticated"
+clause = "mDNS addresses take at most 2 places, only free ones"
+why = "the room left by the authenticated addresses is ignored: mDNS addresses fill a full entry"
+[[mutant.edit]]
+file = "internal/transport/p2p/addrbook.go"
+before = "\te.lan = merge(fresh, e.lan, e.addrs, bookMaxLAN)"
+after = "\te.lan = merge(fresh, e.lan, e.addrs, bookMaxAddrs)"
+
+[[mutant]]
+id = "MC1q"
+block = "RC1"
+kind = "go"
+pkg = "./internal/transport/p2p"
+test = "TestReconnectOnLANSighting"
+clause = "a sighting of a wanted member wakes its dial loop"
+why = "the dial loop's pause ignores the wake: a member seen on the network waits up to 75 s"
+[[mutant.edit]]
+file = "internal/transport/p2p/dial.go"
+before = "\tcase <-wake:\n\t\treturn true, true\n"
+after = ""
+
+[[mutant]]
+id = "MC1r"
+block = "RC1"
+kind = "go"
+pkg = "./internal/transport/p2p"
+test = "FuzzBookNote"
+clause = "security review 1 (DNS names are ASCII hostnames)"
+why = "any DNS value is recorded: a name of invalid UTF-8 cannot be encoded and every save fails"
+[[mutant.edit]]
+file = "internal/transport/p2p/addrbook.go"
+before = "\t\tif !validHostname(a[0].Value()) {\n\t\t\treturn false\n\t\t}\n"
+after = ""
+
+[[mutant]]
+id = "MC1s"
+block = "RC1"
+kind = "go"
+pkg = "./internal/transport/p2p"
+test = "TestBookPerDeviceAcrossProjects"
+clause = "security review 2 (the book belongs to the device)"
+why = "Drop forgets the whole entry, whatever the projects and the reason: a fault or a revocation in one project erases a member of another"
+[[mutant.edit]]
+file = "internal/transport/p2p/node.go"
+before = "\tif !n.member(id) && n.book.forget(id, n.scope()) {"
+after = "\tif n.book.forget(id, n.scope()) || n.book.forget(id, \"A\") {"
+
+[[mutant]]
+id = "MC1t"
+block = "RC1"
+kind = "go"
+pkg = "./internal/transport/p2p"
+test = "TestBookClockRules"
+clause = "security review 3 (the clock never empties the book)"
+why = "the clock rules are removed: a clock far forward prunes and saves an empty book"
+[[mutant.edit]]
+file = "internal/transport/p2p/addrbook.go"
+before = "\tcase newest > now.Add(bookFuture).Unix() || (len(peers) > 0 && newest < now.Add(-bookMaxAge).Unix()):"
+after = "\tcase newest > now.Add(bookFuture).Unix():"
+
+[[mutant]]
+id = "MC1u"
+block = "RC1"
+kind = "go"
+pkg = "./internal/transport/p2p"
+test = "TestBookLANWakeBucket"
+clause = "security review 4 (a node-wide bucket of wakes)"
+why = "the bucket of wakes is unbounded: forged sightings make the node dial in a loop"
+[[mutant.edit]]
+file = "internal/transport/p2p/dial.go"
+before = "\twakeBurst = 4"
+after = "\twakeBurst = 1000"
+
+[[mutant]]
+id = "MC1v"
+block = "RC1"
+kind = "go"
+pkg = "./internal/transport/p2p"
+test = "TestBookLANCannotOutrankAuthenticated"
+clause = "security review 5 (mDNS: private or link-local literals only)"
+why = "any address mDNS gives is taken: public, loopback and DNS"
+[[mutant.edit]]
+file = "internal/transport/p2p/addrbook.go"
+before = "\treturn !ip.IsLoopback() && (ip.IsPrivate() || (ip.To4() != nil && ip.IsLinkLocalUnicast()))"
+after = "\t_ = ip\n\treturn true"
+
+[[mutant]]
+id = "MC1w"
+block = "RC1"
+kind = "go"
+pkg = "./internal/transport/p2p"
+test = "TestBookReachableFrom"
+clause = "security review 6 (identify's address filter)"
+why = "the addresses identify gave are kept unfiltered: a public peer's private and loopback addresses are recorded"
+[[mutant.edit]]
+file = "internal/transport/p2p/addrbook.go"
+before = "\tcase manet.IsPublicAddr(remote):\n\t\treturn slices.DeleteFunc(addrs, func(a ma.Multiaddr) bool { return !manet.IsPublicAddr(a) })\n"
+after = ""
+
+[[mutant]]
+id = "MC1x"
+block = "RC1"
+kind = "go"
+pkg = "./internal/app"
+test = "TestLANProbeKeepsMember"
+clause = "security review 7 (the probe skips linked peers)"
+why = "the probe greets linked peers too: a failed greeting hangs up a working link"
+[[mutant.edit]]
+file = "internal/app/invites.go"
+before = "\treturn slices.DeleteFunc(found, func(n p2p.Nearby) bool { return slices.Contains(linked, n.ID) })"
+after = "\treturn found"
+
+[[mutant]]
+id = "MC1y"
+block = "RC1"
+kind = "go"
+pkg = "./internal/transport/p2p"
+test = "TestBookNoteRechecksMembership"
+clause = "security review 8 (membership re-checked under the lock)"
+why = "note does not re-check membership: a note decided before a revocation brings the entry back"
+[[mutant.edit]]
+file = "internal/transport/p2p/addrbook.go"
+before = "\tb.mu.Lock()\n\tdefer b.mu.Unlock()\n\tif !member() {\n\t\treturn\n\t}"
+after = "\tb.mu.Lock()\n\tdefer b.mu.Unlock()"
+
+[[mutant]]
+id = "MC1z"
+block = "RC1"
+kind = "go"
+pkg = "./internal/app"
+test = "TestAddrBookFileNotRegular"
+clause = "security review 11 (regular files only)"
+why = "a FIFO in place of the book is read"
+[[mutant.edit]]
+file = "internal/app/addrbook_file.go"
+before = "\tif !info.Mode().IsRegular() {"
+after = "\tif false {"
+
+[[mutant]]
+id = "MC1aa"
+block = "RC1"
+kind = "go"
+pkg = "./internal/transport/p2p"
+test = "TestBookPrefersSignedRecord"
+clause = "security review 6 (the signed peer record is preferred)"
+why = "the signed peer record is ignored: the raw listen addresses are recorded"
+[[mutant.edit]]
+file = "internal/transport/p2p/addrbook.go"
+before = "\taddrs := e.ListenAddrs\n\tif e.SignedPeerRecord != nil {"
+after = "\taddrs := e.ListenAddrs\n\tif false && e.SignedPeerRecord != nil {"
+
+[[mutant]]
+id = "MC1ab"
+block = "RC1"
+kind = "go"
+pkg = "./internal/transport/p2p"
+test = "TestDialFallbackOrder"
+clause = "security review 9 (authenticated addresses dialed first)"
+why = "the mDNS addresses are dialed before the authenticated ones"
+[[mutant.edit]]
+file = "internal/transport/p2p/dial.go"
+before = "for _, addrs := range [][]ma.Multiaddr{book, lan} {"
+after = "for _, addrs := range [][]ma.Multiaddr{lan, book} {"
+
+[[mutant]]
+id = "MC1ac"
+block = "RC1"
+kind = "go"
+pkg = "./internal/transport/p2p"
+test = "TestReconnectUnderSightingFlood"
+clause = "second review 1 (sightings never postpone the normal attempt)"
+why = "a wake restarts the backoff timer: forged sightings every few seconds starve the authenticated attempts"
+[[mutant.edit]]
+file = "internal/transport/p2p/dial.go"
+before = "\tcase <-wake:\n\t\treturn true, true"
+after = "\tcase <-wake:\n\t\t*due = time.Time{}\n\t\treturn true, true"
+
+[[mutant]]
+id = "MC1ad"
+block = "RC1"
+kind = "go"
+pkg = "./internal/transport/p2p"
+test = "TestReconnectRoamedSaturated"
+clause = "second review 2 (mDNS hints have places of their own)"
+why = "mDNS hints only take the room the authenticated addresses leave: a member with 8 stale ones is not found on the local network"
+[[mutant.edit]]
+file = "internal/transport/p2p/addrbook.go"
+before = "\te.lan = merge(fresh, e.lan, e.addrs, bookMaxLAN)"
+after = "\te.lan = merge(fresh, e.lan, e.addrs, min(bookMaxLAN, bookMaxAddrs-len(e.addrs)))"
+
+[[mutant]]
+id = "MC1ae"
+block = "RC1"
+kind = "go"
+pkg = "./internal/transport/p2p"
+test = "TestBookSaveRetried"
+clause = "second review 3 (a failed save is retried on its own)"
+why = "a failed save waits for the next change or the shutdown"
+[[mutant.edit]]
+file = "internal/transport/p2p/addrbook.go"
+before = "\t\t\tretry = min(max(2*retry, bookSaveEvery), bookRetryMax)"
+after = "\t\t\tretry = 0"
+
+[[mutant]]
+id = "MC1af"
+block = "RC1"
+kind = "go"
+pkg = "./internal/transport/p2p"
+test = "TestBookClockRules"
+clause = "second review 4 (a revocation is saved during the clock hold)"
+why = "nothing is saved during the hold: the revoked peer's addresses stay on disk and come back"
+[[mutant.edit]]
+file = "internal/transport/p2p/addrbook.go"
+before = "\tif b.hold && !b.revoked {"
+after = "\tif b.hold {"

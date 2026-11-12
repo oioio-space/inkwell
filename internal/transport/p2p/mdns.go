@@ -53,15 +53,27 @@ func (n *Node) startLAN(service string) error {
 // lanNotifee receives the nodes found by mDNS.
 type lanNotifee Node
 
-// HandlePeerFound implements mdns.Notifee.
+// HandlePeerFound implements mdns.Notifee. A member that is seen has the
+// addresses it announces recorded in the address book, apart from the
+// authenticated ones (anyone can forge an announcement; the handshake of a dial
+// checks it), and, if it is wanted and not connected, its dial loop is woken, at
+// most every wakeEvery.
 func (l *lanNotifee) HandlePeerFound(info peer.AddrInfo) {
 	n := (*Node)(l)
+	wake := n.rememberLAN(info.ID, info.Addrs) && !n.connected(info.ID)
 	n.mu.Lock()
 	defer n.mu.Unlock()
 	if n.closed || info.ID == n.h.ID() || len(info.Addrs) == 0 {
 		return
 	}
 	now := time.Now()
+	if w := n.want[info.ID]; wake && w != nil && now.Sub(w.woken) >= wakeEvery && n.wakeTokenLocked(now) {
+		w.woken = now
+		select {
+		case w.wake <- struct{}{}:
+		default:
+		}
+	}
 	n.found[info.ID] = nearbyEntry{info: info, seen: now}
 	if len(n.found) <= maxNearby {
 		return
@@ -73,6 +85,22 @@ func (l *lanNotifee) HandlePeerFound(info peer.AddrInfo) {
 		}
 	}
 	delete(n.found, oldest)
+}
+
+// wakeTokenLocked takes a token of the node's bucket of wakes, if there is
+// one: wakeBurst at most, one more every wakeEvery.
+func (n *Node) wakeTokenLocked(now time.Time) bool {
+	if !n.wakeAt.IsZero() {
+		n.wakeTokens = min(wakeBurst, n.wakeTokens+now.Sub(n.wakeAt).Seconds()/wakeEvery.Seconds())
+	} else {
+		n.wakeTokens = wakeBurst
+	}
+	n.wakeAt = now
+	if n.wakeTokens < 1 {
+		return false
+	}
+	n.wakeTokens--
+	return true
 }
 
 // Nearby returns the nodes seen on the local network in the last five

@@ -63,6 +63,7 @@ func (n *Node) onConnected(p peer.ID) {
 func (n *Node) onDisconnected(p peer.ID) {
 	n.mu.Lock()
 	defer n.mu.Unlock()
+	delete(n.heard, p)
 	if ps := n.peers[p]; ps != nil {
 		ps.connected = false
 		n.settleLocked(ps)
@@ -108,7 +109,8 @@ func (n *Node) openOut(ps *peerState) {
 		return
 	}
 	ps.out = s
-	if !ps.up {
+	announced := !ps.up
+	if announced {
 		ps.up = true
 		n.linkUp(ps.id, sample)
 		n.h.ConnManager().Protect(ps.id, memberTag)
@@ -120,6 +122,9 @@ func (n *Node) openOut(ps *peerState) {
 		n.wg.Go(func() { n.measureRTT(ps.id) })
 	}
 	n.mu.Unlock()
+	if announced { // identify has run (NewStream waits for it)
+		n.remember(ps.id)
+	}
 	// A direct connection may have been made while the stream was opening.
 	n.maybeUpgrade(ps)
 }

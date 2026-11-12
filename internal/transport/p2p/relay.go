@@ -322,21 +322,23 @@ func circuitPrefixes(relays map[peer.ID]peer.AddrInfo) []ma.Multiaddr {
 // servers that a small private network lacks, so the node believes it is
 // private and reserves a slot on the relays at once. Port mapping stays off.
 func reachabilityOptions(relays map[peer.ID]peer.AddrInfo, o Options) []libp2p.Option {
-	if len(relays) == 0 {
-		return nil
+	var opts []libp2p.Option
+	if len(relays) > 0 {
+		opts = append(
+			opts,
+			libp2p.EnableRelay(),
+			libp2p.EnableAutoRelayWithStaticRelays(
+				relayList(relays),
+				autorelay.WithBackoff(relayRetry),
+				autorelay.WithMinInterval(relayLookup),
+			),
+			libp2p.ForceReachabilityPrivate(),
+		)
+		if !o.RelayOnly {
+			opts = append(opts, libp2p.EnableHolePunching())
+		}
 	}
-	opts := []libp2p.Option{
-		libp2p.EnableRelay(),
-		libp2p.EnableAutoRelayWithStaticRelays(
-			relayList(relays),
-			autorelay.WithBackoff(relayRetry),
-			autorelay.WithMinInterval(relayLookup),
-		),
-		libp2p.ForceReachabilityPrivate(),
-	}
-	if !o.RelayOnly {
-		opts = append(opts, libp2p.EnableHolePunching())
-	}
+	// The rewrite of the tests applies with or without relays (RelayOnly has some).
 	if o.RelayOnly || o.rewrite != nil {
 		opts = append(opts, libp2p.AddrsFactory(func(addrs []ma.Multiaddr) []ma.Multiaddr {
 			if o.rewrite != nil {

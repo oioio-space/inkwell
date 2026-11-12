@@ -1,6 +1,15 @@
 package p2p
 
 import (
+	"bytes"
+	"cmp"
+	"errors"
+	"fmt"
+	"log/slog"
+	"slices"
+	"sync"
+	"time"
+
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/peer"
@@ -17,6 +26,18 @@ func SetExtra(o *Options, opts ...libp2p.Option) { o.extra = opts }
 // SetRewrite makes New rewrite the addresses the node advertises through f,
 // so a simulated node behind a NAT advertises its public address.
 func SetRewrite(o *Options, f func([]ma.Multiaddr) []ma.Multiaddr) { o.rewrite = f }
+
+// SetOnDial makes the node tell f of each dial attempt of a wanted peer, with its addresses.
+func SetOnDial(o *Options, f func(transport.PeerID, []string)) {
+	o.onDial = func(id peer.ID, addrs []ma.Multiaddr) {
+		name, _ := peerName(id)
+		out := make([]string, len(addrs))
+		for i, a := range addrs {
+			out[i] = a.String()
+		}
+		f(name, out)
+	}
+}
 
 // SetRelayExtra makes RunRelay apply opts after its own, as SetExtra does for
 // a node.
@@ -101,3 +122,123 @@ func (n *Node) RelayViews() uint64 {
 	}
 	return total
 }
+
+// MemBook is a [BookStore] in memory, safe for concurrent use.
+type MemBook struct {
+	mu        sync.Mutex
+	data, bad []byte
+	reason    string // of the last quarantine
+	saves     int
+	fails     int // saves still to fail, see FailSaves
+}
+
+// FailSaves makes the next n saves fail, as a full disk does.
+func (m *MemBook) FailSaves(n int) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.fails = n
+}
+
+// Load implements BookStore.
+func (m *MemBook) Load() ([]byte, error) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return bytes.Clone(m.data), nil
+}
+
+// Save implements BookStore.
+func (m *MemBook) Save(data []byte) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	if m.fails > 0 {
+		m.fails--
+		return errors.New("disk full")
+	}
+	m.data = bytes.Clone(data)
+	m.saves++
+	return nil
+}
+
+// Quarantine implements BookStore.
+func (m *MemBook) Quarantine(reason string) error {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.bad, m.data, m.reason = m.data, nil, reason
+	return nil
+}
+
+// Set replaces the stored book.
+func (m *MemBook) Set(data []byte) {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	m.data = bytes.Clone(data)
+}
+
+// Data returns the stored book.
+func (m *MemBook) Data() []byte {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return bytes.Clone(m.data)
+}
+
+// Saves returns how many times the book was saved.
+func (m *MemBook) Saves() int {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	return m.saves
+}
+
+// BookAddrs returns the addresses the address book holds for id, and when it was last seen.
+func (n *Node) BookAddrs(id transport.PeerID) (addrs []string, seen time.Time) {
+	p, ok := parseID(id)
+	if !ok {
+		return nil, time.Time{}
+	}
+	for _, e := range n.book.snapshot() {
+		if e.ID == p.String() {
+			return e.Addrs, time.Unix(e.Seen, 0)
+		}
+	}
+	return nil, time.Time{}
+}
+
+// SightLAN hands info to the node as its mDNS service does when it sees a node.
+func (n *Node) SightLAN(info peer.AddrInfo) { (*lanNotifee)(n).HandlePeerFound(info) }
+
+// BookFile is the stored form of an address book holding, for each peer, its addresses seen at
+// seen.
+func BookFile(seen time.Time, peers map[transport.PeerID][]string) []byte {
+	entries := make(map[peer.ID]bookEntry, len(peers))
+	for id, addrs := range peers {
+		p, _ := parseID(id)
+		e := bookEntry{seen: seen.Unix(), in: []string{defaultScope}}
+		for _, a := range addrs {
+			e.addrs = append(e.addrs, ma.StringCast(a))
+		}
+		entries[p] = e
+	}
+	data, skipped, err := encodeBook(entries)
+	if err != nil || skipped > 0 {
+		panic(fmt.Sprint(skipped, err))
+	}
+	return data
+}
+
+// snapshot returns the entries of the book, sorted by peer, for the tests.
+func (b *addrBook) snapshot() []bookPeer {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	out := make([]bookPeer, 0, len(b.peers))
+	for id, e := range b.peers {
+		p := bookPeer{ID: id.String(), Seen: max(e.seen, e.lanSeen)}
+		for _, a := range slices.Concat(e.addrs, e.lan) {
+			p.Addrs = append(p.Addrs, a.String())
+		}
+		out = append(out, p)
+	}
+	slices.SortFunc(out, func(x, y bookPeer) int { return cmp.Compare(x.ID, y.ID) })
+	return out
+}
+
+// discard is a logger for the tests that do not look at the logs.
+var discard = slog.New(slog.DiscardHandler)

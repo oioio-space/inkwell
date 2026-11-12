@@ -56,6 +56,11 @@ func (a *Admission) Admit(id transport.PeerID) bool {
 	return err == nil && a.list.Load().Role(key) > 0
 }
 
+// Scope names the project whose members are admitted now (its project ID). It
+// is meant for p2p.Options.Scope: the device's address book keeps a peer for
+// each project it is a member of.
+func (a *Admission) Scope() string { return a.list.Load().Project().String() }
+
 // reset makes list the project whose members are admitted.
 func (a *Admission) reset(list *trust.List) { a.list.Store(list) }
 

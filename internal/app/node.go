@@ -144,6 +144,8 @@ type Runtime struct {
 	inv    *invites
 	cancel context.CancelFunc
 	files  sync.WaitGroup
+	// closeBook releases the address book's directory, once the node is closed.
+	closeBook func() error
 }
 
 // Start starts the node of the device stored in home and wires it to the open
@@ -163,16 +165,22 @@ func Start(ctx context.Context, home *os.Root, o Options) (*Runtime, error) {
 	if err != nil {
 		return nil, fmt.Errorf("opening project: %w", err)
 	}
-	adm := NewAdmission(list)
-	no := netOptions(o.Port)
-	no.Admit, no.LAN, no.LANService = adm.Admit, o.LAN, o.LANService
-	node, err := startNode(ctx, dev, no)
-	if err != nil {
-		return nil, errors.Join(err, store.close())
-	}
 	log := o.Log
 	if log == nil {
 		log = slog.New(slog.DiscardHandler)
+	}
+	book, err := openAddrBook(home, log)
+	if err != nil {
+		return nil, errors.Join(err, store.close())
+	}
+	closeBook := sync.OnceValue(book.Close) // after the node, whose Close saves the book
+	adm := NewAdmission(list)
+	no := netOptions(o.Port)
+	no.Admit, no.LAN, no.LANService, no.Book = adm.Admit, o.LAN, o.LANService, book
+	no.Scope, no.Log = adm.Scope, log
+	node, err := startNode(ctx, dev, no)
+	if err != nil {
+		return nil, errors.Join(err, store.close(), closeBook())
 	}
 	w := Wire(ctx, node, dev, list, adm, WiringOptions{Log: log, Save: store.save})
 	files, err := NewFiles(o.Project, node.Bulk(), FilesOptions{
@@ -181,7 +189,7 @@ func Start(ctx context.Context, home *os.Root, o Options) (*Runtime, error) {
 		Log:     log,
 	})
 	if err != nil {
-		return nil, errors.Join(err, w.Close(), store.close())
+		return nil, errors.Join(err, w.Close(), store.close(), closeBook())
 	}
 	var c carrier
 	if o.RendezvousURL != NoCodes {
@@ -201,7 +209,7 @@ func Start(ctx context.Context, home *os.Root, o Options) (*Runtime, error) {
 		Log:      log,
 	})
 	files.SetOnWrite(pv.Changed)
-	r := &Runtime{Node: node, Session: s, Repo: w.Repo(), Files: files, Preview: pv, wiring: w, inv: inv, cancel: cancel}
+	r := &Runtime{Node: node, Session: s, Repo: w.Repo(), Files: files, Preview: pv, wiring: w, inv: inv, cancel: cancel, closeBook: closeBook}
 	r.files.Go(func() {
 		if err := files.Run(fctx); fctx.Err() == nil && !errors.Is(err, transport.ErrClosed) {
 			log.Error("blob service stopped", "err", err)
@@ -215,5 +223,5 @@ func (r *Runtime) Close() error {
 	r.cancel()
 	r.Preview.Close()
 	r.files.Wait()
-	return errors.Join(r.wiring.Close(), r.inv.close(), r.Files.Close())
+	return errors.Join(r.wiring.Close(), r.inv.close(), r.Files.Close(), r.closeBook()) // in this order
 }

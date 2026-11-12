@@ -46,11 +46,13 @@
 package p2p
 
 import (
+	"cmp"
 	"context"
 	"crypto/ed25519"
 	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net"
 	"slices"
 	"strings"
@@ -150,6 +152,9 @@ type Options struct {
 	// rewrite, if not nil, rewrites the advertised addresses; tests use it to
 	// give a simulated node its public address.
 	rewrite func([]ma.Multiaddr) []ma.Multiaddr
+	// onDial, if not nil, is told of each dial attempt of a wanted peer, before
+	// it starts; tests use it to check the order of the attempts.
+	onDial func(peer.ID, []ma.Multiaddr)
 	// Relays are the relays to use, as multiaddrs ending in /p2p/<id>. With
 	// at least one, the node reserves a slot on them so that peers can reach
 	// it from any network, dials peers through them when it has no better
@@ -173,6 +178,21 @@ type Options struct {
 	// relays themselves), never dials a direct address and does not hole
 	// punch. It needs at least one relay.
 	RelayOnly bool
+	// Book, if not nil, keeps the address book between runs: the addresses
+	// the members announced, which [Node.Want] dials when it has none for a
+	// peer (after a restart). It is loaded by New and saved as the book changes,
+	// at most every 10 s, and by Close. Nil keeps the book in memory only. The
+	// book records only peers that Admit accepts, and nothing in RelayOnly mode.
+	Book BookStore
+	// Scope, if not nil, names the project whose membership Admit checks now
+	// (1 to 64 ASCII letters, digits, '-' or '_'; it may change, as the open
+	// project does). The book belongs to the device: each entry lists the
+	// projects its peer was seen a member of, and Drop removes only the current
+	// one. Nil is a single unnamed project.
+	Scope func() string
+	// Log, if not nil, receives the diagnostics of the address book: counts
+	// and categories, never an address or a peer ID. Nil discards them.
+	Log *slog.Logger
 }
 
 // queued is an event with the byte budget to release once Recv returns it.
@@ -247,6 +267,10 @@ type Node struct {
 	lobby atomic.Pointer[LobbyHandler]
 	// lan is the mDNS service, if started.
 	lan io.Closer
+	// book holds the addresses the members announced, see Options.Book;
+	// heard has what each connected peer announced through identify, under mu.
+	book  *addrBook
+	heard map[peer.ID][]ma.Multiaddr
 	// want is the set of peers to keep connected, and kick is closed and
 	// replaced to make their dial loops retry at once. Both under mu.
 	want map[peer.ID]*wanted
@@ -255,6 +279,10 @@ type Node struct {
 
 	lanErr    error
 	openUntil time.Time // under mu
+	// wakeTokens and wakeAt are the bucket of mDNS wakes, see wakeTokenLocked;
+	// under mu.
+	wakeTokens float64
+	wakeAt     time.Time
 
 	local   transport.PeerID
 	queue   []queued
@@ -338,12 +366,14 @@ func New(ctx context.Context, key ed25519.PrivateKey, o Options) (*Node, error) 
 		want:      make(map[peer.ID]*wanted),
 		held:      make(map[peer.ID]hold),
 		found:     make(map[peer.ID]nearbyEntry),
+		heard:     make(map[peer.ID][]ma.Multiaddr),
 		kick:      make(chan struct{}),
 		relays:    relays,
 		relayDown: make(map[peer.ID]chan struct{}, len(relays)),
 		reserved:  make(map[peer.ID]bool, len(relays)),
 	}
 	n.circuit = circuitPrefixes(relays)
+	n.book = newAddrBook(o.Book, local, time.Now(), cmp.Or(o.Log, slog.New(slog.DiscardHandler)))
 	for id := range relays {
 		n.relayDown[id] = make(chan struct{}, 1)
 	}
@@ -379,7 +409,7 @@ func New(ctx context.Context, key ed25519.PrivateKey, o Options) (*Node, error) 
 	}
 	n.h = h
 
-	sub, err := h.EventBus().Subscribe(new(event.EvtPeerConnectednessChanged))
+	sub, err := h.EventBus().Subscribe([]any{new(event.EvtPeerConnectednessChanged), new(event.EvtPeerIdentificationCompleted)})
 	if err != nil {
 		n.cancel()
 		_ = h.Close()
@@ -417,8 +447,11 @@ func New(ctx context.Context, key ed25519.PrivateKey, o Options) (*Node, error) 
 			n.onConnected(p)
 		}
 		for ev := range sub.Out() {
-			if e, ok := ev.(event.EvtPeerConnectednessChanged); ok {
+			switch e := ev.(type) {
+			case event.EvtPeerConnectednessChanged:
 				n.onConnectedness(e)
+			case event.EvtPeerIdentificationCompleted:
+				n.onIdentified(e)
 			}
 		}
 	})
@@ -431,6 +464,7 @@ func New(ctx context.Context, key ed25519.PrivateKey, o Options) (*Node, error) 
 		n.dialWG.Go(func() { n.keepRelay(ai, n.relayDown[ai.ID]) })
 	}
 	n.wg.Go(n.sampleLinks)
+	n.wg.Go(func() { n.book.run(n.ctx) })
 	if o.LAN {
 		n.lanErr = n.startLAN(o.LANService)
 	}
@@ -639,8 +673,11 @@ func parseAddr(s string, id peer.ID) (*peer.AddrInfo, error) {
 
 // Drop closes the connections to peer and forgets what is known about it,
 // including that it was wanted (see [Node.Want]). It is for revocation: revoke
-// the peer in Options.Admit first, or it may reconnect at once. The peer's
-// PeerDown follows as for any lost link.
+// the peer in Options.Admit first, or it may reconnect at once. A revoked peer
+// (Admit refuses it) is also removed from the address book for the current
+// project (see [Options.Scope]), and the book is saved at once; a peer still
+// admitted (dropped for a fault) keeps its entry. The peer's PeerDown follows
+// as for any lost link.
 func (n *Node) Drop(who transport.PeerID) {
 	id, ok := parseID(who)
 	if !ok || id == n.h.ID() {
@@ -651,6 +688,35 @@ func (n *Node) Drop(who transport.PeerID) {
 	delete(n.held, id) // a removed peer is refused by Admit, not by an old backoff
 	n.mu.Unlock()
 	_ = n.h.Network().ClosePeer(id)
+	n.forgetAddrs(id)
+	if !n.member(id) && n.book.forget(id, n.scope()) {
+		if !n.book.flush(time.Now(), false) { // not coalesced: the address leaves the disk now
+			n.book.signal() // failed: run retries it
+		}
+	}
+}
+
+// Hangup closes the connections to peer, but unlike [Node.Drop] leaves it
+// wanted and in the address book: a wanted peer is dialed again, as after any
+// lost link. What libp2p knows of a peer that is not wanted is forgotten. It is
+// for a peer that was dialed to be greeted and did not answer. The peer's
+// PeerDown follows if it was announced.
+func (n *Node) Hangup(who transport.PeerID) {
+	id, ok := parseID(who)
+	if !ok || id == n.h.ID() {
+		return
+	}
+	n.mu.Lock()
+	_, wanted := n.want[id]
+	n.mu.Unlock()
+	_ = n.h.Network().ClosePeer(id)
+	if !wanted {
+		n.forgetAddrs(id)
+	}
+}
+
+// forgetAddrs removes what the peerstore holds of id.
+func (n *Node) forgetAddrs(id peer.ID) {
 	n.h.Peerstore().RemovePeer(id)
 	n.h.Peerstore().ClearAddrs(id)
 }
