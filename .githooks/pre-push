@@ -9,6 +9,11 @@
 set -euo pipefail
 
 repo_root="$(git rev-parse --show-toplevel)"
+# Git exports repository-local variables (GIT_DIR, GIT_INDEX_FILE, …) to hooks; tests that create their own
+# temporary repositories would then act on this one. Clear them, as git's own documentation advises
+# (`git rev-parse --local-env-vars`).
+cd "$repo_root"
+unset $(git rev-parse --local-env-vars)
 
 if command -v mise >/dev/null 2>&1 && [[ -f "$repo_root/mise.toml" ]]; then
   # Decide first (seconds): a run keeps the netsim in parallel with the other checks (`mise run ci`),
