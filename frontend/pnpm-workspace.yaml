@@ -13,3 +13,7 @@ strictDepBuilds: true
 allowBuilds:
   # Optional native accelerator for cbor-x; the pure-JS path is enough.
   cbor-extract: false
+patchedDependencies:
+  "@lezer/common@1.5.4": patches/@lezer__common@1.5.4.patch
+  "@lezer/markdown@1.8.1": patches/@lezer__markdown@1.8.1.patch
+  codemirror-lang-typst@0.6.0: patches/codemirror-lang-typst@0.6.0.patch

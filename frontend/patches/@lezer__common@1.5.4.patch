@@ -1,0 +1,150 @@
+diff --git a/dist/index.cjs b/dist/index.cjs
+index 41000f34a85ad897a5c01c4a48ab3f5cf30c7cb2..2e9333aa983255c4526480df7144ad37c7ba4f8e 100644
+--- a/dist/index.cjs
++++ b/dist/index.cjs
+@@ -1032,6 +1032,9 @@ class TreeCursor {
+             return this.yieldNode(node);
+         }
+         this.buffer = node.context;
++        // In buffer mode _tree is the buffer's parent (matchContext reads it). sibling() can
++        // arrive here from a Tree child, whose node _tree still was.
++        this._tree = node.context.parent;
+         return this.yieldBuf(node.index, node.type);
+     }
+     /**
+@@ -1833,7 +1836,14 @@ class MixedParse {
+                 return null;
+             this.baseParse = null;
+             this.baseTree = done;
+-            this.startInner();
++            this.scanning = true;
++        }
++        // The walk that finds nested regions runs in slices, like the parses: in one
++        // call it froze the editor for O(nodes) after a full parse (125 ms at 50 MB).
++        if (this.scanning) {
++            if (!this.startInner(Date.now() + 8))
++                return null;
++            this.scanning = false;
+             if (this.stoppedAt != null)
+                 for (let inner of this.inner)
+                     inner.parse.stopAt(this.stoppedAt);
+@@ -1860,7 +1870,7 @@ class MixedParse {
+     get parsedPos() {
+         if (this.baseParse)
+             return 0;
+-        let pos = this.input.length;
++        let pos = this.scanning ? (this.scan ? this.scan.cursor.from : 0) : this.input.length;
+         for (let i = this.innerDone; i < this.inner.length; i++) {
+             if (this.inner[i].from < pos)
+                 pos = Math.min(pos, this.inner[i].parse.parsedPos);
+@@ -1875,12 +1885,21 @@ class MixedParse {
+             for (let i = this.innerDone; i < this.inner.length; i++)
+                 this.inner[i].parse.stopAt(pos);
+     }
+-    startInner() {
+-        let fragmentCursor = new FragmentCursor(this.fragments);
+-        let overlay = null;
+-        let covered = null;
+-        let cursor = new TreeCursor(new TreeNode(this.baseTree, this.ranges[0].from, 0, null), exports.IterMode.IncludeAnonymous | exports.IterMode.IgnoreMounts);
++    // Walks the base tree for nested regions. Resumable: returns false when `deadline`
++    // passes, with its state in this.scan, and goes on from there on the next call.
++    startInner(deadline) {
++        let s = this.scan || (this.scan = {
++            fragmentCursor: new FragmentCursor(this.fragments), overlay: null, covered: null,
++            cursor: new TreeCursor(new TreeNode(this.baseTree, this.ranges[0].from, 0, null), exports.IterMode.IncludeAnonymous | exports.IterMode.IgnoreMounts)
++        });
++        let { fragmentCursor, cursor } = s, overlay = s.overlay, covered = s.covered;
++        let steps = 0;
+         scan: for (let nest, isCovered;;) {
++            if (++steps % 1024 == 0 && Date.now() > deadline) {
++                s.overlay = overlay;
++                s.covered = covered;
++                return false;
++            }
+             let enter = true, range;
+             if (this.stoppedAt != null && cursor.from >= this.stoppedAt) {
+                 enter = false;
+@@ -1965,6 +1984,8 @@ class MixedParse {
+                 }
+             }
+         }
++        this.scan = null;
++        return true;
+     }
+ }
+ function checkCover(covered, from, to) {
+diff --git a/dist/index.js b/dist/index.js
+index efa8df4a1d96e72da0207ce8ddddeb9075f6a55a..8ddd7518972529e053f8ce31730af3cee8059e1b 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -1030,6 +1030,9 @@ class TreeCursor {
+             return this.yieldNode(node);
+         }
+         this.buffer = node.context;
++        // In buffer mode _tree is the buffer's parent (matchContext reads it). sibling() can
++        // arrive here from a Tree child, whose node _tree still was.
++        this._tree = node.context.parent;
+         return this.yieldBuf(node.index, node.type);
+     }
+     /**
+@@ -1831,7 +1834,14 @@ class MixedParse {
+                 return null;
+             this.baseParse = null;
+             this.baseTree = done;
+-            this.startInner();
++            this.scanning = true;
++        }
++        // The walk that finds nested regions runs in slices, like the parses: in one
++        // call it froze the editor for O(nodes) after a full parse (125 ms at 50 MB).
++        if (this.scanning) {
++            if (!this.startInner(Date.now() + 8))
++                return null;
++            this.scanning = false;
+             if (this.stoppedAt != null)
+                 for (let inner of this.inner)
+                     inner.parse.stopAt(this.stoppedAt);
+@@ -1858,7 +1868,7 @@ class MixedParse {
+     get parsedPos() {
+         if (this.baseParse)
+             return 0;
+-        let pos = this.input.length;
++        let pos = this.scanning ? (this.scan ? this.scan.cursor.from : 0) : this.input.length;
+         for (let i = this.innerDone; i < this.inner.length; i++) {
+             if (this.inner[i].from < pos)
+                 pos = Math.min(pos, this.inner[i].parse.parsedPos);
+@@ -1873,12 +1883,21 @@ class MixedParse {
+             for (let i = this.innerDone; i < this.inner.length; i++)
+                 this.inner[i].parse.stopAt(pos);
+     }
+-    startInner() {
+-        let fragmentCursor = new FragmentCursor(this.fragments);
+-        let overlay = null;
+-        let covered = null;
+-        let cursor = new TreeCursor(new TreeNode(this.baseTree, this.ranges[0].from, 0, null), IterMode.IncludeAnonymous | IterMode.IgnoreMounts);
++    // Walks the base tree for nested regions. Resumable: returns false when `deadline`
++    // passes, with its state in this.scan, and goes on from there on the next call.
++    startInner(deadline) {
++        let s = this.scan || (this.scan = {
++            fragmentCursor: new FragmentCursor(this.fragments), overlay: null, covered: null,
++            cursor: new TreeCursor(new TreeNode(this.baseTree, this.ranges[0].from, 0, null), IterMode.IncludeAnonymous | IterMode.IgnoreMounts)
++        });
++        let { fragmentCursor, cursor } = s, overlay = s.overlay, covered = s.covered;
++        let steps = 0;
+         scan: for (let nest, isCovered;;) {
++            if (++steps % 1024 == 0 && Date.now() > deadline) {
++                s.overlay = overlay;
++                s.covered = covered;
++                return false;
++            }
+             let enter = true, range;
+             if (this.stoppedAt != null && cursor.from >= this.stoppedAt) {
+                 enter = false;
+@@ -1963,6 +1982,8 @@ class MixedParse {
+                 }
+             }
+         }
++        this.scan = null;
++        return true;
+     }
+ }
+ function checkCover(covered, from, to) {

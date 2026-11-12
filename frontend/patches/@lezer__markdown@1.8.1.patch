@@ -1,0 +1,154 @@
+diff --git a/dist/index.cjs b/dist/index.cjs
+index 4a361b0d03d5ed263f09e3eeebbbc2f1b6375ec8..a6d75e19a2f7645a3cd1a59f7002b03dd9d71ab5 100644
+--- a/dist/index.cjs
++++ b/dist/index.cjs
+@@ -1893,6 +1893,14 @@ class FragmentCursor {
+             let end = this.fragment.to;
+             while (end > 0 && this.input.read(end - 1, end) != "\n")
+                 end--;
++            // A block's end was decided looking at the next line and, through peekLine
++            // (GFM tables), the one after it. When the fragment ends at a change, both
++            // must be inside it, so drop one more line.
++            if (this.fragment.openEnd && end > 0) {
++                end--;
++                while (end > 0 && this.input.read(end - 1, end) != "\n")
++                    end--;
++            }
+             this.fragmentEnd = end ? end - 1 : 0;
+         }
+         let c = this.cursor;
+@@ -1920,13 +1928,15 @@ class FragmentCursor {
+     takeNodes(cx) {
+         let cur = this.cursor, off = this.fragment.offset, fragEnd = this.fragmentEnd - (this.fragment.openEnd ? 1 : 0);
+         let start = cx.absoluteLineStart, end = start, blockI = cx.block.children.length;
+-        // Don't reuse anonymous nodes bigger than ¼ of the current
+-        // block's size, to avoid creating lopsided trees.
+-        let maxAnonSize = (cx.lineStart - cx.block.from) >> 2;
+         let prevEnd = end, prevI = blockI;
+         scan: for (;;) {
++            // Don't reuse anonymous nodes bigger than ¼ of the current block's size so
++            // far, to avoid creating lopsided trees. Measured at each node: computed once
++            // at the start of the scan, it stayed 0 for a scan starting at the block's start
++            // and split all reuse into single blocks (every edit O(blocks)).
++            let maxAnonSize = (toRelative(cur.from - off, cx.ranges) - cx.block.from) >> 2;
+             if (cur.to - off > Math.min(fragEnd, cx.to) ||
+-                cur.type.isAnonymous && cur.tree && (cur.to - cur.from > maxAnonSize || !canStopAfterLastChild(cur.tree))) {
++                cur.type.isAnonymous && cur.tree && (cur.to - cur.from > maxAnonSize || lastBlock(cur.tree) == 0 /* LastBlock.None */)) {
+                 if (cur.type.isAnonymous && cur.firstChild())
+                     continue;
+                 break;
+@@ -1945,9 +1955,13 @@ class FragmentCursor {
+             // after an indented code block, since those can continue after
+             // any number of blank lines.
+             if (cur.type.isAnonymous || cur.type.is("Block")) {
+-                // We checked earlier that anon nodes end in a block after
+-                // which we can stop reuse.
+-                if (cur.type.isAnonymous || NotLast.indexOf(cur.type.id) < 0) {
++                // We checked earlier that anon nodes end in a block. One that ends in a
++                // block reuse can't stop after (a list, indented code) is taken like that
++                // block: reuse may stop after it only once a following node is taken too.
++                // Refusing it instead split reuse into single blocks, which made every
++                // edit O(blocks) (Document balance, parseMixed walk).
++                if (cur.type.isAnonymous ? !cur.tree || lastBlock(cur.tree) == 2 /* LastBlock.CanStop */
++                    : NotLast.indexOf(cur.type.id) < 0) {
+                     end = cur.to - off;
+                     blockI = cx.block.children.length;
+                 }
+@@ -1972,15 +1986,17 @@ class FragmentCursor {
+         return end - start;
+     }
+ }
+-function canStopAfterLastChild(tree) {
++// What an anonymous node ends with: 0 = not a block (e.g. the quote mark of the next
++// line, or a buffer), 1 = a block reuse can't stop after (NotLast), 2 = a block it can.
++function lastBlock(tree) {
+     while (tree.type.isAnonymous) {
+         let last = tree.children[tree.children.length - 1];
+         if (last instanceof common.Tree)
+             tree = last;
+         else
+-            return false;
++            return 0;
+     }
+-    return tree.type.is("Block") && NotLast.indexOf(tree.type.id) < 0;
++    return !tree.type.is("Block") ? 0 : NotLast.indexOf(tree.type.id) < 0 ? 2 : 1;
+ }
+ // Convert an input-stream-relative position to a
+ // Markdown-doc-relative position by subtracting the size of all input
+diff --git a/dist/index.js b/dist/index.js
+index bcaae772b1e92dd3f279b5c0b6607a3df0a2b20a..267fa0412384ce08a0039ba3b89d4bb2f4eb7b33 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -1891,6 +1891,14 @@ class FragmentCursor {
+             let end = this.fragment.to;
+             while (end > 0 && this.input.read(end - 1, end) != "\n")
+                 end--;
++            // A block's end was decided looking at the next line and, through peekLine
++            // (GFM tables), the one after it. When the fragment ends at a change, both
++            // must be inside it, so drop one more line.
++            if (this.fragment.openEnd && end > 0) {
++                end--;
++                while (end > 0 && this.input.read(end - 1, end) != "\n")
++                    end--;
++            }
+             this.fragmentEnd = end ? end - 1 : 0;
+         }
+         let c = this.cursor;
+@@ -1918,13 +1926,15 @@ class FragmentCursor {
+     takeNodes(cx) {
+         let cur = this.cursor, off = this.fragment.offset, fragEnd = this.fragmentEnd - (this.fragment.openEnd ? 1 : 0);
+         let start = cx.absoluteLineStart, end = start, blockI = cx.block.children.length;
+-        // Don't reuse anonymous nodes bigger than ¼ of the current
+-        // block's size, to avoid creating lopsided trees.
+-        let maxAnonSize = (cx.lineStart - cx.block.from) >> 2;
+         let prevEnd = end, prevI = blockI;
+         scan: for (;;) {
++            // Don't reuse anonymous nodes bigger than ¼ of the current block's size so
++            // far, to avoid creating lopsided trees. Measured at each node: computed once
++            // at the start of the scan, it stayed 0 for a scan starting at the block's start
++            // and split all reuse into single blocks (every edit O(blocks)).
++            let maxAnonSize = (toRelative(cur.from - off, cx.ranges) - cx.block.from) >> 2;
+             if (cur.to - off > Math.min(fragEnd, cx.to) ||
+-                cur.type.isAnonymous && cur.tree && (cur.to - cur.from > maxAnonSize || !canStopAfterLastChild(cur.tree))) {
++                cur.type.isAnonymous && cur.tree && (cur.to - cur.from > maxAnonSize || lastBlock(cur.tree) == 0 /* LastBlock.None */)) {
+                 if (cur.type.isAnonymous && cur.firstChild())
+                     continue;
+                 break;
+@@ -1943,9 +1953,13 @@ class FragmentCursor {
+             // after an indented code block, since those can continue after
+             // any number of blank lines.
+             if (cur.type.isAnonymous || cur.type.is("Block")) {
+-                // We checked earlier that anon nodes end in a block after
+-                // which we can stop reuse.
+-                if (cur.type.isAnonymous || NotLast.indexOf(cur.type.id) < 0) {
++                // We checked earlier that anon nodes end in a block. One that ends in a
++                // block reuse can't stop after (a list, indented code) is taken like that
++                // block: reuse may stop after it only once a following node is taken too.
++                // Refusing it instead split reuse into single blocks, which made every
++                // edit O(blocks) (Document balance, parseMixed walk).
++                if (cur.type.isAnonymous ? !cur.tree || lastBlock(cur.tree) == 2 /* LastBlock.CanStop */
++                    : NotLast.indexOf(cur.type.id) < 0) {
+                     end = cur.to - off;
+                     blockI = cx.block.children.length;
+                 }
+@@ -1970,15 +1984,17 @@ class FragmentCursor {
+         return end - start;
+     }
+ }
+-function canStopAfterLastChild(tree) {
++// What an anonymous node ends with: 0 = not a block (e.g. the quote mark of the next
++// line, or a buffer), 1 = a block reuse can't stop after (NotLast), 2 = a block it can.
++function lastBlock(tree) {
+     while (tree.type.isAnonymous) {
+         let last = tree.children[tree.children.length - 1];
+         if (last instanceof Tree)
+             tree = last;
+         else
+-            return false;
++            return 0;
+     }
+-    return tree.type.is("Block") && NotLast.indexOf(tree.type.id) < 0;
++    return !tree.type.is("Block") ? 0 : NotLast.indexOf(tree.type.id) < 0 ? 2 : 1;
+ }
+ // Convert an input-stream-relative position to a
+ // Markdown-doc-relative position by subtracting the size of all input
