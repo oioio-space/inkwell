@@ -18,6 +18,8 @@ démontré (test, démo enregistrée ou tâche utilisateur chronométrée).
 - **Lots HDAE (méthode `docs/plans/2026-11-02-methode-hdae.md`, portes figées `gates/<lot>.toml`)** :
   L0 (mesure de référence, garde anti-affaiblissement), L1 (autoportance : bac à sable des sidecars sans programme externe, N42), L2 (G-0a : un clic dans la barre latérale ouvre le fichier), L3 (LSP : problèmes cliquables, F8, aide Typst, N28/N29) — tous `pass` dans `gates/L{0,1,2,3}.json` ; reports : PERF-MEM → G-0b, native darwin/windows → N35, PERF-START-plugins → Fondations extensibles.
 - **Protocole ADR 0034** : étape 1 (module `protocol/`), étape 2 (P2 : `protocol/sig`, Ed25519 strict, N-1) et étape 3 (P3 : TLC épinglé `mise run tla`, profil CBOR et schémas §9 dans `@inkwell/protocol`) faites, portes `gates/P2.json` et `gates/P3.json` vertes ; **prochaine : étape 4** (`protocol/sync2`, `protocol/libp2p`), à spécifier d'abord en exécutable (`docs/plans/2026-11-08-spec-executable.md`). Ensuite : G-0b, G-0c, S13. Suivi : [docs/objectif-en-cours.md](docs/objectif-en-cours.md).
+- **Bloc C5S (qualité du lien à trois niveaux, sonde `/inkwell/linkprobe/1.0.0`, ADR 0036)** : livré le 2026-11-12 (`d051af2`), accepté par décision de l'utilisatrice ; reste : l'affichage dans le popover des personnes. Détail : [docs/objectif-en-cours.md](docs/objectif-en-cours.md).
+- **Livré sur `main` le 2026-11-12** : PB (mesure de performance appariée et entrelacée contre la référence du merge-base, ADR 0038) ; Go 1.27.4 (GO-2026-6859, `net/http`) ; RC1 (reconnexion après redémarrage sans relais, carnet d'adresses par appareil) ; LF0a3 (coloration incrémentale corrigée à la cause, correctifs épinglés Typst, Markdown et Lezer ; résidu : cas du délimiteur non fermé → LF0b) ; GR (`--resume` d'une porte par critère sur le même candidat) ; « plus de portes imbriquées » (un appel imbriqué devient une obligation différée dans le registre `gates/deferred.jsonl`) ; méthode v2 ([docs/plans/2026-11-12-method-v2.md](docs/plans/2026-11-12-method-v2.md)). Choix consignés dans [docs/autonomous-decisions.md](docs/autonomous-decisions.md).
 
 ## Étape 0 — Fondations ✅
 
@@ -101,6 +103,7 @@ Plan : [docs/plans/2026-10-25-etape-2-reseau.md](docs/plans/2026-10-25-etape-2-r
 
 | Date | Changement |
 |------|------------|
+| 2026-11-12 | PB, Go 1.27.4, C5S, RC1, LF0a3, GR, méthode v2 : mesure appariée (ADR 0038) ; Go 1.27.4 ; qualité du lien en trois niveaux acceptée ; reconnexion sans relais ; coloration incrémentale (résidu LF0b) ; `--resume` ; plus de portes imbriquées (`gates/deferred.jsonl`) ; méthode v2 (`docs/plans/2026-11-12-method-v2.md`). |
 | 2026-11-08 | ADR 0034 étape 2 (P2) : `protocol/sig`, Ed25519 strict, porte `gates/P2.json` verte. |
 | 2026-11-08 | ADR 0034 étape 3 (P3) : TLC épinglé, profil CBOR, schémas §9 ; porte `gates/P3.json` verte. |
 | 2026-11-08 | Bloc RL1 : règle L de la spec sur sync/1 — une écriture échouée relance la synchronisation (plus de perte silencieuse après une coupure, NI-2 vert sur 3 graines) ; mesures de lien v1 et notification Links jusqu'à la webview ; outillage réseau perturbé (NI0, en cours). Porte `gates/RL1.json` verte, régressions et mesure native comprises. |
