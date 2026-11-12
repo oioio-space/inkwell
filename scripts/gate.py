@@ -9,7 +9,11 @@ scripts/gate.sh runs this file from the merge-base (see there), isolated
 (python3 -I) from a temporary copy; INKWELL_GATE_ROOT then names the checkout
 and INKWELL_GATE_RUNNER says which runner ran, recorded in the manifest.
 
-Usage: gate.py <lot> | gate.py --base-guard
+Every run records each finished criterion (gates/<lot>/resume/<id>.json). With
+--resume, a criterion whose record still matches the same candidate is re-used
+instead of run (docs/plans/2026-11-12-gr-gate-resume.md).
+
+Usage: gate.py [--resume] <lot> | gate.py --base-guard
 """
 import hashlib
 import importlib.util
@@ -125,7 +129,138 @@ def exclusive_records(out):
     return [json.loads(line) for line in path.read_text().splitlines()] if path.exists() else []
 
 
-def run(lot, root=ROOT, pins=None, guard=True):
+# Per-criterion records, in gates/<lot>/resume/<id>.json, and the fields of their body.
+RECORDS = "resume"
+RECORD_FIELDS = {"lot", "id", "criterion", "entry", "evidence", "digest", "runner", "tools", "environment"}
+
+
+def is_report(relative):
+    """A block report kept by reset_evidence: a *.md file directly in gates/<lot>/."""
+    return "/" not in relative and relative.endswith(".md")
+
+
+def candidate_digest(root, lot):
+    """SHA-256 of the candidate: path, executable bit and content of every tracked or untracked non-ignored file,
+    except the gate's own outputs (gates/<lot>.json, the evidence of gates/<lot>/ but not its *.md reports).
+    None outside a git work tree."""
+    try:
+        listed = subprocess.run(["git", "ls-files", "-z", "--cached", "--others", "--exclude-standard"],
+                                cwd=root, capture_output=True, check=True).stdout
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    own = f"gates/{lot}/"
+    digest = hashlib.sha256()
+    for path in sorted({os.fsdecode(p) for p in listed.split(b"\0") if p}):
+        if path == f"gates/{lot}.json" or (path.startswith(own) and not is_report(path[len(own):])):
+            continue
+        file = root / path
+        if file.is_symlink():
+            kind, data = "link", os.fsencode(os.readlink(file))
+        elif file.is_file():
+            kind, data = "x" if file.stat().st_mode & 0o100 else "-", file.read_bytes()
+        else:
+            kind, data = "missing" if not file.exists() else "other", b""
+        digest.update(f"{path}\0{kind}\0{hashlib.sha256(data).hexdigest()}\n".encode("utf-8", "surrogateescape"))
+    return digest.hexdigest()
+
+
+def tool_versions(root):
+    versions = {"go": version("go version"), "node": version("node --version"),
+                "typst": version("typst --version"), "tinymist": version("tinymist --version"),
+                "os": platform.platform()}
+    pins_file = root / "internal/sidecar/manifest.json"
+    if pins_file.exists():
+        versions["embedded_sidecars"] = {
+            name: data["version"] for name, data in json.loads(pins_file.read_text())["sidecars"].items()}
+    return versions
+
+
+def resume_context(root):
+    """What a record must still match besides the candidate: the runner's content, the tools, the environment
+    (INKWELL_GATE_RUNNER names the merge-base, not the runner's content)."""
+    runner = {p.name: hashlib.sha256(p.read_bytes()).hexdigest()
+              for p in (pathlib.Path(__file__), SCRIPTS / "perf/archive.py")}
+    environment = {k: v for k, v in os.environ.items() if k.startswith("INKWELL_") and k != "INKWELL_GATE_RUNNER"}
+    return {"runner": runner, "tools": tool_versions(root), "environment": environment}
+
+
+def _canonical(body):
+    return json.dumps(body, sort_keys=True, separators=(",", ":")).encode()
+
+
+def snapshot(root, out):
+    """Evidence files of gates/<lot>/ and their SHA-256 (records, reports and the shared exclusive.jsonl apart)."""
+    files = {}
+    for p in out.rglob("*"):
+        relative = str(p.relative_to(out))
+        if p.is_file() and not p.is_symlink() and not is_report(relative) and relative != "exclusive.jsonl" \
+                and not relative.startswith(RECORDS + "/"):
+            files[str(p.relative_to(root))] = hashlib.sha256(p.read_bytes()).hexdigest()
+    return files
+
+
+def write_record(out, body):
+    """Atomically, after the criterion's command exited: an interrupted criterion leaves no record."""
+    path = out / RECORDS / (body["id"] + ".json")
+    path.parent.mkdir(exist_ok=True)
+    temporary = path.with_suffix(".json.tmp")
+    temporary.write_text(json.dumps({"body": body, "sha256": hashlib.sha256(_canonical(body)).hexdigest()}, indent=2))
+    temporary.replace(path)
+
+
+def read_record(out, lot, cid):
+    """The record's body if it is intact and belongs to this criterion, else None."""
+    try:
+        record = json.loads((out / RECORDS / (cid + ".json")).read_text())
+        body = record["body"]
+        intact = record["sha256"] == hashlib.sha256(_canonical(body)).hexdigest() and set(body) == RECORD_FIELDS
+        return body if intact and body["lot"] == lot and body["id"] == cid else None
+    except (OSError, ValueError, KeyError, TypeError):
+        return None
+
+
+def resume_problem(root, body, criterion, digest, context):
+    """Why a record cannot stand for this criterion now, or None."""
+    if body is None:
+        return "no intact record (missing, interrupted or corrupted)"
+    if criterion.get("exclusive") or body["entry"].get("exclusive_steps"):
+        return "native performance measurement (exclusive): always re-run"
+    if body["criterion"] != criterion:
+        return "criterion (command) changed"
+    if digest is None or body["digest"] != digest:
+        return "candidate digest changed"
+    for key, what in (("runner", "runner changed"), ("tools", "tool versions changed"),
+                      ("environment", "INKWELL_* environment changed")):
+        if body[key] != context[key]:
+            return what
+    for path, sha in body["evidence"].items():
+        file = root / path
+        if file.is_symlink() or not file.is_file() or hashlib.sha256(file.read_bytes()).hexdigest() != sha:
+            return "evidence missing or changed: " + path
+    return None
+
+
+def keep_for_resume(root, out, keep):
+    """Empties gates/<lot>/ but for the reports and the given files (intact records and their evidence)."""
+    out.mkdir(parents=True, exist_ok=True)
+    for p in sorted(out.rglob("*"), reverse=True):
+        relative = str(p.relative_to(out))
+        if p.is_dir() and not p.is_symlink():
+            continue
+        if not is_report(relative) and str(p.relative_to(root)) not in keep:
+            p.unlink()
+
+
+def discard(root, out, cid, body):
+    """Removes a re-run criterion's record and its evidence (only ever inside gates/<lot>/)."""
+    for path in (body or {}).get("evidence", {}):
+        file = root / path
+        if out in file.parents and ".." not in pathlib.Path(path).parts:
+            file.unlink(missing_ok=True)
+    (out / RECORDS / (cid + ".json")).unlink(missing_ok=True)
+
+
+def run(lot, root=ROOT, pins=None, guard=True, resume=False):
     if not NAME.fullmatch(lot):
         raise ValueError("invalid lot name")
     sealed = verify(root, pins)
@@ -133,11 +268,20 @@ def run(lot, root=ROOT, pins=None, guard=True):
     out = root / "gates" / lot
     if out.is_symlink():
         raise ValueError("gates/" + lot + " must not be a symlink")
-    reset_evidence(out)
-    entries = []
     ids = [c["id"] for c in config["criteria"]]
     if len(set(ids)) != len(ids) or any(not NAME.fullmatch(i) for i in ids):
         raise ValueError("invalid or duplicate criterion IDs")
+    context = resume_context(root)
+    if resume:
+        # Only intact records and their evidence survive; everything else is stale (never hashed as evidence).
+        bodies = {c["id"]: read_record(out, lot, c["id"]) for c in config["criteria"] if "command" in c}
+        keep = {str(out.relative_to(root) / RECORDS / (cid + ".json")) for cid, b in bodies.items() if b}
+        keep.update(path for b in bodies.values() if b for path in b["evidence"])
+        keep_for_resume(root, out, keep)
+        reused, rerun = [], {}
+    else:
+        reset_evidence(out)
+    entries = []
     guard_record = None
     if guard:
         log = out / "base-guard.log"
@@ -160,7 +304,20 @@ def run(lot, root=ROOT, pins=None, guard=True):
             continue
         if c.get("status", "pass") not in ("pass", "fail"):
             raise ValueError("invalid criterion status")
+        # Judged when reached: an earlier re-run may have changed this criterion's inputs or evidence.
+        digest = candidate_digest(root, lot)
+        if resume:
+            body = bodies.get(c["id"])
+            problem = resume_problem(root, body, c, digest, context)
+            if problem is None:
+                entries.append(dict(body["entry"], resumed=True))
+                reused.append(c["id"])
+                print(c["id"], entries[-1]["status"], "resumed", flush=True)
+                continue
+            rerun[c["id"]] = problem
+            discard(root, out, c["id"], body)
         log = out / (c["id"] + ".log")
+        before = snapshot(root, out)
         start = time.monotonic()
         with log.open("wb") as stream:
             p = subprocess.run(c["command"], shell=True, cwd=root, stdout=stream, stderr=subprocess.STDOUT,
@@ -176,6 +333,12 @@ def run(lot, root=ROOT, pins=None, guard=True):
         if c.get("exclusive") and not entry.get("exclusive"):
             entry.update(status="fail", problem="performance measurement ran without the exclusive heavy lock")
         entries.append(entry)
+        if digest is not None:
+            after = snapshot(root, out)
+            evidence = {path: sha for path, sha in after.items() if before.get(path) != sha}
+            evidence[str(log.relative_to(root))] = after[str(log.relative_to(root))]
+            write_record(out, dict(lot=lot, id=c["id"], criterion=c, entry=entry, evidence=evidence, digest=digest,
+                                   **context))
         print(c["id"], entry["status"], entry.get("problem", ""), flush=True)
     if verify(root, pins) != sealed:
         raise ValueError("gate modified immutable archive")
@@ -185,24 +348,19 @@ def run(lot, root=ROOT, pins=None, guard=True):
     hashes = {str(p.relative_to(root)): hashlib.sha256(p.read_bytes()).hexdigest()
               for p in sorted(set(files)) if p.is_file()}
     failed = any(e["status"] == "fail" for e in entries) or (guard_record or {}).get("status") == "fail"
-    manifest = dict(lot=lot, criteria=entries, versions={
-        "go": version("go version"), "node": version("node --version"),
-        "typst": version("typst --version"), "tinymist": version("tinymist --version"),
-        "os": platform.platform()}, sha256=hashes,
+    manifest = dict(lot=lot, criteria=entries, versions=context["tools"], sha256=hashes,
         status="fail" if failed else "pass",
         deferrals=[e for e in entries if e["status"] == "deferred"],
         known_failures=config.get("known_failures", []))
     if guard_record:
         manifest["base_guard"] = guard_record
+    if resume:
+        manifest["resume"] = {"reused": reused, "rerun": rerun}
     manifest["runner"] = {"source": os.environ.get("INKWELL_GATE_RUNNER", "direct: " + str(pathlib.Path(__file__))),
                           "sha256": hashlib.sha256(pathlib.Path(__file__).read_bytes()).hexdigest()}
     overrides = root / OVERRIDES
     # Reviewed overrides are part of the evidence, shown in full.
     manifest["guard_overrides"] = json.loads(overrides.read_text())["overrides"] if overrides.exists() else []
-    pins_file = root / "internal/sidecar/manifest.json"
-    if pins_file.exists():
-        manifest["versions"]["embedded_sidecars"] = {
-            name: data["version"] for name, data in json.loads(pins_file.read_text())["sidecars"].items()}
     for pattern in config.get("measurement_reports", []):
         report = root / pattern
         manifest.setdefault("measurements", []).append(
@@ -215,7 +373,14 @@ def run(lot, root=ROOT, pins=None, guard=True):
     return int(failed)
 
 
+def main(argv):
+    if argv == ["--base-guard"]:
+        return base_guard(ROOT, sys.stdout.buffer)["status"] != "pass"
+    lots = [a for a in argv if a != "--resume"]
+    if len(lots) != 1 or len(argv) - len(lots) > 1 or lots[0].startswith("-"):
+        return 2
+    return run(lots[0], resume=len(argv) == 2)
+
+
 if __name__ == "__main__":
-    if sys.argv[1:] == ["--base-guard"]:
-        sys.exit(base_guard(ROOT, sys.stdout.buffer)["status"] != "pass")
-    sys.exit(run(sys.argv[1]) if len(sys.argv) == 2 else 2)
+    sys.exit(main(sys.argv[1:]))

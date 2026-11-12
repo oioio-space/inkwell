@@ -31,6 +31,7 @@ mise run mutate:go -- ./internal/trust   # mutation testing (gremlins), mémoire
 INKWELL_GOFLAGS=-exec=$PWD/scripts/memcap.sh mise run mutate:go -- ./internal/trust  # + plafond par test (INKWELL_AS_LIMIT)
 mise run done -- <bloc>  # définition de « fini », dans l'ordre ; --skip-gate = boucle rapide
 mise run gate -- <lot>   # porte figée gates/<lot>.toml ; mesure native : INKWELL_NATIVE_PERF_RUN=1, machine au repos
+mise run gate -- --resume <lot>  # reprise sur le même candidat : critères finis réutilisés, échec gardé, mesure native relancée
 mise run formal          # TLA+ (tla) + Alloy (alloy), mutants compris ; Java ≥ 17 (outil de dev)
 mise run lint:env        # toute variable lue est déclarée dans .env.reference
 mise run lint:claude-md  # tout ce que cite ce fichier existe (tâches, chemins, agents, skills, hooks)

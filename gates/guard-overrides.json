@@ -904,6 +904,21 @@
       "id": "0e586b2231f53818a75834aa5638c93976a5ed65104720e2314d01a05051d06d",
       "reason": "Block GR (gate --resume): scripts/gate_resume_test.py is the new test module named by the frozen gate gates/GR.toml, committed with the gate before the implementation (red for the right reason); it changes no existing check, threshold or delay.",
       "decision": "docs/plans/2026-11-12-gr-gate-resume.md"
+    },
+    {
+      "id": "fd1e1a7386e05f9f6530689b1ee3aa7a3deda9a43c8d53f2de35fd3094e3fdaf",
+      "reason": "Block GR: mise.toml test:py adds scripts/gate_resume_test.py to its explicit list (criterion test-py-inclusion of gates/GR.toml); nothing removed or relaxed.",
+      "decision": "docs/plans/2026-11-12-gr-gate-resume.md"
+    },
+    {
+      "id": "82bd8151869a07646884407727046a22ec6aa7488ea335698aa9076f90b5858f",
+      "reason": "Block GR: scripts/gate.py gains --resume (per-criterion records, re-use only on the same candidate). Without the flag every criterion runs as before, with the same evidence reset and verdicts; the only addition is the record files gates/<lot>/resume/*.json. Proven by gates/GR.toml (unit, regression: gate-selftest, gate-guard self-test, gate_reset_test).",
+      "decision": "docs/plans/2026-11-12-gr-gate-resume.md"
+    },
+    {
+      "id": "5c8f7dad032201e94abecc3611d5ef52cf9fb6a79875eaef98c5266f6c407b1e",
+      "reason": "Block GR: same change to the gate machinery scripts/gate.py (--resume); no check, threshold or delay weakened, a recorded failure stays blocking and native-performance criteria always re-run.",
+      "decision": "docs/plans/2026-11-12-gr-gate-resume.md"
     }
   ]
 }
