@@ -80,29 +80,49 @@ quoi que ce soit ; une exception exige une ADR.
 **Par étape :** recherche en ligne (« Research-first ») → `superpowers:brainstorming` → plan dans
 `docs/plans/` → chaque bloc suit la définition de « fini » ci-dessous → démontrer le critère de sortie.
 
-**Définition de « fini » d'un bloc (règle unique, 2026-11-08 ; vaut quel que soit le modèle) :**
-la méthode v2 (`docs/plans/2026-11-12-method-v2.md`, issue d'un débat entre deux familles de modèles) en fixe
-l'exécution : travail en cours limité, revue avant gel puis après le smoke, rigueur selon le risque (liste fermée
-pour « complet »), niveaux T0–T3 aux obligations inchangées, `next` → `main` sur le candidat exact, outillage
-sur gain démontré.
-un bloc = un lot, une étape du protocole ou un lot d'outillage. Il suit cet ordre, et
-`mise run done -- <bloc>` (`scripts/block_done.py`) vérifie les étapes 1 à 8 dans le même ordre :
+**Méthode v2 — aller vite sans perte de qualité (2026-11-12, accord de deux familles de modèles) :** source
+unique et métriques : `docs/plans/2026-11-12-method-v2.md` (règles 1-16, « When Codex is absent ») ; résumé
+opératoire :
+- **Travail en cours :** un bloc en implémentation, un candidat en vérification ; un worktree par bloc ; un bloc
+  est commité avant que le suivant commence (deux blocs mêlés ne se vérifient plus séparément).
+- **Rigueur selon le risque**, choisie d'abord : « complet » (modèles avec mutants, acceptation statistique)
+  seulement pour la liste fermée — fil et état entre pairs, confiance et admission, frontière du bac à sable, octets
+  venus d'un pair, trois acteurs concurrents ou plus sur un état durable ; sinon « standard » (tests nommés, porte
+  ≤ 45 min, plan ≤ 2 pages) ou « léger » (outillage, docs). Un plafond dépassé fait redécouper, jamais retirer
+  une preuve indispensable.
+- **Revue d'une autre famille** (Codex) sur la spécification et la porte **avant le gel**, puis une sur le code
+  après le smoke ; deux tours au plus, un constat majeur au troisième appelle une décision de conception, pas une
+  rustine. Codex absent : relecture Opus à l'aveugle avec liste de contrôle pour standard et léger ; un bloc complet
+  attend (Gemini, puis OpenRouter payant ≤ 0,50 $ par point de revue, 1 $ de réserve).
+- **Boucle :** boucle interne en minutes (tests des paquets touchés et de leurs consommateurs, tests nommés du
+  défaut, `mutants.py --check`, le mutant Go concerné), smoke de 20 à 30 min, puis la porte figée **une seule
+  fois** sur le candidat final.
+- **Aucune porte n'en lance une autre :** un `gate -- X` imbriqué est une obligation différée, inscrite dans
+  `gates/deferred.jsonl` et close par une exécution de X à part ; `python3 scripts/gate.py --deferred` (audit
+  hebdomadaire) échoue au-delà de 7 jours, et la release est bloquée tant qu'une obligation reste ouverte.
+- **Acceptation** (règle de l'utilisatrice, 2026-11-12) : les critères propres de la porte, le smoke et les tests
+  des paquets touchés, sur l'arbre exact ; les chaînes héritées tournent ensuite comme preuve.
+- **Qualité des tests avant quantité :** chaque assertion à la couche la moins chère qui garde sa classe de
+  défaut (règles en tests purs et vecteurs, statistiques en simulation à graines multiples, cycle de vie en
+  intégration Go à temps contrôlé, netsim réel seulement pour les hypothèses d'environnement) ; les heures et le
+  nombre de tests sont des coûts, pas des preuves ; un test en temps réel qui échoue sous charge est refait sur un
+  temps contrôlé.
+- **Micro-benchmarks** indicatifs, sauf paquet dans les entrées du bloc et ralentissement reproduit en mesure
+  appariée et entrelacée ; **outillage** seulement sur gain démontré (faux verdict mesuré, ou ≥ 2 h par
+  semaine gagnées), ≤ 20 % des commits de la semaine.
+
+**Définition de « fini » d'un bloc (règle unique, vaut quel que soit le modèle) :** un bloc = un lot, une étape du
+protocole ou un lot d'outillage. Il suit cet ordre, et `mise run done -- <bloc>` (`scripts/block_done.py`) vérifie
+les étapes 1 à 8 dans le même ordre :
 1. **Spécifier d'abord, en exécutable** : vecteurs (`protocol/vectors`), modèles TLA+ (`docs/protocol/tla`)
-   et Alloy (`docs/protocol/alloy`) avec mutants, tests à modèle ; puis la porte figée `gates/<bloc>.toml`,
-   commitée **avant** le code puis gelée, une fois chacune de ses commandes lancée, rouge pour la bonne raison et
-   capable de passer avec les vrais outils (où ils écrivent, ce qu'ils produisent)
+   et Alloy (`docs/protocol/alloy`) avec mutants, tests à modèle, selon le niveau de rigueur ; puis la porte figée
+   `gates/<bloc>.toml`, commitée **avant** le code puis gelée, une fois chacune de ses commandes lancée, rouge pour
+   la bonne raison et capable de passer avec les vrais outils (où ils écrivent, ce qu'ils produisent)
    (méthode : `docs/plans/2026-11-08-spec-executable.md` ; gabarit : skill `new-gate` ; modèles : agent
-   `formal-modeler`). Le niveau de rigueur du bloc (léger, standard, complet) est choisi d'abord
-   (`docs/engineering-principles.md` § 0).
-2. **Implémenter** jusqu'à ce que la porte passe, en TDD (`superpowers:test-driven-development`) ;
-   tout modèle ; un agent délégué ne commite ni ne stashe jamais ; aucune de ses affirmations
-   (« déjà cassé », « instable ») n'est crue sans preuve rejouée, par exemple sur un arbre d'avant
-   le changement. Un bloc est commité avant que le suivant commence, et chaque bloc s'implémente dans son
-   propre worktree (deux blocs mêlés dans un arbre ne se vérifient plus séparément, 2026-11-12). À chaque
-   itération, la boucle rapide (tests des paquets touchés et de leurs consommateurs, tests nommés du défaut,
-   `mutants.py --check` et le mutant Go concerné), puis un smoke de 20 à 30 min avant toute porte complète
-   (`docs/plans/2026-11-08-spec-executable.md`, « Iteration loop »). La revue d'une autre famille (Codex)
-   porte sur la spécification et la porte avant le code, pas seulement après.
+   `formal-modeler` ; niveaux : `docs/engineering-principles.md` § 0).
+2. **Implémenter** jusqu'à ce que la porte passe, en TDD (`superpowers:test-driven-development`), dans le worktree
+   du bloc ; un agent délégué ne commite ni ne stashe jamais, et aucune de ses affirmations (« déjà cassé »,
+   « instable ») n'est crue sans preuve rejouée, par exemple sur un arbre d'avant le changement.
 3. **`/simplify`** sur tout le diff du bloc (réutilisation, simplification, efficacité, altitude),
    dans le respect des invariants, des portes et des exigences ; constats, appliqué et écarté dans
    `gates/<bloc>/SIMPLIFY.md`. Il passe **avant** les vérifications, qui portent ainsi sur le code
@@ -116,9 +136,8 @@ un bloc = un lot, une étape du protocole ou un lot d'outillage. Il suit cet ord
 5. **Mutation** (gremlins) sur les paquets `protocol/*` touchés : efficacité ≥ 95 %, ou survivants
    justifiés comme équivalents dans `SIMPLIFY.md` (« mutation <paquet> »). Un test nomme la règle de
    la spec qu'il prouve ; l'utilité se mesure à la mutation, pas à la couverture.
-6. **Porte complète** (`mise run gate -- <bloc>`, régressions et mesure native comprises ; aucune porte n'en
-   lance une autre : un `gate -- X` imbriqué est consigné « différé » et X tourne seul au besoin), en dernier
-   car la plus longue, seule sur la machine, lancée dès qu'elle est libre ; après un incident,
+6. **Porte complète** (`mise run gate -- <bloc>`, mesure native comprise, portes imbriquées différées), en
+   dernier car la plus longue, seule sur la machine, lancée dès qu'elle est libre ; après un incident,
    `mise run gate -- --resume <bloc>` ne refait que les critères inachevés.
 7. Documents : `PROGRESS.md` (la liste courante unique) et `docs/exigences.md` à jour.
 8. **Seule la session Claude commite**, après relecture du diff ; le push relance `mise run ci`. On pousse
@@ -238,7 +257,7 @@ l'effort le plus bas qui gardent la qualité, choisis explicitement à chaque la
 | Brouillon de message de commit, tri de longs journaux, brouillon de traduction i18n | `scripts/llm.sh` (ordre : Groq → Cloudflare Workers AI → OpenRouter gratuit → OpenRouter payant ZDR ; traduction et rédaction : OpenRouter payant seul — ADR 0013 ; quotas : `mise run quotas`) ; texte mécanique seulement, jamais secret, sécurité, conception ni revue de code ; code de sortie 3 → Haiku | open-weight hébergé |
 | Implémentation bien bornée, enquête sur un bogue, second avis, revue adverse (sans tokens Claude) | Codex : agent `codex:codex-rescue`, `/codex:rescue`, `/codex:review`, `/codex:adversarial-review` | connexion ChatGPT (quota limité) ; Claude relit avant fusion |
 | Implémentation guidée par une porte, sans crédit | `mise x -- bash scripts/opencode-free.sh -m <modèle> < consigne.md` (modèles gratuits OpenRouter ou Zen ; gortex branché, rtk injecté) | gratuit ; jamais de sécurité ; ne commite jamais |
-| Relecture critique d'une spécification de sécurité ou d'une ADR (crédit compté) | `scripts/claude-or.sh -t opus` ou `scripts/claude-api.sh`, et Codex (`/codex:adversarial-review`) dès qu'il est disponible : deux familles de modèles | un seul appel ciblé chacun |
+| Relecture critique d'une spécification de sécurité ou d'une ADR (crédit compté) | Codex (`/codex:adversarial-review`) ; absent : relecture Opus à l'aveugle, ou pour un bloc complet une autre famille via `scripts/claude-or.sh -t pro` (≤ 0,50 $ par point, méthode v2) | un seul appel ciblé chacun |
 | Lancer les vérifications (lint, tests, ci, scans), corrections de format triviales | `quality-runner` | Haiku / low |
 | Docs, `PROGRESS.md`, messages de commit | `scribe` | Haiku / low |
 | Recherche de code ou de fichiers, « où est X » | `explorer` (ou `Explore` intégré) | Haiku / low |

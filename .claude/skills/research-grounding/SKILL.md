@@ -1,6 +1,6 @@
 ---
 name: research-grounding
-description: Use when answering ANY non-trivial question or doing research in this project — ground the answer in current external sources (web state-of-the-art, GitHub prior art, official docs) instead of memory, THEN go beyond the existing to find improvements and out-of-the-box approaches. A UserPromptSubmit hook reinforces this on every prompt.
+description: Use when answering ANY non-trivial question or doing research in this project — ground the answer in current external sources (web state-of-the-art, GitHub prior art, official docs) instead of memory, THEN go beyond the existing to find improvements and out-of-the-box approaches. The research-grounding.sh hook reminds it where plans and ADRs are written.
 ---
 
 # Research Grounding
