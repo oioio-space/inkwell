@@ -20,6 +20,7 @@ import pathlib
 import re
 import subprocess
 import sys
+import tomllib
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 MIN_EFFICACY = 95.0
@@ -80,14 +81,19 @@ def step1_gate_first(block, base):
 
 def preflight(block):
     """Cheap checks a long run would only fail at its end (CI study R9): the gate's base guard (dependencies of
-    frozen gates changed without a justified override) and the docs mention of step 8. Fails in seconds, before
+    frozen gates changed without a justified override) and every netsim mutant of the block still applying, and the docs mention of step 8. Fails in seconds, before
     the hours of steps 3-7."""
     if sh(f"{sys.executable} scripts/gate.py --base-guard").returncode != 0:
         sys.exit("done: preflight: base guard failed (a frozen gate's dependency changed without a justified "
                  "entry in gates/guard-overrides.json); fix it before the long steps")
+    mutants = tomllib.loads((ROOT / "scripts/netsim/mutants.toml").read_text()).get("mutant", [])
+    if any(m.get("block") == block for m in mutants) and \
+            sh(f"{sys.executable} scripts/netsim/mutants.py --check {block}").returncode != 0:
+        sys.exit(f"done: preflight: a netsim mutant of {block} no longer applies (its anchor moved with the code: "
+                 f"`python3 scripts/netsim/mutants.py --check {block}`); re-anchor it before the long steps")
     if block not in (ROOT / "docs/objectif-en-cours.md").read_text():
         sys.exit(f"done: preflight: docs/objectif-en-cours.md does not mention {block} (step 8 would fail)")
-    print("done: preflight (base guard, docs): ok")
+    print("done: preflight (base guard, mutant anchors, docs): ok")
 
 
 def step2_simplify(block, files):

@@ -154,6 +154,7 @@ def dependencies(read, gate_files):
     seen, files = set(), set(CONFIGS)
     pending = ["mise run gate"] + [c.get("command", "") for name in gate_files
                                    for c in tomllib.loads(read(name) or "").get("criteria", [])]
+    direct = set(pending)
     while pending:
         command = pending.pop()
         for task in TASK_REF.findall(command):
@@ -164,7 +165,9 @@ def dependencies(read, gate_files):
             pending += [run] if isinstance(run, str) else list(run)
             pending += ["mise run " + d for d in tasks[task].get("depends", [])]
         for script in SCRIPT_REF.findall(command):
-            if script not in files:
+            # A path only named in a script's text (a test fixture, a message) that is no file cannot
+            # change what a gate runs; a criterion naming a missing script is caught by the self-test.
+            if script not in files and (command in direct or (ROOT / script).is_file()):
                 files.add(script)
                 # Comments name tasks and scripts that the script does not run.
                 pending.append("\n".join(line for line in (read(script) or "").splitlines()
@@ -371,6 +374,9 @@ def self_test():
             "scripts/arch-exec-check.sh", "scripts/heavy.sh", "scripts/rtkx.sh", "scripts/gate.sh",
             "scripts/sidecar-no-tools.sh", "scripts/perf/baseline.py", "scripts/perf/automerge.cjs"} <= deps.files, deps.files
     assert all((ROOT / f).is_file() for f in deps.files), [f for f in deps.files if not (ROOT / f).is_file()]
+    # A fixture path inside a dependency's text is not a dependency (scripts/netsim/affected_test.py names
+    # scripts/perf/p.py as test data, 2026-11-11).
+    assert "scripts/perf/p.py" not in deps.files
     assert inspect(".golangci.yml", "a", "b", deps) == ["gate dependency changed"]
     assert inspect("scripts/lint.sh", "a", "b", deps) == ["gate dependency changed"]
     lint = '[tasks.lint]\nrun = "./scripts/lint.sh"\n'

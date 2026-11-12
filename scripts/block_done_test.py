@@ -59,6 +59,22 @@ class PreflightTest(unittest.TestCase):
         finally:
             block_done.sh = orig
 
+    def test_a_mutant_whose_anchor_moved_stops_done_before_the_long_steps(self):
+        import types
+        calls = []
+        def fake_sh(cmd, **kw):
+            calls.append(cmd)
+            return types.SimpleNamespace(returncode=1 if "mutants.py --check" in cmd else 0)
+        orig = block_done.sh
+        block_done.sh = fake_sh
+        try:
+            with self.assertRaises(SystemExit) as e:
+                block_done.preflight("C5S")  # a block with netsim mutants
+            self.assertIn("no longer applies", str(e.exception))
+            self.assertTrue(any("mutants.py --check C5S" in c for c in calls))
+        finally:
+            block_done.sh = orig
+
     def test_preflight_runs_right_after_step_2(self):
         src = (block_done.ROOT / "scripts/block_done.py").read_text()
         main = src[src.index("def main():"):]
