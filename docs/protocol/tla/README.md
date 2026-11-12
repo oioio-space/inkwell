@@ -540,3 +540,129 @@ violate them):
 java -cp tla2tools.jar tlc2.TLC -workers 2 -config OISingleInstance.cfg OISingleInstance
 java -cp tla2tools.jar tlc2.TLC -workers 2 -config mutants/OISingleInstanceNoLock.cfg mutants/OISingleInstanceMutants
 ```
+
+## SandboxScope (W49, block SB1b, ADR 0042 amendment A1-A4, A8 and A9: the sandbox's memory scope)
+
+`SandboxScope.tla` models one app session running the sandboxed launches of `Runs` (compiles, tinymist starts, possibly
+concurrent). Like OISingleInstance it is a local mechanism, not a peer protocol, kept here because `scripts/tla-check.sh`,
+`mise run tla`, `formal` and `done` check this directory. The rows are those of
+`docs/plans/2026-11-11-sandbox-crash-reports.md`, section "Gate SB1b" (S, R, M, F, H). The app sets up a delegated
+session scope and its holder lazily, under a mutex (S1-S9, one atomic step whose outcomes are the fallback rows F1-F7,
+F10, F11; at most `MaxSessions` setups); per run it checks the holder's pidfd (H1), then in one step makes `run-<n>`,
+writes and reads back its limits and starts the outer launcher with `CLONE_INTO_CGROUP` (R1-R5: the race the design
+must survive, a holder dying between its check and `clone3`, H2, stays in the model), whose first statement checks its
+own cgroup (R6); right after `Wait` it reads the counters (R7), then `cgroup.kill` and `rmdir` (R8). Kernel facts are kept apart from what the app believes:
+`sc` (the scope as it really is: slice, inherited bound, memory delegated and enabled), `rcg` (the run cgroup absent,
+present without its limits, or with them in force), `loc` (where the workload really is), `truth` (what really ended
+it). A placement error or a failed write is the fallback (`mode` = `rlimit`, the reported `Output.Containment`).
+
+The memory cause (A4, A8) is computed at R7 from an abstract timeline: how the first local `oom_kill` rise was seen (in
+the same read as an `oom` rise, within W = 1 s of a non-fatal `oom` event, later, or with no `oom` rise), whether a
+non-fatal event came first, whether the `/proc/vmstat` delta exceeds the run's own (a kill elsewhere, another run's
+included: concurrent runs make the attribution conservative, never wrong), whether an ancestor's local `oom` rose,
+and whether the watch overflowed or a read failed. These flags only grow during the watch and are read once, so each
+is chosen at the event that sets it (a kill) or at R7 (overflow, failed read, a kill elsewhere): the same outcomes as
+separate events, with far fewer interleavings. Likewise a run that ended (`done`, or `lost` when the app died) keeps
+only the fields later properties read (`Ended`): every invariant on its cause, counters and order was checked in the
+state before, where those values are final. Measured: with separate events and full end records, `SandboxScopeFaults`
+passed 2.3 million distinct states at depth 20 with 750,000 left on its queue; with both, it ends at 845,384 (before A9; 457,948 after).
+
+`Faults` = TRUE adds every environment fault: any setup step fails (F1-F7, F11, including a job `done` with the holder
+not moved, F4), a limit write refused or silently ignored (F8, F9), the app outside the user manager (F10), a launch
+path that places the bootstrap outside its run cgroup (the code defect R6 exists for), the holder killed at any point
+(H1-H3; systemd then collects the empty scope and its run cgroups), the app SIGKILLed (H4), global and ancestor OOMs
+with or without an earlier non-fatal local `oom` (M3, M6, M8), OOM kills elsewhere (M7), watch overflows and unreadable
+counters (M9), fallback runs without a PID namespace (every cgroup run has one, A9). The document's own behaviour (reaching the
+resident limit, mapping past `RLIMIT_AS`, forking, exiting, running until the timeout) is never a fault.
+
+Fairness: four weak terms, one per process, none on the target, the kernel's OOM decisions or faults. Every fair
+action can occur only finitely often (each run passes once, setups are bounded, each holder reaps once, each scope is
+collected once), so weak fairness on a group's disjunction forces each of its actions that stays enabled. Grouped WF
+terms keep TLC's liveness problem small (the OISingleInstance section explains the blow-up with one term per action).
+
+| Term | Assumes |
+|---|---|
+| F1 `WF_vars(Setup \/ \E r : AppStep(r))` | the app keeps running while alive: its steps for every run, the timeout included, and the session setup |
+| F2 `WF_vars(\E r : BootStep(r))` | the trusted bootstrap (outer launcher, namespace init, second launcher) of a live run keeps running |
+| F3 `WF_vars(\E v : HolderReap(v))` | a holder that read EOF and is not killed finishes its cleanup (bounded at 5 s in the design) |
+| F4 `WF_vars(\E v : Collect(v))` | systemd collects a scope with no process left (`CollectMode` inactive-or-failed) |
+
+| Property | Rule | Meaning |
+|---|---|---|
+| `ConfinedFromBirth` (S1) | A1, A3, R3, R6, H2 | every instruction after the membership check (bootstrap, untrusted target, descendants) runs in its run cgroup with its limits in force, or the run reports `rlimit` |
+| `AddressBudget` (S2) | A2 | no process maps past `MemoryLimit`: `RLIMIT_AS` is never raised |
+| `SessionBounded` (S3) | A3, A8 (aggregate bound) | a workload in a run cgroup sits in a scope inside the app's own slice with the app's leaf bound in force |
+| `CountersBeforeCleanup` (S4) | A4, R7, R8 | the app never kills or removes a run cgroup before reading its counters |
+| `UnreadNeverZero` (S5) | A4, M9 | a failed read or a watch overflow is `unknown`, never zero |
+| `LimitIsLocal` (S6) | A4, A8, M1, M3, M6-M8 | `local-limit` only when the run's own limit killed it, up to residual RS4 (a global OOM that kills only this run within W of a non-fatal local `oom`, indistinguishable by design) |
+| `FailureFallsBack` (S7) | A3, F1-F11, H2 | a setup or placement failure is the fallback, never an error |
+| `NoOrphan` (L1) | A8, A9, H4-H7 | after the app dies, no process remains in a run cgroup, whatever happened to the holder (the init's Pdeathsig and the PID namespace of every cgroup run) |
+| `RunsEnd` (L2) | A3 | every run ends (in its cgroup, in the fallback, or refused by R6), or the app died |
+| `NoStaleScope` (L3) | A8, A9, H5, H8 | after the app dies, every session scope and every run cgroup is eventually gone (the holder's cleanup, then systemd's collection) |
+
+| Configuration | Result |
+|---|---|
+| `SandboxScope.cfg`: 2 runs, at most 2 sessions, no fault | no error, liveness included: 1,323 states generated, 554 distinct, depth 14, 5 temporal branches over 2,770 behaviour-graph nodes; 1 s (2 workers, 2 GB heap, 2026-11-12, after A9) |
+| `SandboxScopeFaults.cfg`: as above, every fault | no error, liveness included: 2,452,912 states generated, 457,948 distinct, depth 21, 5 temporal branches over 2,289,740 behaviour-graph nodes; 4 min 13 s (CPUs 12-19, nice 19, machine loaded) |
+
+The 25 SandboxScope runs of `scripts/tla-check.sh` take about 5 min of TLC time on that machine, 253 s of it
+`SandboxScopeFaults` (before A9, with a PID namespace chosen per cgroup run, 845,384 distinct states and 6 min 10 s);
+every mutant is caught by its listed property (TLC's own message names it) and every witness is violated. The four
+liveness mutants are found by TLC's periodic check in 3 s each: OrphanAfterAppKill ends with the app SIGKILLed and the
+holder alive and idle, so its scope is never collected; NoPdeathsig and NoPidNamespace end with a holder killed, then the
+app SIGKILLed, and the workload (or a descendant) stuttering in `run-<n>`; WaitForScope ends with both setups failed and
+the runs stuttering in `need`. HolderDeathEscapes is the H2 race itself: the holder dies
+after its pidfd check, systemd collects the empty scope, and the placement error's retry runs in the app's cgroup.
+
+Found by the model and decided in ADR 0042 A9:
+- Closed: a holder killed while one of its session's runs keeps the scope alive (H3), then the app SIGKILLed, left that
+  run's descendant (no PID namespace) alive in the stale `run-<n>`, since only the holder reaped. A9 makes the kill the
+  kernel's: the namespace init's `PR_SET_PDEATHSIG(SIGKILL)` and a PID namespace on every cgroup launch path (H6, H7);
+  `NoOrphan` now holds with no exception, and the mutants `NoPdeathsig` and `NoPidNamespace` bring the double fault back.
+  The sweep of stale `run-<n>` at the next app start (H9) is not modelled: the model has one app session.
+- Residual RS6, shown reachable by `SandboxScopeResidualCollected` (it must violate, like `SP1TypingResidual`): the same
+  holder death lets systemd collect the scope once its last process is gone, run cgroups included (A8's own H2
+  assumption), so a run whose target already exited can lose its cgroup before R7; its read fails and its cause is
+  `unknown` (never zero). `CountersBeforeCleanup` is about the app's own order, which holds.
+
+Not covered (named tests instead, plan section "Gate SB1b"): the D-Bus calls and the job matching (`TestCgroupSessionScopeDelegated`),
+the exact read-back values (`TestCgroupRunLimitsVerifiedBeforeStart`), the backoff durations, the descriptors (rows D),
+the accounting of the bootstrap's own memory, the 5 s bounds as durations, the process-group kill of the fallback after
+the app dies (the fallback makes no cleanup claim when the app is SIGKILLed), the journal evidence (rows J).
+
+Mutants (`mutants/SandboxScopeMutants.tla`, each config overrides one rule of the sound model, anchor = the override
+line in the config) and witnesses (anti-vacuity: the sound model must violate them). Each config uses the constants of
+`SandboxScope.cfg` when no fault is needed to show it (NotBornInside, CleanupBeforeCounters, SessionUnbounded,
+RaiseAddressLimit, WitnessLocalLimit, WitnessAddressLimit), else those of `SandboxScopeFaults.cfg`; its first comment
+line names which.
+
+| Mutant | Anchor (config line) | Broken rule | Caught by |
+|---|---|---|---|
+| `SandboxScopeNotBornInside` | `BornInside <- NotBorn` | PIDs of a running launcher handed to systemd: its bootstrap works in the app's cgroup before the move (ADR point 1; SB1b-10) | `ConfinedFromBirth` |
+| `SandboxScopeExecBeforeCheck` | `CheckFirst <- NoFirstCheck` | the bootstrap works before checking its own cgroup: a misplaced launch runs outside (R6; SB1b-11, SB1b-12) | `ConfinedFromBirth` |
+| `SandboxScopeCleanupBeforeCounters` | `CleanFirst <- EarlyCleanup` | `cgroup.kill` and `rmdir` before the counters are read (R8 before R7; SB1b-17) | `CountersBeforeCleanup` |
+| `SandboxScopeUnreadAsZero` | `CauseOf <- UnreadZero` | an unreadable counter or a watch overflow taken as zero (M9; SB1b-18) | `UnreadNeverZero` |
+| `SandboxScopeVictimAsLimit` | `CauseOf <- KillIsLimit` | any local `oom_kill` is the limit, local `oom` not checked (M3; SB1b-19) | `LimitIsLocal` |
+| `SandboxScopeMixedHistoryAsLimit` | `CauseOf <- CountersOnly` | the cause from counters alone (`oom >= 1`, `oom_kill >= 1`), the window W ignored (M6, A8; SB1b-25) | `LimitIsLocal` |
+| `SandboxScopeContinueAfterPartialSetup` | `RunOnFail <- ContinueOnFail` | a refused or silently ignored limit write (F8, F9) not acted on: the run starts in a cgroup without its limits (SB1b-13 to SB1b-16) | `ConfinedFromBirth` |
+| `SandboxScopeSessionUnbounded` | `ScopeSlice <- OtherSlice` | the session scope created outside the app's slice: S5 compares with the requested slice and passes, the slice's limit no longer bounds app plus sandbox (A8; SB1b-28) | `SessionBounded` |
+| `SandboxScopeJobDoneIsConfined` | `Verified <- JobDone` | the job result `done` taken as confinement, S5-S9 not read back: a scope without its inherited bound (F7) is used (A3; SB1b-22, SB1b-23) | `SessionBounded` |
+| `SandboxScopeRaiseAddressLimit` | `AddressLimit <- Raised` | `RLIMIT_AS` raised above `MemoryLimit` when a cgroup is active (ADR point 2, A2; SB1b-20) | `AddressBudget` |
+| `SandboxScopeHolderDeathEscapes` | `PlacementRetry <- KeepContainment` | after the holder dies between its pidfd check and `clone3` and the scope is collected (ENOENT, ENODEV), the retry runs in the app's cgroup but keeps Containment `cgroup` (H2) | `ConfinedFromBirth` |
+| `SandboxScopeOrphanAfterAppKill` | `ReapOnEOF <- NoReap` | the holder ignores EOF: after the app is SIGKILLed its scope and run cgroups stay (H5, H8; SB1b-29); the processes themselves die by A9 | `NoStaleScope` |
+| `SandboxScopeNoPdeathsig` | `InitPdeathsig <- NoPdeathsig` | the namespace init does not die with the app: with its holder killed, the workload lives on in `run-<n>` (A9, H6) | `NoOrphan` |
+| `SandboxScopeNoPidNamespace` | `CgroupPidNs <- NoCgroupPidNs` | a cgroup launch path without PID namespace: with its holder killed, a descendant outlives the app in `run-<n>` (A9, H7) | `NoOrphan` |
+| `SandboxScopeErrorOnFallback` | `PlacementRetry <- ErrorRetry` | a placement error returns an error instead of the fallback (F10, H2; SB1b-21, SB1b-30) | `FailureFallsBack` |
+| `SandboxScopeWaitForScope` | `OnSetupFailed <- WaitScope` | after a failed setup, runs wait for a session instead of using the fallback (A3) | `RunsEnd` |
+| `SandboxScopeWitnessLocalLimit` | invariant `NoLocalLimit` | witness: a run ends attributed `local-limit` (M1), with no fault | (must violate) |
+| `SandboxScopeWitnessAddressLimit` | invariant `NoAddressDeath` | witness: a run dies at the address budget (M2), with no fault | (must violate) |
+| `SandboxScopeWitnessFallback` | invariant `NoFallback` | witness: a run ends in the fallback, Containment `rlimit` (F rows) | (must violate) |
+| `SandboxScopeWitnessVictim` | invariant `NoVictim` | witness: a run ends attributed `victim` (M3, M7, M8) | (must violate) |
+| `SandboxScopeWitnessMixedHistory` | invariant `NoMixedHistory` | witness: a non-fatal local `oom`, then a kill by someone else, read as `victim` (M6) | (must violate) |
+| `SandboxScopeWitnessHolderDeath` | invariant `NoHolderDeath` | witness: a run ends confined in its cgroup although its holder was killed meanwhile (H3) | (must violate) |
+| `SandboxScopeResidualCollected` | invariant `NoCollectedBeforeRead` | residual: a run waits for R7 while its cgroup is gone with its collected scope (its cause is `unknown`) | (must violate) |
+
+```
+java -cp tla2tools.jar tlc2.TLC -workers 2 -config SandboxScopeFaults.cfg SandboxScope
+java -cp tla2tools.jar tlc2.TLC -workers 2 -config mutants/SandboxScopeNotBornInside.cfg mutants/SandboxScopeMutants
+```

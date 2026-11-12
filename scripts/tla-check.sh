@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # P-TLA (ADR 0034 step 3, docs/protocol/tla/README.md): fetch the pinned TLA+ tools
 # (tla2tools.jar SHA-256 checked, never committed) and model-check the models
-# (RepoGen, ConnCredit, SyncIndicator, WriteBudget, SendPath, LinkProbe, OISingleInstance).
+# (RepoGen, ConnCredit, SyncIndicator, WriteBudget, SendPath, LinkProbe, OISingleInstance, SandboxScope).
 #
 # Sound models must finish with no error; every mutant listed in the README must be
 # detected (a violation). The task fails if a sound model violates a property OR if a
@@ -121,6 +121,10 @@ run LinkProbeAccept LinkProbeAccept.cfg LinkProbe sound
 run OISingleInstance OISingleInstance.cfg OISingleInstance sound
 run OISingleInstanceHang OISingleInstanceHang.cfg OISingleInstance sound
 
+# SandboxScope (README "SandboxScope", block SB1b, ADR 0042 A1-A4 and A8): the sandbox's memory scope, no fault and every fault.
+run SandboxScope SandboxScope.cfg SandboxScope sound
+run SandboxScopeFaults SandboxScopeFaults.cfg SandboxScope sound
+
 # Mutants (README "Contre-épreuve" and the ConnCredit table): each must be detected.
 run RepoGenLossNoBump mutants/RepoGenLossNoBump.cfg mutants/RepoGenLossNoBump mutant
 run RepoGenDeliverNoCheck mutants/RepoGenDeliverNoCheck.cfg mutants/RepoGenDeliverNoCheck mutant
@@ -157,6 +161,15 @@ done
 for m in NoLock EarlyIdentity AckNoQueue FireAndForget LockReleasedEarly CrashKeepsLock GiveUpOnClosing SecondUnlinks \
          NoRetryLock NoDrain WitnessHandoff WitnessGiveUp WitnessTakeover WitnessHandover; do
   run "OISingleInstance$m" "mutants/OISingleInstance$m.cfg" mutants/OISingleInstanceMutants mutant
+done
+# SandboxScope mutants and witnesses (README "SandboxScope"): definition overrides from SandboxScopeMutants;
+# a witness is an invariant the sound model must violate (anti-vacuity); the Residual witness must
+# violate too, so that the README never claims a guarantee the design does not give.
+for m in NotBornInside ExecBeforeCheck CleanupBeforeCounters UnreadAsZero VictimAsLimit MixedHistoryAsLimit \
+         ContinueAfterPartialSetup SessionUnbounded JobDoneIsConfined RaiseAddressLimit HolderDeathEscapes \
+         OrphanAfterAppKill ErrorOnFallback WaitForScope WitnessLocalLimit WitnessAddressLimit WitnessFallback \
+         WitnessVictim WitnessMixedHistory WitnessHolderDeath ResidualCollected NoPdeathsig NoPidNamespace; do
+  run "SandboxScope$m" "mutants/SandboxScope$m.cfg" mutants/SandboxScopeMutants mutant
 done
 
 exit "$fail"

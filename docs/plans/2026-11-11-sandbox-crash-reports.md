@@ -585,3 +585,19 @@ holder ignores EOF (H4); SB1b-30 ENOENT/ENODEV at placement returns an error ins
 cgroup fd is not closed after `Start` (D1); SB1b-32 the holder pipe's write end is passed to a launch (D2). SB1b-22 now
 reads "leaf bound not copied" (A2). TLA+ mutants added: `MixedHistoryAsLimit`, `HolderDeathEscapes`,
 `OrphanAfterAppKill`; witnesses `WitnessMixedHistory`, `WitnessHolderDeath`.
+
+### Model findings (ADR 0042 A9, 2026-11-12): additions, which win over the tables above
+
+The model `SandboxScope` (README section `SandboxScope`) found a double fault the H rows did not cover: a holder killed
+(H3) and then the app SIGKILLed (H4) left a run's descendant without PID namespace alive in a stale `run-<n>`.
+
+| Row | Rule | Proof |
+|---|---|---|
+| H6 | the sandbox's namespace init sets `PR_SET_PDEATHSIG(SIGKILL)` tied to the launching app thread before exec, then re-checks `getppid()` and exits if its parent already changed | model mutant `NoPdeathsig` (caught by `NoOrphan`); a test to name in the implementation |
+| H7 | every cgroup launch path runs the target in its own PID namespace; a path that cannot uses the fallback (`rlimit`) | model mutant `NoPidNamespace` (caught by `NoOrphan`) |
+| H8 | after the app dies, the holder removes the run cgroups and systemd collects the empty scope | model property `NoStaleScope`, mutant `OrphanAfterAppKill` |
+| H9 | at the next app start, stale `run-<n>` of sessions whose holder is gone are swept (`cgroup.kill`, `populated 0`, `rmdir`) before the new session is made | not modelled (one app session in the model); a test to name in the implementation |
+
+Residual RS6 (documented, not closed): a scope collected by systemd after its holder died may remove a finished run's
+cgroup before R7; its cause is then `unknown`, never zero (model witness `ResidualCollected`). Row R7's "never before
+R7" is about the app's own cleanup.

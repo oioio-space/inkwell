@@ -879,6 +879,16 @@
       "id": "b9ec12148cbf763dcd415ecc005959b097cce20623c9dfb24a4fa7b2482ca4dd",
       "reason": "mise.toml: gate dependency changed: mise task test:py. Block RG freeze: test:py also excludes the four new RG skeleton modules (rgmodel_test, regression_test, regression_layout_test, regression_falsify_test), which fail with \"not implemented\" until RG step 2: gate-only until RG's implementation; regression_test, regression_layout_test and regression_falsify_test return to test:py in the implementation commit (checked by gates/RG.toml criterion test-py-inclusion); rgmodel_test stays gate-only like pbmodel_test. Every existing test keeps running; nothing previously run is excluded.",
       "decision": "docs/plans/2026-11-12-rg-layout-robust-guard.md"
+    },
+    {
+      "id": "1548ac6a1d752270edb8f32b81ca001867b5c5e2949515d92d854b25f4e11eb0",
+      "reason": "Block SB1b (ADR 0042 A1-A4, A8; gates/SB1b.toml criterion tla): scripts/tla-check.sh adds the SandboxScope model (two sound configs, SandboxScope and SandboxScopeFaults, exhaustive with liveness) and its 23 mutant, witness and residual-witness configs (NoPdeathsig and NoPidNamespace added by ADR 0042 A9), each of which must be detected; the header list of models names it. No existing model, config, mutant, bound or check is removed or weakened.",
+      "decision": "docs/plans/2026-11-11-sandbox-crash-reports.md"
+    },
+    {
+      "id": "40920710060104df56fcf29ffc4476144846991675dbe797ec53e06333fb08b9",
+      "reason": "docs/protocol/tla/README.md prose: the flagged hunk is block C5S's LinkProbe sentence already overridden as 70927f30 (timeouts, closing bytes, rate-bound clock margin, level arithmetic), re-keyed only because block SB1b appends the SandboxScope section (updated for ADR 0042 A9) (gates/SB1b.toml criterion tla requires it); both are documentation of the models, no model bound or check removed (mise run tla runs every config and mutant).",
+      "decision": "docs/plans/2026-11-11-sandbox-crash-reports.md"
     }
   ]
 }

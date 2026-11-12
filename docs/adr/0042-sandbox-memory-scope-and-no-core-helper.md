@@ -230,7 +230,9 @@ The run cgroups live in **one delegated transient scope per app session**, made 
   a mismatch exits with a dedicated status and the launch is **refused** (an error, not a fallback: the code is wrong).
   R7 after `Wait`, read `memory.events.local` and `memory.events` (A4). R8 only then write `1` to `cgroup.kill`
   (Linux 5.14; "handles concurrent forks and is protected against migrations"), wait for `populated 0` in
-  `cgroup.events` (bounded), and `rmdir`. We own the run cgroup, so nothing removes it before R7.
+  `cgroup.events` (bounded), and `rmdir`. We own the run cgroup, so our own cleanup never removes it before R7; but a
+  scope collected by systemd after its holder died may remove a finished run's cgroup before R7; its cause is then
+  `unknown`, never zero (A9, residual RS6).
 - **Bootstrap accounting.** Charged to the run cgroup: everything from the first instruction of the outer launcher,
   including its Go runtime (a few MiB, measured in the tests and kept inside the budget), the namespace init, the target,
   its descendants, and the pages of the private output tmpfs they write (shmem is charged to the allocating cgroup).
@@ -392,6 +394,34 @@ limits, target and descendant membership, refused bootstrap, inherited bound, re
   `--self-test` replays a delayed collector, unattributed lines, a refused journal and skipped subtests.
 - **Skipped subtests (gate).** Every criterion that names tests fails on any `--- SKIP` or `--- FAIL` line at any depth
   and lists the mandatory subtests that must each print `--- PASS`.
+
+### A9. Findings of the model `SandboxScope` (2026-11-12; wins over A1 to A8 where they differ)
+
+The TLA+ model of the gate's `tla` criterion (`docs/protocol/tla/SandboxScope.tla`, README section `SandboxScope`)
+found two behaviours the amendment did not state.
+
+- **Stranded workload after a double fault (closed).** A holder killed while one of its session's runs keeps the scope
+  alive (H3) leaves that run in a verified cgroup; if the app is then SIGKILLed, no holder reaps it, and a descendant
+  of a target launched without a PID namespace outlives the app in the stale `run-<n>`. Decision: the guarantee is made
+  unconditional, by the kernel rather than by the holder.
+  1. The sandbox's namespace init sets `PR_SET_PDEATHSIG(SIGKILL)` tied to the launching app thread, before any exec,
+     then re-checks `getppid()` against the expected parent and exits if it already changed (the race where the parent
+     dies before the `prctl`).
+  2. Every cgroup launch path runs the target in its own PID namespace, so the init's death kills every descendant
+     (`pid_namespaces(7)`: when the init of a PID namespace terminates, the kernel kills all processes in it with
+     SIGKILL). A launch path that cannot make a PID namespace uses the fallback (`rlimit`), never a cgroup.
+  3. The holder's EOF cleanup (A8) stays, now as the remover of the run cgroups and the scope rather than the only
+     killer; systemd collects the empty scope (`CollectMode`).
+  4. Belt and braces: at the next app start, before creating its own session, the app sweeps stale `run-<n>` cgroups of
+     sessions whose holder is gone (`cgroup.kill`, wait for `populated 0`, `rmdir`).
+  The model's `NoOrphan` holds with no exception; mutants `NoPdeathsig` and `NoPidNamespace` must violate it, and
+  `OrphanAfterAppKill` (holder ignores EOF) violates the new `NoStaleScope` (the scope and its run cgroups are
+  eventually gone after the app dies). Item 4 is not modelled (the model has one app session).
+- **Counters lost to a collected scope (residual RS6, documented).** The same holder death lets systemd collect the scope
+  once its last process is gone, run cgroups included, so a run whose target already exited can lose its cgroup before
+  R7. Its read fails and its cause is `unknown`, never zero, so no wrong `local-limit` and no silent zero; the only
+  consequence is the generic message instead of "memory". A1's text is corrected accordingly; the model shows the state
+  reachable (witness `ResidualCollected`).
 
 ### Sources of the amendment (fetched 2026-11-12)
 
