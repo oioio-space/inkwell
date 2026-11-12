@@ -118,3 +118,16 @@ presque pas formalisé. Deux listes, chacune avec son lien modèle ↔ code (ins
   `test -s gates/<bloc>/SIMPLIFY.md` (rapport `/simplify` versionné : constats, appliqué, écarté).
 - Seule la session Claude commite ; `scripts/opencode-free.sh` injecte « ne jamais commiter ni
   stasher » dans chaque consigne déléguée.
+
+## Iteration loop and gate shape (2026-11-12)
+
+- **Inner loop, every iteration (minutes):** the tests of the changed packages and their direct consumers, the
+  defect's named tests, `scripts/netsim/mutants.py --check <block>` and the relevant Go mutant.
+- **Smoke before any full gate (20–30 min):** the block's slowest acceptance at minimum size (e.g. netsim
+  scenario 5 strict, seeds 1 2 3, one repeat each). The full gate runs only on the final candidate, alone on the
+  machine (night queue).
+- **New gates:** criteria ordered fail-fast (structure and named tests, Go mutants → model → integration → long
+  repeats and native perf); blocks split on real boundaries (spec/model, pure module, product wiring, UI,
+  network acceptance); `regression` names only the maximal gates of its closure (a gate already chained by
+  another is not named again). Frozen gates are never rewritten for this.
+

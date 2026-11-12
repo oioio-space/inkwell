@@ -3,7 +3,7 @@
 État et feuille de route : `PROGRESS.md`. L'outillage est géré par **mise** : tout se lance par
 `mise run …`. Garde-fous automatiques :
 - hooks git (`.githooks/pre-commit`) : nettoyage → secrets (gitleaks) → vulnérabilités (gosec,
-  govulncheck) → style Go → **attestation `/simplify`** (marqueur `$GIT_DIR/claude-simplify-ok`, lié au
+  govulncheck) → Biome des fichiers frontend indexés (`fe:check:staged`) → style Go → **attestation `/simplify`** (marqueur `$GIT_DIR/claude-simplify-ok`, lié au
   diff indexé exact ; voir « Définition de fini », étape 3) ; `--no-verify` en urgence seulement ;
 - hooks Claude (`.claude/settings.json`) : `pre-commit-simplify.sh` (bloque le commit sans revue
   attestée), `heavy-guard.sh` (refuse un test non plafonné, voir « Mémoire »), `long-task-monitor.sh` (rappelle
@@ -95,7 +95,12 @@ un bloc = un lot, une étape du protocole ou un lot d'outillage. Il suit cet ord
 2. **Implémenter** jusqu'à ce que la porte passe, en TDD (`superpowers:test-driven-development`) ;
    tout modèle ; un agent délégué ne commite ni ne stashe jamais ; aucune de ses affirmations
    (« déjà cassé », « instable ») n'est crue sans preuve rejouée, par exemple sur un arbre d'avant
-   le changement.
+   le changement. Un bloc est commité avant que le suivant commence, et chaque bloc s'implémente dans son
+   propre worktree (deux blocs mêlés dans un arbre ne se vérifient plus séparément, 2026-11-12). À chaque
+   itération, la boucle rapide (tests des paquets touchés et de leurs consommateurs, tests nommés du défaut,
+   `mutants.py --check` et le mutant Go concerné), puis un smoke de 20 à 30 min avant toute porte complète
+   (`docs/plans/2026-11-08-spec-executable.md`, « Iteration loop »). La revue d'une autre famille (Codex)
+   porte sur la spécification et la porte avant le code, pas seulement après.
 3. **`/simplify`** sur tout le diff du bloc (réutilisation, simplification, efficacité, altitude),
    dans le respect des invariants, des portes et des exigences ; constats, appliqué et écarté dans
    `gates/<bloc>/SIMPLIFY.md`. Il passe **avant** les vérifications, qui portent ainsi sur le code
@@ -110,9 +115,13 @@ un bloc = un lot, une étape du protocole ou un lot d'outillage. Il suit cet ord
    justifiés comme équivalents dans `SIMPLIFY.md` (« mutation <paquet> »). Un test nomme la règle de
    la spec qu'il prouve ; l'utilité se mesure à la mutation, pas à la couverture.
 6. **Porte complète** (`mise run gate -- <bloc>`, régressions et mesure native comprises), en dernier
-   car la plus longue.
+   car la plus longue, seule sur la machine, lancée dès qu'elle est libre ; après un incident,
+   `mise run gate -- --resume <bloc>` ne refait que les critères inachevés.
 7. Documents : `docs/objectif-en-cours.md`, `PROGRESS.md`, `docs/exigences.md` à jour.
-8. **Seule la session Claude commite**, après relecture du diff ; le push relance `mise run ci`.
+8. **Seule la session Claude commite**, après relecture du diff ; le push relance `mise run ci`. On pousse
+   après chaque bloc commité (hors mesure en cours) : la CI part d'une copie propre et attrape ce qu'un
+   arbre de travail chargé de blocs non commités masque (un test dépendant de fichiers non commités est
+   resté rouge sur `main` le 2026-11-12).
 
 **Registre des exigences :** chaque demande de l'utilisatrice est dans `docs/exigences.md` (date, où,
 état) — l'y ajouter dès qu'elle arrive, le mettre à jour à chaque fusion. Elle reçoit aussitôt **sa place
@@ -130,6 +139,8 @@ l'interface »).
   `/claude-md-management:claude-md-improver`.
 
 ## Règles de travail
+
+**Autonomie (règle, 2026-11-12) :** avancer sans s'arrêter, en préférant toujours le choix d'ingénierie pérenne à la vitesse (ce qui évite de perdre du temps ou de créer des difficultés ensuite), en faisant soi-même les choix les plus pertinents dans les orientations déjà prises par le projet (règle d'or, définition de « fini », invariants) ; trancher soi-même tous les choix, produit compris, et consigner chacun dans `docs/autonomous-decisions.md` (date, choix, raison, alternatives) pour le lui présenter quand elle demande où on en est ; elle réoriente à ce moment-là ; enchaîner aussitôt sur le bloc suivant.
 
 **Research-first :** fonder toute réponse technique non triviale sur des sources externes actuelles
 (WebSearch/WebFetch pour l'état de l'art, GitHub via `scripts/ghx.sh` pour l'existant, docs
@@ -187,7 +198,12 @@ jamais attendue à l'aveugle ni sondée à coups de `sleep` :
   sortie de gremlins) ; un code de sortie non nul est toujours rapporté, jamais avalé ;
 - l'utilisatrice est tenue au courant **au fur et à mesure** : chaque étape franchie, chaque résultat, et,
   quand une étape longue reste silencieuse, un point de progression toutes les 5 minutes (ce qui tourne,
-  depuis combien de temps, dernier résultat) ; un échec est traité dès qu'il remonte.
+  depuis combien de temps, dernier résultat) ; un échec est traité dès qu'il remonte ;
+- une tâche qui peut durer plus que la session (porte complète, `done`) est lancée détachée
+  (`setsid nohup bash -c "cmd > LOG 2>&1; echo \"exit \$?\" >> LOG" & disown`) ;
+- sa vie se vérifie avec `rtk proxy pgrep -af …` (le filtre rtk peut masquer des processus) ; un journal
+  silencieux n'est pas une preuve de mort, et une seconde exécution n'est jamais lancée dans le même
+  arbre avant que la première soit prouvée morte (deux portes C5S concurrentes, 2026-11-12).
 Le hook `long-task-monitor.sh` le rappelle à chaque lancement en arrière-plan.
 
 **Mémoire (règle) :** tout travail lourd (tests Go, Python et frontend, couverture, bout en bout,
@@ -200,6 +216,10 @@ netsim, mutation testing gremlins et Stryker) passe par `scripts/heavy.sh` :
 - le hook `heavy-guard.sh` refuse toute commande de test non plafonnée (Claude et ses sous-agents ;
   Codex et opencode n'y sont pas soumis, d'où les tâches mise plafonnées) ;
 - pas plus de 4 agents en parallèle ; mutation testing limité à 4 workers et à un paquet à la fois ;
+- une mesure (perf native, netsim, porte complète) a la machine à elle : elle tourne sur les cœurs P
+  (`taskset -c 0-11` sur ce portable), les agents et le reste sur les cœurs E (`taskset -c 12-19`), et aucun
+  agent ne lance de travail lourd pendant une porte complète (un modèle chronométré a expiré sous la charge,
+  2026-11-12) ;
 - origine : deux plantages globaux le 2026-10-26 (mutant à 8,7 Go, Chrome à 3,4 Go), un troisième le
   2026-11-08 (test Python non plafonné à 21 Go, voir « Pièges connus »).
 
@@ -262,5 +282,6 @@ l'effort le plus bas qui gardent la qualité, choisis explicitement à chaque la
   porte de L3 et P2, alors ignorés, ont été perdus ainsi le 2026-11-08 ; les rapports `gates/*/*.md`
   sont désormais versionnés, seuls les journaux bruts restent ignorés. Une porte (`gate.py`) ne vide que
   les preuves de `gates/<lot>/` et garde ses `*.md` : son ancien `rmtree` avait effacé un rapport.
+- Chaque worktree coûte au démon gortex un graphe complet (une vue par checkout) : 16 worktrees, dont 10 oubliés de séances anciennes, l'ont porté à 14 Go et ont fait tuer des processus par le noyau (OOM global, 2026-11-12). Le worktree d'un bloc est retiré dès le bloc fusionné (règle ci-dessus d'abord, modifications non commitées archivées hors du dépôt) ; au plus un worktree par bloc actif.
 - Simuler un flux d'E/S avec `io.BytesIO`, jamais un `MagicMock` dont `read()` rend toujours la même
   valeur : `shutil.copyfileobj` boucle sans fin (21 Go le 2026-11-08 ; `/tmp` est un tmpfs, donc en RAM).
