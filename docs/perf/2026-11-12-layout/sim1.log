@@ -1,0 +1,29 @@
+residuals 300 sd 4.19 pair-diff sd 5.93
+incumbent FP, fixed layout (C5S case): 0.733
+incumbent power +5%: 0.2635
+incumbent power +10%: 0.999
+N=40 alpha=0.001 m0=0.5%: power5=0.904 power5(sigma_l 2.2%)=0.794
+N=40 alpha=0.001 m0=1.0%: power5=0.803 power5(sigma_l 2.2%)=0.646
+N=40 alpha=0.005 m0=0.5%: power5=0.969 power5(sigma_l 2.2%)=0.915
+N=40 alpha=0.005 m0=1.0%: power5=0.922 power5(sigma_l 2.2%)=0.813
+N=50 alpha=0.001 m0=0.5%: power5=0.970 power5(sigma_l 2.2%)=0.910
+N=50 alpha=0.001 m0=1.0%: power5=0.908 power5(sigma_l 2.2%)=0.786
+N=50 alpha=0.005 m0=0.5%: power5=0.995 power5(sigma_l 2.2%)=0.969
+N=50 alpha=0.005 m0=1.0%: power5=0.972 power5(sigma_l 2.2%)=0.914
+N=60 alpha=0.001 m0=0.5%: power5=0.989 power5(sigma_l 2.2%)=0.961
+N=60 alpha=0.001 m0=1.0%: power5=0.965 power5(sigma_l 2.2%)=0.893
+N=60 alpha=0.005 m0=0.5%: power5=0.998 power5(sigma_l 2.2%)=0.991
+N=60 alpha=0.005 m0=1.0%: power5=0.990 power5(sigma_l 2.2%)=0.961
+N=64 alpha=0.001 m0=0.5%: power5=0.996 power5(sigma_l 2.2%)=0.972
+N=64 alpha=0.001 m0=1.0%: power5=0.976 power5(sigma_l 2.2%)=0.911
+N=64 alpha=0.005 m0=0.5%: power5=0.999 power5(sigma_l 2.2%)=0.995
+N=64 alpha=0.005 m0=1.0%: power5=0.992 power5(sigma_l 2.2%)=0.973
+N=70 alpha=0.001 m0=0.5%: power5=0.997 power5(sigma_l 2.2%)=0.984
+N=70 alpha=0.001 m0=1.0%: power5=0.985 power5(sigma_l 2.2%)=0.944
+N=70 alpha=0.005 m0=0.5%: power5=1.000 power5(sigma_l 2.2%)=0.997
+N=70 alpha=0.005 m0=1.0%: power5=0.998 power5(sigma_l 2.2%)=0.983
+N=80 alpha=0.001 m0=0.5%: power5=1.000 power5(sigma_l 2.2%)=0.994
+N=80 alpha=0.001 m0=1.0%: power5=0.996 power5(sigma_l 2.2%)=0.974
+N=80 alpha=0.005 m0=0.5%: power5=1.000 power5(sigma_l 2.2%)=0.999
+N=80 alpha=0.005 m0=1.0%: power5=1.000 power5(sigma_l 2.2%)=0.994
+exit 0

@@ -1,0 +1,10 @@
+k=none m=1421 asm=3851 data=1
+k=0 m=1421 asm=3851 data=1
+k=1 m=1421 asm=3851 data=1
+k=37 m=1421 asm=3851 data=1
+k=63 m=1421 asm=3851 data=1
+k=0 vs none: -m diff lines (all _testmain.go line numbers) 10; normalized asm diff 0; data diff 0
+k=1 vs none: -m diff lines (all _testmain.go line numbers) 10; normalized asm diff 0; data diff 0
+k=37 vs none: -m diff lines (all _testmain.go line numbers) 10; normalized asm diff 0; data diff 0
+k=63 vs none: -m diff lines (all _testmain.go line numbers) 10; normalized asm diff 0; data diff 0
+Send: none 0x653340, k=1 0x653380, k=37 0x653c80, k=63 0x654300

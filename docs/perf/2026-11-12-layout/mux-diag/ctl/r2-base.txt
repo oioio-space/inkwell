@@ -1,0 +1,160 @@
+goos: linux
+goarch: amd64
+pkg: github.com/oioio-space/inkwell/internal/transport/mux
+cpu: 13th Gen Intel(R) Core(TM) i7-1370P
+BenchmarkSend/256-20         	58482122	        19.92 ns/op	12851.14 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/16384-20       	 6176740	       186.7 ns/op	87768.69 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/1048576-20     	   96328	     15025 ns/op	69788.95 MB/s	     484 B/op	       6 allocs/op
+PASS
+goos: linux
+goarch: amd64
+pkg: github.com/oioio-space/inkwell/internal/transport/mux
+cpu: 13th Gen Intel(R) Core(TM) i7-1370P
+BenchmarkSend/256-20         	64274570	        21.11 ns/op	12126.76 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/16384-20       	 6980366	       182.6 ns/op	89720.35 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/1048576-20     	   40858	     33822 ns/op	31002.99 MB/s	     481 B/op	       6 allocs/op
+PASS
+goos: linux
+goarch: amd64
+pkg: github.com/oioio-space/inkwell/internal/transport/mux
+cpu: 13th Gen Intel(R) Core(TM) i7-1370P
+BenchmarkSend/256-20         	57189188	        20.09 ns/op	12741.41 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/16384-20       	 7265505	       192.4 ns/op	85148.11 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/1048576-20     	   86467	     15133 ns/op	69288.68 MB/s	     483 B/op	       6 allocs/op
+PASS
+goos: linux
+goarch: amd64
+pkg: github.com/oioio-space/inkwell/internal/transport/mux
+cpu: 13th Gen Intel(R) Core(TM) i7-1370P
+BenchmarkSend/256-20         	51114280	        22.04 ns/op	11617.17 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/16384-20       	 7251480	       192.3 ns/op	85212.98 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/1048576-20     	   90301	     14332 ns/op	73162.63 MB/s	     483 B/op	       6 allocs/op
+PASS
+goos: linux
+goarch: amd64
+pkg: github.com/oioio-space/inkwell/internal/transport/mux
+cpu: 13th Gen Intel(R) Core(TM) i7-1370P
+BenchmarkSend/256-20         	59145588	        20.11 ns/op	12731.23 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/16384-20       	 7243384	       182.1 ns/op	89971.30 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/1048576-20     	   85980	     14726 ns/op	71206.37 MB/s	     482 B/op	       6 allocs/op
+PASS
+goos: linux
+goarch: amd64
+pkg: github.com/oioio-space/inkwell/internal/transport/mux
+cpu: 13th Gen Intel(R) Core(TM) i7-1370P
+BenchmarkSend/256-20         	63143335	        21.49 ns/op	11912.99 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/16384-20       	 6557755	       170.8 ns/op	95939.70 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/1048576-20     	   30883	     36550 ns/op	28688.44 MB/s	     483 B/op	       6 allocs/op
+PASS
+goos: linux
+goarch: amd64
+pkg: github.com/oioio-space/inkwell/internal/transport/mux
+cpu: 13th Gen Intel(R) Core(TM) i7-1370P
+BenchmarkSend/256-20         	54081757	        22.84 ns/op	11208.17 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/16384-20       	 6524089	       171.2 ns/op	95692.86 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/1048576-20     	   97063	     13838 ns/op	75772.43 MB/s	     483 B/op	       6 allocs/op
+PASS
+goos: linux
+goarch: amd64
+pkg: github.com/oioio-space/inkwell/internal/transport/mux
+cpu: 13th Gen Intel(R) Core(TM) i7-1370P
+BenchmarkSend/256-20         	55645964	        21.22 ns/op	12065.67 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/16384-20       	 7349272	       178.3 ns/op	91890.55 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/1048576-20     	   46252	     31115 ns/op	33699.86 MB/s	     482 B/op	       6 allocs/op
+PASS
+goos: linux
+goarch: amd64
+pkg: github.com/oioio-space/inkwell/internal/transport/mux
+cpu: 13th Gen Intel(R) Core(TM) i7-1370P
+BenchmarkSend/256-20         	66146166	        20.76 ns/op	12330.74 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/16384-20       	 7557540	       175.4 ns/op	93423.65 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/1048576-20     	   67797	     16095 ns/op	65149.69 MB/s	     483 B/op	       6 allocs/op
+PASS
+goos: linux
+goarch: amd64
+pkg: github.com/oioio-space/inkwell/internal/transport/mux
+cpu: 13th Gen Intel(R) Core(TM) i7-1370P
+BenchmarkSend/256-20         	70382584	        21.65 ns/op	11825.96 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/16384-20       	 6717664	       175.2 ns/op	93517.40 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/1048576-20     	   79309	     13955 ns/op	75142.27 MB/s	     484 B/op	       6 allocs/op
+PASS
+goos: linux
+goarch: amd64
+pkg: github.com/oioio-space/inkwell/internal/transport/mux
+cpu: 13th Gen Intel(R) Core(TM) i7-1370P
+BenchmarkSend/256-20         	63928552	        20.63 ns/op	12409.57 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/16384-20       	 6744252	       185.7 ns/op	88222.34 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/1048576-20     	   92408	     14192 ns/op	73882.46 MB/s	     482 B/op	       6 allocs/op
+PASS
+goos: linux
+goarch: amd64
+pkg: github.com/oioio-space/inkwell/internal/transport/mux
+cpu: 13th Gen Intel(R) Core(TM) i7-1370P
+BenchmarkSend/256-20         	50385336	        21.85 ns/op	11718.85 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/16384-20       	 7447284	       185.0 ns/op	88553.69 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/1048576-20     	   91041	     13618 ns/op	76997.69 MB/s	     483 B/op	       6 allocs/op
+PASS
+goos: linux
+goarch: amd64
+pkg: github.com/oioio-space/inkwell/internal/transport/mux
+cpu: 13th Gen Intel(R) Core(TM) i7-1370P
+BenchmarkSend/256-20         	70393328	        20.63 ns/op	12407.09 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/16384-20       	 7486231	       178.1 ns/op	91990.73 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/1048576-20     	  103136	     14302 ns/op	73317.95 MB/s	     483 B/op	       6 allocs/op
+PASS
+goos: linux
+goarch: amd64
+pkg: github.com/oioio-space/inkwell/internal/transport/mux
+cpu: 13th Gen Intel(R) Core(TM) i7-1370P
+BenchmarkSend/256-20         	62307844	        20.40 ns/op	12549.61 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/16384-20       	 7555318	       178.1 ns/op	92002.39 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/1048576-20     	   34942	     31986 ns/op	32782.49 MB/s	     484 B/op	       6 allocs/op
+PASS
+goos: linux
+goarch: amd64
+pkg: github.com/oioio-space/inkwell/internal/transport/mux
+cpu: 13th Gen Intel(R) Core(TM) i7-1370P
+BenchmarkSend/256-20         	68594688	        20.89 ns/op	12253.90 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/16384-20       	 7538704	       174.7 ns/op	93810.09 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/1048576-20     	   98990	     13946 ns/op	75186.17 MB/s	     483 B/op	       6 allocs/op
+PASS
+goos: linux
+goarch: amd64
+pkg: github.com/oioio-space/inkwell/internal/transport/mux
+cpu: 13th Gen Intel(R) Core(TM) i7-1370P
+BenchmarkSend/256-20         	61924926	        20.91 ns/op	12240.76 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/16384-20       	 7706241	       174.9 ns/op	93676.54 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/1048576-20     	  101607	     13421 ns/op	78126.60 MB/s	     483 B/op	       6 allocs/op
+PASS
+goos: linux
+goarch: amd64
+pkg: github.com/oioio-space/inkwell/internal/transport/mux
+cpu: 13th Gen Intel(R) Core(TM) i7-1370P
+BenchmarkSend/256-20         	62787556	        21.06 ns/op	12157.43 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/16384-20       	 7409226	       175.7 ns/op	93237.06 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/1048576-20     	  102480	     14009 ns/op	74848.15 MB/s	     483 B/op	       6 allocs/op
+PASS
+goos: linux
+goarch: amd64
+pkg: github.com/oioio-space/inkwell/internal/transport/mux
+cpu: 13th Gen Intel(R) Core(TM) i7-1370P
+BenchmarkSend/256-20         	60154117	        20.71 ns/op	12360.02 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/16384-20       	 7232925	       183.2 ns/op	89412.17 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/1048576-20     	   95456	     14296 ns/op	73346.11 MB/s	     483 B/op	       6 allocs/op
+PASS
+goos: linux
+goarch: amd64
+pkg: github.com/oioio-space/inkwell/internal/transport/mux
+cpu: 13th Gen Intel(R) Core(TM) i7-1370P
+BenchmarkSend/256-20         	48857475	        22.27 ns/op	11494.72 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/16384-20       	 7576801	       182.8 ns/op	89614.31 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/1048576-20     	   70744	     14808 ns/op	70812.17 MB/s	     483 B/op	       6 allocs/op
+PASS
+goos: linux
+goarch: amd64
+pkg: github.com/oioio-space/inkwell/internal/transport/mux
+cpu: 13th Gen Intel(R) Core(TM) i7-1370P
+BenchmarkSend/256-20         	67262080	        20.75 ns/op	12340.02 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/16384-20       	 7670403	       181.7 ns/op	90165.20 MB/s	       0 B/op	       0 allocs/op
+BenchmarkSend/1048576-20     	   96507	     13799 ns/op	75991.01 MB/s	     483 B/op	       6 allocs/op
+PASS

@@ -854,6 +854,31 @@
       "id": "d96a860eba9999bf3a01aa8d7f8b17ed49ba2cd3bcd867f1902ab9dd57e77f47",
       "reason": "scripts/perf/typing_checks.py: go build with the pinned Go. Block PB toolchain fix: Go is resolved from the tree's mise.toml pin (refbuild.go_env/tree_go_env: mise where go@<pin>, GOROOT set, its bin first on PATH, GOTOOLCHAIN=local), never the first `go` on PATH; an IDE SDK (go1.27.3) ahead of mise's shims with mise's GOROOT=1.27.4 broke builds (compile: version mismatch). Absent or uninstalled pin fails closed (ReferenceBuildError). No threshold, criterion or vector changed.",
       "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "1e26705e6e4abe6426aa2576e1c5f18f9eb705e62aef4a4c844d3e4b09ab513b",
+      "reason": "Block RG freeze: scripts/perf/rgmodel_test.py: gate machinery changed. New file, a skeleton frozen with gates/RG.toml (criterion `model`): every named test fails with \"not implemented\" until step 2, so the criterion is red for the right reason. Adds tests only; no existing test, threshold, criterion or command changes.",
+      "decision": "docs/plans/2026-11-12-rg-layout-robust-guard.md"
+    },
+    {
+      "id": "be9d0fb9f4da9d73cd92b231a7ab7aa266829f66728a3eae9a35b0f20439aa99",
+      "reason": "Block RG freeze: scripts/perf/regression_test.py: gate machinery changed. New file, a skeleton frozen with gates/RG.toml (criterion `rule`): every named test fails with \"not implemented\" until step 2, so the criterion is red for the right reason. Adds tests only; no existing test, threshold, criterion or command changes.",
+      "decision": "docs/plans/2026-11-12-rg-layout-robust-guard.md"
+    },
+    {
+      "id": "b4b64f445a6a80831899952a245e71538cb8601dc24a299d86adc4e496c0a226",
+      "reason": "Block RG freeze: scripts/perf/regression_layout_test.py: gate machinery changed. New file, a skeleton frozen with gates/RG.toml (criterion `layout-build`): every named test fails with \"not implemented\" until step 2, so the criterion is red for the right reason. Adds tests only; no existing test, threshold, criterion or command changes.",
+      "decision": "docs/plans/2026-11-12-rg-layout-robust-guard.md"
+    },
+    {
+      "id": "ae4fa2859ae120b8857164d4a8906f54e79cc1b7e114d6383f3a356c2d11511e",
+      "reason": "Block RG freeze: scripts/perf/regression_falsify_test.py: gate machinery changed. New file, a skeleton frozen with gates/RG.toml (criterion `falsify`): every named test fails with \"not implemented\" until step 2, so the criterion is red for the right reason. Adds tests only; no existing test, threshold, criterion or command changes.",
+      "decision": "docs/plans/2026-11-12-rg-layout-robust-guard.md"
+    },
+    {
+      "id": "b9ec12148cbf763dcd415ecc005959b097cce20623c9dfb24a4fa7b2482ca4dd",
+      "reason": "mise.toml: gate dependency changed: mise task test:py. Block RG freeze: test:py also excludes the four new RG skeleton modules (rgmodel_test, regression_test, regression_layout_test, regression_falsify_test), which fail with \"not implemented\" until RG step 2: gate-only until RG's implementation; regression_test, regression_layout_test and regression_falsify_test return to test:py in the implementation commit (checked by gates/RG.toml criterion test-py-inclusion); rgmodel_test stays gate-only like pbmodel_test. Every existing test keeps running; nothing previously run is excluded.",
+      "decision": "docs/plans/2026-11-12-rg-layout-robust-guard.md"
     }
   ]
 }

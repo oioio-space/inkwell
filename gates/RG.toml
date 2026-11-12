@@ -1,0 +1,99 @@
+# Frozen acceptance for block RG (rigour: complete — the machinery that judges every later block's Go hot-path
+# performance), written before the code. Root cause measured 2026-11-12: internal/transport/mux BenchmarkSend/256 +6.3 %
+# (p = 0.000, n = 20) between HEAD and block C5S with byte-identical machine code for mux; one unused 32-byte function in
+# front of mux reproduces it (-5.4 %, docs/perf/2026-11-12-layout/). The guard judged one fixed link layout per side, so a
+# deterministic layout effect is "confirmed" by construction. Method: a robust arm (every side built with 64-byte
+# function alignment, -ldflags=-funcalign=64, every process its own binary under a fresh, independent random code layout
+# by minimal padding overlays: empty noinline functions, kept by a never-run test, no init, no data) and a production
+# arm (the shipping build vector; beyond the layout envelope E >= 8 % measured in step 2a it gives `investigate`, never
+# a code regression by itself); pairs in a random order; regression = exact one-sided signed-rank bound (exact under
+# the pure-layout null, level measured under unequal shapes), certification = exact sign-test bound with alpha spent
+# over two looks; predeclared alpha_c = min(1e-3, 0.02 / C), C <= 40, margin 1 %, budget 5 %, 45 + 45 robust and
+# 20 production pairs; inconclusive and investigate fail. Builds use the pinned toolchain (mise go, GOTOOLCHAIN=local,
+# GOROOT unset). Model rates are asserted on 95 % Clopper-Pearson bounds.
+# Spec: docs/plans/2026-11-12-rg-layout-robust-guard.md, the RG amendment of docs/adr/0038-paired-performance.md,
+# scripts/perf/rgmodel.py (formal model with mutant rules). Frozen gates keep their commands: L0's `regression-guard`
+# command is unchanged and the change lives in scripts/perf/regression.py, under gates/guard-overrides.json.
+# A unittest that selects nothing passes, so every criterion requires each named test to be listed by `unittest -v`
+# (nothing skipped, exit 0).
+raw_results = ["docs/plans/2026-11-12-rg-layout-robust-guard.md", "docs/adr/0038-paired-performance.md", "docs/objectif-en-cours.md", "gates/guard-overrides.json", "docs/perf/2026-11-12-layout/*", "gates/RG/*"]
+
+[[criteria]]
+# The decision is written down (ADR 0038 amendment, follow-up F1 closed), the requirement is registered and placed, and
+# the layout evidence (mux-diag, the layout and pinning experiments, their scripts) is archived and sealed.
+id = "spec"
+command = '''test -s docs/plans/2026-11-12-rg-layout-robust-guard.md && grep -q 'Amendment (RG' docs/adr/0038-paired-performance.md && grep -q 'funcalign' docs/adr/0038-paired-performance.md && grep -q 'production arm' docs/adr/0038-paired-performance.md && grep -q 'RG' docs/exigences.md && grep -q 'RG' docs/architecture/coherence.md && test -s docs/perf/2026-11-12-layout/README.md && (cd docs/perf/2026-11-12-layout && sha256sum --quiet --strict -c SHA256SUMS)'''
+
+[[criteria]]
+# The statistical model (plan section 6): the noise refitted from the archive, the incumbent flags the pure layout
+# effect, the new rule never flags it (false regression <= alpha in every layout environment, drift included), power
+# >= 0.95 at a true +5 % sized at C_max = 40, a true +5 % certified in <= 0.5 % of runs in every environment (a loaded
+# host is inconclusive, never certified), a production-only loss gives `investigate`, unequal side shapes (noisier,
+# quieter, layout-sensitive, skewed) never flag at no change, the margin level under unequal shapes <= 2 alpha,
+# certification spends alpha over its two looks, every rate judged on its 95 % Clopper-Pearson bound, every mutant
+# rule rejected (M1-M10), constants equal to the code.
+# Run here and by `done`, not in test:py (minutes).
+id = "model"
+command = '''out=$(./scripts/heavy.sh timeout 1200 python3 -m unittest -v scripts/perf/rgmodel_test.py 2>&1) || { echo "$out" | tail -40; exit 1; }; if echo "$out" | grep -q -- '\.\.\. skipped'; then echo "skipped tests"; exit 1; fi; for t in test_noise_refits_from_archive test_incumbent_flags_pure_layout test_no_false_regression_under_layout test_no_false_regression_under_drift test_flag_rate_at_margin_bounded test_power_at_five_percent test_true_slowdown_never_certified test_loaded_host_is_inconclusive_not_certified test_production_arm_gives_investigate test_unequal_shapes_never_flag_at_no_change test_margin_level_under_unequal_shapes test_certification_spends_alpha_over_looks test_power_sized_at_max_comparisons test_rates_asserted_on_clopper_pearson_bounds test_power_not_below_incumbent test_every_mutant_is_rejected test_constants_match_code; do echo "$out" | grep -q -- "^$t (" || { echo "missing or not run: $t"; exit 1; }; done'''
+
+[[criteria]]
+# The rule as regression.py runs it, no process started: the bound is paired.hl_bounds (no copy), the three outcomes
+# (regression, certified, inconclusive; inconclusive fails, never passes), alpha_c = min(1e-3, 0.02 / C) fixed before
+# measuring, two predeclared looks (stage 2 runs only the uncertified benchmarks, regression judged once at 80 pairs),
+# the production arm and its 8 % envelope, informational packages skipped, the per-benchmark budgets recomputed from
+# the archived A/A run by the predeclared rule, the margin, throughput judged as inverse time, allocs/op by the unchanged
+# layout-independent rule, missing benchmarks fail closed, new ones listed, raw `go test -bench` lines parsed, layout and
+# order plans replayed from the recorded seed, sides drawn independently, the session report complete.
+id = "rule"
+command = '''out=$(./scripts/heavy.sh timeout 300 python3 -m unittest -v scripts/perf/regression_test.py 2>&1) || { echo "$out" | tail -40; exit 1; }; if echo "$out" | grep -q -- '\.\.\. skipped'; then echo "skipped tests"; exit 1; fi; for t in test_bound_is_shared_with_paired test_regression_needs_lower_bound_above_margin test_certified_needs_upper_bound_below_budget test_inconclusive_fails_never_passes test_alpha_from_comparison_count test_stage_two_runs_only_uncertified test_regression_judged_once_at_final_look test_production_arm_envelope test_informational_packages_skipped test_budgets_follow_predeclared_rule test_throughput_is_inverse_time test_allocs_rule_unchanged test_missing_benchmark_fails_closed test_new_benchmark_listed test_parse_bench_lines test_layout_plan_replays_from_seed test_sides_draw_independent_layouts test_orders_are_fair_coins_per_pair test_session_report_records_seed_layouts_and_bounds test_certification_is_sign_test test_comparison_budget_exceeded_fails_closed test_production_vector_is_release_vector test_robust_vector_differs_only_by_funcalign_and_overlay test_pinned_toolchain_environment test_investigate_fails_and_needs_waiver; do echo "$out" | grep -q -- "^$t (" || { echo "missing or not run: $t"; exit 1; }; done'''
+
+[[criteria]]
+# The layout machinery on real builds of internal/transport/mux (go build, no measurement): the overlay pads occupy
+# exactly one 64-byte slot each and precede the package's own code, every function of the module is 64-byte aligned,
+# the realized offsets of the hot functions are spread over the page, inlining/escape decisions (-gcflags=-m=2),
+# normalized assembly and data symbols of the package are identical across pad sizes, the pad files add no init and
+# no data, the keep test never runs, a pad in a dependency moves the package (dependency mutant), and a toolchain that
+# reorders or drops pads makes the build fail closed.
+id = "layout-build"
+command = '''out=$(./scripts/heavy.sh timeout 900 python3 -m unittest -v scripts/perf/regression_layout_test.py 2>&1) || { echo "$out" | tail -40; exit 1; }; if echo "$out" | grep -q -- '\.\.\. skipped'; then echo "skipped tests"; exit 1; fi; for t in test_pad_slots_are_exact test_pads_precede_package_code test_functions_are_cache_line_aligned test_hot_offsets_spread_over_page test_reordered_pads_fail_closed test_pads_keep_compiler_decisions test_pads_keep_data_and_init test_keep_file_never_runs test_dependency_pad_moves_package; do echo "$out" | grep -q -- "^$t (" || { echo "missing or not run: $t"; exit 1; }; done'''
+
+[[criteria]]
+# End-to-end falsification of the harness (short benchmarks, real builds): each injected fault makes the session fail
+# closed, never give a verdict: F1 one binary reused across processes, F2 overlay ignored, F3 production flags altered,
+# F4 production verdict dropped, F5 inconclusive treated as pass, F6 robust build without -funcalign=64, F7 a side's pad
+# vectors copied from the other's; and every process's binary SHA-256, pad vector and realized offsets are recorded and
+# recomputed before the verdict.
+id = "falsify"
+command = '''out=$(./scripts/heavy.sh timeout 1800 python3 -m unittest -v scripts/perf/regression_falsify_test.py 2>&1) || { echo "$out" | tail -40; exit 1; }; if echo "$out" | grep -q -- '\.\.\. skipped'; then echo "skipped tests"; exit 1; fi; for t in test_falsify_reused_binary test_falsify_ignored_overlay test_falsify_altered_production_flags test_falsify_dropped_production_verdict test_falsify_inconclusive_as_pass test_falsify_missing_funcalign test_falsify_shared_pad_vectors test_session_records_identities_and_offsets; do echo "$out" | grep -q -- "^$t (" || { echo "missing or not run: $t"; exit 1; }; done'''
+
+[[criteria]]
+# The self-test with real processes: an injected x1.2 slowdown (environment) and a +5 % slowdown in code are flagged, the
+# reverse gain passes, and the two pure-layout mutants (internal/transport/mux at default alignment with one unused
+# 32-byte function in front of it, and the same function in internal/transport, linked before mux: the C5S mechanism)
+# are shown effective under one fixed layout per side, then do not give `regression`. The old self-test prints
+# `injected slowdown detected` and must not satisfy this criterion.
+id = "selftest"
+command = '''out=$(./scripts/heavy.sh --exclusive timeout 2400 python3 scripts/perf/regression.py --self-test 2>&1) || { echo "$out" | tail -40; exit 1; }; echo "$out" | grep -q 'regression-guard self-test passed: layout-randomized (x1.2 flagged, code +5 % flagged, gain passed, layout mutants (package, dependency) effective and passed)' '''
+
+[[criteria]]
+# No regression: every Python test of the tooling, the gate harness and anti-weakening self-tests, and the frozen L0
+# `regression-guard` command verbatim on the current tree, which includes block C5S (its only flag was the layout case).
+# A must-pass, not a red-first proof: the incumbent's verdict on this case flips with noise (2026-11-12: flagged
+# +5.3 % then unconfirmed); the deterministic proof of the layout case is `selftest` (mutant control) and `model`.
+id = "regression"
+command = "mise run test:py && python3 scripts/gate-selftest.py && python3 scripts/gate-guard.py --self-test && ./scripts/heavy.sh --exclusive python3 scripts/perf/regression.py --self-test && ./scripts/heavy.sh --exclusive python3 scripts/perf/regression.py --bench"
+
+[[criteria]]
+# The skeletons were gate-only during the freeze (mise.toml test:py excluded them, so CI stayed green): the rule, layout
+# and falsification modules are back in test:py, the model stays gate-only like pbmodel_test.py.
+id = "test-py-inclusion"
+command = '''python3 -I -c "
+import sys, tomllib
+run = ' '.join(tomllib.load(open('mise.toml', 'rb'))['tasks']['test:py']['run'])
+back = [m for m in ('regression_test', 'regression_layout_test', 'regression_falsify_test') if '^' + m + '\\\\.py' in run]
+sys.exit('still excluded from test:py: ' + ', '.join(back) if back else (0 if '^rgmodel_test\\\\.py' in run else 'rgmodel_test must stay gate-only'))
+"'''
+
+[[criteria]]
+id = "simplify-report"
+command = "test -s gates/RG/SIMPLIFY.md"

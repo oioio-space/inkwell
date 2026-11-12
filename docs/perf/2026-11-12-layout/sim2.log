@@ -1,0 +1,14 @@
+cols: regression, certified, inconclusive, production-arm flag
+A/A fit                                       [0.0, 1.0, 0.0, 0.0]
+C5S case (prod layout +6.3%, canon 0)         [0.0, 1.0, 0.0001, 0.0]
+C5S case, sigma_l 2.2%                        [0.0001, 0.9995, 0.0004, 0.0]
+C5S case, noise x1.5                          [0.0001, 0.9618, 0.0382, 0.0001]
+true +1% (margin)                             [0.0005, 0.9958, 0.0037, 0.0]
+true +5%                                      [0.9942, 0.0018, 0.004, 0.0]
+true +5%, sigma_l 2.2%                        [0.979, 0.0013, 0.0198, 0.0]
+true +5%, noise x1.5                          [0.7853, 0.0013, 0.2135, 0.0]
+true +5% on a favourable prod layout          [0.9948, 0.0015, 0.0037, 0.0]
+prod-only +15% (layout-specific)              [0.8263, 0.9705, 0.0, 0.8263]
+A/A noise x2.3 (load 6, pin2)                 [0.0, 0.536, 0.464, 0.0]
+true +5%, noise x2.3                          [0.2938, 0.0013, 0.705, 0.0]
+exit 0
