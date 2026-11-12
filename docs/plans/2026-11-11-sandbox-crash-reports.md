@@ -369,6 +369,11 @@ diagnostics plan and is not part of W49.
 
 ## Gate SB1 (`gates/SB1.toml`, block SB1 = requirement W49, step 1)
 
+**Superseded on 2026-11-12 by block SB1b** (section "Gate SB1b" below, `gates/SB1b.toml`, ADR 0042 amendment):
+Codex's adversarial review showed that the scope of ADR 0042 points 1-2 attaches a process already running, orders
+the two memory limits wrongly and is not verified, and that this gate cannot catch a workload left outside its
+cgroup. `gates/SB1.toml` stays frozen as history; no code was written against it.
+
 Replaces the `gates/W49.toml` of § 8.2/§ 9 (same criteria, plus D2). Every Go criterion requires `--- PASS` for
 each named test; a skip fails the gate. Each command was run once before freezing (the heavy `hostile-kept` and
 `regression` ones were not, to leave the machine to the perf gates; their parts are green today and their new
@@ -402,3 +407,181 @@ parts are covered by the other criteria).
 - Open point for the implementer: with a cgroup bound, `RLIMIT_AS` must stay a bound (the gate requires it never be
   lower than the cgroup's) but cannot be what fires first on resident growth, or the death stays SIGSEGV.
 - The cgroup tests skip (so the gate fails) on a machine without a delegated user cgroup; that is deliberate.
+
+## Gate SB1b (`gates/SB1b.toml`, block SB1b = requirement W49, supersedes SB1)
+
+Rigour: complete (security, concurrency, state). Decision: ADR 0042, section "Amendment 2026-11-12" (A1 to A7), which
+wins over sections 5.3, 8 and "Gate SB1" above wherever they disagree. Sections 5.0, 5.1, 5.2, 5.4 (rows R1 to R7 of the
+first table), 6 and 7 stay, with the scoped claims of A5 to A7. Model: `docs/protocol/tla/SandboxScope.tla` (agent
+`formal-modeler`, README section `SandboxScope`) with the mutants and witnesses named in the gate.
+
+### Review findings and their resolution
+
+| # | Finding (Codex, 2026-11-12) | Resolution |
+|---|---|---|
+| 1 | the handshake comes after Go start, mounts and allocation, only when `MountBytes > 0`; `PIDs` migrates a running process; charges and earlier children stay outside | born inside: `clone3(CLONE_INTO_CGROUP)` into a per-run child of a delegated session scope (A1, rows S and R); bootstrap self-check of membership before any mount, fork or exec; accounting table in A1 |
+| 2 | `RLIMIT_AS >= MemoryMax` orders nothing and weakens the old bound | `RLIMIT_AS` = `MemoryLimit` unchanged; `memory.max` = `ResidentLimit`; no order claimed; rows M1 and M2 tested both ways (A2) |
+| 3 | job success is not confinement; fallback not equivalent | read-backs S5-S7, R3, R6; rows F1-F11 each tested; `Output.Containment`; fallback described as per-process only (A3) |
+| 4 | auto-collection races the counters; `oom_kill` counts global kills | we own the run cgroup; counters read at R7 before R8; `oom` local versus `oom_kill` (rows M3-M5, A4) |
+| 5 | `{1,1}` is bypassed by socket mode; a kernel line remains | guarantee scoped to pipe and file; socket mode fails the tests with "RS1"; sentinel line used as positive evidence (A5) |
+| 6 | ignored SIGXFSZ does not make every target exit 1 | "exit 1" claimed only for the pinned typst; the cap and `OutputLimit` claimed for every end (rows X1-X5, A6) |
+| 7 | `blocked` could carry raw text | fixed kind and text; canary tests on frame, log and rendered text (A7) |
+| 8 | no "configured but outside" mutant; journal check ignores failures and sleeps | mutants SB1b-10 to SB1b-12, SB1b-17, SB1b-23; membership of target and descendant asserted before allocation; `scripts/sandbox_no_coredump.py` propagates every failure, waits on a collector barrier and attributes evidence to recorded deaths (rows J) |
+
+### Session setup (rows S; any failure → fallback, row F named)
+
+| Row | Step | Verified by reading | Failure row |
+|---|---|---|---|
+| S1 | start the holder (hidden mode of our binary, blocks on a pipe from the app, exits on EOF; never given a document) | the holder is alive (`pidfd`) | F11 |
+| S2 | connect the user bus, `Subscribe`, match `JobRemoved` | connection established within 5 s | F1 |
+| S3 | `StartTransientUnit(inkwell-sandbox-<pid>-<random>.scope, fail)`: `PIDs` holder, `Delegate` true, `Slice` = the app's slice, `CollectMode` inactive-or-failed, `MemoryMax`/`MemorySwapMax` inherited (A3) | the call returns a job path | F2 |
+| S4 | await `JobRemoved` for that job | result is `done` before 5 s | F3 |
+| S5 | find the scope cgroup | `/proc/<holder>/cgroup` = `<slice>/<name>.scope`; directory owned by our UID; `cgroup.controllers` lists `memory` | F4, F5 |
+| S6 | `mkdir holder/`, write the holder PID to `holder/cgroup.procs` | `/proc/<holder>/cgroup` ends in `/holder`; the scope's `cgroup.procs` is empty | F6 |
+| S7 | write `+memory` to the scope's `cgroup.subtree_control` | read back lists `memory` | F6 |
+| S8 | inherited bound | scope `memory.max`/`memory.swap.max` equal the app cgroup's values (or `max`) | F7 |
+| S9 | placement is permitted | the app cgroup and the scope share an ancestor inside `user@<uid>.service` | F10 |
+
+### Per run (rows R)
+
+| Row | Step | Rule |
+|---|---|---|
+| R1 | `mkdir <scope>/run-<n>` | a failure is F8 for this run |
+| R2 | write `memory.max` = `ResidentLimit`, `memory.swap.max` = 0, `memory.oom.group` = 1 | before `Start` |
+| R3 | read the three back | `memory.max` = `ResidentLimit` rounded down to the page size, the others exact; a mismatch is F9 |
+| R4 | open the directory `O_PATH\|O_DIRECTORY\|O_CLOEXEC`; `SysProcAttr.UseCgroupFD`; expected path in `sandboxConfig` | every Linux launch path (`withLimits`, `directoryMount`, `directoryLimits`); never the probes |
+| R5 | `cmd.Start` | EACCES, EBUSY, EOPNOTSUPP, ENOSYS: nothing ran, so remove the cgroup, mark the session unavailable (F10) and retry once in the fallback |
+| R6 | first statement of `sandboxExec`: `/proc/self/cgroup` equals the expected path | mismatch: exit with the dedicated status, `Run` returns an error (refused, not fallback) |
+| R7 | after `Wait`: read `memory.events.local` and `memory.events` | a failed read gives `unknown`, never zero |
+| R8 | then `cgroup.kill`, wait for `populated 0` (bounded), `rmdir` | never before R7 |
+
+### Memory outcomes (rows M)
+
+| Row | Cause | Death | Counters | `MemoryCause` | Engine error | Preview kind |
+|---|---|---|---|---|---|---|
+| M1 | aggregate charge reaches `ResidentLimit` | SIGKILL of the whole run (`oom.group`) | local `oom >= 1`, `oom_kill >= 1` | `local-limit` | `ErrMemoryLimit` | `memory` |
+| M2 | a mapping past `RLIMIT_AS` | SIGSEGV (musl after Rust's abort) or a program's own exit on ENOMEM; no core helper | `oom = 0` | `none` | `ErrMemoryLimit` (stderr "memory allocation of") | `memory` |
+| M3 | global or ancestor OOM picks the target | SIGKILL | `oom_kill >= 1`, local `oom = 0` | `victim` | "stopped" (fixed text) | `internal` |
+| M4 | counters unreadable | any | read error | `unknown` | by stderr only, else "stopped" | as mapped |
+| M5 | fallback run (no cgroup) | as M2 | none | `none` | as M2 | `memory` |
+
+### Fallback (rows F; each keeps rlimits, seccomp, Landlock, namespaces where available, byte caps, timeout; `Output.Containment` = `rlimit`)
+
+| Row | Condition | Injected in `TestCgroupFallbackAtEveryStep` by |
+|---|---|---|
+| F1 | no session bus or no user manager | a bus address that does not exist (real) |
+| F2 | `StartTransientUnit` refused (unknown property on an old systemd, `InvalidArgs`, `UnitExists`) | fake manager |
+| F3 | job result not `done`, or no `JobRemoved` within 5 s | fake manager |
+| F4 | holder not in the scope after `done` | fake manager reporting `done` without moving it |
+| F5 | `memory` not in the scope's `cgroup.controllers` | cgroupfs seam |
+| F6 | holder move or `subtree_control` write refused | cgroupfs seam (EACCES, EBUSY) |
+| F7 | inherited bound not in place | cgroupfs seam |
+| F8 | `mkdir` or a limit write refused | cgroupfs seam |
+| F9 | read-back mismatch (a write silently ignored) | cgroupfs seam |
+| F10 | placement refused at `clone3`, or the app outside the user manager | errno seam on `Start`; a cgroup path outside `user@<uid>.service` |
+| F11 | holder dead or never started | kill it between runs |
+
+A setup failure is retried after a backoff (1 s doubling to 30 s), not at every launch; the app logs the reason once.
+
+### File size (rows X, A6)
+
+| Row | Target behaviour (sidecar helper attacks) | Required |
+|---|---|---|
+| X1 | write straddling the cap | short count, file exactly at the cap, next write EFBIG, `Signal = 0` |
+| X2 | aborts or exits non-zero on EFBIG | `OutputLimit`, file at the cap |
+| X3 | resets SIGXFSZ to `SIG_DFL`, then writes past the cap | dies of SIGXFSZ, `OutputLimit`, no core helper, cap kept |
+| X4 | loops on EFBIG | ended by the timeout, `OutputLimit`, cap kept |
+| X5 | pinned typst, TYP-19 PDF and SVG | exit 1, `Signal = 0`, stderr `os error 27`, `ErrOutputTooLarge` |
+
+### Tests named by the gate (each red today because it does not exist)
+
+- `internal/sidecar`: `TestTargetCoreLimitIsSentinel`, `TestCorePatternGuaranteeScope` (parse `|…`, a file pattern, `@…`,
+  `@@…`; only pipe and file are guaranteed), `TestSandboxDeathStartsNoCoreHelper` (fails with "RS1" in socket mode),
+  `TestFileSizeCapShortWriteThenEFBIG` (X1), `TestFileSizeCapAbortOnEFBIGIsOutputLimit` (X2),
+  `TestFileSizeCapDispositionResetIsOutputLimit` (X3), `TestFileSizeCapEFBIGLoopEndsAtTimeout` (X4),
+  `TestCgroupSessionScopeDelegated` (S1-S9 on the real user manager), `TestCgroupRunLimitsVerifiedBeforeStart` (R2-R3),
+  `TestCgroupWorkloadAndDescendantsInside` (a helper target forks a child, both print their PIDs and wait on a pipe
+  before allocating; while they wait, both PIDs are in `run-<n>/cgroup.procs` and neither is in the app's cgroup),
+  `TestBootstrapRefusesUnexpectedCgroup` (R6, expected path altered through a seam), `TestCgroupSessionSharesSliceBound`
+  and `TestCgroupSessionCopiesLeafBound` (rows A1-A2), `TestCgroupRemovedAfterRun` (R8, no
+  process left), `TestCgroupFallbackAtEveryStep` (F1-F11, one subtest each; each run still confined and reports
+  `rlimit`), `TestFallbackReportsRlimitOnly`, `TestBothMemoryBudgetsHold` (with a cgroup the target's `RLIMIT_AS` is
+  exactly `MemoryLimit` and `memory.max` is `ResidentLimit`), `TestResidentBudgetKillsWithSIGKILL` (M1, `ResidentLimit`
+  below the address budget), `TestAddressBudgetFailsAllocationFirst` (M2, `ResidentLimit` above it),
+  `TestMemoryCauseFromEvents` (M1-M4 from counter texts and read errors), `TestCgroupCountersReadBeforeCleanup` (R7
+  before R8, order recorded through the cgroupfs seam).
+- `internal/typst`: `TestTargetIgnoresOnlyFileSizeSignal`, `TestPinnedTypstOutputCapExitsOne` (X5),
+  `TestFailureBlocked`, `TestBlockedErrorCarriesNoDetail`, `TestHostileCgroupMemoryIsMemoryLimit` (M1 with real typst),
+  `TestHostileMemoryDeathStartsNoCoreHelper` (M1 and M2), `TestFailureMemoryCause` (M3 and M4 are not `ErrMemoryLimit`).
+- `internal/app`: `TestFailureOfBlocked`, `TestBlockedFailureLeaksNothing` (a canary in stderr, the project path and the
+  document reaches neither the preview frame, exactly `{"kind":"blocked"}`, nor the captured log).
+- `frontend/src/preview/failureMessages.test.ts`: the four SB1 message rules, renamed "SB1b …", and "SB1b a failure shows
+  only the fixed message of its kind".
+- `scripts/sandbox_no_coredump.py` (G4, rows J): see the re-review section below.
+
+### Red reasons recorded at freeze (2026-11-12)
+
+Each criterion of `gates/SB1b.toml` was run once before the freeze; its comment says why it is red (or, for
+`hostile-kept` and `regression`, that it is green and must stay so).
+
+### Re-review (Codex, 2026-11-12, "fix first"): additions, which win over the tables above
+
+ADR 0042, section A8. Mandatory subtests are named `Test…/<row>`; every Go criterion fails on any `--- SKIP` or
+`--- FAIL` line at any depth (a parent can pass while a subtest skips).
+
+**Memory cause from a timeline (rows M6-M9; M1 now also needs the timeline conditions).** From R4 to R7 the app watches
+the run cgroup's `memory.events.local` (inotify) and keeps each read with its monotonic time; it snapshots
+`/proc/vmstat` `oom_kill` and the local `oom` of the session scope and each ancestor up to `user@<uid>.service` at R4 and R7.
+
+| Row | Timeline | `MemoryCause` |
+|---|---|---|
+| M6 | local `oom` rises; the first `oom_kill` rise comes more than W = 1 s later | `victim` |
+| M7 | as M1, but the `/proc/vmstat` `oom_kill` delta exceeds the run's local `oom_kill` delta | `victim` |
+| M8 | as M1, but an ancestor's local `oom` rose (an ancestor limit) | `victim` |
+| M9 | inotify overflow, or a failed read during the watch | `unknown` |
+
+`TestMemoryCauseFromEvents` has the subtests `M1`, `M2`, `M3`, `M4`, `M6`, `M7`, `M8`, `M9` (scripted timelines through
+the cgroupfs seam); M1 includes the two-read case (oom, then the kill within W).
+
+**Aggregate bound (rows A).**
+
+| Row | Where the limit is set | Claim | Test |
+|---|---|---|---|
+| A1 | the app's slice or above | app plus sandbox together never exceed it (kernel, shared ancestor) | `TestCgroupSessionSharesSliceBound`: a child "app" (hidden test mode) in a scope under a fresh limited transient slice holds half the limit, then its sandbox workload grows past the rest: the slice's local `oom` rises and the workload dies (`victim`, M8) |
+| A2 | the app's own leaf cgroup | copied to the session scope: the sandbox alone never exceeds it; the sum may reach twice it (RS5) | `TestCgroupSessionCopiesLeafBound`: the scope's `memory.max`/`swap.max` equal the leaf's; a workload past it is killed by the scope's limit |
+
+**Holder lifetime (rows H).**
+
+| Row | Event | Required | Test |
+|---|---|---|---|
+| H1 | holder dead before R1 (pidfd readable) | session invalidated; S1-S9 for this run | `TestHolderDeathBetweenVerifyAndStart/before-run` |
+| H2 | holder killed between R3 and R5, scope empties | ENOENT or ENODEV at R1/R5 → retried once in the fallback, `rlimit`; next run on a new session | `TestHolderDeathBetweenVerifyAndStart/after-verify` |
+| H3 | holder killed while other runs keep the scope alive | each run is either in a live verified cgroup or in the fallback; none in the app's cgroup; the stale session is dropped when its last run ends | `TestConcurrentRunsDuringHolderDeath` (8 runs) |
+| H4 | the app is SIGKILLed during a run whose target has a forked descendant | within 5 s no process remains in any `run-*`, the scope unit is gone | `TestAppSIGKILLLeavesNoWorkload` (child "app" in hidden test mode) |
+| H5 | holder sees EOF | `cgroup.kill` on every `run-*`, wait `populated 0` (5 s), `rmdir`, exit | `TestAppSIGKILLLeavesNoWorkload`, and H4 |
+
+**Descriptors (rows D).**
+
+| Row | Rule | Test |
+|---|---|---|
+| D1 | the run cgroup fd is `O_CLOEXEC` and closed right after `Start` on every path (success, placement error, retry, refused bootstrap, fallback, new session) | `TestCgroupDescriptorClosedOnEveryPath`: the app's `/proc/self/fd` count and set are unchanged after each path |
+| D2 | both holder-pipe ends come from `os.Pipe` (CLOEXEC, atomic); the read end is only the holder's `ExtraFiles[0]` and is closed in the app after the holder starts; the write end is in no launch's `ExtraFiles` | `TestSandboxInheritsNoSessionDescriptor`: a target and its descendant list `/proc/self/fd`; no entry has the inode of either holder-pipe end, nor is a cgroup directory |
+| D3 | a target inherits exactly 0, 1, 2 and nothing else of ours | same test |
+
+**G4 evidence (rows J), `scripts/sandbox_no_coredump.py`.**
+
+| Row | Rule |
+|---|---|
+| J1 | every hostile test that causes a deliberate sandbox death appends one JSON line to `$INKWELL_SANDBOX_DEATHS`: `test`, host `pid`, `nspid` (from `NSpid` of `/proc/<pid>/status`, read before the death), `comm`, `signal`, `coredumped` (the PIDFD bit); an empty manifest or a `coredumped` other than `false` fails (the variable goes in `.env.reference`) |
+| J2 | barrier: no `systemd-coredump@` unit active, activating or deactivating and no `systemd-coredum` process, on two polls 1 s apart (bounded 60 s); then a marker sent by `logger --journald` (native datagram socket, the one systemd-coredump writes to) is visible (bounded 60 s) |
+| J3 | zero records with `COREDUMP_PID` in the manifest or `COREDUMP_EXE` naming sidecar.test, typst or tinymist; zero abrt lines naming them |
+| J4 | at least one kernel line `coredump: N(comm): RLIMIT_CORE is set to 1, aborting core` whose N and comm are the innermost namespace PID and command name of a recorded death |
+| J5 | every named test and mandatory subtest prints `--- PASS`, no `--- SKIP` or `--- FAIL` anywhere; any failed or refused read fails; socket mode fails with RS1 |
+| J6 | `--self-test` (green before the code): scripted journals with a delayed collector, unattributed records and kernel lines, a refused journal, an empty manifest, a skipped subtest |
+
+Mutants added: SB1b-25 the W window ignored (any earlier `oom` makes `local-limit`; M6); SB1b-26 `/proc/vmstat` check
+removed (M7); SB1b-27 ancestor check removed (M8); SB1b-28 session scope not placed in the app's slice (A1); SB1b-29 the
+holder ignores EOF (H4); SB1b-30 ENOENT/ENODEV at placement returns an error instead of the fallback (H2); SB1b-31 the
+cgroup fd is not closed after `Start` (D1); SB1b-32 the holder pipe's write end is passed to a launch (D2). SB1b-22 now
+reads "leaf bound not copied" (A2). TLA+ mutants added: `MixedHistoryAsLimit`, `HolderDeathEscapes`,
+`OrphanAfterAppKill`; witnesses `WitnessMixedHistory`, `WitnessHolderDeath`.

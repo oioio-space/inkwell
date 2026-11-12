@@ -1,0 +1,164 @@
+# Frozen acceptance for block SB1b (requirement W49, rigour: complete — the sandbox that confines documents from peers),
+# which SUPERSEDES block SB1: gates/SB1.toml stays frozen as history, no code was written against it. Codex's adversarial
+# review of ADR 0042 (2026-11-12, verdict "amend ADR first") found that the memory scope migrated a running process,
+# ordered the two memory limits wrongly, took a job result for confinement, raced its counters, overstated the core-dump
+# and SIGXFSZ guarantees, and that SB1 could not catch a workload left outside its cgroup; its re-review ("fix first")
+# added the mixed OOM history, skipped subtests, the aggregate bound, holder lifetime and app crash, descriptor ownership
+# and attributed journal evidence. Decision: ADR 0042, sections "Amendment 2026-11-12" A1-A7 and A8. Spec:
+# docs/plans/2026-11-11-sandbox-crash-reports.md, section "Gate SB1b" and its re-review additions (rows S, R, M, F, X, A,
+# H, D, J). User decisions kept: D1 SECCOMP_RET_KILL_PROCESS, D2 the cgroup bound in this block, D3 wording confirmed at
+# the UX review. Every criterion that names tests fails on any `--- SKIP` or `--- FAIL` line at any depth and requires
+# each named test and mandatory subtest to print `--- PASS` (a `go test -run` that matches nothing passes; nothing passes
+# silently on a machine that cannot exercise the sandbox or has no delegated user manager); the Vitest criterion requires
+# each named test reported as passed.
+raw_results = ["docs/plans/2026-11-11-sandbox-crash-reports.md", "docs/objectif-en-cours.md", "gates/SB1b/*"]
+
+[[criteria]]
+# The specification is complete where the code needs it: ADR 0042 carries the amendment and its re-review (A8) and names
+# this gate; the plan carries every row of the tables S, R, M, F, X, A, H, D and J; the sandbox policy document explains the
+# core-dump behaviour (RLIMIT_CORE sentinel, core_pattern modes) and the memory cgroup. Red at freeze:
+# internal/sidecar/seccomp-policy.md says nothing about RLIMIT_CORE, core_pattern or the cgroup (blueprint step 6).
+id = "spec"
+command = '''a=docs/adr/0042-sandbox-memory-scope-and-no-core-helper.md; p=docs/plans/2026-11-11-sandbox-crash-reports.md; grep -q '^## Amendment 2026-11-12 (block SB1b)' "$a" && grep -q '^### A8. Re-review of the amendment' "$a" && grep -q 'gates/SB1b.toml' "$a" || { echo 'ADR 0042 lacks its SB1b amendment or A8'; exit 1; }; grep -q '^## Gate SB1b' "$p" || { echo 'plan lacks the Gate SB1b section'; exit 1; }; for r in S1 S2 S3 S4 S5 S6 S7 S8 S9 R1 R2 R3 R4 R5 R6 R7 R8 M1 M2 M3 M4 M5 M6 M7 M8 M9 F1 F2 F3 F4 F5 F6 F7 F8 F9 F10 F11 X1 X2 X3 X4 X5 A1 A2 H1 H2 H3 H4 H5 D1 D2 D3 J1 J2 J3 J4 J5 J6; do grep -q "^| $r |" "$p" || { echo "plan lacks row $r"; exit 1; }; done; f=internal/sidecar/seccomp-policy.md; for w in RLIMIT_CORE core_pattern memory.max CLONE_INTO_CGROUP; do grep -q -- "$w" "$f" || { echo "$f does not explain $w"; exit 1; }; done'''
+
+[[criteria]]
+# The model (ADR 0042 A1, A3, A4, A8): docs/protocol/tla/SandboxScope.tla, sound configurations SandboxScope (no fault)
+# and SandboxScopeFaults (a fault at any setup step, holder death at any point, app kill, global or ancestor OOM, unreadable
+# counters) checked exhaustively. Invariants: untrusted code runs only in a verified run cgroup or in a run marked rlimit;
+# counters are read before cleanup; a failed read is never zero; only a local OOM within the timeline window, with no other
+# kill and no ancestor OOM, is a memory limit; after the app dies no run process survives the bound. Each mutant detected
+# and each witness violated (anti-vacuity), every other model of the directory too, read from tla-check.sh's own verdict
+# lines. The model file and README section are checked first; the run is bounded at 5400 s (on 2026-11-12 the whole suite
+# was still at LinkProbe after 1800 s on a loaded machine). Red at freeze: docs/protocol/tla/SandboxScope.tla is missing.
+id = "tla"
+command = '''test -s docs/protocol/tla/SandboxScope.tla || { echo 'missing docs/protocol/tla/SandboxScope.tla'; exit 1; }; grep -q '^## SandboxScope' docs/protocol/tla/README.md || { echo 'no SandboxScope section in the TLA+ README'; exit 1; }; out=$(timeout 5400 mise run tla 2>&1) || { echo "$out" | tail -40; exit 1; }; for n in SandboxScope SandboxScopeFaults; do echo "$out" | grep -q "✓ $n: no error" || { echo "sound model not checked: $n"; exit 1; }; done; for m in NotBornInside ExecBeforeCheck CleanupBeforeCounters UnreadAsZero VictimAsLimit MixedHistoryAsLimit ContinueAfterPartialSetup SessionUnbounded JobDoneIsConfined RaiseAddressLimit HolderDeathEscapes OrphanAfterAppKill WitnessLocalLimit WitnessAddressLimit WitnessFallback WitnessVictim WitnessMixedHistory WitnessHolderDeath; do echo "$out" | grep -q "✓ SandboxScope$m: violation detected" || { echo "mutant or witness not detected: $m"; exit 1; }; done'''
+
+[[criteria]]
+# W49 / study 5.0 / T1, ADR 0042 A5. The target's RLIMIT_CORE is exactly {1,1} (the kernel's pipe sentinel; Max = 1 so the
+# target cannot raise it), read by the target itself at startup; core_pattern is classified (pipe and file guaranteed,
+# socket and socket-request not). Red at freeze: TestTargetCoreLimitIsSentinel and TestCorePatternGuaranteeScope do not
+# exist, and the launcher sets {0,0}.
+id = "core-limit"
+command = '''out=$(./scripts/heavy.sh timeout 600 go test -count=1 -v -run '^(TestTargetCoreLimitIsSentinel|TestCorePatternGuaranteeScope|TestRunLimitsHoldFromStartup)$' ./internal/sidecar 2>&1) || { echo "$out" | tail -40; exit 1; }; if echo "$out" | grep -E -q -- '^[[:space:]]*--- (SKIP|FAIL): '; then echo "$out" | grep -E -- '--- (SKIP|FAIL): ' | head -20; exit 1; fi; for t in TestTargetCoreLimitIsSentinel TestCorePatternGuaranteeScope TestRunLimitsHoldFromStartup TestCorePatternGuaranteeScope/pipe TestCorePatternGuaranteeScope/file TestCorePatternGuaranteeScope/socket TestCorePatternGuaranteeScope/socket-request; do echo "$out" | grep -q -- "--- PASS: $t (" || { echo "missing, skipped or failing: $t"; exit 1; }; done'''
+
+[[criteria]]
+# W49 / 5.0, 5.4 R3 R4 R7 / T2, D1, A5. For each attack (subtests arch, x32: SIGSYS; xfsz: SIGXFSZ reset to SIG_DFL; segv)
+# the INTENDED signal still kills and the pidfd's PIDFD_INFO_COREDUMP mask has no PIDFD_COREDUMPED bit. On a socket-mode
+# core_pattern the test FAILS with "RS1"; a missing pidfd info is a skip, hence a failure here. Red at freeze:
+# TestSandboxDeathStartsNoCoreHelper does not exist, and with {0,0} the helper starts.
+id = "no-core-helper"
+command = '''out=$(./scripts/heavy.sh timeout 600 go test -count=1 -v -run '^(TestSandboxDeathStartsNoCoreHelper|TestSeccompKillsABIMismatch|TestInitPreservesFileSizeSignal)$' ./internal/sidecar 2>&1) || { echo "$out" | tail -40; exit 1; }; if echo "$out" | grep -E -q -- '^[[:space:]]*--- (SKIP|FAIL): '; then echo "$out" | grep -E -- '--- (SKIP|FAIL): ' | head -20; exit 1; fi; for t in TestSandboxDeathStartsNoCoreHelper TestSeccompKillsABIMismatch TestInitPreservesFileSizeSignal TestSandboxDeathStartsNoCoreHelper/arch TestSandboxDeathStartsNoCoreHelper/x32 TestSandboxDeathStartsNoCoreHelper/xfsz TestSandboxDeathStartsNoCoreHelper/segv; do echo "$out" | grep -q -- "--- PASS: $t (" || { echo "missing, skipped or failing: $t"; exit 1; }; done'''
+
+[[criteria]]
+# W49 / 5.1, ADR 0042 A6, rows X1-X5. SIGXFSZ is ignored in the target (only it, plus SIGPIPE which Rust sets). For any
+# target the byte cap holds and every end with an output at its cap is OutputLimit: short write then EFBIG (X1), abort on
+# EFBIG (X2), disposition reset then SIGXFSZ with no core helper (X3), an EFBIG loop ended by the timeout (X4). Only the
+# pinned typst on TYP-19 (subtests pdf and svg) must exit 1 with no signal and "os error 27", still ErrOutputTooLarge (X5).
+# The existing byte-cap tests are kept. Red at freeze: the new tests do not exist; typst dies of signal 25 today.
+id = "file-size"
+command = '''out=$(./scripts/heavy.sh timeout 600 go test -count=1 -v -run '^(TestFileSizeCapShortWriteThenEFBIG|TestFileSizeCapAbortOnEFBIGIsOutputLimit|TestFileSizeCapDispositionResetIsOutputLimit|TestFileSizeCapEFBIGLoopEndsAtTimeout|TestRunFileSizeLimit|TestRunDirectoryBound)$' ./internal/sidecar 2>&1) || { echo "$out" | tail -40; exit 1; }; if echo "$out" | grep -E -q -- '^[[:space:]]*--- (SKIP|FAIL): '; then echo "$out" | grep -E -- '--- (SKIP|FAIL): ' | head -20; exit 1; fi; for t in TestFileSizeCapShortWriteThenEFBIG TestFileSizeCapAbortOnEFBIGIsOutputLimit TestFileSizeCapDispositionResetIsOutputLimit TestFileSizeCapEFBIGLoopEndsAtTimeout TestRunFileSizeLimit TestRunDirectoryBound; do echo "$out" | grep -q -- "--- PASS: $t (" || { echo "missing, skipped or failing: $t"; exit 1; }; done; out=$(./scripts/heavy.sh timeout 600 go test -count=1 -v -run '^(TestTargetIgnoresOnlyFileSizeSignal|TestPinnedTypstOutputCapExitsOne)$' ./internal/typst 2>&1) || { echo "$out" | tail -40; exit 1; }; if echo "$out" | grep -E -q -- '^[[:space:]]*--- (SKIP|FAIL): '; then echo "$out" | grep -E -- '--- (SKIP|FAIL): ' | head -20; exit 1; fi; for t in TestTargetIgnoresOnlyFileSizeSignal TestPinnedTypstOutputCapExitsOne TestPinnedTypstOutputCapExitsOne/pdf TestPinnedTypstOutputCapExitsOne/svg; do echo "$out" | grep -q -- "--- PASS: $t (" || { echo "missing, skipped or failing: $t"; exit 1; }; done'''
+
+[[criteria]]
+# W49 / 5.2 / T6, ADR 0042 A7. SIGSYS (31) maps to typst.ErrBlocked with a fixed text (no stderr, path or document byte) and
+# the preview to the kind "blocked"; a canary placed in stderr, the project path and the document reaches neither the preview
+# frame (exactly {"kind":"blocked"}) nor the captured app log. SIGSEGV with "memory allocation of N bytes failed" stays
+# ErrMemoryLimit; SIGSEGV alone stays a generic stop. Red at freeze: the tests, ErrBlocked and FailBlocked do not exist.
+id = "blocked"
+command = '''out=$(./scripts/heavy.sh timeout 600 go test -count=1 -v -run '^(TestFailureBlocked|TestBlockedErrorCarriesNoDetail)$' ./internal/typst 2>&1) || { echo "$out" | tail -40; exit 1; }; if echo "$out" | grep -E -q -- '^[[:space:]]*--- (SKIP|FAIL): '; then echo "$out" | grep -E -- '--- (SKIP|FAIL): ' | head -20; exit 1; fi; for t in TestFailureBlocked TestBlockedErrorCarriesNoDetail; do echo "$out" | grep -q -- "--- PASS: $t (" || { echo "missing, skipped or failing: $t"; exit 1; }; done; out=$(./scripts/heavy.sh timeout 600 go test -count=1 -v -run '^(TestFailureOfBlocked|TestBlockedFailureLeaksNothing)$' ./internal/app 2>&1) || { echo "$out" | tail -40; exit 1; }; if echo "$out" | grep -E -q -- '^[[:space:]]*--- (SKIP|FAIL): '; then echo "$out" | grep -E -- '--- (SKIP|FAIL): ' | head -20; exit 1; fi; for t in TestFailureOfBlocked TestBlockedFailureLeaksNothing; do echo "$out" | grep -q -- "--- PASS: $t (" || { echo "missing, skipped or failing: $t"; exit 1; }; done'''
+
+[[criteria]]
+# W49 D2, ADR 0042 A1, A3, A8, rows S, R, F, A. On the real user manager: a delegated session scope whose holder is
+# verified in holder/ and whose subtree enables memory (S); per-run limits written and read back before Start (R2-R3); the
+# target AND a descendant it forks, while they wait before allocating, are both in run-<n>/cgroup.procs and not in the app's
+# cgroup ("scope configured but workload outside it"); the bootstrap refuses an unexpected cgroup (R6); app plus sandbox
+# never exceed a limit on their shared slice, tested as an aggregate (A1), and the app's leaf limit is copied and bounds the
+# sandbox alone (A2); the run cgroup is gone after Run with no process left (R8); every fallback row F1-F11 (one subtest
+# each) leaves the run confined by rlimits, seccomp and Landlock and reports Containment "rlimit", never an error. A machine
+# without a delegated user cgroup skips, hence fails: deliberate. Red at freeze: none of these tests exist.
+id = "memory-scope"
+command = '''out=$(./scripts/heavy.sh timeout 900 go test -count=1 -v -run '^(TestCgroupSessionScopeDelegated|TestCgroupRunLimitsVerifiedBeforeStart|TestCgroupWorkloadAndDescendantsInside|TestBootstrapRefusesUnexpectedCgroup|TestCgroupSessionSharesSliceBound|TestCgroupSessionCopiesLeafBound|TestCgroupRemovedAfterRun|TestCgroupFallbackAtEveryStep|TestFallbackReportsRlimitOnly)$' ./internal/sidecar 2>&1) || { echo "$out" | tail -40; exit 1; }; if echo "$out" | grep -E -q -- '^[[:space:]]*--- (SKIP|FAIL): '; then echo "$out" | grep -E -- '--- (SKIP|FAIL): ' | head -20; exit 1; fi; for t in TestCgroupSessionScopeDelegated TestCgroupRunLimitsVerifiedBeforeStart TestCgroupWorkloadAndDescendantsInside TestBootstrapRefusesUnexpectedCgroup TestCgroupSessionSharesSliceBound TestCgroupSessionCopiesLeafBound TestCgroupRemovedAfterRun TestCgroupFallbackAtEveryStep TestFallbackReportsRlimitOnly TestCgroupFallbackAtEveryStep/F1 TestCgroupFallbackAtEveryStep/F2 TestCgroupFallbackAtEveryStep/F3 TestCgroupFallbackAtEveryStep/F4 TestCgroupFallbackAtEveryStep/F5 TestCgroupFallbackAtEveryStep/F6 TestCgroupFallbackAtEveryStep/F7 TestCgroupFallbackAtEveryStep/F8 TestCgroupFallbackAtEveryStep/F9 TestCgroupFallbackAtEveryStep/F10 TestCgroupFallbackAtEveryStep/F11; do echo "$out" | grep -q -- "--- PASS: $t (" || { echo "missing, skipped or failing: $t"; exit 1; }; done'''
+
+[[criteria]]
+# ADR 0042 A8, rows H and D. Holder lifetime: a holder dead before a run, or killed between verification and Start,
+# invalidates the session and the run is retried once in the fallback, never placed outside a verified cgroup (subtests
+# before-run and after-verify); 8 concurrent runs while the holder dies are each in a live verified cgroup or in the fallback;
+# after the app is SIGKILLed during a run whose target forked a descendant, within 5 s no process remains in any run-* and the
+# scope unit is gone. Descriptors: the run cgroup fd is closed after Start on every path; a target and its descendant
+# inherit neither end of the holder pipe nor any cgroup directory, only 0, 1 and 2. Red at freeze: none of these tests
+# exist.
+id = "session-lifetime"
+command = '''out=$(./scripts/heavy.sh timeout 900 go test -count=1 -v -run '^(TestHolderDeathBetweenVerifyAndStart|TestConcurrentRunsDuringHolderDeath|TestAppSIGKILLLeavesNoWorkload|TestCgroupDescriptorClosedOnEveryPath|TestSandboxInheritsNoSessionDescriptor)$' ./internal/sidecar 2>&1) || { echo "$out" | tail -40; exit 1; }; if echo "$out" | grep -E -q -- '^[[:space:]]*--- (SKIP|FAIL): '; then echo "$out" | grep -E -- '--- (SKIP|FAIL): ' | head -20; exit 1; fi; for t in TestHolderDeathBetweenVerifyAndStart TestConcurrentRunsDuringHolderDeath TestAppSIGKILLLeavesNoWorkload TestCgroupDescriptorClosedOnEveryPath TestSandboxInheritsNoSessionDescriptor TestHolderDeathBetweenVerifyAndStart/before-run TestHolderDeathBetweenVerifyAndStart/after-verify; do echo "$out" | grep -q -- "--- PASS: $t (" || { echo "missing, skipped or failing: $t"; exit 1; }; done'''
+
+[[criteria]]
+# W49 D2, ADR 0042 A2, A4, A8, rows M1-M9. Both budgets hold with a cgroup: the target's RLIMIT_AS is exactly MemoryLimit
+# (never raised) and memory.max is ResidentLimit. Each outcome is exercised: ResidentLimit below the address budget ends in
+# SIGKILL attributed local-limit (M1); above it the allocation fails first (M2); neither starts a core helper. The cause comes
+# from the timeline read after Wait and before cgroup.kill/rmdir (order recorded): a kill more than W = 1 s after a non-fatal
+# local oom (M6), an OOM kill elsewhere in the window (M7) or an ancestor OOM (M8) is "victim"; an overflow or failed read is
+# "unknown", never zero (M9); a global victim is not ErrMemoryLimit (M3). Real typst: a document growing resident memory
+# under a lower ResidentLimit gives ErrMemoryLimit. Red at freeze: none of these tests exist.
+id = "memory-budgets"
+command = '''out=$(./scripts/heavy.sh timeout 900 go test -count=1 -v -run '^(TestBothMemoryBudgetsHold|TestResidentBudgetKillsWithSIGKILL|TestAddressBudgetFailsAllocationFirst|TestMemoryCauseFromEvents|TestCgroupCountersReadBeforeCleanup)$' ./internal/sidecar 2>&1) || { echo "$out" | tail -40; exit 1; }; if echo "$out" | grep -E -q -- '^[[:space:]]*--- (SKIP|FAIL): '; then echo "$out" | grep -E -- '--- (SKIP|FAIL): ' | head -20; exit 1; fi; for t in TestBothMemoryBudgetsHold TestResidentBudgetKillsWithSIGKILL TestAddressBudgetFailsAllocationFirst TestMemoryCauseFromEvents TestCgroupCountersReadBeforeCleanup TestMemoryCauseFromEvents/M1 TestMemoryCauseFromEvents/M2 TestMemoryCauseFromEvents/M3 TestMemoryCauseFromEvents/M4 TestMemoryCauseFromEvents/M6 TestMemoryCauseFromEvents/M7 TestMemoryCauseFromEvents/M8 TestMemoryCauseFromEvents/M9; do echo "$out" | grep -q -- "--- PASS: $t (" || { echo "missing, skipped or failing: $t"; exit 1; }; done; out=$(./scripts/heavy.sh timeout 900 go test -count=1 -v -run '^(TestHostileCgroupMemoryIsMemoryLimit|TestHostileMemoryDeathStartsNoCoreHelper|TestFailureMemoryCause)$' ./internal/typst 2>&1) || { echo "$out" | tail -40; exit 1; }; if echo "$out" | grep -E -q -- '^[[:space:]]*--- (SKIP|FAIL): '; then echo "$out" | grep -E -- '--- (SKIP|FAIL): ' | head -20; exit 1; fi; for t in TestHostileCgroupMemoryIsMemoryLimit TestHostileMemoryDeathStartsNoCoreHelper TestFailureMemoryCause TestHostileMemoryDeathStartsNoCoreHelper/local-limit TestHostileMemoryDeathStartsNoCoreHelper/address-limit; do echo "$out" | grep -q -- "--- PASS: $t (" || { echo "missing, skipped or failing: $t"; exit 1; }; done'''
+
+[[criteria]]
+# G4, the user-visible criterion (study 8.2, ADR 0042 A5 and A8, rows J1-J6): scripts/sandbox_no_coredump.py. Its self-test
+# (green at freeze: delayed collector, unattributed records and kernel lines, refused journal, empty manifest, skipped
+# subtest) runs first; then it runs every hostile test with a manifest of the deliberate deaths, requires each test and
+# mandatory subtest to pass with no SKIP, waits on the collector barrier (no collector unit or process, then a marker through
+# journald's native socket), and requires 0 systemd-coredump records for the recorded PIDs or the sidecars, 0 abrt problems,
+# and at least one kernel sentinel line attributed to a recorded death; any failed read fails; socket mode fails (RS1).
+# Red at freeze: the new hostile tests are missing, the manifest is empty, and systemd-coredump records appear (RLIMIT_CORE
+# is 0, which a pipe ignores).
+id = "no-coredump-record"
+command = '''./scripts/heavy.sh timeout 120 python3 -I scripts/sandbox_no_coredump.py --self-test && python3 -I scripts/sandbox_no_coredump.py'''
+
+[[criteria]]
+# W49 / study 7 (D3: final wording confirmed at the UX review; the keys and rules are frozen here), ADR 0042 A7. Every
+# PreviewFailureKind, "blocked" included, has a non-empty English and French message with no raw key shown; memory, tooLarge
+# and blocked say what to do (UX rule 5) and use no jargon (sandbox, signal, seccomp, crash, core); the two language files
+# hold the same keys; a failure frame carrying extra fields renders only the fixed message of its kind; no test is skipped.
+# Red at freeze: the test file does not exist.
+id = "messages"
+command = '''out=$(cd frontend && ../scripts/heavy.sh timeout 300 pnpm exec vitest run --reporter=verbose src/preview/failureMessages.test.ts 2>&1) || { echo "$out" | tail -40; exit 1; }; if echo "$out" | grep -E -q -- '↓|skipped|todo'; then echo 'a test is skipped'; exit 1; fi; for t in 'SB1b every failure kind has an English and a French message' 'SB1b memory, tooLarge and blocked say what to do' 'SB1b failure messages use no jargon' 'SB1b both languages hold the same preview.fail keys' 'SB1b a failure shows only the fixed message of its kind'; do echo "$out" | grep -q -- "✓.*$t" || { echo "missing or not passing: $t"; exit 1; }; done'''
+
+[[criteria]]
+# The hostile tests keep their guarantees, unchanged in what they assert (the whole sandbox suite and TYP-14..TYP-19,
+# uncached, with no SKIP or FAIL at any depth). Green at freeze (no skip on this machine) and must stay so.
+id = "hostile-kept"
+command = '''out=$(./scripts/heavy.sh timeout 1500 go test -count=1 -v -run 'TestSeccomp|TestSandbox|TestCompileHostile' ./internal/sidecar ./internal/typst 2>&1) || { echo "$out" | tail -40; exit 1; }; if echo "$out" | grep -E -q -- '^[[:space:]]*--- (SKIP|FAIL): '; then echo "$out" | grep -E -- '--- (SKIP|FAIL): ' | head -20; exit 1; fi'''
+
+[[criteria]]
+# Mutants (scripts/netsim/mutants.toml, block SB1b, kind go; the runner counts only a real "--- FAIL"). Each turns the named
+# test red: SB1b-01 RLIMIT_CORE {1,1}->{0,0} (TestTargetCoreLimitIsSentinel); 02 RLIMIT_CORE entry removed (same); 03 Max
+# unlimited (same); 04 signal.Ignore(SIGXFSZ) removed (TestTargetIgnoresOnlyFileSizeSignal); 05 SIGXCPU ignored instead (same);
+# 06 seccomp ABI action KILL_PROCESS->ERRNO (TestSeccompKillsABIMismatch); 07 failure(): SIGSYS branch removed
+# (TestFailureBlocked); 08 failureKinds ErrBlocked row removed (TestFailureOfBlocked); 09 ErrBlocked carries the first stderr
+# line (TestBlockedErrorCarriesNoDetail); 10 UseCgroupFD not set, workload born in the app's cgroup
+# (TestCgroupWorkloadAndDescendantsInside); 11 CgroupFD of holder/ instead of the run cgroup (same); 12 bootstrap membership
+# check removed (TestBootstrapRefusesUnexpectedCgroup); 13 memory.max not written (TestCgroupRunLimitsVerifiedBeforeStart);
+# 14 memory.oom.group not written (same); 15 memory.swap.max not 0 (same); 16 read-back verification skipped
+# (TestCgroupFallbackAtEveryStep/F9); 17 counters read after cleanup, early release (TestCgroupCountersReadBeforeCleanup);
+# 18 unreadable counters reported as zero (TestMemoryCauseFromEvents/M9); 19 local oom check removed (TestMemoryCauseFromEvents/M3);
+# 20 RLIMIT_AS not set when a cgroup is active (TestBothMemoryBudgetsHold); 21 a setup failure returns an error instead of
+# falling back (TestCgroupFallbackAtEveryStep); 22 the app's leaf bound not copied (TestCgroupSessionCopiesLeafBound); 23 job
+# "done" accepted without the holder membership check (TestCgroupFallbackAtEveryStep/F4); 24 run cgroup not removed
+# (TestCgroupRemovedAfterRun); 25 the W window ignored (TestMemoryCauseFromEvents/M6); 26 the /proc/vmstat check removed
+# (.../M7); 27 the ancestor check removed (.../M8); 28 session scope not placed in the app's slice
+# (TestCgroupSessionSharesSliceBound); 29 the holder ignores EOF (TestAppSIGKILLLeavesNoWorkload); 30 ENOENT/ENODEV at
+# placement returns an error instead of the fallback (TestHolderDeathBetweenVerifyAndStart/after-verify); 31 the cgroup fd
+# not closed after Start (TestCgroupDescriptorClosedOnEveryPath); 32 the holder pipe's write end passed to a launch
+# (TestSandboxInheritsNoSessionDescriptor). Red at freeze: the entries do not exist.
+id = "mutants"
+command = '''for i in $(seq -w 1 32); do grep -q "id = \"SB1b-$i\"" scripts/netsim/mutants.toml || { echo "missing mutant SB1b-$i"; exit 1; }; done && mise run netsim:mutants -- SB1b'''
+
+[[criteria]]
+# No regression: the sidecar, typst and app packages (every test, uncached; whole-package platform skips are allowed here, the
+# named criteria above refuse them), the frontend gate, lint, the declared environment, and the frozen gate of the block that
+# introduced the sandbox (L1). At freeze the Go part and lint and lint:env pass; fe:check fails on the formatting of
+# frontend/src/perf/native.test.ts (committed by block PB, 58f0aea), to be fixed outside this block before SB1b's gate runs.
+id = "regression"
+command = '''./scripts/heavy.sh timeout 1800 go test -count=1 ./internal/sidecar/... ./internal/typst/... ./internal/app/... && mise run fe:check && mise run lint && mise run lint:env && mise run gate -- L1'''
+
+[[criteria]]
+id = "simplify-report"
+command = '''test -s gates/SB1b/SIMPLIFY.md'''
