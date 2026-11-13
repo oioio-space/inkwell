@@ -58,5 +58,42 @@ class CheckClaudeMdTest(unittest.TestCase):
         self.assertEqual(self.check("`guard.sh`"), [])
 
 
+class DocsMapTest(unittest.TestCase):
+    """docs/README.md must link every top-level entry of docs/ and have no broken link."""
+
+    def setUp(self):
+        tmp = tempfile.TemporaryDirectory()
+        self.addCleanup(tmp.cleanup)
+        self.root = pathlib.Path(tmp.name)
+        (self.root / "docs/adr").mkdir(parents=True)
+        (self.root / "docs/adr/README.md").write_text("")
+        (self.root / "docs/glossary.md").write_text("")
+        (self.root / "docs/.hidden").write_text("")
+
+    def check(self, readme):
+        (self.root / "docs/README.md").write_text(readme)
+        return check_claude_md.docs_map_problems(self.root)
+
+    def test_complete_map_has_no_finding(self):
+        self.assertEqual(self.check("[a](adr/) [b](./glossary.md) [c](adr/README.md#x)"), [])
+
+    def test_unlinked_entry_is_reported(self):
+        found = self.check("[a](adr/)")
+        self.assertEqual(len(found), 1)
+        self.assertIn("glossary.md", found[0])
+
+    def test_broken_link_is_reported(self):
+        found = self.check("[a](adr) [b](glossary.md) [c](gone.md)")
+        self.assertEqual(len(found), 1)
+        self.assertIn("gone.md", found[0])
+
+    def test_external_and_anchor_links_are_ignored(self):
+        self.assertEqual(
+            self.check("[a](adr) [b](glossary.md) [c](https://x.org/y) [d](#top)"), [])
+
+    def test_findings_name_their_own_file(self):
+        self.assertTrue(self.check("")[0].startswith("docs/README.md:"))
+
+
 if __name__ == "__main__":
     unittest.main()

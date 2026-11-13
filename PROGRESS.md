@@ -6,20 +6,54 @@ Chaque étape livre quelque chose qui tourne ; l'ordre met les risques technique
 et l'habillage en dernier. Une étape n'est close que lorsque son **critère de sortie** est
 démontré (test, démo enregistrée ou tâche utilisateur chronométrée).
 
-## État actuel
+## Où en est-on (mis à jour à chaque bloc commité)
 
-- **Audit d'architecture (2026-10-31)** : référentiel, constats, décisions D1–D14, état des lots et
-  marche à suivre pour reprendre : [docs/plans/2026-10-31-architecture-audit.md](docs/plans/2026-10-31-architecture-audit.md).
-- **Audit admission — étape 2.0** : pairs du Repo limités aux appareils membres non suspendus ; retrait explicite, annulation des files et suppression des cooldowns (A14). TDD et tests ciblés race, Vitest, svelte-check, lint et architecture verts ; invitations/relay à valider hors sandbox (sockets interdits).
-- **Étape 0 — Fondations** : terminée.
-- **Étape 1 — Noyau** : terminée — critère de sortie démontré en local (deux instances réelles, Playwright ; `mise run app:duo`).
-  Plan : [docs/plans/2026-10-25-etape-1-noyau.md](docs/plans/2026-10-25-etape-1-noyau.md).
-- **Étape 2 — Réseau** : code livré (p2p, identité, invitation, confiance, relais, store, projet) ; exit criterion **demonstrated and archived** on 2026-11-08 (`docs/perf/2026-11-08-netsim.md`); remaining: the status panel (link type).
-- **Lots HDAE (méthode `docs/plans/2026-11-02-methode-hdae.md`, portes figées `gates/<lot>.toml`)** :
-  L0 (mesure de référence, garde anti-affaiblissement), L1 (autoportance : bac à sable des sidecars sans programme externe, N42), L2 (G-0a : un clic dans la barre latérale ouvre le fichier), L3 (LSP : problèmes cliquables, F8, aide Typst, N28/N29) — tous `pass` dans `gates/L{0,1,2,3}.json` ; reports : PERF-MEM → G-0b, native darwin/windows → N35, PERF-START-plugins → Fondations extensibles.
-- **Protocole ADR 0034** : étape 1 (module `protocol/`), étape 2 (P2 : `protocol/sig`, Ed25519 strict, N-1) et étape 3 (P3 : TLC épinglé `mise run tla`, profil CBOR et schémas §9 dans `@inkwell/protocol`) faites, portes `gates/P2.json` et `gates/P3.json` vertes ; **prochaine : étape 4** (`protocol/sync2`, `protocol/libp2p`), à spécifier d'abord en exécutable (`docs/plans/2026-11-08-spec-executable.md`). Ensuite : G-0b, G-0c, S13. Suivi : [docs/objectif-en-cours.md](docs/objectif-en-cours.md).
-- **Bloc C5S (qualité du lien à trois niveaux, sonde `/inkwell/linkprobe/1.0.0`, ADR 0036)** : livré le 2026-11-12 (`d051af2`), accepté par décision de l'utilisatrice ; reste : l'affichage dans le popover des personnes. Détail : [docs/objectif-en-cours.md](docs/objectif-en-cours.md).
-- **Livré sur `main` le 2026-11-12** : PB (mesure de performance appariée et entrelacée contre la référence du merge-base, ADR 0038) ; Go 1.27.4 (GO-2026-6859, `net/http`) ; RC1 (reconnexion après redémarrage sans relais, carnet d'adresses par appareil) ; LF0a3 (coloration incrémentale corrigée à la cause, correctifs épinglés Typst, Markdown et Lezer ; résidu : cas du délimiteur non fermé → LF0b) ; GR (`--resume` d'une porte par critère sur le même candidat) ; « plus de portes imbriquées » (un appel imbriqué devient une obligation différée dans le registre `gates/deferred.jsonl`) ; méthode v2 ([docs/plans/2026-11-12-method-v2.md](docs/plans/2026-11-12-method-v2.md)). Choix consignés dans [docs/autonomous-decisions.md](docs/autonomous-decisions.md).
+Seul état courant du projet. Règles de travail : [CLAUDE.md](CLAUDE.md) ; carte de la documentation :
+[docs/README.md](docs/README.md) ; registre lu par les outils : [docs/objectif-en-cours.md](docs/objectif-en-cours.md).
+
+**Objectif en cours : la release R1** — une application utilisable par des collaborateurs de confiance (alpha),
+définie le 2026-11-12 dans [docs/autonomous-decisions.md](docs/autonomous-decisions.md) (lignes « release R1 »).
+
+| # | Bloc R1 | État | Détail |
+|---|---|---|---|
+| 1 | PB — mesure appariée | ✅ `main` | ADR 0038 |
+| 2 | C5S — qualité du lien | ✅ `main` (`d051af2`) ; reste l'affichage dans le popover des personnes | ADR 0036, `gates/C5S.toml` |
+| 3 | OI — instance unique | 🔨 worktree : Codex accepte, parcours d'interface fait (UX-OI-1 à 3 corrigés) ; reste la séance avec l'utilisatrice, puis commit | `gates/OI.toml`, [plan](docs/plans/2026-11-11-oi-single-instance-open.md) |
+| 4 | RC1 — reconnexion après redémarrage | ✅ `main` | `gates/RC1.toml` |
+| 5 | SI1b — états vrais enregistré / envoi / reçu | 🔨 worktree : critères verts sur `main`, parcours « à livrer » ; reste la séance avec l'utilisatrice, puis commit | `gates/SI1b.toml`, `gates/SI1b/UX.md` |
+| 5b | SI1c — en-tête stable et lisible : une seule formulation tant que deux personnes tapent (amende DS-3), mise en page de l'en-tête de 360 à 700 px (absorbe le chevauchement relevé par OI), « Seul » remplacé quand mon texte n'est pas parti | 📝 plan et porte prêts, relus à l'aveugle (2 tours, sources vérifiées) ; à figer après SI1b | [plan](docs/plans/2026-11-13-si1c-header.md), `gates/SI1c.toml` |
+| 6 | LF0a3 — coloration incrémentale | ✅ `main` (`427d74a`) ; résidu LF0b après R1 | `gates/LF0a3.toml` |
+| 7 | SB1b — bac à sable : mémoire et descendants | ⏸ première moitié écrite (non commitée, worktree), refusée par Codex (2 défauts graves) ; arrêtée par les garde-fous d'Opus (`[cyber]`), en attente d'un exécutant | `gates/SB1b.toml`, ADR 0042 |
+| 8 | DU — mises à jour ciblées | ⏳ à refaire depuis `main` : l'ancien worktree (base du 2026-11-09, antérieure à Go 1.27.4) est périmé, son diff archivé (`~/inkwell-archive/2026-11-13-DU-stale-diff.patch`) ; périmètre mesuré le 2026-11-13 sur `main` : govulncheck ne trouve aucune vulnérabilité appelée (GO-2026-5932, `x/crypto/openpgp`, n'est pas appelée) ; `pnpm audit --prod` signale `uuid` < 11.1.1 (GHSA-w5hq-g745-h8pq, modérée) via automerge-repo, qui n'appelle que `v4` (non concerné) → DU pour R1 = une surcharge `uuid` ≥ 11.1.1 et rien d'autre | — |
+| 9 | PR1 — présence correcte (W46 : présence figée, couleurs en double, départ en 45 s) | 📝 plan et porte prêts, relus à l'aveugle (2 tours) ; à figer, puis code | [plan](docs/plans/2026-11-13-pr1-presence.md), `gates/PR1.toml` |
+| 10 | Paquet deb/rpm + parcours à deux personnes | 🔨 premier essai fait le 2026-11-13 sur `main` d3d0829 : `pkg:build`, `pkg:lint` et `pkg:test` (PKG-01…11) verts sur Debian 13, Ubuntu 24.04, Fedora 44 ; reste le parcours à deux personnes avec le paquet | `docs/releasing.md` |
+
+**Défauts relevés hors bloc, à traiter avant R1** (parcours OI du 2026-11-13, `gates/OI/UX.md`) : la barre d'en-tête se
+chevauche à 360 px de large (repris par SI1c) ; un `.md` ouvert depuis le gestionnaire de fichiers s'affiche en lecture seule (« Dans cette
+version… ») — à confirmer comme limite assumée ou à corriger, au parcours empaqueté (bloc 10).
+
+**Acceptation de R1** (en plus des portes) : installation et premier lancement sur machine propre ; créer, inviter,
+éditer, exporter ; tuer et relancer les deux pairs ; éditions hors ligne puis convergence ; disque plein ;
+restauration d'une sauvegarde à côté de l'original ; la seconde personne reçoit images, polices et paquets ;
+cas du délimiteur non fermé mesuré. R1 est annoncée « alpha entre personnes de confiance » jusqu'à l'étape 8 de
+l'ADR 0034, et peut demander un relais joignable derrière un NAT restrictif.
+
+**En parallèle (outillage, ≤ 20 %) :** DL — une seule place par information ([plan](docs/plans/2026-11-13-docs-layout.md), livré le 2026-11-13) ;
+audit hebdomadaire `python3 scripts/gate.py --deferred` ; refaire `TestLinkRTTFromProbe` sur un temps contrôlé
+(règle 16 de la méthode v2) ; même règle pour `scripts/gate-selftest.py`, dont le cas `heavy.sh --exclusive true` échoue dès qu'une autre tâche lourde tourne (rejoué sur `main` propre le 2026-11-13) ; file de revues Codex ([docs/reviews/codex-coverage.md](docs/reviews/codex-coverage.md), prochaine : frontière
+d'admission CRDT).
+
+**Après R1, dans l'ordre :** admission par l'étape 8 de l'ADR 0034 (étapes 4 à 6 d'abord, priorité à la frappe) ;
+TR1 (constats de confiance) ; G-0b, G-0c ; le reste de W46 ou LF0b selon ce que le parcours montre ; reportés :
+ST1, fenêtre légère OI et menus OS au-delà de `%F`, import Excel, RG.
+Audits prévus le 2026-11-09 et toujours à faire : PA (protocole existant aux dix points de
+`docs/protocol/README.md`), AA (reste de l'application au regard de `docs/engineering-principles.md` § 0).
+Outillage en attente, seulement sur gain démontré (règle 12) : R8+R4, R1, R7 de
+[l'étude CI](docs/plans/2026-11-08-ci-cd-study.md).
+
+**Livré récemment :** 2026-11-12 PB, Go 1.27.4, C5S, RC1, LF0a3, GR (`--resume`), plus de portes imbriquées,
+méthode v2 ([docs/plans/2026-11-12-method-v2.md](docs/plans/2026-11-12-method-v2.md)) ; 2026-11-09 SP1b, CI1b ; 2026-11-08 L3, P2, P3, RL1.
+Historique complet : `git log` et [docs/archive/progress-journal.md](docs/archive/progress-journal.md).
 
 ## Étape 0 — Fondations ✅
 
@@ -57,7 +91,7 @@ Plan : [docs/plans/2026-10-25-etape-2-reseau.md](docs/plans/2026-10-25-etape-2-r
 - [x] `store` : persistance Automerge atomique, sauvegardes horodatées, contrôle d'intégrité
 - [x] `project` : index, projection `.typ` sur disque, règle de propriété fsnotify, bac à sable E/S
 - [x] Relais libp2p auto-hébergeable en une commande — `cmd/inkwell-relay`, `docs/relay.md`
-- [ ] Panneau d'état : reste l'indicateur global et le type de lien par pair (la barre d'état ne montre que le nombre de personnes)
+- [ ] Panneau d'état : qualité du lien par pair mesurée (C5S) ; reste son affichage dans le popover des personnes
 - [x] Exit criterion demonstrated and archived (2026-11-08): `mise run e2e:netsim`, 4 scenarios PASS, including 3 (offline 60 s, converged 9 s after coming back) and 4 (network change nat-a → nat-c, converged 25 s after) — [docs/perf/2026-11-08-netsim.md](docs/perf/2026-11-08-netsim.md).
 
 ## Étape 3 — Typst
@@ -98,22 +132,3 @@ Plan : [docs/plans/2026-10-25-etape-2-reseau.md](docs/plans/2026-10-25-etape-2-r
 - [ ] Markdown, export HTML, archive de projet autonome
 - [ ] Builds natifs Linux/macOS/Windows en matrice GitHub Actions, signature + notarisation
 - [ ] Mises à jour signées (`minio/selfupdate`), rapport de bug en un clic
-
-## Journal
-
-| Date | Changement |
-|------|------------|
-| 2026-11-12 | PB, Go 1.27.4, C5S, RC1, LF0a3, GR, méthode v2 : mesure appariée (ADR 0038) ; Go 1.27.4 ; qualité du lien en trois niveaux acceptée ; reconnexion sans relais ; coloration incrémentale (résidu LF0b) ; `--resume` ; plus de portes imbriquées (`gates/deferred.jsonl`) ; méthode v2 (`docs/plans/2026-11-12-method-v2.md`). |
-| 2026-11-08 | ADR 0034 étape 2 (P2) : `protocol/sig`, Ed25519 strict, porte `gates/P2.json` verte. |
-| 2026-11-08 | ADR 0034 étape 3 (P3) : TLC épinglé, profil CBOR, schémas §9 ; porte `gates/P3.json` verte. |
-| 2026-11-08 | Bloc RL1 : règle L de la spec sur sync/1 — une écriture échouée relance la synchronisation (plus de perte silencieuse après une coupure, NI-2 vert sur 3 graines) ; mesures de lien v1 et notification Links jusqu'à la webview ; outillage réseau perturbé (NI0, en cours). Porte `gates/RL1.json` verte, régressions et mesure native comprises. |
-| 2026-11-09 | Bloc SP1b (chemin d'envoi provisoire, remplace WB et SP1) : plancher 2 Kio/s, garde sans progrès 90 s, yamux configuré (120 s, fenêtre fixe 256 Kio), partiels 120 s ; un gros collage sur relais lent arrive du premier coup, sans coupure ni resynchronisation (NI-3 C1 strict). Frappe sur relais lent encore lente (NI-3 C2, panne connue jusqu'aux étapes 4 à 6). Correctif go-libp2p (fork épinglé, libp2p/go-libp2p#3575, #3576). Porte `gates/SP1b.json` verte, régressions et mesure native comprises. |
-| 2026-11-09 | Bloc CI1b (outillage, W35) : au pré-push, le netsim dégradé ne tourne que si le diff touche ses entrées, calculées depuis `go list -deps` des binaires lancés (`scripts/netsim/affected.py`, tout échec ⇒ il tourne) ; sur GitHub il ne tourne plus qu'une fois (job `netsim`), le job `ci` lance `ci:core` ; `done` inchangé. |
-| 2026-11-08 | Triage du registre (exigences 🔨) et mise à jour de PROGRESS. |
-| 2026-11-03 | Lots L1, L2 (N42 précisée : rien à installer à part), L-maj (dépendances). |
-| 2026-11-02 | Lot L0 : portes HDAE et mesure de référence ; spécifications closes, méthode HDAE. |
-| 2026-10-25 | Bootstrap go-starter ; fondations : architecture, 8 ADR, glossaire, UX, roadmap, gopls MCP, Dependabot. |
-| 2026-10-25 | Étape 3 (C1, compilation de C2) : sidecars `typst`/`tinymist` épinglés, embarqués et supervisés ; `internal/typst` compile hors ligne (PDF, SVG, diagnostics, `query`, `Watch`). Reste : aperçu incrémental et LSP par `tinymist` (stdio), présentations. |
-| 2026-10-26 | Étape 3 (C2) : aperçu, problèmes, saut source ↔ aperçu, « Exporter en PDF » et mode réseau (À propos) ; `internal/app.Preview`, `typst.PageCount`/`Anchors`. Reste : LSP `tinymist` (diagnostics à la frappe, aperçu incrémental), ouverture des autres fichiers depuis un problème (B4 côté webview). |
-| 2026-11-08 | Lot L3 : tinymist branché sur l'éditeur (N28, N29). Porte L3 verte, mesure native de la frappe comprise. Le manifeste `gates/L3.json` reste compact : les mesures brutes sont dans `gates/L3-setup/`, citées par chemin et SHA-256. |
-| 2026-10-25 | Étape 1 : transport (memnet, tcp), pont Streams, éditeur collaboratif Svelte/CodeMirror/Automerge, présence, undo local, e2e deux instances ; ADR 0009–0013. |

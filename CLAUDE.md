@@ -1,6 +1,7 @@
 # inkwell — consignes du projet
 
-État et feuille de route : `PROGRESS.md`. L'outillage est géré par **mise** : tout se lance par
+État, ce qui reste et la suite : `PROGRESS.md` (seul état courant) ; où se trouve chaque information :
+`docs/README.md` (une seule place par information, à tenir à jour). L'outillage est géré par **mise** : tout se lance par
 `mise run …`. Garde-fous automatiques :
 - hooks git (`.githooks/pre-commit`) : nettoyage → secrets (gitleaks) → vulnérabilités (gosec,
   govulncheck) → Biome des fichiers frontend indexés (`fe:check:staged`) → style Go → **attestation `/simplify`** (marqueur `$GIT_DIR/claude-simplify-ok`, lié au
@@ -147,7 +148,7 @@ les étapes 1 à 8 dans le même ordre :
 
 **Registre des exigences :** chaque demande de l'utilisatrice est dans `docs/exigences.md` (date, où,
 état) — l'y ajouter dès qu'elle arrive, le mettre à jour à chaque fusion. Elle reçoit aussitôt **sa place
-dans le plan global** : un lot de `docs/architecture/coherence.md` §5 (et l'ordre de `docs/objectif-en-cours.md`),
+dans le plan global** : un lot de `docs/architecture/coherence.md` §5 (et sa place dans la liste ordonnée de `PROGRESS.md`),
 rattachée à un écran ou un mécanisme existant — jamais une tâche isolée ni une « verrue » (voir « Cohérence de
 l'interface »).
 

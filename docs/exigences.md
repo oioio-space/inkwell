@@ -31,7 +31,7 @@ Rien n'est « fait » sans tests verts et sans une passe `ux-walkthrough` réuss
 | W12 | 2026-10-25 | `/simplify` réel sur tout le code depuis le début | passes de rattrapage go-core, go-net, frontend ; règle mémoire | 🔨 preuve manquante : SIMPLIFY de L0–L3 et passes de rattrapage |
 | W14 | 2026-10-25 | Toujours peser le modèle à utiliser (règle) : le moins cher à qualité égale, `model:` fixé à chaque agent | CLAUDE.md, mémoire | ✅ règle active |
 | W15 | 2026-10-25 | Router modèle **et** effort pour chaque tâche, sous-tâche ou skill (règle) | CLAUDE.md, mémoire | ✅ règle active |
-| W16 | 2026-10-26 | Revue des tests unitaires : des tests utiles, qui couvrent tous les cas pertinents (pas « pour faire un test ») | mutation testing (gremlins, StrykerJS) + matrices de cas ; docs/quality/ | 🔨 reste : StrykerJS front, mutation `protocol/trust` (W31), matrices de cas front |
+| W16 | 2026-10-26 | Revue des tests unitaires : des tests utiles, qui couvrent tous les cas pertinents (pas « pour faire un test ») | mutation testing (gremlins, StrykerJS) + matrices de cas ; docs/reviews/ | 🔨 reste : StrykerJS front, mutation `protocol/trust` (W31), matrices de cas front |
 | W17 | 2026-10-26 | Vérifier en début de session ce qui peut être délégué à OpenRouter | hook SessionStart `openrouter-check.sh`, modes `summarize`/`prose`/`check` de llm.sh | ✅ (crédit OpenRouter épuisé au 2026-10-26 → repli Haiku) |
 | W18 | 2026-10-26 | Corriger les plantages mémoire (2 OOM globaux : mutant gremlins 8,7 Go dans `trust.test`, Chrome headless 3,4 Go, 7 agents en parallèle) | `scripts/heavy.sh` (cgroup 8 Go, 2 tâches lourdes max), tâches mise, règle CLAUDE.md | ✅ |
 | W19 | 2026-10-31 | Se placer en architecte : vérifier et réorganiser pour un code performant, conforme aux normes de l'industrie et aux design patterns ; planifier, corriger, continuer | [audit](plans/2026-10-31-architecture-audit.md) | 🔨 reste : M5 (`internal/session`), m1–m11, délai fsync, garde structurelle ADR 0030 |
@@ -195,7 +195,4 @@ Rien n'est « fait » sans tests verts et sans une passe `ux-walkthrough` réuss
 
 ## Questions ouvertes
 
-| # | Question | Décision |
-|---|----------|----------|
-| Q1 | « peut-être » compte pour 1 ou 2 mots ? | 1 mot (comme Word et LibreOffice), à confirmer |
-| Q2 | Garder « Page X sur Y » dans la barre d'état ? | sans réponse ; gardé (C2 : « Page X sur Y » dans la barre d'état, quand l'aperçu est affiché) |
+Voir [open-questions.md](open-questions.md) (Q1, Q2 y ont été déplacées le 2026-11-13).

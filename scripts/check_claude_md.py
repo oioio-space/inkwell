@@ -68,12 +68,36 @@ def problems(root: pathlib.Path, text: str, tasks: set[str]) -> list[str]:
     return found
 
 
+def docs_map_problems(root: pathlib.Path) -> list[str]:
+    """Findings (already prefixed with their file) on docs/README.md, the map of docs/."""
+    readme = root / "docs/README.md"
+    if not readme.is_file():
+        return ["docs/README.md: file is missing"]
+    first, found = set(), []
+    for n, line in enumerate(readme.read_text().splitlines(), 1):
+        for target in re.findall(r"\[[^\]]*\]\(([^)\s]+)\)", line):
+            path = target.split("#")[0]
+            if not path or re.match(r"[a-z][a-z0-9+.-]*:", path):
+                continue
+            if not (readme.parent / path).exists():
+                found.append(f"docs/README.md:{n}: link `{target}` does not resolve")
+            parts = pathlib.PurePosixPath(path).parts
+            if parts and parts[0] != "..":
+                first.add(parts[1] if parts[0] == "." and len(parts) > 1 else parts[0])
+    for entry in sorted(e.name for e in readme.parent.iterdir()):
+        if not entry.startswith(".") and entry != "README.md" and entry not in first:
+            found.append(f"docs/README.md: top-level entry `docs/{entry}` is not linked")
+    return found
+
+
 def main() -> int:
     root = pathlib.Path(sys.argv[1] if len(sys.argv) > 1
                         else pathlib.Path(__file__).resolve().parent.parent)
-    found = problems(root, (root / "CLAUDE.md").read_text(), mise_tasks(root))
+    found = [f"CLAUDE.md:{f}" for f in
+             problems(root, (root / "CLAUDE.md").read_text(), mise_tasks(root))]
+    found += docs_map_problems(root)
     for f in found:
-        print(f"CLAUDE.md:{f}", file=sys.stderr)
+        print(f, file=sys.stderr)
     return 1 if found else 0
 
 

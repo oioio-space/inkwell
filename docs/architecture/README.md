@@ -93,11 +93,4 @@ Elles sont vérifiées par `scripts/arch-check.sh` ; les changer exige une ADR.
 
 ## Où en est-on
 
-Le cœur tourne (étapes 0 à 3 en grande partie, T11 en cours), avec un seul document par projet
-pour l'instant. Le protocole réseau public (ADR 0034) est accepté et en migration. Les greffons
-(ADR 0039, en annexe de la spec, étude dans [research/plugins.md](research/plugins.md)) et la
-spécification du protocole des greffons (`docs/plugin-api/`, à écrire) sont proposés. La
-[passe de cohérence](coherence.md) range chaque fonction à sa place et fixe l'ordre : écrire, partager,
-retrouver, corriger, exporter d'abord ; les plates-formes (extensions, IA, coffre) ensuite, chacune
-acceptée seulement quand ses preuves sont faites. Les écarts entre ce document et le code sont listés
-dans [spec.md §16](spec.md#16-écarts-avec-le-code-au-2026-11-01), chacun avec sa décision.
+Voir `PROGRESS.md` (état, ordre, reste à faire). Écarts avec le code : [spec.md §16](spec.md#16-écarts-avec-le-code-au-2026-11-01).
