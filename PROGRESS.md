@@ -17,20 +17,20 @@ définie le 2026-11-12 dans [docs/autonomous-decisions.md](docs/autonomous-decis
 | # | Bloc R1 | État | Détail |
 |---|---|---|---|
 | 1 | PB — mesure appariée | ✅ `main` | ADR 0038 |
-| 2 | C5S — qualité du lien | ✅ `main` (`d051af2`) ; reste l'affichage dans le popover des personnes | ADR 0036, `gates/C5S.toml` |
+| 2 | C5S — qualité du lien | ✅ `main` (`d051af2`) ; reste l'affichage dans la fenêtre des personnes : bloc C5S-UI, [plan](docs/plans/2026-11-13-c5s-ui-link-level.md) prêt, après PR1 | ADR 0036, `gates/C5S.toml` |
 | 3 | OI — instance unique | 🔨 worktree : Codex accepte, parcours d'interface fait (UX-OI-1 à 3 corrigés) ; reste la séance avec l'utilisatrice, puis commit | `gates/OI.toml`, [plan](docs/plans/2026-11-11-oi-single-instance-open.md) |
 | 4 | RC1 — reconnexion après redémarrage | ✅ `main` | `gates/RC1.toml` |
 | 5 | SI1b — états vrais enregistré / envoi / reçu | 🔨 worktree : critères verts sur `main`, parcours « à livrer » ; reste la séance avec l'utilisatrice, puis commit | `gates/SI1b.toml`, `gates/SI1b/UX.md` |
 | 5b | SI1c — en-tête stable et lisible : une seule formulation tant que deux personnes tapent (amende DS-3), mise en page de l'en-tête de 360 à 700 px (absorbe le chevauchement relevé par OI), « Seul » remplacé quand mon texte n'est pas parti | 📝 plan et porte prêts, relus à l'aveugle (2 tours, sources vérifiées) ; à figer après SI1b | [plan](docs/plans/2026-11-13-si1c-header.md), `gates/SI1c.toml` |
 | 6 | LF0a3 — coloration incrémentale | ✅ `main` (`427d74a`) ; résidu LF0b après R1 | `gates/LF0a3.toml` |
-| 7 | SB1b — bac à sable : mémoire et descendants | ⏸ première moitié écrite (non commitée, worktree), refusée par Codex (2 défauts graves) ; arrêtée par les garde-fous d'Opus (`[cyber]`), en attente d'un exécutant | `gates/SB1b.toml`, ADR 0042 |
+| 7 | SB1b — bac à sable : mémoire et descendants | ✅ `main` (`ca33ae3`) ; porte L1 imbriquée différée (`gates/deferred.jsonl`), à lancer à part | `gates/SB1b.toml`, ADR 0042 |
 | 8 | DU — mises à jour ciblées | ✅ `main` : `uuid` 9.0.1 → 14.0.3 par surcharge `^14.0.3` (GHSA-w5hq-g745-h8pq) ; Go : rien d'appelé (govulncheck) | `gates/DU.toml`, `gates/DU.json` |
 | 9 | PR1 — présence correcte (W46 : présence figée, couleurs en double, départ en 45 s) | 📝 plan et porte prêts, relus à l'aveugle (2 tours) ; à figer, puis code | [plan](docs/plans/2026-11-13-pr1-presence.md), `gates/PR1.toml` |
 | 10 | Paquet deb/rpm + parcours à deux personnes | 🔨 premier essai fait le 2026-11-13 sur `main` d3d0829 : `pkg:build`, `pkg:lint` et `pkg:test` (PKG-01…11) verts sur Debian 13, Ubuntu 24.04, Fedora 44 ; reste le parcours à deux personnes avec le paquet | `docs/releasing.md` |
 
 **Défauts relevés hors bloc, à traiter avant R1** (parcours OI du 2026-11-13, `gates/OI/UX.md`) : la barre d'en-tête se
 chevauche à 360 px de large (repris par SI1c) ; un `.md` ouvert depuis le gestionnaire de fichiers s'affiche en lecture seule (« Dans cette
-version… ») — à confirmer comme limite assumée ou à corriger, au parcours empaqueté (bloc 10).
+version… ») : limite assumée de G-0a jusqu'à G-0b, gardée pour R1 et annoncée (décision du 2026-11-13, [étude](docs/plans/2026-11-13-md-open-readonly.md)).
 
 **Acceptation de R1** (en plus des portes) : installation et premier lancement sur machine propre ; créer, inviter,
 éditer, exporter ; tuer et relancer les deux pairs ; éditions hors ligne puis convergence ; disque plein ;
