@@ -1,0 +1,57 @@
+# Frozen acceptance for block PR1 (presence correctness; rigour standard), written before implementation.
+# Plan: docs/plans/2026-11-13-pr1-presence.md. Closes W46 item 9 of release R1: stuck presence, duplicate colours,
+# 45 s departure. Rules P-1..P-6 (plan section 3). Attribution and "follow" stay out of scope.
+raw_results = ["docs/plans/2026-11-13-pr1-presence.md", "docs/objectif-en-cours.md", "gates/PR1/*"]
+
+[[criteria]]
+# P-1..P-4 (liveness) with controlled time: named unit tests on the pure roster with fake timers and a fake Presence
+# emitter; every named test must pass (read back from the vitest JSON report, as in LF0a3).
+id = "liveness"
+command = "cd frontend && ../scripts/heavy.sh timeout 600 pnpm exec vitest run --configLoader runner --reporter=json --outputFile=../.task/pr1-live.json src/editor/roster.test.ts && cd .. && python3 -I -c \"import json,sys; r=json.load(open('.task/pr1-live.json')); ok={a['title'] for f in r['testResults'] for a in f['assertionResults'] if a['status']=='passed'}; need=['PR1 goodbye removes within one tick','PR1 silence removes by 20 s and not before 15 s','PR1 transport loss removes at once and later updates are ignored','PR1 stopping a presence removes only what no other presence reports','PR1 presence is started with heartbeat 5 s and ttl 15 s','PR1 pagehide says goodbye','PR1 peer-candidate re-broadcasts local state']; miss=[n for n in need if n not in ok]; sys.exit(f'PR1 liveness missing: {miss}' if miss else 0)\""
+
+[[criteria]]
+# P-5, P-6 and P-4 as properties: fast-check over generated join/leave/lose/rejoin histories (1-10 peers, random ids,
+# >= 2000 histories per property, fixed seeds 1 2 3), the model being the set of live ids.
+id = "colours-model"
+command = "cd frontend && ../scripts/heavy.sh timeout 900 pnpm exec vitest run --configLoader runner --reporter=json --outputFile=../.task/pr1-prop.json src/editor/roster.property.test.ts && cd .. && python3 -I -c \"import json,sys; r=json.load(open('.task/pr1-prop.json')); ok={a['title'] for f in r['testResults'] for a in f['assertionResults'] if a['status']=='passed'}; need=['PR1 property: slots are distinct while at most 8 are present','PR1 property: two replicas with the same present set compute the same slots','PR1 property: slot changes are within the displaced people','PR1 property: a displaced person returns home when the slot is free','PR1 property: at 9 or more present, further people take their home slot','PR1 property: no person shown after owner absent']; miss=[n for n in need if n not in ok]; sys.exit(f'PR1 property missing: {miss}' if miss else 0)\""
+
+[[criteria]]
+# Mutants, in-test as in LF0a3 ("LF0 the window-guard mutant is caught"): roster.mutants.test.ts copies roster.ts and
+# colours.ts with one text edit each (anchor asserted present exactly once), imports the copy and requires the rule's
+# check to fail on it and pass on the original. One mutant per rule: P-1 goodbye case removed, P-2 TTL 15000 -> 45000,
+# P-3 disconnect handler removed, P-3b re-broadcast removed, P-4 stop clears all, P-5 collision step removed, P-5 ascending
+# id order -> arrival order, P-6 home slot not restored.
+id = "mutants"
+command = "cd frontend && ../scripts/heavy.sh timeout 900 pnpm exec vitest run --configLoader runner --reporter=json --outputFile=../.task/pr1-mut.json src/editor/roster.mutants.test.ts && cd .. && python3 -I -c \"import json,sys; r=json.load(open('.task/pr1-mut.json')); ok={a['title'] for f in r['testResults'] for a in f['assertionResults'] if a['status']=='passed'}; need=[f'PR1 mutant {m} is caught' for m in ('P-1 goodbye','P-2 ttl','P-3 disconnect','P-3b rebroadcast','P-4 stop','P-5 collision','P-5 order','P-6 home slot')]; miss=[n for n in need if n not in ok]; sys.exit(f'PR1 mutants missing: {miss}' if miss else 0)\""
+
+[[criteria]]
+# Wiring 1: colliding peer ids (same personIndex) show distinct colours in the stack and the panel (component test),
+# and no other non-test source reads personIndex/personColor than the three allowed files.
+id = "colour-wiring"
+command = "cd frontend && ../scripts/heavy.sh timeout 600 pnpm exec vitest run --configLoader runner src/ui/PeopleStack.test.ts -t 'PR1 colliding ids show distinct colours in stack and panel' && cd .. && python3 -I -c \"import pathlib,re,sys; ok={'frontend/src/ui/people.ts','frontend/src/editor/colours.ts','frontend/src/history/people.ts'}; bad=sorted(str(p) for p in pathlib.Path('frontend/src').rglob('*') if p.suffix in ('.ts','.svelte') and '.test.' not in p.name and str(p) not in ok and re.search(r'\\b(personIndex|personColor)\\(', p.read_text())); sys.exit(f'PR1 direct colour use outside slots(): {bad}' if bad else 0)\""
+
+[[criteria]]
+# Timer throttling measured on the real WebKitGTK webview (plan section 6) and the constants follow the record.
+id = "timers"
+command = "python3 -I -c \"import re,sys,pathlib; r=pathlib.Path('gates/PR1/timers.md').read_text(); t=int(re.search(r'^TTL_MS=(\\d+)',r,re.M).group(1)); c=int(re.search(r'PRESENCE_TTL_MS\\s*=\\s*([\\d_]+)',pathlib.Path('frontend/src/editor/roster.ts').read_text()).group(1).replace('_','')); sys.exit(0 if t==c and t>=15000 else f'timers.md TTL_MS={t} but roster.ts {c}')\""
+
+[[criteria]]
+# Wiring 2, once (retries 0, JSON report read back so skip/fixme/not-run fails): page close leaves within 3 s; a frozen
+# server (SIGSTOP, page open and silent) within TTL + heartbeat + 3 s. Real time accepted here only.
+id = "e2e"
+command = "cd frontend && ../scripts/heavy.sh timeout 900 pnpm exec playwright test e2e/presence.spec.ts --retries=0 --reporter=json > ../.task/pr1-e2e.json; cd .. && python3 -I -c \"import json,sys; r=json.load(open('.task/pr1-e2e.json')); ok=set()\nfor s in r['suites']:\n  stack=[s]\n  while stack:\n    x=stack.pop(); stack+=x.get('suites',[])\n    for sp in x.get('specs',[]):\n      if sp['ok'] and all(t['status']=='expected' for t in sp['tests']): ok.add(sp['title'])\nneed=['PR1-E2E page close leaves within 3 s','PR1-E2E frozen server leaves within TTL + heartbeat + 3 s']; miss=[n for n in need if n not in ok]; sys.exit(f'PR1 e2e missing: {miss}' if miss else 0)\""
+
+[[criteria]]
+# No regression: every frontend check and test (includes people.test.ts) and the existing collaboration e2e.
+id = "regression"
+command = "mise run fe:check && mise run e2e -- e2e/collab.spec.ts e2e/people.spec.ts"
+
+[[criteria]]
+# Interface change (stack, carets, people panel colours): ux-walkthrough report with light and dark captures of two,
+# four and nine people present and after a window is closed; verdict line must read "Verdict: ship".
+id = "ux-walkthrough"
+command = "test -s gates/PR1/UX.md && grep -Eq '^Verdict: ship' gates/PR1/UX.md"
+
+[[criteria]]
+id = "simplify-report"
+command = "test -s gates/PR1/SIMPLIFY.md"
