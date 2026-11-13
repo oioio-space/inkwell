@@ -287,7 +287,10 @@ $effect(() => {
 
 onMount(() => {
   observeDocText(() => session.state?.doc.toString());
-  observeLinks(() => links.view());
+  observeLinks(
+    () => links.view(),
+    () => workspace.status,
+  );
   if (import.meta.env.VITE_E2E_OBSERVE === "1") {
     (
       globalThis as typeof globalThis & { __inkwellLanguageVersion?: () => number }
@@ -404,6 +407,8 @@ onMount(() => {
       subtitle={workspace.current}
       {unsaved}
       status={workspace.status}
+      sending={workspace.syncSending}
+      slow={workspace.syncSlow}
       {me}
       peers={workspace.peers}
       {sidebarOpen}

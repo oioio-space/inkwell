@@ -14,6 +14,7 @@ vi.mock("../../bindings/github.com/oioio-space/inkwell/internal/app/index", () =
 vi.mock("@automerge/automerge-repo", async (original) => ({
   ...(await original<typeof import("@automerge/automerge-repo")>()),
   Repo: class {
+    on() {}
     create() {
       return { url: "root" };
     }
@@ -25,6 +26,13 @@ vi.mock("../net/WailsNetworkAdapter", () => ({
     on() {}
     onRoles() {}
     onLinks() {}
+    onSync() {}
+    announcedPeers() {
+      return [];
+    }
+    heardHeads() {
+      return new Map();
+    }
     onSealed() {}
     disconnect() {}
     projectOf() {

@@ -43,8 +43,15 @@ export function observeDocText(text: () => string | undefined): void {
   ).__inkwellDocText = text;
 }
 
-/** The state of the links to the peers (link metrics contract, plan section 7). */
-export function observeLinks(view: () => LinkView[]): void {
+/**
+ * The state of the links to the peers (link metrics contract, plan section 7). `shown` is what the
+ * header says right now ("synced", "sending", ...): the e2e clause SI1 samples it beside the links.
+ */
+export function observeLinks(view: () => LinkView[], shown: () => string = () => ""): void {
   if (!observing()) return;
-  (globalThis as typeof globalThis & { __inkwellLinks?: () => LinkView[] }).__inkwellLinks = view;
+  (
+    globalThis as typeof globalThis & {
+      __inkwellLinks?: (() => LinkView[]) & { shown?: () => string };
+    }
+  ).__inkwellLinks = Object.assign(() => view(), { shown });
 }

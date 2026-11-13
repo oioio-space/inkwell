@@ -1,5 +1,6 @@
 <script lang="ts">
 import { t } from "../../i18n";
+import { statusLabel } from "../../net/syncLabel";
 import type { Status } from "../../workspace/workspace.svelte";
 import Icon from "../icons/Icon.svelte";
 import PeopleStack from "../PeopleStack.svelte";
@@ -11,6 +12,8 @@ let {
   subtitle,
   unsaved = false,
   status,
+  sending = 0,
+  slow = false,
   me,
   peers,
   sidebarOpen,
@@ -36,6 +39,10 @@ let {
   /** A dot before the file name: its text is not in the file yet. */
   unsaved?: boolean;
   status: Status;
+  /** n of « Envoi en cours (n) »: the connected people who lack some of my changes. */
+  sending?: number;
+  /** A link has held a message for more than 2 s: « Lien lent » is added. */
+  slow?: boolean;
   me: { id: string; name: string };
   peers: string[];
   sidebarOpen: boolean;
@@ -80,7 +87,7 @@ let menuOpen = $state(false);
       <Icon name="side" />
     </button>
     <span class="status" data-status={status} role="status">
-      <span class="dot" aria-hidden="true"></span>{t(`status.${status}`)}
+      <span class="dot" aria-hidden="true"></span>{statusLabel(status, sending, slow)}
     </span>
   </div>
   <div class="ttl">
@@ -281,9 +288,16 @@ let menuOpen = $state(false);
   [data-status="synced"] .dot {
     background: var(--success);
   }
-  [data-status="connecting"] .dot {
+  [data-status="connecting"] .dot,
+  [data-status="checking"] .dot {
     background: var(--accent-bg);
     animation: pulse 1.2s ease-in-out infinite;
+  }
+  [data-status="sending"] .dot {
+    background: var(--accent-bg);
+  }
+  [data-status="behind"] .dot {
+    background: var(--warning);
   }
   @keyframes pulse {
     50% {
@@ -291,7 +305,8 @@ let menuOpen = $state(false);
     }
   }
   @media (prefers-reduced-motion: reduce) {
-    [data-status="connecting"] .dot {
+    [data-status="connecting"] .dot,
+    [data-status="checking"] .dot {
       animation: none;
     }
   }

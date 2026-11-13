@@ -228,6 +228,13 @@ $effect(() => {
   [data-status="synced"] .dot {
     background: var(--success);
   }
+  [data-status="checking"] .dot,
+  [data-status="sending"] .dot {
+    background: var(--accent-bg);
+  }
+  [data-status="behind"] .dot {
+    background: var(--warning);
+  }
   .problems {
     display: inline-flex;
     align-items: center;

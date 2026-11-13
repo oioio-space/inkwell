@@ -400,6 +400,85 @@ const probe = (p: Page, key: string) =>
     return { len: text.length, hash, has: needles.map((n) => text.includes(n)) };
   }, key);
 
+/**
+ * Clause SI1 (block SI1, W33): the header never says « Synchronisé » while a token of the other
+ * side is missing. `shown` is what the header displays now, read beside the links from the page's
+ * `__inkwellLinks` debug store. Two kinds of lie are looked for, each sound (a text read after the
+ * header cannot hide a token that was missing when the header was read):
+ *  - in: the viewer shows « Synchronisé » while a token the other side typed more than
+ *    SI_GRACE_MS ago is missing from the viewer's text (a change the other side has not even sent
+ *    yet cannot be known: that limit holds by construction, hence the grace);
+ *  - out: the viewer shows « Synchronisé » while a token it typed itself is missing from the
+ *    other side's text.
+ */
+const SI_GRACE_MS = 3000;
+type Owned = { text: string; at: number };
+const shownState = (p: Page) =>
+  p.evaluate(() => {
+    const store = (globalThis as { __inkwellLinks?: { shown?: () => string } }).__inkwellLinks;
+    return typeof store?.shown === "function" ? store.shown() : undefined;
+  });
+function syncWatch(pages: [Page, Page], owned: () => [Owned[], Owned[]], everyMs = 750) {
+  const lies: string[] = [];
+  const t0w = Date.now();
+  const count = { samples: 0, synced: 0 };
+  let stopped = false;
+  const sampleOne = async (v: 0 | 1) => {
+    const [viewer, other] = [pages[v], pages[1 - v]];
+    const t1 = Date.now();
+    const shown = await shownState(viewer);
+    if (shown === undefined)
+      throw new MetricsMissing("window.__inkwellLinks.shown is not exposed (block SI1)");
+    count.samples++;
+    if (shown !== "synced") return;
+    count.synced++;
+    const [mine, theirs] = [owned()[v], owned()[1 - v]];
+    const old = (items: Owned[], grace: number) =>
+      items.filter((i) => i.at < t1 - grace).map((i) => i.text);
+    const [inNeedles, outNeedles] = [old(theirs, SI_GRACE_MS), old(mine, 200)];
+    await Promise.all([stash(viewer, "si_in", inNeedles), stash(other, "si_out", outNeedles)]);
+    const [inHas, outHas] = await Promise.all([probe(viewer, "si_in"), probe(other, "si_out")]);
+    const missIn = inNeedles.filter((_, i) => !inHas.has[i]);
+    const missOut = outNeedles.filter((_, i) => !outHas.has[i]);
+    if (missIn.length)
+      lies.push(
+        `t+${((t1 - t0w) / 1000).toFixed(1)}s viewer ${v} synced, ${missIn.length} of the other's tokens missing (${missIn[0].slice(0, 12)})`,
+      );
+    if (missOut.length)
+      lies.push(
+        `t+${((t1 - t0w) / 1000).toFixed(1)}s viewer ${v} synced, ${missOut.length} of its own tokens missing at the other (${missOut[0].slice(0, 12)})`,
+      );
+  };
+  let failure: unknown;
+  const done = (async () => {
+    while (!stopped) {
+      try {
+        await Promise.all([sampleOne(0), sampleOne(1)]);
+      } catch (e) {
+        failure = e;
+        return;
+      }
+      await sleep(everyMs);
+    }
+  })();
+  return {
+    stop: async () => {
+      stopped = true;
+      await done;
+    },
+    verdict: () => {
+      if (failure) throw failure;
+      return {
+        ok: lies.length === 0 && count.samples > 0,
+        measured: `${count.samples} header samples, ${count.synced} said Synchronisé, ${lies.length} lies${lies.length ? `: ${lies.slice(0, 3).join("; ")}` : ""}`,
+      };
+    },
+  };
+}
+const SI_CLAUSE = "never Synchronisé while a token of the other side is missing";
+const typed = (t: { tokens: string[]; times: number[] }): Owned[] =>
+  t.tokens.map((text, i) => ({ text, at: t.times[i] }));
+
 /** What the two outage clauses compare: the counters of every page's link before and after. */
 type Snapshot = {
   rows?: { downs?: number; resyncs?: number }[];
@@ -533,6 +612,7 @@ test("scenario 5: NI-1 bad Wi-Fi that changes (converge, stay up, the level foll
   // goes around the bridge. P4 is judged good: its reordering stays within quic-go's tolerance.
   const a = typist(alice, "a", 500, 51);
   const b = typist(bob, "b", 500, 52);
+  const si = syncWatch([alice, bob], () => [typed(a), typed(b)]);
 
   // C1: direct within 90 s of pairing, seen by the NAT counter and, when exposed, by the metrics.
   const c1Run = (async () => {
@@ -718,6 +798,8 @@ test("scenario 5: NI-1 bad Wi-Fi that changes (converge, stay up, the level foll
       };
     },
   );
+  await si.stop();
+  await clause("SI1", `the header is ${SI_CLAUSE}`, "0 lies", async () => si.verdict());
   finish({ tokens: all.length });
 });
 
@@ -728,6 +810,8 @@ test("scenario 6: NI-2 25 s blackout during a large paste (characterization)", a
   const { alice, bob } = await twoPeople(browser);
   const paste = cjk(100_000, rng(6));
   const b = typist(bob, "b", 1000, 61);
+  const pasted: Owned[] = [];
+  const si = syncWatch([alice, bob], () => [pasted, typed(b)]);
   await sleep(5000);
   const before = await snapshot([alice, bob]);
 
@@ -735,6 +819,7 @@ test("scenario 6: NI-2 25 s blackout during a large paste (characterization)", a
   const t0 = Date.now();
   await sleep(1000);
   await pasteAtEnd(alice, paste);
+  pasted.push({ text: paste, at: Date.now() });
   await sleep(Math.max(0, 25_000 - (Date.now() - t0)));
   const dropped = qstats("blackout"); // read before the qdiscs are removed
   topo("unprofile", "blackout");
@@ -783,6 +868,8 @@ test("scenario 6: NI-2 25 s blackout during a large paste (characterization)", a
       measured: `${secs(first.C3)} after restore (watched 60 s), ${all.length} tokens`,
     }),
   );
+  await si.stop();
+  await clause("SI1", `the header is ${SI_CLAUSE}`, "0 lies", async () => si.verdict());
   await clause(
     "C4",
     "anti-vacuity: the blackout qdiscs dropped packets",

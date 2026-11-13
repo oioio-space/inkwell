@@ -80,6 +80,26 @@ def run_go(m, tree):
     return caught, f"go test exit {rc}" + ("" if caught or rc == 0 else " without a failing test (build error or timeout)"), log
 
 
+def run_vitest(m, tree):
+    """One Vitest file of the frontend, run in the copy. Caught only by a real failing assertion:
+    a build or type error, an import error, a failed suite or a timeout is not a measured miss."""
+    log = []
+    report = tree / "frontend/.mutant-vitest.json"
+    test = m["test"].removeprefix("frontend/")
+    rc, out = sh(["../scripts/heavy.sh", "timeout", "900", "pnpm", "--config.verifyDepsBeforeRun=false", "exec",
+                  "vitest", "run", "--configLoader", "runner", "--reporter=json", f"--outputFile={report}", test],
+                 tree / "frontend", log=log, timeout=1000)
+    if rc == 124 or not report.exists():
+        return False, f"vitest exit {rc} without a report (timeout or crash)", log
+    r = json.loads(report.read_text())
+    failed = [a for f in r["testResults"] for a in f["assertionResults"] if a["status"] == "failed"]
+    caught = bool(failed)
+    detail = f"{len(failed)} failing test(s): {failed[0]['title'][:80]}" if caught else (
+        f"no failing assertion (vitest exit {rc}, {r.get('numFailedTestSuites', 0)} failed suite(s): build, type or import error?)"
+        if rc else "all tests pass")
+    return caught, detail, log
+
+
 def run_e2e(m, tree):
     log = []
     if any(e["file"].startswith("frontend/") for e in m["edit"]):
@@ -120,6 +140,8 @@ def validate(mutants):
     """Static checks of the mutant list; return the problems found."""
     bad = []
     for m in mutants:
+        if m["kind"] not in ("go", "vitest", "e2e"):
+            bad.append(f"mutant {m['id']}: unknown kind {m['kind']!r}")
         if m["kind"] == "e2e" and m["scenario"] == 8 and not m.get("variant"):
             bad.append(f"mutant {m['id']}: scenario 8 needs a variant (editor or reader)")
     return bad
@@ -168,7 +190,7 @@ def main():
                 print(f"mutant {m['id']}: {err}")
                 failures.append(m["id"])
                 continue
-            caught, detail, log = (run_go if m["kind"] == "go" else run_e2e)(m, tree)
+            caught, detail, log = {"go": run_go, "vitest": run_vitest, "e2e": run_e2e}[m["kind"]](m, tree)
             print(f"mutant {m['id']} -> {m['clause']}: {'caught' if caught else 'NOT CAUGHT'} ({detail})", flush=True)
             if not caught:
                 failures.append(m["id"])

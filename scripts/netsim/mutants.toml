@@ -8,6 +8,8 @@
 #   kind "e2e"  build the copy's binaries (server and relay), run scenario SCENARIO (seed 1, VARIANT;
 #               required for scenario 8) against them (NETSIM_BIN_DIR) and require results/<run>.json
 #               to show CLAUSE as "fail" (a measured miss: a harness error does not count).
+#   kind "vitest"  run one Vitest file (TEST, relative to the repo root) in the copy; red = at least one
+#               assertion fails (a build, type or import error, a failed suite or a timeout does not count).
 #   A "go" mutant is caught only by a real test failure ("--- FAIL"), never by a build failure or a
 #   timeout.
 # An edit with create = true writes a new file (`after` is its content).
@@ -1240,3 +1242,170 @@ why = "P1-b: first failed PDF hides SVG SIGSYS"
 file = "internal/typst/engine.go"
 before = "\tfor _, run := range runs {\n\t\tif run.Signal == seccompKill {\n\t\t\tres.Diagnostics, res.DiagnosticsTruncated = nil, false\n\t\t\treturn failure(res, &run, e.cfg.MemoryLimit)\n\t\t}\n\t}"
 after = ""
+[[mutant]]
+id = "M-PeerCount"
+block = "SI1"
+kind = "vitest"
+test = "frontend/src/net/syncIndicator.model.test.ts"
+clause = "W33 sync indicator follows SyncIndicator.tla"
+why = "today's rule: any announced peer is synced"
+[[mutant.edit]]
+file = "frontend/src/net/syncIndicator.ts"
+before = "  if (!o.announced) return \"offline\";\n"
+after = "  if (!o.announced) return \"offline\";\n  return \"synced\";\n"
+
+[[mutant]]
+id = "M-IgnoreRemote"
+block = "SI1"
+kind = "vitest"
+test = "frontend/src/net/syncIndicator.model.test.ts"
+clause = "W33 sync indicator follows SyncIndicator.tla"
+why = "the peer's heads are ignored: a change it reports that I lack is never « behind »"
+[[mutant.edit]]
+file = "frontend/src/net/syncIndicator.ts"
+before = "  if (known.some((d) => !A.hasHeads(d.mine, [...d.theirs]))) return \"behind\";\n"
+after = ""
+
+[[mutant]]
+id = "M-SentIsAcked"
+block = "SI1"
+kind = "vitest"
+test = "frontend/src/net/syncIndicator.model.test.ts"
+clause = "W33 sync indicator follows SyncIndicator.tla"
+why = "having sent counts as acknowledged: only what the peer reports I lack is checked"
+[[mutant.edit]]
+file = "frontend/src/net/syncIndicator.ts"
+before = "if (known.some((d) => !sameHeads(A.getHeads(d.mine), d.theirs))) return \"sending\";"
+after = "if (known.some((d) => !A.hasHeads(d.mine, [...d.theirs]))) return \"sending\";"
+
+[[mutant]]
+id = "M-QueueOnly"
+block = "SI1"
+kind = "vitest"
+test = "frontend/src/net/syncIndicator.model.test.ts"
+clause = "W33 sync indicator follows SyncIndicator.tla"
+why = "sending is decided by the bridge queue (pendingMsgs = 0 means synced)"
+[[mutant.edit]]
+file = "frontend/src/net/syncIndicator.ts"
+before = "if (known.some((d) => !sameHeads(A.getHeads(d.mine), d.theirs))) return \"sending\";"
+after = "if (o.pendingMsgs > 0) return \"sending\";"
+
+[[mutant]]
+id = "M-EveryVacuous"
+block = "SI1"
+kind = "vitest"
+test = "frontend/src/net/syncIndicator.model.test.ts"
+clause = "W33 sync indicator follows SyncIndicator.tla"
+why = "nobody connected counts as synced (every on an empty list)"
+[[mutant.edit]]
+file = "frontend/src/net/syncIndicator.ts"
+before = "if (connected.length === 0) return \"offline\";"
+after = "if (connected.length === 0) return \"synced\";"
+
+[[mutant]]
+id = "M-AnyPeer"
+block = "SI1"
+kind = "vitest"
+test = "frontend/src/net/syncIndicator.model.test.ts"
+clause = "W33 sync indicator follows SyncIndicator.tla"
+why = "one synced peer is enough (some instead of every)"
+[[mutant.edit]]
+file = "frontend/src/net/syncIndicator.ts"
+before = "const connected = states.filter((s) => s !== \"offline\");"
+after = "const connected = states.filter((s) => s === \"synced\");"
+
+[[mutant]]
+id = "M-NoRuleL"
+block = "SI1"
+kind = "vitest"
+test = "frontend/src/net/syncIndicator.model.test.ts"
+clause = "W33 sync indicator follows SyncIndicator.tla"
+why = "an acknowledgement is never recognised: a lost change, never resent, keeps the state at sending (EventuallySynced fails)"
+[[mutant.edit]]
+file = "frontend/src/net/syncIndicator.ts"
+before = "  a.length === b.length && [...a].sort().join() === [...b].sort().join();"
+after = "  false && a.length === b.length && [...a].sort().join() === [...b].sort().join();"
+
+[[mutant]]
+id = "SI1-CountMessages"
+block = "SI1"
+kind = "vitest"
+test = "frontend/src/net/syncIndicator.test.ts"
+clause = "SI1-3 n counts the connected people missing my changes"
+why = "n is the bridge message count instead of the people"
+[[mutant.edit]]
+file = "frontend/src/net/syncIndicator.ts"
+before = "  return [...observed].filter((o) => peerSyncState(o) === \"sending\").length;"
+after = "  return [...observed].reduce((n, o) => n + o.pendingMsgs, 0);"
+
+[[mutant]]
+id = "SI1-ScopeKept"
+block = "SI1"
+kind = "vitest"
+test = "frontend/src/net/syncIndicator.test.ts"
+clause = "SI1-A a scope change clears the heard heads"
+why = "a scope change keeps the heads heard in the old scope"
+[[mutant.edit]]
+file = "frontend/src/net/WailsNetworkAdapter.ts"
+before = "    this.#heard.clear();\n"
+after = ""
+
+[[mutant]]
+id = "SI1-NoLocalRefresh"
+block = "SI1"
+kind = "vitest"
+test = "frontend/src/net/syncIndicator.test.ts"
+clause = "SI1-A a local edit makes a synced peer sending"
+why = "the heads-changed hook is gone: a local edit does not leave « Synchronisé »"
+[[mutant.edit]]
+file = "frontend/src/workspace/workspace.svelte.ts"
+before = "      handle.on(\"heads-changed\", () => this.refreshSync());\n"
+after = ""
+
+[[mutant]]
+id = "SI1-HoldNone"
+block = "SI1"
+kind = "vitest"
+test = "frontend/src/net/syncIndicator.test.ts"
+clause = "SI1-2 Synchronisé only after SyncedHoldMs of true synced"
+why = "« Synchronisé » is shown at once"
+[[mutant.edit]]
+file = "frontend/src/net/syncIndicator.ts"
+before = "const held = now - (syncedSince as number) >= SyncedHoldMs;"
+after = "const held = true;"
+
+[[mutant]]
+id = "SI1-HoldLeaks"
+block = "SI1"
+kind = "vitest"
+test = "frontend/src/net/syncIndicator.test.ts"
+clause = "SI1-2 Synchronisé leaves at once when it stops being true"
+why = "« Synchronisé » stays up to MinShowMs after it stops being true"
+[[mutant.edit]]
+file = "frontend/src/net/syncIndicator.ts"
+before = "if (d.label === \"synced\" || truth === d.label || now - d.since >= MinShowMs) {"
+after = "if (truth === d.label || now - d.since >= MinShowMs) {"
+
+[[mutant]]
+id = "SI1-NoMinShow"
+block = "SI1"
+kind = "vitest"
+test = "frontend/src/net/syncIndicator.test.ts"
+clause = "SI1b DS-3 a label stays at least MinShowMs before another non-synced label"
+why = "MinShowMs is 0: labels change as fast as the truth"
+[[mutant.edit]]
+file = "frontend/src/net/syncIndicator.ts"
+before = "export const MinShowMs = 1000;"
+after = "export const MinShowMs = 0;"
+
+[[mutant]]
+id = "SI1-LiveCount"
+block = "SI1"
+kind = "vitest"
+test = "frontend/src/net/syncIndicator.test.ts"
+clause = "SI1b DS-4 Envoi en cours is never shown with 0"
+why = "n is not frozen with its label: it follows the live count"
+[[mutant.edit]]
+file = "frontend/src/net/syncIndicator.ts"
+before = "? { ...next, n: Math.max(d.n, n) }"
+after = "? { ...next, n }"

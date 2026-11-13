@@ -86,6 +86,9 @@ export class WailsNetworkAdapter extends NetworkAdapter {
 
   scopeChanged(): void {
     this.#admission.clearQueues();
+    // New scope (SI1-A): what was heard concerned the old one.
+    this.#heard.clear();
+    this.#notifySync();
   }
   drain(): void {
     for (const peer of this.#announced) {
@@ -105,6 +108,12 @@ export class WailsNetworkAdapter extends NetworkAdapter {
   /** Sync messages written to / accepted from each peer, over the life of this adapter. */
   #syncSent = new Map<string, number>();
   #syncRecv = new Map<string, number>();
+  /**
+   * Per announced peer and document shared with it: the heads of the last sync message heard from
+   * the peer, null while none came (the sync indicator, SI1). Cleared when the peer goes.
+   */
+  #heard = new Map<string, Map<string, string[] | null>>();
+  #syncListeners: (() => void)[] = [];
 
   constructor(open: () => SocketLike, opts: AdapterOptions = {}) {
     super();
@@ -164,6 +173,25 @@ export class WailsNetworkAdapter extends NetworkAdapter {
     return { sent: this.#syncSent.get(peer) ?? 0, recv: this.#syncRecv.get(peer) ?? 0 };
   }
 
+  /** The peers announced to the repo, in announcement order. */
+  announcedPeers(): readonly string[] {
+    return [...this.#announced];
+  }
+
+  /**
+   * Per document shared with the peer: the heads of the last sync message heard from it, decoded
+   * before write enforcement (so changes the coverage filter strips still count as known), or null
+   * while none came since it was announced. Empty for a peer that is not announced.
+   */
+  heardHeads(peer: string): ReadonlyMap<string, readonly string[] | null> {
+    return this.#heard.get(peer) ?? new Map();
+  }
+
+  /** Calls cb whenever the heads heard from, or the documents shared with, a peer change. */
+  onSync(cb: () => void): void {
+    this.#syncListeners.push(cb);
+  }
+
   /** Calls cb with the state of the links whenever Go reports it (Links, kind 20). */
   onLinks(cb: (links: PeerLink[]) => void): void {
     this.#linkListeners.push(cb);
@@ -210,7 +238,7 @@ export class WailsNetworkAdapter extends NetworkAdapter {
 
   /** Every announced peer is gone with the link: the repo forgets its sync state with them. */
   #disconnectAll(): void {
-    for (const peerId of this.#announced) this.emit("peer-disconnected", { peerId });
+    for (const peerId of this.#announced) this.#gone(peerId);
     for (const peer of this.#announced) this.#admission.forget(peer);
     for (const timer of this.#pendingTimers.values()) clearTimeout(timer);
     this.#pendingTimers.clear();
@@ -315,7 +343,18 @@ export class WailsNetworkAdapter extends NetworkAdapter {
     this.#pendingTimers.delete(peer);
     this.#coverage.forgetPeer(peer);
     this.#projects.delete(peer);
-    if (this.#announced.delete(peer)) this.emit("peer-disconnected", { peerId: peer });
+    if (this.#announced.delete(peer)) this.#gone(peer);
+  }
+
+  /** The repo forgets its sync state with the peer, and so do we (heads heard, SI1). */
+  #gone(peerId: PeerId): void {
+    this.#heard.delete(peerId);
+    this.emit("peer-disconnected", { peerId });
+    this.#notifySync();
+  }
+
+  #notifySync(): void {
+    for (const cb of this.#syncListeners) cb();
   }
 
   #receiveAttested(signer: string, payload: Uint8Array): void {
@@ -416,7 +455,7 @@ export class WailsNetworkAdapter extends NetworkAdapter {
         clearTimeout(this.#pendingTimers.get(from));
         this.#pendingTimers.delete(from);
         this.#scheduleReset(from);
-        if (this.#announced.delete(from)) this.emit("peer-disconnected", { peerId: from });
+        if (this.#announced.delete(from)) this.#gone(from);
         return;
       }
       this.#opts.load?.(message.documentId);
@@ -453,7 +492,7 @@ export class WailsNetworkAdapter extends NetworkAdapter {
     this.#admission.reset(from);
     if (hs.type === "arrive") {
       if (this.#announced.delete(from)) {
-        this.emit("peer-disconnected", { peerId: from });
+        this.#gone(from);
         this.#coverage.forgetPeer(from);
         this.#reattest();
       }
@@ -463,8 +502,27 @@ export class WailsNetworkAdapter extends NetworkAdapter {
   }
 
   #deliver(msg: Message): void {
+    this.#hear(msg);
     const checked = this.#enforce(msg as Message);
     if (checked) this.emit("message", checked);
+  }
+
+  /** Records the heads of a sync message, before enforcement strips anything from it. */
+  #hear(msg: Message): void {
+    if (!msg.documentId || !this.#announced.has(msg.senderId)) return;
+    const docs = this.#heard.get(msg.senderId) ?? new Map<string, string[] | null>();
+    this.#heard.set(msg.senderId, docs);
+    if (msg.type === "doc-unavailable") {
+      if (docs.delete(msg.documentId)) this.#notifySync();
+      return;
+    }
+    if (!isSyncData(msg.type) || !msg.data) return;
+    try {
+      docs.set(msg.documentId, [...A.decodeSyncMessage(msg.data).heads].sort());
+    } catch {
+      return; // undecodable: enforcement drops it
+    }
+    this.#notifySync();
   }
 
   /**
@@ -505,13 +563,25 @@ export class WailsNetworkAdapter extends NetworkAdapter {
     this.emit("peer-candidate", { peerId: peer, peerMetadata: { isEphemeral: true } });
   }
 
+  /** A sync message went to the peer for this document: it is now one we sync with it. */
+  #shared(peer: PeerId, doc: string | undefined): void {
+    const docs = this.#heard.get(peer) ?? new Map<string, string[] | null>();
+    if (!doc || !this.#announced.has(peer) || docs.has(doc)) return;
+    docs.set(doc, null);
+    this.#heard.set(peer, docs);
+    this.#notifySync();
+  }
+
   #sendTo(to: PeerId, value: Handshake | Message): void {
     const socket = this.#socket;
     if (!socket || !this.#member(to)) return;
     socket.send(
       encodeEnvelope({ kind: Kind.Message, peer: to, payload: encodeCBOR(value as CBORValue) }),
     );
-    if (isSyncData(value.type)) bump(this.#syncSent, to);
+    if (isSyncData(value.type)) {
+      bump(this.#syncSent, to);
+      this.#shared(to, (value as Message).documentId);
+    }
   }
 }
 

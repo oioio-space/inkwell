@@ -984,6 +984,11 @@
       "id": "5f27ef66fdd39ea7876ecd1f87a1448cac171f6e93291dfe0adaa98d4a063fde",
       "reason": "internal/sidecar/filesize_linux_test.go: kernel-capability skip: runs only when the kernel does not report PIDFD_INFO_COREDUMP (before Linux 6.16), where absence of a core helper cannot be observed; on the gate host (7.3) the oracle runs and the no-core-helper criterion proves it",
       "decision": "docs/plans/2026-11-11-sandbox-crash-reports.md"
+    },
+    {
+      "id": "45b0537f4b385f5cd48acc70adfbf715356d84a99a1eb446d630fc002aeb486c",
+      "reason": "Block SI1b: scripts/netsim/mutants.py gains the kind `vitest` (run_vitest, caught only on a failing assertion, never on a build/type/import error or a timeout) and now refuses an unknown kind; the go and e2e kinds are unchanged, so every other gate's mutants run exactly as before.",
+      "decision": "docs/objectif-en-cours.md"
     }
   ]
 }

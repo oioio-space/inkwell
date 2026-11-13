@@ -1,6 +1,7 @@
 <script lang="ts">
 import { Session } from "../../../bindings/github.com/oioio-space/inkwell/internal/app/index";
 import { lang, t } from "../../i18n";
+import { globalSyncState } from "../../net/syncIndicator";
 import { workspace } from "../../workspace/workspace.svelte";
 import Icon from "../icons/Icon.svelte";
 import { notice } from "../notice.svelte";
@@ -36,6 +37,13 @@ function nameOf(m: Member): string {
 
 const clock = (iso: string | undefined) =>
   iso ? new Date(iso).toLocaleTimeString(lang, { hour: "2-digit", minute: "2-digit" }) : undefined;
+
+/** What a connected person has of my changes (W33), in the worst state of their devices; empty if unknown. */
+function syncOf(m: Member): string {
+  const states = m.devices.flatMap((d) => workspace.peerSync[d.peer] ?? []);
+  const worst = globalSyncState(states);
+  return worst === "offline" ? "" : t(`people.sync.${worst}`);
+}
 
 function stateOf(row: Row): string {
   const m = row.member;
@@ -105,6 +113,7 @@ const manages = $derived(
         {@const m = row.member}
         {@const name = nameOf(m)}
         {@const peer = m.devices[0]?.peer ?? m.id}
+        {@const sync = m.self ? "" : syncOf(m)}
         <li data-person-row={m.id} data-suspended={m.suspended}>
           <div class="line">
             <span
@@ -115,7 +124,7 @@ const manages = $derived(
             >
             <span class="who">
               <span class="name">{name}{#if m.self}&nbsp;<span class="dim">({t("people.you")})</span>{/if}</span>
-              <span class="state" class:online={row.online}>{stateOf(row)}{#if row.online}{" · "}{m.self ? workspace.current : workspace.peerFiles[peer] ?? "main.typ"}{/if}</span>
+              <span class="state" class:online={row.online}>{stateOf(row)}{#if row.online}{" · "}{m.self ? workspace.current : workspace.peerFiles[peer] ?? "main.typ"}{/if}</span>{#if sync && row.online}<span class="state sync">{sync}</span>{/if}
             </span>
             <span class="controls">
             {#if row.actions.roles.length > 0}

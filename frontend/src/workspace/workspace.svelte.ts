@@ -17,6 +17,16 @@ import { t } from "../i18n";
 import { links } from "../net/links.svelte";
 import { AdmittedSet } from "../net/scope";
 import { shareAdmitted } from "../net/sharing";
+import {
+  type GlobalSyncState,
+  globalSyncState,
+  isSlow,
+  observePeers,
+  type PeerSyncState,
+  peerSyncState,
+  SyncDisplay,
+  sendingCount,
+} from "../net/syncIndicator";
 import { type SocketLike, WailsNetworkAdapter } from "../net/WailsNetworkAdapter";
 import { ExternalSync, type Notice } from "../store/externalSync";
 import { type FileInfo, FileKind, type ProjectFile } from "../store/files";
@@ -32,12 +42,27 @@ import { observeVariantHeads } from "./observe";
 
 /** The project's text, and what the history keeps beside it (named versions, variants, actors). */
 export type Doc = { text: string; meta?: Meta };
-export type Status = "alone" | "connecting" | "synced" | "suspended";
+export type Status =
+  | "alone"
+  | "connecting"
+  | "checking"
+  | "sending"
+  | "behind"
+  | "synced"
+  | "suspended";
 
-/** What the header and the status bar say: it follows who is connected, never a stored flag. */
-export function statusOf(peerCount: number, joining: boolean): Exclude<Status, "suspended"> {
-  if (peerCount > 0) return "synced";
-  return joining ? "connecting" : "alone";
+/**
+ * What the header and the status bar say. Alone or connecting while nobody is listed; otherwise
+ * the sync state the indicator shows (W33): never « synced » just because someone is connected.
+ * A listed peer the indicator has not yet seen is being checked.
+ */
+export function statusOf(
+  shown: GlobalSyncState,
+  peerCount: number,
+  joining: boolean,
+): Exclude<Status, "suspended"> {
+  if (peerCount === 0) return joining ? "connecting" : "alone";
+  return shown === "offline" ? "checking" : shown;
 }
 
 /** The projection of the document, in the project folder. */
@@ -68,9 +93,24 @@ class Workspace {
   peers = $state<string[]>([]);
   /** True while an invitation is being followed, until the inviting person's project is open. */
   joining = $state(false);
-  /** Derived from `peers`, so the header and the people count cannot disagree. */
+  /** The sync state the header shows, after the hold of D-SI5; see {@link refreshSync}. */
+  syncShown = $state<GlobalSyncState>("offline");
+  /** n of « Envoi en cours (n) », as shown: frozen with its label (DS-4). */
+  syncSending = $state(0);
+  /** True while a link holds a message for more than 2 s (« Lien lent »). */
+  syncSlow = $state(false);
+  /** Each connected person's own state, for the people popover, by device. */
+  peerSync = $state<Record<string, PeerSyncState>>({});
+  #hooked = new WeakSet<object>();
+  #display = new SyncDisplay((shown, n) => {
+    this.syncShown = shown;
+    this.syncSending = n;
+  });
+  /** Follows `peers` and the indicator, so the header and the people count cannot disagree. */
   status = $derived<Status>(
-    this.access === "suspended" ? "suspended" : statusOf(this.peers.length, this.joining),
+    this.access === "suspended"
+      ? "suspended"
+      : statusOf(this.syncShown, this.peers.length, this.joining),
   );
   myId = $state("");
   myName = $state(safeGet(NAME_KEY) ?? "");
@@ -224,6 +264,8 @@ class Workspace {
 
   #rosterTicket = 0;
   #admitted = new AdmittedSet();
+  /** The scope the sync indicator counts documents of: the admitted set, or a test's own. */
+  #scope: AdmittedSet = this.#admitted;
   #loader: BootstrapLoader | undefined;
   #offAdmission: (() => void) | undefined;
   #repo: Repo | undefined;
@@ -267,6 +309,9 @@ class Workspace {
     const storage = this.#storage;
     this.#storage = undefined;
     this.handle = undefined;
+    this.#display.reset();
+    this.syncSlow = false;
+    this.peerSync = {};
     try {
       await repo?.shutdown();
     } finally {
@@ -289,37 +334,34 @@ class Workspace {
       load: (id) => this.#loader?.ensure(id),
       onDrop: (reason) => console.warn("bridge: dropped frame:", reason),
     });
-    adapter.on("peer-candidate", ({ peerId }) => {
-      this.peerUp(peerId);
-    });
-    adapter.on("peer-disconnected", ({ peerId }) => {
-      this.peers = this.peers.filter((p) => p !== peerId);
-    });
     adapter.onRoles(() => {
       this.rolesVersion++;
       void this.refreshRoster();
     });
-    adapter.onLinks((list) => links.set(list));
+    adapter.onLinks((list) => {
+      links.set(list);
+      this.refreshSync();
+    });
     links.syncCounts = (peer) => adapter.syncCounts(peer);
     adapter.onSealed(() => {
       this.sealed = true;
     });
-    this.#adapter = adapter;
     const storage = new GoStorageAdapter(() => Stream("store") as unknown as SocketLike);
     storage.onExternal((name) => {
       if (this.#sync) this.#sync.notify(name);
       else this.#early.push(name);
     });
     this.#storage = storage;
-    this.#repo = new Repo({
+    const repo = new Repo({
       peerId: id as PeerId,
       network: [adapter],
       storage,
       isEphemeral: true,
       shareConfig: shareAdmitted(this.#admitted),
     });
+    this.attach(adapter, repo);
 
-    this.#loader = new BootstrapLoader(this.#repo, this.#admitted, () => adapter.drain());
+    this.#loader = new BootstrapLoader(this.#repo as Repo, this.#admitted, () => adapter.drain());
     let epoch = this.#admitted.epoch;
     this.#offScope = this.#admitted.onChange(() => {
       if (epoch !== this.#admitted.epoch) {
@@ -344,7 +386,7 @@ class Workspace {
         // The saved document is gone from the project folder: start a fresh one.
       }
     }
-    await this.open(this.#repo.create<Doc>({ text: "" }).url);
+    await this.open(repo.create<Doc>({ text: "" }).url);
   }
 
   async open(url: AutomergeUrl): Promise<void> {
@@ -613,6 +655,61 @@ class Workspace {
   setName(name: string): void {
     this.myName = name.trim().slice(0, 40);
     safeSet(NAME_KEY, this.myName);
+  }
+
+  /**
+   * Wires the sync indicator to the network adapter and the repo: who is connected, what they
+   * report, and (through `refreshSync`) the heads of my own documents. `start` calls it; tests
+   * call it with their own pair and scope.
+   */
+  attach(adapter: WailsNetworkAdapter, repo: Repo, admitted: AdmittedSet = this.#admitted): void {
+    this.#adapter = adapter;
+    this.#repo = repo;
+    this.#scope = admitted;
+    adapter.on("peer-candidate", ({ peerId }) => {
+      this.peerUp(peerId);
+      this.refreshSync();
+    });
+    adapter.on("peer-disconnected", ({ peerId }) => {
+      this.peers = this.peers.filter((p) => p !== peerId);
+      this.refreshSync();
+    });
+    adapter.onSync(() => this.refreshSync());
+  }
+
+  /**
+   * Derives the sync state from what this device observes (W33): the heads heard from each
+   * connected peer, my documents, the links. Called whenever one of them changes.
+   */
+  refreshSync(): void {
+    const adapter = this.#adapter;
+    const repo = this.#repo;
+    // This version of automerge-repo emits no event for a new handle: hook the ones met here, and
+    // follow their heads (a local edit must leave « Synchronisé » at once).
+    for (const handle of Object.values(repo?.handles ?? {})) {
+      if (this.#hooked.has(handle)) continue;
+      this.#hooked.add(handle);
+      handle.on("heads-changed", () => this.refreshSync());
+    }
+    const observed =
+      adapter && repo
+        ? observePeers(
+            adapter,
+            (id) => {
+              const handle = Object.hasOwn(repo.handles, id)
+                ? repo.handles[id as DocumentId]
+                : undefined;
+              return handle?.isReady() ? handle.doc() : undefined;
+            },
+            (peer) => links.of(peer),
+            this.#scope.has,
+          )
+        : new Map();
+    const states = new Map([...observed].map(([peer, o]) => [peer, peerSyncState(o)] as const));
+    const list = [...states.values()];
+    this.peerSync = Object.fromEntries(states);
+    this.syncSlow = isSlow([...observed.values()]);
+    this.#display.update(globalSyncState(list), sendingCount(observed.values()));
   }
 
   /** Lists a connected person; a new one after the invitation was made means it was used. */

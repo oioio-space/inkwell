@@ -110,26 +110,28 @@ describe("invitation", () => {
 });
 
 describe("status", () => {
-  it("follows who is connected: any peer means in sync, whatever else is going on", () => {
-    expect(statusOf(0, false)).toBe("alone");
-    expect(statusOf(0, true)).toBe("connecting");
-    expect(statusOf(1, false)).toBe("synced");
-    expect(statusOf(2, true)).toBe("synced");
+  it("follows who is connected and what the indicator shows, never the peer count alone", () => {
+    expect(statusOf("offline", 0, false)).toBe("alone");
+    expect(statusOf("offline", 0, true)).toBe("connecting");
+    // Someone is connected: the header says what the indicator shows, never "synced" by default.
+    expect(statusOf("offline", 1, false)).toBe("checking");
+    expect(statusOf("sending", 1, false)).toBe("sending");
+    expect(statusOf("synced", 2, true)).toBe("synced");
   });
 
   it("cannot say 'alone' while a peer is listed, however the events arrived", () => {
     expect(workspace.status).toBe("alone");
     workspace.peers = ["bob"];
-    expect(workspace.status).toBe("synced");
+    expect(workspace.status).toBe("checking");
     // The adapter drops and re-announces a peer that starts over: the status follows the list.
     workspace.peers = [];
     expect(workspace.status).toBe("alone");
     workspace.joining = true;
     expect(workspace.status).toBe("connecting");
     workspace.peers = ["bob"];
-    expect(workspace.status).toBe("synced");
+    expect(workspace.status).toBe("checking");
     workspace.joining = false;
-    expect(workspace.status).toBe("synced");
+    expect(workspace.status).toBe("checking");
     workspace.peers = [];
     expect(workspace.status).toBe("alone");
   });
