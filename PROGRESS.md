@@ -40,7 +40,7 @@ l'ADR 0034, et peut demander un relais joignable derrière un NAT restrictif.
 
 **En parallèle (outillage, ≤ 20 %) :** DL — une seule place par information ([plan](docs/plans/2026-11-13-docs-layout.md), livré le 2026-11-13) ;
 audit hebdomadaire `python3 scripts/gate.py --deferred` ; refaire `TestLinkRTTFromProbe` sur un temps contrôlé
-(règle 16 de la méthode v2) ; même règle pour `scripts/gate-selftest.py`, dont le cas `heavy.sh --exclusive true` échoue dès qu'une autre tâche lourde tourne (rejoué sur `main` propre le 2026-11-13) ; file de revues Codex ([docs/reviews/codex-coverage.md](docs/reviews/codex-coverage.md), prochaine : frontière
+(règle 16 de la méthode v2) ; même règle pour `scripts/gate-selftest.py`, dont le cas `heavy.sh --exclusive true` échoue dès qu'une autre tâche lourde tourne (rejoué sur `main` propre le 2026-11-13) ; échec inexpliqué à surveiller : « LF0 Markdown fixed parser equals the original on random edits » a échoué une fois le 2026-11-13 (message non capturé) puis passé deux fois, seul et avec le test de performance (graines fixes, 590 s) — à la prochaine occurrence, garder le journal et trouver la cause ; file de revues Codex ([docs/reviews/codex-coverage.md](docs/reviews/codex-coverage.md), prochaine : frontière
 d'admission CRDT).
 
 **Après R1, dans l'ordre :** admission par l'étape 8 de l'ADR 0034 (étapes 4 à 6 d'abord, priorité à la frappe) ;

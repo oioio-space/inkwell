@@ -187,7 +187,7 @@ docs/protocol/reviews/22-fable.md
 docs/protocol/spec.md
 docs/protocol/tla/README.md
 docs/protocol/vectors/README.md
-docs/quality/test-review-go-2026-10-26.md
+docs/reviews/test-review-go-2026-10-26.md
 docs/relay.md
 docs/releasing.md
 docs/reviews/codex-coverage.md
