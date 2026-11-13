@@ -6,9 +6,10 @@
 # A problem is reported back to Claude (exit 2) so it is fixed in the same step.
 set -euo pipefail
 input="$(cat)"
-root="$(git -C "${CLAUDE_PROJECT_DIR:-.}" rev-parse --show-toplevel 2>/dev/null)" || exit 0
 path="$(jq -r '.tool_input.file_path // empty' <<<"$input")"
 [[ -n $path && -f $path ]] || exit 0
+# The edited file's own checkout (a linked worktree has its own module root), not the session's.
+root="$(git -C "$(dirname "$path")" rev-parse --show-toplevel 2>/dev/null)" || exit 0
 rel="${path#"$root"/}"
 out=""
 
