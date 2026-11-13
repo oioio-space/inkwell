@@ -110,6 +110,11 @@ func TestOpenWindow(t *testing.T) {
 	a, b := lobbyPair(t, func(transport.PeerID) bool { return false })
 	a.HandleLobby(func(context.Context, transport.PeerID, []byte) ([]byte, bool) { return []byte("ok"), true })
 	ask := func() error {
+		// Every attempt dials afresh. A refused or swept stranger still holds its
+		// side of the connection until a's close reaches it; Connect would return
+		// at once on that dying connection and the request would fail on it,
+		// whatever the window says.
+		waitFor(t, "the stranger to see its previous connection closed", func() bool { return !connected(b, a) })
 		ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 		defer cancel()
 		if err := connect(t, b, a); err != nil {
@@ -133,11 +138,14 @@ func TestOpenWindow(t *testing.T) {
 		t.Error("a stranger used the lobby after the window was closed")
 	}
 
-	// A window that ends by itself closes connections too.
-	a.SetOpen(time.Now().Add(300 * time.Millisecond))
+	// A window that ends by itself closes connections too. The stranger gets in
+	// while the end is far away and the window is shortened afterwards, so the
+	// request never races the end of the window on a loaded machine.
+	a.SetOpen(time.Now().Add(time.Hour))
 	if err := ask(); err != nil {
-		t.Fatalf("stranger during a short window: %v", err)
+		t.Fatalf("stranger during a window that ends by itself: %v", err)
 	}
+	a.SetOpen(time.Now().Add(300 * time.Millisecond))
 	waitFor(t, "the window to expire and close the connection", func() bool { return !connected(a, b) })
 }
 

@@ -81,6 +81,13 @@ type result struct {
 func start(t *testing.T, cfg SupervisorConfig) (sup *Supervisor, stop, wait func() error) {
 	t.Helper()
 	sup = NewSupervisor(cfg)
+	stop, wait = supervise(t, sup)
+	return sup, stop, wait
+}
+
+// supervise runs sup like [start]; it is for a supervisor the test prepared itself.
+func supervise(t *testing.T, sup *Supervisor) (stop, wait func() error) {
+	t.Helper()
 	ctx, cancel := context.WithCancel(t.Context())
 	res := &result{done: make(chan struct{})}
 	go func() {
@@ -100,7 +107,7 @@ func start(t *testing.T, cfg SupervisorConfig) (sup *Supervisor, stop, wait func
 		return wait()
 	}
 	t.Cleanup(func() { _ = stop() })
-	return sup, stop, wait
+	return stop, wait
 }
 
 var quick = Backoff{Initial: 5 * time.Millisecond, Max: 20 * time.Millisecond, Factor: 2}
@@ -187,6 +194,13 @@ func TestSupervisor(t *testing.T) {
 	})
 
 	bounded("SIDE-22 backoff grows, is capped and resets after a stable run", func(t *testing.T) {
+		// How long each launch ran is read on a clock the test owns: it moves
+		// only when a launch starts, by that launch's scripted uptime. On the
+		// wall clock, a loaded machine stretched a crash (launcher, sandbox,
+		// exit) past StableAfter and the crash was taken for a stable run.
+		uptimes := []time.Duration{99 * time.Millisecond, 99 * time.Millisecond, 150 * time.Millisecond, 99 * time.Millisecond}
+		clock := time.Unix(0, 0) // touched by the supervising goroutine only
+		launches := 0
 		rec := &recorder{}
 		var calls atomic.Int32
 		cfg := SupervisorConfig{
@@ -194,13 +208,28 @@ func TestSupervisor(t *testing.T) {
 			Command:     script(&calls, "exit:1", "exit:1", "sleepms:150", "exit:1", "sleep"),
 			Backoff:     Backoff{Initial: 20 * time.Millisecond, Max: 80 * time.Millisecond, Factor: 2},
 			StableAfter: 100 * time.Millisecond,
-			OnEvent:     rec.on,
+			OnEvent: func(e Event) {
+				if e.Kind == EventStart { // between the two readings of the clock
+					if launches < len(uptimes) {
+						clock = clock.Add(uptimes[launches])
+					}
+					launches++
+				}
+				rec.on(e)
+			},
 		}
-		start(t, cfg) // stopped by the cleanup
+		sup := NewSupervisor(cfg)
+		sup.now = func() time.Time { return clock }
+		supervise(t, sup) // stopped by the cleanup
 		delays := delaysOf(rec.waitKind(t, EventBackoff, 4)[:4])
 		want := []time.Duration{20 * time.Millisecond, 40 * time.Millisecond, 20 * time.Millisecond, 40 * time.Millisecond}
 		if fmt.Sprint(delays) != fmt.Sprint(want) {
 			t.Errorf("backoff delays = %v, want %v (the 150ms run is stable and resets the delay)", delays, want)
+		}
+		for i, e := range rec.ofKind(EventExit)[:len(uptimes)] {
+			if e.Uptime != uptimes[i] {
+				t.Errorf("launch %d: Uptime = %v, want %v", i, e.Uptime, uptimes[i])
+			}
 		}
 	})
 

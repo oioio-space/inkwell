@@ -139,13 +139,16 @@ type Event struct {
 // when it ends, verifies it before every launch (through Command), and stops it
 // and its whole process group when its context ends.
 type Supervisor struct {
+	// now reads the clock that measures how long a launch ran; tests replace
+	// it before Run, so that no machine load decides whether a run was stable.
+	now      func() time.Time
 	cfg      SupervisorConfig
 	restarts atomic.Int64
 }
 
 // NewSupervisor returns a supervisor; call [Supervisor.Run] to start it.
 func NewSupervisor(cfg SupervisorConfig) *Supervisor {
-	return &Supervisor{cfg: cfg.withDefaults()}
+	return &Supervisor{cfg: cfg.withDefaults(), now: time.Now}
 }
 
 // Restarts is the number of launches after the first.
@@ -230,7 +233,7 @@ func (s *Supervisor) runOnce(ctx context.Context) (time.Duration, error) {
 	if cmd.WaitDelay == 0 {
 		cmd.WaitDelay = waitDelay
 	}
-	began := time.Now()
+	began := s.now()
 	if err := cmd.Start(); err != nil {
 		s.emit(Event{Kind: EventStartFailed, Err: err})
 		return 0, fmt.Errorf("start: %w", err)
@@ -260,7 +263,7 @@ func (s *Supervisor) runOnce(ctx context.Context) (time.Duration, error) {
 	// Whatever the program left behind in its group goes with it.
 	_ = signalGroup(pid, syscall.SIGKILL)
 
-	uptime := time.Since(began)
+	uptime := s.now().Sub(began)
 	code := cmd.ProcessState.ExitCode()
 	s.emit(Event{Kind: EventExit, PID: pid, ExitCode: code, Err: waitErr, Uptime: uptime})
 	if waitErr == nil {
