@@ -17,3 +17,6 @@ patchedDependencies:
   "@lezer/common@1.5.4": patches/@lezer__common@1.5.4.patch
   "@lezer/markdown@1.8.1": patches/@lezer__markdown@1.8.1.patch
   codemirror-lang-typst@0.6.0: patches/codemirror-lang-typst@0.6.0.patch
+overrides:
+  # GHSA-w5hq-g745-h8pq: automerge-repo pins uuid 9 (only v4 is called); DU gate.
+  uuid: "^14.0.3"
