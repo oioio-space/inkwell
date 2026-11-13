@@ -75,6 +75,9 @@ report flag lives.
   background, rather than panes joined by hairlines. Kept within Adwaita: card radius and colours from the Adwaita
   tokens, no new palette.
 
+- « Partager » (invite) stays a visible suggested (blue) button at the end of the bar (Claude's call, user: « trouve le
+  meilleur design »; `docs/autonomous-decisions.md`).
+
 ### Claude's calls (to check)
 - HB1 replaces SI1c's header layout scope: SI1c's other items (one steady wording while two people type, « Seul » when my
   text has not left) move into HB1; `gates/SI1c.toml` (never frozen) is replaced by `gates/HB1.toml`. The UX review's
