@@ -18,15 +18,19 @@ définie le 2026-11-12 dans [docs/autonomous-decisions.md](docs/autonomous-decis
 |---|---|---|---|
 | 1 | PB — mesure appariée | ✅ `main` | ADR 0038 |
 | 2 | C5S — qualité du lien | ✅ `main` (`d051af2`) ; reste l'affichage dans la fenêtre des personnes : bloc C5S-UI, [plan](docs/plans/2026-11-13-c5s-ui-link-level.md) prêt, après PR1 | ADR 0036, `gates/C5S.toml` |
-| 3 | OI — instance unique | 🔨 worktree : Codex accepte, parcours d'interface fait (UX-OI-1 à 3 corrigés) ; reste la séance avec l'utilisatrice, puis commit | `gates/OI.toml`, [plan](docs/plans/2026-11-11-oi-single-instance-open.md) |
+| 3 | OI — instance unique | 🔨 worktree `.claude/worktrees/agent-a78adb31ac7116405` (non commité) : séance avec l'utilisatrice faite le 2026-11-13 avec le paquet installé — « Ouvrir avec » et transmission du fichier OK, **défaut grave** : la fenêtre n'est jamais ramenée au premier plan (« Inkwell est prêt », sablier ; jeton d'activation non transmis) ; correction en cours, puis vérification de 2 min avec le paquet, puis commit | `gates/OI.toml`, [plan](docs/plans/2026-11-11-oi-single-instance-open.md), `gates/OI/UX.md` |
 | 4 | RC1 — reconnexion après redémarrage | ✅ `main` | `gates/RC1.toml` |
-| 5 | SI1b — états vrais enregistré / envoi / reçu | 🔨 worktree : critères verts sur `main`, parcours « à livrer » ; reste la séance avec l'utilisatrice, puis commit | `gates/SI1b.toml`, `gates/SI1b/UX.md` |
-| 5b | SI1c — en-tête stable et lisible : une seule formulation tant que deux personnes tapent (amende DS-3), mise en page de l'en-tête de 360 à 700 px (absorbe le chevauchement relevé par OI), « Seul » remplacé quand mon texte n'est pas parti | 📝 plan et porte prêts, relus à l'aveugle (2 tours, sources vérifiées) ; à figer après SI1b | [plan](docs/plans/2026-11-13-si1c-header.md), `gates/SI1c.toml` |
+| 5 | SI1b — états vrais enregistré / envoi / reçu | ✅ `main` (`0752872`) ; validé par l'utilisatrice en séance le 2026-11-13 (`gates/SI1b/UX.md`) | `gates/SI1b.toml` |
+| 5b | SI1c → **HB1a / HB1b** — nouvelle barre du haut B (style GNOME, pastille centrale, aperçu à la taille de la zone d'écriture, version étroite) ; reprend les règles de SI1c ; `gates/SI1c.toml` jamais figé, remplacé | [conception](docs/plans/2026-11-13-report-and-header-design.md) |
 | 6 | LF0a3 — coloration incrémentale | ✅ `main` (`427d74a`) ; résidu LF0b après R1 | `gates/LF0a3.toml` |
 | 7 | SB1b — bac à sable : mémoire et descendants | ✅ `main` (`ca33ae3`) ; porte L1 imbriquée différée (`gates/deferred.jsonl`), à lancer à part | `gates/SB1b.toml`, ADR 0042 |
 | 8 | DU — mises à jour ciblées | ✅ `main` : `uuid` 9.0.1 → 14.0.3 par surcharge `^14.0.3` (GHSA-w5hq-g745-h8pq) ; Go : rien d'appelé (govulncheck) | `gates/DU.toml`, `gates/DU.json` |
-| 9 | PR1 — présence correcte (W46 : présence figée, couleurs en double, départ en 45 s) | 📝 plan et porte prêts, relus à l'aveugle (2 tours) ; à figer, puis code | [plan](docs/plans/2026-11-13-pr1-presence.md), `gates/PR1.toml` |
+| 9 | PR1 — présence correcte (W46 : présence figée, couleurs en double, départ en 45 s) | 🔨 porte figée (`1975027`) ; code dans le worktree `.claude/worktrees/agent-a8b133d4e69426085` (non commité), 6 critères sur 9 verts ; reste la mesure `timers` dans la vraie application, le parcours d'interface, la relecture, le commit | [plan](docs/plans/2026-11-13-pr1-presence.md), `gates/PR1.toml` |
 | 10 | Paquet deb/rpm + parcours à deux personnes | 🔨 premier essai fait le 2026-11-13 sur `main` d3d0829 : `pkg:build`, `pkg:lint` et `pkg:test` (PKG-01…11) verts sur Debian 13, Ubuntu 24.04, Fedora 44 ; reste le parcours à deux personnes avec le paquet | `docs/releasing.md` |
+| 11 | W58 — invitation refusée sur un projet « étranger » (bloquant R1) | 📝 diagnostiqué : un projet chargé dont l'appareil n'est pas membre ; `Start` ne le vérifie pas, « Inviter » est proposé, erreur brute affichée | [diagnostic](docs/plans/2026-11-13-invite-not-admin.md) |
+| 12 | RP1 — outil de signalement (W51) | 📝 conception validée avec l'utilisatrice ; à planifier | [conception](docs/plans/2026-11-13-report-and-header-design.md) |
+
+**Envoi sur GitHub** : `main` a des commits non poussés tant que le pre-push échoue (2026-11-13 : test de propriété `highlight.equivalence` LF0 Markdown, en diagnostic).
 
 **Défauts relevés hors bloc, à traiter avant R1** (parcours OI du 2026-11-13, `gates/OI/UX.md`) : la barre d'en-tête se
 chevauche à 360 px de large (repris par SI1c) ; un `.md` ouvert depuis le gestionnaire de fichiers s'affiche en lecture seule (« Dans cette
