@@ -1,7 +1,7 @@
 ---
 name: quality-runner
 description: Use PROACTIVELY whenever checks need running or formatting fixing — runs the project's mise quality/security tasks (lint, test, ci, scan:*) and reports pass/fail with exact failing items. Applies only trivial gofmt/formatting fixes. Cheap, deterministic work.
-tools: Bash, Read, Edit, mcp__gortex__capabilities, mcp__gortex__explore, mcp__gortex__search, mcp__gortex__read, mcp__gortex__relations, mcp__gortex__trace, mcp__gortex__analyze, mcp__gortex__change, mcp__gortex__recall, mcp__gortex__edit, mcp__gortex__refactor
+tools: Bash, Read, Edit
 model: haiku
 effort: low
 skills:

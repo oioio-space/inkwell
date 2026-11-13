@@ -1,7 +1,7 @@
 ---
 name: explorer
 description: Use PROACTIVELY for read-only codebase/file search and fan-out — locating code, tracing usages, mapping structure when you only need the conclusion (not a review). Cheap model, search-and-summarize.
-tools: Read, Grep, Glob, Bash, mcp__gortex__capabilities, mcp__gortex__explore, mcp__gortex__search, mcp__gortex__read, mcp__gortex__relations, mcp__gortex__trace, mcp__gortex__analyze, mcp__gortex__change, mcp__gortex__recall
+tools: Read, Grep, Glob, Bash
 model: haiku
 effort: low
 ---
