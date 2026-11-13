@@ -420,8 +420,8 @@ description = "Run two isolated instances to try collaboration on one machine (I
 depends = ["app:build"]
 run = """
 for who in alice bob; do
-  mkdir -p .task/duo/$who
-  INKWELL_HOME=$PWD/.task/duo/$who/home XDG_DATA_HOME=$PWD/.task/duo/$who/data XDG_CACHE_HOME=$PWD/.task/duo/$who/cache ./bin/inkwell &
+  mkdir -p .task/duo/$who/docs
+  INKWELL_DOCS=$PWD/.task/duo/$who/docs INKWELL_HOME=$PWD/.task/duo/$who/home XDG_DATA_HOME=$PWD/.task/duo/$who/data XDG_CACHE_HOME=$PWD/.task/duo/$who/cache ./bin/inkwell &
 done
 wait
 """

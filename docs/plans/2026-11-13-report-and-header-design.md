@@ -70,6 +70,11 @@ report flag lives.
 - Narrow window (360 px): title + state on two lines, flag and menu only; views move to a bottom view-switcher bar, as
   adaptive GNOME apps do. Nothing may overlap (W53).
 
+- Inside the window, the user likes the JetBrains « islands » look (photo of GoLand, 2026-11-13): each pane (sidebar,
+  editor, preview, bottom panel) is its own card with slightly rounded corners, separated by a thin gap of the window
+  background, rather than panes joined by hairlines. Kept within Adwaita: card radius and colours from the Adwaita
+  tokens, no new palette.
+
 ### Claude's calls (to check)
 - HB1 replaces SI1c's header layout scope: SI1c's other items (one steady wording while two people type, « Seul » when my
   text has not left) move into HB1; `gates/SI1c.toml` (never frozen) is replaced by `gates/HB1.toml`. The UX review's
