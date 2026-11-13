@@ -65,3 +65,6 @@ __pycache__/
 /.pnpm-store/
 /.e2e-dist-next/
 /.e2e-dist-old/
+
+# Brainstorming visual companion mockups (local only)
+.superpowers/
