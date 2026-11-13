@@ -164,3 +164,50 @@ func TestLandlockExactRights(t *testing.T) {
 		}
 	}
 }
+
+// P1-a: resource is an unsigned int in the kernel; ignore its upper word.
+// Test both halves of a pointer so low-word-only inspection cannot allow writes.
+func TestCoreSentinelSeccompPolicy(t *testing.T) {
+	f := seccompFilter(unix.AUDIT_ARCH_X86_64, 1234)
+	for _, high := range []uint64{0, 1 << 32} {
+		for _, ptr := range []uint64{1, 1 << 32, 0xffffffffffffffff} {
+			for _, nr := range []uint32{unix.SYS_PRLIMIT64, setrlimitSyscall} {
+				data := make([]byte, 64)
+				binary.NativeEndian.PutUint32(data, nr)
+				binary.NativeEndian.PutUint32(data[4:], unix.AUDIT_ARCH_X86_64)
+				offset := 16
+				if nr == unix.SYS_PRLIMIT64 {
+					offset = 24
+					binary.NativeEndian.PutUint64(data[32:], ptr)
+				}
+				binary.NativeEndian.PutUint64(data[offset:], high|unix.RLIMIT_CORE)
+				if got := interpretSeccomp(t, f, data); got != unix.SECCOMP_RET_ERRNO|uint32(unix.EPERM) {
+					t.Errorf("nr %d resource %x pointer %x: verdict %x", nr, high|unix.RLIMIT_CORE, ptr, got)
+				}
+			}
+		}
+	}
+	data := make([]byte, 64)
+	binary.NativeEndian.PutUint32(data, unix.SYS_PRLIMIT64)
+	binary.NativeEndian.PutUint32(data[4:], unix.AUDIT_ARCH_X86_64)
+	binary.NativeEndian.PutUint64(data[24:], unix.RLIMIT_CORE)
+	if got := interpretSeccomp(t, f, data); got != unix.SECCOMP_RET_ALLOW {
+		t.Errorf("query-only core prlimit: %x", got)
+	}
+}
+
+// The sandbox helpers must use prlimit64 queries, including on amd64 where
+// x/sys.Getrlimit uses the legacy syscall absent from the workload allowlist.
+func TestSandboxLimitQueriesAllowed(t *testing.T) {
+	f := seccompFilter(unix.AUDIT_ARCH_X86_64, 1234)
+	for _, resource := range []uint64{unix.RLIMIT_AS, unix.RLIMIT_CORE, unix.RLIMIT_NOFILE} {
+		data := make([]byte, 64)
+		binary.NativeEndian.PutUint32(data, unix.SYS_PRLIMIT64)
+		binary.NativeEndian.PutUint32(data[4:], unix.AUDIT_ARCH_X86_64)
+		binary.NativeEndian.PutUint64(data[24:], resource)
+		binary.NativeEndian.PutUint64(data[40:], 0x1234) // old_limit output pointer
+		if got := interpretSeccomp(t, f, data); got != unix.SECCOMP_RET_ALLOW {
+			t.Errorf("query resource %d: verdict %x", resource, got)
+		}
+	}
+}

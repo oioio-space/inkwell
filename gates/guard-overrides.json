@@ -969,6 +969,21 @@
       "id": "f4384f321b40b3c88841466bf5565d6c9daa1f263a17ca2cea005c1a534d3be0",
       "reason": "scripts/gate.sh: No nested gates (user decision 2026-11-12, method v2 rules 6 and 9): a gate invoked from inside another gate's criterion (INKWELL_GATE_PARENT set) runs nothing; the criterion keeps its own commands' status and records the chained lot as a deferred obligation (manifest deferred_obligations, never a pass of that lot), validated, ledgered in gates/deferred.jsonl until a passing top-level run closes it; gate.py --deferred fails on obligations older than 7 days and blocks the release (T3). No criterion, threshold, timeout or test is weakened; scripts/gate_nested_test.py (in test:py) proves it, including a mutant that skips without recording.",
       "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "bebdb03c9291569cdb140676bc370391d040ec5e26ff058130e21f5a738e618a",
+      "reason": "frontend/src/preview/protocol.ts: the \"timeout\" failure kind is kept; the union type became FAILURE_KINDS (as const) to enumerate kinds at runtime and add \"blocked\" (W49 T6)",
+      "decision": "docs/plans/2026-11-11-sandbox-crash-reports.md"
+    },
+    {
+      "id": "a8a6d14a62c18707b197b112b447e5a5721cdb495f0244d7ca67366424eff54d",
+      "reason": "internal/sidecar/coredump_linux_test.go: kernel-capability skip: runs only when the kernel does not report PIDFD_INFO_COREDUMP (before Linux 6.16), where absence of a core helper cannot be observed; on the gate host (7.3) the oracle runs and the no-core-helper criterion proves it",
+      "decision": "docs/plans/2026-11-11-sandbox-crash-reports.md"
+    },
+    {
+      "id": "5f27ef66fdd39ea7876ecd1f87a1448cac171f6e93291dfe0adaa98d4a063fde",
+      "reason": "internal/sidecar/filesize_linux_test.go: kernel-capability skip: runs only when the kernel does not report PIDFD_INFO_COREDUMP (before Linux 6.16), where absence of a core helper cannot be observed; on the gate host (7.3) the oracle runs and the no-core-helper criterion proves it",
+      "decision": "docs/plans/2026-11-11-sandbox-crash-reports.md"
     }
   ]
 }

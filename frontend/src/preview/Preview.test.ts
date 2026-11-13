@@ -185,6 +185,7 @@ describe("Preview pane", () => {
       "tooLarge",
       "unsafe",
       "unavailable",
+      "blocked",
       "internal",
     ] as const) {
       preview.receive({ ...result({ pageCount: 0, pages: [] }), failure: { kind, packages: [] } });
@@ -194,7 +195,7 @@ describe("Preview pane", () => {
       expect(text, kind).not.toContain("preview.fail"); // a key shown raw would mean a missing message
       seen.add(text);
     }
-    expect(seen.size).toBe(8);
+    expect(seen.size).toBe(9);
   });
 
   it("PRV-86 with errors but an earlier version, the old pages stay and a notice says so", () => {

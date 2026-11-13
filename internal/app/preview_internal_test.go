@@ -52,6 +52,15 @@ func TestFailureOf(t *testing.T) {
 	}
 }
 
+// W49 T6, ADR 0042 A7: a blocked compilation has its own kind, wrapped or not.
+func TestFailureOfBlocked(t *testing.T) {
+	for _, err := range []error{typst.ErrBlocked, fmt.Errorf("x: %w", typst.ErrBlocked)} {
+		if got := failureOf(err); got == nil || got.Kind != FailBlocked || got.Packages != nil {
+			t.Errorf("failureOf(%v) = %+v, want exactly kind %q", err, got, FailBlocked)
+		}
+	}
+}
+
 func TestDecodePreviewRequest(t *testing.T) {
 	ok := []struct {
 		name, in string

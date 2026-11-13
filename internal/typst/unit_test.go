@@ -66,6 +66,61 @@ func TestFailure(t *testing.T) {
 	}
 }
 
+// W49 T6, ADR 0042 A7, decision table rows R3, R4, R7: SIGSYS (a seccomp
+// kill, 31 on Linux) is ErrBlocked; SIGSEGV is a memory limit only when Rust
+// said its allocation failed, and otherwise a generic stop.
+func TestFailureBlocked(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		run           sidecar.Output
+		wantIs, notIs error
+	}{
+		{name: "R4 SIGSYS", run: sidecar.Output{ExitCode: -1, Signal: 31}, wantIs: ErrBlocked},
+		{name: "R4 SIGSYS at the output cap", run: sidecar.Output{ExitCode: -1, Signal: 31, OutputLimit: true}, wantIs: ErrBlocked},
+		{name: "R3 SIGSEGV after a failed allocation", run: sidecar.Output{ExitCode: -1, Signal: 11, Stderr: []byte("memory allocation of 8 bytes failed\n")}, wantIs: ErrMemoryLimit, notIs: ErrBlocked},
+		{name: "R7 SIGSEGV alone", run: sidecar.Output{ExitCode: -1, Signal: 11, Stderr: []byte("Segmentation fault\n")}, notIs: ErrMemoryLimit},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			err := failure(&Result{}, &tc.run, DefaultMemoryLimit)
+			if tc.wantIs != nil && !errors.Is(err, tc.wantIs) {
+				t.Errorf("failure(%+v) = %v, want %v", tc.run, err, tc.wantIs)
+			}
+			if tc.notIs != nil && (errors.Is(err, tc.notIs) || errors.Is(err, ErrBlocked)) {
+				t.Errorf("failure(%+v) = %v, want neither %v nor ErrBlocked", tc.run, err, tc.notIs)
+			}
+			if tc.wantIs == nil && !strings.Contains(err.Error(), "stopped by a signal") {
+				t.Errorf("failure(%+v) = %v, want the generic stop", tc.run, err)
+			}
+		})
+	}
+}
+
+// ADR 0042 A7: a blocked compilation reports the fixed ErrBlocked and keeps
+// nothing the compiler wrote, neither in the error nor as diagnostics, while
+// the same stderr from a crash is still parsed (the control).
+func TestBlockedErrorCarriesNoDetail(t *testing.T) {
+	const canary = "CANARY-b10c3d"
+	root := filepath.Join(t.TempDir(), canary)
+	stderr := []byte(root + "/main.typ:1:2: error: unknown variable: " + canary + "\n" + canary + " /home/someone/" + canary + "\n")
+	e := &Engine{cfg: Config{MaxDiagnostics: 100, MemoryLimit: DefaultMemoryLimit}}
+	j := &job{root: root}
+
+	control := &Result{}
+	_ = e.settle(control, j, []sidecar.Output{{ExitCode: -1, Signal: 11, Stderr: stderr}})
+	if len(control.Diagnostics) == 0 {
+		t.Fatal("control: the canary stderr gave no diagnostics; the test would prove nothing")
+	}
+
+	res := &Result{}
+	err := e.settle(res, j, []sidecar.Output{{ExitCode: -1, Signal: 31, Stderr: stderr}})
+	if !errors.Is(err, ErrBlocked) || err.Error() != ErrBlocked.Error() || strings.Contains(err.Error(), canary) {
+		t.Errorf("settle = %q, want exactly %q", err, ErrBlocked)
+	}
+	if len(res.Diagnostics) != 0 || res.DiagnosticsTruncated {
+		t.Errorf("a blocked compilation kept diagnostics %+v", res.Diagnostics)
+	}
+}
+
 func TestPDFStrings(t *testing.T) {
 	t.Run("literal escapes", func(t *testing.T) {
 		got := decodeString(`(a\nb\rc\td\be\ff\(g\)\\h\101\0\12\
@@ -263,4 +318,21 @@ func TestScanLinksBounds(t *testing.T) {
 			t.Error("scanLinks(missing) = nil, want an error")
 		}
 	})
+}
+
+func TestBlockedSecondRunDiscardsAllDiagnostics(t *testing.T) {
+	const canary = "CANARY-PDF-before-SVG-SIGSYS"
+	e := &Engine{cfg: Config{MaxDiagnostics: 100}}
+	j := &job{root: t.TempDir()}
+	stderr := []byte(j.root + "/main.typ:1:2: error: " + canary + "\n")
+	for _, runs := range [][]sidecar.Output{
+		{{ExitCode: 1, Stderr: stderr}, {ExitCode: -1, Signal: 31, Stderr: stderr}},
+		{{ExitCode: -1, Signal: 31, Stderr: stderr}, {ExitCode: 1, Stderr: stderr}},
+	} {
+		res := &Result{DiagnosticsTruncated: true}
+		err := e.settle(res, j, runs)
+		if !errors.Is(err, ErrBlocked) || len(res.Diagnostics) != 0 || res.DiagnosticsTruncated {
+			t.Errorf("settle = %v, diagnostics=%+v truncated=%v; want bare ErrBlocked and no diagnostics", err, res.Diagnostics, res.DiagnosticsTruncated)
+		}
+	}
 }

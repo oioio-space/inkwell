@@ -200,6 +200,10 @@ func runHelper(mode string) int {
 		sink = make([]byte, mib<<20)
 		fmt.Println("allocated", len(sink))
 		return 0
+	case "scope-resident-tree", "scope-resident-chunk", "scope-budget", "scope-resident", "scope-resident-wait", "scope-address", "scope-tree", "scope-fds", "scope-fds-tree", "scope-scope-app":
+		return scopeAttackHelper(strings.TrimPrefix(name, "scope-"), arg)
+	case "lower-core":
+		return lowerCoreHelper(arg)
 	case "rlimits": // report the limits in force at startup, before any of our code ran
 		return reportLimits()
 	case "writefile": // arg is "path,MiB": write that much, report if it got through
@@ -248,6 +252,8 @@ func runHelper(mode string) int {
 			}
 		}
 		return 0
+	case "capwrite":
+		return capWriteHelper(arg)
 	case "sparsemount":
 		for _, name := range []string{"a", "b"} {
 			f, err := os.OpenFile(arg+"/"+name, os.O_WRONLY, 0o600)
@@ -382,3 +388,5 @@ func waitGone(pid int, d time.Duration) bool {
 	}
 	return !stillAlive()
 }
+
+func deathSpec(t *testing.T, mode string) Spec { s := spec(mode); s.DeathTest = t.Name(); return s }

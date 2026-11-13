@@ -14,6 +14,7 @@ import (
 	"runtime/debug"
 	"slices"
 	"strconv"
+	"strings"
 	"syscall"
 	"unsafe"
 
@@ -23,6 +24,8 @@ import (
 const sandboxMode = "--inkwell-internal-sandbox-v1"
 
 type sandboxConfig struct {
+	RequireDeath bool
+	Cgroup       bool
 	ReportFD     int
 	Libraries    []string
 	WorkingDir   string
@@ -74,6 +77,23 @@ func sandboxExec(c sandboxConfig, args []string) error {
 	if err := readReportFD(&c); err != nil {
 		return err
 	}
+	if expected := os.Getenv(expectedCgroupEnv); expected != "" {
+		c.Cgroup = true
+		actual, err := selfCgroup()
+		if err != nil || actual != expected {
+			if c.ReportFD >= 3 {
+				_, _ = unix.Write(c.ReportFD, []byte{bootstrapRefusalReport})
+			}
+			return errors.New("bootstrap cgroup membership refused")
+		}
+		_ = os.Unsetenv(expectedCgroupEnv)
+	}
+	if parent := os.Getenv(expectedParentEnv); parent != "" {
+		if err := armNamespaceParentDeath(parent); err != nil {
+			return err
+		}
+		_ = os.Unsetenv(expectedParentEnv)
+	}
 	if c.Overlay {
 		if err := mountIPC(c); err != nil {
 			return err
@@ -91,11 +111,16 @@ func sandboxExec(c sandboxConfig, args []string) error {
 		return err
 	}
 	if unix.Getpid() == 1 {
+		hostProc, err := os.OpenRoot("/proc")
+		if err != nil {
+			return err
+		}
+		defer func() { _ = hostProc.Close() }()
 		if err := unix.Mount("proc", "/proc", "proc", unix.MS_NOSUID|unix.MS_NODEV|unix.MS_NOEXEC, ""); err != nil {
 			return err
 		}
 		c.Overlay, c.MountBytes = false, 0
-		return sandboxInit(c, args)
+		return sandboxInitWithProc(c, args, hostProc)
 	}
 	if len(args) == 0 {
 		return errors.New("missing target")
@@ -142,21 +167,30 @@ func limitAndExec(c sandboxConfig, args []string) error {
 	if err != nil {
 		return err
 	}
+	// execve(2) resets caught signals to their default action but keeps ignored
+	// ones ignored: the target starts with SIGXFSZ ignored, so a write past
+	// RLIMIT_FSIZE fails with EFBIG instead of killing it, and with no other
+	// signal ignored, whatever started the app (nohup ignores SIGHUP). The byte
+	// cap stays the kernel's (ADR 0042 A6).
+	signal.Ignore(syscall.SIGXFSZ)
+	if err := resetIgnoredSignals(); err != nil {
+		return err
+	}
 	type rlimit struct {
 		resource int
 		value    unix.Rlimit
 	}
 	limits := make([]rlimit, 0, 3) // built now: Setrlimit's argument must not be allocated after RLIMIT_AS
-	for _, limit := range []struct {
-		resource int
-		value    uint64
-	}{
-		{unix.RLIMIT_CORE, 0}, {unix.RLIMIT_AS, c.Memory}, {unix.RLIMIT_FSIZE, c.File},
-	} {
-		if limit.value == 0 && limit.resource == unix.RLIMIT_AS || limit.value == 0 && limit.resource == unix.RLIMIT_FSIZE && c.Directory == "" {
-			continue
-		}
-		limits = append(limits, rlimit{limit.resource, unix.Rlimit{Cur: limit.value, Max: limit.value}})
+	// RLIMIT_CORE {1,1} is the kernel's pipe-helper sentinel (fs/coredump.c,
+	// coredump_pipe): a core-class death starts no crash helper such as
+	// systemd-coredump, and 1 byte is below a core file's minimum. Max = 1, so
+	// the target cannot raise it. Socket core_pattern modes ignore it (RS1).
+	limits = append(limits, rlimit{unix.RLIMIT_CORE, unix.Rlimit{Cur: 1, Max: 1}})
+	if c.Memory > 0 {
+		limits = append(limits, rlimit{unix.RLIMIT_AS, unix.Rlimit{Cur: c.Memory, Max: c.Memory}})
+	}
+	if c.File > 0 || c.Directory != "" {
+		limits = append(limits, rlimit{unix.RLIMIT_FSIZE, unix.Rlimit{Cur: c.File, Max: c.File}})
 	}
 	debug.SetGCPercent(-1)
 	for i := range limits {
@@ -172,6 +206,31 @@ func limitAndExec(c sandboxConfig, args []string) error {
 	runtime.KeepAlive(argv)
 	runtime.KeepAlive(envp)
 	return errno
+}
+
+// resetIgnoredSignals restores the default action of every signal ignored in
+// this process except SIGXFSZ, so that exec gives the target no other ignored
+// signal.
+func resetIgnoredSignals() error {
+	for sig := uintptr(1); sig <= 64; sig++ {
+		if sig == uintptr(unix.SIGXFSZ) || sig == uintptr(unix.SIGKILL) || sig == uintptr(unix.SIGSTOP) {
+			continue
+		}
+		// The kernel's struct sigaction: handler, flags, restorer, mask.
+		var action [4]uint64
+		if _, _, errno := unix.RawSyscall6(unix.SYS_RT_SIGACTION, sig, 0, uintptr(unsafe.Pointer(&action)), 8, 0, 0); errno != 0 { // #nosec G103 -- the kernel fills the old action synchronously.
+			return fmt.Errorf("sidecar: read the action of signal %d: %w", sig, errno)
+		}
+		if action[0] != 1 { // SIG_IGN
+			continue
+		}
+		// All zero: SIG_DFL.
+		action = [4]uint64{}
+		if _, _, errno := unix.RawSyscall6(unix.SYS_RT_SIGACTION, sig, uintptr(unsafe.Pointer(&action)), 0, 8, 0, 0); errno != 0 { // #nosec G103 -- the kernel copies the action synchronously.
+			return fmt.Errorf("sidecar: reset signal %d: %w", sig, errno)
+		}
+	}
+	return nil
 }
 
 func mountOutput(c sandboxConfig) error {
@@ -401,7 +460,8 @@ func restrictReadsConfig(c *sandboxConfig, target string) error {
 }
 
 // PID 1 remains a small trusted init; only the exec child handles documents.
-func sandboxInitCommand(c sandboxConfig, args []string) (*exec.Cmd, error) {
+// pidfd receives the child's pidfd, for its core-dump record.
+func sandboxInitCommand(c sandboxConfig, args []string, pidfd *int) (*exec.Cmd, error) {
 	data, err := json.Marshal(c)
 	if err != nil {
 		return nil, err
@@ -409,37 +469,135 @@ func sandboxInitCommand(c sandboxConfig, args []string) (*exec.Cmd, error) {
 	cmd := exec.Command("/proc/self/exe", append([]string{sandboxMode, string(data)}, args...)...) // #nosec G204 G702 -- fixed own launcher path and serialized policy.
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 	cmd.Env = os.Environ()
+	cmd.SysProcAttr = &syscall.SysProcAttr{PidFD: pidfd}
 	return cmd, nil
 }
 
 func sandboxInit(c sandboxConfig, args []string) error {
-	cmd, err := sandboxInitCommand(c, args)
+	root, err := os.OpenRoot("/proc")
 	if err != nil {
 		return err
+	}
+	defer func() { _ = root.Close() }()
+	return sandboxInitWithProc(c, args, root)
+}
+
+func sandboxInitWithProc(c sandboxConfig, args []string, hostProc *os.Root) error {
+	status, err := runSandboxInit(c, args, hostProc)
+	if err != nil {
+		return err
+	}
+	os.Exit(status)
+	return nil
+}
+
+func runSandboxInit(c sandboxConfig, args []string, hostProc *os.Root) (int, error) {
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+	pidfd := -1
+	cmd, err := sandboxInitCommand(c, args, &pidfd)
+	if err != nil {
+		return 0, err
 	}
 	signals := make(chan os.Signal, 8)
 	signal.Notify(signals, syscall.SIGTERM, syscall.SIGINT)
 	if err := cmd.Start(); err != nil {
-		return err
+		return 0, err
 	}
 	go func() {
 		for sig := range signals {
 			_ = cmd.Process.Signal(sig)
 		}
 	}()
+	death, err := targetHostIdentity(hostProc, cmd.Process.Pid, c.RequireDeath)
+	if err != nil {
+		return 0, err
+	}
+
+	return reapSandboxTarget(c, cmd, hostProc, death, pidfd)
+}
+
+func reapSandboxTarget(c sandboxConfig, cmd *exec.Cmd, hostProc *os.Root, death *SandboxDeath, pidfd int) (int, error) {
 	for {
-		var status unix.WaitStatus
-		pid, err := unix.Wait4(-1, &status, 0, nil)
+		var info unix.Siginfo
+		err := unix.Waitid(unix.P_ALL, 0, &info, unix.WEXITED|unix.WNOWAIT, nil)
 		if errors.Is(err, unix.EINTR) {
 			continue
 		}
 		if err != nil {
-			return err
+			return 0, err
+		}
+		waited := siginfoChildPID(&info)
+		if waited == cmd.Process.Pid {
+			death, err = refreshTargetIdentity(hostProc, death, c.RequireDeath)
+			if err != nil {
+				return 0, err
+			}
+		}
+		core := coreDumpOf(pidfd)
+		var status unix.WaitStatus
+		pid, err := unix.Wait4(waited, &status, 0, nil)
+		if errors.Is(err, unix.EINTR) {
+			continue
+		}
+		if err != nil {
+			return 0, err
 		}
 		if pid == cmd.Process.Pid {
-			os.Exit(sandboxExitStatus(status, c.ReportFD))
+
+			if status.Signaled() && c.ReportFD >= 3 && death != nil {
+				sig := status.Signal()
+				if sig < 1 || sig > 64 || core > CoreDumpStarted {
+					return 0, errors.New("invalid signal report")
+				}
+				b, _ := json.Marshal(death)
+				_, _ = unix.Write(c.ReportFD, append([]byte{byte(sig), byte(core)}, b...))
+				return 128 + int(status.Signal()), nil
+			}
+			return sandboxExitStatus(status, c.ReportFD, core), nil
 		}
 	}
+}
+
+func refreshTargetIdentity(hostProc *os.Root, death *SandboxDeath, required bool) (*SandboxDeath, error) {
+	// Read identity after exec and death, before reap. Never infer comm
+	// from the executable basename: the target can change its own name.
+	if hostProc != nil && death != nil {
+		b, err := hostProc.ReadFile(strconv.Itoa(death.PID) + "/status")
+		if err != nil {
+			if required {
+				return nil, err
+			}
+			death = nil
+		} else {
+			d := identityFromStatus(b)
+			death = &d
+		}
+	}
+	return death, nil
+}
+
+// Identity is evidence only; CONFIG_PROC_CHILDREN is optional for normal runs.
+func targetHostIdentity(root *os.Root, pid int, required bool) (*SandboxDeath, error) {
+	if root != nil {
+		b, err := root.ReadFile("thread-self/children")
+		if err == nil {
+			for host := range strings.FieldsSeq(string(b)) {
+				status, err := root.ReadFile(host + "/status")
+				if err != nil {
+					continue
+				}
+				d := identityFromStatus(status)
+				if len(d.NSPID) > 0 && d.NSPID[len(d.NSPID)-1] == pid {
+					return &d, nil
+				}
+			}
+		}
+	}
+	if required {
+		return nil, errors.New("target host identity unavailable")
+	}
+	return nil, nil
 }
 
 // Resolve DT_NEEDED without executing ldd or trusting environment search paths.
@@ -508,13 +666,36 @@ func readReportFD(c *sandboxConfig) error {
 	return nil
 }
 
-// sandboxExitStatus preserves signal death across the PID namespace boundary.
-func sandboxExitStatus(status unix.WaitStatus, reportFD int) int {
+// sandboxExitStatus preserves signal death, and whether it started a core
+// dump, across the PID namespace boundary.
+func sandboxExitStatus(status unix.WaitStatus, reportFD int, core CoreDump) int {
 	if status.Signaled() {
 		if reportFD >= 3 {
-			_, _ = unix.Write(reportFD, []byte{byte(status.Signal())}) // #nosec G115 -- Linux signal numbers are 1..64, so they fit in a byte
+			_, _ = unix.Write(reportFD, []byte{byte(status.Signal()), byte(core)}) // #nosec G115 -- Linux signal numbers are 1..64, so they fit in a byte
 		}
 		return 128 + int(status.Signal())
 	}
 	return status.ExitStatus()
+}
+
+// Read the original host procfs before mounting the namespace procfs: getppid
+// returns zero for an external parent in a new PID namespace and cannot check
+// the parent-death race. The kernel's PPid field can.
+func armNamespaceParentDeath(expected string) error {
+	if err := unix.Prctl(unix.PR_SET_PDEATHSIG, uintptr(unix.SIGKILL), 0, 0, 0); err != nil {
+		return err
+	}
+	b, err := os.ReadFile("/proc/self/status")
+	if err != nil {
+		return err
+	}
+	for line := range strings.SplitSeq(string(b), "\n") {
+		if p, ok := strings.CutPrefix(line, "PPid:"); ok {
+			if strings.TrimSpace(p) == expected {
+				return nil
+			}
+			return errors.New("launching parent died")
+		}
+	}
+	return errors.New("parent identity unavailable")
 }

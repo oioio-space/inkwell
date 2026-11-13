@@ -796,3 +796,447 @@ why = "nothing is saved during the hold: the revoked peer's addresses stay on di
 file = "internal/transport/p2p/addrbook.go"
 before = "\tif b.hold && !b.revoked {"
 after = "\tif b.hold {"
+
+# Block SB1b (gates/SB1b.toml, criterion mutants; plan docs/plans/2026-11-11-sandbox-crash-reports.md, section "Gate
+# SB1b"). SB1b-01 to SB1b-09: the core-dump sentinel, the ignored SIGXFSZ, the seccomp kill and the blocked kind.
+[[mutant]]
+id = "SB1b-01"
+block = "SB1b"
+kind = "go"
+pkg = "./internal/sidecar"
+test = "^TestTargetCoreLimitIsSentinel$"
+clause = "ADR 0042 A5 (RLIMIT_CORE {1,1})"
+why = "RLIMIT_CORE {0,0}: a pipe core_pattern ignores 0, so the crash helper starts again"
+[[mutant.edit]]
+file = "internal/sidecar/launcher_linux.go"
+before = "unix.Rlimit{Cur: 1, Max: 1}"
+after = "unix.Rlimit{Cur: 0, Max: 0}"
+
+[[mutant]]
+id = "SB1b-02"
+block = "SB1b"
+kind = "go"
+pkg = "./internal/sidecar"
+test = "^TestTargetCoreLimitIsSentinel$"
+clause = "ADR 0042 A5 (RLIMIT_CORE {1,1})"
+why = "no RLIMIT_CORE entry: the target inherits the caller's core limit"
+[[mutant.edit]]
+file = "internal/sidecar/launcher_linux.go"
+before = "\tlimits = append(limits, rlimit{unix.RLIMIT_CORE, unix.Rlimit{Cur: 1, Max: 1}})\n"
+after = ""
+
+[[mutant]]
+id = "SB1b-03"
+block = "SB1b"
+kind = "go"
+pkg = "./internal/sidecar"
+test = "^TestTargetCoreLimitIsSentinel$"
+clause = "ADR 0042 A5 (Max = 1)"
+why = "Max unlimited: the target can raise its core limit and reach the helper"
+[[mutant.edit]]
+file = "internal/sidecar/launcher_linux.go"
+before = "unix.Rlimit{Cur: 1, Max: 1}"
+after = "unix.Rlimit{Cur: 1, Max: unix.RLIM_INFINITY}"
+
+[[mutant]]
+id = "SB1b-04"
+block = "SB1b"
+kind = "go"
+pkg = "./internal/typst"
+test = "^TestTargetIgnoresOnlyFileSizeSignal$"
+clause = "ADR 0042 A6 (SIGXFSZ ignored)"
+why = "SIGXFSZ not ignored: exec resets Go's handler, typst dies of signal 25 at the cap"
+[[mutant.edit]]
+file = "internal/sidecar/launcher_linux.go"
+before = "\tsignal.Ignore(syscall.SIGXFSZ)\n"
+after = ""
+
+[[mutant]]
+id = "SB1b-05"
+block = "SB1b"
+kind = "go"
+pkg = "./internal/typst"
+test = "^TestTargetIgnoresOnlyFileSizeSignal$"
+clause = "ADR 0042 A6 (only SIGXFSZ ignored)"
+why = "the wrong signal is ignored (SIGXCPU instead of SIGXFSZ)"
+[[mutant.edit]]
+file = "internal/sidecar/launcher_linux.go"
+before = "\tsignal.Ignore(syscall.SIGXFSZ)\n"
+after = "\tsignal.Ignore(syscall.SIGXCPU)\n"
+
+[[mutant]]
+id = "SB1b-06"
+block = "SB1b"
+kind = "go"
+pkg = "./internal/sidecar"
+test = "^TestSeccompKillsABIMismatch$"
+clause = "D1 (SECCOMP_RET_KILL_PROCESS on ABI mismatch)"
+why = "an ABI mismatch returns EPERM instead of killing: no fail-stop"
+[[mutant.edit]]
+file = "internal/sidecar/seccomp_linux.go"
+before = "\t\teq(arch, 1, 0),\n\t\tstmt(unix.BPF_RET|unix.BPF_K, unix.SECCOMP_RET_KILL_PROCESS),\n\t\tstmt(unix.BPF_LD|unix.BPF_W|unix.BPF_ABS, 0),\n\t\t{Code: unix.BPF_JMP | unix.BPF_JSET | unix.BPF_K, K: 0x40000000, Jf: 1},\n\t\tstmt(unix.BPF_RET|unix.BPF_K, unix.SECCOMP_RET_KILL_PROCESS),"
+after = "\t\teq(arch, 1, 0),\n\t\tdeny,\n\t\tstmt(unix.BPF_LD|unix.BPF_W|unix.BPF_ABS, 0),\n\t\t{Code: unix.BPF_JMP | unix.BPF_JSET | unix.BPF_K, K: 0x40000000, Jf: 1},\n\t\tdeny,"
+
+[[mutant]]
+id = "SB1b-07"
+block = "SB1b"
+kind = "go"
+pkg = "./internal/typst"
+test = "^TestFailureBlocked$"
+clause = "W49 T6, decision table R4 (SIGSYS is ErrBlocked)"
+why = "no SIGSYS branch: a seccomp kill reads as a generic stop"
+[[mutant.edit]]
+file = "internal/typst/engine.go"
+before = "\tif run.Signal == seccompKill {\n\t\treturn ErrBlocked\n\t}\n"
+after = ""
+
+[[mutant]]
+id = "SB1b-08"
+block = "SB1b"
+kind = "go"
+pkg = "./internal/app"
+test = "^TestFailureOfBlocked$"
+clause = "W49 T6 (ErrBlocked is the preview kind blocked)"
+why = "no failureKinds row for ErrBlocked: the person reads the internal-error message"
+[[mutant.edit]]
+file = "internal/app/preview.go"
+before = "\t{typst.ErrBlocked, FailBlocked},\n"
+after = ""
+
+[[mutant]]
+id = "SB1b-09"
+block = "SB1b"
+kind = "go"
+pkg = "./internal/typst"
+test = "^TestBlockedErrorCarriesNoDetail$"
+clause = "ADR 0042 A7 (a fixed text)"
+why = "ErrBlocked carries the first stderr line: the attacker's text reaches the error"
+[[mutant.edit]]
+file = "internal/typst/engine.go"
+before = "\tif run.Signal == seccompKill {\n\t\treturn ErrBlocked\n\t}\n"
+after = "\tif run.Signal == seccompKill {\n\t\tfirst, _, _ := strings.Cut(strings.TrimSpace(string(run.Stderr)), \"\\n\")\n\t\treturn fmt.Errorf(\"%w: %s\", ErrBlocked, first)\n\t}\n"
+
+[[mutant]]
+id = "SB1b-10"
+block = "SB1b"
+kind = "go"
+pkg = "./internal/sidecar"
+test = "^TestCgroupWorkloadAndDescendantsInside$"
+clause = "ADR 0042 A1-A9 / gate SB1b"
+why = "Workload is born outside the run cgroup"
+[[mutant.edit]]
+file = "internal/sidecar/scope_linux.go"
+before = "cmd.SysProcAttr.UseCgroupFD = true"
+after = "cmd.SysProcAttr.UseCgroupFD = false"
+
+[[mutant]]
+id = "SB1b-11"
+block = "SB1b"
+kind = "go"
+pkg = "./internal/sidecar"
+test = "^TestCgroupWorkloadAndDescendantsInside$"
+clause = "ADR 0042 A1-A9 / gate SB1b"
+why = "Workload placed in holder instead of run"
+[[mutant.edit]]
+file = "internal/sidecar/scope_linux.go"
+before = "cmd.SysProcAttr.CgroupFD = fd"
+after = "holderFD,_:=unix.Open(filepath.Join(s.path,\"holder\"),unix.O_PATH|unix.O_DIRECTORY|unix.O_CLOEXEC,0);_ = unix.Close(fd);r.fd=holderFD;cmd.SysProcAttr.CgroupFD=holderFD"
+
+[[mutant]]
+id = "SB1b-12"
+block = "SB1b"
+kind = "go"
+pkg = "./internal/sidecar"
+test = "^TestBootstrapRefusesUnexpectedCgroup$"
+clause = "ADR 0042 A1-A9 / gate SB1b"
+why = "Bootstrap accepts an unexpected cgroup"
+[[mutant.edit]]
+file = "internal/sidecar/launcher_linux.go"
+before = "\t\tactual, err := selfCgroup()\n\t\tif err != nil || actual != expected {\n\t\t\tif c.ReportFD >= 3 {\n\t\t\t\t_, _ = unix.Write(c.ReportFD, []byte{bootstrapRefusalReport})\n\t\t\t}\n\t\t\treturn errors.New(\"bootstrap cgroup membership refused\")\n\t\t}"
+after = "\t\t_ = expected"
+
+[[mutant]]
+id = "SB1b-13"
+block = "SB1b"
+kind = "go"
+pkg = "./internal/sidecar"
+test = "^TestCgroupRunLimitsVerifiedBeforeStart$"
+clause = "ADR 0042 A1-A9 / gate SB1b"
+why = "Hard resident budget omitted"
+[[mutant.edit]]
+file = "internal/sidecar/scope_linux.go"
+before = "\t\t{\"memory.max\", strconv.FormatUint(resident, 10)},\n"
+after = ""
+
+[[mutant]]
+id = "SB1b-14"
+block = "SB1b"
+kind = "go"
+pkg = "./internal/sidecar"
+test = "^TestCgroupRunLimitsVerifiedBeforeStart$"
+clause = "ADR 0042 A1-A9 / gate SB1b"
+why = "OOM group omitted"
+[[mutant.edit]]
+file = "internal/sidecar/scope_linux.go"
+before = "\t\t{\"memory.oom.group\", \"1\"},\n"
+after = ""
+
+[[mutant]]
+id = "SB1b-15"
+block = "SB1b"
+kind = "go"
+pkg = "./internal/sidecar"
+test = "^TestCgroupRunLimitsVerifiedBeforeStart$"
+clause = "ADR 0042 A1-A9 / gate SB1b"
+why = "Swap becomes unbounded"
+[[mutant.edit]]
+file = "internal/sidecar/scope_linux.go"
+before = "{\"memory.swap.max\", \"0\"}"
+after = "{\"memory.swap.max\", \"max\"}"
+
+[[mutant]]
+id = "SB1b-16"
+block = "SB1b"
+kind = "go"
+pkg = "./internal/sidecar"
+test = "^TestCgroupFallbackAtEveryStep/F9$"
+clause = "ADR 0042 A1-A9 / gate SB1b"
+why = "Silent ignored write accepted"
+[[mutant.edit]]
+file = "internal/sidecar/scope_linux.go"
+before = "\tfor _, limit := range limits {\n\t\tgot, err := readValue(filepath.Join(r.path, limit.name))\n\t\tif err != nil || got != limit.value {\n\t\t\treturn errors.Join(err, errors.New(\"limit read-back mismatch\"))\n\t\t}\n\t}"
+after = ""
+
+[[mutant]]
+id = "SB1b-17"
+block = "SB1b"
+kind = "go"
+pkg = "./internal/sidecar"
+test = "^TestCgroupCountersReadBeforeCleanup$"
+clause = "ADR 0042 A1-A9 / gate SB1b"
+why = "Read counters only after cleanup"
+[[mutant.edit]]
+file = "internal/sidecar/scope_linux.go"
+before = "\t\tcause = r.watch.finish(signal)\n\t\tif r.owner.trace != nil {\n\t\t\tr.owner.trace(\"counters\")\n\t\t\tr.owner.trace(\"cleanup\")\n\t\t}\n\t\t_ = removeRunCgroup(r.path, time.Now().Add(5*time.Second))"
+after = "\t\t_ = removeRunCgroup(r.path, time.Now().Add(5*time.Second))\n\t\tcause = r.watch.finish(signal)\n\t\tif r.owner.trace != nil {\n\t\t\tr.owner.trace(\"counters\")\n\t\t\tr.owner.trace(\"cleanup\")\n\t\t}"
+
+[[mutant]]
+id = "SB1b-18"
+block = "SB1b"
+kind = "go"
+pkg = "./internal/sidecar"
+test = "^TestMemoryCauseFromEvents/M9$"
+clause = "ADR 0042 A1-A9 / gate SB1b"
+why = "Unreadable counters silently become none"
+[[mutant.edit]]
+file = "internal/sidecar/memory_linux.go"
+before = "if h.failed || len(h.samples) == 0 {\n\t\treturn MemoryUnknown"
+after = "if h.failed || len(h.samples) == 0 {\n\t\treturn MemoryNone"
+
+[[mutant]]
+id = "SB1b-19"
+block = "SB1b"
+kind = "go"
+pkg = "./internal/sidecar"
+test = "^TestMemoryCauseFromEvents/M3$"
+clause = "ADR 0042 A1-A9 / gate SB1b"
+why = "Global victim classified as local without local OOM evidence"
+[[mutant.edit]]
+file = "internal/sidecar/memory_linux.go"
+before = "if s.oom > prev.oom {"
+after = "if true {"
+
+[[mutant]]
+id = "SB1b-20"
+block = "SB1b"
+kind = "go"
+pkg = "./internal/sidecar"
+test = "^TestBothMemoryBudgetsHold$"
+clause = "ADR 0042 A1-A9 / gate SB1b"
+why = "Address limit removed with cgroup active"
+[[mutant.edit]]
+file = "internal/sidecar/launcher_linux.go"
+before = "if c.Memory > 0 {"
+after = "if c.Memory > 0 && !c.Cgroup {"
+
+[[mutant]]
+id = "SB1b-21"
+block = "SB1b"
+kind = "go"
+pkg = "./internal/sidecar"
+test = "^TestCgroupFallbackAtEveryStep$"
+clause = "ADR 0042 A1-A9 / gate SB1b"
+why = "Setup failure becomes an error instead of fallback"
+[[mutant.edit]]
+file = "internal/sidecar/run.go"
+before = "scope := manager.prepare(ctx, originalSpec, cmd)"
+after = "scope := manager.prepare(ctx, originalSpec, cmd)\n\tif originalSpec.scope!=nil && scope==nil{return Output{},errors.New(\"scope setup failed\")}"
+
+[[mutant]]
+id = "SB1b-22"
+block = "SB1b"
+kind = "go"
+pkg = "./internal/sidecar"
+test = "^TestCgroupSessionCopiesLeafBound$"
+clause = "ADR 0042 A1-A9 / gate SB1b"
+why = "Leaf bound not copied"
+[[mutant.edit]]
+file = "internal/sidecar/scope_linux.go"
+before = "props = append(props, scopeProp(v.prop, n))"
+after = "_ = n"
+
+[[mutant]]
+id = "SB1b-23"
+block = "SB1b"
+kind = "go"
+pkg = "./internal/sidecar"
+test = "^TestCgroupFallbackAtEveryStep/F4$"
+clause = "ADR 0042 A1-A9 / gate SB1b"
+why = "Job done accepted without holder membership check"
+[[mutant.edit]]
+file = "internal/sidecar/scope_linux.go"
+before = "if err != nil || actual != s.relative {\n\t\treturn errors.New(\"holder membership mismatch\")\n\t}"
+after = "_ = actual"
+
+[[mutant]]
+id = "SB1b-24"
+block = "SB1b"
+kind = "go"
+pkg = "./internal/sidecar"
+test = "^TestCgroupRemovedAfterRun$"
+clause = "ADR 0042 A1-A9 / gate SB1b"
+why = "Run cgroup left behind"
+[[mutant.edit]]
+file = "internal/sidecar/scope_linux.go"
+before = "return os.Remove(path)"
+after = "return nil"
+
+[[mutant]]
+id = "SB1b-25"
+block = "SB1b"
+kind = "go"
+pkg = "./internal/sidecar"
+test = "^TestMemoryCauseFromEvents/M6$"
+clause = "ADR 0042 A1-A9 / gate SB1b"
+why = "Ignore one-second local OOM window"
+[[mutant.edit]]
+file = "internal/sidecar/memory_linux.go"
+before = "s.at.Sub(local) > time.Second"
+after = "false"
+
+[[mutant]]
+id = "SB1b-26"
+block = "SB1b"
+kind = "go"
+pkg = "./internal/sidecar"
+test = "^TestMemoryCauseFromEvents/M7$"
+clause = "ADR 0042 A1-A9 / gate SB1b"
+why = "Ignore OOM elsewhere during the window"
+[[mutant.edit]]
+file = "internal/sidecar/memory_linux.go"
+before = " || h.globalDelta != kills"
+after = ""
+
+[[mutant]]
+id = "SB1b-27"
+block = "SB1b"
+kind = "go"
+pkg = "./internal/sidecar"
+test = "^TestMemoryCauseFromEvents/M8$"
+clause = "ADR 0042 A1-A9 / gate SB1b"
+why = "Ignore ancestor OOM"
+[[mutant.edit]]
+file = "internal/sidecar/memory_linux.go"
+before = " || h.ancestorOOM"
+after = ""
+
+[[mutant]]
+id = "SB1b-28"
+block = "SB1b"
+kind = "go"
+pkg = "./internal/sidecar"
+test = "^TestCgroupSessionSharesSliceBound$"
+clause = "ADR 0042 A1-A9 / gate SB1b"
+why = "Session escapes app limited slice"
+[[mutant.edit]]
+file = "internal/sidecar/scope_linux.go"
+before = "scopeProp(\"Slice\", filepath.Base(slice))"
+after = "scopeProp(\"Slice\", \"app.slice\")"
+
+[[mutant]]
+id = "SB1b-29"
+block = "SB1b"
+kind = "go"
+pkg = "./internal/sidecar"
+test = "^TestAppSIGKILLLeavesNoWorkload$"
+clause = "ADR 0042 A1-A9 / gate SB1b"
+why = "Holder ignores EOF and leaves stale run cgroups"
+[[mutant.edit]]
+file = "internal/sidecar/scope_linux.go"
+before = "_, _ = io.Copy(io.Discard, r)"
+after = "_, _ = io.Copy(io.Discard, r); select {}"
+
+[[mutant]]
+id = "SB1b-30"
+block = "SB1b"
+kind = "go"
+pkg = "./internal/sidecar"
+test = "^TestHolderDeathBetweenVerifyAndStart/after-verify$"
+clause = "ADR 0042 A1-A9 / gate SB1b"
+why = "Placement refusal returns an error instead of fallback"
+[[mutant.edit]]
+file = "internal/sidecar/run.go"
+before = "return run(ctx, originalSpec, prepareMount)"
+after = "return Output{},fmt.Errorf(\"placement failed: %w\",err)"
+
+[[mutant]]
+id = "SB1b-31"
+block = "SB1b"
+kind = "go"
+pkg = "./internal/sidecar"
+test = "^TestCgroupDescriptorClosedOnEveryPath$"
+clause = "ADR 0042 A1-A9 / gate SB1b"
+why = "Cgroup fd remains open after Start"
+[[mutant.edit]]
+file = "internal/sidecar/scope_linux.go"
+before = "defer r.started()"
+after = "// mutant: no immediate descriptor close"
+
+[[mutant]]
+id = "SB1b-32"
+block = "SB1b"
+kind = "go"
+pkg = "./internal/sidecar"
+test = "^TestSandboxInheritsNoSessionDescriptor$"
+clause = "ADR 0042 A1-A9 / gate SB1b"
+why = "Holder pipe write end passed to launch"
+[[mutant.edit]]
+file = "internal/sidecar/scope_linux.go"
+before = "cmd.SysProcAttr.CgroupFD = fd"
+after = "cmd.SysProcAttr.CgroupFD = fd\n\tcmd.ExtraFiles=append(cmd.ExtraFiles,s.pipe)"
+
+[[mutant]]
+id = "SB1b-33"
+block = "SB1b"
+kind = "go"
+pkg = "./internal/sidecar"
+test = "^(TestCoreSentinelSeccompPolicy|TestTargetCannotLowerCoreLimit)$"
+clause = "ADR 0042 A1-A9 / gate SB1b"
+why = "P1-a: prlimit64 can lower the pipe sentinel to zero"
+[[mutant.edit]]
+file = "internal/sidecar/seccomp_linux.go"
+before = "f = coreLimitFilter(f, deny)"
+after = "// mutant: sentinel may be lowered"
+
+[[mutant]]
+id = "SB1b-34"
+block = "SB1b"
+kind = "go"
+pkg = "./internal/typst"
+test = "^TestBlockedSecondRunDiscardsAllDiagnostics$"
+clause = "ADR 0042 A1-A9 / gate SB1b"
+why = "P1-b: first failed PDF hides SVG SIGSYS"
+[[mutant.edit]]
+file = "internal/typst/engine.go"
+before = "\tfor _, run := range runs {\n\t\tif run.Signal == seccompKill {\n\t\t\tres.Diagnostics, res.DiagnosticsTruncated = nil, false\n\t\t\treturn failure(res, &run, e.cfg.MemoryLimit)\n\t\t}\n\t}"
+after = ""

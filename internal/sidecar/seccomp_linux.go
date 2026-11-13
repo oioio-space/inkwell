@@ -44,6 +44,9 @@ func seccompFilter(arch uint32, pid uint32) []unix.SockFilter {
 	} {
 		f = append(f, eq(nr, 0, 1), deny)
 	}
+	// Preserve the pipe-core sentinel after exec. RLIMIT_CORE's soft limit
+	// could otherwise be lowered to zero even with a hard limit of one.
+	f = coreLimitFilter(f, deny)
 	// Signal ownership controls must never target processes outside this job.
 	for _, control := range []struct {
 		nr       uint32
@@ -126,4 +129,19 @@ func seccompProgram() ([]unix.SockFilter, error) {
 func installSeccompProgram(f []unix.SockFilter) error {
 	prog := unix.SockFprog{Len: uint16(len(f)), Filter: &f[0]}                                             // #nosec G115 -- fixed small filter.
 	return unix.Prctl(unix.PR_SET_SECCOMP, unix.SECCOMP_MODE_FILTER, uintptr(unsafe.Pointer(&prog)), 0, 0) // #nosec G103 -- synchronous kernel copy of BPF program.
+}
+
+// Resource arguments are 32-bit ints in the kernel. Pointers are 64-bit:
+// checking both words avoids treating a non-null high-only pointer as a query.
+func coreLimitFilter(f []unix.SockFilter, deny unix.SockFilter) []unix.SockFilter {
+	stmt := func(k uint32) unix.SockFilter {
+		return unix.SockFilter{Code: unix.BPF_LD | unix.BPF_W | unix.BPF_ABS, K: k}
+	}
+	eq := func(k uint32, yes, no uint8) unix.SockFilter {
+		return unix.SockFilter{Code: unix.BPF_JMP | unix.BPF_JEQ | unix.BPF_K, K: k, Jt: yes, Jf: no}
+	}
+	f = append(f, eq(setrlimitSyscall, 0, 3), stmt(16), eq(unix.RLIMIT_CORE, 0, 1), deny, stmt(0))
+	f = append(f, eq(unix.SYS_PRLIMIT64, 0, 7), stmt(24), eq(unix.RLIMIT_CORE, 0, 5),
+		stmt(32), eq(0, 0, 2), stmt(36), eq(0, 1, 0), deny, stmt(0))
+	return f
 }

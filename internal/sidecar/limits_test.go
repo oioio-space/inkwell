@@ -13,7 +13,7 @@ import (
 // FINDING 4: the limits are in force from the first instruction of the
 // program, not applied to a process that is already running.
 func TestRunLimitsHoldFromStartup(t *testing.T) {
-	s := spec("rlimits")
+	s := deathSpec(t, "rlimits")
 	s.MemoryLimit = 3 << 30
 	s.FileSizeLimit = 5 << 20
 	out, err := Run(t.Context(), s)
@@ -35,7 +35,7 @@ func TestRunLimitsHoldFromStartup(t *testing.T) {
 
 func TestRunFileSizeLimit(t *testing.T) {
 	path := filepath.Join(t.TempDir(), "big")
-	s := spec("writefile:" + path + ",32")
+	s := deathSpec(t, "writefile:"+path+",32")
 	s.FileSizeLimit = 2 << 20
 	s.WatchDir, s.MaxDirBytes, s.WriteFiles = filepath.Dir(path), 2<<20, []string{"big"}
 	out, err := Run(t.Context(), s)
@@ -54,7 +54,7 @@ func TestRunFileSizeLimit(t *testing.T) {
 // and file growth repeatedly. No observation by the parent is needed for safety.
 func TestRunDirectoryBound(t *testing.T) {
 	dir := t.TempDir()
-	s := spec("boundattack:" + dir)
+	s := deathSpec(t, "boundattack:"+dir)
 	s.WatchDir, s.MaxDirBytes = dir, 8<<20
 	s.WriteFiles = []string{"a", "b"}
 	out, err := runWithoutMount(t.Context(), s)
@@ -78,7 +78,7 @@ func TestRunDirectoryBound(t *testing.T) {
 
 func TestRunDirectoryWithinBound(t *testing.T) {
 	dir := t.TempDir()
-	s := spec("writefile:" + filepath.Join(dir, "ok") + ",1")
+	s := deathSpec(t, "writefile:"+filepath.Join(dir, "ok")+",1")
 	s.WatchDir, s.MaxDirBytes = dir, 8<<20
 	s.WriteFiles = []string{"ok"}
 	out, err := Run(t.Context(), s)
@@ -111,12 +111,12 @@ func TestRunNoNetwork(t *testing.T) {
 	}()
 	addr := ln.Addr().String()
 
-	out, err := Run(t.Context(), spec("dial:"+addr))
+	out, err := Run(t.Context(), deathSpec(t, "dial:"+addr))
 	if err != nil || strings.TrimSpace(string(out.Stdout)) != "unreachable" {
 		t.Fatalf("without isolation: %v %q, want mandatory seccomp to deny loopback", err, out.Stdout)
 	}
 
-	s := spec("dial:" + addr)
+	s := deathSpec(t, "dial:"+addr)
 	s.NoNetwork = true
 	out, err = Run(t.Context(), s)
 	if err != nil {
@@ -138,7 +138,7 @@ func TestRunNoNetwork(t *testing.T) {
 
 func TestRunNoNetworkFallsBack(t *testing.T) {
 	t.Parallel()
-	s := spec("echo")
+	s := deathSpec(t, "echo")
 	s.isolationProbe = func() (bool, error) { return false, nil }
 	s.NoNetwork = true
 	out, err := Run(t.Context(), s)

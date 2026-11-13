@@ -336,7 +336,8 @@ func TestLandlockRuleFailures(t *testing.T) {
 func TestSandboxInitArguments(t *testing.T) {
 	t.Setenv("INKWELL_TEST_ENV", "value")
 	c := sandboxConfig{WorkingDir: "/project", Memory: 123}
-	cmd, err := sandboxInitCommand(c, []string{"/target", "a b", ";literal"})
+	pidfd := -1
+	cmd, err := sandboxInitCommand(c, []string{"/target", "a b", ";literal"}, &pidfd)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -347,16 +348,16 @@ func TestSandboxInitArguments(t *testing.T) {
 	if err := json.Unmarshal([]byte(cmd.Args[2]), &got); err != nil {
 		t.Fatal(err)
 	}
-	if got.WorkingDir != c.WorkingDir || got.Memory != c.Memory || !slices.Contains(cmd.Env, "INKWELL_TEST_ENV=value") || cmd.Stdin != os.Stdin || cmd.Stdout != os.Stdout || cmd.Stderr != os.Stderr {
+	if got.WorkingDir != c.WorkingDir || got.Memory != c.Memory || !slices.Contains(cmd.Env, "INKWELL_TEST_ENV=value") || cmd.Stdin != os.Stdin || cmd.Stdout != os.Stdout || cmd.Stderr != os.Stderr || cmd.SysProcAttr.PidFD != &pidfd {
 		t.Fatalf("bad init config: %+v", got)
 	}
 }
 
 func TestSandboxExitStatus(t *testing.T) {
-	if got := sandboxExitStatus(unix.WaitStatus(7<<8), 0); got != 7 {
+	if got := sandboxExitStatus(unix.WaitStatus(7<<8), 0, CoreDumpNone); got != 7 {
 		t.Fatalf("exit=%d", got)
 	}
-	if got := sandboxExitStatus(unix.WaitStatus(unix.SIGTERM), 0); got != 128+int(unix.SIGTERM) {
+	if got := sandboxExitStatus(unix.WaitStatus(unix.SIGTERM), 0, CoreDumpNone); got != 128+int(unix.SIGTERM) {
 		t.Fatalf("signal exit=%d", got)
 	}
 	r, w, err := os.Pipe()
@@ -365,12 +366,12 @@ func TestSandboxExitStatus(t *testing.T) {
 	}
 	defer func() { _ = r.Close() }()
 	defer func() { _ = w.Close() }()
-	if got := sandboxExitStatus(unix.WaitStatus(unix.SIGXFSZ), int(w.Fd())); got != 128+int(unix.SIGXFSZ) {
+	if got := sandboxExitStatus(unix.WaitStatus(unix.SIGXFSZ), int(w.Fd()), CoreDumpStarted); got != 128+int(unix.SIGXFSZ) {
 		t.Fatal(got)
 	}
-	var b [1]byte
-	if _, err := io.ReadFull(r, b[:]); err != nil || b[0] != byte(unix.SIGXFSZ) {
-		t.Fatalf("signal report: %v %v", b, err)
+	var b [2]byte
+	if _, err := io.ReadFull(r, b[:]); err != nil || b[0] != byte(unix.SIGXFSZ) || b[1] != byte(CoreDumpStarted) {
+		t.Fatalf("signal report: %v %v, want the signal then the core-dump state", b, err)
 	}
 }
 

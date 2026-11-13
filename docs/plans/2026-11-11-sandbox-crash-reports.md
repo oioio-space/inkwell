@@ -601,3 +601,90 @@ The model `SandboxScope` (README section `SandboxScope`) found a double fault th
 Residual RS6 (documented, not closed): a scope collected by systemd after its holder died may remove a finished run's
 cgroup before R7; its cause is then `unknown`, never zero (model witness `ResidualCollected`). Row R7's "never before
 R7" is about the app's own cleanup.
+
+### Implementation decisions (first commit of SB1b, 2026-11-13)
+
+SB1b lands in two commits, split on a real boundary (decision log, 2026-11-12, "blocks are split on real
+boundaries"): the launcher's limits and the failure kind first, the cgroup scope second. The first carries the criteria `core-limit`, `no-core-helper`, `file-size`, `blocked`, `messages`,
+`hostile-kept` and mutants SB1b-01 to SB1b-09; the second the memory scope (`memory-scope`, `session-lifetime`,
+`memory-budgets`, `no-coredump-record`, the cgroup half of `spec`, mutants SB1b-10 to SB1b-32).
+
+- **The core-dump fact is three-valued.** `Output.CoreDump` is `unknown`, `none` or `started` instead of the
+  `CoreHelper bool` of § 9 step 4: the gate refuses to pass where the kernel cannot tell (a skip), which a bool would
+  turn into a silent "no". Source: `include/uapi/linux/pidfd.h` and `fs/pidfs.c` (`pidfd_info`, master, read
+  2026-11-13): `PIDFD_INFO_COREDUMP` is reported for a live or unreaped task, and after the reap only when a dump
+  was recorded (`pidfs_coredump`, called from `umh_coredump_setup` and the socket path of `fs/coredump.c`); so a reaped
+  task without the mark counts as `none` only when `PIDFD_INFO_SUPPORTED_MASK` lists `PIDFD_INFO_COREDUMP`. The ioctl
+  uses the 88-byte `PIDFD_INFO_SIZE_VER3` struct; the kernel matches `_IOC_NR` and copies by the encoded size. The
+  namespace init sends the target's value as a second report byte.
+- **Inherited ignored signals are reset in the target.** The launcher restores `SIG_DFL` for every signal it would
+  pass on as ignored except SIGXFSZ (`execve(2)`: ignored dispositions survive exec), so "only SIGXFSZ" holds whatever
+  started the app (`nohup` ignores SIGHUP; T3 passes under `nohup`).
+- **T3's oracle, measured.** The pinned typst does not ignore SIGPIPE itself (SigIgn `0x1000000` with our change,
+  `0x0` without it, 2026-11-13), contrary to § 8.1's assumption; the test requires SIGXFSZ and tolerates SIGPIPE as the
+  target's own choice, which is what the gate's comment states.
+- **A blocked run publishes nothing of the compiler's.** `typst.ErrBlocked` is returned bare and the engine drops the
+  run's diagnostics; the preview also drops diagnostics and pages for `blocked` and logs only the fixed error; the
+  frontend keeps `packages` only for the kind `package` (A7, defence in depth on each layer).
+
+### P1 re-review follow-up (2026-11-13, blocked before red execution)
+
+P1-a: the hard limit of 1 does not preserve the soft sentinel: an unprivileged
+process can lower its soft limit to zero (getrlimit(2), primary source fetched
+2026-11-13: https://man7.org/linux/man-pages/man2/getrlimit.2.html). The proposed
+fix is a seccomp argument check refusing RLIMIT_CORE writes via both setrlimit
+and prlimit64, including requests targeting another PID. Query-only prlimit64
+must remain available for runtime introspection. Filters inspect the scalar
+resource and new_limit pointer, never the pointed-to memory; the inherited
+filter remains effective across fork and exec (kernel documentation:
+https://docs.kernel.org/userspace-api/seccomp_filter.html). This closes lowering
+as well as raising; RLIMIT_CORE {1,1} alone closes only raising. Regression
+TestTargetCannotLowerCoreLimit attempts both interfaces and checks EPERM and
+an unchanged sentinel. The corresponding production change and mutant are pending.
+
+P1-b: scan every output for SIGSYS before parsing any diagnostic, and clear any
+preexisting diagnostics when returning bare ErrBlocked. Regression
+TestBlockedSecondRunDiscardsAllDiagnostics covers PDF-fails + SVG-SIGSYS and
+reverse order. The production change and mutant are pending.
+
+Neither regression could execute: scripts/heavy.sh cannot open its machine-wide
+lock under /run/user/1000 (read-only filesystem in this agent environment), and
+the user systemd bus fails to connect. No controls were bypassed. Exact frozen
+criteria were invoked individually; results are in gates/SB1b/attempt-results.json.
+The second half is unimplemented. gates/SB1b/SIMPLIFY.md records this stop, not
+an approved simplify review. No red-to-green evidence is claimed.
+
+### Continuation implementation (2026-11-13; supersedes the stopped-at-red note)
+
+The P1-a pure BPF oracle and P1-b PDF-fails/SVG-SIGSYS oracle both failed against
+the inherited implementation, then passed with the fixes. The target-lowering
+integration test remains for the host runner. P1-a rejects core-limit setters
+while retaining query-only prlimit64; the primary sources in the preceding
+proposal explain why the hard limit alone is insufficient. P1-b scans every
+format before diagnostics. SB1b-33 and SB1b-34 revert these fixes; the frozen
+meanings of SB1b-10 through SB1b-32 are retained exactly.
+
+The second half now has SandboxScope setup, CLONE_INTO_CGROUP placement,
+verified memory.high-before-memory.max writes, holder/version lifetime,
+fallback, a bounded inotify timeline and conservative mixed-OOM attribution,
+PID-namespace parent-death handling and stale-session cleanup. Namespace init
+captures the actual target's host identity before reap for J1. The existing
+attributed-journal/barrier checker is retained. Integration tests cover the
+named gate rows, including a child app under a limited shared slice which
+holds 96 MiB before its sandbox allocates, and a copied finite leaf bound.
+H6-H9 follow A9; stale cleanup conservatively skips live or reused app PIDs.
+
+This agent runs only light checks. The Claude session owns all heavy/cgroup/TLC
+gate execution and mutant runs; no green gate or integration red-to-green is
+claimed here. The earlier attempt-results.json records the previous blocked
+attempt and is not validation of this implementation.
+
+J1 identity lifetime: the init keeps the target waitable with waitid(WNOWAIT),
+then reads its final comm and namespace identity before reap. This avoids both
+PID reuse and a target changing comm after an initial startup read. Primary
+source: wait(2), WNOWAIT leaves the child waitable for a later wait call,
+https://man7.org/linux/man-pages/man2/wait.2.html. A separate siginfo child PID
+reader preserves immediate reaping of orphaned descendants on amd64/arm64.
+The aggregate resident test also distributes fixed 32 MiB allocations among
+descendants, each below the 128 MiB run cap, and requires a group SIGKILL from
+their sum. No host result for that test is claimed by this agent.

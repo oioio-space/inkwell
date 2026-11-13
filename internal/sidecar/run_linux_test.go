@@ -8,7 +8,7 @@ import (
 // SIDE-19: the limit is on the child's address space, so an allocation that
 // would succeed in the child without it fails with it; Inkwell is untouched.
 func TestRunMemoryLimit(t *testing.T) {
-	s := spec("alloc:1536")
+	s := deathSpec(t, "alloc:1536")
 	out, err := Run(t.Context(), s)
 	if err != nil || out.ExitCode != 0 {
 		t.Fatalf("without a limit: Run = %v exit %d stderr %q, want success", err, out.ExitCode, out.Stderr)

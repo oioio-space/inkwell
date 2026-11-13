@@ -53,7 +53,16 @@ func directoryLimits(spec Spec) (Spec, []string, error) {
 	if err != nil {
 		return spec, nil, err
 	}
-	path, args, err := sandboxPrefix(sandboxConfig{ReadPaths: spec.ReadPaths, WorkingDir: spec.Dir, Overlay: overlay, Directory: dir, Names: spec.WriteFiles, File: directoryFileCap(spec, len(spec.WriteFiles)), Memory: spec.MemoryLimit})
+	path, args, err := sandboxPrefix(sandboxConfig{
+		RequireDeath: spec.DeathTest != "",
+		ReadPaths:    spec.ReadPaths,
+		WorkingDir:   spec.Dir,
+		Overlay:      overlay,
+		Directory:    dir,
+		Names:        spec.WriteFiles,
+		File:         directoryFileCap(spec, len(spec.WriteFiles)),
+		Memory:       spec.MemoryLimit,
+	})
 	spec.FileSizeLimit, spec.MemoryLimit = 0, 0
 	return spec, append([]string{path}, args...), err
 }

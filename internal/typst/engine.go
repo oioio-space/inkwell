@@ -66,6 +66,9 @@ func DefaultTimestamp() time.Time { return time.Date(2000, 1, 1, 0, 0, 0, 0, tim
 
 // Config configures an [Engine]. The zero value is ready for use.
 type Config struct {
+	deathTest string
+	// ResidentLimit bounds aggregate resident memory; zero uses MemoryLimit.
+	ResidentLimit uint64
 	// MaxScanFiles bounds entries checked for unsafe links; zero uses DefaultMaxScanFiles.
 	MaxScanFiles int
 	// MaxAttachmentBytes bounds one inflated attachment; zero uses DefaultMaxAttachmentBytes.
@@ -486,7 +489,7 @@ func (e *Engine) run(ctx context.Context, j *job, args []string, maxOut int, wat
 	spec := sidecar.Spec{
 		ReadPaths: append(append([]string{}, j.fonts...), e.local, e.pkgs.root, j.pkgPath),
 		Path:      j.typst, Args: args, Dir: j.root, Env: e.env(), NoNetwork: e.noNet,
-		MemoryLimit: e.cfg.MemoryLimit, MaxOutput: maxOut,
+		MemoryLimit: e.cfg.MemoryLimit, ResidentLimit: e.cfg.ResidentLimit, DeathTest: e.cfg.deathTest, MaxOutput: maxOut,
 	}
 	if watch != "" {
 		spec.WatchDir, spec.MaxDirBytes, spec.FileSizeLimit = watch, e.cfg.MaxOutput, uint64(e.cfg.MaxOutput) // #nosec G115 -- MaxOutput is positive
@@ -581,13 +584,6 @@ func (e *Engine) Compile(ctx context.Context, p Project, main string, opts ...Op
 		})
 	}
 	wg.Wait()
-	if err := errors.Join(pdfErr, svgE); err != nil {
-		if runCtx.Err() != nil {
-			return nil, ended(runCtx, e.cfg.Timeout)
-		}
-		return nil, err
-	}
-
 	res := &Result{Elapsed: time.Since(begin)}
 	var ran []sidecar.Output
 	if o.formats&FormatPDF != 0 {
@@ -596,6 +592,18 @@ func (e *Engine) Compile(ctx context.Context, p Project, main string, opts ...Op
 	if o.formats&FormatSVG != 0 {
 		ran = append(ran, svgO)
 	}
+	// A blocked format also wins over a launcher/export error from another
+	// format: no error carrying compiler detail may hide a SIGSYS outcome.
+	if slices.ContainsFunc(ran, func(out sidecar.Output) bool { return out.Signal == seccompKill }) {
+		return res, e.settle(res, j, ran)
+	}
+	if err := errors.Join(pdfErr, svgE); err != nil {
+		if runCtx.Err() != nil {
+			return nil, ended(runCtx, e.cfg.Timeout)
+		}
+		return nil, err
+	}
+
 	if err := e.settle(res, j, ran); err != nil {
 		return res, err
 	}
@@ -615,6 +623,14 @@ func (e *Engine) Compile(ctx context.Context, p Project, main string, opts ...Op
 // settle merges the diagnostics of the runs into res and turns a failed run
 // into the error to return.
 func (e *Engine) settle(res *Result, j *job, runs []sidecar.Output) error {
+	// A later format can be blocked after an earlier format failed normally.
+	// Inspect all outcomes before parsing or retaining any attacker text.
+	for _, run := range runs {
+		if run.Signal == seccompKill {
+			res.Diagnostics, res.DiagnosticsTruncated = nil, false
+			return failure(res, &run, e.cfg.MemoryLimit)
+		}
+	}
 	lim := limits{maxDiagnostics: e.cfg.MaxDiagnostics, maxMessage: maxMessage, maxInput: maxStderr}
 	var failed *sidecar.Output
 	for _, run := range runs {
@@ -632,12 +648,31 @@ func (e *Engine) settle(res *Result, j *job, runs []sidecar.Output) error {
 	if failed == nil {
 		return nil
 	}
-	return failure(res, failed, e.cfg.MemoryLimit)
+	err := failure(res, failed, e.cfg.MemoryLimit)
+	if errors.Is(err, ErrBlocked) {
+		// What a compiler under attack wrote is the attacker's: none of it is kept.
+		res.Diagnostics, res.DiagnosticsTruncated = nil, false
+	}
+	return err
 }
+
+// seccompKill is SIGSYS on Linux, the signal of a seccomp kill.
+const seccompKill = 31
 
 // failure explains why typst exited abnormally.
 func failure(res *Result, run *sidecar.Output, memoryLimit uint64) error {
-	// SIGXFSZ (25 on Linux and macOS): a file grew past the size limit.
+	if run.Signal == seccompKill {
+		return ErrBlocked
+	}
+	// SIGXFSZ (25 on Linux and macOS): a file grew past the size limit. The
+	// sandbox's target ignores it and gets EFBIG instead, so this is a target
+	// that restored the default action, or a signal reported from elsewhere.
+	if run.MemoryCause == sidecar.MemoryLocalLimit {
+		return ErrMemoryLimit
+	}
+	if run.Signal == 9 && (run.MemoryCause == sidecar.MemoryVictim || run.MemoryCause == sidecar.MemoryUnknown || run.MemoryCause == sidecar.MemoryNone) {
+		return errors.New("typst: the compiler was stopped")
+	}
 	if run.OutputLimit || run.Signal == 25 {
 		return fmt.Errorf("%w: the output grew past the limit while it was being written", ErrOutputTooLarge)
 	}

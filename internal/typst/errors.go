@@ -20,6 +20,10 @@ var (
 	ErrMemoryLimit = errors.New("typst: compilation used too much memory")
 	// ErrOutputTooLarge means the result has more pages or bytes than allowed.
 	ErrOutputTooLarge = errors.New("typst: the result is too large")
+	// ErrBlocked means the sandbox stopped the compiler for an action no
+	// document can cause (a system call under another ABI, killed by seccomp):
+	// an attack. It is returned as is, with nothing the compiler wrote.
+	ErrBlocked = errors.New("typst: the compilation was stopped for an action that is not allowed")
 	// ErrInvalidMain means the main file is not a file inside the project.
 	ErrInvalidMain = errors.New("typst: the main file must be a file inside the project")
 	// ErrUnsafeProject means the project holds a symbolic link that leads out of

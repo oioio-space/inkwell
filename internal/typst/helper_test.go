@@ -46,7 +46,7 @@ func TestMain(m *testing.M) {
 // newEngine returns an engine over the shared cache; adjust changes its Config.
 func newEngine(t *testing.T, adjust func(*Config)) *Engine {
 	t.Helper()
-	cfg := Config{CacheDir: sharedCache, Store: sharedStore}
+	cfg := Config{CacheDir: sharedCache, Store: sharedStore, deathTest: t.Name()}
 	if adjust != nil {
 		adjust(&cfg)
 	}

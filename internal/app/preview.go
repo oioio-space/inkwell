@@ -58,6 +58,9 @@ const (
 	FailUnsafe = "unsafe"
 	// FailUnavailable: Typst could not be started.
 	FailUnavailable = "unavailable"
+	// FailBlocked: the sandbox stopped the compilation for an action no
+	// document may take; the message carries nothing else (ADR 0042 A7).
+	FailBlocked = "blocked"
 	// FailInternal: anything else.
 	FailInternal = "internal"
 )
@@ -362,7 +365,13 @@ func (p *Preview) compile(ctx context.Context, run compilation) {
 		}
 	}
 	msg.Failure = failureOf(err)
-	if msg.Failure != nil && msg.Failure.Kind == FailInternal {
+	switch {
+	case msg.Failure != nil && msg.Failure.Kind == FailBlocked:
+		// The compiler was under attack: nothing it produced reaches the
+		// webview, and the log names only the fixed error.
+		msg.Diagnostics, msg.Truncated, msg.Pages = nil, false, nil
+		p.log.Warn("preview: compilation blocked", "err", typst.ErrBlocked)
+	case msg.Failure != nil && msg.Failure.Kind == FailInternal:
 		p.log.Warn("preview: compilation failed", "err", err)
 	}
 	b := encodeMessage(&msg)
@@ -442,6 +451,7 @@ var failureKinds = []struct {
 	err  error
 	kind string
 }{
+	{typst.ErrBlocked, FailBlocked},
 	{typst.ErrMissingPackage, FailPackage},
 	{typst.ErrInvalidMain, FailNoMain},
 	{typst.ErrTimeout, FailTimeout},

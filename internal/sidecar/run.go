@@ -26,6 +26,13 @@ const waitDelay = 2 * time.Second
 
 // Spec describes one launch of a verified sidecar.
 type Spec struct {
+	disableScope      bool
+	scope             *SandboxScope
+	bootstrapExpected string
+	// DeathTest labels opt-in test evidence; empty disables manifest writes.
+	DeathTest string
+	// ResidentLimit bounds aggregate charged memory; zero uses MemoryLimit.
+	ResidentLimit uint64
 	// isolationProbe replaces the platform probe for this run in tests.
 	isolationProbe func() (bool, error)
 	// ReadPaths lists verified package and font directories needed by the workload.
@@ -64,8 +71,10 @@ type Spec struct {
 	// first instruction.
 	MemoryLimit uint64
 	// FileSizeLimit caps the size of any file the child writes, in bytes, on
-	// Linux (see withLimits for the rounding); zero means no limit. A write past
-	// it ends the child with SIGXFSZ.
+	// Linux (see withLimits for the rounding); zero means no limit. The write
+	// that reaches it is shortened and the next one fails with EFBIG: the
+	// target starts with SIGXFSZ ignored (a target that restores the default
+	// action dies of it instead; the cap holds either way).
 	FileSizeLimit uint64
 	// NoNetwork adds a private network namespace when supported. Every Linux
 	// invocation independently requires seccomp (no socket creation or external
@@ -78,8 +87,24 @@ type Spec struct {
 	MaxOutput int
 }
 
+// MemoryCause records evidence, never an inference from SIGKILL alone.
+type MemoryCause string
+
+// Memory causes describe the observed memory limit evidence.
+const (
+	// MemoryNone means no memory limit evidence was observed.
+	MemoryNone       MemoryCause = "none"
+	MemoryLocalLimit MemoryCause = "local-limit"
+	MemoryVictim     MemoryCause = "victim"
+	MemoryUnknown    MemoryCause = "unknown"
+)
+
 // Output is what a finished child wrote and how it ended.
 type Output struct {
+	bootstrapRefused bool
+	Death            *SandboxDeath
+	Containment      string
+	MemoryCause      MemoryCause
 	// Stdout and Stderr hold up to [Spec.MaxOutput] bytes each.
 	Stdout, Stderr []byte
 	// ExitCode is the exit status, or -1 when a signal ended the child.
@@ -93,7 +118,24 @@ type Output struct {
 	OutputLimit bool
 	// Isolated is true when the child ran without network ([Spec.NoNetwork]).
 	Isolated bool
+	// CoreDump says whether the kernel started a core dump, and so a crash
+	// helper such as systemd-coredump, for the program that ended (the target
+	// behind the sandbox's namespace init included). It is a test and
+	// diagnostics fact: no decision depends on it.
+	CoreDump CoreDump
 }
+
+// CoreDump is what the kernel did about a core dump of a finished program.
+type CoreDump uint8
+
+const (
+	// CoreDumpUnknown means the system cannot tell (Linux before 6.16, other systems).
+	CoreDumpUnknown CoreDump = iota
+	// CoreDumpNone means no core dump was started.
+	CoreDumpNone
+	// CoreDumpStarted means the kernel started one (PIDFD_COREDUMPED).
+	CoreDumpStarted
+)
 
 // Run starts the program, waits for it and returns what it wrote. A non-zero
 // exit status is reported in [Output.ExitCode], not as an error. When ctx ends
@@ -142,20 +184,17 @@ func run(ctx context.Context, spec Spec, prepareMount func(Spec) (*directoryMoun
 	cmd.Stdout, cmd.Stderr = streamOutput(stdout, spec.Stdout), stderr
 	cmd.WaitDelay = waitDelay
 	setProcAttr(cmd)
-	if err := configureConfinement(cmd); err != nil {
-		return Output{}, err
-	}
-	isolated, err := spec.isolated()
+	isolated, err := configureRunCommand(cmd, spec, mount)
 	if err != nil {
 		return Output{}, err
 	}
-	if isolated {
-		isolate(cmd)
+	manager := &appSandbox
+	if originalSpec.scope != nil {
+		manager = originalSpec.scope
 	}
-	if mount != nil {
-		if err := mount.configure(cmd); err != nil {
-			return Output{}, err
-		}
+	scope := manager.prepare(ctx, originalSpec, cmd)
+	if scope != nil {
+		defer scope.finish(0)
 	}
 	finishReport, closeReport, err := signalReport(cmd)
 	if err != nil {
@@ -167,24 +206,38 @@ func run(ctx context.Context, spec Spec, prepareMount func(Spec) (*directoryMoun
 	// The parent-death signal follows the thread that forks the child.
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
-	if err := cmd.Start(); err != nil {
+	start := cmd.Start
+	if scope != nil {
+		start = func() error { return scope.start(cmd) }
+	}
+	if err := start(); err != nil {
+		if scope != nil && scope.placementError(err) {
+			scope.placementFailed()
+			originalSpec.disableScope = true
+			return run(ctx, originalSpec, prepareMount)
+		}
 		return Output{}, fmt.Errorf("sidecar: start %s: %w", spec.Path, err)
 	}
-	if mount != nil {
-		if err := mount.open(cmd.Process.Pid); err != nil {
-			_ = signalGroup(cmd.Process.Pid, syscall.SIGKILL)
-			_ = cmd.Wait()
-			return Output{}, err
-		}
+	if scope != nil {
+		scope.afterStart()
+	}
+	if err := openRunMount(mount, cmd); err != nil {
+		return Output{}, err
 	}
 	var overflow atomic.Bool
 	stopWatch := watchDir(spec, cmd.Process.Pid, &overflow)
+	death := captureDeath(cmd)
 	waitErr := cmd.Wait()
 	stopWatch()
+	memoryCause := MemoryUnknown
+	if scope != nil {
+		memoryCause = scope.finish(exitSignal(cmd.ProcessState))
+	}
 	// Whatever the child left behind in its group goes with it.
 	_ = signalGroup(cmd.Process.Pid, syscall.SIGKILL)
 
 	out := Output{
+		Death:     death,
 		Stdout:    stdout.buf,
 		Stderr:    stderr.buf,
 		ExitCode:  cmd.ProcessState.ExitCode(),
@@ -194,7 +247,63 @@ func run(ctx context.Context, spec Spec, prepareMount func(Spec) (*directoryMoun
 
 		OutputLimit: overflow.Load(),
 	}
+	out.Containment, out.MemoryCause = "rlimit", memoryCause
+	if scope != nil {
+		out.Containment = "cgroup"
+	}
 	finishReport(&out)
+	if err := recordRunManifest(originalSpec.DeathTest, out); err != nil {
+		return out, err
+	}
+	out, err = finishRunOutputs(out, mount, originalSpec)
+	if err != nil {
+		return out, err
+	}
+	if err := ctx.Err(); err != nil && out.ExitCode != 0 {
+		return out, err
+	}
+	if waitErr != nil {
+		if _, exited := errors.AsType[*exec.ExitError](waitErr); !exited {
+			return out, fmt.Errorf("sidecar: run %s: %w", spec.Path, waitErr)
+		}
+	}
+	return out, nil
+}
+
+func openRunMount(mount *directoryMount, cmd *exec.Cmd) error {
+	if mount != nil {
+		if err := mount.open(cmd.Process.Pid); err != nil {
+			_ = signalGroup(cmd.Process.Pid, syscall.SIGKILL)
+			_ = cmd.Wait()
+			return err
+		}
+	}
+	return nil
+}
+
+func configureRunCommand(cmd *exec.Cmd, spec Spec, mount *directoryMount) (bool, error) {
+	if err := configureConfinement(cmd); err != nil {
+		return false, err
+	}
+	isolated, err := spec.isolated()
+	if err != nil {
+		return false, err
+	}
+	if isolated {
+		isolate(cmd)
+	}
+	if mount != nil {
+		if err := mount.configure(cmd); err != nil {
+			return false, err
+		}
+	}
+	return isolated, nil
+}
+
+func finishRunOutputs(out Output, mount *directoryMount, originalSpec Spec) (Output, error) {
+	if out.bootstrapRefused {
+		return out, errors.New("sidecar: bootstrap cgroup membership refused")
+	}
 	if mount != nil {
 		out.OutputLimit = out.OutputLimit || mount.limitHit(out)
 		if err := mount.export(); err != nil {
@@ -204,14 +313,6 @@ func run(ctx context.Context, spec Spec, prepareMount func(Spec) (*directoryMoun
 	} else {
 		out.OutputLimit = out.OutputLimit || directoryLimitHit(originalSpec, out)
 		cleanupEmptyOutputs(originalSpec)
-	}
-	if err := ctx.Err(); err != nil && out.ExitCode != 0 {
-		return out, err
-	}
-	if waitErr != nil {
-		if _, exited := errors.AsType[*exec.ExitError](waitErr); !exited {
-			return out, fmt.Errorf("sidecar: run %s: %w", spec.Path, waitErr)
-		}
 	}
 	return out, nil
 }

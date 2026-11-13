@@ -188,7 +188,17 @@ func (m *directoryMount) configure(cmd *exec.Cmd) error {
 	if err != nil {
 		return err
 	}
-	path, args, err := sandboxPrefix(sandboxConfig{ReadPaths: m.spec.ReadPaths, WorkingDir: cwd, Directory: dir, Names: m.spec.WriteFiles, Overlay: true, MountBytes: m.spec.MaxDirBytes, File: directoryFileCap(m.spec, 1), Memory: m.spec.MemoryLimit})
+	path, args, err := sandboxPrefix(sandboxConfig{
+		RequireDeath: m.spec.DeathTest != "",
+		ReadPaths:    m.spec.ReadPaths,
+		WorkingDir:   cwd,
+		Directory:    dir,
+		Names:        m.spec.WriteFiles,
+		Overlay:      true,
+		MountBytes:   m.spec.MaxDirBytes,
+		File:         directoryFileCap(m.spec, 1),
+		Memory:       m.spec.MemoryLimit,
+	})
 	if err != nil {
 		return err
 	}

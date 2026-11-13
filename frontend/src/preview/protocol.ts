@@ -18,20 +18,25 @@ export interface Diagnostic {
   column?: number;
 }
 
-export type FailureKind =
-  | "errors"
-  | "package"
-  | "noMain"
-  | "timeout"
-  | "memory"
-  | "tooLarge"
-  | "unsafe"
-  | "unavailable"
-  | "internal";
+/** Every failure kind Go sends (the Fail constants of internal/app/preview.go). */
+export const FAILURE_KINDS = [
+  "errors",
+  "package",
+  "noMain",
+  "timeout",
+  "memory",
+  "tooLarge",
+  "unsafe",
+  "unavailable",
+  "blocked",
+  "internal",
+] as const;
+
+export type FailureKind = (typeof FAILURE_KINDS)[number];
 
 export interface Failure {
   kind: FailureKind;
-  /** The missing packages, for kind "package". */
+  /** The missing packages, for kind "package"; empty for every other kind. */
   packages: string[];
 }
 
@@ -98,18 +103,6 @@ export const MAX_NOTE = 16 << 10;
 export const MAX_PAGES = 64;
 export const MAX_PAGE_COUNT = 100_000;
 
-const FAILURES: readonly string[] = [
-  "errors",
-  "package",
-  "noMain",
-  "timeout",
-  "memory",
-  "tooLarge",
-  "unsafe",
-  "unavailable",
-  "internal",
-];
-
 const decoder = new TextDecoder();
 const encoder = new TextEncoder();
 
@@ -124,11 +117,14 @@ const int = (v: unknown, max: number): number | undefined =>
   typeof v === "number" && Number.isInteger(v) && v >= 0 && v <= max ? v : undefined;
 
 function parseFailure(v: unknown): Failure | undefined {
-  if (!isObject(v) || typeof v.kind !== "string" || !FAILURES.includes(v.kind)) return undefined;
-  const packages = Array.isArray(v.packages)
-    ? v.packages.filter((p): p is string => typeof p === "string").slice(0, 20)
-    : [];
-  return { kind: v.kind as FailureKind, packages };
+  if (!isObject(v) || !FAILURE_KINDS.some((kind) => kind === v.kind)) return undefined;
+  const kind = v.kind as FailureKind;
+  // Only a missing package names anything; every other kind is its fixed message.
+  const packages =
+    kind === "package" && Array.isArray(v.packages)
+      ? v.packages.filter((p): p is string => typeof p === "string").slice(0, 20)
+      : [];
+  return { kind, packages };
 }
 
 function parseDiagnostic(v: unknown): Diagnostic | undefined {

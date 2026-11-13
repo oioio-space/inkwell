@@ -14,6 +14,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"syscall"
 	"testing"
 	"unsafe"
 
@@ -185,6 +186,14 @@ func confinementAttack() error {
 	case "x32":
 		_, _, _ = unix.RawSyscall(0x40000000|unix.SYS_GETPID, 0, 0, 0)
 		return errors.New("x32 syscall survived")
+	case "segv":
+		// Restore the kernel default action, then fault on a null write as a crashed program would.
+		action := [4]uint64{}
+		if _, _, errno := unix.RawSyscall6(unix.SYS_RT_SIGACTION, uintptr(unix.SIGSEGV), uintptr(unsafe.Pointer(&action)), 0, 8, 0, 0); errno != 0 { // #nosec G103 -- kernel copies the action.
+			return errno
+		}
+		*nullByte = 1
+		return errors.New("null write survived")
 	}
 
 	if os.Getenv("INKWELL_ATTACK") == "seccomp" {
@@ -295,6 +304,9 @@ func confinementAttack() error {
 	}
 	return nil
 }
+
+// nullByte is a nil pointer the compiler cannot prove nil: the "segv" attack writes through it.
+var nullByte *byte
 
 func TestSandboxExternalIPC(t *testing.T) {
 	for _, name := range []string{"signal", "bus"} {
@@ -502,7 +514,22 @@ func TestSeccompKillsABIMismatch(t *testing.T) {
 			}
 			cmd := exec.Command(path, append(args, os.Args[0])...)
 			cmd.Env = []string{"INKWELL_ATTACK=" + attack}
-			out, err := cmd.CombinedOutput()
+			pidfd := -1
+			cmd.SysProcAttr = &syscall.SysProcAttr{PidFD: &pidfd}
+			var captured bytes.Buffer
+			cmd.Stdout, cmd.Stderr = &captured, &captured
+			if err := cmd.Start(); err != nil {
+				t.Fatal(err)
+			}
+			defer func() { _ = unix.Close(pidfd) }()
+			d := captureDeath(cmd)
+			core := coreDumpOf(pidfd)
+			err = cmd.Wait()
+			out := captured.Bytes()
+			if d == nil {
+				t.Fatal("missing death identity")
+			}
+			recordDeath(t, d.PID, d.NSPID, d.Comm, exitSignal(cmd.ProcessState), core)
 			if err == nil || exitSignal(cmd.ProcessState) != int(unix.SIGSYS) {
 				t.Fatalf("ABI mismatch survived: %v %s", err, out)
 			}
@@ -585,6 +612,9 @@ func TestInitPreservesFileSizeSignal(t *testing.T) {
 	}
 	out := Output{ExitCode: cmd.ProcessState.ExitCode()}
 	finish(&out)
+	if err := recordRunManifest(t.Name(), out); err != nil {
+		t.Fatal(err)
+	}
 	if out.Signal != int(unix.SIGXFSZ) || out.ExitCode != -1 {
 		t.Fatalf("%+v", out)
 	}
