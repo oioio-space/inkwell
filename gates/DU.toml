@@ -1,0 +1,30 @@
+# Frozen acceptance for DU (targeted dependency update for R1: uuid < 11.1.1, GHSA-w5hq-g745-h8pq, moderate, reached
+# only through @automerge/automerge-repo which calls v4 only), written before implementation. Rigour: light.
+# Red on the unmodified tree (main, 2026-11-13): `pnpm audit --prod --json` lists advisory 1119441 on uuid 9.0.1
+# (path .>@automerge/automerge-repo>uuid) and `pnpm why uuid` resolves 9.0.1, so (a) and (b) fail for the right reason.
+raw_results = ["gates/DU/*"]
+
+[[criteria]]
+# a: the production audit reports no uuid advisory (the JSON is parsed; missing/invalid JSON fails too).
+id = "audit-no-uuid"
+command = '''cd frontend && mise x -- pnpm audit --prod --json > ../gates/DU/audit.json 2>/dev/null; python3 -I -c "import json,sys; d=json.load(open('../gates/DU/audit.json')); bad=[a['id'] for a in d['advisories'].values() if a['module_name']=='uuid']; print('uuid advisories:', bad); sys.exit(1 if bad else 0)"'''
+
+[[criteria]]
+# b: every resolved uuid is >= 11.1.1.
+id = "uuid-resolved"
+command = '''cd frontend && mise x -- pnpm why uuid --json | python3 -I -c "import json,sys; v=[tuple(map(int,e['version'].split('.')[:3])) for e in json.load(sys.stdin)]; print(v); sys.exit(0 if v and min(v)>=(11,1,1) else 1)"'''
+
+[[criteria]]
+# c: type, lint and unit checks of the frontend.
+id = "fe-check"
+command = "mise run fe:check"
+
+[[criteria]]
+# d: the collab smoke (two instances editing one file) still passes with the new uuid.
+id = "collab-e2e"
+command = "mise run e2e:build && cd frontend && ../scripts/heavy.sh timeout 900 ./node_modules/.bin/playwright test collab.spec.ts"
+
+[[criteria]]
+# e: the /simplify report exists.
+id = "simplify-report"
+command = "test -s gates/DU/SIMPLIFY.md"
