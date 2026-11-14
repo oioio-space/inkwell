@@ -66,6 +66,10 @@ jobs:
           name: seccomp-traces
           path: gates/L1/ci-seccomp-traces/
           retention-days: 7
+      # Ubuntu 24.04 restricts unprivileged user namespaces with AppArmor; the sidecar sandbox and its
+      # tests need them (as in the netsim and sidecars-arm64 jobs).
+      - name: Allow unprivileged user namespaces
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - run: mise run ci:core
       - name: Build the desktop app (Linux)
         run: mise run app:build
@@ -122,8 +126,14 @@ jobs:
       # namespace cannot load a module: the job loads it, with nf_tables (scripts/netsim checks both).
       - name: Load the netem and nftables kernel modules
         run: |
-          sudo apt-get install -y -qq "linux-modules-extra-$(uname -r)" iproute2
-          sudo modprobe sch_netem
+          sudo apt-get install -y -qq iproute2
+          # The extra-modules package is needed only where the image does not ship sch_netem, and it
+          # does not exist for every runner kernel: install it only when the module is missing.
+          sudo modprobe sch_netem || {
+            sudo apt-get update -qq
+            sudo apt-get install -y -qq "linux-modules-extra-$(uname -r)"
+            sudo modprobe sch_netem
+          }
           sudo modprobe nf_tables
       - name: Network simulation (cone and symmetric NAT, offline, change of network)
         run: mise run e2e:netsim
@@ -161,6 +171,9 @@ jobs:
           key: sidecars-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('internal/sidecar/manifest.json') }}
       - name: Fetch the pinned sidecars (SHA-256 verified)
         run: go run ./cmd/sidecar-fetch
+      # Ubuntu 24.04 restricts unprivileged user namespaces with AppArmor; the sandbox needs them.
+      - name: Allow unprivileged user namespaces
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - name: Sidecar and Typst tests (arm64)
         run: go test -race -count=1 ./internal/sidecar/... ./internal/typst/... ./cmd/sidecar-fetch/...
   # The release itself is .github/workflows/release.yml (tags v*; ADR 0025).
