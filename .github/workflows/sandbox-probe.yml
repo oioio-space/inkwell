@@ -1,0 +1,68 @@
+# Measures what GitHub's stock Ubuntu 24.04 machines let the sidecar sandbox do (block SB2, requirement
+# W69): user namespaces under AppArmor's restriction, Landlock, cgroup delegation, the system calls of the
+# pinned typst and tinymist, and a candidate AppArmor profile. Started by hand only; it never changes
+# kernel.apparmor_restrict_unprivileged_userns, and it fails only on an error of the probe itself.
+#
+#   gh workflow run sandbox-probe.yml --ref main
+name: sandbox-probe
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: sandbox-probe-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  probe:
+    name: probe (${{ matrix.runner }})
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        timeout-minutes: 5
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        timeout-minutes: 5
+        with:
+          go-version-file: go.mod
+      - name: Install strace
+        timeout-minutes: 5
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq strace
+      - name: Fetch the pinned sidecars (SHA-256 verified)
+        timeout-minutes: 10
+        run: go run ./cmd/sidecar-fetch
+      # Every question: system state, unshare, the repository's own probes, Landlock, cgroup delegation,
+      # the tests that never returned, the sidecars' system calls, then the candidate AppArmor profile.
+      - name: Probe the sandbox on this machine
+        timeout-minutes: 20
+        env:
+          INKWELL_PROBE_SUDO: "1"
+        run: |
+          scripts/sandbox-probe.sh 2>&1 | tee sandbox-probe.txt
+          exit "${PIPESTATUS[0]}"
+      - name: Show the answers
+        if: always()
+        timeout-minutes: 2
+        run: |
+          {
+            echo '### Sandbox probe (${{ matrix.runner }})'
+            echo
+            echo '```text'
+            grep -E '^Q[0-9]+: ' sandbox-probe.txt | cut -c1-700 | head -700
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+      - name: Keep the raw answers
+        if: always()
+        timeout-minutes: 5
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: sandbox-probe-${{ matrix.runner }}
+          path: sandbox-probe.txt
+          retention-days: 14
