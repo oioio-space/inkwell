@@ -327,6 +327,39 @@ describe("LF0a2 highlighting equivalence", () => {
   );
 
   it(
+    "LF0 a stopped Markdown parse never claims a position past its stop",
+    () => {
+      // Found by seed 1 on docs/design/spec.md (editor #11, 2026-11-13; 1 run in 20 on the wall clock).
+      // An unclosed <script> makes one HTML block of the rest of the document. CodeMirror stops a
+      // parse inside it (stopAt at the previous partial tree's length): the Markdown block still runs
+      // to its end, and the nested HTML parse is cut at the stop. Once the last nested parse was
+      // done, parseMixed's parsedPos was the input's end, so ParseContext.takeTree() recorded the
+      // tree as complete and the editor kept the cut-off colours. Every point where CodeMirror's
+      // time budget can interrupt the parse is tried.
+      const text = `intro\n\n<script>\n${"let a = 1;\n".repeat(20)}`;
+      const stop = text.indexOf("let a") + 30;
+      const parser = md.language.parser;
+      const failures: string[] = [];
+      for (let steps = 0; ; steps++) {
+        const parse = parser.startParse(text);
+        parse.stopAt(stop);
+        let tree: Tree | null = null;
+        for (let i = 0; i < steps && !tree; i++) tree = parse.advance();
+        if (tree) break;
+        // What ParseContext.takeTree() does: the tree is recorded as valid up to parsedPos.
+        const pos = parse.parsedPos;
+        if (pos > stop) failures.push(`${steps} steps: parsedPos ${pos} is past the stop ${stop}`);
+        if (parse.stoppedAt === null || parse.stoppedAt > pos) parse.stopAt(pos);
+        while (!tree) tree = parse.advance();
+        const d = pos >= text.length ? compare(parser.parse(text), tree) : null;
+        if (d) failures.push(`${steps} steps, taken as complete: ${d}`);
+      }
+      expect(failures).toEqual([]);
+    },
+    LONG,
+  );
+
+  it(
     "LF0 Markdown fixed parser equals the original on random edits",
     () => {
       let edits = 0;

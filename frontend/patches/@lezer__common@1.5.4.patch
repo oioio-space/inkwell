@@ -1,5 +1,5 @@
 diff --git a/dist/index.cjs b/dist/index.cjs
-index 41000f34a85ad897a5c01c4a48ab3f5cf30c7cb2..2e9333aa983255c4526480df7144ad37c7ba4f8e 100644
+index 41000f34a85ad897a5c01c4a48ab3f5cf30c7cb2..c4e48dc7c35d95defc829fd6e531b09ac63cc4d0 100644
 --- a/dist/index.cjs
 +++ b/dist/index.cjs
 @@ -1032,6 +1032,9 @@ class TreeCursor {
@@ -28,7 +28,7 @@ index 41000f34a85ad897a5c01c4a48ab3f5cf30c7cb2..2e9333aa983255c4526480df7144ad37
              if (this.stoppedAt != null)
                  for (let inner of this.inner)
                      inner.parse.stopAt(this.stoppedAt);
-@@ -1860,7 +1870,7 @@ class MixedParse {
+@@ -1860,12 +1870,16 @@ class MixedParse {
      get parsedPos() {
          if (this.baseParse)
              return 0;
@@ -37,7 +37,17 @@ index 41000f34a85ad897a5c01c4a48ab3f5cf30c7cb2..2e9333aa983255c4526480df7144ad37
          for (let i = this.innerDone; i < this.inner.length; i++) {
              if (this.inner[i].from < pos)
                  pos = Math.min(pos, this.inner[i].parse.parsedPos);
-@@ -1875,12 +1885,21 @@ class MixedParse {
+         }
+-        return pos;
++        // A stopped parse parsed nothing past its stop: the nested parses were cut
++        // there. With all of them done this was the input's end, so a caller that
++        // interrupted the parse just then (CodeMirror's takeTree) kept the cut-off
++        // nested trees as a complete tree.
++        return this.stoppedAt != null ? Math.min(pos, this.stoppedAt) : pos;
+     }
+     stopAt(pos) {
+         this.stoppedAt = pos;
+@@ -1875,12 +1889,21 @@ class MixedParse {
              for (let i = this.innerDone; i < this.inner.length; i++)
                  this.inner[i].parse.stopAt(pos);
      }
@@ -64,7 +74,7 @@ index 41000f34a85ad897a5c01c4a48ab3f5cf30c7cb2..2e9333aa983255c4526480df7144ad37
              let enter = true, range;
              if (this.stoppedAt != null && cursor.from >= this.stoppedAt) {
                  enter = false;
-@@ -1965,6 +1984,8 @@ class MixedParse {
+@@ -1965,6 +1988,8 @@ class MixedParse {
                  }
              }
          }
@@ -74,7 +84,7 @@ index 41000f34a85ad897a5c01c4a48ab3f5cf30c7cb2..2e9333aa983255c4526480df7144ad37
  }
  function checkCover(covered, from, to) {
 diff --git a/dist/index.js b/dist/index.js
-index efa8df4a1d96e72da0207ce8ddddeb9075f6a55a..8ddd7518972529e053f8ce31730af3cee8059e1b 100644
+index efa8df4a1d96e72da0207ce8ddddeb9075f6a55a..127b3f32851a2842a763b62c0b63d023783628fa 100644
 --- a/dist/index.js
 +++ b/dist/index.js
 @@ -1030,6 +1030,9 @@ class TreeCursor {
@@ -103,7 +113,7 @@ index efa8df4a1d96e72da0207ce8ddddeb9075f6a55a..8ddd7518972529e053f8ce31730af3ce
              if (this.stoppedAt != null)
                  for (let inner of this.inner)
                      inner.parse.stopAt(this.stoppedAt);
-@@ -1858,7 +1868,7 @@ class MixedParse {
+@@ -1858,12 +1868,16 @@ class MixedParse {
      get parsedPos() {
          if (this.baseParse)
              return 0;
@@ -112,7 +122,17 @@ index efa8df4a1d96e72da0207ce8ddddeb9075f6a55a..8ddd7518972529e053f8ce31730af3ce
          for (let i = this.innerDone; i < this.inner.length; i++) {
              if (this.inner[i].from < pos)
                  pos = Math.min(pos, this.inner[i].parse.parsedPos);
-@@ -1873,12 +1883,21 @@ class MixedParse {
+         }
+-        return pos;
++        // A stopped parse parsed nothing past its stop: the nested parses were cut
++        // there. With all of them done this was the input's end, so a caller that
++        // interrupted the parse just then (CodeMirror's takeTree) kept the cut-off
++        // nested trees as a complete tree.
++        return this.stoppedAt != null ? Math.min(pos, this.stoppedAt) : pos;
+     }
+     stopAt(pos) {
+         this.stoppedAt = pos;
+@@ -1873,12 +1887,21 @@ class MixedParse {
              for (let i = this.innerDone; i < this.inner.length; i++)
                  this.inner[i].parse.stopAt(pos);
      }
@@ -139,7 +159,7 @@ index efa8df4a1d96e72da0207ce8ddddeb9075f6a55a..8ddd7518972529e053f8ce31730af3ce
              let enter = true, range;
              if (this.stoppedAt != null && cursor.from >= this.stoppedAt) {
                  enter = false;
-@@ -1963,6 +1982,8 @@ class MixedParse {
+@@ -1963,6 +1986,8 @@ class MixedParse {
                  }
              }
          }

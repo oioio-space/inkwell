@@ -84,7 +84,7 @@ p50 per keystroke through `EditorState` (Node), edit at 10 / 50 / 90 %:
 | Markdown | 4.9 / 16.2 / 18.7 → 1.2 / 0.9 / 0.8 ms | 21.5 / 58.6 / 97.0 → 3.0 / 1.1 / 1.3 ms |
 | Markdown + HTML | 3.1 / 7.9 / 9.6 → 0.9 / 0.9 / 0.8 ms | 13.0 / 42.5 / 60.8 → 1.9 / 1.1 / 1.5 ms |
 
-## 5. `@lezer/common` (`patches/@lezer__common@1.5.4.patch`, 2 changes)
+## 5. `@lezer/common` (`patches/@lezer__common@1.5.4.patch`, 3 changes)
 
 ### 5.1 The cursor defect behind wrong colours
 
@@ -116,6 +116,27 @@ After a full parse, `MixedParse.startInner` walked the whole tree for nested reg
 - **Change:** the walk keeps its state in `this.scan`, checks an 8 ms deadline every 1 024 nodes, and
   resumes on the next call.
 - **Parse position:** `parsedPos` reports the walk's position, so CodeMirror's `takeTree` stops there.
+
+### 5.3 A stopped `parseMixed` never reports a position past its stop (2026-11-13)
+
+**Defect (upstream, unpatched 1.5.4 too).**
+- `MixedParse.stopAt(pos)` cuts the nested parses at `pos`; the base tree may run further (a Markdown HTML
+  block is read to its end whatever the stop).
+- Once the last nested parse is done, `parsedPos` returned `input.length`. The result is only returned by the
+  next `advance()`.
+- CodeMirror's time budget can expire between the two: `ParseContext.takeTree()` then records
+  `treeLen = parsedPos`, the document's end, and serves the tree with its cut-off nested trees as complete.
+
+**Found by** the random edits (seed 1, `docs/design/spec.md`, editor #11, 1 run in 20: it depends on where the
+wall clock cuts the parse): an unclosed `<script>` whose HTML tree stayed cut at the stop
+(`Document@194319-203332:recovered` for `Document@194319-268204:clean`).
+
+**Fix (1 line).** `parsedPos` is capped at `stoppedAt`.
+
+**Reproduction.** Test "LF0 a stopped Markdown parse never claims a position past its stop": a short text with
+an unclosed `<script>`, a stop inside it, and the parse interrupted after every possible number of steps, as
+`takeTree()` does. Before the fix: `parsedPos 236 is past the stop 46`, and the tree taken as complete has
+`Document@7-49:recovered` for `Document@7-236:clean`.
 
 ## 6. Measurements (gate `no-freeze`, Node 24, `INKWELL_PERF=1`; 2, 10, 50 MB; keystrokes at 10/50/90 %)
 
