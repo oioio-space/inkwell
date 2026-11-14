@@ -1,7 +1,8 @@
 # UX/UI study, part 2 (W65): others' changes in the text, differences, versions, files, tabs, and the surfaces nobody designed
 
 Status: **decided by the owner on 2026-11-14: everything is kept** (T, D, V, F, O, S, G), with one change: she keeps
-the git-like tree of the versions, so V1 and V2 were redrawn as a tree (below) and await her view of the new mock-up. Same line as part 1 (`2026-11-14-ux-ui-study.md`, W63):
+the git-like tree of the versions, so V1 and V2 were redrawn as a tree (below). **Confirmed by her the same evening on the revised mock-up: the whole list,
+T1–T9, D1–D9, V1–V9 (redrawn tree, the word « variante », several people in a variant), F1–F7, O1–O4, S1–S9, G1–G3.** Same line as part 1 (`2026-11-14-ux-ui-study.md`, W63):
 apparent simplicity, maximum usefulness, beauty, Adwaita. Groups W55 (diff), W56 (version tree), W57 (who did what),
 W59–W62 (files, tabs). Kept proposals become references in `docs/design/reference/` and are held by the W66 rule
 (`docs/engineering-principles.md` §5, UF-8).
