@@ -18,7 +18,7 @@ définie le 2026-11-12 dans [docs/autonomous-decisions.md](docs/autonomous-decis
 |---|---|---|---|
 | 1 | PB — mesure appariée | ✅ `main` | ADR 0038 |
 | 2 | C5S — qualité du lien | ✅ `main` (`d051af2`) ; reste l'affichage dans la fenêtre des personnes : bloc C5S-UI, [plan](docs/plans/2026-11-13-c5s-ui-link-level.md) prêt, après PR1 | ADR 0036, `gates/C5S.toml` |
-| 3 | OI — instance unique | 🔨 worktree `.claude/worktrees/agent-a78adb31ac7116405` (non commité) : séance avec l'utilisatrice faite le 2026-11-13 avec le paquet installé — « Ouvrir avec » et transmission du fichier OK, **défaut grave** : la fenêtre n'est jamais ramenée au premier plan (« Inkwell est prêt », sablier ; jeton d'activation non transmis) ; correction en cours, puis vérification de 2 min avec le paquet, puis commit | `gates/OI.toml`, [plan](docs/plans/2026-11-11-oi-single-instance-open.md), `gates/OI/UX.md` |
+| 3 | OI — instance unique | ✅ `main` (`7fa0bc2`) ; fenêtre ramenée au premier plan avec le jeton d'activation (purego, sans cgo) ; validé par l'utilisatrice avec le paquet installé le 2026-11-14 (`gates/OI/UX.md`) | `gates/OI.toml`, ADR 0037 |
 | 4 | RC1 — reconnexion après redémarrage | ✅ `main` | `gates/RC1.toml` |
 | 5 | SI1b — états vrais enregistré / envoi / reçu | ✅ `main` (`0752872`) ; validé par l'utilisatrice en séance le 2026-11-13 (`gates/SI1b/UX.md`) | `gates/SI1b.toml` |
 | 5b | SI1c → **HB1a / HB1b** — nouvelle barre du haut B (style GNOME, pastille centrale, aperçu à la taille de la zone d'écriture, version étroite) ; reprend les règles de SI1c ; `gates/SI1c.toml` jamais figé, remplacé | [conception](docs/plans/2026-11-13-report-and-header-design.md) |
@@ -34,7 +34,7 @@ définie le 2026-11-12 dans [docs/autonomous-decisions.md](docs/autonomous-decis
 
 **Reprise (passation du 2026-11-13, 23:45) — à lire en premier par la session suivante, dans cet ordre :**
 1. ✅ Fait le 2026-11-14 : correctif `@lezer/common` intégré (`69216d4`), `main` poussé (CI locale verte).
-2. OI (bloc 3) : correctif refait avec purego le 2026-11-14 (non commité, `.claude/worktrees/agent-a78adb31ac7116405`) : `internal/activate` sans cgo (`RTLD_NOLOAD`), `tools/archexec` inchangé, `mise run app:activation` vert sur binaire frais, tests des paquets touchés verts, `lint`, `lint:env`, `deadcode`, `arch` et garde de porte verts ; rpm reconstruit dans `dist/`. **Reste : la vérification de 2 min avec l'utilisatrice (`gates/OI/UX.md`, pas à pas, `pkexec dnf install` puis `remove`), puis rebase sur `main` et commit.**
+2. ✅ Fait le 2026-11-14 : OI sur `main` (`7fa0bc2`), validé par l'utilisatrice.
 3. ✅ Fait le 2026-11-14 : `AGENTS.md`, `GEMINI.md`, `docs/executors.md`, « When Claude is absent » ; les quatre changements de consignes acceptés par l'utilisatrice ; mentions de gortex retirées du dépôt. Reste, hors dépôt : 8 lignes de `~/.codex/config.toml`.
 4. W58 (bloc 11, bloquant R1), puis PR1 (bloc 9 : mesure `timers`, parcours, relecture, commit), puis `pregate` (contrôles rapides avant toute porte : `lint`, `lint:env`, `lint:claude-md`, `fe:check` — ils ont fait échouer 4 pushes et 2 portes le 2026-11-13), puis RP1 et HB1a/HB1b ([conception](docs/plans/2026-11-13-report-and-header-design.md)), puis le bloc « navigation dans le projet » (W59–W62, après G-0b), puis la porte L1 différée.
 5. Revues à exploiter : `docs/reviews/2026-11-13-velocity-review.md`, `…-ux-ui-review.md`, `…-ai-handover-audit.md`, `…-skills-hooks-claude-md-review.md` (si présente). Fable n'est plus disponible après le 2026-11-13 : routage normal de `CLAUDE.md`.
