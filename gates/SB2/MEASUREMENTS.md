@@ -21,3 +21,15 @@ same on every question below unless noted.
 Not measured: a desktop session (Wayland, a logged-in user), the installed `.deb`, Fedora's SELinux policy, and the
 syscalls typst and tinymist make *inside* the sandbox on arm64 (the launch never reached them). Next probe run:
 with the profile loaded, trace the arm64 sidecars inside the sandbox.
+
+## Run 2 (run 43642240366, commit ca30599, 2026-11-14): both tiers on a stock runner
+
+Raw answers: `PROBE2-ubuntu-24.04-amd64.md`, `PROBE2-ubuntu-24.04-arm64.md`.
+
+| # | Question | amd64 | arm64 | Settles |
+|---|---|---|---|---|
+| Q9 | Process creation during real work (outside the sandbox, `strace -f`) | typst compile: no clone, fork or vfork; tinymist LSP session: `clone3` ×15 (its threads), `vfork` ×1, `execve` ×2 | the same, with `clone` without thread flags ×1 instead of `vfork` | **tinymist does start one child process during a session.** The local measurement of revision 2 showed it still gives the same completions and diagnostics when that is refused; the no-process rule of tier F stands, and the child's purpose must be named in SB2a (what it runs, from the `execve` path) before freezing. glibc creates threads with `clone3`: answering `clone3` with ENOSYS relies on glibc's fallback to `clone` — to keep as a named test |
+| Q10 | The tier this machine decides today, without the profile | refused (EACCES, « inconclusive ») | refused | unchanged: today's code refuses everything on stock Ubuntu |
+| Q11 | Tier F forced (no namespace) | typst `--version` and a **compile to PDF succeed**; tinymist `--version` succeeds | typst dies of SIGSEGV, tinymist of SIGABRT | **tier F works on amd64 on a stock Ubuntu 24.04**; on arm64 it fails for the allow-list reason below |
+| Q8 | With the candidate profile, traced | the decided tier is N: compile and tinymist **isolated** | the decided tier is N, both die the same way | the profile path works on amd64 |
+| Q8 | Calls refused inside, arm64 | — | `ppoll` ×9 and **`tkill` ×12 refused (EPERM)**; the program aborts, its `tkill(SIGABRT)` is refused, it then dies of SIGSEGV | **finding 1 confirmed by measurement, and widened: the arm64 allow-list lacks `ppoll` (73) and `tkill` (130)** — Rust's abort path uses `tkill`; the amd64 list has neither `tkill` (200) nor it is needed there per Q11 (amd64 succeeds); both lists carry only `tgkill` (234 / 131) |
