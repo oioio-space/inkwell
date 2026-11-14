@@ -30,6 +30,31 @@ class ResetEvidence(unittest.TestCase):
             self.assertEqual((out / "SIMPLIFY.md").read_text(), "report")
             self.assertTrue((outside / "keep.txt").exists(), "a symlink must not be followed")
 
+    def test_walkthrough_captures_are_kept(self):
+        # The interface walkthrough (step 4, before the gate) stores its captures in gates/<lot>/ux/; the
+        # gate did not produce them and must not erase them (58 captures of W58a lost on 2026-11-14).
+        with tempfile.TemporaryDirectory() as d:
+            out = pathlib.Path(d) / "W58a"
+            (out / "ux" / "sub").mkdir(parents=True)
+            (out / "ux" / "banner-light.png").write_bytes(b"png")
+            (out / "ux" / "sub" / "dialog-dark.png").write_bytes(b"png")
+            (out / "e2e.log").write_text("old evidence")
+            gate.reset_evidence(out)
+            self.assertEqual(sorted(p.name for p in out.iterdir()), ["ux"])
+            self.assertTrue((out / "ux" / "sub" / "dialog-dark.png").exists())
+
+    def test_a_ux_symlink_is_still_removed(self):
+        with tempfile.TemporaryDirectory() as d:
+            out = pathlib.Path(d) / "L"
+            out.mkdir()
+            elsewhere = pathlib.Path(d) / "elsewhere"
+            elsewhere.mkdir()
+            (elsewhere / "keep.png").write_bytes(b"png")
+            (out / "ux").symlink_to(elsewhere, target_is_directory=True)
+            gate.reset_evidence(out)
+            self.assertEqual(list(out.iterdir()), [])
+            self.assertTrue((elsewhere / "keep.png").exists(), "a symlink must not be followed")
+
     def test_missing_folder_is_created(self):
         with tempfile.TemporaryDirectory() as d:
             out = pathlib.Path(d) / "new"

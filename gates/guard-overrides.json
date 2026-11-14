@@ -1114,6 +1114,26 @@
       "id": "aaec0529e54dac51422cc57d24e80a6e2ebab22b41881c53f038f2e2d35a1ac1",
       "reason": "frontend/e2e/ux/w58a.spec.ts: the driver of the W58a interface walkthrough (captures in light and dark, measured timings) is skipped unless W58A_UX=1, like the other walkthrough drivers: it is evidence tooling run by hand, not a test of the e2e suite; no existing test is skipped",
       "decision": "docs/plans/2026-11-14-w58a-foreign-read-only.md"
+    },
+    {
+      "id": "4ece9686829ad725695b9778de1cca7330abbeae354fb15978eda1f3705d0382",
+      "reason": "scripts/gate.py: reset_evidence keeps gates/<lot>/ux/, the interface walkthrough's captures (taken before the gate, not its evidence): the 58 captures of W58a were erased by its gate run on 2026-11-14; tests test_walkthrough_captures_are_kept and test_a_ux_symlink_is_still_removed (red first); evidence is still emptied, symlinks still never followed",
+      "decision": "docs/plans/2026-11-14-w58a-foreign-read-only.md"
+    },
+    {
+      "id": "dd564e8b56a2c783a05b843826778bf1679b0c5c6693f7d60abaa7f6bd09f8f4",
+      "reason": "scripts/gate.py: reset_evidence keeps gates/<lot>/ux/, the interface walkthrough's captures (taken before the gate, not its evidence): the 58 captures of W58a were erased by its gate run on 2026-11-14; tests test_walkthrough_captures_are_kept and test_a_ux_symlink_is_still_removed (red first); evidence is still emptied, symlinks still never followed",
+      "decision": "docs/plans/2026-11-14-w58a-foreign-read-only.md"
+    },
+    {
+      "id": "f5ee56829bfcbf54204e7fc1c78926e4cf7ae0bd55177cfc610fbbb3f2c82769",
+      "reason": "scripts/gate_reset_test.py: reset_evidence keeps gates/<lot>/ux/, the interface walkthrough's captures (taken before the gate, not its evidence): the 58 captures of W58a were erased by its gate run on 2026-11-14; tests test_walkthrough_captures_are_kept and test_a_ux_symlink_is_still_removed (red first); evidence is still emptied, symlinks still never followed",
+      "decision": "docs/plans/2026-11-14-w58a-foreign-read-only.md"
+    },
+    {
+      "id": "568bfeac44e198bd04d7816585c861e56d61d97bdfc5e256a1a1652b3d520f5b",
+      "reason": "scripts/gate_reset_test.py: reset_evidence keeps gates/<lot>/ux/, the interface walkthrough's captures (taken before the gate, not its evidence): the 58 captures of W58a were erased by its gate run on 2026-11-14; tests test_walkthrough_captures_are_kept and test_a_ux_symlink_is_still_removed (red first); evidence is still emptied, symlinks still never followed",
+      "decision": "docs/plans/2026-11-14-w58a-foreign-read-only.md"
     }
   ]
 }

@@ -40,14 +40,21 @@ SCRIPTS = pathlib.Path(__file__).resolve().parent
 ROOT = pathlib.Path(os.environ.get("INKWELL_GATE_ROOT") or SCRIPTS.parent).resolve()
 
 
+# The interface walkthrough's captures (skill ux-walkthrough), kept across gate runs.
+WALKTHROUGH_DIR = "ux"
+
+
 def reset_evidence(out):
     """Empties gates/<lot>/ for a new run: evidence is only what this run produced. The block's
     reports (*.md: SIMPLIFY, reconstructions, reviews) are versioned documents, not evidence, and
-    are kept (2026-11-08: an rmtree of the whole folder erased them). Symlinks are removed, never
-    followed."""
+    are kept (2026-11-08: an rmtree of the whole folder erased them), and so is ux/, the captures of
+    the interface walkthrough, which runs before the gate and is not its evidence (2026-11-14: the 58
+    captures of W58a were erased). Symlinks are removed, never followed."""
     out.mkdir(parents=True, exist_ok=True)
     for entry in out.iterdir():
         if entry.suffix == ".md" and entry.is_file() and not entry.is_symlink():
+            continue
+        if entry.name == WALKTHROUGH_DIR and entry.is_dir() and not entry.is_symlink():
             continue
         if entry.is_dir() and not entry.is_symlink():
             shutil.rmtree(entry)
