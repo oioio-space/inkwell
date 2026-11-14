@@ -14,6 +14,10 @@ done
 repo_root="$(git rev-parse --show-toplevel)"
 cd "$repo_root"
 
+# The pinned golangci-lint and gofumpt, not a stale copy earlier on PATH.
+# shellcheck source=scripts/pinned-path.sh
+source scripts/pinned-path.sh
+
 # Make Go-installed tools (golangci-lint, gofumpt) reachable (fallback when not
 # running under mise, which already puts the pinned tools on PATH).
 gopath_bin="$(go env GOPATH)/bin"

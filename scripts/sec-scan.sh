@@ -11,6 +11,11 @@ set -euo pipefail
 repo_root="$(git rev-parse --show-toplevel)"
 cd "$repo_root"
 
+# The pinned gosec and govulncheck, not a stale build earlier on PATH (scripts/pinned-path.sh).
+# shellcheck source=scripts/pinned-path.sh
+source scripts/pinned-path.sh
+./scripts/check-pinned-tools.sh
+
 if [[ "${1:-}" == "--staged" ]]; then
   if [[ -z "$(git diff --cached --name-only --diff-filter=ACM -- '*.go')" ]]; then
     echo "✓ No staged Go files — skipping code vuln scan."

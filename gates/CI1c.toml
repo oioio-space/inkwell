@@ -1,0 +1,54 @@
+# Acceptance for CI1c (second repair of the GitHub `ci` workflow: gosec findings hidden by a stale tool earlier on
+# PATH, netem `seed` unknown to Ubuntu 24.04's iproute2). Rigour: light. Plan: docs/plans/2026-11-14-ci1-github-ci.md.
+# HONEST STATUS: this light gate was written AFTER the code (the failures were diagnosed on GitHub, run 43624790761,
+# and the fixes are small); it is not a red-first gate. The red states it can show are in gates/CI1c/WITNESSES.md,
+# each one observed, none assumed. The GitHub confirmation (netsim job, scan:code) is recorded in gates/CI1c/GITHUB.md
+# by the integrator after the push. The pinned-red criterion needs a stale gosec earlier on PATH, as on the
+# developer machine: it is a local witness, not a CI one.
+raw_results = ["docs/plans/2026-11-14-ci1-github-ci.md", "gates/guard-overrides.json", "gates/CI1c/*"]
+
+[[criteria]]
+# a: gosec (pinned) and govulncheck are clean on the whole module.
+id = "scan-code"
+command = "timeout -k 10 1200 ./scripts/heavy.sh mise run scan:code"
+
+[[criteria]]
+# b: the tools the gates run are the pinned ones (gosec's embedded module version included).
+id = "pinned-tools"
+command = "mise x -- bash scripts/check-pinned-tools.sh"
+
+[[criteria]]
+# c: the same check, with the sourcing of pinned-path.sh removed on the fly, must fail naming the shadow.
+id = "pinned-tools-red-without-path-fix"
+command = '''out=$(sed '/^source scripts\/pinned-path.sh/d' scripts/check-pinned-tools.sh | mise x -- bash -s 2>&1); rc=$?; echo "$out"; test "$rc" -eq 1 && echo "$out" | grep -q "mise pins"'''
+
+[[criteria]]
+# d: the instance tests, race detector on, including the absolute-path rule by name.
+id = "instance-tests"
+command = '''bash -c 'set -o pipefail; timeout -k 10 900 ./scripts/heavy.sh go test -count=1 -race -v ./internal/instance/... | tee gates/CI1c/instance-tests.log | tail -3; grep -q -- "--- PASS: TestSocketPathFallback" gates/CI1c/instance-tests.log' '''
+
+[[criteria]]
+# e: a tc that does not know `seed` (fake, iproute2 6.1.0) is refused early with one sentence.
+id = "seed-probe"
+command = '''d=$(mktemp -d); printf '%s\n' '#!/bin/bash' 'case " $* " in *" seed "*) echo "What is \"seed\"?" >&2; exit 1;; esac' '[ "$1" = -V ] && { echo "tc utility, iproute2-6.1.0"; exit 0; }' 'exec /usr/bin/tc "$@"' > "$d/tc"; chmod +x "$d/tc"; out=$(PATH="$d:$PATH" NETSIM_SCENARIOS=5 timeout 60 bash scripts/netsim/run.sh 2>&1); rc=$?; rm -rf "$d"; echo "$out"; test "$rc" -eq 1 && echo "$out" | grep -q "does not accept 'netem ... seed'"'''
+
+[[criteria]]
+id = "lint"
+command = "mise run lint"
+
+[[criteria]]
+id = "lint-sh"
+command = "mise run lint:sh"
+
+[[criteria]]
+id = "lint-yaml"
+command = "mise run lint:yaml"
+
+[[criteria]]
+id = "lint-actions"
+command = "mise run lint:actions"
+
+[[criteria]]
+# k: the /simplify report exists (written by the integrator's review).
+id = "simplify-report"
+command = "test -s gates/CI1c/SIMPLIFY.md"

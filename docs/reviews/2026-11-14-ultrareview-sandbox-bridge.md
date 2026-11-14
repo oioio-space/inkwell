@@ -32,3 +32,22 @@ and six minor. **None has been replayed yet: each is a hypothesis until a failin
 - Order: after W58 (its gate is the candidate in verification and is independent of these files); SB2 before PR1.
   Finding 2 does not jump ahead of W58's gate: it needs the fallback path without a PID namespace and a sidecar that
   is already compromised, and R1 is an alpha between trusted people; it is the first item of SB2.
+
+## Evidence gathered the same day (GitHub run 43624790761, code reading, `docs/plans/2026-11-14-ubuntu-2404-sandbox.md`)
+
+- Finding 8 is **confirmed in the code and is a security defect on arm64, not a minor one**: `corelimit_linux_arm64.go:4`
+  sets `setrlimitSyscall = ^uint32(0)` under the comment « arm64 has no legacy setrlimit syscall », but
+  `SYS_SETRLIMIT = 164` exists (x/sys `zsysnum_linux_arm64.go:173`), so the core-limit filter never denies
+  `setrlimit(RLIMIT_CORE)` there; `TestTargetCannotLowerCoreLimit/setrlimit` fails on the arm64 runner.
+- Finding 1 is **partly confirmed**: `scripts/sidecar-allowlist.py:37-45` drops `poll` (no arm64 number) instead of
+  mapping it to `ppoll` (73), absent from `syscalls_linux_arm64.go`; on the arm64 runner typst and tinymist die at every
+  launch (`exit -1`, empty stderr), but the log holds no direct proof that `poll` is the cause (unlisted calls get
+  ENOSYS, `seccomp_linux.go:74`). To settle with the trace task on arm64.
+- Finding 3 is **confirmed as a code path**: on Ubuntu 24.04 a user namespace is created but holds no capability; the
+  mount probe answers « no », the isolation probe (`launcher_linux.go:107`) returns before mounting `/proc` and answers
+  « yes », the real launch then fails to mount `/proc` and exits 125. tinymist fails silently, typst with « exited with
+  status 125 ». Not yet observed on a real 24.04 machine.
+- Also found: `definitiveRefusal` accepts EPERM, EINVAL and ENOSPC but not EACCES, which is what the runner returned
+  (« permission denied »): the launch stayed « inconclusive » and was refused instead of degrading.
+- The package tests PKG-01…11 start the window in a container and never start a sidecar: they prove nothing about the
+  sandbox on Ubuntu 24.04; the .deb ships no AppArmor profile; every CI job that runs the sandbox lifts the restriction.

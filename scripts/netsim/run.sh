@@ -31,6 +31,11 @@ set -euo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 repo=$(cd "$here/../.." && pwd)
 
+# impaired_selected: whether the scenarios to run include an impaired one (5 to 8).
+impaired_selected() {
+  case " ${NETSIM_SCENARIOS:-1 2 3 4} " in *" "[5-8]" "*) return 0 ;; *) return 1 ;; esac
+}
+
 if [[ -z ${NETSIM_INNER:-} ]]; then
   missing=()
   for tool in unshare ip nft socat curl; do
@@ -43,10 +48,15 @@ if [[ -z ${NETSIM_INNER:-} ]]; then
     reason="cannot create user namespaces (unshare -Urnm failed); on Ubuntu 24.04: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0; elsewhere check user.max_user_namespaces"
   elif ! unshare -Urnm nft list ruleset >/dev/null 2>&1; then
     reason="nftables does not work in a user namespace (kernel module nf_tables not loaded: sudo modprobe nf_tables)"
-  elif case " ${NETSIM_SCENARIOS:-1 2 3 4} " in *" "[5-8]" "*) true ;; *) false ;; esac &&
+  elif impaired_selected &&
     ! { command -v tc >/dev/null 2>&1 && unshare -Urn tc qdisc add dev lo root netem delay 1ms 2>/dev/null; }; then
     # The impaired scenarios are part of `mise run ci`: a missing netem is never a skip, in CI or not.
     echo "netsim: FAILED, netem is not available (tc missing, or kernel module sch_netem not loaded: sudo modprobe sch_netem; a user namespace cannot load it; Fedora: sudo dnf install iproute-tc; CI: the job loads it before mise run ci)" >&2
+    exit 1
+  elif impaired_selected && ! unshare -Urn tc qdisc add dev lo root netem delay 1ms seed 1 2>/dev/null; then
+    # topology.sh seeds every netem qdisc (replayable draws); `seed` is in iproute2 6.6.0 (2023-09), and
+    # Ubuntu 24.04 ships 6.1.0: one clear failure here instead of one per scenario ("What is "seed"?").
+    echo "netsim: FAILED, $(tc -V 2>&1) does not accept 'netem ... seed' (iproute2 6.6.0 or later is required; CI builds the pinned release, see the netsim job of .github/workflows/ci.yml)" >&2
     exit 1
   fi
   if [[ -n $reason ]]; then

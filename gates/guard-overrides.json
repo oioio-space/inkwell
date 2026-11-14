@@ -1009,6 +1009,36 @@
       "id": "a36be85a4ca0b23d56272897c51d53c9870d45467cb309e3de22832a3b638fdc",
       "reason": "scripts/tla-check.sh: gate dependency changed for block OI: the OISingleInstance loop gains the mutants AckDropOnClose and EarlyDequeue (caught by AckedApplied), StaleReportAccepted and ResetAllOnDisconnect (rule D-OWNER, 2026-11-13, caught by SlotsAgree) and the witness WitnessStaleReport; the sound runs gain OISingleInstanceReconnect (three launches with a reconnection, invariants, through a new 'safety' expectation: no error and an exhausted queue) and OISingleInstanceReconnectLive (liveness with a reconnection); the witness WitnessForward of an earlier design is gone with the contract it tested. The 'sound' and 'mutant' checks are unchanged; no run of another model removed, no option changed.",
       "decision": "docs/plans/2026-11-11-oi-single-instance-open.md"
+    },
+    {
+      "id": "e8796306f0b13a0759e5bb6ced323e64738579dfa20d508ce031d60cc1bdcde0",
+      "reason": "scripts/lint.sh: gate dependency changed: sources scripts/pinned-path.sh so the pinned golangci-lint runs, not a stale copy earlier on PATH; no check, flag or threshold changed",
+      "decision": "docs/plans/2026-11-14-ci1-github-ci.md"
+    },
+    {
+      "id": "3917ebd8eb6c9af57cf7cc63e544834cbb12a4899f6db2804bad79fabf5522b0",
+      "reason": "scripts/netsim/run.sh: gate dependency changed: adds an early probe that refuses a tc without netem seed (one sentence instead of three scenario failures) and factors the existing scenario-selection test into impaired_selected; no scenario, expectation or threshold changed",
+      "decision": "docs/plans/2026-11-14-ci1-github-ci.md"
+    },
+    {
+      "id": "650de70856ca188686c182f141e574d3bc89bf46f9c7995dbfb70c93e64d6e10",
+      "reason": "scripts/perf/bench.sh: gate dependency changed: sources scripts/pinned-path.sh so the pinned benchstat runs; the measurement command, count and outputs are unchanged",
+      "decision": "docs/plans/2026-11-14-ci1-github-ci.md"
+    },
+    {
+      "id": "b8fa7b6afc809d87179ff8a83115df493a3fb44a84f83f08fcbbe5575d1b6fe8",
+      "reason": "scripts/perf/bench.sh: gate machinery changed: sources scripts/pinned-path.sh so the pinned benchstat runs; the measurement command, count and outputs are unchanged",
+      "decision": "docs/plans/2026-11-14-ci1-github-ci.md"
+    },
+    {
+      "id": "d84b8c1eff78603da5a2a10835b5b63670425822963fde71cf39ddc976fc7574",
+      "reason": "scripts/rtkx.sh: gate dependency changed: sources scripts/pinned-path.sh so every tool run through the wrapper (gitleaks, grype, gotestsum) is the pinned one; the exit code is still the tool's",
+      "decision": "docs/plans/2026-11-14-ci1-github-ci.md"
+    },
+    {
+      "id": "079259de7f82667094a2adb49931f4984ce11aff8548046b528d151cf59f9678",
+      "reason": "scripts/sec-scan.sh: gate dependency changed: sources scripts/pinned-path.sh and runs scripts/check-pinned-tools.sh first, so gosec 2.30.0 (not a stale 2.29.0) judges the code; the gosec and govulncheck arguments are unchanged",
+      "decision": "docs/plans/2026-11-14-ci1-github-ci.md"
     }
   ]
 }

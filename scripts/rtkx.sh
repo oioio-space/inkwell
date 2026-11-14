@@ -13,6 +13,10 @@
 # Usage: scripts/rtkx.sh <cmd> [args...]
 set -uo pipefail
 
+# The pinned tools (gitleaks, grype, gotestsum, ...), not a stale copy earlier on PATH.
+# shellcheck source=pinned-path.sh
+source "$(dirname "${BASH_SOURCE[0]}")/pinned-path.sh"
+
 if command -v rtk >/dev/null 2>&1; then
   exec rtk err "$@"
 fi

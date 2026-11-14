@@ -169,7 +169,7 @@ func (r Request) Encode() ([]byte, error) {
 	b = appendString(b, r.Cwd)
 	b = appendString(b, r.Activation)
 	b = binary.BigEndian.AppendUint16(b, r.Dropped)
-	b = append(b, byte(len(r.Args)))
+	b = append(b, byte(len(r.Args))) // #nosec G115 -- at most MaxArgs (32), checked by check
 	for _, a := range r.Args {
 		b = appendString(b, a)
 	}

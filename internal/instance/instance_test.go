@@ -1077,6 +1077,15 @@ func TestSocketPathFallback(t *testing.T) {
 			t.Errorf("squatted fallback used: %q", got)
 		}
 	}
+	// A relative TMPDIR would make the socket depend on the working directory: never used, even
+	// when the folder exists there.
+	t.Chdir(profile(t))
+	if err := os.MkdirAll(filepath.Join("rel", "inkwell-"+strconv.Itoa(uid)), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if got := runtimeDirFrom("", "rel", uid, true); got != "" {
+		t.Errorf("relative temporary folder used: %q", got)
+	}
 	if got := runtimeDir(false); got != runtime {
 		t.Errorf("runtimeDir = %q, want $XDG_RUNTIME_DIR %q", got, runtime)
 	}

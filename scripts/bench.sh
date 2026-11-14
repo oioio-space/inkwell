@@ -13,6 +13,10 @@ set -euo pipefail
 repo_root="$(git rev-parse --show-toplevel)"
 cd "$repo_root"
 
+# The pinned benchstat, not a stale build earlier on PATH.
+# shellcheck source=scripts/pinned-path.sh
+source scripts/pinned-path.sh
+
 # -count >= 10 is the practical minimum for benchstat to find a significant delta
 # (runtimes vary ~15% with system load). Override with BENCH_COUNT for quick local runs.
 bench() { go test -run '^$' -bench="${BENCH_PATTERN:-.}" -benchmem -count="${BENCH_COUNT:-10}" ./...; }

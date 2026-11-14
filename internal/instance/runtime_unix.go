@@ -19,7 +19,7 @@ func runtimeDir(create bool) string {
 }
 
 func runtimeDirFrom(xdg, tmp string, uid int, create bool) string {
-	if filepath.IsAbs(xdg) && privateDir(xdg, uid) {
+	if privateDir(xdg, uid) {
 		return xdg
 	}
 	dir := filepath.Join(tmp, "inkwell-"+strconv.Itoa(uid))
@@ -32,8 +32,15 @@ func runtimeDirFrom(xdg, tmp string, uid int, create bool) string {
 	return ""
 }
 
-// privateDir reports whether dir is a directory, not a symlink, owned by uid, with mode 0700.
+// privateDir reports whether dir is an absolute path to a directory, not a symlink, owned by uid,
+// with mode 0700. A relative path (an empty or relative $XDG_RUNTIME_DIR or $TMPDIR) would make
+// the socket depend on the working directory, so it is refused.
 func privateDir(dir string, uid int) bool {
+	if !filepath.IsAbs(dir) {
+		return false
+	}
+	// #nosec G703 -- dir is absolute, and Lstat only reads metadata and follows no symlink; the
+	// result is trusted only for a directory of uid with mode 0700 (ADR 0037).
 	info, err := os.Lstat(dir)
 	if err != nil || !info.IsDir() || info.Mode().Perm() != 0o700 {
 		return false
