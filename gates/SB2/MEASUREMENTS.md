@@ -47,3 +47,12 @@ Raw answers: `PROBE3-ubuntu-24.04-amd64.md`, `PROBE3-ubuntu-24.04-arm64.md`. Sam
 **Defect of the probe:** the typst items exited 1 because the probe's test document named an undefined variable
 (`#tot`); their traces therefore cover a compile that stopped at an error, not a full PDF/SVG/query/eval. Fixed
 (`#total`, checked locally: compile exit 0, query returns the heading); run 4 re-measures typst only.
+
+## Run 4 (run 43647599763, commit 88d5150, 2026-11-14): typst re-measured with a valid document
+
+Raw answers: `PROBE4-ubuntu-24.04-amd64.md`, `PROBE4-ubuntu-24.04-arm64.md`. Same answers on both architectures.
+
+| # | Question | Measured answer | Settles |
+|---|---|---|---|
+| Q9 | Processes and threads of each perimeter item, the sidecar traced alone | typst compile to PDF, compile to SVG, query, eval: all exit 0, **4 threads, no process** besides its own start; tinymist LSP session: 14 threads, no process | the no-process rule of tier F holds for the whole perimeter of D2, with typst doing real work |
+| Q13 | `prctl` and `ioctl` per item | typst: no `prctl`, `TIOCGWINSZ` ×1; tinymist: `PR_SET_NAME` ×7, `FIONREAD` ×2, `TCGETS` ×1 | tier F's `prctl` allow-list is `PR_SET_NAME`; the `ioctl` list is `TIOCGWINSZ`, `FIONREAD`, `TCGETS` (requests read-only on the process's own descriptors) |
