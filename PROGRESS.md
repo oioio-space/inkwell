@@ -37,6 +37,11 @@ définie le 2026-11-12 dans [docs/autonomous-decisions.md](docs/autonomous-decis
 
 **Intégrateur : la session Claude Code** (seule à commiter ; sans Claude, voir « When Claude is absent » de la méthode v2 et `AGENTS.md`).
 
+**Reprise (passation du 2026-11-15, 00:15, jetons presque épuisés) — à lire en premier :**
+1. **Audit du protocole (ultracode)** : workflow `wf_04cd1a24-ce8`, résultats conservés dans `~/.claude/projects/-home-mathieu-GolandProjects-inkwell/61fa9e48-30a6-4e0a-bf70-5c7eb177fa69/subagents/workflows/wf_04cd1a24-ce8/journal.jsonl` ; s'il n'a pas fini, le reprendre avec `Workflow({scriptPath: "~/.claude/projects/-home-mathieu-GolandProjects-inkwell/61fa9e48-30a6-4e0a-bf70-5c7eb177fa69/workflows/scripts/protocol-conformance-audit-wf_04cd1a24-ce8.js", resumeFromRunId: "wf_04cd1a24-ce8"})` (les agents terminés reviennent du cache, sans coût) ; puis écrire `docs/reviews/2026-11-14-protocol-audit.md` et ranger les constats dans TR1, IV1, AD1.
+2. **SB2a1** : porte figée (`8d23ecd`) ; worktree `../inkwell-sb2a1` (branche `sb2a1`) avec un début de code non commité (décision du niveau, descripteur de programme, règles du filtre ; outillage et CI commencés) — deux agents arrêtés à 00:11 faute de jetons : relire l'état (`git status`), relancer. Un premier agent a été arrêté par un filtre de sécurité automatique en écrivant le cœur : découper en briefs étroits, ne pas retenter la même demande ; les témoins hostiles (vraies tentatives d'échappement) attendent la décision de l'utilisatrice.
+3. Puis PC1 (spécification et modèle formel), EX0, la correction de l'outillage (la porte efface les captures des parcours).
+
 **Reprise (passation du 2026-11-13, 23:45) — à lire en premier par la session suivante, dans cet ordre :**
 1. ✅ Fait le 2026-11-14 : correctif `@lezer/common` intégré (`69216d4`), `main` poussé (CI locale verte).
 2. ✅ Fait le 2026-11-14 : OI sur `main` (`e3bc987`), validé par l'utilisatrice.
