@@ -467,7 +467,20 @@ interface, kept here because `scripts/tla-check.sh`, `mise run tla`, `formal` an
 Each launch is a process: it tries the profile lock (`flock` or `LockFileEx`: released by the kernel when its holder
 dies); the holder (primary) removes any leftover socket file, binds, then opens the identity, serves, and on closing
 answers « closing » until it closes the identity and exits; a launch that does not get the lock dials the socket,
-waits for the acknowledgement, and exits 0, or backs off and tries the lock again. Faults: `Crash` (any process, any
+waits for the acknowledgement, and exits 0, or backs off and tries the lock again. A request is acknowledged once a
+primary ready to show it (identity, project and network up) has received and queued it; from then on the primary owns
+the outcome (contract simplified 2026-11-12 after three review rounds; a crash of the primary in between loses the
+request: accepted residual). The open stream between Go and the window has one owner at a time, by generation
+(rule D-OWNER, 2026-11-13): the window connects (`Connect`), may connect again (`Reconnect`, not fair: a new
+generation supersedes the old one, whose undelivered work goes back to Go's queue, and the window starts afresh), and
+the superseded stream's handler returns later (`EndStream`: it gives back only what it held). Go sends a queued
+request to the current window (`Send`) and keeps it until the window reports it handled (`Apply`: shown, or its
+toast up, reported with its generation; `Deliver`: Go accepts a report only from the generation holding the request).
+Closing stops the acknowledgements, the window keeps handling during « closing », and the process closes once Go's
+queue is empty, or once the bounded wait (2 s) gave up on a window that cannot answer (`Stuck`, a fault: the
+residual). `MaxGen` bounds the connections of one primary: 1 in the configurations with a crash, 2 (one
+reconnection) in `OISingleInstanceReconnect.cfg` and the stream mutants. A failed start is a `Crash` here: nothing was
+queued. Faults: `Crash` (any process, any
 time, bounded by `MaxCrashes`), `Hang` (a primary stops answering and keeps the lock). Time is abstract: a per-try
 timeout is always allowed while no reply came; giving up (the 5 s deadline) is allowed only while the lock holder is
 hung. The initial socket file is absent or stale (a crash of a previous run).
@@ -499,18 +512,24 @@ bounds (queue, connections, sizes), the 15 s closing budget as a duration, what 
 | `MutualExclusion` (S1) | D-LOCK, D-ORDER | at most one process has the identity open (the defect this block removes) |
 | `IdentityNeedsLock` (S2) | D-ORDER | the identity is open only by the lock holder |
 | `OnlyHolderListens` (S3) | D-UNLINK | a live socket belongs to the lock holder |
-| `ExitOkImpliesQueued` (S4) | D-ACK | a launch that exits 0 was queued by a primary: no silent loss |
+| `ExitOkImpliesQueued` (S4) | D-ACK | a launch that exits 0 was received and queued by a primary |
 | `GaveUpJustified` (S5) | D-CLOSING | a launch gives up only on a hung holder, never on « closing » |
 | `Settles` (L1) | D-KERNEL, D-RETRY | every launch eventually serves, hands off, gives up on a hung holder, or crashed |
-| `AckedApplied` (L2) | D-ACK, D-DRAIN | a queued request is applied unless its primary stopped serving |
+| `AckedApplied` (L2) | D-ACK, D-DRAIN | a request a primary received is eventually handled by its window (shown, or said why not) unless that primary crashes, hangs, or its window stops answering (`Stuck`: the bounded wait at close gives up); no escape for a primary that closes (it drains first) |
+| `SlotsAgree` (S6) | D-OWNER | whatever the current window holds, Go holds as delivered to that window's generation: Go's in-flight count is the window's, nothing is sent twice to one window |
+| `RemovedWasShown` (S7) | D-OWNER | Go removes a request only once a window showed it (or said why not) |
+| `NoStrandedSlot` (L3) | D-OWNER, D-DRAIN | every request a primary received leaves Go's queue, whatever the reconnections, unless that primary crashes, hangs, or its window stops answering |
 
 | Configuration | Result |
 |---|---|
-| `OISingleInstance.cfg`: 3 launches, 1 crash, no hang | no error, liveness included: 28,022 states generated, 11,832 distinct, depth 32, 12 temporal branches over 141,984 behaviour-graph nodes; 14 s (2 workers, 2 GB heap, 2026-11-12) |
-| `OISingleInstanceHang.cfg`: as above, a primary may hang | no error, liveness included: 35,702 states generated, 15,234 distinct, depth 32, 12 temporal branches over 182,808 behaviour-graph nodes; 18 s |
+| `OISingleInstance.cfg`: 3 launches, 1 crash, no hang, `MaxGen = 1` | no error, liveness included: 66,002 states generated, 23,418 distinct; 1 min 31 s (2 workers, 2 GB heap, 2026-11-13: one owner by generation, reports delivered as their own step) |
+| `OISingleInstanceHang.cfg`: as above, a primary may hang | no error, liveness included: 87,977 states generated, 31,374 distinct; 2 min 9 s |
+| `OISingleInstanceReconnect.cfg`: 3 launches, no crash, no hang, `MaxGen = 2` | no error, invariants (S1-S7) only: 214,727 states generated, 70,171 distinct; 2 s (with liveness: no error, 7 min 31 s, measured 2026-11-13, too long for every run) |
+| `OISingleInstanceReconnectLive.cfg`: 2 launches, no crash, no hang, `MaxGen = 2` | no error, liveness included: 3,402 states generated, 1,484 distinct; 3 s |
 
-Every mutant below is caught by its listed property and every witness is violated (the 16 OI runs of
-`scripts/tla-check.sh` take 56 s); the `AckedApplied` counterexample of NoDrain ends with a primary serving forever
+Every mutant below is caught by its listed property and every witness is violated (the 23 OI runs of
+`scripts/tla-check.sh` take about 5 min 20 s, 2026-11-13). A launch reads « closing » in the step that sends it
+(`ReplyClosing`), and a reply is forgotten once read; the `AckedApplied` counterexample of NoDrain ends with a primary serving forever
 with an acknowledged request queued and never applied; the three `Settles` counterexamples end in a fair cycle: launches retrying against a
 lock held by a crashed process (CrashKeepsLock), a launch redialling a stale socket with the lock free (NoRetryLock),
 a launch looping on an absent socket while the primary it unlinked serves (SecondUnlinks).
@@ -523,18 +542,23 @@ violate them):
 |---|---|---|---|
 | `OISingleInstanceNoLock` | `MayLead <- NoLockLead` | primary = « no socket answers » (the socket-only design) | `MutualExclusion` |
 | `OISingleInstanceEarlyIdentity` | `IdentityAtStart <- EarlyIdentity` | identity opened before the lock (today's order) | `MutualExclusion` |
-| `OISingleInstanceAckNoQueue` | `Enqueue <- AckNoQueue` | acknowledged before queueing | `ExitOkImpliesQueued` |
+| `OISingleInstanceAckNoQueue` | `Enqueue <- AckNoQueue` | acknowledged without being queued | `ExitOkImpliesQueued` |
 | `OISingleInstanceFireAndForget` | `WaitsForReply <- FireAndForget` | exit 0 after sending, no acknowledgement (Wails macOS) | `ExitOkImpliesQueued` |
 | `OISingleInstanceLockReleasedEarly` | `ReleaseOnClose <- ReleaseEarly` | lock released when closing starts | `MutualExclusion` |
 | `OISingleInstanceCrashKeepsLock` | `ReleaseOnCrash <- KeepLockOnCrash` | pid file or `O_EXCL` file left by a crash | `Settles` |
 | `OISingleInstanceGiveUpOnClosing` | `GiveUpOnClosing <- GiveUpClosing` | « closing » read as « already running » | `GaveUpJustified` |
 | `OISingleInstanceSecondUnlinks` | `UnlinksStale <- SecondUnlinksStale` | a second launch removes a « stale » socket (it may be the new primary's) | `Settles` |
 | `OISingleInstanceNoRetryLock` | `AfterBackoff <- DialAgain` | retries reconnect without retrying the lock | `Settles` |
-| `OISingleInstanceNoDrain` | `ToApply <- NoDrain` | requests acknowledged and queued, never read by the window (D-DRAIN) | `AckedApplied` |
+| `OISingleInstanceNoDrain` | `ToApply <- NoDrain` | requests queued, never read by the window (D-DRAIN) | `AckedApplied` |
+| `OISingleInstanceAckDropOnClose` | `DrainedBeforeClose <- CloseAnyTime`, `MaxCrashes = 0` | the window closes without applying what it acknowledged: a clean shutdown loses it; no crash, so only the shutdown can | `AckedApplied` |
+| `OISingleInstanceEarlyDequeue` | `DrainedBeforeClose <- QueueEmpty`, `MaxCrashes = 0` | the process closes once every request was sent to the window instead of once the window reported them handled | `AckedApplied` |
+| `OISingleInstanceStaleReportAccepted` | `AcceptsReport <- StaleReport`, `MaxGen = 2` | a report of a superseded stream frees a request the new stream holds (Go then counts one less in flight than the window holds) | `SlotsAgree` |
+| `OISingleInstanceResetAllOnDisconnect` | `EndGiveBack <- ResetAll`, `MaxGen = 2` | the late end of a superseded stream gives back every request, the new stream's too (sent twice) | `SlotsAgree` |
 | `OISingleInstanceWitnessHandoff` | invariant `NoHandoff` | witness: some launch exits 0 | (must violate) |
 | `OISingleInstanceWitnessGiveUp` | invariant `NoGiveUp`, `Hangs = TRUE` | witness: some launch gives up on a hung holder | (must violate) |
 | `OISingleInstanceWitnessTakeover` | invariant `NoTakeover` | witness: a launch serves after a primary that served crashed | (must violate) |
 | `OISingleInstanceWitnessHandover` | invariant `NoHandover` | witness: a launch serves after a primary closed normally | (must violate) |
+| `OISingleInstanceWitnessStaleReport` | invariant `NoStaleReport`, `MaxGen = 2` | witness: a report of a superseded stream is on its way while the new stream holds the same request | (must violate) |
 
 ```
 java -cp tla2tools.jar tlc2.TLC -workers 2 -config OISingleInstance.cfg OISingleInstance

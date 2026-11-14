@@ -61,7 +61,7 @@ fi
 
 fail=0
 
-# run NAME CONFIG MODULE sound|mutant
+# run NAME CONFIG MODULE sound|safety|mutant
 run() {
   local name="$1" cfg="$2" module="$3" expect="$4"
   local out="$logs/$name.log" metadir status
@@ -84,6 +84,15 @@ run() {
       fail=1
     else
       printf '✓ %s: no error (exhaustive, liveness checked)\n' "$name"
+    fi
+  elif [[ "$expect" == safety ]]; then
+    # A larger configuration of a model whose liveness a smaller sound configuration checks.
+    if ((status != 0)) || ! grep -q 'No error has been found' "$out" || ! grep -q '0 states left on queue' "$out"; then
+      printf '✗ %s: sound model failed (exit %d)\n' "$name" "$status" >&2
+      tail -n 20 "$out" >&2
+      fail=1
+    else
+      printf '✓ %s: no error (exhaustive, invariants)\n' "$name"
     fi
   else
     if ((status == 12 || status == 13)) && grep -Eq 'Error: (Invariant|Temporal property) .* violated' "$out"; then
@@ -120,6 +129,8 @@ run LinkProbeAccept LinkProbeAccept.cfg LinkProbe sound
 # OISingleInstance (README "OISingleInstance", block OI, ADR 0037): one process per profile and the hand-off.
 run OISingleInstance OISingleInstance.cfg OISingleInstance sound
 run OISingleInstanceHang OISingleInstanceHang.cfg OISingleInstance sound
+run OISingleInstanceReconnect OISingleInstanceReconnect.cfg OISingleInstance safety
+run OISingleInstanceReconnectLive OISingleInstanceReconnectLive.cfg OISingleInstance sound
 
 # SandboxScope (README "SandboxScope", block SB1b, ADR 0042 A1-A4 and A8): the sandbox's memory scope, no fault and every fault.
 run SandboxScope SandboxScope.cfg SandboxScope sound
@@ -159,7 +170,8 @@ done
 # OISingleInstance mutants and witnesses (README "OISingleInstance"): definition overrides from OISingleInstanceMutants;
 # a witness is an invariant the sound model must violate (anti-vacuity).
 for m in NoLock EarlyIdentity AckNoQueue FireAndForget LockReleasedEarly CrashKeepsLock GiveUpOnClosing SecondUnlinks \
-         NoRetryLock NoDrain WitnessHandoff WitnessGiveUp WitnessTakeover WitnessHandover; do
+         NoRetryLock NoDrain AckDropOnClose EarlyDequeue StaleReportAccepted ResetAllOnDisconnect \
+         WitnessHandoff WitnessGiveUp WitnessTakeover WitnessHandover WitnessStaleReport; do
   run "OISingleInstance$m" "mutants/OISingleInstance$m.cfg" mutants/OISingleInstanceMutants mutant
 done
 # SandboxScope mutants and witnesses (README "SandboxScope"): definition overrides from SandboxScopeMutants;

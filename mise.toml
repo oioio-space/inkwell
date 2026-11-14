@@ -342,6 +342,11 @@ description = "Build the desktop app for this OS into bin/"
 depends = ["fe:install", "sidecar:fetch"]
 run = "wails3 task build"
 
+[tasks."app:activation"]
+description = "Native check (needs mutter and dbus-run-session, a GNOME desktop has both): a second launch's activation token reaches the compositor from the running Inkwell; headless, isolated profile (usage: -- [binary], default bin/inkwell)"
+depends = ["app:build"] # never judge a stale binary (2026-11-14: a build of the day before was checked)
+run = "./scripts/heavy.sh timeout 150 ./scripts/activation-check.sh"
+
 [tasks."e2e:build"]
 description = "Build what the end-to-end tests run: frontend, bin/inkwell-server, bin/inkwell-relay, the Playwright browser"
 depends = ["fe:install", "fe:bindings", "sidecar:fetch"]

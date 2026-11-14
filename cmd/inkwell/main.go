@@ -5,22 +5,25 @@ package main
 import (
 	"context"
 	"errors"
-	"fmt"
 	"log/slog"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
+	"sync/atomic"
 	"time"
 
 	"github.com/wailsapp/wails/v3/pkg/application"
+	"github.com/wailsapp/wails/v3/pkg/events"
 
 	"github.com/oioio-space/inkwell"
 	"github.com/oioio-space/inkwell/internal/app"
 	"github.com/oioio-space/inkwell/internal/bridge"
+	"github.com/oioio-space/inkwell/internal/instance"
 	"github.com/oioio-space/inkwell/internal/language"
+	"github.com/oioio-space/inkwell/internal/launch"
 	"github.com/oioio-space/inkwell/internal/project"
 	"github.com/oioio-space/inkwell/internal/transport"
-	"github.com/oioio-space/inkwell/internal/version"
 )
 
 const (
@@ -38,46 +41,55 @@ const (
 	exportDirEnv = "INKWELL_EXPORT_DIR"
 )
 
+// run is the launch of Inkwell; configure, when set, adjusts the application before it runs (the
+// native performance build). It exits with the code of [startup] when that is not 0.
 func run(configure func(*application.App, *application.WebviewWindow)) {
-	if versionRequested(os.Args[1:]) {
-		fmt.Println(version.Current())
-		return
+	if code := startup(os.Args[1:], liveDeps(configure)); code != exitOK {
+		os.Exit(code)
 	}
-	log := slog.New(slog.NewTextHandler(os.Stderr, nil))
-	ctx, cancel := context.WithCancel(context.Background())
+}
 
-	home, err := app.OpenHome()
-	if err != nil {
-		log.Error("opening identity directory", "err", err)
-		os.Exit(1)
+// liveDeps are the real effects of a launch.
+func liveDeps(configure func(*application.App, *application.WebviewWindow)) deps {
+	log := slog.New(slog.NewTextHandler(os.Stderr, nil))
+	var wails atomic.Pointer[application.App] // the export dialog needs the application, created last
+	return deps{
+		stdout:  os.Stdout,
+		log:     log,
+		getenv:  startEnv(), // the activation token survives GTK there
+		getwd:   os.Getwd,
+		homeDir: app.HomeDir,
+		start: func(ctx context.Context, dir string, req instance.Request) (*instance.Primary, error) {
+			return instance.Start(ctx, dir, req, instance.Options{})
+		},
+		notify:      tell,
+		openHome:    app.OpenHome,
+		openProject: openProject,
+		startNetwork: func(ctx context.Context, home *os.Root, proj *project.Project) (*app.Runtime, error) {
+			choose := func(name string) (string, error) {
+				return wails.Load().Dialog.SaveFile().SetFilename(name).AddFilter("PDF", "*.pdf").PromptForSingleSelection()
+			}
+			if dir := os.Getenv(exportDirEnv); dir != "" {
+				choose = app.DirChooser(dir)
+			}
+			return app.Start(ctx, home, app.Options{
+				Log:           log,
+				Project:       proj,
+				Port:          app.DefaultPort,
+				LAN:           os.Getenv(lanEnv) == "1",
+				RendezvousURL: os.Getenv(rendezvousEnv),
+				ExportChoose:  choose,
+			})
+		},
+		window: func(ctx context.Context, s *session) int {
+			return runWindow(ctx, s, log, &wails, configure)
+		},
 	}
-	proj, err := openProject()
-	if err != nil {
-		log.Error("opening project", "err", err)
-		os.Exit(1)
-	}
-	var wails *application.App // the export dialog needs the application, created below
-	choose := func(name string) (string, error) {
-		return wails.Dialog.SaveFile().SetFilename(name).AddFilter("PDF", "*.pdf").PromptForSingleSelection()
-	}
-	if dir := os.Getenv(exportDirEnv); dir != "" {
-		choose = app.DirChooser(dir)
-	}
-	rt, err := app.Start(ctx, home, app.Options{
-		Log:           log,
-		Project:       proj,
-		Port:          app.DefaultPort,
-		LAN:           os.Getenv(lanEnv) == "1",
-		RendezvousURL: os.Getenv(rendezvousEnv),
-		ExportChoose:  choose,
-	})
-	if err != nil {
-		log.Error("starting network", "err", err)
-		os.Exit(1)
-	}
-	if err := home.Close(); err != nil {
-		log.Warn("closing identity directory", "err", err)
-	}
+}
+
+// runWindow serves the webview of the open project until the window closes.
+func runWindow(ctx context.Context, s *session, log *slog.Logger, wailsApp *atomic.Pointer[application.App], configure func(*application.App, *application.WebviewWindow)) int {
+	proj, rt := s.proj, s.rt
 	router := bridge.NewRouter(rt.Repo, log)
 
 	if err := proj.Backup(time.Now(), backupsKept); err != nil {
@@ -94,7 +106,7 @@ func run(configure func(*application.App, *application.WebviewWindow)) {
 
 	var loops shutdownLoops
 	assetToken := app.NewAssetToken()
-	wails = application.New(application.Options{
+	wails := application.New(application.Options{
 		Name:        "Inkwell",
 		Description: "Éditeur collaboratif Typst, sans serveur",
 		Services: []application.Service{
@@ -119,9 +131,10 @@ func run(configure func(*application.App, *application.WebviewWindow)) {
 			ApplicationShouldTerminateAfterLastWindowClosed: true,
 		},
 		OnShutdown: func() {
-			shutdown(cancel, &loops, rt.Close, proj.Close, log)
+			stopAll(s.closing, s.cancel, &loops, rt.Close, proj.Close, s.closeInstance, log)
 		},
 	})
+	wailsApp.Store(wails)
 	wails.HandleStream(bridge.StreamName, func(c *application.StreamConn) { router.Serve(c) })
 	wails.HandleStream(bridge.StoreStreamName, func(c *application.StreamConn) { storeServer.Serve(c) })
 	wails.HandleStream(app.PreviewStreamName, func(c *application.StreamConn) { rt.Preview.Serve(c) })
@@ -157,14 +170,38 @@ func run(configure func(*application.App, *application.WebviewWindow)) {
 	if windows != nil {
 		windows.bind(wails, main)
 	}
+	var closingWindow atomic.Bool // a closing window is not raised again
+	mainRaiser := newRaiser(main)
+	raise := func(token string) {
+		if !closingWindow.Load() {
+			mainRaiser.raise(token)
+		}
+	}
+	open := &opener{queue: s.queue, env: openEnv(proj.Path()), raise: raise, log: log}
+	wails.HandleStream(openStreamName, func(c *application.StreamConn) { open.Serve(c) })
+	// Closing the window: stop acknowledging, and wait (bounded) until the webview reported handled
+	// what was acknowledged (rule D-DRAIN at close). The raise is asynchronous: it never waits on
+	// this hook.
+	main.OnWindowEvent(events.Common.WindowClosing, func(*application.WindowEvent) {
+		closingWindow.Store(true)
+		drainOnClose(s.queue, s.closing, drainTimeout, log)
+	})
 
 	if configure != nil {
 		configure(wails, main)
 	}
 	if err := wails.Run(); err != nil {
 		log.Error("inkwell stopped", "err", err)
-		os.Exit(1)
+		return exitError
 	}
+	return exitOK
+}
+
+// openEnv is where the open requests are resolved: the open project dir, its Docs folder (every
+// project opened is a folder of Docs) and the person's home.
+func openEnv(dir string) launch.Env {
+	home, _ := os.UserHomeDir() // "": the walk to a project then stops only at / or a mount point
+	return launch.Env{Home: home, Docs: filepath.Dir(dir), Current: dir}
 }
 
 // windowHost is the desktop's windows for a presentation, which can only be
@@ -178,15 +215,18 @@ type windowHost interface {
 // backupsKept is how many project backups are kept (one per launch).
 const backupsKept = 10
 
-// openProject opens the most recent project in the user's Inkwell folder,
-// creating an untitled one on first launch.
-func openProject() (*project.Project, error) {
+// openProject opens the project of the first argument of this launch when it is a project of the
+// user's Inkwell folder (R2), else the most recent one, creating an untitled one on first launch
+// (R1).
+func openProject(own instance.Request) (*project.Project, error) {
 	docs, err := app.OpenDocs()
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = docs.Close() }() // the project keeps its own handle
-	return app.OpenProject(docs)
+	home, _ := os.UserHomeDir()
+	env := launch.Env{Cwd: own.Cwd, Home: home, Docs: docs.Name()}
+	return app.OpenProjectIn(docs, launch.Startup(launch.Resolve(own.Args, int(own.Dropped), env), docs.Name()))
 }
 
 // serverPort returns INKWELL_SERVER_PORT, or 8080 when unset or invalid.

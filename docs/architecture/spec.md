@@ -386,7 +386,7 @@ arrêt ; statut.
 porte les cas d'usage qui en traversent plusieurs, et les expose au frontend.
 - API : `Start(ctx, home, Options) (*Runtime, error)`, `Runtime.Close` ; services Wails
   `Session` (identité, inviter, rejoindre, personnes, visibilité), `Projects`,
-  `PreviewService`, `PresentService` ; `OpenHome`, `OpenDocs`, `OpenProject` ; `CSPNonce`.
+  `PreviewService`, `PresentService` ; `OpenHome`, `OpenDocs`, `OpenProjectIn` ; `CSPNonce`.
 - Dépend de : tous les paquets internes sauf `cmd/*` ; **personne** n'importe `app` (AC-1).
 - État : le `Runtime` d'un projet ; les invitations en cours ; l'orchestration des fichiers
   (`Files`).

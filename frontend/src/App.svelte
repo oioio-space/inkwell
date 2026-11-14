@@ -36,6 +36,7 @@ import HistoryBars from "./ui/history/HistoryBars.svelte";
 import HistoryDrawer from "./ui/history/HistoryDrawer.svelte";
 import { history } from "./ui/history/history.svelte";
 import NoticeToast from "./ui/NoticeToast.svelte";
+import { notice } from "./ui/notice.svelte";
 import ProjectionBanner from "./ui/ProjectionBanner.svelte";
 import AccessBanner from "./ui/people/AccessBanner.svelte";
 import PeopleDialog from "./ui/people/PeopleDialog.svelte";
@@ -51,6 +52,7 @@ import StatusBar from "./ui/shell/StatusBar.svelte";
 import FormatBar from "./ui/toolbar/FormatBar.svelte";
 import { barLang } from "./ui/toolbar/spec";
 import { observeDocText, observeLinks } from "./workspace/observe";
+import { OpenRequests } from "./workspace/openRequests";
 import { workspace } from "./workspace/workspace.svelte";
 
 let languageMounted = $state(false);
@@ -337,6 +339,33 @@ onMount(() => {
   let nativePerfStop: (() => void) | undefined;
   let mounted = true;
   const started = workspace.start().then(refresh);
+  // What the desktop asked Inkwell to open (« Ouvrir avec », a second launch): Go raised the window.
+  const openLog: { n: number; show?: string }[] = [];
+  if (import.meta.env.VITE_E2E_OBSERVE === "1")
+    (
+      globalThis as typeof globalThis & { __inkwellOpenApplied?: typeof openLog }
+    ).__inkwellOpenApplied = openLog;
+  const openRequests = new OpenRequests(
+    () => Stream("open") as unknown as SocketLike,
+    {
+      ready: started,
+      prepare: async (signal) => {
+        sheetView.toGrid(undefined);
+        await workspace.refreshFiles(); // a file just made outside Inkwell may not be listed yet
+        signal.throwIfAborted();
+      },
+      show: async (path, signal) => {
+        signal.throwIfAborted(); // the stream was superseded: Go sends the request again
+        await workspace.openFile(path);
+        // A file the project does not list (hidden, temporary) is not shown: say so (R19).
+        return workspace.current === path;
+      },
+      toast: (text, role) => notice.queue(text, role),
+    },
+    1000,
+    (r, n) => openLog.push(r.show === undefined ? { n } : { n, show: r.show }),
+  );
+  openRequests.start();
   if (import.meta.env.VITE_PERF_NATIVE === "1") {
     void started
       .then(() => tick())
@@ -385,6 +414,7 @@ onMount(() => {
   }, 4000);
   return () => {
     mounted = false;
+    openRequests.stop();
     nativePerfStop?.();
     clearInterval(timer);
     preview.stop();

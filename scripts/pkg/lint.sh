@@ -13,6 +13,30 @@ bad() {
 }
 need() { command -v "$1" >/dev/null 2>&1 || { printf '✗ pkg:lint: %s is required (%s)\n' "$1" "$2" >&2; exit 2; }; }
 
+# check_desktop FILE: the desktop entry passes the selected files (%F: one argument per file, the
+# field code removed when none) and lists exactly the formats Inkwell opens (W41, user decision
+# Q2): Typst, Markdown, CSV, TSV and pipe-separated values; never text/plain (every text file) nor
+# inode/directory (every folder).
+check_desktop() {
+  local desktop="$1"
+  desktop-file-validate "$desktop" || bad "$desktop is not a valid desktop entry"
+  grep -qx 'Exec=inkwell %F' "$desktop" || bad "$desktop must launch Exec=inkwell %F"
+  grep -qx 'MimeType=text/x-typst;text/markdown;text/csv;text/tab-separated-values;text/x-psv;' "$desktop" ||
+    bad "$desktop must list exactly Typst, Markdown, CSV, TSV and text/x-psv"
+  if grep -Eq 'text/plain|inode/directory' "$desktop"; then bad "$desktop must not claim text/plain or folders"; fi
+  for key in 'Name\[fr\]=' 'Comment\[fr\]=' 'Comment=' 'StartupWMClass='"$app_id" 'Icon='"$app_id" \
+    'Categories=Office;WordProcessor;TextEditor;' 'StartupNotify=true'; do
+    grep -q "^$key" "$desktop" || bad "$desktop lacks $key"
+  done
+}
+
+# `lint.sh --desktop FILE` checks only that entry (scripts/pkg/selftest.sh refuses broken copies).
+if [[ "${1:-}" == --desktop ]]; then
+  need desktop-file-validate "desktop-file-utils"
+  check_desktop "$2"
+  exit "$fail"
+fi
+
 need desktop-file-validate "desktop-file-utils"
 need appstreamcli "appstream"
 need xmllint "libxml2-utils"
@@ -23,12 +47,7 @@ work="$(mktemp -d)"
 trap 'rm -rf "$work"' EXIT
 
 # --- Desktop entry ------------------------------------------------------------------------------
-desktop="build/linux/$app_id.desktop"
-desktop-file-validate "$desktop" || bad "$desktop is not a valid desktop entry"
-for key in 'Name\[fr\]=' 'Comment\[fr\]=' 'Comment=' 'StartupWMClass='"$app_id" 'Icon='"$app_id" \
-  'Categories=Office;WordProcessor;TextEditor;' 'MimeType=text/x-typst;text/markdown;text/csv;'; do
-  grep -q "^$key" "$desktop" || bad "$desktop lacks $key"
-done
+check_desktop "build/linux/$app_id.desktop"
 
 # --- AppStream, generated like the package does, for a release and for a pre-release -------------
 cat >"$work/CHANGELOG.md" <<'EOF'
@@ -71,6 +90,8 @@ mkdir -p "$work/mime/packages"
 cp "build/linux/mime/$app_id.xml" "$work/mime/packages/"
 update-mime-database "$work/mime" >"$work/mime.log" 2>&1 || { cat "$work/mime.log" >&2; bad "update-mime-database rejects the MIME definition"; }
 grep -q '^text/x-typst:\*\.typ$' "$work/mime/globs" || bad "*.typ is not mapped to text/x-typst"
+grep -q '^text/tab-separated-values:\*\.tab$' "$work/mime/globs" || bad "*.tab is not mapped to text/tab-separated-values"
+grep -q '^text/x-psv:\*\.psv$' "$work/mime/globs" || bad "*.psv is not mapped to text/x-psv"
 
 # --- Manual page ---------------------------------------------------------------------------------
 groff -man -ww -z -Tutf8 build/linux/inkwell.1 2>"$work/groff.log" || true

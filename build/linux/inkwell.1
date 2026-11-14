@@ -3,6 +3,7 @@
 inkwell \- collaborative Typst and Markdown editor, without a server
 .SH SYNOPSIS
 .B inkwell
+.RI [ FILE | FOLDER ]...
 .br
 .B inkwell
 .B \-\-version
@@ -13,8 +14,22 @@ People who write together are connected directly to each other; there is no acco
 and no server. Each person keeps a full copy of the project on their computer, edits
 continue offline, and they are merged when people meet again.
 .PP
-Inkwell takes no file argument: it opens the most recent project of the Inkwell folder
-in the Documents folder of the user, and creates one on first launch.
+Without an argument, Inkwell opens the most recent project of the Inkwell folder in the
+Documents folder of the user, and creates one on first launch. Given a
+.I FILE
+or a
+.I FOLDER
+of a project of that folder, it opens that project and shows the file.
+.PP
+Only one Inkwell runs per profile
+.RB ( INKWELL_HOME ).
+When it is already running, a new
+.B inkwell
+hands its arguments and its working directory to it and exits: the running window comes
+to the front and shows the file. A file it cannot show yet is named in a message of that
+window. If the running Inkwell does not answer within 5 seconds, a notification says so
+and the new one exits with status 3; if the profile folder cannot be locked, Inkwell does
+not start and exits with status 4.
 .SH OPTIONS
 .TP
 .B \-\-version

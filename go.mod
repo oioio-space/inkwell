@@ -4,6 +4,7 @@ go 1.27.4
 
 require (
 	filippo.io/edwards25519 v1.2.0
+	github.com/ebitengine/purego v0.11.2
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/godbus/dbus/v5 v5.2.4
 	github.com/google/go-cmp v0.7.0

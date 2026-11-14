@@ -70,6 +70,7 @@ quoi que ce soit ; une exception exige une ADR.
 - Tout octet venu d'un pair est vérifié (signature, rôle) et son décodeur est fuzzé.
 - Pont webview ↔ Go = Streams Wails (aucun port local, ADR 0009). Autres serveurs locaux :
   `127.0.0.1`, port éphémère, jeton comparé en temps constant, jamais logué.
+- Une seule instance par profil : verrou noyau par profil et transfert par socket local privé au même utilisateur, jamais la « single instance » de Wails ni un port (ADR 0037).
 - Typst : jamais de téléchargement à l'exécution. `typst` et `tinymist` sont épinglés
   (`internal/sidecar/manifest.json`), récupérés à la construction, embarqués et revérifiés (SHA-256)
   avant chaque lancement ; paquets `@preview` fournis ou dans `.typstdeps/` (ADR 0024).

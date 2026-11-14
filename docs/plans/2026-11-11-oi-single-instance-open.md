@@ -60,8 +60,8 @@ Every row raises the window (R10 included, on the primary's side); « one toast 
 | R5 | A file or folder of another project (under Docs while running, or outside Docs at any time) | **In block OI (interim):** window raised; toast « « {nom} » fait partie d'un autre projet. Inkwell n'ouvre qu'un projet à la fois pour l'instant. » **Decided (user, §11; block OI3 for a file, OI4 for a project folder):** a file opens at once, with no dialog, in a light single-file window whose header bar offers « Ajouter à un projet… » (its own project proposed first); a project folder opens that project once a window can switch project (OI4, until then the toast); nothing joins a shared project without that action | D4 (OI3, OI4) |
 | R6 | A file in no project | **In block OI (interim):** window raised; toast « « {nom} » n'est dans aucun projet. Inkwell ne sait pas encore ouvrir un fichier seul. » **Decided (user, §11; block OI3):** the file opens at once, with no dialog (« le moins de clic »), in the same light single-file window with « Ajouter à un projet… » in its header bar; nothing joins a shared project without that action | D5 (OI3) |
 | R7 | A folder that is not a project, including `$HOME`, `/` and a mount root | window raised; toast « « {nom} » n'est pas un projet Inkwell. » | D7, D8 (OI5) |
-| R8 | Several arguments | classified one by one in argument order; the first file the current project shows is shown (one document at a time until the tabs of G-0c); the toast names the first argument not shown and adds « Et {n} autre(s). » for the rest | D9 |
-| R9 | Missing, unreadable, not a regular file or folder (fifo, socket, device), inside `.inkwell/`, path over 4096 bytes, more than 32 arguments | the toast of the first such argument: « « {nom} » est introuvable. », « Inkwell n'a pas le droit de lire « {nom} ». », « « {nom} » n'est pas un fichier ordinaire. », « « {nom} » est un fichier interne d'Inkwell. », « Ce chemin est trop long. », « {n} fichiers non ouverts : 32 au plus à la fois. » | D11 |
+| R8 | Several arguments | classified one by one in argument order; the first file the current project shows is shown (one document at a time until the tabs of G-0c); every other argument gets its notice; the window names them (amended 2026-11-13 after the UX walkthrough, UX-OI-1/2/3): the requests that end within one burst (800 ms without a request ending) give one toast per kind, naming up to three files then « et {n} autre(s) », the single case keeping its sentence, and every failure (R9, R19) goes in a toast of its own with `role="alert"` naming each file and why (« « absent.md » est introuvable, « b.md » n'a pas pu s'ouvrir. »); several files shown: « {n} fichiers ouverts : … »; toasts follow one another (AdwToastOverlay's queue) | D9 |
+| R9 | Missing, unreadable, not a regular file or folder (fifo, socket, device), inside `.inkwell/`, path over 4096 bytes, more than 32 arguments | a failure toast (`role="alert"`, R8); for one such argument its sentence: « « {nom} » est introuvable. », « Inkwell n'a pas le droit de lire « {nom} ». », « « {nom} » n'est pas un fichier ordinaire. », « « {nom} » est un fichier interne d'Inkwell. », « Ce chemin est trop long. », « {n} fichiers non ouverts : 32 au plus à la fois. » | D11 |
 | R10 | Second launch while a primary runs on this profile | the second process forwards its arguments, working directory and activation token, waits for the acknowledgement, exits 0; it opens no identity, project, network, window or GTK; the primary applies R3-R9 with the forwarded working directory | D10 |
 | R11 | Second launch; the primary holds the lock but gives no answer within 5 s | desktop notification « Inkwell ne répond pas » / « Inkwell est déjà ouvert avec ce profil mais ne répond pas. Fermez-le puis réessayez. »; exit code 3; no second copy | new |
 | R12 | Second launch while the primary is closing | the second waits for the lock (at most 15 s), becomes the primary itself and applies R1-R9 to its own arguments | new |
@@ -71,6 +71,7 @@ Every row raises the window (R10 included, on the primary's side); « one toast 
 | R16 | Second launch with no argument | window raised; no toast | new |
 | R17 | Second launch while a primary of another Inkwell version runs | the primary answers « unsupported »; notification « Une autre version d'Inkwell est ouverte. Fermez-la puis réessayez. »; exit code 3 | new |
 | R18 | The profile folder supports no lock (`ENOLCK`, `EOPNOTSUPP`; NFS without lockd) | Inkwell does not start; notification « Inkwell ne peut pas s'assurer d'être seul à utiliser son profil ; il ne démarre pas. »; exit code 4 | new |
+| R19 | Running; the window cannot show the file it was given (not in the project's list, unreadable) | window raised; toast « Inkwell n'a pas pu ouvrir « {nom} ». »; the second launch has exited 0 (it was received and queued) | new (2026-11-12) |
 
 Rules of composition, fixed: one toast per launch request; « {nom} » is the base name of the argument as given; the
 toast is built in the webview from a structured notice (`launch.Notice`: kind, name, others), never from a Go string,
@@ -205,6 +206,78 @@ type Options struct { // zero value = the values of the table below; tests short
    try into a primary). `malformed` → I/O error (a bug, not retried). `unsupported` → `ErrOtherVersion` (R17).
 5. Past `Deadline` (or `ClosingWait` once `closing` was seen) with the lock still held → `ErrNotResponding` (R11).
 
+**Contract simplified (2026-11-12, decision in `docs/autonomous-decisions.md`, row « OI »; supersedes the three
+amendments below, kept for the record).** After three review rounds the acknowledgement contract is the one of VS Code
+and GApplication: a second launch exits 0 once the primary has **received and queued** its request (validated, bounded
+queue of 64: « busy » if full; « closing » → retry or takeover as in R12). The queue opens only once the primary can
+show a file (identity, project and network up): until then « busy », so a failed start acknowledges nothing. From
+then on the **primary owns the outcome**: its window shows the file or says why it cannot in a toast (another project,
+no project, a name that is not UTF-8, a file it cannot open: « Inkwell n'a pas pu ouvrir « {nom} ». »). Go keeps each
+request, and its slot of the 64, until the window reports it handled (`{"handled":id}`: the file shown or its toast
+up; an internal window → Go report, not an acknowledgement to the launch); at most 8 are in flight; a window that
+goes away gets the unhandled ones again (rule D-OWNER below: by generation). A step that fails gives the toast and
+frees its slot; a step past its bound (readiness 60 s, showing 10 s) is said slow and keeps its slot until it ends
+(rule D-OWNER below). Closing the window first stops acknowledging
+(« closing ») and waits, at most 2 s, until the window reported handled what was acknowledged; what is still not
+handled then is logged: the residual of a window that cannot answer while it closes. A crash of the primary between
+receipt and display loses the request: accepted residual. Removed: the webview's
+applied/failed answer, the `failed` and `starting` replies, the per-request deadline and `cancel`, the handover mark,
+the startup wait for forwarded requests (a forwarded request after a takeover follows the normal rows).
+
+**Rule D-OWNER: one owner at a time, by generation (design decision 2026-11-13, method v2 rule 3, after the
+fix-diff check of round 5 found reports with no stream ownership; `gates/OI/REVIEW.md`, round 6).** Go numbers each
+connection of the window to the `open` stream (generation g, monotonic). A new connection supersedes the previous one:
+Go closes the old stream, and every request delivered to the old generation and not reported handled goes back to the
+queue, to be sent on the new one first, in order. A delivery records the generation it went to; a `{"handled":id}` is
+accepted only from the stream of the generation that currently holds that id; a report of a superseded stream, or about
+an id not held (unknown, duplicate), is ignored and logged at debug level. The end of a stream gives back only what
+that stream held, never what a newer one holds. The webview starts each connection from a fresh state: what the old
+one held is discarded (Go sends it again), nothing is reported through an old socket, and a new request starts only
+once the previous one's steps have really ended, never overlapped. A step past its bound (readiness 60 s, showing
+10 s) is not announced as a failure (it may not be one): the window says « L'ouverture de « {nom} » prend plus de
+temps que prévu. » and the request keeps its slot until the step really ends; a late success opens the file with no
+failure toast, a late rejection gives the « n'a pas pu ouvrir » toast (amendment 2026-11-13, R-trust). Trust: reports arrive only on the Wails stream between the application's own webview and Go
+(ADR 0009, no local port), so the sender is our window; the generation guards against our own stale connections, not
+against another sender. Model: `OISingleInstance` actions `Connect`, `Reconnect`, `EndStream`, `Send`, `Apply`,
+`Deliver`, invariants `SlotsAgree` and `RemovedWasShown`, property `NoStrandedSlot`; mutants `StaleReportAccepted`
+and `ResetAllOnDisconnect`; witness `NoStaleReport`. Sources: the Wails stream semantics (`wails/v3@v3.0.0`,
+`pkg/application/stream.go`: `Close` notifies the webview, `Context` ends with the connection), the same per-session
+ownership `internal/bridge` uses for the network stream (`Router.Serve`: a page reload replaces the attached
+connection), and the fencing-token pattern (a monotonic epoch per owner, a message of an older epoch refused;
+M. Kleppmann, « How to do distributed locking », 2016, https://martin.kleppmann.com/2016/02/08/how-to-do-distributed-locking.html).
+
+**(Superseded) Amended 2026-11-12 after the cross-family review (`gates/OI/SIMPLIFY.md`, « Codex review »).** The
+acknowledgement is sent once the **window applied** the request, not once it is queued: `Serve(handle func(Request,
+*Ticket) bool)` queues a request with a ticket; the window's delivery acknowledgement (`{"applied":id}` on the
+`open` stream, one request in flight) calls `Ticket.Applied`; a launch is held at most `ReadTimeout`, then told
+`busy`, and its retry waits on the same ticket; `Closing` drops every pending ticket (`closing`: the launch becomes
+the next primary). A primary that answers (`busy` or `closing`) earns `ClosingWait`. The candidates are computed on
+every try. The residual F3 (crash between acknowledgement and display) is gone: nothing is acknowledged before it is
+shown.
+
+**(Superseded) Second amendment, same day (re-review).** The webview answers each request `{"applied":id}` or `{"failed":id}`
+(its application threw, for instance a file the project does not list), and Go fails a request it gets no answer for
+within 10 s (`defaultApplyTimeout`), then serves the next: a failed request is answered `failed` (status 5), its
+retry too, and the launch shows R19 and exits 5. **Rule D-FORWARD:** a request keeps its intended project across a
+takeover: a launch B told `closing` hands its request, unchanged, to whichever launch C takes the lock next; if C is
+still starting and was launched with nothing of its own, C opens the project of the first request forwarded while it
+starts (as R2 does for its own arguments), so B's file is shown; if C already has a project open, the normal rows
+apply (R5's notice for a file of another project). Model: witness `NoForward` (three launches, a takeover by a third
+contender, B applied by C); tests `TestHandoffAcrossTakeover`, `TestTakeoverOpensForwardedProject`.
+
+**(Superseded) Third amendment: a design decision (2026-11-12, method v2: a third finding round is redesigned, not patched).**
+D1, one owner of the deadline: the webview says `{"ready":true}` once its workspace is ready, and Go sends nothing
+before; the 10 s per-request deadline runs from the send, so never before readiness. Until the window is ready, at
+most `StartWait` (60 s) after serving, a held launch is told `starting` (status 6) and keeps waiting (its patience is
+renewed on each `starting`); past that bound it is told `busy` and ends with R11: a slow first open is never a false
+failure. On expiry Go fails the request and sends `{"cancel":id}`; the webview aborts that application
+(`AbortController`, checked before and after each step), frees its slot at once even if a step never ends, never
+shows the file later, and answers nothing for it; a late answer is ignored on both sides. D2: a primary that closes
+with requests it could not apply leaves a handover mark (`instance.handover`, written and removed by lock holders
+only); the next primary, when launched with nothing of its own, waits up to 500 ms for the first of those launches to
+come back before it chooses its project, from the queue as it is at that moment. D3: the burst end-to-end test checks
+each request applied once, in Go's order.
+
 Socket path rule (both ends compute it; pinned by vectors). Candidate 1: `<dir>/instance.sock`. Candidate 2: in the
 private runtime directory, `inkwell-<first 32 hex digits of SHA-256(canonical dir)>.sock`; the runtime directory is
 `$XDG_RUNTIME_DIR` on Linux when it is owned by the user with mode 0700 (basedir spec [W4]), else `os.TempDir()/inkwell-<uid>`
@@ -304,7 +377,8 @@ the presentation hub (`internal/app/present.go`). For each queued request the Go
 `launch.Plan(launch.Resolve(…, Env{Cwd: req.Cwd, Current: project dir}))`, sends `{show, notice}` to the webview and
 raises the window on the main thread: `gtk_window_set_startup_id(NativeWindow(), token)` when a token came (GTK 4,
 `gtkwindow.h:101`, `GDK_AVAILABLE_IN_ALL`, local GTK 4.22.5; to call « before `gtk_window_present` » [W9]), then
-`Restore` and `Focus`; a small cgo file `raise_linux.go` (`//go:build linux && !server`), no-op in the server build.
+`Restore` and `Focus`; a small cgo file `raise_linux.go` (`//go:build linux && !server`), no-op in the server build
+(as built: package `internal/activate`, section 13).
 Without the token GNOME may show « Inkwell est prêt » instead of raising (focus-stealing prevention): forwarding the
 token, as `emacsclient` does for Emacs [W10], is the fix. Notifications (R11, R17, R18): Linux
 `org.freedesktop.Notifications.Notify` over the session bus through `godbus/dbus/v5` (already in the module graph,
@@ -390,10 +464,13 @@ retries); none on `CloseStart`, `Hang`, `Crash`.
 | S1 `MutualExclusion` | at most one process has the identity open | invariant |
 | S2 `IdentityNeedsLock` | the identity is open only by the lock holder | invariant |
 | S3 `OnlyHolderListens` | a live socket belongs to the lock holder | invariant |
-| S4 `ExitOkImpliesQueued` | a launch that exits 0 was queued by a primary | invariant |
+| S4 `ExitOkImpliesQueued` | a launch that exits 0 had its request received and queued by a primary (contract simplified 2026-11-12: acknowledgement means queued, not applied) | invariant |
 | S5 `GaveUpJustified` | a launch gives up only on a hung holder | invariant |
 | L1 `Settles` | every launch eventually serves, hands off, gives up on a hung holder, or crashed | liveness |
-| L2 `AckedApplied` | a queued request is applied unless its primary stopped serving | liveness |
+| L2 `AckedApplied` | a request a primary received and queued is eventually shown by its window, or said why not, with three explicit escapes: that primary crashes (residual F3), hangs, or its window stops answering (`Stuck`: the close residual); a primary that closes cleanly drains first | liveness |
+| S6 `SlotsAgree` | what the current window holds, Go holds as delivered to that window's generation (rule D-OWNER, 2026-11-13) | invariant |
+| S7 `RemovedWasShown` | Go removes a request only once a window showed it or said why not | invariant |
+| L3 `NoStrandedSlot` | every request a primary received leaves Go's queue, whatever the reconnections (a report of a superseded stream is ignored, rule `AcceptsReport`), with the same three escapes | liveness |
 
 ### 6.3 Mutants (each one rule of §4.1 broken; each must be detected)
 
@@ -401,18 +478,26 @@ retries); none on `CloseStart`, `Hang`, `Crash`.
 |---|---|---|---|
 | NoLock | `MayLead <- NoLockLead` | primary = « no socket answers » (the socket-only design) | S1 |
 | EarlyIdentity | `IdentityAtStart <- EarlyIdentity` | identity opened before the lock (today's order) | S1 |
-| AckNoQueue | `Enqueue <- AckNoQueue` | acknowledged before queueing | S4 |
+| AckNoQueue | `Enqueue <- AckNoQueue` | never queued, so never applied nor acknowledged | L2 |
 | FireAndForget | `WaitsForReply <- FireAndForget` | exit 0 after sending, no acknowledgement (Wails macOS, W-4) | S4 |
 | LockReleasedEarly | `ReleaseOnClose <- ReleaseEarly` | lock released when closing starts | S1 |
 | CrashKeepsLock | `ReleaseOnCrash <- KeepLockOnCrash` | pid or `O_EXCL` file left by a crash | L1 |
 | GiveUpOnClosing | `GiveUpOnClosing <- GiveUpClosing` | « closing » read as « already running » | S5 |
 | SecondUnlinks | `UnlinksStale <- SecondUnlinksStale` | a second launch removes a « stale » socket (it may be the new primary's) | L1 |
 | NoRetryLock | `AfterBackoff <- DialAgain` | retries reconnect without retrying the lock | L1 |
-| NoDrain | `ToApply <- NoDrain` | requests acknowledged and queued, but the window never reads the queue (rule D-DRAIN) | L2 |
+| NoDrain | `ToApply <- NoDrain` | requests queued, but the window never reads the queue (rule D-DRAIN) | L2 |
+| AckDropOnClose | `AckAtQueue <- AckQueued` (`MaxCrashes = 0`) | acknowledged when queued: a clean shutdown before the window applies it loses it (added 2026-11-12, review) | L2 |
 
 Witnesses (anti-vacuity; each invariant must be **violated** by the sound model): `NoHandoff` (some launch exits 0),
 `NoGiveUp` (Hang configuration: some launch gives up), `NoTakeover` (a launch serves after a primary crashed),
 `NoHandover` (a launch serves after a primary closed normally).
+
+Added 2026-11-13 (rule D-OWNER; the current list and results are in `docs/protocol/tla/README.md`): the open stream
+is modelled by generation (`Connect`, `Reconnect`, `EndStream`, `Send`, `Apply`, `Deliver`; constant `MaxGen`);
+mutants `StaleReportAccepted` (`AcceptsReport <- StaleReport`: a superseded stream's report frees a request) and
+`ResetAllOnDisconnect` (`EndGiveBack <- ResetAll`: any stream's end gives back every request), both detected by S6;
+witness `NoStaleReport`. Configurations `OISingleInstanceReconnect.cfg` (three launches, no crash, `MaxGen = 2`,
+safety) and `OISingleInstanceReconnectLive.cfg` (two launches, `MaxGen = 2`, liveness included).
 
 ### 6.4 Configurations (to add at landing; TLC through `scripts/tla-check.sh`)
 
@@ -456,7 +541,7 @@ Witnesses (anti-vacuity; each invariant must be **violated** by the sound model)
 |---|---|---|---|
 | F1 | two launches at once on a free profile | the kernel gives the lock to one; the other connects once it listens | model L1; TestHandoffConcurrentLaunches |
 | F2 | the primary crashes holding the lock | the kernel releases it; the next try of a waiting launch becomes primary | model NoTakeover, CrashKeepsLock; TestClaimReleasedByCrash |
-| F3 | the primary crashes between acknowledgement and display | the request is lost with the window; the person sees Inkwell gone and relaunches | model L2 (accepted residual, §10) |
+| F3 | the primary crashes between acknowledgement and display | accepted residual since the simplified contract (2026-11-12): a request is acknowledged once received and queued, so a crash before the window shows it loses it (the launch has exited 0); the person launches again | model L2 `AckedApplied` (a crashed primary is its escape) |
 | F4 | stale socket file after a crash | removed by the next lock holder only | SecondUnlinks; TestHandoffStaleSocket |
 | F5 | the primary is hung | the second gives up after 5 s with R11, no second copy | model GiveUpJustified, NoGiveUp; TestHandoffUnresponsive |
 | F6 | launch during shutdown | waits ≤ 15 s, becomes primary | model NoHandover; TestHandoffDuringClosing |
@@ -549,9 +634,12 @@ R3, R5 and R6 and the SEQ of the short session with the user in `gates/OI/UX.md`
 | show a file in the webview | `Workspace.openFile`, `frontend/src/workspace/workspace.svelte.ts:132`; toast `frontend/src/ui/Toast.svelte` |
 | `%F` and MIME | desktop entry spec [W11]; `freedesktop.org.xml:38814,35360`; `desktop-file-validate` 0.28 accepts `%F` |
 
-Residuals, accepted and graded: F3 (loss with a crash between acknowledgement and display; window: one webview
-message), F15 (one upgrade from a pre-OI version), F16 (two profiles on one Docs folder: project lease at OI3), the
-Windows AF_UNIX reliability (decided on the N35 runner, named-pipe fallback ready).
+Residuals, accepted and graded: F3 (a crash of the primary between acknowledgement and display loses the request:
+the simplified contract of 2026-11-12, ADR 0037 point 6), the close residual (a window that cannot report while it
+closes: what is left after the 2 s wait is logged; a step that never ends holds its slot and the requests after it
+until the window closes, after the « prend plus de temps que prévu » toast), F15 (one upgrade from a pre-OI version), F16 (two profiles on one
+Docs folder: project lease at OI3), the Windows AF_UNIX reliability (decided on the N35 runner, named-pipe fallback
+ready).
 
 ## 11. Decisions of the user (2026-11-11)
 
@@ -580,6 +668,107 @@ W41 (state, and OI3 as the successor block); `docs/architecture/coherence.md` §
 right after OI); `PROGRESS.md`; `docs/objectif-en-cours.md`; the study `docs/plans/2026-11-09-os-integration.md` (§3 symlink rule,
 §4 « Wails SingleInstance » line, pointing here).
 
+## 13. Amendment (2026-11-13): the activation token reaches GTK
+
+**Defect** (installed rpm, GNOME on Wayland, Fedora 45; W41). A second launch from Files or Activities hands its file
+over and exits 0 in 0.07 s, the running window opens the file, but (1) the window is not raised, (2) GNOME shows
+« « Inkwell » est prêt », (3) clicking that notification does nothing, (4) the busy cursor of `StartupNotify=true`
+spins until GNOME gives up.
+
+**Root cause, measured.** The token was read and forwarded (rows R10, F17; `TestSecondLaunchForwardsArgsAndCwd`,
+`TestOpenerServe`) and then dropped at the last step: `raiseWindow(w, _ string)` called Wails' `Show` and `Focus`,
+which are `gtk_window_present` (`wails/v3@v3.0.0/pkg/application/linux_cgo.go:1323,1384`). The cgo file this plan
+specified in section 4.3 had been refused by `mise run arch` and replaced by a documented limitation
+(`gates/OI/SIMPLIFY.md`, finding C4). Trace of the primary (`WAYLAND_DEBUG=1`, headless Mutter 51.1, second launch
+with `XDG_ACTIVATION_TOKEN=oi-forwarded-token-42`, exit 0 in 0.05 s), before the fix:
+
+```text
+-> xdg_activation_v1#29.get_activation_token(new id xdg_activation_token_v1#89)
+-> xdg_activation_token_v1#89.set_serial(0, wl_seat#3)
+-> xdg_activation_v1#29.activate("1cd8685a-…_TIME0", wl_surface#10)      (and once more for Focus)
+```
+
+GTK, given no token, asks the compositor for one of its own (`gdk_wayland_toplevel_focus` [W14]); it has no input
+serial (the person clicked in Files, not in Inkwell), so the compositor's answer cannot activate anything. What
+follows is the desktop's rule, not a fault of it:
+
+- A token goes from the launcher to the launched process in `XDG_ACTIVATION_TOKEN` (Wayland [W13]) or
+  `DESKTOP_STARTUP_ID` (X11 [W16]), or in `platform_data` (`activation-token`, `desktop-startup-id`) for a D-Bus
+  activated application [W17]; « the compositor can ignore unknown activation tokens » [W13].
+- Mutter (`maybe_activate` [W15]) activates the window only for a token that can activate or a recent startup
+  sequence; otherwise it calls `meta_window_set_demands_attention`, which marks a window that is minimised, on
+  another workspace or covered by another window (Files, here), and it completes the startup sequence only for a
+  request that names it: hence symptoms (1) and (4).
+- GNOME Shell turns « demands attention » into the notification « “%s” is ready » with the window's title
+  (`windowAttentionHandler.js` [W18]): symptom (2). Its click handler is `Main.activateWindow`; why it did nothing
+  on 2026-11-13 is **not explained** by these sources and was not reproduced (no Shell in the headless check); with
+  the fix a launch from the desktop no longer shows it.
+- The same defect and the same fix are documented for GTK's own single instance on Plasma: the application « must
+  use the token provided … through the XDG_ACTIVATION_TOKEN environment variable or the platform_data argument »,
+  not one it requests itself (GTK issue 5483 [W19]).
+
+**Prior art: everybody forwards the launcher's token to the process that owns the window.** GApplication sends it in
+`platform_data` and GtkApplication gives it to GDK before the application presents its window
+(`gtk_application_impl_wayland_before_emit` [W20]); Chromium carries it to the running browser as an internal
+switch, `xdg-activation-token` (`base/nix/xdg_util.h` [W21]), over the same socket as the command line [W3];
+Firefox reads `XDG_ACTIVATION_TOKEN` since 108 (bug 1767546 [W22]); emacsclient forwards the startup id [W10].
+Applications that do not are reported for exactly this defect (Electron: Obsidian [W23]). Wails' single instance
+sends one string over D-Bus and has no token (section 3); Tauri's plugin, D-Bus too, documents only `set_focus()`
+[W24].
+
+**Decision.** Keep the hand-off of ADR 0037 (the token already travels in the request, section 4.1) and finish it
+as section 4.3 specified: on the GTK main thread the primary calls `gtk_window_set_startup_id(window, token)` and
+then `gtk_window_present(window)` [W9]. On a mapped window GTK passes the token at once to
+`gdk_toplevel_set_startup_id`, which is `xdg_activation_v1.activate(token, surface)` on Wayland [W14]; on X11 it
+takes the launch's time from the id and ends the startup sequence, and `present` raises the window. The call lives
+in a new package, `internal/activate` (one role: present a window as the launch that asked for it; one function,
+`Present(window, token)`), the only package besides `internal/sidecar` that may import `C`: `tools/archexec` lets
+it import `C` and nothing else (no `os/exec`, no process start, no raw syscall, no native source file, no
+hand-written `go:linkname`), which is what requirement N42 protects (no program to install; platform libraries
+are allowed). `cmd/inkwell` gives it Wails' `NativeWindow` through `raiser` (`raise.go`), whose three effects are
+injected. On Linux `Restore`, `Show` and `Focus` are no longer called: the activation un-minimises, and Wails'
+`Restore` would also un-maximise a maximised window (`webview_window.go:1331`).
+
+After the fix, same trace: the forwarded token first, then GTK's own request from `present` and the token again
+(`gtk_window_notify_startup`). The two extra requests are harmless on Mutter: a completed or unknown sequence does
+nothing, and a window in full view is not marked [W15].
+
+```text
+-> xdg_activation_v1#29.activate("oi-forwarded-token-42", wl_surface#10)
+-> xdg_activation_v1#29.get_activation_token(…) … activate("6b0baae3-…_TIME0", wl_surface#10)
+-> xdg_activation_v1#29.activate("oi-forwarded-token-42", wl_surface#10)
+```
+
+**Alternatives rejected.**
+
+| Alternative | Why not |
+|---|---|
+| `DBusActivatable=true` and `org.freedesktop.Application` [W17] | GNOME would pass the token in `platform_data`, but it must still be given to the GtkWindow by the same C call: Wails creates its GtkApplication `G_APPLICATION_NON_UNIQUE` (`linux_cgo.h:22`), so GTK's own path [W20] never runs. It adds a session-bus name as a second single-instance key, which ADR 0037 point 7 refused (two sessions of one user, no start without a bus), and a service file to package |
+| Wait for a Wails API (decision of 2026-11-12) | right place in the long run, but the shipped package stays broken for an unknown time; kept as the exit: when Wails wraps the call, `internal/activate` is deleted |
+| purego / `dlopen` of libgtk-4 | obeys the letter of the cgo rule and not its intent, adds a dependency, loses the header's type check; Wails already needs cgo and the GTK 4 headers |
+| `gdk_wayland_display_set_startup_notification_id` then `present` (what GtkApplication does) | Wayland only, and deprecated (GTK itself calls it between `G_GNUC_BEGIN_IGNORE_DEPRECATIONS` guards [W20]) |
+| Skip `present` once the token was given to a mapped window | saves two redundant requests on Wayland, but X11 needs `present` to raise; one sequence for both |
+| Let GTK request its own token (the defect) | refused by design [W19] |
+
+**Proof (red first).**
+
+- `TestSecondLaunchTokenReachesPresenter` (`cmd/inkwell/raise_test.go`): a real second launch with
+  `XDG_ACTIVATION_TOKEN` → primary → open queue → opener → `raiser` → the presenter gets the native window and that
+  token; a launch without a token presents with none; a destroyed window is not presented. Red with the token
+  dropped at the presenter (`presentation 0 = {… }, want {… gnome-shell/Files/1234-5-host_TIME678}`).
+  `TestRaiseDoesNotWait`: the raise is handed to the main thread and returns.
+- `mise run app:activation` (`scripts/activation-check.sh`): the real desktop binary under a headless Mutter, a
+  private session bus and a scratch profile; passes only if the primary's first activation request after the second
+  launch carries the forwarded token. Red on the binary of 2026-11-13 23:08, green on the fix (traces above).
+- `TestToolkitPackageImportsCOnly`, `TestSyntaxAcrossBuildTags` (`tools/archexec`): `internal/activate` may import
+  `C`; `os/exec`, `os.StartProcess` and a hand-written `go:linkname` are still reported there.
+
+**Residuals.** The headless Mutter never issued the test's token, so what the compositor does with a real one
+(raise, end of the busy cursor) is Mutter's code [W15] and is confirmed on the person's session (2-minute script
+in `gates/OI/UX.md`). A launch with no token (from a terminal) still gets « Inkwell est prêt » when another window
+covers Inkwell: that is GNOME's focus-stealing prevention. Windows and macOS keep `Restore`, `Show`, `Focus` (N35,
+section 4.6), un-maximise included.
+
 ## Sources
 
 - [W1] Raymond Chen, The Old New Thing, 2015-07-15 (verb selection model limits: « at most 15 new processes starting at once ») —
@@ -604,4 +793,40 @@ right after OI); `PROGRESS.md`; `docs/objectif-en-cours.md`; the study `docs/pla
 - [W11] Desktop Entry Specification, « The Exec key » —
   https://specifications.freedesktop.org/desktop-entry/latest/exec-variables.html
 - [W12] Microsoft, `LockFileEx` — https://learn.microsoft.com/en-us/windows/win32/api/fileapi/nf-fileapi-lockfileex
+- [W13] Wayland, `xdg-activation-v1` (token in `XDG_ACTIVATION_TOKEN`; unknown tokens may be ignored) —
+  https://wayland.app/protocols/xdg-activation-v1
+- [W14] GTK 4 source: `gtk_window_set_startup_id`, `_gtk_window_present`, `gtk_window_notify_startup` —
+  https://gitlab.gnome.org/GNOME/gtk/-/blob/main/gtk/gtkwindow.c ; `gdk_wayland_toplevel_set_startup_id`,
+  `gdk_wayland_toplevel_focus` — https://gitlab.gnome.org/GNOME/gtk/-/blob/main/gdk/wayland/gdktoplevel-wayland.c
+- [W15] Mutter source: `activation_activate`, `maybe_activate`, `token_can_activate` —
+  https://gitlab.gnome.org/GNOME/mutter/-/blob/main/src/wayland/meta-wayland-activation.c ;
+  `meta_window_set_demands_attention` — https://gitlab.gnome.org/GNOME/mutter/-/blob/main/src/core/window.c
+- [W16] Startup Notification specification (`DESKTOP_STARTUP_ID`, the launchee ends the sequence) —
+  https://specifications.freedesktop.org/startup-notification/latest/
+- [W17] Desktop Entry Specification, « D-Bus Activation » (`org.freedesktop.Application`, `platform_data` keys
+  `desktop-startup-id` and `activation-token`) — https://specifications.freedesktop.org/desktop-entry/latest/dbus.html
+- [W18] GNOME Shell, `js/ui/windowAttentionHandler.js` (« “%s” is ready », `Main.activateWindow` on click) —
+  https://gitlab.gnome.org/GNOME/gnome-shell/-/blob/main/js/ui/windowAttentionHandler.js
+- [W19] GTK issue 5483, « Single-instance window activation doesn't work on Plasma Wayland » —
+  https://gitlab.gnome.org/GNOME/gtk/-/issues/5483
+- [W20] GTK 4 source, `gtk_application_impl_wayland_before_emit` —
+  https://gitlab.gnome.org/GNOME/gtk/-/blob/main/gtk/gtkapplication-wayland.c
+- [W21] Chromium `base/nix/xdg_util.h` (switch `xdg-activation-token`) —
+  https://chromium.googlesource.com/chromium/src/+/HEAD/base/nix/xdg_util.h
+- [W22] Mozilla bug 1767546, « [Wayland] Support XDG_ACTIVATION_TOKEN env var » —
+  https://bugzilla.mozilla.org/show_bug.cgi?id=1767546
+- [W23] Obsidian forum, « Linux/Wayland: launching Obsidian while it is running does not focus the existing window » —
+  https://forum.obsidian.md/t/linux-wayland-launching-obsidian-while-it-is-running-does-not-focus-the-existing-window-an-obsidian-link-does/118880
+- [W24] Tauri, Single Instance plugin — https://v2.tauri.app/plugin/single-instance/
 - Wails v3.0.0 module source (`~/go/pkg/mod/github.com/wailsapp/wails/v3@v3.0.0`), files and lines as cited in §3.
+
+**Amendment of 2026-11-14 (user decision of 2026-11-13: no cgo exception).** `internal/activate` reaches GTK through
+purego (`github.com/ebitengine/purego` v0.11.2, Apache-2.0, the library Ebitengine uses to call C without cgo:
+https://github.com/ebitengine/purego) instead of `import "C"`: `Dlopen("libgtk-4.so.1")` with `RTLD_NOLOAD`, so only the
+GTK the process already loaded answers and no second copy can enter it (dlopen(3)), then `Dlsym` + `RegisterFunc` for
+`gtk_window_set_startup_id` and `gtk_window_present`. `tools/archexec` is back to its rule without exception: no package
+but `internal/sidecar` imports `C`. What the header's type check gave is replaced by proofs: `TestGTKCallsResolveOnlyInLoadedGTK`
+(the two names exist in GTK 4, a process without GTK is refused), `TestSecondLaunchTokenReachesPresenter`, and
+`mise run app:activation` on the real binary (now built first: a stale binary of the day before was once judged), which
+shows `xdg_activation_v1.activate("<forwarded token>")`. If GTK cannot be reached `Present` returns an error and the
+window is shown with Wails' own calls, as before. Text above that speaks of the `C` import is superseded by this.

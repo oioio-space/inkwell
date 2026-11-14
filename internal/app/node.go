@@ -37,21 +37,32 @@ const (
 	relayOnly = "relay-only"
 )
 
-// OpenHome opens the directory holding this machine's identity: $INKWELL_HOME
-// or, by default, "inkwell" in the user's configuration directory. It is
-// created, private to the user, when missing. The caller closes the result.
-func OpenHome() (*os.Root, error) {
+// HomeDir returns the profile folder, which holds this machine's identity:
+// $INKWELL_HOME or, by default, "inkwell" in the user's configuration
+// directory. It is created, private to the user, when missing. The
+// single-instance lock lives there (ADR 0037), so it is known before anything
+// in it is opened.
+func HomeDir() (string, error) {
 	dir := os.Getenv(homeEnv)
 	if dir == "" {
 		base, err := os.UserConfigDir()
 		if err != nil {
-			return nil, fmt.Errorf("locating configuration directory: %w", err)
+			return "", fmt.Errorf("locating configuration directory: %w", err)
 		}
 		dir = filepath.Join(base, "inkwell")
 	}
 	// #nosec G703 -- the path is the user's own choice (environment) or their config directory.
 	if err := os.MkdirAll(dir, 0o700); err != nil {
-		return nil, fmt.Errorf("creating %s: %w", dir, err)
+		return "", fmt.Errorf("creating %s: %w", dir, err)
+	}
+	return dir, nil
+}
+
+// OpenHome opens the profile folder of [HomeDir]. The caller closes the result.
+func OpenHome() (*os.Root, error) {
+	dir, err := HomeDir()
+	if err != nil {
+		return nil, err
 	}
 	root, err := os.OpenRoot(dir)
 	if err != nil {

@@ -81,15 +81,20 @@ func parseUserDirs(content, home string) string {
 	return ""
 }
 
-// OpenProject opens the most recently used project of docs, or creates an
-// untitled one when there is none, without asking. The caller closes it.
-func OpenProject(docs *os.Root) (*project.Project, error) {
-	dir, err := project.Latest(docs)
-	if errors.Is(err, project.ErrNoProject) {
-		return project.Create(docs, project.DefaultTitle, "")
-	}
-	if err != nil {
-		return nil, err
+// OpenProjectIn opens the project in folder dir of docs: the one a first launch was given a file
+// of (R2 of docs/plans/2026-11-11-oi-single-instance-open.md). With "" it opens the most recently
+// used project of docs, or creates an untitled one when there is none, without asking. The caller
+// closes it.
+func OpenProjectIn(docs *os.Root, dir string) (*project.Project, error) {
+	if dir == "" {
+		latest, err := project.Latest(docs)
+		if errors.Is(err, project.ErrNoProject) {
+			return project.Create(docs, project.DefaultTitle, "")
+		}
+		if err != nil {
+			return nil, err
+		}
+		dir = latest
 	}
 	p, err := project.Open(docs, dir)
 	if err != nil {

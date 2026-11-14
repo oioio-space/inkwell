@@ -76,8 +76,32 @@ with an acknowledged hand-off, on all three systems.
    arguments, 4096 bytes each, working directory 4096, activation token 1024 printable ASCII, frame at most 136280
    bytes), a one-byte reply (accepted, closing, busy, malformed, unsupported version). The decoder is fuzzed; vectors
    pin the bytes (`protocol/` rule: every byte from another process is verified).
-6. **Hand-off protocol.** The second launch forwards the request and exits 0 **only** on `accepted`, sent after the
-   request is queued. `closing` (the primary is shutting down) makes it wait for the lock up to 15 s and become the
+6. **Hand-off protocol.** **Amended 2026-11-12 (contract simplified, supersedes the amendments in parentheses
+   below):** the second launch exits 0 on `accepted`, sent once the primary has received and queued the request (a
+   bounded queue that opens once the primary can show a file: `busy` before, or when full); the primary owns the
+   outcome (its window shows the file or says why not, then reports it handled to Go, which keeps it and its slot
+   until then); closing the window stops acknowledging and waits at most 2 s for those reports (what remains is
+   logged: a window that cannot answer while closing); a crash in between loses the request (accepted residual).
+   **Amended 2026-11-13 (one owner at a time, plan rule D-OWNER):** each connection of the window to the `open`
+   stream is a generation; a new one supersedes the old one, which Go closes, and what the old one had not reported
+   handled is sent again on the new one; a report is accepted only from the generation holding the request (others
+   ignored, logged at debug level); the webview starts each connection afresh and never runs two requests at once.
+   A step past its bound is said slow (« prend plus de temps que prévu »), never a failure, and keeps its slot until
+   it ends; one that never ends holds the requests after it until the window closes (the close residual).
+   The reports need no further authentication: they arrive only on the Wails stream between the application's own
+   webview and Go, with no local port (ADR 0009), so their sender is our window; the generation guards against our
+   own stale connections. (Earlier wording,
+   superseded:) The second launch forwards the request and exits 0 **only** on `accepted`, sent once the
+   window applied the request (amended 2026-11-12 after the cross-family review: « after it is queued » lost a
+   request on a clean shutdown or a failed start; a pending request is now answered `closing` and its launch becomes
+   the next primary; while the window has not applied it, the launch is held, then told `busy`, and waits up to 15 s
+   for an answering primary). A request the window cannot apply, or does not answer within 10 s, is answered
+   `failed`: the launch shows a notification and exits 5 (R19). A request handed over to a third launch after a
+   takeover keeps its intended project (plan, rule D-FORWARD). Third amendment (design decision after a third
+   review round, plan section 4.1): the deadline has one owner, Go, and starts once the webview reported ready;
+   until then a launch is told `starting` (at most 60 s); an expired request is cancelled in the webview, never
+   shown later; a primary that took over waits up to 500 ms for the requests its predecessor dropped before it
+   chooses its project. `closing` (the primary is shutting down) makes it wait for the lock up to 15 s and become the
    next primary; `busy`, a refused connection or a missing socket make it back off and retry the lock; no answer
    within 5 s while the lock is held ends with the notification « Inkwell ne répond pas » and exit 3; an answer of
    another version ends with exit 3 and a notification.
@@ -117,6 +141,19 @@ It is replaced, line for line, by this wording (the French of the file; to be ap
 Nothing else in the invariants changes: the single source of truth for membership and the identity key is unchanged,
 and the socket carries launch arguments only, never document content, keys or peer bytes.
 
+### Amendment of 2026-11-13: one C call gives the activation token to GTK
+
+The token forwarded by a second launch (point 2 of the context) must be given to the toolkit that owns the window,
+or GNOME refuses the focus and only says « « Inkwell » est prêt » (defect of 2026-11-13, measured: plan section
+13). Wails wraps no such call and creates its GtkApplication `G_APPLICATION_NON_UNIQUE`, so the call is ours:
+`gtk_window_set_startup_id` then `gtk_window_present`, on the GTK main thread, in the new package
+`internal/activate`. It is the only package besides `internal/sidecar` that may import `C`, and `C` is all it
+gains: `tools/archexec` still reports there `os/exec`, a process start, a raw syscall, a native source file and a
+hand-written `go:linkname` (requirement N42 is about programs to install, not platform libraries). Considered and
+refused, with sources (plan section 13): `DBusActivatable` with `org.freedesktop.Application` (the same C call
+would still be needed, and a session-bus name would become a second single-instance key, refused in point 7),
+waiting for a Wails API (the exit: `internal/activate` is deleted the day Wails wraps the call), purego.
+
 ### Consequences
 
 - Good: the defect is closed by construction (model properties S1, S2: no two processes on one identity) and crash
@@ -127,8 +164,11 @@ and the socket carries launch arguments only, never document content, keys or pe
   none of them silent.
 - Bad: one more local server to maintain and review (new package `internal/instance`, cgo-free, standard library and
   `golang.org/x/sys` only), and an amendment of a global invariant.
-- Bad: residual (graded, plan section 10): a request is lost if the primary crashes between acknowledging and
-  showing it (one webview message); a pre-OI Inkwell still running when the new one starts is not locked, once;
+- Bad: residual (accepted, 2026-11-12): a process of the same user can fill the queue (64) and the 16 connection
+  slots, so that other launches get `busy` until their 15 s run out. The trust boundary is the user (decision 4): such
+  a process can already read the identity key, kill Inkwell or edit its files, so a quota per process would protect
+  nothing; the queue and the slots stay bounded, the person sees « Inkwell ne répond pas », nothing is lost silently.
+- Bad: residual (graded, plan section 10): a pre-OI Inkwell still running when the new one starts is not locked, once;
   two profiles on one projects folder are not excluded here (project lease, a later block); Windows AF_UNIX
   reliability is decided on the N35 runner.
 - Out of scope: what the window does with a file outside the open project (the light single-file window, block OI3)
@@ -140,7 +180,8 @@ The model `OISingleInstance.tla` (7 properties, 9 mutants, 4 witnesses, run by `
 plan section 9 under `-race` with real processes (`TestClaim*`, `TestHandoff*`, `TestSocket*`, vectors,
 `FuzzDecodeRequest`); gremlins at 95 % or more on `internal/instance` and `internal/launch`; the gate
 `gates/OI.toml`; `lint:claude-md` for the amended invariant; an independent review by another model family recorded
-in `gates/OI/REVIEW.md`.
+in `gates/OI/REVIEW.md`. For the amendment of 2026-11-13: `TestSecondLaunchTokenReachesPresenter`,
+`TestToolkitPackageImportsCOnly`, and the native check `mise run app:activation`.
 
 ## More information
 
@@ -149,3 +190,14 @@ activation token; Raymond Chen on the 15-process limit of the verb selection mod
 base directory specification for `XDG_RUNTIME_DIR`). Revisit if a supported platform cannot give a kernel lock with
 fail-closed behaviour, if Windows AF_UNIX proves unreliable (named-pipe fallback), or if Wails ships a per-profile
 single instance with an acknowledged hand-off and a bounded, authenticated payload.
+
+**Amendment of 2026-11-14 (user decision of 2026-11-13: no cgo exception).** `internal/activate` reaches GTK through
+purego (`github.com/ebitengine/purego` v0.11.2, Apache-2.0, the library Ebitengine uses to call C without cgo:
+https://github.com/ebitengine/purego) instead of `import "C"`: `Dlopen("libgtk-4.so.1")` with `RTLD_NOLOAD`, so only the
+GTK the process already loaded answers and no second copy can enter it (dlopen(3)), then `Dlsym` + `RegisterFunc` for
+`gtk_window_set_startup_id` and `gtk_window_present`. `tools/archexec` is back to its rule without exception: no package
+but `internal/sidecar` imports `C`. What the header's type check gave is replaced by proofs: `TestGTKCallsResolveOnlyInLoadedGTK`
+(the two names exist in GTK 4, a process without GTK is refused), `TestSecondLaunchTokenReachesPresenter`, and
+`mise run app:activation` on the real binary (now built first: a stale binary of the day before was once judged), which
+shows `xdg_activation_v1.activate("<forwarded token>")`. If GTK cannot be reached `Present` returns an error and the
+window is shown with Wails' own calls, as before. Text above that speaks of the `C` import is superseded by this.

@@ -29,7 +29,7 @@ func TestOpenProjectCreatesThenReopens(t *testing.T) {
 	}
 	defer func() { _ = root.Close() }()
 
-	first, err := app.OpenProject(root)
+	first, err := app.OpenProjectIn(root, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -44,7 +44,7 @@ func TestOpenProjectCreatesThenReopens(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	again, err := app.OpenProject(root)
+	again, err := app.OpenProjectIn(root, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -64,7 +64,7 @@ func TestSetRootURLRejects(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer func() { _ = root.Close() }()
-	p, err := app.OpenProject(root)
+	p, err := app.OpenProjectIn(root, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -77,7 +77,7 @@ func TestSetRootURLRejects(t *testing.T) {
 	}
 }
 
-// Cleanup completes before OpenProject returns a store to the webview.
+// Cleanup completes before OpenProjectIn returns a store to the webview.
 func TestOpenRemovesSyncStates(t *testing.T) {
 	root, err := os.OpenRoot(t.TempDir())
 	if err != nil {
@@ -88,7 +88,7 @@ func TestOpenRemovesSyncStates(t *testing.T) {
 			t.Errorf("close root: %v", err)
 		}
 	})
-	p, err := app.OpenProject(root)
+	p, err := app.OpenProjectIn(root, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -104,7 +104,7 @@ func TestOpenRemovesSyncStates(t *testing.T) {
 		t.Fatal(err)
 	}
 	for range 2 {
-		p, err = app.OpenProject(root)
+		p, err = app.OpenProjectIn(root, "")
 		if err != nil {
 			t.Fatal(err)
 		}

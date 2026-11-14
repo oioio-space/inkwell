@@ -1,5 +1,6 @@
 #!/usr/bin/env bash
-# Tests of the release scripts themselves (notes, assemble, sizes, verify, on-main, release-guard), on fake assets, with a
+# Tests of the release scripts themselves (the desktop entry check of lint.sh, notes, assemble, sizes, verify, on-main,
+# release-guard), on fake assets, with a
 # throwaway cosign key. Run by `mise run pkg:lint`. No network.
 set -euo pipefail
 # A git hook runs this with GIT_DIR and friends set: unset them, or the throwaway repos below
@@ -24,6 +25,16 @@ refuse() { # refuse DESCRIPTION CMD...: the command must fail
   shift
   if "$@" >"$work/out" 2>&1; then bad "$what"; fi
 }
+
+# --- the desktop entry check of lint.sh -----------------------------------------------------------
+desktop="build/linux/io.github.oioio_space.Inkwell.desktop"
+expect "lint.sh accepts the packaged desktop entry" scripts/pkg/lint.sh --desktop "$desktop"
+sed 's/^Exec=inkwell %F$/Exec=inkwell/' "$desktop" >"$work/no-files.desktop"
+refuse "lint.sh must refuse a desktop entry without %F" scripts/pkg/lint.sh --desktop "$work/no-files.desktop"
+sed 's|^MimeType=.*|&text/plain;|' "$desktop" >"$work/plain.desktop"
+refuse "lint.sh must refuse a desktop entry listing text/plain" scripts/pkg/lint.sh --desktop "$work/plain.desktop"
+sed 's|^MimeType=.*|&inode/directory;|' "$desktop" >"$work/folders.desktop"
+refuse "lint.sh must refuse a desktop entry listing inode/directory" scripts/pkg/lint.sh --desktop "$work/folders.desktop"
 
 # --- notes.sh ---------------------------------------------------------------------------------
 cat >"$work/CHANGELOG.md" <<'EOF'
@@ -136,4 +147,4 @@ refuse "no-test-tags.sh must refuse -tags server" scripts/pkg/no-test-tags.sh "$
 refuse "no-test-tags.sh must refuse -tags faultinject" scripts/pkg/no-test-tags.sh "$work/tagged/fault"
 
 if ((fail)); then exit 1; fi
-echo "✓ selftest: notes, assemble, verify, sizes, on-main, release-guard and no-test-tags behave"
+echo "✓ selftest: desktop entry check, notes, assemble, verify, sizes, on-main, release-guard and no-test-tags behave"

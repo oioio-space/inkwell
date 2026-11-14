@@ -989,6 +989,26 @@
       "id": "45b0537f4b385f5cd48acc70adfbf715356d84a99a1eb446d630fc002aeb486c",
       "reason": "Block SI1b: scripts/netsim/mutants.py gains the kind `vitest` (run_vitest, caught only on a failing assertion, never on a build/type/import error or a timeout) and now refuses an unknown kind; the go and e2e kinds are unchanged, so every other gate's mutants run exactly as before.",
       "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "3c1cdeec06abcc711912f863b1da4df6afbfe854050ebb027830331050f5417f",
+      "reason": "scripts/pkg/lint.sh: gate dependency changed for block OI (OI1, plan section 4.5): the desktop entry check moves into check_desktop, also reachable as `lint.sh --desktop FILE` for the selftest; it now requires the exact line Exec=inkwell %F and the exact MimeType list (Typst, Markdown, CSV, TSV, text/x-psv), refuses text/plain and inode/directory, and checks the *.tab and *.psv globs; every check it made before stays (desktop-file-validate, the same keys, *.typ).",
+      "decision": "docs/plans/2026-11-11-oi-single-instance-open.md"
+    },
+    {
+      "id": "dd50f532c46a881964b1b26cdf9426cd5ba80835e513a29e21b0aca8de29e21b",
+      "reason": "scripts/pkg/selftest.sh: gate dependency changed for block OI (OI1, plan section 4.5): added refusals of a desktop entry without %F, listing text/plain, listing inode/directory, and the acceptance of the packaged entry; no existing test, threshold or delay changed. Re-keyed after rebasing block OI onto main 8cacc7a (C5S, RC1, gate runner); same OI hunk.",
+      "decision": "docs/plans/2026-11-11-oi-single-instance-open.md"
+    },
+    {
+      "id": "7f5d270e9ec642b598165bb506d3de395b90403c164e1f0ea910cc4835c5b9b7",
+      "reason": "scripts/memcap.sh: gate dependency changed for block OI: it now exports MALLOC_ARENA_MAX=2 (unless set) before the address-space cap. Root cause measured 2026-11-12: under the 1.8 GB RLIMIT_AS of mutate:go, a cgo test binary (internal/launch, which links net) aborted in pthread_create after about ten threads, each taking a 64 MB glibc arena of address space; with two arenas the same run passes (coverage 96.7 %). The cap, its value and every threshold are unchanged; it now measures what the program allocates instead of glibc's reservations.",
+      "decision": "docs/plans/2026-11-11-oi-single-instance-open.md"
+    },
+    {
+      "id": "a36be85a4ca0b23d56272897c51d53c9870d45467cb309e3de22832a3b638fdc",
+      "reason": "scripts/tla-check.sh: gate dependency changed for block OI: the OISingleInstance loop gains the mutants AckDropOnClose and EarlyDequeue (caught by AckedApplied), StaleReportAccepted and ResetAllOnDisconnect (rule D-OWNER, 2026-11-13, caught by SlotsAgree) and the witness WitnessStaleReport; the sound runs gain OISingleInstanceReconnect (three launches with a reconnection, invariants, through a new 'safety' expectation: no error and an exhausted queue) and OISingleInstanceReconnectLive (liveness with a reconnection); the witness WitnessForward of an earlier design is gone with the contract it tested. The 'sound' and 'mutant' checks are unchanged; no run of another model removed, no option changed.",
+      "decision": "docs/plans/2026-11-11-oi-single-instance-open.md"
     }
   ]
 }
