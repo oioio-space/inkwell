@@ -304,3 +304,89 @@ patch.
 | 5 | Uncapped `e2e:build` and regression tasks | accepted: each inside a `timeout -k 10` | gate `e2e`, `regression` |
 | 6 | A2 (joiner and the genesis root), A4 (roles event after adopt) | settled with Codex's evidence; removed from the open checks | plan « Settled, and still to check » |
 
+
+
+## Round 6 — code review, three rounds on N-11, redefinition (2026-11-14)
+
+Reviewer: Codex (static, read-only), on the implementation of revision 6 in the block's worktree.
+
+| Round | Verdict | On N-11 (the webview follows a project change) | Other findings |
+|---|---|---|---|
+| 1 | REJECT | the adapter was reset after `Session.Join` returned, also when the project had not changed; new-project attestations received before the reply could be wiped | stale standing after the roles event; a refusal could still surface as a Go error when demoted between two checks; the e2e did not prove the key crossed the bridge; the crash test injected no error (it then found a real defect: after a failed rollback `trust` was missing and every later save failed) — all four fixed with a red test first and confirmed resolved in round 2 |
+| 2 | REJECT | with the reset made conditional (`changed`), the window between the adoption in Go and the reply still let the old coverage admit a head attested only under the old project (`AdoptProject` emits no revocation, `PeerDown` keeps coverage, delivered changes stay); deferring it (residual R-6 of that day) was refused under the peer model | none |
+| 3 (targeted) | REJECT | « quiesce, then replay » (close the stream before the call, fresh coverage, Go replays on the new stream): (a) frames already handed to automerge-repo continue after `pause()` — `CollectionSynchronizer.receiveMessage` awaits `shareConfig.access` and `repo.find`, `removePeer` cancels nothing, `DocSynchronizer` load callbacks likewise; (b) `AdoptProject` clears the attestation store but not the 64-event buffer `w.out`, `RecvEnvelope` revalidates only PeerUp and Message, `Router.Run` picks the connection after dequeuing, so an old `Attested` can follow the replayed notices on the new stream | the stream-identity guard, the replay content, the resync after reopening were found sound |
+
+Decision of the integrator (golden rule: the fixes pile up, so the problem is redefined, not patched a fourth time):
+**a take-over never changes the project of a running session.** The request signs the genesis in memory and asks the
+application to quit; the list is archived and replaced during the shutdown, once the wiring is stopped; the same
+executable is then executed again on the same folder. Rules N-5, N-9, N-11 and the new N-12 of the plan; ADR 0043
+points 3 and 6 with the three rejected designs as considered options. The frozen `gates/W58.toml` encodes the
+rejected design in its N-9 and N-11 criteria: it is superseded by `gates/W58r.toml` and never run for acceptance.
+Joining keeps `main`'s behaviour in this block; its exposure to the same races is residual R-6 (block JN1).
+
+To review before the freeze of `gates/W58r.toml` (one round on this point): that the write really happens after the
+wiring stopped and before the store closes; that no path lets the restart run before the outcome is known; that the
+re-execution cannot open another folder; that the server-build page cannot keep using its old memory after the
+restart; that R-6 states the join's exposure exactly.
+
+
+## Round 7 — Codex on the specification of revision 7 (REJECT on precision, not on the restart), dispositions
+
+| # | Point | Disposition | Where (revision 8) |
+|---|---|---|---|
+| 1 | « a failure leaves a non-member » is false for `errCommitted` | accepted: three outcomes; one fact crosses the restart and the message follows the standing actually loaded | N-12, `TestTakeOverOutcomeFollowsTheLoadedList` |
+| 2 | `/health` cannot tell the old image from the new one; the page could reconnect to the old one | accepted: random startup id per image; the page closes its bridge, never reopens it to the id it started with, reloads only on another id | N-9, N-12 |
+| 3 | « start time changed, pid did not » is wrong for an execution in place | accepted: the startup id is the oracle; the independent assertions stay | N-10, N-11 |
+| 4 | « same executable » undefined | accepted: Linux executes `/proc/self/exe` (the running image, also when its path was replaced or deleted), argv and environment rebuilt, the variable read once and removed | N-12, `TestRestartArgvAndEnvRebuilt`, `TestRestartExecsTheRunningImage` |
+| 5 | children and descriptors left to an informal check | accepted: rule N-14 and a native test, gate criterion `restart-barrier`; the desktop build in the walkthrough (« orphans: 0 ») | N-14 |
+| 6 | the e2e criterion's embedded Python would receive backslash-n | **refuted, measured**: TOML decodes `\n` in a basic string into a newline; `tomllib` gives 7 real newlines and the program compiles (same form as the frozen `gates/W58.toml` and `gates/OI.toml`) | `gates/W58/WITNESSES-W58r.md` |
+| 7 | `no-live-change` is a text check | accepted: behavioural proof with an adoption sentinel and mutant MW9; the text check stays as an extra | N-11 |
+| 8 | R-6 narrowed to projects « with other people »; JN1 only recommended | accepted: any adoption of another project (`invites.go:379-419`); JN1 mandatory before R1; W58 does not make « Demander une invitation » safe | plan residuals, ADR |
+| 9 | ADR named the old gate; supersession not recorded by a rule | accepted: ADR names `gates/W58r.toml`; `scripts/gate.py` has no notion of supersession, the convention is the new gate's header and « Round 6 » | ADR, gate header |
+| 10 | shutdown ordering, restart loop, failed execution left implicit | accepted: N-13 (ordering, requests refused once leaving, store usable after `Wiring.Close`), N-12 (at most once per request; a failed execution notifies and exits, the list being on disk) | N-12, N-13 |
+
+Text for `PROGRESS.md` (integrator): « W58 — un document qui ne nomme pas cet appareil s'ouvre en lecture ; « Reprendre
+ce document ici » écrit la nouvelle liste à la fermeture puis redémarre Inkwell ; « Inviter » n'est plus proposé à tort.
+W58 ne rend pas « Demander une invitation » sûre : rejoindre un autre document remplace encore l'identité d'une
+session en marche (défaut connu, bloc JN1, obligatoire avant R1). »
+
+
+## Round 8 — split into W58a and PC1 (integrator, 2026-11-14)
+
+Revision 8 holds 14 rules and 11 Go mutants; its plan is 109 lines and no longer fits the two pages of the
+« standard » rigour. Method v2: a ceiling exceeded means re-cutting the block, never dropping a proof. The cut follows
+what the reviews accepted and what they rejected:
+
+- **W58a** (standard): rules N-1..N-4 (standing, refusal by key with the demotion mapping and the bridge proof,
+  read-only through the reader path, invite capability), N-15 (one banner action, « Demander une invitation »; no
+  take-over, no identity change), N-16 (the trust store recovers from a failed replacement, reached by a join),
+  N-10 (two end-to-end tests). Everything three code-review rounds accepted, already implemented in the worktree,
+  from which the take-over is removed. Plan `docs/plans/2026-11-14-w58a-foreign-read-only.md`, gate
+  `gates/W58a.toml`, witnesses `gates/W58a/WITNESSES.md`. Its stated limit: a person alone cannot yet edit or share
+  a foreign document.
+- **PC1** (complete): the take-over by a restart (N-5..N-14 of revision 8) and the join by the same restart (former
+  JN1, residual R-6), with a formal model `ProjectChange.tla`. Mandatory before R1. Plan
+  `docs/plans/2026-11-14-pc1-project-change-by-restart.md`, gate `gates/PC1.toml`; draft, reviewed after W58a is merged.
+
+`gates/W58r.toml` is deleted (its content went to `gates/PC1.toml`); the frozen `gates/W58.toml` stays untouched and
+superseded by the two new gates. The old plan path keeps a short note that points to both.
+
+Text for `PROGRESS.md` (integrator): « W58a — un document qui ne nomme pas cet appareil s'ouvre en lecture, avec une
+phrase claire et « Demander une invitation » ; « Inviter » n'est plus proposé à tort, plus d'erreur brute. Limite
+assumée : une personne seule ne peut pas encore reprendre ce document. PC1 (obligatoire avant R1) — « Reprendre ce
+document ici » et rejoindre un autre document passent par un redémarrage d'Inkwell : l'identité d'une session en
+marche ne change plus jamais. »
+
+
+## Round 9 — Codex on W58a (ACCEPT WITH CHANGES), dispositions
+
+| # | Finding | Disposition | Where |
+|---|---|---|---|
+| 1 | major: a write window at start — `refreshStanding()` is not awaited (`workspace.svelte.ts:333`) and `access` allows editing while standing and role are unknown (`:608`, `Editor.svelte:81`) | accepted: the editor is locked for every project until standing and role are known; selection and copy stay; cost for a member about a third of a second (323–359 ms measured for the same data), nothing moves on screen; the risk for end-to-end tests that type at once is named and covered by `regression` | plan N-3 and « The lock at start »; Vitest « W58a the editor is locked until standing and role are known »; in-test mutant « N-3 lock before the rights »; gate `frontend` |
+| 2 | medium: `e2e:build` (Vite, Go) is not memory-capped; a timeout bounds time only | accepted: `e2e:build`, `fe:check` and `e2e` run inside `scripts/heavy.sh`; nested capped calls reuse the slot (heavy.sh, header), so no lock is taken twice | gate `e2e`, `regression`, header |
+| 3 | medium: N-2's tests check `InviteDevice` and the store bytes for a non-member only | accepted: the rule and the test column ask for {`Invite`, `InviteDevice`} × {non-member, writer, demoted} with the store compared each time; new Go mutant MW4 (`InviteDevice` skips the refusal for a writer) | plan N-2; gate `mutant-tool`, `mutants` |
+| 4 | minor: « nothing issued » is too broad | accepted: no invitation and no signed attestation; the projection's local maintenance writes remain and are accepted (W64) | ADR part 1 point 2; plan « The lock at start » |
+| 5 | N-16's direct test must keep the double failure and prove a save on the same store before any reopening | accepted | plan N-16 |
+
+Status: W58a reviewed, changes applied, ready to freeze (each remaining command is run red by the implementer's
+first step and added to `gates/W58a/WITNESSES.md`).

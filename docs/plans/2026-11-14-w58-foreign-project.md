@@ -1,5 +1,10 @@
 # W58 - a project that does not name this device (R1 blocker): one block
 
+**Superseded on 2026-11-14** by `2026-11-14-w58a-foreign-read-only.md` (block W58a) and
+`2026-11-14-pc1-project-change-by-restart.md` (block PC1), after three review rounds showed the live project change of
+rules N-9 and N-11 below unsound (`gates/W58/REVIEW.md`, rounds 6 to 9). Kept unchanged below because the frozen
+`gates/W58.toml` cites it; that gate is never run for acceptance.
+
 Status: step 1 done, revision 6, reviewed twice by Codex, gate frozen on 2026-11-14 (owner's rule W64: `gates/W58/REVIEW.md`
 « Round 3 »; Codex on revisions 4 and 5, accepted with changes: « Round 4 », « Round 5 »). Decision: `docs/adr/0043-foreign-project.md`. Diagnosis:
 `docs/plans/2026-11-13-invite-not-admin.md`. Rigour: **standard**. Gate: `gates/W58.toml` (frozen;
