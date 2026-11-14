@@ -64,9 +64,14 @@ func Present(window unsafe.Pointer, token string) error {
 	if err != nil {
 		return err
 	}
-	if token != "" {
-		gtk.setStartupID(window, token)
-	}
-	gtk.present(window)
+	gtk.presentAs(window, token)
 	return nil
+}
+
+// presentAs gives the token to GTK, when there is one, and only then presents the window.
+func (t *toolkit) presentAs(window unsafe.Pointer, token string) {
+	if token != "" {
+		t.setStartupID(window, token)
+	}
+	t.present(window)
 }
