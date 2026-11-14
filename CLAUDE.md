@@ -2,7 +2,8 @@
 
 État, ce qui reste et la suite : `PROGRESS.md` (seul état courant) ; où se trouve chaque information :
 `docs/README.md` (une seule place par information, à tenir à jour). L'outillage est géré par **mise** : tout se lance par
-`mise run …`. Garde-fous automatiques :
+`mise run …`. Les autres IA (Codex, Gemini, opencode) entrent par `AGENTS.md` (carte en anglais qui renvoie ici, sans
+recopier les règles ; `GEMINI.md` y renvoie). Garde-fous automatiques :
 - hooks git (`.githooks/pre-commit`) : nettoyage → secrets (gitleaks) → vulnérabilités (gosec,
   govulncheck) → Biome des fichiers frontend indexés (`fe:check:staged`) → style Go → **attestation `/simplify`** (marqueur `$GIT_DIR/claude-simplify-ok`, lié au
   diff indexé exact ; voir « Définition de fini », étape 3) ; `--no-verify` en urgence seulement ;
@@ -82,7 +83,7 @@ quoi que ce soit ; une exception exige une ADR.
 `docs/plans/` → chaque bloc suit la définition de « fini » ci-dessous → démontrer le critère de sortie.
 
 **Méthode v2 — aller vite sans perte de qualité (2026-11-12, accord de deux familles de modèles) :** source
-unique et métriques : `docs/plans/2026-11-12-method-v2.md` (règles 1-16, « When Codex is absent ») ; résumé
+unique et métriques : `docs/plans/2026-11-12-method-v2.md` (règles 1-16, « When Codex is absent », « When Claude is absent ») ; résumé
 opératoire :
 - **Travail en cours :** un bloc en implémentation, un candidat en vérification ; un worktree par bloc ; un bloc
   est commité avant que le suivant commence (deux blocs mêlés ne se vérifient plus séparément).
@@ -141,7 +142,10 @@ les étapes 1 à 8 dans le même ordre :
    dernier car la plus longue, seule sur la machine, lancée dès qu'elle est libre ; après un incident,
    `mise run gate -- --resume <bloc>` ne refait que les critères inachevés.
 7. Documents : `PROGRESS.md` (la liste courante unique) et `docs/exigences.md` à jour.
-8. **Seule la session Claude commite**, après relecture du diff ; le push relance `mise run ci`. On pousse
+8. **Seule la session intégratrice commite** (la session Claude quand il y en a une ; sinon l'intégrateur nommé
+   selon « When Claude is absent » de la méthode v2, qui dit aussi qui relit et comment l'attestation `/simplify` est
+   produite), après relecture du diff, sans lien de session dans le message ni dans une PR (ni ligne
+   `Claude-Session:` ni URL de conversation ; règle de l'utilisatrice, 2026-10-31) ; le push relance `mise run ci`. On pousse
    après chaque bloc commité (hors mesure en cours) : la CI part d'une copie propre et attrape ce qu'un
    arbre de travail chargé de blocs non commités masque (un test dépendant de fichiers non commités est
    resté rouge sur `main` le 2026-11-12).
@@ -240,10 +244,10 @@ netsim, mutation testing gremlins et Stryker) passe par `scripts/heavy.sh` :
 - le hook `heavy-guard.sh` refuse toute commande de test non plafonnée (Claude et ses sous-agents ;
   Codex et opencode n'y sont pas soumis, d'où les tâches mise plafonnées) ;
 - pas plus de 4 agents en parallèle ; mutation testing limité à 4 workers et à un paquet à la fois ;
-- une mesure (perf native, netsim, porte complète) a la machine à elle : elle tourne sur les cœurs P
-  (`taskset -c 0-11` sur ce portable), les agents et le reste sur les cœurs E (`taskset -c 12-19`), et aucun
-  agent ne lance de travail lourd pendant une porte complète (un modèle chronométré a expiré sous la charge,
-  2026-11-12) ;
+- une mesure (perf native, netsim, porte complète) a la machine à elle : `scripts/heavy.sh --exclusive` prend tous
+  les créneaux et attend une machine au repos, et aucun agent ne lance de travail lourd pendant une porte complète
+  (un modèle chronométré a expiré sous la charge, 2026-11-12) ; pas de placement par `taskset` sur les cœurs P et E
+  (arrêté par la méthode v2, « Removed or changed ») ;
 - origine : deux plantages globaux le 2026-10-26 (mutant à 8,7 Go, Chrome à 3,4 Go), un troisième le
   2026-11-08 (test Python non plafonné à 21 Go, voir « Pièges connus »).
 
@@ -256,14 +260,14 @@ l'effort le plus bas qui gardent la qualité, choisis explicitement à chaque la
 | Tâche | Exécutant | Modèle / effort |
 |-------|-----------|-----------------|
 | Brouillon de message de commit, tri de longs journaux, brouillon de traduction i18n | `scripts/llm.sh` (ordre : Groq → Cloudflare Workers AI → OpenRouter gratuit → OpenRouter payant ZDR ; traduction et rédaction : OpenRouter payant seul — ADR 0013 ; quotas : `mise run quotas`) ; texte mécanique seulement, jamais secret, sécurité, conception ni revue de code ; code de sortie 3 → Haiku | open-weight hébergé |
-| Implémentation bien bornée, enquête sur un bogue, second avis, revue adverse (sans tokens Claude) | Codex : agent `codex:codex-rescue`, `/codex:rescue`, `/codex:review`, `/codex:adversarial-review` | connexion ChatGPT (quota limité) ; Claude relit avant fusion |
-| Implémentation guidée par une porte, sans crédit | `mise x -- bash scripts/opencode-free.sh -m <modèle> < consigne.md` (modèles gratuits OpenRouter ou Zen ; gortex branché, rtk injecté) | gratuit ; jamais de sécurité ; ne commite jamais |
+| Revue adverse avant commit, revue de spécification ou de porte avant le gel, enquête sur un bogue, second avis (sans tokens Claude) ; pas d'implémentation tant que Claude est présent (méthode v2, « Codex, when present » : ordre de priorité et politique de quota) | Codex : agent `codex:codex-rescue`, `/codex:rescue`, `/codex:review`, `/codex:adversarial-review` | connexion ChatGPT (petit abonnement : appels courts, quota utilisé en entier) |
+| Implémentation guidée par une porte, sans crédit | `mise x -- bash scripts/opencode-free.sh -m <modèle> < consigne.md` (modèles gratuits OpenRouter ou Zen ; rtk injecté) | gratuit ; jamais de sécurité ; ne commite jamais |
 | Relecture critique d'une spécification de sécurité ou d'une ADR (crédit compté) | Codex (`/codex:adversarial-review`) ; absent : relecture Opus à l'aveugle, ou pour un bloc complet une autre famille via `scripts/claude-or.sh -t pro` (≤ 0,50 $ par point, méthode v2) | un seul appel ciblé chacun |
 | Lancer les vérifications (lint, tests, ci, scans), corrections de format triviales | `quality-runner` | Haiku / low |
 | Docs, `PROGRESS.md`, messages de commit | `scribe` | Haiku / low |
 | Recherche de code ou de fichiers, « où est X » | `explorer` (ou `Explore` intégré) | Haiku / low |
-| Écrire du Go et ses tests, refactorisations | `go-dev` | Sonnet / medium |
-| Relire un diff Go | `go-reviewer` | Sonnet / medium |
+| Écrire du Go et ses tests, refactorisations | `go-dev` | Sonnet / medium ; relu par Opus ou Codex avant fusion |
+| Relire un diff Go | `go-reviewer` en premier passage seulement ; la revue qui fait foi : session Opus ou Codex | Sonnet / medium, puis Opus / medium ou Codex |
 | Parcours d'interface comme une personne | `ux-tester` | Sonnet / medium (comme simplify) |
 | Algorithme nouveau, architecture | `architect` | Opus / high |
 | Modèles TLA+ et Alloy, mutants (étape 1 d'un bloc) | `formal-modeler` | Opus / high |
@@ -273,10 +277,15 @@ l'effort le plus bas qui gardent la qualité, choisis explicitement à chaque la
 `--effort` (mécanique → `--model spark`, `--effort low` ; `--profile openrouter-cheap` seulement en CLI
 `codex` ; code et revue → modèle par défaut, `--effort medium` ; diagnostic difficile → `--effort high`).
 
+**Sonnet ne fait pas foi (règle de l'utilisatrice, 2026-11-03) :** tout code écrit par Sonnet est relu par Opus (ou
+Codex) avant fusion, et une revue qui compte pour une fusion ou une porte est faite par Opus ou Codex, jamais par
+Sonnet seul ; Sonnet et Haiku restent pour l'exécution mécanique (vérifications, format, recherche). Lancement de chaque exécutant hors Claude Code (Codex en CLI, OpenRouter, opencode,
+Gemini), prérequis hors dépôt et pièges : `docs/executors.md`.
+
 **Boucle principale (Opus) :**
 - elle orchestre ; elle ne débogue pas, ne lit pas de journaux et ne résout pas de gros conflits : tout
   cela va à un agent Sonnet ou Haiku ;
-- lire peu : jamais un fichier déjà en contexte ; journaux via `rtk` ; code via gortex ou gopls ;
+- lire peu : jamais un fichier déjà en contexte ; journaux via `rtk` ; code via gopls ;
   `grep`, `head` ou `tail` ciblés plutôt qu'un fichier entier ;
 - briefs d'agent courts, rapports de 10 lignes au plus, tâches indépendantes en parallèle ;
 - réponses à l'utilisatrice brèves, en français (le reste en anglais), et chacune compréhensible seule (elle ne suit pas en
@@ -306,6 +315,6 @@ l'effort le plus bas qui gardent la qualité, choisis explicitement à chaque la
   porte de L3 et P2, alors ignorés, ont été perdus ainsi le 2026-11-08 ; les rapports `gates/*/*.md`
   sont désormais versionnés, seuls les journaux bruts restent ignorés. Une porte (`gate.py`) ne vide que
   les preuves de `gates/<lot>/` et garde ses `*.md` : son ancien `rmtree` avait effacé un rapport.
-- Chaque worktree coûte au démon gortex un graphe complet (une vue par checkout) : 16 worktrees, dont 10 oubliés de séances anciennes, l'ont porté à 14 Go et ont fait tuer des processus par le noyau (OOM global, 2026-11-12). Le worktree d'un bloc est retiré dès le bloc fusionné (règle ci-dessus d'abord, modifications non commitées archivées hors du dépôt) ; au plus un worktree par bloc actif.
+- Les worktrees oubliés coûtent cher : 16 worktrees, dont 10 de séances anciennes, ont porté le démon d'indexation gortex à 14 Go et fait tuer des processus par le noyau (OOM global, 2026-11-12 ; gortex retiré le 2026-11-13, mais chaque worktree garde ses dépendances et ses binaires, environ 1 Go). Le worktree d'un bloc est retiré dès le bloc fusionné (règle ci-dessus d'abord, modifications non commitées archivées hors du dépôt) ; au plus un worktree par bloc actif, soit environ trois checkouts en tout (méthode v2, règle 1).
 - Simuler un flux d'E/S avec `io.BytesIO`, jamais un `MagicMock` dont `read()` rend toujours la même
   valeur : `shutil.copyfileobj` boucle sans fin (21 Go le 2026-11-08 ; `/tmp` est un tmpfs, donc en RAM).

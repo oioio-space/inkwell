@@ -44,7 +44,8 @@ mise run ci      # le gate complet, identique à la CI GitHub Actions
 ```
 
 Chaque commit passe par des gates (secrets, vulnérabilités, style, revue). Le guide des
-agents IA et les invariants d'architecture sont dans [CLAUDE.md](CLAUDE.md).
+agents IA et les invariants d'architecture sont dans [CLAUDE.md](CLAUDE.md) ; les IA autres que Claude Code entrent
+par [AGENTS.md](AGENTS.md).
 
 ## Confidentialité
 

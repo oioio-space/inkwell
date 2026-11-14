@@ -14,6 +14,7 @@ Règles de travail : [../CLAUDE.md](../CLAUDE.md). Tout fichier ou dossier ajout
 | Ce qui reste à trancher | [open-questions.md](open-questions.md) | questions closes gardées avec leur lien |
 | Le registre des blocs lu par les outils, les décisions de pilotage en vigueur | [objectif-en-cours.md](objectif-en-cours.md) | bloc `gate-lots` lu par `scripts/gate.py` |
 | Comment on travaille (méthode, preuves) | [engineering-principles.md](engineering-principles.md), [plans/2026-11-12-method-v2.md](plans/2026-11-12-method-v2.md) | |
+| Lancer chaque exécutant IA (Codex, OpenRouter, opencode, Gemini), prérequis hors dépôt, pièges | [executors.md](executors.md) | point d'entrée des IA hors Claude : [../AGENTS.md](../AGENTS.md) |
 | Les choix tranchés en autonomie | [autonomous-decisions.md](autonomous-decisions.md) | décisions durables seulement |
 | Les choix produit de l'utilisatrice | [design/decisions-utilisatrice.md](design/decisions-utilisatrice.md) | |
 | Les décisions d'architecture | [adr/](adr/) | MADR, numérotées |

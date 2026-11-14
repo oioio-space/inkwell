@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """Fail when code reads an environment variable that .env.reference does not declare.
 
-.env.reference is the inventory of inkwell's configuration surface (and the provider side of
-gortex env contracts). This check keeps it exhaustive: `mise run lint:env`, part of `mise run ci`.
+.env.reference is the inventory of inkwell's configuration surface. This check keeps it exhaustive: `mise run lint:env`, part of `mise run ci`.
 """
 import pathlib
 import re
