@@ -19,13 +19,12 @@ in the owning block, each with a red-first test, and the row records the outcome
 | Trust and membership | 2026-11-12 | `protocol/trust`, `internal/trust`, `internal/app/wiring.go`, `attest.go` | 5 findings (circular witness after handover, divergent saturation, revocation not durable before ack, non-atomic suspension, attestation equivocation) → block TR1 after R1; 13 of the 21 surviving mutants flagged |
 | Global plan and R1 scope; methods without Codex | 2026-11-12 | PROGRESS, objectif-en-cours, coherence §5, exigences, decisions | R1 re-ordered and acceptance extended; trusted-collaborators alpha; falsification registry (FR) adopted |
 | Sidecar sandbox and bridge (cloud review, not Codex) | 2026-11-14 | `internal/sidecar`, `internal/bridge`, `protocol/bridge` (58 files) | 10 findings, none replayed yet: [report](2026-11-14-ultrareview-sandbox-bridge.md) → blocks SB2 (sandbox, complete) and BR1 (bridge, standard) |
+| CRDT admission frontier and invitation (cloud review) | 2026-11-14 | `frontend/src/net`, `internal/invite`, `protocol/invite`, `frontend/packages/protocol/src` (21 files) | 10 findings, 9 re-read, none replayed: [report](2026-11-14-ultrareview-admission-invite.md) → blocks IV1, AD1 (complete), NA1 (standard) |
 
 ## Queue (most critical first)
 
 | # | Area | Why critical | Files |
 |---|---|---|---|
-| 3 | CRDT admission frontier in the webview | Byzantine writers are the threat model | ADR 0030/0031, `frontend/src/` admission code, `@inkwell/protocol` |
-| 4 | Invitation (Wormhole rendezvous, LAN lobby) | first contact with a stranger's bytes | `protocol/invite`, `internal/invite`, ADR 0032 |
 | 7 | Blob store and Bao transfer | peer-supplied data on disk, quotas | `internal/blob`, ADR 0023 |
 | 8 | Persistence (store, backups, integrity) and project projection (fsnotify ownership) | data loss | `internal/store`, `internal/project` |
 | 9 | Relay (self-hosted) | public network surface | `cmd/inkwell-relay`, `internal/transport/p2p/relay.go` |
