@@ -137,6 +137,7 @@ $effect(() => {
         const sheetDoc = new SheetDoc(port, model, hint);
         const made = new SheetController(sheetDoc, {
           readOnly: readOnly || b !== undefined,
+          locked: () => workspace.locked,
           ...(readOnlyReason ? { readOnlyReason } : {}),
           onUndoKey: () => workspace.undoWithKey(),
           onDialect: (d) => rememberDelimiter(workspace.project, p, d.delimiter),

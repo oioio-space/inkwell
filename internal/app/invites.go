@@ -64,7 +64,19 @@ type Invitation struct {
 	Text string `json:"text"`
 	// CodeError says why there is no Code.
 	CodeError string `json:"codeError,omitzero"`
+	// Refused is the stable key of the reason no invitation was made, empty
+	// when one was: [RefusedNotMember] or [RefusedNotAdmin]. A refusal is a
+	// result, not an error, so the webview shows its own sentence of the key.
+	Refused string `json:"refused,omitzero"`
 }
+
+// Keys of [Invitation.Refused].
+const (
+	// RefusedNotMember: this device is not in the member list of the project.
+	RefusedNotMember = "notMember"
+	// RefusedNotAdmin: this device is a member, but not an admin.
+	RefusedNotAdmin = "notAdmin"
+)
 
 // NearbyPerson is a visible device found on the local network.
 type NearbyPerson struct {
@@ -221,6 +233,11 @@ func (inv *invites) addrs() []string {
 // invite issues a ticket and offers it as a code.
 func (inv *invites) invite(role trust.Role, person *trust.Hash) (Invitation, error) {
 	t, err := inv.currentHost().Invite(role, person)
+	if errors.Is(err, trust.ErrNotAdmin) {
+		// Demoted between the check of the session and the one of the host: the
+		// same refusal, as a result, never an error (N-2).
+		return Invitation{Refused: cmp.Or(inv.refusal(), RefusedNotAdmin)}, nil
+	}
 	if err != nil {
 		return Invitation{}, fmt.Errorf("invite: %w", err)
 	}
@@ -380,6 +397,22 @@ func (inv *invites) adopt(j *invite.Joined) error {
 	inv.hostUntil = time.Time{}
 	inv.mu.Unlock()
 	return nil
+}
+
+// refusal returns the key of why this device cannot invite, or "" if it can.
+func (inv *invites) refusal() string {
+	list := inv.currentList()
+	var key string
+	switch {
+	case standingOf(list, inv.dev.Public()) != StandingMember:
+		key = RefusedNotMember
+	case list.Role(inv.dev.Public()) != trust.RoleAdmin:
+		key = RefusedNotAdmin
+	default:
+		return ""
+	}
+	inv.log.Info("invitation refused", "reason", key, "err", trust.ErrNotAdmin)
+	return key
 }
 
 // probeTargets are the nearby devices worth greeting: those not linked already. A

@@ -149,7 +149,7 @@ class HistoryState {
    * stale at the first demotion.
    */
   get readOnly(): boolean {
-    return workspace.access !== undefined;
+    return workspace.locked;
   }
 
   /** The actors this device has written under in the open document (kept on this device only). */

@@ -264,6 +264,39 @@ describe("WailsNetworkAdapter", () => {
     expect(removed).toEqual([]);
   });
 
+  it("W58a a document outside the admitted scope is not counted as shared", async () => {
+    // A document the scope does not admit is never answered (the peer drops it): counted as
+    // shared, it would keep the indicator on « checking » for good, as the previous root does
+    // right after a join that changes the root.
+    const net = new SimNet(1);
+    const adapter = new WailsNetworkAdapter(() => net.socket("a"), {
+      reconnectDelayMs: 5,
+      admitted: (doc) => doc === "d1",
+    });
+    const a = new Repo({
+      peerId: "a" as PeerId,
+      network: [adapter],
+      sharePolicy: async () => true,
+    });
+    repos.push(a);
+    const b = peer(net, "b");
+    net.link("a", "b");
+    await until(() => b.connected.has("a") && adapter.heardHeads("b") !== undefined);
+    await until(() => adapter.syncCounts("b") !== undefined);
+    const send = (documentId: string) =>
+      adapter.send({
+        type: "sync",
+        senderId: "a" as PeerId,
+        targetId: "b" as PeerId,
+        documentId: documentId as DocumentId,
+        data: new Uint8Array([0]),
+      });
+    send("d2");
+    expect(adapter.heardHeads("b").has("d2"), "W58a not shared outside the scope").toBe(false);
+    send("d1");
+    expect(adapter.heardHeads("b").has("d1")).toBe(true);
+  });
+
   it("NI-4 C4: counts the sync messages sent to and accepted from each peer", async () => {
     const net = new SimNet(1);
     const a = peer(net, "a");

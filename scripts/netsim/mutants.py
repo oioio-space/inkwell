@@ -71,10 +71,44 @@ def sh(cmd, cwd, env=None, log=None, timeout=1800):
     return rc, out
 
 
-def run_go(m, tree):
+def caught_by(out, test, expect):
+    """Whether the `go test -json` output `out` shows `test` failing with `expect` in its own output.
+
+    Both events must belong to the named test (or one of its subtests for the text): a build failure
+    (events without a test), another failing test, or the text printed by another test is not a catch.
+    """
+    failed, said = False, False
+    for line in out.splitlines():
+        try:
+            ev = json.loads(line)
+        except ValueError:
+            continue  # not an event: the output of go build, heavy.sh or timeout
+        if not isinstance(ev, dict):
+            continue
+        name = ev.get("Test", "")
+        if ev.get("Action") == "fail" and name == test:
+            failed = True
+        elif ev.get("Action") == "output" and (name == test or name.startswith(test + "/")) and expect in ev.get("Output", ""):
+            said = True
+    return failed and said
+
+
+def run_go(m, tree, run=None):
+    """Run the mutant's Go test in the copy. `run` is the command runner (default `sh`; tests inject one)."""
+    run = run or sh
     log = []
-    rc, out = sh(["./scripts/heavy.sh", "timeout", "900", "go", "test", m["pkg"], "-run", m["test"], "-count=1"],
-                 tree, log=log, timeout=1000)
+    expect = m.get("expect")
+    name = m["test"].strip("^$")  # the entry may write the test as an anchored pattern
+    cmd = ["./scripts/heavy.sh", "timeout", "900", "go", "test", m["pkg"], "-run", f"^{name}$" if expect else m["test"], "-count=1"]
+    if expect:
+        cmd.append("-json")
+    rc, out = run(cmd, tree, log=log, timeout=1000)
+    if expect:
+        # Caught only if the named test failed with its assertion text: not by a build error, a timeout,
+        # a kill or another failing test.
+        caught = rc not in (0, 124, 137) and caught_by(out, name, expect)
+        detail = f"go test exit {rc}" + ("" if caught else f"; {name} did not fail with {expect!r}")
+        return caught, detail, log
     # Caught only by a real test failure: not by a build error, a timeout or a kill.
     caught = rc not in (0, 124, 137) and "--- FAIL" in out and "[build failed]" not in out
     return caught, f"go test exit {rc}" + ("" if caught or rc == 0 else " without a failing test (build error or timeout)"), log
@@ -140,6 +174,8 @@ def validate(mutants):
     """Static checks of the mutant list; return the problems found."""
     bad = []
     for m in mutants:
+        if "expect" in m and (m["kind"] != "go" or not m["expect"]):
+            bad.append(f"mutant {m['id']}: expect is for a go mutant, and not empty")
         if m["kind"] not in ("go", "vitest", "e2e"):
             bad.append(f"mutant {m['id']}: unknown kind {m['kind']!r}")
         if m["kind"] == "e2e" and m["scenario"] == 8 and not m.get("variant"):

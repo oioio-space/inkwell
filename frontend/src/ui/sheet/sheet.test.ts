@@ -130,6 +130,20 @@ describe("editing", () => {
     expect(projection.notice?.text).toBe(projection.readOnlyText);
   });
 
+  it("W58a a sheet writes nothing while the rights are unknown", () => {
+    let locked = true; // the workspace's lock: rights unknown, or a reason to only read
+    const { sheet, text } = open(BASE, { locked: () => locked });
+    expect(sheet.readOnly, "N-3 no write before the rights").toBe(true);
+    sheet.startEdit("x");
+    sheet.clear();
+    sheet.insertRows();
+    expect(sheet.editing).toBeUndefined();
+    expect(text()).toBe(BASE);
+    locked = false;
+    sheet.tick++; // the controller is told that what it reads changed, as the workspace does
+    expect(sheet.readOnly).toBe(false);
+  });
+
   it("CSV-18 a reader cannot edit, but can copy, sort and filter locally", () => {
     const { sheet, text } = open(BASE, { readOnly: true });
     sheet.startEdit("x");

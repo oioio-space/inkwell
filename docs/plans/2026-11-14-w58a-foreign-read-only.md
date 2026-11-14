@@ -35,6 +35,8 @@ signed while this device is not a member; the automatic projection still writes 
 (`workspace.svelte.ts:444`, `store/projection.ts:187`) in a folder that is the person's (W64). The banner speaks
 of the right to edit, not of an immutable folder.
 
+The lock covers every user action that writes into the document: the editor, the format bar, the history actions, the CSV sheet (a pre-existing hole, fixed here: `Sheet.svelte` never received the access state, so a reader could edit a CSV) and the two outside-edit actions « Intégrer » and « Annuler » (`workspace.locked`); the background merge of outside edits from the disk and the projection stay outside it (the folder is the person's, W64, and peers verify every op).
+
 ## The stated limit: a person alone
 
 With no take-over, a person whose profile is lost and whose documents are kept, with nobody to ask for an invitation,

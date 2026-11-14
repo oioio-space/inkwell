@@ -326,6 +326,12 @@ onMount(() => {
               session.state.selection.main.to,
             )
           : "";
+    // A bound call made by the page itself, to prove what crosses the real bridge (W58, N-2).
+    (
+      globalThis as typeof globalThis & {
+        __inkwellInvite?: (role: string) => Promise<{ refused?: string }>;
+      }
+    ).__inkwellInvite = (role) => Session.Invite(role);
     (globalThis as typeof globalThis & { __inkwellTestTable?: () => void }).__inkwellTestTable =
       () => sheetView.openAsTable("main.typ");
   }
@@ -469,7 +475,7 @@ onMount(() => {
       />
     {/if}
     <SealedBanner />
-    <AccessBanner />
+    <AccessBanner onAsk={() => (sharing = true)} />
     {#if offerTable}
       <div class="viewbar">
         <button

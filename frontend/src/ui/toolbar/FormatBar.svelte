@@ -55,7 +55,7 @@ function pressed(item: BarItem): boolean | undefined {
 
 const languageName = $derived(t(`lang.${lang}`));
 /** A reader, or a disconnected person: every button would do nothing, so none is offered. */
-const locked = $derived(workspace.access !== undefined);
+const locked = $derived(workspace.locked);
 </script>
 
 <div

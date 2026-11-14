@@ -76,6 +76,11 @@ export interface Remote {
 
 export interface SheetOptions {
   readOnly?: boolean;
+  /**
+   * Whether the workspace locks the text now (rights unknown, a reader, a device the member list
+   * does not name, W58a N-3): read live, so the sheet follows it.
+   */
+  locked?: () => boolean;
   /** Why the sheet is read-only when it is not the person's role (a file this version only shows). */
   readOnlyReason?: string;
   /** Record/column coordinates of a cell in a locked zone (ADR 0022). */
@@ -184,7 +189,7 @@ export class SheetController {
   }
   get readOnly(): boolean {
     this.tick;
-    return this.opts.readOnly === true || this.doc.tooBig;
+    return this.opts.readOnly === true || this.opts.locked?.() === true || this.doc.tooBig;
   }
   /** Why the sheet cannot be edited: the file is too big, the given reason, or the person may only read. */
   get readOnlyText(): string {

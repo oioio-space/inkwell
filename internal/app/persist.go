@@ -441,6 +441,13 @@ func (s *opStore) ensureOpen() error {
 		return nil
 	}
 	root, err := s.parent.OpenRoot(trustDir)
+	if errors.Is(err, fs.ErrNotExist) {
+		// A rollback that failed left the set-aside list as the only complete
+		// one (see [opStore.rollback]): settle it, as the next launch would.
+		if err = recoverSwap(s.parent); err == nil {
+			root, err = s.parent.OpenRoot(trustDir)
+		}
+	}
 	if err != nil {
 		return fmt.Errorf("reopening trust: %w", err)
 	}

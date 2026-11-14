@@ -2,11 +2,14 @@ import { describe, expect, it } from "vitest";
 import en from "../i18n/en.json";
 import fr from "../i18n/fr.json";
 
-const sources = import.meta.glob(["../**/*.svelte", "../**/*.ts", "!../**/*.test.ts"], {
-  query: "?raw",
-  import: "default",
-  eager: true,
-}) as Record<string, string>;
+const sources = import.meta.glob(
+  ["../**/*.svelte", "../**/*.ts", "!../**/*.test.ts", "!../**/*.w58mutant-*"],
+  {
+    query: "?raw",
+    import: "default",
+    eager: true,
+  },
+) as Record<string, string>;
 
 const svelte = Object.entries(sources).filter(([path]) => path.endsWith(".svelte"));
 

@@ -11,7 +11,9 @@
 #   kind "vitest"  run one Vitest file (TEST, relative to the repo root) in the copy; red = at least one
 #               assertion fails (a build, type or import error, a failed suite or a timeout does not count).
 #   A "go" mutant is caught only by a real test failure ("--- FAIL"), never by a build failure or a
-#   timeout.
+#   timeout. With the optional field `expect` (a text) the runner uses `go test -json` and the mutant
+#   is caught only if the named TEST has a fail event and an output event of that same test (or its
+#   subtests) holds the `expect` text; another failing test, a build failure or a timeout is not a catch.
 # An edit with create = true writes a new file (`after` is its content).
 
 [[mutant]]
@@ -1409,3 +1411,63 @@ why = "n is not frozen with its label: it follows the live count"
 file = "frontend/src/net/syncIndicator.ts"
 before = "? { ...next, n: Math.max(d.n, n) }"
 after = "? { ...next, n }"
+
+[[mutant]]
+id = "MW1"
+block = "W58a"
+kind = "go"
+pkg = "./internal/app/"
+test = "TestStandingFromList"
+expect = "N-1 standing"
+clause = "N-1 standing"
+why = "standing always member"
+
+[[mutant.edit]]
+file = "internal/app/session.go"
+before = "\tcase list.Role(pub) != 0:\n"
+after = "\tcase list.Role(pub) != 0 || true:\n"
+
+[[mutant]]
+id = "MW2"
+block = "W58a"
+kind = "go"
+pkg = "./internal/app/"
+test = "TestNotMemberInviteRefusedByKey"
+expect = "N-2 refused by key"
+clause = "N-2 refused by key"
+why = "a refusal returned as an error"
+
+[[mutant.edit]]
+file = "internal/app/session.go"
+before = "\t\treturn Invitation{Refused: key}, nil\n\t}\n\tr, err := parseRole(role)"
+after = "\t\treturn Invitation{}, errors.New(key)\n\t}\n\tr, err := parseRole(role)"
+
+[[mutant]]
+id = "MW3"
+block = "W58a"
+kind = "go"
+pkg = "./internal/app/"
+test = "TestReplaceFailureAtEachStep"
+expect = "N-16 store usable after a failed replacement"
+clause = "N-16 store usable after a failed replacement"
+why = "ensureOpen no longer recovers the set-aside list when trust is missing"
+
+[[mutant.edit]]
+file = "internal/app/persist.go"
+before = "\tif errors.Is(err, fs.ErrNotExist) {\n\t\t// A rollback that failed"
+after = "\tif false {\n\t\t// A rollback that failed"
+
+[[mutant]]
+id = "MW4"
+block = "W58a"
+kind = "go"
+pkg = "./internal/app/"
+test = "TestNotMemberInviteRefusedByKey"
+expect = "N-2 device invitation refused by key"
+clause = "N-2 device invitation refused by key"
+why = "InviteDevice answers the refusal of a device as an error instead of a key (a writer is refused in session, so a mere skip is absorbed by the demotion mapping and is equivalent)"
+
+[[mutant.edit]]
+file = "internal/app/session.go"
+before = "func (s *Session) InviteDevice() (Invitation, error) {\n\tif s.inv == nil {\n\t\treturn Invitation{}, errNoProject\n\t}\n\tif key := s.inv.refusal(); key != \"\" {\n\t\treturn Invitation{Refused: key}, nil"
+after = "func (s *Session) InviteDevice() (Invitation, error) {\n\tif s.inv == nil {\n\t\treturn Invitation{}, errNoProject\n\t}\n\tif key := s.inv.refusal(); key != \"\" {\n\t\treturn Invitation{}, errors.New(key)"

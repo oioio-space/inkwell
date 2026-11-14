@@ -52,6 +52,14 @@ export async function open(browser: Browser, url: string, dark = false): Promise
     (async () => {
       await page.goto(url);
       await expect(editor(page)).toBeVisible();
+      // The editor is locked until Go has said the rights of this device (W58a, N-3): keys typed
+      // before that are lost, so wait for what ends the lock, a writable editor or the banner
+      // that says why it stays read-only.
+      await expect(
+        page
+          .locator('.cm-content:not([aria-readonly="true"]), [data-testid="access-banner"]')
+          .first(),
+      ).toBeVisible();
     })(),
     broken,
   ]);

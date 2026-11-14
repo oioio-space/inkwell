@@ -567,6 +567,10 @@ export class WailsNetworkAdapter extends NetworkAdapter {
   #shared(peer: PeerId, doc: string | undefined): void {
     const docs = this.#heard.get(peer) ?? new Map<string, string[] | null>();
     if (!doc || !this.#announced.has(peer) || docs.has(doc)) return;
+    // A document outside the scope is never answered (the peer drops it): it would keep the
+    // indicator on « checking » for good (the old root is still synced right after a join).
+    const scope = this.#opts.admitted;
+    if (scope && !(typeof scope === "function" ? scope(doc) : scope.has(doc))) return;
     docs.set(doc, null);
     this.#heard.set(peer, docs);
     this.#notifySync();

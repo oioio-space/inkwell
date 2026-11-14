@@ -4,8 +4,10 @@ package app
 
 import (
 	"context"
+	"crypto/ed25519"
 	"errors"
 	"fmt"
+	"slices"
 	"time"
 
 	"github.com/oioio-space/inkwell/internal/transport"
@@ -49,6 +51,41 @@ func (s *Session) Peers() []string {
 	return out
 }
 
+// The standing of this device in the member list of the open project, see
+// [Session.Standing].
+const (
+	// StandingMember: the list gives this device a role.
+	StandingMember = "member"
+	// StandingRemoved: the list holds an op about this device, but gives it no role.
+	StandingRemoved = "removed"
+	// StandingNotNamed: the list never names this device, as when the folder was
+	// made by another profile.
+	StandingNotNamed = "notNamed"
+)
+
+// standingOf computes the standing of pub in list.
+func standingOf(list *trust.List, pub ed25519.PublicKey) string {
+	switch {
+	case list.Role(pub) != 0:
+		return StandingMember
+	case slices.ContainsFunc(list.Since(nil), func(o trust.Op) bool { return pub.Equal(o.Subject) }):
+		return StandingRemoved
+	}
+	return StandingNotNamed
+}
+
+// Standing reports whether this device is in the member list of the open
+// project: "member", "removed" or "notNamed". It follows the list, so a join turns it into "member" without a restart; the webview asks again
+// whenever it receives the roles event. A session without project is "notNamed".
+func (s *Session) Standing() string {
+	if s.inv == nil {
+		return StandingNotNamed
+	}
+	// The list of the wiring, not the one of the invitations: the wiring follows
+	// a new project before it announces the roles, the invitations only after.
+	return standingOf(s.inv.wiring.list(), s.inv.dev.Public())
+}
+
 // parseRole converts a role name of the frontend.
 func parseRole(s string) (trust.Role, error) {
 	switch s {
@@ -65,10 +102,14 @@ func parseRole(s string) (trust.Role, error) {
 // Invite issues an invitation for a new person with role ("reader",
 // "writer" or "admin"), valid for 15 minutes and for one person. It carries
 // the same ticket as a short code (when the code server answers) and as a
-// text to paste. Only an admin can invite.
+// text to paste. Only an admin can invite: for anyone else the result has
+// [Invitation.Refused] and no error.
 func (s *Session) Invite(role string) (Invitation, error) {
 	if s.inv == nil {
 		return Invitation{}, errNoProject
+	}
+	if key := s.inv.refusal(); key != "" {
+		return Invitation{Refused: key}, nil
 	}
 	r, err := parseRole(role)
 	if err != nil {
@@ -78,10 +119,14 @@ func (s *Session) Invite(role string) (Invitation, error) {
 }
 
 // InviteDevice is like [Session.Invite] for another device of the same person
-// as this one, which gets this device's role. Only an admin can invite.
+// as this one, which gets this device's role. Only an admin can invite, as for
+// [Session.Invite].
 func (s *Session) InviteDevice() (Invitation, error) {
 	if s.inv == nil {
 		return Invitation{}, errNoProject
+	}
+	if key := s.inv.refusal(); key != "" {
+		return Invitation{Refused: key}, nil
 	}
 	role, person, err := s.inv.myRoleAndPerson()
 	if err != nil {
@@ -139,7 +184,7 @@ func (s *Session) Nearby(ctx context.Context) []NearbyPerson {
 
 // Ask asks the nearby device peer (see [Session.Nearby]) to let this device
 // join its project, under name, and waits for a person to answer. It returns
-// the identity of that device, like [Session.Join].
+// the identity of that device, as the peer of [Session.Join] is.
 func (s *Session) Ask(ctx context.Context, peer, name string) (string, error) {
 	if s.inv == nil {
 		return "", errNoProject

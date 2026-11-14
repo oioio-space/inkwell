@@ -36,7 +36,7 @@ import { type Projection, startProjection } from "../store/projection";
 import { safeGet, safeSet } from "../store/safeStorage";
 import { settings } from "../store/settings.svelte";
 import { notice } from "../ui/notice.svelte";
-import { accessOf, type Member } from "../ui/people/roster";
+import { accessOf, type Member, type Standing } from "../ui/people/roster";
 import { BootstrapLoader } from "./loader";
 import { observeVariantHeads } from "./observe";
 
@@ -140,6 +140,17 @@ class Workspace {
   rolesVersion = $state(0);
   /** The people of the project with their roles and suspensions, as Go reports them. */
   roster = $state.raw<Member[]>([]);
+  /**
+   * Whether the member list names this device, as Go says (`Session.Standing`); undefined until
+   * Go has answered. Asked again whenever the roles event arrives.
+   */
+  standing = $state<Standing | undefined>();
+  /**
+   * True from a successful join until the member list names this device: in a copy of the project
+   * the list arrives by sync (seconds, more on a bad network), and the banner says so meanwhile.
+   */
+  listPending = $state(false);
+  #standingTicket = 0;
   /** True once the member list is full: this device signs no more, so edits stay local. */
   sealed = $state(false);
   handle = $state.raw<DocHandle<Doc> | undefined>();
@@ -324,6 +335,7 @@ class Workspace {
     const id = await Session.LocalPeer();
     if (generation !== this.#generation) return;
     this.myId = id;
+    void this.refreshStanding();
     if (!this.myName) this.setName(`Personne ${id.slice(0, 4)}`);
 
     const adapter = new WailsNetworkAdapter(() => Stream("net") as unknown as SocketLike, {
@@ -333,10 +345,6 @@ class Workspace {
         !!this.#repo?.handles[id as DocumentId]?.inState(["ready", "requesting", "unavailable"]),
       load: (id) => this.#loader?.ensure(id),
       onDrop: (reason) => console.warn("bridge: dropped frame:", reason),
-    });
-    adapter.onRoles(() => {
-      this.rolesVersion++;
-      void this.refreshRoster();
     });
     adapter.onLinks((list) => {
       links.set(list);
@@ -502,6 +510,7 @@ class Workspace {
 
   /** Takes the last outside edit back: only what it brought in, not what others typed since. */
   undoExternal(): void {
+    if (this.locked) return; // a user action that writes: nothing while the rights are unknown (N-3)
     this.#sync?.undo();
     clearTimeout(this.#marksTimer);
     this.marks = null;
@@ -510,13 +519,14 @@ class Workspace {
   /** Ctrl+Z: takes the outside edit back if it is the last thing that happened to the text. */
   undoWithKey(): boolean {
     if (this.keyUndoHooks.some((hook) => hook())) return true;
-    if (!this.#sync?.canKeyUndo) return false;
+    if (!this.#sync?.canKeyUndo || this.locked) return false;
     this.undoExternal();
     return true;
   }
 
   /** "Ask" answered with "Integrate". */
   integrateExternal(): Promise<void> {
+    if (this.locked) return Promise.resolve(); // writes the outside text in: not while locked (N-3)
     return this.#sync?.integrateAsked() ?? Promise.resolve();
   }
 
@@ -598,23 +608,65 @@ class Workspace {
   }
 
   /**
-   * Why this device cannot edit: "reader" (its role), or "suspended" (an admin disconnected it);
-   * undefined when it can, or while Go has not yet said.
+   * Why this device cannot edit: "notNamed" or "removed" (the member list does not name it, W58),
+   * "reader" (its role), or "suspended" (an admin disconnected it); undefined when it can, or while
+   * Go has not yet said.
    */
-  get access(): "reader" | "suspended" | undefined {
+  get access(): "reader" | "suspended" | "notNamed" | "removed" | undefined {
     void this.rolesVersion;
     const me = this.#adapter?.roleOf(this.myId);
-    return accessOf(me?.role, me?.suspended ?? false);
+    return accessOf(me?.role, me?.suspended ?? false, this.standing);
   }
 
   /**
-   * Whether this device may make an invitation: only an admin who is not disconnected may (Go
-   * refuses the others). True while Go has not said, so that a first project is never blocked.
+   * Whether the rights of this device are known: Go has said its standing and, for a member, has
+   * reported its role (a device the list does not name gets no role, and none is waited for).
    */
-  get mayInvite(): boolean {
+  get rightsKnown(): boolean {
     void this.rolesVersion;
+    if (this.standing === undefined) return false;
+    if (this.standing !== "member") return true;
+    return this.#adapter?.roleOf(this.myId) !== undefined;
+  }
+
+  /**
+   * Whether the text cannot be changed now (W58a, N-3): until the rights are known, for every
+   * project, so nothing typed before Go answers is saved or sent; then for whoever has an
+   * {@link access} reason. A locked editor still shows, selects and copies its text.
+   */
+  get locked(): boolean {
+    return !this.rightsKnown || this.access !== undefined;
+  }
+
+  /**
+   * What the invitation controls show: "loading" until Go has reported this device's role, then
+   * "admin", "nonAdmin", or "notMember" (the list does not name this device, and no role will
+   * come).
+   */
+  get inviteState(): "loading" | "admin" | "nonAdmin" | "notMember" {
+    void this.rolesVersion;
+    if (this.standing === "notNamed" || this.standing === "removed") return "notMember";
     const me = this.#adapter?.roleOf(this.myId);
-    return me === undefined || (me.role === "admin" && !me.suspended);
+    if (me === undefined) return "loading";
+    return me.role === "admin" && !me.suspended ? "admin" : "nonAdmin";
+  }
+
+  /** Whether this device may make an invitation: only once Go has reported an admin who is not disconnected. */
+  get mayInvite(): boolean {
+    return this.inviteState === "admin";
+  }
+
+  /** Asks Go whether the member list names this device; the latest answer wins. */
+  async refreshStanding(): Promise<void> {
+    const ticket = ++this.#standingTicket;
+    try {
+      const standing = (await Session.Standing()) as Standing;
+      if (ticket !== this.#standingTicket) return;
+      this.standing = standing;
+      if (standing === "member") this.listPending = false;
+    } catch {
+      // Go does not answer (no project yet): the standing stays as it was.
+    }
   }
 
   /** Asks Go for the people of the project (it changes when an admin acts, here or elsewhere). */
@@ -666,6 +718,11 @@ class Workspace {
     this.#adapter = adapter;
     this.#repo = repo;
     this.#scope = admitted;
+    adapter.onRoles(() => {
+      this.rolesVersion++;
+      void this.refreshRoster();
+      void this.refreshStanding();
+    });
     adapter.on("peer-candidate", ({ peerId }) => {
       this.peerUp(peerId);
       this.refreshSync();
@@ -690,6 +747,11 @@ class Workspace {
       if (this.#hooked.has(handle)) continue;
       this.#hooked.add(handle);
       handle.on("heads-changed", () => this.refreshSync());
+      // A handle turns ready after the heads-changed that delivered its content: no event follows.
+      void handle
+        .whenReady()
+        .then(() => this.refreshSync())
+        .catch(() => {}); // deleted or timed out: nothing to show for it
     }
     const observed =
       adapter && repo
@@ -723,11 +785,19 @@ class Workspace {
     this.error = "";
     try {
       const known = new Set(this.peers);
-      this.invitation = (await Session.Invite("writer")).text;
+      const made = await Session.Invite("writer");
+      if (made.refused) {
+        // A refusal is a result with a stable key: the sentence is ours, never Go's text (N-2).
+        this.error = t(
+          made.refused === "notMember" ? "share.host.notMember" : "share.host.adminOnly",
+        );
+        return;
+      }
+      this.invitation = made.text;
       this.#knownAtInvite = known;
       this.invitationUsed = false;
-    } catch (err) {
-      this.error = t("error.host", { reason: String(err) });
+    } catch {
+      this.error = t("error.host");
     }
   }
 
@@ -737,8 +807,11 @@ class Workspace {
     this.joining = true;
     try {
       const peer = (await Session.Join(invitation.trim())) as PeerId;
+      await this.refreshStanding(); // a join turns "notNamed" into "member" (N-1)
+      this.listPending = this.standing !== "member";
       await this.open(await this.#projectOf(peer));
     } catch {
+      this.listPending = false;
       this.error = t("error.join");
     } finally {
       this.joining = false;

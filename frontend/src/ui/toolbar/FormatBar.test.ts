@@ -2,6 +2,7 @@ import type { EditorView } from "@codemirror/view";
 import { flushSync } from "svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { FileKind, type ProjectFile } from "../../store/files";
+import { workspace } from "../../workspace/workspace.svelte";
 import { session } from "../editorSession.svelte";
 import { cleanup, click, fakeEditor, fakeWidth, press, render } from "../testkit.svelte";
 import FormatBar from "./FormatBar.svelte";
@@ -38,14 +39,28 @@ let restoreWidth = () => {};
 // happy-dom lays nothing out: a window wide enough for the whole bar, unless a test narrows it.
 beforeEach(() => {
   restoreWidth = fakeWidth(1200);
+  // Rights known (standing member, a role reported): the bar is live unless a test says otherwise.
+  vi.spyOn(Object.getPrototypeOf(workspace), "rightsKnown", "get").mockReturnValue(true);
 });
 afterEach(() => {
+  vi.restoreAllMocks();
   cleanup();
   session.view = undefined;
   restoreWidth();
 });
 
 describe("formatting bar", () => {
+  it("W58a the format bar is inert until the rights are known", () => {
+    const known = mountBar("a‸", "typst").host;
+    expect(known.querySelector(".tb")?.hasAttribute("inert")).toBe(false);
+    vi.spyOn(Object.getPrototypeOf(workspace), "rightsKnown", "get").mockReturnValue(false);
+    const unknown = mountBar("a‸", "typst").host;
+    expect(
+      unknown.querySelector(".tb")?.hasAttribute("inert"),
+      "N-3 no write before the rights",
+    ).toBe(true);
+  });
+
   it("UI-01 follows the file: Typst bar, then Markdown bar, then none for a csv", () => {
     expect(barLang("x.typ")).toBe("typst");
     expect(barLang("x.md")).toBe("markdown");

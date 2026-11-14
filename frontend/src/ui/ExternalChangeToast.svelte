@@ -43,7 +43,7 @@ $effect(() => {
     {#snippet actions()}
       {#if notice.ranges.length > 0}
         <button type="button" class="fb lbl" onclick={view}>{t("external.view")}</button>
-        <button type="button" class="fb lbl" onclick={() => workspace.undoExternal()}>
+        <button type="button" class="fb lbl" disabled={workspace.locked} onclick={() => workspace.undoExternal()}>
           {t("external.undo")}
         </button>
       {/if}
@@ -53,7 +53,7 @@ $effect(() => {
   <Toast role="alert">
     {t("external.message", { name: notice.name })}
     {#snippet actions()}
-      <button type="button" class="fb lbl" disabled={busy} onclick={() => resolve(() => workspace.integrateExternal())}>
+      <button type="button" class="fb lbl" disabled={busy || workspace.locked} onclick={() => resolve(() => workspace.integrateExternal())}>
         {t("external.integrate")}
       </button>
       <button type="button" class="fb lbl" disabled={busy} onclick={() => resolve(() => workspace.keepOurs())}>

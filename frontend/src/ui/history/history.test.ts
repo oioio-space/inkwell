@@ -55,6 +55,8 @@ beforeEach(() => {
     void workspace.rolesVersion;
     return live.access;
   });
+  // Rights known (standing member, a role reported): the history is live unless a test says otherwise.
+  vi.spyOn(Object.getPrototypeOf(workspace), "rightsKnown", "get").mockReturnValue(true);
   live.access = undefined;
   history.diff = undefined;
   history.apply = undefined;
@@ -169,6 +171,16 @@ describe("the differences window", () => {
 });
 
 describe("history follows the live role", () => {
+  it("W58a history writes nothing until the rights are known", async () => {
+    vi.useFakeTimers();
+    vi.spyOn(Object.getPrototypeOf(workspace), "rightsKnown", "get").mockReturnValue(false);
+    const handle = await open("writer");
+    expect(history.readOnly, "N-3 no write before the rights").toBe(true);
+    handle.change((d) => A.splice(d, ["text"], 0, 0, "x")); // a change arrives: the claim timer arms
+    await vi.advanceTimersByTimeAsync(5_000);
+    expect(handle.doc()?.meta?.claimedAt, "N-3 no claim before the rights").toBeUndefined();
+  });
+
   it("a demoted writer's history becomes read-only without reload", async () => {
     await open("writer");
     expect(history.readOnly).toBe(false);

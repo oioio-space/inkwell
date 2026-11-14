@@ -232,11 +232,17 @@ func TestOnlyAnAdminInvites(t *testing.T) {
 	if _, err := b.Session.Join(t.Context(), inv.Text); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := b.Session.Invite("reader"); !errors.Is(err, trust.ErrNotAdmin) {
-		t.Errorf("Invite() by a writer = %v, want ErrNotAdmin", err)
+	// Rule N-2: a refusal is a result with a stable key, never an error, and
+	// nothing is written.
+	before := len(b.inv.currentList().Since(nil))
+	if got, err := b.Session.Invite("reader"); err != nil || got.Refused != RefusedNotAdmin || got.Text != "" {
+		t.Errorf("Invite() by a writer = %+v, %v, want Refused %q, no error", got, err, RefusedNotAdmin)
 	}
-	if _, err := b.Session.InviteDevice(); !errors.Is(err, trust.ErrNotAdmin) {
-		t.Errorf("InviteDevice() by a writer = %v, want ErrNotAdmin", err)
+	if got, err := b.Session.InviteDevice(); err != nil || got.Refused != RefusedNotAdmin || got.Text != "" {
+		t.Errorf("InviteDevice() by a writer = %+v, %v, want Refused %q, no error", got, err, RefusedNotAdmin)
+	}
+	if after := len(b.inv.currentList().Since(nil)); after != before {
+		t.Errorf("a refused invitation changed the member list: %d ops, was %d", after, before)
 	}
 	if _, err := a.Session.Invite("owner"); err == nil {
 		t.Error("Invite(unknown role) = nil")

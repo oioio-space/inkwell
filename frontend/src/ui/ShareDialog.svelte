@@ -8,6 +8,16 @@ let dialog: HTMLDialogElement | undefined = $state();
 let address = $state("");
 let copied = $state(false);
 
+const hostHelp = $derived(
+  {
+    loading: t("share.host.loading"),
+    admin: t("share.host.help"),
+    nonAdmin: t("share.host.adminOnly"),
+    notMember: t("share.host.notMember"),
+  }[workspace.inviteState],
+);
+const foreign = $derived(workspace.inviteState === "notMember");
+
 $effect(() => {
   if (open && !dialog?.open) dialog?.showModal();
   if (!open && dialog?.open) dialog.close();
@@ -48,13 +58,13 @@ async function join(e: SubmitEvent) {
 
   <section class="boxed card">
     <div class="row">
-      <span>{workspace.mayInvite ? t("share.host.help") : t("share.host.adminOnly")}</span>
+      <span>{hostHelp}</span>
       <button type="button" class="btn" disabled={!workspace.mayInvite} onclick={() => workspace.host()}>{t("share.host")}</button>
     </div>
     {#if workspace.invitation && workspace.invitationUsed}
       <div class="row" role="status">
         <span>{t("share.used")}</span>
-        <button type="button" class="btn" onclick={() => workspace.host()}>{t("share.renew")}</button>
+        <button type="button" class="btn" disabled={!workspace.mayInvite} onclick={() => workspace.host()}>{t("share.renew")}</button>
       </div>
     {:else if workspace.invitation}
       <div class="row">
@@ -74,7 +84,7 @@ async function join(e: SubmitEvent) {
 
   <form class="boxed card" onsubmit={join}>
     <label class="row">
-      <span>{t("share.join.help")}</span>
+      <span>{foreign ? t("share.join.foreignHelp") : t("share.join.help")}</span>
       <input
         bind:value={address}
         placeholder={t("share.join.placeholder")}

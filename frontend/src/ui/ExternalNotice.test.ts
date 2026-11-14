@@ -15,6 +15,7 @@ vi.mock("../../bindings/github.com/oioio-space/inkwell/internal/app/index", () =
 }));
 
 afterEach(() => {
+  vi.restoreAllMocks();
   workspace.notice = null;
   cleanup();
 });
@@ -28,6 +29,38 @@ const buttons = (host: HTMLElement) =>
   [...host.querySelectorAll("button")].map((b) => b.textContent?.trim());
 
 describe("notices about outside changes", () => {
+  it("W58a outside-edit actions write nothing while locked", async () => {
+    const lock = vi.spyOn(Object.getPrototypeOf(workspace), "locked", "get");
+    const action = (label: string) =>
+      [...document.querySelectorAll("button")].find((b) => b.textContent?.trim() === label);
+    const host = render(ExternalChangeToast, {});
+    const merged: typeof workspace.notice = {
+      kind: "merged",
+      id: 1,
+      name: "main.typ",
+      lines: 1,
+      ranges: [{ from: 0, to: 1 }],
+      skipped: [],
+    };
+    const ask: typeof workspace.notice = { kind: "ask", name: "main.typ" };
+    for (const [locked, disabled] of [
+      [true, true],
+      [false, false],
+    ] as const) {
+      lock.mockReturnValue(locked);
+      show(merged);
+      expect(action("Annuler")?.disabled, `N-3 undo, locked=${locked}`).toBe(disabled);
+      show(ask);
+      expect(action("Intégrer")?.disabled, `N-3 integrate, locked=${locked}`).toBe(disabled);
+    }
+    // The workspace itself refuses too (the Ctrl+Z path does not go through the button).
+    lock.mockReturnValue(true);
+    await expect(workspace.integrateExternal()).resolves.toBeUndefined();
+    expect(() => workspace.undoExternal()).not.toThrow();
+    expect(host).toBeTruthy();
+    lock.mockRestore();
+  });
+
   it("EXT-01 the toast says how many lines were taken in and offers View and Undo", () => {
     const host = render(ExternalChangeToast, {});
     show({

@@ -77,8 +77,9 @@ $effect(() => {
 });
 $effect(() => editor?.rename(me.name));
 $effect(() => editor?.setLang(lang));
-// A reader, or a person who was disconnected, reads without being able to type.
-$effect(() => editor?.setReadOnly(workspace.access !== undefined));
+// Until the rights are known, a reader, or a person who was disconnected (or whom the member list
+// does not name): the text is read, selected and copied, not typed in.
+$effect(() => editor?.setReadOnly(workspace.locked));
 </script>
 
 <div class="page" bind:this={host}></div>

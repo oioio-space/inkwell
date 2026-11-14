@@ -68,11 +68,19 @@ export function rowsOf(members: readonly Member[], connected: ReadonlySet<string
   });
 }
 
-/** Why this device cannot edit, if it cannot: its role, or a suspension (which wins). */
+/** What Go says about this device in the project's member list (`Session.Standing`). */
+export type Standing = "member" | "removed" | "notNamed";
+
+/**
+ * Why this device cannot edit, if it cannot. A device the list does not name (or no longer names)
+ * is read-only whatever it is told about roles; otherwise a suspension wins over a reader's role.
+ */
 export function accessOf(
   role: Role | undefined,
   suspended: boolean,
-): "reader" | "suspended" | undefined {
+  standing: Standing | undefined = undefined,
+): "reader" | "suspended" | "notNamed" | "removed" | undefined {
+  if (standing === "notNamed" || standing === "removed") return standing;
   if (suspended) return "suspended";
   return role === "reader" ? "reader" : undefined;
 }

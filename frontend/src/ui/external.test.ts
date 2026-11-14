@@ -53,11 +53,14 @@ describe("openExternal", () => {
   });
 });
 
-const sources = import.meta.glob(["../**/*.svelte", "../**/*.ts", "!../**/*.test.ts"], {
-  query: "?raw",
-  import: "default",
-  eager: true,
-}) as Record<string, string>;
+const sources = import.meta.glob(
+  ["../**/*.svelte", "../**/*.ts", "!../**/*.test.ts", "!../**/*.w58mutant-*"],
+  {
+    query: "?raw",
+    import: "default",
+    eager: true,
+  },
+) as Record<string, string>;
 
 describe("platform actions", () => {
   // Opening a link, a file or the file manager goes through openExternal only.

@@ -1041,6 +1041,36 @@
       "decision": "docs/plans/2026-11-14-ci1-github-ci.md"
     },
     {
+      "id": "77ac157f8efbe88a6e33c648b657bc90e02208df0c8f0f8c11b52179e32f5355",
+      "reason": "mise.toml: gate dependency changed: mise task test:py now also runs scripts/netsim/mutants_test.py (the tests of the new `expect` field of the mutant runner, W58a)",
+      "decision": "docs/plans/2026-11-14-w58a-foreign-read-only.md"
+    },
+    {
+      "id": "2c5b9cf1e2c85aa123406d2ba39f9b1700fe0609c02cd2e83fc26632534ef568",
+      "reason": "scripts/netsim/mutants.py: gate dependency changed: optional `expect` field (go mutants run `go test -json`, caught only if the named test fails with the expect text in its own output); entries without `expect` behave as before",
+      "decision": "docs/plans/2026-11-14-w58a-foreign-read-only.md"
+    },
+    {
+      "id": "cc74483ef2d8dc04a43cb1eab3b3541c0dc2679b60ea36aaa754f0fb29f0e472",
+      "reason": "scripts/netsim/mutants.py: timeout expression rewritten, not weakened: the `go test` command line with `timeout 900` moved unchanged from an inline sh([...]) call into a `cmd` list (plus -json when `expect` is set); the 900 s test cap is the same",
+      "decision": "docs/plans/2026-11-14-w58a-foreign-read-only.md"
+    },
+    {
+      "id": "9bd28b7aaef016ef0fd0d66feb981177812fba31558614c8408cdab9878336d4",
+      "reason": "scripts/netsim/mutants.py: timeout expression rewritten, not weakened: the runner's `timeout=1000` argument moved unchanged to the `run(cmd, tree, log=log, timeout=1000)` call (the runner is injectable for tests); same 1000 s cap",
+      "decision": "docs/plans/2026-11-14-w58a-foreign-read-only.md"
+    },
+    {
+      "id": "7f7f3a36da97f58174f05165813678ae05d7a51991e2ab1f997bc38fc720a4e9",
+      "reason": "scripts/netsim/mutants.toml: the header comment line ending `timeout.` is re-wrapped to document the new `expect` field; no timeout value changed; MW1..MW4 of block W58a added",
+      "decision": "docs/plans/2026-11-14-w58a-foreign-read-only.md"
+    },
+    {
+      "id": "46ff0b8e35e68764dfe916091e9371a582c3e886899a5ff32e56f46ffc30236c",
+      "reason": "scripts/netsim/mutants_test.py: new file, the tests of the `expect` field (injected runner, no Go build); added to test:py",
+      "decision": "docs/plans/2026-11-14-w58a-foreign-read-only.md"
+    },
+    {
       "id": "eaa7bf4a8b9c30d64b0ed71cb11ba18292a4a965fcd5d4057fe83db0efe69c87",
       "reason": "docs/adr/0044-sandbox-tiers.md: revision 2 rewrites the ADR on measured facts (gates/SB2/MEASUREMENTS.md) after Codex's round 1; the sentences that mention timeouts are prose of a draft ADR (no gate is frozen on it), not a weakened bound: timeout expression removed or rewritten: cached, each step bounded by `probeTimeout`:",
       "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
@@ -1079,6 +1109,11 @@
       "id": "ecac8b4b4830fe5c78fda201f9401c57168d91df221f41967c564fe545239d56",
       "reason": "scripts/sandbox-probe.sh: Q9 rewritten for decision D3 (trace only the sidecar): the three per-item `timeout -k 5 120 strace` lines moved into the new `perimeter` function with the same 120 s bound per item and a new `-ff` form; the probe is a measurement tool started by hand, run by no gate",
       "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "aaec0529e54dac51422cc57d24e80a6e2ebab22b41881c53f038f2e2d35a1ac1",
+      "reason": "frontend/e2e/ux/w58a.spec.ts: the driver of the W58a interface walkthrough (captures in light and dark, measured timings) is skipped unless W58A_UX=1, like the other walkthrough drivers: it is evidence tooling run by hand, not a test of the e2e suite; no existing test is skipped",
+      "decision": "docs/plans/2026-11-14-w58a-foreign-read-only.md"
     }
   ]
 }
