@@ -180,6 +180,9 @@ func (c *packageCache) extract(p bundledPackage, want map[string]fileSum) error 
 	return nil
 }
 
+// removeAll is os.RemoveAll; a test replaces it to play the other process of a race.
+var removeAll = os.RemoveAll
+
 // installTree builds a directory with fill in a temporary sibling of final and
 // moves it into place, replacing whatever was there. Other processes (a second
 // Inkwell window) may be doing the same: whoever finds final already equal to
@@ -202,8 +205,10 @@ func installTree(final string, want map[string]fileSum, fill func(tmp string) er
 		if verifyTree(final, want) == nil {
 			return nil
 		}
-		if err := os.RemoveAll(final); err != nil {
-			return err
+		// Another process may move its own tree into place while this one removes the old
+		// one (ENOTEMPTY): that is a lost race like a failed rename, so look again.
+		if lastErr = removeAll(final); lastErr != nil {
+			continue
 		}
 		if lastErr = os.Rename(tmp, final); lastErr == nil {
 			return nil

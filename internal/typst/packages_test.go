@@ -4,6 +4,7 @@ import (
 	"archive/tar"
 	"bytes"
 	"compress/gzip"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"io"
@@ -14,6 +15,7 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"testing/fstest"
 )
@@ -381,5 +383,41 @@ func readMember(t testing.TB, archive []byte, name string) []byte {
 			}
 			return data
 		}
+	}
+}
+
+// installTree's rule « a lost race is retried » (two windows installing the same package): the
+// other process moves its finished tree into place while this one removes the old one, so the
+// removal fails with a directory that is no longer empty. The tree in place is then the wanted
+// one, and that is success, not « directory not empty » (seen 1 time in a full run, 2026-11-14).
+func TestInstallTreeLostRemovalRace(t *testing.T) {
+	content := []byte("hello")
+	want := map[string]fileSum{"a.txt": {sum: sha256.Sum256(content), size: int64(len(content))}}
+	fill := func(dir string) error { return os.WriteFile(filepath.Join(dir, "a.txt"), content, 0o600) }
+	final := filepath.Join(t.TempDir(), "pkg")
+	if err := os.Mkdir(final, 0o700); err != nil { // a stale, wrong tree
+		t.Fatal(err)
+	}
+	removals := 0
+	removeAll = func(path string) error {
+		if path != final {
+			return os.RemoveAll(path)
+		}
+		removals++
+		if err := fill(final); err != nil { // the other process wins here
+			t.Fatal(err)
+		}
+		return &os.PathError{Op: "unlinkat", Path: path, Err: syscall.ENOTEMPTY}
+	}
+	t.Cleanup(func() { removeAll = os.RemoveAll })
+
+	if err := installTree(final, want, fill); err != nil {
+		t.Fatalf("installTree after a lost removal race = %v, want nil", err)
+	}
+	if removals != 1 {
+		t.Errorf("final was removed %d times, want 1: the winner's tree must be kept", removals)
+	}
+	if err := verifyTree(final, want); err != nil {
+		t.Errorf("tree in place: %v", err)
 	}
 }
