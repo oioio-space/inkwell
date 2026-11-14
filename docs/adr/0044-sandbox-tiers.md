@@ -1,5 +1,5 @@
 ---
-status: proposed # revision 2 (2026-11-14), written on measured facts (gates/SB2/MEASUREMENTS.md, plan « Local measurements »); round 1 of review: gates/SB2/REVIEW.md (REJECT, every finding answered here or in the plan); round 2 pending
+status: proposed # revision 3 (2026-11-14): the integrator's design decisions D1-D9 after Codex's round 2 (REJECT), gates/SB2/REVIEW.md « Round 2 »; measured facts: gates/SB2/MEASUREMENTS.md runs 1 and 2; a third probe run settles D3-D5 before the freeze
 date: 2026-11-14
 amends: ADR 0033 (the namespace probe and its fallback), ADR 0042 A3 (the memory fallback; the cgroup bound needs a PID namespace, unchanged); spec §9.11 (refuse rather than weaken) is kept and made total
 decision-makers: [Mathieu]
@@ -37,10 +37,20 @@ On GitHub's stock Ubuntu 24.04 runners, amd64 and arm64, kernel 7.0, run 4363884
    refused. Peak resident memory: compile 70 MiB, tinymist session 180 MiB; the compile needs an address space between
    128 and 256 MiB (fails at 128, succeeds at 256; the default `RLIMIT_AS` is 4 GiB, `internal/typst/engine.go:46`).
 
-Not measured yet (the next probe run, questions Q8–Q11 of `scripts/sandbox-probe.sh`): process creation by the
-sidecars on arm64 and on the runner's amd64, the namespace-free tier on a stock runner, the calls refused inside the
-sandbox on arm64. A real Ubuntu 24.04 **desktop** (kernel 6.8, Landlock ABI 4 according to the kernel documentation's
-ABI table — not measured) is the owner's check at the end.
+7. Probe run 2 (run 43642240366): tier F forced on the stock amd64 runner compiles to PDF and starts tinymist; with
+   the candidate profile both run isolated; on arm64 both die because the allow-list refuses `ppoll` (73) and `tkill`
+   (130) (Rust's abort path calls `tkill` after the failed `ppoll`). The trace of a tinymist session showed one process
+   creation (`vfork` on amd64, `clone` without `CLONE_THREAD` on arm64) and two `execve`, but it traced the Python
+   driver too, so the child is not attributed yet (Codex, round 2); `clone3` ×15 are the threads.
+8. Linking (this machine, Q12): typst is a static-pie musl binary; tinymist is a dynamic `linux-gnu` binary
+   (interpreter `/lib64/ld-linux-x86-64.so.2`, needs `libc.so.6`, `libm`, `libdl`, `libpthread`, `libgcc_s`; glibc
+   symbol versions up to `GLIBC_2.28`), so it runs on the machine's glibc (2.44 here, 2.39 on Ubuntu 24.04).
+
+Not measured yet (probe run 3, questions Q9, Q12 and Q13 of `scripts/sandbox-probe.sh`, plan « Probe run 3 »): which
+process tinymist creates and why (Q9 now traces only the sidecar), the `prctl` options and `ioctl`s each item of the
+perimeter makes (Q13), the glibc of the runners (Q12), and arm64 once `ppoll` is allowed. A real Ubuntu 24.04
+**desktop** (kernel 6.8, Landlock ABI 4 according to the kernel documentation's ABI table — not measured) is the
+owner's check at the end.
 
 ## Decision
 
@@ -52,15 +62,57 @@ A launch runs in exactly one of two tiers, or is refused.
 |---|---|---|
 | Namespaces | user, mount, PID, IPC; network when `NoNetwork`; `/proc` remounted as PID 1 | none |
 | Files | private mount namespace, output on a private tmpfs sized to the budget, IPC folders hidden; Landlock on top | Landlock only: read the listed paths; write only the output slots created beforehand, `RLIMIT_FSIZE` on each; **execute only the target and the files its ELF interpreter needs** (today `readAccess` grants execute on every read path, `launcher_linux.go:422`) |
-| Processes | the sidecar's children live in its PID namespace and die with it | **no process creation**: seccomp allows `clone` only with `CLONE_THREAD`, answers `clone3` ENOSYS (the C library then uses `clone`; Go never uses `clone3` for threads), denies fork and vfork; `PR_SET_PDEATHSIG` SIGKILL before the target starts, so the sidecar never outlives its parent |
+| Processes | the sidecar's children live in its PID namespace and die with it | **no process creation**: seccomp allows `clone` only with `CLONE_THREAD`, answers `clone3` ENOSYS (glibc then uses `clone`, proven by a named test per architecture, point 1c; Go never uses `clone3` for threads), denies fork and vfork; the **filiation protocol** of point 1a (parent-death signal armed, parent checked, `prctl` filtered so that it cannot be disarmed) |
 | Other processes | not visible (PID namespace) | their **content** is not readable (Landlock grants `/proc/self` and `/proc/thread-self` only, `launcher_linux.go:437`); their **existence and metadata** stay visible to `stat` and `sched_getaffinity` (residual R-3); signals: `kill`, `tkill`, `rt_sigqueueinfo`, `pidfd_*` are not allowed, `tgkill` only to its own pid (exact here, since the process cannot fork), Landlock signal scoping when ABI ≥ 6 |
 | Resource limits of others | n/a | `prlimit64` allowed only with pid 0 (rule S-1, both tiers) |
 | Network | private network namespace when `NoNetwork`; seccomp denies `socket` in all cases | seccomp denies `socket`, so no TCP, UDP, pathname or abstract UNIX socket; only `socketpair(AF_UNIX, SOCK_STREAM)` for the runtime's self-pipe; Landlock TCP rules when ABI ≥ 4, UDP when ABI ≥ 10, abstract-socket scoping when ABI ≥ 6 |
 | Memory | cgroup scope when one is delegated **and** a PID namespace exists (ADR 0042, `scope_linux.go:158-160`), else `RLIMIT_AS` per process | `RLIMIT_AS` only; with no descendant possible it bounds the whole job |
-| Always | `no_new_privs`, capabilities dropped, the seccomp allow-list, Landlock (ABI ≥ 3), the caller's deadline | same |
+| Always | `no_new_privs`, capabilities dropped, the seccomp allow-list (`prctl` by option, `tkill` denied), Landlock (ABI ≥ 3), the caller's deadline | same; the memory bound is on the **address space** (`RLIMIT_AS`), never a promise about kernel memory |
 
 **Refuse** when: Landlock is unavailable or its ABI is below 3; seccomp cannot be installed; neither tier's launch
-succeeds; a launch's own verification (point 3) disagrees with the decided tier.
+succeeds; a launch's own verification (point 3) disagrees with the decided tier; **on arm64 until block SB2a2 has
+proven its inventory** (plan, D7): today both sidecars die there in either tier, so a refusal with its sentence is the
+truth, not a regression.
+
+### 1a. Filiation in tier F (decision D1)
+
+Without a PID namespace nothing kills the sidecar with its parent except the parent-death signal, which a process can
+change for itself and which is tied to the thread that forked it (`PR_SET_PDEATHSIG(2const)`). So, in this order, in
+the launcher, before the seccomp filter and before `execve(target)`:
+
+1. `prctl(PR_SET_PDEATHSIG, SIGKILL)`;
+2. read the parent pid (`PPid:` of `/proc/self/status`, the principle `armNamespaceParentDeath` already uses,
+   `internal/sidecar/launcher_linux.go:684`) and compare it with the pid the parent passed; a difference means the
+   parent died before step 1: exit at once with a distinct status (covers death before arming);
+3. install the seccomp filter, in which `prctl` is allowed only for the options the two sidecars measurably use during
+   the perimeter (Q13) and `PR_SET_PDEATHSIG` is **denied**: a document turned into code cannot disarm the signal.
+
+The parent side keeps the forking goroutine on its OS thread for the child's whole life (`runtime.LockOSThread` in
+`Run`, `internal/sidecar/run.go:206-208`, unchanged and now a named rule), since the signal fires when that thread
+exits. Witnesses: `prctl(PR_SET_PDEATHSIG, 0)` from the target is refused; the parent killed before arming, right
+after arming, and during the run: the sidecar is gone within 1 s (checked by pid).
+
+### 1b. The functional perimeter guaranteed in tier F (decision D2)
+
+F guarantees exactly what inkwell uses today, nothing more:
+
+| Sidecar | Item | Caller |
+|---|---|---|
+| typst | `compile --format pdf` (preview and export), `compile --format svg --pages` (visible pages), `query --format json`, `eval --in` (source-to-preview anchors) | `internal/typst/engine.go:578,583`, `query.go:48`, `anchors.go:83` |
+| tinymist | `initialize`, `initialized`, `textDocument/didOpen`, `didChange`, `completion`, `signatureHelp`, `hover` (the allow-list `internal/language/language.go:183-187`), `$/cancelRequest`, `workspace/didChangeConfiguration`, `shutdown`, `exit` (sent by Go), `textDocument/publishDiagnostics` (from the server) | `internal/language/language.go`, `frontend/src/language/client.ts` |
+
+Everything else tinymist can do (formatting, rename, references, code actions, commands, an external tool) is outside
+the guarantee: inkwell does not call it, and the language bridge refuses it. Each item is compared, in F with the final
+filter, against an unrestricted run of the same pinned binary (`TestPerimeterF/<item>`, structured results), on
+amd64 in SB2a1 and on arm64 in SB2a2. If probe run 3 shows that an item of the perimeter needs tinymist's child
+process, F does **not** allow process creation: that item is refused in F (the plan names it and its sentence).
+
+### 1c. Threads without `clone3` (decision D4)
+
+glibc creates threads with `clone3` since 2.34 and falls back to `clone` when `clone3` answers ENOSYS
+(`sysdeps/unix/sysv/linux/clone-internal.c`); typst is static musl, which uses `clone`. A named test runs a real
+tinymist session and a real typst compile with `clone3` answered ENOSYS and asserts that several threads were created
+and that the perimeter's results are unchanged, on amd64 and on arm64, recording the glibc version loaded (Q12).
 
 ### 2. One decision, by launching each tier for real
 
@@ -101,6 +153,10 @@ launched next: a launcher that cannot be executed at all (a `noexec` mount, a po
   then waits — with a deadline — for the parent's « proceed » before `execve(target)`. The parent compares with the
   decided tier; on any difference it kills the launcher and returns an error naming both. The target is the only
   process that reads the project, and it is not started until the check passes.
+- The handshake fails closed: a report that is absent, truncated or invalid, an end of file, a « proceed » that never
+  comes, or a cancellation at any phase ends the launch with an error, the launcher killed and reaped within a bound;
+  every descriptor but the target's standard ones and the report pipe is closed before `execve(target)` (plan T-4,
+  T-5).
 - A launch failure in a tier the probe accepted is an error with its cause, never a silent retry in another tier.
   The memory fallback (cgroup → rlimit, within N) creates the output slots once, after the bound is settled
   (finding 4).
@@ -109,7 +165,7 @@ launched next: a launcher that cannot be executed at all (a `noexec` mount, a po
 
 Every blocking call of `Run`, of the probe and of the scope code is bound to the caller's context or to a named
 constant: the pidfd wait in `captureDeath` (poll on the pidfd with the context), the report, ready and proceed pipes,
-the D-Bus calls, the cgroup removal. Measured on the stock runner, the two tests that « never returned » fail at once
+the D-Bus calls, the cgroup removal, and the termination and reaping of the launcher and the target. Measured on the stock runner, the two tests that « never returned » fail at once
 there; the hang seen earlier came with the restriction lifted, and `TestCgroupWorkloadAndDescendantsInside`'s wait
 cycle (Codex, round 1, M2) is a defect of that test.
 
@@ -119,8 +175,9 @@ Assume the document turns typst or tinymist into arbitrary code. In F it can: re
 the caller's deadline; allocate up to `RLIMIT_AS` (the whole job: it cannot fork); write the output slots up to their
 budget; `execve` only the target itself or its interpreter, under the same filter and ruleset; learn that other pids
 exist and their CPU masks; reach the kernel through the allowed calls in the host's namespaces. It cannot: open any
-socket; read another process's memory, environment or files under `/proc`; signal, trace or re-limit another
-process; create a process; outlive inkwell; write outside its slots. Accepted, because the alternative on a stock
+socket; read another process's memory, environment or files under `/proc`; signal (`tkill` denied, `tgkill` to itself
+only), trace or re-limit another process; create a process; disarm its parent-death signal or outlive inkwell; write
+outside its slots. Accepted, because the alternative on a stock
 Ubuntu without the package (a build, an archive, an AppImage) is no preview at all, and because the remaining surface is
 the kernel's own, the level of the Landlock-and-seccomp confinement used where namespaces are unavailable. Packaged
 Ubuntu runs in N (point 6).
@@ -146,8 +203,18 @@ profile inkwell /usr/bin/inkwell flags=(unconfined) {
 0). Measured: the label covers the re-execution and the extracted sidecars, so the packaged binary runs in N. A binary
 anywhere else runs in F (measured on the runner: refused today, F after SB2a). The .rpm ships no profile: Fedora's
 SELinux lets `unconfined_t` create user namespaces (measured on Fedora 45 here; the policy of other SELinux distributions
-is not measured). The profile is unconfined: it adds the right to create user namespaces and nothing else, the right
-Ubuntu grants to the browsers and editors it ships profiles for; inkwell then confines its own children itself.
+is not measured).
+
+**The widening, accepted explicitly (decision D9).** The profile is `unconfined` plus `userns`: it removes Ubuntu's
+restriction for `/usr/bin/inkwell` and everything it starts, before any confinement of ours. Beyond our sandbox this
+allows the whole application and its descendants (the webview's helper processes included) to create user namespaces,
+and so exposes more kernel interfaces (namespaced mounts, network stacks, capabilities inside a namespace) to code
+running as the person; it gives no root on the host and no capability outside a namespace. Accepted under the peer
+model because the code that runs there is inkwell's own and the pinned, checked sidecars, and because the document
+from a peer reaches only the sidecars, which tier N then confines (namespaces, Landlock, seccomp, no capability); it is
+the right Ubuntu itself grants to the 92 browsers and editors it ships profiles for (measured, Q1). Install, upgrade
+(from a version without the profile and with it), remove, purge, and AppArmor absent or disabled are the upgrade
+matrix of block SB2p, whose gate is frozen before its implementation.
 
 ### 7. What the person is told
 
@@ -171,6 +238,9 @@ problems list only when a launch is **refused**; the reduced tier raises no toas
 | Cgroup bound in F | refused: ADR 0042's `NoOrphan` needs a PID namespace (Codex C1) |
 | F allowing children with `RLIMIT_NPROC` | refused: `RLIMIT_NPROC` is per user, not per job (Codex C2); measured unnecessary for typst and tinymist |
 | Ask the person to set the sysctl to 0 | weakens the whole machine for one program |
+| Allow `tkill` on arm64 because the abort path called it | refused (D5): it was called only because `ppoll` failed; any thread-kill call stays denied unless a remeasure shows normal work needs it, and then only restricted to the caller's own threads with a witness that targets an outside thread |
+| Allow tinymist's child process in F | refused (D3): F never allows process creation; if a perimeter item needs it, that item is refused in F |
+| Rely on the parent-death signal alone | refused (D1): it can be disarmed by the process and races with the parent's death; the parent check and the `prctl` filter close both |
 | bubblewrap, a setuid helper, Typst as WebAssembly | bubblewrap needs the same allowance; setuid is a larger risk; WebAssembly is block SW1, measured first (W70) |
 
 ## Consequences
@@ -182,10 +252,12 @@ problems list only when a launch is **refused**; the reduced tier raises no toas
 
 ## Residuals
 
-- R-1: aggregate memory without a cgroup in N (ADR 0042, unchanged); not a residual in F (one process).
+- R-1: aggregate memory without a cgroup in N (ADR 0042, unchanged); not a residual in F (one process). In both
+  tiers the bound is the address space: memory the kernel allocates on the process's behalf is not bounded.
 - R-2: on Landlock ABI 3–5, signal and abstract-socket scoping come from seccomp alone (sockets denied, `tgkill` to self).
 - R-3: other processes' existence and CPU masks are visible in F.
-- R-4: arm64's allow-list gaps (`ppoll` measured as called at start; inside the sandbox not yet traced): plan, SB2a.
+- R-4: arm64: `ppoll` and `tkill` measured as refused inside (run 2); the sidecars are refused on arm64 until block
+  SB2a2 adds `ppoll` (and only what probe run 3 proves needed; `tkill` stays denied) and passes the arm64 inventory.
 - R-5: AppImage or Flatpak packaging would need its own answer; a desktop session differs from the runner (owner's check).
 
 ## Sources
@@ -199,6 +271,10 @@ problems list only when a launch is **refused**; the reduced tier raises no toas
   UNIX socket scoping, 9 pathname UNIX sockets, 10 UDP; <https://docs.kernel.org/userspace-api/landlock.html>.
   The kernel release of each ABI comes from the man-pages Landlock table (Codex, round 1): ABI 4 = Linux 6.7, ABI 6 =
   Linux 6.12; Ubuntu 24.04's GA kernel 6.8 therefore has ABI 4 (not measured on a desktop).
-- `prctl(2)`, `PR_SET_PDEATHSIG`: kept across `execve` of a non-set-user-ID binary; `clone(2)`: `CLONE_THREAD`;
+- `PR_SET_PDEATHSIG(2const)` (man-pages): the signal is sent when the parent **thread** terminates, is kept across
+  `execve` of a non-set-user-ID binary, and the process may change it — hence point 1a;
+  <https://man7.org/linux/man-pages/man2/PR_SET_PDEATHSIG.2const.html>; `clone(2)`: `CLONE_THREAD`;
+- glibc `sysdeps/unix/sysv/linux/clone-internal.c`: `clone3` first, `clone` when it answers ENOSYS (read by Codex,
+  round 2): <https://raw.githubusercontent.com/bminor/glibc/master/sysdeps/unix/sysv/linux/clone-internal.c>;
   `golang.org/x/sys/unix` `zsysnum_linux_{amd64,arm64}.go` (read locally): `SYS_PRLIMIT64` 302/261, `SYS_SETRLIMIT`
   160/164, `SYS_PPOLL` 271/73, `SYS_CLONE3` 435/435; arm64 has no `fork` or `vfork` system call.

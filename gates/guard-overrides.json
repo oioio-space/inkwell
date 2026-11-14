@@ -1059,6 +1059,26 @@
       "id": "e3937b90c44bd25df8f340a33d627a90aade11654dd4e40ecf707dcf0e29aa31",
       "reason": "internal/sidecar/probe_report_linux_test.go: the inert measurement test (INKWELL_SANDBOX_PROBE=1 only) gains TestSandboxProbeTiers, which runs a real compile and a tinymist session in each tier and needs a longer context than the version check; it never runs in CI or gates",
       "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "8174d7a9346804540166eca82facc90aca9d8f26c2907f4d19f6b211fd6760f1",
+      "reason": "docs/plans/2026-11-14-sb2-sandbox-tiers.md: revision 3 of a draft plan (no gate frozen on it) rewrites the CI paragraph; the stock job still gives every step a timeout (« CI » section), nothing is weakened",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "7ac1ff8fc4d7f01a4131ecfa6f262eb735a4f3215c589c2fd1df6a1e8737d1fb",
+      "reason": "scripts/sandbox-probe.sh: Q9 rewritten for decision D3 (trace only the sidecar): the three per-item `timeout -k 5 120 strace` lines moved into the new `perimeter` function with the same 120 s bound per item and a new `-ff` form; the probe is a measurement tool started by hand, run by no gate",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "279e8ea266317592bc13bd5e2b7c4d42edcd2bd2c5290892ebe268f2ae0666fd",
+      "reason": "scripts/sandbox-probe.sh: Q9 rewritten for decision D3 (trace only the sidecar): the three per-item `timeout -k 5 120 strace` lines moved into the new `perimeter` function with the same 120 s bound per item and a new `-ff` form; the probe is a measurement tool started by hand, run by no gate",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "ecac8b4b4830fe5c78fda201f9401c57168d91df221f41967c564fe545239d56",
+      "reason": "scripts/sandbox-probe.sh: Q9 rewritten for decision D3 (trace only the sidecar): the three per-item `timeout -k 5 120 strace` lines moved into the new `perimeter` function with the same 120 s bound per item and a new `-ff` form; the probe is a measurement tool started by hand, run by no gate",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
     }
   ]
 }

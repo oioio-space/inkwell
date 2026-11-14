@@ -1,6 +1,6 @@
 # SB2 - reviews of the specification
 
-Specification: `docs/adr/0044-sandbox-tiers.md`, `docs/plans/2026-11-14-sb2-sandbox-tiers.md`, draft `gates/SB2a.toml`.
+Specification: `docs/adr/0044-sandbox-tiers.md`, `docs/plans/2026-11-14-sb2-sandbox-tiers.md`, draft `gates/SB2a.toml` (rev 1–2; rev 3: `gates/SB2a1.toml`; the line numbers of round 1 refer to the rev-1 draft).
 
 ## Round 1 — Codex on revision 1 (REJECT), 2026-11-14
 
@@ -31,6 +31,10 @@ machine (`gates/SB2/MEASUREMENTS.md`, plan « Local measurements »); the last c
 Counts: accepted 11 (C1, C2, M1, M3, M5, M6, M8, M9, M10, M11, M12) plus the minor; accepted and to measure first 1
 (M7); to measure first 1 (M4); verified by reading, with a part to measure 1 (M2). Refuted: none.
 
+Numbering: round 1 has exactly two critical (C1, C2), twelve major (M1–M12) and one minor (m1), as Codex's round-1
+verdict counts them. The round-2 request named « M1–M14 » by mistake (the integrator's error); Codex's round-2 « M13,
+M14 not evaluable » refers to findings that never existed.
+
 ### What the probe answers, and what it cannot
 
 | Question | Fact | Settles |
@@ -59,3 +63,34 @@ its interpreter's files keeps a dynamically linked tinymist working; that `PR_SE
 `execve` really kills the target when inkwell dies (the launcher's parent is inkwell); that the decision table is total
 with EACCES counted as a namespace refusal only because `f` is tried next; the gate's `github` criterion against a
 stale or partial verdict.
+
+## Round 2 — Codex on revision 2 (REJECT), 2026-11-14, design decisions
+
+Codex's round-2 verdict on rev 2: C1, M1, M2, M3, M5, M6, M7, M9, M11 resolved; C2, M4, M8, M10, M12 and m1 not
+resolved; new findings: one critical (F can outlive inkwell: `prctl` is allowed, so the parent-death signal can be
+disarmed), majors (the arming race; Q9 traced the Python driver too, so tinymist's child is not attributed; F's
+functional compatibility not shown beyond completions and diagnostics; the `clone3` fallback not qualified for the
+`linux-gnu` tinymist; `tkill` must not become a general permission; the GitHub proof bypassable and incompatible with an
+uncommitted candidate; vacuous passes through generic skips and partial arm64 inventories), minors (the summed caps
+exceed 45 min; the package's upgrade matrix). At a second round the method asks for design decisions, not patches; the
+integrator took D1–D9 (rows in `docs/autonomous-decisions.md`), written in ADR 0044 rev 3 and the plan rev 3.
+
+| Decision | Answers | Where in rev 3 |
+|---|---|---|
+| D1 filiation protocol of F: arm `PR_SET_PDEATHSIG` in the launcher before seccomp, check the parent pid against the one given, `prctl` filtered by option (measured set, `PR_SET_PDEATHSIG` denied after arming), forking thread locked for the child's life | the new critical (disarm), the arming race, C2 | ADR point 1a; plan S-4, `TestFiliation/*`, MS9, MS12 |
+| D2 functional perimeter of F = what inkwell uses today (typst compile PDF/SVG, query, eval; tinymist's allow-listed methods), compared with an unrestricted run on each architecture | F's compatibility | ADR point 1b; plan S-5, `TestPerimeterF/*` |
+| D3 measure before forbidding: Q9 traces only the sidecar (pid, ppid, path, argv, result), Q12 linking and libc, Q13 `prctl` options and `ioctl`s per perimeter item; F never allows process creation, a perimeter item that needs a child is refused in F | Q9's attribution | plan « Probe run 3 »; `scripts/sandbox-probe.sh` q9, q12, q13 |
+| D4 libc matrix: a real tinymist session and a typst compile with `clone3` answered ENOSYS, threads counted, results unchanged, glibc recorded, amd64 (SB2a1) and arm64 (SB2a2) | the `clone3` fallback | ADR point 1c; plan S-6, MS14 |
+| D5 `tkill` stays denied; `ppoll` added on arm64 then remeasure; `tkill` only with a demonstrated restriction to the caller's threads if normal work needs it, decided by `TestEscape/F/tkill-other-thread`; M4 by a raw `syscall(164, …)` test | `tkill`, M4 | ADR residual R-4 and considered options; plan A-1, A-2 |
+| D6 the candidate published on `candidate/sb2a1-<n>`, `ci.yml` started on it by `workflow_dispatch`, `scripts/gh-verdict.py` re-fetching provenance, SHA, status, jobs, artefacts and the inventory at gate time | the GitHub proof, M8 | plan « The candidate and its GitHub proof » |
+| D7 mandatory inventory per machine kind and tier; no skip in F; `n-unavailable` only with the matching tier report | vacuous passes, M10, M12 | plan « The mandatory inventory » |
+| D8 one global cap of 45 min; SB2a split into SB2a1 (about 39 min) and SB2a2 (arm64, about 10 min local); SB2p separate with its gate frozen first | the budget, m1 | plan « Why SB2a is split », « Durations » |
+| D9 the AppArmor widening accepted explicitly; the bound is on the address space, never kernel memory | the package and widening minor | ADR point 6 « The widening », residual R-1 |
+
+Also applied: the handshake cases (report absent, truncated, invalid, EOF, proceed absent, cancellation at each phase),
+descriptors closed before exec, termination and reaping bounded (plan T-4, T-5; ADR point 3); Landlock ABI 3 and 4
+witnesses (plan, `TestEscape/F-abi3`, `F-abi4`).
+
+Still open before SB2a1's freeze: probe run 3 (Q9, Q12, Q13 on both runners), the `prctl` allow-list written from Q13,
+the perimeter item tinymist's child serves if any, and Codex's third round on rev 3.
+
