@@ -1,16 +1,16 @@
 # SB2 - the sidecar sandbox off the developer machine: four blocks
 
 Status: step 1, revision 3 (2026-11-14): the integrator's design decisions D1–D9 after Codex's round 2 (REJECT,
-`gates/SB2/REVIEW.md` « Round 2 »); round 1 answered in rev 2; gates not frozen. Decision:
-`docs/adr/0044-sandbox-tiers.md` rev 3. Measurements: `gates/SB2/MEASUREMENTS.md` (runs 1 and 2 on stock Ubuntu
+`gates/SB2/REVIEW.md` « Round 2 »), confirmed by Codex (« Round 3 »); gate `gates/SB2a1.toml` frozen. Decision:
+`docs/adr/0044-sandbox-tiers.md` rev 3. Measurements: `gates/SB2/MEASUREMENTS.md` (runs 1 to 4 on stock Ubuntu
 24.04) and « Local measurements » below. Requirements W69 (an R1 criterion), W68. Rigour: **complete** for SB2a1,
 SB2a2 and SB2p, standard for SB2b.
 
 | Order | Block | Content | Gate |
 |---|---|---|---|
-| 0 | probe run 3 | `sandbox-probe.yml` with the new Q9, Q12, Q13 (below), before SB2a1's freeze | `gates/SB2/MEASUREMENTS.md` |
-| 1 | **SB2a1** | tiers N and F, one decision, verification at each launch, the filiation protocol (D1), no process creation in F, the perimeter (D2), `clone3` fallback on amd64 (D4), `prlimit64` pid 0, deadlines, sentences, the stock-Ubuntu job on amd64, the candidate published and checked (D6), arm64 **refused** with its sentence | `gates/SB2a1.toml` (draft rev 3) |
-| 2 | **SB2a2** | arm64: `ppoll` and only what probe run 3 proves needed (D5), `setrlimit` 164 with the raw-call test (M4), the arm64 inventory (D7), the refusal of step 1 lifted | `gates/SB2a2.toml`, written and frozen before its implementation, after SB2a1 is merged |
+| 0 | probe runs 3 and 4 | done: Q9, Q12, Q13 on both runners, settled facts below | `gates/SB2/MEASUREMENTS.md` |
+| 1 | **SB2a1** | tiers N and F, one decision, verification at each launch, the filiation protocol (D1), no process creation in F, the perimeter (D2), `clone3` fallback on amd64 (D4), `prlimit64` pid 0, deadlines, sentences, the stock-Ubuntu job on amd64, the candidate published and checked (D6), arm64 **refused** with its sentence | `gates/SB2a1.toml` (frozen) |
+| 2 | **SB2a2** | arm64: `ppoll`, then a remeasure; anything more only if it shows normal work needs it (D5), `setrlimit` 164 with the raw-call test (M4), the arm64 inventory (D7), the refusal of step 1 lifted | `gates/SB2a2.toml`, written and frozen before its implementation, after SB2a1 is merged |
 | 3 | **SB2p** | the AppArmor profile in the .deb (ADR point 6), its upgrade matrix (D9), the stock job's N step | `gates/SB2p.toml`, frozen before its implementation |
 | 4 | **SB2b** | the allow-list generator translates names through a reviewed table and checks the generated files; `watchDir` not in mount mode; true comments | `gates/SB2b.toml` |
 
@@ -31,18 +31,22 @@ smoke exceeds it.
 | Memory | `/usr/bin/time -v`; `ulimit -v` bisection | peak resident 70 MiB (compile), 180 MiB (tinymist); the compile needs between 128 and 256 MiB of address space |
 | Linking (Q12) | `file`, `readelf`, `ldd` | typst: static-pie musl; tinymist: dynamic `linux-gnu`, interpreter `/lib64/ld-linux-x86-64.so.2`, glibc symbol versions up to 2.28, runs on the machine's glibc (2.44) |
 
-`strace` is not installed here: Q9 and Q13 run on the runners only.
+`strace` is not installed here: Q9 and Q13 ran on the runners (runs 3 and 4).
 
-## Probe run 3 (before SB2a1's freeze) — what it must settle
+## Probe runs 3 and 4 — settled facts (`gates/SB2/MEASUREMENTS.md`)
 
-- **Q9 (D3)** — every thread, process creation and `execve` of typst and tinymist during the whole perimeter (D2),
-  tracing only the sidecar and its descendants (the tracer is their parent; the driver is not traced), with pid,
-  parent pid, call, path, argv and result. If tinymist creates a process: which program, for which perimeter item.
-  That item is then refused in F (never process creation allowed), and SB2a1 names it and its sentence.
-- **Q12** — the runners' glibc and the sidecars' linking on amd64 and arm64 (D4's matrix).
-- **Q13 (D1, D3)** — the `prctl` options and `ioctl` requests each perimeter item makes: the `prctl` allow-list of F
-  is exactly that set minus `PR_SET_PDEATHSIG`.
-- **Q8 on arm64 with `ppoll` allowed** is SB2a2's first measurement (D5), not SB2a1's.
+- **Q9 (D3)** — traced alone (the tracer is the sidecar's parent), across the whole perimeter (D2), on amd64 and
+  arm64: **no process is created**; typst compile to PDF and SVG, query and eval run with 4 threads, the tinymist
+  session with 14 threads, each with one `execve` (its own start). Run 2's « child » was the probe driver's `Popen`.
+  F's no-process rule removes no perimeter item.
+- **Q12 (D4)** — typst is static on both architectures (no interpreter); tinymist is dynamic glibc, symbol versions
+  up to `GLIBC_2.28` (amd64) and `GLIBC_2.30` (arm64); the runners have glibc 2.39. This is a fact for S-6, not a
+  replacement for it.
+- **Q13 (D1, D3)** — `prctl`: `PR_SET_NAME` only (tinymist, thread names), none for typst, so F's `prctl` allow-list
+  is `PR_SET_NAME` and `PR_SET_PDEATHSIG` is denied; `ioctl`: `TIOCGWINSZ` (typst), `FIONREAD` and `TCGETS`
+  (tinymist), F's `ioctl` allow-list.
+- **arm64** — the allow-list refuses `ppoll` (both sidecars call it at start); `tkill` appears only in the abort path
+  that follows. How both behave once `ppoll` is allowed is SB2a2's first measurement (D5), not SB2a1's.
 
 ## SB2a1 - rules
 
@@ -59,10 +63,14 @@ the rule tag in its own `go test -json` events.
 | T-6 | the cgroup → rlimit fallback (N, PID namespace present) creates the output slots once; no cgroup without a PID namespace | `TestPlacementRefusedFallsBack`; `TestNoCgroupWithoutPIDNamespace` | MS6 slots created before the retry → `T-6 fallback` |
 | S-1 | `prlimit64` only with pid 0, both tiers, both architectures (interpreted filters) | `TestSeccompPrlimitPidZero` (pid {0, self, parent, 1, -1, 2^31, 2^32+self} × resource × pointer {nil, set}, for `AUDIT_ARCH_X86_64` and `AUDIT_ARCH_AARCH64`); `TestTargetCannotLimitAnotherProcess/{N,F}` | MS7 pid check removed → `S-1 prlimit64` |
 | S-2 | F: no process creation | `TestSeccompNoProcessInF` (interpreted filter: `clone` with and without `CLONE_THREAD` and every flag combination of `CLONE_VM`, `CLONE_VFORK`, `CLONE_PARENT`, `CLONE_NEWUSER`; `clone3`; fork; vfork; per architecture) | MS8 `clone` allowed without `CLONE_THREAD` → `S-2 no process` |
-| S-4 | F: filiation (D1): parent-death signal armed, parent checked, `prctl` limited to the measured options, `PR_SET_PDEATHSIG` denied after arming; the forking thread locked for the child's life | `TestSeccompPrctlOptions` (interpreted: each measured option allowed, `PR_SET_PDEATHSIG` and every other option EPERM, both architectures); `TestFiliation/{disarm,parent-dies-before-arming,parent-dies-after-arming,parent-dies-during-run}` (the sidecar is gone within 1 s, by pid; « before arming » forced by a seam that delays step 1 and kills the parent) | MS9 no parent check → `S-4 parent check`; MS12 `PR_SET_PDEATHSIG` allowed → `S-4 prctl` |
+| S-4 | F: filiation (D1): parent-death signal armed, parent checked, `prctl` limited to `PR_SET_NAME` and `ioctl` to `TIOCGWINSZ`, `FIONREAD`, `TCGETS` (measured, Q13), `PR_SET_PDEATHSIG` denied after arming; the forking thread locked for the child's life | `TestSeccompPrctlOptions` (interpreted: `PR_SET_NAME` allowed, `PR_SET_PDEATHSIG` and every other option EPERM, both architectures); `TestSeccompIoctlRequests` (interpreted: the three requests allowed, every other request EPERM, both architectures); `TestFiliation/{disarm,parent-dies-before-arming,parent-dies-after-arming,parent-dies-during-run}` (the sidecar is gone within 1 s, by pid; « before arming » forced by a seam that delays step 1 and kills the parent) | MS9 no parent check → `S-4 parent check`; MS12 `PR_SET_PDEATHSIG` allowed → `S-4 prctl` |
 | S-5 | the perimeter works in F with the final filter (D2), amd64 | `TestPerimeterF/{compile-pdf,compile-svg,query,eval,lsp}`: same bytes (PDF and SVG with the timestamp fixed), same JSON, same eval output; LSP: same capabilities, diagnostics before and after `didChange`, completion labels, signature help, hover, cancellation honoured; against an unrestricted run of the same binary | MS13 `ppoll`-like gap: one call the perimeter needs removed from the amd64 list → `S-5 perimeter` |
 | S-6 | threads without `clone3` (D4), amd64 | `TestCloneThreeFallback/{tinymist,typst}`: `clone3` answered ENOSYS, more than one thread created (`/proc/<pid>/status` `Threads:`), the perimeter's results unchanged, the glibc version recorded in the test output | MS14 `clone3` answered EPERM instead of ENOSYS → `S-6 clone3` |
 | S-7 | arm64 refused until SB2a2 | `TestArm64Refused` (`decideTier` with arch arm64 → refuse with `preview.fail.sandbox`; on the arm64 runner a real `Run` returns that refusal, never a crash) | MS15 arm64 allowed → `S-7 arm64` |
+| S-8 | font folders: exactly the caller's list, read-only, both tiers; no hard-coded fallback (ADR 1d, N43) | `TestFontFoldersExactlyThoseGiven/{N,F}` (a folder holding a font file not in the list: the target cannot open it; one in the list: readable); `TestFontFoldersExactlyThoseGiven/F-provided-font` (a compile whose document uses a font present only in the project's `fonts/` succeeds in F, and its PDF embeds that font) | MS16 the two-folder fallback restored → `S-8 fonts` |
+| S-9 | a protected project is refused in tier F with `preview.fail.protected`, runs in N (ADR 1e, N37) | `TestProtectedRefusedInF` (pure: `decideTier` with `Protected` and F → refuse with that key; a real `Run` in forced F returns it, the target never starts); `TestProtectedRunsInN` | MS17 protected allowed in F → `S-9 protected` |
+| S-10 | one `Program` descriptor per program: allow-list per architecture, `prctl` and `ioctl` lists, memory bound, perimeter; `decideTier` per program (ADR 1f; N21, N23, N32, AD-57) | `TestProgramDescriptors` (typst and tinymist are table entries; no other code path names them); `TestThirdProgramDescriptor/{N,F}` (a test program registered with its own minimal lists runs in both tiers, a call outside its list is refused, typst's lists are not applied to it) | MS18 the `ioctl` list shared by every program instead of the descriptor's → `S-10 descriptor` |
+| S-11 | a bound violation in N with a scope is inkwell's own kill above `memory.high`, never a cgroup OOM kill; `memory.max` is a backstop above it; tier F fails the allocation through `RLIMIT_AS` (ADR 1g, W73) | `TestBoundViolationIsNotAnOOMKill/{cgroup,rlimit}` (a target allocating without end: the run returns the bound outcome; the scope's `memory.events` `oom_kill` is 0; with a systemd user manager reachable, the unit's `Result` is not `oom-kill`; in F the target dies of its failed allocation, no cgroup); `TestHostileCgroupMemoryIsMemoryLimit` rewritten to that outcome; the backstop test `TestMemoryMaxBackstop` runs only with `INKWELL_OOM_BACKSTOP=1` (it is the one that may raise the desktop notification) | MS19 the watchdog disabled (the bound reached at `memory.max`) → `S-11 no oom-kill` |
 | U-1 | the About line and the refusal sentence follow the outcome; never « exited with status » | `TestIsolationReportsTier`; Vitest « SB2a1 about shows the tier: namespaces », « …: reduced », « SB2a1 a refused sandbox shows its sentence and Détails » | in-test: the status text restored → U-1 |
 | C-1 | the candidate is published and its GitHub runs are checked at gate time (D6) | criterion `github` with `scripts/gh-verdict.py` (below) | - |
 
@@ -84,7 +92,7 @@ the socket and signal protections the lower ABIs lack.
 ## The mandatory inventory (D7)
 
 Each machine kind runs its column and uploads `go test -json`; the gate reads every column from
-`gates/SB2a1/inventory.toml`, the machine-readable form of this table, written and reviewed with the gate's freeze. A cell is **pass**
+`gates/inventories/SB2a1.toml`, the machine-readable form of this table, written with the gate's freeze; every test name it lists is the contract. A cell is **pass**
 (required), **n-unavailable** (accepted only in an N column, and only when the launch's tier report for that test
 says N is unavailable on that machine; a distinct status, never counted as a pass), or **refused** (required on arm64
 in SB2a1). No skip is accepted anywhere in an F column; a missing cell, an extra skip or a failure fails the gate.
@@ -105,7 +113,7 @@ The block's candidate is a commit on a branch `candidate/sb2a1-<n>` of the publi
 integrator pushes it and starts `ci.yml` on it with `workflow_dispatch` (the trigger is added by this block; the
 `sandbox-stock` job — `ubuntu-24.04`, restriction left on, asserted to be 1 with AppArmor enabled — and the
 `sidecars-arm64` job run there). The local file `gates/SB2a1/github.json` holds only `{ "run_id": N }`. At gate time
-`scripts/gh-verdict.py --check gates/SB2a1/github.json --inventory gates/SB2a1/inventory.toml` re-fetches through the
+`scripts/gh-verdict.py --check gates/SB2a1/github.json --inventory gates/inventories/SB2a1.toml` re-fetches through the
 GitHub API, and fails unless all hold: repository `oioio-space/inkwell` (also `head_repository`, so no fork);
 workflow path `.github/workflows/ci.yml`; event `workflow_dispatch`; head branch `candidate/sb2a1-*`; `head_sha`
 equal to `git rev-parse HEAD` of the gate's checkout, whose tracked tree is clean; status `completed` and conclusion
@@ -153,7 +161,7 @@ Files: `internal/sidecar/` (`tier_linux.go` new; `launcher_linux.go`, `run.go`, 
 
 ## Durations of SB2a1 (estimates; measured at the smoke; the gate has a global cap of 45 min)
 
-`docs` < 1 min; `go` (one `-json` run of the three packages, both local columns) about 15 min; `mutants` (MS1–MS15,
-all runnable here: each mutates a rule checked by an interpreted filter or a local launch, 15 × about 1 min) about 15 min; `frontend` about 2 min; `test:py` (gh-verdict,
+`docs` < 1 min; `go` (one `-json` run of the three packages, both local columns) about 15 min; `mutants` (MS1–MS19,
+all runnable here: each mutates a rule checked by an interpreted filter or a local launch, 19 × about 1 min) about 19 min; `frontend` about 2 min; `test:py` (gh-verdict,
 gojson_check) about 1 min; `github` (API reads and artefact downloads) about 1 min; `regression` about 4 min (the
-preview spec only) → **about 39 min**, under the 45-minute cap with 6 min of margin.
+preview spec only) → **about 43 min**, under the 45-minute cap with 2 min of margin (the four rules S-8–S-11 added at the freeze, 2026-11-14: fonts N43, protected projects N37, program descriptors for plugins, no desktop OOM alarm W73). If the smoke exceeds the cap, SB2a1 is re-cut (S-10 first, into its own block), never weakened.

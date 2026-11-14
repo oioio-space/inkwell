@@ -1,0 +1,1045 @@
+# The mandatory inventory of block SB2a1 (decision D7, plan docs/plans/2026-11-14-sb2-sandbox-tiers.md « The mandatory
+# inventory »), frozen with gates/SB2a1.toml. Read by scripts/gojson_check.py (columns local-N, local-F: the `go`
+# criterion) and scripts/gh-verdict.py (columns stock-amd64, arm64: the `github` criterion), both added by the block.
+#
+# One [[test]] per test name, exactly as `go test -json` reports it (subtests with their path). Cell values:
+#   "pass"               the test must report pass in that column;
+#   "pass|n-unavailable" pass, or n-unavailable — accepted only in an N cell, and only when that test's tier report
+#                        line says tier N is unavailable on that machine; a distinct status, never counted as a pass;
+#   "refused"            the test must report the refusal of the sandbox with its sentence (arm64 until SB2a2);
+#   "-"                  the test is not part of that column (it must not be required there; if it runs, it must pass).
+# Rules: no skip is accepted in an F cell; a missing required cell, a failure, an extra skip or an unknown status fails;
+# the local columns are one `-json` run on the development machine, where tier N is decided and tier F is forced.
+columns = ["local-N", "local-F", "stock-amd64", "arm64"]
+
+[[test]]
+name = "TestDecideTierExhaustive"
+rule = "T-1"
+local-N = "pass"
+local-F = "-"
+stock-amd64 = "pass"
+arm64 = "pass"
+
+[[test]]
+name = "TestRefusalErrnoTable"
+rule = "T-2"
+local-N = "pass"
+local-F = "-"
+stock-amd64 = "pass"
+arm64 = "pass"
+
+[[test]]
+name = "TestSeccompPrlimitPidZero"
+rule = "S-1"
+local-N = "pass"
+local-F = "-"
+stock-amd64 = "pass"
+arm64 = "pass"
+
+[[test]]
+name = "TestSeccompNoProcessInF"
+rule = "S-2"
+local-N = "pass"
+local-F = "-"
+stock-amd64 = "pass"
+arm64 = "pass"
+
+[[test]]
+name = "TestSeccompPrctlOptions"
+rule = "S-4"
+local-N = "pass"
+local-F = "-"
+stock-amd64 = "pass"
+arm64 = "pass"
+
+[[test]]
+name = "TestSeccompIoctlRequests"
+rule = "S-4"
+local-N = "pass"
+local-F = "-"
+stock-amd64 = "pass"
+arm64 = "pass"
+
+[[test]]
+name = "TestIsolationReportsTier"
+rule = "U-1"
+local-N = "pass"
+local-F = "-"
+stock-amd64 = "pass"
+arm64 = "pass"
+
+[[test]]
+name = "TestArm64Refused"
+rule = "S-7"
+local-N = "pass"
+local-F = "-"
+stock-amd64 = "pass"
+arm64 = "pass"
+
+[[test]]
+name = "TestProbeIsTheLaunch"
+rule = "T-3"
+local-N = "pass"
+local-F = "-"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestNoCapabilityNamespaceGivesF"
+rule = "T-3"
+local-N = "pass"
+local-F = "-"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestLaunchVerifiesTier"
+rule = "T-4"
+local-N = "pass"
+local-F = "-"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestOneConfigurationPerTier"
+rule = "T-4"
+local-N = "pass"
+local-F = "-"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestDescriptorsClosedBeforeExec"
+rule = "T-4"
+local-N = "pass"
+local-F = "-"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestProbeDeadline"
+rule = "T-5"
+local-N = "pass"
+local-F = "-"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestPlacementRefusedFallsBack"
+rule = "T-6"
+local-N = "pass"
+local-F = "-"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestNoCgroupWithoutPIDNamespace"
+rule = "T-6"
+local-N = "pass"
+local-F = "-"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestHandshakeFailsClosed/no-report"
+rule = "T-4"
+local-N = "pass"
+local-F = "-"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestHandshakeFailsClosed/truncated"
+rule = "T-4"
+local-N = "pass"
+local-F = "-"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestHandshakeFailsClosed/invalid"
+rule = "T-4"
+local-N = "pass"
+local-F = "-"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestHandshakeFailsClosed/eof"
+rule = "T-4"
+local-N = "pass"
+local-F = "-"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestHandshakeFailsClosed/no-proceed"
+rule = "T-4"
+local-N = "pass"
+local-F = "-"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestHandshakeFailsClosed/cancel-before-report"
+rule = "T-4"
+local-N = "pass"
+local-F = "-"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestHandshakeFailsClosed/cancel-after-report"
+rule = "T-4"
+local-N = "pass"
+local-F = "-"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestHandshakeFailsClosed/cancel-after-proceed"
+rule = "T-4"
+local-N = "pass"
+local-F = "-"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestRunReturnsAfterCancel/N/cgroup"
+rule = "T-5"
+local-N = "pass"
+local-F = "-"
+stock-amd64 = "pass|n-unavailable"
+arm64 = "refused"
+
+[[test]]
+name = "TestRunReturnsAfterCancel/N/rlimit"
+rule = "T-5"
+local-N = "pass"
+local-F = "-"
+stock-amd64 = "pass|n-unavailable"
+arm64 = "refused"
+
+[[test]]
+name = "TestRunReturnsAfterCancel/F/rlimit"
+rule = "T-5"
+local-N = "-"
+local-F = "pass"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestTargetCannotLimitAnotherProcess/N"
+rule = "S-1"
+local-N = "pass"
+local-F = "-"
+stock-amd64 = "pass|n-unavailable"
+arm64 = "refused"
+
+[[test]]
+name = "TestTargetCannotLimitAnotherProcess/F"
+rule = "S-1"
+local-N = "-"
+local-F = "pass"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestFiliation/disarm"
+rule = "S-4"
+local-N = "-"
+local-F = "pass"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestFiliation/parent-dies-before-arming"
+rule = "S-4"
+local-N = "-"
+local-F = "pass"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestFiliation/parent-dies-after-arming"
+rule = "S-4"
+local-N = "-"
+local-F = "pass"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestFiliation/parent-dies-during-run"
+rule = "S-4"
+local-N = "-"
+local-F = "pass"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestPerimeterF/compile-pdf"
+rule = "S-5"
+local-N = "-"
+local-F = "pass"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestPerimeterF/compile-svg"
+rule = "S-5"
+local-N = "-"
+local-F = "pass"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestPerimeterF/query"
+rule = "S-5"
+local-N = "-"
+local-F = "pass"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestPerimeterF/eval"
+rule = "S-5"
+local-N = "-"
+local-F = "pass"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestPerimeterF/lsp"
+rule = "S-5"
+local-N = "-"
+local-F = "pass"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestCloneThreeFallback/tinymist"
+rule = "S-6"
+local-N = "-"
+local-F = "pass"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestCloneThreeFallback/typst"
+rule = "S-6"
+local-N = "-"
+local-F = "pass"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestEscape/N/parent-environ"
+rule = "ADR 0044 point 5"
+local-N = "pass"
+local-F = "-"
+stock-amd64 = "pass|n-unavailable"
+arm64 = "refused"
+
+[[test]]
+name = "TestEscape/F/parent-environ"
+rule = "ADR 0044 point 5"
+local-N = "-"
+local-F = "pass"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestEscape/F-abi3/parent-environ"
+rule = "ADR 0044 point 5"
+local-N = "-"
+local-F = "pass"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestEscape/F-abi4/parent-environ"
+rule = "ADR 0044 point 5"
+local-N = "-"
+local-F = "pass"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestEscape/N/parent-maps"
+rule = "ADR 0044 point 5"
+local-N = "pass"
+local-F = "-"
+stock-amd64 = "pass|n-unavailable"
+arm64 = "refused"
+
+[[test]]
+name = "TestEscape/F/parent-maps"
+rule = "ADR 0044 point 5"
+local-N = "-"
+local-F = "pass"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestEscape/F-abi3/parent-maps"
+rule = "ADR 0044 point 5"
+local-N = "-"
+local-F = "pass"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestEscape/F-abi4/parent-maps"
+rule = "ADR 0044 point 5"
+local-N = "-"
+local-F = "pass"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestEscape/N/proc-self-root"
+rule = "ADR 0044 point 5"
+local-N = "pass"
+local-F = "-"
+stock-amd64 = "pass|n-unavailable"
+arm64 = "refused"
+
+[[test]]
+name = "TestEscape/F/proc-self-root"
+rule = "ADR 0044 point 5"
+local-N = "-"
+local-F = "pass"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestEscape/F-abi3/proc-self-root"
+rule = "ADR 0044 point 5"
+local-N = "-"
+local-F = "pass"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestEscape/F-abi4/proc-self-root"
+rule = "ADR 0044 point 5"
+local-N = "-"
+local-F = "pass"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestEscape/N/write-outside"
+rule = "ADR 0044 point 5"
+local-N = "pass"
+local-F = "-"
+stock-amd64 = "pass|n-unavailable"
+arm64 = "refused"
+
+[[test]]
+name = "TestEscape/F/write-outside"
+rule = "ADR 0044 point 5"
+local-N = "-"
+local-F = "pass"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestEscape/F-abi3/write-outside"
+rule = "ADR 0044 point 5"
+local-N = "-"
+local-F = "pass"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestEscape/F-abi4/write-outside"
+rule = "ADR 0044 point 5"
+local-N = "-"
+local-F = "pass"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestEscape/N/replace-outside"
+rule = "ADR 0044 point 5"
+local-N = "pass"
+local-F = "-"
+stock-amd64 = "pass|n-unavailable"
+arm64 = "refused"
+
+[[test]]
+name = "TestEscape/F/replace-outside"
+rule = "ADR 0044 point 5"
+local-N = "-"
+local-F = "pass"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestEscape/F-abi3/replace-outside"
+rule = "ADR 0044 point 5"
+local-N = "-"
+local-F = "pass"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestEscape/F-abi4/replace-outside"
+rule = "ADR 0044 point 5"
+local-N = "-"
+local-F = "pass"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestEscape/N/slot-budget"
+rule = "ADR 0044 point 5"
+local-N = "pass"
+local-F = "-"
+stock-amd64 = "pass|n-unavailable"
+arm64 = "refused"
+
+[[test]]
+name = "TestEscape/F/slot-budget"
+rule = "ADR 0044 point 5"
+local-N = "-"
+local-F = "pass"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestEscape/F-abi3/slot-budget"
+rule = "ADR 0044 point 5"
+local-N = "-"
+local-F = "pass"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestEscape/F-abi4/slot-budget"
+rule = "ADR 0044 point 5"
+local-N = "-"
+local-F = "pass"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestEscape/N/exec-slot"
+rule = "ADR 0044 point 5"
+local-N = "pass"
+local-F = "-"
+stock-amd64 = "pass|n-unavailable"
+arm64 = "refused"
+
+[[test]]
+name = "TestEscape/F/exec-slot"
+rule = "ADR 0044 point 5"
+local-N = "-"
+local-F = "pass"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestEscape/F-abi3/exec-slot"
+rule = "ADR 0044 point 5"
+local-N = "-"
+local-F = "pass"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestEscape/F-abi4/exec-slot"
+rule = "ADR 0044 point 5"
+local-N = "-"
+local-F = "pass"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestEscape/N/signal-parent"
+rule = "ADR 0044 point 5"
+local-N = "pass"
+local-F = "-"
+stock-amd64 = "pass|n-unavailable"
+arm64 = "refused"
+
+[[test]]
+name = "TestEscape/F/signal-parent"
+rule = "ADR 0044 point 5"
+local-N = "-"
+local-F = "pass"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestEscape/F-abi3/signal-parent"
+rule = "ADR 0044 point 5"
+local-N = "-"
+local-F = "pass"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestEscape/F-abi4/signal-parent"
+rule = "ADR 0044 point 5"
+local-N = "-"
+local-F = "pass"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestEscape/N/tkill-other-thread"
+rule = "ADR 0044 point 5"
+local-N = "pass"
+local-F = "-"
+stock-amd64 = "pass|n-unavailable"
+arm64 = "refused"
+
+[[test]]
+name = "TestEscape/F/tkill-other-thread"
+rule = "ADR 0044 point 5"
+local-N = "-"
+local-F = "pass"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestEscape/F-abi3/tkill-other-thread"
+rule = "ADR 0044 point 5"
+local-N = "-"
+local-F = "pass"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestEscape/F-abi4/tkill-other-thread"
+rule = "ADR 0044 point 5"
+local-N = "-"
+local-F = "pass"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestEscape/N/prlimit-parent"
+rule = "ADR 0044 point 5"
+local-N = "pass"
+local-F = "-"
+stock-amd64 = "pass|n-unavailable"
+arm64 = "refused"
+
+[[test]]
+name = "TestEscape/F/prlimit-parent"
+rule = "ADR 0044 point 5"
+local-N = "-"
+local-F = "pass"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestEscape/F-abi3/prlimit-parent"
+rule = "ADR 0044 point 5"
+local-N = "-"
+local-F = "pass"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestEscape/F-abi4/prlimit-parent"
+rule = "ADR 0044 point 5"
+local-N = "-"
+local-F = "pass"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestEscape/N/socket-tcp"
+rule = "ADR 0044 point 5"
+local-N = "pass"
+local-F = "-"
+stock-amd64 = "pass|n-unavailable"
+arm64 = "refused"
+
+[[test]]
+name = "TestEscape/F/socket-tcp"
+rule = "ADR 0044 point 5"
+local-N = "-"
+local-F = "pass"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestEscape/F-abi3/socket-tcp"
+rule = "ADR 0044 point 5"
+local-N = "-"
+local-F = "pass"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestEscape/F-abi4/socket-tcp"
+rule = "ADR 0044 point 5"
+local-N = "-"
+local-F = "pass"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestEscape/N/socket-udp"
+rule = "ADR 0044 point 5"
+local-N = "pass"
+local-F = "-"
+stock-amd64 = "pass|n-unavailable"
+arm64 = "refused"
+
+[[test]]
+name = "TestEscape/F/socket-udp"
+rule = "ADR 0044 point 5"
+local-N = "-"
+local-F = "pass"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestEscape/F-abi3/socket-udp"
+rule = "ADR 0044 point 5"
+local-N = "-"
+local-F = "pass"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestEscape/F-abi4/socket-udp"
+rule = "ADR 0044 point 5"
+local-N = "-"
+local-F = "pass"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestEscape/N/socket-unix"
+rule = "ADR 0044 point 5"
+local-N = "pass"
+local-F = "-"
+stock-amd64 = "pass|n-unavailable"
+arm64 = "refused"
+
+[[test]]
+name = "TestEscape/F/socket-unix"
+rule = "ADR 0044 point 5"
+local-N = "-"
+local-F = "pass"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestEscape/F-abi3/socket-unix"
+rule = "ADR 0044 point 5"
+local-N = "-"
+local-F = "pass"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestEscape/F-abi4/socket-unix"
+rule = "ADR 0044 point 5"
+local-N = "-"
+local-F = "pass"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestEscape/N/socket-abstract"
+rule = "ADR 0044 point 5"
+local-N = "pass"
+local-F = "-"
+stock-amd64 = "pass|n-unavailable"
+arm64 = "refused"
+
+[[test]]
+name = "TestEscape/F/socket-abstract"
+rule = "ADR 0044 point 5"
+local-N = "-"
+local-F = "pass"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestEscape/F-abi3/socket-abstract"
+rule = "ADR 0044 point 5"
+local-N = "-"
+local-F = "pass"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestEscape/F-abi4/socket-abstract"
+rule = "ADR 0044 point 5"
+local-N = "-"
+local-F = "pass"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestEscape/N/fork-bomb"
+rule = "ADR 0044 point 5"
+local-N = "pass"
+local-F = "-"
+stock-amd64 = "pass|n-unavailable"
+arm64 = "refused"
+
+[[test]]
+name = "TestEscape/F/fork-bomb"
+rule = "ADR 0044 point 5"
+local-N = "-"
+local-F = "pass"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestEscape/F-abi3/fork-bomb"
+rule = "ADR 0044 point 5"
+local-N = "-"
+local-F = "pass"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestEscape/F-abi4/fork-bomb"
+rule = "ADR 0044 point 5"
+local-N = "-"
+local-F = "pass"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestEscape/N/allocation"
+rule = "ADR 0044 point 5"
+local-N = "pass"
+local-F = "-"
+stock-amd64 = "pass|n-unavailable"
+arm64 = "refused"
+
+[[test]]
+name = "TestEscape/F/allocation"
+rule = "ADR 0044 point 5"
+local-N = "-"
+local-F = "pass"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestEscape/F-abi3/allocation"
+rule = "ADR 0044 point 5"
+local-N = "-"
+local-F = "pass"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestEscape/F-abi4/allocation"
+rule = "ADR 0044 point 5"
+local-N = "-"
+local-F = "pass"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestEscape/N/parent-death"
+rule = "ADR 0044 point 5"
+local-N = "pass"
+local-F = "-"
+stock-amd64 = "pass|n-unavailable"
+arm64 = "refused"
+
+[[test]]
+name = "TestEscape/F/parent-death"
+rule = "ADR 0044 point 5"
+local-N = "-"
+local-F = "pass"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestEscape/F-abi3/parent-death"
+rule = "ADR 0044 point 5"
+local-N = "-"
+local-F = "pass"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestEscape/F-abi4/parent-death"
+rule = "ADR 0044 point 5"
+local-N = "-"
+local-F = "pass"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestEscape/N/ptrace-parent"
+rule = "ADR 0044 point 5"
+local-N = "pass"
+local-F = "-"
+stock-amd64 = "pass|n-unavailable"
+arm64 = "refused"
+
+[[test]]
+name = "TestEscape/F/ptrace-parent"
+rule = "ADR 0044 point 5"
+local-N = "-"
+local-F = "pass"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestEscape/F-abi3/ptrace-parent"
+rule = "ADR 0044 point 5"
+local-N = "-"
+local-F = "pass"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestEscape/F-abi4/ptrace-parent"
+rule = "ADR 0044 point 5"
+local-N = "-"
+local-F = "pass"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestCgroupSessionScopeDelegated"
+rule = "tier-aware suite"
+local-N = "pass"
+local-F = "-"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestCgroupRunLimitsVerifiedBeforeStart"
+rule = "tier-aware suite"
+local-N = "pass"
+local-F = "-"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestCgroupWorkloadAndDescendantsInside"
+rule = "tier-aware suite"
+local-N = "pass"
+local-F = "-"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestRunNoNetworkFallsBack"
+rule = "tier-aware suite"
+local-N = "pass"
+local-F = "-"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestHostileCgroupMemoryIsMemoryLimit"
+rule = "tier-aware suite"
+local-N = "pass"
+local-F = "-"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestHostileMemoryDeathStartsNoCoreHelper"
+rule = "tier-aware suite"
+local-N = "pass"
+local-F = "-"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestEmbeddedSidecarsRun"
+rule = "tier-aware suite"
+local-N = "pass"
+local-F = "-"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestFontFoldersExactlyThoseGiven/N"
+rule = "S-8"
+local-N = "pass"
+local-F = "-"
+stock-amd64 = "pass|n-unavailable"
+arm64 = "refused"
+
+[[test]]
+name = "TestFontFoldersExactlyThoseGiven/F"
+rule = "S-8"
+local-N = "-"
+local-F = "pass"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestFontFoldersExactlyThoseGiven/F-provided-font"
+rule = "S-8"
+local-N = "-"
+local-F = "pass"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestProtectedRefusedInF"
+rule = "S-9"
+local-N = "pass"
+local-F = "-"
+stock-amd64 = "pass"
+arm64 = "pass"
+
+[[test]]
+name = "TestProtectedRunsInN"
+rule = "S-9"
+local-N = "pass"
+local-F = "-"
+stock-amd64 = "pass|n-unavailable"
+arm64 = "refused"
+
+[[test]]
+name = "TestProgramDescriptors"
+rule = "S-10"
+local-N = "pass"
+local-F = "-"
+stock-amd64 = "pass"
+arm64 = "pass"
+
+[[test]]
+name = "TestThirdProgramDescriptor/N"
+rule = "S-10"
+local-N = "pass"
+local-F = "-"
+stock-amd64 = "pass|n-unavailable"
+arm64 = "refused"
+
+[[test]]
+name = "TestThirdProgramDescriptor/F"
+rule = "S-10"
+local-N = "-"
+local-F = "pass"
+stock-amd64 = "pass"
+arm64 = "refused"
+
+[[test]]
+name = "TestBoundViolationIsNotAnOOMKill/cgroup"
+rule = "S-11"
+local-N = "pass|n-unavailable"
+local-F = "-"
+stock-amd64 = "pass|n-unavailable"
+arm64 = "refused"
+
+[[test]]
+name = "TestBoundViolationIsNotAnOOMKill/rlimit"
+rule = "S-11"
+local-N = "-"
+local-F = "pass"
+stock-amd64 = "pass"
+arm64 = "refused"

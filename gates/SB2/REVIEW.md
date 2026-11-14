@@ -94,3 +94,26 @@ witnesses (plan, `TestEscape/F-abi3`, `F-abi4`).
 Still open before SB2a1's freeze: probe run 3 (Q9, Q12, Q13 on both runners), the `prctl` allow-list written from Q13,
 the perimeter item tinymist's child serves if any, and Codex's third round on rev 3.
 
+
+## Round 3 — Codex confirmation, freeze (2026-11-14)
+
+A targeted confirmation, not a third full review (method v2: two rounds). Verdict: **CONFIRM (freeze after edits)**.
+
+| Point | Codex | Disposition |
+|---|---|---|
+| D1–D9 applied in revision 3 | yes for all nine (ADR 0044 points 1a, 1b, 1c, 6; plan « Probe runs », « The mandatory inventory », « The candidate », « Durations ») | — |
+| Contradiction with the measurements | the ADR still called tinymist's child « not attributed »; runs 3 and 4 show no child process | applied: ADR context point 9 and point 1b; plan « Probe runs 3 and 4 — settled facts » |
+| To write as settled | no child process (typst 4 threads, tinymist 14); `prctl` = `PR_SET_NAME`, `PR_SET_PDEATHSIG` refused; `ioctl` = `TIOCGWINSZ`, `FIONREAD`, `TCGETS`; typst static, tinymist glibc ≤ 2.28 / ≤ 2.30, host 2.39, not a replacement for S-6; arm64 `ppoll` refused, `tkill` only in the abort path, behaviour after `ppoll` is SB2a2's | applied in the ADR (point 9, 1a step 3) and the plan (S-4 now also tests the `ioctl` list: `TestSeccompIoctlRequests`) |
+| Round-2 findings C2, M4, M8, M10, M12, m1 | resolved for SB2a1 (M4 stays an obligation of SB2a2) | — |
+| Blocking | none; keep the witnesses, the inventory and the smoke as prerequisites | the inventory is `gates/inventories/SB2a1.toml` (outside `gates/SB2a1/`, which a gate run empties: the W58a walkthrough captures were lost that way); witnesses in `gates/SB2a1/WITNESSES.md`; the smoke stays a prerequisite of acceptance |
+
+Constraints added by the integrator at the freeze (cross-check of the owner's requirements and the desktop alarm of
+2026-11-14 23:55), each with its rule, named tests, mutant and inventory rows — they extend the confirmed design, they
+do not change D1–D9:
+
+| Rule | Requirement | What it fixes |
+|---|---|---|
+| S-8 (ADR 1d) | N43 fonts | the sandbox opens exactly the font list Go computes (FT-1/FT-4); the hard-coded two-folder fallback (`launcher_linux.go:434-435`) goes |
+| S-9 (ADR 1e) | N37 protected projects | tier F has no mount namespace for a memory-backed working folder: a protected project is refused in F with its own sentence until the « Projet protégé » lot |
+| S-10 (ADR 1f) | N21, N23, N32, AD-57 plugins | one `Program` descriptor per program (allow-lists, prctl/ioctl lists, memory bound, perimeter); the plugin host is a third entry, not a redesign |
+| S-11 (ADR 1g) | W73 | a bound violation is inkwell's own kill above `memory.high` (memory.events watchdog), never a cgroup OOM kill that makes GNOME's housekeeping plugin show « la mémoire du périphérique est presque pleine » (source read); `memory.max` is a backstop, opt-in test |

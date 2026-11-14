@@ -1,7 +1,7 @@
 ---
-status: proposed # revision 3 (2026-11-14): the integrator's design decisions D1-D9 after Codex's round 2 (REJECT), gates/SB2/REVIEW.md « Round 2 »; measured facts: gates/SB2/MEASUREMENTS.md runs 1 and 2; a third probe run settles D3-D5 before the freeze
+status: proposed # revision 3, confirmed by Codex on 2026-11-14 (gates/SB2/REVIEW.md, « Round 3 »), gate SB2a1 frozen; design decisions D1-D9 after Codex's round 2; measured facts: gates/SB2/MEASUREMENTS.md runs 1 to 4
 date: 2026-11-14
-amends: ADR 0033 (the namespace probe and its fallback), ADR 0042 A3 (the memory fallback; the cgroup bound needs a PID namespace, unchanged); spec §9.11 (refuse rather than weaken) is kept and made total
+amends: ADR 0033 (the namespace probe and its fallback), ADR 0042 A3 (the memory fallback; the cgroup bound needs a PID namespace, unchanged; the normal bound is memory.high with inkwell's watchdog, memory.max a backstop: point 1g); spec §9.11 (refuse rather than weaken) is kept and made total
 decision-makers: [Mathieu]
 ---
 
@@ -40,17 +40,23 @@ On GitHub's stock Ubuntu 24.04 runners, amd64 and arm64, kernel 7.0, run 4363884
 7. Probe run 2 (run 43642240366): tier F forced on the stock amd64 runner compiles to PDF and starts tinymist; with
    the candidate profile both run isolated; on arm64 both die because the allow-list refuses `ppoll` (73) and `tkill`
    (130) (Rust's abort path calls `tkill` after the failed `ppoll`). The trace of a tinymist session showed one process
-   creation (`vfork` on amd64, `clone` without `CLONE_THREAD` on arm64) and two `execve`, but it traced the Python
-   driver too, so the child is not attributed yet (Codex, round 2); `clone3` ×15 are the threads.
+   creation (`vfork` on amd64, `clone` without `CLONE_THREAD` on arm64) and two `execve`; that trace also followed the
+   Python driver, whose `Popen` started tinymist (Codex, round 2) — run 3 settled it (point 9).
 8. Linking (this machine, Q12): typst is a static-pie musl binary; tinymist is a dynamic `linux-gnu` binary
    (interpreter `/lib64/ld-linux-x86-64.so.2`, needs `libc.so.6`, `libm`, `libdl`, `libpthread`, `libgcc_s`; glibc
    symbol versions up to `GLIBC_2.28`), so it runs on the machine's glibc (2.44 here, 2.39 on Ubuntu 24.04).
+9. Probe runs 3 and 4 (runs 43645254398 and 43647599763), the sidecar traced alone (the tracer is its parent), on both
+   runners: across the whole perimeter of point 1b, **no process is created** — typst compile to PDF and SVG, query and
+   eval run with 4 threads, the tinymist session with 14 threads, each with one `execve` (its own start); the only
+   `prctl` option used is `PR_SET_NAME` (tinymist, thread names), typst uses none; the `ioctl` requests are `TIOCGWINSZ`
+   (typst), `FIONREAD` and `TCGETS` (tinymist); typst is static on both architectures (no interpreter); tinymist needs
+   glibc symbol versions up to `GLIBC_2.28` on amd64 and `GLIBC_2.30` on arm64, the runners have glibc 2.39 — this does
+   not replace the named test S-6 of the plan. On arm64 the allow-list refuses `ppoll` (both sidecars call it at start)
+   and `tkill` appears only in the abort path that follows; how both behave once `ppoll` is allowed is SB2a2's
+   measurement.
 
-Not measured yet (probe run 3, questions Q9, Q12 and Q13 of `scripts/sandbox-probe.sh`, plan « Probe run 3 »): which
-process tinymist creates and why (Q9 now traces only the sidecar), the `prctl` options and `ioctl`s each item of the
-perimeter makes (Q13), the glibc of the runners (Q12), and arm64 once `ppoll` is allowed. A real Ubuntu 24.04
-**desktop** (kernel 6.8, Landlock ABI 4 according to the kernel documentation's ABI table — not measured) is the
-owner's check at the end.
+A real Ubuntu 24.04 **desktop** (kernel 6.8, Landlock ABI 4 according to the kernel documentation's ABI table — not
+measured) is the owner's check at the end.
 
 ## Decision
 
@@ -84,8 +90,9 @@ the launcher, before the seccomp filter and before `execve(target)`:
 2. read the parent pid (`PPid:` of `/proc/self/status`, the principle `armNamespaceParentDeath` already uses,
    `internal/sidecar/launcher_linux.go:684`) and compare it with the pid the parent passed; a difference means the
    parent died before step 1: exit at once with a distinct status (covers death before arming);
-3. install the seccomp filter, in which `prctl` is allowed only for the options the two sidecars measurably use during
-   the perimeter (Q13) and `PR_SET_PDEATHSIG` is **denied**: a document turned into code cannot disarm the signal.
+3. install the seccomp filter, in which `prctl` is allowed only with `PR_SET_NAME` — the one option the two sidecars
+   use during the perimeter (measured, point 9) — and `PR_SET_PDEATHSIG` is therefore **denied**: a document turned
+   into code cannot disarm the signal. `ioctl` is allowed only with `TIOCGWINSZ`, `FIONREAD` and `TCGETS` (point 9).
 
 The parent side keeps the forking goroutine on its OS thread for the child's whole life (`runtime.LockOSThread` in
 `Run`, `internal/sidecar/run.go:206-208`, unchanged and now a named rule), since the signal fires when that thread
@@ -104,15 +111,68 @@ F guarantees exactly what inkwell uses today, nothing more:
 Everything else tinymist can do (formatting, rename, references, code actions, commands, an external tool) is outside
 the guarantee: inkwell does not call it, and the language bridge refuses it. Each item is compared, in F with the final
 filter, against an unrestricted run of the same pinned binary (`TestPerimeterF/<item>`, structured results), on
-amd64 in SB2a1 and on arm64 in SB2a2. If probe run 3 shows that an item of the perimeter needs tinymist's child
-process, F does **not** allow process creation: that item is refused in F (the plan names it and its sentence).
+amd64 in SB2a1 and on arm64 in SB2a2. No item of the perimeter creates a process (measured, point 9), so F's
+no-process rule removes none of them; F never allows process creation.
 
 ### 1c. Threads without `clone3` (decision D4)
 
 glibc creates threads with `clone3` since 2.34 and falls back to `clone` when `clone3` answers ENOSYS
 (`sysdeps/unix/sysv/linux/clone-internal.c`); typst is static musl, which uses `clone`. A named test runs a real
 tinymist session and a real typst compile with `clone3` answered ENOSYS and asserts that several threads were created
-and that the perimeter's results are unchanged, on amd64 and on arm64, recording the glibc version loaded (Q12).
+and that the perimeter's results are unchanged, on amd64 (SB2a1) and on arm64 (SB2a2), recording the glibc version
+loaded (point 9).
+
+### 1d. Font folders: exactly the list Go computes (requirement N43)
+
+Both tiers grant read-only access to **exactly** the font folders the caller passes, which are the list of spec §6.12
+FT-1 and FT-4 computed by Go (project `fonts/`, inkwell's extracted fonts, « mes polices », the system folders of
+FT-4), the same list typst receives as `--font-path` and tinymist as `fontPaths` (`internal/typst/engine.go:474`,
+`internal/language/language.go:340`). The launcher's hard-coded fallback (`internal/sidecar/launcher_linux.go:434-435`,
+two system folders when the caller passes none) is removed: an empty list grants no font folder. Computing the FT-4
+system folders is the fonts lot's work (N43); this block guarantees that whatever list it computes is what the sandbox
+opens, nothing more. Witnesses: a font folder not in the list is unreadable from the target, in N and in F; a compile
+that needs a font provided in the project's `fonts/` succeeds in F.
+
+### 1e. Protected projects in tier F (requirement N37, coherence C03)
+
+A protected (encrypted) project compiles from a plaintext working folder held in memory (tmpfs without swap) or on a
+disk the system encrypts (C03). Tier N gets that folder from its private mount namespace; tier F has no mount namespace
+and cannot create one. Until the « Projet protégé » lot specifies how tier F would bound such a folder (a directory
+Landlock can confine and no other user can read, on memory that is never swapped), **a launch for a protected project
+is refused in tier F** with its own sentence (`preview.fail.protected`), never run on an unbounded folder. The caller
+marks the launch (`Spec.Protected`); tier N runs it as today. No protected project exists yet: the rule closes the
+gap before the vault lot instead of letting it reopen the tier table.
+
+### 1f. One descriptor per program (requirements N21, N23, N32, AD-57)
+
+The tier decision and every allow-list are per **program**, not special cases of typst and tinymist: a `Program`
+descriptor holds its executable, its seccomp allow-list per architecture, its `prctl` options and `ioctl` requests, its
+memory bound and its perimeter, and `decideTier` takes the program (arm64 is refused per program until that program's
+inventory passes). typst and tinymist are the two entries today; the plugin host of AD-57 becomes a third entry with
+its own measured lists, not a redesign. No plugin code is written here.
+
+### 1g. A bound violation is inkwell's to report, not a desktop memory emergency (requirement W73)
+
+Measured on the owner's GNOME desktop (2026-11-14, 23:49–23:52): the hostile-memory tests made the kernel OOM-kill
+their targets inside `inkwell-sandbox-*` and `inkwell-test-app-*` scopes under `app.slice` (expected kills, 19 GiB
+still available), and GNOME showed « L'application a été arrêtée. La mémoire du périphérique est presque pleine… ».
+The source is gnome-settings-daemon's housekeeping plugin (`plugins/housekeeping/gsd-systemd-notify.c`): it subscribes
+to `PropertiesChanged` of every systemd user Scope and Service unit and raises that notification whenever a unit's
+`Result` becomes `oom-kill`, whatever the cause or the memory left. A cgroup OOM kill at `memory.max` in a scope is
+exactly that. On a person's machine a hostile document hitting its bound would raise the same false alarm.
+
+Rule: in tier N with a cgroup scope, the bound a document can reach is **`memory.high`**, not `memory.max`: above it
+the kernel throttles and reclaims and « never invokes the OOM killer » (kernel cgroup-v2 documentation, memory.high);
+inkwell watches the scope's `memory.events` (a file-modified event on every change, same documentation) and, on the
+first `high` event above the bound, kills the target itself with SIGKILL and reports « document too large » in its own
+words (the existing bound sentence). A kill by inkwell is not an OOM kill: the unit's `Result` is not `oom-kill`, so
+the desktop shows nothing. `memory.max` stays as the **hard backstop**, set above the bound (bound + 25 %, at least
+64 MiB more), reached only if the watchdog fails; that case is still an OOM kill and GNOME may then show its
+notification — documented as residual R-7, never the normal path. Tier F has no cgroup: `RLIMIT_AS` makes the
+allocation fail inside the process (abort), which is not an OOM kill either. Witness: a hostile allocation in N with a
+scope ends with inkwell's bound outcome, the scope's `memory.events` `oom_kill` stays 0 and, when a systemd user
+manager is reachable, the scope's `Result` is not `oom-kill`; the hard-backstop test is opt-in
+(`INKWELL_OOM_BACKSTOP=1`), so the normal suite no longer raises the desktop notification.
 
 ### 2. One decision, by launching each tier for real
 
@@ -226,6 +286,7 @@ problems list only when a launch is **refused**; the reduced tier raises no toas
 | N | `about.network.namespace` (kept) | « La mise en page tourne dans un espace isolé : elle ne peut joindre aucun réseau, pas même cet ordinateur. » |
 | F | `about.isolation.reduced` (replaces `about.network.proxy`) | « La mise en page tourne avec une isolation réduite : elle ne peut ni joindre le réseau, ni lancer d'autre programme, ni écrire hors du document, mais ce système ne permet pas de la séparer complètement des autres programmes. » |
 | refuse | `preview.fail.sandbox`, action `preview.fail.sandbox.details` « Détails » (opens About) | « La mise en page ne peut pas démarrer : ce système ne fournit pas la protection dont Inkwell a besoin. » |
+| refuse, protected project in F (point 1e) | `preview.fail.protected`, same action | « Ce document est protégé : sur ce système, Inkwell ne peut pas encore le mettre en page sans risquer d'exposer son contenu. » |
 
 ## Considered options
 
@@ -257,10 +318,20 @@ problems list only when a launch is **refused**; the reduced tier raises no toas
 - R-2: on Landlock ABI 3–5, signal and abstract-socket scoping come from seccomp alone (sockets denied, `tgkill` to self).
 - R-3: other processes' existence and CPU masks are visible in F.
 - R-4: arm64: `ppoll` and `tkill` measured as refused inside (run 2); the sidecars are refused on arm64 until block
-  SB2a2 adds `ppoll` (and only what probe run 3 proves needed; `tkill` stays denied) and passes the arm64 inventory.
+  SB2a2 adds `ppoll` (then measures again; `tkill` stays denied) and passes the arm64 inventory.
 - R-5: AppImage or Flatpak packaging would need its own answer; a desktop session differs from the runner (owner's check).
+- R-6: protected projects are refused in tier F until the « Projet protégé » lot specifies a bounded working folder
+  without a mount namespace (point 1e).
+- R-7: if inkwell's memory watchdog fails, the hard backstop `memory.max` is an OOM kill and GNOME's housekeeping plugin
+  may show « La mémoire du périphérique est presque pleine… » (point 1g); the normal path never reaches it.
 
 ## Sources
+
+- gnome-settings-daemon, `plugins/housekeeping/gsd-systemd-notify.c` (master, read 2026-11-14): notifies on a user
+  unit's `Result` = `oom-kill` — https://gitlab.gnome.org/GNOME/gnome-settings-daemon/-/raw/master/plugins/housekeeping/gsd-systemd-notify.c
+  (module added in 2022: https://mail.gnome.org/archives/commits-list/2022-April/msg09028.html).
+- Linux kernel, Control Group v2, memory controller (`memory.high` never invokes the OOM killer; `memory.max` does;
+  `memory.events` fields, hierarchical, file-modified events) — https://docs.kernel.org/admin-guide/cgroup-v2.html
 
 - Measured: `gates/SB2/MEASUREMENTS.md` and `PROBE-ubuntu-24.04-{amd64,arm64}.md` (run 43638847261); the plan's
   « Local measurements » (this machine, 2026-11-14).

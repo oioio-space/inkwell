@@ -1,0 +1,102 @@
+# FROZEN 2026-11-14, red witnesses in gates/SB2a1/WITNESSES.md.
+# Revision 3 of the SB2 specification, block SB2a1, 2026-11-14, confirmed by Codex: gates/SB2/REVIEW.md
+# « Round 3 »; replaces the draft gates/SB2a.toml of revision 2. Settled before the freeze: probe runs 1 to 4
+# (gates/SB2/MEASUREMENTS.md; the prctl allow-list is PR_SET_NAME, the ioctl allow-list TIOCGWINSZ, FIONREAD, TCGETS),
+# the mandatory inventory gates/inventories/SB2a1.toml (outside gates/SB2a1/, which a gate run empties), and each
+# command seen red for the right reason in gates/SB2a1/WITNESSES.md. Required before acceptance, not before the freeze:
+# the smoke measured under the global cap (re-cut, never weakened, if it exceeds it). Acceptance for block SB2a1: tiers N and F decided by
+# real launches and verified at each launch with a fail-closed handshake; tier F's filiation protocol (D1), no process
+# creation, perimeter (D2) and clone3 fallback (D4) on amd64; prlimit64 with pid 0; deadlines; arm64 refused with its
+# sentence; the stock-Ubuntu job; the candidate published and checked on GitHub (D6) against the mandatory inventory
+# (D7). Rigour: complete. Plan: docs/plans/2026-11-14-sb2-sandbox-tiers.md. ADR 0044 rev 3.
+# Every long command is `timeout -k 10 N ./scripts/heavy.sh ...` (the timeout covers the wait for a slot). No nested gate.
+# Global cap (D8): the gate runs as `timeout -k 30 2700 mise run gate -- SB2a1`; estimated total about 39 min (plan,
+# « Durations of SB2a1 »).
+raw_results = ["docs/plans/2026-11-14-sb2-sandbox-tiers.md", "docs/adr/0044-sandbox-tiers.md", "docs/objectif-en-cours.md", "gates/inventories/SB2a1.toml", "gates/SB2a1/*"]
+
+[[criteria]]
+# Documents: each rule id has its row in the plan, the catalogue keys exist in both languages, the old key is gone,
+# the ADR is accepted, probe run 4 is recorded.
+id = "docs"
+command = """python3 -I -c "
+import json, re, sys, pathlib
+plan = pathlib.Path('docs/plans/2026-11-14-sb2-sandbox-tiers.md').read_text()
+ids = ('T-1','T-2','T-3','T-4','T-5','T-6','S-1','S-2','S-4','S-5','S-6','S-7','S-8','S-9','S-10','S-11','U-1','C-1')
+bad = [f'plan row {i}' for i in ids if not re.search(rf'^\\| {i} \\|', plan, re.M)]
+for lang in ('fr', 'en'):
+    cat = json.load(open(f'frontend/src/i18n/{lang}.json'))
+    bad += [f'{lang}.json {k}' for k in ('about.isolation.reduced', 'preview.fail.sandbox', 'preview.fail.sandbox.details', 'preview.fail.protected') if k not in cat]
+    bad += [f'{lang}.json still has about.network.proxy'] if 'about.network.proxy' in cat else []
+adr = pathlib.Path('docs/adr/0044-sandbox-tiers.md').read_text()
+bad += ['ADR 0044 not accepted'] if not re.search(r'^status: accepted', adr, re.M) else []
+meas = pathlib.Path('gates/SB2/MEASUREMENTS.md').read_text()
+bad += ['probe run 4 not recorded'] if '## Run 4' not in meas else []
+sys.exit(f'SB2a1 docs: {bad}' if bad else 0)
+"
+"""
+
+[[criteria]]
+# The local columns of the mandatory inventory (plan, D7), in one `go test -json` run: this machine offers N and can force
+# F. scripts/gojson_check.py (added by this block, tested in test:py) checks the run's exit status and every cell of
+# the « local N » and « local F » columns of gates/inventories/SB2a1.toml: a missing cell, a failure or any skip in an F
+# column fails; `n-unavailable` is accepted only in an N column and only with that test's tier report line.
+id = "go"
+command = """timeout -k 10 1500 ./scripts/heavy.sh go test -json -count=1 -race ./internal/sidecar/... ./internal/typst/... ./internal/language/... > .task/sb2a1-go.json; rc=$?; python3 -I scripts/gojson_check.py .task/sb2a1-go.json --exit "$rc" --inventory gates/inventories/SB2a1.toml --columns local-N,local-F"""
+
+[[criteria]]
+# Manual mutants MS1..MS19 (scripts/netsim/mutants.toml, block SB2a1): each applied to a compiling copy and caught by its
+# named test failing with its expected text in that test's own `go test -json` events (a build failure, a timeout or
+# another failing test is not a catch).
+id = "mutants"
+command = """python3 -I -c "
+import tomllib, sys
+ms = {m['id']: m for m in tomllib.load(open('scripts/netsim/mutants.toml', 'rb'))['mutant'] if m.get('block') == 'SB2a1'}
+need = [f'MS{i}' for i in range(1, 20)]
+bad = [i for i in need if i not in ms or not ms[i].get('test') or not ms[i].get('expect', '').startswith(('T-', 'S-'))]
+sys.exit(f'SB2a1 mutant entries missing or without test and expect: {bad}' if bad else 0)
+" && timeout -k 10 1200 ./scripts/heavy.sh python3 -I scripts/netsim/mutants.py SB2a1"""
+
+[[criteria]]
+# U-1 in the webview: zero failed tests, and every named test passed (read back from the Vitest JSON report).
+id = "frontend"
+command = """cd frontend && timeout -k 10 600 ../scripts/heavy.sh pnpm exec vitest run --configLoader runner --reporter=json --outputFile=../.task/sb2a1-fe.json -t 'SB2a1 '; rc=$?; cd .. && python3 -I -c "
+import json, sys
+rc = int(sys.argv[1]); r = json.load(open('.task/sb2a1-fe.json'))
+ok = {a['title'] for f in r['testResults'] for a in f['assertionResults'] if a['status'] == 'passed'}
+need = ['SB2a1 about shows the tier: namespaces', 'SB2a1 about shows the tier: reduced', 'SB2a1 a refused sandbox shows its sentence and Détails']
+miss = [n for n in need if n not in ok]; failed = r.get('numFailedTests', 1)
+sys.exit(f'SB2a1 frontend: exit {rc}, failed {failed}, missing {miss}' if rc or failed or miss else 0)
+" "$rc\""""
+
+[[criteria]]
+# The checkers this gate relies on are themselves tested (gh_verdict_test.py replays recorded API answers: another
+# repository, a fork, another workflow path or event, another SHA, a dirty tree, in_progress, a failed job, a missing
+# artefact, a missing cell, an extra skip in F, n-unavailable without its tier report or in an F column; gojson_check
+# likewise).
+id = "checkers"
+command = "timeout -k 10 300 ./scripts/heavy.sh python3 -m unittest scripts/gh_verdict_test.py scripts/gojson_check_test.py"
+
+[[criteria]]
+# C-1 (D6): the candidate's GitHub runs, re-fetched now through the API. gates/SB2a1/github.json holds only the run id;
+# gh-verdict.py checks repository and head repository oioio-space/inkwell, workflow .github/workflows/ci.yml, event
+# workflow_dispatch, head branch candidate/sb2a1-*, head SHA equal to this checkout's HEAD with a clean tracked tree,
+# run and jobs ci, netsim, sandbox-stock, sidecars-arm64 completed with success, every required artefact parsed, and the
+# « stock amd64 » and « arm64 runner » columns of the inventory satisfied.
+id = "github"
+command = "timeout -k 10 300 python3 -I scripts/gh-verdict.py --check gates/SB2a1/github.json --repo oioio-space/inkwell --workflow .github/workflows/ci.yml --event workflow_dispatch --branch-prefix candidate/sb2a1- --head \"$(git rev-parse HEAD)\" --clean --jobs ci,netsim,sandbox-stock,sidecars-arm64 --inventory gates/inventories/SB2a1.toml --columns stock-amd64,arm64"
+
+[[criteria]]
+# No regression: the spec that compiles and exports through the real application (fe:check runs inside `frontend`'s
+# neighbours in ci; here only what this block can break).
+id = "regression"
+command = "timeout -k 10 600 ./scripts/heavy.sh mise run e2e -- e2e/preview.spec.ts"
+
+[[criteria]]
+# Interface change (About line, refusal sentence in the preview): ux-walkthrough with light and dark captures, compared
+# with docs/design/reference/. The verdict line must read "Verdict: ship".
+id = "ux-walkthrough"
+command = "test -s gates/SB2a1/UX.md && grep -Eq '^Verdict: ship' gates/SB2a1/UX.md"
+
+[[criteria]]
+id = "simplify-report"
+command = "test -s gates/SB2a1/SIMPLIFY.md"

@@ -58,6 +58,9 @@ frontend/playwright-report/
 # reports (SIMPLIFY.md, SUMMARY*.md, REVIEW*.md, UX-walkthrough.md) are evidence and are versioned.
 /gates/*/*
 !/gates/*/*.md
+# Mandatory test inventories of the gates (decision D7 of SB2): contracts frozen with their gate, kept outside
+# gates/<lot>/, which a gate run empties.
+!/gates/inventories/*.toml
 __pycache__/
 /testdata/perf/generated/
 
