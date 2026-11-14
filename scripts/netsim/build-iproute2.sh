@@ -5,7 +5,7 @@
 # ships 6.1.0. The tarball is fetched through scripts/fetch_pinned.py, which refuses any other SHA-256
 # (the one kernel.org publishes in sha256sums.asc next to the tarball).
 #
-# Usage: scripts/netsim/build-iproute2.sh PREFIX   # leaves PREFIX/sbin/tc; no-op when it is already there
+# Usage: scripts/netsim/build-iproute2.sh PREFIX   # leaves PREFIX/sbin/tc and PREFIX/lib/tc/*.dist; no-op when already there
 # Needs: gcc, make, bison, flex, pkg-config (Debian/Ubuntu: sudo apt-get install bison flex pkg-config).
 set -euo pipefail
 
@@ -16,7 +16,7 @@ url="https://mirrors.edge.kernel.org/pub/linux/utils/net/iproute2/iproute2-$vers
 prefix=${1:?usage: build-iproute2.sh PREFIX}
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 
-if [[ -x $prefix/sbin/tc ]] && "$prefix/sbin/tc" -V 2>&1 | grep -q "iproute2-$version"; then
+if [[ -x $prefix/sbin/tc && -f $prefix/lib/tc/normal.dist ]] && "$prefix/sbin/tc" -V 2>&1 | grep -q "iproute2-$version"; then
   echo "iproute2 $version already built in $prefix"
   exit 0
 fi
@@ -29,6 +29,11 @@ cd "$work/iproute2-$version"
 ./configure >/dev/null
 make -j"$(nproc)" >/dev/null
 make DESTDIR="$work/stage" PREFIX=/usr SBINDIR=/sbin install >/dev/null
-mkdir -p "$prefix/sbin"
+mkdir -p "$prefix/sbin" "$prefix/lib/tc"
 install -m 0755 "$work/stage/sbin/tc" "$prefix/sbin/tc"
+# netem's delay distributions (normal.dist, pareto.dist, ...): tc reads them from TC_LIB_DIR, and the
+# built tc would otherwise look in a system folder this build does not install into ("No distribution
+# data for normal"). The caller exports TC_LIB_DIR=PREFIX/lib/tc.
+find "$work/stage" -name '*.dist' -exec install -m 0644 {} "$prefix/lib/tc/" \;
+[[ -f $prefix/lib/tc/normal.dist ]] || { echo "build-iproute2: normal.dist was not built" >&2; exit 1; }
 "$prefix/sbin/tc" -V

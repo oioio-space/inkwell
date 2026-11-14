@@ -124,6 +124,7 @@ jobs:
         run: |
           scripts/netsim/build-iproute2.sh "$HOME/.cache/inkwell-iproute2"
           echo "$HOME/.cache/inkwell-iproute2/sbin" >> "$GITHUB_PATH"
+          echo "TC_LIB_DIR=$HOME/.cache/inkwell-iproute2/lib/tc" >> "$GITHUB_ENV"
       # Ubuntu 24.04 restricts unprivileged user namespaces with AppArmor.
       - name: Allow unprivileged user namespaces
         run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
