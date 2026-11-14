@@ -105,7 +105,7 @@ une relecture doit confirmer, pas découvrir. Avant toute relecture, l'auteur d'
 | Effort borné pour les cinq tâches (créer, partager, relire, présenter, exporter) (UF-5) | comptes d'opérateurs et temps KLM par tâche, budgets figés ; étape ajoutée ⇒ rouge (bloc UF2) |
 | Simple à voir, rien d'inaccessible : budget de commandes visibles par vue ; chaque commande dans la palette et à deux pas au plus d'un menu (UF-6) | énumération du registre de commandes |
 | Annuler plutôt que confirmer (UF-7) | toute transition destructive d'une machine a son « Annuler » |
-| L'apparence ne dérive pas (UF-8) | captures de référence par vue, clair et sombre (bloc UF1) |
+| L'apparence ne dérive pas, et **un design décidé est tenu ensuite** (UF-8 ; règle de l'utilisatrice, 2026-11-14, W66) : chaque design qu'elle a retenu a sa référence versionnée dans `docs/design/reference/` (maquette, mesures chiffrées, remarques) ; un bloc d'interface part de cette référence et ne s'en écarte que par une décision consignée | captures de référence par vue, clair et sombre (bloc UF1) ; invariants mesurés tirés de la référence (hauteurs, libellés sur une ligne, présence et ordre des commandes) dans les tests du bloc ; le parcours `ux-walkthrough` compare ses captures à la référence et nomme tout écart ; UF-4 interdit les valeurs brutes |
 | Tout geste qui lance une action a un retour visible en moins de 100 ms (UF-9) | invariant de la fixture ; mutant de toast retardé attrapé |
 | Chaque mode d'un parcours a son propre arbre d'accessibilité ; chaque vue a son instantané ARIA (UF-10, UF-11) | `toMatchAriaSnapshot` par état ; bouton renommé ⇒ rouge |
 | Chaque widget suit le contrat clavier de l'APG WAI-ARIA (UF-12) | tests générés par type de widget ; Échap cassé ⇒ rouge |

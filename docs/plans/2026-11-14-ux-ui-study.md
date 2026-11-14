@@ -129,3 +129,6 @@ onboarding tour (Apple and GNOME both prefer a usable first screen with a good e
 - 2026-11-14: the « Texte / Les deux / Aperçu » switcher must keep one line per label and the height of the other header
   controls (34 px); a label that wraps (« Les deux » on two lines in the first mock-up) is a defect. HB1a carries this as
   a test: the switcher's height equals the header buttons' at every supported width.
+- 2026-11-14: the close button was missing at the top right of the first mock-up. With P18 (the header is the title
+  bar) the header carries the window buttons itself: close always, minimise and maximise when the system's button
+  layout shows them (`gtk-decoration-layout`), on the side the system puts them. HB1a + S13 carry this as a test.

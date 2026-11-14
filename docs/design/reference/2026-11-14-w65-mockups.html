@@ -1,0 +1,403 @@
+<title>Inkwell, relire et retrouver</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&family=Source+Serif+4:wght@400;700&display=swap">
+<style>
+/* Layout: one reading column (study text) with full-width "specimen" bands holding the window mock-ups, all in Adwaita's own tokens. */
+:root{
+  --window:#fafafb; --view:#ffffff; --bar:#ffffff; --side:#ebebed; --card:#ffffff; --pop:#ffffff;
+  --fg:rgb(0 0 6/80%); --dim:rgb(0 0 6/55%); --line:rgb(0 0 6/13%); --soft:rgb(0 0 6/7%); --btn:rgb(0 0 6/9%);
+  --accent:#3584e4; --accent-text:#0461be; --accent-fg:#fff; --ok:#26a269; --warn:#905400; --warn-bg:#fdf3d6; --bad:#c30000;
+  --paper:#ffffff; --ink:#1d1d20; --shadow:0 1px 3px rgb(0 0 6/10%),0 8px 24px rgb(0 0 6/12%);
+  --hl-kw:#a2326c; --hl-head:#0461be; --p1:#e66100; --p2:#1c71d8;
+  --ui:"Inter","Adwaita Sans",system-ui,sans-serif; --mono:"JetBrains Mono","Adwaita Mono",ui-monospace,monospace; --serif:"Source Serif 4",Georgia,serif;
+  --ease:cubic-bezier(.25,.46,.45,.94);
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --window:#222226; --view:#1d1d20; --bar:#2e2e32; --side:#2e2e32; --card:rgb(255 255 255/8%); --pop:#36363a;
+  --fg:#ffffff; --dim:rgb(255 255 255/60%); --line:rgb(255 255 255/14%); --soft:rgb(255 255 255/7%); --btn:rgb(255 255 255/11%);
+  --accent:#3584e4; --accent-text:#81d0ff; --ok:#78e9ab; --warn:#ffc252; --warn-bg:rgb(205 147 9/22%); --bad:#ff938c;
+  --shadow:0 1px 3px rgb(0 0 0/40%),0 8px 24px rgb(0 0 0/45%); --hl-kw:#ffa0d8; --hl-head:#81d0ff; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --window:#222226; --view:#1d1d20; --bar:#2e2e32; --side:#2e2e32; --card:rgb(255 255 255/8%); --pop:#36363a;
+  --fg:#ffffff; --dim:rgb(255 255 255/60%); --line:rgb(255 255 255/14%); --soft:rgb(255 255 255/7%); --btn:rgb(255 255 255/11%);
+  --accent:#3584e4; --accent-text:#81d0ff; --ok:#78e9ab; --warn:#ffc252; --warn-bg:rgb(205 147 9/22%); --bad:#ff938c;
+  --shadow:0 1px 3px rgb(0 0 0/40%),0 8px 24px rgb(0 0 0/45%); --hl-kw:#ffa0d8; --hl-head:#81d0ff; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--window);color:var(--fg);font:15px/1.55 var(--ui);font-feature-settings:"cv05","cv08"}
+.wrap{max-width:1040px;margin:0 auto;padding-block:36px 72px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:48px}
+.col{max-width:66ch}
+h1{font:800 34px/1.12 var(--ui);letter-spacing:-.02em;margin:0 0 12px;text-wrap:balance}
+h2{font:800 22px/1.2 var(--ui);letter-spacing:-.01em;margin:0 0 6px;text-wrap:balance}
+h3{font:700 15px/1.3 var(--ui);margin:0}
+p{margin:0 0 10px}.dim{color:var(--dim)} .small{font-size:13px}
+a{color:var(--accent-text)} :focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
+section{display:flex;flex-direction:column;gap:16px}
+.levels{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;padding:0;margin:0;list-style:none}
+.levels li{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.levels b{display:block;font-weight:700}.levels span{color:var(--dim);font-size:13.5px}
+kbd{font:600 12px var(--ui);padding:1px 6px;border-radius:6px;background:var(--btn);white-space:nowrap}
+/* segmented toggle (AdwToggleGroup) */
+.seg{display:inline-flex;background:var(--btn);border-radius:9px;padding:3px;gap:2px;flex:none}
+.seg button{white-space:nowrap;font:600 13px var(--ui);color:var(--fg);background:none;border:0;border-radius:7px;padding:5px 14px;min-height:28px;cursor:default}
+.seg button[aria-pressed="true"]{background:var(--card);box-shadow:0 1px 2px rgb(0 0 6/18%)}
+.shead{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;justify-content:space-between}
+.scroll{overflow-x:auto;padding:6px 2px 18px}
+/* ---- window mock ---- */
+.win{width:940px;height:470px;border-radius:15px;background:var(--view);box-shadow:var(--shadow);border:1px solid var(--line);display:flex;overflow:hidden;font-size:13.5px;position:relative}
+.sb{width:216px;background:var(--side);display:flex;flex-direction:column;flex:none;border-right:1px solid var(--soft)}
+.main{flex:1;min-width:0;display:flex;flex-direction:column}
+.bar{height:47px;display:flex;align-items:center;gap:6px;padding:0 7px;flex:none}
+.bar.line{border-bottom:1px solid var(--soft)} .sys{height:36px;background:var(--side);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;position:relative;flex:none;border-bottom:1px solid var(--soft)}
+.ib{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;flex:none;color:var(--fg)}
+.ib.on{background:var(--btn)} .ib svg,.lb svg,.row svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.lb{height:34px;border-radius:9px;display:inline-flex;align-items:center;gap:7px;padding:0 10px;font-weight:600;flex:none}
+.sug{background:#1c71d8;color:#fff;font-weight:700;padding:0 16px}
+.grow{flex:1} .wc{display:flex;gap:8px;margin-left:6px}.wc i{width:24px;height:24px;border-radius:50%;background:var(--btn);display:grid;place-items:center}.wc svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round}
+.ttl{display:flex;flex-direction:column;align-items:center;line-height:1.2}.ttl b{font-weight:700}.ttl span{font-size:12px;color:var(--dim)}
+.pill{height:34px;border-radius:9px;background:var(--btn);display:flex;align-items:center;gap:10px;padding:0 6px 0 12px;font-weight:600;min-width:230px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--ok);flex:none}
+.av{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font:700 11px var(--ui);color:#fff;border:2px solid var(--bar);margin-left:-8px}.av:first-child{margin-left:0}
+.fmt{font-weight:700;width:30px;text-align:center;font-family:var(--serif);font-size:16px}
+.body{flex:1;display:flex;min-height:0}
+.src{flex:1;min-width:0;padding:14px 0;font:13px/1.9 var(--mono);position:relative}
+.ln{display:flex}.ln i{width:44px;text-align:right;padding-right:14px;color:var(--dim);font-style:normal;flex:none}.kw{color:var(--hl-kw)}.hd{color:var(--hl-head);font-weight:600}
+.prev{width:44%;background:var(--window);border-left:1px solid var(--soft);display:flex;flex-direction:column;position:relative;flex:none}
+.sheet{background:var(--paper);color:var(--ink);margin:16px auto 0;width:78%;flex:1;box-shadow:0 1px 4px rgb(0 0 6/25%);padding:26px 24px;font-family:var(--serif);font-size:9px;line-height:1.5}.sheet b{display:block;font-size:14px;margin-bottom:6px}
+.osd{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);background:rgb(0 0 6/72%);color:#fff;border-radius:999px;display:flex;align-items:center;gap:2px;padding:3px 6px;font:600 12px var(--ui)}.osd span{padding:4px 9px}
+.st{height:32px;display:flex;align-items:center;gap:18px;padding:0 14px;font-size:12.5px;color:var(--dim);border-top:1px solid var(--soft);flex:none}
+.sbh{height:47px;display:flex;align-items:center;gap:4px;padding:0 7px;font-weight:700;flex:none}
+.grp{font:700 11.5px var(--ui);color:var(--dim);padding:10px 14px 4px}
+.row{height:34px;margin:0 6px 2px;border-radius:9px;display:flex;align-items:center;gap:9px;padding:0 9px}.row.sel{background:var(--btn);font-weight:600}.row em{margin-left:auto;font-style:normal;font-size:12px;color:var(--dim)}
+.note{position:absolute;font:600 11.5px var(--ui);color:var(--warn);background:var(--warn-bg);border-radius:6px;padding:2px 8px;white-space:nowrap}
+.cap{font-size:13.5px;color:var(--dim);max-width:70ch}
+.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:0}
+.facts div{border-top:2px solid var(--line);padding-top:8px}.facts dt{font:800 24px/1.1 var(--ui);font-variant-numeric:tabular-nums}.facts dd{margin:2px 0 0;color:var(--dim);font-size:13px}
+/* ---- pairs ---- */
+.pair{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:18px}
+.fig{display:flex;flex-direction:column;gap:8px;min-width:0}.tag{font:700 11.5px var(--ui);letter-spacing:.06em;text-transform:uppercase;color:var(--dim)}
+.dlg{background:var(--pop);border:1px solid var(--line);box-shadow:var(--shadow);min-height:290px;position:relative;overflow:hidden}
+.dlg.old{border-radius:12px;padding:16px 18px}.dlg.old h4{font:700 14.5px var(--ui);margin:0 0 10px}.dlg.old h5{font:700 14.5px var(--ui);margin:14px 0 6px}
+.dlg.old select,.fake{display:block;width:100%;height:34px;border-radius:6px;border:1px solid var(--line);background:var(--view);color:var(--fg);font:13.5px var(--ui);padding:0 8px;line-height:32px}
+.dlg.new{border-radius:15px;padding:0 0 18px;background:var(--window)}
+.dlg.new header{height:47px;display:grid;place-items:center;font-weight:700}.dlg.new h5{font:700 14px var(--ui);margin:14px 30px 6px}
+.box{margin:0 18px;background:var(--card);border-radius:12px;box-shadow:0 0 0 1px var(--soft)}
+.box>div{min-height:50px;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 14px;border-top:1px solid var(--soft)}.box>div:first-child{border-top:0}
+.box small{display:block;color:var(--dim);font-size:12.5px}
+.sw{width:42px;height:24px;border-radius:999px;background:var(--accent);position:relative;flex:none}.sw::after{content:"";position:absolute;right:2px;top:2px;width:20px;height:20px;border-radius:50%;background:#fff}
+/* motion demo */
+.stage{background:var(--view);border:1px solid var(--line);border-radius:12px;height:230px;position:relative;overflow:hidden;padding:12px 16px;font:13px/1.9 var(--mono)}
+.bn{background:var(--warn-bg);color:var(--warn);font:600 13px var(--ui);padding:0 14px;border-radius:9px;margin-bottom:8px;height:38px;display:flex;align-items:center}
+.pp{position:absolute;right:14px;top:14px;width:190px;background:var(--pop);border:1px solid var(--line);border-radius:15px;box-shadow:var(--shadow);padding:10px 12px;font:13px/1.5 var(--ui)}
+.old-m .bn,.old-m .pp{display:none}.old-m.show .bn{display:flex}.old-m.show .pp{display:block}
+.new-m .bn{position:absolute;left:16px;right:16px;top:12px;opacity:0;transform:translateY(-8px);transition:opacity 150ms var(--ease),transform 150ms var(--ease)}
+.new-m .txt{transition:transform 200ms var(--ease)}.new-m.show .txt{transform:translateY(46px)}
+.new-m .pp{opacity:0;transform:translateY(-6px) scale(.97);transform-origin:top right;transition:opacity 150ms var(--ease),transform 150ms var(--ease)}
+.new-m.show .bn,.new-m.show .pp{opacity:1;transform:none;transition-duration:200ms}
+@media (prefers-reduced-motion:reduce){.new-m .bn,.new-m .pp,.new-m .txt{transition:opacity 120ms linear;transform:none}.new-m.show .txt{transform:translateY(46px)}}
+.go{font:600 13.5px var(--ui);color:var(--fg);background:var(--btn);border:0;border-radius:9px;height:34px;padding:0 16px;align-self:flex-start}
+/* palette + search */
+.find{display:flex;align-items:center;gap:6px;padding:6px 10px;border-bottom:1px solid var(--soft);background:var(--bar)}
+.ent{height:34px;border-radius:9px;background:var(--btn);display:flex;align-items:center;gap:8px;padding:0 10px;flex:1;min-width:0}.ent em{margin-left:auto;font-style:normal;color:var(--dim);font-size:12px}
+.pal{background:var(--pop);border:1px solid var(--line);border-radius:15px;box-shadow:var(--shadow);padding:8px;display:flex;flex-direction:column;gap:2px}
+.pal .ent{flex:none;margin-bottom:6px}.cmd{height:36px;border-radius:9px;display:flex;align-items:center;justify-content:space-between;padding:0 10px}.cmd.sel{background:var(--btn)}
+mark{background:rgb(248 228 92/55%);color:inherit;border-radius:3px}
+/* proposals */
+.plist{display:flex;flex-direction:column;gap:0;border-top:1px solid var(--line)}
+.p{display:grid;grid-template-columns:22px 44px minmax(0,1fr);gap:4px 8px;padding:12px 0;border-bottom:1px solid var(--line);align-items:start}
+.p input{width:18px;height:18px;margin:3px 0 0;accent-color:var(--accent)}.p .id{font:700 13px var(--mono);color:var(--dim);padding-top:2px}
+.p label{font-weight:600}.p .why{grid-column:3;color:var(--dim);font-size:13.5px}.p .eff{font:600 11.5px var(--ui);background:var(--btn);border-radius:999px;padding:1px 8px;margin-left:6px;white-space:nowrap}
+.pick{position:sticky;bottom:calc(10px + env(safe-area-inset-bottom,0px));align-self:flex-start;display:flex;flex-wrap:wrap;gap:10px;align-items:center;background:var(--pop);border:1px solid var(--line);box-shadow:var(--shadow);border-radius:15px;padding:8px 8px 8px 16px;font-size:13.5px}
+.pick button{font:700 13.5px var(--ui);background:var(--accent);color:var(--accent-fg);border:0;border-radius:9px;height:34px;padding:0 16px}
+#out{width:100%;font:12.5px var(--mono);background:var(--view);color:var(--fg);border:1px solid var(--line);border-radius:9px;padding:8px;min-height:60px}
+</style>
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<symbol id="i-side" viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="10" rx="2"/><path d="M6 3v10"/></symbol>
+<symbol id="i-clock" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="M8 4.5V8l2.3 1.6"/></symbol>
+<symbol id="i-share" viewBox="0 0 16 16"><path d="M8 10V2M5 4.8 8 2l3 2.8M3 9v4h10V9"/></symbol>
+<symbol id="i-menu" viewBox="0 0 16 16"><path d="M3 4.5h10M3 8h10M3 11.5h10"/></symbol>
+<symbol id="i-search" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.2"/><path d="m10.2 10.2 3.3 3.3"/></symbol>
+<symbol id="i-plus" viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></symbol>
+<symbol id="i-eye" viewBox="0 0 16 16"><path d="M1.5 8S4 3.5 8 3.5 14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8Z"/><circle cx="8" cy="8" r="1.8"/></symbol>
+<symbol id="i-doc" viewBox="0 0 16 16"><path d="M4 2h5l3 3v9H4zM9 2v3h3"/></symbol>
+<symbol id="i-branch" viewBox="0 0 16 16"><circle cx="5" cy="3.5" r="1.5"/><circle cx="5" cy="12.5" r="1.5"/><circle cx="11" cy="5.5" r="1.5"/><path d="M5 5v6M11 7c0 2.5-6 1.5-6 4"/></symbol>
+</defs></svg>
+<style>
+.ed{background:var(--view);border:1px solid var(--line);border-radius:12px;position:relative;overflow:hidden;font:13px/2 var(--mono);padding:12px 0;min-height:250px}
+.l{display:flex;position:relative;padding-right:14px}.l>i{width:40px;flex:none;text-align:right;padding-right:10px;color:var(--dim);font-style:normal}
+.l>b{width:3px;flex:none;border-radius:2px;margin:5px 9px 5px 0;background:transparent}
+.by-b>b{background:var(--p2)}.by-a>b{background:var(--p1)}
+.fresh{background:color-mix(in srgb,var(--p2) 22%,transparent);border-radius:3px;transition:background 2.6s var(--ease)}
+.fresh.done{background:transparent}
+.caret{display:inline-block;width:2px;height:1.25em;background:var(--p2);vertical-align:-3px;position:relative}
+.caret::after{content:"Bob";position:absolute;left:-1px;bottom:100%;background:var(--p2);color:#fff;font:700 10.5px var(--ui);padding:1px 5px;border-radius:5px 5px 5px 0;white-space:nowrap}
+.gone{position:absolute;left:44px;width:0;height:0;border:5px solid transparent;border-left-color:var(--bad);margin-top:9px}
+.tip2{position:absolute;left:62px;background:var(--pop);border:1px solid var(--line);box-shadow:var(--shadow);border-radius:9px;padding:6px 10px;font:12.5px/1.4 var(--ui);max-width:240px;z-index:2}
+.tip2 s{color:var(--dim)}
+.edge{position:absolute;left:50%;transform:translateX(-50%);background:var(--pop);border:1px solid var(--line);box-shadow:var(--shadow);border-radius:999px;font:600 12px var(--ui);padding:4px 12px;display:flex;gap:7px;align-items:center;white-space:nowrap}
+.edge i{width:8px;height:8px;border-radius:50%;background:var(--p1);display:block}
+.since{position:absolute;right:12px;top:10px;background:var(--btn);border-radius:999px;font:600 12px var(--ui);padding:4px 12px;white-space:nowrap}
+.strip{background:var(--warn-bg);color:var(--warn);font:600 12.5px var(--ui);padding:8px 14px;margin:-12px 0 8px}
+ins{background:color-mix(in srgb,var(--ok) 20%,transparent);text-decoration:underline;text-decoration-color:var(--ok);text-underline-offset:3px;border-radius:3px}
+del{background:color-mix(in srgb,var(--bad) 16%,transparent);color:var(--bad)}
+.dhead{display:flex;flex-wrap:wrap;gap:8px 12px;align-items:center;padding:8px 12px;border-bottom:1px solid var(--soft);font:13px var(--ui);margin-top:-12px;margin-bottom:8px;background:var(--bar)}
+.dhead .sum{font-weight:600;flex:1;min-width:180px}.chipb{background:var(--btn);border-radius:9px;padding:4px 10px;font:600 12.5px var(--ui);white-space:nowrap}
+.fold{font:12px var(--ui);color:var(--dim);text-align:center;padding:2px;margin:4px 14px 4px 62px;background:var(--soft);border-radius:6px}
+.mm{position:absolute;right:4px;top:60px;bottom:10px;width:6px;border-radius:3px;background:var(--soft)}.mm i{position:absolute;left:0;right:0;height:8px;border-radius:3px;background:var(--ok)}
+.arrow{font:12px var(--ui);color:var(--dim);margin-left:62px}
+.modal{background:var(--pop);border:1px solid var(--line);box-shadow:var(--shadow);border-radius:12px;padding:12px;font:13px/1.9 var(--mono)}
+.modal h4{font:700 14.5px var(--ui);margin:0 0 6px}
+/* versions */
+.dr{background:var(--side);border:1px solid var(--line);border-radius:12px;padding:8px;font:13px var(--ui);display:flex;flex-direction:column;gap:2px;min-height:330px}
+.day{font:700 11.5px var(--ui);color:var(--dim);padding:10px 8px 4px}
+.vr{display:flex;gap:10px;align-items:center;padding:6px 8px;border-radius:9px;min-height:40px}.vr.sel{background:var(--btn)}
+.vr .who{width:24px;height:24px;border-radius:50%;flex:none;display:grid;place-items:center;font:700 11px var(--ui);color:#fff}
+.vr .t{flex:1;min-width:0}.vr small{display:block;color:var(--dim);font-size:12px}.vr time{color:var(--dim);font-size:12px;white-space:nowrap}
+.mile{border:1px solid var(--line);background:var(--card)}.mile .who{background:none;color:var(--accent-text);font-size:15px}
+.draft{background:var(--card);border-radius:12px;box-shadow:0 0 0 1px var(--soft);padding:10px 12px;margin:2px 0 4px}.draft div{display:flex;gap:6px;margin-top:8px;flex-wrap:wrap}
+.lane{display:flex;gap:8px;align-items:center;height:56px;padding:0 6px;border-radius:9px}
+.lane svg{flex:none}.lane small{display:block;color:var(--dim);font-size:12px}
+/* files */
+.tree{background:var(--side);border:1px solid var(--line);border-radius:12px;padding:8px 0;font:13.5px var(--ui);min-height:330px}
+.tree .ent{margin:0 8px 6px;flex:none}
+.tr{height:32px;margin:0 6px 1px;border-radius:9px;display:flex;align-items:center;gap:7px;padding:0 8px;white-space:nowrap}
+.tr.sel{background:var(--btn);font-weight:600}.tr svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;flex:none;stroke-linecap:round;stroke-linejoin:round}
+.tr .sp{flex:1}.tr .bd{width:7px;height:7px;border-radius:50%;background:var(--accent)}.tr .pr{font:700 11px var(--ui);color:var(--bad)}
+.tr .mini{width:18px;height:18px;border-radius:50%;font:700 9.5px var(--ui);color:#fff;display:grid;place-items:center}
+.tabs{display:flex;gap:2px;padding:4px 6px;background:var(--bar);border:1px solid var(--line);border-radius:12px 12px 0 0;border-bottom:0;font:13px var(--ui);overflow:hidden}
+.tab{display:flex;align-items:center;gap:7px;padding:0 12px;height:30px;border-radius:9px;white-space:nowrap}.tab.on{background:var(--btn);font-weight:600}.tab em{font-style:italic;color:var(--dim)}
+.welcome{background:var(--window);border:1px solid var(--line);box-shadow:var(--shadow);border-radius:15px;padding:26px 22px;max-width:460px;display:flex;flex-direction:column;gap:14px}
+.welcome h4{font:800 22px/1.2 var(--ui);margin:0}.swatches{display:flex;gap:8px}.swatches i{width:24px;height:24px;border-radius:50%;display:block}
+
+:root{--br1:#9141ac;--br2:#2190a4}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--br1:#dc8add;--br2:#7bdff4}}
+:root[data-theme="dark"]{--br1:#dc8add;--br2:#7bdff4}
+.gt{position:relative;height:368px;margin-top:4px}
+.gt svg{position:absolute;left:0;top:0}
+.gr{position:absolute;left:66px;right:0;height:46px;display:flex;align-items:center;gap:8px;padding:0 8px;border-radius:9px}
+.gr.sel{background:var(--btn)}.gr .t{flex:1;min-width:0;line-height:1.3}.gr small{display:block;color:var(--dim);font-size:12px}.gr time{color:var(--dim);font-size:12px;white-space:nowrap}
+.gr .lab{font:700 11px var(--ui);color:#fff;background:var(--br1);border-radius:999px;padding:1px 8px;white-space:nowrap}
+.gsep{position:absolute;left:66px;right:0;border-top:1px solid var(--line)}.gsep span{position:absolute;right:8px;top:-9px;background:var(--side);padding:0 6px;font:700 11px var(--ui);color:var(--dim)}
+.gt text{font:700 11px var(--ui);fill:#fff;text-anchor:middle;dominant-baseline:central}
+</style>
+
+<div class="wrap">
+<header class="col">
+  <p class="tag">Étude W65 · deuxième partie · 14 novembre 2026</p>
+  <h1>Voir ce que les autres écrivent, relire, retrouver ses fichiers</h1>
+  <p>Cette page couvre les écrans que vous avez demandé de refaire : les modifications des autres dans le texte, les différences, les versions, les fichiers, les onglets, et les surfaces que personne n'avait encore dessinées. Même règle que la première partie : simple à l'œil, complet sous la main.</p>
+  <p class="dim small">Aucune capture du diff ni du volet des versions n'existe dans le dépôt : leurs maquettes « Aujourd'hui » sont reconstituées d'après le code, pas photographiées.</p>
+</header>
+
+<section>
+  <div class="col"><h2>Les modifications des autres, dans le texte</h2><p class="cap">T1 à T6. Aujourd'hui le texte d'une autre personne apparaît sans aucune marque, une suppression ne laisse pas de trace, et rien ne dit que quelqu'un écrit hors de votre vue. Les données nécessaires existent déjà.</p></div>
+  <button class="go" id="bob">Bob écrit une phrase</button>
+  <div class="pair">
+    <div class="fig"><span class="tag">Aujourd'hui</span>
+      <div class="ed"><div class="strip">Depuis votre dernière visite (hier 17:42) · 12 passages modifiés · Tout est vu</div>
+        <div class="l"><i>1</i><b></b><span class="hd">= Rapport annuel</span></div>
+        <div class="l"><i>2</i><b></b><span>Le chiffre d'affaires progresse de 12 %.</span></div>
+        <div class="l"><i>3</i><b></b><span id="old-bob"></span></div>
+        <div class="l"><i>4</i><b></b><span>La marge reste stable.</span></div></div>
+      <p class="cap">Le bandeau pousse le texte. La phrase de Bob arrive sans marque.</p></div>
+    <div class="fig"><span class="tag">Proposé</span>
+      <div class="ed"><span class="since">12 changements depuis hier 17:42 · Voir</span>
+        <div class="l"><i>1</i><b></b><span class="hd">= Rapport annuel</span></div>
+        <div class="l by-a"><i>2</i><b></b><span>Le chiffre d'affaires progresse de 12 %.</span></div>
+        <div class="l" id="new-line"><i>3</i><b></b><span id="new-bob"></span></div>
+        <span class="gone" style="top:118px"></span><div class="tip2" style="top:128px">Alice a supprimé<br><s>sur les trois derniers mois</s></div>
+        <div class="l"><i>4</i><b></b><span>La marge reste stable.</span></div>
+        <div class="edge" style="bottom:10px"><i></i>Alice écrit plus bas ↓</div></div>
+      <p class="cap">Une teinte qui s'estompe, une barre dans la marge jusqu'à ce que vous l'ayez vue, une marque là où du texte a disparu, et une pastille quand quelqu'un écrit hors de l'écran. Le texte reste propre, et votre ligne de lecture ne bouge pas.</p></div>
+  </div>
+</section>
+
+<section>
+  <div class="col"><h2>Les différences</h2><p class="cap">D1 à D5. Aujourd'hui : une fenêtre par-dessus l'application, deux moteurs différents selon la vue, du texte barré en masse, et une seconde fenêtre pour revenir en arrière.</p></div>
+  <div class="pair">
+    <div class="fig"><span class="tag">Aujourd'hui (reconstitué)</span>
+      <div class="modal"><h4>Marie · hier 17:42</h4><span class="chipb">Intégré | Côte à côte</span>
+        <div style="margin-top:8px">Le chiffre d'affaires <del>augmente de 10 % sur les trois derniers mois</del><ins>progresse de 12 % sur l'année</ins>, porté par <del>la région Nord</del><ins>les nouvelles régions</ins>.</div>
+        <div class="fold" style="margin-left:0">… 120 lignes inchangées …</div>
+        <div><del>Les coûts de livraison baissent.</del></div>
+        <p class="small dim" style="font-family:var(--ui);margin:8px 0 0">Fenêtre modale · les lignes repliées ne s'ouvrent pas · « Revenir à ce moment » ouvre une deuxième fenêtre.</p></div></div>
+    <div class="fig"><span class="tag">Proposé</span>
+      <div class="ed"><div class="dhead"><span class="sum">Marie a modifié 2 phrases dans « Résultats »</span><span class="chipb">De : hier 17:42 ⌄</span><span class="chipb">À : maintenant ⌄</span><span class="seg" style="padding:2px"><button aria-pressed="true" tabindex="-1">Simple</button><button aria-pressed="false" tabindex="-1">Tout</button></span><span class="chipb">‹ 1 sur 3 ›</span></div>
+        <div class="l"><i>12</i><b style="background:var(--ok)"></b><span>Le chiffre d'affaires <ins>progresse de 12 % sur l'année</ins>, porté par <ins>les nouvelles régions</ins>.</span></div>
+        <div class="arrow">« augmente de 10 % sur les trois derniers mois » → « progresse de 12 % sur l'année »</div>
+        <div class="fold">120 lignes inchangées · Afficher</div>
+        <span class="gone" style="top:176px"></span>
+        <div class="l"><i>133</i><b></b><span class="dim">une phrase supprimée · survolez la marque</span></div>
+        <div class="mm"><i style="top:8%"></i><i style="top:70%;background:var(--bad)"></i></div></div>
+      <p class="cap">À la place de l'éditeur, pas par-dessus. Une phrase résume le changement. Les ajouts sont teintés et soulignés, les suppressions restent une marque qu'on ouvre. « Tout » montre le texte barré. On compare deux moments quelconques.</p></div>
+  </div>
+</section>
+
+<section>
+  <div class="col"><h2>Les versions</h2><p class="cap">V1 à V5, V8, proposition refaite à votre demande : l'arbre est gardé et redessiné. Les mots restent simples : texte principal, variante, version nommée.</p></div>
+  <div class="pair">
+    <div class="fig"><span class="tag">Aujourd'hui (reconstitué)</span>
+      <div class="dr">
+        <div class="lane"><svg width="46" height="56"><path d="M14 0v56" stroke="currentColor" stroke-width="2" opacity=".5"/><circle cx="14" cy="28" r="5" style="fill:var(--accent)"/></svg><span>Maintenant<small>Le texte que vous voyez</small></span></div>
+        <div class="lane"><svg width="46" height="56"><path d="M14 0v56M14 56C14 28 30 28 30 0" stroke="currentColor" stroke-width="2" fill="none" opacity=".5"/><circle cx="30" cy="28" r="5" style="fill:var(--p1)"/></svg><span>Variante « Intro courte »<small>Marie · pas encore fusionnée</small></span></div>
+        <div class="lane"><svg width="46" height="56"><path d="M14 0v56M30 0v56" stroke="currentColor" stroke-width="2" opacity=".5"/><circle cx="14" cy="28" r="5" style="fill:var(--p2)"/></svg><span>Bob<small>aujourd'hui 14:10 · 3 modifications</small></span></div>
+        <div class="lane"><svg width="46" height="56"><path d="M14 0v56M30 0v56" stroke="currentColor" stroke-width="2" opacity=".5"/><rect x="9" y="23" width="10" height="10" transform="rotate(45 14 28)" style="fill:var(--fg)"/></svg><span>Version « Relecture »<small>hier · nommée par Alice</small></span></div>
+        <div class="draft" style="margin-top:auto"><b>Bob · aujourd'hui 14:10</b><div><span class="chipb">Voir les changements</span><span class="chipb">Fusionner</span></div></div></div>
+      <p class="cap">Des lignes et des courbes à lire comme un arbre git, le mot « fusionner », les actions dans une carte en bas.</p></div>
+    <div class="fig"><span class="tag">Proposé · l'arbre, redessiné</span>
+      <div class="dr">
+        <div style="display:flex;gap:6px;padding:2px 4px 4px;flex-wrap:wrap"><span class="chipb">Versions nommées</span><span class="chipb">Tout le monde ⌄</span></div>
+        <div class="gt"><svg width="66" height="368" aria-hidden="true">
+<path d="M20 23V368" style="stroke:var(--dim);stroke-width:2;fill:none"/>
+<path d="M20 253C20 227 44 233 44 207V115" style="stroke:var(--br1);stroke-width:2;fill:none;stroke-linecap:round"/>
+<path d="M20 314C40 314 40 284 20 284" style="stroke:var(--br2);stroke-width:2;fill:none"/>
+<circle cx="20" cy="23" r="7" style="fill:var(--side);stroke:var(--accent);stroke-width:3"/>
+<circle cx="20" cy="69" r="11" style="fill:var(--p2);stroke:var(--side);stroke-width:2"/><text x="20" y="69">B</text><circle cx="44" cy="115" r="11" style="fill:var(--br1);stroke:var(--side);stroke-width:2"/><text x="44" y="115">M</text><circle cx="20" cy="161" r="11" style="fill:var(--p1);stroke:var(--side);stroke-width:2"/><text x="20" y="161">A</text><circle cx="44" cy="207" r="11" style="fill:var(--br1);stroke:var(--side);stroke-width:2"/><text x="44" y="207">M</text>
+<rect x="13" y="246" width="14" height="14" rx="2" transform="rotate(45 20 253)" style="fill:var(--accent);stroke:var(--side);stroke-width:2"/>
+<circle cx="20" cy="299" r="6" style="fill:var(--br2);stroke:var(--side);stroke-width:2"/>
+<circle cx="20" cy="345" r="11" style="fill:var(--p1);stroke:var(--side);stroke-width:2"/><text x="20" y="345">A</text></svg><div class="gr " style="top:0px"><span class="t">Maintenant<small>Le texte que vous voyez</small></span><time></time></div><div class="gr " style="top:46px"><span class="t">Bob a ajouté 2 phrases dans « Résultats »</span><time>14:10</time></div><div class="gr sel" style="top:92px"><span class="t"><span class="lab">Variante · Intro courte</span><small>Marie a raccourci l'introduction · Ouvrir · Comparer · Intégrer</small></span><time>13:20</time></div><div class="gr " style="top:138px"><span class="t">Alice a corrigé 3 mots</span><time>11:32</time></div><div class="gr " style="top:184px"><span class="t">Marie a créé la variante « Intro courte »</span><time>18:05</time></div><div class="gr " style="top:230px"><span class="t"><b>⚑ Relecture</b><small>version nommée par Alice</small></span><time>17:42</time></div><div class="gr " style="top:276px"><span class="t">Variante « Plan B » intégrée par Alice<small>3 séances · Déplier</small></span><time>16:30</time></div><div class="gr " style="top:322px"><span class="t">Alice a écrit « Introduction »</span><time>16:05</time></div><div class="gsep" style="top:184px"><span>Hier</span></div></div></div>
+      <p class="cap">L'arbre reste, mais il se lit : un tronc continu pour le texte principal, une branche courbe et colorée par variante avec son nom au bout, les visages comme nœuds, un losange pour les versions nommées. Une variante intégrée se replie en une boucle sur le tronc et se déplie d'un clic. Le texte est toujours aligné, et chaque ligne dit qui a fait quoi.</p></div>
+  </div>
+<dl class="facts" style="margin-top:4px">
+    <div><dt style="font-size:15px">Texte principal</dt><dd>le tronc : le texte que tout le monde voit</dd></div>
+    <div><dt style="font-size:15px">Variante</dt><dd>une branche : une autre tournure du texte, écrite à côté sans toucher au texte principal</dd></div>
+    <div><dt style="font-size:15px">Version nommée</dt><dd>le losange : un moment auquel quelqu'un a donné un nom</dd></div>
+    <div><dt style="font-size:15px">Intégrer</dt><dd>reprendre une variante dans le texte principal ; sinon « Abandonner », qu'on peut « Rétablir »</dd></div>
+  </dl>
+</section>
+
+<section>
+  <div class="col"><h2>Les fichiers et les onglets</h2><p class="cap">F1 à F6, O1 à O4. Le volet devient un vrai arbre, utilisable au clavier, avec un filtre. Chaque ligne dit ce qui compte. Les onglets n'apparaissent qu'à partir du deuxième fichier ouvert.</p></div>
+  <div class="pair">
+    <div class="fig"><span class="tag">Aujourd'hui</span>
+      <div class="tree"><div style="text-align:center;font-weight:700;padding:6px 0 12px">Fichiers</div>
+        <div class="tr sel"><svg><use href="#i-doc"/></svg>main.typ<span class="sp"></span><span class="dim" style="font-weight:400">principal</span></div>
+        <div class="tr"><svg><use href="#i-doc"/></svg>chapitres/intro.typ</div><div class="tr"><svg><use href="#i-doc"/></svg>chapitres/resultats.typ</div><div class="tr"><svg><use href="#i-doc"/></svg>images/logo.png</div></div>
+      <p class="cap">Une liste plate de boutons : pas de filtre, pas de création, de renommage ni de suppression, pas de navigation au clavier.</p></div>
+    <div class="fig"><span class="tag">Proposé</span>
+      <div class="tabs"><span class="tab on">main.typ</span><span class="tab"><em>resultats.typ</em><span class="mini" style="background:var(--p2);width:16px;height:16px">B</span></span><span class="tab">notes.md <span class="bd"></span></span></div>
+      <div class="tree" style="border-radius:0 0 12px 12px"><div class="ent"><svg style="width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2"><use href="#i-search"/></svg><span class="dim">Filtrer, ou Ctrl P pour ouvrir</span></div>
+        <div class="tr sel"><svg><use href="#i-doc"/></svg>main.typ<span class="dim" style="font-weight:400;font-size:12px">★ principal</span><span class="sp"></span><span class="mini" style="background:var(--p1)">A</span></div>
+        <div class="tr">⌄ chapitres<span class="sp"></span><span class="pr">2</span></div>
+        <div class="tr" style="padding-left:28px"><svg><use href="#i-doc"/></svg>intro.typ<span class="sp"></span><span class="bd"></span></div>
+        <div class="tr" style="padding-left:28px"><svg><use href="#i-doc"/></svg>resultats.typ<span class="sp"></span><span class="pr">2</span><span class="mini" style="background:var(--p2)">B</span></div>
+        <div class="tr">› images <span class="dim">· 48</span></div>
+        <div class="tr"><svg><use href="#i-doc"/></svg>notes.md</div>
+        <div class="day" style="padding-left:14px">Dernières versions</div>
+        <div class="tr"><span class="mini" style="background:var(--p2)">B</span>Bob · 14:10<span class="sp"></span><span class="dim">Tout voir</span></div></div>
+      <p class="cap">Un visage : quelqu'un est dans ce fichier. Un point bleu : modifié par d'autres depuis votre dernier passage. Un chiffre rouge : des problèmes, reportés sur le dossier. Renommer avec <kbd>F2</kbd>, supprimer avec « Annuler » et une corbeille du projet.</p></div>
+  </div>
+</section>
+
+<section>
+  <div class="col"><h2>Le premier lancement</h2><p class="cap">S1. La première minute de chaque nouvelle personne n'a aucun design aujourd'hui : le document « Sans titre » s'ouvre directement, sans nom ni choix.</p></div>
+  <div class="welcome"><h4>Bienvenue dans Inkwell</h4>
+    <div class="box" style="margin:0"><div><span>Votre nom<small>Les autres le verront à côté de votre curseur</small></span><span class="dim">Alice</span></div><div><span>Votre couleur</span><span class="swatches"><i style="background:#e66100"></i><i style="background:#1c71d8"></i><i style="background:#26a269"></i><i style="background:#9141ac"></i></span></div></div>
+    <div style="display:flex;flex-direction:column;gap:8px"><span class="lb sug" style="justify-content:center">Nouveau document</span><span class="lb" style="justify-content:center;background:var(--btn)">Ouvrir un document…</span><span class="lb" style="justify-content:center;background:var(--btn)">Rejoindre avec une invitation…</span></div>
+    <span class="dim small">Récents : Rapport annuel · Thèse, chapitre 3</span></div>
+</section>
+
+<section>
+  <div class="col"><h2>Les propositions</h2><p class="cap">Cochez celles que vous gardez, copiez la liste et collez-la dans la conversation. Le détail, les sources et l'ordre proposé sont dans <code>docs/plans/2026-11-14-ux-diff-versions-files.md</code>. « Après » : dépend d'un bloc pas encore livré.</p></div>
+  <div id="props"></div>
+  <div class="pick"><span id="count">0 proposition retenue</span><button id="copy">Copier ma sélection</button></div>
+  <textarea id="out" readonly aria-label="Sélection à copier" hidden></textarea>
+</section>
+
+<section class="col">
+  <h2>Limites</h2>
+  <p>L'existant a été lu dans le code, sans lancer l'application. Aucune étude contrôlée n'a été trouvée sur le diff de prose, les onglets pour l'écriture ou les curseurs en direct : sur ces points les propositions suivent la pratique des meilleurs outils, pas une preuve mesurée. La pastille « quelqu'un écrit hors de l'écran » (T3) est une idée sans source : à essayer en séance avant de la garder. Le cas précis derrière « l'arbre ne se synchronise pas » n'est écrit nulle part ; il faut le reproduire à deux avant de le corriger (V7).</p>
+</section>
+</div>
+
+<script>
+const groups=[
+["Les modifications des autres dans le texte",[
+["T1","Texte tout juste écrit : teinte qui s'estompe et barre dans la marge","M","Aucune marque aujourd'hui. Word (marge, texte propre), Upwelling."],
+["T2","Suppression par un autre : une marque, le texte au survol","M","Une suppression ne laisse aucune trace aujourd'hui."],
+["T3","Pastille « Bob écrit plus haut », avec saut","M","Idée sans source, à essayer en séance."],
+["T4","Votre ligne de lecture ne bouge jamais quand du texte arrive au-dessus","S","Rien ne le garantit aujourd'hui ; un test le prouvera."],
+["T5","Curseurs : le nom s'affiche puis se replie, contraste corrigé","S","Quatre couleurs de curseur sur huit sont sous le seuil WCAG de 3:1."],
+["T6","« Depuis votre dernière visite » : marques dans la marge et une pastille, plus de bandeau","S","Le bandeau actuel pousse le texte."],
+["T7","« Qui a écrit quoi » en un geste depuis la pastille centrale","S","Caché dans le volet des versions aujourd'hui. iA Writer."],
+["T8","« Écriture calme » : masquer curseurs et marques des autres","S","Demandé par les utilisateurs de Figma et Miro ; va avec le mode concentration."],
+["T9","Journal des changements pour les lecteurs d'écran","M","Google Docs en propose un."]]],
+["Les différences",[
+["D1","La comparaison à la place de l'éditeur, plus de fenêtre par-dessus","M","Deux fenêtres empilées aujourd'hui. Guide GNOME : préférer une vue dans la fenêtre."],
+["D2","Un seul moteur, au mot, avec regroupement des changements","M","Deux moteurs aujourd'hui ; au caractère ou à la ligne, la prose devient du bruit (Fraser)."],
+["D3","Discret par défaut ; quatre vues Simple, Tout, Avant, Après","M","Le texte barré en masse est illisible (Upwelling) ; jamais la couleur seule (WCAG)."],
+["D4","Remplacement en « avant → après » ; un paragraphe déplacé est un déplacement","S","Patchwork ; la détection existe déjà."],
+["D5","Phrase de résumé, compteur, mini-barre, lignes repliées qu'on ouvre","M","Patchwork, VS Code, Word."],
+["D6","Comparer deux moments quelconques","M","Seulement « contre maintenant » aujourd'hui. Overleaf."],
+["D7","Revenir sur un seul passage","M","Aujourd'hui on annule une séance entière."],
+["D8","Lecteurs d'écran : « ajouté », « supprimé »","S","Absent aujourd'hui."],
+["D9","Plus tard : comparer les pages mises en forme","L","Demande de compiler une ancienne version ; après R1."]]],
+["Les versions",[
+["V1","L'arbre gardé et redessiné : tronc continu, branches courbes, visages comme nœuds, une phrase par ligne","M","Vous tenez à l'arbre. Aujourd'hui chaque ligne dessine son morceau, les couleurs des branches sont celles des personnes et le texte n'est pas aligné."],
+["V2","Les variantes sont les branches de l'arbre ; une variante intégrée se replie en une ligne ; des mots clairs","M","Une variante n'est pas un brouillon : c'est une autre tournure du texte, écrite à côté. On l'intègre au texte principal ou on l'abandonne."],
+["V3","Filtres en pastilles, qui ne cachent jamais les versions nommées","S","Tout filtre les fait disparaître aujourd'hui."],
+["V4","Actions sur la ligne ; revenir en arrière agit, ne détruit rien, propose « Annuler »","S","Figma, Notion, Pages."],
+["V5","Choisir un moment montre le texte tel qu'il était, avec une seule barre","M","Pages : voir avant de restaurer. Prévu, pas construit."],
+["V6","Un nom et une note pour une version","S","Overleaf."],
+["V7","La même liste pour tout le monde, prouvée à deux","M","Le regroupement dépend aujourd'hui de qui regarde ; cas à reproduire d'abord."],
+["V8","Un seul nom « Versions », une horloge, un raccourci, les trois dernières sous les fichiers","S","Une icône de branche git aujourd'hui."]]],
+["Les fichiers",[
+["F1","Un vrai arbre, au clavier, qui tient des centaines de fichiers","M","Modèle d'arbre du W3C ; vos gros dossiers Typst."],
+["F2","Filtre au-dessus de l'arbre et Ctrl P « trouver ou créer »","M","VS Code, Obsidian, JetBrains."],
+["F3","Créer, importer, renommer, déplacer, supprimer avec « Annuler » et corbeille du projet","L","Après : demande l'index des fichiers partagé."],
+["F4","Chaque ligne dit ce qui compte : qui y est, modifié, problèmes","M","Zed, Figma."],
+["F5","Dossiers à enfant unique repliés ; « Montrer le fichier ouvert »","S","Zed, JetBrains."],
+["F6","États vide et « en cours de réception »","S","Rien aujourd'hui."],
+["F7","Déposer des fichiers depuis le bureau","M","Manipulation directe."]]],
+["Les onglets",[
+["O1","Barre d'onglets seulement à partir du deuxième fichier","M","Guide GNOME. Après : un document par fichier."],
+["O2","Onglet d'aperçu en italique, qu'un double clic garde ; onglets épinglés","M","VS Code, libadwaita."],
+["O3","Ctrl Tab dans l'ordre d'usage, Ctrl W, Ctrl Maj T, Alt 1…9","S","Raccourcis standards."],
+["O4","L'onglet montre la même chose que l'arbre","S","Cohérence avec F4."]]],
+["Les surfaces que personne n'avait dessinées",[
+["S1","Premier lancement et choix du document","M","Aucun design aujourd'hui."],
+["S2","Un bandeau à la fois, par priorité","M","Sept sources s'empilent aujourd'hui."],
+["S3","Problèmes : compteur, liste en mots simples, clic vers la ligne","S","VS Code, Overleaf."],
+["S4","Rechercher et remplacer dans tout le projet, avec aperçu","M","Après : un document par fichier."],
+["S5","Export : une petite fenêtre qui se souvient","S","Un seul élément de menu aujourd'hui."],
+["S6","Une fenêtre et un menu de référence pour redessiner les autres","M","Sept variantes aujourd'hui."],
+["S7","Le tableur aligné sur le reste de l'application","M","Seule surface hors de la première étude."],
+["S8","Volet « Sommaire »","M","Décidé, pas construit."],
+["S9","Vues de présentation vérifiées contre leur référence","S","Défauts de parcours encore ouverts."]]],
+["Tenir les designs",[
+["G1","La définition de « fini » refuse un bloc d'interface sans son parcours comparé à la référence","S","La règle n'existe qu'à l'écrit aujourd'hui."],
+["G2","Captures de référence par écran, clair et sombre, et contrôle des valeurs hors système","M","13 captures aujourd'hui, aucune pour ces écrans."],
+["G3","Mesures tirées de la référence dans les tests de chaque bloc","S","Hauteurs, libellés sur une ligne, ordre des commandes."]]]];
+const host=document.getElementById("props"); let saved=[];
+try{saved=JSON.parse(localStorage.getItem("w65")||"[]")}catch(e){}
+for(const [title,items] of groups){
+  const h=document.createElement("h3"); h.textContent=title; h.style.margin="22px 0 10px"; host.append(h);
+  const list=document.createElement("div"); list.className="plist";
+  for(const [id,name,eff,why] of items){
+    const d=document.createElement("div"); d.className="p";
+    const c=document.createElement("input"); c.type="checkbox"; c.id="c-"+id; c.value=id; c.checked=saved.includes(id);
+    const n=document.createElement("span"); n.className="id"; n.textContent=id;
+    const l=document.createElement("label"); l.htmlFor=c.id; l.textContent=name;
+    const e=document.createElement("span"); e.className="eff"; e.textContent=eff; l.append(e);
+    const w=document.createElement("div"); w.className="why"; w.textContent=why;
+    d.append(c,n,l,w); list.append(d);
+  } host.append(list);
+}
+const picked=()=>[...host.querySelectorAll("input:checked")].map(c=>c.value);
+function refresh(){const p=picked(); document.getElementById("count").textContent=p.length+(p.length>1?" propositions retenues":" proposition retenue"); try{localStorage.setItem("w65",JSON.stringify(p))}catch(e){}}
+host.addEventListener("change",refresh); refresh();
+document.getElementById("copy").addEventListener("click",async()=>{
+  const p=picked(), t=p.length?"Je retiens : "+p.join(", "):"Je ne retiens aucune proposition pour l'instant.";
+  const out=document.getElementById("out"); out.value=t; out.hidden=false;
+  try{await navigator.clipboard.writeText(t); document.getElementById("copy").textContent="Copié"}catch(e){out.focus(); out.select()}
+});
+const phrase="Les coûts de livraison baissent de 4 %.";
+const ob=document.getElementById("old-bob"), nb=document.getElementById("new-bob"), nl=document.getElementById("new-line");
+function rest(){ob.textContent=phrase; nb.innerHTML=""; const s=document.createElement("span"); s.className="fresh done"; s.textContent=phrase; nb.append(s); nl.classList.add("by-b")}
+rest(); let timer=0;
+document.getElementById("bob").addEventListener("click",()=>{
+  clearInterval(timer); ob.textContent=""; nb.innerHTML=""; nl.classList.add("by-b");
+  const s=document.createElement("span"); s.className="fresh"; const c=document.createElement("span"); c.className="caret"; nb.append(s,c);
+  let i=0; timer=setInterval(()=>{i++; ob.textContent=phrase.slice(0,i); s.textContent=phrase.slice(0,i);
+    if(i>=phrase.length){clearInterval(timer); setTimeout(()=>{s.classList.add("done"); c.remove()},900)}},45);
+});
+</script>

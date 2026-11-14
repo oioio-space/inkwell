@@ -1,0 +1,315 @@
+<title>Étude d'interface Inkwell</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700;800&family=JetBrains+Mono:wght@400;600&family=Source+Serif+4:wght@400;700&display=swap">
+<style>
+/* Layout: one reading column (study text) with full-width "specimen" bands holding the window mock-ups, all in Adwaita's own tokens. */
+:root{
+  --window:#fafafb; --view:#ffffff; --bar:#ffffff; --side:#ebebed; --card:#ffffff; --pop:#ffffff;
+  --fg:rgb(0 0 6/80%); --dim:rgb(0 0 6/55%); --line:rgb(0 0 6/13%); --soft:rgb(0 0 6/7%); --btn:rgb(0 0 6/9%);
+  --accent:#3584e4; --accent-text:#0461be; --accent-fg:#fff; --ok:#26a269; --warn:#905400; --warn-bg:#fdf3d6; --bad:#c30000;
+  --paper:#ffffff; --ink:#1d1d20; --shadow:0 1px 3px rgb(0 0 6/10%),0 8px 24px rgb(0 0 6/12%);
+  --hl-kw:#a2326c; --hl-head:#0461be; --p1:#e66100; --p2:#1c71d8;
+  --ui:"Inter","Adwaita Sans",system-ui,sans-serif; --mono:"JetBrains Mono","Adwaita Mono",ui-monospace,monospace; --serif:"Source Serif 4",Georgia,serif;
+  --ease:cubic-bezier(.25,.46,.45,.94);
+}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){
+  --window:#222226; --view:#1d1d20; --bar:#2e2e32; --side:#2e2e32; --card:rgb(255 255 255/8%); --pop:#36363a;
+  --fg:#ffffff; --dim:rgb(255 255 255/60%); --line:rgb(255 255 255/14%); --soft:rgb(255 255 255/7%); --btn:rgb(255 255 255/11%);
+  --accent:#3584e4; --accent-text:#81d0ff; --ok:#78e9ab; --warn:#ffc252; --warn-bg:rgb(205 147 9/22%); --bad:#ff938c;
+  --shadow:0 1px 3px rgb(0 0 0/40%),0 8px 24px rgb(0 0 0/45%); --hl-kw:#ffa0d8; --hl-head:#81d0ff; color-scheme:dark}}
+:root[data-theme="dark"]{
+  --window:#222226; --view:#1d1d20; --bar:#2e2e32; --side:#2e2e32; --card:rgb(255 255 255/8%); --pop:#36363a;
+  --fg:#ffffff; --dim:rgb(255 255 255/60%); --line:rgb(255 255 255/14%); --soft:rgb(255 255 255/7%); --btn:rgb(255 255 255/11%);
+  --accent:#3584e4; --accent-text:#81d0ff; --ok:#78e9ab; --warn:#ffc252; --warn-bg:rgb(205 147 9/22%); --bad:#ff938c;
+  --shadow:0 1px 3px rgb(0 0 0/40%),0 8px 24px rgb(0 0 0/45%); --hl-kw:#ffa0d8; --hl-head:#81d0ff; color-scheme:dark}
+*{box-sizing:border-box}
+body{background:var(--window);color:var(--fg);font:15px/1.55 var(--ui);font-feature-settings:"cv05","cv08"}
+.wrap{max-width:1040px;margin:0 auto;padding-block:36px 72px;padding-left:max(16px,env(safe-area-inset-left,0px));padding-right:max(16px,env(safe-area-inset-right,0px));display:flex;flex-direction:column;gap:48px}
+.col{max-width:66ch}
+h1{font:800 34px/1.12 var(--ui);letter-spacing:-.02em;margin:0 0 12px;text-wrap:balance}
+h2{font:800 22px/1.2 var(--ui);letter-spacing:-.01em;margin:0 0 6px;text-wrap:balance}
+h3{font:700 15px/1.3 var(--ui);margin:0}
+p{margin:0 0 10px}.dim{color:var(--dim)} .small{font-size:13px}
+a{color:var(--accent-text)} :focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:6px}
+section{display:flex;flex-direction:column;gap:16px}
+.levels{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:12px;padding:0;margin:0;list-style:none}
+.levels li{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:14px 16px}
+.levels b{display:block;font-weight:700}.levels span{color:var(--dim);font-size:13.5px}
+kbd{font:600 12px var(--ui);padding:1px 6px;border-radius:6px;background:var(--btn);white-space:nowrap}
+/* segmented toggle (AdwToggleGroup) */
+.seg{display:inline-flex;background:var(--btn);border-radius:9px;padding:3px;gap:2px;flex:none}
+.seg button{white-space:nowrap;font:600 13px var(--ui);color:var(--fg);background:none;border:0;border-radius:7px;padding:5px 14px;min-height:28px;cursor:default}
+.seg button[aria-pressed="true"]{background:var(--card);box-shadow:0 1px 2px rgb(0 0 6/18%)}
+.shead{display:flex;flex-wrap:wrap;gap:10px 18px;align-items:center;justify-content:space-between}
+.scroll{overflow-x:auto;padding:6px 2px 18px}
+/* ---- window mock ---- */
+.win{width:940px;height:470px;border-radius:15px;background:var(--view);box-shadow:var(--shadow);border:1px solid var(--line);display:flex;overflow:hidden;font-size:13.5px;position:relative}
+.sb{width:216px;background:var(--side);display:flex;flex-direction:column;flex:none;border-right:1px solid var(--soft)}
+.main{flex:1;min-width:0;display:flex;flex-direction:column}
+.bar{height:47px;display:flex;align-items:center;gap:6px;padding:0 7px;flex:none}
+.bar.line{border-bottom:1px solid var(--soft)} .sys{height:36px;background:var(--side);display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px;position:relative;flex:none;border-bottom:1px solid var(--soft)}
+.ib{width:34px;height:34px;border-radius:9px;display:grid;place-items:center;flex:none;color:var(--fg)}
+.ib.on{background:var(--btn)} .ib svg,.lb svg,.row svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round;stroke-linejoin:round}
+.lb{height:34px;border-radius:9px;display:inline-flex;align-items:center;gap:7px;padding:0 10px;font-weight:600;flex:none}
+.sug{background:#1c71d8;color:#fff;font-weight:700;padding:0 16px}
+.grow{flex:1} .wc{display:flex;gap:8px;margin-left:6px}.wc i{width:24px;height:24px;border-radius:50%;background:var(--btn);display:grid;place-items:center}.wc svg{width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2;stroke-linecap:round}
+.ttl{display:flex;flex-direction:column;align-items:center;line-height:1.2}.ttl b{font-weight:700}.ttl span{font-size:12px;color:var(--dim)}
+.pill{height:34px;border-radius:9px;background:var(--btn);display:flex;align-items:center;gap:10px;padding:0 6px 0 12px;font-weight:600;min-width:230px}
+.dot{width:8px;height:8px;border-radius:50%;background:var(--ok);flex:none}
+.av{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font:700 11px var(--ui);color:#fff;border:2px solid var(--bar);margin-left:-8px}.av:first-child{margin-left:0}
+.fmt{font-weight:700;width:30px;text-align:center;font-family:var(--serif);font-size:16px}
+.body{flex:1;display:flex;min-height:0}
+.src{flex:1;min-width:0;padding:14px 0;font:13px/1.9 var(--mono);position:relative}
+.ln{display:flex}.ln i{width:44px;text-align:right;padding-right:14px;color:var(--dim);font-style:normal;flex:none}.kw{color:var(--hl-kw)}.hd{color:var(--hl-head);font-weight:600}
+.prev{width:44%;background:var(--window);border-left:1px solid var(--soft);display:flex;flex-direction:column;position:relative;flex:none}
+.sheet{background:var(--paper);color:var(--ink);margin:16px auto 0;width:78%;flex:1;box-shadow:0 1px 4px rgb(0 0 6/25%);padding:26px 24px;font-family:var(--serif);font-size:9px;line-height:1.5}.sheet b{display:block;font-size:14px;margin-bottom:6px}
+.osd{position:absolute;left:50%;bottom:14px;transform:translateX(-50%);background:rgb(0 0 6/72%);color:#fff;border-radius:999px;display:flex;align-items:center;gap:2px;padding:3px 6px;font:600 12px var(--ui)}.osd span{padding:4px 9px}
+.st{height:32px;display:flex;align-items:center;gap:18px;padding:0 14px;font-size:12.5px;color:var(--dim);border-top:1px solid var(--soft);flex:none}
+.sbh{height:47px;display:flex;align-items:center;gap:4px;padding:0 7px;font-weight:700;flex:none}
+.grp{font:700 11.5px var(--ui);color:var(--dim);padding:10px 14px 4px}
+.row{height:34px;margin:0 6px 2px;border-radius:9px;display:flex;align-items:center;gap:9px;padding:0 9px}.row.sel{background:var(--btn);font-weight:600}.row em{margin-left:auto;font-style:normal;font-size:12px;color:var(--dim)}
+.note{position:absolute;font:600 11.5px var(--ui);color:var(--warn);background:var(--warn-bg);border-radius:6px;padding:2px 8px;white-space:nowrap}
+.cap{font-size:13.5px;color:var(--dim);max-width:70ch}
+.facts{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px;margin:0}
+.facts div{border-top:2px solid var(--line);padding-top:8px}.facts dt{font:800 24px/1.1 var(--ui);font-variant-numeric:tabular-nums}.facts dd{margin:2px 0 0;color:var(--dim);font-size:13px}
+/* ---- pairs ---- */
+.pair{display:grid;grid-template-columns:repeat(auto-fit,minmax(300px,1fr));gap:18px}
+.fig{display:flex;flex-direction:column;gap:8px;min-width:0}.tag{font:700 11.5px var(--ui);letter-spacing:.06em;text-transform:uppercase;color:var(--dim)}
+.dlg{background:var(--pop);border:1px solid var(--line);box-shadow:var(--shadow);min-height:290px;position:relative;overflow:hidden}
+.dlg.old{border-radius:12px;padding:16px 18px}.dlg.old h4{font:700 14.5px var(--ui);margin:0 0 10px}.dlg.old h5{font:700 14.5px var(--ui);margin:14px 0 6px}
+.dlg.old select,.fake{display:block;width:100%;height:34px;border-radius:6px;border:1px solid var(--line);background:var(--view);color:var(--fg);font:13.5px var(--ui);padding:0 8px;line-height:32px}
+.dlg.new{border-radius:15px;padding:0 0 18px;background:var(--window)}
+.dlg.new header{height:47px;display:grid;place-items:center;font-weight:700}.dlg.new h5{font:700 14px var(--ui);margin:14px 30px 6px}
+.box{margin:0 18px;background:var(--card);border-radius:12px;box-shadow:0 0 0 1px var(--soft)}
+.box>div{min-height:50px;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:8px 14px;border-top:1px solid var(--soft)}.box>div:first-child{border-top:0}
+.box small{display:block;color:var(--dim);font-size:12.5px}
+.sw{width:42px;height:24px;border-radius:999px;background:var(--accent);position:relative;flex:none}.sw::after{content:"";position:absolute;right:2px;top:2px;width:20px;height:20px;border-radius:50%;background:#fff}
+/* motion demo */
+.stage{background:var(--view);border:1px solid var(--line);border-radius:12px;height:230px;position:relative;overflow:hidden;padding:12px 16px;font:13px/1.9 var(--mono)}
+.bn{background:var(--warn-bg);color:var(--warn);font:600 13px var(--ui);padding:0 14px;border-radius:9px;margin-bottom:8px;height:38px;display:flex;align-items:center}
+.pp{position:absolute;right:14px;top:14px;width:190px;background:var(--pop);border:1px solid var(--line);border-radius:15px;box-shadow:var(--shadow);padding:10px 12px;font:13px/1.5 var(--ui)}
+.old-m .bn,.old-m .pp{display:none}.old-m.show .bn{display:flex}.old-m.show .pp{display:block}
+.new-m .bn{position:absolute;left:16px;right:16px;top:12px;opacity:0;transform:translateY(-8px);transition:opacity 150ms var(--ease),transform 150ms var(--ease)}
+.new-m .txt{transition:transform 200ms var(--ease)}.new-m.show .txt{transform:translateY(46px)}
+.new-m .pp{opacity:0;transform:translateY(-6px) scale(.97);transform-origin:top right;transition:opacity 150ms var(--ease),transform 150ms var(--ease)}
+.new-m.show .bn,.new-m.show .pp{opacity:1;transform:none;transition-duration:200ms}
+@media (prefers-reduced-motion:reduce){.new-m .bn,.new-m .pp,.new-m .txt{transition:opacity 120ms linear;transform:none}.new-m.show .txt{transform:translateY(46px)}}
+.go{font:600 13.5px var(--ui);color:var(--fg);background:var(--btn);border:0;border-radius:9px;height:34px;padding:0 16px;align-self:flex-start}
+/* palette + search */
+.find{display:flex;align-items:center;gap:6px;padding:6px 10px;border-bottom:1px solid var(--soft);background:var(--bar)}
+.ent{height:34px;border-radius:9px;background:var(--btn);display:flex;align-items:center;gap:8px;padding:0 10px;flex:1;min-width:0}.ent em{margin-left:auto;font-style:normal;color:var(--dim);font-size:12px}
+.pal{background:var(--pop);border:1px solid var(--line);border-radius:15px;box-shadow:var(--shadow);padding:8px;display:flex;flex-direction:column;gap:2px}
+.pal .ent{flex:none;margin-bottom:6px}.cmd{height:36px;border-radius:9px;display:flex;align-items:center;justify-content:space-between;padding:0 10px}.cmd.sel{background:var(--btn)}
+mark{background:rgb(248 228 92/55%);color:inherit;border-radius:3px}
+/* proposals */
+.plist{display:flex;flex-direction:column;gap:0;border-top:1px solid var(--line)}
+.p{display:grid;grid-template-columns:22px 44px minmax(0,1fr);gap:4px 8px;padding:12px 0;border-bottom:1px solid var(--line);align-items:start}
+.p input{width:18px;height:18px;margin:3px 0 0;accent-color:var(--accent)}.p .id{font:700 13px var(--mono);color:var(--dim);padding-top:2px}
+.p label{font-weight:600}.p .why{grid-column:3;color:var(--dim);font-size:13.5px}.p .eff{font:600 11.5px var(--ui);background:var(--btn);border-radius:999px;padding:1px 8px;margin-left:6px;white-space:nowrap}
+.pick{position:sticky;bottom:calc(10px + env(safe-area-inset-bottom,0px));align-self:flex-start;display:flex;flex-wrap:wrap;gap:10px;align-items:center;background:var(--pop);border:1px solid var(--line);box-shadow:var(--shadow);border-radius:15px;padding:8px 8px 8px 16px;font-size:13.5px}
+.pick button{font:700 13.5px var(--ui);background:var(--accent);color:var(--accent-fg);border:0;border-radius:9px;height:34px;padding:0 16px}
+#out{width:100%;font:12.5px var(--mono);background:var(--view);color:var(--fg);border:1px solid var(--line);border-radius:9px;padding:8px;min-height:60px}
+</style>
+
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+<symbol id="i-side" viewBox="0 0 16 16"><rect x="2" y="3" width="12" height="10" rx="2"/><path d="M6 3v10"/></symbol>
+<symbol id="i-clock" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6"/><path d="M8 4.5V8l2.3 1.6"/></symbol>
+<symbol id="i-share" viewBox="0 0 16 16"><path d="M8 10V2M5 4.8 8 2l3 2.8M3 9v4h10V9"/></symbol>
+<symbol id="i-menu" viewBox="0 0 16 16"><path d="M3 4.5h10M3 8h10M3 11.5h10"/></symbol>
+<symbol id="i-search" viewBox="0 0 16 16"><circle cx="7" cy="7" r="4.2"/><path d="m10.2 10.2 3.3 3.3"/></symbol>
+<symbol id="i-plus" viewBox="0 0 16 16"><path d="M8 3v10M3 8h10"/></symbol>
+<symbol id="i-eye" viewBox="0 0 16 16"><path d="M1.5 8S4 3.5 8 3.5 14.5 8 14.5 8 12 12.5 8 12.5 1.5 8 1.5 8Z"/><circle cx="8" cy="8" r="1.8"/></symbol>
+<symbol id="i-doc" viewBox="0 0 16 16"><path d="M4 2h5l3 3v9H4zM9 2v3h3"/></symbol>
+<symbol id="i-branch" viewBox="0 0 16 16"><circle cx="5" cy="3.5" r="1.5"/><circle cx="5" cy="12.5" r="1.5"/><circle cx="11" cy="5.5" r="1.5"/><path d="M5 5v6M11 7c0 2.5-6 1.5-6 4"/></symbol>
+</defs></svg>
+
+<div class="wrap">
+<header class="col">
+  <p class="tag">Étude W63 · 14 novembre 2026</p>
+  <h1>Inkwell : simple à l'œil, complet sous la main</h1>
+  <p>Les guides de GNOME et d'Apple donnent le même moyen d'être simple et complet à la fois : montrer ce qui sert maintenant, et garder le reste à un geste. Cette page applique ce moyen à Inkwell en 32 propositions. Chacune dit ce qui a été constaté dans l'application, ce qui changerait, et la source qui le justifie.</p>
+  <p class="dim small">Les maquettes sont dessinées avec les mesures d'Adwaita (libadwaita 1.10) et suivent le thème clair ou sombre de votre écran. Elles partent de la barre du haut « B » que vous avez déjà choisie.</p>
+</header>
+
+<section>
+  <div class="col"><h2>Trois niveaux, une seule place par fonction</h2></div>
+  <ol class="levels">
+    <li><b>Toujours visible</b><span>Le texte, une barre, un état. Rien d'autre par défaut.</span></li>
+    <li><b>À un geste</b><span>Fichiers (<kbd>F9</kbd>), aperçu, personnes, versions, recherche : des volets qui glissent.</span></li>
+    <li><b>À un raccourci</b><span>Tout le reste par la palette de commandes, qui montre aussi les raccourcis.</span></li>
+  </ol>
+</section>
+
+<section>
+  <div class="shead">
+    <div class="col"><h2>La fenêtre</h2><p class="cap">Propositions P9, P11 à P13, P16, P18. Basculez pour comparer.</p></div>
+    <div class="seg" role="group" aria-label="Version de la fenêtre">
+      <button id="w-old" aria-pressed="false">Aujourd'hui</button><button id="w-new" aria-pressed="true">Proposé</button>
+    </div>
+  </div>
+  <div class="scroll">
+    <!-- today -->
+    <div class="win" id="win-old" hidden>
+      <div class="sb"><div class="sys" style="border:0"></div><div class="sbh" style="justify-content:center">Fichiers</div>
+        <div class="row sel"><svg><use href="#i-doc"/></svg>main.typ<em>principal</em></div></div>
+      <div class="main">
+        <div class="sys">Inkwell<span class="note" style="right:10px">barre du système en plus</span></div>
+        <div class="bar"><span class="ib on"><svg><use href="#i-side"/></svg></span><span class="dot" style="margin-left:8px"></span><span class="dim">Synchronisé</span>
+          <span class="grow"></span><span class="ttl"><b>Sans titre</b><span>main.typ</span></span><span class="grow"></span>
+          <span class="ib on"><svg><use href="#i-eye"/></svg></span><span style="display:flex;margin:0 4px"><span class="av" style="background:var(--p1)">A</span><span class="av" style="background:var(--p2)">B</span></span>
+          <span class="lb sug">Partager</span><span class="ib"><svg><use href="#i-branch"/></svg></span><span class="ib"><svg><use href="#i-menu"/></svg></span></div>
+        <div class="bar line"><span class="lb">Paragraphe ⌄</span><span class="fmt">B</span><span class="fmt" style="font-style:italic">I</span><span class="fmt" style="text-decoration:underline">U</span><span class="fmt" style="text-decoration:line-through">S</span><span class="lb"><svg><use href="#i-plus"/></svg>Insérer</span></div>
+        <div class="body">
+          <div class="src"><div class="ln"><i>1</i><span class="hd">= Rapport annuel</span></div><div class="ln"><i>2</i></div><div class="ln"><i>3</i>Le chiffre d'affaires progresse de 12 % sur l'année, porté par les nouvelles régions et par</div><div class="ln"><i>4</i>la baisse des coûts de livraison.</div>
+            <span class="note" style="left:60px;bottom:16px">130 px de barres avant la première ligne</span></div>
+          <div class="prev"><div class="bar line" style="height:40px"><span class="ib">−</span><span class="lb" style="background:var(--btn)">60 %</span><span class="ib">+</span><span class="note" style="right:8px">3ᵉ barre</span></div>
+            <div class="sheet"><b>Rapport annuel</b>Le chiffre d'affaires progresse de 12 % sur l'année.</div></div>
+        </div>
+        <div class="st"><span class="dot"></span>2 personnes<span class="note" style="position:static">état en double</span><span class="grow"></span>Aucun problème<span>Page 1 sur 1</span><span>Ligne 4, colonne 1</span><span>24 mots</span><span>100 %</span><span>Typst</span></div>
+      </div>
+    </div>
+    <!-- proposed -->
+    <div class="win" id="win-new">
+      <div class="sb"><div class="sbh"><span class="ib"><svg><use href="#i-plus"/></svg></span><span class="grow" style="text-align:center">Rapport annuel</span><span class="ib"><svg><use href="#i-search"/></svg></span></div>
+        <div class="grp">Fichiers</div>
+        <div class="row sel"><svg><use href="#i-doc"/></svg>main.typ<em>Bob</em></div><div class="row"><svg><use href="#i-doc"/></svg>notes.md</div><div class="row"><svg><use href="#i-doc"/></svg>logo.png</div></div>
+      <div class="main">
+        <div class="bar line"><span class="ib on"><svg><use href="#i-side"/></svg></span><span class="ib"><svg><use href="#i-clock"/></svg></span>
+          <span class="grow"></span><span class="pill">main.typ<span class="grow"></span><span class="dot"></span><span class="dim" style="font-weight:400">Synchronisé</span><span style="display:flex"><span class="av" style="background:var(--p1)">A</span><span class="av" style="background:var(--p2)">B</span></span></span><span class="grow"></span>
+          <span class="seg" style="padding:2px"><button aria-pressed="false" tabindex="-1">Texte</button><button aria-pressed="true" tabindex="-1">Les deux</button><button aria-pressed="false" tabindex="-1">Aperçu</button></span>
+          <span class="lb"><svg><use href="#i-share"/></svg>Partager</span><span class="ib"><svg><use href="#i-menu"/></svg></span><span class="wc" title="Fermer"><i><svg viewBox="0 0 16 16"><path d="M5 5l6 6M11 5l-6 6"/></svg></i></span></div>
+        <div class="bar" style="height:46px"><span class="lb">Paragraphe ⌄</span><span class="fmt">B</span><span class="fmt" style="font-style:italic">I</span><span class="fmt" style="text-decoration:underline">U</span><span class="fmt" style="text-decoration:line-through">S</span><span class="lb"><svg><use href="#i-plus"/></svg>Insérer</span></div>
+        <div class="body">
+          <div class="src"><div style="max-width:430px;margin:0 auto"><div class="ln"><i>1</i><span class="hd">= Rapport annuel</span></div><div class="ln"><i>2</i></div><div class="ln"><i>3</i><span>Le chiffre d'affaires progresse de 12 % sur l'année, porté par les nouvelles régions et par la baisse des coûts de livraison.</span></div></div></div>
+          <div class="prev"><div class="sheet" style="width:84%"><b>Rapport annuel</b>Le chiffre d'affaires progresse de 12 % sur l'année, porté par les nouvelles régions et par la baisse des coûts de livraison.</div>
+            <div class="osd"><span>−</span><span>Ajusté</span><span>+</span></div></div>
+        </div>
+        <div class="st"><span>Aucun problème</span><span class="grow"></span><span>Ligne 3, colonne 1</span><span>24 mots</span><span>Typst</span></div>
+      </div>
+    </div>
+  </div>
+  <dl class="facts">
+    <div><dt>130 → 93 px</dt><dd>de barres au-dessus du texte, 47 px si la barre de mise en forme est masquée</dd></div>
+    <div><dt>3 → 1</dt><dd>zoom visible ; celui du texte passe dans le menu, comme l'Éditeur de texte de GNOME</dd></div>
+    <div><dt>2 → 1</dt><dd>endroit pour l'état de synchronisation : la pastille centrale</dd></div>
+    <div><dt>1 seule barre</dt><dd>de fenêtre : le bouton de fermeture est dans la barre du haut, et les boutons réduire et agrandir s'y ajoutent si votre système les affiche</dd></div>
+    <div><dt>0 bouton bleu</dt><dd>dans la barre : le guide GNOME le déconseille, « Partager » garde son icône et son nom</dd></div>
+  </dl>
+</section>
+
+<section>
+  <div class="col"><h2>La hiérarchie du texte</h2><p class="cap">P1 à P3, P7. Aujourd'hui tous les titres ont la même taille et la même graisse (14,5 px gras) et l'application compte 13 tailles de texte. Cinq styles suffisent, ceux de libadwaita.</p></div>
+  <div class="pair">
+    <div class="fig"><span class="tag">Aujourd'hui</span>
+      <div class="dlg old"><h4>Préférences</h4><h5>Enregistrement des fichiers</h5><div class="fake">Automatique</div><h5>Modifications hors d'Inkwell</h5><div class="fake">Demander à chaque fois</div><p class="small dim" style="margin-top:10px">Deux groupes, deux listes déroulantes. Ni thème, ni langue.</p></div></div>
+    <div class="fig"><span class="tag">Proposé</span>
+      <div class="dlg new"><header>Préférences</header>
+        <h5>Apparence</h5><div class="box"><div><span>Thème</span><span class="seg"><button aria-pressed="false" tabindex="-1">Clair</button><button aria-pressed="false" tabindex="-1">Sombre</button><button aria-pressed="true" tabindex="-1">Système</button></span></div><div><span>Langue</span><span class="dim">Français ⌄</span></div></div>
+        <h5>Enregistrement</h5><div class="box"><div><span>Enregistrer automatiquement<small>Après 2 secondes sans frappe</small></span><span class="sw"></span></div><div><span>Fichier modifié hors d'Inkwell</span><span class="dim">Demander ⌄</span></div></div></div></div>
+  </div>
+</section>
+
+<section>
+  <div class="col"><h2>Le mouvement</h2><p class="cap">P5. Aujourd'hui rien n'est animé : un bandeau apparaît d'un coup et fait sauter le texte de 45 px. Proposé : une seule courbe, 200 ms à l'entrée, 150 ms à la sortie, et le texte glisse au lieu de sauter. Avec « réduire les animations », il reste un fondu court.</p></div>
+  <button class="go" id="play">Faire apparaître un bandeau et un popover</button>
+  <div class="pair">
+    <div class="fig"><span class="tag">Aujourd'hui</span><div class="stage old-m" id="m-old"><div class="bn">Vous travaillez hors connexion</div><div class="txt"><span class="hd">= Rapport annuel</span><br>Le chiffre d'affaires progresse<br>de 12 % sur l'année.</div><div class="pp"><b>Alice</b> · vous<br><span class="dim">écrit ligne 3</span></div></div></div>
+    <div class="fig"><span class="tag">Proposé</span><div class="stage new-m" id="m-new"><div class="bn">Vous travaillez hors connexion</div><div class="txt"><span class="hd">= Rapport annuel</span><br>Le chiffre d'affaires progresse<br>de 12 % sur l'année.</div><div class="pp"><b>Alice</b> · vous<br><span class="dim">écrit ligne 3</span></div></div></div>
+  </div>
+</section>
+
+<section>
+  <div class="col"><h2>Trouver et commander</h2><p class="cap">P19 et P20. La recherche dans le texte est déjà écrite et testée, mais elle n'est branchée nulle part : <kbd>Ctrl</kbd> <kbd>F</kbd> ne fait rien aujourd'hui. La palette donne accès à tout sans rien ajouter à l'écran.</p></div>
+  <div class="pair">
+    <div class="fig"><span class="tag">Recherche sous la barre · Ctrl F</span>
+      <div class="stage" style="padding:0;height:210px"><div class="find"><div class="ent"><svg class="ib" style="width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2"><use href="#i-search"/></svg>progresse<em>1 sur 2</em></div><span class="lb" style="background:var(--btn)">Remplacer</span></div>
+        <div style="padding:10px 16px"><span class="hd">= Rapport annuel</span><br>Le chiffre d'affaires <mark>progresse</mark><br>de 12 % ; la marge <mark>progresse</mark> aussi.</div></div></div>
+    <div class="fig"><span class="tag">Palette de commandes · Ctrl Maj P</span>
+      <div class="pal"><div class="ent"><svg style="width:16px;height:16px;fill:none;stroke:currentColor;stroke-width:2"><use href="#i-search"/></svg>expor</div>
+        <div class="cmd sel"><span>Exporter en PDF…</span><kbd>Ctrl Maj E</kbd></div><div class="cmd"><span>Exporter une version nommée…</span></div><div class="cmd"><span>Afficher les fichiers</span><kbd>F9</kbd></div><div class="cmd"><span>Raccourcis clavier</span><kbd>Ctrl ?</kbd></div></div></div>
+  </div>
+  <p class="cap">Le raccourci d'export montré ici est un exemple : les raccourcis seront fixés avec le registre de commandes.</p>
+</section>
+
+<section>
+  <div class="col"><h2>Les 32 propositions</h2><p class="cap">Cochez celles que vous voulez garder, puis copiez la liste et collez-la dans la conversation. Effort : S quelques heures, M quelques jours, L un bloc entier. Le détail et toutes les sources sont dans <code>docs/plans/2026-11-14-ux-ui-study.md</code>.</p></div>
+  <div id="props"></div>
+  <div class="pick"><span id="count">0 proposition retenue</span><button id="copy">Copier ma sélection</button></div>
+  <textarea id="out" readonly aria-label="Sélection à copier" hidden></textarea>
+</section>
+
+<section class="col">
+  <h2>Limites de l'étude</h2>
+  <p>L'inventaire a été fait en lisant le code et six captures, sans lancer l'application : les rendus réels sous WebKitGTK restent à voir à l'écran. Les citations du guide GNOME sont passées par un outil de résumé ; celle sur les boutons de la barre du haut (P11) a été relue mot pour mot. Quelques sources n'ont pas pu être lues (ISO 9241-110, le livre de Bringhurst, certaines pages WCAG) et sont marquées comme telles dans les fichiers de sources.</p>
+</section>
+</div>
+
+<script>
+const G="https://developer.gnome.org/hig/", L="https://gnome.pages.gitlab.gnome.org/libadwaita/doc/1.10/", N="https://www.nngroup.com/articles/";
+const groups=[
+["Le beau : un seul système visuel",[
+["P1","Cinq styles de texte au lieu de 13 tailles","M","Tous les titres font 14,5 px gras. Le guide GNOME demande de réduire le nombre de tailles et de graisses.",G+"guidelines/typography.html"],
+["P2","Espacements sur la grille de 6 d'Adwaita","M","L'échelle actuelle ne sert que dans 18 % des cas ; 6 px est déjà la valeur la plus fréquente. Un rythme régulier se lit comme du soin.",L+"adaptive-layouts.html"],
+["P3","Une seule famille d'arrondis, d'ombres, de fenêtres et de boutons","M","Sept variantes de fenêtres aujourd'hui (deux arrondis, deux ombres). GNOME : garder le style propre au minimum.",G+"guidelines/ui-styling.html"],
+["P4","Embarquer les polices Adwaita Sans et Adwaita Mono","S","Elles sont nommées mais pas fournies : le rendu dépend de la machine. Licence à confirmer avant.","https://release.gnome.org/48/developers/"],
+["P5","Un mouvement utile : 200 ms, une courbe, rien ne saute","M","Aucune transition aujourd'hui. GNOME : les éléments ne doivent pas sauter ni disparaître sans animation ; NN/g : 100 à 500 ms.",N+"animation-duration/"],
+["P6","Icônes à une seule taille (16 px, trait de 2 px)","S","Quatre tailles mêlées et des lettres B I U S à côté d'icônes. GNOME : éviter les autres tailles, rendu flou.",G+"guidelines/ui-icons.html"],
+["P7","Préférences : thème, langue, taille du texte","M","Deux réglages seulement aujourd'hui. GNOME : le choix du thème est surtout utile aux éditeurs de texte.",G+"guidelines/ui-styling.html"],
+["P8","Suivre la couleur d'accent du système","M","Comportement par défaut des applications GNOME depuis la version 47. À faire après R1.",L+"styles-and-appearance.html"]]],
+["Simple en apparence : moins de barres, une place par chose",[
+["P9","Une seule barre au-dessus du texte ; les outils de l'aperçu en pastille posée dessus","M","130 px de barres aujourd'hui ; la nouvelle barre du haut ne traite que la première des trois.",G+"patterns/controls/overlaid.html"],
+["P10","Mode concentration : le texte seul","M","Déjà décidé (N63), à planifier. Apple : masquer les barres à la demande, avec un retour sûr.","https://developer.apple.com/design/human-interface-guidelines/toolbars"],
+["P11","« Partager » sans fond bleu, avec icône et nom","S","Le guide GNOME déconseille le style « suggéré » dans la barre du haut. Corrige la décision du 13 novembre, dont la citation était inexacte.",G+"patterns/containers/header-bars.html"],
+["P12","Un état, un endroit : la synchronisation seulement dans la pastille","S","Affichée deux fois avec deux vocabulaires. Apple : l'état se montre à sa place, sans interrompre.","https://www.inkandswitch.com/essay/local-first/"],
+["P13","Un seul zoom visible","S","Trois zooms avec les mêmes mots. Celui du texte passe dans le menu, comme l'Éditeur de texte de GNOME.",G+"patterns/controls/menus.html"],
+["P14","Menu principal dans l'ordre du guide, F10 pour l'ouvrir","S","Préférences, Raccourcis clavier, À propos d'Inkwell, en fin de menu.",G+"patterns/controls/menus.html"],
+["P15","Largeur de lecture : 80 à 90 caractères, colonne centrée","S","Les lignes courent sur toute la largeur. Butterick : 45 à 90 caractères ; WCAG 1.4.8 : 80 au plus.","https://practicaltypography.com/line-length.html"],
+["P16","Volet des fichiers aux mesures d'Adwaita, F9 pour l'ouvrir","S","25 % de la largeur entre 180 et 280 px, sélection neutre, recouvre le texte en fenêtre étroite.",L+"class.NavigationSplitView.html"],
+["P17","Largeur minimale réelle de 360 px au lieu de 720","S","Une fenêtre en demi-écran sur 1366 px fait 683 px : sous le minimum actuel.",G+"guidelines/adaptive.html"],
+["P18","Une seule barre de fenêtre : la barre du haut sert de barre de titre","L","La barre du système s'ajoute aujourd'hui à celle d'Inkwell. C'est le plus grand pas vers l'allure native (N49, à avancer).",G+"patterns/containers/header-bars.html"]]],
+["Utile au maximum : rien ne manque, rien ne gêne",[
+["P19","Brancher la recherche et le remplacement (Ctrl F, Ctrl H)","S","Le code existe et il est testé : la plus grande utilité pour le plus petit coût de cette étude.",G+"patterns/nav/search.html"],
+["P20","Palette de commandes et fenêtre des raccourcis, depuis un seul registre","L","Déjà prévu (R3). Le registre nourrit aussi les menus et les infobulles : un raccourci s'écrit une fois.",L+"class.ShortcutsDialog.html"],
+["P21","Raccourcis standards : F9, F10, Ctrl , et Ctrl ?","S","Aucun raccourci pour le volet, l'aperçu, les versions, le partage ; deux utilisent Alt, que le guide exclut.",G+"reference/keyboard.html"],
+["P22","Une infobulle unique : le nom et le raccourci, sur chaque bouton à icône","M","49 infobulles natives et une riche aujourd'hui. Exigé par les critères d'application de GNOME.",G+"patterns/feedback/tooltips.html"],
+["P23","États vides et erreurs : un titre, une phrase, une action","M","Texte nu aujourd'hui (volet vide, aperçu en échec, export raté).",G+"patterns/feedback/placeholders.html"],
+["P24","Annuler plutôt que demander confirmation","S","GNOME : permettre d'annuler au lieu de demander. Notification de 5 s avec « Annuler ».",G+"principles.html"],
+["P25","Collaboration en deux commandes, et suivre une personne en cliquant son visage","M","Apple : une phrase qui dit qui peut faire quoi, puis l'invitation ; les personnes, puis « Gérer ».","https://developer.apple.com/design/human-interface-guidelines/collaboration-and-sharing"],
+["P26","Code de vérification court à l'arrivée d'une personne","M","Étude sur 162 personnes : 13 % de quasi-identiques manqués sur une ligne, 43 % sur trois (Turner et al., 2023).",""],
+["P27","Glisser une image dans le texte, des fichiers dans le volet","M","Manipulation directe (Apple). W62 couvre déjà les opérations sur les fichiers, pas le dépôt dans le texte.","https://developer.apple.com/design/human-interface-guidelines/drag-and-drop"],
+["P28","Règle d'attente : rien sous 1 s, un mot discret jusqu'à 3 s, jamais de scintillement","S","NN/g : 0,1 s, 1 s, 10 s ; GNOME : indicateur au-delà d'environ 3 s.",N+"response-times-3-important-limits/"]]],
+["Les mots et la preuve",[
+["P29","Typographie française dans l'interface, vérifiée par un test","S","123 apostrophes droites pour 1 typographique ; pas d'espace insécable avant « : » et « ? ».",G+"guidelines/typography.html"],
+["P30","Un mot par chose","S","Trois verbes pour revenir à une version, trois noms pour le même volet, « fusionner » alors que le glossaire dit « intégrer ».",G+"guidelines/writing-style.html"],
+["P31","Corriger la règle des cibles : 34 px, jamais moins de 24","S","La règle écrite dit 44 px, l'application fait 34 px, qui est la hauteur d'Adwaita. WCAG 2.5.8 : 24 px au moins.","https://www.w3.org/WAI/WCAG22/Understanding/target-size-minimum.html"],
+["P32","Liste de contrôle de GNOME avant chaque version","S","Clavier seul, contraste élevé, grand texte, lecteur d'écran, infobulle sur chaque icône, pas de blanc parasite en sombre.","https://gitlab.gnome.org/Teams/Releng/AppOrganization/-/blob/main/AppCriteria.md"]]]];
+const host=document.getElementById("props"); let saved=[];
+try{saved=JSON.parse(localStorage.getItem("w63")||"[]")}catch(e){}
+for(const [title,items] of groups){
+  const h=document.createElement("h3"); h.textContent=title; h.style.margin="22px 0 10px"; host.append(h);
+  const list=document.createElement("div"); list.className="plist";
+  for(const [id,name,eff,why,url] of items){
+    const d=document.createElement("div"); d.className="p";
+    const c=document.createElement("input"); c.type="checkbox"; c.id="c-"+id; c.value=id; c.checked=saved.includes(id);
+    const n=document.createElement("span"); n.className="id"; n.textContent=id;
+    const l=document.createElement("label"); l.htmlFor=c.id; l.textContent=name;
+    const e=document.createElement("span"); e.className="eff"; e.textContent=eff; l.append(e);
+    const w=document.createElement("div"); w.className="why"; w.textContent=why+" ";
+    if(url){const a=document.createElement("a"); a.href=url; a.textContent="Source"; a.target="_blank"; a.rel="noopener"; w.append(a)}
+    d.append(c,n,l,w); list.append(d);
+  } host.append(list);
+}
+const picked=()=>[...host.querySelectorAll("input:checked")].map(c=>c.value);
+function refresh(){const p=picked(); document.getElementById("count").textContent=p.length+(p.length>1?" propositions retenues":" proposition retenue"); try{localStorage.setItem("w63",JSON.stringify(p))}catch(e){}}
+host.addEventListener("change",refresh); refresh();
+document.getElementById("copy").addEventListener("click",async()=>{
+  const p=picked(), t=p.length?"Je retiens : "+p.join(", "):"Je ne retiens aucune proposition pour l'instant.";
+  const out=document.getElementById("out"); out.value=t; out.hidden=false;
+  try{await navigator.clipboard.writeText(t); document.getElementById("copy").textContent="Copié"}catch(e){out.focus(); out.select()}
+});
+const wo=document.getElementById("w-old"), wn=document.getElementById("w-new");
+function win(old){document.getElementById("win-old").hidden=!old; document.getElementById("win-new").hidden=old; wo.setAttribute("aria-pressed",old); wn.setAttribute("aria-pressed",!old)}
+wo.addEventListener("click",()=>win(true)); wn.addEventListener("click",()=>win(false));
+let shown=false; const pb=document.getElementById("play");
+pb.addEventListener("click",()=>{shown=!shown; for(const id of ["m-old","m-new"]) document.getElementById(id).classList.toggle("show",shown); pb.textContent=shown?"Les faire disparaître":"Faire apparaître un bandeau et un popover"});
+</script>
