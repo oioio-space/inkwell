@@ -47,6 +47,8 @@ définie le 2026-11-12 dans [docs/autonomous-decisions.md](docs/autonomous-decis
 
 **Envoi sur GitHub** : `main` poussé le 2026-11-14 (09:20).
 
+**Contraintes à reprendre dans les spécifications des prochains blocs** (vérification de toutes les demandes du 2026-11-14, [détail](docs/plans/2026-11-14-anticipate-requirements.md)) : SB2a1 — polices (N43), projet protégé (N37), listes par programme pour l'hôte des greffons (N21, N32) ; AD1 — quota et plafond dimensionnés pour un document par fichier, sortie d'un document de l'ensemble admis (W59, G-0b), auteur = clé de membre, IA comptée à l'appareil (N66) ; PR1 — schéma public et extensible de la présence (N14, V9, T3) ; « Relire » — un seul enregistrement de version, signé et à l'échelle du projet, avec l'état de validation (W71, N39, N48) ; PC1 — redémarrage modélisé pour toutes les plates-formes (N35) ; EX0 — il est aussi le registre des types de fichiers (U26, ADR 0027) ; G-0b — stockage derrière une interface (N22).
+
 **Défauts relevés hors bloc, à traiter avant R1** (parcours OI du 2026-11-13, `gates/OI/UX.md`) : la barre d'en-tête se
 chevauche à 360 px de large (repris par SI1c) ; un `.md` ouvert depuis le gestionnaire de fichiers s'affiche en lecture seule (« Dans cette
 version… ») : limite assumée de G-0a jusqu'à G-0b, gardée pour R1 et annoncée (décision du 2026-11-13, [étude](docs/plans/2026-11-13-md-open-readonly.md)).
