@@ -1,0 +1,56 @@
+# FROZEN 2026-11-14, red witnesses in gates/W58/WITNESSES.md (revision 6: scope reset « Round 3 », Codex on revisions 4 and 5, « Round 4 » and « Round 5 »,
+# gates/W58/REVIEW.md; reviewed twice). Acceptance for block W58 (a project
+# that does not name this device: standing, read-only, invite capability and refusal by key, take-over in place, ask
+# for an invitation). Rigour: standard. Plan: docs/plans/2026-11-14-w58-foreign-project.md (N-1..N-11). ADR 0043.
+# Every long command is `timeout -k 10 N ./scripts/heavy.sh …` (the timeout covers the wait for a slot). No nested gate.
+raw_results = ["docs/plans/2026-11-14-w58-foreign-project.md", "docs/adr/0043-foreign-project.md", "docs/objectif-en-cours.md", "gates/W58/*"]
+
+[[criteria]]
+# Documents: each rule id has its row in the plan, each catalogue key of the plan exists in fr.json, the ADR is
+# accepted, and the requirement rows are closed.
+id = "docs"
+command = "python3 -I -c \"import json,re,sys,pathlib; plan=pathlib.Path('docs/plans/2026-11-14-w58-foreign-project.md').read_text(); fr=json.load(open('frontend/src/i18n/fr.json')); bad=[f'plan row N-{i}' for i in range(1,12) if not re.search(rf'^\\| N-{i} \\|',plan,re.M)]; keys=['foreign.notNamed','foreign.removed','foreign.takeOver','foreign.ask','foreign.takeOver.confirm.title','foreign.takeOver.confirm.body','foreign.takeOver.done','foreign.takeOver.failed','share.host.notMember','share.host.loading','error.host','share.join.foreignHelp']; bad+=[f'fr.json {k}' for k in keys if k not in fr]; bad+=['error.host still carries {reason}'] if '{reason}' in fr.get('error.host','') else []; adr=pathlib.Path('docs/adr/0043-foreign-project.md').read_text(); bad+=['ADR 0043 not accepted'] if not re.search(r'^status: accepted',adr,re.M) else []; ex=pathlib.Path('docs/exigences.md').read_text(); bad+=[f'exigences {w} not closed' for w in ('W58','W64') if not re.search(rf'^\\| {w} \\|.*✅',ex,re.M)]; sys.exit(f'W58 docs: {bad}' if bad else 0)\""
+
+[[criteria]]
+# N-1, N-2, N-5..N-8 in Go: the run succeeds and every named test passes.
+id = "go"
+command = "out=$(timeout -k 10 1200 ./scripts/heavy.sh go test -count=1 -race -v -run 'TestStanding|TestFirstLaunchCreatorIsAdmin|TestNotMemberInviteRefusedByKey|TestTakeOver' ./internal/app/ 2>&1) || { echo \"$out\" | tail -40; exit 1; }; for t in TestStandingFromList TestStandingMemberAfterJoin TestFirstLaunchCreatorIsAdmin TestNotMemberInviteRefusedByKey TestTakeOverThenInviteSucceeds TestTakeOverWiringFollows TestTakeOverArchivesOldList TestTakeOverLeavesTextAndFilesIdentical TestTakeOverCrashAtEachStep TestTakeOverNoOpForMember TestTakeOverIdDiffersFromOwnProject; do echo \"$out\" | grep -q -- \"--- PASS: $t\" || { echo \"missing or not passing: $t\"; exit 1; }; done"
+
+[[criteria]]
+# The mutant runner's new `expect` field (plan « Mutants »): its own tests, then every W58 entry exists with a test
+# and an expect text that starts with its rule tag.
+id = "mutant-tool"
+command = "timeout -k 10 300 ./scripts/heavy.sh python3 -m unittest scripts/netsim/mutants_test.py && python3 -I -c \"import tomllib,re,sys; ms={m['id']:m for m in tomllib.load(open('scripts/netsim/mutants.toml','rb'))['mutant'] if m.get('block')=='W58'}; bad=[i for i in ('MW1','MW2','MW3','MW4','MW5','MW6','MW7') if i not in ms or ms[i].get('kind')!='go' or not ms[i].get('test') or not re.match(r'N-\\d+ ',ms[i].get('expect',''))]; sys.exit(f'W58 mutant entries missing or without test and expect: {bad}' if bad else 0)\""
+
+[[criteria]]
+# Go mutants MW1..MW7, each applied to a copy that compiles and caught by its named test failing with its expect
+# text in that test's own `go test -json` output (a build error, a timeout or another failing test is not a catch).
+id = "mutants"
+command = "timeout -k 10 2400 mise run netsim:mutants -- W58"
+
+[[criteria]]
+# N-2, N-3, N-4, N-9, N-11 in the webview and their in-test mutants: zero failed tests, and every named test passed (read
+# back from the Vitest JSON report).
+id = "frontend"
+command = "cd frontend && timeout -k 10 900 ../scripts/heavy.sh pnpm exec vitest run --configLoader runner --reporter=json --outputFile=../.task/w58-fe.json -t 'W58 '; rc=$?; cd .. && python3 -I -c \"import json,sys; rc=int(sys.argv[1]); r=json.load(open('.task/w58-fe.json')); ok={a['title'] for f in r['testResults'] for a in f['assertionResults'] if a['status']=='passed'}; need=['W58 a refusal shows its sentence, never Go text','W58 not a member: read-only, one sentence, two actions','W58 removed: its own sentence','W58 invite capability: loading','W58 invite capability: admin','W58 invite capability: non-admin','W58 invite capability: not a member','W58 take-over asks once and says the consequence','W58 after take-over the editor is writable','W58 ask for an invitation opens the join dialog','W58 project change renews coverage and re-attests the local heads','W58 heads attested before the change are asked again']+[f'W58 mutant {m} is caught' for m in ('N-2 raw error','N-3 access','N-4 renew','N-9 confirmation','N-11 attested kept')]; miss=[n for n in need if n not in ok]; sys.exit(f'W58 frontend: exit {rc}, failed {r[\\\"numFailedTests\\\"]}, failed suites {r[\\\"numFailedTestSuites\\\"]}, missing {miss}' if rc or r['numFailedTests'] or r['numFailedTestSuites'] or miss else 0)\" $rc"
+
+[[criteria]]
+# N-10 (and N-2 across the real bridge), once: the candidate is built first (capped), retries 0; Playwright's exit code is
+# kept, the report must hold zero global errors, zero unexpected, flaky or skipped tests, and the three titles.
+id = "e2e"
+command = "timeout -k 10 1500 mise run e2e:build && cd frontend && timeout -k 10 1200 ../scripts/heavy.sh ./node_modules/.bin/playwright test e2e/foreign-project.spec.ts --retries=0 --reporter=json > ../.task/w58-e2e.json; rc=$?; cd .. && python3 -I -c \"import json,sys; rc=int(sys.argv[1]); r=json.load(open('.task/w58-e2e.json')); st=r.get('stats',{}); ok=set()\nfor s in r['suites']:\n  stack=[s]\n  while stack:\n    x=stack.pop(); stack+=x.get('suites',[])\n    for sp in x.get('specs',[]):\n      if sp['ok'] and all(t['status']=='expected' for t in sp['tests']): ok.add(sp['title'])\nneed=['W58-E2E a second profile reads and cannot invite','W58-E2E a third profile joins after the take-over and receives the earlier text','W58-E2E the first profile then opens the folder as a readable non-member']; miss=[n for n in need if n not in ok]; bad=rc or r.get('errors') or st.get('unexpected') or st.get('flaky') or st.get('skipped') or miss; sys.exit(f'W58 e2e: exit {rc}, errors {len(r.get(\\\"errors\\\",[]))}, stats {st}, missing {miss}' if bad else 0)\" $rc"
+
+[[criteria]]
+# No regression: every frontend check, and the flows that create, join and list people; both capped, wait included.
+id = "regression"
+command = "timeout -k 10 1500 mise run fe:check && timeout -k 10 1800 mise run e2e -- e2e/join.spec.ts e2e/collab.spec.ts e2e/people.spec.ts"
+
+[[criteria]]
+# Interface change (banner with two actions, confirmation, disabled invite row): ux-walkthrough report with light and
+# dark captures; the verdict line must read "Verdict: ship".
+id = "ux-walkthrough"
+command = "test -s gates/W58/UX.md && grep -Eq '^Verdict: ship' gates/W58/UX.md"
+
+[[criteria]]
+id = "simplify-report"
+command = "test -s gates/W58/SIMPLIFY.md"

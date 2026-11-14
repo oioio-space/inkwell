@@ -223,6 +223,11 @@ run = "java -version 2>&1 | head -1"
 description = "Alloy models (docs/protocol/alloy): checks hold, runs are satisfiable, every mutant is caught (jar pinned by SHA-256)"
 run = "./scripts/heavy.sh python3 scripts/alloy_check.py"
 
+[tasks.pregate]
+description = "Cheap checks (seconds, no test) to run before any gate, `done` or push: they failed 12 times inside long runs in one week (docs/reviews/2026-11-13-velocity-review.md)"
+depends = ["lint:env", "lint:claude-md", "arch", "deadcode", "lint", "lint:sh", "lint:yaml", "lint:actions"]
+run = "python3 scripts/gate.py --base-guard"
+
 [tasks."lint:env"]
 description = "Every environment variable the code reads is declared in .env.reference"
 run = "python3 scripts/check-env-reference.py"

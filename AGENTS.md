@@ -95,6 +95,7 @@ performance, netsim, full gate) has the machine to itself: start nothing heavy w
 
 ```bash
 gofmt -l . && go vet ./<package>/...   # after editing Go
+mise run pregate                       # all the cheap checks below at once (about 20 s), before any gate or push
 mise run lint                          # Go style gate
 mise run lint:env                      # every variable read is declared in .env.reference
 mise run lint:claude-md                # everything the instruction files cite exists; docs/ is mapped

@@ -83,6 +83,7 @@ une relecture doit confirmer, pas découvrir. Avant toute relecture, l'auteur d'
 | Règle | Preuve |
 |---|---|
 | **Tout octet venu d'un pair est hostile** : taille bornée, décodage strict, signature et rôle vérifiés **avant** usage | fuzz natif de chaque décodeur (`go test -fuzz`) ; tests de rejet |
+| **Frontière de confiance (règle de l'utilisatrice, 2026-11-14, W64)** : inkwell reste un éditeur de texte et ne protège pas tout. L'adversaire est un **pair** (réseau, invitation, octets reçus, contenu reçu puis compilé) ; les fichiers déjà présents sur la machine (dossier du projet, profil) sont ceux de la personne : qui peut les lire, les écrire, les copier ou les remplacer relève d'elle et de son système d'exploitation. Aucune défense contre un dossier local fabriqué, substitué ou rejoué ; on garde la robustesse (jamais de plantage ni de perte silencieuse sur un fichier abîmé) et des messages clairs | revue : un constat qui suppose un attaquant ayant déjà accès en écriture aux fichiers locaux est classé hors périmètre, avec renvoi à cette ligne (ADR 0043) |
 | E/S fichier du projet uniquement via **`os.Root`** (anti-traversée `..` / liens) ; `--root` pour typst et tinymist | revue ; test d'évasion par lien symbolique |
 | Crypto standard uniquement (`crypto/ed25519`, `crypto/rand`, Noise via libp2p) ; comparaisons de secrets en temps constant | `gosec` (gate pre-commit) |
 | Serveurs locaux : `127.0.0.1`, port éphémère, jeton aléatoire, jamais logué | revue ; test d'accès sans jeton → refus |

@@ -33,6 +33,7 @@ mise run done -- <bloc>  # définition de « fini », dans l'ordre ; --skip-gate
 mise run gate -- <lot>   # porte figée gates/<lot>.toml ; mesure native : INKWELL_NATIVE_PERF_RUN=1, machine au repos
 mise run gate -- --resume <lot>  # reprise sur le même candidat : critères finis réutilisés, échec gardé, mesure native relancée
 mise run formal          # TLA+ (tla) + Alloy (alloy), mutants compris ; Java ≥ 17 (outil de dev)
+mise run pregate         # contrôles rapides (≈ 20 s, sans test) avant toute porte, `done` ou push ; `scripts/qpush.sh` le lance d'abord
 mise run lint:env        # toute variable lue est déclarée dans .env.reference
 mise run lint:claude-md  # tout ce que cite ce fichier existe (tâches, chemins, agents, skills, hooks)
 mise run test:py         # tests Python de l'outillage | mise run fe:check (Biome, svelte-check, Vitest)
