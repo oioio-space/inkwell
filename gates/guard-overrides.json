@@ -1039,6 +1039,26 @@
       "id": "079259de7f82667094a2adb49931f4984ce11aff8548046b528d151cf59f9678",
       "reason": "scripts/sec-scan.sh: gate dependency changed: sources scripts/pinned-path.sh and runs scripts/check-pinned-tools.sh first, so gosec 2.30.0 (not a stale 2.29.0) judges the code; the gosec and govulncheck arguments are unchanged",
       "decision": "docs/plans/2026-11-14-ci1-github-ci.md"
+    },
+    {
+      "id": "eaa7bf4a8b9c30d64b0ed71cb11ba18292a4a965fcd5d4057fe83db0efe69c87",
+      "reason": "docs/adr/0044-sandbox-tiers.md: revision 2 rewrites the ADR on measured facts (gates/SB2/MEASUREMENTS.md) after Codex's round 1; the sentences that mention timeouts are prose of a draft ADR (no gate is frozen on it), not a weakened bound: timeout expression removed or rewritten: cached, each step bounded by `probeTimeout`:",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "c2f93402f6cb172b0668d96ee49cf8f105135fa3730dea235a3c3fa09cbab1cb",
+      "reason": "docs/adr/0044-sandbox-tiers.md: revision 2 rewrites the ADR on measured facts (gates/SB2/MEASUREMENTS.md) after Codex's round 1; the sentences that mention timeouts are prose of a draft ADR (no gate is frozen on it), not a weakened bound: timeout expression removed or rewritten: namespace refusal from a launcher that cannot be executed at all (row #). Any other error, a timeout or a crash is",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "c8706281f410109d3a471420b5f53401e7776e7281a73a90b7b7c8de07ed84e8",
+      "reason": "docs/adr/0044-sandbox-tiers.md: revision 2 rewrites the ADR on measured facts (gates/SB2/MEASUREMENTS.md) after Codex's round 1; the sentences that mention timeouts are prose of a draft ADR (no gate is frozen on it), not a weakened bound: timeout expression removed or rewritten: until the caller's timeout, and allocate up to `RLIMIT_AS` in each process it forks (no aggregate bound without a",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "e3937b90c44bd25df8f340a33d627a90aade11654dd4e40ecf707dcf0e29aa31",
+      "reason": "internal/sidecar/probe_report_linux_test.go: the inert measurement test (INKWELL_SANDBOX_PROBE=1 only) gains TestSandboxProbeTiers, which runs a real compile and a tinymist session in each tier and needs a longer context than the version check; it never runs in CI or gates",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
     }
   ]
 }

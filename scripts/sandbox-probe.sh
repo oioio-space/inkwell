@@ -12,7 +12,11 @@
 # repository's own probes and Landlock (a Go test, INKWELL_SANDBOX_PROBE=1); q5 systemd user session and
 # cgroup delegation; q6 the two tests that never returned on the runner, with Go's goroutine dump;
 # q7 the system calls of the pinned typst and tinymist at start, outside and inside the sandbox (needs
-# strace and the fetched sidecars); q8 the same as q2 and q3 under a candidate AppArmor profile.
+# strace and the fetched sidecars); q8 the same as q2 and q3 under a candidate AppArmor profile, then the
+# sidecars' real work inside the sandbox under that profile, traced, with the calls it refused; q9 whether
+# typst (a compile) and tinymist (a language-server session) create processes or only threads, outside
+# the sandbox (strace); q10 and q11 the pinned sidecars through Run, in the tier this machine decides (Q10)
+# and with the namespace-free tier forced (Q11), with no profile (TestSandboxProbeTiers).
 set -uo pipefail
 
 repo=$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)
@@ -159,11 +163,107 @@ q7() {
   say Q7 "last calls before each kill: $(grep -B3 -E '\+\+\+ killed by' "$work/inside" | sed -E 's/^[0-9]+ +//' | cut -c1-110 | tr '\n' '|' | cut -c1-900)"
 }
 
+# denied_calls TRACE ERRNO: the calls of a strace log answered with ERRNO, with their counts.
+denied_calls() {
+  grep -E "= -1 $2" "$1" | sed -E 's/^[0-9]+ +//' | grep -oE '^[a-z_0-9]+\(' | tr -d '(' | sort | uniq -c | sort -rn | awk '{printf "%s×%s ", $2, $1}' | cut -c1-900
+}
+
+# process_calls TRACE: process creation in a strace log: thread clones, process clones, clone3, fork,
+# vfork, and the execve after the first one.
+process_calls() {
+  local threads procs
+  threads=$(grep -cE '(^|[0-9] +)clone\(.*CLONE_THREAD' "$1")
+  procs=$(grep -E '(^|[0-9] +)clone\(' "$1" | grep -vc CLONE_THREAD)
+  printf 'clone_thread=%s clone_process=%s clone3=%s fork=%s vfork=%s execve=%s' "$threads" "$procs" \
+    "$(grep -cE '(^|[0-9] +)clone3\(' "$1")" "$(grep -cE '(^|[0-9] +)fork\(' "$1")" \
+    "$(grep -cE '(^|[0-9] +)vfork\(' "$1")" "$(grep -cE '(^|[0-9] +)execve(at)?\(' "$1")"
+}
+
+# q9: process creation by typst (a compile of a small document, PDF and SVG) and by tinymist (a language
+# server session: initialize, open, completion, hover, shutdown), outside the sandbox.
+q9() {
+  command -v strace >/dev/null 2>&1 || { say Q9 "strace: absent"; return; }
+  local arch dir typst tinymist proj
+  case $(uname -m) in x86_64) arch=amd64 ;; aarch64) arch=arm64 ;; *) arch=$(uname -m) ;; esac
+  dir="internal/sidecar/bin/linux_$arch"
+  [[ -f $dir/typst.gz && -f $dir/tinymist.gz ]] || { say Q9 "no fetched sidecar in $dir"; return; }
+  typst="$work/q9-typst" tinymist="$work/q9-tinymist" proj="$work/q9-project"
+  gunzip -c "$dir/typst.gz" >"$typst" && gunzip -c "$dir/tinymist.gz" >"$tinymist" && chmod 0700 "$typst" "$tinymist"
+  mkdir -p "$proj"
+  # shellcheck disable=SC2016 # Typst source: $x^2$ is math, not a shell expansion
+  printf '#set page(width: 8cm, height: 6cm)\n#let total = 1\n= Probe\nText $x^2$ and a table:\n#table(columns: 2, [a], [b])\n#tot\n' >"$proj/main.typ"
+  timeout -k 5 120 strace -f -e trace=clone,clone3,fork,vfork,execve,execveat -o "$work/q9.compile" \
+    "$typst" compile --root "$proj" --ignore-system-fonts "$proj/main.typ" "$work/q9.pdf" >/dev/null 2>&1
+  say Q9 "typst compile (PDF): exit=$? $(process_calls "$work/q9.compile")"
+  timeout -k 5 120 strace -f -e trace=clone,clone3,fork,vfork,execve,execveat -o "$work/q9.svg" \
+    "$typst" compile --root "$proj" --ignore-system-fonts --format svg "$proj/main.typ" "$work/q9-{p}.svg" >/dev/null 2>&1
+  say Q9 "typst compile (SVG): exit=$? $(process_calls "$work/q9.svg")"
+  (cd "$proj" && HOME="$proj" timeout -k 5 120 strace -f -e trace=clone,clone3,fork,vfork,execve,execveat -o "$work/q9.lsp" \
+    python3 -I -c "$lsp_session" "$tinymist" "$proj" >"$work/q9.lsp.out" 2>&1)
+  say Q9 "tinymist lsp session: exit=$? $(tr '\n' ' ' <"$work/q9.lsp.out" | cut -c1-200) $(process_calls "$work/q9.lsp")"
+}
+
+# lsp_session: a language-server session driven over stdin and stdout (python3, standard library only).
+# shellcheck disable=SC2016 # Python source, not shell
+lsp_session='
+import json, os, subprocess, sys, threading, time
+binary, root = sys.argv[1], sys.argv[2]
+p = subprocess.Popen([binary, "lsp"], stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL, cwd=root)
+got = []
+def reader():
+    while True:
+        header = b""
+        while not header.endswith(b"\r\n\r\n"):
+            c = p.stdout.read(1)
+            if not c:
+                return
+            header += c
+        n = int([l for l in header.decode().split("\r\n") if l.lower().startswith("content-length")][0].split(":")[1])
+        got.append(json.loads(p.stdout.read(n)))
+threading.Thread(target=reader, daemon=True).start()
+def send(m):
+    b = json.dumps(m).encode()
+    p.stdin.write(b"Content-Length: %d\r\n\r\n" % len(b) + b)
+    p.stdin.flush()
+uri = "file://" + root + "/main.typ"
+send({"jsonrpc": "2.0", "id": 1, "method": "initialize", "params": {"processId": None, "rootUri": "file://" + root, "capabilities": {}}})
+send({"jsonrpc": "2.0", "method": "initialized", "params": {}})
+send({"jsonrpc": "2.0", "method": "textDocument/didOpen", "params": {"textDocument": {"uri": uri, "languageId": "typst", "version": 1, "text": open(root + "/main.typ").read()}}})
+send({"jsonrpc": "2.0", "id": 2, "method": "textDocument/completion", "params": {"textDocument": {"uri": uri}, "position": {"line": 5, "character": 4}}})
+send({"jsonrpc": "2.0", "id": 3, "method": "textDocument/hover", "params": {"textDocument": {"uri": uri}, "position": {"line": 2, "character": 3}}})
+start = time.time()
+while time.time() - start < 20 and not any(m.get("id") == 2 for m in got):
+    time.sleep(0.1)
+time.sleep(5)
+send({"jsonrpc": "2.0", "id": 9, "method": "shutdown"})
+send({"jsonrpc": "2.0", "method": "exit"})
+try:
+    p.wait(10)
+except subprocess.TimeoutExpired:
+    p.kill()
+    p.wait()
+replies = sorted(m["id"] for m in got if m.get("id") is not None)
+diagnostics = sum(len(m["params"]["diagnostics"]) for m in got if m.get("method") == "textDocument/publishDiagnostics")
+print("replies=%s diagnostics=%d server_exit=%s" % (replies, diagnostics, p.returncode))
+'
+
+# q10: the pinned sidecars through Run, unprofiled: Q10 is the tier this machine decides, Q11 the
+# namespace-free tier forced (TestSandboxProbeTiers). No sudo, no tracer.
+q10() {
+  local out rc
+  out=$(INKWELL_SANDBOX_PROBE=1 timeout -k 10 300 go test ./internal/sidecar -run '^TestSandboxProbeTiers$' -v -count=1 2>&1)
+  rc=$?
+  say Q10 "go test TestSandboxProbeTiers: exit=$rc"
+  printf '%s\n' "$out" | grep -E '^Q1[01]: ' | cut -c1-500
+  [[ $rc -eq 0 ]] || printf '%s\n' "$out" | tail -15 | sed 's/^/Q10:   /'
+}
+
 # load_profile NAME PATH: writes and loads a candidate profile for the binary at PATH, in the form
 # Ubuntu 24.04 ships for the applications it allows (compare with the files q1 prints).
 load_profile() {
   local name=$1 path=$2 file="/etc/apparmor.d/$1"
-  printf 'abi <abi/4.0>,\ninclude <tunables/global>\n\nprofile %s %s flags=(unconfined) {\n  userns,\n}\n' "$name" "$path" | sudo tee "$file" >/dev/null
+  # The exact text of ADR 0044 point 6, for another name and path.
+  printf 'abi <abi/4.0>,\ninclude <tunables/global>\n\nprofile %s %s flags=(unconfined) {\n  userns,\n\n  include if exists <local/%s>\n}\n' "$name" "$path" "$name" | sudo tee "$file" >/dev/null
   try Q8 "apparmor_parser -r $file" sudo apparmor_parser -r "$file"
 }
 
@@ -195,17 +295,30 @@ q8() {
   install -m 0700 "$work/probe.test" "$work/elsewhere.test"
   say Q8 "the same binary from an unprofiled path:"
   go_probe Q8 "$work/elsewhere.test"
+  # The sidecars' real work inside the sandbox, under the profile, traced: the calls refused inside are
+  # the allow-list's gaps on this architecture (a tracer is attached: read with the untraced q10).
+  if command -v strace >/dev/null 2>&1; then
+    INKWELL_SANDBOX_PROBE=1 timeout -k 10 300 strace -f -o "$work/q8.trace" "$probe" -test.run '^(TestEmbeddedSidecarsRun|TestSandboxProbeTiers)$' -test.v -test.count=1 >"$work/q8.out" 2>&1
+    say Q8 "under the profile, traced: exit=$? $(grep -E '^(--- (PASS|FAIL)|ok|FAIL)' "$work/q8.out" | tr '\n' '|' | cut -c1-700)"
+    grep -E '^Q1[01]: ' "$work/q8.out" | sed 's/^Q\([0-9]*\): /Q8: [Q\1 traced, profile] /' | cut -c1-500
+    local errno
+    for errno in ENOSYS EPERM EACCES; do
+      say Q8 "calls answered $errno inside, under the profile: $(denied_calls "$work/q8.trace" "$errno")"
+    done
+    say Q8 "kills under the profile: $(grep -cE '\+\+\+ killed by' "$work/q8.trace") $(grep -B3 -E '\+\+\+ killed by' "$work/q8.trace" | sed -E 's/^[0-9]+ +//' | cut -c1-110 | tr '\n' '|' | cut -c1-700)"
+  fi
   sudo rm -f /etc/apparmor.d/inkwell-sandbox-probe /etc/apparmor.d/inkwell-probe-unshare "$probe" "$copy"
 }
 
 questions=("$@")
-[[ ${#questions[@]} -gt 0 ]] || questions=(q1 q2 q3 q5 q6 q7 q8)
+[[ ${#questions[@]} -gt 0 ]] || questions=(q1 q2 q3 q5 q6 q7 q9 q10 q8)
 for q in "${questions[@]}"; do
   case $q in
-  q1 | q2 | q3 | q5 | q6 | q7 | q8) "$q" ;;
-  q4) q3 ;; # Landlock is answered by the same Go test as q3
+  q1 | q2 | q3 | q5 | q6 | q7 | q8 | q9 | q10) "$q" ;;
+  q4) q3 ;;  # Landlock is answered by the same Go test as q3
+  q11) q10 ;; # the forced namespace-free tier is answered by the same Go test as q10
   *)
-    echo "sandbox-probe: unknown question $q (q1 q2 q3 q4 q5 q6 q7 q8)" >&2
+    echo "sandbox-probe: unknown question $q (q1 q2 q3 q4 q5 q6 q7 q8 q9 q10 q11)" >&2
     exit 2
     ;;
   esac

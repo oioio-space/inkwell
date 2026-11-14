@@ -120,3 +120,60 @@ func errnoName(err error) string {
 	}
 	return "-"
 }
+
+// TestSandboxProbeTiers is a measurement, not a test (block SB2, questions Q10
+// and Q11 of scripts/sandbox-probe.sh): it runs the pinned typst and tinymist
+// through Run, first in the tier this machine decides (Q10), then with the
+// namespace-free tier forced (Q11: both probes answer « no »), and prints the
+// outcome of each: a version, a compile of a small document to standard
+// output, and tinymist's version. Inert unless INKWELL_SANDBOX_PROBE=1.
+func TestSandboxProbeTiers(t *testing.T) {
+	if os.Getenv("INKWELL_SANDBOX_PROBE") != "1" {
+		return // a measurement, not a test: it asserts nothing, so there is nothing to skip
+	}
+	say := func(q, format string, args ...any) { fmt.Printf(q+": "+format+"\n", args...) }
+	store := &Store{Dir: sharedCache}
+	typst, terr := store.Resolve(Typst)
+	tinymist, merr := store.Resolve(Tinymist)
+	if terr != nil || merr != nil {
+		say("Q10", "no embedded sidecar (typst: %v, tinymist: %v): build after `go run ./cmd/sidecar-fetch`", terr, merr)
+		return
+	}
+	project := t.TempDir()
+	doc := "#set page(width: 8cm, height: 6cm)\n= Probe\nText $x^2$ and a table:\n#table(columns: 2, [a], [b])\n"
+	if err := os.WriteFile(filepath.Join(project, "main.typ"), []byte(doc), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	runs := func(q string, noIsolation bool) {
+		for _, c := range []struct {
+			label string
+			spec  Spec
+		}{
+			{"typst --version", Spec{Path: typst, Dir: t.TempDir(), Args: []string{"--version"}}},
+			{"typst compile to stdout", Spec{Path: typst, Dir: project, Args: []string{"compile", "--root", project, "--ignore-system-fonts", "main.typ", "-"}, MaxOutput: 1 << 20, NoNetwork: true}},
+			{"tinymist --version", Spec{Path: tinymist, Dir: t.TempDir(), Args: []string{"--version"}, Env: []string{"HOME=" + t.TempDir()}, NoNetwork: true}},
+		} {
+			if noIsolation {
+				c.spec.isolationProbe = func() (bool, error) { return false, nil }
+			}
+			ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
+			out, err := Run(ctx, c.spec)
+			cancel()
+			head := strings.TrimSpace(string(out.Stdout))
+			if len(head) > 40 {
+				head = head[:40]
+			}
+			say(q, "%s: err=%v errno=%s exit=%d signal=%d isolated=%v containment=%q stdout=%d bytes %q stderr=%q",
+				c.label, err, errnoName(err), out.ExitCode, out.Signal, out.Isolated, out.Containment, len(out.Stdout), head,
+				strings.TrimSpace(strings.ReplaceAll(string(out.Stderr), "\n", "|")))
+		}
+	}
+	say("Q10", "process label=%s; the tier this machine decides:", procLabel())
+	runs("Q10", false)
+
+	saved := probeOutputMount
+	probeOutputMount = func() (bool, error) { return false, nil }
+	defer func() { probeOutputMount = saved }()
+	say("Q11", "the namespace-free tier forced (both probes answer no):")
+	runs("Q11", true)
+}

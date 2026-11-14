@@ -1,132 +1,133 @@
 ---
-status: proposed # draft for block SB2a (plan: docs/plans/2026-11-14-sb2-sandbox-tiers.md); not reviewed yet
+status: proposed # revision 2 (2026-11-14), written on measured facts (gates/SB2/MEASUREMENTS.md, plan « Local measurements »); round 1 of review: gates/SB2/REVIEW.md (REJECT, every finding answered here or in the plan); round 2 pending
 date: 2026-11-14
-amends: ADR 0033 (the namespace probe and its fallback), ADR 0042 A3 (which fallback is named); spec §9.11 (refuse rather than weaken) is kept and made total
+amends: ADR 0033 (the namespace probe and its fallback), ADR 0042 A3 (the memory fallback; the cgroup bound needs a PID namespace, unchanged); spec §9.11 (refuse rather than weaken) is kept and made total
 decision-makers: [Mathieu]
 ---
 
-# The sidecar sandbox has explicit tiers, decided once by launching each tier for real; a machine without usable namespaces gets the Landlock tier, said to the person, never a hang or a bare status 125
+# The sidecar sandbox has two tiers and a refusal, decided once by real launches and verified at every launch; without usable namespaces the sidecar runs as one process that cannot create another
 
-Requirements: W69 (inkwell works on a stock Ubuntu 24.04, an R1 criterion), W68 (cloud review of 2026-11-14,
-`docs/reviews/2026-11-14-ultrareview-sandbox-bridge.md`). Diagnosis: `docs/plans/2026-11-14-ubuntu-2404-sandbox.md`.
-GitHub evidence: `gates/CI1c/GITHUB.md`. Rigour: **complete** — the compiler runs on documents written by peers, so
-this is the boundary the trust rule keeps (`docs/engineering-principles.md` §4, « Frontière de confiance »).
+Requirements: W69 (inkwell works on a stock Ubuntu 24.04, an R1 criterion), W68 (cloud review of 2026-11-14), W70
+(no ready-made cross-platform sandbox exists: `docs/plans/2026-11-14-sandbox-existing-solutions.md`). Plan:
+`docs/plans/2026-11-14-sb2-sandbox-tiers.md`. Rigour: **complete** — the compiler runs on documents written by peers,
+the boundary the trust rule keeps (`docs/engineering-principles.md` §4, « Frontière de confiance »).
 
-## Context and problem
+## Context: what was measured
 
-`internal/sidecar` confines `typst` and `tinymist` with user, mount, PID, IPC and network namespaces, a private
-tmpfs for the output, Landlock, seccomp, rlimits and a systemd user scope. Its stated policy is already to degrade on
-a definitive refusal and to refuse otherwise: « Spec §9.11, refuse rather than weaken: only a DEFINITIVE negative
-result selects the launch without namespaces » (`mount_linux.go:26-35`); « An actual failed namespace/mount probe
-selects the fallback, including Ubuntu… » (ADR 0033); the memory fallback is « never an error and never a weaker
-bound » (ADR 0042, point 2); Landlock and seccomp are mandatory (« mandatory Landlock unavailable; refusing peer
-document », `launcher_linux.go:138`, `:152`, `:205`). What fails is the mechanism, read in the code on `main` e256ea6:
+On GitHub's stock Ubuntu 24.04 runners, amd64 and arm64, kernel 7.0, run 43638847261 (`gates/SB2/MEASUREMENTS.md`):
 
-1. **Two probes that test different things.** `probeOutputMount` runs the child with `Overlay` and a tmpfs mount
-   (`mount_linux.go:49-60`); `probeIsolation` runs it with `Probe: true` only (`netns_linux.go:34-40`), and
-   `sandboxExec` returns at `if c.Probe` (`launcher_linux.go:104-106`) **before** the `/proc` mount that a real
-   namespaced launch performs as PID 1 (`:110-119`). Where a user namespace can be created but holds no capability,
-   the first says no and the second yes; the launch then keeps the caller's uid (`isolate` maps the uid onto itself
-   when the mount namespace did not set the root mapping, `netns_linux.go:22-25`), fails to mount `/proc` and exits
-   125. Confirmed as a code path; not yet observed on a real Ubuntu 24.04 desktop.
-2. **An errno without a decision.** `definitiveRefusal` knows EPERM, EINVAL and ENOSPC-at-limit-0
-   (`mount_linux.go:64-70`). The arm64 GitHub runner answered « fork/exec /proc/self/exe: permission denied »
-   (EACCES, run 43620631116): inconclusive for ever, every launch refused for two weeks.
-3. **Waits without a deadline.** `captureDeath` blocks in `waitid` on the pidfd (`death_linux.go:72-83`), called
-   before `cmd.Wait` (`run.go:229`); on the amd64 GitHub runner `TestCgroupWorkloadAndDescendantsInside` and
-   `TestRunNoNetworkFallsBack` never return (run 43629366160, package killed after 8 min). Cause not established.
-4. **The fallback of the fallback cannot run** (review finding 4, confirmed in code): a refused cgroup placement
-   re-runs `run` (`run.go:213-217`), but the Landlock path has already created the output slots in the watched
-   folder (`dir_linux.go:43-51`) and refuses a folder that is not empty (`:36-39`).
-5. **A pid argument that nothing checks** (finding 2, confirmed in code): the filter refuses `prlimit64` only for
-   `RLIMIT_CORE` with a new limit (`seccomp_linux.go:143-144`); for every other resource the pid argument is free.
-   Without a PID namespace the target can lower the limits of any process of the same user, Inkwell included. It is
-   the only pid-taking call of the allow-list that writes (`sched_getaffinity` reads; `tgkill` is already bound to
-   self, `seccomp_linux.go:104-110`).
-6. **Nothing tells the person.** The About dialog has two sentences (`about.network.namespace`,
-   `about.network.proxy`), fed by `sidecar.NetworkIsolation()` (`internal/typst/engine.go:249`): the second probe
-   only. A refused launch surfaces as « exited with status 125 »; tinymist's failure is a log line.
-7. **No test runs where the problem is**: every CI job that starts a sidecar lifts
-   `kernel.apparmor_restrict_unprivileged_userns` first; the package tests start no sidecar; the .deb ships no
-   AppArmor profile (`build/linux/nfpm/scripts/postinstall.sh` only refreshes desktop caches).
+1. `kernel.apparmor_restrict_unprivileged_userns=1`: an unconfined process creates a user namespace but may not
+   write its id map (`unshare -Ur`: « write failed /proc/self/uid_map: Operation not permitted »).
+2. inkwell's launcher then fails with `fork/exec /proc/self/exe: permission denied` (**EACCES**), which
+   `definitiveRefusal` does not know (`internal/sidecar/mount_linux.go:64-70`: EPERM, EINVAL, ENOSPC at limit 0): the
+   probe stays « inconclusive » and **every sidecar launch is refused**: no preview, no export, no completion.
+3. With a profile `profile NAME PATH flags=(unconfined) { userns, }` loaded for the binary's path, both probes
+   succeed and a `NoNetwork` launch is isolated; the label is inherited by the `/proc/self/exe` re-execution and by a
+   binary extracted to a temporary folder (as the sidecar store extracts typst and tinymist). The same binary from an
+   unprofiled path is still refused. 92 shipped profiles on 24.04 use this form (chrome, firefox, code, obsidian…).
+4. Landlock ABI 8 on that kernel; a ruleset with TCP rules is accepted.
+5. On this development machine (Fedora 45, kernel 7.3, SELinux enforcing, `unconfined_t`): namespaces work, and
+   `TestSandboxProbeTiers` runs typst `--version`, a compile to standard output and tinymist `--version` both in the
+   decided tier (isolated) and with the namespace-free tier forced.
+6. Locally, with a seccomp filter that refuses every process creation (fork and vfork denied, `clone` without
+   `CLONE_THREAD` denied, `clone3` answered ENOSYS): the fixture project (`internal/typst/engine_test.go`: cmarker,
+   lilaq, touying, images, CSV, bibliography) compiles to PDF and SVG with the same bytes as without the filter
+   (fixed timestamp); `typst query` works; a tinymist language-server session (initialize, open, completion, hover,
+   shutdown) gives the same 7 completions and 2 diagnostics; a Go program's runtime threads work, its child process is
+   refused. Peak resident memory: compile 70 MiB, tinymist session 180 MiB; the compile needs an address space between
+   128 and 256 MiB (fails at 128, succeeds at 256; the default `RLIMIT_AS` is 4 GiB, `internal/typst/engine.go:46`).
+
+Not measured yet (the next probe run, questions Q8–Q11 of `scripts/sandbox-probe.sh`): process creation by the
+sidecars on arm64 and on the runner's amd64, the namespace-free tier on a stock runner, the calls refused inside the
+sandbox on arm64. A real Ubuntu 24.04 **desktop** (kernel 6.8, Landlock ABI 4 according to the kernel documentation's
+ABI table — not measured) is the owner's check at the end.
 
 ## Decision
 
 ### 1. Tiers
 
-A launch runs in exactly one tier, the pair of an isolation level and a memory bound:
+A launch runs in exactly one of two tiers, or is refused.
 
-| | **Namespaces** | **Landlock** (no namespace) |
+| | **N — namespaces** | **F — namespace-free** |
 |---|---|---|
-| Files | private mount namespace; output on a private tmpfs sized to the budget; IPC folders hidden; Landlock on top | Landlock only: read the project, the fonts and the listed system files; write only the output slots created beforehand, each capped by `RLIMIT_FSIZE` (budget shared between slots) |
-| Other processes | private PID namespace (`/proc` remounted): none visible | visible to the kernel, not to the target: Landlock denies `/proc` outside `self`; seccomp denies `kill`, `tkill`, `ptrace`, `process_vm_*`, `pidfd_*`; `tgkill` and **`prlimit64` only on itself** (rule S-1); Landlock signal scoping where ABI ≥ 6 |
-| Network | private network namespace when `NoNetwork`; seccomp denies every `socket` in all cases | seccomp denies every `socket`, `connect`, `bind`, `send*`; Landlock TCP rules where ABI ≥ 4; no private namespace (`Output.Isolated` false) |
-| IPC | private IPC namespace; SysV and POSIX queues denied by seccomp | SysV and POSIX queues denied by seccomp; abstract UNIX sockets need `socket`, denied |
-| Privileges | `no_new_privs`, capabilities dropped, bounding set emptied inside the namespace | `no_new_privs`, capabilities dropped |
+| Namespaces | user, mount, PID, IPC; network when `NoNetwork`; `/proc` remounted as PID 1 | none |
+| Files | private mount namespace, output on a private tmpfs sized to the budget, IPC folders hidden; Landlock on top | Landlock only: read the listed paths; write only the output slots created beforehand, `RLIMIT_FSIZE` on each; **execute only the target and the files its ELF interpreter needs** (today `readAccess` grants execute on every read path, `launcher_linux.go:422`) |
+| Processes | the sidecar's children live in its PID namespace and die with it | **no process creation**: seccomp allows `clone` only with `CLONE_THREAD`, answers `clone3` ENOSYS (the C library then uses `clone`; Go never uses `clone3` for threads), denies fork and vfork; `PR_SET_PDEATHSIG` SIGKILL before the target starts, so the sidecar never outlives its parent |
+| Other processes | not visible (PID namespace) | their **content** is not readable (Landlock grants `/proc/self` and `/proc/thread-self` only, `launcher_linux.go:437`); their **existence and metadata** stay visible to `stat` and `sched_getaffinity` (residual R-3); signals: `kill`, `tkill`, `rt_sigqueueinfo`, `pidfd_*` are not allowed, `tgkill` only to its own pid (exact here, since the process cannot fork), Landlock signal scoping when ABI ≥ 6 |
+| Resource limits of others | n/a | `prlimit64` allowed only with pid 0 (rule S-1, both tiers) |
+| Network | private network namespace when `NoNetwork`; seccomp denies `socket` in all cases | seccomp denies `socket`, so no TCP, UDP, pathname or abstract UNIX socket; only `socketpair(AF_UNIX, SOCK_STREAM)` for the runtime's self-pipe; Landlock TCP rules when ABI ≥ 4, UDP when ABI ≥ 10, abstract-socket scoping when ABI ≥ 6 |
+| Memory | cgroup scope when one is delegated **and** a PID namespace exists (ADR 0042, `scope_linux.go:158-160`), else `RLIMIT_AS` per process | `RLIMIT_AS` only; with no descendant possible it bounds the whole job |
+| Always | `no_new_privs`, capabilities dropped, the seccomp allow-list, Landlock (ABI ≥ 3), the caller's deadline | same |
 
-| Memory bound | When | What it bounds |
+**Refuse** when: Landlock is unavailable or its ABI is below 3; seccomp cannot be installed; neither tier's launch
+succeeds; a launch's own verification (point 3) disagrees with the decided tier.
+
+### 2. One decision, by launching each tier for real
+
+`decideTier(facts) (Tier, error)` is pure and total. The facts come from one probe sequence, run once per process and
+cached once conclusive, each step bounded by `probeTimeout` (5 s):
+
+| Fact | Obtained by | Values |
 |---|---|---|
-| **cgroup** | a delegated systemd user scope was created and verified (ADR 0042 A3) | every process of the run and its tmpfs output, in aggregate; `RLIMIT_AS` still set |
-| **rlimit** | anything else | each process's address space (`RLIMIT_AS`); no aggregate bound (ADR 0042, accepted) |
+| `landlock` | `landlock_create_ruleset(VERSION)` | ABI number, or unavailable |
+| `seccomp` | installing the real filter in the probe child | ok, unavailable |
+| `ns` | **the real N launch** of a no-op target: the same code path, flags, id maps, tmpfs, IPC overlay, `/proc` mount as PID 1, Landlock, seccomp and `execve` as every N launch (`NoNetwork` set, output bounded: the strictest variant, and the only one N uses, see point 3) | ok · refused · inconclusive |
+| `f` | **the real F launch** of the same no-op target | ok · failed · inconclusive |
 
-Both features (the Typst compile; tinymist with `NoNetwork`) run in all four tiers. **Refuse** is the fifth outcome.
+Errno classes of `ns` (total): EPERM, **EACCES**, EINVAL, and ENOSPC with `user.max_user_namespaces` = 0, returned by
+`clone`, the id-map writes, `unshare` or a mount in the probe child (reported with status 120) → **refused**. Any other
+errno, a timeout, a signal or a crash → **inconclusive**. EACCES counts as a namespace refusal only because `f` is
+launched next: a launcher that cannot be executed at all (a `noexec` mount, a policy on the binary) fails both.
 
-### 2. One decision, made by launching each tier for real
-
-`decideTier(facts) (Tier, error)` is a pure, total function; the facts come from one probe sequence, run once and
-cached, each step bounded by `probeTimeout`:
-
-| Fact | How it is obtained | Values |
-|---|---|---|
-| `landlockABI` | `landlock_create_ruleset(VERSION)` | integer; `< 3` or an error is « unusable » |
-| `seccomp` | the filter is built and installed in a probe child | usable, unusable |
-| `namespaces` | **the real namespaced launch** of a no-op target: same clone flags and id maps as a `NoNetwork` run with a bounded folder, the tmpfs, the IPC overlay, the `/proc` mount as PID 1, Landlock, seccomp, then `execve` | ok, refused (definitive), inconclusive |
-| `plain` | the real Landlock-tier launch of the same no-op target (no clone flag) | ok, failed, inconclusive |
-| `cgroup` | the scope session of ADR 0042 (S1–S9), under the caller's context | delegated, not delegated |
-
-| `landlockABI` | `seccomp` | `namespaces` | `plain` | Tier |
+| `landlock` | `seccomp` | `ns` | `f` | Outcome |
 |---|---|---|---|---|
-| unusable | any | any | any | **refuse**: « mandatory Landlock unavailable » |
-| usable | unusable | any | any | **refuse**: « mandatory seccomp unavailable » |
-| usable | usable | ok | any | **Namespaces** |
-| usable | usable | refused | ok | **Landlock** |
-| usable | usable | refused | failed | **refuse**: the launcher itself cannot run here (noexec, a policy on the binary); the error names it |
-| usable | usable | inconclusive | any | **refuse, retry** (`ErrProbeInconclusive`, backoff as today); nothing cached |
-| usable | usable | refused | inconclusive | **refuse, retry** |
+| unavailable or ABI < 3 | any | any | any | **refuse** « mandatory Landlock unavailable » |
+| ABI ≥ 3 | unavailable | any | any | **refuse** « mandatory seccomp unavailable » |
+| ABI ≥ 3 | ok | ok | any | **N** |
+| ABI ≥ 3 | ok | refused | ok | **F** |
+| ABI ≥ 3 | ok | refused | failed | **refuse**, the launcher cannot run here; the error names `f`'s errno |
+| ABI ≥ 3 | ok | inconclusive | any | **refuse, retry** (`ErrProbeInconclusive`, backoff as today); nothing cached |
+| ABI ≥ 3 | ok | refused | inconclusive | **refuse, retry** |
 
-The memory bound is chosen independently (cgroup when delegated, else rlimit) and may change from run to run as today.
+`probeOutputMount` and `probeIsolation` are replaced by this sequence; `NetworkIsolation()` reports the tier.
 
-- **« Refused » is total over errno.** A failure of `clone`, of the id-map setup or of a mount in the probe child is
-  definitive when it is EPERM, **EACCES**, EINVAL, or ENOSPC with `user.max_user_namespaces` = 0; the child reports a
-  mount refusal with its own status (120, as today). EACCES is safe to count because the `plain` step tells a
-  namespace refusal from a launcher that cannot be executed at all (row 5). Any other error, a timeout or a crash is
-  inconclusive.
-- **The launch uses the decided tier and nothing else.** `Spec.isolated()`, `configureConfinement`,
-  `newDirectoryMount` and `directoryLimits` read the cached tier; `probeOutputMount` and `probeIsolation` disappear.
-  A launch that then fails in a way the probe said could not happen is an error with its cause, never a silent retry
-  in another tier.
-- **Nothing waits without a deadline.** Every blocking call of `Run` and of the scope code is bound to the caller's
-  context or to a named constant: the pidfd wait of `captureDeath` (poll on the pidfd with the context), the ready and
-  proceed pipes of the mount launcher, the D-Bus calls, the cgroup removal. A test starts a target that never ends
-  and never answers, cancels the context and requires `Run` to return within the deadline in each tier.
-- **The memory fallback can run on the Landlock path** (finding 4): the output slots are created once per `Run`,
-  after the tier and the memory bound are settled, or removed before the second attempt.
+### 3. One configuration per tier, verified at every launch
 
-### 3. What a hostile document can do in the Landlock tier, and why it is accepted
+- **N** always uses the full set: every namespace including network, the private tmpfs, the IPC overlay. A launch that
+  does not need a network barrier or a bounded folder gets them anyway (the probe proved exactly this set). The
+  variants `run.go:368-369` and `mount_linux.go:153-155` allow today disappear. **F** has one configuration.
+- **Before the document reaches the target**: the launcher writes to its report descriptor the tier it actually
+  established (namespaces present, `/proc` remounted, seccomp mode, Landlock ABI used) after every confinement step,
+  then waits — with a deadline — for the parent's « proceed » before `execve(target)`. The parent compares with the
+  decided tier; on any difference it kills the launcher and returns an error naming both. The target is the only
+  process that reads the project, and it is not started until the check passes.
+- A launch failure in a tier the probe accepted is an error with its cause, never a silent retry in another tier.
+  The memory fallback (cgroup → rlimit, within N) creates the output slots once, after the bound is settled
+  (finding 4).
 
-It can read what every tier lets it read (the project folder, the fonts, the listed system files), use the processor
-until the caller's timeout, and allocate up to `RLIMIT_AS` in each process it forks (no aggregate bound without a
-cgroup: the same residual as the Namespaces tier with the rlimit bound, ADR 0042). It cannot write outside the output
-slots, open a socket, signal, trace or re-limit another process (rule S-1 closes the last one), nor see another
-process through `/proc`. What it keeps over the Namespaces tier is the kernel's attack surface behind the allowed
-calls **in the host's namespaces**: a kernel bug reachable through the 71 allowed calls is not further contained.
-That is the level of Landlock-plus-seccomp sandboxes used where namespaces are unavailable, and refusing instead would
-leave Ubuntu 24.04, its derivatives and every non-packaged run without preview, export or completion. Accepted,
-stated to the person, and removed for packaged installs by point 4.
+### 4. Nothing waits without a deadline
 
-### 4. Ubuntu: the package allows the namespaces
+Every blocking call of `Run`, of the probe and of the scope code is bound to the caller's context or to a named
+constant: the pidfd wait in `captureDeath` (poll on the pidfd with the context), the report, ready and proceed pipes,
+the D-Bus calls, the cgroup removal. Measured on the stock runner, the two tests that « never returned » fail at once
+there; the hang seen earlier came with the restriction lifted, and `TestCgroupWorkloadAndDescendantsInside`'s wait
+cycle (Codex, round 1, M2) is a defect of that test.
 
-The .deb installs `/etc/apparmor.d/inkwell`:
+### 5. What a hostile document can do in tier F, and why it is accepted
+
+Assume the document turns typst or tinymist into arbitrary code. In F it can: read the listed paths; use the CPU until
+the caller's deadline; allocate up to `RLIMIT_AS` (the whole job: it cannot fork); write the output slots up to their
+budget; `execve` only the target itself or its interpreter, under the same filter and ruleset; learn that other pids
+exist and their CPU masks; reach the kernel through the allowed calls in the host's namespaces. It cannot: open any
+socket; read another process's memory, environment or files under `/proc`; signal, trace or re-limit another
+process; create a process; outlive inkwell; write outside its slots. Accepted, because the alternative on a stock
+Ubuntu without the package (a build, an archive, an AppImage) is no preview at all, and because the remaining surface is
+the kernel's own, the level of the Landlock-and-seccomp confinement used where namespaces are unavailable. Packaged
+Ubuntu runs in N (point 6).
+
+### 6. Ubuntu: the package allows the namespaces (measured form)
+
+The .deb installs `/etc/apparmor.d/inkwell` as a configuration file:
 
 ```
 abi <abi/4.0>,
@@ -139,74 +140,65 @@ profile inkwell /usr/bin/inkwell flags=(unconfined) {
 }
 ```
 
-It is the form Ubuntu documents for applications that need unprivileged user namespaces (an otherwise unconfined
-profile carrying the `userns,` rule; the 23.10 announcement spells the flag `default_allow`, AppArmor 4.0 on 24.04
-`unconfined` — **to verify against a profile shipped by the 24.04 `apparmor` package before the freeze**). nfpm lists
-it as a configuration file of the deb only; `postinstall.sh` loads it when `apparmor_parser` exists and AppArmor is
-enabled (`apparmor_parser -r -T -W`), `postremove.sh` unloads it; neither can fail the installation. The launcher
-re-executes `/proc/self/exe`, which resolves to the same `/usr/bin/inkwell`: whether the child stays under the
-profile, so that its `clone(CLONE_NEWUSER)` is allowed, **is not known** and is settled by experiment E-2 (plan). If
-it is not, the profile gains an explicit transition rule or the packaged install stays in the Landlock tier, said so.
-A binary run from anywhere else (a build, an archive in the home folder) matches no profile: Landlock tier. The .rpm
-ships nothing: Fedora's SELinux policy does not restrict user namespaces for unconfined users (unverified here; the
-`sidecars` tests of the package run on Fedora decide).
+`postinstall.sh` loads it when AppArmor is enabled (`/sys/module/apparmor/parameters/enabled` is `Y` and
+`apparmor_parser` exists): `apparmor_parser -r -T -W /etc/apparmor.d/inkwell`; `postremove.sh` unloads it
+(`apparmor_parser -R`) on remove and purge; neither can fail the installation (errors are printed, the exit status is
+0). Measured: the label covers the re-execution and the extracted sidecars, so the packaged binary runs in N. A binary
+anywhere else runs in F (measured on the runner: refused today, F after SB2a). The .rpm ships no profile: Fedora's
+SELinux lets `unconfined_t` create user namespaces (measured on Fedora 45 here; the policy of other SELinux distributions
+is not measured). The profile is unconfined: it adds the right to create user namespaces and nothing else, the right
+Ubuntu grants to the browsers and editors it ships profiles for; inkwell then confines its own children itself.
 
-### 5. What the person is told
+### 7. What the person is told
 
-One fact, one place (study W63, P12): the About dialog's existing line, now fed by the decided tier.
+The About dialog's existing line follows the tier (one fact, one place). A sentence appears in the preview and the
+problems list only when a launch is **refused**; the reduced tier raises no toast (the person can do nothing about it).
 
-| Tier | Key | Sentence |
+| Outcome | Key | Sentence |
 |---|---|---|
-| Namespaces | `about.network.namespace` (kept) | « La mise en page tourne dans un espace isolé : elle ne peut joindre aucun réseau, pas même cet ordinateur. » |
-| Landlock | `about.network.proxy` → renamed `about.isolation.reduced` | « La mise en page tourne avec une isolation réduite : elle ne peut ni joindre le réseau ni écrire hors du document, mais ce système ne permet pas de la séparer des autres programmes. » |
-| refuse | `preview.fail.sandbox` (new), in the preview's failure state and for completion | « La mise en page ne peut pas démarrer : ce système ne fournit pas la protection dont Inkwell a besoin. » with the action « Détails » (opens About) |
-
-No toast for the reduced tier: the person can do nothing at that moment, and the state does not change during a
-session. The refusal is shown where the work fails (the preview, once), not as a generic status 125; tinymist's
-refusal uses the same sentence in the problems popover instead of a log line.
+| N | `about.network.namespace` (kept) | « La mise en page tourne dans un espace isolé : elle ne peut joindre aucun réseau, pas même cet ordinateur. » |
+| F | `about.isolation.reduced` (replaces `about.network.proxy`) | « La mise en page tourne avec une isolation réduite : elle ne peut ni joindre le réseau, ni lancer d'autre programme, ni écrire hors du document, mais ce système ne permet pas de la séparer complètement des autres programmes. » |
+| refuse | `preview.fail.sandbox`, action `preview.fail.sandbox.details` « Détails » (opens About) | « La mise en page ne peut pas démarrer : ce système ne fournit pas la protection dont Inkwell a besoin. » |
 
 ## Considered options
 
 | Option | Verdict |
 |---|---|
-| **Explicit tiers decided by real launches, plus the AppArmor profile** | chosen: the decision is total, the proof is the launch itself, packaged Ubuntu gets the strong tier, everything else works in the reduced one |
-| AppArmor profile only | a build, an AppImage or a home-folder archive stays refused; the probe disagreement and the EACCES gap remain |
-| Landlock tier only | works everywhere but gives packaged Ubuntu less than the kernel allows |
-| Fix the two probes separately (make `probeIsolation` mount `/proc`, add EACCES) | the smallest patch, and the third of its kind: two probes can disagree again at the next kernel or policy change (golden rule) |
-| Ask the person to set `kernel.apparmor_restrict_unprivileged_userns=0` | weakens the whole machine for one application; against « nothing to install » |
-| bubblewrap or a setuid helper | bubblewrap needs the same AppArmor allowance; a setuid binary is a larger risk than the one removed |
+| **Two tiers decided by real launches, verified at each launch, plus the measured profile** | chosen |
+| Profile only | builds, archives and AppImages stay without preview |
+| F only | works everywhere, gives packaged Ubuntu and Fedora less than the kernel allows |
+| Patch the two probes (mount `/proc` in `probeIsolation`, add EACCES) | the third patch of its kind; the probes could disagree again at the next policy change |
+| Cgroup bound in F | refused: ADR 0042's `NoOrphan` needs a PID namespace (Codex C1) |
+| F allowing children with `RLIMIT_NPROC` | refused: `RLIMIT_NPROC` is per user, not per job (Codex C2); measured unnecessary for typst and tinymist |
+| Ask the person to set the sysctl to 0 | weakens the whole machine for one program |
+| bubblewrap, a setuid helper, Typst as WebAssembly | bubblewrap needs the same allowance; setuid is a larger risk; WebAssembly is block SW1, measured first (W70) |
 
 ## Consequences
 
-- Good: Ubuntu 24.04 works packaged (strong tier, pending E-2) and unpackaged (reduced tier); no hang; one probe;
-  the person reads the truth; CI runs the sandbox where it used to be switched off.
-- Bad: a second isolation level to test for ever (tier-aware tests, a CI job without the sysctl); a packaging file
-  that only Ubuntu-family systems use; the reduced tier's kernel surface.
+- Good: Ubuntu 24.04 works packaged (N) and unpackaged (F); one decision; no hang; the person reads the truth; the
+  stock runner becomes a permanent proof.
+- Bad: two tiers to test for ever; an Ubuntu-only packaging file; F's kernel surface; N always pays for the network
+  namespace and the tmpfs even where a run does not need them.
 
 ## Residuals
 
-- R-1: aggregate memory in the rlimit bound (ADR 0042, unchanged).
-- R-2: the Landlock tier on kernels with Landlock ABI 3 has no Landlock network rule; seccomp alone denies sockets.
-- R-3: `sched_getaffinity` on another pid stays allowed (reads a CPU mask).
-- R-4: arm64 (`setrlimit` never filtered, `ppoll` missing from the allow-list, no arm64 trace): block SB2b.
-- R-5: an AppImage or Flatpak packaging would need its own answer.
+- R-1: aggregate memory without a cgroup in N (ADR 0042, unchanged); not a residual in F (one process).
+- R-2: on Landlock ABI 3–5, signal and abstract-socket scoping come from seccomp alone (sockets denied, `tgkill` to self).
+- R-3: other processes' existence and CPU masks are visible in F.
+- R-4: arm64's allow-list gaps (`ppoll` measured as called at start; inside the sandbox not yet traced): plan, SB2a.
+- R-5: AppImage or Flatpak packaging would need its own answer; a desktop session differs from the runner (owner's check).
 
 ## Sources
 
-- Ubuntu, « Restricted unprivileged user namespaces are coming to Ubuntu 23.10 » (read 2026-11-14): unconfined
-  processes may create user namespaces only with the `userns,` rule or CAP_SYS_ADMIN; sysctls
-  `kernel.apparmor_restrict_unprivileged_userns`, `…_unconfined`; example profile `abi <abi/4.0>, /path
-  flags=(default_allow) { userns, include if exists <local/…> }` in `/etc/apparmor.d/`.
-  <https://ubuntu.com/blog/ubuntu-23-10-restricted-unprivileged-user-namespaces>
-- Kernel documentation, Landlock (read 2026-11-14): ABI 3 truncate, ABI 4 TCP bind and connect, ABI 6 scoping of
-  signals and abstract UNIX sockets, ABI 9 pathname UNIX sockets, ABI 10 UDP; « chroot(2) calls are not denied »;
-  Landlock first appeared in Linux 5.13. The kernel release of each ABI is not on that page: Ubuntu 24.04's 6.8 kernel
-  is expected at ABI 4 (**unverified**; the probe reads the ABI, the design does not depend on it).
-  <https://docs.kernel.org/userspace-api/landlock.html>
-- `golang.org/x/sys/unix`, `zsysnum_linux_{amd64,arm64}.go` (read locally): `SYS_PRLIMIT64` 302 / 261,
-  `SYS_SETRLIMIT` 160 / 164, `SYS_PPOLL` 271 / 73.
-- GitHub runs 43620631116, 43624790761, 43629366160 (`gates/CI1c/GITHUB.md`): on `ubuntu-24.04-arm` a launch with
-  `CLONE_NEWUSER` fails with EACCES until `kernel.apparmor_restrict_unprivileged_userns=0`, so the restriction is on
-  by default there (measured); for the amd64 image it is expected and **not measured** (experiment E-1).
-- Not read: the profiles shipped by Ubuntu 24.04's `apparmor` package, `dh_apparmor`, AppArmor's rule for a
-  re-execution of the same binary, Fedora's SELinux policy on user namespaces, how bubblewrap and Chromium fall back.
+- Measured: `gates/SB2/MEASUREMENTS.md` and `PROBE-ubuntu-24.04-{amd64,arm64}.md` (run 43638847261); the plan's
+  « Local measurements » (this machine, 2026-11-14).
+- Ubuntu, « Restricted unprivileged user namespaces are coming to Ubuntu 23.10 » (read 2026-11-14):
+  <https://ubuntu.com/blog/ubuntu-23-10-restricted-unprivileged-user-namespaces>. The flag spelled there,
+  `default_allow`, is not what 24.04 ships: the measured profiles use `unconfined`.
+- Kernel documentation, Landlock (read 2026-11-14): ABI 3 truncate, 4 TCP, 5 ioctl on devices, 6 signal and abstract
+  UNIX socket scoping, 9 pathname UNIX sockets, 10 UDP; <https://docs.kernel.org/userspace-api/landlock.html>.
+  The kernel release of each ABI comes from the man-pages Landlock table (Codex, round 1): ABI 4 = Linux 6.7, ABI 6 =
+  Linux 6.12; Ubuntu 24.04's GA kernel 6.8 therefore has ABI 4 (not measured on a desktop).
+- `prctl(2)`, `PR_SET_PDEATHSIG`: kept across `execve` of a non-set-user-ID binary; `clone(2)`: `CLONE_THREAD`;
+  `golang.org/x/sys/unix` `zsysnum_linux_{amd64,arm64}.go` (read locally): `SYS_PRLIMIT64` 302/261, `SYS_SETRLIMIT`
+  160/164, `SYS_PPOLL` 271/73, `SYS_CLONE3` 435/435; arm64 has no `fork` or `vfork` system call.
