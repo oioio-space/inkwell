@@ -83,3 +83,31 @@ Gaps named by the completeness critic:
 - §1.4.5 support and retirement policy, §1.4.6 GREASE emission and §1.4.7 package versions (N13): P8 read them, but nobody checked that the protocol module's tags and CHANGES.md follow them. §2, §15 and §22 are informative and nobody covered them.
 - Wormhole Fetch (internal/invite/wormhole.go:72-90) does not check the ticket's expiry, as its own doc says. Whether every caller does was not traced. P6's coverage does not mention it.
 - Nothing was run (read-only). The figures in finding 1 come from the constants as read: cost = 64 MiB - 3 per claim, so 4 claims hold 256 MiB - 12 bytes. They were not measured on a live node.
+
+## Triage by block (integrator, 2026-11-15, from each finding's proposed block; to confirm when each block is specified)
+
+- **AD1**: 7 findings (1 critical, 0 major, 6 minor)
+- **ADR 0034 step 4**: 1 findings (0 critical, 0 major, 1 minor)
+- **ADR 0034 step 5**: 16 findings (2 critical, 5 major, 9 minor)
+- **ADR 0034 step 6**: 3 findings (2 critical, 0 major, 1 minor)
+- **IV1**: 13 findings (1 critical, 3 major, 9 minor)
+- **TR1**: 1 findings (0 critical, 1 major, 0 minor)
+- **new**: 12 findings (0 critical, 0 major, 12 minor)
+
+Critical and major, with their block:
+
+- critical · AD1 · P3: A reader's sync message makes the webview run Automerge decodeChange/load on unbounded RLE/deflate content before any bounded parse
+- critical · ADR 0034 step 5 · P2: A reader can starve every peer's document sync: costly key validation runs before dedup, with no per-peer budget or sanction, and control frames always go before repo frames
+- critical · ADR 0034 step 5 · X: One admitted peer freezes every peer's sync and file reception by announcing a large frame and then sending nothing: the shared receive budget is reserved on the announced length and nothing ever times out
+- major · ADR 0034 step 5 · P5: Requester sends more than 2 requests at a time to one peer; server answers BUSY instead of treating it as a violation
+- major · ADR 0034 step 5 · P5: Serving capacity fixed at 8 with no reserved share per peer; the 32-BUSY bound is global, not per peer per minute
+- major · ADR 0034 step 5 · P5: Size-mismatch handling in code (confirmSize sub-exchange, no fault, discard on final) is not what the spec says
+- major · ADR 0034 step 5 · P5: Malformed bulk frames are faults, not connection violations, and are ignored entirely while the peer is banned; faults never age
+- major · ADR 0034 step 5 · P5: The vectors cover framing only: Bao verification is in no vector, and slice-final-group's expectations are never checked
+- critical · ADR 0034 step 6 · P3: Coverage keeps phantom heads after eviction: a Byzantine writer grows #covered/#open without bound
+- critical · ADR 0034 step 6 · P8: Kept attestations have no global or per-signer bound: one Byzantine writer exhausts the memory of every member
+- critical · IV1 · P8: An unattested stranger can make Go hold about 40 000 unverified attestations per identity during an invitation window, with no total
+- major · IV1 · P5: Bulk stream accepted from a non-member during the invitation window
+- major · IV1 · P6: During an invitation window a stranger is fully admitted to the sync and bulk streams, not only the lobby
+- major · IV1 · P6: The lobby has accept-only vectors, no model and no recorded mutation score
+- major · TR1 · P2: The vectors do not pin the rules of §4.1, §4.3 and §4.9: 8 trust, 3 attestation and 7 fold vectors, which a simplified fold passes
