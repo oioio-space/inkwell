@@ -400,7 +400,7 @@ arrive after the next PROBE and a figure that never becomes known.
 
 Not covered (corpus `linkprobe.json` instead): the negotiation and `na`, the transport and role table, the
 one-message writer, ignorable messages and their budget, bytes read in chunks, the 10 s negotiation and closing
-timeouts, the 1024 bytes read after the FIN, the 1/64 clock margin of the rate bound (it only widens the bound), the level of §8.5.5 step 6 (pure arithmetic: vectors and
+timeouts, the 1024 bytes read after the FIN, the 1/64 clock margin of the rate bound (it only widens the bound), the responder's stack discarding a late packet (it is `LoseData`: never counted, spec §8.5.2), the level of §8.5.5 step 6 (pure arithmetic: vectors and
 `TestStepBoundaries`). The size of the figure's error under crossings is statistical (`scripts/netsim/c5model.py
 errors`, ADR 0036 « Levels »); the model proves its zero point (`Exact`).
 
