@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # P-TLA (ADR 0034 step 3, docs/protocol/tla/README.md): fetch the pinned TLA+ tools
 # (tla2tools.jar SHA-256 checked, never committed) and model-check the models
-# (RepoGen, ConnCredit, SyncIndicator, WriteBudget, SendPath, LinkProbe, OISingleInstance, SandboxScope).
+# (RepoGen, ConnCredit, SyncIndicator, WriteBudget, SendPath, LinkProbe, OISingleInstance, SandboxScope,
+# ProjectChange).
 #
 # Sound models must finish with no error; every mutant listed in the README must be
 # detected (a violation). The task fails if a sound model violates a property OR if a
@@ -9,6 +10,7 @@
 #
 #   mise run tla
 #   INKWELL_TLA_XMX=1g INKWELL_TLA_WORKERS=2 mise run tla
+#   INKWELL_TLA_ONLY='^ProjectChange' ./scripts/tla-check.sh   # inner loop: only the runs whose name matches
 set -euo pipefail
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
@@ -61,10 +63,14 @@ fi
 
 fail=0
 
-# run NAME CONFIG MODULE sound|safety|mutant
+# run NAME CONFIG MODULE sound|safety|mutant [PROPERTY]
+# PROPERTY (mutants): the violation must be of that invariant or temporal property, named by TLC.
 run() {
-  local name="$1" cfg="$2" module="$3" expect="$4"
+  local name="$1" cfg="$2" module="$3" expect="$4" prop="${5:-}"
   local out="$logs/$name.log" metadir status
+  if [[ -n "${INKWELL_TLA_ONLY:-}" && ! "$name" =~ $INKWELL_TLA_ONLY ]]; then
+    return 0
+  fi
   metadir="$(mktemp -d)"
   set +e
   (
@@ -95,8 +101,9 @@ run() {
       printf '✓ %s: no error (exhaustive, invariants)\n' "$name"
     fi
   else
-    if ((status == 12 || status == 13)) && grep -Eq 'Error: (Invariant|Temporal property) .* violated' "$out"; then
-      printf '✓ %s: violation detected\n' "$name"
+    if ((status == 12 || status == 13)) && grep -Eq 'Error: (Invariant|Temporal property) .* violated' "$out" \
+       && { [[ -z "$prop" ]] || grep -Eq "Error: (Invariant|Temporal property) $prop (is|was) violated" "$out"; }; then
+      printf '✓ %s: violation detected%s\n' "$name" "${prop:+ ($prop)}"
     else
       printf '✗ %s: mutant passed (exit %d) — the model no longer catches it\n' "$name" "$status" >&2
       tail -n 20 "$out" >&2
@@ -183,5 +190,32 @@ for m in NotBornInside ExecBeforeCheck CleanupBeforeCounters UnreadAsZero Victim
          WitnessVictim WitnessMixedHistory WitnessHolderDeath ResidualCollected NoPdeathsig NoPidNamespace; do
   run "SandboxScope$m" "mutants/SandboxScope$m.cfg" mutants/SandboxScopeMutants mutant
 done
+
+# ProjectChange (README "ProjectChange", block PC1, ADR 0043 part 2): the project changes by a restart, exec and spawn.
+run ProjectChange ProjectChange.cfg ProjectChange sound
+run ProjectChangeSpawn ProjectChangeSpawn.cfg ProjectChange sound
+run ProjectChangeFaults ProjectChangeFaults.cfg ProjectChange sound
+run ProjectChangeSpawnFaults ProjectChangeSpawnFaults.cfg ProjectChange sound
+# ProjectChange mutants and witnesses: each must be caught by the property its README row names.
+while read -r m prop; do
+  run "ProjectChange$m" "mutants/ProjectChange$m.cfg" mutants/ProjectChangeMutants mutant "$prop"
+done <<'MUTANTS'
+LiveAdopt NoOldStateAfterChange
+RestartBeforeDurable WriteBeforeRestart
+RestartTwice RestartOnce
+OldContinuation NoOldStateAfterChange
+JoinTwice JoinOnce
+WriteBeforeWiringStopped NoOldStateAfterChange
+NoBarrier NoOldStateAfterChange
+SpawnNoWait OneImage
+JoinRecordAfterInstall OpensAfterCrash
+RecoverPrefersAside NewStateSurvives
+CarriedOutcome NoticeMatchesStanding
+PageNeverReloads ChangeCompletes
+WitnessTakeOver NoTakeOverDone
+WitnessJoinAnnounced NoJoinAnnounced
+WitnessCrashAfterInstall NoCrashAfterInstall
+WitnessFailedWrite NoFailedNotice
+MUTANTS
 
 exit "$fail"

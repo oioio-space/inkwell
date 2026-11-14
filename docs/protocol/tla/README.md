@@ -690,3 +690,96 @@ line names which.
 java -cp tla2tools.jar tlc2.TLC -workers 2 -config SandboxScopeFaults.cfg SandboxScope
 java -cp tla2tools.jar tlc2.TLC -workers 2 -config mutants/SandboxScopeNotBornInside.cfg mutants/SandboxScopeMutants
 ```
+
+## ProjectChange (block PC1, ADR 0043 part 2: the project changes by a restart, never live)
+
+Rule: `docs/plans/2026-11-14-pc1-project-change-by-restart.md`, rules N-5..N-14 (the take-over and the restart) and
+J-1..J-5 (the join). Like OISingleInstance it is a local mechanism, kept here because `scripts/tla-check.sh`,
+`mise run tla`, `formal` and `done` check this directory. `ProjectChange.tla` models the process images of one
+profile on one folder:
+
+- **The Go runtime of each image**: the wiring with its event buffer, the trust store, the invitation host. A
+  request (take-over or join) is held in memory; the shutdown closes the wiring, writes (a join: the pending-join
+  record in `project.json`, then `opStore.replace`: stage, set aside, install, clean up), returns from `stopAll`,
+  passes the termination barrier (no child alive), then restarts. The next image recovers the list (`recoverSwap`),
+  loads it, drops the record of a join that did not install, chooses its notice from what loaded and reads
+  `INKWELL_AFTER_TAKEOVER` once; the record of a join that installed is consumed once the joined root document is
+  held (one atomic rewrite of `project.json`: `rootUrl` set, record removed), never before, so no start can replace
+  that root by a fresh document.
+- **The page**: coverage, automerge-repo's pending continuations, the root it opened, the startup id it loaded
+  with. It is the server build's page, a browser tab that outlives the process; the desktop webview, which ends
+  with the process, is the case where the reload is immediate.
+- **The restart**, by `Platform`: `exec` (Linux: the same process becomes the next image; every thread and its memory
+  end; the profile lock goes with close-on-exec) or `spawn` (macOS and Windows, N35: a new process that claims the
+  profile lock like any launch, ADR 0037, while the old one exits holding it to the end). One module, so a port is
+  a new implementation of the same rules, not a new design.
+- **Durable versus memory**: `trust`, `prev`, `next` (each rename is followed by a directory sync, so each step is
+  one durable step), `pj` (the record), `root` (`rootUrl`) survive a crash and a restart; everything else is lost
+  (Raft's `Restart`: "it loses everything but" stable storage). A crash may hit any process at any step; a write step
+  or the execution may fail (a failed rollback included). Projects are `old` and `new`; roots `R0` (the folder's
+  document) and `R1` (the inviter's).
+- **Environment**: one peer that attests under whatever project the wiring runs, the person (request, quit,
+  relaunch), a member of the new project that gives the root document after a join (and announces its URL when the
+  genesis carries none), children, faults.
+
+Not covered (named tests instead, plan rows): the archive copy (N-5, N-7: `TestTakeOverArchivesOldList`, MW3, MW6), the
+genesis contents and the member's no-op (N-8), the tree hash of the folder (N-6), argv and environment rebuilt
+(`TestRestartArgvAndEnvRebuilt`), the descriptors (N-14, `TestRestartBarrier`), another launch taking the lock between
+the release and the re-acquisition (R-7: OISingleInstance proves the hand-off), several requests in one behaviour (one
+per behaviour; a second request is a new behaviour from the state the first left), the network handshake of the join
+(an invitation that fails before the Welcome changes nothing), a Byzantine member announcing another root.
+
+Fairness: three weak terms, grouped as in SandboxScope. F1 `WF_vars(GoStep)`: every live process keeps running its
+own steps (the steps of one image are sequential and finite, so weak fairness on the group forces each). F2
+`WF_vars(PageStep)`: a waiting page keeps polling the startup id and reloads. F3 `WF_vars(RootStep)`: a member of the
+new project is eventually online (an assumption; with every member gone for good the record waits, J-2). None on the
+person, the peer, children or faults.
+
+| Property | Rule | Meaning |
+|---|---|---|
+| `NoOldStateAfterChange` | N-11, N-13, N-14, J-1 | a page bound to an image holds coverage and continuations of that image's project only and opens that project's root; no change authorised under one project reaches an image running another; no op of the old project lands in the installed new list; no child of an older image runs beside a newer one |
+| `NewStateSurvives` | N-7, J-4 | once installed, the new list stays the list (crash, `errCommitted`, recovery); a joined root, once recorded, stays |
+| `RestartOnce` | N-12 | at most one restart per request: no restart loop |
+| `OpensAfterCrash` | N-7, J-1, J-4 | in every state a complete list is recoverable, and with no record left the recorded root is the loaded project's root (never the old text under the new list) |
+| `WriteBeforeRestart` | N-12, N-13 | history: no restart ever cut a write short (the restart follows `stopAll`, which follows the write) |
+| `JoinOnce` | J-1, J-2 | the pending-join record is consumed at most once and « joined » shows at most once |
+| `OneImage` | N-12, N35, ADR 0037 | one process works on the profile at a time: a restarted image starts its work only when the previous one has ended |
+| `NoticeMatchesStanding` | N-12, J-2 | the notice tells what loaded: the three outcomes of the write, `errCommitted` included |
+| `ChangeCompletes` (F1-F3) | N-9, N-12, J-2 | a request ends in a running image of the new project, the page reloaded on it with the project's root and the notice, unless a crash, a failed step or a quit interrupted it |
+
+| Configuration | Result (TLC 1.8.0, 2 workers, 2026-11-15) |
+|---|---|
+| `ProjectChange.cfg`: exec; take-over or join (root in the genesis or announced); 3 images, 1 crash, 1 failed step | **exhaustive, no error**: 29,868 states generated, 14,538 distinct, depth 30, liveness included, 1 s |
+| `ProjectChangeSpawn.cfg`: spawn, as above | **exhaustive, no error**: 35,060 states, 17,361 distinct, depth 30, liveness included, 1 s |
+| `ProjectChangeFaults.cfg`: exec; 4 images, 2 crashes, 2 failed steps | **exhaustive, no error**: 228,214 states, 104,580 distinct, depth 38, liveness included, 4 s |
+| `ProjectChangeSpawnFaults.cfg`: spawn, as above | **exhaustive, no error**: 269,568 states, 124,758 distinct, depth 38, liveness included, 4 s |
+
+Mutants (`mutants/ProjectChangeMutants.tla`, each config overrides one rule of the sound model with the constants of
+`ProjectChange.cfg`, `SpawnNoWait` and `WitnessJoinAnnounced` those of `ProjectChangeSpawn.cfg`; anchor = the override
+line in the config). `scripts/tla-check.sh` checks that TLC's message names the property of the row, not only that
+something is violated.
+
+| Mutant | Anchor (config line) | Broken rule | Caught by |
+|---|---|---|---|
+| `ProjectChangeLiveAdopt` | `LiveChange <- Yes` | the rejected design: the project adopted in the running session, the adapter reset at the reply; a buffered `Attested` of the old project reaches the new coverage (4 states) | `NoOldStateAfterChange` |
+| `ProjectChangeRestartBeforeDurable` | `StoppedOK <- AfterWiring` | the restart before `stopAll` returned (MW8): the write is cut short | `WriteBeforeRestart` |
+| `ProjectChangeRestartTwice` | `RestartWanted <- AfterChangeToo` | the restarted image restarts again when the person quits (`INKWELL_AFTER_TAKEOVER` taken as a request) | `RestartOnce` |
+| `ProjectChangeOldContinuation` | `PageGate <- No` | a page that asked keeps applying automerge-repo's continuations; one authorised under the old project persists through the new image | `NoOldStateAfterChange` |
+| `ProjectChangeJoinTwice` | `ClearRecord <- KeepRecord` | consuming the pending-join record leaves it in `project.json`; the next start consumes it again | `JoinOnce` |
+| `ProjectChangeWriteBeforeWiringStopped` | `WriteOK <- Anytime` | the write starts while the wiring runs (MW10): an op of the old project lands in the new list | `NoOldStateAfterChange` |
+| `ProjectChangeNoBarrier` | `BarrierOK <- NoBarrier` | no termination barrier (MW11): a child of the old image runs beside the new one | `NoOldStateAfterChange` |
+| `ProjectChangeSpawnNoWait` | `MayStart <- NoWait` | N35: the spawned image starts its work without claiming the profile lock, while the old one is still exiting | `OneImage` |
+| `ProjectChangeJoinRecordAfterInstall` | `StepsOf <- RecordLast` | the new list installed before the pending-join record: a crash between them leaves the new list with the old root | `OpensAfterCrash` |
+| `ProjectChangeRecoverPrefersAside` | `RecoveredTrust <- PreferAside` | recovery at open prefers the set-aside list: after the install rename the old list comes back | `NewStateSurvives` |
+| `ProjectChangeCarriedOutcome` | `NoticeOf <- AlwaysDone` | the notice follows the request, not what loaded: a write that failed before the install says « maintenant le vôtre » | `NoticeMatchesStanding` |
+| `ProjectChangePageNeverReloads` | `ReloadOn <- SameId` | the page reloads only on the startup id it knows: it waits forever (N-9's in-test mutant) | `ChangeCompletes` |
+| `ProjectChangeWitnessTakeOver` | invariant `NoTakeOverDone` | witness: a take-over ends with « Ce document est maintenant le vôtre » | (must violate) |
+| `ProjectChangeWitnessJoinAnnounced` | invariant `NoJoinAnnounced` | witness (spawn): a join whose genesis has no root ends with the root announced and held after the restart | (must violate) |
+| `ProjectChangeWitnessCrashAfterInstall` | invariant `NoCrashAfterInstall` | witness: a crash after the install, then a manual launch loads the new list | (must violate) |
+| `ProjectChangeWitnessFailedWrite` | invariant `NoFailedNotice` | witness: a write that fails before the install restarts on the old list and says so | (must violate) |
+
+```
+java -cp tla2tools.jar tlc2.TLC -workers 2 -config ProjectChange.cfg ProjectChange
+java -cp tla2tools.jar tlc2.TLC -workers 2 -config mutants/ProjectChangeLiveAdopt.cfg mutants/ProjectChangeMutants
+INKWELL_TLA_ONLY='^ProjectChange' ./scripts/tla-check.sh    # the 20 ProjectChange runs only, about 25 s
+```

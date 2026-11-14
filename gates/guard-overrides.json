@@ -1134,6 +1134,11 @@
       "id": "568bfeac44e198bd04d7816585c861e56d61d97bdfc5e256a1a1652b3d520f5b",
       "reason": "scripts/gate_reset_test.py: reset_evidence keeps gates/<lot>/ux/, the interface walkthrough's captures (taken before the gate, not its evidence): the 58 captures of W58a were erased by its gate run on 2026-11-14; tests test_walkthrough_captures_are_kept and test_a_ux_symlink_is_still_removed (red first); evidence is still emptied, symlinks still never followed",
       "decision": "docs/plans/2026-11-14-w58a-foreign-read-only.md"
+    },
+    {
+      "id": "1aae2de01a0e7560d83ccef76127bdb3ae5c35de50fda8058c0d8b266de11ac7",
+      "reason": "scripts/tla-check.sh: a mutant now passes only when TLC names the property its README row names (no longer any violation), and INKWELL_TLA_ONLY filters the models to run; this strengthens the check, every existing model and mutant still runs by default (mise run formal exits 0 in 822 s)",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
     }
   ]
 }
