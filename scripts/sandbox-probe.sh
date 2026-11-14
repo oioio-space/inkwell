@@ -183,7 +183,7 @@ sidecars() {
   gunzip -c "$dir/typst.gz" >"$typst" && gunzip -c "$dir/tinymist.gz" >"$tinymist" && chmod 0700 "$typst" "$tinymist"
   mkdir -p "$proj"
   # shellcheck disable=SC2016 # Typst source: $x^2$ is math, not a shell expansion
-  printf '#set page(width: 8cm, height: 6cm)\n#let total = 1\n= Probe <probe>\nText $x^2$ and a table:\n#table(columns: 2, [a], [b])\n#tot\n#calc.max(1, 2)\n' >"$proj/main.typ"
+  printf '#set page(width: 8cm, height: 6cm)\n#let total = 1\n= Probe <probe>\nText $x^2$ and a table:\n#table(columns: 2, [a], [b])\n#total\n#calc.max(1, 2)\n' >"$proj/main.typ"
 }
 
 # perimeter TRACEOPTS PREFIX: runs every item of the functional perimeter inkwell guarantees (plan, D2), each

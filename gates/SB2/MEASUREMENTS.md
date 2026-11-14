@@ -33,3 +33,17 @@ Raw answers: `PROBE2-ubuntu-24.04-amd64.md`, `PROBE2-ubuntu-24.04-arm64.md`.
 | Q11 | Tier F forced (no namespace) | typst `--version` and a **compile to PDF succeed**; tinymist `--version` succeeds | typst dies of SIGSEGV, tinymist of SIGABRT | **tier F works on amd64 on a stock Ubuntu 24.04**; on arm64 it fails for the allow-list reason below |
 | Q8 | With the candidate profile, traced | the decided tier is N: compile and tinymist **isolated** | the decided tier is N, both die the same way | the profile path works on amd64 |
 | Q8 | Calls refused inside, arm64 | — | `ppoll` ×9 and **`tkill` ×12 refused (EPERM)**; the program aborts, its `tkill(SIGABRT)` is refused, it then dies of SIGSEGV | **finding 1 confirmed by measurement, and widened: the arm64 allow-list lacks `ppoll` (73) and `tkill` (130)** — Rust's abort path uses `tkill`; the amd64 list has neither `tkill` (200) nor it is needed there per Q11 (amd64 succeeds); both lists carry only `tgkill` (234 / 131) |
+
+## Run 3 (run 43645254398, commit cb884b3, 2026-11-14): only the sidecars traced
+
+Raw answers: `PROBE3-ubuntu-24.04-amd64.md`, `PROBE3-ubuntu-24.04-arm64.md`. Same answers on both architectures.
+
+| # | Question | Measured answer | Settles |
+|---|---|---|---|
+| Q9 | Processes created by the sidecars themselves (the tracer is the sidecar's parent) | typst compile, query, eval: one `execve` (its own start), no thread, no process; tinymist LSP session: one `execve` (its own start), **14 threads, no process** | **tinymist creates no child process.** Run 2's « child » was Python's `Popen`, traced along with it (Codex, round 2). Tier F's no-process rule removes no feature of the perimeter |
+| Q12 | ELF and C library | typst: static (amd64 static-pie, arm64 static), no interpreter; tinymist: dynamic, glibc, needs symbol versions up to GLIBC_2.28 (amd64) / 2.30 (arm64), interpreter `/lib64/ld-linux-x86-64.so.2` / `/lib/ld-linux-aarch64.so.1`; the runners have glibc 2.39 | D4's matrix: typst does not depend on the host libc; tinymist does, and its `clone3` fallback is glibc's |
+| Q13 | `prctl` options and `ioctl`s per perimeter item | tinymist: `PR_SET_NAME` ×7 (thread names), nothing else; typst: none; `ioctl`: `TIOCGWINSZ` ×1 per typst run | the `prctl` allow-list of tier F is `PR_SET_NAME` only (D1) |
+
+**Defect of the probe:** the typst items exited 1 because the probe's test document named an undefined variable
+(`#tot`); their traces therefore cover a compile that stopped at an error, not a full PDF/SVG/query/eval. Fixed
+(`#total`, checked locally: compile exit 0, query returns the heading); run 4 re-measures typst only.
