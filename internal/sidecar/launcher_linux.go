@@ -16,6 +16,7 @@ import (
 	"strconv"
 	"strings"
 	"syscall"
+	"time"
 	"unsafe"
 
 	"golang.org/x/sys/unix"
@@ -37,9 +38,34 @@ type sandboxConfig struct {
 	ReadPaths    []string
 	Executable   string
 	Dynamic      bool
-	Probe        bool
 	Overlay      bool
+	// Tier is the decided tier ("N" or "F"), reported back before exec.
+	Tier string
+	// The program's seccomp lists, resolved by the parent (ADR 0044 1f).
+	Program  string
+	Syscalls []uint32
+	Prctl    []uint32
+	Ioctl    []uint32
+	// ParentPID is the parent the launcher checks after arming its
+	// parent-death signal (tier F, ADR 0044 point 1a); ArmDelay delays
+	// that arming in tests.
+	ParentPID int
+	ArmDelay  time.Duration
+	// LandlockABI requests a test ruleset ABI; zero uses the kernel ABI.
+	LandlockABI int
+	// HandshakeFD is the tier report's descriptor; « proceed » is the next.
+	HandshakeFD int
+	// landlock is the ABI the ruleset was created with (reported).
+	landlock int
 }
+
+// parentDiedExit: the parent died before the parent-death signal was armed.
+const parentDiedExit = 122
+
+var (
+	errNamespaceStep = errors.New("sidecar: namespace step")
+	errParentDied    = errors.New("sidecar: the launching parent died")
+)
 
 // init dispatches only our explicit hidden child mode, before application startup.
 // The locked thread carries Landlock and capabilities through exec; no untrusted
@@ -56,25 +82,29 @@ func init() {
 	}
 	if err != nil {
 		_, _ = fmt.Fprintln(os.Stderr, "sidecar: sandbox:", err)
-		if c.Probe && definitiveRefusal(err) {
-			os.Exit(probeUnsupportedExit)
-		}
-		os.Exit(125)
+		os.Exit(launcherStatus(err))
 	}
 	os.Exit(0)
 }
 
-func sandboxPrefix(c sandboxConfig) (string, []string, error) {
-	c.RuntimeDir = os.Getenv("XDG_RUNTIME_DIR")
-	if c.RuntimeDir == "" {
-		c.RuntimeDir = fmt.Sprintf("/run/user/%d", os.Getuid())
+// launcherStatus is the exit status of a launcher that failed: the parent
+// reads a namespace refusal, a missing seccomp and a dead parent apart.
+func launcherStatus(err error) int {
+	switch {
+	case errors.Is(err, errSeccompUnavailable):
+		return seccompUnavailableExit
+	case errors.Is(err, errParentDied):
+		return parentDiedExit
+	case errors.Is(err, errNamespaceStep) && namespaceOutcome(err) == launchRefused:
+		return probeUnsupportedExit
 	}
-	data, err := json.Marshal(c)
-	return "/proc/self/exe", []string{sandboxMode, string(data)}, err
+	return 125
 }
 
-func sandboxExec(c sandboxConfig, args []string) error {
-	if err := readReportFD(&c); err != nil {
+// sandboxBootstrap takes the launcher's inherited descriptors and checks
+// its cgroup and its parent, before any confinement step.
+func sandboxBootstrap(c *sandboxConfig) error {
+	if err := readReportFD(c); err != nil {
 		return err
 	}
 	if expected := os.Getenv(expectedCgroupEnv); expected != "" {
@@ -94,18 +124,34 @@ func sandboxExec(c sandboxConfig, args []string) error {
 		}
 		_ = os.Unsetenv(expectedParentEnv)
 	}
+	return nil
+}
+
+func sandboxPrefix(c sandboxConfig) (string, []string, error) {
+	c.RuntimeDir = os.Getenv("XDG_RUNTIME_DIR")
+	if c.RuntimeDir == "" {
+		c.RuntimeDir = fmt.Sprintf("/run/user/%d", os.Getuid())
+	}
+	data, err := json.Marshal(c)
+	return "/proc/self/exe", []string{sandboxMode, string(data)}, err
+}
+
+func sandboxExec(c sandboxConfig, args []string) error {
+	if err := sandboxBootstrap(&c); err != nil {
+		return err
+	}
+	if err := readHandshakeFD(&c); err != nil {
+		return err
+	}
 	if c.Overlay {
 		if err := mountIPC(c); err != nil {
-			return err
+			return fmt.Errorf("%w: %w", errNamespaceStep, err)
 		}
 	}
 	if c.MountBytes > 0 {
 		if err := mountOutput(c); err != nil {
-			return err
+			return fmt.Errorf("%w: %w", errNamespaceStep, err)
 		}
-	}
-	if c.Probe {
-		return nil
 	}
 	if err := unix.CloseRange(3, ^uint(0), unix.CLOSE_RANGE_CLOEXEC); err != nil {
 		return err
@@ -117,7 +163,7 @@ func sandboxExec(c sandboxConfig, args []string) error {
 		}
 		defer func() { _ = hostProc.Close() }()
 		if err := unix.Mount("proc", "/proc", "proc", unix.MS_NOSUID|unix.MS_NODEV|unix.MS_NOEXEC, ""); err != nil {
-			return err
+			return fmt.Errorf("%w: %w", errNamespaceStep, err)
 		}
 		c.Overlay, c.MountBytes = false, 0
 		return sandboxInitWithProc(c, args, hostProc)
@@ -137,10 +183,19 @@ func sandboxExec(c sandboxConfig, args []string) error {
 	if err := restrictReadsConfig(&c, args[0]); err != nil {
 		return err
 	}
-	if err := restrictOutput(c); err != nil {
+	abi, err := restrictOutput(c)
+	if err != nil {
 		return fmt.Errorf("mandatory Landlock unavailable; refusing peer document: %w", err)
 	}
-
+	c.landlock = abi
+	if c.ParentPID > 0 {
+		// Tier F (ADR 0044 point 1a): nothing else kills the sidecar with
+		// its parent. Armed before seccomp, which then refuses to disarm it.
+		time.Sleep(c.ArmDelay)
+		if err := armNamespaceParentDeath(strconv.Itoa(c.ParentPID)); err != nil {
+			return fmt.Errorf("%w: %w", errParentDied, err)
+		}
+	}
 	return limitAndExec(c, args)
 }
 
@@ -151,10 +206,17 @@ func limitAndExec(c sandboxConfig, args []string) error {
 	// "runtime: out of memory" that looks like a typst limit hit (TYP-16
 	// failed about 2% of runs). GC is off for the same reason, and the exec
 	// is a raw execve on pointers prepared here (syscall.Exec allocates).
-	prog, err := seccompProgram()
+	prog, err := launcherFilter(c)
 	if err != nil {
-		return fmt.Errorf("mandatory seccomp unavailable; refusing peer document: %w", err)
+		return fmt.Errorf("%w; refusing peer document: %w", errSeccompUnavailable, err)
 	}
+	report, err := reportPrefix(c)
+	if err != nil {
+		return err
+	}
+	status := make([]byte, 4096)                                               // /proc/self/status, read after seccomp without allocating
+	poll := []unix.PollFd{{Fd: int32(c.HandshakeFD + 1), Events: unix.POLLIN}} // #nosec G115 -- a small descriptor.
+	var proceed [1]byte
 	path, err := unix.BytePtrFromString(args[0])
 	if err != nil {
 		return err
@@ -199,7 +261,10 @@ func limitAndExec(c sandboxConfig, args []string) error {
 		}
 	}
 	if err := installSeccompProgram(prog); err != nil {
-		return fmt.Errorf("mandatory seccomp unavailable; refusing peer document: %w", err)
+		return fmt.Errorf("%w; refusing peer document: %w", errSeccompUnavailable, err)
+	}
+	if err := reportAndAwait(c.HandshakeFD, report, status, poll, proceed[:]); err != nil {
+		return err
 	}
 	_, _, errno := unix.RawSyscall(unix.SYS_EXECVE, uintptr(unsafe.Pointer(path)), uintptr(unsafe.Pointer(&argv[0])), uintptr(unsafe.Pointer(&envp[0]))) // #nosec G103 -- NUL-terminated pointers prepared above; execve returns only on failure.
 	runtime.KeepAlive(path)
@@ -233,7 +298,17 @@ func resetIgnoredSignals() error {
 	return nil
 }
 
+// mountOutput mounts the private tmpfs, then lets the parent pin it before
+// anything else happens (the ready / proceed exchange on descriptors 3 and 4).
 func mountOutput(c sandboxConfig) error {
+	if err := mountTmpfs(c); err != nil {
+		return err
+	}
+	return awaitMountPin(c)
+}
+
+// mountTmpfs mounts the output tmpfs sized to the budget and creates its slots.
+func mountTmpfs(c sandboxConfig) error {
 	size := c.MountBytes / int64(os.Getpagesize()) * int64(os.Getpagesize())
 	if size <= 0 {
 		return errors.New("sidecar: tmpfs size must be at least one page")
@@ -254,15 +329,20 @@ func mountOutput(c sandboxConfig) error {
 			return err
 		}
 	}
-	if c.Probe {
-		return nil
-	}
+	return nil
+}
+
+func awaitMountPin(c sandboxConfig) error {
 	if err := unix.Chdir(c.WorkingDir); err != nil {
 		return err
 	}
 	ready, proceed := os.NewFile(3, "ready"), os.NewFile(4, "proceed")
 	defer func() { _ = ready.Close(); _ = proceed.Close() }()
 	if _, err := ready.Write([]byte("r")); err != nil {
+		return err
+	}
+	// An inherited blocking descriptor has no deadline: poll it.
+	if err := pollReadable(int(proceed.Fd()), handshakeTimeout); err != nil {
 		return err
 	}
 	var b [1]byte
@@ -356,18 +436,24 @@ func landlockPolicy(abi uintptr) (unix.LandlockRulesetAttr, uintptr) {
 	return attr, size
 }
 
-func restrictOutput(c sandboxConfig) error {
+func restrictOutput(c sandboxConfig) (int, error) {
 	abi, _, errno := unix.Syscall(unix.SYS_LANDLOCK_CREATE_RULESET, 0, 0, unix.LANDLOCK_CREATE_RULESET_VERSION)
 	if errno != 0 {
-		return errno
+		return 0, errno
+	}
+	if c.LandlockABI != 0 {
+		if c.LandlockABI < 3 || uintptr(c.LandlockABI) > abi {
+			return 0, fmt.Errorf("sidecar: invalid requested Landlock ABI %d (kernel %d)", c.LandlockABI, abi)
+		}
+		abi = uintptr(c.LandlockABI)
 	}
 	if abi < 3 {
-		return errors.New("sidecar: directory bound requires Landlock ABI >= 3")
+		return 0, errors.New("sidecar: directory bound requires Landlock ABI >= 3")
 	}
 	attr, size := landlockPolicy(abi)
 	fd, _, errno := unix.Syscall(unix.SYS_LANDLOCK_CREATE_RULESET, uintptr(unsafe.Pointer(&attr)), size, 0) // #nosec G103 -- kernel reads this ABI-sized struct synchronously.
 	if errno != 0 {
-		return errno
+		return 0, errno
 	}
 	defer func() { _ = unix.Close(int(fd)) }()
 	paths := []string{"/dev/null"}
@@ -377,13 +463,13 @@ func restrictOutput(c sandboxConfig) error {
 	for _, path := range paths {
 		pathFD, err := unix.Open(path, unix.O_PATH|unix.O_CLOEXEC|unix.O_NOFOLLOW, 0)
 		if err != nil {
-			return err
+			return 0, err
 		}
 		rule := unix.LandlockPathBeneathAttr{Allowed_access: unix.LANDLOCK_ACCESS_FS_WRITE_FILE | unix.LANDLOCK_ACCESS_FS_TRUNCATE, Parent_fd: int32(pathFD)} // #nosec G115 -- Linux file descriptors are nonnegative signed ints fitting int32.
 		_, _, errno = unix.Syscall6(unix.SYS_LANDLOCK_ADD_RULE, fd, unix.LANDLOCK_RULE_PATH_BENEATH, uintptr(unsafe.Pointer(&rule)), 0, 0, 0)                 // #nosec G103 -- kernel reads the path rule synchronously.
 		_ = unix.Close(pathFD)
 		if errno != 0 {
-			return errno
+			return 0, errno
 		}
 	}
 	for _, path := range c.ReadPaths {
@@ -393,7 +479,7 @@ func restrictOutput(c sandboxConfig) error {
 			continue
 		}
 		if err != nil {
-			return err
+			return 0, err
 		}
 		if info.IsDir() {
 			rights |= unix.LANDLOCK_ACCESS_FS_READ_DIR
@@ -403,20 +489,20 @@ func restrictOutput(c sandboxConfig) error {
 		}
 		pathFD, err := unix.Open(path, unix.O_PATH|unix.O_CLOEXEC, 0)
 		if err != nil {
-			return err
+			return 0, err
 		}
 		rule := unix.LandlockPathBeneathAttr{Allowed_access: rights, Parent_fd: int32(pathFD)}                                                   // #nosec G115 -- Linux fd fits int32.
 		_, _, ruleErr := unix.Syscall6(unix.SYS_LANDLOCK_ADD_RULE, fd, unix.LANDLOCK_RULE_PATH_BENEATH, uintptr(unsafe.Pointer(&rule)), 0, 0, 0) // #nosec G103 -- synchronous kernel copy.
 		_ = unix.Close(pathFD)
 		if ruleErr != 0 {
-			return ruleErr
+			return 0, ruleErr
 		}
 	}
 	_, _, errno = unix.Syscall(unix.SYS_LANDLOCK_RESTRICT_SELF, fd, 0, 0)
 	if errno != 0 {
-		return errno
+		return 0, errno
 	}
-	return nil
+	return int(abi), nil // #nosec G115 -- a small ABI number.
 }
 
 const readAccess = uint64(unix.LANDLOCK_ACCESS_FS_READ_FILE | unix.LANDLOCK_ACCESS_FS_READ_DIR | unix.LANDLOCK_ACCESS_FS_EXECUTE)
@@ -430,10 +516,9 @@ func restrictReadsConfig(c *sandboxConfig, target string) error {
 	if err != nil {
 		return err
 	}
+	// Font folders are exactly those the caller lists in ReadPaths (ADR
+	// 0044 point 1d): no list, no font folder.
 	c.Executable = path
-	if len(c.ReadPaths) == 0 {
-		c.ReadPaths = append(c.ReadPaths, "/usr/share/fonts", "/usr/local/share/fonts")
-	}
 	c.ReadPaths = append(c.ReadPaths, []string{c.WorkingDir, path, "/dev/null", "/dev/urandom", "/proc/self", "/proc/thread-self", "/proc/meminfo", "/proc/cpuinfo", "/etc/ssl/certs", "/etc/pki/ca-trust/extracted/pem/tls-ca-bundle.pem"}...)
 	if c.Directory != "" {
 		c.ReadPaths = append(c.ReadPaths, c.Directory)
@@ -469,6 +554,10 @@ func sandboxInitCommand(c sandboxConfig, args []string, pidfd *int) (*exec.Cmd, 
 	cmd := exec.Command("/proc/self/exe", append([]string{sandboxMode, string(data)}, args...)...) // #nosec G204 G702 -- fixed own launcher path and serialized policy.
 	cmd.Stdin, cmd.Stdout, cmd.Stderr = os.Stdin, os.Stdout, os.Stderr
 	cmd.Env = os.Environ()
+	if c.HandshakeFD >= 3 {
+		cmd.ExtraFiles = []*os.File{os.NewFile(uintptr(c.HandshakeFD), "report"), os.NewFile(uintptr(c.HandshakeFD+1), "proceed")} // #nosec G115 -- descriptors from our parent.
+		cmd.Env = append(cmd.Env, handshakeEnv+"=3")
+	}
 	cmd.SysProcAttr = &syscall.SysProcAttr{PidFD: pidfd}
 	return cmd, nil
 }
@@ -503,6 +592,11 @@ func runSandboxInit(c sandboxConfig, args []string, hostProc *os.Root) (int, err
 	signal.Notify(signals, syscall.SIGTERM, syscall.SIGINT)
 	if err := cmd.Start(); err != nil {
 		return 0, err
+	}
+	// Only the exec child reports and waits for « proceed »: an end of
+	// file must reach the parent when it dies.
+	for _, f := range cmd.ExtraFiles {
+		_ = f.Close()
 	}
 	go func() {
 		for sig := range signals {
@@ -600,6 +694,29 @@ func targetHostIdentity(root *os.Root, pid int, required bool) (*SandboxDeath, e
 	return nil, nil
 }
 
+// runpathDirs are the folders the dynamic loader searches first for the
+// libraries binary needs: its DT_RUNPATH, else its DT_RPATH, $ORIGIN expanded
+// (ld.so(8)). Relative entries and other tokens are left out: the fixed system
+// folders follow. The real application needs it for its own probe launch
+// (libpulse finds libpulsecommon this way).
+func runpathDirs(binary *elf.File, path string) []string {
+	entries, _ := binary.DynString(elf.DT_RUNPATH)
+	if len(entries) == 0 {
+		entries, _ = binary.DynString(elf.DT_RPATH)
+	}
+	origin := filepath.Dir(path)
+	var dirs []string
+	for _, entry := range entries {
+		for dir := range strings.SplitSeq(entry, ":") {
+			dir = strings.ReplaceAll(strings.ReplaceAll(dir, "${ORIGIN}", origin), "$ORIGIN", origin)
+			if filepath.IsAbs(dir) && !strings.Contains(dir, "$") {
+				dirs = append(dirs, filepath.Clean(dir))
+			}
+		}
+	}
+	return dirs
+}
+
 // Resolve DT_NEEDED without executing ldd or trusting environment search paths.
 func dynamicLibraries(path string, seen map[string]bool) ([]string, error) {
 	if seen[path] {
@@ -625,14 +742,15 @@ func dynamicLibraries(path string, seen map[string]bool) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
+	dirs := append(runpathDirs(binary, path), "/lib64", "/lib", "/usr/lib64", "/usr/lib", "/lib/x86_64-linux-gnu", "/lib/aarch64-linux-gnu")
 	for _, name := range names {
 		if filepath.Base(name) != name || name == "." || name == ".." {
 			return nil, fmt.Errorf("invalid ELF library name %q", name)
 		}
 		found := false
-		for _, dir := range []string{"/lib64", "/lib", "/usr/lib64", "/usr/lib", "/lib/x86_64-linux-gnu", "/lib/aarch64-linux-gnu"} {
+		for _, dir := range dirs {
 			candidate := filepath.Join(dir, name)
-			if _, err := os.Stat(candidate); err != nil { // #nosec G703 -- validated basename joined to fixed system library directory; ELF comes from verified sidecar.
+			if _, err := os.Stat(candidate); err != nil { // #nosec G703 -- validated basename joined to a system library directory or to the RUNPATH of a verified ELF (a sidecar, this executable).
 				continue
 			}
 			paths = append(paths, candidate)

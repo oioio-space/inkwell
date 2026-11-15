@@ -34,6 +34,7 @@ func TestFailureOf(t *testing.T) {
 		{"PRV-40 a link out of the folder", typst.ErrUnsafeProject, FailUnsafe, nil},
 		{"PRV-40 typst cannot start", fmt.Errorf("%w: %w", errUnavailable, errors.New("not embedded")), FailUnavailable, nil},
 		{"PRV-40 a corrupted binary", typst.ErrIntegrity, FailUnavailable, nil},
+		{"UX-SB2a1-2 an inconclusive probe asks to try again", fmt.Errorf("%w: typst: %w: timeout", errUnavailable, sidecar.ErrProbeInconclusive), "retry", nil},
 		{"PRV-40 anything else", errors.New("boom /secret/path"), FailInternal, nil},
 	}
 	for _, tc := range cases {
@@ -260,6 +261,30 @@ func TestPreviewRetriesInconclusiveEngineStart(t *testing.T) {
 		p.Close()
 		if starts != c.wantStarts || (c.wantStarts == 2) != (second == nil) {
 			t.Errorf("after %v: %d starts, second error %v; want %d starts", c.first, starts, second, c.wantStarts)
+		}
+	}
+}
+
+// UX-SB2a1-2 and -3: About states why there is no preview. A refused sandbox
+// and an inconclusive probe each have their own mode; any other start failure
+// stays unknown (empty).
+func TestNetworkModeNamesARefusedOrPendingSandbox(t *testing.T) {
+	saved := startTypst
+	t.Cleanup(func() { startTypst = saved })
+	for _, c := range []struct {
+		err  error
+		want string
+	}{
+		{fmt.Errorf("typst: %w: typst: mandatory Landlock unavailable (ABI 0)", sidecar.ErrSandboxRefused), "refused"},
+		{fmt.Errorf("typst: %w: timeout", sidecar.ErrProbeInconclusive), "pending"},
+		{errors.New("typst: not embedded"), ""},
+	} {
+		startTypst = func(*slog.Logger) (Compiler, error) { return nil, c.err }
+		p := NewPreview(PreviewOptions{Root: t.TempDir()})
+		got := p.networkMode()
+		p.Close()
+		if got != c.want {
+			t.Errorf("UX-SB2a1-3 about: networkMode after %v = %q, want %q", c.err, got, c.want)
 		}
 	}
 }

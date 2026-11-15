@@ -104,6 +104,20 @@ export class PreviewModel {
     if (seconds <= 0) return;
     this.#client?.edit(seconds);
     if (!this.hasResult) return;
+    this.#working();
+  }
+
+  /**
+   * The person asked to try again (the engine could not start this time): Go compiles again,
+   * and the preview says at once that it is working.
+   */
+  retry(): void {
+    this.#client?.refresh();
+    this.#working();
+  }
+
+  /** "Updating" from now until Go answers, or by itself if nothing comes. */
+  #working(): void {
     this.compiling = true;
     clearTimeout(this.#settle);
     this.#settle = setTimeout(() => {

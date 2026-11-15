@@ -22,11 +22,14 @@ import { preview } from "./preview.svelte";
 let {
   onSourceJump,
   onCursorJump,
+  onDetails,
 }: {
   /** The person clicked at (x, y) points of `page`. */
   onSourceJump: (page: number, x: number, y: number) => void;
   /** The person asked for the page of the caret. */
   onCursorJump: () => void;
+  /** The person asked for details of a refused sandbox, with this button (opens the About dialog). */
+  onDetails?: (from: HTMLElement) => void;
 } = $props();
 
 const PAD = 16;
@@ -196,9 +199,19 @@ const packages = $derived(preview.failure?.packages.join(", ") ?? "");
       {#if !preview.hasResult}
         <p>{t("preview.starting")}</p>
       {:else if preview.failure}
+        {@const kind = preview.failure.kind}
         <p>
-          {t(`preview.fail.${preview.failure.kind}`, { packages })}
+          {t(`preview.fail.${kind}`, { packages })}
         </p>
+        {#if kind === "retry"}
+          <button type="button" class="btn" onclick={() => preview.retry()}>
+            {t("preview.retry")}
+          </button>
+        {:else if (kind === "sandbox" || kind === "protected") && onDetails}
+          <button type="button" class="btn" onclick={(e) => onDetails(e.currentTarget)}>
+            {t("preview.fail.sandbox.details")}
+          </button>
+        {/if}
       {/if}
     </div>
   {/if}
@@ -320,9 +333,15 @@ const packages = $derived(preview.failure?.packages.join(", ") ?? "");
     display: grid;
     flex: 1;
     place-items: center;
+    align-content: center;
+    gap: 12px;
     padding: 24px;
     color: var(--fg-dim);
     text-align: center;
+  }
+  /* The shared notice action, at the size of a lone target. */
+  .empty .btn {
+    min-height: var(--target-min);
   }
   .empty p {
     max-width: 34ch;

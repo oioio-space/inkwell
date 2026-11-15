@@ -29,6 +29,9 @@ export const FAILURE_KINDS = [
   "unsafe",
   "unavailable",
   "blocked",
+  "sandbox",
+  "protected",
+  "retry",
   "internal",
 ] as const;
 
