@@ -94,7 +94,8 @@ merged; its formal model is `ProjectChange.tla` (plan of PC1).
 
 7. **The join follows the same rule.** An accepted invitation into another project is written during the shutdown
    and followed by the same restart, with a pending-join record so that the next start opens the inviter's document
-   (rules J-1..J-5 of the PC1 plan, to write at that block's step 1). Until then the join behaves as on `main`.
+   (rules J-1..J-5, written on 2026-11-15 in `docs/plans/2026-11-15-pc1b-join.md`, block PC1b, after PC1a's take-over
+   and restart; model `docs/protocol/tla/ProjectChange.tla`). Until PC1b is merged the join behaves as on `main`.
 
 ## Considered options
 

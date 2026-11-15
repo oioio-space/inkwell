@@ -1139,6 +1139,11 @@
       "id": "1aae2de01a0e7560d83ccef76127bdb3ae5c35de50fda8058c0d8b266de11ac7",
       "reason": "scripts/tla-check.sh: a mutant now passes only when TLC names the property its README row names (no longer any violation), and INKWELL_TLA_ONLY filters the models to run; this strengthens the check, every existing model and mutant still runs by default (mise run formal exits 0 in 822 s)",
       "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "8aab6da9da8909a99448176d5705180efc2e54313f609684ff6e16d5a93a67ec",
+      "reason": "docs/plans/2026-11-14-pc1-project-change-by-restart.md: the plan is split into a shared part and two blocks; the sentence on mutants (« a build failure, a timeout or another test is no catch ») moved to docs/plans/2026-11-15-pc1a-take-over.md and pc1b-join.md unchanged; no bound weakened",
+      "decision": "docs/plans/2026-11-14-pc1-project-change-by-restart.md"
     }
   ]
 }
