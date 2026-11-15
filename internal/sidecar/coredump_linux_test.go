@@ -110,7 +110,7 @@ func TestSandboxDeathStartsNoCoreHelper(t *testing.T) {
 		{attack: "segv", signal: unix.SIGSEGV},
 	} {
 		t.Run(tc.attack, func(t *testing.T) {
-			path, args, err := sandboxPrefix(sandboxConfig{WorkingDir: t.TempDir()})
+			path, args, err := sandboxPrefix(launcherConfig(sandboxConfig{WorkingDir: t.TempDir()}))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -118,7 +118,7 @@ func TestSandboxDeathStartsNoCoreHelper(t *testing.T) {
 			cmd.Env = []string{"INKWELL_ATTACK=" + tc.attack}
 			pidfd := -1
 			cmd.SysProcAttr = &syscall.SysProcAttr{PidFD: &pidfd}
-			if err := cmd.Start(); err != nil {
+			if err := startLauncher(t, cmd); err != nil {
 				t.Fatal(err)
 			}
 			defer func() { _ = unix.Close(pidfd) }()

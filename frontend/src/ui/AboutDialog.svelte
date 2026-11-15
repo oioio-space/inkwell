@@ -1,6 +1,6 @@
 <script lang="ts">
 import { PreviewService } from "../../bindings/github.com/oioio-space/inkwell/internal/app/index";
-import { t } from "../i18n";
+import { type MessageKey, t } from "../i18n";
 import { session } from "./editorSession.svelte";
 import Icon from "./icons/Icon.svelte";
 
@@ -8,13 +8,25 @@ import Icon from "./icons/Icon.svelte";
 export type BuildInfo = { Version: string; Commit: string; Date: string };
 
 /** The About dialog (modal): name, version and licence. Empty until the version is known. */
-let { open = $bindable(false), info }: { open: boolean; info?: BuildInfo | undefined } = $props();
+let {
+  open = $bindable(false),
+  info,
+  opener,
+}: {
+  open: boolean;
+  info?: BuildInfo | undefined;
+  /** The button that opened the dialog, which gets the focus back; none: the editor does. */
+  opener?: HTMLElement | undefined;
+} = $props();
 let dialog: HTMLDialogElement | undefined = $state();
 
 /** The product name is a brand, not a translated text. */
 const NAME = "Inkwell";
 
-/** How the layout engine is kept offline (the Typst sidecar's network mode); undefined while asking. */
+/**
+ * How the layout engine is confined, as Go reports it: the tier ("namespace", "reduced"), or why
+ * there is no preview ("refused", "pending"); undefined while asking.
+ */
 let mode = $state<string | undefined>();
 
 $effect(() => {
@@ -38,13 +50,13 @@ $effect(() => {
   };
 });
 
-const networkText = $derived(
-  mode === "namespace"
-    ? t("about.network.namespace")
-    : mode === "proxy only"
-      ? t("about.network.proxy")
-      : t("about.network.unknown"),
-);
+const LINES: Record<string, MessageKey> = {
+  namespace: "about.network.namespace",
+  reduced: "about.isolation.reduced",
+  refused: "about.isolation.refused",
+  pending: "about.isolation.pending",
+};
+const networkText = $derived(t(LINES[mode ?? ""] ?? "about.network.unknown"));
 
 /** The short commit and the day, as "Révision 0123456, 2026-10-26"; empty when neither is known. */
 const build = $derived.by(() => {
@@ -59,7 +71,8 @@ const build = $derived.by(() => {
   aria-labelledby="about-title"
   onclose={() => {
     open = false;
-    session.focus();
+    if (opener?.isConnected) opener.focus();
+    else session.focus();
   }}
 >
   <header>

@@ -2,11 +2,6 @@
 
 package sidecar
 
-import "os/exec"
-
-// There is no unprivileged network namespace here. On macOS a sandbox-exec
-// profile denying network access would do it; it is not wired (the tool is
-// deprecated) and the callers' proxy settings remain the only barrier.
-func isolate(*exec.Cmd) {}
-
-func probeIsolation() (bool, error) { return false, nil }
+// There is no unprivileged network namespace here; [Run] refuses every launch
+// (spec §9.11), so there is no tier to report.
+func networkIsolation(*Store) (bool, error) { return false, confinementAvailable() }
