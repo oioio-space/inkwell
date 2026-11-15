@@ -181,8 +181,16 @@ func scopeAttackHelper(mode, arg string) int {
 				b[i] = 1
 			}
 		}
-	case "address":
-		_, err := unix.Mmap(-1, 0, 2<<30, unix.PROT_READ|unix.PROT_WRITE, unix.MAP_PRIVATE|unix.MAP_ANON)
+	case "address": // map arg bytes at once (2 GiB by default)
+		size := 2 << 30
+		if arg != "" {
+			var err error
+			if size, err = strconv.Atoi(arg); err != nil {
+				fmt.Println(err)
+				return 2
+			}
+		}
+		_, err := unix.Mmap(-1, 0, size, unix.PROT_READ|unix.PROT_WRITE, unix.MAP_PRIVATE|unix.MAP_ANON)
 		if err != nil {
 			fmt.Println("allocation-failed")
 			return 1

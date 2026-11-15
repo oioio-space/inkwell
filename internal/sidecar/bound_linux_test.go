@@ -67,7 +67,8 @@ func TestBoundViolationIsNotAnOOMKill(t *testing.T) {
 		s.Dir = t.TempDir()
 		s.scope = scopeManager(t)
 		s.tier = tierF
-		s.MemoryLimit = 1<<30 + raceAddressReserve(t)
+		// 2 GiB, not 1: the helper's own start must not be what fails (escapeAllocation).
+		s.MemoryLimit = 2<<30 + raceAddressReserve(t)
 		own, err := selfCgroup()
 		if err != nil {
 			t.Fatal(err)
