@@ -78,15 +78,17 @@ func TestHostileMemoryDeathStartsNoCoreHelper(t *testing.T) {
 	s := deathSpec(t, "scope-resident")
 	s.Dir = t.TempDir()
 	s.tier = machineTier(t)
-	s.MemoryLimit = 1<<30 + raceAddressReserve(t)
+	// 2 GiB, not 1: the helper's own start must not be what fails (escapeAllocation).
+	s.MemoryLimit = 2<<30 + raceAddressReserve(t)
 	s.ResidentLimit = 128 << 20
 	s.scope = scopeManager(t)
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
 	out, err := Run(ctx, s)
-	if err != nil || out.CoreDump != CoreDumpNone || out.ExitCode == 0 {
+	if err != nil || out.ExitCode == 0 {
 		t.Fatalf("S-11 no oom-kill: memory death/core outcome %+v %v", out, err)
 	}
+	assertNoCoreHelper(t, out.CoreDump)
 }
 
 func TestThirdProgramDescriptor(t *testing.T) {
