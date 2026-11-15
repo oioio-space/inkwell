@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -96,10 +97,10 @@ func TestCgroupRunLimitsVerifiedBeforeStart(t *testing.T) {
 	called := false
 	m.beforeStart = func(r *cgroupRun) {
 		called = true
-		if strings.Join(writes, ",") != "memory.max,memory.swap.max,memory.oom.group" {
+		if strings.Join(writes, ",") != "memory.max,memory.high,memory.swap.max,memory.oom.group" {
 			t.Errorf("limit write ordering: %v", writes)
 		}
-		for file, want := range map[string]string{"memory.max": "134217728", "memory.swap.max": "0", "memory.oom.group": "1"} {
+		for file, want := range map[string]string{"memory.max": "201326592", "memory.high": "134217728", "memory.swap.max": "0", "memory.oom.group": "1"} {
 			got, err := readValue(filepath.Join(r.path, file))
 			if err != nil || got != want {
 				t.Errorf("%s = %s %v want %s", file, got, err, want)
@@ -302,9 +303,12 @@ func TestBothMemoryBudgetsHold(t *testing.T) {
 	m := scopeManager(t)
 	s := scopeSpec(t, m, "budget")
 	m.beforeStart = func(r *cgroupRun) {
-		v, err := readValue(filepath.Join(r.path, "memory.max"))
+		v, err := readValue(filepath.Join(r.path, "memory.high"))
 		if err != nil || v != "134217728" {
 			t.Errorf("resident budget = %s %v", v, err)
+		}
+		if v, err = readValue(filepath.Join(r.path, "memory.max")); err != nil || v != "201326592" {
+			t.Errorf("resident backstop = %s %v", v, err)
 		}
 	}
 	out, err := Run(t.Context(), s)
@@ -322,7 +326,13 @@ func TestBothMemoryBudgetsHold(t *testing.T) {
 func TestResidentBudgetKillsWithSIGKILL(t *testing.T) {
 	for _, mode := range []string{"resident", "resident-tree"} {
 		t.Run(mode, func(t *testing.T) {
-			out := requireScopedRun(t, scopeManager(t), mode)
+			out, err := Run(t.Context(), residentSpec(t, scopeManager(t), mode))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if out.Containment != "cgroup" {
+				t.Fatal("no delegated user scope or PID namespaces available")
+			}
 			if out.Signal != 9 || out.MemoryCause != MemoryLocalLimit || out.CoreDump != CoreDumpNone {
 				t.Fatalf("resident outcome: %+v", out)
 			}
@@ -516,11 +526,17 @@ func TestCgroupDescriptorClosedOnEveryPath(t *testing.T) {
 	}
 }
 
-func appHelper(t *testing.T, arg string) (*exec.Cmd, *lineSink, io.WriteCloser) {
+// appExit is the end of an app helper: err is its Wait error once done is closed.
+type appExit struct {
+	done chan struct{}
+	err  error
+}
+
+func appHelper(t *testing.T, arg string) (*exec.Cmd, *lineSink, io.WriteCloser, *appExit) {
 	t.Helper()
 	dir := t.TempDir()
 	cmd := exec.Command(os.Args[0], "--sidecar-test=scope-scope-app:"+arg)
-	cmd.Env = append(os.Environ(), "INKWELL_TEST_PROJECT="+dir)
+	cmd.Env = append(os.Environ(), "INKWELL_TEST_PROJECT="+dir, "INKWELL_TEST_ADDRESS_RESERVE="+strconv.FormatUint(raceAddressReserve(t), 10))
 	w := newLineSink()
 	cmd.Stdout = w
 	cmd.Stderr = os.Stderr
@@ -531,14 +547,19 @@ func appHelper(t *testing.T, arg string) (*exec.Cmd, *lineSink, io.WriteCloser) 
 	if err = cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = input.Close(); _ = cmd.Process.Kill(); _ = cmd.Wait() })
-	return cmd, w, input
+	exit := &appExit{done: make(chan struct{})}
+	go func() {
+		exit.err = cmd.Wait()
+		close(exit.done)
+	}()
+	t.Cleanup(func() { _ = input.Close(); _ = cmd.Process.Kill(); <-exit.done })
+	return cmd, w, input, exit
 }
 
 func TestAppSIGKILLLeavesNoWorkload(t *testing.T) {
 	for _, holderDead := range []bool{false, true} {
 		t.Run(fmt.Sprintf("holder-dead-%v", holderDead), func(t *testing.T) {
-			cmd, lines, input := appHelper(t, "")
+			cmd, lines, input, _ := appHelper(t, "")
 			_, _ = input.Write([]byte("x"))
 			info := waitLine(t, lines, "scope=")
 			scope, holder, _ := strings.Cut(info, " holder=")
@@ -616,7 +637,25 @@ func testUnit(t *testing.T, name string, props []scopeProperty) {
 	}
 }
 
+// boundApp plays the scenario until its app helper reports. The helper shares
+// the test's bounded slice, so the kernel can OOM-kill it too, right after the
+// run and before the report (residual R2c of gates/SB2a1/SIMPLIFY.md): such an
+// attempt says nothing about the rule and is played again, three times at most.
+// Every other outcome is judged by the attempt itself.
 func boundApp(t *testing.T, leaf bool) {
+	t.Helper()
+	const attempts = 3
+	for attempt := 1; !boundAttempt(t, leaf); attempt++ {
+		if attempt == attempts {
+			t.Fatalf("the kernel OOM-killed the app helper before its report in each of %d attempts: the scenario never ran to its end", attempts)
+		}
+		t.Logf("attempt %d: the kernel OOM-killed the app helper before its report; scenario played again", attempt)
+	}
+}
+
+// boundAttempt reports false only when the kernel OOM-killed the app helper
+// itself before it reported the run.
+func boundAttempt(t *testing.T, leaf bool) bool {
 	t.Helper()
 	var nonce [8]byte
 	if _, err := rand.Read(nonce[:]); err != nil {
@@ -633,12 +672,21 @@ func boundApp(t *testing.T, leaf bool) {
 	if leaf {
 		arg = "leaf"
 	}
-	cmd, lines, input := appHelper(t, arg)
-	appProps := []scopeProperty{scopeProp("PIDs", []uint32{uint32(cmd.Process.Pid)}), scopeProp("Slice", slice), scopeProp("CollectMode", "inactive-or-failed"), scopeProp("MemorySwapMax", uint64(0))}
+	cmd, lines, input, exit := appHelper(t, arg)
+	// An idle process keeps the app's scope, and so its OOM counters, readable
+	// after the app helper's death; OOMPolicy=continue keeps the manager from
+	// stopping that scope on an OOM kill (its default for a scope without Delegate).
+	keeper := exec.Command("sleep", "infinity")
+	if err := keeper.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = keeper.Process.Kill(); _ = keeper.Wait() })
+	appScope := "inkwell-test-app-" + suffix + ".scope"
+	appProps := []scopeProperty{scopeProp("PIDs", []uint32{uint32(cmd.Process.Pid), uint32(keeper.Process.Pid)}), scopeProp("Slice", slice), scopeProp("CollectMode", "inactive-or-failed"), scopeProp("OOMPolicy", "continue"), scopeProp("MemorySwapMax", uint64(0))}
 	if leaf {
 		appProps = append(appProps, scopeProp("MemoryMax", uint64(128<<20)))
 	}
-	testUnit(t, "inkwell-test-app-"+suffix+".scope", appProps)
+	testUnit(t, appScope, appProps)
 	_, _ = input.Write([]byte("x"))
 	info := waitLine(t, lines, "scope=")
 	scope, _, _ := strings.Cut(info, " holder=")
@@ -676,8 +724,28 @@ func boundApp(t *testing.T, leaf bool) {
 		}
 	}
 	_, _ = input.Write([]byte("x"))
-	result := waitLine(t, lines, "out=")
-	if !strings.Contains(result, "cgroup cause=victim signal=9 err=<nil>") {
+	result, reported := waitReport(t, lines, exit)
+	if !reported {
+		events, err := readCounters(filepath.Join(filepath.Dir(scope), appScope, "memory.events.local"))
+		killed := false
+		if ended, ok := errors.AsType[*exec.ExitError](exit.err); ok {
+			status, ok := ended.Sys().(syscall.WaitStatus)
+			killed = ok && status.Signaled() && status.Signal() == syscall.SIGKILL
+		}
+		if !killed || err != nil || events["oom_kill"] == 0 {
+			t.Fatalf("app helper ended without a report and not by the kernel's OOM kill: %v, app scope counters %v %v", exit.err, events, err)
+		}
+		return false
+	}
+	// The shared slice bounds the app too, and the kernel charges each inotify
+	// event to the watcher's memory cgroup: at that bound the allocation of the
+	// kill's event can fail, which inotify reports as a queue overflow (kernel
+	// source fs/notify/inotify/inotify_fsnotify.c, cited from memory; measured
+	// here as IN_Q_OVERFLOW after 3 or 4 samples, R2b of gates/SB2a1/SIMPLIFY.md).
+	// The leaf bound leaves the app outside: no event is lost.
+	// ADR 0042 rule M9: a lost watch answers "unknown", never a guessed cause.
+	lostEvent := !leaf && result == "cgroup cause=unknown signal=9 err=<nil> watch-lost=true"
+	if result != "cgroup cause=victim signal=9 err=<nil> watch-lost=false" && !lostEvent {
 		t.Fatal("ancestor bound did not kill the sandbox: " + result)
 	}
 	ancestor := filepath.Dir(scope)
@@ -690,6 +758,37 @@ func boundApp(t *testing.T, leaf bool) {
 		events, err := readCounters(filepath.Join(ancestor, "memory.events.local"))
 		if err != nil || events["oom"] == 0 {
 			t.Fatalf("shared aggregate bound never fired: %v %v", events, err)
+		}
+	}
+	return true
+}
+
+// waitReport returns the app helper's "out=" line, or false when the helper
+// ended without writing one.
+func waitReport(t *testing.T, w *lineSink, exit *appExit) (string, bool) {
+	t.Helper()
+	timer := time.NewTimer(20 * time.Second)
+	defer timer.Stop()
+	for {
+		select {
+		case line := <-w.lines:
+			if report, ok := strings.CutPrefix(line, "out="); ok {
+				return report, true
+			}
+		case <-exit.done:
+			// Wait has returned: every line the helper wrote is already queued.
+			for {
+				select {
+				case line := <-w.lines:
+					if report, ok := strings.CutPrefix(line, "out="); ok {
+						return report, true
+					}
+				default:
+					return "", false
+				}
+			}
+		case <-timer.C:
+			t.Fatal("target did not report out=")
 		}
 	}
 }

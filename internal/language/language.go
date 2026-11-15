@@ -134,7 +134,7 @@ func (s *Service) Serve(c bridge.Conn) {
 		defer close(done)
 		defer func() { _ = writeOut.Close() }()
 		defer func() { _ = in.Close() }()
-		result, err := sidecar.Run(ctx, sidecar.Spec{Path: path, Dir: s.root, Args: []string{"lsp"}, Stdin: in, Stdout: writeOut, ReadPaths: readPaths, NoNetwork: true, MemoryLimit: 4 << 30})
+		result, err := sidecar.Run(ctx, sidecar.Spec{Path: path, Store: s.store, Dir: s.root, Args: []string{"lsp"}, Stdin: in, Stdout: writeOut, ReadPaths: readPaths, NoNetwork: true, MemoryLimit: 4 << 30})
 		if ctx.Err() == nil {
 			slog.Warn("language sidecar stopped", "err", err, "exit", result.ExitCode, "truncated", result.Truncated)
 		}

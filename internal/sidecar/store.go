@@ -53,6 +53,15 @@ var (
 	// succeeded nor failed definitively (a timeout, a transient error): the
 	// launch is refused rather than run with weaker isolation. Retry later.
 	ErrProbeInconclusive = errors.New("sidecar: namespace probe inconclusive; launch refused, retry")
+	// ErrSandboxRefused is returned when this system cannot give a sidecar
+	// the protection it needs (ADR 0044 point 1: no usable Landlock or
+	// seccomp, neither tier launches, or an architecture whose inventory is
+	// not proven). It is definitive; the interface shows preview.fail.sandbox.
+	ErrSandboxRefused = errors.New("sidecar: sandbox unavailable on this system; launch refused")
+	// ErrProtectedRefused is returned for a protected project where only the
+	// namespace-free tier is available (ADR 0044 point 1e): its plaintext
+	// folder would not be bounded. The interface shows preview.fail.protected.
+	ErrProtectedRefused = errors.New("sidecar: a protected project cannot be laid out safely on this system")
 )
 
 // Store extracts and verifies the embedded sidecars. The zero value is ready
@@ -73,6 +82,10 @@ type Store struct {
 
 	mu sync.Mutex
 }
+
+// defaultStore is the machine's store, for a caller that names none: the tier
+// probe verifies its target in it (Linux).
+var defaultStore = &Store{}
 
 // Embedded returns the sidecars embedded for the platform being built:
 // <name>.gz files. It holds no sidecar when `mise run sidecar:fetch` has not

@@ -207,7 +207,7 @@ func TestSignalReportDescriptorNeverStdio(t *testing.T) {
 	for _, value := range []string{"0", "1", "2", "-1", "three", "3 "} {
 		t.Run(value, func(t *testing.T) {
 			t.Setenv(signalReportEnv, value)
-			err := sandboxExec(sandboxConfig{Probe: true}, nil)
+			err := sandboxBootstrap(&sandboxConfig{})
 			if err == nil || !strings.Contains(err.Error(), "signal report descriptor") {
 				t.Fatalf("report descriptor %q: %v", value, err)
 			}
@@ -228,7 +228,7 @@ func TestBootstrapAcceptsOnlyExpectedCgroup(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv(expectedCgroupEnv, own)
-	if err := sandboxExec(sandboxConfig{Probe: true}, nil); err != nil {
+	if err := sandboxBootstrap(&sandboxConfig{}); err != nil {
 		t.Fatalf("membership in the expected cgroup refused: %v", err)
 	}
 	if v, ok := os.LookupEnv(expectedCgroupEnv); ok {
@@ -239,7 +239,7 @@ func TestBootstrapAcceptsOnlyExpectedCgroup(t *testing.T) {
 	}
 	for _, other := range []string{own + "/run-1", filepath.Dir(own), own + "/"} {
 		t.Setenv(expectedCgroupEnv, other)
-		if err := sandboxExec(sandboxConfig{Probe: true}, nil); err == nil {
+		if err := sandboxBootstrap(&sandboxConfig{}); err == nil {
 			t.Fatalf("membership accepted for %q while in %q", other, own)
 		}
 	}
@@ -269,7 +269,7 @@ func TestNamespaceInitChecksLaunchingParent(t *testing.T) {
 	}
 
 	t.Setenv(expectedParentEnv, strconv.Itoa(os.Getpid())) // any process but our parent
-	err := sandboxExec(sandboxConfig{Probe: true}, nil)
+	err := sandboxBootstrap(&sandboxConfig{})
 	if err == nil || !strings.Contains(err.Error(), "launching parent died") {
 		t.Fatalf("bootstrap under another parent: %v", err)
 	}
@@ -278,7 +278,7 @@ func TestNamespaceInitChecksLaunchingParent(t *testing.T) {
 	}
 
 	t.Setenv(expectedParentEnv, strconv.Itoa(os.Getppid()))
-	if err := sandboxExec(sandboxConfig{Probe: true}, nil); err != nil {
+	if err := sandboxBootstrap(&sandboxConfig{}); err != nil {
 		t.Fatalf("bootstrap under the launching parent: %v", err)
 	}
 	if v, ok := os.LookupEnv(expectedParentEnv); ok {
@@ -328,12 +328,14 @@ func TestInitReportsTargetDeathWithIdentity(t *testing.T) {
 			defer func() { _ = r.Close(); _ = w.Close() }()
 			t.Setenv("INKWELL_ATTACK", tc.attack)
 			pidfd := -1
-			c := sandboxConfig{WorkingDir: cwd, ReportFD: int(w.Fd()), RequireDeath: true}
+			c := launcherConfig(sandboxConfig{WorkingDir: cwd, ReportFD: int(w.Fd()), RequireDeath: true})
 			cmd, err := sandboxInitCommand(c, []string{os.Args[0]}, &pidfd)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := cmd.Start(); err != nil {
+			// The exec child reports its tier and waits for « proceed », as
+			// under a real init (whose launch handshake this test stands in for).
+			if err := startLauncher(t, cmd); err != nil {
 				t.Fatal(err)
 			}
 			defer func() { _ = unix.Close(pidfd); _ = cmd.Process.Release() }()

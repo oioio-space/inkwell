@@ -3,11 +3,13 @@ package sidecar
 import (
 	"errors"
 	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unsafe"
 
@@ -16,13 +18,16 @@ import (
 
 // Samples retain monotonic time. A failed read/overflow poisons the entire watch.
 type memorySample struct {
-	at         time.Time
-	oom, kills uint64
+	at               time.Time
+	oom, kills, high uint64
 }
+
+// memoryHistory is the run's counter timeline. bounded records that the
+// watchdog killed the run itself once it went over memory.high (ADR 0044 1g).
 type memoryHistory struct {
-	samples             []memorySample
-	globalDelta         uint64
-	ancestorOOM, failed bool
+	samples                      []memorySample
+	globalDelta                  uint64
+	ancestorOOM, failed, bounded bool
 }
 
 func (h memoryHistory) cause(signal int) MemoryCause {
@@ -40,7 +45,14 @@ func (h memoryHistory) cause(signal int) MemoryCause {
 	}
 	kills := last.kills - first.kills
 	if kills == 0 {
-		return MemoryNone
+		switch {
+		case !h.bounded:
+			return MemoryNone
+		case signal == int(unix.SIGKILL):
+			return MemoryLocalLimit
+		default:
+			return MemoryUnknown
+		}
 	}
 	if signal != int(unix.SIGKILL) || h.ancestorOOM || h.globalDelta != kills {
 		return MemoryVictim
@@ -90,7 +102,9 @@ func readCounters(path string) (map[string]uint64, error) {
 
 func readMemorySample(path string) (memorySample, error) {
 	v, err := readCounters(filepath.Join(path, "memory.events.local"))
-	s := memorySample{at: time.Now(), oom: v["oom"], kills: v["oom_kill"]}
+	// "high" is read when present: without it the watchdog never fires and
+	// the memory.max backstop is what bounds the run.
+	s := memorySample{at: time.Now(), oom: v["oom"], kills: v["oom_kill"], high: v["high"]}
 	if _, ok := v["oom"]; !ok {
 		err = errors.Join(err, errors.New("missing oom"))
 	}
@@ -110,7 +124,8 @@ func globalKills() (uint64, error) {
 }
 
 type memoryWatch struct {
-	beforeRead  func() // test seam at the final counter read, before cleanup
+	beforeRead  func()      // test seam at the final counter read, before cleanup
+	disarmed    atomic.Bool // test seam: no watchdog kill, the memory.max backstop acts (R-7)
 	path        string
 	fd          int
 	done, ended chan struct{}
@@ -118,6 +133,28 @@ type memoryWatch struct {
 	h           memoryHistory
 	global      uint64
 	ancestors   map[string]uint64
+	bound       uint64    // memory.high of the run; zero leaves only the backstop
+	over        time.Time // first check, since the last one at or under the bound, that found memory.current above it
+}
+
+// boundGrace is how long memory.current must stay above memory.high before
+// the watchdog kills: page cache is charged too, but reclaim brings it back
+// under the bound at once; only unreclaimable memory (anonymous, tmpfs, kernel;
+// no swap) stays above (ADR 0044 point 1g).
+const boundGrace = 100 * time.Millisecond
+
+// watchCounterFile opens a non-blocking inotify queue on the counter file;
+// a variable so that tests can make inotify fail.
+var watchCounterFile = func(file string) (int, error) {
+	fd, err := unix.InotifyInit1(unix.IN_NONBLOCK | unix.IN_CLOEXEC)
+	if err != nil {
+		return -1, err
+	}
+	if _, err := unix.InotifyAddWatch(fd, file, unix.IN_MODIFY|unix.IN_DELETE_SELF|unix.IN_MOVE_SELF); err != nil {
+		_ = unix.Close(fd)
+		return -1, err
+	}
+	return fd, nil
 }
 
 func startMemoryWatch(path, scope string) *memoryWatch {
@@ -129,14 +166,8 @@ func startMemoryWatch(path, scope string) *memoryWatch {
 		ancestors: map[string]uint64{},
 	}
 	var err error
-	w.fd, err = unix.InotifyInit1(unix.IN_NONBLOCK | unix.IN_CLOEXEC)
-	if err != nil {
-		w.h.failed = true
-	}
-	if w.fd >= 0 {
-		if _, err = unix.InotifyAddWatch(w.fd, filepath.Join(path, "memory.events.local"), unix.IN_MODIFY|unix.IN_DELETE_SELF|unix.IN_MOVE_SELF); err != nil {
-			w.h.failed = true
-		}
+	if w.fd, err = watchCounterFile(filepath.Join(path, "memory.events.local")); err != nil {
+		w.fd, w.h.failed = -1, true
 	}
 	w.global, err = globalKills()
 	w.h.failed = w.h.failed || err != nil
@@ -152,22 +183,42 @@ func startMemoryWatch(path, scope string) *memoryWatch {
 			break
 		}
 	}
+	if v, err := readValue(filepath.Join(path, "memory.high")); err == nil {
+		w.bound, _ = strconv.ParseUint(v, 10, 64) // "max" or unreadable: no watchdog, the backstop bounds the run
+	}
 	w.sample()
 	go func() {
 		defer close(w.ended)
-		tick := time.NewTicker(10 * time.Millisecond)
-		defer tick.Stop()
 		for {
 			select {
 			case <-w.done:
 				w.drain()
 				return
-			case <-tick.C:
+			default:
+			}
+			w.wait(10 * time.Millisecond)
+			if w.fd < 0 {
+				// No inotify queue: sample at the same cadence, so that the
+				// watchdog still acts and memory.max stays the backstop (S-11).
+				w.sample()
+			} else {
 				w.drain()
 			}
+			w.enforce(time.Now())
 		}
 	}()
 	return w
+}
+
+// wait blocks until the counters change or d passes: the watchdog must act
+// on the first memory.high event, before the run reaches memory.max.
+func (w *memoryWatch) wait(d time.Duration) {
+	if w.fd < 0 || w.fd > math.MaxInt32 {
+		time.Sleep(d)
+		return
+	}
+	p := []unix.PollFd{{Fd: int32(w.fd), Events: unix.POLLIN}}
+	_, _ = unix.Poll(p, int(d.Milliseconds()))
 }
 
 func (w *memoryWatch) sample() {
@@ -178,6 +229,37 @@ func (w *memoryWatch) sample() {
 	} else {
 		w.h.failed = true
 		w.h.samples[len(w.h.samples)-1] = s
+	}
+}
+
+// enforce is the watchdog of ADR 0044 point 1g, checked at most 10 ms apart
+// while the run lives: memory.high throttles and reclaims but never invokes
+// the OOM killer (kernel cgroup-v2 documentation, memory.high). Once the run
+// has had a "high" event, inkwell kills the whole run cgroup itself when
+// memory.current stays above the bound for boundGrace, so a run that only
+// filled the page cache is not stopped. A kill by inkwell is not an OOM kill:
+// the session scope's Result stays "success" and the desktop raises no memory
+// alarm. If the kill fails, memory.max above the bound is the backstop
+// (residual R-7).
+func (w *memoryWatch) enforce(now time.Time) {
+	n := len(w.h.samples)
+	if w.h.bounded || w.bound == 0 || w.disarmed.Load() || n == 0 || w.h.samples[n-1].high <= w.h.samples[0].high {
+		return
+	}
+	v, err := readValue(filepath.Join(w.path, "memory.current"))
+	current, perr := strconv.ParseUint(v, 10, 64)
+	if err != nil || perr != nil || current <= w.bound {
+		w.over = time.Time{}
+		return
+	}
+	if w.over.IsZero() {
+		w.over = now
+	}
+	if now.Sub(w.over) < boundGrace {
+		return
+	}
+	if err := killRunCgroup(w.path, func(pid int) error { return killCgroupPID(w.path, pid) }); err == nil {
+		w.h.bounded = true
 	}
 }
 
