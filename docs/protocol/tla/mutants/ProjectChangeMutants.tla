@@ -12,8 +12,10 @@ Yes == TRUE
 AfterWiring(i) == ~wiring[i]
 \* RestartTwice: the restarted image restarts again on a quit (INKWELL_AFTER_TAKEOVER taken as a request).
 AfterChangeToo(i) == req[i] # "none" \/ byRestart[i]
-\* OldContinuation: a page that asked keeps applying automerge-repo's pending continuations.
+\* RequestBeforeNavigation: the request is sent while the page's context lives (no navigation first).
 No == FALSE
+\* JoinNoRestart: a join is written but only a take-over restarts.
+TakeOverOnly(i) == req[i] = "takeover"
 \* JoinTwice: consuming the record leaves it in project.json.
 KeepRecord == pj
 \* WriteBeforeWiringStopped: the write starts while the wiring runs (MW10).

@@ -203,7 +203,8 @@ done <<'MUTANTS'
 LiveAdopt NoOldStateAfterChange
 RestartBeforeDurable WriteBeforeRestart
 RestartTwice RestartOnce
-OldContinuation NoOldStateAfterChange
+RequestBeforeNavigation NoOldStateAfterChange
+JoinNoRestart ChangeCompletes
 JoinTwice JoinOnce
 WriteBeforeWiringStopped NoOldStateAfterChange
 NoBarrier NoOldStateAfterChange

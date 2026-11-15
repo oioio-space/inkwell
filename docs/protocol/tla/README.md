@@ -764,7 +764,8 @@ something is violated.
 | `ProjectChangeLiveAdopt` | `LiveChange <- Yes` | the rejected design: the project adopted in the running session, the adapter reset at the reply; a buffered `Attested` of the old project reaches the new coverage (4 states) | `NoOldStateAfterChange` |
 | `ProjectChangeRestartBeforeDurable` | `StoppedOK <- AfterWiring` | the restart before `stopAll` returned (MW8): the write is cut short | `WriteBeforeRestart` |
 | `ProjectChangeRestartTwice` | `RestartWanted <- AfterChangeToo` | the restarted image restarts again when the person quits (`INKWELL_AFTER_TAKEOVER` taken as a request) | `RestartOnce` |
-| `ProjectChangeOldContinuation` | `PageGate <- No` | a page that asked keeps applying automerge-repo's continuations; one authorised under the old project persists through the new image | `NoOldStateAfterChange` |
+| `ProjectChangeRequestBeforeNavigation` | `DiscardContext <- No` | N-15: the request is sent while the page's JavaScript context lives (no navigation to the restart page first); a continuation authorised under the old project persists through the new image | `NoOldStateAfterChange` |
+| `ProjectChangeJoinNoRestart` | `RestartWanted <- TakeOverOnly` | N-12: a join is written but only a take-over restarts (constants of `ProjectChange.cfg`, `Kinds = {"join"}`); the image exits and the change never completes | `ChangeCompletes` |
 | `ProjectChangeJoinTwice` | `ClearRecord <- KeepRecord` | consuming the pending-join record leaves it in `project.json`; the next start consumes it again | `JoinOnce` |
 | `ProjectChangeWriteBeforeWiringStopped` | `WriteOK <- Anytime` | the write starts while the wiring runs (MW10): an op of the old project lands in the new list | `NoOldStateAfterChange` |
 | `ProjectChangeNoBarrier` | `BarrierOK <- NoBarrier` | no termination barrier (MW11): a child of the old image runs beside the new one | `NoOldStateAfterChange` |
@@ -781,5 +782,5 @@ something is violated.
 ```
 java -cp tla2tools.jar tlc2.TLC -workers 2 -config ProjectChange.cfg ProjectChange
 java -cp tla2tools.jar tlc2.TLC -workers 2 -config mutants/ProjectChangeLiveAdopt.cfg mutants/ProjectChangeMutants
-INKWELL_TLA_ONLY='^ProjectChange' ./scripts/tla-check.sh    # the 20 ProjectChange runs only, about 25 s
+INKWELL_TLA_ONLY='^ProjectChange' ./scripts/tla-check.sh    # the 21 ProjectChange runs only, about 25 s
 ```

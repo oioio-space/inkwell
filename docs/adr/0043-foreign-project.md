@@ -1,5 +1,5 @@
 ---
-status: accepted # part 1 (W58a) accepted and merged on 2026-11-14; part 2 (PC1) stays a draft, proposed; # split on 2026-11-14 into part 1 (block W58a, gate gates/W58a.toml: read-only and no broken invitation) and part 2 (block PC1, gate gates/PC1.toml: the project changes by a restart, never live); history in gates/W58/REVIEW.md rounds 1-8; the frozen gates/W58.toml is superseded; each part is accepted when its block is merged
+status: accepted # part 1 (W58a) accepted and merged on 2026-11-14; part 2 (PC1, split into PC1a then PC1b) stays a draft, proposed, until each block writes « part 2 PC1a accepted » or « part 2 PC1b accepted » in this line at its merge (its gate's docs criterion reads it); # split on 2026-11-14 into part 1 (block W58a, gate gates/W58a.toml: read-only and no broken invitation) and part 2 (block PC1, gate gates/PC1.toml: the project changes by a restart, never live); history in gates/W58/REVIEW.md rounds 1-8; the frozen gates/W58.toml is superseded; each part is accepted when its block is merged
 date: 2026-11-14
 decision-makers: [Mathieu]
 ---

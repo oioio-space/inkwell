@@ -1144,6 +1144,11 @@
       "id": "8aab6da9da8909a99448176d5705180efc2e54313f609684ff6e16d5a93a67ec",
       "reason": "docs/plans/2026-11-14-pc1-project-change-by-restart.md: the plan is split into a shared part and two blocks; the sentence on mutants (« a build failure, a timeout or another test is no catch ») moved to docs/plans/2026-11-15-pc1a-take-over.md and pc1b-join.md unchanged; no bound weakened",
       "decision": "docs/plans/2026-11-14-pc1-project-change-by-restart.md"
+    },
+    {
+      "id": "fd76d199d07ea1219e3b8ddb1743ffbd9009a631b5843fed02d67fa3fef48164",
+      "reason": "scripts/tla-check.sh: ProjectChange mutant list after Codex round 1 of PC1: OldContinuation renamed RequestBeforeNavigation (N-15, the page discards its context before the request) and JoinNoRestart added (N-12, a join restarts); each still caught by its named property",
+      "decision": "docs/plans/2026-11-14-pc1-project-change-by-restart.md"
     }
   ]
 }

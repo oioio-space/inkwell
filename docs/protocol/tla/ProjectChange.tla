@@ -29,6 +29,9 @@
 (*     gives the root document after a join, children (tinymist, typst, the*)
 (*     preview server), crashes and failed steps.                          *)
 (*                                                                         *)
+(* The folder is the one the profile opens next: for a take-over the same *)
+(* folder; for a join the fresh folder (J-6), whose creation is one rename *)
+(* after its list and record are synced, the previous folder untouched.   *)
 (* Durable (the folder; survives a crash and a restart): trust, prev,      *)
 (* next (opStore.replace: the list, the set-aside one, the staged one; each*)
 (* rename is followed by a directory sync, so each step is one durable     *)
@@ -92,8 +95,9 @@ StoppedOK(i) == phase[i] = "stopped"
 BarrierOK(i) == i \notin children
 \* N-12, N35: an image starts its work only once it holds the profile lock (ADR 0037, D-LOCK).
 MayStart(j) == lock = 0
-\* N-9: once the page asked, or lost its image, it applies and persists nothing until it reloads.
-PageGate == TRUE
+\* N-15: the page discards its whole JavaScript context (navigation to the static restart page) before the
+\* request reaches Go: coverage, automerge-repo and every pending continuation end with it.
+DiscardContext == TRUE
 \* N-9: the page reloads only on another startup id.
 ReloadOn(j) == j # ph
 \* J-1: consuming the record removes it in the same atomic rewrite of project.json that records the root.
@@ -175,7 +179,7 @@ Frame ==
 Apply ==
   /\ \E p \in cont :
        /\ \/ pst = "live" /\ bad' = (bad \/ p # proj[ph])
-          \/ pst = "waiting" /\ ~PageGate
+          \/ pst = "waiting"
              /\ \E a \in Img : phase[a] = "run" /\ bad' = (bad \/ p # proj[a])
        /\ cont' = cont \ {p}
   /\ UNCHANGED <<disk, goVars, kernel, ph, pst, cov, proot, env, requests, restarts, consumed, committed,
@@ -198,9 +202,11 @@ SpawnChild(i) ==
 (***************************************************************************)
 (* The person                                                              *)
 (***************************************************************************)
-\* N-5, N-9, J-1: the request. Go records it in memory (a take-over's genesis, or a join's Welcome: the
-\* list, the inviter, the root when the genesis carries one) and quits; it writes nothing. The page shows
-\* « Redémarrage… », closes its bridge and from now on applies nothing (PageGate).
+\* N-5, N-15, J-1: the request. The page has flushed its local edits and navigated to the static restart
+\* page (N-15: its context is discarded, so its coverage and continuations are gone); that page sends the
+\* request. Go records it in memory (a take-over's genesis, or a join's Welcome: the list, the inviter, the
+\* root when the genesis carries one) and quits; it writes nothing. A peer's frame dropped with the context
+\* is sent again by its peer at the next sync (automerge-repo's sync protocol).
 Request(i) ==
   /\ ~LiveChange
   /\ phase[i] = "run" /\ ph = i /\ pst = "live" /\ requests = 0 /\ proj[i] = "old" /\ top < MaxImg
@@ -209,8 +215,10 @@ Request(i) ==
        /\ kind' = k /\ rk' = r /\ req' = [req EXCEPT ![i] = k]
   /\ phase' = [phase EXCEPT ![i] = "leaving"]
   /\ pst' = "waiting"
+  /\ cov' = IF DiscardContext THEN {} ELSE cov
+  /\ cont' = IF DiscardContext THEN {} ELSE cont
   /\ requests' = 1
-  /\ UNCHANGED <<disk, proj, wiring, buf, wstep, flag, byRestart, notice, kernel, ph, cov, cont, proot, top,
+  /\ UNCHANGED <<disk, proj, wiring, buf, wstep, flag, byRestart, notice, kernel, ph, proot, top,
                  restarts, consumed, committed, polluted, bad, cut, crashes, errors, intr>>
 
 \* The rejected design (ADR 0043, « Considered options »): adopt the new project in the running session,
