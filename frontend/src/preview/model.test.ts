@@ -197,6 +197,16 @@ describe("PreviewModel", () => {
     m.stop();
   });
 
+  it("SB2a1 retry asks Go to compile again and says the preview is working", () => {
+    const m = started();
+    m.receive({ ...result({ pageCount: 0, pages: [] }), failure: { kind: "retry", packages: [] } });
+    expect(m.compiling).toBe(false);
+    m.retry();
+    expect(last().sent.filter((r) => r.op === "refresh")).toHaveLength(1);
+    expect(m.compiling).toBe(true);
+    m.stop();
+  });
+
   it("PRV-75 anchors that never come time out", async () => {
     const m = started();
     m.receive(result());

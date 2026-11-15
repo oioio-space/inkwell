@@ -14,8 +14,7 @@ env:
 jobs:
   ci:
     runs-on: ubuntu-latest
-    # ~20 min of checks (`ci:checks`); the formal models run in the `formal` job and the impaired-network
-    # scenarios once, in the `netsim` job.
+    # ~25 min of checks (`ci:core`); the impaired-network scenarios run once, in the `netsim` job.
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -67,10 +66,9 @@ jobs:
           name: seccomp-traces
           path: gates/L1/ci-seccomp-traces/
           retention-days: 7
-      # Ubuntu 24.04 restricts unprivileged user namespaces with AppArmor; the sidecar sandbox and its
-      # tests need them (as in the netsim and sidecars-arm64 jobs).
-      - name: Allow unprivileged user namespaces
-        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
+      # The sandbox tiers (ADR 0044): this job never lifts Ubuntu's AppArmor restriction on unprivileged user
+      # namespaces, so the sidecar tests run in the tier the machine gives (F where it is on); the `sandbox-stock`
+      # job asserts the restriction is on and checks both tiers' inventory.
       - run: mise run ci:checks # the formal models run in the parallel `formal` job
       - name: Build the desktop app (Linux)
         run: mise run app:build
@@ -208,9 +206,70 @@ jobs:
           key: sidecars-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('internal/sidecar/manifest.json') }}
       - name: Fetch the pinned sidecars (SHA-256 verified)
         run: go run ./cmd/sidecar-fetch
-      # Ubuntu 24.04 restricts unprivileged user namespaces with AppArmor; the sandbox needs them.
-      - name: Allow unprivileged user namespaces
-        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-      - name: Sidecar and Typst tests (arm64)
-        run: go test -race -count=1 ./internal/sidecar/... ./internal/typst/... ./cmd/sidecar-fetch/...
+      # arm64 is refused with its sentence until SB2a2 (plan docs/plans/2026-11-14-sb2-sandbox-tiers.md, S-7): the
+      # run must show the refusal, read from `go test -json` against the `arm64` column of the inventory. The
+      # restriction is left as the runner has it (never lifted).
+      - name: Sidecar and Typst tests (arm64), the refusal asserted
+        timeout-minutes: 20
+        run: |
+          rc=0
+          go test -json -race -count=1 ./internal/sidecar/... ./internal/typst/... ./internal/language/... ./cmd/sidecar-fetch/... > go-test.json || rc=$?
+          python3 -I scripts/gojson_check.py go-test.json --exit "$rc" --inventory gates/inventories/SB2a1.toml --columns arm64
+      - name: Keep the structured test results (read by scripts/gh-verdict.py)
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: go-test-json-sidecars-arm64
+          path: go-test.json
+          if-no-files-found: error
+          retention-days: 30
+  # The sandbox on a stock Ubuntu 24.04 (ADR 0044, decision D6): AppArmor restricts unprivileged user namespaces
+  # and the job never lifts it, so the real compile, export and language session run in the tier the machine gives
+  # (F: namespaces refused with EACCES, measured). Its `go test -json` results are the `stock-amd64` column of
+  # gates/inventories/SB2a1.toml, read back through the API by scripts/gh-verdict.py.
+  sandbox-stock:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+      - name: Cache the sidecar binaries
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            internal/sidecar/bin/**/*.gz
+            ~/.cache/inkwell/sidecar-dl
+          key: sidecars-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('internal/sidecar/manifest.json') }}
+      - name: Fetch the pinned sidecars (SHA-256 verified)
+        timeout-minutes: 5
+        run: go run ./cmd/sidecar-fetch
+      # The point of the job: the restriction is on, AppArmor is enabled, and nothing here changes either.
+      - name: Assert the stock restriction is on (never lifted)
+        timeout-minutes: 1
+        run: |
+          value="$(sysctl -n kernel.apparmor_restrict_unprivileged_userns)"
+          enabled="$(cat /sys/module/apparmor/parameters/enabled)"
+          echo "kernel.apparmor_restrict_unprivileged_userns=${value} apparmor=${enabled}"
+          test "${value}" = 1
+          test "${enabled}" = Y
+      - name: Sandbox, Typst and language tests in the tier the machine gives
+        timeout-minutes: 20
+        run: |
+          rc=0
+          go test -json -race -count=1 ./internal/sidecar/... ./internal/typst/... ./internal/language/... > go-test.json || rc=$?
+          python3 -I scripts/gojson_check.py go-test.json --exit "$rc" --inventory gates/inventories/SB2a1.toml --columns stock-amd64
+      - name: Keep the structured test results (read by scripts/gh-verdict.py)
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: go-test-json-sandbox-stock
+          path: go-test.json
+          if-no-files-found: error
+          retention-days: 30
   # The release itself is .github/workflows/release.yml (tags v*; ADR 0025).

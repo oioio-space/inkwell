@@ -209,3 +209,40 @@ func TestMemoryWatchFailurePoisons(t *testing.T) {
 		}
 	})
 }
+
+// S-11 (ADR 0044 point 1g): without inotify the watchdog still acts, on
+// memory.events.local sampled at the same 10 ms cadence, and kills only once
+// memory.current has stayed above memory.high for boundGrace; memory.max stays
+// the backstop, never the normal path. The cgroup is ordinary files here, so
+// the kill shows as the write of cgroup.kill.
+func TestMemoryWatchdogWithoutInotify(t *testing.T) {
+	watch := watchCounterFile
+	t.Cleanup(func() { watchCounterFile = watch })
+	watchCounterFile = func(string) (int, error) { return -1, unix.EMFILE }
+
+	dir := filepath.Dir(counterFile(t, "high 0\noom 0\noom_kill 0\n"))
+	for name, value := range map[string]string{"memory.high": "100\n", "memory.current": "200\n", "cgroup.kill": ""} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(value), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	w := startMemoryWatch(dir, dir)
+	over := time.Now()
+	if err := os.WriteFile(filepath.Join(dir, "memory.events.local"), []byte("high 1\noom 0\noom_kill 0\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var killed time.Time
+	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(time.Millisecond) {
+		if b, _ := os.ReadFile(filepath.Join(dir, "cgroup.kill")); string(b) == "1" {
+			killed = time.Now()
+			break
+		}
+	}
+	w.finish(int(unix.SIGKILL))
+	if killed.IsZero() || !w.h.bounded {
+		t.Fatalf("no watchdog kill without inotify (bounded=%v): memory.max would be the normal path", w.h.bounded)
+	}
+	if took := killed.Sub(over); took < boundGrace {
+		t.Fatalf("killed %v after the bound was passed, before its %v grace", took, boundGrace)
+	}
+}

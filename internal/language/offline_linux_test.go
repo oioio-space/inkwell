@@ -10,7 +10,7 @@ import (
 )
 
 func TestOfflineLanguage(t *testing.T) {
-	isolated, err := sidecar.NetworkIsolation()
+	isolated, err := sidecar.NetworkIsolation(nil)
 	if err != nil || !isolated {
 		t.Fatalf("empty network namespace unavailable: %v", err)
 	}

@@ -174,6 +174,55 @@ describe("Preview pane", () => {
     expect(empty?.textContent).toContain("ne télécharge jamais");
   });
 
+  it("SB2a1 a refused sandbox shows its sentence and Détails", () => {
+    const onDetails = vi.fn();
+    const { host } = mount({ onDetails });
+    const sentences = {
+      sandbox:
+        "L'aperçu est désactivé : ce système ne permet pas d'isoler le moteur de mise en page. Le texte et la collaboration fonctionnent normalement.",
+      protected:
+        "Ce document est protégé : sur ce système, Inkwell ne peut pas encore le mettre en page sans risquer d'exposer son contenu. Vous pouvez continuer à écrire ; pour voir l'aperçu, ouvrez-le sur un autre ordinateur.",
+    } as const;
+    for (const [kind, sentence] of Object.entries(sentences) as [
+      keyof typeof sentences,
+      string,
+    ][]) {
+      preview.receive({ ...result({ pageCount: 0, pages: [] }), failure: { kind, packages: [] } });
+      flushSync();
+      const empty = host.querySelector('[data-testid="preview-empty"]');
+      expect(empty?.querySelector("p")?.textContent?.trim(), kind).toBe(sentence);
+      expect(empty?.textContent).not.toMatch(/exited with status|code de sortie/i);
+      const details = empty?.querySelector("button");
+      expect(details?.textContent?.trim(), kind).toBe("Détails");
+      // UX-SB2a1-5 (minor): the action looks like every other notice action.
+      expect(details?.classList.contains("btn"), kind).toBe(true);
+      click(details as HTMLElement);
+      // The owner learns which button asked, to give it the focus back.
+      expect(onDetails).toHaveBeenLastCalledWith(details);
+    }
+    expect(onDetails).toHaveBeenCalledTimes(2);
+  });
+
+  it("SB2a1 an engine that could not start this time offers Réessayer, never a reinstallation", () => {
+    const retry = vi.spyOn(preview, "retry").mockImplementation(() => {});
+    const { host } = mount({ onDetails: vi.fn() });
+    preview.receive({
+      ...result({ pageCount: 0, pages: [] }),
+      failure: { kind: "retry", packages: [] },
+    });
+    flushSync();
+    const empty = host.querySelector('[data-testid="preview-empty"]');
+    expect(empty?.querySelector("p")?.textContent?.trim()).toBe(
+      "L'aperçu n'a pas pu démarrer cette fois.",
+    );
+    expect(empty?.textContent).not.toMatch(/réinstall/i);
+    const buttons = [...(empty?.querySelectorAll("button") ?? [])];
+    expect(buttons.map((b) => b.textContent?.trim())).toEqual(["Réessayer"]);
+    expect(buttons[0]?.classList.contains("btn")).toBe(true);
+    click(buttons[0] as HTMLElement);
+    expect(retry).toHaveBeenCalledOnce();
+  });
+
   it("PRV-85 every failure has its own sentence", () => {
     const { host } = mount();
     const seen = new Set<string>();
