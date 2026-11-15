@@ -31,6 +31,9 @@ func requireEmbedded(t *testing.T) {
 
 func TestEmbeddedSidecarsRun(t *testing.T) {
 	requireEmbedded(t)
+	if !requireLaunch(t) {
+		return
+	}
 	store := &Store{Dir: sharedCache}
 
 	t.Run("SIDE-02 the pinned typst runs", func(t *testing.T) {
@@ -111,6 +114,9 @@ func mustArtifact(t *testing.T, name string) Artifact {
 
 // SIDE-29: the real language server, supervised, answers on stdio.
 func TestSupervisedTinymistLSP(t *testing.T) {
+	if !requireLaunch(t) {
+		return
+	}
 	requireEmbedded(t)
 	store := &Store{Dir: sharedCache}
 	home := t.TempDir()

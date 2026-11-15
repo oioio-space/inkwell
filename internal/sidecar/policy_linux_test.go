@@ -183,32 +183,45 @@ func TestLandlockExactRights(t *testing.T) {
 
 // P1-a: resource is an unsigned int in the kernel; ignore its upper word.
 // Test both halves of a pointer so low-word-only inspection cannot allow writes.
+// Both architectures' filters are interpreted here, on either runner.
 func TestCoreSentinelSeccompPolicy(t *testing.T) {
-	f, audit := hostLaunchFilter(t, 1234)
-	for _, high := range []uint64{0, 1 << 32} {
-		for _, ptr := range []uint64{1, 1 << 32, 0xffffffffffffffff} {
-			for _, nr := range []uint32{unix.SYS_PRLIMIT64, setrlimitSyscall} {
-				data := make([]byte, 64)
-				binary.NativeEndian.PutUint32(data, nr)
-				binary.NativeEndian.PutUint32(data[4:], audit)
-				offset := 16
-				if nr == unix.SYS_PRLIMIT64 {
-					offset = 24
-					binary.NativeEndian.PutUint64(data[32:], ptr)
-				}
-				binary.NativeEndian.PutUint64(data[offset:], high|unix.RLIMIT_CORE)
-				if got := interpretSeccomp(t, f, data); got != unix.SECCOMP_RET_ERRNO|uint32(unix.EPERM) {
-					t.Errorf("nr %d resource %x pointer %x: verdict %x", nr, high|unix.RLIMIT_CORE, ptr, got)
+	p, _ := lookupProgram(Typst)
+	for _, a := range sysArches {
+		f, err := seccompFilter(p, a, 1234, tierN)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// An architecture without the legacy call has no number to refuse
+		// (noSyscall; TestSysArchMatchesHost checks the table on its runner).
+		numbers := []uint32{a.prlimit64}
+		if a.setrlimit != noSyscall {
+			numbers = append(numbers, a.setrlimit)
+		}
+		for _, high := range []uint64{0, 1 << 32} {
+			for _, ptr := range []uint64{1, 1 << 32, 0xffffffffffffffff} {
+				for _, nr := range numbers {
+					data := make([]byte, 64)
+					binary.NativeEndian.PutUint32(data, nr)
+					binary.NativeEndian.PutUint32(data[4:], a.audit)
+					offset := 16
+					if nr == a.prlimit64 {
+						offset = 24
+						binary.NativeEndian.PutUint64(data[32:], ptr)
+					}
+					binary.NativeEndian.PutUint64(data[offset:], high|unix.RLIMIT_CORE)
+					if got := interpretSeccomp(t, f, data); got != unix.SECCOMP_RET_ERRNO|uint32(unix.EPERM) {
+						t.Errorf("%s: nr %d resource %x pointer %x: verdict %x", a.name, nr, high|unix.RLIMIT_CORE, ptr, got)
+					}
 				}
 			}
 		}
-	}
-	data := make([]byte, 64)
-	binary.NativeEndian.PutUint32(data, unix.SYS_PRLIMIT64)
-	binary.NativeEndian.PutUint32(data[4:], audit)
-	binary.NativeEndian.PutUint64(data[24:], unix.RLIMIT_CORE)
-	if got := interpretSeccomp(t, f, data); got != unix.SECCOMP_RET_ALLOW {
-		t.Errorf("query-only core prlimit: %x", got)
+		data := make([]byte, 64)
+		binary.NativeEndian.PutUint32(data, a.prlimit64)
+		binary.NativeEndian.PutUint32(data[4:], a.audit)
+		binary.NativeEndian.PutUint64(data[24:], unix.RLIMIT_CORE)
+		if got := interpretSeccomp(t, f, data); got != unix.SECCOMP_RET_ALLOW {
+			t.Errorf("%s: query-only core prlimit: %x", a.name, got)
+		}
 	}
 }
 

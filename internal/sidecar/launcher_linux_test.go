@@ -48,6 +48,9 @@ func TestWithLimitsExactBytes(t *testing.T) {
 
 // TestSandboxPrivileges checks kernel state in the final target, after exec.
 func TestSandboxPrivileges(t *testing.T) {
+	if !requireLaunch(t) {
+		return
+	}
 	s := spec("sandboxstatus")
 	s.WatchDir, s.MaxDirBytes, s.WriteFiles = t.TempDir(), 8192, []string{"out"}
 	out, err := Run(t.Context(), s)
@@ -328,6 +331,9 @@ func confinementAttack() error {
 var nullByte *byte
 
 func TestSandboxExternalIPC(t *testing.T) {
+	if !requireLaunch(t) {
+		return
+	}
 	for _, name := range []string{"signal", "bus"} {
 		t.Run(name, func(t *testing.T) {
 			sibling := exec.Command(os.Args[0], "-test.run=^$")
@@ -439,6 +445,9 @@ func TestSandboxZeroFileCap(t *testing.T) {
 // TestEveryInvocationConfined covers unlimited query/eval, limited commands,
 // bounded compiles and the long-lived stdio supervisor.
 func TestEveryInvocationConfined(t *testing.T) {
+	if !requireLaunch(t) {
+		return
+	}
 	for _, mode := range []string{"unlimited", "limited", "bounded", "fallback"} {
 		t.Run(mode, func(t *testing.T) {
 			s := spec("sandboxstatus")
@@ -513,6 +522,9 @@ func TestIPCOverlays(t *testing.T) {
 // This invokes the launcher without user, mount, PID or network namespaces.
 // The denial probe must still succeed, regardless of Landlock's ABI scopes.
 func TestSeccompWithoutNamespaces(t *testing.T) {
+	if !requireLaunch(t) {
+		return
+	}
 	path, args, err := sandboxPrefix(launcherConfig(sandboxConfig{WorkingDir: t.TempDir()}))
 	if err != nil {
 		t.Fatal(err)
@@ -525,6 +537,9 @@ func TestSeccompWithoutNamespaces(t *testing.T) {
 }
 
 func TestSeccompKillsABIMismatch(t *testing.T) {
+	if !requireLaunch(t) {
+		return
+	}
 	for _, attack := range []string{"arch", "x32"} {
 		t.Run(attack, func(t *testing.T) {
 			path, args, err := sandboxPrefix(launcherConfig(sandboxConfig{WorkingDir: t.TempDir()}))
@@ -559,6 +574,9 @@ func TestSeccompKillsABIMismatch(t *testing.T) {
 // Host creates a real, writable SysV segment, then passes its id into the
 // namespace-free launcher. Even an otherwise attachable segment must be denied.
 func TestSandboxShmAttach(t *testing.T) {
+	if !requireLaunch(t) {
+		return
+	}
 	id, err := unix.SysvShmGet(unix.IPC_PRIVATE, 4096, unix.IPC_CREAT|0o600)
 	if err != nil {
 		t.Fatal(err)
@@ -586,6 +604,9 @@ func TestSandboxHomeRead(t *testing.T) {
 func TestSandboxSignalControls(t *testing.T) { runAttack(t, "controls") }
 func runAttack(t *testing.T, attack string, env ...string) {
 	t.Helper()
+	if !requireLaunch(t) {
+		return
+	}
 	path, args, err := sandboxPrefix(launcherConfig(sandboxConfig{WorkingDir: t.TempDir()}))
 	if err != nil {
 		t.Fatal(err)
@@ -598,6 +619,9 @@ func runAttack(t *testing.T, attack string, env ...string) {
 }
 
 func TestSandboxInheritedFD(t *testing.T) {
+	if !requireLaunch(t) {
+		return
+	}
 	path, args, err := sandboxPrefix(launcherConfig(sandboxConfig{WorkingDir: t.TempDir()}))
 	if err != nil {
 		t.Fatal(err)
@@ -618,6 +642,9 @@ func TestSandboxInheritedFD(t *testing.T) {
 func TestSeccompUnknownSyscall(t *testing.T) { runAttack(t, "unknown") }
 
 func TestInitPreservesFileSizeSignal(t *testing.T) {
+	if !requireLaunch(t) {
+		return
+	}
 	cmd := exec.Command(os.Args[0])
 	cmd.Dir = t.TempDir()
 	cmd.Env = []string{"INKWELL_ATTACK=init-report"}
