@@ -122,7 +122,7 @@ func TestRunNoNetwork(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	available, err := NetworkIsolation()
+	available, err := NetworkIsolation(nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -139,7 +139,7 @@ func TestRunNoNetwork(t *testing.T) {
 func TestRunNoNetworkFallsBack(t *testing.T) {
 	t.Parallel()
 	s := deathSpec(t, "echo")
-	s.isolationProbe = func() (bool, error) { return false, nil }
+	s.tier = tierF
 	s.NoNetwork = true
 	out, err := Run(t.Context(), s)
 	if err != nil || out.ExitCode != 0 || out.Isolated {

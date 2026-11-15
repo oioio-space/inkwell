@@ -9,3 +9,5 @@ func capWriteHelper(string) int { return 2 }
 func lowerCoreHelper(string) int { return 1 }
 
 func scopeAttackHelper(string, string) int { return 2 }
+
+func tierHelper(string, string) int { return 0 }
