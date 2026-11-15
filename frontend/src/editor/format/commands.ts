@@ -279,12 +279,16 @@ function codeBlockCommand(lang: Lang): StateCommand {
     const slots: number[] = [];
     let shift = 0;
     if (filled.length === 0) {
-      // No selection: an empty block, cursor inside it.
-      const blank = head.text.trim() === "";
-      const at = blank ? head.from : head.to;
-      const insert = `${blank ? "" : "\n"}\`\`\`\n\n\`\`\``;
-      changes.push({ from: at, to: head.to, insert });
-      slots.push(at + (blank ? 0 : 1) + 4);
+      // No selection: on a blank line, that line becomes the block's body (its whitespace is
+      // content, kept so that unfencing gives it back); otherwise an empty block after the line.
+      // The caret ends inside the body either way.
+      if (head.text.trim() === "") {
+        changes.push({ from: head.from, insert: "```\n" }, { from: head.to, insert: "\n```" });
+        slots.push(head.to + 4);
+      } else {
+        changes.push({ from: head.to, insert: "\n```\n\n```" });
+        slots.push(head.to + 5);
+      }
     } else {
       for (const [first, last] of lineSpans(state, filled)) {
         const a = doc.line(first);

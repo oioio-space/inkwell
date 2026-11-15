@@ -241,6 +241,15 @@ describe("blocks", () => {
     expect(apply("texte‸", setBlock("markdown", "codeblock"))).toBe("texte\n```\n‸\n```");
   });
 
+  it("FMT-27 a whitespace-only line survives a code block toggled twice", () => {
+    for (const lang of ["typst", "markdown"] as Lang[]) {
+      const once = run(parse("aaa\n ‸\na"), setBlock(lang, "codeblock"));
+      // The blank line becomes the block's body, its spaces kept and the caret after them.
+      expect(show(once.state)).toBe("aaa\n```\n ‸\n```\na");
+      expect(show(run(once.state, setBlock(lang, "codeblock")).state)).toBe("aaa\n ‸\na");
+    }
+  });
+
   it("FMT-14 other blocks decline inside a code block", () => {
     const result = run(parse("```\n- a‸\n```"), setBlock("markdown", "ul"));
     expect(result.ran).toBe(false);
