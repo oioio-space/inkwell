@@ -47,6 +47,12 @@ export const Op = {
 export type Op = (typeof Op)[keyof typeof Op];
 
 /**
+ * The payload of the Error answer to a request Go did not take because the session is leaving (a
+ * project change was requested, PC1 rule N-16): `ReasonLeaving` of internal/bridge.
+ */
+export const REASON_LEAVING = "leaving";
+
+/**
  * Binary and InvalidText answer ReadProjection and FileInfo for a file that is not text: the
  * second carries the 1-based line of the first invalid byte as a u32. EditedOutside answers
  * WriteProjection for a file changed outside Inkwell and not yet acknowledged. TooLarge answers

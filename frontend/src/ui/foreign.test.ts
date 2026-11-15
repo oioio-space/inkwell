@@ -19,8 +19,10 @@ import { cleanup, click, render } from "./testkit.svelte";
 /**
  * W58a: a project whose member list does not name this device. Rules N-2 (a refusal is a key,
  * never Go's text), N-3 (locked until the rights are known, then read-only, one sentence), N-4 (the
- * invitation controls wait for an admin role), N-15 (one action, no take-over). Each rule's check
- * also runs on a copy of the real source with one edit, and must fail there (« W58a mutant … »).
+ * invitation controls wait for an admin role). Each rule's check also runs on a copy of the real
+ * source with one edit, and must fail there (« W58a mutant … »). W58a's rule N-15 (one action, no
+ * take-over) is reversed by PC1a (ADR 0043, part 2): the banner's two actions and the take-over
+ * are checked in projectChange.test.ts.
  */
 
 vi.mock("@wailsio/runtime", () => ({ Stream: vi.fn() }));
@@ -30,13 +32,13 @@ vi.mock("../../bindings/github.com/oioio-space/inkwell/internal/app/index", () =
     Invite: vi.fn(),
     Join: vi.fn(),
     Standing: vi.fn(),
+    CanTakeOver: vi.fn(async () => true),
     Members: vi.fn(async () => []),
   },
 }));
 
 type Workspace = typeof workspace;
 
-type Component = typeof AccessBanner;
 type ShareComponent = typeof ShareDialog;
 
 const text = (el: Element) => el.textContent?.replace(/\s+/g, " ").trim() ?? "";
@@ -157,15 +159,11 @@ describe("W58a access (N-3)", () => {
     expect(w.access, "N-3 access follows the standing").toBe(standing);
   }
 
-  it("W58a not a member: read-only, one sentence, one action", async () => {
+  it("W58a not a member: read-only, one sentence", async () => {
     await readOnlyChecks(workspace, "notNamed");
-    const onAsk = vi.fn();
-    const host = render(AccessBanner, { onAsk });
+    const host = render(AccessBanner, {});
     const banner = host.querySelector("[data-testid=access-banner]");
     expect(banner && text(banner)).toBe(fr["foreign.notNamed"]);
-    expect([...host.querySelectorAll("button")].map(text), "one action").toEqual([
-      fr["foreign.ask"],
-    ]);
   });
 
   it("W58a removed: its own sentence", async () => {
@@ -173,7 +171,10 @@ describe("W58a access (N-3)", () => {
     const host = render(AccessBanner, {});
     const banner = host.querySelector("[data-testid=access-banner]");
     expect(banner && text(banner)).toBe(fr["foreign.removed"]);
-    expect([...host.querySelectorAll("button")].map(text)).toEqual([fr["foreign.ask"]]);
+    expect([...host.querySelectorAll("button")].map(text)).toEqual([
+      fr["foreign.ask"],
+      fr["foreign.takeOver"],
+    ]);
   });
 
   it("W58a a member sees no foreign action", async () => {
@@ -360,7 +361,7 @@ describe("W58a invite capability (N-4)", () => {
   });
 });
 
-describe("W58a standing and the share dialog (N-1, N-15)", () => {
+describe("W58a standing and the share dialog (N-1)", () => {
   it("W58a a join asks for the standing again", async () => {
     await arm(workspace, "notNamed");
     expect(workspace.access).toBe("notNamed");
@@ -391,15 +392,6 @@ describe("W58a standing and the share dialog (N-1, N-15)", () => {
     await vi.waitFor(() => expect(refreshed, "indicator refreshed on ready").toHaveBeenCalled());
   });
 
-  /** The banner of a device the list does not name: one action, and nothing else. */
-  async function bannerChecks(Banner: Component): Promise<void> {
-    await arm(workspace, "notNamed");
-    const host = render(Banner, {});
-    expect([...host.querySelectorAll("button")].map(text), "N-15 one action, nothing else").toEqual(
-      [fr["foreign.ask"]],
-    );
-  }
-
   it("W58a ask for an invitation opens the join dialog", async () => {
     await arm(workspace, "notNamed");
     const onAsk = vi.fn();
@@ -410,25 +402,5 @@ describe("W58a standing and the share dialog (N-1, N-15)", () => {
     expect(dialog.querySelector("dialog")?.hasAttribute("open")).toBe(true);
     expect(text(dialog)).toContain(fr["share.join.foreignHelp"]);
     expect(dialog.querySelector("input[required]")).not.toBeNull();
-  });
-
-  it("W58a the banner offers nothing else", async () => {
-    await bannerChecks(AccessBanner);
-    expect(document.querySelector("dialog")).toBeNull();
-    expect(JSON.stringify(Object.keys(fr).filter((k) => k.startsWith("foreign.")))).not.toContain(
-      "takeOver",
-    );
-  });
-
-  it("W58a mutant N-15 second action is caught", async () => {
-    await withMutant<{ default: Component }, void>(
-      "ui/people/AccessBanner.svelte",
-      "w58mutant-n15",
-      '{t("foreign.ask")}\n        </button>',
-      '{t("foreign.ask")}\n        </button>\n        <button type="button" class="btn">+</button>',
-      async (m) => {
-        await expect(bannerChecks(m.default)).rejects.toThrow(/N-15 one action/);
-      },
-    );
   });
 });

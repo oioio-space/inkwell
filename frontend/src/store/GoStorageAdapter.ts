@@ -14,6 +14,7 @@ import {
   encodeWriteAt,
   Op,
   ProtocolError,
+  REASON_LEAVING,
   type Response,
   Status,
 } from "./protocol";
@@ -46,7 +47,20 @@ export class ExternalEditError extends StoreError {
 interface Pending {
   resolve: (r: Response) => void;
   reject: (e: Error) => void;
+  /** Whether the request writes: one lost with its stream is reported as not saved. */
+  write: boolean;
 }
+
+/** The requests that write the storage or a project file. */
+const WRITES: ReadonlySet<Op> = new Set([
+  Op.Save,
+  Op.Remove,
+  Op.RemoveRange,
+  Op.WriteProjection,
+  Op.WriteProjectionAt,
+  Op.SetSyncPoint,
+  Op.PutBlob,
+]);
 
 const textDecoder = new TextDecoder();
 const textEncoder = new TextEncoder();
@@ -64,6 +78,7 @@ export class GoStorageAdapter implements StorageAdapterInterface {
   #conn: Promise<SocketLike> | undefined;
   #pending = new Map<number, Pending>();
   #external = new Set<(rel: string) => void>();
+  #leaving = new Set<() => void>();
   #nextId = 0;
 
   constructor(open: () => SocketLike) {
@@ -179,6 +194,17 @@ export class GoStorageAdapter implements StorageAdapterInterface {
     return () => this.#external.delete(cb);
   }
 
+  /**
+   * Calls `cb` each time Go refuses a request because the session is leaving (a project change was
+   * requested, rule N-16), and each time Go ends the stream with a write still unanswered (its
+   * drain may close the stream before the refusal is out): what was sent is not saved, as far as
+   * the page knows. Returns an unsubscribe.
+   */
+  onLeaving(cb: () => void): () => void {
+    this.#leaving.add(cb);
+    return () => this.#leaving.delete(cb);
+  }
+
   /** Closes the stream; requests still waiting fail. */
   close(): void {
     const conn = this.#conn;
@@ -195,7 +221,9 @@ export class GoStorageAdapter implements StorageAdapterInterface {
       socket.onopen = () => resolve(socket);
       socket.onclose = () => {
         if (this.#conn === conn) this.#conn = undefined; // the next request reconnects
+        const lostWrite = [...this.#pending.values()].some((p) => p.write);
         this.#failAll(new StoreError("store stream closed"));
+        if (lostWrite) for (const cb of this.#leaving) cb();
         reject(new StoreError("store stream closed"));
       };
     });
@@ -225,6 +253,7 @@ export class GoStorageAdapter implements StorageAdapterInterface {
     const pending = this.#pending.get(r.id);
     if (!pending) return;
     this.#pending.delete(r.id);
+    if (isLeaving(r)) for (const cb of this.#leaving) cb();
     pending.resolve(r);
   }
 
@@ -239,7 +268,7 @@ export class GoStorageAdapter implements StorageAdapterInterface {
     this.#nextId = (this.#nextId % 0xffffffff) + 1; // never 0: that id is Go's pushes
     const id = this.#nextId;
     const reply = new Promise<Response>((resolve, reject) => {
-      this.#pending.set(id, { resolve, reject });
+      this.#pending.set(id, { resolve, reject, write: WRITES.has(op) });
     });
     try {
       socket.send(encodeRequest({ id, op, key, data }));
@@ -249,6 +278,10 @@ export class GoStorageAdapter implements StorageAdapterInterface {
     }
     return reply;
   }
+}
+
+function isLeaving(r: Response): boolean {
+  return r.status === Status.Error && textDecoder.decode(r.payload) === REASON_LEAVING;
 }
 
 function expectOk(r: Response): void {

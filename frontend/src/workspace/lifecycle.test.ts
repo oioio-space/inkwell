@@ -47,6 +47,7 @@ vi.mock("../net/WailsNetworkAdapter", () => ({
 vi.mock("../store/GoStorageAdapter", () => ({
   GoStorageAdapter: class {
     onExternal() {}
+    onLeaving() {}
     close() {}
   },
 }));

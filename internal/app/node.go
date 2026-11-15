@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 
+	"github.com/oioio-space/inkwell/internal/bridge"
 	"github.com/oioio-space/inkwell/internal/identity"
 	"github.com/oioio-space/inkwell/internal/invite"
 	"github.com/oioio-space/inkwell/internal/project"
@@ -130,6 +131,12 @@ type Options struct {
 	// ExportChoose asks the person where to save an exported PDF (see
 	// [PreviewOptions.Choose]); nil turns the export off.
 	ExportChoose func(name string) (string, error)
+	// AfterChange is set when this process image was started by the restart of a project
+	// change: [Session.StartupNotice] then says, once, how it went.
+	AfterChange bool
+	// CanRestart is set where the process can restart itself on the same folder: a take-over is
+	// offered and accepted only there (residual R-8 of the PC1 plan).
+	CanRestart bool
 }
 
 // NoCodes as [Options.RendezvousURL] turns the short codes off: invitations
@@ -150,9 +157,13 @@ type Runtime struct {
 	Files *Files
 	// Preview compiles the project and streams the result to the webview.
 	Preview *Preview
+	// Bridge is drained by a project change before anything is written (rule N-16): the store
+	// and net servers of the webview use it.
+	Bridge *bridge.Drain
 
 	wiring *Wiring
 	inv    *invites
+	chg    *change
 	cancel context.CancelFunc
 	files  sync.WaitGroup
 	// closeBook releases the address book's directory, once the node is closed.
@@ -209,6 +220,8 @@ func Start(ctx context.Context, home *os.Root, o Options) (*Runtime, error) {
 	inv := newInvites(ctx, node, w, dev, list, store, c, log)
 	s := NewSession(node)
 	s.inv = inv
+	s.chg = newChange(o.AfterChange, o.CanRestart)
+	s.proj = o.Project
 	fctx, cancel := context.WithCancel(ctx)
 	// Acquire this process's snapshot lease and reclaim abandoned sessions at startup.
 	_, _ = sourceSnapshotPool()
@@ -220,7 +233,7 @@ func Start(ctx context.Context, home *os.Root, o Options) (*Runtime, error) {
 		Log:      log,
 	})
 	files.SetOnWrite(pv.Changed)
-	r := &Runtime{Node: node, Session: s, Repo: w.Repo(), Files: files, Preview: pv, wiring: w, inv: inv, cancel: cancel, closeBook: closeBook}
+	r := &Runtime{Node: node, Session: s, Repo: w.Repo(), Files: files, Preview: pv, Bridge: s.chg.drain, wiring: w, inv: inv, chg: s.chg, cancel: cancel, closeBook: closeBook}
 	r.files.Go(func() {
 		if err := files.Run(fctx); fctx.Err() == nil && !errors.Is(err, transport.ErrClosed) {
 			log.Error("blob service stopped", "err", err)
@@ -229,10 +242,16 @@ func Start(ctx context.Context, home *os.Root, o Options) (*Runtime, error) {
 	return r, nil
 }
 
-// Close stops the blob service, the wiring and the node. It is idempotent.
+// Close stops the blob service, the wiring and the node. It is idempotent. A recorded project
+// change is written here, once the wiring, the lobby, the invitation host, the joins and the blob
+// service have stopped, and before the member-list store closes (rule N-13).
 func (r *Runtime) Close() error {
 	r.cancel()
 	r.Preview.Close()
 	r.files.Wait()
-	return errors.Join(r.wiring.Close(), r.inv.close(), r.Files.Close(), r.closeBook()) // in this order
+	werr := r.wiring.Close()
+	r.inv.stop()
+	ferr := r.Files.Close()
+	cerr := r.inv.finishChange(r.chg)
+	return errors.Join(werr, ferr, cerr, r.inv.close(), r.closeBook()) // in this order
 }

@@ -19,6 +19,8 @@ import unittest
 from unittest import mock
 
 SCRIPTS = pathlib.Path(__file__).resolve().parent
+# Rule G-1: a gate written after it carries a deadline.
+DEADLINE = "max_minutes = 45\n"
 
 
 def git(root, *args):
@@ -49,7 +51,7 @@ class Nested(unittest.TestCase):
         (self.root / "sentinel").mkdir()
         (self.root / ".gitignore").write_text("/sentinel/\n/gates/*/*\n!/gates/*/*.md\n/gates/*.json\n")
         # The nested lot N leaves a sentinel when (and only when) its criterion runs.
-        (self.root / "gates/N.toml").write_text(criterion("n", "touch sentinel/N"))
+        (self.root / "gates/N.toml").write_text(DEADLINE + criterion("n", "touch sentinel/N"))
         git(self.root, "init", "-q", "-b", "main")
         git(self.root, "add", "-A")
         git(self.root, "commit", "-q", "-m", "base")
@@ -74,7 +76,7 @@ class Nested(unittest.TestCase):
         return f"INKWELL_GATE_ROOT={self.root} {sys.executable} -I {self.runner / 'gate.py'} {lot}"
 
     def parent(self, *commands):
-        (self.root / "gates/P.toml").write_text("".join(criterion(f"p{i}", c) for i, c in enumerate(commands)))
+        (self.root / "gates/P.toml").write_text(DEADLINE + "".join(criterion(f"p{i}", c) for i, c in enumerate(commands)))
 
     def run_gate(self, lot="P", gate=None, **kwargs):
         return (gate or self.gate).run(lot, self.root, pins=self.pins, guard=False, **kwargs)
@@ -199,10 +201,10 @@ class Nested(unittest.TestCase):
         self.assertEqual({k: rows[0][k] for k in ("lot", "from_gate", "criterion", "commit")},
                          {"lot": "N", "from_gate": "P", "criterion": "p0", "commit": head})
         self.assertIn("date", rows[0])
-        (self.root / "gates/N.toml").write_text(criterion("n", "touch sentinel/N; exit 1"))
+        (self.root / "gates/N.toml").write_text(DEADLINE + criterion("n", "touch sentinel/N; exit 1"))
         self.assertEqual(self.run_gate("N"), 1)
         self.assertEqual(len(self.open_ledger()), 1, "a failing run closed the obligation")
-        (self.root / "gates/N.toml").write_text(criterion("n", "touch sentinel/N"))
+        (self.root / "gates/N.toml").write_text(DEADLINE + criterion("n", "touch sentinel/N"))
         self.assertEqual(self.run_gate("N"), 0)
         self.assertEqual(self.open_ledger(), [])
         closed = self.ledger()[0]

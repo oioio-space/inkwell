@@ -31,12 +31,18 @@ import (
 // effects of the shipped binary) with the arguments of $INKWELL_CHILD_ARGS, one per line.
 const childEnv = "INKWELL_CMD_CHILD"
 
+// childModes are the helper modes registered by the platform's test files.
+var childModes = map[string]func() int{}
+
 func TestMain(m *testing.M) {
 	switch os.Getenv(childEnv) {
 	case "primary":
 		os.Exit(primaryChild())
 	case "second":
 		os.Exit(startup(strings.Split(os.Getenv("INKWELL_CHILD_ARGS"), "\n"), liveDeps(nil)))
+	}
+	if mode, ok := childModes[os.Getenv(childEnv)]; ok {
+		os.Exit(mode())
 	}
 	os.Exit(m.Run())
 }
@@ -276,10 +282,11 @@ func TestSecondLaunchForwardsArgsAndCwd(t *testing.T) {
 // fakeDeps are deps whose effects fail the test unless the test replaces them.
 func fakeDeps(t *testing.T, env map[string]string) deps {
 	return deps{
-		stdout: io.Discard,
-		log:    slog.New(slog.DiscardHandler),
-		getenv: func(k string) string { return env[k] },
-		getwd:  func() (string, error) { return "/home/ana", nil },
+		stdout:   io.Discard,
+		log:      slog.New(slog.DiscardHandler),
+		getenv:   func(k string) string { return env[k] },
+		unsetenv: func(string) error { return nil },
+		getwd:    func() (string, error) { return "/home/ana", nil },
 		homeDir: func() (string, error) {
 			return t.TempDir(), nil
 		},
@@ -290,11 +297,13 @@ func fakeDeps(t *testing.T, env map[string]string) deps {
 		notify:      func(m message) { t.Fatalf("unexpected notification %q", m.title) },
 		openHome:    func() (*os.Root, error) { t.Fatal("identity opened"); return nil, nil },
 		openProject: func(instance.Request) (*project.Project, error) { t.Fatal("project opened"); return nil, nil },
-		startNetwork: func(context.Context, *os.Root, *project.Project) (*app.Runtime, error) {
+		startNetwork: func(context.Context, *os.Root, *project.Project, bool) (*app.Runtime, error) {
 			t.Fatal("network started")
 			return nil, nil
 		},
-		window: func(context.Context, *session) int { t.Fatal("window opened"); return 0 },
+		window:           func(context.Context, *session) int { t.Fatal("window opened"); return 0 },
+		restartRequested: func(*app.Runtime) bool { t.Fatal("restart asked"); return false },
+		restart:          func(string) error { t.Fatal("restarted"); return nil },
 	}
 }
 
@@ -378,7 +387,7 @@ func primaryDeps(t *testing.T, steps *[]string) deps {
 		*steps = append(*steps, "project")
 		return project.Create(docs, "Essai", "")
 	}
-	d.startNetwork = func(context.Context, *os.Root, *project.Project) (*app.Runtime, error) {
+	d.startNetwork = func(context.Context, *os.Root, *project.Project, bool) (*app.Runtime, error) {
 		*steps = append(*steps, "network")
 		return nil, errors.New("stop here")
 	}

@@ -41,7 +41,13 @@ let {
   .warning {
     background: var(--warning-bg);
   }
+  .msg {
+    min-width: 0;
+  }
+  /* In a narrow window an action never leaves the strip: its label wraps, a long word breaks. */
   .banner :global(.btn) {
     min-height: 32px;
+    max-width: 100%;
+    overflow-wrap: anywhere;
   }
 </style>

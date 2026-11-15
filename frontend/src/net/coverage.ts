@@ -199,6 +199,11 @@ export class Coverage {
     };
   }
 
+  /** The signers whose attestations are held, for tests and diagnostics. */
+  get signers(): string[] {
+    return [...this.#bySigner.keys()];
+  }
+
   /**
    * `signer`, a current writer (Go verified the signature and the role), attested `heads` of
    * document `doc`. Only here does a document get state; past the limits the attestation is not

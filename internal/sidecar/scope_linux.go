@@ -94,6 +94,26 @@ func init() {
 	os.Exit(0)
 }
 
+// Shutdown ends the sandbox session of the process: its holder exits at once when no workload
+// runs, else when the last one ends; a later run sets up a new session. The shutdown of a process
+// image calls it, so that the holder does not outlive the image (rule N-14 of
+// docs/plans/2026-11-14-pc1-project-change-by-restart.md).
+func Shutdown() { appSandbox.shutdown() }
+
+func (m *SandboxScope) shutdown() {
+	m.mu.Lock()
+	defer m.mu.Unlock()
+	s := m.session
+	if s == nil {
+		return
+	}
+	m.session = nil
+	s.stale = true
+	if s.refs == 0 {
+		closeSession(s)
+	}
+}
+
 func (m *SandboxScope) step(name string) error {
 	if m.fault != nil {
 		return m.fault(name)

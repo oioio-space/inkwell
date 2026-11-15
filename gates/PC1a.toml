@@ -98,7 +98,9 @@ id = "regression"
 # Changed on the user's word (2026-11-15, gates/<block>/WITNESSES.md): the whole Vitest suite takes 307 s alone, past
 # the 180 s cap; the frontend part is Biome, svelte-check and the Vitest tests related to the files the block
 # changed since it left main (method v2: acceptance on the touched packages; the whole suite runs in `mise run ci`).
-command = '''base=$(git merge-base HEAD main) && timeout -k 10 30 mise run fe:bindings && cd frontend && timeout -k 10 180 ../scripts/heavy.sh sh -c "pnpm exec biome check . && pnpm exec svelte-check --tsconfig ./tsconfig.json && pnpm exec vitest run --configLoader runner --changed $base" && cd .. && timeout -k 10 300 ./scripts/heavy.sh mise run e2e -- e2e/join.spec.ts e2e/collab.spec.ts e2e/people.spec.ts'''
+# Narrowed the same day: `--changed` followed imports and re-ran nearly the whole suite (workspace.svelte.ts is imported
+# everywhere, 180 s cap reached); the Vitest part is the test files the block itself added or modified.
+command = '''base=$(git merge-base HEAD main) && files=$(git diff --name-only --diff-filter=d "$base" -- frontend/src | grep -E '[.]test[.]ts$' | sed 's#^frontend/##' | tr '\n' ' ') && timeout -k 10 30 mise run fe:bindings && cd frontend && timeout -k 10 180 ../scripts/heavy.sh sh -c "pnpm exec biome check . && pnpm exec svelte-check --tsconfig ./tsconfig.json && { [ -z '$files' ] || pnpm exec vitest run --configLoader runner $files; }" && cd .. && timeout -k 10 300 ./scripts/heavy.sh mise run e2e -- e2e/join.spec.ts e2e/collab.spec.ts e2e/people.spec.ts'''
 
 [[criteria]]
 # N-14 natively on the server binary: no descendant, listening socket or descriptor reaches the new image.

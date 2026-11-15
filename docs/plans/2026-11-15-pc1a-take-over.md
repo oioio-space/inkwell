@@ -22,7 +22,7 @@ W58a removes the take-over code written for revision 6; this block writes it aga
 (`Session.TakeOver` → `TakeOverResult{Restarting}`), `finishTakeOver` in `Runtime.Close`, `archive` and `copyOps`
 (their tests `TestTakeOverArchivesOldList`, `…LeavesTextAndFilesIdentical`, `…CrashAtEachStep`, `…NoOpForMember`,
 `…IdDiffersFromOwnProject` come back from the revision-6 tree, kept under `gates/W58/` history in git), the banner's
-second action and its confirmation, `cmd/inkwell/startup.go` with `restart_unix.go` and `restart_other.go`,
+second action and its confirmation, `cmd/inkwell/startup.go` with `restart_linux.go` and `restart_other.go`,
 `Session.StartupID` and `Session.StartupNotice`, `.env.reference` (`INKWELL_AFTER_TAKEOVER`), the Go mutants below,
 the e2e that follows the restart by the startup id, and a new walkthrough.
 
@@ -37,11 +37,11 @@ et partager ce document. Les personnes qui le partageaient ne seront plus relié
 nouvelle invitation. Le texte et les fichiers ne changent pas. » · `foreign.takeOver.busy` « Inkwell redémarre… » · `change.flushFailed` « Le document n'a pas pu être enregistré. Rien n'a changé. » ·
 `foreign.takeOver.done` « Ce document est maintenant le vôtre sur cet appareil. » · `foreign.takeOver.failed` « Le
 document n'a pas pu être repris. Rien n'a changé. » · Go notification (French, English): « Inkwell s'est fermé sans
-pouvoir redémarrer. Ouvrez-le de nouveau. »
+pouvoir redémarrer. Ouvrez-le de nouveau. »; the restart page says the same sentence when it gives up (`change.restartFailed`, UX-PC1a-2).
 
 Budget (Codex round 2, decision D-B): the gate file carries `max_minutes = 45`; `scripts/gate.py` refuses to start a
 gate whose `timeout` caps sum past it and stops the whole run at that deadline (rule G-1 below). The caps: go 5,
-gate-deadline 1, mutant-tool 1, mutants 12 (eleven mutants, about one minute each with the named test only), frontend
+gate-deadline 1, mutant-tool 1, mutants 12 (fifteen mutants: MW14 and MW15 added at implementation, MW16 and MW17 with the fix of UX-PC1a-1, with the named test only; wall time measured in `gates/PC1a/SIMPLIFY.md`), frontend
 3, e2e 4 + 5 (build, run), regression 3 + 5, restart-barrier 2, tla 3 min 20 s (the 23 model runs measured at 132 s); 44 min 20 s in all,
 40 s left for the uncapped text checks. The smoke measures each; a cap that does not hold splits the block, it is never raised past the total.
 
@@ -58,3 +58,8 @@ part is Biome, svelte-check and `vitest run --changed <merge-base with main>` (t
 block changed), capped at 180 s, plus 30 s for the bindings; the e2e part is unchanged. Reason: the whole Vitest suite
 takes 307 s alone on an idle machine (measured 2026-11-15), past the cap and the gate's 45 minutes; method v2 accepts
 on the touched packages and the whole suite runs in `mise run ci` at every push. Caps now sum to 2690 s of 2700 s.
+
+Narrowed the same day after the first full gate run: `--changed` follows imports, and this block changes files nearly
+every test imports, so it re-ran almost the whole suite and hit the 180 s cap. The Vitest part is now the test files
+the block itself added or modified (measured: 73 tests, 6.7 s with Biome and svelte-check). Same intent as the user's
+decision (the tests of the touched parts); the whole suite runs in `mise run ci`.

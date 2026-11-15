@@ -58,7 +58,7 @@ func startOn(t *testing.T, proj *project.Project) *Runtime {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = home.Close() })
-	rt, err := Start(t.Context(), home, Options{Project: proj, RendezvousURL: NoCodes, LANService: testLANService})
+	rt, err := Start(t.Context(), home, Options{Project: proj, RendezvousURL: NoCodes, LANService: testLANService, CanRestart: true})
 	if err != nil {
 		t.Fatal(err)
 	}

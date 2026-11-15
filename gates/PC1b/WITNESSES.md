@@ -34,3 +34,8 @@ The user accepted the integrator's recommendation: in `regression`, the frontend
 `vitest run --changed <merge-base with main>` (the tests related to the files the block changed), capped at 180 s,
 plus 30 s for the bindings; the e2e part is unchanged. Caps now sum to 2690 s of the 2700 s allowed. The whole
 suite still runs in `mise run ci` at every push. No other criterion changed.
+
+Narrowed the same day after the first full gate run: `--changed` follows imports, and this block changes files nearly
+every test imports, so it re-ran almost the whole suite and hit the 180 s cap. The Vitest part is now the test files
+the block itself added or modified (measured: 73 tests, 6.7 s with Biome and svelte-check). Same intent as the user's
+decision (the tests of the touched parts); the whole suite runs in `mise run ci`.

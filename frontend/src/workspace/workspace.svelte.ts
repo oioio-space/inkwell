@@ -28,6 +28,7 @@ import {
   sendingCount,
 } from "../net/syncIndicator";
 import { type SocketLike, WailsNetworkAdapter } from "../net/WailsNetworkAdapter";
+import { markLeave } from "../restart/mark";
 import { ExternalSync, type Notice } from "../store/externalSync";
 import { type FileInfo, FileKind, type ProjectFile } from "../store/files";
 import { ExternalEditError, GoStorageAdapter, NotTextError } from "../store/GoStorageAdapter";
@@ -38,7 +39,7 @@ import { settings } from "../store/settings.svelte";
 import { notice } from "../ui/notice.svelte";
 import { accessOf, type Member, type Standing } from "../ui/people/roster";
 import { BootstrapLoader } from "./loader";
-import { observeVariantHeads } from "./observe";
+import { observeSession, observeVariantHeads } from "./observe";
 
 /** The project's text, and what the history keeps beside it (named versions, variants, actors). */
 export type Doc = { text: string; meta?: Meta };
@@ -88,6 +89,9 @@ export function assetFetch(url: string, method: "GET" | "HEAD" = "GET"): Promise
 const WATCH_MS = 2000;
 
 type Opened = { text?: string; image?: string; failed?: boolean };
+
+/** How long the page waits for its edits to be saved before it leaves for a project change (rule N-15). */
+export const LEAVE_FLUSH_MS = 5000;
 
 class Workspace {
   peers = $state<string[]>([]);
@@ -145,6 +149,11 @@ class Workspace {
    * Go has answered. Asked again whenever the roles event arrives.
    */
   standing = $state<Standing | undefined>();
+  /**
+   * Whether Go can take a document over here (`Session.CanTakeOver`): only where Inkwell can
+   * restart itself (PC1, residual R-8). Asked with the standing.
+   */
+  canTakeOver = $state(false);
   /**
    * True from a successful join until the member list names this device: in a copy of the project
    * the list arrives by sync (seconds, more on a bad network), and the banner says so meanwhile.
@@ -297,6 +306,59 @@ class Workspace {
   #generation = 0;
   #offScope: (() => void) | undefined;
 
+  /**
+   * True from the confirmation of a project change until the page has left, or until its edits
+   * could not be saved: the text is read-only meanwhile (PC1, rule N-15).
+   */
+  leaving = $state(false);
+
+  /**
+   * Leaves this page for the one at `to` before a project change is asked of Go (PC1, rule N-15):
+   * the text becomes read-only, the edits and the pending file write are saved (at most
+   * {@link LEAVE_FLUSH_MS}), the repo is closed (the same time at most), then the page is replaced. This page asks Go for
+   * nothing: the next one does. When the edits cannot be saved in time, nothing is sent, the text
+   * is unlocked and the person is told; the answer is then false. Best effort: what makes sure no
+   * write is lost or misapplied is Go's drain (rule N-16).
+   */
+  async leave(
+    to: string,
+    navigate: (url: string) => void = (url) => location.replace(url),
+  ): Promise<boolean> {
+    if (this.leaving) return false;
+    this.leaving = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        Promise.all([
+          this.#repo?.flush(),
+          settings.saveMode === "manual" ? undefined : this.#projection?.flush(),
+        ]),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => reject(new Error("flush deadline")), LEAVE_FLUSH_MS);
+        }),
+      ]);
+    } catch {
+      this.leaving = false;
+      notice.show(t("change.flushFailed"), "alert");
+      return false;
+    } finally {
+      clearTimeout(timer);
+    }
+    // The context goes with the navigation whatever the close says, and however long it takes:
+    // Go drains the bridge anyway.
+    let closing: ReturnType<typeof setTimeout> | undefined;
+    await Promise.race([
+      this.stop().catch(() => undefined),
+      new Promise<void>((resolve) => {
+        closing = setTimeout(resolve, LEAVE_FLUSH_MS);
+      }),
+    ]);
+    clearTimeout(closing);
+    markLeave(); // the next page asks Go only after this confirmed leave (rule N-9)
+    navigate(to);
+    return true;
+  }
+
   async stop(): Promise<void> {
     this.#generation++;
     this.#openTicket++;
@@ -359,6 +421,9 @@ class Workspace {
       if (this.#sync) this.#sync.notify(name);
       else this.#early.push(name);
     });
+    // Go took a project change while this page still wrote: the write is refused, never lost in
+    // silence (PC1, rule N-16).
+    storage.onLeaving(() => notice.show(t("change.flushFailed"), "alert"));
     this.#storage = storage;
     const repo = new Repo({
       peerId: id as PeerId,
@@ -383,6 +448,10 @@ class Workspace {
     observeVariantHeads(
       () => this.handle,
       () => this.#repo,
+    );
+    observeSession(
+      () => Session.StartupID(),
+      () => ({ signers: adapter.attestedSigners, peers: [...this.peers] }),
     );
     const saved = (await Projects.Current()).RootURL;
     if (generation !== this.#generation) return;
@@ -632,10 +701,11 @@ class Workspace {
   /**
    * Whether the text cannot be changed now (W58a, N-3): until the rights are known, for every
    * project, so nothing typed before Go answers is saved or sent; then for whoever has an
-   * {@link access} reason. A locked editor still shows, selects and copies its text.
+   * {@link access} reason, and while the page leaves for a project change (PC1, N-15). A locked
+   * editor still shows, selects and copies its text.
    */
   get locked(): boolean {
-    return !this.rightsKnown || this.access !== undefined;
+    return this.leaving || !this.rightsKnown || this.access !== undefined;
   }
 
   /**
@@ -660,9 +730,13 @@ class Workspace {
   async refreshStanding(): Promise<void> {
     const ticket = ++this.#standingTicket;
     try {
-      const standing = (await Session.Standing()) as Standing;
+      const [standing, canTakeOver] = await Promise.all([
+        Session.Standing() as Promise<Standing>,
+        Session.CanTakeOver(),
+      ]);
       if (ticket !== this.#standingTicket) return;
       this.standing = standing;
+      this.canTakeOver = canTakeOver;
       if (standing === "member") this.listPending = false;
     } catch {
       // Go does not answer (no project yet): the standing stays as it was.

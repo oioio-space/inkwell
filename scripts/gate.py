@@ -27,6 +27,7 @@ import pathlib
 import platform
 import re
 import shutil
+import signal
 import subprocess
 import sys
 import tempfile
@@ -311,6 +312,101 @@ def take_nested(root, lot, out):
     return obligations, ("invalid nested deferral: " + ", ".join(map(repr, bad))) if bad else None
 
 
+# Rule G-1 (docs/plans/2026-11-15-pc1a-take-over.md): a gate has a deadline, max_minutes, that its criteria's
+# `timeout` caps fit in; the gates written before the rule are listed, and the list is closed.
+LEGACY_NO_DEADLINE = "gates/legacy-no-deadline.txt"
+CAP = re.compile(r"\btimeout\s+(?:-k\s+\S+\s+)?(\d+(?:\.\d+)?)([smhd]?)(?=\s)")
+UNIT_SECONDS = {"": 1, "s": 1, "m": 60, "h": 3600, "d": 86400}
+KILL_GRACE_SECONDS = 10
+# The deadline's clock, replaced by the tests.
+clock = time.monotonic
+
+
+def criterion_caps(command):
+    """Seconds of every `timeout [-k K] N` cap in a criterion's command, summed."""
+    return sum(float(n) * UNIT_SECONDS[unit] for n, unit in CAP.findall(command))
+
+
+def legacy_gates(root):
+    path = root / LEGACY_NO_DEADLINE
+    lines = path.read_text().splitlines() if path.exists() else []
+    return {line.strip() for line in lines if line.strip() and not line.startswith("#")}
+
+
+def deadline_problem(lot, config, root):
+    """Why the gate may not start (no max_minutes and not legacy, or caps past it), or None."""
+    if "max_minutes" not in config:
+        return None if lot in legacy_gates(root) else \
+            f"gates/{lot}.toml has no max_minutes and is not listed in {LEGACY_NO_DEADLINE}"
+    limit = config["max_minutes"] * 60
+    caps = sum(criterion_caps(c.get("command", "")) for c in config["criteria"])
+    return None if caps <= limit else \
+        f"the timeout caps of gates/{lot}.toml sum to {caps:g} s, past max_minutes = {config['max_minutes']} ({limit:g} s)"
+
+
+def process_groups(leader):
+    """The process groups of `leader`'s tree: its own and those its descendants made (`timeout` makes one)."""
+    table = subprocess.run(["ps", "-A", "-o", "pid=,ppid=,pgid="], capture_output=True, text=True).stdout
+    rows = [tuple(map(int, line.split())) for line in table.splitlines() if len(line.split()) == 3]
+    tree, groups = {leader}, {leader}
+    while grown := {pid for pid, ppid, _ in rows if ppid in tree} - tree:
+        tree |= grown
+    groups.update(pgid for pid, _, pgid in rows if pid in tree)
+    return groups
+
+
+def signal_groups(groups, sig):
+    """Signals each group; returns those still present."""
+    alive = set()
+    for group in groups:
+        try:
+            os.killpg(group, sig)
+            alive.add(group)
+        except ProcessLookupError:
+            pass
+    return alive
+
+
+def run_until(command, deadline, **kwargs):
+    """Runs a criterion's shell command; returns its exit code, or None when the deadline (a clock() value) stopped
+    it: SIGTERM to the groups of its tree, SIGKILL KILL_GRACE_SECONDS later. Without a deadline (a legacy gate) it
+    runs as before, in the runner's group."""
+    p = subprocess.Popen(command, shell=True, start_new_session=deadline is not None, **kwargs)
+    try:
+        return p.wait(None if deadline is None else max(0, deadline - clock()))
+    except subprocess.TimeoutExpired:
+        pass
+    except BaseException:
+        # Ctrl-C or any error of the runner: in its own session the criterion would outlive the runner.
+        if deadline is not None:
+            stop_tree(p)
+        raise
+    stop_tree(p)
+    return None
+
+
+def stop_tree(p):
+    """SIGTERM to the groups of p's tree, SIGKILL KILL_GRACE_SECONDS later; reaps p."""
+    # Taken before the signal: a dying parent's children are re-parented out of reach.
+    groups = signal_groups(process_groups(p.pid), signal.SIGTERM)
+    grace = time.monotonic() + KILL_GRACE_SECONDS
+    while groups and time.monotonic() < grace:
+        p.poll()  # reaps the leader, so a zombie does not hold its group
+        time.sleep(0.1)
+        groups = signal_groups(groups, 0)
+    signal_groups(groups, signal.SIGKILL)
+    p.wait()
+
+
+DEADLINE = "deadline"
+
+
+def stop_at_deadline(entries, c, **fields):
+    entries.append(dict(id=c["id"], command=c.get("command", ""), status=DEADLINE,
+                        problem="stopped or not run: the gate reached its max_minutes", **fields))
+    print(c["id"], DEADLINE, flush=True)
+
+
 def _now():
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
@@ -382,6 +478,10 @@ def run(lot, root=ROOT, pins=None, guard=True, resume=False):
     ids = [c["id"] for c in config["criteria"]]
     if len(set(ids)) != len(ids) or any(not NAME.fullmatch(i) for i in ids):
         raise ValueError("invalid or duplicate criterion IDs")
+    problem = deadline_problem(lot, config, root)
+    if problem:
+        raise ValueError(problem)
+    deadline = clock() + config["max_minutes"] * 60 if "max_minutes" in config else None
     context = resume_context(root)
     if resume:
         # Only intact records and their evidence survive; everything else is stale (never hashed as evidence).
@@ -408,6 +508,9 @@ def run(lot, root=ROOT, pins=None, guard=True, resume=False):
                                 problem="not run: the base guard failed (see base-guard.log)"))
             print(c["id"], "fail", "not run: base guard failed", flush=True)
             continue
+        if deadline is not None and clock() >= deadline:
+            stop_at_deadline(entries, c)
+            continue
         if c.get("status") == "deferred":
             problem = deferral_problem(c, lot, root)
             entries.append(dict(c, status="fail", problem=problem) if problem else dict(c))
@@ -431,11 +534,15 @@ def run(lot, root=ROOT, pins=None, guard=True, resume=False):
         before = snapshot(root, out)
         start = time.monotonic()
         with log.open("wb") as stream:
-            p = subprocess.run(c["command"], shell=True, cwd=root, stdout=stream, stderr=subprocess.STDOUT,
-                               env=dict(os.environ, INKWELL_PERF_OUT=str(out), INKWELL_GATE_CRITERION=c["id"],
-                                        INKWELL_GATE_PARENT=lot, INKWELL_GATE_PARENT_OUT=str(out)))
-        entry = dict(id=c["id"], command=c["command"], status="pass" if p.returncode == 0 and c.get("status") != "fail" else "fail",
-                     exit_code=p.returncode, duration_seconds=time.monotonic()-start,
+            code = run_until(c["command"], deadline, cwd=root, stdout=stream, stderr=subprocess.STDOUT,
+                             env=dict(os.environ, INKWELL_PERF_OUT=str(out), INKWELL_GATE_CRITERION=c["id"],
+                                      INKWELL_GATE_PARENT=lot, INKWELL_GATE_PARENT_OUT=str(out)))
+        if code is None:
+            # Interrupted: no record, as for any interrupted criterion; the rest is not run.
+            stop_at_deadline(entries, c, log=str(log.relative_to(root)), duration_seconds=time.monotonic()-start)
+            continue
+        entry = dict(id=c["id"], command=c["command"], status="pass" if code == 0 and c.get("status") != "fail" else "fail",
+                     exit_code=code, duration_seconds=time.monotonic()-start,
                      log=str(log.relative_to(root)))
         # scripts/heavy.sh --exclusive records each isolated measurement step.
         records = [r for r in exclusive_records(out) if r["criterion"] == c["id"]]
@@ -466,7 +573,7 @@ def run(lot, root=ROOT, pins=None, guard=True, resume=False):
         files.extend(root.glob(pattern))
     hashes = {str(p.relative_to(root)): hashlib.sha256(p.read_bytes()).hexdigest()
               for p in sorted(set(files)) if p.is_file()}
-    failed = any(e["status"] == "fail" for e in entries) or (guard_record or {}).get("status") == "fail"
+    failed = any(e["status"] in ("fail", DEADLINE) for e in entries) or (guard_record or {}).get("status") == "fail"
     manifest = dict(lot=lot, criteria=entries, versions=context["tools"], sha256=hashes,
         status="fail" if failed else "pass",
         deferrals=[e for e in entries if e["status"] == "deferred"],

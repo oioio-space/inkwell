@@ -1469,5 +1469,251 @@ why = "InviteDevice answers the refusal of a device as an error instead of a key
 
 [[mutant.edit]]
 file = "internal/app/session.go"
-before = "func (s *Session) InviteDevice() (Invitation, error) {\n\tif s.inv == nil {\n\t\treturn Invitation{}, errNoProject\n\t}\n\tif key := s.inv.refusal(); key != \"\" {\n\t\treturn Invitation{Refused: key}, nil"
-after = "func (s *Session) InviteDevice() (Invitation, error) {\n\tif s.inv == nil {\n\t\treturn Invitation{}, errNoProject\n\t}\n\tif key := s.inv.refusal(); key != \"\" {\n\t\treturn Invitation{}, errors.New(key)"
+before = "func (s *Session) InviteDevice() (Invitation, error) {\n\tif err := s.leaving(); err != nil {\n\t\treturn Invitation{}, err\n\t}\n\tif key := s.inv.refusal(); key != \"\" {\n\t\treturn Invitation{Refused: key}, nil"
+after = "func (s *Session) InviteDevice() (Invitation, error) {\n\tif err := s.leaving(); err != nil {\n\t\treturn Invitation{}, err\n\t}\n\tif key := s.inv.refusal(); key != \"\" {\n\t\treturn Invitation{}, errors.New(key)"
+
+# PC1a, the shared restart rules N-12..N-16 (plan docs/plans/2026-11-14-pc1-project-change-by-restart.md).
+# MW3..MW7 (N-5..N-8) and MW9 (N-11) come with the take-over itself.
+[[mutant]]
+id = "MW8"
+block = "PC1a"
+kind = "go"
+pkg = "./cmd/inkwell/"
+test = "TestRestartAfterStopAllReturned"
+expect = "N-12 restart after the outcome"
+clause = "N-12 restart after the outcome"
+why = "runPrimary no longer stops the session once the window returned: the restart runs with the project and the network still open"
+
+[[mutant.edit]]
+file = "cmd/inkwell/startup.go"
+before = "\tcode := d.window(ctx, s)\n\ts.stop(d.log) // a no-op after the window's OnShutdown\n"
+after = "\tcode := d.window(ctx, s)\n"
+
+[[mutant]]
+id = "MW10"
+block = "PC1a"
+kind = "go"
+pkg = "./internal/app/"
+test = "TestNoTrustWriteNorSignatureOnceTheWriteStarts"
+expect = "N-13 nothing writes once the write starts"
+clause = "N-13 nothing writes once the write starts"
+why = "the change write runs before the lobby, the invitation host and the joins are stopped"
+
+[[mutant.edit]]
+file = "internal/app/node.go"
+before = "\tr.inv.stop()\n\tferr := r.Files.Close()\n\tcerr := r.inv.finishChange(r.chg)\n"
+after = "\tcerr := r.inv.finishChange(r.chg)\n\tr.inv.stop()\n\tferr := r.Files.Close()\n"
+
+[[mutant]]
+id = "MW11"
+block = "PC1a"
+kind = "go"
+pkg = "./cmd/inkwell/"
+test = "TestRestartBarrier"
+expect = "N-14 no child survives"
+clause = "N-14 no child survives"
+why = "shutdown leaves the language service running: its child outlives the image"
+
+[[mutant.edit]]
+file = "cmd/inkwell/startup.go"
+before = "\t\t\ts.language.Close() // its child ends before the network and the lock (rule N-14)\n"
+after = ""
+
+[[mutant]]
+id = "MW12"
+block = "PC1a"
+kind = "go"
+pkg = "./internal/app/"
+test = "TestChangeRequestFailsWhenDrainTimesOut"
+expect = "N-16 no write before the drain"
+clause = "N-16 no write before the drain"
+why = "the change write is recorded before the drain completes: a failed drain still writes the member list"
+
+[[mutant.edit]]
+file = "internal/app/change.go"
+before = "\tc.requested = true\n\tc.mu.Unlock()\n"
+after = "\tc.requested = true\n\tc.write = write\n\tc.mu.Unlock()\n"
+
+[[mutant]]
+id = "MW13"
+block = "PC1a"
+kind = "go"
+pkg = "./internal/app/"
+test = "TestRequestsRefusedOnceTakeOverRequested"
+expect = "N-13 one change per image"
+clause = "N-13 one change per image"
+why = "a second change request is accepted while the first one is recorded"
+
+[[mutant.edit]]
+file = "internal/app/change.go"
+before = "\tif c.requested {\n\t\tc.mu.Unlock()\n\t\treturn errLeaving\n\t}\n\tc.requested = true\n"
+after = "\tc.requested = true\n"
+
+[[mutant]]
+id = "MW14"
+block = "PC1a"
+kind = "go"
+pkg = "./internal/bridge/"
+test = "TestStorageWriteBeforeRequestLandsOrIsRefused"
+expect = "N-16 no lost write"
+clause = "N-16 no lost write"
+why = "the drain closes the streams without waiting for the requests in flight: a write lands without its reply"
+
+[[mutant.edit]]
+file = "internal/bridge/drain.go"
+before = "\terr := waitFor(ctx, &d.handlers)\n"
+after = "\tvar err error\n"
+
+[[mutant]]
+id = "MW15"
+block = "PC1a"
+kind = "go"
+pkg = "./cmd/inkwell/"
+test = "TestRestartBarrier"
+expect = "N-14 no child survives"
+clause = "N-14 no child survives"
+why = "shutdown leaves the sandbox holder of the sidecars running: it outlives the image"
+
+[[mutant.edit]]
+file = "cmd/inkwell/startup.go"
+before = "\t\t\tsidecar.Shutdown() // and so does the sandbox holder, once the previews are closed\n"
+after = "\t\t\t_ = sidecar.Shutdown // the import stays used: the mutant must compile\n"
+
+# MW16 and MW17: the fix of UX-PC1a-1 (2026-11-15): the barrier ends the children the session does not control.
+[[mutant]]
+id = "MW16"
+block = "PC1a"
+kind = "go"
+pkg = "./cmd/inkwell/"
+test = "TestRestartBarrier"
+expect = "N-14 remaining children are ended"
+clause = "N-14 remaining children are ended"
+why = "the barrier only waits for the remaining children instead of ending them: a helper the session does not control (the web view's) holds the restart until it fails"
+
+[[mutant.edit]]
+file = "internal/sidecar/endchildren_linux.go"
+before = "\t\tfor _, kid := range kids {\n"
+after = "\t\tfor _, kid := range kids[:0] {\n"
+
+[[mutant]]
+id = "MW17"
+block = "PC1a"
+kind = "go"
+pkg = "./internal/sidecar/"
+test = "TestEndChildren"
+expect = "N-14 remaining children are ended"
+clause = "N-14 remaining children are ended"
+why = "the process is no child subreaper: what an ended helper leaves behind goes to init and outlives the image"
+
+[[mutant.edit]]
+file = "internal/sidecar/endchildren_linux.go"
+before = "\tif err := unix.Prctl(unix.PR_SET_CHILD_SUBREAPER, 1, 0, 0, 0); err != nil {\n"
+after = "\tif err := unix.Prctl(unix.PR_SET_CHILD_SUBREAPER, 0, 0, 0, 0); err != nil {\n"
+
+# PC1a, the take-over itself: MW3..MW7 (N-5..N-8) and MW9 (N-11), plan docs/plans/2026-11-15-pc1a-take-over.md.
+# The ids MW3 and MW4 are also W58a's: mutants.py selects by block first, so each block runs its own.
+[[mutant]]
+id = "MW3"
+block = "PC1a"
+kind = "go"
+pkg = "./internal/app/"
+test = "TestTakeOverArchivesOldList"
+expect = "N-5 old list archived"
+clause = "N-5 old list archived"
+why = "the take-over replaces the member list without archiving it first"
+
+[[mutant.edit]]
+file = "internal/app/takeover.go"
+before = "\tif err := st.archive(at); err != nil {\n"
+after = "\tif err := error(nil); err != nil {\n"
+
+[[mutant]]
+id = "MW4"
+block = "PC1a"
+kind = "go"
+pkg = "./internal/app/"
+test = "TestTakeOverRequestWritesNothing"
+expect = "N-5 nothing written at the request"
+clause = "N-5 nothing written at the request"
+why = "the member list is archived and replaced at the request, while the session still runs"
+
+[[mutant.edit]]
+file = "internal/app/takeover.go"
+before = "\tif err := s.requestChange(ctx, write); err != nil {\n"
+after = "\tif err := errors.Join(write(s.inv.store), s.requestChange(ctx, write)); err != nil {\n"
+
+[[mutant]]
+id = "MW5"
+block = "PC1a"
+kind = "go"
+pkg = "./internal/app/"
+test = "TestTakeOverLeavesTextAndFilesIdentical"
+expect = "N-6 folder unchanged"
+clause = "N-6 folder unchanged"
+why = "the take-over rewrites project.json (its recorded root document)"
+
+[[mutant.edit]]
+file = "internal/app/takeover.go"
+before = "\twrite, err := s.inv.takeOver(s.proj.Meta())\n"
+after = "\twrite, err := s.inv.takeOver(s.proj.Meta())\n\t_ = s.proj.SetRootURL(s.proj.Meta().RootURL + \"0\")\n"
+
+[[mutant]]
+id = "MW6"
+block = "PC1a"
+kind = "go"
+pkg = "./internal/app/"
+test = "TestTakeOverFailureAtEachStep"
+expect = "N-7 archive is a copy"
+clause = "N-7 archive is a copy"
+why = "the archive moves the ops instead of copying them: a failure before the install loses the old list"
+
+[[mutant.edit]]
+file = "internal/app/takeover.go"
+before = "\t\tif err := store.WriteAtomic(dst, e.Name(), b, 0o600); err != nil {\n"
+after = "\t\tif err := errors.Join(store.WriteAtomic(dst, e.Name(), b, 0o600), s.root.Remove(e.Name())); err != nil {\n"
+
+[[mutant]]
+id = "MW7"
+block = "PC1a"
+kind = "go"
+pkg = "./internal/app/"
+test = "TestTakeOverIdDiffersFromOwnProject"
+expect = "N-8 distinct project"
+clause = "N-8 distinct project"
+why = "the genesis of the take-over has an empty root: its id is the one of a project this device created with the same title"
+
+[[mutant.edit]]
+file = "internal/app/takeover.go"
+before = "\troot := m.RootURL\n"
+after = "\troot := \"\"\n"
+
+[[mutant]]
+id = "MW9"
+block = "PC1a"
+kind = "go"
+pkg = "./internal/app/"
+test = "TestTakeOverNeverAdoptsBeforeShutdown"
+expect = "N-11 no adoption before shutdown"
+clause = "N-11 no adoption before shutdown"
+why = "the adoption moved into a helper that takeOver calls: the running session follows the new project (the text check of the gate does not see it)"
+
+[[mutant.edit]]
+file = "internal/app/invites.go"
+before = "\treturn func(st *opStore) error { return finishTakeOver(st, g, inv.now(), inv.log) }, nil\n"
+after = "\tinv.follow(g)\n\treturn func(st *opStore) error { return finishTakeOver(st, g, inv.now(), inv.log) }, nil\n"
+
+[[mutant.edit]]
+file = "internal/app/zz_mutant_follow.go"
+create = true
+after = """package app
+
+import "github.com/oioio-space/inkwell/internal/trust"
+
+// follow makes the running session adopt the project of the genesis g (mutant MW9).
+func (inv *invites) follow(g trust.Op) {
+	l := trust.New(trust.ProjectID(g.Hash()))
+	if l.Apply(g) == nil {
+		_ = inv.wiring.SwitchProject(l, inv.store.save)
+	}
+}
+"""

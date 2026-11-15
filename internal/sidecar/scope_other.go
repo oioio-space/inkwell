@@ -12,6 +12,9 @@ type cgroupRun struct{}
 
 var appSandbox SandboxScope
 
+// Shutdown has nothing to end where no sandbox session exists.
+func Shutdown() {}
+
 func (*SandboxScope) prepare(context.Context, Spec, *exec.Cmd) *cgroupRun { return nil }
 func (*cgroupRun) started()                                               {}
 func (*cgroupRun) finish(int) MemoryCause                                 { return MemoryNone }

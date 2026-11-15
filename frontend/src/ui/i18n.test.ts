@@ -3,7 +3,13 @@ import en from "../i18n/en.json";
 import fr from "../i18n/fr.json";
 
 const sources = import.meta.glob(
-  ["../**/*.svelte", "../**/*.ts", "!../**/*.test.ts", "!../**/*.w58mutant-*"],
+  [
+    "../**/*.svelte",
+    "../**/*.ts",
+    "!../**/*.test.ts",
+    "!../**/*.w58mutant-*",
+    "!../**/*.pc1mutant-*",
+  ],
   {
     query: "?raw",
     import: "default",

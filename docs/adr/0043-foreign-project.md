@@ -1,5 +1,5 @@
 ---
-status: accepted # part 1 W58a accepted 2026-11-14; part 2 PC1a proposed; part 2 PC1b proposed
+status: accepted # part 1 W58a accepted 2026-11-14; part 2 PC1a accepted 2026-11-15; part 2 PC1b proposed
 date: 2026-11-14
 decision-makers: [Mathieu]
 ---

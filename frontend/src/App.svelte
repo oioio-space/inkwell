@@ -49,6 +49,7 @@ import { sheetView, showsSheet } from "./ui/sheet/viewMode.svelte";
 import HeaderBar from "./ui/shell/HeaderBar.svelte";
 import Sidebar from "./ui/shell/Sidebar.svelte";
 import StatusBar from "./ui/shell/StatusBar.svelte";
+import { showStartupNotice } from "./ui/startupNotice";
 import FormatBar from "./ui/toolbar/FormatBar.svelte";
 import { barLang } from "./ui/toolbar/spec";
 import { observeDocText, observeLinks } from "./workspace/observe";
@@ -345,6 +346,13 @@ onMount(() => {
   let nativePerfStop: (() => void) | undefined;
   let mounted = true;
   const started = workspace.start().then(refresh);
+  // After a take-over restarted Inkwell: how it ended, once, and the focus in the text (PC1a, N-12).
+  void showStartupNotice(
+    () => {
+      if (mounted) session.focus();
+    },
+    started.then(() => tick()),
+  );
   // What the desktop asked Inkwell to open (« Ouvrir avec », a second launch): Go raised the window.
   const openLog: { n: number; show?: string }[] = [];
   if (import.meta.env.VITE_E2E_OBSERVE === "1")

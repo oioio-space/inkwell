@@ -37,6 +37,7 @@ type Router struct {
 	epoch time.Time
 	// linksPeriod is the period of the Links notifications, 0 for none.
 	linksPeriod time.Duration
+	drain       *Drain
 	mu          sync.Mutex
 }
 
@@ -84,6 +85,10 @@ func NewRouter(t transport.Transport, log *slog.Logger) *Router {
 	r.att, _ = t.(Attester)
 	return r
 }
+
+// UseDrain makes d end this router's streams before a project change (see [Drain]). It is called
+// before the first [Router.Serve].
+func (r *Router) UseDrain(d *Drain) { r.drain = d }
 
 // stamp returns the nanoseconds since the router's epoch plus one, so that it
 // is never zero: a monotonic reading that is cheaper to queue than a time.Time.
@@ -160,8 +165,14 @@ func (r *Router) sendLocked(s *session, e Envelope) {
 // (see [Attester.Notices]), then relays its frames to the transport until c
 // fails or is replaced. Malformed frames and sends to
 // unknown peers are logged, never their payloads, and skipped. Serve detaches
-// c on return unless a newer connection already replaced it.
+// c on return unless a newer connection already replaced it. Once its [Drain]
+// drained, a frame is dropped and a new stream is closed at once.
 func (r *Router) Serve(c Conn) {
+	detach, ok := r.drain.attach(c)
+	if !ok {
+		return // the session is leaving: the stream is closed (rule N-16)
+	}
+	defer detach()
 	var links []LinkEntry // the current links, for the first notification
 	if r.linksPeriod > 0 {
 		links = linkEntries(r.Links(), time.Now())
@@ -219,6 +230,10 @@ func (r *Router) Serve(c Conn) {
 			r.warn("bridge: dropped frame", "bytes", len(b), "err", err)
 			continue
 		}
+		if !r.drain.Begin() { // read once the session is leaving: dropped; a peer's sync sends it again (rule N-16)
+			r.warn("bridge: frame dropped, leaving", "kind", e.Kind)
+			continue
+		}
 		switch e.Kind {
 		case Message:
 			r.enqueue(s, e.Peer, e.Payload)
@@ -227,6 +242,7 @@ func (r *Router) Serve(c Conn) {
 		default:
 			r.warn("bridge: dropped frame from webview", "kind", e.Kind)
 		}
+		r.drain.End()
 	}
 }
 

@@ -20,6 +20,9 @@ export const OFFLINE_BOB_PORT = base + 5;
 /** The third person of a spec that joins a project after the second (JOIN-3). */
 export const CAROL_PORT = base + 6;
 
+/** The third profile of project-change.spec.ts, which joins after a take-over (the block's last port). */
+export const DAVE_PORT = base + 7;
+
 export const ALICE_URL = `http://127.0.0.1:${ALICE_PORT}/`;
 export const BOB_URL = `http://127.0.0.1:${BOB_PORT}/`;
 export const SPARE_URL = `http://127.0.0.1:${SPARE_PORT}/`;

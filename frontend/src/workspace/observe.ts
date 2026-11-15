@@ -55,3 +55,25 @@ export function observeLinks(view: () => LinkView[], shown: () => string = () =>
     }
   ).__inkwellLinks = Object.assign(() => view(), { shown });
 }
+
+/** What this page holds of its session, as the e2e of a project change reads it (PC1, rule N-11). */
+export interface SessionView {
+  /** The signers whose attestations the page holds. */
+  signers: string[];
+  /** The peers the page talks to. */
+  peers: string[];
+}
+
+/**
+ * The startup id of the process image that answers (the only proof of a restart, rule N-12) and
+ * what the page holds of its session: the e2e of a project change asserts on them, never on timing.
+ */
+export function observeSession(startupId: () => Promise<string>, view: () => SessionView): void {
+  if (!observing()) return;
+  const g = globalThis as typeof globalThis & {
+    __inkwellStartupId?: () => Promise<string>;
+    __inkwellSession?: () => SessionView;
+  };
+  g.__inkwellStartupId = startupId;
+  g.__inkwellSession = view;
+}

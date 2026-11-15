@@ -68,7 +68,7 @@ func startRuntime(t *testing.T, c carrier, lan bool) (*Runtime, dirs) {
 	}
 	t.Cleanup(func() { _ = home.Close() })
 	proj, _ := newProjectFolder(t)
-	rt, err := Start(t.Context(), home, Options{Project: proj, RendezvousURL: NoCodes, LAN: lan, LANService: testLANService})
+	rt, err := Start(t.Context(), home, Options{Project: proj, RendezvousURL: NoCodes, LAN: lan, LANService: testLANService, CanRestart: true})
 	if err != nil {
 		t.Fatal(err)
 	}

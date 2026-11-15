@@ -18,6 +18,8 @@ import unittest
 from unittest import mock
 
 SCRIPTS = pathlib.Path(__file__).resolve().parent
+# Rule G-1: a gate written after it carries a deadline.
+DEADLINE = "max_minutes = 45\n"
 REPO = SCRIPTS.parent
 
 
@@ -75,7 +77,7 @@ class Resume(unittest.TestCase):
         return module
 
     def write_gate(self, text):
-        (self.root / "gates/T.toml").write_text(text)
+        (self.root / "gates/T.toml").write_text(DEADLINE + text)
 
     def run_gate(self, resume=False, gate=None, guard=False):
         gate = gate or self.gate

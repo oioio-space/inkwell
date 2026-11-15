@@ -10,6 +10,7 @@ import (
 	"slices"
 	"time"
 
+	"github.com/oioio-space/inkwell/internal/project"
 	"github.com/oioio-space/inkwell/internal/transport"
 	"github.com/oioio-space/inkwell/internal/trust"
 )
@@ -32,6 +33,9 @@ type Network interface {
 type Session struct {
 	net Network
 	inv *invites
+	chg *change // the project change of this image; nil without a project
+	// proj is the open project; nil without one.
+	proj *project.Project
 }
 
 // NewSession returns a session over n. It cannot invite or join; [Start]
@@ -105,8 +109,8 @@ func parseRole(s string) (trust.Role, error) {
 // text to paste. Only an admin can invite: for anyone else the result has
 // [Invitation.Refused] and no error.
 func (s *Session) Invite(role string) (Invitation, error) {
-	if s.inv == nil {
-		return Invitation{}, errNoProject
+	if err := s.leaving(); err != nil {
+		return Invitation{}, err
 	}
 	if key := s.inv.refusal(); key != "" {
 		return Invitation{Refused: key}, nil
@@ -122,8 +126,8 @@ func (s *Session) Invite(role string) (Invitation, error) {
 // as this one, which gets this device's role. Only an admin can invite, as for
 // [Session.Invite].
 func (s *Session) InviteDevice() (Invitation, error) {
-	if s.inv == nil {
-		return Invitation{}, errNoProject
+	if err := s.leaving(); err != nil {
+		return Invitation{}, err
 	}
 	if key := s.inv.refusal(); key != "" {
 		return Invitation{Refused: key}, nil
@@ -139,8 +143,8 @@ func (s *Session) InviteDevice() (Invitation, error) {
 // who made it, and returns that person's device identity, so that the caller
 // can open the project. The project then replaces the one this device had.
 func (s *Session) Join(ctx context.Context, codeOrText string) (string, error) {
-	if s.inv == nil {
-		return "", errNoProject
+	if err := s.leaving(); err != nil {
+		return "", err
 	}
 	peer, err := s.inv.join(ctx, codeOrText)
 	return string(peer), err
@@ -186,8 +190,8 @@ func (s *Session) Nearby(ctx context.Context) []NearbyPerson {
 // join its project, under name, and waits for a person to answer. It returns
 // the identity of that device, as the peer of [Session.Join] is.
 func (s *Session) Ask(ctx context.Context, peer, name string) (string, error) {
-	if s.inv == nil {
-		return "", errNoProject
+	if err := s.leaving(); err != nil {
+		return "", err
 	}
 	p, err := s.inv.ask(ctx, transport.PeerID(peer), name)
 	return string(p), err

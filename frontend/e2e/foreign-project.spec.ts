@@ -9,8 +9,9 @@ import { startInstance, stopInstance } from "./instance";
 import { CAROL_PORT, SPARE_PORT } from "./ports";
 
 // W58a (N-10): a project folder whose member list does not name this device. A second profile on
-// the first one's folder reads, sees one sentence and one action, and cannot invite; it asks for an
-// invitation, joins with the first profile's and can then write. No take-over, no change of project.
+// the first one's folder reads, sees one sentence and its two actions, and cannot invite; it asks
+// for an invitation, joins with the first profile's and can then write. The other way out, the
+// take-over by a restart, is PC1a's: project-change.spec.ts.
 
 const FIRST = "Texte du premier profil.";
 const url = (port: number) => `http://127.0.0.1:${port}/`;
@@ -50,14 +51,14 @@ async function cannotType(p: Page): Promise<void> {
   expect(await docText(p)).toBe(before);
 }
 
-/** The banner of a device the member list does not name: its sentence and its one action. */
+/** The banner of a device the member list does not name: its sentence and its two actions. */
 async function expectForeign(p: Page): Promise<void> {
   await expect(banner(p)).toContainText(
     "Ce document vient d'un autre appareil. Vous pouvez le lire et en copier le texte, mais pas le modifier ni le partager.",
     { timeout: 30_000 },
   );
   await expect(p.getByRole("button", { name: "Demander une invitation" })).toBeVisible();
-  await expect(p.getByRole("button", { name: "Reprendre ce document ici" })).toHaveCount(0);
+  await expect(p.getByRole("button", { name: "Reprendre ce document ici" })).toBeVisible();
   await expect.poll(() => docText(p)).toBe(FIRST);
   await cannotType(p);
 }

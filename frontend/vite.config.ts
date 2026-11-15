@@ -21,7 +21,16 @@ export default defineConfig({
     port: Number(process.env.WAILS_VITE_PORT) || 9245,
     strictPort: true,
   },
-  build: { target: "es2023" },
+  build: {
+    target: "es2023",
+    // Two pages: the application, and what is left of it while Inkwell restarts (PC1, rule N-15).
+    rollupOptions: {
+      input: {
+        main: fileURLToPath(new URL("./index.html", import.meta.url)),
+        restart: fileURLToPath(new URL("./restart.html", import.meta.url)),
+      },
+    },
+  },
   // Workers are ES modules too: the Automerge wasm loads with a top-level await.
   worker: { format: "es" },
   plugins: [svelte(), wails("./bindings"), devCsp()],

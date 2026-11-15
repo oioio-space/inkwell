@@ -54,7 +54,13 @@ describe("openExternal", () => {
 });
 
 const sources = import.meta.glob(
-  ["../**/*.svelte", "../**/*.ts", "!../**/*.test.ts", "!../**/*.w58mutant-*"],
+  [
+    "../**/*.svelte",
+    "../**/*.ts",
+    "!../**/*.test.ts",
+    "!../**/*.w58mutant-*",
+    "!../**/*.pc1mutant-*",
+  ],
   {
     query: "?raw",
     import: "default",

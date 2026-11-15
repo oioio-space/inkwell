@@ -38,6 +38,9 @@ func newFakeConn(t *testing.T) *fakeConn {
 }
 
 func (c *fakeConn) Send(b []byte) error {
+	if err := c.ctx.Err(); err != nil { // as the Wails stream: nothing is sent once closed
+		return err
+	}
 	select {
 	case c.sent <- b:
 		return nil
@@ -60,6 +63,9 @@ func (c *fakeConn) Context() context.Context { return c.ctx }
 func (c *fakeConn) push(b []byte) { c.in <- b }
 
 func (c *fakeConn) close() { c.once.Do(c.cancel) }
+
+// Close ends the connection as the Wails stream's Close does, which [bridge.Drain] calls.
+func (c *fakeConn) Close() error { c.close(); return nil }
 
 // next returns the next envelope sent to the webview.
 func (c *fakeConn) next(t *testing.T) bridge.Envelope {

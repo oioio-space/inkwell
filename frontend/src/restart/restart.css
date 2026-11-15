@@ -1,0 +1,8 @@
+/* The restart page: one sentence in the middle of the window, on the window's own background. */
+#restart {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  margin: 0;
+  color: var(--fg);
+}

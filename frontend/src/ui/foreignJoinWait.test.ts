@@ -19,7 +19,13 @@ import { cleanup, render } from "./testkit.svelte";
 vi.mock("@wailsio/runtime", () => ({ Stream: vi.fn() }));
 vi.mock("../../bindings/github.com/oioio-space/inkwell/internal/app/index", () => ({
   Projects: {},
-  Session: { Invite: vi.fn(), Join: vi.fn(), Standing: vi.fn(), Members: vi.fn(async () => []) },
+  Session: {
+    Invite: vi.fn(),
+    Join: vi.fn(),
+    Standing: vi.fn(),
+    CanTakeOver: vi.fn(async () => true),
+    Members: vi.fn(async () => []),
+  },
 }));
 
 const text = (el: Element) => el.textContent?.replace(/\s+/g, " ").trim() ?? "";
@@ -61,12 +67,13 @@ describe("UX-W58a-2 an invitation used, the list not yet here", () => {
     expect(workspace.access).toBeUndefined();
   });
 
-  it("UX-W58a-2 a plain foreign copy keeps its sentence and its action", () => {
+  it("UX-W58a-2 a plain foreign copy keeps its sentence and its actions", () => {
     workspace.standing = "notNamed";
+    workspace.canTakeOver = true;
     const host = render(AccessBanner, {});
     expect(text(host.querySelector("[data-testid=access-banner]") as Element)).toBe(
       fr["foreign.notNamed"],
     );
-    expect(host.querySelectorAll("button")).toHaveLength(1);
+    expect(host.querySelectorAll("button")).toHaveLength(2); // ask, and take over (PC1a)
   });
 });

@@ -130,6 +130,11 @@ export class WailsNetworkAdapter extends NetworkAdapter {
     return this.#readyPromise;
   }
 
+  /** The signers whose attestations this page holds, for diagnostics. */
+  get attestedSigners(): string[] {
+    return this.#coverage.signers;
+  }
+
   /** What write enforcement did so far: changes removed, messages dropped. */
   get coverageStats(): Readonly<Coverage["stats"]> {
     return this.#coverage.stats;

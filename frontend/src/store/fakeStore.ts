@@ -14,6 +14,7 @@ import {
   encodeRange,
   encodeResponse,
   Op,
+  REASON_LEAVING,
   Status,
   validComponent,
 } from "./protocol";
@@ -41,6 +42,10 @@ export class FakeGoStore {
   readonly binary = new Set<string>();
   /** Files with invalid UTF-8, by 1-based line of the first bad byte. */
   readonly invalidText = new Map<string, number>();
+  /** True once the session is leaving: every request is refused with that reason (rule N-16). */
+  leaving = false;
+  /** True while requests are read but not answered, as when Go's drain ends the stream first. */
+  held = false;
   /** Every request received, in order: [op, key joined by "/"]. */
   readonly log: [number, string][] = [];
   #sockets = new Set<FakeSocket>();
@@ -77,6 +82,7 @@ export class FakeGoStore {
     const req = decodeRequest(frame);
     const path = req.key.join("/");
     this.log.push([req.op, path]);
+    if (this.leaving) return [Status.Error, textEncoder.encode(REASON_LEAVING)];
     const keyless = req.op === Op.LoadRange || req.op === Op.ListFiles;
     if (!req.key.every(validComponent) || (req.key.length === 0 && !keyless)) {
       return [Status.Error, textEncoder.encode("invalid key")];
@@ -191,6 +197,10 @@ class FakeSocket implements SocketLike {
     const frame = data.slice();
     queueMicrotask(() => {
       if (this.#closed) return;
+      if (this.store.held) {
+        this.store.log.push([frame[4] ?? 0, "held"]);
+        return;
+      }
       const id = new DataView(frame.buffer).getUint32(0);
       const [status, payload] = this.store.handle(frame);
       this.deliver(id, status, payload);

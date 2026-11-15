@@ -355,6 +355,7 @@ type StoreServer struct {
 	mu         sync.Mutex
 	cur        *session
 	pending    map[string]struct{} // external edits the webview has not acknowledged
+	drain      *Drain
 }
 
 // NewStoreServer returns a server over the three storage consumers.
@@ -362,6 +363,10 @@ type StoreServer struct {
 func NewStoreServer(kv KV, projection Projection, tree Tree, log *slog.Logger) *StoreServer {
 	return &StoreServer{kv: kv, projection: projection, tree: tree, log: log, pending: map[string]struct{}{}}
 }
+
+// UseDrain makes d end this server's streams before a project change (see [Drain]). It is called
+// before the first [StoreServer.Serve].
+func (s *StoreServer) UseDrain(d *Drain) { s.drain = d }
 
 // NotifyExternal tells the webview that the project file rel was edited
 // outside Inkwell. The notice is kept, and sent again to every new connection
@@ -398,8 +403,15 @@ func (s *StoreServer) sendLocked(cur *session, r StoreResponse) {
 // Serve attaches c, replacing any previous connection (a page reload), sends
 // it the pending external-edit notices, then answers its requests one at a
 // time until c fails or is replaced. A malformed request is logged without
-// its data, answered with StatusError when it carries an id, and skipped.
+// its data, answered with StatusError when it carries an id, and skipped. Once
+// its [Drain] drained, a request is answered StatusError [ReasonLeaving] and a
+// new stream is closed at once.
 func (s *StoreServer) Serve(c Conn) {
+	detach, ok := s.drain.attach(c)
+	if !ok {
+		return // the session is leaving: the stream is closed (rule N-16)
+	}
+	defer detach()
 	cur := &session{c: c}
 	cur.mu.Lock() // pushes wait until the pending notices are out
 	s.mu.Lock()
@@ -440,7 +452,12 @@ func (s *StoreServer) Serve(c Conn) {
 			}
 			continue
 		}
+		if !s.drain.Begin() { // read once the session is leaving: refused, never handled (rule N-16)
+			s.send(cur, StoreResponse{ID: req.ID, Status: StatusError, Payload: []byte(ReasonLeaving)})
+			continue
+		}
 		s.send(cur, s.handle(req))
+		s.drain.End() // after the reply: the drain closes the stream only once it is out
 	}
 }
 

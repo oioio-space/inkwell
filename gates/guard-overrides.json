@@ -1179,6 +1179,81 @@
       "id": "7feb0684869fffde67b3f6913f9de8b398807fbb273d869b338bd95ef9972cc6",
       "reason": "gates/PC1b.toml: regression criterion changed on the user's explicit word (2026-11-15): the whole Vitest suite takes 307 s alone against the 180 s cap; frontend part is now Biome, svelte-check and vitest --changed <merge-base>, capped 180 s (+30 s bindings); e2e part and its cap unchanged; the whole suite still runs in ci",
       "decision": "docs/plans/2026-11-15-pc1b-join.md"
+    },
+    {
+      "id": "d35cdea9e0a1fbfe7ebbf4cbf050e5175387688180f79fdfc3e2bd14ceb7201d",
+      "reason": "frontend/src/workspace/workspace.svelte.ts: not a test timeout: the new 5 s deadline of workspace.leave (N-15: flush, then close, bounded); no existing delay changed",
+      "decision": "docs/plans/2026-11-15-pc1a-take-over.md"
+    },
+    {
+      "id": "714871a62d9fe783406bc442364a8061258dd8c97bf87dff373258e6bd7622cd",
+      "reason": "frontend/src/workspace/workspace.svelte.ts: the clearTimeout of the same new N-15 deadline; no existing delay changed",
+      "decision": "docs/plans/2026-11-15-pc1a-take-over.md"
+    },
+    {
+      "id": "14ecc9aa62406107d53e56506fb0d1a702b177c87335741f044769dd6f01eaa5",
+      "reason": "frontend/vite.config.ts: a second entry, restart.html, the restart page of N-15; nothing removed",
+      "decision": "docs/plans/2026-11-15-pc1a-take-over.md"
+    },
+    {
+      "id": "8b885bcfef5c8f81b5b0073a466a598920fb57a2503c86a9df5b4641f4b1a5f9",
+      "reason": "scripts/gate.py: rule G-1, the gate deadline (max_minutes, caps summed, run stopped at the deadline, closed legacy list); legacy gates run as before",
+      "decision": "docs/plans/2026-11-15-pc1a-take-over.md"
+    },
+    {
+      "id": "c8748d47b0348345fd523510cc1b20059b0ea475cd53f33b1bd920f7e660eb55",
+      "reason": "scripts/gate.py: rule G-1, same change seen as gate machinery; it only adds refusals and a stop, no criterion is relaxed",
+      "decision": "docs/plans/2026-11-15-pc1a-take-over.md"
+    },
+    {
+      "id": "23669f1fcc2180e2da72a4cc8474b9af7b7254af4a38d8051c4f997938976f19",
+      "reason": "scripts/gate_deadline_test.py: new, the four tests of rule G-1 and the interruption test",
+      "decision": "docs/plans/2026-11-15-pc1a-take-over.md"
+    },
+    {
+      "id": "924920356bb792c50e2840c37b66de272a9771dd794840418320a0c4c695eb6e",
+      "reason": "scripts/gate_deadline_test.py: new test file of rule G-1 (gate machinery)",
+      "decision": "docs/plans/2026-11-15-pc1a-take-over.md"
+    },
+    {
+      "id": "b52c90cb3c9f5c63b7258c98cc734f628eff585a63457d36404a7bad900c26b2",
+      "reason": "scripts/gate_nested_test.py: its temporary gates carry max_minutes = 45, which rule G-1 now requires; assertions unchanged",
+      "decision": "docs/plans/2026-11-15-pc1a-take-over.md"
+    },
+    {
+      "id": "dba1369382f21f9b38336ff818b527d17e923421d7f3738365b84d53b3856d6a",
+      "reason": "scripts/gate_nested_test.py: same change (gate machinery); assertions unchanged",
+      "decision": "docs/plans/2026-11-15-pc1a-take-over.md"
+    },
+    {
+      "id": "e709064e185de5b12731f38089fa92878ac7b84e945e03f01ffe44e2e637cf16",
+      "reason": "scripts/gate_resume_test.py: its temporary gates carry max_minutes = 45, which rule G-1 now requires; assertions unchanged",
+      "decision": "docs/plans/2026-11-15-pc1a-take-over.md"
+    },
+    {
+      "id": "b5b5c3036832cb1ef7a9c0340154711f4c92ff5b7bea10275a66dd5b207529e5",
+      "reason": "scripts/gate_resume_test.py: same change (gate machinery); assertions unchanged",
+      "decision": "docs/plans/2026-11-15-pc1a-take-over.md"
+    },
+    {
+      "id": "30b3824f059bdb37597ac74b341fbc389eba83f7a41999cd46809f3fa7155f66",
+      "reason": "gates/PC1a.toml: regression narrowed (same user decision of 2026-11-15, tests of the touched parts): vitest --changed re-ran nearly the whole suite and hit the 180 s cap; the Vitest part is now the test files the block added or modified; caps unchanged (30 + 180 + 300 s)",
+      "decision": "docs/plans/2026-11-15-pc1a-take-over.md"
+    },
+    {
+      "id": "af951a3377afebcd4f52c53f70da10f849f70074403a4ece4066e4c0d610fabb",
+      "reason": "gates/PC1a.toml: regression narrowed (same user decision of 2026-11-15, tests of the touched parts): vitest --changed re-ran nearly the whole suite and hit the 180 s cap; the Vitest part is now the test files the block added or modified; caps unchanged (30 + 180 + 300 s)",
+      "decision": "docs/plans/2026-11-15-pc1a-take-over.md"
+    },
+    {
+      "id": "1d7216e52e411dd85ee11c4de1ce15bfda24f58b82b3ab92f5b18b4b2922357f",
+      "reason": "gates/PC1b.toml: regression narrowed (same user decision of 2026-11-15, tests of the touched parts): vitest --changed re-ran nearly the whole suite and hit the 180 s cap; the Vitest part is now the test files the block added or modified; caps unchanged (30 + 180 + 300 s)",
+      "decision": "docs/plans/2026-11-15-pc1b-join.md"
+    },
+    {
+      "id": "4909486a23b2adc1ed9a528e1c78f79ffcc2251b26de63423a9aedb148d9a087",
+      "reason": "gates/PC1b.toml: regression narrowed (same user decision of 2026-11-15, tests of the touched parts): vitest --changed re-ran nearly the whole suite and hit the 180 s cap; the Vitest part is now the test files the block added or modified; caps unchanged (30 + 180 + 300 s)",
+      "decision": "docs/plans/2026-11-15-pc1b-join.md"
     }
   ]
 }

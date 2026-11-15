@@ -64,6 +64,21 @@
 .flat {
   background: transparent;
 }
+/* Where the system forces its colours, backgrounds are dropped: a button keeps its shape by a
+   border, and the suggested action keeps its fill, in the system's highlight colours. */
+@media (forced-colors: active) {
+  .btn,
+  .sug {
+    border: 1px solid ButtonBorder;
+  }
+  .sug,
+  .sug:hover:not(:disabled) {
+    forced-color-adjust: none;
+    border-color: Highlight;
+    background: Highlight;
+    color: HighlightText;
+  }
+}
 
 /* Popover ------------------------------------------------------------------------------ */
 .pop {

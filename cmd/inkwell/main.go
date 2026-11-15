@@ -54,18 +54,19 @@ func liveDeps(configure func(*application.App, *application.WebviewWindow)) deps
 	log := slog.New(slog.NewTextHandler(os.Stderr, nil))
 	var wails atomic.Pointer[application.App] // the export dialog needs the application, created last
 	return deps{
-		stdout:  os.Stdout,
-		log:     log,
-		getenv:  startEnv(), // the activation token survives GTK there
-		getwd:   os.Getwd,
-		homeDir: app.HomeDir,
+		stdout:   os.Stdout,
+		log:      log,
+		getenv:   startEnv(), // the activation token survives GTK there
+		unsetenv: os.Unsetenv,
+		getwd:    os.Getwd,
+		homeDir:  app.HomeDir,
 		start: func(ctx context.Context, dir string, req instance.Request) (*instance.Primary, error) {
 			return instance.Start(ctx, dir, req, instance.Options{})
 		},
 		notify:      tell,
 		openHome:    app.OpenHome,
 		openProject: openProject,
-		startNetwork: func(ctx context.Context, home *os.Root, proj *project.Project) (*app.Runtime, error) {
+		startNetwork: func(ctx context.Context, home *os.Root, proj *project.Project, afterChange bool) (*app.Runtime, error) {
 			choose := func(name string) (string, error) {
 				return wails.Load().Dialog.SaveFile().SetFilename(name).AddFilter("PDF", "*.pdf").PromptForSingleSelection()
 			}
@@ -79,11 +80,15 @@ func liveDeps(configure func(*application.App, *application.WebviewWindow)) deps
 				LAN:           os.Getenv(lanEnv) == "1",
 				RendezvousURL: os.Getenv(rendezvousEnv),
 				ExportChoose:  choose,
+				AfterChange:   afterChange,
+				CanRestart:    canRestart,
 			})
 		},
 		window: func(ctx context.Context, s *session) int {
 			return runWindow(ctx, s, log, &wails, configure)
 		},
+		restartRequested: (*app.Runtime).RestartRequested,
+		restart:          restartImage,
 	}
 }
 
@@ -91,20 +96,22 @@ func liveDeps(configure func(*application.App, *application.WebviewWindow)) deps
 func runWindow(ctx context.Context, s *session, log *slog.Logger, wailsApp *atomic.Pointer[application.App], configure func(*application.App, *application.WebviewWindow)) int {
 	proj, rt := s.proj, s.rt
 	router := bridge.NewRouter(rt.Repo, log)
+	router.UseDrain(rt.Bridge)
 
 	if err := proj.Backup(time.Now(), backupsKept); err != nil {
 		log.Warn("backing up project", "err", err) // not fatal: the store still works
 	}
 	storeServer := bridge.NewStoreServer(rt.Files, rt.Files, rt.Files, log)
+	storeServer.UseDrain(rt.Bridge)
 	windows := newWindowHost() // nil without native windows (the server build)
 	var winService app.Windows
 	if windows != nil {
 		winService = windows
 	}
 	presentHub := app.NewPresent(log)
-	languageService := language.New(proj.Path())
+	languageService := s.language
 
-	var loops shutdownLoops
+	loops := &s.loops
 	assetToken := app.NewAssetToken()
 	wails := application.New(application.Options{
 		Name:        "Inkwell",
@@ -130,11 +137,10 @@ func runWindow(ctx context.Context, s *session, log *slog.Logger, wailsApp *atom
 		Mac: application.MacOptions{
 			ApplicationShouldTerminateAfterLastWindowClosed: true,
 		},
-		OnShutdown: func() {
-			stopAll(s.closing, s.cancel, &loops, rt.Close, proj.Close, s.closeInstance, log)
-		},
+		OnShutdown: func() { s.stop(log) },
 	})
 	wailsApp.Store(wails)
+	rt.SetQuit(wails.Quit) // a recorded project change quits, then restarts (rule N-12)
 	wails.HandleStream(bridge.StreamName, func(c *application.StreamConn) { router.Serve(c) })
 	wails.HandleStream(bridge.StoreStreamName, func(c *application.StreamConn) { storeServer.Serve(c) })
 	wails.HandleStream(app.PreviewStreamName, func(c *application.StreamConn) { rt.Preview.Serve(c) })

@@ -10,11 +10,14 @@ import (
 	"os"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/oioio-space/inkwell/internal/app"
 	"github.com/oioio-space/inkwell/internal/instance"
+	"github.com/oioio-space/inkwell/internal/language"
 	"github.com/oioio-space/inkwell/internal/project"
+	"github.com/oioio-space/inkwell/internal/sidecar"
 	"github.com/oioio-space/inkwell/internal/version"
 )
 
@@ -29,12 +32,17 @@ const (
 	exitNoLock = 4
 )
 
+// afterTakeOverEnv is set to "1" in the environment of the image a project change restarts
+// (rule N-12): that image reads it once, removes it, and says how the change went.
+const afterTakeOverEnv = "INKWELL_AFTER_TAKEOVER"
+
 // deps are the effects of a launch, injected so that the order of startup is tested.
 type deps struct {
-	stdout io.Writer
-	log    *slog.Logger
-	getenv func(string) string
-	getwd  func() (string, error)
+	stdout   io.Writer
+	log      *slog.Logger
+	getenv   func(string) string
+	unsetenv func(string) error
+	getwd    func() (string, error)
 	// homeDir returns the profile folder, created private to the user.
 	homeDir func() (string, error)
 	// start claims the profile or hands the request over (instance.Start).
@@ -43,11 +51,17 @@ type deps struct {
 	notify func(m message)
 	// openHome, openProject and startNetwork open the identity, the project and the network: only
 	// the primary reaches them, after the claim.
-	openHome     func() (*os.Root, error)
-	openProject  func(own instance.Request) (*project.Project, error)
-	startNetwork func(ctx context.Context, home *os.Root, proj *project.Project) (*app.Runtime, error)
+	openHome    func() (*os.Root, error)
+	openProject func(own instance.Request) (*project.Project, error)
+	// afterChange is set when this image was started by the restart of a project change.
+	startNetwork func(ctx context.Context, home *os.Root, proj *project.Project, afterChange bool) (*app.Runtime, error)
 	// window runs the window until it closes, once the network is up.
 	window func(ctx context.Context, s *session) int
+	// restartRequested reports whether rt recorded a project change ([app.Runtime.RestartRequested]).
+	restartRequested func(rt *app.Runtime) bool
+	// restart replaces this process image by a new launch on the project folder dir (rule N-12);
+	// it returns only when it failed.
+	restart func(dir string) error
 }
 
 // session is what the primary has open while its window runs.
@@ -56,10 +70,30 @@ type session struct {
 	proj   *project.Project
 	rt     *app.Runtime
 	queue  *openQueue
+	// language is the language service of the window; shutdown waits until its child has exited
+	// (rule N-14).
+	language *language.Service
 	// closing and closeInstance are the primary's Closing and Close: the first and the last step of
 	// shutdown.
 	closing       func()
 	closeInstance func() error
+	// loops are the window's loops, registered by it before it runs; shutdown waits for them.
+	loops    shutdownLoops
+	stopOnce sync.Once
+}
+
+// stop is the shutdown of the session ([stopAll]), once: the window's OnShutdown runs it, and so
+// does runPrimary after the window returned, in case the window ended without it.
+func (s *session) stop(log *slog.Logger) {
+	s.stopOnce.Do(func() {
+		closeNetwork := func() error {
+			s.language.Close() // its child ends before the network and the lock (rule N-14)
+			err := s.rt.Close()
+			sidecar.Shutdown() // and so does the sandbox holder, once the previews are closed
+			return err
+		}
+		stopAll(s.closing, s.cancel, &s.loops, closeNetwork, s.proj.Close, s.closeInstance, log)
+	})
 }
 
 // startup runs a launch with the arguments args (the command line without the program name) and
@@ -75,6 +109,11 @@ func startup(args []string, d deps) int {
 	if err != nil {
 		d.log.Error("opening the profile folder", "err", err)
 		return exitError
+	}
+	// Read once and removed, so that nothing started from this image inherits it (rule N-12).
+	afterChange := d.getenv(afterTakeOverEnv) == "1"
+	if err := d.unsetenv(afterTakeOverEnv); err != nil {
+		d.log.Warn("clearing the restart marker", "err", err)
 	}
 	cwd, err := d.getwd()
 	if err != nil {
@@ -104,39 +143,62 @@ func startup(args []string, d deps) int {
 	queue := newOpenQueue()
 	p.Serve(queue.push)
 	queue.own(req) // the primary's own arguments take the same path as forwarded ones
-	code := runPrimary(ctx, d, req, queue, p)
+	code, restartDir := runPrimary(ctx, d, req, queue, p, dir, afterChange)
 	if err := p.Close(); err != nil { // already done by a clean shutdown; a no-op then
 		d.log.Warn("releasing the profile", "err", err)
 	}
-	return code
+	if restartDir == "" {
+		return code
+	}
+	// The session is closed and the lock released: the change is on disk, the next image loads it.
+	err = d.restart(restartDir)
+	d.log.Error("restarting after a project change", "err", err)
+	// No image got the restart marker: the next launch on this folder says how the change went.
+	if err := leaveRestartMark(dir, restartDir); err != nil {
+		d.log.Warn("recording the failed restart", "err", err)
+	}
+	d.notify(messageFor(msgRestartFailed, d.getenv))
+	return exitError
 }
 
-// runPrimary opens the identity, the project and the network, then runs the window.
-func runPrimary(ctx context.Context, d deps, own instance.Request, queue *openQueue, p *instance.Primary) int {
+// runPrimary opens the identity, the project and the network, then runs the window. Once the
+// window returned and the session is stopped, it returns the folder to restart on when this image
+// recorded a project change (rule N-12), else "". profile is the profile folder.
+func runPrimary(ctx context.Context, d deps, own instance.Request, queue *openQueue, p *instance.Primary, profile string, afterChange bool) (int, string) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	home, err := d.openHome()
 	if err != nil {
 		d.log.Error("opening identity directory", "err", err)
-		return exitError
+		return exitError, ""
 	}
 	proj, err := d.openProject(own)
 	if err != nil {
 		d.log.Error("opening project", "err", err)
 		_ = home.Close()
-		return exitError
+		return exitError, ""
 	}
-	rt, err := d.startNetwork(ctx, home, proj)
+	// A change on this folder whose restart failed is told like one that restarted (rule N-12).
+	if takeRestartMark(profile, proj.Path()) {
+		afterChange = true
+	}
+	rt, err := d.startNetwork(ctx, home, proj, afterChange)
 	if err := home.Close(); err != nil {
 		d.log.Warn("closing identity directory", "err", err)
 	}
 	if err != nil {
 		d.log.Error("starting network", "err", err)
 		_ = proj.Close()
-		return exitError
+		return exitError, ""
 	}
 	queue.open() // ready to show a file: launches are acknowledged from now on (« busy » until then)
-	return d.window(ctx, &session{cancel: cancel, proj: proj, rt: rt, queue: queue, closing: p.Closing, closeInstance: p.Close})
+	s := &session{cancel: cancel, proj: proj, rt: rt, queue: queue, language: language.New(proj.Path()), closing: p.Closing, closeInstance: p.Close}
+	code := d.window(ctx, s)
+	s.stop(d.log) // a no-op after the window's OnShutdown
+	if !d.restartRequested(rt) {
+		return code, ""
+	}
+	return code, proj.Path()
 }
 
 // stopAll is the shutdown of the primary, in this order: answer « closing » to any new launch, so
@@ -159,6 +221,7 @@ const (
 	msgNotResponding messageID = iota // R11
 	msgOtherVersion                   // R17
 	msgNoLock                         // R18
+	msgRestartFailed                  // N-12
 )
 
 // messages are the only texts of Go for people (plan section 2): no webview exists in the process
@@ -175,6 +238,10 @@ var messages = map[messageID][2]message{
 	msgNoLock: {
 		{"Inkwell ne démarre pas", "Inkwell ne peut pas s'assurer d'être seul à utiliser son profil ; il ne démarre pas."},
 		{"Inkwell does not start", "Inkwell cannot make sure it is the only one using its profile; it does not start."},
+	},
+	msgRestartFailed: {
+		{"Inkwell ne redémarre pas", "Inkwell s'est fermé sans pouvoir redémarrer. Ouvrez-le de nouveau."},
+		{"Inkwell does not restart", "Inkwell closed without being able to restart. Open it again."},
 	},
 }
 

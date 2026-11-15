@@ -13,6 +13,7 @@ import (
 
 	"github.com/oioio-space/inkwell/internal/identity"
 	"github.com/oioio-space/inkwell/internal/invite"
+	"github.com/oioio-space/inkwell/internal/project"
 	"github.com/oioio-space/inkwell/internal/transport"
 	"github.com/oioio-space/inkwell/internal/transport/p2p"
 	"github.com/oioio-space/inkwell/internal/trust"
@@ -300,6 +301,9 @@ func (inv *invites) ticket(ctx context.Context, codeOrText string) (invite.Ticke
 
 // join redeems the ticket and moves to its project.
 func (inv *invites) join(ctx context.Context, codeOrText string) (transport.PeerID, error) {
+	if inv.ctx.Err() != nil {
+		return "", errLeaving // stopped (see [invites.stop])
+	}
 	t, err := inv.ticket(ctx, codeOrText)
 	if err != nil {
 		return "", err
@@ -307,6 +311,8 @@ func (inv *invites) join(ctx context.Context, codeOrText string) (transport.Peer
 	inv.joining.Lock()
 	defer inv.joining.Unlock()
 	switch {
+	case inv.ctx.Err() != nil:
+		return "", errLeaving
 	case t.Host == inv.node.Local():
 		return "", fmt.Errorf("%w: this is your own invitation", invite.ErrMalformed)
 	case t.Expired(inv.now()):
@@ -468,8 +474,33 @@ func (inv *invites) myRoleAndPerson() (trust.Role, trust.Hash, error) {
 
 // close stops the invitations and releases what they hold.
 func (inv *invites) close() error {
+	inv.stop()
+	return inv.store.close()
+}
+
+// stop ends the lobby, the invitation host and the joins under way; the store stays open.
+func (inv *invites) stop() {
 	inv.node.HandleLobby(nil)
 	inv.cancel()
 	inv.wg.Wait()
-	return inv.store.close()
+}
+
+// takeOver returns the write of a take-over of the project of m by this device (rule N-5): its
+// genesis is signed and checked here, in memory; [finishTakeOver] archives the list and installs
+// it once [Runtime.Close] stopped everything else. Nothing is written and nothing is adopted:
+// the running session keeps its project until the restart (rule N-11).
+func (inv *invites) takeOver(m project.Meta) (changeWrite, error) {
+	g, err := takeOverGenesis(inv.dev, m)
+	if err != nil {
+		return nil, err
+	}
+	return func(st *opStore) error { return finishTakeOver(st, g, inv.now(), inv.log) }, nil
+}
+
+// finishChange runs the recorded change write of c on the member-list store, under the
+// invitation lock: once [invites.stop] returned, nothing else writes the list (rule N-13).
+func (inv *invites) finishChange(c *change) error {
+	inv.joining.Lock()
+	defer inv.joining.Unlock()
+	return c.finish(inv.store)
 }

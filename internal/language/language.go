@@ -39,6 +39,7 @@ type Service struct {
 	mu       sync.Mutex
 	serveMu  sync.Mutex
 	cancel   context.CancelFunc
+	closed   bool // set by Close: no generation starts any more
 	redact   *strings.Replacer
 }
 
@@ -49,6 +50,21 @@ func New(root string) *Service {
 	escaped := (&url.URL{Path: root}).EscapedPath()
 	redact := strings.NewReplacer(fileURI+"/", "file:///", fileURI, "file:///", escaped+"/", "", escaped, ".", root+"/", "", root, ".", url.QueryEscape(root), ".", url.PathEscape(root), ".")
 	return &Service{root: root, store: &sidecar.Store{}, redact: redact}
+}
+
+// Close ends the current generation and returns once its tinymist has exited; a stream served
+// afterwards is closed at once. Shutdown calls it, so that no child outlives the process image
+// (plan docs/plans/2026-11-14-pc1-project-change-by-restart.md, rule N-14).
+func (s *Service) Close() {
+	s.mu.Lock()
+	s.closed = true
+	cancel := s.cancel
+	s.mu.Unlock()
+	if cancel != nil {
+		cancel()
+	}
+	s.serveMu.Lock() // a generation holds it until its process has exited
+	defer s.serveMu.Unlock()
 }
 
 // Serve relays one JSON object per stream frame and Content-Length on stdio.
@@ -65,11 +81,15 @@ func (s *Service) Serve(c bridge.Conn) {
 	s.mu.Lock()
 	previous := s.cancel
 	s.cancel = closeStream
+	closed := s.closed
 	s.mu.Unlock()
 	if previous != nil {
 		previous()
 	}
 	defer closeStream()
+	if closed {
+		return
+	}
 	// Resource settings and the actual process remain owned by one generation.
 	s.serveMu.Lock()
 	defer s.serveMu.Unlock()
