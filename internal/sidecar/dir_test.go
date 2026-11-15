@@ -22,6 +22,9 @@ func TestDirectoryBoundExactBytes(t *testing.T) {
 	if runtime.GOOS != "linux" {
 		t.Skip("hard directory output unsupported on this OS")
 	}
+	if !requireLaunch(t) {
+		return
+	}
 	for _, limit := range []uint64{0, 1001} {
 		dir := t.TempDir()
 		s := spec("writefile:" + filepath.Join(dir, "a") + ",1")
@@ -54,6 +57,9 @@ func runWithoutMount(ctx context.Context, s Spec) (Output, error) {
 }
 
 func TestDirectoryFallbackWhenNamespacesUnavailable(t *testing.T) {
+	if !requireLaunch(t) {
+		return
+	}
 	if runtime.GOOS != "linux" {
 		t.Skip("Landlock fallback is Linux-only")
 	}

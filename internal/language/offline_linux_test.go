@@ -5,15 +5,12 @@ import (
 	"encoding/json"
 	"testing"
 	"time"
-
-	"github.com/oioio-space/inkwell/internal/sidecar"
 )
 
 func TestOfflineLanguage(t *testing.T) {
-	isolated, err := sidecar.NetworkIsolation(nil)
-	if err != nil || !isolated {
-		t.Fatalf("empty network namespace unavailable: %v", err)
-	}
+	// Either tier has no network: an empty network namespace in N, seccomp and
+	// Landlock in F. The bundled package must answer in both.
+	requireSandbox(t)
 	ctx, stop := context.WithCancel(t.Context())
 	c := &testConn{ctx: ctx, input: make(chan []byte, 16), output: make(chan []byte, 128)}
 	service := New(t.TempDir())
