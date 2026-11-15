@@ -1439,6 +1439,11 @@
       "id": "24ee84c5c5e947c0f1258118d284590e6ef29d9a0d79e8614d00bbc13ca7aae7",
       "reason": "internal/typst/helper_test.go: newEngine skips only on a sandbox refusal (arm64 until SB2a2, rule S-7); the two inventoried typst tests do not skip there, they assert the refusal sentence",
       "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "0284a584e3a8dc781e80c8d9d332a27afe06e942255dc93b6585de226da63615",
+      "reason": "internal/sidecar/bound_linux_test.go: new file; its one skip is the opt-in of the new TestMemoryMaxBackstop (INKWELL_OOM_BACKSTOP=1), which makes the kernel OOM-kill a target and may raise the desktop's memory notification (residual R-7); no existing test gains a skip; re-fingerprinted on 2026-11-15 after the second GitHub run: the helper's address limit in this file goes from 1 GiB to 2 GiB, because a Go helper built with coverage failed to start under 1 GiB 4 times in 400 (pthread_create EAGAIN) and never under 2 GiB; a fixture limit, not a product bound; no skip added",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
     }
   ]
 }
