@@ -75,6 +75,9 @@ func holdMainThread(t *testing.T) {
 // every thread not locked to a goroutine, the creating one included unless
 // runOnce holds it, and exiting locked destroys each of them.
 func TestSupervisorRunOnceKeepsCreatingThread(t *testing.T) {
+	if !requireLaunch(t) {
+		return
+	}
 	watchdog(t, supervisorDeadline)
 	defer runtime.GOMAXPROCS(runtime.GOMAXPROCS(1))
 	holdMainThread(t)

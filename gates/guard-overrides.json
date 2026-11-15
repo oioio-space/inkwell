@@ -1454,6 +1454,31 @@
       "id": "17a9b53dbe2b538b6dfabebe21ef3aaad9d16360e4a3e7966fb93b2b96e1c6d4",
       "reason": "scripts/gojson_check_test.py: new file, the tests of scripts/gojson_check.py (criterion `checkers` of gates/SB2a1.toml); no existing gate dependency changes",
       "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "31bc79d163b7a39e8898e6b11f6e010b58fbd173ee30659f3cc17ad26cd212fb",
+      "reason": "internal/sidecar/launcher_policy_linux_test.go: the skip belongs to the new TestLandlockABISeamRefusesUnsupported, below Landlock ABI 3, where decideTier refuses every sidecar anyway (ADR 0044 point 2); no existing test gains a skip; re-fingerprinted on 2026-11-15: the mount-construction tests now go through requireN (a mount namespace exists only in tier N), reported with the tier-report line; no F cell of the inventory skips",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "d7c57da8ac8e592d5ce92e157dd5eb3ba8f3cbfa2b0c5d91582127444120b2c1",
+      "reason": "internal/sidecar/scope_linux_test.go: no timer is raised; the new waitReport has the same 20 s bound as waitLine and also returns when the app helper ends without a report. Two deliberate changes of TestCgroupSession* in this file, neither a weakening: the aggregate case accepts `cause=unknown watch-lost=true` beside `victim` (ADR 0042 rule M9: a lost watch answers unknown, never a guessed cause; the leaf case stays strict; docs/autonomous-decisions.md 2026-11-15 « SB2a1 R2b ») and the scenario is played again, 3 attempts at most, only when the kernel OOM-killed the helper itself before its report, proven by its SIGKILL status and the oom_kill counter of its scope (harness artefact; docs/autonomous-decisions.md 2026-11-15 « SB2a1 R2c (test) ») Re-fingerprinted on 2026-11-15 after the GitHub run of candidate/sb2a1-1: requireScope makes the scope tests assert tier F's own contract (a clean rlimit run, no session and no run cgroup: T-6) where no PID namespace exists, and a wait cycle on the test's stdin pipe now fails at once instead of timing the package out; no timer raised",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "ee6f0b1663ae28b333af5d298710b0574b3dfb7e918b2af64f0d54f02cb8d478",
+      "reason": "internal/sidecar/tier_helpers_linux_test.go: new file; requireN's skip (tier N unavailable, with its tier-report line) replaces the skip of requireOutputMount removed from mount_linux_test.go, and scripts/gojson_check.py accepts it only as `n-unavailable` in an N column of the inventory, never in an F column (decision D7); re-fingerprinted on 2026-11-15: forksInSandbox added, for tests that need process creation, which the tier-F filter forbids by design (S-2)",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "fc60dfc524d59e3d4de088bf8f7a175e4ada7be7562f9fcd360f9c0c09eaeb5e",
+      "reason": "internal/language/integration_test.go: new requireSandbox skips only on ErrSandboxRefused (arm64 until SB2a2, rule S-7); the tests now run in tier F as well as N; none of them is in the inventory",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "24ee84c5c5e947c0f1258118d284590e6ef29d9a0d79e8614d00bbc13ca7aae7",
+      "reason": "internal/typst/helper_test.go: newEngine skips only on a sandbox refusal (arm64 until SB2a2, rule S-7); the two inventoried typst tests do not skip there, they assert the refusal sentence",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
     }
   ]
 }

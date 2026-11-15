@@ -66,7 +66,32 @@ func requireScopedRun(t *testing.T, m *SandboxScope, mode string) Output {
 	return out
 }
 
+// requireScope is requireN for a tier-aware cgroup test (plan « Tier-aware
+// suites »). On a machine in tier F it asserts that tier's promise instead: a
+// real run given a scope manager creates no session and places no run cgroup
+// (T-6: no cgroup without a PID namespace) and is bounded by its rlimits; it
+// then returns false, as it does on a refused machine.
+func requireScope(t *testing.T) bool {
+	t.Helper()
+	switch machineTier(t) {
+	case tierNone:
+		return false
+	case tierN:
+		return true
+	}
+	m := scopeManager(t)
+	m.beforeStart = func(*cgroupRun) { t.Error("T-6 fallback: a run cgroup was placed without a PID namespace") }
+	out, err := Run(t.Context(), scopeSpec(t, m, "fds"))
+	if err != nil || out.ExitCode != 0 || out.Containment != "rlimit" || m.session != nil {
+		t.Fatalf("T-6 fallback: tier F run with a scope manager: %+v %v, session %v; want a clean rlimit run and no session", out, err, m.session)
+	}
+	return false
+}
+
 func TestCgroupSessionScopeDelegated(t *testing.T) {
+	if !requireScope(t) {
+		return
+	}
 	m := scopeManager(t)
 	requireScopedRun(t, m, "fds")
 	s := m.session
@@ -88,6 +113,9 @@ func TestCgroupSessionScopeDelegated(t *testing.T) {
 }
 
 func TestCgroupRunLimitsVerifiedBeforeStart(t *testing.T) {
+	if !requireScope(t) {
+		return
+	}
 	m := scopeManager(t)
 	var writes []string
 	m.write = func(path, value string) error {
@@ -157,6 +185,9 @@ func waitLine(t *testing.T, w *lineSink, prefix string) string {
 }
 
 func TestCgroupWorkloadAndDescendantsInside(t *testing.T) {
+	if !requireScope(t) {
+		return
+	}
 	m := scopeManager(t)
 	s := scopeSpec(t, m, "tree")
 	input, writer := io.Pipe()
@@ -183,6 +214,18 @@ func TestCgroupWorkloadAndDescendantsInside(t *testing.T) {
 			t.Fatal("scope unavailable")
 		}
 		t.Fatal("target ended before membership check")
+	case line := <-lines.lines:
+		// The target starts after beforeStart: a line with no run cgroup
+		// announced is a run outside the scope. Its stdin is released first,
+		// or Run would wait for it until the package's timeout.
+		select {
+		case path = <-runPath:
+			lines.lines <- line
+		default:
+			_ = writer.Close()
+			<-done
+			t.Fatalf("scope unavailable: the target runs (%s) outside any run cgroup", line)
+		}
 	}
 	pids := strings.Split(waitLine(t, lines, "tree="), ",")
 	if len(pids) != 2 {
@@ -228,6 +271,9 @@ func TestCgroupWorkloadAndDescendantsInside(t *testing.T) {
 }
 
 func TestBootstrapRefusesUnexpectedCgroup(t *testing.T) {
+	if !requireN(t) {
+		return
+	}
 	m := scopeManager(t)
 	called := false
 	m.beforeStart = func(r *cgroupRun) { called = true }
@@ -244,6 +290,9 @@ func TestBootstrapRefusesUnexpectedCgroup(t *testing.T) {
 }
 
 func TestCgroupRemovedAfterRun(t *testing.T) {
+	if !requireN(t) {
+		return
+	}
 	m := scopeManager(t)
 	var path string
 	m.beforeStart = func(r *cgroupRun) { path = r.path }
@@ -254,6 +303,9 @@ func TestCgroupRemovedAfterRun(t *testing.T) {
 }
 
 func TestCgroupFallbackAtEveryStep(t *testing.T) {
+	if !requireN(t) {
+		return
+	}
 	for i := 1; i <= 11; i++ {
 		row := fmt.Sprintf("F%d", i)
 		t.Run(row, func(t *testing.T) {
@@ -291,6 +343,9 @@ func TestCgroupFallbackAtEveryStep(t *testing.T) {
 }
 
 func TestFallbackReportsRlimitOnly(t *testing.T) {
+	if !requireLaunch(t) {
+		return
+	}
 	s := scopeSpec(t, scopeManager(t), "fds")
 	s.disableScope = true
 	out, err := Run(t.Context(), s)
@@ -300,6 +355,9 @@ func TestFallbackReportsRlimitOnly(t *testing.T) {
 }
 
 func TestBothMemoryBudgetsHold(t *testing.T) {
+	if !requireN(t) {
+		return
+	}
 	m := scopeManager(t)
 	s := scopeSpec(t, m, "budget")
 	m.beforeStart = func(r *cgroupRun) {
@@ -324,6 +382,9 @@ func TestBothMemoryBudgetsHold(t *testing.T) {
 }
 
 func TestResidentBudgetKillsWithSIGKILL(t *testing.T) {
+	if !requireN(t) {
+		return
+	}
 	for _, mode := range []string{"resident", "resident-tree"} {
 		t.Run(mode, func(t *testing.T) {
 			out, err := Run(t.Context(), residentSpec(t, scopeManager(t), mode))
@@ -344,6 +405,9 @@ func TestResidentBudgetKillsWithSIGKILL(t *testing.T) {
 }
 
 func TestAddressBudgetFailsAllocationFirst(t *testing.T) {
+	if !requireN(t) {
+		return
+	}
 	m := scopeManager(t)
 	s := scopeSpec(t, m, "address")
 	s.ResidentLimit = 3 << 30
@@ -360,6 +424,9 @@ func TestAddressBudgetFailsAllocationFirst(t *testing.T) {
 }
 
 func TestCgroupCountersReadBeforeCleanup(t *testing.T) {
+	if !requireN(t) {
+		return
+	}
 	m := scopeManager(t)
 	var events []string
 	m.trace = func(s string) { events = append(events, s) }
@@ -377,6 +444,9 @@ func TestCgroupCountersReadBeforeCleanup(t *testing.T) {
 }
 
 func TestHolderDeathBetweenVerifyAndStart(t *testing.T) {
+	if !requireN(t) {
+		return
+	}
 	for _, row := range []string{"before-run", "after-verify"} {
 		t.Run(row, func(t *testing.T) {
 			m := scopeManager(t)
@@ -415,6 +485,9 @@ func TestHolderDeathBetweenVerifyAndStart(t *testing.T) {
 }
 
 func TestConcurrentRunsDuringHolderDeath(t *testing.T) {
+	if !requireN(t) {
+		return
+	}
 	m := scopeManager(t)
 	requireScopedRun(t, m, "fds")
 	old := m.session
@@ -432,6 +505,9 @@ func TestConcurrentRunsDuringHolderDeath(t *testing.T) {
 }
 
 func TestSandboxInheritsNoSessionDescriptor(t *testing.T) {
+	if !requireN(t) {
+		return
+	}
 	m := scopeManager(t)
 	m.beforeStart = func(r *cgroupRun) {
 		for _, f := range r.command.ExtraFiles {
@@ -481,6 +557,9 @@ func descriptorSnapshot(t *testing.T) map[string]string {
 }
 
 func TestCgroupDescriptorClosedOnEveryPath(t *testing.T) {
+	if !requireN(t) {
+		return
+	}
 	for _, row := range []string{"success", "placement-error", "refused-bootstrap"} {
 		t.Run(row, func(t *testing.T) {
 			// Each path starts with its own live session. A placement failure
@@ -557,6 +636,9 @@ func appHelper(t *testing.T, arg string) (*exec.Cmd, *lineSink, io.WriteCloser, 
 }
 
 func TestAppSIGKILLLeavesNoWorkload(t *testing.T) {
+	if !requireN(t) {
+		return
+	}
 	for _, holderDead := range []bool{false, true} {
 		t.Run(fmt.Sprintf("holder-dead-%v", holderDead), func(t *testing.T) {
 			cmd, lines, input, _ := appHelper(t, "")
@@ -792,10 +874,23 @@ func waitReport(t *testing.T, w *lineSink, exit *appExit) (string, bool) {
 		}
 	}
 }
-func TestCgroupSessionSharesSliceBound(t *testing.T) { boundApp(t, false) }
-func TestCgroupSessionCopiesLeafBound(t *testing.T)  { boundApp(t, true) }
+
+func TestCgroupSessionSharesSliceBound(t *testing.T) {
+	if requireN(t) {
+		boundApp(t, false)
+	}
+}
+
+func TestCgroupSessionCopiesLeafBound(t *testing.T) {
+	if requireN(t) {
+		boundApp(t, true)
+	}
+}
 
 func TestCgroupTargetExit124(t *testing.T) {
+	if !requireN(t) {
+		return
+	}
 	m := scopeManager(t)
 	s := scopeSpec(t, m, "fds")
 	s.Args = []string{"--sidecar-test=exit:124"}
@@ -806,6 +901,9 @@ func TestCgroupTargetExit124(t *testing.T) {
 }
 
 func TestCgroupStartErrorPreservesSession(t *testing.T) {
+	if !requireN(t) {
+		return
+	}
 	for _, startErr := range []error{unix.ENOENT, unix.ENOEXEC, unix.EAGAIN} {
 		t.Run(startErr.Error(), func(t *testing.T) {
 			m := scopeManager(t)

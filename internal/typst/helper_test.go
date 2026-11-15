@@ -2,6 +2,7 @@ package typst
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"image"
 	"image/color"
@@ -43,9 +44,32 @@ func TestMain(m *testing.M) {
 	os.Exit(code)
 }
 
+// launchTier reports the tier typst runs in on this machine: isolated is true
+// in the namespaces tier, false in the namespace-free one. Where the sandbox
+// is refused (arm64 until SB2a2) it logs the refusal with its sentence key,
+// which the inventory reads, and returns ok false: the test passes with it.
+func launchTier(t *testing.T) (isolated, ok bool) {
+	t.Helper()
+	isolated, err := sidecar.NetworkIsolation(sharedStore)
+	if errors.Is(err, sidecar.ErrSandboxRefused) {
+		t.Logf("refusal: preview.fail.sandbox: %v", err)
+		return false, false
+	}
+	if err != nil {
+		t.Fatalf("tier probe: %v", err)
+	}
+	t.Logf("tier: isolated=%t", isolated)
+	return isolated, true
+}
+
 // newEngine returns an engine over the shared cache; adjust changes its Config.
+// A test of the running engine means nothing where the sandbox is refused: it
+// is skipped there with the refusal.
 func newEngine(t *testing.T, adjust func(*Config)) *Engine {
 	t.Helper()
+	if _, ok := launchTier(t); !ok {
+		t.Skip("the sandbox is refused on this machine: no engine runs here")
+	}
 	cfg := Config{CacheDir: sharedCache, Store: sharedStore, deathTest: t.Name()}
 	if adjust != nil {
 		adjust(&cfg)
