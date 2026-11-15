@@ -7,6 +7,9 @@ import (
 )
 
 func TestProjectCannotReadHomeSentinel(t *testing.T) {
+	if !requireLaunch(t) {
+		return
+	}
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Chdir(home)

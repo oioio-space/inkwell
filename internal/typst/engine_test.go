@@ -799,6 +799,9 @@ func TestCompileInputs(t *testing.T) {
 
 func TestNew(t *testing.T) {
 	t.Run("defaults come from the user cache directory", func(t *testing.T) {
+		if _, ok := launchTier(t); !ok {
+			return
+		}
 		cache := t.TempDir()
 		t.Setenv("XDG_CACHE_HOME", cache)
 		t.Setenv("HOME", cache)

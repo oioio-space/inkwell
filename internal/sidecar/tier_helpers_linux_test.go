@@ -95,6 +95,13 @@ func requireN(t *testing.T) bool {
 	return true
 }
 
+// forksInSandbox reports whether a target may create a process on this
+// machine: tier F creates none (S-2).
+func forksInSandbox(t *testing.T) bool {
+	t.Helper()
+	return machineTier(t) == tierN
+}
+
 // requireLaunch returns false on a refused machine: the test then passes with
 // the refusal sentence in its output.
 func requireLaunch(t *testing.T) bool {

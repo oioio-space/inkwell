@@ -298,6 +298,9 @@ func TestInitReportsTargetDeathWithIdentity(t *testing.T) {
 	if os.Getenv("INKWELL_INIT_REPORT") != "1" {
 		// The init reaps whatever child dies (it is PID 1 in production): it
 		// must run in a process that has no other child.
+		if !requireLaunch(t) {
+			return
+		}
 		runChild(t, childTest(name, "INKWELL_INIT_REPORT=1"), name)
 		return
 	}
