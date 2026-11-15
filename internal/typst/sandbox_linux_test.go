@@ -132,12 +132,31 @@ func hostileMemoryRun(t *testing.T, resident, address uint64) (sidecar.Output, e
 	return out, err
 }
 
+// hostileContainment is what bounds a hostile document's memory in the tier
+// this machine gives: the run cgroup in N, the address limit alone in F (no
+// cgroup without a PID namespace).
+func hostileContainment(isolated bool) string {
+	if isolated {
+		return "cgroup"
+	}
+	return "rlimit"
+}
+
 func TestHostileCgroupMemoryIsMemoryLimit(t *testing.T) {
+	isolated, ok := launchTier(t)
+	if !ok {
+		return
+	}
 	out, err := hostileMemoryRun(t, 128<<20, 4<<30)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if out.Containment != "cgroup" || out.MemoryCause != sidecar.MemoryLocalLimit || out.Signal != 9 {
+	if out.Containment != hostileContainment(isolated) {
+		t.Fatalf("containment %q, want %q: %+v", out.Containment, hostileContainment(isolated), out)
+	}
+	// In N the resident bound is Inkwell's own kill; in F the allocation fails
+	// at the address limit (S-11). Both are the memory limit to the person.
+	if isolated && (out.MemoryCause != sidecar.MemoryLocalLimit || out.Signal != 9) {
 		t.Fatalf("not a local resident death: %+v", out)
 	}
 	if err := failure(&Result{}, &out, 4<<30); !errors.Is(err, ErrMemoryLimit) {
@@ -146,6 +165,10 @@ func TestHostileCgroupMemoryIsMemoryLimit(t *testing.T) {
 }
 
 func TestHostileMemoryDeathStartsNoCoreHelper(t *testing.T) {
+	isolated, ok := launchTier(t)
+	if !ok {
+		return
+	}
 	for _, kind := range []string{"local-limit", "address-limit"} {
 		t.Run(kind, func(t *testing.T) {
 			resident, address := uint64(128<<20), uint64(4<<30)
@@ -156,8 +179,8 @@ func TestHostileMemoryDeathStartsNoCoreHelper(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if out.Containment != "cgroup" || out.CoreDump != sidecar.CoreDumpNone {
-				t.Fatalf("missing cgroup or core evidence: %+v", out)
+			if out.Containment != hostileContainment(isolated) || out.CoreDump != sidecar.CoreDumpNone {
+				t.Fatalf("missing %s or core evidence: %+v", hostileContainment(isolated), out)
 			}
 			if err := failure(&Result{}, &out, address); !errors.Is(err, ErrMemoryLimit) {
 				t.Fatalf("not memory: %v (%+v)", err, out)

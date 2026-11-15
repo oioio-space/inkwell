@@ -153,6 +153,9 @@ func TestWatchdogFailsAHang(t *testing.T) {
 // earlier SIGTERM is discarded (measured: a stop issued from the start event
 // takes 3 s and exits -1; one issued 500 ms later takes 2 ms and exits 143).
 func TestSupervisor(t *testing.T) {
+	if !requireLaunch(t) {
+		return
+	}
 	bounded := func(name string, f func(t *testing.T)) {
 		t.Helper()
 		t.Run(name, func(t *testing.T) {
@@ -304,6 +307,10 @@ func TestSupervisor(t *testing.T) {
 	})
 
 	bounded("SIDE-27 the whole process group stops with the supervisor", func(t *testing.T) {
+		// Tier F creates no process (S-2): there is no group beyond the child.
+		if !requireN(t) {
+			return
+		}
 		out := &syncBuffer{}
 		cfg := SupervisorConfig{
 			Name: "tree", Backoff: quick,
@@ -428,6 +435,9 @@ func TestEventKindString(t *testing.T) {
 func TestSupervisorNoOrphanAfterParentDies(t *testing.T) {
 	if !orphanSafe {
 		t.Skip("this platform has no parent-death signal (see docs/plans/2026-10-25-etape-3-typst.md, D4)")
+	}
+	if !requireLaunch(t) {
+		return
 	}
 	parent := exec.CommandContext(t.Context(), os.Args[0]) // #nosec G204 -- re-executes the test binary
 	parent.Env = append(helperEnv("supervise-forever"), "HOME="+os.Getenv("HOME"), "USERPROFILE="+os.Getenv("USERPROFILE"), "APPDATA="+os.Getenv("APPDATA"))
