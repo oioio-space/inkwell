@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 
 	"golang.org/x/sys/unix"
@@ -12,7 +13,7 @@ import (
 
 // directoryLimits prepares an empty, caller-owned private directory. The caller
 // must not mutate it concurrently, including through another Run.
-func directoryLimits(spec Spec) (Spec, []string, error) {
+func directoryLimits(spec Spec, plan launchPlan) (Spec, []string, error) {
 	if spec.WatchDir == "" || spec.MaxDirBytes <= 0 {
 		return spec, nil, nil
 	}
@@ -33,38 +34,56 @@ func directoryLimits(spec Spec) (Spec, []string, error) {
 		return spec, nil, err
 	}
 	defer func() { _ = root.Close() }()
-	entries, err := os.ReadDir(dir)
-	if err != nil || len(entries) != 0 {
-		return spec, nil, errors.New("sidecar: bounded directory must be empty and readable")
-	}
 	if err := validateOutputNames(spec.WriteFiles); err != nil {
 		return spec, nil, err
 	}
-	for _, name := range spec.WriteFiles {
-		f, err := root.OpenFile(name, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
-		if err != nil {
-			return spec, nil, fmt.Errorf("sidecar: prepare output: %w", err)
-		}
-		if err := f.Close(); err != nil {
+	if spec.slotsReady {
+		// The placement fallback (plan T-6): the slots of the first attempt
+		// are reused, never created twice; they must be exactly ours, empty.
+		if err := ownEmptySlots(dir, spec.WriteFiles); err != nil {
 			return spec, nil, err
 		}
-	}
-	overlay, err := probeOutputMount()
-	if err != nil {
+	} else if err := createSlots(root, dir, spec.WriteFiles); err != nil {
 		return spec, nil, err
 	}
-	path, args, err := sandboxPrefix(sandboxConfig{
-		RequireDeath: spec.DeathTest != "",
-		ReadPaths:    spec.ReadPaths,
-		WorkingDir:   spec.Dir,
-		Overlay:      overlay,
-		Directory:    dir,
-		Names:        spec.WriteFiles,
-		File:         directoryFileCap(spec, len(spec.WriteFiles)),
-		Memory:       spec.MemoryLimit,
-	})
+	c := baseConfig(spec, plan)
+	c.Directory, c.Names, c.File = dir, spec.WriteFiles, directoryFileCap(spec, len(spec.WriteFiles))
+	path, args, err := sandboxPrefix(c)
 	spec.FileSizeLimit, spec.MemoryLimit = 0, 0
 	return spec, append([]string{path}, args...), err
+}
+
+// createSlots creates each output slot in the empty folder dir.
+func createSlots(root *os.Root, dir string, names []string) error {
+	entries, err := os.ReadDir(dir)
+	if err != nil || len(entries) != 0 {
+		return errors.New("sidecar: bounded directory must be empty and readable")
+	}
+	for _, name := range names {
+		f, err := root.OpenFile(name, os.O_CREATE|os.O_EXCL|os.O_WRONLY, 0o600)
+		if err != nil {
+			return fmt.Errorf("sidecar: prepare output: %w", err)
+		}
+		if err := f.Close(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// ownEmptySlots checks that dir holds exactly the empty slots names.
+func ownEmptySlots(dir string, names []string) error {
+	entries, err := os.ReadDir(dir)
+	if err != nil || len(entries) != len(names) {
+		return errors.New("sidecar: the output slots changed before the retry")
+	}
+	for _, e := range entries {
+		info, err := e.Info()
+		if err != nil || !info.Mode().IsRegular() || info.Size() != 0 || !slices.Contains(names, e.Name()) {
+			return errors.New("sidecar: the output slots changed before the retry")
+		}
+	}
+	return nil
 }
 
 // A failed write may return EFBIG instead of terminating with SIGXFSZ.

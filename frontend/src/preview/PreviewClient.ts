@@ -60,6 +60,11 @@ export class PreviewClient {
     this.#send(this.#edit);
   }
 
+  /** Compile again although nothing changed (the person asked to try again). */
+  refresh(): void {
+    this.#send({ op: "refresh" });
+  }
+
   /** Ask where the headings and paragraphs are; the answer arrives as an "anchors" message. */
   anchors(): void {
     this.#send({ op: "anchors" });

@@ -61,6 +61,16 @@ const (
 	// FailBlocked: the sandbox stopped the compilation for an action no
 	// document may take; the message carries nothing else (ADR 0042 A7).
 	FailBlocked = "blocked"
+	// FailSandbox: this system cannot give the layout engine the protection
+	// it needs (ADR 0044 point 7, preview.fail.sandbox).
+	FailSandbox = "sandbox"
+	// FailProtected: a protected project cannot be laid out safely on this
+	// system (ADR 0044 point 1e, preview.fail.protected).
+	FailProtected = "protected"
+	// FailRetry: the engine could not start this time (an inconclusive
+	// sandbox probe, [sidecar.ErrProbeInconclusive]): the person can ask
+	// again, nothing is broken (preview.fail.retry).
+	FailRetry = "retry"
 	// FailInternal: anything else.
 	FailInternal = "internal"
 )
@@ -232,14 +242,28 @@ func (p *Preview) Close() {
 	p.wg.Wait()
 }
 
-// networkMode says how Typst is kept offline ("namespace" or "proxy only"; see
-// [typst.Engine.NetworkMode]). It is empty when Typst cannot start.
+// The modes of [Preview.networkMode] when Typst did not start.
+const (
+	// modeRefused: this system cannot confine Typst ([sidecar.ErrSandboxRefused]).
+	modeRefused = "refused"
+	// modePending: the sandbox probe was inconclusive; a later start may succeed.
+	modePending = "pending"
+)
+
+// networkMode says how Typst is confined ("namespace" or "reduced"; see
+// [typst.Engine.NetworkMode]), or why it is not running: "refused", "pending",
+// and empty for any other start failure.
 func (p *Preview) networkMode() string {
 	eng, err := p.engine()
-	if err != nil {
-		return ""
+	switch {
+	case err == nil:
+		return eng.NetworkMode()
+	case errors.Is(err, sidecar.ErrSandboxRefused):
+		return modeRefused
+	case errors.Is(err, sidecar.ErrProbeInconclusive):
+		return modePending
 	}
-	return eng.NetworkMode()
+	return ""
 }
 
 // Changed tells the preview that a file of the project changed on disk. The
@@ -458,6 +482,9 @@ var failureKinds = []struct {
 	{typst.ErrMemoryLimit, FailMemory},
 	{typst.ErrOutputTooLarge, FailTooLarge},
 	{typst.ErrUnsafeProject, FailUnsafe},
+	{sidecar.ErrProtectedRefused, FailProtected},
+	{sidecar.ErrSandboxRefused, FailSandbox},
+	{sidecar.ErrProbeInconclusive, FailRetry},
 	{errUnavailable, FailUnavailable},
 	{typst.ErrIntegrity, FailUnavailable},
 }
@@ -899,9 +926,10 @@ type PreviewService struct{ p *Preview }
 // NewPreviewService returns the service over p.
 func NewPreviewService(p *Preview) *PreviewService { return &PreviewService{p: p} }
 
-// NetworkMode says how Typst is kept offline: "namespace" when it runs in a
-// private network namespace, "proxy only" when the system forbids that and
-// only a refused proxy stands in the way. Empty when Typst cannot start.
+// NetworkMode says how Typst is confined (ADR 0044 point 7): "namespace" in
+// the namespace tier, "reduced" in the namespace-free one; "refused" when this
+// system cannot confine it, "pending" when that could not be decided yet, and
+// empty when Typst cannot start for another reason.
 func (s *PreviewService) NetworkMode() string { return s.p.networkMode() }
 
 // ExportPDF asks the person where to save the PDF of the document, then writes
