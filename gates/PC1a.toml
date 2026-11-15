@@ -1,0 +1,140 @@
+# DRAFT - NOT FROZEN. Acceptance for block PC1a (take over a document by a restart: N-5..N-10, the shared restart rules N-11..N-16 and the gate deadline G-1). Rigour: complete. Plan: docs/plans/2026-11-15-pc1a-take-over.md; shared part, restart
+# mechanism and formal model: docs/plans/2026-11-14-pc1-project-change-by-restart.md. ADR 0043, part 2. Split on 2026-11-15 from the draft PC1 gate; reviewed by Codex,
+# then frozen. The frozen gates/W58.toml stays untouched and superseded (scripts/gate.py has no notion of a superseded
+# gate: the convention is these headers and gates/W58/REVIEW.md « Round 6 » and « Round 8 »).
+# Every long command is `timeout -k 10 N ./scripts/heavy.sh …` (the timeout covers the wait for a slot). No nested gate.
+# Deadline (Codex round 2, D-B): scripts/gate.py refuses caps that sum past max_minutes and stops the run at it (plan rule G-1).
+max_minutes = 45
+raw_results = ["docs/plans/2026-11-15-pc1a-take-over.md", "docs/plans/2026-11-14-pc1-project-change-by-restart.md", "docs/adr/0043-foreign-project.md", "docs/objectif-en-cours.md", "gates/PC1a/*"]
+
+[[criteria]]
+# Each rule row is in the plans (literal « | id | » at a line start), each catalogue key exists, the ADR's status line carries « part 2 PC1a accepted » and not « part 2 PC1a proposed » (ADR 0043, « Status of the parts »).
+id = "docs"
+command = '''python3 -I - <<'PY'
+import json, pathlib, sys
+plan = "".join(pathlib.Path(p).read_text() for p in ["docs/plans/2026-11-15-pc1a-take-over.md", "docs/plans/2026-11-14-pc1-project-change-by-restart.md"])
+fr = json.load(open("frontend/src/i18n/fr.json"))
+rows = ["N-5", "N-6", "N-7", "N-8", "N-9", "N-10", "N-11", "N-12", "N-13", "N-14", "N-15", "N-16", "G-1"]
+keys = ["foreign.takeOver", "foreign.takeOver.confirm.title", "foreign.takeOver.confirm.body", "foreign.takeOver.done", "foreign.takeOver.failed", "foreign.takeOver.busy", "change.flushFailed"]
+bad = [f"plan row {i}" for i in rows if f"\n| {i} |" not in plan]
+bad += [f"fr.json {k}" for k in keys if k not in fr]
+st = [l for l in pathlib.Path("docs/adr/0043-foreign-project.md").read_text().splitlines() if l.startswith("status:")]
+if not st or "part 2 PC1a accepted" not in st[0] or "part 2 PC1a proposed" in st[0]:
+    bad.append("ADR 0043 status line: part 2 PC1a not accepted")
+sys.exit(f"PC1a docs: {bad}" if bad else 0)
+PY'''
+
+[[criteria]]
+# N-5..N-8, N-11..N-13, N-16 in Go: the run succeeds and every named test passes.
+id = "go"
+command = '''out=$(timeout -k 10 300 ./scripts/heavy.sh go test -count=1 -race -v -run 'TestTakeOver|TestNoTrustWrite|TestRequestsRefused|TestTrustStoreUsable|TestRestart(Only|After|Argv|Execs|Failure|LosesLock)|TestStorageWriteBeforeRequest|TestChangeRequest|TestStartupNotice' ./internal/app/ ./internal/bridge/ ./cmd/inkwell/ 2>&1) || { echo "$out" | tail -40; exit 1; }
+for t in TestTakeOverRequestWritesNothing TestTakeOverThenNextStartInvites TestTakeOverArchivesOldList TestTakeOverLeavesTextAndFilesIdentical TestTakeOverCrashAtEachStep TestTakeOverFailureAtEachStep TestTakeOverNoOpForMember TestTakeOverIdDiffersFromOwnProject TestTakeOverNeverAdoptsBeforeShutdown TestTakeOverIdentityOnlyAtNextStart TestTakeOverOutcomeFollowsTheLoadedList TestNoTrustWriteNorSignatureOnceTheWriteStarts TestRequestsRefusedOnceTakeOverRequested TestTrustStoreUsableAfterWiringClose TestRestartOnlyAfterARequestAndOnce TestRestartAfterStopAllReturned TestRestartArgvAndEnvRebuilt TestRestartExecsTheRunningImage TestRestartFailureIsReported TestStartupNoticeShownOnce TestRestartLosesLockToAnotherLaunch TestStorageWriteBeforeRequestLandsOrIsRefused TestChangeRequestClosesBridgeStreamsForGood TestChangeRequestFailsWhenDrainTimesOut; do
+  echo "$out" | grep -q -- "--- PASS: $t" || { echo "missing or not passing: $t"; exit 1; }
+done'''
+
+[[criteria]]
+# G-1: scripts/gate.py refuses caps past max_minutes, stops the run at the deadline, refuses a gate without max_minutes unless legacy.
+id = "gate-deadline"
+command = '''out=$(timeout -k 10 60 ./scripts/heavy.sh python3 -m unittest -v scripts/gate_deadline_test.py 2>&1) || { echo "$out" | tail -40; exit 1; }
+for t in test_caps_over_max_minutes_refused_before_any_run test_run_stopped_at_the_deadline test_gate_without_max_minutes_refused_unless_legacy test_legacy_list_is_closed; do
+  echo "$out" | grep -qE "^$t .* ok$" || { echo "missing or not passing: $t"; exit 1; }
+done'''
+
+[[criteria]]
+# Every PC1a mutant entry exists with its test and an expect text starting with its rule tag.
+id = "mutant-tool"
+command = '''timeout -k 10 60 ./scripts/heavy.sh python3 -m unittest scripts/netsim/mutants_test.py && python3 -I - <<'PY'
+import re, sys, tomllib
+ms = {m["id"]: m for m in tomllib.load(open("scripts/netsim/mutants.toml", "rb"))["mutant"] if m.get("block") == "PC1a"}
+need = ["MW3", "MW4", "MW5", "MW6", "MW7", "MW8", "MW9", "MW10", "MW11", "MW12", "MW13"]
+bad = [i for i in need if i not in ms or ms[i].get("kind") != "go" or not ms[i].get("test") or not re.match(r"[NJG]-\d+ ", ms[i].get("expect", ""))]
+sys.exit(f"PC1a mutant entries missing or without test and expect: {bad}" if bad else 0)
+PY'''
+
+[[criteria]]
+# MW3..MW11, each caught by its named test with its expect text (build error, timeout or another test is no catch).
+id = "mutants"
+command = "timeout -k 10 720 mise run netsim:mutants -- PC1a"
+
+[[criteria]]
+# N-9, N-12, N-15 in the webview and their in-test mutants (Vitest JSON report).
+id = "frontend"
+command = '''cd frontend && timeout -k 10 180 ../scripts/heavy.sh pnpm exec vitest run --configLoader runner --reporter=json --outputFile=../.task/pc1a-fe.json -t 'PC1 '; rc=$?; cd .. && python3 -I - "$rc" <<'PY'
+import json, sys
+rc = int(sys.argv[1])
+r = json.load(open(".task/pc1a-fe.json"))
+ok = {a["title"] for f in r["testResults"] for a in f["assertionResults"] if a["status"] == "passed"}
+need = ['PC1 not a member: one sentence, two actions', 'PC1 take-over asks once and says that Inkwell restarts', 'PC1 the restart page asks Go once and waits', 'PC1 the restart page reloads only on another startup id', 'PC1 a refused take-over reloads the application unchanged', 'PC1 the page flushes, closes its repo and navigates before any request', 'PC1 a flush past its deadline sends nothing and changes nothing', 'PC1 the restart page holds no repo, adapter or storage handle', 'PC1 mutant N-15 request before navigation is caught', 'PC1 the startup notice shows once and the text has the focus', 'PC1 a failed take-over says so and stays readable', 'PC1 mutant N-9 confirmation is caught', 'PC1 mutant N-9 reload on the same id is caught']
+miss = [n for n in need if n not in ok]
+if rc or r["numFailedTests"] or r["numFailedTestSuites"] or miss:
+    sys.exit(f"PC1a frontend: exit {rc}, failed {r['numFailedTests']}, missing {miss}")
+PY'''
+
+[[criteria]]
+# N-10, N-11 end to end on the built candidate, retries 0, no error, unexpected, flaky or skipped test.
+id = "e2e"
+command = '''timeout -k 10 240 ./scripts/heavy.sh mise run e2e:build && cd frontend && timeout -k 10 300 ../scripts/heavy.sh ./node_modules/.bin/playwright test e2e/project-change.spec.ts --retries=0 --reporter=json > ../.task/pc1a-e2e.json; rc=$?; cd .. && python3 -I - "$rc" <<'PY'
+import json, sys
+rc = int(sys.argv[1])
+r = json.load(open(".task/pc1a-e2e.json"))
+st = r.get("stats", {})
+ok = set()
+stack = list(r["suites"])
+while stack:
+    x = stack.pop()
+    stack += x.get("suites", [])
+    for sp in x.get("specs", []):
+        if sp["ok"] and all(t["status"] == "expected" for t in sp["tests"]):
+            ok.add(sp["title"])
+need = ['PC1-E2E the take-over restarts Inkwell on the same document, writable', 'PC1-E2E nothing of the old session survives the restart', 'PC1-E2E a third profile joins after the take-over and receives the earlier text', 'PC1-E2E the first profile then opens the folder as a readable non-member']
+miss = [n for n in need if n not in ok]
+if rc or r.get("errors") or st.get("unexpected") or st.get("flaky") or st.get("skipped") or miss:
+    sys.exit(f"PC1a e2e: exit {rc}, stats {st}, missing {miss}")
+PY'''
+
+[[criteria]]
+# No regression: frontend checks and the create, join and people flows; capped, wait included.
+id = "regression"
+command = "timeout -k 10 180 ./scripts/heavy.sh mise run fe:check && timeout -k 10 300 ./scripts/heavy.sh mise run e2e -- e2e/join.spec.ts e2e/collab.spec.ts e2e/people.spec.ts"
+
+[[criteria]]
+# N-14 natively on the server binary: no descendant, listening socket or descriptor reaches the new image.
+id = "restart-barrier"
+command = "out=$(timeout -k 10 120 ./scripts/heavy.sh go test -count=1 -v -run 'TestRestartBarrier' ./cmd/inkwell/ 2>&1) || { echo \"$out\" | tail -40; exit 1; }; echo \"$out\" | grep -q -- '--- PASS: TestRestartBarrier' || { echo 'missing or not passing: TestRestartBarrier'; exit 1; }"
+
+[[criteria]]
+# N-11, an extra to the behavioural proof (TestTakeOverNeverAdoptsBeforeShutdown, MW9).
+id = "no-live-change"
+command = '''python3 -I - <<'PY'
+import pathlib, re, sys
+bad = []
+ad = pathlib.Path("frontend/src/net/WailsNetworkAdapter.ts").read_text()
+ws = pathlib.Path("frontend/src/workspace/workspace.svelte.ts").read_text()
+bad += [f"adapter still has {n}" for n in ("projectChanged", "pause(", "resume(") if n in ad]
+bad += [f"workspace still has {n}" for n in ("projectChanged", "#joinQuiet", ".pause(", ".resume(") if n in ws]
+inv = pathlib.Path("internal/app/invites.go").read_text()
+m = re.search(r"func \(inv \*invites\) takeOver\(.*?\n}\n", inv, re.S)
+bad += ["takeOver not found"] if not m else [f"takeOver calls {n}" for n in ("AdoptProject", "adoptList") if n in m.group(0)]
+sys.exit(f"PC1a live change: {bad}" if bad else 0)
+PY'''
+
+[[criteria]]
+# The shared model: four sound configurations hold (exhaustive, liveness) and every mutant and witness is caught by its named property.
+id = "tla"
+command = '''out=$(INKWELL_TLA_ONLY='^ProjectChange' timeout -k 10 200 ./scripts/tla-check.sh 2>&1) || { echo "$out" | tail -40; exit 1; }
+for n in ProjectChange ProjectChangeSpawn ProjectChangeFaults ProjectChangeSpawnFaults; do
+  echo "$out" | grep -qF -- "✓ $n: no error (exhaustive, liveness checked)" || { echo "sound configuration missing or failing: $n"; exit 1; }
+done
+for n in ProjectChangeLiveAdopt ProjectChangeRestartBeforeDurable ProjectChangeRestartTwice ProjectChangeRequestBeforeNavigation ProjectChangeJoinNoRestart ProjectChangeJoinTwice ProjectChangeWriteBeforeWiringStopped ProjectChangeWriteBeforeDrain ProjectChangeNoBarrier ProjectChangeSpawnNoWait ProjectChangeJoinRecordAfterInstall ProjectChangeRecoverPrefersAside ProjectChangeCarriedOutcome ProjectChangePageNeverReloads ProjectChangeWitnessTakeOver ProjectChangeWitnessJoinAnnounced ProjectChangeWitnessCrashAfterInstall ProjectChangeWitnessFailedWrite ProjectChangeWitnessWriteRefused; do
+  echo "$out" | grep -qF -- "✓ $n: violation detected" || { echo "mutant or witness not caught by its named property: $n"; exit 1; }
+done'''
+
+[[criteria]]
+# Interface change incl. the restart; light and dark captures; « orphans: 0 »; verdict ship.
+id = "ux-walkthrough"
+command = "test -s gates/PC1a/UX.md && grep -qi 'restart' gates/PC1a/UX.md && grep -q 'orphans: 0' gates/PC1a/UX.md && grep -Eq '^Verdict: ship' gates/PC1a/UX.md"
+
+[[criteria]]
+# The /simplify review of the diff.
+id = "simplify-report"
+command = "test -s gates/PC1a/SIMPLIFY.md"

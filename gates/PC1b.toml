@@ -1,0 +1,113 @@
+# DRAFT - NOT FROZEN. Acceptance for block PC1b (an accepted invitation restarts Inkwell: J-1..J-6 and the drain N-16 on the join path, on the restart built by PC1a). Rigour: complete. Plan: docs/plans/2026-11-15-pc1b-join.md; shared part, restart
+# mechanism and formal model: docs/plans/2026-11-14-pc1-project-change-by-restart.md. ADR 0043, part 2. Split on 2026-11-15 from the draft PC1 gate; reviewed by Codex,
+# then frozen. The frozen gates/W58.toml stays untouched and superseded (scripts/gate.py has no notion of a superseded
+# gate: the convention is these headers and gates/W58/REVIEW.md « Round 6 » and « Round 8 »).
+# Every long command is `timeout -k 10 N ./scripts/heavy.sh …` (the timeout covers the wait for a slot). No nested gate.
+# Deadline (Codex round 2, D-B): scripts/gate.py refuses caps that sum past max_minutes and stops the run at it (PC1a rule G-1).
+max_minutes = 45
+raw_results = ["docs/plans/2026-11-15-pc1b-join.md", "docs/plans/2026-11-14-pc1-project-change-by-restart.md", "docs/adr/0043-foreign-project.md", "docs/objectif-en-cours.md", "gates/PC1b/*"]
+
+[[criteria]]
+# Each rule row is in the plans, each catalogue key exists, the ADR's status line carries « part 2 PC1b accepted » and not « part 2 PC1b proposed », W58 closed.
+id = "docs"
+command = '''python3 -I - <<'PY'
+import json, pathlib, sys
+plan = "".join(pathlib.Path(p).read_text() for p in ["docs/plans/2026-11-15-pc1b-join.md", "docs/plans/2026-11-14-pc1-project-change-by-restart.md"])
+fr = json.load(open("frontend/src/i18n/fr.json"))
+rows = ["J-1", "J-2", "J-3", "J-4", "J-5", "J-6", "N-16"]
+keys = ["join.restart.note", "join.restart.folder", "join.folderDefault", "join.waitingRoot", "join.done", "join.failed"]
+bad = [f"plan row {i}" for i in rows if f"\n| {i} |" not in plan]
+bad += [f"fr.json {k}" for k in keys if k not in fr]
+st = [l for l in pathlib.Path("docs/adr/0043-foreign-project.md").read_text().splitlines() if l.startswith("status:")]
+if not st or "part 2 PC1b accepted" not in st[0] or "part 2 PC1b proposed" in st[0]:
+    bad.append("ADR 0043 status line: part 2 PC1b not accepted")
+ex = pathlib.Path("docs/exigences.md").read_text().splitlines()
+bad += [f"exigences {w} not closed" for w in ["W58"] if not any(l.startswith(f"| {w} |") and "✅" in l for l in ex)]
+sys.exit(f"PC1b docs: {bad}" if bad else 0)
+PY'''
+
+[[criteria]]
+# J-1, J-4..J-6 and N-16 on the join path in Go: the run succeeds and every named test passes.
+id = "go"
+command = '''out=$(timeout -k 10 300 ./scripts/heavy.sh go test -count=1 -race -v -run 'TestJoin|TestCompleteJoin|TestFirstLaunchJoin|TestRequestsRefusedOnceJoinHeld|TestRestartOnlyAfterARequestAndOnce|TestStorageWriteBeforeFinishJoin' ./internal/app/ ./internal/bridge/ ./cmd/inkwell/ 2>&1) || { echo "$out" | tail -40; exit 1; }
+for t in TestJoinRequestWritesNothing TestJoinWritesRecordBeforeTheList TestJoinCrashAtEachStep TestCompleteJoinConsumesOnce TestCompleteJoinRefuses TestJoinOutcomeFollowsTheLoadedList TestJoinFailedRecordDropped TestJoinSameProjectNoRestart TestCompleteJoinAfterTheDocumentIsStored TestFirstLaunchJoinRestarts TestRequestsRefusedOnceJoinHeld TestRestartOnlyAfterARequestAndOnce TestJoinKeepsThePreviousFolder TestJoinFolderNameConfined TestJoinFolderCollisionGetsSuffix TestJoinCrashDuringInstall TestStorageWriteBeforeFinishJoinLandsOrIsRefused; do
+  echo "$out" | grep -q -- "--- PASS: $t" || { echo "missing or not passing: $t"; exit 1; }
+done'''
+
+[[criteria]]
+# Every PC1b mutant entry exists with its test and an expect text starting with its rule tag.
+id = "mutant-tool"
+command = '''timeout -k 10 60 ./scripts/heavy.sh python3 -m unittest scripts/netsim/mutants_test.py && python3 -I - <<'PY'
+import re, sys, tomllib
+ms = {m["id"]: m for m in tomllib.load(open("scripts/netsim/mutants.toml", "rb"))["mutant"] if m.get("block") == "PC1b"}
+need = [f"MJ{n}" for n in range(1, 17)]
+bad = [i for i in need if i not in ms or ms[i].get("kind") != "go" or not ms[i].get("test") or not re.match(r"[NJ]-\d+ ", ms[i].get("expect", ""))]
+sys.exit(f"PC1b mutant entries missing or without test and expect: {bad}" if bad else 0)
+PY'''
+
+[[criteria]]
+# MJ1..MJ16, each caught by its named test with its expect text.
+id = "mutants"
+command = "timeout -k 10 900 mise run netsim:mutants -- PC1b"
+
+[[criteria]]
+# J-2 in the webview and its in-test mutants (Vitest JSON report).
+id = "frontend"
+command = '''cd frontend && timeout -k 10 180 ../scripts/heavy.sh pnpm exec vitest run --configLoader runner --reporter=json --outputFile=../.task/pc1b-fe.json -t 'PC1 '; rc=$?; cd .. && python3 -I - "$rc" <<'PY'
+import json, sys
+rc = int(sys.argv[1])
+r = json.load(open(".task/pc1b-fe.json"))
+ok = {a["title"] for f in r["testResults"] for a in f["assertionResults"] if a["status"] == "passed"}
+need = ['PC1 join says that Inkwell restarts', 'PC1 a pending join waits for its root and never creates a document', 'PC1 the joined notice shows once', 'PC1 the join is completed only after the document is flushed', 'PC1 mutant J-2 fresh document is caught', 'PC1 mutant J-1 completion before the flush is caught']
+miss = [n for n in need if n not in ok]
+if rc or r["numFailedTests"] or r["numFailedTestSuites"] or miss:
+    sys.exit(f"PC1b frontend: exit {rc}, failed {r['numFailedTests']}, missing {miss}")
+PY'''
+
+[[criteria]]
+# J-2, J-3, J-6 end to end on the built candidate, retries 0, no error, unexpected, flaky or skipped test.
+id = "e2e"
+command = '''timeout -k 10 240 ./scripts/heavy.sh mise run e2e:build && cd frontend && timeout -k 10 300 ../scripts/heavy.sh ./node_modules/.bin/playwright test e2e/project-change.spec.ts --retries=0 --reporter=json > ../.task/pc1b-e2e.json; rc=$?; cd .. && python3 -I - "$rc" <<'PY'
+import json, sys
+rc = int(sys.argv[1])
+r = json.load(open(".task/pc1b-e2e.json"))
+st = r.get("stats", {})
+ok = set()
+stack = list(r["suites"])
+while stack:
+    x = stack.pop()
+    stack += x.get("suites", [])
+    for sp in x.get("specs", []):
+        if sp["ok"] and all(t["status"] == "expected" for t in sp["tests"]):
+            ok.add(sp["title"])
+need = ['PC1-E2E a join restarts Inkwell on the document of the inviter', 'PC1-E2E a pending join waits while the inviter is away', 'PC1-E2E after a join and a save of the joined document, the previous text is still in its folder']
+miss = [n for n in need if n not in ok]
+if rc or r.get("errors") or st.get("unexpected") or st.get("flaky") or st.get("skipped") or miss:
+    sys.exit(f"PC1b e2e: exit {rc}, stats {st}, missing {miss}")
+PY'''
+
+[[criteria]]
+# No regression: frontend checks and the create, join and people flows.
+id = "regression"
+command = "timeout -k 10 180 ./scripts/heavy.sh mise run fe:check && timeout -k 10 300 ./scripts/heavy.sh mise run e2e -- e2e/join.spec.ts e2e/collab.spec.ts e2e/people.spec.ts"
+
+[[criteria]]
+# The shared model, as in PC1a.
+id = "tla"
+command = '''out=$(INKWELL_TLA_ONLY='^ProjectChange' timeout -k 10 200 ./scripts/tla-check.sh 2>&1) || { echo "$out" | tail -40; exit 1; }
+for n in ProjectChange ProjectChangeSpawn ProjectChangeFaults ProjectChangeSpawnFaults; do
+  echo "$out" | grep -qF -- "✓ $n: no error (exhaustive, liveness checked)" || { echo "sound configuration missing or failing: $n"; exit 1; }
+done
+for n in ProjectChangeLiveAdopt ProjectChangeRestartBeforeDurable ProjectChangeRestartTwice ProjectChangeRequestBeforeNavigation ProjectChangeJoinNoRestart ProjectChangeJoinTwice ProjectChangeWriteBeforeWiringStopped ProjectChangeWriteBeforeDrain ProjectChangeNoBarrier ProjectChangeSpawnNoWait ProjectChangeJoinRecordAfterInstall ProjectChangeRecoverPrefersAside ProjectChangeCarriedOutcome ProjectChangePageNeverReloads ProjectChangeWitnessTakeOver ProjectChangeWitnessJoinAnnounced ProjectChangeWitnessCrashAfterInstall ProjectChangeWitnessFailedWrite ProjectChangeWitnessWriteRefused; do
+  echo "$out" | grep -qF -- "✓ $n: violation detected" || { echo "mutant or witness not caught by its named property: $n"; exit 1; }
+done'''
+
+[[criteria]]
+# The join with its restart; light and dark captures; verdict ship.
+id = "ux-walkthrough"
+command = "test -s gates/PC1b/UX.md && grep -qi 'restart' gates/PC1b/UX.md && grep -Eq '^Verdict: ship' gates/PC1b/UX.md"
+
+[[criteria]]
+# The /simplify review of the diff.
+id = "simplify-report"
+command = "test -s gates/PC1b/SIMPLIFY.md"

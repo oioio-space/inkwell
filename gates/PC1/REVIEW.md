@@ -79,9 +79,24 @@ absent), `frontend` and `e2e` Python parts on an empty report 1 (every named tes
 keys, « part 2 PC1b not accepted », W58 not closed), `mutant-tool` 1 (MJ1..MJ15 missing), `frontend`, `e2e` 1 likewise.
 The `go`, `mutants`, `restart-barrier` and `regression` commands are unchanged in form (shell only).
 
-## Round 3 — pending (Codex, decision confirmation, short)
+## Round 3 — 2026-11-15 (Codex, decision confirmation): PC1a CONFIRM, PC1b one major, decided
 
 Confirm the design decisions D-A..D-E as dispositions of round 2: (1) N-16, Go drains `store` and `net` before any
 write, join points as named, test observes Go storage, mutant MW12 and model `WriteBeforeDrain`; (2) G-1, `max_minutes`
 enforced by `gate.py` before and during the run; (3) the ADR status tokens; (4) J-6 naming, staging, rename without
 replacement; (5) heredoc commands. A remaining major finding is a design decision for the integrator, not a fourth round.
+
+### Round 3 verdict and disposition
+
+Codex: D-A YES (contract level; implementation to prove at `internal/bridge/storestream.go:443`), D-B YES (G-1 an
+obligation before acceptance, not yet in `scripts/gate.py`), D-C YES, D-E YES; rename without replacement available on
+the three systems (`renameat2(RENAME_NOREPLACE)`, `renamex_np(RENAME_EXCL)`, `MoveFileExW` without
+`MOVEFILE_REPLACE_EXISTING`), failing safe where a filesystem lacks it. D-D NO: J-1 staged in `.inkwell/join-staging/`
+while J-6 staged in the parent, and nothing said how the previous folder finds the staging folder after an
+interruption. Verdict: **PC1a CONFIRM (freeze)**, **PC1b REJECT** on that one major.
+
+Integrator decision (no fourth round, per method v2): one location, `.inkwell-join-<record id>` in the parent (J-1,
+J-6); found again through a marker `.inkwell/join-pending.json` (`{v: 1, id}`) written atomically in the previous
+folder **before** the staging folder is created; the next start of the previous folder removes the staging folder it
+names, then the marker (J-4); after the install only the marker remains and is removed. New mutant MJ16 (staging before
+the marker), crash test extended. PC1b is frozen on this disposition.
