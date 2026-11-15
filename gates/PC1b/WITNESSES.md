@@ -27,3 +27,10 @@ Count red for the right reason: 8 of 10. NO: `regression` (timeout at the 180 s 
   takes 306.9 s (measured 04:53, `mise run fe:check`, exit 0); the other gates give it 1500 s. A spec error of the
   integrator, not a weakening. A frozen gate changes only on the user's word (`.claude/hooks/gate-freeze.sh`):
   decision requested — raise the cap to 1500 s as in `gates/SB2a1.toml`.
+
+## Gate changed on the user's word (2026-11-15, 09:03)
+
+The user accepted the integrator's recommendation: in `regression`, the frontend part is now Biome, svelte-check and
+`vitest run --changed <merge-base with main>` (the tests related to the files the block changed), capped at 180 s,
+plus 30 s for the bindings; the e2e part is unchanged. Caps now sum to 2690 s of the 2700 s allowed. The whole
+suite still runs in `mise run ci` at every push. No other criterion changed.

@@ -1159,6 +1159,26 @@
       "id": "74c0f97bd335354678c3835089eb9650d3a424312c3136b3f2d17a1eccf9cccf",
       "reason": "scripts/tla-check.sh: two ProjectChange runs added (mutant WriteBeforeDrain caught by NoLostWrite, witness WitnessWriteRefused) for the bridge drain N-16 (Codex round 2, D-A); no existing run changed",
       "decision": "docs/plans/2026-11-14-pc1-project-change-by-restart.md"
+    },
+    {
+      "id": "b6d669eab0d8aa3d6e66b6538a402246469aebe31dbb04a31115d0516d4e5b42",
+      "reason": "gates/PC1a.toml: regression criterion changed on the user's explicit word (2026-11-15): the whole Vitest suite takes 307 s alone against the 180 s cap; frontend part is now Biome, svelte-check and vitest --changed <merge-base>, capped 180 s (+30 s bindings); e2e part and its cap unchanged; the whole suite still runs in ci",
+      "decision": "docs/plans/2026-11-15-pc1a-take-over.md"
+    },
+    {
+      "id": "ca4a5c2879dfa743bb32fbb01d03487cc4df2e04525441614312bffa7fd85c1d",
+      "reason": "gates/PC1a.toml: regression criterion changed on the user's explicit word (2026-11-15): the whole Vitest suite takes 307 s alone against the 180 s cap; frontend part is now Biome, svelte-check and vitest --changed <merge-base>, capped 180 s (+30 s bindings); e2e part and its cap unchanged; the whole suite still runs in ci",
+      "decision": "docs/plans/2026-11-15-pc1a-take-over.md"
+    },
+    {
+      "id": "1d45260a71192a24fdabf7e061df368eda956172b7a8366b64129378aa2f65ad",
+      "reason": "gates/PC1b.toml: regression criterion changed on the user's explicit word (2026-11-15): the whole Vitest suite takes 307 s alone against the 180 s cap; frontend part is now Biome, svelte-check and vitest --changed <merge-base>, capped 180 s (+30 s bindings); e2e part and its cap unchanged; the whole suite still runs in ci",
+      "decision": "docs/plans/2026-11-15-pc1b-join.md"
+    },
+    {
+      "id": "7feb0684869fffde67b3f6913f9de8b398807fbb273d869b338bd95ef9972cc6",
+      "reason": "gates/PC1b.toml: regression criterion changed on the user's explicit word (2026-11-15): the whole Vitest suite takes 307 s alone against the 180 s cap; frontend part is now Biome, svelte-check and vitest --changed <merge-base>, capped 180 s (+30 s bindings); e2e part and its cap unchanged; the whole suite still runs in ci",
+      "decision": "docs/plans/2026-11-15-pc1b-join.md"
     }
   ]
 }

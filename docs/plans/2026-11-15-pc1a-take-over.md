@@ -50,3 +50,11 @@ gate-deadline 1, mutant-tool 1, mutants 12 (eleven mutants, about one minute eac
 | Id | Rule | Test (oracle) |
 |---|---|---|
 | G-1 | **A gate has a deadline.** A gate file carries a top-level `max_minutes` (at most 45 for a « standard » or « complete » block of method v2). `scripts/gate.py` reads every criterion's `timeout -k K N` caps; it refuses to start when their sum exceeds `max_minutes` × 60 (message naming the sum and the limit), and at run time it stops the criterion running at `start + max_minutes` (its process group gets SIGTERM, then SIGKILL after 10 s), records `deadline` for it and every criterion not run, and fails the gate. A gate file without `max_minutes` is refused, except those listed in `gates/legacy-no-deadline.txt` (the gates committed before this rule; the list is closed: a name added later fails the test) | `scripts/gate_deadline_test.py`: `test_caps_over_max_minutes_refused_before_any_run`, `test_run_stopped_at_the_deadline` (a criterion sleeping past a 1-minute deadline, time controlled: the process group is gone, the rest is `deadline`), `test_gate_without_max_minutes_refused_unless_legacy`, `test_legacy_list_is_closed` |
+
+## Gate change on the user's word (2026-11-15)
+
+The `regression` criterion of this block's frozen gate was changed with the user's explicit agreement: its frontend
+part is Biome, svelte-check and `vitest run --changed <merge-base with main>` (the tests related to the files the
+block changed), capped at 180 s, plus 30 s for the bindings; the e2e part is unchanged. Reason: the whole Vitest suite
+takes 307 s alone on an idle machine (measured 2026-11-15), past the cap and the gate's 45 minutes; method v2 accepts
+on the touched packages and the whole suite runs in `mise run ci` at every push. Caps now sum to 2690 s of 2700 s.
