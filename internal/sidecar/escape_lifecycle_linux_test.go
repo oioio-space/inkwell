@@ -70,12 +70,17 @@ func escapeAllocation(t *testing.T, tr tier, abi int) {
 	if !requireTier(t, tr) {
 		return
 	}
-	s := spec("scope-address")
+	// The helper maps the whole limit at once, which the limit can never hold.
+	// The limit is 2 GiB, not 1: under 1 GiB the Go runtime itself failed to
+	// start once in a hundred runs (measured 2026-11-15: 4 of 400 at 1 GiB,
+	// 0 of 400 at 2 GiB), and that is not the allocation refused.
+	limit := 2<<30 + raceAddressReserve(t)
+	s := spec("scope-address:" + strconv.FormatUint(limit, 10))
 	s.Dir = t.TempDir()
 	s.tier = tr
 	s.landlockABI = abi
 	s.disableScope = true
-	s.MemoryLimit = 1<<30 + raceAddressReserve(t)
+	s.MemoryLimit = limit
 	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 	defer cancel()
 	out, err := Run(ctx, s)
