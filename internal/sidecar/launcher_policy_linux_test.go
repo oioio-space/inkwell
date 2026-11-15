@@ -230,6 +230,10 @@ func TestLauncherMountConstruction(t *testing.T) {
 		}
 		return
 	}
+	// The mounts need the mount namespace of tier N.
+	if !requireN(t) {
+		return
+	}
 	dir := t.TempDir()
 	args := []string{"-test.run=^TestLauncherMountConstruction$"}
 	if f := flag.Lookup("test.gocoverdir"); f != nil && f.Value.String() != "" {
@@ -260,6 +264,9 @@ func TestLauncherMountConstruction(t *testing.T) {
 
 func TestSandboxExecDeniedTarget(t *testing.T) {
 	if os.Getenv("INKWELL_EXEC_DENIED") != "1" {
+		if !requireLaunch(t) {
+			return
+		}
 		// sandboxExec sets RLIMIT_CORE to 0, soft and hard, for the whole process,
 		// and an unprivileged process cannot raise a hard limit back: run the case
 		// in a child and prove this process keeps its limit.
@@ -493,6 +500,10 @@ func TestSandboxMountErrors(t *testing.T) {
 	// Rejected before any mount, so this case is safe in-process.
 	if err := sandboxExec(sandboxConfig{MountBytes: 1}, nil); err == nil || !strings.Contains(err.Error(), "at least one page") {
 		t.Fatalf("sub-page mount: %v, want the one-page error", err)
+	}
+	// The mount itself needs the mount namespace of tier N.
+	if !requireN(t) {
+		return
 	}
 	cmd := childTest("TestSandboxMountErrors", "INKWELL_MOUNT_ERRORS=1")
 	setProcAttr(cmd)

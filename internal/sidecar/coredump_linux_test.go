@@ -78,6 +78,9 @@ func TestCorePatternGuaranteeScope(t *testing.T) {
 
 // W49 T1, ADR 0042 A5: the target starts with RLIMIT_CORE exactly {1,1}, read by the target itself, on every launch path.
 func TestTargetCoreLimitIsSentinel(t *testing.T) {
+	if !requireLaunch(t) {
+		return
+	}
 	for _, bounded := range []bool{false, true} {
 		t.Run(map[bool]string{false: "plain", true: "bounded"}[bounded], func(t *testing.T) {
 			s := spec("rlimits")
@@ -99,6 +102,9 @@ func TestTargetCoreLimitIsSentinel(t *testing.T) {
 // W49 T2, ADR 0042 A5, D1: each attack still dies of the intended signal, and the
 // kernel starts no core helper for it (PIDFD_INFO_COREDUMP, Linux 6.16).
 func TestSandboxDeathStartsNoCoreHelper(t *testing.T) {
+	if !requireLaunch(t) {
+		return
+	}
 	requireGuaranteedCorePattern(t)
 	for _, tc := range []struct {
 		attack string
@@ -208,6 +214,9 @@ func recordDeath(t *testing.T, pid int, nspid []int, comm string, signal int, co
 }
 
 func TestTargetCannotLowerCoreLimit(t *testing.T) {
+	if !requireLaunch(t) {
+		return
+	}
 	for _, api := range []string{"prlimit64", "setrlimit"} {
 		t.Run(api, func(t *testing.T) {
 			s := spec("lower-core:" + api)

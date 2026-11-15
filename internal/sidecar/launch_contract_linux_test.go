@@ -277,7 +277,8 @@ func TestNoCgroupWithoutPIDNamespace(t *testing.T) {
 }
 
 func TestPlacementRefusedFallsBack(t *testing.T) {
-	if !requireN(t) {
+	// Tier F has no placement to refuse: there the rule's other half holds.
+	if !requireScope(t) {
 		return
 	}
 	m := scopeManager(t)

@@ -123,6 +123,9 @@ func TestSupervisorBackoffShapes(t *testing.T) {
 // TestSupervisorGivingUp: the default is ten consecutive failures, one gives up
 // at once, and a negative number never gives up.
 func TestSupervisorGivingUp(t *testing.T) {
+	if !requireLaunch(t) {
+		return
+	}
 	tiny := Backoff{Initial: time.Millisecond, Max: time.Millisecond, Factor: 1}
 	var calls atomic.Int32
 	rec := &recorder{}
@@ -160,6 +163,9 @@ func TestSupervisorGivingUp(t *testing.T) {
 // starts the count over, so a program that keeps crashing only after a good
 // run is never given up on.
 func TestSupervisorStableRunForgivesFailures(t *testing.T) {
+	if !requireLaunch(t) {
+		return
+	}
 	rec := &recorder{}
 	var calls atomic.Int32
 	cfg := SupervisorConfig{

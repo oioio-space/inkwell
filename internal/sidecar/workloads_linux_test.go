@@ -13,6 +13,9 @@ import (
 // PM-1 project member. The supervised Tinymist LSP test covers the server.
 func TestAllowlistRealTypstWorkloads(t *testing.T) {
 	requireEmbedded(t)
+	if !requireLaunch(t) {
+		return
+	}
 	store := &Store{Dir: sharedCache}
 	binary, err := store.Resolve(Typst)
 	if err != nil {
