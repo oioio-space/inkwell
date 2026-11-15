@@ -37,6 +37,21 @@ définie le 2026-11-12 dans [docs/autonomous-decisions.md](docs/autonomous-decis
 
 **Intégrateur : la session Claude Code** (seule à commiter ; sans Claude, voir « When Claude is absent » de la méthode v2 et `AGENTS.md`).
 
+**Cap à long terme (écrit le 2026-11-15 pour toute session qui reprend ; à tenir à jour, jamais à dupliquer ailleurs) :**
+
+But : la première version (R1) — un éditeur collaboratif sans serveur, beau, simple en apparence et complet, qui s'installe par paquet `deb`/`rpm` sans rien d'autre, fonctionne sur Ubuntu 24.04 telle qu'installée, et dont chaque promesse est prouvée. Puis arm64, Windows, le lien Git optionnel, les greffons.
+
+Ordre, sauf décision contraire de l'utilisatrice (le tableau ci-dessus donne le détail de chaque ligne) :
+1. **`main` vert et poussé d'abord, toujours** : aucune fonction nouvelle tant qu'un bloc commité fait échouer la CI locale ou GitHub (aujourd'hui : PC1b et la simulation de réseau, puis CL1) ; un bloc commencé se termine avant d'en ouvrir un autre.
+2. **Finir SB2a1** (Ubuntu 24.04), puis **EX0** (registre unique des contributions : posé tôt pour ne jamais exposer l'intérieur aux greffons, W72).
+3. **IV1** avant R1 : le seul défaut de l'audit du protocole qu'un inconnu peut déclencher ; avec lui, faire porter au Welcome la racine du document (lève la contrainte « seule l'annonce de l'inviteur », F1 de PC1b) si le point 1 de la reprise confirme ce besoin.
+4. **UX1 et W65** : l'interface retenue par l'utilisatrice dans les deux études (P1–P32 sauf P26 ; T, D, V, F, O, S, G) — c'est là que se joue « beau, simple, très fonctionnel » ; y entrent W74 (boutons de fenêtre), W75 (projets récents) et les résiduels des parcours de PC1a, PC1b et SB2a1. Chaque écran passe par une séance courte avec elle (R14).
+5. **Solidité** : AD1, TR1 (dont la racine signée), BR1, NA1, UF1, HB1, PR1, RP1.
+6. **R1** : recette, paquets, parcours à deux personnes ; les cinq autres défauts critiques de l'audit (pair déjà admis) sont nommés comme limites connues dans les notes de version, puis corrigés aux étapes 5, 6 et 8 de l'ADR 0034.
+7. Après R1 : SB2a2 (arm64), Windows (N35), lien Git (conception faite, W71), greffons.
+
+Ce qui ne se négocie pas en route : la définition de « fini » et les invariants de `CLAUDE.md` ; on délègue au système ce qui est à lui (W64 : l'adversaire est un pair) ; on ne change jamais de projet à chaud (PC1) ; une preuve qui gêne ne s'affaiblit pas, elle se comprend (les quatre exécutions GitHub de SB2a1 ont chacune trouvé un vrai écart) ; les choix pris seuls vont dans `docs/autonomous-decisions.md` et lui sont montrés quand elle demande où on en est ; Codex avec parcimonie, pour ce que lui seul peut faire.
+
 **Reprise (passation du 2026-11-15, 21:45) — à lire en premier, dans cet ordre :**
 
 État de `main` : cinq commits **locaux non poussés** (`e637035` icônes, `5a268f5`, `611ba1b` W74, `81397c4` W75, `73d0f4b` PC1b). Le push est **bloqué par la CI locale** (simulation de réseau, points 1 et 2). Ne pas pousser avec `--no-verify`.
@@ -49,9 +64,8 @@ définie le 2026-11-12 dans [docs/autonomous-decisions.md](docs/autonomous-decis
 **Décisions prises sans l'utilisatrice, à lui montrer** (`docs/autonomous-decisions.md`, lignes du 2026-11-15) : critère `regression` des portes PC1a/PC1b restreint aux fichiers de tests du bloc (seconde retouche, sans réponse d'elle) ; phrases du bac à sable (« isolation réduite », refus, « Réessayer ») ; confirmation avant redémarrage et « Revenir à mon document » (PC1b) ; seule l'annonce de l'inviteur ouvre le document (F1). **À vérifier par elle** : `~/Documents/Inkwell/Sans titre`, touché par accident le matin puis restauré. **Demandes du jour** : W74 (boutons agrandir et réduire), W75 (projets récents), W73 (les tests de borne de session restent dans la CI locale : l'alerte GNOME pendant un push local est attendue).
 
 **Pièges rencontrés aujourd'hui (outillage)** :
-- un commit lancé depuis un worktree est refusé par le hook Claude, qui compare l'attestation à l'arbre principal : soit porter l'arbre du worktree dans `main` (`git diff --binary HEAD <arbre>` puis `git apply --3way --index`), soit, pour une branche candidate, armer l'attestation du worktree (`$(git rev-parse --git-dir)/claude-simplify-ok`) **et** celle de `main` sur son index vide ;
+- commit depuis un worktree, icônes régénérées, échec « dû à la charge », porte sans scénario réseau, bloc dépendant du système : règles désormais dans `CLAUDE.md`, « Pièges connus » ; pour une branche candidate (commit nécessaire dans le worktree), armer l'attestation du worktree (`$(git rev-parse --git-dir)/claude-simplify-ok`) et celle de `main` sur son index vide ;
 - sauvegarder un worktree par un arbre git (`GIT_INDEX_FILE=<fichier> git read-tree HEAD && git add -A && git write-tree`), pas par `git diff` seul (manque les suppressions et les fichiers neufs) ;
-- `app:build` régénère `build/darwin/icons.icns` et `build/windows/icon.ico` : les écarter avant tout `git add -A` ;
 - ne pas pointer `TMPDIR` vers un chemin long pendant la CI (sockets) ; ne pas envelopper `mise` dans des `XDG_*` modifiés ;
 - pas de commit sur `main` pendant un push (le nettoyage du pre-commit supprime `sbom.cdx.json`) ;
 - la simulation de réseau et les portes veulent la machine seule : `scripts/heavy.sh --exclusive`, et aucun agent lourd pendant ce temps ;
