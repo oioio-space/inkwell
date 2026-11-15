@@ -1,5 +1,5 @@
 ---
-status: accepted # part 1 (W58a) accepted and merged on 2026-11-14; part 2 (PC1, split into PC1a then PC1b) stays a draft, proposed, until each block writes « part 2 PC1a accepted » or « part 2 PC1b accepted » in this line at its merge (its gate's docs criterion reads it); # split on 2026-11-14 into part 1 (block W58a, gate gates/W58a.toml: read-only and no broken invitation) and part 2 (block PC1, gate gates/PC1.toml: the project changes by a restart, never live); history in gates/W58/REVIEW.md rounds 1-8; the frozen gates/W58.toml is superseded; each part is accepted when its block is merged
+status: accepted # part 1 W58a accepted 2026-11-14; part 2 PC1a proposed; part 2 PC1b proposed
 date: 2026-11-14
 decision-makers: [Mathieu]
 ---
@@ -7,7 +7,7 @@ decision-makers: [Mathieu]
 # A project whose member list does not name this device opens read-only, and is taken over in place or joined; inkwell does not defend the local folder
 
 Diagnosis: `docs/plans/2026-11-13-invite-not-admin.md`. Plans: `docs/plans/2026-11-14-w58a-foreign-read-only.md` (block W58a) and
-`docs/plans/2026-11-14-pc1-project-change-by-restart.md` (block PC1). Gates: `gates/W58a.toml` and `gates/PC1.toml` (drafts; they supersede `gates/W58.toml`, frozen on 2026-11-14 for revision 6 and no longer run). Review history: `gates/W58/REVIEW.md`. Requirements:
+`docs/plans/2026-11-14-pc1-project-change-by-restart.md` (block PC1). Gates: `gates/W58a.toml`, `gates/PC1a.toml` and `gates/PC1b.toml` (they supersede `gates/W58.toml`, frozen on 2026-11-14 for revision 6 and no longer run). Review history: `gates/W58/REVIEW.md`. Requirements:
 W58 (R1 blocker), W64.
 
 ## Context and problem
@@ -59,6 +59,16 @@ says exactly that and promises nothing more. This is part 1's stated limit.
    of the result (`Invitation.Refused`, a stable key, like the existing `CodeError`), never as an error text: a Go
    error reaches the webview only as a string (`cmd/inkwell/main.go:113`, no serialiser). The Go text goes to the log.
 
+### Status of the parts
+
+The front-matter `status:` line carries one token per part, `part <n> <block> <state>`, where `<state>` is `proposed`
+or `accepted` (with the date for an accepted part). A block's merge replaces its own token, `part 2 PC1a proposed` by
+`part 2 PC1a accepted <date>` (the same for PC1b); its gate's `docs` criterion requires the token `part 2 <block>
+accepted` on that line and the absence of `part 2 <block> proposed`, so a draft cannot pass it and no explanation
+belongs on that line. History of the split: part 1 (block W58a, gate `gates/W58a.toml`) and part 2 (block PC1, split
+on 2026-11-15 into PC1a, take-over, and PC1b, join; gates `gates/PC1a.toml` and `gates/PC1b.toml`); the frozen
+`gates/W58.toml` is superseded; review history in `gates/W58/REVIEW.md` rounds 1-8 and `gates/PC1/REVIEW.md`.
+
 ### Part 2 — block PC1: the project changes by a restart, never live (mandatory before R1)
 
 Part 2 adds « Reprendre ce document ici » and puts the join under the same rule. Draft, reviewed after W58a is
@@ -96,6 +106,17 @@ merged; its formal model is `ProjectChange.tla` (plan of PC1).
    and followed by the same restart, with a pending-join record so that the next start opens the inviter's document
    (rules J-1..J-5, written on 2026-11-15 in `docs/plans/2026-11-15-pc1b-join.md`, block PC1b, after PC1a's take-over
    and restart; model `docs/protocol/tla/ProjectChange.tla`). Until PC1b is merged the join behaves as on `main`.
+8. **Go drains the bridge before it writes (N-16, revision of 2026-11-15 after Codex round 2).** The page's flush
+   and navigation to the restart page (N-15) are best effort: they shorten the window, they prove nothing. The proof
+   is in Go: on a take-over or join request, Go closes the bridge's `store` and `net` streams for good (a reopening
+   is refused until the restart), waits with a deadline until every handler has returned, and only then writes the
+   member list and restarts. A storage write the page sent just before the request has therefore either landed in
+   the old project's storage, where the next image finds it, or been refused with a sentence; it is never lost
+   silently and never applied to the new project. Past the deadline the request fails and nothing is written.
+9. **The joined project's folder is named safely (J-6).** Its name comes from the joined document's title, which a
+   peer supplies: normalised to the allowed characters and length, with no separator and no dot-name, created
+   exclusively with a numbered suffix on a collision, filled in a staging folder and installed by one rename that
+   never replaces an existing folder.
 
 ## Considered options
 

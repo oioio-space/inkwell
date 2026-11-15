@@ -30,10 +30,58 @@ Verbatim:
 TLC after the changes: the four sound configurations hold (exhaustive, liveness), the 13 mutants and 4 witnesses are
 each caught by the property of their README row (`INKWELL_TLA_ONLY='^ProjectChange' ./scripts/tla-check.sh`, 21 runs).
 
-## Round 2 — pending (Codex, short)
+## Round 2 — Codex, 2026-11-15: PC1a REJECT, PC1b REJECT
 
-Confirm: (1) N-15 is buildable as written (Wails asset server serves `restart.html` as its own entry; `repo.shutdown()`
-then `location.replace` ends every automerge-repo continuation; Go's « no editor stream open » check), (2) J-6 (new
-folder beside, name confinement, staging under `.inkwell/`) preserves the text and adds no new attack surface, (3) the
-mutant lists now falsify every refusal and both restart triggers, (4) the budget criterion is a real global cap.
-At most 20 lines, one verdict per block.
+Asked to confirm: (1) N-15 buildable as written, (2) J-6 preserves the text without new attack surface, (3) the mutant
+lists falsify every refusal and both restart triggers, (4) the `budget` criterion is a real global cap.
+
+Verbatim:
+
+> 1. **PageGate — NOT RESOLVED** : la navigation remplace utilement la barrière supposée, mais N-15 ne contractualise pas la fin des opérations Go déjà reçues (`docs/plans/2026-11-14-pc1-project-change-by-restart.md:46`, `internal/bridge/storestream.go:443`).
+> 2. **Déclencheur du redémarrage — RESOLVED** : reprise et join sont explicites, avec test et mutant (`docs/plans/2026-11-14-pc1-project-change-by-restart.md:43`).
+> 3. **Falsification — RESOLVED au niveau spécification** : MJ6–MJ10 couvrent les refus et le stockage ; MJ11 couvre le premier join (`docs/plans/2026-11-15-pc1b-join.md:17`, `docs/plans/2026-11-15-pc1b-join.md:19`).
+> 4. **Conservation du texte — RESOLVED au niveau spécification** : dossier distinct, vérification après première sauvegarde et mutant destructif (`docs/plans/2026-11-15-pc1b-join.md:22`), sous réserve de corriger N-15.
+> 5. **Budget — NOT RESOLVED comme plafond global** : sommer les délais ne borne ni les commandes hors `timeout`, ni les surcoûts ; le lanceur n’impose aucun délai global (`gates/PC1a.toml:11`, `gates/PC1b.toml:11`, `scripts/gate.py:434`).
+> 6. **Limites du modèle — RESOLVED** : demandes successives, lancement externe et archive sont explicitement délégués aux tests/mutants nommés (`docs/plans/2026-11-14-pc1-project-change-by-restart.md:65`).
+> 7. **Contrôle documentaire — NOT RESOLVED intégralement** : recherche littérale corrigée, mais les deux mentions recherchées figurent déjà dans la phrase déclarant la partie 2 encore proposée : faux positif (`gates/PC1a.toml:16`, `gates/PC1b.toml:16`, `docs/adr/0043-foreign-project.md:2`).
+> 8. **N-15, faisabilité Wails : oui pour la seconde entrée HTML**, embarquée et servie par le même serveur (`cmd/inkwell/main.go:118` ; [documentation Wails](https://v3.wails.io/contributing/asset-server/)).
+> 9. **N-15, garantie absolue : non** : `shutdown()` déconnecte les adaptateurs réseau puis appelle `flush()` ; il ne détruit pas le repo (`frontend/node_modules/@automerge/automerge-repo/dist/Repo.js:740`).
+> 10. La navigation supprime les continuations de la page détruite, mais ne constitue pas une annulation universelle du stockage : une fermeture IndexedDB attend normalement les transactions ([spécification IndexedDB §5.2](https://www.w3.org/TR/IndexedDB/#closing-connection) ; assertion excessive dans `docs/plans/2026-11-14-pc1-project-change-by-restart.md:46`).
+> 11. **Majeur restant : préciser la barrière Go** : compter aussi le stream `store`, attendre la sortie de ses handlers et interdire leur réouverture pendant le changement ; « aucun stream éditeur ouvert » seul ne prouve pas ce drainage (`cmd/inkwell/main.go:138`, `cmd/inkwell/main.go:139`, `internal/bridge/storestream.go:412`, `internal/bridge/storestream.go:443`).
+> 12. Le test suspendu doit observer l’écriture effective côté stockage, pas seulement l’absence d’appel au bridge après navigation (`docs/plans/2026-11-14-pc1-project-change-by-restart.md:46`).
+> 13. **J-6 : nouvelle entrée non fiable vers le système de fichiers**, mais confinement et collisions sont contractualisés ; aucune traversée démontrée sous l’adversaire pair (`docs/plans/2026-11-15-pc1b-join.md:22`).
+> 14. À préciser : installation atomique **sans remplacement**, avec nouvel essai sur collision ; hypothèse de concurrence entre deux créations légitimes, sans supposer de fichiers locaux hostiles (`docs/plans/2026-11-15-pc1b-join.md:17`, `docs/plans/2026-11-15-pc1b-join.md:22`).
+> 15. **Autre majeur : commandes Python invalides telles qu’écrites** : dans les arguments shell entre apostrophes, les `\\n` TOML deviennent des caractères littéraux `\n`, pas des sauts de ligne Python ; corriger notamment `budget` et `docs` avant gel (`gates/PC1a.toml:11`, `gates/PC1a.toml:16`, `gates/PC1b.toml:11`, `gates/PC1b.toml:16`).
+>
+> PC1a REJECT
+> PC1b REJECT
+
+### Dispositions (2026-11-15, integrator's decisions D-A..D-E; third round = design decisions, method v2)
+
+| # | Finding | Disposition | Where |
+|---|---|---|---|
+| 1, 9-12 | PageGate: N-15 does not bound the Go operations already received; `shutdown()` flushes, does not destroy; IndexedDB close waits for transactions; the Go barrier must count `store`, await its handlers, forbid reopening; the suspended-write test must observe storage | **D-A, design**: new rule N-16, Go drains the bridge before it writes (streams closed for good, write not taken refused with a sentence, handlers awaited with a 5 s deadline, join points `StoreServer.Serve`, `Router.Serve`, `storestream.go:443`, `main.go:138-139`); N-15 softened to best effort; `TestStorageWriteBeforeRequestLandsOrIsRefused` observes Go storage after the restart; MW12 redefined « list written before the drain »; model: bridge variables, `Drain`, property `NoLostWrite`, mutant `WriteBeforeDrain`, witness `WitnessWriteRefused` | shared plan N-15, N-16; ADR 0043 point 8; `ProjectChange.tla`; gates `go`, `tla` |
+| 2, 3, 4, 6, 8 | resolved or confirmed | none | — |
+| 5 | Sum of caps is no global cap | **D-B**: `max_minutes = 45` in each gate file, enforced by `scripts/gate.py` (refused before the run when the caps sum past it, run stopped at the deadline), rule G-1 of PC1a with `scripts/gate_deadline_test.py`; `budget` criterion dropped | PC1a plan « Tooling rule »; gates head, `gate-deadline` |
+| 7 | Docs check false positive | **D-C**: the ADR status line is now tokens only (`part 2 PC1a proposed; part 2 PC1b proposed`), format in ADR « Status of the parts »; the check requires `part 2 <block> accepted` and the absence of `part 2 <block> proposed` | ADR 0043 line 2; gates `docs` |
+| 13, 14 | J-6: peer-supplied title; install without replacement, retry on collision | **D-D**: normalisation made explicit (allowed characters, 64, no separator, no dot-name), exclusive staging folder in the same parent, rename without replacement per OS, « (2) »… up to 99; tests `TestJoinFolderNameConfined` (traversal-shaped titles), `TestJoinFolderCollisionGetsSuffix`, `TestJoinCrashDuringInstall`; mutant MJ15 `J-6 never replaces` | PC1b plan J-6; ADR 0043 point 9; gate `go`, `mutant-tool` |
+| 15 | Embedded Python invalid | **Refuted by measurement** (TOML basic strings decode `\n` into newlines: before the change PC1a `budget` exited 0, `docs` exited 1 on missing catalogue keys, PC1b likewise); **D-E** applied anyway for clarity: every program is a heredoc in a TOML literal string, each run once (witnesses below) | both gates |
+
+TLC after D-A (`INKWELL_TLA_ONLY='^ProjectChange' ./scripts/tla-check.sh`, 23 runs, 132 s): the four sound
+configurations hold with `NoLostWrite` (exhaustive, liveness; Faults 998,929 distinct states, 51 s), the 14 mutants
+(`WriteBeforeDrain` caught by `NoLostWrite`) and the 5 witnesses (`WitnessWriteRefused` reached) each by their
+README property.
+
+Red witnesses of the rewritten commands (2026-11-15, each run once): PC1a `docs` 1 (missing `foreign.takeOver*` and
+`change.flushFailed` keys; « part 2 PC1a not accepted »; every plan row found, N-16 and G-1 included), `no-live-change`
+1 (« takeOver not found »), `mutant-tool` 1 (MW3..MW13 missing), `gate-deadline` 1 (`scripts/gate_deadline_test.py`
+absent), `frontend` and `e2e` Python parts on an empty report 1 (every named test missing); PC1b `docs` 1 (six `join.*`
+keys, « part 2 PC1b not accepted », W58 not closed), `mutant-tool` 1 (MJ1..MJ15 missing), `frontend`, `e2e` 1 likewise.
+The `go`, `mutants`, `restart-barrier` and `regression` commands are unchanged in form (shell only).
+
+## Round 3 — pending (Codex, decision confirmation, short)
+
+Confirm the design decisions D-A..D-E as dispositions of round 2: (1) N-16, Go drains `store` and `net` before any
+write, join points as named, test observes Go storage, mutant MW12 and model `WriteBeforeDrain`; (2) G-1, `max_minutes`
+enforced by `gate.py` before and during the run; (3) the ADR status tokens; (4) J-6 naming, staging, rename without
+replacement; (5) heredoc commands. A remaining major finding is a design decision for the integrator, not a fourth round.

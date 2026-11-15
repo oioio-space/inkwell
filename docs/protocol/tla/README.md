@@ -718,6 +718,9 @@ profile on one folder:
   (Raft's `Restart`: "it loses everything but" stable storage). A crash may hit any process at any step; a write step
   or the execution may fail (a failed rollback included). Projects are `old` and `new`; roots `R0` (the folder's
   document) and `R1` (the inviter's).
+- **The bridge** (N-16): the page's `store` and `net` streams to Go. One storage write of the page per behaviour;
+  on a request (or a quit) Go closes both streams for good, refuses a write not yet taken (the page says so) and
+  waits for the handler in flight; the member-list write and `stopAll` start only once drained.
 - **Environment**: one peer that attests under whatever project the wiring runs, the person (request, quit,
   relaunch), a member of the new project that gives the root document after a join (and announces its URL when the
   genesis carries none), children, faults.
@@ -745,14 +748,15 @@ person, the peer, children or faults.
 | `JoinOnce` | J-1, J-2 | the pending-join record is consumed at most once and « joined » shows at most once |
 | `OneImage` | N-12, N35, ADR 0037 | one process works on the profile at a time: a restarted image starts its work only when the previous one has ended |
 | `NoticeMatchesStanding` | N-12, J-2 | the notice tells what loaded: the three outcomes of the write, `errCommitted` included |
+| `NoLostWrite` | N-16 | a storage write of the page is never lost silently (while pending, its image still runs, shuts down or crashed) and never lands once the member-list write began |
 | `ChangeCompletes` (F1-F3) | N-9, N-12, J-2 | a request ends in a running image of the new project, the page reloaded on it with the project's root and the notice, unless a crash, a failed step or a quit interrupted it |
 
-| Configuration | Result (TLC 1.8.0, 2 workers, 2026-11-15) |
+| Configuration | Result (TLC 1.8.0, 2 workers, 2026-11-15, with the bridge drain N-16) |
 |---|---|
-| `ProjectChange.cfg`: exec; take-over or join (root in the genesis or announced); 3 images, 1 crash, 1 failed step | **exhaustive, no error**: 29,868 states generated, 14,538 distinct, depth 30, liveness included, 1 s |
-| `ProjectChangeSpawn.cfg`: spawn, as above | **exhaustive, no error**: 35,060 states, 17,361 distinct, depth 30, liveness included, 1 s |
-| `ProjectChangeFaults.cfg`: exec; 4 images, 2 crashes, 2 failed steps | **exhaustive, no error**: 228,214 states, 104,580 distinct, depth 38, liveness included, 4 s |
-| `ProjectChangeSpawnFaults.cfg`: spawn, as above | **exhaustive, no error**: 269,568 states, 124,758 distinct, depth 38, liveness included, 4 s |
+| `ProjectChange.cfg`: exec; take-over or join (root in the genesis or announced); 3 images, 1 crash, 1 failed step | **exhaustive, no error**: 174,908 states generated, 81,790 distinct, depth 36, liveness included, 4 s |
+| `ProjectChangeSpawn.cfg`: spawn, as above | **exhaustive, no error**: 198,115 states, 93,657 distinct, depth 36, liveness included, 4 s |
+| `ProjectChangeFaults.cfg`: exec; 4 images, 2 crashes, 2 failed steps | **exhaustive, no error**: 2,238,681 states, 998,929 distinct, depth 46, liveness included, 51 s |
+| `ProjectChangeSpawnFaults.cfg`: spawn, as above | **exhaustive, no error**: 2,567,171 states, 1,155,209 distinct, depth 45, liveness included, 59 s |
 
 Mutants (`mutants/ProjectChangeMutants.tla`, each config overrides one rule of the sound model with the constants of
 `ProjectChange.cfg`, `SpawnNoWait` and `WitnessJoinAnnounced` those of `ProjectChangeSpawn.cfg`; anchor = the override
@@ -768,6 +772,7 @@ something is violated.
 | `ProjectChangeJoinNoRestart` | `RestartWanted <- TakeOverOnly` | N-12: a join is written but only a take-over restarts (constants of `ProjectChange.cfg`, `Kinds = {"join"}`); the image exits and the change never completes | `ChangeCompletes` |
 | `ProjectChangeJoinTwice` | `ClearRecord <- KeepRecord` | consuming the pending-join record leaves it in `project.json`; the next start consumes it again | `JoinOnce` |
 | `ProjectChangeWriteBeforeWiringStopped` | `WriteOK <- Anytime` | the write starts while the wiring runs (MW10): an op of the old project lands in the new list | `NoOldStateAfterChange` |
+| `ProjectChangeWriteBeforeDrain` | `WriteOK <- WriteBeforeDrain` | N-16: the member-list write starts once the wiring stopped but before Go drained the store and net streams: a storage write of the page still in its handler lands after the write began | `NoLostWrite` |
 | `ProjectChangeNoBarrier` | `BarrierOK <- NoBarrier` | no termination barrier (MW11): a child of the old image runs beside the new one | `NoOldStateAfterChange` |
 | `ProjectChangeSpawnNoWait` | `MayStart <- NoWait` | N35: the spawned image starts its work without claiming the profile lock, while the old one is still exiting | `OneImage` |
 | `ProjectChangeJoinRecordAfterInstall` | `StepsOf <- RecordLast` | the new list installed before the pending-join record: a crash between them leaves the new list with the old root | `OpensAfterCrash` |
@@ -778,9 +783,10 @@ something is violated.
 | `ProjectChangeWitnessJoinAnnounced` | invariant `NoJoinAnnounced` | witness (spawn): a join whose genesis has no root ends with the root announced and held after the restart | (must violate) |
 | `ProjectChangeWitnessCrashAfterInstall` | invariant `NoCrashAfterInstall` | witness: a crash after the install, then a manual launch loads the new list | (must violate) |
 | `ProjectChangeWitnessFailedWrite` | invariant `NoFailedNotice` | witness: a write that fails before the install restarts on the old list and says so | (must violate) |
+| `ProjectChangeWitnessWriteRefused` | invariant `NoRefusedWrite` | witness: a storage write the page sent just before the request is refused by the drain (N-16) | (must violate) |
 
 ```
 java -cp tla2tools.jar tlc2.TLC -workers 2 -config ProjectChange.cfg ProjectChange
 java -cp tla2tools.jar tlc2.TLC -workers 2 -config mutants/ProjectChangeLiveAdopt.cfg mutants/ProjectChangeMutants
-INKWELL_TLA_ONLY='^ProjectChange' ./scripts/tla-check.sh    # the 21 ProjectChange runs only, about 25 s
+INKWELL_TLA_ONLY='^ProjectChange' ./scripts/tla-check.sh    # the 23 ProjectChange runs only, about 130 s (measured 132 s)
 ```

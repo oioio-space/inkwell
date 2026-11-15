@@ -1149,6 +1149,16 @@
       "id": "fd76d199d07ea1219e3b8ddb1743ffbd9009a631b5843fed02d67fa3fef48164",
       "reason": "scripts/tla-check.sh: ProjectChange mutant list after Codex round 1 of PC1: OldContinuation renamed RequestBeforeNavigation (N-15, the page discards its context before the request) and JoinNoRestart added (N-12, a join restarts); each still caught by its named property",
       "decision": "docs/plans/2026-11-14-pc1-project-change-by-restart.md"
+    },
+    {
+      "id": "6e450b4cdf41fbbffab3511ebbb35fe6f8759873feb5073169e5cb3182a8edec",
+      "reason": "docs/plans/2026-11-15-pc1a-take-over.md: the budget paragraph rewritten for the gate deadline (Codex round 2, D-B): the `budget` criterion is replaced by `max_minutes = 45` enforced by scripts/gate.py (rule G-1); caps restated, none raised past 45 min",
+      "decision": "docs/plans/2026-11-15-pc1a-take-over.md"
+    },
+    {
+      "id": "74c0f97bd335354678c3835089eb9650d3a424312c3136b3f2d17a1eccf9cccf",
+      "reason": "scripts/tla-check.sh: two ProjectChange runs added (mutant WriteBeforeDrain caught by NoLostWrite, witness WitnessWriteRefused) for the bridge drain N-16 (Codex round 2, D-A); no existing run changed",
+      "decision": "docs/plans/2026-11-14-pc1-project-change-by-restart.md"
     }
   ]
 }

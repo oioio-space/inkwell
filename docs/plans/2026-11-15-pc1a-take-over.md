@@ -5,7 +5,7 @@ built here), model and residuals: `docs/plans/2026-11-14-pc1-project-change-by-r
 (draft). It starts from W58a's tree (standing, refusal by key, read-only banner, invite capability) and adds the
 banner's second action, « Reprendre ce document ici », and the restart itself.
 
-## Rules (N-5..N-10; N-11..N-15 in the shared part, implemented by this block)
+## Rules (N-5..N-10; N-11..N-16 in the shared part, implemented by this block)
 
 | Id | Rule | Test (oracle) | Mutant -> expected assertion text |
 |---|---|---|---|
@@ -28,7 +28,7 @@ the e2e that follows the restart by the startup id, and a new walkthrough.
 
 ## Mutants and wording
 
-Go mutants MW3..MW13 (MW3..MW11 numbered in W58 revision 8, MW1 and MW2 belong to W58a; MW12 and MW13 added after Codex's round 1) in `scripts/netsim/mutants.toml`,
+Go mutants MW3..MW13 (MW3..MW11 numbered in W58 revision 8, MW1 and MW2 belong to W58a; MW12 and MW13 added after Codex's round 1, MW12 redefined after round 2 as « the member list written before the drain », N-16) in `scripts/netsim/mutants.toml`,
 block `PC1a`, with `expect` tied to the named test's own `go test -json` events (a build failure, a timeout or another
 test is no catch). Interface mutants are in-test copies with one edit (`frontend/src/mutant.ts`).
 
@@ -39,8 +39,14 @@ nouvelle invitation. Le texte et les fichiers ne changent pas. » · `foreign.ta
 document n'a pas pu être repris. Rien n'a changé. » · Go notification (French, English): « Inkwell s'est fermé sans
 pouvoir redémarrer. Ouvrez-le de nouveau. »
 
-Budget (Codex round 1): each criterion has its own cap and the caps sum to 42 min (`budget` criterion: the sum of
-the gate's `timeout` values is at most 43 min, leaving 2 min of the 45 for the uncapped text checks): go 5, mutant-tool
-1, mutants 12 (eleven mutants, about one minute each with the named test only), frontend 3, e2e 4 + 5 (build, run),
-regression 3 + 5, restart-barrier 2, tla 2. The smoke measures each; a cap that does not hold splits the block, it is
-never raised past the total.
+Budget (Codex round 2, decision D-B): the gate file carries `max_minutes = 45`; `scripts/gate.py` refuses to start a
+gate whose `timeout` caps sum past it and stops the whole run at that deadline (rule G-1 below). The caps: go 5,
+gate-deadline 1, mutant-tool 1, mutants 12 (eleven mutants, about one minute each with the named test only), frontend
+3, e2e 4 + 5 (build, run), regression 3 + 5, restart-barrier 2, tla 3 min 20 s (the 23 model runs measured at 132 s); 44 min 20 s in all,
+40 s left for the uncapped text checks. The smoke measures each; a cap that does not hold splits the block, it is never raised past the total.
+
+## Tooling rule (built by this block)
+
+| Id | Rule | Test (oracle) |
+|---|---|---|
+| G-1 | **A gate has a deadline.** A gate file carries a top-level `max_minutes` (at most 45 for a « standard » or « complete » block of method v2). `scripts/gate.py` reads every criterion's `timeout -k K N` caps; it refuses to start when their sum exceeds `max_minutes` × 60 (message naming the sum and the limit), and at run time it stops the criterion running at `start + max_minutes` (its process group gets SIGTERM, then SIGKILL after 10 s), records `deadline` for it and every criterion not run, and fails the gate. A gate file without `max_minutes` is refused, except those listed in `gates/legacy-no-deadline.txt` (the gates committed before this rule; the list is closed: a name added later fails the test) | `scripts/gate_deadline_test.py`: `test_caps_over_max_minutes_refused_before_any_run`, `test_run_stopped_at_the_deadline` (a criterion sleeping past a 1-minute deadline, time controlled: the process group is gone, the rest is `deadline`), `test_gate_without_max_minutes_refused_unless_legacy`, `test_legacy_list_is_closed` |

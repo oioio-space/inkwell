@@ -207,6 +207,7 @@ RequestBeforeNavigation NoOldStateAfterChange
 JoinNoRestart ChangeCompletes
 JoinTwice JoinOnce
 WriteBeforeWiringStopped NoOldStateAfterChange
+WriteBeforeDrain NoLostWrite
 NoBarrier NoOldStateAfterChange
 SpawnNoWait OneImage
 JoinRecordAfterInstall OpensAfterCrash
@@ -217,6 +218,7 @@ WitnessTakeOver NoTakeOverDone
 WitnessJoinAnnounced NoJoinAnnounced
 WitnessCrashAfterInstall NoCrashAfterInstall
 WitnessFailedWrite NoFailedNotice
+WitnessWriteRefused NoRefusedWrite
 MUTANTS
 
 exit "$fail"

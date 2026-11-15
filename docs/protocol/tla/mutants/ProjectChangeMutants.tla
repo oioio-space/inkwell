@@ -20,6 +20,9 @@ TakeOverOnly(i) == req[i] = "takeover"
 KeepRecord == pj
 \* WriteBeforeWiringStopped: the write starts while the wiring runs (MW10).
 Anytime(i) == TRUE
+\* WriteBeforeDrain: the member-list write starts once the wiring stopped but before Go drained the bridge
+\* streams (N-16): a storage write of the page still in its handler lands after the write began.
+WriteBeforeDrain(i) == ~wiring[i]
 \* NoBarrier: a child of the old image outlives the restart (MW11).
 NoBarrier(i) == TRUE
 \* SpawnNoWait: the spawned image starts its work without claiming the profile lock (N35).
@@ -39,6 +42,7 @@ SameId(j) == j = ph
 NoTakeOverDone == \A j \in Img : notice[j] # "done"
 NoJoinAnnounced == ~(consumed > 0 /\ ~rk)
 NoCrashAfterInstall == ~\E j \in Img : ~byRestart[j] /\ j > 1 /\ phase[j] = "run" /\ proj[j] = "new"
+NoRefusedWrite == sw # "refused"
 NoFailedNotice == \A j \in Img : notice[j] \notin {"failed", "joinFailed"}
 
 =============================================================================

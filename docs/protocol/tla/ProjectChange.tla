@@ -24,6 +24,10 @@
 (*     process, every other thread ends, descriptors close-on-exec) or     *)
 (*     "spawn" (macOS, Windows, N35: a new process that claims the         *)
 (*     profile lock like any launch, ADR 0037, while the old one exits);   *)
+(*   the bridge (drained, sw, swi): the page's store and net streams to   *)
+(*     Go; on a request Go closes them for good and waits for every handler *)
+(*     before it writes (N-16), so a storage write of the page lands in the *)
+(*     old project or is refused, never lost and never after the write;     *)
 (*   the environment: one peer that attests under whatever project the     *)
 (*     wiring runs, the person (request, quit, relaunch), a member that    *)
 (*     gives the root document after a join, children (tinymist, typst, the*)
@@ -66,7 +70,8 @@ VARIABLES
   lock, children,                                                  \* kernel: profile lock, live children by image
   ph, pst, cov, cont, proot,                                       \* the page
   kind, rk, top,                                                   \* the request, the newest image
-  requests, restarts, consumed, committed, polluted, bad, cut, crashes, errors, intr  \* history
+  requests, restarts, consumed, committed, polluted, bad, cut, crashes, errors, intr,  \* history
+  drained, sw, swi, late                                           \* the bridge (N-16)
 
 disk == <<trust, prev, next, pj, root>>
 goVars == <<phase, proj, wiring, buf, req, wstep, flag, byRestart, notice>>
@@ -74,7 +79,13 @@ kernel == <<lock, children>>
 page == <<ph, pst, cov, cont, proot>>
 env == <<kind, rk, top>>
 hist == <<requests, restarts, consumed, committed, polluted, bad, cut, crashes, errors, intr>>
-vars == <<disk, goVars, kernel, page, env, hist>>
+bridge == <<drained, sw, swi, late>>
+vars == <<disk, goVars, kernel, page, env, hist, bridge>>
+
+\* N-16: Go closed the image's store and net streams for good and every handler in flight returned.
+Drained(i) == i \in drained /\ ~(sw = "handling" /\ swi = i)
+\* The streams of an image are open while it runs or shuts down, until Go drains them (N-16).
+Open(i) == phase[i] \in {"run", "leaving", "closed"} /\ i \notin drained
 
 (***************************************************************************)
 (* RULES. Each is one decision of the plan; a mutant configuration         *)
@@ -83,7 +94,7 @@ vars == <<disk, goVars, kernel, page, env, hist>>
 \* N-11: the project of a running session is never changed in place.
 LiveChange == FALSE
 \* N-13: the write starts only once the wiring, the lobby, the invitation host and any pending join have ended.
-WriteOK(i) == ~wiring[i]
+WriteOK(i) == ~wiring[i] /\ Drained(i)
 \* N-5, J-1: the write's steps; a join writes its pending-join record before the new list is staged.
 StepsOf(k) == IF k = "join" THEN <<"record", "stage", "aside", "install", "cleanup">>
                             ELSE <<"stage", "aside", "install", "cleanup">>
@@ -134,6 +145,8 @@ TypeOK ==
   /\ ph \in Img /\ pst \in {"live", "waiting"} /\ cov \subseteq {"old", "new"} /\ cont \subseteq {"old", "new"}
   /\ proot \in {"none", "R0", "R1"}
   /\ kind \in {"none", "takeover", "join"} /\ rk \in BOOLEAN /\ top \in Img
+  /\ drained \subseteq Img /\ sw \in {"none", "sent", "handling", "landed", "refused"} /\ swi \in Img
+  /\ late \in BOOLEAN
 
 Init ==
   /\ trust = "old" /\ prev = "none" /\ next = "none" /\ pj = "none" /\ root = "R0"
@@ -152,6 +165,7 @@ Init ==
   /\ requests = 0 /\ restarts = 0 /\ consumed = 0
   /\ committed = FALSE /\ polluted = FALSE /\ bad = FALSE /\ cut = FALSE
   /\ crashes = 0 /\ errors = 0 /\ intr = FALSE
+  /\ drained = {} /\ sw = "none" /\ swi = 1 /\ late = FALSE
 
 (***************************************************************************)
 (* The session and the peer (environment, no fairness)                     *)
@@ -296,7 +310,7 @@ WriteError(i) ==
 \* stopAll returns: the network, the project and the stores are closed. On exec the profile lock is
 \* released (closeInstance, and close-on-exec); a spawning image keeps it until it exits (D-HOLD).
 StopAll(i) ==
-  /\ phase[i] = "closed" /\ WriteDone(i)
+  /\ phase[i] = "closed" /\ WriteDone(i) /\ Drained(i)
   /\ phase' = [phase EXCEPT ![i] = "stopped"]
   /\ lock' = IF Platform = "exec" /\ lock = i THEN 0 ELSE lock
   /\ UNCHANGED <<disk, proj, wiring, buf, req, wstep, flag, byRestart, notice, children, page, env, hist>>
@@ -408,18 +422,55 @@ RootArrives(j) ==
                  cont, env, requests, restarts, committed, polluted, bad, cut, crashes, errors, intr>>
 
 (***************************************************************************)
+(* The bridge (N-16): one storage write of the page per behaviour          *)
+(***************************************************************************)
+\* The page sends a storage write (a document saved to Go storage) on the store stream of its image, before
+\* any request: the case that matters is the write just before it (one write per behaviour bounds the states).
+SendWrite(i) ==
+  /\ pst = "live" /\ ph = i /\ Open(i) /\ sw = "none" /\ requests = 0
+  /\ sw' = "sent" /\ swi' = i
+  /\ UNCHANGED <<disk, goVars, kernel, page, env, hist, drained, late>>
+
+\* Go's stream handler takes the write while the stream is open.
+Handle(i) ==
+  /\ sw = "sent" /\ swi = i /\ Open(i)
+  /\ sw' = "handling"
+  /\ UNCHANGED <<disk, goVars, kernel, page, env, hist, drained, swi, late>>
+
+\* The handler returns: the write is in the storage of the image's project. late records a write that
+\* landed once the member-list write had begun (it could reach the next project's folder).
+Land(i) ==
+  /\ sw = "handling" /\ swi = i /\ phase[i] \in Alive
+  /\ sw' = "landed"
+  /\ late' = (late \/ (req[i] # "none" /\ wstep[i] > 1))
+  /\ UNCHANGED <<disk, goVars, kernel, page, env, hist, drained, swi>>
+
+\* N-16: on a request (or a quit), Go closes the store and net streams for good: a write not yet taken is
+\* refused (the page shows a sentence), a handler in flight is awaited (Drained).
+Drain(i) ==
+  /\ phase[i] \in {"leaving", "closed"} /\ i \notin drained
+  /\ drained' = drained \cup {i}
+  /\ sw' = IF sw = "sent" /\ swi = i THEN "refused" ELSE sw
+  /\ UNCHANGED <<disk, goVars, kernel, page, env, hist, swi, late>>
+
+(***************************************************************************)
 (* Specification                                                           *)
 (***************************************************************************)
-GoStep == \E i \in Img : CloseWiring(i) \/ WriteStep(i) \/ StopAll(i) \/ ChildEnd(i) \/ Restart(i)
-                         \/ Exit(i) \/ Start(i) \/ Load(i)
-PageStep == \E j \in Img : Reload(j)
-RootStep == \E j \in Img : RootArrives(j)
+\* The actions before the bridge leave its variables unchanged.
+GoStep == \E i \in Img : \/ /\ \/ CloseWiring(i) \/ WriteStep(i) \/ StopAll(i) \/ ChildEnd(i) \/ Restart(i)
+                               \/ Exit(i) \/ Start(i) \/ Load(i)
+                            /\ UNCHANGED bridge
+                         \/ Handle(i) \/ Land(i) \/ Drain(i)
+PageStep == (\E j \in Img : Reload(j)) /\ UNCHANGED bridge
+RootStep == (\E j \in Img : RootArrives(j)) /\ UNCHANGED bridge
 
 Next ==
   \/ GoStep \/ PageStep \/ RootStep
-  \/ \E i \in Img : PeerAttest(i) \/ Deliver(i) \/ WiringSave(i) \/ SpawnChild(i) \/ Request(i) \/ LiveAdopt(i)
-                    \/ Quit(i) \/ WriteError(i) \/ ExecFail(i) \/ Crash(i)
-  \/ Frame \/ Apply \/ Launch
+  \/ /\ \/ \E i \in Img : PeerAttest(i) \/ Deliver(i) \/ WiringSave(i) \/ SpawnChild(i) \/ Request(i)
+                          \/ LiveAdopt(i) \/ Quit(i) \/ WriteError(i) \/ ExecFail(i) \/ Crash(i)
+        \/ Frame \/ Apply \/ Launch
+     /\ UNCHANGED bridge
+  \/ \E i \in Img : SendWrite(i)
 
 \* Fairness, three weak terms (grouped: see README, OISingleInstance, on TLC's DNF blow-up):
 \*  F1 every live process keeps running its own steps (the steps of one image are sequential, those of
@@ -477,6 +528,13 @@ NoticeMatchesStanding ==
   \A j \in Img :
     /\ notice[j] \in {"done", "joined"} => proj[j] = "new"
     /\ notice[j] \in {"failed", "joinFailed"} => proj[j] = "old"
+
+\* N-16: a storage write of the page is never lost silently and never lands once the member-list write began:
+\* while it is pending, its image still runs, shuts down or crashed (a crash is not silent); a write that
+\* landed did so before the list write's first step.
+NoLostWrite ==
+  /\ ~late
+  /\ sw \in {"sent", "handling"} => phase[swi] \in {"run", "leaving", "closed", "crashed"}
 
 \* N-9, N-12, J-2 (liveness): a requested change ends in a running image of the new project, the page
 \* reloaded on it with the project's root and the notice, unless a crash, a failed step or a quit
