@@ -200,6 +200,39 @@ func TestCoreDumpUnknownWithoutKernelEvidence(t *testing.T) {
 	}
 }
 
+// The kernel's answer is read the same from each published layout of struct
+// pidfd_info (include/uapi/linux/pidfd.h): Linux 6.16 always sets the coredump
+// field; later kernels set it only for a dump or a live process with memory,
+// and list it in supported_mask, which sits at byte 72 in Linux 7.0 (80-byte
+// struct) and at byte 80 from the 88-byte struct on. A reaped process without
+// the mark started no core dump only where the kernel lists the field.
+func TestCoreDumpFromEachKernelLayout(t *testing.T) {
+	const supported70 = 0x7f // v7.0 PIDFD_INFO_SUPPORTED: bits 0 to 6
+	const supported73 = 0xff // with PIDFD_INFO_COREDUMP_CODE
+	const noCoredump = 0x2f  // a mask that does not list the coredump field
+	for _, tc := range []struct {
+		name string
+		info pidfdInfo
+		want CoreDump
+	}{
+		{"6.16 no dump", pidfdInfo{mask: pidfdInfoExit | pidfdInfoCoredump}, CoreDumpNone},
+		{"dump started", pidfdInfo{mask: pidfdInfoExit | pidfdInfoCoredump, coredumpMask: pidfdCoredumped}, CoreDumpStarted},
+		{"7.3 reaped, no dump", pidfdInfo{mask: pidfdInfoExit | pidfdInfoSupportedMask, tail: [2]uint64{0, supported73}}, CoreDumpNone},
+		{"7.0 reaped, no dump", pidfdInfo{mask: pidfdInfoExit | pidfdInfoSupportedMask, tail: [2]uint64{supported70, 0}}, CoreDumpNone},
+		{"7.0 zombie, not reaped", pidfdInfo{mask: pidfdInfoSupportedMask, tail: [2]uint64{supported70, 0}}, CoreDumpUnknown},
+		{"before 6.16", pidfdInfo{mask: pidfdInfoExit}, CoreDumpUnknown},
+		{"field not listed", pidfdInfo{mask: pidfdInfoExit | pidfdInfoSupportedMask, tail: [2]uint64{noCoredump, 0}}, CoreDumpUnknown},
+		{"field not listed, 88 bytes", pidfdInfo{mask: pidfdInfoExit | pidfdInfoSupportedMask, tail: [2]uint64{0, noCoredump}}, CoreDumpUnknown},
+	} {
+		if got := coreDumpFrom(tc.info); got != tc.want {
+			t.Errorf("%s: core dump = %d, want %d", tc.name, got, tc.want)
+		}
+	}
+	if size := unsafe.Sizeof(pidfdInfo{}); size != 88 {
+		t.Errorf("pidfdInfo is %d bytes, want PIDFD_INFO_SIZE_VER3 (88)", size)
+	}
+}
+
 // The signal report travels on an inherited descriptor of its own (3 or
 // above), apart from the target's stdio; any other value is refused before
 // the first confinement step, and the number is not passed on to the target.

@@ -34,48 +34,6 @@ func capRun(ctx context.Context, t *testing.T, end string, launch func(context.C
 	return out, path, err
 }
 
-// coreDumpRecorded reports whether a kernel of this release records core dumps
-// on the pidfd (PIDFD_INFO_COREDUMP, Linux 6.16).
-func coreDumpRecorded(release string) bool {
-	var major, minor int
-	if _, err := fmt.Sscanf(release, "%d.%d", &major, &minor); err != nil {
-		return false
-	}
-	return major > 6 || major == 6 && minor >= 16
-}
-
-func TestCoreDumpRecordedFromLinux616(t *testing.T) {
-	for release, want := range map[string]bool{
-		"6.8.0-1017-azure": false, "6.15.9": false, "6.16.0": true, "6.17.1-300.fc43.x86_64": true,
-		"7.3.3-300.fc45.x86_64": true, "5.15.0-generic": false, "unknown": false,
-	} {
-		if got := coreDumpRecorded(release); got != want {
-			t.Errorf("coreDumpRecorded(%q) = %t, want %t", release, got, want)
-		}
-	}
-}
-
-// assertNoCoreHelper is requireNoCoreHelper for a test the inventory lets no
-// machine skip: a started core helper fails, and so does a missing answer from
-// a kernel that records core dumps. On an older kernel (Ubuntu 24.04's) the
-// absence cannot be shown; it is logged and the test's other assertions stand.
-func assertNoCoreHelper(t *testing.T, core CoreDump) {
-	t.Helper()
-	var name unix.Utsname
-	if err := unix.Uname(&name); err != nil {
-		t.Fatal(err)
-	}
-	release := unix.ByteSliceToString(name.Release[:])
-	switch {
-	case core == CoreDumpStarted:
-		t.Errorf("the kernel started a core helper")
-	case core == CoreDumpUnknown && coreDumpRecorded(release):
-		t.Errorf("Linux %s records core dumps, yet the run reports none: no core helper is not shown", release)
-	case core == CoreDumpUnknown:
-		t.Logf("Linux %s does not report PIDFD_INFO_COREDUMP (Linux 6.16): no core helper cannot be shown here", release)
-	}
-}
-
 // requireNoCoreHelper fails unless the kernel reported, and reported no core dump.
 func requireNoCoreHelper(t *testing.T, out Output) {
 	t.Helper()
