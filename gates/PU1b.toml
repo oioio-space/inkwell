@@ -1,0 +1,231 @@
+# FROZEN 2026-11-16 after two Codex reviews (second round: FREEZE, no new major finding).
+# DRAFT 2026-11-16 (step 1, not frozen), round 2 after Codex's first review (DO NOT FREEZE: empty end of writing, the
+# scope of the closes, a real generation change, a resource-manager refusal, the opener's backoff and budget in the
+# model). Codex reviews the spec and this gate before the freeze (method v2). Block PU1b:
+# the order of a peer's inbound sync streams (rules P-8, P-9): two places per peer, shared by its connections and
+# generations, taken before the ACK; a stream that ends without delivering a frame leaves at once and wakes its
+# successors; a further stream is refused for capacity (reset code 0x1002) and the opener retries within the 15 s
+# budget, keeping its session. Rigour: complete (state between peers, octets from a peer). Plan:
+# docs/plans/2026-11-16-pu1b-inbound-order.md; spec §8.7.3, §8.7.4, §16.1; model docs/protocol/tla/SyncOrder.tla.
+# PU1b lands on PU1's candidate: gates/PU1.toml (frozen) must pass on the same tree (its tla run set '^PeerUpAck' is
+# untouched: SyncOrder's runs are named outside it); gates/PU1n.toml (netsim) runs once on that candidate, alone on the
+# machine. No gate runs another. Red witnesses: gates/PU1b/WITNESSES.md. Every command is `timeout -k 10 N …` (the cap
+# covers the wait for a slot): 240 + 120 + 300 + 300 + 480 + 30 + 30 + 660 + 30 + 30 = 2220 s ≤ 2700 s (rule G-1).
+max_minutes = 45
+raw_results = ["docs/plans/2026-11-16-pu1b-inbound-order.md", "docs/protocol/tla/SyncOrder.tla", "protocol/vectors/syncorder.json", "gates/PU1b/*"]
+
+[[criteria]]
+# Vectors (spec §8.7.9). syncorder.json is exactly step 1's corpus (digest of id, decoder, input, context, events,
+# expect, verdict, scope over the 20 vectors: step 2 changes only status/enforce), every vector is enforced from step 3,
+# the generator reproduces the committed corpus, and TestCorpus passes every syncorder.json case as required (no
+# « future: »: the reference decoders sync_order and sync_refusal exist in protocol/conformance, backed by
+# protocol/syncack). PU1's syncack.json is unchanged (its digest).
+id = "vectors"
+command = '''mkdir -p .task && cd protocol && timeout -k 10 240 ../scripts/heavy.sh go test -count=1 -json -run '^(TestCorpus|TestGenerateMatchesCommittedCorpus)$' -v ./conformance/ ./cmd/vectors/ > ../.task/pu1b-vectors.json 2>&1; a=$?; cd .. && python3 -I - "$a" <<'PY'
+import hashlib, json, pathlib, sys
+bad = [] if sys.argv[1] == "0" else [f"go test exit {sys.argv[1]}"]
+keep = ("id", "decoder", "input_hex", "context", "events", "expect", "verdict", "scope")
+def digest(name):
+    d = json.loads(pathlib.Path(f"protocol/vectors/{name}").read_text())
+    canon = json.dumps([{k: v[k] for k in keep if k in v} for v in d["vectors"]], sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+    return d, (len(d["vectors"]), hashlib.sha256(canon.encode()).hexdigest())
+d, got = digest("syncorder.json")
+if got != (20, "5fee8f342018e830d6920c30aa03600607c2d8be44342429f2d33069ba2293a4"):
+    bad.append("syncorder.json differs from step 1's corpus")
+if digest("syncack.json")[1] != (34, "5307797671903594e1ccfef42b9a62536e18c0a139ed0d6af0af93c503e12d50"):
+    bad.append("PU1's syncack.json changed")
+bad += [f"{v['id']}: enforce {v.get('enforce')!r}, want 'step-3'" for v in d["vectors"] if v.get("enforce") != "step-3"][:3]
+evs = []
+for line in pathlib.Path(".task/pu1b-vectors.json").read_text().splitlines():
+    try:
+        e = json.loads(line)
+    except ValueError:
+        continue
+    if isinstance(e, dict):
+        evs.append(e)
+passed = {e["Test"] for e in evs if e.get("Action") == "pass" and e.get("Test")}
+future = {e["Test"] for e in evs if e.get("Action") == "output" and "future:" in e.get("Output", "")}
+for v in d["vectors"]:
+    n = f"TestCorpus/syncorder.json/{v['id']}"
+    if n not in passed or n in future:
+        bad.append(f"{n}: {'future (not required)' if n in future else 'missing or failing'}")
+if "TestGenerateMatchesCommittedCorpus" not in passed:
+    bad.append("TestGenerateMatchesCommittedCorpus not passing")
+sys.exit(f"PU1b vectors: {bad[:12]}" if bad else 0)
+PY'''
+
+[[criteria]]
+# The reference (rules P-8, P-9) is pure and tested in protocol/syncack: TestOrder (the list: places, turns, removal
+# with wake, at once for a stream that delivered nothing), TestRefusal (a reset's code → capacity or refusal, the
+# retry wait 50 ms doubled to 1 s, the 15 s budget), and the corpus.
+id = "reference"
+command = '''cd protocol && timeout -k 10 120 ../scripts/heavy.sh go test -count=1 -json -run '^(TestOrder|TestRefusal|TestCorpus)$' ./syncack/ > ../.task/pu1b-ref.json 2>&1; a=$?; cd .. && python3 -I - "$a" <<'PY'
+import json, pathlib, sys
+bad = [] if sys.argv[1] == "0" else [f"go test exit {sys.argv[1]}"]
+passed = set()
+for line in pathlib.Path(".task/pu1b-ref.json").read_text().splitlines():
+    try:
+        e = json.loads(line)
+    except ValueError:
+        continue
+    if isinstance(e, dict) and e.get("Action") == "pass" and e.get("Test"):
+        passed.add(e["Test"])
+bad += [f"missing or not passing: {n}" for n in ("TestOrder", "TestRefusal", "TestCorpus") if n not in passed]
+sys.exit(f"PU1b reference: {bad}" if bad else 0)
+PY'''
+
+[[criteria]]
+# The model (plan §4, README « SyncOrder »): exactly these twelve runs, no ✗. Sound: Honest (move, drop, reopen: the
+# capacity refusal reached, its backoff waited, retried; honest timing; Places, Order, SessionKept, Budget,
+# AllDelivered, SessionResumes, EmptyLeaves), AnyTiming (the same, any timing: the budget may run out; invariants),
+# Byzantine (opens, writes, ends, resets, holds; a waiting stream may give the order up; Places, EmptyLeaves). Mutants
+# caught by the named property: Q1 NoWake (AllDelivered), Q2 KeepEmpty (EmptyLeaves), Q3 ClosePeerOnBusy
+# (SessionKept), Q4 Bound3 (Places), Q5 EofKeeps (EmptyLeaves: an empty end of writing); witnesses: a capacity refusal
+# reached by an honest opener, a removal while a successor waits, an empty end of writing leaving, the budget running
+# out during a capacity refusal.
+# Structure: the rule operators are the sound ones. PU1's PeerUpAck.tla and its 19 runs are untouched.
+id = "tla"
+command = '''out=$(INKWELL_TLA_ONLY='^SyncOrder' INKWELL_PERF_LOAD_WAIT=120 timeout -k 10 300 ./scripts/heavy.sh --exclusive ./scripts/tla-check.sh 2>&1) || { echo "$out" | tail -40; exit 1; }
+! echo "$out" | grep -q '✗' || { echo "$out" | grep '✗'; exit 1; }
+for want in "✓ SyncOrderHonest: no error (exhaustive, liveness checked)" "✓ SyncOrderAnyTiming: no error (exhaustive, invariants)" "✓ SyncOrderByzantine: no error (exhaustive, liveness checked)" "✓ SyncOrderNoWake: violation detected (AllDelivered)" "✓ SyncOrderKeepEmpty: violation detected (EmptyLeaves)" "✓ SyncOrderClosePeerOnBusy: violation detected (SessionKept)" "✓ SyncOrderBound3: violation detected (Places)" "✓ SyncOrderEofKeeps: violation detected (EmptyLeaves)" "✓ SyncOrderWitnessBusy: violation detected (NoBusy)" "✓ SyncOrderWitnessRemoveWaiting: violation detected (NoRemovalWhileWaiting)" "✓ SyncOrderWitnessEmptyEof: violation detected (NoEmptyEof)" "✓ SyncOrderWitnessBudgetOut: violation detected (NoBudgetOut)"; do echo "$out" | grep -qxF -- "$want" || { echo "missing: $want"; exit 1; }; done
+[ "$(echo "$out" | grep -c '✓')" -eq 12 ] || { echo "want 12 ✓, got $(echo "$out" | grep -c '✓')"; exit 1; }
+python3 -I - <<'PY'
+import pathlib, re, sys
+t = pathlib.Path("docs/protocol/tla/SyncOrder.tla").read_text()
+bad = [w for w in [r"^PlaceFree == Len\(list\) < Cap$", r"^EarlyOK\(s\) == TRUE$", r"^Ended\(s\) == rstd\[s\] \\/ \(fin\[s\] /\\ buf\[s\] = <<>>\)$", r"^Budget ==", r"^Tick ==", r"^OutOfBudget ==", r"^Rewire\(s\) == waitFor\[s\]$", r"^OnBusyKill == FALSE$", r"^Places ==", r"^Order ==", r"^SessionKept ==", r"^EmptyLeaves ==", r"^AllDelivered ==", r"^SessionResumes =="] if not re.search(w, t, re.M)]
+sys.exit(f"SyncOrder structure: {bad}" if bad else 0)
+PY'''
+
+[[criteria]]
+# The rules in Go (internal/transport/p2p, simnet inside testing/synctest, -race), each arm named; failure texts
+# « PU1b over capacity » (a third place), « PU1b place kept » (a place or a goroutine kept past the rule), « PU1b turn
+# missed » (a stream whose turn came does not read), « PU1b order broken » (frames out of order), « PU1b session lost »
+# (a capacity refusal closed the peer or announced it down). The node exports, for tests, InboundPlaces(peer) and
+# BusyRefusals(). TestSyncOrder: at_bound (a raw opener holds two ACKed streams: InboundPlaces = 2),
+# bound_plus_one (a third stream: reset with StreamError code 0x1002 seen by the raw opener as remote, no byte, the
+# connection kept, places still 2, BusyRefusals + 1), recovery (the raw opener ends its first stream; its retry is
+# placed and ACKed; and a Node opener refused twice for capacity by a raw responder announces it after the waits of
+# 50 and 100 ms, never ClosePeer), busy_forever (a raw responder that always answers 0x1002: no PeerUp, the connection
+# closed 15 s after the open ± 10 ms, P-5), byzantine_reset_loop (a raw opener holds a first stream open and opens then
+# resets 50 streams during their ACK: InboundPlaces never above 2 and back to 1 within 1 s of the last reset;
+# runtime.NumGoroutine at most the count before the loop + 8), resource_manager_refusal (a raw responder whose libp2p
+# resource manager admits no inbound sync stream: every open is reset during its negotiation with code 0x1002; the Node
+# opener counts them as capacity refusals (BusyRetries ≥ 2), never announces it, and closes the connection 15 s after
+# the open ± 10 ms, P-5), generation_change (two Nodes up; b's handler of a's stream held after its ACK; a's
+# connection closed: PeerDown on both sides, then reconnected: PeerUp on both, while the old handler still holds its
+# place; a's new stream placed behind it, released: the old one leaves without a frame, the new one reads; exactly one
+# PeerDown and one PeerUp per side, InboundPlaces(a) ≤ 2 throughout and 1 at the end, runtime.NumGoroutine back to at
+# most the count before + 8, the frames b delivers after the PeerUp strictly increasing), drain_replace_reconnect (two Nodes, relay then direct:
+# b's handlers of the relayed and of the direct stream held after their ACK (SetAfterAck), the direct connection
+# dropped, a's reopen on the circuit refused for capacity at least once (BusyRefusals ≥ 1), then placed once the
+# dropped stream leaves; no event on either side, the frames b delivers strictly increasing), removal_while_waiting (a
+# raw opener's head stream held open with no frame: a second, waiting, reset frees its place within 1 s (not after
+# 60 s); a third, waiting, closed for writing without a frame frees its place within 1 s too; and resetting the head
+# lets a waiting successor deliver its frame within 1 s). The node also exports BusyRetries() (capacity refusals read
+# as an opener).
+# TestPeerUpMoveAfterAck/move_keeps_order_across_late_handler (PU1's round-1 finding) passes too.
+id = "go"
+command = '''mkdir -p .task && timeout -k 10 300 ./scripts/heavy.sh go test -count=1 -race -timeout=270s -json -run '^(TestSyncOrder|TestPeerUpMoveAfterAck)$' ./internal/transport/p2p/ > .task/pu1b-go.json 2>&1; a=$?; python3 -I - "$a" <<'PY'
+import json, pathlib, sys
+arms = {"TestSyncOrder": ["at_bound", "bound_plus_one", "recovery", "busy_forever", "resource_manager_refusal", "byzantine_reset_loop", "drain_replace_reconnect", "generation_change", "removal_while_waiting"], "TestPeerUpMoveAfterAck": ["move_keeps_order_across_late_handler"]}
+evs = []
+for line in pathlib.Path(".task/pu1b-go.json").read_text().splitlines():
+    try:
+        ev = json.loads(line)
+    except ValueError:
+        continue
+    if isinstance(ev, dict):
+        evs.append(ev)
+bad = [] if sys.argv[1] == "0" else [f"go test exit {sys.argv[1]}"]
+passed = {e["Test"] for e in evs if e.get("Action") == "pass" and e.get("Test")}
+want = list(arms) + [f"{t}/{a}" for t, l in arms.items() for a in l]
+bad += [f"missing or not passing: {n}" for n in want if n not in passed]
+for n in sorted({e["Test"] for e in evs if e.get("Action") == "fail" and e.get("Test")})[:3]:
+    said = [e["Output"].strip() for e in evs if e.get("Test") == n and e.get("Action") == "output" and "_test.go" in e.get("Output", "")]
+    print(f"{n}: {said[:2]}")
+sys.exit(f"PU1b go: {bad[:12]}" if bad else 0)
+PY'''
+
+[[criteria]]
+# Regression: the whole p2p package and the bridge, as CI runs them (no -race): PU1b changes how every inbound sync
+# stream is ordered and refused.
+id = "regression"
+command = '''timeout -k 10 480 ./scripts/heavy.sh go test -count=1 -timeout=450s ./internal/transport/p2p/ ./internal/bridge/'''
+
+[[criteria]]
+# Architecture: the order and the refusal come from protocol/syncack (spec §1.6, no private copy): internal/transport/p2p
+# has no 0x1002 / 4098 literal of its own, no literal place count, and the chain of PU1's round 1 is gone (no inTail).
+id = "arch"
+command = '''timeout -k 10 30 python3 -I - <<'PY'
+import pathlib, re, sys
+src = "\n".join(p.read_text() for p in pathlib.Path("internal/transport/p2p").glob("*.go") if not p.name.endswith("_test.go"))
+bad = []
+if '"github.com/oioio-space/inkwell/protocol/syncack"' not in src:
+    bad.append("internal/transport/p2p does not import protocol/syncack")
+if re.search(r"0x1002|\b4098\b|StreamResourceLimitExceeded", src):
+    bad.append("a private capacity code in internal/transport/p2p")
+if "inTail" in src:
+    bad.append("the chain of PU1's round 1 (inTail) is still there")
+if not re.search(r"syncack\.\w*(Order|Refusal|Places)", src):
+    bad.append("internal/transport/p2p does not use the reference's order or refusal")
+sys.exit(f"PU1b arch: {bad}" if bad else 0)
+PY'''
+
+[[criteria]]
+# Docs: plan rows P-8, P-9 name their proofs; spec §8.7.3/§8.7.4 carry the normative sentences, §16.1 the row (and
+# TestLimitsMatchSpecification its constants); CHANGES.md the PU1b entry; the TLA README the SyncOrder section.
+id = "docs"
+command = '''timeout -k 10 30 python3 -I - <<'PY'
+import pathlib, sys
+bad = []
+plan = pathlib.Path("docs/plans/2026-11-16-pu1b-inbound-order.md").read_text()
+rows = {l.split("|")[1].strip(): l for l in plan.splitlines() if l.startswith("| P-")}
+need = {"P-8": ["at_bound", "bound_plus_one", "recovery", "busy_forever", "resource_manager_refusal", "drain_replace_reconnect", "generation_change", "byzantine_reset_loop", "0x1002", "Q3", "Q4", "MQ3", "MQ4", "Scope of the closes"], "P-9": ["removal_while_waiting", "byzantine_reset_loop", "generation_change", "closed for writing", "Q1", "Q2", "Q5", "MQ1", "MQ2", "MQ5", "60 s"]}
+for r, ws in need.items():
+    bad += [f"plan row {r} lacks {w!r}" for w in ws if w not in rows.get(r, "")]
+spec = pathlib.Path("docs/protocol/spec.md").read_text()
+i = spec.find("\n### 8.7 ")
+j = spec.find("\n## 9. ", i + 1)
+s = " ".join(spec[i:j].split()) if 0 <= i < j else ""
+for w in ["tient **au plus deux** places", "**refusé pour capacité**", "code d'erreur de flux `0x1002`", "**quitte la liste aussitôt**", "même s'ils attendaient déjà", "**refus pour capacité** : le nœud réinitialise son flux, garde sa session", "dans le même délai de 15 s compté depuis la première ouverture", "modèle `SyncOrder`", "fermé en écriture par l'ouvreur sans trame à lire", "**pour un passage au direct**, les mêmes causes n'abandonnent que le passage", "un refus pour capacité ne ferme jamais rien par lui-même"]:
+    if w not in s:
+        bad.append(f"spec §8.7 lacks {w!r}")
+if "| flux sync entrants par pair (§8.7.3) | 2 places" not in spec:
+    bad.append("spec §16.1 lacks the inbound sync streams row")
+if "# Bloc PU1b" not in pathlib.Path("docs/protocol/CHANGES.md").read_text():
+    bad.append("CHANGES.md lacks the PU1b entry")
+readme = pathlib.Path("docs/protocol/tla/README.md").read_text()
+for w in ["## SyncOrder", "`SyncOrderNoWake` (Q1", "`SyncOrderKeepEmpty` (Q2", "`SyncOrderClosePeerOnBusy` (Q3", "`SyncOrderBound3` (Q4", "`SyncOrderEofKeeps` (Q5", "`Budget` (Honest, AnyTiming)"]:
+    if w not in readme:
+        bad.append(f"tla README lacks {w!r}")
+sys.exit(f"PU1b docs: {bad}" if bad else 0)
+PY'''
+
+[[criteria]]
+# The Go mutants of PU1b (scripts/netsim/mutants.toml, block PU1b; main's mutants.py; step 2 writes edits and anchors)
+# are exactly this table, each anchor applies once, and each is caught by TestSyncOrder failing with its text: MQ1 no
+# wake (a successor keeps waiting for a stream that left), MQ2 a stream that delivered nothing keeps its place until
+# its turn, MQ3 a capacity refusal closes the peer, MQ4 three places, MQ5 a stream closed for writing without a frame
+# keeps its place (only a reset counts as an end).
+id = "mutant"
+command = '''timeout -k 10 30 python3 -I - <<'PY' && timeout -k 10 30 python3 -I scripts/netsim/mutants.py --check PU1b && timeout -k 10 600 ./scripts/heavy.sh python3 -I scripts/netsim/mutants.py PU1b
+import sys, tomllib
+ms = {m["id"]: m for m in tomllib.load(open("scripts/netsim/mutants.toml", "rb"))["mutant"] if m.get("block") == "PU1b"}
+want = {"MQ1": ("go", "./internal/transport/p2p/", "TestSyncOrder", "P-9", "PU1b turn missed"), "MQ2": ("go", "./internal/transport/p2p/", "TestSyncOrder", "P-9", "PU1b place kept"), "MQ3": ("go", "./internal/transport/p2p/", "TestSyncOrder", "P-8", "PU1b session lost"), "MQ4": ("go", "./internal/transport/p2p/", "TestSyncOrder", "P-8", "PU1b over capacity"), "MQ5": ("go", "./internal/transport/p2p/", "TestSyncOrder", "P-9", "PU1b place kept")}
+bad = sorted(set(ms) ^ set(want))
+for i, (kind, pkg, test, clause, expect) in want.items():
+    m = ms.get(i, {})
+    if (m.get("kind"), m.get("pkg"), m.get("test"), m.get("clause"), m.get("expect")) != (kind, pkg, test, clause, expect) or not m.get("edit"):
+        bad.append(i)
+sys.exit(f"PU1b mutant entries differ from the table: {bad}" if bad else 0)
+PY'''
+
+[[criteria]]
+# PU1's frozen gate keeps its model: PeerUpAck.tla is byte-identical to the frozen commit's (c7c90c7).
+id = "pu1-model-untouched"
+command = '''timeout -k 10 30 git diff --quiet c7c90c7 -- docs/protocol/tla/PeerUpAck.tla docs/protocol/tla/mutants/PeerUpAckMutants.tla gates/PU1.toml gates/PU1n.toml'''
+
+[[criteria]]
+# The §16 constants match the spec row (P-8's bounds are exported constants of protocol).
+id = "limits"
+command = '''cd protocol && timeout -k 10 30 ../scripts/heavy.sh go test -count=1 -run '^TestLimitsMatchSpecification$' .'''
