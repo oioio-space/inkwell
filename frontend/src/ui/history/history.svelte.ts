@@ -1,5 +1,10 @@
 import { next as A } from "@automerge/automerge";
-import { type AutomergeUrl, type DocHandle, isValidAutomergeUrl } from "@automerge/automerge-repo";
+import {
+  type AutomergeUrl,
+  type DocHandle,
+  type DocHandleChangePayload,
+  isValidAutomergeUrl,
+} from "@automerge/automerge-repo";
 import { Session as Backend } from "../../../bindings/github.com/oioio-space/inkwell/internal/app/index";
 import {
   type Analysis,
@@ -35,6 +40,7 @@ import { tooBigToEdit } from "../../store/limits";
 import type { Skip } from "../../store/merge";
 import { settings } from "../../store/settings.svelte";
 import { lastVisit, myActors, rememberActor, saveVisit } from "../../store/visit";
+import { observeClaims } from "../../workspace/observe";
 import { workspace } from "../../workspace/workspace.svelte";
 
 export type Tab = "problems" | "history" | "comments" | "activity";
@@ -118,6 +124,10 @@ class HistoryState {
   #claimTimer: ReturnType<typeof setTimeout> | undefined;
   /** What this device last said about itself in the open document. */
   #claimed: DeviceClaim | undefined;
+  /** This device's actor wrote in the open document and its claim there is not right yet (CL1). */
+  #owed = false;
+  /** No analysis of this opening has been read yet: what this actor wrote before it is not known. */
+  #opening = false;
   #stop: (() => void)[] = [];
   #lastRevert: Reverted | undefined;
 
@@ -172,10 +182,9 @@ class HistoryState {
     const doc = handle.doc();
     if (!doc) return;
     this.doc = doc;
-    this.myActor = A.getActorId(doc);
-    rememberActor(handle.url, this.myActor);
-    this.myActors = myActors(handle.url);
-    this.#claimed = undefined;
+    this.#actorIs(handle, A.getActorId(doc));
+    this.#owed = false;
+    this.#opening = true;
     // First opening: the last visit is now, nothing is marked (HIS-01).
     const visit = lastVisit(handle.url);
     this.since = sinceHeads(doc, visit);
@@ -184,18 +193,30 @@ class HistoryState {
 
     this.#analyzer = makeAnalyzer();
     // The device says who it is once its person pauses after an edit, never while they type:
-    // opening a document writes nothing, and the claim never lands in the middle of typing.
-    const onChange = ({ patchInfo }: { patchInfo: { source: string } }) => {
-      if (patchInfo.source === "change") {
-        clearTimeout(this.#claimTimer);
-        this.#claimTimer = setTimeout(() => this.#claim(true), CLAIM_PAUSE_MS);
+    // opening a document writes nothing, and the claim never lands in the middle of typing. Only a
+    // change this device wrote arms the pause (CL1 C-1): automerge-repo emits `change` with the same
+    // `source` for a peer's change and a load, so the document itself says who wrote.
+    const onChange = ({ patchInfo }: DocHandleChangePayload<HDoc>) => {
+      // Read at each event, never kept from the opening: a clone writes under a new actor (C-6).
+      const actor = A.getActorId(patchInfo.after);
+      if (actor !== this.myActor) this.#actorIs(handle, actor);
+      if (this.#wroteHere(patchInfo)) {
+        this.#owed = true;
+        this.#armClaim();
       }
       this.#schedule();
     };
     handle.on("change", onChange);
-    this.#stop.push(() => handle.off("change", onChange), watchHeadings(handle));
+    this.#stop.push(
+      () => handle.off("change", onChange),
+      watchHeadings(handle),
+      observeClaims(handle),
+    );
     const leave = (e: Event) => {
-      if (e.type === "pagehide" || document.visibilityState === "hidden") this.#remember();
+      if (e.type !== "pagehide" && document.visibilityState !== "hidden") return;
+      // The next session writes under another actor: a claim owed now could never be written then.
+      this.#settle("hidden");
+      this.#remember();
     };
     window.addEventListener("pagehide", leave);
     document.addEventListener("visibilitychange", leave);
@@ -213,6 +234,7 @@ class HistoryState {
   }
 
   detach(): void {
+    this.#settle("detach");
     this.#remember();
     for (const stop of this.#stop.splice(0)) stop();
     clearTimeout(this.#timer);
@@ -223,6 +245,56 @@ class HistoryState {
     this.analysis = undefined;
     this.doc = undefined;
     this.#seq++;
+  }
+
+  /** This device now writes under `actor` in `handle`: it is one of mine, and nothing is claimed for it yet. */
+  #actorIs(handle: DocHandle<HDoc>, actor: string): void {
+    this.myActor = actor;
+    rememberActor(handle.url, actor);
+    this.myActors = myActors(handle.url);
+    this.#claimed = undefined;
+  }
+
+  /** Whether the event brings a change this device's actor wrote, by whatever call wrote it. */
+  #wroteHere({ before, after }: DocHandleChangePayload<HDoc>["patchInfo"]): boolean {
+    return A.getChangesMetaSince(after, A.getHeads(before)).some((m) => m.actor === this.myActor);
+  }
+
+  /** Starts the pause again: the claim owed is settled once it ends. */
+  #armClaim(): void {
+    clearTimeout(this.#claimTimer);
+    this.#claimTimer = setTimeout(() => this.#settle("pause"), CLAIM_PAUSE_MS);
+  }
+
+  /**
+   * Writes the claim that is owed, if the device may write now (CL1 C-5): at the pause, and without
+   * waiting for it when the document or the page is left. A claim that could not be written (rights
+   * unknown, no identity yet) is tried again a pause later, for as long as the document is open: no
+   * change is needed to wake it.
+   */
+  #settle(when: "pause" | "detach" | "hidden"): void {
+    clearTimeout(this.#claimTimer);
+    if (!this.#owed) return;
+    this.#claim(true);
+    if (!this.#owed || when === "detach") return;
+    this.#armClaim(); // owed and not written: retried
+  }
+
+  /**
+   * The first analysis of an opening: the document already holds a change this device's actor wrote
+   * and no claim names that actor, so a claim is owed (U12: every author of the history is named).
+   * That is the device that has just created the document, a change made before the history
+   * followed it, and a claim that could not be written when the document was left. A device whose
+   * actor wrote nothing owes nothing: reading or receiving never claims (C-2).
+   */
+  #owedFrom(result: Analysis): void {
+    if (!this.#opening) return;
+    this.#opening = false;
+    const actor = this.myActor;
+    const wrote = result.sessions.some((s) => s.actor === actor);
+    if (this.#owed || !wrote || result.claims[actor]) return;
+    this.#owed = true;
+    this.#armClaim();
   }
 
   /**
@@ -238,6 +310,7 @@ class HistoryState {
     if (!known && !create) return;
     claimActor(handle, { id: workspace.myId, name: workspace.myName }, known);
     this.#claimed = { name: workspace.myName, peer: workspace.myId };
+    this.#owed = false;
   }
 
   /** The name changed: the document says it. */
@@ -296,6 +369,7 @@ class HistoryState {
       this.doc = doc;
       this.analysisHeads = A.getHeads(doc);
       this.error = "";
+      this.#owedFrom(result);
     } catch (err) {
       if (seq !== this.#seq) return;
       // The worker failed: a small document is analysed here, in slices, rather than leave the

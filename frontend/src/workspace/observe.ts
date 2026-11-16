@@ -1,9 +1,12 @@
+import { next as A } from "@automerge/automerge";
 import {
   type DocHandle,
+  type DocHandleChangePayload,
   isValidAutomergeUrl,
   parseAutomergeUrl,
   type Repo,
 } from "@automerge/automerge-repo";
+import { type HDoc, parseAction } from "../history/types";
 import type { LinkView } from "../net/links.svelte";
 
 /** Whether this is a development or an explicitly instrumented e2e build. */
@@ -76,4 +79,41 @@ export function observeSession(startupId: () => Promise<string>, view: () => Ses
   };
   g.__inkwellStartupId = startupId;
   g.__inkwellSession = view;
+}
+
+/** A claim change this page has seen (CL1): who wrote it, whether this device did, and when it was seen. */
+export interface ClaimSeen {
+  actor: string;
+  mine: boolean;
+  /** `Date.now()` when the change reached this page's document. */
+  at: number;
+}
+
+/** The claims seen so far, by document: a page follows several in its life (its own untitled one, then a shared one). */
+const claimsSeen = new Map<string, ClaimSeen[]>();
+/** The document the history follows now. */
+let followed = "";
+
+/**
+ * The claim changes that reach `handle`, written here or received, with the time each was seen: netsim
+ * scenario 8 reads when every device wrote its claim against its quiescence baseline (CL1, rule C-4).
+ * `window.__inkwellClaims()` gives those of the document followed now, the one the scenario measures:
+ * a claim in a document left earlier (the creator of an untitled document is named too) is not its matter.
+ * Returns what stops the watch.
+ */
+export function observeClaims(handle: DocHandle<HDoc>): () => void {
+  if (!observing()) return () => {};
+  followed = handle.url;
+  const seen = claimsSeen.get(followed) ?? [];
+  claimsSeen.set(followed, seen);
+  (globalThis as typeof globalThis & { __inkwellClaims?: () => ClaimSeen[] }).__inkwellClaims =
+    () => [...(claimsSeen.get(followed) ?? [])];
+  const onChange = ({ patchInfo: { before, after } }: DocHandleChangePayload<HDoc>) => {
+    const me = A.getActorId(after);
+    for (const m of A.getChangesMetaSince(after, A.getHeads(before)))
+      if (parseAction(m.message)?.kind === "claim")
+        seen.push({ actor: m.actor, mine: m.actor === me, at: Date.now() });
+  };
+  handle.on("change", onChange);
+  return () => handle.off("change", onChange);
 }

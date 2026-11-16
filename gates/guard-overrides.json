@@ -1254,6 +1254,16 @@
       "id": "4909486a23b2adc1ed9a528e1c78f79ffcc2251b26de63423a9aedb148d9a087",
       "reason": "gates/PC1b.toml: regression narrowed (same user decision of 2026-11-15, tests of the touched parts): vitest --changed re-ran nearly the whole suite and hit the 180 s cap; the Vitest part is now the test files the block added or modified; caps unchanged (30 + 180 + 300 s)",
       "decision": "docs/plans/2026-11-15-pc1b-join.md"
+    },
+    {
+      "id": "27f61ff641459ec74b0fc8db0fcd9f4a8b82374bfa64fea17f490f51068ea321",
+      "reason": "frontend/src/ui/history/history.svelte.ts: not a test timeout; the claim timer's clearTimeout only moved into #settle (rules C-1, C-5); CLAIM_PAUSE_MS is unchanged",
+      "decision": "docs/plans/2026-11-15-cl1-claim-on-local-edits.md"
+    },
+    {
+      "id": "2b2bae409491f8b8c6f28a25c95ffb85e58f7afc0b49fe60a42066ed04115d03",
+      "reason": "frontend/src/ui/history/history.svelte.ts: the same timer with the same delay (CLAIM_PAUSE_MS), now calling #settle(\"pause\") so that a claim owed is retried (rule C-5); no delay raised",
+      "decision": "docs/plans/2026-11-15-cl1-claim-on-local-edits.md"
     }
   ]
 }

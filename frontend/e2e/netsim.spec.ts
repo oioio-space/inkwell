@@ -256,6 +256,20 @@ async function links(p: Page): Promise<Link[]> {
   return Object.values((inner ?? {}) as Record<string, Link>);
 }
 
+/**
+ * CL1 (docs/plans/2026-11-15-cl1-claim-on-local-edits.md, « Observed, not inferred »): the claim changes
+ * this page has seen, with the time it saw each (`window.__inkwellClaims`, instrumented builds). Undefined
+ * when the build does not expose them; a report, never a clause.
+ */
+async function claimsSeen(p: Page) {
+  return p.evaluate(() => {
+    const f = (globalThis as { __inkwellClaims?: () => unknown }).__inkwellClaims;
+    return typeof f === "function"
+      ? (f() as { actor: string; mine: boolean; at: number }[])
+      : undefined;
+  });
+}
+
 const only = async (p: Page): Promise<Link> => {
   const ls = await links(p);
   if (ls.length !== 1) throw new Error(`expected 1 link, got ${ls.length}: ${JSON.stringify(ls)}`);
@@ -1059,8 +1073,33 @@ test("scenario 8: NI-4 three devices, alice-bob down (converge through carol, no
   // The quiescence baseline is taken after a short settle: the tail of the last exchanges is not idle traffic.
   await sleep(3_000);
   const settled = metricsMissing ? undefined : await sync().catch(() => undefined);
+  const baselineAt = Date.now();
   await sleep(30_000);
   const afterIdle = metricsMissing ? undefined : await sync().catch(() => undefined);
+  // CL1: when each device wrote its claim and when the others saw it, against the quiescence baseline
+  // (negative: before it). Read here, so the list is the one of phase 1 and of its window.
+  const seen = await Promise.all(pages.map((p) => claimsSeen(p).catch(() => undefined)));
+  const claims = seen.some((s) => s === undefined)
+    ? null
+    : seen.flatMap((s, device) =>
+        (s ?? []).map((c) => ({
+          device,
+          actor: c.actor,
+          mine: c.mine,
+          fromBaselineMs: c.at - baselineAt,
+        })),
+      );
+  // In the job's log too: the result files of a green run are not kept by the CI.
+  console.log(
+    `netsim ${run} claims written, ms from the quiescence baseline: ${
+      claims
+        ? claims
+            .filter((c) => c.mine)
+            .map((c) => `${c.device} ${c.fromBaselineMs}`)
+            .join(", ")
+        : "not exposed"
+    }`,
+  );
 
   // Phase 2: the relay's card goes down: the A-B circuit dies, A-C and B-C do not use it.
   topo("relay-down");
@@ -1146,5 +1185,5 @@ test("scenario 8: NI-4 three devices, alice-bob down (converge through carol, no
       };
     },
   );
-  finish({ carolWrites });
+  finish({ carolWrites, claims });
 });
