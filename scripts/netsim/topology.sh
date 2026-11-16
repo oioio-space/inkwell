@@ -46,6 +46,7 @@
 #        topology.sh unprofile wifi|blackout|slowrelay     # removes the qdiscs of a profile (a wifi-* name: the same four)
 #        topology.sh qstats wifi|blackout|slowrelay        # "NS DEV bytes= sent= dropped= overlimits=" lines, in profile_ifaces order
 #        topology.sh relay-down | relay-up                 # the relay's network card
+#        topology.sh truth-check                           # the qdisc counters count packets, not GSO batches (run after up)
 set -euo pipefail
 
 WAN=11.0.0
@@ -56,10 +57,22 @@ declare -A LAN=([nat-a]=10.1.0 [nat-b]=10.2.0 [nat-c]=10.3.0)
 NAMESPACES=(wan relay nat-a nat-b nat-c alice bob carol)
 MESH=0
 
+# segment_early NS DEV: an endpoint's own interface hands the network single packets. quic-go sends a run of
+# full-size packets as one UDP GSO batch (TCP does the same with TSO); a veth passes the batch on whole, so the
+# netem of the NAT behind it would drop or keep the batch as one skb and count one drop for all its packets
+# (plan BK6: C5's truth undercounted a lost batch). With gso_max_segs 1 the kernel segments the batch in
+# software as it leaves the endpoint, as a Wi-Fi card does (one frame per datagram). iproute2 rather than
+# `ethtool -K DEV tx-udp-segmentation off`: no new tool, it works in the user namespace, and it covers TCP
+# too. `truth-check` proves it.
+segment_early() {
+  ip -n "$1" link set dev "$2" gso_max_segs 1
+}
+
 # lan NAT HOST HOST_IF: a point-to-point link from the NAT's eth1 to HOST_IF.
 lan() {
   local nat=$1 host=$2 ifname=$3
   ip -n "$nat" link add eth1 type veth peer name "$ifname" netns "$host"
+  segment_early "$host" "$ifname"
   ip -n "$nat" addr add "${LAN[$nat]}.1/24" dev eth1
   ip -n "$nat" link set eth1 up
 }
@@ -126,6 +139,7 @@ up() {
     ip link add "w-$ns" netns wan type veth peer name eth0 netns "$ns"
     ip -n wan link set "w-$ns" master br-wan up
     ip -n "$ns" addr add "$WAN.${hosts[$ns]}/24" dev eth0
+    [[ $ns == nat-* ]] || segment_early "$ns" eth0 # the relay and carol are endpoints too
     ip -n "$ns" link set eth0 up
   done
   lan nat-a alice eth0
@@ -261,6 +275,38 @@ qstats() {
   done
 }
 
+# truth_check: the qdisc counters that C5 reads as the truth count packets, not batches (plan BK6). netem
+# draws its loss once per skb and adds one to `dropped` for a whole GSO batch, while `Sent ... pkt` counts its
+# segments, so a lost batch of k packets reads as one drop. For each of alice and bob, one UDP send of
+# GSO_SEGS segments (UDP_SEGMENT) through a `loss 100%` netem on its NAT's wan egress must raise `dropped`
+# by at least GSO_SEGS (other packets of the moment only add to it). Run right after `up`, before any profile;
+# the relay's address is pinned on the NAT so that no ARP request is lost to the 100 % loss.
+GSO_SEGS=10
+truth_check() {
+  local host nat mac before after
+  mac=$(ip -n relay link show eth0 | awk '/link\/ether/ { print $2 }')
+  for host in alice:nat-a bob:nat-b; do
+    nat=${host##*:} host=${host%%:*}
+    ip -n "$nat" neigh replace "$WAN.${WAN_HOST[relay]}" lladdr "$mac" dev eth0 nud permanent
+    impair "$nat" eth0 loss 100% limit 1000
+    before=$(qstat "$nat" eth0 | sed 's/.*dropped=\([0-9]*\).*/\1/')
+    ip netns exec "$host" python3 -I -c '
+import socket, sys
+s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+s.setsockopt(socket.SOL_UDP, 103, 1200)  # UDP_SEGMENT (linux/udp.h)
+s.sendto(b"x" * (int(sys.argv[2]) * 1200), (sys.argv[1], 9))
+' "$WAN.${WAN_HOST[relay]}" "$GSO_SEGS"
+    sleep 0.2
+    after=$(qstat "$nat" eth0 | sed 's/.*dropped=\([0-9]*\).*/\1/')
+    clear_qdisc "$nat" eth0
+    ip -n "$nat" neigh del "$WAN.${WAN_HOST[relay]}" dev eth0
+    if ((after - before < GSO_SEGS)); then
+      echo "topology: FAILED truth check: one GSO send of $GSO_SEGS packets from $host raised $nat/eth0 dropped by $((after - before)), not $GSO_SEGS: the qdisc counters undercount lost packets (segmentation must happen before netem)" >&2
+      return 1
+    fi
+  done
+}
+
 # counter NAT NAME: the packet count of one of the NAT's counters.
 counter() {
   ip netns exec "$1" nft list counter ip count "$2" | awk '/packets/ { print $2 }'
@@ -280,6 +326,7 @@ case ${1:-} in
   relay-down) ip -n relay link set eth0 down ;;
   relay-up) ip -n relay link set eth0 up ;;
   relay-ip) echo "$WAN.${WAN_HOST[relay]}" ;;
+  truth-check) truth_check ;;
   counter) counter "${2:?usage: topology.sh counter NAT direct|egress}" "${3:?usage: topology.sh counter NAT direct|egress}" ;;
   *)
     sed -n '2,/^set -e/p' "$0" | sed '$d' >&2

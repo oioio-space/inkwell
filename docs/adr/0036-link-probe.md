@@ -238,8 +238,10 @@ prober itself reports:
   exactly the one spec §8.5.5 step 6 gives for the figures shown so far, with the round-trip level good (every
   profile is below 400 ms). A level that never falls back, enters at the wrong threshold or rises at the wrong
   place differs at the first figure where it should not.
-- **R2, the figure follows the truth.** From 33 s on, the figure must lie within `1.5·√(T*/n) + c/n` of the range
-  of qdisc truths its window may cover, with at least 3000 packets. `c` is the crossings in packets: 22 on P0, P1
+- **R2, the figure follows the truth.** From 33 s on, the figure must lie within `k·(1.5·√(T*/n) + c/n)` of the
+  range of qdisc truths its window may cover, with at least 3000 packets. The 1.5 was chosen; block BK6 (plan
+  `2026-11-16-bk6-netsim-c5.md`) derives `k` per window class at 1e-7 false failures per run (1 to 2.75,
+  `c5model.RULE.ks`); the C5S margin is k = 1. `c` is the crossings in packets: 22 on P0, P1
   and P5, 32 on P2, 24 on P3, 34 on P4, about 1.5 times the largest needed over 4000 traces. **R3:** P0, P1 and P2
   were impaired (mean `T* ≥ 1 %`).
 - **0 false failures in 3000 runs: ≤ 1.0e-3 per run (95 %).** Each mutant is rejected in 3000 of 3000 runs, a

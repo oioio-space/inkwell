@@ -139,6 +139,8 @@ start_stack() {
   # start_stack runs in an `if`, where set -e is off: every step that can fail returns explicitly.
   mkdir -p "$dir" || return 1
   "$topology" up "${MODE[$n]}" || return 1
+  # The impaired scenarios judge against the qdisc counters: they must count packets, not batches.
+  if ((n >= 5)); then "$topology" truth-check || return 1; fi
   relay_ip=$("$topology" relay-ip) || return 1
 
   ip netns exec relay "$relay_bin" --key "$dir/relay.key" --print-addr \

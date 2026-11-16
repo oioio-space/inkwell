@@ -204,6 +204,49 @@ class Rule(unittest.TestCase):
         return code, json.loads(out.getvalue())["ok"]
 
 
+class Scale(unittest.TestCase):
+    """Plan BK6: R2's margin is scaled by k, read from the honest runs' tail at ALPHA_RUN per run."""
+
+    def test_margin_used_is_the_k_at_which_r2_fails(self):
+        """A run using u of a window class's margin at scale 1 passes R2 there for a scale >= u, fails it below."""
+        rows = [("P1", "AB", 40.0, m.FAIR, 0.046, 5500, 0.0363, 0.0387)]
+        u = m.margin_used(dataclasses.replace(m.RULE, ks=()), rows)["P1"]
+        self.assertGreater(u, 0)
+        for k, ok in ((u * 0.99, False), (u * 1.01, True)):
+            rule = dataclasses.replace(m.RULE, ks=(("P1", k),))
+            lo, hi = m.tolerance(rule, "P1", 0.0363, 0.0387, 5500)
+            self.assertEqual(lo <= 0.046 <= hi, ok, k)
+            run = {"honest": (False, {"P1": u})}
+            self.assertEqual(m.rejected(run, "honest", {"P1": k}), not ok, k)
+        self.assertEqual(m.margin_used(m.RULE, [rows[0][:5] + (2999,) + rows[0][6:]])["P1"], math.inf)
+
+    def test_derived_scale_covers_an_exponential_tail(self):
+        """Maxima with an exponential tail, P(X > x) = e^-x, so the level at 1e-7 is ln(1e7) = 16.1: on ten
+        samples of 3000, the bootstrap upper bound is never below it (k is not anti-conservative) and k
+        rounds it up."""
+        exact = math.log(1e7)
+        for seed in range(10):
+            rng = random.Random(seed)
+            d = m.derive_scale([rng.expovariate(1.0) for _ in range(3000)], boots=100)
+            self.assertGreaterEqual(d["upper"], exact, seed)
+            self.assertGreaterEqual(d["k"], d["upper"], seed)
+
+
+    def test_window_classes(self):
+        """A phase without loss keeps 1 (c bounds its error), a change at one traffic rate takes the larger
+        scale of its two phases, and a phase with loss or the P0>P1 change of rate gets its own tail."""
+        rng = random.Random(5)
+        res = [{"honest": (False, {lb: rng.expovariate(4.0) for lb in ("P0", "P1", "P2", "P5", "P0>P1")})}
+               for _ in range(3000)]
+        d = m.derive_scales(res)
+        self.assertEqual((d["P3"]["k"], d["P4"]["k"], d["P3>P4"]["k"]), (1.0, 1.0, 1.0))
+        self.assertEqual(d["P1>P2"]["k"], max(d["P1"]["k"], d["P2"]["k"]))
+        self.assertEqual(d["P4>P5"]["k"], d["P5"]["k"])
+        for lb in ("P0", "P1", "P2", "P5", "P0>P1"):
+            self.assertEqual(d[lb]["how"], "tail", lb)
+            self.assertGreater(d[lb]["k"], 1.0, lb)  # exponential, mean 0.25: ln(11e7) / 4 = 4.6 > 1
+
+
 class Transition(unittest.TestCase):
     """Spec §8.5.5 step 3.6 and « Exactitude » (run 5-s1-r8): a sample at a change of the round trip."""
 

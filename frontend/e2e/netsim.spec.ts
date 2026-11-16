@@ -776,7 +776,7 @@ test("scenario 5: NI-1 bad Wi-Fi that changes (converge, stay up, the level foll
   await clause(
     "C5",
     "the level shown follows the injected loss: replayed exactly from every sampler step (level rule R1), the figure within tolerance of the qdisc truth (R2), the impairment happened (R3)",
-    "c5model.py verdict: level = spec 8.5.5 step 6 applied to the figures; |figure - T*| <= 1.5 sqrt(T*/n) + c/n, n >= 3000",
+    "c5model.py verdict: level = spec 8.5.5 step 6 applied to the figures; |figure - T*| <= k(class) (1.5 sqrt(T*/n) + c/n), k at 1e-7 false failures per run (c5model RULE.ks), n >= 3000",
     async () => {
       const input = JSON.stringify({ counters, steps });
       writeFileSync(join(out, `${run}-c5.json`), input);

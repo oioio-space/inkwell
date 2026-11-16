@@ -37,6 +37,7 @@ the gate's runs, against the model's).
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import bisect
 import heapq
 import json
@@ -1066,6 +1067,8 @@ class Rule:
     crossings: tuple  # ((phase, c), ...): the crossing term, in packets, per profile
     t_min: float  # P0, P1, P2: mean T* below this means the impairment did not happen (anti-vacuity)
     lags: tuple = ()  # (("A>B", seconds), ...): `transition_lag` of each change of the plan
+    k: float = 1.0  # a scale of the whole margin (1e9 in `scale`: R2 out of the way)
+    ks: tuple = ()  # (("label", scale), ...): per window class, read from the honest tail at ALPHA_RUN (`scale`, BK6)
 
     def c(self, label: str) -> float:
         return max(dict(self.crossings)[p] for p in label.split(">"))
@@ -1073,15 +1076,22 @@ class Rule:
     def lag(self, label: str) -> float:
         return dict(self.lags).get(label, 0.0)
 
+    def scale(self, label: str) -> float:
+        return self.k * dict(self.ks).get(label, 1.0)
+
 
 def _plan_lags(plan=PLAN) -> tuple:
     names = [p for p, _ in plan]
     return tuple((f"{a}>{b}", transition_lag(PROFILES[PHASES[a]], PROFILES[PHASES[b]])) for a, b in zip(names, names[1:]))
 
 
+# ks: `c5model.py scale --runs 3000 --seed 29` (plan BK6): each window class's scale of the margin at
+# ALPHA_RUN = 1e-7 false failures per run; the margin of the C5S plan (q = 1.5, chosen) is k = 1.
 RULE = Rule(n_min=3000, q=1.5,
             crossings=(("P0", 22), ("P1", 22), ("P2", 32), ("P3", 24), ("P4", 34), ("P5", 22)), t_min=0.01,
-            lags=_plan_lags())
+            lags=_plan_lags(),
+            ks=(("P0", 1.75), ("P1", 1.15), ("P2", 1.05), ("P3", 1.0), ("P4", 1.0), ("P5", 1.25),
+                ("P0>P1", 2.75), ("P1>P2", 1.15), ("P2>P3", 1.05), ("P3>P4", 1.0), ("P4>P5", 1.25)))
 
 
 def tolerance(rule: Rule, label: str, lo_t: float, hi_t: float, n: int) -> tuple[float, float]:
@@ -1091,8 +1101,30 @@ def tolerance(rule: Rule, label: str, lo_t: float, hi_t: float, n: int) -> tuple
     seconds of our traffic, the window's ΔS at least rate × (W − 2) packets (`window_range`), so its
     share of the figure is lag / (W − 2), whatever the rate (either sign: the oldest sample's
     crossings raise the figure, the newest's lower it)."""
-    tol = rule.q * math.sqrt(hi_t / n) + rule.c(label) / n + rule.lag(label) / (WINDOW - 2)
+    tol = rule.scale(label) * (rule.q * math.sqrt(hi_t / n) + rule.c(label) / n + rule.lag(label) / (WINDOW - 2))
     return lo_t - tol, hi_t + tol
+
+
+def margin_used(rule: Rule, rows) -> dict:
+    """{label: the largest share of R2's margin the figures of a run use in that window class} (1 = on the
+    edge, 0 = inside the range of T*; inf when a judged step has no figure or too few packets: R2 fails
+    whatever the margin). The margin scales with rule.scale(label), so a run that uses u of a class's
+    margin at scale 1 fails R2 there exactly when its scale is below u."""
+    worst: dict = {}
+    for label, _, _, _, fig, n, lo_t, hi_t in rows:
+        if math.isnan(lo_t):
+            continue
+        u = 0.0
+        if n < rule.n_min or math.isnan(fig):
+            u = math.inf
+        else:
+            lo, hi = tolerance(rule, label, lo_t, hi_t, n)
+            if fig > hi_t:
+                u = (fig - hi_t) / (hi - hi_t)
+            elif fig < lo_t:
+                u = (lo_t - fig) / (lo_t - lo)
+        worst[label] = max(worst.get(label, 0.0), u)
+    return worst
 
 
 def judge_run(rule: Rule, rows) -> tuple[bool, list]:
@@ -1239,6 +1271,121 @@ def assess(rule: Rule, tr: Traffic, runs: int, seed: int, workers: int = 1) -> A
         for k, v in r.items():
             reasons.setdefault(k, v)
     return Assessment(runs, fails, reasons)
+
+
+
+# ── The scale of R2's margin at a stated false-alarm rate (plan BK6) ─────────────────────────────
+
+ALPHA_RUN = 1e-7  # false failures per run of the honest prober the rule may cost (BK3's standard)
+
+
+def _scale_chunk(args):
+    """Per run: the share of R2's margin (at k = 1) the honest prober uses, and for each estimator whether
+    a clause independent of k (R1, R3, a missing figure) rejects it and the share of the margin it uses."""
+    rule, tr, runs, seed = args
+    rng = random.Random(seed)
+    loose = dataclasses.replace(rule, k=1e9)  # R2 out of the way: what R1 and R3 reject on their own
+    out = []
+    for _ in range(runs):
+        rows = simulate_run(tr, rng)
+        out.append({k: (not judge_run(loose, r)[0], margin_used(rule, r)) for k, r in rows.items()})
+    return out
+
+
+def scale_runs(rule: Rule, tr, runs: int, seed: int, workers: int = 1) -> list:
+    chunks = max(1, workers)
+    per = [runs // chunks + (i < runs % chunks) for i in range(chunks)]
+    jobs = [(dataclasses.replace(rule, k=1.0, ks=()), tr, n, seed + i) for i, n in enumerate(per) if n]
+    if workers > 1:
+        import multiprocessing
+
+        with multiprocessing.Pool(workers) as pool:
+            parts = pool.map(_scale_chunk, jobs)
+    else:
+        parts = [_scale_chunk(j) for j in jobs]
+    return [r for p in parts for r in p]
+
+
+def tail_quantile(xs, alpha: float, top: float = 0.1) -> float:
+    """The level a run's maximum exceeds with probability alpha: a generalized Pareto tail fitted by the
+    method of moments to the excesses over the (1 − top) quantile (Coles 2001, §4.3; Hosking and Wallis
+    1987), its shape floored at 0 (an exponential tail) so that a light-tailed sample is not trusted to
+    end sooner than an exponential would."""
+    xs = sorted(xs)
+    u = xs[int((1 - top) * len(xs))]
+    ex = [x - u for x in xs if x > u]
+    zeta = len(ex) / len(xs)
+    mean, var = statistics.fmean(ex), statistics.pvariance(ex)
+    xi = max(0.0, 0.5 * (1 - mean * mean / var))
+    sigma = 0.5 * mean * (mean * mean / var + 1)
+    if xi == 0.0:
+        sigma = mean  # exponential: the mean excess
+        return u + sigma * math.log(zeta / alpha)
+    return u + sigma / xi * ((alpha / zeta) ** (-xi) - 1)
+
+
+def derive_scale(honest, alpha: float = ALPHA_RUN, boots: int = 400, seed: int = 7, conf: float = 0.95) -> dict:
+    """k: the conf upper bound (bootstrap over runs) of the tail quantile of the honest runs' largest
+    share of the margin at alpha per run, rounded up to 0.05."""
+    rng = random.Random(seed)
+    point = tail_quantile(honest, alpha)
+    qs = sorted(tail_quantile([rng.choice(honest) for _ in honest], alpha) for _ in range(boots))
+    upper = qs[min(boots - 1, math.ceil(conf * boots) - 1)]
+    return {"point": point, "upper": upper, "k": math.ceil(upper * 20 - 1e-9) / 20}
+
+
+def rejected(run: dict, estimator: str, ks: dict) -> bool:
+    """Whether the rule with per-class scales ks rejects an estimator's run (from `_scale_chunk`)."""
+    other, used = run[estimator]
+    return other or any(u > ks.get(label, 1.0) for label, u in used.items())
+
+
+def derive_scales(res: list, alpha: float = ALPHA_RUN, tr=None, plan=PLAN) -> dict:
+    """{label: {k, how, ...}}, one scale per window class, so that the run's false-failure rate stays below
+    alpha (Bonferroni over the L classes of the plan, alpha / L each), never below 1 (the margin of the C5S
+    plan). Three kinds of class (plan BK6, section 4):
+    * a phase without loss (T* = 0: P3, P4): the figure's error is the crossings and the permille rounding,
+      which c already bounds (the largest crossing over 4000 traces, × 1.5); the honest margin use there is
+      discrete (whole permille), so no tail is fitted: k = 1;
+    * a phase with loss, and a change across which our traffic rate changes (P0>P1): the tail of the honest
+      runs' largest margin use, a generalized Pareto fitted to the top 10 % and read at alpha / L, its 95 %
+      bootstrap upper bound rounded up to 0.05 (`derive_scale`);
+    * any other change: the window mixes the two phases at the same rate, and the lag of `transition_lag`
+      is a bound, not a tail: the larger scale of its two phases."""
+    tr = tr or design_traffic()
+    names = [p for p, _ in plan]
+    labels = names + [f"{a}>{b}" for a, b in zip(names, names[1:])]
+    lossless = {p for p in names if PROFILES[PHASES[p]].path_loss() == 0.0}
+    out = {}
+    for lb in labels:
+        parts = lb.split(">")
+        xs = [r["honest"][1].get(lb, 0.0) for r in res]
+        if len(parts) == 1 and lb in lossless:
+            out[lb] = {"k": 1.0, "how": "no loss: bounded by c", "max": max(xs)}
+        elif len(parts) == 1 or tr.rate_of(parts[0]) != tr.rate_of(parts[1]):
+            d = derive_scale(xs, alpha / len(labels))
+            out[lb] = {**d, "k": max(1.0, d["k"]), "how": "tail", "max": max(xs)}
+    for lb in labels:
+        if lb not in out:
+            a, b = lb.split(">")
+            xs = [r["honest"][1].get(lb, 0.0) for r in res]
+            out[lb] = {"k": max(out[a]["k"], out[b]["k"]), "how": f"the larger of {a} and {b}", "max": max(xs)}
+    return out
+
+
+def cmd_scale(args):
+    res = scale_runs(RULE, design_traffic(), args.runs, args.seed, args.workers)
+    if args.save:
+        with open(args.save, "w") as f:
+            json.dump(res, f)
+    other = sum(r["honest"][0] for r in res)
+    per = derive_scales(res)
+    derived = {lb: d["k"] for lb, d in per.items()}
+    rules = {"k = 1 (C5S)": {}, "RULE.ks": dict(RULE.ks), "derived": derived}
+    print(json.dumps({"runs": len(res), "alpha_run": ALPHA_RUN, "honest_rejected_without_R2": other,
+                      "per_class": per, "derived_ks": derived,
+                      "rejected": {name: {e: sum(rejected(r, e, ks) for r in res) for e in ESTIMATORS}
+                                   for name, ks in rules.items()}}, indent=1))
 
 
 # ── The figure's error (spec §8.5.5 « Exactitude »): many seeds, intervals ──────────────────────
@@ -1500,10 +1647,15 @@ def main(argv=None):
     x.add_argument("--runs", type=int, default=300)
     x.add_argument("--seed", type=int, default=23)
     x.add_argument("--workers", type=int, default=4)
+    sc = sub.add_parser("scale")
+    sc.add_argument("--runs", type=int, default=3000)
+    sc.add_argument("--seed", type=int, default=29)
+    sc.add_argument("--workers", type=int, default=4)
+    sc.add_argument("--save", help="write every run's margins (JSON) for offline analysis")
     sub.add_parser("verdict")
     args = ap.parse_args(argv)
     cmds = {"report": cmd_report, "errors": cmd_errors, "flicker": cmd_flicker, "profiles": cmd_profiles,
-            "transitions": cmd_transitions, "verdict": cmd_verdict}
+            "transitions": cmd_transitions, "verdict": cmd_verdict, "scale": cmd_scale}
     return cmds[args.cmd](args) or 0
 
 

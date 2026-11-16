@@ -1289,6 +1289,21 @@
       "id": "5384e881e158118745fa46dcbaf45b452849f251ba16202fcc72885b9da3fa94",
       "reason": "scripts/tla-check.sh: registers the PeerUpAck model of block PU1 (7 configurations, mutants M1-M8 and witnesses, frozen gate gates/PU1.toml); additive, no existing run, count or bound changed",
       "decision": "docs/plans/2026-11-16-pu1-peerup-after-acceptance.md"
+    },
+    {
+      "id": "3552c17f7cdfc725dd59f34f795cc7613c9e6fcf794f2a2de9cc2aefb2adb1f8",
+      "reason": "scripts/netsim/c5model.py: C5's R2 margin scaled per window class at a stated 1e-7 false failures per run (BK6, docs/plans/2026-11-16-bk6-netsim-c5.md), replacing q = 1.5 set by eye (about 1e-3 per run); 3000 runs: 0 honest failures, every mutant (old figure, M5b, 60 s and stale window) still rejected 3000/3000",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "cfb402357675c4c05d44d80a0d50998275faae33fb3564012901c19e39460127",
+      "reason": "scripts/netsim/c5model_test.py: new Scale tests for the per-class derivation (BK6); no existing assertion weakened, power stays >= 0.999 on 3000 runs",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "319a4937f230408f97ad8c1a5395016ef7761b40b6b9941a446360d3f4a9599e",
+      "reason": "scripts/netsim/run.sh: a start-up truth-check for scenarios 5-8 fails the scenario if the qdisc counters undercount (a 10-segment GSO send through 100 % loss must raise dropped by 10; it raised it by 1 before gso_max_segs 1, BK6)",
+      "decision": "docs/objectif-en-cours.md"
     }
   ]
 }
