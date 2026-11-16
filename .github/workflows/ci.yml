@@ -104,8 +104,14 @@ jobs:
           path: ~/.cache/inkwell
           key: ${{ runner.os }}-formal-${{ hashFiles('scripts/tla-check.sh', 'scripts/alloy_check.py') }}
           restore-keys: ${{ runner.os }}-formal-
+      # Only mise itself: the models need Java and Python, which the runner has; installing every tool would build
+      # wails3, which needs GTK4 and WebKitGTK (run 43978292467).
       - uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3.6.3
+        with:
+          install: false
       - run: mise run formal
+        env:
+          MISE_TASK_RUN_AUTO_INSTALL: "false"
   # Two instances behind NATs and a public relay, in network namespaces created without
   # root by the script itself (scripts/netsim); the same command runs locally.
   netsim:
