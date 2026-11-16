@@ -1,0 +1,72 @@
+# FROZEN 2026-11-16, red witnesses in gates/TC1/WITNESSES.md, blind review applied (F1-F6). Acceptance for block TC1 (the fold's cost is asserted by counts, not by the clock: rules K-1..K-4).
+# Rigour: standard. Plan: docs/plans/2026-11-16-tc1-fold-cost-by-counts.md. Written before any production change.
+# Every long command is `timeout -k 10 N …/scripts/heavy.sh …` (the timeout covers the wait for a slot). No nested gate.
+# The module `protocol` is nested: its tests run from protocol/ ; the mutants name the package by import path.
+max_minutes = 12
+raw_results = ["docs/plans/2026-11-16-tc1-fold-cost-by-counts.md", "gates/TC1/*"]
+
+[[criteria]]
+# Each rule row is in the plan; K-4: the paragraph of §4.9 that carries O(n²/64 + n·e) holds the key words of the plan's
+# sentence (an upper bound, exact when ranked, sweep inputs and not a time bound, no new DOIT); doc.go says the same
+# and no longer « one more fold per self-cut ».
+id = "docs"
+command = '''python3 -I - <<'PY'
+import pathlib, re, sys
+plan = pathlib.Path("docs/plans/2026-11-16-tc1-fold-cost-by-counts.md").read_text()
+bad = [f"plan row {i}" for i in ["K-1", "K-2", "K-3", "K-4"] if f"\n| {i} |" not in plan]
+spec = pathlib.Path("docs/protocol/spec.md").read_text()
+sec = spec[spec.index("\n### 4.9 "):spec.index("\n### 4.10 ")]
+para = [p for p in re.split(r"\n\s*\n", sec) if "O(n²/64 + n·e)" in p]
+if len(para) != 1:
+    bad.append(f"spec §4.9: {len(para)} paragraphs state O(n²/64 + n·e), want 1")
+else:
+    flat = " ".join(para[0].split())
+    fr = ["dont le sujet est l'auteur", "au plus 1 + s balayages", "exactement 1 + s quand", "au coût d'un balayage", "524 800 ops balayées", "pas une borne de temps"]
+    bad += [f"spec §4.9 cost paragraph lacks {w!r}" for w in fr if w not in flat]
+    if flat.count("DOIT") != 1:
+        bad.append(f"spec §4.9 cost paragraph holds {flat.count('DOIT')} DOIT, want 1 (the sealed-list one)")
+doc = " ".join(" ".join(l.strip().removeprefix("//").strip() for l in pathlib.Path("protocol/trust/doc.go").read_text().splitlines()).split())
+en = ["non-grant op whose subject is its author", "at most 1 + s sweeps", "exactly 1 + s when", "at the cost of one sweep", "524 800 ops swept", "not a time bound"]
+bad += [f"doc.go lacks {w!r}" for w in en if w not in doc]
+if "one more fold per self-cut" in doc:
+    bad.append("doc.go still says 'one more fold per self-cut'")
+sys.exit(f"TC1 docs: {bad}" if bad else 0)
+PY'''
+
+[[criteria]]
+# K-1..K-3 in Go, under -race: the run succeeds (-timeout=90s: Go names a stuck test), every named test passes, and the
+# four test files neither import `time` nor read the clock (grep must exit 1: found = 0 and error > 1 both fail).
+# foldcost_counts_test.go keeps its name at step 2 (only its body changes).
+id = "go"
+command = '''cd protocol && out=$(timeout -k 10 120 ../scripts/heavy.sh go test -count=1 -race -timeout=90s -v -run '^(TestCreatorSelfCutsCostBounded|TestSelfCutsCostAtSeal|TestFoldCostWithinSelfCutBound|TestCascadeSingleSweep)$' ./trust/ 2>&1) || { echo "$out" | tail -40; exit 1; }
+for t in TestCreatorSelfCutsCostBounded TestSelfCutsCostAtSeal TestSelfCutsCostAtSeal/chain_of_12 TestSelfCutsCostAtSeal/sibling TestSelfCutsCostAtSeal/chained TestFoldCostWithinSelfCutBound TestCascadeSingleSweep; do
+  echo "$out" | grep -q -- "--- PASS: $t " || { echo "missing or not passing: $t"; exit 1; }
+done
+grep -nE '^[[:space:]]*([A-Za-z_.]+ )?"time"$|time[.](Now|Since)' trust/regress_test.go trust/regress2_test.go trust/foldcost_test.go trust/foldcost_counts_test.go; rc=$?
+[ "$rc" -eq 1 ] || { echo "a clock is left in the count tests, or a file is missing (grep exit $rc)"; exit 1; }'''
+
+[[criteria]]
+# Every TC1 mutant entry exists with its test and an expect text starting with its rule tag; the anchors apply.
+id = "mutant-tool"
+command = '''timeout -k 10 60 ./scripts/heavy.sh python3 -m unittest scripts/netsim/mutants_test.py && python3 -I scripts/netsim/mutants.py --check TC1 && python3 -I - <<'PY'
+import re, sys, tomllib
+ms = {m["id"]: m for m in tomllib.load(open("scripts/netsim/mutants.toml", "rb"))["mutant"] if m.get("block") == "TC1"}
+need = ["MK1", "MK2", "MK3", "MK4", "MK5", "MK6"]
+bad = [i for i in need if i not in ms or ms[i].get("kind") != "go" or not ms[i].get("test") or not re.match(r"K-\d ", ms[i].get("expect", ""))]
+sys.exit(f"TC1 mutant entries missing or without test and expect: {bad}" if bad else 0)
+PY'''
+
+[[criteria]]
+# MK1..MK6, each caught by its named test with its expect text (never by a build failure or a timeout).
+id = "mutants"
+command = "timeout -k 10 300 ./scripts/heavy.sh python3 -I scripts/netsim/mutants.py TC1"
+
+[[criteria]]
+# No regression: the whole trust package of the protocol module.
+id = "regression"
+command = "cd protocol && timeout -k 10 120 ../scripts/heavy.sh go test -count=1 -timeout=90s ./trust/..."
+
+[[criteria]]
+# The /simplify review of the diff: the report exists and its « Diff : » line names a real base commit.
+id = "simplify-report"
+command = "grep -Eq '^Diff : [0-9a-f]{7,}[.][.]' gates/TC1/SIMPLIFY.md"
