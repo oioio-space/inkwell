@@ -1509,6 +1509,11 @@
       "id": "352d5635190c3dbe45421ad23ed625d662f95dc25ea9209624575c1d580e824e",
       "reason": "internal/typst/sandbox_linux_test.go: the hostile-memory tests take the scope helper, and skip only the core-dump check on kernels that cannot report core dumps (PIDFD_INFO_COREDUMP, before Linux 6.16), after the memory-limit check has run, as the sidecar tests already do",
       "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "4353776ea2baaa7f4e297d90498992b8d1d95d24aa1ea0144dcba339bcf0dc36",
+      "reason": "scripts/perf/cpu_test.py: burn() consumes a fixed CPU time (process_time) instead of a wall time, and the detached-helper window closes once the helper reports its 0.8 s of CPU burnt instead of after a fixed 800 ms; no bound is lowered (> 350 and > 500 unchanged); the tests now hold under CPU contention (reproduced red with 6 busy loops on 2 CPUs and on GitHub run 43920252732, green after)",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
     }
   ]
 }
