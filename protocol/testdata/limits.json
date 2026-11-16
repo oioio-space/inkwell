@@ -27,6 +27,13 @@
     }
   },
   {
+    "row": "| accusé de session sync (§8.7) | 1 octet `0x01` ; ouverture et accusé en 15 s ; écriture de l'accusé en 15 s | par flux | refus ou violation : flux réinitialisé, `ClosePeer`, aucun événement | nouvelle connexion |",
+    "constants": {
+      "SyncAckLen": "1",
+      "SyncAckTimeout": "15000000000"
+    }
+  },
+  {
     "row": "| trame vrac | 1 065 005 o | — | violation | Tenu |",
     "constants": {
       "MaxBulkFrame": "1065005"

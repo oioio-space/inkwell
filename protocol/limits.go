@@ -32,6 +32,8 @@ const (
 	LobbyStreams = 4
 	// MaxSyncFrame is the maximum size of a sync frame, in bytes (§16, sync frame row).
 	MaxSyncFrame = 98304
+	// SyncAckLen is the length of the sync session's acceptance ACK, in bytes (§16, sync ACK row; §8.7.2).
+	SyncAckLen = 1
 	// MaxBulkFrame is the maximum size of a bulk frame, in bytes (§16, bulk frame row).
 	MaxBulkFrame = 1065005
 	// MaxLobbyRequest is the maximum size of a lobby request, in bytes (§16, lobby row).
@@ -332,6 +334,9 @@ const (
 	LinkProbeReopenGap = 30 * time.Second
 	// LinkProbeNegotiationTimeout bounds the outbound negotiation (§8.5.5).
 	LinkProbeNegotiationTimeout = 10 * time.Second
+	// SyncAckTimeout bounds opening a sync stream and reading its ACK together, counted from the
+	// open, and the responder's write of the ACK (§16, sync ACK row; §8.7.4).
+	SyncAckTimeout = 15 * time.Second
 	// LinkProbeDefaultMaxAckDelay is the max_ack_delay used when the QUIC stack does not expose the peer's (§8.5.5): quic-go advertises 26 ms (MaxAckDelayInclGranularity), above RFC 9000's 25 ms default.
 	LinkProbeDefaultMaxAckDelay = 26 * time.Millisecond
 )
