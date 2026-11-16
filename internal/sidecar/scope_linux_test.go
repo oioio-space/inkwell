@@ -433,13 +433,32 @@ func TestBothMemoryBudgetsHold(t *testing.T) {
 	}
 }
 
+// raceResidentReserve is the resident memory the race detector adds to the
+// Go processes of the resident-tree run that must fit under its bound before
+// the second child is ready: PID 1, the tree's parent and two children.
+// Measured 2026-11-16 (eight runs each, memory.current of one process in its
+// own cgroup): idle 1.6 to 3.0 MiB plain, 15.9 to 16.6 MiB race; a child
+// holding its 32 MiB chunk 33.8 to 35.0 MiB plain, 48.0 to 48.3 MiB race.
+// The difference is at most 15.0 MiB a process, taken as 16 MiB.
+const raceResidentReserve = 4 * 16 << 20
+
 func TestResidentBudgetKillsWithSIGKILL(t *testing.T) {
 	if !requireNScope(t) {
 		return
 	}
 	for _, mode := range []string{"resident", "resident-tree"} {
 		t.Run(mode, func(t *testing.T) {
-			out, err := Run(t.Context(), residentSpec(t, scopeManager(t), mode))
+			s := residentSpec(t, scopeManager(t), mode)
+			if mode == "resident-tree" && raceEnabled {
+				s.ResidentLimit += raceResidentReserve
+			}
+			// The claim stays a whole-tree kill: the six children's chunks
+			// alone (6 x 32 MiB) fill the bound, before any of the seven
+			// processes' own memory.
+			if mode == "resident-tree" && 6*32<<20 < s.ResidentLimit {
+				t.Fatalf("the tree's chunks (%d) no longer exceed its bound (%d)", 6*32<<20, s.ResidentLimit)
+			}
+			out, err := Run(t.Context(), s)
 			if err != nil {
 				t.Fatal(err)
 			}

@@ -134,14 +134,58 @@ type memoryWatch struct {
 	global      uint64
 	ancestors   map[string]uint64
 	bound       uint64    // memory.high of the run; zero leaves only the backstop
-	over        time.Time // first check, since the last one at or under the bound, that found memory.current above it
+	over        time.Time // first check, since the last one at or under the bound, that found unreclaimable memory above it
 }
 
-// boundGrace is how long memory.current must stay above memory.high before
-// the watchdog kills: page cache is charged too, but reclaim brings it back
-// under the bound at once; only unreclaimable memory (anonymous, tmpfs, kernel;
-// no swap) stays above (ADR 0044 point 1g).
+// boundGrace is how long the run's unreclaimable memory must stay above
+// memory.high before the watchdog kills: it absorbs the moment between the
+// reads of memory.current and memory.stat (ADR 0044 point 1g).
 const boundGrace = 100 * time.Millisecond
+
+// unreclaimable is the part of a run's charge that reclaim cannot give back
+// without swap and without the run's cooperation: memory.current less the
+// clean, evictable page cache of files. memory.stat "file" holds tmpfs and
+// shared memory ("shmem"), dirty and writeback pages, which wait on writes,
+// and mlocked file pages ("unevictable"; it holds mlocked anonymous pages
+// too, which are then counted twice, on the side of the bound): all stay
+// counted. Clean mapped file pages are left out: reclaim unmaps them itself
+// (measured 2026-11-16: a run mapping a 512 MiB file under a 128 MiB bound
+// keeps 18 MiB unreclaimable). The page cache alone is not a bound violation,
+// even while it stays above memory.high: pages under read I/O cannot be
+// reclaimed until the I/O completes, and on storage at 200 MB/s or less a
+// plain read stays above the bound for 85 ms to 200 ms at a time (measured
+// 2026-11-16, ADR 0044 point 1g). What is left out is still charged: memory.max
+// stays its hard backstop.
+func unreclaimable(current uint64, stat map[string]uint64) (uint64, error) {
+	var v [5]uint64
+	for i, name := range [...]string{"file", "shmem", "file_dirty", "file_writeback", "unevictable"} {
+		n, ok := stat[name]
+		if !ok {
+			return 0, fmt.Errorf("memory.stat has no %s", name)
+		}
+		v[i] = n
+	}
+	file, kept := v[0], v[1]+v[2]+v[3]+v[4]
+	clean := file - min(kept, file)
+	return current - min(clean, current), nil
+}
+
+// usage reads the run's unreclaimable memory now.
+func (w *memoryWatch) usage() (uint64, error) {
+	v, err := readValue(filepath.Join(w.path, "memory.current"))
+	if err != nil {
+		return 0, err
+	}
+	current, err := strconv.ParseUint(v, 10, 64)
+	if err != nil {
+		return 0, err
+	}
+	stat, err := readCounters(filepath.Join(w.path, "memory.stat"))
+	if err != nil {
+		return 0, err
+	}
+	return unreclaimable(current, stat)
+}
 
 // watchCounterFile opens a non-blocking inotify queue on the counter file;
 // a variable so that tests can make inotify fail.
@@ -236,8 +280,8 @@ func (w *memoryWatch) sample() {
 // while the run lives: memory.high throttles and reclaims but never invokes
 // the OOM killer (kernel cgroup-v2 documentation, memory.high). Once the run
 // has had a "high" event, inkwell kills the whole run cgroup itself when
-// memory.current stays above the bound for boundGrace, so a run that only
-// filled the page cache is not stopped. A kill by inkwell is not an OOM kill:
+// its unreclaimable memory stays above the bound for boundGrace, so a run
+// that only filled the page cache is not stopped. A kill by inkwell is not an OOM kill:
 // the session scope's Result stays "success" and the desktop raises no memory
 // alarm. If the kill fails, memory.max above the bound is the backstop
 // (residual R-7).
@@ -246,9 +290,8 @@ func (w *memoryWatch) enforce(now time.Time) {
 	if w.h.bounded || w.bound == 0 || w.disarmed.Load() || n == 0 || w.h.samples[n-1].high <= w.h.samples[0].high {
 		return
 	}
-	v, err := readValue(filepath.Join(w.path, "memory.current"))
-	current, perr := strconv.ParseUint(v, 10, 64)
-	if err != nil || perr != nil || current <= w.bound {
+	used, err := w.usage()
+	if err != nil || used <= w.bound {
 		w.over = time.Time{}
 		return
 	}
