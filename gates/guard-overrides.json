@@ -1529,6 +1529,11 @@
       "id": "e84827b6c16d5bdda2f9f35f952955c83ce2b74d1c8082c81848ac4da978d4b3",
       "reason": "mise.toml: SB2a1's sandbox tasks combined with CI1's split of ci:core into ci:checks + formal; locally ci:core runs what it ran before",
       "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "99635f1b14ff87eba82531b149ac268fd277a499d64530d3f6edb03e09525670",
+      "reason": ".github/workflows/ci.yml: the formal job installs only mise (install: false, no task auto-install); SB2a1's ci steps and CI1's formal job as before, no cap raised",
+      "decision": "docs/objectif-en-cours.md"
     }
   ]
 }
