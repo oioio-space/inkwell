@@ -923,3 +923,65 @@ java -cp tla2tools.jar tlc2.TLC -workers 2 -config DirectUpgradeHonest.cfg Direc
 java -cp tla2tools.jar tlc2.TLC -workers 2 -config mutants/DirectUpgradeLowerOnly.cfg mutants/DirectUpgradeMutants
 INKWELL_TLA_ONLY='^DirectUpgrade' ./scripts/tla-check.sh    # the 44 DirectUpgrade runs only, 273 s (heavy.sh --exclusive)
 ```
+
+## PeerUpAck (block PU1, spec §8.7: a peer is announced only after its acceptance ACK of this stream)
+
+Model: [PeerUpAck.tla](PeerUpAck.tla); plan
+[2026-11-16-pu1-peerup-after-acceptance.md](../../plans/2026-11-16-pu1-peerup-after-acceptance.md). Two symmetric
+nodes; connections created on the wire and registered by each side on its own time, a side may close one at its
+registration (a late link it does not keep, Admit refusing it) while the other registers it before it learns of the
+close (the trace found in block HP1r, reproducible on main); one outbound stream per node carrying the session (`out`)
+and, while up, a move to another connection (`nxt`, the relay-to-direct upgrade of `stream.go`); libp2p's lazy path
+when the peer's protocol is cached (`cached`: NewStream returns at once, no byte of the peer); a silent responder
+(libp2p echoes, the handler never answers); a responder stuck in its handler (`StuckNodes`: it accepts and never
+decides, and fairness never forces it); Drop (admission off, every connection closed) and re-admission. Messages are
+a set; a stream's echo precedes its ACK or reset (`EchoGone`); bytes of an abandoned stream are stale.
+
+Time (P-5): each opening stream has a clock (`age`, `tot`: ticks since the open, NewStream and the ACK together); the
+deadline fires at `age = D` **whatever is in flight**. `HonestTiming = TRUE` is the environment assumption « the
+deadline is longer than any honest exchange » (the clock runs only while the stream is silent), used for the honest
+liveness; `HonestTiming = FALSE` lets the clock run at any moment (slow negotiation, late ACK, stuck handler), used
+for every safety run and for Stuck. `TickFair` makes time pass. Acceptance is remembered per connection **and** stream.
+
+Rule operators (overridden by the mutants): `AckReady(m, c) == admit[m] /\ Usable(m, c)` (P-2, P-3: no wait for the
+responder's own PeerUp), `ReturnOpens == FALSE` (P-1), `MoveAtReturn == FALSE` (P-6), `AckMatches(st, m) == st.s = m.s`
+(P-4: an ACK counts for its own stream), `TimeoutReady(n, st) == st.age = D` (P-5: unconditional), `ResetOnReturn ==
+FALSE` (P-5: one budget).
+
+| Property | Meaning |
+|---|---|
+| `UpAfterAccept` (S1) | a PeerUp is backed by the peer's sound ACK (admitted, connection held) of the very stream that announced it |
+| `SessionOnAccepted` (S2) | the session's stream is only ever a stream the peer accepted, moves included |
+| `NoUpOnRefused` (S3) | « no PeerUp on either side »: a connection the peer closed at registration, or has not registered, never announces it |
+| `Budget` (S4) | an opening stream, NewStream and ACK together, never outlives the deadline (`tot ≤ D`) |
+| `NoUpFromStuck` (S5) | a responder stuck in its handler never gets its opener announced |
+| `BothUp` (L1, Honest only) | both sides come up: nobody waits for the other's PeerUp |
+| `OpenResolves`, `MoveResolves` (L2) | an opening stream always resolves (ACK, reset, connection lost, deadline) |
+
+| Configuration | Run | What it covers |
+|---|---|---|
+| `PeerUpAckHonest.cfg` | `PeerUpAckHonest` | one connection, both paths, honest timing; S1-S4, L1, L2 |
+| `PeerUpAckLate.cfg` | `PeerUpAckLate` (safety) | two connections, the second refusable at registration, protocol cached, a close at will, a Drop/re-admission, the move, any timing; S1-S4 |
+| `PeerUpAckLateLive.cfg` | `PeerUpAckLateLive` | the same with one stream per node and honest timing; S1-S4, L2 |
+| `PeerUpAckSilent.cfg` | `PeerUpAckSilent` | a silent responder on one connection, both paths; S1-S4, L2 (the deadline) |
+| `PeerUpAckStuck.cfg` | `PeerUpAckStuck` | b's handler never decides, any timing, time passes, D = 2, both paths; S1-S5, L2 |
+| `PeerUpAckByzantine.cfg` | `PeerUpAckByzantine` (safety) | silent responder, either connection refusable by either side, admission on or off at start and flipped once, both paths, honest timing (any timing is covered by Late, Stuck and Reuse); S1-S4 |
+| `PeerUpAckReuse.cfg` | `PeerUpAckReuse` (safety) | three streams per node on two connections, any timing: a move abandoned at its deadline while its ACK is in flight, then another on the same connection; S1-S4 |
+
+| Mutant (mutants/PeerUpAckMutants.tla) | Override | Caught by |
+|---|---|---|
+| `PeerUpAckUpOnReturn` (M1, P-1 off: today's code) | `ReturnOpens <- ReturnOpensMut` | `NoUpOnRefused` (Late) |
+| `PeerUpAckBeforeAdmit` (M2, P-2 off) | `AckReady <- AckAlways` | `UpAfterAccept` (Byzantine) |
+| `PeerUpAckAfterOwnUp` (M3, P-3 off) | `AckReady <- AckAfterUp` | `BothUp` (Honest): the deadlock |
+| `PeerUpAckMoveNoAck` (M4, P-6 off) | `MoveAtReturn <- MoveAtReturnMut` | `SessionOnAccepted` (Late) |
+| `PeerUpAckNoRetention` (M5, P-2's connection check off) | `AckReady <- AckAdmittedOnly` | `UpAfterAccept` (Late) |
+| `PeerUpAckTimeoutGuarded` (M6, P-5: the deadline waits for silence) | `TimeoutReady <- TimeoutWhenSilent` | `OpenResolves` (Stuck) |
+| `PeerUpAckAckByConn` (M7, P-4: acceptance by connection only) | `AckMatches <- AckSameConn` | `SessionOnAccepted` (Reuse) |
+| `PeerUpAckBudgetPerPhase` (M8, P-5: the clock restarts at NewStream's return) | `ResetOnReturn <- ResetOnReturnMut` | `Budget` (Stuck) |
+| `PeerUpAckWitnessLazyLate` (witness) | — | `NotLazyLate`: an opener awaits on a connection its peer refused (S3 is not vacuous) |
+| `PeerUpAckWitnessBothUp` (witness) | — | `NotBothUp`: both up in Late |
+| `PeerUpAckWitnessMove` (witness) | — | `NoMove`: a move completes (S2 covers it) |
+| `PeerUpAckWitnessLateFire` (witness) | — | `NoLateFire`: a deadline fires while the stream's bytes are in flight or its handler is deciding (Stuck) |
+
+Not modelled: frames and their order across a move (NI0's `TestRelayThenDirect`, `move_waits_for_ack`), the bulk
+lane (opened after PeerUp), real timings (the Go test `TestPeerUpLatency`, netsim). Results: gates/PU1/WITNESSES.md.

@@ -795,6 +795,9 @@ func generate(dir, casesPath string) {
 	// ---- linkprobe (spec §8.5) ----
 	write(root, "linkprobe.json", vectorFile{Vectors: linkprobeVectors()})
 
+	// ---- sync acceptance ACK (spec §8.7, block PU1) ----
+	write(root, "syncack.json", vectorFile{Vectors: syncAckVectors()})
+
 	fmt.Println("ok")
 }
 

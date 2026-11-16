@@ -1,0 +1,43 @@
+# FROZEN 2026-11-16 after two Codex reviews (second round: FREEZE; concession accepted: the Byzantine configuration runs with honest timing, any timing covered by Late, Stuck and Reuse).
+# DRAFT 2026-11-16 (step 1, not frozen; Codex reviews it with gates/PU1.toml). Second gate of block PU1, run on the
+# same candidate after gates/PU1.toml, alone on the machine (each run.sh takes it with `heavy.sh --exclusive`;
+# INKWELL_PERF_LOAD_WAIT bounds the wait for an idle machine, inside the cap). Plan:
+# docs/plans/2026-11-16-pu1-peerup-after-acceptance.md §3 « Cost ». PU1 delays PeerUp by up to one RTT on the cached
+# path (bounded in gates/PU1.toml by a paired measurement on controlled time); this gate only characterises real
+# timings and checks that no scenario bounding a connection or session time breaks: 1 (direct after hole punching),
+# 2 (symmetric NAT: relayed), 3 (offline 60 s and back), 4 (roaming), strict, seeds 20771 and 20772 (scenario 9 is
+# block HP1's, not on main: PU1 lands first); then 5 (bad Wi-Fi: link stays up) and 8 (three devices, both
+# variants), seed 20772, characterize: pass or a declared known failure only. A regression bound, not a red-first
+# criterion: on main's code it is expected green; its red witness is a missing result file (gates/PU1/WITNESSES.md).
+# Every command is capped; 240 + 1000 + 1080 = 2320 s ≤ 2700 s (PC1a rule G-1).
+max_minutes = 45
+raw_results = ["docs/plans/2026-11-16-pu1-peerup-after-acceptance.md", "gates/PU1/*"]
+
+[[criteria]]
+# run.sh wipes .task/netsim at start, so each run's result files are copied to .task/pu1n-results right after it,
+# and only those copies are read (as gates/HP1n.toml).
+id = "netsim"
+command = '''rm -rf .task/pu1n-results && mkdir -p .task/pu1n-results && timeout -k 10 240 ./scripts/heavy.sh mise run e2e:build && { NETSIM_SCENARIOS="1 2 3 4" NETSIM_SEEDS="20771 20772" NETSIM_EXPECT=strict INKWELL_E2E_BROWSER=chromium INKWELL_PERF_LOAD_WAIT=180 timeout -k 10 1000 ./scripts/heavy.sh --exclusive ./scripts/netsim/run.sh; a=$?; cp .task/netsim/results/*.json .task/pu1n-results/ 2>/dev/null; NETSIM_SCENARIOS="5 8" NETSIM_VARIANTS="editor reader" NETSIM_SEEDS=20772 NETSIM_EXPECT=characterize INKWELL_E2E_BROWSER=chromium INKWELL_PERF_LOAD_WAIT=180 timeout -k 10 1080 ./scripts/heavy.sh --exclusive ./scripts/netsim/run.sh; b=$?; cp .task/netsim/results/*.json .task/pu1n-results/ 2>/dev/null; python3 -I - "$a" "$b" <<'PY'
+import json, pathlib, sys
+bad = []
+d = pathlib.Path(".task/pu1n-results")
+for sc in (1, 2, 3, 4):
+    for seed in (20771, 20772):
+        hits = sorted(d.glob(f"{sc}-s{seed}*.json"))
+        if not hits:
+            bad.append(f"{sc}-s{seed} missing")
+        for p in hits:
+            r = json.loads(p.read_text())
+            red = [f'{c["id"]} {c["status"]}' for c in r["clauses"] if c["status"] != "pass"]
+            if r.get("expect") != "strict" or not r["clauses"] or red:
+                bad.append(f"{p.name}: expect {r.get('expect')}, red {red}")
+for sc in (5, 8):
+    hits = sorted(d.glob(f"{sc}-s20772*.json"))
+    if not hits:
+        bad.append(f"{sc}-s20772 missing")
+    for p in hits:
+        bad += [f'{p.name} {c["id"]} {c["status"]}' for c in json.loads(p.read_text())["clauses"] if c["status"] not in ("pass", "known-failure")]
+if sys.argv[1:] != ["0", "0"] or bad:
+    sys.exit(f"PU1n netsim: exit {sys.argv[1]} (1-4) and {sys.argv[2]} (5, 8), {bad[:12]}")
+PY
+}'''

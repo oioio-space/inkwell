@@ -1,0 +1,801 @@
+{
+  "spec": "inkwell protocol",
+  "spec_version": "2.0.0-draft.11",
+  "generator": "docs/protocol/vectors/generate.go.txt (real codecs; proposed vectors use encoders written from spec.md)",
+  "vectors": [
+    {
+      "id": "sync-ack-ok",
+      "status": "proposed",
+      "description": "L'accusé 0x01, rien après : accepté.",
+      "decoder": "sync_ack",
+      "input_hex": "01",
+      "verdict": "accept",
+      "expect": {
+        "after": "none",
+        "result": "accepted"
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "sync-ack-eof",
+      "status": "proposed",
+      "description": "Fin du flux avant tout octet : refus (P-4).",
+      "decoder": "sync_ack",
+      "verdict": "reject",
+      "expect": {
+        "after": "none",
+        "result": "refused"
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "sync-ack-zero",
+      "status": "proposed",
+      "description": "0x00 n'est pas l'accusé : violation.",
+      "decoder": "sync_ack",
+      "input_hex": "00",
+      "verdict": "reject",
+      "expect": {
+        "after": "none",
+        "result": "violation"
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "sync-ack-two",
+      "status": "proposed",
+      "description": "0x02 : violation (aucune valeur ignorable).",
+      "decoder": "sync_ack",
+      "input_hex": "02",
+      "verdict": "reject",
+      "expect": {
+        "after": "none",
+        "result": "violation"
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "sync-ack-7f",
+      "status": "proposed",
+      "description": "0x7F : violation.",
+      "decoder": "sync_ack",
+      "input_hex": "7f",
+      "verdict": "reject",
+      "expect": {
+        "after": "none",
+        "result": "violation"
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "sync-ack-ff",
+      "status": "proposed",
+      "description": "0xFF : violation.",
+      "decoder": "sync_ack",
+      "input_hex": "ff",
+      "verdict": "reject",
+      "expect": {
+        "after": "none",
+        "result": "violation"
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "sync-ack-twice",
+      "status": "proposed",
+      "description": "Un second 0x01 après l'accusé : violation (le répondeur n'écrit qu'un octet).",
+      "decoder": "sync_ack",
+      "input_hex": "0101",
+      "verdict": "reject",
+      "expect": {
+        "after": "violation",
+        "result": "accepted"
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "sync-ack-trailing",
+      "status": "proposed",
+      "description": "Accusé puis donnée : violation.",
+      "decoder": "sync_ack",
+      "input_hex": "0100",
+      "verdict": "reject",
+      "expect": {
+        "after": "violation",
+        "result": "accepted"
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "sync-ack-frame-first",
+      "status": "proposed",
+      "description": "Une trame sync (longueur, données) à la place de l'accusé : violation.",
+      "decoder": "sync_ack",
+      "input_hex": "0300616263",
+      "verdict": "reject",
+      "expect": {
+        "after": "none",
+        "result": "violation"
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "sync-ack-responder-ok",
+      "status": "proposed",
+      "context": {
+        "admitted": true,
+        "conn_closed": false,
+        "node_closed": false
+      },
+      "description": "Nœud ouvert, pair admis, connexion gardée : accusé.",
+      "decoder": "sync_ack_responder",
+      "verdict": "accept",
+      "expect": {
+        "action": "ack"
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "sync-ack-responder-closed",
+      "status": "proposed",
+      "context": {
+        "admitted": true,
+        "conn_closed": false,
+        "node_closed": true
+      },
+      "description": "Nœud fermé : réinitialisation sans octet (étape 1).",
+      "decoder": "sync_ack_responder",
+      "verdict": "reject",
+      "expect": {
+        "action": "reset"
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "sync-ack-responder-not-admitted",
+      "status": "proposed",
+      "context": {
+        "admitted": false,
+        "conn_closed": false,
+        "node_closed": false
+      },
+      "description": "Pair non admis ou tenu : réinitialisation sans octet (étape 2).",
+      "decoder": "sync_ack_responder",
+      "verdict": "reject",
+      "expect": {
+        "action": "reset"
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "sync-ack-responder-conn-closed",
+      "status": "proposed",
+      "context": {
+        "admitted": true,
+        "conn_closed": true,
+        "node_closed": false
+      },
+      "description": "Connexion fermée ou en fermeture (H-19, Drop) : réinitialisation sans octet (étape 3).",
+      "decoder": "sync_ack_responder",
+      "verdict": "reject",
+      "expect": {
+        "action": "reset"
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "sync-ack-responder-all-bad",
+      "status": "proposed",
+      "context": {
+        "admitted": false,
+        "conn_closed": true,
+        "node_closed": true
+      },
+      "description": "Tout faux : réinitialisation.",
+      "decoder": "sync_ack_responder",
+      "verdict": "reject",
+      "expect": {
+        "action": "reset"
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "sync-ack-responder-closed-conn-not-admitted",
+      "status": "proposed",
+      "context": {
+        "admitted": false,
+        "conn_closed": true,
+        "node_closed": false
+      },
+      "description": "Pair non admis sur une connexion fermée : réinitialisation.",
+      "decoder": "sync_ack_responder",
+      "verdict": "reject",
+      "expect": {
+        "action": "reset"
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "sync-ack-opener-up",
+      "status": "proposed",
+      "context": {
+        "deadline_ms": 15000,
+        "peer_announced": false,
+        "role": "session"
+      },
+      "description": "Session, retour de l'ouverture : rien ; accusé : PeerUp (P-1).",
+      "decoder": "sync_ack_opener",
+      "verdict": "accept",
+      "scope": "transport",
+      "events": [
+        {
+          "at_ms": 0,
+          "expect": "none",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "expect": "none",
+          "op": "return"
+        },
+        {
+          "at_ms": 100,
+          "byte_hex": "01",
+          "expect": "peer_up",
+          "op": "byte"
+        }
+      ]
+    },
+    {
+      "id": "sync-ack-opener-negotiated",
+      "status": "proposed",
+      "context": {
+        "deadline_ms": 15000,
+        "peer_announced": false,
+        "role": "session"
+      },
+      "description": "Ouverture négociée : le retour arrive après un aller-retour, PeerUp attend toujours l'accusé.",
+      "decoder": "sync_ack_opener",
+      "verdict": "accept",
+      "scope": "transport",
+      "events": [
+        {
+          "at_ms": 0,
+          "expect": "none",
+          "op": "open"
+        },
+        {
+          "at_ms": 100,
+          "expect": "none",
+          "op": "return"
+        },
+        {
+          "at_ms": 100,
+          "byte_hex": "01",
+          "expect": "peer_up",
+          "op": "byte"
+        }
+      ]
+    },
+    {
+      "id": "sync-ack-opener-eof",
+      "status": "proposed",
+      "context": {
+        "deadline_ms": 15000,
+        "peer_announced": false,
+        "role": "session"
+      },
+      "description": "Fin du flux sans accusé : ClosePeer, aucun PeerUp (H-19 : connexion fermée par le pair).",
+      "decoder": "sync_ack_opener",
+      "verdict": "accept",
+      "scope": "transport",
+      "events": [
+        {
+          "at_ms": 0,
+          "expect": "none",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "expect": "none",
+          "op": "return"
+        },
+        {
+          "at_ms": 40,
+          "expect": "close_peer",
+          "op": "eof"
+        }
+      ]
+    },
+    {
+      "id": "sync-ack-opener-reset",
+      "status": "proposed",
+      "context": {
+        "deadline_ms": 15000,
+        "peer_announced": false,
+        "role": "session"
+      },
+      "description": "Réinitialisation sans accusé (pair qui ne nous admet pas) : ClosePeer, aucun PeerUp.",
+      "decoder": "sync_ack_opener",
+      "verdict": "accept",
+      "scope": "transport",
+      "events": [
+        {
+          "at_ms": 0,
+          "expect": "none",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "expect": "none",
+          "op": "return"
+        },
+        {
+          "at_ms": 100,
+          "expect": "close_peer",
+          "op": "reset"
+        }
+      ]
+    },
+    {
+      "id": "sync-ack-opener-conn-lost",
+      "status": "proposed",
+      "context": {
+        "deadline_ms": 15000,
+        "peer_announced": false,
+        "role": "session"
+      },
+      "description": "Connexion perdue avant l'accusé : aucun événement.",
+      "decoder": "sync_ack_opener",
+      "verdict": "accept",
+      "scope": "transport",
+      "events": [
+        {
+          "at_ms": 0,
+          "expect": "none",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "expect": "none",
+          "op": "return"
+        },
+        {
+          "at_ms": 30,
+          "expect": "lost",
+          "op": "conn_closed"
+        }
+      ]
+    },
+    {
+      "id": "sync-ack-opener-bad-byte",
+      "status": "proposed",
+      "context": {
+        "deadline_ms": 15000,
+        "peer_announced": false,
+        "role": "session"
+      },
+      "description": "Octet faux : violation, ClosePeer, aucun PeerUp.",
+      "decoder": "sync_ack_opener",
+      "verdict": "accept",
+      "scope": "transport",
+      "events": [
+        {
+          "at_ms": 0,
+          "expect": "none",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "expect": "none",
+          "op": "return"
+        },
+        {
+          "at_ms": 100,
+          "byte_hex": "02",
+          "expect": "close_peer",
+          "op": "byte"
+        }
+      ]
+    },
+    {
+      "id": "sync-ack-opener-byte-after",
+      "status": "proposed",
+      "context": {
+        "deadline_ms": 15000,
+        "peer_announced": false,
+        "role": "session"
+      },
+      "description": "Accusé puis un octet : PeerUp puis violation, ClosePeer.",
+      "decoder": "sync_ack_opener",
+      "verdict": "accept",
+      "scope": "transport",
+      "events": [
+        {
+          "at_ms": 0,
+          "expect": "none",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "expect": "none",
+          "op": "return"
+        },
+        {
+          "at_ms": 100,
+          "byte_hex": "01",
+          "expect": "peer_up",
+          "op": "byte"
+        },
+        {
+          "at_ms": 200,
+          "byte_hex": "01",
+          "expect": "close_peer",
+          "op": "byte"
+        }
+      ]
+    },
+    {
+      "id": "sync-ack-opener-just-in-time",
+      "status": "proposed",
+      "context": {
+        "deadline_ms": 15000,
+        "peer_announced": false,
+        "role": "session"
+      },
+      "description": "Accusé à 14 999 ms : PeerUp.",
+      "decoder": "sync_ack_opener",
+      "verdict": "accept",
+      "scope": "transport",
+      "events": [
+        {
+          "at_ms": 0,
+          "expect": "none",
+          "op": "open"
+        },
+        {
+          "at_ms": 10,
+          "expect": "none",
+          "op": "return"
+        },
+        {
+          "at_ms": 14999,
+          "byte_hex": "01",
+          "expect": "peer_up",
+          "op": "byte"
+        }
+      ]
+    },
+    {
+      "id": "sync-ack-opener-deadline",
+      "status": "proposed",
+      "context": {
+        "deadline_ms": 15000,
+        "peer_announced": false,
+        "role": "session"
+      },
+      "description": "Accusé à 15 000 ms : le délai est déjà écoulé, ClosePeer (P-5).",
+      "decoder": "sync_ack_opener",
+      "verdict": "accept",
+      "scope": "transport",
+      "events": [
+        {
+          "at_ms": 0,
+          "expect": "none",
+          "op": "open"
+        },
+        {
+          "at_ms": 10,
+          "expect": "none",
+          "op": "return"
+        },
+        {
+          "at_ms": 15000,
+          "byte_hex": "01",
+          "expect": "close_peer",
+          "op": "byte"
+        }
+      ]
+    },
+    {
+      "id": "sync-ack-opener-slow-negotiation",
+      "status": "proposed",
+      "context": {
+        "deadline_ms": 15000,
+        "peer_announced": false,
+        "role": "session"
+      },
+      "description": "Négociation lente (retour à 10 s) puis accusé à 15 s : un seul délai pour l'ouverture et l'accusé, ClosePeer (P-5).",
+      "decoder": "sync_ack_opener",
+      "verdict": "accept",
+      "scope": "transport",
+      "events": [
+        {
+          "at_ms": 0,
+          "expect": "none",
+          "op": "open"
+        },
+        {
+          "at_ms": 10000,
+          "expect": "none",
+          "op": "return"
+        },
+        {
+          "at_ms": 15000,
+          "byte_hex": "01",
+          "expect": "close_peer",
+          "op": "byte"
+        }
+      ]
+    },
+    {
+      "id": "sync-ack-opener-slow-negotiation-in-time",
+      "status": "proposed",
+      "context": {
+        "deadline_ms": 15000,
+        "peer_announced": false,
+        "role": "session"
+      },
+      "description": "Négociation lente (retour à 10 s), accusé à 14 999 ms : PeerUp.",
+      "decoder": "sync_ack_opener",
+      "verdict": "accept",
+      "scope": "transport",
+      "events": [
+        {
+          "at_ms": 0,
+          "expect": "none",
+          "op": "open"
+        },
+        {
+          "at_ms": 10000,
+          "expect": "none",
+          "op": "return"
+        },
+        {
+          "at_ms": 14999,
+          "byte_hex": "01",
+          "expect": "peer_up",
+          "op": "byte"
+        }
+      ]
+    },
+    {
+      "id": "sync-ack-opener-deadline-before-return",
+      "status": "proposed",
+      "context": {
+        "deadline_ms": 15000,
+        "peer_announced": false,
+        "role": "session"
+      },
+      "description": "Ouverture sans retour pendant 15 s : ClosePeer.",
+      "decoder": "sync_ack_opener",
+      "verdict": "accept",
+      "scope": "transport",
+      "events": [
+        {
+          "at_ms": 0,
+          "expect": "none",
+          "op": "open"
+        },
+        {
+          "at_ms": 15000,
+          "expect": "close_peer",
+          "op": "deadline"
+        }
+      ]
+    },
+    {
+      "id": "sync-ack-opener-silent",
+      "status": "proposed",
+      "context": {
+        "deadline_ms": 15000,
+        "peer_announced": false,
+        "role": "session"
+      },
+      "description": "Pair muet après le retour : ClosePeer à 15 s, aucun PeerUp.",
+      "decoder": "sync_ack_opener",
+      "verdict": "accept",
+      "scope": "transport",
+      "events": [
+        {
+          "at_ms": 0,
+          "expect": "none",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "expect": "none",
+          "op": "return"
+        },
+        {
+          "at_ms": 15000,
+          "expect": "close_peer",
+          "op": "deadline"
+        }
+      ]
+    },
+    {
+      "id": "sync-ack-opener-reopen",
+      "status": "proposed",
+      "context": {
+        "deadline_ms": 15000,
+        "peer_announced": true,
+        "role": "session"
+      },
+      "description": "Flux rouvert alors que le pair est annoncé : l'accusé ne produit aucun nouvel événement (P-6).",
+      "decoder": "sync_ack_opener",
+      "verdict": "accept",
+      "scope": "transport",
+      "events": [
+        {
+          "at_ms": 0,
+          "expect": "none",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "expect": "none",
+          "op": "return"
+        },
+        {
+          "at_ms": 100,
+          "byte_hex": "01",
+          "expect": "none",
+          "op": "byte"
+        }
+      ]
+    },
+    {
+      "id": "sync-ack-opener-reopen-refused",
+      "status": "proposed",
+      "context": {
+        "deadline_ms": 15000,
+        "peer_announced": true,
+        "role": "session"
+      },
+      "description": "Flux rouvert refusé : ClosePeer (PeerDown suivra la fermeture).",
+      "decoder": "sync_ack_opener",
+      "verdict": "accept",
+      "scope": "transport",
+      "events": [
+        {
+          "at_ms": 0,
+          "expect": "none",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "expect": "none",
+          "op": "return"
+        },
+        {
+          "at_ms": 100,
+          "expect": "close_peer",
+          "op": "reset"
+        }
+      ]
+    },
+    {
+      "id": "sync-ack-opener-move",
+      "status": "proposed",
+      "context": {
+        "deadline_ms": 15000,
+        "peer_announced": true,
+        "role": "move"
+      },
+      "description": "Passage au direct : le remplacement attend l'accusé du nouveau flux (P-6).",
+      "decoder": "sync_ack_opener",
+      "verdict": "accept",
+      "scope": "transport",
+      "events": [
+        {
+          "at_ms": 0,
+          "expect": "none",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "expect": "none",
+          "op": "return"
+        },
+        {
+          "at_ms": 60,
+          "byte_hex": "01",
+          "expect": "swap",
+          "op": "byte"
+        }
+      ]
+    },
+    {
+      "id": "sync-ack-opener-move-eof",
+      "status": "proposed",
+      "context": {
+        "deadline_ms": 15000,
+        "peer_announced": true,
+        "role": "move"
+      },
+      "description": "Passage refusé (connexion directe fermée par le pair) : abandon, session inchangée, aucun événement.",
+      "decoder": "sync_ack_opener",
+      "verdict": "accept",
+      "scope": "transport",
+      "events": [
+        {
+          "at_ms": 0,
+          "expect": "none",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "expect": "none",
+          "op": "return"
+        },
+        {
+          "at_ms": 30,
+          "expect": "abandon",
+          "op": "eof"
+        }
+      ]
+    },
+    {
+      "id": "sync-ack-opener-move-bad-byte",
+      "status": "proposed",
+      "context": {
+        "deadline_ms": 15000,
+        "peer_announced": true,
+        "role": "move"
+      },
+      "description": "Passage, octet faux : abandon.",
+      "decoder": "sync_ack_opener",
+      "verdict": "accept",
+      "scope": "transport",
+      "events": [
+        {
+          "at_ms": 0,
+          "expect": "none",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "expect": "none",
+          "op": "return"
+        },
+        {
+          "at_ms": 60,
+          "byte_hex": "00",
+          "expect": "abandon",
+          "op": "byte"
+        }
+      ]
+    },
+    {
+      "id": "sync-ack-opener-move-deadline",
+      "status": "proposed",
+      "context": {
+        "deadline_ms": 15000,
+        "peer_announced": true,
+        "role": "move"
+      },
+      "description": "Passage sans accusé en 15 s : abandon.",
+      "decoder": "sync_ack_opener",
+      "verdict": "accept",
+      "scope": "transport",
+      "events": [
+        {
+          "at_ms": 0,
+          "expect": "none",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "expect": "none",
+          "op": "return"
+        },
+        {
+          "at_ms": 15000,
+          "expect": "abandon",
+          "op": "deadline"
+        }
+      ]
+    }
+  ]
+}

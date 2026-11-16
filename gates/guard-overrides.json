@@ -1284,6 +1284,11 @@
       "id": "c076bee78e7771914ba3a99389e705cbb5e1295d6d0e6a67d551532cda3627e9",
       "reason": "internal/app/preview_test.go: new helper previewConn.handled (BK5, docs/plans/2026-11-16-bk5-prv37.md) waits at most 5 s for the preview to take a request, a bound on a new wait, not an increase; no existing timeout of the file is changed",
       "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "5384e881e158118745fa46dcbaf45b452849f251ba16202fcc72885b9da3fa94",
+      "reason": "scripts/tla-check.sh: registers the PeerUpAck model of block PU1 (7 configurations, mutants M1-M8 and witnesses, frozen gate gates/PU1.toml); additive, no existing run, count or bound changed",
+      "decision": "docs/plans/2026-11-16-pu1-peerup-after-acceptance.md"
     }
   ]
 }

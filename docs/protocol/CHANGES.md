@@ -545,3 +545,17 @@ chiffre, lui, doit suivre la vérité des qdiscs (R2). 3000 parcours : 0 faux é
 | Le trafic du modèle (120 paquets/s) est hors de portée du test (frappe : environ 8 paquets/s ; une frappe plus rapide déclenche la réinitialisation « le pair ne lit pas » du pont) | une source de trafic propre à netsim, à débit fixe, dans la seule construction `-tags server` (un flux `/inkwell/netsim-fill/1.0.0` lu et jeté par le pair) ; garanties recalculées | plan C5S §5 |
 | L'aller-retour affiché (`rttMs`, celui de quic-go) était biaissé vers le bas de 8 à 15 % dès que le trafic est dense sur un lien qui réordonne : `smoothed_rtt` n'échantillonne que l'acquittement du plus grand paquet ([RFC 9002 §5.1]), donc surtout les paquets qui ont doublé ; C4 de netsim 5 sortait de sa borne (46 ms pour 60) | une seule mesure par lien : `rttMs` et `rttVarMs` viennent des échantillons de la sonde (médiane basse, la même que celle du niveau, et médiane basse des écarts) sur un chemin `lan` ou `direct` dès que son chiffre est connu ; QUIC ou ping sinon (relais compris) ; borne de C4 inchangée | Annexe A.1, `protocol/linkprobe`, `internal/transport/p2p/links.go` |
 | Une seule étape de P2>P3 (run 5-s1-r8) lisait 21 ‰ pour une vérité de 2 à 5 ‰ : la plus ancienne sonde de la fenêtre, perdue à la fin de P2 et retransmise sur le chemin de 60 ms, était acceptée parce que `rttvar`, gonflé par la baisse de 300 à 60 ms, portait le PTO vers 0,7 s ; le modèle tirait chaque sonde d'un profil fixe, avec un PTO fixe | règles inchangées ; modèle fidèle aux changements de profil (estimation du RTT de RFC 9002 nourrie par les ACK simulés, PTO à la lecture de l'écho, seuil de temps de quic-go, retransmission sur le profil de son instant, blocage en tête de ligne d'un profil à l'autre) ; tolérance de R2 élargie de `transition_lag / (W − 2)` à un changement de l'aller-retour, déduite du pic du PTO (24 ‰ pour P2>P3) ; exactitude informative : 15,4 ‰ sur un profil fixe, 16,2 ‰ à un changement | §8.5.5 « Exactitude », `c5model.py`, `c5model_test.py` (`Transition`) |
+
+# Bloc PU1 : pair annoncé après son accusé (2026-11-16, proposé)
+
+Constat du bloc HP1r (session 5) et débat avec Codex du 2026-11-16 : `PeerUp` suivait le retour de
+l'ouverture du flux sync, que libp2p rend sans aucun octet du pair quand le protocole est déjà connu
+(négociation optimiste) ; une connexion fermée aussitôt par le pair donnait `PeerUp` puis
+`PeerDown`. Plan : [2026-11-16-pu1-peerup-after-acceptance.md](../plans/2026-11-16-pu1-peerup-after-acceptance.md).
+
+| Constat | Changement | Où |
+|---|---|---|
+| L'ouverture d'un flux ne prouve pas que le pair l'a accepté (négociation optimiste de go-libp2p) | accusé d'un octet `0x01`, écrit par le répondeur après l'admission et avec la connexion gardée, avant d'attendre sa propre annonce ; `PeerUp` seulement après lui ; délai commun de 15 s | §8.7, §16.1 |
+| Le passage au direct pouvait porter la session sur un flux jamais accepté | le remplacement attend l'accusé du nouveau flux ; sinon abandon sans événement | §8.7.4 |
+| Changement incompatible du flux existant | `/inkwell/sync/2.0.0` remplace `/inkwell/sync/1.0.0` (bascule nette, aucune version publiée) | §8.7.8, §20.6 |
+| Preuves | vecteurs `syncack.json`, modèle `PeerUpAck` (S1–S3, L1–L2, M1–M5, trois témoins), décodeur fuzzé `protocol/syncack` | §8.7.9 |

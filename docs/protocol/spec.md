@@ -1663,6 +1663,103 @@ mieux), et l'écrivain gardé libre après une sonde jetée dans une même lectu
 loin dans la lecture ne peut avoir d'écho). Côté décodeur, un type `0x00` ou `≥ 0x80` refusé comme réservé ou comme critique non attribué
 donne le même verdict.
 
+### 8.7 `/inkwell/sync/2.0.0` : session existante, pair annoncé après son accusé (*existant, précisé*, bloc PU1)
+
+Plan : [2026-11-16-pu1-peerup-after-acceptance.md](../plans/2026-11-16-pu1-peerup-after-acceptance.md).
+Modèle : [tla/PeerUpAck.tla](tla/PeerUpAck.tla). Vecteurs : [vectors/syncack.json](vectors/syncack.json).
+Paquet de référence : `protocol/syncack` (§1.6).
+
+**8.7.1 Rôle.** Jusqu'à la session 2.0 (§5), deux membres synchronisent par la session existante :
+chacun ouvre vers l'autre **un** flux unidirectionnel `/inkwell/sync/2.0.0` (l'*ouvreur* y écrit des
+trames sync, §16.1 ; le *répondeur* ne fait que les lire). La présente section ajoute à ce flux
+un **accusé d'acceptation** : le seul octet que le répondeur écrive jamais sur ce flux. Il prouve
+que l'application du pair a accepté le flux, sur une connexion qu'il garde, alors qu'il admettait
+l'ouvreur. Le retour de l'ouverture du flux ne le prouve pas : quand le pair a déjà annoncé le
+protocole (identify), libp2p ouvre le flux sans attendre la réponse de multistream-select
+(négociation optimiste), donc sans aucun octet du pair.
+
+**8.7.2 Forme (règle P-4).** `ACK = 0x01`, un octet, sans longueur ni champ. Le répondeur l'écrit
+une fois, en premier, puis n'écrit plus rien. L'ouvreur lit **exactement un** octet : `0x01` est
+l'accusé ; toute autre valeur (`0x00`, `0x02`–`0xFF`) est une violation ; la fin du flux ou sa
+réinitialisation avant cet octet est un refus ; tout octet après l'accusé est une violation
+(comportement existant : le répondeur n'écrit jamais de données). Aucune valeur n'est ignorable :
+rien ne suit l'accusé, une extension prend une majeure (P-7).
+
+**8.7.3 Répondeur (règles P-2, P-3).** À l'arrivée d'un flux `/inkwell/sync/2.0.0`, le répondeur
+DOIT, dans cet ordre : (1) le réinitialiser sans rien écrire si le nœud est fermé ; (2) le
+réinitialiser sans rien écrire si le pair n'est pas admis (`Admit` le refuse, ou il est tenu après
+une réinitialisation, §16.1) ; (3) le réinitialiser sans rien écrire si la connexion du flux est
+fermée ou en cours de fermeture ; (4) écrire `0x01`, en au plus 15 s, sinon réinitialiser.
+Une connexion que le répondeur ferme dès son enregistrement (connexion tardive qu'il ne garde pas,
+`Admit` qui la refuse) n'accepte aucun flux : aucun accusé n'y est donc jamais écrit. Le répondeur NE DOIT PAS attendre d'avoir lui-même annoncé
+l'ouvreur avant d'écrire l'accusé (sinon deux ouvertures croisées s'attendent l'une l'autre) ;
+il lit les trames seulement **après** cette annonce (comportement existant, 30 s au plus).
+
+**8.7.4 Ouvreur (règles P-1, P-5, P-6).** Un nœud NE DOIT annoncer un pair (`PeerUp`, Annexe A.1)
+qu'après avoir lu son accusé sur le flux sortant qui porte la session, que l'ouverture ait été
+négociée ou optimiste. L'ouverture du flux et la lecture de l'accusé partagent **un seul** délai de 15 s, compté depuis
+l'ouverture et non relancé au retour de l'ouverture (une négociation lente suivie d'un accusé tardif
+n'a pas 15 s de plus) ;
+à son terme, ou sur un refus ou une violation, le nœud réinitialise le flux et ferme ses
+connexions au pair (`ClosePeer`), sans aucun événement. Un flux rouvert alors que le pair est déjà
+annoncé (règle L, perte d'écriture) attend aussi son accusé avant de porter des trames, sans
+nouvel événement. Le passage du relais au direct (remplacement du flux relayé par un flux sur
+une connexion directe, sans événement) ne remplace le flux de la session par celui de la connexion
+directe qu'après l'accusé de ce dernier ; sans accusé, le nouveau flux est réinitialisé et la
+session reste où elle est, sans événement. Toute règle qui dit « la session a quitté le circuit »
+s'entend donc après ce remplacement.
+
+**8.7.5 Machines à états.**
+
+| Ouvreur, flux de la session | Entrée | Sortie, action |
+|---|---|---|
+| Ouverture | retour de l'ouverture | Attente (rien d'annoncé) |
+| Ouverture, Attente | échec, refus, violation, 15 s écoulées | Fermé : flux réinitialisé, `ClosePeer`, aucun événement |
+| Attente | `0x01` | Ouvert : `PeerUp` si le pair n'était pas annoncé |
+| Ouvert | octet reçu | violation : `ClosePeer` (existant) |
+| Ouvert | flux perdu, connexion vivante | Ouverture d'un nouveau flux (le pair reste annoncé) |
+| tout état | plus de connexion ni de flux | `PeerDown` si le pair était annoncé |
+
+| Ouvreur, flux d'un passage au direct | Entrée | Sortie, action |
+|---|---|---|
+| Ouverture, Attente | échec, refus, violation, 15 s | abandon : flux réinitialisé, session inchangée, aucun événement |
+| Attente | `0x01` | remplacement du flux de la session (sans événement, ordre des trames gardé) |
+
+Deux ouvertures croisées sont indépendantes : chaque côté accuse le flux de l'autre sans attendre
+(8.7.3). Redémarrage d'une connexion : tout recommence sur la nouvelle, aucune mémoire d'accusé.
+
+**8.7.6 Erreurs et débit.** Valeur fausse, octet de trop : violation, comme ci-dessus. Pair muet :
+15 s, puis `ClosePeer`. Inondation : un accusé par flux, et les flux sync par pair restent bornés
+par le gestionnaire de ressources (4 par pair) ; l'accusé n'est jamais répété ni rejoué (il vit
+dans un flux chiffré et authentifié de la connexion).
+
+**8.7.7 Sécurité et confidentialité.** L'accusé ne transporte rien : il est authentifié par la
+connexion (Noise ou TLS 1.3, §3.1) et lié au flux par le multiplexeur ; un tiers ne peut ni le
+forger ni le rejouer. Il ne prouve l'admission par le pair que si le pair est **conforme** : un pair
+byzantin peut écrire `0x01` sans appliquer `Admit`. La garantie de l'ouvreur reste donc sa propre
+admission locale, vérifiée avant d'ouvrir le flux et avant d'accepter les trames du pair (§8.7.3) ;
+l'accusé ajoute seulement qu'un pair conforme a accepté **ce** flux. Un membre byzantin peut accuser puis se taire : c'est une session réelle,
+brève ou muette, déjà bornée par les règles existantes (L, H, délais d'écriture) ; il ne peut pas
+se faire annoncer sans avoir été admis par nous (on n'ouvre que vers un pair admis). L'accusé
+n'apprend rien de nouveau au pair : un pair admis l'apprend par la session elle-même, un pair non
+admis reçoit une réinitialisation, comme avant.
+
+**8.7.8 Interopérabilité.** L'identifiant passe de `/inkwell/sync/1.0.0` à `/inkwell/sync/2.0.0`
+(changement incompatible, §1.4) ; `1.0.0` n'est plus servi ni ouvert (bascule nette : aucune
+version publiée ne le parle). Face à un appareil qui ne connaît que `1.0.0`, multistream-select
+répond `na` : l'ouverture échoue, `ClosePeer`, aucun événement. Le flux vrac (§8.1) est inchangé :
+il ne s'ouvre qu'après `PeerUp`. Dans la session 2.0 (§5, §11.1), le HELLO du pair joue ce rôle :
+un nœud n'entre pas en Actif au retour de l'ouverture d'un flux, seulement sur des HELLO valides.
+
+**8.7.9 Conformité.** Vecteurs `syncack.json` (décodeurs `sync_ack`, `sync_ack_responder`,
+`sync_ack_opener`, portée `transport`) ; décodeur `syncack.ReadAck` fuzzé (`FuzzReadAck`) ; modèle
+`PeerUpAck` : invariants S1 `UpAfterAccept`, S2 `SessionOnAccepted`, S3 `NoUpOnRefused`, vivacité
+L1 `BothUp`, L2 `OpenResolves`/`MoveResolves`, mutants M1–M5 (annonce au retour de l'ouverture,
+accusé avant l'admission, accusé après sa propre annonce, passage sans accusé, accusé sans la
+connexion), et pour le délai et l'accusé de ce flux S4 `Budget`, S5 `NoUpFromStuck` (répondeur bloqué dans son
+traitement), mutants M6–M8 (délai qui attend le silence du flux, accusé compté par connexion seulement,
+budget relancé au retour de l'ouverture), quatre témoins (M1–M8 en tout). Tests Go nommés par règle : porte `gates/PU1.toml`.
+
 ## 9. Couche dépôt : messages automerge-repo
 
 ### 9.1 Contenu
@@ -2069,6 +2166,7 @@ de `protocol` ; un test par ligne vérifie la borne, la borne + 1 et la reprise.
 | connexions | 2 par pair (passage) ; 128 entrantes, 128 sortantes au total (impl., 64 membres × 2) | — | refusée | à la fermeture d'une autre |
 | flux par pair et par sens (gestionnaire de ressources libp2p, portées *protocol* × *peer*) | control 1, repo 1 (+1 en fermeture), presence 1, large 1 non lu ; vrac 1 ; salon 4 | — | violation (salon : réinitialisé) | Tenu |
 | trame sync | 98 304 o | — | violation | Tenu |
+| accusé de session sync (§8.7) | 1 octet `0x01` ; ouverture et accusé en 15 s ; écriture de l'accusé en 15 s | par flux | refus ou violation : flux réinitialisé, `ClosePeer`, aucun événement | nouvelle connexion |
 | trame vrac | 1 065 005 o | — | violation | Tenu |
 | salon | requête 4096 o / 10 s ; réponse 262 144 o ; traitement 3 min | — | flux fermé | nouvelle requête |
 | HELLO | 1024 o ; 10 s | — | GOAWAY | Tenu |
@@ -2252,7 +2350,8 @@ triées, séparées par des virgules, ≤ 64) · `equiv/<hex32>/<seq décimal �
 `/inkwell/control/2.0.0` · `/inkwell/repo/2.0.0` · `/inkwell/presence/2.0.0` ·
 `/inkwell/large/2.0.0` · `/inkwell/bulk/1.0.0` · `/inkwell/lobby/1.0.0` ·
 `/inkwell/linkprobe/1.0.0` (§8.5 ; hors session, sans capacité : son absence est permise,
-§8.5.9). `/inkwell/sync/1.0.0` est retiré (bascule nette). Une nouvelle classe de session
+§8.5.9). `/inkwell/sync/2.0.0` (§8.7, session existante avec accusé d'acceptation) remplace
+`/inkwell/sync/1.0.0`, qui n'est plus servi ; la session 2.0 (§5) retirera `sync` (bascule nette). Une nouvelle classe de session
 s'ajoute par une mineure, liée à une capacité.
 
 ### 20.7 Raisons de refus du salon

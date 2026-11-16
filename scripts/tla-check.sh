@@ -2,7 +2,7 @@
 # P-TLA (ADR 0034 step 3, docs/protocol/tla/README.md): fetch the pinned TLA+ tools
 # (tla2tools.jar SHA-256 checked, never committed) and model-check the models
 # (RepoGen, ConnCredit, SyncIndicator, WriteBudget, SendPath, LinkProbe, OISingleInstance, SandboxScope,
-# ProjectChange, DirectUpgrade).
+# ProjectChange, DirectUpgrade, PeerUpAck).
 #
 # Sound models must finish with no error; every mutant listed in the README must be
 # detected (a violation). The task fails if a sound model violates a property OR if a
@@ -272,6 +272,33 @@ WitnessSlow NoSlowStep
 WitnessGateRefusal NoGateRefusal
 WitnessWaitBehind NoWaitBehind
 WitnessCross NoCross
+MUTANTS
+
+# PeerUpAck (README "PeerUpAck", block PU1, spec §8.7): PeerUp only after the peer's acceptance ACK of this stream.
+# Late, Byzantine and Reuse are invariants under any timing; Honest, LateLive, Silent and Stuck check liveness.
+run PeerUpAckHonest PeerUpAckHonest.cfg PeerUpAck sound
+run PeerUpAckLate PeerUpAckLate.cfg PeerUpAck safety
+run PeerUpAckLateLive PeerUpAckLateLive.cfg PeerUpAck sound
+run PeerUpAckSilent PeerUpAckSilent.cfg PeerUpAck sound
+run PeerUpAckStuck PeerUpAckStuck.cfg PeerUpAck sound
+run PeerUpAckByzantine PeerUpAckByzantine.cfg PeerUpAck safety
+run PeerUpAckReuse PeerUpAckReuse.cfg PeerUpAck safety
+# PeerUpAck mutants (M1-M8) and witnesses: each must be caught by the property its README row names.
+while read -r m prop; do
+  run "PeerUpAck$m" "mutants/PeerUpAck$m.cfg" mutants/PeerUpAckMutants mutant "$prop"
+done <<'MUTANTS'
+UpOnReturn NoUpOnRefused
+BeforeAdmit UpAfterAccept
+AfterOwnUp BothUp
+MoveNoAck SessionOnAccepted
+NoRetention UpAfterAccept
+TimeoutGuarded OpenResolves
+AckByConn SessionOnAccepted
+BudgetPerPhase Budget
+WitnessLazyLate NotLazyLate
+WitnessBothUp NotBothUp
+WitnessMove NoMove
+WitnessLateFire NoLateFire
 MUTANTS
 
 exit "$fail"

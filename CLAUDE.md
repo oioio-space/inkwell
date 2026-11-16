@@ -231,6 +231,7 @@ jamais attendue à l'aveugle ni sondée à coups de `sleep` :
   depuis combien de temps, dernier résultat) ; un échec est traité dès qu'il remonte ;
 - une tâche qui peut durer plus que la session (porte complète, `done`) est lancée détachée
   (`setsid nohup bash -c "cmd > LOG 2>&1; echo \"exit \$?\" >> LOG" & disown`) ;
+- un échantillonneur ou une surveillance s'arrête de lui-même quand ce qu'il observe disparaît, et les processus restés actifs de la séance sont relevés à chaque point d'étape (un échantillonneur orphelin a tourné 34 h à 37 % d'un cœur, 2026-11-16) ;
 - sa vie se vérifie avec `rtk proxy pgrep -af …` (le filtre rtk peut masquer des processus) ; un journal
   silencieux n'est pas une preuve de mort, et une seconde exécution n'est jamais lancée dans le même
   arbre avant que la première soit prouvée morte (deux portes C5S concurrentes, 2026-11-12).

@@ -1,0 +1,207 @@
+# FROZEN 2026-11-16 after two Codex reviews (second round: FREEZE; concession accepted: the Byzantine configuration runs with honest timing, any timing covered by Late, Stuck and Reuse).
+# DRAFT 2026-11-16 (step 1, not frozen): Codex reviews the spec and this gate before the freeze (method v2). Block PU1:
+# a node announces a peer up only after the peer's acceptance ACK on its outbound sync stream (rules P-1..P-7). Rigour:
+# complete (wire and state between peers): model with mutants (PeerUpAck.tla, M1-M5, three witnesses), vectors and a
+# fuzzed decoder in protocol/syncack, a Go mutant per decision (MP1-MP3), the defect's trace as a named arm on main's
+# code (closed_at_once_by_remote). PU1 lands on main first and depends on no artefact of block HP1 (integrator,
+# 2026-11-16): HP1 and HP1r are rebased onto it, and HP1r's frozen arm closed_dropping_side then needs PU1.
+# Plan: docs/plans/2026-11-16-pu1-peerup-after-acceptance.md; spec §8.7; model docs/protocol/tla/PeerUpAck.tla. The
+# network simulation is in gates/PU1n.toml, run on the same candidate, alone on the machine; no gate runs another. Red
+# witnesses: gates/PU1/WITNESSES.md. Every command is `timeout -k 10 N …` (the cap covers the wait for a slot);
+# scripts/gate.py refuses caps past max_minutes (PC1a rule G-1): 240 + 60 + 180 + 600 + 300 + 480 + 30 + 30 + 480 + 30
+# + 30 = 2460 s ≤ 2700 s.
+max_minutes = 45
+raw_results = ["docs/plans/2026-11-16-pu1-peerup-after-acceptance.md", "docs/protocol/tla/PeerUpAck.tla", "protocol/vectors/syncack.json", "gates/PU1/*"]
+
+[[criteria]]
+# Vectors (spec §8.7.9). syncack.json is exactly step 1's corpus (digest of id, decoder, input, context, events, expect,
+# verdict, scope over the 34 vectors: step 2 changes only status/enforce), every vector is enforced from step 3 (so the
+# CI's TestCorpus enforces it), the generator still reproduces the committed corpus, and TestCorpus passes every
+# syncack.json case as required (no « future: » line: the reference decoders sync_ack, sync_ack_responder and
+# sync_ack_opener exist in protocol/conformance, backed by protocol/syncack).
+id = "vectors"
+command = '''mkdir -p .task && cd protocol && timeout -k 10 240 ../scripts/heavy.sh go test -count=1 -json -run '^(TestCorpus|TestGenerateMatchesCommittedCorpus)$' -v ./conformance/ ./cmd/vectors/ > ../.task/pu1-vectors.json 2>&1; a=$?; cd .. && python3 -I - "$a" <<'PY'
+import hashlib, json, pathlib, sys
+bad = [] if sys.argv[1] == "0" else [f"go test exit {sys.argv[1]}"]
+d = json.loads(pathlib.Path("protocol/vectors/syncack.json").read_text())
+keep = ("id", "decoder", "input_hex", "context", "events", "expect", "verdict", "scope")
+canon = json.dumps([{k: v[k] for k in keep if k in v} for v in d["vectors"]], sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+if (len(d["vectors"]), hashlib.sha256(canon.encode()).hexdigest()) != (34, "5307797671903594e1ccfef42b9a62536e18c0a139ed0d6af0af93c503e12d50"):
+    bad.append("syncack.json differs from step 1's corpus")
+bad += [f"{v['id']}: enforce {v.get('enforce')!r}, want 'step-3'" for v in d["vectors"] if v.get("enforce") != "step-3"][:3]
+evs = []
+for line in pathlib.Path(".task/pu1-vectors.json").read_text().splitlines():
+    try:
+        e = json.loads(line)
+    except ValueError:
+        continue
+    if isinstance(e, dict):
+        evs.append(e)
+ids = [v["id"] for v in d["vectors"]]
+passed = {e["Test"] for e in evs if e.get("Action") == "pass" and e.get("Test")}
+future = {e["Test"] for e in evs if e.get("Action") == "output" and "future:" in e.get("Output", "")}
+for i in ids:
+    n = f"TestCorpus/syncack.json/{i}"
+    if n not in passed or n in future:
+        bad.append(f"{n}: {'future (not required)' if n in future else 'missing or failing'}")
+if "TestGenerateMatchesCommittedCorpus" not in passed:
+    bad.append("TestGenerateMatchesCommittedCorpus not passing")
+sys.exit(f"PU1 vectors: {bad[:12]}" if bad else 0)
+PY'''
+
+[[criteria]]
+# The reference decoder (rule P-4) is fuzzed: FuzzReadAck in protocol/syncack, 60 s, seeded with every input_hex of
+# syncack.json; its unit tests pass (ReadAck, the responder and opener decisions).
+id = "fuzz"
+command = '''cd protocol && timeout -k 10 60 ../scripts/heavy.sh go test -count=1 ./syncack/ && timeout -k 10 180 ../scripts/heavy.sh go test -run '^$' -fuzz '^FuzzReadAck$' -fuzztime 60s ./syncack/'''
+
+[[criteria]]
+# The model (spec §8.7.9, plan §3): exactly these nineteen runs, no ✗. A clock per opening stream (D ticks from the
+# open, NewStream and ACK together); the deadline fires at D whatever is in flight; acceptance remembered per
+# connection and stream. Sound: Honest (honest timing; L1 BothUp, L2), Late (the closed-at-once trace, a close, a
+# Drop/re-admission, the move, any timing: invariants), LateLive (L2), Silent (a silent responder: L2), Stuck (b's
+# handler never decides, any timing, time passes: S5 NoUpFromStuck, S4 Budget, L2), Byzantine (invariants), Reuse (a
+# move abandoned at its deadline with its ACK in flight, then another on the same connection: invariants). Mutants
+# caught by the named property: M1 UpOnReturn (S3), M2 BeforeAdmit (S1), M3 AfterOwnUp (L1: the deadlock), M4
+# MoveNoAck (S2), M5 NoRetention (S1), M6 TimeoutGuarded (L2: a deadline waiting for silence never fires against a
+# stuck handler), M7 AckByConn (S2: a late ACK of an abandoned stream), M8 BudgetPerPhase (S4: slow negotiation and
+# a late ACK). Witnesses reached: the lazy path on a refused connection, both up, a move, a deadline firing while
+# bytes are in flight. Structure: the rule operators are the sound ones in PeerUpAck.tla.
+id = "tla"
+command = '''out=$(INKWELL_TLA_ONLY='^PeerUpAck' INKWELL_PERF_LOAD_WAIT=120 timeout -k 10 600 ./scripts/heavy.sh --exclusive ./scripts/tla-check.sh 2>&1) || { echo "$out" | tail -40; exit 1; }
+! echo "$out" | grep -q '✗' || { echo "$out" | grep '✗'; exit 1; }
+for want in "✓ PeerUpAckHonest: no error (exhaustive, liveness checked)" "✓ PeerUpAckLate: no error (exhaustive, invariants)" "✓ PeerUpAckLateLive: no error (exhaustive, liveness checked)" "✓ PeerUpAckSilent: no error (exhaustive, liveness checked)" "✓ PeerUpAckStuck: no error (exhaustive, liveness checked)" "✓ PeerUpAckByzantine: no error (exhaustive, invariants)" "✓ PeerUpAckReuse: no error (exhaustive, invariants)" "✓ PeerUpAckUpOnReturn: violation detected (NoUpOnRefused)" "✓ PeerUpAckBeforeAdmit: violation detected (UpAfterAccept)" "✓ PeerUpAckAfterOwnUp: violation detected (BothUp)" "✓ PeerUpAckMoveNoAck: violation detected (SessionOnAccepted)" "✓ PeerUpAckNoRetention: violation detected (UpAfterAccept)" "✓ PeerUpAckTimeoutGuarded: violation detected (OpenResolves)" "✓ PeerUpAckAckByConn: violation detected (SessionOnAccepted)" "✓ PeerUpAckBudgetPerPhase: violation detected (Budget)" "✓ PeerUpAckWitnessLazyLate: violation detected (NotLazyLate)" "✓ PeerUpAckWitnessBothUp: violation detected (NotBothUp)" "✓ PeerUpAckWitnessMove: violation detected (NoMove)" "✓ PeerUpAckWitnessLateFire: violation detected (NoLateFire)"; do echo "$out" | grep -qxF -- "$want" || { echo "missing: $want"; exit 1; }; done
+[ "$(echo "$out" | grep -c '✓')" -eq 19 ] || { echo "want 19 ✓, got $(echo "$out" | grep -c '✓')"; exit 1; }
+python3 -I - <<'PY'
+import pathlib, re, sys
+t = pathlib.Path("docs/protocol/tla/PeerUpAck.tla").read_text()
+bad = [w for w in [r"^AckReady\(m, c\) == admit\[m\] /\\ Usable\(m, c\)$", r"^ReturnOpens == FALSE$", r"^MoveAtReturn == FALSE$", r"^AckMatches\(st, m\) == st\.s = m\.s$", r"^TimeoutReady\(n, st\) == st\.age = D$", r"^ResetOnReturn == FALSE$", r"^Budget ==", r"^NoUpFromStuck ==", r"^UpAfterAccept ==", r"^SessionOnAccepted ==", r"^NoUpOnRefused ==", r"^BothUp ==", r"^OpenResolves =="] if not re.search(w, t, re.M)]
+sys.exit(f"PeerUpAck structure: {bad}" if bad else 0)
+PY'''
+
+[[criteria]]
+# The rules in Go (internal/transport/p2p, simnet inside testing/synctest, -race), each arm named, failure texts
+# « PU1 PeerUp without acceptance » (an announcement the rules forbid) or « PU1 session not up » (a session the rules
+# allow, missing or late). TestPeerUpAfterAck: closed_at_once_by_remote (the defect's trace on main's code: b holds a's
+# protocol cached from an earlier session; a raw libp2p host with a's key closes every new connection in its Connected
+# notification; within 1 s b sees no PeerUp and holds no connection), one_sided_admission (the remote resets without
+# ACK: no PeerUp either side, connection closed, P-2), not_admitted_remote, ack_needs_live_conn (the remote's
+# connection closing when the stream lands: no ACK), silent_remote (the remote accepts and never writes: no PeerUp,
+# connection closed at 15 s simulated, P-5), slow_negotiation_late_ack (the negotiated path; the remote's
+# multistream echo is held 10 s, its ACK comes 6 s after: the connection is closed at 15 s from the open, ± 10 ms,
+# never PeerUp: one budget for NewStream and the ACK, P-5), wrong_ack_byte (0x02: no PeerUp, closed, P-4), byte_after_ack (PeerUp
+# then closed within 1 s), ack_before_own_up (a raw host opens a sync stream to b and serves none of b's: it reads
+# 0x01 while b has not announced it, P-3), both_sides_up (two nodes, crossed opens, cached and negotiated paths: both
+# PeerUp), old_peer_refused (a peer serving only /inkwell/sync/1.0.0: no PeerUp, connection closed, P-7).
+# TestPeerUpMoveAfterAck (the relay-to-direct upgrade of block NI0, on main): move_waits_for_ack (the session moves to
+# the direct connection only after the ACK; frames keep their order), move_refused_keeps_circuit (the remote resets
+# the direct stream: the session stays on the circuit, no PeerDown, no PeerUp). TestPeerUpLatency, a paired
+# measurement in one run on controlled time (synctest, simnet path of RTT R = 100 ms): the PeerUp delay of the same
+# setup with the ACK minus without it (a test-only seam in export_test.go skips the ACK read); cached: R to R + 2 ms
+# (exactly one more round trip, by construction); negotiated: 0 to R + 2 ms. Both differences are logged for the
+# report; failure text « PU1 latency ». The measurement was prototyped at step 1 on main's code (raw libp2p hosts,
+# a stand-in ACK): gates/PU1/latency_proto_test.go.txt, result in WITNESSES.md.
+id = "go"
+command = '''mkdir -p .task && timeout -k 10 300 ./scripts/heavy.sh go test -count=1 -race -timeout=270s -json -run '^(TestPeerUpAfterAck|TestPeerUpMoveAfterAck|TestPeerUpLatency)$' ./internal/transport/p2p/ > .task/pu1-go.json 2>&1; a=$?; python3 -I - "$a" <<'PY'
+import json, pathlib, sys
+arms = {"TestPeerUpAfterAck": ["closed_at_once_by_remote", "one_sided_admission", "not_admitted_remote", "ack_needs_live_conn", "silent_remote", "slow_negotiation_late_ack", "wrong_ack_byte", "byte_after_ack", "ack_before_own_up", "both_sides_up", "old_peer_refused"], "TestPeerUpMoveAfterAck": ["move_waits_for_ack", "move_refused_keeps_circuit"], "TestPeerUpLatency": ["cached", "negotiated"]}
+evs = []
+for line in pathlib.Path(".task/pu1-go.json").read_text().splitlines():
+    try:
+        ev = json.loads(line)
+    except ValueError:
+        continue
+    if isinstance(ev, dict):
+        evs.append(ev)
+bad = [] if sys.argv[1] == "0" else [f"go test exit {sys.argv[1]}"]
+passed = {e["Test"] for e in evs if e.get("Action") == "pass" and e.get("Test")}
+want = list(arms) + [f"{t}/{a}" for t, l in arms.items() for a in l]
+bad += [f"missing or not passing: {n}" for n in want if n not in passed]
+for n in sorted({e["Test"] for e in evs if e.get("Action") == "fail" and e.get("Test")})[:3]:
+    said = [e["Output"].strip() for e in evs if e.get("Test") == n and e.get("Action") == "output" and "_test.go" in e.get("Output", "")]
+    print(f"{n}: {said[:2]}")
+sys.exit(f"PU1 go: {bad[:12]}" if bad else 0)
+PY'''
+
+[[criteria]]
+# Regression: the whole p2p package and the bridge, as CI runs them (no -race): PU1 changes when PeerUp fires, which
+# every lifecycle test of the package observes.
+id = "regression"
+command = '''timeout -k 10 480 ./scripts/heavy.sh go test -count=1 -timeout=450s ./internal/transport/p2p/ ./internal/bridge/'''
+
+[[criteria]]
+# The Go mutants of PU1 (scripts/netsim/mutants.toml, block PU1, read by main's mutants.py unchanged: `clause` names
+# the rule, `expect` the failure text) are exactly this table (kind, package, test, clause, expect; step 2 writes their
+# edits and anchors), each anchor applies once, and each mutant is caught by its test
+# failing with its text (never a build failure, a timeout or another test): MP1 PeerUp on NewStream's return (the ACK
+# read skipped, P-1), MP2 the ACK written before the admission check (P-2), MP3 any first byte taken as the ACK (P-4).
+id = "mutant"
+command = '''timeout -k 10 30 python3 -I - <<'PY' && timeout -k 10 30 python3 -I scripts/netsim/mutants.py --check PU1 && timeout -k 10 480 ./scripts/heavy.sh python3 -I scripts/netsim/mutants.py PU1
+import sys, tomllib
+ms = {m["id"]: m for m in tomllib.load(open("scripts/netsim/mutants.toml", "rb"))["mutant"] if m.get("block") == "PU1"}
+want = {"MP1": ("go", "./internal/transport/p2p/", "TestPeerUpAfterAck", "P-1", "PU1 PeerUp without acceptance"), "MP2": ("go", "./internal/transport/p2p/", "TestPeerUpAfterAck", "P-2", "PU1 PeerUp without acceptance"), "MP3": ("go", "./internal/transport/p2p/", "TestPeerUpAfterAck", "P-4", "PU1 PeerUp without acceptance")}
+bad = sorted(set(ms) ^ set(want))
+for i, (kind, pkg, test, clause, expect) in want.items():
+    m = ms.get(i, {})
+    if (m.get("kind"), m.get("pkg"), m.get("test"), m.get("clause"), m.get("expect")) != (kind, pkg, test, clause, expect) or not m.get("edit"):
+        bad.append(i)
+sys.exit(f"PU1 mutant entries differ from the table: {bad}" if bad else 0)
+PY'''
+
+[[criteria]]
+# Architecture: inkwell has no private copy of the codec (spec §1.6): internal/transport/p2p imports
+# protocol/syncack, defines no 0x01 ACK constant of its own, and serves and opens /inkwell/sync/2.0.0 only.
+id = "arch"
+command = '''timeout -k 10 30 python3 -I - <<'PY'
+import pathlib, re, sys
+src = {p: p.read_text() for p in pathlib.Path("internal/transport/p2p").glob("*.go") if not p.name.endswith("_test.go")}
+allsrc = "\n".join(src.values())
+bad = []
+if '"github.com/oioio-space/inkwell/protocol/syncack"' not in allsrc:
+    bad.append("internal/transport/p2p does not import protocol/syncack")
+if re.search(r'"/inkwell/sync/1\.0\.0"', allsrc):
+    bad.append("/inkwell/sync/1.0.0 still in the product code")
+if not re.search(r'ProtocolSync\s*=\s*"/inkwell/sync/2\.0\.0"', allsrc):
+    bad.append("ProtocolSync is not /inkwell/sync/2.0.0")
+if re.search(r"(?i)ack\w*\s*=\s*(byte\()?0x01", allsrc):
+    bad.append("a private ACK constant in internal/transport/p2p")
+sys.exit(f"PU1 arch: {bad}" if bad else 0)
+PY'''
+
+[[criteria]]
+# The documents: plan rows P-1..P-7 name their proofs, and the plan states the paired latency measurement; spec §8.7 carries the normative sentences, §20.6 the new id,
+# §16.1 the bound; CHANGES.md the PU1 entry; the TLA README the PeerUpAck section (S1-S3, L1-L2, M1-M5, witnesses).
+id = "docs"
+command = '''timeout -k 10 30 python3 -I - <<'PY'
+import pathlib, sys
+bad = []
+plan = pathlib.Path("docs/plans/2026-11-16-pu1-peerup-after-acceptance.md").read_text()
+rows = {l.split("|")[1].strip(): l for l in plan.splitlines() if l.startswith("| P-")}
+need = {"P-1": ["closed_at_once_by_remote", "M1", "MP1"], "P-2": ["not_admitted_remote", "M2", "M5", "MP2"], "P-3": ["ack_before_own_up", "M3"], "P-4": ["`0x01`", "FuzzReadAck", "MP3", "M7"], "P-5": ["silent_remote", "slow_negotiation_late_ack", "M6", "M8", "15 s"], "P-6": ["move_waits_for_ack", "M4", "NI0"], "P-7": ["/inkwell/sync/2.0.0", "old_peer_refused"]}
+for r, ws in need.items():
+    bad += [f"plan row {r} lacks {w!r}" for w in ws if w not in rows.get(r, "")]
+spec = pathlib.Path("docs/protocol/spec.md").read_text()
+i = spec.find("\n### 8.7 ")
+j = spec.find("\n## 9. ", i + 1)
+s = " ".join(spec[i:j].split()) if 0 <= i < j else ""
+for w in ["`ACK = 0x01`", "NE DOIT annoncer un pair (`PeerUp`, Annexe A.1) qu'après avoir lu son accusé", "NE DOIT PAS attendre d'avoir lui-même annoncé l'ouvreur", "qu'après l'accusé de ce dernier", "15 s", "`/inkwell/sync/2.0.0`", "S1 `UpAfterAccept`", "M1–M8", "que si le pair est **conforme**", "partagent **un seul** délai de 15 s"]:
+    if w not in s:
+        bad.append(f"spec §8.7 lacks {w!r}")
+k = spec.find("### 20.6 ")
+if "`/inkwell/sync/2.0.0` (§8.7" not in spec[k:k + 800]:
+    bad.append("spec §20.6 lacks /inkwell/sync/2.0.0")
+if "| accusé de session sync (§8.7) |" not in spec:
+    bad.append("spec §16.1 lacks the ACK row")
+if "# Bloc PU1" not in pathlib.Path("docs/protocol/CHANGES.md").read_text():
+    bad.append("CHANGES.md lacks the PU1 entry")
+readme = pathlib.Path("docs/protocol/tla/README.md").read_text()
+for w in ["## PeerUpAck", "`UpAfterAccept` (S1)", "`SessionOnAccepted` (S2)", "`NoUpOnRefused` (S3)", "`PeerUpAckUpOnReturn` (M1", "`PeerUpAckAfterOwnUp` (M3", "`Budget` (S4)", "`PeerUpAckTimeoutGuarded` (M6", "`PeerUpAckAckByConn` (M7", "`PeerUpAckBudgetPerPhase` (M8"]:
+    if w not in readme:
+        bad.append(f"tla README lacks {w!r}")
+if "paired" not in plan or "test-only seam" not in plan:
+    bad.append("plan lacks the paired latency measurement")
+for w in ["§8.6", "H-19", "H-15"]:
+    if w in s:
+        bad.append(f"spec §8.7 depends on block HP1 ({w})")
+sys.exit(f"PU1 docs: {bad}" if bad else 0)
+PY'''
