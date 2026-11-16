@@ -394,6 +394,10 @@ func TestBookPerDeviceAcrossProjects(t *testing.T) {
 		b := nn.nodeAt(t, 2, true, p2p.Options{})
 		a.Want(map[transport.PeerID][]string{b.Local(): b.Addrs()})
 		expectEventWithin(t, a, transport.PeerUp, b.Local(), wait)
+		// PeerUp is pushed before the stream goroutine notes b in the book, and the note reads
+		// the scope when it runs: let it run under A before project B opens, or b is recorded
+		// for B alone and its revocation there rightly removes it.
+		synctest.Wait()
 		scope.Store("B") // another project opened, b a member there too
 		a.Want(map[transport.PeerID][]string{b.Local(): nil})
 
