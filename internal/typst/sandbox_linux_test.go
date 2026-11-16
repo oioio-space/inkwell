@@ -12,8 +12,6 @@ import (
 	"testing"
 	"time"
 
-	"golang.org/x/sys/unix"
-
 	"github.com/oioio-space/inkwell/internal/sidecar"
 )
 
@@ -166,31 +164,6 @@ func TestHostileCgroupMemoryIsMemoryLimit(t *testing.T) {
 	}
 }
 
-// assertNoCoreHelper fails when the kernel started a core helper, or gave no
-// answer although it records core dumps on the pidfd (PIDFD_INFO_COREDUMP,
-// Linux 6.16). On an older kernel (Ubuntu 24.04's) the absence cannot be
-// shown: it is logged and the other assertions stand, since the inventory
-// lets no machine skip this test.
-func assertNoCoreHelper(t *testing.T, core sidecar.CoreDump) {
-	t.Helper()
-	var name unix.Utsname
-	if err := unix.Uname(&name); err != nil {
-		t.Fatal(err)
-	}
-	release := unix.ByteSliceToString(name.Release[:])
-	var major, minor int
-	_, _ = fmt.Sscanf(release, "%d.%d", &major, &minor)
-	recorded := major > 6 || major == 6 && minor >= 16
-	switch {
-	case core == sidecar.CoreDumpStarted:
-		t.Errorf("the kernel started a core helper")
-	case core == sidecar.CoreDumpUnknown && recorded:
-		t.Errorf("Linux %s records core dumps, yet the run reports none: no core helper is not shown", release)
-	case core == sidecar.CoreDumpUnknown:
-		t.Logf("Linux %s does not report PIDFD_INFO_COREDUMP (Linux 6.16): no core helper cannot be shown here", release)
-	}
-}
-
 func TestHostileMemoryDeathStartsNoCoreHelper(t *testing.T) {
 	isolated, ok := launchTier(t)
 	if !ok {
@@ -206,10 +179,9 @@ func TestHostileMemoryDeathStartsNoCoreHelper(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if out.Containment != hostileContainment(isolated) {
-				t.Fatalf("missing %s evidence: %+v", hostileContainment(isolated), out)
+			if out.Containment != hostileContainment(isolated) || out.CoreDump != sidecar.CoreDumpNone {
+				t.Fatalf("missing %s or core evidence: %+v", hostileContainment(isolated), out)
 			}
-			assertNoCoreHelper(t, out.CoreDump)
 			if err := failure(&Result{}, &out, address); !errors.Is(err, ErrMemoryLimit) {
 				t.Fatalf("not memory: %v (%+v)", err, out)
 			}
