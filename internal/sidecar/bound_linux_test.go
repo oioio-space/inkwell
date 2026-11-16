@@ -20,7 +20,7 @@ import (
 // announce that the device's memory is almost full.
 func TestBoundViolationIsNotAnOOMKill(t *testing.T) {
 	t.Run("cgroup", func(t *testing.T) {
-		if !requireN(t) {
+		if !requireNScope(t) {
 			return
 		}
 		m := scopeManager(t)
@@ -99,7 +99,7 @@ func TestMemoryMaxBackstop(t *testing.T) {
 	if os.Getenv("INKWELL_OOM_BACKSTOP") != "1" {
 		t.Skip("set INKWELL_OOM_BACKSTOP=1: this test makes the kernel OOM-kill a target (desktop notification)")
 	}
-	if !requireN(t) {
+	if !requireNScope(t) {
 		return
 	}
 	m := scopeManager(t)
@@ -131,7 +131,7 @@ func TestMemoryMaxBackstop(t *testing.T) {
 // legitimate run, not a bound violation (ADR 0044 point 1g). The file lives on
 // a disk filesystem: tmpfs pages are shmem, which is unreclaimable without swap.
 func TestBoundSparesPageCache(t *testing.T) {
-	if !requireN(t) {
+	if !requireNScope(t) {
 		return
 	}
 	cache, err := os.UserCacheDir()
