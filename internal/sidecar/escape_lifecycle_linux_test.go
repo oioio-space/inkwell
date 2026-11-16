@@ -164,7 +164,11 @@ func escapeProcessTree(t *testing.T) {
 	s.Dir = t.TempDir()
 	s.tier = tierN
 	s.disableScope = true
-	s.MemoryLimit = 1<<30 + raceAddressReserve(t)
+	// The package's 2 GiB address bound (scopeSpec): the Go runtime sizes its
+	// reservations to RLIMIT_AS, and under 1 GiB a cgo, coverage-built helper
+	// keeps about 10 MiB for its threads' stacks — one stack size above 8 MiB
+	// and it cannot start (measured 2026-11-16; the `ci` runner failed so).
+	s.MemoryLimit = 2<<30 + raceAddressReserve(t)
 	ready := make(chan struct{}, 1)
 	s.Stdout = &readyWriter{ready: ready, seen: func(text string) bool { return strings.Contains(text, "children=8\n") }}
 	var cmd *exec.Cmd

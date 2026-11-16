@@ -72,14 +72,40 @@ jobs:
       # `sidecars-arm64` proves the refusal. Together GitHub exercises every tier on every push.
       - name: Allow unprivileged user namespaces (tier N)
         run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-      - run: mise run ci:core
-      # Lifting the sysctl does not prove tier N ran: the sandbox's own tier report must say so.
-      - name: Assert the sandbox ran in tier N
+      # Tier N bounds a run's memory in a cgroup of a delegated user scope (ADR 0044 point 1g), which the sandbox asks
+      # of the user's systemd manager for the slice the app runs in. A step runs in the hosted agent's system service,
+      # outside any user manager: there the sandbox keeps its per-process fallback (ADR 0042, plan rule T-6), and the
+      # cgroup path would never run. The runner user's manager is already running (lingering) and `systemd-run --user
+      # --scope` places a step's command under it (scripts/sandbox-probe.sh Q5 on ubuntu-24.04, 2026-11-14); the
+      # suite runs there, with the session bus the sandbox talks to (dbus-user-session, installed if the image lacks it).
+      - name: Give the suite a delegated systemd user scope
+        run: |
+          uid="$(id -u)"
+          if [ -z "${XDG_RUNTIME_DIR:-}" ]; then
+            export XDG_RUNTIME_DIR="/run/user/${uid}"
+            echo "XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR}" >> "$GITHUB_ENV"
+          fi
+          loginctl show-user "$USER" -p Linger | grep -qx 'Linger=yes' || sudo loginctl enable-linger "$USER"
+          sudo systemctl start "user@${uid}.service"
+          if [ ! -S "${XDG_RUNTIME_DIR}/bus" ]; then
+            sudo apt-get install -y -qq dbus-user-session
+            systemctl --user daemon-reload
+            systemctl --user start dbus.socket
+          fi
+          test -S "${XDG_RUNTIME_DIR}/bus"
+          systemd-run --user --scope --quiet --collect -- cat /proc/self/cgroup | grep "/user@${uid}.service/"
+      - run: systemd-run --user --scope --quiet --collect -- mise run ci:core
+      # Lifting the sysctl does not prove tier N ran, nor the user manager that its cgroup ran: the sandbox's own tier
+      # report and the scope suite's report must say so (internal/sidecar, tier_helpers_linux_test.go and
+      # scope_linux_test.go), and the scope test must pass with its run in a cgroup.
+      - name: Assert the sandbox ran in tier N with its aggregate memory scope
         timeout-minutes: 3
         run: |
-          out="$(go test -count=1 -v -run '^TestIsolationReportsTier$' ./internal/sidecar/ 2>&1)" || { echo "$out"; exit 1; }
-          echo "$out" | grep 'tier-report:'
+          out="$(systemd-run --user --scope --quiet --collect -- go test -count=1 -v -run '^(TestIsolationReportsTier|TestCgroupSessionScopeDelegated)$' ./internal/sidecar/ 2>&1)" || { echo "$out"; exit 1; }
+          echo "$out" | grep -E 'tier-report:|scope-report:'
           echo "$out" | grep -q 'tier-report: tier=N n=available'
+          echo "$out" | grep -q 'scope-report: scope=available'
+          echo "$out" | grep -q -- '--- PASS: TestCgroupSessionScopeDelegated'
       - name: Build the desktop app (Linux)
         run: mise run app:build
       - name: End-to-end (two instances, Playwright/WebKit)
