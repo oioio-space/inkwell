@@ -5,8 +5,10 @@ import (
 	"encoding/binary"
 	"fmt"
 	"io"
+	"math"
 	"math/rand/v2"
 	"slices"
+	"sort"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -579,37 +581,154 @@ func latePacketDiscard(t *testing.T) {
 // extra and a uniform draw below jitter (natNet.RecvPacket): the
 // true round trip the probe is judged against, drawn from a fixed seed.
 func oneWayMedianRTT(extra, jitter time.Duration) time.Duration {
+	rtts := pathRTTs(extra, jitter)
+	return rtts[len(rtts)/2]
+}
+
+// pathRTTs returns, sorted, 20001 round trips drawn from the path of oneWayMedianRTT: the
+// distribution the probe's samples come from.
+func pathRTTs(extra, jitter time.Duration) []time.Duration {
 	rng := rand.New(rand.NewPCG(7, 7)) // #nosec G404 -- a model of the network, not a secret.
 	oneWay := func() time.Duration {
-		d := baseDelay + extra + time.Duration(rng.Int64N(int64(jitter)))
-		return d
+		return baseDelay + extra + time.Duration(rng.Int64N(int64(jitter)))
 	}
 	rtts := make([]time.Duration, 20001)
 	for i := range rtts {
 		rtts[i] = oneWay() + oneWay()
 	}
 	slices.Sort(rtts)
-	return rtts[len(rtts)/2]
+	return rtts
+}
+
+// binomAtLeast returns P(X ≥ k) for X ~ Binomial(n, p).
+func binomAtLeast(n, k int, p float64) float64 {
+	sum, c := 0.0, 1.0 // c is C(n, j)
+	for j := 0; j <= n; j++ {
+		if j >= k {
+			sum += c * math.Pow(p, float64(j)) * math.Pow(1-p, float64(n-j))
+		}
+		c = c * float64(n-j) / float64(j+1)
+	}
+	return min(sum, 1)
+}
+
+// lowMedianBelow is P(the lower median of n independent draws is below x), p being P(a draw is
+// below x): at least ⌊(n−1)/2⌋+1 of the draws are. lowMedianAbove is the same above x, p being
+// P(a draw is above x): at least n−⌊(n−1)/2⌋ of them are.
+func lowMedianBelow(n int, p float64) float64 { return binomAtLeast(n, (n-1)/2+1, p) }
+func lowMedianAbove(n int, p float64) float64 { return binomAtLeast(n, n-(n-1)/2, p) }
+
+// medianBounds returns the window [lo, hi] that the lower median of draws from the sorted
+// distribution rtts leaves with probability at most alpha on each side, where below(p) and
+// above(p) map P(a draw is below / above x) to P(the median is below / above x).
+func medianBounds(rtts []time.Duration, alpha float64, below, above func(p float64) float64) (lo, hi time.Duration) {
+	n := float64(len(rtts))
+	i := sort.Search(len(rtts), func(i int) bool { return below(float64(i)/n) > alpha })
+	j := sort.Search(len(rtts), func(j int) bool { return above(float64(len(rtts)-1-j)/n) <= alpha })
+	return rtts[max(i-1, 0)], rtts[min(j, len(rtts)-1)]
+}
+
+// TestRTTWindowCalibration pins the derivation of TestLinkRTTFromProbe's windows: the lower
+// median of probeWindowSamples draws leaves [0.9 R, 1.2 R], the window it replaced, with
+// probability 1.35e-3 per seed (2.7 % of the runs of 20 seeds, the « 62.8 ms for 69.9 ms » of
+// 2026-11-16), and the derived windows leave theirs with at most rttAlpha per side.
+func TestRTTWindowCalibration(t *testing.T) {
+	rtts := pathRTTs(rttExtra, rttJitter)
+	r := rtts[len(rtts)/2]
+	n := float64(len(rtts))
+	cdf := func(x time.Duration) float64 { // P(a draw is below x)
+		i, _ := slices.BinarySearch(rtts, x)
+		return float64(i) / n
+	}
+	sf := func(x time.Duration) float64 { return 1 - cdf(x+1) } // P(a draw is above x)
+	if got := lowMedianBelow(probeWindowSamples, cdf(r*9/10)); got < 1.2e-3 || got > 1.5e-3 {
+		t.Errorf("P(median of %d < 0.9 R) = %.3g, want about 1.35e-3 (exact binomial on the triangular law)", probeWindowSamples, got)
+	}
+	seed, agg := rttWindows(rtts)
+	m := probeWindowSamples
+	for _, w := range []struct {
+		name         string
+		lo, hi       time.Duration
+		below, above func(float64) float64
+	}{
+		{
+			"seed", seed[0], seed[1],
+			func(p float64) float64 { return lowMedianBelow(m, p) },
+			func(p float64) float64 { return lowMedianAbove(m, p) },
+		},
+		{
+			"over the seeds", agg[0], agg[1],
+			func(p float64) float64 { return lowMedianBelow(latencySeeds, lowMedianBelow(m, p)) },
+			func(p float64) float64 { return lowMedianAbove(latencySeeds, lowMedianAbove(m, p)) },
+		},
+	} {
+		if p := w.below(cdf(w.lo)); p > rttAlpha {
+			t.Errorf("%s: P(median < %v) = %.3g, want at most %g", w.name, w.lo, p, rttAlpha)
+		}
+		if p := w.above(sf(w.hi)); p > rttAlpha {
+			t.Errorf("%s: P(median > %v) = %.3g, want at most %g", w.name, w.hi, p, rttAlpha)
+		}
+		if w.lo >= r || r >= w.hi {
+			t.Errorf("%s: window [%v, %v] does not hold R = %v", w.name, w.lo, w.hi, r)
+		}
+	}
+	// The window over the seeds keeps the anti-vacuity: quic-go's SmoothedRTT, below 0.95 R in
+	// median, falls outside it.
+	if agg[0] < r*95/100 {
+		t.Errorf("window over the seeds starts at %v, below 0.95 R = %v: it no longer tells the probe from SmoothedRTT", agg[0], r*95/100)
+	}
+	t.Logf("R %v, per seed [%v, %v], over the seeds [%v, %v]", r, seed[0], seed[1], agg[0], agg[1])
+}
+
+// The direct path of TestLinkRTTFromProbe and the derivation of its windows. The probe sends one
+// PROBE a second and its figure is the lower median of the window's samples (protocol/linkprobe
+// Prober.RTT), 30 s plus the sample at each end: 31 samples on a path without loss. Each sample is
+// one round trip of the path, two independent one-way draws (a PROBE and its ECHO each ride their
+// own packet, in no queue: the typing is 1 kB every 8 ms), so the figure is the lower median of 31
+// draws of pathRTTs, whose distribution is binomial in the path's CDF. rttAlpha is the probability
+// a correct probe leaves a window on one side: with 2 sides × (20 seeds + the median over them),
+// a run fails falsely with probability below 5e-6, 500 runs below 3e-3.
+const (
+	rttExtra, rttJitter = 20 * time.Millisecond, 24 * time.Millisecond
+	probeWindowSamples  = 31
+	rttAlpha            = 1e-7
+)
+
+// rttWindows returns the window of each seed's figure and the window of the lower median of the
+// seeds' figures, both derived at rttAlpha from the path's distribution rtts.
+func rttWindows(rtts []time.Duration) (seed, agg [2]time.Duration) {
+	m := probeWindowSamples
+	seed[0], seed[1] = medianBounds(rtts, rttAlpha,
+		func(p float64) float64 { return lowMedianBelow(m, p) },
+		func(p float64) float64 { return lowMedianAbove(m, p) })
+	agg[0], agg[1] = medianBounds(rtts, rttAlpha,
+		func(p float64) float64 { return lowMedianBelow(latencySeeds, lowMedianBelow(m, p)) },
+		func(p float64) float64 { return lowMedianAbove(latencySeeds, lowMedianAbove(m, p)) })
+	return seed, agg
 }
 
 // TestLinkRTTFromProbe is spec Annex A.1 « Sens de rttMs et rttVarMs »: on a direct path whose
-// probe figure is known, the link's round trip is the probe's, which measures every ECHO, within
-// [0.9 R, 1.2 R] of the true median R under reordering and dense traffic, where quic-go's smoothed
-// round trip (RFC 9002 §5.1: one sample per newly largest acknowledged packet) reads low (the
-// anti-vacuity); a relayed link, whose probe sees only the first hop, keeps the end-to-end ping.
+// probe figure is known, the link's round trip is the probe's, which measures every ECHO, unbiased
+// against the true median R under reordering and dense traffic: within the window its sampling
+// noise allows on every seed, and within the narrower window of the median over the seeds (both
+// derived by rttWindows), where quic-go's smoothed round trip (RFC 9002 §5.1: one sample per newly
+// largest acknowledged packet) reads low (the anti-vacuity); a relayed link, whose probe sees only
+// the first hop, keeps the end-to-end ping.
 func TestLinkRTTFromProbe(t *testing.T) {
 	t.Run("direct", func(t *testing.T) {
 		// The bias is a statistical property of quic-go's estimator, which wanders sample by
-		// sample: it is judged on the median over the seeds, the probe's bound on every seed.
+		// sample: it is judged on the median over the seeds, the probe on every seed and on the
+		// median over them.
+		rtts := pathRTTs(rttExtra, rttJitter)
+		r := rtts[len(rtts)/2]
+		seedWin, aggWin := rttWindows(rtts)
 		var mu sync.Mutex
-		var ratios []float64
+		var ratios, probes []float64
 		forSeeds(t, func(t *testing.T, nn *natNet) {
-			// About 60 ms of round trip and 24 ms of jitter against packets 4 ms apart: they
+			// About 70 ms of round trip and 24 ms of jitter against packets 4 ms apart: they
 			// overtake each other, and the bias shows (netsim P1).
-			const extra, jitter = 20 * time.Millisecond, 24 * time.Millisecond
-			nn.setLatency(extra)
-			nn.setJitter(jitter)
-			r := oneWayMedianRTT(extra, jitter)
+			nn.setLatency(rttExtra)
+			nn.setJitter(rttJitter)
 			a, b := directPair(t, nn, p2p.Options{}, p2p.Options{})
 			stop := both(t, a, b, 8*time.Millisecond)
 			defer stop()
@@ -619,8 +738,8 @@ func TestLinkRTTFromProbe(t *testing.T) {
 			if l.ProbeLoss == nil {
 				t.Fatalf("figure unknown after 60 s of traffic")
 			}
-			if lo, hi := r*9/10, r*12/10; l.RTT < lo || l.RTT > hi {
-				t.Errorf("RTT = %v, want within [%v, %v] (true median %v)", l.RTT, lo, hi, r)
+			if l.RTT < seedWin[0] || l.RTT > seedWin[1] {
+				t.Errorf("RTT = %v, want within [%v, %v] (true median %v)", l.RTT, seedWin[0], seedWin[1], r)
 			}
 			if l.RTTVar <= 0 || l.RTTVar > r {
 				t.Errorf("RTTVar = %v, want within (0, %v]", l.RTTVar, r)
@@ -631,11 +750,20 @@ func TestLinkRTTFromProbe(t *testing.T) {
 			sr := quicOf(t, a, b.Local()).ConnectionStats().SmoothedRTT
 			mu.Lock()
 			ratios = append(ratios, float64(sr)/float64(r))
+			probes = append(probes, float64(l.RTT)/float64(r))
 			mu.Unlock()
 		})
 		slices.Sort(ratios)
 		if len(ratios) == 0 {
 			t.Fatal("no seed ran")
+		}
+		// The window over the seeds holds for the median of all of them (not of a -run subset).
+		slices.Sort(probes)
+		if len(probes) == latencySeeds {
+			lo, hi := float64(aggWin[0])/float64(r), float64(aggWin[1])/float64(r)
+			if m := probes[(len(probes)-1)/2]; m < lo || m > hi {
+				t.Errorf("probe RTT / R: median %.3f over the seeds %.3f, want within [%.3f, %.3f]: the probe is biased", m, probes, lo, hi)
+			}
 		}
 		if m := ratios[(len(ratios)-1)/2]; m >= 0.95 {
 			t.Errorf("quic-go SmoothedRTT / R: median %.3f over the seeds %.3f, want below 0.95: the profile does not show the bias", m, ratios)
