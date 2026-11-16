@@ -2119,3 +2119,48 @@ why = "a failed read of the tier report (eof, truncated) is ignored: the handsha
 file = "internal/sidecar/launch_linux.go"
 before = "\tif err != nil {\n\t\treturn fmt.Errorf(\"sidecar: no tier report: %w\", err)\n\t}"
 after = "\tif err != nil && false {\n\t\treturn fmt.Errorf(\"sidecar: no tier report: %w\", err)\n\t}"
+
+[[mutant]]
+id = "MS20"
+block = "SB2a1"
+kind = "go"
+pkg = "./internal/sidecar"
+test = "TestMemoryWatchdogSparesFileCache"
+expect = "S-11 page cache"
+clause = "S-11"
+why = "the watchdog counts the file cache: a run that only reads files on slow storage is killed as a bound violation"
+
+[[mutant.edit]]
+file = "internal/sidecar/memory_linux.go"
+before = "\tclean := file - min(kept, file)\n"
+after = "\tclean := uint64(0) * (file - min(kept, file))\n"
+
+[[mutant]]
+id = "MS21"
+block = "SB2a1"
+kind = "go"
+pkg = "./internal/sidecar"
+test = "TestAddressLimitWaitsForExec"
+expect = "S-11 address limit"
+clause = "S-11"
+why = "RLIMIT_AS is set with the other limits, before seccomp and the handshake: the Go launcher runs under the target's address limit"
+
+[[mutant.edit]]
+file = "internal/sidecar/launcher_linux.go"
+before = "\tdebug.SetGCPercent(-1)\n"
+after = "\tdebug.SetGCPercent(-1)\n\tif c.Memory > 0 {\n\t\t_ = unix.Setrlimit(unix.RLIMIT_AS, &address)\n\t}\n"
+
+[[mutant]]
+id = "MS22"
+block = "SB2a1"
+kind = "go"
+pkg = "./internal/sidecar"
+test = "TestMemoryWatchdogSparesFileCache"
+expect = "S-11 page cache"
+clause = "S-11"
+why = "dirty file pages are left out of the watchdog's measure: a run holding dirty cache above its bound is only stopped at memory.max"
+
+[[mutant.edit]]
+file = "internal/sidecar/memory_linux.go"
+before = "\tfile, kept := v[0], v[1]+v[2]+v[3]+v[4]\n"
+after = "\tfile, kept := v[0], v[1]+v[3]+v[4]\n"

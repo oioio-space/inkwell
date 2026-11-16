@@ -1501,8 +1501,8 @@
       "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
     },
     {
-      "id": "0915cc9f8e63b5d8cda72645e5bb6328e08e73ee04c1e9c06888dd414e002d82",
-      "reason": "internal/sidecar/scope_linux_test.go: requireScope also covers tier N without a delegated scope (decided only by environment facts: not under user@UID.service, or no session bus), asserting the fallback; no timeout changed (the 20 s waitLine timer is as before), the fingerprint moved with the new helpers",
+      "id": "fdc19e0e389c26ea74948f2d7e867d536d5c1f1d1bd82e5fb5b89b4c050bec3f",
+      "reason": "internal/sidecar/scope_linux_test.go: requireScope also covers tier N without a delegated scope (decided only by environment facts: not under user@UID.service, or no session bus), asserting the fallback; no timeout changed (the 20 s waitLine timer is as before), the fingerprint moved with the new helpers; re-fingerprinted on 2026-11-16: raceResidentReserve added to TestResidentBudgetKillsWithSIGKILL/resident-tree in race builds only (measured per-process race overhead, gates/SB2a1/WITNESSES.md), no timeout touched",
       "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
     },
     {
@@ -1514,6 +1514,11 @@
       "id": "4353776ea2baaa7f4e297d90498992b8d1d95d24aa1ea0144dcba339bcf0dc36",
       "reason": "scripts/perf/cpu_test.py: burn() consumes a fixed CPU time (process_time) instead of a wall time, and the detached-helper window closes once the helper reports its 0.8 s of CPU burnt instead of after a fixed 800 ms; no bound is lowered (> 350 and > 500 unchanged); the tests now hold under CPU contention (reproduced red with 6 busy loops on 2 CPUs and on GitHub run 43920252732, green after)",
       "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "98489a711732555908f4281d856aab7c70e61b1c7bf05f732488e21b3ec12c4a",
+      "reason": "internal/sidecar/bound_linux_test.go: TestBoundSparesPageCache gains a slow_storage case (50 MB/s through the scope's io.max, the condition in which GitHub's ci runner killed the read under the former watchdog rule, ADR 0044 point 1g amendment of 2026-11-16); it skips only where io.max cannot be set (the io controller not delegated to the scope, or the cache directory not on a block device); the local_storage case keeps every assertion and no skip, and the rule is proven without any skip by TestUnreclaimableLeavesOutOnlyFileCache and TestMemoryWatchdogSparesFileCache (seen red under the former rule, MS20)",
+      "decision": "docs/adr/0044-sandbox-tiers.md"
     }
   ]
 }

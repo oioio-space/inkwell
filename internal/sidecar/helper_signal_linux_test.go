@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math/rand/v2"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -169,6 +170,24 @@ func scopeAttackHelper(mode, arg string) int {
 			return 2
 		}
 		fmt.Printf("read=%d\n", n)
+		return 0
+	case "dirty": // write 512 MiB to the file arg without syncing, report the bytes written
+		f, err := os.OpenFile(arg, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600) // #nosec G304 -- test helper writing its test's declared output
+		if err != nil {
+			return 2
+		}
+		chunk := make([]byte, 1<<20)
+		_, _ = rand.NewChaCha8([32]byte{2}).Read(chunk)
+		n := 0
+		for range 512 {
+			w, err := f.Write(chunk)
+			n += w
+			if err != nil {
+				break
+			}
+		}
+		_ = f.Close()
+		fmt.Printf("wrote=%d\n", n)
 		return 0
 	case "resident":
 		for {

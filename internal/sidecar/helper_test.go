@@ -201,7 +201,7 @@ func runHelper(mode string) int {
 		sink = make([]byte, mib<<20)
 		fmt.Println("allocated", len(sink))
 		return 0
-	case "scope-resident-tree", "scope-resident-chunk", "scope-budget", "scope-resident", "scope-resident-wait", "scope-address", "scope-tree", "scope-fds", "scope-fds-tree", "scope-scope-app", "scope-pagecache":
+	case "scope-resident-tree", "scope-resident-chunk", "scope-budget", "scope-resident", "scope-resident-wait", "scope-address", "scope-tree", "scope-fds", "scope-fds-tree", "scope-scope-app", "scope-pagecache", "scope-dirty":
 		return scopeAttackHelper(strings.TrimPrefix(name, "scope-"), arg)
 	case "lower-core":
 		return lowerCoreHelper(arg)

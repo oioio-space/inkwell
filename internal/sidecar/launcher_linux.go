@@ -201,11 +201,15 @@ func sandboxExec(c sandboxConfig, args []string) error {
 
 // limitAndExec applies the resource limits and seccomp, then execs args[0].
 func limitAndExec(c sandboxConfig, args []string) error {
-	// Everything that allocates happens before RLIMIT_AS: this Go runtime
-	// shares the limit until exec, and a heap growth past it is a fatal
-	// "runtime: out of memory" that looks like a typst limit hit (TYP-16
-	// failed about 2% of runs). GC is off for the same reason, and the exec
-	// is a raw execve on pointers prepared here (syscall.Exec allocates).
+	// Everything that allocates happens before the limits: a heap growth past
+	// one is a fatal "runtime: out of memory" that looks like a typst limit
+	// hit (TYP-16 failed about 2% of runs). GC is off for the same reason, and
+	// the exec is a raw execve on pointers prepared here (syscall.Exec
+	// allocates). RLIMIT_AS is the last step before execve (ADR 0044 point
+	// 1h): this runtime has reserved more address space than a small limit
+	// (1.6 GiB measured, 2026-11-16), so under it any mapping the runtime still
+	// makes (a thread or a span while a syscall blocks) is a fatal "cannot
+	// allocate memory" before the target starts.
 	prog, err := launcherFilter(c)
 	if err != nil {
 		return fmt.Errorf("%w; refusing peer document: %w", errSeccompUnavailable, err)
@@ -242,15 +246,13 @@ func limitAndExec(c sandboxConfig, args []string) error {
 		resource int
 		value    unix.Rlimit
 	}
-	limits := make([]rlimit, 0, 3) // built now: Setrlimit's argument must not be allocated after RLIMIT_AS
+	limits := make([]rlimit, 0, 2) // built now: Setrlimit's argument must not be allocated under a limit
 	// RLIMIT_CORE {1,1} is the kernel's pipe-helper sentinel (fs/coredump.c,
 	// coredump_pipe): a core-class death starts no crash helper such as
 	// systemd-coredump, and 1 byte is below a core file's minimum. Max = 1, so
 	// the target cannot raise it. Socket core_pattern modes ignore it (RS1).
 	limits = append(limits, rlimit{unix.RLIMIT_CORE, unix.Rlimit{Cur: 1, Max: 1}})
-	if c.Memory > 0 {
-		limits = append(limits, rlimit{unix.RLIMIT_AS, unix.Rlimit{Cur: c.Memory, Max: c.Memory}})
-	}
+	address := unix.Rlimit{Cur: c.Memory, Max: c.Memory}
 	if c.File > 0 || c.Directory != "" {
 		limits = append(limits, rlimit{unix.RLIMIT_FSIZE, unix.Rlimit{Cur: c.File, Max: c.File}})
 	}
@@ -265,6 +267,14 @@ func limitAndExec(c sandboxConfig, args []string) error {
 	}
 	if err := reportAndAwait(c.HandshakeFD, report, status, poll, proceed[:]); err != nil {
 		return err
+	}
+	// Raw syscalls only from here: the scheduler is not entered, so the
+	// runtime has no occasion to map memory under the address limit. The
+	// filter allows prlimit64 on this process (S-1).
+	if c.Memory > 0 {
+		if _, _, errno := unix.RawSyscall6(unix.SYS_PRLIMIT64, 0, unix.RLIMIT_AS, uintptr(unsafe.Pointer(&address)), 0, 0, 0); errno != 0 { // #nosec G103 -- the kernel copies the limit synchronously.
+			return errno
+		}
 	}
 	_, _, errno := unix.RawSyscall(unix.SYS_EXECVE, uintptr(unsafe.Pointer(path)), uintptr(unsafe.Pointer(&argv[0])), uintptr(unsafe.Pointer(&envp[0]))) // #nosec G103 -- NUL-terminated pointers prepared above; execve returns only on failure.
 	runtime.KeepAlive(path)

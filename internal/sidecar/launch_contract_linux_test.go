@@ -364,3 +364,67 @@ func TestProtectedRunsInN(t *testing.T) {
 		t.Fatalf("S-9 protected: N: %+v %v", out, err)
 	}
 }
+
+// The Go launcher never runs under the target's address limit (ADR 0044
+// point 1h): its runtime has reserved far more address space than a small
+// limit (1.6 GiB measured for a coverage-built launcher, 2026-11-16), so
+// any mapping it made after RLIMIT_AS was lowered under that would be a fatal
+// "cannot allocate memory" before the target starts. At the verified report
+// the launcher still has the address limit it was started with; the target,
+// after exec, has the requested one (TestRunLimitsHoldFromStartup).
+func TestAddressLimitWaitsForExec(t *testing.T) {
+	if !requireLaunch(t) {
+		return
+	}
+	for _, tr := range []tier{tierN, tierF} {
+		t.Run(tr.String(), func(t *testing.T) {
+			if !requireTier(t, tr) {
+				return
+			}
+			s := deathSpec(t, "rlimits")
+			s.tier = tr
+			s.disableScope = true
+			s.MemoryLimit = 3 << 30
+			inherited, atReport := addressLimit(t, os.Getpid()), ""
+			var cmd *exec.Cmd
+			s.rewriteLauncher = func(c *exec.Cmd) { cmd = c }
+			s.afterReport = func() {
+				reporter := cmd.Process.Pid
+				if tr == tierN { // PID 1 stays a small init; its child reports and execs the target
+					b, err := os.ReadFile(fmt.Sprintf("/proc/%d/task/%d/children", reporter, reporter))
+					if _, err2 := fmt.Sscan(string(b), &reporter); err != nil || err2 != nil {
+						t.Errorf("no exec child of the N launcher: %v %v", err, err2)
+						return
+					}
+				}
+				atReport = addressLimit(t, reporter)
+			}
+			out, err := Run(t.Context(), s)
+			if err != nil || out.ExitCode != 0 {
+				t.Fatalf("Run = %v exit %d stderr %q", err, out.ExitCode, out.Stderr)
+			}
+			if atReport == "" || atReport != inherited {
+				t.Fatalf("S-11 address limit: the launcher's address limit at its report is %q, want the inherited %q: the Go launcher would run under the target's limit", atReport, inherited)
+			}
+			if !strings.HasPrefix(string(out.Stdout), fmt.Sprintf("as=%d ", int64(3<<30))) {
+				t.Fatalf("target limits %q, want as=%d", out.Stdout, int64(3<<30))
+			}
+		})
+	}
+}
+
+// addressLimit is the "Max address space" line of /proc/pid/limits.
+func addressLimit(t *testing.T, pid int) string {
+	t.Helper()
+	b, err := os.ReadFile(fmt.Sprintf("/proc/%d/limits", pid))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for line := range strings.SplitSeq(string(b), "\n") {
+		if strings.HasPrefix(line, "Max address space") {
+			return strings.Join(strings.Fields(line), " ")
+		}
+	}
+	t.Fatalf("no address limit in /proc/%d/limits", pid)
+	return ""
+}
