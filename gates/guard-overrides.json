@@ -1524,6 +1524,16 @@
       "id": "98489a711732555908f4281d856aab7c70e61b1c7bf05f732488e21b3ec12c4a",
       "reason": "internal/sidecar/bound_linux_test.go: TestBoundSparesPageCache gains a slow_storage case (50 MB/s through the scope's io.max, the condition in which GitHub's ci runner killed the read under the former watchdog rule, ADR 0044 point 1g amendment of 2026-11-16); it skips only where io.max cannot be set (the io controller not delegated to the scope, or the cache directory not on a block device); the local_storage case keeps every assertion and no skip, and the rule is proven without any skip by TestUnreclaimableLeavesOutOnlyFileCache and TestMemoryWatchdogSparesFileCache (seen red under the former rule, MS20)",
       "decision": "docs/adr/0044-sandbox-tiers.md"
+    },
+    {
+      "id": "d258f46b9d899a60296d9d2b1365a50f73b0f1071229e31e201f86cb31cc6e29",
+      "reason": ".github/workflows/ci.yml: SB2a1's ci job steps (tier N lift, delegated user scope, tier assertion with its own 3 min) combined with CI1's parallel `formal` job (45 min, measured 25 min); no existing cap raised",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "e84827b6c16d5bdda2f9f35f952955c83ce2b74d1c8082c81848ac4da978d4b3",
+      "reason": "mise.toml: SB2a1's sandbox tasks combined with CI1's split of ci:core into ci:checks + formal; locally ci:core runs what it ran before",
+      "decision": "docs/objectif-en-cours.md"
     }
   ]
 }
