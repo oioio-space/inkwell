@@ -9,6 +9,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -142,9 +143,33 @@ type Preview struct {
 	lastCount  int    // page count of last
 	cache      snapshot
 	anchors    anchorCache
-	asking     bool // an "anchors" request is being answered: a second one waits for that answer
+	anchorsAsk answering // the "anchors" requests
 	deck       deckCache
-	askingDeck bool // likewise for "deck"
+	deckAsk    answering // the "deck" requests
+}
+
+// answering serialises the requests of one kind ("anchors", "deck"): one computation runs at a
+// time. A request that arrives while it runs is answered by it when it is for the same version of
+// the sources; otherwise one more computation follows it, for the version current when that one
+// starts, and answers every stream that asked meanwhile. The decision and the end of the running
+// computation are taken under [Preview.mu] before its answer is sent, so a request handled while
+// the answer is on its way starts a computation of its own instead of waiting for an answer
+// already sent. Several streams can be live at once: [Preview.Serve] replaces p.cur but the old
+// stream is served until Wails closes it (cmd/inkwell/main.go, HandleStream), so the streams are
+// sets, as small as the live streams (each appears once).
+type answering struct {
+	running bool
+	srcGen  uint64         // version of the sources the running computation describes
+	to      []*previewConn // where its answer goes
+	again   []*previewConn // streams that asked for a newer version: one more computation answers them
+}
+
+// addConn adds c to set unless it is there already.
+func addConn(set []*previewConn, c *previewConn) []*previewConn {
+	if slices.Contains(set, c) {
+		return set
+	}
+	return append(set, c)
 }
 
 // window is a range of pages, 1-based and inclusive.
@@ -649,34 +674,48 @@ func (p *Preview) handle(cur *previewConn, req previewRequest) {
 		p.srcGen++
 		p.armLocked(0)
 	case "anchors":
-		if p.asking {
-			return // the answer to the running one reaches the webview too
-		}
-		p.asking = true
-		date, srcGen := p.docTimeLocked(), p.srcGen
-		p.wg.Go(func() {
-			defer func() {
-				p.mu.Lock()
-				p.asking = false
-				p.mu.Unlock()
-			}()
-			p.answerAnchors(cur, srcGen, date)
-		})
+		p.askLocked(&p.anchorsAsk, cur, p.answerAnchors)
 	case "deck":
-		if p.askingDeck {
-			return
-		}
-		p.askingDeck = true
-		date, srcGen := p.docTimeLocked(), p.srcGen
-		p.wg.Go(func() {
-			defer func() {
-				p.mu.Lock()
-				p.askingDeck = false
-				p.mu.Unlock()
-			}()
-			p.answerDeck(cur, srcGen, date)
-		})
+		p.askLocked(&p.deckAsk, cur, p.answerDeck)
 	}
+}
+
+// askLocked takes a request of the kind a serialises, for the sources as they are now; answer
+// computes its reply, nil once the preview is closed.
+func (p *Preview) askLocked(a *answering, cur *previewConn, answer func(srcGen uint64, date time.Time) []byte) {
+	if a.running {
+		if a.srcGen == p.srcGen {
+			a.to = addConn(a.to, cur) // the running computation's answer, sent after this
+		} else {
+			a.again = addConn(a.again, cur)
+		}
+		return
+	}
+	a.running, a.srcGen, a.to = true, p.srcGen, []*previewConn{cur}
+	srcGen, date := p.srcGen, p.docTimeLocked()
+	p.wg.Go(func() {
+		for {
+			msg := answer(srcGen, date)
+			p.mu.Lock()
+			to := a.to
+			more := msg != nil && !p.closed && len(a.again) > 0
+			if more {
+				a.srcGen, a.to, a.again = p.srcGen, a.again, nil
+				srcGen, date = p.srcGen, p.docTimeLocked()
+			} else {
+				a.running, a.to, a.again = false, nil, nil
+			}
+			p.mu.Unlock()
+			if msg != nil {
+				for _, c := range to {
+					c.send(p.log, msg)
+				}
+			}
+			if !more {
+				return
+			}
+		}
+	})
 }
 
 // coversLocked says whether the last result already holds every page of w.
@@ -689,8 +728,9 @@ func (p *Preview) coversLocked(w window) bool {
 	return last < w.first || (w.first >= have.first && last <= have.last)
 }
 
-// answerAnchors sends the anchors of the sources as they are now.
-func (p *Preview) answerAnchors(cur *previewConn, srcGen uint64, date time.Time) {
+// answerAnchors is the "anchors" message for version srcGen of the sources, nil once the
+// preview is closed.
+func (p *Preview) answerAnchors(srcGen uint64, date time.Time) []byte {
 	p.mu.Lock()
 	cached := p.anchors
 	p.mu.Unlock()
@@ -705,7 +745,7 @@ func (p *Preview) answerAnchors(cur *previewConn, srcGen uint64, date time.Time)
 			msg.Anchors, err = eng.Anchors(ctx, typst.Project{Root: p.opt.Root}, p.opt.Main, typst.WithTimestamp(date))
 		}
 		if p.ctx.Err() != nil {
-			return
+			return nil
 		}
 		if err != nil {
 			msg.Failure = failureOf(err)
@@ -715,12 +755,13 @@ func (p *Preview) answerAnchors(cur *previewConn, srcGen uint64, date time.Time)
 			p.mu.Unlock()
 		}
 	}
-	cur.send(p.log, encodeMessage(&msg))
+	return encodeMessage(&msg)
 }
 
-// answerDeck sends the slides and steps of the sources as they are now. Rev
-// tells which version of the sources they describe, as for the pages.
-func (p *Preview) answerDeck(cur *previewConn, srcGen uint64, date time.Time) {
+// answerDeck is the "deck" message, the slides and steps of version srcGen of the
+// sources, nil once the preview is closed. Rev tells which version they describe, as for
+// the pages.
+func (p *Preview) answerDeck(srcGen uint64, date time.Time) []byte {
 	p.mu.Lock()
 	cached := p.deck
 	p.mu.Unlock()
@@ -735,7 +776,7 @@ func (p *Preview) answerDeck(cur *previewConn, srcGen uint64, date time.Time) {
 			msg.Deck, err = eng.Deck(ctx, typst.Project{Root: p.opt.Root}, p.opt.Main, typst.WithTimestamp(date))
 		}
 		if p.ctx.Err() != nil {
-			return
+			return nil
 		}
 		if err != nil {
 			msg.Failure = failureOf(err)
@@ -745,7 +786,7 @@ func (p *Preview) answerDeck(cur *previewConn, srcGen uint64, date time.Time) {
 			p.mu.Unlock()
 		}
 	}
-	cur.send(p.log, encodeMessage(&msg))
+	return encodeMessage(&msg)
 }
 
 // ExportResult is the outcome of [PreviewService.ExportPDF].

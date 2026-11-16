@@ -30,6 +30,12 @@ type previewConn struct {
 	in     chan []byte
 	sent   chan []byte
 	once   sync.Once
+
+	// beforeSend, when set before the conn is attached, runs in the sending goroutine before
+	// each message is delivered.
+	beforeSend func(b []byte)
+	returned   atomic.Int32 // frames Receive has returned
+	entered    chan int32   // on each call, Receive sends how many frames it has returned so far
 }
 
 var _ bridge.Conn = (*previewConn)(nil)
@@ -37,12 +43,18 @@ var _ bridge.Conn = (*previewConn)(nil)
 func newPreviewConn(t *testing.T) *previewConn {
 	t.Helper()
 	ctx, cancel := context.WithCancel(t.Context())
-	c := &previewConn{ctx: ctx, cancel: cancel, in: make(chan []byte, 16), sent: make(chan []byte, 64)}
+	c := &previewConn{
+		ctx: ctx, cancel: cancel, in: make(chan []byte, 16), sent: make(chan []byte, 64),
+		entered: make(chan int32, 1024),
+	}
 	t.Cleanup(c.close)
 	return c
 }
 
 func (c *previewConn) Send(b []byte) error {
+	if c.beforeSend != nil {
+		c.beforeSend(b)
+	}
 	select {
 	case c.sent <- b:
 		return nil
@@ -53,7 +65,12 @@ func (c *previewConn) Send(b []byte) error {
 
 func (c *previewConn) Receive() ([]byte, error) {
 	select {
+	case c.entered <- c.returned.Load():
+	default:
+	}
+	select {
 	case b := <-c.in:
+		c.returned.Add(1)
 		return b, nil
 	case <-c.ctx.Done():
 		return nil, io.EOF
@@ -70,6 +87,26 @@ func (c *previewConn) ask(t *testing.T, req string) {
 	case c.in <- []byte(req):
 	case <-time.After(5 * time.Second):
 		t.Fatalf("request %s not taken", req)
+	}
+}
+
+// handled sends a request and waits until the preview has handled it, that is until Serve
+// asks for the next frame. It may run in any goroutine; it reports failures with t.Errorf.
+func (c *previewConn) handled(t *testing.T, req string) {
+	t.Helper()
+	want := c.returned.Load() + 1
+	c.in <- []byte(req)
+	timeout := time.After(5 * time.Second)
+	for {
+		select {
+		case n := <-c.entered:
+			if n >= want {
+				return
+			}
+		case <-timeout:
+			t.Errorf("request %s not handled", req)
+			return
+		}
 	}
 }
 
@@ -112,7 +149,12 @@ func (c *previewConn) quiet(t *testing.T, typ string, d time.Duration) {
 
 func attach(t *testing.T, p *app.Preview) *previewConn {
 	t.Helper()
-	c := newPreviewConn(t)
+	return attachConn(t, p, newPreviewConn(t))
+}
+
+// attachConn attaches c, made by newPreviewConn, as the webview of p.
+func attachConn(t *testing.T, p *app.Preview, c *previewConn) *previewConn {
+	t.Helper()
 	done := make(chan struct{})
 	go func() { defer close(done); p.Serve(c) }()
 	t.Cleanup(func() { c.close(); <-done })
@@ -600,6 +642,77 @@ func TestPreviewScheduling(t *testing.T) {
 		if got := fc.deckCalls.Load(); got != 2 {
 			t.Errorf("%d computations after a change, want 2", got)
 		}
+	})
+
+	t.Run("PRV-38 a request handled while the previous answer is being sent is answered too", func(t *testing.T) {
+		// The webview asks again as soon as an answer arrives (a new result, a new jump): that
+		// request must not be taken for one the answer being sent already covers. Each case sends
+		// the next request from inside the delivery of the first answer and waits until the preview
+		// has handled it, the narrowest moment there is.
+		for _, tc := range []struct {
+			name, op string
+			change   bool // the sources change before the second request
+			calls    func(*fakeCompiler) int32
+			want     int32
+		}{
+			{"deck, same version", "deck", false, func(f *fakeCompiler) int32 { return f.deckCalls.Load() }, 1},
+			{"deck, after a change", "deck", true, func(f *fakeCompiler) int32 { return f.deckCalls.Load() }, 2},
+			{"anchors, same version", "anchors", false, func(f *fakeCompiler) int32 { return f.anchorCalls.Load() }, 1},
+			{"anchors, after a change", "anchors", true, func(f *fakeCompiler) int32 { return f.anchorCalls.Load() }, 2},
+		} {
+			t.Run(tc.name, func(t *testing.T) {
+				fc := &fakeCompiler{compile: func(context.Context, int) (*typst.Result, error) { return okResult(3), nil }}
+				p := app.NewPreview(app.PreviewOptions{Engine: fc, Root: t.TempDir()})
+				t.Cleanup(p.Close)
+				req := fmt.Sprintf(`{"op":%q}`, tc.op)
+				c := newPreviewConn(t)
+				var once sync.Once
+				c.beforeSend = func(b []byte) {
+					var m app.PreviewMessage
+					if json.Unmarshal(b, &m) != nil || m.Type != tc.op {
+						return
+					}
+					once.Do(func() {
+						if tc.change {
+							p.Changed("main.typ")
+						}
+						c.handled(t, req)
+					})
+				}
+				attachConn(t, p, c)
+				c.ask(t, req)
+				first := c.message(t, tc.op)
+				second := c.message(t, tc.op)
+				if tc.change && tc.op == "deck" && second.Rev <= first.Rev {
+					t.Errorf("second deck is of version %d, the first of %d: want the newer", second.Rev, first.Rev)
+				}
+				if got := tc.calls(fc); got != tc.want {
+					t.Errorf("%d computations, want %d", got, tc.want)
+				}
+			})
+		}
+		t.Run("two live streams, then the first asks after a change", func(t *testing.T) {
+			// A reloaded webview opens a new stream while the old one is still served (Wails
+			// closes the old one on its own schedule): a request from each must be answered.
+			fc := &fakeCompiler{
+				compile:    func(context.Context, int) (*typst.Result, error) { return okResult(1), nil },
+				anchorGate: make(chan struct{}),
+			}
+			p := app.NewPreview(app.PreviewOptions{Engine: fc, Root: t.TempDir()})
+			t.Cleanup(p.Close)
+			a, b := attach(t, p), attach(t, p)
+			a.handled(t, `{"op":"anchors"}`) // computing, held by the gate
+			b.handled(t, `{"op":"anchors"}`) // same version, other stream
+			p.Changed("main.typ")
+			a.handled(t, `{"op":"anchors"}`) // newer version
+			close(fc.anchorGate)
+			b.message(t, "anchors")
+			a.message(t, "anchors")
+			a.message(t, "anchors")
+			if got := fc.anchorCalls.Load(); got != 2 {
+				t.Errorf("%d computations, want 2", got)
+			}
+		})
 	})
 
 	t.Run("PRV-35 the network mode is the engine's", func(t *testing.T) {

@@ -1274,6 +1274,16 @@
       "id": "6adfe02081f88c842f4889b17eaac20e592244933aae2dcc8144654dd706d09c",
       "reason": "scripts/tla-check.sh: block HP1 step 1 registers the DirectUpgrade configurations, mutants M1-M29 and witnesses; existing runs untouched",
       "decision": "docs/plans/2026-11-16-hp1-direct-upgrade.md"
+    },
+    {
+      "id": "e5152ecb469bd05a7d5cb0600d82e7cd56b0b3199de7e639129dc2a3aae1d498",
+      "reason": "internal/app/preview_test.go: new helper previewConn.handled (BK5, docs/plans/2026-11-16-bk5-prv37.md) waits at most 5 s for the preview to take a request, a bound on a new wait, not an increase; no existing timeout of the file is changed",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "c076bee78e7771914ba3a99389e705cbb5e1295d6d0e6a67d551532cda3627e9",
+      "reason": "internal/app/preview_test.go: new helper previewConn.handled (BK5, docs/plans/2026-11-16-bk5-prv37.md) waits at most 5 s for the preview to take a request, a bound on a new wait, not an increase; no existing timeout of the file is changed",
+      "decision": "docs/objectif-en-cours.md"
     }
   ]
 }
