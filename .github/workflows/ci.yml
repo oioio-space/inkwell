@@ -66,10 +66,20 @@ jobs:
           name: seccomp-traces
           path: gates/L1/ci-seccomp-traces/
           retention-days: 7
-      # The sandbox tiers (ADR 0044): this job never lifts Ubuntu's AppArmor restriction on unprivileged user
-      # namespaces, so the sidecar tests run in the tier the machine gives (F where it is on); the `sandbox-stock`
-      # job asserts the restriction is on and checks both tiers' inventory.
+      # The sandbox tiers (ADR 0044, decision D6, revised 2026-11-16 after the candidate's coverage gate): this job
+      # lifts Ubuntu's AppArmor restriction so that the whole suite, coverage included, runs in tier N; the
+      # `sandbox-stock` job keeps the stock restriction and proves tier F, the application tests included;
+      # `sidecars-arm64` proves the refusal. Together GitHub exercises every tier on every push.
+      - name: Allow unprivileged user namespaces (tier N)
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
       - run: mise run ci:checks # the formal models run in the parallel `formal` job
+      # Lifting the sysctl does not prove tier N ran: the sandbox's own tier report must say so.
+      - name: Assert the sandbox ran in tier N
+        timeout-minutes: 3
+        run: |
+          out="$(go test -count=1 -v -run '^TestIsolationReportsTier$' ./internal/sidecar/ 2>&1)" || { echo "$out"; exit 1; }
+          echo "$out" | grep 'tier-report:'
+          echo "$out" | grep -q 'tier-report: tier=N n=available'
       - name: Build the desktop app (Linux)
         run: mise run app:build
       - name: End-to-end (two instances, Playwright/WebKit)
@@ -258,11 +268,13 @@ jobs:
           echo "kernel.apparmor_restrict_unprivileged_userns=${value} apparmor=${enabled}"
           test "${value}" = 1
           test "${enabled}" = Y
-      - name: Sandbox, Typst and language tests in the tier the machine gives
+      # internal/app is here too: its tests compile and export a real document (preview_test.go), the
+      # application's integration with the sandbox in tier F, which the `ci` job (tier N) no longer exercises.
+      - name: Sandbox, Typst, language and application tests in the tier the machine gives
         timeout-minutes: 20
         run: |
           rc=0
-          go test -json -race -count=1 ./internal/sidecar/... ./internal/typst/... ./internal/language/... > go-test.json || rc=$?
+          go test -json -race -count=1 ./internal/sidecar/... ./internal/typst/... ./internal/language/... ./internal/app/... > go-test.json || rc=$?
           python3 -I scripts/gojson_check.py go-test.json --exit "$rc" --inventory gates/inventories/SB2a1.toml --columns stock-amd64
       - name: Keep the structured test results (read by scripts/gh-verdict.py)
         if: always()

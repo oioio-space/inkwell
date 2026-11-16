@@ -133,6 +133,15 @@ the sysctl is 1 and AppArmor is enabled, else fail; (2) `go test -json` of `inte
 `internal/language`, uploaded as an artefact, the decided tier and its errno printed (expected: F, EACCES); (3, added
 by SB2p) install the built .deb, assert the profile is loaded, run again and expect N. Every step has a timeout.
 
+**Revised 2026-11-16 (debated with Codex).** The candidate's GitHub run 43820841198 was green on every test but red on
+`cover:check`: `internal/sidecar` 73.7 % < 85 %, because with `ci` no longer lifting the restriction, no GitHub job
+exercised tier N. Decision: the `ci` job lifts the restriction again and asserts, from the sandbox's own tier report,
+that tier N really ran (`TestIsolationReportsTier`: `tier=N n=available`); `sandbox-stock` keeps the stock restriction
+and now also runs `internal/app` (its tests compile and export a real document: the application's integration with the
+sandbox in tier F, which `ci` no longer exercises); `sidecars-arm64` is unchanged. GitHub then proves tiers N and F and
+the arm64 refusal on every push. Rejected: per-tier thresholds or exemptions (weaken the coverage gate); merging the
+coverage of two jobs (orchestration for the same proof). The frozen `github` criterion is unchanged.
+
 Where each proof exists: the interpreted filters anywhere; the escape tests, filiation, handshake and the ABI
 witnesses here (N and F) and on the stock runner (F); the perimeter and `clone3` here (F) and on the stock runner;
 arm64's refusal on the arm64 runner; N under the installed package (SB2p); a desktop Ubuntu 24.04 with the package:
