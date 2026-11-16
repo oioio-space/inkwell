@@ -74,6 +74,8 @@ type view struct {
 	stands   []bool
 	exc      map[int]bool // standing junior cuts on seniors.
 	members  []Member
+	sweeps   int // sweeps made on this view: one, plus one per self-cut judged.
+	swept    int // ops given to those sweeps.
 }
 
 // rankEntry is a key waiting in the sweep's priority queue.
@@ -173,6 +175,8 @@ func (v *view) sweep(in []int) *sweep {
 		v: v, on: make(map[string][]int), susp: make(map[string][]int), by: make(map[string][]int), rank: make(map[string]int),
 		base: make(map[string][]int), stands: make([]bool, len(v.nodes)), exc: make(map[int]bool),
 	}
+	v.sweeps++
+	v.swept += len(in)
 	s.inSet = newBitset(len(v.nodes))
 	for _, i := range in {
 		s.inSet.set(i)

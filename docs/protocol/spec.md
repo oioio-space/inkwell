@@ -477,7 +477,13 @@ admin.
    autre clé n'est concurrent à o.
 
 Chaque règle sur les ops de y ne lit que les ops des clés plus anciennes que y et les
-siennes : un seul balayage par rang décide de tout, en O(n²/64 + n·e). Une liste scellée
+siennes : un seul balayage par rang décide de tout, en O(n²/64 + n·e). Chaque coupe de soi
+(une op qui n'est pas un octroi et dont le sujet est l'auteur) est en plus jugée par un
+balayage de ses seuls ancêtres, fait une seule fois : un pli fait au plus 1 + s balayages
+pour s coupes de soi (exactement 1 + s quand l'auteur de chacune a un rang), chacun au coût
+d'un balayage donné ci-dessus, et ces balayages lisent au plus n + Σ|anc(k)| ops, soit au
+plus 524 800 ops balayées pour une liste scellée ; ce nombre compte les ops données aux
+balayages, ce n'est pas une borne de temps. Une liste scellée
 (1024 ops) dont deux répliques détiennent des ensembles différents (seulement si un ex-admin
 les a inondées) **DOIT** le dire : « liste de membres saturée — créez un nouveau projet ».
 

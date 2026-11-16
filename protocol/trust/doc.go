@@ -167,8 +167,14 @@
 // junior's op is read from what was decided for it, and the junior's cut,
 // decided afterwards, neither changes the senior's rank, nor its ops, nor
 // drops a grant, so nothing already decided is revisited; it only shapes the
-// senior's final role (rule 5). The fold costs O(n²/64 + n·e), where e is the
-// largest number of role ops on one key, plus one more fold per self-cut.
+// senior's final role (rule 5). One sweep costs O(n²/64 + n·e), where e is the
+// largest number of role ops on one key. The fold makes one sweep over the n
+// ops, plus, for each self-cut (a non-grant op whose subject is its author),
+// one sweep of its ancestors alone, made once: at most 1 + s sweeps for s
+// self-cuts (exactly 1 + s when the author of each holds a rank), each at the
+// cost of one sweep, over at most n + Σ|anc(k)| ops, that is at most 524 800
+// ops swept for a sealed list; that number counts sweep inputs, it is not a
+// time bound.
 //
 // An admin leaves only after seeing another admin, and nobody can remove
 // the creator while it is admin. Concurrent departures of different keys (the

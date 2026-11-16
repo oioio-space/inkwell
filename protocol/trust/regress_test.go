@@ -8,7 +8,6 @@ import (
 	"slices"
 	"strconv"
 	"testing"
-	"time"
 )
 
 // craft signs an op by s with explicit parents, bypassing Issue and its
@@ -376,13 +375,13 @@ func buildCascade(t testing.TB, k int) (l *List, s, c []*testSigner) {
 	return l, s, c
 }
 
+// TC1 K-3: the cascade costs one sweep, asserted by counts.
 func TestCascadeSingleSweep(t *testing.T) {
 	const k = 250
 	l, s, c := buildCascade(t, k)
-	t0 := time.Now()
-	fold(l.ops)
-	if d := time.Since(t0); d > 100*time.Millisecond {
-		t.Errorf("fold of %d ops took %v, want < 100ms", l.Len(), d)
+	// K-3: no self-cut, so the whole cascade is decided by one sweep over the n ops, whatever the machine's load.
+	if sweeps, swept := foldCost(t, fold(l.ops)); sweeps != 1 || swept != l.Len() {
+		t.Errorf("K-3 one sweep: fold of %d ops made %d sweeps over %d ops, want 1 sweep over %d", l.Len(), sweeps, swept, l.Len())
 	}
 	for i := range k {
 		wantRole(t, l, s[i], 0)

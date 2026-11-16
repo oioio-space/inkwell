@@ -1717,3 +1717,111 @@ func (inv *invites) follow(g trust.Op) {
 	}
 }
 """
+
+# Block TC1 (docs/plans/2026-11-16-tc1-fold-cost-by-counts.md): the fold's cost, by counts. The package is in the
+# nested module `protocol`: it is named by its import path, which `go test` resolves from the root through the
+# `replace` of go.mod (`./protocol/trust` from the root is outside the main module).
+[[mutant]]
+id = "MK1"
+block = "TC1"
+kind = "go"
+pkg = "github.com/oioio-space/inkwell/protocol/trust"
+test = "TestCreatorSelfCutsCostBounded"
+expect = "K-1 sweeps"
+clause = "K-1 sweeps"
+why = "the verdict on a self-cut is no longer memoised: a cut that is read twice is swept twice"
+
+[[mutant.edit]]
+file = "protocol/trust/fold.go"
+before = "\tv.memo[k] = c\n"
+after = ""
+
+[[mutant]]
+id = "MK2"
+block = "TC1"
+kind = "go"
+pkg = "github.com/oioio-space/inkwell/protocol/trust"
+test = "TestCreatorSelfCutsCostBounded"
+expect = "K-2 ops swept"
+clause = "K-2 ops swept"
+why = "a self-cut is judged on every op before it, not on its ancestors alone: as many sweeps, over more ops"
+
+[[mutant.edit]]
+file = "protocol/trust/fold.go"
+before = "v.verdict(v.sweep(v.anc[k].positions()), v.auth[k])"
+after = "v.verdict(v.sweep(before(k)), v.auth[k])"
+
+[[mutant.edit]]
+file = "protocol/trust/zz_mutant_before.go"
+create = true
+after = """package trust
+
+// before returns every position before k (mutant MK2).
+func before(k int) []int {
+	out := make([]int, k)
+	for i := range out {
+		out[i] = i
+	}
+	return out
+}
+"""
+
+[[mutant]]
+id = "MK3"
+block = "TC1"
+kind = "go"
+pkg = "github.com/oioio-space/inkwell/protocol/trust"
+test = "TestSelfCutsCostAtSeal"
+expect = "K-1 sweeps"
+clause = "K-1 sweeps"
+why = "each self-cut sweeps its ancestors twice: twice the cost at the seal, the verdicts unchanged"
+
+[[mutant.edit]]
+file = "protocol/trust/fold.go"
+before = "\tc := v.verdict(v.sweep(v.anc[k].positions()), v.auth[k])\n"
+after = "\tv.sweep(v.anc[k].positions())\n\tc := v.verdict(v.sweep(v.anc[k].positions()), v.auth[k])\n"
+
+[[mutant]]
+id = "MK4"
+block = "TC1"
+kind = "go"
+pkg = "github.com/oioio-space/inkwell/protocol/trust"
+test = "TestCascadeSingleSweep"
+expect = "K-3 one sweep"
+clause = "K-3 one sweep"
+why = "the fold sweeps the whole list twice: the cascade is no longer decided by one sweep"
+
+[[mutant.edit]]
+file = "protocol/trust/fold.go"
+before = "\ts := v.sweep(all)\n"
+after = "\tv.sweep(all)\n\ts := v.sweep(all)\n"
+
+[[mutant]]
+id = "MK5"
+block = "TC1"
+kind = "go"
+pkg = "github.com/oioio-space/inkwell/protocol/trust"
+test = "TestSelfCutsCostAtSeal"
+expect = "K-1 sweeps"
+clause = "K-1 sweeps"
+why = "MK1's edit on chained cuts: without the memo a chain of s cuts costs 2^s sweeps; the chain of 12 fails (and the lists at the seal are not built) instead of running to the cap"
+
+[[mutant.edit]]
+file = "protocol/trust/fold.go"
+before = "\tv.memo[k] = c\n"
+after = ""
+
+[[mutant]]
+id = "MK6"
+block = "TC1"
+kind = "go"
+pkg = "github.com/oioio-space/inkwell/protocol/trust"
+test = "TestFoldCostWithinSelfCutBound"
+expect = "K-1 bound"
+clause = "K-1 bound"
+why = "MK3's edit on the random lists: two sweeps per judged self-cut pass the bound 1 + s as soon as more than half of a list's self-cuts are judged"
+
+[[mutant.edit]]
+file = "protocol/trust/fold.go"
+before = "\tc := v.verdict(v.sweep(v.anc[k].positions()), v.auth[k])\n"
+after = "\tv.sweep(v.anc[k].positions())\n\tc := v.verdict(v.sweep(v.anc[k].positions()), v.auth[k])\n"

@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"slices"
 	"testing"
-	"time"
 
 	"pgregory.net/rapid"
 )
@@ -251,7 +250,8 @@ func TestJuniorCutDoesNotBeatConcurrentRegrant(t *testing.T) {
 	}
 }
 
-// PoC N6: self-cuts of the creator, each judged on its own ancestors, stay cheap enough.
+// PoC N6: self-cuts of the creator, each judged on its own ancestors, keep the fold's cost to the
+// one TC1 states (K-1, K-2), asserted by counts: sibling cuts over a cascade, up to the seal.
 func TestCreatorSelfCutsCostBounded(t *testing.T) {
 	l, _, _ := buildCascade(t, 150)
 	a := newSigner(1)
@@ -264,21 +264,18 @@ func TestCreatorSelfCutsCostBounded(t *testing.T) {
 		mustApply(t, l, o)
 		last = h(o)
 	}
-	base := time.Now()
-	fold(l.ops)
-	baseline := time.Since(base)
+	wantFoldCost(t, l, nil, 1, l.Len()) // without the self-cuts: one sweep.
+	const m, s = 604, 420               // the ops before the cuts, all seen by each cut, and the cuts.
+	if l.Len() != m {
+		t.Fatalf("the list holds %d ops before the self-cuts, want %d", l.Len(), m)
+	}
+	var cuts []Hash
 	for i := 0; !l.Sealed(); i++ {
-		mustApply(t, l, craft(t, l, a, OpSetRole, a, RoleWriter, fmt.Sprint(i), last))
+		o := craft(t, l, a, OpSetRole, a, RoleWriter, fmt.Sprint(i), last)
+		mustApply(t, l, o)
+		cuts = append(cuts, o.Hash())
 	}
-	t0 := time.Now()
-	fold(l.ops)
-	d := time.Since(t0)
-	t.Logf("fold of %d ops: %v (without the self-cuts: %v)", l.Len(), d, baseline)
-	// Relative to the same fold without the self-cuts, so a loaded machine (-race, parallel
-	// packages) does not fail it: a blow-up shows as a ratio, not as wall-clock time.
-	if d > 5*time.Second && d > 50*baseline {
-		t.Errorf("fold took %v, %.0f× the fold without the self-cuts (%v)", d, float64(d)/float64(baseline), baseline)
-	}
+	wantFoldCost(t, l, cuts, 1+s, maxOps+s*m)
 }
 
 // PoC N7: strangers cannot fill the buffer of ops waiting for their parents.
