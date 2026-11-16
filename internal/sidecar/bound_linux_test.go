@@ -3,6 +3,7 @@ package sidecar
 import (
 	"context"
 	"fmt"
+	"math/rand/v2"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -126,14 +127,102 @@ func TestMemoryMaxBackstop(t *testing.T) {
 	}
 }
 
-// TestBoundSparesPageCache: memory.high counts the page cache, which reclaim
-// takes back at once, so a run that reads a file larger than its bound is a
-// legitimate run, not a bound violation (ADR 0044 point 1g). The file lives on
-// a disk filesystem: tmpfs pages are shmem, which is unreclaimable without swap.
+// TestBoundSparesPageCache: memory.high counts the page cache, so a run that
+// reads a file larger than its bound is a legitimate run, not a bound
+// violation (ADR 0044 point 1g). The file lives on a disk filesystem: tmpfs
+// pages are shmem, which is unreclaimable without swap. On slow storage the
+// pages waiting for their read cannot be reclaimed yet, so memory.current
+// stays above memory.high for longer than the watchdog's grace (160 ms to
+// 200 ms at 50 MB/s, measured 2026-11-16): the "slow storage" case caps the
+// scope's read bandwidth there with io.max, where the io controller is
+// delegated.
 func TestBoundSparesPageCache(t *testing.T) {
+	for _, c := range []struct {
+		name string
+		rbps uint64
+	}{{"local storage", 0}, {"slow storage", 50 << 20}} {
+		t.Run(c.name, func(t *testing.T) {
+			if !requireNScope(t) {
+				return
+			}
+			dir := pageCacheDir(t)
+			const size = 512 << 20 // four times the 128 MiB bound
+			writeEvicted(t, filepath.Join(dir, "data"), size)
+			device := ""
+			if c.rbps > 0 {
+				device = blockDevice(t, dir)
+			}
+			m := scopeManager(t)
+			s := residentSpec(t, m, "pagecache:data")
+			s.Dir = dir
+			var run map[string]uint64
+			var throttle error
+			m.beforeStart = func(r *cgroupRun) {
+				r.watch.beforeRead = func() { run, _ = readCounters(filepath.Join(r.path, "memory.events.local")) }
+				if device != "" {
+					throttle = throttleReads(r.session.path, device, c.rbps)
+				}
+			}
+			out, err := Run(t.Context(), s)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if throttle != nil {
+				t.Skipf("io controller not delegated to the scope (%v): slow storage cannot be shown", throttle)
+			}
+			if out.Containment != "cgroup" {
+				t.Fatal("no delegated user scope or PID namespaces available")
+			}
+			if out.Signal != 0 || out.ExitCode != 0 || out.MemoryCause != MemoryNone || string(out.Stdout) != fmt.Sprintf("read=%d\n", size) {
+				t.Fatalf("page-cache run: signal=%d exit=%d cause=%s stdout=%q stderr=%q, want a complete read and no bound", out.Signal, out.ExitCode, out.MemoryCause, out.Stdout, out.Stderr)
+			}
+			if run["high"] == 0 || run["oom_kill"] != 0 {
+				t.Fatalf("run counters %v: want the page cache to have reached memory.high, and no OOM kill", run)
+			}
+		})
+	}
+}
+
+// TestBoundCountsDirtyFileCache: dirty and writeback pages count against the
+// bound (ADR 0044 point 1g), and a run that writes four times its bound into a
+// regular file is still an ordinary run: the kernel throttles a cgroup's
+// dirtying to a share of its memory (dirty plus writeback peaked at 69 to
+// 102 MiB under a 128 MiB memory.high, the watchdog's measure at 53 to
+// 69 MiB, measured 2026-11-16), so it completes, with no bound outcome and
+// no OOM kill. The output is on disk, not the tier-N tmpfs (whose pages are
+// shmem and count anyway).
+func TestBoundCountsDirtyFileCache(t *testing.T) {
 	if !requireNScope(t) {
 		return
 	}
+	dir := pageCacheDir(t)
+	m := scopeManager(t)
+	path := filepath.Join(dir, "out")
+	s := residentSpec(t, m, "dirty:"+path)
+	s.Dir = dir
+	s.WatchDir, s.MaxDirBytes, s.WriteFiles, s.FileSizeLimit = dir, 1<<30, []string{"out"}, 1<<30
+	var run map[string]uint64
+	m.beforeStart = func(r *cgroupRun) {
+		r.watch.beforeRead = func() { run, _ = readCounters(filepath.Join(r.path, "memory.events.local")) }
+	}
+	out, err := runWithoutMount(t.Context(), s)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if out.Containment != "cgroup" {
+		t.Fatal("no delegated user scope or PID namespaces available")
+	}
+	if out.Signal != 0 || out.ExitCode != 0 || out.MemoryCause != MemoryNone || string(out.Stdout) != fmt.Sprintf("wrote=%d\n", 512<<20) {
+		t.Fatalf("S-11 page cache: dirty run: signal=%d exit=%d cause=%s stdout=%q stderr=%q, want a complete write and no bound", out.Signal, out.ExitCode, out.MemoryCause, out.Stdout, out.Stderr)
+	}
+	if run["high"] == 0 || run["oom_kill"] != 0 {
+		t.Fatalf("run counters %v: want the dirty cache to have reached memory.high, and no OOM kill", run)
+	}
+}
+
+// pageCacheDir is a fresh directory on a disk filesystem, removed at cleanup.
+func pageCacheDir(t *testing.T) string {
+	t.Helper()
 	cache, err := os.UserCacheDir()
 	if err != nil {
 		t.Fatal(err)
@@ -150,28 +239,58 @@ func TestBoundSparesPageCache(t *testing.T) {
 	if err := unix.Statfs(dir, &fs); err != nil || fs.Type == unix.TMPFS_MAGIC {
 		t.Fatalf("%s is not on a disk filesystem (statfs %v, type %#x)", dir, err, fs.Type)
 	}
-	const size = 512 << 20 // four times the 128 MiB bound
-	writeEvicted(t, filepath.Join(dir, "data"), size)
-	m := scopeManager(t)
-	s := residentSpec(t, m, "pagecache:data")
-	s.Dir = dir
-	var run map[string]uint64
-	m.beforeStart = func(r *cgroupRun) {
-		r.watch.beforeRead = func() { run, _ = readCounters(filepath.Join(r.path, "memory.events.local")) }
-	}
-	out, err := Run(t.Context(), s)
+	return dir
+}
+
+// blockDevice is the "major:minor" of the whole disk under dir's mount, as
+// io.max names it: the mount's source device, or its parent if a partition.
+func blockDevice(t *testing.T, dir string) string {
+	t.Helper()
+	b, err := os.ReadFile("/proc/self/mountinfo")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if out.Containment != "cgroup" {
-		t.Fatal("no delegated user scope or PID namespaces available")
+	source, longest := "", -1
+	for line := range strings.SplitSeq(strings.TrimSpace(string(b)), "\n") {
+		pre, post, ok := strings.Cut(line, " - ")
+		f, g := strings.Fields(pre), strings.Fields(post)
+		if !ok || len(f) < 5 || len(g) < 2 {
+			continue
+		}
+		mount := f[4]
+		if (dir == mount || strings.HasPrefix(dir, strings.TrimSuffix(mount, "/")+"/")) && len(mount) > longest {
+			source, longest = g[1], len(mount)
+		}
 	}
-	if out.Signal != 0 || out.ExitCode != 0 || out.MemoryCause != MemoryNone || string(out.Stdout) != fmt.Sprintf("read=%d\n", size) {
-		t.Fatalf("page-cache run: signal=%d exit=%d cause=%s stdout=%q stderr=%q, want a complete read and no bound", out.Signal, out.ExitCode, out.MemoryCause, out.Stdout, out.Stderr)
+	var st unix.Stat_t
+	if err := unix.Stat(source, &st); err != nil || st.Mode&unix.S_IFMT != unix.S_IFBLK {
+		t.Skipf("%s is not on a block device (%q: %v)", dir, source, err)
 	}
-	if run["high"] == 0 || run["oom_kill"] != 0 {
-		t.Fatalf("run counters %v: want the page cache to have reached memory.high, and no OOM kill", run)
+	sys, err := filepath.EvalSymlinks(fmt.Sprintf("/sys/dev/block/%d:%d", unix.Major(st.Rdev), unix.Minor(st.Rdev)))
+	if err != nil {
+		t.Fatal(err)
 	}
+	if _, err := os.Stat(filepath.Join(sys, "partition")); err == nil {
+		sys = filepath.Dir(sys)
+	}
+	dev, err := os.ReadFile(filepath.Join(sys, "dev"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	return strings.TrimSpace(string(dev))
+}
+
+// throttleReads caps the read bandwidth of every process of the scope on
+// device, through the scope's io.max.
+func throttleReads(scope, device string, rbps uint64) error {
+	controllers, err := readValue(filepath.Join(scope, "cgroup.controllers"))
+	if err != nil {
+		return err
+	}
+	if !containsWord(controllers, "io") {
+		return fmt.Errorf("controllers %q", controllers)
+	}
+	return writeValue(filepath.Join(scope, "io.max"), fmt.Sprintf("%s rbps=%d", device, rbps))
 }
 
 // writeEvicted writes size bytes to path, flushes them and drops them from
@@ -183,10 +302,11 @@ func writeEvicted(t *testing.T, path string, size int) {
 		t.Fatal(err)
 	}
 	defer func() { _ = f.Close() }()
+	// Pseudo-random, not a pattern: a filesystem could store zeros as holes,
+	// and a compressing one (btrfs compress=zstd) would read a pattern from
+	// storage in a few megabytes.
 	chunk := make([]byte, 1<<20)
-	for i := range chunk {
-		chunk[i] = byte(i*7 + 1) // not zeros: a filesystem could store zeros as holes
-	}
+	_, _ = rand.NewChaCha8([32]byte{1}).Read(chunk)
 	for range size / len(chunk) {
 		if _, err := f.Write(chunk); err != nil {
 			t.Fatal(err)
