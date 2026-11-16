@@ -40,6 +40,39 @@ async function until(cond: () => boolean, ms = 5000): Promise<void> {
   }
 }
 
+/**
+ * Dials like `open`, but holds the peer messages Go delivers (control frames pass) until
+ * released; a socket dialled after the release is not held.
+ */
+function holdPeerMessages(open: () => SocketLike): { open: () => SocketLike; release: () => void } {
+  let held: (() => void)[] | undefined = [];
+  const dial = (): SocketLike => {
+    const inner = open();
+    const socket: SocketLike = {
+      binaryType: "",
+      send: (data) => inner.send(data),
+      close: () => inner.close(),
+      onopen: null,
+      onclose: null,
+      onmessage: null,
+    };
+    inner.onopen = (ev) => socket.onopen?.(ev);
+    inner.onclose = (ev) => socket.onclose?.(ev);
+    inner.onmessage = (ev) => {
+      const kind = decodeEnvelope(new Uint8Array(ev.data as ArrayBuffer)).kind;
+      if (held && kind === Kind.Message) held.push(() => socket.onmessage?.(ev));
+      else socket.onmessage?.(ev);
+    };
+    return socket;
+  };
+  const release = () => {
+    const queue = held ?? [];
+    held = undefined;
+    for (const deliver of queue) deliver();
+  };
+  return { open: dial, release };
+}
+
 describe("WailsNetworkAdapter", () => {
   it("announces a peer only after the repo handshake", async () => {
     const net = new SimNet(1);
@@ -269,7 +302,8 @@ describe("WailsNetworkAdapter", () => {
     // shared, it would keep the indicator on « checking » for good, as the previous root does
     // right after a join that changes the root.
     const net = new SimNet(1);
-    const adapter = new WailsNetworkAdapter(() => net.socket("a"), {
+    const toA = holdPeerMessages(() => net.socket("a"));
+    const adapter = new WailsNetworkAdapter(toA.open, {
       reconnectDelayMs: 5,
       admitted: (doc) => doc === "d1",
     });
@@ -281,8 +315,13 @@ describe("WailsNetworkAdapter", () => {
     repos.push(a);
     const b = peer(net, "b");
     net.link("a", "b");
-    await until(() => b.connected.has("a") && adapter.heardHeads("b") !== undefined);
-    await until(() => adapter.syncCounts("b") !== undefined);
+    // The handshake is not symmetric in time: b announces a on a's « arrive » while b's own
+    // « arrive » (or « welcome ») is still on its way to a. Under load the test once woke up in
+    // that gap; the held frames force it. Only a's own announcement makes b a peer it shares with.
+    await until(() => b.connected.has("a"));
+    expect(adapter.announcedPeers(), "b sees a before a sees b").not.toContain("b");
+    toA.release();
+    await until(() => adapter.announcedPeers().includes("b"));
     const send = (documentId: string) =>
       adapter.send({
         type: "sync",
