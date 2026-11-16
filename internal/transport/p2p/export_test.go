@@ -88,6 +88,10 @@ func (n *Node) OutDirect(id transport.PeerID) (direct, ok bool) {
 // MuxConfig is the yamux configuration the node and the relay pass to libp2p.
 func MuxConfig() *yamux.Config { return muxConfig() }
 
+// KnownDialTimeout bounds an attempt at a peer's last known addresses, for the tests whose
+// bounds derive from it.
+const KnownDialTimeout = knownDialTimeout
+
 // The muxer's constants, for the tests that derive their scenarios from them.
 const (
 	MuxWriteTimeout = muxWriteTimeout

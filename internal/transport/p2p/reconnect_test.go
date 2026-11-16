@@ -21,8 +21,10 @@ import (
 
 // The bounds of docs/plans/2026-11-12-rc1-reconnect.md §6.
 const (
+	// handshakeAllowance is what a handshake at a valid address may take (§6 step 2).
+	handshakeAllowance = 5 * time.Second
 	// reconnectBound is R = knownDialTimeout + 5 s: the restarted device holds a valid address.
-	reconnectBound = 15 * time.Second
+	reconnectBound = p2p.KnownDialTimeout + handshakeAllowance
 	// sleepingBound: only the surviving device holds one, and its dial loop sleeps (75 s + 10 s
 	// + 5 s).
 	sleepingBound = 90 * time.Second
@@ -481,22 +483,51 @@ func TestReconnectUnderSightingFlood(t *testing.T) {
 
 // TestReconnectRoamedSaturated: second review 2, a member whose 8 authenticated addresses all went
 // stale (it moved) is still found by a sighting on the local network: mDNS addresses have places of
-// their own.
+// their own. A wake ends the loop's pause, never an attempt under way (sightings can be forged, and
+// must not cut the authenticated attempts short): seen during the pause, the member is up within
+// the handshake's allowance; seen as a round of stale addresses starts, within that round's
+// attempt (knownDialTimeout) more, the bound R. Both instants are taken from the dial loop itself,
+// so that each seed meets each case.
 func TestReconnectRoamedSaturated(t *testing.T) {
-	forSeeds(t, func(t *testing.T, nn *natNet) {
-		bID := idOf(key(2))
-		var stale []string
-		for i := range 8 {
-			stale = append(stale, fmt.Sprintf("/ip4/1.2.9.%d/udp/8000/quic-v1", i+1)) // nobody there
-		}
-		book := &p2p.MemBook{}
-		book.Set(p2p.BookFile(time.Now(), map[transport.PeerID][]string{bID: stale}))
-		a := nn.node(t, 1, p2p.Options{Book: book})
-		a.Want(map[transport.PeerID][]string{bID: nil})
-		b := nn.lanNode(t, 2, p2p.Options{})
-		time.Sleep(awayFor)
-		id, _ := p2p.LibP2PID(bID)
-		a.SightLAN(peer.AddrInfo{ID: id, Addrs: []ma.Multiaddr{ma.StringCast(directAddr(b))}})
-		expectEventWithin(t, a, transport.PeerUp, b.Local(), 5*time.Second)
-	})
+	for _, c := range []struct {
+		name   string
+		after  time.Duration // from the start of a round of stale addresses to the sighting
+		within time.Duration
+	}{
+		{"inPause", p2p.KnownDialTimeout, handshakeAllowance}, // the round has failed: the loop sleeps
+		{"atRoundStart", 0, reconnectBound},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			forSeeds(t, func(t *testing.T, nn *natNet) {
+				bID := idOf(key(2))
+				var stale []string
+				for i := range 8 {
+					stale = append(stale, fmt.Sprintf("/ip4/1.2.9.%d/udp/8000/quic-v1", i+1)) // nobody there
+				}
+				book := &p2p.MemBook{}
+				book.Set(p2p.BookFile(time.Now(), map[transport.PeerID][]string{bID: stale}))
+				var armed atomic.Bool
+				round := make(chan struct{}, 1)
+				o := p2p.Options{Book: book}
+				p2p.SetOnDial(&o, func(to transport.PeerID, addrs []string) {
+					if to == bID && len(addrs) == len(stale) && armed.Load() {
+						select {
+						case round <- struct{}{}:
+						default:
+						}
+					}
+				})
+				a := nn.node(t, 1, o)
+				a.Want(map[transport.PeerID][]string{bID: nil})
+				b := nn.lanNode(t, 2, p2p.Options{})
+				time.Sleep(awayFor) // the loop's backoff is at its longest
+				armed.Store(true)
+				<-round // the next round of stale addresses starts
+				time.Sleep(c.after)
+				id, _ := p2p.LibP2PID(bID)
+				a.SightLAN(peer.AddrInfo{ID: id, Addrs: []ma.Multiaddr{ma.StringCast(directAddr(b))}})
+				expectEventWithin(t, a, transport.PeerUp, b.Local(), c.within)
+			})
+		})
+	}
 }
