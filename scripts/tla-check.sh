@@ -2,7 +2,7 @@
 # P-TLA (ADR 0034 step 3, docs/protocol/tla/README.md): fetch the pinned TLA+ tools
 # (tla2tools.jar SHA-256 checked, never committed) and model-check the models
 # (RepoGen, ConnCredit, SyncIndicator, WriteBudget, SendPath, LinkProbe, OISingleInstance, SandboxScope,
-# ProjectChange).
+# ProjectChange, DirectUpgrade).
 #
 # Sound models must finish with no error; every mutant listed in the README must be
 # detected (a violation). The task fails if a sound model violates a property OR if a
@@ -219,6 +219,59 @@ WitnessJoinAnnounced NoJoinAnnounced
 WitnessCrashAfterInstall NoCrashAfterInstall
 WitnessFailedWrite NoFailedNotice
 WitnessWriteRefused NoRefusedWrite
+MUTANTS
+
+# DirectUpgrade (README "DirectUpgrade", block HP1, plan 2026-11-16-hp1-direct-upgrade.md §6): a relayed link
+# to a wanted peer keeps trying to become direct. Byzantine is invariants only (its liveness: the honest configs).
+run DirectUpgradeHonest DirectUpgradeHonest.cfg DirectUpgrade sound
+run DirectUpgradeSilent DirectUpgradeSilent.cfg DirectUpgrade sound
+run DirectUpgradeTwoCircuits DirectUpgradeTwoCircuits.cfg DirectUpgrade sound
+run DirectUpgradeAnswerer DirectUpgradeAnswerer.cfg DirectUpgrade sound
+run DirectUpgradeTwoPeers DirectUpgradeTwoPeers.cfg DirectUpgrade sound
+run DirectUpgradeLostPush DirectUpgradeLostPush.cfg DirectUpgrade sound
+run DirectUpgradeByzantine DirectUpgradeByzantine.cfg DirectUpgrade safety
+# DirectUpgrade mutants (M1-M29) and witnesses (anti-vacuity):
+# each must be caught by the property its README row names.
+while read -r m prop; do
+  run "DirectUpgrade$m" "mutants/DirectUpgrade$m.cfg" mutants/DirectUpgradeMutants mutant "$prop"
+done <<'MUTANTS'
+NoRetry Upgrades
+StaleApplied StaleIgnored
+StaleAppliedLive Upgrades
+BusyTakesToken BusyFree
+AnyPeer NoLaunchUnwanted
+OutboundPunch RoleOK
+LowerOnly Upgrades
+EpochRefills RoundBudget
+SchedulerOnly RoundBudget
+NoLocalReady NoLaunchUnready
+StopAtCap Upgrades
+NoCap GlobalCap
+WhileDirect NoLaunchDirect
+WhileInFlight OneCall
+GateAnyPeer NoRoundUnwanted
+NoDeadline BusyEnds
+EpochRefillsAttempts AttemptBudget
+RemoteGuard Upgrades
+AnyOrder BusyEnds
+PreDialFree DestBudget
+GaterAnyPeer NoDialUnwanted
+IdleIgnored NoLadderCallIdle
+StaySuspended Upgrades
+GrantFree AdmissionBudget
+H15Off Upgrades
+NoClose DupResolves
+NoAllowance NoUnallowedDial
+GaterNoLease NoUnallowedDial
+TicketAny NoTicketUnwanted
+PlaceLost Upgrades
+WitnessDirect NoDirect
+WitnessStale NoStaleResult
+WitnessBusy NoBusy
+WitnessSlow NoSlowStep
+WitnessGateRefusal NoGateRefusal
+WitnessWaitBehind NoWaitBehind
+WitnessCross NoCross
 MUTANTS
 
 exit "$fail"

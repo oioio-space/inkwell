@@ -42,6 +42,22 @@ MUTANTS = [
     ("Tree.als", "OneParent",
      "(no n.parent or n in breakers) => p = Root else p = n.parent",
      "(n in breakers) => p = Root else p = n.parent"),
+    # HP1 (plan 2026-11-16-hp1-direct-upgrade.md §3.4, H-3): who initiates the DCUtR exchange.
+    ("DirectUpgradeRoles.als", "SomeEligibleAccepted",   # lower PeerID only: stalls on the lower side's outbound
+     "pred eligible[s: Side] { holdsInbound[s] }",
+     "pred eligible[s: Side] { holdsInbound[s] and s in Lower }"),
+    ("DirectUpgradeRoles.als", "AcceptedIsEligible",     # lower PeerID only forbids the side that would succeed
+     "pred eligible[s: Side] { holdsInbound[s] }",
+     "pred eligible[s: Side] { holdsInbound[s] and s in Lower }"),
+    ("DirectUpgradeRoles.als", "PunchNeedsInbound",      # the outbound side punches too
+     "pred eligible[s: Side] { holdsInbound[s] }",
+     "pred eligible[s: Side] { some Circuit }"),
+    ("DirectUpgradeRoles.als", "SomeEligibleAccepted",   # NewStream picks the oldest: both ends pick their outbound
+     "localTime[a, s] > localTime[b, s])",
+     "localTime[a, s] < localTime[b, s])"),
+    ("DirectUpgradeRoles.als", "SomeEligibleAccepted",   # no handshake delay: a full tie lets both pick their outbound
+     "all c: Circuit | c.delay >= 1   --",
+     "all c: Circuit | c.delay >= 0   --"),
 ]
 
 

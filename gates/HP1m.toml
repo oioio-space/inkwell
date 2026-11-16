@@ -1,0 +1,15 @@
+# FROZEN 2026-11-16 after two Codex reviews (gates/HP1/WITNESSES.md, plan « Codex debate »). Second gate of block HP1, run on the same candidate after gates/HP1.toml (header of
+# gates/HP1.toml: five gates, split on 2026-11-16 to fit rule G-1's 45 min without dropping a proof). Plan:
+# docs/plans/2026-11-16-hp1-direct-upgrade.md (§4 rules and their mutants); models docs/protocol/tla/DirectUpgrade.tla,
+# alloy/DirectUpgradeRoles.als. This gate: the Go mutants of block HP1 (scripts/netsim/mutants.toml; their entries are
+# frozen by gates/HP1.toml's `mutant-tool` table). Every command is capped; scripts/gate.py refuses caps past
+# max_minutes (PC1a rule G-1). Red witnesses: gates/HP1m/WITNESSES.md.
+max_minutes = 45
+raw_results = ["docs/plans/2026-11-16-hp1-direct-upgrade.md", "docs/protocol/tla/DirectUpgrade.tla", "docs/protocol/alloy/DirectUpgradeRoles.als", "gates/HP1m/*"]
+
+[[criteria]]
+# MH1..MH22 (one per rule, H-12, H-16 and H-5 twice, H-15 once since its adoption), each caught by its named test
+# failing with its expect text (never by a build failure, a timeout or another test). 22 mutants: 6 pure (about 15 s
+# each) and 16 in internal/transport/p2p (a copy of the tree and a build, about 60 s each), about 1 050 s.
+id = "mutants"
+command = "timeout -k 10 1800 ./scripts/heavy.sh python3 -I scripts/netsim/mutants.py HP1 MH1 MH2 MH3 MH4 MH5 MH6 MH7 MH8 MH9 MH10 MH11 MH12 MH13 MH14 MH15 MH16 MH17 MH18 MH19 MH20 MH21 MH22"

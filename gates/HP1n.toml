@@ -1,0 +1,43 @@
+# FROZEN 2026-11-16 after two Codex reviews (gates/HP1/WITNESSES.md, plan « Codex debate »). Third gate of block HP1, run on the same candidate after gates/HP1.toml and gates/HP1m.toml (header of gates/HP1.toml:
+# five gates, split on 2026-11-16 to fit rule G-1's 45 min without dropping a proof of plan §9). Plan:
+# docs/plans/2026-11-16-hp1-direct-upgrade.md; models docs/protocol/tla/DirectUpgrade.tla, alloy/DirectUpgradeRoles.als.
+# This gate: scenario 9 « a device restarts while linked » (new, plan Q4) on three seeds, and the netsim scenarios HP1
+# can affect that §9 does not name (1-4, 6, 7). Wall-clock criteria: each run.sh takes the machine with
+# `heavy.sh --exclusive`; INKWELL_PERF_LOAD_WAIT bounds the wait for an idle machine, inside the cap. Every command is
+# capped (`timeout -k 10 N`); scripts/gate.py refuses caps past max_minutes (PC1a rule G-1). Red witnesses:
+# gates/HP1n/WITNESSES.md.
+max_minutes = 45
+raw_results = ["docs/plans/2026-11-16-hp1-direct-upgrade.md", "docs/protocol/tla/DirectUpgrade.tla", "docs/protocol/alloy/DirectUpgradeRoles.als", "gates/HP1n/*"]
+
+[[criteria]]
+# Scenario 9 (two NATed devices and a relay; bob's process restarts: C1 direct within 30 s, C2 converge, C3a), seeds
+# 20771, 20772, 20773, once each (the plan gives no repeat count), strict; in the same run the default scenarios 1-4
+# (1: the direct upgrade itself; 2: 0 packets across symmetric NATs, which HP1's retries must not break; 3, 4: offline
+# and roaming). Then 6 and 7 (relayed under impairment) on seed 20772, characterize: 7's C2 is a declared known failure,
+# so pass or known-failure only. Both runs always run; a skipped simulation leaves no result file and fails here.
+# run.sh wipes .task/netsim at start (scripts/netsim/run.sh: rm -rf "$state"), so each run's result files are copied
+# to .task/hp1n-results right after it, and only those copies are read (Codex freeze review, B5).
+id = "netsim"
+command = '''rm -rf .task/hp1n-results && mkdir -p .task/hp1n-results && timeout -k 10 240 ./scripts/heavy.sh mise run e2e:build && { NETSIM_SCENARIOS="1 2 3 4 9" NETSIM_SEEDS="20771 20772 20773" NETSIM_EXPECT=strict INKWELL_E2E_BROWSER=chromium INKWELL_PERF_LOAD_WAIT=180 timeout -k 10 1500 ./scripts/heavy.sh --exclusive ./scripts/netsim/run.sh; a=$?; cp .task/netsim/results/*.json .task/hp1n-results/ 2>/dev/null; NETSIM_SCENARIOS="6 7" NETSIM_SEEDS=20772 NETSIM_EXPECT=characterize INKWELL_E2E_BROWSER=chromium INKWELL_PERF_LOAD_WAIT=180 timeout -k 10 360 ./scripts/heavy.sh --exclusive ./scripts/netsim/run.sh; b=$?; cp .task/netsim/results/*.json .task/hp1n-results/ 2>/dev/null; python3 -I - "$a" "$b" <<'PY'
+import json, pathlib, sys
+bad = []
+for seed in (20771, 20772, 20773):
+    p = pathlib.Path(f".task/hp1n-results/9-s{seed}.json")
+    if not p.exists():
+        bad.append(f"{p.name} missing")
+        continue
+    r = json.loads(p.read_text())
+    got = {c["id"] for c in r["clauses"]}
+    red = [f'{c["id"]} {c["status"]}: {c.get("measured", "")[:80]}' for c in r["clauses"] if c["status"] != "pass"]
+    if r.get("expect") != "strict" or not {"C1", "C2", "C3a"} <= got or red:
+        bad.append(f"{p.name}: expect {r.get('expect')}, missing {sorted({'C1', 'C2', 'C3a'} - got)}, red {red}")
+for run in ("6-s20772", "7-s20772"):
+    p = pathlib.Path(f".task/hp1n-results/{run}.json")
+    if not p.exists():
+        bad.append(f"{p.name} missing")
+        continue
+    bad += [f'{run} {c["id"]} {c["status"]}' for c in json.loads(p.read_text())["clauses"] if c["status"] not in ("pass", "known-failure")]
+if sys.argv[1:] != ["0", "0"] or bad:
+    sys.exit(f"HP1n netsim: exit {sys.argv[1]} (1-4, 9) and {sys.argv[2]} (6, 7), {bad}")
+PY
+}'''

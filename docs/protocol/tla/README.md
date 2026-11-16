@@ -790,3 +790,136 @@ java -cp tla2tools.jar tlc2.TLC -workers 2 -config ProjectChange.cfg ProjectChan
 java -cp tla2tools.jar tlc2.TLC -workers 2 -config mutants/ProjectChangeLiveAdopt.cfg mutants/ProjectChangeMutants
 INKWELL_TLA_ONLY='^ProjectChange' ./scripts/tla-check.sh    # the 23 ProjectChange runs only, about 130 s (measured 132 s)
 ```
+
+## DirectUpgrade (block HP1: a relayed link to a wanted peer keeps trying to become direct)
+
+Rule: `docs/plans/2026-11-16-hp1-direct-upgrade.md`, rules H-1..H-17, section 6, revised after the Codex debate
+(D1-D6) and the freeze review (B1-B6). `DirectUpgrade.tla` models two nodes. L is modelled in full: its upgrader (the policy of
+`protocol/directup`: Off, NotReady = `idle`, Scheduled, InFlight, Direct; ladders; epochs; the attempt bucket; the
+app's activity), its calls (Punch = the fork's cancellable `DirectConnectContext`, with the direct dial libp2p makes
+first to every peerstore address once one is public; Dial = a forced direct dial), libp2p's one-shot on a new inbound
+circuit (`Auto`, which holds libp2p's per-peer lock: our call is then Busy), and the answerer side of R's exchanges.
+Every round, whatever its origin, passes L's two choke points: the address filter (the gate: wanted, round bucket,
+FIFO admission to a node-wide slot with a lease, one ticket per peer, none for a peer not wanted; a round that gives
+up waiting keeps its ticket's place and a grant to it is held for its peer) and the connection gater (wanted, a bucket
+of non-relay destinations, and only under a held grant, within its allowance: libp2p's first direct dial of its
+one-shot holds no grant and is refused). R is honest (its upgrader under the same role rule, paced by time, and its one-shot; its
+exchanges run concurrently with L's) or Byzantine (starts exchanges at will, reconnects, toggles `/libp2p/dcutr`,
+refuses or stalls as answerer). Other peers ask for slots and may keep them until their lease ends.
+
+- **Circuits and picks**: circuits are named by their dialler (`LR`: L dialled). A DCUtR stream rides the circuit its
+  sender's `NewStream` picks (`chL`, `chR`); the answerer resets a stream that arrives on its inbound circuit. Any pair
+  of picks may last for ever (Alloy `BothAccepted`: both ends on their own inbound circuit, two exchanges at once);
+  only « both outbound » is left by a fair step (`Settle`), because it needs unequal stream counts (Alloy
+  `SomeEligibleAccepted`), which last only while an opening is in flight.
+- **Overlap**: `crossed` records that the pair's two punch phases overlapped; with `CrossCancel`, such punches may
+  both fail. Whether they do on libp2p is unknown; `TwoCircuits` assumes they may and checks the adopted rule H-15
+  (with two circuits nobody initiates, the circuit the higher PeerID dialled is closed: `Resolve`).
+- **Epochs**: a new circuit (E7) marks the call in flight `stale` and cancels it (D1) unless it is already punching.
+- **Time**: `Tick` is one unit; due times and leases count down, `since` is the time since the last call started
+  (capped), buckets refill on one free-running clock. `Tick` waits while R's slot is at its last unit and the pair has
+  work at L that libp2p's own deadlines end within the lease (an upper-bound timer); a lease that ends cancels what is
+  left. Ladders and caps are scaled (fast 1, slow 1 then 2, `Off` 1, leases 2).
+- **Budgets** are checked against **reference buckets** driven only by the clock and what really happens: rounds
+  (S5), non-Busy calls (S10), non-relay destinations (S12), node-wide admissions (S15). A run stays within a (σ, ρ)
+  bound in every window iff its reference never goes negative; a Busy charged shows as a real bucket below its
+  reference (S11).
+- **Liveness** assumptions (weak fairness): `Tick`, every step of a running call, one-shot or exchange, L's actor,
+  identify (E2, E3), both handlers registering, an honest R starting exchanges, `Settle`, `Resolve`, the app waking
+  (`<>[]active`, idle periods bounded), the queue (joining, leaving, the semaphore handing a freed slot to the head),
+  and `Open` (`<>[]punchable`, closes bounded). No fairness on dials, restarts, losses, wanted flips, closes, pick
+  changes, idling, other peers asking for, using or giving back a slot, a round giving up its wait in the
+  filter (it keeps its ticket), or a Byzantine R. An honest R that gave up comes back within the hold of its grant
+  (`Tick` waits for it at the lease's last unit: its fast ladder is shorter than the 75 s lease).
+
+Not covered (named tests or vectors instead): Settling and the nudge of `maybeUpgrade` (H-13, Go sim); E8 (H-9, pure);
+jitter and the real ladder values (H-8, pure); the three address kinds and the ≤ 3 per round (H-12, vectors: one
+destination unit per punch here); classification from libp2p errors (H-7, vectors); the filter's 20 s wait bound
+(Go sim); whether overlapping punches cancel (Go measurement); more than one other peer.
+
+| Property | Rule | Meaning |
+|---|---|---|
+| `OneCall` (S1) | H-4 | at most one of L's calls for R is in flight, a cancelled one included |
+| `NoLaunchUnwanted` (S2) | H-1, H-14 | no live call for a peer that is not wanted |
+| `NoLaunchDirect` (S3) | H-14 | no live call while the session is direct |
+| `RoleOK` (S4) | H-3 | a live Punch holds an inbound circuit; a live Dial holds an outbound circuit only, to a public peer |
+| `RoundBudget` (S5) | H-12 | rounds through the gate, every origin, stay within (RCap, RPeriod) |
+| `NoRoundUnwanted` (S6) | H-12 | zero rounds with a peer that is not wanted |
+| `NoLaunchUnready` (S7) | H-2 | no live call before our handler is registered |
+| `StaleIgnored` (S8) | H-6 | a result of an older epoch changes neither the ladders, the due time nor the state |
+| `GlobalCap` (S9) | H-5 | at most K slots held on the node, every origin |
+| `AttemptBudget` (S10) | H-11 | non-Busy calls stay within (ACap, APeriod), across epochs, reconnections and un-want |
+| `BusyFree` (S11) | H-7 | a Busy call is never charged |
+| `DestBudget` (S12) | H-12 | non-relay destinations, every origin (DirectConnect's first direct dial included), stay within (DCap, RPeriod) |
+| `NoDialUnwanted` (S13) | H-12 | no non-relay dial to a peer that is not wanted: a stranger has no direct path |
+| `NoLadderCallIdle` (S14) | H-17 | no ladder-driven call while the app is idle |
+| `AdmissionBudget` (S15) | H-16 | node-wide slot grants stay within (NCap, APeriod) |
+| `NoUnallowedDial` (S16) | H-16 | every non-relay destination, every origin (other peers' rounds sharing a grant, libp2p's first direct dial), is drawn from a held grant's allowance: with S15, node-wide destinations ≤ allowance × admissions |
+| `NoTicketUnwanted` (S17) | H-1, H-5 | a peer that is not wanted never takes a ticket nor a grant |
+| `Upgrades` (L1) | H-2, H-3, H-6, H-8, H-10, H-17 | `wanted ∧ relayed ~> direct ∨ ¬wanted ∨ no circuit` |
+| `BusyEnds` (L2) | H-4, H-5, H-7 | waiting for a slot or Busy does not repeat forever, even with another peer asking without end and never giving its slot back |
+| `DupResolves` (L3) | H-15 | two circuits do not last: the one the higher PeerID dialled is closed |
+
+| Configuration | Result (TLC 1.8.0, 2 workers, 2026-11-16, `heavy.sh --exclusive`, S1-S17 in every one) |
+|---|---|
+| `DirectUpgradeHonest.cfg`: one circuit at a time in either direction, R public or not (DirectConnect's first direct dial); R restarts once, 2 new circuits, the direct connection lost once; K = 2 | **exhaustive, no error**: 692,918 states, 170,697 distinct, depth 32, liveness included, 44s |
+| `DirectUpgradeSilent.cfg`: one circuit R dialled (L is the only initiator); the direct path closes and opens with no event; the app idles once | **exhaustive, no error**: 38,300 states, 10,324 distinct, depth 25, liveness included, 04s |
+| `DirectUpgradeTwoCircuits.cfg`: circuits both ways, any durable picks, both PeerID orders, rounds and destinations buckets of 2, overlaps may cancel, H-15 | **exhaustive, no error**: 629,210 states, 152,846 distinct, depth 40, liveness included, 52s |
+| `DirectUpgradeTwoPeers.cfg`: one circuit R dialled, redialled once; one slot (K = 1), granted FIFO, another peer asking for ever, dialling within its grants and never giving them back | **exhaustive, no error**: 328,870 states, 69,688 distinct, depth 31, liveness included, 23s |
+| `DirectUpgradeAnswerer.cfg`: one circuit L dialled, R not public: R is the only initiator; its rounds wait in L's filter, give up and come back; one slot shared with a peer asking for ever | **exhaustive, no error**: 23,244 states, 5,400 distinct, depth 23, liveness included, 02s |
+| `DirectUpgradeLostPush.cfg`: one circuit R dialled (L is the only initiator); R's push after its handler registers may be lost; the poll calls (`remoteReady` a trigger) | **exhaustive, no error**: 20,788 states, 6,914 distinct, depth 24, liveness included, 02s |
+| `DirectUpgradeByzantine.cfg`: Byzantine R, one circuit at a time, 2 new circuits, wanted flips once, R public or not, leases and node bucket of 2 (liveness: the honest configurations) | **exhaustive, no error**: 6,854,792 states, 994,752 distinct, depth 29, invariants, 18s |
+
+Mutants (`mutants/DirectUpgradeMutants.tla`, each config overrides one rule of the sound model with the constants of
+the configuration named; anchor = the override line in the config). `scripts/tla-check.sh` checks that TLC's message
+names the property of the row.
+
+| Mutant | Anchor (config line) | Broken rule | Configuration | Caught by |
+|---|---|---|---|---|
+| `DirectUpgradeNoRetry` (M1) | `Retry <- NoRetry` | no retry, libp2p's one-shot only (H-8) | Silent | `Upgrades` |
+| `DirectUpgradeStaleApplied` (M2) | `ApplyStale <- StaleApplied` | a result of an older epoch is applied (H-6) | Byzantine | `StaleIgnored` |
+| `DirectUpgradeStaleAppliedLive` (M2) | `ApplyStale <- StaleApplied` | the same: a stale Success taken after a fallback stops the upgrader | Honest | `Upgrades` |
+| `DirectUpgradeBusyTakesToken` (M3) | `BusyCharge <- BusyTakesToken` | Busy takes an attempt token (H-7) | Honest | `BusyFree` |
+| `DirectUpgradeAnyPeer` (M4) | `WantedOK <- AnyPeer` | no wanted check (H-1) | Byzantine | `NoLaunchUnwanted` |
+| `DirectUpgradeOutboundPunch` (M5) | `HasRole <- AnyCircuit` | the side that only dialled punches (H-3) | Honest | `RoleOK` |
+| `DirectUpgradeLowerOnly` (M6) | `TieOK <- LowerOnly` | « lower PeerID only » (§3.4): both ends pick the lower side's outbound circuit, the higher side, whose stream would be accepted, never initiates | TwoCircuits | `Upgrades` |
+| `DirectUpgradeEpochRefills` (M7) | `EpochRounds <- RefillRounds` (and `EpochAtt <- RefillAttempts`) | a new circuit refills the buckets (H-9) | Byzantine | `RoundBudget` |
+| `DirectUpgradeSchedulerOnly` (M8) | `GateBudget <- SchedulerOnly` | the round budget in the scheduler only (H-12) | Byzantine | `RoundBudget` |
+| `DirectUpgradeNoLocalReady` (M9) | `LReadyOK <- NoLocalReady` | a call before our handler is registered (H-2) | Honest | `NoLaunchUnready` |
+| `DirectUpgradeStopAtCap` (M10) | `StopAfter <- StopAtCap` | a terminal hopeless state (H-10) | Silent | `Upgrades` |
+| `DirectUpgradeNoCap` (M11) | `SlotFree <- NoCap` | no node-wide cap (H-5) | TwoPeers | `GlobalCap` |
+| `DirectUpgradeWhileDirect` (M12) | `NotDirect <- IgnoreDirect` | a call while the session is direct (H-14) | Honest | `NoLaunchDirect` |
+| `DirectUpgradeWhileInFlight` (M13) | `OneCallOK <- AnyTime` | a new call after E7 before the cancelled call returned (H-4) | Honest | `OneCall` |
+| `DirectUpgradeGateAnyPeer` (M14) | `GateWanted <- GateAnyPeer` | the gate gives addresses to a peer not wanted (H-12) | Byzantine | `NoRoundUnwanted` |
+| `DirectUpgradeNoDeadline` (M15) | `Expire <- Never` | no lease deadline: a holder that never gives its slot back keeps it (H-5, D3) | TwoPeers | `BusyEnds` |
+| `DirectUpgradeEpochRefillsAttempts` (M16) | `EpochAtt <- RefillAttempts` | a new circuit refills the attempt bucket (H-11) | Byzantine | `AttemptBudget` |
+| `DirectUpgradeRemoteGuard` (M17) | `RemoteGuard <- GuardOn` | the old guard: Punch waits for `remoteReady`; a lost push leaves the only initiator NotReady (scenario 8) | LostPush | `Upgrades` |
+| `DirectUpgradeAnyOrder` (M18) | `GrantOrder <- AnyOrder` | slots granted in any order: the other peer retakes every freed slot | TwoPeers | `BusyEnds` |
+| `DirectUpgradePreDialFree` (M19) | `GaterBudget <- PreDialFree` | DirectConnect's first direct dial passes the gater without spending (D2) | Byzantine | `DestBudget` |
+| `DirectUpgradeGaterAnyPeer` (M20) | `GaterWanted <- GaterAnyPeer` | the gater lets a peer not wanted be dialled: libp2p's one-shot to a stranger (D2) | Byzantine | `NoDialUnwanted` |
+| `DirectUpgradeIdleIgnored` (M21) | `ActiveOK <- AlwaysActive` | the ladders call while idle (D4) | Silent | `NoLadderCallIdle` |
+| `DirectUpgradeStaySuspended` (M22) | `ActiveOK <- StaySuspended` | no resume once the app is active again (D4) | Silent | `Upgrades` |
+| `DirectUpgradeGrantFree` (M23) | `NodeTokOK <- NoNodeBudget` | a slot granted without a node-wide admission token (D4) | TwoPeers | `AdmissionBudget` |
+| `DirectUpgradeH15Off` (M24) | `CloseDup <- Disabled` | H-15 off: both sides eligible with two circuits; overlapping punches that cancel repeat for ever (B1) | TwoCircuits | `Upgrades` |
+| `DirectUpgradeNoClose` (M25) | `ResolveOK <- Disabled` | the duplicate circuit is never closed (B1) | TwoCircuits | `DupResolves` |
+| `DirectUpgradeNoAllowance` (M26) | `OAllowOK <- AnyAllow` | another peer's rounds sharing one grant dial beyond its allowance (B3) | TwoPeers | `NoUnallowedDial` |
+| `DirectUpgradeGaterNoLease` (M27) | `GaterLease <- NoLeaseNeeded` | a destination without a grant: libp2p's first direct dial (B3) | Honest | `NoUnallowedDial` |
+| `DirectUpgradeTicketAny` (M28) | `TicketOK <- AnyTicket` | a peer that is not wanted takes a ticket (B4) | Byzantine | `NoTicketUnwanted` |
+| `DirectUpgradePlaceLost` (M29) | `DropTicket <- AbandonDrops` | a round that gave up waiting loses its ticket's place and re-registers at the tail: R starves behind a peer asking for ever (B6) | Answerer | `Upgrades` |
+| `DirectUpgradeWitnessDirect` | invariant `NoDirect` | witness: a link becomes direct | Honest | (must violate) |
+| `DirectUpgradeWitnessStale` | invariant `NoStaleResult` | witness: a result of an older epoch arrives | Honest | (must violate) |
+| `DirectUpgradeWitnessBusy` | invariant `NoBusy` | witness: a call is Busy | Honest | (must violate) |
+| `DirectUpgradeWitnessSlow` | invariant `NoSlowStep` | witness: a Spent call moves the slow ladder | Silent | (must violate) |
+| `DirectUpgradeWitnessGateRefusal` | invariant `NoGateRefusal` | witness: a Byzantine flood empties the round bucket | Byzantine | (must violate) |
+| `DirectUpgradeWitnessWaitBehind` | invariant `NoWaitBehind` | witness: L waits for a slot another peer holds | TwoPeers | (must violate) |
+| `DirectUpgradeWitnessCross` | invariant `NoCross` | witness: the pair's two punch phases overlap | TwoCircuits | (must violate) |
+
+M3 is caught by `BusyFree`, not by `Upgrades`: refills are timers under fairness, so a charged Busy only delays.
+M11, M16 and the overlap need buckets or leases of 2: with 1, the node bucket or a frozen clock hides them. The
+model's allowance of 2 stands for the plan's 12 (one destination unit per step).
+
+```
+java -cp tla2tools.jar tlc2.TLC -workers 2 -config DirectUpgradeHonest.cfg DirectUpgrade
+java -cp tla2tools.jar tlc2.TLC -workers 2 -config mutants/DirectUpgradeLowerOnly.cfg mutants/DirectUpgradeMutants
+INKWELL_TLA_ONLY='^DirectUpgrade' ./scripts/tla-check.sh    # the 44 DirectUpgrade runs only, 273 s (heavy.sh --exclusive)
+```

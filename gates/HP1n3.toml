@@ -1,0 +1,37 @@
+# FROZEN 2026-11-16 after two Codex reviews (gates/HP1/WITNESSES.md, plan « Codex debate »). Fifth gate of block HP1, run on the same candidate after gates/HP1.toml, HP1m, HP1n and
+# gates/HP1n2.toml (header of gates/HP1.toml: five gates, split on 2026-11-16 to fit rule G-1's 45 min without dropping a
+# proof of plan §9). Plan: docs/plans/2026-11-16-hp1-direct-upgrade.md (§7: scenario 5's C3 from the baseline and C3a);
+# models docs/protocol/tla/DirectUpgrade.tla, alloy/DirectUpgradeRoles.als. This gate: scenario 5 on three seeds and the
+# netsim mutant MN2. Wall-clock criteria take the machine with `heavy.sh --exclusive`; every command is capped;
+# scripts/gate.py refuses caps past max_minutes (PC1a rule G-1). Red witnesses: gates/HP1n3/WITNESSES.md.
+max_minutes = 45
+raw_results = ["docs/plans/2026-11-16-hp1-direct-upgrade.md", "docs/protocol/tla/DirectUpgrade.tla", "docs/protocol/alloy/DirectUpgradeRoles.als", "gates/HP1n3/*"]
+
+[[criteria]]
+# Plan §7 and §9: scenario 5 « bad Wi-Fi that changes », seeds 20771, 20772 (the reproduction seed), 20773, once each,
+# strict: every clause passes, C3 counted from the baseline and the new C3a among them.
+id = "netsim"
+command = '''rm -f .task/netsim/results/5-s2077[123].json && timeout -k 10 240 ./scripts/heavy.sh mise run e2e:build && { NETSIM_SCENARIOS=5 NETSIM_SEEDS="20771 20772 20773" NETSIM_EXPECT=strict INKWELL_E2E_BROWSER=chromium INKWELL_PERF_LOAD_WAIT=180 timeout -k 10 1500 ./scripts/heavy.sh --exclusive ./scripts/netsim/run.sh; rc=$?; python3 -I - "$rc" <<'PY'
+import json, pathlib, sys
+need = {"C1", "C2", "C3", "C3a", "C4", "C5", "C6", "SI1"}
+bad = []
+for seed in (20771, 20772, 20773):
+    p = pathlib.Path(f".task/netsim/results/5-s{seed}.json")
+    if not p.exists():
+        bad.append(f"{p.name} missing")
+        continue
+    r = json.loads(p.read_text())
+    got = {c["id"] for c in r["clauses"]}
+    red = [f'{c["id"]} {c["status"]}: {c.get("measured", "")[:80]}' for c in r["clauses"] if c["status"] != "pass"]
+    if r.get("expect") != "strict" or not need <= got or red:
+        bad.append(f"{p.name}: expect {r.get('expect')}, missing {sorted(need - got)}, red {red}")
+if int(sys.argv[1]) or bad:
+    sys.exit(f"HP1n3 netsim: exit {sys.argv[1]}, {bad}")
+PY
+}'''
+
+[[criteria]]
+# Plan §7 (D6) and §9 « netsim-mutant », seed 20772: an extra link-down outside the identified restart window turns
+# scenario 5's C3a red (MN2, scripts/netsim/mutants.toml), caught by its clause, not by a crash or a timeout.
+id = "netsim-mutants"
+command = "NETSIM_MUTANT_SEED=20772 INKWELL_PERF_LOAD_WAIT=180 timeout -k 10 900 ./scripts/heavy.sh --exclusive python3 -I scripts/netsim/mutants.py HP1 MN2"

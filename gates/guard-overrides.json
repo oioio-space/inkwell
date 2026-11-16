@@ -1264,6 +1264,16 @@
       "id": "2b2bae409491f8b8c6f28a25c95ffb85e58f7afc0b49fe60a42066ed04115d03",
       "reason": "frontend/src/ui/history/history.svelte.ts: the same timer with the same delay (CLAIM_PAUSE_MS), now calling #settle(\"pause\") so that a claim owed is retried (rule C-5); no delay raised",
       "decision": "docs/plans/2026-11-15-cl1-claim-on-local-edits.md"
+    },
+    {
+      "id": "ed99b8df34309546a39e50145ca8a307e3d632fa95292212ff309c1188f3850f",
+      "reason": "scripts/alloy_check.py: block HP1 step 1 adds the five mutants of DirectUpgradeRoles.als; existing entries untouched",
+      "decision": "docs/plans/2026-11-16-hp1-direct-upgrade.md"
+    },
+    {
+      "id": "6adfe02081f88c842f4889b17eaac20e592244933aae2dcc8144654dd706d09c",
+      "reason": "scripts/tla-check.sh: block HP1 step 1 registers the DirectUpgrade configurations, mutants M1-M29 and witnesses; existing runs untouched",
+      "decision": "docs/plans/2026-11-16-hp1-direct-upgrade.md"
     }
   ]
 }
