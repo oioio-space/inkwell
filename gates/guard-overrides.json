@@ -1304,6 +1304,16 @@
       "id": "319a4937f230408f97ad8c1a5395016ef7761b40b6b9941a446360d3f4a9599e",
       "reason": "scripts/netsim/run.sh: a start-up truth-check for scenarios 5-8 fails the scenario if the qdisc counters undercount (a 10-segment GSO send through 100 % loss must raise dropped by 10; it raised it by 1 before gso_max_segs 1, BK6)",
       "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "211a8650c3caa5d2b765d0d876c58f0a020bb42a515c0a230b332db7c73f020c",
+      "reason": ".github/workflows/ci.yml: a new parallel job `formal` (mise run formal) with its own 45 min cap, derived from its measured 25 min on a 4-vCPU runner (run 43961568931); the ci job runs ci:checks without the models and keeps its 35 min; no existing cap is raised (CI1)",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "3226d89dcd866759cc9c0167cea34f9309c2127116c6a12cc200381b1861d140",
+      "reason": "mise.toml: ci:core = ci:checks + formal, with ci:checks the same dependencies minus formal, so GitHub runs the models in their own job; locally ci:core runs exactly what it ran before (CI1)",
+      "decision": "docs/objectif-en-cours.md"
     }
   ]
 }
