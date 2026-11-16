@@ -1444,6 +1444,11 @@
       "id": "0284a584e3a8dc781e80c8d9d332a27afe06e942255dc93b6585de226da63615",
       "reason": "internal/sidecar/bound_linux_test.go: new file; its one skip is the opt-in of the new TestMemoryMaxBackstop (INKWELL_OOM_BACKSTOP=1), which makes the kernel OOM-kill a target and may raise the desktop's memory notification (residual R-7); no existing test gains a skip; re-fingerprinted on 2026-11-15 after the second GitHub run: the helper's address limit in this file goes from 1 GiB to 2 GiB, because a Go helper built with coverage failed to start under 1 GiB 4 times in 400 (pthread_create EAGAIN) and never under 2 GiB; a fixture limit, not a product bound; no skip added",
       "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "2ea6ad01baec8aba054b166d327d481d5678e17afbf3e1e719b328eb0e15051c",
+      "reason": ".github/workflows/ci.yml: a new step of the ci job, « Assert the sandbox ran in tier N », with its own 3-minute cap (D6 revised 2026-11-16); no existing timeout-minutes is raised: the sandbox-stock step keeps its 20 minutes with internal/app added (measured 57 s with -race in tier F)",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
     }
   ]
 }
