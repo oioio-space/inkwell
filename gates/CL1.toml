@@ -1,0 +1,94 @@
+# FROZEN 2026-11-16, red witnesses in gates/CL1/WITNESSES.md, blind review applied (F1-F12). Acceptance for block CL1 (the history claim arms on local edits only: C-1..C-6), written before
+# the implementation. Rigour: standard. Plan: docs/plans/2026-11-15-cl1-claim-on-local-edits.md. Serves W32 (netsim
+# scenario 8, NI-4, clause C5 red in 7 of the 12 GitHub runs that measured it since 2026-11-14) and keeps U12.
+# Every long command is `timeout -k 10 N ./scripts/heavy.sh …`, shared mode everywhere (the timeout covers the wait
+# for a slot; the gate runs alone on the machine, CLAUDE.md « Mémoire »; no criterion is a wall-clock measurement:
+# the netsim one counts messages). No nested gate. Deadline: scripts/gate.py refuses caps that sum past its
+# deadline and stops the run at it (PC1a rule G-1). Caps: 960 s. After the merge: gates/CL1/GITHUB.md (plan).
+max_minutes = 20
+raw_results = ["docs/plans/2026-11-15-cl1-claim-on-local-edits.md", "gates/CL1/*"]
+
+[[criteria]]
+# Each rule row is in the plan; the registry says where W32's scenario 8 was repaired; the post-merge record exists;
+# the bound of C5 is still 2, its settle 3 s, its window 30 s, the typists' period 1000 ms and its 0.8 + 0.4·random
+# factor (C-4: never loosened, and the 1.8 s margin is derived from them), read in the scenario itself.
+id = "docs"
+command = '''python3 -I - <<'PY'
+import pathlib, sys
+plan = pathlib.Path("docs/plans/2026-11-15-cl1-claim-on-local-edits.md").read_text()
+bad = [f"plan row {i}" for i in ["C-1", "C-2", "C-3", "C-4", "C-5", "C-6"] if f"\n| {i} |" not in plan]
+ex = pathlib.Path("docs/exigences.md").read_text().splitlines()
+if not any(l.startswith("| W32 |") and "CL1" in l for l in ex):
+    bad.append("exigences W32 does not name CL1")
+if "Status: open" not in pathlib.Path("gates/CL1/GITHUB.md").read_text():
+    bad.append("gates/CL1/GITHUB.md is not the open record of the post-merge runs")
+spec = pathlib.Path("frontend/e2e/netsim.spec.ts").read_text()
+if "await sleep(periodMs * (0.8 + 0.4 * random()));" not in spec:
+    bad.append("the typist no longer sleeps periodMs * (0.8 + 0.4 * random())")
+s8 = spec[spec.index('test("scenario 8:'):]
+for text in ['"<= 2 per ordered pair in 30 s"', "ok: rows.every(([, d]) => d <= 2)", "await sleep(3_000);\n  const settled", "const baselineAt = Date.now();\n  await sleep(30_000);\n  const afterIdle", 'typist(alice, "a", 1000, 81, { count: 30 })', 'typist(bob, "b", 1000, 82, { count: 30 })', 'typist(carol, "c", 1000, 83, { count: 30 })', "finish({ carolWrites, claims });"]:
+    if text not in s8:
+        bad.append(f"scenario 8 no longer has: {text!r}")
+sys.exit(f"CL1 docs: {bad}" if bad else 0)
+PY'''
+
+[[criteria]]
+# C-1..C-6 on the real history module, devices on fake time, and their in-test mutants (Vitest JSON report). The
+# bindings are generated first: frontend/bindings is not versioned and the module imports them.
+id = "frontend"
+command = '''timeout -k 10 30 mise run fe:bindings && cd frontend && timeout -k 10 120 ../scripts/heavy.sh pnpm exec vitest run --configLoader runner --reporter=json --outputFile=../.task/cl1-fe.json src/ui/history/claim.test.ts; rc=$?; cd .. && python3 -I - "$rc" <<'PY'
+import json, sys
+rc = int(sys.argv[1])
+r = json.load(open(".task/cl1-fe.json"))
+ok = {a["title"] for f in r["testResults"] for a in f["assertionResults"] if a["status"] == "passed"}
+need = ['CL1 C-1 a change from another device does not re-arm the claim timer', 'CL1 C-1 every way this device writes arms the claim', 'CL1 C-2 a device that made no edit since its last claim sends no claim', 'CL1 C-3 the claim lands CLAIM_PAUSE_MS after the last local edit', 'CL1 C-4 three devices: no claim traffic in the quiescence window of scenario 8', 'CL1 C-5 a claim owed when the document or the page is left is written', 'CL1 C-5 a claim that could not be written is retried', 'CL1 C-5 a claim owed is found again when the document is opened', 'CL1 C-6 the actor a clone gives this device is claimed too', 'CL1 mutant C-1 arming on every change is caught', 'CL1 mutant C-1 a flag around change is caught', 'CL1 mutant C-2 arming at the opening is caught', 'CL1 mutant C-3 a longer pause is caught', 'CL1 mutant C-4 arming on every change is caught', 'CL1 mutant dropping the owed claim at detach is caught', 'CL1 mutant dropping the owed claim when hidden is caught', 'CL1 mutant no retry is caught', 'CL1 mutant nothing owed at the opening is caught', 'CL1 mutant the actor cached at the opening is caught']
+miss = [n for n in need if n not in ok]
+if rc or r["numFailedTests"] or r["numFailedTestSuites"] or miss:
+    sys.exit(f"CL1 frontend: exit {rc}, failed {r['numFailedTests']}, missing {miss}")
+PY'''
+
+[[criteria]]
+# Non-regression only, NOT the proof of the fix: scenario 8, editor variant, one strict run per seed (20771, 20772),
+# every clause passing with the bound of C5 unchanged. Ten such runs on the unchanged tree all passed here on 2026-11-15
+# (gates/CL1/WITNESSES.md): this machine does not show the defect GitHub shows in 8 runs of 15 (plan, residual R-1).
+# The proof is the `frontend` criterion (C-1, C-2, C-4, deterministic) and, after the merge, the netsim job of the next
+# ten GitHub runs of main, recorded in gates/CL1/GITHUB.md (plan, « Acceptance after the merge »). A skipped simulation
+# (no netem) leaves no result file and fails here. Cap: 139 s measured for the slowest of ten runs, two runs, 360 s.
+# Observed, not inferred (C-4 on the real stack): each run's result carries `claims`, the time each device wrote its
+# claim against the quiescence baseline; three devices wrote one each, every one before the baseline.
+id = "netsim"
+command = '''rm -f .task/netsim/results/8-editor-s2077[12]-r1.json && timeout -k 10 240 ./scripts/heavy.sh mise run e2e:build && { NETSIM_SCENARIOS=8 NETSIM_VARIANTS=editor NETSIM_SEEDS="20771 20772" NETSIM_REPEAT=1 NETSIM_EXPECT=strict INKWELL_E2E_BROWSER=chromium timeout -k 10 360 ./scripts/heavy.sh ./scripts/netsim/run.sh; rc=$?; python3 -I - "$rc" <<'PY'
+import json, pathlib, sys
+rc = int(sys.argv[1])
+bad = []
+for seed in (20771, 20772):
+    for k in (1,):
+        p = pathlib.Path(f".task/netsim/results/8-editor-s{seed}-r{k}.json")
+        if not p.exists():
+            bad.append(f"{p.name} missing")
+            continue
+        r = json.loads(p.read_text())
+        ids = {c["id"] for c in r["clauses"]}
+        red = [f'{c["id"]} {c["status"]}: {c.get("measured", "")}' for c in r["clauses"] if c["status"] != "pass"]
+        if r.get("expect") != "strict" or not {"C1", "C2", "C3", "C4", "C5"} <= ids or red:
+            bad.append(f"{p.name}: expect {r.get('expect')}, clauses {sorted(ids)}, red {red}")
+        own = [c for c in (r.get("claims") or []) if c.get("mine")]
+        late = [f'device {c["device"]} at {c["fromBaselineMs"]:+d} ms' for c in own if c["fromBaselineMs"] >= 0]
+        if r.get("claims") is None:
+            bad.append(f"{p.name}: C-4 claims not exposed by the build (window.__inkwellClaims)")
+        elif sorted(c["device"] for c in own) != [0, 1, 2] or late:
+            bad.append(f"{p.name}: C-4 one claim per device before the baseline: devices {sorted(c['device'] for c in own)}, late {late}")
+if rc or bad:
+    sys.exit(f"CL1 netsim: exit {rc}, {bad}")
+PY
+}'''
+
+[[criteria]]
+# No regression: Biome, svelte-check, the history tests (the panel and its model) and the test files the block changed.
+id = "regression"
+command = '''base=$(git merge-base HEAD main) && files=$( { git diff --name-only --diff-filter=d "$base" -- frontend/src | grep -E '[.]test[.]ts$' | sed 's#^frontend/##'; cd frontend && ls src/ui/history/*.test.ts src/history/*.test.ts; } | sort -u | tr '\n' ' ') && timeout -k 10 30 mise run fe:bindings && cd frontend && timeout -k 10 180 ../scripts/heavy.sh sh -c "pnpm exec biome check . && pnpm exec svelte-check --tsconfig ./tsconfig.json && pnpm exec vitest run --configLoader runner $files"'''
+
+[[criteria]]
+# The /simplify review of the diff.
+id = "simplify-report"
+command = "test -s gates/CL1/SIMPLIFY.md"
