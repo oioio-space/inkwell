@@ -85,10 +85,9 @@ func TestHostileMemoryDeathStartsNoCoreHelper(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
 	out, err := Run(ctx, s)
-	if err != nil || out.ExitCode == 0 {
+	if err != nil || out.CoreDump != CoreDumpNone || out.ExitCode == 0 {
 		t.Fatalf("S-11 no oom-kill: memory death/core outcome %+v %v", out, err)
 	}
-	assertNoCoreHelper(t, out.CoreDump)
 }
 
 func TestThirdProgramDescriptor(t *testing.T) {
