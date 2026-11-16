@@ -67,25 +67,77 @@ func requireScopedRun(t *testing.T, m *SandboxScope, mode string) Output {
 }
 
 // requireScope is requireN for a tier-aware cgroup test (plan « Tier-aware
-// suites »). On a machine in tier F it asserts that tier's promise instead: a
-// real run given a scope manager creates no session and places no run cgroup
-// (T-6: no cgroup without a PID namespace) and is bounded by its rlimits; it
-// then returns false, as it does on a refused machine.
+// suites »). Where the machine cannot give the run cgroup it asserts the
+// promise that replaces it, the per-process fallback (ADR 0042, ADR 0044, T-6),
+// and returns false, as it does on a refused machine: in tier F (no cgroup
+// without a PID namespace), and in tier N without a delegated user scope.
 func requireScope(t *testing.T) bool {
 	t.Helper()
 	switch machineTier(t) {
 	case tierNone:
 		return false
 	case tierN:
+		return scopeOrFallback(t)
+	}
+	requireFallback(t, "tier F")
+	return false
+}
+
+// requireNScope is requireScope for a test that has no tier F half: it skips
+// in tier F, as requireN does.
+func requireNScope(t *testing.T) bool {
+	t.Helper()
+	return requireN(t) && scopeOrFallback(t)
+}
+
+// scopeOrFallback, in tier N, reports whether this machine can give a
+// delegated user scope; where it cannot, it asserts the fallback and returns
+// false. It logs `scope-report: scope=<available|unavailable> [reason=X]`,
+// which the `ci` job asserts (.github/workflows/ci.yml).
+func scopeOrFallback(t *testing.T) bool {
+	t.Helper()
+	reason := delegatedScopeUnreachable()
+	if reason == "" {
+		t.Log("scope-report: scope=available")
 		return true
 	}
+	t.Log("scope-report: scope=unavailable reason=" + reason)
+	requireFallback(t, "tier N without a delegated user scope ("+reason+")")
+	return false
+}
+
+// delegatedScopeUnreachable names what keeps this process from a delegated
+// user scope, "" when nothing does: the scope is a child of the slice the
+// process runs in under its user's systemd manager, asked for on the session
+// bus (SandboxScope.setup). These are facts of the environment (a CI runner's
+// service, no user bus); a scope that fails past them is the product's failure.
+func delegatedScopeUnreachable() string {
+	app, err := selfCgroup()
+	if err != nil {
+		return "no-cgroup"
+	}
+	if !strings.Contains(app, fmt.Sprintf("/user@%d.service/", os.Getuid())) {
+		return "outside-user-manager"
+	}
+	conn, err := dbus.ConnectSessionBus()
+	if err != nil {
+		return "no-session-bus"
+	}
+	_ = conn.Close()
+	return ""
+}
+
+// requireFallback asserts the per-process fallback: a real run given a scope
+// manager creates no session, places no run cgroup and is bounded by its
+// rlimits (T-6).
+func requireFallback(t *testing.T, where string) {
+	t.Helper()
 	m := scopeManager(t)
-	m.beforeStart = func(*cgroupRun) { t.Error("T-6 fallback: a run cgroup was placed without a PID namespace") }
+	m.beforeStart = func(*cgroupRun) { t.Errorf("T-6 fallback: %s: a run cgroup was placed", where) }
 	out, err := Run(t.Context(), scopeSpec(t, m, "fds"))
 	if err != nil || out.ExitCode != 0 || out.Containment != "rlimit" || m.session != nil {
-		t.Fatalf("T-6 fallback: tier F run with a scope manager: %+v %v, session %v; want a clean rlimit run and no session", out, err, m.session)
+		t.Fatalf("T-6 fallback: %s: run with a scope manager: %+v %v, session %v; want a clean rlimit run and no session", where, out, err, m.session)
 	}
-	return false
 }
 
 func TestCgroupSessionScopeDelegated(t *testing.T) {
@@ -271,7 +323,7 @@ func TestCgroupWorkloadAndDescendantsInside(t *testing.T) {
 }
 
 func TestBootstrapRefusesUnexpectedCgroup(t *testing.T) {
-	if !requireN(t) {
+	if !requireNScope(t) {
 		return
 	}
 	m := scopeManager(t)
@@ -290,7 +342,7 @@ func TestBootstrapRefusesUnexpectedCgroup(t *testing.T) {
 }
 
 func TestCgroupRemovedAfterRun(t *testing.T) {
-	if !requireN(t) {
+	if !requireNScope(t) {
 		return
 	}
 	m := scopeManager(t)
@@ -303,7 +355,7 @@ func TestCgroupRemovedAfterRun(t *testing.T) {
 }
 
 func TestCgroupFallbackAtEveryStep(t *testing.T) {
-	if !requireN(t) {
+	if !requireNScope(t) {
 		return
 	}
 	for i := 1; i <= 11; i++ {
@@ -355,7 +407,7 @@ func TestFallbackReportsRlimitOnly(t *testing.T) {
 }
 
 func TestBothMemoryBudgetsHold(t *testing.T) {
-	if !requireN(t) {
+	if !requireNScope(t) {
 		return
 	}
 	m := scopeManager(t)
@@ -382,7 +434,7 @@ func TestBothMemoryBudgetsHold(t *testing.T) {
 }
 
 func TestResidentBudgetKillsWithSIGKILL(t *testing.T) {
-	if !requireN(t) {
+	if !requireNScope(t) {
 		return
 	}
 	for _, mode := range []string{"resident", "resident-tree"} {
@@ -405,7 +457,7 @@ func TestResidentBudgetKillsWithSIGKILL(t *testing.T) {
 }
 
 func TestAddressBudgetFailsAllocationFirst(t *testing.T) {
-	if !requireN(t) {
+	if !requireNScope(t) {
 		return
 	}
 	m := scopeManager(t)
@@ -424,7 +476,7 @@ func TestAddressBudgetFailsAllocationFirst(t *testing.T) {
 }
 
 func TestCgroupCountersReadBeforeCleanup(t *testing.T) {
-	if !requireN(t) {
+	if !requireNScope(t) {
 		return
 	}
 	m := scopeManager(t)
@@ -444,7 +496,7 @@ func TestCgroupCountersReadBeforeCleanup(t *testing.T) {
 }
 
 func TestHolderDeathBetweenVerifyAndStart(t *testing.T) {
-	if !requireN(t) {
+	if !requireNScope(t) {
 		return
 	}
 	for _, row := range []string{"before-run", "after-verify"} {
@@ -485,7 +537,7 @@ func TestHolderDeathBetweenVerifyAndStart(t *testing.T) {
 }
 
 func TestConcurrentRunsDuringHolderDeath(t *testing.T) {
-	if !requireN(t) {
+	if !requireNScope(t) {
 		return
 	}
 	m := scopeManager(t)
@@ -505,7 +557,7 @@ func TestConcurrentRunsDuringHolderDeath(t *testing.T) {
 }
 
 func TestSandboxInheritsNoSessionDescriptor(t *testing.T) {
-	if !requireN(t) {
+	if !requireNScope(t) {
 		return
 	}
 	m := scopeManager(t)
@@ -557,7 +609,7 @@ func descriptorSnapshot(t *testing.T) map[string]string {
 }
 
 func TestCgroupDescriptorClosedOnEveryPath(t *testing.T) {
-	if !requireN(t) {
+	if !requireNScope(t) {
 		return
 	}
 	for _, row := range []string{"success", "placement-error", "refused-bootstrap"} {
@@ -636,7 +688,7 @@ func appHelper(t *testing.T, arg string) (*exec.Cmd, *lineSink, io.WriteCloser, 
 }
 
 func TestAppSIGKILLLeavesNoWorkload(t *testing.T) {
-	if !requireN(t) {
+	if !requireNScope(t) {
 		return
 	}
 	for _, holderDead := range []bool{false, true} {
@@ -876,19 +928,19 @@ func waitReport(t *testing.T, w *lineSink, exit *appExit) (string, bool) {
 }
 
 func TestCgroupSessionSharesSliceBound(t *testing.T) {
-	if requireN(t) {
+	if requireNScope(t) {
 		boundApp(t, false)
 	}
 }
 
 func TestCgroupSessionCopiesLeafBound(t *testing.T) {
-	if requireN(t) {
+	if requireNScope(t) {
 		boundApp(t, true)
 	}
 }
 
 func TestCgroupTargetExit124(t *testing.T) {
-	if !requireN(t) {
+	if !requireNScope(t) {
 		return
 	}
 	m := scopeManager(t)
@@ -901,7 +953,7 @@ func TestCgroupTargetExit124(t *testing.T) {
 }
 
 func TestCgroupStartErrorPreservesSession(t *testing.T) {
-	if !requireN(t) {
+	if !requireNScope(t) {
 		return
 	}
 	for _, startErr := range []error{unix.ENOENT, unix.ENOEXEC, unix.EAGAIN} {

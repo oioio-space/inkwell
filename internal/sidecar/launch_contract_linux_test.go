@@ -210,6 +210,9 @@ func TestRunReturnsAfterCancel(t *testing.T) {
 					s.disableScope = containment == "rlimit"
 					s.MemoryLimit = 4 << 30
 					if containment == "cgroup" {
+						if !scopeOrFallback(t) {
+							return
+						}
 						m := scopeManager(t)
 						requireScopedRun(t, m, "fds")
 						s.scope = m
