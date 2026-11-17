@@ -43,6 +43,10 @@ ROOT = pathlib.Path(os.environ.get("INKWELL_GATE_ROOT") or SCRIPTS.parent).resol
 
 # The interface walkthrough's captures (skill ux-walkthrough), kept across gate runs.
 WALKTHROUGH_DIR = "ux"
+# The gate's inputs written before a run: github.json names the GitHub run a `github` criterion checks
+# (scripts/gh-verdict.py). They are not evidence, so a reset keeps them (2026-11-17: erasing it made the
+# criterion fail on a run that was all green).
+GATE_INPUTS = frozenset({"github.json"})
 
 
 def reset_evidence(out):
@@ -56,6 +60,8 @@ def reset_evidence(out):
         if entry.suffix == ".md" and entry.is_file() and not entry.is_symlink():
             continue
         if entry.name == WALKTHROUGH_DIR and entry.is_dir() and not entry.is_symlink():
+            continue
+        if entry.name in GATE_INPUTS and entry.is_file() and not entry.is_symlink():
             continue
         if entry.is_dir() and not entry.is_symlink():
             shutil.rmtree(entry)

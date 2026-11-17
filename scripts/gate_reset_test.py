@@ -43,6 +43,19 @@ class ResetEvidence(unittest.TestCase):
             self.assertEqual(sorted(p.name for p in out.iterdir()), ["ux"])
             self.assertTrue((out / "ux" / "sub" / "dialog-dark.png").exists())
 
+    def test_github_run_input_is_kept(self):
+        # gates/<lot>/github.json names the GitHub run a `github` criterion checks (scripts/gh-verdict.py,
+        # gates/SB2a1.toml): it is the gate's input, written before the run, not its evidence (2026-11-17: the
+        # reset erased it and the criterion could never pass).
+        with tempfile.TemporaryDirectory() as d:
+            out = pathlib.Path(d) / "SB2a1"
+            out.mkdir()
+            (out / "github.json").write_text('{"run_id": 1}')
+            (out / "github.log").write_text("old evidence")
+            gate.reset_evidence(out)
+            self.assertEqual(sorted(p.name for p in out.iterdir()), ["github.json"])
+            self.assertEqual((out / "github.json").read_text(), '{"run_id": 1}')
+
     def test_a_ux_symlink_is_still_removed(self):
         with tempfile.TemporaryDirectory() as d:
             out = pathlib.Path(d) / "L"

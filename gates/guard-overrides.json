@@ -1374,6 +1374,21 @@
       "id": "8aded43caf285f8c7b756dd70b7a3aa9df354771bcc5e8d3473464b814a3096a",
       "reason": "E2E2: SHEET-MU-01's departure split into SHEET-MU-01b, fixme on WebKit only: WebKit never delivers the presence goodbye pagehide sends while the page closes (probe at rest: 58.6 s on WebKit, 10 ms on Chromium); the assertion still runs on Chromium; owned by PR1 (P-3) and WC1, R-E2E2-1 in docs/plans/2026-11-17-e2e1.md",
       "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "cf5cb5529833d0598f2c34b0e5f34b62a2681e5fcf4753b1eaaea614080734d1",
+      "reason": "scripts/gate.py: reset_evidence keeps the gate's inputs written before a run (GATE_INPUTS = github.json, the GitHub run a `github` criterion checks); it erased it, so SB2a1's `github` criterion failed on an all-green run (44056867564); no evidence kept, no check weakened",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "f91cae913926b51e8d2017ad11c23a31a5f91bf56b017821469b04dac3876968",
+      "reason": "scripts/gate.py: reset_evidence keeps the gate's inputs written before a run (GATE_INPUTS = github.json, the GitHub run a `github` criterion checks); it erased it, so SB2a1's `github` criterion failed on an all-green run (44056867564); no evidence kept, no check weakened",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "5731fe74b276d096b978e35c2ed67cc7be4f3b233f996d7b3761ec81df0fede6",
+      "reason": "scripts/gate_reset_test.py: new test that github.json survives a reset (red on the previous gate.py, green now); no test removed",
+      "decision": "docs/objectif-en-cours.md"
     }
   ]
 }
