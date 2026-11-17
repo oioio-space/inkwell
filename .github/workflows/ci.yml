@@ -14,8 +14,13 @@ env:
 jobs:
   ci:
     runs-on: ubuntu-latest
-    # ~20 min of checks (`ci:checks`); the formal models run in the `formal` job and the impaired-network
-    # scenarios once, in the `netsim` job.
+    # Two parts on two runners (CI1b): `checks` (~22 min of `ci:checks` after ~10 min of setup) and `e2e` (the
+    # desktop build and the two-instance end-to-end tests); in one job they passed its 35 min (run 44002604121).
+    # The formal models run in the `formal` job and the impaired-network scenarios once, in the `netsim` job.
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [checks, e2e]
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -59,9 +64,10 @@ jobs:
             ~/.cache/inkwell/sidecar-dl
           key: sidecars-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('internal/sidecar/manifest.json') }}
       - name: Trace pinned sidecars on PM-1
+        if: matrix.part == 'checks'
         run: mise run sidecar:trace
       - name: Keep seccomp trace evidence
-        if: always()
+        if: always() && matrix.part == 'checks'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: seccomp-traces
@@ -95,11 +101,13 @@ jobs:
           fi
           test -S "${XDG_RUNTIME_DIR}/bus"
           systemd-run --user --scope --quiet --collect -- cat /proc/self/cgroup | grep "/user@${uid}.service/"
-      - run: systemd-run --user --scope --quiet --collect -- mise run ci:checks # the formal models run in the parallel `formal` job
+      - if: matrix.part == 'checks'
+        run: systemd-run --user --scope --quiet --collect -- mise run ci:checks # the formal models run in the parallel `formal` job
       # Lifting the sysctl does not prove tier N ran, nor the user manager that its cgroup ran: the sandbox's own tier
       # report and the scope suite's report must say so (internal/sidecar, tier_helpers_linux_test.go and
       # scope_linux_test.go), and the scope test must pass with its run in a cgroup.
       - name: Assert the sandbox ran in tier N with its aggregate memory scope
+        if: matrix.part == 'checks'
         timeout-minutes: 3
         run: |
           out="$(systemd-run --user --scope --quiet --collect -- go test -count=1 -v -run '^(TestIsolationReportsTier|TestCgroupSessionScopeDelegated)$' ./internal/sidecar/ 2>&1)" || { echo "$out"; exit 1; }
@@ -108,17 +116,20 @@ jobs:
           echo "$out" | grep -q 'scope-report: scope=available'
           echo "$out" | grep -q -- '--- PASS: TestCgroupSessionScopeDelegated'
       - name: Build the desktop app (Linux)
+        if: matrix.part == 'e2e'
         run: mise run app:build
       - name: End-to-end (two instances, Playwright/WebKit)
+        if: matrix.part == 'e2e'
         run: mise run e2e
       - name: Keep Playwright traces on failure
-        if: failure()
+        if: failure() && matrix.part == 'e2e'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: playwright-traces
           path: frontend/test-results/
           retention-days: 7
       - name: Upload coverage to Codecov
+        if: matrix.part == 'checks'
         uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac # v5.5.5
         with:
           files: ./coverage.out

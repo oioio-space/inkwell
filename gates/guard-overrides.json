@@ -1544,6 +1544,11 @@
       "id": "47d48bb75e78295575631a5cfbf6ab8c601d9ad248dcf47283f1d3c91a91ae6f",
       "reason": ".github/workflows/ci.yml: SB2a1's ci job steps (tier N lift, delegated user scope, tier assertion with its own 3 min) on top of main's ci.yml (CI1's formal job unchanged); no cap raised",
       "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "51dad904fe6a365f85ff5b15f45ad8a6999aece1c8d00a631c4f3aa5977f8e9c",
+      "reason": ".github/workflows/ci.yml: the ci job becomes a matrix of two parts on two runners (checks, e2e), each with the same 35 min cap, because with every check green it passed 35 min in one job (run 44002604121); no cap raised (CI1b)",
+      "decision": "docs/objectif-en-cours.md"
     }
   ]
 }
