@@ -2,6 +2,7 @@ package sidecar
 
 import (
 	"encoding/binary"
+	"runtime"
 	"slices"
 	"testing"
 
@@ -42,10 +43,25 @@ func interpretSeccomp(t *testing.T, program []unix.SockFilter, data []byte) uint
 	return 0
 }
 
+// hostLaunchFilter is typst's filter in tier N on this host, with the host's
+// audit value.
+func hostLaunchFilter(t *testing.T, pid uint32) ([]unix.SockFilter, uint32) {
+	t.Helper()
+	a, err := hostSysArch()
+	if err != nil {
+		t.Fatal(err)
+	}
+	p, _ := lookupProgram(Typst)
+	f, err := seccompFilter(p, a, pid, tierN)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return f, a.audit
+}
+
 func TestSeccompPolicyVM(t *testing.T) {
-	const arch = unix.AUDIT_ARCH_X86_64
 	const pid = 1234
-	f := seccompFilter(arch, pid)
+	f, arch := hostLaunchFilter(t, pid)
 	check := func(nr uint32, audit uint32, want uint32, args ...uint64) {
 		t.Helper()
 		data := make([]byte, 64)
@@ -91,12 +107,12 @@ func TestSeccompPolicyVM(t *testing.T) {
 	// Exhaustive sweep with zero arguments: a jump-offset slip in the emitted
 	// program cannot open anything beyond the table, and every refusal is a
 	// plain EPERM (ENOSYS for clone3), never a kill or another verdict.
-	conditional := map[uint32]uint32{unix.SYS_SOCKETPAIR: deny, unix.SYS_TGKILL: deny, unix.SYS_CLONE3: unix.SECCOMP_RET_ERRNO | uint32(unix.ENOSYS)}
+	conditional := map[uint32]uint32{unix.SYS_SOCKETPAIR: deny, unix.SYS_TGKILL: deny, unix.SYS_IOCTL: deny, unix.SYS_PRCTL: deny, unix.SYS_CLONE3: unix.SECCOMP_RET_ERRNO | uint32(unix.ENOSYS)}
 	for nr := range uint32(1024) {
 		want, ok := conditional[nr]
 		if !ok {
 			want = deny
-			if slices.Contains(allowedSyscalls, nr) {
+			if slices.Contains(sidecarSyscalls[runtime.GOARCH], nr) {
 				want = allow
 			}
 		}
@@ -167,43 +183,56 @@ func TestLandlockExactRights(t *testing.T) {
 
 // P1-a: resource is an unsigned int in the kernel; ignore its upper word.
 // Test both halves of a pointer so low-word-only inspection cannot allow writes.
+// Both architectures' filters are interpreted here, on either runner.
 func TestCoreSentinelSeccompPolicy(t *testing.T) {
-	f := seccompFilter(unix.AUDIT_ARCH_X86_64, 1234)
-	for _, high := range []uint64{0, 1 << 32} {
-		for _, ptr := range []uint64{1, 1 << 32, 0xffffffffffffffff} {
-			for _, nr := range []uint32{unix.SYS_PRLIMIT64, setrlimitSyscall} {
-				data := make([]byte, 64)
-				binary.NativeEndian.PutUint32(data, nr)
-				binary.NativeEndian.PutUint32(data[4:], unix.AUDIT_ARCH_X86_64)
-				offset := 16
-				if nr == unix.SYS_PRLIMIT64 {
-					offset = 24
-					binary.NativeEndian.PutUint64(data[32:], ptr)
-				}
-				binary.NativeEndian.PutUint64(data[offset:], high|unix.RLIMIT_CORE)
-				if got := interpretSeccomp(t, f, data); got != unix.SECCOMP_RET_ERRNO|uint32(unix.EPERM) {
-					t.Errorf("nr %d resource %x pointer %x: verdict %x", nr, high|unix.RLIMIT_CORE, ptr, got)
+	p, _ := lookupProgram(Typst)
+	for _, a := range sysArches {
+		f, err := seccompFilter(p, a, 1234, tierN)
+		if err != nil {
+			t.Fatal(err)
+		}
+		// An architecture without the legacy call has no number to refuse
+		// (noSyscall; TestSysArchMatchesHost checks the table on its runner).
+		numbers := []uint32{a.prlimit64}
+		if a.setrlimit != noSyscall {
+			numbers = append(numbers, a.setrlimit)
+		}
+		for _, high := range []uint64{0, 1 << 32} {
+			for _, ptr := range []uint64{1, 1 << 32, 0xffffffffffffffff} {
+				for _, nr := range numbers {
+					data := make([]byte, 64)
+					binary.NativeEndian.PutUint32(data, nr)
+					binary.NativeEndian.PutUint32(data[4:], a.audit)
+					offset := 16
+					if nr == a.prlimit64 {
+						offset = 24
+						binary.NativeEndian.PutUint64(data[32:], ptr)
+					}
+					binary.NativeEndian.PutUint64(data[offset:], high|unix.RLIMIT_CORE)
+					if got := interpretSeccomp(t, f, data); got != unix.SECCOMP_RET_ERRNO|uint32(unix.EPERM) {
+						t.Errorf("%s: nr %d resource %x pointer %x: verdict %x", a.name, nr, high|unix.RLIMIT_CORE, ptr, got)
+					}
 				}
 			}
 		}
-	}
-	data := make([]byte, 64)
-	binary.NativeEndian.PutUint32(data, unix.SYS_PRLIMIT64)
-	binary.NativeEndian.PutUint32(data[4:], unix.AUDIT_ARCH_X86_64)
-	binary.NativeEndian.PutUint64(data[24:], unix.RLIMIT_CORE)
-	if got := interpretSeccomp(t, f, data); got != unix.SECCOMP_RET_ALLOW {
-		t.Errorf("query-only core prlimit: %x", got)
+		data := make([]byte, 64)
+		binary.NativeEndian.PutUint32(data, a.prlimit64)
+		binary.NativeEndian.PutUint32(data[4:], a.audit)
+		binary.NativeEndian.PutUint64(data[24:], unix.RLIMIT_CORE)
+		if got := interpretSeccomp(t, f, data); got != unix.SECCOMP_RET_ALLOW {
+			t.Errorf("%s: query-only core prlimit: %x", a.name, got)
+		}
 	}
 }
 
 // The sandbox helpers must use prlimit64 queries, including on amd64 where
 // x/sys.Getrlimit uses the legacy syscall absent from the workload allowlist.
 func TestSandboxLimitQueriesAllowed(t *testing.T) {
-	f := seccompFilter(unix.AUDIT_ARCH_X86_64, 1234)
+	f, audit := hostLaunchFilter(t, 1234)
 	for _, resource := range []uint64{unix.RLIMIT_AS, unix.RLIMIT_CORE, unix.RLIMIT_NOFILE} {
 		data := make([]byte, 64)
 		binary.NativeEndian.PutUint32(data, unix.SYS_PRLIMIT64)
-		binary.NativeEndian.PutUint32(data[4:], unix.AUDIT_ARCH_X86_64)
+		binary.NativeEndian.PutUint32(data[4:], audit)
 		binary.NativeEndian.PutUint64(data[24:], resource)
 		binary.NativeEndian.PutUint64(data[40:], 0x1234) // old_limit output pointer
 		if got := interpretSeccomp(t, f, data); got != unix.SECCOMP_RET_ALLOW {

@@ -2,7 +2,7 @@
 // Trace-derived list plus documented runtime portability additions.
 package sidecar
 
-var allowedSyscalls = []uint32{
+var allowedSyscallsAMD64 = []uint32{
 	21,  // access
 	158, // arch_prctl
 	12,  // brk

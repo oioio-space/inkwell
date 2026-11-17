@@ -1369,6 +1369,281 @@
       "id": "b0562c1c95d590504091b6a61ad2b2835e45084fa61fbf79a953850396cc8fa2",
       "reason": "scripts/inventory_test.py: new test for a fixme cut over lines (red on the previous script, green now); no test removed",
       "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "686052570051bda550ebcde660dc7a0f4a4757b657e200c53008b53c97bc8583",
+      "reason": ".github/workflows/ci.yml: no existing timeout-minutes is raised; the new job sandbox-stock (30 min) and the new steps (fetch 5, assertion 1, tests 20 min) bring their own bounds, the heuristic compares them with the smaller existing ones; the ci and sidecars-arm64 jobs no longer lift Ubuntu's user-namespace restriction and check their `go test -json` against gates/inventories/SB2a1.toml (decision D6, rule S-7)",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "b46d643c54db3079aff86f70004102fb131d63b4620d5440ed36e54dc1fcc8fe",
+      "reason": "internal/sidecar/bound_linux_test.go: new file; its one skip is the opt-in of the new TestMemoryMaxBackstop (INKWELL_OOM_BACKSTOP=1), which makes the kernel OOM-kill a target and may raise the desktop's memory notification (residual R-7); no existing test gains a skip",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "0065c65defbdab8ee6e22e3025725b74995c21ece2abe8e7cc9f119784ce10a1",
+      "reason": "internal/sidecar/launcher_policy_linux_test.go: the skip belongs to the new TestLandlockABISeamRefusesUnsupported, below Landlock ABI 3, where decideTier refuses every sidecar anyway (ADR 0044 point 2); no existing test gains a skip",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "e4f0ced1dbc43eb978fc332f1c54dab375e6b52296d82e5125632be6a965e9a5",
+      "reason": "internal/sidecar/mount_linux.go: no bound is removed: the cached boolean probe (cachedProbe, probeOutputMount) is replaced by the tier facts of ADR 0044 point 2 (cachedFacts and probeLaunch in internal/sidecar/launch_linux.go): probeTimeout stays 5 s and the backoff 1 s to 30 s, moved there unchanged",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "be1ff505746c4da148997b8886430b51ec33b01a14f21fef9960e0f9166f05d8",
+      "reason": "internal/sidecar/mount_linux.go: no bound is removed: the cached boolean probe (cachedProbe, probeOutputMount) is replaced by the tier facts of ADR 0044 point 2 (cachedFacts and probeLaunch in internal/sidecar/launch_linux.go): probeTimeout stays 5 s and the backoff 1 s to 30 s, moved there unchanged",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "d001f86770132a81a8127a1acd28e6ea03f6e6d5ab45057422c5c36394b49e9a",
+      "reason": "internal/sidecar/mount_linux.go: no bound is removed: the cached boolean probe (cachedProbe, probeOutputMount) is replaced by the tier facts of ADR 0044 point 2 (cachedFacts and probeLaunch in internal/sidecar/launch_linux.go): probeTimeout stays 5 s and the backoff 1 s to 30 s, moved there unchanged",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "97e5c10ce29f50d197c59caae7c5ef53b6406a4099f0dc20d6a41defbdbd02a1",
+      "reason": "internal/sidecar/mount_linux.go: no bound is removed: the cached boolean probe (cachedProbe, probeOutputMount) is replaced by the tier facts of ADR 0044 point 2 (cachedFacts and probeLaunch in internal/sidecar/launch_linux.go): probeTimeout stays 5 s and the backoff 1 s to 30 s, moved there unchanged",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "12e6a3b34570d2df5a825b9d5b2399d5393eaaab090ec09d56d960d836579c5c",
+      "reason": "internal/sidecar/mount_linux.go: no bound is removed: the cached boolean probe (cachedProbe, probeOutputMount) is replaced by the tier facts of ADR 0044 point 2 (cachedFacts and probeLaunch in internal/sidecar/launch_linux.go): probeTimeout stays 5 s and the backoff 1 s to 30 s, moved there unchanged",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "dd39699b629bacf9837b90a5e4af299daee14e21e55904dd44976556f0f07068",
+      "reason": "internal/sidecar/mount_linux.go: no bound is removed: the cached boolean probe (cachedProbe, probeOutputMount) is replaced by the tier facts of ADR 0044 point 2 (cachedFacts and probeLaunch in internal/sidecar/launch_linux.go): probeTimeout stays 5 s and the backoff 1 s to 30 s, moved there unchanged",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "1a0488503e960af3d481affcbf173fb1bbfa0d30887916ec962366cec1749d6c",
+      "reason": "internal/sidecar/mount_linux_test.go: the lines belong to TestOutputMountProbeHungChildRefusesLaunch, removed with cachedProbe; its successors are TestTierFactsConclusiveProbedOnce, TestTierFactsInconclusiveRetriedAfterBackoff, TestTierFactsBackoffIsCapped and TestHungProbeLaunchIsInconclusive (internal/sidecar/probe_cache_linux_test.go, each seen red on a hand mutant of cachedFacts), TestRefusalErrnoTable, TestNamespaceOutcome and TestDecideTierExhaustive (tier_linux_test.go)",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "5603b1a2c9db9c66fd5647e4a3f1f8d00fe18cf4ceea0f7044cd361262cbd578",
+      "reason": "internal/sidecar/mount_linux_test.go: the lines belong to TestOutputMountProbeHungChildRefusesLaunch, removed with cachedProbe; its successors are TestTierFactsConclusiveProbedOnce, TestTierFactsInconclusiveRetriedAfterBackoff, TestTierFactsBackoffIsCapped and TestHungProbeLaunchIsInconclusive (internal/sidecar/probe_cache_linux_test.go, each seen red on a hand mutant of cachedFacts), TestRefusalErrnoTable, TestNamespaceOutcome and TestDecideTierExhaustive (tier_linux_test.go)",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "bf781812b6aa5a8424f9fc12b992959260038bdb116dbf2d9fd242822e7d45e5",
+      "reason": "internal/sidecar/mount_linux_test.go: the lines belong to TestOutputMountProbeHungChildRefusesLaunch, removed with cachedProbe; its successors are TestTierFactsConclusiveProbedOnce, TestTierFactsInconclusiveRetriedAfterBackoff, TestTierFactsBackoffIsCapped and TestHungProbeLaunchIsInconclusive (internal/sidecar/probe_cache_linux_test.go, each seen red on a hand mutant of cachedFacts), TestRefusalErrnoTable, TestNamespaceOutcome and TestDecideTierExhaustive (tier_linux_test.go)",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "b9804f125a22c031486713301a0d21287fb7369d914c5d084dab1cc16c35939c",
+      "reason": "internal/sidecar/mount_linux_test.go: the lines belong to TestOutputMountProbeHungChildRefusesLaunch, removed with cachedProbe; its successors are TestTierFactsConclusiveProbedOnce, TestTierFactsInconclusiveRetriedAfterBackoff, TestTierFactsBackoffIsCapped and TestHungProbeLaunchIsInconclusive (internal/sidecar/probe_cache_linux_test.go, each seen red on a hand mutant of cachedFacts), TestRefusalErrnoTable, TestNamespaceOutcome and TestDecideTierExhaustive (tier_linux_test.go)",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "7d6be29cc48c5f51cb55ec1d8285fdf5b2b961de9f188afd270f3e4476540576",
+      "reason": "internal/sidecar/netns_linux.go: no bound is removed: the cached boolean probe (cachedProbe, probeOutputMount) is replaced by the tier facts of ADR 0044 point 2 (cachedFacts and probeLaunch in internal/sidecar/launch_linux.go): probeTimeout stays 5 s and the backoff 1 s to 30 s, moved there unchanged",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "242e70174472b7c1b53720850ee978c50f2f19986aedc989ea1d12f95b83183c",
+      "reason": "internal/sidecar/netns_linux.go: no bound is removed: the cached boolean probe (cachedProbe, probeOutputMount) is replaced by the tier facts of ADR 0044 point 2 (cachedFacts and probeLaunch in internal/sidecar/launch_linux.go): probeTimeout stays 5 s and the backoff 1 s to 30 s, moved there unchanged",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "1f17119b069dd4bcd4655a83bc506212c6f886d3e013f84a3ffc17a5c52b30ed",
+      "reason": "internal/sidecar/netns_linux_test.go: deleted with probeIsolation, the boolean network probe it tested (TestIsolationProbeHungChildRefusesLaunch, TestIsolationProbeDefinitiveRefusalSelectsFallback); its successors are TestTierFactsConclusiveProbedOnce, TestTierFactsInconclusiveRetriedAfterBackoff, TestTierFactsBackoffIsCapped and TestHungProbeLaunchIsInconclusive (internal/sidecar/probe_cache_linux_test.go, each seen red on a hand mutant of cachedFacts), TestRefusalErrnoTable, TestNamespaceOutcome and TestDecideTierExhaustive (tier_linux_test.go)",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "913eb1e92f363ee377c6ea90633550614b0cefd55a72922aea27175965e480eb",
+      "reason": "internal/sidecar/netns_linux_test.go: same deletion (the hung-probe test of the removed probeIsolation); its successors are TestTierFactsConclusiveProbedOnce, TestTierFactsInconclusiveRetriedAfterBackoff, TestTierFactsBackoffIsCapped and TestHungProbeLaunchIsInconclusive (internal/sidecar/probe_cache_linux_test.go, each seen red on a hand mutant of cachedFacts), TestRefusalErrnoTable, TestNamespaceOutcome and TestDecideTierExhaustive (tier_linux_test.go)",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "57120228c3b4011169a1f81ab2b7b3a6f6ad79817fbc0d75cf734ef910e394ad",
+      "reason": "internal/sidecar/netns_linux_test.go: same deletion (the hung-probe test of the removed probeIsolation); its successors are TestTierFactsConclusiveProbedOnce, TestTierFactsInconclusiveRetriedAfterBackoff, TestTierFactsBackoffIsCapped and TestHungProbeLaunchIsInconclusive (internal/sidecar/probe_cache_linux_test.go, each seen red on a hand mutant of cachedFacts), TestRefusalErrnoTable, TestNamespaceOutcome and TestDecideTierExhaustive (tier_linux_test.go)",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "7fa164c5a517adaae96aab95167d73cd48d33c4437f4d346cf86745e5d36eab5",
+      "reason": "internal/sidecar/netns_linux_test.go: same deletion (the hung-probe test of the removed probeIsolation); its successors are TestTierFactsConclusiveProbedOnce, TestTierFactsInconclusiveRetriedAfterBackoff, TestTierFactsBackoffIsCapped and TestHungProbeLaunchIsInconclusive (internal/sidecar/probe_cache_linux_test.go, each seen red on a hand mutant of cachedFacts), TestRefusalErrnoTable, TestNamespaceOutcome and TestDecideTierExhaustive (tier_linux_test.go)",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "79b6a7781edca4d0008f2294ccec617c63c605eb837519bd7668b229c65602d2",
+      "reason": "internal/sidecar/netns_linux_test.go: same deletion (the hung-probe test of the removed probeIsolation); its successors are TestTierFactsConclusiveProbedOnce, TestTierFactsInconclusiveRetriedAfterBackoff, TestTierFactsBackoffIsCapped and TestHungProbeLaunchIsInconclusive (internal/sidecar/probe_cache_linux_test.go, each seen red on a hand mutant of cachedFacts), TestRefusalErrnoTable, TestNamespaceOutcome and TestDecideTierExhaustive (tier_linux_test.go)",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "843bb0916ae71b0657557413a98efefbd8f5415d1dfb9fc355497413c44feb79",
+      "reason": "internal/sidecar/probe_report_linux_test.go: no timeout is raised; the raw namespace-probe loop and its 10 s bound are removed with runNamespaceProbe, the 30 s and 60 s bounds of the remaining runs are unchanged; the file is a measurement that asserts nothing (INKWELL_SANDBOX_PROBE=1)",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "a123a70321bece473e72ea3938484d3417fd9f3da092b42ca47c24b8c317eb33",
+      "reason": "internal/sidecar/scope_linux_test.go: no timer is raised; the new waitReport has the same 20 s bound as waitLine and also returns when the app helper ends without a report. Two deliberate changes of TestCgroupSession* in this file, neither a weakening: the aggregate case accepts `cause=unknown watch-lost=true` beside `victim` (ADR 0042 rule M9: a lost watch answers unknown, never a guessed cause; the leaf case stays strict; docs/autonomous-decisions.md 2026-11-15 « SB2a1 R2b ») and the scenario is played again, 3 attempts at most, only when the kernel OOM-killed the helper itself before its report, proven by its SIGKILL status and the oom_kill counter of its scope (harness artefact; docs/autonomous-decisions.md 2026-11-15 « SB2a1 R2c (test) »)",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "041ba39514c28dde4d6f7bcedff68474548385c2d0f50349e9bb72f44e51baea",
+      "reason": "internal/sidecar/tier_helpers_linux_test.go: new file; requireN's skip (tier N unavailable, with its tier-report line) replaces the skip of requireOutputMount removed from mount_linux_test.go, and scripts/gojson_check.py accepts it only as `n-unavailable` in an N column of the inventory, never in an F column (decision D7)",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "d86de6a7d2dd92d691b8d7da3a64085a479a52d9300e5bbc05aeb0f854575a90",
+      "reason": "mise.toml: task test:py also runs scripts/gojson_check_test.py and scripts/gh_verdict_test.py, the tests of the two checkers this block adds; nothing is removed from the task",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "8ee039304e62598fde2d80532709e51b5606f2f7db1146f9f407b89f73b46613",
+      "reason": "scripts/gh-verdict.py: new file, the checker of the `github` criterion of gates/SB2a1.toml (decision D6), tested by scripts/gh_verdict_test.py; no existing gate dependency changes",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "08f4b64240b0d279bb397a959bfe76ac48555ba1543e9ad38ac7feb633764b09",
+      "reason": "scripts/gh_verdict_test.py: new file, the tests of scripts/gh-verdict.py on recorded API answers (criterion `checkers` of gates/SB2a1.toml); no existing gate dependency changes",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "cd07ffb1cffcf084e010281c25c08cf8a1ea65ed4d17176b5114b2637ff0e862",
+      "reason": "scripts/gojson_check.py: new file, the checker of `go test -json` runs against gates/inventories/SB2a1.toml (decision D7), tested by scripts/gojson_check_test.py; no existing gate dependency changes",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "17a9b53dbe2b538b6dfabebe21ef3aaad9d16360e4a3e7966fb93b2b96e1c6d4",
+      "reason": "scripts/gojson_check_test.py: new file, the tests of scripts/gojson_check.py (criterion `checkers` of gates/SB2a1.toml); no existing gate dependency changes",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "31bc79d163b7a39e8898e6b11f6e010b58fbd173ee30659f3cc17ad26cd212fb",
+      "reason": "internal/sidecar/launcher_policy_linux_test.go: the skip belongs to the new TestLandlockABISeamRefusesUnsupported, below Landlock ABI 3, where decideTier refuses every sidecar anyway (ADR 0044 point 2); no existing test gains a skip; re-fingerprinted on 2026-11-15: the mount-construction tests now go through requireN (a mount namespace exists only in tier N), reported with the tier-report line; no F cell of the inventory skips",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "d7c57da8ac8e592d5ce92e157dd5eb3ba8f3cbfa2b0c5d91582127444120b2c1",
+      "reason": "internal/sidecar/scope_linux_test.go: no timer is raised; the new waitReport has the same 20 s bound as waitLine and also returns when the app helper ends without a report. Two deliberate changes of TestCgroupSession* in this file, neither a weakening: the aggregate case accepts `cause=unknown watch-lost=true` beside `victim` (ADR 0042 rule M9: a lost watch answers unknown, never a guessed cause; the leaf case stays strict; docs/autonomous-decisions.md 2026-11-15 « SB2a1 R2b ») and the scenario is played again, 3 attempts at most, only when the kernel OOM-killed the helper itself before its report, proven by its SIGKILL status and the oom_kill counter of its scope (harness artefact; docs/autonomous-decisions.md 2026-11-15 « SB2a1 R2c (test) ») Re-fingerprinted on 2026-11-15 after the GitHub run of candidate/sb2a1-1: requireScope makes the scope tests assert tier F's own contract (a clean rlimit run, no session and no run cgroup: T-6) where no PID namespace exists, and a wait cycle on the test's stdin pipe now fails at once instead of timing the package out; no timer raised",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "ee6f0b1663ae28b333af5d298710b0574b3dfb7e918b2af64f0d54f02cb8d478",
+      "reason": "internal/sidecar/tier_helpers_linux_test.go: new file; requireN's skip (tier N unavailable, with its tier-report line) replaces the skip of requireOutputMount removed from mount_linux_test.go, and scripts/gojson_check.py accepts it only as `n-unavailable` in an N column of the inventory, never in an F column (decision D7); re-fingerprinted on 2026-11-15: forksInSandbox added, for tests that need process creation, which the tier-F filter forbids by design (S-2)",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "fc60dfc524d59e3d4de088bf8f7a175e4ada7be7562f9fcd360f9c0c09eaeb5e",
+      "reason": "internal/language/integration_test.go: new requireSandbox skips only on ErrSandboxRefused (arm64 until SB2a2, rule S-7); the tests now run in tier F as well as N; none of them is in the inventory",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "24ee84c5c5e947c0f1258118d284590e6ef29d9a0d79e8614d00bbc13ca7aae7",
+      "reason": "internal/typst/helper_test.go: newEngine skips only on a sandbox refusal (arm64 until SB2a2, rule S-7); the two inventoried typst tests do not skip there, they assert the refusal sentence",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "0284a584e3a8dc781e80c8d9d332a27afe06e942255dc93b6585de226da63615",
+      "reason": "internal/sidecar/bound_linux_test.go: new file; its one skip is the opt-in of the new TestMemoryMaxBackstop (INKWELL_OOM_BACKSTOP=1), which makes the kernel OOM-kill a target and may raise the desktop's memory notification (residual R-7); no existing test gains a skip; re-fingerprinted on 2026-11-15 after the second GitHub run: the helper's address limit in this file goes from 1 GiB to 2 GiB, because a Go helper built with coverage failed to start under 1 GiB 4 times in 400 (pthread_create EAGAIN) and never under 2 GiB; a fixture limit, not a product bound; no skip added",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "2ea6ad01baec8aba054b166d327d481d5678e17afbf3e1e719b328eb0e15051c",
+      "reason": ".github/workflows/ci.yml: a new step of the ci job, « Assert the sandbox ran in tier N », with its own 3-minute cap (D6 revised 2026-11-16); no existing timeout-minutes is raised: the sandbox-stock step keeps its 20 minutes with internal/app added (measured 57 s with -race in tier F)",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "95bae164b740e7458ff76697e8bd4b39486fb104bf96410b990d97786f669b15",
+      "reason": ".github/workflows/ci.yml: the ci job gains a step that starts the user manager and session bus and runs ci:core inside systemd-run --user --scope (GitHub's ci job had no delegated scope, so the cgroup path never ran there); no timeout-minutes is raised, the « Assert the sandbox ran in tier N » step keeps its 3-minute cap",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "8d6ea452cacb87e85987ced1ccc519405e489b2703ff5ed32281f3336bd6347c",
+      "reason": "internal/sidecar/bound_linux_test.go: requireN becomes requireNScope, the same tier-F skip (accepted only as n-unavailable in an N column); without a delegated scope the test now asserts the per-process fallback (rule T-6) instead of failing; no inventory cell newly skipped",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "fdc19e0e389c26ea74948f2d7e867d536d5c1f1d1bd82e5fb5b89b4c050bec3f",
+      "reason": "internal/sidecar/scope_linux_test.go: requireScope also covers tier N without a delegated scope (decided only by environment facts: not under user@UID.service, or no session bus), asserting the fallback; no timeout changed (the 20 s waitLine timer is as before), the fingerprint moved with the new helpers; re-fingerprinted on 2026-11-16: raceResidentReserve added to TestResidentBudgetKillsWithSIGKILL/resident-tree in race builds only (measured per-process race overhead, gates/SB2a1/WITNESSES.md), no timeout touched",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "352d5635190c3dbe45421ad23ed625d662f95dc25ea9209624575c1d580e824e",
+      "reason": "internal/typst/sandbox_linux_test.go: the hostile-memory tests take the scope helper, and skip only the core-dump check on kernels that cannot report core dumps (PIDFD_INFO_COREDUMP, before Linux 6.16), after the memory-limit check has run, as the sidecar tests already do",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "4353776ea2baaa7f4e297d90498992b8d1d95d24aa1ea0144dcba339bcf0dc36",
+      "reason": "scripts/perf/cpu_test.py: burn() consumes a fixed CPU time (process_time) instead of a wall time, and the detached-helper window closes once the helper reports its 0.8 s of CPU burnt instead of after a fixed 800 ms; no bound is lowered (> 350 and > 500 unchanged); the tests now hold under CPU contention (reproduced red with 6 busy loops on 2 CPUs and on GitHub run 43920252732, green after)",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "98489a711732555908f4281d856aab7c70e61b1c7bf05f732488e21b3ec12c4a",
+      "reason": "internal/sidecar/bound_linux_test.go: TestBoundSparesPageCache gains a slow_storage case (50 MB/s through the scope's io.max, the condition in which GitHub's ci runner killed the read under the former watchdog rule, ADR 0044 point 1g amendment of 2026-11-16); it skips only where io.max cannot be set (the io controller not delegated to the scope, or the cache directory not on a block device); the local_storage case keeps every assertion and no skip, and the rule is proven without any skip by TestUnreclaimableLeavesOutOnlyFileCache and TestMemoryWatchdogSparesFileCache (seen red under the former rule, MS20)",
+      "decision": "docs/adr/0044-sandbox-tiers.md"
+    },
+    {
+      "id": "d258f46b9d899a60296d9d2b1365a50f73b0f1071229e31e201f86cb31cc6e29",
+      "reason": ".github/workflows/ci.yml: SB2a1's ci job steps (tier N lift, delegated user scope, tier assertion with its own 3 min) combined with CI1's parallel `formal` job (45 min, measured 25 min); no existing cap raised",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "e84827b6c16d5bdda2f9f35f952955c83ce2b74d1c8082c81848ac4da978d4b3",
+      "reason": "mise.toml: SB2a1's sandbox tasks combined with CI1's split of ci:core into ci:checks + formal; locally ci:core runs what it ran before",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "99635f1b14ff87eba82531b149ac268fd277a499d64530d3f6edb03e09525670",
+      "reason": ".github/workflows/ci.yml: the formal job installs only mise (install: false, no task auto-install); SB2a1's ci steps and CI1's formal job as before, no cap raised",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "47d48bb75e78295575631a5cfbf6ab8c601d9ad248dcf47283f1d3c91a91ae6f",
+      "reason": ".github/workflows/ci.yml: SB2a1's ci job steps (tier N lift, delegated user scope, tier assertion with its own 3 min) on top of main's ci.yml (CI1's formal job unchanged); no cap raised",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "51dad904fe6a365f85ff5b15f45ad8a6999aece1c8d00a631c4f3aa5977f8e9c",
+      "reason": ".github/workflows/ci.yml: the ci job becomes a matrix of two parts on two runners (checks, e2e), each with the same 35 min cap, because with every check green it passed 35 min in one job (run 44002604121); no cap raised (CI1b)",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "46d2686fd2acc7d5b70a477cbfc6f4813070161d13cc4daa1e54eb1d369d706b",
+      "reason": ".github/workflows/ci.yml: the ci matrix gains a `frontend` part running fe:check alone (beside test:ci it ran 5 to 15 times slower and timed out, runs 43979066870 and 44010837492); every part keeps the 35 min cap; no cap raised (CI1b)",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "544bc0751e9c503af7894e42c776a6054294d1cebf312a342d86b6f15a977695",
+      "reason": "mise.toml: fe:check leaves ci:checks for GitHub's own `frontend` part; locally ci:core = ci:checks + fe:check + formal, the same set as before (CI1b)",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "4cfb74b3fdb2ed6bfa0ed733625c4bf20a57044bb524d4d2251e4a5311d6d640",
+      "reason": "mise.toml: fe:check leaves ci:checks for GitHub's own `frontend` part; locally ci:core = ci:checks + fe:check + formal, the same set as before (CI1b)",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "bf5d1603378ef2c24ff74ce62689d6f92e8c2ea65e9d7e1d73494e16ace121b5",
+      "reason": "mise.toml: fe:check leaves ci:checks for GitHub's own `frontend` part; locally ci:core = ci:checks + fe:check + formal, the same set as before (CI1b)",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "48f610e228ddcddf5100ac21a0517c92a9557a68eb10773ce55fd5f6d15767f8",
+      "reason": ".github/workflows/ci.yml: the checks part of the ci matrix keeps the job name `ci`, read by frozen gates through the API (gates/SB2a1.toml `github`); the other parts are ci-frontend and ci-e2e; no cap raised (CI1b)",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "c863cbd143c30d12f2a90984fe209aeff43712ba1fa6b3635d38704d1a979f80",
+      "reason": "internal/language/integration_test.go: the skip when the sandbox is refused on this machine (arm64 until SB2a2, or no isolation) gets an environment comment for INV1's inventory; the skip itself is SB2a1's refusal rule, unchanged",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "0b0dd07d5077eaf05cb83308c8e3dd83c4655b47b821110a81cf0616f0d0bfa3",
+      "reason": "mise.toml: SB2a1 on top of main: CI1b's split (ci:checks, fe:check on its own runner, formal) and SB2a1's test:py entry (gojson_check_test.py) beside INV1's inventory_test.py; locally ci:core runs the same set; no test weakened",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "1067d873cc311fa26d2638719c6bd1ed68271dae9bdf8b3ce664a5e6e56152cf",
+      "reason": "mise.toml: SB2a1 on top of main: CI1b's split (ci:checks, fe:check on its own runner, formal) and SB2a1's test:py entry (gojson_check_test.py) beside INV1's inventory_test.py; locally ci:core runs the same set; no test weakened",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "41cd83999f7128d4e5359b8186e1aed8bdd60074549f42805a0fccdd0fdaaaf7",
+      "reason": "mise.toml: SB2a1 on top of main: CI1b's split (ci:checks, fe:check on its own runner, formal) and SB2a1's test:py entry (gojson_check_test.py) beside INV1's inventory_test.py; locally ci:core runs the same set; no test weakened",
+      "decision": "docs/objectif-en-cours.md"
     }
   ]
 }

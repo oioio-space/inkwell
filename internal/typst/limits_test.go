@@ -83,15 +83,15 @@ func TestCompilePageWindow(t *testing.T) {
 // FINDING 3: Typst runs without network when the system allows it.
 func TestCompileNetworkMode(t *testing.T) {
 	e := newEngine(t, nil)
-	isolated, err := sidecar.NetworkIsolation()
+	isolated, err := sidecar.NetworkIsolation(sharedStore)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if want := map[bool]string{true: "namespace", false: "proxy only"}[isolated]; e.NetworkMode() != want {
+	if want := map[bool]string{true: "namespace", false: "reduced"}[isolated]; e.NetworkMode() != want {
 		t.Errorf("NetworkMode() = %q, want %q", e.NetworkMode(), want)
 	}
 	proxyOnly := newEngine(t, func(c *Config) { c.proxyOnly = true })
-	if proxyOnly.NetworkMode() != "proxy only" {
+	if proxyOnly.NetworkMode() != "reduced" {
 		t.Errorf("NetworkMode() = %q with proxyOnly", proxyOnly.NetworkMode())
 	}
 	// Either way a missing package is reported, never fetched.

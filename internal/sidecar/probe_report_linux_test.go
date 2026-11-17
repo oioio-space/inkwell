@@ -21,11 +21,10 @@ import (
 // an answer. It is inert unless INKWELL_SANDBOX_PROBE=1
 // (scripts/sandbox-probe.sh, .github/workflows/sandbox-probe.yml; block SB2).
 //
-// It calls, in this order: the two cached probes the launcher decides with
-// (probeOutputMount, probeIsolation); the same probe child through
-// runNamespaceProbe with each namespace set, to read the raw error; Run on the
-// test helper in "echo" mode, plain and with NoNetwork; and the Landlock
-// system call for its ABI version and for a ruleset with TCP rules.
+// It prints, in this order: the tier facts of the real N and F probe launches
+// (ADR 0044 point 2) and the tier decided for each sidecar; Run on the test
+// helper in "echo" mode, plain and with NoNetwork; and the Landlock system
+// call for its ABI version and for a ruleset with TCP rules.
 func TestSandboxProbeReport(t *testing.T) {
 	if os.Getenv("INKWELL_SANDBOX_PROBE") != "1" {
 		return // a measurement, not a test: it asserts nothing, so there is nothing to skip
@@ -38,24 +37,17 @@ func TestSandboxProbeReport(t *testing.T) {
 		say("Q3", "child %s label=%s err=%v", child, strings.Trim(string(out), "\x00\n "), err)
 	}
 
-	ok, err := probeOutputMount()
-	say("Q3", "probeOutputMount supported=%v err=%v errno=%s", ok, err, errnoName(err))
-	ok, err = probeIsolation()
-	say("Q3", "probeIsolation supported=%v err=%v errno=%s", ok, err, errnoName(err))
-
-	path, args, err := sandboxPrefix(sandboxConfig{Probe: true})
+	target, err := probeTarget(nil)
 	if err != nil {
-		say("Q3", "sandboxPrefix err=%v", err)
-	} else {
-		for _, ns := range []struct {
-			name string
-			set  func(*exec.Cmd)
-		}{{"mount namespaces", mountNamespace}, {"user+net+pid+ipc+mount namespaces", isolate}} {
-			ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
-			ok, err := runNamespaceProbe(ctx, ns.set, []string{}, path, args...)
-			cancel()
-			say("Q3", "raw probe %s: supported=%v err=%v errno=%s definitive=%v", ns.name, ok, err, errnoName(err), err != nil && definitiveRefusal(err))
-		}
+		say("Q3", "no probe target: %v", err)
+		return
+	}
+	facts := probeFacts(target)
+	say("Q3", "tier facts: landlock=%d seccomp=%v ns=%v (err=%v errno=%s) f=%v (err=%v errno=%s)",
+		facts.Landlock, facts.Seccomp, facts.NS, facts.NSErr, errnoName(facts.NSErr), facts.F, facts.FErr, errnoName(facts.FErr))
+	for _, p := range sidecarPrograms() {
+		decided, err := decideTier(p, facts)
+		say("Q3", "decided tier for %s: %v err=%v", p.name, decided, err)
 	}
 
 	for _, noNetwork := range []bool{false, true} {
@@ -144,7 +136,7 @@ func TestSandboxProbeTiers(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(project, "main.typ"), []byte(doc), 0o600); err != nil {
 		t.Fatal(err)
 	}
-	runs := func(q string, noIsolation bool) {
+	runs := func(q string, forceF bool) {
 		for _, c := range []struct {
 			label string
 			spec  Spec
@@ -153,8 +145,8 @@ func TestSandboxProbeTiers(t *testing.T) {
 			{"typst compile to stdout", Spec{Path: typst, Dir: project, Args: []string{"compile", "--root", project, "--ignore-system-fonts", "main.typ", "-"}, MaxOutput: 1 << 20, NoNetwork: true}},
 			{"tinymist --version", Spec{Path: tinymist, Dir: t.TempDir(), Args: []string{"--version"}, Env: []string{"HOME=" + t.TempDir()}, NoNetwork: true}},
 		} {
-			if noIsolation {
-				c.spec.isolationProbe = func() (bool, error) { return false, nil }
+			if forceF {
+				c.spec.tier = tierF
 			}
 			ctx, cancel := context.WithTimeout(t.Context(), 60*time.Second)
 			out, err := Run(ctx, c.spec)
@@ -171,9 +163,6 @@ func TestSandboxProbeTiers(t *testing.T) {
 	say("Q10", "process label=%s; the tier this machine decides:", procLabel())
 	runs("Q10", false)
 
-	saved := probeOutputMount
-	probeOutputMount = func() (bool, error) { return false, nil }
-	defer func() { probeOutputMount = saved }()
-	say("Q11", "the namespace-free tier forced (both probes answer no):")
+	say("Q11", "the namespace-free tier forced:")
 	runs("Q11", true)
 }
