@@ -147,12 +147,6 @@ jobs:
       - run: mise run formal
         env:
           MISE_TASK_RUN_AUTO_INSTALL: "false"
-      - uses: jdx/mise-action@5228313ee0372e111a38da051671ca30fc5a96db # v3.6.3
-        with:
-          install: false
-      - run: mise run formal
-        env:
-          MISE_TASK_RUN_AUTO_INSTALL: "false"
   # Two instances behind NATs and a public relay, in network namespaces created without
   # root by the script itself (scripts/netsim); the same command runs locally.
   netsim:

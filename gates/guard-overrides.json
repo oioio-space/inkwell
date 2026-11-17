@@ -1539,6 +1539,11 @@
       "id": "99635f1b14ff87eba82531b149ac268fd277a499d64530d3f6edb03e09525670",
       "reason": ".github/workflows/ci.yml: the formal job installs only mise (install: false, no task auto-install); SB2a1's ci steps and CI1's formal job as before, no cap raised",
       "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "47d48bb75e78295575631a5cfbf6ab8c601d9ad248dcf47283f1d3c91a91ae6f",
+      "reason": ".github/workflows/ci.yml: SB2a1's ci job steps (tier N lift, delegated user scope, tier assertion with its own 3 min) on top of main's ci.yml (CI1's formal job unchanged); no cap raised",
+      "decision": "docs/objectif-en-cours.md"
     }
   ]
 }
