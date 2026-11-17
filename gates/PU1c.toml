@@ -1,0 +1,352 @@
+# FROZEN 2026-11-17 after two Codex reviews (second round: the 250 ms bound imposed in the criteria).
+# DRAFT 2026-11-17 (step 1, not frozen). Codex reviews the spec and this gate before the freeze (method v2). Block
+# PU1c: one lifecycle for every inbound stream of the two ordered lanes, sync and bulk (rules P-10 to P-14): one
+# reader per stream for its whole life; a 1-byte probe at most every 250 ms while waiting (≤ 256 B kept), its bytes
+# kept in order; an end with nothing unread seen at once, a reset within 250 ms, an end behind bytes at its turn; any
+# end after a probed prefix keeps the place to its turn, then the decoder delivers the whole frames; no stream takes
+# the receive budget before its turn; a blocked reader freed by room, its own connection's loss or the node's close,
+# every reservation returned; the QUIC initial connection window set so that the waiting streams of both lanes never
+# starve a head; the bulk lane on /inkwell/bulk/2.0.0 with the same ACK, places, order and 0x1002 refusal. Rigour:
+# complete (bytes from a peer, state between peers, a budget shared by every peer). Plan:
+# docs/plans/2026-11-17-pu1c-inbound-lifecycle.md; spec §8.1, §8.7.3, §8.7.8, §8.7.9, §16.1, §20.6; model
+# docs/protocol/tla/InboundLifecycle.tla. PU1c lands on PU1+PU1b's candidate: gates/PU1.toml and gates/PU1b.toml
+# (frozen) must pass on the same tree, their Go arms are re-run here as direct criteria, PU1b's MQ1, MQ2, MQ5 are
+# re-anchored on the new code and re-run here; gates/PU1n.toml (netsim) runs once on that candidate, alone on the
+# machine. No gate runs another. Red witnesses: gates/PU1c/WITNESSES.md. Every command is `timeout -k 10 N …` (the cap
+# covers the wait for a slot): 90 + 60 + 560 + 450 + 120 + 270 + 30 + 30 + 690 + 30 + 30 = 2360 s ≤ 2700 s (G-1).
+max_minutes = 45
+raw_results = ["docs/plans/2026-11-17-pu1c-inbound-lifecycle.md", "docs/protocol/tla/InboundLifecycle.tla", "protocol/vectors/inbound.json", "gates/PU1c/*"]
+
+[[criteria]]
+# Vectors (spec §8.7.9). inbound.json is exactly step 1's corpus (digest of id, decoder, input, context, events,
+# expect, verdict, scope over the 33 vectors: step 2 changes only status/enforce), every vector is enforced from step 3,
+# the generator reproduces the committed corpus, and TestCorpus passes every inbound.json case as required (no
+# « future: »: the reference decoders inbound_lifecycle, inbound_probe and quic_window exist in protocol/conformance,
+# backed by protocol/syncack). PU1's syncack.json and PU1b's syncorder.json are unchanged (their digests).
+id = "vectors"
+command = '''mkdir -p .task && cd protocol && timeout -k 10 90 ../scripts/heavy.sh go test -count=1 -json -run '^(TestCorpus|TestGenerateMatchesCommittedCorpus)$' -v ./conformance/ ./cmd/vectors/ > ../.task/pu1c-vectors.json 2>&1; a=$?; cd .. && python3 -I - "$a" <<'PY'
+import hashlib, json, pathlib, sys
+bad = [] if sys.argv[1] == "0" else [f"go test exit {sys.argv[1]}"]
+keep = ("id", "decoder", "input_hex", "context", "events", "expect", "verdict", "scope")
+def digest(name):
+    d = json.loads(pathlib.Path(f"protocol/vectors/{name}").read_text())
+    canon = json.dumps([{k: v[k] for k in keep if k in v} for v in d["vectors"]], sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+    return d, (len(d["vectors"]), hashlib.sha256(canon.encode()).hexdigest())
+d, got = digest("inbound.json")
+if got != (33, "eecc4ab6cdd76bede1536914df71f50172927f24b8b5a0d2fca6910687a1c8ac"):
+    bad.append("inbound.json differs from step 1's corpus")
+if digest("syncack.json")[1] != (34, "5307797671903594e1ccfef42b9a62536e18c0a139ed0d6af0af93c503e12d50"):
+    bad.append("PU1's syncack.json changed")
+if digest("syncorder.json")[1] != (20, "5fee8f342018e830d6920c30aa03600607c2d8be44342429f2d33069ba2293a4"):
+    bad.append("PU1b's syncorder.json changed")
+bad += [f"{v['id']}: enforce {v.get('enforce')!r}, want 'step-3'" for v in d["vectors"] if v.get("enforce") != "step-3"][:3]
+evs = []
+for line in pathlib.Path(".task/pu1c-vectors.json").read_text().splitlines():
+    try:
+        e = json.loads(line)
+    except ValueError:
+        continue
+    if isinstance(e, dict):
+        evs.append(e)
+passed = {e["Test"] for e in evs if e.get("Action") == "pass" and e.get("Test")}
+future = {e["Test"] for e in evs if e.get("Action") == "output" and "future:" in e.get("Output", "")}
+for v in d["vectors"]:
+    n = f"TestCorpus/inbound.json/{v['id']}"
+    if n not in passed or n in future:
+        bad.append(f"{n}: {'future (not required)' if n in future else 'missing or failing'}")
+if "TestGenerateMatchesCommittedCorpus" not in passed:
+    bad.append("TestGenerateMatchesCommittedCorpus not passing")
+sys.exit(f"PU1c vectors: {bad[:12]}" if bad else 0)
+PY'''
+
+[[criteria]]
+# The reference (rules P-10 to P-13) is pure and tested in protocol/syncack: TestLifecycle (every state × every
+# observation: arrive, ack, read with n and an error, turn, up, budget, own and other connection lost, decode with a
+# truncated tail), TestProbeSchedule (the next attempt at most InboundProbeEvery after the previous one, at most one
+# byte per period, at most InboundProbeMax kept), TestQUICWindow (the P-13 inequality, at the bound and one byte
+# under), and the corpus. PU1b's TestOrder and TestRefusal still pass.
+id = "reference"
+command = '''mkdir -p .task && cd protocol && timeout -k 10 60 ../scripts/heavy.sh go test -count=1 -json -run '^(TestLifecycle|TestProbeSchedule|TestQUICWindow|TestOrder|TestRefusal|TestCorpus)$' ./syncack/ > ../.task/pu1c-ref.json 2>&1; a=$?; cd .. && python3 -I - "$a" <<'PY'
+import json, pathlib, sys
+bad = [] if sys.argv[1] == "0" else [f"go test exit {sys.argv[1]}"]
+passed = set()
+for line in pathlib.Path(".task/pu1c-ref.json").read_text().splitlines():
+    try:
+        e = json.loads(line)
+    except ValueError:
+        continue
+    if isinstance(e, dict) and e.get("Action") == "pass" and e.get("Test"):
+        passed.add(e["Test"])
+bad += [f"missing or not passing: {n}" for n in ("TestLifecycle", "TestProbeSchedule", "TestQUICWindow", "TestOrder", "TestRefusal", "TestCorpus") if n not in passed]
+sys.exit(f"PU1c reference: {bad}" if bad else 0)
+PY'''
+
+[[criteria]]
+# The model (plan §6, README « InboundLifecycle »): exactly these sixteen runs, no ✗. Sound: Honest (both lanes at
+# once, late handlers, a reopen per lane, the sessions end; all safety, AllDelivered, EmptyLeaves, NoBlindWait),
+# Byzantine (a head and a waiting stream of one lane — it over-approximates both Byzantine lanes on one credit, plan §6
+# « Composition of the two lanes »; every end kind in every state, a stalled consumer, Stall, a connection loss; safety, EmptyLeaves, NoBlindWait, BlockedFreed),
+# ByzantineSafety (three streams, a third place refused, a probe keeping a whole and a truncated frame; invariants), Credit (the sync head honest, a second sync stream
+# and both bulk streams filled to their window before it writes, the bulk head blocked: HeadProgresses). Mutants
+# caught by the named property: QC1 PlaceSyncLate (Order), QC2 FailedWaits (EmptyLeaves), QC3 ProbeOnce
+# (NoBlindWait), QC4 WaitCharges (WaitNoBudget), QC5 KeepWholeOnly (FinFramesDelivered), QC6 NoCancel (BlockedFreed),
+# QC7 BulkTail (Order), QC8 SmallWindow (HeadProgresses); witnesses: a kept prefix, a blocked reader, a truncated tail
+# after whole frames, the credit exhausted before the head writes. Structure: the rule operators are the sound ones
+# and both lanes share one ConnWindow; Honest and Credit instantiate both lanes at once. SyncOrder.tla and PeerUpAck.tla are untouched (criterion frozen-untouched).
+id = "tla"
+# Cap = compute + wait, stated: the sixteen runs took 292 s with 4 workers (2026-11-17, idle machine), × 1.5 = 440 s of
+# compute; heavy.sh --exclusive waits at most INKWELL_PERF_LOAD_WAIT = 120 s for an idle machine (no other heavy job
+# runs during a gate, so its slot wait is the idle wait): 440 + 120 = 560 s.
+command = '''out=$(INKWELL_TLA_ONLY='^InboundLifecycle' INKWELL_TLA_WORKERS=4 INKWELL_PERF_LOAD_WAIT=120 timeout -k 10 560 ./scripts/heavy.sh --exclusive ./scripts/tla-check.sh 2>&1) || { echo "$out" | tail -40; exit 1; }
+! echo "$out" | grep -q '✗' || { echo "$out" | grep '✗'; exit 1; }
+for want in "✓ InboundLifecycleHonest: no error (exhaustive, liveness checked)" "✓ InboundLifecycleByzantine: no error (exhaustive, liveness checked)" "✓ InboundLifecycleByzantineSafety: no error (exhaustive, invariants)" "✓ InboundLifecycleCredit: no error (exhaustive, liveness checked)" "✓ InboundLifecyclePlaceSyncLate: violation detected (Order)" "✓ InboundLifecycleFailedWaits: violation detected (EmptyLeaves)" "✓ InboundLifecycleProbeOnce: violation detected (NoBlindWait)" "✓ InboundLifecycleWaitCharges: violation detected (WaitNoBudget)" "✓ InboundLifecycleKeepWholeOnly: violation detected (FinFramesDelivered)" "✓ InboundLifecycleNoCancel: violation detected (BlockedFreed)" "✓ InboundLifecycleBulkTail: violation detected (Order)" "✓ InboundLifecycleSmallWindow: violation detected (HeadProgresses)" "✓ InboundLifecycleWitnessKept: violation detected (NoKept)" "✓ InboundLifecycleWitnessBlocked: violation detected (NoBlocked)" "✓ InboundLifecycleWitnessTruncatedTail: violation detected (NoTruncatedTail)" "✓ InboundLifecycleWitnessExhausted: violation detected (NoCreditExhaustedFirst)"; do echo "$out" | grep -qxF -- "$want" || { echo "missing: $want"; exit 1; }; done
+[ "$(echo "$out" | grep -c '✓')" -eq 16 ] || { echo "want 16 ✓, got $(echo "$out" | grep -c '✓')"; exit 1; }
+python3 -I - <<'PY'
+import pathlib, re, sys
+t = pathlib.Path("docs/protocol/tla/InboundLifecycle.tla").read_text()
+bad = [w for w in [r"^PlaceAtArrival\(l\) == TRUE$", r"^EarlyOK\(s\) == TRUE$", r"^ProbeOK\(s\) == TRUE$", r"^WaitCharges == FALSE$", r"^KeepPrefix\(s\) == TRUE$", r"^CancelOnLoss == TRUE$", r"^ConnWindow == Cap \* 2 \* Win$", r'^FirstState\(l\) == "accepting"$', r"^Lanes == \{\"sync\", \"bulk\"\}$", r"^ConnRoom == SumQ\(S\) < ConnWindow$", r"^ArrivingHoldsNothing ==", r"^Release\(s\) ==$", r"^Places ==", r"^Order ==", r"^WaitNoBudget ==", r"^ReservationsReturned ==", r"^FinFramesDelivered ==", r"^EmptyLeaves ==", r"^NoBlindWait ==", r"^BlockedFreed ==", r"^HeadProgresses =="] if not re.search(w, t, re.M)]
+for cfg in ("InboundLifecycleHonest", "InboundLifecycleCredit"):
+    c = pathlib.Path(f"docs/protocol/tla/{cfg}.cfg").read_text()
+    if not re.search(r"^  Sync = \{[^}]+\}$", c, re.M) or not re.search(r"^  Bulk = \{[^}]+\}$", c, re.M):
+        bad.append(f"{cfg}: both lanes must have streams")
+sys.exit(f"InboundLifecycle structure: {bad}" if bad else 0)
+PY'''
+
+[[criteria]]
+# The rules in Go (internal/transport/p2p, simnet inside testing/synctest where time matters, -race), each arm named;
+# failure texts « PU1c place kept » (a place, a goroutine or a byte kept past the rule), « PU1c blind wait » (an end not
+# seen within its bound: at once with nothing unread, at most 250 ms for a reset, the turn behind bytes), « PU1c late
+# wake » (a turn, a PeerUp or a probe attempt later than 250 ms), « PU1c budget taken » (a waiting stream
+# charged the receive budget, or a reservation not returned: BufferedBytes back to its baseline), « PU1c frames lost »
+# (a whole frame before a truncated tail, a probed byte, or a frame of a stream that started delivering, lost or out of
+# place), « PU1c order broken » (a lane's frames out of order), « PU1c blocked forever » (a reader blocked on the budget
+# not freed within 1 s of its own connection's loss, or freed by another connection's), « PU1c head starved » (a head
+# delivering less than 4 MiB in 10 s of simulated time while the other streams of both lanes hold their windows),
+# « PU1c over capacity » (a third place on a lane), « PU1c memory unaccounted » (a QUIC connection's initial window not
+# held by its resource scope). Every time bound is checked on controlled time (testing/synctest, simnet): the model's
+# temporal properties prove only « eventually ». The bounds are the spec's, with no slack: a reset seen, a turn or a
+# PeerUp seen, the gap between two probe attempts, each ≤ 250 ms (InboundProbeEvery) measured on synctest/simnet time,
+# never on the wall clock (the next attempt may start exactly T after the previous one: ≤, not <). The node exports, for tests, InboundPlaces(lane, peer),
+# BufferedBytes(lane), ProbedBytes(peer), BusyRefusals(), BusyRetries(), and a seam replacing the QUIC initial
+# connection window (for the witness arm only).
+# TestInboundLifecycle:
+#   matrix/<lane>/<state>/<end>, lane ∈ {sync, bulk}: accepting × {reset, fin, conn_lost, node_close} (held in its ACK
+#   write by a seam: the place freed within 1 s of the write's end, no event); waiting_empty × {reset, fin, conn_lost,
+#   node_close} (freed within 1 s); waiting_bytes (64 KiB unread) × {reset (freed within 250 ms), fin (kept to its turn,
+#   then every frame delivered), conn_lost, node_close}; kept (one whole frame and 3 bytes of the next, then FIN, all
+#   probed) × {at_turn (the whole frame delivered, freed, no ClosePeer), conn_lost (nothing delivered after PeerDown,
+#   freed by its turn or its up-wait), node_close, reorder_wait (delivered after 60 s behind a head held open)};
+#   delivering × {reset, fin, conn_lost, node_close} (freed within 1 s, frames delivered before stay delivered);
+#   blocked (consumer stalled, budget full) × {reset (place held until room, then freed within 1 s, BufferedBytes back
+#   to its baseline), fin (the rest delivered after room), conn_lost (freed within 1 s, all returned), node_close}.
+#   probe_bound (each lane: 10 MiB pushed into a waiting stream for 60 s: ProbedBytes ≤ 256, BufferedBytes unchanged,
+#   no write error at the opener before 60 s), probe_period (a reset at seven phases of the probe period, seen within
+#   250 ms each), probe_bytes_before_error (a stream whose Read returns 1 byte and an error: the byte kept and decoded
+#   first), wake_within_bound (a turn and a PeerUp seen within 250 ms), interrupt_during_transition (the head leaves
+#   and PeerUp arrives exactly at k × 250 ms, k = 1..8: the successor's frames intact, no deadline error while
+#   delivering), immediate_when_first_and_up (a stream that arrives first with its peer already announced delivers its
+#   first frame with no added delay: 0 ms of controlled time after its ACK), valid_prefix_then_truncated (two whole frames then a truncated third and FIN while waiting: two
+#   delivered at its turn, freed, no ClosePeer), credit_exhausted_before_head (QUIC: an honest peer's
+#   opener fills one waiting sync stream, one waiting and one blocked bulk stream to 128 KiB each after their ACK and
+#   **before** the ACKed head writes; the head then delivers 4 MiB), credit_witness_default_window (the same with
+#   quic-go's 512 KiB / 768 KiB through the seam: the head delivers less than 1 MiB in 10 s, so the arm
+#   discriminates), quic_window_reserved (the resource manager's connection scope of every QUIC connection holds
+#   QUICInitialConnectionWindow from its start and returns it at close; with less than that left in the system scope
+#   the connection is refused), refused_stream_bytes_released (a raw opener writes 128 KiB into a stream refused for
+#   capacity: that credit is back once its reset is processed, and a head on the connection still delivers), one_goroutine_per_place (each placed waiting stream
+#   adds at most one goroutine), blocked_exact_connection (two connections to one peer: the loss of the other leaves
+#   the reader blocked, the loss of its own frees it), byzantine_floods (each lane: 50 open-reset loops and data floods
+#   into waiting streams: InboundPlaces ≤ 2 per lane, goroutines back to at most the count before + 8, BufferedBytes
+#   back to its baseline), bulk_ack (the bulk opener reads 0x01 before its first frame), bulk_order_across_late_handler
+#   (P-6 on bulk: a held handler of the old stream keeps its rank across a move), bulk_capacity (a third bulk stream
+#   reset with 0x1002; the Node opener retries and its Send succeeds; no ClosePeer, no event), bulk_removal_while_waiting,
+#   old_bulk_refused (/inkwell/bulk/1.0.0 is neither served nor opened).
+# TestInboundTransport (the transport facts the design stands on, each on QUIC and on yamux through a relay circuit):
+#   deadline_interrupts_pending_read, reset_wins_over_buffered_data, data_before_eof.
+id = "go"
+command = '''mkdir -p .task && timeout -k 10 450 ./scripts/heavy.sh go test -count=1 -race -timeout=420s -json -run '^(TestInboundLifecycle|TestInboundTransport)$' ./internal/transport/p2p/ > .task/pu1c-go.json 2>&1; a=$?; python3 -I - "$a" <<'PY'
+import json, pathlib, sys
+ends = {"accepting": ["reset", "fin", "conn_lost", "node_close"], "waiting_empty": ["reset", "fin", "conn_lost", "node_close"], "waiting_bytes": ["reset", "fin", "conn_lost", "node_close"], "kept": ["at_turn", "conn_lost", "node_close", "reorder_wait"], "delivering": ["reset", "fin", "conn_lost", "node_close"], "blocked": ["reset", "fin", "conn_lost", "node_close"]}
+arms = {"TestInboundLifecycle": [f"matrix/{l}/{s}/{e}" for l in ("sync", "bulk") for s, es in ends.items() for e in es] + ["probe_bound", "probe_period", "probe_bytes_before_error", "wake_within_bound", "interrupt_during_transition", "valid_prefix_then_truncated", "immediate_when_first_and_up", "credit_exhausted_before_head", "credit_witness_default_window", "quic_window_reserved", "refused_stream_bytes_released", "one_goroutine_per_place", "blocked_exact_connection", "byzantine_floods", "bulk_ack", "bulk_order_across_late_handler", "bulk_capacity", "bulk_removal_while_waiting", "old_bulk_refused"], "TestInboundTransport": [f"{a}/{m}" for a in ("deadline_interrupts_pending_read", "reset_wins_over_buffered_data", "data_before_eof") for m in ("quic", "yamux")]}
+evs = []
+for line in pathlib.Path(".task/pu1c-go.json").read_text().splitlines():
+    try:
+        ev = json.loads(line)
+    except ValueError:
+        continue
+    if isinstance(ev, dict):
+        evs.append(ev)
+bad = [] if sys.argv[1] == "0" else [f"go test exit {sys.argv[1]}"]
+passed = {e["Test"] for e in evs if e.get("Action") == "pass" and e.get("Test")}
+want = list(arms) + [f"{t}/{a}" for t, l in arms.items() for a in l]
+bad += [f"missing or not passing: {n}" for n in want if n not in passed]
+for n in sorted({e["Test"] for e in evs if e.get("Action") == "fail" and e.get("Test")})[:3]:
+    said = [e["Output"].strip() for e in evs if e.get("Test") == n and e.get("Action") == "output" and "_test.go" in e.get("Output", "")]
+    print(f"{n}: {said[:2]}")
+sys.exit(f"PU1c go: {bad[:12]} ({len(bad)} in all)" if bad else 0)
+PY'''
+
+[[criteria]]
+# PU1's and PU1b's Go arms, re-run as direct criteria on the new code (no nested gate): the lifecycle replaces the
+# code they were written against, so each arm must still pass, with -race.
+id = "inherited"
+command = '''mkdir -p .task && timeout -k 10 120 ./scripts/heavy.sh go test -count=1 -race -timeout=100s -json -run '^(TestSyncOrder|TestPeerUpAfterAck|TestPeerUpMoveAfterAck|TestPeerUpLatency)$' ./internal/transport/p2p/ > .task/pu1c-inherited.json 2>&1; a=$?; python3 -I - "$a" <<'PY'
+import json, pathlib, sys
+arms = {"TestSyncOrder": ["at_bound", "bound_plus_one", "recovery", "busy_forever", "resource_manager_refusal", "byzantine_reset_loop", "drain_replace_reconnect", "generation_change", "removal_while_waiting"], "TestPeerUpAfterAck": ["closed_at_once_by_remote", "one_sided_admission", "not_admitted_remote", "ack_needs_live_conn", "silent_remote", "slow_negotiation_late_ack", "wrong_ack_byte", "byte_after_ack", "ack_before_own_up", "both_sides_up", "old_peer_refused"], "TestPeerUpMoveAfterAck": ["move_waits_for_ack", "move_refused_keeps_circuit", "move_keeps_order_across_late_handler"], "TestPeerUpLatency": ["cached", "negotiated"]}
+evs = []
+for line in pathlib.Path(".task/pu1c-inherited.json").read_text().splitlines():
+    try:
+        ev = json.loads(line)
+    except ValueError:
+        continue
+    if isinstance(ev, dict):
+        evs.append(ev)
+bad = [] if sys.argv[1] == "0" else [f"go test exit {sys.argv[1]}"]
+passed = {e["Test"] for e in evs if e.get("Action") == "pass" and e.get("Test")}
+want = list(arms) + [f"{t}/{a}" for t, l in arms.items() for a in l]
+bad += [f"missing or not passing: {n}" for n in want if n not in passed]
+sys.exit(f"PU1c inherited: {bad[:12]}" if bad else 0)
+PY'''
+
+[[criteria]]
+# Regression: the transport packages, the bridge and the blob service (the bulk lane's consumer), as CI runs them (no
+# -race): PU1c changes how every inbound sync and bulk stream is read, and the bulk protocol's version.
+id = "regression"
+command = '''timeout -k 10 270 ./scripts/heavy.sh go test -count=1 -timeout=250s ./internal/transport/... ./internal/bridge/ ./internal/blob/'''
+
+[[criteria]]
+# Architecture: one reader per stream, shared by both lanes; no watcher, no chain; the budget wait cancellable; the
+# QUIC window from the protocol constant, through the fork's quicreuse option; the bounds from protocol, not literals.
+id = "arch"
+command = '''timeout -k 10 30 python3 -I - <<'PY'
+import pathlib, re, subprocess, sys
+d = pathlib.Path("internal/transport/p2p")
+srcs = {p.name: p.read_text() for p in d.glob("*.go") if not p.name.endswith("_test.go")}
+src = "\n".join(srcs.values())
+bad = []
+inb = srcs.get("inbound.go")
+if inb is None:
+    bad.append("no internal/transport/p2p/inbound.go (the lifecycle shared by both lanes)")
+else:
+    if re.search(r"\bgo\s+func\b|\bgo\s+\w+\(|\.Go\(", inb):
+        bad.append("inbound.go starts a goroutine (one reader per stream: the handler's)")
+    if "AcquireCtx(" not in inb or re.search(r"\.Acquire\(", inb):
+        bad.append("inbound.go does not wait for the budget with AcquireCtx only")
+    if re.search(r"250\s*\*\s*time\.Millisecond|\b256\b", inb):
+        bad.append("inbound.go has a private probe bound")
+    funcs = set(re.findall(r"^func (?:\([^)]*\) )?(\w+)\(", inb, re.M))
+    if not any(re.search(rf"\b{f}\(", srcs.get("stream.go", "")) and re.search(rf"\b{f}\(", srcs.get("bulk.go", "")) for f in funcs):
+        bad.append("stream.go and bulk.go do not both call the lifecycle of inbound.go")
+def body(name, fn):
+    s = srcs.get(name, ""); i = s.find(fn)
+    return s[i:s.find("\nfunc ", i + 1)] if i >= 0 else ""
+for name, fn in (("stream.go", "func (n *Node) handleStream("), ("bulk.go", "func (b *Bulk) handle(")):
+    if re.search(r"\bgo\s+func\b|\.Go\(", body(name, fn)):
+        bad.append(f"{name}: the inbound handler starts a helper goroutine (one reader per stream)")
+if re.search(r"\.Peek\(", src):
+    bad.append("a Peek watcher is still there")
+if "bulkTail" in src:
+    bad.append("the bulk chain (bulkTail) is still there")
+if not re.search(r'ProtocolBulk\s*=\s*"/inkwell/bulk/2\.0\.0"', src):
+    bad.append("ProtocolBulk is not /inkwell/bulk/2.0.0")
+for c in ("InboundProbeEvery", "InboundProbeMax", "QUICInitialStreamWindow", "QUICInitialConnectionWindow"):
+    if not re.search(rf"\.{c}\b", src):
+        bad.append(f"internal/transport/p2p does not use protocol's {c}")
+if "QUICReuse(" not in src:
+    bad.append("the node does not configure its QUIC transport (libp2p.QUICReuse with the fork's option)")
+if "func (b *Budget) AcquireCtx(" not in pathlib.Path("internal/transport/frame/budget.go").read_text():
+    bad.append("frame.Budget has no AcquireCtx")
+lib = subprocess.run(["go", "list", "-m", "-f", "{{.Dir}}", "github.com/libp2p/go-libp2p"], capture_output=True, text=True).stdout.strip()
+q = "\n".join(p.read_text() for p in pathlib.Path(lib, "p2p/transport/quicreuse").glob("*.go") if not p.name.endswith("_test.go")) if lib else ""
+if "InitialConnectionReceiveWindow" not in q or "InitialStreamReceiveWindow" not in q:
+    bad.append("the go-libp2p in use has no quicreuse option setting the initial stream and connection receive windows")
+tq = "\n".join(p.read_text() for p in pathlib.Path(lib, "p2p/transport/quic").glob("*.go") if not p.name.endswith("_test.go")) if lib else ""
+if tq.count("ReserveMemory(") < 2:
+    bad.append("the go-libp2p QUIC transport in use does not reserve the initial connection window (only its increases)")
+sys.exit(f"PU1c arch: {bad}" if bad else 0)
+PY'''
+
+[[criteria]]
+# Docs: plan rows P-10 to P-14 name their proofs; spec §8.1, §8.7.3, §8.7.8, §8.7.9 carry the normative sentences,
+# §16.1 the rows (and TestLimitsMatchSpecification their constants), §20.6 bulk/2.0.0; CHANGES.md the PU1c entry; the
+# TLA README the InboundLifecycle section.
+id = "docs"
+command = '''timeout -k 10 30 python3 -I - <<'PY'
+import pathlib, sys
+bad = []
+plan = pathlib.Path("docs/plans/2026-11-17-pu1c-inbound-lifecycle.md").read_text()
+rows = {l.split("|")[1].strip(): l for l in plan.splitlines() if l.startswith("| P-")}
+need = {"P-10": ["matrix/*", "one_goroutine_per_place", "interrupt_during_transition", "wake_within_bound", "immediate_when_first_and_up", "QC1", "MC10", "cleared before Delivering"], "P-11": ["probe_bound", "probe_period", "probe_bytes_before_error", "valid_prefix_then_truncated", "**at most T**", "QC2", "QC3", "QC5", "MC2", "MC3", "MC5", "MC6", "MQ2", "MQ5"], "P-12": ["blocked_exact_connection", "byzantine_floods", "**Explicit resource limit:**", "QC4", "QC6", "MC4", "MC7"], "P-13": ["credit_exhausted_before_head", "credit_witness_default_window", "quic_window_reserved", "refused_stream_bytes_released", "(P × L + 1) × w0 ≤ (1 − θ) × W", "w0 = 128 KiB and W = 1 MiB", "ArrivingHoldsNothing", "**Explicit back-pressure limit across lanes:**", "1.25 MiB/s", "QC8", "MC8", "MC11"], "P-14": ["bulk_ack", "bulk_order_across_late_handler", "bulk_capacity", "bulk_removal_while_waiting", "/inkwell/bulk/2.0.0", "QC7", "MC1", "MC9"]}
+for r, ws in need.items():
+    bad += [f"plan row {r} lacks {w!r}" for w in ws if w not in rows.get(r, "")]
+spec = pathlib.Path("docs/protocol/spec.md").read_text()
+def section(a, b):
+    i = spec.find(a); j = spec.find(b, i + 1)
+    return " ".join(spec[i:j].split()) if 0 <= i < j else ""
+s87 = section("\n### 8.7 ", "\n## 9. ")
+s81 = section("\n### 8.1 ", "\n### 8.2 ")
+for w in ["Chaque flux entrant a **un seul lecteur** pour toute sa vie", "l'essai suivant commence **au plus 250 ms** après le précédent", "**256 octets** gardés en tout", "garde ses octets, dans l'ordre, avant de traiter l'erreur", "une échéance n'est jamais une fin", "son tour et l'annonce du pair en **250 ms au plus**", "une fin **sans octet non lu** se voit aussitôt", "il est **gardé** : il garde sa place jusqu'à son tour", "**Aucun flux ne réserve ni n'attend le budget de réception avant son tour**", "par la perte de **sa** connexion (pas d'une autre connexion du même pair)", "*Limite de ressources assumée :*", "*Contre-pression assumée entre les voies :*", "ne tient aucun crédit chez un pair conforme", "modèle `InboundLifecycle`", "depuis le bloc PU1c il porte le même accusé (`/inkwell/bulk/2.0.0`)"]:
+    if w not in s87:
+        bad.append(f"spec §8.7 lacks {w!r}")
+for w in ["### 8.1 `/inkwell/bulk/2.0.0`", "*Flux vrac entrants (règle P-14, bloc PU1c).*", "**refusé pour capacité** (code `0x1002`, sans octet)", "**sans** `ClosePeer` ni événement", "`/inkwell/bulk/1.0.0` n'est plus servi ni ouvert"]:
+    if w not in s81 and w not in spec:
+        bad.append(f"spec §8.1 lacks {w!r}")
+if "| cycle de vie d'un flux entrant, sync et vrac (§8.7.3, §8.1) |" not in spec:
+    bad.append("spec §16.1 lacks the inbound stream lifecycle row")
+if "(places × voies + 1) × fenêtre initiale de flux ≤ 3/4 × fenêtre initiale de connexion" not in spec or "réservée au gestionnaire de ressources à l'ouverture de la connexion" not in spec:
+    bad.append("spec §16.1 QUIC windows row lacks the P-13 inequality")
+k = spec.find("### 20.6 ")
+if "`/inkwell/bulk/2.0.0` (§8.1" not in spec[k:k + 900]:
+    bad.append("spec §20.6 lacks /inkwell/bulk/2.0.0")
+if "# Bloc PU1c" not in pathlib.Path("docs/protocol/CHANGES.md").read_text():
+    bad.append("CHANGES.md lacks the PU1c entry")
+readme = pathlib.Path("docs/protocol/tla/README.md").read_text()
+for w in ["## InboundLifecycle", "`InboundLifecyclePlaceSyncLate` (QC1", "`InboundLifecycleFailedWaits` (QC2", "`InboundLifecycleProbeOnce` (QC3", "`InboundLifecycleWaitCharges` (QC4", "`InboundLifecycleKeepWholeOnly` (QC5", "`InboundLifecycleNoCancel` (QC6", "`InboundLifecycleBulkTail` (QC7", "`InboundLifecycleSmallWindow` (QC8", "`HeadProgresses` (Credit)"]:
+    if w not in readme:
+        bad.append(f"tla README lacks {w!r}")
+sys.exit(f"PU1c docs: {bad}" if bad else 0)
+PY'''
+
+[[criteria]]
+# The Go mutants of PU1c (scripts/netsim/mutants.toml, block PU1c; step 2 writes edits and anchors) are exactly this
+# table, each anchor applies once, and each is caught by TestInboundLifecycle failing with its text: MC1 the bulk place
+# taken after the up-wait, MC2 the probe stops after a byte, MC3 a probe period of 2 × InboundProbeEvery, MC4 a waiting
+# stream charges the receive budget, MC5 a prefix kept only without a truncated tail, MC6 the bytes of a read that also
+# returned an error dropped, MC7 the budget wait not cancelled by the connection's loss, MC8 the QUIC option dropped
+# (quic-go's default window), MC9 a third bulk place, MC10 the probe deadline left armed into Delivering, MC11 the initial connection window not reserved with
+# the resource manager. PU1b's MQ1,
+# MQ2 and MQ5, re-anchored on the new code (same ids, tests, clauses, texts: the table of gates/PU1b.toml), apply and
+# are caught again; MQ3 and MQ4 apply (their anchors are untouched).
+id = "mutant"
+command = '''timeout -k 10 30 python3 -I - <<'PY' && timeout -k 10 30 python3 -I scripts/netsim/mutants.py --check PU1c && timeout -k 10 30 python3 -I scripts/netsim/mutants.py --check PU1b && timeout -k 10 420 ./scripts/heavy.sh python3 -I scripts/netsim/mutants.py PU1c && timeout -k 10 180 ./scripts/heavy.sh python3 -I scripts/netsim/mutants.py PU1b MQ1 MQ2 MQ5
+import sys, tomllib
+ms = {m["id"]: m for m in tomllib.load(open("scripts/netsim/mutants.toml", "rb"))["mutant"] if m.get("block") == "PU1c"}
+t = ("go", "./internal/transport/p2p/", "TestInboundLifecycle")
+want = {"MC1": (*t, "P-14", "PU1c order broken"), "MC2": (*t, "P-11", "PU1c blind wait"), "MC3": (*t, "P-11", "PU1c late wake"), "MC4": (*t, "P-12", "PU1c budget taken"), "MC5": (*t, "P-11", "PU1c frames lost"), "MC6": (*t, "P-11", "PU1c frames lost"), "MC7": (*t, "P-12", "PU1c blocked forever"), "MC8": (*t, "P-13", "PU1c head starved"), "MC9": (*t, "P-14", "PU1c over capacity"), "MC10": (*t, "P-10", "PU1c frames lost"), "MC11": (*t, "P-13", "PU1c memory unaccounted")}
+bad = sorted(set(ms) ^ set(want))
+for i, (kind, pkg, test, clause, expect) in want.items():
+    m = ms.get(i, {})
+    if (m.get("kind"), m.get("pkg"), m.get("test"), m.get("clause"), m.get("expect")) != (kind, pkg, test, clause, expect) or not m.get("edit"):
+        bad.append(i)
+sys.exit(f"PU1c mutant entries differ from the table: {bad}" if bad else 0)
+PY'''
+
+[[criteria]]
+# The frozen gates keep their models: PeerUpAck.tla, SyncOrder.tla, their configurations and mutants, gates/PU1.toml,
+# PU1b.toml and PU1n.toml are byte-identical to step 1 of PU1c (19 files, one fingerprint).
+id = "frozen-untouched"
+command = '''timeout -k 10 30 python3 -I - <<'PY'
+import hashlib, pathlib, sys
+files = sorted([*map(str, pathlib.Path("docs/protocol/tla").glob("SyncOrder*")), *map(str, pathlib.Path("docs/protocol/tla/mutants").glob("SyncOrder*")), "docs/protocol/tla/PeerUpAck.tla", "docs/protocol/tla/mutants/PeerUpAckMutants.tla", "gates/PU1.toml", "gates/PU1b.toml", "gates/PU1n.toml"])
+h = hashlib.sha256()
+for f in files:
+    h.update(f.encode() + b"\0" + hashlib.sha256(pathlib.Path(f).read_bytes()).digest())
+got = (len(files), h.hexdigest())
+sys.exit(0 if got == (19, "29bb784eb7a9103d900c440aaad45e4d93e38f34695fe531374ae1d06e59272e") else f"frozen PU1/PU1b artefacts changed: {got}")
+PY'''
+
+[[criteria]]
+# The §16 constants match the spec rows (P-11's and P-13's bounds are exported constants of protocol; the P-13
+# inequality and the probe bound are compile-time assertions of protocol/limits.go).
+id = "limits"
+command = '''cd protocol && timeout -k 10 30 ../scripts/heavy.sh go test -count=1 -run '^TestLimitsMatchSpecification$' .'''
