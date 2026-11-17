@@ -45,7 +45,7 @@ changes fail closed. Overrides require exact finding/content hashes, a reason an
 an existing decision document; both the override file and decision must appear in
 manifest raw_results. No override is used by L1. Its --self-test exercises
 positive and negative cases. Overrides require human review, as does the guard
-itself; no script can protect itself from a malicious replacement in its own lot.
+itself; no script can protect itself from a malicious replacement in its own lot. [done]
 
 Sources used to check syscall semantics:
 - https://docs.kernel.org/userspace-api/landlock.html

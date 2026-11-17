@@ -19,7 +19,7 @@ implementer's own pass: the review that counts for the merge is the integrator's
   the creator, so the oracles of C-1, C-2, C-3, C-5 and C-6 now run on devices that received the document; a new test
   `CL1 C-5 the device that created a document is named at its opening` and two new mutants (`the creator not named at
   the opening`, `C-2 owing a claim at every opening`) hold the rule from both sides; C-4's model has its first device
-  create the document, as in scenario 8, with the same expectations. 22 tests, all green; no assertion loosened.
+  create the document, as in scenario 8, with the same expectations. 22 tests, all green; no assertion loosened. [done]
 
 ## Findings applied
 
@@ -93,12 +93,12 @@ means. A claim in another document inside the window would not show in this list
 
 - **R-1 (plan):** the defect does not show on this machine (ten runs of ten passed on the unchanged tree); the two
   local runs are non-regression and observation. Acceptance is `gates/CL1/GITHUB.md`: open until ten measured GitHub
-  runs over three seeds or more.
-- **R-2 (plan):** a claim owed, the device unable to write, and the page ends: that actor stays « Quelqu'un ».
-- **R-3 (new):** an actor replaced by a clone while its claim is owed is never claimed (see « Skipped »).
-- **R-4: closed**, it is the rule « At the opening » of the plan.
+  runs over three seeds or more. → CL1
+- **R-2 (plan):** a claim owed, the device unable to write, and the page ends: that actor stays « Quelqu'un ». → W65
+- **R-3 (new):** an actor replaced by a clone while its claim is owed is never claimed (see « Skipped »). → W65
+- **R-4: closed**, it is the rule « At the opening » of the plan. [done]
 - **For the walkthrough (U12):** two instances, A creates a document and only B types: B's history must name A on
-  the creation entry within a few seconds. No e2e asserts names across devices.
+  the creation entry within a few seconds. No e2e asserts names across devices. → W65
 
 ## Guard ids raised by `mise run pregate` (exit 1 on these two only; `gates/guard-overrides.json` not edited)
 

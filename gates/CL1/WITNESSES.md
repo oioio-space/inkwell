@@ -35,7 +35,7 @@ Each criterion's command was run once where the machine allowed; it must fail fo
   and the Playwright traces record no sync message. The cause is shown by the tests above and by this timeline, not
   observed at message level.
 - Local, same day: see the next section.
-  (plan, residual R-1).
+  (plan, residual R-1). → CL1
 
 ## The netsim witness on the unchanged tree (21:44 to 22:06, `heavy.sh --exclusive`, strict, exit 0)
 

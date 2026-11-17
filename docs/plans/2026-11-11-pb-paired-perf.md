@@ -6,7 +6,7 @@ shared cache, and a wrong rule silently passes regressions or blocks unrelated w
 with mutant rules (`scripts/perf/pbmodel.py`, the formal model of this block, section 5), the attempt machine as an
 exhaustive decision table test (section 8), the frozen gate `gates/PB.toml`, one independent review by another model
 family before the gate is frozen (Codex from 2026-11-12, or an OpenRouter non-Claude model via `scripts/llm.sh`).
-ADR: 0038 (section 15; 0037 is reserved for OI).
+ADR: 0038 (section 15; 0037 is reserved for OI). [done]
 
 ## 1. Need
 
@@ -27,7 +27,7 @@ built and measured now, interleaved; (b) the statistic is a single high order st
 with a bound whose error rates are known.
 
 The Go hot-path guard (`scripts/perf/regression.py --bench`) already measures the merge-base and the branch in one
-interleaved session; it is out of this block's scope (section 14, follow-up F1).
+interleaved session; it is out of this block's scope (section 14, follow-up F1). → RG1
 
 ## 2. Noise of this host (fitted, `python3 scripts/perf/pbmodel.py fit`)
 
@@ -194,7 +194,7 @@ samples; at 30 the bound does not exist. Proposed (open question Q2): warm sampl
 second largest; keystrokes are cheap), cold fresh processes 30 -> 59 (k = 59, the maximum); the budgets (warm handler
 <= 8 ms, cold <= 50 ms, frame work <= 16 ms) apply to the bound of the same conservative per-sample upper values the
 verifier already computes; the point p95 stays in the report as a diagnostic. Native runs are single-arm absolute
-measurements, not regression comparisons; a paired native comparison is follow-up F2.
+measurements, not regression comparisons; a paired native comparison is follow-up F2. → ST1
 
 ## 7. Reference build
 
@@ -354,7 +354,7 @@ criterion requires `--- PASS: <name>`; the Vitest criterion reads the JSON repor
 - R2 — a noisier machine than `heavy`: criteria end invalid (fail closed, labelled). If it happens in practice,
   add the sequential extension of section 5 (new spec, new gate), never a wider margin.
 - R3 — a change that only adds rare slow starts moves the median little; the absolute budget bounds the tail only
-  coarsely (the maximum of 80). A tail-ratio rule needs several hundred pairs; follow-up if a real case appears.
+  coarsely (the maximum of 80). A tail-ratio rule needs several hundred pairs; follow-up if a real case appears. → ST1
 - R4 — the reference commit's build breaks with today's toolchain (old lockfile, removed sidecar): fail closed with
   the build log; the next merge moves the merge-base.
 - R5 — clean tree on main: reference equals change, the criterion is an A/A check and cannot see a regression
@@ -365,9 +365,9 @@ criterion requires `--- PASS: <name>`; the Vitest criterion reads the JSON repor
 ## 14. Follow-ups (not in PB)
 
 - F1 — `regression.py --bench`: align its rule (5 %, p < 0.05, confirmation) with the same non-inferiority bound
-  per benchmark, with a family-wise level over the benchmarks.
-- F2 — a paired native typing comparison (reference and change windows interleaved run by run).
-- F6 — make the bound on background CPU relative to a quiet level measured in the run (section 18.4, limit 2).
+  per benchmark, with a family-wise level over the benchmarks. → RG1
+- F2 — a paired native typing comparison (reference and change windows interleaved run by run). → ST1
+- F6 — make the bound on background CPU relative to a quiet level measured in the run (section 18.4, limit 2). → ST1
 
 ## 15. Open questions for the user (product choices)
 
@@ -547,7 +547,7 @@ machine without the application is not zero: median 1.27 CPUs, robust sd 0.096. 
 All 49 starts over 400 ms are above 1.5 CPUs; none of the 535 at or below it exceeds 370 ms (sd of their log 0.032).
 Above the quiet level a start costs about **41 ms per CPU** of background (median of (ms - 329) / (share - 1.27) over the
 105 hits; quartiles 33 and 62 ms), residual sd 23 ms below 3 CPUs, 39 ms to 6, 120 ms above. The peaks (31 starts at
-6.3-10.2, mode 9.4 CPUs, 2.7 CPU-s) recur every 12.2 slots = 7.7 s, the cadence of the daemon.
+6.3-10.2, mode 9.4 CPUs, 2.7 CPU-s) recur every 12.2 slots = 7.7 s, the cadence of the daemon. [done]
 
 ### 18.4 Why 1.5 CPUs
 
@@ -580,7 +580,7 @@ reached. Two limits are stated, not hidden:
    (three attempts), never a pass; the cost is time, not a wrong verdict.
 2. The bound is absolute and the quiet level is a property of the host (here 1.27). On a host whose ambient load is above
    1.5 CPUs every start is invalid and the run ends invalid after 33 starts, loudly and early. Making the bound relative
-   to a measured quiet level is a follow-up (F6), not done here: it needs its own data on a second host.
+   to a measured quiet level is a follow-up (F6), not done here: it needs its own data on a second host. → ST1
 
 ### 18.5 Model (`pbmodel.py`, `Interference` tests)
 
@@ -590,7 +590,7 @@ archive; the fitted model reproduces them (hits above 1.5: 16.0 % against 16.4 %
 shoulders 1.5-2.5: 8.8 % against 8.6 %; 99th percentile 9.45 against 9.47 CPUs), and `test_constants_match_disk` refits and
 compares. A start's duration is the bulk of the fitted environment plus 41.4 ms per CPU of burst it overlapped, with the
 fitted residual. `bg_session` runs the driver's rule (warm-up and judged pairs in random order, re-measurement in the slot,
-the cap at 20 %, five tries) on that timeline.
+the cap at 20 %, five tries) on that timeline. [done]
 
 Review of 2026-11-12: the first table was computed by `bg_rates` at a bound of 2.0 CPUs, not the gate's 1.5; `bg_session`
 and `bg_rates` now default to `BG_SHARE_MAX` and the tests pass it explicitly (`test_model_runs_the_gate_bound`). The model
@@ -622,7 +622,7 @@ at 20 %; at 20 % of slow starts outside, 14 % of the criteria still pass (142 / 
 desktop service on start is not covered below that size, and the server build measured here does not wake one. The
 stressed bursts (not claimed at 1e-3) give 5 false failures in 3000 at the chosen bound; the stress is already 1.5 x the
 fitted slope and a 50 % longer shoulder. What the model does not cover: bursts of another cadence (a different daemon), and
-a host with a different quiet level.
+a host with a different quiet level. [done]
 
 ### 18.6 Where it lives
 
@@ -638,4 +638,4 @@ and on the real cgroup), `start.cjs` (window, `slotStep`, retry in the slot, qui
 ## Decisions of the user (2026-11-11)
 
 - Q2 (native typing): yes, certify the p95 at 95 % (100 warm samples, 59 cold fresh processes).
-- Q1 (absolute startup budget), after the study `docs/plans/2026-11-11-startup-speed.md`: « accelerate then tighten ». Now: median ≤ 350 ms and p95 ≤ 400 ms (the Chromium proxy, to a usable editor), judged on an order-statistic bound; block ST1 builds the three gains (preload hints, Go handshake overlapped with Automerge init, non-editor code deferred), then the budget is tightened to what ST1 measures (target ≈ 300 ms median, 350 ms p95). No native budget until a native measurement exists.
+- Q1 (absolute startup budget), after the study `docs/plans/2026-11-11-startup-speed.md`: « accelerate then tighten ». Now: median ≤ 350 ms and p95 ≤ 400 ms (the Chromium proxy, to a usable editor), judged on an order-statistic bound; block ST1 builds the three gains (preload hints, Go handshake overlapped with Automerge init, non-editor code deferred), then the budget is tightened to what ST1 measures (target ≈ 300 ms median, 350 ms p95). No native budget until a native measurement exists. → ST1

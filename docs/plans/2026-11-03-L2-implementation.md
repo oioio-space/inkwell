@@ -28,7 +28,7 @@ PERF-TYPE is deferred to L3: the actual desktop builds and was launched, includi
 a private writable runtime/X11/software-rendering retry. No usable native editor
 was established; the screenshot and logs are retained. No native p95 or numeric
 threshold is claimed. PERF-TYPE.json records cold/warm empty samples and the
-required threshold formula, native p95 × 1.10. The L0 reference is unchanged.
+required threshold formula, native p95 × 1.10. The L0 reference is unchanged. [done]
 
 The user clarified N42 on 2026-11-03 ("2026-11-03 — décision de l'utilisatrice
 (N42 précisée)" in docs/objectif-en-cours.md): no separately installed program

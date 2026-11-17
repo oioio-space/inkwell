@@ -710,6 +710,7 @@ func TestMaterializeRefusesARottenBlob(t *testing.T) {
 // FilesOptions.Allowed (TestAllowedGatesServing); what is missing is the
 // Admission that knows about suspension.
 func TestBulkLaneRefusedToSuspendedMember(t *testing.T) {
+	// Block LK1 (PROGRESS.md, « Cap à long terme »).
 	t.Skip("TODO ADR 0021 (t11-b3a-suspend, not merged): Wiring.isActive must say false for a suspended member; then drive Wire + Files with a suspend op and assert no slice is served")
 }
 

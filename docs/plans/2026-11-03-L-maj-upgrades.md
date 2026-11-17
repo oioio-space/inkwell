@@ -129,4 +129,4 @@ module-level advisories: GO-2026-6866 and GO-2026-6860 in x/net, fixed by the
 deferred v0.62.0, and GO-2026-5932 in x/crypto/openpgp, fixed only in an untagged
 pseudo-version), `pkg:build` + `pkg:test`, and `gate -- L2` (L0, L1, L2 pass; base
 guard pass with the reviewed UX-LUP-1 override). Perf A/B against `main` (benchstat,
-n=20): Relay/Message −2.5 %, no other significant change, no allocation change.
+n=20): Relay/Message −2.5 %, no other significant change, no allocation change. [done]

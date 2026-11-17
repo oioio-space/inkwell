@@ -42,7 +42,7 @@ Date 2026-11-14. Gate: `gates/CI1c.toml` (the name CI1 is taken by the merged bl
 - Job `sidecars-arm64`: block SB2.
 - Residual: mise tasks that still resolve Go-installed tools by bare name (`fmt` gofumpt, `betteralign*`, `wails3`
   tasks) and the pre-commit hook. One-line fix: run them as `./scripts/rtkx.sh <tool> ...` (it sources
-  `pinned-path.sh`) or add `source scripts/pinned-path.sh` to the hook.
+  `pinned-path.sh`) or add `source scripts/pinned-path.sh` to the hook. → CI1b
 - govulncheck lists GO-2026-5932 (x/crypto openpgp, v0.58.0), not called by the code; to be decided separately.
 
 ## To confirm on GitHub

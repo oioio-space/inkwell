@@ -7,7 +7,7 @@ built by PC1a and reused by PC1b), the formal model, the platforms and the resid
 `docs/plans/2026-11-15-pc1a-take-over.md` (gate `gates/PC1a.toml`, draft) first, then
 `docs/plans/2026-11-15-pc1b-join.md` (gate `gates/PC1b.toml`, draft). Out of PC1: the copy into a new folder (R-4),
 genesis freshness at every creation (R-2), the missing-root fallback (R-1), a lint of the launchers (R-3), F16 of the
-OI plan. The frozen `gates/W58.toml` stays untouched and superseded.
+OI plan. The frozen `gates/W58.toml` stays untouched and superseded. → PC1b
 
 ## Why a restart
 
@@ -78,7 +78,7 @@ again (the person is the restart; the model's `Launch`): no platform keeps a liv
 be another folder; the taken-over one opens normally when chosen. **R-10** a joined project whose members all stay away waits
 (J-2): leaving it belongs to the Projects screen (R-4). **R-11** (rewritten after Codex's round 1) a join never writes the current
 folder (J-6): the joined document gets its own folder beside it, and the previous text, with the edits flushed before
-« Rejoindre » (N-15), stays where it was, opened from the Projects list or the file manager. R-1..R-5 as in the ADR.
+« Rejoindre » (N-15), stays where it was, opened from the Projects list or the file manager. R-1..R-5 as in the ADR. → PC1b
 
 
 ## To check at implementation (each has its test above; none is assumed)

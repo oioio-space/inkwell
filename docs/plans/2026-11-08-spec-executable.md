@@ -100,7 +100,7 @@ presque pas formalisé. Deux listes, chacune avec son lien modèle ↔ code (ins
 |---|---|---|---|
 | 1 | Liste de membres et rôles (ADR 0017, `protocol/trust`) | Alloy : règles 1–5, S1–S3, scellement | instances → vecteurs de pli, en plus de `fold.json` |
 | 2 | Admission et couverture (ADR 0031, `frontend/src/net`) | Alloy ou TLA+ selon la concurrence | traces → tests de `admission.ts` / `coverage.ts` |
-| 3 | Écriture différée Automerge (`amSync`, L3) | test à modèle fast-check contre une référence Automerge directe | suites d'éditions concurrentes, pairs compris |
+| 3 | Écriture différée Automerge (`amSync`, L3) | test à modèle fast-check contre une référence Automerge directe | suites d'éditions concurrentes, pairs compris → QA1 |
 | 4 | Arborescence par chemins (`internal/project` `checkTree`, `ApplyTree`) | Alloy : collisions, profondeur, propriété des fichiers | instances → vecteurs de `checkTree` |
 | 5 | Bac à sable tinymist (L1 : Landlock, seccomp) | table de politique vérifiée | chaque appel et chaque chemin testé autorisé/refusé |
 | 6 | Magasin BLAKE3 et Bao (`internal/blob`) | propriétés | une tranche falsifiée est toujours rejetée |

@@ -38,7 +38,7 @@ to Bob and the window updates and ACKs going to Alice share one FIFO (assumption
 | RC6 | **The WB model is unsound for this failure.** `WriteBudget.tla` lets the sender see progress at the reader's rate on every tick. With no window and no reverse path, `Delivered` holds in the model and fails in reality. WB-2 (the total) was never the trigger, so WB's own NI-3 criterion (0 resyncs) is expected to stay red. | `WriteBudget.tla` header; RC1 | expected; measured by E1 |
 | RC7 | **v2 as written inherits RC1 and RC3.** §7.2.5 « aucun progrès pendant 60 s » does not say *whose* progress. Measured at the sender's `Write`, it cuts honest links under `U/(60 − 2·D)` ≈ 2.6 KiB/s, which is above the 2 KiB/s floor. §5.6.3 (« un gros transfert ne retarde pas la frappe ») is false on a relayed circuit: the REPO and LARGE streams are separate, but they share the relay FIFO, and LARGE can fill it with 256 KiB. | §1, RC3 | design finding |
 | RC8 | **The muxer's write valve is a cut of its own.** go-yamux `Config.ConnectionWriteTimeout` (10 s, the go-libp2p default; `session.go` `sendLoop`: the conn deadline is extended to now + 10 s only when the loop picks a frame and less than 5 s remain) closes the **whole session** — every stream, the typing lane and CONTROL included — when one frame write to the circuit blocks for 5-10 s, i.e. when the relay hop is full and reopens slower than that. Independent of `WriteIdle` and of any `frame` constant. | E1: 2 runs of 8 (6 KiB/s; the 512 KiB run); E1b seed 1: 6 of 12 runs lost the session within 100 s at 4-8 KiB/s | **to measure (E1b)**; modelled: `SendPath` `NoSessionLoss`, mutants M-MuxWriteTimeout, M-StackedWindows, SP1HopValve10 |
-| RC9 | **The muxer's keepalive is another.** Every 30 s (`KeepAliveInterval`) yamux pings; the ping must be flushed and then answered, each within `ConnectionWriteTimeout` (10 s), else the session is closed (`keepalive timeout`). On a relayed slow link the ping queues behind every byte already in the relay (up to a stream window: 32 s at 8 KiB/s, 128 s at the floor) and the pong behind data in the shared bottleneck. | E1b: at 4 KiB/s, default window, session closed at 53.8 s by `keepalive timeout` | **to measure (E1b)**; modelled: mutants M-KeepaliveBehindData, SP1KeepaliveBehindData, residual SP1FloorKeepaliveBigHop |
+| RC9 | **The muxer's keepalive is another.** Every 30 s (`KeepAliveInterval`) yamux pings; the ping must be flushed and then answered, each within `ConnectionWriteTimeout` (10 s), else the session is closed (`keepalive timeout`). On a relayed slow link the ping queues behind every byte already in the relay (up to a stream window: 32 s at 8 KiB/s, 128 s at the floor) and the pong behind data in the shared bottleneck. | E1b: at 4 KiB/s, default window, session closed at 53.8 s by `keepalive timeout` | **to measure (E1b)**; modelled: mutants M-KeepaliveBehindData, SP1KeepaliveBehindData, residual SP1FloorKeepaliveBigHop → PT4 |
 | RC10 | **Raising `WriteIdle` alone creates a silent loss in v1.** The reader drops a partial message after `partialTTL` (30 s) without a fragment, and silently ignores its continuations (`fragment.go` `reassemble`: « the continuation of a message we dropped »). Today the sender is cut first (20 s < 30 s, then rule L). With `WriteIdle` 90 s, a 50 s silence (NI-2's blackout plus QUIC's probe backoff) makes the reader drop the message while the sender, not cut, goes on: no rule L anywhere. | code reading; modelled: mutant SP1PartialTTL30 (`NoSilentDrop`) | design finding |
 
 Lesson for the model (§4): it must contain the transport window with its update quantum, a FIFO bottleneck that
@@ -324,7 +324,7 @@ Intervention: Bob's `InitialStreamWindowSize` = 512 KiB, R = 8 KiB/s (same probe
    experiment (several seeds) before decision 2 is fixed at 90 s.
 2. netem tail-drops 250-520 packets in every run (`limit 24` against bursts from the QUIC hop): QUIC loss recovery
    hides them, but they add to the first-stall excess.
-3. Not done: E1's 3 seeds, the rate 12 sweep repeated, and the `tc -s` counters during a stall (only the final counters are kept).
+3. Not done: E1's 3 seeds, the rate 12 sweep repeated, and the `tc -s` counters during a stall (only the final counters are kept). → PT4
 
 ## SP1: executable specification (step 1 of block SP1, 2026-11-09)
 
@@ -364,10 +364,10 @@ remains); each ping phase gets the full 120 s (`Ping`: one timer for the flush, 
 | the session survives the muxer's timers at `ConnectionWriteTimeout` 120 s (valve at its earliest, 60 s; pings 120 s) | `SP1Relay`, `SP1RelayKeepalive`, `SP1Floor`, `SP1FloorKeepalive`, `SP1Hop` | holds; smallest safe valve 9 s blocking at 8 KiB/s and 36 s at the floor, pings 28 s and 80 s; today's 10 s fails (`SP1HopValve10`, `SP1KeepaliveBehindData`: E1, E1b) |
 | a grown 512 KiB window at 6 KiB/s is not cut by `WriteIdle` 90 s, and its keepalive is answered within 120 s | `SP1Grown90`, `SP1GrownKeepalive` | holds (a margin: D-SP1-2 pins the window) |
 | a stopped reader is cut within `WriteIdle` + D; a drip within WB-2 | `SP1Any` | holds |
-| **residual:** typing on the relay | `SP1TypingResidual` | up to **36 s** at 8 KiB/s from the path alone (144 s at the floor); NI-3 C2 stays a known failure until step 6 |
-| **residual:** keepalive at the floor through a relay that buffers a whole window | `SP1FloorKeepaliveBigHop` | needs 140 s; 120 s fails |
+| **residual:** typing on the relay | `SP1TypingResidual` | up to **36 s** at 8 KiB/s from the path alone (144 s at the floor); NI-3 C2 stays a known failure until step 6 → PT4 |
+| **residual:** keepalive at the floor through a relay that buffers a whole window | `SP1FloorKeepaliveBigHop` | needs 140 s; 120 s fails → PT4 |
 | closed by 120 s: keepalive behind a grown 512 KiB window | `SP1GrownKeepalive` (now sound) | the ping waited 89 s at 6 KiB/s, so 90 s failed; 120 s holds |
-| **residual:** resent bytes | (none) | a lost session still resends the whole message (no SP-5 in v1) |
+| **residual:** resent bytes | (none) | a lost session still resends the whole message (no SP-5 in v1) → PT4 |
 
 ### Open decisions (the user's, after E1b; nothing is assumed; taken in "SP1 decisions" below)
 
@@ -388,7 +388,7 @@ first seed in 6 of 12: raising `WriteIdle` alone does not make NI-3 pass.
   (`EnableKeepAlive` = false), the hops' QUIC idle timeouts and the relay's circuit teardown detecting a dead path
   (not modelled); (c) a residual that only ADR 0034 steps 4-6 remove (the credit keeps the relay queue under
   `Wmax`, SP-9). Giving pings priority does not help on v1: the bytes they wait behind are already in the relay.
-  Recommended: (a); (b) if E1b shows keepalive closes even at 90 s.
+  Recommended: (a); (b) if E1b shows keepalive closes even at 90 s. → PT4
 - **D-SP1-4, `partialTTL` 120 s.** Required by SP1-1 (RC10). Recommended.
 
 ### Gate
@@ -486,7 +486,7 @@ Keepalive survived because the ping now has 120 s to be answered.
   4 and 6 KiB/s with a 512 KiB window, where 5/6 died at the 10 s default); 2 KiB/s to be checked by the gate.
 - D-SP1-2: yamux receive window pinned at 256 KiB, no auto-tuning (E1b: 3/18 deaths vs 15/18 at 512 KiB).
 - D-SP1-3: the keepalive answer is bounded by the same 120 s; the residual (ping behind data at the floor) is
-  declared and measured until ADR 0034 steps 4-6 give control frames priority.
+  declared and measured until ADR 0034 steps 4-6 give control frames priority. → PT4
 - D-SP1-4: partialTTL = 120 s, always above the sync/1 no-progress cut (WriteIdle 90 s), so a receiver never
   drops a partial message the sender is still sending (silent loss found by the model).
 
@@ -499,11 +499,11 @@ window pinned):
 - new: `SP1Silence` and its mutant `SP1PartialTTLAtIdle` (`partialTTL` = `WriteIdle` is a silent drop; 91 s holds,
   since the model has no reverse propagation delay, hence the 2D + 10 s margin of D-SP1-4);
 - closed: the keepalive behind a grown 512 KiB window (`SP1GrownKeepalive`, a residual at 90 s) holds at 120 s and
-  is now a sound configuration;
+  is now a sound configuration; [done]
 - residuals, still witnessed: typing on the relay (36 s at 8 KiB/s: NI-3 C2 stays a known failure until step 6);
   the keepalive at the floor through a relay that buffers a whole 256 KiB window (needs 140 s); a lost session
   resends the whole message; a silence of 60 s or more while the send loop is blocked closes the session (outside
-  the contract, through rule L). E1b ran neither 2 KiB/s nor a whole-window relay buffer: both stay unmeasured.
+  the contract, through rule L). E1b ran neither 2 KiB/s nor a whole-window relay buffer: both stay unmeasured. → PT4
 
 Block WB is superseded by SP1: `gates/WB.toml` stays frozen as history and is not run; its WB-2 floor, tests and
 mutants are carried by `gates/SP1.toml` (netsim plan, section "Block WB").

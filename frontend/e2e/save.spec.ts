@@ -123,7 +123,10 @@ test("SAV-03b a keystroke typed just before the page goes survives it, whatever 
   // R-E2E1-1 (docs/plans/2026-11-17-e2e1.md, block WC1): on a reload WebKit loses what the page sends as it goes,
   // and the desktop window closes without the page hearing it; Go must hold the close until the
   // page has saved. Chromium delivers the page's last writes: the test holds there.
-  test.fixme(browserName === "webkit", "R-E2E1-1: a page that goes mid-save loses its last keys");
+  test.fixme(
+    browserName === "webkit",
+    "WC1, R-E2E1-1: a page that goes mid-save loses its last keys",
+  );
   const page = await openWith(browser, ALICE_URL, { saveMode: "manual" });
   const typed = `${await docText(page)} juste avant`;
   await typeAtEnd(page, " juste avant");

@@ -10,6 +10,9 @@ démontré (test, démo enregistrée ou tâche utilisateur chronométrée).
 
 Seul état courant du projet. Règles de travail : [CLAUDE.md](CLAUDE.md) ; carte de la documentation :
 [docs/README.md](docs/README.md) ; registre lu par les outils : [docs/objectif-en-cours.md](docs/objectif-en-cours.md).
+**Règle (INV1) : tout point ouvert, où qu'il soit, porte l'identifiant d'un bloc de la liste ordonnée « Cap à long
+terme » ci-dessous** ; branches non fusionnées et worktrees non commités sont listés dans une section « Travaux en
+cours » (`nom` → bloc) ; `mise run inventory` le vérifie (détail : `CLAUDE.md`, « Registre des exigences »).
 
 **Objectif en cours : la release R1** — une application utilisable par des collaborateurs de confiance (alpha),
 définie le 2026-11-12 dans [docs/autonomous-decisions.md](docs/autonomous-decisions.md) (lignes « release R1 »).
@@ -42,21 +45,88 @@ définie le 2026-11-12 dans [docs/autonomous-decisions.md](docs/autonomous-decis
 But : la première version (R1) — un éditeur collaboratif sans serveur, beau, simple en apparence et complet, qui s'installe par paquet `deb`/`rpm` sans rien d'autre, fonctionne sur Ubuntu 24.04 telle qu'installée, et dont chaque promesse est prouvée. Puis arm64, Windows, le lien Git optionnel, les greffons.
 
 Ordre, sauf décision contraire de l'utilisatrice (le tableau ci-dessus donne le détail de chaque ligne) :
-1. **`main` vert et poussé d'abord, toujours** : aucune fonction nouvelle tant qu'un bloc commité fait échouer la CI locale ou GitHub (aujourd'hui : PC1b et la simulation de réseau, puis CL1) ; un bloc commencé se termine avant d'en ouvrir un autre.
-2. **Finir SB2a1** (Ubuntu 24.04), puis **EX0** (registre unique des contributions : posé tôt pour ne jamais exposer l'intérieur aux greffons, W72).
-3. **IV1** avant R1 : le seul défaut de l'audit du protocole qu'un inconnu peut déclencher ; avec lui, faire porter au Welcome la racine du document (lève la contrainte « seule l'annonce de l'inviteur », F1 de PC1b) si le point 1 de la reprise confirme ce besoin.
-4. **UX1 et W65** : l'interface retenue par l'utilisatrice dans les deux études (P1–P32 sauf P26 ; T, D, V, F, O, S, G) — c'est là que se joue « beau, simple, très fonctionnel » ; y entrent W74 (boutons de fenêtre), W75 (projets récents) et les résiduels des parcours de PC1a, PC1b et SB2a1. Chaque écran passe par une séance courte avec elle (R14).
-5. **Solidité** : AD1, TR1 (dont la racine signée), BR1, NA1, UF1, HB1, PR1, RP1.
-5d. **Résiduels de performance de FE1 (avec ML1, avant R1)** : R-FE1-1, la fusion d'une modification externe passe par `updateText` (≈ 17 s au repos pour 30 000 lignes changées par un outil externe) ; R-FE1-2, « qui a écrit quoi » coûte ≈ 150 ms de diff Automerge par session à 1 M caractères (dans un Worker, page non figée). Mesurer sur le corpus de gros documents, corriger avec benchstat ou l'équivalent frontend.
-5c. **ML1 (avec les blocs de solidité, W76)** : budgets mémoire du bac à sable fixés depuis un corpus de documents lourds mesuré (aujourd'hui 4 Gio fixes, mesurés sur le seul petit document de test), adaptés à la mémoire de la machine, et message clair quand la limite est atteinte.
-6. **R1** : recette, paquets, parcours à deux personnes ; les cinq autres défauts critiques de l'audit (pair déjà admis) sont nommés comme limites connues dans les notes de version, puis corrigés aux étapes 5, 6 et 8 de l'ADR 0034.
-5b. **PU1 (complet, avant la fusion de HP1)** : n'annoncer un appareil « relié » (PeerUp) qu'après un accusé de réception de sa part, envoyé après ses contrôles d'admission et de rétention (H-19) ; défaut prouvé par HP1r (libp2p saute la négociation d'un protocole déjà connu : PeerUp puis PeerDown 10 ms plus tard). Spécification publique (docs/protocol, dix points), vecteurs, fuzz, modèle TLA+ avec mutants ; coût mesuré (≈ 1 aller-retour). HP1, code prêt, fusionne ensuite avec sa porte HP1r gelée inchangée. Puis BK6 (vérité netsim sous-estimée par l'envoi groupé UDP, tolérance C5 refaite).
-6a. **RF1 (complet, aussitôt après HP1)** : défaut prouvé le 2026-11-16 sur `main` — le gestionnaire de ressources de libp2p limite à 8 connexions simultanées par adresse IPv4 et compte un circuit sous l'adresse du relais : au-delà de 7 membres derrière un même relais, le suivant est refusé (dans les deux sens), contre les 64 membres de la spec §16.1. Correctif retenu (débat Codex) : un circuit n'est plus compté sous l'IP du relais, remplacé par un petit quota global des connexions non membres (sous-quota par relais identifié par son PeerID authentifié, cadence et délai bornés), membres vérifiés sortis du compteur par IP (cas de 8 membres derrière une box) ; relever `relayMaxCircuits` (16) et les 8 réservations par IP du relais selon 64 membres × 2 liens ; réconcilier 64 connexions par sens du code et 128 promises ; lignes §16.1 « circuits par relais » et « connexions par IP », testées à la borne, borne + 1 et reprise ; reproduction nommée à N = 10 et N = 17.
-6a'. **Amont libp2p, une fois HP1 fusionné (accord de l'utilisatrice, 2026-11-16)** : ouvrir chez `libp2p/go-libp2p` l'issue et la PR de `DirectConnectContext` (textes prêts dans `docs/plans/2026-11-16-hp1-libp2p-directconnectcontext.md`, commit du fork `c37a183f`), avec les chiffres de HP1 ; relancer notre PR #3576 (pas de relecture) ; appuyer leur PR #3547 (adresses DNS refusées dans DCUtR, notre règle H-12).
-6b. **LP1 (léger, après HP1)** : passer le fork `oioio-space/go-libp2p` de la v0.51.0 à la v0.52.0 (reprendre les deux commits du fork, `git merge-tree` sans conflit au 2026-11-16) pour le correctif amont de la fuite de places entrantes du gestionnaire de ressources (libp2p/go-libp2p#3568) ; monter `golang.org/x/crypto` ; tests p2p et test court de simulation. Attendre une version de libp2p qui monte quic-go v0.65 plutôt que de la forcer.
-7. Après R1 : SB2a2 (arm64), Windows (N35), lien Git (conception faite, W71), greffons.
+1. **`main` vert et poussé d'abord, toujours** : aucune fonction nouvelle tant qu'un bloc commité fait échouer la CI locale ou GitHub ; un bloc commencé se termine avant d'en ouvrir un autre. Blocs ouverts, à finir dans cet ordre :
+   - **SB2a1** (complet) et **E2E1** (standard) : la CI GitHub de `main` redevient verte (exécution 43884324109 rouge : `ci`, `sidecars-arm64`) ; E2E1 reprend les branches `fix-main-ci`, `fix-flaky`, `fix-sav03-join3` et prouve N-1 et N11 (suites réseau autrefois bloquées par le bac à sable).
+   - **WC1** (complet, perte de données, aussitôt après SB2a1 et E2E1) : fermer la fenêtre de bureau ne perd jamais ce qui vient d'être tapé — Go retient la fermeture jusqu'à ce que la page ait enregistré (règle D-DRAIN du modèle TLA+), `drainOnClose` retient la fenêtre, le serveur du store ne jette plus une requête reçue après un rechargement ; prouvé par SAV-03b sous WebKit (en `fixme` d'ici là, R-E2E1-1) et une vraie fermeture de fenêtre ; résiduels R-E2E1-2 (UX-OI, étape R19), R-E2E1-3 (dates PRV-108) et R-E2E1-4 (PRS-31/33) dans E2E1.
+   - **CI1b** (léger) : CI en tâches parallèles (porté par la candidate de SB2a1) ; y entrent W35, le résiduel de CI1/CI1c (outils appelés par leur nom nu) et les quatre vCPU partagés par `fe:check` et `test:ci` (FE1).
+   - **PU1**, **PU1b**, **PU1c** (complet, avant la fusion de HP1) : n'annoncer un appareil « relié » (PeerUp) qu'après un accusé de réception de sa part, envoyé après ses contrôles d'admission et de rétention (H-19) ; défaut prouvé par HP1r (libp2p saute la négociation d'un protocole déjà connu : PeerUp puis PeerDown 10 ms plus tard). Spécification publique (docs/protocol, dix points), vecteurs, fuzz, modèle TLA+ avec mutants ; coût mesuré (≈ 1 aller-retour).
+   - **HP1** (complet, porte HP1r gelée inchangée), code prêt, fusionne ensuite ; puis **PC1b** (`pc1b-held`, rejoué après HP1) ; puis **BK6** (vérité netsim sous-estimée par l'envoi groupé UDP, tolérance C5 refaite).
+   - **CL1** : fusionné ; reste R-1, `gates/CL1/GITHUB.md` ouvert jusqu'à dix exécutions GitHub mesurées sur trois graines.
+   - **INV1** (léger) : tout point ouvert porte l'identifiant d'un bloc de cette liste (`mise run inventory`).
+2. **Finir SB2a1** (Ubuntu 24.04), puis **DEP1**, puis **EX0** (registre unique des contributions : posé tôt pour ne jamais exposer l'intérieur aux greffons, W72).
+   - **DEP1** (léger) : mises à jour en attente, après SB2a1 pour ne pas mêler deux causes de CI rouge : PR Dependabot #4 (actions) et #7 (modules Go), W48 (Wails v3.1.0), W22 (versions de plus de 7 jours à refaire).
+   - **EX0** (standard) : y entrent U26 et l'ADR 0027 à écrire (registre des types de fichiers), N20 (registre ; coloration des autres langages), N21 et N24 (socle des « Fondations extensibles »).
+3. **IV1** avant R1 : le seul défaut de l'audit du protocole qu'un inconnu peut déclencher ; avec lui, faire porter au Welcome la racine du document (lève la contrainte « seule l'annonce de l'inviteur », F1 de PC1b) si le point 1 de la reprise confirme ce besoin. Puis, une fois HP1 fusionné :
+   - **RF1** (complet, aussitôt après HP1) : défaut prouvé le 2026-11-16 sur `main` — le gestionnaire de ressources de libp2p limite à 8 connexions simultanées par adresse IPv4 et compte un circuit sous l'adresse du relais : au-delà de 7 membres derrière un même relais, le suivant est refusé (dans les deux sens), contre les 64 membres de la spec §16.1. Correctif retenu (débat Codex) : un circuit n'est plus compté sous l'IP du relais, remplacé par un petit quota global des connexions non membres (sous-quota par relais identifié par son PeerID authentifié, cadence et délai bornés), membres vérifiés sortis du compteur par IP (cas de 8 membres derrière une box) ; relever `relayMaxCircuits` (16) et les 8 réservations par IP du relais selon 64 membres × 2 liens ; réconcilier 64 connexions par sens du code et 128 promises ; lignes §16.1 « circuits par relais » et « connexions par IP », testées à la borne, borne + 1 et reprise ; reproduction nommée à N = 10 et N = 17.
+   - **LP1** (léger, après HP1) : passer le fork `oioio-space/go-libp2p` de la v0.51.0 à la v0.52.0 (reprendre les deux commits du fork, `git merge-tree` sans conflit au 2026-11-16) pour le correctif amont de la fuite de places entrantes du gestionnaire de ressources (libp2p/go-libp2p#3568) ; monter `golang.org/x/crypto` ; tests p2p et test court de simulation. Attendre une version de libp2p qui monte quic-go v0.65 plutôt que de la forcer. Avec LP1, l'amont libp2p (accord de l'utilisatrice, 2026-11-16) : ouvrir chez `libp2p/go-libp2p` l'issue et la PR de `DirectConnectContext` (textes prêts dans `docs/plans/2026-11-16-hp1-libp2p-directconnectcontext.md`, commit du fork `c37a183f`), avec les chiffres de HP1 ; relancer notre PR #3576 (pas de relecture) ; appuyer leur PR #3547 (adresses DNS refusées dans DCUtR, notre règle H-12).
+4. **UX1 et W65** : l'interface retenue par l'utilisatrice dans les deux études (P1–P32 sauf P26 ; T, D, V, F, O, S, G) — c'est là que se joue « beau, simple, très fonctionnel » ; y entrent W74 (boutons de fenêtre), W75 (projets récents) et les résiduels des parcours de PC1a, PC1b et SB2a1. Chaque écran passe par une séance courte avec elle (R14). Blocs de ce point, dans l'ordre :
+   - **UX1** : y entrent aussi U14 (recherche branchée ; SRC-11 et SRC-20 en `fixme`), N43 (onglet Polices FT-1…14), U31 (règle permanente), les résiduels UX-PC1a-3, -6, -7 et le suivi du second parcours de SI1b.
+   - **W65** : y entrent W55, W56, U11, U12, N39 (« Revenir en arrière », MVP) et les résiduels R-2, R-3 de CL1 (un appareil reste « Quelqu'un »).
+   - **S13** (standard) : révision de design N44–N57 (sauf N53), UX-PC1a-5 (bandeau serré à 360 px), UX-LUP-1 (`lup.spec.ts`, `fixme`) ; avec HB1 pour N49 et N50.
+   - **EF1** (standard) : fonctions de l'éditeur, famille §5 « Comprendre, corriger, produire » — U15 (inclusions, liens internes), U16 (qui édite quoi dans la liste des fichiers), U17 (liens présents ou absents), U18 (mise en page Markdown), U24 (redimensionnement, RSZ-*), U29 (tâches TODO), U30 (sommaire des titres), W61 (complétion des chemins).
+   - **FM1** (complet : octets venus d'un pair) : fichiers du projet — U13 (gestionnaire de fichiers), N5 et ADR 0023 (rejoindre = recevoir tous les fichiers : index et interface du magasin BLAKE3, critère de R1), U7 (renommage EXT-09, autres fichiers) ; reprend la branche `t11-b4b-files`, jamais fusionnée.
+   - **LK1** (complet) : verrous et suspension — décider d'abord ADR 0021 (suspension : N3, test sauté `internal/app/files_test.go:713`) et ADR 0022 (zones verrouillées : N4), puis W43 (fichiers entiers verrouillés).
+   - **SH1** (standard, après LK1) : tableur — SHEET-MU-04…07 (besoin de LK1), CSV-16/17 (aperçu Typst de `csv()`), N6, ADR 0026 ; passes `ux-walkthrough` de U19, U20, U21, U22, U25, U27.
+   - **PRS1** (standard) : présentations — U10 (PRS-01…03, PRS-12), U28, U34b (plein écran natif, second écran) ; PRS-09 suit les commentaires de RV1.
+5. **Solidité** : AD1, TR1 (dont la racine signée et R-TC1), BR1, NA1, UF1, PR1 (W46), RP1 (W51, W44 et son résiduel DG6), C5S-UI (qualité du lien dans le popover des personnes, plan prêt), et :
+   - **HB1** (HB1a, HB1b ; SI1c remplacé) : y entrent W52, W53.
+   - **OI3** (standard, bloquant R1) : bail de projet — F16 et F15 du plan OI, R-1 à R-3 de W58, points 2 et 3 de `docs/plans/2026-11-13-invite-not-admin.md`.
+   - **SB2b** (complet) : reste des constats SB2 hors arm64 et résiduels du bac à sable RS1, RS3, RS6.
+   - **TX1** (complet : fil et état entre pairs) : résiduels du transport — C5S (écrivain sortant sans échéance, test de bout en bout de `RunRelay`), RC1 (fenêtre d'identify, observations mDNS forgées, source des paquets mDNS, adresses en clair), RL1 (panique libp2p sous `synctest` = F3 de l'audit, signal par événements, type `outbox`, Links vers une page bloquée), SI1b et W32 (fenêtre de perte de C5), D-SI6, Q5 (NAT rebinding), PeerID mDNS stable, D1 de C5 côté émetteur.
+   - **QA1** (léger) : preuves de revue — W9 (cas croisés X-01…X-20), W11, W12, W16 (StrykerJS, branche `t11-test-review-ts`), W19 (audit d'architecture : M5, m1–m11), W28, W29, W31 (mutation `protocol/trust` ≥ 95 %), W36, FMT-27 instable, couverture formelle d'amSync.
+   - **REL1** (standard) : fiabilité, U32 et ADR 0029 (REL-01…20) ; porte les critères de R1 « disque plein », « restauration d'une sauvegarde », « tuer et relancer ».
+   - **ML1** (avec les blocs de solidité, W76) : budgets mémoire du bac à sable fixés depuis un corpus de documents lourds mesuré (aujourd'hui 4 Gio fixes, mesurés sur le seul petit document de test), adaptés à la mémoire de la machine, et message clair quand la limite est atteinte ; y entre N38 (mesure de référence).
+   - **FE1r** (avec ML1, avant R1) : R-FE1-1, la fusion d'une modification externe passe par `updateText` (≈ 17 s au repos pour 30 000 lignes changées par un outil externe) ; R-FE1-2, « qui a écrit quoi » coûte ≈ 150 ms de diff Automerge par session à 1 M caractères (dans un Worker, page non figée). Mesurer sur le corpus de gros documents, corriger avec benchstat ou l'équivalent frontend.
+   - **LF1** (standard) : gros fichiers — W42, U33, U34, ADR 0028, PERF-32…37, STA-12, MDL-12, et **LF0b** (délimiteur non fermé, critère de R1, cible de fuzz) ; textes amont du surligneur Typst (accord de l'utilisatrice requis).
+6. **R1** : recette, paquets, parcours à deux personnes ; L1, L2 (amd64), L3 (premier tag SemVer signé), L5 ; questions Q1 et Q2 de `docs/open-questions.md` (« avant le premier tag ») ; les cinq autres défauts critiques de l'audit (pair déjà admis) sont nommés comme limites connues dans les notes de version, puis corrigés aux étapes 5, 6 et 8 de l'ADR 0034.
+7. Après R1, dans l'ordre :
+   - **PT4** (complet) : protocole, étapes 4 à 11 de l'ADR 0034 (4 à 6 d'abord, priorité à la frappe ; admission par l'étape 8) — N7, N12–N16, W37, W38, W45, ADR 0035, S1-R6, résiduels du chemin d'envoi (SP1b, D-SP1-3), critère netsim de chaque étape.
+   - **SB2a2** (arm64, avec Landlock), **PL1** (Windows et macOS : N35, N42, RS2), lien Git (conception faite, W71), greffons (**EXT1**).
+   - **NAV1** : navigation dans le projet avec G-0b et G-0c (un document par fichier, onglets) — W59b, W60, W62, N19.
+   - **ST1** (seuils de démarrage Q1 de PB ; suites F2, F6, R3 de PB ; reste de W50) et **RG1** (bloc RG du plan `rg-layout-robust-guard` : garde des bancs Go, suite F1 de PB).
+   - Lots v1 de `docs/architecture/coherence.md` §5 : **RV1** (Relire ensemble : N47, N48, commentaires), **VAR1** (N41, N46), **EXT1** (N21–N26, N32, W34), **WR1** (Modèles et écriture : N27, N30, N34, N53, N60–N65, N67–N69), **AI1** (N31, N33, N66, N70), **PV1** (N37), **OX1** (import bureautique : `.xls`, `.ods`).
+
+Rangement des points ouverts (INV1, 2026-11-17 ; chaque point porte son bloc à sa source — ligne de `docs/exigences.md`, « → ID » dans un plan ou un `SIMPLIFY.md`, commentaire au-dessus d'un test sauté) :
+
+| Bloc | Sources principales |
+|---|---|
+| E2E1, SB2a1, CI1b | CI rouge de `main` ; `docs/plans/2026-11-14-ci1-github-ci.md`, `gates/CI1c/SIMPLIFY.md`, `docs/plans/2026-11-17-fe1-frontend-timing.md` (CI) ; tests `internal/sidecar` instables (`gates/PC1a/SIMPLIFY.md`) |
+| PU1, HP1, PC1b, CL1 | `docs/plans/2026-11-16-hp1-direct-upgrade.md`, `gates/HP1*/WITNESSES.md`, `docs/plans/2026-11-14-pc1-project-change-by-restart.md`, `gates/CL1/` |
+| TX1 | `gates/C5S`, `gates/RC1`, `gates/RL1`, `gates/SI1b` (SIMPLIFY) ; plans étape 2 (risque 5), netsim-impaired (Q5, D-SI6), c5-sound (D1), rc1-reconnect |
+| PT4 | plan send-path (RC9, E1, résiduels SP1), `gates/SP1b/SIMPLIFY.md`, audit d'architecture (S1-R6), netsim-impaired (critère par étape) |
+| LF1, FE1r, ML1 | plans large-files, ide-large-file-practices, typst-highlight-root-cause, t11 (STA-12, MDL-12) ; `gates/LF0a3/SIMPLIFY.md` |
+| ST1, RG1 | plans pb-paired-perf (F1, F2, F6, R3, Q1) et rg-layout-robust-guard (R1–R6) ; `gates/PB/SIMPLIFY.md` |
+| SB2b, SB2a2, PL1 | plan sandbox-crash-reports (RS1, RS2, RS3, RS6), plan étape 3 (Landlock) |
+| OI3 | plan OI (F15, F16), plans w58-foreign-project et invite-not-admin |
+| UX1, S13, HB1 | `frontend/e2e/search.spec.ts` (UX1), `frontend/e2e/ux/lup.spec.ts` (S13), `gates/PC1a/SIMPLIFY.md`, `gates/SI1b/SIMPLIFY.md` |
+| LK1, SH1 | `internal/app/files_test.go:713`, `frontend/e2e/sheet.spec.ts`, ADR 0021, 0022, 0026 |
+| PRS1, RV1 | plan c4-present (« Pas fait ») |
+| QA1 | `gates/RL1/SIMPLIFY.md` (FMT-27), plan spec-executable (ligne 3) |
+| RP1 | plan diagnostics (DG6, `netsim --from-report`) |
+| TR1 | plan tc1-fold-cost-by-counts et `gates/TC1/SIMPLIFY.md` (R-TC1) |
+
+Placés après R1, et pourquoi : PT4 (décision du 2026-11-15 : les cinq défauts restants demandent un pair admis) ; SB2a2, PL1, lien Git, greffons (ordre déjà décidé) ; NAV1 (dépend de G-0b, après R1) ; ST1 et RG1 (reportés par la décision « release R1 ») ; RV1, VAR1, EXT1, WR1, AI1, PV1, OX1 (leurs lignes d'exigence les placent en v1 ou après, `coherence.md` §5).
 
 Les décisions qui demandent de la réflexion (conception, règle de protocole, compromis de sécurité, résiduel accepté ou refusé) se **débattent avec Codex avant d'être tranchées**, les deux avis consignés dans `docs/autonomous-decisions.md` (demande de l'utilisatrice, 2026-11-16) ; un appel ciblé par groupe de décisions, son quota est petit. Ce qui ne se négocie pas en route : la définition de « fini » et les invariants de `CLAUDE.md` ; on délègue au système ce qui est à lui (W64 : l'adversaire est un pair) ; on ne change jamais de projet à chaud (PC1) ; une preuve qui gêne ne s'affaiblit pas, elle se comprend (les quatre exécutions GitHub de SB2a1 ont chacune trouvé un vrai écart) ; les choix pris seuls vont dans `docs/autonomous-decisions.md` et lui sont montrés quand elle demande où on en est ; Codex avec parcimonie, pour ce que lui seul peut faire.
+
+**Travaux en cours (branches non fusionnées et worktrees ; `nom` → bloc ; vérifié par `mise run inventory`) :**
+- `ci.yml` run 43884324109 sur `main`, rouge (`ci`, `sidecars-arm64`) → SB2a1, E2E1 (ils la rendent verte)
+- `candidate/sb2a1-12` (worktree `inkwell-sb2a1m`, poussée) → SB2a1
+- `candidate/sb2a1-1`, `candidate/sb2a1-2`, `candidate/sb2a1-3`, `candidate/sb2a1-4`, `candidate/sb2a1-5`, `candidate/sb2a1-6`, `candidate/sb2a1-7`, `candidate/sb2a1-8`, `candidate/sb2a1-9`, `candidate/sb2a1-10`, `candidate/sb2a1-11` (candidates antérieures, locales ou sur `origin`) → SB2a1, à supprimer après sa fusion
+- `inkwell-sb2a1` (branche `sb2a1`, `8d23ecd`, avant le rejeu) → SB2a1 : à retirer, remplacé par les candidates (`git status --porcelain --ignored` d'abord)
+- `inkwell-hp1` (branche `hp1`) → HP1
+- `inkwell-pu1` (branche `pu1`) → PU1, PU1b, PU1c
+- `inkwell-e2e1` (HEAD détachée) → E2E1
+- `fix-main-ci` (locale et `origin`), `fix-flaky`, `fix-sav03-join3` (`origin`) → E2E1 (travail antérieur : à reprendre ou à supprimer dans E2E1)
+- `pc1b-held` (`73d0f4b`), `inkwell-pc1b` (branche `pc1b`) → PC1b
+- `agent-a8b133d4e69426085` (branche `worktree-agent-a8b133d4e69426085`, non commité depuis le 2026-11-13 : présence, couleurs du roster) → PR1 (c'est son code : 6 critères sur 9 verts)
+- `agent-a440b7b5ef6640b3a` (branche `worktree-agent-a440b7b5ef6640b3a`) → INV1
+- `inkwell` (arbre principal : `gates/SI1c.toml` non suivi, jamais figé) → HB1 : à supprimer, SI1c est remplacé par HB1a/HB1b
+- `dependabot/github_actions/actions-727537871c` (PR #4), `dependabot/go_modules/go-minor-patch-e7b6ea9cbd` (PR #7) → DEP1
+- `dependabot/github_actions/actions-5007a5d9ce`, `dependabot/go_modules/go-minor-patch-eaa3edf43a` (remplacées par #4 et #7) → DEP1 : à supprimer
+- `t11-b4b-files` (`origin`) et `worktree-agent-aa9d45d9e82d80d76` (même tête `748bbcf` : index du projet, gestionnaire de fichiers, types modulaires, ADR 0027 ; absent de `main`) → FM1 (à rejouer sur `main`)
+- `t11-test-review-ts` (`b7a237d`, outillage StrykerJS inachevé) → QA1 (W16)
+- `si1b` (`60fa7a2`) → INV1 : à supprimer, SI1b est sur `main` (`0752872`)
 
 **Reprise (passation du 2026-11-15, 21:45) — à lire en premier, dans cet ordre :**
 

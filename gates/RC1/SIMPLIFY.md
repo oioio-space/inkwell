@@ -84,10 +84,10 @@ Scope (RC1 lines only; several files also hold uncommitted block C5S changes):
 
 - A member is recorded when identify's event is handled, asynchronously, a few milliseconds after its PeerUp: a node
   closed inside that window does not record it (found as a 1-in-100 flake of the restart tests, whose setup now
-  waits for both books; in the app a session lasts far longer).
+  waits for both books; in the app a session lasts far longer). → TX1
 
 - A forged sighting can still fill the 2 mDNS places of a member's entry and cost one dial attempt per 10 s at most;
-  the authenticated addresses are dialed first and are never displaced, and a dial authenticates the peer ID.
+  the authenticated addresses are dialed first and are never displaced, and a dial authenticates the peer ID. → TX1
 
 ## Security review (independent, 2026-11-12): finding, fix, test
 
@@ -97,7 +97,7 @@ Scope (RC1 lines only; several files also hold uncommitted block C5S changes):
 | 2 | Load dropped the peers the open project's Admit refuses, and Drop erased an entry: a per-device book lost the members of the other projects (switch, failed join) | Entries carry the projects (`Options.Scope`, the app's project ID) they were seen a member of; load filters nothing; Drop removes only the current project, only when Admit already refuses the peer (revocation), and the entry once no project keeps it; a Drop for a fault keeps it | `TestBookPerDevice`, `TestBookPerDeviceAcrossProjects` (two projects, a switch, a fault Drop, a revocation in one then the other); mutant MC1s |
 | 3 | A clock set back quarantined the whole book; a jump forward of more than 90 days pruned and saved it empty | Per-entry rules: a future seen is brought back to now; if any was, or every entry would be pruned, the book is kept as it is and unsaved (`hold`) until a member is seen, then the usual rules apply; the 2020 floor is gone | `TestBookClockRules` (ten years back; 100 days forward); mutant MC1t |
 | 4 | Each wake (every 10 s per peer) ran a full `dialOnce`, relays included | A woken loop dials only the addresses the sighting gave (`dialLAN`, no relay); a node-wide token bucket (4, then one per 10 s) on top of the per-peer bound | `TestReconnectOnLANSighting`, `TestBookLANWakeBucket`; mutants MC1q, MC1u |
-| 5 | mDNS addresses unrestricted | `lanAddrOK`: private or link-local IPv4, unique-local IPv6 literals only; no loopback, public or DNS. The packet's source is not available through libp2p's mDNS notifee: not matched (residual) | `TestBookLANCannotOutrankAuthenticated` (refused rows); mutant MC1v |
+| 5 | mDNS addresses unrestricted | `lanAddrOK`: private or link-local IPv4, unique-local IPv6 literals only; no loopback, public or DNS. The packet's source is not available through libp2p's mDNS notifee: not matched (residual) | `TestBookLANCannotOutrankAuthenticated` (refused rows); mutant MC1v → TX1 |
 | 6 | Identify's listen addresses recorded raw | The signed peer record's addresses when identify carried one (its signature checked by identify), else the listen addresses; filtered as identify does (`reachableFrom`: a peer reached publicly keeps its public addresses only, no loopback unless reached on loopback) | `TestBookReachableFrom`, `TestBookPrefersSignedRecord` (a sealed record of the peer wins over the listen addresses, one of another peer is ignored; `announced` is the pure part of `onIdentified`); mutants MC1w, MC1aa |
 | 7 | The probe greeted connected members; a failed Hello hung up a working link | The probe skips linked peers (`probeTargets`) | `TestLANProbeKeepsMember` (AST + unit); mutant MC1x |
 | 8 | `remember` checked membership outside the book's lock: Drop then forget could be undone by a racing note | `note`/`noteLAN` take the membership check as a func and call it under `b.mu` | `TestBookNoteRechecksMembership` (asserts the check runs under the lock, then revoke, forget, late note); deterministic, not synctest: the interleaving is a lock, not a blocking point; mutant MC1y |

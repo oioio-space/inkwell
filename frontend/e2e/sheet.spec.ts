@@ -1033,6 +1033,7 @@ test.describe("two people on one sheet (SHEET-MU)", () => {
     await expect(cell(bob, 2, 2)).toContainText("BBB");
   });
 
+  // Block SH1, after LK1 (PROGRESS.md, « Cap à long terme »).
   test.fixme("SHEET-MU-04..07 roles, locked zones, suspension and history entries: need B3 (rights, ADR 0021/0022) and B2 (history); the sheet already refuses edits when `readOnly` / `isLocked` are given (unit tests CSV-18, CSV-19)", () => {});
   test("CSV-DIALECT a .csv that is really tab-separated says so, offers the choice, and remembers it", async ({
     browser,

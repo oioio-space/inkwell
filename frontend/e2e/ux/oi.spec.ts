@@ -27,6 +27,7 @@ async function open(browser: Browser, scheme: "light" | "dark"): Promise<Page> {
 
 for (const scheme of ["light", "dark"] as const) {
   test(`UX-OI walkthrough ${scheme}`, async ({ browser }) => {
+    // Block E2E1 (R-E2E1-2).
     test.fixme(
       true,
       "R-E2E1-2 (docs/plans/2026-11-17-e2e1.md): the R19 step reads an earlier toast",

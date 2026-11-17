@@ -44,11 +44,11 @@ Test, in all four. Product observations, with numbers, for the plans they belong
 - `store/merge.ts` uses `A.updateText` for an external rewrite whose regions are all under 64 Ki: an external tool
   that touches each of 30 000 lines of a 300 KB file costs about 17 s at idle on this machine (Automerge, superlinear
   in the number of edits). Residual R-FE1-1 for the external-edit plan (ADR 0028): measure it in the product path and
-  bound it (for example the line-region splices of the locked-zone path cost 3.5 s, still superlinear).
+  bound it (for example the line-region splices of the locked-zone path cost 3.5 s, still superlinear). → FE1r
 - DIF-05 costs one historical `A.diff` per session, each O(document): 150 ms at 1 M characters here, so a 5 MB
   document with many sessions costs seconds to minutes on its first analysis. It runs in a Worker
   (`analysis.worker.ts`), so the page is not frozen; the slices yield between sessions, never inside one diff.
-  Residual R-FE1-2 for the history plan: a budget at 5 MB stated by sessions × diff.
+  Residual R-FE1-2 for the history plan: a budget at 5 MB stated by sessions × diff. → FE1r
 - `encodeCBOR` at about 21 µs a small map is not the cause of any failure; noted for the protocol package.
 
 ## Fix (no bound raised, no run or input removed, no timeout lengthened)
@@ -86,7 +86,7 @@ timing them is the Go standard library's practice (`testing.AllocsPerRun`, `sort
 
 Follow-up, not taken here: in CI, `fe:check` shares four vCPU with `test:ci` (`mise.toml`, task `ci`); serialising them,
 or giving Vitest a fixed `maxWorkers`, removes the load itself. It changes the CI's length and is a decision for the CI
-plan.
+plan. → CI1b
 
 ## Proof
 
@@ -111,4 +111,4 @@ weakening one. DIF-05 is the product's own work: 17 historical `A.diff` calls on
 here, 32.8 s on the CI runner, 52 s at N = 4, past the 60 s cap at N = 6. The adapter test's 50 000 messages cost
 0.1 s in the adapter itself; the rest of its 0.4 s is the Repo's start and stop. Both have their margin only at the
 CI's measured level of load (DIF-05: 46.8 s on the CI against 60 s). The cause of that load is the CI's job layout
-(follow-up above), and DIF-05's cost per session is residual R-FE1-2.
+(follow-up above), and DIF-05's cost per session is residual R-FE1-2. → FE1r

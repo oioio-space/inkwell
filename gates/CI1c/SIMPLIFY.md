@@ -15,6 +15,6 @@ Diff read in full: `.github/workflows/ci.yml`, `internal/instance/{runtime_unix.
 | `lint.sh` keeps its `$GOPATH/bin` fallback after the pinned path | kept: it is the path without mise, and it now comes after the pinned folders |
 
 Not applied, recorded as residuals in the plan: mise tasks and the pre-commit hook that still call `gofumpt`,
-`betteralign` and `wails3` by bare name.
+`betteralign` and `wails3` by bare name. → CI1b
 
 Secrets: none. Artefacts: none (the iproute2 build goes to a temporary folder and a cache outside the repository).

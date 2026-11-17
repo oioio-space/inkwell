@@ -64,7 +64,7 @@ TLA+ mutants of SyncIndicator.tla.
   failed on the same commit, so C5's P3 bound is proven marginal. It is not caused by SI1.
 - **Follow-up, outside this block:** the P3 samples fall from 1.8 % and 1.6 % to 0-0.7 %. This suggests that the
   clean phase still counts loss from the previous phase's 30 s window; it is a hypothesis to check. Filed for the
-  netsim work (W32). The bound is not changed.
+  netsim work (W32). The bound is not changed. → TX1
 
 ## SI1b: the display rule after the blocked walkthrough
 
@@ -76,7 +76,7 @@ TLA+ mutants of SyncIndicator.tla.
   is against R7 (no `title=`), and the ellipsis hid information. The person's sync state is now on its own line. The
   affected test now selects that line; its assertion is unchanged.
 - **Second walkthrough** (`gates/SI1b/UX.md`): « Verdict: ship with filed follow-ups ». The flicker is down to 9-10
-  label changes in 8 s of two-person typing; « (0) » is never shown.
+  label changes in 8 s of two-person typing; « (0) » is never shown. → UX1
 - **Filed for the next block** (R1, the clickable sync state, where the labels are revisited):
   - UX-SI1b-1: sending and behind alternate once a second while both type;
   - UX-SI1-5: « Synchronisé » shown, withdrawn and shown again on a first join;
@@ -91,7 +91,7 @@ TLA+ mutants of SyncIndicator.tla.
 - **Result:** A failed C5 once in 4 runs (P1 at 0.5 %, under its 1 % floor: the other direction). B passed 4 of 4.
 - **Reading:** C5 is marginal in both directions, independently of SI1. The two B failures of the gate run came while
   the large-file measurements loaded the machine. Follow-up (W32, outside this block): C5's loss estimate rests on
-  too few packets per 30 s window. It needs a statistically sound estimator; the bounds are not changed.
+  too few packets per 30 s window. It needs a statistically sound estimator; the bounds are not changed. → TX1
 
 ## Re-validation on main after C5S, RC1 and LF0a3 (2026-11-13)
 

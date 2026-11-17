@@ -2,7 +2,7 @@
 
 Date: 2026-11-12. Rigour: standard (tooling; the runner judges every later block, so every input class has a test
 and the digest check has a mutant). Decision: `docs/autonomous-decisions.md`, row « process (after Codex) », item 4.
-Frozen gate: `gates/GR.toml`; tests: `scripts/gate_resume_test.py`.
+Frozen gate: `gates/GR.toml`; tests: `scripts/gate_resume_test.py`. [done]
 
 ## Need
 
@@ -27,7 +27,7 @@ A full gate runs for hours; an interruption (crash, OOM of one step, reboot) tod
   the gate's own outputs only: `gates/<lot>.json` and the files of `gates/<lot>/` that `reset_evidence` clears. The
   block's versioned reports (`gates/<lot>/*.md`, e.g. SIMPLIFY.md) **are** inputs: `simplify-report` reads one.
   Ignored files (`node_modules`, build outputs, `.typstdeps/`) are not in the digest; they are pinned elsewhere
-  (sidecar SHA-256, lock files) or covered by the tool versions — a stated residual, as in the decision.
+  (sidecar SHA-256, lock files) or covered by the tool versions — a stated residual, as in the decision. [done]
 - **Without `--resume`**: unchanged — evidence reset, every criterion runs, same verdicts; the only addition is the
   record files (listed in the manifest's `sha256` like all evidence). The manifest has no `resume` key.
 - **With `--resume`**: no `reset_evidence`; instead every file of `gates/<lot>/` is removed except the `*.md`
@@ -37,7 +37,7 @@ A full gate runs for hours; an interruption (crash, OOM of one step, reboot) tod
   re-used only if its record parses, its checksum holds, its `lot`/`id` match, its TOML table equals the current one,
   the digest computed now equals the recorded one, runner identity, tool versions and environment are equal, and
   every evidence file exists with its recorded SHA-256. Otherwise the record and its evidence are deleted and the
-  criterion runs; the first mismatch is the reason. A re-used entry carries `"resumed": true`.
+  criterion runs; the first mismatch is the reason. A re-used entry carries `"resumed": true`. [done]
 - **A valid failure stays blocking**: a recorded `fail` is re-used as `fail`, never retried by `--resume` (retry =
   change the candidate, or run without the flag).
 - **Interrupted criterion** = no record (records are written only after the command exits) ⇒ re-run.

@@ -6,7 +6,7 @@ chained into every later gate), and a wrong rule either blocks unrelated work or
 statistical model with mutant rules (`scripts/perf/rgmodel.py`, section 6), the rule and layout tests (section 9), the
 self-test with a real layout mutant (section 8), the frozen gate `gates/RG.toml`, and one review by another model
 family before the gate is frozen (Codex; its first review is folded in, section 4.6). ADR: amendment "RG" of ADR 0038
-(closes its follow-up F1; no new number).
+(closes its follow-up F1; no new number). → RG1
 
 ## 1. Need and evidence
 
@@ -125,7 +125,7 @@ log-ratio (the median of the Walsh averages), not a location shift of a common d
   (change side noise x1.5), `b-layout` (change side twice as layout-sensitive), `b-quiet` (x0.7) and `b-stalls`
   (10 % of the change's processes +15 %, a skewed loss whose pair median is about 0 and whose pseudo-median is
   positive: a real loss in the tail, which the guard is meant to flag). The prototype `rgsim2.py` is not the
-  common-residual, additive model of the first round: each side draws its own scale, layout sensitivity and tail.
+  common-residual, additive model of the first round: each side draws its own scale, layout sensitivity and tail. → RG1
 - Certification (the only passing outcome): an **exact sign-test** upper bound of the median pair log-ratio (an order
   statistic), valid for any continuous distribution of independent pairs, symmetric or not, and under drift (each
   pair's own median); so "certified" never rests on symmetry.
@@ -227,7 +227,7 @@ Readings, and the qualified guarantees:
 
 Noise: per-process residuals of Send/256 (log ns minus the variant median), 300 processes, sd 4.2 %, pair difference
 sd 5.9 %, bootstrapped; layout: canonical arm with between-layout sd 0 (fit) or 2.2 % (measured upper bound); stress:
-noise x1.5. Single-look power at a true +5 % (4000 runs each):
+noise x1.5. Single-look power at a true +5 % (4000 runs each): → RG1
 
 | N pairs | alpha 1e-3, m0 1 % | same, sigma_l 2.2 % | alpha 1e-3, m0 0.5 % | alpha 5e-3, m0 1 % |
 |---|---|---|---|---|
@@ -271,7 +271,7 @@ the layout environments: `fit` (canonical, sigma_l 0), `page` (sigma_l 2.2 %), `
 randomized: two-point ±3.15 %), `c5s` (production arm: fixed layouts, change side in the slow phase, +6.3 %),
 `envelope` (production +7 %), `drift` (linear drift 5 % over the session, random order), `stress` (noise x1.5),
 `loaded` (noise x2.3, as measured at load 6). It
-evaluates the rule exactly as regression.py does (it imports the rule, as pbmodel imports paired).
+evaluates the rule exactly as regression.py does (it imports the rule, as pbmodel imports paired). → RG1
 
 Every rate is asserted on its 95 % Clopper-Pearson bound, never on the point estimate (a requirement "<= x" holds only
 if the upper bound is <= x; ">= y" only if the lower bound is >= y), at alpha_c of C_max = 40 unless stated. Added
@@ -396,14 +396,14 @@ the model's prototypes, `sim1.log` to `sim4.log`), and the pad side-effect check
 
 - R1 only the benchmarked package is randomized; its dependencies are canonicalized (64-byte alignment) but keep a
   deterministic page-level layout. Measured page-level effect on mux: not detectable (<= 2.2 %). Extending the pads
-  to every module package costs a recompilation of the closure per layout (follow-up, measured first).
+  to every module package costs a recompilation of the closure per layout (follow-up, measured first). → RG1
 - R2 data layout (heap, stacks) is not randomized; Go heap addresses are deterministic per binary. No evidence of an
-  effect yet; a heap jitter at init is the follow-up if one is measured.
+  effect yet; a heap jitter at init is the follow-up if one is measured. → RG1
 - R3 hybrid CPU (6 performance cores, 8 efficiency cores): pinning to the performance cores (`taskset -c 0-11`) was
   measured and rejected: 36 against 36 processes, variance ratios 0.73 (Send/256), 0.52 (16384), 1.63 (1048576), no
-  consistent gain (`pin2.jsonl`; the 16-process run `pin.jsonl` gave 0.51, not significant either).
+  consistent gain (`pin2.jsonl`; the 16-process run `pin.jsonl` gave 0.51, not significant either). → RG1
 - R4 the pad placement relies on cmd/compile emitting functions in file order and cmd/link in package order; checked
-  on every build (fail closed), so a toolchain change cannot silently disable the randomization.
-- R5 the production arm's 8 % envelope is fitted to one CPU; a new host re-measures it (new spec and gate).
+  on every build (fail closed), so a toolchain change cannot silently disable the randomization. → RG1
+- R5 the production arm's 8 % envelope is fitted to one CPU; a new host re-measures it (new spec and gate). → RG1
 - R6 cost (section 7); a sequential design with more looks would cut it further, at the price of an alpha spending
-  function (follow-up).
+  function (follow-up). → RG1

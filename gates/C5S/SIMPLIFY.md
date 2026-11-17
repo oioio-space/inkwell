@@ -51,9 +51,9 @@ Scope: the product code of `/inkwell/linkprobe/1.0.0` (ADR 0036, accepted; spec 
   requires, and it is bounded at one per connection.
 - **Follow-up (spec):** the outbound writer has no deadline. A responder that stops reading pins the writer for the
   connection's life (the figure goes unknown). Spec §8.5 defines no bound, so none was invented. To specify: a reset
-  after a bound tied to the PTO.
+  after a bound tied to the PTO. → TX1
 - **Follow-up (test):** the relay-role test drives `relayRoles` directly. An end-to-end test through `RunRelay` is to
-  add.
+  add. → TX1
 
 ## Evidence
 
@@ -146,7 +146,7 @@ source, bounds unchanged.
   it. Both runs replay green with it, red with the old rule; the old rule fails 3 of 200 corrected-model runs. Spec
   « Exactitude » and ADR 0036 now say 15.4 ‰ (18.4 ‰ for a window starting within 2 s of a drop). Declined for now: a
   stricter step 3.6 (PTO at hand-over and at the echo, the smaller), which needs an ADR amendment, vectors and TLA+;
-  filed as a follow-up.
+  filed as a follow-up. [done]
 - **regression: L1 anti-weakening (through RL1 > P3 > P2 > L2 > L1).** `gate-guard.py`'s dependency walk took a test
   fixture path named in `scripts/netsim/affected_test.py` (`scripts/perf/p.py`) for a dependency, and its self-test
   required every dependency to exist. A path only named transitively that is no file is not a dependency now; a
@@ -171,6 +171,6 @@ Three connection-identity races, each fixed at the root with a red-first determi
   is split into `readLinks` and `applyLinks`; each sample names the peer and the sync stream it was
   read for, and `applyLinks` (holding `n.mu` then `n.lmu`) drops it if `ps.out` changed.
   `TestLinkLevelDropsSampleOfEndedSession`.
-- No defect found in the amSync microtask rule. The unbounded outbound writer stays a P3 follow-up.
+- No defect found in the amSync microtask rule. The unbounded outbound writer stays a P3 follow-up. → TX1
 - Checks: the three tests pass 3× under `-race`; `go-product`, lint and `mutants.py --check C5S` pass.
   The p2p package needs `-timeout 35m` under `-race` (1372 s); 126 s without.

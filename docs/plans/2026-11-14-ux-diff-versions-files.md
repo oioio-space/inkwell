@@ -17,7 +17,7 @@ writers or on live cursors in prose; items not read on a fetched page are marked
 
 | Fact | Evidence |
 |---|---|
-| History, differences and « who wrote what » are computed in the webview from the Automerge document of `main.typ` only; there is no go-git projection and no per-file history yet | `ui/history/HistoryBars.svelte:22-26`; no `go-git` in `go.mod`; G-0b not done |
+| History, differences and « who wrote what » are computed in the webview from the Automerge document of `main.typ` only; there is no go-git projection and no per-file history yet | `ui/history/HistoryBars.svelte:22-26`; no `go-git` in `go.mod`; G-0b not done → W65 |
 | Text arriving from another person shows **no mark at all**; a deletion leaves no trace; nothing says that someone writes above or below the view; no code or test keeps the reading position stable | `editor/amPatches.ts`, `editor/remoteCursors.ts`; no scroll code in `amSync.ts` |
 | Arriving patches carry exact ranges and their source: an arrival mark needs only an author lookup | `editor/amPatches.ts`, `patchInfo.source` |
 | The diff is a 1100 × 760 modal with two engines: word-level with authors and moves when inline, CodeMirror's line diff when side by side; restoring opens a second modal on top; unchanged stretches fold but cannot be opened; only « X against now » can be compared | `ui/history/DiffView.svelte`, `DiffInline.svelte`, `ApplyDialog.svelte`, `history/layout.ts` |

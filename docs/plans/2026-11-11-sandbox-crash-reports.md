@@ -97,8 +97,8 @@ death, plus a pipe `core_pattern`, plus `RLIMIT_CORE = 0`, which a pipe ignores.
 | b | `PR_SET_DUMPABLE 0` before exec | Does not work: exec resets it (§ 3) |
 | c | Execute-only typst binary → `suid_dumpable` | Does not work on Fedora (2 still dumps); also depends on a system setting |
 | d | ptrace the target and turn the fatal signal into SIGKILL | Does not work for seccomp: a forced SIGSYS is `SA_IMMUTABLE`, so the tracer never sees it. It would also add a tracer and ptrace surface |
-| e | Userland ELF loader shim (non-dumpable, no exec) | Rejected for W49: a new ELF loader would be attack surface in the trusted part. Kept as research for the socket-mode residual (§ 6) |
-| f | cgroup v2 `memory.max` (OOM → SIGKILL, which never dumps) | Follow-up block, not W49 (§ 5.3, § 6) |
+| e | Userland ELF loader shim (non-dumpable, no exec) | Rejected for W49: a new ELF loader would be attack surface in the trusted part. Kept as research for the socket-mode residual (§ 6) → SB2b |
+| f | cgroup v2 `memory.max` (OOM → SIGKILL, which never dumps) | Follow-up block, not W49 (§ 5.3, § 6) [done] |
 | g | `coredump.conf`, abrt `IgnoredPaths`, sysctl | Forbidden by the requirement (system settings, hides reports) |
 | h | `SIGXFSZ` ignored in the target → EFBIG | **Adopted** (§ 5.1) |
 | i | Seccomp: ERRNO instead of kill on ABI mismatch | Not adopted by default; **user decision D1** (§ 5.2) |
@@ -195,7 +195,7 @@ however large or broken, can cause it. The 14 SIGSYS records all come from tests
   still fails in `mmap` under the overcommit heuristic, which means an abort. It needs a delegated subtree
   (systemd user manager, `clone3(CLONE_INTO_CGROUP)` through `SysProcAttr.UseCgroupFD`) and a fallback,
   and macOS does not have it. **A follow-up block (proposed: M-cg), not W49.** *(Superseded by decision D2 and ADR 0042: the memory cgroup is part of block SB1.)* For W49, `RLIMIT_AS` stays
-  the hard bound and § 5.0 removes the record.
+  the hard bound and § 5.0 removes the record. [done]
 - Classification is unchanged: stderr `memory allocation of … failed` → `ErrMemoryLimit`.
 
 ### 5.4 Decision table (the executable specification)
@@ -219,12 +219,12 @@ however large or broken, can cause it. The 14 SIGSYS records all come from tests
   for honest documents. Mitigations: the G4 gate check (§ 8.2) fails on any machine that has the mode, so
   we will see it the day it arrives. M-cg covers honest large documents. Research to follow: upstream,
   ask systemd-coredumpd to reply `COREDUMP_REJECT` without journaling when the limit is ≤ 1, or a kernel
-  check of limit 1 in `coredump_socket`; and option e.
+  check of limit 1 in `coredump_socket`; and option e. → SB2b
 - **RS2: macOS.** The limits do not apply there (`Spec` docs), so W49 has no counterpart there.
   ReportCrash writes `.ips` files for crashing child processes without a dialog. To check when the macOS
-  limits come.
+  limits come. → PL1
 - **RS3: the kernel log line.** One rate-limited KERN_WARNING per stop (§ 5.0). It is accepted: it names
-  no project path, and abrt-oops ignores it. The G4 gate check also asserts that no abrt problem appears.
+  no project path, and abrt-oops ignores it. The G4 gate check also asserts that no abrt problem appears. → SB2b
 
 ## 7. What the person sees (question 3)
 
@@ -329,7 +329,7 @@ diagnostics plan and is not part of W49.
   and on current systems it leaves no record), or switch to ENOSYS (no signal on any system, same
   containment against an informed attacker, but we lose fail-stop and our local evidence; needs an ADR).
 - **D2 (scope):** accept RS1, so that a future socket-mode systemd can again report a memory-limit stop,
-  and schedule M-cg (cgroup memory bound) as the follow-up block for that case. Or require M-cg inside W49.
+  and schedule M-cg (cgroup memory bound) as the follow-up block for that case. Or require M-cg inside W49. [done]
 - **D3 (wording):** the three messages of § 7, to be confirmed in a short session in front of the app.
 
 ## Sources
@@ -364,7 +364,7 @@ diagnostics plan and is not part of W49.
 ## Decisions of the user (2026-11-11)
 
 - D1: keep SECCOMP_RET_KILL_PROCESS on a forbidden syscall.
-- D2: the cgroup `memory.max` limit is in this block (W49), not a follow-up.
+- D2: the cgroup `memory.max` limit is in this block (W49), not a follow-up. [done]
 - D3: wording to confirm at the UX review of the block.
 
 ## Gate SB1 (`gates/SB1.toml`, block SB1 = requirement W49, step 1)
@@ -403,7 +403,7 @@ parts are covered by the other criteria).
   The implementer must pick one, justify it against "nothing to install" and the dependency rule, and add an ADR.
   **Decided (2026-11-12): D-Bus `StartTransientUnit`, recorded in
   [ADR 0042](../adr/0042-sandbox-memory-scope-and-no-core-helper.md)** (0039 to 0041 are reserved for plugins and
-  AI in `docs/architecture/decisions.md`). It supersedes the "follow-up block (M-cg), not W49" of § 5.3 (decision D2).
+  AI in `docs/architecture/decisions.md`). It supersedes the "follow-up block (M-cg), not W49" of § 5.3 (decision D2). [done]
 - Open point for the implementer: with a cgroup bound, `RLIMIT_AS` must stay a bound (the gate requires it never be
   lower than the cgroup's) but cannot be what fires first on resident growth, or the death stays SIGSEGV.
 - The cgroup tests skip (so the gate fails) on a machine without a delegated user cgroup; that is deliberate.
@@ -600,7 +600,7 @@ The model `SandboxScope` (README section `SandboxScope`) found a double fault th
 
 Residual RS6 (documented, not closed): a scope collected by systemd after its holder died may remove a finished run's
 cgroup before R7; its cause is then `unknown`, never zero (model witness `ResidualCollected`). Row R7's "never before
-R7" is about the app's own cleanup.
+R7" is about the app's own cleanup. → SB2b
 
 ### Implementation decisions (first commit of SB1b, 2026-11-13)
 

@@ -35,4 +35,4 @@ tableau « Migration », ligne 3 ; spec du protocole §9 (profil de validité CB
 Le décodeur CBOR (`protocol/repo/cbor.go`, `@inkwell/protocol` `cbor.ts`) lit des octets de pairs :
 il doit recevoir sa cible de fuzz (`FuzzRepoMessage`, corpus = vecteurs `repo.json`) au plus tard à
 P-FUZZ (étape 9, 1 h sans plantage). Implémenté par un modèle gratuit (Nemotron Ultra via opencode) ;
-diff relu (un test d'interface affaibli `innerText` → `textContent` rétabli) ; porte P3 verte.
+diff relu (un test d'interface affaibli `innerText` → `textContent` rétabli) ; porte P3 verte. [done]

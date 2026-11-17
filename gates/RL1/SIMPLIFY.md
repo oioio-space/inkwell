@@ -57,7 +57,7 @@ Applied by two delegated agents (Go side, netsim side); every result re-run by t
 - `mise run netsim:mutants -- RL1`: RL1a caught (go test exit 1).
 - `mise run lint`, `mise run fe:check` (1199 tests): green.
 - Known, not introduced here: `p2p` panics about 1 run in 5 inside libp2p (`swarm.nonProxyAddr` in a synctest
-  bubble); reproduced 2/15 on a clean worktree of HEAD. Tracked as a residual.
+  bubble); reproduced 2/15 on a clean worktree of HEAD. Tracked as a residual. → TX1
 
 ## Mutation
 
@@ -92,15 +92,15 @@ Applied:
   monotonic stamp `683.8n → 692.5n ~ (p=0.072)`, B/op and allocs/op unchanged — kept.
 
 Declined (outside this diff or a later block, noted for W33 UI):
-- Event-driven dirty signal instead of the 1 Hz sampler (spec bound is ≤ 1/s; the sampler is the source).
-- Merging link state into the roster store the people popover reads: decided with the W33 UX design.
-- Extracting an `outbox` type owning queue, gauges and failure counters (lot 8, with the p2p dupl).
-- A drop-latest slot for Links sends to a stalled webview (rare; the session ends on a stalled conn).
-- Quality computed in the webview: Go stays the single source (decision Q4 thresholds in `transport`).
-- Lifting the `protocol/invite` reader into a shared package (touches invite; same pattern used locally).
+- Event-driven dirty signal instead of the 1 Hz sampler (spec bound is ≤ 1/s; the sampler is the source). → TX1
+- Merging link state into the roster store the people popover reads: decided with the W33 UX design. → C5S-UI
+- Extracting an `outbox` type owning queue, gauges and failure counters (lot 8, with the p2p dupl). → TX1
+- A drop-latest slot for Links sends to a stalled webview (rare; the session ends on a stalled conn). → TX1
+- Quality computed in the webview: Go stays the single source (decision Q4 thresholds in `transport`). [obsolete: declined, Go stays the single source of link quality]
+- Lifting the `protocol/invite` reader into a shared package (touches invite; same pattern used locally). → TX1
 
 Seen while checking: `commands.prop.test.ts` FMT-27 (fast-check) failed once and passed on rerun —
-unrelated to this diff, tracked as a flaky residual.
+unrelated to this diff, tracked as a flaky residual. → QA1
 
 ## mutation protocol/bridge
 

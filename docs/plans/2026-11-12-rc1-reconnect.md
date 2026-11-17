@@ -95,7 +95,7 @@ location-sensitive data kept in plaintext in the user's home profile. Mitigation
 as the identity), only members are recorded, 90 days maximum, deleted on revocation, never logged (logs say counts),
 never sent to a peer, never in a diagnostic or crash report (the file is outside the reports' allow-list, whose own test stays the proof), removed with the profile. A device-wide "forget everything" action removes the file;
 the settings screen entry is out of scope here and filed as a follow-up in `docs/exigences.md`. Full-disk encryption
-is the person's choice, as for the project files.
+is the person's choice, as for the project files. → TX1
 
 Security of the use: a recorded address is a **hint**. The handshake authenticates the peer ID; an address that now
 belongs to another device fails the handshake (test `TestReconnectStaleAddressWrongPeer`). The file is local state but
@@ -136,7 +136,7 @@ restarted device, which for a crash is when the person reopens the app, long aft
 
 | Situation | Behaviour |
 |---|---|
-| no entry, no relay, no mDNS (first start, or every address changed on both sides) | `errNoAddress`; the link comes back when either side is reached by an invitation or by mDNS or when the other side dials us; documented residual, not a regression |
+| no entry, no relay, no mDNS (first start, or every address changed on both sides) | `errNoAddress`; the link comes back when either side is reached by an invitation or by mDNS or when the other side dials us; documented residual, not a regression → TX1 |
 | stale address, another device now there | handshake fails (peer ID mismatch), attempt counted as a failure, backoff as today; never an accepted link to the wrong peer |
 | book file corrupt, too large, wrong version | quarantine as `.bad`, empty book, app starts (section 3) |
 | book directory read-only / disk full | save fails, logged; the in-memory book keeps working; next change retries |

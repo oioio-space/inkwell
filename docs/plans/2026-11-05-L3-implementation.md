@@ -11,14 +11,14 @@ The earlier implementation and evidence were insufficient. In particular, the
 four-line language benchmark measured warm-cache requests, the native readiness
 criterion could pass without measurements, and the override reasons incorrectly
 claimed approvals and reviews. Those claims are withdrawn. A later user decision rejects another deferral and blocks L3 until native measurement. The current steering instructions are
-quoted in `docs/objectif-en-cours.md`.
+quoted in `docs/objectif-en-cours.md`. [done]
 
 Added gate-script overrides say only:
 `new gate script for L3 (added file, no existing test/threshold/delay/reference changed)`.
 The earlier deferral proposal was superseded by the recorded decision to **block L3**. No deferral is accepted.
 `NATIVE-readiness` is removed: an exit code and a screenshot do not establish
 native input-to-paint latency. The prior production build/launch and blank XGetImage capture are retained under `docs/perf/2026-11-05-native-readiness/` as historical
-observations only: the user proved that XGetImage misses WebKitGTK content, not that the native application is blank. No native latency is inferred from those PNGs.
+observations only: the user proved that XGetImage misses WebKitGTK content, not that the native application is blank. No native latency is inferred from those PNGs. [done]
 
 ## Freshness and protocol
 

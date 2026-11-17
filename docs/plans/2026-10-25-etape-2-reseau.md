@@ -514,7 +514,7 @@ Les messages éphémères (curseurs, présence) restent acceptés pour les lecte
 2. **wormhole-william est peu actif** (dernier commit en août 2025). Il dépend de `gospake2` (2021, hébergé sur salsa.debian.org). Le serveur de rendez-vous public est un tiers en `ws://` (contenu chiffré, mais les métadonnées sont visibles). Le porteur est isolé derrière `invite`. Plans B : le fork `rymdport/wormhole` (déjà sur `coder/websocket`), ou un rendez-vous hébergé sur `inkwell-relay`. Les mots du code restent anglais (liste PGP) en v1.
 3. **Messages de synchro V2 d'Automerge 3** (document complet) : la vérification de couverture charge le fragment, ce qui coûte O(document) à la première synchro. Il faut le mesurer sur 50 000 ops (budget < 2 s).
 4. **Un pair malveillant renvoie sans cesse des modifications filtrées** (boucle de synchro). Parade : limite de débit, puis `Drop` après N rejets. À vérifier en simulation.
-5. **mDNS publie un PeerID stable sur chaque réseau rejoint** (pistage possible). Le réglage le désactive ; des identifiants tournants viendront plus tard.
+5. **mDNS publie un PeerID stable sur chaque réseau rejoint** (pistage possible). Le réglage le désactive ; des identifiants tournants viendront plus tard. → TX1
 6. **Empreinte en langues différentes** : deux personnes avec une interface fr et une interface en ne voient pas les mêmes mots. « Détails techniques » montre les deux.
 7. **Ubuntu 24.04 et userns** : AppArmor impose le `sysctl` en CI. Sous Fedora, `nf_tables` doit déjà être chargé, ce qu'assure firewalld.
 8. **Relais sans limite** : risque d'abus de bande passante sur un relais public. Parades : plafonds par IP, liste blanche facultative, et métriques côté relais.

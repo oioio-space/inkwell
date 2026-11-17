@@ -259,7 +259,7 @@ Reproducing a network incident needs the **sequence** and the **conditions**, wi
 - the last 100 `net.*` and `sync.*` events with `cid`/`op` and relative times (path changes, resync causes under rule L, send-path cuts, refused frames), so the incident timeline is readable;
 - sync state per document: hashed doc id, pending/behind counts, last resync, heads count (not heads);
 - the library versions (libp2p, protocol step `conformance.CurrentStep`, `INKWELL_PROTOCOL_STEP`). That is enough to replay in netsim (`scripts/netsim`): a report maps to a scenario (topology direct/relay, NAT class, loss bucket, event order). A `netsim --from-report` importer is a later
-residual (graded, not part of the first lots). What stays out: addresses (IP is personal data; only kinds and counts), peer ids, keys, document ids in clear, payload sizes beyond buckets.
+residual (graded, not part of the first lots). What stays out: addresses (IP is personal data; only kinds and counts), peer ids, keys, document ids in clear, payload sizes beyond buckets. → RP1
 
 ## 5. Executable proofs
 
@@ -292,7 +292,7 @@ Cost in focused sessions (one session = a Sonnet go-dev block with Opus review; 
 | DG3 | Webview capture: `window.onerror`, rejections, `svelte:boundary`, long tasks, heartbeat, watchdog, rate limit; P8 UI cases | 2 sessions | go-dev |
 | DG4 | Report bundle, About/Help/crash dialog, Preferences switches, breadcrumbs, e2e P10-P11 | 2-3 sessions | go-dev + ux-tester |
 | DG5 | Sidecar stderr capture and class mapping (typst, tinymist), `sync.*`, `store.*` events and the remaining P8 cases | 2 sessions | go-dev |
-| DG6 (residual) | `netsim --from-report`; WebKit `web-process-terminated` if Wails exposes it; crash minidump for cgo faults | open | graded residual |
+| DG6 (residual) | `netsim --from-report`; WebKit `web-process-terminated` if Wails exposes it; crash minidump for cgo faults | open | graded residual → RP1 |
 
 Recommended first: **DG1 then DG2** (value on the very first crash and the silent bind failure). Estimated 13-15 sessions in total. Dependencies: command registry (W40 R3) for readable action ids (until then, a closed local table); sync indicator (W33) for the health item; embedded Help for the
 "Un probleme ?" entry (About works alone meanwhile).

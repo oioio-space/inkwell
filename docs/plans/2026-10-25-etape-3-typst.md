@@ -110,7 +110,7 @@ Typst n'a **aucun** mode hors ligne : un paquet absent du cache est télécharg�
    Inkwell ne télécharge jamais », avec `ErrMissingPackage` et le nom du paquet.
 
 Durcissement possible plus tard : Landlock (réseau et système de fichiers, Linux ≥ 6.7) via un
-ré-exécutable d'amorçage — non fait ici, noté dans `docs/open-questions.md`.
+ré-exécutable d'amorçage — non fait ici, noté dans `docs/open-questions.md`. → SB2a2
 
 ### D6 · Paquets `@preview` fournis : cmarker, touying, **lilaq**
 

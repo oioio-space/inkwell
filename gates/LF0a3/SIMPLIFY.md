@@ -85,11 +85,11 @@ New docs made the Markdown random-edit test fail twice: `2026-11-09-c5-sound.md`
 
 - **LF0b, the unclosed delimiter**: a `$`, `#[`, fence or `/*` left open still pauses at 10 and 50 MB. V8's GC
   stops for 190–210 ms on a 1.3–1.7 GB heap, because every node of the open element is a JS object rebuilt on each
-  keystroke. LF0b owns both its no-freeze requirement and its 16 ms viewport colours.
-- **Upstream**: three issue or PR texts are ready in the study doc. Publishing them needs the user's consent.
+  keystroke. LF0b owns both its no-freeze requirement and its 16 ms viewport colours. → LF0b
+- **Upstream**: three issue or PR texts are ready in the study doc. Publishing them needs the user's consent. → LF1
 - **Robustness**: the parser reads documents that come from peers. A patched parser that loops forever would freeze
   the editor, and the random-edit equivalence test also acts as a fuzzer. LF0b adds a dedicated fuzz target with a
-  time bound per edit.
+  time bound per edit. → LF0b
 
 ## Evidence
 

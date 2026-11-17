@@ -83,7 +83,7 @@ Measured today, to size it: a sealed list costs up to 1024 sweeps and 524 800 op
 is bounded by the 1024-op seal, and only an admin can spend it. **Not bounded by any gate after TC1:** the cost
 inside one sweep — `spared` for each pair of an op and an exit, `survivors` in e² per key, the O(n²/64 + n·e) the
 spec states. TC1 counts sweeps and their inputs only; `BenchmarkFoldAtCap` is indicative. That term stays an
-unproven residual for TR1, which must bound it by counts too or prove it.
+unproven residual for TR1, which must bound it by counts too or prove it. → TR1
 
 ## Budget
 

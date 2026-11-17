@@ -1339,6 +1339,26 @@
       "id": "68af41a0cb7ad9b2129105db59b3cb69be8d5a276c5c51708376176f35a6f751",
       "reason": "ux/si1b.spec.ts: UX-SI1b-1/2 are known defects written red on purpose by the SI1b walkthrough (gates/SI1b/UX.md), the header moves to HB1a/HB1b; test.fixme with that reference",
       "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "c904ea912def3ddb2868401fab3f249763a81e34f76cc6264086c17ea5c5ef9f",
+      "reason": "docs/plans/2026-11-08-netsim-impaired-plan.md: a block tag (« → ID ») appended to an open residual row by INV1; the timeout expression is unchanged in substance",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "5fc745683810cd582e721eca4f2754737ad3dcb5e498f60a271d2d7715427866",
+      "reason": "docs/plans/2026-11-09-send-path-design.md: a block tag appended to an open residual row by INV1; no timeout changed",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "b538dc6aa1e66f47696cdae8444a67b5ad3b0526f93e8555d916422f9368e630",
+      "reason": "frontend/e2e/save.spec.ts: SAV-03b (new test, E2E1) is fixme on WebKit only, tagged WC1: a desktop window destroyed without telling the page loses the last keys until Go holds the close (block WC1, complete rigour, scheduled right after SB2a1 and E2E1); green on Chromium",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "03055f45be0a677de84804610067aae83840e0959dbb00e20e55cf40a112f61b",
+      "reason": "mise.toml: INV1 adds the `inventory` task to pregate and its tests to test:py; no test, bound or timeout weakened",
+      "decision": "docs/objectif-en-cours.md"
     }
   ]
 }

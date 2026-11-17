@@ -270,7 +270,7 @@ official documentation or an engineering blog). Where the only evidence is a for
 
 The status column reads: **LF** = in large-files.md, **ADR** = in ADR 0028, **new** = proposed here. Every
 proof is a PERF case under the frozen gate `LF1`, or under a follow-up gate when the case is new (PERF-32 and
-up).
+up). → LF1
 
 | # | Practice | Value | Status |
 |---|---|---|---|
@@ -333,7 +333,7 @@ How to adopt each practice, its cost and risk, and its proof:
 
 ## 7. Measurement plan (no runs today)
 
-- PERF-32 to PERF-37 above join a follow-up gate after `LF1`, frozen before code by the skill `new-gate`.
+- PERF-32 to PERF-37 above join a follow-up gate after `LF1`, frozen before code by the skill `new-gate`. → LF1
 - Mutants it must catch: kill switch disabled; undo budget removed; merge cap removed; save through
   `toString()`; rename without fsync (crash test); textview through `mmap`; follow mode rebuilding on append.
 - Run them at rest, after the running native gate; heavy jobs go through `scripts/heavy.sh`.

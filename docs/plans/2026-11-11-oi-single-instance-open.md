@@ -222,7 +222,7 @@ frees its slot; a step past its bound (readiness 60 s, showing 10 s) is said slo
 handled then is logged: the residual of a window that cannot answer while it closes. A crash of the primary between
 receipt and display loses the request: accepted residual. Removed: the webview's
 applied/failed answer, the `failed` and `starting` replies, the per-request deadline and `cancel`, the handover mark,
-the startup wait for forwarded requests (a forwarded request after a takeover follows the normal rows).
+the startup wait for forwarded requests (a forwarded request after a takeover follows the normal rows). [done]
 
 **Rule D-OWNER: one owner at a time, by generation (design decision 2026-11-13, method v2 rule 3, after the
 fix-diff check of round 5 found reports with no stream ownership; `gates/OI/REVIEW.md`, round 6).** Go numbers each
@@ -253,7 +253,7 @@ acknowledgement is sent once the **window applied** the request, not once it is 
 `busy`, and its retry waits on the same ticket; `Closing` drops every pending ticket (`closing`: the launch becomes
 the next primary). A primary that answers (`busy` or `closing`) earns `ClosingWait`. The candidates are computed on
 every try. The residual F3 (crash between acknowledgement and display) is gone: nothing is acknowledged before it is
-shown.
+shown. [obsolete: superseded by the simplified contract of 2026-11-12]
 
 **(Superseded) Second amendment, same day (re-review).** The webview answers each request `{"applied":id}` or `{"failed":id}`
 (its application threw, for instance a file the project does not list), and Go fails a request it gets no answer for
@@ -467,7 +467,7 @@ retries); none on `CloseStart`, `Hang`, `Crash`.
 | S4 `ExitOkImpliesQueued` | a launch that exits 0 had its request received and queued by a primary (contract simplified 2026-11-12: acknowledgement means queued, not applied) | invariant |
 | S5 `GaveUpJustified` | a launch gives up only on a hung holder | invariant |
 | L1 `Settles` | every launch eventually serves, hands off, gives up on a hung holder, or crashed | liveness |
-| L2 `AckedApplied` | a request a primary received and queued is eventually shown by its window, or said why not, with three explicit escapes: that primary crashes (residual F3), hangs, or its window stops answering (`Stuck`: the close residual); a primary that closes cleanly drains first | liveness |
+| L2 `AckedApplied` | a request a primary received and queued is eventually shown by its window, or said why not, with three explicit escapes: that primary crashes (residual F3), hangs, or its window stops answering (`Stuck`: the close residual); a primary that closes cleanly drains first | liveness [accepted ADR 0037] |
 | S6 `SlotsAgree` | what the current window holds, Go holds as delivered to that window's generation (rule D-OWNER, 2026-11-13) | invariant |
 | S7 `RemovedWasShown` | Go removes a request only once a window showed it or said why not | invariant |
 | L3 `NoStrandedSlot` | every request a primary received leaves Go's queue, whatever the reconnections (a report of a superseded stream is ignored, rule `AcceptsReport`), with the same three escapes | liveness |
@@ -508,7 +508,7 @@ safety) and `OISingleInstanceReconnectLive.cfg` (two launches, `MaxGen = 2`, liv
 - `mutants/OISingleInstance<Mutant>.cfg` for the ten mutants: the sound constants (`MaxCrashes = 1`), the one
   override, and only the detecting property of table 6.3.
 - `mutants/OISingleInstanceWitness{Handoff,GiveUp,Takeover,Handover}.cfg`: the sound constants (`Hangs = TRUE` for
-  GiveUp), `INVARIANT` the witness; listed with the mutants (must violate), like `SP1TypingResidual`.
+  GiveUp), `INVARIANT` the witness; listed with the mutants (must violate), like `SP1TypingResidual`. [done]
 - Three launches: the smallest number with a primary and two concurrent seconds (two seconds racing on a stale
   socket is the SecondUnlinks counterexample). No symmetry reduction (unsound with liveness in TLC).
 - A section « OISingleInstance (W41, single instance) » in `docs/protocol/tla/README.md` with the result table. The
@@ -541,7 +541,7 @@ safety) and `OISingleInstanceReconnectLive.cfg` (two launches, `MaxGen = 2`, liv
 |---|---|---|---|
 | F1 | two launches at once on a free profile | the kernel gives the lock to one; the other connects once it listens | model L1; TestHandoffConcurrentLaunches |
 | F2 | the primary crashes holding the lock | the kernel releases it; the next try of a waiting launch becomes primary | model NoTakeover, CrashKeepsLock; TestClaimReleasedByCrash |
-| F3 | the primary crashes between acknowledgement and display | accepted residual since the simplified contract (2026-11-12): a request is acknowledged once received and queued, so a crash before the window shows it loses it (the launch has exited 0); the person launches again | model L2 `AckedApplied` (a crashed primary is its escape) |
+| F3 | the primary crashes between acknowledgement and display | accepted residual since the simplified contract (2026-11-12): a request is acknowledged once received and queued, so a crash before the window shows it loses it (the launch has exited 0); the person launches again | model L2 `AckedApplied` (a crashed primary is its escape) [accepted ADR 0037] |
 | F4 | stale socket file after a crash | removed by the next lock holder only | SecondUnlinks; TestHandoffStaleSocket |
 | F5 | the primary is hung | the second gives up after 5 s with R11, no second copy | model GiveUpJustified, NoGiveUp; TestHandoffUnresponsive |
 | F6 | launch during shutdown | waits ≤ 15 s, becomes primary | model NoHandover; TestHandoffDuringClosing |
@@ -553,8 +553,8 @@ safety) and `OISingleInstanceReconnectLive.cfg` (two launches, `MaxGen = 2`, liv
 | F12 | the lock fd inherited by `typst`/`tinymist` (would outlive Inkwell) | close-on-exec | TestClaimNotInheritedByChild |
 | F13 | the `*Primary` collected by the GC | kept alive by `run` | TestPrimaryHeldUntilExit |
 | F14 | old primary, new second (upgrade while running) | `unsupported` → R17 | TestRequestVectors (version byte), TestHandoffOtherVersion |
-| F15 | a pre-OI Inkwell (no lock) still running when the new one starts | the new one becomes primary: two processes once, during that upgrade only | residual, §10 |
-| F16 | a different profile with the same Docs folder (`INKWELL_HOME` only) | two identities on one project folder: out of this block (project lease, OI3) | residual, §10 |
+| F15 | a pre-OI Inkwell (no lock) still running when the new one starts | the new one becomes primary: two processes once, during that upgrade only | residual, §10 → OI3 |
+| F16 | a different profile with the same Docs folder (`INKWELL_HOME` only) | two identities on one project folder: out of this block (project lease, OI3) | residual, §10 → OI3 |
 | F17 | Wayland focus-stealing prevention | the forwarded activation token is applied before present | TestSecondLaunchForwardsArgsAndCwd (token forwarded); ux-walkthrough on GNOME |
 | F18 | profile on NFS without lockd | R18, fail closed | TestClaimNoLock (injected `ENOLCK`) |
 
@@ -639,7 +639,7 @@ the simplified contract of 2026-11-12, ADR 0037 point 6), the close residual (a 
 closes: what is left after the 2 s wait is logged; a step that never ends holds its slot and the requests after it
 until the window closes, after the « prend plus de temps que prévu » toast), F15 (one upgrade from a pre-OI version), F16 (two profiles on one
 Docs folder: project lease at OI3), the Windows AF_UNIX reliability (decided on the N35 runner, named-pipe fallback
-ready).
+ready). [accepted ADR 0037]
 
 ## 11. Decisions of the user (2026-11-11)
 
@@ -767,7 +767,7 @@ nothing, and a window in full view is not marked [W15].
 (raise, end of the busy cursor) is Mutter's code [W15] and is confirmed on the person's session (2-minute script
 in `gates/OI/UX.md`). A launch with no token (from a terminal) still gets « Inkwell est prêt » when another window
 covers Inkwell: that is GNOME's focus-stealing prevention. Windows and macOS keep `Restore`, `Show`, `Focus` (N35,
-section 4.6), un-maximise included.
+section 4.6), un-maximise included. [done]
 
 ## Sources
 

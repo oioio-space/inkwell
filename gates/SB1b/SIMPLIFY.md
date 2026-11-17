@@ -30,7 +30,7 @@ changed. No commits or stashes were created.
 | 8 | Altitude | `unix.Siginfo` reinterpreted via unsafe | discarded: x/sys exposes no `Pid`; documented, ABI-bound to 64-bit |
 | 9 | Altitude | `*_other.go` stubs mirror the Linux API | discarded: existing project pattern |
 | 10 | Simplification | `run`, `prepare`, `setup`, `sandboxInitWithProc` over the cognitive-complexity bound (lint, gate `regression`) | applied: split into `configureRunCommand`/`openRunMount`/`finishRunOutputs`, `ensureSession`/`configureRunLimits`, `inheritedScopeProperties`/`validateSession`, `runSandboxInit`/`reapSandboxTarget`/`refreshTargetIdentity`; same step order and cleanup (Opus review of the diff) |
-| 11 | Style | `os.Exit` after `defer runtime.UnlockOSThread`, `strings.Fields` loops, `HasPrefix`+`TrimPrefix`, unchecked deferred closes, doc comments | applied: exit status returned to the caller, `FieldsSeq`, `CutPrefix`, explicit `_ =`, comments |
+| 11 | Style | `os.Exit` after `defer runtime.UnlockOSThread`, `strings.Fields` loops, `HasPrefix`+`TrimPrefix`, unchecked deferred closes, doc comments | applied: exit status returned to the caller, `FieldsSeq`, `CutPrefix`, explicit `_ =`, comments [done] |
 
 Earlier rounds: Codex's own review (2 P1, fixed), host smoke (6 criteria, fixed), Claude Opus review (5 + 5 items, fixed; narrow
 re-check ACCEPT), recorded in `gates/SB1b/FIXES.md`.

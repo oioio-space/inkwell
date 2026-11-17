@@ -1,7 +1,7 @@
 # PR1 - presence correctness (R1, W46 item 9)
 
 Rigour: standard (method v2 rule 4). Scope: stuck presence, duplicate colours, 45 s departure. Attribution and
-"follow" stay deferred (docs/autonomous-decisions.md, row "release R1"). Study: docs/plans/2026-11-10-collab-presence.md.
+"follow" stay deferred (docs/autonomous-decisions.md, row "release R1"). Study: docs/plans/2026-11-10-collab-presence.md. → PR1
 
 ## 1. Need
 
@@ -43,7 +43,7 @@ Decision table (roster per event; "ignore" = state unchanged):
 
 ## 4. Design and change list
 
-Pure modules `frontend/src/editor/colours.ts` (`placeSlots(ids)`; the only user of `personIndex` besides blame) and `frontend/src/editor/roster.ts` (`createRoster`, constants `PRESENCE_HEARTBEAT_MS`, `PRESENCE_TTL_MS`, `slots()`), importing nothing outside the two files. Change list: `editor/presence.ts`, `ui/sheet/presence.ts`, `App.svelte` create Presences through one `startPresence(handle, initialState)` helper (heartbeat/TTL, `pagehide` goodbye, `peer-candidate` re-broadcast, feed the roster); `workspace.hearNames` reads the roster; `PeopleStack.svelte`, `PeopleDialog.svelte`, `remoteCursors.ts`, `ui/sheet/Grid.svelte` (161, 606) take colours from `slots()`; `history/people.ts` keeps `personIndex`. No new string or component; "has left" wording stays deferred.
+Pure modules `frontend/src/editor/colours.ts` (`placeSlots(ids)`; the only user of `personIndex` besides blame) and `frontend/src/editor/roster.ts` (`createRoster`, constants `PRESENCE_HEARTBEAT_MS`, `PRESENCE_TTL_MS`, `slots()`), importing nothing outside the two files. Change list: `editor/presence.ts`, `ui/sheet/presence.ts`, `App.svelte` create Presences through one `startPresence(handle, initialState)` helper (heartbeat/TTL, `pagehide` goodbye, `peer-candidate` re-broadcast, feed the roster); `workspace.hearNames` reads the roster; `PeopleStack.svelte`, `PeopleDialog.svelte`, `remoteCursors.ts`, `ui/sheet/Grid.svelte` (161, 606) take colours from `slots()`; `history/people.ts` keeps `personIndex`. No new string or component; "has left" wording stays deferred. → PR1
 
 Contract change (recorded, not a weakening): colours shown for displaced people change, so `e2e/people.spec.ts-snapshots/` baselines may be regenerated; each regenerated image is reviewed in the ux-walkthrough.
 

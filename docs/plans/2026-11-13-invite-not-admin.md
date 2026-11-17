@@ -37,7 +37,7 @@ established.
 
 Side effect to know: two processes with two identities have been writing the developer's real project folder
 (`main.typ`, `.inkwell/repo`, `.inkwell/backups/20261113T2118…–T2154…`). This is residual F16 of
-`docs/plans/2026-11-11-oi-single-instance-open.md` (« a different profile with the same Docs folder »).
+`docs/plans/2026-11-11-oi-single-instance-open.md` (« a different profile with the same Docs folder »). → OI3
 
 ## 3. Can a real person reach it?
 
@@ -103,4 +103,4 @@ it is run by hand.
 - Items 2 and 3: one block in the OI family (« Écrire et retrouver », FM-OPEN), the home of residual F16; it
   is an **R1 blocker** because case 1 of §3 (reinstall, documents kept) leaves a person unable to share their
   own document with a message they cannot read. The G12 part of item 3 can ride with the UX review fixes if
-  that block lands first.
+  that block lands first. → OI3

@@ -292,4 +292,4 @@ it, since typst.app has no blame at all (§1).
 
 Requirements: add the user's request to `docs/exigences.md` and a lot in
 `docs/architecture/coherence.md` §5 when the plan is accepted. That is not done here: this file is
-the only change.
+the only change. [done]

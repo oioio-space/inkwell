@@ -27,7 +27,7 @@ Test. The book records a project only together with a membership check made for 
 `member` at the same moment); a note that ran after the switch has verified B, not A, so it must not record A. Nothing
 the book had recorded is lost. `PeerUp` never promised the book was written. Residual, noted, not a defect: a project
 switch within the instant a connection is being noted records the new project only; the next `Want` under A records A
-again (`Want` notes every connected wanted peer).
+again (`Want` notes every connected wanted peer). [done]
 
 ## Fix
 

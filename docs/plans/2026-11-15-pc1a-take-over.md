@@ -3,7 +3,7 @@
 Status: **draft, step 1**; split from PC1 on 2026-11-15. Rigour: **complete**. Shared part, restart mechanism (N-11..N-15,
 built here), model and residuals: `docs/plans/2026-11-14-pc1-project-change-by-restart.md`. Gate: `gates/PC1a.toml`
 (draft). It starts from W58a's tree (standing, refusal by key, read-only banner, invite capability) and adds the
-banner's second action, « Reprendre ce document ici », and the restart itself.
+banner's second action, « Reprendre ce document ici », and the restart itself. [done]
 
 ## Rules (N-5..N-10; N-11..N-16 in the shared part, implemented by this block)
 

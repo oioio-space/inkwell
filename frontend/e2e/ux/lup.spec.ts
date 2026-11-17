@@ -61,6 +61,7 @@ const statusClashes = (p: Page): Promise<string[]> =>
 // fixed by its own lot, S13 (docs/objectif-en-cours.md, "Lots suivants"); that lot turns these
 // back into `test`.
 for (const width of [1100, 950]) {
+  // Block S13 (PROGRESS.md, « Cap à long terme »).
   test.fixme(`UX-LUP-1 at ${width}px, opening the history covers nothing in the header and the status bar`, async ({
     browser,
   }) => {

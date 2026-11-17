@@ -156,7 +156,13 @@ les étapes 1 à 8 dans le même ordre :
 état) — l'y ajouter dès qu'elle arrive, le mettre à jour à chaque fusion. Elle reçoit aussitôt **sa place
 dans le plan global** : un lot de `docs/architecture/coherence.md` §5 (et sa place dans la liste ordonnée de `PROGRESS.md`),
 rattachée à un écran ou un mécanisme existant — jamais une tâche isolée ni une « verrue » (voir « Cohérence de
-l'interface »).
+l'interface »). Il en va de même de **tout point ouvert, où qu'il soit** (exigence non faite ; résiduel, report ou
+suite d'un `SIMPLIFY.md`, d'un `WITNESSES.md` ou d'un plan, marqué « → ID » ou « [ID] » ; test `fixme` ou sauté en
+attente ; ADR « proposed » depuis plus de 14 jours ; branche non fusionnée ; worktree non commité ; CI de `main` non
+verte ; obligation différée échue) : il porte l'identifiant d'un bloc de la liste ordonnée de `PROGRESS.md` (« Cap à
+long terme » ; branches et worktrees dans sa section « Travaux en cours »). `mise run inventory` le vérifie (dans
+`pregate`), `mise run inventory -- --report` en donne la liste ; raisons et seuils :
+`docs/plans/2026-11-17-inv1-inventory.md`.
 
 **Cohérence de ce fichier (règle) :** toute modification de `CLAUDE.md` le garde cohérent :
 - une règle vit à un seul endroit — on complète la règle existante, on n'en écrit pas une seconde ;

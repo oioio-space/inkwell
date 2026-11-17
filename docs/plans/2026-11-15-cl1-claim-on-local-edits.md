@@ -63,7 +63,7 @@ model, where the first device created the document as in scenario 8).
 Flushing alone misses a device that cannot write when it leaves; rebuilding at the opening alone misses the closed
 window. The retry is a timer of this device only (no change wakes it), alive only while a claim is owed. Residual
 R-2: owed, unable to write, and the session ends: that actor stays « Quelqu'un ». The mutants anchor on these lines
-(the anchors follow the code if step 2 writes it otherwise; the gate names titles).
+(the anchors follow the code if step 2 writes it otherwise; the gate names titles). → W65
 
 ## Rules
 
@@ -99,6 +99,6 @@ UTC days; reruns and unmeasured runs not counted; one failure reopens). Ten pass
 runs are independent, 0.023 at the 95 % lower bound of the rate (0.315); (5/12)^3 = 0.072 if one seed is one draw,
 which is why the claims lines are copied too. `gates/deferred.jsonl` does not fit this obligation: its rows are
 closed by the next passing local run of a lot (`scripts/gate.py`, `LEDGER`), which is not this evidence; the record
-is `GITHUB.md`, whose `Status: open` the `docs` criterion checks, and a line of `PROGRESS.md` until it closes.
+is `GITHUB.md`, whose `Status: open` the `docs` criterion checks, and a line of `PROGRESS.md` until it closes. → CL1
 
 Budget: `max_minutes = 20`; caps: frontend 30 + 120 s, netsim 240 + 360 s, regression 30 + 180 s; 960 s in all.

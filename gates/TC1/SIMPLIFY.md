@@ -18,7 +18,7 @@ specification (Fable, F1–F6 applied before the freeze).
 ## Skipped
 
 - Memoising self-cuts by (author, ancestor set): an algorithmic change of the fold, trust at « complete » rigour,
-  residual R-TC1 for TR1.
+  residual R-TC1 for TR1. → TR1
 
 ## mutation protocol/trust
 
@@ -33,4 +33,4 @@ package stays owned by TR1 and the protocol audit for those survivors.
 ## Residuals
 
 - R-TC1: the fold is Θ(k·m) in self-cuts (at most n(n+1)/2 = 524 800 ops swept at the seal); the cost inside one
-  sweep (`spared` per pair, `survivors` in e²) is bounded by no gate (BenchmarkFoldAtCap is indicative). TR1.
+  sweep (`spared` per pair, `survivors` in e²) is bounded by no gate (BenchmarkFoldAtCap is indicative). TR1. → TR1

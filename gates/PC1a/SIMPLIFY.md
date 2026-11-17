@@ -69,10 +69,10 @@ Residuals:
 
 - UX-PC1a-3 (severity 2): the banner's actions come about 19 Tab stops after the toolbar although the banner sits right under
   it. The order is the shell's older structure (W58a's « Demander une invitation » has it too), not this block's: left for the
-  shell's lot (S13), not changed here.
+  shell's lot (S13), not changed here. → UX1
 - UX-PC1a-5, the rest: at 360 px the banner itself is squeezed because the file list keeps its width (S13 debt, present
-  without the banner); only the clipping of the actions is fixed here.
-- UX-PC1a-6 and UX-PC1a-7 (severity 1): not changed.
+  without the banner); only the clipping of the actions is fixed here. → S13
+- UX-PC1a-6 and UX-PC1a-7 (severity 1): not changed. → UX1
 - `internal/sidecar`: `TestResidentBudgetKillsWithSIGKILL`, `TestCgroupSessionSharesSliceBound` and
   `TestCgroupSessionCopiesLeafBound` fail under `scripts/heavy.sh` on this machine; replayed with the same command on the main
-  checkout, without this block: the same three fail there (2026-11-15). Not caused by this change, not looked into here.
+  checkout, without this block: the same three fail there (2026-11-15). Not caused by this change, not looked into here. → SB2a1

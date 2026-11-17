@@ -84,7 +84,7 @@ Scope: the diff of this amendment only: `scripts/perf/cpu.cjs` (new), `start.cjs
 ## Considered, discarded
 
 - Deriving the bound from a quiet level measured inside each run (robust to a busier host). Data from one host cannot
-  validate it; filed as plan follow-up F6, not done.
+  validate it; filed as plan follow-up F6, not done. → ST1
 - A finer observable (peak share over 50 ms sub-windows), which would separate edge overlaps of a peak from shoulders:
   the written decision is the share over the window, and the model reproduces the archive with it.
 - Counting only the first try of each slot against the 20 % cap: a slot that is invalid twice is two lost starts; the

@@ -39,7 +39,7 @@ round `hp1r-w-*.log`, `hp1r-tla44.log`).
   `TestWantStopsAndDrop` take about 4 s (synctest, no -race); the 12 arms under -race are estimated well under 300 s
   (HP1's 18 `TestUpgrade*` tests take about 100 s under -race).
 - **Statistical acceptance**: measured failure rate before the fix 0.30 to 0.50 (19/40, 20/40, 12/40); the false pass
-  P(40/40 | p) = (1 - p)^40 is 6e-12 at 0.475, 6e-7 at 0.30; a residual rate ≥ 7.2 % is rejected at 95 %.
+  P(40/40 | p) = (1 - p)^40 is 6e-12 at 0.475, 6e-7 at 0.30; a residual rate ≥ 7.2 % is rejected at 95 %. → HP1
 - **mutant**: `scripts/netsim/mutants.py` copies the tree, applies the edit and runs
   `go test ./internal/transport/p2p/ -run ^TestUpgradeLateLinkClosed$ -count=1 -json`; a catch needs a fail event
   of that test and an output line of it or its subtests holding « H-19 late link kept » (the same path catches HP1's

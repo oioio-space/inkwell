@@ -79,7 +79,7 @@ Find and replace:
 - **Browser.** Headless Chromium 1248 through Playwright 1.64.1, on a standalone page using the app's editor extensions: line numbers, history, drawSelection, active line, `lineWrapping`, `languageExtension`, `searchHighlight`, and the app's theme `contain: strict`.
   - Not measured: Automerge sync, presence, the Wails Streams.
   - Typing is measured from keydown to the first task after the next frame. At 60 Hz it therefore includes up to one frame of waiting.
-- **Not done:**
+- **Not done:** → LF1
   - Playwright WebKit cannot launch on this Fedora host (missing system dependencies). Native WebKitGTK certification stays with `frontend/src/perf/native.ts` (PERF-01).
   - The runs were not `--exclusive`, and other heavy jobs ran at the same time. A 1 MB build varied from 0.5 to 2.6 s between runs, so treat ±30 % as noise on Automerge wall times.
   - Startup, idle CPU, disk save through the Stream, and Typst preview compile time were not measured. §7 adds them as cases.

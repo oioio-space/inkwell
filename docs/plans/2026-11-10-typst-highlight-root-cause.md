@@ -195,7 +195,7 @@ TYPST perf cases failed with steps of 154–454 ms.
 >
 > Known limit: after an unclosed delimiter there is no restart point, so the tail is reparsed (sliced).
 > From about 10 MB, the per-node objects of that single open element cause GC pauses over 50 ms. A compact
-> node buffer in `TypstCSTParser` is the follow-up.
+> node buffer in `TypstCSTParser` is the follow-up. → LF1
 
 **(b) PR to lezer-parser/markdown — "Incremental reuse: per-node size limit, anonymous NotLast nodes, table
 lookahead"**

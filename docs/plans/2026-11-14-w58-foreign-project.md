@@ -11,7 +11,7 @@ Status: step 1 done, revision 6, reviewed twice by Codex, gate frozen on 2026-11
 red witnesses in `gates/W58/WITNESSES.md`). Own worktree.
 
 Out of the block: the copy into a new folder (residual R-4, Projects screen), genesis freshness at every creation
-(R-2), the missing-root fallback (R-1), a lint of the launchers (R-3), F16 of the OI plan.
+(R-2), the missing-root fallback (R-1), a lint of the launchers (R-3), F16 of the OI plan. → OI3
 
 ## Rules
 

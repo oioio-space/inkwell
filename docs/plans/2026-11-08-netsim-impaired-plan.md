@@ -70,7 +70,7 @@ Timers and limits as they are today (`sync/1`), with sources:
 | R11 | **v2 session tie-break disagrees under jitter.** Two simultaneous DCUtR connections reach the two sides in different orders; if the sides keep different sessions, both close and the link flaps. | spec §5.1 deterministic tie-break | **G-2** |
 | R12 | **Repeated long outages, backoff never converging.** | `dial.go`, `relay.go` keeper | Already covered (§6) |
 | R13 | Corruption reaching the app; packet reordering or duplication breaking our framing. | AEAD (QUIC TLS 1.3, Noise); ordered QUIC and yamux streams | Impossible by construction; folded into NI-1 at no cost (§6) |
-| R14 | Credit deadlock under loss (`ConnCredit`). | spec §5.1, §10.7 | Loss only delays the reliable `MAX_DATA` frames; deadlock freedom is TLC's job (P-TLA). The loss-specific residual is R10. |
+| R14 | Credit deadlock under loss (`ConnCredit`). | spec §5.1, §10.7 | Loss only delays the reliable `MAX_DATA` frames; deadlock freedom is TLC's job (P-TLA). The loss-specific residual is R10. [done] |
 | R15 | Duplicate or reordered *sync messages* breaking admission or the generation rules (rule A). | spec §7.3; `admission.ts` | One peer pair rides a single ordered stream (`sync/1`) or a single REPO stream per generation (v2), so the network cannot reorder or duplicate them. The only real source of duplicates is a second path: NI-4. |
 
 ## 3. Netem conventions
@@ -253,8 +253,8 @@ found is itself a failure.
 | Corruption-only scenario (R13) | AEAD (QUIC TLS 1.3, Noise) drops every corrupted packet before our code sees it. `corrupt 0.1%` rides along in NI-1 for free. |
 | Reorder-only or duplicate-only scenario (R13, R15) | QUIC and yamux streams are ordered and deduplicated; packet reordering and duplication are inside NI-1. Duplicate *messages* only come from a second path: NI-4. |
 | Separate hole-punching-under-jitter test (R6) | One clause of NI-1 (C1) at no extra cost. |
-| NAT mapping timeout and rebinding (quic-interop `rebind-port`) | QUIC keepalive is 15 s, below common UDP NAT timers (RFC 4787 REQ-5 asks for ≥ 2 min). It also needs `nf_conntrack_udp_timeout` to be writable in a user namespace, which is unverified. Deferred (Q5). |
-| Credit deadlock under loss (R14) | Exhaustively checked by TLC (`ConnCredit`) and carried by P-QUIC end to end; loss adds nothing but delay. The loss-specific residual is G-1. |
+| NAT mapping timeout and rebinding (quic-interop `rebind-port`) | QUIC keepalive is 15 s, below common UDP NAT timers (RFC 4787 REQ-5 asks for ≥ 2 min). It also needs `nf_conntrack_udp_timeout` to be writable in a user namespace, which is unverified. Deferred (Q5). → TX1 |
+| Credit deadlock under loss (R14) | Exhaustively checked by TLC (`ConnCredit`) and carried by P-QUIC end to end; loss adds nothing but delay. The loss-specific residual is G-1. [done] |
 | Toxiproxy, Pumba, Testground, ns-3 (quic-network-simulator) | TCP only; containers only; deprecated; heavy, and redundant with quic-go's own interop matrix. |
 
 ## 7. Shared observability: the per-peer link metrics contract (W33)
@@ -263,7 +263,7 @@ Designed once. The impaired scenarios read **exactly** what the people popover a
 will read. The UI itself (wording, quality grade, layout) is a later block with its own UX design,
 inside the **existing** people popover (« directement » / « par un relais », « Envoi en cours (n) »,
 « Lien lent », `docs/design/spec.md` §4.15 and the WAN row of the performance table) and the status
-bar. No new panel.
+bar. No new panel. → C5S-UI
 
 **Ownership and flow (spec §15):**
 
@@ -338,7 +338,7 @@ NI-1's C4 and C5 are the metrics' own acceptance test: injected truth against re
 ### Which ADR 0034 step carries what
 
 Each later step's gate (frozen before its code, as P2 and P3 were) adds a `netsim-impaired-regression`
-criterion, in the same pattern as `P2-regression`.
+criterion, in the same pattern as `P2-regression`. → PT4
 
 | Step | Gate carries | Closes |
 |---|---|---|
@@ -431,7 +431,7 @@ command = "mise run gate -- P3"
 - **Q4 — link-quality grades:** the metrics contract includes a first proposal of plain grades
   (e.g. good / fair / poor) and their thresholds, derived from the shared metrics; the UX design of the
   people popover and status bar refines them later.
-- **Q5 — NAT rebinding:** deferred; listed with the rejected-for-now candidates, to revisit after NI-4.
+- **Q5 — NAT rebinding:** deferred; listed with the rejected-for-now candidates, to revisit after NI-4. → TX1
 
 ## Addition (user, 2026-11-08): sleep and resume
 
@@ -506,7 +506,7 @@ Two buffers already exist: the editor coalesces keystrokes before writing the Au
 `flushTyped`), and the bridge keeps a bounded per-peer outbox (internal/bridge/router.go; large messages are
 fragmented by internal/transport/mux). The risks sit at their edges: undo/redo while typed text is still
 buffered, a multi-MiB paste immediately undone, a large deletion during an outage, redo after the other side
-edited the same range, outbox overflow under a burst.
+edited the same range, outbox overflow under a burst. [done]
 - **EM-1 — model-based property test, no network (fast-check, already a dependency):** random sequences of
   {type one char, paste 1 B…4 MiB, delete a large range, undo, redo, flush, sync} on two editors joined by an
   in-memory automerge-repo; reference model: per editor a plain string plus its own undo/redo stack.
@@ -874,7 +874,7 @@ the display layer on top of it.
   display), and while typing it reads « Envoi en cours » until one second after the last acknowledgement, without
   flicker between keystrokes.
 - **D-SI6, Q-UX6:** residual, model unchanged: a change the coverage filter refuses (a reader's forgery) leaves that
-  peer « Pas encore à jour »; rare, honest (I do not hold what it claims), revisited with the security wording.
+  peer « Pas encore à jour »; rare, honest (I do not hold what it claims), revisited with the security wording. → TX1
 - **D-SI7, Q-UX7:** ADR 0028 D8 unchanged: « Lien lent » is added after 2 s of `oldestPendingMs`.
 - **Scope of SI1:** the indicator (header, status bar, the per-person line of the existing people popover). The link
   type and quality in the popover (the rest of W33) are the next block.

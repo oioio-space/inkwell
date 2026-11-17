@@ -137,7 +137,7 @@ The dialect (delimiter, decimal comma, header) is the project's CSV `Dialect`, a
 `.xls` and `.ods`: the honest answer for v1 is "not supported, save as `.xlsx` or CSV" for `.xls` (the
 Go readers are unmaintained or GPL) and route B for `.ods`. A stdlib `.ods` reader is feasible
 (`content.xml`, but `table:number-rows-repeated` / `number-columns-repeated` is a decompression-bomb trap
-that must be bounded) and could be a later lot if asked.
+that must be bounded) and could be a later lot if asked. → OX1
 
 ### 1.4 Export to xlsx (brief)
 

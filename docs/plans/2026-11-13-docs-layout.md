@@ -27,7 +27,7 @@ that loses its role becomes a short pointer that keeps its machine-read parts.
 |---|---|---|
 | Rules for working | `CLAUDE.md` (index + invariants), method detail in `docs/plans/2026-11-12-method-v2.md` | — |
 | Where we are, current block, ordered next list, everything that remains for R1, blockers, last deliveries | `PROGRESS.md` (ordered summary with links; one screen, then the stage checklists) | objective file, architecture README |
-| Detailed residual checklist of one block | its plan in `docs/plans/` (PROGRESS links to it) | — |
+| Detailed residual checklist of one block | its plan in `docs/plans/` (PROGRESS links to it) | — [done] |
 | Block registry read by tools (`gate-lots`, block names) | `docs/objectif-en-cours.md`, reduced to that registry | — |
 | Release scope (which lot belongs to MVP, v1, later) | `docs/architecture/coherence.md` §5 (no status column) | PROGRESS repeats only the order |
 | Requirements and their state (one line each, no work lists) | `docs/exigences.md` | — |
@@ -60,4 +60,4 @@ that loses its role becomes a short pointer that keeps its machine-read parts.
 
 **Done when:** each row of the table has exactly one live copy (checked by reading, listed in the commit),
 `python3 scripts/gate.py --deferred`, `gate-selftest.py`, `lint:claude-md` and `test:py` pass, and one
-review (Codex if present) accepts the plan before step 1 (Codex, 2026-11-12: 7 findings, all taken in this version).
+review (Codex if present) accepts the plan before step 1 (Codex, 2026-11-12: 7 findings, all taken in this version). [done]

@@ -30,7 +30,7 @@ unchanged). Two reviews (reuse + simplification, efficiency + altitude), triaged
 
 - Absolute cap on a message's total send time, and per-peer reassembly accounting: spec changes. At the 2 KiB/s
   floor a 128 MiB message may take ~18 h and a drip-feeding peer can hold its own sender and one partial (global cap
-  128 MiB) for 120 s. Recorded as residuals for ADR 0034 steps 4-6 (credits bound the in-flight bytes per peer).
+  128 MiB) for 120 s. Recorded as residuals for ADR 0034 steps 4-6 (credits bound the in-flight bytes per peer). → PT4
 - Removing `muxKeepAlive`/`EnableKeepAlive`: they restate libp2p's defaults on purpose — D-SP1-3 makes the keepalive
   part of the spec, and `TestRuleSP1MuxConfig` guards it against an upstream default change.
 - Replacing the `libp2pyamux.Transport` conversion: it is go-libp2p's own pattern (`type Transport yamux.Config`);
