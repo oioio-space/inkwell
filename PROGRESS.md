@@ -128,6 +128,19 @@ Les décisions qui demandent de la réflexion (conception, règle de protocole, 
 - `t11-test-review-ts` (`b7a237d`, outillage StrykerJS inachevé) → QA1 (W16)
 - `si1b` (`60fa7a2`) → INV1 : à supprimer, SI1b est sur `main` (`0752872`)
 
+**Reprise (passation du 2026-11-17, 07:50) — à lire en premier ; elle remplace celle du 2026-11-15 ci-dessous, gardée pour l'historique :**
+
+Pause demandée par l'utilisatrice le 2026-11-17 à 07:46 (« termine les tâches en cours, puis pause pour garder des tokens »). Avant toute chose : `gh run list --workflow ci.yml --branch main --limit 3` et `mise run inventory -- --report` (INV1 : tout point ouvert a un bloc ; `pregate` échoue sinon).
+
+1. **SB2a1** — worktree `../inkwell-sb2a1m`, branche `candidate/sb2a1-13` (`2255451`, un seul commit = SB2a1 entier sur `main` `76200b1`). Exécution GitHub 44029449661 : `ci`, `ci-frontend`, `sidecars-arm64`, `netsim`, `sandbox-stock` verts ; `ci-e2e` rouge sur 3 tests traités par E2E2 (point 2). La porte gelée `gates/SB2a1.toml` (critère `github`, `scripts/gh-verdict.py`) exige une exécution entière verte et une tâche nommée exactement `ci` (d'où `name:` dans la matrice CI1b). Suite : E2E2 fusionné → recaler la candidate sur `main` (appliquer `git diff <merge-base> HEAD` en un bloc, résoudre `mise.toml` à la main : la liste de `test:py` = celle de `main` + `scripts/gojson_check_test.py`), push par `scripts/qpush.sh` (jamais `--no-verify`), `gh workflow run ci.yml --ref candidate/sb2a1-N`, `gates/SB2a1/github.json` = `{"run_id": N}`, `mise run gate -- SB2a1`, fusion, ADR 0044 acceptée, retirer `../inkwell-sb2a1m` et `../inkwell-sb2a1`.
+2. **E2E2** (suite d'E2E1) — worktree `../inkwell-e2e2` : SHEET-MU (`sheet.spec.ts:909`, rouge sous WebKit sur GitHub), PRS-33 et PRV-108 instables (R-E2E1-3/4). Plan `docs/plans/2026-11-17-e2e1.md`.
+3. **WC1** (complet, perte de données) — à spécifier : fermer la fenêtre de bureau perd les dernières touches sous WebKit (SAV-03b en `fixme`) ; Go doit retenir la fermeture jusqu'à l'enregistrement de la page (règle D-DRAIN du modèle TLA+).
+4. **PU1 / PU1b / PU1c** — worktree `../inkwell-pu1`, code non commité, critères des trois portes gelées verts au 2026-11-17 07:40 (TLA+ compris) ; restait : paquets consommateurs sous `-race`, lint, gremlins, puis relecture du code par Codex (deux tours), PU1n (simulation, machine seule), fusion. Le changement du fork go-libp2p (option `quicreuse` pour la fenêtre QUIC de 1 Mio) est préparé en patch dans `docs/plans/` avec un `replace` local temporaire : **c'est l'intégratrice qui pousse le fork**, jamais un agent. État : `scratchpad/pu1/STATE.md`, copie durable `~/inkwell-archive/2026-11-17/state/pu1/`.
+5. **HP1 + HP1r** — worktree `../inkwell-hp1`, code prêt, attend PU1/PU1b/PU1c (rebaser dessus) ; état `~/inkwell-archive/2026-11-17/state/hp1/STATE.md`. Puis **PC1b** (`pc1b-held`).
+6. Ensuite l'ordre de « Cap à long terme » ci-dessus (DEP1, EX0, IV1, UX1 et les blocs rangés par INV1 : EF1, FM1, LK1, SH1, PRS1, PR1, puis la solidité). Les rapports de revue Codex de la séance sont dans `~/inkwell-archive/2026-11-17/state/`.
+
+Pièges de la séance (règles déjà dans `CLAUDE.md` ou ci-dessus) : `/tmp` est un tmpfs (le script TLA+ nettoie désormais ses fichiers d'états, `ebf7a6a`) ; un recalage de la candidate se fait en un bloc, pas commit par commit ; la fusion automatique `union.py` ne convient pas à `ci.yml` ni à `mise.toml` (vérifier à la main) ; ne jamais accuser un agent sans preuve (un arrêt « sans statut » venait de `/tmp` plein) ; `--no-verify` interdit hors urgence.
+
 **Reprise (passation du 2026-11-15, 21:45) — à lire en premier, dans cet ordre :**
 
 État de `main` (22:00) : PC1b a été **retiré de `main` et gardé sur la branche locale `pc1b-held`** (`73d0f4b`), pour que `main` reste vert et poussable ; `main` porte des commits de documentation locaux à pousser (`scripts/qpush.sh`, machine au repos). Ne jamais pousser avec `--no-verify`.
