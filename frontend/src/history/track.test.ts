@@ -5,8 +5,9 @@ import { analyze } from "./analysis";
 import { changeMarks, END, resolver, sinceHeads } from "./gutter";
 import { claimsOf, history, sessionsBefore, stepsOf } from "./log";
 import { authorBook } from "./people";
+import { SPLIT_AT } from "./pieces";
 import { Device } from "./testkit";
-import { blameOf, sessionAt, Tracker } from "./track";
+import { blameOf, sessionAt, Tracker, type TrackOptions } from "./track";
 import { clock } from "./when";
 
 const BASE = "ligne un\nligne deux\nligne trois\nligne quatre\n";
@@ -143,6 +144,27 @@ describe("change gutter since the last visit (HIS-01 to HIS-05)", () => {
   });
 });
 
+/**
+ * The most the piece list may work to follow `runs` inserted runs (FE1, counts, not the clock):
+ * each run finds one place, walking at most every block and one block of at most
+ * 2 × SPLIT_AT + 2 pieces, then shifts that block and splits it at most once; the open session's
+ * copy and the summary walk the list once more each. Each run adds at most two pieces, and every
+ * block but the last holds at least SPLIT_AT. A walk of the text for each run costs the number of
+ * pieces each time instead: for thirty thousand runs, a dozen times this bound and more.
+ */
+function workBound(runs: number): number {
+  const pieces = 2 * runs + 1;
+  const blocks = Math.ceil(pieces / SPLIT_AT) + 1;
+  return runs * (2 * blocks + 6 * SPLIT_AT + 6) + 3 * (blocks + pieces);
+}
+
+/** Follows the sessions with a new tracker; returns the blame and what it cost, counted. */
+async function counted(doc: A.Doc<{ text: string }>, opts?: TrackOptions) {
+  const tracker = new Tracker();
+  const blame = await tracker.update(doc, history(doc), opts);
+  return { blame, ...tracker.work };
+}
+
 describe("who wrote what (DIF-05)", () => {
   it("DIF-05 a large document: computed in slices, the thread is given back, hover is exact", async () => {
     const big = new Device("aa01").type("x".repeat(1_000_000), 0);
@@ -152,14 +174,16 @@ describe("who wrote what (DIF-05)", () => {
       b.type(`b${i}`, 600_000 + i * 7, 700);
     }
     big.sync(b);
-    const sessions = history(big.doc);
     let ticks = 0;
     const timer = setInterval(() => ticks++, 1);
-    const t0 = performance.now();
-    const blame = await new Tracker().update(big.doc, sessions, { budget: 1 });
+    const { blame, finds, steps } = await counted(big.doc, { budget: 1 });
     clearInterval(timer);
-    expect(performance.now() - t0).toBeLessThan(20_000);
     expect(ticks).toBeGreaterThan(0);
+    // The cost, counted: each session is followed once, so each run typed (the million characters,
+    // then sixteen) finds its place once, and the whole costs what seventeen runs may cost. Following
+    // the sessions again from the first at each one finds 137 places.
+    expect(finds, "DIF-05 each run found once").toBe(17);
+    expect(steps, "DIF-05 work").toBeLessThanOrEqual(workBound(17));
     expect(blame.length).toBe(big.doc.text.length);
     // Exact: the character at an index is attributed to the session that wrote it.
     const at = big.doc.text.indexOf("b7");
@@ -186,17 +210,21 @@ describe("who wrote what (DIF-05)", () => {
   });
 
   it("many scattered edits in one session do not cost a scan of the text for each (no quadratic cost)", async () => {
-    const lines = Array.from({ length: 30_000 }, (_, i) => `ligne ${i}`);
-    const a = new Device("aa01").type(`${lines.join("\n")}\n`, 0);
-    // One session rewrites every line: 30 000 patches, then 30 000 pieces to follow.
-    const edited = lines.map((l) => `${l} !`).join("\n");
-    const b = new Device("bb02", a.doc);
-    b.set(`${edited}\n`, 1);
-    a.sync(b);
-    const t0 = performance.now();
-    const blame = await blameOf(a.doc, history(a.doc));
-    const ms = performance.now() - t0;
-    expect(blame.length).toBe(a.doc.text.length);
-    expect(ms).toBeLessThan(4_000);
+    // Lines of one character: what the list follows is the number of runs and pieces, not the
+    // length of the text, and Automerge's own cost of typing grows with that length (FE1: 30 000
+    // edits of « ligne N » cost 4 s to build here, through `updateText` 17 s, then 4 s to merge).
+    const lines = 30_000;
+    const a = new Device("aa01").type("x\n".repeat(lines), 0);
+    // One session edits every line, from the last: 30 000 patches, then 60 000 pieces to follow.
+    const b = new Device("bb02", a.doc).edit((d) => {
+      for (let i = lines; i > 0; i--) A.splice(d, ["text"], 2 * i - 1, 0, " !");
+    });
+    const { blame, finds, steps } = await counted(b.doc);
+    expect(blame.length).toBe(b.doc.text.length);
+    expect(b.doc.text).toBe("x !\n".repeat(lines));
+    expect(blame.spans).toHaveLength(2 * lines + 1);
+    // The text typed, then one place found for each of the 30 000 edits.
+    expect(finds, "no quadratic cost: each run found once").toBe(1 + lines);
+    expect(steps, "no quadratic cost: work").toBeLessThanOrEqual(workBound(1 + lines));
   }, 120_000);
 });

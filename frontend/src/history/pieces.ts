@@ -14,7 +14,19 @@ export interface Loc {
   i: number;
 }
 
-const SPLIT_AT = 512;
+/** A block is cut in two halves of this many pieces once it holds more than twice as many. */
+export const SPLIT_AT = 512;
+
+/**
+ * The work of a piece list and of its copies: `finds`, the places looked up
+ * ({@link PieceList.locate}); `steps`, the blocks and pieces walked over, copied or shifted. A count
+ * is the same on every machine and under any load, so the tests that bound what following a
+ * document costs read it, not the clock (FE1). The application never reads it.
+ */
+export interface PieceWork {
+  finds: number;
+  steps: number;
+}
 
 /**
  * The pieces of the text, in order, kept in blocks with the length of text each holds. Finding a
@@ -26,11 +38,20 @@ export class PieceList {
   #blocks: Piece[][] = [[]];
   #lens: number[] = [0];
 
+  constructor(readonly work: PieceWork = { finds: 0, steps: 0 }) {}
+
   clone(): PieceList {
-    const out = new PieceList();
+    const out = new PieceList(this.work);
     out.#blocks = this.#blocks.map((b) => b.slice());
     out.#lens = this.#lens.slice();
+    this.work.steps += this.#blocks.length + this.#pieceCount();
     return out;
+  }
+
+  #pieceCount(): number {
+    let n = 0;
+    for (const b of this.#blocks) n += b.length;
+    return n;
   }
 
   clear(): void {
@@ -40,7 +61,9 @@ export class PieceList {
 
   /** All the pieces, in order. */
   toArray(): Piece[] {
-    return this.#blocks.flat();
+    const all = this.#blocks.flat();
+    this.work.steps += this.#blocks.length + all.length;
+    return all;
   }
 
   /**
@@ -55,6 +78,9 @@ export class PieceList {
       b++;
     }
     const block = this.#blocks[b] as Piece[];
+    this.work.finds++;
+    // The blocks walked, and the whole block: what this costs at most, cut or not.
+    this.work.steps += b + block.length;
     let at = acc;
     for (let i = 0; i < block.length; i++) {
       const p = block[i] as Piece;
@@ -78,12 +104,14 @@ export class PieceList {
   insert(at: Loc, ...pieces: Piece[]): void {
     const block = this.#blocks[at.b] as Piece[];
     block.splice(at.i, 0, ...pieces);
-    this.#lens[at.b] = (this.#lens[at.b] as number) + sum(pieces);
+    this.work.steps += block.length;
+    this.#lens[at.b] = (this.#lens[at.b] as number) + this.#sum(pieces);
     if (block.length > 2 * SPLIT_AT) {
+      this.work.steps += this.#blocks.length;
       const tail = block.splice(SPLIT_AT);
       this.#blocks.splice(at.b + 1, 0, tail);
-      this.#lens[at.b] = sum(block);
-      this.#lens.splice(at.b + 1, 0, sum(tail));
+      this.#lens[at.b] = this.#sum(block);
+      this.#lens.splice(at.b + 1, 0, this.#sum(tail));
     }
   }
 
@@ -96,22 +124,30 @@ export class PieceList {
     let removed: Piece[];
     if (from.b === to.b) {
       removed = first.splice(from.i, to.i - from.i, ...markers);
-      this.#lens[from.b] = sum(first);
+      this.#lens[from.b] = this.#sum(first);
       return removed;
     }
     const last = this.#blocks[to.b] as Piece[];
+    this.work.steps += this.#blocks.length;
     removed = first.splice(from.i, first.length - from.i, ...markers);
     for (let b = from.b + 1; b < to.b; b++) removed.push(...(this.#blocks[b] as Piece[]));
     removed.push(...last.splice(0, to.i));
     this.#blocks.splice(from.b + 1, to.b - from.b - 1);
     this.#lens.splice(from.b + 1, to.b - from.b - 1);
-    this.#lens[from.b] = sum(first);
-    this.#lens[from.b + 1] = sum(last);
+    this.#lens[from.b] = this.#sum(first);
+    this.#lens[from.b + 1] = this.#sum(last);
     if (last.length === 0 && this.#blocks.length > 1) {
       this.#blocks.splice(from.b + 1, 1);
       this.#lens.splice(from.b + 1, 1);
     }
+    this.work.steps += removed.length;
     return removed;
+  }
+
+  /** The text length of `pieces`, counting the walk. */
+  #sum(pieces: readonly Piece[]): number {
+    this.work.steps += pieces.length;
+    return sum(pieces);
   }
 }
 

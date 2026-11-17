@@ -1,6 +1,6 @@
 import { next as A } from "@automerge/automerge";
 import type { Session } from "./log";
-import { type Piece, PieceList } from "./pieces";
+import { type Piece, PieceList, type PieceWork } from "./pieces";
 
 /** A stretch of the current text and the session that wrote it. */
 export interface Span {
@@ -123,7 +123,9 @@ export interface TrackOptions {
  * and only the new ones and the one still open are followed again.
  */
 export class Tracker {
-  #pieces = new PieceList();
+  /** What following the sessions cost, counted (see {@link PieceWork}). */
+  readonly work: PieceWork = { finds: 0, steps: 0 };
+  #pieces = new PieceList(this.work);
   /** The sessions already followed, as (id, after) pairs. */
   #done: { id: string; after: string }[] = [];
 
@@ -144,7 +146,7 @@ export class Tracker {
     // Something earlier changed (rare): the sure way is to follow everything again.
     if (k < this.#done.length) {
       this.#done = [];
-      this.#pieces = new PieceList();
+      this.#pieces = new PieceList(this.work);
     }
     let t0 = performance.now();
     for (let i = this.#done.length; i < closed; i++) {

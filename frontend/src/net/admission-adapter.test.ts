@@ -1,9 +1,10 @@
 // @vitest-environment node
+import { next as A } from "@automerge/automerge";
 import { type PeerId, Repo } from "@automerge/automerge-repo";
 import { type CBORValue, encodeCBOR } from "@inkwell/protocol";
 import { expect, it, vi } from "vitest";
 import { encodeEnvelope, encodeRoles, Kind } from "./envelope";
-import { peerMessage } from "./testkit";
+import { inventedIds, peerMessage } from "./testkit";
 import { type SocketLike, WailsNetworkAdapter } from "./WailsNetworkAdapter";
 
 function setup(ready = () => true) {
@@ -22,14 +23,11 @@ function setup(ready = () => true) {
     load,
   });
   adapter.connect("me" as PeerId);
-  const deliver = (message: unknown) => {
-    const frame = encodeEnvelope({
-      kind: Kind.Message,
-      peer: "peer",
-      payload: encodeCBOR(message as CBORValue),
-    });
+  const deliverBytes = (payload: Uint8Array) => {
+    const frame = encodeEnvelope({ kind: Kind.Message, peer: "peer", payload });
     socket.onmessage?.(new MessageEvent("message", { data: frame.buffer }));
   };
+  const deliver = (message: unknown) => deliverBytes(encodeCBOR(message as CBORValue));
   const rolesFrame = encodeEnvelope({
     kind: Kind.Roles,
     peer: "me",
@@ -49,26 +47,33 @@ function setup(ready = () => true) {
   const down = vi.fn();
   adapter.on("peer-disconnected", down);
   handshake();
-  return { adapter, socket, load, deliver, handshake, messages, up, down };
+  return { adapter, socket, load, deliver, deliverBytes, handshake, messages, up, down };
 }
 it("3 boundary prevents invented ids from reaching Repo access or handles", async () => {
   const x = setup();
   const access = vi.fn(async () => true);
   const repo = new Repo({
+    // The adapter's own id stays « me », the target of every message below.
+    peerId: "me" as PeerId,
     network: [x.adapter],
     shareConfig: { access, announce: async () => false },
   });
   await new Promise((r) => setTimeout(r, 0));
-  for (let i = 0; i < 50000; i++)
-    x.deliver({
-      type: "request",
-      senderId: "peer",
-      targetId: "me",
-      documentId: `invented${i}`,
-      data: new Uint8Array(),
-    });
+  // A real sync message: an empty `data` is dropped later by the coverage filter, so the boundary
+  // would go untested (FE1: removing the scope check left the test green).
+  const [, data] = A.generateSyncMessage(A.init(), A.initSyncState());
+  const request = { type: "request", senderId: "peer", targetId: "me", data };
+  const ids = inventedIds(50000, request);
+  for (const i of [0, 1, 31415, 49999])
+    expect(ids.bytes(i)).toEqual(encodeCBOR({ ...request, documentId: ids.id(i) } as CBORValue));
+  for (let i = 0; i < 50000; i++) x.deliverBytes(ids.bytes(i));
+  expect(x.adapter.admissionDrops.get("invalid peer message")).toBe(50000);
+  expect(x.messages).toHaveLength(0);
   expect(access).not.toHaveBeenCalled();
   expect(Object.keys(repo.handles)).toHaveLength(0);
+  // The same request for the admitted document does reach the repo: the drop above is the boundary.
+  x.deliver({ ...request, documentId: "doc" });
+  expect(x.messages, JSON.stringify([...x.adapter.admissionDrops])).toHaveLength(1);
   await repo.shutdown();
 });
 it("5 filters presence before Repo, rewrites one session and drops outbound relay", () => {
@@ -121,20 +126,20 @@ it("7 PeerDown and epoch cancel held messages; requesting drains", () => {
   x.deliver(message);
   ready = true;
   x.adapter.drain();
-  expect(x.messages).toHaveLength(1);
+  expect(x.messages, JSON.stringify([...x.adapter.admissionDrops])).toHaveLength(1);
   ready = false;
   x.deliver(message);
   x.adapter.scopeChanged();
   ready = true;
   x.adapter.drain();
-  expect(x.messages).toHaveLength(1);
+  expect(x.messages, JSON.stringify([...x.adapter.admissionDrops])).toHaveLength(1);
   ready = false;
   x.deliver(message);
   const frame = encodeEnvelope({ kind: Kind.PeerDown, peer: "peer", payload: new Uint8Array() });
   x.socket.onmessage?.(new MessageEvent("message", { data: frame.buffer }));
   ready = true;
   x.adapter.drain();
-  expect(x.messages).toHaveLength(1);
+  expect(x.messages, JSON.stringify([...x.adapter.admissionDrops])).toHaveLength(1);
   x.adapter.disconnect();
 });
 
@@ -223,7 +228,7 @@ it("drops loading-document cursor bursts without cooldown", () => {
     expect(x.load).not.toHaveBeenCalled();
     ready = true;
     x.deliver({ type: "doc-unavailable", senderId: "peer", targetId: "me", documentId: "doc" });
-    expect(x.messages).toHaveLength(1);
+    expect(x.messages, JSON.stringify([...x.adapter.admissionDrops])).toHaveLength(1);
   } finally {
     x.adapter.disconnect();
     vi.useRealTimers();

@@ -8,6 +8,7 @@ import fc from "fast-check";
 import { expect, it, vi } from "vitest";
 import { Admission, parsePeerMessage, validFilePath, validPresenceName } from "./admission";
 import { AdmittedSet } from "./scope";
+import { inventedIds } from "./testkit";
 
 vi.mock("@automerge/automerge-repo", { spy: true });
 
@@ -19,6 +20,12 @@ const request = {
   documentId: "doc",
   data: new Uint8Array(),
 };
+/**
+ * Strings of any code points. fast-check builds its table for them once per process (275 to
+ * 330 ms here, cached after), whichever property asks first: built here, at load, so that one-time
+ * cost is not charged to the 100 runs of one property (FE1).
+ */
+const binaryString = fc.string({ unit: "binary" });
 /** Encodes a value that conforms to the CBOR validity profile (§9.2.1). */
 const encodeValid = (v: unknown) => encodeCBOR(v as CBORValue);
 /** Encodes an arbitrary JS value as CBOR (may produce invalid CBOR per §9.2.1). */
@@ -195,7 +202,7 @@ it("2 keeps the valid keys of a snapshot and drops the others", () => {
 });
 it("2 an admitted snapshot only ever carries safe values", () => {
   const value = fc.oneof(
-    fc.string({ unit: "binary" }),
+    binaryString,
     fc.constantFrom(...SPOOFING, "main.typ", "a/../b", "Bob", "e\u0301"),
     fc.anything(),
   );
@@ -224,7 +231,7 @@ it("2 validFilePath refuses what CBOR cannot carry, such as a lone surrogate", (
 });
 it("2 never admits a presence file that a property finds unsafe", () => {
   fc.assert(
-    fc.property(fc.string({ unit: "binary" }), (file) => {
+    fc.property(binaryString, (file) => {
       const admitted = parseValid(fileUpdate(file)) !== undefined;
       if (admitted) {
         expect(new TextEncoder().encode(file).length).toBeLessThanOrEqual(1024);
@@ -243,8 +250,13 @@ it("2 never admits a presence file that a property finds unsafe", () => {
   );
 });
 it("3 P2 drops 50,000 invented ids", () => {
-  for (let i = 0; i < 50000; i++)
-    expect(parseValid({ ...request, documentId: `invented${i}` })).toBeUndefined();
+  const ids = inventedIds(50000, request);
+  for (const i of [0, 1, 31415, 49999])
+    expect(ids.bytes(i)).toEqual(encodeValid({ ...request, documentId: ids.id(i) }));
+  // Counted, then one assertion: an `expect` for each id was most of what is left of the cost.
+  let admitted = 0;
+  for (let i = 0; i < 50000; i++) if (parsePeerMessage(ids.bytes(i), context)) admitted++;
+  expect(admitted).toBe(0);
 });
 it("4 sticky scope caps distinct variants and changes epoch", () => {
   const repo = new Repo();
