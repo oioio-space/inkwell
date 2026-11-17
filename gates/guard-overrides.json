@@ -1314,6 +1314,11 @@
       "id": "3226d89dcd866759cc9c0167cea34f9309c2127116c6a12cc200381b1861d140",
       "reason": "mise.toml: ci:core = ci:checks + formal, with ci:checks the same dependencies minus formal, so GitHub runs the models in their own job; locally ci:core runs exactly what it ran before (CI1)",
       "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "18795191fcf1b03eb91eb51494a69b317a9ac117cbbb677472cbc93c873c9249",
+      "reason": "scripts/tla-check.sh: TLC's -metadir state files go under one directory per run, removed by a trap on any exit (EXIT, INT, TERM, HUP); runs cut by a timeout or a signal left GBs of states in /tmp (a tmpfs) until TLC failed with « disk quota exceeded » (2026-11-17); no model, run, count or bound changed",
+      "decision": "docs/objectif-en-cours.md"
     }
   ]
 }

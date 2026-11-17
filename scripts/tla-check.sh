@@ -19,6 +19,10 @@ cache="${INKWELL_TLA_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/inkwell/tla}"
 jar="$cache/tla2tools.jar"
 logs="$cache/logs"
 heavy="$root/scripts/heavy.sh"
+# TLC's state files (-metadir) go under one directory per run of this script, removed on any exit: a run cut
+# by a timeout or a signal left its states in /tmp, a tmpfs, until it filled (« disk quota exceeded », 2026-11-17).
+metaroot="$(mktemp -d -t inkwell-tla.XXXXXX)"
+trap 'rm -rf "$metaroot"' EXIT INT TERM HUP
 
 # docs/protocol/tla/README.md, "Résultats".
 jar_sha="011267fca25d0752cf18894dd585cd28b96960c112ea8a20b823ea770e7e10cd"
@@ -71,7 +75,7 @@ run() {
   if [[ -n "${INKWELL_TLA_ONLY:-}" && ! "$name" =~ $INKWELL_TLA_ONLY ]]; then
     return 0
   fi
-  metadir="$(mktemp -d)"
+  metadir="$(mktemp -d -p "$metaroot")"
   set +e
   (
     cd "$dir"
