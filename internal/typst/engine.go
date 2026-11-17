@@ -99,8 +99,9 @@ type Config struct {
 	// MaxConcurrent bounds the compilations running at once (each is one or two
 	// Typst processes); the others wait. Default: half the number of CPUs, at least 1.
 	MaxConcurrent int
-	// proxyOnly turns the network namespace off, for the test that watches the
-	// refused proxy.
+	// proxyOnly skips the tier probe, so Typst runs without a network
+	// namespace (NetworkMode "reduced"), for the test that watches the refused
+	// proxy: tier N cuts the network and would hide it.
 	proxyOnly bool
 	// MaxDiagnostics bounds the diagnostics kept; default [DefaultMaxDiagnostics].
 	MaxDiagnostics int
@@ -245,8 +246,8 @@ func New(cfg Config) (*Engine, error) {
 		return nil, err
 	}
 	if !cfg.proxyOnly {
-		// An inconclusive probe refuses the engine rather than run proxy-only.
-		isolated, err := sidecar.NetworkIsolation()
+		// An inconclusive probe refuses the engine rather than guess the tier.
+		isolated, err := sidecar.NetworkIsolation(e.store)
 		if err != nil {
 			return nil, fmt.Errorf("typst: %w", err)
 		}
@@ -256,14 +257,15 @@ func New(cfg Config) (*Engine, error) {
 	return e, nil
 }
 
-// NetworkMode says how Typst is kept offline: "namespace" when it runs in a
-// private network namespace (not even the loopback is reachable), "proxy only"
-// when the system forbids that and only the refused proxy stands in the way.
+// NetworkMode says how Typst is confined (ADR 0044 point 7): "namespace" in
+// the namespace tier (not even the loopback is reachable), "reduced" in the
+// namespace-free tier (no socket, no other program, no write outside the
+// document, but no separation from the other processes).
 func (e *Engine) NetworkMode() string {
 	if e.noNet {
 		return "namespace"
 	}
-	return "proxy only"
+	return "reduced"
 }
 
 // acquire waits for a free compilation slot.
@@ -488,7 +490,7 @@ func (e *Engine) args(sub string, j *job, o options, extra ...string) []string {
 func (e *Engine) run(ctx context.Context, j *job, args []string, maxOut int, watch string, first, last int) (sidecar.Output, error) {
 	spec := sidecar.Spec{
 		ReadPaths: append(append([]string{}, j.fonts...), e.local, e.pkgs.root, j.pkgPath),
-		Path:      j.typst, Args: args, Dir: j.root, Env: e.env(), NoNetwork: e.noNet,
+		Path:      j.typst, Store: e.store, Args: args, Dir: j.root, Env: e.env(), NoNetwork: e.noNet,
 		MemoryLimit: e.cfg.MemoryLimit, ResidentLimit: e.cfg.ResidentLimit, DeathTest: e.cfg.deathTest, MaxOutput: maxOut,
 	}
 	if watch != "" {

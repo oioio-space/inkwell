@@ -61,6 +61,8 @@ let sharing = $state(false);
 let people = $state(false);
 let preferences = $state(false);
 let about = $state(false);
+/** The button that opened About, when it is not the main menu: it gets the focus back. */
+let aboutOpener = $state<HTMLElement | undefined>();
 let buildInfo = $state.raw<BuildInfo | undefined>();
 const me = $derived({ id: workspace.myId, name: workspace.myName });
 
@@ -469,7 +471,10 @@ onMount(() => {
       onPreferences={() => (preferences = true)}
       onTogglePreview={togglePreview}
       onExport={exportPdf}
-      onAbout={() => (about = true)}
+      onAbout={() => {
+        aboutOpener = undefined;
+        about = true;
+      }}
       {canPresent}
       onPresent={present}
     />
@@ -560,7 +565,14 @@ onMount(() => {
       </div>
       {#if mainFile && previewOpen && !showSheet && !presenting && !workspace.big}
         <div class="pane side-preview">
-          <Preview onSourceJump={jumpFromPage} onCursorJump={jumpFromCursor} />
+          <Preview
+            onSourceJump={jumpFromPage}
+            onCursorJump={jumpFromCursor}
+            onDetails={(from) => {
+              aboutOpener = from;
+              about = true;
+            }}
+          />
         </div>
       {/if}
     </main>
@@ -587,7 +599,7 @@ onMount(() => {
 <PeopleDialog bind:open={people} />
 <Preferences bind:open={preferences} />
 <NoticeToast />
-<AboutDialog bind:open={about} info={buildInfo} />
+<AboutDialog bind:open={about} info={buildInfo} opener={aboutOpener} />
 <ExternalChangeToast />
 
 <style>

@@ -18,3 +18,16 @@ changed the `docs` and `mutants` commands: both were run again afterwards (resul
 
 The global cap (45 min) and the smoke are measured on the candidate, before acceptance (gate header); the estimate is
 43 min (plan, « Durations of SB2a1 »).
+
+## Closing the `go` row note of 2026-11-14 (2026-11-16)
+
+`TestResidentBudgetKillsWithSIGKILL/resident-tree`, listed above as load-sensitive, is not caused by load: at rest
+(`scripts/heavy.sh --exclusive`, `-race`) it failed 5 of 16 runs on cf6889c and 2 of 10 on the candidate, always
+« did not include two bounded descendants » with the watchdog's kill at 131 to 133 MiB of anonymous memory. Cause: the
+race detector adds up to 15.0 MiB of resident memory to each Go process (memory.current of one process in its own
+cgroup, eight runs each: idle 1.6 to 3.0 MiB plain, 15.9 to 16.6 MiB race; a child holding its 32 MiB chunk 33.8 to
+35.0 MiB plain, 48.0 to 48.3 MiB race), and four of them (PID 1, the tree's parent, two children) must fit under the
+128 MiB bound before the second child is ready. Fix: in race builds only, the test's bound gains
+`raceResidentReserve` = 4 × 16 MiB, as `raceAddressReserve` does for the address bound; the test asserts that the six
+children's chunks alone (192 MiB) still fill the raised bound, so the whole tree's SIGKILL is still what is proved.
+After: 40 of 40 green at rest (`--exclusive`, `-race`, `-count=40`), and the `go` criterion (run A) green on the candidate.

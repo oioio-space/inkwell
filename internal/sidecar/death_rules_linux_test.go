@@ -200,6 +200,39 @@ func TestCoreDumpUnknownWithoutKernelEvidence(t *testing.T) {
 	}
 }
 
+// The kernel's answer is read the same from each published layout of struct
+// pidfd_info (include/uapi/linux/pidfd.h): Linux 6.16 always sets the coredump
+// field; later kernels set it only for a dump or a live process with memory,
+// and list it in supported_mask, which sits at byte 72 in Linux 7.0 (80-byte
+// struct) and at byte 80 from the 88-byte struct on. A reaped process without
+// the mark started no core dump only where the kernel lists the field.
+func TestCoreDumpFromEachKernelLayout(t *testing.T) {
+	const supported70 = 0x7f // v7.0 PIDFD_INFO_SUPPORTED: bits 0 to 6
+	const supported73 = 0xff // with PIDFD_INFO_COREDUMP_CODE
+	const noCoredump = 0x2f  // a mask that does not list the coredump field
+	for _, tc := range []struct {
+		name string
+		info pidfdInfo
+		want CoreDump
+	}{
+		{"6.16 no dump", pidfdInfo{mask: pidfdInfoExit | pidfdInfoCoredump}, CoreDumpNone},
+		{"dump started", pidfdInfo{mask: pidfdInfoExit | pidfdInfoCoredump, coredumpMask: pidfdCoredumped}, CoreDumpStarted},
+		{"7.3 reaped, no dump", pidfdInfo{mask: pidfdInfoExit | pidfdInfoSupportedMask, tail: [2]uint64{0, supported73}}, CoreDumpNone},
+		{"7.0 reaped, no dump", pidfdInfo{mask: pidfdInfoExit | pidfdInfoSupportedMask, tail: [2]uint64{supported70, 0}}, CoreDumpNone},
+		{"7.0 zombie, not reaped", pidfdInfo{mask: pidfdInfoSupportedMask, tail: [2]uint64{supported70, 0}}, CoreDumpUnknown},
+		{"before 6.16", pidfdInfo{mask: pidfdInfoExit}, CoreDumpUnknown},
+		{"field not listed", pidfdInfo{mask: pidfdInfoExit | pidfdInfoSupportedMask, tail: [2]uint64{noCoredump, 0}}, CoreDumpUnknown},
+		{"field not listed, 88 bytes", pidfdInfo{mask: pidfdInfoExit | pidfdInfoSupportedMask, tail: [2]uint64{0, noCoredump}}, CoreDumpUnknown},
+	} {
+		if got := coreDumpFrom(tc.info); got != tc.want {
+			t.Errorf("%s: core dump = %d, want %d", tc.name, got, tc.want)
+		}
+	}
+	if size := unsafe.Sizeof(pidfdInfo{}); size != 88 {
+		t.Errorf("pidfdInfo is %d bytes, want PIDFD_INFO_SIZE_VER3 (88)", size)
+	}
+}
+
 // The signal report travels on an inherited descriptor of its own (3 or
 // above), apart from the target's stdio; any other value is refused before
 // the first confinement step, and the number is not passed on to the target.
@@ -207,7 +240,7 @@ func TestSignalReportDescriptorNeverStdio(t *testing.T) {
 	for _, value := range []string{"0", "1", "2", "-1", "three", "3 "} {
 		t.Run(value, func(t *testing.T) {
 			t.Setenv(signalReportEnv, value)
-			err := sandboxExec(sandboxConfig{Probe: true}, nil)
+			err := sandboxBootstrap(&sandboxConfig{})
 			if err == nil || !strings.Contains(err.Error(), "signal report descriptor") {
 				t.Fatalf("report descriptor %q: %v", value, err)
 			}
@@ -228,7 +261,7 @@ func TestBootstrapAcceptsOnlyExpectedCgroup(t *testing.T) {
 		t.Fatal(err)
 	}
 	t.Setenv(expectedCgroupEnv, own)
-	if err := sandboxExec(sandboxConfig{Probe: true}, nil); err != nil {
+	if err := sandboxBootstrap(&sandboxConfig{}); err != nil {
 		t.Fatalf("membership in the expected cgroup refused: %v", err)
 	}
 	if v, ok := os.LookupEnv(expectedCgroupEnv); ok {
@@ -239,7 +272,7 @@ func TestBootstrapAcceptsOnlyExpectedCgroup(t *testing.T) {
 	}
 	for _, other := range []string{own + "/run-1", filepath.Dir(own), own + "/"} {
 		t.Setenv(expectedCgroupEnv, other)
-		if err := sandboxExec(sandboxConfig{Probe: true}, nil); err == nil {
+		if err := sandboxBootstrap(&sandboxConfig{}); err == nil {
 			t.Fatalf("membership accepted for %q while in %q", other, own)
 		}
 	}
@@ -269,7 +302,7 @@ func TestNamespaceInitChecksLaunchingParent(t *testing.T) {
 	}
 
 	t.Setenv(expectedParentEnv, strconv.Itoa(os.Getpid())) // any process but our parent
-	err := sandboxExec(sandboxConfig{Probe: true}, nil)
+	err := sandboxBootstrap(&sandboxConfig{})
 	if err == nil || !strings.Contains(err.Error(), "launching parent died") {
 		t.Fatalf("bootstrap under another parent: %v", err)
 	}
@@ -278,7 +311,7 @@ func TestNamespaceInitChecksLaunchingParent(t *testing.T) {
 	}
 
 	t.Setenv(expectedParentEnv, strconv.Itoa(os.Getppid()))
-	if err := sandboxExec(sandboxConfig{Probe: true}, nil); err != nil {
+	if err := sandboxBootstrap(&sandboxConfig{}); err != nil {
 		t.Fatalf("bootstrap under the launching parent: %v", err)
 	}
 	if v, ok := os.LookupEnv(expectedParentEnv); ok {
@@ -298,6 +331,9 @@ func TestInitReportsTargetDeathWithIdentity(t *testing.T) {
 	if os.Getenv("INKWELL_INIT_REPORT") != "1" {
 		// The init reaps whatever child dies (it is PID 1 in production): it
 		// must run in a process that has no other child.
+		if !requireLaunch(t) {
+			return
+		}
 		runChild(t, childTest(name, "INKWELL_INIT_REPORT=1"), name)
 		return
 	}
@@ -328,12 +364,14 @@ func TestInitReportsTargetDeathWithIdentity(t *testing.T) {
 			defer func() { _ = r.Close(); _ = w.Close() }()
 			t.Setenv("INKWELL_ATTACK", tc.attack)
 			pidfd := -1
-			c := sandboxConfig{WorkingDir: cwd, ReportFD: int(w.Fd()), RequireDeath: true}
+			c := launcherConfig(sandboxConfig{WorkingDir: cwd, ReportFD: int(w.Fd()), RequireDeath: true})
 			cmd, err := sandboxInitCommand(c, []string{os.Args[0]}, &pidfd)
 			if err != nil {
 				t.Fatal(err)
 			}
-			if err := cmd.Start(); err != nil {
+			// The exec child reports its tier and waits for « proceed », as
+			// under a real init (whose launch handshake this test stands in for).
+			if err := startLauncher(t, cmd); err != nil {
 				t.Fatal(err)
 			}
 			defer func() { _ = unix.Close(pidfd); _ = cmd.Process.Release() }()

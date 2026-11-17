@@ -1,6 +1,7 @@
 package sidecar
 
 import (
+	"bufio"
 	"bytes"
 	"encoding/json"
 	"errors"
@@ -12,6 +13,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -28,7 +30,8 @@ func TestLauncherReadConfiguration(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if c.Executable != resolved || !slices.Contains(c.ReadPaths, c.WorkingDir) || !slices.Contains(c.ReadPaths, c.Directory) || !slices.Contains(c.ReadPaths, "/usr/share/fonts") {
+		// ADR 0044 point 1d: no font folder unless the caller lists it.
+		if c.Executable != resolved || !slices.Contains(c.ReadPaths, c.WorkingDir) || !slices.Contains(c.ReadPaths, c.Directory) || slices.Contains(c.ReadPaths, "/usr/share/fonts") || slices.Contains(c.ReadPaths, "/usr/local/share/fonts") {
 			t.Fatalf("bad read authority: %+v", c)
 		}
 		if target == "/bin/sh" && (!c.Dynamic || len(c.Libraries) == 0) {
@@ -115,10 +118,13 @@ func TestConfinementOnDisposableThread(t *testing.T) {
 			err = restrictReadsConfig(&c, "/bin/sh")
 		}
 		if err == nil {
-			err = restrictOutput(c)
+			_, err = restrictOutput(c)
 		}
 		if err == nil {
-			err = installSeccomp()
+			var f []unix.SockFilter
+			if f, err = hostTestFilter(tierN); err == nil {
+				err = installSeccompProgram(f)
+			}
 		}
 		if err == nil {
 			// The installed policy must permit writes to the granted output and deny
@@ -154,9 +160,13 @@ func TestSandboxEarlyPaths(t *testing.T) {
 		t.Fatal("invalid report fd accepted")
 	}
 	t.Setenv(signalReportEnv, "")
-	if err := sandboxExec(sandboxConfig{Probe: true}, nil); err != nil {
+	if err := sandboxBootstrap(&sandboxConfig{}); err != nil {
 		t.Fatal(err)
 	}
+	if err := sandboxExec(sandboxConfig{}, nil); err == nil || !strings.Contains(err.Error(), "handshake") {
+		t.Fatalf("a launch without its handshake: %v", err)
+	}
+	t.Setenv(handshakeEnv, "7")
 	done := make(chan error, 1)
 	go func() {
 		runtime.LockOSThread()
@@ -183,8 +193,11 @@ func TestLauncherMountConstruction(t *testing.T) {
 		runtime.LockOSThread()
 		defer runtime.UnlockOSThread()
 		dir := os.Getenv("INKWELL_MOUNT_DIR")
-		c := sandboxConfig{RuntimeDir: dir, Overlay: true, Directory: dir, MountBytes: 8192, Names: []string{"out"}, Probe: true}
-		if err := sandboxExec(c, nil); err != nil {
+		c := sandboxConfig{RuntimeDir: dir, Overlay: true, Directory: dir, MountBytes: 8192, Names: []string{"out"}}
+		if err := mountIPC(c); err != nil {
+			t.Fatal(err)
+		}
+		if err := mountTmpfs(c); err != nil {
 			t.Fatal(err)
 		}
 		var stat unix.Statfs_t
@@ -196,7 +209,6 @@ func TestLauncherMountConstruction(t *testing.T) {
 		}
 
 		// Exercise the ready/proceed protocol on the real output mount.
-		c.Probe = false
 		c.WorkingDir = dir
 		if err := mountOutput(c); err != nil {
 			t.Fatal(err)
@@ -206,9 +218,8 @@ func TestLauncherMountConstruction(t *testing.T) {
 		if err := mountOutput(c); err == nil {
 			t.Fatal("missing working directory accepted")
 		}
-		c.Probe = true
 		c.Names = []string{"out", "out"}
-		if err := mountOutput(c); err == nil {
+		if err := mountTmpfs(c); err == nil {
 			t.Fatal("duplicate output accepted")
 		}
 		if err := mountIPC(sandboxConfig{RuntimeDir: "/nonexistent/inkwell"}); err != nil {
@@ -217,6 +228,10 @@ func TestLauncherMountConstruction(t *testing.T) {
 		if err := dropCapabilities(); err != nil {
 			t.Fatal(err)
 		}
+		return
+	}
+	// The mounts need the mount namespace of tier N.
+	if !requireN(t) {
 		return
 	}
 	dir := t.TempDir()
@@ -241,7 +256,7 @@ func TestLauncherMountConstruction(t *testing.T) {
 	cmd.ExtraFiles = []*os.File{readyW, proceedR}
 	go func() { var b [1]byte; _, _ = io.ReadFull(readyR, b[:]); _, _ = proceedW.Write([]byte("p")) }()
 	setProcAttr(cmd)
-	mountNamespace(cmd)
+	tierNamespaces(cmd, launchPlan{tier: tierN})
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Fatalf("mount policy: %v %s", err, out)
 	}
@@ -249,6 +264,9 @@ func TestLauncherMountConstruction(t *testing.T) {
 
 func TestSandboxExecDeniedTarget(t *testing.T) {
 	if os.Getenv("INKWELL_EXEC_DENIED") != "1" {
+		if !requireLaunch(t) {
+			return
+		}
 		// sandboxExec sets RLIMIT_CORE to 0, soft and hard, for the whole process,
 		// and an unprivileged process cannot raise a hard limit back: run the case
 		// in a child and prove this process keeps its limit.
@@ -273,11 +291,71 @@ func TestSandboxExecDeniedTarget(t *testing.T) {
 	if err := os.WriteFile(target, data, 0o600); err != nil {
 		t.Fatal(err)
 	}
+	parent := launcherHandshake(t)
 	done := make(chan error, 1)
-	go func() { runtime.LockOSThread(); done <- sandboxExec(sandboxConfig{WorkingDir: dir}, []string{target}) }()
+	go func() {
+		runtime.LockOSThread()
+		done <- sandboxExec(launcherConfig(sandboxConfig{WorkingDir: dir}), []string{target})
+	}()
 	if err := <-done; !errors.Is(err, unix.EACCES) {
 		t.Fatalf("exec nonexecutable ELF: %v", err)
 	}
+	if err := <-parent; err != nil {
+		t.Fatalf("launch handshake: %v", err)
+	}
+}
+
+// launcherHandshake gives a sandboxExec run in this process its launch
+// handshake: the report and « proceed » pipes on consecutive descriptors,
+// named in the environment, and a parent side that reads one well-formed
+// tier report and answers « proceed ». (The report is not verified against
+// a tier: the filter is on one thread, /proc/self/status shows the leader.)
+func launcherHandshake(t *testing.T) <-chan error {
+	t.Helper()
+	report, reportChild, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	proceedChild, proceed, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	fd := 100
+	for {
+		fd, err = unix.FcntlInt(reportChild.Fd(), unix.F_DUPFD_CLOEXEC, fd)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := unix.FcntlInt(uintptr(fd+1), unix.F_GETFD, 0); errors.Is(err, unix.EBADF) {
+			break
+		}
+		_ = unix.Close(fd)
+		fd += 2
+	}
+	if err := unix.Dup3(int(proceedChild.Fd()), fd+1, unix.O_CLOEXEC); err != nil {
+		t.Fatal(err)
+	}
+	_ = reportChild.Close()
+	_ = proceedChild.Close()
+	t.Cleanup(func() {
+		_ = unix.Close(fd)
+		_ = unix.Close(fd + 1)
+		_ = report.Close()
+		_ = proceed.Close()
+	})
+	t.Setenv(handshakeEnv, strconv.Itoa(fd))
+	done := make(chan error, 1)
+	go func() {
+		line, err := bufio.NewReader(report).ReadString('\n')
+		if err == nil {
+			_, err = parseTierReport(line)
+		}
+		if err == nil {
+			_, err = proceed.Write([]byte("p"))
+		}
+		done <- err
+	}()
+	return done
 }
 
 func TestWorkingDirectoryErrors(t *testing.T) {
@@ -319,7 +397,7 @@ func TestLandlockRuleFailures(t *testing.T) {
 			runtime.LockOSThread()
 			err := unix.Prctl(unix.PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0)
 			if err == nil {
-				err = restrictOutput(c)
+				_, err = restrictOutput(c)
 			}
 			done <- err
 		}()
@@ -406,6 +484,8 @@ func TestWorkingDirectoryRelativeXDG(t *testing.T) {
 }
 
 func TestSandboxMountErrors(t *testing.T) {
+	// Both refusals come before the handshake descriptor is used.
+	t.Setenv(handshakeEnv, "7")
 	if os.Getenv("INKWELL_MOUNT_ERRORS") == "1" {
 		// Root of a private user and mount namespace (below): making "/" private
 		// and mounting over /dev/null cannot touch the host's mounts.
@@ -421,9 +501,13 @@ func TestSandboxMountErrors(t *testing.T) {
 	if err := sandboxExec(sandboxConfig{MountBytes: 1}, nil); err == nil || !strings.Contains(err.Error(), "at least one page") {
 		t.Fatalf("sub-page mount: %v, want the one-page error", err)
 	}
+	// The mount itself needs the mount namespace of tier N.
+	if !requireN(t) {
+		return
+	}
 	cmd := childTest("TestSandboxMountErrors", "INKWELL_MOUNT_ERRORS=1")
 	setProcAttr(cmd)
-	mountNamespace(cmd)
+	tierNamespaces(cmd, launchPlan{tier: tierN})
 	runChild(t, cmd, "TestSandboxMountErrors")
 }
 
@@ -443,11 +527,31 @@ func TestSymlinkLoopAuthorities(t *testing.T) {
 		runtime.LockOSThread()
 		err := unix.Prctl(unix.PR_SET_NO_NEW_PRIVS, 1, 0, 0, 0)
 		if err == nil {
-			err = restrictOutput(sandboxConfig{ReadPaths: []string{loop}})
+			_, err = restrictOutput(sandboxConfig{ReadPaths: []string{loop}})
 		}
 		done <- err
 	}()
 	if err := <-done; !errors.Is(err, unix.ELOOP) {
 		t.Fatalf("loop read rule: %v", err)
+	}
+}
+
+func TestLandlockABISeamRefusesUnsupported(t *testing.T) {
+	kernel := landlockABI()
+	if kernel < 3 {
+		t.Skip("Landlock ABI 3 required")
+	}
+	for _, abi := range []int{2, kernel + 1} {
+		t.Run(fmt.Sprint(abi), func(t *testing.T) {
+			s := Spec{landlockABI: abi}
+			c := baseConfig(s, testPlan(tierF))
+			if c.LandlockABI != abi {
+				t.Fatalf("Landlock ABI seam lost: got %d, want %d", c.LandlockABI, abi)
+			}
+			_, err := restrictOutput(c)
+			if err == nil || !strings.Contains(err.Error(), "invalid requested Landlock ABI") {
+				t.Fatalf("unsupported Landlock ABI %d: %v", abi, err)
+			}
+		})
 	}
 }

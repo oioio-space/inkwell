@@ -84,6 +84,18 @@ func TestProtectedDescendantsRefused(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
 	t.Setenv("USERPROFILE", home)
+	// The home's default directories stay protected when the XDG variables
+	// point elsewhere (GitHub's runners set XDG_CONFIG_HOME).
+	for _, key := range []string{"XDG_CONFIG_HOME", "XDG_DATA_HOME", "XDG_STATE_HOME", "XDG_CACHE_HOME"} {
+		t.Setenv(key, t.TempDir())
+	}
+	cache := filepath.Join(home, ".cache")
+	if err := os.MkdirAll(cache, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := workingDirectory(cache); err == nil {
+		t.Fatal("accepted the home's default cache")
+	}
 	for _, name := range []string{".ssh", ".gnupg", ".config", filepath.Join(".local", "share"), filepath.Join(".local", "state")} {
 		dir := filepath.Join(home, name, "nested")
 		if err := os.MkdirAll(dir, 0o700); err != nil {

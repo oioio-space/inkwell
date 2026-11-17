@@ -2,7 +2,7 @@
 // Trace-derived list plus documented runtime portability additions.
 package sidecar
 
-var allowedSyscalls = []uint32{
+var allowedSyscallsARM64 = []uint32{
 	214, // brk
 	113, // clock_gettime
 	220, // clone

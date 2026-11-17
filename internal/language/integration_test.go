@@ -3,6 +3,7 @@ package language
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -10,7 +11,24 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/oioio-space/inkwell/internal/sidecar"
 )
+
+// requireSandbox skips a test of the running language server where the
+// sandbox is refused (arm64 until SB2a2): no server runs there. Any tier that
+// launches is the test's subject.
+func requireSandbox(t testing.TB) {
+	t.Helper()
+	_, err := sidecar.NetworkIsolation(nil)
+	if errors.Is(err, sidecar.ErrSandboxRefused) {
+		// Environment: the sandbox is refused on this machine (arm64 until SB2a2, or no isolation at all).
+		t.Skipf("refusal: preview.fail.sandbox: %v", err)
+	}
+	if err != nil {
+		t.Fatalf("tier probe: %v", err)
+	}
+}
 
 type testConn struct {
 	ctx    context.Context
@@ -254,6 +272,7 @@ func BenchmarkLanguageLatency(t *testing.B) {
 
 // Closing a window must release its sidecar before a new stream can initialize.
 func TestReconnectReleasesServer(t *testing.T) {
+	requireSandbox(t)
 	service := New(t.TempDir())
 	for range 2 {
 		ctx, cancel := context.WithCancel(t.Context())
@@ -275,6 +294,7 @@ func TestReconnectReleasesServer(t *testing.T) {
 
 // The old virtual stream may survive page destruction without its context ending.
 func TestNewStreamSupersedesAbandonedWindow(t *testing.T) {
+	requireSandbox(t)
 	service := New(t.TempDir())
 	var previous <-chan struct{}
 	for range 2 {

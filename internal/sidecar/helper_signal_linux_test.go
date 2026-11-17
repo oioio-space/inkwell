@@ -7,6 +7,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"math/rand/v2"
 	"os"
 	"os/exec"
 	"os/signal"
@@ -157,6 +159,36 @@ func scopeAttackHelper(mode, arg string) int {
 			return 2
 		}
 		return scopeAttackHelper("resident", "")
+	case "pagecache": // read the file arg through the page cache, report the bytes read
+		f, err := os.Open(arg) // #nosec G304 -- test helper reading the file its test wrote
+		if err != nil {
+			return 2
+		}
+		n, err := io.Copy(io.Discard, f)
+		_ = f.Close()
+		if err != nil {
+			return 2
+		}
+		fmt.Printf("read=%d\n", n)
+		return 0
+	case "dirty": // write 512 MiB to the file arg without syncing, report the bytes written
+		f, err := os.OpenFile(arg, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600) // #nosec G304 -- test helper writing its test's declared output
+		if err != nil {
+			return 2
+		}
+		chunk := make([]byte, 1<<20)
+		_, _ = rand.NewChaCha8([32]byte{2}).Read(chunk)
+		n := 0
+		for range 512 {
+			w, err := f.Write(chunk)
+			n += w
+			if err != nil {
+				break
+			}
+		}
+		_ = f.Close()
+		fmt.Printf("wrote=%d\n", n)
+		return 0
 	case "resident":
 		for {
 			b, err := unix.Mmap(-1, 0, 8<<20, unix.PROT_READ|unix.PROT_WRITE, unix.MAP_PRIVATE|unix.MAP_ANON)
@@ -168,8 +200,16 @@ func scopeAttackHelper(mode, arg string) int {
 				b[i] = 1
 			}
 		}
-	case "address":
-		_, err := unix.Mmap(-1, 0, 2<<30, unix.PROT_READ|unix.PROT_WRITE, unix.MAP_PRIVATE|unix.MAP_ANON)
+	case "address": // map arg bytes at once (2 GiB by default)
+		size := 2 << 30
+		if arg != "" {
+			var err error
+			if size, err = strconv.Atoi(arg); err != nil {
+				fmt.Println(err)
+				return 2
+			}
+		}
+		_, err := unix.Mmap(-1, 0, size, unix.PROT_READ|unix.PROT_WRITE, unix.MAP_PRIVATE|unix.MAP_ANON)
 		if err != nil {
 			fmt.Println("allocation-failed")
 			return 1
@@ -247,8 +287,22 @@ func scopeAttackHelper(mode, arg string) int {
 				held[i] = 1
 			}
 		}
+		// Under the race detector the target's address limit must leave the
+		// same room to allocate (raceAddressReserve), or its allocation fails
+		// at RLIMIT_AS before the ancestor's bound is reached.
+		var reserve uint64
+		if v := os.Getenv("INKWELL_TEST_ADDRESS_RESERVE"); v != "" {
+			var err error
+			if reserve, err = strconv.ParseUint(v, 10, 64); err != nil {
+				return 2
+			}
+		}
 		manager := &SandboxScope{}
-		manager.beforeStart = func(r *cgroupRun) { fmt.Printf("scope=%s holder=%d\n", r.session.path, r.session.holder.Process.Pid) }
+		var run *cgroupRun
+		manager.beforeStart = func(r *cgroupRun) {
+			run = r
+			fmt.Printf("scope=%s holder=%d\n", r.session.path, r.session.holder.Process.Pid)
+		}
 		mode := "tree"
 		if arg == "aggregate" || arg == "leaf" {
 			mode = "resident-wait"
@@ -258,14 +312,17 @@ func scopeAttackHelper(mode, arg string) int {
 			Dir:           os.Getenv("INKWELL_TEST_PROJECT"),
 			Args:          []string{"--sidecar-test=scope-" + mode},
 			Env:           []string{},
-			MemoryLimit:   2 << 30,
+			MemoryLimit:   2<<30 + reserve,
 			ResidentLimit: 256 << 20,
 			Stdin:         os.Stdin,
 			Stdout:        os.Stdout,
 			scope:         manager,
 		}
 		out, err := Run(context.Background(), s)
-		fmt.Printf("out=%s cause=%s signal=%d err=%v\n", out.Containment, out.MemoryCause, out.Signal, err)
+		// watch-lost: the run's memory watch lost an event or a read, which
+		// rule M9 answers with the cause "unknown".
+		lost := run != nil && run.watch != nil && run.watch.h.failed
+		fmt.Printf("out=%s cause=%s signal=%d err=%v watch-lost=%v\n", out.Containment, out.MemoryCause, out.Signal, err, lost)
 		runtime.KeepAlive(held)
 		manager.mu.Lock()
 		if manager.session != nil {
