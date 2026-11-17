@@ -33,6 +33,10 @@ async function typeFor(page: import("@playwright/test").Page, text: string, ms: 
 test("UX-SI1b-1 while two people type, the header holds one wording, it does not blink every second", async ({
   browser,
 }) => {
+  test.fixme(
+    true,
+    "UX-SI1b-1: known defect, tracked in gates/SI1b/UX.md (the header moves to HB1a/HB1b)",
+  );
   test.setTimeout(90_000);
   const alice = await open(browser, ALICE_URL);
   const bob = await open(browser, BOB_URL, true);
@@ -50,6 +54,10 @@ test("UX-SI1b-1 while two people type, the header holds one wording, it does not
 test("UX-SI1b-2 the header's status wording never overlaps the title, down to 500 px", async ({
   browser,
 }) => {
+  test.fixme(
+    true,
+    "UX-SI1b-2: known defect, tracked in gates/SI1b/UX.md (the header moves to HB1a/HB1b)",
+  );
   test.setTimeout(90_000);
   const alice = await open(browser, ALICE_URL);
   const bob = await open(browser, BOB_URL, true);

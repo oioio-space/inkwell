@@ -1,7 +1,7 @@
 import { existsSync, statSync, unlinkSync, writeFileSync } from "node:fs";
-import { dirname, join } from "node:path";
+import { join } from "node:path";
 import type { Page } from "@playwright/test";
-import { docsRoot, historyWrittenSince, holds, mainTypIn, openWith, readDisk } from "./disk";
+import { docsRoot, holds, mainTypIn, openWith, readDisk } from "./disk";
 import { expect, test } from "./fixtures";
 import { clear, docText, editor, open, pair, typeAtEnd } from "./helpers";
 import { ALICE_PORT, ALICE_URL, BOB_PORT, BOB_URL } from "./ports";
@@ -95,23 +95,42 @@ test("SAV-03 closing with unwritten changes loses nothing, asks nothing, and reo
   const page = await openWith(browser, ALICE_URL, { saveMode: "manual" });
   const before = await fileCaughtUp(page);
   await typeAtEnd(page, " pas écrit");
-  const typedAt = Date.now() - 50;
   await expect(page.getByTestId("unsaved")).toBeVisible();
   let asked = false;
   page.on("dialog", (d) => {
     asked = true;
     void d.dismiss();
   });
-  // The store keeps the history a moment after each keystroke (automerge-repo's save debounce).
-  await expect
-    .poll(() => historyWrittenSince(dirname(aliceFile()), typedAt), { timeout: 5_000 })
-    .toBe(true);
+  // The save a closing window runs, acknowledged by Go: what follows checks what a close keeps. A
+  // page that goes before it ends is SAV-03b.
+  await page.evaluate(() => {
+    const save = (globalThis as { __inkwellSaveNow?: () => Promise<void> }).__inkwellSaveNow;
+    if (typeof save !== "function") throw new Error("no __inkwellSaveNow (VITE_E2E_OBSERVE=1)");
+    return save();
+  });
   await page.reload();
   await expect(editor(page)).toBeVisible();
   await expect.poll(() => docText(page)).toBe(`${before} pas écrit`.replace(/\n/g, ""));
   await expect(page.getByTestId("unsaved")).toBeVisible();
   expect(readDisk(aliceFile())).toBe(before);
   expect(asked).toBe(false);
+});
+
+test("SAV-03b a keystroke typed just before the page goes survives it, whatever the timing", async ({
+  browser,
+  browserName,
+}) => {
+  // R-E2E1-1 (docs/plans/2026-11-17-e2e1.md, block WC1): on a reload WebKit loses what the page sends as it goes,
+  // and the desktop window closes without the page hearing it; Go must hold the close until the
+  // page has saved. Chromium delivers the page's last writes: the test holds there.
+  test.fixme(browserName === "webkit", "R-E2E1-1: a page that goes mid-save loses its last keys");
+  const page = await openWith(browser, ALICE_URL, { saveMode: "manual" });
+  const typed = `${await docText(page)} juste avant`;
+  await typeAtEnd(page, " juste avant");
+  // The page goes as soon as the last key is in: before any pause of the editor or of the store.
+  await page.reload();
+  await expect(editor(page)).toBeVisible();
+  await expect.poll(() => docText(page)).toBe(typed);
 });
 
 test("EXT-01 EXT-12 a file changed outside is taken in, its lines are marked, Ctrl+Z and Annuler take it back", async ({

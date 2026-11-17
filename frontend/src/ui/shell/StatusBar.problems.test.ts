@@ -36,6 +36,18 @@ describe("status bar: problems and pages", () => {
     expect(mountBar().querySelector('[data-testid="problems"]')).toBeNull();
   });
 
+  it("UX-L2-1 a note does not wear the compilation's problems; a Typst file does", () => {
+    const props = { hasText: true, onNextProblem: () => {} };
+    preview.receive(result());
+    expect(
+      mountBar({ ...props, lang: "markdown" }).querySelector('[data-testid="problems"]'),
+    ).toBeNull();
+    cleanup();
+    expect(
+      mountBar({ ...props, lang: "typst" }).querySelector('[data-testid="problems"]'),
+    ).not.toBeNull();
+  });
+
   it("PRV-90 a document without problems says so", () => {
     const host = mountBar();
     preview.receive(result());

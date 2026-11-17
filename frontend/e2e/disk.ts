@@ -61,19 +61,3 @@ export async function holds(what: string, condition: () => boolean, ms: number):
     await new Promise((r) => setTimeout(r, 50));
   } while (Date.now() < end);
 }
-
-/**
- * Whether the document history Inkwell keeps in a project folder (`.inkwell/repo`) was written
- * since `since` (ms since the epoch). Not the rest of `.inkwell` (backups, project.json…): they
- * are written on their own schedule and would stand for a save that has not happened. The files are compressed once a document is long, so what was typed
- * cannot be searched for in them.
- */
-export function historyWrittenSince(projectDir: string, since: number): boolean {
-  const walk = (dir: string): boolean =>
-    existsSync(dir) &&
-    readdirSync(dir, { withFileTypes: true }).some((entry) => {
-      const path = join(dir, entry.name);
-      return entry.isDirectory() ? walk(path) : statSync(path).mtimeMs >= since;
-    });
-  return walk(join(projectDir, ".inkwell", "repo"));
-}

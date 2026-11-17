@@ -43,8 +43,12 @@ async function cannotType(p: Page) {
 
 test("S7 people: a role, disconnect Paul, let him back, and Léa as a reader", async ({
   browser,
+  browserName,
 }) => {
   test.setTimeout(150_000);
+  // The reference pictures are made with Chromium, as in shell.spec.ts: another engine draws text
+  // differently. Everything else in the walkthrough runs in every engine.
+  const pixels = browserName === "chromium";
   const alice = await open(browser, ALICE_URL);
   const paul = await open(browser, BOB_URL, true);
   await clear(alice);
@@ -65,10 +69,11 @@ test("S7 people: a role, disconnect Paul, let him back, and Léa as a reader", a
     await expect(alice.getByLabel("Rôle de Paul")).toHaveValue("writer");
     await alice.mouse.move(5, 5);
     // One row, not the list: earlier specs add people to Alice's project.
-    await expect(rowOf(alice, "Paul")).toHaveScreenshot("people-admin-light.png", {
-      maxDiffPixelRatio: 0.02,
-      mask: [rowOf(alice, "Paul").locator(".avatar")], // colours come from random identities
-    });
+    if (pixels)
+      await expect(rowOf(alice, "Paul")).toHaveScreenshot("people-admin-light.png", {
+        maxDiffPixelRatio: 0.02,
+        mask: [rowOf(alice, "Paul").locator(".avatar")], // colours come from random identities
+      });
 
     // ACL-08: Léa becomes a reader. She reads, she cannot type, and she is told why.
     await alice.getByLabel("Rôle de Léa").selectOption("reader");
@@ -89,10 +94,11 @@ test("S7 people: a role, disconnect Paul, let him back, and Léa as a reader", a
         await person.mouse.move(5, 5);
         // Léa seen from Paul is only a machine name and a colour: not part of the reference.
         // His own row only: other specs add people to the list.
-        await expect(rowOf(person, "(vous)")).toHaveScreenshot("people-writer-dark.png", {
-          mask: [rowOf(person, "(vous)").locator(".avatar")],
-          maxDiffPixelRatio: 0.02,
-        });
+        if (pixels)
+          await expect(rowOf(person, "(vous)")).toHaveScreenshot("people-writer-dark.png", {
+            mask: [rowOf(person, "(vous)").locator(".avatar")],
+            maxDiffPixelRatio: 0.02,
+          });
       }
       await closePanel(person);
     }
@@ -124,9 +130,10 @@ test("S7 people: a role, disconnect Paul, let him back, and Léa as a reader", a
     await banner(paul).evaluate((el) => {
       el.textContent = (el.textContent ?? "").replace(/\d{2}:\d{2}/, "12:00");
     });
-    await expect(banner(paul).locator("..")).toHaveScreenshot("people-suspended-dark.png", {
-      maxDiffPixelRatio: 0.02,
-    });
+    if (pixels)
+      await expect(banner(paul).locator("..")).toHaveScreenshot("people-suspended-dark.png", {
+        maxDiffPixelRatio: 0.02,
+      });
     await cannotType(paul);
     await openPanel(paul);
     await expect(panel(paul).locator("select")).toHaveCount(0);

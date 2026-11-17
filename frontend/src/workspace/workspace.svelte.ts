@@ -11,6 +11,7 @@ import {
   Projects,
   Session,
 } from "../../bindings/github.com/oioio-space/inkwell/internal/app/index";
+import { flushAllTyped } from "../editor/amSync";
 import type { Span } from "../editor/external";
 import type { Meta } from "../history/types";
 import { t } from "../i18n";
@@ -39,7 +40,7 @@ import { settings } from "../store/settings.svelte";
 import { notice } from "../ui/notice.svelte";
 import { accessOf, type Member, type Standing } from "../ui/people/roster";
 import { BootstrapLoader } from "./loader";
-import { observeSession, observeVariantHeads } from "./observe";
+import { observeSaveNow, observeSession, observeVariantHeads } from "./observe";
 
 /** The project's text, and what the history keeps beside it (named versions, variants, actors). */
 export type Doc = { text: string; meta?: Meta };
@@ -301,6 +302,7 @@ class Workspace {
   #early: string[] = [];
   #marksTimer: ReturnType<typeof setTimeout> | undefined;
   #offSize: (() => void) | undefined;
+  #offPageGone: (() => void) | undefined;
 
   #projectWaits = new Set<() => void>();
   #generation = 0;
@@ -359,7 +361,21 @@ class Workspace {
     return true;
   }
 
+  /**
+   * Saves what was typed, now: the keys still waiting for the paint into their documents, then every
+   * changed document to the store, without automerge-repo's save pause, so that a page that goes
+   * right after a keystroke loses nothing (SAV-03b). Runs as the page goes (pagehide, or hidden).
+   * A desktop window destroyed without telling the page does not run it yet: Go holding the close
+   * until the page has saved is block WC1. Never rejects: a write that fails is reported by the store.
+   */
+  async saveNow(): Promise<void> {
+    flushAllTyped();
+    await this.#repo?.flush().catch(() => undefined);
+  }
+
   async stop(): Promise<void> {
+    this.#offPageGone?.();
+    this.#offPageGone = undefined;
     this.#generation++;
     this.#openTicket++;
     clearInterval(this.#watch);
@@ -433,6 +449,18 @@ class Workspace {
       shareConfig: shareAdmitted(this.#admitted),
     });
     this.attach(adapter, repo);
+    // The page may go at any time after a keystroke (a reload, a navigation): its writes start now,
+    // before the page's timers die. The writes run in the event's microtasks, so they are sent.
+    const gone = (e: Event) => {
+      if (e.type === "pagehide" || document.visibilityState === "hidden") void this.saveNow();
+    };
+    this.#offPageGone?.();
+    window.addEventListener("pagehide", gone);
+    document.addEventListener("visibilitychange", gone);
+    this.#offPageGone = () => {
+      window.removeEventListener("pagehide", gone);
+      document.removeEventListener("visibilitychange", gone);
+    };
 
     this.#loader = new BootstrapLoader(this.#repo as Repo, this.#admitted, () => adapter.drain());
     let epoch = this.#admitted.epoch;
@@ -445,6 +473,7 @@ class Workspace {
       for (const id of this.#admitted.ids) this.#loader?.ensure(id);
     });
 
+    observeSaveNow(() => this.saveNow());
     observeVariantHeads(
       () => this.handle,
       () => this.#repo,

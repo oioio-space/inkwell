@@ -51,7 +51,10 @@ test("UX-L2-1 a picture or an info card does not wear main.typ's page, problems 
       await expect(page.locator(".ttl small")).toHaveText(name);
       // The preview is main.typ's pages; the problems and the page count are main.typ's too.
       await expect(page.locator(".side-preview")).toHaveCount(0);
-      await expect(page.getByTestId("problems")).toHaveCount(0);
+      // Absent for a while, not only at the first look: the bar settles after the file shows.
+      const problemsShown = page.getByTestId("problems");
+      for (const end = Date.now() + 1_000; Date.now() < end; )
+        expect(await problemsShown.count(), `problems on ${name}`).toBe(0);
       await expect(page.getByTestId("page-indicator")).toHaveCount(0);
     }
     for (const name of ["logo.png", "blob.bin"]) {

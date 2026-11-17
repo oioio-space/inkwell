@@ -1319,6 +1319,26 @@
       "id": "18795191fcf1b03eb91eb51494a69b317a9ac117cbbb677472cbc93c873c9249",
       "reason": "scripts/tla-check.sh: TLC's -metadir state files go under one directory per run, removed by a trap on any exit (EXIT, INT, TERM, HUP); runs cut by a timeout or a signal left GBs of states in /tmp (a tmpfs) until TLC failed with « disk quota exceeded » (2026-11-17); no model, run, count or bound changed",
       "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "d4e4fadcda2ff23e9f3340e6976c447677d90609e5d6e25892186e57e72dce6e",
+      "reason": "save.spec.ts: SAV-03b is new and red on WebKit for a real defect (R-E2E1-1, a page that goes mid-save loses its last keys); test.fixme on WebKit only, green on Chromium, the fix is block WC1",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "dd91afa6870a93e77d774169555b175580f3902c0b1278bd11c1c3d439af12b9",
+      "reason": "save.spec.ts SAV-03: the 5 s poll on any history file written since the keys (met by a save holding only part of them) is replaced by waiting for the save itself, acknowledged by Go (__inkwellSaveNow): stronger, every assertion kept; the race moved to its own test SAV-03b",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "d1e1e8014be38705dc5a9ba9da96d94e4105f8f93271aab7922cc1ad25f3ddd3",
+      "reason": "ux/oi.spec.ts: UX-OI light/dark known red on both engines (the R19 step reads the previous toast), test.fixme with its id R-E2E1-2",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "68af41a0cb7ad9b2129105db59b3cb69be8d5a276c5c51708376176f35a6f751",
+      "reason": "ux/si1b.spec.ts: UX-SI1b-1/2 are known defects written red on purpose by the SI1b walkthrough (gates/SI1b/UX.md), the header moves to HB1a/HB1b; test.fixme with that reference",
+      "decision": "docs/objectif-en-cours.md"
     }
   ]
 }

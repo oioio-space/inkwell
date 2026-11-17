@@ -18,6 +18,8 @@ interface Waiting {
 }
 const editorsOf = new WeakMap<object, Set<Waiting>>();
 const editorOfView = new WeakMap<EditorView, Waiting>();
+/** Every live editor, whatever its document: the page writes them all as it goes. */
+const live = new Set<Waiting>();
 
 /**
  * Writes now the keys typed in the editors of `handle` that wait for the paint. Call it before
@@ -26,6 +28,11 @@ const editorOfView = new WeakMap<EditorView, Waiting>();
  */
 export function flushTyped(handle: DocHandle<unknown>): void {
   for (const editor of editorsOf.get(handle) ?? []) editor.flush();
+}
+
+/** Writes now the keys typed in every editor of the page, whatever its document: the page is going. */
+export function flushAllTyped(): void {
+  for (const editor of live) editor.flush();
 }
 
 /** Runs `fn` once the keys typed in every editor of `handle` are in the document: now if none wait. */
@@ -128,6 +135,7 @@ export function amSync({
         const editors = editorsOf.get(handle) ?? new Set<Waiting>();
         editorsOf.set(handle, editors.add(this));
         editorOfView.set(view, this);
+        live.add(this);
       }
       get waiting() {
         return this.pending.length > 0 || this.rebase !== undefined;
@@ -279,6 +287,7 @@ export function amSync({
           window.removeEventListener("keydown", this.onKey, true);
           window.removeEventListener("pointerdown", this.flush, true);
           editorsOf.get(handle)?.delete(this);
+          live.delete(this);
           this.written();
         }
       }

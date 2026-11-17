@@ -47,6 +47,16 @@ export function observeDocText(text: () => string | undefined): void {
 }
 
 /**
+ * The save a closing window runs (workspace.saveNow): an e2e spec runs it before the page goes, to
+ * check what a close keeps (SAV-03) apart from the race of a page that goes mid-save (SAV-03b).
+ */
+export function observeSaveNow(save: () => Promise<void>): void {
+  if (!observing()) return;
+  (globalThis as typeof globalThis & { __inkwellSaveNow?: () => Promise<void> }).__inkwellSaveNow =
+    save;
+}
+
+/**
  * The state of the links to the peers (link metrics contract, plan section 7). `shown` is what the
  * header says right now ("synced", "sending", ...): the e2e clause SI1 samples it beside the links.
  */

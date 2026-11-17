@@ -92,7 +92,8 @@ $effect(() => {
   </span>
   <span class="sp"></span>
   {#if onNextProblem}
-  {#if hasText && (preview.hasResult || problems.entries.length > 0)}
+  <!-- The problems are the compilation's: a Typst file takes part in it, a note or a picture does not (UX-L2-1). -->
+  {#if hasText && lang === "typst" && (preview.hasResult || problems.entries.length > 0)}
     <button type="button" class="fb" title={t("problems.hint")} aria-label={`${t("problems.label")} : ${t("problems.next")}, ${problemsName}`} onclick={(event) => event.shiftKey ? problems.show() : onNextProblem?.()} oncontextmenu={(event) => {event.preventDefault();problems.show();}}>
       <span class="problems" data-testid="problems" data-errors={problems.errors} data-warnings={problems.warnings}>
         {#if problems.errors + problems.warnings === 0}
