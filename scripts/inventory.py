@@ -58,7 +58,8 @@ TODO_RE = re.compile(r"TODO|FIXME|XXX|not merged|not yet|\bneeds? (?:B\d|wave|AD
 ENV_SKIP = re.compile(
     r"mDNS|multicast|\broot\b|Getuid|symlink|symbolic link|hard link|link count|Windows|GOOS|platform|this OS"
     r"|Linux-only|kernel|Unix modes|socket|taken meanwhile|AppArmor|namespace|testing\.Short|INKWELL_PERF"
-    r"|process\.env|browserName|skipIf|covered by Fuzz|privilege|parent-death|refuses removals|/proc\b", re.I)
+    r"|process\.env|browserName|skipIf|covered by Fuzz|privilege|parent-death|refuses removals|/proc\b"
+    r"|unavailable on this machine|refused on this machine|not delegated|block device|io controller", re.I)
 TEST_FILE = re.compile(r"(?:_test\.go|\.(?:spec|test)\.[cm]?[jt]sx?)$")
 
 PROPOSED_DAYS = 14
@@ -233,6 +234,17 @@ def check_residuals(root, known):
 
 # ── 3 skips ───────────────────────────────────────────────────────────────────────────────────────────────────
 
+def call_span(lines, i, limit=8):
+    """The lines of the call that starts on line i, until its parentheses close (at most limit lines)."""
+    depth, out = 0, []
+    for line in lines[i:i + limit]:
+        out.append(line)
+        depth += line.count("(") - line.count(")")
+        if depth <= 0:
+            break
+    return out
+
+
 def check_skips(root, known):
     out = git(root, "ls-files")
     files = [f for f in out.stdout.splitlines() if TEST_FILE.search(f) and "node_modules/" not in f]
@@ -247,9 +259,13 @@ def check_skips(root, known):
             m = SKIP_RE.search(line)
             if not m:
                 continue
-            context = "\n".join(lines[max(0, i - 2):i + 1])
-            if any_filed("\n".join(lines[max(0, i - 1):i + 2]), known):
+            # The whole call, which a formatter may cut over several lines (the reason, or its block, on the
+            # next one), and the line above it.
+            call = call_span(lines, i)
+            context = "\n".join(lines[max(0, i - 2):i] + call)
+            if any_filed("\n".join(lines[max(0, i - 1):i] + call), known):
                 continue
+            line = " ".join(x.strip() for x in call)
             kind = m.group(1)
             if kind == "fixme":
                 reason = "test.fixme is an open defect"

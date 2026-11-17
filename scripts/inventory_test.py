@@ -146,6 +146,15 @@ class SkipsTest(Base):
     def test_fixme_naming_a_block_passes(self):
         self.assertEqual(self.check("e2e/a.spec.ts", '// UX1\ntest.fixme("SRC-11", async () => {});\n'), [])
 
+    def test_fixme_cut_over_lines_by_a_formatter_reads_the_whole_call(self):
+        # Biome cuts a long call: the block, in the reason, is two lines below the call's first line.
+        self.assertEqual(self.check("e2e/a.spec.ts", 'test("x", async () => {\n  test.fixme(\n'
+                                                      '    browserName === "webkit",\n'
+                                                      '    "UX1, R-1: the page loses its last keys",\n  );\n});\n'), [])
+        found = self.check("e2e/b.spec.ts", 'test("x", async () => {\n  test.fixme(\n    true,\n'
+                                            '    "a reason with no block",\n  );\n});\n')
+        self.assertEqual(len(found), 1)
+
     def test_todo_and_unconditional_go_skips_are_reported(self):
         found = self.check("x_test.go", 'func TestA(t *testing.T) {\n\tt.Skip("waiting")\n}\n'
                                         'func TestB(t *testing.T) {\n\tif x {\n\t\tt.Skip("TODO ADR 0021")\n\t}\n}\n')

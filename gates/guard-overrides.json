@@ -1359,6 +1359,16 @@
       "id": "03055f45be0a677de84804610067aae83840e0959dbb00e20e55cf40a112f61b",
       "reason": "mise.toml: INV1 adds the `inventory` task to pregate and its tests to test:py; no test, bound or timeout weakened",
       "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "1752239609999024f1acc05e52a893827254aed9ed5c624e3937e0430fbb6dd5",
+      "reason": "scripts/inventory.py: the skip check reads the whole call (a formatter cut test.fixme over lines and the block went unseen, main red on inventory); sandbox environment reasons (tier unavailable, refused on this machine, io controller not delegated, not a block device) join ENV_SKIP; no check weakened",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "b0562c1c95d590504091b6a61ad2b2835e45084fa61fbf79a953850396cc8fa2",
+      "reason": "scripts/inventory_test.py: new test for a fixme cut over lines (red on the previous script, green now); no test removed",
+      "decision": "docs/objectif-en-cours.md"
     }
   ]
 }
