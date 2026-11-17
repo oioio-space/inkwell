@@ -8,16 +8,20 @@ import (
 
 // pidfdInfo is struct pidfd_info of include/uapi/linux/pidfd.h at its fourth
 // published size (PIDFD_INFO_SIZE_VER3, 88 bytes). The kernel copies the
-// fields that fit the size encoded in the ioctl command and clears the mask
-// bits of those that do not (fs/pidfs.c, pidfd_info).
+// fields that fit the size encoded in the ioctl command, zero-fills what its
+// own struct does not reach, and clears the mask bits of the fields it does
+// not have (fs/pidfs.c, pidfd_info). tail holds the two words after
+// coredump_signal, whose meaning depends on the kernel's own struct size:
+// VER2 (80 bytes, Linux 7.0) puts supported_mask in the first, VER3 puts
+// coredump_code and padding there and supported_mask in the second.
 type pidfdInfo struct {
 	mask                                             uint64
 	cgroupID                                         uint64
 	pid, tgid, ppid                                  uint32
 	ruid, rgid, euid, egid, suid, sgid, fsuid, fsgid uint32
 	exitCode                                         int32
-	coredumpMask, coredumpSignal, coredumpCode, _    uint32
-	supportedMask                                    uint64
+	coredumpMask, coredumpSignal                     uint32
+	tail                                             [2]uint64
 }
 
 const (
@@ -42,12 +46,23 @@ func coreDumpOf(pidfd int) CoreDump {
 	if _, _, errno := unix.Syscall(unix.SYS_IOCTL, uintptr(pidfd), pidfdGetInfo, uintptr(unsafe.Pointer(&info))); errno != 0 { // #nosec G103 -- the kernel fills this ABI-sized struct synchronously.
 		return CoreDumpUnknown
 	}
+	return coreDumpFrom(info)
+}
+
+// coreDumpFrom reads the kernel's answer. supported_mask always lists its own
+// flag: a zero second word is a kernel whose struct ends before it (VER2),
+// which wrote the mask in the first.
+func coreDumpFrom(info pidfdInfo) CoreDump {
+	supported := info.tail[1]
+	if supported == 0 {
+		supported = info.tail[0]
+	}
 	switch {
 	case info.mask&pidfdInfoCoredump != 0 && info.coredumpMask&pidfdCoredumped != 0:
 		return CoreDumpStarted
 	case info.mask&pidfdInfoCoredump != 0:
 		return CoreDumpNone
-	case info.mask&pidfdInfoExit != 0 && info.mask&pidfdInfoSupportedMask != 0 && info.supportedMask&pidfdInfoCoredump != 0:
+	case info.mask&pidfdInfoExit != 0 && info.mask&pidfdInfoSupportedMask != 0 && supported&pidfdInfoCoredump != 0:
 		return CoreDumpNone
 	}
 	return CoreDumpUnknown

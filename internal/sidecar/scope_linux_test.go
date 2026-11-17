@@ -14,6 +14,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -65,7 +66,84 @@ func requireScopedRun(t *testing.T, m *SandboxScope, mode string) Output {
 	return out
 }
 
+// requireScope is requireN for a tier-aware cgroup test (plan « Tier-aware
+// suites »). Where the machine cannot give the run cgroup it asserts the
+// promise that replaces it, the per-process fallback (ADR 0042, ADR 0044, T-6),
+// and returns false, as it does on a refused machine: in tier F (no cgroup
+// without a PID namespace), and in tier N without a delegated user scope.
+func requireScope(t *testing.T) bool {
+	t.Helper()
+	switch machineTier(t) {
+	case tierNone:
+		return false
+	case tierN:
+		return scopeOrFallback(t)
+	}
+	requireFallback(t, "tier F")
+	return false
+}
+
+// requireNScope is requireScope for a test that has no tier F half: it skips
+// in tier F, as requireN does.
+func requireNScope(t *testing.T) bool {
+	t.Helper()
+	return requireN(t) && scopeOrFallback(t)
+}
+
+// scopeOrFallback, in tier N, reports whether this machine can give a
+// delegated user scope; where it cannot, it asserts the fallback and returns
+// false. It logs `scope-report: scope=<available|unavailable> [reason=X]`,
+// which the `ci` job asserts (.github/workflows/ci.yml).
+func scopeOrFallback(t *testing.T) bool {
+	t.Helper()
+	reason := delegatedScopeUnreachable()
+	if reason == "" {
+		t.Log("scope-report: scope=available")
+		return true
+	}
+	t.Log("scope-report: scope=unavailable reason=" + reason)
+	requireFallback(t, "tier N without a delegated user scope ("+reason+")")
+	return false
+}
+
+// delegatedScopeUnreachable names what keeps this process from a delegated
+// user scope, "" when nothing does: the scope is a child of the slice the
+// process runs in under its user's systemd manager, asked for on the session
+// bus (SandboxScope.setup). These are facts of the environment (a CI runner's
+// service, no user bus); a scope that fails past them is the product's failure.
+func delegatedScopeUnreachable() string {
+	app, err := selfCgroup()
+	if err != nil {
+		return "no-cgroup"
+	}
+	if !strings.Contains(app, fmt.Sprintf("/user@%d.service/", os.Getuid())) {
+		return "outside-user-manager"
+	}
+	conn, err := dbus.ConnectSessionBus()
+	if err != nil {
+		return "no-session-bus"
+	}
+	_ = conn.Close()
+	return ""
+}
+
+// requireFallback asserts the per-process fallback: a real run given a scope
+// manager creates no session, places no run cgroup and is bounded by its
+// rlimits (T-6).
+func requireFallback(t *testing.T, where string) {
+	t.Helper()
+	m := scopeManager(t)
+	m.beforeStart = func(*cgroupRun) { t.Errorf("T-6 fallback: %s: a run cgroup was placed", where) }
+	out, err := Run(t.Context(), scopeSpec(t, m, "fds"))
+	if err != nil || out.ExitCode != 0 || out.Containment != "rlimit" || m.session != nil {
+		t.Fatalf("T-6 fallback: %s: run with a scope manager: %+v %v, session %v; want a clean rlimit run and no session", where, out, err, m.session)
+	}
+}
+
 func TestCgroupSessionScopeDelegated(t *testing.T) {
+	if !requireScope(t) {
+		return
+	}
 	m := scopeManager(t)
 	requireScopedRun(t, m, "fds")
 	s := m.session
@@ -87,6 +165,9 @@ func TestCgroupSessionScopeDelegated(t *testing.T) {
 }
 
 func TestCgroupRunLimitsVerifiedBeforeStart(t *testing.T) {
+	if !requireScope(t) {
+		return
+	}
 	m := scopeManager(t)
 	var writes []string
 	m.write = func(path, value string) error {
@@ -96,10 +177,10 @@ func TestCgroupRunLimitsVerifiedBeforeStart(t *testing.T) {
 	called := false
 	m.beforeStart = func(r *cgroupRun) {
 		called = true
-		if strings.Join(writes, ",") != "memory.max,memory.swap.max,memory.oom.group" {
+		if strings.Join(writes, ",") != "memory.max,memory.high,memory.swap.max,memory.oom.group" {
 			t.Errorf("limit write ordering: %v", writes)
 		}
-		for file, want := range map[string]string{"memory.max": "134217728", "memory.swap.max": "0", "memory.oom.group": "1"} {
+		for file, want := range map[string]string{"memory.max": "201326592", "memory.high": "134217728", "memory.swap.max": "0", "memory.oom.group": "1"} {
 			got, err := readValue(filepath.Join(r.path, file))
 			if err != nil || got != want {
 				t.Errorf("%s = %s %v want %s", file, got, err, want)
@@ -156,6 +237,9 @@ func waitLine(t *testing.T, w *lineSink, prefix string) string {
 }
 
 func TestCgroupWorkloadAndDescendantsInside(t *testing.T) {
+	if !requireScope(t) {
+		return
+	}
 	m := scopeManager(t)
 	s := scopeSpec(t, m, "tree")
 	input, writer := io.Pipe()
@@ -182,6 +266,18 @@ func TestCgroupWorkloadAndDescendantsInside(t *testing.T) {
 			t.Fatal("scope unavailable")
 		}
 		t.Fatal("target ended before membership check")
+	case line := <-lines.lines:
+		// The target starts after beforeStart: a line with no run cgroup
+		// announced is a run outside the scope. Its stdin is released first,
+		// or Run would wait for it until the package's timeout.
+		select {
+		case path = <-runPath:
+			lines.lines <- line
+		default:
+			_ = writer.Close()
+			<-done
+			t.Fatalf("scope unavailable: the target runs (%s) outside any run cgroup", line)
+		}
 	}
 	pids := strings.Split(waitLine(t, lines, "tree="), ",")
 	if len(pids) != 2 {
@@ -227,6 +323,9 @@ func TestCgroupWorkloadAndDescendantsInside(t *testing.T) {
 }
 
 func TestBootstrapRefusesUnexpectedCgroup(t *testing.T) {
+	if !requireNScope(t) {
+		return
+	}
 	m := scopeManager(t)
 	called := false
 	m.beforeStart = func(r *cgroupRun) { called = true }
@@ -243,6 +342,9 @@ func TestBootstrapRefusesUnexpectedCgroup(t *testing.T) {
 }
 
 func TestCgroupRemovedAfterRun(t *testing.T) {
+	if !requireNScope(t) {
+		return
+	}
 	m := scopeManager(t)
 	var path string
 	m.beforeStart = func(r *cgroupRun) { path = r.path }
@@ -253,6 +355,9 @@ func TestCgroupRemovedAfterRun(t *testing.T) {
 }
 
 func TestCgroupFallbackAtEveryStep(t *testing.T) {
+	if !requireNScope(t) {
+		return
+	}
 	for i := 1; i <= 11; i++ {
 		row := fmt.Sprintf("F%d", i)
 		t.Run(row, func(t *testing.T) {
@@ -290,6 +395,9 @@ func TestCgroupFallbackAtEveryStep(t *testing.T) {
 }
 
 func TestFallbackReportsRlimitOnly(t *testing.T) {
+	if !requireLaunch(t) {
+		return
+	}
 	s := scopeSpec(t, scopeManager(t), "fds")
 	s.disableScope = true
 	out, err := Run(t.Context(), s)
@@ -299,12 +407,18 @@ func TestFallbackReportsRlimitOnly(t *testing.T) {
 }
 
 func TestBothMemoryBudgetsHold(t *testing.T) {
+	if !requireNScope(t) {
+		return
+	}
 	m := scopeManager(t)
 	s := scopeSpec(t, m, "budget")
 	m.beforeStart = func(r *cgroupRun) {
-		v, err := readValue(filepath.Join(r.path, "memory.max"))
+		v, err := readValue(filepath.Join(r.path, "memory.high"))
 		if err != nil || v != "134217728" {
 			t.Errorf("resident budget = %s %v", v, err)
+		}
+		if v, err = readValue(filepath.Join(r.path, "memory.max")); err != nil || v != "201326592" {
+			t.Errorf("resident backstop = %s %v", v, err)
 		}
 	}
 	out, err := Run(t.Context(), s)
@@ -319,10 +433,38 @@ func TestBothMemoryBudgetsHold(t *testing.T) {
 	}
 }
 
+// raceResidentReserve is the resident memory the race detector adds to the
+// Go processes of the resident-tree run that must fit under its bound before
+// the second child is ready: PID 1, the tree's parent and two children.
+// Measured 2026-11-16 (eight runs each, memory.current of one process in its
+// own cgroup): idle 1.6 to 3.0 MiB plain, 15.9 to 16.6 MiB race; a child
+// holding its 32 MiB chunk 33.8 to 35.0 MiB plain, 48.0 to 48.3 MiB race.
+// The difference is at most 15.0 MiB a process, taken as 16 MiB.
+const raceResidentReserve = 4 * 16 << 20
+
 func TestResidentBudgetKillsWithSIGKILL(t *testing.T) {
+	if !requireNScope(t) {
+		return
+	}
 	for _, mode := range []string{"resident", "resident-tree"} {
 		t.Run(mode, func(t *testing.T) {
-			out := requireScopedRun(t, scopeManager(t), mode)
+			s := residentSpec(t, scopeManager(t), mode)
+			if mode == "resident-tree" && raceEnabled {
+				s.ResidentLimit += raceResidentReserve
+			}
+			// The claim stays a whole-tree kill: the six children's chunks
+			// alone (6 x 32 MiB) fill the bound, before any of the seven
+			// processes' own memory.
+			if mode == "resident-tree" && 6*32<<20 < s.ResidentLimit {
+				t.Fatalf("the tree's chunks (%d) no longer exceed its bound (%d)", 6*32<<20, s.ResidentLimit)
+			}
+			out, err := Run(t.Context(), s)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if out.Containment != "cgroup" {
+				t.Fatal("no delegated user scope or PID namespaces available")
+			}
 			if out.Signal != 9 || out.MemoryCause != MemoryLocalLimit || out.CoreDump != CoreDumpNone {
 				t.Fatalf("resident outcome: %+v", out)
 			}
@@ -334,6 +476,9 @@ func TestResidentBudgetKillsWithSIGKILL(t *testing.T) {
 }
 
 func TestAddressBudgetFailsAllocationFirst(t *testing.T) {
+	if !requireNScope(t) {
+		return
+	}
 	m := scopeManager(t)
 	s := scopeSpec(t, m, "address")
 	s.ResidentLimit = 3 << 30
@@ -350,6 +495,9 @@ func TestAddressBudgetFailsAllocationFirst(t *testing.T) {
 }
 
 func TestCgroupCountersReadBeforeCleanup(t *testing.T) {
+	if !requireNScope(t) {
+		return
+	}
 	m := scopeManager(t)
 	var events []string
 	m.trace = func(s string) { events = append(events, s) }
@@ -367,6 +515,9 @@ func TestCgroupCountersReadBeforeCleanup(t *testing.T) {
 }
 
 func TestHolderDeathBetweenVerifyAndStart(t *testing.T) {
+	if !requireNScope(t) {
+		return
+	}
 	for _, row := range []string{"before-run", "after-verify"} {
 		t.Run(row, func(t *testing.T) {
 			m := scopeManager(t)
@@ -405,6 +556,9 @@ func TestHolderDeathBetweenVerifyAndStart(t *testing.T) {
 }
 
 func TestConcurrentRunsDuringHolderDeath(t *testing.T) {
+	if !requireNScope(t) {
+		return
+	}
 	m := scopeManager(t)
 	requireScopedRun(t, m, "fds")
 	old := m.session
@@ -422,6 +576,9 @@ func TestConcurrentRunsDuringHolderDeath(t *testing.T) {
 }
 
 func TestSandboxInheritsNoSessionDescriptor(t *testing.T) {
+	if !requireNScope(t) {
+		return
+	}
 	m := scopeManager(t)
 	m.beforeStart = func(r *cgroupRun) {
 		for _, f := range r.command.ExtraFiles {
@@ -471,6 +628,9 @@ func descriptorSnapshot(t *testing.T) map[string]string {
 }
 
 func TestCgroupDescriptorClosedOnEveryPath(t *testing.T) {
+	if !requireNScope(t) {
+		return
+	}
 	for _, row := range []string{"success", "placement-error", "refused-bootstrap"} {
 		t.Run(row, func(t *testing.T) {
 			// Each path starts with its own live session. A placement failure
@@ -516,11 +676,17 @@ func TestCgroupDescriptorClosedOnEveryPath(t *testing.T) {
 	}
 }
 
-func appHelper(t *testing.T, arg string) (*exec.Cmd, *lineSink, io.WriteCloser) {
+// appExit is the end of an app helper: err is its Wait error once done is closed.
+type appExit struct {
+	done chan struct{}
+	err  error
+}
+
+func appHelper(t *testing.T, arg string) (*exec.Cmd, *lineSink, io.WriteCloser, *appExit) {
 	t.Helper()
 	dir := t.TempDir()
 	cmd := exec.Command(os.Args[0], "--sidecar-test=scope-scope-app:"+arg)
-	cmd.Env = append(os.Environ(), "INKWELL_TEST_PROJECT="+dir)
+	cmd.Env = append(os.Environ(), "INKWELL_TEST_PROJECT="+dir, "INKWELL_TEST_ADDRESS_RESERVE="+strconv.FormatUint(raceAddressReserve(t), 10))
 	w := newLineSink()
 	cmd.Stdout = w
 	cmd.Stderr = os.Stderr
@@ -531,14 +697,22 @@ func appHelper(t *testing.T, arg string) (*exec.Cmd, *lineSink, io.WriteCloser) 
 	if err = cmd.Start(); err != nil {
 		t.Fatal(err)
 	}
-	t.Cleanup(func() { _ = input.Close(); _ = cmd.Process.Kill(); _ = cmd.Wait() })
-	return cmd, w, input
+	exit := &appExit{done: make(chan struct{})}
+	go func() {
+		exit.err = cmd.Wait()
+		close(exit.done)
+	}()
+	t.Cleanup(func() { _ = input.Close(); _ = cmd.Process.Kill(); <-exit.done })
+	return cmd, w, input, exit
 }
 
 func TestAppSIGKILLLeavesNoWorkload(t *testing.T) {
+	if !requireNScope(t) {
+		return
+	}
 	for _, holderDead := range []bool{false, true} {
 		t.Run(fmt.Sprintf("holder-dead-%v", holderDead), func(t *testing.T) {
-			cmd, lines, input := appHelper(t, "")
+			cmd, lines, input, _ := appHelper(t, "")
 			_, _ = input.Write([]byte("x"))
 			info := waitLine(t, lines, "scope=")
 			scope, holder, _ := strings.Cut(info, " holder=")
@@ -616,7 +790,25 @@ func testUnit(t *testing.T, name string, props []scopeProperty) {
 	}
 }
 
+// boundApp plays the scenario until its app helper reports. The helper shares
+// the test's bounded slice, so the kernel can OOM-kill it too, right after the
+// run and before the report (residual R2c of gates/SB2a1/SIMPLIFY.md): such an
+// attempt says nothing about the rule and is played again, three times at most.
+// Every other outcome is judged by the attempt itself.
 func boundApp(t *testing.T, leaf bool) {
+	t.Helper()
+	const attempts = 3
+	for attempt := 1; !boundAttempt(t, leaf); attempt++ {
+		if attempt == attempts {
+			t.Fatalf("the kernel OOM-killed the app helper before its report in each of %d attempts: the scenario never ran to its end", attempts)
+		}
+		t.Logf("attempt %d: the kernel OOM-killed the app helper before its report; scenario played again", attempt)
+	}
+}
+
+// boundAttempt reports false only when the kernel OOM-killed the app helper
+// itself before it reported the run.
+func boundAttempt(t *testing.T, leaf bool) bool {
 	t.Helper()
 	var nonce [8]byte
 	if _, err := rand.Read(nonce[:]); err != nil {
@@ -633,12 +825,21 @@ func boundApp(t *testing.T, leaf bool) {
 	if leaf {
 		arg = "leaf"
 	}
-	cmd, lines, input := appHelper(t, arg)
-	appProps := []scopeProperty{scopeProp("PIDs", []uint32{uint32(cmd.Process.Pid)}), scopeProp("Slice", slice), scopeProp("CollectMode", "inactive-or-failed"), scopeProp("MemorySwapMax", uint64(0))}
+	cmd, lines, input, exit := appHelper(t, arg)
+	// An idle process keeps the app's scope, and so its OOM counters, readable
+	// after the app helper's death; OOMPolicy=continue keeps the manager from
+	// stopping that scope on an OOM kill (its default for a scope without Delegate).
+	keeper := exec.Command("sleep", "infinity")
+	if err := keeper.Start(); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = keeper.Process.Kill(); _ = keeper.Wait() })
+	appScope := "inkwell-test-app-" + suffix + ".scope"
+	appProps := []scopeProperty{scopeProp("PIDs", []uint32{uint32(cmd.Process.Pid), uint32(keeper.Process.Pid)}), scopeProp("Slice", slice), scopeProp("CollectMode", "inactive-or-failed"), scopeProp("OOMPolicy", "continue"), scopeProp("MemorySwapMax", uint64(0))}
 	if leaf {
 		appProps = append(appProps, scopeProp("MemoryMax", uint64(128<<20)))
 	}
-	testUnit(t, "inkwell-test-app-"+suffix+".scope", appProps)
+	testUnit(t, appScope, appProps)
 	_, _ = input.Write([]byte("x"))
 	info := waitLine(t, lines, "scope=")
 	scope, _, _ := strings.Cut(info, " holder=")
@@ -676,8 +877,28 @@ func boundApp(t *testing.T, leaf bool) {
 		}
 	}
 	_, _ = input.Write([]byte("x"))
-	result := waitLine(t, lines, "out=")
-	if !strings.Contains(result, "cgroup cause=victim signal=9 err=<nil>") {
+	result, reported := waitReport(t, lines, exit)
+	if !reported {
+		events, err := readCounters(filepath.Join(filepath.Dir(scope), appScope, "memory.events.local"))
+		killed := false
+		if ended, ok := errors.AsType[*exec.ExitError](exit.err); ok {
+			status, ok := ended.Sys().(syscall.WaitStatus)
+			killed = ok && status.Signaled() && status.Signal() == syscall.SIGKILL
+		}
+		if !killed || err != nil || events["oom_kill"] == 0 {
+			t.Fatalf("app helper ended without a report and not by the kernel's OOM kill: %v, app scope counters %v %v", exit.err, events, err)
+		}
+		return false
+	}
+	// The shared slice bounds the app too, and the kernel charges each inotify
+	// event to the watcher's memory cgroup: at that bound the allocation of the
+	// kill's event can fail, which inotify reports as a queue overflow (kernel
+	// source fs/notify/inotify/inotify_fsnotify.c, cited from memory; measured
+	// here as IN_Q_OVERFLOW after 3 or 4 samples, R2b of gates/SB2a1/SIMPLIFY.md).
+	// The leaf bound leaves the app outside: no event is lost.
+	// ADR 0042 rule M9: a lost watch answers "unknown", never a guessed cause.
+	lostEvent := !leaf && result == "cgroup cause=unknown signal=9 err=<nil> watch-lost=true"
+	if result != "cgroup cause=victim signal=9 err=<nil> watch-lost=false" && !lostEvent {
 		t.Fatal("ancestor bound did not kill the sandbox: " + result)
 	}
 	ancestor := filepath.Dir(scope)
@@ -692,11 +913,55 @@ func boundApp(t *testing.T, leaf bool) {
 			t.Fatalf("shared aggregate bound never fired: %v %v", events, err)
 		}
 	}
+	return true
 }
-func TestCgroupSessionSharesSliceBound(t *testing.T) { boundApp(t, false) }
-func TestCgroupSessionCopiesLeafBound(t *testing.T)  { boundApp(t, true) }
+
+// waitReport returns the app helper's "out=" line, or false when the helper
+// ended without writing one.
+func waitReport(t *testing.T, w *lineSink, exit *appExit) (string, bool) {
+	t.Helper()
+	timer := time.NewTimer(20 * time.Second)
+	defer timer.Stop()
+	for {
+		select {
+		case line := <-w.lines:
+			if report, ok := strings.CutPrefix(line, "out="); ok {
+				return report, true
+			}
+		case <-exit.done:
+			// Wait has returned: every line the helper wrote is already queued.
+			for {
+				select {
+				case line := <-w.lines:
+					if report, ok := strings.CutPrefix(line, "out="); ok {
+						return report, true
+					}
+				default:
+					return "", false
+				}
+			}
+		case <-timer.C:
+			t.Fatal("target did not report out=")
+		}
+	}
+}
+
+func TestCgroupSessionSharesSliceBound(t *testing.T) {
+	if requireNScope(t) {
+		boundApp(t, false)
+	}
+}
+
+func TestCgroupSessionCopiesLeafBound(t *testing.T) {
+	if requireNScope(t) {
+		boundApp(t, true)
+	}
+}
 
 func TestCgroupTargetExit124(t *testing.T) {
+	if !requireNScope(t) {
+		return
+	}
 	m := scopeManager(t)
 	s := scopeSpec(t, m, "fds")
 	s.Args = []string{"--sidecar-test=exit:124"}
@@ -707,6 +972,9 @@ func TestCgroupTargetExit124(t *testing.T) {
 }
 
 func TestCgroupStartErrorPreservesSession(t *testing.T) {
+	if !requireNScope(t) {
+		return
+	}
 	for _, startErr := range []error{unix.ENOENT, unix.ENOEXEC, unix.EAGAIN} {
 		t.Run(startErr.Error(), func(t *testing.T) {
 			m := scopeManager(t)

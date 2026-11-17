@@ -12,6 +12,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/godbus/dbus/v5"
+
 	"github.com/oioio-space/inkwell/internal/sidecar"
 )
 
@@ -132,12 +134,69 @@ func hostileMemoryRun(t *testing.T, resident, address uint64) (sidecar.Output, e
 	return out, err
 }
 
+// hostileContainment is what bounds a hostile document's memory in the tier
+// this machine gives: the run cgroup in N with a delegated user scope, the
+// address limit alone in F (no cgroup without a PID namespace) and in N
+// without one (the per-process fallback, ADR 0042, ADR 0044, T-6).
+func hostileContainment(t *testing.T, isolated bool) string {
+	t.Helper()
+	if !isolated {
+		return "rlimit"
+	}
+	if reason := delegatedScopeUnreachable(); reason != "" {
+		t.Log("scope-report: scope=unavailable reason=" + reason)
+		return "rlimit"
+	}
+	t.Log("scope-report: scope=available")
+	return "cgroup"
+}
+
+// delegatedScopeUnreachable names what keeps this process from a delegated
+// user scope, "" when nothing does: the facts of the environment that the
+// sidecar's scope needs (its test of the same name in internal/sidecar). The
+// process runs under its user's systemd manager, and the session bus answers.
+func delegatedScopeUnreachable() string {
+	b, err := os.ReadFile("/proc/self/cgroup")
+	if err != nil {
+		return "no-cgroup"
+	}
+	if !strings.Contains(string(b), fmt.Sprintf("/user@%d.service/", os.Getuid())) {
+		return "outside-user-manager"
+	}
+	conn, err := dbus.ConnectSessionBus()
+	if err != nil {
+		return "no-session-bus"
+	}
+	_ = conn.Close()
+	return ""
+}
+
+// requireCoreReport skips where the kernel cannot say whether it started a
+// core dump (PIDFD_INFO_COREDUMP, Linux 6.16), as the sidecar's tests do.
+func requireCoreReport(t *testing.T, out sidecar.Output) {
+	t.Helper()
+	if out.CoreDump == sidecar.CoreDumpUnknown {
+		t.Skip("the kernel does not report PIDFD_INFO_COREDUMP (Linux 6.16): no core helper cannot be shown")
+	}
+}
+
 func TestHostileCgroupMemoryIsMemoryLimit(t *testing.T) {
+	isolated, ok := launchTier(t)
+	if !ok {
+		return
+	}
 	out, err := hostileMemoryRun(t, 128<<20, 4<<30)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if out.Containment != "cgroup" || out.MemoryCause != sidecar.MemoryLocalLimit || out.Signal != 9 {
+	want := hostileContainment(t, isolated)
+	if out.Containment != want {
+		t.Fatalf("containment %q, want %q: %+v", out.Containment, want, out)
+	}
+	// With a run cgroup the resident bound is Inkwell's own kill; without one
+	// the allocation fails at the address limit (S-11). Both are the memory
+	// limit to the person.
+	if want == "cgroup" && (out.MemoryCause != sidecar.MemoryLocalLimit || out.Signal != 9) {
 		t.Fatalf("not a local resident death: %+v", out)
 	}
 	if err := failure(&Result{}, &out, 4<<30); !errors.Is(err, ErrMemoryLimit) {
@@ -146,6 +205,10 @@ func TestHostileCgroupMemoryIsMemoryLimit(t *testing.T) {
 }
 
 func TestHostileMemoryDeathStartsNoCoreHelper(t *testing.T) {
+	isolated, ok := launchTier(t)
+	if !ok {
+		return
+	}
 	for _, kind := range []string{"local-limit", "address-limit"} {
 		t.Run(kind, func(t *testing.T) {
 			resident, address := uint64(128<<20), uint64(4<<30)
@@ -156,11 +219,15 @@ func TestHostileMemoryDeathStartsNoCoreHelper(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			if out.Containment != "cgroup" || out.CoreDump != sidecar.CoreDumpNone {
-				t.Fatalf("missing cgroup or core evidence: %+v", out)
+			if want := hostileContainment(t, isolated); out.Containment != want {
+				t.Fatalf("containment %q, want %q: %+v", out.Containment, want, out)
 			}
 			if err := failure(&Result{}, &out, address); !errors.Is(err, ErrMemoryLimit) {
 				t.Fatalf("not memory: %v (%+v)", err, out)
+			}
+			requireCoreReport(t, out)
+			if out.CoreDump != sidecar.CoreDumpNone {
+				t.Fatalf("the kernel started a core helper: %+v", out)
 			}
 		})
 	}

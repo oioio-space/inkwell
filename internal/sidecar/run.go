@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"runtime"
 	"slices"
+	"strings"
 	"sync/atomic"
 	"syscall"
 	"time"
@@ -33,8 +34,25 @@ type Spec struct {
 	DeathTest string
 	// ResidentLimit bounds aggregate charged memory; zero uses MemoryLimit.
 	ResidentLimit uint64
-	// isolationProbe replaces the platform probe for this run in tests.
-	isolationProbe func() (bool, error)
+	// tier forces the launch's tier in tests (tierNone: decided by the probe).
+	tier tier
+	// armDelay delays the launcher's parent-death arming in tests (plan S-4).
+	armDelay time.Duration
+	// landlockABI forces a supported ruleset ABI in tests (zero uses the kernel ABI).
+	landlockABI int
+	// slotsReady says the output slots exist: the placement fallback reuses
+	// them instead of creating them again (plan T-6).
+	slotsReady bool
+	// handshake seams, in tests: afterReport runs between the verified report
+	// and « proceed »; skipProceed never sends it.
+	afterReport func()
+	skipProceed bool
+	// rewriteLauncher replaces the launcher command in tests (a faulty
+	// launcher, plan T-4); it runs after every descriptor is set.
+	rewriteLauncher func(*exec.Cmd)
+	// Protected marks a launch for a protected project: refused where only
+	// the namespace-free tier is available ([ErrProtectedRefused]).
+	Protected bool
 	// ReadPaths lists verified package and font directories needed by the workload.
 	ReadPaths []string
 	// Stdin is the child's standard input; nil means none.
@@ -44,6 +62,9 @@ type Spec struct {
 	Stdout io.Writer
 	// Path is the executable, as returned by [Store.Resolve].
 	Path string
+	// Store verifies the pinned typst the first launches of a process run to
+	// decide the sandbox tier (Linux); nil means the zero [Store].
+	Store *Store
 	// Dir is the mandatory project directory; home and its ancestors are refused.
 	Dir string
 	// Args are the arguments after the program name.
@@ -76,10 +97,9 @@ type Spec struct {
 	// target starts with SIGXFSZ ignored (a target that restores the default
 	// action dies of it instead; the cap holds either way).
 	FileSizeLimit uint64
-	// NoNetwork adds a private network namespace when supported. Every Linux
-	// invocation independently requires seccomp (no socket creation or external
-	// signals) and Landlock, including when namespaces are unavailable.
-	// Output.Isolated reports the additional network namespace only.
+	// NoNetwork is kept for callers: every Linux launch is without network,
+	// in a private network namespace in tier N, through seccomp (no socket)
+	// and Landlock in tier F. Output.Isolated reports the namespace.
 	NoNetwork bool
 	// MaxOutput is how many bytes of each of stdout and stderr are kept; the
 	// rest is read and dropped so the child never blocks. Zero means
@@ -116,7 +136,8 @@ type Output struct {
 	// OutputLimit reports a directory backstop kill or a failed bounded run
 	// with an output file at its kernel-enforced size cap.
 	OutputLimit bool
-	// Isolated is true when the child ran without network ([Spec.NoNetwork]).
+	// Isolated is true when the child ran in a private network namespace
+	// (the namespaces tier, ADR 0044).
 	Isolated bool
 	// CoreDump says whether the kernel started a core dump, and so a crash
 	// helper such as systemd-coredump, for the program that ended (the target
@@ -145,13 +166,18 @@ func Run(ctx context.Context, spec Spec) (Output, error) {
 	if err := confinementAvailable(); err != nil {
 		return Output{}, err
 	}
-	return run(ctx, spec, newDirectoryMount)
-}
-
-func run(ctx context.Context, spec Spec, prepareMount func(Spec) (*directoryMount, error)) (Output, error) {
 	if err := validateLaunch(ctx, &spec); err != nil {
 		return Output{}, err
 	}
+	plan, err := planLaunch(spec)
+	if err != nil {
+		return Output{}, err
+	}
+	return run(ctx, spec, plan, newDirectoryMount)
+}
+
+// run launches a validated spec in plan's tier.
+func run(ctx context.Context, spec Spec, plan launchPlan, prepareMount func(Spec) (*directoryMount, error)) (Output, error) {
 	maxOut := spec.MaxOutput
 	if maxOut <= 0 {
 		maxOut = DefaultMaxOutput
@@ -159,13 +185,17 @@ func run(ctx context.Context, spec Spec, prepareMount func(Spec) (*directoryMoun
 	stdout, stderr := &capped{max: maxOut}, &capped{max: maxOut}
 
 	originalSpec := spec
-	mount, err := prepareMount(spec)
-	if err != nil {
-		return Output{}, err
+	var mount *directoryMount
+	var err error
+	if plan.mounted() {
+		if mount, err = prepareMount(spec); err != nil {
+			return Output{}, err
+		}
 	}
 	var prefix []string
 	if mount == nil {
-		spec, prefix, err = directoryLimits(spec)
+		spec, prefix, err = directoryLimits(spec, plan)
+		originalSpec.slotsReady = true
 	} else {
 		defer mount.close()
 		spec.FileSizeLimit, spec.MemoryLimit = 0, 0 // applied by the mount launcher
@@ -173,7 +203,7 @@ func run(ctx context.Context, spec Spec, prepareMount func(Spec) (*directoryMoun
 	if err != nil {
 		return Output{}, err
 	}
-	path, args, err := launchCommand(spec, mount != nil, prefix)
+	path, args, err := launchCommand(spec, plan, mount != nil, prefix)
 	if err != nil {
 		return Output{}, err
 	}
@@ -184,9 +214,11 @@ func run(ctx context.Context, spec Spec, prepareMount func(Spec) (*directoryMoun
 	cmd.Stdout, cmd.Stderr = streamOutput(stdout, spec.Stdout), stderr
 	cmd.WaitDelay = waitDelay
 	setProcAttr(cmd)
-	isolated, err := configureRunCommand(cmd, spec, mount)
-	if err != nil {
-		return Output{}, err
+	tierNamespaces(cmd, plan)
+	if mount != nil {
+		if err := mount.configure(cmd, plan); err != nil {
+			return Output{}, err
+		}
 	}
 	manager := &appSandbox
 	if originalSpec.scope != nil {
@@ -201,6 +233,15 @@ func run(ctx context.Context, spec Spec, prepareMount func(Spec) (*directoryMoun
 		return Output{}, err
 	}
 	defer closeReport()
+	hs, err := newHandshake(cmd, plan)
+	if err != nil {
+		return Output{}, err
+	}
+	defer hs.close()
+	hs.afterReport, hs.skipProceed = spec.afterReport, spec.skipProceed
+	if spec.rewriteLauncher != nil {
+		spec.rewriteLauncher(cmd)
+	}
 	cmd.Cancel = func() error { return signalGroup(cmd.Process.Pid, syscall.SIGKILL) }
 
 	// The parent-death signal follows the thread that forks the child.
@@ -214,7 +255,7 @@ func run(ctx context.Context, spec Spec, prepareMount func(Spec) (*directoryMoun
 		if scope != nil && scope.placementError(err) {
 			scope.placementFailed()
 			originalSpec.disableScope = true
-			return run(ctx, originalSpec, prepareMount)
+			return run(ctx, originalSpec, plan, prepareMount)
 		}
 		return Output{}, fmt.Errorf("sidecar: start %s: %w", spec.Path, err)
 	}
@@ -223,6 +264,11 @@ func run(ctx context.Context, spec Spec, prepareMount func(Spec) (*directoryMoun
 	}
 	if err := openRunMount(mount, cmd); err != nil {
 		return Output{}, err
+	}
+	if err := hs.await(ctx); err != nil {
+		err = stopLaunch(cmd, fmt.Errorf("sidecar: launch %s: %w", spec.Path, err))
+		err = withLauncherCause(err, stderr.buf)
+		return launchRefusal(cmd, scope != nil, finishReport, err)
 	}
 	var overflow atomic.Bool
 	stopWatch := watchDir(spec, cmd.Process.Pid, &overflow)
@@ -243,7 +289,7 @@ func run(ctx context.Context, spec Spec, prepareMount func(Spec) (*directoryMoun
 		ExitCode:  cmd.ProcessState.ExitCode(),
 		Truncated: stdout.dropped || stderr.dropped,
 		Signal:    exitSignal(cmd.ProcessState),
-		Isolated:  isolated,
+		Isolated:  plan.isolated(),
 
 		OutputLimit: overflow.Load(),
 	}
@@ -255,7 +301,12 @@ func run(ctx context.Context, spec Spec, prepareMount func(Spec) (*directoryMoun
 	if err := recordRunManifest(originalSpec.DeathTest, out); err != nil {
 		return out, err
 	}
-	out, err = finishRunOutputs(out, mount, originalSpec)
+	return runResult(ctx, out, waitErr, mount, originalSpec, spec.Path)
+}
+
+// runResult is the outcome of a run whose target was waited for.
+func runResult(ctx context.Context, out Output, waitErr error, mount *directoryMount, originalSpec Spec, path string) (Output, error) {
+	out, err := finishRunOutputs(out, mount, originalSpec)
 	if err != nil {
 		return out, err
 	}
@@ -264,40 +315,63 @@ func run(ctx context.Context, spec Spec, prepareMount func(Spec) (*directoryMoun
 	}
 	if waitErr != nil {
 		if _, exited := errors.AsType[*exec.ExitError](waitErr); !exited {
-			return out, fmt.Errorf("sidecar: run %s: %w", spec.Path, waitErr)
+			return out, fmt.Errorf("sidecar: run %s: %w", path, waitErr)
 		}
 	}
 	return out, nil
 }
 
+// launcherCauseMax bounds the launcher's own words kept in a launch error.
+const launcherCauseMax = 512
+
+// withLauncherCause adds to err what the launcher wrote on its standard error
+// before it stopped: the target never ran (it starts after the handshake), so
+// these are the launcher's own words, the cause of a missing tier report.
+func withLauncherCause(err error, stderr []byte) error {
+	cause := strings.TrimSpace(string(stderr[:min(len(stderr), launcherCauseMax)]))
+	if cause == "" {
+		return err
+	}
+	return fmt.Errorf("%w (%s)", err, cause)
+}
+
+// launchRefusal is the result of a launcher that stopped before its target:
+// a bootstrap refusal it reported (it is not in the expected cgroup) stays
+// told apart from any other launch failure, with the run's containment.
+func launchRefusal(cmd *exec.Cmd, scoped bool, finishReport func(*Output), err error) (Output, error) {
+	out := Output{Containment: "rlimit"}
+	if scoped {
+		out.Containment = "cgroup"
+	}
+	if cmd.ProcessState != nil {
+		out.ExitCode = cmd.ProcessState.ExitCode()
+	}
+	finishReport(&out)
+	if !out.bootstrapRefused {
+		return Output{}, err
+	}
+	return out, fmt.Errorf("sidecar: bootstrap cgroup membership refused: %w", err)
+}
+
 func openRunMount(mount *directoryMount, cmd *exec.Cmd) error {
 	if mount != nil {
 		if err := mount.open(cmd.Process.Pid); err != nil {
-			_ = signalGroup(cmd.Process.Pid, syscall.SIGKILL)
-			_ = cmd.Wait()
-			return err
+			return stopLaunch(cmd, err)
 		}
 	}
 	return nil
 }
 
-func configureRunCommand(cmd *exec.Cmd, spec Spec, mount *directoryMount) (bool, error) {
-	if err := configureConfinement(cmd); err != nil {
-		return false, err
+// stopLaunch kills the launcher's group and reaps it: the target never
+// started. A launcher that had already exited on its own keeps its status.
+func stopLaunch(cmd *exec.Cmd, err error) error {
+	_ = signalGroup(cmd.Process.Pid, syscall.SIGKILL)
+	_ = cmd.Process.Kill() // a command outside its own group
+	_ = cmd.Wait()
+	if code := cmd.ProcessState.ExitCode(); code > 0 {
+		return errors.Join(err, launcherExit(code))
 	}
-	isolated, err := spec.isolated()
-	if err != nil {
-		return false, err
-	}
-	if isolated {
-		isolate(cmd)
-	}
-	if mount != nil {
-		if err := mount.configure(cmd); err != nil {
-			return false, err
-		}
-	}
-	return isolated, nil
+	return err
 }
 
 func finishRunOutputs(out Output, mount *directoryMount, originalSpec Spec) (Output, error) {
@@ -363,26 +437,14 @@ func dirBytes(dir string) int64 {
 	return total
 }
 
-// isolated reports whether this launch runs in a private network namespace.
-func (s Spec) isolated() (bool, error) {
-	if !s.NoNetwork {
-		return false, nil
-	}
-	return s.networkIsolation()
-}
-
-func (s Spec) networkIsolation() (bool, error) {
-	if s.isolationProbe != nil {
-		return s.isolationProbe()
-	}
-	return NetworkIsolation()
-}
-
-// NetworkIsolation reports whether [Spec.NoNetwork] can be honoured on this
-// machine. The answer is probed once it is conclusive; until then it returns
-// an error wrapping [ErrProbeInconclusive], and the launch must be refused.
-func NetworkIsolation() (bool, error) {
-	return probeIsolation()
+// NetworkIsolation reports the sandbox tier of this machine (ADR 0044): true
+// for the namespace tier, false for the namespace-free one, an error wrapping
+// [ErrSandboxRefused] when the sidecars cannot run here, or
+// [ErrProbeInconclusive] until the probe is conclusive (retry later). The tier
+// is decided by launching the pinned typst, verified in store (nil: the zero
+// [Store]), as `typst --version`.
+func NetworkIsolation(store *Store) (bool, error) {
+	return networkIsolation(store)
 }
 
 // capped keeps the first max bytes written to it and counts the rest as
@@ -405,11 +467,11 @@ func (c *capped) Write(p []byte) (int, error) {
 }
 
 // launchCommand selects exactly one confinement wrapper.
-func launchCommand(spec Spec, mounted bool, prefix []string) (string, []string, error) {
+func launchCommand(spec Spec, plan launchPlan, mounted bool, prefix []string) (string, []string, error) {
 	path, args := spec.Path, spec.Args
 	var err error
 	if !mounted && len(prefix) == 0 {
-		path, args, err = withLimits(spec)
+		path, args, err = withLimits(spec, plan)
 	}
 	if len(prefix) > 0 {
 		args = slices.Concat(prefix[1:], []string{path}, args)

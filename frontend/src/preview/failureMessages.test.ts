@@ -15,7 +15,7 @@ import { FAILURE_KINDS, parseMessage } from "./protocol";
 const catalogs: Record<string, Record<string, string>> = { en, fr };
 const failKeys = (catalog: Record<string, string>) =>
   Object.keys(catalog)
-    .filter((k) => k.startsWith("preview.fail."))
+    .filter((k) => k.startsWith("preview.fail.") && !k.endsWith(".details"))
     .sort();
 
 // A message says what to do (UX rule 5) when it holds one of these.

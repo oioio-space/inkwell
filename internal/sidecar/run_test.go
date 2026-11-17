@@ -15,6 +15,9 @@ func spec(mode string) Spec {
 }
 
 func TestRun(t *testing.T) {
+	if !requireLaunch(t) {
+		return
+	}
 	t.Run("SIDE-16 output is captured and the exit code reported", func(t *testing.T) {
 		out, err := Run(t.Context(), spec("echo"))
 		if err != nil {
@@ -94,6 +97,11 @@ func TestRun(t *testing.T) {
 	})
 
 	t.Run("SIDE-17 a timeout kills the whole process group", func(t *testing.T) {
+		// Tier F creates no process (S-2): the group is the target alone, whose
+		// end at the deadline is TestRunReturnsAfterCancel/F.
+		if !requireN(t) {
+			return
+		}
 		ctx, cancel := context.WithTimeout(t.Context(), 500*time.Millisecond)
 		defer cancel()
 		start := time.Now()

@@ -14,8 +14,16 @@ env:
 jobs:
   ci:
     runs-on: ubuntu-latest
-    # ~20 min of checks (`ci:checks`); the formal models run in the `formal` job and the impaired-network
-    # scenarios once, in the `netsim` job.
+    # Three parts on three runners (CI1b): `checks` (`ci:checks` after ~10 min of setup), `frontend` (`fe:check`
+    # alone: beside test:ci it ran 5 to 15 times slower, runs 43979066870 and 44010837492) and `e2e` (the desktop
+    # build and the two-instance end-to-end tests); in one job they passed its 35 min (run 44002604121).
+    # The formal models run in the `formal` job and the impaired-network scenarios once, in the `netsim` job.
+    # The checks part keeps the job name `ci`, which frozen gates read through the API (gates/SB2a1.toml, `github`).
+    name: ${{ matrix.part == 'checks' && 'ci' || format('ci-{0}', matrix.part) }}
+    strategy:
+      fail-fast: false
+      matrix:
+        part: [checks, frontend, e2e]
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -59,31 +67,74 @@ jobs:
             ~/.cache/inkwell/sidecar-dl
           key: sidecars-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('internal/sidecar/manifest.json') }}
       - name: Trace pinned sidecars on PM-1
+        if: matrix.part == 'checks'
         run: mise run sidecar:trace
       - name: Keep seccomp trace evidence
-        if: always()
+        if: always() && matrix.part == 'checks'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: seccomp-traces
           path: gates/L1/ci-seccomp-traces/
           retention-days: 7
-      # Ubuntu 24.04 restricts unprivileged user namespaces with AppArmor; the sidecar sandbox and its
-      # tests need them (as in the netsim and sidecars-arm64 jobs).
-      - name: Allow unprivileged user namespaces
+      # The sandbox tiers (ADR 0044, decision D6, revised 2026-11-16 after the candidate's coverage gate): this job
+      # lifts Ubuntu's AppArmor restriction so that the whole suite, coverage included, runs in tier N; the
+      # `sandbox-stock` job keeps the stock restriction and proves tier F, the application tests included;
+      # `sidecars-arm64` proves the refusal. Together GitHub exercises every tier on every push.
+      - name: Allow unprivileged user namespaces (tier N)
         run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-      - run: mise run ci:checks # the formal models run in the parallel `formal` job
+      # Tier N bounds a run's memory in a cgroup of a delegated user scope (ADR 0044 point 1g), which the sandbox asks
+      # of the user's systemd manager for the slice the app runs in. A step runs in the hosted agent's system service,
+      # outside any user manager: there the sandbox keeps its per-process fallback (ADR 0042, plan rule T-6), and the
+      # cgroup path would never run. The runner user's manager is already running (lingering) and `systemd-run --user
+      # --scope` places a step's command under it (scripts/sandbox-probe.sh Q5 on ubuntu-24.04, 2026-11-14); the
+      # suite runs there, with the session bus the sandbox talks to (dbus-user-session, installed if the image lacks it).
+      - name: Give the suite a delegated systemd user scope
+        run: |
+          uid="$(id -u)"
+          if [ -z "${XDG_RUNTIME_DIR:-}" ]; then
+            export XDG_RUNTIME_DIR="/run/user/${uid}"
+            echo "XDG_RUNTIME_DIR=${XDG_RUNTIME_DIR}" >> "$GITHUB_ENV"
+          fi
+          loginctl show-user "$USER" -p Linger | grep -qx 'Linger=yes' || sudo loginctl enable-linger "$USER"
+          sudo systemctl start "user@${uid}.service"
+          if [ ! -S "${XDG_RUNTIME_DIR}/bus" ]; then
+            sudo apt-get install -y -qq dbus-user-session
+            systemctl --user daemon-reload
+            systemctl --user start dbus.socket
+          fi
+          test -S "${XDG_RUNTIME_DIR}/bus"
+          systemd-run --user --scope --quiet --collect -- cat /proc/self/cgroup | grep "/user@${uid}.service/"
+      - if: matrix.part == 'checks'
+        run: systemd-run --user --scope --quiet --collect -- mise run ci:checks # the formal models run in the parallel `formal` job
+      - if: matrix.part == 'frontend'
+        run: mise run fe:check
+      # Lifting the sysctl does not prove tier N ran, nor the user manager that its cgroup ran: the sandbox's own tier
+      # report and the scope suite's report must say so (internal/sidecar, tier_helpers_linux_test.go and
+      # scope_linux_test.go), and the scope test must pass with its run in a cgroup.
+      - name: Assert the sandbox ran in tier N with its aggregate memory scope
+        if: matrix.part == 'checks'
+        timeout-minutes: 3
+        run: |
+          out="$(systemd-run --user --scope --quiet --collect -- go test -count=1 -v -run '^(TestIsolationReportsTier|TestCgroupSessionScopeDelegated)$' ./internal/sidecar/ 2>&1)" || { echo "$out"; exit 1; }
+          echo "$out" | grep -E 'tier-report:|scope-report:'
+          echo "$out" | grep -q 'tier-report: tier=N n=available'
+          echo "$out" | grep -q 'scope-report: scope=available'
+          echo "$out" | grep -q -- '--- PASS: TestCgroupSessionScopeDelegated'
       - name: Build the desktop app (Linux)
+        if: matrix.part == 'e2e'
         run: mise run app:build
       - name: End-to-end (two instances, Playwright/WebKit)
+        if: matrix.part == 'e2e'
         run: mise run e2e
       - name: Keep Playwright traces on failure
-        if: failure()
+        if: failure() && matrix.part == 'e2e'
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
         with:
           name: playwright-traces
           path: frontend/test-results/
           retention-days: 7
       - name: Upload coverage to Codecov
+        if: matrix.part == 'checks'
         uses: codecov/codecov-action@0fb7174895f61a3b6b78fc075e0cd60383518dac # v5.5.5
         with:
           files: ./coverage.out
@@ -208,9 +259,72 @@ jobs:
           key: sidecars-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('internal/sidecar/manifest.json') }}
       - name: Fetch the pinned sidecars (SHA-256 verified)
         run: go run ./cmd/sidecar-fetch
-      # Ubuntu 24.04 restricts unprivileged user namespaces with AppArmor; the sandbox needs them.
-      - name: Allow unprivileged user namespaces
-        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0
-      - name: Sidecar and Typst tests (arm64)
-        run: go test -race -count=1 ./internal/sidecar/... ./internal/typst/... ./cmd/sidecar-fetch/...
+      # arm64 is refused with its sentence until SB2a2 (plan docs/plans/2026-11-14-sb2-sandbox-tiers.md, S-7): the
+      # run must show the refusal, read from `go test -json` against the `arm64` column of the inventory. The
+      # restriction is left as the runner has it (never lifted).
+      - name: Sidecar and Typst tests (arm64), the refusal asserted
+        timeout-minutes: 20
+        run: |
+          rc=0
+          go test -json -race -count=1 ./internal/sidecar/... ./internal/typst/... ./internal/language/... ./cmd/sidecar-fetch/... > go-test.json || rc=$?
+          python3 -I scripts/gojson_check.py go-test.json --exit "$rc" --inventory gates/inventories/SB2a1.toml --columns arm64
+      - name: Keep the structured test results (read by scripts/gh-verdict.py)
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: go-test-json-sidecars-arm64
+          path: go-test.json
+          if-no-files-found: error
+          retention-days: 30
+  # The sandbox on a stock Ubuntu 24.04 (ADR 0044, decision D6): AppArmor restricts unprivileged user namespaces
+  # and the job never lifts it, so the real compile, export and language session run in the tier the machine gives
+  # (F: namespaces refused with EACCES, measured). Its `go test -json` results are the `stock-amd64` column of
+  # gates/inventories/SB2a1.toml, read back through the API by scripts/gh-verdict.py.
+  sandbox-stock:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-go@40f1582b2485089dde7abd97c1529aa768e1baff # v5
+        with:
+          go-version-file: go.mod
+      - name: Cache the sidecar binaries
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+        with:
+          path: |
+            internal/sidecar/bin/**/*.gz
+            ~/.cache/inkwell/sidecar-dl
+          key: sidecars-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('internal/sidecar/manifest.json') }}
+      - name: Fetch the pinned sidecars (SHA-256 verified)
+        timeout-minutes: 5
+        run: go run ./cmd/sidecar-fetch
+      # The point of the job: the restriction is on, AppArmor is enabled, and nothing here changes either.
+      - name: Assert the stock restriction is on (never lifted)
+        timeout-minutes: 1
+        run: |
+          value="$(sysctl -n kernel.apparmor_restrict_unprivileged_userns)"
+          enabled="$(cat /sys/module/apparmor/parameters/enabled)"
+          echo "kernel.apparmor_restrict_unprivileged_userns=${value} apparmor=${enabled}"
+          test "${value}" = 1
+          test "${enabled}" = Y
+      # internal/app is here too: its tests compile and export a real document (preview_test.go), the
+      # application's integration with the sandbox in tier F, which the `ci` job (tier N) no longer exercises.
+      - name: Sandbox, Typst, language and application tests in the tier the machine gives
+        timeout-minutes: 20
+        run: |
+          rc=0
+          go test -json -race -count=1 ./internal/sidecar/... ./internal/typst/... ./internal/language/... ./internal/app/... > go-test.json || rc=$?
+          python3 -I scripts/gojson_check.py go-test.json --exit "$rc" --inventory gates/inventories/SB2a1.toml --columns stock-amd64
+      - name: Keep the structured test results (read by scripts/gh-verdict.py)
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: go-test-json-sandbox-stock
+          path: go-test.json
+          if-no-files-found: error
+          retention-days: 30
   # The release itself is .github/workflows/release.yml (tags v*; ADR 0025).

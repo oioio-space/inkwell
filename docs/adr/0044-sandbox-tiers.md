@@ -1,5 +1,5 @@
 ---
-status: proposed # revision 3, confirmed by Codex on 2026-11-14 (gates/SB2/REVIEW.md, « Round 3 »), gate SB2a1 frozen; design decisions D1-D9 after Codex's round 2; measured facts: gates/SB2/MEASUREMENTS.md runs 1 to 4
+status: accepted # 2026-11-15, block SB2a1; revision 3, confirmed by Codex on 2026-11-14 (gates/SB2/REVIEW.md, « Round 3 »), gate SB2a1 frozen; design decisions D1-D9 after Codex's round 2; measured facts: gates/SB2/MEASUREMENTS.md runs 1 to 4
 date: 2026-11-14
 amends: ADR 0033 (the namespace probe and its fallback), ADR 0042 A3 (the memory fallback; the cgroup bound needs a PID namespace, unchanged; the normal bound is memory.high with inkwell's watchdog, memory.max a backstop: point 1g); spec §9.11 (refuse rather than weaken) is kept and made total
 decision-makers: [Mathieu]
@@ -174,6 +174,67 @@ scope ends with inkwell's bound outcome, the scope's `memory.events` `oom_kill` 
 manager is reachable, the scope's `Result` is not `oom-kill`; the hard-backstop test is opt-in
 (`INKWELL_OOM_BACKSTOP=1`), so the normal suite no longer raises the desktop notification.
 
+The watchdog does not kill on the `high` event alone (amended 2026-11-15). `memory.current` is « the total amount of
+memory currently being used by the cgroup » and that includes the page cache (kernel cgroup-v2 documentation, Memory
+Ownership: a page is charged to the cgroup that instantiated it; memory.stat `file` is « memory used to cache
+filesystem data, including tmpfs and shared memory »), and memory.events `high` counts the times the run was
+« throttled and routed to perform direct memory reclaim », so a compile that only reads large fonts or packages
+reaches it too, and reclaim then gives the clean cache back at once. Rule: once the run has had a `high` event,
+inkwell kills it when `memory.current` stays above `memory.high` at every check (at most 10 ms apart) for 100 ms. With
+`memory.swap.max` at 0, only unreclaimable memory (anonymous, tmpfs/shmem, kernel) stays above the bound that long.
+Counting anonymous memory alone (`memory.stat` `anon`) was rejected: a document filling tmpfs would escape the
+watchdog and meet the OOM killer at `memory.max`. Witness: `TestBoundSparesPageCache` (a target reads a 512 MiB file,
+evicted beforehand, under a 128 MiB bound: `high` events, no kill, no bound outcome; red under the first-event rule).
+
+Amended 2026-11-16: the bound is on what reclaim cannot give back, not on `memory.current`. GitHub's `ci` runner
+(ubuntu-26.04, the first run with a delegated scope, run 43929170947) killed `TestBoundSparesPageCache` as a bound
+violation: reclaim does not give the cache back « at once » while the pages are still waiting for their read, which
+cannot be reclaimed until the I/O completes. Measured on the owner's machine (2026-11-16, a 32 KiB reader of an evicted,
+incompressible 512 MiB file under `memory.high` = 128 MiB, `memory.current` checked every 10 ms, read bandwidth capped
+by `io.max`): uncapped (NVMe), the longest span above `memory.high` is 0 to 22 ms; at 200 MB/s 85 to 96 ms; at
+100 MB/s 74 to 116 ms; at 50 MB/s 160 to 201 ms, every run — while `memory.current` less the file cache stays at
+7 to 9 MiB throughout. Storage at 200 MB/s or less (a hard disk, a USB stick, eMMC, a cloud disk) is ordinary.
+Rule: the watchdog's measure is `memory.current` less the file cache that reclaim can give back without the run's
+cooperation: `memory.stat` `file` less `shmem` (tmpfs and shared memory, inside `file`: « file: Amount of memory used
+to cache filesystem data, including tmpfs and shared memory », kernel cgroup-v2 documentation), less `file_dirty` and
+`file_writeback` (pages that wait on the run's own writes), less `unevictable` (mlocked pages; it holds mlocked
+anonymous pages too, which are then counted twice, on the side of the bound). Clean mapped file pages (`file_mapped`)
+are left out: reclaim unmaps and drops them itself — measured the same day, a run mapping and touching a 512 MiB file
+at 50 MB/s under a 128 MiB bound kept `file_mapped` at 112 MiB, `memory.current` at the bound and the measure at
+18 MiB, never above the bound; counting them would bring the false kill back for the fonts and packages typst maps.
+Writes stay ordinary runs: the kernel throttles a cgroup's dirtying to a share of its memory (writing 512 MiB, at full
+speed or at 50 MB/s, dirty plus writeback peaked at 69 to 102 MiB and the measure at 53 to 69 MiB). The 100 ms at
+every check is kept for the moment between the two reads. A `memory.stat` lacking any of these counters makes no
+decision. Guarantee, stated exactly: the watchdog bounds what it measures; whatever it leaves out is still charged to
+the run, so `memory.max` is the hard backstop for it (a cgroup OOM kill, residual R-7). Neither is an absolute
+guarantee against every pressure from the host: the kernel can overshoot `memory.high` briefly, and I/O stalls delay
+both reclaim and the watchdog's kill. Witnesses: `TestUnreclaimableLeavesOutOnlyFileCache` and
+`TestMemoryWatchdogSparesFileCache` (the rule, on ordinary files: page cache and clean mapped pages spared; the same
+charge as tmpfs, dirty pages or an mlocked file mapping killed); `TestBoundSparesPageCache/slow_storage` (50 MB/s
+through the scope's `io.max` where the io controller is delegated; reproduced the runner's `signal=9
+cause=local-limit` under the former rule); `TestBoundCountsDirtyFileCache` (a run writing 512 MiB to a file on disk
+under the 128 MiB bound completes, no bound outcome, no OOM kill).
+
+### 1h. The address limit is set by the last raw system call before `execve` (2026-11-16)
+
+The launcher is a Go program and shares the target's `RLIMIT_AS` until `execve`. Its runtime has already reserved
+far more address space than a small limit: 1.6 GiB (`VmSize` 1 697 048 kB, `VmRSS` 9.7 MiB, 6 threads) measured in
+the coverage-built launcher at the moment it lowered `RLIMIT_AS` to 512 MiB (2026-11-16). `setrlimit` accepts a limit
+under the current size; from then on every mapping fails, and a Go runtime treats that as fatal. The launcher used to
+set the limit before installing seccomp, completing its tier report and waiting for « proceed »: blocking system calls
+in which the scheduler may start a thread or take a fresh span. GitHub's `ci` runner lost that race
+(`TestHostileMemoryDeathStartsNoCoreHelper/address-limit`: « no tier report: EOF (fatal error: runtime: cannot
+allocate memory … persistentalloc1) »): the target never started and the person would have seen a launch failure,
+not « document too large ». Rule: everything else is unchanged and stays before the report (`RLIMIT_CORE`,
+`RLIMIT_FSIZE`, seccomp); `RLIMIT_AS` is applied after « proceed » by a raw `prlimit64` on the launcher itself (the
+filter allows it, S-1), followed by the raw `execve`: no scheduler entry between the two, so the runtime has no
+occasion to map memory under the limit, whatever its size; the window before `prlimit64` runs no code of the document.
+The target is under the limit from its first instruction (`execve` replaces the address space), soft limit equal to
+hard: without a capability it cannot raise it, though the filter still lets it lower its own limits. A failed
+`prlimit64` returns at once and `execve` is never called. Witnesses: `TestAddressLimitWaitsForExec` (at the verified report the
+launcher still has the address limit it inherited, N and F) and `TestRunLimitsHoldFromStartup` (the target has the
+exact limit).
+
 ### 2. One decision, by launching each tier for real
 
 `decideTier(facts) (Tier, error)` is pure and total. The facts come from one probe sequence, run once per process and
@@ -183,8 +244,8 @@ cached once conclusive, each step bounded by `probeTimeout` (5 s):
 |---|---|---|
 | `landlock` | `landlock_create_ruleset(VERSION)` | ABI number, or unavailable |
 | `seccomp` | installing the real filter in the probe child | ok, unavailable |
-| `ns` | **the real N launch** of a no-op target: the same code path, flags, id maps, tmpfs, IPC overlay, `/proc` mount as PID 1, Landlock, seccomp and `execve` as every N launch (`NoNetwork` set, output bounded: the strictest variant, and the only one N uses, see point 3) | ok · refused · inconclusive |
-| `f` | **the real F launch** of the same no-op target | ok · failed · inconclusive |
+| `ns` | **the real N launch** of the pinned, SHA-256-verified `typst --version` (amended 2026-11-15, see below): the same code path, flags, id maps, tmpfs, IPC overlay, `/proc` mount as PID 1, Landlock, seccomp and `execve` as every N launch (`NoNetwork` set, output bounded: the strictest variant, and the only one N uses, see point 3) | ok · refused · inconclusive |
+| `f` | **the real F launch** of the same target | ok · failed · inconclusive |
 
 Errno classes of `ns` (total): EPERM, **EACCES**, EINVAL, and ENOSPC with `user.max_user_namespaces` = 0, returned by
 `clone`, the id-map writes, `unshare` or a mount in the probe child (reported with status 120) → **refused**. Any other
@@ -201,7 +262,21 @@ launched next: a launcher that cannot be executed at all (a `noexec` mount, a po
 | ABI ≥ 3 | ok | inconclusive | any | **refuse, retry** (`ErrProbeInconclusive`, backoff as today); nothing cached |
 | ABI ≥ 3 | ok | refused | inconclusive | **refuse, retry** |
 
-`probeOutputMount` and `probeIsolation` are replaced by this sequence; `NetworkIsolation()` reports the tier.
+`probeOutputMount` and `probeIsolation` are replaced by this sequence; `NetworkIsolation(store)` reports the tier.
+
+The probe's target (amended 2026-11-15). The target was first « a no-op target »: the host executable
+(`os.Executable()`) run in a hidden no-op mode. In the application that executable is linked to GTK and WebKitGTK, whose
+libraries differ from one distribution to the next and are found through `DT_RUNPATH`: the launcher's library resolver
+refused it before the tier report, every probe was inconclusive and the preview never started (`gates/SB2a1/UX.md`,
+UX-SB2a1-1), while the tests, whose binary is nearly static, saw nothing. The target is now the embedded typst,
+verified against its pinned SHA-256 in the caller's `Store` before each probe as before every launch (ADR 0024), run as
+`typst --version` under typst's own descriptor (its system-call, `prctl` and `ioctl` lists, point 1f): the program,
+the filter and the library set of a real launch, and nothing of the host's. A target that cannot be verified is that
+error (`ErrNotEmbedded`, `ErrIntegrity`), not an inconclusive probe. The `DT_RUNPATH` resolution stays (right for any
+dynamically linked sidecar). Rejected: keeping the host executable with a wider resolver (the probe would still depend
+on libraries no launch uses, and a new host library could break it again); a dedicated static helper binary (one more
+artefact to pin and ship, and still not the program a launch runs). Witnesses: `TestProbeTargetIsTheVerifiedTypst`,
+`TestProbeRunsVersionUnderTypstDescriptor`, `TestUnverifiableProbeTargetIsNotInconclusive`, `TestProbeIsTheLaunch`.
 
 ### 3. One configuration per tier, verified at every launch
 
@@ -279,14 +354,22 @@ matrix of block SB2p, whose gate is frozen before its implementation.
 ### 7. What the person is told
 
 The About dialog's existing line follows the tier (one fact, one place). A sentence appears in the preview and the
-problems list only when a launch is **refused**; the reduced tier raises no toast (the person can do nothing about it).
+problems list only when a launch is **refused** or could not be decided; the reduced tier raises no toast (the person
+can do nothing about it). Sentences amended 2026-11-15 after the interface walkthrough (`gates/SB2a1/UX.md`,
+UX-SB2a1-2 to -5): each says what it means for the person and what to do, an inconclusive probe is no longer shown as a
+broken installation, and About states the same fact as the preview (Go reports `namespace`, `reduced`, `refused` or
+`pending` through `NetworkMode`). « Détails » and « Réessayer » use the shared button style; closing About gives the
+focus back to « Détails ».
 
 | Outcome | Key | Sentence |
 |---|---|---|
 | N | `about.network.namespace` (kept) | « La mise en page tourne dans un espace isolé : elle ne peut joindre aucun réseau, pas même cet ordinateur. » |
-| F | `about.isolation.reduced` (replaces `about.network.proxy`) | « La mise en page tourne avec une isolation réduite : elle ne peut ni joindre le réseau, ni lancer d'autre programme, ni écrire hors du document, mais ce système ne permet pas de la séparer complètement des autres programmes. » |
-| refuse | `preview.fail.sandbox`, action `preview.fail.sandbox.details` « Détails » (opens About) | « La mise en page ne peut pas démarrer : ce système ne fournit pas la protection dont Inkwell a besoin. » |
-| refuse, protected project in F (point 1e) | `preview.fail.protected`, same action | « Ce document est protégé : sur ce système, Inkwell ne peut pas encore le mettre en page sans risquer d'exposer son contenu. » |
+| F | `about.isolation.reduced` (replaces `about.network.proxy`) | « Vos fichiers restent protégés : le moteur de mise en page ne peut ni lire vos autres fichiers ni utiliser le réseau. Ce système ne permet pas l'isolation complète : le moteur n'est pas entièrement séparé des autres programmes ouverts. » |
+| refuse | `preview.fail.sandbox`, action `preview.fail.sandbox.details` « Détails » (opens About) | « L'aperçu est désactivé : ce système ne permet pas d'isoler le moteur de mise en page. Le texte et la collaboration fonctionnent normalement. » |
+| refuse, in About | `about.isolation.refused` | « L'aperçu est désactivé sur cet ordinateur : ce système ne permet pas d'isoler le moteur de mise en page, et Inkwell ne le lance jamais sans cette protection. Le texte et la collaboration fonctionnent normalement ; pour voir l'aperçu, ouvrez le document sur un autre ordinateur, ou mettez à jour le système et Inkwell. » |
+| refuse, protected project in F (point 1e) | `preview.fail.protected`, same action | « Ce document est protégé : sur ce système, Inkwell ne peut pas encore le mettre en page sans risquer d'exposer son contenu. Vous pouvez continuer à écrire ; pour voir l'aperçu, ouvrez-le sur un autre ordinateur. » |
+| refuse, retry (inconclusive probe) | `preview.fail.retry`, action `preview.retry` « Réessayer » (compiles again, hence probes again once the backoff has elapsed) | « L'aperçu n'a pas pu démarrer cette fois. » |
+| refuse, retry, in About | `about.isolation.pending` | « L'aperçu n'a pas pu démarrer cette fois : Inkwell n'a pas pu vérifier l'isolation du moteur de mise en page. Choisissez « Réessayer » dans l'aperçu. » |
 
 ## Considered options
 

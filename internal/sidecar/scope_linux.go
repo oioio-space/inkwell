@@ -243,8 +243,15 @@ func (m *SandboxScope) configureRunLimits(r *cgroupRun, spec Spec) error {
 	if resident == 0 {
 		return errors.New("resident budget below page size")
 	}
+	backstop, err := memoryBackstop(resident, uint64(pagesize))
+	if err != nil {
+		return err
+	}
+	// The bound is memory.high, which the watchdog enforces by its own kill;
+	// memory.max, above it, is only the backstop (ADR 0044 point 1g).
 	limits := []struct{ name, value string }{
-		{"memory.max", strconv.FormatUint(resident, 10)},
+		{"memory.max", strconv.FormatUint(backstop, 10)},
+		{"memory.high", strconv.FormatUint(resident, 10)},
 		{"memory.swap.max", "0"},
 		{"memory.oom.group", "1"},
 	}
@@ -263,6 +270,16 @@ func (m *SandboxScope) configureRunLimits(r *cgroupRun, spec Spec) error {
 		}
 	}
 	return nil
+}
+
+// memoryBackstop is the hard limit above a page-aligned bound: 25 % more, at
+// least 64 MiB more, rounded down to a page (ADR 0044 point 1g).
+func memoryBackstop(bound, page uint64) (uint64, error) {
+	extra := max(bound/4/page*page, 64<<20)
+	if bound > math.MaxUint64-extra {
+		return 0, errors.New("resident budget too large")
+	}
+	return bound + extra, nil
 }
 
 func (m *SandboxScope) ensureSession(ctx context.Context) bool {

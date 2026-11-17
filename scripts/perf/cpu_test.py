@@ -118,14 +118,23 @@ class Cgroup(unittest.TestCase):
     def app(self, body: str) -> str:
         return self.script("app", "#!/bin/sh\n" + body + "\n")
 
-    def burn(self, seconds: float) -> str:
-        """A command that keeps one CPU busy for `seconds`."""
-        return self.script("burn", "#!/usr/bin/env python3\nimport sys, time\nt = time.time() + float(sys.argv[1])\n"
-                           "while time.time() < t:\n    pass\n") + f" {seconds}"
+    def burn(self, cpu_seconds: float, ready: Path | None = None) -> str:
+        """A command that consumes `cpu_seconds` of its own CPU time (not wall time: under contention a wall-time
+        spin gets only a share of a CPU, 2026-11-16). With `ready`, it then creates that file and stays alive,
+        idle, so it is still running when the start closes."""
+        then = f"open({str(ready)!r}, 'w').close()\ntime.sleep(60)\n" if ready else ""
+        return self.script("burn", "#!/usr/bin/env python3\nimport sys, time\nt = float(sys.argv[1])\n"
+                           "while time.process_time() < t:\n    pass\n" + then) + f" {cpu_seconds}"
 
-    def start(self, app: str, wait_ms: int) -> dict:
-        """Launch `app` in a start cgroup, wait for it to exit and `wait_ms` more, then close the start. Returns
-        closeStart's record, the run cgroup's CPU over the window and the pid and argv0 of the launched process."""
+    def start(self, app: str, wait_ms: int, ready: Path | None = None) -> dict:
+        """Launch `app` in a start cgroup, wait for it to exit, `wait_ms` more and, with `ready`, for that file to
+        exist (30 s at most), then close the start. Returns closeStart's record, the run cgroup's CPU over the
+        window and the pid and argv0 of the launched process."""
+        wait_ready = "" if ready is None else f"""
+              for (const end = Date.now() + 30000; !require('node:fs').existsSync({json.dumps(str(ready))});) {{
+                if (Date.now() > end) throw new Error('the helper never reported its CPU burnt');
+                await sleep(20);
+              }}"""
         return node(f"""
             const run = c.openRun({{name: 'pbtest-' + process.pid}});
             try {{
@@ -134,7 +143,7 @@ class Cgroup(unittest.TestCase):
               const [cmd, args] = c.launcher(dir, {json.dumps(app)});
               const child = spawn(cmd, args, {{stdio: 'ignore'}});
               const code = await new Promise((r) => child.once('close', r));
-              await sleep({wait_ms});
+              await sleep({wait_ms});{wait_ready}
               const closed = c.snapshot(run, {{opening: false}});
               const done = await c.closeStart(dir);
               console.log(JSON.stringify({{...done, code, pid: child.pid, measured_ms: (closed.measured - opened.measured) / 1000,
@@ -143,10 +152,12 @@ class Cgroup(unittest.TestCase):
 
     def test_a_detached_helper_stays_in_the_measured_cgroup(self):
         """A helper that double-forks and calls setsid leaves the process tree, not the cgroup: its CPU is the
-        application's (measured, not background), it is a leftover, and cgroup.kill ends it."""
-        pidfile = self.root / "helper.pid"
-        app = self.app(f"setsid sh -c 'echo $$ > {pidfile}; exec {self.burn(5)}' </dev/null >/dev/null 2>&1 &\nexit 0")
-        got = self.start(app, 800)
+        application's (measured, not background), it is a leftover, and cgroup.kill ends it. The helper has
+        consumed 800 ms of CPU when the window closes, whatever the load: a cgroup that did not hold it would
+        show only the shell's few milliseconds."""
+        pidfile, ready = self.root / "helper.pid", self.root / "helper.ready"
+        app = self.app(f"setsid sh -c 'echo $$ > {pidfile}; exec {self.burn(0.8, ready)}' </dev/null >/dev/null 2>&1 &\nexit 0")
+        got = self.start(app, 0, ready)
         self.assertEqual(got["code"], 0)
         self.assertGreaterEqual(got["leftover"], 1)
         self.assertGreater(got["app_cpu_ms"], 500)

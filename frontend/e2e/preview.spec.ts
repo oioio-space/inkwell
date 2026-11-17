@@ -144,8 +144,8 @@ test("PRV-104 offline: a bundled package compiles, a missing one says why, and t
   await page.getByRole("menuitem", { name: "À propos" }).click();
   const dialog = page.getByRole("dialog", { name: "À propos" });
   const mode = dialog.getByTestId("network-mode");
-  await expect(mode).toHaveAttribute("data-mode", /^(namespace|proxy only)$/, SLOW);
-  await expect(mode).toContainText(/espace isolé|aucun accès au réseau/);
+  await expect(mode).toHaveAttribute("data-mode", /^(namespace|reduced)$/, SLOW);
+  await expect(mode).toContainText(/espace isolé|isolation complète/);
   await page.screenshot({ path: "test-results/preview-about.png" });
   await dialog.getByRole("button", { name: "Fermer" }).click();
   await clear(page);

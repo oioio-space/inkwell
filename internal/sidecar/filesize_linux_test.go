@@ -48,6 +48,9 @@ func requireNoCoreHelper(t *testing.T, out Output) {
 // X1 (ADR 0042 A6): the write that reaches the cap is shortened, the next one
 // fails with EFBIG, no signal ends the target, and the run is an output limit.
 func TestFileSizeCapShortWriteThenEFBIG(t *testing.T) {
+	if !requireLaunch(t) {
+		return
+	}
 	for _, p := range launchPaths {
 		t.Run(p.name, func(t *testing.T) {
 			out, path, err := capRun(t.Context(), t, "short", p.run)
@@ -67,6 +70,9 @@ func TestFileSizeCapShortWriteThenEFBIG(t *testing.T) {
 
 // X2: a target that aborts on EFBIG is an output limit, its file at the cap.
 func TestFileSizeCapAbortOnEFBIGIsOutputLimit(t *testing.T) {
+	if !requireLaunch(t) {
+		return
+	}
 	for _, p := range launchPaths {
 		t.Run(p.name, func(t *testing.T) {
 			out, path, err := capRun(t.Context(), t, "abort", p.run)
@@ -87,6 +93,9 @@ func TestFileSizeCapAbortOnEFBIGIsOutputLimit(t *testing.T) {
 // X3: a target that restores SIGXFSZ's default action dies of it at the cap;
 // that is still an output limit, with the cap kept and no core helper.
 func TestFileSizeCapDispositionResetIsOutputLimit(t *testing.T) {
+	if !requireLaunch(t) {
+		return
+	}
 	requireGuaranteedCorePattern(t)
 	for _, p := range launchPaths {
 		t.Run(p.name, func(t *testing.T) {
@@ -107,6 +116,9 @@ func TestFileSizeCapDispositionResetIsOutputLimit(t *testing.T) {
 
 // X4: a target that loops on EFBIG is ended by the timeout, as an output limit, the cap kept.
 func TestFileSizeCapEFBIGLoopEndsAtTimeout(t *testing.T) {
+	if !requireLaunch(t) {
+		return
+	}
 	for _, p := range launchPaths {
 		t.Run(p.name, func(t *testing.T) {
 			ctx, cancel := context.WithTimeout(t.Context(), time.Second)
