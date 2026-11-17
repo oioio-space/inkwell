@@ -458,6 +458,28 @@ func TestPreviewExport(t *testing.T) {
 			t.Errorf("exported PDF has %d pages (%v), want the 3 of the latest text", n, err)
 		}
 	})
+
+	t.Run("PRV-26 a date reported after the last compilation is in the export", func(t *testing.T) {
+		// R-E2E1-3: the text reaches the folder before the webview reports the date of the change
+		// that carried it; the compilation of that text must not be reused with the earlier date.
+		root := writePreviewProject(t, map[string]string{"main.typ": "x\n"})
+		out := t.TempDir()
+		p := app.NewPreview(app.PreviewOptions{Engine: eng, Root: root, Choose: exportTo(t, out), Debounce: 10 * time.Millisecond})
+		t.Cleanup(p.Close)
+		c := attach(t, p)
+		c.ask(t, `{"op":"edit","time":1700000000}`)
+		c.message(t, "result")
+		c.handled(t, `{"op":"edit","time":1700000001}`) // the later change, its text already compiled
+
+		res, err := app.NewPreviewService(p).ExportPDF()
+		if err != nil || res.Path == "" {
+			t.Fatalf("ExportPDF = %+v, %v", res, err)
+		}
+		pdf, _ := os.ReadFile(res.Path)
+		if m := creationDate.FindSubmatch(pdf); m == nil || string(m[1]) != "20231114221321" {
+			t.Errorf("creation date = %q, want 20231114221321 (the last date reported)", m)
+		}
+	})
 }
 
 // fakeCompiler lets the tests drive timing without the real Typst.

@@ -250,7 +250,28 @@ test("PRV-108 two people: Bob's edit updates Alice's preview, and both exports c
   await alice.screenshot({ path: "test-results/preview-alice.png" });
   await bob.screenshot({ path: "test-results/preview-bob.png" });
 
-  // The date inside the document is the time of the last change, the same for everyone.
+  // The date inside the document is the time of the last change, the same for everyone who holds
+  // the same changes. Each one's « who I am » change (no text) follows their typing by a pause:
+  // both are written and both replicas hold the same heads before the exports (E2E2).
+  type Claim = { actor: string; mine: boolean };
+  const claims = (p: Page) =>
+    p.evaluate(() => (globalThis as { __inkwellClaims?: () => Claim[] }).__inkwellClaims?.() ?? []);
+  const heads = (p: Page) =>
+    p.evaluate(() => (globalThis as { __inkwellHeads?: () => string[] }).__inkwellHeads?.() ?? []);
+  /** This page's own claim is written, and the other page holds it. */
+  const heard = (own: Claim[], other: Claim[]) =>
+    own.some((c) => c.mine && other.some((o) => o.actor === c.actor));
+  await expect
+    .poll(async () => {
+      const [ca, cb, ha, hb] = await Promise.all([
+        claims(alice),
+        claims(bob),
+        heads(alice),
+        heads(bob),
+      ]);
+      return heard(ca, cb) && heard(cb, ca) && ha.length > 0 && ha.join() === hb.join();
+    }, SLOW)
+    .toBe(true);
   const a = await exportPdf(alice, ALICE_PORT);
   const b = await exportPdf(bob, BOB_PORT);
   const date = (pdf: Buffer) => pdf.toString("latin1").match(/\/CreationDate\s*\(D:(\d{14})/)?.[1];

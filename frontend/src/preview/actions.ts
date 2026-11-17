@@ -60,8 +60,12 @@ export async function jumpFromCursor(): Promise<void> {
 export async function jumpFromPage(page: number, _x: number, y: number): Promise<void> {
   const state = session.state;
   if (!state) return;
+  const acts = session.acts;
   try {
     const anchors = await preview.anchors();
+    // The person moved or typed in the editor while the preview answered: where they are wins
+    // (a jump landing after Ctrl+A turned their Delete into the loss of one character, R-E2E1-4).
+    if (session.acts !== acts) return;
     const line = lineAt(pairUp(state.doc.toString(), anchors), page, y);
     if (line === undefined || !placeCaret(line)) notice.show(t("preview.jump.unknown"));
   } catch {

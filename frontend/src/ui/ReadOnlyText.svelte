@@ -16,7 +16,7 @@ $effect(() => {
     createReadOnlyEditor(host, shown, {
       lang,
       onView: (view) => (session.view = view),
-      onState: (state) => (session.state = state),
+      onState: session.note,
     }),
   );
   return () => {

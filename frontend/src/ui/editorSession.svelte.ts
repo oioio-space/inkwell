@@ -1,4 +1,4 @@
-import type { EditorState, StateCommand } from "@codemirror/state";
+import { type EditorState, type StateCommand, Transaction } from "@codemirror/state";
 import type { EditorView } from "@codemirror/view";
 
 /**
@@ -8,6 +8,14 @@ import type { EditorView } from "@codemirror/view";
 class EditorSession {
   view = $state.raw<EditorView | undefined>();
   state = $state.raw<EditorState | undefined>();
+  /** How many times the person has acted on the editor (typed, selected, ran a command); others' edits do not count. */
+  acts = 0;
+
+  /** Takes the editor's new state and the transactions that made it. */
+  note = (state: EditorState, transactions: readonly Transaction[] = []): void => {
+    this.state = state;
+    if (transactions.some((tr) => tr.annotation(Transaction.userEvent) !== undefined)) this.acts++;
+  };
 
   /** Runs a command on the editor. Returns false when there is no editor or it declined. */
   run = (command: StateCommand): boolean => {

@@ -52,7 +52,7 @@ import StatusBar from "./ui/shell/StatusBar.svelte";
 import { showStartupNotice } from "./ui/startupNotice";
 import FormatBar from "./ui/toolbar/FormatBar.svelte";
 import { barLang } from "./ui/toolbar/spec";
-import { observeDocText, observeLinks } from "./workspace/observe";
+import { observeDocText, observeHeads, observeLinks } from "./workspace/observe";
 import { OpenRequests } from "./workspace/openRequests";
 import { workspace } from "./workspace/workspace.svelte";
 
@@ -290,6 +290,7 @@ $effect(() => {
 
 onMount(() => {
   observeDocText(() => session.state?.doc.toString());
+  observeHeads(() => workspace.handle?.heads());
   observeLinks(
     () => links.view(),
     () => workspace.status,

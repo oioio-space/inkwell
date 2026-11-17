@@ -55,7 +55,7 @@ $effect(() => {
           const head = view.state.selection.main.head;
           view.dispatch({ effects: EditorView.scrollIntoView(head, { y: "center" }) });
         },
-        onState: (state) => (session.state = state),
+        onState: session.note,
         onUndoKey: () => workspace.undoWithKey(),
         onRefused: (chars) =>
           notice.show(

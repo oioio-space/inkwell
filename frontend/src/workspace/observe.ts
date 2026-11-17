@@ -47,6 +47,16 @@ export function observeDocText(text: () => string | undefined): void {
 }
 
 /**
+ * The heads of the document shown, sorted: an e2e spec compares two replicas before asserting on what
+ * the same heads promise (PRV-108: the same date in both exports).
+ */
+export function observeHeads(heads: () => readonly string[] | undefined): void {
+  if (!observing()) return;
+  (globalThis as typeof globalThis & { __inkwellHeads?: () => string[] }).__inkwellHeads = () =>
+    [...(heads() ?? [])].sort();
+}
+
+/**
  * The save a closing window runs (workspace.saveNow): an e2e spec runs it before the page goes, to
  * check what a close keeps (SAV-03) apart from the race of a page that goes mid-save (SAV-03b).
  */

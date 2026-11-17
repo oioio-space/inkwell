@@ -667,8 +667,13 @@ func (p *Preview) handle(cur *previewConn, req previewRequest) {
 			p.armLocked(0)
 		}
 	case "edit":
-		if req.Time > 0 {
-			p.editTime = time.Unix(req.Time, 0).UTC()
+		// A new date is a new document (datetime.today(), the PDF's creation date): what was
+		// compiled with the earlier one is not reused, the text often being on disk before the
+		// webview reports the date of the change that carried it (R-E2E1-3).
+		if t := time.Unix(req.Time, 0).UTC(); req.Time > 0 && !t.Equal(p.editTime) {
+			p.editTime = t
+			p.srcGen++
+			p.armLocked(p.debounce)
 		}
 	case "refresh":
 		p.srcGen++

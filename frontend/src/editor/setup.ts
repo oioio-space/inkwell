@@ -1,6 +1,12 @@
 import type { DocHandle } from "@automerge/automerge-repo";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
-import { Compartment, EditorState, type Extension, Prec } from "@codemirror/state";
+import {
+  Compartment,
+  EditorState,
+  type Extension,
+  Prec,
+  type Transaction,
+} from "@codemirror/state";
 import {
   drawSelection,
   EditorView,
@@ -85,8 +91,11 @@ export function cspNonce() {
 /** What the shell needs from the editor: its language and a feed of its state. */
 export interface EditorOptions {
   lang?: Lang;
-  /** Called with the new state at creation and after each change of text or selection. */
-  onState?: (state: EditorState) => void;
+  /**
+   * Called with the new state at creation and after each change of text or selection, with the
+   * transactions that made it (none at creation).
+   */
+  onState?: (state: EditorState, transactions: readonly Transaction[]) => void;
   /** Called once with the view, so the shell can run commands on it and give it back focus. */
   onView?: (view: EditorView) => void;
   /** Text offset of the caret at creation (opening the text view of a table at a cell). */
@@ -169,8 +178,8 @@ export function createEditor(
       EditorView.updateListener.of((u) => {
         if (!(u.docChanged || u.selectionSet)) return;
         if (import.meta.env.VITE_PERF_NATIVE === "1")
-          profileNativeStage("app-onState", () => onState?.(u.state));
-        else onState?.(u.state);
+          profileNativeStage("app-onState", () => onState?.(u.state, u.transactions));
+        else onState?.(u.state, u.transactions);
       }),
       amSync({ handle, path: ["text"], ...(onRefused ? { onRefused } : {}) }),
       remoteCursors(),
@@ -180,7 +189,7 @@ export function createEditor(
   });
   view.focus();
   onView?.(view);
-  onState?.(view.state);
+  onState?.(view.state, []);
   return {
     rename: presence.rename,
     setLang: (next) => view?.dispatch({ effects: language.reconfigure(forLang(next)) }),
@@ -215,12 +224,12 @@ export function createReadOnlyEditor(
       keymap.of(defaultKeymap),
       EditorView.contentAttributes.of({ "aria-label": t("editor.label"), "aria-readonly": "true" }),
       EditorView.updateListener.of((u) => {
-        if (u.selectionSet) onState?.(u.state);
+        if (u.selectionSet) onState?.(u.state, u.transactions);
       }),
       theme,
     ],
   });
   onView?.(view);
-  onState?.(view.state);
+  onState?.(view.state, []);
   return { destroy: () => view.destroy() };
 }
