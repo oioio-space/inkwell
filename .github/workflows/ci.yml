@@ -14,13 +14,14 @@ env:
 jobs:
   ci:
     runs-on: ubuntu-latest
-    # Two parts on two runners (CI1b): `checks` (~22 min of `ci:checks` after ~10 min of setup) and `e2e` (the
-    # desktop build and the two-instance end-to-end tests); in one job they passed its 35 min (run 44002604121).
+    # Three parts on three runners (CI1b): `checks` (`ci:checks` after ~10 min of setup), `frontend` (`fe:check`
+    # alone: beside test:ci it ran 5 to 15 times slower, runs 43979066870 and 44010837492) and `e2e` (the desktop
+    # build and the two-instance end-to-end tests); in one job they passed its 35 min (run 44002604121).
     # The formal models run in the `formal` job and the impaired-network scenarios once, in the `netsim` job.
     strategy:
       fail-fast: false
       matrix:
-        part: [checks, e2e]
+        part: [checks, frontend, e2e]
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6.1.0
@@ -103,6 +104,8 @@ jobs:
           systemd-run --user --scope --quiet --collect -- cat /proc/self/cgroup | grep "/user@${uid}.service/"
       - if: matrix.part == 'checks'
         run: systemd-run --user --scope --quiet --collect -- mise run ci:checks # the formal models run in the parallel `formal` job
+      - if: matrix.part == 'frontend'
+        run: mise run fe:check
       # Lifting the sysctl does not prove tier N ran, nor the user manager that its cgroup ran: the sandbox's own tier
       # report and the scope suite's report must say so (internal/sidecar, tier_helpers_linux_test.go and
       # scope_linux_test.go), and the scope test must pass with its run in a cgroup.

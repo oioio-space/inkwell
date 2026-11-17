@@ -238,11 +238,11 @@ run = "python3 scripts/check-env-reference.py"
 
 [tasks."ci:core"]
 description = "Everything CI must pass except the impaired network simulation (what the pre-push hook runs first; scripts/netsim/affected.py decides about the netsim): ci:checks and the formal models"
-depends = ["ci:checks", "formal"]
+depends = ["ci:checks", "fe:check", "formal"]
 
 [tasks."ci:checks"]
-description = "ci:core without the formal models, which GitHub runs in their own parallel job (formal: about 25 min on a 4-vCPU runner, 2026-11-16)"
-depends = ["test:py", "lint:env", "lint:claude-md", "arch", "deadcode", "scan:secrets", "scan:code", "scan:sbom", "lint", "lint:sh", "lint:yaml", "lint:actions", "pkg:lint", "test:ci", "cover:check", "fe:check"]
+description = "ci:core without the formal models and the frontend gate, which GitHub runs on their own runners (formal: about 25 min on a 4-vCPU runner; fe:check sharing the runner with test:ci ran 5 to 15 times slower, 2026-11-17)"
+depends = ["test:py", "lint:env", "lint:claude-md", "arch", "deadcode", "scan:secrets", "scan:code", "scan:sbom", "lint", "lint:sh", "lint:yaml", "lint:actions", "pkg:lint", "test:ci", "cover:check"]
 
 [tasks.ci]
 description = "Everything CI must pass: ci:core and the impaired network simulation"

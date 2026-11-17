@@ -1549,6 +1549,26 @@
       "id": "51dad904fe6a365f85ff5b15f45ad8a6999aece1c8d00a631c4f3aa5977f8e9c",
       "reason": ".github/workflows/ci.yml: the ci job becomes a matrix of two parts on two runners (checks, e2e), each with the same 35 min cap, because with every check green it passed 35 min in one job (run 44002604121); no cap raised (CI1b)",
       "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "46d2686fd2acc7d5b70a477cbfc6f4813070161d13cc4daa1e54eb1d369d706b",
+      "reason": ".github/workflows/ci.yml: the ci matrix gains a `frontend` part running fe:check alone (beside test:ci it ran 5 to 15 times slower and timed out, runs 43979066870 and 44010837492); every part keeps the 35 min cap; no cap raised (CI1b)",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "544bc0751e9c503af7894e42c776a6054294d1cebf312a342d86b6f15a977695",
+      "reason": "mise.toml: fe:check leaves ci:checks for GitHub's own `frontend` part; locally ci:core = ci:checks + fe:check + formal, the same set as before (CI1b)",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "4cfb74b3fdb2ed6bfa0ed733625c4bf20a57044bb524d4d2251e4a5311d6d640",
+      "reason": "mise.toml: fe:check leaves ci:checks for GitHub's own `frontend` part; locally ci:core = ci:checks + fe:check + formal, the same set as before (CI1b)",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "bf5d1603378ef2c24ff74ce62689d6f92e8c2ea65e9d7e1d73494e16ace121b5",
+      "reason": "mise.toml: fe:check leaves ci:checks for GitHub's own `frontend` part; locally ci:core = ci:checks + fe:check + formal, the same set as before (CI1b)",
+      "decision": "docs/objectif-en-cours.md"
     }
   ]
 }
