@@ -61,6 +61,7 @@ func TestMain(m *testing.M) {
 		os.Exit(1)
 	}
 	sharedCache = dir
+	defaultStore = &Store{Dir: dir} // the tier probe verifies its typst here, not in the user's cache
 	code := m.Run()
 	_ = os.RemoveAll(dir)
 	if code == 0 {
@@ -200,7 +201,7 @@ func runHelper(mode string) int {
 		sink = make([]byte, mib<<20)
 		fmt.Println("allocated", len(sink))
 		return 0
-	case "scope-resident-tree", "scope-resident-chunk", "scope-budget", "scope-resident", "scope-resident-wait", "scope-address", "scope-tree", "scope-fds", "scope-fds-tree", "scope-scope-app":
+	case "scope-resident-tree", "scope-resident-chunk", "scope-budget", "scope-resident", "scope-resident-wait", "scope-address", "scope-tree", "scope-fds", "scope-fds-tree", "scope-scope-app", "scope-pagecache", "scope-dirty":
 		return scopeAttackHelper(strings.TrimPrefix(name, "scope-"), arg)
 	case "lower-core":
 		return lowerCoreHelper(arg)
@@ -320,6 +321,8 @@ func runHelper(mode string) int {
 		<-done
 		sink = make([]byte, shared) // uses the value, so neither write is dead
 		return 0
+	default:
+		return tierHelper(name, arg)
 	}
 	return 0
 }

@@ -165,11 +165,6 @@ func (s *Supervisor) Run(ctx context.Context) error {
 	if s.cfg.Command == nil {
 		return errors.New("sidecar: supervisor: Command is required")
 	}
-	// The parent-death signal follows the thread that forks the child: this
-	// goroutine keeps it for the whole supervision.
-	runtime.LockOSThread()
-	defer runtime.UnlockOSThread()
-
 	cfg := s.cfg
 	failures := 0
 	delay := cfg.Backoff.Initial
@@ -222,19 +217,36 @@ func (s *Supervisor) runOnce(ctx context.Context) (time.Duration, error) {
 	cmd.Dir = dir
 	cmd.Env = supervisorEnv(cmd.Env)
 	setProcAttr(cmd)
-	path, args, err := withLimits(Spec{Path: cmd.Path, Args: cmd.Args[1:], Dir: cmd.Dir})
+	spec := Spec{Path: cmd.Path, Args: cmd.Args[1:], Dir: cmd.Dir}
+	plan, err := planLaunch(spec)
+	if err != nil {
+		return 0, err
+	}
+	path, args, err := withLimits(spec, plan)
 	if err != nil {
 		return 0, err
 	}
 	cmd.Path, cmd.Args = path, append([]string{path}, args...)
-	if err := configureConfinement(cmd); err != nil {
+	tierNamespaces(cmd, plan)
+	hs, err := newHandshake(cmd, plan)
+	if err != nil {
 		return 0, err
 	}
+	defer hs.close()
 	if cmd.WaitDelay == 0 {
 		cmd.WaitDelay = waitDelay
 	}
+	// The parent-death signal follows the thread that forks the child: hold it
+	// until the child is reaped, the failed handshake's stopLaunch included.
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
 	began := s.now()
 	if err := cmd.Start(); err != nil {
+		s.emit(Event{Kind: EventStartFailed, Err: err})
+		return 0, fmt.Errorf("start: %w", err)
+	}
+	if err := hs.await(ctx); err != nil {
+		err = stopLaunch(cmd, err)
 		s.emit(Event{Kind: EventStartFailed, Err: err})
 		return 0, fmt.Errorf("start: %w", err)
 	}

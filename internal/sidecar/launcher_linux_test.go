@@ -23,13 +23,13 @@ import (
 
 // TestWithLimitsExactBytes checks the policy passed to the pre-exec launcher.
 func TestWithLimitsExactBytes(t *testing.T) {
-	path, args, err := withLimits(Spec{Path: "target", Args: []string{"a"}})
+	path, args, err := withLimits(Spec{Path: "target", Args: []string{"a"}}, testPlan(tierN))
 	if err != nil || path != "/proc/self/exe" || len(args) != 4 {
 		t.Fatalf("unconfined unset limits: %q %q %v", path, args, err)
 	}
 	for _, value := range []uint64{1, 512, 513, 1024, 1025} {
 		s := Spec{Path: "target", Args: []string{"a", "b"}, MemoryLimit: value, FileSizeLimit: value}
-		path, args, err := withLimits(s)
+		path, args, err := withLimits(s, testPlan(tierN))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -48,6 +48,9 @@ func TestWithLimitsExactBytes(t *testing.T) {
 
 // TestSandboxPrivileges checks kernel state in the final target, after exec.
 func TestSandboxPrivileges(t *testing.T) {
+	if !requireLaunch(t) {
+		return
+	}
 	s := spec("sandboxstatus")
 	s.WatchDir, s.MaxDirBytes, s.WriteFiles = t.TempDir(), 8192, []string{"out"}
 	out, err := Run(t.Context(), s)
@@ -59,14 +62,15 @@ func TestSandboxPrivileges(t *testing.T) {
 			t.Errorf("missing %s in %s", field, out.Stdout)
 		}
 	}
-	if mountSupported(t) {
+	namespaces := machineTier(t) == tierN
+	if namespaces {
 		for line := range strings.SplitSeq(string(out.Stdout), "\n") {
 			if strings.HasPrefix(line, "NSpid:") && strings.HasSuffix(line, "\t1") {
 				t.Errorf("workload incorrectly runs as PID 1: %s", line)
 			}
 		}
 	}
-	if mountSupported(t) && !strings.Contains(string(out.Stdout), "CapBnd:\t0000000000000000") {
+	if namespaces && !strings.Contains(string(out.Stdout), "CapBnd:\t0000000000000000") {
 		t.Errorf("bounding set retained: %s", out.Stdout)
 	}
 }
@@ -112,7 +116,12 @@ func confinementAttack() error {
 		if err != nil {
 			return err
 		}
-		return sandboxInit(sandboxConfig{WorkingDir: cwd, ReportFD: fd}, []string{os.Args[0]})
+		// As the real init: the launch handshake passes on to its exec child.
+		c := launcherConfig(sandboxConfig{WorkingDir: cwd, ReportFD: fd})
+		if err := readHandshakeFD(&c); err != nil {
+			return err
+		}
+		return sandboxInit(c, []string{os.Args[0]})
 	case "xfsz":
 		// Install the kernel default action, bypassing Go's SIGXFSZ handler.
 		action := [4]uint64{}
@@ -176,7 +185,15 @@ func confinementAttack() error {
 
 	case "arch":
 		runtime.LockOSThread()
-		f := seccompFilter(0, 0)                                   // No valid audit architecture can match.
+		a, err := hostSysArch()
+		if err != nil {
+			return err
+		}
+		a.audit = 0 // No valid audit architecture can match.
+		f, err := seccompFilter(testProgram, a, 0, tierN)
+		if err != nil {
+			return err
+		}
 		prog := unix.SockFprog{Len: uint16(len(f)), Filter: &f[0]} // #nosec G115 -- small fixed test filter.
 		if err := unix.Prctl(unix.PR_SET_SECCOMP, unix.SECCOMP_MODE_FILTER, uintptr(unsafe.Pointer(&prog)), 0, 0); err != nil {
 			return err
@@ -276,7 +293,12 @@ func confinementAttack() error {
 		if err != nil {
 			return err
 		}
-		return sandboxInit(sandboxConfig{WorkingDir: cwd, ReportFD: fd}, []string{os.Args[0]})
+		// As the real init: the launch handshake passes on to its exec child.
+		c := launcherConfig(sandboxConfig{WorkingDir: cwd, ReportFD: fd})
+		if err := readHandshakeFD(&c); err != nil {
+			return err
+		}
+		return sandboxInit(c, []string{os.Args[0]})
 	case "xfsz":
 		// Install the kernel default action, bypassing Go's SIGXFSZ handler.
 		action := [4]uint64{}
@@ -309,6 +331,9 @@ func confinementAttack() error {
 var nullByte *byte
 
 func TestSandboxExternalIPC(t *testing.T) {
+	if !requireLaunch(t) {
+		return
+	}
 	for _, name := range []string{"signal", "bus"} {
 		t.Run(name, func(t *testing.T) {
 			sibling := exec.Command(os.Args[0], "-test.run=^$")
@@ -333,14 +358,14 @@ func TestSandboxExternalIPC(t *testing.T) {
 				t.Fatal(err)
 			}
 			_ = connection.Close()
-			path, args, err := sandboxPrefix(sandboxConfig{WorkingDir: t.TempDir(), Directory: t.TempDir()})
+			path, args, err := sandboxPrefix(launcherConfig(sandboxConfig{WorkingDir: t.TempDir(), Directory: t.TempDir()}))
 			if err != nil {
 				t.Fatal(err)
 			}
 			args = append(args, os.Args[0], "-test.run=^TestConfinementHelper$")
 			cmd := exec.Command(path, args...)
 			cmd.Env = []string{"INKWELL_ATTACK=" + name, fmt.Sprintf("INKWELL_SIBLING=%d", sibling.Process.Pid), "INKWELL_BUS=" + bus, "XDG_RUNTIME_DIR=" + runtimeDir}
-			if output, err := cmd.CombinedOutput(); err != nil {
+			if output, err := combinedLaunch(t, cmd); err != nil {
 				t.Fatalf("sandbox: %v %s", err, output)
 			}
 		})
@@ -349,7 +374,7 @@ func TestSandboxExternalIPC(t *testing.T) {
 
 func TestDirectoryZeroFileCap(t *testing.T) {
 	s := Spec{WatchDir: t.TempDir(), MaxDirBytes: 1, WriteFiles: []string{"a", "b"}}
-	_, prefix, err := directoryLimits(s)
+	_, prefix, err := directoryLimits(s, testPlan(tierF))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -402,13 +427,13 @@ func TestSandboxZeroFileCap(t *testing.T) {
 	if err := os.WriteFile(output, nil, 0o600); err != nil {
 		t.Fatal(err)
 	}
-	path, args, err := sandboxPrefix(sandboxConfig{WorkingDir: t.TempDir(), Directory: dir, Names: []string{"out"}})
+	path, args, err := sandboxPrefix(launcherConfig(sandboxConfig{WorkingDir: t.TempDir(), Directory: dir, Names: []string{"out"}}))
 	if err != nil {
 		t.Fatal(err)
 	}
 	cmd := exec.Command(path, append(args, os.Args[0])...)
 	cmd.Env = helperEnv("writefile:" + output + ",1")
-	if data, err := cmd.CombinedOutput(); err == nil {
+	if data, err := combinedLaunch(t, cmd); err == nil {
 		t.Fatalf("zero cap allowed write: %s", data)
 	}
 	info, err := os.Stat(output)
@@ -420,6 +445,9 @@ func TestSandboxZeroFileCap(t *testing.T) {
 // TestEveryInvocationConfined covers unlimited query/eval, limited commands,
 // bounded compiles and the long-lived stdio supervisor.
 func TestEveryInvocationConfined(t *testing.T) {
+	if !requireLaunch(t) {
+		return
+	}
 	for _, mode := range []string{"unlimited", "limited", "bounded", "fallback"} {
 		t.Run(mode, func(t *testing.T) {
 			s := spec("sandboxstatus")
@@ -430,7 +458,7 @@ func TestEveryInvocationConfined(t *testing.T) {
 			case "bounded":
 				s.WatchDir, s.MaxDirBytes, s.WriteFiles = t.TempDir(), 8192, []string{"out"}
 			case "fallback":
-				s.isolationProbe = func() (bool, error) { return false, nil }
+				s.tier = tierF
 			}
 			out, err := Run(t.Context(), s)
 			if err != nil || out.ExitCode != 0 {
@@ -459,8 +487,8 @@ func assertConfined(t *testing.T, output []byte) {
 }
 
 func TestIPCOverlays(t *testing.T) {
-	if !mountSupported(t) {
-		t.Fatal("cannot verify IPC overlays: user/mount/PID namespaces unavailable")
+	if !requireN(t) {
+		return
 	}
 	runtimeDir := t.TempDir()
 	t.Setenv("XDG_RUNTIME_DIR", runtimeDir)
@@ -494,21 +522,27 @@ func TestIPCOverlays(t *testing.T) {
 // This invokes the launcher without user, mount, PID or network namespaces.
 // The denial probe must still succeed, regardless of Landlock's ABI scopes.
 func TestSeccompWithoutNamespaces(t *testing.T) {
-	path, args, err := sandboxPrefix(sandboxConfig{WorkingDir: t.TempDir()})
+	if !requireLaunch(t) {
+		return
+	}
+	path, args, err := sandboxPrefix(launcherConfig(sandboxConfig{WorkingDir: t.TempDir()}))
 	if err != nil {
 		t.Fatal(err)
 	}
 	cmd := exec.Command(path, append(args, os.Args[0])...)
 	cmd.Env = []string{"INKWELL_ATTACK=seccomp"}
-	if out, err := cmd.CombinedOutput(); err != nil {
+	if out, err := combinedLaunch(t, cmd); err != nil {
 		t.Fatalf("%v: %s", err, out)
 	}
 }
 
 func TestSeccompKillsABIMismatch(t *testing.T) {
+	if !requireLaunch(t) {
+		return
+	}
 	for _, attack := range []string{"arch", "x32"} {
 		t.Run(attack, func(t *testing.T) {
-			path, args, err := sandboxPrefix(sandboxConfig{WorkingDir: t.TempDir()})
+			path, args, err := sandboxPrefix(launcherConfig(sandboxConfig{WorkingDir: t.TempDir()}))
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -518,7 +552,7 @@ func TestSeccompKillsABIMismatch(t *testing.T) {
 			cmd.SysProcAttr = &syscall.SysProcAttr{PidFD: &pidfd}
 			var captured bytes.Buffer
 			cmd.Stdout, cmd.Stderr = &captured, &captured
-			if err := cmd.Start(); err != nil {
+			if err := startLauncher(t, cmd); err != nil {
 				t.Fatal(err)
 			}
 			defer func() { _ = unix.Close(pidfd) }()
@@ -540,6 +574,9 @@ func TestSeccompKillsABIMismatch(t *testing.T) {
 // Host creates a real, writable SysV segment, then passes its id into the
 // namespace-free launcher. Even an otherwise attachable segment must be denied.
 func TestSandboxShmAttach(t *testing.T) {
+	if !requireLaunch(t) {
+		return
+	}
 	id, err := unix.SysvShmGet(unix.IPC_PRIVATE, 4096, unix.IPC_CREAT|0o600)
 	if err != nil {
 		t.Fatal(err)
@@ -567,19 +604,25 @@ func TestSandboxHomeRead(t *testing.T) {
 func TestSandboxSignalControls(t *testing.T) { runAttack(t, "controls") }
 func runAttack(t *testing.T, attack string, env ...string) {
 	t.Helper()
-	path, args, err := sandboxPrefix(sandboxConfig{WorkingDir: t.TempDir()})
+	if !requireLaunch(t) {
+		return
+	}
+	path, args, err := sandboxPrefix(launcherConfig(sandboxConfig{WorkingDir: t.TempDir()}))
 	if err != nil {
 		t.Fatal(err)
 	}
 	cmd := exec.Command(path, append(args, os.Args[0])...)
 	cmd.Env = append([]string{"INKWELL_ATTACK=" + attack}, env...)
-	if output, err := cmd.CombinedOutput(); err != nil {
+	if output, err := combinedLaunch(t, cmd); err != nil {
 		t.Fatalf("%s: %v %s", attack, err, output)
 	}
 }
 
 func TestSandboxInheritedFD(t *testing.T) {
-	path, args, err := sandboxPrefix(sandboxConfig{WorkingDir: t.TempDir()})
+	if !requireLaunch(t) {
+		return
+	}
+	path, args, err := sandboxPrefix(launcherConfig(sandboxConfig{WorkingDir: t.TempDir()}))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -591,7 +634,7 @@ func TestSandboxInheritedFD(t *testing.T) {
 	cmd := exec.Command(path, append(args, os.Args[0])...)
 	cmd.ExtraFiles = []*os.File{f}
 	cmd.Env = []string{"INKWELL_ATTACK=fds"}
-	if output, err := cmd.CombinedOutput(); err != nil {
+	if output, err := combinedLaunch(t, cmd); err != nil {
 		t.Fatalf("%v %s", err, output)
 	}
 }
@@ -599,6 +642,9 @@ func TestSandboxInheritedFD(t *testing.T) {
 func TestSeccompUnknownSyscall(t *testing.T) { runAttack(t, "unknown") }
 
 func TestInitPreservesFileSizeSignal(t *testing.T) {
+	if !requireLaunch(t) {
+		return
+	}
 	cmd := exec.Command(os.Args[0])
 	cmd.Dir = t.TempDir()
 	cmd.Env = []string{"INKWELL_ATTACK=init-report"}
@@ -607,7 +653,10 @@ func TestInitPreservesFileSizeSignal(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer closeReport()
-	if err := cmd.Run(); err == nil {
+	if err := startLauncher(t, cmd); err != nil {
+		t.Fatal(err)
+	}
+	if err := cmd.Wait(); err == nil {
 		t.Fatal("signal death succeeded")
 	}
 	out := Output{ExitCode: cmd.ProcessState.ExitCode()}

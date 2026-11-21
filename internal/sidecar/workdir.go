@@ -44,7 +44,9 @@ func workingDirectory(dir string) (string, error) {
 // identity, and the kernel's pseudo-filesystems. A project may sit inside a
 // broad directory but never contain one: home, caches, the runtime directory
 // and the system tree, whose /run/media holds removable drives and /var/home
-// the homes of image-based systems (Fedora Silverblue).
+// the homes of image-based systems (Fedora Silverblue). The home's default
+// directories are listed by name as well as through the XDG variables: a
+// variable that points elsewhere does not unprotect them.
 func protectedDirs() (secret, broad []string, err error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -60,14 +62,14 @@ func protectedDirs() (secret, broad []string, err error) {
 	}
 	secret = []string{
 		filepath.Join(home, ".ssh"), filepath.Join(home, ".gnupg"),
-		config, os.Getenv("XDG_CONFIG_HOME"), os.Getenv("APPDATA"),
+		filepath.Join(home, ".config"), config, os.Getenv("XDG_CONFIG_HOME"), os.Getenv("APPDATA"),
 		filepath.Join(home, ".local", "share"), os.Getenv("XDG_DATA_HOME"),
 		filepath.Join(home, ".local", "state"), os.Getenv("XDG_STATE_HOME"),
 		os.Getenv("INKWELL_HOME"),
 		"/proc", "/sys", "/dev",
 	}
 	broad = []string{
-		home, cache, os.Getenv("XDG_RUNTIME_DIR"), os.Getenv("LOCALAPPDATA"),
+		home, filepath.Join(home, ".cache"), cache, os.Getenv("XDG_RUNTIME_DIR"), os.Getenv("LOCALAPPDATA"),
 		"/etc", "/usr", "/var", "/boot", "/run",
 	}
 	broad = append(broad, filepath.SplitList(os.Getenv("XDG_DATA_DIRS"))...)

@@ -66,7 +66,7 @@ func TestMemoryControllerMustBeListedExactly(t *testing.T) {
 func runLimits(t *testing.T, dir string) map[string]string {
 	t.Helper()
 	got := map[string]string{}
-	for _, name := range []string{"memory.max", "memory.swap.max", "memory.oom.group"} {
+	for _, name := range []string{"memory.max", "memory.high", "memory.swap.max", "memory.oom.group"} {
 		if v, err := readValue(filepath.Join(dir, name)); err == nil {
 			got[name] = v
 		}
@@ -74,18 +74,20 @@ func runLimits(t *testing.T, dir string) map[string]string {
 	return got
 }
 
-// R2 and R3: memory.max is the resident budget rounded down to the page size
-// (the address budget when no resident budget is given), swap is 0 and the
+// R2, R3 and S-11: memory.high is the resident budget rounded down to the
+// page size (the address budget when no resident budget is given), memory.max
+// is the backstop 64 MiB above it (25 % for larger bounds), swap is 0 and the
 // whole run is one OOM group.
 func TestRunLimitsRoundedDownToPageSize(t *testing.T) {
 	page := uint64(os.Getpagesize())
 	for _, tc := range []struct {
 		name             string
 		resident, memory uint64
-		want             uint64
+		want, backstop   uint64
 	}{
-		{"resident budget between two pages", 3*page + 123, 1 << 30, 3 * page},
-		{"address budget when there is no resident budget", 0, 2*page + 1, 2 * page},
+		{"resident budget between two pages", 3*page + 123, 1 << 30, 3 * page, 3*page + 64<<20},
+		{"address budget when there is no resident budget", 0, 2*page + 1, 2 * page, 2*page + 64<<20},
+		{"backstop 25 % above a large bound", 1 << 30, 0, 1 << 30, 1<<30 + 256<<20},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			r := &cgroupRun{path: filepath.Join(t.TempDir(), "run-1")}
@@ -93,8 +95,8 @@ func TestRunLimitsRoundedDownToPageSize(t *testing.T) {
 				t.Fatal(err)
 			}
 			got := runLimits(t, r.path)
-			if got["memory.max"] != strconv.FormatUint(tc.want, 10) || got["memory.swap.max"] != "0" || got["memory.oom.group"] != "1" {
-				t.Fatalf("limits = %v, want memory.max %d, swap 0, oom.group 1", got, tc.want)
+			if got["memory.high"] != strconv.FormatUint(tc.want, 10) || got["memory.max"] != strconv.FormatUint(tc.backstop, 10) || got["memory.swap.max"] != "0" || got["memory.oom.group"] != "1" {
+				t.Fatalf("limits = %v, want memory.high %d, memory.max %d, swap 0, oom.group 1", got, tc.want, tc.backstop)
 			}
 		})
 	}
@@ -131,7 +133,7 @@ func TestRunLimitsRefusedUnlessVerified(t *testing.T) {
 			t.Fatalf("configureRunLimits = %v, want EACCES", err)
 		}
 	})
-	for _, ignored := range []string{"memory.max", "memory.swap.max", "memory.oom.group"} {
+	for _, ignored := range []string{"memory.max", "memory.high", "memory.swap.max", "memory.oom.group"} {
 		t.Run("F9 write of "+ignored+" silently ignored", func(t *testing.T) {
 			m := &SandboxScope{write: func(path, value string) error {
 				if filepath.Base(path) == ignored {

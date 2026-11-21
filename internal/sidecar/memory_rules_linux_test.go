@@ -1,6 +1,7 @@
 package sidecar
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -208,4 +209,135 @@ func TestMemoryWatchFailurePoisons(t *testing.T) {
 			t.Fatal("an ended event queue did not poison the watch")
 		}
 	})
+}
+
+// S-11 (ADR 0044 point 1g): without inotify the watchdog still acts, on
+// memory.events.local sampled at the same 10 ms cadence, and kills only once
+// memory.current has stayed above memory.high for boundGrace; memory.max stays
+// the backstop, never the normal path. The cgroup is ordinary files here, so
+// the kill shows as the write of cgroup.kill.
+func TestMemoryWatchdogWithoutInotify(t *testing.T) {
+	watch := watchCounterFile
+	t.Cleanup(func() { watchCounterFile = watch })
+	watchCounterFile = func(string) (int, error) { return -1, unix.EMFILE }
+
+	dir := filepath.Dir(counterFile(t, "high 0\noom 0\noom_kill 0\n"))
+	for name, value := range map[string]string{"memory.high": "100\n", "memory.current": "200\n", "memory.stat": "anon 200\nfile 0\nshmem 0\nfile_dirty 0\nfile_writeback 0\nunevictable 0\n", "cgroup.kill": ""} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte(value), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	w := startMemoryWatch(dir, dir)
+	over := time.Now()
+	if err := os.WriteFile(filepath.Join(dir, "memory.events.local"), []byte("high 1\noom 0\noom_kill 0\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	var killed time.Time
+	for deadline := time.Now().Add(5 * time.Second); time.Now().Before(deadline); time.Sleep(time.Millisecond) {
+		if b, _ := os.ReadFile(filepath.Join(dir, "cgroup.kill")); string(b) == "1" {
+			killed = time.Now()
+			break
+		}
+	}
+	w.finish(int(unix.SIGKILL))
+	if killed.IsZero() || !w.h.bounded {
+		t.Fatalf("no watchdog kill without inotify (bounded=%v): memory.max would be the normal path", w.h.bounded)
+	}
+	if took := killed.Sub(over); took < boundGrace {
+		t.Fatalf("killed %v after the bound was passed, before its %v grace", took, boundGrace)
+	}
+}
+
+// S-11 (ADR 0044 point 1g): the bound is on what reclaim cannot give back.
+// memory.current counts the page cache, which stays above memory.high for
+// 85 ms to 200 ms at a time while a plain read waits on storage at 200 MB/s
+// or less (measured 2026-11-16): file pages are not the run's to answer for,
+// but tmpfs and shared memory (shmem, inside "file") and the rest are.
+func TestUnreclaimableLeavesOutOnlyFileCache(t *testing.T) {
+	const mib = 1 << 20
+	for _, c := range []struct {
+		name               string
+		current, file, shm uint64
+		want               uint64
+	}{
+		{"page cache", 200 * mib, 190 * mib, 0, 10 * mib},
+		{"tmpfs", 200 * mib, 190 * mib, 190 * mib, 200 * mib},
+		{"anonymous", 200 * mib, 0, 0, 200 * mib},
+		{"part tmpfs", 200 * mib, 150 * mib, 50 * mib, 100 * mib},
+		{"stat ahead of current", 100 * mib, 150 * mib, 0, 0},
+	} {
+		got, err := unreclaimable(c.current, map[string]uint64{"anon": 1, "file": c.file, "shmem": c.shm, "file_dirty": 0, "file_writeback": 0, "file_mapped": 0, "unevictable": 0})
+		if err != nil || got != c.want {
+			t.Errorf("S-11 page cache: %s: unreclaimable = %d, %v; want %d", c.name, got, err, c.want)
+		}
+	}
+	// Only clean, evictable file pages are left out: dirty and writeback pages
+	// wait on the run's own writes, unevictable ones (mlock) never go. Clean
+	// mapped pages are reclaimed by unmapping them, without the run.
+	for _, c := range []struct {
+		name                            string
+		dirty, writeback, unevict, mapd uint64
+		want                            uint64
+	}{
+		{"dirty", 100 * mib, 0, 0, 0, 110 * mib},
+		{"writeback", 0, 100 * mib, 0, 0, 110 * mib},
+		{"mlocked file mapping", 0, 0, 100 * mib, 100 * mib, 110 * mib},
+		{"clean mapped", 0, 0, 0, 190 * mib, 10 * mib},
+		{"all three", 60 * mib, 60 * mib, 60 * mib, 0, 190 * mib},
+		{"more kept than cache", 190 * mib, 190 * mib, 0, 0, 200 * mib},
+	} {
+		stat := map[string]uint64{"file": 190 * mib, "shmem": 0, "file_dirty": c.dirty, "file_writeback": c.writeback, "file_mapped": c.mapd, "unevictable": c.unevict}
+		got, err := unreclaimable(200*mib, stat)
+		if err != nil || got != c.want {
+			t.Errorf("S-11 page cache: %s: unreclaimable = %d, %v; want %d", c.name, got, err, c.want)
+		}
+	}
+	for _, stat := range []map[string]uint64{{"file": 1}, {"shmem": 1}, {}, {"file": 1, "shmem": 0, "file_dirty": 0, "file_writeback": 0}, {"file": 1, "shmem": 0, "unevictable": 0}} {
+		if _, err := unreclaimable(1, stat); err == nil {
+			t.Errorf("S-11 page cache: memory.stat %v without every counter gave a usage", stat)
+		}
+	}
+}
+
+// S-11: past memory.high for longer than boundGrace, a run held up only by
+// its page cache is not killed; the same charge in tmpfs is.
+func TestMemoryWatchdogSparesFileCache(t *testing.T) {
+	const mib = 1 << 20
+	for _, c := range []struct {
+		name string
+		stat string
+		kill bool
+	}{
+		{"page cache", fmt.Sprintf("anon %d\nfile %d\nshmem 0\nfile_mapped %d\nfile_dirty 0\nfile_writeback 0\nunevictable 0\n", 10*mib, 190*mib, 190*mib), false},
+		{"tmpfs", fmt.Sprintf("anon %d\nfile %d\nshmem %d\nfile_mapped 0\nfile_dirty 0\nfile_writeback 0\nunevictable 0\n", 10*mib, 190*mib, 190*mib), true},
+		{"dirty file", fmt.Sprintf("anon %d\nfile %d\nshmem 0\nfile_mapped 0\nfile_dirty %d\nfile_writeback 0\nunevictable 0\n", 10*mib, 190*mib, 190*mib), true},
+		{"mlocked file", fmt.Sprintf("anon %d\nfile %d\nshmem 0\nfile_mapped %d\nfile_dirty 0\nfile_writeback 0\nunevictable %d\n", 10*mib, 190*mib, 190*mib, 190*mib), true},
+		{"no stat", "", false},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			dir := filepath.Dir(counterFile(t, "high 0\noom 0\noom_kill 0\n"))
+			files := map[string]string{"memory.high": fmt.Sprint(128*mib, "\n"), "memory.current": fmt.Sprint(200*mib, "\n"), "cgroup.kill": ""}
+			if c.stat != "" {
+				files["memory.stat"] = c.stat
+			}
+			for name, value := range files {
+				if err := os.WriteFile(filepath.Join(dir, name), []byte(value), 0o600); err != nil {
+					t.Fatal(err)
+				}
+			}
+			w := startMemoryWatch(dir, dir)
+			if err := os.WriteFile(filepath.Join(dir, "memory.events.local"), []byte("high 1\noom 0\noom_kill 0\n"), 0o600); err != nil {
+				t.Fatal(err)
+			}
+			killed := false
+			for deadline := time.Now().Add(10 * boundGrace); time.Now().Before(deadline) && !killed; time.Sleep(time.Millisecond) {
+				b, _ := os.ReadFile(filepath.Join(dir, "cgroup.kill"))
+				killed = string(b) == "1"
+			}
+			w.finish(int(unix.SIGKILL))
+			if killed != c.kill || w.h.bounded != c.kill {
+				t.Fatalf("S-11 page cache: killed=%v bounded=%v after %v above memory.high, want %v", killed, w.h.bounded, 10*boundGrace, c.kill)
+			}
+		})
+	}
 }

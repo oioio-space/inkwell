@@ -204,7 +204,7 @@ run = "./scripts/deadcode.sh"
 
 [tasks."test:py"]
 description = "Python tests of the gate, perf and formal tooling (unittest)"
-run = ["cd scripts/perf && ../heavy.sh python3 -m unittest $(ls *_test.py | grep -v -e '^pbmodel_test\\.py$' -e '^paired_e2e_test\\.py$' -e '^rgmodel_test\\.py$' -e '^regression_test\\.py$' -e '^regression_layout_test\\.py$' -e '^regression_falsify_test\\.py$' | sed 's/\\.py$//')", "./scripts/heavy.sh python3 -m unittest scripts/alloy_check_test.py scripts/block_done_test.py scripts/fetch_pinned_test.py scripts/check_claude_md_test.py scripts/inventory_test.py scripts/gate_reset_test.py scripts/gate_resume_test.py scripts/gate_nested_test.py scripts/llm_test.py scripts/netsim/affected_test.py scripts/netsim/mutants_test.py"]
+run = ["cd scripts/perf && ../heavy.sh python3 -m unittest $(ls *_test.py | grep -v -e '^pbmodel_test\\.py$' -e '^paired_e2e_test\\.py$' -e '^rgmodel_test\\.py$' -e '^regression_test\\.py$' -e '^regression_layout_test\\.py$' -e '^regression_falsify_test\\.py$' | sed 's/\\.py$//')", "./scripts/heavy.sh python3 -m unittest scripts/alloy_check_test.py scripts/block_done_test.py scripts/fetch_pinned_test.py scripts/check_claude_md_test.py scripts/inventory_test.py scripts/gate_reset_test.py scripts/gate_resume_test.py scripts/gate_nested_test.py scripts/llm_test.py scripts/netsim/affected_test.py scripts/netsim/mutants_test.py scripts/gojson_check_test.py"]
 
 [tasks."lint:claude-md"]
 description = "Everything CLAUDE.md cites exists: mise tasks, paths, agents, skills, Claude hooks"
@@ -242,11 +242,11 @@ run = "python3 scripts/check-env-reference.py"
 
 [tasks."ci:core"]
 description = "Everything CI must pass except the impaired network simulation (what the pre-push hook runs first; scripts/netsim/affected.py decides about the netsim): ci:checks and the formal models"
-depends = ["ci:checks", "formal"]
+depends = ["ci:checks", "fe:check", "formal"]
 
 [tasks."ci:checks"]
-description = "ci:core without the formal models, which GitHub runs in their own parallel job (formal: about 25 min on a 4-vCPU runner, 2026-11-16)"
-depends = ["test:py", "lint:env", "lint:claude-md", "arch", "deadcode", "scan:secrets", "scan:code", "scan:sbom", "lint", "lint:sh", "lint:yaml", "lint:actions", "pkg:lint", "test:ci", "cover:check", "fe:check"]
+description = "ci:core without the formal models and the frontend gate, which GitHub runs on their own runners (formal: about 25 min on a 4-vCPU runner; fe:check sharing the runner with test:ci ran 5 to 15 times slower, 2026-11-17)"
+depends = ["test:py", "lint:env", "lint:claude-md", "arch", "deadcode", "scan:secrets", "scan:code", "scan:sbom", "lint", "lint:sh", "lint:yaml", "lint:actions", "pkg:lint", "test:ci", "cover:check"]
 
 [tasks.ci]
 description = "Everything CI must pass: ci:core and the impaired network simulation"
