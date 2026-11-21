@@ -1664,6 +1664,11 @@
       "id": "41cd83999f7128d4e5359b8186e1aed8bdd60074549f42805a0fccdd0fdaaaf7",
       "reason": "mise.toml: SB2a1 on top of main: CI1b's split (ci:checks, fe:check on its own runner, formal) and SB2a1's test:py entry (gojson_check_test.py) beside INV1's inventory_test.py; locally ci:core runs the same set; no test weakened",
       "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "38462a8e3d5460feac0725ba9455e771741a55a22cad23c76c7509237d16cbde",
+      "reason": "scripts/sidecar-no-tools.sh (gate L1 `without-tools`): the probe fixtures are built before PATH is emptied and the whole -race suite runs from the package directory; with an empty PATH the tests looked for cc, getconf and sleep and missed the package-relative font; same assertions and delays",
+      "decision": "docs/plans/2026-11-02-L1-implementation.md"
     }
   ]
 }

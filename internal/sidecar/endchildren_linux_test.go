@@ -65,7 +65,7 @@ func endChildrenCase(t *testing.T, mode string) {
 	switch mode {
 	case "ignores-term":
 		// The child ignores the polite request: it is killed once the grace has passed, not before.
-		pid, _ := foreignChild(t, `trap "" TERM; echo ready; exec sleep 600`)
+		pid, _ := foreignChild(t, `test -x /bin/sleep || exit 1; trap "" TERM; echo ready; exec /bin/sleep 600`)
 		start := time.Now()
 		if err := EndChildren(5*time.Second, grace); err != nil {
 			t.Fatalf("N-14 remaining children are ended: %v", err)
@@ -78,13 +78,16 @@ func endChildrenCase(t *testing.T, mode string) {
 		// The child ends on the request and leaves a process behind, like a sandbox holder: that
 		// process comes to this one (child subreaper), not to init, and is ended too.
 		asked := filepath.Join(t.TempDir(), "asked")
-		pid, lines := foreignChild(t, `sleep 600 & echo $!; trap 'echo term > "$ASKED"; exit 0' TERM; echo ready; wait`, "ASKED="+asked)
+		pid, lines := foreignChild(t, `test -x /bin/sleep || exit 1; /bin/sleep 600 & echo $!; trap 'echo term > "$ASKED"; exit 0' TERM; echo ready; wait`, "ASKED="+asked)
 		if len(lines) != 1 {
 			t.Fatalf("the child printed %q, want the pid of its own child", lines)
 		}
 		grand, err := strconv.Atoi(lines[0])
 		if err != nil {
 			t.Fatal(err)
+		}
+		if !alive(grand) {
+			t.Fatalf("N-14 grandchild %d exited before the barrier", grand)
 		}
 		if err := EndChildren(5*time.Second, grace); err != nil {
 			t.Fatalf("N-14 remaining children are ended: %v", err)
@@ -101,7 +104,7 @@ func endChildrenCase(t *testing.T, mode string) {
 		}
 	case "deadline":
 		// The deadline passes before the grace: the failure names the child that still runs.
-		pid, _ := foreignChild(t, `trap "" TERM; echo ready; exec sleep 600`)
+		pid, _ := foreignChild(t, `test -x /bin/sleep || exit 1; trap "" TERM; echo ready; exec /bin/sleep 600`)
 		err := EndChildren(100*time.Millisecond, time.Minute)
 		_ = unix.Kill(pid, unix.SIGKILL)
 		want := fmt.Sprintf("1 child processes still running: [%d (sleep)]", pid)

@@ -32,8 +32,11 @@ WebKitGTK itself launches WebKitWebProcess, WebKitNetworkProcess,
 WebKitGPUProcess, bwrap and xdg-dbus-proxy. Those are guaranteed library helpers
 (architecture §14.1), never programs launched by our application code.
 
-scripts/sidecar-no-tools.sh compiles the race-instrumented test binary, then runs
-the entire existing sidecar suite with PATH empty. arch-exec-check complements
+scripts/sidecar-no-tools.sh compiles the race-instrumented test binary and
+prepares the SB2a1 probe fixtures and libc version before clearing PATH.
+It runs the entire sidecar suite from the package's source directory, as
+[`go test`](https://pkg.go.dev/cmd/go#hdr-Test_packages) does, so package-relative
+fixtures resolve in both modes. arch-exec-check complements
 the dependency graph with a scan of all platform sources. (2026-11-03: the
 dependency-graph scan was removed by the user's N42 clarification; only our own
 code is checked. See docs/objectif-en-cours.md.)

@@ -3,9 +3,6 @@ package sidecar
 import (
 	"context"
 	"errors"
-	"os"
-	"os/exec"
-	"path/filepath"
 	"testing"
 	"time"
 )
@@ -105,32 +102,13 @@ func TestTierFactsBackoffIsCapped(t *testing.T) {
 	}
 }
 
-// spinHelper builds a C program that never ends and makes no system call.
-func spinHelper(t *testing.T) string {
-	t.Helper()
-	cc, err := exec.LookPath("cc")
-	if err != nil {
-		t.Fatalf("ADR 0044 point 2 hung probe: a C compiler is required (cgo is, for the application): %v", err)
-	}
-	dir := t.TempDir()
-	src := filepath.Join(dir, "main.c")
-	if err := os.WriteFile(src, []byte("int main(void) { for (;;) {} }\n"), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	helper := filepath.Join(dir, "helper")
-	if out, err := exec.CommandContext(t.Context(), cc, "-o", helper, src).CombinedOutput(); err != nil {
-		t.Fatalf("ADR 0044 point 2 hung probe: cc: %v\n%s", err, out)
-	}
-	return helper
-}
-
 // ADR 0044 point 2: a probe launch whose target hangs ends at its deadline and
 // is inconclusive in both tiers, never a refusal nor a decided tier.
 func TestHungProbeLaunchIsInconclusive(t *testing.T) {
 	if !requireLaunchFor(t, "ADR 0044 point 2 hung probe") {
 		return
 	}
-	helper := spinHelper(t)
+	helper := probeFixture(t, t.Context(), "spin")
 	const deadline = 300 * time.Millisecond
 	for _, tr := range []tier{tierN, tierF} {
 		if tr == tierN && machineTier(t) != tierN {

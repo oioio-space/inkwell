@@ -4,8 +4,6 @@ import (
 	"context"
 	"errors"
 	"os"
-	"os/exec"
-	"path/filepath"
 	"testing"
 	"time"
 )
@@ -80,45 +78,13 @@ func TestUnverifiableProbeTargetIsNotInconclusive(t *testing.T) {
 	}
 }
 
-// versionHelper builds a C program that behaves as the probe expects typst
-// to: it exits 0 only when run as `<program> --version`, and only if the
-// terminal-size ioctl typst's descriptor allows was not refused by the filter
-// (status 3: other arguments; status 4: the ioctl answered EPERM).
-func versionHelper(t *testing.T) string {
-	t.Helper()
-	cc, err := exec.LookPath("cc")
-	if err != nil {
-		t.Fatalf("T-3 probe target: a C compiler is required (cgo is, for the application): %v", err)
-	}
-	dir := t.TempDir()
-	src := filepath.Join(dir, "main.c")
-	const program = `#include <errno.h>
-#include <string.h>
-#include <sys/ioctl.h>
-int main(int argc, char **argv) {
-	struct winsize ws;
-	if (argc != 2 || strcmp(argv[1], "--version") != 0) return 3;
-	if (ioctl(0, TIOCGWINSZ, &ws) != 0 && errno == EPERM) return 4;
-	return 0;
-}
-`
-	if err := os.WriteFile(src, []byte(program), 0o600); err != nil {
-		t.Fatal(err)
-	}
-	helper := filepath.Join(dir, "helper")
-	if out, err := exec.CommandContext(t.Context(), cc, "-o", helper, src).CombinedOutput(); err != nil {
-		t.Fatalf("T-3 probe target: cc: %v\n%s", err, out)
-	}
-	return helper
-}
-
 // T-3, ADR 0044 point 2 (amended 2026-11-15): the probe launches its target as
 // `--version`, under typst's own descriptor, in both tiers.
 func TestProbeRunsVersionUnderTypstDescriptor(t *testing.T) {
 	if !requireLaunchFor(t, "T-3 probe target") {
 		return
 	}
-	helper := versionHelper(t)
+	helper := probeFixture(t, t.Context(), "version")
 	for _, tr := range []tier{tierN, tierF} {
 		if tr == tierN && machineTier(t) != tierN {
 			continue

@@ -4,45 +4,10 @@ import (
 	"context"
 	"errors"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 )
-
-// runpathHelper builds a dynamically linked C program whose one library is
-// found only through its DT_RUNPATH, as the libraries of the real application
-// are (WebKitGTK needs libpulse, whose libpulsecommon lives in a RUNPATH
-// folder).
-func runpathHelper(t *testing.T) string {
-	t.Helper()
-	cc, err := exec.LookPath("cc")
-	if err != nil {
-		t.Fatalf("UX-SB2a1-1 probe target: a C compiler is required (cgo is, for the application): %v", err)
-	}
-	dir := t.TempDir()
-	lib := filepath.Join(dir, "private")
-	if err := os.Mkdir(lib, 0o700); err != nil {
-		t.Fatal(err)
-	}
-	write := func(name, src string) string {
-		path := filepath.Join(dir, name)
-		if err := os.WriteFile(path, []byte(src), 0o600); err != nil {
-			t.Fatal(err)
-		}
-		return path
-	}
-	build := func(args ...string) {
-		if out, err := exec.CommandContext(t.Context(), cc, args...).CombinedOutput(); err != nil {
-			t.Fatalf("UX-SB2a1-1 probe target: cc %v: %v\n%s", args, err, out)
-		}
-	}
-	build("-shared", "-fPIC", "-o", filepath.Join(lib, "libinkwellprobedep.so"), write("dep.c", "int inkwell_probe_dep(void) { return 0; }\n"))
-	helper := filepath.Join(dir, "helper")
-	build("-o", helper, write("main.c", "int inkwell_probe_dep(void);\nint main(void) { return inkwell_probe_dep(); }\n"),
-		"-L"+lib, "-linkwellprobedep", "-Wl,--enable-new-dtags,-rpath,"+lib)
-	return helper
-}
 
 // UX-SB2a1-1: the probe's target was this executable, which in the application
 // is linked to libraries found through a DT_RUNPATH; the launcher refused it
@@ -53,7 +18,7 @@ func TestProbeTargetWithRunpathLibrary(t *testing.T) {
 	if !requireLaunchFor(t, "UX-SB2a1-1 probe target") {
 		return
 	}
-	helper := runpathHelper(t)
+	helper := probeFixture(t, t.Context(), "runpath")
 	for _, tr := range []tier{tierN, tierF} {
 		if tr == tierN && machineTier(t) != tierN {
 			continue

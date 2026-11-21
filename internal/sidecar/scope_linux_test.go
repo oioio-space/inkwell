@@ -829,7 +829,7 @@ func boundAttempt(t *testing.T, leaf bool) bool {
 	// An idle process keeps the app's scope, and so its OOM counters, readable
 	// after the app helper's death; OOMPolicy=continue keeps the manager from
 	// stopping that scope on an OOM kill (its default for a scope without Delegate).
-	keeper := exec.Command("sleep", "infinity")
+	keeper := exec.Command("/bin/sleep", "infinity")
 	if err := keeper.Start(); err != nil {
 		t.Fatal(err)
 	}

@@ -140,6 +140,8 @@ var sink []byte
 // runHelper is the body of a fake sidecar; it returns the exit code.
 func runHelper(mode string) int {
 	switch name, arg, _ := strings.Cut(mode, ":"); name {
+	case "build-probe-fixtures":
+		return buildProbeFixtures(arg)
 	case "sandboxstatus":
 		data, err := os.ReadFile("/proc/self/status")
 		if err != nil {
