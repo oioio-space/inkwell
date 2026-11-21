@@ -985,3 +985,40 @@ FALSE` (P-5: one budget).
 
 Not modelled: frames and their order across a move (NI0's `TestRelayThenDirect`, `move_waits_for_ack`), the bulk
 lane (opened after PeerUp), real timings (the Go test `TestPeerUpLatency`, netsim). Results: gates/PU1/WITNESSES.md.
+
+## WindowClose (WC1)
+
+[WC1 window-close contract](../../plans/2026-11-21-wc1-window-close.md) refines the close aspect
+of OISingleInstance's D-DRAIN. One attempt coordinates a single editor or a parallel drain of
+both on quit. Model checking bounds edit prefixes and attempt IDs. `InputFrozen` preserves the
+captured cut. `AckIsDurable` compares the cut to the durable prefix at save ACK. Normal close
+requires that prefix, the current completion ACK and the presence handoff. Group authorization
+requires all targets to be ready before any permit may pass the hook. `OnlyWithConsent`
+checks that forced authorization and release have a matching explicit choice from the
+abort notice, recorded independently of permit issuance.
+
+`WindowClose` explores failures, retries and permit consumption. The first close event for
+an approved window consumes its permit regardless of event origin. Revocation clears any
+remaining permits before input resumes. Its fair clock can reach the shared deadline,
+after which Expire aborts the attempt. `WindowCloseHealthy`
+requests quit with healthy participants and assumes the prerequisites can complete within the
+time budget. Weak fairness covers Prepare, Write, SaveAck, launch handling, Goodbye, Ack and
+authorization/consumption. `HealthyCloseSucceeds` requires normal closes for all targets.
+`WindowCloseCrashed` starts with absent renderers and a fair request and explicit force choice.
+`ForceClosesCrashedWindow` requires native teardown in that environment. Go and native tests
+cover clock bounds in seconds, notice actions, transport barriers and OS quit routing.
+The WC1 gate runs these models through `scripts/wc1-tla.sh` using the shared pinned TLC
+distribution.
+
+| TLC run | Counterexample |
+|---|---|
+| `WindowCloseSkipWait` | `NoAcknowledgedKeystrokeLost`: destroy with buffered edits |
+| `WindowCloseTimeoutCloses` | `NoAcknowledgedKeystrokeLost`: the timer destroys before the write |
+| `WindowCloseNoGoodbye` | `GoodbyeBeforeClose`: the save ACK authorizes close without presence |
+| `WindowCloseStaleAck` | `CloseWaitedForAck`: a previous attempt's ACK authorizes a retry |
+| `WindowCloseTypeWhileHeld` | `InputFrozen`: accept a keystroke after capturing the cut |
+| `WindowCloseAckBeforeWrite` | `AckIsDurable`: acknowledge the cut before committing it |
+| `WindowClosePartialQuit` | `GroupWaitedForAll`: authorize one editor while the other is still draining |
+| `WindowCloseNoWrite` | `HealthyCloseSucceeds`: a healthy request stalls on a dirty cut |
+| `WindowCloseForceNeedsLive` | `ForceClosesCrashedWindow`: an unavailable renderer prevents explicit force |
+| `WindowCloseForceWithoutConsent` | `OnlyWithConsent`: issue a forced permit straight from the abort notice |

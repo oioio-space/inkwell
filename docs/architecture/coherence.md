@@ -110,6 +110,8 @@ dernier). Une alpha Linux ne clôt ni N35, ni N37, ni L5.
 
 ### MVP (alpha utile) — terminer les étapes 1 à 3, avec le minimum des étapes 5 et 6
 
+WC1 belongs to **Collaborer sans perdre** and uses the existing editing and presence paths. [Window-close rules](../plans/2026-11-21-wc1-window-close.md) → WC1
+
 | Lot | Exigences | Valeur | Risque traité | Porte |
 |---|---|---|---|---|
 | Mesure de référence (N38) | `PERF-TYPE`, `PERF-SYNC-*`, `PERF-START`, `PERF-MEM` (dont W76, lot ML1 : budgets mémoire du bac à sable fixés sur le corpus de gros documents), bancs Go de `HOT_PATHS:`, corpus de §12.5 PM-1 | sans elle, aucun budget n'est un seuil | budgets restés des souhaits | résultats bruts archivés, seuils fixés (PM-5) |

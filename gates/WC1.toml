@@ -1,0 +1,244 @@
+# FROZEN 2026-11-21 after two cross-family reviews (Opus; decision: an approved attempt's permit is consumed by any close event, no Wails fork).
+# WC1 prevents data loss at native window close.
+# Spec: docs/plans/2026-11-21-wc1-window-close.md. Rigour: complete.
+# Witnesses: gates/WC1/WITNESSES.md. Six commands, at most 1620 s including kill grace, leaving 180 s of margin.
+max_minutes = 30
+raw_results = ["docs/plans/2026-11-21-wc1-window-close.md", "docs/protocol/tla/WindowClose*", "docs/protocol/tla/mutants/WindowClose*", "scripts/wc1-tla.sh", "gates/WC1/*"]
+
+[[criteria]]
+id = "tla"
+command = '''set -euo pipefail
+out="${INKWELL_PERF_OUT:-.task/wc1}"
+mkdir -p "$out"
+timeout -k 10 120 ./scripts/heavy.sh ./scripts/wc1-tla.sh sound | tee "$out/tla.log"
+for model in WindowClose WindowCloseHealthy WindowCloseCrashed; do
+    grep -Fqx "✓ $model: no error (exhaustive, liveness checked)" "$out/tla.log"
+done'''
+
+[[criteria]]
+# W-1 through W-6. Absent, skipped and failed tests all fail the criterion.
+# TestWC1W1CloseHold must veto any close without an approved attempt for the window.
+# The first close after approval consumes the permit, even if an OS request beats
+# the reissued Close(). Consumption is one-use. Abort or the possibility of a new
+# edit invalidates the permit, and a later attempt must earn its own approval.
+id = "go"
+command = '''set -eu
+out="${INKWELL_PERF_OUT:-.task/wc1}"
+mkdir -p "$out"
+rc=0
+timeout -k 10 300 ./scripts/heavy.sh go test -count=1 -json -run '^TestWC1W[1-6]' ./cmd/inkwell ./internal/bridge >"$out/go.jsonl" || rc=$?
+python3 -I - "$out/go.jsonl" "$rc" <<'PY'
+import json, sys
+from pathlib import Path
+
+tests = {
+    "TestWC1W1CloseHold": "cmd/inkwell",
+    "TestWC1W2SaveAck": "cmd/inkwell",
+    "TestWC1W3PresenceBarrier": "internal/bridge",
+    "TestWC1W4ExitPaths": "cmd/inkwell",
+    "TestWC1W5StoreAfterReload": "internal/bridge",
+    "TestWC1W6CloseRecovery": "cmd/inkwell",
+}
+events = [json.loads(line) for line in Path(sys.argv[1]).read_text().splitlines() if line.startswith("{")]
+terminal = {(e.get("Package"), e.get("Test")): e["Action"] for e in events
+            if e["Action"] in {"pass", "fail", "skip"}}
+bad = {test: terminal.get(("github.com/oioio-space/inkwell/" + pkg, test), "absent")
+       for test, pkg in tests.items()}
+bad = {test: action for test, action in bad.items() if action != "pass"}
+for (_, test), action in terminal.items():
+    if test and action == "skip" and test.split("/")[0] in tests:
+        bad[test] = action
+if bad or sys.argv[2] != "0":
+    for e in events:
+        if e["Action"] in {"output", "build-output"} and (
+            e.get("Test", "") in bad or e.get("Test", "").split("/")[0] in bad or not e.get("Test")
+        ):
+            print(e.get("Output", ""), end="")
+    sys.exit(f"WC1 Go: exit {sys.argv[2]}, required tests {bad}")
+PY'''
+
+[[criteria]]
+# scripts/wc1-webkit.sh ABSOLUTE_EVIDENCE_DIR (step 2) must fail on setup, scenario
+# or evidence collector errors. Build from the candidate and use fresh populated
+# INKWELL_DOCS and INKWELL_HOME for each participant. Only relaunch reuses its own paths.
+#
+# Browser leg: emit webkit.json with Playwright's bundled WebKit and Chromium against
+# the browser fixture, no retries. In WebKit the fixture invokes the production page-side
+# barrier before an app-owned reload (SAV-03b) or departure (SHEET-MU-01b), starting
+# immediately after the input. Assert recovered text and removal of the other person's
+# selection. Keep the original assertions, bounds and raw Chromium reload/close coverage.
+#
+# Native leg: build and launch the Wails desktop app with GTK4 and system WebKitGTK in a
+# real desktop session or isolated compositor. An external window-manager close request
+# (e.g. the compositor's close-window shortcut directed at the identified toplevel)
+# initiates each native scenario. Require a real GtkWindow::close-request and Wails hook
+# veto for that window, independently observed and correlated with the external action.
+# Page reload/close and calls to GTK or Go Close() cannot initiate the native proof.
+# The first closing event after approval consumes the attempt's one-use permit in the
+# hook. The coordinator calls Close() to ensure an event arrives. Observe actual
+# GTK toplevel destruction, an OS wait status proving clean exit of the original process,
+# and a fresh PID reopening the same project. In SHEET-MU-01b keep the second person's
+# window alive. Observe removal on a healthy link before destruction to distinguish
+# the goodbye from link loss or TTL expiry. The fixture can hold the final completion
+# ACK until this observation, inside the normal close deadline.
+#
+# Native output is native.jsonl (go test -json) and native-lifecycle.jsonl (ordered evidence
+# from the compositor driver, GTK, Wails hook, UI assertions and process supervisor).
+# Each event has scenario, event, request (nonempty correlation ID), window (original GTK
+# toplevel correlation ID) and pid (the event's app PID). Only the last two events carry
+# the fresh PID. The process-exited record includes exit_code from the OS wait status.
+# TestWC1NativeClose runs the real SAV-03b cut without a save or debounce wait and checks
+# recovered text, unsaved marker and unchanged manual projection. It also runs
+# SHEET-MU-01b with its original assertions and bounds.
+# TestWC1NativeRecovery runs fresh W-6 cases. FullDiskRetry injects a real save error at
+# the store boundary and clears it on retry. HungStoreForce keeps the save stalled through
+# exit. HungRendererForce stops the renderer from answering. CrashedRendererForce terminates
+# the WebKit renderer with the Go process and GTK toplevel alive. Every case checks progress
+# while held, the notice by the deadline or on error, recovery wording and both accessible
+# actions. Dismissal and repeated WM requests cannot close without consent. Retry completes
+# after the fault clears. Force uses the visible action with the fault still present and
+# checks exit within 5 s of force and that only the deliberately committed prefix reopens.
+# Check keyboard focus and destructive styling.
+id = "webkit-native-e2e"
+command = '''set -eu
+out="${INKWELL_PERF_OUT:-.task/wc1}"
+mkdir -p "$out"
+timeout -k 10 960 bash -s -- "$(realpath "$out")" <<'WC1_NATIVE'
+set -eu
+out="$1"
+python3 -I - <<'PY'
+import re, sys
+from pathlib import Path
+
+bad = []
+for file, scenario in (("save.spec.ts", "SAV-03b"), ("sheet.spec.ts", "SHEET-MU-01b")):
+    source = Path("frontend/e2e", file).read_text()
+    case = re.search(r'test\("' + scenario + r'\b.*?(?=\n[ \t]*test\(|\Z)', source, re.S)
+    if not case or "test.fixme(" in case.group():
+        bad.append(f"{scenario} is absent or still fixme on WebKit")
+if not Path("scripts/wc1-webkit.sh").is_file():
+    bad.append("the native Wails close runner is absent")
+if bad:
+    sys.exit("WC1 WebKit: " + "; ".join(bad))
+PY
+rm -f "$out/webkit.json" "$out/native.jsonl" "$out/native-lifecycle.jsonl"
+./scripts/heavy.sh bash scripts/wc1-webkit.sh "$out"
+python3 -I - "$out" <<'PY'
+import json, sys
+from pathlib import Path
+
+out = Path(sys.argv[1])
+report = json.loads((out / "webkit.json").read_text())
+scenarios = ("SAV-03b", "SHEET-MU-01b")
+expected = {(project, case) for project in ("webkit", "chromium") for case in scenarios}
+suites = list(report["suites"])
+passed = set()
+while suites:
+    suite = suites.pop()
+    suites.extend(suite.get("suites", []))
+    for spec in suite.get("specs", []):
+        scenario = spec["title"].split()[0]
+        for test in spec["tests"]:
+            if (test["status"] == "expected"
+                    and [r["status"] for r in test["results"]] == ["passed"]):
+                passed.add((test["projectName"], scenario))
+if expected - passed or report.get("errors"):
+    sys.exit(f"WC1 browser regressions missing or failing: {sorted(expected - passed)}")
+
+required = {"TestWC1NativeClose", "TestWC1NativeRecovery"}
+required.update(f"TestWC1NativeClose/{case}" for case in scenarios)
+required.update(f"TestWC1NativeRecovery/{case}" for case in
+                ("FullDiskRetry", "HungStoreForce", "HungRendererForce", "CrashedRendererForce"))
+events = [json.loads(line) for line in (out / "native.jsonl").read_text().splitlines()]
+terminal = {e.get("Test"): e["Action"] for e in events
+            if e.get("Package") == "github.com/oioio-space/inkwell/cmd/inkwell"
+            and e["Action"] in {"pass", "fail", "skip"}}
+bad = {test: terminal.get(test, "absent") for test in required if terminal.get(test) != "pass"}
+bad.update({test: action for test, action in terminal.items()
+            if test and test.split("/")[0] in required and action != "pass"})
+if bad:
+    sys.exit(f"WC1 native scenarios missing or failing: {bad}")
+
+trace = [json.loads(line) for line in (out / "native-lifecycle.jsonl").read_text().splitlines()]
+for scenario, prepared, oracle in (
+    ("SAV-03b", "input-accepted", ["save-ack-durable"]),
+    ("SHEET-MU-01b", "selection-visible", ["goodbye-handed-off", "remote-selection-cleared"]),
+):
+    expected_trace = [prepared, "wm-close-sent", "gtk-close-request", "wails-close-vetoed",
+                      *oracle, "close-authorized", "close-permit-consumed", "gtk-window-destroyed",
+                      "process-exited", "process-relaunched", "project-reopened"]
+    rows = [e for e in trace if e["scenario"] == scenario]
+    if [e["event"] for e in rows] != expected_trace:
+        sys.exit(f"WC1 native {scenario}: incorrect window-manager close lifecycle")
+    for field in ("request", "window"):
+        if not rows[0][field] or any(e[field] != rows[0][field] for e in rows):
+            sys.exit(f"WC1 native {scenario}: mismatched {field} identity")
+    old_pid, new_pid = rows[0]["pid"], rows[-1]["pid"]
+    if (not all(type(pid) is int and pid > 0 for pid in (old_pid, new_pid))
+            or old_pid == new_pid or rows[-3].get("exit_code") != 0
+            or any(e["pid"] != old_pid for e in rows[:-2])
+            or any(e["pid"] != new_pid for e in rows[-2:])):
+        sys.exit(f"WC1 native {scenario}: no clean exit and distinct process relaunch")
+PY
+WC1_NATIVE'''
+
+[[criteria]]
+id = "mutants"
+command = '''set -euo pipefail
+out="${INKWELL_PERF_OUT:-.task/wc1}"
+mkdir -p "$out"
+timeout -k 10 120 ./scripts/heavy.sh ./scripts/wc1-tla.sh mutants | tee "$out/mutants.log"
+grep -Fqx '✓ WindowCloseSkipWait: violation detected (NoAcknowledgedKeystrokeLost)' "$out/mutants.log"
+grep -Fqx '✓ WindowCloseTimeoutCloses: violation detected (NoAcknowledgedKeystrokeLost)' "$out/mutants.log"
+grep -Fqx '✓ WindowCloseNoGoodbye: violation detected (GoodbyeBeforeClose)' "$out/mutants.log"
+grep -Fqx '✓ WindowCloseStaleAck: violation detected (CloseWaitedForAck)' "$out/mutants.log"
+grep -Fqx '✓ WindowCloseTypeWhileHeld: violation detected (InputFrozen)' "$out/mutants.log"
+grep -Fqx '✓ WindowCloseAckBeforeWrite: violation detected (AckIsDurable)' "$out/mutants.log"
+grep -Fqx '✓ WindowClosePartialQuit: violation detected (GroupWaitedForAll)' "$out/mutants.log"
+grep -Fqx '✓ WindowCloseNoWrite: violation detected (HealthyCloseSucceeds)' "$out/mutants.log"
+grep -Fqx '✓ WindowCloseForceNeedsLive: violation detected (ForceClosesCrashedWindow)' "$out/mutants.log"
+grep -Fqx '✓ WindowCloseForceWithoutConsent: violation detected (OnlyWithConsent)' "$out/mutants.log"'''
+
+[[criteria]]
+id = "docs"
+command = '''timeout -k 10 30 python3 -I - <<'PY'
+import sys
+from pathlib import Path
+
+plan = Path("docs/plans/2026-11-21-wc1-window-close.md").read_text()
+model = Path("docs/protocol/tla/README.md").read_text()
+requirements = Path("docs/exigences.md").read_text()
+witnesses = [f"**W-{i} " for i in range(1, 7)] + ["R-E2E1-1", "R-E2E2-1", "SAV-03b", "SHEET-MU-01b"]
+missing = [x for x in witnesses if x not in plan]
+missing += [x for x in ("WindowClose", "NoAcknowledgedKeystrokeLost", "GoodbyeBeforeClose", "OnlyWithConsent",
+                                   "HealthyCloseSucceeds", "ForceClosesCrashedWindow") if x not in model]
+if "2026-11-21-wc1-window-close.md" not in requirements:
+    missing.append("WC1 requirements entry")
+if missing:
+    sys.exit(f"WC1 docs: missing {missing}")
+PY'''
+
+[[criteria]]
+id = "simplify-report"
+command = '''timeout -k 10 30 python3 -I - <<'PY'
+import sys
+from pathlib import Path
+
+report = Path("gates/WC1/SIMPLIFY.md")
+if not report.is_file():
+    sys.exit("WC1 /simplify review evidence is absent")
+lines = report.read_text().splitlines()
+required = ("## Applied", "## Set aside", "## Verified")
+if not any(line.startswith("Reviewer: ") and line[10:].strip() for line in lines):
+    sys.exit("WC1 /simplify reviewer is absent")
+for heading in required:
+    if heading not in lines:
+        sys.exit(f"WC1 /simplify review lacks {heading}")
+    body = []
+    for line in lines[lines.index(heading) + 1:]:
+        if line.startswith("## "):
+            break
+        body.append(line)
+    if not any(line.strip() for line in body):
+        sys.exit(f"WC1 /simplify review is empty under {heading}")
+PY'''
