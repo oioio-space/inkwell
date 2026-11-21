@@ -18,7 +18,7 @@ func TestProbeTargetWithRunpathLibrary(t *testing.T) {
 	if !requireLaunchFor(t, "UX-SB2a1-1 probe target") {
 		return
 	}
-	helper := probeFixture(t, t.Context(), "runpath")
+	helper := probeFixture(t.Context(), t, "runpath")
 	for _, tr := range []tier{tierN, tierF} {
 		if tr == tierN && machineTier(t) != tierN {
 			continue

@@ -84,7 +84,7 @@ func TestProbeRunsVersionUnderTypstDescriptor(t *testing.T) {
 	if !requireLaunchFor(t, "T-3 probe target") {
 		return
 	}
-	helper := probeFixture(t, t.Context(), "version")
+	helper := probeFixture(t.Context(), t, "version")
 	for _, tr := range []tier{tierN, tierF} {
 		if tr == tierN && machineTier(t) != tierN {
 			continue

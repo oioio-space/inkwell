@@ -145,7 +145,7 @@ func TestCloneThreeFallback(t *testing.T) {
 			if threads <= 1 || !bytes.Equal(got, baseline) {
 				t.Fatalf("S-6 clone3: %s threads=%d results equal=%t", name, threads, bytes.Equal(got, baseline))
 			}
-			version := probeFixture(t, ctx, "glibc-version")
+			version := probeFixture(ctx, t, "glibc-version")
 			glibc, e := os.ReadFile(version) // #nosec G304 -- a test fixture built with getconf.
 			if e != nil {
 				t.Fatalf("S-6 clone3: glibc version: %v", e)

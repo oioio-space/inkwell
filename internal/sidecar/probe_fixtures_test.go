@@ -15,7 +15,7 @@ import (
 // go test runs build only the fixtures their selected tests use.
 var preparedProbeFixtures = flag.String("sidecar-probe-fixtures", "", "directory of prebuilt sidecar probe fixtures")
 
-func probeFixture(t *testing.T, ctx context.Context, name string) string {
+func probeFixture(ctx context.Context, t *testing.T, name string) string {
 	t.Helper()
 	dir := *preparedProbeFixtures
 	if dir == "" {

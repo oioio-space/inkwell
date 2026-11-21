@@ -1,1 +1,2 @@
-{"commit": "d3d0829cf6b94d04516658f11c8309edcced3f0d", "criterion": "regression", "date": "2026-11-13T21:31:36+00:00", "from_gate": "SB1b", "lot": "L1"}
+{"closed_commit": "8f313ace0b05787eec4f2a794e7a98224660c397", "closed_date": "2026-11-21T08:36:51+00:00", "commit": "d3d0829cf6b94d04516658f11c8309edcced3f0d", "criterion": "regression", "date": "2026-11-13T21:31:36+00:00", "from_gate": "SB1b", "lot": "L1"}
+{"commit": "2a91baf8ff09e8a0853c2f5d10c8b1c2f1febf85", "criterion": "L0", "date": "2026-11-21T07:52:38+00:00", "from_gate": "L1", "lot": "L0"}

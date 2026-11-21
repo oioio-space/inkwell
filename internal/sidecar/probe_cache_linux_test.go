@@ -108,7 +108,7 @@ func TestHungProbeLaunchIsInconclusive(t *testing.T) {
 	if !requireLaunchFor(t, "ADR 0044 point 2 hung probe") {
 		return
 	}
-	helper := probeFixture(t, t.Context(), "spin")
+	helper := probeFixture(t.Context(), t, "spin")
 	const deadline = 300 * time.Millisecond
 	for _, tr := range []tier{tierN, tierF} {
 		if tr == tierN && machineTier(t) != tierN {
