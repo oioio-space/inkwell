@@ -1679,6 +1679,11 @@
       "id": "b153e3584a83f2d2d4632898883ca97f2d874a86c9398144cccf045c24b436bd",
       "reason": "scripts/wc1-webkit.sh (WC1, new): the browser and native GTK walk the frozen gate requires — built from the candidate, fresh populated docs and profile folders per engine, no retries, the native leg a real window-manager close (Opus review: legitimate); the WebKit browser leg runs through the project's container on a host without Playwright's system libraries (e2e:webkit), on the host on GitHub's runner; the native leg owns its private D-Bus session and headless Mutter with start-up and lifetime checks",
       "decision": "docs/plans/2026-11-21-wc1-window-close.md"
+    },
+    {
+      "id": "dfd4fe51c0397ad07f9bc2755874696ea459eb054db4282cf001f57fe270e837",
+      "reason": "scripts/pkg/selftest.sh (OI dependency, CI1b): the four AC-14 fixture binaries omit VCS metadata so an ancestor .git cannot break their builds. AC-14 still accepts plain and production builds and rejects server and faultinject for their build tags.",
+      "decision": "docs/plans/2026-11-08-ci-cd-study.md"
     }
   ]
 }

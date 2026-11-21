@@ -215,3 +215,10 @@ regression that the moved check must still catch, and an entry in `docs/exigence
 Limits of this study: GitHub run durations were not fetched (no `gh` call during the full local CI); the 17 min
 of netsim comes from the comment in `ci.yml` and scenario-level logs, not a timestamped full run; the push log has
 no timestamps, so per-task wall times are task-reported durations, not offsets.
+
+### Package self-test
+
+CI1b (CI1b): `go build -x` traced the failing AC-14 fixture build to `git status --porcelain` in `/tmp`, where Go detected an
+empty `.git` and Git exited 128. The package lint script from `8980890` also failed in that environment. Apply
+[`-buildvcs=false`](https://pkg.go.dev/cmd/go#hdr-Compile_packages_and_dependencies) to the four synthetic binaries,
+whose build tags are the inputs to AC-14. Verify with `mise run pkg:lint` and `mise run pregate`.

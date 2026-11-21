@@ -141,7 +141,14 @@ refuse "release-guard.sh must refuse when gh fails for another reason" guard err
 mkdir -p "$work/tagged"
 printf 'module tagged\n\ngo 1.22\n' >"$work/tagged/go.mod"
 printf 'package main\n\nfunc main() {}\n' >"$work/tagged/main.go"
-(cd "$work/tagged" && go build -o plain . && go build -tags server -o srv . && go build -tags production,faultinject -o fault . && go build -tags production -o prod .)
+# These synthetic binaries test build tags only. Keep them independent of any Git metadata above the temp directory.
+(
+  cd "$work/tagged"
+  go build -buildvcs=false -o plain .
+  go build -buildvcs=false -tags server -o srv .
+  go build -buildvcs=false -tags production,faultinject -o fault .
+  go build -buildvcs=false -tags production -o prod .
+)
 expect "no-test-tags.sh must accept an executable built without a test tag" scripts/pkg/no-test-tags.sh "$work/tagged/plain" "$work/tagged/prod"
 refuse "no-test-tags.sh must refuse -tags server" scripts/pkg/no-test-tags.sh "$work/tagged/plain" "$work/tagged/srv"
 refuse "no-test-tags.sh must refuse -tags faultinject" scripts/pkg/no-test-tags.sh "$work/tagged/fault"
