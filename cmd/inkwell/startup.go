@@ -80,20 +80,44 @@ type session struct {
 	// loops are the window's loops, registered by it before it runs; shutdown waits for them.
 	loops    shutdownLoops
 	stopOnce sync.Once
+	forced   bool // set by the desktop shutdown callback before the native loop returns
 }
 
 // stop is the shutdown of the session ([stopAll]), once: the window's OnShutdown runs it, and so
 // does runPrimary after the window returned, in case the window ended without it.
 func (s *session) stop(log *slog.Logger) {
+	if s.forced {
+		return
+	}
 	s.stopOnce.Do(func() {
-		closeNetwork := func() error {
-			s.language.Close() // its child ends before the network and the lock (rule N-14)
-			err := s.rt.Close()
-			sidecar.Shutdown() // and so does the sandbox holder, once the previews are closed
-			return err
-		}
-		stopAll(s.closing, s.cancel, &s.loops, closeNetwork, s.proj.Close, s.closeInstance, log)
+		s.stopResources(log)
 	})
+}
+
+func (s *session) stopResources(log *slog.Logger) {
+	closeNetwork := func() error {
+		s.language.Close() // its child ends before the network and the lock (rule N-14)
+		err := s.rt.Close()
+		sidecar.Shutdown() // and so does the sandbox holder, once the previews are closed
+		return err
+	}
+	stopAll(s.closing, s.cancel, &s.loops, closeNetwork, s.proj.Close, s.closeInstance, log)
+}
+
+// stopAfterForce allows resource cleanup to finish when it can, while a store
+// operation that never returns cannot keep the process alive.
+func (s *session) stopAfterForce(log *slog.Logger) {
+	s.forced = true
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		s.stopResources(log)
+	}()
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		log.Warn("leaving after an explicit force close with cleanup still pending")
+	}
 }
 
 // startup runs a launch with the arguments args (the command line without the program name) and

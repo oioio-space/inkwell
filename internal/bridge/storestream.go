@@ -9,6 +9,7 @@ import (
 	"math"
 	"strings"
 	"sync"
+	"syscall"
 
 	"github.com/oioio-space/inkwell/internal/project"
 	"github.com/oioio-space/inkwell/internal/store"
@@ -353,9 +354,15 @@ type StoreServer struct {
 	tree       Tree
 	log        *slog.Logger
 	mu         sync.Mutex
-	cur        *session
+	cur        *storeSession
 	pending    map[string]struct{} // external edits the webview has not acknowledged
 	drain      *Drain
+}
+
+type storeSession struct {
+	c    Conn
+	done chan struct{}
+	mu   sync.Mutex // orders the initial notices, live pushes and replies
 }
 
 // NewStoreServer returns a server over the three storage consumers.
@@ -383,19 +390,22 @@ func (s *StoreServer) NotifyExternal(rel string) {
 }
 
 // send writes r to cur, logging a failure.
-func (s *StoreServer) send(cur *session, r StoreResponse) {
+func (s *StoreServer) send(cur *storeSession, r StoreResponse) {
 	cur.mu.Lock()
 	defer cur.mu.Unlock()
 	s.sendLocked(cur, r)
 }
 
-func (s *StoreServer) sendLocked(cur *session, r StoreResponse) {
+func (s *StoreServer) sendLocked(cur *storeSession, r StoreResponse) {
+	if cur.c.Context().Err() != nil {
+		return
+	}
 	b, err := EncodeStoreResponse(r)
 	if err != nil {
 		s.log.Error("store stream: encode response", "status", r.Status, "err", err)
 		return
 	}
-	if err := cur.c.Send(b); err != nil {
+	if err := cur.c.Send(b); err != nil && cur.c.Context().Err() == nil {
 		s.log.Warn("store stream: send to webview", "status", r.Status, "err", err)
 	}
 }
@@ -412,36 +422,40 @@ func (s *StoreServer) Serve(c Conn) {
 		return // the session is leaving: the stream is closed (rule N-16)
 	}
 	defer detach()
-	cur := &session{c: c}
+	cur := &storeSession{c: c, done: make(chan struct{})}
 	cur.mu.Lock() // pushes wait until the pending notices are out
 	s.mu.Lock()
+	prev := s.cur
 	s.cur = cur
-	notices := make([]string, 0, len(s.pending))
-	for rel := range s.pending {
-		notices = append(notices, rel)
-	}
 	s.mu.Unlock()
 	defer func() {
 		s.mu.Lock()
 		if s.cur == cur {
 			s.cur = nil
 		}
+		close(cur.done)
 		s.mu.Unlock()
 	}()
+	if prev != nil {
+		// Close wakes a Receive or Send on the retired page. A frame already
+		// returned by Receive still runs to completion before we serve this page.
+		closeConn(prev.c)
+		<-prev.done
+	}
+	s.mu.Lock()
+	notices := make([]string, 0, len(s.pending))
+	for rel := range s.pending {
+		notices = append(notices, rel)
+	}
+	s.mu.Unlock()
 	for _, rel := range notices {
 		s.sendLocked(cur, StoreResponse{Status: StatusExternal, Payload: []byte(rel)})
 	}
 	cur.mu.Unlock()
 
-	for {
+	for c.Context().Err() == nil {
 		b, err := c.Receive()
 		if err != nil {
-			return
-		}
-		s.mu.Lock()
-		replaced := s.cur != cur
-		s.mu.Unlock()
-		if replaced {
 			return
 		}
 		req, err := DecodeStoreRequest(b)
@@ -648,6 +662,8 @@ func (s *StoreServer) respond(req StoreRequest, payload []byte, err error) Store
 		return StoreResponse{ID: req.ID, Status: StatusEditedOutside}
 	case errors.Is(err, ErrMalformed):
 		return StoreResponse{ID: req.ID, Status: StatusError, Payload: []byte("malformed request")}
+	case errors.Is(err, syscall.ENOSPC):
+		return StoreResponse{ID: req.ID, Status: StatusError, Payload: []byte("disk-full")}
 	}
 	if tl, ok := errors.AsType[*TooLargeError](err); ok {
 		return StoreResponse{ID: req.ID, Status: StatusTooLarge, Payload: binary.BigEndian.AppendUint64(nil, uint64(max(tl.Limit, 0)))} // #nosec G115 -- clamped.

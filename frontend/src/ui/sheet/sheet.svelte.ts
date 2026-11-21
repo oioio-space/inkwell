@@ -76,6 +76,8 @@ export interface Remote {
 
 export interface SheetOptions {
   readOnly?: boolean;
+  /** The close barrier owns the draft that would normally be committed on blur. */
+  closing?: () => boolean;
   /**
    * Whether the workspace locks the text now (rights unknown, a reader, a device the member list
    * does not name, W58a N-3): read live, so the sheet follows it.
@@ -595,6 +597,27 @@ export class SheetController {
       this.doc.perform(this.model.editCell(rec, e.c, e.value), e.c);
     }
     if (move) this.#moveInSelection(move.dr, move.dc);
+  }
+
+  /** Commits an open cell for close, retaining its draft if it cannot be applied. */
+  flushEdit(): void {
+    const e = this.editing;
+    if (!e) return;
+    const rec = this.#recordOfEdit(e);
+    if (
+      rec === undefined ||
+      (e.value !== this.model.value(rec, e.c) &&
+        !this.doc.perform(this.model.editCell(rec, e.c, e.value), e.c))
+    ) {
+      throw new Error("sheet edit could not be confirmed");
+    }
+    this.editing = undefined;
+  }
+
+  blurEdit(from?: "cell" | "bar"): void {
+    if (!this.opts.closing?.() && (from === undefined || this.editing?.from === from)) {
+      this.commitEdit();
+    }
   }
 
   cancelEdit() {

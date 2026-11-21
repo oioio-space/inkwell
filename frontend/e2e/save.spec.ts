@@ -3,7 +3,7 @@ import { join } from "node:path";
 import type { Page } from "@playwright/test";
 import { docsRoot, holds, mainTypIn, openWith, readDisk } from "./disk";
 import { expect, test } from "./fixtures";
-import { clear, docText, editor, open, pair, typeAtEnd } from "./helpers";
+import { clear, docText, editor, open, pair, prepareDeparture, typeAtEnd } from "./helpers";
 import { ALICE_PORT, ALICE_URL, BOB_PORT, BOB_URL } from "./ports";
 
 // B1: when the project file is written (SAV-*) and what happens when another program changes it
@@ -120,17 +120,11 @@ test("SAV-03b a keystroke typed just before the page goes survives it, whatever 
   browser,
   browserName,
 }) => {
-  // R-E2E1-1 (docs/plans/2026-11-17-e2e1.md, block WC1): on a reload WebKit loses what the page sends as it goes,
-  // and the desktop window closes without the page hearing it; Go must hold the close until the
-  // page has saved. Chromium delivers the page's last writes: the test holds there.
-  test.fixme(
-    browserName === "webkit",
-    "WC1, R-E2E1-1: a page that goes mid-save loses its last keys",
-  );
   const page = await openWith(browser, ALICE_URL, { saveMode: "manual" });
   const typed = `${await docText(page)} juste avant`;
   await typeAtEnd(page, " juste avant");
-  // The page goes as soon as the last key is in: before any pause of the editor or of the store.
+  // The controlled WebKit reload starts as soon as the last key is in.
+  if (browserName === "webkit") await prepareDeparture(page);
   await page.reload();
   await expect(editor(page)).toBeVisible();
   await expect.poll(() => docText(page)).toBe(typed);

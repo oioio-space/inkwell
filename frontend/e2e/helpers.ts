@@ -2,6 +2,16 @@ import { type Browser, expect, type Page } from "@playwright/test";
 
 export const editor = (p: Page) => p.locator(".cm-content");
 
+/** Runs the same page-side barrier as desktop close before a controlled WebKit departure. */
+export async function prepareDeparture(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const prepare = (globalThis as { __inkwellPrepareDeparture?: () => Promise<void> })
+      .__inkwellPrepareDeparture;
+    if (!prepare) throw new Error("missing WC1 page-side barrier");
+    return prepare();
+  });
+}
+
 /**
  * The document text as typed, read from the editor's state through the `__inkwellDocText` hook of
  * instrumented builds (VITE_E2E_OBSERVE=1, what `mise run e2e:build` makes), not from the page:

@@ -1669,6 +1669,16 @@
       "id": "38462a8e3d5460feac0725ba9455e771741a55a22cad23c76c7509237d16cbde",
       "reason": "scripts/sidecar-no-tools.sh (gate L1 `without-tools`): the probe fixtures are built before PATH is emptied and the whole -race suite runs from the package directory; with an empty PATH the tests looked for cc, getconf and sleep and missed the package-relative font; same assertions and delays",
       "decision": "docs/plans/2026-11-02-L1-implementation.md"
+    },
+    {
+      "id": "7069e3bdec4531c664ad45ca66d54d4f14b4dd7bcdf734749612f67e9272850a",
+      "reason": "frontend/playwright.config.ts (WC1): an optional profile root isolates and checks the Playwright profiles per engine; defaults unchanged; an empty fixture directory is refused (the INKWELL_DOCS trap of CLAUDE.md); no timeout or retry changed (Opus review: legitimate)",
+      "decision": "docs/plans/2026-11-21-wc1-window-close.md"
+    },
+    {
+      "id": "b153e3584a83f2d2d4632898883ca97f2d874a86c9398144cccf045c24b436bd",
+      "reason": "scripts/wc1-webkit.sh (WC1, new): the browser and native GTK walk the frozen gate requires — built from the candidate, fresh populated docs and profile folders per engine, no retries, the native leg a real window-manager close (Opus review: legitimate); the WebKit browser leg runs through the project's container on a host without Playwright's system libraries (e2e:webkit), on the host on GitHub's runner; the native leg owns its private D-Bus session and headless Mutter with start-up and lifetime checks",
+      "decision": "docs/plans/2026-11-21-wc1-window-close.md"
     }
   ]
 }

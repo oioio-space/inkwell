@@ -27,4 +27,5 @@ l'interrupteur « Détails techniques ».
 Noms d'interface figés : panneaux **Fichiers**, **Sommaire** ; tiroir **Rechercher**,
 **Relire** (Problèmes, Commentaires, Activité, Versions), **IA** ; dialogue **Personnes** ; vue
 **Ressources** ; boutons **Garder** / **Annuler**, **Enregistrer une version**,
-**Afficher les modifications**, **Me rendre invisible**.
+**Afficher les modifications**, **Me rendre invisible**, **Réessayer**,
+**Fermer quand même** ; état de progression **Enregistrement…**.

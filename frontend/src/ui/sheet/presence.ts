@@ -1,6 +1,7 @@
 import { getCursor, getCursorPosition } from "@automerge/automerge";
 import { type DocHandle, Presence } from "@automerge/automerge-repo";
 import type { CursorState, Person } from "../../editor/presence";
+import { closePublisher } from "../../workspace/closePage";
 import type { Remote, SheetController } from "./sheet.svelte";
 
 type Doc = { text: string };
@@ -26,6 +27,10 @@ export function sheetPresence(
 } {
   const presence = new Presence<CursorState, Doc>({ handle });
   presence.start({ initialState: { name: me.name, file: "main.typ" } });
+  const unregister = closePublisher(
+    () => presence.stop(),
+    () => presence.start({ initialState: presence.getLocalState() }),
+  );
 
   const refresh = () => {
     const states = Object.values(presence.getPeerStates().value);
@@ -102,6 +107,7 @@ export function sheetPresence(
     broadcast,
     refresh,
     stop: () => {
+      unregister();
       window.removeEventListener("pagehide", bye);
       presence.stop();
     },

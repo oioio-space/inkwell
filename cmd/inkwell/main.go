@@ -101,12 +101,32 @@ func runWindow(ctx context.Context, s *session, log *slog.Logger, wailsApp *atom
 	if err := proj.Backup(time.Now(), backupsKept); err != nil {
 		log.Warn("backing up project", "err", err) // not fatal: the store still works
 	}
-	storeServer := bridge.NewStoreServer(rt.Files, rt.Files, rt.Files, log)
+	var kv bridge.KV = rt.Files
+	if probe, ok := ctx.Value(closeProbeKey{}).(closeProbe); ok && probe.wrapKV != nil {
+		kv = probe.wrapKV(kv)
+	}
+	storeServer := bridge.NewStoreServer(kv, rt.Files, rt.Files, log)
 	storeServer.UseDrain(rt.Bridge)
 	windows := newWindowHost() // nil without native windows (the server build)
 	var winService app.Windows
+	var closer *closeCoordinator
+	var shouldQuit func() bool
 	if windows != nil {
 		winService = windows
+		closer = newCloseCoordinator()
+		closer.observe = func(event string) { observeClose(ctx, event) }
+		closer.pause = s.queue.pause
+		closer.drain = func(deadline time.Time) {
+			drainOnClose(s.queue, func() {}, min(drainTimeout, time.Until(deadline)), log)
+		}
+		shouldQuit = closer.shouldQuit
+		router.OnPresenceHandoff(func(conn bridge.Conn, attempt uint32) {
+			if stream, ok := conn.(*application.StreamConn); ok {
+				if window := stream.Window(); window != nil {
+					closer.presence(window.ID(), attempt)
+				}
+			}
+		})
 	}
 	presentHub := app.NewPresent(log)
 	languageService := s.language
@@ -137,10 +157,26 @@ func runWindow(ctx context.Context, s *session, log *slog.Logger, wailsApp *atom
 		Mac: application.MacOptions{
 			ApplicationShouldTerminateAfterLastWindowClosed: true,
 		},
-		OnShutdown: func() { s.stop(log) },
+		DisableDefaultSignalHandler: closer != nil,
+		Flags:                       map[string]any{"inkwellClose": closer != nil},
+		ShouldQuit:                  shouldQuit,
+		Windows:                     closeWindowsOptions(closer),
+		OnShutdown: func() {
+			if closer != nil && closer.forceExit() {
+				s.stopAfterForce(log)
+				return
+			}
+			s.stop(log)
+		},
 	})
 	wailsApp.Store(wails)
-	rt.SetQuit(wails.Quit) // a recorded project change quits, then restarts (rule N-12)
+	// A recorded project change quits, then restarts (rule N-12).
+	if closer == nil {
+		rt.SetQuit(wails.Quit)
+	} else {
+		rt.SetProjectClose(closer.beginProjectChange, closer.rejectProjectChange)
+		rt.SetQuit(closer.finishProjectChange)
+	}
 	wails.HandleStream(bridge.StreamName, func(c *application.StreamConn) { router.Serve(c) })
 	wails.HandleStream(bridge.StoreStreamName, func(c *application.StreamConn) { storeServer.Serve(c) })
 	wails.HandleStream(app.PreviewStreamName, func(c *application.StreamConn) { rt.Preview.Serve(c) })
@@ -176,22 +212,18 @@ func runWindow(ctx context.Context, s *session, log *slog.Logger, wailsApp *atom
 	if windows != nil {
 		windows.bind(wails, main)
 	}
-	var closingWindow atomic.Bool // a closing window is not raised again
 	mainRaiser := newRaiser(main)
-	raise := func(token string) {
-		if !closingWindow.Load() {
-			mainRaiser.raise(token)
-		}
+	open := &opener{queue: s.queue, env: openEnv(proj.Path()), raise: mainRaiser.raise, log: log}
+	if closer == nil {
+		wails.HandleStream(openStreamName, func(c *application.StreamConn) { open.Serve(c) })
+		main.OnWindowEvent(events.Common.WindowClosing, func(*application.WindowEvent) {
+			drainOnClose(s.queue, s.closing, drainTimeout, log)
+		})
+	} else {
+		desktopCtx, stop := context.WithCancel(ctx)
+		defer stop()
+		bindDesktopClose(desktopCtx, wails, main, closer, open, windows.ClosePublic, log)
 	}
-	open := &opener{queue: s.queue, env: openEnv(proj.Path()), raise: raise, log: log}
-	wails.HandleStream(openStreamName, func(c *application.StreamConn) { open.Serve(c) })
-	// Closing the window: stop acknowledging, and wait (bounded) until the webview reported handled
-	// what was acknowledged (rule D-DRAIN at close). The raise is asynchronous: it never waits on
-	// this hook.
-	main.OnWindowEvent(events.Common.WindowClosing, func(*application.WindowEvent) {
-		closingWindow.Store(true)
-		drainOnClose(s.queue, s.closing, drainTimeout, log)
-	})
 
 	if configure != nil {
 		configure(wails, main)

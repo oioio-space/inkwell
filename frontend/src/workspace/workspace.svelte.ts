@@ -7,6 +7,7 @@ import {
   Repo,
 } from "@automerge/automerge-repo";
 import { Stream } from "@wailsio/runtime";
+import { tick } from "svelte";
 import {
   Projects,
   Session,
@@ -39,6 +40,7 @@ import { safeGet, safeSet } from "../store/safeStorage";
 import { settings } from "../store/settings.svelte";
 import { notice } from "../ui/notice.svelte";
 import { accessOf, type Member, type Standing } from "../ui/people/roster";
+import { flushCloseBuffers, pauseClosePresence, resumeClosePresence } from "./closePage";
 import { BootstrapLoader } from "./loader";
 import { observeSaveNow, observeSession, observeVariantHeads } from "./observe";
 
@@ -313,6 +315,10 @@ class Workspace {
    * could not be saved: the text is read-only meanwhile (PC1, rule N-15).
    */
   leaving = $state(false);
+  closing = $state(false);
+  authorizeProjectLeave: (() => Promise<boolean> | undefined) | undefined;
+  #closeFocus: HTMLElement | undefined;
+  #storeStarted = false;
 
   /**
    * Leaves this page for the one at `to` before a project change is asked of Go (PC1, rule N-15):
@@ -326,8 +332,22 @@ class Workspace {
     to: string,
     navigate: (url: string) => void = (url) => location.replace(url),
   ): Promise<boolean> {
-    if (this.leaving) return false;
+    if (this.leaving || this.closing) return false;
+    const nativeApproval = this.authorizeProjectLeave?.();
+    if (nativeApproval && !(await nativeApproval)) return false;
     this.leaving = true;
+    if (!nativeApproval && !(await this.flushBeforeRestart())) {
+      this.leaving = false;
+      notice.show(t("change.flushFailed"), "alert");
+      return false;
+    }
+    await this.closeBeforeRestart();
+    markLeave(); // the next page asks Go only after this confirmed leave (rule N-9)
+    navigate(to);
+    return true;
+  }
+
+  private async flushBeforeRestart(): Promise<boolean> {
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
       await Promise.race([
@@ -339,15 +359,16 @@ class Workspace {
           timer = setTimeout(() => reject(new Error("flush deadline")), LEAVE_FLUSH_MS);
         }),
       ]);
+      return true;
     } catch {
-      this.leaving = false;
-      notice.show(t("change.flushFailed"), "alert");
       return false;
     } finally {
       clearTimeout(timer);
     }
-    // The context goes with the navigation whatever the close says, and however long it takes:
-    // Go drains the bridge anyway.
+  }
+
+  private async closeBeforeRestart(): Promise<void> {
+    // The navigation goes ahead once the close is bounded. Go drains the bridge as well.
     let closing: ReturnType<typeof setTimeout> | undefined;
     await Promise.race([
       this.stop().catch(() => undefined),
@@ -356,21 +377,59 @@ class Workspace {
       }),
     ]);
     clearTimeout(closing);
-    markLeave(); // the next page asks Go only after this confirmed leave (rule N-9)
-    navigate(to);
-    return true;
   }
 
   /**
    * Saves what was typed, now: the keys still waiting for the paint into their documents, then every
    * changed document to the store, without automerge-repo's save pause, so that a page that goes
    * right after a keystroke loses nothing (SAV-03b). Runs as the page goes (pagehide, or hidden).
-   * A desktop window destroyed without telling the page does not run it yet: Go holding the close
-   * until the page has saved is block WC1. Never rejects: a write that fails is reported by the store.
+   * Native close uses {@link saveForClose}, which propagates an unconfirmed write.
    */
   async saveNow(): Promise<void> {
     flushAllTyped();
     await this.#repo?.flush().catch(() => undefined);
+  }
+
+  /** A page that never started its store can confirm an empty editing cut. */
+  async saveForClose(signal: AbortSignal): Promise<boolean> {
+    const repo = this.#repo;
+    const storage = this.#storage;
+    this.closing = true;
+    const focus = document.activeElement;
+    this.#closeFocus = focus instanceof HTMLElement ? focus : undefined;
+    this.#closeFocus?.blur(); // finish a native input-method composition
+    document.body.inert = true;
+    if (!this.#storeStarted) return false;
+    if (!repo || !storage) throw new Error("workspace is not ready to save");
+    await tick();
+    signal.throwIfAborted();
+    await flushCloseBuffers();
+    signal.throwIfAborted();
+    flushAllTyped(true);
+    const ready = Object.values(repo.handles)
+      .filter((handle) => handle.isReady())
+      .map((handle) => handle.documentId);
+    const pending = storage.pendingWrites();
+    try {
+      await Promise.all([repo.flush(ready), pending]);
+    } finally {
+      signal.throwIfAborted();
+    }
+    return true;
+  }
+
+  async goodbyeForClose(attempt: number, signal: AbortSignal): Promise<void> {
+    if (!this.#adapter) throw new Error("presence stream unavailable");
+    pauseClosePresence();
+    await this.#adapter.flushPresence(attempt, signal);
+  }
+
+  resumeAfterClose(): void {
+    resumeClosePresence();
+    this.closing = false;
+    document.body.inert = false;
+    this.#closeFocus?.focus();
+    this.#closeFocus = undefined;
   }
 
   async stop(): Promise<void> {
@@ -441,6 +500,7 @@ class Workspace {
     // silence (PC1, rule N-16).
     storage.onLeaving(() => notice.show(t("change.flushFailed"), "alert"));
     this.#storage = storage;
+    this.#storeStarted = true;
     const repo = new Repo({
       peerId: id as PeerId,
       network: [adapter],
@@ -734,7 +794,7 @@ class Workspace {
    * editor still shows, selects and copies its text.
    */
   get locked(): boolean {
-    return this.leaving || !this.rightsKnown || this.access !== undefined;
+    return this.closing || this.leaving || !this.rightsKnown || this.access !== undefined;
   }
 
   /**

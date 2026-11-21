@@ -2,7 +2,10 @@ package bridge
 
 import (
 	"context"
+	"encoding/binary"
+	"errors"
 	"log/slog"
+	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -38,6 +41,7 @@ type Router struct {
 	// linksPeriod is the period of the Links notifications, 0 for none.
 	linksPeriod time.Duration
 	drain       *Drain
+	presenceOK  func(Conn, uint32)
 	mu          sync.Mutex
 }
 
@@ -58,6 +62,7 @@ type session struct {
 // goroutine that sends them.
 type outbox struct {
 	q      chan queuedMsg
+	done   chan struct{}
 	cancel context.CancelFunc
 	// msgs and bytes are what waits to be sent, the message being sent
 	// included; head is when that one was enqueued (see [Router.stamp]), or 0.
@@ -68,6 +73,7 @@ type outbox struct {
 type queuedMsg struct {
 	payload []byte
 	at      int64 // [Router.stamp]
+	barrier chan<- bool
 }
 
 // Resetter is implemented by a transport that can reset a peer: close its
@@ -89,6 +95,10 @@ func NewRouter(t transport.Transport, log *slog.Logger) *Router {
 // UseDrain makes d end this router's streams before a project change (see [Drain]). It is called
 // before the first [Router.Serve].
 func (r *Router) UseDrain(d *Drain) { r.drain = d }
+
+// OnPresenceHandoff reports a successful local presence barrier before the
+// stream replies. Install it before serving connections.
+func (r *Router) OnPresenceHandoff(fn func(Conn, uint32)) { r.presenceOK = fn }
 
 // stamp returns the nanoseconds since the router's epoch plus one, so that it
 // is never zero: a monotonic reading that is cheaper to queue than a time.Time.
@@ -225,6 +235,15 @@ func (r *Router) Serve(c Conn) {
 		if r.current() != s {
 			return // replaced while blocked in Receive
 		}
+		// Version zero is reserved here for the five-byte local presence
+		// barrier (zero followed by a u32 token). It never goes to a peer.
+		if len(b) == 5 && b[0] == 0 {
+			if r.drain.Begin() {
+				r.presenceBarrier(s, b)
+				r.drain.End()
+			}
+			continue
+		}
 		e, err := Decode(b)
 		if err != nil {
 			r.warn("bridge: dropped frame", "bytes", len(b), "err", err)
@@ -259,7 +278,7 @@ func (r *Router) enqueue(s *session, peer transport.PeerID, payload []byte) {
 	o := s.out[peer]
 	if o == nil {
 		pctx, cancel := context.WithCancel(s.ctx)
-		o = &outbox{q: make(chan queuedMsg, outboxDepth), cancel: cancel}
+		o = &outbox{q: make(chan queuedMsg, outboxDepth), done: make(chan struct{}), cancel: cancel}
 		s.out[peer] = o
 		s.wg.Go(func() { r.sendTo(pctx, peer, o) })
 	}
@@ -295,9 +314,16 @@ func (r *Router) stopPeer(s *session, peer transport.PeerID) {
 
 // sendTo sends the payloads of o to peer, in order, until ctx is done.
 func (r *Router) sendTo(ctx context.Context, peer transport.PeerID, o *outbox) {
+	defer close(o.done)
+	failed := false
 	for {
 		select {
 		case m := <-o.q:
+			if m.barrier != nil {
+				m.barrier <- !failed
+				failed = false
+				continue
+			}
 			if ctx.Err() != nil {
 				o.msgs.Add(-1)
 				o.bytes.Add(-int64(len(m.payload)))
@@ -309,12 +335,63 @@ func (r *Router) sendTo(ctx context.Context, peer transport.PeerID, o *outbox) {
 			o.msgs.Add(-1)
 			o.bytes.Add(-int64(len(m.payload)))
 			if err != nil {
+				failed = failed || !errors.Is(err, transport.ErrUnknownPeer)
 				r.countsOf(peer).sendFailures.Add(1)
 				r.warn("bridge: send to peer", "peer", peer, "err", err)
 			}
 		case <-ctx.Done():
 			return
 		}
+	}
+}
+
+// presenceBarrier confirms that each healthy peer's writer handed off all
+// frames preceding the barrier. A disconnected peer uses ordinary link loss.
+func (r *Router) presenceBarrier(s *session, token []byte) {
+	ctx, cancel := context.WithTimeout(s.ctx, 5*time.Second)
+	defer cancel()
+	s.omu.Lock()
+	boxes := make([]*outbox, 0, len(s.out))
+	for _, o := range s.out {
+		boxes = append(boxes, o)
+	}
+	s.omu.Unlock()
+	ok := true
+	for _, o := range boxes {
+		ok = handoff(ctx, o) && ok
+	}
+	if s.ctx.Err() != nil || r.current() != s {
+		return
+	}
+	ack := slices.Clone(token)
+	if !ok {
+		ack = append(ack, 1)
+	} else if r.presenceOK != nil {
+		r.presenceOK(s.c, binary.BigEndian.Uint32(token[1:]))
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if err := s.c.Send(ack); err != nil && s.ctx.Err() == nil {
+		r.warn("bridge: send presence barrier reply", "err", err)
+	}
+}
+
+func handoff(ctx context.Context, o *outbox) bool {
+	reply := make(chan bool, 1)
+	select {
+	case o.q <- queuedMsg{barrier: reply}:
+	case <-o.done:
+		return true
+	case <-ctx.Done():
+		return false
+	}
+	select {
+	case ok := <-reply:
+		return ok
+	case <-o.done:
+		return true
+	case <-ctx.Done():
+		return false
 	}
 }
 

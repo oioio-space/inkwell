@@ -24,6 +24,15 @@ export class StoreError extends Error {
   override name = "StoreError";
 }
 
+export class SaveError extends StoreError {
+  constructor(
+    readonly document: string | undefined,
+    readonly failure: unknown,
+  ) {
+    super(failure instanceof Error ? failure.message : "unconfirmed save");
+  }
+}
+
 /** A project file that is not text Inkwell can edit: it is binary, or has invalid UTF-8 bytes. */
 export class NotTextError extends StoreError {
   override name = "NotTextError";
@@ -77,6 +86,7 @@ export class GoStorageAdapter implements StorageAdapterInterface {
   #open: () => SocketLike;
   #conn: Promise<SocketLike> | undefined;
   #pending = new Map<number, Pending>();
+  #writes = new Set<Promise<Response>>();
   #external = new Set<(rel: string) => void>();
   #leaving = new Set<() => void>();
   #nextId = 0;
@@ -101,7 +111,16 @@ export class GoStorageAdapter implements StorageAdapterInterface {
   }
 
   async save(key: StorageKey, data: Uint8Array): Promise<void> {
-    expectOk(await this.#call(Op.Save, key, data));
+    try {
+      expectOk(await this.#call(Op.Save, key, data));
+    } catch (error) {
+      throw new SaveError(key[0], error);
+    }
+  }
+
+  /** Store replies still owed to writes started before an explicit Repo.flush. */
+  async pendingWrites(): Promise<void> {
+    await Promise.all([...this.#writes].map((write) => write.then(expectOk)));
   }
 
   async remove(key: StorageKey): Promise<void> {
@@ -263,7 +282,17 @@ export class GoStorageAdapter implements StorageAdapterInterface {
     for (const p of all) p.reject(err);
   }
 
-  async #call(op: Op, key: string[], data: Uint8Array = new Uint8Array()): Promise<Response> {
+  #call(op: Op, key: string[], data: Uint8Array = new Uint8Array()): Promise<Response> {
+    const reply = this.#request(op, key, data);
+    if (WRITES.has(op)) {
+      this.#writes.add(reply);
+      const remove = () => this.#writes.delete(reply);
+      void reply.then(remove, remove);
+    }
+    return reply;
+  }
+
+  async #request(op: Op, key: string[], data: Uint8Array): Promise<Response> {
     const socket = await this.#connect();
     this.#nextId = (this.#nextId % 0xffffffff) + 1; // never 0: that id is Go's pushes
     const id = this.#nextId;

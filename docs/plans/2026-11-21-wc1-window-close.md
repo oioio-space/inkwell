@@ -136,6 +136,59 @@ state. The concrete failures are R-E2E1-1 (last keys lost) and R-E2E2-1 (presenc
 
 ## Open items
 
-- → WC1 Verify the platform routes and veto behavior for session logout, and document the
-  observed boundary between a cooperative request and a forced termination.
-- → WC1 Implement the native fixture in step 2 and run the recovery-dialog walkthrough.
+- Linux uses the pinned Wails window hook and the application-level quit veto. The GTK fallback
+  attaches progress and recovery controls to the native window so a renderer failure leaves both
+  actions available. It resolves the public APIs in Wails' already loaded GTK and WebKitGTK via
+  `RTLD_NOLOAD`, as the existing native activation code does. The native walk uses a private Mutter session and independent GTK signal and
+  toplevel observations. Its private GNOME session manager exercises the one-second query and the
+  end-session flush. A session manager can still override an objection, and an externally forced
+  termination can recover only the committed prefix.
+  [GTK close-request](https://docs.gtk.org/gtk4/signal.Window.close-request.html)
+  · [Mutter remote desktop test driver](https://github.com/GNOME/mutter/blob/main/data/dbus-interfaces/org.gnome.Mutter.RemoteDesktop.xml)
+  · [GNOME session protocol](https://gnome.pages.gitlab.gnome.org/gnome-session/re05.html)
+- → PL1 Prove the macOS and Windows cancellation and reissue paths on their native desktops.
+  The integrator approved cancelling the OS termination, running the handshake, and reissuing the
+  application quit under its permit. R1 requires native proof on Linux. PL1 also owns native
+  progress presentation and replacement of the Wails fallback recovery dialog.
+- → REL1 A retired store request that never returns holds the replacement page's store queue.
+  Preserve the accepted-request ordering in W-5 when adding recovery. The native
+  « Fermer quand même » action still exits an app with a blocked store.
+- → WC1 Record the owner's recovery-dialog walkthrough before integration (R14).
+
+## Post-review implementation
+
+- The Ready grant and close attempt share the coordinator lock. A window without a grant is
+  empty, and a granted page can expressly confirm that it froze input before starting its
+  store. A granted window with a missing stream still requires confirmation. When no target
+  could have received an open request, the existing OI drain logs pending opens immediately.
+- Abort uses the pinned stream's blocking send on one writer per connection. The writer
+  keeps the latest pending abort, since a newer Prepare replaces the old page hold. A
+  refused take-over clears the close state and resumes launches. The project-specific
+  refusal remains visible through the existing take-over path. [Pinned Wails Streams](https://github.com/wailsapp/wails/blob/v3.0.0/v3/pkg/application/stream.go)
+- The WC1 frontend replay found that the after-paint exception test used the real slice clock.
+  The witness now controls that clock and still rejects a drain that exits on the exception.
+- The integrator's Fedora gate found missing Playwright WebKit libraries at browser launch.
+  WC1 uses the Podman-backed `e2e:webkit` task locally and host WebKit with Playwright's system
+  dependencies on GitHub's Ubuntu runner. Each browser gets fresh document and profile
+  directories and zero retries. The native GTK witness runs on the host.
+  [Mise tasks](../../mise.toml) · [CI workflow](../../.github/workflows/ci.yml)
+- In the next Fedora gate, both browser legs passed. The native crash case still showed
+  the saving banner when its second close attempt reached the five-second dialog check.
+  The native launcher now owns a short XDG runtime, a headless Mutter and a D-Bus session
+  with no service activation directories. The fixture registers its own session manager
+  and uses GTK widget APIs for the role and focus assertions. GTK's AT-SPI bridge can
+  therefore be disabled for this run. The launcher clears inherited display and
+  activation state, selects software rendering and checks the bus, the Wayland socket and
+  Mutter's lifetime. The recovery assertions and their deadlines are preserved.
+  [D-Bus session lifetime](https://dbus.freedesktop.org/doc/dbus-run-session.1.html)
+  · [D-Bus activation configuration](https://dbus.freedesktop.org/doc/dbus-daemon.1.html)
+  · [GTK accessibility backend](https://docs.gtk.org/gtk4/running.html#gtk_a11y)
+  · [Mesa software rendering](https://docs.mesa3d.org/envvars.html)
+- A crash already recorded for a target window starts directly in recovery. The coordinator
+  skips the open-request drain and the save timer, so the view can only show the recovery
+  dialog. A crash during a pending attempt ends the wait immediately. Both paths keep the
+  attempt in recovery until the user acts, so another close request adds no dialog and
+  closing still requires explicit consent. The native crash case waits for the coordinator
+  to observe the WebKit termination before sending Alt+F4. It checks both close attempts
+  against a one-second dialog bound. The other fault cases still check the saving banner
+  and use the existing dialog bound. [WindowClose model](../protocol/tla/WindowClose.tla)

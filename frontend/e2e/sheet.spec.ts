@@ -5,7 +5,7 @@ import AxeBuilder from "@axe-core/playwright";
 import type { Page } from "@playwright/test";
 import { docsRoot, mainTypIn, readDisk } from "./disk";
 import { expect, test } from "./fixtures";
-import { clear, editor, open, pair } from "./helpers";
+import { clear, editor, open, pair, prepareDeparture } from "./helpers";
 import { startInstance, stopInstance } from "./instance";
 import { ALICE_PORT, ALICE_URL, BOB_URL, SPARE_PORT, SPARE_URL } from "./ports";
 import {
@@ -924,16 +924,10 @@ test.describe("two people on one sheet (SHEET-MU)", () => {
     browser,
     browserName,
   }) => {
-    // E2E2: WebKit never delivers the goodbye that pagehide sends over the stream while the page
-    // closes (the same goodbye sent with the page still open arrives in tens of milliseconds), so
-    // the rectangle stays for the library's 45 s TTL. Leaving without the page's last word is
-    // block PR1's (P-3: the link's loss removes at once, TTL 15 s) and WC1's (Go holds the close).
-    test.fixme(browserName === "webkit", "goodbye lost on close in WebKit: PR1 P-3, WC1");
     const { alice, bob } = await both(browser);
     await range(alice, 1, 1, 2, 2);
     await expect(bob.locator(".cell.rem").first()).toBeVisible({ timeout: 10_000 });
-    // Alice goes: her rectangle goes. A plain close runs pagehide, which says goodbye;
-    // runBeforeUnload leaves the page open in WebKit, so she would never have left.
+    if (browserName === "webkit") await prepareDeparture(alice);
     await alice.close();
     expect(alice.isClosed()).toBe(true);
     await expect(bob.locator(".cell.rem")).toHaveCount(0, { timeout: 20_000 });

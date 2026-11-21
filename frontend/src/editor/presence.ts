@@ -2,6 +2,7 @@ import { getCursor, getCursorPosition } from "@automerge/automerge";
 import { type DocHandle, Presence } from "@automerge/automerge-repo";
 import type { Extension } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
+import { closePublisher } from "../workspace/closePage";
 import { whenWritten } from "./amSync";
 import { type RemoteCursor, setRemoteCursors } from "./remoteCursors";
 
@@ -28,6 +29,10 @@ export function presenceSync(
 ): { extension: Extension; rename: (name: string) => void; stop: () => void } {
   const presence = new Presence<CursorState, Doc>({ handle });
   presence.start({ initialState: { name: me.name, file: "main.typ" } });
+  const unregister = closePublisher(
+    () => presence.stop(),
+    () => presence.start({ initialState: presence.getLocalState() }),
+  );
 
   const refresh = () => {
     const states = Object.values(presence.getPeerStates().value);
@@ -93,6 +98,7 @@ export function presenceSync(
     rename: (name) => presence.broadcast("name", name),
     stop: () => {
       stopped = true;
+      unregister();
       handle.off("change", onDocumentChange);
       presence.stop();
     },

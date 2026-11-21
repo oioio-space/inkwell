@@ -1,5 +1,6 @@
 import { type MessageKey, t, tn } from "../i18n";
 import type { SocketLike } from "../net/WailsNetworkAdapter";
+import { type ClosePage, readCloseControl } from "./closePage";
 
 /**
  * The `open` stream carries what Inkwell was asked to open from the desktop: a file chosen with
@@ -232,6 +233,7 @@ export function summarize(said: Said[]): Toast[] {
 
 /** What an open request acts on: the workspace once it is ready, and the toast. */
 export interface OpenTarget {
+  closePage?: ClosePage;
   /** Settles once the workspace has its project: a request that comes earlier waits for it. */
   ready: Promise<unknown>;
   /**
@@ -419,6 +421,7 @@ export class OpenRequests {
     const s = this.#session;
     this.#session = undefined;
     s?.stop.abort(new Error("open stream superseded"));
+    if (s) this.#target.closePage?.disconnect();
     return s;
   }
 
@@ -469,7 +472,15 @@ export class OpenRequests {
     socket.onmessage = (ev) => {
       if (this.#session !== s) return;
       const data = ev.data as ArrayBuffer | string;
-      const r = parseOpen(typeof data === "string" ? data : new Uint8Array(data));
+      const bytes = typeof data === "string" ? data : new Uint8Array(data);
+      const close = this.#target.closePage && readCloseControl(bytes);
+      if (close) {
+        this.#target.closePage?.receive(close, (reply) => {
+          if (this.#session === s) s.socket.send(new TextEncoder().encode(JSON.stringify(reply)));
+        });
+        return;
+      }
+      const r = parseOpen(bytes);
       if (!r) return;
       if (s.pending >= MAX_PENDING) {
         // Never queued without limit (Go sends at most as many); said once the queue is free.

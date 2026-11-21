@@ -19,6 +19,7 @@ describe("afterPaint", () => {
   });
 
   it("keeps going after a callback throws", async () => {
+    vi.spyOn(performance, "now").mockReturnValue(0);
     const report = vi.fn();
     vi.stubGlobal("reportError", report);
     const seen: string[] = [];

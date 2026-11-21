@@ -8,6 +8,7 @@ import type { Delimiter } from "../../editor/csv/records";
 import { type DocPort, handlePort, plainPort, SheetDoc } from "../../editor/csv/sheetDoc";
 import { t, tn } from "../../i18n";
 import { problems } from "../../language/problems.svelte";
+import { closeBuffer } from "../../workspace/closePage";
 import { type Doc, workspace } from "../../workspace/workspace.svelte";
 import Icon from "../icons/Icon.svelte";
 import type { IconName } from "../icons/paths";
@@ -65,6 +66,11 @@ let context = $state<{ x: number; y: number } | undefined>();
 let finding = $state<{ replace: boolean } | undefined>();
 let gridHost: HTMLDivElement | undefined = $state();
 let presence: ReturnType<typeof sheetPresence> | undefined;
+
+$effect(() => {
+  const controller = ctrl;
+  if (controller) return closeBuffer(() => controller.flushEdit());
+});
 
 $effect(() => {
   const controller = ctrl;
@@ -138,6 +144,7 @@ $effect(() => {
         const made = new SheetController(sheetDoc, {
           readOnly: readOnly || b !== undefined,
           locked: () => workspace.locked,
+          closing: () => workspace.closing,
           ...(readOnlyReason ? { readOnlyReason } : {}),
           onUndoKey: () => workspace.undoWithKey(),
           onDialect: (d) => rememberDelimiter(workspace.project, p, d.delimiter),
@@ -546,9 +553,7 @@ const totalRows = $derived.by(() => {
           if (ctrl && !ctrl.editing && !ctrl.readOnly) ctrl.startEdit(undefined, "bar");
         }}
         oninput={(e) => ctrl?.setEditValue(e.currentTarget.value)}
-        onblur={() => {
-          if (ctrl?.editing?.from === "bar") ctrl.commitEdit();
-        }}
+        onblur={() => ctrl?.blurEdit("bar")}
         onkeydown={barKey}
       />
     </div>

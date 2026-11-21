@@ -52,6 +52,8 @@ type change struct {
 	requested bool        // a request started: every other one is refused
 	write     changeWrite // recorded once the bridge is drained; nil before
 	quit      func()      // asks the application to quit, once a change is recorded
+	confirm   func() bool // consumes the desktop approval before the irreversible drain
+	reject    func()      // releases the desktop hold if recording fails
 	finished  bool        // the runtime closed and ran the write, if any (once): nothing is recorded after
 }
 
@@ -75,14 +77,24 @@ func (c *change) leaving() error {
 // [bridge.DrainTimeout]), and only then records write and asks the application to quit. If the
 // drain fails, or the runtime closed meanwhile, nothing is recorded: the request fails, nothing is
 // written, and the streams stay closed until the person quits (rule N-16).
-func (c *change) request(ctx context.Context, write changeWrite) error {
+func (c *change) request(ctx context.Context, write changeWrite) (err error) {
 	c.mu.Lock()
 	if c.requested {
 		c.mu.Unlock()
 		return errLeaving
 	}
+	if c.confirm != nil && !c.confirm() {
+		c.mu.Unlock()
+		return errors.New("project change has no confirmed desktop close")
+	}
+	reject := c.reject
 	c.requested = true
 	c.mu.Unlock()
+	defer func() {
+		if err != nil && reject != nil {
+			reject()
+		}
+	}()
 	ctx, cancel := context.WithTimeout(ctx, bridge.DrainTimeout)
 	defer cancel()
 	if err := c.drain.Drain(ctx); err != nil {
@@ -167,6 +179,14 @@ func (r *Runtime) SetQuit(quit func()) {
 	r.chg.mu.Lock()
 	defer r.chg.mu.Unlock()
 	r.chg.quit = quit
+}
+
+// SetProjectClose makes project changes consume a desktop save approval before
+// draining the bridge and reports a failed transition to the coordinator.
+func (r *Runtime) SetProjectClose(confirm func() bool, reject func()) {
+	r.chg.mu.Lock()
+	defer r.chg.mu.Unlock()
+	r.chg.confirm, r.chg.reject = confirm, reject
 }
 
 // RestartRequested reports whether this image recorded a project change: once the runtime is

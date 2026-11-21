@@ -74,3 +74,6 @@ __pycache__/
 
 # Brainstorming visual companion mockups (local only)
 .superpowers/
+
+# Local WC1 executor state.
+/gates/WC1/STATE.local.md

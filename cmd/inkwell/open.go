@@ -52,7 +52,14 @@ type openQueue struct {
 	seq    uint64
 	gen    uint64 // the current connection's generation, 0 before the first
 	opened bool
+	paused bool
 	wake   chan struct{} // closed and replaced when the queue changes
+}
+
+func (q *openQueue) pause(paused bool) {
+	q.mu.Lock()
+	defer q.mu.Unlock()
+	q.paused = paused
 }
 
 func newOpenQueue() *openQueue { return &openQueue{wake: make(chan struct{})} }
@@ -94,7 +101,7 @@ func (q *openQueue) open() {
 func (q *openQueue) push(r instance.Request) bool {
 	q.mu.Lock()
 	defer q.mu.Unlock()
-	if !q.opened || len(q.items) >= openQueueSize {
+	if !q.opened || q.paused || len(q.items) >= openQueueSize {
 		return false
 	}
 	q.items = append(q.items, q.entryLocked(r))
@@ -235,6 +242,10 @@ type openFrame struct {
 // sent again on the next connection. Reports are taken only for what c holds. Their sender is the
 // application's own window: the stream is a Wails stream, with no local port (ADR 0009).
 func (o *opener) Serve(c openConn) {
+	o.serve(c, nil)
+}
+
+func (o *opener) serve(c openConn, closeReply func([]byte) bool) {
 	g := o.attach(c)
 	defer o.detach(c, g)
 	ctx := c.Context()
@@ -249,7 +260,9 @@ func (o *opener) Serve(c openConn) {
 			if !ok {
 				return
 			}
-			o.report(g, b)
+			if closeReply == nil || !closeReply(b) {
+				o.report(g, b)
+			}
 		case <-changed:
 		case <-ctx.Done():
 			return

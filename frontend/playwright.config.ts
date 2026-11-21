@@ -18,6 +18,16 @@ const docsRoot = process.env.INKWELL_E2E_DOCS;
 // Two real inkwell instances in Wails server mode (`-tags server`): same Go code, same
 // frontend, the Stream bridge becomes a WebSocket. Built by `mise run e2e`.
 const browser = process.env.INKWELL_E2E_BROWSER ?? (process.env.CI ? "webkit" : "chromium");
+const profileRoot = process.env.INKWELL_E2E_PROFILE;
+const profile = (port: number) => resolve(profileRoot ?? e2eDir, String(port));
+
+if (profileRoot) {
+  for (const port of [ALICE_PORT, BOB_PORT]) {
+    for (const dir of [join(docsRoot, String(port)), profile(port)]) {
+      if (readdirSync(dir).length === 0) throw new Error(`empty test application directory ${dir}`);
+    }
+  }
+}
 
 const instance = (port: number) => ({
   command: `../bin/inkwell-server`,
@@ -26,7 +36,7 @@ const instance = (port: number) => ({
     INKWELL_SERVER_PORT: String(port),
     // No short codes: the tests never reach the public code server.
     INKWELL_RENDEZVOUS: "off",
-    INKWELL_HOME: resolve(e2eDir, String(port)),
+    INKWELL_HOME: profile(port),
     INKWELL_DOCS: join(docsRoot, String(port)),
     // "Exporter en PDF" cannot open a dialog in a headless run: it saves here, unasked.
     INKWELL_EXPORT_DIR: join(docsRoot, `export-${port}`),

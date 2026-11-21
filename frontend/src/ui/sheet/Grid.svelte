@@ -230,7 +230,7 @@ function editKey(e: KeyboardEvent) {
 }
 
 function editBlur() {
-  if (ctrl.editing?.from === "cell") ctrl.commitEdit();
+  ctrl.blurEdit("cell");
 }
 
 // ---- pointer ----
@@ -632,7 +632,7 @@ const fillRect = $derived.by(() => {
         use:focusEnd
         oninput={(e) => ctrl.setEditValue(e.currentTarget.value)}
         onkeydown={editKey}
-        onblur={() => ctrl.commitEdit()}
+        onblur={() => ctrl.blurEdit()}
       ></textarea>
     {:else}
       <span class="letter">{ctrl.dialect.header ? colName(c) : ""}</span>

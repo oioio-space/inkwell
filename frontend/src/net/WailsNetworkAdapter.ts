@@ -72,6 +72,7 @@ export class WailsNetworkAdapter extends NetworkAdapter {
     this.#resolveReady = resolve;
   });
   #closed = false;
+  #presenceBarriers = new Map<number, (sent: boolean) => void>();
   #dropCounts = new Map<string, number>();
   get admissionDrops(): ReadonlyMap<string, number> {
     return this.#dropCounts;
@@ -95,6 +96,31 @@ export class WailsNetworkAdapter extends NetworkAdapter {
       for (const msg of this.#admission.drain(peer, this.#opts.ready ?? (() => true)))
         this.#deliver(msg);
     }
+  }
+
+  /** Waits for Go's outbound handoff of the earlier frames on this net stream. */
+  async flushPresence(attempt: number, signal: AbortSignal): Promise<void> {
+    const socket = this.#socket;
+    if (!socket || !this.#ready) throw new Error("presence stream unavailable");
+    const token = new Uint8Array(5);
+    new DataView(token.buffer).setUint32(1, attempt);
+    let aborted = () => {};
+    const sent = await new Promise<boolean>((resolve, reject) => {
+      aborted = () => resolve(false);
+      this.#presenceBarriers.set(attempt, resolve);
+      try {
+        signal.throwIfAborted();
+        signal.addEventListener("abort", aborted, { once: true });
+        socket.send(token);
+      } catch (error) {
+        reject(error);
+      }
+    }).finally(() => {
+      this.#presenceBarriers.delete(attempt);
+      signal.removeEventListener("abort", aborted);
+    });
+    signal.throwIfAborted();
+    if (!sent) throw new Error("presence handoff unconfirmed");
   }
   /** Heads of the last sync message sent for each document. */
   #lastHeads = new Map<string, string[]>();
@@ -243,6 +269,7 @@ export class WailsNetworkAdapter extends NetworkAdapter {
 
   /** Every announced peer is gone with the link: the repo forgets its sync state with them. */
   #disconnectAll(): void {
+    for (const finish of this.#presenceBarriers.values()) finish(false);
     for (const peerId of this.#announced) this.#gone(peerId);
     for (const peer of this.#announced) this.#admission.forget(peer);
     for (const timer of this.#pendingTimers.values()) clearTimeout(timer);
@@ -260,6 +287,7 @@ export class WailsNetworkAdapter extends NetworkAdapter {
     socket.onmessage = (ev) => this.#receive(new Uint8Array(ev.data as ArrayBuffer));
     socket.onclose = () => {
       if (this.#socket !== socket) return;
+      this.#ready = false;
       this.#disconnectAll();
       if (!this.#closed) setTimeout(() => this.#dial(), this.#opts.reconnectDelayMs ?? 500);
     };
@@ -267,6 +295,11 @@ export class WailsNetworkAdapter extends NetworkAdapter {
   }
 
   #receive(frame: Uint8Array): void {
+    if ((frame.length === 5 || frame.length === 6) && frame[0] === 0) {
+      const attempt = new DataView(frame.buffer, frame.byteOffset, frame.byteLength).getUint32(1);
+      this.#presenceBarriers.get(attempt)?.(frame.length === 5);
+      return;
+    }
     let env: ReturnType<typeof decodeEnvelope>;
     try {
       env = decodeEnvelope(frame);

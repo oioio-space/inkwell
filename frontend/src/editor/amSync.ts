@@ -13,6 +13,7 @@ export { isReconcileTx, reconcileAnnotationType };
 interface Waiting {
   readonly waiting: boolean;
   flush(): void;
+  confirm(): void;
   /** Runs `fn` once what waits is in the document. */
   onceWritten(fn: () => void): void;
 }
@@ -31,8 +32,11 @@ export function flushTyped(handle: DocHandle<unknown>): void {
 }
 
 /** Writes now the keys typed in every editor of the page, whatever its document: the page is going. */
-export function flushAllTyped(): void {
-  for (const editor of live) editor.flush();
+export function flushAllTyped(strict = false): void {
+  for (const editor of live) {
+    editor.flush();
+    if (strict) editor.confirm();
+  }
 }
 
 /** Runs `fn` once the keys typed in every editor of `handle` are in the document: now if none wait. */
@@ -119,6 +123,7 @@ export function amSync({
       isProcessingCmTransaction = false;
       // Local edits not yet in the document, in order, in the coordinates of reconciledHeads.
       pending: Edit[] = [];
+      failed = false;
       scheduled = false;
       // The waiting edits are being written concurrently with a change that came in; `local` is
       // set, to the heads of the last change written, when the handle runs that write.
@@ -142,6 +147,11 @@ export function amSync({
       }
       onceWritten(fn: () => void) {
         this.afterWrite.push(fn);
+      }
+      confirm() {
+        if (this.failed || this.waiting || this.view.composing) {
+          throw new Error("editor input could not be confirmed");
+        }
       }
       update(update: { transactions: readonly Transaction[] }) {
         // Only the typed insert itself waits; anything else in the same update (a paste, an undo,
@@ -177,6 +187,7 @@ export function amSync({
           profiled(() => applyEdits(handle, edits, path));
           this.reconciledHeads = A.getHeads(handle.doc());
         } catch (error) {
+          this.failed = true;
           reportLost(edits, error);
         } finally {
           this.isProcessingCmTransaction = false;

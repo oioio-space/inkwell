@@ -1,7 +1,7 @@
 <script lang="ts">
 import { next as A } from "@automerge/automerge";
 import { Presence } from "@automerge/automerge-repo";
-import { Stream, WailsSocket } from "@wailsio/runtime";
+import { Flags, Stream, WailsSocket } from "@wailsio/runtime";
 import { onMount, tick, untrack } from "svelte";
 import { Session } from "../bindings/github.com/oioio-space/inkwell/internal/app/index";
 import { whenWritten } from "./editor/amSync";
@@ -25,6 +25,7 @@ import { exportPdf, jumpFromCursor, jumpFromPage, jumpToProblem } from "./previe
 import { lastChangeSeconds } from "./preview/docTime";
 import Preview from "./preview/Preview.svelte";
 import { preview } from "./preview/preview.svelte";
+import { SaveError } from "./store/GoStorageAdapter";
 import { settings } from "./store/settings.svelte";
 import AboutDialog, { type BuildInfo } from "./ui/AboutDialog.svelte";
 import Banner from "./ui/Banner.svelte";
@@ -52,6 +53,8 @@ import StatusBar from "./ui/shell/StatusBar.svelte";
 import { showStartupNotice } from "./ui/startupNotice";
 import FormatBar from "./ui/toolbar/FormatBar.svelte";
 import { barLang } from "./ui/toolbar/spec";
+import { ClosePage, closePublisher } from "./workspace/closePage";
+import { nativeCloseProbe } from "./workspace/nativeCloseProbe";
 import { observeDocText, observeHeads, observeLinks } from "./workspace/observe";
 import { OpenRequests } from "./workspace/openRequests";
 import { workspace } from "./workspace/workspace.svelte";
@@ -190,6 +193,10 @@ $effect(() => {
     handle,
   });
   presence.start({ initialState: { name, file } });
+  const unregister = closePublisher(
+    () => presence.stop(),
+    () => presence.start({ initialState: presence.getLocalState() }),
+  );
   const refresh = () =>
     workspace.hearNames(
       Object.values(presence.getPeerStates().value).map((p) => ({
@@ -200,10 +207,14 @@ $effect(() => {
     );
   for (const event of ["update", "snapshot", "goodbye", "pruning"] as const)
     presence.on(event, refresh);
-  return () => presence.stop();
+  return () => {
+    unregister();
+    presence.stop();
+  };
 });
 
 function onKey(e: KeyboardEvent) {
+  if (workspace.closing) return;
   if (e.key === "F8" && !e.ctrlKey && !e.metaKey && !e.altKey) {
     e.preventDefault();
     problems.next(e.shiftKey);
@@ -348,7 +359,55 @@ onMount(() => {
   languageMounted = true;
   let nativePerfStop: (() => void) | undefined;
   let mounted = true;
-  const started = workspace.start().then(refresh);
+  const closeWalk =
+    import.meta.env.VITE_E2E_OBSERVE === "1" &&
+    new URLSearchParams(location.search).get("wc1Native");
+  if (closeWalk) settings.setSaveMode("manual");
+  let nativeProbe: ReturnType<typeof nativeCloseProbe> | undefined;
+  const closePage = new ClosePage({
+    save: (signal) => workspace.saveForClose(signal),
+    goodbye: async (attempt, signal) => {
+      await workspace.goodbyeForClose(attempt, signal);
+      await nativeProbe?.waitForSelectionClear(signal);
+    },
+    restore: () => workspace.resumeAfterClose(),
+    describe: (error) => {
+      if (!(error instanceof SaveError)) return {};
+      return {
+        ...(error.message === "disk-full" ? { reason: "disk-full" } : {}),
+        ...(error.document && error.document === workspace.handle?.documentId
+          ? { files: ["main.typ"] }
+          : {}),
+      };
+    },
+  });
+  let desktopClose = false;
+  try {
+    desktopClose = Flags.GetFlag("inkwellClose") === true;
+  } catch {
+    // The browser transport can start without the native bootstrap flags.
+  }
+  const allowed = desktopClose ? closePage.ready : Promise.resolve();
+  const started = allowed.then(() => {
+    if (mounted) return workspace.start().then(refresh);
+  });
+  if (closeWalk) nativeProbe = nativeCloseProbe(closeWalk, started);
+  if (desktopClose)
+    workspace.authorizeProjectLeave = () => closePage.requestProject() ?? Promise.resolve(false);
+  if (import.meta.env.VITE_E2E_OBSERVE === "1") {
+    (
+      globalThis as typeof globalThis & { __inkwellPrepareDeparture?: () => Promise<void> }
+    ).__inkwellPrepareDeparture = async () => {
+      const signal = AbortSignal.timeout(5000);
+      try {
+        await workspace.saveForClose(signal);
+        await workspace.goodbyeForClose(1, signal);
+      } catch (error) {
+        workspace.resumeAfterClose();
+        throw error;
+      }
+    };
+  }
   // After a take-over restarted Inkwell: how it ended, once, and the focus in the text (PC1a, N-12).
   void showStartupNotice(
     () => {
@@ -366,6 +425,7 @@ onMount(() => {
     () => Stream("open") as unknown as SocketLike,
     {
       ready: started,
+      closePage,
       prepare: async (signal) => {
         sheetView.toGrid(undefined);
         await workspace.refreshFiles(); // a file just made outside Inkwell may not be listed yet
@@ -431,7 +491,9 @@ onMount(() => {
   }, 4000);
   return () => {
     mounted = false;
+    workspace.authorizeProjectLeave = undefined;
     openRequests.stop();
+    nativeProbe?.stop();
     nativePerfStop?.();
     clearInterval(timer);
     preview.stop();
