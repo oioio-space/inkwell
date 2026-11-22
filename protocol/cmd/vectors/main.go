@@ -798,6 +798,12 @@ func generate(dir, casesPath string) {
 	// ---- sync acceptance ACK (spec §8.7, block PU1) ----
 	write(root, "syncack.json", vectorFile{Vectors: syncAckVectors()})
 
+	// ---- inbound order of a peer's sync streams (spec §8.7.3, §8.7.4, block PU1b) ----
+	write(root, "syncorder.json", vectorFile{Vectors: syncOrderVectors()})
+
+	// ---- lifecycle of an inbound stream on the ordered lanes (spec §8.1, §8.7.3, §16.1, block PU1c) ----
+	write(root, "inbound.json", vectorFile{Vectors: inboundVectors()})
+
 	fmt.Println("ok")
 }
 

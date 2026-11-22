@@ -283,7 +283,6 @@ func (nn *natNet) roam(end *natEnd) {
 // quic returns the libp2p option that puts QUIC on the end: the listening
 // socket is a simulated one wired to nn.
 func (nn *natNet) quic(end *natEnd) libp2p.Option {
-	selector := &mockSource{}
 	return libp2p.QUICReuse(
 		func(l fx.Lifecycle, reset quic.StatelessResetKey, token quic.TokenGeneratorKey, opts ...quicreuse.Option) (*quicreuse.ConnManager, error) {
 			cm, err := quicreuse.NewConnManager(reset, token, opts...)
@@ -293,6 +292,15 @@ func (nn *natNet) quic(end *natEnd) libp2p.Option {
 			l.Append(fx.StopHook(cm.Close))
 			return cm, nil
 		},
+		nn.quicSocket(end)...,
+	)
+}
+
+// quicSocket are the QUIC connection manager's options that put its socket on the end of nn; a node takes them
+// in its own manager (p2p.SetQUICReuse), which sets the node's windows.
+func (nn *natNet) quicSocket(end *natEnd) []quicreuse.Option {
+	selector := &mockSource{}
+	return []quicreuse.Option{
 		quicreuse.OverrideSourceIPSelector(func() (quicreuse.SourceIPSelector, error) { return selector, nil }),
 		quicreuse.OverrideListenUDP(func(_ string, address *net.UDPAddr) (net.PacketConn, error) {
 			selector.ip.Store(&address.IP)
@@ -305,7 +313,7 @@ func (nn *natNet) quic(end *natEnd) libp2p.Option {
 			nn.byExt[fmt.Sprintf("%s:%d", end.external, simPort)] = end
 			return c, nil
 		}),
-	)
+	}
 }
 
 // mockSource tells QUIC which address to send from.
@@ -357,8 +365,23 @@ func (nn *natNet) nodeKeyAt(t *testing.T, keySeed, endSeed byte, public bool, o 
 	return nn.nodeOn(t, keySeed, nn.newEnd(endSeed, public), o)
 }
 
-// nodeOn is nodeAt with the identity of keySeed on the endpoint end.
-func (nn *natNet) nodeOn(t *testing.T, keySeed byte, end *natEnd, o p2p.Options) *simNode {
+// simOptions are the libp2p options of a host listening on end of the simulated network.
+func (nn *natNet) simOptions(end *natEnd) []libp2p.Option {
+	return append(nn.nodeSimOptions(end), nn.quic(end))
+}
+
+// nodeSimOptions are simOptions but the QUIC connection manager, which a node builds itself.
+func (nn *natNet) nodeSimOptions(end *natEnd) []libp2p.Option {
+	return []libp2p.Option{
+		libp2p.NoListenAddrs,
+		libp2p.ListenAddrStrings(fmt.Sprintf("/ip4/%s/udp/%d/quic-v1", end.internal, simPort)),
+		libp2p.DisableIdentifyAddressDiscovery(), // it stalls synctest
+	}
+}
+
+// nodeOn is nodeAt with the identity of keySeed on the endpoint end; extra libp2p options apply
+// after the simulated network's.
+func (nn *natNet) nodeOn(t *testing.T, keySeed byte, end *natEnd, o p2p.Options, extra ...libp2p.Option) *simNode {
 	t.Helper()
 	p2p.SetRewrite(&o, func(addrs []ma.Multiaddr) []ma.Multiaddr {
 		out := make([]ma.Multiaddr, 0, len(addrs))
@@ -372,13 +395,8 @@ func (nn *natNet) nodeOn(t *testing.T, keySeed byte, end *natEnd, o p2p.Options)
 		nn.mu.Unlock()
 		return append(out, ma.StringCast(fmt.Sprintf("/ip4/%s/udp/%d/quic-v1", ext, simPort)))
 	})
-	p2p.SetExtra(
-		&o,
-		libp2p.NoListenAddrs,
-		libp2p.ListenAddrStrings(fmt.Sprintf("/ip4/%s/udp/%d/quic-v1", end.internal, simPort)),
-		libp2p.DisableIdentifyAddressDiscovery(), // it stalls synctest
-		nn.quic(end),
-	)
+	p2p.SetQUICReuse(&o, nn.quicSocket(end)...)
+	p2p.SetExtra(&o, append(nn.nodeSimOptions(end), extra...)...)
 	n, err := p2p.New(t.Context(), key(keySeed), o)
 	if err != nil {
 		t.Fatalf("New(seed %d): %v", keySeed, err)
@@ -612,6 +630,19 @@ func TestRoamToNewAddress(t *testing.T) {
 		time.Sleep(2 * time.Minute)
 		nn.roam(b.end)
 
+		// Its old address is useless: the way back is through the relay, so the first connection a
+		// registers to b after the return is a circuit. (The link's kind at PeerUp is no proof: PeerUp
+		// waits for b's ACK, one round trip, during which the hole punch may already land, PU1.)
+		bID, _ := p2p.LibP2PID(b.Local())
+		var firstMu sync.Mutex
+		var first ma.Multiaddr
+		a.Host().Network().Notify(&network.NotifyBundle{ConnectedF: func(_ network.Network, c network.Conn) {
+			firstMu.Lock()
+			defer firstMu.Unlock()
+			if c.RemotePeer() == bID && first == nil {
+				first = c.RemoteMultiaddr()
+			}
+		}})
 		healed := time.Now()
 		nn.setCut(false)
 		expectEventWithin(t, a, transport.PeerUp, b.Local(), 30*time.Second)
@@ -619,10 +650,11 @@ func TestRoamToNewAddress(t *testing.T) {
 		if d := time.Since(healed); d > 30*time.Second {
 			t.Errorf("PeerUp %v after b came back, want at most 30s", d)
 		}
-		// Its old address is useless: the way back is through the relay.
-		if got := linkTo(a, b.Local()); got != transport.LinkRelayed {
-			t.Errorf("link a->b right after the return = %v, want %v", got, transport.LinkRelayed)
+		firstMu.Lock()
+		if _, err := first.ValueForProtocol(ma.P_CIRCUIT); first == nil || err != nil {
+			t.Errorf("a's first connection to b after the return = %v, want a relay circuit", first)
 		}
+		firstMu.Unlock()
 		expectQuietFor(t, a, 10*time.Second)
 		expectQuietFor(t, b, 10*time.Second)
 		waitLink(t, a, b.Local(), transport.LinkDirect, time.Minute) // and the new address is punched

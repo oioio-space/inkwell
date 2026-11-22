@@ -1022,3 +1022,118 @@ distribution.
 | `WindowCloseNoWrite` | `HealthyCloseSucceeds`: a healthy request stalls on a dirty cut |
 | `WindowCloseForceNeedsLive` | `ForceClosesCrashedWindow`: an unavailable renderer prevents explicit force |
 | `WindowCloseForceWithoutConsent` | `OnlyWithConsent`: issue a forced permit straight from the abort notice |
+
+## SyncOrder (block PU1b, spec §8.7.3-§8.7.4: the order of a peer's inbound sync streams, two places)
+
+Model: [SyncOrder.tla](SyncOrder.tla); plan
+[2026-11-16-pu1b-inbound-order.md](../../plans/2026-11-16-pu1b-inbound-order.md). One responder, one peer's inbound
+sync streams: each takes a place in the peer's order on arrival, before its ACK; at most `Cap` places, shared by the
+peer's connections and generations; a stream reads only once nobody ahead of it holds a place (`waitFor = 0`); a
+stream leaves when it ends — at once, wherever it stands, if it delivered nothing (reset, or closed for writing with
+nothing to read), and its successor then waits for
+the stream ahead of it (the wake) — or, having delivered frames, once read to its end. Openers: honest (one session
+stream, the move relay → direct that swaps after the ACK and closes the old stream for writing, the direct connection
+dropping, the reopen on the relay: drain + replacement + reconnect, where a third place is asked for and refused for
+capacity, then retried) or Byzantine (opens, writes, ends, resets and holds any stream at will). `Stall` lets a
+waiting stream give the order up (`reorderWait`). Time: an opening has a clock (`spent`, ticks since its first open,
+retries included); a retry after a capacity refusal needs a tick first (`wait` → `due`: the backoff); at `spent = D`
+the budget is out: a session opening closes the peer (`closedBy = "budget"`, every stream of the peer reset), a move
+is abandoned. `HonestTiming` (time passes only while neither the responder nor a due retry can act) is the honest
+liveness assumption; `SyncOrderAnyTiming` drops it. Its runs are named `SyncOrder*`, outside PU1's `^PeerUpAck` set.
+
+Rule operators (overridden by the mutants): `PlaceFree == Len(list) < Cap` (P-8), `EarlyOK(s) == TRUE` (P-9: a
+stream that delivered nothing leaves at once), `Ended(s) == rstd[s] \/ (fin[s] /\ buf[s] = <<>>)` (P-9: a reset or an
+end of writing with nothing to read), `Rewire(s) == waitFor[s]` (P-9: the wake), `OnBusyKill == FALSE` (P-8: a
+capacity refusal never closes the peer).
+
+| Property | Meaning |
+|---|---|
+| `Places` | at most two streams of the peer hold a place |
+| `Order` (Honest) | the frames are delivered in the order the opener wrote them, across the move and the reconnect |
+| `SessionKept` (Honest, AnyTiming) | a capacity refusal never closes the peer (only the budget's end does) |
+| `Budget` (Honest, AnyTiming) | an opening, retries included, never outlives its budget |
+| `EmptyLeaves` | a stream that ended (reset, or closed for writing with nothing to read) without delivering a frame does not keep its place (fair responder) |
+| `AllDelivered` (Honest) | every frame still in a stream is eventually delivered |
+| `SessionResumes` (Honest) | after the drop, the session comes back (the capacity refusal is retried) |
+
+| Configuration | Run | What it covers |
+|---|---|---|
+| `SyncOrderHonest.cfg` | `SyncOrderHonest` | honest opener, three streams, a move, a drop of the direct connection, a reopen, honest timing, D = 3; all properties |
+| `SyncOrderAnyTiming.cfg` | `SyncOrderAnyTiming` (safety) | the same under any timing, D = 2: the budget may run out during a capacity refusal; invariants |
+| `SyncOrderByzantine.cfg` | `SyncOrderByzantine` | Byzantine opener, three streams, a waiting stream may give the order up; `Places`, `EmptyLeaves` |
+
+| Mutant (mutants/SyncOrderMutants.tla) | Override | Caught by |
+|---|---|---|
+| `SyncOrderNoWake` (Q1, P-9: no wake) | `Rewire <- RewireStale` | `AllDelivered` (Honest): the successor of a drained stream waits for it for ever |
+| `SyncOrderKeepEmpty` (Q2, P-9: the place kept) | `EarlyOK <- EarlyAtTurn` | `EmptyLeaves` (Byzantine): a stream reset behind a head held open keeps its place |
+| `SyncOrderClosePeerOnBusy` (Q3, P-8: ClosePeer on capacity) | `OnBusyKill <- OnBusyKillMut` | `SessionKept` (Honest) |
+| `SyncOrderBound3` (Q4, P-8: three places) | `PlaceFree <- PlaceFree3` | `Places` (Byzantine) |
+| `SyncOrderEofKeeps` (Q5, P-9: an empty end of writing keeps its place) | `Ended <- EndedByReset` | `EmptyLeaves` (Byzantine) |
+| `SyncOrderWitnessBusy` (witness) | — | `NoBusy`: an honest opener meets a capacity refusal (drain + replacement + reconnect) |
+| `SyncOrderWitnessRemoveWaiting` (witness) | — | `NoRemovalWhileWaiting`: a stream leaves while its successor waits for it |
+| `SyncOrderWitnessEmptyEof` (witness) | — | `NoEmptyEof`: a waiting stream closed by its opener without a frame leaves the order (Byzantine) |
+| `SyncOrderWitnessBudgetOut` (witness) | — | `NoBudgetOut`: the budget runs out during a capacity refusal and the session opening closes the peer (AnyTiming) |
+
+Not modelled: the exact waits (50 ms doubled to 1 s: the vectors), the bytes of the ACK (PeerUpAck), real timings. Results: gates/PU1b/WITNESSES.md.
+
+## InboundLifecycle (block PU1c, spec §8.1, §8.7.3, §16.1: one lifecycle for the inbound streams of both ordered lanes)
+
+Model: [InboundLifecycle.tla](InboundLifecycle.tla); plan
+[2026-11-17-pu1c-inbound-lifecycle.md](../../plans/2026-11-17-pu1c-inbound-lifecycle.md). One peer's inbound streams
+on **both** ordered lanes at once (sync and bulk), each lane with its order (`Cap` places), its receive budget and its
+consumer, all on **one** QUIC connection whose credit (`ConnWindow` units) they share; a stream holds at most `Win`
+units of it, its unread units plus, until its turn, the units its probe took (no window update below a quarter of a
+window). Each stream has one reader: `arrived` → `refused` | `accepting` (the ACK, both lanes) → `waiting` → `kept`
+| `delivering` ⇄ `blocked` → `gone`. Waiting, the reader probes: a reset is seen (it wins over unread units); else a
+unit is taken (at most `ProbeMax`); else an end with nothing unread is seen: an empty prefix leaves at once, a
+non-empty one is kept to its turn and given to the decoder, which delivers whole frames and drops a truncated last
+one. The turn needs no stream ahead (or the order given up, `Stall`) and the peer up. Delivering charges each whole
+frame to the lane's budget; a full budget blocks; a blocked reader is freed by room or by the loss of its connection,
+never by its own reset. Openers: honest per lane (session stream, a reopen that swaps after the new stream's ACK,
+streams arriving before PeerUp: the late handler, the session's end), Byzantine per lane (opens, whole and partial
+frames, FIN, reset, RESET_STREAM_AT, holds), Greedy streams filled to their window by any opener. Its runs are named
+`InboundLifecycle*`, outside PU1's `^PeerUpAck` and PU1b's `^SyncOrder` sets; `SyncOrder.tla` and `PeerUpAck.tla` are
+untouched.
+
+Rule operators (overridden by the mutants): `PlaceAtArrival(l) == TRUE` (P-6, P-14), `EarlyOK(s) == TRUE` (P-9),
+`ProbeOK(s) == TRUE` (P-11), `WaitCharges == FALSE` (P-12), `KeepPrefix(s) == TRUE` (P-11), `CancelOnLoss == TRUE`
+(P-12), `ConnWindow == Cap * 2 * Win` (P-13: the streams not read besides a head are at most `Cap * 2 - 1`; the
+spec's inequality adds one arriving or refused stream and divides by 1 − θ).
+
+| Property | Meaning |
+|---|---|
+| `Places` | at most two places per lane |
+| `Order` (Honest) | each honest lane's frames reach its consumer in the order written, across late handlers and reopens |
+| `WaitNoBudget` | a stream holds budget only from its turn |
+| `ArrivingHoldsNothing` (Honest, Credit) | on an honest peer's connection a stream arriving, accepting or refused holds no credit (its opener writes after the ACK): the « + 1 » of P-13's inequality is a margin; a refused stream's units are released by a step of their own (`Release`, the reset processed) |
+| `ReservationsReturned` | a stream that left holds no reservation |
+| `FinFramesDelivered` | a stream that ended without an abrupt reset and left delivered every whole frame written on it |
+| `EmptyLeaves` | a stream that ended before its turn with nothing to read (nothing unread, nothing probed) leaves its place (fair reader) |
+| `NoBlindWait` | an accepting or waiting stream whose stream was reset (or whose connection was lost) leaves that state, even after its probe took units |
+| `BlockedFreed` (Byzantine) | a reader blocked on the budget is freed by its connection's loss |
+| `AllDelivered` (Honest), `HeadProgresses` (Credit) | every frame of an honest lane is delivered; in Credit, with three other streams of both lanes holding their windows and the bulk head blocked |
+
+| Configuration | Run | What it covers |
+|---|---|---|
+| `InboundLifecycleHonest.cfg` | `InboundLifecycleHonest` | both lanes honest, late handlers, a reopen per lane, the sessions end; consumers fair; all safety, `AllDelivered`, `EmptyLeaves`, `NoBlindWait` |
+| `InboundLifecycleByzantine.cfg` | `InboundLifecycleByzantine` | a Byzantine opener on a head and a waiting stream of one lane — an over-approximation of two Byzantine lanes on one credit (plan §6, « Composition of the two lanes »: the other lane acts only by holding credit, which only disables this lane's writes, and those are unfair choices already) —, every end kind in every state, a stalled consumer, `Stall`, a connection loss; safety, `EmptyLeaves`, `NoBlindWait`, `BlockedFreed` |
+| `InboundLifecycleByzantineSafety.cfg` | `InboundLifecycleByzantineSafety` (safety) | the same on three streams (a third place refused), a probe keeping two units (a whole and a truncated frame); invariants |
+| `InboundLifecycleCredit.cfg` | `InboundLifecycleCredit` | the sync head honest; a second sync stream and both bulk streams filled to their window before the head writes; the bulk consumer stalled; `HeadProgresses` |
+
+| Mutant (mutants/InboundLifecycleMutants.tla) | Override | Caught by |
+|---|---|---|
+| `InboundLifecyclePlaceSyncLate` (QC1, finding 1: the place after the up-wait) | `PlaceAtArrival <- PlaceSyncLate` | `Order` (Honest) |
+| `InboundLifecycleFailedWaits` (QC2, finding 2: a failed stream waits for its predecessor) | `EarlyOK <- EarlyAtTurn` | `EmptyLeaves` (Byzantine) |
+| `InboundLifecycleProbeOnce` (QC3, finding 3: the probe blind after a byte) | `ProbeOK <- ProbeOnce` | `NoBlindWait` (Byzantine) |
+| `InboundLifecycleWaitCharges` (QC4, finding 5: a waiting stream charges the budget) | `WaitCharges <- WaitChargesMut` | `WaitNoBudget` (Honest) |
+| `InboundLifecycleKeepWholeOnly` (QC5, review: a prefix with a truncated tail dropped) | `KeepPrefix <- KeepWholeOnly` | `FinFramesDelivered` (ByzantineSafety) |
+| `InboundLifecycleNoCancel` (QC6, review: the budget wait blind to the connection's loss) | `CancelOnLoss <- CancelOnLossMut` | `BlockedFreed` (Byzantine) |
+| `InboundLifecycleBulkTail` (QC7, `bulkTail`: bulk place after the up-wait, failed bulk stream waits) | `PlaceAtArrival <- PlaceBulkLate`, `EarlyOK <- EarlyBulkAtTurn` | `Order` (Honest) |
+| `InboundLifecycleSmallWindow` (QC8, P-13 off: the connection window too small) | `ConnWindow <- ConnWindowSmall` | `HeadProgresses` (Credit) |
+| `InboundLifecycleWitnessKept` (witness) | — | `NoKept`: an end after a probed prefix keeps the place |
+| `InboundLifecycleWitnessBlocked` (witness) | — | `NoBlocked`: a reader blocks on a full budget |
+| `InboundLifecycleWitnessTruncatedTail` (witness, ByzantineSafety) | — | `NoTruncatedTail`: whole frames delivered, then a truncated last one dropped |
+| `InboundLifecycleWitnessExhausted` (witness) | — | `NoCreditExhaustedFirst`: the other streams hold all but the head's share before the head writes |
+
+Not modelled: real times — the temporal properties prove « eventually »; every bound (T = 250 ms, at once, 60 s, 30 s) is proved by Go arms on controlled time (`probe_period`, `wake_within_bound`, `immediate_when_first_and_up`, `interrupt_during_transition`, `matrix/*`) and by the vectors —, byte sizes (units), the auto-tuning of
+windows (the stated limit of P-13), the opener's retries (SyncOrder). Results: gates/PU1c/WITNESSES.md.

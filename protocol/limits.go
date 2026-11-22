@@ -34,6 +34,21 @@ const (
 	MaxSyncFrame = 98304
 	// SyncAckLen is the length of the sync session's acceptance ACK, in bytes (§16, sync ACK row; §8.7.2).
 	SyncAckLen = 1
+	// SyncInboundPlaces is how many inbound sync streams of one peer hold a place in its order (§16, inbound
+	// sync streams row; §8.7.3, rule P-8).
+	SyncInboundPlaces = 2
+	// BulkInboundPlaces is how many inbound bulk streams of one peer hold a place in its order (§16, inbound stream
+	// lifecycle row; §8.1, rule P-14).
+	BulkInboundPlaces = 2
+	// InboundLanes is the number of ordered inbound lanes, sync and bulk, whose streams share a QUIC connection's
+	// credit (§16, inbound stream lifecycle row; §8.7.3, rule P-13).
+	InboundLanes = 2
+	// InboundProbeMax is how many bytes a waiting inbound stream may take by probing, in all (§16, inbound stream
+	// lifecycle row; §8.7.3, rule P-11).
+	InboundProbeMax = 256
+	// SyncBusyCode is the stream error code of a refusal for capacity (§16, inbound sync streams row; §8.7.4):
+	// go-libp2p's StreamResourceLimitExceeded.
+	SyncBusyCode = 0x1002
 	// MaxBulkFrame is the maximum size of a bulk frame, in bytes (§16, bulk frame row).
 	MaxBulkFrame = 1065005
 	// MaxLobbyRequest is the maximum size of a lobby request, in bytes (§16, lobby row).
@@ -104,10 +119,13 @@ const (
 	QUICMaxConnectionWindow = 15 << 20
 	// QUICMaxStreamWindow is the maximum QUIC stream window, in bytes (§16, QUIC windows row).
 	QUICMaxStreamWindow = 10 << 20
-	// QUICInitialStreamWindow is the initial QUIC stream window, in bytes (§16, QUIC windows row).
-	QUICInitialStreamWindow = 512 << 10
-	// QUICInitialConnectionWindow is the initial QUIC connection window, in bytes (§16, QUIC windows row).
-	QUICInitialConnectionWindow = 768 << 10
+	// QUICInitialStreamWindow is the initial QUIC stream receive window the node sets, in bytes (§16, QUIC windows row;
+	// §8.7.3, rule P-13).
+	QUICInitialStreamWindow = 128 << 10
+	// QUICInitialConnectionWindow is the initial QUIC connection receive window the node sets, in bytes (§16, QUIC
+	// windows row; §8.7.3, rule P-13): the inbound streams not read of both ordered lanes cannot exhaust it before a
+	// head (see the assertion below). It is reserved with the resource manager when the connection opens.
+	QUICInitialConnectionWindow = 1 << 20
 	// IgnorableFramesPerMinute is the maximum number of ignorable frames per peer and minute (§16, ignorable frames row).
 	IgnorableFramesPerMinute = 256
 	// IgnorableBytesPerMinute is the maximum size of ignorable frames per peer and minute, in bytes (§16, ignorable frames row).
@@ -337,6 +355,18 @@ const (
 	// SyncAckTimeout bounds opening a sync stream and reading its ACK together, counted from the
 	// open, and the responder's write of the ACK (§16, sync ACK row; §8.7.4).
 	SyncAckTimeout = 15 * time.Second
+	// SyncBusyRetryMin is the opener's first wait after a refusal for capacity, doubled at each one
+	// (§16, inbound sync streams row; §8.7.4).
+	SyncBusyRetryMin = 50 * time.Millisecond
+	// SyncBusyRetryMax caps that wait (§16, inbound sync streams row).
+	SyncBusyRetryMax = time.Second
+	// SyncReorderWait bounds how long an inbound sync stream waits for its turn before it is read anyway
+	// (§16, inbound sync streams row; §8.7.3, rule P-9).
+	SyncReorderWait = time.Minute
+	// InboundProbeEvery bounds the time between the starts of two probe reads of a waiting inbound stream, and so
+	// how late it sees a reset, its turn or its peer's announcement (§16, inbound stream lifecycle row; §8.7.3,
+	// rule P-11).
+	InboundProbeEvery = 250 * time.Millisecond
 	// LinkProbeDefaultMaxAckDelay is the max_ack_delay used when the QUIC stack does not expose the peer's (§8.5.5): quic-go advertises 26 ms (MaxAckDelayInclGranularity), above RFC 9000's 25 ms default.
 	LinkProbeDefaultMaxAckDelay = 26 * time.Millisecond
 )
@@ -358,4 +388,12 @@ const (
 	LinkProbeRTTPoorDown = 1600 * time.Millisecond
 	LinkProbeRTTPoor     = 2 * time.Second
 	LinkProbeRTTPoorUp   = 2500 * time.Millisecond
+)
+
+// Rule P-13 (§8.7.3, §16 QUIC windows row): (places × lanes + 1) × the initial stream window ≤ (1 − 1/4) × the
+// initial connection window, 1/4 being quic-go's window-update threshold; and a waiting stream probing one byte per
+// InboundProbeEvery for SyncReorderWait stays within InboundProbeMax. Either fails to compile once broken.
+const (
+	_ = uint(3*QUICInitialConnectionWindow/4 - (SyncInboundPlaces*InboundLanes+1)*QUICInitialStreamWindow)
+	_ = uint(InboundProbeMax - 1 - SyncReorderWait/InboundProbeEvery)
 )

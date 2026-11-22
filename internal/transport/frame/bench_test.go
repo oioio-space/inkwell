@@ -49,3 +49,33 @@ func BenchmarkRead(b *testing.B) {
 		})
 	}
 }
+
+// BenchmarkBudget is the receive budget's cost per frame: an acquire and a release with no waiter (every frame
+// of a reader keeping up), and with a waiter woken by each release.
+func BenchmarkBudget(b *testing.B) {
+	b.Run("uncontended", func(b *testing.B) {
+		bu := frame.NewBudget(1 << 20)
+		b.ReportAllocs()
+		for b.Loop() {
+			bu.Acquire(64)
+			bu.Release(64)
+		}
+	})
+	b.Run("handoff", func(b *testing.B) {
+		bu := frame.NewBudget(64)
+		done := make(chan struct{})
+		go func() {
+			defer close(done)
+			for bu.Acquire(64) {
+				bu.Release(64)
+			}
+		}()
+		b.ReportAllocs()
+		for b.Loop() {
+			bu.Acquire(64)
+			bu.Release(64)
+		}
+		bu.Close()
+		<-done
+	})
+}

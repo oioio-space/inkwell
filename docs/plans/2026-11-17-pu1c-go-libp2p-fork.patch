@@ -1,0 +1,308 @@
+From: inkwell (block PU1c, rule P-13) — proposed for oioio-space/go-libp2p on cae49c803966 and upstream
+Subject: [PATCH] quicreuse: configure and account for initial receive windows
+
+Unread stream bytes hold QUIC connection credit. Applications that order their
+inbound streams need an initial connection window larger than the combined
+windows of the streams they leave unread, and a resource reservation before a
+peer can consume that credit.
+
+- quicreuse.InitialReceiveWindows(stream, conn) sets the initial stream and
+  connection receive windows. The maximum windows and auto-tuning still apply.
+- quicreuse.AccountInitialConnectionWindow(rm) opens and charges the inbound
+  resource scope in ConnContext, before quic-go constructs the connection. The
+  accepted connection reuses the scope and its reservation. The QUIC context
+  and libp2p close paths release the scope once. Outbound QUIC reserves its
+  initial window after SetPeer and before the dial. A failed reservation
+  refuses the connection. The option is off by default.
+
+Apply with git apply on oioio-space/go-libp2p cae49c803966
+(v0.51.1-0.20261109121346-cae49c803966). Inkwell uses a local replace until the
+integrator publishes the fork and pins its new pseudo-version.
+
+diff --git a/p2p/transport/quic/listener.go b/p2p/transport/quic/listener.go
+index 009d33c..137503c 100644
+--- a/p2p/transport/quic/listener.go
++++ b/p2p/transport/quic/listener.go
+@@ -90,6 +90,9 @@ func (l *listener) wrapConn(qconn *quic.Conn) (*conn, error) {
+ 	}
+ 	connScope, err := network.UnwrapConnManagementScope(qconn.Context())
+ 	if err != nil {
++		if l.transport.connManager.InitialConnectionWindowReservation() != 0 {
++			return nil, err // Accounting requires the reservation made before the handshake.
++		}
+ 		connScope = nil
+ 		// Don't error here.
+ 		// Setup scope if we don't have scope from quicreuse.
+diff --git a/p2p/transport/quic/transport.go b/p2p/transport/quic/transport.go
+index 45bbf81..927c1f0 100644
+--- a/p2p/transport/quic/transport.go
++++ b/p2p/transport/quic/transport.go
+@@ -138,6 +138,10 @@ func (t *transport) dialWithScope(ctx context.Context, raddr ma.Multiaddr, p pee
+ 		log.Debug("resource manager blocked outgoing connection for peer", "peer", p, "addr", raddr, "err", err)
+ 		return nil, err
+ 	}
++	if err := t.reserveInitialWindow(scope); err != nil {
++		log.Debug("resource manager blocked the initial window of an outgoing connection", "peer", p, "addr", raddr, "err", err)
++		return nil, err
++	}
+ 
+ 	tlsConf, keyCh := t.identity.ConfigForPeer(p)
+ 	ctx = quicreuse.WithAssociation(ctx, t)
+@@ -349,6 +353,17 @@ func (t *transport) Listen(addr ma.Multiaddr) (tpt.Listener, error) {
+ 	return l, nil
+ }
+ 
++// reserveInitialWindow reserves, in the resource scope of a new connection, the initial connection receive window
++// the ConnManager accounts for (quicreuse.AccountInitialConnectionWindow): until the application reads, a peer may
++// fill it. The scope's Done releases it.
++func (t *transport) reserveInitialWindow(scope network.ResourceScope) error {
++	n := t.connManager.InitialConnectionWindowReservation()
++	if n == 0 {
++		return nil
++	}
++	return scope.ReserveMemory(n, network.ReservationPriorityAlways)
++}
++
+ func (t *transport) allowWindowIncrease(conn *quic.Conn, size uint64) bool {
+ 	// If the QUIC connection tries to increase the window before we've inserted it
+ 	// into our connections map (which we do right after dialing / accepting it),
+diff --git a/p2p/transport/quicreuse/config.go b/p2p/transport/quicreuse/config.go
+index 6272208..ac77ecd 100644
+--- a/p2p/transport/quicreuse/config.go
++++ b/p2p/transport/quicreuse/config.go
+@@ -6,6 +6,10 @@ import (
+ 	"github.com/quic-go/quic-go"
+ )
+ 
++// defaultInitialConnectionReceiveWindow is quic-go's initial connection receive window when the config leaves it
++// zero (protocol.DefaultInitialMaxData: 1.5 × its 512 KiB initial stream window).
++const defaultInitialConnectionReceiveWindow = 768 << 10
++
+ var quicConfig = &quic.Config{
+ 	MaxIncomingStreams:         256,
+ 	MaxIncomingUniStreams:      5,              // allow some unidirectional streams, in case we speak WebTransport
+diff --git a/p2p/transport/quicreuse/connmgr.go b/p2p/transport/quicreuse/connmgr.go
+index 023b82e..fafabd4 100644
+--- a/p2p/transport/quicreuse/connmgr.go
++++ b/p2p/transport/quicreuse/connmgr.go
+@@ -13,6 +13,7 @@ import (
+ 	"net"
+ 	"sync"
+ 
++	"github.com/libp2p/go-libp2p/core/network"
+ 	"github.com/libp2p/go-libp2p/gologshim"
+ 	"github.com/libp2p/go-netroute"
+ 	ma "github.com/multiformats/go-multiaddr"
+@@ -72,6 +73,13 @@ type ConnManager struct {
+ 	verifySourceAddress func(addr net.Addr) bool
+ 
+ 	qlogTracerDir string
++
++	// initialStreamWindow and initialConnWindow, if not zero, are the initial receive windows of every
++	// connection (InitialReceiveWindows); accountInitialWindow makes the QUIC transport reserve the initial
++	// connection window in each connection's resource scope (AccountInitialConnectionWindow).
++	initialStreamWindow  uint64
++	initialConnWindow    uint64
++	accountInitialWindow bool
+ }
+ 
+ type quicListenerEntry struct {
+@@ -111,6 +119,10 @@ func NewConnManager(statelessResetKey quic.StatelessResetKey, tokenKey quic.Toke
+ 	}
+ 
+ 	quicConf := quicConfig.Clone()
++	if cm.initialStreamWindow != 0 {
++		quicConf.InitialStreamReceiveWindow = cm.initialStreamWindow
++		quicConf.InitialConnectionReceiveWindow = cm.initialConnWindow
++	}
+ 	// quic-go takes care of disabling this if QLOGDIR Environment variable isn't present
+ 	quicConf.Tracer = qlog.DefaultConnectionTracer
+ 	serverConfig := quicConf.Clone()
+@@ -432,3 +444,45 @@ func newQUICTransport(
+ 		VerifySourceAddress: verifySourceAddress,
+ 	}
+ }
++
++// InitialConnectionWindowReservation is how many bytes the QUIC transport reserves in the resource scope of each
++// connection when it opens it: the initial connection receive window with AccountInitialConnectionWindow, else 0.
++func (c *ConnManager) InitialConnectionWindowReservation() int {
++	if !c.accountInitialWindow {
++		return 0
++	}
++	w := c.clientConfig.InitialConnectionReceiveWindow
++	if w == 0 {
++		w = defaultInitialConnectionReceiveWindow
++	}
++	return int(w)
++}
++
++func (c *ConnManager) inboundScope(rm network.ResourceManager) connContextFunc {
++	return func(ctx context.Context, info *quic.ClientInfo) (context.Context, error) {
++		addr, err := ToQuicMultiaddr(info.RemoteAddr, quic.Version1)
++		if err != nil {
++			return ctx, err
++		}
++		scope, err := rm.OpenConnection(network.DirInbound, false, addr)
++		if err != nil {
++			return ctx, err
++		}
++		if err := scope.ReserveMemory(c.InitialConnectionWindowReservation(), network.ReservationPriorityAlways); err != nil {
++			scope.Done()
++			return ctx, err
++		}
++		// ConnContext covers connections that never finish the handshake. Once accepted, the QUIC and
++		// libp2p close paths share the same scope and release its reservation once.
++		owned := &inboundConnScope{ConnManagementScope: scope}
++		context.AfterFunc(ctx, owned.Done)
++		return network.WithConnManagementScope(ctx, owned), nil
++	}
++}
++
++type inboundConnScope struct {
++	network.ConnManagementScope
++	done sync.Once
++}
++
++func (s *inboundConnScope) Done() { s.done.Do(s.ConnManagementScope.Done) }
+diff --git a/p2p/transport/quicreuse/options.go b/p2p/transport/quicreuse/options.go
+index d6c1465..b467830 100644
+--- a/p2p/transport/quicreuse/options.go
++++ b/p2p/transport/quicreuse/options.go
+@@ -3,8 +3,10 @@ package quicreuse
+ import (
+ 	"context"
+ 	"errors"
++	"fmt"
+ 	"net"
+ 
++	"github.com/libp2p/go-libp2p/core/network"
+ 	"github.com/prometheus/client_golang/prometheus"
+ 	"github.com/quic-go/quic-go"
+ )
+@@ -73,3 +75,34 @@ func EnableMetrics(reg prometheus.Registerer) Option {
+ 		return nil
+ 	}
+ }
++
++// InitialReceiveWindows sets the initial stream and connection receive windows of every QUIC connection
++// (quic.Config's InitialStreamReceiveWindow and InitialConnectionReceiveWindow). quic-go's auto-tuning still grows
++// them, up to the maximum windows, as the application reads. stream must be at most conn, and both at most the
++// maximum windows (10 MB per stream, 15 MB per connection).
++//
++// Bytes a peer sent and the application did not read hold connection credit: with streams that are deliberately
++// left unread (an application that orders its inbound streams, say), a connection window larger than the sum of
++// their stream windows keeps credit for the stream being read.
++func InitialReceiveWindows(stream, conn uint64) Option {
++	return func(m *ConnManager) error {
++		if stream == 0 || conn == 0 || stream > conn || stream > quicConfig.MaxStreamReceiveWindow || conn > quicConfig.MaxConnectionReceiveWindow {
++			return fmt.Errorf("quicreuse: invalid initial receive windows (stream %d, connection %d)", stream, conn)
++		}
++		m.initialStreamWindow, m.initialConnWindow = stream, conn
++		return nil
++	}
++}
++
++// AccountInitialConnectionWindow reserves the initial receive window in the resource scope of each QUIC
++// connection. It installs the inbound ConnContext callback and cannot be combined with ConnContext. Pass
++// the same resource manager as the QUIC transport. Connections are refused if the window cannot be reserved.
++func AccountInitialConnectionWindow(rm network.ResourceManager) Option {
++	return func(m *ConnManager) error {
++		if err := ConnContext(m.inboundScope(rm))(m); err != nil {
++			return err
++		}
++		m.accountInitialWindow = true
++		return nil
++	}
++}
+diff --git a/p2p/transport/quicreuse/initial_window_test.go b/p2p/transport/quicreuse/initial_window_test.go
+new file mode 100644
+index 0000000..34bf26a
+--- /dev/null
++++ b/p2p/transport/quicreuse/initial_window_test.go
+@@ -0,0 +1,86 @@
++package quicreuse
++
++import (
++	"context"
++	"net"
++	"testing"
++	"testing/synctest"
++
++	"github.com/libp2p/go-libp2p/core/network"
++	ma "github.com/multiformats/go-multiaddr"
++	"github.com/quic-go/quic-go"
++	"github.com/stretchr/testify/require"
++)
++
++func TestInitialReceiveWindows(t *testing.T) {
++	cm, err := NewConnManager(quic.StatelessResetKey{}, quic.TokenGeneratorKey{}, InitialReceiveWindows(128<<10, 1<<20))
++	require.NoError(t, err)
++	defer cm.Close()
++	for _, c := range []*quic.Config{cm.clientConfig, cm.serverConfig} {
++		require.Equal(t, uint64(128<<10), c.InitialStreamReceiveWindow)
++		require.Equal(t, uint64(1<<20), c.InitialConnectionReceiveWindow)
++	}
++	require.Zero(t, cm.InitialConnectionWindowReservation(), "no reservation without AccountInitialConnectionWindow")
++
++	for _, w := range [][2]uint64{{0, 1 << 20}, {128 << 10, 0}, {2 << 20, 1 << 20}, {11 << 20, 16 << 20}} {
++		_, err := NewConnManager(quic.StatelessResetKey{}, quic.TokenGeneratorKey{}, InitialReceiveWindows(w[0], w[1]))
++		require.Error(t, err, "windows %v", w)
++	}
++}
++
++func TestAccountInitialConnectionWindow(t *testing.T) {
++	rm := &network.NullResourceManager{}
++	cm, err := NewConnManager(quic.StatelessResetKey{}, quic.TokenGeneratorKey{}, InitialReceiveWindows(128<<10, 1<<20), AccountInitialConnectionWindow(rm))
++	require.NoError(t, err)
++	defer cm.Close()
++	require.Equal(t, 1<<20, cm.InitialConnectionWindowReservation())
++
++	def, err := NewConnManager(quic.StatelessResetKey{}, quic.TokenGeneratorKey{}, AccountInitialConnectionWindow(rm))
++	require.NoError(t, err)
++	defer def.Close()
++	require.Equal(t, defaultInitialConnectionReceiveWindow, def.InitialConnectionWindowReservation(), "quic-go's default window")
++}
++
++type countedScope struct {
++	network.NullScope
++	reserved int
++	closed   int
++}
++
++func (s *countedScope) ReserveMemory(n int, _ uint8) error {
++	s.reserved += n
++	return nil
++}
++
++func (s *countedScope) Done() { s.closed++ }
++
++type countedManager struct {
++	network.NullResourceManager
++	scope countedScope
++}
++
++func (m *countedManager) OpenConnection(network.Direction, bool, ma.Multiaddr) (network.ConnManagementScope, error) {
++	return &m.scope, nil
++}
++
++func TestInboundWindowScope(t *testing.T) {
++	synctest.Test(t, func(t *testing.T) {
++		const window = 1 << 20
++		rm := &countedManager{}
++		cm, err := NewConnManager(quic.StatelessResetKey{}, quic.TokenGeneratorKey{}, InitialReceiveWindows(128<<10, window), AccountInitialConnectionWindow(rm))
++		require.NoError(t, err)
++		defer cm.Close()
++		ctx, cancel := context.WithCancel(t.Context())
++		defer cancel()
++		ctx, err = cm.connContext(ctx, &quic.ClientInfo{RemoteAddr: &net.UDPAddr{IP: net.IPv4(127, 0, 0, 1), Port: 42}})
++		require.NoError(t, err)
++		require.Equal(t, window, rm.scope.reserved)
++		scope, err := network.UnwrapConnManagementScope(ctx)
++		require.NoError(t, err)
++		cancel()
++		synctest.Wait()
++		require.Equal(t, 1, rm.scope.closed, "a connection that never reaches Accept releases its scope")
++		scope.Done()
++		require.Equal(t, 1, rm.scope.closed, "a competing libp2p close cannot release the scope twice")
++	})
++}

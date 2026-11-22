@@ -4,9 +4,12 @@ package main
 
 // The sync acceptance ACK corpus (spec §8.7, block PU1). The ACK is one byte, 0x01 (§8.7.2); the
 // bytes and decisions are written here from the text of §8.7, not from any implementation.
-// Status proposed with no enforce at step 1 of PU1; step 2 sets enforce once protocol/syncack exists.
+// Status proposed, enforced from step 3 (CurrentStep when PU1's reference, protocol/syncack, landed).
 
-const syncAck = "01"
+const (
+	syncAck   = "01"
+	saEnforce = "step-3"
+)
 
 // saRead is an opener's reading of its outbound stream (§8.7.2): the bytes read before the stream
 // ended or the reading stopped; result is the verdict on the first byte, after on any later byte.
@@ -16,7 +19,7 @@ func saRead(id, desc, input, result, after string) vector {
 		verdict = "accept"
 	}
 	return vector{
-		ID: id, Status: "proposed", Desc: desc, Decoder: "sync_ack", Input: input, Verdict: verdict,
+		ID: id, Status: "proposed", Enforce: saEnforce, Desc: desc, Decoder: "sync_ack", Input: input, Verdict: verdict,
 		Scope: "transport", Expect: map[string]any{"result": result, "after": after},
 	}
 }
@@ -28,7 +31,7 @@ func saResponder(id, desc string, closed, admitted, connClosed bool, action stri
 		verdict = "accept"
 	}
 	return vector{
-		ID: id, Status: "proposed", Desc: desc, Decoder: "sync_ack_responder", Verdict: verdict, Scope: "transport",
+		ID: id, Status: "proposed", Enforce: saEnforce, Desc: desc, Decoder: "sync_ack_responder", Verdict: verdict, Scope: "transport",
 		Context: map[string]any{"node_closed": closed, "admitted": admitted, "conn_closed": connClosed},
 		Expect:  map[string]any{"action": action},
 	}
@@ -38,7 +41,7 @@ func saResponder(id, desc string, closed, admitted, connClosed bool, action stri
 // after "open"; an input at or past it finds the deadline already fired.
 func saOpener(id, desc, role string, up bool, events ...event) vector {
 	return vector{
-		ID: id, Status: "proposed", Desc: desc, Decoder: "sync_ack_opener", Verdict: "accept", Scope: "transport",
+		ID: id, Status: "proposed", Enforce: saEnforce, Desc: desc, Decoder: "sync_ack_opener", Verdict: "accept", Scope: "transport",
 		Context: map[string]any{"role": role, "peer_announced": up, "deadline_ms": 15000}, Events: events,
 	}
 }

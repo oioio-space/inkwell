@@ -559,3 +559,31 @@ l'ouverture du flux sync, que libp2p rend sans aucun octet du pair quand le prot
 | Le passage au direct pouvait porter la session sur un flux jamais accepté | le remplacement attend l'accusé du nouveau flux ; sinon abandon sans événement | §8.7.4 |
 | Changement incompatible du flux existant | `/inkwell/sync/2.0.0` remplace `/inkwell/sync/1.0.0` (bascule nette, aucune version publiée) | §8.7.8, §20.6 |
 | Preuves | vecteurs `syncack.json`, modèle `PeerUpAck` (S1–S3, L1–L2, M1–M5, trois témoins), décodeur fuzzé `protocol/syncack` | §8.7.9 |
+
+# Bloc PU1b : ordre des flux sync entrants d'un pair, deux places (2026-11-16, proposé)
+
+Revues du code de PU1 par Codex (deux tours) et décision de conception : une place dans l'ordre des
+flux entrants d'un pair était un maillon de chaîne qu'un flux parti avant son tour gardait, sans
+borne ; un pair byzantin qui réinitialise ses flux en boucle accumulait places et attentes. Plan :
+[2026-11-16-pu1b-inbound-order.md](../plans/2026-11-16-pu1b-inbound-order.md).
+
+| Constat | Changement | Où |
+|---|---|---|
+| L'ordre des flux entrants n'était ni borné ni retirable | liste dans l'ordre d'arrivée ; deux places par pair (toutes connexions et générations) ; un flux parti sans trame la quitte aussitôt et réveille ses successeurs (P-8, P-9) | §8.7.3, §16.1 |
+| Un refus fermait toujours les connexions au pair | refus pour capacité (réinitialisation de code `0x1002`) : l'ouvreur garde sa session et réessaie dans les 15 s ; tout autre refus : `ClosePeer` | §8.7.4, §8.7.5 |
+| Preuves | vecteurs `syncorder.json`, modèle `SyncOrder` (Q1–Q4, deux témoins), porte `gates/PU1b.toml` | §8.7.9 |
+
+# Bloc PU1c : cycle de vie d'un flux entrant, voies sync et vrac (2026-11-17, proposé)
+
+Revues du code de PU1b par Codex (trois tours) et de l'ébauche de conception (verdict CHANGE, chaque point appliqué) :
+cinq constats d'une seule cause, un traitement qui attend là où la fin de son propre flux ne se voit pas ; la voie vrac
+avait les mêmes défauts. Plan : [2026-11-17-pu1c-inbound-lifecycle.md](../plans/2026-11-17-pu1c-inbound-lifecycle.md).
+
+| Constat | Changement | Où |
+|---|---|---|
+| Un flux en attente pouvait ne plus voir sa fin (veilleur aveugle après un octet, attente du budget sans annulation) | un seul lecteur par flux ; sonde d'un octet au plus toutes les 250 ms au plus, 256 o gardés ; fin sans octet non lu vue aussitôt, réinitialisation en 250 ms, fin derrière des octets à son tour (P-10, P-11) | §8.7.3, §16.1 |
+| Les flux en attente prenaient le budget de réception partagé | budget pris seulement à partir du tour ; bloqué : libéré par la place rendue, la perte de sa connexion ou la fermeture du nœud ; limite de ressources assumée pour sa propre réinitialisation (P-12) | §8.7.3, §16.1 |
+| Une fin après des trames entières et une trame tronquée pouvait jeter les trames entières | tout préfixe sondé non vide garde la place jusqu'au tour, puis le décodeur livre les trames entières (P-11) | §8.7.3 |
+| Sur QUIC, les flux en attente des deux voies pouvaient épuiser le crédit de la connexion avant la tête | fenêtres initiales réglées par le nœud, 128 Kio par flux et 1 Mio par connexion, (places × voies + 1) × 128 Kio ≤ 3/4 × 1 Mio, la fenêtre de connexion réservée au gestionnaire de ressources (128 Mio à 128 connexions) ; contre-pression entre les voies assumée (P-13) | §8.7.3, §16.1 |
+| La voie vrac prenait sa place après l'attente de l'annonce et n'avait ni places ni refus | `/inkwell/bulk/2.0.0` : accusé, deux places, ordre et cycle de vie de §8.7.3, refus pour capacité `0x1002`, sans `ClosePeer` (P-14) | §8.1, §8.7.8, §20.6 |
+| Preuves | vecteurs `inbound.json`, modèle `InboundLifecycle` (les deux voies à la fois, y compris byzantines ; QC1–QC8, quatre témoins), porte `gates/PU1c.toml` | §8.7.9 |

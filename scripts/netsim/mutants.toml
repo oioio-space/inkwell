@@ -1825,342 +1825,305 @@ why = "MK3's edit on the random lists: two sweeps per judged self-cut pass the b
 file = "protocol/trust/fold.go"
 before = "\tc := v.verdict(v.sweep(v.anc[k].positions()), v.auth[k])\n"
 after = "\tv.sweep(v.anc[k].positions())\n\tc := v.verdict(v.sweep(v.anc[k].positions()), v.auth[k])\n"
-# Block SB2a1 (plan docs/plans/2026-11-14-sb2-sandbox-tiers.md, SB2a1 rules): MS1..MS19, each a minimal change to the sandbox launch that
-# the named test must catch with the rule tag in its own events.
+
+# Block PU1 (spec §8.7, plan docs/plans/2026-11-16-pu1-peerup-after-acceptance.md, gate gates/PU1.toml): a peer is
+# announced only after its ACK on the outbound sync stream. One mutant per decision, each caught by
+# TestPeerUpAfterAck failing with « PU1 PeerUp without acceptance ».
 
 [[mutant]]
-id = "MS1"
-block = "SB2a1"
+id = "MP1"
+block = "PU1"
 kind = "go"
-pkg = "./internal/sidecar"
-test = "TestDecideTierExhaustive"
-expect = "T-1 tier"
-clause = "T-1"
-why = "an F launch that failed (refused) still gives tier F"
+pkg = "./internal/transport/p2p/"
+test = "TestPeerUpAfterAck"
+expect = "PU1 PeerUp without acceptance"
+clause = "P-1"
+why = "the ACK read is skipped: the peer is announced on NewStream's return, which on the optimistic path proves nothing"
 
 [[mutant.edit]]
-file = "internal/sidecar/tier_linux.go"
-before = "\tcase f.F == launchOK:\n\t\treturn tierF, nil"
-after = "\tcase f.F != launchInconclusive:\n\t\treturn tierF, nil"
+file = "internal/transport/p2p/stream.go"
+before = "\tif err != nil || (n.opts.skipAck && proto == ProtocolSync) {\n"
+after = "\tif err != nil || true {\n"
 
 [[mutant]]
-id = "MS2"
-block = "SB2a1"
+id = "MP2"
+block = "PU1"
 kind = "go"
-pkg = "./internal/sidecar"
-test = "TestRefusalErrnoTable"
-expect = "T-2 errno"
-clause = "T-2"
-why = "EACCES is no longer classed as a namespace refusal"
+pkg = "./internal/transport/p2p/"
+test = "TestPeerUpAfterAck"
+expect = "PU1 PeerUp without acceptance"
+clause = "P-2"
+why = "the responder writes the ACK before (without) its admission check: a peer it does not admit is acknowledged"
 
 [[mutant.edit]]
-file = "internal/sidecar/tier_linux.go"
-before = "case unix.EPERM, unix.EACCES, unix.EINVAL:"
-after = "case unix.EPERM, unix.EINVAL:"
+file = "internal/transport/p2p/inbound.go"
+before = "\t\tAdmitted:   n.admitted(s.Conn().RemotePeer()),\n"
+after = "\t\tAdmitted:   true,\n"
 
 [[mutant]]
-id = "MS3"
-block = "SB2a1"
+id = "MP3"
+block = "PU1"
 kind = "go"
-pkg = "./internal/sidecar"
-test = "TestProbeIsTheLaunch"
-expect = "T-3 probe is the launch"
-clause = "T-3"
-why = "the N launch never mounts /proc, so the probe no longer exercises the launch's steps"
+pkg = "./internal/transport/p2p/"
+test = "TestPeerUpAfterAck"
+expect = "PU1 PeerUp without acceptance"
+clause = "P-4"
+why = "any first byte is taken as the ACK: a remote that writes 0x02 is announced"
 
 [[mutant.edit]]
-file = "internal/sidecar/launcher_linux.go"
-before = "unix.Mount(\"proc\", \"/proc\", \"proc\", unix.MS_NOSUID|unix.MS_NODEV|unix.MS_NOEXEC, \"\")"
-after = "error(nil)"
+file = "protocol/syncack/syncack.go"
+before = "\tif b[0] != Ack {\n"
+after = "\tif false {\n"
+
+# Block PU1b (spec §8.7.3-§8.7.4, plan docs/plans/2026-11-16-pu1b-inbound-order.md, gate gates/PU1b.toml): the
+# order of a peer's inbound sync streams, two places, capacity refusal. Each caught by TestSyncOrder with its text.
 
 [[mutant]]
-id = "MS4"
-block = "SB2a1"
+id = "MQ1"
+block = "PU1b"
 kind = "go"
-pkg = "./internal/sidecar"
-test = "TestLaunchVerifiesTier"
-expect = "T-4 verified"
-clause = "T-4"
-why = "the launch proceeds without comparing the report with the decided tier"
+pkg = "./internal/transport/p2p/"
+test = "TestSyncOrder"
+expect = "PU1b turn missed"
+clause = "P-9"
+why = "no wake: a stream whose predecessor left keeps waiting (until reorderWait)"
 
 [[mutant.edit]]
-file = "internal/sidecar/launch_linux.go"
-before = "\tif !ok {\n\t\treturn fmt.Errorf(\"sidecar: the launch reports"
-after = "\tif !ok && false {\n\t\treturn fmt.Errorf(\"sidecar: the launch reports"
+file = "internal/transport/p2p/inbound.go"
+before = "\tdue := time.Now() // start of the next probe attempt\n"
+after = "\tdue := time.Now() // start of the next probe attempt\n\tstart, behind := n.since(), false\n"
+
+[[mutant.edit]]
+file = "internal/transport/p2p/inbound.go"
+before = "\t\tif in.order.Ready(id, n.since()) {\n\t\t\tlc.Turn()\n\t\t}\n"
+after = "\t\tif r := in.order.Ready(id, n.since()); r && (!behind || n.since()-start >= reorderWait) {\n\t\t\tlc.Turn()\n\t\t} else if !r {\n\t\t\tbehind = true\n\t\t}\n"
 
 [[mutant]]
-id = "MS5"
-block = "SB2a1"
+id = "MQ2"
+block = "PU1b"
 kind = "go"
-pkg = "./internal/sidecar"
-test = "TestRunReturnsAfterCancel"
-expect = "T-5 deadline"
-clause = "T-5"
-why = "a cancelled context neither terminates the launcher nor bounds the wait: the run waits without a deadline"
+pkg = "./internal/transport/p2p/"
+test = "TestSyncOrder"
+expect = "PU1b place kept"
+clause = "P-9"
+why = "a waiting stream that is reset keeps its place until its turn (only an end of writing with nothing read leaves at once)"
 
 [[mutant.edit]]
-file = "internal/sidecar/run.go"
-before = "cmd.Cancel = func() error { return signalGroup(cmd.Process.Pid, syscall.SIGKILL) }"
-after = "cmd.Cancel = func() error { return nil }\n\tcmd.WaitDelay = 0"
+file = "internal/transport/p2p/inbound.go"
+before = "\t\tif lc.Read(m, readEnd(err), n.since()) {\n"
+after = "\t\tif e := readEnd(err); e != syncack.ReadReset && lc.Read(m, e, n.since()) {\n"
 
 [[mutant]]
-id = "MS6"
-block = "SB2a1"
+id = "MQ3"
+block = "PU1b"
 kind = "go"
-pkg = "./internal/sidecar"
-test = "TestPlacementRefusedFallsBack"
-expect = "T-6 fallback"
-clause = "T-6"
-why = "the output slots are created again by the rlimit retry instead of once"
+pkg = "./internal/transport/p2p/"
+test = "TestSyncOrder"
+expect = "PU1b session lost"
+clause = "P-8"
+why = "a refusal for capacity is taken as a refusal: the opener closes the peer"
 
 [[mutant.edit]]
-file = "internal/sidecar/run.go"
-before = "originalSpec.slotsReady = true"
-after = "originalSpec.slotsReady = false"
+file = "internal/transport/p2p/stream.go"
+before = "\t\tif err == nil || !isBusy(err) {\n"
+after = "\t\tif err == nil || true {\n"
 
 [[mutant]]
-id = "MS7"
-block = "SB2a1"
+id = "MQ4"
+block = "PU1b"
 kind = "go"
-pkg = "./internal/sidecar"
-test = "TestSeccompPrlimitPidZero"
-expect = "S-1 prlimit64"
-clause = "S-1"
-why = "the low word of the pid is no longer checked: prlimit64 on self, parent or pid 1 is allowed"
+pkg = "./internal/transport/p2p/"
+test = "TestSyncOrder"
+expect = "PU1b over capacity"
+clause = "P-8"
+why = "three places per peer"
 
 [[mutant.edit]]
-file = "internal/sidecar/seccomp_linux.go"
-before = "bpfEq(a.prlimit64, 0, 14),\n\t\tbpfLoad(argLow(0)), bpfEq(0, 1, 0), deny,\n\t\tbpfLoad(argHigh(0))"
-after = "bpfEq(a.prlimit64, 0, 11),\n\t\tbpfLoad(argHigh(0))"
+file = "protocol/syncack/order.go"
+before = "\tif len(o.list) >= Places {\n"
+after = "\tif len(o.list) >= Places+1 {\n"
 
 [[mutant]]
-id = "MS8"
-block = "SB2a1"
+id = "MQ5"
+block = "PU1b"
 kind = "go"
-pkg = "./internal/sidecar"
-test = "TestSeccompNoProcessInF"
-expect = "S-2 no process"
-clause = "S-2"
-why = "tier F allows clone without CLONE_THREAD: a process can be created"
+pkg = "./internal/transport/p2p/"
+test = "TestSyncOrder"
+expect = "PU1b place kept"
+clause = "P-9"
+why = "a waiting stream closed for writing without a whole frame keeps its place (only a reset counts as an end)"
 
 [[mutant.edit]]
-file = "internal/sidecar/seccomp_linux.go"
-before = "f = append(f, bpfEq(a.clone, 0, 6),\n\t\t\tbpfLoad(argLow(0)), bpfSet(forbidden, 0, 1), deny,\n\t\t\tbpfSet(unix.CLONE_THREAD, 1, 0), deny,\n\t\t\treload)"
-after = "f = append(f, bpfEq(a.clone, 0, 4),\n\t\t\tbpfLoad(argLow(0)), bpfSet(forbidden, 0, 1), deny,\n\t\t\treload)"
+file = "protocol/syncack/lifecycle.go"
+before = "\t\t\tif l.prefix == 0 {\n\t\t\t\treturn l.leave()\n\t\t\t}\n"
+after = "\t\t\tif false {\n\t\t\t\treturn l.leave()\n\t\t\t}\n"
 
 [[mutant]]
-id = "MS9"
-block = "SB2a1"
+id = "MC1"
+block = "PU1c"
 kind = "go"
-pkg = "./internal/sidecar"
-test = "TestFiliation"
-expect = "S-4 parent check"
-clause = "S-4"
-why = "the launcher arms the parent-death signal but does not check that its parent is still the expected one"
+pkg = "./internal/transport/p2p/"
+test = "TestInboundLifecycle"
+expect = "PU1c order broken"
+clause = "P-14"
+why = "the bulk lane outside its order (as if its place were taken after the up-wait, the old bulkTail): a new bulk stream overtakes the held old one"
 
 [[mutant.edit]]
-file = "internal/sidecar/launcher_linux.go"
-before = "\t\t\treturn errors.New(\"launching parent died\")"
-after = "\t\t\treturn nil"
+file = "internal/transport/p2p/inbound.go"
+before = "\t\tif in.order.Ready(id, n.since()) {\n\t\t\tlc.Turn()\n"
+after = "\t\tif in.order.Ready(id, n.since()) || s.Protocol() == ProtocolBulk {\n\t\t\tlc.Turn()\n"
 
 [[mutant]]
-id = "MS11"
-block = "SB2a1"
+id = "MC2"
+block = "PU1c"
 kind = "go"
-pkg = "./internal/sidecar"
-test = "TestDescriptorsClosedBeforeExec"
-expect = "T-4 descriptors"
-clause = "T-4"
-why = "only descriptor 3 is closed on exec: the report pipe and others leak into the target"
+pkg = "./internal/transport/p2p/"
+test = "TestInboundLifecycle"
+expect = "PU1c blind wait"
+clause = "P-11"
+why = "the probe stops after its first byte: a reset behind unread bytes is never seen while waiting"
 
 [[mutant.edit]]
-file = "internal/sidecar/launcher_linux.go"
-before = "unix.CloseRange(3, ^uint(0), unix.CLOSE_RANGE_CLOEXEC)"
-after = "unix.CloseRange(3, 3, unix.CLOSE_RANGE_CLOEXEC)"
+file = "internal/transport/p2p/inbound.go"
+before = "\t\tm, err := s.Read(b[:])\n"
+after = "\t\tvar m int\n\t\tvar err error\n\t\tif len(prefix) == 0 {\n\t\t\tm, err = s.Read(b[:])\n\t\t} else {\n\t\t\terr = os.ErrDeadlineExceeded\n\t\t}\n"
 
 [[mutant]]
-id = "MS12"
-block = "SB2a1"
+id = "MC3"
+block = "PU1c"
 kind = "go"
-pkg = "./internal/sidecar"
-test = "TestSeccompPrctlOptions"
-expect = "S-4 prctl"
-clause = "S-4"
-why = "PR_SET_PDEATHSIG is accepted in a descriptor's prctl list (second edit adds it to tinymist's)"
+pkg = "./internal/transport/p2p/"
+test = "TestInboundLifecycle"
+expect = "PU1c late wake"
+clause = "P-11"
+why = "a probe period of 2 × InboundProbeEvery: a turn, a PeerUp or a reset seen up to 500 ms late"
 
 [[mutant.edit]]
-file = "internal/sidecar/seccomp_linux.go"
-before = "\tif slices.Contains(p.prctl, unix.PR_SET_PDEATHSIG) {"
-after = "\tif slices.Contains(p.prctl, unix.PR_SET_PDEATHSIG) && false {"
-
-[[mutant.edit]]
-file = "internal/sidecar/program_linux.go"
-before = "prctl:     []uint32{unix.PR_SET_NAME},"
-after = "prctl:     []uint32{unix.PR_SET_NAME, unix.PR_SET_PDEATHSIG},"
+file = "internal/transport/p2p/inbound.go"
+before = "\t\tdue = due.Add(wire.InboundProbeEvery)\n"
+after = "\t\tdue = due.Add(2 * wire.InboundProbeEvery)\n"
 
 [[mutant]]
-id = "MS13"
-block = "SB2a1"
+id = "MC4"
+block = "PU1c"
 kind = "go"
-pkg = "./internal/sidecar"
-test = "TestPerimeterF"
-expect = "S-5 perimeter"
-clause = "S-5"
-why = "poll, which the perimeter needs, is missing from the amd64 allow-list"
+pkg = "./internal/transport/p2p/"
+test = "TestInboundLifecycle"
+expect = "PU1c budget taken"
+clause = "P-12"
+why = "a waiting stream charges the lane's receive budget for each probed byte"
 
 [[mutant.edit]]
-file = "internal/sidecar/syscalls_amd64_linux.go"
-before = "\t7,   // poll\n"
+file = "internal/transport/p2p/inbound.go"
+before = "\t\tif m > 0 {\n\t\t\tn.setProbed(in, id, len(prefix))\n"
+after = "\t\tif m > 0 {\n\t\t\tn.budget.TryAcquire(m)\n\t\t\tn.setProbed(in, id, len(prefix))\n"
+
+[[mutant]]
+id = "MC5"
+block = "PU1c"
+kind = "go"
+pkg = "./internal/transport/p2p/"
+test = "TestInboundLifecycle"
+expect = "PU1c frames lost"
+clause = "P-11"
+why = "a probed prefix is kept only without a truncated tail: the whole frames before one are dropped"
+
+[[mutant.edit]]
+file = "internal/transport/p2p/inbound.go"
+before = "\t\tif lc.Read(m, readEnd(err), n.since()) {\n"
+after = "\t\tif lc.Read(m, readEnd(err), n.since()) || lc.State() == syncack.Kept && truncatedTail(prefix) {\n"
+
+[[mutant.edit]]
+file = "internal/transport/p2p/inbound.go"
+before = "// readEnd classifies how a read of an inbound stream ended.\n"
+after = "func truncatedTail(b []byte) bool {\n\tfor len(b) >= 4 {\n\t\tk := 4 + (int(b[0])<<24 | int(b[1])<<16 | int(b[2])<<8 | int(b[3]))\n\t\tif k > len(b) {\n\t\t\treturn true\n\t\t}\n\t\tb = b[k:]\n\t}\n\treturn len(b) > 0\n}\n\n// readEnd classifies how a read of an inbound stream ended.\n"
+
+[[mutant]]
+id = "MC6"
+block = "PU1c"
+kind = "go"
+pkg = "./internal/transport/p2p/"
+test = "TestInboundLifecycle"
+expect = "PU1c frames lost"
+clause = "P-11"
+why = "the bytes of a read that also returned an error are dropped"
+
+[[mutant.edit]]
+file = "internal/transport/p2p/inbound.go"
+before = "\t\tprefix = append(prefix, b[:m]...) // the bytes first, then the error (P-11)\n"
+after = "\t\tif err == nil {\n\t\t\tprefix = append(prefix, b[:m]...)\n\t\t}\n"
+
+[[mutant]]
+id = "MC7"
+block = "PU1c"
+kind = "go"
+pkg = "./internal/transport/p2p/"
+test = "TestInboundLifecycle"
+expect = "PU1c blocked forever"
+clause = "P-12"
+why = "the budget wait is not cancelled by the loss of the stream's connection (only by the node's close)"
+
+[[mutant.edit]]
+file = "internal/transport/p2p/inbound.go"
+before = "\tctx, done := n.connContext(s.Conn())\n"
+after = "\tctx, done := n.ctx, func() {}\n"
+
+[[mutant]]
+id = "MC8"
+block = "PU1c"
+kind = "go"
+pkg = "./internal/transport/p2p/"
+test = "TestInboundLifecycle"
+expect = "PU1c head starved"
+clause = "P-13"
+why = "the node's QUIC windows dropped: quic-go's 512 KiB per stream and 768 KiB per connection"
+
+[[mutant.edit]]
+file = "internal/transport/p2p/node.go"
+before = "\t\t\tquicreuse.InitialReceiveWindows(windows[0], windows[1]),\n"
+after = "\t\t\tfunc() quicreuse.Option { _ = windows; return func(*quicreuse.ConnManager) error { return nil } }(),\n"
+
+[[mutant]]
+id = "MC9"
+block = "PU1c"
+kind = "go"
+pkg = "./internal/transport/p2p/"
+test = "TestInboundLifecycle"
+expect = "PU1c over capacity"
+clause = "P-14"
+why = "a third bulk place (outside the order)"
+
+[[mutant.edit]]
+file = "internal/transport/p2p/inbound.go"
+before = "\treturn in, n.nextIn, in.order.Arrive(n.nextIn, n.since())\n"
+after = "\tplaced = in.order.Arrive(n.nextIn, n.since())\n\tif !placed && l.name == \"bulk\" && in.order.Len() == syncack.Places {\n\t\tplaced = true\n\t}\n\treturn in, n.nextIn, placed\n"
+
+[[mutant]]
+id = "MC10"
+block = "PU1c"
+kind = "go"
+pkg = "./internal/transport/p2p/"
+test = "TestInboundLifecycle"
+expect = "PU1c frames lost"
+clause = "P-10"
+why = "the probe's read deadline left armed into Delivering: it cuts the stream's delivery"
+
+[[mutant.edit]]
+file = "internal/transport/p2p/inbound.go"
+before = "\t\t\tif err := s.SetReadDeadline(time.Time{}); err != nil {\n\t\t\t\treturn nil, nil, false\n\t\t\t}\n"
 after = ""
 
 [[mutant]]
-id = "MS14"
-block = "SB2a1"
+id = "MC11"
+block = "PU1c"
 kind = "go"
-pkg = "./internal/sidecar"
-test = "TestCloneThreeFallback"
-expect = "S-6 clone3"
-clause = "S-6"
-why = "clone3 answers EPERM instead of ENOSYS: libc does not fall back to clone, threads fail"
+pkg = "./internal/transport/p2p/"
+test = "TestInboundLifecycle"
+expect = "PU1c memory unaccounted"
+clause = "P-13"
+why = "the initial connection window is not reserved with the resource manager"
 
 [[mutant.edit]]
-file = "internal/sidecar/seccomp_linux.go"
-before = "bpfRet(unix.SECCOMP_RET_ERRNO|uint32(unix.ENOSYS))"
-after = "bpfRet(unix.SECCOMP_RET_ERRNO|uint32(unix.EPERM))"
-
-[[mutant]]
-id = "MS15"
-block = "SB2a1"
-kind = "go"
-pkg = "./internal/sidecar"
-test = "TestArm64Refused"
-expect = "S-7 arm64"
-clause = "S-7"
-why = "arm64 is accepted before SB2a2 has proven it"
-
-[[mutant.edit]]
-file = "internal/sidecar/tier_linux.go"
-before = "\tcase !slices.Contains(p.proven, f.Arch):"
-after = "\tcase !slices.Contains(p.proven, f.Arch) && f.Arch != \"arm64\":"
-
-[[mutant]]
-id = "MS16"
-block = "SB2a1"
-kind = "go"
-pkg = "./internal/sidecar"
-test = "TestFontFoldersExactlyThoseGiven"
-expect = "S-8 fonts"
-clause = "S-8"
-why = "the two-folder system font fallback is restored on top of the caller's list"
-
-[[mutant.edit]]
-file = "internal/sidecar/launch_linux.go"
-before = "\t\tReadPaths:    spec.ReadPaths,"
-after = "\t\tReadPaths:    append(slices.Clone(spec.ReadPaths), \"/usr/share/fonts\", \"/usr/local/share/fonts\"),"
-
-[[mutant]]
-id = "MS17"
-block = "SB2a1"
-kind = "go"
-pkg = "./internal/sidecar"
-test = "TestProtectedRefusedInF"
-expect = "S-9 protected"
-clause = "S-9"
-why = "a protected project is allowed in tier F"
-
-[[mutant.edit]]
-file = "internal/sidecar/tier_linux.go"
-before = "\tcase f.F == launchOK && f.Protected:"
-after = "\tcase false && f.Protected:"
-
-[[mutant]]
-id = "MS18"
-block = "SB2a1"
-kind = "go"
-pkg = "./internal/sidecar"
-test = "TestProgramFilterFollowsDescriptor"
-expect = "S-10 descriptor"
-clause = "S-10"
-why = "every program uses typst's ioctl list instead of its own descriptor's"
-
-[[mutant.edit]]
-file = "internal/sidecar/seccomp_linux.go"
-before = "f = onlyValues(f, a.ioctl, argLow(1), p.ioctl, deny)"
-after = "f = onlyValues(f, a.ioctl, argLow(1), programs[0].ioctl, deny)"
-
-[[mutant]]
-id = "MS19"
-block = "SB2a1"
-kind = "go"
-pkg = "./internal/sidecar"
-test = "TestBoundViolationIsNotAnOOMKill"
-expect = "S-11 no oom-kill"
-clause = "S-11"
-why = "the watchdog never acts: the bound is only reached at memory.max (a cgroup OOM kill)"
-
-[[mutant.edit]]
-file = "internal/sidecar/memory_linux.go"
-before = "\tif w.h.bounded || w.bound == 0 ||"
-after = "\tif w.h.bounded || true ||"
-
-# MS10 has no row in the plan's table (ids jump from MS9 to MS11, and the gate requires MS1..MS19): it covers the
-# T-4 handshake's fail-closed rule, whose test (TestHandshakeFailsClosed) is named in the plan.
-[[mutant]]
-id = "MS10"
-block = "SB2a1"
-kind = "go"
-pkg = "./internal/sidecar"
-test = "TestHandshakeFailsClosed"
-expect = "T-4 handshake"
-clause = "T-4"
-why = "a failed read of the tier report (eof, truncated) is ignored: the handshake does not fail closed"
-
-[[mutant.edit]]
-file = "internal/sidecar/launch_linux.go"
-before = "\tif err != nil {\n\t\treturn fmt.Errorf(\"sidecar: no tier report: %w\", err)\n\t}"
-after = "\tif err != nil && false {\n\t\treturn fmt.Errorf(\"sidecar: no tier report: %w\", err)\n\t}"
-
-[[mutant]]
-id = "MS20"
-block = "SB2a1"
-kind = "go"
-pkg = "./internal/sidecar"
-test = "TestMemoryWatchdogSparesFileCache"
-expect = "S-11 page cache"
-clause = "S-11"
-why = "the watchdog counts the file cache: a run that only reads files on slow storage is killed as a bound violation"
-
-[[mutant.edit]]
-file = "internal/sidecar/memory_linux.go"
-before = "\tclean := file - min(kept, file)\n"
-after = "\tclean := uint64(0) * (file - min(kept, file))\n"
-
-[[mutant]]
-id = "MS21"
-block = "SB2a1"
-kind = "go"
-pkg = "./internal/sidecar"
-test = "TestAddressLimitWaitsForExec"
-expect = "S-11 address limit"
-clause = "S-11"
-why = "RLIMIT_AS is set with the other limits, before seccomp and the handshake: the Go launcher runs under the target's address limit"
-
-[[mutant.edit]]
-file = "internal/sidecar/launcher_linux.go"
-before = "\tdebug.SetGCPercent(-1)\n"
-after = "\tdebug.SetGCPercent(-1)\n\tif c.Memory > 0 {\n\t\t_ = unix.Setrlimit(unix.RLIMIT_AS, &address)\n\t}\n"
-
-[[mutant]]
-id = "MS22"
-block = "SB2a1"
-kind = "go"
-pkg = "./internal/sidecar"
-test = "TestMemoryWatchdogSparesFileCache"
-expect = "S-11 page cache"
-clause = "S-11"
-why = "dirty file pages are left out of the watchdog's measure: a run holding dirty cache above its bound is only stopped at memory.max"
-
-[[mutant.edit]]
-file = "internal/sidecar/memory_linux.go"
-before = "\tfile, kept := v[0], v[1]+v[2]+v[3]+v[4]\n"
-after = "\tfile, kept := v[0], v[1]+v[3]+v[4]\n"
+file = "internal/transport/p2p/node.go"
+before = "\t\t\tquicreuse.AccountInitialConnectionWindow(rm),\n"
+after = ""

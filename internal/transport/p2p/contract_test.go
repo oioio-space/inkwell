@@ -4,11 +4,13 @@ import (
 	"bytes"
 	"context"
 	"crypto/ed25519"
+	"net"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/libp2p/go-libp2p"
+	"github.com/libp2p/go-libp2p/p2p/transport/quicreuse"
 	"github.com/libp2p/go-libp2p/x/simlibp2p"
 	"github.com/marcopolo/simnet"
 
@@ -70,12 +72,21 @@ func (s *simNet) nodeCtx(ctx context.Context, t *testing.T, seed byte, ip string
 		Downlink: simnet.LinkSettings{BitsPerSecond: 100 * simlibp2p.OneMbps},
 		Uplink:   simnet.LinkSettings{BitsPerSecond: 100 * simlibp2p.OneMbps},
 	}
+	// The node builds its own QUIC connection manager (its windows, rule P-13): the simulated socket goes into
+	// it, as simlibp2p.QUICSimnet would put it into its own.
+	selector := &mockSource{}
+	p2p.SetQUICReuse(&o,
+		quicreuse.OverrideSourceIPSelector(func() (quicreuse.SourceIPSelector, error) { return selector, nil }),
+		quicreuse.OverrideListenUDP(func(_ string, address *net.UDPAddr) (net.PacketConn, error) {
+			selector.ip.Store(&address.IP)
+			return s.net.NewEndpoint(address, link), nil
+		}),
+	)
 	p2p.SetExtra(
 		&o,
 		libp2p.NoListenAddrs,
 		libp2p.ListenAddrStrings("/ip4/"+ip+"/udp/8000/quic-v1"),
 		libp2p.DisableIdentifyAddressDiscovery(), // it stalls synctest
-		simlibp2p.QUICSimnet(s.net, link),
 	)
 	n, err := p2p.New(ctx, key(seed), o)
 	if err != nil {

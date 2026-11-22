@@ -1689,6 +1689,46 @@
       "id": "6373ad131cec91a272f0ce5dba5a6b46e87caaafbb56cd2bb2c77a4033825d7a",
       "reason": "mise.toml (DEP1): test:py adds scripts/check_mise_lock_test.py to its existing unittest invocation. All existing tests, assertions and timeouts are preserved.",
       "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "16f45ba7b2caf874d222f8311be056a5517d8b7f361afa659305d9b59f906693",
+      "reason": "PU1c: the bound is unchanged (upTimeout = syncack.UpWait = 30 s, bulk lane) and now enforced by the single inbound lifecycle of spec §8.7.3 (protocol/syncack, rule P-10); checked by the integrator on 2026-11-22.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "527105cde60bab5f0989363f2cfce8391f0dea17693d090b1266f52804ec8517",
+      "reason": "PU1c: the bound is unchanged (reorderWait = 1 min, bulk lane, via syncack.Order) and now enforced by the single inbound lifecycle of spec §8.7.3 (protocol/syncack, rule P-9); checked by the integrator on 2026-11-22.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "44528043f677c6bd828e3faf35011e6eced6eec9f2eec4592d5c1e1aaaad3b9a",
+      "reason": "PU1c: comment of openTimeout extended to the sync ACK it also bounds; the value is unchanged (15 s); checked by the integrator on 2026-11-22.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "a1f2eb8acd1a4239b1c177cbcd7467a1a3ddd7e17b8f9dec83df5b6e8ea80c07",
+      "reason": "PU1/PU1c: openTimeout = syncack.Budget = transport.SyncAckTimeout = 15 s, the same value now named by the spec (protocol/limits.go); checked by the integrator on 2026-11-22.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "21c93cc407ab5a9e612a64fc2a086565e91527e196ebef994ec130e6e58f6480",
+      "reason": "PU1c: upTimeout = syncack.UpWait = 30 s, the same value now owned by the spec's lifecycle (rule P-10); checked by the integrator on 2026-11-22.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "381cd4c46b6f7a01832d626a8afb441762d476fada596b51dd756fb42dd85804",
+      "reason": "PU1c: the bound is unchanged (upTimeout = 30 s, sync lane) and now enforced by the single inbound lifecycle of spec §8.7.3 (protocol/syncack, rule P-10); checked by the integrator on 2026-11-22.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "b6b8473ffff3c582285f3d9d8a76f9fd10d3eb92572048ade25174e1ce3ed2c5",
+      "reason": "PU1c: the bound is unchanged (reorderWait = 1 min, sync lane, via syncack.Order) and now enforced by the single inbound lifecycle of spec §8.7.3 (protocol/syncack, rule P-9); checked by the integrator on 2026-11-22.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "f0cd99cd337063df5ff2e75e3a3094acd7cdda9bfbedba0235ba4c20b80735aa",
+      "reason": "PU1b/PU1c: tla-check.sh only adds the SyncOrder and InboundLifecycle models with their mutants; no existing run, property or bound changed; checked by the integrator on 2026-11-22.",
+      "decision": "docs/objectif-en-cours.md"
     }
   ]
 }

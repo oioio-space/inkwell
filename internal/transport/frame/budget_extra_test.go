@@ -1,6 +1,8 @@
 package frame_test
 
 import (
+	"context"
+	"errors"
 	"testing"
 	"testing/synctest"
 
@@ -114,6 +116,41 @@ func TestBudgetWakesEveryFittingWaiter(t *testing.T) {
 			if ok, done := settled(ch); !done || !ok {
 				t.Errorf("waiter %d = %t, %t; want true after Release(20)", i, ok, done)
 			}
+		}
+	})
+}
+
+// AcquireCtx (rule P-12): a waiter whose context ends returns its error and takes nothing; the bytes it waited for
+// stay free for the others; Held tells what is taken.
+func TestBudgetAcquireCtx(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		b := frame.NewBudget(10)
+		if err := b.AcquireCtx(t.Context(), 8); err != nil || b.Held() != 8 {
+			t.Fatalf("AcquireCtx(8) = %v, Held %d", err, b.Held())
+		}
+		ctx, cancel := context.WithCancel(t.Context())
+		errc := make(chan error, 1)
+		go func() { errc <- b.AcquireCtx(ctx, 5) }()
+		synctest.Wait()
+		select {
+		case err := <-errc:
+			t.Fatalf("AcquireCtx(5) returned %v with 2 bytes free", err)
+		default:
+		}
+		cancel()
+		if err := <-errc; !errors.Is(err, context.Canceled) {
+			t.Fatalf("cancelled AcquireCtx = %v, want context.Canceled", err)
+		}
+		if b.Held() != 8 {
+			t.Fatalf("Held after a cancelled wait = %d, want 8", b.Held())
+		}
+		b.Release(8)
+		if !b.TryAcquire(10) || b.Held() != 10 {
+			t.Fatalf("the whole budget is not free after the cancelled wait: Held %d", b.Held())
+		}
+		b.Close()
+		if err := b.AcquireCtx(t.Context(), 1); err == nil {
+			t.Fatal("AcquireCtx on a closed budget succeeded")
 		}
 	})
 }

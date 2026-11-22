@@ -148,7 +148,7 @@ version de protocole visée. `@inkwell/protocol` suit les mêmes règles.
 | Partie | Statut | Sections |
 |---|---|---|
 | Identités, cryptographie, objets signés, pli de la liste, ensemble admis | public | §3, §4 |
-| Transport libp2p, `control`/`repo`/`presence`/`large` `2.0.0`, `bulk/1.0.0`, `lobby/1.0.0`, ticket | public | §2, §5–§8 |
+| Transport libp2p, `control`/`repo`/`presence`/`large` `2.0.0`, `bulk/2.0.0`, `lobby/1.0.0`, ticket | public | §2, §5–§8 |
 | Messages automerge-repo, profil CBOR, admission, garde structurelle | public | §9 |
 | Contrôle de flux, machines à états, erreurs, bornes | public (comportement observable) | §10–§16 |
 | Pont Go ↔ webview (Streams Wails `net`, `store`, `preview`, `present`) | **interne**, hors contrat | Annexe A |
@@ -162,7 +162,7 @@ applications et utilisées par inkwell lui-même (aucune copie privée des codec
 | Paquet | Contenu | Dépendances permises |
 |---|---|---|
 | module Go `github.com/oioio-space/inkwell/protocol` (dossier `protocol/`, `go.mod` propre, SemVer `v0.x` tant que la spec est un brouillon, étiquettes `protocol/vX.Y.Z`) | cœur **pur** : types et codecs du fil (§4–§8), profil CBOR et schémas (§9), validation des clés et signatures (§3), pli de la liste (§4.9), ensemble admis (§4.10), machines à états (§7.3, §11) sans E/S ni goroutine, table des bornes en constantes (§16), vecteurs embarqués (`go:embed`) et exécuteur de conformité exporté (§21) | bibliothèque standard, `filippo.io/edwards25519`, `lukechampine.com/blake3` ; **rien** d'inkwell, ni libp2p, ni Wails, ni Automerge |
-| module Go `github.com/oioio-space/inkwell/protocol/libp2p` (sous-module, `go.mod` propre) | liaison libp2p : flux par classe, préambules, flux LARGE, lecture au rythme du receveur, `bulk/1.0.0` | le cœur, go-libp2p |
+| module Go `github.com/oioio-space/inkwell/protocol/libp2p` (sous-module, `go.mod` propre) | liaison libp2p : flux par classe, préambules, flux LARGE, lecture au rythme du receveur, `bulk/2.0.0` | le cœur, go-libp2p |
 | paquet TypeScript `@inkwell/protocol` (`frontend/packages/protocol`, espace de travail pnpm) | profil CBOR, schémas §9, garde (§9.7) et couverture, crédits du pont, mêmes vecteurs | `cbor-x` (décodage), `@automerge/automerge` (garde) |
 
 Règles de dépendance vérifiées par `scripts/arch-check.sh` : `protocol/...` n'importe rien
@@ -185,7 +185,7 @@ reste possible à la 1.0 sans changer le chemin d'import si le module est servi 
  L2  session      un protocole libp2p par classe de flux : /inkwell/control/2.0.0 (HELLO,
                   capacités, GOAWAY, SET, ATTEST), /inkwell/repo/2.0.0 (génération dans le
                   préambule), /inkwell/presence/2.0.0, /inkwell/large/2.0.0 (> 64 Kio)
-                  /inkwell/bulk/1.0.0 : blobs (WANT/SLICE/MISSING/BUSY, Bao, BLAKE3)
+                  /inkwell/bulk/2.0.0 : blobs (WANT/SLICE/MISSING/BUSY, Bao, BLAKE3)
                   /inkwell/lobby/1.0.0 : une requête, une réponse (inconnus invités)
                   /inkwell/linkprobe/1.0.0 : sonde de perte d'une connexion QUIC (§8.5)
  L1  transport    libp2p : QUIC v1 (TLS 1.3) ou TCP + Noise + yamux ; relais circuit v2 ;
@@ -963,11 +963,25 @@ du pair (§10.6), jusqu'à `Fini` ou `Réinitialisé`.
 
 ## 8. Vrac, salon et sonde de lien
 
-### 8.1 `/inkwell/bulk/1.0.0` : blobs (*existant*, règles précisées)
+### 8.1 `/inkwell/bulk/2.0.0` : blobs (*existant*, règles précisées ; accusé et cycle de vie des flux entrants : bloc PU1c)
 
 Les blobs (fichiers joints, ADR 0023) peuvent venir de n'importe quel membre qui les détient :
 on les vérifie contre leur empreinte. Un flux unidirectionnel par sens et par pair, trames
-`u32 length` comme §5.2, `length ≤ 1 065 005`. Corps :
+`u32 length` comme §5.2, `length ≤ 1 065 005`.
+
+*Flux vrac entrants (règle P-14, bloc PU1c).* Plan :
+[2026-11-17-pu1c-inbound-lifecycle.md](../plans/2026-11-17-pu1c-inbound-lifecycle.md). Le flux vrac suit les règles du
+flux sync (§8.7) : le répondeur écrit l'accusé `0x01` (§8.7.2, P-4) avant toute trame, après avoir pris une **place**
+dans l'ordre des flux vrac entrants de ce pair (deux places, toutes connexions et générations confondues, §8.7.3) ; un
+flux sans place est **refusé pour capacité** (code `0x1002`, sans octet) ; l'ordre, le retrait et le cycle de vie sont
+ceux de §8.7.3. L'ouvreur lit l'accusé avant sa première trame, dans les 15 s de l'ouverture ; un refus pour capacité
+est réessayé comme pour sync (50 ms, doublé, 1 s au plus, dans les 15 s) ; tout autre refus, une violation ou la fin
+du délai font échouer cet envoi : flux réinitialisé, **sans** `ClosePeer` ni événement, et l'envoi suivant ouvre un
+nouveau flux. Sans accusé, l'ordre de deux flux d'un même pair (passage au direct, flux rouvert) ne se prouve pas :
+deux traitements peuvent commencer dans n'importe quel ordre (modèle `InboundLifecycle`). `/inkwell/bulk/1.0.0`
+n'est plus servi ni ouvert (bascule nette : aucune version publiée ne le parle).
+
+Corps :
 
 ```
 want    { kind u8 = 1 ; hash [32] ; offset u64 ; length u32 }   offset multiple de 16 384 ; length = 16 384 × k, 1 ≤ k ≤ 64
@@ -1695,13 +1709,72 @@ Une connexion que le répondeur ferme dès son enregistrement (connexion tardive
 l'ouvreur avant d'écrire l'accusé (sinon deux ouvertures croisées s'attendent l'une l'autre) ;
 il lit les trames seulement **après** cette annonce (comportement existant, 30 s au plus).
 
+*Ordre des flux entrants (règles P-8, P-9, bloc PU1b).* Avant l'étape (1), le flux prend une
+**place** dans l'ordre des flux entrants de ce pair : une liste, dans l'ordre d'arrivée. Un pair
+tient **au plus deux** places, toutes connexions et toutes générations de son état confondues
+(`PeerDown` puis `PeerUp` ne les rend pas) ; un flux qui n'en trouve pas est **refusé pour
+capacité** : réinitialisé avec le code d'erreur de flux `0x1002` (celui du gestionnaire de ressources
+de libp2p, `StreamResourceLimitExceeded`), sans octet, sans `ClosePeer`, sans événement. Un flux ne
+livre ses trames que lorsqu'aucun flux devant lui ne tient de place, ou après avoir attendu 60 s
+(l'ordre est alors abandonné, comportement existant). Un flux **quitte la liste aussitôt**, où qu'il
+soit, quand il se termine sans avoir livré de trame (refusé, accusé non écrit, réinitialisé, fermé
+en écriture par l'ouvreur sans trame à lire, ou connexion perdue avant son tour) : ses successeurs sont réveillés et attendent le flux désormais
+devant eux, même s'ils attendaient déjà. Un flux qui a livré des trames la quitte une fois lu jusqu'à
+sa fin. Rien n'attend pour le compte d'un flux parti. La lecture du flux de tête n'est pas bornée
+dans le temps : elle finit avec le flux (fin d'écriture de l'ouvreur, réinitialisation, perte de la
+connexion, fermeture du nœud) ; un pair byzantin qui tient un flux ouvert n'y perd que sa propre
+place et, après 60 s, l'ordre de ses propres trames.
+
+*Cycle de vie d'un flux entrant (règles P-10 à P-13, bloc PU1c ; voies sync et vrac, §8.1).* Plan :
+[2026-11-17-pu1c-inbound-lifecycle.md](../plans/2026-11-17-pu1c-inbound-lifecycle.md). Modèle :
+[tla/InboundLifecycle.tla](tla/InboundLifecycle.tla). Chaque flux entrant a **un seul lecteur** pour toute sa vie ;
+aucun autre fil ne lit le flux ni ne touche à ses échéances. États : *arrivé* → *refusé* (sans place) ou *acceptation*
+(place prise à l'arrivée, avant toute attente ; accusé écrit en 15 s au plus ; la fin se voit à l'échec de cette
+écriture) → *attente* → *gardé* → *livraison* ⇄ *bloqué* (budget de réception de la voie plein) → *parti* (il quitte
+la liste et réveille son successeur). En attente, le lecteur ne lit que pour **sonder** : au plus **un octet** par
+lecture ; l'essai suivant commence **au plus 250 ms** après le précédent ; au plus un octet par période et **256 octets**
+gardés en tout. Une lecture qui rend des octets et une erreur garde ses octets, dans l'ordre, avant de traiter
+l'erreur ; une échéance n'est jamais une fin, seulement l'occasion de réévaluer le tour, l'annonce et les délais : le
+lecteur voit donc son tour et l'annonce du pair en **250 ms au plus**. Une réinitialisation se voit en 250 ms au plus
+(elle passe devant les octets en tampon, sur QUIC comme sur yamux) ; une fin **sans octet non lu** se voit aussitôt :
+c'est le sens de « sans trame à lire » ci-dessus. Le flux qui finit ainsi sans aucun octet sondé quitte la liste
+aussitôt ; s'il a des octets sondés, il est **gardé** : il garde sa place jusqu'à son tour, puis le décodeur livre
+toutes les trames entières et jette une dernière trame tronquée (rien de plus n'est livré, ce n'est pas une
+violation). Une fin derrière des octets non lus (fin d'écriture après des octets, réinitialisation à taille fiable
+RESET_STREAM_AT) se voit à son tour. Au tour, le lecteur efface lui-même son échéance, puis lit les octets sondés et le
+flux. **Aucun flux ne réserve ni n'attend le budget de réception avant son tour** (sync : les 256 Mio partagés par
+tous les pairs ; vrac : une trame). Bloqué sur le budget, le lecteur est libéré par de la place rendue, par la perte
+de **sa** connexion (pas d'une autre connexion du même pair) ou par la fermeture du nœud, et il rend toute
+réservation, quelle que soit sa sortie. *Limite de ressources assumée :* sa propre réinitialisation ne se voit
+qu'une fois de la place rendue ; tant que le consommateur local est arrêté, ce délai n'est pas borné, et il ne coûte
+que la place de ce flux. Sur QUIC, les octets reçus et non lus des flux qui ne sont pas lus (acceptation, attente,
+gardé, bloqué) des deux voies d'une même connexion tiennent le crédit de cette connexion : les fenêtres initiales
+sont réglées pour qu'une tête en trouve toujours (§16.1, fenêtres QUIC), et la fenêtre initiale de connexion est
+réservée au gestionnaire de ressources. Un flux qui arrive, attend son accusé ou est refusé ne tient aucun crédit
+chez un pair conforme (l'ouvreur n'écrit qu'après l'accusé) ; une connexion ne porte qu'un pair, donc un pair byzantin
+qui remplit des flux refusés ou non acceptés n'affame que ses propres têtes, sans borne de temps : le progrès de la
+tête n'est garanti que pour un pair conforme. *Contre-pression assumée entre les
+voies :* une tête dont le propre consommateur est arrêté garde sa fenêtre de flux (jusqu'à 10 Mio une fois agrandie) ;
+quic-go n'agrandit alors la fenêtre de connexion que si le gestionnaire de ressources l'accorde, et l'autre voie de
+cette connexion peut attendre ce consommateur (une indépendance garantie demanderait d'isoler les voies dans le
+transport).
+
 **8.7.4 Ouvreur (règles P-1, P-5, P-6).** Un nœud NE DOIT annoncer un pair (`PeerUp`, Annexe A.1)
 qu'après avoir lu son accusé sur le flux sortant qui porte la session, que l'ouverture ait été
 négociée ou optimiste. L'ouverture du flux et la lecture de l'accusé partagent **un seul** délai de 15 s, compté depuis
 l'ouverture et non relancé au retour de l'ouverture (une négociation lente suivie d'un accusé tardif
 n'a pas 15 s de plus) ;
 à son terme, ou sur un refus ou une violation, le nœud réinitialise le flux et ferme ses
-connexions au pair (`ClosePeer`), sans aucun événement. Un flux rouvert alors que le pair est déjà
+connexions au pair (`ClosePeer`), sans aucun événement. Deux sortes de refus (règle P-8, bloc PU1b), pour toute ouverture (flux de la session, flux rouvert,
+passage au direct) : une réinitialisation avant l'accusé portant le code `0x1002` est un **refus pour
+capacité** : le nœud réinitialise son flux, garde sa session et ses connexions et rouvre après une
+attente (50 ms, doublée, 1 s au plus), dans le même délai de 15 s compté depuis la première ouverture ;
+toute autre réinitialisation avant l'accusé, ou la fin du flux, est un **refus**. Portée des
+fermetures : un refus, une violation ou la fin du délai (refus pour capacité compris) ferment les
+connexions au pair (`ClosePeer`) **pour l'ouverture du flux de la session ou d'un flux rouvert** ;
+**pour un passage au direct**, les mêmes causes n'abandonnent que le passage (flux réinitialisé,
+session inchangée, aucun événement, ci-dessous et §8.7.5) ; un refus pour capacité ne ferme jamais
+rien par lui-même. Un flux rouvert alors que le pair est déjà
 annoncé (règle L, perte d'écriture) attend aussi son accusé avant de porter des trames, sans
 nouvel événement. Le passage du relais au direct (remplacement du flux relayé par un flux sur
 une connexion directe, sans événement) ne remplace le flux de la session par celui de la connexion
@@ -1715,6 +1788,7 @@ s'entend donc après ce remplacement.
 |---|---|---|
 | Ouverture | retour de l'ouverture | Attente (rien d'annoncé) |
 | Ouverture, Attente | échec, refus, violation, 15 s écoulées | Fermé : flux réinitialisé, `ClosePeer`, aucun événement |
+| Attente | réinitialisation `0x1002` (capacité) | Ouverture d'un nouveau flux après l'attente, dans les 15 s ; session inchangée |
 | Attente | `0x01` | Ouvert : `PeerUp` si le pair n'était pas annoncé |
 | Ouvert | octet reçu | violation : `ClosePeer` (existant) |
 | Ouvert | flux perdu, connexion vivante | Ouverture d'un nouveau flux (le pair reste annoncé) |
@@ -1723,6 +1797,7 @@ s'entend donc après ce remplacement.
 | Ouvreur, flux d'un passage au direct | Entrée | Sortie, action |
 |---|---|---|
 | Ouverture, Attente | échec, refus, violation, 15 s | abandon : flux réinitialisé, session inchangée, aucun événement |
+| Attente | réinitialisation `0x1002` (capacité) | nouvel essai après l'attente, dans les 15 s, sinon abandon |
 | Attente | `0x01` | remplacement du flux de la session (sans événement, ordre des trames gardé) |
 
 Deux ouvertures croisées sont indépendantes : chaque côté accuse le flux de l'autre sans attendre
@@ -1730,7 +1805,9 @@ Deux ouvertures croisées sont indépendantes : chaque côté accuse le flux de 
 
 **8.7.6 Erreurs et débit.** Valeur fausse, octet de trop : violation, comme ci-dessus. Pair muet :
 15 s, puis `ClosePeer`. Inondation : un accusé par flux, et les flux sync par pair restent bornés
-par le gestionnaire de ressources (4 par pair) ; l'accusé n'est jamais répété ni rejoué (il vit
+par le gestionnaire de ressources (4 par pair), dont deux au plus tiennent une place dans l'ordre
+(§8.7.3) ; un pair qui ouvre puis réinitialise des flux en boucle ne garde ni place ni attente :
+chaque flux parti sans trame quitte l'ordre aussitôt ; l'accusé n'est jamais répété ni rejoué (il vit
 dans un flux chiffré et authentifié de la connexion).
 
 **8.7.7 Sécurité et confidentialité.** L'accusé ne transporte rien : il est authentifié par la
@@ -1747,11 +1824,22 @@ admis reçoit une réinitialisation, comme avant.
 **8.7.8 Interopérabilité.** L'identifiant passe de `/inkwell/sync/1.0.0` à `/inkwell/sync/2.0.0`
 (changement incompatible, §1.4) ; `1.0.0` n'est plus servi ni ouvert (bascule nette : aucune
 version publiée ne le parle). Face à un appareil qui ne connaît que `1.0.0`, multistream-select
-répond `na` : l'ouverture échoue, `ClosePeer`, aucun événement. Le flux vrac (§8.1) est inchangé :
-il ne s'ouvre qu'après `PeerUp`. Dans la session 2.0 (§5, §11.1), le HELLO du pair joue ce rôle :
+répond `na` : l'ouverture échoue, `ClosePeer`, aucun événement. Le flux vrac (§8.1) ne s'ouvre
+qu'après `PeerUp` ; depuis le bloc PU1c il porte le même accusé (`/inkwell/bulk/2.0.0`). Dans la session 2.0 (§5, §11.1), le HELLO du pair joue ce rôle :
 un nœud n'entre pas en Actif au retour de l'ouverture d'un flux, seulement sur des HELLO valides.
 
-**8.7.9 Conformité.** Vecteurs `syncack.json` (décodeurs `sync_ack`, `sync_ack_responder`,
+**8.7.9 Conformité.** Cycle de vie des flux entrants (bloc PU1c) : vecteurs `inbound.json` (décodeurs
+`inbound_lifecycle`, `inbound_probe`, `quic_window`, portée `transport`) ; modèle `InboundLifecycle` (les deux voies à
+la fois, un crédit de connexion partagé) : `Places`, `Order`, `WaitNoBudget`, `ReservationsReturned`,
+`FinFramesDelivered`, `ArrivingHoldsNothing`, `EmptyLeaves`, `NoBlindWait`, `BlockedFreed`, `HeadProgresses` (« à terme » : les bornes de temps sont prouvées par les tests Go à horloge contrôlée), mutants QC1–QC8 (place après
+l'attente de l'annonce, flux parti qui attend son prédécesseur, sonde aveugle après un octet, budget pris en attente,
+préfixe jeté devant une trame tronquée, attente du budget non annulée par la perte de la connexion, chaîne vrac,
+fenêtre de connexion trop petite), quatre témoins ; porte `gates/PU1c.toml`. Ordre des flux entrants (bloc PU1b) : vecteurs `syncorder.json` (décodeurs
+`sync_order`, `sync_refusal`, portée `transport`) ; modèle `SyncOrder` : `Places`, `Order`,
+`SessionKept`, `Budget`, `EmptyLeaves`, `AllDelivered`, `SessionResumes`, mutants Q1–Q5 (pas de réveil,
+place gardée sans trame, `ClosePeer` sur un refus pour capacité, trois places, fin d'écriture sans trame qui garde
+sa place) ; porte
+`gates/PU1b.toml`. Vecteurs `syncack.json` (décodeurs `sync_ack`, `sync_ack_responder`,
 `sync_ack_opener`, portée `transport`) ; décodeur `syncack.ReadAck` fuzzé (`FuzzReadAck`) ; modèle
 `PeerUpAck` : invariants S1 `UpAfterAccept`, S2 `SessionOnAccepted`, S3 `NoUpOnRefused`, vivacité
 L1 `BothUp`, L2 `OpenResolves`/`MoveResolves`, mutants M1–M5 (annonce au retour de l'ouverture,
@@ -2166,6 +2254,8 @@ de `protocol` ; un test par ligne vérifie la borne, la borne + 1 et la reprise.
 | connexions | 2 par pair (passage) ; 128 entrantes, 128 sortantes au total (impl., 64 membres × 2) | — | refusée | à la fermeture d'une autre |
 | flux par pair et par sens (gestionnaire de ressources libp2p, portées *protocol* × *peer*) | control 1, repo 1 (+1 en fermeture), presence 1, large 1 non lu ; vrac 1 ; salon 4 | — | violation (salon : réinitialisé) | Tenu |
 | trame sync | 98 304 o | — | violation | Tenu |
+| flux sync entrants par pair (§8.7.3) | 2 places dans l'ordre ; refus pour capacité : code `0x1002` ; nouvel essai après 50 ms, doublé jusqu'à 1 s, dans les 15 s de l'ouverture ; attente de son tour 60 s | par pair (toutes connexions, toutes générations) | flux réinitialisé avec le code, sans `ClosePeer` ; l'ouvreur réessaie, session inchangée | une place rendue (flux lu jusqu'à sa fin, ou parti sans trame) |
+| cycle de vie d'un flux entrant, sync et vrac (§8.7.3, §8.1) | un seul lecteur ; deux voies ordonnées (sync, vrac), 2 places par pair et par voie ; vrac : accusé `0x01` et refus pour capacité `0x1002` comme sync ; en attente, sonde d'un octet au plus, essai suivant 250 ms au plus après le précédent, 256 o gardés au plus ; tour et annonce vus en 250 ms au plus ; budget de réception pris seulement à partir du tour | par pair et par voie | réinitialisation vue en 250 ms au plus, fin sans octet non lu aussitôt, fin derrière des octets non lus à son tour ; bloqué sur le budget : libéré par de la place rendue, la perte de sa connexion ou la fermeture du nœud | place rendue (flux lu jusqu'à sa fin, ou parti sans trame) |
 | accusé de session sync (§8.7) | 1 octet `0x01` ; ouverture et accusé en 15 s ; écriture de l'accusé en 15 s | par flux | refus ou violation : flux réinitialisé, `ClosePeer`, aucun événement | nouvelle connexion |
 | trame vrac | 1 065 005 o | — | violation | Tenu |
 | salon | requête 4096 o / 10 s ; réponse 262 144 o ; traitement 3 min | — | flux fermé | nouvelle requête |
@@ -2185,7 +2275,7 @@ de `protocol` ; un test par ligne vérifie la borne, la borne + 1 et la reprise.
 | objets LARGE annoncés (émetteur) | 1 par pair, en attente de `LARGE_REPLY`, ≤ 10 min (dans la voie LARGE de la webview) | par pair | oublié au refus ou après 10 min ; état de synchronisation de ce document réinitialisé | règle H chez le receveur |
 | objets LARGE réservés (receveur) | 1 par pair ; ≤ part fixe `r` = 4 Mio ; plus grand : refus (`LARGE_REPLY` 0), ou vrac si indivisible | 4 Mio (fixe) | refus | pages d'historique ≤ `r` (§9.6) |
 | sessions par pair | 2 pendant un passage ; limites du gestionnaire de ressources = 2 × celles d'une session | — | la plus ancienne fermée | — |
-| fenêtres QUIC | maximum de connexion ≥ maximum de flux + fenêtre initiale de flux + 1 Mio (go-libp2p v0.51.0 et quic-go v0.64.1 : 15 ≥ 10 + 0,5 + 1 Mio ; initiales 512 / 768 Kio) | — | démarrage refusé (porte P-QUIC) | — |
+| fenêtres QUIC | maximum de connexion ≥ maximum de flux + fenêtre initiale de flux + 1 Mio (go-libp2p v0.51.0 et quic-go v0.64.1 : 15 ≥ 10 + 0,125 + 1 Mio) ; fenêtres initiales réglées par le nœud (bloc PU1c, §8.7.3) : flux 128 Kio, connexion 1 Mio, avec (places × voies + 1) × fenêtre initiale de flux ≤ 3/4 × fenêtre initiale de connexion, soit (2 × 2 + 1) × 128 Kio = 640 Kio ≤ 768 Kio ; la fenêtre initiale de connexion est réservée au gestionnaire de ressources à l'ouverture de la connexion (128 connexions : 128 Mio des 256 Mio du nœud), ses hausses aussi (auto-ajustement gardé) ; coût : 1,25 Mio/s par flux à 100 ms d'aller-retour tant que sa fenêtre n'a pas grandi | — | démarrage refusé (porte P-QUIC) ; la construction échoue si l'inégalité ne tient plus ; réservation refusée : connexion refusée | — |
 | trames ignorables | 256 trames et 256 Kio par minute et par pair | par pair | OVERLOADED | — |
 | sonde de lien (§8.5.7) | message : `len` ≤ 64, au plus 65 o gardés d'un message incomplet ; flux (gestionnaire de ressources libp2p, portées *protocol* × *peer*) : 4 entrants et 2 sortants par pair (2 connexions × (1 + 1 en fermeture), 2 × 1), tant que les portées *peer* et *transient* laissent de la place (la portée du protocole n'en réserve pas) ; par connexion, l'hôte en tient 1 entrant et 1 sortant ; négociation ≤ 10 s ; 1 PROBE par seconde, jamais à moins de 500 ms, `seq` ≤ (temps depuis l'acceptation, + 1/64) / 500 ms + 2 répondu, jusqu'à 20 de plus jeté ; 8 en attente ; 64 échantillons ; fenêtre 30 s, chiffre inconnu sous 200 paquets ou à moins de 15 s entre ses deux échantillons ; niveaux : perte 5 / 10 / 25 ‰ et 50 / 100 / 150 ‰, aller-retour 400 / 500 / 625 ms et 1,6 / 2 / 2,5 s ; crédit d'écho 1500 ms par connexion, 500 ms par écho ; `max_ack_delay` 26 ms s'il n'est pas exposé ; un ignorable par message, plus un, par flux ; nouveau flux entrant refusé 30 s après la fin du précédent ; 1024 o lus et jetés après le FIN du sondeur | par connexion | sonde jetée sans faute ; violation : flux de sonde réinitialisé (jamais la session), nouveaux flux du pair refusés 60 s ; fermeture sans réponse ou trop bavarde : réinitialisée | 60 s |
 | progrès d'un flux LARGE | 60 s sans octet alors que réservé et lu | — | flux réinitialisé | règle L |
@@ -2348,7 +2438,7 @@ triées, séparées par des virgules, ≤ 64) · `equiv/<hex32>/<seq décimal �
 ### 20.6 Identifiants de protocole
 
 `/inkwell/control/2.0.0` · `/inkwell/repo/2.0.0` · `/inkwell/presence/2.0.0` ·
-`/inkwell/large/2.0.0` · `/inkwell/bulk/1.0.0` · `/inkwell/lobby/1.0.0` ·
+`/inkwell/large/2.0.0` · `/inkwell/bulk/2.0.0` (§8.1, accusé d'acceptation, remplace `1.0.0`) · `/inkwell/lobby/1.0.0` ·
 `/inkwell/linkprobe/1.0.0` (§8.5 ; hors session, sans capacité : son absence est permise,
 §8.5.9). `/inkwell/sync/2.0.0` (§8.7, session existante avec accusé d'acceptation) remplace
 `/inkwell/sync/1.0.0`, qui n'est plus servi ; la session 2.0 (§5) retirera `sync` (bascule nette). Une nouvelle classe de session
@@ -2472,7 +2562,7 @@ manque une pièce ; on n'écrit une couche à nous que si rien ne convient, avec
 | Signatures | Ed25519 [RFC 8032] ; séparation de domaine par préfixe (pratique de libp2p) | **tel quel** + règles de validité (§3.2–§3.3) | les vecteurs de [Chalkias 2020] fixent le verdict |
 | Liste des membres, rôles | MLS [RFC 9420] ; Keyhive (Ink & Switch, alpha) ; p2panda-auth 0.7 | **garder la liste signée** ; reprendre des idées | MLS exige un ordre total des commits (service de distribution), incompatible avec l'édition hors ligne sans serveur, et traite des clés de groupe, pas des droits ; Keyhive (niveaux read/edit/relay/admin, graphe de délégations, E2EE) est la cible la plus proche mais en alpha et sans implémentation Go ; p2panda-auth (CRDT d'ops, « strong removal ») ressemble à notre pli mais son API n'est pas stable et il est en Rust. À réexaminer quand Keyhive sera stable (le niveau « relay » est une idée à reprendre) |
 | Anti-entropie des ensembles signés | réconciliation par intervalles (RBSR, negentropy NIP-77), échange de frontières (Hypercore, SSB) | **frontières** (existant, §6.1) | ensembles ≤ 8192, graphes : la frontière est plus simple ; RBSR si les ensembles plats grandissent |
-| Blobs et modifications indivisibles | BLAKE3 + Bao (`lukechampine.com/blake3` v1.4.1), groupes de 16 Kio comme `bao-tree` d'iroh ; bitswap (IPFS) | **tel quel** (format) ; requêtes à nous (`bulk/1.0.0`, existant, étendu aux modifications indivisibles par leur racine, accord D1) | bitswap : blocs et CID SHA-256, plus lourd ; iroh-blobs : hors libp2p |
+| Blobs et modifications indivisibles | BLAKE3 + Bao (`lukechampine.com/blake3` v1.4.1), groupes de 16 Kio comme `bao-tree` d'iroh ; bitswap (IPFS) | **tel quel** (format) ; requêtes à nous (`bulk/2.0.0`, existant, étendu aux modifications indivisibles par leur racine, accord D1) | bitswap : blocs et CID SHA-256, plus lourd ; iroh-blobs : hors libp2p |
 | Invitation | magic-wormhole (ADR 0032) | **tel quel** | — |
 | Ticket | tickets iroh | **à nous** (existant) | pas de standard pour libp2p ; format figé (§8.3) |
 | Versionnement, extensibilité | [RFC 6709], [RFC 9413], [RFC 8701], [RFC 9368] | **méthodes reprises** | §1.4 |

@@ -12,7 +12,9 @@ import (
 
 	"github.com/libp2p/go-libp2p"
 	"github.com/libp2p/go-libp2p/core/host"
+	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/libp2p/go-libp2p/p2p/transport/quicreuse"
 	"github.com/libp2p/go-yamux/v5"
 	ma "github.com/multiformats/go-multiaddr"
 
@@ -38,6 +40,122 @@ func SetOnDial(o *Options, f func(transport.PeerID, []string)) {
 		f(name, out)
 	}
 }
+
+// SetSkipAck makes the node announce a peer when its outbound sync stream opens, without reading
+// the peer's ACK: the « without » half of TestPeerUpLatency's paired measurement.
+func SetSkipAck(o *Options) { o.skipAck = true }
+
+// SetBeforeAck makes the responder of each inbound sync stream call f once its checks accept the
+// stream, before it writes the ACK; f returning false resets the stream instead.
+func SetBeforeAck(o *Options, f func(network.Conn) bool) { o.beforeAck = f }
+
+// SetAfterAck makes the responder of each inbound sync stream call f right after it wrote the ACK.
+func SetAfterAck(o *Options, f func(network.Conn)) { o.afterAck = f }
+
+// SetAckHold makes the responder of each inbound stream of either ordered lane call f once its checks accept
+// the stream, right before it writes the ACK: f holds the stream in its acceptance for as long as it runs.
+func SetAckHold(o *Options, f func(lane string, s network.Stream)) { o.ackHold = f }
+
+// SetAfterAckLane makes the responder of each inbound stream of either ordered lane call f right after it wrote
+// the ACK; tests use it to hold a handler there.
+func SetAfterAckLane(o *Options, f func(lane string, c network.Conn)) { o.afterAckLane = f }
+
+// ServeSync serves s as an inbound sync stream: the handler of ProtocolSync, for a stream a test wraps.
+func (n *Node) ServeSync(s network.Stream) { n.handleStream(s) }
+
+// StallLane makes the consumer of the lane named lane stop reading: it takes the lane's whole receive budget, so
+// its delivering readers block on it. It reports false, taking nothing, if the budget was not entirely free.
+// ResumeLane undoes it.
+func (n *Node) StallLane(lane string) bool {
+	l := n.lane(lane)
+	return l != nil && l.budget.TryAcquire(l.maxCost)
+}
+
+// ResumeLane gives back the budget taken by StallLane.
+func (n *Node) ResumeLane(lane string) {
+	l := n.lane(lane)
+	l.budget.Release(l.maxCost)
+}
+
+// SetQUICReuse adds options to the node's QUIC connection manager, after its own.
+func SetQUICReuse(o *Options, opts ...quicreuse.Option) { o.quicReuse = opts }
+
+// SetQUICWindows replaces the node's QUIC initial stream and connection receive windows (the witness of rule P-13).
+func SetQUICWindows(o *Options, stream, conn uint64) { o.quicWindows = &[2]uint64{stream, conn} }
+
+// lane returns the ordered lane named name ("sync" or "bulk"), nil for a bulk lane not created yet.
+func (n *Node) lane(name string) *lane {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	switch {
+	case name == "sync":
+		return n.syncLane
+	case name == "bulk" && n.bulk != nil:
+		return n.bulk.lane
+	}
+	return nil
+}
+
+// InboundPlaces is how many inbound streams of id hold a place in its order on the lane named lane.
+func (n *Node) InboundPlaces(lane string, id transport.PeerID) int {
+	p, ok := parseID(id)
+	l := n.lane(lane)
+	if !ok || l == nil {
+		return 0
+	}
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	if in := l.orders[p]; in != nil {
+		return in.order.Len()
+	}
+	return 0
+}
+
+// BufferedBytes is how many bytes of the receive budget of the lane named lane are taken.
+func (n *Node) BufferedBytes(lane string) int {
+	if l := n.lane(lane); l != nil {
+		return l.budget.Held()
+	}
+	return 0
+}
+
+// ProbedBytes is how many bytes the waiting inbound streams of id hold by probing, on both lanes.
+func (n *Node) ProbedBytes(id transport.PeerID) int {
+	p, ok := parseID(id)
+	if !ok {
+		return 0
+	}
+	total := 0
+	for _, name := range []string{"sync", "bulk"} {
+		l := n.lane(name)
+		if l == nil {
+			continue
+		}
+		n.mu.Lock()
+		if in := l.orders[p]; in != nil {
+			for _, k := range in.probed {
+				total += k
+			}
+		}
+		n.mu.Unlock()
+	}
+	return total
+}
+
+// BusyRefusals is how many inbound sync streams the node refused for capacity.
+func (n *Node) BusyRefusals() uint64 { return n.busyRefusals.Load() }
+
+// BusyRetries is how many refusals for capacity the node read as an opener.
+func (n *Node) BusyRetries() uint64 { return n.busyRetries.Load() }
+
+// OutEndedByConn reports how watchOut reads the end of an outbound stream: the connection lost (true) or a
+// refusal (false).
+func OutEndedByConn(n int, err error, connClosed bool) bool {
+	return outEndedByConn(n, err, connClosed)
+}
+
+// ReorderWait bounds how long an inbound stream waits for its turn.
+const ReorderWait = reorderWait
 
 // SetRelayExtra makes RunRelay apply opts after its own, as SetExtra does for
 // a node.

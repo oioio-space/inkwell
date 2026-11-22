@@ -2,6 +2,7 @@ package p2p
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"sync/atomic"
@@ -10,16 +11,18 @@ import (
 	"github.com/libp2p/go-libp2p/core/event"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
+	"github.com/libp2p/go-libp2p/core/protocol"
 
 	"github.com/oioio-space/inkwell/internal/transport"
 	"github.com/oioio-space/inkwell/internal/transport/frame"
+	"github.com/oioio-space/inkwell/protocol/syncack"
 )
 
 // Lifecycle of a peer. libp2p reports connectedness changes; from them and
 // from the outbound stream a peerState derives the events:
 //
 //   - connected and admitted: the outbound stream is opened (openOut);
-//   - stream open: PeerUp, once;
+//   - stream open and acknowledged by the peer (spec §8.7): PeerUp, once;
 //   - stream lost while connected: it is reopened silently when the loss comes
 //     from our side or from the connection (a Send that failed, a connection
 //     replaced by another), and the peer is disconnected when the remote
@@ -80,14 +83,13 @@ func (n *Node) startOpenLocked(ps *peerState) {
 	n.wg.Go(func() { n.openOut(ps) })
 }
 
-// openOut opens the outbound stream of ps, then announces the peer if it is
-// new. If it cannot, the connection is useless for syncing and is closed.
+// openOut opens the outbound stream of ps and waits for the peer's ACK, then
+// announces the peer if it is new (spec §8.7.4). If it cannot, the connection is
+// useless for syncing and is closed, with no event.
 func (n *Node) openOut(ps *peerState) {
 	ctx, cancel := context.WithTimeout(n.ctx, openTimeout)
 	defer cancel()
-	ctx = network.WithAllowLimitedConn(ctx, "inkwell sync")
-	ctx = network.WithNoDial(ctx, "the peer is connected")
-	s, err := n.h.NewStream(ctx, ps.id, ProtocolSync)
+	s, err := n.openSync(ctx, ps.id, false)
 	var sample linkSample
 	if err == nil {
 		sample = n.probeLink(ps.id, s, nil) // before mu: it calls into libp2p
@@ -129,15 +131,110 @@ func (n *Node) openOut(ps *peerState) {
 	n.maybeUpgrade(ps)
 }
 
+// openSync opens a sync stream to p and reads the peer's ACK (spec §8.7.4, rules
+// P-1, P-4, P-5); with direct, on a direct connection (the move of upgrade).
+func (n *Node) openSync(ctx context.Context, p peer.ID, direct bool) (network.Stream, error) {
+	role := syncack.RoleSession
+	if direct {
+		role = syncack.RoleMove
+	}
+	return n.openAcked(ctx, p, ProtocolSync, role, direct)
+}
+
+// openAcked opens a stream of protocol proto, an ordered lane, to p and reads
+// the peer's ACK (spec §8.1, §8.7.4, rules P-4, P-14): opening and ACK share
+// ctx's deadline, counted from the open and fired whatever is in flight. A
+// stream that is not acknowledged is reset. With direct, the stream is opened on
+// a direct connection.
+//
+// A refusal for capacity (a reset with syncack.BusyCode, rule P-8) is not a
+// refusal: the stream is opened again after a backoff, within the same budget,
+// the session and the connections untouched; when no retry fits in the budget,
+// the opening ends with the budget and the caller acts as on a refusal (spec
+// §8.7.4: a session opening closes the peer, a move is abandoned, a bulk send
+// fails).
+func (n *Node) openAcked(ctx context.Context, p peer.ID, proto protocol.ID, role syncack.Role, direct bool) (network.Stream, error) {
+	start := time.Now()
+	for attempt := 0; ; attempt++ {
+		s, err := n.openOnce(ctx, p, proto, direct)
+		if err == nil || !isBusy(err) {
+			return s, err
+		}
+		n.busyRetries.Add(1)
+		action, wait := syncack.OnRefusal(role, true, time.Since(start), attempt)
+		if action != syncack.Retry { // no retry fits: the opening ends with its budget
+			<-ctx.Done()
+			return nil, err
+		}
+		t := time.NewTimer(wait)
+		select {
+		case <-t.C:
+		case <-ctx.Done():
+			t.Stop()
+			return nil, ctx.Err()
+		}
+	}
+}
+
+// isBusy reports whether err is the remote's refusal for capacity (spec §8.7.4).
+func isBusy(err error) bool {
+	var se *network.StreamError
+	return errors.As(err, &se) && se.Remote && uint32(se.ErrorCode) == syncack.BusyCode
+}
+
+// openOnce is one attempt of openAcked.
+func (n *Node) openOnce(ctx context.Context, p peer.ID, proto protocol.ID, direct bool) (network.Stream, error) {
+	ctx = network.WithAllowLimitedConn(ctx, "inkwell "+string(proto))
+	ctx = network.WithNoDial(ctx, "the peer is connected")
+	if direct {
+		ctx = network.WithForceDirectDial(ctx, "upgrade to a direct connection")
+	}
+	s, err := n.h.NewStream(ctx, p, proto)
+	if err != nil || (n.opts.skipAck && proto == ProtocolSync) {
+		return s, err
+	}
+	// The return of NewStream proves nothing: on the optimistic path no byte of the
+	// peer has arrived yet. The deadline resets the stream, which ends the read.
+	stop := context.AfterFunc(ctx, func() { _ = s.Reset() })
+	err = syncack.ReadAck(s)
+	if !stop() && err == nil {
+		err = ctx.Err() // the deadline fired as the ACK arrived: too late
+	}
+	if err != nil {
+		_ = s.Reset()
+		return nil, fmt.Errorf("p2p: %s stream to %s not accepted: %w", proto, p, err)
+	}
+	return s, nil
+}
+
 // watchOut returns when the outbound stream s ends, which is the only way to
-// learn that the remote reset it: nothing is ever read from it.
+// learn that the remote reset it: nothing is read from it after the ACK.
 func (n *Node) watchOut(ps *peerState, s network.Stream) {
 	var b [1]byte
-	// The remote never writes on this stream; if it does, it is hostile.
-	_, _ = s.Read(b[:])
-	connGone := s.Conn().IsClosed()
-	n.outLost(ps, s, connGone, false)
-	_ = s.Reset()
+	// The remote writes nothing after its ACK; if it does, it is hostile.
+	m, err := s.Read(b[:])
+	n.outLost(ps, s, outEndedByConn(m, err, s.Conn().IsClosed()), false)
+}
+
+// outEndedByConn reports whether an outbound stream that ended with n bytes
+// read and err was lost with its connection, rather than refused (spec §8.7.2,
+// §8.7.5). What the remote did comes first: a byte after the ACK is hostile and
+// a reset by the remote is a refusal, even if the connection is closed by now
+// (the remote may reset the stream, then close this connection while another
+// survives). Only the connection's own close error, or an end on a connection
+// marked closed (connClosed), is the connection lost.
+func outEndedByConn(n int, err error, connClosed bool) bool {
+	var ce *network.ConnError
+	var se *network.StreamError
+	switch {
+	case n > 0:
+		return false
+	case errors.As(err, &ce):
+		return true
+	case errors.As(err, &se) && se.Remote:
+		return false
+	}
+	return connClosed
 }
 
 // outLost retires the outbound stream s of ps. With reopen, a new one is
@@ -150,30 +247,37 @@ func (n *Node) outLost(ps *peerState, s network.Stream, reopen, resync bool) {
 	n.mu.Lock()
 	if ps.out != s {
 		n.mu.Unlock()
+		_ = s.Reset()
 		return
 	}
 	ps.out = nil
 	n.changedLocked()
-	closePeer := false
-	if ps.connected && !n.closed {
-		if reopen {
-			if resync {
-				n.announceDownLocked(ps, true)
-			}
-			n.startOpenLocked(ps)
-		} else {
-			closePeer = true
+	if reopen {
+		if resync && ps.connected && !n.closed {
+			n.announceDownLocked(ps, true)
 		}
+		// Keep the state while the stream releases its resource manager slot.
+		// A connection event must not start the replacement during that reset.
+		ps.opening = true
+		n.mu.Unlock()
+		_ = s.Reset()
+		n.mu.Lock()
+		ps.opening = false
+		n.startOpenLocked(ps)
 	}
+	closePeer := !reopen && ps.connected && !n.closed
 	n.settleLocked(ps)
 	n.mu.Unlock()
 	if closePeer {
 		_ = n.h.Network().ClosePeer(ps.id)
 	}
+	if !reopen {
+		_ = s.Reset()
+	}
 }
 
 // settleLocked forgets ps, with a PeerDown if it was announced, once it has
-// no stream, no stream being opened and no connection.
+// no stream, no stream being replaced and no connection.
 func (n *Node) settleLocked(ps *peerState) {
 	if ps.out != nil || ps.opening || ps.connected {
 		return
@@ -216,91 +320,11 @@ func (n *Node) handleBulkStream(s network.Stream) {
 	b.handle(s)
 }
 
-// handleStream serves a stream opened by a remote: it delivers its frames as
-// Messages for as long as it lasts.
-func (n *Node) handleStream(s network.Stream) {
-	n.mu.Lock()
-	if n.closed {
-		n.mu.Unlock()
-		_ = s.Reset()
-		return
-	}
-	n.wg.Add(1)
-	n.mu.Unlock()
-	defer n.wg.Done()
-	defer func() { _ = s.Reset() }()
-
-	p := s.Conn().RemotePeer()
-	if !n.admitted(p) {
-		return
-	}
-	// Messages come after the peer's PeerUp, which needs our own stream open.
-	ctx, cancel := context.WithTimeout(n.ctx, upTimeout)
-	defer cancel()
-	ps, ok := n.waitUp(ctx, p)
-	if !ok {
-		return
-	}
-	// A stream replaced by an upgrade is read to its end before the next one,
-	// so that the messages of a peer keep their order.
-	n.mu.Lock()
-	prev, mine := ps.inTail, make(chan struct{})
-	ps.inTail = mine
-	n.mu.Unlock()
-	defer close(mine)
-	if prev != nil {
-		wctx, wcancel := context.WithTimeout(n.ctx, reorderWait)
-		select {
-		case <-prev:
-		case <-wctx.Done():
-		}
-		wcancel()
-	}
-	for {
-		var cost int
-		payload, err := frame.ReadReserve(s, transport.MaxFrame, func(size int) error {
-			cost = min(size+msgOverhead, maxBuffered)
-			if !n.budget.Acquire(cost) {
-				cost = 0
-				return transport.ErrClosed
-			}
-			return nil
-		})
-		if err != nil {
-			n.budget.Release(cost)
-			return
-		}
-		n.mu.Lock()
-		if n.peers[p] == ps && ps.up {
-			n.pushLocked(transport.Event{Kind: transport.Message, Peer: ps.name, Payload: payload}, cost)
-		} else {
-			n.budget.Release(cost)
-		}
-		n.mu.Unlock()
-	}
-}
-
-// waitUp waits until p is announced, or ctx is done.
-func (n *Node) waitUp(ctx context.Context, p peer.ID) (*peerState, bool) {
-	for {
-		n.mu.Lock()
-		ps := n.peers[p]
-		if ps != nil && ps.up {
-			n.mu.Unlock()
-			return ps, true
-		}
-		chg, closed := n.chg, n.closed
-		n.mu.Unlock()
-		if closed {
-			return nil, false
-		}
-		select {
-		case <-chg:
-		case <-ctx.Done():
-			return nil, false
-		}
-	}
-}
+// handleStream serves a sync stream opened by a remote: it delivers its frames
+// as Messages for as long as it lasts, in the order of the peer's streams, with
+// the lifecycle every ordered lane shares (spec §8.7.3, rules P-6, P-8 to P-12;
+// see serveInbound).
+func (n *Node) handleStream(s network.Stream) { n.serveInbound(n.syncLane, s) }
 
 // outStream returns the announced peer's outbound stream, waiting while it is
 // being replaced. It returns [transport.ErrUnknownPeer] if the peer is not
@@ -409,12 +433,12 @@ func watchCancel(ctx context.Context) (canceled func() bool) {
 }
 
 // sendFailed replaces the stream s after a failed write. It retires s before
-// resetting it, so that watchOut sees a stream we gave up, not a refusal.
+// resetting it and opening a replacement, so that watchOut cannot mistake
+// the local reset for a refusal.
 // Unless the caller canceled, the frame is lost for good: the peer is
 // announced down and up again (spec rule L, §5.5).
 func (n *Node) sendFailed(ctx context.Context, ps *peerState, s network.Stream, to transport.PeerID, err error, canceled bool) error {
 	n.outLost(ps, s, true, !canceled)
-	_ = s.Reset()
 	if canceled {
 		err = ctx.Err()
 	}
@@ -474,9 +498,10 @@ func (n *Node) maybeUpgrade(ps *peerState) {
 
 // upgrade replaces the relayed outbound stream of ps by one on a direct
 // connection, without any event and without losing or reordering a frame:
-// writers are paused for the swap, the old stream is closed for writing so
-// that the peer reads it to its end, and the peer reads the new stream only
-// after that (see handleStream).
+// the swap waits for the peer's ACK of the new stream (spec §8.7.4, rule P-6;
+// without it the session stays on the circuit), writers are paused for the
+// swap, the old stream is closed for writing so that the peer reads it to its
+// end, and the peer reads the new stream only after that (see handleStream).
 func (n *Node) upgrade(ps *peerState) {
 	defer func() {
 		n.mu.Lock()
@@ -485,10 +510,7 @@ func (n *Node) upgrade(ps *peerState) {
 	}()
 	ctx, cancel := context.WithTimeout(n.ctx, openTimeout)
 	defer cancel()
-	ctx = network.WithAllowLimitedConn(ctx, "inkwell sync")
-	ctx = network.WithNoDial(ctx, "the peer is connected")
-	ctx = network.WithForceDirectDial(ctx, "upgrade to a direct connection")
-	s, err := n.h.NewStream(ctx, ps.id, ProtocolSync)
+	s, err := n.openSync(ctx, ps.id, true)
 	if err != nil {
 		return
 	}

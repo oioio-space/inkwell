@@ -6,6 +6,7 @@
     {
       "id": "sync-ack-ok",
       "status": "proposed",
+      "enforce": "step-3",
       "description": "L'accusé 0x01, rien après : accepté.",
       "decoder": "sync_ack",
       "input_hex": "01",
@@ -19,6 +20,7 @@
     {
       "id": "sync-ack-eof",
       "status": "proposed",
+      "enforce": "step-3",
       "description": "Fin du flux avant tout octet : refus (P-4).",
       "decoder": "sync_ack",
       "verdict": "reject",
@@ -31,6 +33,7 @@
     {
       "id": "sync-ack-zero",
       "status": "proposed",
+      "enforce": "step-3",
       "description": "0x00 n'est pas l'accusé : violation.",
       "decoder": "sync_ack",
       "input_hex": "00",
@@ -44,6 +47,7 @@
     {
       "id": "sync-ack-two",
       "status": "proposed",
+      "enforce": "step-3",
       "description": "0x02 : violation (aucune valeur ignorable).",
       "decoder": "sync_ack",
       "input_hex": "02",
@@ -57,6 +61,7 @@
     {
       "id": "sync-ack-7f",
       "status": "proposed",
+      "enforce": "step-3",
       "description": "0x7F : violation.",
       "decoder": "sync_ack",
       "input_hex": "7f",
@@ -70,6 +75,7 @@
     {
       "id": "sync-ack-ff",
       "status": "proposed",
+      "enforce": "step-3",
       "description": "0xFF : violation.",
       "decoder": "sync_ack",
       "input_hex": "ff",
@@ -83,6 +89,7 @@
     {
       "id": "sync-ack-twice",
       "status": "proposed",
+      "enforce": "step-3",
       "description": "Un second 0x01 après l'accusé : violation (le répondeur n'écrit qu'un octet).",
       "decoder": "sync_ack",
       "input_hex": "0101",
@@ -96,6 +103,7 @@
     {
       "id": "sync-ack-trailing",
       "status": "proposed",
+      "enforce": "step-3",
       "description": "Accusé puis donnée : violation.",
       "decoder": "sync_ack",
       "input_hex": "0100",
@@ -109,6 +117,7 @@
     {
       "id": "sync-ack-frame-first",
       "status": "proposed",
+      "enforce": "step-3",
       "description": "Une trame sync (longueur, données) à la place de l'accusé : violation.",
       "decoder": "sync_ack",
       "input_hex": "0300616263",
@@ -122,6 +131,7 @@
     {
       "id": "sync-ack-responder-ok",
       "status": "proposed",
+      "enforce": "step-3",
       "context": {
         "admitted": true,
         "conn_closed": false,
@@ -138,6 +148,7 @@
     {
       "id": "sync-ack-responder-closed",
       "status": "proposed",
+      "enforce": "step-3",
       "context": {
         "admitted": true,
         "conn_closed": false,
@@ -154,6 +165,7 @@
     {
       "id": "sync-ack-responder-not-admitted",
       "status": "proposed",
+      "enforce": "step-3",
       "context": {
         "admitted": false,
         "conn_closed": false,
@@ -170,6 +182,7 @@
     {
       "id": "sync-ack-responder-conn-closed",
       "status": "proposed",
+      "enforce": "step-3",
       "context": {
         "admitted": true,
         "conn_closed": true,
@@ -186,6 +199,7 @@
     {
       "id": "sync-ack-responder-all-bad",
       "status": "proposed",
+      "enforce": "step-3",
       "context": {
         "admitted": false,
         "conn_closed": true,
@@ -202,6 +216,7 @@
     {
       "id": "sync-ack-responder-closed-conn-not-admitted",
       "status": "proposed",
+      "enforce": "step-3",
       "context": {
         "admitted": false,
         "conn_closed": true,
@@ -218,6 +233,7 @@
     {
       "id": "sync-ack-opener-up",
       "status": "proposed",
+      "enforce": "step-3",
       "context": {
         "deadline_ms": 15000,
         "peer_announced": false,
@@ -249,6 +265,7 @@
     {
       "id": "sync-ack-opener-negotiated",
       "status": "proposed",
+      "enforce": "step-3",
       "context": {
         "deadline_ms": 15000,
         "peer_announced": false,
@@ -280,6 +297,7 @@
     {
       "id": "sync-ack-opener-eof",
       "status": "proposed",
+      "enforce": "step-3",
       "context": {
         "deadline_ms": 15000,
         "peer_announced": false,
@@ -310,6 +328,7 @@
     {
       "id": "sync-ack-opener-reset",
       "status": "proposed",
+      "enforce": "step-3",
       "context": {
         "deadline_ms": 15000,
         "peer_announced": false,
@@ -340,6 +359,7 @@
     {
       "id": "sync-ack-opener-conn-lost",
       "status": "proposed",
+      "enforce": "step-3",
       "context": {
         "deadline_ms": 15000,
         "peer_announced": false,
@@ -370,6 +390,7 @@
     {
       "id": "sync-ack-opener-bad-byte",
       "status": "proposed",
+      "enforce": "step-3",
       "context": {
         "deadline_ms": 15000,
         "peer_announced": false,
@@ -401,6 +422,7 @@
     {
       "id": "sync-ack-opener-byte-after",
       "status": "proposed",
+      "enforce": "step-3",
       "context": {
         "deadline_ms": 15000,
         "peer_announced": false,
@@ -438,6 +460,7 @@
     {
       "id": "sync-ack-opener-just-in-time",
       "status": "proposed",
+      "enforce": "step-3",
       "context": {
         "deadline_ms": 15000,
         "peer_announced": false,
@@ -469,6 +492,7 @@
     {
       "id": "sync-ack-opener-deadline",
       "status": "proposed",
+      "enforce": "step-3",
       "context": {
         "deadline_ms": 15000,
         "peer_announced": false,
@@ -500,6 +524,7 @@
     {
       "id": "sync-ack-opener-slow-negotiation",
       "status": "proposed",
+      "enforce": "step-3",
       "context": {
         "deadline_ms": 15000,
         "peer_announced": false,
@@ -531,6 +556,7 @@
     {
       "id": "sync-ack-opener-slow-negotiation-in-time",
       "status": "proposed",
+      "enforce": "step-3",
       "context": {
         "deadline_ms": 15000,
         "peer_announced": false,
@@ -562,6 +588,7 @@
     {
       "id": "sync-ack-opener-deadline-before-return",
       "status": "proposed",
+      "enforce": "step-3",
       "context": {
         "deadline_ms": 15000,
         "peer_announced": false,
@@ -587,6 +614,7 @@
     {
       "id": "sync-ack-opener-silent",
       "status": "proposed",
+      "enforce": "step-3",
       "context": {
         "deadline_ms": 15000,
         "peer_announced": false,
@@ -617,6 +645,7 @@
     {
       "id": "sync-ack-opener-reopen",
       "status": "proposed",
+      "enforce": "step-3",
       "context": {
         "deadline_ms": 15000,
         "peer_announced": true,
@@ -648,6 +677,7 @@
     {
       "id": "sync-ack-opener-reopen-refused",
       "status": "proposed",
+      "enforce": "step-3",
       "context": {
         "deadline_ms": 15000,
         "peer_announced": true,
@@ -678,6 +708,7 @@
     {
       "id": "sync-ack-opener-move",
       "status": "proposed",
+      "enforce": "step-3",
       "context": {
         "deadline_ms": 15000,
         "peer_announced": true,
@@ -709,6 +740,7 @@
     {
       "id": "sync-ack-opener-move-eof",
       "status": "proposed",
+      "enforce": "step-3",
       "context": {
         "deadline_ms": 15000,
         "peer_announced": true,
@@ -739,6 +771,7 @@
     {
       "id": "sync-ack-opener-move-bad-byte",
       "status": "proposed",
+      "enforce": "step-3",
       "context": {
         "deadline_ms": 15000,
         "peer_announced": true,
@@ -770,6 +803,7 @@
     {
       "id": "sync-ack-opener-move-deadline",
       "status": "proposed",
+      "enforce": "step-3",
       "context": {
         "deadline_ms": 15000,
         "peer_announced": true,

@@ -2,7 +2,7 @@
 # P-TLA (ADR 0034 step 3, docs/protocol/tla/README.md): fetch the pinned TLA+ tools
 # (tla2tools.jar SHA-256 checked, never committed) and model-check the models
 # (RepoGen, ConnCredit, SyncIndicator, WriteBudget, SendPath, LinkProbe, OISingleInstance, SandboxScope,
-# ProjectChange, DirectUpgrade, PeerUpAck).
+# ProjectChange, DirectUpgrade, PeerUpAck, SyncOrder, InboundLifecycle).
 #
 # Sound models must finish with no error; every mutant listed in the README must be
 # detected (a violation). The task fails if a sound model violates a property OR if a
@@ -303,6 +303,49 @@ WitnessLazyLate NotLazyLate
 WitnessBothUp NotBothUp
 WitnessMove NoMove
 WitnessLateFire NoLateFire
+MUTANTS
+
+# SyncOrder (README "SyncOrder", block PU1b, spec §8.7.3-§8.7.4): the responder's order of a peer's inbound sync
+# streams, two places, removal with wake, capacity refusal without ClosePeer. Names outside PU1's '^PeerUpAck' set.
+run SyncOrderHonest SyncOrderHonest.cfg SyncOrder sound
+run SyncOrderAnyTiming SyncOrderAnyTiming.cfg SyncOrder safety
+run SyncOrderByzantine SyncOrderByzantine.cfg SyncOrder sound
+while read -r m prop; do
+  run "SyncOrder$m" "mutants/SyncOrder$m.cfg" mutants/SyncOrderMutants mutant "$prop"
+done <<'MUTANTS'
+NoWake AllDelivered
+KeepEmpty EmptyLeaves
+ClosePeerOnBusy SessionKept
+Bound3 Places
+EofKeeps EmptyLeaves
+WitnessBusy NoBusy
+WitnessRemoveWaiting NoRemovalWhileWaiting
+WitnessEmptyEof NoEmptyEof
+WitnessBudgetOut NoBudgetOut
+MUTANTS
+
+# InboundLifecycle (README "InboundLifecycle", block PU1c, spec §8.1, §8.7.3, §16.1): one reader per inbound stream on
+# both ordered lanes at once, the probe while waiting, the budget only from the turn, the shared QUIC credit. Names
+# outside PU1's '^PeerUpAck' and PU1b's '^SyncOrder' sets.
+run InboundLifecycleHonest InboundLifecycleHonest.cfg InboundLifecycle sound
+run InboundLifecycleByzantine InboundLifecycleByzantine.cfg InboundLifecycle sound
+run InboundLifecycleByzantineSafety InboundLifecycleByzantineSafety.cfg InboundLifecycle safety
+run InboundLifecycleCredit InboundLifecycleCredit.cfg InboundLifecycle sound
+while read -r m prop; do
+  run "InboundLifecycle$m" "mutants/InboundLifecycle$m.cfg" mutants/InboundLifecycleMutants mutant "$prop"
+done <<'MUTANTS'
+PlaceSyncLate Order
+FailedWaits EmptyLeaves
+ProbeOnce NoBlindWait
+WaitCharges WaitNoBudget
+KeepWholeOnly FinFramesDelivered
+NoCancel BlockedFreed
+BulkTail Order
+SmallWindow HeadProgresses
+WitnessKept NoKept
+WitnessBlocked NoBlocked
+WitnessTruncatedTail NoTruncatedTail
+WitnessExhausted NoCreditExhaustedFirst
 MUTANTS
 
 exit "$fail"

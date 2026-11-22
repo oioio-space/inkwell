@@ -129,21 +129,24 @@ func (c *referenceCase) matchExpectExact(actual map[string]any) error {
 
 // lpEvent is one step of a linkprobe script (spec §21).
 type lpEvent struct {
-	Op       string          `json:"op"`
-	AtMs     int64           `json:"at_ms"`
-	Sent     uint64          `json:"sent"`
-	SentNow  uint64          `json:"sent_now"`
-	Received uint64          `json:"received"`
-	PTOMs    int64           `json:"pto_ms"`
-	Message  string          `json:"message_hex"`
-	Data     string          `json:"data_hex"`
-	Writable *bool           `json:"writable"`
-	OK       bool            `json:"ok"`
-	Fin      bool            `json:"fin"`
-	Stream   uint64          `json:"stream"`
-	Roles    []string        `json:"roles"`
-	Action   string          `json:"action"`
-	Expect   json.RawMessage `json:"expect"`
+	Op        string          `json:"op"`
+	AtMs      int64           `json:"at_ms"`
+	Sent      uint64          `json:"sent"`
+	SentNow   uint64          `json:"sent_now"`
+	Received  uint64          `json:"received"`
+	PTOMs     int64           `json:"pto_ms"`
+	Message   string          `json:"message_hex"`
+	Data      string          `json:"data_hex"`
+	Byte      string          `json:"byte_hex"`  // one byte (sync_ack_opener)
+	Wake      []uint64        `json:"wake"`      // streams whose turn came (sync_order)
+	Delivered bool            `json:"delivered"` // the stream delivered frames (sync_order)
+	Writable  *bool           `json:"writable"`
+	OK        bool            `json:"ok"`
+	Fin       bool            `json:"fin"`
+	Stream    uint64          `json:"stream"`
+	Roles     []string        `json:"roles"`
+	Action    string          `json:"action"`
+	Expect    json.RawMessage `json:"expect"`
 }
 
 // writable is the event's writable flag, true when absent.

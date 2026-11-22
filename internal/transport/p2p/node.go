@@ -71,16 +71,22 @@ import (
 	"github.com/libp2p/go-libp2p/p2p/net/connmgr"
 	"github.com/libp2p/go-libp2p/p2p/security/noise"
 	libp2pquic "github.com/libp2p/go-libp2p/p2p/transport/quic"
+	"github.com/libp2p/go-libp2p/p2p/transport/quicreuse"
 	"github.com/libp2p/go-libp2p/p2p/transport/tcp"
 	ma "github.com/multiformats/go-multiaddr"
+	"github.com/quic-go/quic-go"
+	"go.uber.org/fx"
 
 	"github.com/oioio-space/inkwell/internal/transport"
 	"github.com/oioio-space/inkwell/internal/transport/frame"
 	wire "github.com/oioio-space/inkwell/protocol"
+	"github.com/oioio-space/inkwell/protocol/syncack"
 )
 
-// ProtocolSync is the libp2p protocol of the unidirectional sync streams.
-const ProtocolSync = "/inkwell/sync/1.0.0"
+// ProtocolSync is the libp2p protocol of the unidirectional sync streams: the
+// opener writes frames, the responder writes only its acceptance ACK (spec §8.7,
+// protocol/syncack).
+const ProtocolSync = "/inkwell/sync/2.0.0"
 
 const (
 	// memberTag protects the connections of admitted peers from the
@@ -102,13 +108,15 @@ const (
 	// fails; it is re-armed each time a chunk of the frame is written, so the
 	// time a frame takes is not bounded, only its stalls are.
 	writeTimeout = frame.WriteIdle
-	// openTimeout bounds opening the outbound stream.
-	openTimeout = 15 * time.Second
+	// openTimeout bounds opening an outbound stream and, for a sync stream,
+	// reading its ACK (spec §8.7.4), and the responder's write of the ACK.
+	openTimeout = syncack.Budget
 	// upTimeout bounds how long an inbound stream waits for its peer to be
-	// announced, before it is reset.
-	upTimeout = 30 * time.Second
+	// announced, counted from its ACK, before it is reset (rule P-10).
+	upTimeout = syncack.UpWait
 	// reorderWait bounds how long a new inbound stream waits for the one it
-	// replaces to be read to its end, before it is read anyway. It is long
+	// replaces to be read to its end, before it is read anyway (for sync
+	// streams, syncack.ReorderWait, spec §8.7.3). It is long
 	// because a slow consumer holds the old stream up, and only a stalled
 	// sender should make it give up.
 	reorderWait = time.Minute
@@ -155,6 +163,29 @@ type Options struct {
 	// onDial, if not nil, is told of each dial attempt of a wanted peer, before
 	// it starts; tests use it to check the order of the attempts.
 	onDial func(peer.ID, []ma.Multiaddr)
+	// skipAck, for TestPeerUpLatency only, announces a peer when its stream opens instead of after
+	// its ACK (spec §8.7): the measurement's « without » half.
+	skipAck bool
+	// beforeAck, if not nil, is called by the responder of a sync stream once its checks accept it,
+	// before it writes the ACK; false resets the stream instead. Tests use it to delay or refuse an
+	// acceptance.
+	beforeAck func(network.Conn) bool
+	// afterAck, if not nil, is called by the responder of a sync stream right after it wrote the
+	// ACK; tests use it to hold a handler there.
+	afterAck func(network.Conn)
+	// ackHold, if not nil, is called by the responder of an inbound stream of either ordered lane
+	// (sync or bulk) once its checks accept it, right before it writes the ACK; tests use it to hold
+	// a stream in its acceptance.
+	ackHold func(lane string, s network.Stream)
+	// afterAckLane, if not nil, is called by the responder of an inbound stream of either ordered lane
+	// right after it wrote the ACK; tests use it to hold a handler there.
+	afterAckLane func(lane string, c network.Conn)
+	// quicReuse are extra options of the QUIC connection manager, after the node's own; tests use
+	// them to put QUIC on a simulated network.
+	quicReuse []quicreuse.Option
+	// quicWindows, if not nil, replaces the QUIC initial stream and connection receive windows
+	// (rule P-13); only the witness arm of the default windows uses it.
+	quicWindows *[2]uint64
 	// Relays are the relays to use, as multiaddrs ending in /p2p/<id>. With
 	// at least one, the node reserves a slot on them so that peers can reach
 	// it from any network, dials peers through them when it has no better
@@ -206,20 +237,16 @@ type queued struct {
 type peerState struct {
 	out  network.Stream // the stream we write on; nil while none is open
 	wsem chan struct{}  // capacity 1: held while writing to out
-	// inTail is closed when the last inbound stream of the peer is done; the
-	// next one waits for it to keep the messages in order.
-	inTail chan struct{}
-	// The bulk lane's counterparts of out, wsem and inTail; see Bulk.
-	bulkOut  network.Stream
-	bulkSem  chan struct{}
-	bulkTail chan struct{}
-	name     transport.PeerID
-	id       peer.ID
+	// The bulk lane's counterparts of out and wsem; see Bulk.
+	bulkOut network.Stream
+	bulkSem chan struct{}
+	name    transport.PeerID
+	id      peer.ID
 	// connected: libp2p has at least one connection to the peer.
 	connected bool
 	// admitted: Options.Admit accepted the peer when it connected.
 	admitted bool
-	// opening: a goroutine is opening the outbound stream.
+	// opening: the outbound stream is being opened or its predecessor is releasing its slot.
 	opening bool
 	// up: PeerUp was announced and PeerDown has not been yet.
 	up bool
@@ -243,6 +270,18 @@ type Node struct {
 	chg    chan struct{}
 	budget *frame.Budget
 	peers  map[peer.ID]*peerState
+	// syncLane is the ordered lane of the inbound sync streams (spec §8.7.3);
+	// the bulk lane is the Bulk's. nextIn names the inbound streams of both.
+	syncLane *lane
+	nextIn   uint64
+	// connWaits are the cancels of the contexts tied to a connection's life
+	// (connContext), under mu.
+	connWaits map[network.Conn]map[*context.CancelFunc]struct{}
+	// born is when the node started: the clock of the inbound orders.
+	born time.Time
+	// busyRefusals counts the inbound sync streams refused for capacity,
+	// busyRetries the refusals for capacity read as an opener (P-8).
+	busyRefusals, busyRetries atomic.Uint64
 	// lmu guards stats, the link metrics. Order: mu, then lmu. lmu is a leaf:
 	// nothing under it takes mu or calls into libp2p or QUIC.
 	lmu   sync.Mutex
@@ -362,6 +401,8 @@ func New(ctx context.Context, key ed25519.PrivateKey, o Options) (*Node, error) 
 		chg:       make(chan struct{}),
 		budget:    frame.NewBudget(maxBuffered),
 		peers:     make(map[peer.ID]*peerState),
+		connWaits: make(map[network.Conn]map[*context.CancelFunc]struct{}),
+		born:      time.Now(),
 		stats:     make(map[peer.ID]*peerLink),
 		want:      make(map[peer.ID]*wanted),
 		held:      make(map[peer.ID]hold),
@@ -371,6 +412,12 @@ func New(ctx context.Context, key ed25519.PrivateKey, o Options) (*Node, error) 
 		relays:    relays,
 		relayDown: make(map[peer.ID]chan struct{}, len(relays)),
 		reserved:  make(map[peer.ID]bool, len(relays)),
+	}
+	n.syncLane = &lane{
+		name: "sync", orders: make(map[peer.ID]*inbound), budget: n.budget, maxCost: maxBuffered,
+		pushLocked: func(ps *peerState, payload []byte, cost int) {
+			n.pushLocked(transport.Event{Kind: transport.Message, Peer: ps.name, Payload: payload}, cost)
+		},
 	}
 	n.circuit = circuitPrefixes(relays)
 	n.book = newAddrBook(o.Book, local, time.Now(), cmp.Or(o.Log, slog.New(slog.DiscardHandler)))
@@ -383,6 +430,7 @@ func New(ctx context.Context, key ed25519.PrivateKey, o Options) (*Node, error) 
 		libp2p.Identity(priv),
 		libp2p.NoTransports,
 		libp2p.Transport(libp2pquic.NewTransport),
+		quicReuse(o),
 		// No SO_REUSEPORT: with it, a second Inkwell on the machine binds the same TCP port and
 		// the kernel spreads incoming connections between the two, so handshakes reach the
 		// wrong process. A busy port must fail the bind, so the caller falls back to a free one.
@@ -433,6 +481,7 @@ func New(ctx context.Context, key ed25519.PrivateKey, o Options) (*Node, error) 
 			n.onConn(c)
 		},
 		DisconnectedF: func(_ network.Network, c network.Conn) {
+			n.connLost(c)
 			n.probes.detach(c)
 			n.onDisconn(c)
 		},
@@ -473,6 +522,32 @@ func New(ctx context.Context, key ed25519.PrivateKey, o Options) (*Node, error) 
 	n.stop = stop
 	n.mu.Unlock()
 	return n, nil
+}
+
+// quicReuse is the node's QUIC connection manager (rule P-13, spec §16.1): the
+// initial receive windows of every QUIC connection are QUICInitialStreamWindow
+// per stream and QUICInitialConnectionWindow per connection, so that the
+// streams of both ordered lanes it leaves unread never take the credit of the
+// stream it reads, and the connection window is reserved with the resource
+// manager when the connection opens. Otherwise it is libp2p's default manager.
+func quicReuse(o Options) libp2p.Option {
+	windows := [2]uint64{wire.QUICInitialStreamWindow, wire.QUICInitialConnectionWindow}
+	if o.quicWindows != nil {
+		windows = *o.quicWindows
+	}
+	return libp2p.QUICReuse(func(key quic.StatelessResetKey, token quic.TokenGeneratorKey, rm network.ResourceManager, life fx.Lifecycle, extra ...quicreuse.Option) (*quicreuse.ConnManager, error) {
+		opts := []quicreuse.Option{
+			quicreuse.VerifySourceAddress(rm.VerifySourceAddress),
+			quicreuse.InitialReceiveWindows(windows[0], windows[1]),
+			quicreuse.AccountInitialConnectionWindow(rm),
+		}
+		cm, err := quicreuse.NewConnManager(key, token, append(opts, extra...)...)
+		if err != nil {
+			return nil, err
+		}
+		life.Append(fx.StopHook(cm.Close))
+		return cm, nil
+	}, o.quicReuse...)
 }
 
 // newResourceManager returns the libp2p resource manager with the limits of a

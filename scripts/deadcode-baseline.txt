@@ -10,3 +10,14 @@ github.com/oioio-space/inkwell/internal/typst.Attachments
 # Public protocol API (ADR 0034: the protocol module is a reusable library): used by protocol/conformance's link-probe runner and vectors, not by inkwell's binaries.
 github.com/oioio-space/inkwell/protocol/linkprobe.StepLoss
 github.com/oioio-space/inkwell/protocol/linkprobe.StepRTT
+# PU1 / PU1b / PU1c: public reference API used by protocol/conformance when replaying the frozen corpora.
+github.com/oioio-space/inkwell/protocol/syncack.Action.String
+github.com/oioio-space/inkwell/protocol/syncack.NewOpener
+github.com/oioio-space/inkwell/protocol/syncack.Opener.Step
+github.com/oioio-space/inkwell/protocol/syncack.Outcome.String
+github.com/oioio-space/inkwell/protocol/syncack.ParseOp
+github.com/oioio-space/inkwell/protocol/syncack.ParseReadEnd
+github.com/oioio-space/inkwell/protocol/syncack.ParseRole
+github.com/oioio-space/inkwell/protocol/syncack.ProbeSchedule.Attempt
+github.com/oioio-space/inkwell/protocol/syncack.ProbeSchedule.Byte
+github.com/oioio-space/inkwell/protocol/syncack.QUICWindowOK

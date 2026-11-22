@@ -1,0 +1,695 @@
+{
+  "spec": "inkwell protocol",
+  "spec_version": "2.0.0-draft.11",
+  "generator": "docs/protocol/vectors/generate.go.txt (real codecs; proposed vectors use encoders written from spec.md)",
+  "vectors": [
+    {
+      "id": "sync-order-at-bound",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "places": 2,
+        "reorder_wait_ms": 60000
+      },
+      "description": "Deux places tenues : le troisième flux est refusé pour capacité (P-8).",
+      "decoder": "sync_order",
+      "verdict": "accept",
+      "scope": "transport",
+      "events": [
+        {
+          "at_ms": 0,
+          "expect": "place",
+          "op": "arrive",
+          "stream": 1
+        },
+        {
+          "at_ms": 10,
+          "expect": "place",
+          "op": "arrive",
+          "stream": 2
+        },
+        {
+          "at_ms": 20,
+          "expect": "busy",
+          "op": "arrive",
+          "stream": 3
+        }
+      ]
+    },
+    {
+      "id": "sync-order-recovery",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "places": 2,
+        "reorder_wait_ms": 60000
+      },
+      "description": "Une place rendue (flux lu jusqu'à sa fin) : le flux suivant réveillé, le nouvel essai placé.",
+      "decoder": "sync_order",
+      "verdict": "accept",
+      "scope": "transport",
+      "events": [
+        {
+          "at_ms": 0,
+          "expect": "place",
+          "op": "arrive",
+          "stream": 1
+        },
+        {
+          "at_ms": 1,
+          "expect": "acked",
+          "op": "ack",
+          "stream": 1
+        },
+        {
+          "at_ms": 10,
+          "expect": "place",
+          "op": "arrive",
+          "stream": 2
+        },
+        {
+          "at_ms": 11,
+          "expect": "acked",
+          "op": "ack",
+          "stream": 2
+        },
+        {
+          "at_ms": 20,
+          "expect": "busy",
+          "op": "arrive",
+          "stream": 3
+        },
+        {
+          "at_ms": 30,
+          "delivered": true,
+          "expect": "leave",
+          "op": "end",
+          "stream": 1,
+          "wake": [
+            2
+          ]
+        },
+        {
+          "at_ms": 80,
+          "expect": "place",
+          "op": "arrive",
+          "stream": 4
+        },
+        {
+          "at_ms": 81,
+          "expect": "wait",
+          "op": "ready",
+          "stream": 4
+        }
+      ]
+    },
+    {
+      "id": "sync-order-turns",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "places": 2,
+        "reorder_wait_ms": 60000
+      },
+      "description": "Le flux de tête lit ; le second attend son tour.",
+      "decoder": "sync_order",
+      "verdict": "accept",
+      "scope": "transport",
+      "events": [
+        {
+          "at_ms": 0,
+          "expect": "place",
+          "op": "arrive",
+          "stream": 1
+        },
+        {
+          "at_ms": 0,
+          "expect": "turn",
+          "op": "ready",
+          "stream": 1
+        },
+        {
+          "at_ms": 5,
+          "expect": "place",
+          "op": "arrive",
+          "stream": 2
+        },
+        {
+          "at_ms": 5,
+          "expect": "wait",
+          "op": "ready",
+          "stream": 2
+        },
+        {
+          "at_ms": 40,
+          "delivered": true,
+          "expect": "leave",
+          "op": "end",
+          "stream": 1,
+          "wake": [
+            2
+          ]
+        },
+        {
+          "at_ms": 40,
+          "expect": "turn",
+          "op": "ready",
+          "stream": 2
+        }
+      ]
+    },
+    {
+      "id": "sync-order-remove-waiting",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "places": 2,
+        "reorder_wait_ms": 60000
+      },
+      "description": "Un flux parti sans trame pendant qu'il attendait quitte l'ordre aussitôt ; le suivant attend le flux de tête (P-9).",
+      "decoder": "sync_order",
+      "verdict": "accept",
+      "scope": "transport",
+      "events": [
+        {
+          "at_ms": 0,
+          "expect": "place",
+          "op": "arrive",
+          "stream": 1
+        },
+        {
+          "at_ms": 5,
+          "expect": "place",
+          "op": "arrive",
+          "stream": 2
+        },
+        {
+          "at_ms": 10,
+          "delivered": false,
+          "expect": "leave",
+          "op": "end",
+          "stream": 2,
+          "wake": []
+        },
+        {
+          "at_ms": 20,
+          "expect": "place",
+          "op": "arrive",
+          "stream": 3
+        },
+        {
+          "at_ms": 20,
+          "expect": "wait",
+          "op": "ready",
+          "stream": 3
+        },
+        {
+          "at_ms": 50,
+          "delivered": true,
+          "expect": "leave",
+          "op": "end",
+          "stream": 1,
+          "wake": [
+            3
+          ]
+        },
+        {
+          "at_ms": 50,
+          "expect": "turn",
+          "op": "ready",
+          "stream": 3
+        }
+      ]
+    },
+    {
+      "id": "sync-order-remove-ahead",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "places": 2,
+        "reorder_wait_ms": 60000
+      },
+      "description": "Le flux devant un flux en attente part sans trame : le flux en attente est réveillé et lit (P-9).",
+      "decoder": "sync_order",
+      "verdict": "accept",
+      "scope": "transport",
+      "events": [
+        {
+          "at_ms": 0,
+          "expect": "place",
+          "op": "arrive",
+          "stream": 1
+        },
+        {
+          "at_ms": 5,
+          "expect": "place",
+          "op": "arrive",
+          "stream": 2
+        },
+        {
+          "at_ms": 5,
+          "expect": "wait",
+          "op": "ready",
+          "stream": 2
+        },
+        {
+          "at_ms": 9,
+          "delivered": false,
+          "expect": "leave",
+          "op": "end",
+          "stream": 1,
+          "wake": [
+            2
+          ]
+        },
+        {
+          "at_ms": 9,
+          "expect": "turn",
+          "op": "ready",
+          "stream": 2
+        }
+      ]
+    },
+    {
+      "id": "sync-order-byzantine-loop",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "places": 2,
+        "reorder_wait_ms": 60000
+      },
+      "description": "Un premier flux tenu ouvert, les suivants réinitialisés pendant leur accusé : jamais plus de deux places, aucune gardée (P-8, P-9).",
+      "decoder": "sync_order",
+      "verdict": "accept",
+      "scope": "transport",
+      "events": [
+        {
+          "at_ms": 0,
+          "expect": "place",
+          "op": "arrive",
+          "stream": 1
+        },
+        {
+          "at_ms": 1,
+          "expect": "place",
+          "op": "arrive",
+          "stream": 2
+        },
+        {
+          "at_ms": 2,
+          "delivered": false,
+          "expect": "leave",
+          "op": "end",
+          "stream": 2,
+          "wake": []
+        },
+        {
+          "at_ms": 3,
+          "expect": "place",
+          "op": "arrive",
+          "stream": 3
+        },
+        {
+          "at_ms": 4,
+          "delivered": false,
+          "expect": "leave",
+          "op": "end",
+          "stream": 3,
+          "wake": []
+        },
+        {
+          "at_ms": 5,
+          "expect": "place",
+          "op": "arrive",
+          "stream": 4
+        },
+        {
+          "at_ms": 6,
+          "delivered": false,
+          "expect": "leave",
+          "op": "end",
+          "stream": 4,
+          "wake": []
+        },
+        {
+          "at_ms": 7,
+          "expect": "place",
+          "op": "arrive",
+          "stream": 5
+        },
+        {
+          "at_ms": 8,
+          "expect": "busy",
+          "op": "arrive",
+          "stream": 6
+        }
+      ]
+    },
+    {
+      "id": "sync-order-eof-empty-waiting",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "places": 2,
+        "reorder_wait_ms": 60000
+      },
+      "description": "Un flux en attente fermé en écriture par l'ouvreur sans aucune trame quitte l'ordre aussitôt, comme un flux réinitialisé (P-9).",
+      "decoder": "sync_order",
+      "verdict": "accept",
+      "scope": "transport",
+      "events": [
+        {
+          "at_ms": 0,
+          "expect": "place",
+          "op": "arrive",
+          "stream": 1
+        },
+        {
+          "at_ms": 5,
+          "expect": "place",
+          "op": "arrive",
+          "stream": 2
+        },
+        {
+          "at_ms": 5,
+          "expect": "wait",
+          "op": "ready",
+          "stream": 2
+        },
+        {
+          "at_ms": 10,
+          "delivered": false,
+          "expect": "leave",
+          "op": "end",
+          "stream": 2,
+          "wake": []
+        },
+        {
+          "at_ms": 20,
+          "expect": "place",
+          "op": "arrive",
+          "stream": 3
+        },
+        {
+          "at_ms": 20,
+          "expect": "wait",
+          "op": "ready",
+          "stream": 3
+        }
+      ]
+    },
+    {
+      "id": "sync-order-expire",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "places": 2,
+        "reorder_wait_ms": 60000
+      },
+      "description": "Attente de son tour : 60 s, puis le flux lit quand même (l'ordre est abandonné).",
+      "decoder": "sync_order",
+      "verdict": "accept",
+      "scope": "transport",
+      "events": [
+        {
+          "at_ms": 0,
+          "expect": "place",
+          "op": "arrive",
+          "stream": 1
+        },
+        {
+          "at_ms": 100,
+          "expect": "place",
+          "op": "arrive",
+          "stream": 2
+        },
+        {
+          "at_ms": 60099,
+          "expect": "wait",
+          "op": "ready",
+          "stream": 2
+        },
+        {
+          "at_ms": 60100,
+          "expect": "turn",
+          "op": "ready",
+          "stream": 2
+        }
+      ]
+    },
+    {
+      "id": "sync-order-refused-leaves",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "places": 2,
+        "reorder_wait_ms": 60000
+      },
+      "description": "Un flux refusé (pair non admis) part sans trame et rend sa place.",
+      "decoder": "sync_order",
+      "verdict": "accept",
+      "scope": "transport",
+      "events": [
+        {
+          "at_ms": 0,
+          "expect": "place",
+          "op": "arrive",
+          "stream": 1
+        },
+        {
+          "at_ms": 1,
+          "delivered": false,
+          "expect": "leave",
+          "op": "end",
+          "stream": 1,
+          "wake": []
+        },
+        {
+          "at_ms": 2,
+          "expect": "place",
+          "op": "arrive",
+          "stream": 2
+        },
+        {
+          "at_ms": 2,
+          "expect": "turn",
+          "op": "ready",
+          "stream": 2
+        }
+      ]
+    },
+    {
+      "id": "sync-refusal-busy-first",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "attempt": 0,
+        "budget_ms": 15000,
+        "elapsed_ms": 0,
+        "reset_code": 4098,
+        "role": "session"
+      },
+      "description": "Réinitialisation 0x1002 avant l'accusé : refus pour capacité, nouvel essai après 50 ms.",
+      "decoder": "sync_refusal",
+      "verdict": "accept",
+      "expect": {
+        "action": "retry",
+        "wait_ms": 50
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "sync-refusal-busy-doubled",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "attempt": 3,
+        "budget_ms": 15000,
+        "elapsed_ms": 2000,
+        "reset_code": 4098,
+        "role": "session"
+      },
+      "description": "Troisième refus pour capacité : attente doublée (400 ms).",
+      "decoder": "sync_refusal",
+      "verdict": "accept",
+      "expect": {
+        "action": "retry",
+        "wait_ms": 400
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "sync-refusal-busy-capped",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "attempt": 6,
+        "budget_ms": 15000,
+        "elapsed_ms": 4000,
+        "reset_code": 4098,
+        "role": "session"
+      },
+      "description": "Attente plafonnée à 1 s.",
+      "decoder": "sync_refusal",
+      "verdict": "accept",
+      "expect": {
+        "action": "retry",
+        "wait_ms": 1000
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "sync-refusal-busy-in-budget",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "attempt": 0,
+        "budget_ms": 15000,
+        "elapsed_ms": 14949,
+        "reset_code": 4098,
+        "role": "session"
+      },
+      "description": "Nouvel essai qui tient dans les 15 s de l'ouverture.",
+      "decoder": "sync_refusal",
+      "verdict": "accept",
+      "expect": {
+        "action": "retry",
+        "wait_ms": 50
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "sync-refusal-busy-out-of-budget",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "attempt": 0,
+        "budget_ms": 15000,
+        "elapsed_ms": 14950,
+        "reset_code": 4098,
+        "role": "session"
+      },
+      "description": "Nouvel essai qui dépasserait les 15 s : ClosePeer (P-5).",
+      "decoder": "sync_refusal",
+      "verdict": "accept",
+      "expect": {
+        "action": "close_peer"
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "sync-refusal-busy-move",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "attempt": 1,
+        "budget_ms": 15000,
+        "elapsed_ms": 100,
+        "reset_code": 4098,
+        "role": "move"
+      },
+      "description": "Passage au direct refusé pour capacité : nouvel essai, session inchangée.",
+      "decoder": "sync_refusal",
+      "verdict": "accept",
+      "expect": {
+        "action": "retry",
+        "wait_ms": 100
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "sync-refusal-busy-move-out-of-budget",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "attempt": 0,
+        "budget_ms": 15000,
+        "elapsed_ms": 14990,
+        "reset_code": 4098,
+        "role": "move"
+      },
+      "description": "Passage au direct, budget épuisé : abandon.",
+      "decoder": "sync_refusal",
+      "verdict": "accept",
+      "expect": {
+        "action": "abandon"
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "sync-refusal-other-code",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "attempt": 0,
+        "budget_ms": 15000,
+        "elapsed_ms": 100,
+        "reset_code": 0,
+        "role": "session"
+      },
+      "description": "Réinitialisation d'un autre code : refus, ClosePeer (P-4).",
+      "decoder": "sync_refusal",
+      "verdict": "accept",
+      "expect": {
+        "action": "close_peer"
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "sync-refusal-negotiation-code",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "attempt": 0,
+        "budget_ms": 15000,
+        "elapsed_ms": 100,
+        "reset_code": 4097,
+        "role": "session"
+      },
+      "description": "Code 0x1001 (négociation échouée) : refus.",
+      "decoder": "sync_refusal",
+      "verdict": "accept",
+      "expect": {
+        "action": "close_peer"
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "sync-refusal-eof",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "attempt": 0,
+        "budget_ms": 15000,
+        "elapsed_ms": 100,
+        "role": "session"
+      },
+      "description": "Fin du flux avant l'accusé : refus, ClosePeer.",
+      "decoder": "sync_refusal",
+      "verdict": "accept",
+      "expect": {
+        "action": "close_peer"
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "sync-refusal-other-move",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "attempt": 0,
+        "budget_ms": 15000,
+        "elapsed_ms": 100,
+        "reset_code": 0,
+        "role": "move"
+      },
+      "description": "Passage au direct refusé (autre code) : abandon.",
+      "decoder": "sync_refusal",
+      "verdict": "accept",
+      "expect": {
+        "action": "abandon"
+      },
+      "scope": "transport"
+    }
+  ]
+}

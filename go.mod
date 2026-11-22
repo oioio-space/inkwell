@@ -126,4 +126,6 @@ replace github.com/oioio-space/inkwell/protocol => ./protocol
 // Fork of go-libp2p v0.51.0 with a one-commit fix: Swarm.nonProxyAddr panics (nil
 // transport) when a hole-punch dial races with Swarm.Close. Upstream issue/PR:
 // https://github.com/libp2p/go-libp2p/issues/3575 (fix: https://github.com/libp2p/go-libp2p/pull/3576). Remove this replace once the fix is released upstream.
-replace github.com/libp2p/go-libp2p => github.com/oioio-space/go-libp2p v0.51.1-0.20261109121346-cae49c803966
+// Second commit (block PU1c, branch inkwell/quicreuse-initial-windows of the fork): quicreuse options
+// InitialReceiveWindows and AccountInitialConnectionWindow (docs/plans/2026-11-17-pu1c-go-libp2p-fork.patch).
+replace github.com/libp2p/go-libp2p => github.com/oioio-space/go-libp2p v0.51.1-0.20261122111250-6de4a5e06d73

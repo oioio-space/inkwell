@@ -11,18 +11,19 @@ import (
 
 	"github.com/oioio-space/inkwell/internal/transport"
 	"github.com/oioio-space/inkwell/internal/transport/frame"
+	"github.com/oioio-space/inkwell/protocol/syncack"
 )
 
-// ProtocolBulk is the libp2p protocol of the bulk streams, which carry the
-// binary files of a project (package blob). It is a second protocol, hence a
-// second QUIC stream per direction: a hundred megabytes in flight never delays
-// a keystroke of the sync protocol, because QUIC schedules streams
-// independently and the sync stream has no byte in front of it to wait for.
-const ProtocolBulk = "/inkwell/bulk/1.0.0"
+// ProtocolBulk carries blobs on a separate ordered stream with its own receive
+// queue. On QUIC, both lanes share connection credit (spec §8.7.3).
+// Since version 2.0.0 (spec §8.1, rule P-14) its streams have the lifecycle of
+// the sync streams: the responder's ACK, two places per peer, the order and the
+// refusal for capacity; /inkwell/bulk/1.0.0 is neither served nor opened.
+const ProtocolBulk = "/inkwell/bulk/2.0.0"
 
 const (
-	// maxBulkStreams bounds the bulk streams of one peer: one in use, one
-	// being closed after the link moved to a direct connection.
+	// maxBulkStreams bounds the bulk streams of one peer for the resource
+	// manager, above the lane's two places, which refuse the third (P-14).
 	maxBulkStreams = 4
 	// bulkBuffered bounds the received bytes waiting for Bulk.Recv, across
 	// peers: one largest frame.
@@ -44,6 +45,7 @@ const (
 type Bulk struct {
 	n      *Node
 	budget *frame.Budget
+	lane   *lane
 	wake   chan struct{} // capacity 1: "the queue may be non-empty"
 	queue  []queued      // under Node.mu
 }
@@ -59,6 +61,12 @@ func (n *Node) Bulk() *Bulk {
 	defer n.mu.Unlock()
 	if n.bulk == nil {
 		b := &Bulk{n: n, budget: frame.NewBudget(bulkBuffered), wake: make(chan struct{}, 1)}
+		b.lane = &lane{
+			name: "bulk", orders: make(map[peer.ID]*inbound), budget: b.budget, maxCost: bulkBuffered,
+			pushLocked: func(ps *peerState, payload []byte, cost int) {
+				b.pushLocked(transport.Event{Kind: transport.Message, Peer: ps.name, Payload: payload}, cost)
+			},
+		}
 		if n.closed {
 			b.budget.Close()
 		}
@@ -122,66 +130,10 @@ func (b *Bulk) Recv(ctx context.Context) (transport.Event, error) {
 }
 
 // handle serves a bulk stream opened by a remote: it delivers its frames as
-// Messages for as long as it lasts. Streams of the same peer are read one
-// after the other, so that its messages keep their order.
-func (b *Bulk) handle(s network.Stream) {
-	n := b.n
-	defer func() { _ = s.Reset() }()
-	n.mu.Lock()
-	if n.closed {
-		n.mu.Unlock()
-		return
-	}
-	n.wg.Add(1)
-	n.mu.Unlock()
-	defer n.wg.Done()
-
-	p := s.Conn().RemotePeer()
-	if !n.admitted(p) {
-		return
-	}
-	ctx, cancel := context.WithTimeout(n.ctx, upTimeout)
-	defer cancel()
-	ps, ok := n.waitUp(ctx, p)
-	if !ok {
-		return
-	}
-	n.mu.Lock()
-	prev, mine := ps.bulkTail, make(chan struct{})
-	ps.bulkTail = mine
-	n.mu.Unlock()
-	defer close(mine)
-	if prev != nil {
-		wctx, wcancel := context.WithTimeout(n.ctx, reorderWait)
-		select {
-		case <-prev:
-		case <-wctx.Done():
-		}
-		wcancel()
-	}
-	for {
-		var cost int
-		payload, err := frame.ReadReserve(s, transport.MaxFrame, func(size int) error {
-			cost = min(size+msgOverhead, bulkBuffered)
-			if !b.budget.Acquire(cost) {
-				cost = 0
-				return transport.ErrClosed
-			}
-			return nil
-		})
-		if err != nil {
-			b.budget.Release(cost)
-			return
-		}
-		n.mu.Lock()
-		if n.peers[p] == ps && ps.up {
-			b.pushLocked(transport.Event{Kind: transport.Message, Peer: ps.name, Payload: payload}, cost)
-		} else {
-			b.budget.Release(cost)
-		}
-		n.mu.Unlock()
-	}
-}
+// Messages for as long as it lasts, in the order of the peer's bulk streams,
+// with the lifecycle of every ordered lane (spec §8.1, rule P-14; see
+// serveInbound).
+func (b *Bulk) handle(s network.Stream) { b.n.serveInbound(b.lane, s) }
 
 // Send writes payload to peer to as one frame on the bulk stream, with the
 // guarantees of [Node.Send]: writes to one peer are serialised and bounded by
@@ -261,14 +213,13 @@ func (b *Bulk) stream(ctx context.Context, ps *peerState) (network.Stream, error
 	if cur != nil && (!direct || !isCircuit(cur.Conn().RemoteMultiaddr())) {
 		return cur, nil
 	}
+	// The ACK (rule P-14) orders this stream after the one it replaces: the
+	// peer placed it on arrival, before writing the ACK, and nothing is written
+	// before the ACK is read. A refusal for capacity is retried within the
+	// budget; any other refusal, or the budget's end, fails this Send only.
 	octx, cancel := context.WithTimeout(ctx, openTimeout)
 	defer cancel()
-	octx = network.WithAllowLimitedConn(octx, "inkwell bulk")
-	octx = network.WithNoDial(octx, "the peer is connected")
-	if direct {
-		octx = network.WithForceDirectDial(octx, "bulk on a direct connection")
-	}
-	s, err := n.h.NewStream(octx, ps.id, ProtocolBulk)
+	s, err := n.openAcked(octx, ps.id, ProtocolBulk, syncack.RoleMove, direct)
 	if err != nil {
 		return nil, fmt.Errorf("p2p: open bulk stream to %s: %w", ps.name, err)
 	}
