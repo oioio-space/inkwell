@@ -1,0 +1,58 @@
+# FROZEN 2026-11-22 after a cross-family review (Codex drafted, Claude Opus reviewed). Supersedes PU1n (c7c90c7) because its
+# checker read a C5 sampler as a scenario report and expected seeded JSON from scenarios 1-4.
+# The simulation commands and acceptance bounds carry over from PU1n.
+# Evidence and runner contract: docs/plans/2026-11-22-pu1n2.md. Every command is capped: 240 + 1000 + 1080 = 2320 s
+# ≤ 2700 s (rule G-1).
+max_minutes = 45
+raw_results = [
+    "docs/plans/2026-11-16-pu1-peerup-after-acceptance.md",
+    "docs/plans/2026-11-22-pu1n2.md",
+    "gates/PU1/*",
+]
+
+[[criteria]]
+# The strict run reports 1-4 once each in its summary. Save that output before run.sh resets
+# its state for the characterize run, whose three clause reports have exact filenames.
+id = "netsim"
+command = '''bash -o pipefail -s <<'SH'
+mkdir -p .task/pu1n2-results &&
+timeout -k 10 240 ./scripts/heavy.sh mise run e2e:build || exit $?
+NETSIM_SCENARIOS="1 2 3 4" NETSIM_SEEDS="20771 20772" NETSIM_EXPECT=strict INKWELL_E2E_BROWSER=chromium INKWELL_PERF_LOAD_WAIT=180 timeout -k 10 1000 ./scripts/heavy.sh --exclusive ./scripts/netsim/run.sh 2>&1 | tee .task/pu1n2-results/strict.log
+a=$?
+NETSIM_SCENARIOS="5 8" NETSIM_VARIANTS="editor reader" NETSIM_SEEDS=20772 NETSIM_EXPECT=characterize INKWELL_E2E_BROWSER=chromium INKWELL_PERF_LOAD_WAIT=180 timeout -k 10 1080 ./scripts/heavy.sh --exclusive ./scripts/netsim/run.sh
+b=$?
+python3 -I - "$a" "$b" <<'PY'
+import json
+import pathlib
+import re
+import sys
+
+bad = []
+strict_log = pathlib.Path(".task/pu1n2-results/strict.log").read_text(errors="replace")
+_, marker, summary = strict_log.rpartition("\nnetsim results\n")
+# The summary formats run and title in columns of 14 and 52 characters.
+rows = re.findall(r"^  ([1-4]) {14}.{52} (PASS|FAIL) ", summary, re.MULTILINE) if marker else []
+for scenario in "1234":
+    statuses = [status for run, status in rows if run == scenario]
+    if statuses != ["PASS"]:
+        bad.append(f"strict scenario {scenario}: expected one PASS row, found {statuses}")
+
+results = pathlib.Path(".task/netsim/results")
+# Allow only the expected <run>.json reports. Sidecars such as <run>-c5.json are outside this list.
+for run in ("5-s20772", "8-editor-s20772", "8-reader-s20772"):
+    path = results / f"{run}.json"
+    if not path.is_file():
+        bad.append(f"{path.name} missing")
+        continue
+    report = json.loads(path.read_text())
+    clauses = report["clauses"]
+    red = [f'{c["id"]} {c["status"]}' for c in clauses if c["status"] not in ("pass", "known-failure")]
+    if report.get("run") != run or report.get("expect") != "characterize" or not clauses or red:
+        bad.append(f"{path.name}: run {report.get('run')}, expect {report.get('expect')}, "
+                   f"{len(clauses)} clauses, red {red}")
+
+if sys.argv[1:] != ["0", "0"] or bad:
+    sys.exit(f"PU1n2 netsim: exit {sys.argv[1]} (1-4) and {sys.argv[2]} (5, 8), {bad}")
+PY
+SH
+'''
