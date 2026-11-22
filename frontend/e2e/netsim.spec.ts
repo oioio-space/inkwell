@@ -68,6 +68,9 @@ test("scenario 2: symmetric NAT, the link stays relayed", async ({ browser }) =>
   // Long enough for hole punching to try, fail and retry.
   await alice.waitForTimeout(45_000);
   await typeAtEnd(alice, "via le relais ");
+  // Bob types once Alice's sentence has reached him: typing while her letters still arrive interleaves the two
+  // texts (a correct merge), which the contiguous checks below would read as a failure (main, run 45022971739).
+  await expect(bob.locator(".cm-content")).toContainText("via le relais", { timeout: 30_000 });
   await typeAtEnd(bob, "bob aussi");
   await converge(alice, bob, ["via le relais", "bob aussi"], 30_000);
   expect(directPackets(), "packets crossed between the NATs").toBe(0);
