@@ -108,15 +108,25 @@ func (n *Node) AskLobby(ctx context.Context, to transport.PeerID, req []byte) ([
 	if err != nil {
 		return nil, fmt.Errorf("p2p: lobby: open stream to %s: %w", to, err)
 	}
+	return exchangeLobby(ctx, s, to, req)
+}
+
+func exchangeLobby(ctx context.Context, s network.MuxedStream, to transport.PeerID, req []byte) ([]byte, error) {
 	stop := context.AfterFunc(ctx, func() { _ = s.Reset() })
 	defer stop()
-	defer func() { _ = s.Reset() }() // a no-op once the stream is closed in order
+	answered := false
+	defer func() {
+		if answered {
+			_ = s.Close()
+		} else {
+			_ = s.Reset()
+		}
+	}()
 	if err := frame.Write(s, req); err != nil {
 		return nil, fmt.Errorf("p2p: lobby: %w", err)
 	}
-	if err := s.CloseWrite(); err != nil {
-		return nil, fmt.Errorf("p2p: lobby: %w", err)
-	}
+	// The request is length-framed. The host can close its read half as soon as
+	// it replies, canceling our QUIC write half while the reply is still readable.
 	resp, err := frame.Read(s, MaxLobbyResponse)
 	if err != nil {
 		if cerr := ctx.Err(); cerr != nil {
@@ -124,5 +134,6 @@ func (n *Node) AskLobby(ctx context.Context, to transport.PeerID, req []byte) ([
 		}
 		return nil, fmt.Errorf("p2p: lobby: no answer from %s: %w", to, err)
 	}
+	answered = true
 	return resp, nil
 }

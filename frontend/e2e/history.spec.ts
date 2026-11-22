@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -264,8 +265,10 @@ test("ZZ-1 a variant created after pairing reaches the other person when opened 
   await pair(alice, bob);
   await typeAtEnd(alice, "= Commun\n");
   await expect.poll(() => docText(bob)).toContain("Commun");
-  await makeVariant(alice, "v-en-ligne", "Texte de la variante.\n");
-  await openVariant(bob, "v-en-ligne");
+  // The instances keep their history between attempts.
+  const name = `v-en-ligne-${randomUUID()}`;
+  await makeVariant(alice, name, "Texte de la variante.\n");
+  await openVariant(bob, name);
   await expect.poll(() => docText(bob), { timeout: 20_000 }).toContain("Texte de la variante");
 });
 
