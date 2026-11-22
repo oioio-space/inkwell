@@ -36,9 +36,13 @@ ok()   { printf '\033[32m✓ %s\033[0m\n' "$1"; }
 if [[ $staged_only -eq 1 ]]; then
   mapfile -t go_files < <(git diff --cached --name-only --diff-filter=ACM -- '*.go')
 else
-  files="$(find . -type d \( -name .git -o -path './.claude' -o -path './frontend/bindings' -o -path './frontend/node_modules' \) -prune -o -type f -name '*.go' -print)"
+  # The source set is what git knows (tracked, plus untracked files not ignored), not whatever the tree holds at
+  # this instant: a walk of the live tree also entered scratch directories that tests running alongside create
+  # and remove, and failed when one vanished (GitHub run 45030441084).
   go_files=()
-  [[ -z "$files" ]] || mapfile -t go_files <<< "$files"
+  while IFS= read -r -d '' f; do
+    [[ -f "$f" ]] && go_files+=("$f")
+  done < <(git ls-files -z --cached --others --exclude-standard -- '*.go' ':!:.claude' ':!:frontend/bindings' ':!:frontend/node_modules')
 fi
 
 if [[ ${#go_files[@]} -eq 0 ]]; then

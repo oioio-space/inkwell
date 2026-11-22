@@ -200,7 +200,11 @@ jour depuis les notes officielles (`https://go.dev/doc/go1.N`) à chaque montée
 - **règle d'or** : on traite chaque problème à la racine, clairement et simplement, une fois et bien ; quand
   un problème devient trop difficile ou que les correctifs s'enchaînent, on s'arrête, on redéfinit le problème,
   on remet à plat, on reformalise (spec, modèle, mutants, nouvelle porte), puis on fait bien ; jamais de
-  rustine ni de bidouille au coup par coup (2026-11-09, précisée le 2026-11-10).
+  rustine ni de bidouille au coup par coup (2026-11-09, précisée le 2026-11-10). Obligatoire, sans exception
+  (rappel de l'utilisatrice, 2026-11-22, après un correctif qui faisait taire une erreur) : avant d'écrire un
+  correctif, nommer la cause racine avec sa preuve et dire pourquoi le correctif la supprime (dans le message de
+  commit) ; faire taire un symptôme (option qui ignore l'erreur, nouvel essai, délai ou plafond relevé, test sauté
+  ou assoupli) n'est pas un correctif ; quand des échecs se suivent, chercher d'abord leur cause commune.
 
 **Cohérence de l'interface :** une fonctionnalité nouvelle s'intègre à l'existant, jamais en « verrue ».
 Elle doit :
