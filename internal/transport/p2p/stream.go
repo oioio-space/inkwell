@@ -85,11 +85,13 @@ func (n *Node) startOpenLocked(ps *peerState) {
 
 // openOut opens the outbound stream of ps and waits for the peer's ACK, then
 // announces the peer if it is new (spec §8.7.4). A failed sync opening closes
-// the peer unless the failure came from a connection that is already lost.
+// the peer unless it was lost with its connection; a lost one is opened again
+// on a connection that survives.
 func (n *Node) openOut(ps *peerState) {
 	ctx, cancel := context.WithTimeout(n.ctx, openTimeout)
 	defer cancel()
-	s, err := n.openSync(ctx, ps.id, false)
+	before := n.h.Network().ConnsToPeer(ps.id)
+	s, on, err := n.openSync(ctx, ps.id, false)
 	var sample linkSample
 	if err == nil {
 		sample = n.probeLink(ps.id, s, nil) // before mu: it calls into libp2p
@@ -103,14 +105,11 @@ func (n *Node) openOut(ps *peerState) {
 	}
 	if err != nil {
 		closePeer := ps.connected && !n.closed
-		var connErr *network.ConnError
-		if closePeer && errors.As(err, &connErr) {
-			// The error belongs to a lost connection. A surviving connection
-			// may have arrived while ps.opening prevented its own opening.
+		if closePeer && openingLost(err, on, before) {
+			// A surviving connection may have arrived while ps.opening
+			// prevented its own opening.
 			closePeer = false
-			if slices.ContainsFunc(n.h.Network().ConnsToPeer(ps.id), func(c network.Conn) bool {
-				return !c.IsClosed()
-			}) {
+			if n.liveConn(ps.id) {
 				n.startOpenLocked(ps)
 			}
 		}
@@ -142,9 +141,34 @@ func (n *Node) openOut(ps *peerState) {
 	n.maybeUpgrade(ps)
 }
 
+// openingLost reports whether a failed opening was lost with its connection
+// rather than refused (spec §8.7.4): the error is the connection's, or the
+// connection it ran on (on, nil when no stream was obtained) is closed, or,
+// with no stream, every connection to the peer it could run on (before, the
+// ones there when it started) is closed. BasicHost.NewStream reports the last
+// case as errors.New("connection failed"), which names no connection.
+func openingLost(err error, on network.Conn, before []network.Conn) bool {
+	if _, ok := errors.AsType[*network.ConnError](err); ok {
+		return true
+	}
+	if on != nil {
+		return on.IsClosed()
+	}
+	return !slices.ContainsFunc(before, isLive)
+}
+
+func isLive(c network.Conn) bool { return !c.IsClosed() }
+
+// liveConn reports whether a connection to p is open.
+func (n *Node) liveConn(p peer.ID) bool {
+	return slices.ContainsFunc(n.h.Network().ConnsToPeer(p), isLive)
+}
+
 // openSync opens a sync stream to p and reads the peer's ACK (spec §8.7.4, rules
 // P-1, P-4, P-5); with direct, on a direct connection (the move of upgrade).
-func (n *Node) openSync(ctx context.Context, p peer.ID, direct bool) (network.Stream, error) {
+// It also returns the connection the last attempt ran on, nil if it obtained no
+// stream.
+func (n *Node) openSync(ctx context.Context, p peer.ID, direct bool) (network.Stream, network.Conn, error) {
 	role := syncack.RoleSession
 	if direct {
 		role = syncack.RoleMove
@@ -163,26 +187,27 @@ func (n *Node) openSync(ctx context.Context, p peer.ID, direct bool) (network.St
 // the session and the connections untouched; when no retry fits in the budget,
 // the opening ends with the budget and the caller acts as on a refusal (spec
 // §8.7.4: a session opening closes the peer, a move is abandoned, a bulk send
-// fails).
-func (n *Node) openAcked(ctx context.Context, p peer.ID, proto protocol.ID, role syncack.Role, direct bool) (network.Stream, error) {
+// fails). The connection the last attempt ran on is returned too, nil if it
+// obtained no stream.
+func (n *Node) openAcked(ctx context.Context, p peer.ID, proto protocol.ID, role syncack.Role, direct bool) (network.Stream, network.Conn, error) {
 	start := time.Now()
 	for attempt := 0; ; attempt++ {
-		s, err := n.openOnce(ctx, p, proto, direct)
+		s, on, err := n.openOnce(ctx, p, proto, direct)
 		if err == nil || !isBusy(err) {
-			return s, err
+			return s, on, err
 		}
 		n.busyRetries.Add(1)
 		action, wait := syncack.OnRefusal(role, true, time.Since(start), attempt)
 		if action != syncack.Retry { // no retry fits: the opening ends with its budget
 			<-ctx.Done()
-			return nil, err
+			return nil, on, err
 		}
 		t := time.NewTimer(wait)
 		select {
 		case <-t.C:
 		case <-ctx.Done():
 			t.Stop()
-			return nil, ctx.Err()
+			return nil, on, ctx.Err()
 		}
 	}
 }
@@ -194,15 +219,19 @@ func isBusy(err error) bool {
 }
 
 // openOnce is one attempt of openAcked.
-func (n *Node) openOnce(ctx context.Context, p peer.ID, proto protocol.ID, direct bool) (network.Stream, error) {
+func (n *Node) openOnce(ctx context.Context, p peer.ID, proto protocol.ID, direct bool) (network.Stream, network.Conn, error) {
 	ctx = network.WithAllowLimitedConn(ctx, "inkwell "+string(proto))
 	ctx = network.WithNoDial(ctx, "the peer is connected")
 	if direct {
 		ctx = network.WithForceDirectDial(ctx, "upgrade to a direct connection")
 	}
 	s, err := n.h.NewStream(ctx, p, proto)
-	if err != nil || (n.opts.skipAck && proto == ProtocolSync) {
-		return s, err
+	if err != nil {
+		return nil, nil, err
+	}
+	on := s.Conn()
+	if n.opts.skipAck && proto == ProtocolSync {
+		return s, on, nil
 	}
 	// The return of NewStream proves nothing: on the optimistic path no byte of the
 	// peer has arrived yet. The deadline resets the stream, which ends the read.
@@ -213,9 +242,9 @@ func (n *Node) openOnce(ctx context.Context, p peer.ID, proto protocol.ID, direc
 	}
 	if err != nil {
 		_ = s.Reset()
-		return nil, fmt.Errorf("p2p: %s stream to %s not accepted: %w", proto, p, err)
+		return nil, on, fmt.Errorf("p2p: %s stream to %s not accepted: %w", proto, p, err)
 	}
-	return s, nil
+	return s, on, nil
 }
 
 // watchOut returns when the outbound stream s ends, which is the only way to
@@ -457,21 +486,25 @@ func (n *Node) sendFailed(ctx context.Context, ps *peerState, s network.Stream, 
 }
 
 // onConn handles a new libp2p connection of any kind. A relay that connects
-// again means the network is back, so the wanted peers are retried at once; a
-// direct connection to a peer whose stream is relayed upgrades the stream.
+// again means the network is back, so the wanted peers are retried at once. A
+// connected peer with no stream opens one on it: libp2p emits no connectedness
+// change for a connection that replaces a lost one before the loss is reported
+// (it reads the connectedness when it emits), so no onConnected follows (spec
+// §8.7.4). A direct connection to a peer whose stream is relayed upgrades the
+// stream.
 func (n *Node) onConn(c network.Conn) {
 	p := c.RemotePeer()
 	if _, relay := n.relays[p]; relay {
 		n.kickAll()
 		return
 	}
-	if isCircuit(c.RemoteMultiaddr()) {
-		return
-	}
 	n.mu.Lock()
 	ps := n.peers[p]
-	n.mu.Unlock()
 	if ps != nil {
+		n.startOpenLocked(ps)
+	}
+	n.mu.Unlock()
+	if ps != nil && !isCircuit(c.RemoteMultiaddr()) {
 		n.maybeUpgrade(ps)
 	}
 }
@@ -521,7 +554,7 @@ func (n *Node) upgrade(ps *peerState) {
 	}()
 	ctx, cancel := context.WithTimeout(n.ctx, openTimeout)
 	defer cancel()
-	s, err := n.openSync(ctx, ps.id, true)
+	s, _, err := n.openSync(ctx, ps.id, true)
 	if err != nil {
 		return
 	}
