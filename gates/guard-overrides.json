@@ -1729,6 +1729,21 @@
       "id": "f0cd99cd337063df5ff2e75e3a3094acd7cdda9bfbedba0235ba4c20b80735aa",
       "reason": "PU1b/PU1c: tla-check.sh only adds the SyncOrder and InboundLifecycle models with their mutants; no existing run, property or bound changed; checked by the integrator on 2026-11-22.",
       "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "8418ebaf38c587103c7f8db4108caadcd3c1b081729b0eb48b7b53a288dbe3c7",
+      "reason": "CI2 (docs/plans/2026-11-22-ci2-formal-shards.md): the new 5-minute `formal` aggregate job adds a timeout line; every formal shard keeps the original 45-minute limit, none is raised.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "3177912c2e823ca534985f31d7f0cc2e2f9a79d403165d5102921b15953e22fc",
+      "reason": "CI2 (docs/plans/2026-11-22-ci2-formal-shards.md): test:py adds scripts/tla_shards_test.py (every TLA+ run in exactly one shard) to its existing list.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "ff357fb48b908270365f2e2ba5f0b9ffd9e41b792bdb95e9f2ff50429a421f6c",
+      "reason": "CI2 (docs/plans/2026-11-22-ci2-formal-shards.md): tla-check.sh adds opt-in TLA_SHARD dispatch and --list; the full run list, assertions, TLC arguments and mutant verdicts are unchanged.",
+      "decision": "docs/objectif-en-cours.md"
     }
   ]
 }

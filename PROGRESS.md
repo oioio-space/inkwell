@@ -56,7 +56,7 @@ Ordre, sauf décision contraire de l'utilisatrice (le tableau ci-dessus donne le
    - **INV1** (léger) : tout point ouvert porte l'identifiant d'un bloc de cette liste (`mise run inventory`).
 2. **Finir SB2a1** (Ubuntu 24.04), puis **DEP1**, puis **EX0** (registre unique des contributions : posé tôt pour ne jamais exposer l'intérieur aux greffons, W72).
    - **DEP1** (light) — Dependabot PR #4, compatible updates from PR #7, and the W22 version audit. [Evidence and remaining updates](docs/plans/2026-11-22-dep1.md).
-   - **CI2** (light) — the `formal` job split into parallel shards (it hit its 45 min cap after PU1); every model and mutant still run once.
+   - **CI2** (light) — the `formal` job split into parallel shards (it hit its 45 min cap after PU1); every model and mutant still run once. [Measurements and design](docs/plans/2026-11-22-ci2-formal-shards.md); candidate run on GitHub before merge.
    - **CI3** (standard, right after CI2) — the local CI run before each push does not do what GitHub does: on 2026-11-21 and 2026-11-22 five defects were seen only after the push (e2e after WC1, stale `mise.lock`, `formal` job duration, lint walk race, netsim scenario 2). Measure the gap job by job and close it (same commands, same caps) or require a green GitHub run of a candidate branch before any integration; alert when a job nears its time cap (W77).
    - **EX0** (standard) : y entrent U26 et l'ADR 0027 à écrire (registre des types de fichiers), N20 (registre ; coloration des autres langages), N21 et N24 (socle des « Fondations extensibles »).
    - **WAILS1** (W48) — Qualify Wails v3.1.0, its CLI and its webview runtime together. Replay WC1 native close, Streams and Linux GTK4 packaging. [Migration scope](docs/plans/2026-11-22-dep1.md#wails-v310--wails1).
@@ -115,6 +115,7 @@ Les décisions qui demandent de la réflexion (conception, règle de protocole, 
 
 **Travaux en cours (branches non fusionnées et worktrees ; `nom` → bloc ; vérifié par `mise run inventory`) :**
 - `ci.yml` run 45030441084 on `main` failed (`ci`: lint walk race, fixed locally; `formal`: 45 min cap) → CI2
+- `inkwell-ci2` (branch `ci2`), ported to `main`, awaiting its candidate run → CI2
 - `ci.yml` run 44933423541 on `main` failed in `ci-e2e`; `inkwell-e2e3` (branch `e2e3`) → E2E3
 - `ci.yml` run 43884324109 sur `main`, rouge (`ci`, `sidecars-arm64`) → SB2a1, E2E1 (ils la rendent verte)
 - `ci.yml` run 44076092629 sur `main`, rouge (`ci`, `sidecars-arm64`) → SB2a1 (diagnostic Codex du 2026-11-21 : les deux tâches sont corrigées par la candidate)

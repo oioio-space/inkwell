@@ -9,6 +9,7 @@
 # mutant passes. TLC runs through scripts/heavy.sh with a bounded heap.
 #
 #   mise run tla
+#   TLA_SHARD=1/3 mise run tla   # run the same shard as GitHub CI
 #   INKWELL_TLA_XMX=1g INKWELL_TLA_WORKERS=2 mise run tla
 #   INKWELL_TLA_ONLY='^ProjectChange' ./scripts/tla-check.sh   # inner loop: only the runs whose name matches
 set -euo pipefail
@@ -19,11 +20,6 @@ cache="${INKWELL_TLA_CACHE:-${XDG_CACHE_HOME:-$HOME/.cache}/inkwell/tla}"
 jar="$cache/tla2tools.jar"
 logs="$cache/logs"
 heavy="$root/scripts/heavy.sh"
-# TLC's state files (-metadir) go under one directory per run of this script, removed on any exit: a run cut
-# by a timeout or a signal left its states in /tmp, a tmpfs, until it filled (« disk quota exceeded », 2026-11-17).
-metaroot="$(mktemp -d -t inkwell-tla.XXXXXX)"
-trap 'rm -rf "$metaroot"' EXIT INT TERM HUP
-
 # docs/protocol/tla/README.md, "Résultats".
 jar_sha="011267fca25d0752cf18894dd585cd28b96960c112ea8a20b823ea770e7e10cd"
 # Immutable distribution of that exact build: TLA+ VS Code extension 2026.10.301552,
@@ -38,31 +34,51 @@ workers="${INKWELL_TLA_WORKERS:-2}"
 
 die() { printf 'tla: %s\n' "$*" >&2; exit 1; }
 
-command -v java >/dev/null 2>&1 || die "java (11+) is required"
-command -v sha256sum >/dev/null 2>&1 || die "sha256sum is required"
+shard="${TLA_SHARD:-}"
+case "$shard" in
+  ''|1/3|2/3|3/3) ;;
+  *) die "invalid TLA_SHARD '$shard' (expected 1/3, 2/3 or 3/3)" ;;
+esac
 
-mkdir -p "$cache" "$logs"
+list=0
+case "${1:-}" in
+  '') ;;
+  --list) list=1 ;;
+  *) die "usage: tla-check.sh [--list]" ;;
+esac
 
-if [[ ! -f "$jar" ]] || [[ "$(sha256sum "$jar" | cut -d' ' -f1)" != "$jar_sha" ]]; then
-  rm -f "$jar"
-  vsix="$cache/tlaplus-vscode-ide-${vsix_version}.vsix"
-  # fetch_pinned reuses a valid cached copy, else downloads, verifies and renames atomically.
-  python3 -I "$root/scripts/fetch_pinned.py" "$vsix_url" "$vsix_sha" "$vsix"
-  tmp="$(mktemp "$cache/tla2tools.jar.XXXXXX")"
-  if command -v unzip >/dev/null 2>&1; then
-    unzip -p "$vsix" extension/tools/tla2tools.jar >"$tmp"
-  elif command -v python3 >/dev/null 2>&1; then
-    python3 -I -c 'import sys, zipfile; sys.stdout.buffer.write(zipfile.ZipFile(sys.argv[1]).read(sys.argv[2]))' "$vsix" extension/tools/tla2tools.jar >"$tmp"
-  else
-    die "unzip or python3 is required to extract the pinned TLA+ tools"
+if ((!list)); then
+  # TLC's state files (-metadir) go under one directory per run of this script, removed on any exit: a run cut
+  # by a timeout or a signal left its states in /tmp, a tmpfs, until it filled (« disk quota exceeded », 2026-11-17).
+  metaroot="$(mktemp -d -t inkwell-tla.XXXXXX)"
+  trap 'rm -rf "$metaroot"' EXIT INT TERM HUP
+
+  command -v java >/dev/null 2>&1 || die "java (11+) is required"
+  command -v sha256sum >/dev/null 2>&1 || die "sha256sum is required"
+
+  mkdir -p "$cache" "$logs"
+
+  if [[ ! -f "$jar" ]] || [[ "$(sha256sum "$jar" | cut -d' ' -f1)" != "$jar_sha" ]]; then
+    rm -f "$jar"
+    vsix="$cache/tlaplus-vscode-ide-${vsix_version}.vsix"
+    # fetch_pinned reuses a valid cached copy, else downloads, verifies and renames atomically.
+    python3 -I "$root/scripts/fetch_pinned.py" "$vsix_url" "$vsix_sha" "$vsix"
+    tmp="$(mktemp "$cache/tla2tools.jar.XXXXXX")"
+    if command -v unzip >/dev/null 2>&1; then
+      unzip -p "$vsix" extension/tools/tla2tools.jar >"$tmp"
+    elif command -v python3 >/dev/null 2>&1; then
+      python3 -I -c 'import sys, zipfile; sys.stdout.buffer.write(zipfile.ZipFile(sys.argv[1]).read(sys.argv[2]))' "$vsix" extension/tools/tla2tools.jar >"$tmp"
+    else
+      die "unzip or python3 is required to extract the pinned TLA+ tools"
+    fi
+    got="$(sha256sum "$tmp" | cut -d' ' -f1)"
+    if [[ "$got" != "$jar_sha" ]]; then
+      rm -f "$tmp"
+      die "refusing extracted tla2tools.jar: sha256 $got, want $jar_sha"
+    fi
+    mv "$tmp" "$jar"
+    printf 'tla: using %s\n' "$jar" >&2
   fi
-  got="$(sha256sum "$tmp" | cut -d' ' -f1)"
-  if [[ "$got" != "$jar_sha" ]]; then
-    rm -f "$tmp"
-    die "refusing extracted tla2tools.jar: sha256 $got, want $jar_sha"
-  fi
-  mv "$tmp" "$jar"
-  printf 'tla: using %s\n' "$jar" >&2
 fi
 
 fail=0
@@ -73,6 +89,21 @@ run() {
   local name="$1" cfg="$2" module="$3" expect="$4" prop="${5:-}"
   local out="$logs/$name.log" metadir status
   if [[ -n "${INKWELL_TLA_ONLY:-}" && ! "$name" =~ $INKWELL_TLA_ONLY ]]; then
+    return 0
+  fi
+  if [[ -n "$shard" ]]; then
+    local assigned
+    # Family totals and the headroom for InboundLifecycle are recorded in the CI2 plan.
+    case "$name" in
+      RepoGen*|ConnCredit*|WriteBudget*|OISingleInstance*|SyncOrder*|InboundLifecycle*) assigned=1/3 ;;
+      SendPath*|SP1*|SandboxScope*|ProjectChange*) assigned=2/3 ;;
+      SyncIndicator*|LinkProbe*|DirectUpgrade*|PeerUpAck*) assigned=3/3 ;;
+      *) die "no shard assigned to '$name'" ;;
+    esac
+    [[ "$assigned" == "$shard" ]] || return 0
+  fi
+  if ((list)); then
+    printf '%s\n' "$name"
     return 0
   fi
   metadir="$(mktemp -d -p "$metaroot")"

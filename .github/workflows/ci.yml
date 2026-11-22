@@ -17,7 +17,7 @@ jobs:
     # Three parts on three runners (CI1b): `checks` (`ci:checks` after ~10 min of setup), `frontend` (`fe:check`
     # alone: beside test:ci it ran 5 to 15 times slower, runs 43979066870 and 44010837492) and `e2e` (the desktop
     # build and the two-instance end-to-end tests); in one job they passed its 35 min (run 44002604121).
-    # The formal models run in the `formal` job and the impaired-network scenarios once, in the `netsim` job.
+    # The formal models run on separate runners and the impaired-network scenarios once, in the `netsim` job.
     # The checks part keeps the job name `ci`, which frozen gates read through the API (gates/SB2a1.toml, `github`).
     name: ${{ matrix.part == 'checks' && 'ci' || format('ci-{0}', matrix.part) }}
     strategy:
@@ -105,7 +105,7 @@ jobs:
           test -S "${XDG_RUNTIME_DIR}/bus"
           systemd-run --user --scope --quiet --collect -- cat /proc/self/cgroup | grep "/user@${uid}.service/"
       - if: matrix.part == 'checks'
-        run: systemd-run --user --scope --quiet --collect -- mise run ci:checks # the formal models run in the parallel `formal` job
+        run: systemd-run --user --scope --quiet --collect -- mise run ci:checks
       - if: matrix.part == 'frontend'
         run: mise run fe:check
       # Lifting the sysctl does not prove tier N ran, nor the user manager that its cgroup ran: the sandbox's own tier
@@ -140,10 +140,22 @@ jobs:
           files: ./coverage.out
           fail_ci_if_error: false
           token: ${{ secrets.CODECOV_TOKEN }}
-  # The TLA+ and Alloy models with their mutants (`mise run formal`) took about 25 min alone on a 4-vCPU runner
-  # (run 43961568931, 2026-11-16), which pushed the ci job past its 35 min: they run here, in parallel.
-  formal:
+  # CI2 balances TLC by the timings in run 45030441084. Each matrix entry has its own runner.
+  formal-checks:
+    name: ${{ matrix.shard == 'alloy' && 'formal (alloy)' || format('formal (tla {0})', matrix.shard) }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ["1/3", "2/3", "3/3", "alloy"]
+    # Only the leg that ran a check supplies its output. The aggregate also checks the job result.
+    outputs:
+      tla-1: ${{ matrix.shard == '1/3' && steps.tla.outcome || '' }}
+      tla-2: ${{ matrix.shard == '2/3' && steps.tla.outcome || '' }}
+      tla-3: ${{ matrix.shard == '3/3' && steps.tla.outcome || '' }}
+      alloy: ${{ matrix.shard == 'alloy' && steps.alloy.outcome || '' }}
+    env:
+      MISE_TASK_RUN_AUTO_INSTALL: "false"
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -153,16 +165,38 @@ jobs:
         uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cache/inkwell
-          key: ${{ runner.os }}-formal-${{ hashFiles('scripts/tla-check.sh', 'scripts/alloy_check.py') }}
-          restore-keys: ${{ runner.os }}-formal-
+          key: ${{ runner.os }}-formal-${{ matrix.shard == 'alloy' && 'alloy' || 'tla' }}-${{ hashFiles('scripts/tla-check.sh', 'scripts/alloy_check.py') }}
+          restore-keys: ${{ runner.os }}-formal-${{ matrix.shard == 'alloy' && 'alloy' || 'tla' }}-
       # Only mise itself: the models need Java and Python, which the runner has; installing every tool would build
       # wails3, which needs GTK4 and WebKitGTK (run 43978292467).
       - uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5.2.7
         with:
           install: false
-      - run: mise run formal
+      - id: tla
+        if: matrix.shard != 'alloy'
+        run: mise run tla
         env:
-          MISE_TASK_RUN_AUTO_INSTALL: "false"
+          TLA_SHARD: ${{ matrix.shard }}
+      - id: alloy
+        if: matrix.shard == 'alloy'
+        run: mise run alloy
+  formal:
+    needs: formal-checks
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Require all formal checks to succeed
+        env:
+          FORMAL_RESULT: ${{ needs.formal-checks.result }}
+          TLA_1_RESULT: ${{ needs.formal-checks.outputs.tla-1 }}
+          TLA_2_RESULT: ${{ needs.formal-checks.outputs.tla-2 }}
+          TLA_3_RESULT: ${{ needs.formal-checks.outputs.tla-3 }}
+          ALLOY_RESULT: ${{ needs.formal-checks.outputs.alloy }}
+        run: |
+          for result in "$FORMAL_RESULT" "$TLA_1_RESULT" "$TLA_2_RESULT" "$TLA_3_RESULT" "$ALLOY_RESULT"; do
+            test "$result" = success
+          done
   # Two instances behind NATs and a public relay, in network namespaces created without
   # root by the script itself (scripts/netsim); the same command runs locally.
   netsim:

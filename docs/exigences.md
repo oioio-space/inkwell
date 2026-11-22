@@ -17,6 +17,7 @@ Rien n'est « fait » sans tests verts et sans une passe `ux-walkthrough` réuss
 
 | # | Date | Demande | Où | État |
 |---|------|---------|----|------|
+| CI2 | 2026-11-22 | Shard formal CI by measured runtime and verify full, exact-once coverage. Keep the local full task and the GitHub verdict. | [CI2 plan](plans/2026-11-22-ci2-formal-shards.md) | 🔨 |
 | W1 | 2026-10-25 | Démarrer avec les meilleures pratiques Go + IA (kit go-starter, encre, Internet) | CLAUDE.md, ADR 0001–0013 | ✅ |
 | W2 | 2026-10-25 | Rechercher les bonnes pratiques sur Internet pour chaque élément (règle) | skill research-grounding | ✅ en continu |
 | W3 | 2026-10-25 | Conception moderne, modulaire, performante et sécurisée (règle) | docs/engineering-principles.md | ✅ en continu |
