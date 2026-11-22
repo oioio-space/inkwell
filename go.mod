@@ -4,7 +4,7 @@ go 1.27.4
 
 require (
 	filippo.io/edwards25519 v1.2.0
-	github.com/ebitengine/purego v0.11.2
+	github.com/ebitengine/purego v0.11.3
 	github.com/fsnotify/fsnotify v1.10.1
 	github.com/godbus/dbus/v5 v5.2.4
 	github.com/google/go-cmp v0.7.0
@@ -21,7 +21,7 @@ require (
 	go.uber.org/fx v1.24.0
 	go.uber.org/goleak v1.3.0
 	golang.org/x/crypto v0.58.0
-	golang.org/x/sys v0.49.0
+	golang.org/x/sys v0.50.0
 	golang.org/x/text v0.43.0
 	golang.org/x/tools v0.52.0
 	lukechampine.com/blake3 v1.4.1

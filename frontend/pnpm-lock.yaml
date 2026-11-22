@@ -65,8 +65,8 @@ importers:
         specifier: 0.6.0
         version: 0.6.0(patch_hash=684f1ef45ae1658e70524572afb1f60dc84c5929e3a2e8bc22a67773ed1004d3)
       papaparse:
-        specifier: 5.7.0
-        version: 5.7.0
+        specifier: 5.7.1
+        version: 5.7.1
     devDependencies:
       '@axe-core/playwright':
         specifier: 4.14.0
@@ -84,8 +84,8 @@ importers:
         specifier: 7.3.1
         version: 7.3.1(svelte@5.57.3)(vite@8.3.5(@types/node@26.6.5))
       '@tsconfig/svelte':
-        specifier: 5.0.8
-        version: 5.0.8
+        specifier: 5.0.9
+        version: 5.0.9
       '@types/papaparse':
         specifier: 5.5.2
         version: 5.5.2
@@ -99,8 +99,8 @@ importers:
         specifier: 5.57.3
         version: 5.57.3
       svelte-check:
-        specifier: 4.7.7
-        version: 4.7.7(picomatch@4.0.7)(svelte@5.57.3)(typescript@6.0.3)
+        specifier: 4.7.8
+        version: 4.7.8(picomatch@4.0.7)(svelte@5.57.3)(typescript@6.0.3)
       typescript:
         specifier: 6.0.3
         version: 6.0.3
@@ -450,8 +450,8 @@ packages:
       svelte: ^5.46.4
       vite: ^8.0.0-beta.7 || ^8.0.0
 
-  '@tsconfig/svelte@5.0.8':
-    resolution: {integrity: sha512-UkNnw1/oFEfecR8ypyHIQuWYdkPvHiwcQ78sh+ymIiYoF+uc5H1UBetbjyqT+vgGJ3qQN6nhucJviX6HesWtKQ==}
+  '@tsconfig/svelte@5.0.9':
+    resolution: {integrity: sha512-gbtbqsEFq9gFzGmgJMIB3+leXVmkUttoFjzeHsbqN6qFKst40fvxnN9+3Ajdl8VlIGwPevs9LNJ8YUhQgchqaw==}
 
   '@types/chai@5.2.3':
     resolution: {integrity: sha512-Mw558oeA9fFbv65/y4mHtXDs9bPnFMZAL/jxdPFUpOHHIXX91mcgEHbS5Lahr+pwZFR8A7GQleRWeI6cGFC2UA==}
@@ -736,8 +736,8 @@ packages:
     resolution: {integrity: sha512-5vvB5+W7ePv+p3uqxi+RcW1XAzLW0/hxt3/4X4Lc4qHudzOhmBiBwOY6DRob4WnanAEGvNcLjF+KNOufrUoEQw==}
     engines: {node: '>=12.20.0'}
 
-  papaparse@5.7.0:
-    resolution: {integrity: sha512-qBGxg/7Q3Kl9Wfhrz2Z74UnvnHTXLNG6jmKJFeBvP2+y4lV7So+7SR62+Zd47JvdrCkX+nDcnr0ObPzek/+6RA==}
+  papaparse@5.7.1:
+    resolution: {integrity: sha512-qOR+UDWv6D3hMxnWWOk0ZpBdCkd+kw5Yh7aXOaNSQU8A+73EA2bhW7EiUix/hY0yulUi5FRvt7PpYSI2VDvY0g==}
 
   picocolors@1.1.1:
     resolution: {integrity: sha512-xceH2snhtb5M9liqDsmEw56le376mTZkEX/jEb/RxNFyegNul7eNslCXP9FDj/Lcu0X8KEyMceP2ntpaHrDEVA==}
@@ -786,8 +786,8 @@ packages:
   style-mod@4.1.4:
     resolution: {integrity: sha512-XXWIQt633/EpAFx8aZDOTjBzrCaGmhvEQlQo6MVPfa2OzO2cWo+4hV9h+6UkHYlXGfy+ODXKUdP7Pthmcu5ATw==}
 
-  svelte-check@4.7.7:
-    resolution: {integrity: sha512-Ge2IMdeTpbJuzNFGRiiMg0RWgbScysKQu7xwcyFJ22+DU9F5nPX51+Q3gHmGqRxYQMx2knreVWt5oCtfe0vf2g==}
+  svelte-check@4.7.8:
+    resolution: {integrity: sha512-laZ49GFHZ3b0z2PWinJWL0syehc/PTR8aHaUaTiBkWJ+4Y38nhxjmXsSz7CbGa3VdKopViVbrBH3bGNqIAI0bQ==}
     engines: {node: '>= 18.0.0'}
     hasBin: true
     peerDependencies:
@@ -1261,7 +1261,7 @@ snapshots:
       vite: 8.3.5(@types/node@26.6.5)
       vitefu: 1.1.3(vite@8.3.5(@types/node@26.6.5))
 
-  '@tsconfig/svelte@5.0.8': {}
+  '@tsconfig/svelte@5.0.9': {}
 
   '@types/chai@5.2.3':
     dependencies:
@@ -1502,7 +1502,7 @@ snapshots:
 
   obug@3.0.0: {}
 
-  papaparse@5.7.0: {}
+  papaparse@5.7.1: {}
 
   picocolors@1.1.1: {}
 
@@ -1555,7 +1555,7 @@ snapshots:
 
   style-mod@4.1.4: {}
 
-  svelte-check@4.7.7(picomatch@4.0.7)(svelte@5.57.3)(typescript@6.0.3):
+  svelte-check@4.7.8(picomatch@4.0.7)(svelte@5.57.3)(typescript@6.0.3):
     dependencies:
       '@jridgewell/trace-mapping': 0.3.31
       '@sveltejs/load-config': 0.2.3

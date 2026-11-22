@@ -112,6 +112,7 @@ dernier). Une alpha Linux ne clôt ni N35, ni N37, ni L5.
 
 WC1 belongs to **Collaborer sans perdre** and uses the existing editing and presence paths. [Window-close rules](../plans/2026-11-21-wc1-window-close.md) → WC1
 E2E3 verifies the existing invitation flow in **Collaborer sans perdre** and variant sharing in **Relire** → E2E3
+DEP1 refreshes the build, release and dependency pins used by Distribution. WAILS1 qualifies the existing native window and Streams used in Collaborer sans perdre. [Evidence and W48 scope](../plans/2026-11-22-dep1.md) → DEP1, WAILS1
 
 | Lot | Exigences | Valeur | Risque traité | Porte |
 |---|---|---|---|---|

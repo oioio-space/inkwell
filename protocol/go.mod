@@ -11,5 +11,5 @@ require (
 
 require (
 	github.com/klauspost/cpuid/v2 v2.4.2 // indirect
-	golang.org/x/sys v0.49.0 // indirect
+	golang.org/x/sys v0.50.0 // indirect
 )
