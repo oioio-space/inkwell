@@ -56,7 +56,7 @@ Ordre, sauf décision contraire de l'utilisatrice (le tableau ci-dessus donne le
    - **INV1** (léger) : tout point ouvert porte l'identifiant d'un bloc de cette liste (`mise run inventory`).
 2. **Finir SB2a1** (Ubuntu 24.04), puis **DEP1**, puis **EX0** (registre unique des contributions : posé tôt pour ne jamais exposer l'intérieur aux greffons, W72).
    - **DEP1** (light) — Dependabot PR #4, compatible updates from PR #7, and the W22 version audit. [Evidence and remaining updates](docs/plans/2026-11-22-dep1.md).
-   - **CI2** (light) — the `formal` job split into parallel shards (it hit its 45 min cap after PU1); every model and mutant still run once. [Measurements and design](docs/plans/2026-11-22-ci2-formal-shards.md); candidate run on GitHub before merge.
+   - **CI2** (light) — the `formal` job split into parallel shards (it hit its 45 min cap after PU1); every model and mutant still run once. [Measurements and design](docs/plans/2026-11-22-ci2-formal-shards.md). Merged 2026-11-22 (21eb2e9): formal shards took 10–11 min on GitHub.
    - **CI3** (standard, right after CI2) — the local CI run before each push does not do what GitHub does: on 2026-11-21 and 2026-11-22 five defects were seen only after the push (e2e after WC1, stale `mise.lock`, `formal` job duration, lint walk race, netsim scenario 2). Measure the gap job by job and close it (same commands, same caps) or require a green GitHub run of a candidate branch before any integration; alert when a job nears its time cap (W77).
    - **EX0** (standard) : y entrent U26 et l'ADR 0027 à écrire (registre des types de fichiers), N20 (registre ; coloration des autres langages), N21 et N24 (socle des « Fondations extensibles »).
    - **WAILS1** (W48) — Qualify Wails v3.1.0, its CLI and its webview runtime together. Replay WC1 native close, Streams and Linux GTK4 packaging. [Migration scope](docs/plans/2026-11-22-dep1.md#wails-v310--wails1).
@@ -114,8 +114,8 @@ Placés après R1, et pourquoi : PT4 (décision du 2026-11-15 : les cinq défaut
 Les décisions qui demandent de la réflexion (conception, règle de protocole, compromis de sécurité, résiduel accepté ou refusé) se **débattent avec Codex avant d'être tranchées**, les deux avis consignés dans `docs/autonomous-decisions.md` (demande de l'utilisatrice, 2026-11-16) ; un appel ciblé par groupe de décisions, son quota est petit. Ce qui ne se négocie pas en route : la définition de « fini » et les invariants de `CLAUDE.md` ; on délègue au système ce qui est à lui (W64 : l'adversaire est un pair) ; on ne change jamais de projet à chaud (PC1) ; une preuve qui gêne ne s'affaiblit pas, elle se comprend (les quatre exécutions GitHub de SB2a1 ont chacune trouvé un vrai écart) ; les choix pris seuls vont dans `docs/autonomous-decisions.md` et lui sont montrés quand elle demande où on en est ; Codex avec parcimonie, pour ce que lui seul peut faire.
 
 **Travaux en cours (branches non fusionnées et worktrees ; `nom` → bloc ; vérifié par `mise run inventory`) :**
-- `ci.yml` run 45030441084 on `main` failed (`ci`: lint walk race, fixed locally; `formal`: 45 min cap) → CI2
-- `inkwell-ci2` (branch `ci2`), ported to `main`, awaiting its candidate run → CI2
+- `ci.yml` run 45067621739 on `main` failed (`ci`: `TestOpenWindow`, a sync opening failed by a lost connection closed the live replacement; fixed locally, spec §8.7.4 aligned with `StreamLost`) → E2E3
+- `inkwell-ci2` (branch `ci2`): merged in 21eb2e9 (candidate run 45062448299 green), worktree to remove → CI2
 - `ci.yml` run 44933423541 on `main` failed in `ci-e2e`; `inkwell-e2e3` (branch `e2e3`) → E2E3
 - `ci.yml` run 43884324109 sur `main`, rouge (`ci`, `sidecars-arm64`) → SB2a1, E2E1 (ils la rendent verte)
 - `ci.yml` run 44076092629 sur `main`, rouge (`ci`, `sidecars-arm64`) → SB2a1 (diagnostic Codex du 2026-11-21 : les deux tâches sont corrigées par la candidate)

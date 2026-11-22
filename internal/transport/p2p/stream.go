@@ -84,8 +84,8 @@ func (n *Node) startOpenLocked(ps *peerState) {
 }
 
 // openOut opens the outbound stream of ps and waits for the peer's ACK, then
-// announces the peer if it is new (spec §8.7.4). If it cannot, the connection is
-// useless for syncing and is closed, with no event.
+// announces the peer if it is new (spec §8.7.4). A failed sync opening closes
+// the peer unless the failure came from a connection that is already lost.
 func (n *Node) openOut(ps *peerState) {
 	ctx, cancel := context.WithTimeout(n.ctx, openTimeout)
 	defer cancel()
@@ -103,6 +103,17 @@ func (n *Node) openOut(ps *peerState) {
 	}
 	if err != nil {
 		closePeer := ps.connected && !n.closed
+		var connErr *network.ConnError
+		if closePeer && errors.As(err, &connErr) {
+			// The error belongs to a lost connection. A surviving connection
+			// may have arrived while ps.opening prevented its own opening.
+			closePeer = false
+			if slices.ContainsFunc(n.h.Network().ConnsToPeer(ps.id), func(c network.Conn) bool {
+				return !c.IsClosed()
+			}) {
+				n.startOpenLocked(ps)
+			}
+		}
 		n.settleLocked(ps)
 		n.mu.Unlock()
 		if closePeer {

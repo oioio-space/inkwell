@@ -1765,7 +1765,10 @@ négociée ou optimiste. L'ouverture du flux et la lecture de l'accusé partagen
 l'ouverture et non relancé au retour de l'ouverture (une négociation lente suivie d'un accusé tardif
 n'a pas 15 s de plus) ;
 à son terme, ou sur un refus ou une violation, le nœud réinitialise le flux et ferme ses
-connexions au pair (`ClosePeer`), sans aucun événement. Deux sortes de refus (règle P-8, bloc PU1b), pour toute ouverture (flux de la session, flux rouvert,
+connexions au pair (`ClosePeer`), sans aucun événement. La perte de la connexion qui porte l'ouverture
+(erreur de connexion, et non refus du pair) n'est pas un refus : le flux se termine sans `ClosePeer` ni
+événement, et une autre connexion utilisable au pair ouvre son propre flux (action `StreamLost` de
+`tla/PeerUpAck.tla` ; bloc E2E3, défaut vu par `TestOpenWindow` le 2026-11-22). Deux sortes de refus (règle P-8, bloc PU1b), pour toute ouverture (flux de la session, flux rouvert,
 passage au direct) : une réinitialisation avant l'accusé portant le code `0x1002` est un **refus pour
 capacité** : le nœud réinitialise son flux, garde sa session et ses connexions et rouvre après une
 attente (50 ms, doublée, 1 s au plus), dans le même délai de 15 s compté depuis la première ouverture ;
@@ -1788,6 +1791,7 @@ s'entend donc après ce remplacement.
 |---|---|---|
 | Ouverture | retour de l'ouverture | Attente (rien d'annoncé) |
 | Ouverture, Attente | échec, refus, violation, 15 s écoulées | Fermé : flux réinitialisé, `ClosePeer`, aucun événement |
+| Ouverture, Attente | connexion de l'ouverture perdue | Fermé : flux terminé, sans `ClosePeer` ni événement ; ouverture sur une autre connexion utilisable s'il y en a une |
 | Attente | réinitialisation `0x1002` (capacité) | Ouverture d'un nouveau flux après l'attente, dans les 15 s ; session inchangée |
 | Attente | `0x01` | Ouvert : `PeerUp` si le pair n'était pas annoncé |
 | Ouvert | octet reçu | violation : `ClosePeer` (existant) |
