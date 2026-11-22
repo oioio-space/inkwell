@@ -60,6 +60,8 @@ Fondations-extensibles: PERF-START-plugins
 
 ## Décisions en vigueur
 
+2026-11-22 — DEP1 : la tâche `test:py` ajoute les tests du verrou mise. Le reste de la tâche correspond exactement à la base de fusion. Le garde enregistre l'empreinte de cet ajout. [Preuves DEP1](plans/2026-11-22-dep1.md#locked-tool-installs-in-github-actions).
+
 Les spécifications sont acceptées (design rév. 7 + 7.1, architecture rév. 8.1 + 8.2) ; on ne les
 change plus que par une décision consignée dans `docs/architecture/decisions.md` ou
 `docs/design/decisions-utilisatrice.md`.

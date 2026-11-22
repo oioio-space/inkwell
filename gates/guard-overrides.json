@@ -1684,6 +1684,11 @@
       "id": "dfd4fe51c0397ad07f9bc2755874696ea459eb054db4282cf001f57fe270e837",
       "reason": "scripts/pkg/selftest.sh (OI dependency, CI1b): the four AC-14 fixture binaries omit VCS metadata so an ancestor .git cannot break their builds. AC-14 still accepts plain and production builds and rejects server and faultinject for their build tags.",
       "decision": "docs/plans/2026-11-08-ci-cd-study.md"
+    },
+    {
+      "id": "6373ad131cec91a272f0ce5dba5a6b46e87caaafbb56cd2bb2c77a4033825d7a",
+      "reason": "mise.toml (DEP1): test:py adds scripts/check_mise_lock_test.py to its existing unittest invocation. All existing tests, assertions and timeouts are preserved.",
+      "decision": "docs/objectif-en-cours.md"
     }
   ]
 }

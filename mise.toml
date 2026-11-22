@@ -204,7 +204,7 @@ run = "./scripts/deadcode.sh"
 
 [tasks."test:py"]
 description = "Python tests of the gate, perf and formal tooling (unittest)"
-run = ["cd scripts/perf && ../heavy.sh python3 -m unittest $(ls *_test.py | grep -v -e '^pbmodel_test\\.py$' -e '^paired_e2e_test\\.py$' -e '^rgmodel_test\\.py$' -e '^regression_test\\.py$' -e '^regression_layout_test\\.py$' -e '^regression_falsify_test\\.py$' | sed 's/\\.py$//')", "./scripts/heavy.sh python3 -m unittest scripts/alloy_check_test.py scripts/block_done_test.py scripts/fetch_pinned_test.py scripts/check_claude_md_test.py scripts/inventory_test.py scripts/gate_reset_test.py scripts/gate_resume_test.py scripts/gate_nested_test.py scripts/llm_test.py scripts/netsim/affected_test.py scripts/netsim/mutants_test.py scripts/gojson_check_test.py"]
+run = ["cd scripts/perf && ../heavy.sh python3 -m unittest $(ls *_test.py | grep -v -e '^pbmodel_test\\.py$' -e '^paired_e2e_test\\.py$' -e '^rgmodel_test\\.py$' -e '^regression_test\\.py$' -e '^regression_layout_test\\.py$' -e '^regression_falsify_test\\.py$' | sed 's/\\.py$//')", "./scripts/heavy.sh python3 -m unittest scripts/alloy_check_test.py scripts/block_done_test.py scripts/fetch_pinned_test.py scripts/check_claude_md_test.py scripts/check_mise_lock_test.py scripts/inventory_test.py scripts/gate_reset_test.py scripts/gate_resume_test.py scripts/gate_nested_test.py scripts/llm_test.py scripts/netsim/affected_test.py scripts/netsim/mutants_test.py scripts/gojson_check_test.py"]
 
 [tasks."lint:claude-md"]
 description = "Everything CLAUDE.md cites exists: mise tasks, paths, agents, skills, Claude hooks"
@@ -225,7 +225,7 @@ run = "./scripts/heavy.sh python3 scripts/alloy_check.py"
 
 [tasks.pregate]
 description = "Cheap checks (seconds, no test) to run before any gate, `done` or push: they failed 12 times inside long runs in one week (docs/reviews/2026-11-13-velocity-review.md)"
-depends = ["lint:pinned", "lint:env", "lint:claude-md", "inventory", "arch", "deadcode", "lint", "lint:sh", "lint:yaml", "lint:actions"]
+depends = ["lint:lock", "lint:pinned", "lint:env", "lint:claude-md", "inventory", "arch", "deadcode", "lint", "lint:sh", "lint:yaml", "lint:actions"]
 run = "python3 scripts/gate.py --base-guard"
 
 [tasks.inventory]
@@ -239,6 +239,10 @@ run = "./scripts/check-pinned-tools.sh"
 [tasks."lint:env"]
 description = "Every environment variable the code reads is declared in .env.reference"
 run = "python3 scripts/check-env-reference.py"
+
+[tasks."lint:lock"]
+description = "Check project tool versions and Linux platforms in mise.lock offline"
+run = "python3 -I scripts/check-mise-lock.py"
 
 [tasks."ci:core"]
 description = "Everything CI must pass except the impaired network simulation (what the pre-push hook runs first; scripts/netsim/affected.py decides about the netsim): ci:checks and the formal models"
