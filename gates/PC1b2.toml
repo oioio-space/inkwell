@@ -1,0 +1,232 @@
+# Written 2026-11-23 at step 1 of PC1b2, to be frozen after review. SUPERSEDES gates/PC1b.toml (method v2 rule 9: a
+# contract change is stated, compared old/new and recorded, never an edit of a frozen gate). Block PC1b (an accepted
+# invitation restarts Inkwell: J-1..J-7 and the drain N-16 on the join path, on PC1a's restart), its work re-applied on
+# main 8a23f84 (PU1, HP1, WC1, CL1, CI3 since its base e637035). Rigour: complete. Plan:
+# docs/plans/2026-11-15-pc1b-join.md (section « Re-applied on main and gates of 2026-11-23 »); shared part, restart
+# mechanism and formal model: docs/plans/2026-11-14-pc1-project-change-by-restart.md. ADR 0043, part 2. The network
+# proof is in gates/PC1n.toml and gates/PC1n2.toml (not nested: run alone, after this one).
+# Every PC1b criterion is kept verbatim except these changes, one reason each:
+# - docs: the plan rows include J-7 (the restart line the network gates read, new on 2026-11-23);
+# - go: TestFinishJoinConsumesTheDesktopApproval (WC1's approval consumed at FinishJoin) and TestRestartLogsOneLine
+#   (J-7; absent at step 1, so red until step 2) named; cap 300 -> 120 s (measured 19 s);
+# - mutant-tool: MJ1..MJ20, not MJ1..MJ16 (MJ17..MJ19 came with the code review and the walkthrough; MJ20, J-7's « the
+#   line removed », expect `J-7 restart line`, test TestRestartLogsOneLine, is frozen here: its anchor is written at
+#   step 2, so this criterion is red until then);
+# - mutants: cap 900 -> 300 s (nineteen mutants in 74 s on 2026-11-15);
+# - frontend: cap 180 -> 60 s (measured 5 s, 52 tests); report path .task/pc1b2-fe.json;
+# - e2e: run cap 300 -> 240 s (measured 88 s, nine tests); report path .task/pc1b2-e2e.json;
+# - regression: the e2e part runs every spec that pairs or joins (helpers `pair`, `joinAs`, `acceptJoin`), since each
+#   such join now restarts the joiner: on this tree `offline.spec.ts` fails on a second `status` element (the join
+#   notice), which the old three-spec list never ran; frontend cap 180 -> 60 s (measured 8 s);
+# - webkit-native (new): WC1's runner (scripts/wc1-webkit.sh) with WC1's oracles for SAV-03b and SHEET-MU-01b, plus
+#   the native join `TestWC1NativeClose/PC1b-join`: on the desktop build a join is confirmed through the close
+#   coordinator's project approval and the process restarts in place (same pid). Red at step 1, two named reasons:
+#   the native SHEET-MU-01b's guest join stays held (the probe can neither confirm « Redémarrer et ouvrir » nor
+#   follow a restart in place, so the guest keeps its own document and `sheet` never finds `#cell-2-2`), and
+#   `TestWC1NativeClose/PC1b-join` does not exist. The browser SHEET-MU-01b passes since its fixture shows the table
+#   again after the join restart (`tableAfterJoin`; the view mode is page memory);
+#   a third, known and not PC1b's: WC1's TestWC1NativeRecovery is intermittent on main too (wc1_native_test.go:813,
+#   gates/PC1b/SIMPLIFY.md → WC1);
+# - ux-walkthrough: a walkthrough of the rebased tree, gates/PC1b2/UX.md (gates/PC1b/UX.md predates WC1's close and
+#   HP1's upgrade: the join's restart now passes through « Enregistrement… »);
+# - the header without « DRAFT » (gates/PC1b.toml was frozen with a stale « DRAFT - NOT FROZEN » line).
+# Every long command is `timeout -k 10 N ./scripts/heavy.sh …` (the timeout covers the wait for a slot). No nested gate.
+# Deadline: scripts/gate.py refuses caps that sum past max_minutes (PC1a rule G-1). Caps (measured on 2026-11-23):
+# go 120 (19 s), mutant-tool 60, mutants 300 (74 s), frontend 60 (5 s), e2e 240 + 240 (7 s warm, 88 s), regression
+# 30 + 60 + 400 (1 s, 8 s, 266 s for the fourteen specs that pair or join), tla 200, webkit-native 960 (WC1's cap):
+# 2670 s of 2700 s.
+max_minutes = 45
+raw_results = ["docs/plans/2026-11-15-pc1b-join.md", "docs/plans/2026-11-14-pc1-project-change-by-restart.md", "docs/adr/0043-foreign-project.md", "docs/objectif-en-cours.md", "gates/PC1b/*", "gates/PC1b2/*"]
+
+[[criteria]]
+# Each rule row is in the plans, each catalogue key exists, the ADR's status line carries « part 2 PC1b accepted » and not « part 2 PC1b proposed », W58 closed.
+id = "docs"
+command = '''python3 -I - <<'PY'
+import json, pathlib, sys
+plan = "".join(pathlib.Path(p).read_text() for p in ["docs/plans/2026-11-15-pc1b-join.md", "docs/plans/2026-11-14-pc1-project-change-by-restart.md"])
+fr = json.load(open("frontend/src/i18n/fr.json"))
+rows = ["J-1", "J-2", "J-3", "J-4", "J-5", "J-6", "J-7", "N-16"]
+keys = ["join.restart.note", "join.restart.folder", "join.folderDefault", "join.waitingRoot", "join.done", "join.failed"]
+bad = [f"plan row {i}" for i in rows if f"\n| {i} |" not in plan]
+bad += [f"fr.json {k}" for k in keys if k not in fr]
+st = [l for l in pathlib.Path("docs/adr/0043-foreign-project.md").read_text().splitlines() if l.startswith("status:")]
+if not st or "part 2 PC1b accepted" not in st[0] or "part 2 PC1b proposed" in st[0]:
+    bad.append("ADR 0043 status line: part 2 PC1b not accepted")
+ex = pathlib.Path("docs/exigences.md").read_text().splitlines()
+bad += [f"exigences {w} not closed" for w in ["W58"] if not any(l.startswith(f"| {w} |") and "✅" in l for l in ex)]
+sys.exit(f"PC1b docs: {bad}" if bad else 0)
+PY'''
+
+[[criteria]]
+# J-1, J-4..J-7 and N-16 on the join path in Go, and WC1's approval on it: the run succeeds and every named test passes.
+id = "go"
+command = '''out=$(timeout -k 10 120 ./scripts/heavy.sh go test -count=1 -race -v -run 'TestJoin|TestCompleteJoin|TestFirstLaunchJoin|TestRequestsRefusedOnceJoinHeld|TestRestartOnlyAfterARequestAndOnce|TestStorageWriteBeforeFinishJoin|TestFinishJoinConsumesTheDesktopApproval|TestRestartLogsOneLine' ./internal/app/ ./internal/bridge/ ./cmd/inkwell/ 2>&1) || { echo "$out" | tail -40; exit 1; }
+for t in TestJoinRequestWritesNothing TestJoinWritesRecordBeforeTheList TestJoinCrashAtEachStep TestCompleteJoinConsumesOnce TestCompleteJoinRefuses TestJoinOutcomeFollowsTheLoadedList TestJoinFailedRecordDropped TestJoinSameProjectNoRestart TestCompleteJoinAfterTheDocumentIsStored TestFirstLaunchJoinRestarts TestRequestsRefusedOnceJoinHeld TestRestartOnlyAfterARequestAndOnce TestJoinKeepsThePreviousFolder TestJoinFolderNameConfined TestJoinFolderCollisionGetsSuffix TestJoinCrashDuringInstall TestStorageWriteBeforeFinishJoinLandsOrIsRefused TestFinishJoinConsumesTheDesktopApproval TestRestartLogsOneLine; do
+  echo "$out" | grep -q -- "--- PASS: $t" || { echo "missing or not passing: $t"; exit 1; }
+done'''
+
+[[criteria]]
+# Every PC1b mutant entry exists with its test and an expect text starting with its rule tag.
+id = "mutant-tool"
+command = '''timeout -k 10 60 ./scripts/heavy.sh python3 -m unittest scripts/netsim/mutants_test.py && python3 -I - <<'PY'
+import re, sys, tomllib
+ms = {m["id"]: m for m in tomllib.load(open("scripts/netsim/mutants.toml", "rb"))["mutant"] if m.get("block") == "PC1b"}
+need = [f"MJ{n}" for n in range(1, 21)]
+bad = [i for i in need if i not in ms or ms[i].get("kind") != "go" or not ms[i].get("test") or not re.match(r"[NJ]-\d+ ", ms[i].get("expect", ""))]
+m20 = ms.get("MJ20", {})
+if (m20.get("test"), m20.get("expect")) != ("TestRestartLogsOneLine", "J-7 restart line"):
+    bad.append("MJ20 differs from the frozen entry (test TestRestartLogsOneLine, expect « J-7 restart line »)")
+sys.exit(f"PC1b mutant entries missing or without test and expect: {bad}" if bad else 0)
+PY'''
+
+[[criteria]]
+# MJ1..MJ20, each caught by its named test with its expect text.
+id = "mutants"
+command = "timeout -k 10 300 mise run netsim:mutants -- PC1b"
+
+[[criteria]]
+# J-2 in the webview and its in-test mutants (Vitest JSON report).
+id = "frontend"
+command = '''cd frontend && timeout -k 10 60 ../scripts/heavy.sh pnpm exec vitest run --configLoader runner --reporter=json --outputFile=../.task/pc1b2-fe.json -t 'PC1 '; rc=$?; cd .. && python3 -I - "$rc" <<'PY'
+import json, sys
+rc = int(sys.argv[1])
+r = json.load(open(".task/pc1b2-fe.json"))
+ok = {a["title"] for f in r["testResults"] for a in f["assertionResults"] if a["status"] == "passed"}
+need = ['PC1 join says that Inkwell restarts', 'PC1 a pending join waits for its root and never creates a document', 'PC1 the joined notice shows once', 'PC1 the join is completed only after the document is flushed', 'PC1 mutant J-2 fresh document is caught', 'PC1 mutant J-1 completion before the flush is caught']
+miss = [n for n in need if n not in ok]
+if rc or r["numFailedTests"] or r["numFailedTestSuites"] or miss:
+    sys.exit(f"PC1b frontend: exit {rc}, failed {r['numFailedTests']}, missing {miss}")
+PY'''
+
+[[criteria]]
+# J-2, J-3, J-6 end to end on the built candidate, retries 0, no error, unexpected, flaky or skipped test.
+id = "e2e"
+command = '''timeout -k 10 240 ./scripts/heavy.sh mise run e2e:build && cd frontend && timeout -k 10 240 ../scripts/heavy.sh ./node_modules/.bin/playwright test e2e/project-change.spec.ts --retries=0 --reporter=json > ../.task/pc1b2-e2e.json; rc=$?; cd .. && python3 -I - "$rc" <<'PY'
+import json, sys
+rc = int(sys.argv[1])
+r = json.load(open(".task/pc1b2-e2e.json"))
+st = r.get("stats", {})
+ok = set()
+stack = list(r["suites"])
+while stack:
+    x = stack.pop()
+    stack += x.get("suites", [])
+    for sp in x.get("specs", []):
+        if sp["ok"] and all(t["status"] == "expected" for t in sp["tests"]):
+            ok.add(sp["title"])
+need = ['PC1-E2E a join restarts Inkwell on the document of the inviter', 'PC1-E2E a pending join waits while the inviter is away', 'PC1-E2E after a join and a save of the joined document, the previous text is still in its folder']
+miss = [n for n in need if n not in ok]
+if rc or r.get("errors") or st.get("unexpected") or st.get("flaky") or st.get("skipped") or miss:
+    sys.exit(f"PC1b e2e: exit {rc}, stats {st}, missing {miss}")
+PY'''
+
+[[criteria]]
+# No regression: frontend checks and every flow that pairs or joins (each such join restarts the joiner since PC1b).
+id = "regression"
+# The user's decision of 2026-11-15 (gates/PC1b.toml, plan « Gate change on the user's word ») is kept: the Vitest
+# part is the test files the block added or modified; the whole suite runs in `mise run ci`. The e2e part is now the
+# specs that call `pair`, `joinAs` or `acceptJoin` (netsim.spec.ts belongs to PC1n/PC1n2, project-change.spec.ts to
+# the e2e criterion), listed when the criterion runs so that a spec added later is not forgotten.
+command = '''base=$(git merge-base HEAD main) && files=$(git diff --name-only --diff-filter=d "$base" -- frontend/src | grep -E '[.]test[.]ts$' | sed 's#^frontend/##' | tr '\n' ' ') && specs=$(cd frontend && grep -lE 'pair\(|joinAs\(|acceptJoin\(' e2e/*.spec.ts e2e/ux/*.spec.ts | grep -vE '(netsim|project-change)[.]spec[.]ts$' | tr '\n' ' ') && [ -n "$specs" ] && timeout -k 10 30 mise run fe:bindings && cd frontend && timeout -k 10 60 ../scripts/heavy.sh sh -c "pnpm exec biome check . && pnpm exec svelte-check --tsconfig ./tsconfig.json && { [ -z '$files' ] || pnpm exec vitest run --configLoader runner $files; }" && cd .. && timeout -k 10 400 ./scripts/heavy.sh mise run e2e -- $specs --retries=0'''
+
+[[criteria]]
+# The shared model, as in PC1a.
+id = "tla"
+command = '''out=$(INKWELL_TLA_ONLY='^ProjectChange' timeout -k 10 200 ./scripts/tla-check.sh 2>&1) || { echo "$out" | tail -40; exit 1; }
+for n in ProjectChange ProjectChangeSpawn ProjectChangeFaults ProjectChangeSpawnFaults; do
+  echo "$out" | grep -qF -- "✓ $n: no error (exhaustive, liveness checked)" || { echo "sound configuration missing or failing: $n"; exit 1; }
+done
+for n in ProjectChangeLiveAdopt ProjectChangeRestartBeforeDurable ProjectChangeRestartTwice ProjectChangeRequestBeforeNavigation ProjectChangeJoinNoRestart ProjectChangeJoinTwice ProjectChangeWriteBeforeWiringStopped ProjectChangeWriteBeforeDrain ProjectChangeNoBarrier ProjectChangeSpawnNoWait ProjectChangeJoinRecordAfterInstall ProjectChangeRecoverPrefersAside ProjectChangeCarriedOutcome ProjectChangePageNeverReloads ProjectChangeWitnessTakeOver ProjectChangeWitnessJoinAnnounced ProjectChangeWitnessCrashAfterInstall ProjectChangeWitnessFailedWrite ProjectChangeWitnessWriteRefused; do
+  echo "$out" | grep -qF -- "✓ $n: violation detected" || { echo "mutant or witness not caught by its named property: $n"; exit 1; }
+done'''
+
+[[criteria]]
+# WC1's desktop path on the join (new): WC1's runner, WC1's oracles for SAV-03b and SHEET-MU-01b (WebKit and Chromium
+# browser regressions, the native GTK walk and its window-manager close lifecycle), and the native join
+# `TestWC1NativeClose/PC1b-join`, a subtest of the test the runner already selects. Its lifecycle trace (scenario
+# « PC1b-join » in native-lifecycle.jsonl) is, in this order: join-held (the guest's Join answered a restart, the Welcome
+# held), close-authorized (the coordinator's project approval, WC1), process-restarted (same pid, another startup id:
+# the execution in place, N-12), project-joined (the new image shows the host's text and the guest is a member).
+id = "webkit-native"
+command = '''set -eu
+out="$(realpath .task)/pc1b2-wc1"
+rm -rf "$out" && mkdir -p "$out"
+timeout -k 10 960 bash -s -- "$out" <<'PC1B2_NATIVE'
+set -eu
+out="$1"
+./scripts/heavy.sh bash scripts/wc1-webkit.sh "$out"
+python3 -I - "$out" <<'PY'
+import json, sys
+from pathlib import Path
+
+out = Path(sys.argv[1])
+report = json.loads((out / "webkit.json").read_text())
+scenarios = ("SAV-03b", "SHEET-MU-01b")
+expected = {(project, case) for project in ("webkit", "chromium") for case in scenarios}
+suites = list(report["suites"])
+passed = set()
+while suites:
+    suite = suites.pop()
+    suites.extend(suite.get("suites", []))
+    for spec in suite.get("specs", []):
+        scenario = spec["title"].split()[0]
+        for test in spec["tests"]:
+            if (test["status"] == "expected"
+                    and [r["status"] for r in test["results"]] == ["passed"]):
+                passed.add((test["projectName"], scenario))
+if expected - passed or report.get("errors"):
+    sys.exit(f"PC1b2 browser regressions missing or failing: {sorted(expected - passed)}")
+
+required = {"TestWC1NativeClose", "TestWC1NativeRecovery"}
+required.update(f"TestWC1NativeClose/{case}" for case in (*scenarios, "PC1b-join"))
+events = [json.loads(line) for line in (out / "native.jsonl").read_text().splitlines()]
+terminal = {e.get("Test"): e["Action"] for e in events
+            if e.get("Package") == "github.com/oioio-space/inkwell/cmd/inkwell"
+            and e["Action"] in {"pass", "fail", "skip"}}
+bad = {test: terminal.get(test, "absent") for test in required if terminal.get(test) != "pass"}
+bad.update({test: action for test, action in terminal.items()
+            if test and test.split("/")[0] in required and action != "pass"})
+if bad:
+    sys.exit(f"PC1b2 native scenarios missing or failing: {bad}")
+
+trace = [json.loads(line) for line in (out / "native-lifecycle.jsonl").read_text().splitlines()]
+for scenario, prepared, oracle in (
+    ("SAV-03b", "input-accepted", ["save-ack-durable"]),
+    ("SHEET-MU-01b", "selection-visible", ["goodbye-handed-off", "remote-selection-cleared"]),
+):
+    expected_trace = [prepared, "wm-close-sent", "gtk-close-request", "wails-close-vetoed",
+                      *oracle, "close-authorized", "close-permit-consumed", "gtk-window-destroyed",
+                      "process-exited", "process-relaunched", "project-reopened"]
+    rows = [e for e in trace if e["scenario"] == scenario]
+    if [e["event"] for e in rows] != expected_trace:
+        sys.exit(f"PC1b2 native {scenario}: incorrect window-manager close lifecycle")
+    for field in ("request", "window"):
+        if not rows[0][field] or any(e[field] != rows[0][field] for e in rows):
+            sys.exit(f"PC1b2 native {scenario}: mismatched {field} identity")
+    old_pid, new_pid = rows[0]["pid"], rows[-1]["pid"]
+    if (not all(type(pid) is int and pid > 0 for pid in (old_pid, new_pid))
+            or old_pid == new_pid or rows[-3].get("exit_code") != 0
+            or any(e["pid"] != old_pid for e in rows[:-2])
+            or any(e["pid"] != new_pid for e in rows[-2:])):
+        sys.exit(f"PC1b2 native {scenario}: no clean exit and distinct process relaunch")
+rows = [e for e in trace if e["scenario"] == "PC1b-join"]
+events = [e["event"] for e in rows]
+want = ["join-held", "close-authorized", "process-restarted", "project-joined"]
+it = iter(events)
+if not rows or not all(w in it for w in want):
+    sys.exit(f"PC1b2 native join: trace {events}, want the subsequence {want}")
+pids = {e["pid"] for e in rows}
+if len(pids) != 1 or not all(type(p) is int and p > 0 for p in pids):
+    sys.exit(f"PC1b2 native join: the restart is not in place (pids {sorted(pids)})")
+PY
+PC1B2_NATIVE'''
+
+[[criteria]]
+# The join with its restart on the rebased tree (WC1's close and HP1's upgrade included); light and dark captures; verdict ship.
+id = "ux-walkthrough"
+command = "test -s gates/PC1b2/UX.md && grep -qi 'restart' gates/PC1b2/UX.md && grep -Eq '^Verdict: ship' gates/PC1b2/UX.md"
+
+[[criteria]]
+# The /simplify review of the diff.
+id = "simplify-report"
+command = "test -s gates/PC1b/SIMPLIFY.md"

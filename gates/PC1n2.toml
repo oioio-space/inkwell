@@ -1,0 +1,106 @@
+# Written 2026-11-23 at step 1 of PC1b2, before the J-7 code, to be frozen after review. Second network gate of block
+# PC1b (header of gates/PC1n.toml: split to fit rule G-1's 45 min). Plan: docs/plans/2026-11-15-pc1b-join.md, rule
+# J-7 and section « Netsim proof of the join restart ». This gate: scenario 8 (three devices, two joins, both
+# variants) and scenario 9 (a device that restarts while linked, graceful and crash), each on three seeds.
+# Why scenario 9 changes (method v2 rule 9, a contract change stated and compared): since PC1b, bob reaches scenario
+# 9's harness restart after a first restart of its own, its join's (J-7 logs it). Two frozen clauses of scenario 9
+# then cannot pass as written, whatever the code: C3a (HP1n, graceful) requires alice's link-down count to be 0
+# before the harness restart and exactly one restart logged, and C3c (HP1n5, crash) requires no link-down at alice
+# over the whole run and one restart logged; the join restart is a second logged restart and may cost alice one
+# outage. They are replaced, under new names (a frozen name never gets a new meaning, HP1n5's lesson), by:
+# - C3j (graceful): alice's outages over the run are at most one inside the join window [t_j - 1 s, t_j + 15 s]
+#   and at most one inside the harness window [t_h - 1 s, t_h + 15 s] (t_j the time of bob's J-7 line, t_h the time
+#   of run.sh's `netsim: restart bob <ms>` line), none elsewhere; bob's own count is 0; exactly one J-7 join line
+#   and one harness restart line;
+# - C3k (crash): as C3j, but no outage inside the harness window (C3c's rule: P-15 supersedes the dead circuit only
+#   after the new connection's ACK), at most one inside the join window;
+# each outage is placed by its begin and end, read as in PC1n's C3w (`upMs`, `lastDownMs` of alice's link figures at
+# each read). At step 2, scenario 9's C3a and C3c are removed from netsim.spec.ts.
+# SUPERSEDES, decided by the integrator on 2026-11-23: (a) the scenario 9 part of gates/HP1n.toml's `netsim`
+# criterion, which requires {C1, C2, C3a} on 9-s2077[123] (its scenarios 1-4, 6, 7 are untouched): C1 and C2 are
+# kept by name here, C3a is replaced by C3j; (b) gates/HP1n5.toml's `netsim` criterion, which requires {C1d, C2d,
+# C3c} on 9-crash-s2077[123]: C1d and C2d are kept by name here, C3c is replaced by C3k. Why C3a and C3c cannot pass
+# once J-7 logs the join restart: both require `restarts("bob") === 1` (netsim.spec.ts: `msg=restarting` lines plus
+# run.sh's `netsim: restart` lines), and bob now logs two (its join's, J-7, then the harness's); C3a also requires
+# alice's count to be 0 before the harness restart, and C3c no outage at alice over the whole run, which the join
+# restart may cost once. gates/HP1n5.toml's `netsim-mutants` (MN3 on C1d) is not superseded: C1d keeps its meaning. Scenario 9's other clauses keep their names and clocks (C1, C2;
+# C1d, C2d from the harness restart, HP1n5).
+# Clauses added to scenarios 8 and 9: CJ (each joiner logs exactly one `msg=restarting change=join` line), and in
+# scenario 9 CJd (bob's new process sees its link to alice direct within 30 s of its J-7 line, clock from the
+# restart). Scenario 8 has no CJd: its A-B link stays relayed by design.
+# Wall-clock criteria take the machine with `heavy.sh --exclusive`; every command is capped; caps sum to 2440 s of
+# 2700 s (240 + 1300 + 450 + 450). Measured before PC1b: scenario 8, six runs in 814 s (HP1n2); scenario 9 crash, three
+# runs in 203 s (HP1n5).
+max_minutes = 45
+raw_results = ["docs/plans/2026-11-15-pc1b-join.md", "gates/PC1n2/*"]
+
+[[criteria]]
+# Scenario 8, editor and reader variants, seeds 20771, 20772, 20773, once each, strict: every clause passes, the
+# frozen C1..C5 and the new CJ (two joiners each: Alice and Bob join Carol in the editor pass, Carol and Bob join
+# Alice in the reader pass).
+id = "netsim-8"
+command = '''mkdir -p .task/pc1n2-results && rm -f .task/pc1n2-results/8-*.json && timeout -k 10 240 ./scripts/heavy.sh mise run e2e:build && { NETSIM_SCENARIOS=8 NETSIM_VARIANTS="editor reader" NETSIM_SEEDS="20771 20772 20773" NETSIM_EXPECT=strict INKWELL_E2E_BROWSER=chromium INKWELL_PERF_LOAD_WAIT=180 timeout -k 10 1300 ./scripts/heavy.sh --exclusive ./scripts/netsim/run.sh; rc=$?; cp .task/netsim/results/8-editor-s2077[123].json .task/netsim/results/8-reader-s2077[123].json .task/pc1n2-results/ 2>/dev/null; python3 -I - "$rc" <<'PY'
+import json, pathlib, sys
+need = {"C1", "C2", "C3", "C4", "C5", "CJ"}
+bad = []
+for run in ("8-editor", "8-reader"):
+    for seed in (20771, 20772, 20773):
+        p = pathlib.Path(f".task/pc1n2-results/{run}-s{seed}.json")
+        if not p.exists():
+            bad.append(f"{p.name} missing")
+            continue
+        r = json.loads(p.read_text())
+        got = {c["id"] for c in r["clauses"]}
+        red = [f'{c["id"]} {c["status"]}: {c.get("measured", "")[:80]}' for c in r["clauses"] if c["status"] != "pass"]
+        if r.get("expect") != "strict" or not need <= got or red:
+            bad.append(f"{p.name}: expect {r.get('expect')}, missing {sorted(need - got)}, red {red}")
+if int(sys.argv[1]) or bad:
+    sys.exit(f"PC1n2 netsim-8: exit {sys.argv[1]}, {bad}")
+PY
+}'''
+
+[[criteria]]
+# Scenario 9, graceful variant (run.sh's default), seeds 20771, 20772, 20773, strict: C1, C2, C3j, CJ, CJd pass and
+# no clause is red; C3a (superseded, header) must be gone.
+id = "netsim-9"
+command = '''mkdir -p .task/pc1n2-results && rm -f .task/pc1n2-results/9-s2077[123].json && { NETSIM_SCENARIOS=9 NETSIM_SEEDS="20771 20772 20773" NETSIM_EXPECT=strict INKWELL_E2E_BROWSER=chromium INKWELL_PERF_LOAD_WAIT=180 timeout -k 10 450 ./scripts/heavy.sh --exclusive ./scripts/netsim/run.sh; rc=$?; cp .task/netsim/results/9-s2077[123].json .task/pc1n2-results/ 2>/dev/null; python3 -I - "$rc" <<'PY'
+import json, pathlib, sys
+need, gone = {"C1", "C2", "C3j", "CJ", "CJd"}, {"C3a"}
+bad = []
+for seed in (20771, 20772, 20773):
+    p = pathlib.Path(f".task/pc1n2-results/9-s{seed}.json")
+    if not p.exists():
+        bad.append(f"{p.name} missing")
+        continue
+    r = json.loads(p.read_text())
+    got = {c["id"] for c in r["clauses"]}
+    red = [f'{c["id"]} {c["status"]}: {c.get("measured", "")[:80]}' for c in r["clauses"] if c["status"] != "pass"]
+    if r.get("expect") != "strict" or not need <= got or got & gone or red:
+        bad.append(f"{p.name}: expect {r.get('expect')}, missing {sorted(need - got)}, superseded {sorted(got & gone)}, red {red}")
+if int(sys.argv[1]) or bad:
+    sys.exit(f"PC1n2 netsim-9: exit {sys.argv[1]}, {bad}")
+PY
+}'''
+
+[[criteria]]
+# Scenario 9, crash variant, seeds 20771, 20772, 20773, strict: C1d, C2d (HP1n5's, clocks from the harness restart),
+# C3k, CJ, CJd pass and no clause is red; C3c (superseded, header) must be gone.
+id = "netsim-9-crash"
+command = '''mkdir -p .task/pc1n2-results && rm -f .task/pc1n2-results/9-crash-s2077[123].json && { NETSIM_SCENARIOS=9 NETSIM_VARIANTS=crash NETSIM_SEEDS="20771 20772 20773" NETSIM_EXPECT=strict INKWELL_E2E_BROWSER=chromium INKWELL_PERF_LOAD_WAIT=180 timeout -k 10 450 ./scripts/heavy.sh --exclusive ./scripts/netsim/run.sh; rc=$?; cp .task/netsim/results/9-crash-s2077[123].json .task/pc1n2-results/ 2>/dev/null; python3 -I - "$rc" <<'PY'
+import json, pathlib, sys
+need, gone = {"C1d", "C2d", "C3k", "CJ", "CJd"}, {"C3c"}
+bad = []
+for seed in (20771, 20772, 20773):
+    p = pathlib.Path(f".task/pc1n2-results/9-crash-s{seed}.json")
+    if not p.exists():
+        bad.append(f"{p.name} missing")
+        continue
+    r = json.loads(p.read_text())
+    got = {c["id"] for c in r["clauses"]}
+    red = [f'{c["id"]} {c["status"]}: {c.get("measured", "")[:80]}' for c in r["clauses"] if c["status"] != "pass"]
+    if r.get("expect") != "strict" or not need <= got or got & gone or red:
+        bad.append(f"{p.name}: expect {r.get('expect')}, missing {sorted(need - got)}, superseded {sorted(got & gone)}, red {red}")
+if int(sys.argv[1]) or bad:
+    sys.exit(f"PC1n2 netsim-9-crash: exit {sys.argv[1]}, {bad}")
+PY
+}'''

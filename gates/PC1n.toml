@@ -1,0 +1,64 @@
+# Written 2026-11-23 at step 1 of PC1b2, before the J-7 code, to be frozen after review. New gate (it supersedes
+# nothing): the network proof of block PC1b that the CLAUDE.md rule requires for a block that touches device arrival
+# and invitation (« Pièges connus »: PC1b passed its first gate and broke a scenario only the push's CI saw). Since
+# PC1b every pairing of the simulation is a join that restarts the joiner (helpers `pair`/`joinAs` -> `acceptJoin`), so
+# scenario 5 now goes through the join restart. Plan: docs/plans/2026-11-15-pc1b-join.md, rule J-7 and section
+# « Netsim proof of the join restart ». Split from gates/PC1n2.toml (scenarios 8 and 9) to fit rule G-1's 45 min:
+# scenario 5 alone takes about 330 s a run (HP1n3: 991 s for three seeds, 415 s for one mutant run).
+# Clauses this gate adds to scenario 5 (none exists at step 1, so the gate is red for that reason until step 2):
+# - CJ: bob's log has exactly one `msg=restarting change=join` line (J-7), the restart of its join;
+# - CJd: bob's new process sees its link to alice direct within 30 s of that line's time (the clock starts at the
+#   restart, never at page readiness: the HP1n5 lesson); PC1b's defect of 2026-11-15 (a link relayed for good after
+#   the restart) as an executable clause;
+# - C3w: alice's link to bob, read at the baseline, has at most one outage, and it begins inside the window
+#   [t_r - 1 s, t_r + 15 s], t_r the time of bob's J-7 line; its begin is the read time minus `upMs` minus
+#   `lastDownMs` of alice's link figures (internal/transport/link.go UpSince, LastDown). C3a (frozen by HP1n3) still
+#   counts; C3w places. This closes the item HP1 left for PC1b (gates/HP1/SIMPLIFY.md, « C3a … restart window »).
+# Mutant MN4 (scripts/netsim/mutants.toml, block PC1n, written at step 1: its anchor applies to current code):
+# alice records each outage as begun 30 s before the connection was lost (linkstat.go `down`), so the one outage
+# of bob's restart lies outside the window while its count stays 1: C3a passes, C3w must fail.
+# Wall-clock criteria take the machine with `heavy.sh --exclusive`; every command is capped; caps sum to 2700 s of
+# 2700 s (240 + 1500 + 30 + 30 + 900).
+max_minutes = 45
+raw_results = ["docs/plans/2026-11-15-pc1b-join.md", "gates/PC1n/*"]
+
+[[criteria]]
+# Scenario 5 « bad Wi-Fi that changes », seeds 20771, 20772, 20773, once each, strict: every clause passes, the
+# frozen ones (C1..C6, C3a, SI1) and the three new ones (CJ, CJd, C3w). run.sh wipes its state at its start, so the
+# result files are copied to .task/pc1n-results right after it and only those copies are read.
+id = "netsim"
+command = '''rm -rf .task/pc1n-results && mkdir -p .task/pc1n-results && timeout -k 10 240 ./scripts/heavy.sh mise run e2e:build && { NETSIM_SCENARIOS=5 NETSIM_SEEDS="20771 20772 20773" NETSIM_EXPECT=strict INKWELL_E2E_BROWSER=chromium INKWELL_PERF_LOAD_WAIT=180 timeout -k 10 1500 ./scripts/heavy.sh --exclusive ./scripts/netsim/run.sh; rc=$?; cp .task/netsim/results/5-s2077[123].json .task/pc1n-results/ 2>/dev/null; python3 -I - "$rc" <<'PY'
+import json, pathlib, sys
+need = {"C1", "C2", "C3", "C3a", "C4", "C5", "C6", "SI1", "CJ", "CJd", "C3w"}
+bad = []
+for seed in (20771, 20772, 20773):
+    p = pathlib.Path(f".task/pc1n-results/5-s{seed}.json")
+    if not p.exists():
+        bad.append(f"{p.name} missing")
+        continue
+    r = json.loads(p.read_text())
+    got = {c["id"] for c in r["clauses"]}
+    red = [f'{c["id"]} {c["status"]}: {c.get("measured", "")[:80]}' for c in r["clauses"] if c["status"] != "pass"]
+    if r.get("expect") != "strict" or not need <= got or red:
+        bad.append(f"{p.name}: expect {r.get('expect')}, missing {sorted(need - got)}, red {red}")
+if int(sys.argv[1]) or bad:
+    sys.exit(f"PC1n netsim: exit {sys.argv[1]}, {bad}")
+PY
+}'''
+
+[[criteria]]
+# MN4 is exactly the frozen entry (kind e2e, scenario 5, clause C3w; step 2 adjusts its anchor only) and its anchor
+# applies once; then, seed 20772, the outage placed 30 s early turns C3w red, caught by its clause, not by a crash or
+# a timeout (mutants.py: a « fail » with an error is a harness exception, not a catch).
+id = "netsim-mutants"
+command = '''timeout -k 10 30 python3 -I - <<'PY' && timeout -k 10 30 python3 -I scripts/netsim/mutants.py --check PC1n && NETSIM_MUTANT_SEED=20772 INKWELL_PERF_LOAD_WAIT=180 timeout -k 10 900 ./scripts/heavy.sh --exclusive python3 -I scripts/netsim/mutants.py PC1n MN4
+import sys, tomllib
+ms = {m["id"]: m for m in tomllib.load(open("scripts/netsim/mutants.toml", "rb"))["mutant"] if m.get("block") == "PC1n"}
+want = {"MN4": ("e2e", 5, None, "C3w")}
+bad = sorted(set(ms) ^ set(want))
+for i, t in want.items():
+    m = ms.get(i, {})
+    if (m.get("kind"), m.get("scenario"), m.get("variant"), m.get("clause")) != t or not m.get("edit"):
+        bad.append(i)
+sys.exit(f"PC1n mutant entries differ from the frozen table: {bad}" if bad else 0)
+PY'''
