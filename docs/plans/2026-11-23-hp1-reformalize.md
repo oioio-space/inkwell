@@ -183,6 +183,7 @@ MN1 build. This is a light tooling block, committed to `main` first. No frozen g
 | HP1m | kept verbatim | MH1-MH22 per the table (MH6 now pure) | 1800 s |
 | HP1r | kept verbatim | H-19 | 2190 s |
 | **HP1c** | new | docs 30 (H-20; P-15 with its exemption) · tla `^HP1c` 1000, exclusive (18 runs: 3 sound, 2 safety, the 7 model mutants M31-M33 and Supersede's four caught, 6 witnesses reached) · pure + vectors 60, fuzz 30 (corpus digest frozen) · sim + 40-run acceptance, race, 600 · MH23, MP1-MP4: table 30, anchors 30, runs 440 · gremlins `protocol/syncack` 300 | 2520 s |
+| **HP1c2** | new (2026-11-23), supersedes HP1c (kept frozen as history) | HP1c verbatim except the corpus (15 vectors: `supersede_dead_middle_acked_keeps_older`, review finding 3b) and its digest, and the TLA runs (20 ✓: mutant `HP1cSupersedeBackwardAck` caught by `FallbackKept` on three connections; `HP1cSupersedeThree`, the sound rule on three connections by seeded simulation; MS4 redefined as MP2, since `FallbackKept` now implies `NeverCloseSole`); raw results under `gates/HP1c2/` | 2520 s, as HP1c |
 | HP1n, HP1n2, HP1n3 | kept verbatim | MN1/MN2 now build (§4) | as frozen |
 | **HP1n4** | new | `e2e:build` 240 · scenario 9 variant `crash` (SIGKILL, new port), seeds 20771-3, strict, from bob's page readiness: C1c direct ≤ 15 s, C2c both ways converge ≤ 15 s, C3c alice never shows bob away (no spurious `PeerDown`), 1300 · MN3 (block `HP1n4`, `Supersede` decides nothing), P-15 off, turns C2c red (≥ 30 s): table 30, anchor 30, run 900. Needs `main`'s `a153829` (§4) | 2500 s |
 
@@ -192,7 +193,8 @@ is used only for the environment hypothesis, that a real relay keeps the half-op
 **Order.** (1) The §4 tooling block, committed to `main`. (2) Step 1: spec text, models with mutants, vectors, the
 HP1c and HP1n4 tests (red for the right reason), cross-family review of spec and gates, freeze. (3) TDD to green.
 (4) `/simplify`. (5) A 20-30 min smoke. (6) Each gate **once** on the same final candidate: HP1b → HP1m → HP1r →
-HP1c → HP1n → HP1n2 → HP1n3 → HP1n4 (controlled time first, exclusive netsim last; no gate runs another).
+HP1c2 → HP1n → HP1n2 → HP1n3 → HP1n4 (controlled time first, exclusive netsim last; no gate runs another). HP1c2
+replaces HP1c in this order (2026-11-23, code review finding 3b, §8 below).
 
 ## 6. Out of scope (each with its block)
 
@@ -227,7 +229,28 @@ changes were applied:
 3. [Minor] A test and a Go mutant for an older connection that answers in time. Applied with
    `TestSupersedeKeepsLiveOlder`, MP3 and M32/`CloseOnTimer`.
 
+## 8. Code review of step 2 (Gemini, 2026-11-23)
+
+Verdict « reject ». Findings 1, 2 and 3a were real and are fixed in code and spec (§8.6, §8.7.4). Finding 4 was not a
+defect on its own: churn is bounded by the rule, one proof per connection, a pending one never restarted. Table and
+evidence: `gates/HP1/SIMPLIFY.md`, « HP1c step 2, cross-family code review ». Finding 3b is a defect of the rule
+itself. The exemption was lifted by the ACK of any newer connection, so a dead acknowledged middle connection let the
+oldest one close while the newest awaited its first ACK. The fix is in the rule: only a newer connection still judged
+alive lifts it (acknowledged, its proof not silent; the newest is never judged). It is written as spec text, the 15th
+vector `supersede_dead_middle_acked_keeps_older` (red on the step-1 decision: `close: got [1], want []`), the model
+change (`NewerAcked` excludes a silent connection, the close checks it again, `FallbackKept` reads it when the close
+runs) and mutant MS5 `HP1cSupersedeBackwardAck`, on AnyTiming's constants with three connections. The sound rule on three
+connections is checked by a seeded TLC simulation (`HP1cSupersedeThree`), and MS4 is redefined as MP2. The
+exhaustive check on three stays a residual → HP1: no exhaustive bound measured fits the budget. That changes frozen
+content (corpus digest, run list), so `gates/HP1c2.toml` supersedes `gates/HP1c.toml` (method v2 rule 9). The pure
+decision changes at the code step after the freeze.
+
 
 ## Gate freeze review (Gemini, 2026-11-23)
 
-Gemini (Antigravity CLI) reviewed gates/HP1b.toml, HP1c.toml and HP1n4.toml against HP1, HP1m, HP1n*, HP1r, method v2 rule 9 and gate.py G-1: verdict « freeze ». HP1b differs from HP1 only by its header, raw_results and the MH6 row; HP1c covers H-20 and P-15 at every layer; HP1n4's clauses C1c, C2c, C3c and MN3 prove the crash restart. Minor points left to step 2: MH23's mutants.toml entry (locked by HP1c's symmetric-difference check) and scenario 9's crash variant in scripts/netsim/run.sh. → HP1
+Gemini reviewed gates/HP1b.toml, HP1c.toml and HP1n4.toml: « freeze ». → HP1
+
+
+## Second review round and HP1c2 freeze (Gemini, 2026-11-23)
+
+The first code review rejected step 2 (a local proof failure read as peer silence; a proof state never cleared; a close executed after the newer connection was lost; an ACK from a dead middle connection lifting the fallback exemption). The second round verified the first three fixed at the root (Void = no verdict; Proving ends on every exit; the close re-decided against live connections before Close), the 3b spec sentence, the 15th vector (red on the unfixed pure code, as required) and the model (NewerAcked excludes a silent connection; mutant MS5 BackwardAck on three connections). Verdicts: code « accept », HP1c2 « freeze ». HP1c2 supersedes HP1c; MS4 redefined because FallbackKept implies NeverCloseSole under the close re-check; the exhaustive three-connection check is a residual, covered meanwhile by a seeded TLC simulation. → HP1
