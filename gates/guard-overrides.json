@@ -1839,6 +1839,126 @@
       "id": "06cda4b8f7234d0f5c36fc59037ed5225aefa0a7b1ee76d2baafd472c52baf2c",
       "reason": "HP1 merge: tla-check.sh gains two shellcheck SC2154 annotations (sim_seed, sim_depth, sim_traces are set per call as prefixes); the run list (`--list` identical to the gated tree), TLC arguments and verdict lines are unchanged.",
       "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "578eb67bc6d14bfaa7427c2bd7ef40243945945145bdbf69fa1e5649d1d67af4",
+      "reason": "PC1b2 step 2 (J-7: the restart dep restartRequested became restartChange, one line of this file; same change, new fingerprint): cmd/inkwell/restart_linux_test.go: a new test (first-launch join restarts, J-3) with its own 10 s wait; no existing delay changed (was 85cdbd2a…)",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "b23d1351ab5281f23b2c881d0b9e2dfa23550efef8979fcd65700c811e48bd9e",
+      "reason": "PC1b2 step 2 (J-7: the restart dep restartRequested became restartChange, one line of this file; same change, new fingerprint): cmd/inkwell/restart_linux_test.go: the 90 s context of the same new test, which runs a real child process image; no existing delay changed (was 35991fc2…)",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "f2389a68b2e4a4422ebf1fb23b87a06665ab80116601cc0160c4057c9282ec1d",
+      "reason": "frontend/e2e/project-change.spec.ts: new join tests (J-2) wait for another process image; a new poll bound, no existing one raised",
+      "decision": "docs/plans/2026-11-15-pc1b-join.md"
+    },
+    {
+      "id": "43b23aec5db1289cc5c1b79cc94b9bed6b11d64159e0e64b1b90face895a0724",
+      "reason": "frontend/e2e/project-change.spec.ts: test.setTimeout of the new waiting-join test, which freezes the inviter on purpose; no existing test's budget raised",
+      "decision": "docs/plans/2026-11-15-pc1b-join.md"
+    },
+    {
+      "id": "d480a7975c95be8f0a6bd68a98de98da0481967568d77c7cc59f4de83324a7ad",
+      "reason": "frontend/src/workspace/workspace.svelte.ts: #projectOf renamed #announced(peer, timeoutMs?); the same-project path keeps its 10 s; only the pending join waits without end (J-2), and for the inviter alone (F1 of the code review)",
+      "decision": "docs/plans/2026-11-15-pc1b-join.md"
+    },
+    {
+      "id": "fc3f2ab031a6e0c77a38c548222d257e64c6b154d5534cf8c25999e3886beee0",
+      "reason": "frontend/src/workspace/workspace.svelte.ts: the timer of the same function, optional for the pending join (J-2: every start waits again); the live path is unchanged",
+      "decision": "docs/plans/2026-11-15-pc1b-join.md"
+    },
+    {
+      "id": "9dbbb78dad4e4a6e9f39a484a0e7cadd9b5604ac8a2fe00925b0c09359b4b890",
+      "reason": "internal/app/foreign_test.go: the N-1 test no longer interleaves a live adoption, which rule J-1 removes (a join restarts); it now proves the running session keeps its list and the restarted image answers member at once",
+      "decision": "docs/plans/2026-11-15-pc1b-join.md"
+    },
+    {
+      "id": "eb5e06c18d33a15252d9578b5ac6fd4a93a692d6060e2fc07eb841d20575fc16",
+      "reason": "internal/app/foreign_test.go: same rewrite of the N-1 test; the timeout branch belonged to the removed live interleaving",
+      "decision": "docs/plans/2026-11-15-pc1b-join.md"
+    },
+    {
+      "id": "0223ba110f4d7e3638d3f0f2b806ffcf5dcf6602b837308184f8ae3b7773e6c7",
+      "reason": "internal/app/foreign_test.go: same rewrite of the N-1 test; the wait belonged to the removed live interleaving",
+      "decision": "docs/plans/2026-11-15-pc1b-join.md"
+    },
+    {
+      "id": "befd26d940b9bf07c258ee968ad438f94789f84975538a5bc3f46113f40c2a35",
+      "reason": "frontend/e2e/helpers.ts: the status locator gains .first(), because the join notice is now a second status element; the 60 s bound is unchanged",
+      "decision": "docs/plans/2026-11-15-pc1b-join.md"
+    },
+    {
+      "id": "09b011342785d13e40a6c8112ac026b2a8421ce6786e7be88bf7d2546cbecbf3",
+      "reason": "frontend/e2e/helpers.ts: new shared helper acceptJoin (the confirmation step of rule J-2), with the same bounds as the lines it replaces in the specs; none raised",
+      "decision": "docs/plans/2026-11-15-pc1b-join.md"
+    },
+    {
+      "id": "9dd91ecc49ad077e88f34ca189ad4c091a633c6fafaa1feeebe49da33005d906",
+      "reason": "frontend/e2e/history.spec.ts: uses acceptJoin and .first() on the status locator; the 60 s bound is unchanged",
+      "decision": "docs/plans/2026-11-15-pc1b-join.md"
+    },
+    {
+      "id": "8e041cbf4dea6cd8b3732d4c63dc335b3e8c9a120df0d92cb89703e0aae349c1",
+      "reason": "frontend/e2e/join.spec.ts: uses acceptJoin and .first() on the status locator; the 60 s bound is unchanged",
+      "decision": "docs/plans/2026-11-15-pc1b-join.md"
+    },
+    {
+      "id": "0177025ca30e8e312c192f576e8b8d82794cc2529e9a4ed7f26a8668b7cf0658",
+      "reason": "frontend/e2e/project-change.spec.ts: the 60 s poll of the new test « a waiting join returns to the previous document » (it waits for another process image), same bound as its neighbours; no existing one raised",
+      "decision": "docs/plans/2026-11-15-pc1b-join.md"
+    },
+    {
+      "id": "5bc890cb36c18b575978d0ce22051e5ee11a173a5474892aefa961be00325f85",
+      "reason": "frontend/e2e/project-change.spec.ts: test.setTimeout(180_000) of the same new test, which freezes the inviter and restarts twice, same budget as the waiting-join test; no existing test's budget raised",
+      "decision": "docs/plans/2026-11-15-pc1b-join.md"
+    },
+    {
+      "id": "286b930fe06e67aacb2a72005a34c79c5a548900bba6012b2aca41e1c70e88ce",
+      "reason": "PC1b re-applied on main 8a23f84 (rebase; same change, new fingerprint): frontend/e2e/helpers.ts: pair() reads alice's status with .first(), because the join notice is now a second status element; the 60 s bound is unchanged (was befd26d9…)",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "6694b52704b219b81444a49d3fba0a5f00aeb480b91b8bd40bff5c97bec98138",
+      "reason": "PC1b re-applied on main 8a23f84 (rebase; same change, new fingerprint): frontend/e2e/helpers.ts: pair() reads bob's status with .first(), same reason; the 60 s bound is unchanged",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "f1454842a235fc944f4426b63e1580347107911f7841e64b92db2c57c2faab6e",
+      "reason": "PC1b re-applied on main 8a23f84 (rebase; same change, new fingerprint): frontend/e2e/history.spec.ts: uses acceptJoin and .first() on the status locator; the 60 s bound is unchanged (was 9dd91ecc…)",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "1b5d116bc9368de40101188c6ccb6f56a53bd6c511ff85c5f519541ffa25cf25",
+      "reason": "PC1b re-applied on main 8a23f84 (rebase; same change, new fingerprint): frontend/src/workspace/workspace.svelte.ts: #projectOf renamed #announced(peer, timeoutMs?); the same-project path keeps its 10 s; only the pending join waits without end (J-2), for the inviter alone (F1) (was d480a797…)",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "d6618ad75ba6e50f22a40381b910626957c777e9eeb9f53599ab3717eb03310f",
+      "reason": "PC1b re-applied on main 8a23f84 (rebase; same change, new fingerprint): frontend/src/workspace/workspace.svelte.ts: the timer of the same function, optional for the pending join (J-2: every start waits again); the live path is unchanged (was fc3f2ab0…)",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "49928beb536748f19a85fdd91765b0a7391f0a980884191085fc4397169258b3",
+      "reason": "PC1b2 step 2: frontend/e2e/offline.spec.ts reads alice's « Seul » from the header status (getByRole(\"banner\").getByRole(\"status\"), as the same test's last line does): since PC1b the join notice is a second status element and the bare locator failed in strict mode (gates/PC1b/SIMPLIFY.md); the 30 s bound and the expected text are unchanged",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "ebf2ff17d2501631611af4de119243daa6fbedb293326acd7539170257986d59",
+      "reason": "PC1b2 step 2: frontend/e2e/offline.spec.ts reads bob's « Seul » from the header status (getByRole(\"banner\").getByRole(\"status\"), as the same test's last line does): since PC1b the join notice is a second status element and the bare locator failed in strict mode (gates/PC1b/SIMPLIFY.md); the 30 s bound and the expected text are unchanged",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "41feb58ee37c40e08af4d3b6213ecd283228c9f42602973a135812995fd4e7da",
+      "reason": "PC1b2 UX fixes J-8 and J-9 (same change, new fingerprint: the file gained refreshInvitation and kept canReturn after a join; this line is untouched): frontend/src/workspace/workspace.svelte.ts: #projectOf renamed #announced(peer, timeoutMs?); the same-project path keeps its 10 s; only the pending join waits without end (J-2), for the inviter alone (F1) (was 1b5d116b…)",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "42b6a1e6cbb3039e05de3d0bca516666fbccdc6fa3440df56dfc909036b60dee",
+      "reason": "PC1b2 UX fixes J-8 and J-9 (same change, new fingerprint; this line is untouched): frontend/src/workspace/workspace.svelte.ts: the timer of the same function, optional for the pending join (J-2: every start waits again); the live path is unchanged (was d6618ad7…)",
+      "decision": "docs/objectif-en-cours.md"
     }
   ]
 }

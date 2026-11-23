@@ -36,6 +36,7 @@ import { session } from "./ui/editorSession.svelte";
 import HistoryBars from "./ui/history/HistoryBars.svelte";
 import HistoryDrawer from "./ui/history/HistoryDrawer.svelte";
 import { history } from "./ui/history/history.svelte";
+import JoinWaiting from "./ui/JoinWaiting.svelte";
 import NoticeToast from "./ui/NoticeToast.svelte";
 import { notice } from "./ui/notice.svelte";
 import ProjectionBanner from "./ui/ProjectionBanner.svelte";
@@ -539,6 +540,8 @@ onMount(() => {
       }}
       {canPresent}
       onPresent={present}
+      canReturn={workspace.canReturn && !workspace.leaving}
+      onReturn={() => void workspace.returnToPrevious()}
     />
     {#if barVisible && session.state && barLanguage}
       <FormatBar
@@ -608,6 +611,8 @@ onMount(() => {
               <ReadOnlyText text={workspace.big.text} />
             {/if}
           {/key}
+        {:else if workspace.waitingFor !== undefined}
+          <JoinWaiting />
         {:else if workspace.active}
           {@const active = workspace.active}
           {#key active.url}
@@ -625,7 +630,8 @@ onMount(() => {
           {/key}
         {/if}
       </div>
-      {#if mainFile && previewOpen && !showSheet && !presenting && !workspace.big}
+      <!-- While the document of a join is waited for there is nothing to preview (PC1b, J-2). -->
+      {#if mainFile && previewOpen && !showSheet && !presenting && !workspace.big && workspace.waitingFor === undefined}
         <div class="pane side-preview">
           <Preview
             onSourceJump={jumpFromPage}

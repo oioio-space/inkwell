@@ -88,7 +88,7 @@ $effect(() => {
 <footer class="bot" aria-label={t("status.bar")}>
   <span class="people" data-status={status}>
     <span class="dot" aria-hidden="true"></span>
-    {peerCount === 0 ? t("status.alone") : tn("people.count", peerCount + 1)}
+    {peerCount === 0 ? t(status === "connecting" ? "status.connecting" : "status.alone") : tn("people.count", peerCount + 1)}
   </span>
   <span class="sp"></span>
   {#if onNextProblem}

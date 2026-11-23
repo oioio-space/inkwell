@@ -150,8 +150,8 @@ func TestTakeOverThenNextStartInvites(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Error("N-5 the request asks to quit: no quit")
 	}
-	if len(quits) != 0 || !rt.RestartRequested() {
-		t.Errorf("N-5 the request asks to quit once and restart: %d more quits, restart recorded %v", len(quits), rt.RestartRequested())
+	if len(quits) != 0 || rt.RestartChange() == "" {
+		t.Errorf("N-5 the request asks to quit once and restart: %d more quits, restart recorded %v", len(quits), rt.RestartChange() != "")
 	}
 	if err := rt.Close(); err != nil {
 		t.Fatal(err)
@@ -410,8 +410,8 @@ func TestTakeOverNoOpForMember(t *testing.T) {
 	if err != nil || got.Restarting {
 		t.Errorf("N-8 a member's take-over does nothing: TakeOver = %+v, %v; want not restarting", got, err)
 	}
-	if quits != 0 || rt.RestartRequested() {
-		t.Errorf("N-8 a member's take-over does nothing: quit %d times, restart recorded %v", quits, rt.RestartRequested())
+	if quits != 0 || rt.RestartChange() != "" {
+		t.Errorf("N-8 a member's take-over does nothing: quit %d times, restart recorded %v", quits, rt.RestartChange() != "")
 	}
 	if inv, err := rt.Session.Invite("writer"); err != nil || inv.Text == "" {
 		t.Errorf("N-8 a member's take-over does nothing: Invite after it = %+v, %v", inv, err)
@@ -559,8 +559,8 @@ func TestTakeOverRefusedWhereNoRestart(t *testing.T) {
 	if err := rt.Close(); err != nil {
 		t.Fatal(err)
 	}
-	if diff := changed(before, treeFiles(t, folder, nil)); len(diff) > 0 || quits != 0 || rt.RestartRequested() {
-		t.Errorf("R-8 no take-over where no restart: changed %v, quit %d times, restart recorded %v", diff, quits, rt.RestartRequested())
+	if diff := changed(before, treeFiles(t, folder, nil)); len(diff) > 0 || quits != 0 || rt.RestartChange() != "" {
+		t.Errorf("R-8 no take-over where no restart: changed %v, quit %d times, restart recorded %v", diff, quits, rt.RestartChange() != "")
 	}
 	if !startIn(t, home, proj, false).Session.CanTakeOver() {
 		t.Error("R-8 the take-over is offered where Inkwell can restart: CanTakeOver = false")

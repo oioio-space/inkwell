@@ -25,6 +25,7 @@ import {
   setClipboard,
   setText,
   shot,
+  tableAfterJoin,
 } from "./sheetHelpers";
 
 // B9 — the spreadsheet. Everything here drives the real app (two real Inkwell instances) with
@@ -887,6 +888,7 @@ test.describe("two people on one sheet (SHEET-MU)", () => {
     const bob = await openSheet(browser, BOB_URL, { dark: true, width: 1100, height: 640 });
     await setText(alice, "");
     await pair(alice, bob);
+    await tableAfterJoin(bob);
     await setText(alice, SEED);
     await expect(cell(bob, 1, 3)).toContainText("8");
     return { alice, bob };

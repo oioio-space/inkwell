@@ -1,12 +1,16 @@
 <script lang="ts">
+import { untrack } from "svelte";
 import { t } from "../i18n";
 import { workspace } from "../workspace/workspace.svelte";
 import Icon from "./icons/Icon.svelte";
+import JoinConfirmDialog from "./JoinConfirmDialog.svelte";
 
 let { open = $bindable(false) }: { open: boolean } = $props();
 let dialog: HTMLDialogElement | undefined = $state();
 let address = $state("");
 let copied = $state(false);
+/** Whether Go has answered, for this opening, what became of the invitation shown (J-8). */
+let checked = $state(false);
 
 const hostHelp = $derived(
   {
@@ -23,6 +27,20 @@ $effect(() => {
   if (!open && dialog?.open) dialog.close();
 });
 
+// The invitation shown is the one Go still holds, never a used or expired one (PC1b, rule J-8):
+// at each opening it shows only once Go has answered, so a spent one never flashes by.
+$effect(() => {
+  if (!open) return;
+  checked = false;
+  // Once per opening: a new invitation made here is open, and is not asked about again.
+  untrack(() => void workspace.refreshInvitation().finally(() => (checked = true)));
+});
+
+// A dropped invitation is used (PC1b, rule J-2): its text leaves the field.
+$effect(() => {
+  if (workspace.joinCancelled) address = "";
+});
+
 async function copy() {
   await navigator.clipboard.writeText(workspace.invitation);
   copied = true;
@@ -32,7 +50,8 @@ async function copy() {
 async function join(e: SubmitEvent) {
   e.preventDefault();
   await workspace.join(address);
-  if (!workspace.error) open = false;
+  // An invitation into another document waits for the confirmation, over this dialog.
+  if (!workspace.error && !workspace.joinOffer) open = false;
 }
 </script>
 
@@ -61,9 +80,11 @@ async function join(e: SubmitEvent) {
       <span>{hostHelp}</span>
       <button type="button" class="btn" disabled={!workspace.mayInvite} onclick={() => workspace.host()}>{t("share.host")}</button>
     </div>
-    {#if workspace.invitation && workspace.invitationUsed}
+    {#if !checked}
+      <!-- Go is asked what became of the invitation: nothing is offered meanwhile. -->
+    {:else if workspace.invitation && workspace.invitationState !== "open"}
       <div class="row" role="status">
-        <span>{t("share.used")}</span>
+        <span>{t(workspace.invitationState === "expired" ? "share.expired" : "share.used")}</span>
         <button type="button" class="btn" disabled={!workspace.mayInvite} onclick={() => workspace.host()}>{t("share.renew")}</button>
       </div>
     {:else if workspace.invitation}
@@ -93,10 +114,21 @@ async function join(e: SubmitEvent) {
       />
     </label>
     <div class="row end">
-      <button type="submit" class="sug" disabled={workspace.joining}>
+      <button type="submit" class="sug" disabled={workspace.joining} aria-busy={workspace.joining}>
         {t("share.join")}
       </button>
     </div>
+    <!-- While the person who invites answers, the card says so; before, that a join into another
+         document restarts Inkwell and keeps the current one (PC1b, rule J-2; in a copy of this
+         one it does not); after « Annuler », that the invitation is used; after a failed attempt,
+         only the error below. -->
+    {#if workspace.joining}
+      <p class="note in-card" role="status">{t("join.connecting")}</p>
+    {:else if workspace.joinCancelled}
+      <p class="note in-card" role="status">{t("join.cancelled")}</p>
+    {:else if !foreign && !workspace.error}
+      <p class="note in-card">{t("join.restart.note")} {t("join.restart.kept")}</p>
+    {/if}
   </form>
 
   {#if workspace.error}
@@ -104,6 +136,15 @@ async function join(e: SubmitEvent) {
   {/if}
   <p class="note">{t("share.trust")}</p>
 </dialog>
+
+{#if workspace.joinOffer}
+  <JoinConfirmDialog
+    offer={workspace.joinOffer}
+    busy={workspace.leaving}
+    onyes={() => workspace.confirmJoin()}
+    onno={() => workspace.cancelJoin()}
+  />
+{/if}
 
 <style>
   dialog {
@@ -200,5 +241,9 @@ async function join(e: SubmitEvent) {
     margin: var(--space-2) 0 0;
     color: var(--fg-dim);
     font-size: 13px;
+  }
+  .in-card {
+    margin: 0;
+    padding: 0 var(--space-3) var(--space-2);
   }
 </style>

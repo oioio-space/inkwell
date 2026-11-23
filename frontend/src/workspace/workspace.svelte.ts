@@ -30,7 +30,7 @@ import {
   sendingCount,
 } from "../net/syncIndicator";
 import { type SocketLike, WailsNetworkAdapter } from "../net/WailsNetworkAdapter";
-import { markLeave } from "../restart/mark";
+import { type LeaveKind, markLeave } from "../restart/mark";
 import { ExternalSync, type Notice } from "../store/externalSync";
 import { type FileInfo, FileKind, type ProjectFile } from "../store/files";
 import { ExternalEditError, GoStorageAdapter, NotTextError } from "../store/GoStorageAdapter";
@@ -92,9 +92,13 @@ export function assetFetch(url: string, method: "GET" | "HEAD" = "GET"): Promise
 const WATCH_MS = 2000;
 
 type Opened = { text?: string; image?: string; failed?: boolean };
+/** The answers of `Session.InvitationState` (PC1b, rule J-8). */
+export type InvitationState = "open" | "used" | "expired";
 
 /** How long the page waits for its edits to be saved before it leaves for a project change (rule N-15). */
 export const LEAVE_FLUSH_MS = 5000;
+/** How long the page waits before it asks again for the document of a join (rule J-2). */
+export const JOIN_RETRY_MS = 1000;
 
 class Workspace {
   peers = $state<string[]>([]);
@@ -113,20 +117,29 @@ class Workspace {
     this.syncShown = shown;
     this.syncSending = n;
   });
+  /**
+   * Who this start waits for: the person whose invitation was accepted, while the document of
+   * the join has not arrived (PC1b, rule J-2); "" when no name is known for that person (the
+   * sentence then names nobody); undefined when nothing is waited for.
+   */
+  waitingFor = $state<string | undefined>();
   /** Follows `peers` and the indicator, so the header and the people count cannot disagree. */
   status = $derived<Status>(
     this.access === "suspended"
       ? "suspended"
-      : statusOf(this.syncShown, this.peers.length, this.joining),
+      : // Never « Seul » while the document of a join is waited for (PC1b, J-2).
+        statusOf(this.syncShown, this.peers.length, this.joining || this.waitingFor !== undefined),
   );
   myId = $state("");
   myName = $state(safeGet(NAME_KEY) ?? "");
   /** The invitation text to give to the person joining: opaque, copied and pasted as is. */
   invitation = $state("");
-  /** True once someone new connected after the invitation was made: it works once, so it is dead. */
-  invitationUsed = $state(false);
-  /** The people already connected when the invitation was made: none of them used it. */
-  #knownAtInvite = new Set<string>();
+  /**
+   * What became of {@link invitation}, as Go says (PC1b, rule J-8): it works ("open") until its
+   * ticket is redeemed ("used", whether or not that person then connects) or reaches its end
+   * ("expired"). Only an open invitation is offered to copy.
+   */
+  invitationState = $state<InvitationState>("open");
   /** Display names of present people, by peer id (from presence). */
   names = $state<Record<string, string>>({});
   peerFiles = $state<Record<string, string>>({});
@@ -319,6 +332,22 @@ class Workspace {
   authorizeProjectLeave: (() => Promise<boolean> | undefined) | undefined;
   #closeFocus: HTMLElement | undefined;
   #storeStarted = false;
+  /**
+   * The accepted invitation Go holds until the person confirms (PC1b, J-2): the joined document
+   * and the folder it gets, as Go named them, and the folder of the text open now, "" when the
+   * person has no text of their own (a first launch). Undefined when nothing is held.
+   */
+  joinOffer = $state<{ title: string; folder: string; current: string } | undefined>();
+  /**
+   * True once a held invitation was dropped, until the next « Rejoindre »: an invitation is used
+   * once, so its text is of no use any more and the page asks for a new one (PC1b, J-2).
+   */
+  joinCancelled = $state(false);
+  /**
+   * Whether the document open before the join that made this folder can be returned to: on the
+   * waiting page while the join waits (PC1b, J-2), in the main menu once it completed (J-9).
+   */
+  canReturn = $state(false);
 
   /**
    * Leaves this page for the one at `to` before a project change is asked of Go (PC1, rule N-15):
@@ -330,6 +359,7 @@ class Workspace {
    */
   async leave(
     to: string,
+    kind: LeaveKind = "takeOver",
     navigate: (url: string) => void = (url) => location.replace(url),
   ): Promise<boolean> {
     if (this.leaving || this.closing) return false;
@@ -342,7 +372,7 @@ class Workspace {
       return false;
     }
     await this.closeBeforeRestart();
-    markLeave(); // the next page asks Go only after this confirmed leave (rule N-9)
+    markLeave(kind); // the next page asks Go only after this confirmed leave (rule N-9)
     navigate(to);
     return true;
   }
@@ -460,6 +490,9 @@ class Workspace {
     this.#display.reset();
     this.syncSlow = false;
     this.peerSync = {};
+    this.waitingFor = undefined;
+    this.canReturn = false;
+    this.joinCancelled = false;
     try {
       await repo?.shutdown();
     } finally {
@@ -542,6 +575,22 @@ class Workspace {
       () => Session.StartupID(),
       () => ({ signers: adapter.attestedSigners, peers: [...this.peers] }),
     );
+    await this.openStart(generation);
+  }
+
+  /**
+   * Opens the document this start shows: the one of the join the folder waits for (PC1b), else
+   * the recorded one, else a fresh one. While a join waits, no document is ever created: the
+   * joined list would get a root that is not the inviter's (rule J-2).
+   */
+  async openStart(generation = this.#generation): Promise<void> {
+    const repo = this.#repo;
+    if (!repo) throw new Error("workspace not started");
+    const pending = await Session.PendingJoin();
+    if (generation !== this.#generation) return;
+    // The way back to the document open before the join, waiting or not (PC1b, J-2 and J-9).
+    this.canReturn = pending.canReturn ?? false;
+    if (pending.waiting) return this.#resumeJoin(pending, generation);
     const saved = (await Projects.Current()).RootURL;
     if (generation !== this.#generation) return;
     if (saved && isValidAutomergeUrl(saved)) {
@@ -553,6 +602,54 @@ class Workspace {
       }
     }
     await this.open(repo.create<Doc>({ text: "" }).url);
+  }
+
+  /**
+   * Waits for the document of the join this folder was made for, for as long as needed, then
+   * opens it (PC1b, rules J-1 and J-2). The root is the one the invitation stated, else the one
+   * the inviter announces, and nobody else's: nothing signed states the root yet, and the first
+   * one recorded binds the project for good, so another member of the joined list is not
+   * listened to (Go refuses it too). Go is asked to consume the record
+   * (`Session.CompleteJoin`) only once the repo holds the document and its flush returned: Go
+   * records the root then, and before that no root is recorded at all. Whatever fails (the
+   * inviter is away, Go does not hold the document yet) is tried again after
+   * {@link JOIN_RETRY_MS}; meanwhile {@link waitingFor} names who is waited for.
+   */
+  async #resumeJoin(
+    pending: { root: string; inviter: string; name: string; folder?: string; canReturn?: boolean },
+    generation: number,
+  ): Promise<void> {
+    const inviter = pending.inviter as PeerId;
+    // Never the neutral « Personne 12D3 »: every device id starts alike, it would name nobody.
+    this.waitingFor = pending.name || this.knownName(inviter) || "";
+    // The root, once known: kept from one try to the next.
+    let root = isValidAutomergeUrl(pending.root) ? pending.root : undefined;
+    for (;;) {
+      const repo = this.#repo;
+      if (!repo || generation !== this.#generation) return;
+      try {
+        root ??= await this.#announced(inviter);
+        this.#admitted.setRoot(root);
+        const handle = await repo.find<Doc>(root);
+        await repo.flush([handle.documentId]);
+        await Session.CompleteJoin(root, inviter);
+        break;
+      } catch {
+        if (generation !== this.#generation) return;
+        await new Promise((resolve) => setTimeout(resolve, JOIN_RETRY_MS));
+      }
+    }
+    // The record is consumed, once: what follows is an ordinary start on the recorded root.
+    if (!root || generation !== this.#generation) return;
+    // The folder is named when it is not the one the person read before the restart.
+    notice.queue(
+      pending.folder ? t("join.doneFolder", { folder: pending.folder }) : t("join.done"),
+    );
+    try {
+      await this.open(root);
+    } finally {
+      this.waitingFor = undefined;
+    }
   }
 
   async open(url: AutomergeUrl): Promise<void> {
@@ -885,6 +982,7 @@ class Workspace {
       this.rolesVersion++;
       void this.refreshRoster();
       void this.refreshStanding();
+      void this.refreshInvitation();
     });
     adapter.on("peer-candidate", ({ peerId }) => {
       this.peerUp(peerId);
@@ -937,17 +1035,32 @@ class Workspace {
     this.#display.update(globalSyncState(list), sendingCount(observed.values()));
   }
 
-  /** Lists a connected person; a new one after the invitation was made means it was used. */
+  /** Lists a connected person; the invitation may be what let them in, so Go is asked about it. */
   peerUp(peerId: string): void {
-    if (this.invitation && !this.#knownAtInvite.has(peerId)) this.invitationUsed = true;
     if (!this.peers.includes(peerId)) this.peers = [...this.peers, peerId];
+    void this.refreshInvitation();
+  }
+
+  /**
+   * Asks Go what became of the invitation shown (PC1b, rule J-8): « Partager » calls it when it
+   * opens, and so do a change of the member list (the person invited is admitted) and a new
+   * connection. The answer about another invitation than the one now shown is ignored.
+   */
+  async refreshInvitation(): Promise<void> {
+    const text = this.invitation;
+    if (!text) return;
+    try {
+      const state = (await Session.InvitationState(text)) as InvitationState;
+      if (text === this.invitation) this.invitationState = state;
+    } catch {
+      // Go does not answer (no project, or leaving): the state stays as it was.
+    }
   }
 
   /** Makes a fresh invitation, replacing the last one (used or not). */
   async host(): Promise<void> {
     this.error = "";
     try {
-      const known = new Set(this.peers);
       const made = await Session.Invite("writer");
       if (made.refused) {
         // A refusal is a result with a stable key: the sentence is ours, never Go's text (N-2).
@@ -957,22 +1070,36 @@ class Workspace {
         return;
       }
       this.invitation = made.text;
-      this.#knownAtInvite = known;
-      this.invitationUsed = false;
+      this.invitationState = "open";
     } catch {
       this.error = t("error.host");
     }
   }
 
-  /** Connects using the invitation text and opens the inviting person's project. */
+  /**
+   * Uses the invitation text. Into another document than the open one, Go only holds the answer
+   * (PC1b, rules J-1 and J-2): the page asks the person ({@link joinOffer}), and nothing restarts
+   * before {@link confirmJoin}. Into the open document (a copy of it on a device the list did
+   * not name, rule J-5) nothing restarts: the page follows the inviting person's document.
+   */
   async join(invitation: string): Promise<void> {
     this.error = "";
+    this.joinCancelled = false;
     this.joining = true;
     try {
-      const peer = (await Session.Join(invitation.trim())) as PeerId;
+      const joined = await Session.Join(invitation.trim());
+      if (joined.restart) {
+        this.joinOffer = {
+          title: joined.title ?? "",
+          folder: joined.folder ?? "",
+          current: this.handle?.doc()?.text.trim() ? (joined.current ?? "") : "",
+        };
+        return;
+      }
+      const peer = joined.peer as PeerId;
       await this.refreshStanding(); // a join turns "notNamed" into "member" (N-1)
       this.listPending = this.standing !== "member";
-      await this.open(await this.#projectOf(peer));
+      await this.open(await this.#announced(peer, 10_000));
     } catch {
       this.listPending = false;
       this.error = t("error.join");
@@ -981,8 +1108,40 @@ class Workspace {
     }
   }
 
-  /** Resolves with the project peer announced, waiting for its handshake if needed. */
-  #projectOf(peer: PeerId, timeoutMs = 10_000): Promise<AutomergeUrl> {
+  /**
+   * « Redémarrer et ouvrir »: the page leaves as for any project change ({@link leave}) and the
+   * restart page asks Go to finish the held join; when the edits cannot be saved in time the
+   * held invitation is dropped and nothing changes (rule N-15).
+   */
+  async confirmJoin(): Promise<void> {
+    if (!this.joinOffer) return;
+    if (!(await this.leave("restart.html", "join"))) await this.cancelJoin();
+  }
+
+  /**
+   * « Annuler »: Go drops the invitation it holds; nothing was written, nothing changes. The
+   * invitation is used all the same: the person who invites admitted this device.
+   */
+  async cancelJoin(): Promise<void> {
+    this.joinCancelled = true;
+    this.joinOffer = undefined;
+    await Session.CancelChange().catch(() => undefined);
+  }
+
+  /**
+   * « Revenir à mon document », while a join waits (PC1b, J-2) or after it (J-9): the page leaves,
+   * and the restart page asks Go to restart Inkwell on the document that was open before. A join
+   * that waits keeps waiting in its own folder.
+   */
+  async returnToPrevious(): Promise<void> {
+    await this.leave("restart.html", "return");
+  }
+
+  /**
+   * Resolves with the project `peer` announced, and no other peer's, waiting for a handshake if
+   * needed: for `timeoutMs` when given, else until the page stops.
+   */
+  #announced(peer: PeerId, timeoutMs?: number): Promise<AutomergeUrl> {
     const adapter = this.#adapter;
     if (!adapter) return Promise.reject(new Error("workspace not started"));
     const known = adapter.projectOf(peer);
@@ -997,10 +1156,13 @@ class Workspace {
         cleanup();
         reject(new Error("workspace stopped"));
       };
-      const timer = setTimeout(() => {
-        cleanup();
-        reject(new Error("no project announced"));
-      }, timeoutMs);
+      const timer =
+        timeoutMs === undefined
+          ? undefined
+          : setTimeout(() => {
+              cleanup();
+              reject(new Error("no project announced"));
+            }, timeoutMs);
       const off = adapter.onProject((url, from) => {
         if (from !== peer) return;
         cleanup();

@@ -63,7 +63,7 @@ func (s *Session) TakeOver(ctx context.Context) (TakeOverResult, error) {
 	if err != nil {
 		return TakeOverResult{}, err
 	}
-	if err := s.requestChange(ctx, write); err != nil {
+	if err := s.requestChange(ctx, ChangeTakeOver, write); err != nil {
 		return TakeOverResult{}, err
 	}
 	return TakeOverResult{Restarting: true}, nil

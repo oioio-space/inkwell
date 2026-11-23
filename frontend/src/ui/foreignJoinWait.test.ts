@@ -33,7 +33,7 @@ let standingNow: Standing = "notNamed";
 
 beforeEach(() => {
   vi.mocked(Session.Standing).mockImplementation((async () => standingNow) as never);
-  vi.mocked(Session.Join).mockResolvedValue("host" as never);
+  vi.mocked(Session.Join).mockResolvedValue({ peer: "host", restart: false } as never);
   vi.spyOn(WailsNetworkAdapter.prototype, "projectOf").mockReturnValue("automerge:x" as never);
   vi.spyOn(workspace, "open").mockResolvedValue(undefined as never);
   // Not started: the workspace has no adapter, join() reaches projectOf through this stand-in.

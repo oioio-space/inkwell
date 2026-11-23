@@ -396,3 +396,43 @@ func TestJoinerVerifiesProject(t *testing.T) {
 		}
 	}
 }
+
+// TestHostOutstanding: a ticket is outstanding from Invite until it is redeemed, cancelled or
+// expired, and only that ticket is (plan PC1b, rule J-8).
+func TestHostOutstanding(t *testing.T) {
+	p := newProject(t)
+	used, err := p.host.Invite(trust.RoleWriter, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	cancelled, err := p.host.Invite(trust.RoleWriter, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !p.host.Outstanding(used) || !p.host.Outstanding(cancelled) {
+		t.Fatal("J-8 a ticket just made is outstanding")
+	}
+	other := used
+	other.Secret[0] ^= 1
+	if p.host.Outstanding(other) {
+		t.Error("J-8 a ticket this host never made is not outstanding")
+	}
+	if _, err := p.joiner(testDevice(t), "Bob").Redeem(t.Context(), used, p.clock.Now()); err != nil {
+		t.Fatal(err)
+	}
+	if p.host.Outstanding(used) {
+		t.Error("J-8 a used invitation is not offered: a redeemed ticket is still outstanding")
+	}
+	p.host.Cancel(cancelled)
+	if p.host.Outstanding(cancelled) {
+		t.Error("J-8 a cancelled ticket is still outstanding")
+	}
+	expiring, err := p.host.Invite(trust.RoleReader, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p.clock.Advance(invite.TicketTTL + time.Second)
+	if p.host.Outstanding(expiring) {
+		t.Error("J-8 an expired ticket is still outstanding")
+	}
+}

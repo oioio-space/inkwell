@@ -53,14 +53,14 @@ func TestRequestsRefusedOnceTakeOverRequested(t *testing.T) {
 		t.Fatalf("Invite before the request: %v", err)
 	}
 	var ran bool
-	if err := s.requestChange(t.Context(), marker(&ran)); err != nil {
+	if err := s.requestChange(t.Context(), ChangeTakeOver, marker(&ran)); err != nil {
 		t.Fatalf("change request: %v", err)
 	}
-	if !rt.RestartRequested() {
+	if rt.RestartChange() == "" {
 		t.Error("N-12 a request restarts: no restart recorded")
 	}
 	var second bool
-	if err := s.requestChange(t.Context(), marker(&second)); !errors.Is(err, errLeaving) {
+	if err := s.requestChange(t.Context(), ChangeTakeOver, marker(&second)); !errors.Is(err, errLeaving) {
 		t.Errorf("N-13 one change per image: a second change request = %v, want refused", err)
 	}
 	refused := map[string]error{}
@@ -95,7 +95,7 @@ func TestChangeRequestFailsWhenDrainTimesOut(t *testing.T) {
 	ctx, cancel := context.WithTimeout(t.Context(), 100*time.Millisecond)
 	defer cancel()
 	var ran bool
-	if err := rt.Session.requestChange(ctx, marker(&ran)); !errors.Is(err, context.DeadlineExceeded) {
+	if err := rt.Session.requestChange(ctx, ChangeTakeOver, marker(&ran)); !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("change request with a stuck handler = %v, want the drain's deadline", err)
 	}
 	if err := rt.Close(); err != nil {
@@ -104,7 +104,7 @@ func TestChangeRequestFailsWhenDrainTimesOut(t *testing.T) {
 	if ran || !equalMaps(trustFiles(t, folder), before) {
 		t.Error("N-16 no write before the drain: the member list was written although the drain failed")
 	}
-	if rt.RestartRequested() {
+	if rt.RestartChange() != "" {
 		t.Error("N-16 no write before the drain: a failed request still restarts")
 	}
 }
@@ -121,7 +121,7 @@ func TestChangeRequestLosesToClose(t *testing.T) {
 	before := trustFiles(t, folder)
 	var ran bool
 	res := make(chan error, 1)
-	go func() { res <- rt.Session.requestChange(t.Context(), marker(&ran)) }()
+	go func() { res <- rt.Session.requestChange(t.Context(), ChangeTakeOver, marker(&ran)) }()
 	waitUntil(t, "the request is draining", func() bool { return rt.Session.leaving() != nil })
 	if err := rt.Close(); err != nil {
 		t.Fatal(err)
@@ -130,8 +130,8 @@ func TestChangeRequestLosesToClose(t *testing.T) {
 	if err := <-res; !errors.Is(err, errClosing) {
 		t.Errorf("N-12 no restart without its write: a request that lost to the close = %v, want refused", err)
 	}
-	if ran || rt.RestartRequested() || !equalMaps(trustFiles(t, folder), before) {
-		t.Errorf("N-12 no restart without its write: write ran %v, restart recorded %v", ran, rt.RestartRequested())
+	if ran || rt.RestartChange() != "" || !equalMaps(trustFiles(t, folder), before) {
+		t.Errorf("N-12 no restart without its write: write ran %v, restart recorded %v", ran, rt.RestartChange() != "")
 	}
 }
 
@@ -157,7 +157,7 @@ func TestTrustStoreUsableAfterWiringClose(t *testing.T) {
 		}
 		return nil
 	}
-	if err := rt.Session.requestChange(t.Context(), write); err != nil {
+	if err := rt.Session.requestChange(t.Context(), ChangeTakeOver, write); err != nil {
 		t.Fatal(err)
 	}
 	if err := rt.Close(); err != nil {
@@ -228,7 +228,7 @@ func TestNoTrustWriteNorSignatureOnceTheWriteStarts(t *testing.T) {
 		}
 		return nil
 	}
-	if err := rt.Session.requestChange(t.Context(), write); err != nil {
+	if err := rt.Session.requestChange(t.Context(), ChangeTakeOver, write); err != nil {
 		t.Fatal(err)
 	}
 	if err := rt.Close(); err != nil {

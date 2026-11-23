@@ -57,8 +57,12 @@ type deps struct {
 	startNetwork func(ctx context.Context, home *os.Root, proj *project.Project, afterChange bool) (*app.Runtime, error)
 	// window runs the window until it closes, once the network is up.
 	window func(ctx context.Context, s *session) int
-	// restartRequested reports whether rt recorded a project change ([app.Runtime.RestartRequested]).
-	restartRequested func(rt *app.Runtime) bool
+	// restartChange returns the kind of the project change rt recorded, "" when none
+	// ([app.Runtime.RestartChange]).
+	restartChange func(rt *app.Runtime) string
+	// restartFolder returns the folder the restart opens when it is not the open project's: the
+	// one a join installed ([app.Runtime.RestartFolder]); "" otherwise.
+	restartFolder func(rt *app.Runtime) string
 	// restart replaces this process image by a new launch on the project folder dir (rule N-12);
 	// it returns only when it failed.
 	restart func(dir string) error
@@ -167,7 +171,7 @@ func startup(args []string, d deps) int {
 	queue := newOpenQueue()
 	p.Serve(queue.push)
 	queue.own(req) // the primary's own arguments take the same path as forwarded ones
-	code, restartDir := runPrimary(ctx, d, req, queue, p, dir, afterChange)
+	code, change, restartDir := runPrimary(ctx, d, req, queue, p, dir, afterChange)
 	if err := p.Close(); err != nil { // already done by a clean shutdown; a no-op then
 		d.log.Warn("releasing the profile", "err", err)
 	}
@@ -175,6 +179,8 @@ func startup(args []string, d deps) int {
 		return code
 	}
 	// The session is closed and the lock released: the change is on disk, the next image loads it.
+	// Its slog time opens the restart window of the network proof (rule J-7).
+	d.log.Info("restarting", "change", change, "folder", restartDir)
 	err = d.restart(restartDir)
 	d.log.Error("restarting after a project change", "err", err)
 	// No image got the restart marker: the next launch on this folder says how the change went.
@@ -186,21 +192,22 @@ func startup(args []string, d deps) int {
 }
 
 // runPrimary opens the identity, the project and the network, then runs the window. Once the
-// window returned and the session is stopped, it returns the folder to restart on when this image
-// recorded a project change (rule N-12), else "". profile is the profile folder.
-func runPrimary(ctx context.Context, d deps, own instance.Request, queue *openQueue, p *instance.Primary, profile string, afterChange bool) (int, string) {
+// window returned and the session is stopped, it returns the kind of the project change this
+// image recorded and the folder to restart on (rule N-12; the joined folder for a join, rule J-6),
+// else "" twice. profile is the profile folder.
+func runPrimary(ctx context.Context, d deps, own instance.Request, queue *openQueue, p *instance.Primary, profile string, afterChange bool) (code int, change, restartDir string) {
 	ctx, cancel := context.WithCancel(ctx)
 	defer cancel()
 	home, err := d.openHome()
 	if err != nil {
 		d.log.Error("opening identity directory", "err", err)
-		return exitError, ""
+		return exitError, "", ""
 	}
 	proj, err := d.openProject(own)
 	if err != nil {
 		d.log.Error("opening project", "err", err)
 		_ = home.Close()
-		return exitError, ""
+		return exitError, "", ""
 	}
 	// A change on this folder whose restart failed is told like one that restarted (rule N-12).
 	if takeRestartMark(profile, proj.Path()) {
@@ -213,16 +220,17 @@ func runPrimary(ctx context.Context, d deps, own instance.Request, queue *openQu
 	if err != nil {
 		d.log.Error("starting network", "err", err)
 		_ = proj.Close()
-		return exitError, ""
+		return exitError, "", ""
 	}
 	queue.open() // ready to show a file: launches are acknowledged from now on (« busy » until then)
 	s := &session{cancel: cancel, proj: proj, rt: rt, queue: queue, language: language.New(proj.Path()), closing: p.Closing, closeInstance: p.Close}
-	code := d.window(ctx, s)
+	code = d.window(ctx, s)
 	s.stop(d.log) // a no-op after the window's OnShutdown
-	if !d.restartRequested(rt) {
-		return code, ""
+	if change = d.restartChange(rt); change == "" {
+		return code, "", ""
 	}
-	return code, proj.Path()
+	// A join restarts on the folder of the joined document, a take-over on the same folder.
+	return code, change, cmp.Or(d.restartFolder(rt), proj.Path())
 }
 
 // stopAll is the shutdown of the primary, in this order: answer « closing » to any new launch, so

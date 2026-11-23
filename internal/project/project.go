@@ -86,6 +86,12 @@ type manifest struct {
 	// content.
 	Files map[string]string `json:"files,omitzero"`
 	Tree  map[string]string `json:"tree,omitzero"`
+	// PendingJoin is the record of a join whose root document is not stored yet; nil otherwise.
+	PendingJoin *PendingJoin `json:"pendingJoin,omitzero"`
+	// Previous is, once the join that made this folder completed, the name of the folder that was
+	// open when its invitation was accepted (the record's previous): the way back stays (rule
+	// J-9). Empty otherwise.
+	Previous string `json:"previous,omitzero"`
 	Meta
 }
 
@@ -128,6 +134,11 @@ func Create(base *os.Root, title, rootURL string) (*Project, error) {
 	if err != nil {
 		return nil, err
 	}
+	return createIn(base, dir, title, rootURL)
+}
+
+// createIn makes the project titled title in the new, empty folder dir of base.
+func createIn(base *os.Root, dir, title, rootURL string) (*Project, error) {
 	root, err := base.OpenRoot(dir)
 	if err != nil {
 		return nil, fmt.Errorf("project: open %s: %w", dir, err)
@@ -253,8 +264,8 @@ func Latest(base *os.Root) (string, error) {
 	var best string
 	var bestTime int64
 	for _, e := range entries {
-		if !e.IsDir() {
-			continue
+		if !e.IsDir() || strings.HasPrefix(e.Name(), StagingPrefix) {
+			continue // a staging folder is no project yet: only its install makes it one
 		}
 		info, err := base.Stat(e.Name() + "/" + inkwellDir + "/" + manifestFile)
 		if err != nil {
@@ -285,10 +296,15 @@ func (p *Project) Meta() Meta {
 	return p.m.Meta
 }
 
-// SetRootURL records the automerge URL of the project's root document.
+// SetRootURL records the automerge URL of the project's root document. It is refused with
+// [ErrPendingJoin] while the project waits for the root of a join: only [Project.CompleteJoin]
+// records that one.
 func (p *Project) SetRootURL(url string) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	if p.m.PendingJoin != nil {
+		return ErrPendingJoin
+	}
 	old := p.m.RootURL
 	p.m.RootURL = url
 	if err := p.saveLocked(); err != nil {

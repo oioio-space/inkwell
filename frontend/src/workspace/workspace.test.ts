@@ -86,26 +86,33 @@ describe("an open file changed outside Inkwell", () => {
 });
 
 describe("invitation", () => {
-  it("is marked used when a new person connects, and a fresh one replaces it", async () => {
+  it("PC1 the invitation shown follows what Go says of it, and a fresh one replaces it", async () => {
     const invite = vi
       .fn()
       .mockResolvedValueOnce({ text: "first" })
       .mockResolvedValueOnce({ text: "second" });
-    (Session as unknown as { Invite: typeof invite }).Invite = invite;
-    workspace.peers = ["carol"];
+    let held = "open";
+    const state = vi.fn(async () => held);
+    Object.assign(Session, { Invite: invite, InvitationState: state });
     await workspace.host();
     expect(workspace.invitation).toBe("first");
-    expect(workspace.invitationUsed).toBe(false);
+    expect(workspace.invitationState).toBe("open");
 
-    workspace.peerUp("carol"); // already there: not the person invited
-    expect(workspace.invitationUsed).toBe(false);
-    workspace.peerUp("bob");
-    expect(workspace.invitationUsed).toBe(true);
+    // J-8: someone redeemed it; the person may never connect (a cancelled join).
+    held = "used";
+    await workspace.refreshInvitation();
+    expect(state).toHaveBeenLastCalledWith("first");
+    expect(workspace.invitationState, "J-8 a used invitation is not offered").toBe("used");
 
+    // A fresh invitation is open; a new connection makes the page ask Go again.
+    held = "open";
     await workspace.host();
-    expect(workspace.invitation).toBe("second");
-    expect(workspace.invitationUsed).toBe(false);
+    expect([workspace.invitation, workspace.invitationState]).toEqual(["second", "open"]);
+    held = "expired";
+    workspace.peerUp("bob");
+    await vi.waitFor(() => expect(workspace.invitationState).toBe("expired"));
     workspace.invitation = "";
+    workspace.invitationState = "open";
   });
 });
 

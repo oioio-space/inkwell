@@ -196,7 +196,17 @@ func Start(ctx context.Context, home *os.Root, o Options) (*Runtime, error) {
 		return nil, errors.Join(err, store.close())
 	}
 	closeBook := sync.OnceValue(book.Close) // after the node, whose Close saves the book
+	// What an unfinished join left beside this folder goes before anything else runs (rule J-4).
+	joinFailed, err := recoverJoin(o.Project)
+	if err != nil {
+		log.Warn("removing what an unfinished join left", "err", err) // the next start tries again
+	}
 	adm := NewAdmission(list)
+	// A folder that waits for the document of a join reaches the inviter at the addresses of
+	// its record; once linked, the node keeps them in its address book (rule J-1).
+	if rec, ok := o.Project.PendingJoin(); ok && rec.Project == list.Project().String() {
+		adm.hint(transport.PeerID(rec.Inviter), rec.Addrs)
+	}
 	no := netOptions(o.Port)
 	no.Admit, no.LAN, no.LANService, no.Book = adm.Admit, o.LAN, o.LANService, book
 	no.Scope, no.Log = adm.Scope, log
@@ -220,7 +230,11 @@ func Start(ctx context.Context, home *os.Root, o Options) (*Runtime, error) {
 	inv := newInvites(ctx, node, w, dev, list, store, c, log)
 	s := NewSession(node)
 	s.inv = inv
-	s.chg = newChange(o.AfterChange, o.CanRestart)
+	// A start that follows a return to this document followed no change of this folder: it has
+	// no sentence to say (rule J-2).
+	s.chg = newChange(o.AfterChange && !takeReturned(o.Project), o.CanRestart)
+	s.chg.joinFailed.Store(joinFailed)
+	inv.chg, inv.folder = s.chg, o.Project.Path()
 	s.proj = o.Project
 	fctx, cancel := context.WithCancel(ctx)
 	// Acquire this process's snapshot lease and reclaim abandoned sessions at startup.

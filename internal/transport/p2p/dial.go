@@ -55,6 +55,9 @@ type wanted struct {
 
 var errNoAddress = errors.New("no address to dial")
 
+// errConnectInFlight refuses an attempt of the dial loop while a call of [Node.Connect] to the same peer runs.
+var errConnectInFlight = errors.New("a connect to this peer is in flight")
+
 // Want sets the peers to keep connected, with the addresses they were last
 // seen at (as returned by their [Node.Addrs]; they may be stale or empty).
 // Peers absent from the map are no longer wanted, but their connections are
@@ -344,12 +347,25 @@ func (n *Node) forgetDialFailures(id peer.ID) {
 // they are cleared first, or an attempt at mDNS hints would dial the
 // authenticated addresses too and the order of the attempts would mean nothing.
 // It is called for a peer that is not connected, whose peerstore addresses are
-// stale.
+// stale. The peerstore is shared with every call of [Node.Connect], which adds
+// its addresses there and lets the swarm read them: while one to id is in flight
+// the attempt is refused (errConnectInFlight; the loop retries on its schedule),
+// or the clear would leave that call no address to dial. The check and the clear
+// are made under mu, as Connect counts itself in before adding its addresses, so
+// a Connect that starts later adds them after the clear.
 func (n *Node) dial(ctx context.Context, id peer.ID, addrs []ma.Multiaddr, timeout time.Duration) error {
+	n.mu.Lock()
+	inFlight := n.connecting[id] > 0
+	if !inFlight {
+		n.h.Peerstore().ClearAddrs(id) // the address book's own lock only: nothing calls back into the node
+	}
+	n.mu.Unlock()
+	if inFlight {
+		return errConnectInFlight
+	}
 	if n.opts.onDial != nil {
 		n.opts.onDial(id, slices.Clone(addrs))
 	}
-	n.h.Peerstore().ClearAddrs(id)
 	n.forgetDialFailures(id)
 	ctx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()

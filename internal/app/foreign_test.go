@@ -7,7 +7,6 @@ import (
 	"slices"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/oioio-space/inkwell/internal/bridge"
 	"github.com/oioio-space/inkwell/internal/identity"
@@ -151,17 +150,14 @@ func TestStandingFromList(t *testing.T) {
 func TestStandingMemberAfterJoin(t *testing.T) {
 	host, _ := startRuntime(t, nil, false)
 	proj, _, _ := foreignFolder(t)
-	guest := startOn(t, proj)
+	home := newHome(t)
+	guest := startIn(t, home, proj, false)
 	if got := guest.Session.Standing(); got != StandingNotNamed {
 		t.Fatalf("N-1 standing before the join = %q, want %q", got, StandingNotNamed)
 	}
-	inv, err := host.Session.Invite("writer")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := guest.Session.Join(t.Context(), inv.Text); err != nil {
-		t.Fatal(err)
-	}
+	// The standing follows the loaded list: the join makes it "member" in the image it restarts
+	// (PC1b, rule J-1).
+	guest = joinedRuntime(t, guest, dirs{home, proj}, host)
 	if got := guest.Session.Standing(); got != StandingMember {
 		t.Errorf("N-1 standing after the join = %q, want %q", got, StandingMember)
 	}
@@ -196,58 +192,25 @@ func equalMaps(a, b map[string]string) bool {
 // adm returns the admission of the runtime's wiring.
 func (r *Runtime) adm() *Admission { return r.wiring.adm }
 
-// N-1: once the roles event of the new project is out, Standing never
-// answers from the old list. The test holds the lock that publishes the list of
-// the session after the wiring followed the project (the interleaving of a
-// webview that reacts to the event at once), and asks for the standing.
+// N-1: Standing never answers from an older list. Since a join restarts Inkwell (PC1b, rule
+// J-1), the running session keeps its list and its standing until the end, whatever the Welcome
+// held, and the image the join restarts answers "member" from its first call, before any event.
 func TestStandingNeverOldAfterRolesEvent(t *testing.T) {
 	host, _ := startRuntime(t, nil, false)
-	invitation, err := host.Session.Invite("writer")
-	if err != nil {
-		t.Fatal(err)
-	}
 	proj, _, _ := foreignFolder(t)
-	rt := startOn(t, proj)
-	self := p2p.IDFromKey(rt.inv.dev.Public())
-	held := false
-	rt.inv.store.step = func(name string) error { // on the goroutine of the wiring, before it follows
-		if name == stepInstalled && !held {
-			held = true
-			rt.inv.mu.Lock() // released by the test: adopt cannot publish before
-		}
-		return nil
+	home := newHome(t)
+	rt := startIn(t, home, proj, false)
+	holdJoin(t, rt, host)
+	if got := rt.Session.Standing(); got != StandingNotNamed {
+		t.Errorf("N-1 standing of the running session with a held Welcome = %q, want %q", got, StandingNotNamed)
 	}
-	done := make(chan error, 1)
-	go func() { _, err := rt.Session.Join(t.Context(), invitation.Text); done <- err }()
-	timeout := time.After(10 * time.Second)
-	for named := false; !named; {
-		select {
-		case e := <-rt.wiring.out:
-			if e.Kind != bridge.Roles {
-				continue
-			}
-			rs, err := bridge.DecodeRoles(e.Payload)
-			if err != nil {
-				t.Fatal(err)
-			}
-			named = slices.ContainsFunc(rs, func(r bridge.MemberRole) bool { return r.Peer == self })
-		case <-timeout:
-			t.Fatal("N-1 standing: the roles event of the new project never came")
-		}
+	next := restartAfterJoin(t, rt, home, proj)
+	if got := next.Session.Standing(); got != StandingMember {
+		t.Errorf("N-1 standing of the image the join restarted = %q, want %q", got, StandingMember)
 	}
-	answer := make(chan string, 1)
-	go func() { answer <- rt.Session.Standing() }()
-	select {
-	case got := <-answer:
-		if got != StandingMember {
-			t.Errorf("N-1 standing after the roles event = %q, want %q", got, StandingMember)
-		}
-	case <-time.After(3 * time.Second):
-		t.Error("N-1 standing after the roles event: no answer, it waits for the old list to be replaced")
-	}
-	rt.inv.mu.Unlock()
-	if err := <-done; err != nil {
-		t.Fatal(err)
+	self := p2p.IDFromKey(next.inv.dev.Public())
+	if !slices.ContainsFunc(rolesOf(t, next), func(r bridge.MemberRole) bool { return r.Peer == self }) {
+		t.Error("N-1 the roles notice of the restarted image does not name this device")
 	}
 }
 
@@ -298,12 +261,14 @@ func TestNotMemberInviteRefusedByKey(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			proj, folder, _ := foreignFolder(t)
-			rt := startOn(t, proj)
+			proj, _, _ := foreignFolder(t)
+			home := newHome(t)
+			rt := startIn(t, home, proj, false)
 			if _, err := rt.Session.Join(t.Context(), inv.Text); err != nil {
 				t.Fatal(err)
 			}
-			return rt, folder
+			rt = restartAfterJoin(t, rt, home, proj) // a writer in the image the join restarted
+			return rt, rt.inv.folder
 		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

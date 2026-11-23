@@ -23,7 +23,7 @@ let confirming = $state(false);
 
 function takeOver() {
   confirming = false;
-  void workspace.leave("restart.html");
+  void workspace.leave("restart.html", "takeOver");
 }
 const me = $derived(workspace.roster.find((m) => m.self));
 const text = $derived.by(() => {

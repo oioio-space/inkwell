@@ -26,8 +26,13 @@ func (p *Project) renameNative(src, dst string) error {
 	if err != nil {
 		return err
 	}
-	defer func() { _ = dd.Close() }()                                           // read-only handle
-	err = noReplace(int(sd.Fd()), path.Base(src), int(dd.Fd()), path.Base(dst)) // #nosec G115 -- a file descriptor fits an int.
+	defer func() { _ = dd.Close() }()                                                          // read-only handle
+	return noReplaceErr(noReplace(int(sd.Fd()), path.Base(src), int(dd.Fd()), path.Base(dst))) // #nosec G115 -- a file descriptor fits an int.
+}
+
+// noReplaceErr names the outcome of [noReplace]: [fs.ErrExist] when the destination exists,
+// [errNoNative] where the file system cannot do it.
+func noReplaceErr(err error) error {
 	switch {
 	case err == nil:
 		return nil
@@ -37,6 +42,18 @@ func (p *Project) renameNative(src, dst string) error {
 		return errNoNative
 	}
 	return err
+}
+
+// renameChild is [RenameNoReplace] on checked names: renameat2 with RENAME_NOREPLACE on Linux,
+// renameatx_np with RENAME_EXCL on macOS, both names relative to the open folder base.
+func renameChild(base *os.Root, src, dst string) error {
+	d, err := base.Open(".")
+	if err != nil {
+		return err
+	}
+	defer func() { _ = d.Close() }() // read-only handle
+	fd := int(d.Fd())                // #nosec G115 -- a file descriptor fits an int.
+	return noReplaceErr(noReplace(fd, src, fd, dst))
 }
 
 // openDir opens the folder dir of the project for use as a file descriptor.

@@ -281,19 +281,20 @@ const only = async (p: Page): Promise<Link> => {
 /**
  * Polls the link list until `ok` holds for exactly one link, for at most `timeoutMs` (the bound of
  * the clause that waits, never longer). A miss comes back as data (`count`, `link` of the last
- * read); a harness error (metrics missing, page gone) propagates.
+ * read, `at` the wall-clock time that read returned); a harness error (metrics missing, page gone)
+ * propagates.
  */
 async function awaitOnly(
   p: Page,
   timeoutMs: number,
   ok: (l: Link) => boolean = () => true,
   everyMs = 1000,
-): Promise<{ ms?: number; link?: Link; count: number }> {
+): Promise<{ ms?: number; link?: Link; count: number; at?: number }> {
   const t0 = Date.now();
-  let last: { link?: Link; count: number } = { count: -1 };
+  let last: { link?: Link; count: number; at?: number } = { count: -1 };
   for (;;) {
     const ls = await links(p);
-    last = { link: ls.length === 1 ? ls[0] : undefined, count: ls.length };
+    last = { link: ls.length === 1 ? ls[0] : undefined, count: ls.length, at: Date.now() };
     if (last.link && ok(last.link)) return { ...last, ms: Date.now() - t0 };
     if (Date.now() - t0 + everyMs > timeoutMs) return last;
     await sleep(everyMs);
@@ -496,9 +497,12 @@ const SI_CLAUSE = "never Synchronisé while a token of the other side is missing
 const typed = (t: { tokens: string[]; times: number[] }): Owned[] =>
   t.tokens.map((text, i) => ({ text, at: t.times[i] }));
 
-/** What the two outage clauses compare: the counters of every page's link before and after. */
+/**
+ * What the outage clauses compare: the counters of every page's link before and after, and what
+ * places the last outage of each (`upMs`, `lastDownMs`, read at `at`; see `placeOutages`).
+ */
 type Snapshot = {
-  rows?: { downs?: number; resyncs?: number }[];
+  rows?: { downs?: number; resyncs?: number; upMs?: number; lastDownMs?: number; at?: number }[];
   /** A measured miss: the peer is not an active member (one link) within the wait. */
   missing?: string;
   /** A harness error. */
@@ -511,9 +515,12 @@ async function snapshot(pages: Page[], waitMs = 0): Promise<Snapshot> {
     const gone = reads.find((r) => !r.link);
     if (gone) return { missing: `expected 1 link, got ${gone.count} (waited ${secs(waitMs)})` };
     return {
-      rows: reads.map(({ link: l }) => ({
+      rows: reads.map(({ link: l, at }) => ({
         downs: field(l as Link, "downsTotal"),
         resyncs: field(l as Link, "resyncs"),
+        upMs: field(l as Link, "upMs"),
+        lastDownMs: field(l as Link, "lastDownMs"),
+        at,
       })),
     };
   } catch (error) {
@@ -558,10 +565,149 @@ function beforeBaseline(base: Snapshot, excused: number) {
   };
 }
 
+type Who = "alice" | "bob" | "carol";
+const logOf = (who: Who) => readFileSync(join(out, "..", run, `${who}.log`), "utf8");
+
 /** The restarts of `who` its log records: the harness's (`netsim: restart`, scenario 9) or its own (PC1b). */
-function restarts(who: "alice" | "bob"): number {
-  const log = readFileSync(join(out, "..", run, `${who}.log`), "utf8");
-  return [...log.matchAll(/^netsim: restart \S+ \d+$|msg=restarting/gm)].length;
+function restarts(who: Who): number {
+  return [...logOf(who).matchAll(/^netsim: restart \S+ \d+$|msg=restarting/gm)].length;
+}
+
+/**
+ * Rule J-7 (docs/plans/2026-11-15-pc1b-join.md): the restart lines of a project change in `who`'s log,
+ * `time=… level=INFO msg=restarting change=… folder=…`, each with its kind and its slog time (ms).
+ */
+function changeRestarts(who: Who): { change: string; t: number }[] {
+  return [...logOf(who).matchAll(/^time=(\S+) level=INFO msg=restarting change=(\S+) /gm)].map(
+    (m) => ({ change: m[2], t: Date.parse(m[1]) }),
+  );
+}
+const joinRestarts = (who: Who) => changeRestarts(who).filter((r) => r.change === "join");
+
+/** The harness's restarts of `who` (run.sh's `netsim: restart <who> <ms>`), each with its time (ms). */
+function harnessRestarts(who: Who): number[] {
+  return [...logOf(who).matchAll(/^netsim: restart (\S+) (\d+)$/gm)]
+    .filter((m) => m[1] === who)
+    .map((m) => Number(m[2]));
+}
+
+/** CJ: each joiner's log has exactly one J-7 join line, the restart of its join. */
+function oneJoinLine(joiners: Who[]) {
+  const n = joiners.map((who) => [who, joinRestarts(who).length] as const);
+  return {
+    ok: n.every(([, k]) => k === 1),
+    measured: n.map(([who, k]) => `${who} ${k}`).join(", "),
+  };
+}
+
+/**
+ * CJd: `who`'s new process logs its link direct (`linkstep … kind=LinkDirect`) within 30 s of its J-7
+ * join line; the clock starts at the restart, never at page readiness (HP1n5's lesson).
+ */
+function directAfterJoin(who: Who) {
+  const lines = joinRestarts(who);
+  if (lines.length !== 1) return { ok: false, measured: `${lines.length} join restart lines` };
+  const tj = lines[0].t;
+  const first = linkSteps(who).find((s) => s.kind === "LinkDirect" && s.t >= tj);
+  return {
+    ok: first !== undefined && first.t - tj <= 30_000,
+    measured: first
+      ? `direct ${secs(first.t - tj)} after the join restart`
+      : "no direct step after the join restart",
+  };
+}
+
+/** One outage of a link, placed in wall-clock ms. */
+type Outage = { begin: number; end: number };
+/**
+ * The outages of row `row`'s link, read by `reads` in order: each read places the last outage it
+ * counts, beginning at the read time - `upMs` - `lastDownMs` and ending at the read time - `upMs`
+ * (internal/transport/link.go UpSince, LastDown). Two outages between consecutive reads, or one a read
+ * cannot place (the link down at the read, a figure missing), cannot all be placed: `unplaced` says
+ * why. A harness error propagates.
+ */
+function placeOutages(reads: Snapshot[], row = 0): { outages: Outage[]; unplaced?: string } {
+  const outages: Outage[] = [];
+  let counted = 0;
+  for (const [i, x] of reads.entries()) {
+    if (x.error) throw x.error;
+    if (x.missing) return { outages, unplaced: x.missing };
+    const r = x.rows?.[row];
+    const downs = r?.downs ?? Number.NaN;
+    if (downs === counted) continue;
+    const { at, upMs, lastDownMs } = r ?? {};
+    if (downs !== counted + 1 || at === undefined || !upMs || upMs <= 0 || lastDownMs === undefined)
+      return {
+        outages,
+        unplaced: `read ${i}: downsTotal ${counted} -> ${downs}, upMs ${upMs}, lastDownMs ${lastDownMs}: a read places one outage, on a link that is up`,
+      };
+    outages.push({ begin: at - upMs - lastDownMs, end: at - upMs });
+    counted = downs;
+  }
+  return { outages };
+}
+/** The restart window of the instant `t` (ms): [t - 1 s, t + 15 s]; an outage is inside when it begins there. */
+const inWindow = (o: Outage, t: number | undefined) =>
+  t !== undefined && o.begin >= t - 1_000 && o.begin <= t + 15_000;
+const placed = (o: Outage, t: number | undefined) =>
+  `begins ${t === undefined ? `at ${o.begin}` : `${secs(o.begin - t)} from the join restart`}, lasts ${secs(o.end - o.begin)}`;
+
+/**
+ * C3w (scenario 5): read at the baseline, the inviter's link to the joiner has at most one outage, and
+ * it begins inside the join restart's window (t_j the time of the joiner's J-7 line).
+ */
+function insideJoinWindow(baseline: Snapshot, joiner: Who) {
+  const tj = joinRestarts(joiner)[0]?.t;
+  const { outages, unplaced } = placeOutages([baseline]);
+  if (unplaced) return { ok: false, measured: unplaced };
+  return {
+    ok: outages.length <= 1 && outages.every((o) => inWindow(o, tj)),
+    measured: `${outages.length} outage(s) at the inviter${outages.length ? `: ${outages.map((o) => placed(o, tj)).join("; ")}` : ""}${tj === undefined ? "; no join restart line" : ""}`,
+  };
+}
+
+/**
+ * The restart each outage follows: of the restarts at `starts` (ms) whose window holds the outage's begin, the
+ * latest one, by its index in `starts`; -1 when no window holds it. The windows of two restarts close together
+ * overlap (scenario 9: the harness restarts bob about 3 s after its join's restart), and an outage inside both
+ * began after the later restart's window opened, so it is that restart's: an earlier one never takes it, which
+ * would hide an outage the later restart caused (C3k: the crash must cost none).
+ */
+function followedRestart(o: Outage, starts: (number | undefined)[]) {
+  let at = -1;
+  for (const [w, t] of starts.entries())
+    if (t !== undefined && inWindow(o, t) && (at < 0 || t > (starts[at] as number))) at = w;
+  return at;
+}
+
+/**
+ * C3j (scenario 9, graceful) and C3k (crash, `harnessAllowed` 0): alice's outages over the run, placed by
+ * `reads`: at most one inside bob's join window, at most `harnessAllowed` inside the harness window (t_h from
+ * run.sh's `netsim: restart bob <ms>`), none elsewhere; bob's own count 0 (`end`'s second row); exactly one
+ * J-7 join line and one harness restart line. Each outage counts for the restart it follows (`followedRestart`):
+ * the windows overlap when the harness restarts bob within 16 s of its join's restart.
+ */
+function outagesInRestartWindows(reads: Snapshot[], end: Snapshot, harnessAllowed: number) {
+  const joins = joinRestarts("bob");
+  const harness = harnessRestarts("bob");
+  const [tj, th] = [joins[0]?.t, harness[0]];
+  const { outages, unplaced } = placeOutages(reads);
+  if (unplaced) return { ok: false, measured: unplaced };
+  const of = outages.map((o) => followedRestart(o, [tj, th]));
+  const [atJoin, atHarness, elsewhere] = [0, 1, -1].map((w) => of.filter((x) => x === w).length);
+  const joiner = end.rows?.[1]?.downs ?? Number.NaN;
+  const where = ["the join's", "the harness's", "no restart's"];
+  const each = outages.map((o, i) => `${placed(o, tj)}, ${where.at(of[i]) ?? ""}`);
+  return {
+    ok:
+      atJoin <= 1 &&
+      atHarness <= harnessAllowed &&
+      elsewhere === 0 &&
+      joiner === 0 &&
+      joins.length === 1 &&
+      harness.length === 1,
+    measured: `alice: ${atJoin} in the join window, ${atHarness} in the harness window, ${elsewhere} elsewhere${each.length ? ` (${each.join("; ")})` : ""}${tj !== undefined && th !== undefined ? `; harness restart ${secs(th - tj)} after the join's` : ""}; bob ${joiner}; join lines ${joins.length}, harness restarts ${harness.length}`,
+  };
 }
 
 /** Both pages hold the same text, and every token exactly once. */
@@ -587,18 +733,16 @@ interface LinkStepLog {
 const QUALITY = { unknown: 0, good: 1, fair: 2, poor: 3 } as const;
 
 /** How many steps the instance `who` dropped before logging them (a gap in the replay, not a quiet second). */
-function droppedSteps(who: "alice" | "bob"): number {
-  const log = readFileSync(join(out, "..", run, `${who}.log`), "utf8");
+function droppedSteps(who: Who): number {
   let n = 0;
-  for (const m of log.matchAll(/msg=linkstepdropped count=(\d+)/g)) n += Number(m[1]);
+  for (const m of logOf(who).matchAll(/msg=linkstepdropped count=(\d+)/g)) n += Number(m[1]);
   return n;
 }
 
 /** Every step the instance `who` logged for its link, in order (the netsim build logs each one). */
-function linkSteps(who: "alice" | "bob"): LinkStepLog[] {
-  const log = readFileSync(join(out, "..", run, `${who}.log`), "utf8");
+function linkSteps(who: Who): LinkStepLog[] {
   const steps: LinkStepLog[] = [];
-  for (const m of log.matchAll(
+  for (const m of logOf(who).matchAll(
     /msg=linkstep peer=\S+ t=(\d+) kind=(\S+) quality=(\S+) lossPermille=(\d+)/g,
   ))
     steps.push({ t: Number(m[1]), kind: m[2], quality: m[3], lossPermille: Number(m[4]) });
@@ -787,6 +931,13 @@ test("scenario 5: NI-1 bad Wi-Fi that changes (converge, stay up, the level foll
     "before the baseline, a link-down only inside an identified restart of the joiner, at most one",
     "inviter downsTotal <= restarts of bob (<= 1), bob 0",
     async () => beforeBaseline(baseline, restarts("bob") > 0 ? 1 : 0),
+  );
+  await joinClauses();
+  await clause(
+    "C3w",
+    "read at the baseline, alice's link to bob has at most one outage, beginning inside bob's join restart window",
+    "<= 1 outage, begin in [t_j - 1 s, t_j + 15 s]",
+    async () => insideJoinWindow(baseline, "bob"),
   );
   await clause(
     "C4",
@@ -1219,6 +1370,12 @@ test("scenario 8: NI-4 three devices, alice-bob down (converge through carol, no
       };
     },
   );
+  await clause(
+    "CJ",
+    "each joiner logs its join restart once (rule J-7)",
+    "1 join line each",
+    async () => oneJoinLine(carolWrites ? ["alice", "bob"] : ["carol", "bob"]),
+  );
   finish({ carolWrites, claims });
 });
 
@@ -1235,12 +1392,13 @@ async function convergedNow(a: Page, b: Page, texts: string[]) {
  * shows « Synchronisé » and the link bob sees is direct, within 15 s of the restart; without P-15 the dead
  * connection is kept until QUIC's idle timeout and bob's link stays relayed (direct 30.0 s after the restart in
  * HP1n4's MN3 run), so this is the clause MN3 turns red. C2d: texts typed on both sides once bob's page is ready
- * converge both ways within 15 s of the restart. C3c: alice never shows bob away (no link-down at alice over the
- * whole run: the dead circuit is closed only after the new connection's ACK) and bob's restart is logged once.
- * Every miss, readiness included, is returned as data, never thrown (mutants.py reads a thrown error as a
- * harness error, not a catch).
+ * converge both ways within 15 s of the restart. C3k (gates/PC1n2.toml, which supersedes HP1n5's C3c): alice
+ * shows bob away at most once, inside bob's join restart window, and never at the crash (the dead circuit is
+ * closed only after the new connection's ACK); bob's join and the crash's restart are each logged once. Every
+ * miss, readiness included, is returned as data, never thrown (mutants.py reads a thrown error as a harness
+ * error, not a catch).
  */
-async function crashClauses(alice: Page, bob: Page, tRestart: number) {
+async function crashClauses(alice: Page, bob: Page, tRestart: number, before: Snapshot) {
   const bound = 15_000;
   const left = () => Math.max(0, tRestart + bound - Date.now());
   const ready = await until(
@@ -1294,20 +1452,26 @@ async function crashClauses(alice: Page, bob: Page, tRestart: number) {
             : `${secs(converged - tRestart)} after bob's restart`,
     }),
   );
+  const end = await snapshot([alice, bob]);
   await clause(
-    "C3c",
-    "alice never shows bob away (no link-down at alice over the whole run), bob's restart logged once",
-    "alice downsTotal 0; restarts logged 1",
-    async () => {
-      const end = await snapshot([alice, bob]);
-      if (end.error) throw end.error;
-      if (end.missing) return { ok: false, measured: end.missing };
-      const downs = end.rows?.[0]?.downs ?? Number.NaN;
-      return {
-        ok: downs === 0 && restarts("bob") === 1,
-        measured: `alice downsTotal ${downs}; bob ${end.rows?.[1]?.downs ?? Number.NaN}; restarts logged ${restarts("bob")}`,
-      };
-    },
+    "C3k",
+    "alice shows bob away at most once, inside bob's join restart window, never at the crash; bob's join and the crash's restart logged once each",
+    "alice: <= 1 in [t_j - 1 s, t_j + 15 s], 0 in [t_h - 1 s, t_h + 15 s], 0 elsewhere; bob 0",
+    async () => outagesInRestartWindows([before, end], end, 0),
+  );
+  await joinClauses();
+}
+
+/** CJ and CJd (scenarios 5 and 9): bob, the joiner, logs its join restart once and is direct within 30 s of it. */
+async function joinClauses() {
+  await clause("CJ", "bob logs its join restart once (rule J-7)", "1 join line", async () =>
+    oneJoinLine(["bob"]),
+  );
+  await clause(
+    "CJd",
+    "bob's new process sees its link to alice direct within 30 s of its join restart",
+    "direct <= 30 s from the J-7 line",
+    async () => directAfterJoin("bob"),
   );
 }
 
@@ -1339,7 +1503,7 @@ test("scenario 9: HP1 a device restarts while linked (direct again within 30 s, 
   if (up === undefined) throw new Error("bob's new process does not answer");
   await bob.reload();
   if (crash) {
-    await crashClauses(alice, bob, tRestart);
+    await crashClauses(alice, bob, tRestart, before);
     finish();
     return;
   }
@@ -1365,25 +1529,15 @@ test("scenario 9: HP1 a device restarts while linked (direct again within 30 s, 
     return { ok: true, measured: `${secs(Date.now() - t0)}` };
   });
 
+  // C3j (gates/PC1n2.toml, which supersedes HP1n's C3a here): bob restarts twice, its join's (J-7) and the
+  // harness's; alice may lose the link once inside each restart's window, never elsewhere.
+  const end = await snapshot([alice, bob]);
   await clause(
-    "C3a",
-    "a link-down only inside the identified restart window (bob's restart to the baseline), at most one; none before it, none after",
-    "alice: 0 before, <= 1 in the window, 0 after; bob 0",
-    async () => {
-      const end = await snapshot([alice, bob]);
-      for (const x of [before, baseline, end]) if (x.error) throw x.error;
-      const miss = [before, baseline, end].find((x) => x.missing);
-      if (miss) return { ok: false, measured: miss.missing as string };
-      const d = (x: Snapshot, i: number) => x.rows?.[i]?.downs ?? Number.NaN;
-      const pre = d(before, 0);
-      const inWindow = d(baseline, 0) - pre;
-      const after = d(end, 0) - d(baseline, 0);
-      const joiner = d(end, 1);
-      return {
-        ok: pre === 0 && inWindow <= 1 && after === 0 && joiner === 0 && restarts("bob") === 1,
-        measured: `alice downsTotal ${pre} before, +${inWindow} in the window, +${after} after; bob ${joiner}; restarts logged ${restarts("bob")}`,
-      };
-    },
+    "C3j",
+    "alice shows bob away at most once inside each restart window of bob (its join's, the harness's), never elsewhere; bob's join and the harness's restart logged once each",
+    "alice: <= 1 in [t_j - 1 s, t_j + 15 s], <= 1 in [t_h - 1 s, t_h + 15 s], 0 elsewhere; bob 0",
+    async () => outagesInRestartWindows([before, baseline, end], end, 1),
   );
+  await joinClauses();
   finish();
 });

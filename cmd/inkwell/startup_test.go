@@ -301,9 +301,10 @@ func fakeDeps(t *testing.T, env map[string]string) deps {
 			t.Fatal("network started")
 			return nil, nil
 		},
-		window:           func(context.Context, *session) int { t.Fatal("window opened"); return 0 },
-		restartRequested: func(*app.Runtime) bool { t.Fatal("restart asked"); return false },
-		restart:          func(string) error { t.Fatal("restarted"); return nil },
+		window:        func(context.Context, *session) int { t.Fatal("window opened"); return 0 },
+		restartChange: func(*app.Runtime) string { t.Fatal("restart asked"); return "" },
+		restartFolder: (*app.Runtime).RestartFolder,
+		restart:       func(string) error { t.Fatal("restarted"); return nil },
 	}
 }
 

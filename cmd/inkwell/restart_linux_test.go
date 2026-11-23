@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/oioio-space/inkwell/internal/app"
+	"github.com/oioio-space/inkwell/internal/project"
 	"github.com/oioio-space/inkwell/internal/sidecar"
 )
 
@@ -241,7 +242,7 @@ func barrierChild() int {
 		fmt.Printf("foreign: helper %d left %s\n", helper.Process.Pid, left)
 		return exitOK
 	}
-	d.restartRequested = func(*app.Runtime) bool { return true }
+	d.restartChange = func(*app.Runtime) string { return app.ChangeTakeOver }
 	restart := d.restart
 	d.restart = func(dir string) error {
 		pids, _ := sidecar.Children()
@@ -311,5 +312,111 @@ func TestRestartBarrier(t *testing.T) {
 	}
 	if after[0] != 0 || after[1] != 0 || after[2] != 0 {
 		t.Errorf("N-14 no child survives: the new image inherited children %d, sockets %d, descriptors %d\n%s", after[0], after[1], after[2], out)
+	}
+}
+
+func init() { childModes["firstjoin"] = firstJoinChild }
+
+// firstJoinChild is a real launch on a new profile whose window, in place of the page, accepts
+// the invitation of $INKWELL_CHILD_TICKET and finishes the join; the image the join restarts
+// prints what it loaded and ends.
+func firstJoinChild() int {
+	restarted := os.Getenv(afterTakeOverEnv) == "1"
+	d := liveDeps(nil)
+	d.window = func(ctx context.Context, s *session) int {
+		sess := s.rt.Session
+		line := func(when string) {
+			pending := sess.PendingJoin()
+			fmt.Printf("%s: image %s pid %d members %d waiting %v inviter %q folder %q\n", when, sess.StartupID(), os.Getpid(), len(sess.Members()), pending.Waiting, pending.Inviter, s.proj.Path())
+		}
+		if restarted {
+			line("second")
+			return exitOK
+		}
+		line("first")
+		quit := make(chan struct{})
+		s.rt.SetQuit(func() { close(quit) })
+		res, err := sess.Join(ctx, os.Getenv("INKWELL_CHILD_TICKET"))
+		fmt.Printf("join: restart %v err %v\n", res.Restart, err)
+		line("held")
+		if err := sess.FinishJoin(ctx); err != nil {
+			fmt.Println("finish:", err)
+			return exitError
+		}
+		select {
+		case <-quit:
+			return exitOK
+		case <-time.After(10 * time.Second):
+			fmt.Println("finish: the application was not asked to quit")
+			return exitError
+		}
+	}
+	if restarted {
+		return startup(os.Args[1:], d) // the folder the restart gave
+	}
+	return startup(nil, d)
+}
+
+var firstJoinRE = regexp.MustCompile(`(?m)^(first|held|second): image ([0-9a-f]{32}) pid (\d+) members (\d+) waiting (true|false) inviter "(.*)" folder "(.*)"$`)
+
+// TestFirstLaunchJoinRestarts: a profile with no project accepts an invitation at its first
+// launch. Nothing is adopted in that image: its member list stays its own until the end; the
+// process restarts in place, with another startup id, on the folder of the joined document,
+// beside the one the first launch created, and waits there for the document of the inviter
+// (rule J-3: one rule, no live case).
+func TestFirstLaunchJoinRestarts(t *testing.T) {
+	hostHome, err := os.OpenRoot(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = hostHome.Close() }()
+	hostDocs, err := os.OpenRoot(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = hostDocs.Close() }()
+	proj, err := project.Create(hostDocs, "Roman", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = proj.Close() }()
+	host, err := app.Start(t.Context(), hostHome, app.Options{Project: proj, RendezvousURL: app.NoCodes})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = host.Close() }()
+	inv, err := host.Session.Invite("writer")
+	if err != nil || inv.Text == "" {
+		t.Fatalf("Invite = %+v, %v", inv, err)
+	}
+
+	home, docs := t.TempDir(), t.TempDir() // a new profile and an empty documents folder
+	ctx, cancel := context.WithTimeout(t.Context(), 90*time.Second)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, os.Args[0], "-test.run=^$") // #nosec G204 -- the test binary itself
+	cmd.Env = cleanEnv(childEnv+"=firstjoin", "INKWELL_HOME="+home, "INKWELL_DOCS="+docs, "INKWELL_RENDEZVOUS=off", "INKWELL_CHILD_TICKET="+inv.Text)
+	out, err := cmd.CombinedOutput()
+	got := map[string][]string{}
+	for _, m := range firstJoinRE.FindAllStringSubmatch(string(out), -1) {
+		got[m[1]] = m[2:]
+	}
+	first, held, second := got["first"], got["held"], got["second"]
+	if err != nil || first == nil || held == nil || second == nil || !strings.Contains(string(out), "join: restart true err <nil>") {
+		t.Fatalf("J-3 first launch restarts: no restarted image after the join (exit %v)\n%s", err, out)
+	}
+	// image, pid, members, waiting, inviter, folder
+	if held[0] != first[0] || held[2] != "1" || held[3] != "false" || held[5] != first[5] {
+		t.Errorf("J-3 first launch restarts: the first image adopted the project: members %s, waiting %s, folder %q after the Welcome\n%s", held[2], held[3], held[5], out)
+	}
+	if second[0] == first[0] || second[1] != first[1] {
+		t.Errorf("J-3 first launch restarts: the startup id changes in the same process: before id %s pid %s, after id %s pid %s", first[0], first[1], second[0], second[1])
+	}
+	want := filepath.Join(docs, "Roman")
+	if second[5] != want || second[5] == first[5] || second[2] != "2" || second[3] != "true" || second[4] != host.Session.LocalPeer() {
+		t.Errorf("J-3 first launch restarts: the restarted image is on %q with %s members, waiting %s for %q; want %q, 2 members, waiting for the inviter\n%s", second[5], second[2], second[3], second[4], want, out)
+	}
+	entries, err := os.ReadDir(docs)
+	if err != nil || len(entries) != 2 {
+		t.Errorf("J-3 first launch restarts: the documents folder holds %v (%v), want the first folder and the joined one", entries, err)
 	}
 }

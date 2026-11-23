@@ -27,6 +27,7 @@ import (
 
 const nativeProjection = "Committed prefix"
 const sheetProjection = "a;b;c;d\n1;2;3;4\n5;6;7;8\n9;10;11;12\n"
+const joinProjection = "Text of the person who invites"
 
 type walkEvent struct {
 	Event string          `json:"event"`
@@ -98,7 +99,11 @@ func nativeWalkEvent(scenario, event string) bool {
 		return scenario == "SAV-03b"
 	case "goodbye-handed-off":
 		return scenario == "SHEET-MU-01b"
-	case "gtk-close-request", "wails-close-vetoed", "close-authorized", "close-permit-consumed", "gtk-window-destroyed":
+	case "join-held":
+		return scenario == "PC1b-join"
+	case "close-authorized":
+		return scenario == "SAV-03b" || scenario == "SHEET-MU-01b" || scenario == "PC1b-join"
+	case "gtk-close-request", "wails-close-vetoed", "close-permit-consumed", "gtk-window-destroyed":
 		return scenario == "SAV-03b" || scenario == "SHEET-MU-01b"
 	default:
 		return false
@@ -137,6 +142,11 @@ func runNativeChild(root string) int {
 	}
 	defer proof.Close()
 	request := os.Getenv("WC1_NATIVE_REQUEST")
+	// The image a project change restarts in place opens the folder the restart names (rule N-12).
+	args := []string{filepath.Join(os.Getenv("INKWELL_DOCS"), "Project", "main.typ")}
+	if os.Getenv(afterTakeOverEnv) == "1" {
+		args = os.Args[1:]
+	}
 	var windowID string
 	var observeMu sync.Mutex
 	record := func(event string, value any) {
@@ -234,6 +244,10 @@ func runNativeChild(root string) int {
 	})
 	realWindow := d.window
 	d.window = func(ctx context.Context, s *session) int {
+		record("image", nativeImage{
+			PID: os.Getpid(), StartupID: s.rt.Session.StartupID(), Standing: s.rt.Session.Standing(),
+			Members: len(s.rt.Session.Members()),
+		})
 		probe := closeProbe{observe: func(event string) { record(event, nil) }}
 		if mode == "disk" || mode == "store" || mode == "hang" || mode == "crash" {
 			probe.wrapKV = func(kv bridge.KV) bridge.KV {
@@ -242,7 +256,74 @@ func runNativeChild(root string) int {
 		}
 		return realWindow(context.WithValue(ctx, closeProbeKey{}, probe), s)
 	}
-	return startup([]string{filepath.Join(os.Getenv("INKWELL_DOCS"), "Project", "main.typ")}, d)
+	return startup(args, d)
+}
+
+// nativeImage is what each process image of a native child reports once its runtime runs (event
+// « image »): an execution in place keeps the pid and changes the startup id (rule N-12).
+type nativeImage struct {
+	PID       int    `json:"pid"`
+	StartupID string `json:"startupId"`
+	Standing  string `json:"standing"`
+	Members   int    `json:"members"`
+}
+
+// images returns every image the child reported so far, in order, whatever the transcript cursor.
+func (p *nativeProcess) images(t *testing.T) []nativeImage {
+	t.Helper()
+	b, err := os.ReadFile(filepath.Join(p.root, "events.jsonl"))
+	if err != nil && !errors.Is(err, os.ErrNotExist) {
+		t.Fatal(err)
+	}
+	var images []nativeImage
+	for line := range strings.Lines(string(b)) {
+		var event walkEvent
+		if json.Unmarshal([]byte(line), &event) == nil && event.Event == "image" {
+			images = append(images, eventValue[nativeImage](t, event.Value))
+		}
+	}
+	return images
+}
+
+// joinRestarting has the guest p accept the invitation ticket into another project, which holds
+// the Welcome and asks before Inkwell restarts (PC1b, rules J-1 and J-2); it confirms « Redémarrer
+// et ouvrir » as a person does, then follows the process while it restarts in place on the joined
+// folder (same pid, another startup id, rule N-12) and returns that image and its page once the
+// joined document shows. The steps are recorded in the lifecycle trace of p's scenario, if any.
+func (p *nativeProcess) joinRestarting(t *testing.T, ticket string) (nativeImage, pageWitness) {
+	t.Helper()
+	before := p.images(t)
+	if len(before) == 0 {
+		t.Fatal("the guest reported no process image before the join")
+	}
+	p.send(t, "join", ticket)
+	p.until(t, 20*time.Second, "join-held")
+	p.send(t, "confirm-join")
+	p.until(t, 5*time.Second, "confirm-join")
+	var after []nativeImage
+	for end := time.Now().Add(30 * time.Second); len(after) <= len(before); after = p.images(t) {
+		select {
+		case <-p.exited:
+			t.Fatalf("the guest exited instead of restarting in place: %v", p.waitErr)
+		default:
+		}
+		if time.Now().After(end) {
+			t.Fatal("the guest did not restart within 30 s of « Redémarrer et ouvrir »")
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	old, image := before[len(before)-1], after[len(after)-1]
+	if image.PID != p.cmd.Process.Pid || old.PID != image.PID || image.StartupID == old.StartupID {
+		t.Fatalf("N-12 the join restarts in place: image %+v after %+v (process %d)", image, old, p.cmd.Process.Pid)
+	}
+	if log, err := os.ReadFile(p.log); err != nil || !strings.Contains(string(log), "level=INFO msg=restarting change=join ") {
+		t.Fatalf("J-7 the restart of the join is not logged: %v", err)
+	}
+	if p.scenario != "" {
+		p.lifecycle(t, "process-restarted", image.PID, nil)
+	}
+	p.window = "" // the new image opens a window of its own
+	return image, p.ready(t)
 }
 
 type nativeProcess struct {
@@ -648,8 +729,9 @@ func TestWC1NativeClose(t *testing.T) {
 		q.ready(t)
 		p.send(t, "invite")
 		ticket := eventValue[string](t, p.until(t, 10*time.Second, "invite").Value)
-		q.send(t, "join", ticket)
-		q.until(t, 20*time.Second, "join")
+		if _, got := q.joinRestarting(t, ticket); got.Text != sheetProjection {
+			t.Fatalf("the joined guest shows %q, want the host's %q", got.Text, sheetProjection)
+		}
 		for _, person := range []*nativeProcess{p, q} {
 			person.send(t, "sheet")
 			person.until(t, 10*time.Second, "sheet")
@@ -672,6 +754,24 @@ func TestWC1NativeClose(t *testing.T) {
 			t.Fatalf("reopened sheet text = %q, want %q", got.Text, sheetProjection)
 		}
 		p.lifecycle(t, "project-reopened", reopened.cmd.Process.Pid, nil)
+	})
+	t.Run("PC1b-join", func(t *testing.T) {
+		hostRoot, guestRoot := nativeFixture(t), nativeFixture(t)
+		makeNativeProject(t, hostRoot, joinProjection)
+		makeNativeProject(t, guestRoot, nativeProjection)
+		host := nativeProcessStart(t, hostRoot, "host", "", "", proof)
+		host.ready(t)
+		host.seed(t, joinProjection)
+		guest := nativeProcessStart(t, guestRoot, "guest", "PC1b-join", filepath.Base(guestRoot), proof)
+		guest.ready(t)
+		host.send(t, "invite")
+		ticket := eventValue[string](t, host.until(t, 10*time.Second, "invite").Value)
+		image, got := guest.joinRestarting(t, ticket)
+		if got.Text != joinProjection || image.Standing != "member" || image.Members != 2 {
+			t.Fatalf("J-2 the restarted guest shows %q as %s of %d members, want the host's %q as a member of 2", got.Text, image.Standing, image.Members, joinProjection)
+		}
+		guest.lifecycle(t, "project-joined", image.PID, nil)
+		assertProjection(t, guest, nativeProjection) // J-6: the previous folder is never written
 	})
 	for _, mode := range []string{"Quit", "SIGTERM", "GNOMELogout"} {
 		t.Run(mode, func(t *testing.T) {

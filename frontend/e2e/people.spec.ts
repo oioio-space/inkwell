@@ -3,7 +3,16 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Locator, Page } from "@playwright/test";
 import { expect, test } from "./fixtures";
-import { clear, docText, editor, freshInvitation, open, rename, typeAtEnd } from "./helpers";
+import {
+  acceptJoin,
+  clear,
+  docText,
+  editor,
+  freshInvitation,
+  open,
+  rename,
+  typeAtEnd,
+} from "./helpers";
 import { startInstance, stopInstance } from "./instance";
 import { ALICE_URL, BOB_URL, CAROL_PORT } from "./ports";
 
@@ -16,7 +25,7 @@ async function joinAs(host: Page, guest: Page, guestName: string, hostName?: str
   await guest.getByRole("button", { name: "Partager" }).click();
   await rename(guest, guestName);
   await guest.getByPlaceholder("Collez l'invitation ici").fill(text);
-  await guest.getByRole("button", { name: "Rejoindre" }).click();
+  await acceptJoin(guest);
   await expect(guest.getByRole("status").first()).toHaveText(/Synchronisé/, { timeout: 60_000 });
   await guest.keyboard.press("Escape");
 }

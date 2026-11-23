@@ -100,3 +100,30 @@ J-6); found again through a marker `.inkwell/join-pending.json` (`{v: 1, id}`) w
 folder **before** the staging folder is created; the next start of the previous folder removes the staging folder it
 names, then the marker (J-4); after the install only the marker remains and is removed. New mutant MJ16 (staging before
 the marker), crash test extended. PC1b is frozen on this disposition.
+
+## Code review, PC1b — Codex, 2026-11-15 (after the smoke): one major, fixed
+
+Codex read the code of the block (confinement of the joined folder's name, exclusive creation of the staging
+folder, rename without replacement, recovery after an interruption, the refusals of `FinishJoin` and
+`CompleteJoin`) and found no defect there. One finding:
+
+- **F1 (major, blocking).** When the Welcome carries no root (every genesis today), the page recorded once and for
+  good, through `CompleteJoin`, the root announced by the inviter **or** by another member of the joined list that
+  announced first and served a document (`#resumeJoin` / `#announced`, `frontend/src/workspace/workspace.svelte.ts`;
+  `internal/app/join.go` `CompleteJoin`). A Byzantine member could bind the newcomer's project to a document of its
+  choosing, for good, even after that member is removed (this was residual RJ-1 of `gates/PC1b/SIMPLIFY.md`).
+
+### Disposition (integrator's decision, the minimal sound fix)
+
+While the record holds no root, only the inviter's announcement counts:
+
+- Go: `CompleteJoin(url, peer)` refuses any peer other than the record's inviter when the record holds no root
+  (`errJoinInviter`); with a root in the record the rule is unchanged (that root, from any member of the list).
+  `TestCompleteJoinRefuses/not_the_inviter`, `TestCompleteJoinStatedRootFromAnyMember`, mutant MJ17
+  (`J-1 CompleteJoin refuses a root not announced by the inviter`), beyond the MJ1..MJ16 the frozen gate names.
+- Page: the wait follows the inviter's announcement alone; another member's is ignored, and the logic « the
+  inviter's announcement replaces another member's » is removed. Vitest « PC1 a pending join without a root ignores
+  what another member announces », in-test mutant « PC1 mutant J-1 a root announced by another member is caught ».
+- Plan rows J-1 and J-2 say it. Residual: without a root in the record the wait lasts until the inviter is
+  reachable, even with other members online. A root signed in the Welcome or in the member list lifts both the
+  trust in the inviter's unsigned word and that wait: block TR1.

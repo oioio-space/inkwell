@@ -1486,8 +1486,8 @@ why = "runPrimary no longer stops the session once the window returned: the rest
 
 [[mutant.edit]]
 file = "cmd/inkwell/startup.go"
-before = "\tcode := d.window(ctx, s)\n\ts.stop(d.log) // a no-op after the window's OnShutdown\n"
-after = "\tcode := d.window(ctx, s)\n"
+before = "\tcode = d.window(ctx, s)\n\ts.stop(d.log) // a no-op after the window's OnShutdown\n"
+after = "\tcode = d.window(ctx, s)\n"
 
 [[mutant]]
 id = "MW10"
@@ -1516,7 +1516,7 @@ why = "shutdown leaves the language service running: its child outlives the imag
 
 [[mutant.edit]]
 file = "cmd/inkwell/startup.go"
-before = "\t\t\ts.language.Close() // its child ends before the network and the lock (rule N-14)\n"
+before = "\t\ts.language.Close() // its child ends before the network and the lock (rule N-14)\n"
 after = ""
 
 [[mutant]]
@@ -1546,8 +1546,8 @@ why = "a second change request is accepted while the first one is recorded"
 
 [[mutant.edit]]
 file = "internal/app/change.go"
-before = "\tif c.requested {\n\t\tc.mu.Unlock()\n\t\treturn errLeaving\n\t}\n\tc.requested = true\n"
-after = "\tc.requested = true\n"
+before = "\tif c.requested {\n\t\tc.mu.Unlock()\n\t\treturn errLeaving\n\t}\n\treject, err := c.approveLocked()\n"
+after = "\treject, err := c.approveLocked()\n"
 
 [[mutant]]
 id = "MW14"
@@ -1576,8 +1576,8 @@ why = "shutdown leaves the sandbox holder of the sidecars running: it outlives t
 
 [[mutant.edit]]
 file = "cmd/inkwell/startup.go"
-before = "\t\t\tsidecar.Shutdown() // and so does the sandbox holder, once the previews are closed\n"
-after = "\t\t\t_ = sidecar.Shutdown // the import stays used: the mutant must compile\n"
+before = "\t\tsidecar.Shutdown() // and so does the sandbox holder, once the previews are closed\n"
+after = "\t\t_ = sidecar.Shutdown // the import stays used: the mutant must compile\n"
 
 # MW16 and MW17: the fix of UX-PC1a-1 (2026-11-15): the barrier ends the children the session does not control.
 [[mutant]]
@@ -1639,8 +1639,8 @@ why = "the member list is archived and replaced at the request, while the sessio
 
 [[mutant.edit]]
 file = "internal/app/takeover.go"
-before = "\tif err := s.requestChange(ctx, write); err != nil {\n"
-after = "\tif err := errors.Join(write(s.inv.store), s.requestChange(ctx, write)); err != nil {\n"
+before = "\tif err := s.requestChange(ctx, ChangeTakeOver, write); err != nil {\n"
+after = "\tif err := errors.Join(write(s.inv.store), s.requestChange(ctx, ChangeTakeOver, write)); err != nil {\n"
 
 [[mutant]]
 id = "MW5"
@@ -2610,3 +2610,371 @@ why = "P-15 off: Supersede decides nothing for any open connection, so the crash
 file = "protocol/syncack/supersede.go"
 before = "\tif len(conns) == 0 {\n"
 after = "\tif len(conns) >= 0 {\n"
+
+# PC1b, the join by a restart: MJ1..MJ16 (plan docs/plans/2026-11-15-pc1b-join.md, rules J-1..J-6; MJ5 and MJ13
+# hold the shared N-12 and N-13 on the join path).
+[[mutant]]
+id = "MJ1"
+block = "PC1b"
+kind = "go"
+pkg = "./internal/app/"
+test = "TestJoinWritesRecordBeforeTheList"
+expect = "J-1 record before the list"
+clause = "J-1 record before the list"
+why = "the member list is staged before the record: a crash between the two leaves a list no record explains"
+
+[[mutant.edit]]
+file = "internal/app/join.go"
+before = "\tif err := stageRecord(st, p, h.record); err != nil {\n\t\treturn err\n\t}\n\treturn stageList(st, p, h.ops)\n"
+after = "\tif err := stageList(st, p, h.ops); err != nil {\n\t\treturn err\n\t}\n\treturn stageRecord(st, p, h.record)\n"
+
+[[mutant]]
+id = "MJ2"
+block = "PC1b"
+kind = "go"
+pkg = "./internal/app/"
+test = "TestCompleteJoinConsumesOnce"
+expect = "J-1 consumed once"
+clause = "J-1 consumed once"
+why = "CompleteJoin records the root but keeps the record: every start waits again and the root can be replaced"
+
+[[mutant.edit]]
+file = "internal/project/join.go"
+before = "\tp.m.RootURL = rootURL\n\tp.m.PendingJoin = nil\n"
+after = "\tp.m.RootURL = rootURL\n"
+
+[[mutant]]
+id = "MJ3"
+block = "PC1b"
+kind = "go"
+pkg = "./internal/app/"
+test = "TestJoinFailedRecordDropped"
+expect = "J-4 nothing changed"
+clause = "J-4 nothing changed"
+why = "the next start does not remove what a failed join left: its staging folder and marker stay, and nothing is said"
+
+[[mutant.edit]]
+file = "internal/app/node.go"
+before = "\tjoinFailed, err := recoverJoin(o.Project)\n"
+after = "\tjoinFailed, err := false, error(nil)\n"
+
+[[mutant]]
+id = "MJ4"
+block = "PC1b"
+kind = "go"
+pkg = "./internal/app/"
+test = "TestJoinSameProjectNoRestart"
+expect = "J-5 no-op"
+clause = "J-5 no-op"
+why = "a join into the project the session already runs is held and restarts"
+
+[[mutant.edit]]
+file = "internal/app/join.go"
+before = "\tif j.List.Project() == inv.currentList().Project() {\n\t\treturn res, nil\n\t}\n\tops := j.List.Since(nil)\n"
+after = "\tops := j.List.Since(nil)\n"
+
+[[mutant]]
+id = "MJ5"
+block = "PC1b"
+kind = "go"
+pkg = "./internal/app/"
+test = "TestJoinOutcomeFollowsTheLoadedList"
+expect = "N-12 a join restarts"
+clause = "N-12 a join restarts"
+why = "a join is recorded and written but asks for no restart: the process ends on the old project"
+
+[[mutant.edit]]
+file = "internal/app/change.go"
+before = "\treturn r.chg.recorded()\n}"
+after = "\tif r.chg.joinedFolder() != \"\" {\n\t\treturn \"\"\n\t}\n\treturn r.chg.recorded()\n}"
+
+[[mutant]]
+id = "MJ6"
+block = "PC1b"
+kind = "go"
+pkg = "./internal/app/"
+test = "TestCompleteJoinRefuses"
+expect = "J-1 CompleteJoin refuses a non-member"
+clause = "J-1 CompleteJoin refuses a non-member"
+why = "a root announced by a device that is not a member consumes the record"
+
+[[mutant.edit]]
+file = "internal/app/join.go"
+before = "\tif key, err := p2p.KeyFromID(transport.PeerID(peer)); err != nil || s.inv.wiring.list().Role(key) == 0 {\n\t\treturn errJoinPeer\n\t}\n"
+after = ""
+
+[[mutant]]
+id = "MJ7"
+block = "PC1b"
+kind = "go"
+pkg = "./internal/app/"
+test = "TestCompleteJoinRefuses"
+expect = "J-1 CompleteJoin refuses an invalid URL"
+clause = "J-1 CompleteJoin refuses an invalid URL"
+why = "a root that is not an automerge URL consumes the record"
+
+[[mutant.edit]]
+file = "internal/app/join.go"
+before = "\tif !validRootURL(url) {\n\t\treturn errBadRootURL\n\t}\n"
+after = ""
+
+[[mutant]]
+id = "MJ8"
+block = "PC1b"
+kind = "go"
+pkg = "./internal/app/"
+test = "TestCompleteJoinRefuses"
+expect = "J-1 CompleteJoin refuses another root"
+clause = "J-1 CompleteJoin refuses another root"
+why = "another root than the one the record holds consumes the record"
+
+[[mutant.edit]]
+file = "internal/app/join.go"
+before = "\tif rec.Root != \"\" && url != rec.Root {\n\t\treturn errJoinRoot\n\t}\n"
+after = "\t_ = rec.Root // the record stays used: the mutant must compile\n"
+
+[[mutant]]
+id = "MJ9"
+block = "PC1b"
+kind = "go"
+pkg = "./internal/app/"
+test = "TestCompleteJoinRefuses"
+expect = "J-1 CompleteJoin refuses without a record"
+clause = "J-1 CompleteJoin refuses without a record"
+why = "CompleteJoin records a root in a project that waits for no join"
+
+[[mutant.edit]]
+file = "internal/app/join.go"
+before = "\trec, ok := s.joinRecord()\n\tif !ok {\n\t\treturn errNoJoinRecord\n\t}\n\tif !validRootURL(url) {\n"
+after = "\trec, _ := s.joinRecord()\n\tif !validRootURL(url) {\n"
+
+[[mutant]]
+id = "MJ10"
+block = "PC1b"
+kind = "go"
+pkg = "./internal/app/"
+test = "TestCompleteJoinAfterTheDocumentIsStored"
+expect = "J-1 consumed after storage"
+clause = "J-1 consumed after storage"
+why = "the record is consumed while the Go storage holds no chunk of the document: a crash then opens a root nothing can load"
+
+[[mutant.edit]]
+file = "internal/app/join.go"
+before = "\tif !s.stored(url) {\n\t\treturn errJoinNotStored\n\t}\n"
+after = ""
+
+[[mutant]]
+id = "MJ11"
+block = "PC1b"
+kind = "go"
+pkg = "./cmd/inkwell/"
+test = "TestFirstLaunchJoinRestarts"
+expect = "J-3 first launch restarts"
+clause = "J-3 first launch restarts"
+why = "a join at the first launch (a list of one op) is adopted live by the running session instead of restarting"
+
+[[mutant.edit]]
+file = "internal/app/join.go"
+before = "\tops := j.List.Since(nil)\n\ttitle := \"\"\n"
+after = "\tif inv.currentList().Len() == 1 {\n\t\treturn res, inv.adoptLive(j)\n\t}\n\tops := j.List.Since(nil)\n\ttitle := \"\"\n"
+
+[[mutant.edit]]
+file = "internal/app/zz_mutant_adopt.go"
+create = true
+after = """package app
+
+import "github.com/oioio-space/inkwell/internal/invite"
+
+// adoptLive makes the running session adopt the project of j (mutant MJ11).
+func (inv *invites) adoptLive(j *invite.Joined) error {
+	persist := func() error { return inv.store.replace(j.List.Since(nil)) }
+	if err := inv.wiring.AdoptProject(j.List, persist, inv.store.save); err != nil {
+		return err
+	}
+	inv.mu.Lock()
+	inv.list = j.List
+	inv.mu.Unlock()
+	return nil
+}
+"""
+
+[[mutant]]
+id = "MJ12"
+block = "PC1b"
+kind = "go"
+pkg = "./internal/app/"
+test = "TestJoinKeepsThePreviousFolder"
+expect = "J-6 previous folder unchanged"
+clause = "J-6 previous folder unchanged"
+why = "the joined project is written into the current folder: its member list replaces the current one and the joined document is projected over the previous text"
+
+[[mutant.edit]]
+file = "internal/app/join.go"
+before = "\t\tjoined, err := finishJoin(st, inv.folder, h, inv.log)\n"
+after = "\t\tjoined, err := \"\", st.replace(h.ops)\n"
+
+[[mutant]]
+id = "MJ13"
+block = "PC1b"
+kind = "go"
+pkg = "./internal/app/"
+test = "TestRequestsRefusedOnceJoinHeld"
+expect = "N-13 one change per image"
+clause = "N-13 one change per image"
+why = "a held Welcome does not start the request: a second join or a take-over is accepted while one is held"
+
+[[mutant.edit]]
+file = "internal/app/change.go"
+before = "\tc.held = write\n\tc.requested = true\n\treturn nil\n"
+after = "\tc.held = write\n\treturn nil\n"
+
+[[mutant]]
+id = "MJ14"
+block = "PC1b"
+kind = "go"
+pkg = "./internal/app/"
+test = "TestJoinFolderNameConfined"
+expect = "J-6 folder name confined"
+clause = "J-6 folder name confined"
+why = "the title a peer supplied names the joined folder unsanitised"
+
+[[mutant.edit]]
+file = "internal/app/join.go"
+before = "\t\tname: joinFolderName(title),\n"
+after = "\t\tname: title,\n"
+
+[[mutant]]
+id = "MJ15"
+block = "PC1b"
+kind = "go"
+pkg = "./internal/app/"
+test = "TestJoinFolderCollisionGetsSuffix"
+expect = "J-6 never replaces"
+clause = "J-6 never replaces"
+why = "the install is a plain rename: it replaces an empty folder that holds the name"
+
+[[mutant.edit]]
+file = "internal/app/join.go"
+before = "\t\terr := project.RenameNoReplace(parent, staging, dst)\n"
+after = "\t\terr := parent.Rename(staging, dst)\n"
+
+[[mutant]]
+id = "MJ16"
+block = "PC1b"
+kind = "go"
+pkg = "./internal/app/"
+test = "TestJoinCrashDuringInstall"
+expect = "J-6 staging found again"
+clause = "J-6 staging found again"
+why = "the staging folder is created before the marker: a crash between the two leaves a folder nothing names"
+
+[[mutant.edit]]
+file = "internal/app/join.go"
+before = "\tif err := writeJoinMarker(st, h.record.ID); err != nil {\n\t\treturn \"\", err\n\t}\n\tstaged, err := createStaging(st, parent, h)\n\tif err != nil {\n\t\treturn \"\", err\n\t}\n"
+after = "\tstaged, err := createStaging(st, parent, h)\n\tif err != nil {\n\t\treturn \"\", err\n\t}\n\tif err := writeJoinMarker(st, h.record.ID); err != nil {\n\t\treturn \"\", err\n\t}\n"
+
+# MJ17, added after the code review (Codex, F1): while the record holds no root, only the inviter binds it.
+[[mutant]]
+id = "MJ17"
+block = "PC1b"
+kind = "go"
+pkg = "./internal/app/"
+test = "TestCompleteJoinRefuses"
+expect = "J-1 CompleteJoin refuses a root not announced by the inviter"
+clause = "J-1 CompleteJoin refuses a root not announced by the inviter"
+why = "with no root in the record, any member of the joined list binds the project to the document it announces"
+
+[[mutant.edit]]
+file = "internal/app/join.go"
+before = "\tif rec.Root == \"\" && peer != rec.Inviter {\n\t\treturn errJoinInviter\n\t}\n"
+after = ""
+
+[[mutant]]
+id = "MJ18"
+block = "PC1b"
+kind = "go"
+pkg = "./internal/app/"
+test = "TestReturnToPreviousRefuses"
+expect = "J-2 return refused without a previous document"
+clause = "J-2 return refused without a previous document"
+why = "a return recorded with no previous document closes Inkwell and restarts it on the folder that waits: the person is told of a way back that leads nowhere"
+
+[[mutant.edit]]
+file = "internal/app/join.go"
+before = "\tif !ok || s.previousFolder(name) == \"\" {\n\t\treturn errNoPrevious\n\t}\n"
+after = "\tif !ok {\n\t\treturn errNoPrevious\n\t}\n"
+
+[[mutant]]
+id = "MJ19"
+block = "PC1b"
+kind = "go"
+pkg = "./internal/app/"
+test = "TestReturnToPreviousSurvivesARelaunch"
+expect = "J-2 a return to the previous document survives a relaunch"
+clause = "J-2 a return to the previous document survives a relaunch"
+why = "without it the folder that waits stays the most recent one: the next launch shows the waiting page again, and the way back has to be taken at every start"
+
+[[mutant.edit]]
+file = "internal/app/join.go"
+before = "\tif err := project.Prefer(root, name); err != nil {\n\t\treturn \"\", fmt.Errorf(\"return: %w\", err)\n\t}\n"
+after = ""
+
+[[mutant]]
+id = "MJ20"
+block = "PC1b"
+kind = "go"
+pkg = "./cmd/inkwell/"
+test = "TestRestartLogsOneLine"
+expect = "J-7 restart line"
+clause = "J-7 restart line"
+why = "without it no restart of a project change is logged: the network proof (gates PC1n, PC1n2) can neither count the joiner's restart nor place the inviter's one outage inside its window"
+
+[[mutant.edit]]
+file = "cmd/inkwell/startup.go"
+before = "\td.log.Info(\"restarting\", \"change\", change, \"folder\", restartDir)\n"
+after = "\t_ = change\n"
+
+[[mutant]]
+id = "MJ21"
+block = "PC1b"
+kind = "go"
+pkg = "./internal/app/"
+test = "TestInvitationStateFollowsTheTicket"
+expect = "J-8 a used invitation is not offered"
+clause = "J-8 a used invitation is not offered"
+why = "an invitation the guest redeemed, then cancelled, is still said to work: the inviter's dialog offers it to copy, and the guest who pastes it is refused (UX-PC1b2-1)"
+
+[[mutant.edit]]
+file = "internal/app/invites.go"
+before = "\tcase inv.currentHost().Outstanding(t):\n"
+after = "\tcase true:\n"
+
+[[mutant]]
+id = "MJ22"
+block = "PC1b"
+kind = "go"
+pkg = "./internal/app/"
+test = "TestReturnAfterTheJoin"
+expect = "J-9 the way back after a join"
+clause = "J-9 the way back after a join"
+why = "the consuming rewrite forgets the previous folder: once the join succeeded nothing in the application leads back to the document the question said was kept (UX-PC1b2-2)"
+
+[[mutant.edit]]
+file = "internal/project/join.go"
+before = "\t\tp.m.Previous = oldRec.Previous\n"
+after = ""
+
+# PC1n, the network proof of the join restart (plan docs/plans/2026-11-15-pc1b-join.md, rule J-7, section « Netsim
+# proof of the join restart »; gate gates/PC1n.toml).
+[[mutant]]
+id = "MN4"
+block = "PC1n"
+kind = "e2e"
+scenario = 5
+clause = "C3w"
+why = "the inviter records each outage as begun 30 s before the connection was lost: the one outage of the joiner's restart lies outside its window [t_r - 1 s, t_r + 15 s] while its count stays 1, so C3a passes and C3w must fail"
+
+[[mutant.edit]]
+file = "internal/transport/p2p/linkstat.go"
+before = "\ts.downAt, s.seen = now, now\n"
+after = "\ts.downAt, s.seen = now.Add(-30*time.Second), now\n"

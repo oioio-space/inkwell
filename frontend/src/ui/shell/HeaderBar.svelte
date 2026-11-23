@@ -32,6 +32,8 @@ let {
   onAbout,
   canPresent = false,
   onPresent = () => {},
+  canReturn = false,
+  onReturn = () => {},
 }: {
   title: string;
   /** The file being edited, under the title. */
@@ -68,6 +70,10 @@ let {
   canPresent?: boolean;
   /** "Présenter" (from the first slide), from this slide, or only as the audience view of this screen. */
   onPresent?: (how: "start" | "here" | "public") => void;
+  /** This folder was made by a join and the document open before it is still there (PC1b, J-9). */
+  canReturn?: boolean;
+  /** « Revenir à mon document ». */
+  onReturn?: () => void;
 } = $props();
 
 let menuOpen = $state(false);
@@ -164,6 +170,12 @@ let menuOpen = $state(false);
           <span>{t("menu.preview")}</span>
           <span class="tick" class:off={!previewOpen}><Icon name="check" size={14} /></span>
         </button>
+        <!-- The « Projet » group of the design (spec §4.2) comes before the document's actions. -->
+        {#if canReturn}
+          <button type="button" class="mi" role="menuitem" onclick={() => { close(false); onReturn(); }}>
+            <span>{t("join.return")}</span>
+          </button>
+        {/if}
         {#if canPresent}
           <button type="button" class="mi" role="menuitem" onclick={() => { close(false); onPresent("start"); }}>
             <span>{t("present.start")}</span>

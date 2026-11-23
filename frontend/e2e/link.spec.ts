@@ -23,6 +23,6 @@ test("LINK-01 the link survives a third pairing in a row and a heading typed rig
   await expect.poll(() => docText(bob), { timeout: 20_000 }).toBe("= TitreUn paragraphe.");
   await typeAtEnd(bob, " suite");
   await expect.poll(() => docText(alice), { timeout: 20_000 }).toBe("= TitreUn paragraphe. suite");
-  await expect(alice.getByRole("status")).toHaveText(/Synchronisé/);
-  await expect(bob.getByRole("status")).toHaveText(/Synchronisé/);
+  await expect(alice.getByRole("banner").getByRole("status")).toHaveText(/Synchronisé/);
+  await expect(bob.getByRole("banner").getByRole("status")).toHaveText(/Synchronisé/);
 });

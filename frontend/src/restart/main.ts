@@ -1,4 +1,6 @@
 import {
+  FinishJoin,
+  ReturnToPrevious,
   StartupID,
   TakeOver,
 } from "../../bindings/github.com/oioio-space/inkwell/internal/app/session";
@@ -13,6 +15,8 @@ if (!target) throw new Error("missing #restart mount point");
 void startRestart(target, {
   confirmed: takeLeaveMark,
   takeOver: () => TakeOver(),
+  finishJoin: () => FinishJoin(),
+  returnToPrevious: () => ReturnToPrevious(),
   startupId: () => StartupID(),
   load: (url) => location.replace(url),
   wait: (ms) => new Promise((resolve) => setTimeout(resolve, ms)),

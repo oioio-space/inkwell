@@ -1,0 +1,2061 @@
+{
+  "lot": "PC1n",
+  "criteria": [
+    {
+      "id": "netsim",
+      "command": "rm -rf .task/pc1n-results && mkdir -p .task/pc1n-results && timeout -k 10 240 ./scripts/heavy.sh mise run e2e:build && { NETSIM_SCENARIOS=5 NETSIM_SEEDS=\"20771 20772 20773\" NETSIM_EXPECT=strict INKWELL_E2E_BROWSER=chromium INKWELL_PERF_LOAD_WAIT=180 timeout -k 10 1500 ./scripts/heavy.sh --exclusive ./scripts/netsim/run.sh; rc=$?; cp .task/netsim/results/5-s2077[123].json .task/pc1n-results/ 2>/dev/null; python3 -I - \"$rc\" <<'PY'\nimport json, pathlib, sys\nneed = {\"C1\", \"C2\", \"C3\", \"C3a\", \"C4\", \"C5\", \"C6\", \"SI1\", \"CJ\", \"CJd\", \"C3w\"}\nbad = []\nfor seed in (20771, 20772, 20773):\n    p = pathlib.Path(f\".task/pc1n-results/5-s{seed}.json\")\n    if not p.exists():\n        bad.append(f\"{p.name} missing\")\n        continue\n    r = json.loads(p.read_text())\n    got = {c[\"id\"] for c in r[\"clauses\"]}\n    red = [f'{c[\"id\"]} {c[\"status\"]}: {c.get(\"measured\", \"\")[:80]}' for c in r[\"clauses\"] if c[\"status\"] != \"pass\"]\n    if r.get(\"expect\") != \"strict\" or not need <= got or red:\n        bad.append(f\"{p.name}: expect {r.get('expect')}, missing {sorted(need - got)}, red {red}\")\nif int(sys.argv[1]) or bad:\n    sys.exit(f\"PC1n netsim: exit {sys.argv[1]}, {bad}\")\nPY\n}",
+      "status": "pass",
+      "exit_code": 0,
+      "duration_seconds": 1065.5238656880101,
+      "log": "gates/PC1n/netsim.log",
+      "exclusive": true,
+      "exclusive_steps": [
+        {
+          "criterion": "netsim",
+          "exclusive": true,
+          "slots": 2,
+          "load_before": [
+            4.82,
+            4.53,
+            3.38
+          ],
+          "load_after": [
+            2.78,
+            3.24,
+            3.39
+          ],
+          "max_load": 5,
+          "waited_seconds": 65,
+          "exit_code": 0
+        }
+      ]
+    },
+    {
+      "id": "netsim-mutants",
+      "command": "timeout -k 10 30 python3 -I - <<'PY' && timeout -k 10 30 python3 -I scripts/netsim/mutants.py --check PC1n && NETSIM_MUTANT_SEED=20772 INKWELL_PERF_LOAD_WAIT=180 timeout -k 10 900 ./scripts/heavy.sh --exclusive python3 -I scripts/netsim/mutants.py PC1n MN4\nimport sys, tomllib\nms = {m[\"id\"]: m for m in tomllib.load(open(\"scripts/netsim/mutants.toml\", \"rb\"))[\"mutant\"] if m.get(\"block\") == \"PC1n\"}\nwant = {\"MN4\": (\"e2e\", 5, None, \"C3w\")}\nbad = sorted(set(ms) ^ set(want))\nfor i, t in want.items():\n    m = ms.get(i, {})\n    if (m.get(\"kind\"), m.get(\"scenario\"), m.get(\"variant\"), m.get(\"clause\")) != t or not m.get(\"edit\"):\n        bad.append(i)\nsys.exit(f\"PC1n mutant entries differ from the frozen table: {bad}\" if bad else 0)\nPY",
+      "status": "pass",
+      "exit_code": 0,
+      "duration_seconds": 359.3207180650206,
+      "log": "gates/PC1n/netsim-mutants.log",
+      "exclusive": true,
+      "exclusive_steps": [
+        {
+          "criterion": "netsim-mutants",
+          "exclusive": true,
+          "slots": 2,
+          "load_before": [
+            2.78,
+            3.24,
+            3.39
+          ],
+          "load_after": [
+            3.64,
+            3.29,
+            3.33
+          ],
+          "max_load": 5,
+          "waited_seconds": 0,
+          "exit_code": 0
+        }
+      ]
+    }
+  ],
+  "versions": {
+    "go": "go version go1.27.4 linux/amd64",
+    "node": "v24.22.1",
+    "typst": "unavailable: /bin/sh: ligne 1: typst: commande introuvable",
+    "tinymist": "unavailable: /bin/sh: ligne 1: tinymist: commande introuvable",
+    "os": "Linux-7.3.3-300.fc45.x86_64-x86_64-with-glibc2.44",
+    "embedded_sidecars": {
+      "typst": "0.15.1",
+      "tinymist": "0.15.10"
+    }
+  },
+  "sha256": {
+    "docs/plans/2026-11-15-pc1b-join.md": "620abb72127770440c2dc17eac577cec71d9df39eea066002e771cd9dedac84a",
+    "gates/PC1n/base-guard.log": "c8fd436777b9bf7b7902bb50b7a3eaa74a779d469c9c2e7630ad3507501e370b",
+    "gates/PC1n/exclusive.jsonl": "7f77f2b77a479046d0ba58c36ddf08460f34e98f62ecd2161521a78c89b505cf",
+    "gates/PC1n/netsim-mutants.log": "25e0ec8d46b6bb98a602b1e1ca5ad512c7851cc2265c97b4908b5942a57d4101",
+    "gates/PC1n/netsim.log": "dcdae8087d5b16a9c82812dc9db0af60bb263d43061c91707b740d89538acad7",
+    "gates/PC1n/resume/netsim-mutants.json": "f7e848b9615c10985686dd28f226594a0a2f4688421062b0268c2fb08b7f50d4",
+    "gates/PC1n/resume/netsim.json": "2f54ab8eb048ae3748e210b15733f2da020499cd031753a773e85c8a4cc0978b"
+  },
+  "status": "pass",
+  "deferrals": [],
+  "known_failures": [],
+  "deferred_obligations": [],
+  "base_guard": {
+    "ref": "main",
+    "base": "8bb5778501ddea96b6e71340fbef9b55540fc8bc",
+    "source_sha256": "93281b4e2c4c4e07d7c6407bf389bea44d016aa4d0e5e765c510eda3f5176187",
+    "exit_code": 0,
+    "status": "pass",
+    "log": "gates/PC1n/base-guard.log"
+  },
+  "runner": {
+    "source": "base 8bb5778501ddea96b6e71340fbef9b55540fc8bc",
+    "sha256": "050a154281195ed45be06dc2726b219645964acf5a1acdece23d091994a4b7ec"
+  },
+  "guard_overrides": [
+    {
+      "id": "9d89d3de349a698eaaf2aacd34a7bd3d27fbd0bda750b126538d21939d818a7c",
+      "reason": "fault handling in verdict.go: collectionTimeout += time.Duration(nativeperf.NullCount) * # * time.Second removed or rewritten; re-added constants WarmSamples=100 and ColdReplicates=59, fault handling logic, validation updates to use those constants, Invalid verdict function, etc.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "e1468cfc5b75fe7b2f16641ab0f901d18859435dee21ce05449f7a396701f679",
+      "reason": "mise.toml: gate dependency changed: mise task test:py (new ref to scripts/perf/paired_test.py)",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "a296e13122f51e8b248638fa3b53ffd3670af7beeea66f69f743f4ab17da3052",
+      "reason": "scripts/gate-selftest.py: gate dependency changed (paired.randomized self-test)",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "50d6bcddf99adca7a71f663757affcb9fc7d9a010a1a324d1b2f65bd8875ed1f",
+      "reason": "scripts/gate-selftest.py: gate machinery changed (paired.randomized logic)",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "7458573fbae437488fc5edf5b0e56cfecfc11633bddfd0263c1322460d90335c",
+      "reason": "scripts/perf/baseline.py: gate dependency changed (paired performance driver)",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "1fe6031eac9abc056e929a92773350e76155a3496fbfa120f2336d9f803d6643",
+      "reason": "scripts/perf/baseline.py: gate machinery changed (paired performance driver, run_criterion, config)",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "aecdf30c6895c8c8c57b1a54cd22bb377d72d691782f53c97531f87340d1b3c8",
+      "reason": "scripts/perf/paired_e2e_test.py: gate dependency changed (FakeServer, RealServer tests)",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "8642a7ce90d391e01f9e848d4a64150d036f3e99179ca2491e4e5989cdf10811",
+      "reason": "scripts/perf/paired.py: gate machinery changed (rule implementation, self-test)",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "n42-scope-2026-11-03",
+      "reason": "Scope correction decided by the user (N42 clarified), not a weakening; the guard reports no finding for it, this entry records the removal. Removed: tools/archexec dependency scan (go list -deps graph walk from L1; L2 audited.json deny/exception/via audits pinned to go.sum, raw-syscall, assembly, go:linkname and DLL-lookup heuristics; arch-exec -deps mode; dependencies*.go, audits.go, l2_contract_test.go and their testdata), the analyzer's transitive os/exec import rule and its Wails OpenURL/OpenFile/OpenFileManager/pkg/updater rules, app.RuntimeGuard, app.DisarmFrameworkLaunchers (D-Bus address pinning, WAILS_UPDATER_HELPER* clearing), the third_party/memory fork with its replace directive and internal/memorytest. Kept: own-code no-exec rule outside internal/sidecar, sandbox and all L1/L2 security checks.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "8df04b9301a401d51f6d06f2e36e9f89b875f0f59efc049644ea41982dfd062a",
+      "reason": "PERF-MEM was deferred from L0 to L2, and L2 re-deferred it to G-0b because L2 delivered only G-0a (no multi-file corpus opening). Pointing L0 at the lot that actually owns it; the criterion stays deferred, never counted as a pass.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "052e1f994d2cd5baffa57aa34d7e2d93d705040a87478421e88c5387769cea36",
+      "reason": "UX-LUP-1 (new walkthrough test, frontend/e2e/ux/lup.spec.ts) exposes the known narrow-window defect S13, present on main and not caused by the L-maj upgrade. It is test.fixme until its own lot S13 (docs/objectif-en-cours.md, Lots suivants), whose gate turns it back into test. No existing test, threshold or timeout changes.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "4eb54f3a3de7ad041a91971d04609618f8050ab9bf85d4cf1b36207a66731ac0",
+      "reason": "new gate script for L3 (added file, no existing test/threshold/delay/reference changed)",
+      "decision": "docs/plans/2026-11-05-L3-implementation.md"
+    },
+    {
+      "id": "d3ae81d5374485ce6de4aa4526d6319a9eaf73f5b8312ceda5a5a1b06ab68070",
+      "reason": "new gate script for L3 (added file, no existing test/threshold/delay/reference changed)",
+      "decision": "docs/plans/2026-11-05-L3-implementation.md"
+    },
+    {
+      "id": "7c17e71f13ea93d8a39a0747b8686916d7d676b1b4d247737ee921c803d06fa0",
+      "reason": "New file for L3, absent at the merge base, so the guard reports it as changed gate machinery: the PERF-TYPE-native keyboard driver: types through Mutter on the native host after verifying the X11 target window, and collects raw evidence only (it declares no verdict). Adding it changes no existing test, threshold, delay or criterion command.",
+      "decision": "docs/plans/2026-11-05-L3-implementation.md"
+    },
+    {
+      "id": "56498dfcefa00e368a87264e7b733d36a85a0fe0ddfc85dbb9a18642079a3472",
+      "reason": "New file for L3, absent at the merge base, so the guard reports it as changed gate machinery: unit tests of native_input.py; no X connection, native process, window or key injection. Adding it changes no existing test, threshold, delay or criterion command.",
+      "decision": "docs/plans/2026-11-05-L3-implementation.md"
+    },
+    {
+      "id": "03e87f0046f7939b199baeb7293009a121aa01a2921d519dd5484a3e599689c1",
+      "reason": "New file for L3, absent at the merge base, so the guard reports it as changed gate machinery: the GNOME Mutter RemoteDesktop D-Bus keyboard injection used by native_input.py (one owned connection per run, no token stored). Adding it changes no existing test, threshold, delay or criterion command.",
+      "decision": "docs/plans/2026-11-05-L3-implementation.md"
+    },
+    {
+      "id": "8386049e39a5d3d669590b2788ab7ec5e2e22aca37ab66f7bc359be681eb8a52",
+      "reason": "New file for L3, absent at the merge base, so the guard reports it as changed gate machinery: unit tests of native_mutter.py; no real bus, session, display, key or dialog. Adding it changes no existing test, threshold, delay or criterion command.",
+      "decision": "docs/plans/2026-11-05-L3-implementation.md"
+    },
+    {
+      "id": "fa14c2ee20d0f2fa4c1090df8cb8c3f18574d53e37a779f59b52278247a96d0e",
+      "reason": "New file for L3, absent at the merge base, so the guard reports it as changed gate machinery: diagnostic only: resolves the native attribution table's minified frames to source through the perf_native build's sourcemaps; it changes no verdict. Adding it changes no existing test, threshold, delay or criterion command.",
+      "decision": "docs/plans/2026-11-05-L3-implementation.md"
+    },
+    {
+      "id": "aec7d2e3d6ec704b93baeeb399b350068b7a70acfc5735df0a63e0047a881d55",
+      "reason": "New file for L3, absent at the merge base, so the guard reports it as changed gate machinery: unit tests of sourcemap.py. Adding it changes no existing test, threshold, delay or criterion command.",
+      "decision": "docs/plans/2026-11-05-L3-implementation.md"
+    },
+    {
+      "id": "0409d1bafdf67d623691f8a828c7fb23a750090e344ea4d65e6ca6f6caa4fff1",
+      "reason": "New file for L3, absent at the merge base, so the guard reports it as changed gate machinery: the PERF-TYPE-native criterion command: runs type_native.py under heavy.sh --exclusive; without the explicit host opt-in INKWELL_NATIVE_PERF_RUN=1 it writes a failed verdict. Adding it changes no existing test, threshold, delay or criterion command.",
+      "decision": "docs/plans/2026-11-05-L3-implementation.md"
+    },
+    {
+      "id": "0af3a9f66d55ce43bdfb6d75a4f2cf8c2279e960e3dc593630f28114b2fe2f6c",
+      "reason": "New file for L3, absent at the merge base, so the guard reports it as changed gate machinery: builds the tagged native collector and runs it only with the native-host opt-in; the Go verifier (internal/nativeperf) writes every PERF-TYPE verdict, this script invents no sample. Adding it changes no existing test, threshold, delay or criterion command.",
+      "decision": "docs/plans/2026-11-05-L3-implementation.md"
+    },
+    {
+      "id": "f600ff5157acf4bfb0840f043ae2eec3047cd321ded844994d2edd9aa9f46832",
+      "reason": "New file for L3, absent at the merge base, so the guard reports it as changed gate machinery: diagnostic tool behind mise run perf:typing-checks (typing checks in the perf-build window, CodeMirror-owned typing on then off); no gate criterion calls it. Adding it changes no existing test, threshold, delay or criterion command.",
+      "decision": "docs/plans/2026-11-05-L3-implementation.md"
+    },
+    {
+      "id": "f52f5153350032a80f733dfd7677f4fcce6ee287ec67bb456725163149ef39ed",
+      "reason": "New file for L3, absent at the merge base, so the guard reports it as changed gate machinery: unit tests of typing_checks.py; no window, bus, key or build. Adding it changes no existing test, threshold, delay or criterion command.",
+      "decision": "docs/plans/2026-11-05-L3-implementation.md"
+    },
+    {
+      "id": "354394131951ab6c2c02fea36bebbb62f74ab30681d98963770719888eeefc2e",
+      "reason": "New file for L3, absent at the merge base, so the guard reports it as changed gate machinery: the PERF-TYPE-native orchestrator (builds the perf_native app, runs the cold, warm and NULL trials through the native input driver, writes the verdict from internal/nativeperf). Adding it changes no existing test, threshold, delay or criterion command.",
+      "decision": "docs/plans/2026-11-05-L3-implementation.md"
+    },
+    {
+      "id": "8ebea8bdde8f2f8155068c4d1db359c684ba6a0c78c6f4f49e49457db3066663",
+      "reason": "New file for L3, absent at the merge base, so the guard reports it as changed gate machinery: unit tests of type_native.py; no display, no native desktop. Adding it changes no existing test, threshold, delay or criterion command.",
+      "decision": "docs/plans/2026-11-05-L3-implementation.md"
+    },
+    {
+      "id": "a6ef791eb160117c5477e1e84b2dfbfaf345e0c3244c75659e40861347000dbc",
+      "reason": "P2 gate written the same day with a command that could not run: protocol/sig and protocol/trust are in the nested protocol module (go test ./protocol/sig from the root fails) and internal/policy does not exist. The corrected command runs the same packages plus protocol/trust; no criterion, threshold or test was weakened.",
+      "decision": "docs/plans/2026-11-08-P2-implementation.md"
+    },
+    {
+      "id": "2d1ae6c4d45b872d0ba92150f4da1e0859246a9ae6de2e209e08b23c23f2c71c",
+      "reason": ".golangci.yml: adds the modernize linter (W26, go fix modernizers enforced). Strengthens lint; no linter removed, no setting relaxed.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "e2de7e0f2da435d43919e6edf5006bf4a72c9cc859e61284be2167516e1ce76a",
+      "reason": "mise.toml mutate:go: gremlins installed once (pinned v0.6.0) instead of go run, -count=1 and a 1.8 GB per-test-binary cap (memcap.sh); timeout coefficient 3 -> 10. The coefficient only decides when a mutant counts as timed out, and timed-out mutants are excluded from efficacy, so a longer limit cannot raise the score: it lets more mutants be judged (2026-11-08: 278/278 timed out at 3, a void run). block_done.py now refuses a run with >10% timeouts. No test, threshold or efficacy target changed.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "29a279f369ec1be00b74db74acbdbf6a97d40c443a0e20925e6d91e52732e5d8",
+      "reason": "scripts/alloy_check.py: the pinned download moved to scripts/fetch_pinned.py, which keeps the same timeout=120 and adds an atomic rename; the timeout is moved, not removed.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "0d9b6e4b873ac2d6b4b24d7643210bab0f9ec292584ed32d05930c808f992c35",
+      "reason": "scripts/tla-check.sh: cache check, SHA-256 verification and rename delegated to scripts/fetch_pinned.py (same pin, same SHA-256, timeout=120); verified by mise run formal from an empty cache. No model, mutant or check removed.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "977129d226f06fa8fa41e1b9fb12df6873c613ab557aeafdfa56c5accc68fc26",
+      "reason": "mise.toml: same mutate:go change as override e2de7e0f (pinned gremlins binary, -count=1, 1.8 GB per-test cap, coefficient 3 -> 10; a timed-out mutant is excluded from efficacy, so a longer limit cannot raise the score) plus scripts/gate_reset_test.py added to test:py. No test, threshold or efficacy target changed.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "e4f1dddf8e395e784e1e0bd29b8db314d566c77a12ceb3bb4a7e911b289d778a",
+      "reason": "scripts/gate.py: reset_evidence keeps the block's reports (gates/<lot>/*.md) instead of an rmtree of the whole folder, which erased the P3 report and the L3/P2 reconstructions on 2026-11-08. Every other entry (logs, playwright results, JSON, subfolders, symlinks) is still removed before the run, so evidence is still only what this run produced; no criterion, threshold or verdict logic changed. Tested by scripts/gate_reset_test.py; scripts/gate-selftest.py passes.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "0c05bb58c3dcd947cd378850fad0ba22a49642584859ca7e7e9a8b2baa7b2674",
+      "reason": "scripts/gate.py: reset_evidence keeps the block's reports (gates/<lot>/*.md) instead of an rmtree of the whole folder, which erased the P3 report and the L3/P2 reconstructions on 2026-11-08. Every other entry (logs, playwright results, JSON, subfolders, symlinks) is still removed before the run, so evidence is still only what this run produced; no criterion, threshold or verdict logic changed. Tested by scripts/gate_reset_test.py; scripts/gate-selftest.py passes.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "f4e233f366ad0939cf1e932ca5e87fcd1685bd87118c45d2bcb46f3c9d8f3b3a",
+      "reason": "scripts/gate_reset_test.py: new test file for gate.reset_evidence (reports kept, evidence cleared, symlinks not followed); adds checks, changes none.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "37de64a21345dfc3a211d1ec0e1b422f3400af968ddee210568e0e29934c0743",
+      "reason": "RL1/NI0: CI job timeout raised because the job now also runs the impaired-network scenarios (decision Q2, ~17 min added); no test threshold or test timeout changes.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "edc8aa9c784242aee624ba6a760f855dcdaac2ad0a98954c62b4bcc09e7c26a4",
+      "reason": "RL1: the existing p2p dupl exclusions (audit m1-m11, lot 8) are matched by file pair instead of line numbers, which shifted with every edit; same files, same linter, no new exclusion.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "bd21f8db785e3fa73d708433b88dd22746f68955fddc41d19d095c4aecc06332",
+      "reason": "RL1/NI0: pingTimeout moved into a const block with the other link-metric constants; value unchanged (5 s).",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "02130de200bd248ae9ccb49f5b20204473ea79f3af441023655ef1e438f58489",
+      "reason": "NI0 G-0: a redundant one-hour per-Recv timeout replaced by the test context (bounded by the test deadline, virtual time in synctest); the receiver still ends with the test.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "da127e92eba0fd067f86e42bb83b886c17bea3e0f7df263c31dd3d424341a592",
+      "reason": "NI0: netsim run.sh gains the impaired scenarios and fails fast when the topology does not come up (was hidden by `if start_stack`); scenarios 1-4 and their bounds unchanged.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "6c7fb901e4dd90b2f5f129a18391ae8d23e7c07b32d80d3db9c5a8f8a17987ee",
+      "reason": "RL1 follow-up: e2e:build waits (wait_for) for the tasks that compile the root package, and builds the frontend into a side directory swapped into frontend/dist at the end, so neither a concurrent build nor an interrupted one leaves dist empty (seen in the pre-push ci on 2026-11-08). Same vite build, same mode and VITE_E2E_OBSERVE flag; the server and relay builds and every e2e bound are unchanged.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "4c1f4ca28b37b744f08d243db2f85daee15f57c44112722c582ba06b8d7584cc",
+      "reason": "W36 C2/C7: netsim run.sh gives each scenario its own Playwright --output directory so the traces of a failure survive the next scenario (Playwright wipes its output dir); scenarios, clauses and bounds unchanged.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "f9bfbcfd9a66e8d7fa94acaa563d30c21bc8b6c55cf850f3d960d1f81fcf26fc",
+      "reason": "W33: tla-check.sh adds the SyncIndicator model (two sound configs) and its seven mutants; the RepoGen and ConnCredit runs are unchanged.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "f6b85cdffb23c71a10e3e33ba4a9c885e131125fb753f50f73d5321aac63782d",
+      "reason": "Free model providers (user rule \u00ab au juste besoin \u00bb): test:py also runs scripts/llm_test.py (provider fall-through with a fake curl, no network); every existing test still runs.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "290cdcc795f0c151c586028ee5eecca3b75dd4d5b421e38e950579fc08ac9157",
+      "reason": "NI-4 C5 unit test (new): two waits in a NEW test (300 ms for the tail of the exchange, 500 ms quiet window) to prove sync counters stay still once converged; no existing wait or bound is changed.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "95e2b4b1837f01eb2779e060f7478a585a1ca574dc6ae4df6e3b6c934ba9c6d2",
+      "reason": "Block WB: tla-check.sh adds the WriteBudget model (two sound configs) and its four mutants; every earlier model and mutant run is unchanged.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "61f62ed836abe55cdf30414e854c39f01e25c40bbec73eded4d067af74ff1402",
+      "reason": "W38: tla-check.sh adds the SendPath model (target send path, rules SP-1..SP-9) and the SP1 interim configurations with their mutants and residual witnesses; every earlier model and mutant run is unchanged.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "f7483447df96767dfbbc3a73db499fe85cd997bdc56d719695e362bcff61f7fa",
+      "reason": "Block SP1: the draft gate is deleted, replaced by gates/SP1.toml written after decisions D-SP1-1..4; the matched lines are comments of the draft (no executed timeout), and every criterion moved to the new gate.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "49ab05eb831a779272a0cab2862ef0670e046a41a19fd36550cf88490376443d",
+      "reason": "Block SP1: the draft gate is deleted, replaced by gates/SP1.toml written after decisions D-SP1-1..4; the matched lines are comments of the draft (no executed timeout), and every criterion moved to the new gate.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "6bc586746be08a856572e83cc4a17945a3abeff8b89c1f81cd9485364f536472",
+      "reason": "Block SP1: the draft gate is deleted, replaced by gates/SP1.toml written after decisions D-SP1-1..4; the matched lines are comments of the draft (no executed timeout), and every criterion moved to the new gate.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "cad02420d6f688add0c8c1c11025c05f3aca38d9ba5c3b15b3738fc8a9e0887d",
+      "reason": "Block SP1: the draft gate is deleted, replaced by gates/SP1.toml written after decisions D-SP1-1..4; the matched lines are comments of the draft (no executed timeout), and every criterion moved to the new gate.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "15e62d0ec178835d4e9918f13267d89db52d015c05c6c93f97c470a089faa4a9",
+      "reason": "Block SP1: the draft gate is deleted, replaced by gates/SP1.toml written after decisions D-SP1-1..4; the matched lines are comments of the draft (no executed timeout), and every criterion moved to the new gate.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "e00ad5be9b539b640e8877c99d95b72b3c5a6523cf716f0d0b6d5a6021ef617f",
+      "reason": "Block SP1: the draft gate is deleted, replaced by gates/SP1.toml written after decisions D-SP1-1..4; the matched lines are comments of the draft (no executed timeout), and every criterion moved to the new gate.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "70b8c6b498d7f0584d11bd18baf9f62ee199a1a65bdee0f51669ff923c9c0705",
+      "reason": "Block SP1: the draft gate is deleted, replaced by gates/SP1.toml written after decisions D-SP1-1..4; the matched lines are comments of the draft (no executed timeout), and every criterion moved to the new gate.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "11bbf6b3035554cbab31fb9e0dcbcf1a2b0fe156fe8b9d23a16493ec1eafdd51",
+      "reason": "Block SP1: the draft gate is deleted, replaced by gates/SP1.toml written after decisions D-SP1-1..4; the matched lines are comments of the draft (no executed timeout), and every criterion moved to the new gate.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "b2f893dff0d44d96674a9d830587e4fa082a3fbdcbc588d8e2f753e16295c36e",
+      "reason": "Block SP1: prose of the design doc updated to the decided yamux ConnectionWriteTimeout 120 s (was an open decision); no executed timeout.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "eba6dab413a0d756b9653880eec9a9bb315e36ea1da03e47721663a98395bf00",
+      "reason": "Block SP1: prose of the design doc updated to the decided yamux ConnectionWriteTimeout 120 s (was an open decision); no executed timeout.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "bc05bbe67a25e3895ceb82117d3d28e16ab776249589843233fa13003cb414d7",
+      "reason": "Block SP1: README SP1 section rewritten for the decided constants (ConnectionWriteTimeout 120 s, pings 120 s, partialTTL 120 s, window pinned), with the new state counts; prose only, no executed timeout.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "d839eef3376b8c8680d57f680c9fbe414822042b837e1f7c8c41fd78cf9f121a",
+      "reason": "Block SP1: README SP1 section rewritten for the decided constants (ConnectionWriteTimeout 120 s, pings 120 s, partialTTL 120 s, window pinned), with the new state counts; prose only, no executed timeout.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "8772c7cb953b828cf527d1c49c41846b196df970e8a774955b8126720a9ba602",
+      "reason": "Block SP1: README SP1 section rewritten for the decided constants (ConnectionWriteTimeout 120 s, pings 120 s, partialTTL 120 s, window pinned), with the new state counts; prose only, no executed timeout.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "ef589c3a4c1e6975106b008caeba0c94c9747e5ed1961d67102df4644cff28fc",
+      "reason": "Block SP1: README SP1 section rewritten for the decided constants (ConnectionWriteTimeout 120 s, pings 120 s, partialTTL 120 s, window pinned), with the new state counts; prose only, no executed timeout.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "4b5c5d320ce88fdfa698eaa5a3ed13d661e73272e9c7cc8cc80bbe0847ba2d05",
+      "reason": "Block SP1: header comment of a TLA+ config updated to the decided ping timeouts (120 s); TLC ignores comments; the model constants are checked by mise run tla.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "e08275093c19656cf837cfecf2bead27a6c59676367c1350c6cdac3f530c404f",
+      "reason": "Block SP1: header comment of a TLA+ config updated to the decided ping timeouts (120 s); TLC ignores comments; the model constants are checked by mise run tla.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "b3dce09ab218dd267c45d64f8d67a9cc126ad215b15b4a3bc3ad39354b8ccadf",
+      "reason": "Block SP1: header comment of a residual witness updated to the decided 120 s; it still violates under mise run tla.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "091e0b9e6868a6e932cc71710f310306629b9d1558c6e7bfcf02730e9e0b7cce",
+      "reason": "Block SP1: this residual witness holds at the decided 120 s, so it became the sound configuration docs/protocol/tla/SP1GrownKeepalive.cfg (run by tla-check.sh); nothing is weakened.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "0045e8b2d04dc6c2dd09222a86ae75e8105299b8e4ccb99efe973b04310b5568",
+      "reason": "Block SP1: header comment of a mutant renamed after its twin SP1Hop (was SP1Hop90); the mutant still violates under mise run tla.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "6bd225c9c99932f1b2fc2c3c1ca75b88b26510c6951781e107807e0d29065dea",
+      "reason": "Block SP1: header comment of a mutant updated to its twin SP1RelayKeepalive; the mutant still violates under mise run tla.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "7df636c05f8ae7a7533eaf887582cab0a9b8aa2aff1a9d01f84fc9bab37265b7",
+      "reason": "Block SP1: tla-check.sh renames SP1Hop90 to SP1Hop, adds the sound SP1Silence and SP1GrownKeepalive (a residual witness closed by the decided 120 s) and the mutant SP1PartialTTLAtIdle; every other model and mutant run is unchanged (62 runs, all as expected).",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "320c24c2933b463c1051e13c6a6c33c5b09a42b0e1675b1af9f048508819252d",
+      "reason": "Block SP1b (D-SP1, rule SP1-2): sendFragmented's total deadline uses frame.FloorRate (2 KiB/s) instead of MinRate (16 KiB/s), so a large message on an honest slow link is not cut and resent; proven by TestRuleSP1SlowLinkDeliversWithoutResend (mutant SP1e) and the SendPath/SP1 TLA+ model; the 90 s no-progress cut still bounds a stopped reader.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "0c138dcc2f7d2217751da972c599728b0daf6cbe80fe6a586783f0e2a79bd97f",
+      "reason": "Block SP1b (D-SP1-4, /simplify): the reassembly sweep now wakes at the oldest partial's deadline instead of a full partialTTL, so a partial is freed at partialTTL (120 s) instead of up to twice that; stricter, proven by TestRuleSP1PartialFreedAfterTTL (red before) and the tightened TestStalePartialExpires.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "751a0eb80e6b7d8897570fe06ac31de7fc23172d4cfa03be692102b829752818",
+      "reason": "Block SP1b (rule SP1-2): bulk lane WriteProgress takes frame.FloorRate (2 KiB/s) instead of MinRate (16 KiB/s), same rule as sync/1; the no-progress cut (WriteIdle) is unchanged in kind and stated in the spec.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "56c03e0de40304b3b341188f377e357177d48b2ed1c6d4d08b5558dfd5f7e5da",
+      "reason": "Block SP1b (rule SP1-2): sync/1 WriteProgress takes frame.FloorRate (2 KiB/s) instead of MinRate (16 KiB/s) \u2014 the root fix of the NI-3 resend loop (E1, E3: paste delivered at the first attempt, 0 resyncs); WriteIdle 90 s per D-SP1, proven by the RuleSP1 tests and the TLA+ model.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "9a9fbc0657f7af9f3179b29802df8ab9a326846019d334befd51962d658cebce",
+      "reason": "Block CI1b (W35, user decision \u00ab netsim seulement si touch\u00e9 \u00bb): `ci` now depends on ci:core + e2e:netsim:impaired, where ci:core is exactly the previous list minus the netsim; the content of `mise run ci` is unchanged (gate criterion rule-CI1-wiring checks it). Nothing removed or weakened.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "e9ab19538005856322916542a823208f5b6b6c693b900623004417fad2d14ba2",
+      "reason": "Block CI1b: test:py gains scripts/netsim/affected_test.py (28 new tests); every existing test file still runs.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "1f650fcd7621017e13281cb0aa969b1d4a6a6c99152ab9edcce756267291677a",
+      "reason": "Block CI1b: new netsim selector scripts/netsim/affected.py, written for gate CI1b (rules CI1-1..CI1-4, fails towards running).",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "14006af3b852de0386db1be0359e9daaafa4aea51f0a9712e77ebfb95ef45869",
+      "reason": "Block CI1b: new unit tests of the selector, one per case of gate criterion rule-CI1-unit.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "d393a94f90bf97fdb0e92d3e5de905378dc16ce5362abd09a4d983e21808b4ad",
+      "reason": "Block C5S: docs/protocol/tla/README.md describes the reworked LinkProbe model (timeouts, closing bytes, rate-bound clock margin, level arithmetic); documentation of the model, no model bound or check removed (mise run tla runs every config and mutant).",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "4198b84cbf5faf72986e8ef2c59b0bdf8158e5186ebe8cfd9eac12d5568f79f0",
+      "reason": "Block C5S: scenario 5's whole-test Playwright timeout grows 480 s -> 900 s because the scenario itself grew (new P0 entry phase, P5 of 180 s, filler traffic); no clause bound changes, every clause keeps its own bound.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "4a9d25e8758445336f3a8800b3a84ba66043bd8fda996fe2aa70f1028f76cc06",
+      "reason": "Block C5S: scripts/netsim/c5model.py is the C5 statistical model of this block (spec reformalized: late discards, filler traffic); its guarantees are re-proven by c5model_test.py (0 false failures in 3000 runs, every mutant rejected).",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "6e6f71fdc5bebb32acde8a79613b9940916a0facd306848f3115b347a6dd12ab",
+      "reason": "Block C5S: scripts/netsim/c5model_test.py, the model's tests for this block; they check the false-failure bound and the power against every mutant estimator.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "ba63bc2264354dbbcb17654443cb7dad0a1832e2042d36f59a72b841f742b5ae",
+      "reason": "Block C5S: scripts/netsim/run.sh gains NETSIM_REPEAT and per-repeat result files (gate criterion e2e-C5); a run without it behaves as before.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "e3735c10c0e1206b58a4f60eeab20fc65bf7b83b64feabc795e1be1ed73ad969",
+      "reason": "Block C5S (security review finding 9): scripts/pkg/selftest.sh covers the new AC-14 check that a release binary was not built with tags server; existing selftests unchanged.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "2f16525d27dc2136ee0622eda0de30eb552b3f458029dfa50338e63196672c14",
+      "reason": "Fail fast (user, 2026-11-10: \u00ab monitore \u00e0 chaque fois pour pas que \u00e7a arrive \u00bb): block_done.py gains a preflight right after step 2 that runs the gate's base guard and the step-8 docs check, so a run that would fail at its end after hours fails in seconds; every step is unchanged and still runs.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "702c3ec6b331272ca2fd29d0c8d1c1194492d9d561c092a8dab3507ef0467a38",
+      "reason": "Fail fast: block_done_test.py pins the preflight (a failing base guard stops done before the long steps; it runs right after step 2); existing tests unchanged.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "63c08e7c3565ddbc9b3f0b4263f73a2f7a1f44fd2d0c23fa31939e38a22f6e19",
+      "reason": "Fail fast at the source (user, 2026-11-10: \u00ab corrige la source, pas les effets \u00bb): a gate whose base guard fails can no longer pass, so gate.py now records every criterion as not run and stops instead of running hours of criteria first; the guard itself and every criterion are unchanged. Pinned by gate-selftest.py (no criterion runs after a failing base guard; red before the fix).",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "942d53f7dd6caa50bc751f20e861ab1013ad02143b50d36742a18aa41e1d3db3",
+      "reason": "Fail fast at the source (user, 2026-11-10: \u00ab corrige la source, pas les effets \u00bb): a gate whose base guard fails can no longer pass, so gate.py now records every criterion as not run and stops instead of running hours of criteria first; the guard itself and every criterion are unchanged. Pinned by gate-selftest.py (no criterion runs after a failing base guard; red before the fix).",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "fd250db474038aafd0c39cb19afb15d5b85b6879aecbceafef0da24057b2f0c7",
+      "reason": "Fail fast at the source (user, 2026-11-10: \u00ab corrige la source, pas les effets \u00bb): a gate whose base guard fails can no longer pass, so gate.py now records every criterion as not run and stops instead of running hours of criteria first; the guard itself and every criterion are unchanged. Pinned by gate-selftest.py (no criterion runs after a failing base guard; red before the fix).",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "7fcc7b9b00f050e2866a040a166466f7f7063c575225174afa454aec5cb80720",
+      "reason": "Fail fast at the source (user, 2026-11-10: \u00ab corrige la source, pas les effets \u00bb): a gate whose base guard fails can no longer pass, so gate.py now records every criterion as not run and stops instead of running hours of criteria first; the guard itself and every criterion are unchanged. Pinned by gate-selftest.py (no criterion runs after a failing base guard; red before the fix).",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "891e206f2ff5286e1ef362fd3aa7101c56e6f9425d7b0a5006353c89314cd34a",
+      "reason": "Block C5S: block_done.py preflight also runs `mutants.py --check <block>`, so a netsim mutant whose anchor moved with the code fails done in seconds instead of hours into the gate (found 2026-11-11: M5b, M5h, M5j). Adds a check; nothing weakened.",
+      "decision": "docs/plans/2026-11-09-c5-sound.md"
+    },
+    {
+      "id": "1d8454828c12a99f85fe76f20b1269b61696ed3f171bbf99962a75de4270d775",
+      "reason": "Block C5S: block_done_test.py adds PreflightTest.test_a_mutant_whose_anchor_moved_stops_done_before_the_long_steps (red without the preflight check); existing tests unchanged.",
+      "decision": "docs/plans/2026-11-09-c5-sound.md"
+    },
+    {
+      "id": "600d3f47e2e1d6e97217ef2a98878a30e7c0900b456cfe6c1f0f0b655c289414",
+      "reason": "Block C5S: gate-guard.py's dependency walk added every scripts/*.py path named anywhere in a dependency's text, so a test fixture path (scripts/perf/p.py in scripts/netsim/affected_test.py) became a 'dependency' and the self-test failed (L1 anti-weakening, found through RL1 > P3 > P2 > L2 > L1, 2026-11-11). A transitively named path that is no file is no longer a dependency; a criterion naming a missing script still fails the self-test, and a self-test assertion pins the case. Nothing guarded is dropped: every existing file stays covered.",
+      "decision": "docs/plans/2026-11-09-c5-sound.md"
+    },
+    {
+      "id": "ce1158c0905ac65e37ab804d2c230b4f30c395fd53b2ab174381a1f8e83f879f",
+      "reason": "Block C5S: gate-guard.py's dependency walk added every scripts/*.py path named anywhere in a dependency's text, so a test fixture path (scripts/perf/p.py in scripts/netsim/affected_test.py) became a 'dependency' and the self-test failed (L1 anti-weakening, found through RL1 > P3 > P2 > L2 > L1, 2026-11-11). A transitively named path that is no file is no longer a dependency; a criterion naming a missing script still fails the self-test, and a self-test assertion pins the case. Nothing guarded is dropped: every existing file stays covered.",
+      "decision": "docs/plans/2026-11-09-c5-sound.md"
+    },
+    {
+      "id": "61b44de0cf99d9080472ae3bb941a9113eba35ff049ca83d40c20d2660d89627",
+      "reason": "Block C5S: c5model.py simulates a PROBE across a change of round trip as the stack does (RFC 9002 estimator fed across phases, PTO read at the ECHO, quic-go's resend time threshold, head-of-line order); R2's crossing term for transition labels is derived from it (transition_lag), not hand-widened. Found by e2e-C5 runs 5-s1-r8 and 5-s3-r6 (one step each at the P2>P3 drop); both replay green, the old rule fails 3 of 200 corrected-model runs. Guarantees re-proven: 0 false failures in 3000 runs, every mutant rejected.",
+      "decision": "docs/plans/2026-11-09-c5-sound.md"
+    },
+    {
+      "id": "0231bea19170282540c60688f7379337bb64549f90cfcb1764b29635687b8592",
+      "reason": "Block C5S: c5model_test.py adds Transition.test_single_step_spike_at_the_p2_p3_drop (red with the old tolerance) and test_pto_climbs_after_the_drop; existing guarantees tests unchanged (24 tests, 597 s at rest).",
+      "decision": "docs/plans/2026-11-09-c5-sound.md"
+    },
+    {
+      "id": "f22057e36244ddd6ef648864ff0df369f85e2b26277fdddf52102c6426784b16",
+      "reason": "Audit explicitly requires clear skips on kernels below the required ABI; only new IPC tests are capability-gated. Existing tests and thresholds are unchanged.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "5467a9137b41485c53dcf9abfea36f2ea0cd66b032899ef8befcd119360d29bd",
+      "reason": "Block PB (ADR 0038, paired performance): scripts/perf/native_input.py: gate machinery changed. Proven by native_input_test (environment faults exit 75, bounded retries, fresh raw directory). No threshold is weakened: the 10 % budget is kept and the absolute limit is replaced by a stronger bound.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "2e74ad3d5207a7f8a60e7ebeb9e1a7334280bbf3a657ff1d1886b9a225c24fb8",
+      "reason": "Block PB (ADR 0038, paired performance): scripts/perf/native_input.py: timeout expression removed or rewritten: deadline, pending, complete = time.monotonic() + timeout + (# * NULL_COUNT * # if phase == \"warm\" else #), b\"\", None. Proven by native_input_test (environment faults exit 75, bounded retries, fresh raw directory). No threshold is weakened: the 10 % budget is kept and the absolute limit is replaced by a stronger bound.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "a1a051b8a2c9442443a79bbf77e0cd1adccb143612884d856ba0d475aa69b71a",
+      "reason": "Block PB (ADR 0038, paired performance): scripts/perf/native_input_test.py: gate dependency changed. Proven by native_input_test (environment faults exit 75, bounded retries, fresh raw directory). No threshold is weakened: the 10 % budget is kept and the absolute limit is replaced by a stronger bound.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "c2a988db0ca2d76be5f18e427cd5d915c02ada62b53912b82d5478ed4112baac",
+      "reason": "Block PB (ADR 0038, paired performance): scripts/perf/native_input_test.py: gate machinery changed. Proven by native_input_test (environment faults exit 75, bounded retries, fresh raw directory). No threshold is weakened: the 10 % budget is kept and the absolute limit is replaced by a stronger bound.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "14a60de14d315d22eb826d0a1cd2f87a325fdb840ec4735c1fbc35ce23ee91b5",
+      "reason": "Block PB (ADR 0038, paired performance): scripts/perf/paired_e2e_test.py: gate machinery changed. Proven by the FakeServer and RealServer driver tests (A/A pass, injected slowdown, noise invalid). No threshold is weakened: the 10 % budget is kept and the absolute limit is replaced by a stronger bound.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "47baf8bfaffe8adecbbf775d8decc014c5eef4671f07860823075a5e9a536b7f",
+      "reason": "Block PB (ADR 0038, paired performance): scripts/perf/paired_test.py: gate dependency changed. Proven by paired_test (attempt machine, order statistics, replayable orders). No threshold is weakened: the 10 % budget is kept and the absolute limit is replaced by a stronger bound.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "bba4bc2777b535930ce85bbe052247c08f33f097c61283f4b7a5627676e010e2",
+      "reason": "Block PB (ADR 0038, paired performance): scripts/perf/paired_test.py: gate machinery changed. Proven by paired_test (attempt machine, order statistics, replayable orders). No threshold is weakened: the 10 % budget is kept and the absolute limit is replaced by a stronger bound.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "4e52584628ac824921b4dc8aa6a52e5aa6f5f51b0ca8888069011eeec524f6e9",
+      "reason": "Block PB (ADR 0038, paired performance): scripts/perf/pbmodel.py: gate machinery changed. Proven by pbmodel_test (false regression 0/3000, power, every mutant rule rejected). No threshold is weakened: the 10 % budget is kept and the absolute limit is replaced by a stronger bound.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "966eb31d4e86ed349cf8787bd433a16976b442fe4b4ffa86211ac7279ac37acb",
+      "reason": "Block PB (ADR 0038, paired performance): scripts/perf/refbuild_test.py: gate dependency changed. Proven by refbuild_test (merge-base reference, digest, atomic publication, fail closed). No threshold is weakened: the 10 % budget is kept and the absolute limit is replaced by a stronger bound.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "aa68c3a1ca31f0da26f952fa5b6d5d01c34e276764b9f0797de754bc1be57b24",
+      "reason": "Block PB (ADR 0038, paired performance): scripts/perf/refbuild_test.py: gate machinery changed. Proven by refbuild_test (merge-base reference, digest, atomic publication, fail closed). No threshold is weakened: the 10 % budget is kept and the absolute limit is replaced by a stronger bound.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "2c73d7e5a43e8fae7cc5b58b78a68117d7c6d6a3e9a6b3a3dd0b8d00cb60b35a",
+      "reason": "Block PB (ADR 0038, paired performance): scripts/perf/start.cjs: gate dependency changed. Proven by paired_e2e_test (the plan driver run against the fake and the real server). No threshold is weakened: the 10 % budget is kept and the absolute limit is replaced by a stronger bound.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "8ac7173e0ca26e0db8c5d2119aea339fabe66bb8a8e0c031b98962005784daf2",
+      "reason": "Block PB (ADR 0038, paired performance): scripts/perf/start.cjs: gate machinery changed. Proven by paired_e2e_test (the plan driver run against the fake and the real server). No threshold is weakened: the 10 % budget is kept and the absolute limit is replaced by a stronger bound.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "c08f09fc4517c1d3c2c45e2c63cfca4c42100fee7f1939830137c50ce1e34622",
+      "reason": "Block PB (ADR 0038, paired performance): scripts/perf/start.cjs: timeout expression removed or rewritten: for(let j=#;j<#;j++){try{if((await fetch('http://#.#:#/health')).ok){ready=true;break;}}catch{} await new Promise(r=>setTimeout(r,#));}. Proven by paired_e2e_test (the plan driver run against the fake and the real server). No threshold is weakened: the 10 % budget is kept and the absolute limit is replaced by a stronger bound.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "36a8e9a1f6e3fbc1b3c5e38e486d9d30aca6760048a75b5e91b4c12b6638d529",
+      "reason": "Block PB (ADR 0038, paired performance): scripts/perf/testdata/fakeserver.py: gate machinery changed. Proven by paired_e2e_test (the fake server is the driver test fixture). No threshold is weakened: the 10 % budget is kept and the absolute limit is replaced by a stronger bound.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "ab554781046f18d9abba8eb8d61f8046445d6cea08812b5868540fc2774e4d55",
+      "reason": "Block PB (ADR 0038, paired performance): scripts/perf/testdata/quantile-index.json: gate machinery changed. Proven by paired_test and Go TestQuantileUpperIndexMatchesPythonVector (shared vector). No threshold is weakened: the 10 % budget is kept and the absolute limit is replaced by a stronger bound.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "cd1bcf46aec134382b652681d781251ef01566690877b56033286bd40674cabb",
+      "reason": "Block PB (ADR 0038, paired performance): scripts/perf/type_native.py: gate machinery changed. Proven by type_native_test (environment fault retry, invalid after three, valid failure never retried). No threshold is weakened: the 10 % budget is kept and the absolute limit is replaced by a stronger bound.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "4b7a14d48489e5af7eb4a5ab553e512a997cbb7d6fb59e585b309e815f3b3784",
+      "reason": "Block PB (ADR 0038, paired performance): scripts/perf/type_native_test.py: gate dependency changed. Proven by type_native_test (environment fault retry, invalid after three, valid failure never retried). No threshold is weakened: the 10 % budget is kept and the absolute limit is replaced by a stronger bound.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "31b1cf1a4da8fd0039fcf3376591f7a6c2320580ff388dd081ce2d05d10642ec",
+      "reason": "Block PB (ADR 0038, paired performance): scripts/perf/type_native_test.py: gate machinery changed. Proven by type_native_test (environment fault retry, invalid after three, valid failure never retried). No threshold is weakened: the 10 % budget is kept and the absolute limit is replaced by a stronger bound.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "096caa77960b9f2bcebfd03119a2eb90a1ed9137a10b3df4e40fdaffccdf567f",
+      "reason": "Block PB (ADR 0038, paired performance): scripts/perf/refbuild.py: gate machinery changed. Now also generates the gitignored Wails bindings in the reference worktree (the build vector is shared by both sides). Proven by refbuild_test (reference is the merge-base, one build vector for both sides, fail closed) and the perf-start criterion. No threshold is weakened.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "a3c9c9f1617971fb3f4dffc6201d5b31661c11c7edd884ed0b809ae5fdd2f413",
+      "reason": "Block OI (ADR 0037, single instance): scripts/tla-check.sh adds the OISingleInstance model (two sound configs, OISingleInstance and OISingleInstanceHang) and its fourteen mutant and witness configs (NoDrain, caught by AckedApplied, added 2026-11-12), each of which must be detected; no existing model, mutant or bound is removed or weakened.",
+      "decision": "docs/plans/2026-11-11-oi-single-instance-open.md"
+    },
+    {
+      "id": "fb80c6a741e9e760cd92e0865c62bed54cdd144941ffc003704adb453a5ffd1a",
+      "reason": "docs/protocol/tla/README.md prose, not block PB: block C5S extends one sentence (the responder stack discarding a late packet is LoseData) and block OI adds the OISingleInstance section (its fairness table names the per-try Timeout that A2 must outlast); documentation of the models only, no model bound or check removed. Added by PB because the guard listed it while PB was gated; its owners should confirm.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "af472f1cd03c389c66d959913d41ce69798ac22693d825202565f80b600611dd",
+      "reason": "Block PB per-sample interference (ADR 0038 amendment 2026-11-12): scripts/perf/baseline.py: PERF-START report gains `interference` (the bound, the raw background share of every kept and every discarded start, the invalid rate per side); tests: paired_test.Interference.test_report_keeps_every_raw_share, paired_e2e_test.FakeServer.test_every_slot_records_its_background_cpu",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "fdccc02ce1b4eb272b7fa826e8f27b4246299bf171c4551c46d7b6b807178501",
+      "reason": "Block PB per-sample interference (ADR 0038 amendment 2026-11-12): scripts/perf/baseline.py: PERF-START report gains `interference` (the bound, the raw background share of every kept and every discarded start, the invalid rate per side); tests: paired_test.Interference.test_report_keeps_every_raw_share, paired_e2e_test.FakeServer.test_every_slot_records_its_background_cpu",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "196f0c38ca86a22007bed9e4523d6b74b2a2cd3e72631f741b633959b42e6189",
+      "reason": "Block PB per-sample interference (ADR 0038 amendment 2026-11-12): scripts/perf/cpu.cjs: new: per-start background CPU accounting from /proc (machine busy jiffies minus the measured tree); tests: cpu_test.py (fake /proc, ten rules)",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "a8cc9c69977d0c355a3bc44141f41fd4dac51ec7c88e000ee638449b928af252",
+      "reason": "Block PB per-sample interference (ADR 0038 amendment 2026-11-12): scripts/perf/cpu_test.py: new tests of cpu.cjs on a fake /proc",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "1fb82a436a3da061faa9d0699f3ba961efc9083fc4af958a45e0b2f249456137",
+      "reason": "Block PB per-sample interference (ADR 0038 amendment 2026-11-12): scripts/perf/paired.py: per-sample interference: BG_SHARE_MAX 1.5 CPUs, INVALID_MAX 20 %, MAX_TRIES 5, invalid_start, run_interfered, interference_report, classify maps the interference fault to an invalid attempt, plan carries the rule; tests: paired_test.Interference, pbmodel_test.Interference",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "ab91b4dd44221827c0e62a6ad7484ce5b25e9d2f104721d65d17c04149fcefd0",
+      "reason": "Block PB per-sample interference (ADR 0038 amendment 2026-11-12): scripts/perf/paired_e2e_test.py: driver tests for per-sample interference (a real burner process is discarded and re-measured in its slot, a slow start is not invalid, the 20 % cap and the five tries stop the run); the existing timing tests pass bg_share_max=None so ambient load cannot fail them. No test weakened",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "b803faf00e0cf5aaf4db6faa4e0a31e0db2a3de8fa5c2fac7019ef7b6a4ee0a6",
+      "reason": "Block PB per-sample interference (ADR 0038 amendment 2026-11-12): scripts/perf/paired_e2e_test.py: driver tests for per-sample interference (a real burner process is discarded and re-measured in its slot, a slow start is not invalid, the 20 % cap and the five tries stop the run); the existing timing tests pass bg_share_max=None so ambient load cannot fail them. No test weakened",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "92c618ec8b28b68f2b60ce69f44e5ed349732a139d42d2d8960a72b376a206de",
+      "reason": "Block PB per-sample interference (ADR 0038 amendment 2026-11-12): scripts/perf/paired_test.py: new class Interference (bound, cap, classify, plan, report); no existing test changed",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "37bb1599f382e345e6581d0b4036a3687eeff74f643fd9d02501c7a7e682fa7b",
+      "reason": "Block PB per-sample interference (ADR 0038 amendment 2026-11-12): scripts/perf/paired_test.py: new class Interference (bound, cap, classify, plan, report); no existing test changed",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "2ca2b29c6bc29151c1e8ee5ea29fb6cbf4f77374ae033eeda90e01b31014fa68",
+      "reason": "Block PB per-sample interference (ADR 0038 amendment 2026-11-12): scripts/perf/pbmodel.py: burst model fitted to docs/perf/2026-11-12-start-bg (Bursts, bg_session, BG_SCENARIOS, BG_MUTANTS, bgfit, threshold); the existing rule, environments and mutants are untouched",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "e3a02ef5a77b63f5524976983712f296a5262fb6437a42a3fc11b4249a300100",
+      "reason": "Block PB per-sample interference (ADR 0038 amendment 2026-11-12): scripts/perf/pbmodel_test.py: new class Interference (archive sealed, constants refit, quiet-edge bound, false failure <= 1e-3 under bursts, truly slow application still fails, three mutants rejected); no existing test changed",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "6f352aa8b2516cdb2ac9f9a16da1afbfaa3165bbff31137bf48cd8e71a19984c",
+      "reason": "Block PB per-sample interference (ADR 0038 amendment 2026-11-12): scripts/perf/pbmodel_test.py: new class Interference (archive sealed, constants refit, quiet-edge bound, false failure <= 1e-3 under bursts, truly slow application still fails, three mutants rejected); no existing test changed",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "24ed17094b908254f15a61608bf5ffcae34840ba03ed3622296b01a3ad3b9508",
+      "reason": "Block PB per-sample interference (ADR 0038 amendment 2026-11-12): scripts/perf/start.cjs: per-sample interference: window around each start, bg_share recorded, an invalid start re-measured in its slot after a quiet wait, fault `interference` above 20 % of the plan or five tries; the readiness loop and timeouts are unchanged",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "d8c7a287b8e2a2f8b2d9eb98daa1009fa9b29243881eb997d72038b01b9636a8",
+      "reason": "Block PB per-sample interference (ADR 0038 amendment 2026-11-12): scripts/perf/start.cjs: per-sample interference: window around each start, bg_share recorded, an invalid start re-measured in its slot after a quiet wait, fault `interference` above 20 % of the plan or five tries; the readiness loop and timeouts are unchanged",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "d4219dcb86e8f55829873a947d887cb39c992efd3e890751b95b8578b76f5e7e",
+      "reason": "Block PB per-sample interference (ADR 0038 amendment 2026-11-12): scripts/perf/start.cjs: per-sample interference: window around each start, bg_share recorded, an invalid start re-measured in its slot after a quiet wait, fault `interference` above 20 % of the plan or five tries; the readiness loop and timeouts are unchanged",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "137d9459bd16b0816c6d3baa25445a4a8d8424965b70dfd00dbfdb872eb9e5e2",
+      "reason": "Block PB review fixes (ADR 0038 amendment 2026-11-12): scripts/perf/native_input.py: gate machinery changed: focus taken by a window of the measured process or a descendant is a product failure, another program's window stays the fault focus-lost (focus_moved, descends, parent_pid); the timeout expression is unchanged, re-keyed by the file edit; test: native_input_test.test_focus_taken_by_the_product_is_a_failure",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "df0b72d935214f69f13fe54c29165d93085df6dad98e0f339cf6de55949e6545",
+      "reason": "Block PB review fixes (ADR 0038 amendment 2026-11-12): scripts/perf/native_input.py: timeout expression removed or rewritten: deadline, pending, complete = time.monotonic() + timeout + (# * NULL_COUNT * # if phase == \"warm\" else #), b\"\", None: focus taken by a window of the measured process or a descendant is a product failure, another program's window stays the fault focus-lost (focus_moved, descends, parent_pid); the timeout expression is unchanged, re-keyed by the file edit; test: native_input_test.test_focus_taken_by_the_product_is_a_failure",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "643e515c15115bc4ae66e15183bc9926140fe49de7ea724318d74680233efede",
+      "reason": "Block PB review fixes (ADR 0038 amendment 2026-11-12): scripts/perf/native_input_test.py: gate dependency changed: adds test_focus_taken_by_the_product_is_a_failure; test_same_pid_but_wrong_active_xid_is_rejected again asserts a failure (as committed before PB: rejected, not an environment fault), now RuntimeError; nothing weakened",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "0b1f511430e25066dd352b2aba7c4ddeb093446b30d54e68a323ea41455a8ac0",
+      "reason": "Block PB review fixes (ADR 0038 amendment 2026-11-12): scripts/perf/native_input_test.py: gate machinery changed: adds test_focus_taken_by_the_product_is_a_failure; test_same_pid_but_wrong_active_xid_is_rejected again asserts a failure (as committed before PB: rejected, not an environment fault), now RuntimeError; nothing weakened",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "b74ee324fc4eeb8e5fbeeb7f03de1ab11c4480566d3b0b496e8ab034672087fa",
+      "reason": "Block PB review fixes (ADR 0038 amendment 2026-11-12): scripts/perf/paired.py: gate machinery changed: slot_step (the per-start rule, twin of start.cjs slotStep, shared vector testdata/slot-rule.json), Fisher side test of the discards (IMBALANCE_ALPHA 1e-3, significant imbalance = regression even when the cap stopped the run), classify: accounting fault invalid, fewer judged pairs than the plan fail, interference_report counts over the planned slots and reports discarded durations per side; tests: paired_test.Interference, Accounting, Discards",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "92bd6d4e222a0f59c045f7146d38c0402184e69a21f0f6ec4f351ba124ce0f72",
+      "reason": "Block PB review fixes (ADR 0038 amendment 2026-11-12): scripts/perf/paired_e2e_test.py: gate dependency changed: ambient() reads the cgroup accounting; adds test_a_detached_helper_is_measured_not_background; no existing test or tolerance changed",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "7ec10356e27d5841df4bab175843183e5704dbfccdc319ea5791150dddfbf380",
+      "reason": "Block PB review fixes (ADR 0038 amendment 2026-11-12): scripts/perf/paired_e2e_test.py: gate machinery changed: ambient() reads the cgroup accounting; adds test_a_detached_helper_is_measured_not_background; no existing test or tolerance changed",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "6b52b6175716cb2f18512a9aa759c952da9be8a93302c373ee8bb85493dbfc1e",
+      "reason": "Block PB review fixes (ADR 0038 amendment 2026-11-12): scripts/perf/paired_test.py: gate dependency changed: adds test_driver_and_model_share_the_slot_rule and classes Accounting and Discards; test_report_keeps_every_raw_share now checks the planned size, discarded durations and side test; no gate test changed",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "b7ca91f3455403823eb90e11d446b8732c26e6e9d185027796ebd2eb95022038",
+      "reason": "Block PB review fixes (ADR 0038 amendment 2026-11-12): scripts/perf/paired_test.py: gate machinery changed: adds test_driver_and_model_share_the_slot_rule and classes Accounting and Discards; test_report_keeps_every_raw_share now checks the planned size, discarded durations and side test; no gate test changed",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "2e9c517b8eeffb9e0a7142efcec18ad2c9ab2f1109552c2fa54ead9cc108739f",
+      "reason": "Block PB review fixes (ADR 0038 amendment 2026-11-12): scripts/perf/pbmodel.py: gate machinery changed: bg_session runs paired.slot_step, the side test and the cgroup accounting (where: app, helper, outside); bg_session and bg_rates default to BG_SHARE_MAX (was 2.0); scenarios 4/8/12 % detached helper and 30 % outside; mutants tree-accounting and no-side-test added; tests: pbmodel_test.Interference",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "3ecbecf7b71313a7cf0346aadbb059ca38473c73adba34094aee3d0dc6c9325b",
+      "reason": "Block PB review fixes (ADR 0038 amendment 2026-11-12): scripts/perf/pbmodel_test.py: gate dependency changed: Interference tests at the gate bound passed explicitly: side-test false alarm <= 1e-3 (30000 runs), detached helper judged as in-process slowness (power >= 0.99 at 8 and 12 %), five mutants rejected with disjoint bounds; existing claims kept",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "4a503adb3dbec6d100532ef76308c853e1a7f3e8c14d08a4af152e704ba91358",
+      "reason": "Block PB review fixes (ADR 0038 amendment 2026-11-12): scripts/perf/pbmodel_test.py: gate machinery changed: Interference tests at the gate bound passed explicitly: side-test false alarm <= 1e-3 (30000 runs), detached helper judged as in-process slowness (power >= 0.99 at 8 and 12 %), five mutants rejected with disjoint bounds; existing claims kept",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "a76a1a9424e4c24c67d6a34e3b1cdd413ed346e2d7392086450f15272e2bc535",
+      "reason": "Block PB review fixes (ADR 0038 amendment 2026-11-12): scripts/perf/refbuild.py: gate machinery changed: every vector step on both sides (frozen pnpm install, bindings regenerated), -buildvcs=false, cache key with go env -json at the reference's go.mod, wails3 and cc versions; dirtied worktree, missing manifest and failed sidecar fetch raise ReferenceBuildError; kept-* evicted, never nested; tests: refbuild_test (test_dirtied_reference_worktree_fails_closed, test_cache_key_covers_the_build_environment, test_missing_manifest_or_failed_fetch_fails_closed, test_build_vector_is_reproducible_across_trees)",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "5987d5158d6b419b7908089bb0576480e08fcdaf6354032393bfea2601eb06e1",
+      "reason": "Block PB review fixes (ADR 0038 amendment 2026-11-12): scripts/perf/refbuild_test.py: gate dependency changed: adds five tests (dirtied worktree, vector steps, build environment key, manifest and fetch failures, reproducible build across trees); no existing test changed",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "f83c3b6c98bf6e5bbe86c73d8e8134761d6d1c8dbcb64876d6c8b9c4cde51c5f",
+      "reason": "Block PB review fixes (ADR 0038 amendment 2026-11-12): scripts/perf/refbuild_test.py: gate machinery changed: adds five tests (dirtied worktree, vector steps, build environment key, manifest and fetch failures, reproducible build across trees); no existing test changed",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "6ce348e537eefd7b5772f1382cdc3be183278d19ecb447ddd19ebc53adf21543",
+      "reason": "Block PB review fixes (ADR 0038 amendment 2026-11-12): scripts/perf/testdata/slot-rule.json: gate machinery changed: new shared vector of the per-start rule, read by paired_test for paired.slot_step and start.cjs slotStep",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "973f6eebccfb62828a313ba2de47436b56729f81dad5685d5ab8b1e097c4cbd9",
+      "reason": "Block PB review fixes (ADR 0038 amendment 2026-11-12): scripts/perf/cpu.cjs: gate machinery changed: the measured set is the run's cgroup v2 (driver, browser, one cgroup per start joined by the launcher before exec): background = /proc/stat busy minus cpu.stat usage_usec, a detached or reaped child stays measured, leftovers killed by cgroup.kill, no writable cgroup is the fault `accounting`; tests: cpu_test (fake cgroup arithmetic, real-cgroup test_a_detached_helper_stays_in_the_measured_cgroup, test_a_reaped_child_counts); adopt moves back into the run's cgroup every descendant of the driver that left it (Chromium's own systemd scope), test_an_escaped_descendant_is_brought_back",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "1e42766df5a5139354fd16e61795d99ed732a785943c0ffa703836c4c095fc65",
+      "reason": "Block PB review fixes (ADR 0038 amendment 2026-11-12): scripts/perf/cpu_test.py: gate machinery changed: tests rewritten for the cgroup accounting (fake cgroup arithmetic, real-kernel detached helper, reaped child, launcher pid/argv, launch failure); no bound or timeout weakened; adds test_an_escaped_descendant_is_brought_back",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "b676de981639ae21d3d1da95b3fbd92361363159d46d05eb6afc86555b6f6e88",
+      "reason": "Block PB review fixes (ADR 0038 amendment 2026-11-12): scripts/perf/start.cjs: gate dependency changed: for(let j=#;j<#;j++){try{if((await fetch('http://#.#:#/health')).ok){ready=true;break;}}catch{} await new Promise(r=>setTimeout(r,#));}: launches each start in its own cgroup (cpu.launcher), decision by slotStep (twin of paired.slot_step), fault `accounting`, writes planned/bg_share_max/invalid_max, /proc diagnostics moved to cpu.cjs; the readiness loop and its timeouts are unchanged (re-keyed by the file edit); tests: paired_e2e_test, paired_test.test_driver_and_model_share_the_slot_rule; adopt after the launch and before every start, recorded in `adopted`, a failure is the fault `accounting`",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "84ae843d8e127694f5c3bd81dc6141a6b1e64c161b3d677aed843e4fdb8f1c57",
+      "reason": "Block PB review fixes (ADR 0038 amendment 2026-11-12): scripts/perf/start.cjs: gate machinery changed: for(let j=#;j<#;j++){try{if((await fetch('http://#.#:#/health')).ok){ready=true;break;}}catch{} await new Promise(r=>setTimeout(r,#));}: launches each start in its own cgroup (cpu.launcher), decision by slotStep (twin of paired.slot_step), fault `accounting`, writes planned/bg_share_max/invalid_max, /proc diagnostics moved to cpu.cjs; the readiness loop and its timeouts are unchanged (re-keyed by the file edit); tests: paired_e2e_test, paired_test.test_driver_and_model_share_the_slot_rule; adopt after the launch and before every start, recorded in `adopted`, a failure is the fault `accounting`",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "2cd60bb8a3b8d0c785a3fbaf9f4ac2dc3364c1e857394b85c169e7f4c1fa6b0a",
+      "reason": "Block PB review fixes (ADR 0038 amendment 2026-11-12): scripts/perf/start.cjs: timeout expression removed or rewritten: for(let j=#;j<#;j++){try{if((await fetch('http://#.#:#/health')).ok){ready=true;break;}}catch{} await new Promise(r=>setTimeout(r,#));}: for(let j=#;j<#;j++){try{if((await fetch('http://#.#:#/health')).ok){ready=true;break;}}catch{} await new Promise(r=>setTimeout(r,#));}: launches each start in its own cgroup (cpu.launcher), decision by slotStep (twin of paired.slot_step), fault `accounting`, writes planned/bg_share_max/invalid_max, /proc diagnostics moved to cpu.cjs; the readiness loop and its timeouts are unchanged (re-keyed by the file edit); tests: paired_e2e_test, paired_test.test_driver_and_model_share_the_slot_rule; adopt after the launch and before every start, recorded in `adopted`, a failure is the fault `accounting`",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "33abbd7dead4bb5506c03ed57ffd2257f97fb70adad6b89d77fff942a86764bc",
+      "reason": "scripts/perf/baseline.py: Block PB (ADR 0038): the reference build record's cache field is renamed from key to cache_digest (a SHA-256 cache digest that secret scanners read as an API key), and a cache entry is a hit only when its record names that entry; no check, threshold or delay changes. Pinned by refbuild_test.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "28b93923e3ec43e44583a25e0ca7192cc8ae7577c464c49275d9975b631b057b",
+      "reason": "scripts/perf/baseline.py: Block PB (ADR 0038): the reference build record's cache field is renamed from key to cache_digest (a SHA-256 cache digest that secret scanners read as an API key), and a cache entry is a hit only when its record names that entry; no check, threshold or delay changes. Pinned by refbuild_test.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "02302ecb0a1d58d10417649a66dfda4647e8be9e8a2667dd971de4a508465dac",
+      "reason": "scripts/perf/refbuild.py: Block PB (ADR 0038): the reference build record's cache field is renamed from key to cache_digest (a SHA-256 cache digest that secret scanners read as an API key), and a cache entry is a hit only when its record names that entry; no check, threshold or delay changes. Pinned by refbuild_test.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "bde2a28a2a6490bb4fa612699a4542795da2cb08cf475e0708f4857be459a5d2",
+      "reason": "scripts/perf/refbuild_test.py: Block PB (ADR 0038): the reference build record's cache field is renamed from key to cache_digest (a SHA-256 cache digest that secret scanners read as an API key), and a cache entry is a hit only when its record names that entry; no check, threshold or delay changes. Pinned by refbuild_test.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "facf1b3a9921945089d64bbd6dcf2595256042a5a8800847624e77dd28c38af4",
+      "reason": "scripts/perf/refbuild_test.py: Block PB (ADR 0038): the reference build record's cache field is renamed from key to cache_digest (a SHA-256 cache digest that secret scanners read as an API key), and a cache entry is a hit only when its record names that entry; no check, threshold or delay changes. Pinned by refbuild_test.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "513f55db20a31d312e4b8e96b3b84bd6f82e31f56e462297fabe0fd9cf6363ba",
+      "reason": "internal/app/addrbook_file_test.go: Block RC1, new test TestAddrBookFileMode skips on Windows only, where files have no Unix mode bits (0600 cannot be set or read back); the test runs on Linux and macOS, and the gate's go-app criterion requires its PASS. No existing test, threshold or delay changes.",
+      "decision": "docs/plans/2026-11-12-rc1-reconnect.md"
+    },
+    {
+      "id": "70927f30087b15ecb150148a8ac4ff1666ce6ac3559c9f144b9e3faf6242c8a2",
+      "reason": "Block C5S: docs/protocol/tla/README.md describes the reworked LinkProbe model (timeouts, closing bytes, rate-bound clock margin, level arithmetic); documentation of the model, no model bound or check removed (mise run tla runs every config and mutant). Re-keyed after the OI gate commit changed the file's committed baseline; same C5S hunk.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "2f9175f2c779ddf04773cae039d752d1bccd21d0919c293bc1f00b779bfe660c",
+      "reason": "internal/transport/p2p/dial.go: Block RC1 (second review, finding 1): pause's timer `time.NewTimer(jitter(*backoff))` becomes `*due = time.Now().Add(jitter(*backoff))` then `time.NewTimer(time.Until(*due))`: the same jittered backoff, now kept as an absolute deadline across mDNS wakes so forged sightings cannot postpone the next normal attempt. No delay, bound or backoff constant changes. Pinned by TestReconnectUnderSightingFlood and mutant MC1ac; the dial tests (TestWant*, TestAddressChangeRetriesNow, TestRefusedPeerIsNotHammered) keep passing unchanged.",
+      "decision": "docs/plans/2026-11-12-rc1-reconnect.md"
+    },
+    {
+      "id": "9207694b26715477629c1fa4fd4313104b98a74feed77fdfd114042bcd70b615",
+      "reason": "scripts/perf/baseline.py: records the pinned go version. Block PB toolchain fix: Go is resolved from the tree's mise.toml pin (refbuild.go_env/tree_go_env: mise where go@<pin>, GOROOT set, its bin first on PATH, GOTOOLCHAIN=local), never the first `go` on PATH; an IDE SDK (go1.27.3) ahead of mise's shims with mise's GOROOT=1.27.4 broke builds (compile: version mismatch). Absent or uninstalled pin fails closed (ReferenceBuildError). No threshold, criterion or vector changed.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "6ff15abced19d1b3eea213a7d386758bcbc156f2f7419c2c85af731be6ab6028",
+      "reason": "scripts/perf/baseline.py: records the pinned go version. Block PB toolchain fix: Go is resolved from the tree's mise.toml pin (refbuild.go_env/tree_go_env: mise where go@<pin>, GOROOT set, its bin first on PATH, GOTOOLCHAIN=local), never the first `go` on PATH; an IDE SDK (go1.27.3) ahead of mise's shims with mise's GOROOT=1.27.4 broke builds (compile: version mismatch). Absent or uninstalled pin fails closed (ReferenceBuildError). No threshold, criterion or vector changed.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "39bd3e9d1af6d13e310fb75f8dc6cd08e0bf295a56a1e57cde3b7fb82c7e2cc1",
+      "reason": "scripts/perf/lsp.py: go test with the pinned Go. Block PB toolchain fix: Go is resolved from the tree's mise.toml pin (refbuild.go_env/tree_go_env: mise where go@<pin>, GOROOT set, its bin first on PATH, GOTOOLCHAIN=local), never the first `go` on PATH; an IDE SDK (go1.27.3) ahead of mise's shims with mise's GOROOT=1.27.4 broke builds (compile: version mismatch). Absent or uninstalled pin fails closed (ReferenceBuildError). No threshold, criterion or vector changed.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "1dc843ec76e21441ddf8a440e5e9c233ddc055aee4669cc980dbd2d7e2f31ed0",
+      "reason": "scripts/perf/lsp.py: go test with the pinned Go. Block PB toolchain fix: Go is resolved from the tree's mise.toml pin (refbuild.go_env/tree_go_env: mise where go@<pin>, GOROOT set, its bin first on PATH, GOTOOLCHAIN=local), never the first `go` on PATH; an IDE SDK (go1.27.3) ahead of mise's shims with mise's GOROOT=1.27.4 broke builds (compile: version mismatch). Absent or uninstalled pin fails closed (ReferenceBuildError). No threshold, criterion or vector changed.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "528f5ebcf82fa8a79284d4831e612d47998dfde64943aa6aa80751e8a3b11818",
+      "reason": "scripts/perf/refbuild.py: go_env/tree_go_env; build vector and toolchain record (cache key) use the pinned Go. Block PB toolchain fix: Go is resolved from the tree's mise.toml pin (refbuild.go_env/tree_go_env: mise where go@<pin>, GOROOT set, its bin first on PATH, GOTOOLCHAIN=local), never the first `go` on PATH; an IDE SDK (go1.27.3) ahead of mise's shims with mise's GOROOT=1.27.4 broke builds (compile: version mismatch). Absent or uninstalled pin fails closed (ReferenceBuildError). No threshold, criterion or vector changed.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "2236078bcdc70a20cc4126f42a8bd30947b84e1353ca7916b2caaeca9554c0e6",
+      "reason": "scripts/perf/refbuild_test.py: test_build_uses_the_pinned_go_whatever_path_holds (fake older go first on PATH, red on the old code) and test_unpinned_or_uninstalled_go_fails_closed; fixture repo pins Go; existing assertions unchanged. Block PB toolchain fix: Go is resolved from the tree's mise.toml pin (refbuild.go_env/tree_go_env: mise where go@<pin>, GOROOT set, its bin first on PATH, GOTOOLCHAIN=local), never the first `go` on PATH; an IDE SDK (go1.27.3) ahead of mise's shims with mise's GOROOT=1.27.4 broke builds (compile: version mismatch). Absent or uninstalled pin fails closed (ReferenceBuildError). No threshold, criterion or vector changed.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "b14a77494a63fcbeb995f68a21e6a689390023093ebc42fdae72af86e909b0e5",
+      "reason": "scripts/perf/refbuild_test.py: as above. Block PB toolchain fix: Go is resolved from the tree's mise.toml pin (refbuild.go_env/tree_go_env: mise where go@<pin>, GOROOT set, its bin first on PATH, GOTOOLCHAIN=local), never the first `go` on PATH; an IDE SDK (go1.27.3) ahead of mise's shims with mise's GOROOT=1.27.4 broke builds (compile: version mismatch). Absent or uninstalled pin fails closed (ReferenceBuildError). No threshold, criterion or vector changed.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "c5af7fa8cf6e21188f9776b8641b5be9aa3dcdd19846cf33daad9cfd23a07a71",
+      "reason": "scripts/perf/reference.py: go test with the pinned Go. Block PB toolchain fix: Go is resolved from the tree's mise.toml pin (refbuild.go_env/tree_go_env: mise where go@<pin>, GOROOT set, its bin first on PATH, GOTOOLCHAIN=local), never the first `go` on PATH; an IDE SDK (go1.27.3) ahead of mise's shims with mise's GOROOT=1.27.4 broke builds (compile: version mismatch). Absent or uninstalled pin fails closed (ReferenceBuildError). No threshold, criterion or vector changed.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "78697ac686b958b629084d38c0f53e6fb68f8a71b9ce0b7233bc187f648f7502",
+      "reason": "scripts/perf/regression.py: each side (merge-base worktree, checkout) builds with its own pinned Go. Block PB toolchain fix: Go is resolved from the tree's mise.toml pin (refbuild.go_env/tree_go_env: mise where go@<pin>, GOROOT set, its bin first on PATH, GOTOOLCHAIN=local), never the first `go` on PATH; an IDE SDK (go1.27.3) ahead of mise's shims with mise's GOROOT=1.27.4 broke builds (compile: version mismatch). Absent or uninstalled pin fails closed (ReferenceBuildError). No threshold, criterion or vector changed.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "04dfc03734e8ed06a474de77eb5e31089eda28918fb6565740403aa525fb357c",
+      "reason": "scripts/perf/regression.py: each side builds with its own pinned Go. Block PB toolchain fix: Go is resolved from the tree's mise.toml pin (refbuild.go_env/tree_go_env: mise where go@<pin>, GOROOT set, its bin first on PATH, GOTOOLCHAIN=local), never the first `go` on PATH; an IDE SDK (go1.27.3) ahead of mise's shims with mise's GOROOT=1.27.4 broke builds (compile: version mismatch). Absent or uninstalled pin fails closed (ReferenceBuildError). No threshold, criterion or vector changed.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "734b51071c4bf6ad7cb059b40060942d6c773ed99cfe6ff5827c652bdcdfe1ab",
+      "reason": "scripts/perf/type_native.py: go build with the pinned Go. Block PB toolchain fix: Go is resolved from the tree's mise.toml pin (refbuild.go_env/tree_go_env: mise where go@<pin>, GOROOT set, its bin first on PATH, GOTOOLCHAIN=local), never the first `go` on PATH; an IDE SDK (go1.27.3) ahead of mise's shims with mise's GOROOT=1.27.4 broke builds (compile: version mismatch). Absent or uninstalled pin fails closed (ReferenceBuildError). No threshold, criterion or vector changed.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "d96a860eba9999bf3a01aa8d7f8b17ed49ba2cd3bcd867f1902ab9dd57e77f47",
+      "reason": "scripts/perf/typing_checks.py: go build with the pinned Go. Block PB toolchain fix: Go is resolved from the tree's mise.toml pin (refbuild.go_env/tree_go_env: mise where go@<pin>, GOROOT set, its bin first on PATH, GOTOOLCHAIN=local), never the first `go` on PATH; an IDE SDK (go1.27.3) ahead of mise's shims with mise's GOROOT=1.27.4 broke builds (compile: version mismatch). Absent or uninstalled pin fails closed (ReferenceBuildError). No threshold, criterion or vector changed.",
+      "decision": "docs/plans/2026-11-11-pb-paired-perf.md"
+    },
+    {
+      "id": "1e26705e6e4abe6426aa2576e1c5f18f9eb705e62aef4a4c844d3e4b09ab513b",
+      "reason": "Block RG freeze: scripts/perf/rgmodel_test.py: gate machinery changed. New file, a skeleton frozen with gates/RG.toml (criterion `model`): every named test fails with \"not implemented\" until step 2, so the criterion is red for the right reason. Adds tests only; no existing test, threshold, criterion or command changes.",
+      "decision": "docs/plans/2026-11-12-rg-layout-robust-guard.md"
+    },
+    {
+      "id": "be9d0fb9f4da9d73cd92b231a7ab7aa266829f66728a3eae9a35b0f20439aa99",
+      "reason": "Block RG freeze: scripts/perf/regression_test.py: gate machinery changed. New file, a skeleton frozen with gates/RG.toml (criterion `rule`): every named test fails with \"not implemented\" until step 2, so the criterion is red for the right reason. Adds tests only; no existing test, threshold, criterion or command changes.",
+      "decision": "docs/plans/2026-11-12-rg-layout-robust-guard.md"
+    },
+    {
+      "id": "b4b64f445a6a80831899952a245e71538cb8601dc24a299d86adc4e496c0a226",
+      "reason": "Block RG freeze: scripts/perf/regression_layout_test.py: gate machinery changed. New file, a skeleton frozen with gates/RG.toml (criterion `layout-build`): every named test fails with \"not implemented\" until step 2, so the criterion is red for the right reason. Adds tests only; no existing test, threshold, criterion or command changes.",
+      "decision": "docs/plans/2026-11-12-rg-layout-robust-guard.md"
+    },
+    {
+      "id": "ae4fa2859ae120b8857164d4a8906f54e79cc1b7e114d6383f3a356c2d11511e",
+      "reason": "Block RG freeze: scripts/perf/regression_falsify_test.py: gate machinery changed. New file, a skeleton frozen with gates/RG.toml (criterion `falsify`): every named test fails with \"not implemented\" until step 2, so the criterion is red for the right reason. Adds tests only; no existing test, threshold, criterion or command changes.",
+      "decision": "docs/plans/2026-11-12-rg-layout-robust-guard.md"
+    },
+    {
+      "id": "b9ec12148cbf763dcd415ecc005959b097cce20623c9dfb24a4fa7b2482ca4dd",
+      "reason": "mise.toml: gate dependency changed: mise task test:py. Block RG freeze: test:py also excludes the four new RG skeleton modules (rgmodel_test, regression_test, regression_layout_test, regression_falsify_test), which fail with \"not implemented\" until RG step 2: gate-only until RG's implementation; regression_test, regression_layout_test and regression_falsify_test return to test:py in the implementation commit (checked by gates/RG.toml criterion test-py-inclusion); rgmodel_test stays gate-only like pbmodel_test. Every existing test keeps running; nothing previously run is excluded.",
+      "decision": "docs/plans/2026-11-12-rg-layout-robust-guard.md"
+    },
+    {
+      "id": "1548ac6a1d752270edb8f32b81ca001867b5c5e2949515d92d854b25f4e11eb0",
+      "reason": "Block SB1b (ADR 0042 A1-A4, A8; gates/SB1b.toml criterion tla): scripts/tla-check.sh adds the SandboxScope model (two sound configs, SandboxScope and SandboxScopeFaults, exhaustive with liveness) and its 23 mutant, witness and residual-witness configs (NoPdeathsig and NoPidNamespace added by ADR 0042 A9), each of which must be detected; the header list of models names it. No existing model, config, mutant, bound or check is removed or weakened.",
+      "decision": "docs/plans/2026-11-11-sandbox-crash-reports.md"
+    },
+    {
+      "id": "40920710060104df56fcf29ffc4476144846991675dbe797ec53e06333fb08b9",
+      "reason": "docs/protocol/tla/README.md prose: the flagged hunk is block C5S's LinkProbe sentence already overridden as 70927f30 (timeouts, closing bytes, rate-bound clock margin, level arithmetic), re-keyed only because block SB1b appends the SandboxScope section (updated for ADR 0042 A9) (gates/SB1b.toml criterion tla requires it); both are documentation of the models, no model bound or check removed (mise run tla runs every config and mutant).",
+      "decision": "docs/plans/2026-11-11-sandbox-crash-reports.md"
+    },
+    {
+      "id": "8285a7a536b7cffd654ba687c2d96faeb9a23b8acfe1d4a599d1168465455c17",
+      "reason": "Block C5S: docs/protocol/tla/README.md describes the reworked LinkProbe model (timeouts, closing bytes, rate-bound clock margin, level arithmetic); documentation of the model, no model bound or check is changed. Re-keyed after the SandboxScope commit (818f3ac) changed the file's committed baseline; same C5S hunk.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "69eeda1e218addc8c3040b9dab3415598e777bb3af5fc4ddf0832c4a00930df0",
+      "reason": "scripts/block_done_test.py: the preflight test named block C5S, whose netsim mutants are not on main yet, so it failed on a clean checkout; it now names NI0, which has mutants on main. Same assertion (the preflight runs mutants.py --check for a block with mutants and stops on failure); nothing weakened.",
+      "decision": "docs/plans/2026-11-09-c5-sound.md"
+    },
+    {
+      "id": "0e586b2231f53818a75834aa5638c93976a5ed65104720e2314d01a05051d06d",
+      "reason": "Block GR (gate --resume): scripts/gate_resume_test.py is the new test module named by the frozen gate gates/GR.toml, committed with the gate before the implementation (red for the right reason); it changes no existing check, threshold or delay.",
+      "decision": "docs/plans/2026-11-12-gr-gate-resume.md"
+    },
+    {
+      "id": "fd1e1a7386e05f9f6530689b1ee3aa7a3deda9a43c8d53f2de35fd3094e3fdaf",
+      "reason": "Block GR: mise.toml test:py adds scripts/gate_resume_test.py to its explicit list (criterion test-py-inclusion of gates/GR.toml); nothing removed or relaxed.",
+      "decision": "docs/plans/2026-11-12-gr-gate-resume.md"
+    },
+    {
+      "id": "82bd8151869a07646884407727046a22ec6aa7488ea335698aa9076f90b5858f",
+      "reason": "Block GR: scripts/gate.py gains --resume (per-criterion records, re-use only on the same candidate). Without the flag every criterion runs as before, with the same evidence reset and verdicts; the only addition is the record files gates/<lot>/resume/*.json. Proven by gates/GR.toml (unit, regression: gate-selftest, gate-guard self-test, gate_reset_test).",
+      "decision": "docs/plans/2026-11-12-gr-gate-resume.md"
+    },
+    {
+      "id": "5c8f7dad032201e94abecc3611d5ef52cf9fb6a79875eaef98c5266f6c407b1e",
+      "reason": "Block GR: same change to the gate machinery scripts/gate.py (--resume); no check, threshold or delay weakened, a recorded failure stays blocking and native-performance criteria always re-run.",
+      "decision": "docs/plans/2026-11-12-gr-gate-resume.md"
+    },
+    {
+      "id": "5d73e43648d13eaff9000d26242095c894787cfbc7b11790af9434c4c761fa16",
+      "reason": ".claude/hooks/openrouter-check.sh: Method v2 (two-family debate, 2026-11-12): the session-start OpenRouter ping and the per-prompt/per-edit reminder hooks are removed; their timeouts go with them. No test, threshold or gate delay is involved: these are advisory Claude hooks, and research is now required where decisions are written (research-grounding on docs/plans and docs/adr).",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "12555cd80b3cccfc5f74f00e5b4f503a6c3694c90ecefd66a93ad9902d9d15b7",
+      "reason": ".claude/settings.json: Method v2 (two-family debate, 2026-11-12): the session-start OpenRouter ping and the per-prompt/per-edit reminder hooks are removed; their timeouts go with them. No test, threshold or gate delay is involved: these are advisory Claude hooks, and research is now required where decisions are written (research-grounding on docs/plans and docs/adr).",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "7c668eb0178abae288f7ca66a1865e2cbeece9b1bb78605d0f1180be02221c6c",
+      "reason": "scripts/gate-selftest.py: No nested gates (user decision 2026-11-12, method v2 rules 6 and 9): a gate invoked from inside another gate's criterion (INKWELL_GATE_PARENT set) runs nothing; the criterion keeps its own commands' status and records the chained lot as a deferred obligation (manifest deferred_obligations, never a pass of that lot), validated, ledgered in gates/deferred.jsonl until a passing top-level run closes it; gate.py --deferred fails on obligations older than 7 days and blocks the release (T3). No criterion, threshold, timeout or test is weakened; scripts/gate_nested_test.py (in test:py) proves it, including a mutant that skips without recording.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "b19868d39d5c91a53df78dbb4b91355f2e66487dfdff83551fee66fb078d7a8a",
+      "reason": "scripts/gate-selftest.py: No nested gates (user decision 2026-11-12, method v2 rules 6 and 9): a gate invoked from inside another gate's criterion (INKWELL_GATE_PARENT set) runs nothing; the criterion keeps its own commands' status and records the chained lot as a deferred obligation (manifest deferred_obligations, never a pass of that lot), validated, ledgered in gates/deferred.jsonl until a passing top-level run closes it; gate.py --deferred fails on obligations older than 7 days and blocks the release (T3). No criterion, threshold, timeout or test is weakened; scripts/gate_nested_test.py (in test:py) proves it, including a mutant that skips without recording.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "715aec4831b31984b6e2725183fad123c09b45ed96698866291bb2b8c8b3b03e",
+      "reason": "scripts/gate.py: No nested gates (user decision 2026-11-12, method v2 rules 6 and 9): a gate invoked from inside another gate's criterion (INKWELL_GATE_PARENT set) runs nothing; the criterion keeps its own commands' status and records the chained lot as a deferred obligation (manifest deferred_obligations, never a pass of that lot), validated, ledgered in gates/deferred.jsonl until a passing top-level run closes it; gate.py --deferred fails on obligations older than 7 days and blocks the release (T3). No criterion, threshold, timeout or test is weakened; scripts/gate_nested_test.py (in test:py) proves it, including a mutant that skips without recording.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "ec1325acd0fffc0abc3e415c1ed326bded1e2dbccb992862d01505d811940060",
+      "reason": "scripts/gate.py: No nested gates (user decision 2026-11-12, method v2 rules 6 and 9): a gate invoked from inside another gate's criterion (INKWELL_GATE_PARENT set) runs nothing; the criterion keeps its own commands' status and records the chained lot as a deferred obligation (manifest deferred_obligations, never a pass of that lot), validated, ledgered in gates/deferred.jsonl until a passing top-level run closes it; gate.py --deferred fails on obligations older than 7 days and blocks the release (T3). No criterion, threshold, timeout or test is weakened; scripts/gate_nested_test.py (in test:py) proves it, including a mutant that skips without recording.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "30b7b91646f5c6764963152504efb35c87bd2770dfaf135cb236139d56374864",
+      "reason": "scripts/gate_nested_test.py: No nested gates (user decision 2026-11-12, method v2 rules 6 and 9): a gate invoked from inside another gate's criterion (INKWELL_GATE_PARENT set) runs nothing; the criterion keeps its own commands' status and records the chained lot as a deferred obligation (manifest deferred_obligations, never a pass of that lot), validated, ledgered in gates/deferred.jsonl until a passing top-level run closes it; gate.py --deferred fails on obligations older than 7 days and blocks the release (T3). No criterion, threshold, timeout or test is weakened; scripts/gate_nested_test.py (in test:py) proves it, including a mutant that skips without recording.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "edb10e615775aa3bfb72b239b3649b8906f7184fecc101fbe61e479377e78eee",
+      "reason": "mise.toml: No nested gates (user decision 2026-11-12, method v2 rules 6 and 9): a gate invoked from inside another gate's criterion (INKWELL_GATE_PARENT set) runs nothing; the criterion keeps its own commands' status and records the chained lot as a deferred obligation (manifest deferred_obligations, never a pass of that lot), validated, ledgered in gates/deferred.jsonl until a passing top-level run closes it; gate.py --deferred fails on obligations older than 7 days and blocks the release (T3). No criterion, threshold, timeout or test is weakened; scripts/gate_nested_test.py (in test:py) proves it, including a mutant that skips without recording.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "2b1ad06fe7a213e3bd1f2758ab76d44bb644f7841d8a161813a776cdd7338ef8",
+      "reason": "scripts/gate.sh: No nested gates (user decision 2026-11-12, method v2 rules 6 and 9): a gate invoked from inside another gate's criterion (INKWELL_GATE_PARENT set) runs nothing; the criterion keeps its own commands' status and records the chained lot as a deferred obligation (manifest deferred_obligations, never a pass of that lot), validated, ledgered in gates/deferred.jsonl until a passing top-level run closes it; gate.py --deferred fails on obligations older than 7 days and blocks the release (T3). No criterion, threshold, timeout or test is weakened; scripts/gate_nested_test.py (in test:py) proves it, including a mutant that skips without recording.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "f4384f321b40b3c88841466bf5565d6c9daa1f263a17ca2cea005c1a534d3be0",
+      "reason": "scripts/gate.sh: No nested gates (user decision 2026-11-12, method v2 rules 6 and 9): a gate invoked from inside another gate's criterion (INKWELL_GATE_PARENT set) runs nothing; the criterion keeps its own commands' status and records the chained lot as a deferred obligation (manifest deferred_obligations, never a pass of that lot), validated, ledgered in gates/deferred.jsonl until a passing top-level run closes it; gate.py --deferred fails on obligations older than 7 days and blocks the release (T3). No criterion, threshold, timeout or test is weakened; scripts/gate_nested_test.py (in test:py) proves it, including a mutant that skips without recording.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "bebdb03c9291569cdb140676bc370391d040ec5e26ff058130e21f5a738e618a",
+      "reason": "frontend/src/preview/protocol.ts: the \"timeout\" failure kind is kept; the union type became FAILURE_KINDS (as const) to enumerate kinds at runtime and add \"blocked\" (W49 T6)",
+      "decision": "docs/plans/2026-11-11-sandbox-crash-reports.md"
+    },
+    {
+      "id": "a8a6d14a62c18707b197b112b447e5a5721cdb495f0244d7ca67366424eff54d",
+      "reason": "internal/sidecar/coredump_linux_test.go: kernel-capability skip: runs only when the kernel does not report PIDFD_INFO_COREDUMP (before Linux 6.16), where absence of a core helper cannot be observed; on the gate host (7.3) the oracle runs and the no-core-helper criterion proves it",
+      "decision": "docs/plans/2026-11-11-sandbox-crash-reports.md"
+    },
+    {
+      "id": "5f27ef66fdd39ea7876ecd1f87a1448cac171f6e93291dfe0adaa98d4a063fde",
+      "reason": "internal/sidecar/filesize_linux_test.go: kernel-capability skip: runs only when the kernel does not report PIDFD_INFO_COREDUMP (before Linux 6.16), where absence of a core helper cannot be observed; on the gate host (7.3) the oracle runs and the no-core-helper criterion proves it",
+      "decision": "docs/plans/2026-11-11-sandbox-crash-reports.md"
+    },
+    {
+      "id": "45b0537f4b385f5cd48acc70adfbf715356d84a99a1eb446d630fc002aeb486c",
+      "reason": "Block SI1b: scripts/netsim/mutants.py gains the kind `vitest` (run_vitest, caught only on a failing assertion, never on a build/type/import error or a timeout) and now refuses an unknown kind; the go and e2e kinds are unchanged, so every other gate's mutants run exactly as before.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "3c1cdeec06abcc711912f863b1da4df6afbfe854050ebb027830331050f5417f",
+      "reason": "scripts/pkg/lint.sh: gate dependency changed for block OI (OI1, plan section 4.5): the desktop entry check moves into check_desktop, also reachable as `lint.sh --desktop FILE` for the selftest; it now requires the exact line Exec=inkwell %F and the exact MimeType list (Typst, Markdown, CSV, TSV, text/x-psv), refuses text/plain and inode/directory, and checks the *.tab and *.psv globs; every check it made before stays (desktop-file-validate, the same keys, *.typ).",
+      "decision": "docs/plans/2026-11-11-oi-single-instance-open.md"
+    },
+    {
+      "id": "dd50f532c46a881964b1b26cdf9426cd5ba80835e513a29e21b0aca8de29e21b",
+      "reason": "scripts/pkg/selftest.sh: gate dependency changed for block OI (OI1, plan section 4.5): added refusals of a desktop entry without %F, listing text/plain, listing inode/directory, and the acceptance of the packaged entry; no existing test, threshold or delay changed. Re-keyed after rebasing block OI onto main 8cacc7a (C5S, RC1, gate runner); same OI hunk.",
+      "decision": "docs/plans/2026-11-11-oi-single-instance-open.md"
+    },
+    {
+      "id": "7f5d270e9ec642b598165bb506d3de395b90403c164e1f0ea910cc4835c5b9b7",
+      "reason": "scripts/memcap.sh: gate dependency changed for block OI: it now exports MALLOC_ARENA_MAX=2 (unless set) before the address-space cap. Root cause measured 2026-11-12: under the 1.8 GB RLIMIT_AS of mutate:go, a cgo test binary (internal/launch, which links net) aborted in pthread_create after about ten threads, each taking a 64 MB glibc arena of address space; with two arenas the same run passes (coverage 96.7 %). The cap, its value and every threshold are unchanged; it now measures what the program allocates instead of glibc's reservations.",
+      "decision": "docs/plans/2026-11-11-oi-single-instance-open.md"
+    },
+    {
+      "id": "a36be85a4ca0b23d56272897c51d53c9870d45467cb309e3de22832a3b638fdc",
+      "reason": "scripts/tla-check.sh: gate dependency changed for block OI: the OISingleInstance loop gains the mutants AckDropOnClose and EarlyDequeue (caught by AckedApplied), StaleReportAccepted and ResetAllOnDisconnect (rule D-OWNER, 2026-11-13, caught by SlotsAgree) and the witness WitnessStaleReport; the sound runs gain OISingleInstanceReconnect (three launches with a reconnection, invariants, through a new 'safety' expectation: no error and an exhausted queue) and OISingleInstanceReconnectLive (liveness with a reconnection); the witness WitnessForward of an earlier design is gone with the contract it tested. The 'sound' and 'mutant' checks are unchanged; no run of another model removed, no option changed.",
+      "decision": "docs/plans/2026-11-11-oi-single-instance-open.md"
+    },
+    {
+      "id": "e8796306f0b13a0759e5bb6ced323e64738579dfa20d508ce031d60cc1bdcde0",
+      "reason": "scripts/lint.sh: gate dependency changed: sources scripts/pinned-path.sh so the pinned golangci-lint runs, not a stale copy earlier on PATH; no check, flag or threshold changed",
+      "decision": "docs/plans/2026-11-14-ci1-github-ci.md"
+    },
+    {
+      "id": "3917ebd8eb6c9af57cf7cc63e544834cbb12a4899f6db2804bad79fabf5522b0",
+      "reason": "scripts/netsim/run.sh: gate dependency changed: adds an early probe that refuses a tc without netem seed (one sentence instead of three scenario failures) and factors the existing scenario-selection test into impaired_selected; no scenario, expectation or threshold changed",
+      "decision": "docs/plans/2026-11-14-ci1-github-ci.md"
+    },
+    {
+      "id": "650de70856ca188686c182f141e574d3bc89bf46f9c7995dbfb70c93e64d6e10",
+      "reason": "scripts/perf/bench.sh: gate dependency changed: sources scripts/pinned-path.sh so the pinned benchstat runs; the measurement command, count and outputs are unchanged",
+      "decision": "docs/plans/2026-11-14-ci1-github-ci.md"
+    },
+    {
+      "id": "b8fa7b6afc809d87179ff8a83115df493a3fb44a84f83f08fcbbe5575d1b6fe8",
+      "reason": "scripts/perf/bench.sh: gate machinery changed: sources scripts/pinned-path.sh so the pinned benchstat runs; the measurement command, count and outputs are unchanged",
+      "decision": "docs/plans/2026-11-14-ci1-github-ci.md"
+    },
+    {
+      "id": "d84b8c1eff78603da5a2a10835b5b63670425822963fde71cf39ddc976fc7574",
+      "reason": "scripts/rtkx.sh: gate dependency changed: sources scripts/pinned-path.sh so every tool run through the wrapper (gitleaks, grype, gotestsum) is the pinned one; the exit code is still the tool's",
+      "decision": "docs/plans/2026-11-14-ci1-github-ci.md"
+    },
+    {
+      "id": "079259de7f82667094a2adb49931f4984ce11aff8548046b528d151cf59f9678",
+      "reason": "scripts/sec-scan.sh: gate dependency changed: sources scripts/pinned-path.sh and runs scripts/check-pinned-tools.sh first, so gosec 2.30.0 (not a stale 2.29.0) judges the code; the gosec and govulncheck arguments are unchanged",
+      "decision": "docs/plans/2026-11-14-ci1-github-ci.md"
+    },
+    {
+      "id": "77ac157f8efbe88a6e33c648b657bc90e02208df0c8f0f8c11b52179e32f5355",
+      "reason": "mise.toml: gate dependency changed: mise task test:py now also runs scripts/netsim/mutants_test.py (the tests of the new `expect` field of the mutant runner, W58a)",
+      "decision": "docs/plans/2026-11-14-w58a-foreign-read-only.md"
+    },
+    {
+      "id": "2c5b9cf1e2c85aa123406d2ba39f9b1700fe0609c02cd2e83fc26632534ef568",
+      "reason": "scripts/netsim/mutants.py: gate dependency changed: optional `expect` field (go mutants run `go test -json`, caught only if the named test fails with the expect text in its own output); entries without `expect` behave as before",
+      "decision": "docs/plans/2026-11-14-w58a-foreign-read-only.md"
+    },
+    {
+      "id": "cc74483ef2d8dc04a43cb1eab3b3541c0dc2679b60ea36aaa754f0fb29f0e472",
+      "reason": "scripts/netsim/mutants.py: timeout expression rewritten, not weakened: the `go test` command line with `timeout 900` moved unchanged from an inline sh([...]) call into a `cmd` list (plus -json when `expect` is set); the 900 s test cap is the same",
+      "decision": "docs/plans/2026-11-14-w58a-foreign-read-only.md"
+    },
+    {
+      "id": "9bd28b7aaef016ef0fd0d66feb981177812fba31558614c8408cdab9878336d4",
+      "reason": "scripts/netsim/mutants.py: timeout expression rewritten, not weakened: the runner's `timeout=1000` argument moved unchanged to the `run(cmd, tree, log=log, timeout=1000)` call (the runner is injectable for tests); same 1000 s cap",
+      "decision": "docs/plans/2026-11-14-w58a-foreign-read-only.md"
+    },
+    {
+      "id": "7f7f3a36da97f58174f05165813678ae05d7a51991e2ab1f997bc38fc720a4e9",
+      "reason": "scripts/netsim/mutants.toml: the header comment line ending `timeout.` is re-wrapped to document the new `expect` field; no timeout value changed; MW1..MW4 of block W58a added",
+      "decision": "docs/plans/2026-11-14-w58a-foreign-read-only.md"
+    },
+    {
+      "id": "46ff0b8e35e68764dfe916091e9371a582c3e886899a5ff32e56f46ffc30236c",
+      "reason": "scripts/netsim/mutants_test.py: new file, the tests of the `expect` field (injected runner, no Go build); added to test:py",
+      "decision": "docs/plans/2026-11-14-w58a-foreign-read-only.md"
+    },
+    {
+      "id": "eaa7bf4a8b9c30d64b0ed71cb11ba18292a4a965fcd5d4057fe83db0efe69c87",
+      "reason": "docs/adr/0044-sandbox-tiers.md: revision 2 rewrites the ADR on measured facts (gates/SB2/MEASUREMENTS.md) after Codex's round 1; the sentences that mention timeouts are prose of a draft ADR (no gate is frozen on it), not a weakened bound: timeout expression removed or rewritten: cached, each step bounded by `probeTimeout`:",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "c2f93402f6cb172b0668d96ee49cf8f105135fa3730dea235a3c3fa09cbab1cb",
+      "reason": "docs/adr/0044-sandbox-tiers.md: revision 2 rewrites the ADR on measured facts (gates/SB2/MEASUREMENTS.md) after Codex's round 1; the sentences that mention timeouts are prose of a draft ADR (no gate is frozen on it), not a weakened bound: timeout expression removed or rewritten: namespace refusal from a launcher that cannot be executed at all (row #). Any other error, a timeout or a crash is",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "c8706281f410109d3a471420b5f53401e7776e7281a73a90b7b7c8de07ed84e8",
+      "reason": "docs/adr/0044-sandbox-tiers.md: revision 2 rewrites the ADR on measured facts (gates/SB2/MEASUREMENTS.md) after Codex's round 1; the sentences that mention timeouts are prose of a draft ADR (no gate is frozen on it), not a weakened bound: timeout expression removed or rewritten: until the caller's timeout, and allocate up to `RLIMIT_AS` in each process it forks (no aggregate bound without a",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "e3937b90c44bd25df8f340a33d627a90aade11654dd4e40ecf707dcf0e29aa31",
+      "reason": "internal/sidecar/probe_report_linux_test.go: the inert measurement test (INKWELL_SANDBOX_PROBE=1 only) gains TestSandboxProbeTiers, which runs a real compile and a tinymist session in each tier and needs a longer context than the version check; it never runs in CI or gates",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "8174d7a9346804540166eca82facc90aca9d8f26c2907f4d19f6b211fd6760f1",
+      "reason": "docs/plans/2026-11-14-sb2-sandbox-tiers.md: revision 3 of a draft plan (no gate frozen on it) rewrites the CI paragraph; the stock job still gives every step a timeout (\u00ab CI \u00bb section), nothing is weakened",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "7ac1ff8fc4d7f01a4131ecfa6f262eb735a4f3215c589c2fd1df6a1e8737d1fb",
+      "reason": "scripts/sandbox-probe.sh: Q9 rewritten for decision D3 (trace only the sidecar): the three per-item `timeout -k 5 120 strace` lines moved into the new `perimeter` function with the same 120 s bound per item and a new `-ff` form; the probe is a measurement tool started by hand, run by no gate",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "279e8ea266317592bc13bd5e2b7c4d42edcd2bd2c5290892ebe268f2ae0666fd",
+      "reason": "scripts/sandbox-probe.sh: Q9 rewritten for decision D3 (trace only the sidecar): the three per-item `timeout -k 5 120 strace` lines moved into the new `perimeter` function with the same 120 s bound per item and a new `-ff` form; the probe is a measurement tool started by hand, run by no gate",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "ecac8b4b4830fe5c78fda201f9401c57168d91df221f41967c564fe545239d56",
+      "reason": "scripts/sandbox-probe.sh: Q9 rewritten for decision D3 (trace only the sidecar): the three per-item `timeout -k 5 120 strace` lines moved into the new `perimeter` function with the same 120 s bound per item and a new `-ff` form; the probe is a measurement tool started by hand, run by no gate",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "aaec0529e54dac51422cc57d24e80a6e2ebab22b41881c53f038f2e2d35a1ac1",
+      "reason": "frontend/e2e/ux/w58a.spec.ts: the driver of the W58a interface walkthrough (captures in light and dark, measured timings) is skipped unless W58A_UX=1, like the other walkthrough drivers: it is evidence tooling run by hand, not a test of the e2e suite; no existing test is skipped",
+      "decision": "docs/plans/2026-11-14-w58a-foreign-read-only.md"
+    },
+    {
+      "id": "4ece9686829ad725695b9778de1cca7330abbeae354fb15978eda1f3705d0382",
+      "reason": "scripts/gate.py: reset_evidence keeps gates/<lot>/ux/, the interface walkthrough's captures (taken before the gate, not its evidence): the 58 captures of W58a were erased by its gate run on 2026-11-14; tests test_walkthrough_captures_are_kept and test_a_ux_symlink_is_still_removed (red first); evidence is still emptied, symlinks still never followed",
+      "decision": "docs/plans/2026-11-14-w58a-foreign-read-only.md"
+    },
+    {
+      "id": "dd564e8b56a2c783a05b843826778bf1679b0c5c6693f7d60abaa7f6bd09f8f4",
+      "reason": "scripts/gate.py: reset_evidence keeps gates/<lot>/ux/, the interface walkthrough's captures (taken before the gate, not its evidence): the 58 captures of W58a were erased by its gate run on 2026-11-14; tests test_walkthrough_captures_are_kept and test_a_ux_symlink_is_still_removed (red first); evidence is still emptied, symlinks still never followed",
+      "decision": "docs/plans/2026-11-14-w58a-foreign-read-only.md"
+    },
+    {
+      "id": "f5ee56829bfcbf54204e7fc1c78926e4cf7ae0bd55177cfc610fbbb3f2c82769",
+      "reason": "scripts/gate_reset_test.py: reset_evidence keeps gates/<lot>/ux/, the interface walkthrough's captures (taken before the gate, not its evidence): the 58 captures of W58a were erased by its gate run on 2026-11-14; tests test_walkthrough_captures_are_kept and test_a_ux_symlink_is_still_removed (red first); evidence is still emptied, symlinks still never followed",
+      "decision": "docs/plans/2026-11-14-w58a-foreign-read-only.md"
+    },
+    {
+      "id": "568bfeac44e198bd04d7816585c861e56d61d97bdfc5e256a1a1652b3d520f5b",
+      "reason": "scripts/gate_reset_test.py: reset_evidence keeps gates/<lot>/ux/, the interface walkthrough's captures (taken before the gate, not its evidence): the 58 captures of W58a were erased by its gate run on 2026-11-14; tests test_walkthrough_captures_are_kept and test_a_ux_symlink_is_still_removed (red first); evidence is still emptied, symlinks still never followed",
+      "decision": "docs/plans/2026-11-14-w58a-foreign-read-only.md"
+    },
+    {
+      "id": "1aae2de01a0e7560d83ccef76127bdb3ae5c35de50fda8058c0d8b266de11ac7",
+      "reason": "scripts/tla-check.sh: a mutant now passes only when TLC names the property its README row names (no longer any violation), and INKWELL_TLA_ONLY filters the models to run; this strengthens the check, every existing model and mutant still runs by default (mise run formal exits 0 in 822 s)",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "8aab6da9da8909a99448176d5705180efc2e54313f609684ff6e16d5a93a67ec",
+      "reason": "docs/plans/2026-11-14-pc1-project-change-by-restart.md: the plan is split into a shared part and two blocks; the sentence on mutants (\u00ab a build failure, a timeout or another test is no catch \u00bb) moved to docs/plans/2026-11-15-pc1a-take-over.md and pc1b-join.md unchanged; no bound weakened",
+      "decision": "docs/plans/2026-11-14-pc1-project-change-by-restart.md"
+    },
+    {
+      "id": "fd76d199d07ea1219e3b8ddb1743ffbd9009a631b5843fed02d67fa3fef48164",
+      "reason": "scripts/tla-check.sh: ProjectChange mutant list after Codex round 1 of PC1: OldContinuation renamed RequestBeforeNavigation (N-15, the page discards its context before the request) and JoinNoRestart added (N-12, a join restarts); each still caught by its named property",
+      "decision": "docs/plans/2026-11-14-pc1-project-change-by-restart.md"
+    },
+    {
+      "id": "6e450b4cdf41fbbffab3511ebbb35fe6f8759873feb5073169e5cb3182a8edec",
+      "reason": "docs/plans/2026-11-15-pc1a-take-over.md: the budget paragraph rewritten for the gate deadline (Codex round 2, D-B): the `budget` criterion is replaced by `max_minutes = 45` enforced by scripts/gate.py (rule G-1); caps restated, none raised past 45 min",
+      "decision": "docs/plans/2026-11-15-pc1a-take-over.md"
+    },
+    {
+      "id": "74c0f97bd335354678c3835089eb9650d3a424312c3136b3f2d17a1eccf9cccf",
+      "reason": "scripts/tla-check.sh: two ProjectChange runs added (mutant WriteBeforeDrain caught by NoLostWrite, witness WitnessWriteRefused) for the bridge drain N-16 (Codex round 2, D-A); no existing run changed",
+      "decision": "docs/plans/2026-11-14-pc1-project-change-by-restart.md"
+    },
+    {
+      "id": "b6d669eab0d8aa3d6e66b6538a402246469aebe31dbb04a31115d0516d4e5b42",
+      "reason": "gates/PC1a.toml: regression criterion changed on the user's explicit word (2026-11-15): the whole Vitest suite takes 307 s alone against the 180 s cap; frontend part is now Biome, svelte-check and vitest --changed <merge-base>, capped 180 s (+30 s bindings); e2e part and its cap unchanged; the whole suite still runs in ci",
+      "decision": "docs/plans/2026-11-15-pc1a-take-over.md"
+    },
+    {
+      "id": "ca4a5c2879dfa743bb32fbb01d03487cc4df2e04525441614312bffa7fd85c1d",
+      "reason": "gates/PC1a.toml: regression criterion changed on the user's explicit word (2026-11-15): the whole Vitest suite takes 307 s alone against the 180 s cap; frontend part is now Biome, svelte-check and vitest --changed <merge-base>, capped 180 s (+30 s bindings); e2e part and its cap unchanged; the whole suite still runs in ci",
+      "decision": "docs/plans/2026-11-15-pc1a-take-over.md"
+    },
+    {
+      "id": "1d45260a71192a24fdabf7e061df368eda956172b7a8366b64129378aa2f65ad",
+      "reason": "gates/PC1b.toml: regression criterion changed on the user's explicit word (2026-11-15): the whole Vitest suite takes 307 s alone against the 180 s cap; frontend part is now Biome, svelte-check and vitest --changed <merge-base>, capped 180 s (+30 s bindings); e2e part and its cap unchanged; the whole suite still runs in ci",
+      "decision": "docs/plans/2026-11-15-pc1b-join.md"
+    },
+    {
+      "id": "7feb0684869fffde67b3f6913f9de8b398807fbb273d869b338bd95ef9972cc6",
+      "reason": "gates/PC1b.toml: regression criterion changed on the user's explicit word (2026-11-15): the whole Vitest suite takes 307 s alone against the 180 s cap; frontend part is now Biome, svelte-check and vitest --changed <merge-base>, capped 180 s (+30 s bindings); e2e part and its cap unchanged; the whole suite still runs in ci",
+      "decision": "docs/plans/2026-11-15-pc1b-join.md"
+    },
+    {
+      "id": "d35cdea9e0a1fbfe7ebbf4cbf050e5175387688180f79fdfc3e2bd14ceb7201d",
+      "reason": "frontend/src/workspace/workspace.svelte.ts: not a test timeout: the new 5 s deadline of workspace.leave (N-15: flush, then close, bounded); no existing delay changed",
+      "decision": "docs/plans/2026-11-15-pc1a-take-over.md"
+    },
+    {
+      "id": "714871a62d9fe783406bc442364a8061258dd8c97bf87dff373258e6bd7622cd",
+      "reason": "frontend/src/workspace/workspace.svelte.ts: the clearTimeout of the same new N-15 deadline; no existing delay changed",
+      "decision": "docs/plans/2026-11-15-pc1a-take-over.md"
+    },
+    {
+      "id": "14ecc9aa62406107d53e56506fb0d1a702b177c87335741f044769dd6f01eaa5",
+      "reason": "frontend/vite.config.ts: a second entry, restart.html, the restart page of N-15; nothing removed",
+      "decision": "docs/plans/2026-11-15-pc1a-take-over.md"
+    },
+    {
+      "id": "8b885bcfef5c8f81b5b0073a466a598920fb57a2503c86a9df5b4641f4b1a5f9",
+      "reason": "scripts/gate.py: rule G-1, the gate deadline (max_minutes, caps summed, run stopped at the deadline, closed legacy list); legacy gates run as before",
+      "decision": "docs/plans/2026-11-15-pc1a-take-over.md"
+    },
+    {
+      "id": "c8748d47b0348345fd523510cc1b20059b0ea475cd53f33b1bd920f7e660eb55",
+      "reason": "scripts/gate.py: rule G-1, same change seen as gate machinery; it only adds refusals and a stop, no criterion is relaxed",
+      "decision": "docs/plans/2026-11-15-pc1a-take-over.md"
+    },
+    {
+      "id": "23669f1fcc2180e2da72a4cc8474b9af7b7254af4a38d8051c4f997938976f19",
+      "reason": "scripts/gate_deadline_test.py: new, the four tests of rule G-1 and the interruption test",
+      "decision": "docs/plans/2026-11-15-pc1a-take-over.md"
+    },
+    {
+      "id": "924920356bb792c50e2840c37b66de272a9771dd794840418320a0c4c695eb6e",
+      "reason": "scripts/gate_deadline_test.py: new test file of rule G-1 (gate machinery)",
+      "decision": "docs/plans/2026-11-15-pc1a-take-over.md"
+    },
+    {
+      "id": "b52c90cb3c9f5c63b7258c98cc734f628eff585a63457d36404a7bad900c26b2",
+      "reason": "scripts/gate_nested_test.py: its temporary gates carry max_minutes = 45, which rule G-1 now requires; assertions unchanged",
+      "decision": "docs/plans/2026-11-15-pc1a-take-over.md"
+    },
+    {
+      "id": "dba1369382f21f9b38336ff818b527d17e923421d7f3738365b84d53b3856d6a",
+      "reason": "scripts/gate_nested_test.py: same change (gate machinery); assertions unchanged",
+      "decision": "docs/plans/2026-11-15-pc1a-take-over.md"
+    },
+    {
+      "id": "e709064e185de5b12731f38089fa92878ac7b84e945e03f01ffe44e2e637cf16",
+      "reason": "scripts/gate_resume_test.py: its temporary gates carry max_minutes = 45, which rule G-1 now requires; assertions unchanged",
+      "decision": "docs/plans/2026-11-15-pc1a-take-over.md"
+    },
+    {
+      "id": "b5b5c3036832cb1ef7a9c0340154711f4c92ff5b7bea10275a66dd5b207529e5",
+      "reason": "scripts/gate_resume_test.py: same change (gate machinery); assertions unchanged",
+      "decision": "docs/plans/2026-11-15-pc1a-take-over.md"
+    },
+    {
+      "id": "30b3824f059bdb37597ac74b341fbc389eba83f7a41999cd46809f3fa7155f66",
+      "reason": "gates/PC1a.toml: regression narrowed (same user decision of 2026-11-15, tests of the touched parts): vitest --changed re-ran nearly the whole suite and hit the 180 s cap; the Vitest part is now the test files the block added or modified; caps unchanged (30 + 180 + 300 s)",
+      "decision": "docs/plans/2026-11-15-pc1a-take-over.md"
+    },
+    {
+      "id": "af951a3377afebcd4f52c53f70da10f849f70074403a4ece4066e4c0d610fabb",
+      "reason": "gates/PC1a.toml: regression narrowed (same user decision of 2026-11-15, tests of the touched parts): vitest --changed re-ran nearly the whole suite and hit the 180 s cap; the Vitest part is now the test files the block added or modified; caps unchanged (30 + 180 + 300 s)",
+      "decision": "docs/plans/2026-11-15-pc1a-take-over.md"
+    },
+    {
+      "id": "1d7216e52e411dd85ee11c4de1ce15bfda24f58b82b3ab92f5b18b4b2922357f",
+      "reason": "gates/PC1b.toml: regression narrowed (same user decision of 2026-11-15, tests of the touched parts): vitest --changed re-ran nearly the whole suite and hit the 180 s cap; the Vitest part is now the test files the block added or modified; caps unchanged (30 + 180 + 300 s)",
+      "decision": "docs/plans/2026-11-15-pc1b-join.md"
+    },
+    {
+      "id": "4909486a23b2adc1ed9a528e1c78f79ffcc2251b26de63423a9aedb148d9a087",
+      "reason": "gates/PC1b.toml: regression narrowed (same user decision of 2026-11-15, tests of the touched parts): vitest --changed re-ran nearly the whole suite and hit the 180 s cap; the Vitest part is now the test files the block added or modified; caps unchanged (30 + 180 + 300 s)",
+      "decision": "docs/plans/2026-11-15-pc1b-join.md"
+    },
+    {
+      "id": "27f61ff641459ec74b0fc8db0fcd9f4a8b82374bfa64fea17f490f51068ea321",
+      "reason": "frontend/src/ui/history/history.svelte.ts: not a test timeout; the claim timer's clearTimeout only moved into #settle (rules C-1, C-5); CLAIM_PAUSE_MS is unchanged",
+      "decision": "docs/plans/2026-11-15-cl1-claim-on-local-edits.md"
+    },
+    {
+      "id": "2b2bae409491f8b8c6f28a25c95ffb85e58f7afc0b49fe60a42066ed04115d03",
+      "reason": "frontend/src/ui/history/history.svelte.ts: the same timer with the same delay (CLAIM_PAUSE_MS), now calling #settle(\"pause\") so that a claim owed is retried (rule C-5); no delay raised",
+      "decision": "docs/plans/2026-11-15-cl1-claim-on-local-edits.md"
+    },
+    {
+      "id": "ed99b8df34309546a39e50145ca8a307e3d632fa95292212ff309c1188f3850f",
+      "reason": "scripts/alloy_check.py: block HP1 step 1 adds the five mutants of DirectUpgradeRoles.als; existing entries untouched",
+      "decision": "docs/plans/2026-11-16-hp1-direct-upgrade.md"
+    },
+    {
+      "id": "6adfe02081f88c842f4889b17eaac20e592244933aae2dcc8144654dd706d09c",
+      "reason": "scripts/tla-check.sh: block HP1 step 1 registers the DirectUpgrade configurations, mutants M1-M29 and witnesses; existing runs untouched",
+      "decision": "docs/plans/2026-11-16-hp1-direct-upgrade.md"
+    },
+    {
+      "id": "e5152ecb469bd05a7d5cb0600d82e7cd56b0b3199de7e639129dc2a3aae1d498",
+      "reason": "internal/app/preview_test.go: new helper previewConn.handled (BK5, docs/plans/2026-11-16-bk5-prv37.md) waits at most 5 s for the preview to take a request, a bound on a new wait, not an increase; no existing timeout of the file is changed",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "c076bee78e7771914ba3a99389e705cbb5e1295d6d0e6a67d551532cda3627e9",
+      "reason": "internal/app/preview_test.go: new helper previewConn.handled (BK5, docs/plans/2026-11-16-bk5-prv37.md) waits at most 5 s for the preview to take a request, a bound on a new wait, not an increase; no existing timeout of the file is changed",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "5384e881e158118745fa46dcbaf45b452849f251ba16202fcc72885b9da3fa94",
+      "reason": "scripts/tla-check.sh: registers the PeerUpAck model of block PU1 (7 configurations, mutants M1-M8 and witnesses, frozen gate gates/PU1.toml); additive, no existing run, count or bound changed",
+      "decision": "docs/plans/2026-11-16-pu1-peerup-after-acceptance.md"
+    },
+    {
+      "id": "3552c17f7cdfc725dd59f34f795cc7613c9e6fcf794f2a2de9cc2aefb2adb1f8",
+      "reason": "scripts/netsim/c5model.py: C5's R2 margin scaled per window class at a stated 1e-7 false failures per run (BK6, docs/plans/2026-11-16-bk6-netsim-c5.md), replacing q = 1.5 set by eye (about 1e-3 per run); 3000 runs: 0 honest failures, every mutant (old figure, M5b, 60 s and stale window) still rejected 3000/3000",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "cfb402357675c4c05d44d80a0d50998275faae33fb3564012901c19e39460127",
+      "reason": "scripts/netsim/c5model_test.py: new Scale tests for the per-class derivation (BK6); no existing assertion weakened, power stays >= 0.999 on 3000 runs",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "319a4937f230408f97ad8c1a5395016ef7761b40b6b9941a446360d3f4a9599e",
+      "reason": "scripts/netsim/run.sh: a start-up truth-check for scenarios 5-8 fails the scenario if the qdisc counters undercount (a 10-segment GSO send through 100 % loss must raise dropped by 10; it raised it by 1 before gso_max_segs 1, BK6)",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "211a8650c3caa5d2b765d0d876c58f0a020bb42a515c0a230b332db7c73f020c",
+      "reason": ".github/workflows/ci.yml: a new parallel job `formal` (mise run formal) with its own 45 min cap, derived from its measured 25 min on a 4-vCPU runner (run 43961568931); the ci job runs ci:checks without the models and keeps its 35 min; no existing cap is raised (CI1)",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "3226d89dcd866759cc9c0167cea34f9309c2127116c6a12cc200381b1861d140",
+      "reason": "mise.toml: ci:core = ci:checks + formal, with ci:checks the same dependencies minus formal, so GitHub runs the models in their own job; locally ci:core runs exactly what it ran before (CI1)",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "18795191fcf1b03eb91eb51494a69b317a9ac117cbbb677472cbc93c873c9249",
+      "reason": "scripts/tla-check.sh: TLC's -metadir state files go under one directory per run, removed by a trap on any exit (EXIT, INT, TERM, HUP); runs cut by a timeout or a signal left GBs of states in /tmp (a tmpfs) until TLC failed with \u00ab disk quota exceeded \u00bb (2026-11-17); no model, run, count or bound changed",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "d4e4fadcda2ff23e9f3340e6976c447677d90609e5d6e25892186e57e72dce6e",
+      "reason": "save.spec.ts: SAV-03b is new and red on WebKit for a real defect (R-E2E1-1, a page that goes mid-save loses its last keys); test.fixme on WebKit only, green on Chromium, the fix is block WC1",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "dd91afa6870a93e77d774169555b175580f3902c0b1278bd11c1c3d439af12b9",
+      "reason": "save.spec.ts SAV-03: the 5 s poll on any history file written since the keys (met by a save holding only part of them) is replaced by waiting for the save itself, acknowledged by Go (__inkwellSaveNow): stronger, every assertion kept; the race moved to its own test SAV-03b",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "d1e1e8014be38705dc5a9ba9da96d94e4105f8f93271aab7922cc1ad25f3ddd3",
+      "reason": "ux/oi.spec.ts: UX-OI light/dark known red on both engines (the R19 step reads the previous toast), test.fixme with its id R-E2E1-2",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "68af41a0cb7ad9b2129105db59b3cb69be8d5a276c5c51708376176f35a6f751",
+      "reason": "ux/si1b.spec.ts: UX-SI1b-1/2 are known defects written red on purpose by the SI1b walkthrough (gates/SI1b/UX.md), the header moves to HB1a/HB1b; test.fixme with that reference",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "c904ea912def3ddb2868401fab3f249763a81e34f76cc6264086c17ea5c5ef9f",
+      "reason": "docs/plans/2026-11-08-netsim-impaired-plan.md: a block tag (\u00ab \u2192 ID \u00bb) appended to an open residual row by INV1; the timeout expression is unchanged in substance",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "5fc745683810cd582e721eca4f2754737ad3dcb5e498f60a271d2d7715427866",
+      "reason": "docs/plans/2026-11-09-send-path-design.md: a block tag appended to an open residual row by INV1; no timeout changed",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "b538dc6aa1e66f47696cdae8444a67b5ad3b0526f93e8555d916422f9368e630",
+      "reason": "frontend/e2e/save.spec.ts: SAV-03b (new test, E2E1) is fixme on WebKit only, tagged WC1: a desktop window destroyed without telling the page loses the last keys until Go holds the close (block WC1, complete rigour, scheduled right after SB2a1 and E2E1); green on Chromium",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "03055f45be0a677de84804610067aae83840e0959dbb00e20e55cf40a112f61b",
+      "reason": "mise.toml: INV1 adds the `inventory` task to pregate and its tests to test:py; no test, bound or timeout weakened",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "1752239609999024f1acc05e52a893827254aed9ed5c624e3937e0430fbb6dd5",
+      "reason": "scripts/inventory.py: the skip check reads the whole call (a formatter cut test.fixme over lines and the block went unseen, main red on inventory); sandbox environment reasons (tier unavailable, refused on this machine, io controller not delegated, not a block device) join ENV_SKIP; no check weakened",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "b0562c1c95d590504091b6a61ad2b2835e45084fa61fbf79a953850396cc8fa2",
+      "reason": "scripts/inventory_test.py: new test for a fixme cut over lines (red on the previous script, green now); no test removed",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "8aded43caf285f8c7b756dd70b7a3aa9df354771bcc5e8d3473464b814a3096a",
+      "reason": "E2E2: SHEET-MU-01's departure split into SHEET-MU-01b, fixme on WebKit only: WebKit never delivers the presence goodbye pagehide sends while the page closes (probe at rest: 58.6 s on WebKit, 10 ms on Chromium); the assertion still runs on Chromium; owned by PR1 (P-3) and WC1, R-E2E2-1 in docs/plans/2026-11-17-e2e1.md",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "cf5cb5529833d0598f2c34b0e5f34b62a2681e5fcf4753b1eaaea614080734d1",
+      "reason": "scripts/gate.py: reset_evidence keeps the gate's inputs written before a run (GATE_INPUTS = github.json, the GitHub run a `github` criterion checks); it erased it, so SB2a1's `github` criterion failed on an all-green run (44056867564); no evidence kept, no check weakened",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "f91cae913926b51e8d2017ad11c23a31a5f91bf56b017821469b04dac3876968",
+      "reason": "scripts/gate.py: reset_evidence keeps the gate's inputs written before a run (GATE_INPUTS = github.json, the GitHub run a `github` criterion checks); it erased it, so SB2a1's `github` criterion failed on an all-green run (44056867564); no evidence kept, no check weakened",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "5731fe74b276d096b978e35c2ed67cc7be4f3b233f996d7b3761ec81df0fede6",
+      "reason": "scripts/gate_reset_test.py: new test that github.json survives a reset (red on the previous gate.py, green now); no test removed",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "686052570051bda550ebcde660dc7a0f4a4757b657e200c53008b53c97bc8583",
+      "reason": ".github/workflows/ci.yml: no existing timeout-minutes is raised; the new job sandbox-stock (30 min) and the new steps (fetch 5, assertion 1, tests 20 min) bring their own bounds, the heuristic compares them with the smaller existing ones; the ci and sidecars-arm64 jobs no longer lift Ubuntu's user-namespace restriction and check their `go test -json` against gates/inventories/SB2a1.toml (decision D6, rule S-7)",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "b46d643c54db3079aff86f70004102fb131d63b4620d5440ed36e54dc1fcc8fe",
+      "reason": "internal/sidecar/bound_linux_test.go: new file; its one skip is the opt-in of the new TestMemoryMaxBackstop (INKWELL_OOM_BACKSTOP=1), which makes the kernel OOM-kill a target and may raise the desktop's memory notification (residual R-7); no existing test gains a skip",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "0065c65defbdab8ee6e22e3025725b74995c21ece2abe8e7cc9f119784ce10a1",
+      "reason": "internal/sidecar/launcher_policy_linux_test.go: the skip belongs to the new TestLandlockABISeamRefusesUnsupported, below Landlock ABI 3, where decideTier refuses every sidecar anyway (ADR 0044 point 2); no existing test gains a skip",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "e4f0ced1dbc43eb978fc332f1c54dab375e6b52296d82e5125632be6a965e9a5",
+      "reason": "internal/sidecar/mount_linux.go: no bound is removed: the cached boolean probe (cachedProbe, probeOutputMount) is replaced by the tier facts of ADR 0044 point 2 (cachedFacts and probeLaunch in internal/sidecar/launch_linux.go): probeTimeout stays 5 s and the backoff 1 s to 30 s, moved there unchanged",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "be1ff505746c4da148997b8886430b51ec33b01a14f21fef9960e0f9166f05d8",
+      "reason": "internal/sidecar/mount_linux.go: no bound is removed: the cached boolean probe (cachedProbe, probeOutputMount) is replaced by the tier facts of ADR 0044 point 2 (cachedFacts and probeLaunch in internal/sidecar/launch_linux.go): probeTimeout stays 5 s and the backoff 1 s to 30 s, moved there unchanged",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "d001f86770132a81a8127a1acd28e6ea03f6e6d5ab45057422c5c36394b49e9a",
+      "reason": "internal/sidecar/mount_linux.go: no bound is removed: the cached boolean probe (cachedProbe, probeOutputMount) is replaced by the tier facts of ADR 0044 point 2 (cachedFacts and probeLaunch in internal/sidecar/launch_linux.go): probeTimeout stays 5 s and the backoff 1 s to 30 s, moved there unchanged",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "97e5c10ce29f50d197c59caae7c5ef53b6406a4099f0dc20d6a41defbdbd02a1",
+      "reason": "internal/sidecar/mount_linux.go: no bound is removed: the cached boolean probe (cachedProbe, probeOutputMount) is replaced by the tier facts of ADR 0044 point 2 (cachedFacts and probeLaunch in internal/sidecar/launch_linux.go): probeTimeout stays 5 s and the backoff 1 s to 30 s, moved there unchanged",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "12e6a3b34570d2df5a825b9d5b2399d5393eaaab090ec09d56d960d836579c5c",
+      "reason": "internal/sidecar/mount_linux.go: no bound is removed: the cached boolean probe (cachedProbe, probeOutputMount) is replaced by the tier facts of ADR 0044 point 2 (cachedFacts and probeLaunch in internal/sidecar/launch_linux.go): probeTimeout stays 5 s and the backoff 1 s to 30 s, moved there unchanged",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "dd39699b629bacf9837b90a5e4af299daee14e21e55904dd44976556f0f07068",
+      "reason": "internal/sidecar/mount_linux.go: no bound is removed: the cached boolean probe (cachedProbe, probeOutputMount) is replaced by the tier facts of ADR 0044 point 2 (cachedFacts and probeLaunch in internal/sidecar/launch_linux.go): probeTimeout stays 5 s and the backoff 1 s to 30 s, moved there unchanged",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "1a0488503e960af3d481affcbf173fb1bbfa0d30887916ec962366cec1749d6c",
+      "reason": "internal/sidecar/mount_linux_test.go: the lines belong to TestOutputMountProbeHungChildRefusesLaunch, removed with cachedProbe; its successors are TestTierFactsConclusiveProbedOnce, TestTierFactsInconclusiveRetriedAfterBackoff, TestTierFactsBackoffIsCapped and TestHungProbeLaunchIsInconclusive (internal/sidecar/probe_cache_linux_test.go, each seen red on a hand mutant of cachedFacts), TestRefusalErrnoTable, TestNamespaceOutcome and TestDecideTierExhaustive (tier_linux_test.go)",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "5603b1a2c9db9c66fd5647e4a3f1f8d00fe18cf4ceea0f7044cd361262cbd578",
+      "reason": "internal/sidecar/mount_linux_test.go: the lines belong to TestOutputMountProbeHungChildRefusesLaunch, removed with cachedProbe; its successors are TestTierFactsConclusiveProbedOnce, TestTierFactsInconclusiveRetriedAfterBackoff, TestTierFactsBackoffIsCapped and TestHungProbeLaunchIsInconclusive (internal/sidecar/probe_cache_linux_test.go, each seen red on a hand mutant of cachedFacts), TestRefusalErrnoTable, TestNamespaceOutcome and TestDecideTierExhaustive (tier_linux_test.go)",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "bf781812b6aa5a8424f9fc12b992959260038bdb116dbf2d9fd242822e7d45e5",
+      "reason": "internal/sidecar/mount_linux_test.go: the lines belong to TestOutputMountProbeHungChildRefusesLaunch, removed with cachedProbe; its successors are TestTierFactsConclusiveProbedOnce, TestTierFactsInconclusiveRetriedAfterBackoff, TestTierFactsBackoffIsCapped and TestHungProbeLaunchIsInconclusive (internal/sidecar/probe_cache_linux_test.go, each seen red on a hand mutant of cachedFacts), TestRefusalErrnoTable, TestNamespaceOutcome and TestDecideTierExhaustive (tier_linux_test.go)",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "b9804f125a22c031486713301a0d21287fb7369d914c5d084dab1cc16c35939c",
+      "reason": "internal/sidecar/mount_linux_test.go: the lines belong to TestOutputMountProbeHungChildRefusesLaunch, removed with cachedProbe; its successors are TestTierFactsConclusiveProbedOnce, TestTierFactsInconclusiveRetriedAfterBackoff, TestTierFactsBackoffIsCapped and TestHungProbeLaunchIsInconclusive (internal/sidecar/probe_cache_linux_test.go, each seen red on a hand mutant of cachedFacts), TestRefusalErrnoTable, TestNamespaceOutcome and TestDecideTierExhaustive (tier_linux_test.go)",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "7d6be29cc48c5f51cb55ec1d8285fdf5b2b961de9f188afd270f3e4476540576",
+      "reason": "internal/sidecar/netns_linux.go: no bound is removed: the cached boolean probe (cachedProbe, probeOutputMount) is replaced by the tier facts of ADR 0044 point 2 (cachedFacts and probeLaunch in internal/sidecar/launch_linux.go): probeTimeout stays 5 s and the backoff 1 s to 30 s, moved there unchanged",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "242e70174472b7c1b53720850ee978c50f2f19986aedc989ea1d12f95b83183c",
+      "reason": "internal/sidecar/netns_linux.go: no bound is removed: the cached boolean probe (cachedProbe, probeOutputMount) is replaced by the tier facts of ADR 0044 point 2 (cachedFacts and probeLaunch in internal/sidecar/launch_linux.go): probeTimeout stays 5 s and the backoff 1 s to 30 s, moved there unchanged",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "1f17119b069dd4bcd4655a83bc506212c6f886d3e013f84a3ffc17a5c52b30ed",
+      "reason": "internal/sidecar/netns_linux_test.go: deleted with probeIsolation, the boolean network probe it tested (TestIsolationProbeHungChildRefusesLaunch, TestIsolationProbeDefinitiveRefusalSelectsFallback); its successors are TestTierFactsConclusiveProbedOnce, TestTierFactsInconclusiveRetriedAfterBackoff, TestTierFactsBackoffIsCapped and TestHungProbeLaunchIsInconclusive (internal/sidecar/probe_cache_linux_test.go, each seen red on a hand mutant of cachedFacts), TestRefusalErrnoTable, TestNamespaceOutcome and TestDecideTierExhaustive (tier_linux_test.go)",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "913eb1e92f363ee377c6ea90633550614b0cefd55a72922aea27175965e480eb",
+      "reason": "internal/sidecar/netns_linux_test.go: same deletion (the hung-probe test of the removed probeIsolation); its successors are TestTierFactsConclusiveProbedOnce, TestTierFactsInconclusiveRetriedAfterBackoff, TestTierFactsBackoffIsCapped and TestHungProbeLaunchIsInconclusive (internal/sidecar/probe_cache_linux_test.go, each seen red on a hand mutant of cachedFacts), TestRefusalErrnoTable, TestNamespaceOutcome and TestDecideTierExhaustive (tier_linux_test.go)",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "57120228c3b4011169a1f81ab2b7b3a6f6ad79817fbc0d75cf734ef910e394ad",
+      "reason": "internal/sidecar/netns_linux_test.go: same deletion (the hung-probe test of the removed probeIsolation); its successors are TestTierFactsConclusiveProbedOnce, TestTierFactsInconclusiveRetriedAfterBackoff, TestTierFactsBackoffIsCapped and TestHungProbeLaunchIsInconclusive (internal/sidecar/probe_cache_linux_test.go, each seen red on a hand mutant of cachedFacts), TestRefusalErrnoTable, TestNamespaceOutcome and TestDecideTierExhaustive (tier_linux_test.go)",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "7fa164c5a517adaae96aab95167d73cd48d33c4437f4d346cf86745e5d36eab5",
+      "reason": "internal/sidecar/netns_linux_test.go: same deletion (the hung-probe test of the removed probeIsolation); its successors are TestTierFactsConclusiveProbedOnce, TestTierFactsInconclusiveRetriedAfterBackoff, TestTierFactsBackoffIsCapped and TestHungProbeLaunchIsInconclusive (internal/sidecar/probe_cache_linux_test.go, each seen red on a hand mutant of cachedFacts), TestRefusalErrnoTable, TestNamespaceOutcome and TestDecideTierExhaustive (tier_linux_test.go)",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "79b6a7781edca4d0008f2294ccec617c63c605eb837519bd7668b229c65602d2",
+      "reason": "internal/sidecar/netns_linux_test.go: same deletion (the hung-probe test of the removed probeIsolation); its successors are TestTierFactsConclusiveProbedOnce, TestTierFactsInconclusiveRetriedAfterBackoff, TestTierFactsBackoffIsCapped and TestHungProbeLaunchIsInconclusive (internal/sidecar/probe_cache_linux_test.go, each seen red on a hand mutant of cachedFacts), TestRefusalErrnoTable, TestNamespaceOutcome and TestDecideTierExhaustive (tier_linux_test.go)",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "843bb0916ae71b0657557413a98efefbd8f5415d1dfb9fc355497413c44feb79",
+      "reason": "internal/sidecar/probe_report_linux_test.go: no timeout is raised; the raw namespace-probe loop and its 10 s bound are removed with runNamespaceProbe, the 30 s and 60 s bounds of the remaining runs are unchanged; the file is a measurement that asserts nothing (INKWELL_SANDBOX_PROBE=1)",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "a123a70321bece473e72ea3938484d3417fd9f3da092b42ca47c24b8c317eb33",
+      "reason": "internal/sidecar/scope_linux_test.go: no timer is raised; the new waitReport has the same 20 s bound as waitLine and also returns when the app helper ends without a report. Two deliberate changes of TestCgroupSession* in this file, neither a weakening: the aggregate case accepts `cause=unknown watch-lost=true` beside `victim` (ADR 0042 rule M9: a lost watch answers unknown, never a guessed cause; the leaf case stays strict; docs/autonomous-decisions.md 2026-11-15 \u00ab SB2a1 R2b \u00bb) and the scenario is played again, 3 attempts at most, only when the kernel OOM-killed the helper itself before its report, proven by its SIGKILL status and the oom_kill counter of its scope (harness artefact; docs/autonomous-decisions.md 2026-11-15 \u00ab SB2a1 R2c (test) \u00bb)",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "041ba39514c28dde4d6f7bcedff68474548385c2d0f50349e9bb72f44e51baea",
+      "reason": "internal/sidecar/tier_helpers_linux_test.go: new file; requireN's skip (tier N unavailable, with its tier-report line) replaces the skip of requireOutputMount removed from mount_linux_test.go, and scripts/gojson_check.py accepts it only as `n-unavailable` in an N column of the inventory, never in an F column (decision D7)",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "d86de6a7d2dd92d691b8d7da3a64085a479a52d9300e5bbc05aeb0f854575a90",
+      "reason": "mise.toml: task test:py also runs scripts/gojson_check_test.py and scripts/gh_verdict_test.py, the tests of the two checkers this block adds; nothing is removed from the task",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "8ee039304e62598fde2d80532709e51b5606f2f7db1146f9f407b89f73b46613",
+      "reason": "scripts/gh-verdict.py: new file, the checker of the `github` criterion of gates/SB2a1.toml (decision D6), tested by scripts/gh_verdict_test.py; no existing gate dependency changes",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "08f4b64240b0d279bb397a959bfe76ac48555ba1543e9ad38ac7feb633764b09",
+      "reason": "scripts/gh_verdict_test.py: new file, the tests of scripts/gh-verdict.py on recorded API answers (criterion `checkers` of gates/SB2a1.toml); no existing gate dependency changes",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "cd07ffb1cffcf084e010281c25c08cf8a1ea65ed4d17176b5114b2637ff0e862",
+      "reason": "scripts/gojson_check.py: new file, the checker of `go test -json` runs against gates/inventories/SB2a1.toml (decision D7), tested by scripts/gojson_check_test.py; no existing gate dependency changes",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "17a9b53dbe2b538b6dfabebe21ef3aaad9d16360e4a3e7966fb93b2b96e1c6d4",
+      "reason": "scripts/gojson_check_test.py: new file, the tests of scripts/gojson_check.py (criterion `checkers` of gates/SB2a1.toml); no existing gate dependency changes",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "31bc79d163b7a39e8898e6b11f6e010b58fbd173ee30659f3cc17ad26cd212fb",
+      "reason": "internal/sidecar/launcher_policy_linux_test.go: the skip belongs to the new TestLandlockABISeamRefusesUnsupported, below Landlock ABI 3, where decideTier refuses every sidecar anyway (ADR 0044 point 2); no existing test gains a skip; re-fingerprinted on 2026-11-15: the mount-construction tests now go through requireN (a mount namespace exists only in tier N), reported with the tier-report line; no F cell of the inventory skips",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "d7c57da8ac8e592d5ce92e157dd5eb3ba8f3cbfa2b0c5d91582127444120b2c1",
+      "reason": "internal/sidecar/scope_linux_test.go: no timer is raised; the new waitReport has the same 20 s bound as waitLine and also returns when the app helper ends without a report. Two deliberate changes of TestCgroupSession* in this file, neither a weakening: the aggregate case accepts `cause=unknown watch-lost=true` beside `victim` (ADR 0042 rule M9: a lost watch answers unknown, never a guessed cause; the leaf case stays strict; docs/autonomous-decisions.md 2026-11-15 \u00ab SB2a1 R2b \u00bb) and the scenario is played again, 3 attempts at most, only when the kernel OOM-killed the helper itself before its report, proven by its SIGKILL status and the oom_kill counter of its scope (harness artefact; docs/autonomous-decisions.md 2026-11-15 \u00ab SB2a1 R2c (test) \u00bb) Re-fingerprinted on 2026-11-15 after the GitHub run of candidate/sb2a1-1: requireScope makes the scope tests assert tier F's own contract (a clean rlimit run, no session and no run cgroup: T-6) where no PID namespace exists, and a wait cycle on the test's stdin pipe now fails at once instead of timing the package out; no timer raised",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "ee6f0b1663ae28b333af5d298710b0574b3dfb7e918b2af64f0d54f02cb8d478",
+      "reason": "internal/sidecar/tier_helpers_linux_test.go: new file; requireN's skip (tier N unavailable, with its tier-report line) replaces the skip of requireOutputMount removed from mount_linux_test.go, and scripts/gojson_check.py accepts it only as `n-unavailable` in an N column of the inventory, never in an F column (decision D7); re-fingerprinted on 2026-11-15: forksInSandbox added, for tests that need process creation, which the tier-F filter forbids by design (S-2)",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "fc60dfc524d59e3d4de088bf8f7a175e4ada7be7562f9fcd360f9c0c09eaeb5e",
+      "reason": "internal/language/integration_test.go: new requireSandbox skips only on ErrSandboxRefused (arm64 until SB2a2, rule S-7); the tests now run in tier F as well as N; none of them is in the inventory",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "24ee84c5c5e947c0f1258118d284590e6ef29d9a0d79e8614d00bbc13ca7aae7",
+      "reason": "internal/typst/helper_test.go: newEngine skips only on a sandbox refusal (arm64 until SB2a2, rule S-7); the two inventoried typst tests do not skip there, they assert the refusal sentence",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "0284a584e3a8dc781e80c8d9d332a27afe06e942255dc93b6585de226da63615",
+      "reason": "internal/sidecar/bound_linux_test.go: new file; its one skip is the opt-in of the new TestMemoryMaxBackstop (INKWELL_OOM_BACKSTOP=1), which makes the kernel OOM-kill a target and may raise the desktop's memory notification (residual R-7); no existing test gains a skip; re-fingerprinted on 2026-11-15 after the second GitHub run: the helper's address limit in this file goes from 1 GiB to 2 GiB, because a Go helper built with coverage failed to start under 1 GiB 4 times in 400 (pthread_create EAGAIN) and never under 2 GiB; a fixture limit, not a product bound; no skip added",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "2ea6ad01baec8aba054b166d327d481d5678e17afbf3e1e719b328eb0e15051c",
+      "reason": ".github/workflows/ci.yml: a new step of the ci job, \u00ab Assert the sandbox ran in tier N \u00bb, with its own 3-minute cap (D6 revised 2026-11-16); no existing timeout-minutes is raised: the sandbox-stock step keeps its 20 minutes with internal/app added (measured 57 s with -race in tier F)",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "95bae164b740e7458ff76697e8bd4b39486fb104bf96410b990d97786f669b15",
+      "reason": ".github/workflows/ci.yml: the ci job gains a step that starts the user manager and session bus and runs ci:core inside systemd-run --user --scope (GitHub's ci job had no delegated scope, so the cgroup path never ran there); no timeout-minutes is raised, the \u00ab Assert the sandbox ran in tier N \u00bb step keeps its 3-minute cap",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "8d6ea452cacb87e85987ced1ccc519405e489b2703ff5ed32281f3336bd6347c",
+      "reason": "internal/sidecar/bound_linux_test.go: requireN becomes requireNScope, the same tier-F skip (accepted only as n-unavailable in an N column); without a delegated scope the test now asserts the per-process fallback (rule T-6) instead of failing; no inventory cell newly skipped",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "fdc19e0e389c26ea74948f2d7e867d536d5c1f1d1bd82e5fb5b89b4c050bec3f",
+      "reason": "internal/sidecar/scope_linux_test.go: requireScope also covers tier N without a delegated scope (decided only by environment facts: not under user@UID.service, or no session bus), asserting the fallback; no timeout changed (the 20 s waitLine timer is as before), the fingerprint moved with the new helpers; re-fingerprinted on 2026-11-16: raceResidentReserve added to TestResidentBudgetKillsWithSIGKILL/resident-tree in race builds only (measured per-process race overhead, gates/SB2a1/WITNESSES.md), no timeout touched",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "352d5635190c3dbe45421ad23ed625d662f95dc25ea9209624575c1d580e824e",
+      "reason": "internal/typst/sandbox_linux_test.go: the hostile-memory tests take the scope helper, and skip only the core-dump check on kernels that cannot report core dumps (PIDFD_INFO_COREDUMP, before Linux 6.16), after the memory-limit check has run, as the sidecar tests already do",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "4353776ea2baaa7f4e297d90498992b8d1d95d24aa1ea0144dcba339bcf0dc36",
+      "reason": "scripts/perf/cpu_test.py: burn() consumes a fixed CPU time (process_time) instead of a wall time, and the detached-helper window closes once the helper reports its 0.8 s of CPU burnt instead of after a fixed 800 ms; no bound is lowered (> 350 and > 500 unchanged); the tests now hold under CPU contention (reproduced red with 6 busy loops on 2 CPUs and on GitHub run 43920252732, green after)",
+      "decision": "docs/plans/2026-11-14-sb2-sandbox-tiers.md"
+    },
+    {
+      "id": "98489a711732555908f4281d856aab7c70e61b1c7bf05f732488e21b3ec12c4a",
+      "reason": "internal/sidecar/bound_linux_test.go: TestBoundSparesPageCache gains a slow_storage case (50 MB/s through the scope's io.max, the condition in which GitHub's ci runner killed the read under the former watchdog rule, ADR 0044 point 1g amendment of 2026-11-16); it skips only where io.max cannot be set (the io controller not delegated to the scope, or the cache directory not on a block device); the local_storage case keeps every assertion and no skip, and the rule is proven without any skip by TestUnreclaimableLeavesOutOnlyFileCache and TestMemoryWatchdogSparesFileCache (seen red under the former rule, MS20)",
+      "decision": "docs/adr/0044-sandbox-tiers.md"
+    },
+    {
+      "id": "d258f46b9d899a60296d9d2b1365a50f73b0f1071229e31e201f86cb31cc6e29",
+      "reason": ".github/workflows/ci.yml: SB2a1's ci job steps (tier N lift, delegated user scope, tier assertion with its own 3 min) combined with CI1's parallel `formal` job (45 min, measured 25 min); no existing cap raised",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "e84827b6c16d5bdda2f9f35f952955c83ce2b74d1c8082c81848ac4da978d4b3",
+      "reason": "mise.toml: SB2a1's sandbox tasks combined with CI1's split of ci:core into ci:checks + formal; locally ci:core runs what it ran before",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "99635f1b14ff87eba82531b149ac268fd277a499d64530d3f6edb03e09525670",
+      "reason": ".github/workflows/ci.yml: the formal job installs only mise (install: false, no task auto-install); SB2a1's ci steps and CI1's formal job as before, no cap raised",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "47d48bb75e78295575631a5cfbf6ab8c601d9ad248dcf47283f1d3c91a91ae6f",
+      "reason": ".github/workflows/ci.yml: SB2a1's ci job steps (tier N lift, delegated user scope, tier assertion with its own 3 min) on top of main's ci.yml (CI1's formal job unchanged); no cap raised",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "51dad904fe6a365f85ff5b15f45ad8a6999aece1c8d00a631c4f3aa5977f8e9c",
+      "reason": ".github/workflows/ci.yml: the ci job becomes a matrix of two parts on two runners (checks, e2e), each with the same 35 min cap, because with every check green it passed 35 min in one job (run 44002604121); no cap raised (CI1b)",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "46d2686fd2acc7d5b70a477cbfc6f4813070161d13cc4daa1e54eb1d369d706b",
+      "reason": ".github/workflows/ci.yml: the ci matrix gains a `frontend` part running fe:check alone (beside test:ci it ran 5 to 15 times slower and timed out, runs 43979066870 and 44010837492); every part keeps the 35 min cap; no cap raised (CI1b)",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "544bc0751e9c503af7894e42c776a6054294d1cebf312a342d86b6f15a977695",
+      "reason": "mise.toml: fe:check leaves ci:checks for GitHub's own `frontend` part; locally ci:core = ci:checks + fe:check + formal, the same set as before (CI1b)",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "4cfb74b3fdb2ed6bfa0ed733625c4bf20a57044bb524d4d2251e4a5311d6d640",
+      "reason": "mise.toml: fe:check leaves ci:checks for GitHub's own `frontend` part; locally ci:core = ci:checks + fe:check + formal, the same set as before (CI1b)",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "bf5d1603378ef2c24ff74ce62689d6f92e8c2ea65e9d7e1d73494e16ace121b5",
+      "reason": "mise.toml: fe:check leaves ci:checks for GitHub's own `frontend` part; locally ci:core = ci:checks + fe:check + formal, the same set as before (CI1b)",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "48f610e228ddcddf5100ac21a0517c92a9557a68eb10773ce55fd5f6d15767f8",
+      "reason": ".github/workflows/ci.yml: the checks part of the ci matrix keeps the job name `ci`, read by frozen gates through the API (gates/SB2a1.toml `github`); the other parts are ci-frontend and ci-e2e; no cap raised (CI1b)",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "c863cbd143c30d12f2a90984fe209aeff43712ba1fa6b3635d38704d1a979f80",
+      "reason": "internal/language/integration_test.go: the skip when the sandbox is refused on this machine (arm64 until SB2a2, or no isolation) gets an environment comment for INV1's inventory; the skip itself is SB2a1's refusal rule, unchanged",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "0b0dd07d5077eaf05cb83308c8e3dd83c4655b47b821110a81cf0616f0d0bfa3",
+      "reason": "mise.toml: SB2a1 on top of main: CI1b's split (ci:checks, fe:check on its own runner, formal) and SB2a1's test:py entry (gojson_check_test.py) beside INV1's inventory_test.py; locally ci:core runs the same set; no test weakened",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "1067d873cc311fa26d2638719c6bd1ed68271dae9bdf8b3ce664a5e6e56152cf",
+      "reason": "mise.toml: SB2a1 on top of main: CI1b's split (ci:checks, fe:check on its own runner, formal) and SB2a1's test:py entry (gojson_check_test.py) beside INV1's inventory_test.py; locally ci:core runs the same set; no test weakened",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "41cd83999f7128d4e5359b8186e1aed8bdd60074549f42805a0fccdd0fdaaaf7",
+      "reason": "mise.toml: SB2a1 on top of main: CI1b's split (ci:checks, fe:check on its own runner, formal) and SB2a1's test:py entry (gojson_check_test.py) beside INV1's inventory_test.py; locally ci:core runs the same set; no test weakened",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "38462a8e3d5460feac0725ba9455e771741a55a22cad23c76c7509237d16cbde",
+      "reason": "scripts/sidecar-no-tools.sh (gate L1 `without-tools`): the probe fixtures are built before PATH is emptied and the whole -race suite runs from the package directory; with an empty PATH the tests looked for cc, getconf and sleep and missed the package-relative font; same assertions and delays",
+      "decision": "docs/plans/2026-11-02-L1-implementation.md"
+    },
+    {
+      "id": "7069e3bdec4531c664ad45ca66d54d4f14b4dd7bcdf734749612f67e9272850a",
+      "reason": "frontend/playwright.config.ts (WC1): an optional profile root isolates and checks the Playwright profiles per engine; defaults unchanged; an empty fixture directory is refused (the INKWELL_DOCS trap of CLAUDE.md); no timeout or retry changed (Opus review: legitimate)",
+      "decision": "docs/plans/2026-11-21-wc1-window-close.md"
+    },
+    {
+      "id": "b153e3584a83f2d2d4632898883ca97f2d874a86c9398144cccf045c24b436bd",
+      "reason": "scripts/wc1-webkit.sh (WC1, new): the browser and native GTK walk the frozen gate requires \u2014 built from the candidate, fresh populated docs and profile folders per engine, no retries, the native leg a real window-manager close (Opus review: legitimate); the WebKit browser leg runs through the project's container on a host without Playwright's system libraries (e2e:webkit), on the host on GitHub's runner; the native leg owns its private D-Bus session and headless Mutter with start-up and lifetime checks",
+      "decision": "docs/plans/2026-11-21-wc1-window-close.md"
+    },
+    {
+      "id": "dfd4fe51c0397ad07f9bc2755874696ea459eb054db4282cf001f57fe270e837",
+      "reason": "scripts/pkg/selftest.sh (OI dependency, CI1b): the four AC-14 fixture binaries omit VCS metadata so an ancestor .git cannot break their builds. AC-14 still accepts plain and production builds and rejects server and faultinject for their build tags.",
+      "decision": "docs/plans/2026-11-08-ci-cd-study.md"
+    },
+    {
+      "id": "6373ad131cec91a272f0ce5dba5a6b46e87caaafbb56cd2bb2c77a4033825d7a",
+      "reason": "mise.toml (DEP1): test:py adds scripts/check_mise_lock_test.py to its existing unittest invocation. All existing tests, assertions and timeouts are preserved.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "16f45ba7b2caf874d222f8311be056a5517d8b7f361afa659305d9b59f906693",
+      "reason": "PU1c: the bound is unchanged (upTimeout = syncack.UpWait = 30 s, bulk lane) and now enforced by the single inbound lifecycle of spec \u00a78.7.3 (protocol/syncack, rule P-10); checked by the integrator on 2026-11-22.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "527105cde60bab5f0989363f2cfce8391f0dea17693d090b1266f52804ec8517",
+      "reason": "PU1c: the bound is unchanged (reorderWait = 1 min, bulk lane, via syncack.Order) and now enforced by the single inbound lifecycle of spec \u00a78.7.3 (protocol/syncack, rule P-9); checked by the integrator on 2026-11-22.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "44528043f677c6bd828e3faf35011e6eced6eec9f2eec4592d5c1e1aaaad3b9a",
+      "reason": "PU1c: comment of openTimeout extended to the sync ACK it also bounds; the value is unchanged (15 s); checked by the integrator on 2026-11-22.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "a1f2eb8acd1a4239b1c177cbcd7467a1a3ddd7e17b8f9dec83df5b6e8ea80c07",
+      "reason": "PU1/PU1c: openTimeout = syncack.Budget = transport.SyncAckTimeout = 15 s, the same value now named by the spec (protocol/limits.go); checked by the integrator on 2026-11-22.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "21c93cc407ab5a9e612a64fc2a086565e91527e196ebef994ec130e6e58f6480",
+      "reason": "PU1c: upTimeout = syncack.UpWait = 30 s, the same value now owned by the spec's lifecycle (rule P-10); checked by the integrator on 2026-11-22.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "381cd4c46b6f7a01832d626a8afb441762d476fada596b51dd756fb42dd85804",
+      "reason": "PU1c: the bound is unchanged (upTimeout = 30 s, sync lane) and now enforced by the single inbound lifecycle of spec \u00a78.7.3 (protocol/syncack, rule P-10); checked by the integrator on 2026-11-22.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "b6b8473ffff3c582285f3d9d8a76f9fd10d3eb92572048ade25174e1ce3ed2c5",
+      "reason": "PU1c: the bound is unchanged (reorderWait = 1 min, sync lane, via syncack.Order) and now enforced by the single inbound lifecycle of spec \u00a78.7.3 (protocol/syncack, rule P-9); checked by the integrator on 2026-11-22.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "f0cd99cd337063df5ff2e75e3a3094acd7cdda9bfbedba0235ba4c20b80735aa",
+      "reason": "PU1b/PU1c: tla-check.sh only adds the SyncOrder and InboundLifecycle models with their mutants; no existing run, property or bound changed; checked by the integrator on 2026-11-22.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "8418ebaf38c587103c7f8db4108caadcd3c1b081729b0eb48b7b53a288dbe3c7",
+      "reason": "CI2 (docs/plans/2026-11-22-ci2-formal-shards.md): the new 5-minute `formal` aggregate job adds a timeout line; every formal shard keeps the original 45-minute limit, none is raised.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "3177912c2e823ca534985f31d7f0cc2e2f9a79d403165d5102921b15953e22fc",
+      "reason": "CI2 (docs/plans/2026-11-22-ci2-formal-shards.md): test:py adds scripts/tla_shards_test.py (every TLA+ run in exactly one shard) to its existing list.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "ff357fb48b908270365f2e2ba5f0b9ffd9e41b792bdb95e9f2ff50429a421f6c",
+      "reason": "CI2 (docs/plans/2026-11-22-ci2-formal-shards.md): tla-check.sh adds opt-in TLA_SHARD dispatch and --list; the full run list, assertions, TLC arguments and mutant verdicts are unchanged.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "eb8d3b485e8e7568b1242685333ea6b4e47c7819393cf0426ac041727098c12c",
+      "reason": "HP1 reformalize item 3 (docs/plans/2026-11-23-hp1-reformalize.md in inkwell-hp1m): run_e2e builds the copied tree with -buildvcs=false; selection, verdict and matching rules unchanged.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "57fbf8487281e84cd1636d70be61373e558326701f37119924359757a74d1c59",
+      "reason": "Same change: the go build line gains -buildvcs=false; its timeout (900 s) is unchanged.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "95bef13b0f1ec4951b03a01c1cb124122482545892a780b8cc69e9b010365e4f",
+      "reason": "mutants_test.py adds E2EBuildTest (every e2e build ignores parent repositories); existing tests unchanged.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "0751bb4db37cb957bc4a5fc9b89977cf5c6c4a27e60a62fc7f1614ac38c26bdc",
+      "reason": "mise.toml: gate dependency changed: mise task test:py (new ref to scripts/scratch_guard_test.py, the guard that keeps test scratch outside the checkout); CI run 45138932780 -> CI3: test scratch moved out of the checkout (it raced `go test ./...`); no criterion, threshold, timeout or skip changed",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "7c514691509e8d9152db39473541be0c946dba887b71c464eddd44e0ba2f9aad",
+      "reason": "scripts/perf/native_input_test.py: gate dependency changed (worktree() points driver.ROOT at a scratch root under the system temp dir instead of TemporaryDirectory(dir=driver.ROOT)); CI run 45138932780 -> CI3: test scratch moved out of the checkout (it raced `go test ./...`); no criterion, threshold, timeout or skip changed",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "d4de1a2166a02f4392106fedae8cec5d789acf47caa377af6960fd828191c5a2",
+      "reason": "scripts/perf/native_input_test.py: gate machinery changed (same edit, test file only; the driver is unchanged); CI run 45138932780 -> CI3: test scratch moved out of the checkout (it raced `go test ./...`); no criterion, threshold, timeout or skip changed",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "06de32af4acf45b1563e7817afa8295abab29f208cf15bf550458099be7546da",
+      "reason": "scripts/perf/type_native_test.py: gate dependency changed (scratch under the system temp dir with harness.ROOT patched, instead of dir=harness.ROOT); CI run 45138932780 -> CI3: test scratch moved out of the checkout (it raced `go test ./...`); no criterion, threshold, timeout or skip changed",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "9dc8fd1c674ac6ab9b32f5ead850f481170e90f3cb802631ecc47537f4546e2c",
+      "reason": "scripts/perf/type_native_test.py: gate machinery changed (same edit, test file only; the harness is unchanged); CI run 45138932780 -> CI3: test scratch moved out of the checkout (it raced `go test ./...`); no criterion, threshold, timeout or skip changed",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "2080020ca018132adfc19bec82bf2923970977fa29e4e22efc9517cc93fbd6a9",
+      "reason": "HP1 + HP1c (gates/HP1/SIMPLIFY.md; plan docs/plans/2026-11-23-hp1-reformalize.md \u00a75, gate HP1n4): netsim.spec.ts keeps HP1's archived 600 s Playwright cap for scenario 9 (restart), now also covering its crash variant, whose clauses C1c, C2c, C3c wait 15 s each from bob's page readiness; existing scenarios keep their caps; C1 and C2 of the graceful restart keep their separate 30 s waits. Replaces 7d115488 (the same file before HP1c).",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "6989446145e93d34e0e62e38ab0b4b1030a683a3184e6e3e933751ebd6163ff4",
+      "reason": "HP1 + HP1c (gates/HP1/SIMPLIFY.md, \u00ab HP1n5 code step \u00bb; gate HP1n5, which supersedes HP1n4): netsim.spec.ts keeps HP1's archived 600 s Playwright cap for scenario 9 (restart); its crash variant's clauses are now C1d and C2d, 15 s each counted from bob's restart with \u00ab Synchronis\u00e9 \u00bb inside the measure (a miss is data, never thrown), and C3c unchanged; the graceful restart's wait for \u00ab Synchronis\u00e9 \u00bb (60 s), C1 and C2 (30 s each) are unchanged; existing scenarios keep their caps. Replaces 2080020c (the same file before HP1n5).",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "fe77e923f52141c1e727e6021d340c4a931e677ddffa527f94667e203ad42e55",
+      "reason": "HP1: the simnet delivery callback captures the destination socket before releasing the simulator lock (H-19 fixtures add latency between NATed peers); same delay calculation.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "ac421e2f9ae3835176a9b5263baa384a09392baa475cc041c1e40bdaf65be1ef",
+      "reason": "HP1: the duplicated packet uses the same captured socket; its scheduling still uses the existing duplicate delay.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "f326e7d354e0fe62e8adc52b16fe44992e71c8aa25041d37fd8e9915ee960f98",
+      "reason": "HP1: netsim mutants may carry `expect` without `clause`; the runner reports that label instead of throwing; verdict and matching rules unchanged.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "cea36854ce39c8e8eec86e1de0fd34852f411181c660e9fba158c5789df12d5f",
+      "reason": "HP1 + HP1c (plan docs/plans/2026-11-23-hp1-reformalize.md \u00a75, gate HP1n4): run.sh adds scenario 9 (process restart, PID cleanup) and its crash variant (NETSIM_VARIANTS=crash: restart-bob.sh crash sends SIGKILL and holds the old UDP port with a placeholder so the new process listens on another one); the graceful restart, the run names without a variant (9-s<seed>), the existing scenario selection, prerequisites and qdisc truth checks are unchanged. Replaces eb44f5f1 (the same file before HP1c).",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "9501f711acfc9535e5aad1ced075b3e11d8c0bd73432187528c422d4dc2ad825",
+      "reason": "HP1: tla-check.sh registers HP1rLinkLost, HP1rLateLand, HP1rWitnessSurvives (assigned to CI2 shard 3/3 with DirectUpgrade); all existing runs and verdicts unchanged.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "8c7d0cb88192a64e83b0bc514becdd36d63547667875327aaa904de85c32b2c4",
+      "reason": "HP1c + HP1c2 (plan docs/plans/2026-11-23-hp1-reformalize.md \u00a75 and \u00a78; gates/HP1/SIMPLIFY.md \u00ab HP1c2 step 1 \u00bb): tla-check.sh registers block HP1c's runs, named HP1c*, outside ^DirectUpgrade, ^HP1r and ^PeerUpAck, so HP1's 44, HP1r's 3 and PU1's 19 frozen counts stay exact. They are now 20: mutant MS5 HP1cSupersedeBackwardAck, and HP1cSupersedeThree in a new `simulate` mode, TLC's seeded simulation with fixed seed, depth and trace count, its own \u2713 line saying \u00ab simulation \u00bb. They sit on CI2 shards 1/3 (HP1c[!S]*) and 3/3 (HP1cSupersede*). No existing run, shard, assertion, TLC argument of an existing run or verdict rule changes. Replaces 88ea6459 (the same file before HP1c2).",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "95985d8f04b086b6859a6d1f88618ee7e3bf46b9362430bf0af183917fcb656f",
+      "reason": "HP1 on main a153829: mutants.py carries both HP1's change (expect without clause, f326e7d3) and main's -buildvcs=false e2e builds (eb8d3b48); no other change.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "38fe2e36c3032b54333ebacecc728ca5f24d2a35d9cdc7ce4d5911edf24cb3cb",
+      "reason": "HP1 merge: .golangci.yml extends the existing misspell exclusion of protocol/cmd/vectors/main.go to the generator's other files (supersede.go): its French fixture descriptions are in the frozen vector corpus (HP1c2 digest) and an accented letter splits a word for misspell. No other linter or path changes.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "06cda4b8f7234d0f5c36fc59037ed5225aefa0a7b1ee76d2baafd472c52baf2c",
+      "reason": "HP1 merge: tla-check.sh gains two shellcheck SC2154 annotations (sim_seed, sim_depth, sim_traces are set per call as prefixes); the run list (`--list` identical to the gated tree), TLC arguments and verdict lines are unchanged.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "578eb67bc6d14bfaa7427c2bd7ef40243945945145bdbf69fa1e5649d1d67af4",
+      "reason": "PC1b2 step 2 (J-7: the restart dep restartRequested became restartChange, one line of this file; same change, new fingerprint): cmd/inkwell/restart_linux_test.go: a new test (first-launch join restarts, J-3) with its own 10 s wait; no existing delay changed (was 85cdbd2a\u2026)",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "b23d1351ab5281f23b2c881d0b9e2dfa23550efef8979fcd65700c811e48bd9e",
+      "reason": "PC1b2 step 2 (J-7: the restart dep restartRequested became restartChange, one line of this file; same change, new fingerprint): cmd/inkwell/restart_linux_test.go: the 90 s context of the same new test, which runs a real child process image; no existing delay changed (was 35991fc2\u2026)",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "f2389a68b2e4a4422ebf1fb23b87a06665ab80116601cc0160c4057c9282ec1d",
+      "reason": "frontend/e2e/project-change.spec.ts: new join tests (J-2) wait for another process image; a new poll bound, no existing one raised",
+      "decision": "docs/plans/2026-11-15-pc1b-join.md"
+    },
+    {
+      "id": "43b23aec5db1289cc5c1b79cc94b9bed6b11d64159e0e64b1b90face895a0724",
+      "reason": "frontend/e2e/project-change.spec.ts: test.setTimeout of the new waiting-join test, which freezes the inviter on purpose; no existing test's budget raised",
+      "decision": "docs/plans/2026-11-15-pc1b-join.md"
+    },
+    {
+      "id": "d480a7975c95be8f0a6bd68a98de98da0481967568d77c7cc59f4de83324a7ad",
+      "reason": "frontend/src/workspace/workspace.svelte.ts: #projectOf renamed #announced(peer, timeoutMs?); the same-project path keeps its 10 s; only the pending join waits without end (J-2), and for the inviter alone (F1 of the code review)",
+      "decision": "docs/plans/2026-11-15-pc1b-join.md"
+    },
+    {
+      "id": "fc3f2ab031a6e0c77a38c548222d257e64c6b154d5534cf8c25999e3886beee0",
+      "reason": "frontend/src/workspace/workspace.svelte.ts: the timer of the same function, optional for the pending join (J-2: every start waits again); the live path is unchanged",
+      "decision": "docs/plans/2026-11-15-pc1b-join.md"
+    },
+    {
+      "id": "9dbbb78dad4e4a6e9f39a484a0e7cadd9b5604ac8a2fe00925b0c09359b4b890",
+      "reason": "internal/app/foreign_test.go: the N-1 test no longer interleaves a live adoption, which rule J-1 removes (a join restarts); it now proves the running session keeps its list and the restarted image answers member at once",
+      "decision": "docs/plans/2026-11-15-pc1b-join.md"
+    },
+    {
+      "id": "eb5e06c18d33a15252d9578b5ac6fd4a93a692d6060e2fc07eb841d20575fc16",
+      "reason": "internal/app/foreign_test.go: same rewrite of the N-1 test; the timeout branch belonged to the removed live interleaving",
+      "decision": "docs/plans/2026-11-15-pc1b-join.md"
+    },
+    {
+      "id": "0223ba110f4d7e3638d3f0f2b806ffcf5dcf6602b837308184f8ae3b7773e6c7",
+      "reason": "internal/app/foreign_test.go: same rewrite of the N-1 test; the wait belonged to the removed live interleaving",
+      "decision": "docs/plans/2026-11-15-pc1b-join.md"
+    },
+    {
+      "id": "befd26d940b9bf07c258ee968ad438f94789f84975538a5bc3f46113f40c2a35",
+      "reason": "frontend/e2e/helpers.ts: the status locator gains .first(), because the join notice is now a second status element; the 60 s bound is unchanged",
+      "decision": "docs/plans/2026-11-15-pc1b-join.md"
+    },
+    {
+      "id": "09b011342785d13e40a6c8112ac026b2a8421ce6786e7be88bf7d2546cbecbf3",
+      "reason": "frontend/e2e/helpers.ts: new shared helper acceptJoin (the confirmation step of rule J-2), with the same bounds as the lines it replaces in the specs; none raised",
+      "decision": "docs/plans/2026-11-15-pc1b-join.md"
+    },
+    {
+      "id": "9dd91ecc49ad077e88f34ca189ad4c091a633c6fafaa1feeebe49da33005d906",
+      "reason": "frontend/e2e/history.spec.ts: uses acceptJoin and .first() on the status locator; the 60 s bound is unchanged",
+      "decision": "docs/plans/2026-11-15-pc1b-join.md"
+    },
+    {
+      "id": "8e041cbf4dea6cd8b3732d4c63dc335b3e8c9a120df0d92cb89703e0aae349c1",
+      "reason": "frontend/e2e/join.spec.ts: uses acceptJoin and .first() on the status locator; the 60 s bound is unchanged",
+      "decision": "docs/plans/2026-11-15-pc1b-join.md"
+    },
+    {
+      "id": "0177025ca30e8e312c192f576e8b8d82794cc2529e9a4ed7f26a8668b7cf0658",
+      "reason": "frontend/e2e/project-change.spec.ts: the 60 s poll of the new test \u00ab a waiting join returns to the previous document \u00bb (it waits for another process image), same bound as its neighbours; no existing one raised",
+      "decision": "docs/plans/2026-11-15-pc1b-join.md"
+    },
+    {
+      "id": "5bc890cb36c18b575978d0ce22051e5ee11a173a5474892aefa961be00325f85",
+      "reason": "frontend/e2e/project-change.spec.ts: test.setTimeout(180_000) of the same new test, which freezes the inviter and restarts twice, same budget as the waiting-join test; no existing test's budget raised",
+      "decision": "docs/plans/2026-11-15-pc1b-join.md"
+    },
+    {
+      "id": "286b930fe06e67aacb2a72005a34c79c5a548900bba6012b2aca41e1c70e88ce",
+      "reason": "PC1b re-applied on main 8a23f84 (rebase; same change, new fingerprint): frontend/e2e/helpers.ts: pair() reads alice's status with .first(), because the join notice is now a second status element; the 60 s bound is unchanged (was befd26d9\u2026)",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "6694b52704b219b81444a49d3fba0a5f00aeb480b91b8bd40bff5c97bec98138",
+      "reason": "PC1b re-applied on main 8a23f84 (rebase; same change, new fingerprint): frontend/e2e/helpers.ts: pair() reads bob's status with .first(), same reason; the 60 s bound is unchanged",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "f1454842a235fc944f4426b63e1580347107911f7841e64b92db2c57c2faab6e",
+      "reason": "PC1b re-applied on main 8a23f84 (rebase; same change, new fingerprint): frontend/e2e/history.spec.ts: uses acceptJoin and .first() on the status locator; the 60 s bound is unchanged (was 9dd91ecc\u2026)",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "1b5d116bc9368de40101188c6ccb6f56a53bd6c511ff85c5f519541ffa25cf25",
+      "reason": "PC1b re-applied on main 8a23f84 (rebase; same change, new fingerprint): frontend/src/workspace/workspace.svelte.ts: #projectOf renamed #announced(peer, timeoutMs?); the same-project path keeps its 10 s; only the pending join waits without end (J-2), for the inviter alone (F1) (was d480a797\u2026)",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "d6618ad75ba6e50f22a40381b910626957c777e9eeb9f53599ab3717eb03310f",
+      "reason": "PC1b re-applied on main 8a23f84 (rebase; same change, new fingerprint): frontend/src/workspace/workspace.svelte.ts: the timer of the same function, optional for the pending join (J-2: every start waits again); the live path is unchanged (was fc3f2ab0\u2026)",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "49928beb536748f19a85fdd91765b0a7391f0a980884191085fc4397169258b3",
+      "reason": "PC1b2 step 2: frontend/e2e/offline.spec.ts reads alice's \u00ab Seul \u00bb from the header status (getByRole(\"banner\").getByRole(\"status\"), as the same test's last line does): since PC1b the join notice is a second status element and the bare locator failed in strict mode (gates/PC1b/SIMPLIFY.md); the 30 s bound and the expected text are unchanged",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "ebf2ff17d2501631611af4de119243daa6fbedb293326acd7539170257986d59",
+      "reason": "PC1b2 step 2: frontend/e2e/offline.spec.ts reads bob's \u00ab Seul \u00bb from the header status (getByRole(\"banner\").getByRole(\"status\"), as the same test's last line does): since PC1b the join notice is a second status element and the bare locator failed in strict mode (gates/PC1b/SIMPLIFY.md); the 30 s bound and the expected text are unchanged",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "41feb58ee37c40e08af4d3b6213ecd283228c9f42602973a135812995fd4e7da",
+      "reason": "PC1b2 UX fixes J-8 and J-9 (same change, new fingerprint: the file gained refreshInvitation and kept canReturn after a join; this line is untouched): frontend/src/workspace/workspace.svelte.ts: #projectOf renamed #announced(peer, timeoutMs?); the same-project path keeps its 10 s; only the pending join waits without end (J-2), for the inviter alone (F1) (was 1b5d116b\u2026)",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "42b6a1e6cbb3039e05de3d0bca516666fbccdc6fa3440df56dfc909036b60dee",
+      "reason": "PC1b2 UX fixes J-8 and J-9 (same change, new fingerprint; this line is untouched): frontend/src/workspace/workspace.svelte.ts: the timer of the same function, optional for the pending join (J-2: every start waits again); the live path is unchanged (was d6618ad7\u2026)",
+      "decision": "docs/objectif-en-cours.md"
+    }
+  ]
+}

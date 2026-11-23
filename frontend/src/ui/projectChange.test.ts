@@ -1,31 +1,39 @@
 import { readFileSync } from "node:fs";
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
-import { Repo } from "@automerge/automerge-repo";
+import { type AutomergeUrl, generateAutomergeUrl, Repo } from "@automerge/automerge-repo";
 import { flushSync } from "svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { Session } from "../../bindings/github.com/oioio-space/inkwell/internal/app/index";
+import {
+  Projects,
+  Session,
+} from "../../bindings/github.com/oioio-space/inkwell/internal/app/index";
 import fr from "../i18n/fr.json";
 import { withMutant } from "../mutant";
 import { encodeEnvelope, encodeRoles, Kind } from "../net/envelope";
 import { type SocketLike, WailsNetworkAdapter } from "../net/WailsNetworkAdapter";
-import { markLeave, takeLeaveMark } from "../restart/mark";
+import { type LeaveKind, markLeave, takeLeaveMark } from "../restart/mark";
 import {
   APP_URL,
   GIVE_UP_MS,
+  JOIN_REFUSED_URL,
   POLL_MS,
   REFUSED_URL,
+  RETURN_REFUSED_URL,
   type RestartDeps,
   startRestart,
 } from "../restart/restart";
 import { FakeGoStore } from "../store/fakeStore";
 import { GoStorageAdapter } from "../store/GoStorageAdapter";
-import { LEAVE_FLUSH_MS, workspace } from "../workspace/workspace.svelte";
+import { JOIN_RETRY_MS, LEAVE_FLUSH_MS, workspace } from "../workspace/workspace.svelte";
 import Editor from "./Editor.svelte";
 import { session } from "./editorSession.svelte";
+import JoinWaiting from "./JoinWaiting.svelte";
 import { notice } from "./notice.svelte";
 import AccessBanner from "./people/AccessBanner.svelte";
 import type { Role, Standing } from "./people/roster";
+import ShareDialog from "./ShareDialog.svelte";
+import HeaderBar from "./shell/HeaderBar.svelte";
 import { showStartupNotice } from "./startupNotice";
 import { cleanup, click, render } from "./testkit.svelte";
 
@@ -34,16 +42,24 @@ import { cleanup, click, render } from "./testkit.svelte";
  * 2026-11-14-pc1-project-change-by-restart.md): N-9 (« Reprendre ce document ici » asks once and
  * says that Inkwell restarts; the restart page asks Go once and loads the application only on
  * another startup id), N-12 (the notice of the next start, once), N-15 (the page flushes, closes
- * its repo and navigates before any request). Each rule's check also runs on a copy of the real
+ * its repo and navigates before any request). PC1b (plan 2026-11-15-pc1b-join.md): J-2 (what a
+ * join says, the wait for the document of the inviter, the notice, once) and the page's half of
+ * J-1 (the join is completed only after the document is stored). Each rule's check also runs on a copy of the real
  * source with one edit, and must fail there (« PC1 mutant … »).
  */
 
 vi.mock("@wailsio/runtime", () => ({ Stream: vi.fn() }));
 vi.mock("../../bindings/github.com/oioio-space/inkwell/internal/app/index", () => ({
-  Projects: {},
+  Projects: { Current: vi.fn(), SetRootURL: vi.fn() },
   Session: {
     Invite: vi.fn(),
+    InvitationState: vi.fn(),
     Join: vi.fn(),
+    FinishJoin: vi.fn(),
+    CancelChange: vi.fn(),
+    ReturnToPrevious: vi.fn(),
+    PendingJoin: vi.fn(),
+    CompleteJoin: vi.fn(),
     Standing: vi.fn(),
     CanTakeOver: vi.fn(),
     Members: vi.fn(async () => []),
@@ -67,6 +83,21 @@ let standingNow: Standing = "member";
 let flushed: Promise<void> = Promise.resolve();
 /** Ends when the test lets the repo's shutdown end. */
 let closed: Promise<void> = Promise.resolve();
+/** Whether the repo holds the document asked of it: `find` fails otherwise, as for a peer away. */
+let available = true;
+/** How many times the repo was asked for a document, found or not. */
+let finds = 0;
+/** What a peer announces, as the test hears it from the adapter. */
+let announce: ((url: AutomergeUrl, peer: string) => void) | undefined;
+
+/** A document of the repo of spies: what `Workspace.open` needs of a handle. */
+const handleOf = (url: AutomergeUrl) => ({
+  url,
+  documentId: url.slice("automerge:".length),
+  on: () => {},
+  off: () => {},
+  doc: () => ({ text: "le texte de la personne qui invite" }),
+});
 
 /** Gives `w` a network adapter on a fake link, a repo of spies, Go's standing and maybe its role. */
 async function arm(w: Workspace, standing: Standing, role?: Role): Promise<void> {
@@ -87,8 +118,24 @@ async function arm(w: Workspace, standing: Standing, role?: Role): Promise<void>
     },
     { admitted: () => true },
   );
+  vi.spyOn(adapter, "onProject").mockImplementation((cb) => {
+    announce = cb as typeof announce;
+    return () => {
+      announce = undefined;
+    };
+  });
   const repo = {
     handles: {},
+    find: async (url: AutomergeUrl) => {
+      finds++;
+      if (!available) throw new Error(`Document ${url} is unavailable`);
+      calls.push("find");
+      return handleOf(url);
+    },
+    create: () => {
+      calls.push("create");
+      return handleOf(generateAutomergeUrl());
+    },
     flush: async () => {
       calls.push("flush");
       await flushed;
@@ -117,6 +164,24 @@ beforeEach(() => {
   calls = [];
   flushed = Promise.resolve();
   closed = Promise.resolve();
+  available = true;
+  finds = 0;
+  announce = undefined;
+  vi.mocked(Projects.Current).mockResolvedValue({ RootURL: "" } as never);
+  vi.mocked(Projects.SetRootURL).mockResolvedValue(undefined as never);
+  vi.mocked(Session.PendingJoin).mockResolvedValue({
+    waiting: false,
+    root: "",
+    inviter: "",
+    name: "",
+  } as never);
+  vi.mocked(Session.CompleteJoin).mockImplementation((async () => {
+    calls.push("complete");
+  }) as never);
+  vi.mocked(Session.FinishJoin).mockImplementation((async () => {
+    calls.push("request");
+  }) as never);
+  vi.mocked(Session.CancelChange).mockResolvedValue(undefined as never);
   vi.mocked(Session.Standing).mockImplementation((async () => standingNow) as never);
   vi.mocked(Session.CanTakeOver).mockResolvedValue(true as never);
   vi.mocked(Session.TakeOver).mockImplementation((async () => {
@@ -139,6 +204,8 @@ afterEach(() => {
   workspace.standing = undefined;
   workspace.leaving = false;
   workspace.error = "";
+  workspace.joinOffer = undefined;
+  workspace.handle = undefined;
   takeLeaveMark();
   while (notice.text) notice.hide();
 });
@@ -232,7 +299,7 @@ describe("PC1 the banner of a device the list does not name (N-9)", () => {
     click(button(host, fr["foreign.takeOver"]));
     click(button(host.querySelector("dialog") as Element, fr["foreign.takeOver"]));
     expect(leave, "asked once, left once").toHaveBeenCalledTimes(1);
-    expect(leave).toHaveBeenCalledWith("restart.html");
+    expect(leave).toHaveBeenCalledWith("restart.html", "takeOver");
     expect(host.querySelector("dialog"), "the question is not asked twice").toBeNull();
   }
 
@@ -267,18 +334,26 @@ describe("PC1 the restart page (N-9)", () => {
     start: Start,
     ids: (string | Error)[],
     answer: boolean | Error = true,
-    confirmed = true,
+    confirmed: LeaveKind | false = "takeOver",
   ) {
     const target = document.createElement("main");
     const loaded: string[] = [];
     const log: string[] = [];
     let asked = 0;
     const deps: RestartDeps = {
-      confirmed: () => confirmed,
+      confirmed: () => confirmed || undefined,
       takeOver: async () => {
         log.push("takeOver");
         if (answer instanceof Error) throw answer;
         return { restarting: answer };
+      },
+      finishJoin: async () => {
+        log.push("finishJoin");
+        if (answer instanceof Error) throw answer;
+      },
+      returnToPrevious: async () => {
+        log.push("returnToPrevious");
+        if (answer instanceof Error) throw answer;
       },
       startupId: async () => {
         const id = ids[asked++];
@@ -332,16 +407,21 @@ describe("PC1 the restart page (N-9)", () => {
   it("PC1 the restart page asks nothing when opened without the confirmation", async () => {
     await markChecks(startRestart);
     // The mark is the leaving page's, and it is taken once: a reloaded restart page has none.
-    expect(takeLeaveMark()).toBe(false);
-    markLeave();
-    expect([takeLeaveMark(), takeLeaveMark()]).toEqual([true, false]);
+    expect(takeLeaveMark()).toBeUndefined();
+    markLeave("takeOver");
+    expect([takeLeaveMark(), takeLeaveMark()]).toEqual(["takeOver", undefined]);
+    // The mark says which change was confirmed; anything else in its place is no mark.
+    markLeave("join");
+    expect([takeLeaveMark(), takeLeaveMark()]).toEqual(["join", undefined]);
+    sessionStorage.setItem("inkwell.leave", "1");
+    expect(takeLeaveMark()).toBeUndefined();
   });
 
   it("PC1 mutant N-9 request without the confirmation is caught", async () => {
     await withMutant<{ startRestart: Start }, void>(
       "restart/restart.ts",
       "pc1mutant-n9mark",
-      "if (!deps.confirmed()) return deps.load(APP_URL);",
+      "if (!kind) return deps.load(APP_URL);",
       "",
       async (m) => {
         await expect(markChecks(m.startRestart)).rejects.toThrow(/N-9 no request without/);
@@ -434,8 +514,10 @@ describe("PC1 the restart page (N-9)", () => {
     const loaded: string[] = [];
     const t0 = Date.now();
     const done = start(target, {
-      confirmed: () => true,
+      confirmed: () => "takeOver",
       takeOver: async () => ({ restarting: true }),
+      finishJoin: async () => {},
+      returnToPrevious: async () => {},
       startupId: async () => {
         const id = answer(Date.now() - t0);
         if (id instanceof Error) throw id;
@@ -573,7 +655,7 @@ describe("PC1 the page leaves its context before the request (N-15)", () => {
     let release: () => void = () => {};
     flushed = new Promise<void>((r) => (release = r));
     const navigate = vi.fn((url: string) => void calls.push(`navigate:${url}`));
-    const left = w.leave("restart.html", navigate);
+    const left = w.leave("restart.html", "takeOver", navigate);
     await vi.waitFor(() => expect(calls).toEqual(["flush"]));
     expect(w.locked, "N-15 read-only while the page leaves").toBe(true);
     expect(navigate).not.toHaveBeenCalled();
@@ -607,11 +689,11 @@ describe("PC1 the page leaves its context before the request (N-15)", () => {
 
   it("PC1 the leaving page marks the restart page's one request", async () => {
     await arm(workspace, "member", "writer");
-    expect(takeLeaveMark()).toBe(false);
+    expect(takeLeaveMark()).toBeUndefined();
     const navigate = vi.fn(() =>
-      expect(takeLeaveMark(), "marked before the navigation").toBe(true),
+      expect(takeLeaveMark(), "marked before the navigation").toBe("takeOver"),
     );
-    expect(await workspace.leave("restart.html", navigate)).toBe(true);
+    expect(await workspace.leave("restart.html", "takeOver", navigate)).toBe(true);
     expect(navigate).toHaveBeenCalledTimes(1);
   });
 
@@ -620,7 +702,7 @@ describe("PC1 the page leaves its context before the request (N-15)", () => {
     closed = new Promise<void>(() => {}); // the repo never ends its shutdown
     vi.useFakeTimers();
     const navigate = vi.fn();
-    const left = workspace.leave("restart.html", navigate);
+    const left = workspace.leave("restart.html", "takeOver", navigate);
     await vi.advanceTimersByTimeAsync(LEAVE_FLUSH_MS - 1);
     expect(navigate, "still closing just before the deadline").not.toHaveBeenCalled();
     await vi.advanceTimersByTimeAsync(1);
@@ -633,7 +715,7 @@ describe("PC1 the page leaves its context before the request (N-15)", () => {
     flushed = new Promise<void>(() => {}); // the storage never answers
     vi.useFakeTimers();
     const navigate = vi.fn();
-    const left = workspace.leave("restart.html", navigate);
+    const left = workspace.leave("restart.html", "takeOver", navigate);
     await vi.advanceTimersByTimeAsync(LEAVE_FLUSH_MS - 1);
     expect(workspace.locked, "still leaving just before the deadline").toBe(true);
     expect(notice.text).toBe("");
@@ -752,5 +834,866 @@ describe("PC1 the notice of the next start (N-12)", () => {
     vi.mocked(Session.StartupNotice).mockResolvedValueOnce("share.title" as never);
     await showStartupNotice(session.focus);
     expect(notice.text).toBe("");
+  });
+});
+
+describe("PC1 a join restarts Inkwell (J-1, J-2)", () => {
+  type Dialog = typeof ShareDialog;
+  const INVITER = "host";
+  const ROOT = generateAutomergeUrl();
+  const JOINED = {
+    peer: INVITER,
+    restart: true,
+    title: "Roman",
+    folder: "Roman (2)",
+    current: "Mon livre",
+  };
+  const CONFIRM_BODY =
+    "Inkwell va redémarrer pour ouvrir ce document dans un nouveau dossier, « Roman (2) », à côté du vôtre.";
+  const CONFIRM_CURRENT = "Votre document actuel ne change pas : il reste dans « Mon livre ».";
+  const confirmation = () => document.querySelector("[data-testid=join-confirm]");
+
+  afterEach(async () => {
+    await workspace.stop();
+  });
+
+  /** Go's answer to `Session.PendingJoin`: a record waits, with or without its root. */
+  const waiting = (root: string, name = "Alice") =>
+    vi
+      .mocked(Session.PendingJoin)
+      .mockResolvedValue({ waiting: true, root, inviter: INVITER, name } as never);
+
+  /** Fills the invitation in the dialog of `host` and presses « Rejoindre ». */
+  function submit(host: Element): HTMLFormElement {
+    const form = host.querySelector("form") as HTMLFormElement;
+    const input = form.querySelector("input") as HTMLInputElement;
+    input.value = " invitation ";
+    input.dispatchEvent(new Event("input", { bubbles: true }));
+    form.dispatchEvent(new Event("submit", { bubbles: true, cancelable: true }));
+    flushSync();
+    return form;
+  }
+
+  /**
+   * « Rejoindre »: what is said before; the progress while the person who invites answers; then
+   * the question, which stays until the person chooses, and only « Redémarrer et ouvrir » makes
+   * the page leave. The page itself asks Go for nothing more.
+   */
+  async function joinSaysChecks(Component: Dialog): Promise<void> {
+    await arm(workspace, "member", "admin");
+    workspace.handle = handleOf(ROOT) as never; // a text of one's own is open
+    let answer: (joined: typeof JOINED) => void = () => {};
+    vi.mocked(Session.Join).mockReturnValue(
+      new Promise((r) => {
+        answer = r;
+      }) as never,
+    );
+    let left: (ok: boolean) => void = () => {};
+    const leave = vi
+      .spyOn(workspace, "leave")
+      .mockImplementation(() => new Promise<boolean>((r) => (left = r)));
+    const host = render(Component, { open: true });
+    const form = host.querySelector("form") as HTMLFormElement;
+    expect(text(form), "J-2 says that Inkwell restarts, before « Rejoindre »").toContain(
+      "Inkwell va redémarrer pour ouvrir ce document.",
+    );
+    expect(text(form)).toContain(fr["join.restart.note"]);
+    expect(text(form), "J-2 says before the click that the current document is kept").toContain(
+      "Votre document actuel est conservé.",
+    );
+    expect(text(form), "the folder is not known before the invitation is used").not.toContain(
+      "nouveau dossier",
+    );
+    expect(form.querySelector("button[type=submit]")?.getAttribute("aria-busy")).not.toBe("true");
+
+    submit(host);
+    await vi.waitFor(() => expect(Session.Join).toHaveBeenCalledWith("invitation"));
+    flushSync();
+    // D3: while the person who invites has not answered, the button and a sentence say so.
+    const go = form.querySelector("button[type=submit]") as HTMLButtonElement;
+    expect([go.disabled, go.getAttribute("aria-busy")], "J-2 « Rejoindre » shows progress").toEqual(
+      [true, "true"],
+    );
+    const busy = form.querySelector("[role=status]");
+    expect(busy && text(busy), "J-2 says that it connects").toBe(
+      "Connexion à la personne qui vous invite…",
+    );
+    expect(text(form)).not.toContain(fr["join.restart.note"]);
+    expect(confirmation()).toBeNull();
+
+    answer(JOINED);
+    await vi.waitFor(() => expect(confirmation()).not.toBeNull());
+    flushSync();
+    const asked = confirmation() as HTMLElement;
+    expect(asked.hasAttribute("open")).toBe(true);
+    expect(text(asked.querySelector("h2") as Element)).toBe("Rejoindre « Roman » ?");
+    expect(text(asked.querySelector("p") as Element), "J-2 says where the document opens").toBe(
+      `${CONFIRM_BODY} ${CONFIRM_CURRENT}`,
+    );
+    expect(buttons(asked).map(text)).toEqual(["Annuler", "Redémarrer et ouvrir"]);
+    // The question stays until the person chooses: nothing leaves, nothing is asked of Go.
+    await new Promise((r) => setTimeout(r, 20));
+    expect(leave, "J-2 nothing restarts before the confirmation").not.toHaveBeenCalled();
+    expect(confirmation()).not.toBeNull();
+    expect(Session.FinishJoin).not.toHaveBeenCalled();
+    expect(Session.CancelChange).not.toHaveBeenCalled();
+
+    click(button(asked, "Redémarrer et ouvrir"));
+    await vi.waitFor(() => expect(leave).toHaveBeenCalledTimes(1));
+    expect(
+      leave,
+      "J-2 after « Redémarrer et ouvrir » the page leaves for the restart page",
+    ).toHaveBeenCalledWith("restart.html", "join");
+    expect(Session.FinishJoin, "N-15 the page itself never asks Go").not.toHaveBeenCalled();
+    expect(Session.CancelChange).not.toHaveBeenCalled();
+    left(true);
+    await vi.waitFor(() => expect(workspace.joining).toBe(false));
+    expect(workspace.error).toBe("");
+  }
+
+  /**
+   * The held invitation, in the workspace: nothing leaves before the confirmation, and
+   * « Annuler » drops what Go holds, so that another « Rejoindre » works.
+   */
+  async function heldChecks(w: Workspace): Promise<void> {
+    await arm(w, "member", "admin");
+    vi.mocked(Session.Join).mockResolvedValue(JOINED as never);
+    const leave = vi.spyOn(w, "leave").mockResolvedValue(true);
+    await w.join("invitation");
+    expect(leave, "J-2 nothing restarts before the confirmation").not.toHaveBeenCalled();
+    // A first launch has no text of its own: no folder of one's own is named.
+    expect(w.joinOffer).toEqual({ title: "Roman", folder: "Roman (2)", current: "" });
+    expect(w.joining).toBe(false);
+
+    await w.cancelJoin();
+    expect(
+      vi.mocked(Session.CancelChange).mock.calls.length,
+      "J-2 « Annuler » drops the held invitation",
+    ).toBe(1);
+    expect(w.joinOffer).toBeUndefined();
+    expect(leave).not.toHaveBeenCalled();
+    expect(Session.FinishJoin).not.toHaveBeenCalled();
+
+    await w.join("invitation");
+    expect(Session.Join, "a second « Rejoindre » works afterwards").toHaveBeenCalledTimes(2);
+    expect(w.joinOffer?.folder).toBe("Roman (2)");
+    await w.confirmJoin();
+    expect(leave).toHaveBeenCalledWith("restart.html", "join");
+  }
+
+  it("PC1 join says that Inkwell restarts", async () => {
+    await joinSaysChecks(ShareDialog);
+    // In a copy of this very project the invitation changes nothing here: no restart is announced.
+    cleanup();
+    await arm(workspace, "notNamed");
+    const form = render(ShareDialog, { open: true }).querySelector("form") as HTMLFormElement;
+    expect(text(form)).toContain(fr["share.join.foreignHelp"]);
+    expect(text(form)).not.toContain(fr["join.restart.note"]);
+  });
+
+  it("PC1 mutant J-2 a join that does not say it restarts is caught", async () => {
+    await withMutant<{ default: Dialog }, void>(
+      "ui/ShareDialog.svelte",
+      "pc1mutant-j2note",
+      '{t("join.restart.note")}',
+      "",
+      async (m) => {
+        await expect(joinSaysChecks(m.default)).rejects.toThrow(/J-2 says that Inkwell restarts/);
+      },
+    );
+  });
+
+  it("PC1 a join waits for the confirmation, and « Annuler » drops it", async () => {
+    await heldChecks(workspace);
+  });
+
+  it("PC1 mutant J-2 a restart without the confirmation is caught", async () => {
+    await withMutant<{ workspace: Workspace }, void>(
+      "workspace/workspace.svelte.ts",
+      "pc1mutant-j2confirm",
+      "        this.joinOffer = {",
+      '        void this.leave("restart.html", "join");\n        this.joinOffer = {',
+      async (m) => {
+        await expect(heldChecks(m.workspace)).rejects.toThrow(
+          /J-2 nothing restarts before the confirmation/,
+        );
+        await m.workspace.stop();
+      },
+    );
+  });
+
+  it("PC1 mutant J-2 « Annuler » that leaves the held invitation is caught", async () => {
+    await withMutant<{ workspace: Workspace }, void>(
+      "workspace/workspace.svelte.ts",
+      "pc1mutant-j2cancel",
+      "    this.joinOffer = undefined;\n    await Session.CancelChange().catch(() => undefined);",
+      "    this.joinOffer = undefined;",
+      async (m) => {
+        await expect(heldChecks(m.workspace)).rejects.toThrow(
+          /J-2 « Annuler » drops the held invitation/,
+        );
+        await m.workspace.stop();
+      },
+    );
+  });
+
+  it("PC1 the confirmation of a join: « Annuler », and a first launch names no folder of its own", async () => {
+    await arm(workspace, "member", "admin");
+    vi.mocked(Session.Join).mockResolvedValue(JOINED as never);
+    const leave = vi.spyOn(workspace, "leave").mockResolvedValue(true);
+    const host = render(ShareDialog, { open: true });
+    submit(host);
+    await vi.waitFor(() => expect(confirmation()).not.toBeNull());
+    flushSync();
+    const asked = confirmation() as HTMLElement;
+    expect(text(asked.querySelector("p") as Element)).toBe(CONFIRM_BODY);
+    click(button(asked, "Annuler"));
+    await vi.waitFor(() => expect(Session.CancelChange).toHaveBeenCalledTimes(1));
+    flushSync();
+    expect(confirmation()).toBeNull();
+    expect(leave).not.toHaveBeenCalled();
+    expect(
+      host.querySelector("dialog")?.hasAttribute("open"),
+      "the invitation is still there",
+    ).toBe(true);
+
+    // D3: after a failed attempt the restart sentence does not sit above the error.
+    vi.mocked(Session.Join).mockRejectedValue(new Error("no answer") as never);
+    const form = submit(host);
+    await vi.waitFor(() => expect(workspace.error).toBe(fr["error.join"]));
+    flushSync();
+    expect(text(form)).not.toContain(fr["join.restart.note"]);
+    expect(text(host.querySelector("[role=alert]") as Element)).toBe(fr["error.join"]);
+  });
+
+  /**
+   * An invitation is used once (rule J-2): after « Annuler » the field is emptied and the card
+   * says to ask for a new one, where the restart note was; no error is shown.
+   */
+  async function cancelledChecks(Component: Dialog): Promise<Element> {
+    await arm(workspace, "member", "admin");
+    vi.mocked(Session.Join).mockResolvedValue(JOINED as never);
+    const host = render(Component, { open: true });
+    const form = submit(host);
+    await vi.waitFor(() => expect(confirmation()).not.toBeNull());
+    flushSync();
+    click(button(confirmation() as HTMLElement, "Annuler"));
+    await vi.waitFor(() => expect(Session.CancelChange).toHaveBeenCalledTimes(1));
+    flushSync();
+    const said = form.querySelector("[role=status]");
+    expect(said && text(said), "J-2 says that a cancelled invitation is used").toBe(
+      "Invitation annulée. Pour rejoindre ce document plus tard, demandez une nouvelle invitation.",
+    );
+    expect(
+      (form.querySelector("input") as HTMLInputElement).value,
+      "J-2 a cancelled invitation leaves the field",
+    ).toBe("");
+    expect(text(form)).not.toContain(fr["join.restart.note"]);
+    expect(host.querySelector("[role=alert]")).toBeNull();
+    return host;
+  }
+
+  it("PC1 a cancelled invitation leaves the field, and the page asks for a new one", async () => {
+    const host = await cancelledChecks(ShareDialog);
+    // The next « Rejoindre » starts afresh: the sentence goes.
+    submit(host);
+    await vi.waitFor(() => expect(confirmation()).not.toBeNull());
+    expect(workspace.joinCancelled).toBe(false);
+  });
+
+  it("PC1 mutant J-2 a cancelled invitation kept in the field is caught", async () => {
+    await withMutant<{ default: Dialog }, void>(
+      "ui/ShareDialog.svelte",
+      "pc1mutant-j2field",
+      'if (workspace.joinCancelled) address = "";',
+      "void workspace.joinCancelled;",
+      async (m) => {
+        await expect(cancelledChecks(m.default)).rejects.toThrow(
+          /J-2 a cancelled invitation leaves the field/,
+        );
+      },
+    );
+  });
+
+  /**
+   * The share dialog of an admin who made an invitation, of which Go says `state` (rule J-8): an
+   * open invitation is offered to copy; a used or expired one is not, and a new one is offered.
+   * Before Go answers nothing is offered: a spent invitation never flashes by.
+   */
+  async function invitationChecks(Component: Dialog, state: "open" | "used" | "expired") {
+    await arm(workspace, "member", "admin");
+    workspace.invitation = "inkwell1:made";
+    workspace.invitationState = "open";
+    let answer: (s: string) => void = () => {};
+    vi.mocked(Session.InvitationState).mockReturnValue(
+      new Promise<string>((resolve) => (answer = resolve)) as never,
+    );
+    const host = render(Component, { open: true });
+    const card = () => host.querySelector("section") as Element;
+    flushSync();
+    expect(
+      button(card(), fr["share.copy"]),
+      "J-8 nothing is offered before Go answers",
+    ).toBeUndefined();
+    answer(state);
+    await vi.waitFor(() => {
+      flushSync();
+      if (state === "open")
+        expect(
+          button(card(), fr["share.copy"]),
+          "J-8 an open invitation is offered to copy",
+        ).toBeDefined();
+      else
+        expect(
+          button(card(), fr["share.renew"]),
+          "J-8 a used invitation is not offered: a new one is offered in its place",
+        ).toBeDefined();
+    });
+    if (state !== "open") {
+      expect(
+        button(card(), fr["share.copy"]),
+        "J-8 a used invitation is not offered",
+      ).toBeUndefined();
+      expect(text(card())).toContain(fr[state === "used" ? "share.used" : "share.expired"]);
+    }
+    expect(Session.InvitationState).toHaveBeenCalledWith("inkwell1:made");
+    cleanup();
+    workspace.invitation = "";
+  }
+
+  it("PC1 the share dialog follows what Go says of the invitation", async () => {
+    for (const state of ["open", "used", "expired"] as const)
+      await invitationChecks(ShareDialog, state);
+  });
+
+  it("PC1 mutant J-8 a dialog that does not ask Go is caught", async () => {
+    await withMutant<{ default: Dialog }, void>(
+      "ui/ShareDialog.svelte",
+      "pc1mutant-j8ask",
+      "untrack(() => void workspace.refreshInvitation().finally(() => (checked = true)));",
+      "checked = true;",
+      async (m) => {
+        // Without the question the old invitation shows at once: caught before or after Go's answer.
+        await expect(invitationChecks(m.default, "used")).rejects.toThrow(
+          /J-8 (nothing is offered before Go answers|a used invitation is not offered)/,
+        );
+        cleanup();
+        workspace.invitation = "";
+      },
+    );
+  });
+
+  it("PC1 mutant J-8 a dialog that offers the invitation before Go answers is caught", async () => {
+    await withMutant<{ default: Dialog }, void>(
+      "ui/ShareDialog.svelte",
+      "pc1mutant-j8wait",
+      "{#if !checked}",
+      "{#if false}",
+      async (m) => {
+        await expect(invitationChecks(m.default, "open")).rejects.toThrow(
+          /J-8 nothing is offered before Go answers/,
+        );
+        cleanup();
+        workspace.invitation = "";
+      },
+    );
+  });
+
+  it("PC1 a join the page could not save for is dropped", async () => {
+    // N-15: past the flush deadline nothing is sent, the held invitation is dropped, and the
+    // person is told; the document open now stays writable.
+    await arm(workspace, "member", "admin");
+    vi.mocked(Session.Join).mockResolvedValue(JOINED as never);
+    flushed = new Promise<void>(() => {});
+    vi.useFakeTimers();
+    await workspace.join("invitation");
+    const joined = workspace.confirmJoin();
+    await vi.advanceTimersByTimeAsync(LEAVE_FLUSH_MS);
+    await joined;
+    expect(Session.CancelChange, "N-15 the held invitation is dropped").toHaveBeenCalledTimes(1);
+    expect(Session.FinishJoin).not.toHaveBeenCalled();
+    expect(takeLeaveMark(), "no mark: the restart page would ask for nothing").toBeUndefined();
+    expect([notice.text, notice.role]).toEqual([fr["change.flushFailed"], "alert"]);
+    expect([workspace.locked, workspace.joinOffer]).toEqual([false, undefined]);
+    expect(workspace.joinCancelled, "J-2 the invitation is used all the same").toBe(true);
+  });
+
+  it("PC1 a join into the open project does not restart", async () => {
+    // J-5: Go answers « no restart »; the page stays, and follows the inviter as before.
+    await arm(workspace, "notNamed");
+    vi.mocked(Session.Join).mockResolvedValue({ peer: INVITER, restart: false } as never);
+    const leave = vi.spyOn(workspace, "leave");
+    const joined = workspace.join("invitation");
+    await vi.waitFor(() => expect(announce).toBeDefined());
+    announce?.(ROOT, INVITER);
+    await joined;
+    expect(leave).not.toHaveBeenCalled();
+    expect(workspace.handle?.url).toBe(ROOT);
+    expect(workspace.error).toBe("");
+  });
+
+  it("PC1 the page that leaves for a join marks it, and the restart page finishes it", async () => {
+    await arm(workspace, "member", "admin");
+    const navigate = vi.fn();
+    expect(await workspace.leave("restart.html", "join", navigate)).toBe(true);
+    const kind = takeLeaveMark();
+    expect(kind).toBe("join");
+
+    // The restart page: « Inkwell redémarre… », FinishJoin once, the application on another id.
+    const target = document.createElement("main");
+    const log: string[] = [];
+    const ids = ["a", "a", "b"];
+    await startRestart(target, {
+      confirmed: () => kind,
+      takeOver: async () => {
+        log.push("takeOver");
+        return { restarting: true };
+      },
+      finishJoin: async () => void log.push("finishJoin"),
+      returnToPrevious: async () => void log.push("returnToPrevious"),
+      startupId: async () => {
+        const id = ids.shift() as string;
+        log.push(`id:${id}`);
+        return id;
+      },
+      load: (url) => void log.push(`load:${url}`),
+      wait: (ms) => (ms === POLL_MS ? Promise.resolve() : new Promise<void>(() => {})),
+    });
+    expect(text(target)).toBe(fr["foreign.takeOver.busy"]);
+    expect(log, "J-1 the restart page asks Go to finish the join, once").toEqual([
+      "id:a",
+      "finishJoin",
+      "id:a",
+      "id:b",
+      `load:${APP_URL}`,
+    ]);
+  });
+
+  it("PC1 a join Go refuses to finish says that nothing changed", async () => {
+    // The request failed and the same image still answers: the application comes back and says so.
+    const target = document.createElement("main");
+    const loaded: string[] = [];
+    const ids = ["a", "a"];
+    await startRestart(target, {
+      confirmed: () => "join",
+      takeOver: async () => ({ restarting: true }),
+      finishJoin: async () => {
+        throw new Error("no invitation is held");
+      },
+      returnToPrevious: async () => undefined,
+      startupId: async () => ids.shift() as string,
+      load: (url) => void loaded.push(url),
+      wait: (ms) => (ms === POLL_MS ? Promise.resolve() : new Promise<void>(() => {})),
+    });
+    expect(loaded).toEqual([JOIN_REFUSED_URL]);
+    const replaced: string[] = [];
+    await showStartupNotice(
+      () => {},
+      Promise.resolve(),
+      new URL(JOIN_REFUSED_URL, "http://127.0.0.1:1/"),
+      (clean) => replaced.push(clean),
+    );
+    expect([notice.text, notice.role]).toEqual([
+      "L'invitation n'a pas pu être terminée. Rien n'a changé.",
+      "alert",
+    ]);
+    expect(replaced).toEqual(["/"]);
+
+    // J-4: the next start found what an unfinished join left, and Go says so, once.
+    notice.hide();
+    vi.mocked(Session.StartupNotice).mockResolvedValueOnce("join.failed" as never);
+    await showStartupNotice(() => {});
+    expect([notice.text, notice.role]).toEqual([fr["join.failed"], "alert"]);
+  });
+
+  /**
+   * A start on a folder whose record waits: the sentence in place of the editor for as long as
+   * the document of the inviter is not there, and never a fresh document.
+   */
+  async function waitChecks(w: Workspace): Promise<void> {
+    vi.useFakeTimers();
+    await arm(w, "member", "writer");
+    waiting(ROOT);
+    available = false; // the inviter is away
+    const started = w.openStart();
+    started.catch(() => undefined); // a start that opens something else fails on the checks below
+    await vi.advanceTimersByTimeAsync(0);
+    for (let turn = 0; turn < 5; turn++) {
+      expect(calls, "J-2 never a fresh document while a record waits").not.toContain("create");
+      expect(w.waitingFor, "J-2 waits for the inviter").toBe("Alice");
+      expect(w.handle, "nothing in the editor's place but the sentence").toBeUndefined();
+      await vi.advanceTimersByTimeAsync(JOIN_RETRY_MS);
+    }
+    expect(finds, "asked again for as long as needed").toBeGreaterThan(4);
+    expect(Session.CompleteJoin).not.toHaveBeenCalled();
+    expect(
+      Projects.SetRootURL,
+      "no root is recorded before the join is completed",
+    ).not.toHaveBeenCalled();
+
+    available = true; // the inviter is back
+    await vi.advanceTimersByTimeAsync(JOIN_RETRY_MS);
+    await started;
+    expect(w.waitingFor).toBeUndefined();
+    expect(w.handle?.url, "the document of the inviter").toBe(ROOT);
+    expect(calls).not.toContain("create");
+  }
+
+  it("PC1 a pending join waits for its root and never creates a document", async () => {
+    await waitChecks(workspace);
+    vi.useRealTimers();
+
+    // The sentence, in place of the editor, announced as a status.
+    workspace.waitingFor = "Alice";
+    const host = render(JoinWaiting, {});
+    const said = host.querySelector("[role=status]");
+    expect(said && text(said)).toBe("En attente de Alice pour ouvrir le document…");
+    expect(fr["join.waitingRoot"]).toBe("En attente de {name} pour ouvrir le document…");
+    workspace.waitingFor = undefined;
+    flushSync();
+    expect(text(host)).toBe("");
+  });
+
+  it("PC1 the waiting page says what to do and offers the way back", async () => {
+    await arm(workspace, "member", "writer");
+    workspace.waitingFor = "";
+    workspace.canReturn = false;
+    const host = render(JoinWaiting, {});
+    expect(text(host), "J-2 the waiting page says what happens next").toBe(
+      "En attente de la personne qui vous a invité pour ouvrir le document… Le document s'ouvrira dès que cette personne sera connectée. Vous pouvez fermer Inkwell : l'attente reprendra à la prochaine ouverture.",
+    );
+    expect(buttons(host), "no way back without a previous document").toEqual([]);
+    expect(workspace.status, "J-2 never « Seul » while a join waits").toBe("connecting");
+
+    workspace.canReturn = true;
+    flushSync();
+    const back = button(host, "Revenir à mon document");
+    expect(back, "J-2 the waiting page offers the way back").toBeDefined();
+    const leave = vi.spyOn(workspace, "leave").mockResolvedValue(true);
+    click(back);
+    expect(leave).toHaveBeenCalledWith("restart.html", "return");
+    expect(Session.ReturnToPrevious, "N-15 the page itself never asks Go").not.toHaveBeenCalled();
+    workspace.waitingFor = undefined;
+    workspace.canReturn = false;
+  });
+
+  it("PC1 the restart page asks Go for the return, and a refused return says so", async () => {
+    const run = async (ids: string[], returnToPrevious: () => Promise<void>) => {
+      const log: string[] = [];
+      await startRestart(document.createElement("main"), {
+        confirmed: () => "return",
+        takeOver: async () => ({ restarting: void log.push("takeOver") === undefined }),
+        finishJoin: async () => void log.push("finishJoin"),
+        returnToPrevious: async () => {
+          log.push("returnToPrevious");
+          await returnToPrevious();
+        },
+        startupId: async () => ids.shift() as string,
+        load: (url) => void log.push(`load:${url}`),
+        wait: (ms) => (ms === POLL_MS ? Promise.resolve() : new Promise<void>(() => {})),
+      });
+      return log;
+    };
+    expect(await run(["a", "a", "b"], async () => undefined)).toEqual([
+      "returnToPrevious",
+      `load:${APP_URL}`,
+    ]);
+    const refused = await run(["a", "a"], async () => {
+      throw new Error("no previous document");
+    });
+    expect(refused).toEqual(["returnToPrevious", `load:${RETURN_REFUSED_URL}`]);
+    await showStartupNotice(
+      () => {},
+      Promise.resolve(),
+      new URL(RETURN_REFUSED_URL, "http://127.0.0.1:1/"),
+      () => {},
+    );
+    expect([notice.text, notice.role]).toEqual([
+      "Impossible de revenir à votre document. Rien n'a changé.",
+      "alert",
+    ]);
+  });
+
+  it("PC1 the joined notice names the folder when it is not the one announced", async () => {
+    await arm(workspace, "member", "writer");
+    vi.mocked(Session.PendingJoin).mockResolvedValue({
+      waiting: true,
+      root: ROOT,
+      inviter: INVITER,
+      name: "Alice",
+      folder: "Roman (3)",
+      canReturn: true,
+    } as never);
+    await workspace.openStart();
+    expect([notice.text, notice.role]).toEqual([
+      "Vous avez rejoint ce document. Il est dans le dossier « Roman (3) ».",
+      "status",
+    ]);
+    expect(workspace.canReturn, "J-9 the way back stays once the document is open").toBe(true);
+    workspace.canReturn = false;
+  });
+
+  it("PC1 the main menu offers the way back after a join", async () => {
+    // J-9: Go says the way back stays once the join completed; every start asks it again.
+    await arm(workspace, "member", "writer");
+    vi.mocked(Session.PendingJoin).mockResolvedValue({ waiting: false, canReturn: true } as never);
+    vi.mocked(Projects.Current).mockResolvedValue({ RootURL: ROOT } as never);
+    await workspace.openStart();
+    expect(workspace.canReturn, "J-9 the way back after a join survives a relaunch").toBe(true);
+
+    const menu = (canReturn: boolean, onReturn: () => void) => {
+      const host = render(HeaderBar, {
+        title: "Inkwell",
+        subtitle: "main.typ",
+        status: "alone",
+        me: { id: "me", name: "Moi" },
+        peers: [],
+        sidebarOpen: true,
+        toolbarVisible: true,
+        canToggleToolbar: true,
+        previewOpen: true,
+        onShare: () => {},
+        onPeople: () => {},
+        onToggleSidebar: () => {},
+        onToggleToolbar: () => {},
+        onPreferences: () => {},
+        onTogglePreview: () => {},
+        onExport: () => {},
+        onAbout: () => {},
+        canReturn,
+        onReturn,
+      });
+      click(host.querySelector(`button[aria-label="${fr["menu.main"]}"]`) as HTMLElement);
+      flushSync();
+      return [...host.querySelectorAll("[role=menuitem]")] as HTMLElement[];
+    };
+    const onReturn = vi.fn();
+    const items = menu(true, onReturn);
+    const back = items.find((i) => text(i) === fr["join.return"]);
+    expect(back, "J-9 the main menu offers « Revenir à mon document »").toBeDefined();
+    expect(
+      items.indexOf(back as HTMLElement),
+      "J-9 the way back comes before the document's actions",
+    ).toBe(0);
+    click(back as HTMLElement);
+    expect(onReturn).toHaveBeenCalledTimes(1);
+    cleanup();
+    expect(
+      menu(false, onReturn).some((i) => text(i) === fr["join.return"]),
+      "no way back without a previous document",
+    ).toBe(false);
+    workspace.canReturn = false;
+  });
+
+  it("PC1 mutant J-2 fresh document is caught", async () => {
+    await withMutant<{ workspace: Workspace }, void>(
+      "workspace/workspace.svelte.ts",
+      "pc1mutant-j2fresh",
+      "if (pending.waiting) return this.#resumeJoin(pending, generation);",
+      "",
+      async (m) => {
+        try {
+          await expect(waitChecks(m.workspace)).rejects.toThrow(
+            /J-2 never a fresh document while a record waits/,
+          );
+        } finally {
+          await m.workspace.stop();
+        }
+      },
+    );
+  });
+
+  it("PC1 a pending join without a root waits for the one the inviter announces", async () => {
+    await arm(workspace, "member", "writer");
+    waiting("", ""); // the invitation stated no root, and the list gives the inviter no name
+    const started = workspace.openStart();
+    await vi.waitFor(() => expect(announce).toBeDefined());
+    // No name to show: the sentence names nobody, never a neutral « Personne 12D3 » (every device
+    // id starts alike).
+    expect(workspace.waitingFor, "J-2 no made-up name for the inviter").toBe("");
+    const said = render(JoinWaiting, {}).querySelector("[role=status]");
+    expect(said && text(said), "J-2 the sentence when the list gives the inviter no name").toBe(
+      "En attente de la personne qui vous a invité pour ouvrir le document…",
+    );
+    expect(fr["join.waitingRootUnnamed"]).toBe(said && text(said));
+    expect(finds, "nothing to ask for before a root is announced").toBe(0);
+    // A device the list does not name announces a document: not the one waited for.
+    announce?.(generateAutomergeUrl(), "stranger");
+    await new Promise((r) => setTimeout(r, 0));
+    expect(finds).toBe(0);
+    announce?.(ROOT, INVITER);
+    await started;
+    expect(Session.CompleteJoin).toHaveBeenCalledWith(ROOT, INVITER);
+    expect(workspace.handle?.url).toBe(ROOT);
+    expect(calls).not.toContain("create");
+  });
+
+  /**
+   * The record holds no root, and nothing signed states one yet: only the inviter's announcement
+   * counts. Another member of the joined list announces first and serves its document: it is
+   * neither asked for nor recorded, however long the inviter stays away.
+   */
+  async function inviterOnlyChecks(w: Workspace): Promise<void> {
+    vi.useFakeTimers();
+    await arm(w, "member", "writer");
+    waiting("");
+    vi.spyOn(WailsNetworkAdapter.prototype, "roleOf").mockImplementation(((peer: string) =>
+      peer === "mallory" || peer === "me" ? "writer" : undefined) as never);
+    const started = w.openStart();
+    started.catch(() => undefined); // a start that follows another member fails on the checks below
+    await vi.advanceTimersByTimeAsync(0);
+    announce?.(generateAutomergeUrl(), "mallory");
+    await vi.advanceTimersByTimeAsync(2 * JOIN_RETRY_MS);
+    expect(finds, "J-1 only the inviter announces the root of a record without one").toBe(0);
+    expect(
+      Session.CompleteJoin,
+      "J-1 only the inviter announces the root of a record without one",
+    ).not.toHaveBeenCalled();
+    expect(w.waitingFor, "J-2 still waiting for the inviter").toBe("Alice");
+    expect(w.handle).toBeUndefined();
+
+    announce?.(ROOT, INVITER);
+    await vi.advanceTimersByTimeAsync(0);
+    await started;
+    expect(Session.CompleteJoin).toHaveBeenCalledTimes(1);
+    expect(Session.CompleteJoin).toHaveBeenCalledWith(ROOT, INVITER);
+    expect(w.handle?.url).toBe(ROOT);
+  }
+
+  it("PC1 a pending join without a root ignores what another member announces", async () => {
+    await inviterOnlyChecks(workspace);
+  });
+
+  it("PC1 mutant J-1 a root announced by another member is caught", async () => {
+    await withMutant<{ workspace: Workspace }, void>(
+      "workspace/workspace.svelte.ts",
+      "pc1mutant-j1inviter",
+      "if (from !== peer) return;",
+      "if (from !== peer && adapter.roleOf(from) === undefined) return;",
+      async (m) => {
+        try {
+          await expect(inviterOnlyChecks(m.workspace)).rejects.toThrow(
+            /J-1 only the inviter announces the root of a record without one/,
+          );
+        } finally {
+          await m.workspace.stop();
+        }
+      },
+    );
+  });
+
+  /** The record is consumed only once the document is there and the storage has it. */
+  async function orderChecks(w: Workspace): Promise<void> {
+    await arm(w, "member", "writer");
+    waiting(ROOT);
+    let release: () => void = () => {};
+    flushed = new Promise<void>((r) => (release = r));
+    const started = w.openStart();
+    await vi.waitFor(() => expect(calls).toContain("flush"));
+    await new Promise((r) => setTimeout(r, 0));
+    expect(calls, "J-1 completed only after the flush returned").toEqual(["find", "flush"]);
+    expect(w.waitingFor, "still waiting while the document is being stored").toBe("Alice");
+    release();
+    await started;
+    expect(calls.slice(0, 3), "J-1 completed only after the flush returned").toEqual([
+      "find",
+      "flush",
+      "complete",
+    ]);
+    expect(Session.CompleteJoin).toHaveBeenCalledTimes(1);
+    expect(Session.CompleteJoin).toHaveBeenCalledWith(ROOT, INVITER);
+    expect(Projects.SetRootURL).toHaveBeenCalledWith(ROOT);
+  }
+
+  it("PC1 the join is completed only after the document is flushed", async () => {
+    await orderChecks(workspace);
+  });
+
+  it("PC1 mutant J-1 completion before the flush is caught", async () => {
+    await withMutant<{ workspace: Workspace }, void>(
+      "workspace/workspace.svelte.ts",
+      "pc1mutant-j1flush",
+      "await repo.flush([handle.documentId]);\n        await Session.CompleteJoin(root, inviter);",
+      "await Session.CompleteJoin(root, inviter);\n        await repo.flush([handle.documentId]);",
+      async (m) => {
+        try {
+          await expect(orderChecks(m.workspace)).rejects.toThrow(
+            /J-1 completed only after the flush returned/,
+          );
+        } finally {
+          flushed = Promise.resolve();
+          await m.workspace.stop();
+        }
+      },
+    );
+  });
+
+  it("PC1 a join Go does not complete yet is asked again, and nothing opens meanwhile", async () => {
+    vi.useFakeTimers();
+    await arm(workspace, "member", "writer");
+    waiting(ROOT);
+    vi.mocked(Session.CompleteJoin).mockRejectedValueOnce(
+      new Error("join: the document is not stored yet") as never,
+    );
+    const started = workspace.openStart();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(Session.CompleteJoin).toHaveBeenCalledTimes(1);
+    expect([workspace.waitingFor, workspace.handle]).toEqual(["Alice", undefined]);
+    expect(notice.text).toBe("");
+    await vi.advanceTimersByTimeAsync(JOIN_RETRY_MS);
+    await started;
+    expect(Session.CompleteJoin).toHaveBeenCalledTimes(2);
+    expect(workspace.handle?.url).toBe(ROOT);
+  });
+
+  it("PC1 a consumed join is never asked of Go again", async () => {
+    // Once Go consumed the record, a failure of what follows is no reason to complete again.
+    vi.useFakeTimers();
+    await arm(workspace, "member", "writer");
+    waiting(ROOT);
+    vi.mocked(Projects.SetRootURL).mockRejectedValueOnce(new Error("disk full") as never);
+    const started = workspace.openStart();
+    const failed = expect(started).rejects.toThrow("disk full");
+    await vi.advanceTimersByTimeAsync(3 * JOIN_RETRY_MS);
+    await failed;
+    expect(Session.CompleteJoin, "J-1 consumed once").toHaveBeenCalledTimes(1);
+    expect(workspace.waitingFor).toBeUndefined();
+  });
+
+  it("PC1 the joined notice shows once", async () => {
+    await arm(workspace, "member", "writer");
+    waiting(ROOT);
+    await workspace.openStart();
+    expect([notice.text, notice.role], "J-2 said by the image that consumed the record").toEqual([
+      "Vous avez rejoint ce document.",
+      "status",
+    ]);
+    expect(notice.text).toBe(fr["join.done"]);
+    expect(workspace.waitingFor).toBeUndefined();
+
+    // The record is consumed: the next start opens the recorded root and says nothing.
+    notice.hide();
+    await workspace.stop();
+    await arm(workspace, "member", "writer");
+    vi.mocked(Session.PendingJoin).mockResolvedValue({
+      waiting: false,
+      root: "",
+      inviter: "",
+      name: "",
+    } as never);
+    vi.mocked(Projects.Current).mockResolvedValue({ RootURL: ROOT } as never);
+    await workspace.openStart();
+    expect(workspace.handle?.url).toBe(ROOT);
+    expect(notice.text, "J-2 shown once").toBe("");
+    expect(Session.CompleteJoin).toHaveBeenCalledTimes(1);
+    expect(calls).not.toContain("create");
+  });
+
+  it("PC1 a start with no record opens a fresh document as before", async () => {
+    await arm(workspace, "member", "writer");
+    await workspace.openStart();
+    expect(calls).toContain("create");
+    expect(workspace.waitingFor).toBeUndefined();
+    expect(Session.CompleteJoin).not.toHaveBeenCalled();
   });
 });

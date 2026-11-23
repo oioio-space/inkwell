@@ -79,7 +79,7 @@ func standingOf(list *trust.List, pub ed25519.PublicKey) string {
 }
 
 // Standing reports whether this device is in the member list of the open
-// project: "member", "removed" or "notNamed". It follows the list, so a join turns it into "member" without a restart; the webview asks again
+// project: "member", "removed" or "notNamed". It follows the list; the webview asks again
 // whenever it receives the roles event. A session without project is "notNamed".
 func (s *Session) Standing() string {
 	if s.inv == nil {
@@ -139,15 +139,29 @@ func (s *Session) InviteDevice() (Invitation, error) {
 	return s.inv.invite(role, &person)
 }
 
-// Join uses an invitation, a code or a text, to join the project of the person
-// who made it, and returns that person's device identity, so that the caller
-// can open the project. The project then replaces the one this device had.
-func (s *Session) Join(ctx context.Context, codeOrText string) (string, error) {
-	if err := s.leaving(); err != nil {
-		return "", err
+// InvitationState says whether text, the text of an invitation this device made
+// ([Invitation.Text]), still works: [InvitationOpen] while this device holds its ticket,
+// [InvitationExpired] past its end, [InvitationUsed] otherwise (someone redeemed it, or it was
+// withdrawn). Only Go knows: a ticket is single-use and is taken before the person is admitted,
+// whether or not that person then connects (rule J-8). A text that is not an invitation is an
+// error.
+func (s *Session) InvitationState(text string) (string, error) {
+	if s.inv == nil {
+		return "", errNoProject
 	}
-	peer, err := s.inv.join(ctx, codeOrText)
-	return string(peer), err
+	return s.inv.state(text)
+}
+
+// Join uses an invitation, a code or a text, to join the project of the person who made it. For
+// another project than the open one, the verified answer is only held in memory: the result says
+// Restart, nothing is written, and the project of the running session never changes; the page
+// leaves its context and calls [Session.FinishJoin] (rule J-1). For the open project the result
+// says no restart and nothing happens (rule J-5).
+func (s *Session) Join(ctx context.Context, codeOrText string) (JoinResult, error) {
+	if err := s.leaving(); err != nil {
+		return JoinResult{}, err
+	}
+	return s.inv.join(ctx, codeOrText)
 }
 
 // SetVisible opens (or closes) the window "visible to join", for ten minutes:
@@ -187,14 +201,13 @@ func (s *Session) Nearby(ctx context.Context) []NearbyPerson {
 }
 
 // Ask asks the nearby device peer (see [Session.Nearby]) to let this device
-// join its project, under name, and waits for a person to answer. It returns
-// the identity of that device, as the peer of [Session.Join] is.
-func (s *Session) Ask(ctx context.Context, peer, name string) (string, error) {
+// join its project, under name, and waits for a person to answer. Its result
+// is the one of [Session.Join].
+func (s *Session) Ask(ctx context.Context, peer, name string) (JoinResult, error) {
 	if err := s.leaving(); err != nil {
-		return "", err
+		return JoinResult{}, err
 	}
-	p, err := s.inv.ask(ctx, transport.PeerID(peer), name)
-	return string(p), err
+	return s.inv.ask(ctx, transport.PeerID(peer), name)
 }
 
 // Requests returns the requests to join that wait for an answer.

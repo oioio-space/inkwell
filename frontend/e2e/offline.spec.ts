@@ -109,8 +109,10 @@ test("a relay killed and restarted: both sides keep typing offline and converge"
 
   // The relay goes away: the link between them cannot survive without it.
   await stop(relay.proc);
-  await expect(alice.getByRole("status")).toHaveText(/Seul/, { timeout: 30_000 });
-  await expect(bob.getByRole("status")).toHaveText(/Seul/, { timeout: 30_000 });
+  await expect(alice.getByRole("banner").getByRole("status")).toHaveText(/Seul/, {
+    timeout: 30_000,
+  });
+  await expect(bob.getByRole("banner").getByRole("status")).toHaveText(/Seul/, { timeout: 30_000 });
   await typeAtEnd(alice, "alice-hors-ligne ");
   await typeAtEnd(bob, "bob-hors-ligne ");
   // Nothing crossed while the relay was down.

@@ -191,6 +191,23 @@ func (h *Host) Cancel(t Ticket) {
 	h.opened()
 }
 
+// Outstanding reports whether t can still be redeemed here: the host holds it and it has not
+// expired. A redeemed, cancelled or expired ticket is not outstanding. The secret is compared
+// with every ticket, in constant time.
+func (h *Host) Outstanding(t Ticket) bool {
+	now := h.cfg.Now()
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	h.purgeLocked(now)
+	held := false
+	for _, o := range h.tickets {
+		if subtle.ConstantTimeCompare(o.Secret[:], t.Secret[:]) == 1 && o.Project == t.Project {
+			held = true
+		}
+	}
+	return held
+}
+
 // SetVisible opens or closes the window "visible to join": for [VisibleFor],
 // the host answers Hello and takes requests to join. Closing it declines the
 // requests that wait.

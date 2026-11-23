@@ -39,6 +39,9 @@ const (
 // for concurrent use.
 type Admission struct {
 	list atomic.Pointer[trust.List]
+	// hints are addresses known for some members before any link (see [Admission.hint]); set
+	// before the admission is shared, never changed after.
+	hints map[transport.PeerID][]string
 }
 
 // NewAdmission returns the admission policy of the project whose member list
@@ -72,12 +75,22 @@ func (a *Admission) wasMember(key ed25519.PublicKey) bool {
 	})
 }
 
-// dialTargets returns the peers worth keeping connected: the other members.
+// hint gives addresses where the member peer was reached (the inviter of a join that restarted
+// Inkwell): [Admission.dialTargets] offers them. It is called before the admission is shared.
+func (a *Admission) hint(peer transport.PeerID, addrs []string) {
+	if a.hints == nil {
+		a.hints = map[transport.PeerID][]string{}
+	}
+	a.hints[peer] = slices.Clone(addrs)
+}
+
+// dialTargets returns the peers worth keeping connected: the other members, with the addresses
+// hinted for them.
 func (a *Admission) dialTargets(self transport.PeerID) map[transport.PeerID][]string {
 	out := make(map[transport.PeerID][]string)
 	for _, m := range a.list.Load().Members() {
 		if id := p2p.IDFromKey(m.Pub); id != "" && id != self {
-			out[id] = nil
+			out[id] = a.hints[id]
 		}
 	}
 	return out
@@ -301,6 +314,11 @@ func (w *Wiring) IssueBatch(tmpls []trust.Op) ([]trust.Op, error) {
 // wiring: the peers of the old project are announced down, and the connected
 // peers that are members of the new one are announced up. save persists the
 // new ops of list; the ops list holds now are taken as saved already.
+//
+// No production code calls it, nor [Wiring.AdoptProject], since a project change restarts Inkwell
+// (PC1a and PC1b, rule N-11: the project of a running session never changes). Both stay for the
+// tests of the wiring that switch a fixture, and for the mutants MW9 and MJ11, which call them to
+// play a live adoption; a new caller would break N-11.
 func (w *Wiring) SwitchProject(list *trust.List, save func(trust.Op) error) error {
 	return w.AdoptProject(list, nil, save)
 }

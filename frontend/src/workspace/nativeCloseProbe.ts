@@ -1,5 +1,6 @@
 import { Stream } from "@wailsio/runtime";
 import { tick } from "svelte";
+import { t } from "../i18n";
 import type { SocketLike } from "../net/WailsNetworkAdapter";
 import { session } from "../ui/editorSession.svelte";
 import { sheetView } from "../ui/sheet/viewMode.svelte";
@@ -94,8 +95,23 @@ export function nativeCloseProbe(mode: string, ready: Promise<unknown>) {
         case "join":
           await workspace.join(value ?? "");
           if (workspace.error) throw new Error(workspace.error);
-          send(command, inspect());
+          // Into another document Go holds the Welcome and the page asks before Inkwell restarts
+          // (PC1b, rules J-1 and J-2).
+          if (workspace.joinOffer) send("join-held", workspace.joinOffer);
+          else send(command, inspect());
           break;
+        case "confirm-join": {
+          // « Redémarrer et ouvrir », as the person presses it: the page leaves through the
+          // desktop close approval and this process restarts in place (PC1b, rule J-2).
+          await tick();
+          const yes = [
+            ...document.querySelectorAll<HTMLButtonElement>("[data-testid=join-confirm] button"),
+          ].find((b) => b.textContent?.trim() === t("join.confirm.yes"));
+          if (!yes) throw new Error("the join confirmation is missing");
+          yes.click();
+          send(command);
+          break;
+        }
         case "sheet":
           sheetView.openAsTable("main.typ");
           await tick();

@@ -155,16 +155,18 @@ func TestJoinByTicketText(t *testing.T) {
 		t.Error("Join(own invitation) = nil, want an error")
 	}
 
-	peer, err := b.Session.Join(t.Context(), inv.Text)
+	res, err := b.Session.Join(t.Context(), inv.Text)
 	if err != nil {
 		t.Fatalf("Join() = %v", err)
 	}
-	if peer != a.Session.LocalPeer() {
-		t.Errorf("Join() = %q, want the host %q", peer, a.Session.LocalPeer())
+	if res.Peer != a.Session.LocalPeer() || !res.Restart {
+		t.Errorf("Join() = %+v, want the host %q and a restart", res, a.Session.LocalPeer())
 	}
 	if got := a.role(b); got != trust.RoleWriter {
 		t.Errorf("host sees the joiner as %v, want writer", got)
 	}
+	// The joined project is the one of the next image, on its own folder (rule J-1).
+	b = restartAfterJoin(t, b, bDirs.home, bDirs.proj)
 	if got, want := b.inv.currentList().Project(), a.inv.currentList().Project(); got != want {
 		t.Errorf("joiner works on project %v, want the host's %v", got, want)
 	}
@@ -186,11 +188,12 @@ func TestJoinByTicketText(t *testing.T) {
 		t.Errorf("host peers = %v, want only the joiner", got)
 	}
 
-	// The joined project is the one found again after a restart.
+	// The joined project is the one found again after another restart.
+	joined := b.inv.folder
 	if err := b.Close(); err != nil {
 		t.Fatal(err)
 	}
-	again, err := Start(t.Context(), bDirs.home, Options{Project: bDirs.proj, RendezvousURL: NoCodes})
+	again, err := Start(t.Context(), bDirs.home, Options{Project: openFolder(t, joined), RendezvousURL: NoCodes})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -224,14 +227,8 @@ func TestJoinByCode(t *testing.T) {
 
 func TestOnlyAnAdminInvites(t *testing.T) {
 	a, _ := startRuntime(t, nil, false)
-	b, _ := startRuntime(t, nil, false)
-	inv, err := a.Session.Invite("writer")
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := b.Session.Join(t.Context(), inv.Text); err != nil {
-		t.Fatal(err)
-	}
+	first, d := startRuntime(t, nil, false)
+	b := joinedRuntime(t, first, d, a)
 	// Rule N-2: a refusal is a result with a stable key, never an error, and
 	// nothing is written.
 	before := len(b.inv.currentList().Since(nil))
@@ -278,7 +275,7 @@ func TestInviteDeviceKeepsPerson(t *testing.T) {
 
 func TestLanAskAndAnswer(t *testing.T) {
 	a, _ := startRuntime(t, nil, true)
-	b, _ := startRuntime(t, nil, true)
+	b, bDirs := startRuntime(t, nil, true)
 	if err := errors.Join(a.Node.LANError(), b.Node.LANError()); err != nil {
 		t.Skipf("mDNS is not available here: %v", err)
 	}
@@ -325,8 +322,10 @@ func TestLanAskAndAnswer(t *testing.T) {
 	}
 
 	// Then accepts as a reader.
+	resc := make(chan JoinResult, 1)
 	go func() {
-		_, err := b.Session.Ask(context.Background(), near[0].Peer, "Bob")
+		res, err := b.Session.Ask(context.Background(), near[0].Peer, "Bob")
+		resc <- res
 		errc <- err
 	}()
 	waitUntil(t, "the second request", func() bool { reqs = a.Session.Requests(); return len(reqs) == 1 })
@@ -338,6 +337,15 @@ func TestLanAskAndAnswer(t *testing.T) {
 	}
 	if got := a.role(b); got != trust.RoleReader {
 		t.Errorf("host sees the joiner as %v, want reader", got)
+	}
+	// As for an invitation text, the answer is held and Inkwell restarts on the joined project
+	// (PC1b, rule J-1), where the two devices link at the addresses the nearby device was seen at.
+	if res := <-resc; !res.Restart || res.Peer != a.Session.LocalPeer() || res.Folder != "Mon livre (2)" {
+		t.Errorf("J-1 a nearby device's answer is held for the restart: Ask() = %+v", res)
+	}
+	b = restartAfterJoin(t, b, bDirs.home, bDirs.proj)
+	if got, want := b.inv.currentList().Project(), a.inv.currentList().Project(); got != want {
+		t.Errorf("J-1 the image the join restarted works on project %v, want the host's %v", got, want)
 	}
 	expectRepoUp(t, b, a.Node.Local())
 	if err := a.Session.Answer(99, "reader"); err == nil {

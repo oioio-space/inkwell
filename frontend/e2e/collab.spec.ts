@@ -1,5 +1,5 @@
 import { expect, test } from "./fixtures";
-import { clear, docText, editor, rename } from "./helpers";
+import { acceptJoin, clear, docText, editor, rename } from "./helpers";
 import { ALICE_URL, BOB_URL } from "./ports";
 
 test("two people type in the same file, see each other, and undo only their own text", async ({
@@ -32,10 +32,10 @@ test("two people type in the same file, see each other, and undo only their own 
   await bob.getByRole("button", { name: "Partager" }).click();
   await rename(bob, "Bob");
   await bob.getByPlaceholder("Collez l'invitation ici").fill(invitation);
-  await bob.getByRole("button", { name: "Rejoindre" }).click();
+  await acceptJoin(bob);
 
-  await expect(alice.getByRole("status")).toHaveText(/Synchronisé/);
-  await expect(bob.getByRole("status")).toHaveText(/Synchronisé/);
+  await expect(alice.getByRole("status").first()).toHaveText(/Synchronisé/);
+  await expect(bob.getByRole("status").first()).toHaveText(/Synchronisé/);
 
   await editor(alice).click();
   await alice.keyboard.type("Bonjour ");

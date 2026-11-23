@@ -30,6 +30,7 @@ vi.mock("../../bindings/github.com/oioio-space/inkwell/internal/app/index", () =
   Projects: {},
   Session: {
     Invite: vi.fn(),
+    InvitationState: vi.fn(),
     Join: vi.fn(),
     Standing: vi.fn(),
     CanTakeOver: vi.fn(async () => true),
@@ -106,7 +107,7 @@ afterEach(() => {
   vi.mocked(Session.Invite).mockReset();
   workspace.standing = undefined;
   workspace.invitation = "";
-  workspace.invitationUsed = false;
+  workspace.invitationState = "open";
   workspace.error = "";
   notice.hide();
 });
@@ -305,9 +306,14 @@ describe("W58a invite capability (N-4)", () => {
   async function share(Dialog: ShareComponent, standing: Standing, role?: Role) {
     await arm(workspace, standing, role);
     workspace.invitation = "invitation";
-    workspace.invitationUsed = true;
+    workspace.invitationState = "used";
+    vi.mocked(Session.InvitationState).mockResolvedValue("used");
     const host = render(Dialog, { open: true });
-    flushSync();
+    // The dialog shows the invitation's row once Go has answered about it (PC1b, J-8).
+    await vi.waitFor(() => {
+      flushSync();
+      expect(button(host, fr["share.renew"])).toBeDefined();
+    });
     return {
       text: text(host),
       invite: button(host, fr["share.host"]),
@@ -366,7 +372,7 @@ describe("W58a standing and the share dialog (N-1)", () => {
     await arm(workspace, "notNamed");
     expect(workspace.access).toBe("notNamed");
     standingNow = "member"; // Go follows the new project before the reply of Join
-    vi.mocked(Session.Join).mockResolvedValue("host" as never);
+    vi.mocked(Session.Join).mockResolvedValue({ peer: "host", restart: false } as never);
     vi.spyOn(WailsNetworkAdapter.prototype, "projectOf").mockReturnValue("automerge:x" as never);
     vi.spyOn(workspace, "open").mockResolvedValue(undefined as never);
     await workspace.join("invitation");

@@ -102,8 +102,9 @@ type JoinRequest struct {
 }
 
 // invites runs the invitations of a runtime: the tickets this device issues
-// and serves, and the projects it joins. The project it works on changes when
-// it joins another one.
+// and serves, and the project it asks to join. The project it works on never
+// changes: a join into another one is held, then written while the runtime
+// closes (see [invites.hold]).
 type invites struct {
 	node    lobbyNode
 	wiring  *Wiring
@@ -117,7 +118,11 @@ type invites struct {
 	list    *trust.List
 	host    *invite.Host
 	machine string
-	wg      sync.WaitGroup
+	// chg is the project change of the image and folder the folder of the open project: a join
+	// into another project is held in the first and installed beside the second.
+	chg    *change
+	folder string
+	wg     sync.WaitGroup
 
 	// joining serializes the joins.
 	joining sync.Mutex
@@ -256,6 +261,31 @@ func (inv *invites) invite(role trust.Role, person *trust.Hash) (Invitation, err
 	return out, nil
 }
 
+// Answers of [Session.InvitationState].
+const (
+	// InvitationOpen: the ticket is held, the invitation works.
+	InvitationOpen = "open"
+	// InvitationUsed: the ticket was redeemed or withdrawn.
+	InvitationUsed = "used"
+	// InvitationExpired: the ticket reached its end.
+	InvitationExpired = "expired"
+)
+
+// state says what became of the invitation text made by this device (rule J-8).
+func (inv *invites) state(text string) (string, error) {
+	t, err := invite.ParseText(strings.TrimSpace(text))
+	if err != nil {
+		return "", fmt.Errorf("invitation state: %w", err)
+	}
+	switch {
+	case t.Expired(inv.now()):
+		return InvitationExpired, nil
+	case inv.currentHost().Outstanding(t):
+		return InvitationOpen, nil
+	}
+	return InvitationUsed, nil
+}
+
 // offer publishes t as a code, which stays valid until t expires or is
 // received.
 func (inv *invites) offer(t invite.Ticket) (string, error) {
@@ -299,110 +329,76 @@ func (inv *invites) ticket(ctx context.Context, codeOrText string) (invite.Ticke
 	return inv.carrier.Fetch(ctx, s)
 }
 
-// join redeems the ticket and moves to its project.
-func (inv *invites) join(ctx context.Context, codeOrText string) (transport.PeerID, error) {
+// join redeems the ticket and holds the project it leads to.
+func (inv *invites) join(ctx context.Context, codeOrText string) (JoinResult, error) {
 	if inv.ctx.Err() != nil {
-		return "", errLeaving // stopped (see [invites.stop])
+		return JoinResult{}, errLeaving // stopped (see [invites.stop])
 	}
 	t, err := inv.ticket(ctx, codeOrText)
 	if err != nil {
-		return "", err
+		return JoinResult{}, err
 	}
 	inv.joining.Lock()
 	defer inv.joining.Unlock()
 	switch {
 	case inv.ctx.Err() != nil:
-		return "", errLeaving
+		return JoinResult{}, errLeaving
 	case t.Host == inv.node.Local():
-		return "", fmt.Errorf("%w: this is your own invitation", invite.ErrMalformed)
+		return JoinResult{}, fmt.Errorf("%w: this is your own invitation", invite.ErrMalformed)
 	case t.Expired(inv.now()):
-		return "", invite.ErrExpired
+		return JoinResult{}, invite.ErrExpired
 	}
 	ctx, cancel := context.WithTimeout(ctx, redeemTimeout)
 	defer cancel()
-	err = inv.enter(ctx, t.Host, t.Addrs, func(ctx context.Context) (*invite.Joined, error) {
+	return inv.enter(ctx, t.Host, t.Addrs, func(ctx context.Context) (*invite.Joined, error) {
 		return inv.joiner(identity.MachineName()).Redeem(ctx, t, inv.now())
 	})
-	if err != nil {
-		return "", err
-	}
-	return t.Host, nil
 }
 
 // ask asks the nearby device peer, which is visible, to let this one join,
 // and waits for a person to answer.
-func (inv *invites) ask(ctx context.Context, peer transport.PeerID, name string) (transport.PeerID, error) {
+func (inv *invites) ask(ctx context.Context, peer transport.PeerID, name string) (JoinResult, error) {
 	nearby := inv.node.Nearby()
 	i := slices.IndexFunc(nearby, func(n p2p.Nearby) bool { return n.ID == peer })
 	if i < 0 {
-		return "", errors.New("join: this device is not nearby anymore")
+		return JoinResult{}, errors.New("join: this device is not nearby anymore")
 	}
 	addrs := nearby[i].Addrs
 	inv.joining.Lock()
 	defer inv.joining.Unlock()
 	ctx, cancel := context.WithTimeout(ctx, invite.AskTimeout+redeemTimeout)
 	defer cancel()
-	err := inv.enter(ctx, peer, addrs, func(ctx context.Context) (*invite.Joined, error) {
+	return inv.enter(ctx, peer, addrs, func(ctx context.Context) (*invite.Joined, error) {
 		return inv.joiner(cmp.Or(identity.CleanName(name), identity.MachineName())).Ask(ctx, peer)
 	})
-	if err != nil {
-		return "", err
-	}
-	return peer, nil
 }
 
 // enter connects to host, which this device lets in meanwhile, has it admit
-// this device with admit and moves to the project it joined. The connection
-// is dropped if that fails. The caller holds inv.joining.
-func (inv *invites) enter(ctx context.Context, host transport.PeerID, addrs []string, admit func(context.Context) (*invite.Joined, error)) error {
+// this device with admit and holds the project it joined ([invites.hold]). The
+// connection is dropped if that fails. The caller holds inv.joining.
+func (inv *invites) enter(ctx context.Context, host transport.PeerID, addrs []string, admit func(context.Context) (*invite.Joined, error)) (JoinResult, error) {
+	if err := inv.chg.leaving(); err != nil {
+		return JoinResult{}, err // a request started while this one waited its turn (rule N-13)
+	}
 	defer inv.openForJoin()()
 	if err := inv.node.Connect(ctx, host, addrs); err != nil {
-		return fmt.Errorf("join: %w", err)
+		return JoinResult{}, fmt.Errorf("join: %w", err)
 	}
 	joined, err := admit(ctx)
 	if err != nil {
 		inv.node.Drop(host)
-		return fmt.Errorf("join: %w", err)
+		return JoinResult{}, fmt.Errorf("join: %w", err)
 	}
-	if err := inv.adopt(joined); err != nil {
+	res, err := inv.hold(joined, addrs)
+	if err != nil {
 		inv.node.Drop(host)
-		return err
+		return JoinResult{}, err
 	}
-	return nil
+	return res, nil
 }
 
 func (inv *invites) joiner(name string) invite.Joiner {
 	return invite.Joiner{Lobby: inv.node, KeyOf: p2p.KeyFromID, Name: name, Self: inv.dev.Public()}
-}
-
-// adopt moves this device to the project it joined: it stores its member
-// list in place of the previous one, and gives it to the wiring.
-func (inv *invites) adopt(j *invite.Joined) error {
-	if j.List.Project() == inv.currentList().Project() {
-		return nil // already there; the member lists converge by themselves
-	}
-	// Stored on the goroutine of the wiring: an op of the old project cannot
-	// land in the new store. The genesis op goes first: an interruption leaves
-	// a valid, partial list.
-	persist := func() error {
-		err := inv.store.replace(j.List.Since(nil))
-		if errors.Is(err, errCommitted) {
-			// The new list is what the next open loads: follow it, whatever
-			// failed after the replacement took place.
-			inv.log.Warn("trust store replaced, with a follow-up failure", "err", err)
-			return nil
-		}
-		return err
-	}
-	if err := inv.wiring.AdoptProject(j.List, persist, inv.store.save); err != nil {
-		return fmt.Errorf("join: %w", err)
-	}
-	inv.mu.Lock()
-	inv.list = j.List
-	inv.host = inv.newHost(j.List)
-	inv.hostUntil = time.Time{}
-	inv.mu.Unlock()
-	return nil
 }
 
 // refusal returns the key of why this device cannot invite, or "" if it can.

@@ -99,6 +99,21 @@ export async function freshInvitation(host: Page, name?: string): Promise<string
 }
 
 /**
+ * « Rejoindre », and « Redémarrer et ouvrir » when the question follows (PC1b, rule J-2): an
+ * invitation into another document restarts Inkwell on it once confirmed; one into the document
+ * already open here (J-5) asks nothing and the dialog « Écrire à plusieurs » just closes.
+ */
+export async function acceptJoin(guest: Page) {
+  await guest.getByRole("button", { name: "Rejoindre" }).click();
+  const yes = guest
+    .getByTestId("join-confirm")
+    .getByRole("button", { name: "Redémarrer et ouvrir" });
+  const closed = guest.locator('dialog[aria-labelledby="share-title"]:not([open])');
+  await yes.or(closed).first().waitFor({ state: "attached", timeout: 60_000 });
+  if (await yes.isVisible()) await yes.click();
+}
+
+/**
  * `host` invites and `guest` joins under `guestName` with the invitation text; the guest ends
  * up "Synchronisé". The dialog is closed afterwards.
  */
@@ -107,7 +122,7 @@ export async function joinAs(host: Page, guest: Page, guestName: string, hostNam
   await guest.getByRole("button", { name: "Partager" }).click();
   await rename(guest, guestName);
   await guest.getByPlaceholder("Collez l'invitation ici").fill(text);
-  await guest.getByRole("button", { name: "Rejoindre" }).click();
+  await acceptJoin(guest);
   await expect(guest.getByRole("status").first()).toHaveText(/Synchronisé/, { timeout: 60_000 });
   await guest.keyboard.press("Escape");
 }
@@ -122,17 +137,17 @@ export async function pair(alice: Page, bob: Page, people = 2) {
   await bob.getByRole("button", { name: "Partager" }).click();
   await rename(bob, "Bob");
   await bob.getByPlaceholder("Collez l'invitation ici").fill(text);
-  await bob.getByRole("button", { name: "Rejoindre" }).click();
+  await acceptJoin(bob);
 
-  await expect(alice.getByRole("status")).toHaveText(/Synchronisé/, { timeout: 60_000 });
-  await expect(bob.getByRole("status")).toHaveText(/Synchronisé/, { timeout: 60_000 });
+  await expect(alice.getByRole("status").first()).toHaveText(/Synchronisé/, { timeout: 60_000 });
+  await expect(bob.getByRole("status").first()).toHaveText(/Synchronisé/, { timeout: 60_000 });
 
   // The header and the status bar come from the same list of people: they never disagree.
   for (const page of [alice, bob]) {
     const bar = page.getByRole("contentinfo", { name: "Barre d'état" });
     await expect(bar).toContainText(`${people} personnes`);
     await expect(bar).not.toContainText("Seul");
-    await expect(page.getByRole("status")).not.toHaveText(/Seul/);
+    await expect(page.getByRole("status").first()).not.toHaveText(/Seul/);
   }
 }
 

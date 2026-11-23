@@ -8,7 +8,11 @@ const state = vi.hoisted(() => ({
 }));
 vi.mock("@wailsio/runtime", () => ({ Stream: vi.fn() }));
 vi.mock("../../bindings/github.com/oioio-space/inkwell/internal/app/index", () => ({
-  Session: { LocalPeer: async () => "me", Join: async () => "host" },
+  Session: {
+    LocalPeer: async () => "me",
+    Join: async () => ({ peer: "host", restart: false }),
+    PendingJoin: async () => ({ waiting: false, root: "", inviter: "", name: "" }),
+  },
   Projects: { Current: async () => ({ RootURL: "" }) },
 }));
 vi.mock("@automerge/automerge-repo", async (original) => ({

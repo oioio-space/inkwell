@@ -4,7 +4,17 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures";
-import { clear, docText, editor, freshInvitation, open, pair, rename, typeAtEnd } from "./helpers";
+import {
+  acceptJoin,
+  clear,
+  docText,
+  editor,
+  freshInvitation,
+  open,
+  pair,
+  rename,
+  typeAtEnd,
+} from "./helpers";
 import { startInstance, stopInstance } from "./instance";
 import { ALICE_URL, BOB_URL, CAROL_PORT } from "./ports";
 
@@ -293,8 +303,8 @@ test("ZZ-2 a variant created by a person who then leaves is still available to t
     await carol.getByRole("button", { name: "Partager" }).click();
     await rename(carol, "Carole");
     await carol.getByPlaceholder("Collez l'invitation ici").fill(text);
-    await carol.getByRole("button", { name: "Rejoindre" }).click();
-    await expect(carol.getByRole("status")).toHaveText(/Synchronisé/, { timeout: 60_000 });
+    await acceptJoin(carol);
+    await expect(carol.getByRole("status").first()).toHaveText(/Synchronisé/, { timeout: 60_000 });
     await expect.poll(() => docText(carol), { timeout: 20_000 }).toContain("Commun");
     await carol.keyboard.press("Escape");
     await makeVariant(carol, "v-partie", "Variante de Carole.\n");

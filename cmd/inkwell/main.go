@@ -87,8 +87,9 @@ func liveDeps(configure func(*application.App, *application.WebviewWindow)) deps
 		window: func(ctx context.Context, s *session) int {
 			return runWindow(ctx, s, log, &wails, configure)
 		},
-		restartRequested: (*app.Runtime).RestartRequested,
-		restart:          restartImage,
+		restartChange: (*app.Runtime).RestartChange,
+		restartFolder: (*app.Runtime).RestartFolder,
+		restart:       restartImage,
 	}
 }
 

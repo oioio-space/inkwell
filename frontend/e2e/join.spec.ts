@@ -3,7 +3,16 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { Page } from "@playwright/test";
 import { expect, test } from "./fixtures";
-import { clear, docText, freshInvitation, open, pair, rename, typeAtEnd } from "./helpers";
+import {
+  acceptJoin,
+  clear,
+  docText,
+  freshInvitation,
+  open,
+  pair,
+  rename,
+  typeAtEnd,
+} from "./helpers";
 import { startInstance, stopInstance } from "./instance";
 import { ALICE_URL, BOB_URL, CAROL_PORT } from "./ports";
 
@@ -17,8 +26,8 @@ async function joinWith(host: Page, guest: Page, guestName: string) {
   await guest.getByRole("button", { name: "Partager" }).click();
   await rename(guest, guestName);
   await guest.getByPlaceholder("Collez l'invitation ici").fill(text);
-  await guest.getByRole("button", { name: "Rejoindre" }).click();
-  await expect(guest.getByRole("status")).toHaveText(/Synchronisé/, { timeout: 60_000 });
+  await acceptJoin(guest);
+  await expect(guest.getByRole("status").first()).toHaveText(/Synchronisé/, { timeout: 60_000 });
 }
 
 test("JOIN-3 a third person who joins receives everything, and the three converge", async ({

@@ -3,9 +3,12 @@ package main
 import (
 	"context"
 	"errors"
+	"log/slog"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -45,7 +48,12 @@ func restartDepsProject(t *testing.T, steps *[]string, requested bool) (d deps, 
 		return app.Start(ctx, home, app.Options{Project: proj, RendezvousURL: app.NoCodes, AfterChange: afterChange, CanRestart: true})
 	}
 	d.window = func(context.Context, *session) int { *steps = append(*steps, "window"); return exitOK }
-	d.restartRequested = func(*app.Runtime) bool { return requested }
+	d.restartChange = func(*app.Runtime) string {
+		if requested {
+			return app.ChangeTakeOver
+		}
+		return ""
+	}
 	d.restart = func(string) error { t.Fatal("restarted"); return nil }
 	return d, profile, dir, proj
 }
@@ -180,7 +188,7 @@ func TestRestartFailedThenLaunchedByHandSaysOnce(t *testing.T) {
 	changed := *dir
 
 	// Launched by hand: nothing restarts, and the window asks for the notice twice.
-	d.restartRequested = func(*app.Runtime) bool { return false }
+	d.restartChange = func(*app.Runtime) string { return "" }
 	var said []string
 	d.window = func(_ context.Context, s *session) int {
 		said = append(said, s.rt.Session.StartupNotice(), s.rt.Session.StartupNotice())
@@ -265,4 +273,184 @@ func TestRestartWaitsForTheWindowLoops(t *testing.T) {
 	if i, j := slices.Index(steps, "loop ended"), slices.Index(steps, "restart"); i < 0 || j < i {
 		t.Errorf("N-12 restart after the outcome: the window's loops were not stopped before the restart: steps %v", steps)
 	}
+}
+
+// syncLog is a log destination that several goroutines may write while the test reads it.
+type syncLog struct {
+	mu sync.Mutex
+	b  strings.Builder
+}
+
+func (l *syncLog) Write(p []byte) (int, error) {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.b.Write(p)
+}
+
+// String returns what was logged since the last take.
+func (l *syncLog) String() string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	return l.b.String()
+}
+
+// take returns what was logged since the last call and forgets it.
+func (l *syncLog) take() string {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	s := l.b.String()
+	l.b.Reset()
+	return s
+}
+
+// restartLineRE is the restart line of rule J-7 in slog's text form; the folder may be quoted.
+var restartLineRE = regexp.MustCompile(`(?m)^time=\S+ level=INFO msg=restarting change=(\S+) folder=("(?:[^"\\]|\\.)*"|\S+)$`)
+
+// restartLines returns the change and folder of each restart line of logs, and the number of
+// lines whose message is `restarting` at all, well-formed or not.
+func restartLines(t *testing.T, logs string) (lines [][2]string, all int) {
+	t.Helper()
+	for _, m := range restartLineRE.FindAllStringSubmatch(logs, -1) {
+		folder := m[2]
+		if strings.HasPrefix(folder, `"`) {
+			var err error
+			if folder, err = strconv.Unquote(folder); err != nil {
+				t.Fatalf("restart line folder %s: %v", m[2], err)
+			}
+		}
+		lines = append(lines, [2]string{m[1], folder})
+	}
+	return lines, strings.Count(logs, " msg=restarting ")
+}
+
+// TestRestartLogsOneLine: the image that restarts after a recorded change logs exactly one line,
+// `msg=restarting change=<kind> folder=<the folder the new image opens>`, before it executes the
+// new image, and none after; a run that records no change logs none (rule J-7). The changes are
+// the real ones, asked of the session as the page asks them: a join into the project of a host,
+// the return from the folder that then waits to the previous one, and the take-over of a folder
+// whose member list another device made.
+func TestRestartLogsOneLine(t *testing.T) {
+	hostHome, err := os.OpenRoot(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = hostHome.Close() }()
+	hostDocs, err := os.OpenRoot(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = hostDocs.Close() }()
+	hostProj, err := project.Create(hostDocs, "Roman", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = hostProj.Close() }()
+	host, err := app.Start(t.Context(), hostHome, app.Options{Project: hostProj, RendezvousURL: app.NoCodes})
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = host.Close() }()
+	inv, err := host.Session.Invite("writer")
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	var steps []string
+	d, _, dir := restartDeps(t, &steps, false)
+	d.restartChange = (*app.Runtime).RestartChange
+	d.notify = func(message) {}
+	var logs syncLog
+	d.log = slog.New(slog.NewTextHandler(&logs, nil))
+	openIn := func(folder string) func(instance.Request) (*project.Project, error) {
+		return func(instance.Request) (*project.Project, error) {
+			base, err := os.OpenRoot(filepath.Dir(folder))
+			if err != nil {
+				return nil, err
+			}
+			defer func() { _ = base.Close() }()
+			return project.Open(base, filepath.Base(folder))
+		}
+	}
+	// run launches once with window and returns the restart lines logged when the restart was
+	// called, the folder it was called on ("" when it was not), and every restart line of the run.
+	run := func(window func(context.Context, *app.Session) error) (atRestart [][2]string, restartedOn string, whole [][2]string, all int) {
+		t.Helper()
+		logs.take()
+		d.window = func(ctx context.Context, s *session) int {
+			if err := window(ctx, s.rt.Session); err != nil {
+				t.Errorf("the change was refused: %v", err)
+			}
+			return exitOK
+		}
+		d.restart = func(folder string) error {
+			atRestart, _ = restartLines(t, logs.String())
+			restartedOn = folder
+			return errExecuted
+		}
+		startup(nil, d)
+		whole, all = restartLines(t, logs.take())
+		return atRestart, restartedOn, whole, all
+	}
+	check := func(change, wantFolder string, atRestart [][2]string, restartedOn string, whole [][2]string, all int) {
+		t.Helper()
+		want := [][2]string{{change, wantFolder}}
+		if restartedOn != wantFolder || !slices.Equal(atRestart, want) || !slices.Equal(whole, want) || all != 1 {
+			t.Errorf("J-7 restart line: a %s restarted on %q; lines at the restart %q, over the run %q (%d with the message), want exactly %q before the restart on %q",
+				change, restartedOn, atRestart, whole, all, want, wantFolder)
+		}
+	}
+
+	// A join into the host's project restarts on the joined folder.
+	atRestart, joined, whole, all := run(func(ctx context.Context, s *app.Session) error {
+		if _, err := s.Join(ctx, inv.Text); err != nil {
+			return err
+		}
+		return s.FinishJoin(ctx)
+	})
+	previous := *dir
+	check(app.ChangeJoin, filepath.Join(filepath.Dir(previous), "Roman"), atRestart, joined, whole, all)
+
+	// From the joined folder, which waits for its document, the return restarts on the previous one.
+	d.openProject = openIn(joined)
+	atRestart, on, whole, all := run(func(ctx context.Context, s *app.Session) error { return s.ReturnToPrevious(ctx) })
+	check(app.ChangeReturn, previous, atRestart, on, whole, all)
+
+	// A launch that records no change logs no restart line.
+	d.openProject = openIn(previous)
+	if atRestart, on, whole, all := run(func(context.Context, *app.Session) error { return nil }); on != "" || len(atRestart)+len(whole)+all != 0 {
+		t.Errorf("J-7 restart line: a launch without a change restarted on %q and logged %q (%d with the message), want none", on, whole, all)
+	}
+
+	// A folder whose member list another device made: its take-over restarts on the same folder.
+	docs, err := os.OpenRoot(filepath.Dir(previous))
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = docs.Close() }()
+	foreign, err := project.Create(docs, "Autre", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	otherHome, err := os.OpenRoot(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer func() { _ = otherHome.Close() }()
+	other, err := app.Start(t.Context(), otherHome, app.Options{Project: foreign, RendezvousURL: app.NoCodes})
+	if err != nil {
+		t.Fatal(err)
+	}
+	folder := foreign.Path()
+	if err := errors.Join(other.Close(), foreign.Close()); err != nil {
+		t.Fatal(err)
+	}
+	d.openProject = openIn(folder)
+	atRestart, on, whole, all = run(func(ctx context.Context, s *app.Session) error {
+		res, err := s.TakeOver(ctx)
+		if err == nil && !res.Restarting {
+			err = errors.New("the take-over did not restart")
+		}
+		return err
+	})
+	check(app.ChangeTakeOver, folder, atRestart, on, whole, all)
 }

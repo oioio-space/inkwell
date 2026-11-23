@@ -48,7 +48,7 @@ export async function openSheet(
 }
 
 /** Shows the open document as a table: the view mode is not kept across a reload. */
-async function showAsTable(page: Page): Promise<void> {
+export async function showAsTable(page: Page): Promise<void> {
   await page.locator(".cm-content").waitFor();
   await page.evaluate(() =>
     (globalThis as typeof globalThis & { __inkwellTestTable: () => void }).__inkwellTestTable(),
@@ -228,4 +228,13 @@ export async function shot(p: Page, path: string): Promise<void> {
   const seen = cspErrors(p).length;
   await p.screenshot({ path });
   cspErrors(p).length = seen;
+}
+
+/**
+ * Shows the open document as a table again after a join: a join into another project restarts the joiner's
+ * page (PC1b, rule J-1), and the view mode is not kept across a reload; a join into the project already open
+ * (J-5, an earlier test of the run joined it) keeps the page, and its table.
+ */
+export async function tableAfterJoin(page: Page): Promise<void> {
+  if (!(await grid(page).isVisible())) await showAsTable(page);
 }

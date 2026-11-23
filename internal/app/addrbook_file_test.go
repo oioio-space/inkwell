@@ -181,13 +181,15 @@ func TestRestartReconnectsMembers(t *testing.T) {
 	if _, err := b.Session.Join(t.Context(), inv.Text); err != nil {
 		t.Fatalf("Join() = %v", err)
 	}
+	b = restartAfterJoin(t, b, bDirs.home, bDirs.proj) // the join restarts on its own folder (PC1b)
 	expectRepoUp(t, a, b.Node.Local())
 	expectRepoUp(t, b, a.Node.Local())
 
+	joined := b.inv.folder
 	if err := b.Close(); err != nil {
 		t.Fatal(err)
 	}
-	again, err := Start(t.Context(), bDirs.home, Options{Project: bDirs.proj, RendezvousURL: NoCodes})
+	again, err := Start(t.Context(), bDirs.home, Options{Project: openFolder(t, joined), RendezvousURL: NoCodes})
 	if err != nil {
 		t.Fatal(err)
 	}
