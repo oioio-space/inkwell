@@ -259,3 +259,8 @@ The first code review rejected step 2 (a local proof failure read as peer silenc
 ## HP1r2 freeze (Gemini, 2026-11-23)
 
 MR1 (H-19's late-link guard) became equivalent on HP1r's frozen arms: H-20 cancels a bound initiator call when its circuit closes, so no late link can arise there (MR1 caught 0 times now, 5 with H-20's binding reverted, 0 with each other change reverted). The answerer's DCUtR dial runs on the service context, unbound, and can still land after a Drop. HP1r2 supersedes HP1r with one new closed arm, closed_answerer_dial, where MR1 must be caught with the same text. Gemini: equivalence correct, the arm exercises a real product path, nothing weakened, G-1 holds; « freeze ». Run order: HP1b → HP1m → HP1r2 → HP1c2 → HP1n → HP1n2 → HP1n3 → HP1n4. → HP1
+
+
+## HP1n5 freeze (Gemini, 2026-11-23)
+
+HP1n4 passed its netsim criterion but missed MN3 (P-15 disabled): C1c/C2c started their clock at tReady, taken after bob's page shows « Synchronisé » (a wait of up to 60 s), which absorbed the ~30 s spent on the dead direct connection (tReady − tRestart = 31.2 s under MN3 against 6.1–6.6 s unmutated). P-15 is needed in the real stack on this path; the clause was blind. HP1n5 supersedes HP1n4 with C1d/C2d counted from tRestart, « Synchronisé » inside the measure, 15 s each (unmutated 6.7–7.3 s, MN3 31.3–31.9 s); MN3 expected on C1d. Gemini: defect real, tRestart the right origin, margin ample, nothing weakened, G-1 holds; « freeze ». The same clock defect in HP1n's C1 is filed under PC1b. Run order ends … → HP1n3 → HP1n5. → HP1

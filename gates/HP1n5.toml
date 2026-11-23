@@ -1,0 +1,85 @@
+# Written 2026-11-23 after HP1n4's MN3 run. SUPERSEDES gates/HP1n4.toml, which stays frozen as history (method v2
+# rule 9: a contract change is stated, compared old/new and recorded, never an edit of a frozen gate).
+# Why: HP1n4's clauses C1c and C2c start their clock at `tReady`, taken only after bob's page shows « Synchronisé »
+# (a wait of up to 60 s). Under MN3 (P-15 off) the ~30 s the session spends on the dead connection (the fresh direct
+# QUIC one, held silent by the socat placeholder after bob's SIGKILL 0.8 s after the pair went direct, dying by
+# quic-go's 30 s idle timeout) is absorbed by that wait, so C1c/C2c read 0.1 s / 0.7 s and MN3 is not caught
+# (gates/HP1n4/netsim-mutants.log). Discriminating number: tReady - tRestart = 31.2 s under MN3
+# (.task/netsim/results/9-crash-s20772.json) vs 6.6, 6.2, 6.1 s on the three unmutated seeds (gates/HP1n4/netsim.log
+# lines 117, 143, 167). Fix: C1d and C2d start at bob's restart (`tRestart`, when restart-bob.sh's kill and respawn
+# return), with « Synchronisé » part of what they measure; bound 15 s each (unmutated, from the same log: direct at
+# 6.7, 6.9, 6.8 s and converged at 7.3, 6.9, 6.8 s after the restart; MN3: 31.3 s and 31.9 s). A miss, « Synchronisé »
+# not shown in time included, is returned as data, never thrown (mutants.py reads a thrown error as a harness error).
+# MN3 now expects C1d: in the MN3 run bob's link reads LinkRelayed every second from 1.0 s to 29.0 s after the restart
+# and first LinkDirect at 30.0 s (.task/netsim/9-crash-s20772/bob.log, t=1795422475424 vs restart 1795422445383),
+# before the page readiness (31.2 s) and the convergence (31.9 s). C1d's own observable is late with or without the
+# readiness term; C2d's texts are typed only once the page is ready, so its lateness is inherited from it.
+# Byte-identical to HP1n4 except this header, raw_results under gates/HP1n5/, the clause names C1d and C2d (C3c
+# unchanged) and their clock, the result copies under .task/hp1n5-results, the failure texts, and MN3's tuple (clause
+# C1d). MN3 stays in mutants.toml's block HP1n4, as MH6 stays in block HP1 for HP1b. Same seeds, variant and order:
+# HP1n5 replaces HP1n4, last, after HP1n3 (plan docs/plans/2026-11-23-hp1-reformalize.md §5).
+#
+# HP1n4's header follows, unchanged.
+# Written 2026-11-23 at step 1, before the H-20/P-15 code; frozen after the cross-family review of the plan's spec and
+# gates (docs/plans/2026-11-23-hp1-reformalize.md §5, §7 change 1). Block HP1n4, an ADD-ON to block HP1's network
+# simulation (it supersedes nothing; HP1n, HP1n2 and HP1n3 stay as frozen): the crash variant of scenario 9. Why: the
+# environment hypothesis of plan §2, that a real relay keeps a crashed peer's circuit half-open for about 30 s
+# (quic-go DefaultIdleTimeout), can only be shown on a real stack; H-20 itself is proved on controlled time
+# (gates/HP1c.toml, MH23), so there is no netsim mutant for it. Rules: H-20 and P-15 (spec §8.6, §8.7.4).
+# Variant `crash` of scenario 9 (scripts/netsim/run.sh, frontend/e2e/netsim.spec.ts, written at step 2): bob's
+# process is killed with SIGKILL (no close reaches the relay or alice) and starts again on the same home and network
+# but a new UDP port, so the relay and alice see a new circuit while the old one stays open, dead.
+# Run last on the same candidate, after gates/HP1b.toml, HP1m, HP1r, HP1c, HP1n, HP1n2 and HP1n3 (plan §5 « Order »);
+# no gate runs another. Wall-clock criteria take the machine with `heavy.sh --exclusive`; INKWELL_PERF_LOAD_WAIT bounds
+# the wait for an idle machine, inside the cap. Prerequisite: the tree carries main's a153829 (-buildvcs=false in
+# mutants.py's run_e2e, plan §4), without which MN3's build fails on a stray /tmp/.git.
+# Caps (rule G-1): 240 + 1300 + 30 + 30 + 900 = 2500 s <= 2700 s.
+max_minutes = 45
+raw_results = ["docs/plans/2026-11-23-hp1-reformalize.md", "docs/protocol/tla/DirectUpgrade.tla", "docs/protocol/tla/Supersede.tla", "gates/HP1n5/*"]
+
+[[criteria]]
+# Scenario 9, variant crash, seeds 20771, 20772, 20773, once each, strict, clauses counted from bob's restart
+# (`tRestart`), page readiness included: C1d bob's page shows « Synchronisé » and the link bob sees is direct, within
+# 15 s of the restart; C2d texts typed on both sides once bob's page is ready converge both ways within 15 s of the
+# restart; C3c alice never shows bob away (no PeerDown at alice over the whole run: the dead
+# circuit is closed by P-15 only after the new connection's ACK, never before, plan §7 change 1) and bob's restart is
+# logged once. Every clause passes on every run. run.sh's own state is wiped at its start, so the three result files
+# are copied to .task/hp1n5-results right after it and only those copies are read.
+id = "netsim"
+command = '''rm -rf .task/hp1n5-results && mkdir -p .task/hp1n5-results && timeout -k 10 240 ./scripts/heavy.sh mise run e2e:build && { NETSIM_SCENARIOS=9 NETSIM_VARIANTS=crash NETSIM_SEEDS="20771 20772 20773" NETSIM_EXPECT=strict INKWELL_E2E_BROWSER=chromium INKWELL_PERF_LOAD_WAIT=180 timeout -k 10 1300 ./scripts/heavy.sh --exclusive ./scripts/netsim/run.sh; rc=$?; cp .task/netsim/results/9-crash-s2077[123].json .task/hp1n5-results/ 2>/dev/null; python3 -I - "$rc" <<'PY'
+import json, pathlib, sys
+need = {"C1d", "C2d", "C3c"}
+bad = []
+for seed in (20771, 20772, 20773):
+    p = pathlib.Path(f".task/hp1n5-results/9-crash-s{seed}.json")
+    if not p.exists():
+        bad.append(f"{p.name} missing")
+        continue
+    r = json.loads(p.read_text())
+    got = {c["id"] for c in r["clauses"]}
+    red = [f'{c["id"]} {c["status"]}: {c.get("measured", "")[:80]}' for c in r["clauses"] if c["status"] != "pass"]
+    if r.get("expect") != "strict" or not need <= got or red:
+        bad.append(f"{p.name}: expect {r.get('expect')}, missing {sorted(need - got)}, red {red}")
+if int(sys.argv[1]) or bad:
+    sys.exit(f"HP1n5 netsim: exit {sys.argv[1]}, {bad}")
+PY
+}'''
+
+[[criteria]]
+# MN3 (scripts/netsim/mutants.toml, block HP1n4) is exactly the frozen entry (kind e2e, scenario 9, variant crash,
+# clause C1d; step 2 adjusts its anchor only) and its anchor applies once; then, seed 20772, P-15 off (Supersede decides
+# nothing) turns C1d red: the dead connection is not superseded, so bob's link stays relayed until it dies by QUIC's
+# idle timeout (direct 30.0 s after the restart in HP1n4's MN3 run), past C1d's 15 s. Caught by its clause, not by
+# a crash or a timeout (mutants.py: a « fail » with an error is a harness exception, not a catch).
+id = "netsim-mutants"
+command = '''timeout -k 10 30 python3 -I - <<'PY' && timeout -k 10 30 python3 -I scripts/netsim/mutants.py --check HP1n4 && NETSIM_MUTANT_SEED=20772 INKWELL_PERF_LOAD_WAIT=180 timeout -k 10 900 ./scripts/heavy.sh --exclusive python3 -I scripts/netsim/mutants.py HP1n4 MN3
+import sys, tomllib
+ms = {m["id"]: m for m in tomllib.load(open("scripts/netsim/mutants.toml", "rb"))["mutant"] if m.get("block") == "HP1n4"}
+want = {"MN3": ("e2e", 9, "crash", "C1d")}
+bad = sorted(set(ms) ^ set(want))
+for i, t in want.items():
+    m = ms.get(i, {})
+    if (m.get("kind"), m.get("scenario"), m.get("variant"), m.get("clause")) != t or not m.get("edit"):
+        bad.append(i)
+sys.exit(f"HP1n5 mutant entries differ from the frozen table: {bad}" if bad else 0)
+PY'''
