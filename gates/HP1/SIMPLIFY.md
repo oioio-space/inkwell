@@ -662,3 +662,7 @@ the page readiness (31.2 s) and the convergence (31.9 s).
   test.setTimeout(#_#) », the same 600 s archived cap as entry `2080020c`, whose fingerprint the edit changed.
   It is recorded in `gates/guard-overrides.json` (decision `docs/objectif-en-cours.md`). `gate.py --base-guard`:
   pass.
+
+## Evidence archive (2026-11-23)
+
+The scratch evidence this report cites under `~/.cache/inkwell/hp1-review/` and `~/.cache/inkwell/hp1m-run/` (red/green and package logs) moved to `~/inkwell-archive/2026-11-23/hp1-evidence-cache.tgz` when the cache was cleaned. [done]
