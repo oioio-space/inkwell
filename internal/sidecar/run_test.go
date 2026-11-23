@@ -11,7 +11,7 @@ import (
 )
 
 func spec(mode string) Spec {
-	return Spec{Path: os.Args[0], Dir: sharedCache, Env: helperEnv(mode)}
+	return Spec{Path: os.Args[0], Dir: helperDir, Env: helperEnv(mode)}
 }
 
 func TestRun(t *testing.T) {

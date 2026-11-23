@@ -1959,6 +1959,51 @@
       "id": "42b6a1e6cbb3039e05de3d0bca516666fbccdc6fa3440df56dfc909036b60dee",
       "reason": "PC1b2 UX fixes J-8 and J-9 (same change, new fingerprint; this line is untouched): frontend/src/workspace/workspace.svelte.ts: the timer of the same function, optional for the pending join (J-2: every start waits again); the live path is unchanged (was d6618ad7…)",
       "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "10d88bcaab1542df54f8c0f3c3e5319ffdfa39ccadac331504b3cf4f8620cc40",
+      "reason": "scripts/alloy_check.py: gate dependency changed — CI3 /tmp leaks: Alloy runs with java.io.tmpdir set to a per-run folder, removed on exit and on SIGTERM/SIGHUP (Java ignores TMPDIR; 15 .cnf files leaked per run); checks unchanged",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "c65cd42fc9aaed55d93e2b7e96630712dc33f4831571b6294dfa72916bdd3fcf",
+      "reason": "scripts/heavy.sh: gate dependency changed — CI3 /tmp leaks: each job gets its own TMPDIR, removed on exit; the folder of a killed job (lock held by no process) is removed by the next run; caps, slots and exclusivity unchanged",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "0aa2dbad4f59c9a1ac0dff0f2eecef44b9e950cc7c9b0c2cb96b8c787ce68ed5",
+      "reason": "scripts/heavy.sh: gate machinery changed — CI3 /tmp leaks: each job gets its own TMPDIR, removed on exit; the folder of a killed job (lock held by no process) is removed by the next run; caps, slots and exclusivity unchanged",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "c7e0df35fe4b251e76479dab03de79cb746092b8dd14161b5597517bf591f209",
+      "reason": "scripts/llm.sh: gate dependency changed — CI3 /tmp leaks: response bodies go to a trapped temporary folder instead of an untrapped mktemp file",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "4ed59b7c2331cf8e349ae8c8507a9d30aee879aacf3b2f187d60fee578704971",
+      "reason": "scripts/netsim/affected_test.py: gate dependency changed — CI3 /tmp leaks: the test repository uses TemporaryDirectory with addCleanup instead of an unremoved mkdtemp; assertions unchanged",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "219a5cd1e7250719b9fff7236c734f4e06a7efdc51d0031758f1260eccc72328",
+      "reason": "scripts/scratch_guard_test.py: gate dependency changed — CI3 /tmp leaks: three new static rules (Java launch sets java.io.tmpdir, Python mkdtemp has rmtree, shell mktemp has a trap); existing rules unchanged",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "ba8bf29a8e20f9c2d261928a079022abb9f6ea655df67d77ee49f4f5210c8c3e",
+      "reason": "scripts/tla-check.sh: gate dependency changed — CI3 /tmp leaks: TLC runs with -Djava.io.tmpdir in the run folder (TLC left one tlc-* folder per run, 14,389 found); models, shards and mutants unchanged",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "849ad5eb35882208b1f2b1b840d3e7dc05ec4fd8e1e41e068441fd417a00c24b",
+      "reason": "scripts/wc1-tla.sh: gate dependency changed — CI3 /tmp leaks: TLC runs with -Djava.io.tmpdir in the run folder; models unchanged",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "3b63746f86e34f319bbe6dd0bd500f9743009df9428ed562b145a6e57bbd32e2",
+      "reason": "scripts/wc1-webkit.sh: gate dependency changed — CI3 /tmp leaks: the runtime folder goes under TMPDIR instead of a hardcoded /tmp path; the native suite unchanged",
+      "decision": "docs/objectif-en-cours.md"
     }
   ]
 }

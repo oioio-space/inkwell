@@ -62,6 +62,26 @@ if [[ -n "${INKWELL_HEAVY_HELD:-}" ]]; then
   exec "$@"
 fi
 
+# Each job gets its own TMPDIR, removed when the job ends. A job killed before it cleans up (SIGKILL, a test
+# timeout's panic, the memory cap) used to leave its scratch in /tmp, a tmpfs, until reboot: 119 sidecar test
+# copies of 130 MB, Go fuzzing's 100 MB files, e2e profiles, Python temporary repositories (2026-11-23). The job
+# and its children hold a lock on the folder; a folder nobody holds any more, because its heavy.sh was killed
+# before its trap ran, is removed by the next heavy.sh. Java ignores TMPDIR: its launches set java.io.tmpdir
+# (scripts/scratch_guard_test.py). GOTMPDIR (above) is Go's own and stays shared.
+if [[ -z "${CI:-}" ]]; then
+  tmp_parent="${TMPDIR:-/tmp}"
+  while IFS= read -r -d '' stale; do
+    { exec {stale_fd}<"$stale"; } 2>/dev/null || continue
+    if flock -n "$stale_fd"; then rm -rf -- "$stale"; fi
+    exec {stale_fd}<&-
+  done < <(find "$tmp_parent" -maxdepth 1 -mindepth 1 -type d -name 'inkwell-job.*' -user "$(id -u)" -mmin +1 -print0 2>/dev/null)
+  job_tmp="$(mktemp -d -p "$tmp_parent" inkwell-job.XXXXXX)"
+  exec {job_fd}<"$job_tmp"
+  flock -n "$job_fd"
+  trap 'rm -rf -- "$job_tmp"' EXIT
+  export TMPDIR="$job_tmp"
+fi
+
 slots="${INKWELL_HEAVY_SLOTS:-2}"
 mem="${INKWELL_HEAVY_MEM:-8G}"
 mkdir -p "$dir"

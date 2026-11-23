@@ -65,7 +65,9 @@ func TestEmbeddedSidecarsRun(t *testing.T) {
 	})
 
 	t.Run("SIDE-04 a tampered real binary is replaced and still runs (PKG-05)", func(t *testing.T) {
-		path, err := store.Resolve(Typst)
+		// Its own store: the shared one outlives the run and serves the other runs meanwhile.
+		own := &Store{Dir: t.TempDir()}
+		path, err := own.Resolve(Typst)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -88,7 +90,7 @@ func TestEmbeddedSidecarsRun(t *testing.T) {
 			t.Fatal("the tampered binary still verifies")
 		}
 
-		again, err := store.Resolve(Typst)
+		again, err := own.Resolve(Typst)
 		if err != nil || again != path {
 			t.Fatalf("Resolve after tampering = %q, %v; want %q", again, err, path)
 		}

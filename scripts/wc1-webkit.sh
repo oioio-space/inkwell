@@ -34,8 +34,9 @@ native_walk() (
         command -v "$tool" >/dev/null || { echo "WC1 native: missing $tool on PATH" >&2; exit 2; }
     done
 
-    # Keep the Wayland, D-Bus and fixture sockets within the Unix address limit.
-    runtime="$(mktemp -d /tmp/inkwell-wc1.XXXXXX)"
+    # Keep the Wayland, D-Bus and fixture sockets within the Unix address limit. Under TMPDIR, heavy.sh's job
+    # folder: a walk killed past its trap left this folder (60 MB) in /tmp.
+    runtime="$(mktemp -d "${TMPDIR:-/tmp}/inkwell-wc1.XXXXXX")"
     trap 'rm -rf -- "$runtime"' EXIT
 
     # The walk's services register directly. Omit service search directories

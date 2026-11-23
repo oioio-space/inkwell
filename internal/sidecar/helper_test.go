@@ -24,9 +24,32 @@ import (
 // sidecar: the tests launch os.Args[0] as the "program" to supervise.
 const modeEnv = "INKWELL_SIDECAR_TEST_MODE"
 
-// sharedCache is the cache directory of the tests that run the real sidecars,
-// so that the 77 MB tinymist is extracted once, not once per test.
+// sharedCache is the Store directory of the tests that run the real sidecars:
+// a test-only folder of the user cache, kept across runs, so that the 130 MB of
+// pinned binaries are extracted once per pin, not once per run. Store names each
+// binary by version and SHA-256 and hashes it before every use, as the product
+// does, so a stale or damaged copy is replaced, never run. It is not per run on
+// purpose: a run killed before its cleanup (a timeout, heavy.sh's memory cap,
+// a mutant) left its 130 MB copy in /tmp, a tmpfs, for good (119 of them,
+// 2026-11-23).
 var sharedCache string
+
+// helperDir is the working directory and GOCOVERDIR (helperEnv) of the
+// re-executed test binary. It outlives the run as well and stays empty: a
+// -cover run of the package wrote nothing in it (2026-11-23).
+var helperDir string
+
+// testCacheDirs returns sharedCache and helperDir under the user cache, apart
+// from the product's own folder (DefaultDir): the tier probe verifies its typst
+// there, never in the user's cache.
+func testCacheDirs() (store, helper string, err error) {
+	base, err := os.UserCacheDir()
+	if err != nil {
+		return "", "", err
+	}
+	root := filepath.Join(base, "inkwell-test", "sidecar")
+	return filepath.Join(root, "store"), filepath.Join(root, "helper"), nil
+}
 
 func TestMain(m *testing.M) {
 	mode := os.Getenv(modeEnv)
@@ -55,15 +78,17 @@ func TestMain(m *testing.M) {
 		}
 		helperExit(runHelper(mode))
 	}
-	dir, err := os.MkdirTemp("", "inkwell-sidecar-test-")
-	if err != nil {
-		fmt.Fprintln(os.Stderr, err)
-		os.Exit(1)
+	// Without a user cache (a confined child gets no HOME) DefaultDir fails too,
+	// so the zero sharedCache can never fall back to the user's cache.
+	if store, helper, err := testCacheDirs(); err == nil {
+		if err := os.MkdirAll(helper, 0o700); err != nil {
+			fmt.Fprintln(os.Stderr, err)
+			os.Exit(1)
+		}
+		sharedCache, helperDir = store, helper
+		defaultStore = &Store{Dir: store}
 	}
-	sharedCache = dir
-	defaultStore = &Store{Dir: dir} // the tier probe verifies its typst here, not in the user's cache
 	code := m.Run()
-	_ = os.RemoveAll(dir)
 	if code == 0 {
 		if err := goleak.Find(); err != nil {
 			fmt.Fprintln(os.Stderr, err)
@@ -131,7 +156,7 @@ func runChild(t *testing.T, cmd *exec.Cmd, name string) {
 // helper itself skips that hook, but the sandbox launcher, which is this same
 // binary, exits through os.Exit and needs GOCOVERDIR to keep stderr clean.
 func helperEnv(mode string) []string {
-	return []string{modeEnv + "=" + mode, "GOCOVERDIR=" + sharedCache}
+	return []string{modeEnv + "=" + mode, "GOCOVERDIR=" + helperDir}
 }
 
 // sink keeps the helper's allocation alive.
@@ -333,7 +358,7 @@ func runHelper(mode string) int {
 func helperCmd(mode string) *exec.Cmd {
 	cmd := exec.Command(os.Args[0], "--sidecar-test="+mode) // #nosec G204 -- re-executes the test binary
 	cmd.Env = helperEnv(mode)
-	cmd.Dir = sharedCache
+	cmd.Dir = helperDir
 	if cmd.Dir == "" {
 		cmd.Dir, _ = os.Getwd()
 	}

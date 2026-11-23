@@ -115,7 +115,9 @@ run() {
   set +e
   (
     cd "$dir"
-    "$heavy" java -Xmx"$xmx" -XX:+UseParallelGC -cp "$jar" tlc2.TLC \
+    # java.io.tmpdir: Java ignores TMPDIR, and TLC leaves an empty tlc-<n> folder in it on every run (its
+    # module scratch, util.FilenameToStream): 14 389 of them piled up in /tmp by 2026-11-23.
+    "$heavy" java -Xmx"$xmx" -XX:+UseParallelGC -Djava.io.tmpdir="$metadir" -cp "$jar" tlc2.TLC \
       -workers "$workers" -noGenerateSpecTE -cleanup -metadir "$metadir" "${mode[@]}" \
       -config "$cfg" "$module"
   ) >"$out" 2>&1

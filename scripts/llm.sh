@@ -33,11 +33,14 @@ set -euo pipefail
 : "${LLM_API_ROOT_CLOUDFLARE:=https://api.cloudflare.com/client/v4}"
 : "${LLM_API_ROOT_OPENROUTER:=https://openrouter.ai/api/v1}"
 
+# The response bodies go to one folder per run, removed on exit: a run killed during curl left its body in /tmp.
+scratch="$(mktemp -d)"
+trap 'rm -rf -- "$scratch"' EXIT
+
 # post URL AUTH_HEADER JSON → prints the response body on HTTP 200, returns 1 otherwise (429, 5xx,
 # network error) so the caller falls through. The key is passed through a header file, not argv.
 post() {
-  local url="$1" auth="$2" json="$3" body code
-  body="$(mktemp)"
+  local url="$1" auth="$2" json="$3" body="$scratch/body" code
   code="$(curl -sS --max-time 120 -o "$body" -w '%{http_code}' "$url" \
     -H @<(printf '%s\n' "$auth") -H "Content-Type: application/json" -H "X-Title: inkwell-dev" \
     --data-binary "$json" 2>/dev/null)" || code=000

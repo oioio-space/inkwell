@@ -26,7 +26,8 @@ fail=0
 run() {
   local name="$1" cfg="$2" property="${3:-}"
   local out="$logs/$name.log" states="$metaroot/$name" status=0
-  "$heavy" java -Xmx"$xmx" -XX:+UseParallelGC -cp "$jar" tlc2.TLC \
+  # java.io.tmpdir: TLC's own scratch (an empty tlc-<n> folder per run) stays under metaroot (see tla-check.sh).
+  "$heavy" java -Xmx"$xmx" -XX:+UseParallelGC -Djava.io.tmpdir="$metaroot" -cp "$jar" tlc2.TLC \
     -workers "$workers" -noGenerateSpecTE -cleanup -metadir "$states" \
     -config "$cfg" WindowClose >"$out" 2>&1 || status=$?
   rm -rf "$states"

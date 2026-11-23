@@ -211,7 +211,9 @@ class TestCleanEnv(unittest.TestCase):
         os.environ["GIT_DIR"] = "/nonexistent/hook/git-dir"
         try:
             self.assertNotIn("GIT_DIR", clean_env())
-            root = tempfile.mkdtemp()
+            tmp = tempfile.TemporaryDirectory()  # mkdtemp() here left one repository in /tmp per run
+            self.addCleanup(tmp.cleanup)
+            root = tmp.name
             git(root, "init", "-q")
             write(root, "a.txt")
             git(root, "add", "-A")

@@ -9,6 +9,7 @@ import hashlib
 import json
 import os
 import pathlib
+import signal
 import subprocess
 import sys
 import tempfile
@@ -71,12 +72,16 @@ def jar():
     return fetch_pinned.fetch(JAR_URL, JAR_SHA256, CACHE)
 
 
-def run(model: pathlib.Path):
-    """Return {command: (type, has_solution)} for one model file."""
+def run(model: pathlib.Path, scratch: pathlib.Path):
+    """Return {command: (type, has_solution)} for one model file.
+
+    java.io.tmpdir is scratch: Java ignores TMPDIR, and Alloy's SAT back end leaves an empty
+    alloy-plingeling<n>.cnf in it for every command it solves (1 077 of them in /tmp by 2026-11-23).
+    """
     with tempfile.TemporaryDirectory() as out:
         proc = subprocess.run(
-            ["java", "-Xmx2g", "--enable-native-access=ALL-UNNAMED", "-jar", str(jar()),
-             "exec", "-f", "-o", out, str(model)],
+            ["java", "-Xmx2g", f"-Djava.io.tmpdir={scratch}", "--enable-native-access=ALL-UNNAMED",
+             "-jar", str(jar()), "exec", "-f", "-o", out, str(model)],
             capture_output=True, text=True, timeout=900)
         receipt = pathlib.Path(out) / "receipt.json"
         if proc.returncode != 0 or not receipt.exists():
@@ -85,11 +90,25 @@ def run(model: pathlib.Path):
         return {name: (c["type"], "solution" in c) for name, c in commands.items()}
 
 
+def _exit_on_signal(signum, _frame):
+    """SIGTERM and SIGHUP end the run through SystemExit, so that every `with` below removes its
+    folder (subprocess.run kills the running java first); Python's default would leave them."""
+    sys.exit(128 + signum)
+
+
 def main():
     java_ok()
+    for sig in (signal.SIGTERM, signal.SIGHUP):
+        signal.signal(sig, _exit_on_signal)
+    # One scratch folder for the whole run, removed on every exit but SIGKILL.
+    with tempfile.TemporaryDirectory(prefix="inkwell-alloy-") as scratch:
+        check(pathlib.Path(scratch))
+
+
+def check(scratch: pathlib.Path):
     failures = []
     for model in sorted(MODELS.glob("*.als")):
-        for name, (kind, solved) in run(model).items():
+        for name, (kind, solved) in run(model, scratch).items():
             ok = (not solved) if kind == "check" else solved
             print(f"{model.name} {kind} {name}: {'ok' if ok else 'FAIL'}")
             if not ok:
@@ -102,7 +121,7 @@ def main():
         with tempfile.TemporaryDirectory() as d:
             mutant = pathlib.Path(d) / model
             mutant.write_text(text.replace(before, after, 1))
-            kind, solved = run(mutant)[assertion]
+            kind, solved = run(mutant, scratch)[assertion]
             caught = kind == "check" and solved
             print(f"mutant {model} -> {assertion}: {'caught' if caught else 'NOT CAUGHT'}")
             if not caught:
