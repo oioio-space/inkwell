@@ -119,6 +119,7 @@ Les décisions qui demandent de la réflexion (conception, règle de protocole, 
 
 - `inkwell-ci2` (branch `ci2`): merged in 21eb2e9 (candidate run 45062448299 green), worktree to remove → CI2
 - `ci.yml` run 44933423541 on `main` failed in `ci-e2e`; `inkwell-e2e3` (branch `e2e3`) → E2E3
+- `ci.yml` run 45138932780 on `main` (`5d6c325`) failed in `ci`: scratch directories created in the checkout by `scripts/perf` tests raced `go test ./...`, and `TestHandoffSlowClient` started its clock after the primary armed its deadline; both fixed in the working tree, guard `scripts/scratch_guard_test.py` in `test:py` → CI3
 - `ci.yml` run 43884324109 sur `main`, rouge (`ci`, `sidecars-arm64`) → SB2a1, E2E1 (ils la rendent verte)
 - `ci.yml` run 44076092629 sur `main`, rouge (`ci`, `sidecars-arm64`) → SB2a1 (diagnostic Codex du 2026-11-21 : les deux tâches sont corrigées par la candidate)
 - `candidate/sb2a1-12` (worktree `inkwell-sb2a1m`, poussée) → SB2a1

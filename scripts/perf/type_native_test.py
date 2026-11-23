@@ -28,8 +28,9 @@ class NativeEntryTests(unittest.TestCase):
             self.assertEqual(len(calls), 2)
 
     def test_native_raw_evidence_survives_gate_output_cleanup(self):
-        with tempfile.TemporaryDirectory(dir=harness.ROOT) as directory:
-            root = Path(directory)
+        # Scratch under the system temp dir, never in the checkout: `go test ./...` walks it.
+        with tempfile.TemporaryDirectory() as directory:
+            root = Path(directory).resolve()
             out = root / "gates/L3"
             paths, annotated = [], []
             def execute(binary, output, raw, enabled, input_backend="mutter"):
@@ -142,10 +143,11 @@ class EnvironmentFaultRetryTests(unittest.TestCase):
         self.assertFalse(any(x.startswith("--native-perf-invalid=") for c in calls for x in c))
 
     def test_fault_reasons_come_from_driver_json(self):
-        with tempfile.TemporaryDirectory(dir=harness.ROOT) as directory:
-            raw = Path(directory)
+        with tempfile.TemporaryDirectory() as directory, mock.patch.object(harness, "ROOT", Path(directory)):
+            raw = Path(directory) / "raw"
+            raw.mkdir()
             (raw / "driver.json").write_text('{"status":"fault","fault":{"kind":"focus-lost","message":"a | b"}}')
-            self.assertEqual(harness.fault_reason(raw.relative_to(harness.ROOT)), "focus-lost: a / b")
+            self.assertEqual(harness.fault_reason(Path("raw")), "focus-lost: a / b")
             self.assertEqual(harness.fault_reason(Path("no-such-dir")), "environment fault (exit 75)")
 
 

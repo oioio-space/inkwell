@@ -1759,6 +1759,31 @@
       "id": "95bef13b0f1ec4951b03a01c1cb124122482545892a780b8cc69e9b010365e4f",
       "reason": "mutants_test.py adds E2EBuildTest (every e2e build ignores parent repositories); existing tests unchanged.",
       "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "0751bb4db37cb957bc4a5fc9b89977cf5c6c4a27e60a62fc7f1614ac38c26bdc",
+      "reason": "mise.toml: gate dependency changed: mise task test:py (new ref to scripts/scratch_guard_test.py, the guard that keeps test scratch outside the checkout); CI run 45138932780 -> CI3: test scratch moved out of the checkout (it raced `go test ./...`); no criterion, threshold, timeout or skip changed",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "7c514691509e8d9152db39473541be0c946dba887b71c464eddd44e0ba2f9aad",
+      "reason": "scripts/perf/native_input_test.py: gate dependency changed (worktree() points driver.ROOT at a scratch root under the system temp dir instead of TemporaryDirectory(dir=driver.ROOT)); CI run 45138932780 -> CI3: test scratch moved out of the checkout (it raced `go test ./...`); no criterion, threshold, timeout or skip changed",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "d4de1a2166a02f4392106fedae8cec5d789acf47caa377af6960fd828191c5a2",
+      "reason": "scripts/perf/native_input_test.py: gate machinery changed (same edit, test file only; the driver is unchanged); CI run 45138932780 -> CI3: test scratch moved out of the checkout (it raced `go test ./...`); no criterion, threshold, timeout or skip changed",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "06de32af4acf45b1563e7817afa8295abab29f208cf15bf550458099be7546da",
+      "reason": "scripts/perf/type_native_test.py: gate dependency changed (scratch under the system temp dir with harness.ROOT patched, instead of dir=harness.ROOT); CI run 45138932780 -> CI3: test scratch moved out of the checkout (it raced `go test ./...`); no criterion, threshold, timeout or skip changed",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "9dc8fd1c674ac6ab9b32f5ead850f481170e90f3cb802631ecc47537f4546e2c",
+      "reason": "scripts/perf/type_native_test.py: gate machinery changed (same edit, test file only; the harness is unchanged); CI run 45138932780 -> CI3: test scratch moved out of the checkout (it raced `go test ./...`); no criterion, threshold, timeout or skip changed",
+      "decision": "docs/objectif-en-cours.md"
     }
   ]
 }

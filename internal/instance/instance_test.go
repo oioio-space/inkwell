@@ -877,11 +877,14 @@ func TestHandoffSlowClient(t *testing.T) {
 	serving := runtime.NumGoroutine()
 	frame, _ := request("x.typ").Encode()
 	for _, raw := range [][]byte{nil, frame[:3], frame[:len(frame)-1]} {
+		// The clock starts before Dial: the primary arms its deadline after Accept, which can run
+		// before a descheduled client reads the clock once Dial has returned (CI run 45138932780
+		// measured 199.92 ms). Before Dial, start precedes the arming, so the bound is exact.
+		start := time.Now()
 		c, err := net.Dial("unix", filepath.Join(dir, sockName))
 		if err != nil {
 			t.Fatal(err)
 		}
-		start := time.Now()
 		_, _ = c.Write(raw)
 		_ = c.SetDeadline(time.Now().Add(3 * time.Second))
 		b, _ := io.ReadAll(c)

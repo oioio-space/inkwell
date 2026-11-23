@@ -1,4 +1,5 @@
 """Pure driver tests: no X connection, native process, window or input injection."""
+import contextlib
 import importlib.util
 from pathlib import Path
 import unittest
@@ -12,6 +13,22 @@ from types import SimpleNamespace
 spec = importlib.util.spec_from_file_location("native_input", Path(__file__).with_name("native_input.py"))
 driver = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(driver)
+
+
+@contextlib.contextmanager
+def worktree():
+    """Yield an output directory inside a scratch worktree under the system temp dir.
+
+    main() accepts only paths inside driver.ROOT, so driver.ROOT is pointed at the scratch root
+    (its default binary, bin/inkwell-native-perf, is a stand-in file there). Scratch inside the
+    real checkout raced `go test ./...` walking the tree (CI run 45138932780)."""
+    with tempfile.TemporaryDirectory() as scratch:
+        root = Path(scratch).resolve()
+        (root / "bin").mkdir()
+        (root / "bin/inkwell-native-perf").write_bytes(b"stand-in binary")
+        (root / "out").mkdir()
+        with mock.patch.object(driver, "ROOT", root):
+            yield str(root / "out")
 
 
 class GtkMonitorInitializationTests(unittest.TestCase):
@@ -111,9 +128,9 @@ class DriverProtocolTests(unittest.TestCase):
             self.assertIs(keyboard.backend, backend)
             calls.append((phase, index))
             return dict(status="collected")
-        with tempfile.TemporaryDirectory(dir=driver.ROOT) as directory, \
+        with worktree() as directory, \
              mock.patch.dict(os.environ, INKWELL_NATIVE_PERF_RUN="1"), \
-             mock.patch("sys.argv", ["native_input", "--binary", __file__, "--output", directory]), \
+             mock.patch("sys.argv", ["native_input", "--output", directory]), \
              mock.patch.object(driver, "MutterKeyboard", return_value=backend) as create, \
              mock.patch.object(driver, "X11Keyboard", side_effect=AssertionError("XTest selected")), \
              mock.patch.object(driver, "collect_run", collect):
@@ -126,9 +143,9 @@ class DriverProtocolTests(unittest.TestCase):
             self.assertEqual(manifest["status"], "collected")
 
     def test_missing_mutter_api_fails_without_retry_xtest_or_app_launch(self):
-        with tempfile.TemporaryDirectory(dir=driver.ROOT) as directory, \
+        with worktree() as directory, \
              mock.patch.dict(os.environ, INKWELL_NATIVE_PERF_RUN="1"), \
-             mock.patch("sys.argv", ["native_input", "--binary", __file__, "--output", directory]), \
+             mock.patch("sys.argv", ["native_input", "--output", directory]), \
              mock.patch.object(driver, "MutterKeyboard", side_effect=RuntimeError("Mutter Start failed")) as create, \
              mock.patch.object(driver, "X11Keyboard", side_effect=AssertionError("XTest selected")), \
              mock.patch.object(driver, "collect_run") as collect:
@@ -143,9 +160,9 @@ class DriverProtocolTests(unittest.TestCase):
     def test_mutter_session_closes_on_collection_failure_or_interruption(self):
         for failure in (RuntimeError("input failed"), KeyboardInterrupt()):
             backend = SimpleNamespace(close=mock.Mock())
-            with tempfile.TemporaryDirectory(dir=driver.ROOT) as directory, \
+            with worktree() as directory, \
                  mock.patch.dict(os.environ, INKWELL_NATIVE_PERF_RUN="1"), \
-                 mock.patch("sys.argv", ["native_input", "--binary", __file__, "--output", directory]), \
+                 mock.patch("sys.argv", ["native_input", "--output", directory]), \
                  mock.patch.object(driver, "MutterKeyboard", return_value=backend), \
                  mock.patch.object(driver, "collect_run", side_effect=failure):
                 with self.assertRaises(type(failure)):
@@ -155,9 +172,9 @@ class DriverProtocolTests(unittest.TestCase):
 
     def test_mutter_requires_trusted_delivery_before_any_cold_replicate(self):
         backend = SimpleNamespace(close=mock.Mock())
-        with tempfile.TemporaryDirectory(dir=driver.ROOT) as directory, \
+        with worktree() as directory, \
              mock.patch.dict(os.environ, INKWELL_NATIVE_PERF_RUN="1"), \
-             mock.patch("sys.argv", ["native_input", "--binary", __file__, "--output", directory]), \
+             mock.patch("sys.argv", ["native_input", "--output", directory]), \
              mock.patch.object(driver, "MutterKeyboard", return_value=backend), \
              mock.patch.object(driver, "collect_run", return_value=dict(status="fail", inputUnavailable=True)) as collect:
             with self.assertRaises(SystemExit) as exit_:
@@ -171,9 +188,9 @@ class DriverProtocolTests(unittest.TestCase):
 
     def test_cleanup_failure_stays_a_failure_and_preserves_driver_evidence(self):
         backend = SimpleNamespace(close=mock.Mock(side_effect=RuntimeError("Stop failed")))
-        with tempfile.TemporaryDirectory(dir=driver.ROOT) as directory, \
+        with worktree() as directory, \
              mock.patch.dict(os.environ, INKWELL_NATIVE_PERF_RUN="1"), \
-             mock.patch("sys.argv", ["native_input", "--binary", __file__, "--output", directory]), \
+             mock.patch("sys.argv", ["native_input", "--output", directory]), \
              mock.patch.object(driver, "MutterKeyboard", return_value=backend), \
              mock.patch.object(driver, "collect_run", return_value=dict(status="collected")):
             with self.assertRaisesRegex(RuntimeError, "Stop failed"):
@@ -267,9 +284,9 @@ class DriverProtocolTests(unittest.TestCase):
         def collect(binary,out,phase,index,keyboard):
             calls.append((phase,index))
             return dict(status="fail",inputUnavailable=True)
-        with tempfile.TemporaryDirectory(dir=driver.ROOT) as directory, \
+        with worktree() as directory, \
              mock.patch.dict(os.environ, INKWELL_NATIVE_PERF_RUN="1"), \
-             mock.patch("sys.argv", ["native_input", "--input-backend", "xtest", "--binary", __file__, "--output", directory]), \
+             mock.patch("sys.argv", ["native_input", "--input-backend", "xtest", "--output", directory]), \
              mock.patch.object(driver, "X11Keyboard", return_value=SimpleNamespace(close=mock.Mock())), \
              mock.patch.object(driver, "collect_run", collect):
             with self.assertRaises(SystemExit) as exit_:
@@ -302,7 +319,7 @@ class DriverProtocolTests(unittest.TestCase):
             def wait(self, **kwargs): self.returncode = 1; return 1
             def terminate(self): self.returncode = -15
             def kill(self): self.returncode = -9
-        with tempfile.TemporaryDirectory(dir=driver.ROOT) as directory, \
+        with worktree() as directory, \
              mock.patch.object(driver.subprocess, "Popen", FailedProcess):
             inject = mock.Mock(side_effect=AssertionError("unexpected input"))
             result = driver.collect_run(Path(__file__), Path(directory), "warm", 1,
@@ -317,9 +334,9 @@ class DriverProtocolTests(unittest.TestCase):
         def collect(binary, out, phase, index, keyboard):
             calls.append((phase, index))
             return {"status": "fail" if phase == "warm" else "collected"}
-        with tempfile.TemporaryDirectory(dir=driver.ROOT) as directory, \
+        with worktree() as directory, \
              mock.patch.dict(os.environ, INKWELL_NATIVE_PERF_RUN="1"), \
-             mock.patch("sys.argv", ["native_input", "--input-backend", "xtest", "--binary", __file__, "--output", directory]), \
+             mock.patch("sys.argv", ["native_input", "--input-backend", "xtest", "--output", directory]), \
              mock.patch.object(driver, "X11Keyboard", return_value=SimpleNamespace(close=mock.Mock())), \
              mock.patch.object(driver, "collect_run", collect):
             with self.assertRaises(SystemExit):
@@ -333,9 +350,9 @@ class DriverProtocolTests(unittest.TestCase):
             calls.append((phase,index))
             return {"status":"collected", "phase":phase, "index":index,
                     "budgetVerdict":"fail" if phase=="warm" else "unknown"}
-        with tempfile.TemporaryDirectory(dir=driver.ROOT) as directory, \
+        with worktree() as directory, \
              mock.patch.dict(os.environ, INKWELL_NATIVE_PERF_RUN="1"), \
-             mock.patch("sys.argv", ["native_input", "--input-backend", "xtest", "--binary", __file__, "--output", directory]), \
+             mock.patch("sys.argv", ["native_input", "--input-backend", "xtest", "--output", directory]), \
              mock.patch.object(driver, "X11Keyboard", return_value=SimpleNamespace(close=mock.Mock())), \
              mock.patch.object(driver, "collect_run", collect):
             driver.main()
@@ -424,9 +441,9 @@ class DriverProtocolTests(unittest.TestCase):
             keyboard.activate_for(43)
 
     def test_host_guard_never_opens_display_or_process(self):
-        with tempfile.TemporaryDirectory(dir=driver.ROOT) as directory:
+        with worktree() as directory:
             with mock.patch.dict(driver.os.environ, {"INKWELL_NATIVE_PERF_RUN": "0"}), \
-                 mock.patch("sys.argv", ["native_input", "--binary", __file__, "--output", directory]), \
+                 mock.patch("sys.argv", ["native_input", "--output", directory]), \
                  mock.patch.object(driver, "X11Keyboard", side_effect=AssertionError("display opened")), \
                  mock.patch.object(driver, "MutterKeyboard", side_effect=AssertionError("D-Bus opened")), \
                  mock.patch.object(driver.subprocess, "Popen", side_effect=AssertionError("process launched")):
@@ -470,7 +487,7 @@ class DriverProtocolTests(unittest.TestCase):
             def wait(self, **kwargs): self.returncode = 0; return 0
             def terminate(self): self.returncode = -15
             def kill(self): self.returncode = -9
-        with tempfile.TemporaryDirectory(dir=driver.ROOT) as directory, \
+        with worktree() as directory, \
              mock.patch.object(driver.subprocess, "Popen", FakeProcess):
             result = driver.collect_run(Path(__file__), Path(directory), "cold", 1,
                                         SimpleNamespace(press_for=lambda pid: keys.append(pid)))
@@ -530,9 +547,9 @@ class EnvironmentFaultTests(unittest.TestCase):
             for phase_failing in ("warm", "cold"):
                 def collect(binary, out, phase, index, keyboard, failing=phase_failing):
                     return dict(status="fail", inputUnavailable=(phase == failing))
-                with tempfile.TemporaryDirectory(dir=driver.ROOT) as directory, \
+                with worktree() as directory, \
                      mock.patch.dict(os.environ, INKWELL_NATIVE_PERF_RUN="1"), \
-                     mock.patch("sys.argv", ["native_input", "--input-backend", backend_name, "--binary", __file__, "--output", directory]), \
+                     mock.patch("sys.argv", ["native_input", "--input-backend", backend_name, "--output", directory]), \
                      mock.patch.object(driver, "MutterKeyboard", return_value=SimpleNamespace(close=mock.Mock())), \
                      mock.patch.object(driver, "X11Keyboard", return_value=SimpleNamespace(close=mock.Mock())), \
                      mock.patch.object(driver, "collect_run", collect):
@@ -565,9 +582,9 @@ class EnvironmentFaultTests(unittest.TestCase):
     def test_driver_exit_75_writes_fault(self):
         backend = SimpleNamespace(close=mock.Mock())
         failure = driver.EnvironmentFault("focus-lost", "another window took the focus")
-        with tempfile.TemporaryDirectory(dir=driver.ROOT) as directory, \
+        with worktree() as directory, \
              mock.patch.dict(os.environ, INKWELL_NATIVE_PERF_RUN="1"), \
-             mock.patch("sys.argv", ["native_input", "--binary", __file__, "--output", directory]), \
+             mock.patch("sys.argv", ["native_input", "--output", directory]), \
              mock.patch.object(driver, "MutterKeyboard", return_value=backend), \
              mock.patch.object(driver, "collect_run", side_effect=failure):
             with self.assertRaises(SystemExit) as exit_:
@@ -578,9 +595,9 @@ class EnvironmentFaultTests(unittest.TestCase):
             self.assertEqual(manifest["fault"], dict(kind="focus-lost", message="another window took the focus"))
             backend.close.assert_called_once_with()
         # A genuine failure keeps its own status and exit.
-        with tempfile.TemporaryDirectory(dir=driver.ROOT) as directory, \
+        with worktree() as directory, \
              mock.patch.dict(os.environ, INKWELL_NATIVE_PERF_RUN="1"), \
-             mock.patch("sys.argv", ["native_input", "--binary", __file__, "--output", directory]), \
+             mock.patch("sys.argv", ["native_input", "--output", directory]), \
              mock.patch.object(driver, "MutterKeyboard", return_value=SimpleNamespace(close=mock.Mock())), \
              mock.patch.object(driver, "collect_run", side_effect=RuntimeError("input failed")):
             with self.assertRaises(RuntimeError):
