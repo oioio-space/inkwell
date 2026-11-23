@@ -219,7 +219,7 @@ func (b *Bulk) stream(ctx context.Context, ps *peerState) (network.Stream, error
 	// budget; any other refusal, or the budget's end, fails this Send only.
 	octx, cancel := context.WithTimeout(ctx, openTimeout)
 	defer cancel()
-	s, _, err := n.openAcked(octx, ps.id, ProtocolBulk, syncack.RoleMove, direct)
+	s, _, err := n.openAcked(octx, ps.id, ProtocolBulk, syncack.RoleMove, direct, nil)
 	if err != nil {
 		return nil, fmt.Errorf("p2p: open bulk stream to %s: %w", ps.name, err)
 	}

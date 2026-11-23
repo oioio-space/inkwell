@@ -62,6 +62,16 @@ NoLeaseNeeded == TRUE
 AnyTicket == TRUE
 \* M29 (H-5, B6): a round that gave up waiting loses its ticket's place (re-registers at the tail).
 AbandonDrops == ~RWants \/ ~wanted \/ circuits = {} \/ direct
+\* M30 (H-19, block HP1r): a direct connection that lands after the last circuit is gone is kept.
+LandAny == TRUE
+\* M31 (H-20, block HP1c): L's round rides the connection libp2p picks, the older circuit (more streams), which is a
+\* ghost after R's crash.
+RoundAnyConn(origin) == In("L") \in cr.ghost
+\* M32 (P-15, block HP1c): the proof's timer closes the older circuit whatever the answer.
+CloseOnTimer == FALSE
+\* M33 (H-15, P-15, block HP1c): L settles a duplicate without waiting for the P-15 proofs: a ghost is taken for
+\* one of the two circuits, and the circuit H-15 keeps may be the dead one.
+ResolveNoWait == TRUE
 
 \* Witnesses (anti-vacuity): invariants the sound model must violate.
 NoDirect == ~direct                                               \* a link becomes direct
@@ -70,5 +80,9 @@ NoBusy == lastCls # "busy"                                         \* a call is 
 NoSlowStep == pol.k = 0                                            \* the slow ladder is used (a Spent call)
 NoWaitBehind == ~(InQ("r") /\ \E o \in OPeers : lease[o] > 0)      \* L waits for a slot another peer holds
 NoCross == ~crossed                                                \* two punch phases of the pair overlap
+NoDirectAfterRelayLost == ~(direct /\ circuits = {} /\ cnt.rlost > 0)  \* HP1r: an upgraded session outlives its circuit
+NoRoundBesideGhost == ~cr.besideGhost                            \* HP1c: a round of L starts while a ghost shares its direction
+NoProofAnswered == ~cr.answered                                    \* HP1c: an older live circuit answers its P-15 proof
+NoProofClose == ~cr.proofClosed                                    \* HP1c: P-15 closes a ghost
 NoGateRefusal == ~(Byz /\ "LR" \in circuits /\ lReady /\ wanted /\ roundTok = 0)  \* the gate's budget binds a flood
 =============================================================================

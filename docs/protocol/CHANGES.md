@@ -587,3 +587,18 @@ avait les mêmes défauts. Plan : [2026-11-17-pu1c-inbound-lifecycle.md](../plan
 | Sur QUIC, les flux en attente des deux voies pouvaient épuiser le crédit de la connexion avant la tête | fenêtres initiales réglées par le nœud, 128 Kio par flux et 1 Mio par connexion, (places × voies + 1) × 128 Kio ≤ 3/4 × 1 Mio, la fenêtre de connexion réservée au gestionnaire de ressources (128 Mio à 128 connexions) ; contre-pression entre les voies assumée (P-13) | §8.7.3, §16.1 |
 | La voie vrac prenait sa place après l'attente de l'annonce et n'avait ni places ni refus | `/inkwell/bulk/2.0.0` : accusé, deux places, ordre et cycle de vie de §8.7.3, refus pour capacité `0x1002`, sans `ClosePeer` (P-14) | §8.1, §8.7.8, §20.6 |
 | Preuves | vecteurs `inbound.json`, modèle `InboundLifecycle` (les deux voies à la fois, y compris byzantines ; QC1–QC8, quatre témoins), porte `gates/PU1c.toml` | §8.7.9 |
+
+# Bloc HP1c : circuit d'une ronde et connexion supplantée (2026-11-23, proposé)
+
+Constat du bloc HP1m (porte HP1m échouée, `gates/HP1/SIMPLIFY.md`, « W77 stopped call ») : après le plantage d'un
+pair, le relais garde son ancien circuit jusqu'à 30 s d'inactivité QUIC ; libp2p y porte la session et la ronde
+automatique de DCUtR, qui tient l'unique appel en cours (H-4). Plan :
+[2026-11-23-hp1-reformalize.md](../plans/2026-11-23-hp1-reformalize.md), relu par Gemini (accepté avec trois
+changements, appliqués).
+
+| Constat | Changement | Où |
+|---|---|---|
+| Une ronde DCUtR causée par un circuit neuf s'ouvrait sur la connexion choisie par libp2p, l'ancien circuit mort | chaque ronde initiée s'ouvre sur le circuit qui la cause (H-20) | §8.6 |
+| Une connexion supplantée n'était jamais mise à l'épreuve : un circuit mort restait préféré environ 30 s | preuve de vie (ping de 32 o) de chaque connexion plus ancienne, `T_vie` = 5 s ; sans preuve, fermeture une fois un flux sync accusé sur une connexion plus récente, jamais la plus récente ni la seule ; une réponse garde la connexion (P-15) ; la règle des doublons attend la fin des preuves (H-15) | §8.6, §8.7.4, §8.7.5, §16 |
+| Revue du code (étape 2) : une défaillance locale de la preuve se lisait comme le silence du pair ; une preuve finie restait « en cours » pour la règle des doublons ; une fermeture décidée restait exécutée après la perte de la connexion plus récente | une preuve qui n'atteint pas le pair ne donne aucun verdict (état `void`) ; une preuve finie sans réponse ne retient plus la règle des doublons et son circuit n'y compte plus ; la fermeture se décide sur les connexions telles qu'elles sont quand elle a lieu (P-15, H-15) | §8.6, §8.7.4 |
+| Preuves | vecteurs `supersede.json`, décision `syncack.Supersede` fuzzée ; modèles `DirectUpgrade` (S19, S20, M31, M32, trois témoins) et `Supersede`, qui étend `PeerUpAck` sans le modifier (MS1–MS4, trois témoins) | §8.6, §8.7.9 |

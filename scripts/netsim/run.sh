@@ -25,7 +25,8 @@
 # <scenario>-s<seed>-r<k> with k = 1..K and results/<run>.json each; repeat k draws netem's chains
 # from seed + 100 (k - 1), so the repeats are independent; unset: once, no -r suffix), NETSIM_EXPECT (characterize, the default: the declared
 # known failures are reported, not blocking; strict: they block), NETSIM_BIN_DIR (binaries to run;
-# the mutant runner points it at a mutated build), NETSIM_VARIANTS (scenario 8: editor reader).
+# the mutant runner points it at a mutated build), NETSIM_VARIANTS (scenario 8: editor reader; scenario 9:
+# none by default, the graceful restart, or crash: SIGKILL and a new UDP port, block HP1n4).
 set -euo pipefail
 
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -93,7 +94,7 @@ done
 rm -rf "$state"
 mkdir -p "$out" /run/netsim
 
-declare -A MODE=([1]=cone [2]=symmetric [3]=cone [4]=cone [5]=cone [6]=cone [7]=symmetric [8]=mesh)
+declare -A MODE=([1]=cone [2]=symmetric [3]=cone [4]=cone [5]=cone [6]=cone [7]=symmetric [8]=mesh [9]=cone)
 declare -A TITLE=(
   [1]="cone NAT: direct link after hole punching"
   [2]="symmetric NAT: link stays relayed"
@@ -103,8 +104,10 @@ declare -A TITLE=(
   [6]="NI-2 25 s blackout during a large paste"
   [7]="NI-3 8 KiB/s relay, large paste"
   [8]="NI-4 three devices, alice-bob down"
+  [9]="HP1 a device restarts while linked"
 )
 declare -A PORT=([alice]=18081 [bob]=18082 [carol]=18083)
+udp_port=7419 # internal/app/node.go DefaultPort: the port an instance listens on first
 pids=()
 
 stop_stack() {
@@ -113,6 +116,16 @@ stop_stack() {
     wait "${pids[@]}" 2>/dev/null || true
   fi
   pids=()
+  # Instances a scenario restarted (scenario 9) are not children of this shell: their pid files.
+  local f
+  for f in /run/netsim/*.pid; do
+    # Under set -e a failed last command of an && list ends the script: a process already gone (the stack's
+    # own children are killed first) must not make the run fail before its summary.
+    if [[ -f $f ]]; then
+      kill "$(cat "$f")" 2>/dev/null || true
+    fi
+    rm -f "$f"
+  done
   "$topology" down
 }
 trap stop_stack EXIT
@@ -164,6 +177,37 @@ start_stack() {
       INKWELL_RELAYS="$relay_addr" \
       "$app_bin" >"$dir/$who.log" 2>&1 &
     pids+=($!)
+    echo "$!" >"/run/netsim/$who.pid"
+    # restart-<who>.sh ends the instance's process and starts it again on the same home, network and
+    # port, its log appended (scenario 9, a device that restarts while linked). restart-<who>.sh crash
+    # kills it instead (SIGKILL: no close reaches the relay or the peers) and holds its UDP port with a
+    # placeholder that swallows what still arrives there (no ICMP error tells the relay), so the new
+    # process listens on another port: the relay and the peers see a new circuit while the old one stays
+    # open, dead, until their idle timeout (block HP1n4). $udp_port is the app's DefaultPort.
+    cat >"$dir/restart-$who.sh" <<EOF
+#!/usr/bin/env bash
+set -u
+pid=\$(cat /run/netsim/$who.pid)
+if [[ \${1:-} == crash ]]; then
+  kill -KILL "\$pid" 2>/dev/null
+else
+  kill "\$pid" 2>/dev/null
+fi
+for _ in \$(seq 100); do kill -0 "\$pid" 2>/dev/null || break; sleep 0.1; done
+if [[ \${1:-} == crash ]]; then
+  ip netns exec $who setsid socat -u UDP4-RECV:$udp_port /dev/null </dev/null >/dev/null 2>&1 &
+  echo "\$!" >/run/netsim/$who-hold.pid
+  for _ in \$(seq 50); do
+    ip netns exec $who ss -Hlun "sport = :$udp_port" | grep -q . && break
+    sleep 0.1
+  done
+fi
+echo "netsim: restart $who \$(date +%s%3N)" >>"$dir/$who.log"
+ip netns exec $who env INKWELL_SERVER_PORT=${PORT[$who]} INKWELL_HOME="$dir/$who" INKWELL_DOCS="$dir/$who-docs" \\
+  INKWELL_RELAYS="$relay_addr" setsid "$app_bin" >>"$dir/$who.log" 2>&1 </dev/null &
+echo "\$!" >/run/netsim/$who.pid
+EOF
+    chmod +x "$dir/restart-$who.sh"
     ip netns exec "$who" socat "UNIX-LISTEN:/run/netsim/$who.sock,fork" "TCP:127.0.0.1:${PORT[$who]}" &
     pids+=($!)
     socat "TCP-LISTEN:${PORT[$who]},bind=127.0.0.1,reuseaddr,fork" "UNIX-CONNECT:/run/netsim/$who.sock" &
@@ -193,6 +237,7 @@ for n in $scenarios; do
   seed_list=("")
   if ((n >= 5)); then read -r -a seed_list <<<"$seeds"; fi
   if ((n == 8)); then read -r -a variants <<<"${NETSIM_VARIANTS:-editor reader}"; fi
+  if ((n == 9)) && [[ -n ${NETSIM_VARIANTS:-} ]]; then read -r -a variants <<<"$NETSIM_VARIANTS"; fi
   for seed in "${seed_list[@]}"; do
     for variant in "${variants[@]}"; do
       reps=("")

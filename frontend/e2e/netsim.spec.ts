@@ -20,7 +20,7 @@ const packets = (nat: string, counter: "direct" | "egress") =>
 /** Packets that crossed a hole punched between two NATs, all NATs together. */
 const directPackets = () =>
   ["nat-a", "nat-b", "nat-c"].reduce((n, nat) => n + packets(nat, "direct"), 0);
-// The impaired scenarios (5-8) run once per seed (and scenario 8 once per variant): `run` names the
+// The impaired scenarios (5-9) run once per seed (and scenarios 8 and 9 once per variant): `run` names the
 // run's files, `seed` drives netem, the typing schedule and the payloads.
 const run = process.env.NETSIM_RUN ?? scenario;
 const seed = Number(process.env.NETSIM_SEED ?? "0") || 0;
@@ -543,6 +543,27 @@ function notTornDown(before: Snapshot, after: Snapshot) {
   };
 }
 
+/**
+ * C3a (HP1, plan section 7): the outages counted at the baseline. The inviter (first row) may have lost
+ * the link once if the joiner restarted (`excused`, 0 or 1); the joiner's counter is its new process's
+ * own and must be 0. Every other link-down before the baseline fails, restart or not.
+ */
+function beforeBaseline(base: Snapshot, excused: number) {
+  if (base.error) throw base.error;
+  if (base.missing) return { ok: false, measured: base.missing };
+  const [inviter, joiner] = (base.rows ?? []).map((r) => r.downs ?? Number.NaN);
+  return {
+    ok: inviter <= excused && joiner === 0,
+    measured: `downsTotal at the baseline: inviter ${inviter}, joiner ${joiner}; restart window ${excused ? "identified" : "none"} (excused ${excused})`,
+  };
+}
+
+/** The restarts of `who` its log records: the harness's (`netsim: restart`, scenario 9) or its own (PC1b). */
+function restarts(who: "alice" | "bob"): number {
+  const log = readFileSync(join(out, "..", run, `${who}.log`), "utf8");
+  return [...log.matchAll(/^netsim: restart \S+ \d+$|msg=restarting/gm)].length;
+}
+
 /** Both pages hold the same text, and every token exactly once. */
 async function consistent(pages: Page[], all: string[]) {
   const texts = await Promise.all(pages.map(docText));
@@ -657,6 +678,10 @@ test("scenario 5: NI-1 bad Wi-Fi that changes (converge, stay up, the level foll
   // The phases start once C1 has seen the direct path (or given up at 90 s): a relayed link reports
   // a relayed RTT and no level, which is not what C4 and C5 judge.
   await c1;
+  // HP1 (plan docs/plans/2026-11-16-hp1-direct-upgrade.md section 7): C3 counts the outages from here, the
+  // pairing done (a joiner that restarts, PC1b, has its first process gone by now); C3a judges what came
+  // before: a link-down only inside an identified restart of the joiner, one at most.
+  const baseline = await snapshot([alice, bob], 30_000);
 
   // Every second, the cumulative counters of each direction's two hops; at 20 s and 40 s into P1,
   // P2 and P3 the RTT the people popover reads (C4 judges the end of each phase).
@@ -751,12 +776,18 @@ test("scenario 5: NI-1 bad Wi-Fi that changes (converge, stay up, the level foll
       return { ok: t !== undefined, measured: `${secs(t)} for ${all.length} tokens` };
     },
   );
-  await clause("C3", "zero PeerDown on either side", "downsTotal = 0", async () => {
-    const downs = await Promise.all(
-      [alice, bob].map(async (p) => field(await only(p), "downsTotal")),
-    );
-    return { ok: downs.every((d) => d === 0), measured: `downsTotal ${downs.join(", ")}` };
-  });
+  await clause(
+    "C3",
+    "zero PeerDown on either side during the phases",
+    "downsTotal - baseline = 0",
+    async () => notTornDown(baseline, await snapshot([alice, bob])),
+  );
+  await clause(
+    "C3a",
+    "before the baseline, a link-down only inside an identified restart of the joiner, at most one",
+    "inviter downsTotal <= restarts of bob (<= 1), bob 0",
+    async () => beforeBaseline(baseline, restarts("bob") > 0 ? 1 : 0),
+  );
   await clause(
     "C4",
     "reported RTT at the end of each phase (40 s after its change) follows the injected delay",
@@ -1189,4 +1220,170 @@ test("scenario 8: NI-4 three devices, alice-bob down (converge through carol, no
     },
   );
   finish({ carolWrites, claims });
+});
+
+/** Both documents contain every given text and are identical, now; a miss is false, never an exception. */
+async function convergedNow(a: Page, b: Page, texts: string[]) {
+  const [ta, tb] = await Promise.all([docText(a), docText(b)]);
+  return ta === tb && texts.every((t) => ta.includes(t));
+}
+
+/**
+ * Scenario 9, variant crash (gates/HP1n5.toml, which supersedes HP1n4): every clause is counted from bob's
+ * restart (`tRestart`, when restart-bob.sh's kill and respawn return), and bob's page readiness (« Synchronisé »)
+ * is part of what is measured: HP1n4 counted from readiness, a wait that absorbed MN3's ~30 s. C1d: bob's page
+ * shows « Synchronisé » and the link bob sees is direct, within 15 s of the restart; without P-15 the dead
+ * connection is kept until QUIC's idle timeout and bob's link stays relayed (direct 30.0 s after the restart in
+ * HP1n4's MN3 run), so this is the clause MN3 turns red. C2d: texts typed on both sides once bob's page is ready
+ * converge both ways within 15 s of the restart. C3c: alice never shows bob away (no link-down at alice over the
+ * whole run: the dead circuit is closed only after the new connection's ACK) and bob's restart is logged once.
+ * Every miss, readiness included, is returned as data, never thrown (mutants.py reads a thrown error as a
+ * harness error, not a catch).
+ */
+async function crashClauses(alice: Page, bob: Page, tRestart: number) {
+  const bound = 15_000;
+  const left = () => Math.max(0, tRestart + bound - Date.now());
+  const ready = await until(
+    async () => /Synchronisé/.test((await bob.getByRole("status").textContent()) ?? ""),
+    left(),
+    200,
+  );
+  const readyAt = ready === undefined ? undefined : Date.now();
+  const texts = ["avant", "alice-apres", "bob-apres"];
+  let direct: { at?: number; link?: Link; count: number } = { count: -1 };
+  let converged: number | undefined;
+  if (readyAt !== undefined) {
+    await typeAtEnd(alice, "alice-apres ");
+    await typeAtEnd(bob, "bob-apres ");
+    [direct, converged] = await Promise.all([
+      awaitOnly(bob, left(), isDirect, 500).then((r) => ({
+        ...r,
+        at: r.ms === undefined ? undefined : Date.now(),
+      })),
+      until(() => convergedNow(alice, bob, texts), left(), 500).then((ms) =>
+        ms === undefined ? undefined : Date.now(),
+      ),
+    ]);
+  }
+  const notReady = "« Synchronisé » not shown 15 s after bob's restart";
+  await clause(
+    "C1d",
+    "« Synchronisé » and direct within 15 s of bob's restart after the crash",
+    "ready and direct <= 15 s",
+    async () => ({
+      ok: direct.at !== undefined,
+      measured:
+        readyAt === undefined
+          ? notReady
+          : direct.at === undefined
+            ? `${direct.link ? `path ${direct.link.path}` : `${direct.count} links`} 15 s after bob's restart (« Synchronisé » at ${secs(readyAt - tRestart)})`
+            : `${secs(direct.at - tRestart)} after bob's restart (« Synchronisé » at ${secs(readyAt - tRestart)})`,
+    }),
+  );
+  await clause(
+    "C2d",
+    "texts typed on both sides after the crash converge both ways within 15 s of bob's restart",
+    "<= 15 s",
+    async () => ({
+      ok: converged !== undefined,
+      measured:
+        readyAt === undefined
+          ? notReady
+          : converged === undefined
+            ? "not converged 15 s after bob's restart"
+            : `${secs(converged - tRestart)} after bob's restart`,
+    }),
+  );
+  await clause(
+    "C3c",
+    "alice never shows bob away (no link-down at alice over the whole run), bob's restart logged once",
+    "alice downsTotal 0; restarts logged 1",
+    async () => {
+      const end = await snapshot([alice, bob]);
+      if (end.error) throw end.error;
+      if (end.missing) return { ok: false, measured: end.missing };
+      const downs = end.rows?.[0]?.downs ?? Number.NaN;
+      return {
+        ok: downs === 0 && restarts("bob") === 1,
+        measured: `alice downsTotal ${downs}; bob ${end.rows?.[1]?.downs ?? Number.NaN}; restarts logged ${restarts("bob")}`,
+      };
+    },
+  );
+}
+
+test("scenario 9: HP1 a device restarts while linked (direct again within 30 s, converge, no outage outside the restart)", async ({
+  browser,
+}) => {
+  test.setTimeout(600_000);
+  // Plan docs/plans/2026-11-16-hp1-direct-upgrade.md Q4: two NATed devices and a relay; bob's process
+  // ends and starts again on the same home, network and port, as after a crash or an update. Without
+  // HP1, libp2p's single DCUtR attempt races the restart and the link stays relayed for good.
+  const { alice, bob } = await twoPeople(browser);
+  const first = await awaitOnly(alice, 120_000, isDirect);
+  if (!first.link) throw new Error(`the first link never became direct (${first.count} links)`);
+  await typeAtEnd(alice, "avant ");
+  await converge(alice, bob, ["avant"], 30_000);
+  const before = await snapshot([alice]);
+
+  // Variant crash (block HP1n4, plan docs/plans/2026-11-23-hp1-reformalize.md §5): bob's process is killed
+  // (SIGKILL, no close reaches the relay or alice) and comes back on another UDP port, so alice and the relay
+  // see a new circuit while the old one stays open, dead, for the relay's idle timeout (rules H-20, P-15).
+  const crash = variant === "crash";
+  execFileSync("bash", [join(out, "..", run, "restart-bob.sh"), ...(crash ? ["crash"] : [])]);
+  const tRestart = Date.now();
+  const up = await until(
+    async () => (await fetch("http://127.0.0.1:18082/health").catch(() => undefined))?.ok === true,
+    60_000,
+    200,
+  );
+  if (up === undefined) throw new Error("bob's new process does not answer");
+  await bob.reload();
+  if (crash) {
+    await crashClauses(alice, bob, tRestart);
+    finish();
+    return;
+  }
+  await expect(bob.getByRole("status")).toHaveText(/Synchronisé/, { timeout: 60_000 });
+  const tReady = Date.now();
+
+  // C1: bob's new process sees the link to alice direct within 30 s (its links are its own, fresh).
+  const c1 = await awaitOnly(bob, 30_000, isDirect);
+  await clause("C1", "direct within 30 s of bob's new process", "direct <= 30 s", async () => ({
+    ok: c1.ms !== undefined,
+    measured:
+      c1.ms === undefined
+        ? `${c1.link ? `path ${c1.link.path}` : `${c1.count} links`} after 30 s`
+        : `${secs(c1.ms)} after bob answered (${secs(tReady - tRestart)} restart)`,
+  }));
+  const baseline = await snapshot([alice, bob], 30_000);
+
+  await typeAtEnd(alice, "alice-apres ");
+  await typeAtEnd(bob, "bob-apres ");
+  await clause("C2", "texts converge after the restart", "<= 30 s", async () => {
+    const t0 = Date.now();
+    await converge(alice, bob, ["avant", "alice-apres", "bob-apres"], 30_000);
+    return { ok: true, measured: `${secs(Date.now() - t0)}` };
+  });
+
+  await clause(
+    "C3a",
+    "a link-down only inside the identified restart window (bob's restart to the baseline), at most one; none before it, none after",
+    "alice: 0 before, <= 1 in the window, 0 after; bob 0",
+    async () => {
+      const end = await snapshot([alice, bob]);
+      for (const x of [before, baseline, end]) if (x.error) throw x.error;
+      const miss = [before, baseline, end].find((x) => x.missing);
+      if (miss) return { ok: false, measured: miss.missing as string };
+      const d = (x: Snapshot, i: number) => x.rows?.[i]?.downs ?? Number.NaN;
+      const pre = d(before, 0);
+      const inWindow = d(baseline, 0) - pre;
+      const after = d(end, 0) - d(baseline, 0);
+      const joiner = d(end, 1);
+      return {
+        ok: pre === 0 && inWindow <= 1 && after === 0 && joiner === 0 && restarts("bob") === 1,
+        measured: `alice downsTotal ${pre} before, +${inWindow} in the window, +${after} after; bob ${joiner}; restarts logged ${restarts("bob")}`,
+      };
+    },
+  );
+  finish();
 });

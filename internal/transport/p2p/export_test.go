@@ -3,10 +3,13 @@ package p2p
 import (
 	"bytes"
 	"cmp"
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/netip"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -14,16 +17,18 @@ import (
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
+	rcmgr "github.com/libp2p/go-libp2p/p2p/host/resource-manager"
 	"github.com/libp2p/go-libp2p/p2p/transport/quicreuse"
 	"github.com/libp2p/go-yamux/v5"
 	ma "github.com/multiformats/go-multiaddr"
 
 	"github.com/oioio-space/inkwell/internal/transport"
+	"github.com/oioio-space/inkwell/protocol/directup"
 )
 
-// SetExtra makes New apply opts after its own, so tests can swap the network
+// SetExtra makes New apply opts after its own (and after those set before), so tests can swap the network
 // (for example for a simulated one).
-func SetExtra(o *Options, opts ...libp2p.Option) { o.extra = opts }
+func SetExtra(o *Options, opts ...libp2p.Option) { o.extra = append(o.extra, opts...) }
 
 // SetRewrite makes New rewrite the addresses the node advertises through f,
 // so a simulated node behind a NAT advertises its public address.
@@ -364,3 +369,199 @@ func (b *addrBook) snapshot() []bookPeer {
 
 // discard is a logger for the tests that do not look at the logs.
 var discard = slog.New(slog.DiscardHandler)
+
+// UpgradeDebug describes the direct upgrade's view of peer: its connections and their streams, the
+// session's connection, the policy, the call in flight and the slots.
+func (n *Node) UpgradeDebug(id transport.PeerID) string {
+	p, ok := parseID(id)
+	if !ok {
+		return "bad peer"
+	}
+	var b strings.Builder
+	for _, c := range n.h.Network().ConnsToPeer(p) {
+		var protos []string
+		for _, s := range c.GetStreams() {
+			protos = append(protos, string(s.Protocol())+"/"+s.Stat().Direction.String())
+		}
+		fmt.Fprintf(&b, "conn %s %s %v; ", c.RemoteMultiaddr(), c.Stat().Direction, protos)
+	}
+	n.mu.Lock()
+	if ps := n.peers[p]; ps != nil && ps.out != nil {
+		fmt.Fprintf(&b, "out on %s; ", ps.out.Conn().RemoteMultiaddr())
+	}
+	u := n.ups[p]
+	n.mu.Unlock()
+	if u != nil {
+		fmt.Fprintf(&b, "policy epoch %d in flight %v due %s; call %v queued %v; ", u.pol.Epoch(), u.pol.InFlight(), u.pol.Due().Format("15:04:05.000"), u.call != nil, u.queued)
+	}
+	if n.pgate != nil {
+		n.pgate.mu.Lock()
+		fmt.Fprintf(&b, "slots held %d queued %v", n.pgate.slots.Held(time.Now()), n.pgate.slots.Queued(string(p)))
+		n.pgate.mu.Unlock()
+	}
+	return b.String()
+}
+
+// SetPuncher replaces the host's hole-punch call of the direct upgrade by f (block HP1).
+func SetPuncher(o *Options, f func(ctx context.Context, to transport.PeerID) error) {
+	o.punch = func(ctx context.Context, p peer.ID) error {
+		name, _ := peerName(p)
+		return f(ctx, name)
+	}
+}
+
+// SetOnRound makes the node tell f of the connection each DCUtR round it initiates opens on (H-20).
+func SetOnRound(o *Options, f func(c network.Conn)) { o.onRound = f }
+
+// SetOnProof makes the node tell f of each liveness proof of P-15 that ends: its connection, and whether
+// the peer answered within T_vie.
+func SetOnProof(o *Options, f func(c network.Conn, heard bool)) { o.onProof = f }
+
+// OutStream returns the outbound session stream to peer, or nil.
+func (n *Node) OutStream(id transport.PeerID) network.Stream {
+	p, _ := parseID(id)
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	if ps := n.peers[p]; ps != nil {
+		return ps.out
+	}
+	return nil
+}
+
+// PunchIdle reports whether the node has no hole-punch call to peer in flight: neither one of its upgrader nor
+// a one-shot of its DCUtR service.
+func (n *Node) PunchIdle(to transport.PeerID) bool {
+	p, _ := parseID(to)
+	n.mu.Lock()
+	u := n.ups[p]
+	n.mu.Unlock()
+	if u != nil && u.live.Load() != nil {
+		return false
+	}
+	s := n.hps.Load()
+	if s == nil {
+		return true
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	_, busy := s.active[p]
+	return !busy
+}
+
+// SetOnAnswerDial makes the node tell f when, as the answerer of a DCUtR round, it starts its punch dial to peer: the
+// round read the initiator's SYNC, and the dial runs on the punch service's context, bound to no circuit.
+func SetOnAnswerDial(o *Options, f func(peer transport.PeerID)) {
+	o.onAnswerDial = func(p peer.ID) {
+		name, _ := peerName(p)
+		f(name)
+	}
+}
+
+// SetNoAutoPunch turns libp2p's one-shot off (autoPunch): a test of the upgrader alone, with no other DCUtR call to
+// the peer, whose rounds would be booked to the upgrader's call.
+func SetNoAutoPunch(o *Options) { o.noAutoPunch = true }
+
+// SetLocalReady replaces the check of the node's own /libp2p/dcutr handler by f.
+func SetLocalReady(o *Options, f func() bool) { o.localReady = f }
+
+// SetFailUpgrade makes a move of the session to a direct connection fail at once while f is true.
+func SetFailUpgrade(o *Options, f func() bool) { o.failUpgrade = f }
+
+// RealPunch calls the host's own hole-punch service, as the upgrader does without SetPuncher.
+func (n *Node) RealPunch(ctx context.Context, to transport.PeerID) error {
+	p, ok := parseID(to)
+	if !ok {
+		return errors.New("bad peer")
+	}
+	s := n.hps.Load()
+	if s == nil {
+		return errors.New("no hole-punch service")
+	}
+	return n.punchOn(ctx, s, p, n.newestCircuitIn(p))
+}
+
+// PunchCounts returns the rounds the punch gate admitted with peer and the non-relay destinations it let
+// through to it.
+func (n *Node) PunchCounts(to transport.PeerID) (rounds, dests int) {
+	p, _ := parseID(to)
+	return n.pgate.counts(p)
+}
+
+// PunchTicket reports whether peer holds a ticket or a grant in the node's slots.
+func (n *Node) PunchTicket(to transport.PeerID) bool {
+	p, _ := parseID(to)
+	n.pgate.mu.Lock()
+	defer n.pgate.mu.Unlock()
+	return n.pgate.slots.Queued(string(p)) || n.pgate.slots.Holds(string(p), time.Now())
+}
+
+// LiftRelayIPLimit lets the node of o hold up to n connections through the relay at relayIP (an IPv4
+// address of the simulated network), instead of libp2p's 8 per IPv4 address: every circuit through a relay
+// counts under the relay's address. Test harness only, for tests that need more than 7 relayed links on
+// one node; block RF1 fixes the limit in the product, and this exception proves no product capacity.
+func LiftRelayIPLimit(o *Options, relayIP string, n int) {
+	o.rcmgr = append(o.rcmgr, rcmgr.WithNetworkPrefixLimit(
+		[]rcmgr.NetworkPrefixLimit{{Network: netip.PrefixFrom(netip.MustParseAddr(relayIP), 32), ConnCount: n}}, nil,
+	))
+}
+
+// SelectAddrs returns the addresses of addrs a round may use (H-12), as the punch gate selects them.
+func SelectAddrs(addrs []ma.Multiaddr) []ma.Multiaddr { return selectAddrs(addrs) }
+
+// FillSlots makes k holders that are no peer take node-wide slots (FIFO, as any ask), and returns the
+// function that gives them back.
+func (n *Node) FillSlots(k int) (release func()) {
+	g := n.pgate
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	grants := make(map[peer.ID]time.Time, k)
+	for i := range k {
+		p := peer.ID(fmt.Sprintf("fill-%d", i))
+		grants[p] = g.askLocked(p, time.Now())
+	}
+	return func() {
+		g.mu.Lock()
+		defer g.mu.Unlock()
+		now := time.Now()
+		for p, until := range grants {
+			g.releaseLocked(p, until, now)
+		}
+	}
+}
+
+// SlotsHeld returns the node-wide slots held now, and the grants made since the start.
+func (n *Node) SlotsHeld() (held, grants int) {
+	n.pgate.mu.Lock()
+	defer n.pgate.mu.Unlock()
+	return n.pgate.slots.Held(time.Now()), n.pgate.slots.Grants()
+}
+
+// Circuits returns the open relay circuits to peer, by direction.
+func (n *Node) Circuits(to transport.PeerID) (in, out int) {
+	p, _ := parseID(to)
+	for _, c := range n.h.Network().ConnsToPeer(p) {
+		if !isCircuit(c.RemoteMultiaddr()) || c.IsClosed() {
+			continue
+		}
+		if c.Stat().Direction == network.DirInbound {
+			in++
+		} else {
+			out++
+		}
+	}
+	return in, out
+}
+
+// HasDirect reports whether the node holds a direct (non-circuit) connection to peer.
+func (n *Node) HasDirect(to transport.PeerID) bool {
+	p, _ := parseID(to)
+	return n.hasDirect(p)
+}
+
+// SetOnUpgradeCall makes the node tell f of each call its direct upgrade starts: "punch" or "dial".
+func SetOnUpgradeCall(o *Options, f func(to transport.PeerID, action string)) {
+	o.onCall = func(p peer.ID, act directup.Action) {
+		name, _ := peerName(p)
+		f(name, act.String())
+	}
+}

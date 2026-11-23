@@ -48,6 +48,9 @@ type wanted struct {
 	// the local network. woken is when it last was, under Node.mu (see wakeEvery).
 	wake  chan struct{}
 	woken time.Time
+	// up is the direct upgrade of the peer (upgrade.go), driven by the loop; nil if the node may not
+	// hole punch.
+	up *upgrader
 }
 
 var errNoAddress = errors.New("no address to dial")
@@ -93,10 +96,12 @@ func (n *Node) Want(peers map[transport.PeerID][]string) {
 		n.mu.Unlock()
 		return
 	}
+	var unwanted []peer.ID
 	for id, w := range n.want {
 		if _, ok := parsed[id]; !ok {
 			w.cancel()
 			delete(n.want, id)
+			unwanted = append(unwanted, id)
 		}
 	}
 	for id, known := range parsed {
@@ -107,6 +112,12 @@ func (n *Node) Want(peers map[transport.PeerID][]string) {
 		delete(n.held, id) // wanted anew (a new pairing): an earlier reset no longer keeps it out
 		ctx, cancel := context.WithCancel(n.ctx)
 		w := &wanted{id: id, known: known, cancel: cancel, wake: make(chan struct{}, 1)}
+		if d := n.mup[id]; d != nil { // its dial loop takes the upgrader over from the member loop, as it is
+			d.handover = true
+			d.cancel()
+			delete(n.mup, id)
+		}
+		w.up = n.upgraderLocked(id)
 		n.want[id] = w
 		n.dialWG.Go(func() { n.dialLoop(ctx, w) })
 	}
@@ -120,6 +131,9 @@ func (n *Node) Want(peers map[transport.PeerID][]string) {
 	n.mu.Unlock()
 	for _, id := range up { // outside mu: Admit and the peerstore are called
 		n.remember(id)
+	}
+	for _, id := range unwanted { // still a member with a circuit: it keeps an upgrader (H-1)
+		n.memberUp(id)
 	}
 }
 
@@ -155,6 +169,10 @@ func (n *Node) connected(id peer.ID) bool {
 
 // dialLoop keeps w connected until ctx is done.
 func (n *Node) dialLoop(ctx context.Context, w *wanted) {
+	if !n.drive(ctx, w) {
+		return
+	}
+	defer n.undrive(w, true)
 	backoff := minBackoff
 	var since time.Time // when the current connection was seen, if there is one
 	// due is when the pending pause ends, kept across wakes: sightings, which anyone on the
@@ -170,14 +188,26 @@ func (n *Node) dialLoop(ctx context.Context, w *wanted) {
 			if since.IsZero() {
 				since = time.Now()
 			}
+			// A relayed link keeps trying to become direct (upgrade.go).
+			n.upgradeStep(ctx, w)
+			var upWake <-chan struct{}
+			var slotCh <-chan struct{}
+			if w.up != nil {
+				upWake, slotCh = w.up.wake, w.up.slotCh
+			}
 			select {
 			case <-chg:
+				continue
+			case <-upWake:
+				continue
+			case <-slotCh:
 				continue
 			case <-ctx.Done():
 				return
 			}
 		}
 		if !since.IsZero() {
+			n.upgradeStep(ctx, w) // the link is gone: the call in flight is cancelled, the ticket dropped
 			// The connection was lost. A long one is replaced at once.
 			stable := time.Since(since) >= stableAfter
 			since = time.Time{}

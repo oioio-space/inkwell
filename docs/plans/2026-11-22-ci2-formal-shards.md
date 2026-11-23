@@ -24,7 +24,10 @@ The table sums the gaps between consecutive TLC verdict timestamps in the `forma
 | PeerUpAck | 19 | 190.5 | 3/3 |
 | Alloy | All | 34.25 | Alloy |
 
-TLC shard totals from the log are ≥12:06, 15:43 and 17:08. Shard 1 passed all 66 entries locally in 16:09. Its final 14 InboundLifecycle entries took 5:46 locally, giving a mixed-run estimate of 16:45 for shard 1 when added to the GitHub timings through the second InboundLifecycle verdict. The estimate excludes runner setup and awaits a hosted rerun. Shards 2 and 3 contain 86 and 95 entries.
+TLC shard totals from the log are ≥12:06, 15:43 and 17:08. Shard 1 passed all 66 entries locally in 16:09. Its final 14 InboundLifecycle entries took 5:46 locally, giving a mixed-run estimate of 16:45 for shard 1 when added to the GitHub timings through the second InboundLifecycle verdict. The estimate excludes runner setup and awaits a hosted rerun. Shards 2 and 3 contain 86 and 95 entries. HP1 later adds its three HP1r runs (link lost, late landing, witness survives) to shard 3/3 with the DirectUpgrade family they extend; the partition test caught them as unassigned. Block HP1c adds 17 runs, 194 s locally (2026-11-23, 2 workers): its
+seven DirectUpgrade crash runs (`HP1c[!S]*`, about 50 s) go to shard 1/3 and its ten Supersede runs (`HP1cSupersede*`,
+about 150 s) to shard 3/3. From the last green run's shard times (45087731662: 14:19, 15:58, 13:21) that gives
+about 15:09 and 15:51, and shard 2/3 stays the longest.
 
 ## Design and acceptance
 

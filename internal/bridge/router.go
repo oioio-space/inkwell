@@ -42,7 +42,10 @@ type Router struct {
 	linksPeriod time.Duration
 	drain       *Drain
 	presenceOK  func(Conn, uint32)
-	mu          sync.Mutex
+	// active, if not nil, is told of every frame from the page: the person editing, or the open
+	// document syncing (HP1, rule H-17).
+	active func()
+	mu     sync.Mutex
 }
 
 // session is one attached connection; mu serializes its writes, which come
@@ -91,6 +94,10 @@ func NewRouter(t transport.Transport, log *slog.Logger) *Router {
 	r.att, _ = t.(Attester)
 	return r
 }
+
+// OnActivity makes the router call f for every frame the page sends: the app is in use (spec §8.6,
+// rule H-17). It is called before the first [Router.Serve]; f must not block.
+func (r *Router) OnActivity(f func()) { r.active = f }
 
 // UseDrain makes d end this router's streams before a project change (see [Drain]). It is called
 // before the first [Router.Serve].
@@ -227,6 +234,11 @@ func (r *Router) Serve(c Conn) {
 		last := stableLinks(links)
 		s.wg.Go(func() { r.pushLinks(s, last) })
 	}
+	r.serveFrames(s)
+}
+
+func (r *Router) serveFrames(s *session) {
+	c := s.c
 	for {
 		b, err := c.Receive()
 		if err != nil {
@@ -248,6 +260,9 @@ func (r *Router) Serve(c Conn) {
 		if err != nil {
 			r.warn("bridge: dropped frame", "bytes", len(b), "err", err)
 			continue
+		}
+		if r.active != nil {
+			r.active()
 		}
 		if !r.drain.Begin() { // read once the session is leaving: dropped; a peer's sync sends it again (rule N-16)
 			r.warn("bridge: frame dropped, leaving", "kind", e.Kind)

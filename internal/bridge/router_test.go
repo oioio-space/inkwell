@@ -8,6 +8,7 @@ import (
 	"log/slog"
 	"slices"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"testing/synctest"
 	"time"
@@ -580,5 +581,34 @@ func TestNoticesAndEnvelopesReachTheWebview(t *testing.T) {
 		<-runDone
 		c.close()
 		<-serveDone
+	})
+}
+
+// HP1 rule H-17 (spec §8.6): every frame the page sends tells the app is in use; nothing is told
+// while the page is quiet.
+func TestRouterReportsPageActivity(t *testing.T) {
+	synctest.Test(t, func(t *testing.T) {
+		n := memnet.New(1, memnet.Faults{})
+		a, _ := n.Join("a"), n.Join("b")
+		n.Link("a", "b")
+		r := newRouter(a, quietLogger())
+		var active atomic.Int64
+		r.OnActivity(func() { active.Add(1) })
+		c := newFakeConn(t)
+		done := wait(func() { r.Serve(c) })
+		_ = c.next(t) // PeerUp b
+		synctest.Wait()
+		if n := active.Load(); n != 0 {
+			t.Fatalf("H-17 activity reported %d times with a quiet page", n)
+		}
+		for range 3 {
+			c.push(mustEncode(t, bridge.Envelope{Kind: bridge.Message, Peer: "b", Payload: []byte("x")}))
+		}
+		synctest.Wait()
+		if n := active.Load(); n != 3 {
+			t.Fatalf("H-17 activity reported %d times for 3 frames from the page", n)
+		}
+		c.close()
+		<-done
 	})
 }

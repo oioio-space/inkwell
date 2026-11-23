@@ -34,6 +34,9 @@ const (
 	MaxSyncFrame = 98304
 	// SyncAckLen is the length of the sync session's acceptance ACK, in bytes (§16, sync ACK row; §8.7.2).
 	SyncAckLen = 1
+	// SupersedeProofLen is the payload of a liveness proof, in bytes: one /ipfs/ping/1.0.0 ping (§16, superseded
+	// connection row; §8.7.4, rule P-15).
+	SupersedeProofLen = 32
 	// SyncInboundPlaces is how many inbound sync streams of one peer hold a place in its order (§16, inbound
 	// sync streams row; §8.7.3, rule P-8).
 	SyncInboundPlaces = 2
@@ -355,6 +358,10 @@ const (
 	// SyncAckTimeout bounds opening a sync stream and reading its ACK together, counted from the
 	// open, and the responder's write of the ACK (§16, sync ACK row; §8.7.4).
 	SyncAckTimeout = 15 * time.Second
+	// SupersedeProofWindow is how long an older connection to a peer has to answer its liveness proof once a newer
+	// one registers (§16, superseded connection row; §8.7.4, rule P-15): twice the round trip from which a link is
+	// poor (§8.5.7).
+	SupersedeProofWindow = 5 * time.Second
 	// SyncBusyRetryMin is the opener's first wait after a refusal for capacity, doubled at each one
 	// (§16, inbound sync streams row; §8.7.4).
 	SyncBusyRetryMin = 50 * time.Millisecond
@@ -396,4 +403,11 @@ const (
 const (
 	_ = uint(3*QUICInitialConnectionWindow/4 - (SyncInboundPlaces*InboundLanes+1)*QUICInitialStreamWindow)
 	_ = uint(InboundProbeMax - 1 - SyncReorderWait/InboundProbeEvery)
+)
+
+// Rule P-15 (§8.7.4): T_vie is exactly twice the round trip from which a link rises to poor (§8.5.7). Either
+// direction fails to compile once broken.
+const (
+	_ = uint(SupersedeProofWindow - 2*LinkProbeRTTPoorUp)
+	_ = uint(2*LinkProbeRTTPoorUp - SupersedeProofWindow)
 )

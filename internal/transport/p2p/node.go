@@ -69,6 +69,8 @@ import (
 	rcmgr "github.com/libp2p/go-libp2p/p2p/host/resource-manager"
 	"github.com/libp2p/go-libp2p/p2p/net/conngater"
 	"github.com/libp2p/go-libp2p/p2p/net/connmgr"
+	"github.com/libp2p/go-libp2p/p2p/protocol/holepunch"
+	"github.com/libp2p/go-libp2p/p2p/protocol/ping"
 	"github.com/libp2p/go-libp2p/p2p/security/noise"
 	libp2pquic "github.com/libp2p/go-libp2p/p2p/transport/quic"
 	"github.com/libp2p/go-libp2p/p2p/transport/quicreuse"
@@ -80,6 +82,7 @@ import (
 	"github.com/oioio-space/inkwell/internal/transport"
 	"github.com/oioio-space/inkwell/internal/transport/frame"
 	wire "github.com/oioio-space/inkwell/protocol"
+	"github.com/oioio-space/inkwell/protocol/directup"
 	"github.com/oioio-space/inkwell/protocol/syncack"
 )
 
@@ -98,6 +101,11 @@ const (
 	maxSyncStreams = 4
 	memoryLimit    = 256 << 20
 	fdLimit        = 1024
+	// maxPeerConns is libp2p's limit of connections per peer, which bounds the liveness proofs of P-15.
+	maxPeerConns = 8
+	// pingStreams are the /ipfs/ping/1.0.0 streams per peer and direction the rules need at once: a proof on
+	// each connection but the newest (P-15), and one RTT ping (links.go).
+	pingStreams = (maxPeerConns - 1) + 1
 
 	// Connection manager watermarks: above high, connections of
 	// unprotected peers are trimmed down to low.
@@ -186,6 +194,28 @@ type Options struct {
 	// quicWindows, if not nil, replaces the QUIC initial stream and connection receive windows
 	// (rule P-13); only the witness arm of the default windows uses it.
 	quicWindows *[2]uint64
+	// punch, if not nil, replaces the host's hole-punch call of the direct
+	// upgrade; localReady, if not nil, replaces the check of our /libp2p/dcutr
+	// handler; failUpgrade, if not nil and true, makes a move of the session to
+	// a direct connection fail at once; onCall is told of each call the
+	// upgrader starts. Tests use them (block HP1).
+	punch       func(context.Context, peer.ID) error
+	onCall      func(peer.ID, directup.Action)
+	localReady  func() bool
+	failUpgrade func() bool
+	// onRound, if not nil, is told of the connection each DCUtR round the node initiates opens on (rule
+	// H-20), and onProof of each liveness proof of rule P-15 that ends, with whether the peer answered.
+	// Tests use them (block HP1c).
+	onRound func(network.Conn)
+	onProof func(c network.Conn, heard bool)
+	// noAutoPunch, for tests that isolate the upgrader, turns libp2p's one-shot off (autoPunch); onAnswerDial is
+	// told when the answerer of a DCUtR round starts its punch dial (tests of H-19, block HP1r2).
+	noAutoPunch  bool
+	onAnswerDial func(peer.ID)
+	// rcmgr are extra options of the resource manager; tests use them to lift, in the simulated network
+	// only, libp2p's limit of 8 connections per IPv4 address for the relay's address (block RF1 fixes
+	// that limit for real; the exception proves no product capacity).
+	rcmgr []rcmgr.Option
 	// Relays are the relays to use, as multiaddrs ending in /p2p/<id>. With
 	// at least one, the node reserves a slot on them so that peers can reach
 	// it from any network, dials peers through them when it has no better
@@ -251,8 +281,12 @@ type peerState struct {
 	// up: PeerUp was announced and PeerDown has not been yet.
 	up bool
 	// upgrading: a goroutine is moving the outbound stream to a direct
-	// connection.
+	// connection (or off a duplicate circuit, rule H-15).
 	upgrading bool
+	// retiring is the outbound stream the last move replaced. The next move
+	// waits for its reset or the end of the sync ordering window (P-9), so
+	// the peer holds at most two of our sync streams.
+	retiring network.Stream
 }
 
 // Node is a libp2p peer; it implements [transport.Transport].
@@ -277,6 +311,8 @@ type Node struct {
 	// connWaits are the cancels of the contexts tied to a connection's life
 	// (connContext), under mu.
 	connWaits map[network.Conn]map[*context.CancelFunc]struct{}
+	// identified are closed once the node has handled a connection's identify (see identifiedOn), under mu.
+	identified map[network.Conn]*idWait
 	// born is when the node started: the clock of the inbound orders.
 	born time.Time
 	// busyRefusals counts the inbound sync streams refused for capacity,
@@ -313,8 +349,15 @@ type Node struct {
 	// want is the set of peers to keep connected, and kick is closed and
 	// replaced to make their dial loops retry at once. Both under mu.
 	want map[peer.ID]*wanted
+	// ups are the direct upgraders of the members the node holds a circuit with, wanted or not, and mup
+	// the member loops of those it does not want (upgrade.go); under mu.
+	ups  map[peer.ID]*upgrader
+	mup  map[peer.ID]*memberDrive
 	held map[peer.ID]hold // the peers that were reset, see Reset; under mu
-	kick chan struct{}
+	// connecting counts, per peer, the calls of Connect in flight: a reason to keep an outbound direct
+	// connection (H-19, see lateLink). Under mu.
+	connecting map[peer.ID]int
+	kick       chan struct{}
 
 	lanErr    error
 	openUntil time.Time // under mu
@@ -331,6 +374,18 @@ type Node struct {
 	// dialWG counts the goroutines that dial, which Close waits for before it
 	// closes the host: libp2p does not like to be closed under a dial.
 	dialWG sync.WaitGroup
+	// pgate is the punch gate of the direct upgrade, nil if the node may not
+	// hole punch (no relay, or RelayOnly). hps runs the scoped exchanges.
+	pgate *punchGate
+	hps   atomic.Pointer[punchService]
+	// proofs are the inputs of rule P-15, the superseded connections (supersede.go).
+	proofs *proofSet
+	// lastActivity is the monotonic time since born plus one nanosecond. Zero
+	// means the app counts as active until the first input.
+	lastActivity atomic.Int64
+	// direct are the node's own non-circuit addresses, as last announced (E8);
+	// read and written by the address subscription's goroutine only.
+	direct []ma.Multiaddr
 
 	closeOnce sync.Once
 	mu        sync.Mutex
@@ -377,7 +432,7 @@ func New(ctx context.Context, key ed25519.PrivateKey, o Options) (*Node, error) 
 	if !ok {
 		return nil, fmt.Errorf("p2p: peer id %q is not valid", local)
 	}
-	rm, err := newResourceManager()
+	rm, err := resourceManagerWith(o.rcmgr...)
 	if err != nil {
 		return nil, err
 	}
@@ -394,24 +449,29 @@ func New(ctx context.Context, key ed25519.PrivateKey, o Options) (*Node, error) 
 	}
 
 	n := &Node{
-		local:     localName,
-		opts:      o,
-		done:      make(chan struct{}),
-		wake:      make(chan struct{}, 1),
-		chg:       make(chan struct{}),
-		budget:    frame.NewBudget(maxBuffered),
-		peers:     make(map[peer.ID]*peerState),
-		connWaits: make(map[network.Conn]map[*context.CancelFunc]struct{}),
-		born:      time.Now(),
-		stats:     make(map[peer.ID]*peerLink),
-		want:      make(map[peer.ID]*wanted),
-		held:      make(map[peer.ID]hold),
-		found:     make(map[peer.ID]nearbyEntry),
-		heard:     make(map[peer.ID][]ma.Multiaddr),
-		kick:      make(chan struct{}),
-		relays:    relays,
-		relayDown: make(map[peer.ID]chan struct{}, len(relays)),
-		reserved:  make(map[peer.ID]bool, len(relays)),
+		local:      localName,
+		opts:       o,
+		done:       make(chan struct{}),
+		wake:       make(chan struct{}, 1),
+		chg:        make(chan struct{}),
+		budget:     frame.NewBudget(maxBuffered),
+		peers:      make(map[peer.ID]*peerState),
+		connWaits:  make(map[network.Conn]map[*context.CancelFunc]struct{}),
+		identified: make(map[network.Conn]*idWait),
+		born:       time.Now(),
+		stats:      make(map[peer.ID]*peerLink),
+		want:       make(map[peer.ID]*wanted),
+		ups:        make(map[peer.ID]*upgrader),
+		mup:        make(map[peer.ID]*memberDrive),
+		connecting: make(map[peer.ID]int),
+		proofs:     newProofSet(),
+		held:       make(map[peer.ID]hold),
+		found:      make(map[peer.ID]nearbyEntry),
+		heard:      make(map[peer.ID][]ma.Multiaddr),
+		kick:       make(chan struct{}),
+		relays:     relays,
+		relayDown:  make(map[peer.ID]chan struct{}, len(relays)),
+		reserved:   make(map[peer.ID]bool, len(relays)),
 	}
 	n.syncLane = &lane{
 		name: "sync", orders: make(map[peer.ID]*inbound), budget: n.budget, maxCost: maxBuffered,
@@ -420,6 +480,10 @@ func New(ctx context.Context, key ed25519.PrivateKey, o Options) (*Node, error) 
 		},
 	}
 	n.circuit = circuitPrefixes(relays)
+	if len(relays) > 0 && !o.RelayOnly {
+		n.pgate = newPunchGate(n.member, time.Now())
+		n.pgate.announced = n.announced
+	}
 	n.book = newAddrBook(o.Book, local, time.Now(), cmp.Or(o.Log, slog.New(slog.DiscardHandler)))
 	for id := range relays {
 		n.relayDown[id] = make(chan struct{}, 1)
@@ -444,11 +508,21 @@ func New(ctx context.Context, key ed25519.PrivateKey, o Options) (*Node, error) 
 		),
 		libp2p.ResourceManager(rm),
 		libp2p.ConnectionManager(cm),
-		libp2p.ConnectionGater(gate{BasicConnectionGater: base, admit: n.admitted, relays: relays, relayOnly: o.RelayOnly}),
+		libp2p.ConnectionGater(gate{BasicConnectionGater: base, admit: n.admitted, relays: relays, relayOnly: o.RelayOnly, wanted: n.member, punch: n.pgate}),
 		libp2p.DisableMetrics(),
+		// No black hole detector (rule H-18, ADR 0045): it refuses every new UDP (or IPv6) dial once fewer than
+		// 5 of the last 100 succeeded, with no time expiry and whoever chose the addresses, so a member that
+		// points the node at unreachable addresses would shut the honest direct upgrades of every peer. The
+		// per-member and node-wide budgets of the punch gate bound the attempts it would have saved.
+		libp2p.UDPBlackHoleSuccessCounter(nil),
+		libp2p.IPv6BlackHoleSuccessCounter(nil),
 	}
 	opts = append(opts, reachabilityOptions(relays, o)...)
-	h, err := libp2p.New(append(opts, o.extra...)...)
+	opts = append(opts, o.extra...)
+	if n.pgate != nil {
+		opts = append(opts, n.punchServiceOption())
+	}
+	h, err := libp2p.New(opts...)
 	if err != nil {
 		n.cancel()
 		_ = rm.Close()
@@ -456,59 +530,9 @@ func New(ctx context.Context, key ed25519.PrivateKey, o Options) (*Node, error) 
 		return nil, fmt.Errorf("p2p: start libp2p: %w", err)
 	}
 	n.h = h
-
-	sub, err := h.EventBus().Subscribe([]any{new(event.EvtPeerConnectednessChanged), new(event.EvtPeerIdentificationCompleted)})
-	if err != nil {
-		n.cancel()
-		_ = h.Close()
-		return nil, fmt.Errorf("p2p: subscribe: %w", err)
+	if err := n.startTransport(); err != nil {
+		return nil, err
 	}
-	n.sub = sub
-	addrSub, err := h.EventBus().Subscribe(new(event.EvtLocalAddressesUpdated))
-	if err != nil {
-		n.cancel()
-		_ = sub.Close()
-		_ = h.Close()
-		return nil, fmt.Errorf("p2p: subscribe: %w", err)
-	}
-	n.addrSub = addrSub
-	n.probes = newProbeSet(n.ctx, h, n.probeRoles)
-	n.fillRegister()
-	n.notifee = &network.NotifyBundle{
-		ConnectedF: func(_ network.Network, c network.Conn) {
-			n.probes.attach(c)
-			n.fillAttach(c)
-			n.onConn(c)
-		},
-		DisconnectedF: func(_ network.Network, c network.Conn) {
-			n.connLost(c)
-			n.probes.detach(c)
-			n.onDisconn(c)
-		},
-	}
-	h.Network().Notify(n.notifee)
-	n.attachExisting()
-	h.SetStreamHandler(ProtocolSync, n.handleStream)
-	h.SetStreamHandler(ProtocolBulk, n.handleBulkStream)
-	h.SetStreamHandler(ProtocolLobby, n.handleLobbyStream)
-	n.wg.Go(func() {
-		for _, p := range h.Network().Peers() { // connected before the subscription
-			n.onConnected(p)
-		}
-		for ev := range sub.Out() {
-			switch e := ev.(type) {
-			case event.EvtPeerConnectednessChanged:
-				n.onConnectedness(e)
-			case event.EvtPeerIdentificationCompleted:
-				n.onIdentified(e)
-			}
-		}
-	})
-	n.wg.Go(func() {
-		for range addrSub.Out() { // the network changed: retry now
-			n.kickAll()
-		}
-	})
 	for _, ai := range relayList(relays) {
 		n.dialWG.Go(func() { n.keepRelay(ai, n.relayDown[ai.ID]) })
 	}
@@ -522,6 +546,108 @@ func New(ctx context.Context, key ed25519.PrivateKey, o Options) (*Node, error) 
 	n.stop = stop
 	n.mu.Unlock()
 	return n, nil
+}
+
+// startTransport subscribes to connection and address events and serves the host's streams.
+func (n *Node) startTransport() error {
+	h := n.h
+	if n.pgate != nil {
+		n.pgate.net.Store(networkPeers(h.Network()))
+	}
+
+	sub, err := h.EventBus().Subscribe([]any{
+		new(event.EvtPeerConnectednessChanged), new(event.EvtPeerIdentificationCompleted), new(event.EvtPeerIdentificationFailed),
+		new(event.EvtPeerProtocolsUpdated), new(event.EvtLocalProtocolsUpdated),
+	})
+	if err != nil {
+		n.cancel()
+		_ = h.Close()
+		return fmt.Errorf("p2p: subscribe: %w", err)
+	}
+	n.sub = sub
+	addrSub, err := h.EventBus().Subscribe(new(event.EvtLocalAddressesUpdated))
+	if err != nil {
+		n.cancel()
+		_ = sub.Close()
+		_ = h.Close()
+		return fmt.Errorf("p2p: subscribe: %w", err)
+	}
+	n.addrSub = addrSub
+	n.probes = newProbeSet(n.ctx, h, n.probeRoles)
+	n.fillRegister()
+	n.notifee = &network.NotifyBundle{
+		ConnectedF: func(_ network.Network, c network.Conn) {
+			if n.lateLink(c) {
+				_ = c.Close() // before the swarm accepts a stream on it (H-19)
+				return
+			}
+			n.supersedeRegister(c) // the older connections to its peer prove they live (P-15)
+			n.probes.attach(c)
+			n.fillAttach(c)
+			n.onConn(c)
+			if isCircuit(c.RemoteMultiaddr()) {
+				n.memberUp(c.RemotePeer()) // a member the node does not want has an upgrader too (H-1)
+				n.upEpoch(c)               // the peer restarted or moved: a new epoch, on c (H-20)
+				n.autoPunch(c)
+			}
+		},
+		DisconnectedF: func(_ network.Network, c network.Conn) {
+			n.supersedeForget(c)
+			n.identifyForget(c)
+			n.connLost(c)
+			n.probes.detach(c)
+			n.onDisconn(c)
+			if isCircuit(c.RemoteMultiaddr()) {
+				n.upWake(c.RemotePeer()) // the roles may have changed (H-3, H-15)
+			}
+		},
+	}
+	h.Network().Notify(n.notifee)
+	n.attachExisting()
+	h.SetStreamHandler(ProtocolSync, n.handleStream)
+	h.SetStreamHandler(ProtocolBulk, n.handleBulkStream)
+	h.SetStreamHandler(ProtocolLobby, n.handleLobbyStream)
+	n.wg.Go(n.watchPeerEvents)
+	n.wg.Go(n.watchAddressEvents)
+	if s := n.hps.Load(); s != nil {
+		n.wg.Go(s.serve)
+	}
+	return nil
+}
+
+func (n *Node) watchPeerEvents() {
+	for _, p := range n.h.Network().Peers() { // connected before the subscription
+		n.onConnected(p)
+	}
+	for ev := range n.sub.Out() {
+		switch e := ev.(type) {
+		case event.EvtPeerConnectednessChanged:
+			n.onConnectedness(e)
+		case event.EvtPeerIdentificationCompleted:
+			n.onIdentified(e)
+			n.identifyDone(e.Peer, e.Conn)
+			n.upEvent(e.Peer, directup.E2)
+		case event.EvtPeerIdentificationFailed:
+			n.identifyDone(e.Peer, nil)
+		case event.EvtPeerProtocolsUpdated:
+			if slices.Contains(e.Added, holepunch.Protocol) {
+				n.upEvent(e.Peer, directup.E3)
+			}
+		case event.EvtLocalProtocolsUpdated:
+			if slices.Contains(e.Added, holepunch.Protocol) {
+				n.upEventAll(directup.E4)
+			}
+		}
+	}
+}
+
+func (n *Node) watchAddressEvents() {
+	for ev := range n.addrSub.Out() { // the network changed: retry now
+		n.kickAll()
+		if e, ok := ev.(event.EvtLocalAddressesUpdated); ok && n.directChanged(e) {
+			n.upEventAll(directup.E8)
+		}
+	}
 }
 
 // quicReuse is the node's QUIC connection manager (rule P-13, spec §16.1): the
@@ -553,8 +679,12 @@ func quicReuse(o Options) libp2p.Option {
 // newResourceManager returns the libp2p resource manager with the limits of a
 // node: 64 peers (as inbound and outbound connections), 4 sync streams per
 // peer and 256 MiB of memory. The other limits are libp2p's, scaled to that
-// memory, and the bundled services (identify, ping, relay) keep their own.
-func newResourceManager() (network.ResourceManager, error) {
+// memory, and the bundled services (identify, ping, relay) keep their own,
+// except the ping streams per peer, which the liveness proofs of rule P-15 need.
+func newResourceManager() (network.ResourceManager, error) { return resourceManagerWith() }
+
+// resourceManagerWith is [newResourceManager] with extra options for the test harness.
+func resourceManagerWith(opts ...rcmgr.Option) (network.ResourceManager, error) {
 	scaling := rcmgr.DefaultLimits
 	libp2p.SetDefaultServiceLimits(&scaling)
 	limits := rcmgr.PartialLimitConfig{
@@ -584,10 +714,15 @@ func newResourceManager() (network.ResourceManager, error) {
 			// outbound stream, and the limit allows two connections to the peer, one of them still
 			// closing.
 			ProtocolProbe: probeStreamLimits(wire.LinkProbeInboundStreamsPerPeer, wire.LinkProbeOutboundStreamsPerPeer),
+			// Sized by the rules that use /ipfs/ping/1.0.0, each way: P-15 (spec §8.7.4) holds at most one proof
+			// per connection, never on the newest, so maxPeerConns - 1 at once, and the link sampler holds one RTT
+			// ping per peer (links.go, claimPing). libp2p's own limit (3 outbound, 4 in all) is below that: it
+			// refused proofs, which then gave no verdict and left a crashed peer's dead circuit open.
+			ping.ID: {StreamsInbound: pingStreams, StreamsOutbound: pingStreams, Streams: 2 * pingStreams},
 		},
 	}
 	cfg := limits.Build(scaling.Scale(memoryLimit, fdLimit))
-	rm, err := rcmgr.NewResourceManager(rcmgr.NewFixedLimiter(cfg))
+	rm, err := rcmgr.NewResourceManager(rcmgr.NewFixedLimiter(cfg), opts...)
 	if err != nil {
 		return nil, fmt.Errorf("p2p: resource manager: %w", err)
 	}
@@ -724,10 +859,43 @@ func (n *Node) Connect(ctx context.Context, to transport.PeerID, addrs []string)
 	if n.isClosed() {
 		return transport.ErrClosed
 	}
+	n.mu.Lock()
+	n.connecting[id]++
+	n.mu.Unlock()
+	defer n.connectDone(id)
 	if err := n.h.Connect(ctx, info); err != nil {
 		return fmt.Errorf("p2p: connect to %s: %w", to, err)
 	}
 	return nil
+}
+
+// connectDone ends a call of Connect to id, whatever its outcome.
+func (n *Node) connectDone(id peer.ID) {
+	n.mu.Lock()
+	defer n.mu.Unlock()
+	if n.connecting[id]--; n.connecting[id] <= 0 {
+		delete(n.connecting, id)
+	}
+}
+
+// lateLink reports whether c is the late end of an upgrade attempt (rule H-19): an outbound direct connection
+// to a peer that is not a relay, which the node, once the swarm registered c, neither holds a circuit to, nor
+// wants, nor is connecting to on request. Whoever started the attempt (the upgrader's call, libp2p's one-shot on
+// context.Background, the answerer's punch on the service's context), cancelling it does not stop a dial the
+// swarm already made, nor can the connection be traced back to its dial (the swarm replaces the caller's
+// context): the reasons to keep it are read here instead, after its registration and before the swarm accepts
+// streams on it. Inbound connections are not checked: refusing a member is Admit's job. It takes mu and releases
+// it before returning, so the caller closes c without it.
+func (n *Node) lateLink(c network.Conn) bool {
+	if c.Stat().Direction != network.DirOutbound || isCircuit(c.RemoteMultiaddr()) {
+		return false
+	}
+	p := c.RemotePeer()
+	n.mu.Lock()
+	_, relay := n.relays[p]
+	keep := relay || n.want[p] != nil || n.connecting[p] > 0
+	n.mu.Unlock()
+	return !keep && n.circuitTo(p) == nil
 }
 
 // parseAddr parses a multiaddr that is, or leads to, the peer id.
@@ -906,6 +1074,10 @@ func (n *Node) Close() error {
 		n.mu.Unlock()
 		close(n.done)
 		n.cancel()
+		n.proofs.close()
+		if n.pgate != nil {
+			n.pgate.close() // the rounds waiting for a slot return
+		}
 		n.dialWG.Wait()
 		n.budget.Close()
 		if n.lan != nil {
@@ -1001,10 +1173,27 @@ func newRelayResourceManager() (network.ResourceManager, error) {
 }
 
 // attachExisting starts the per-connection services on the connections that were there before the
-// notifee: the probe, and in the server build the filler.
+// notifee: the probe, in the server build the filler, and the record of rule P-15.
 func (n *Node) attachExisting() {
 	for _, c := range n.h.Network().Conns() {
 		n.probes.attach(c)
 		n.fillAttach(c)
+		n.supersedeRegister(c)
 	}
+}
+
+// directChanged reports whether e changes the node's own non-circuit addresses (E8, iroh's « new
+// candidates »), and records them; a change of relay addresses alone is not one.
+func (n *Node) directChanged(e event.EvtLocalAddressesUpdated) bool {
+	var now []ma.Multiaddr
+	for _, u := range e.Current {
+		if !isCircuit(u.Address) {
+			now = append(now, u.Address)
+		}
+	}
+	same := len(now) == len(n.direct) && !slices.ContainsFunc(now, func(a ma.Multiaddr) bool {
+		return !slices.ContainsFunc(n.direct, a.Equal)
+	})
+	n.direct = now
+	return !same
 }

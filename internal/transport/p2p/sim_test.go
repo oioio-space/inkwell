@@ -74,10 +74,18 @@ type natNet struct {
 	// jitter is the spread of the latency of a packet; jitterMax by default.
 	// holdShare of the packets are held holdFor longer than the others, as
 	// netem's "delay D reorder P%" does.
-	jitter    time.Duration
-	extra     time.Duration // added to every packet's latency, beyond baseDelay
+	jitter time.Duration
+	extra  time.Duration // added to every packet's latency, beyond baseDelay
+	// direct is added to the latency of a packet between two ends that are not public: the direct path of
+	// two nodes behind NATs, slower than their paths to the relay (block HP1r delays a late landing with it).
+	direct    time.Duration
 	holdFor   time.Duration
 	holdShare float64
+	// tap, if not nil, is told of every packet that enters the network, under mu: its sending end
+	// and its external destination (block HP1 counts destinations and packets with it).
+	tap func(src *natEnd, to string)
+	// v6 numbers the IPv6 sockets opened for dials from IPv4-only nodes (quic below).
+	v6 int
 }
 
 // impairment is a bursty loss and duplication profile for every packet of the
@@ -136,6 +144,9 @@ func (nn *natNet) RecvPacket(p *simnet.Packet) {
 	}
 	nn.sent[src]++
 	dstExt := p.To.String()
+	if nn.tap != nil {
+		nn.tap(src, dstExt)
+	}
 	p.From = udpAddr(fmt.Sprintf("%s:%d", src.external, simPort))
 	src.sent[dstExt] = struct{}{}
 	dst := nn.byExt[dstExt]
@@ -150,6 +161,9 @@ func (nn *natNet) RecvPacket(p *simnet.Packet) {
 		nn.dropped[src]++
 	}
 	delay := baseDelay + nn.extra + time.Duration(nn.rng.Int64N(int64(nn.jitter)))
+	if !src.public && !dst.public {
+		delay += nn.direct
+	}
 	if nn.holdShare > 0 && nn.rng.Float64() < nn.holdShare {
 		delay += nn.holdFor
 	}
@@ -157,15 +171,16 @@ func (nn *natNet) RecvPacket(p *simnet.Packet) {
 	if dup {
 		dupDelay = baseDelay + nn.extra + time.Duration(nn.rng.Int64N(int64(nn.jitter)))
 	}
+	conn := dst.conn // read under mu: a node that listens again replaces it
 	nn.mu.Unlock()
 
 	if lost || (!dst.public && !replied) {
 		return
 	}
-	time.AfterFunc(delay, func() { dst.conn.RecvPacket(p) })
+	time.AfterFunc(delay, func() { conn.RecvPacket(p) })
 	if dup {
 		q := *p // the buffer is only read downstream, so the copy shares it
-		time.AfterFunc(dupDelay, func() { dst.conn.RecvPacket(&q) })
+		time.AfterFunc(dupDelay, func() { conn.RecvPacket(&q) })
 	}
 }
 
@@ -210,6 +225,14 @@ func (nn *natNet) setJitter(d time.Duration) {
 func (nn *natNet) setLatency(d time.Duration) {
 	nn.mu.Lock()
 	nn.extra = d
+	nn.mu.Unlock()
+}
+
+// setDirectDelay adds d to the one-way latency of the direct path between two nodes behind NATs, and to
+// nothing else: their circuits through the relay keep their latency.
+func (nn *natNet) setDirectDelay(d time.Duration) {
+	nn.mu.Lock()
+	nn.direct = d
 	nn.mu.Unlock()
 }
 
@@ -303,6 +326,21 @@ func (nn *natNet) quicSocket(end *natEnd) []quicreuse.Option {
 	return []quicreuse.Option{
 		quicreuse.OverrideSourceIPSelector(func() (quicreuse.SourceIPSelector, error) { return selector, nil }),
 		quicreuse.OverrideListenUDP(func(_ string, address *net.UDPAddr) (net.PacketConn, error) {
+			if address.IP.To4() == nil {
+				// A dial to an IPv6 address from a node that listens on IPv4 only: quicreuse opens a second
+				// socket. It must not replace the end's socket nor its source address (the node would lose
+				// every connection it holds: its packets would come back to a socket that knows none of
+				// them and answers with stateless resets). It gets an address of its own on the same end, so
+				// what it sends is routed (and counted) as the end's, and nobody can answer it.
+				nn.mu.Lock()
+				defer nn.mu.Unlock()
+				nn.v6++
+				own := &net.UDPAddr{IP: net.ParseIP(fmt.Sprintf("fd00::%x", nn.v6)), Port: simPort}
+				c := simnet.NewBlockingSimConn(own)
+				c.SetUpPacketReceiver(nn)
+				nn.byInt[own.String()] = end
+				return c, nil
+			}
 			selector.ip.Store(&address.IP)
 			c := simnet.NewBlockingSimConn(address)
 			c.SetUpPacketReceiver(nn)

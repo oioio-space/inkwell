@@ -793,7 +793,7 @@ INKWELL_TLA_ONLY='^ProjectChange' ./scripts/tla-check.sh    # the 23 ProjectChan
 
 ## DirectUpgrade (block HP1: a relayed link to a wanted peer keeps trying to become direct)
 
-Rule: `docs/plans/2026-11-16-hp1-direct-upgrade.md`, rules H-1..H-17, section 6, revised after the Codex debate
+Rule: `docs/plans/2026-11-16-hp1-direct-upgrade.md`, rules H-1..H-17 and H-19, section 6, revised after the Codex debate
 (D1-D6) and the freeze review (B1-B6). `DirectUpgrade.tla` models two nodes. L is modelled in full: its upgrader (the policy of
 `protocol/directup`: Off, NotReady = `idle`, Scheduled, InFlight, Direct; ladders; epochs; the attempt bucket; the
 app's activity), its calls (Punch = the fork's cancellable `DirectConnectContext`, with the direct dial libp2p makes
@@ -802,8 +802,9 @@ circuit (`Auto`, which holds libp2p's per-peer lock: our call is then Busy), and
 Every round, whatever its origin, passes L's two choke points: the address filter (the gate: wanted, round bucket,
 FIFO admission to a node-wide slot with a lease, one ticket per peer, none for a peer not wanted; a round that gives
 up waiting keeps its ticket's place and a grant to it is held for its peer) and the connection gater (wanted, a bucket
-of non-relay destinations, and only under a held grant, within its allowance: libp2p's first direct dial of its
-one-shot holds no grant and is refused). R is honest (its upgrader under the same role rule, paced by time, and its one-shot; its
+of non-relay destinations, and only under a held grant, within its allowance: for libp2p's first direct dial of its
+one-shot, R holding no grant, the gater asks one once through the FIFO, `AutoPre`'s `AskGranted` branch, and
+otherwise refuses the dial and keeps the ticket). R is honest (its upgrader under the same role rule, paced by time, and its one-shot; its
 exchanges run concurrently with L's) or Byzantine (starts exchanges at will, reconnects, toggles `/libp2p/dcutr`,
 refuses or stalls as answerer). Other peers ask for slots and may keep them until their lease ends.
 
@@ -856,6 +857,7 @@ destination unit per punch here); classification from libp2p errors (H-7, vector
 | `AdmissionBudget` (S15) | H-16 | node-wide slot grants stay within (NCap, APeriod) |
 | `NoUnallowedDial` (S16) | H-16 | every non-relay destination, every origin (other peers' rounds sharing a grant, libp2p's first direct dial), is drawn from a held grant's allowance: with S15, node-wide destinations ≤ allowance × admissions |
 | `NoTicketUnwanted` (S17) | H-1, H-5 | a peer that is not wanted never takes a ticket nor a grant |
+| `LinkBound` (S18) | H-19 | no direct connection is kept that landed after the last circuit was gone (ghost `lateLand`, set by every landing: L's call, its first direct dial, the one-shot, the answerer); `LandOK` (a circuit held) guards every landing branch, a landing without it is the attempt's failure (the late connection closed). Want and Connect, the rule's other reasons, are outside the model: the conservative case |
 | `Upgrades` (L1) | H-2, H-3, H-6, H-8, H-10, H-17 | `wanted ∧ relayed ~> direct ∨ ¬wanted ∨ no circuit` |
 | `BusyEnds` (L2) | H-4, H-5, H-7 | waiting for a slot or Busy does not repeat forever, even with another peer asking without end and never giving its slot back |
 | `DupResolves` (L3) | H-15 | two circuits do not last: the one the higher PeerID dialled is closed |
@@ -869,6 +871,38 @@ destination unit per punch here); classification from libp2p errors (H-7, vector
 | `DirectUpgradeAnswerer.cfg`: one circuit L dialled, R not public: R is the only initiator; its rounds wait in L's filter, give up and come back; one slot shared with a peer asking for ever | **exhaustive, no error**: 23,244 states, 5,400 distinct, depth 23, liveness included, 02s |
 | `DirectUpgradeLostPush.cfg`: one circuit R dialled (L is the only initiator); R's push after its handler registers may be lost; the poll calls (`remoteReady` a trigger) | **exhaustive, no error**: 20,788 states, 6,914 distinct, depth 24, liveness included, 02s |
 | `DirectUpgradeByzantine.cfg`: Byzantine R, one circuit at a time, 2 new circuits, wanted flips once, R public or not, leases and node bucket of 2 (liveness: the honest configurations) | **exhaustive, no error**: 6,854,792 states, 994,752 distinct, depth 29, invariants, 18s |
+| `DirectUpgradeLinkLost.cfg` (run `HP1rLinkLost`, block HP1r): Honest's constants and the relay drops every circuit once (a Drop seen from the dropped side: R still reachable, the path open), so the one-shot, a punch phase or the answerer's dial outlives the circuit it started on | **exhaustive, no error**: 1,200,294 states, 263,386 distinct, depth 34, liveness included, 1 min 17 s |
+
+Scope of H-19 here (block HP1r): S18 `LinkBound` covers a landing without a circuit. That an upgraded session survives
+its circuit's closure is checked by no property: no action closes a direct connection on a circuit's loss (`RelayLost`
+and `Resolve` leave `direct` unchanged; only `DirectLost` and `RRestart` set it FALSE), so it holds by construction; an
+invariant would be vacuous, so the witness `HP1rWitnessSurvives` only shows the state is reached, and the Go arm
+`kept_upgrade_outbound_circuit_closed` of `TestUpgradeLateLinkClosed` checks the product.
+
+Block HP1c (rules H-20 and P-15, plan `docs/plans/2026-11-23-hp1-reformalize.md` §2): R may crash (`RCrash`). Its
+process dies without closing anything, so every circuit L holds stays open at L and is dead (a **ghost**, `cr.ghost`):
+L sees it (`Sees("L")`) and nothing it carries arrives. R comes back on a new circuit in the same direction (R dials
+again) or the other (L does), a new epoch (E7) that starts libp2p's one-shot at L as `Dial` does. H-20 is the rule
+operator `RoundGhost` (FALSE: L's rounds open on their cause circuit, which is live); P-15 proves every older circuit
+when a new one registers (`cr.pl` for a live one, `cr.pg` for a ghost): a live one answers and stays
+(`ProveAnswered`, rule operator `KeepAnswered`), a ghost is closed (`ProveClose`; the newer circuit's sync ACK, outside
+this model, comes since R is honest). H-15's `Resolve` waits for the proofs, so a ghost is never taken for a duplicate.
+Modelling bounds: P-15 is modelled only when `ProveOlder` (required by a crash; with no ghost every proof is answered
+and changes nothing but H-15's wait, a stutter, so the 47 HP1 and HP1r runs keep their state spaces); a crash happens only while the pair
+has no exchange in progress (a crash during one ends it as `CanFail` does) and with the session relayed (a dead
+direct connection is `Supersede`'s case); a crash run has no honest restart. The connection-level rule (T_vie, the
+ACK wait, the sole connection) is checked by `Supersede` below.
+
+| Property | Rule | Meaning |
+|---|---|---|
+| `RoundOnLive` (S19) | H-20 | no round of L (a call's or the one-shot's) starts on a ghost |
+| `ProofKeepsLive` (S20) | P-15 | an older live circuit that answers its proof is never closed; crossed live dials still settle by H-15 (`DupResolves`) |
+| `ResolveKeepsLive` (S21) | H-15, P-15 | H-15 never closes L's live circuit in favour of a ghost: L settles a duplicate only once the P-15 proofs are done (`ResolveWaits`), so a crossed crash is settled by P-15 closing the ghost |
+
+| Configuration | Result (TLC 1.8.0, 2 workers, 2026-11-23, `heavy.sh`, S1-S21) |
+|---|---|
+| `DirectUpgradeCrash.cfg` (run `HP1cCrash`): Honest's constants with one dial, no honest restart nor direct loss, one crash with a new circuit in either direction (the same: H-20; the other: H-15 waits for P-15) | **exhaustive, no error**: 317,878 states, 80,974 distinct, depth 30, liveness included, 26 s |
+| `DirectUpgradeProofTwoCircuits.cfg` (run `HP1cProofTwoCircuits`): TwoCircuits' constants with aligned picks, an always open path, no overlap cancel and buckets of 1; P-15 modelled, no crash (crossed live dials: the older answers, H-15 settles after the proofs) | **exhaustive, no error**: 155,160 states, 42,140 distinct, depth 26, liveness included, 14 s |
 
 Mutants (`mutants/DirectUpgradeMutants.tla`, each config overrides one rule of the sound model with the constants of
 the configuration named; anchor = the override line in the config). `scripts/tla-check.sh` checks that TLC's message
@@ -906,6 +940,14 @@ names the property of the row.
 | `DirectUpgradeGaterNoLease` (M27) | `GaterLease <- NoLeaseNeeded` | a destination without a grant: libp2p's first direct dial (B3) | Honest | `NoUnallowedDial` |
 | `DirectUpgradeTicketAny` (M28) | `TicketOK <- AnyTicket` | a peer that is not wanted takes a ticket (B4) | Byzantine | `NoTicketUnwanted` |
 | `DirectUpgradePlaceLost` (M29) | `DropTicket <- AbandonDrops` | a round that gave up waiting loses its ticket's place and re-registers at the tail: R starves behind a peer asking for ever (B6) | Answerer | `Upgrades` |
+| `HP1rLateLand` (M30, file `mutants/DirectUpgradeLateLand.cfg`) | `LandOK <- LandAny` | a direct connection that lands after the last circuit is gone is kept (H-19): libp2p's one-shot started on a circuit the relay then dropped | LinkLost | `LinkBound` |
+| `HP1rWitnessSurvives` (file `mutants/DirectUpgradeWitnessSurvives.cfg`) | invariant `NoDirectAfterRelayLost` | witness: a session that became direct is still direct after the relay dropped its circuit | LinkLost | (must violate) |
+| `HP1cRoundAnyConn` (M31, file `mutants/DirectUpgradeRoundAnyConn.cfg`) | `RoundGhost <- RoundAnyConn` | L's rounds ride the connection libp2p picks, the older circuit, a ghost after R's crash (H-20) | Crash | `RoundOnLive` |
+| `HP1cCloseOnTimer` (M32, file `mutants/DirectUpgradeCloseOnTimer.cfg`) | `KeepAnswered <- CloseOnTimer` | the proof's timer closes the older circuit whatever the answer (P-15) | ProofTwoCircuits | `ProofKeepsLive` |
+| `HP1cResolveNoWait` (M33, file `mutants/DirectUpgradeResolveNoWait.cfg`) | `ResolveWaits <- ResolveNoWait` | H-15 does not wait for the P-15 proofs: after a crossed crash L takes the ghost for one of two circuits and keeps it, closing the live one (counterexample: Dial(LR), RCrash(RL), Resolve) | Crash | `ResolveKeepsLive` |
+| `HP1cWitnessGhost` (file `mutants/DirectUpgradeWitnessGhost.cfg`) | invariant `NoRoundBesideGhost` | witness: a round of L starts while a ghost shares its direction (S19 is not vacuous) | Crash | (must violate) |
+| `HP1cWitnessAnswered` (file `mutants/DirectUpgradeWitnessAnswered.cfg`) | invariant `NoProofAnswered` | witness: an older live circuit answers its proof (S20 is not vacuous) | ProofTwoCircuits | (must violate) |
+| `HP1cWitnessProofClose` (file `mutants/DirectUpgradeWitnessProofClose.cfg`) | invariant `NoProofClose` | witness: P-15 closes a ghost | Crash | (must violate) |
 | `DirectUpgradeWitnessDirect` | invariant `NoDirect` | witness: a link becomes direct | Honest | (must violate) |
 | `DirectUpgradeWitnessStale` | invariant `NoStaleResult` | witness: a result of an older epoch arrives | Honest | (must violate) |
 | `DirectUpgradeWitnessBusy` | invariant `NoBusy` | witness: a call is Busy | Honest | (must violate) |
@@ -922,6 +964,8 @@ model's allowance of 2 stands for the plan's 12 (one destination unit per step).
 java -cp tla2tools.jar tlc2.TLC -workers 2 -config DirectUpgradeHonest.cfg DirectUpgrade
 java -cp tla2tools.jar tlc2.TLC -workers 2 -config mutants/DirectUpgradeLowerOnly.cfg mutants/DirectUpgradeMutants
 INKWELL_TLA_ONLY='^DirectUpgrade' ./scripts/tla-check.sh    # the 44 DirectUpgrade runs only, 273 s (heavy.sh --exclusive)
+INKWELL_TLA_ONLY='^HP1r' ./scripts/tla-check.sh             # block HP1r's two runs (H-19), named outside ^DirectUpgrade so HP1's count stays 44
+INKWELL_TLA_ONLY='^HP1c' ./scripts/tla-check.sh             # block HP1c's 17 runs (H-20, P-15: DirectUpgrade and Supersede), 194 s; CI2 puts the seven DirectUpgrade ones (`HP1c[!S]*`) on shard 1/3, the ten `HP1cSupersede*` on 3/3
 ```
 
 ## PeerUpAck (block PU1, spec §8.7: a peer is announced only after its acceptance ACK of this stream)
@@ -985,6 +1029,65 @@ FALSE` (P-5: one budget).
 
 Not modelled: frames and their order across a move (NI0's `TestRelayThenDirect`, `move_waits_for_ack`), the bulk
 lane (opened after PeerUp), real timings (the Go test `TestPeerUpLatency`, netsim). Results: gates/PU1/WITNESSES.md.
+
+## Supersede (block HP1c, spec §8.7.4: a superseded connection proves that it lives, rule P-15)
+
+Model: [Supersede.tla](Supersede.tla); plan [2026-11-23-hp1-reformalize.md](../../plans/2026-11-23-hp1-reformalize.md)
+§2. It EXTENDS `PeerUpAck` and leaves it byte for byte as frozen by `gates/PU1c.toml`: every action of PeerUpAck runs
+unchanged (`Keep(A) == A /\ UNCHANGED supv`), the registration is wrapped (`RegisterS`) and P-15's steps are added.
+PeerUpAck already has the half-open state: a side closes a connection (`Close`, here the peer's crash) and the other
+learns it only later (`LearnClose`, the 30 s idle timeout), while its session stays on the dead connection. A kept
+registration ranks the connection newest and proves every older usable one with no proof in progress
+(`proof[n][c]`: pending, then answered or silent; an answered one is proved again by a later newer connection). The
+peer answers (`ProveAnswer`) while it still holds the connection; `ProveExpire` is T_vie passing with no byte, under
+`HonestTiming` only if the peer no longer holds it (T_vie is twice a bad round trip), at any time otherwise (a slow
+relay). `ProofAcked` latches that a newer connection carries an acknowledged sync stream, either direction (the
+node read its ACK, `out`, or wrote one, `acc`); `ProveClose` closes a silent connection after that, never the newest
+nor the only one; its streams end by PeerUpAck's own `StreamLost`, no ClosePeer, no event. `ProofEnd` drops a proof
+when no newer connection is left. `LearnFair = FALSE` drops the idle timeout's fairness: P-15 alone must take a session
+off a dead connection. Bounds that keep the runs small: `Moves = FALSE` (PeerUpAck's relay-to-direct move is not
+explored: after a crash the session changes connection by reopening, `StartOpen`; moves stay PU1's runs), and
+`CrashBy` names the nodes whose side may close at will (both for safety; b only for the liveness, a's view of b's
+crash, the other side being the same by symmetry).
+
+Rule operators (overridden by the mutants): `StartsProof == TRUE`, `Closable(n, c) == proof[n][c].st = "silent"`,
+`AckWaitOK(n, c) == proof[n][c].ack`, `SoleOK(n, c) == NewerUsable(n, c)`.
+
+| Property | Meaning |
+|---|---|
+| `SupersededBounded` (P15-1) | a usable connection with a newer usable one is under proof (or answered since): its life is bounded by T_vie and the newer's ACK, not by the idle timeout |
+| `LiveKept` (P15-2, `HonestTiming`) | a connection the peer still holds is never closed by a proof |
+| `FallbackKept` (P15-3) | no proof closes a connection unless, when it closes, a newer one still judged alive (its proof not silent) carries an acknowledged sync stream (the newer opening may still fail: the fallback; review 3b: a dead acknowledged middle connection does not count) |
+| `NeverCloseSole` (P15-4) | no proof closes the newest connection nor the only one |
+| `SessionLeavesDead` (P15-5, liveness) | a session on a dead connection under proof leaves it, unless no newer connection is left, with no idle timeout assumed |
+
+PeerUpAck's `TypeOK`, `UpAfterAccept`, `SessionOnAccepted`, `NoUpOnRefused` and `Budget` are checked in both safety
+runs: the proofs break none of PU1's guarantees.
+
+| Configuration | Run | What it covers | Result (TLC 1.8.0, 2 workers, 2026-11-23, `heavy.sh`) |
+|---|---|---|---|
+| `SupersedeHonest.cfg` | `HP1cSupersede` (safety) | two connections, either side closes one without the other knowing (the crash), lazy path, no move, honest timing; PU1's S1-S4, P15-1..P15-4 | **exhaustive, no error**: 3,231,721 states, 755,680 distinct, depth 31, invariants, 19 s |
+| `SupersedeAnyTiming.cfg` | `HP1cSupersedeAnyTiming` (safety) | one close at will, no move, any timing (a deadline may close the newer connection after its ACK); PU1's S1-S4, P15-1, P15-3, P15-4 | **exhaustive, no error**: 6,611,059 states, 1,273,276 distinct, depth 27, invariants, 29 s |
+| `SupersedeThree.cfg` | `HP1cSupersedeThree` (simulation, block HP1c2) | AnyTiming's constants with three connections (review 3b: a dead acknowledged middle connection); P15-1, P15-3, P15-4 | **TLC simulation, no error**: seed 20771, depth 60, 100,000 traces per worker (200,000, 5,979,513 states, 52 s). Not exhaustive: Honest and AnyTiming on three, even with one crashing side or no close, exceed 300 s with their queues still growing (residual → HP1). The same simulation catches `HP1cSupersedeBackwardAck` in 3 s |
+| `SupersedeLive.cfg` | `HP1cSupersedeLive` | Honest's constants, only b's side may close, no idle timeout assumed; P15-1, P15-2, liveness P15-5 | **exhaustive, no error**: 1,624,745 states, 380,888 distinct, depth 31, liveness included, 1 min 31 s |
+
+| Mutant (mutants/SupersedeMutants.tla) | Override | Caught by |
+|---|---|---|
+| `HP1cSupersedeNoProof` (MS1, P-15 off) | `StartsProof <- NoProofMut` | `SupersededBounded` (Honest) |
+| `HP1cSupersedeCloseOnTimer` (MS2: the timer closes whatever the answer) | `Closable <- CloseOnTimerMut` | `LiveKept` (Honest) |
+| `HP1cSupersedeIgnoreAckWait` (MS3: no wait for the newer's ACK) | `AckWaitOK <- IgnoreAckWaitMut` | `FallbackKept` (Honest) |
+| `HP1cSupersedeProveSole` (MS4: the newest or only connection closed; since HP1c2 as MP2, the newest judged like the older ones, its own ACK counting) | `SoleOK <- ProveSoleMut`, `AckWaitOK <- OwnAckMut` | `NeverCloseSole` (AnyTiming: the newer connection closes after its ACK). With `SoleOK` alone it is equivalent since review 3b: the close re-checks a newer usable connection judged alive and acknowledged, so `FallbackKept` implies `NeverCloseSole` |
+| `HP1cSupersedeBackwardAck` (MS5, review 3b: any newer acknowledged connection, a silent one included, lifts the exemption) | `AckWaitOK <- BackwardAckMut` | `FallbackKept` (AnyTiming's constants with three connections, its own configuration `mutants/SupersedeBackwardAck.cfg`: the oldest closes while the newest awaits its first ACK; the vector `supersede_dead_middle_acked_keeps_older`), 32 s |
+| `HP1cSupersedeWitnessProofClose` (witness) | — | `NoProofClose`: a proof closes a dead connection (Honest) |
+| `HP1cSupersedeWitnessAnswer` (witness) | — | `NoAnswer`: a live older connection answers its proof (Honest) |
+| `HP1cSupersedeWitnessFallback` (witness) | — | `NoFallbackWait`: a silent proof waits while the newer connection's opening awaits its ACK (Honest; the vector `supersede_newer_unacked_keeps_older`) |
+
+Not modelled: the ping's bytes and T_vie's value (vectors `supersede.json`, `protocol/syncack.Supersede`), an
+exhaustive check of the sound rule on three connections or more (only `HP1cSupersedeThree`'s seeded simulation, and the
+vectors `supersede_middle_acked`, `supersede_dead_middle_acked_keeps_older`, `supersede_answered_reproved`,
+`supersede_loop`; residual → HP1), a Byzantine peer
+that answers on a connection it no longer uses (it keeps only its own connection open), real timings (the Go tests of
+plan §2).
 
 ## WindowClose (WC1)
 

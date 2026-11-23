@@ -1,0 +1,656 @@
+{
+  "spec": "inkwell protocol",
+  "spec_version": "2.0.0-draft.11",
+  "generator": "docs/protocol/vectors/generate.go.txt (real codecs; proposed vectors use encoders written from spec.md)",
+  "vectors": [
+    {
+      "id": "supersede_newer_proves_older",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "conns": [
+          {
+            "acked": false,
+            "id": 1,
+            "opened_ms": 0
+          },
+          {
+            "acked": false,
+            "id": 2,
+            "opened_ms": 1000
+          }
+        ],
+        "now_ms": 1000,
+        "proof_window_ms": 5000
+      },
+      "description": "Une connexion plus récente s'enregistre : l'ancienne doit prouver qu'elle vit (un ping de 32 octets).",
+      "decoder": "sync_supersede",
+      "verdict": "accept",
+      "expect": {
+        "close": [],
+        "drop": [],
+        "prove": [
+          1
+        ],
+        "states": {
+          "1": "none",
+          "2": "none"
+        },
+        "wake_ms": 0
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "supersede_pending_waits",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "conns": [
+          {
+            "acked": false,
+            "id": 1,
+            "opened_ms": 0,
+            "proof": {
+              "for_ms": 1000,
+              "heard": false,
+              "started_ms": 1000
+            }
+          },
+          {
+            "acked": true,
+            "id": 2,
+            "opened_ms": 1000
+          }
+        ],
+        "now_ms": 5999,
+        "proof_window_ms": 5000
+      },
+      "description": "Aucun octet depuis 4,999 s : la preuve attend encore, échéance à 5 s.",
+      "decoder": "sync_supersede",
+      "verdict": "accept",
+      "expect": {
+        "close": [],
+        "drop": [],
+        "prove": [],
+        "states": {
+          "1": "pending",
+          "2": "none"
+        },
+        "wake_ms": 6000
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "supersede_silent_closed_after_newer_ack",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "conns": [
+          {
+            "acked": false,
+            "id": 1,
+            "opened_ms": 0,
+            "proof": {
+              "for_ms": 1000,
+              "heard": false,
+              "started_ms": 1000
+            }
+          },
+          {
+            "acked": true,
+            "id": 2,
+            "opened_ms": 1000
+          }
+        ],
+        "now_ms": 6000,
+        "proof_window_ms": 5000
+      },
+      "description": "T_vie écoulé sans octet et la nouvelle connexion porte un flux sync accusé : l'ancienne est fermée.",
+      "decoder": "sync_supersede",
+      "verdict": "accept",
+      "expect": {
+        "close": [
+          1
+        ],
+        "drop": [],
+        "prove": [],
+        "states": {
+          "1": "silent",
+          "2": "none"
+        },
+        "wake_ms": 0
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "supersede_newer_unacked_keeps_older",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "conns": [
+          {
+            "acked": false,
+            "id": 1,
+            "opened_ms": 0,
+            "proof": {
+              "for_ms": 1000,
+              "heard": false,
+              "started_ms": 1000
+            }
+          },
+          {
+            "acked": false,
+            "id": 2,
+            "opened_ms": 1000
+          }
+        ],
+        "now_ms": 10000,
+        "proof_window_ms": 5000
+      },
+      "description": "Une connexion directe plus récente attend l'accusé de son flux, le circuit plus ancien est muet : il reste ouvert, chemin de repli (exemption).",
+      "decoder": "sync_supersede",
+      "verdict": "accept",
+      "expect": {
+        "close": [],
+        "drop": [],
+        "prove": [],
+        "states": {
+          "1": "silent",
+          "2": "none"
+        },
+        "wake_ms": 0
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "supersede_answered_keeps_older",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "conns": [
+          {
+            "acked": false,
+            "id": 1,
+            "opened_ms": 0,
+            "proof": {
+              "for_ms": 1000,
+              "heard": true,
+              "started_ms": 1000
+            }
+          },
+          {
+            "acked": true,
+            "id": 2,
+            "opened_ms": 1000
+          }
+        ],
+        "now_ms": 20000,
+        "proof_window_ms": 5000
+      },
+      "description": "L'ancienne connexion a répondu dans T_vie : elle reste ouverte, rien ne change, même la nouvelle accusée.",
+      "decoder": "sync_supersede",
+      "verdict": "accept",
+      "expect": {
+        "close": [],
+        "drop": [],
+        "prove": [],
+        "states": {
+          "1": "answered",
+          "2": "none"
+        },
+        "wake_ms": 0
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "supersede_ack_on_older_does_not_count",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "conns": [
+          {
+            "acked": true,
+            "id": 1,
+            "opened_ms": 0,
+            "proof": {
+              "for_ms": 1000,
+              "heard": false,
+              "started_ms": 1000
+            }
+          },
+          {
+            "acked": false,
+            "id": 2,
+            "opened_ms": 1000
+          }
+        ],
+        "now_ms": 9000,
+        "proof_window_ms": 5000
+      },
+      "description": "Seule l'ancienne connexion porte un flux accusé : la muette reste ouverte tant que la nouvelle n'en porte pas.",
+      "decoder": "sync_supersede",
+      "verdict": "accept",
+      "expect": {
+        "close": [],
+        "drop": [],
+        "prove": [],
+        "states": {
+          "1": "silent",
+          "2": "none"
+        },
+        "wake_ms": 0
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "supersede_sole_never_closed",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "conns": [
+          {
+            "acked": true,
+            "id": 1,
+            "opened_ms": 0,
+            "proof": {
+              "for_ms": 1000,
+              "heard": false,
+              "started_ms": 1000
+            }
+          }
+        ],
+        "now_ms": 9000,
+        "proof_window_ms": 5000
+      },
+      "description": "La nouvelle connexion s'est fermée : la seule connexion restante n'est jamais fermée ; sa preuve est abandonnée.",
+      "decoder": "sync_supersede",
+      "verdict": "accept",
+      "expect": {
+        "close": [],
+        "drop": [
+          1
+        ],
+        "prove": [],
+        "states": {
+          "1": "silent"
+        },
+        "wake_ms": 0
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "supersede_newest_proof_dropped",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "conns": [
+          {
+            "acked": false,
+            "id": 1,
+            "opened_ms": 0,
+            "proof": {
+              "for_ms": 3000,
+              "heard": false,
+              "started_ms": 3000
+            }
+          },
+          {
+            "acked": true,
+            "id": 2,
+            "opened_ms": 1000,
+            "proof": {
+              "for_ms": 3000,
+              "heard": false,
+              "started_ms": 3000
+            }
+          }
+        ],
+        "now_ms": 9000,
+        "proof_window_ms": 5000
+      },
+      "description": "La plus récente s'est fermée : la preuve de la suivante, devenue la plus récente, est abandonnée ; la plus ancienne, muette, est fermée (une plus récente est accusée).",
+      "decoder": "sync_supersede",
+      "verdict": "accept",
+      "expect": {
+        "close": [
+          1
+        ],
+        "drop": [
+          2
+        ],
+        "prove": [],
+        "states": {
+          "1": "silent",
+          "2": "silent"
+        },
+        "wake_ms": 0
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "supersede_middle_acked",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "conns": [
+          {
+            "acked": false,
+            "id": 1,
+            "opened_ms": 0,
+            "proof": {
+              "for_ms": 2000,
+              "heard": false,
+              "started_ms": 2000
+            }
+          },
+          {
+            "acked": true,
+            "id": 2,
+            "opened_ms": 1000,
+            "proof": {
+              "for_ms": 2000,
+              "heard": true,
+              "started_ms": 2000
+            }
+          },
+          {
+            "acked": false,
+            "id": 3,
+            "opened_ms": 2000
+          }
+        ],
+        "now_ms": 9000,
+        "proof_window_ms": 5000
+      },
+      "description": "Trois connexions : la plus ancienne, muette, est fermée dès qu'une plus récente, même intermédiaire, est accusée.",
+      "decoder": "sync_supersede",
+      "verdict": "accept",
+      "expect": {
+        "close": [
+          1
+        ],
+        "drop": [],
+        "prove": [],
+        "states": {
+          "1": "silent",
+          "2": "answered",
+          "3": "none"
+        },
+        "wake_ms": 0
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "supersede_dead_middle_acked_keeps_older",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "conns": [
+          {
+            "acked": false,
+            "id": 1,
+            "opened_ms": 0,
+            "proof": {
+              "for_ms": 2000,
+              "heard": false,
+              "started_ms": 2000
+            }
+          },
+          {
+            "acked": true,
+            "id": 2,
+            "opened_ms": 1000,
+            "proof": {
+              "for_ms": 2000,
+              "heard": false,
+              "started_ms": 2000
+            }
+          },
+          {
+            "acked": false,
+            "id": 3,
+            "opened_ms": 2000
+          }
+        ],
+        "now_ms": 9000,
+        "proof_window_ms": 5000
+      },
+      "description": "Trois connexions : l'intermédiaire a été accusée mais sa preuve est muette, elle ne compte pas ; la plus récente attend son accusé, la plus ancienne reste le chemin de repli.",
+      "decoder": "sync_supersede",
+      "verdict": "accept",
+      "expect": {
+        "close": [],
+        "drop": [],
+        "prove": [],
+        "states": {
+          "1": "silent",
+          "2": "silent",
+          "3": "none"
+        },
+        "wake_ms": 0
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "supersede_answered_reproved",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "conns": [
+          {
+            "acked": false,
+            "id": 1,
+            "opened_ms": 0,
+            "proof": {
+              "for_ms": 1000,
+              "heard": true,
+              "started_ms": 1000
+            }
+          },
+          {
+            "acked": false,
+            "id": 2,
+            "opened_ms": 1000
+          },
+          {
+            "acked": false,
+            "id": 3,
+            "opened_ms": 9000
+          }
+        ],
+        "now_ms": 9000,
+        "proof_window_ms": 5000
+      },
+      "description": "Une connexion prouvée pour une ancienne venue doit prouver de nouveau quand une plus récente arrive.",
+      "decoder": "sync_supersede",
+      "verdict": "accept",
+      "expect": {
+        "close": [],
+        "drop": [],
+        "prove": [
+          1,
+          2
+        ],
+        "states": {
+          "1": "answered",
+          "2": "none",
+          "3": "none"
+        },
+        "wake_ms": 0
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "supersede_pending_not_restarted",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "conns": [
+          {
+            "acked": false,
+            "id": 1,
+            "opened_ms": 0,
+            "proof": {
+              "for_ms": 1000,
+              "heard": false,
+              "started_ms": 1000
+            }
+          },
+          {
+            "acked": false,
+            "id": 2,
+            "opened_ms": 1000
+          },
+          {
+            "acked": false,
+            "id": 3,
+            "opened_ms": 3000
+          }
+        ],
+        "now_ms": 3000,
+        "proof_window_ms": 5000
+      },
+      "description": "Au plus une preuve en cours par connexion : une nouvelle venue ne relance pas la preuve en cours.",
+      "decoder": "sync_supersede",
+      "verdict": "accept",
+      "expect": {
+        "close": [],
+        "drop": [],
+        "prove": [
+          2
+        ],
+        "states": {
+          "1": "pending",
+          "2": "none",
+          "3": "none"
+        },
+        "wake_ms": 6000
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "supersede_loop",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "conns": [
+          {
+            "acked": false,
+            "id": 1,
+            "opened_ms": 0
+          },
+          {
+            "acked": false,
+            "id": 2,
+            "opened_ms": 1000
+          },
+          {
+            "acked": false,
+            "id": 3,
+            "opened_ms": 2000
+          },
+          {
+            "acked": false,
+            "id": 4,
+            "opened_ms": 3000
+          },
+          {
+            "acked": true,
+            "id": 5,
+            "opened_ms": 4000
+          }
+        ],
+        "now_ms": 4000,
+        "proof_window_ms": 5000
+      },
+      "description": "Un pair qui ouvre des connexions en boucle : un seul ping par connexion plus ancienne, aucune fermeture sans preuve muette.",
+      "decoder": "sync_supersede",
+      "verdict": "accept",
+      "expect": {
+        "close": [],
+        "drop": [],
+        "prove": [
+          1,
+          2,
+          3,
+          4
+        ],
+        "states": {
+          "1": "none",
+          "2": "none",
+          "3": "none",
+          "4": "none",
+          "5": "none"
+        },
+        "wake_ms": 0
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "supersede_same_time_by_id",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "conns": [
+          {
+            "acked": false,
+            "id": 9,
+            "opened_ms": 0
+          },
+          {
+            "acked": false,
+            "id": 4,
+            "opened_ms": 0
+          }
+        ],
+        "now_ms": 0,
+        "proof_window_ms": 5000
+      },
+      "description": "Deux connexions enregistrées au même instant : l'ordre est celui des identifiants, la plus grande est la plus récente.",
+      "decoder": "sync_supersede",
+      "verdict": "accept",
+      "expect": {
+        "close": [],
+        "drop": [],
+        "prove": [
+          4
+        ],
+        "states": {
+          "4": "none",
+          "9": "none"
+        },
+        "wake_ms": 0
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "supersede_single",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "conns": [
+          {
+            "acked": true,
+            "id": 1,
+            "opened_ms": 0
+          }
+        ],
+        "now_ms": 0,
+        "proof_window_ms": 5000
+      },
+      "description": "Une seule connexion, sans preuve : rien à faire.",
+      "decoder": "sync_supersede",
+      "verdict": "accept",
+      "expect": {
+        "close": [],
+        "drop": [],
+        "prove": [],
+        "states": {
+          "1": "none"
+        },
+        "wake_ms": 0
+      },
+      "scope": "transport"
+    }
+  ]
+}

@@ -310,8 +310,8 @@ clause = "rule L (a failed send resyncs the peer)"
 why = "a send that fails on a surviving connection resets the stream without announcing the peer down and up: the repo layer keeps its sync state and never resends the lost change"
 [[mutant.edit]]
 file = "internal/transport/p2p/stream.go"
-before = "n.outLost(ps, s, true, !canceled)"
-after = "n.outLost(ps, s, true, false)"
+before = "n.outLost(ps, s, true, !canceled, nil)"
+after = "n.outLost(ps, s, true, false, nil)"
 
 [[mutant]]
 id = "SP1a"
@@ -2127,3 +2127,486 @@ why = "the initial connection window is not reserved with the resource manager"
 file = "internal/transport/p2p/node.go"
 before = "\t\t\tquicreuse.AccountInitialConnectionWindow(rm),\n"
 after = ""
+
+# Block HP1 (plan docs/plans/2026-11-16-hp1-direct-upgrade.md §4, gate gates/HP1.toml): a relayed link to a
+# wanted peer keeps trying to become direct. Written at step 1, before the code: the entries (id, test, expect,
+# why) are frozen by the gate's `mutant-tool` criterion; the anchors name the lines the plan's design puts in
+# protocol/directup and internal/transport/p2p, and are adjusted to the final code at step 2 (never the test or
+# its text). Adjusted at step 2 (2026-11-16): MH3 lives in classify.go, MH20 in punchgate.go (the gater's
+# grant check); MH12 and MH20 now let the dial through (« return true ») rather than delete a check that a
+# later one repeats; MH10 gives up at the cap without a new field.
+[[mutant]]
+id = "MN2"
+block = "HP1"
+kind = "e2e"
+scenario = 5
+clause = "C3a"
+why = "plan §7, D6: an extra link-down outside the identified restart window (one outage counted at the first PeerUp, before the baseline): C3a must fail, as C3 did"
+
+[[mutant.edit]]
+file = "internal/transport/p2p/links.go"
+before = "\tpl.stab.up(now)\n\tn.applyLinkLocked(id, pl, now, s)\n"
+after = "\tif pl.stab.total == 0 {\n\t\tpl.stab.down(now)\n\t}\n\tpl.stab.up(now)\n\tn.applyLinkLocked(id, pl, now, s)\n"
+
+[[mutant]]
+id = "MN1"
+block = "HP1"
+kind = "e2e"
+scenario = 9
+clause = "C1"
+why = "HP1 disabled: the dial loop's connected branch never asks the upgrader, so after bob's restart the link stays relayed (scenario 9, C1 direct within 30 s)"
+
+[[mutant.edit]]
+file = "internal/transport/p2p/dial.go"
+before = "\t\t\tn.upgradeStep(ctx, w)\n"
+after = "\n"
+
+[[mutant]]
+id = "MH12"
+block = "HP1"
+kind = "go"
+pkg = "./internal/transport/p2p/"
+test = "TestUpgradeDialsOnlyAdmitted"
+expect = "H-12 dialled a stranger"
+clause = "H-12 dialled a stranger"
+why = "the gater lets a non-relay dial reach a peer that is not wanted: a stranger gets libp2p's one-shot direct path"
+
+[[mutant.edit]]
+file = "internal/transport/p2p/gate.go"
+before = "\tif !g.wanted(p) {\n\t\treturn false\n\t}\n"
+after = "\tif !g.wanted(p) {\n\t\treturn true\n\t}\n"
+
+[[mutant]]
+id = "MH1"
+block = "HP1"
+kind = "go"
+pkg = "github.com/oioio-space/inkwell/protocol/directup"
+test = "TestPolicyActsOnlyWhenWantedAndRelayed"
+expect = "H-1 decision for a peer not wanted"
+clause = "H-1 decision for a peer not wanted"
+why = "the wanted check is dropped: the policy schedules calls for a relayed peer that is not wanted"
+
+[[mutant.edit]]
+file = "protocol/directup/policy.go"
+before = "\tif !o.Wanted || !o.Relayed || !o.Enabled {\n"
+after = "\tif !o.Relayed || !o.Enabled {\n"
+
+[[mutant]]
+id = "MH2"
+block = "HP1"
+kind = "go"
+pkg = "./internal/transport/p2p/"
+test = "TestUpgradeNotBeforeLocalReady"
+expect = "H-2 call before local ready"
+clause = "H-2 call before local ready"
+why = "no localReady guard: a call starts before our /libp2p/dcutr handler is registered"
+
+[[mutant.edit]]
+file = "protocol/directup/policy.go"
+before = "\tif !o.LocalReady {\n\t\treturn Decision{}\n\t}\n"
+after = ""
+
+[[mutant]]
+id = "MH3"
+block = "HP1"
+kind = "go"
+pkg = "github.com/oioio-space/inkwell/protocol/directup"
+test = "TestPolicyRoles"
+expect = "H-3 punch without an inbound circuit"
+clause = "H-3 punch without an inbound circuit"
+why = "the side that only dialled punches too (DCUtR's answerer resets the stream; model mutant M5)"
+
+[[mutant.edit]]
+file = "protocol/directup/classify.go"
+before = "\tcase o.In:\n\t\treturn Punch\n"
+after = "\tcase o.In || o.Out:\n\t\treturn Punch\n"
+
+[[mutant]]
+id = "MH4"
+block = "HP1"
+kind = "go"
+pkg = "./internal/transport/p2p/"
+test = "TestUpgradeOneCallInFlight"
+expect = "H-4 calls in flight"
+clause = "H-4 calls in flight"
+why = "a call is launched while the previous one (cancelled or not) is still in flight (model mutant M13)"
+
+[[mutant.edit]]
+file = "protocol/directup/policy.go"
+before = "\tif p.inFlight {\n\t\treturn Decision{Cancel: p.call != p.epoch}\n\t}\n"
+after = ""
+
+[[mutant]]
+id = "MH5"
+block = "HP1"
+kind = "go"
+pkg = "./internal/transport/p2p/"
+test = "TestUpgradeSlotsFIFO"
+expect = "H-5 slots held"
+clause = "H-5 slots held"
+why = "no node-wide cap: every relayed peer punches at once (model mutant M11)"
+
+[[mutant.edit]]
+file = "protocol/directup/slots.go"
+before = "\tif len(s.held) >= s.max {\n"
+after = "\tif false {\n"
+
+# MH6 repointed on 2026-11-23 from TestUpgradeAfterRestartDuringAttempt (internal/transport/p2p) to the pure
+# TestPolicyEpoch, same text: on the integration path a stopped call and a stale epoch both discard the result, so the
+# mutant is equivalent there (plan docs/plans/2026-11-23-hp1-reformalize.md §3; frozen by gates/HP1b.toml, which
+# supersedes gates/HP1.toml).
+[[mutant]]
+id = "MH6"
+block = "HP1"
+kind = "go"
+pkg = "github.com/oioio-space/inkwell/protocol/directup"
+test = "TestPolicyEpoch"
+expect = "H-6 direct after the new circuit"
+clause = "H-6 direct after the new circuit"
+why = "the result of an older epoch is applied: the old process's failure schedules a slow step for the new one (model mutant M2)"
+
+[[mutant.edit]]
+file = "protocol/directup/policy.go"
+before = "\tif epoch != p.epoch {\n\t\treturn Decision{FreeSlot: true}\n\t}\n"
+after = ""
+
+[[mutant]]
+id = "MH7"
+block = "HP1"
+kind = "go"
+pkg = "github.com/oioio-space/inkwell/protocol/directup"
+test = "TestClassify"
+expect = "H-7 class"
+clause = "H-7 class"
+why = "a call that punched or dialled is classed Unspent: a hopeless pair retries on the fast ladder"
+
+[[mutant.edit]]
+file = "protocol/directup/classify.go"
+before = "\tcase rounds > 0 || dialled:\n"
+after = "\tcase false:\n"
+
+[[mutant]]
+id = "MH8"
+block = "HP1"
+kind = "go"
+pkg = "github.com/oioio-space/inkwell/protocol/directup"
+test = "TestPolicyLadders"
+expect = "H-8 slow ladder"
+clause = "H-8 slow ladder"
+why = "the slow ladder has no cap: a hopeless pair waits longer than 16 min ± 25 % between calls"
+
+[[mutant.edit]]
+file = "protocol/directup/policy.go"
+before = "min(SlowBase<<p.slow, SlowCap)"
+after = "SlowBase<<p.slow"
+
+[[mutant]]
+id = "MH9"
+block = "HP1"
+kind = "go"
+pkg = "github.com/oioio-space/inkwell/protocol/directup"
+test = "TestPolicyEvents"
+expect = "H-9 an event refilled a budget"
+clause = "H-9 an event refilled a budget"
+why = "a new-candidates event (E7, E8) refills the attempt bucket as well as resetting the slow ladder (model mutant M7)"
+
+[[mutant.edit]]
+file = "protocol/directup/policy.go"
+before = "\tcase E7, E8:\n\t\tp.slow = 0\n"
+after = "\tcase E7, E8:\n\t\tp.slow = 0\n\t\tp.attempts = NewBucket(AttemptBurst, AttemptRefill, now)\n"
+
+[[mutant]]
+id = "MH10"
+block = "HP1"
+kind = "go"
+pkg = "./internal/transport/p2p/"
+test = "TestUpgradeAfterLongBlock"
+expect = "H-10 direct after the block lifts"
+clause = "H-10 direct after the block lifts"
+why = "the policy gives up once the slow ladder reaches its cap: a silent change (a firewall lifted) is never seen (model mutant M10)"
+
+[[mutant.edit]]
+file = "protocol/directup/policy.go"
+before = "\t\tp.slow = min(p.slow+1, slowSteps)\n"
+after = "\t\tp.slow = min(p.slow+1, slowSteps)\n\t\tif p.slow == slowSteps {\n\t\t\tp.due = p.due.Add(100 * 365 * 24 * time.Hour) // gives up at the cap\n\t\t}\n"
+
+[[mutant]]
+id = "MH11"
+block = "HP1"
+kind = "go"
+pkg = "./internal/transport/p2p/"
+test = "TestUpgradeByzantineReconnect"
+expect = "H-11 calls in an hour"
+clause = "H-11 calls in an hour"
+why = "a new epoch refills the attempt bucket: a member that reconnects every 10 s gets a call each time (model mutant M16)"
+
+[[mutant.edit]]
+file = "protocol/directup/policy.go"
+before = "func (p *Policy) newEpoch(now time.Time) {\n"
+after = "func (p *Policy) newEpoch(now time.Time) {\n\tp.attempts = NewBucket(AttemptBurst, AttemptRefill, now)\n"
+
+[[mutant]]
+id = "MH13"
+block = "HP1"
+kind = "go"
+pkg = "./internal/transport/p2p/"
+test = "TestUpgradeGateRefusesSpam"
+expect = "H-12 rounds with a stranger"
+clause = "H-12 rounds with a stranger"
+why = "the address filter ignores « wanted »: a stranger that opens /libp2p/dcutr gets our public addresses and a punch (model mutant M14)"
+
+[[mutant.edit]]
+file = "internal/transport/p2p/punchgate.go"
+before = "\tif !g.wanted(p) {\n\t\treturn nil\n\t}\n"
+after = ""
+
+[[mutant]]
+id = "MH14"
+block = "HP1"
+kind = "go"
+pkg = "./internal/transport/p2p/"
+test = "TestUpgradeStaleDirectSettles"
+expect = "H-13 direct after settle"
+clause = "H-13 direct after settle"
+why = "no settle check: a Success over a stale direct connection to a dead process leaves the session relayed for ever (go-libp2p #3420)"
+
+[[mutant.edit]]
+file = "internal/transport/p2p/upgrade.go"
+before = "\t\tn.maybeUpgrade(ps)\n"
+after = "\n"
+
+[[mutant]]
+id = "MH15"
+block = "HP1"
+kind = "go"
+pkg = "./internal/transport/p2p/"
+test = "TestUpgradeCloseDuringAttempt"
+expect = "H-14 Close returned after"
+clause = "H-14 Close returned after"
+why = "Close waits for the call in flight instead of cancelling it and returning"
+
+[[mutant.edit]]
+file = "internal/transport/p2p/upgrade.go"
+before = "\tu.cancel()\n"
+after = "\tu.cancel()\n\t<-u.done\n"
+
+[[mutant]]
+id = "MH16"
+block = "HP1"
+kind = "go"
+pkg = "github.com/oioio-space/inkwell/protocol/directup"
+test = "TestNodeAdmissions"
+expect = "H-16 admissions"
+clause = "H-16 admissions"
+why = "a slot is granted without a token of the node-wide admission bucket (model mutant M23)"
+
+[[mutant.edit]]
+file = "protocol/directup/slots.go"
+before = "\tif !s.node.Take(now) {\n\t\treturn false\n\t}\n"
+after = ""
+
+[[mutant]]
+id = "MH17"
+block = "HP1"
+kind = "go"
+pkg = "./internal/transport/p2p/"
+test = "TestUpgradeIdleNoLadder"
+expect = "H-17 ladder call while idle"
+clause = "H-17 ladder call while idle"
+why = "ladder-driven calls run while the app is idle (model mutant M21)"
+
+[[mutant.edit]]
+file = "protocol/directup/policy.go"
+before = "\tif o.Idle && d.FromLadder {\n"
+after = "\tif false {\n"
+
+# Block HP1, after the model's B1-B6 findings (plan « Codex freeze review »): H-15 adopted, the node budget counts
+# destinations, the answerer keeps its place in the queue. Anchors on step 2's lines, as above.
+[[mutant]]
+id = "MH18"
+block = "HP1"
+kind = "go"
+pkg = "./internal/transport/p2p/"
+test = "TestUpgradeCrossedExchanges"
+expect = "H-15 circuit not closed"
+clause = "H-15 circuit not closed"
+why = "with two circuits the one the higher PeerID dialled is never closed: both ends stay eligible and crossed punches may cancel each other (model mutant M25, DupResolves)"
+
+[[mutant.edit]]
+file = "internal/transport/p2p/upgrade.go"
+before = "\t\t_ = dup.Close()\n"
+after = "\n"
+
+[[mutant]]
+id = "MH19"
+block = "HP1"
+kind = "go"
+pkg = "./internal/transport/p2p/"
+test = "TestUpgradeNodeTraffic"
+expect = "H-16 destinations"
+clause = "H-16 destinations"
+why = "the grant's allowance of 12 destinations is not drawn: several rounds share one grant and dial without bound (model mutant M26, NoUnallowedDial)"
+
+[[mutant.edit]]
+file = "protocol/directup/slots.go"
+before = "\tif g.allowance == 0 {\n\t\treturn false\n\t}\n\tg.allowance--\n"
+after = ""
+
+[[mutant]]
+id = "MH20"
+block = "HP1"
+kind = "go"
+pkg = "./internal/transport/p2p/"
+test = "TestUpgradeDialsOnlyAdmitted"
+expect = "H-16 first direct dial without a grant"
+clause = "H-16 first direct dial without a grant"
+why = "the gater lets libp2p's first direct dial through while the peer holds no grant and the FIFO grants none on demand (model mutant M27, NoUnallowedDial)"
+
+[[mutant.edit]]
+file = "internal/transport/p2p/punchgate.go"
+before = "\tif !g.slots.Holds(string(p), now) && !g.askOnDemandLocked(p, announced, now) {\n\t\treturn false\n\t}\n"
+after = "\tif !g.slots.Holds(string(p), now) && !g.askOnDemandLocked(p, announced, now) {\n\t\treturn true\n\t}\n"
+
+[[mutant]]
+id = "MH21"
+block = "HP1"
+kind = "go"
+pkg = "./internal/transport/p2p/"
+test = "TestUpgradeAnswererBehindQueue"
+expect = "H-5 place lost"
+clause = "H-5 place lost"
+why = "a round that gives up after its 20 s wait drops its ticket: the peer goes to the back of the queue each time and may never be granted (model mutant M29, Upgrades in Answerer)"
+
+[[mutant.edit]]
+file = "protocol/directup/slots.go"
+before = "func (s *Slots) GiveUp(p string, now time.Time) {\n"
+after = "func (s *Slots) GiveUp(p string, now time.Time) {\n\ts.drop(p)\n"
+
+[[mutant]]
+id = "MH22"
+block = "HP1"
+kind = "go"
+pkg = "./internal/transport/p2p/"
+test = "TestUpgradeGateRefusesSpam"
+expect = "H-12 ticket for a stranger"
+clause = "H-12 ticket for a stranger"
+why = "a peer that is not wanted takes a ticket in the slot queue: strangers delay the members' rounds (model mutant M28, NoTicketUnwanted)"
+
+[[mutant.edit]]
+file = "internal/transport/p2p/punchgate.go"
+before = "\tif !g.wanted(p) {\n\t\treturn nil\n\t}\n\tif g.peerLocked(p, now).budgets.Rounds.Tokens(now) == 0 {\n"
+after = "\tg.slots.Ask(string(p), now)\n\tif !g.wanted(p) {\n\t\treturn nil\n\t}\n\tif g.peerLocked(p, now).budgets.Rounds.Tokens(now) == 0 {\n"
+
+# Block HP1r (rule H-19, plan docs/plans/2026-11-16-hp1-direct-upgrade.md §4, gate gates/HP1r.toml): a direct
+# connection that lands with no reason to keep it (no circuit, not wanted, no Connect in flight) is closed in the
+# node's ConnectedF before it accepts a stream. Written at step 1, before the code: id, test and expect are frozen by
+# gates/HP1r.toml's `mutant` criterion; the anchor names the line the design puts first in ConnectedF (node.go) and
+# may be adjusted to the final code at step 2, never the test or its text.
+[[mutant]]
+id = "MR1"
+block = "HP1r"
+kind = "go"
+pkg = "./internal/transport/p2p/"
+test = "TestUpgradeLateLinkClosed"
+expect = "H-19 late link kept"
+why = "the retention check removed: the late end of an upgrade attempt (libp2p's one-shot started on the dropped circuit) is kept, the re-admitted peer accepts it, PeerUp"
+
+[[mutant.edit]]
+file = "internal/transport/p2p/node.go"
+before = "if n.lateLink(c) {"
+after = "if false {"
+
+# Block HP1c (rules H-20 and P-15, plan docs/plans/2026-11-23-hp1-reformalize.md §2; frozen by gates/HP1c.toml): one Go
+# mutant per decision. MP1-MP4's anchors are in protocol/syncack/supersede.go, the reference decision that exists at
+# step 1 and that the node runs (internal/transport/p2p/supersede.go only executes it); each is caught by the test
+# named, failing with its rule's text. Step 2 may move an anchor to the final code, never the test or its text. MH23
+# (H-20) was added at step 2 with the tuple gates/HP1c.toml froze: its anchor is the H-20 code itself,
+# punchService.connect opening each round on its circuit with newStreamOn(via, ...).
+[[mutant]]
+id = "MH23"
+block = "HP1c"
+kind = "go"
+pkg = "./internal/transport/p2p/"
+test = "TestUpgradeAfterCrashRestart"
+expect = "H-20 round on a dead circuit"
+why = "rounds go through host.NewStream: libp2p picks the connection with the most streams, the crashed peer's old circuit, dead for the relay's 30 s idle timeout, so the one-shot's round waits there instead of on the new circuit that caused it"
+
+[[mutant.edit]]
+file = "internal/transport/p2p/dcutr.go"
+before = "\t\tstr, err := newStreamOn(streamCtx, via, holepunch.Protocol)\n"
+after = "\t\tstr, err := s.host.NewStream(streamCtx, p, holepunch.Protocol)\n"
+
+[[mutant]]
+id = "MP1"
+block = "HP1c"
+kind = "go"
+pkg = "./internal/transport/p2p/"
+test = "TestUpgradeAfterCrashRestart"
+expect = "P-15 dead connection kept"
+why = "no proof is started: an older connection with no proof is never pinged, so after a crash the dead circuit stays open for the transport's 30 s idle timeout"
+
+[[mutant.edit]]
+file = "protocol/syncack/supersede.go"
+before = "\t\tcase Unproved:\n\t\t\td.Prove = append(d.Prove, c.ID)\n"
+after = "\t\tcase Unproved:\n"
+
+[[mutant]]
+id = "MP2"
+block = "HP1c"
+kind = "go"
+pkg = "github.com/oioio-space/inkwell/protocol/syncack"
+test = "TestSupersedeKeepsSole"
+expect = "P-15 sole connection closed"
+why = "the newest connection is judged like the older ones: a silent sole connection (its newer one gone) is closed"
+
+[[mutant.edit]]
+file = "protocol/syncack/supersede.go"
+before = "\tolder := cs[:len(cs)-1]\n"
+after = "\tolder := cs\n"
+
+[[mutant]]
+id = "MP3"
+block = "HP1c"
+kind = "go"
+pkg = "./internal/transport/p2p/"
+test = "TestSupersedeKeepsLiveOlder"
+expect = "P-15 live connection closed"
+why = "the proof's timer closes whatever the answer: a byte heard within T_vie is ignored, so a live older circuit is closed at T_vie (model mutants M32 and CloseOnTimer)"
+
+[[mutant.edit]]
+file = "protocol/syncack/supersede.go"
+before = "\tcase c.Heard:\n\t\treturn Answered\n"
+after = ""
+
+[[mutant]]
+id = "MP4"
+block = "HP1c"
+kind = "go"
+pkg = "github.com/oioio-space/inkwell/protocol/syncack"
+test = "TestSupersedeWaitsForNewerAck"
+expect = "P-15 fallback closed"
+why = "the ACK wait is ignored: a silent older connection is closed at T_vie while the newer opening still awaits its ACK, removing the fallback (spurious PeerDown if it fails; model mutant IgnoreAckWait)"
+
+[[mutant.edit]]
+file = "protocol/syncack/supersede.go"
+before = "\t\t\tcloses[i] = newerAcked\n"
+after = "\t\t\tcloses[i] = true\n"
+
+# Block HP1n4 (plan docs/plans/2026-11-23-hp1-reformalize.md §5; frozen by gates/HP1n5.toml, which supersedes
+# gates/HP1n4.toml and keeps this block name): the environment hypothesis, a real relay keeps a crashed peer's
+# circuit half-open for about 30 s. With P-15 off the dead connection is never proved nor closed, so after bob's crash
+# his link stays relayed until it dies (direct 30.0 s after the restart in HP1n4's MN3 run), past C1d's 15 s counted
+# from the restart. HP1n4's C2c, counted from bob's page readiness, did not see it (gates/HP1/SIMPLIFY.md).
+[[mutant]]
+id = "MN3"
+block = "HP1n4"
+kind = "e2e"
+scenario = 9
+variant = "crash"
+clause = "C1d"
+why = "P-15 off: Supersede decides nothing for any open connection, so the crashed peer's dead connection is kept until QUIC's 30 s idle timeout and bob's link stays relayed (scenario 9 crash variant, C1d « Synchronisé » and direct within 15 s of the restart)"
+
+[[mutant.edit]]
+file = "protocol/syncack/supersede.go"
+before = "\tif len(conns) == 0 {\n"
+after = "\tif len(conns) >= 0 {\n"

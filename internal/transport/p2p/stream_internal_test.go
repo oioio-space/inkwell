@@ -21,7 +21,7 @@ func TestOutLostReleasesStreamBeforeReopen(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())
 		s := &retiringStream{}
 		opened := make(chan bool, 1)
-		n := &Node{ctx: ctx, chg: make(chan struct{}), h: openRecordingHost{
+		n := &Node{ctx: ctx, proofs: newProofSet(), chg: make(chan struct{}), h: openRecordingHost{
 			net: &recordingNetwork{},
 			open: func(ctx context.Context) (network.Stream, error) {
 				opened <- s.released.Load()
@@ -37,7 +37,7 @@ func TestOutLostReleasesStreamBeforeReopen(t *testing.T) {
 			n.wg.Wait()
 		}()
 		ps := &peerState{connected: true, admitted: true, out: s}
-		n.outLost(ps, s, true, false)
+		n.outLost(ps, s, true, false, false)
 		synctest.Wait()
 		select {
 		case released := <-opened:
@@ -67,7 +67,7 @@ func TestOpenOutConnectionLossPreservesReplacement(t *testing.T) {
 		firstOpen, loseFirst := make(chan struct{}), make(chan struct{})
 		replacementOpen := make(chan struct{})
 		net := &recordingNetwork{}
-		n := &Node{ctx: ctx, chg: make(chan struct{}), h: openRecordingHost{
+		n := &Node{ctx: ctx, proofs: newProofSet(), chg: make(chan struct{}), h: openRecordingHost{
 			net: net,
 			open: func(ctx context.Context) (network.Stream, error) {
 				select {
@@ -91,7 +91,7 @@ func TestOpenOutConnectionLossPreservesReplacement(t *testing.T) {
 		}()
 
 		ps := &peerState{connected: true, admitted: true}
-		n.startOpenLocked(ps)
+		n.startOpenLocked(ps, false)
 		<-firstOpen
 		// The original connection is gone. The replacement has already
 		// arrived while openOut still owns the opening.
@@ -123,7 +123,7 @@ func TestOpenOutLostWithoutStreamSparesReplacement(t *testing.T) {
 		replacementOpen := make(chan struct{})
 		orig, repl := &closableConn{}, &closableConn{}
 		net := &recordingNetwork{conns: []network.Conn{orig}}
-		n := &Node{ctx: ctx, chg: make(chan struct{}), h: openRecordingHost{
+		n := &Node{ctx: ctx, proofs: newProofSet(), chg: make(chan struct{}), h: openRecordingHost{
 			net: net,
 			open: func(ctx context.Context) (network.Stream, error) {
 				select {
@@ -141,7 +141,7 @@ func TestOpenOutLostWithoutStreamSparesReplacement(t *testing.T) {
 		defer stopNode(n, cancel)
 
 		ps := &peerState{connected: true, admitted: true}
-		n.startOpenLocked(ps)
+		n.startOpenLocked(ps, false)
 		<-firstOpen
 		orig.closed.Store(true)
 		net.conns = []network.Conn{repl}
@@ -175,7 +175,7 @@ func TestNewConnectionOpensWithoutConnectednessEvent(t *testing.T) {
 		replacementOpen := make(chan struct{})
 		orig, repl := &closableConn{}, &closableConn{}
 		net := &recordingNetwork{conns: []network.Conn{orig}}
-		n := &Node{ctx: ctx, chg: make(chan struct{}), peers: map[peer.ID]*peerState{}, h: openRecordingHost{
+		n := &Node{ctx: ctx, proofs: newProofSet(), chg: make(chan struct{}), peers: map[peer.ID]*peerState{}, h: openRecordingHost{
 			net: net,
 			open: func(ctx context.Context) (network.Stream, error) {
 				select {
@@ -194,7 +194,7 @@ func TestNewConnectionOpensWithoutConnectednessEvent(t *testing.T) {
 
 		ps := &peerState{connected: true, admitted: true}
 		n.peers[ps.id] = ps
-		n.startOpenLocked(ps)
+		n.startOpenLocked(ps, false)
 		<-firstOpen
 		orig.closed.Store(true)
 		net.conns = nil // lost, and no replacement yet

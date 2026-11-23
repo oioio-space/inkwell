@@ -90,6 +90,9 @@ func (n *Node) serveInbound(l *lane, s network.Stream) {
 	if lc.Ack(n.acceptInbound(l, s), n.since()) {
 		return
 	}
+	if l == n.syncLane {
+		n.supersedeAcked(s.Conn()) // a silent older connection may now be closed (P-15)
+	}
 	if n.opts.afterAck != nil && l == n.syncLane {
 		n.opts.afterAck(s.Conn())
 	}

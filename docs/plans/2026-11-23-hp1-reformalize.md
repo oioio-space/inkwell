@@ -182,23 +182,26 @@ MN1 build. This is a light tooling block, committed to `main` first. No frozen g
 | **HP1b** | new, supersedes HP1 (kept frozen as history) | the 8 criteria, verbatim except `mutant-tool`'s MH6 tuple (§3); the MH6 entry of `scripts/netsim/mutants.toml` stays in block `HP1`, so HP1m runs the pure version and HP1b's table checks it | 2340 s, as HP1 |
 | HP1m | kept verbatim | MH1-MH22 per the table (MH6 now pure) | 1800 s |
 | HP1r | kept verbatim | H-19 | 2190 s |
+| **HP1r2** | new (2026-11-23), supersedes HP1r (kept frozen as history) | HP1r verbatim except the new closed arm `closed_answerer_dial` of `TestUpgradeLateLinkClosed` (the Drop after the initiator's SYNC, while the answerer's unbound punch dial is in flight), where MR1 is caught again: H-20 cancels a bound call when its circuit closes, so HP1r's arms no longer produce a late link; raw results under `gates/HP1r2/` | 2190 s, as HP1r |
 | **HP1c** | new | docs 30 (H-20; P-15 with its exemption) · tla `^HP1c` 1000, exclusive (18 runs: 3 sound, 2 safety, the 7 model mutants M31-M33 and Supersede's four caught, 6 witnesses reached) · pure + vectors 60, fuzz 30 (corpus digest frozen) · sim + 40-run acceptance, race, 600 · MH23, MP1-MP4: table 30, anchors 30, runs 440 · gremlins `protocol/syncack` 300 | 2520 s |
 | **HP1c2** | new (2026-11-23), supersedes HP1c (kept frozen as history) | HP1c verbatim except the corpus (15 vectors: `supersede_dead_middle_acked_keeps_older`, review finding 3b) and its digest, and the TLA runs (20 ✓: mutant `HP1cSupersedeBackwardAck` caught by `FallbackKept` on three connections; `HP1cSupersedeThree`, the sound rule on three connections by seeded simulation; MS4 redefined as MP2, since `FallbackKept` now implies `NeverCloseSole`); raw results under `gates/HP1c2/` | 2520 s, as HP1c |
 | HP1n, HP1n2, HP1n3 | kept verbatim | MN1/MN2 now build (§4) | as frozen |
 | **HP1n4** | new | `e2e:build` 240 · scenario 9 variant `crash` (SIGKILL, new port), seeds 20771-3, strict, from bob's page readiness: C1c direct ≤ 15 s, C2c both ways converge ≤ 15 s, C3c alice never shows bob away (no spurious `PeerDown`), 1300 · MN3 (block `HP1n4`, `Supersede` decides nothing), P-15 off, turns C2c red (≥ 30 s): table 30, anchor 30, run 900. Needs `main`'s `a153829` (§4) | 2500 s |
+| **HP1n5** | new (2026-11-23), supersedes HP1n4 (kept frozen as history) | HP1n4 verbatim except C1d and C2d, counted from bob's restart (`tRestart`), « Synchronisé » included, 15 s each (C3c unchanged), MN3 now on C1d, result copies and raw results under `hp1n5`. Why: HP1n4's C1c/C2c count from page readiness, which absorbed MN3's ~30 s (tReady - tRestart 31.2 s under MN3 vs 6.1-6.6 s unmutated), so MN3 was not caught (`gates/HP1/SIMPLIFY.md`, « HP1n4 mutant MN3 not caught ») | 2500 s, as HP1n4 |
 
 Every new gate has `max_minutes = 45`. There is no netsim mutant for H-20: MH23 proves it on controlled time. Netsim
 is used only for the environment hypothesis, that a real relay keeps the half-open circuit for about 30 s (MN3).
 
 **Order.** (1) The §4 tooling block, committed to `main`. (2) Step 1: spec text, models with mutants, vectors, the
 HP1c and HP1n4 tests (red for the right reason), cross-family review of spec and gates, freeze. (3) TDD to green.
-(4) `/simplify`. (5) A 20-30 min smoke. (6) Each gate **once** on the same final candidate: HP1b → HP1m → HP1r →
-HP1c2 → HP1n → HP1n2 → HP1n3 → HP1n4 (controlled time first, exclusive netsim last; no gate runs another). HP1c2
-replaces HP1c in this order (2026-11-23, code review finding 3b, §8 below).
+(4) `/simplify`. (5) A 20-30 min smoke. (6) Each gate **once** on the same final candidate: HP1b → HP1m → HP1r2 →
+HP1c2 → HP1n → HP1n2 → HP1n3 → HP1n5 (controlled time first, exclusive netsim last; no gate runs another). HP1c2
+replaces HP1c in this order (2026-11-23, code review finding 3b, §8 below), HP1r2 replaces HP1r (MR1 equivalent on HP1r's arms since H-20), and HP1n5 replaces HP1n4 (MN3 not caught by clauses counted from page readiness).
 
 ## 6. Out of scope (each with its block)
 
-- HP1n's C1 is counted from page readiness, while its text says from restart → **PC1b**.
+- HP1n's C1 is counted from page readiness, while its text says from restart → **PC1b**. It is the same clock defect
+  that let MN3 pass HP1n4's C1c/C2c, fixed for the crash variant by HP1n5; HP1n stays frozen as it is.
 - HP1n3 C3a cannot place an outage inside a restart window → **PC1b**.
 - H-12: DNS names arriving through identify → **TX1** (RC1).
 - Who recreates `/tmp/.git` (2026-11-21 19:17:37) → **CI1b**. The repository does not show the writer: no script,

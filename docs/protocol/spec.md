@@ -1677,6 +1677,94 @@ mieux), et l'écrivain gardé libre après une sonde jetée dans une même lectu
 loin dans la lecture ne peut avoir d'écho). Côté décodeur, un type `0x00` ou `≥ 0x80` refusé comme réservé ou comme critique non attribué
 donne le même verdict.
 
+### 8.6 Montée en direct : relances de DCUtR sur un lien relayé ([ADR 0045])
+
+**Rôle.** Un lien vers un membre qui passe par un relais essaie de devenir direct tant qu'il le reste.
+Aucun message ni identifiant nouveau : la coordination est DCUtR (`/libp2p/dcutr`, spécification libp2p
+`relay/DCUtR.md`, §20.6). libp2p n'appelle DCUtR qu'une fois par connexion relayée nouvelle ; un pair qui
+redémarre, ou dont l'annonce de `/libp2p/dcutr` est perdue, resterait relayé pour toujours. Cette section
+fixe quand un nœud rappelle DCUtR, qui l'appelle, et les bornes qu'un pair peut observer.
+
+**Rôles (règle H-3, H-15).** Un nœud n'initie DCUtR (`DirectConnect`) que sur un circuit **entrant** ; un
+nœud qui n'a qu'un circuit sortant compose directement les adresses publiques que le pair a annoncées
+(identify), s'il en a, et sinon attend l'autre côté. Avec deux circuits vers le même pair, personne
+n'initie : le circuit composé par le PeerID le plus grand est fermé dès qu'aucun flux de session n'y passe
+(règle des doublons de §5.1 appliquée aux circuits) ; un circuit donne un seul initiateur. Tant qu'une
+preuve de vie de la règle P-15 (§8.7.4) est en cours sur une connexion à ce pair, le nœud attend sa fin avant
+cette fermeture : un circuit mort n'est pas un doublon. Une preuve finie sans réponse dans `T_vie` ne retient plus
+cette fermeture, et ce circuit n'est plus compté parmi les deux. Toute bascule de flux attend l'accusé du nouveau flux
+(§8.7.4, P-6).
+
+**Circuit d'une ronde (règle H-20).** Un nœud ouvre chaque ronde DCUtR qu'il initie sur le circuit qui la cause,
+jamais sur la connexion que choisit libp2p. La tentative automatique s'ouvre sur le circuit entrant dont
+l'arrivée la déclenche. Un appel du rythme s'ouvre sur le circuit entrant qui a ouvert l'époque en cours, ou, s'il
+est fermé, sur le circuit entrant ouvert le plus récent. Si ce circuit se ferme pendant l'appel, l'appel finit et se
+classe sur ce qui a été observé. Raison : libp2p préfère le circuit qui porte le plus de flux, donc le plus ancien.
+Après un plantage du pair, ce circuit reste ouvert environ 30 s sans être vivant. Une ronde ouverte sur lui y
+attendrait tout ce temps, en tenant l'unique appel en cours vers le pair (H-4).
+
+**Connexion tardive (règle H-19).** Un nœud NE DOIT PAS garder une connexion directe qu'il a lui-même ouverte vers un pair si, au moment où elle s'enregistre, il ne tient aucun circuit vers ce pair, ne cherche pas à le joindre et n'a aucune connexion demandée en cours vers lui : il la ferme avant d'y accepter le moindre flux (le pair ne peut donc pas recevoir l'accusé nécessaire à `PeerUp`, §8.7.3–8.7.4) ; une connexion enregistrée
+pendant qu'un circuit était tenu est la montée de ce circuit et reste quand il se ferme.
+
+**Rythme (règles H-4, H-6 à H-11, H-13, H-17).** Un nœud conforme :
+
+- NE DOIT PAS avoir plus d'un seul appel en cours vers un même pair ; un appel annulé compte jusqu'à son
+  retour ;
+- NE DOIT PAS dépasser 12 appels (hors « occupé », `ErrHolePunchActive`) vers un même pair sur toute
+  fenêtre d'une heure, soit 8 par heure en régime établi (seau de 4, un jeton de plus toutes les 7,5 min),
+  quels que soient les reconnexions, les époques et les événements ;
+- espace deux appels vers un pair d'au moins 1 s ; après un appel qui n'a rien envoyé au réseau, attend
+  1 s · 2^j (plafond 30 s) ; après un appel qui a poinçonné ou composé en vain, 60 s · 2^k (plafond
+  16 min), indéfiniment tant que le pair est voulu et relayé ; chaque attente varie de ± 25 % ;
+- avance l'échéance (jamais au-delà de 1 s après le dernier appel) quand identify se termine, que le pair
+  annonce `/libp2p/dcutr`, que son propre gestionnaire s'enregistre, qu'un nouveau circuit arrive (une
+  nouvelle époque : l'appel en cours est annulé, son résultat ignoré, les échelles remises à zéro) ou que
+  ses adresses non relayées changent (ces deux derniers remettent aussi l'échelle lente à zéro) ; aucun
+  événement ne rend de jeton ;
+- n'appelle sur échelle que si l'application est active (une saisie depuis moins de 5 min) ; les appels
+  dus à un événement partent aussitôt ;
+- si un appel réussit sans que la session devienne directe en 15 s, tente une fois de la déplacer vers la
+  connexion directe (§8.7.4, P-6) et classe l'appel comme n'ayant rien envoyé.
+
+La classe d'un appel se décide par ce qui a été observé, jamais par le texte d'une erreur : réussite (une
+connexion directe existe après l'appel), occupé, dépensé (au moins une ronde admise ou une numérotation
+directe émise), non dépensé, fermé (le service s'arrête).
+
+**Ce qu'un nœud PEUT refuser (règles H-5, H-12, H-16).** Toute ronde, quel que soit l'initiateur (appels du
+nœud, tentative automatique de libp2p, côté répondant), passe par le filtre d'adresses de DCUtR ; toute
+destination non relayée vers un pair joignable seulement par un relais passe par le contrôleur de
+connexions. Un nœud PEUT refuser :
+
+- toute ronde et toute numérotation non relayée avec un non-membre (fenêtre d'invitation, inconnu) : aucune
+  adresse publique ne lui est envoyée, il ne prend aucune place dans la file ;
+- les rondes avec un membre au-delà de 45 rondes sur toute heure (seau de 9, une de plus toutes les
+  100 s) ; il retient au plus 3 adresses par ronde (la première QUIC/IPv4, la première QUIC/IPv6, la
+  première TCP/IPv4, publiques et non relayées) ; une adresse sans composant IP4 ou IP6 (un nom :
+  `dns`, `dns4`, `dns6`, `dnsaddr`) est écartée avant ce choix, pour qu'un pair ne fasse jamais
+  résoudre au nœud un nom de son choix ;
+- les destinations non relayées d'un membre au-delà de 174 destinations sur toute heure (seau de 30, une
+  de plus toutes les 25 s), ou hors d'une place de la file : 4 places pour tout le nœud, accordées dans
+  l'ordre d'arrivée (un ticket par pair), un bail de 75 s, 12 destinations par place, 38 places au plus
+  sur toute heure pour tout le nœud (seau de 8, une de plus toutes les 120 s) ; une ronde attend une place
+  au plus 20 s, puis abandonne en gardant son rang.
+
+Bornes qui en découlent : par membre byzantin et par heure ≤ 174 destinations, ≈ 5,9 Mo ; par nœud,
+toutes origines comptées, ≤ 456 destinations, ≤ 15,5 Mo.
+
+**Pas de détecteur de trou noir (règle H-18).** Les adresses injoignables d'un membre ne peuvent pas couper
+les numérotations UDP ou IPv6 honnêtes : un nœud conforme NE DOIT PAS refuser une numérotation UDP (ou IPv6)
+parce que les précédentes ont échoué, comme le fait le détecteur de libp2p (moins de 5 succès sur les
+100 derniers résultats, sans expiration, quel que soit qui a choisi les adresses). Les seaux ci-dessus bornent
+les tentatives inutiles qu'il aurait évitées ([ADR 0045]).
+
+**Erreurs et abus.** Un membre qui initie en boucle reçoit, au-delà de son seau, une ronde sans adresse (le
+flux est réinitialisé avant tout paquet de poinçonnage) ; un membre qui se reconnecte ou bascule son
+protocole avance les échéances sans jamais rendre de jeton ; un membre qui pointe ses adresses vers une
+victime ne lui envoie que ce que ses seaux permettent. Vecteurs : `vectors/directup.json` (classe, rôles,
+échelles, seaux, sélection d'adresses ; décodeurs `directup_*`). Modèle : `tla/DirectUpgrade.tla` (S1-S18,
+L1-L3, mutants M1-M30 ; bloc HP1c, plantage du pair : S19 `RoundOnLive` pour H-20, S20 `ProofKeepsLive` pour P-15,
+S21 `ResolveKeepsLive` pour l'attente de H-15, mutants M31-M33), `alloy/DirectUpgradeRoles.als`.
+
 ### 8.7 `/inkwell/sync/2.0.0` : session existante, pair annoncé après son accusé (*existant, précisé*, bloc PU1)
 
 Plan : [2026-11-16-pu1-peerup-after-acceptance.md](../plans/2026-11-16-pu1-peerup-after-acceptance.md).
@@ -1775,7 +1863,37 @@ connexion qui arrive vers un pair connecté sans flux de session ni ouverture en
 changement d'état du pair soit signalé ou non : libp2p lit l'état du pair au moment d'émettre, si bien qu'une
 connexion qui en remplace une perdue avant que la perte soit signalée n'émet aucun événement (action `StartOpen`,
 permise dès qu'une connexion est utilisable). Sans cela, le pair resterait connecté sans flux ni ouverture, et tout
-envoi vers lui attendrait sans fin. Deux sortes de refus (règle P-8, bloc PU1b), pour toute ouverture (flux de la session, flux rouvert,
+envoi vers lui attendrait sans fin.
+
+**Connexion supplantée (règle P-15).** Quand une connexion vers un pair s'enregistre et est gardée (H-19), chaque
+connexion plus ancienne encore ouverte vers ce pair DOIT prouver qu'elle vit. Le nœud ouvre, sur cette connexion
+précise, un flux `/ipfs/ping/1.0.0` et y écrit 32 octets. Tout octet reçu du pair sur cette connexion dans les
+`T_vie` = 5 s qui suivent l'enregistrement est une preuve : un écho, un refus de négociation ou une
+réinitialisation. Une connexion qui prouve qu'elle vit reste ouverte, et rien ne change. Une connexion sans preuve
+est fermée, mais seulement une fois que la nouvelle porte un flux `/inkwell/sync/2.0.0` accusé, dans un sens ou
+dans l'autre. Tant que l'ouverture sur la nouvelle connexion attend son accusé (15 s au plus, §8.7.4), l'ancienne
+reste le chemin de repli. Seule une connexion plus récente encore jugée vivante lève cette attente : accusée, et dont la
+preuve n'est pas restée sans réponse (la plus récente, dont la preuve est abandonnée, n'est jamais jugée). Une connexion
+plus récente accusée mais elle-même muette ne compte pas : avec elle, l'ancienne reste ouverte tant que la plus récente
+attend son accusé. La fermer ferait annoncer à tort la perte du pair (`PeerDown`) si cette ouverture
+échouait. La fermeture a donc lieu à la plus tardive de ces deux échéances : `T_vie`, ou l'accusé sur la nouvelle
+connexion. Si la nouvelle connexion se ferme avant cet accusé, la preuve est abandonnée et l'ancienne connexion
+reste ouverte. Les flux d'une connexion ainsi fermée finissent comme des flux perdus avec leur connexion : la
+session se rouvre ailleurs, sans `ClosePeer` ni événement, et un flux entrant qui n'a rien livré quitte l'ordre
+(§8.7.3). Le nœud NE DOIT PAS fermer ainsi la connexion la plus récente, ni sa seule connexion au pair. Il tient
+au plus une preuve en cours par connexion. Raison : un pair conforme ne compose que vers un pair auquel il n'est
+pas relié, donc une connexion nouvelle signale que l'ancienne a pu mourir sans être fermée. Ni QUIC (30 s
+d'inactivité) ni le multiplexeur (30 s) ne le voient plus tôt. `T_vie` vaut deux fois l'aller-retour de 2,5 s à
+partir duquel un lien est « mauvais » (§8.5.7). Un pair qui ouvre des connexions en boucle ne fait envoyer que
+32 octets par connexion plus ancienne, et ne ferme que ses propres connexions. Une connexion prouvée vivante l'est
+pour la connexion qui a causé sa preuve : une autre plus récente la fait prouver de nouveau. Une preuve que le nœud
+n'a pas pu mener jusqu'au pair (son propre gestionnaire de ressources refuse le flux, par exemple) ne donne aucun
+verdict : la connexion n'est pas jugée sur elle et reste ouverte, comme une connexion qui a prouvé qu'elle vit, et
+seule une connexion plus récente la fait prouver de nouveau. Une défaillance locale n'est jamais le silence du pair.
+La fermeture se décide sur les connexions telles qu'elles sont quand elle a lieu : si la connexion plus récente
+accusée s'est fermée entre-temps, l'ancienne reste ouverte.
+
+Deux sortes de refus (règle P-8, bloc PU1b), pour toute ouverture (flux de la session, flux rouvert,
 passage au direct) : une réinitialisation avant l'accusé portant le code `0x1002` est un **refus pour
 capacité** : le nœud réinitialise son flux, garde sa session et ses connexions et rouvre après une
 attente (50 ms, doublée, 1 s au plus), dans le même délai de 15 s compté depuis la première ouverture ;
@@ -1804,6 +1922,7 @@ s'entend donc après ce remplacement.
 | Attente | `0x01` | Ouvert : `PeerUp` si le pair n'était pas annoncé |
 | Ouvert | octet reçu | violation : `ClosePeer` (existant) |
 | Ouvert | flux perdu, connexion vivante | Ouverture d'un nouveau flux (le pair reste annoncé) |
+| Ouvert | connexion du flux fermée faute de preuve (P-15) | comme « flux perdu » : ouverture sur une connexion utilisable, sans événement |
 | tout état | plus de connexion ni de flux | `PeerDown` si le pair était annoncé |
 
 | Ouvreur, flux d'un passage au direct | Entrée | Sortie, action |
@@ -1859,6 +1978,11 @@ accusé avant l'admission, accusé après sa propre annonce, passage sans accus�
 connexion), et pour le délai et l'accusé de ce flux S4 `Budget`, S5 `NoUpFromStuck` (répondeur bloqué dans son
 traitement), mutants M6–M8 (délai qui attend le silence du flux, accusé compté par connexion seulement,
 budget relancé au retour de l'ouverture), quatre témoins (M1–M8 en tout). Tests Go nommés par règle : porte `gates/PU1.toml`.
+Connexion supplantée (bloc HP1c, P-15) : vecteurs `supersede.json` (décodeur `sync_supersede`, portée `transport`),
+décision de référence `syncack.Supersede`, fuzzée (`FuzzSupersede`) ; modèle `tla/Supersede.tla`, qui étend
+`PeerUpAck` sans le modifier : `SupersededBounded`, `LiveKept`, `FallbackKept`, `NeverCloseSole`, vivacité
+`SessionLeavesDead`, mutants MS1–MS4 (aucune preuve, fermeture à l'échéance quelle que soit la réponse, fermeture
+sans attendre l'accusé de la nouvelle connexion, fermeture de la seule connexion), trois témoins.
 
 ## 9. Couche dépôt : messages automerge-repo
 
@@ -2263,12 +2387,17 @@ de `protocol` ; un test par ligne vérifie la borne, la borne + 1 et la reprise.
 
 | Objet | Borne | Part réservée | À la borne | Reprise |
 |---|---|---|---|---|
+| montée en direct, appels (§8.6) | 1 en cours par pair ; 12 appels par pair sur toute heure (4 + 1 par 7,5 min) ; échelle lente plafonnée à 16 min | par pair | appel repoussé | jeton suivant |
+| montée en direct, rondes DCUtR (§8.6) | 45 rondes par membre sur toute heure (9 + 1 par 100 s) ; 3 adresses par ronde ; aucune pour un non-membre | par pair | ronde sans adresse | jeton suivant |
+| montée en direct, destinations non relayées (§8.6) | 174 destinations par membre sur toute heure (30 + 1 par 25 s) ; 4 places par nœud, bail 75 s, 12 destinations par place, 38 places par heure (8 + 1 par 120 s) | par pair et par nœud | numérotation refusée par le contrôleur | place suivante (FIFO) |
+| montée en direct, échecs de numérotation UDP et IPv6 (§8.6) | aucun refus fondé sur les échecs passés (pas de détecteur de trou noir) ; les tentatives restent bornées par les seaux de destinations | par nœud | — | — |
 | connexions | 2 par pair (passage) ; 128 entrantes, 128 sortantes au total (impl., 64 membres × 2) | — | refusée | à la fermeture d'une autre |
 | flux par pair et par sens (gestionnaire de ressources libp2p, portées *protocol* × *peer*) | control 1, repo 1 (+1 en fermeture), presence 1, large 1 non lu ; vrac 1 ; salon 4 | — | violation (salon : réinitialisé) | Tenu |
 | trame sync | 98 304 o | — | violation | Tenu |
 | flux sync entrants par pair (§8.7.3) | 2 places dans l'ordre ; refus pour capacité : code `0x1002` ; nouvel essai après 50 ms, doublé jusqu'à 1 s, dans les 15 s de l'ouverture ; attente de son tour 60 s | par pair (toutes connexions, toutes générations) | flux réinitialisé avec le code, sans `ClosePeer` ; l'ouvreur réessaie, session inchangée | une place rendue (flux lu jusqu'à sa fin, ou parti sans trame) |
 | cycle de vie d'un flux entrant, sync et vrac (§8.7.3, §8.1) | un seul lecteur ; deux voies ordonnées (sync, vrac), 2 places par pair et par voie ; vrac : accusé `0x01` et refus pour capacité `0x1002` comme sync ; en attente, sonde d'un octet au plus, essai suivant 250 ms au plus après le précédent, 256 o gardés au plus ; tour et annonce vus en 250 ms au plus ; budget de réception pris seulement à partir du tour | par pair et par voie | réinitialisation vue en 250 ms au plus, fin sans octet non lu aussitôt, fin derrière des octets non lus à son tour ; bloqué sur le budget : libéré par de la place rendue, la perte de sa connexion ou la fermeture du nœud | place rendue (flux lu jusqu'à sa fin, ou parti sans trame) |
 | accusé de session sync (§8.7) | 1 octet `0x01` ; ouverture et accusé en 15 s ; écriture de l'accusé en 15 s | par flux | refus ou violation : flux réinitialisé, `ClosePeer`, aucun événement | nouvelle connexion |
+| connexion supplantée (§8.7.4, P-15) | preuve de vie : un ping de 32 o (`/ipfs/ping/1.0.0`) sur chaque connexion plus ancienne, au plus une preuve en cours par connexion ; réponse attendue en 5 s (`T_vie`, deux fois l'aller-retour « mauvais » de §8.5.7) | par connexion | sans preuve : fermée à l'accusé d'un flux sync sur une connexion plus récente, jamais la plus récente ni la seule ; ses flux finissent comme perdus avec elle, sans `ClosePeer` ni événement | nouvelle connexion |
 | trame vrac | 1 065 005 o | — | violation | Tenu |
 | salon | requête 4096 o / 10 s ; réponse 262 144 o ; traitement 3 min | — | flux fermé | nouvelle requête |
 | HELLO | 1024 o ; 10 s | — | GOAWAY | Tenu |
@@ -2374,6 +2503,11 @@ de `protocol` ; un test par ligne vérifie la borne, la borne + 1 et la reprise.
   son propre lien, borné à 0–1000 ‰ et jamais au-delà de ce qui a été envoyé ; un relais qui
   répond fixe le chiffre de premier saut de ceux qu'il relaie ; le chiffre n'entre dans aucune
   décision ; au plus `3 + 2 × t` échos par connexion ; une sonde jetée n'est jamais une faute.
+- **Montée en direct** (§8.6) : un non-membre n'obtient ni ronde DCUtR, ni place dans la file, ni
+  numérotation directe ; ce qu'un membre fait poinçonner ou composer au nœud est borné par ses seaux
+  (45 rondes, 174 destinations par heure), ce que tous ensemble font par le seau du nœud (38 places
+  par heure, ≤ 456 destinations) ; un membre qui pointe ses adresses vers une victime ne lui envoie
+  pas plus.
 
 ## 18. Considérations de confidentialité
 
@@ -2393,6 +2527,10 @@ Selon [RFC 6973] :
   dit au sondeur combien de ses paquets sont arrivés, ce que les ACK lui disent déjà en grande
   partie ; le délai de l'écho laisse deviner la charge du répondeur (résiduel accepté) ; le
   chiffre reste local.
+
+- **Montée en direct** (§8.6) : les adresses publiques du nœud ne sont envoyées dans un CONNECT qu'à un
+  membre ; un inconnu admis par la fenêtre d'invitation n'en reçoit aucune et n'a aucun chemin direct
+  automatique vers le nœud.
 
 ## 19. Écarts avec le code au 2026-11-01
 
@@ -2452,7 +2590,7 @@ triées, séparées par des virgules, ≤ 64) · `equiv/<hex32>/<seq décimal �
 `/inkwell/control/2.0.0` · `/inkwell/repo/2.0.0` · `/inkwell/presence/2.0.0` ·
 `/inkwell/large/2.0.0` · `/inkwell/bulk/2.0.0` (§8.1, accusé d'acceptation, remplace `1.0.0`) · `/inkwell/lobby/1.0.0` ·
 `/inkwell/linkprobe/1.0.0` (§8.5 ; hors session, sans capacité : son absence est permise,
-§8.5.9). `/inkwell/sync/2.0.0` (§8.7, session existante avec accusé d'acceptation) remplace
+§8.5.9). `/libp2p/dcutr` (DCUtR de libp2p, inchangé ; rythme et bornes : §8.6). `/inkwell/sync/2.0.0` (§8.7, session existante avec accusé d'acceptation) remplace
 `/inkwell/sync/1.0.0`, qui n'est plus servi ; la session 2.0 (§5) retirera `sync` (bascule nette). Une nouvelle classe de session
 s'ajoute par une mineure, liée à une capacité.
 
@@ -2672,6 +2810,7 @@ déterministe envisagé (→ validité de [RFC 8949 §5.3.1]).
 [ADR 0032]: ../adr/0032-canal-invitation-wormhole.md
 [ADR 0034]: ../adr/0034-protocole-unifie.md
 [ADR 0036]: ../adr/0036-link-probe.md
+[ADR 0045]: ../adr/0045-direct-upgrade-retry.md
 
 ## Annexe A — Pont interne Go ↔ webview (hors contrat public)
 

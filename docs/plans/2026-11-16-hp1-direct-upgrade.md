@@ -86,7 +86,7 @@ protocol/directup (pure, sans I/O, time passed in, like protocol/linkprobe): Pol
 - **The only fork change (D1):** `(*holepunch.Service).DirectConnectContext(ctx, p)`, the existing `DirectConnect`
   with a context: the call returns when `ctx` ends (its rounds, its first direct dial and the wait on
   `hasPublicAddrsChan`, `svc.go:145-153, 282-288`, all select on it) and releases libp2p's per-peer lock. A few lines
-  in `holepuncher.go` and `svc.go`; upstream issue and PR filed with it (it also fixes R2). It keeps H-6's « ≤ 3 s »
+  in `holepuncher.go` and `svc.go`; upstream issue and PR prepared in `docs/plans/2026-11-16-hp1-libp2p-directconnectcontext.md`, not filed (it also fixes R2). It keeps H-6's « ≤ 3 s »
   (a new epoch cancels the old call instead of waiting up to 3 rounds), H-4 (one call in flight, a cancelled one
   until it returns, which is prompt) and Close (cancels every call, waits for none).
 - `protocol/directup` (new, pure): `Policy` per peer (state, ladders, epoch), `Bucket` (token bucket on a given
@@ -145,16 +145,16 @@ only effect is a send on a channel of capacity 1; Close cancels its context (D1)
 | fast ladder (Unspent) | 1 s · 2^j, cap 30 s | cap = quic-go's default `MaxIdleTimeout` 30 s: a stale connection is gone by then |
 | slow ladder (Spent) | 60 s · 2^k, cap 16 min (k ≤ 4) | base: Tailscale `upgradeUDPDirectInterval`, iroh `UPGRADE_INTERVAL` (both 60 s); exponential because 97.6 % of successes are first attempts (Trautwein); cap chosen (Q3): a hopeless pair costs ≈ 4 calls an hour |
 | jitter | ± 25 % on every due time | `jitter()` of `dial.go` |
-| T_offset | +3 s on the due times of the higher PeerID while both sides hold an inbound circuit | > T_busy; a DCUtR coordination is about one RTT, far below |
+| T_offset | not used (step 2, accepted 2026-11-16): H-15 is adopted, so with two circuits nobody initiates and the offset never applies | — |
 | T_settle | 15 s | `openTimeout`, the bound of `upgrade()`'s stream open |
 | attempt budget, per peer | bucket of 4, refill 1 per 7.5 min: **≤ 4 + 8 = 12 non-Busy calls in any hour** (burst included), 8 an hour sustained | matches the slow ladder's first hour (t = 0, 1, 3, 7, 15, 31, 47 min…); events cannot exceed it |
 | round budget, per peer, both roles (gate) | bucket of 9, refill 1 per 100 s: **≤ 9 + 36 = 45 rounds in any hour**; **0 for a peer that is not wanted** | 8 calls × 3 rounds + libp2p's own 3 per new circuit + slack |
 | destination budget, per peer, every origin (gater) | bucket of 30, refill 1 per 25 s: **≤ 30 + 144 = 174 non-relay destinations in any hour**; **none for a peer that is not wanted** | 45 rounds × 3 addresses + 12 calls × 3 for DirectConnect's first direct dial |
 | node-wide admissions (H-16) | bucket of 8, refill 1 per 120 s: ≤ 8 + 30 = 38 slot grants in any hour, all peers and origins, granted in FIFO order | the energy budget (B3) |
-| destination allowance per grant (H-16) | 12 non-relay destinations, all the peer's origins together, while it holds the slot (several rounds may share one grant, never its allowance); **no non-relay destination outside a grant**, libp2p's first direct dial of its one-shot included | one call: 3 for the first direct dial + 3 rounds × 3 addresses; node ≤ 38 × 12 = 456 destinations in any hour |
+| destination allowance per grant (H-16) | 12 non-relay destinations, all the peer's origins together, while it holds the slot (several rounds may share one grant, never its allowance); **no non-relay destination outside a grant**, libp2p's first direct dial of its one-shot included: the gater asks that grant once on demand through the FIFO (3.3a) and refuses the dial, ticket kept, when it is not granted | one call: 3 for the first direct dial + 3 rounds × 3 addresses; node ≤ 38 × 12 = 456 destinations in any hour |
 | slot lease | 75 s from the grant; early release when the round or call ends; a grant to a ticket whose round gave up is held for its peer for the lease | ≥ `StreamTimeout` 60 s (`svc.go:30`, the deadline set on the exchange's stream) + `directDialTimeout` 10 s (`svc.go:22`): libp2p's own deadlines end the holder's work first |
 | activity (H-17) | ladders run only while the app is active (input within 5 min, not asleep); events call at once | Tailscale stops its endpoint heartbeat once the session is idle (`sessionActiveTimeout`, `endpoint.go`) and restarts it on traffic |
-| addresses accepted from a CONNECT | ≤ 3 public, non-circuit: first QUIC/IPv4, first QUIC/IPv6, first TCP/IPv4 | spec's 4 KiB message bound allows ~100; we bound the fan-out |
+| addresses accepted from a CONNECT | ≤ 3 public, non-circuit, with an IP component (no DNS name): first QUIC/IPv4, first QUIC/IPv6, first TCP/IPv4 | spec's 4 KiB message bound allows ~100; we bound the fan-out |
 | global concurrency | ≤ 4 node-wide slots, **every origin** (our calls, libp2p's automatic attempts, the answerer side: a round is admitted in the address filter, `FilterLocal`, called first in both roles, `holepuncher.go:224`, `svc.go:177`), granted **FIFO**, one ticket per peer (a peer that keeps asking never takes a slot while another waits), none for a peer that is not wanted (B4); the filter blocks a waiting round up to 20 s (< `StreamTimeout`), then the round gives up but **the ticket keeps its place** (B6) until its peer is no longer wanted or relayed, or 20 min without any round; when it reaches the head its grant is held for the peer for the lease (75 s), which an honest peer's fast ladder (≤ 30 s · 1.25) reaches | `wakeBurst = 4` (`dial.go`), memory rule of the project; FIFO as `golang.org/x/sync/semaphore.Weighted` serves its waiters in order |
 
 A bucket is dropped once full (no information is lost), so budgets survive reconnections, epochs and un-want/re-want.
@@ -183,8 +183,19 @@ admitted for an invitation has no automatic punching path, libp2p's one-shot inc
 only through a relay, a non-relay destination is allowed only if it is one of the ≤ 3 addresses the filter admitted
 for the current round, or one of its announced public addresses for our Dial, and only while the peer holds a
 node-wide slot: it costs one token of the peer's destination bucket and one of the grant's allowance (12). libp2p's
-one-shot dials first, before any filter (`holepuncher.go:113`), and holds no slot then: the gater refuses that dial;
-the one-shot goes on with its rounds, which take a slot in `FilterLocal` like any other. The answerer side (`svc.go:254`, `holePunchConnect` from the stream handler, outside libp2p's
+one-shot dials first, before any filter (`holepuncher.go:113`), and holds no slot then: the gater then asks the peer's
+grant **once, on demand, through the same FIFO** (`Slots.Ask` is non-blocking: it takes a ticket at the tail and serves
+only the head; no priority, no bypass). Granted (the peer at the head, a slot and a node token free), it admits only the
+peer's ≤ 3 selected announced addresses, drawn from that grant's lease and allowance (shared with the peer's rounds,
+no refill per address) and from the peer's destination bucket; not granted, the dial is refused and the ticket kept.
+The on-demand grant serves the whole one-shot, as the model's `AutoPre`/`AutoStart` do (the rounds run under the lease
+the ask set): its rounds find it held in `FilterLocal` and share it, so one one-shot takes one node token. The ask is
+released when the one-shot ends: its first direct dial connects (`DirectDialEvtT` with success, `holepuncher.go:137-146`),
+a round succeeds, or its last round (`maxRetries` = 3) ends, and at the latest when the lease ends (75 s) (step 2,
+2026-11-16: releasing it at the end of a failed first dial made the rounds take a second grant and a second token per
+new circuit, measured in `TestUpgradeSlotsFIFO`: a peer's first slot came two refills late, 7 min 59 s). Every non-relay destination still needs a held grant (S16); the grant is
+acquired on demand (step 2, 2026-11-16: without it the inbound side's first direct dial never leaves the packet that
+opens its NAT towards the peer, and `TestWantAgainClearsResetHold` missed its 3 s bound). The answerer side (`svc.go:254`, `holePunchConnect` from the stream handler, outside libp2p's
 per-peer lock and outside our queue) is admitted like any round: its `FilterLocal` takes a FIFO slot with a lease, its
 dials pass the gater.
 
@@ -228,23 +239,25 @@ lose liveness for ≈ 0.5 MB an hour saved (mutant M10). Events with new candida
 
 | Id | Rule | Oracle (layer) | Mutant → caught by |
 |---|---|---|---|
-| H-1 | The upgrader acts only for a **wanted** peer whose session is on a circuit, with relays configured and RelayOnly off | pure (`directup`: no decision when unwanted, direct or disabled); Go sim: RelayOnly node makes no call | drop the wanted check → pure `H-1`; TLA M4 |
+| H-1 | The upgrader acts only for a **wanted** peer whose session is on a circuit, with relays configured and RelayOnly off; « wanted » is « admitted member » (as in the model): the upgrader exists for every member the node holds a circuit with, whether or not it is in the node's `Want` set, with the same budgets, leases and gates, and its policy (attempt budget included) is kept per peer across want, un-want and the member's reconnections; strangers (non-members, the invitation window) get none (step 2, accepted 2026-11-16); when a member becomes wanted, its dial loop takes the upgrader over as it is: a call in flight goes on (its result applies, H-4) and its ticket keeps its place (H-5), and a loop that is ending never steps (it would see the peer unwanted and cancel what the next loop takes over); its calls live on the node's context, cancelled only by the upgrader's stop (unwant, Close) or the lease (step 2, 2026-11-16: the cancelled call and a new grant cost a second node token, `TestUpgradeSlotsFIFO`) | pure (`directup`: no decision when unwanted, direct or disabled); Go sim: RelayOnly node makes no call; `TestUpgradeMemberNotWanted` (a wants b, b does not: b, holding the inbound circuit, punches for a; red before) | drop the wanted check → pure `H-1`; TLA M4 |
 | H-2 | Punch starts only if `localReady`; `remoteReady` (E2, E3) is a trigger that advances the due time, not a guard: without it the fast-ladder poll still calls `DirectConnect` (a missing handler: one stream, no round, Unspent, one attempt token), since a lost push or identify is never resent | pure; Go sim `TestUpgradeAfterRestartBeforeHandler` (b restarts and dials within the 250 ms window: direct ≤ 5 s simulated after b's handler; **red today**) | no `localReady` guard → Go fake service that blocks until ready: call observed before ready; TLA M9; the old `remoteReady` guard → TLA M17 (L1, LostPush) |
 | H-3 | Punch only with an inbound circuit; Dial only with outbound only and a public announced address; both inbound → H-15 | pure (role table); Alloy/TLA two-circuit config; Go sim `TestUpgradeTwoCircuits` | outbound side punches → TLA S4; lower-only → TLA L1 (M6) |
-| H-4 | At most one of our calls in flight per peer; the next starts after the result; a new epoch, an unwant, Close or the slot's lease end cancels the call (D1, `DirectConnectContext`), which then returns at once | pure; Go sim with a fake puncher counting concurrency under `-race` | launch while in flight → TLA S1 (M13), pure |
-| H-5 | At most 4 node-wide slots for **every** punch round: our calls, libp2p's automatic attempts and the answerer side all take one in the address filter (`FilterLocal`, first in both roles), granted FIFO, one ticket per peer and none for a peer that is not wanted, the filter blocking a waiting round ≤ 20 s; a round that gives up keeps its ticket's place (dropped only when the peer is no longer wanted or relayed, or after 20 min without a round), and a grant to it is held for its peer for the lease; a slot is a lease of 75 s, ended at its deadline whatever its holder does (early when the round or call ends) | pure (10 peers); Go fake puncher blocking, 10 relayed wanted peers: max 4; a peer asking in a loop never delays a waiting one by more than one lease; a holder that never finishes loses its slot at 75 s; `TestUpgradeAnswererBehindQueue` (R the only initiator, four members holding the slots in turn: R's rounds give up, come back on R's fast ladder, R goes direct) | no cap → TLA M11 (S9); grant in any order → TLA M18 (L2); no deadline → TLA M15 (L2); a stranger's ticket → TLA M28 (S17); a give-up loses the place → TLA M29 (L1, Answerer) |
+| H-4 | At most one of our calls in flight per peer; the next starts after the result; a new epoch, an unwant, Close or the slot's lease end cancels the call (D1, `DirectConnectContext`), which then returns at once; so does the loss of the peer's last connection (PeerDown): hole punching needs the relayed connection it started on, and a call that went on would reopen a link the node lost or closed (a Drop of a revoked peer); the cancelled call still returns, and gives its slot back, before the next (step 2, 2026-11-16, integrator's decision); the cancel frees the slot and the call, it is not a bound on what lands: a swarm dial runs on a context of its own, kept alive by any other caller joined to it (dial_sync.go:74-111), and the late connection seen in `TestWantStopsAndDrop` was not our call's (Busy, it never dialled) but libp2p's one-shot on the inbound circuit, started on `context.Background` (holepuncher.go:89, :311), which no cancel reaches; rule H-19 closes such a late connection, whoever started it (block HP1r) | pure; Go sim with a fake puncher counting concurrency under `-race` | launch while in flight → TLA S1 (M13), pure |
+| H-5 | At most 4 node-wide slots for **every** punch round: our calls, libp2p's automatic attempts and the answerer side all take one in the address filter (`FilterLocal`, first in both roles), granted FIFO, one ticket per peer and none for a peer that is not wanted, the filter blocking a waiting round ≤ 20 s; a round that gives up keeps its ticket's place (dropped only when the peer is no longer wanted or relayed, or after 20 min without a round), and a grant to it is held for its peer for the lease; a slot is a lease of 75 s, ended at its deadline whatever its holder does (early when the round or call ends) | pure (10 peers); Go fake puncher blocking, 10 relayed wanted peers: max 4; a peer asking in a loop never delays a waiting one by more than one lease; a holder that never finishes loses its slot at 75 s; `TestUpgradeAnswererBehindQueue` (R a raw initiator announcing no public address, so the node only answers; eight members holding the four slots in turn: R's rounds give up, R's ticket is asserted still queued after each give-up, R goes direct; step 2: the earlier version went direct through the node's own Dial and was vacuous, MH21 now caught) | no cap → TLA M11 (S9); grant in any order → TLA M18 (L2); no deadline → TLA M15 (L2); a stranger's ticket → TLA M28 (S17); a give-up loses the place → TLA M29 (L1, Answerer) |
 | H-6 | A new circuit to p is a new epoch: ladders reset, due at max(now, lastStart + T_min), the call in flight cancelled (D1); a result applies only to its epoch | pure; Go sim `TestUpgradeAfterRestartDuringAttempt` (call in flight towards the old process: direct ≤ 3 s after the new circuit, not 5 s) | apply stale results / no epoch → TLA M2, Go sim |
 | H-7 | Classes by observation: Success = direct connection after the call; Busy = `ErrHolePunchActive` (no token); Spent = ≥ 1 gated round or a network Dial; Unspent = otherwise; `ErrClosed` = stop | pure classification table (vectors) | Spent classed Unspent → pure `H-7`, Go hopeless-calm count; Busy charged → TLA M3 (S11) |
 | H-8 | Ladders: fast 1 s·2^j cap 30 s; slow 60 s·2^k cap 16 min; ± 25 % jitter; Success clears them | pure on controlled time, jitter injected | cap removed or base halved → pure `H-8` |
 | H-9 | E3, E4, E7, E8 advance the due time to max(now, lastStart + T_min); E7 and E8 (non-circuit address set changed) reset the slow ladder; no event refills a budget; relay-address-only changes are ignored | pure | event refills the bucket → pure `H-11`, TLA M7 |
 | H-10 | No terminal hopeless state: at the cap, one call per 16 min ± 25 % while wanted and relayed | pure; Go sim `TestUpgradeAfterLongBlock` (direct blocked 20 simulated min, then open: direct ≤ 16 min · 1.25 + 30 s after) | stop after N failures → Go sim, TLA M10 |
 | H-11 | Attempt budget: ≤ 4 + 8 = 12 non-Busy calls per peer in any hour (8 an hour sustained), kept across epochs, reconnections and un-want | pure; Go sim `TestUpgradeByzantineReconnect` (reconnect every 10 s for 1 h: calls ≤ 12) | reset on epoch → Go sim, TLA M16 (S10) |
-| H-12 | Two choke points (3.3a). Address filter: no address to or from a peer that is not wanted; beyond 9 rounds (refill 1/100 s) none; else ≤ 3 public non-circuit addresses. Connection gater: no non-relay dial to a peer that is not wanted (no automatic punching path for a stranger); for a wanted peer reachable only through a relay, only an address the filter admitted for the round (or an announced public one for our Dial), each costing one token of a bucket of 30, refill 1/25 s (≤ 174 in any hour), DirectConnect's first direct dial included | pure (filter and gater functions, vectors); Go sim `TestUpgradeGateRefusesSpam` (raw libp2p member opens DCUtR in a loop: rounds ≤ 9 + t/100 s; stranger: 0); Go sim `TestUpgradeDialsOnlyAdmitted` (a member's identify lists 20 public addresses: ≤ 3 dialled per round, all counted; a stranger with a public address: none dialled) | gate only in the scheduler → TLA M8 (S5); the gate ignores wanted → TLA M14 (S6); first direct dial unbudgeted → TLA M19 (S12); gater dials a stranger → TLA M20 (S13), Go sim |
-| H-13 | After Success, if the session is not direct within T_settle, nudge `maybeUpgrade` once and class Unspent | pure; Go sim with a stale direct connection to a dead process (#3420) | no settle check → Go sim stuck |
+| H-12 | Two choke points (3.3a). Address filter: no address to or from a peer that is not wanted; beyond 9 rounds (refill 1/100 s) none; else ≤ 3 public non-circuit addresses with an IP4 or IP6 component: a name (dns, dns4, dns6, dnsaddr), which `manet.IsPublicAddr` counts as public, is refused before selection, so a member never makes the node resolve a name of its choosing (step 2, 2026-11-16; the rule of go-libp2p's open PR https://github.com/libp2p/go-libp2p/pull/3547). Connection gater: no non-relay dial to a peer that is not wanted (no automatic punching path for a stranger); for a wanted peer reachable only through a relay, only an address the filter admitted for the round (or an announced public one for our Dial), each costing one token of a bucket of 30, refill 1/25 s (≤ 174 in any hour), DirectConnect's first direct dial included | pure (filter and gater functions, vectors; `TestAddrFilterAndGater` and vector `directup-select-quic4-dns-quic6-tcp4-dns`: names refused); Go sim `TestUpgradeGateRefusesSpam` (raw libp2p member opens DCUtR in a loop: rounds ≤ 9 + t/100 s; stranger: 0); Go sim `TestUpgradeDialsOnlyAdmitted` (a member's identify lists 20 public addresses: ≤ 3 dialled per round, all counted; a stranger with a public address: none dialled) | gate only in the scheduler → TLA M8 (S5); the gate ignores wanted → TLA M14 (S6); first direct dial unbudgeted → TLA M19 (S12); gater dials a stranger → TLA M20 (S13), Go sim |
+| H-13 | After Success, if the session is not direct within T_settle, nudge `maybeUpgrade` once and class Unspent | pure; Go sim `TestUpgradeStaleDirectSettles`: a direct connection exists but the move of the session onto it failed (step 2, accepted 2026-11-16: with a stale connection to a dead process, #3420, the next punch makes a new connection and moves the session without the nudge, so only a failed move shows the nudge) | no settle check → Go sim stuck |
 | H-14 | Direct stops the upgrader; a fallback to a circuit restarts it with budgets kept; unwant or Close: nothing new starts, the call is cancelled, Close never waits for it | pure; Go sim `TestUpgradeCloseDuringAttempt` (Close ≤ 1 s with a call in flight, goleak clean) | Close waits for the call → Go sim times out; call after unwant → TLA S2 |
 | H-15 | Adopted (B1): with two circuits to p nobody initiates; the circuit the higher PeerID dialled is closed once the session is off it, so one circuit gives one initiator and the pair's two exchanges never overlap, whether or not crossed punches cancel | TLA `DirectUpgradeTwoCircuits` (`CrossCancel` on, L1, L3); Go sim `TestUpgradeCrossedExchanges`: oracle — with two circuits no DCUtR stream is opened by our upgrader and the higher PeerID's circuit is closed within 5 s of the session leaving it; measurement for information — overlap and both-fail rates at offsets 0 to 3 s, 20 seeds, written to the gate report | H-15 off (`CrossCancel` on) → TLA M24 (L1); no close → TLA M25 (L3), Go sim |
-| H-16 | Node-wide budget, every origin (B3): every slot grant takes one token of a node bucket of 8, refill 1/120 s (≤ 38 in any hour), granted in FIFO order, and allows 12 non-relay destinations for the peer while held; no non-relay destination to a peer reachable only through a relay outside a grant | pure; Go sim `TestUpgradeNodeTraffic`: 10 Byzantine members (raw libp2p: DCUtR in a loop, reconnects, identify with 20 public addresses each) for 1 simulated hour; counts **destinations actually dialled** (every `InterceptAddrDial` admission and every simnet packet to a non-relay address): ≤ 456 node-wide, ≤ 174 per member, bytes ≤ 15.5 MB; and grants ≤ 8 + t/120 s | grant without a token → TLA M23 (S15); rounds sharing a grant beyond its allowance → TLA M26 (S16); a destination outside a grant (libp2p's first direct dial) → TLA M27 (S16) |
-| H-17 | Energy: ladder-driven calls (fast and slow) run only while the app is active (input in its window within 5 min, machine not asleep); when idle they are suspended, and resume at once on activity; event-driven calls (E1-E8) run at once whatever the activity | pure (activity passed in); Go sim: idle 30 simulated min, no ladder call; activity: a call ≤ 1 s | ladders while idle → TLA M21 (S14); no resume → TLA M22 (L1) |
+| H-16 | Node-wide budget, every origin (B3): every slot grant takes one token of a node bucket of 8, refill 1/120 s (≤ 38 in any hour), granted in FIFO order, and allows 12 non-relay destinations for the peer while held; no non-relay destination to a peer reachable only through a relay outside a grant; libp2p's first direct dial asks the grant once on demand through the FIFO (no bypass), refused with the ticket kept when not granted; the grant serves the whole one-shot, its rounds included (one token), released at the one-shot's end or the lease's (3.3a) | pure; Go sim `TestUpgradeNodeTraffic`, the worst case for one simulated hour, the node's own upgrader quiet (the members announce no public address): `coalition`, 10 Byzantine members (raw libp2p, dialled by the node), each spending its round bucket as fast as it can and chaining its rounds on each grant (libp2p's default limit of 2 DCUtR streams per peer), 20 public addresses never sent before in every CONNECT; `member`, one such member alone; counts **destinations actually dialled** (every `InterceptAddrDial` admission and every simnet packet to a non-relay address): ≤ 456 node-wide, ≤ 174 per member, bytes ≤ 15.5 MB; not vacuous (≥ 30 grants and ≥ 10 admissions each for the coalition, ≥ 40 rounds for the member). Step 2, measured (-race): coalition 37 grants, 442 admissions (≤ 456), 215 distinct destinations, 2 200 packets ≤ 3.3 MB; member 43 rounds (its bucket's 45), 98 admissions, 82 distinct. The simnet carries QUIC only (2 addresses per round, not 3) and the per-member figure counts no Dial of ours (the members announce nothing), so 174 is reached in the product only (45 × 3 + 12 × 3 = 171); the relay's per-IP connection limit is lifted in the test harness only (block RF1 fixes it in the product); libp2p's UDP black-hole detector is off in the product (H-18). The gater is asked for every peerstore address at every dial request (`swarm.addrsForDial`), so one destination costs about two admissions: the bound on admissions holds a fortiori for destinations; and grants ≤ 8 + t/120 s | grant without a token → TLA M23 (S15); rounds sharing a grant beyond its allowance → TLA M26 (S16); a destination outside a grant (libp2p's first direct dial, the FIFO granting none) → TLA M27 (S16), Go `TestUpgradeDialsOnlyAdmitted` (every slot held: no packet to the member; a slot free: 1 to 3 announced addresses dialled) |
+| H-17 | Energy: ladder-driven calls (fast and slow) run only while the app is active (page↔Go traffic within 5 min: every frame the page sends on the bridge, the person editing or the open document syncing, `bridge.Router.OnActivity` → `Node.NoteActivity`; until the first one the node counts as active; machine not asleep); when idle they are suspended, and resume at once on activity; event-driven calls (E1-E8) run at once whatever the activity | pure (activity passed in); Go sim: idle 30 simulated min, no ladder call; activity: a call ≤ 1 s | ladders while idle → TLA M21 (S14); no resume → TLA M22 (L1) |
+| H-18 | A member's unreachable addresses cannot shut honest UDP or IPv6 dials: the node runs without libp2p's black hole detector (`UDPBlackHoleSuccessCounter(nil)`, `IPv6BlackHoleSuccessCounter(nil)`), which refuses every new UDP (IPv6) dial once fewer than 5 of the last 100 succeeded, with no time expiry and whoever chose the addresses (`black_hole_detector.go`); the per-member (174) and node-wide (456) destination budgets bound the attempts it would have saved (step 2, 2026-11-16, integrator's decision after the Codex debate; objection kept in ADR 0045: on a network that really blocks UDP, more useless attempts, bounded by the budgets) | Go sim `TestUpgradeUnreachableAddrsKeepUDPDials` (120 failed direct dials to public addresses nobody answers, then a dial to a public peer: it connects; red before, `no good addresses`) | detector back on → Go sim (package regression) |
+| H-19 | Retention of a direct connection (step 2, 2026-11-16, integrator's decision after Codex's review, accepted with changes; block HP1r): a node keeps an **outbound** non-relay connection to a peer only if, once the swarm has registered it, the node holds a circuit to the peer, wants it (`Want`: the dial loop; LAN sightings feed it), or is connecting to it on explicit request (`Node.Connect`, invitations included: a `connecting` counter per peer under `Node.mu`, incremented before `h.Connect` and decremented on every exit, error and cancellation included); any other, the late end of an upgrade attempt whoever started it (our call, libp2p's one-shot on `context.Background`, the answerer's punch on the service context), is closed in the node's existing `ConnectedF`, as its first statement, with `Node.mu` released before `Close`. What is guaranteed, and its limit: `ConnectedF` runs after the swarm registers the connection and before it accepts streams on it (swarm.go:420, 443-447), so the node accepts no stream on a late connection and the peer cannot complete a `PeerUp` over it (its opener must read the node's acceptance ACK, rule P-1, spec §8.7); it is not « no stream ever »: the connection is published for a moment (swarm.go:420, 427-440) and `NewStream` does not wait for `ConnectedF` (swarm_conn.go:212, 242), so another consumer of the node (identify) may open a stream that the peer accepts before the close. No clean-up when the last circuit closes (Codex's freeze review, 2026-11-16: a general clean-up would close every successful one-sided upgrade whose direct connection registered outbound at the side that does not want the other, and its only addition over the check is to close connections registered before the circuit's loss, which is exactly the legitimate upgrade): a connection registered while a circuit was held is that circuit's upgrade, the session moves onto it (H-13, H-15) and it stays when the circuit closes; `linkLost` (H-4) only cancels the call and frees its slot. Residual, stated: a late connection that registers in the moment between the peer's Drop and this node's own removal of the circuit passes the check (a circuit is still held); it is not distinguished from an upgrade, and only the peer's `Admit` refuses it (a revoked peer). Inbound connections are not checked (a member that wants the node dials it; refusing a member is `Admit`'s job). The rule is reason-based, not incarnation-based: a landing while a new circuit is held is that circuit's upgrade (H-6) and is kept; a connection cannot be attributed to the dial that made it (dial_sync.go:43-51 replaces the caller's context), and any future dial path of the node must add its reason here | TLA `LandOK` on every landing branch, S18 `LinkBound` in the seven configurations, run `HP1rLinkLost` (Honest with the relay lost once: exhaustive, liveness); Go sim `TestUpgradeLateLinkClosed` (closed: the dropped side and the dropping side, Drop at several offsets of the punch, after a failed Connect; kept: wanted peer, live circuit, a one-sided upgrade registered outbound at the side that does not want the other then its last circuit closed (the link stays and carries the session), renewed circuit, two circuits, invitation Connect to a peer not wanted, dial loop, LAN sighting); `TestWantStopsAndDrop` 40 of 40 (19 of 40 failed before) | check removed → Go MR1 (`TestUpgradeLateLinkClosed`, « H-19 late link kept »); `LandOK == TRUE` → TLA M30 (S18, run `HP1rLateLand`). Model scope: S18 covers a landing without a circuit; that an upgraded session survives its circuit's closure is checked by no property: no action of the model closes a direct connection on a circuit's loss (`RelayLost` and `Resolve` leave `direct` unchanged; only `DirectLost` and `RRestart` set it FALSE), so it holds by construction, the witness `HP1rWitnessSurvives` shows the state (direct, no circuit, after `RelayLost`) is reached, and the Go arm checks the product → HP1 |
 
 Go integration tests run in `sim_test.go`'s simnet inside `testing/synctest` (controlled time, real libp2p hole
 punching, the NAT firewall that go-libp2p's own tests use); a restart helper keeps the node's address and changes its
@@ -316,8 +329,8 @@ phases, not the pairing; PC1b's restart is a real end of a process at the transp
 transport fact. With overlapping connections the restart may count 0 or 1 (`outLost` reopens without a PeerDown),
 hence `≤ 1`.
 
-Rejected: a « going away, back soon » notice. The wire today is `/inkwell/sync/1.0.0`, with no control channel;
-GOAWAY exists only in the v2 spec (§20.3, vectors) and is not implemented. A new code would need spec, registry,
+Rejected: a « going away, back soon » notice. PU1 uses `/inkwell/sync/2.0.0` for the existing session and its
+acceptance ACK (§8.7). GOAWAY belongs to the future session protocol (§20.3, vectors). A new code would need spec, registry,
 vectors and both ends; it would let a Byzantine peer hide real outages from the figures; it couples application intent
 into a transport counter. Its only gain is a cosmetic count. Revisit with v2 if the interface ever needs to hide the
 departure (Q6).
@@ -409,7 +422,7 @@ touches the arrival of a device includes the netsim scenarios » (CLAUDE.md) is 
 ## Integrator decisions (2026-11-16)
 
 The eight open questions are settled as recommended: (1) the pure policy core goes in `protocol/directup`, no I/O,
-like `protocol/linkprobe`; (2) the shutdown-window `DirectConnect` leak is filed upstream (issue and PR) and the fork
+like `protocol/linkprobe`; (2) the shutdown-window `DirectConnect` leak goes upstream (issue and PR prepared, not filed: not authorised yet) and the fork
 is left alone; the residual is one goroutine, Close still returns; (3) the slow-retry cap is 16 min; (4) netsim
 scenario 9, « a device restarts while linked », is added so that HP1's gate shows the defect without PC1b; (5) a
 small Alloy model of who initiates sits beside the TLA+ model; (6) no « going away, back soon » notice; (7) the new
@@ -427,6 +440,17 @@ Decisions on the formal model's findings (2026-11-16, step 1):
 4. **FIFO grant of the node-wide slots** (part of H-5): a peer waits for a slot in a FIFO queue; no peer takes a
    slot while an earlier one waits, so a Byzantine member that keeps calling cannot starve the others. L2 holds with
    the other peers calling without end (`DirectUpgradeTwoPeers`); mutant M18 grants in any order and fails L2.
+
+Decision at step 2 (2026-11-16): **the upgrader exists for every admitted member with whom the node holds a circuit**,
+not only for the peers in its `Want` set, with the same budgets, leases and gates. The model defines « wanted » as
+« member », and the initiator rule (H-3, DCUtR's own: the peer that received the relayed connection initiates,
+https://github.com/libp2p/specs/blob/master/relay/DCUtR.md) makes the side holding the inbound circuit punch: when only `a` wants `b`, `b`
+holds the inbound circuit and must punch for `a`. Without it `b` had no upgrader for `a`, hence no grant, and libp2p's
+one-shot first direct dial was refused (`TestWantAgainClearsResetHold` missed its 3 s bound). The policy of a peer
+(ladders, attempt budget) is kept per peer by the node while a loop drives it (the dial loop of a wanted peer, or a
+member loop while a circuit exists) and dropped only once it carries nothing (no call in flight, attempt budget full),
+so a member that reconnects never refills its attempt budget (H-11). A member can still not make the node punch
+without limit: the per-peer round, destination and attempt budgets and the node's admissions apply unchanged.
 
 ### Codex debate (2026-11-16)
 
@@ -458,3 +482,99 @@ decided B1, the others were applied as asked.
 | B3 node bound | libp2p's first direct dial spends destinations without admission; several rounds can share one lease; « 76 × 3 ⇒ 7.3 MB/h » does not follow | every non-relay destination needs a held grant and draws on its allowance (12); node-wide ≤ 38 grants × 12 = 456 destinations, ≤ 15.5 MB/h; per Byzantine member ≤ 174, ≤ 5.9 MB/h; S16 over all origins, M26 and M27; `TestUpgradeNodeTraffic` counts destinations dialled and bytes, not grants |
 | B4 strangers' tickets | the one-shot and the answerer reached the queue without the wanted check | a peer not wanted takes no ticket, its rounds are refused at once (S17, M28) |
 | B6 FIFO with a 20 s wait | tickets did not expire in the model; starvation not excluded | a round that gives up keeps its ticket's place; a grant to it is held for its peer for the lease; `Answerer` checks L1 and L2 with give-ups and returns; M29 (the place lost) fails L1 |
+| third: gater on-demand grant (step 2) | with the upgrader for every member, `TestWantAgainClearsResetHold` still missed 3 s: libp2p's one-shot takes the per-peer lock first, the gater refused its ungated first direct dial, so the inbound side never opened its NAT towards the peer | accepted, corrected: the gater asks the grant once through the existing FIFO (no priority, no bypass), admits only the ≤ 3 selected announced addresses under that grant's lease and allowance, refuses with the ticket kept when not granted; released at the end of the first direct dial or of the lease (3.3a, H-16); the model's `AutoPre` may ask (no new run: M27 still catches a destination without a grant) |
+
+
+## Integration with PU1
+
+The sync stream's acceptance ACK is the point at which the remote has admitted
+the opener and taken its place in the inbound order. The direct upgrade and
+the move off a duplicate circuit both use PU1's ACK, capacity retries, and
+single opening budget (P-5, P-6, P-8). The duplicate-circuit move opens on
+the circuit selected by H-15. A replaced stream keeps its retirement place
+until its watcher has released the stream. PU1's bounded inbound lifecycle
+serves every incoming sync stream, including a replacement.
+
+The HP1 upgrade timing exposed a connection-selection race in PU1b's
+`drain_replace_reconnect` test. While two direct connections were closing,
+the reopen picked one of them instead of the live circuit. The resulting
+pre-ACK failure closed the peer's remaining circuit. After a confirmed
+direct-connection loss, the watcher selects the surviving circuit for the
+reopen, when one exists. That circuit uses the same pinned stream opener as
+H-15 and the same refusal classification, acceptance ACK, capacity retries
+and opening budget as an ordinary reopen. [Pinned libp2p stream selection](https://github.com/oioio-space/go-libp2p/blob/6de4a5e06d73b04f26d4464730d9806431fec2f8/p2p/net/swarm/swarm.go#L475-L527)
+
+For local checks, use a separate Go modfile with a replacement pointing to a
+local fork clone that combines `6de4a5e` (PU1c) and the changes from
+`c37a183f` (HP1). Once the integrator publishes the combined fork, pin its
+pseudo-version and record its checksums in the canonical Go module.
+
+## Post-port review on the published fork
+
+1. **Round ownership (findings 1 and 2) [HP1].** The pinned initiator returns on
+   context cancellation during the half-RTT wait without tracing completion.
+   The answerer traces a protocol error even if its exchange never acquired a
+   slot. The filters and traces carry only a peer ID. The peer's in-flight
+   counter therefore cannot identify which exchange has returned, or even
+   whether it owned a slot. The transport must own each exchange from address
+   admission through the end of its dial, with a deferred release of that
+   exchange's grant reference. The preliminary dial's reference belongs to
+   the full connect call. Keep the existing DCUtR format, role order, resource
+   scopes, time limits, and the FIFO and token policy of H-5/H-12/H-16.
+   [Pinned initiator](https://github.com/oioio-space/go-libp2p/blob/8ebee42bc17abb847f44baea5c67d6be5904fc79/p2p/protocol/holepunch/holepuncher.go)
+   [Pinned answerer](https://github.com/oioio-space/go-libp2p/blob/8ebee42bc17abb847f44baea5c67d6be5904fc79/p2p/protocol/holepunch/svc.go)
+2. **Reopen route (finding 3).** The direct-link watcher chooses a circuit
+   before resetting the lost stream. A normal reopen must choose its route
+   at opening time. Still prefer a live circuit after a confirmed direct
+   loss, as established by the PU1b replay above. If none survives, let the
+   swarm open on its current connection. H-15 still names the exact retained
+   circuit for a planned move.
+   [Pinned swarm connection selection](https://github.com/oioio-space/go-libp2p/blob/8ebee42bc17abb847f44baea5c67d6be5904fc79/p2p/net/swarm/swarm.go)
+3. **Retirement (finding 4).** After a move, the predecessor is half-closed
+   with a write deadline, but only the watcher on its read side can finish
+   retirement. Use the 60 s sync ordering window from P-9 (§8.7.3) as the
+   maximum drain time after the swap. Once the read ends, close the
+   predecessor and release its place before allowing another move or H-15
+   cleanup. The DirectUpgrade model abstracts sync stream drain and already
+   models round admission and completion separately. The fixes use the
+   existing protocol bounds.
+4. **Input activity (finding 5).** The bridge invokes the activity callback
+   on each valid page frame. The timestamp and the transition check took the
+   same mutex as peer and stream state. Store monotonic time since a fixed
+   origin with an atomic compare-and-swap, and publish EActive only from the
+   update that crosses the idle boundary. The transport and protocol test
+   share the same pure H-17 idle predicate. This preserves H-17 under
+   racing inputs and wall-clock changes.
+   [Go atomics](https://pkg.go.dev/sync/atomic)
+   [Go monotonic time](https://pkg.go.dev/time#hdr-Monotonic_Clocks)
+
+## HP1m mutation witnesses
+
+- **H-6.** Exercise the policy with an old call that is still unwinding when
+  the peer restarts. Hold its completion until the new circuit and sync session
+  are established and the driver has processed the circuit event. Return a
+  service-closed result that would stop the current epoch if applied. Keep
+  simulated direct traffic blocked until the scheduler launches a fresh call,
+  then use the real punch path and measure the existing 3 s bound from the new
+  circuit's registration. The existing pure policy test covers stale spent
+  results separately. [Go synctest scheduling](https://pkg.go.dev/testing/synctest#Wait)
+- **H-12.** MH13 removes the initial membership check in `beginRound`. As
+  responder the node still sends nothing, because `filterRemote` checks
+  membership before the reply CONNECT. As initiator, `beginRound` is the only
+  guard: `exchange` writes the CONNECT with our addresses before it reads the
+  peer's. A stranger that dials a circuit to the node triggers that path through
+  the one-shot (`autoPunch`, on every inbound circuit). The old witness had only
+  a stranger that opened DCUtR, so it never reached the initiator path. A second
+  stranger now dials the node and answers its rounds by counting the CONNECT.
+  The address assertion runs before the ticket assertion because an admitted
+  round also leaves a ticket or a slot. MH22 still fails on the ticket. The
+  frozen mutant stays a single edit.
+  [Pre-port fork responder](https://github.com/oioio-space/go-libp2p/blob/c37a183f1f1e/p2p/protocol/holepunch/svc.go#L170-L223)
+- **H-14.** Let the member loop own the call from launch to shutdown. Starting
+  a wanted-peer dial loop during the call can transfer ownership just as Close
+  cancels the node. If the new driver gives up before taking ownership, neither
+  driver reaches the mutated abort. With a stable owner, the mutant makes the
+  driver wait for the five-second unwind, which blocks Close and violates the
+  original one-second bound.
+
+[Mutation replay and guard evidence](../../gates/HP1/SIMPLIFY.md#w77-hp1m-go-mutants)

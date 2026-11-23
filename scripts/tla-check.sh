@@ -2,7 +2,7 @@
 # P-TLA (ADR 0034 step 3, docs/protocol/tla/README.md): fetch the pinned TLA+ tools
 # (tla2tools.jar SHA-256 checked, never committed) and model-check the models
 # (RepoGen, ConnCredit, SyncIndicator, WriteBudget, SendPath, LinkProbe, OISingleInstance, SandboxScope,
-# ProjectChange, DirectUpgrade, PeerUpAck, SyncOrder, InboundLifecycle).
+# ProjectChange, DirectUpgrade, PeerUpAck, Supersede, SyncOrder, InboundLifecycle).
 #
 # Sound models must finish with no error; every mutant listed in the README must be
 # detected (a violation). The task fails if a sound model violates a property OR if a
@@ -95,9 +95,9 @@ run() {
     local assigned
     # Family totals and the headroom for InboundLifecycle are recorded in the CI2 plan.
     case "$name" in
-      RepoGen*|ConnCredit*|WriteBudget*|OISingleInstance*|SyncOrder*|InboundLifecycle*) assigned=1/3 ;;
+      RepoGen*|ConnCredit*|WriteBudget*|OISingleInstance*|SyncOrder*|InboundLifecycle*|HP1c[!S]*) assigned=1/3 ;;
       SendPath*|SP1*|SandboxScope*|ProjectChange*) assigned=2/3 ;;
-      SyncIndicator*|LinkProbe*|DirectUpgrade*|PeerUpAck*) assigned=3/3 ;;
+      SyncIndicator*|LinkProbe*|DirectUpgrade*|HP1r*|HP1cSupersede*|PeerUpAck*) assigned=3/3 ;;
       *) die "no shard assigned to '$name'" ;;
     esac
     [[ "$assigned" == "$shard" ]] || return 0
@@ -107,11 +107,16 @@ run() {
     return 0
   fi
   metadir="$(mktemp -d -p "$metaroot")"
+  # simulate: TLC's random simulation, fixed seed and depth, where no exhaustive run fits the budget (a second,
+  # weaker check beside the exhaustive runs of smaller bounds; block HP1c2).
+  local mode=()
+  # shellcheck disable=SC2154 # sim_seed, sim_depth and sim_traces are set per call as prefixes (sim_seed=… run …, below)
+  [[ "$expect" == simulate ]] && mode=(-simulate "num=$sim_traces" -depth "$sim_depth" -seed "$sim_seed")
   set +e
   (
     cd "$dir"
     "$heavy" java -Xmx"$xmx" -XX:+UseParallelGC -cp "$jar" tlc2.TLC \
-      -workers "$workers" -noGenerateSpecTE -cleanup -metadir "$metadir" \
+      -workers "$workers" -noGenerateSpecTE -cleanup -metadir "$metadir" "${mode[@]}" \
       -config "$cfg" "$module"
   ) >"$out" 2>&1
   status=$?
@@ -125,6 +130,15 @@ run() {
       fail=1
     else
       printf '✓ %s: no error (exhaustive, liveness checked)\n' "$name"
+    fi
+  elif [[ "$expect" == simulate ]]; then
+    if ((status != 0)) || grep -q '^Error:' "$out" || ! grep -q 'traces generated' "$out"; then
+      printf '✗ %s: simulation found an error or did not run (exit %d)\n' "$name" "$status" >&2
+      tail -n 20 "$out" >&2
+      fail=1
+    else
+      # shellcheck disable=SC2154 # sim_seed, sim_depth and sim_traces are set per call as prefixes (sim_seed=… run …, below)
+      printf '✓ %s: no error (simulation, seed %s, depth %s, %s traces per worker)\n' "$name" "$sim_seed" "$sim_depth" "$sim_traces"
     fi
   elif [[ "$expect" == safety ]]; then
     # A larger configuration of a model whose liveness a smaller sound configuration checks.
@@ -307,6 +321,44 @@ WitnessSlow NoSlowStep
 WitnessGateRefusal NoGateRefusal
 WitnessWaitBehind NoWaitBehind
 WitnessCross NoCross
+MUTANTS
+# Block HP1r (rule H-19, the retention of a direct connection): its runs are named outside ^DirectUpgrade so that
+# block HP1's frozen count of the DirectUpgrade runs (gates/HP1.toml, `tla`: 44) stays exact.
+run HP1rLinkLost DirectUpgradeLinkLost.cfg DirectUpgrade sound
+run HP1rLateLand mutants/DirectUpgradeLateLand.cfg mutants/DirectUpgradeMutants mutant LinkBound
+run HP1rWitnessSurvives mutants/DirectUpgradeWitnessSurvives.cfg mutants/DirectUpgradeMutants mutant NoDirectAfterRelayLost
+# Block HP1c (rules H-20 and P-15, plan 2026-11-23-hp1-reformalize.md §2): R crashes, its circuits stay open at L, dead.
+# Named outside ^DirectUpgrade, ^HP1r and ^PeerUpAck so that the frozen counts of HP1 (44), HP1r (3) and PU1 (19) stay.
+run HP1cCrash DirectUpgradeCrash.cfg DirectUpgrade sound
+run HP1cProofTwoCircuits DirectUpgradeProofTwoCircuits.cfg DirectUpgrade sound
+while read -r m prop; do
+  run "HP1c$m" "mutants/DirectUpgrade$m.cfg" mutants/DirectUpgradeMutants mutant "$prop"
+done <<'MUTANTS'
+RoundAnyConn RoundOnLive
+CloseOnTimer ProofKeepsLive
+ResolveNoWait ResolveKeepsLive
+WitnessGhost NoRoundBesideGhost
+WitnessAnswered NoProofAnswered
+WitnessProofClose NoProofClose
+MUTANTS
+# Supersede (README "Supersede", block HP1c, spec §8.7.4): P-15 on PeerUpAck's connections, PeerUpAck itself unedited
+# (gates/PU1c.toml pins it). Honest and AnyTiming are invariants; Live checks P15-5 with no idle timeout assumed.
+run HP1cSupersede SupersedeHonest.cfg Supersede safety
+run HP1cSupersedeAnyTiming SupersedeAnyTiming.cfg Supersede safety
+# Three connections (HP1c2, review 3b): no exhaustive run fits the budget, so a seeded simulation (residual -> HP1).
+sim_seed=20771 sim_depth=60 sim_traces=100000 run HP1cSupersedeThree SupersedeThree.cfg Supersede simulate
+run HP1cSupersedeLive SupersedeLive.cfg Supersede sound
+while read -r m prop; do
+  run "HP1cSupersede$m" "mutants/Supersede$m.cfg" mutants/SupersedeMutants mutant "$prop"
+done <<'MUTANTS'
+NoProof SupersededBounded
+CloseOnTimer LiveKept
+IgnoreAckWait FallbackKept
+ProveSole NeverCloseSole
+BackwardAck FallbackKept
+WitnessProofClose NoProofClose
+WitnessAnswer NoAnswer
+WitnessFallback NoFallbackWait
 MUTANTS
 
 # PeerUpAck (README "PeerUpAck", block PU1, spec §8.7): PeerUp only after the peer's acceptance ACK of this stream.

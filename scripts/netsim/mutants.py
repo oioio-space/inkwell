@@ -230,7 +230,8 @@ def main():
                 failures.append(m["id"])
                 continue
             caught, detail, log = {"go": run_go, "vitest": run_vitest, "e2e": run_e2e}[m["kind"]](m, tree)
-            print(f"mutant {m['id']} -> {m['clause']}: {'caught' if caught else 'NOT CAUGHT'} ({detail})", flush=True)
+            target = m.get("clause") or m.get("expect")  # a Go mutant names its failure text, a netsim one its clause
+            print(f"mutant {m['id']} -> {target}: {'caught' if caught else 'NOT CAUGHT'} ({detail})", flush=True)
             if not caught:
                 failures.append(m["id"])
                 print("\n".join(log)[-1500:])

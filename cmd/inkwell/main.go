@@ -97,6 +97,7 @@ func runWindow(ctx context.Context, s *session, log *slog.Logger, wailsApp *atom
 	proj, rt := s.proj, s.rt
 	router := bridge.NewRouter(rt.Repo, log)
 	router.UseDrain(rt.Bridge)
+	router.OnActivity(rt.Node.NoteActivity) // the page's traffic is the app in use (spec §8.6, H-17)
 
 	if err := proj.Backup(time.Now(), backupsKept); err != nil {
 		log.Warn("backing up project", "err", err) // not fatal: the store still works

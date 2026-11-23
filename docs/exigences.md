@@ -12,6 +12,10 @@ Rien n'est « fait » sans tests verts et sans une passe `ux-walkthrough` réuss
 | # | Date | Demande | Où | État |
 |---|------|---------|----|------|
 | N-1 | 2026-11-01 | Refuser les clés Ed25519 non canoniques et d’ordre petit avant toute admission ou vérification | `internal/identity/public.go`, p2p, invite, trust, attestations ; vecteurs et tests de rejet ; bloc E2E1 | 🧪 (race ciblée, lint, arch, deadcode OK ; suite réseau bloquée par le bac à sable) |
+| HP1 | 2026-11-22 | Port event-driven direct upgrades and late-link retention while preserving PU1 acceptance and inbound lifecycle guarantees | [HP1 plan](plans/2026-11-16-hp1-direct-upgrade.md) and [protocol §8.6–8.7](protocol/spec.md) | 🔨 HP1 integration |
+| HP1-RV | 2026-11-22 | Fix five post-port findings at their root, each with a failing regression before implementation | [HP1 post-port review](plans/2026-11-16-hp1-direct-upgrade.md#post-port-review-on-the-published-fork) | 🔨 HP1 integration |
+| W77 (idle upgrade) | 2026-11-22 | Correct the HP1 idle-upgrade witness for either reconnect direction, verify the replacement stream test, and account for the p2p race-suite timeout without changing the frozen bounds. | [HP1 evidence](../gates/HP1/SIMPLIFY.md#w77-idle-upgrade-and-race-runtime) | 🔨 HP1 integration |
+| W77 (HP1m Go mutants) | 2026-11-22 | Trace MH6, MH13 and MH15 back to their causes, restore the restart and shutdown witnesses, and report any defect in the frozen gate. | [HP1 plan](plans/2026-11-16-hp1-direct-upgrade.md#hp1m-mutation-witnesses) | 🔨 HP1 integration |
 
 ## Façon de travailler
 

@@ -1,0 +1,847 @@
+{
+  "spec": "inkwell protocol",
+  "spec_version": "2.0.0-draft.11",
+  "generator": "docs/protocol/vectors/generate.go.txt (real codecs; proposed vectors use encoders written from spec.md)",
+  "vectors": [
+    {
+      "id": "directup-class-r0-dfalse-ctrue-ok",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "dialled": false,
+        "direct": true,
+        "outcome": "ok",
+        "rounds": 0
+      },
+      "description": "Classe d'un appel : 0 ronde(s), numérotation false, direct après true, issue ok : success.",
+      "decoder": "directup_classify",
+      "verdict": "accept",
+      "expect": {
+        "class": "success"
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "directup-class-r3-dtrue-ctrue-other",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "dialled": true,
+        "direct": true,
+        "outcome": "other",
+        "rounds": 3
+      },
+      "description": "Classe d'un appel : 3 ronde(s), numérotation true, direct après true, issue other : success.",
+      "decoder": "directup_classify",
+      "verdict": "accept",
+      "expect": {
+        "class": "success"
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "directup-class-r0-dfalse-ctrue-busy",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "dialled": false,
+        "direct": true,
+        "outcome": "busy",
+        "rounds": 0
+      },
+      "description": "Classe d'un appel : 0 ronde(s), numérotation false, direct après true, issue busy : success.",
+      "decoder": "directup_classify",
+      "verdict": "accept",
+      "expect": {
+        "class": "success"
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "directup-class-r0-dfalse-cfalse-busy",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "dialled": false,
+        "direct": false,
+        "outcome": "busy",
+        "rounds": 0
+      },
+      "description": "Classe d'un appel : 0 ronde(s), numérotation false, direct après false, issue busy : busy.",
+      "decoder": "directup_classify",
+      "verdict": "accept",
+      "expect": {
+        "class": "busy"
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "directup-class-r1-dfalse-cfalse-other",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "dialled": false,
+        "direct": false,
+        "outcome": "other",
+        "rounds": 1
+      },
+      "description": "Classe d'un appel : 1 ronde(s), numérotation false, direct après false, issue other : spent.",
+      "decoder": "directup_classify",
+      "verdict": "accept",
+      "expect": {
+        "class": "spent"
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "directup-class-r0-dtrue-cfalse-other",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "dialled": true,
+        "direct": false,
+        "outcome": "other",
+        "rounds": 0
+      },
+      "description": "Classe d'un appel : 0 ronde(s), numérotation true, direct après false, issue other : spent.",
+      "decoder": "directup_classify",
+      "verdict": "accept",
+      "expect": {
+        "class": "spent"
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "directup-class-r3-dfalse-cfalse-ok",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "dialled": false,
+        "direct": false,
+        "outcome": "ok",
+        "rounds": 3
+      },
+      "description": "Classe d'un appel : 3 ronde(s), numérotation false, direct après false, issue ok : spent.",
+      "decoder": "directup_classify",
+      "verdict": "accept",
+      "expect": {
+        "class": "spent"
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "directup-class-r0-dfalse-cfalse-other",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "dialled": false,
+        "direct": false,
+        "outcome": "other",
+        "rounds": 0
+      },
+      "description": "Classe d'un appel : 0 ronde(s), numérotation false, direct après false, issue other : unspent.",
+      "decoder": "directup_classify",
+      "verdict": "accept",
+      "expect": {
+        "class": "unspent"
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "directup-class-r0-dfalse-cfalse-ok",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "dialled": false,
+        "direct": false,
+        "outcome": "ok",
+        "rounds": 0
+      },
+      "description": "Classe d'un appel : 0 ronde(s), numérotation false, direct après false, issue ok : unspent.",
+      "decoder": "directup_classify",
+      "verdict": "accept",
+      "expect": {
+        "class": "unspent"
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "directup-class-r2-dtrue-ctrue-closed",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "dialled": true,
+        "direct": true,
+        "outcome": "closed",
+        "rounds": 2
+      },
+      "description": "Classe d'un appel : 2 ronde(s), numérotation true, direct après true, issue closed : closed.",
+      "decoder": "directup_classify",
+      "verdict": "accept",
+      "expect": {
+        "class": "closed"
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "directup-class-r0-dfalse-cfalse-closed",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "dialled": false,
+        "direct": false,
+        "outcome": "closed",
+        "rounds": 0
+      },
+      "description": "Classe d'un appel : 0 ronde(s), numérotation false, direct après false, issue closed : closed.",
+      "decoder": "directup_classify",
+      "verdict": "accept",
+      "expect": {
+        "class": "closed"
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "directup-role-intrue-outfalse-pubfalse",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "in": true,
+        "out": false,
+        "remote_public": false
+      },
+      "description": "Rôle : circuit entrant true, sortant false, adresse publique annoncée false : punch.",
+      "decoder": "directup_role",
+      "verdict": "accept",
+      "expect": {
+        "action": "punch"
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "directup-role-intrue-outfalse-pubtrue",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "in": true,
+        "out": false,
+        "remote_public": true
+      },
+      "description": "Rôle : circuit entrant true, sortant false, adresse publique annoncée true : punch.",
+      "decoder": "directup_role",
+      "verdict": "accept",
+      "expect": {
+        "action": "punch"
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "directup-role-infalse-outtrue-pubfalse",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "in": false,
+        "out": true,
+        "remote_public": false
+      },
+      "description": "Rôle : circuit entrant false, sortant true, adresse publique annoncée false : none.",
+      "decoder": "directup_role",
+      "verdict": "accept",
+      "expect": {
+        "action": "none"
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "directup-role-infalse-outtrue-pubtrue",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "in": false,
+        "out": true,
+        "remote_public": true
+      },
+      "description": "Rôle : circuit entrant false, sortant true, adresse publique annoncée true : dial.",
+      "decoder": "directup_role",
+      "verdict": "accept",
+      "expect": {
+        "action": "dial"
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "directup-role-intrue-outtrue-pubfalse",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "in": true,
+        "out": true,
+        "remote_public": false
+      },
+      "description": "Rôle : circuit entrant true, sortant true, adresse publique annoncée false : none.",
+      "decoder": "directup_role",
+      "verdict": "accept",
+      "expect": {
+        "action": "none"
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "directup-role-intrue-outtrue-pubtrue",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "in": true,
+        "out": true,
+        "remote_public": true
+      },
+      "description": "Rôle : circuit entrant true, sortant true, adresse publique annoncée true : none.",
+      "decoder": "directup_role",
+      "verdict": "accept",
+      "expect": {
+        "action": "none"
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "directup-role-infalse-outfalse-pubtrue",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "in": false,
+        "out": false,
+        "remote_public": true
+      },
+      "description": "Rôle : circuit entrant false, sortant false, adresse publique annoncée true : none.",
+      "decoder": "directup_role",
+      "verdict": "accept",
+      "expect": {
+        "action": "none"
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "directup-ladder-unspent-1",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "calls": 1,
+        "class": "unspent"
+      },
+      "description": "Échelle unspent : après le 1e appel de cette classe, attente de 1000 ms (sans gigue).",
+      "decoder": "directup_ladder",
+      "verdict": "accept",
+      "expect": {
+        "wait_ms": 1000
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "directup-ladder-unspent-2",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "calls": 2,
+        "class": "unspent"
+      },
+      "description": "Échelle unspent : après le 2e appel de cette classe, attente de 2000 ms (sans gigue).",
+      "decoder": "directup_ladder",
+      "verdict": "accept",
+      "expect": {
+        "wait_ms": 2000
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "directup-ladder-unspent-3",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "calls": 3,
+        "class": "unspent"
+      },
+      "description": "Échelle unspent : après le 3e appel de cette classe, attente de 4000 ms (sans gigue).",
+      "decoder": "directup_ladder",
+      "verdict": "accept",
+      "expect": {
+        "wait_ms": 4000
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "directup-ladder-unspent-4",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "calls": 4,
+        "class": "unspent"
+      },
+      "description": "Échelle unspent : après le 4e appel de cette classe, attente de 8000 ms (sans gigue).",
+      "decoder": "directup_ladder",
+      "verdict": "accept",
+      "expect": {
+        "wait_ms": 8000
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "directup-ladder-unspent-5",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "calls": 5,
+        "class": "unspent"
+      },
+      "description": "Échelle unspent : après le 5e appel de cette classe, attente de 16000 ms (sans gigue).",
+      "decoder": "directup_ladder",
+      "verdict": "accept",
+      "expect": {
+        "wait_ms": 16000
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "directup-ladder-unspent-6",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "calls": 6,
+        "class": "unspent"
+      },
+      "description": "Échelle unspent : après le 6e appel de cette classe, attente de 30000 ms (sans gigue).",
+      "decoder": "directup_ladder",
+      "verdict": "accept",
+      "expect": {
+        "wait_ms": 30000
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "directup-ladder-unspent-7",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "calls": 7,
+        "class": "unspent"
+      },
+      "description": "Échelle unspent : après le 7e appel de cette classe, attente de 30000 ms (sans gigue).",
+      "decoder": "directup_ladder",
+      "verdict": "accept",
+      "expect": {
+        "wait_ms": 30000
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "directup-ladder-spent-1",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "calls": 1,
+        "class": "spent"
+      },
+      "description": "Échelle spent : après le 1e appel de cette classe, attente de 60000 ms (sans gigue).",
+      "decoder": "directup_ladder",
+      "verdict": "accept",
+      "expect": {
+        "wait_ms": 60000
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "directup-ladder-spent-2",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "calls": 2,
+        "class": "spent"
+      },
+      "description": "Échelle spent : après le 2e appel de cette classe, attente de 120000 ms (sans gigue).",
+      "decoder": "directup_ladder",
+      "verdict": "accept",
+      "expect": {
+        "wait_ms": 120000
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "directup-ladder-spent-3",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "calls": 3,
+        "class": "spent"
+      },
+      "description": "Échelle spent : après le 3e appel de cette classe, attente de 240000 ms (sans gigue).",
+      "decoder": "directup_ladder",
+      "verdict": "accept",
+      "expect": {
+        "wait_ms": 240000
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "directup-ladder-spent-4",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "calls": 4,
+        "class": "spent"
+      },
+      "description": "Échelle spent : après le 4e appel de cette classe, attente de 480000 ms (sans gigue).",
+      "decoder": "directup_ladder",
+      "verdict": "accept",
+      "expect": {
+        "wait_ms": 480000
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "directup-ladder-spent-5",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "calls": 5,
+        "class": "spent"
+      },
+      "description": "Échelle spent : après le 5e appel de cette classe, attente de 960000 ms (sans gigue).",
+      "decoder": "directup_ladder",
+      "verdict": "accept",
+      "expect": {
+        "wait_ms": 960000
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "directup-ladder-spent-6",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "calls": 6,
+        "class": "spent"
+      },
+      "description": "Échelle spent : après le 6e appel de cette classe, attente de 960000 ms (sans gigue).",
+      "decoder": "directup_ladder",
+      "verdict": "accept",
+      "expect": {
+        "wait_ms": 960000
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "directup-ladder-spent-7",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "calls": 7,
+        "class": "spent"
+      },
+      "description": "Échelle spent : après le 7e appel de cette classe, attente de 960000 ms (sans gigue).",
+      "decoder": "directup_ladder",
+      "verdict": "accept",
+      "expect": {
+        "wait_ms": 960000
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "directup-ladder-spent-8",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "calls": 8,
+        "class": "spent"
+      },
+      "description": "Échelle spent : après le 8e appel de cette classe, attente de 960000 ms (sans gigue).",
+      "decoder": "directup_ladder",
+      "verdict": "accept",
+      "expect": {
+        "wait_ms": 960000
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "directup-bucket-attempts-hour",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "bucket": "attempts",
+        "period_ms": 1000,
+        "window_s": 3600
+      },
+      "description": "attempts bucket receives one request every 1000 ms for an hour and grants 12.",
+      "decoder": "directup_bucket",
+      "verdict": "accept",
+      "expect": {
+        "granted": 12
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "directup-bucket-attempts-burst",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "bucket": "attempts",
+        "period_ms": 0,
+        "window_s": 0
+      },
+      "description": "attempts bucket grants 4 of 100 simultaneous requests.",
+      "decoder": "directup_bucket",
+      "verdict": "accept",
+      "expect": {
+        "granted": 4
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "directup-bucket-rounds-hour",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "bucket": "rounds",
+        "period_ms": 1000,
+        "window_s": 3600
+      },
+      "description": "rounds bucket receives one request every 1000 ms for an hour and grants 45.",
+      "decoder": "directup_bucket",
+      "verdict": "accept",
+      "expect": {
+        "granted": 45
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "directup-bucket-rounds-burst",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "bucket": "rounds",
+        "period_ms": 0,
+        "window_s": 0
+      },
+      "description": "rounds bucket grants 9 of 100 simultaneous requests.",
+      "decoder": "directup_bucket",
+      "verdict": "accept",
+      "expect": {
+        "granted": 9
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "directup-bucket-dests-hour",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "bucket": "dests",
+        "period_ms": 250,
+        "window_s": 3600
+      },
+      "description": "dests bucket receives one request every 250 ms for an hour and grants 174.",
+      "decoder": "directup_bucket",
+      "verdict": "accept",
+      "expect": {
+        "granted": 174
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "directup-bucket-dests-burst",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "bucket": "dests",
+        "period_ms": 0,
+        "window_s": 0
+      },
+      "description": "dests bucket grants 30 of 100 simultaneous requests.",
+      "decoder": "directup_bucket",
+      "verdict": "accept",
+      "expect": {
+        "granted": 30
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "directup-bucket-node-hour",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "bucket": "node",
+        "period_ms": 1000,
+        "window_s": 3600
+      },
+      "description": "node bucket receives one request every 1000 ms for an hour and grants 38.",
+      "decoder": "directup_bucket",
+      "verdict": "accept",
+      "expect": {
+        "granted": 38
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "directup-bucket-node-burst",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "bucket": "node",
+        "period_ms": 0,
+        "window_s": 0
+      },
+      "description": "node bucket grants 8 of 100 simultaneous requests.",
+      "decoder": "directup_bucket",
+      "verdict": "accept",
+      "expect": {
+        "granted": 8
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "directup-select-empty",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "addrs": []
+      },
+      "description": "Sélection d'adresses : [] donne les indices [].",
+      "decoder": "directup_select",
+      "verdict": "accept",
+      "expect": {
+        "selected": []
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "directup-select-quic4-private-quic4-circuit",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "addrs": [
+          "quic4-private",
+          "quic4-circuit"
+        ]
+      },
+      "description": "Sélection d'adresses : [quic4-private quic4-circuit] donne les indices [].",
+      "decoder": "directup_select",
+      "verdict": "accept",
+      "expect": {
+        "selected": []
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "directup-select-quic4-quic4-quic4-quic6-quic6-tcp4-tcp4",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "addrs": [
+          "quic4",
+          "quic4",
+          "quic4",
+          "quic6",
+          "quic6",
+          "tcp4",
+          "tcp4"
+        ]
+      },
+      "description": "Sélection d'adresses : [quic4 quic4 quic4 quic6 quic6 tcp4 tcp4] donne les indices [0 3 5].",
+      "decoder": "directup_select",
+      "verdict": "accept",
+      "expect": {
+        "selected": [
+          0,
+          3,
+          5
+        ]
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "directup-select-quic4-circuit-tcp4-quic4-private-quic6-quic4",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "addrs": [
+          "quic4-circuit",
+          "tcp4",
+          "quic4-private",
+          "quic6",
+          "quic4"
+        ]
+      },
+      "description": "Sélection d'adresses : [quic4-circuit tcp4 quic4-private quic6 quic4] donne les indices [1 3 4].",
+      "decoder": "directup_select",
+      "verdict": "accept",
+      "expect": {
+        "selected": [
+          1,
+          3,
+          4
+        ]
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "directup-select-tcp6-quic4",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "addrs": [
+          "tcp6",
+          "quic4"
+        ]
+      },
+      "description": "Sélection d'adresses : [tcp6 quic4] donne les indices [1].",
+      "decoder": "directup_select",
+      "verdict": "accept",
+      "expect": {
+        "selected": [
+          1
+        ]
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "directup-select-quic6-private-tcp4-circuit-tcp4",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "addrs": [
+          "quic6-private",
+          "tcp4-circuit",
+          "tcp4"
+        ]
+      },
+      "description": "Sélection d'adresses : [quic6-private tcp4-circuit tcp4] donne les indices [2].",
+      "decoder": "directup_select",
+      "verdict": "accept",
+      "expect": {
+        "selected": [
+          2
+        ]
+      },
+      "scope": "transport"
+    },
+    {
+      "id": "directup-select-quic4-dns-quic6-tcp4-dns",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "addrs": [
+          "quic4-dns",
+          "quic6",
+          "tcp4-dns"
+        ]
+      },
+      "description": "Sélection d'adresses : [quic4-dns quic6 tcp4-dns] donne les indices [1].",
+      "decoder": "directup_select",
+      "verdict": "accept",
+      "expect": {
+        "selected": [
+          1
+        ]
+      },
+      "scope": "transport"
+    }
+  ]
+}

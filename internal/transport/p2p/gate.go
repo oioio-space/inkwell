@@ -19,6 +19,11 @@ type gate struct {
 	admit     func(peer.ID) bool
 	relays    map[peer.ID]peer.AddrInfo
 	relayOnly bool
+	// wanted and punch, if punch is not nil, bound the non-relay dials to a peer reachable only through
+	// a relay (HP1, rule H-12): the second choke point of hole punching. wanted is Node.member: a
+	// stranger (a non-member, or a peer admitted only by the invitation window) is never wanted.
+	wanted func(peer.ID) bool
+	punch  *punchGate
 }
 
 func (g gate) isRelay(p peer.ID) bool {
@@ -27,9 +32,25 @@ func (g gate) isRelay(p peer.ID) bool {
 }
 
 // InterceptAddrDial refuses, in RelayOnly mode, to dial a direct address of
-// anyone but a relay.
+// anyone but a relay. Otherwise a direct address of a peer reachable only
+// through a relay is dialed only by a hole punch the punch gate admitted: for
+// a wanted peer, an address of its current grant, within its budgets (spec
+// §8.6); for any other, never, so a stranger has no automatic path to the
+// node. A peer not connected, or already connected directly, is dialed as
+// before: by the dial loop, or an invitation.
 func (g gate) InterceptAddrDial(p peer.ID, a ma.Multiaddr) bool {
-	return !g.relayOnly || g.isRelay(p) || isCircuit(a)
+	switch {
+	case g.isRelay(p) || isCircuit(a):
+		return true
+	case g.relayOnly:
+		return false
+	case g.punch == nil || !g.punch.relayedOnly(p):
+		return true
+	}
+	if !g.wanted(p) {
+		return false
+	}
+	return g.punch.admitDial(p, a)
 }
 
 // InterceptSecured decides on an authenticated connection.

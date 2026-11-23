@@ -9,6 +9,7 @@ require (
 	github.com/godbus/dbus/v5 v5.2.4
 	github.com/google/go-cmp v0.7.0
 	github.com/libp2p/go-libp2p v0.51.0
+	github.com/libp2p/go-msgio v0.3.0
 	github.com/libp2p/go-yamux/v5 v5.1.0
 	github.com/marcopolo/simnet v0.0.7
 	github.com/multiformats/go-multiaddr v0.16.1
@@ -55,7 +56,6 @@ require (
 	github.com/libp2p/go-buffer-pool v0.1.0 // indirect
 	github.com/libp2p/go-flow-metrics v0.3.0 // indirect
 	github.com/libp2p/go-libp2p-asn-util v0.4.1 // indirect
-	github.com/libp2p/go-msgio v0.3.0 // indirect
 	github.com/libp2p/go-netroute v0.4.0 // indirect
 	github.com/libp2p/go-reuseport v0.4.0 // indirect
 	github.com/libp2p/zeroconf/v2 v2.2.0 // indirect
@@ -128,4 +128,6 @@ replace github.com/oioio-space/inkwell/protocol => ./protocol
 // https://github.com/libp2p/go-libp2p/issues/3575 (fix: https://github.com/libp2p/go-libp2p/pull/3576). Remove this replace once the fix is released upstream.
 // Second commit (block PU1c, branch inkwell/quicreuse-initial-windows of the fork): quicreuse options
 // InitialReceiveWindows and AccountInitialConnectionWindow (docs/plans/2026-11-17-pu1c-go-libp2p-fork.patch).
-replace github.com/libp2p/go-libp2p => github.com/oioio-space/go-libp2p v0.51.1-0.20261122111250-6de4a5e06d73
+// Third commit (block HP1, branch inkwell/hp1-pu1c of the fork, on top of the two above): holepunch
+// Service.DirectConnectContext, a DCUtR attempt bounded by a context (docs/plans/2026-11-16-hp1-direct-upgrade.md).
+replace github.com/libp2p/go-libp2p => github.com/oioio-space/go-libp2p v0.51.1-0.20261122194938-8ebee42bc17a

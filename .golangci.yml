@@ -70,6 +70,12 @@ linters:
           - gocognit
           - unparam
           - misspell
+      # The same French fixture descriptions in the generator's other files (supersede.go, HP1):
+      # they are part of the frozen vector corpus, and an accented letter splits a French word
+      # (« intermédiaire » read as « interm »).
+      - path: ^protocol/cmd/vectors/[^/]+\.go$
+        linters:
+          - misspell
       # Examples and table tests legitimately keep some otherwise-flagged patterns.
       - path: _test\.go
         linters:

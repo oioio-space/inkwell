@@ -836,7 +836,8 @@ func TestInboundLifecycle(t *testing.T) {
 				if dir == "inbound" {
 					err = raw.Connect(t.Context(), peer.AddrInfo{ID: bID, Addrs: b.Host().Addrs()})
 				} else {
-					err = b.Host().Connect(t.Context(), peer.AddrInfo{ID: raw.ID(), Addrs: raw.Network().ListenAddresses()})
+					// Use the explicit connection path so H-19 retains this outbound connection.
+					err = b.Connect(t.Context(), nameOf(raw), addrStrings(raw))
 				}
 				if err != nil {
 					t.Fatalf("%s connection: %v", dir, err)
@@ -874,7 +875,7 @@ func TestInboundLifecycle(t *testing.T) {
 			if got := system(); got != m0+int64(fill) {
 				t.Fatalf("%s: refused inbound connection changed memory to %d, want %d", pu1cMem, got, m0+int64(fill))
 			}
-			err = b.Host().Connect(t.Context(), peer.AddrInfo{ID: fresh.ID(), Addrs: fresh.Network().ListenAddresses()})
+			err = b.Connect(t.Context(), nameOf(fresh), addrStrings(fresh))
 			if !errors.Is(err, network.ErrResourceLimitExceeded) {
 				t.Fatalf("%s: outbound initial window must be refused by the resource manager, got %v", pu1cMem, err)
 			}

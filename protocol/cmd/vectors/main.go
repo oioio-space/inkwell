@@ -804,6 +804,12 @@ func generate(dir, casesPath string) {
 	// ---- lifecycle of an inbound stream on the ordered lanes (spec §8.1, §8.7.3, §16.1, block PU1c) ----
 	write(root, "inbound.json", vectorFile{Vectors: inboundVectors()})
 
+	// ---- superseded connection's liveness proof (spec §8.7.4, block HP1c, rule P-15) ----
+	write(root, "supersede.json", vectorFile{Vectors: supersedeVectors()})
+
+	// ---- directup (spec §8.6) ----
+	write(root, "directup.json", vectorFile{Vectors: directupVectors()})
+
 	fmt.Println("ok")
 }
 

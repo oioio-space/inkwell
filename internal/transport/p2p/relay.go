@@ -321,6 +321,9 @@ func circuitPrefixes(relays map[peer.ID]peer.AddrInfo) []ma.Multiaddr {
 // A desktop is nearly always behind a NAT, and AutoNAT v2 needs several public
 // servers that a small private network lacks, so the node believes it is
 // private and reserves a slot on the relays at once. Port mapping stays off.
+//
+// hole are the options of the host's hole-punch service: the direct upgrade's
+// address filter, tracer and capture of the service (upgrade.go).
 func reachabilityOptions(relays map[peer.ID]peer.AddrInfo, o Options) []libp2p.Option {
 	var opts []libp2p.Option
 	if len(relays) > 0 {
@@ -334,9 +337,6 @@ func reachabilityOptions(relays map[peer.ID]peer.AddrInfo, o Options) []libp2p.O
 			),
 			libp2p.ForceReachabilityPrivate(),
 		)
-		if !o.RelayOnly {
-			opts = append(opts, libp2p.EnableHolePunching())
-		}
 	}
 	// The rewrite of the tests applies with or without relays (RelayOnly has some).
 	if o.RelayOnly || o.rewrite != nil {

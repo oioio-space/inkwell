@@ -1,5 +1,21 @@
 [
   {
+    "row": "| montée en direct, appels (§8.6) | 1 en cours par pair ; 12 appels par pair sur toute heure (4 + 1 par 7,5 min) ; échelle lente plafonnée à 16 min | par pair | appel repoussé | jeton suivant |",
+    "constants": {}
+  },
+  {
+    "row": "| montée en direct, rondes DCUtR (§8.6) | 45 rondes par membre sur toute heure (9 + 1 par 100 s) ; 3 adresses par ronde ; aucune pour un non-membre | par pair | ronde sans adresse | jeton suivant |",
+    "constants": {}
+  },
+  {
+    "row": "| montée en direct, destinations non relayées (§8.6) | 174 destinations par membre sur toute heure (30 + 1 par 25 s) ; 4 places par nœud, bail 75 s, 12 destinations par place, 38 places par heure (8 + 1 par 120 s) | par pair et par nœud | numérotation refusée par le contrôleur | place suivante (FIFO) |",
+    "constants": {}
+  },
+  {
+    "row": "| montée en direct, échecs de numérotation UDP et IPv6 (§8.6) | aucun refus fondé sur les échecs passés (pas de détecteur de trou noir) ; les tentatives restent bornées par les seaux de destinations | par nœud | — | — |",
+    "constants": {}
+  },
+  {
     "row": "| connexions | 2 par pair (passage) ; 128 entrantes, 128 sortantes au total (impl., 64 membres × 2) | — | refusée | à la fermeture d'une autre |",
     "constants": {
       "MaxConnectionsPerPeer": "2",
@@ -50,6 +66,13 @@
     "constants": {
       "SyncAckLen": "1",
       "SyncAckTimeout": "15000000000"
+    }
+  },
+  {
+    "row": "| connexion supplantée (§8.7.4, P-15) | preuve de vie : un ping de 32 o (`/ipfs/ping/1.0.0`) sur chaque connexion plus ancienne, au plus une preuve en cours par connexion ; réponse attendue en 5 s (`T_vie`, deux fois l'aller-retour « mauvais » de §8.5.7) | par connexion | sans preuve : fermée à l'accusé d'un flux sync sur une connexion plus récente, jamais la plus récente ni la seule ; ses flux finissent comme perdus avec elle, sans `ClosePeer` ni événement | nouvelle connexion |",
+    "constants": {
+      "SupersedeProofLen": "32",
+      "SupersedeProofWindow": "5000000000"
     }
   },
   {

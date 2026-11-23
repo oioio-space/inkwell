@@ -42,3 +42,34 @@ alloy, mutation and simplify-report too, unchanged. The table above is that roun
 - `mutation` (300 s) cannot be measured before the code (no file to mutate); the Go mutants are in `gates/HP1m.toml`.
 - After the first round, only caps changed, plus `mkdir -p .task` in `go` (its first run failed on the missing folder,
   superseded) and the rewritten `regression`; the changed criteria were run again, and this table is that round.
+
+## Behavioural reproductions on `main` (step 2)
+
+The behaviour tests run on a copy of `main` (`c560c9a`) holding only the HP1 test files: `sim_test.go`,
+`upgrade_sim_test.go`, `upgrade_helpers_test.go` of step 2, and `hp1stubs_test.go`, whose hooks change nothing on
+`main` (`SetPuncher`, `FillSlots`, `NoteActivity`… are no-ops; `PunchTicket` reports no ticket) and whose observations
+read the node as HP1's exports do (`Circuits`, `HasDirect`), plus HP1's address selection (`SelectAddrs`, a pure
+function `main` lacks) so that a test reaches its dial checks. A red proof counts only if it fails on the rule's own
+line, not on a precondition. Logs: scratchpad `hp1/red-main.log` (H-2, H-10, H-12), `hp1/red-main2.log` (H-6, H-11, H-16).
+
+| Rule, test | Red on `main` | Reason read in the output | On the rule? |
+|---|---|---|---|
+| H-2 `TestUpgradeAfterRestartBeforeHandler` | 20/20 seeds | `H-2 direct after b's handler: links after 4.7 s: a->b LinkDirect, b->a LinkRelayed` | yes |
+| H-6 `TestUpgradeAfterRestartDuringAttempt` | 20/20 seeds | `H-6 direct after the new circuit: 4.2s, want ≤ 3 s` (17 seeds), `4.3s` (3) | yes (the earlier red, `b's new process never came back over the relay`, was the `Circuits` stub's 0: the stub now reads the node) |
+| H-10 `TestUpgradeAfterLongBlock` | yes | relayed 20 min 31 s after the block lifts (> 16 min · 1.25 + 30 s) | yes |
+| H-11 `TestUpgradeByzantineReconnect` | not reproducible on `main` | `H-11 only 0 calls: the upgrader did not act`: `main` has no upgrader, so its bound (≤ 12 calls an hour) holds vacuously; the red proof is the Go mutant MH11 (a new epoch refills the attempt bucket), caught on the rule's line `H-11 calls in an hour` | by mutant |
+| H-12 `TestUpgradeGateRefusesSpam` | yes | the stranger got a CONNECT carrying our addresses | yes |
+| H-16 `TestUpgradeDialsOnlyAdmitted` | yes | `H-16 first direct dial without a grant: 7 of the member's addresses dialled while the FIFO granted none` (the earlier red stopped at the DNS check, `SelectAddrs` being an identity stub) | yes |
+
+The two tests that are proofs of a bound or of the queue, not reproductions, are shown non-vacuous by their mutants
+(scratchpad `hp1/STATE.md`, session 4): `TestUpgradeNodeTraffic` builds the worst case (coalition: 37 grants, 442 of
+456 destination admissions, 215 distinct destinations dialled, 2 200 packets ≤ 3.3 MB) and catches MH19 (the grant's
+allowance not drawn) on `H-16 destinations`, which survived the earlier version (1 destination admitted);
+`TestUpgradeAnswererBehindQueue` asserts that R's ticket survives each give-up (5 give-ups, direct after 1 min 58 s)
+and catches MH21 (a give-up drops the ticket) on `H-5 place lost`, which survived the earlier version (direct through
+the node's own Dial at 56 s, no round of R admitted).
+
+H-18 (no black hole detector) has no entry in the frozen mutant list: it is guarded by its named test,
+`TestUpgradeUnreachableAddrsKeepUDPDials` (red before the change: `no good addresses` after 120 failed dials; green
+with only the two options added), which the frozen `go` criterion selects (`-run '^TestUpgrade'`, under -race) and
+the `regression` criterion runs with the whole package.

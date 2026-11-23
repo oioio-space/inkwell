@@ -112,6 +112,7 @@ dernier). Une alpha Linux ne clôt ni N35, ni N37, ni L5.
 
 WC1 belongs to **Collaborer sans perdre** and uses the existing editing and presence paths. [Window-close rules](../plans/2026-11-21-wc1-window-close.md) → WC1
 E2E3 verifies the existing invitation flow in **Collaborer sans perdre** and variant sharing in **Relire** → E2E3
+HP1 and HP1r upgrade the existing relayed connection in **Collaborer sans perdre** while keeping PU1's acceptance and inbound lifecycle rules. [Direct-upgrade rules](../plans/2026-11-16-hp1-direct-upgrade.md) → HP1
 DEP1 refreshes the build, release and dependency pins used by Distribution. The local `pregate` checks the tool lock for both Linux architectures. WAILS1 qualifies the existing native window and Streams used in Collaborer sans perdre. [Evidence and W48 scope](../plans/2026-11-22-dep1.md) → DEP1, WAILS1
 
 | Lot | Exigences | Valeur | Risque traité | Porte |
