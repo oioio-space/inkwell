@@ -254,3 +254,8 @@ Gemini reviewed gates/HP1b.toml, HP1c.toml and HP1n4.toml: « freeze ». → HP1
 ## Second review round and HP1c2 freeze (Gemini, 2026-11-23)
 
 The first code review rejected step 2 (a local proof failure read as peer silence; a proof state never cleared; a close executed after the newer connection was lost; an ACK from a dead middle connection lifting the fallback exemption). The second round verified the first three fixed at the root (Void = no verdict; Proving ends on every exit; the close re-decided against live connections before Close), the 3b spec sentence, the 15th vector (red on the unfixed pure code, as required) and the model (NewerAcked excludes a silent connection; mutant MS5 BackwardAck on three connections). Verdicts: code « accept », HP1c2 « freeze ». HP1c2 supersedes HP1c; MS4 redefined because FallbackKept implies NeverCloseSole under the close re-check; the exhaustive three-connection check is a residual, covered meanwhile by a seeded TLC simulation. → HP1
+
+
+## HP1r2 freeze (Gemini, 2026-11-23)
+
+MR1 (H-19's late-link guard) became equivalent on HP1r's frozen arms: H-20 cancels a bound initiator call when its circuit closes, so no late link can arise there (MR1 caught 0 times now, 5 with H-20's binding reverted, 0 with each other change reverted). The answerer's DCUtR dial runs on the service context, unbound, and can still land after a Drop. HP1r2 supersedes HP1r with one new closed arm, closed_answerer_dial, where MR1 must be caught with the same text. Gemini: equivalence correct, the arm exercises a real product path, nothing weakened, G-1 holds; « freeze ». Run order: HP1b → HP1m → HP1r2 → HP1c2 → HP1n → HP1n2 → HP1n3 → HP1n4. → HP1

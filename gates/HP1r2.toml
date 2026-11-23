@@ -1,0 +1,196 @@
+# Written 2026-11-23 after HP1r's mutant MR1 survived on the HP1c code. SUPERSEDES gates/HP1r.toml, which stays frozen
+# as history (method v2 rule 9: a contract change is stated, compared old/new and recorded, never an edit of a frozen
+# gate). Why: rule H-20 (spec §8.6) ends a DCUtR call when the circuit it is bound to closes. The one-shot started on
+# the dropped circuit is then cancelled, and its delayed direct dial with it, before the dial lands, so none of the
+# frozen closed arms can still produce a late link: MR1 (the retention check removed) became an equivalent mutant on
+# them (gates/HP1/SIMPLIFY.md « HP1r mutant MR1 survives »; docs/autonomous-decisions.md « HP1r MR1 »). Evidence,
+# TestUpgradeLateLinkClosed with MR1 applied, « H-19 late link kept » printed:
+#   current tree                                                      0
+#   H-20's binding of a call to its circuit reverted (punchOn)        5
+#   identify wait, P-15 or newest-connection choice reverted          0 each
+# H-19 still guards the late links no bound call can cancel: the answerer's punch dial (its round runs on the punch
+# service's context, bound to no circuit, and dials once the initiator's SYNC is read). Byte-identical to HP1r except
+# this header, raw_results under gates/HP1r2/, and the new closed arm closed_answerer_dial of TestUpgradeLateLinkClosed
+# (criterion `go`: its description and its place in the arm list). The Drop comes after the initiator's SYNC, while
+# the answerer's punch dial, delayed by the natNet direct delay, is in flight; within 1 s neither node holds a
+# connection to the other and neither announced the other, else « H-19 late link kept ». MR1 is caught there, with the
+# same text and the same mutant criterion. The caps are unchanged (G-1: 2190 s ≤ 2700 s).
+#
+# HP1r's header follows, unchanged.
+# FROZEN 2026-11-16 after two Codex reviews (second round: FREEZE, residual accepted: a late connection between the peer's Drop and our circuit removal passes the check, Admit refuses its session).
+# Block HP1r, a small add-on to block HP1 (rule H-19: the retention of a direct connection). Rigour: complete. Method v2
+# (docs/plans/2026-11-12-method-v2.md) puts « wire and state between peers » on the closed list, and H-19 decides
+# whether a connection between two peers is kept, after a Drop, against a peer that may be re-admitted: being an add-on
+# to a frozen block does not lower it (Codex's freeze review, 2026-11-16). Complete here means: models with mutants
+# (LandOK and S18 in DirectUpgrade.tla, M30 caught, the witness of the kept upgrade, HP1's 44 runs unchanged); a Go
+# mutant per decision (MR1); statistical acceptance of the defect's test: TestWantStopsAndDrop 40 runs, 0 failures. Its
+# false pass: P(40/40 | p) = (1 - p)^40, 6e-12 at the measured p = 0.475 (19/40; at step 1 20/40 and 12/40, i.e. 6e-7 at p = 0.30), 0.015 at p = 0.10,
+# 0.129 at p = 0.05: a residual failure rate of 7.2 % or more is rejected at 95 % confidence. No protocol/* package is
+# touched (no gremlins run); the network simulation stays in gates/HP1n*.toml, run on the same candidate.
+# Plan: docs/plans/2026-11-16-hp1-direct-upgrade.md (§4 row H-19, H-4's note closed onto it); spec §8.6 « Connexion
+# tardive »; ADR 0045 (decision paragraph); model docs/protocol/tla/DirectUpgrade.tla (LandOK, S18 LinkBound). Written
+# at step 1, before any production code; red witnesses in gates/HP1r/WITNESSES.md. Run after HP1's five gates on the
+# same candidate; no gate runs another. HP1's frozen criteria already cover the rest of the change: `tla` re-checks the
+# seven configurations with S18 and still counts 44 (HP1r's runs are named outside ^DirectUpgrade), `go` runs
+# '^TestUpgrade' (so TestUpgradeLateLinkClosed too) and `regression` the whole p2p package. Every command is
+# `timeout -k 10 N …` (the cap covers the wait for a slot); scripts/gate.py refuses caps past max_minutes (PC1a rule
+# G-1): 600 + 300 + 600 + 30 + 30 + 600 + 30 = 2190 s ≤ 2700 s.
+# H-19 is the retention check in ConnectedF alone (plus linkLost freeing the slot, H-4): no clean-up when the last
+# circuit closes, which would close every successful one-sided upgrade (Codex's freeze review).
+max_minutes = 45
+raw_results = ["docs/plans/2026-11-16-hp1-direct-upgrade.md", "docs/adr/0045-direct-upgrade-retry.md", "docs/protocol/tla/DirectUpgrade.tla", "gates/HP1r2/*"]
+
+[[criteria]]
+# H-19 in the model: the sound run HP1rLinkLost (Honest's constants, the relay lost once: exhaustive, liveness) holds
+# and M30 (HP1rLateLand, LandOK <- LandAny) is caught by LinkBound; the witness HP1rWitnessSurvives reaches a direct
+# session with no circuit after RelayLost (the kept upgrade: no action closes it, see the TLA README); exactly these
+# three runs, no ✗. Structure: every
+# landing branch of DirectUpgrade.tla (PreDial, RoundEnd, DialStep, AutoPre, AutoEnd, REnd) is guarded by LandOK, S18
+# LinkBound is listed in the seven configurations and in DirectUpgradeLinkLost.cfg, whose only difference from Honest
+# is MaxRelayLost = 1.
+id = "tla"
+command = '''out=$(INKWELL_TLA_ONLY='^HP1r' INKWELL_PERF_LOAD_WAIT=180 timeout -k 10 600 ./scripts/heavy.sh --exclusive ./scripts/tla-check.sh 2>&1) || { echo "$out" | tail -40; exit 1; }
+[ "$(echo "$out" | grep -c '✓')" -eq 3 ] || { echo "want 3 ✓, got $(echo "$out" | grep -c '✓')"; echo "$out" | tail -20; exit 1; }
+! echo "$out" | grep -q '✗' || { echo "$out" | grep '✗'; exit 1; }
+echo "$out" | grep -qxF -- "✓ HP1rLinkLost: no error (exhaustive, liveness checked)" || { echo "sound run missing or failing: HP1rLinkLost"; exit 1; }
+echo "$out" | grep -qxF -- "✓ HP1rLateLand: violation detected (LinkBound)" || { echo "M30 not caught by LinkBound: HP1rLateLand"; exit 1; }
+echo "$out" | grep -qxF -- "✓ HP1rWitnessSurvives: violation detected (NoDirectAfterRelayLost)" || { echo "witness not reached: HP1rWitnessSurvives"; exit 1; }
+python3 -I - <<'PY'
+import pathlib, re, sys
+d = pathlib.Path("docs/protocol/tla")
+bad = []
+def read(name):
+    f = d / name
+    if not f.exists():
+        bad.append(f"{name} missing")
+        return ""
+    return f.read_text()
+tla = read("DirectUpgrade.tla")
+if not re.search(r"^LandOK == circuits # \{\}$", tla, re.M):
+    bad.append("rule operator LandOK == circuits # {} missing")
+if not re.search(r"^LinkBound == ~g\.lateLand\b", tla, re.M):
+    bad.append("invariant LinkBound (S18) missing")
+lands = re.findall(r"direct' = TRUE", tla)
+guarded = re.findall(r"punchable /\\ LandOK /\\ direct' = TRUE", tla)
+if len(guarded) != 6 or len(lands) != 6:
+    bad.append(f"landing branches: {len(lands)}, guarded by LandOK: {len(guarded)} (want 6 and 6)")
+def invs(text):
+    m = re.search(r"^INVARIANTS?\n(.*?)(?=^[A-Z_]+\b|\Z)", text, re.M | re.S)
+    return set(m.group(1).split()) if m else set()
+for c in ["Honest", "Silent", "TwoCircuits", "Answerer", "TwoPeers", "LostPush", "Byzantine", "LinkLost"]:
+    if "LinkBound" not in invs(read(f"DirectUpgrade{c}.cfg")):
+        bad.append(f"{c}: invariant LinkBound missing")
+def body(text):
+    return [l for l in text.splitlines() if not l.startswith("\\*")]
+h, l = body(read("DirectUpgradeHonest.cfg")), body(read("DirectUpgradeLinkLost.cfg"))
+diff = sorted(set(h) ^ set(l))
+if diff != ["  MaxRelayLost = 0", "  MaxRelayLost = 1"]:
+    bad.append(f"DirectUpgradeLinkLost.cfg differs from Honest beyond MaxRelayLost: {diff}")
+m = read("mutants/DirectUpgradeLateLand.cfg")
+if "LandOK <- LandAny" not in m or invs(m) != {"LinkBound"}:
+    bad.append("mutants/DirectUpgradeLateLand.cfg: not « LandOK <- LandAny » checked by LinkBound alone")
+sys.exit(f"HP1r tla structure: {bad}" if bad else 0)
+PY'''
+
+[[criteria]]
+# H-19 in Go. (1) TestUpgradeLateLinkClosed (internal/transport/p2p, simnet inside testing/synctest, -race): the direct
+# path b→a is delayed (natNet link delay, as BK3) so that an upgrade attempt's direct dial is in flight when the circuit
+# goes; every arm passes. Closed arms (failure text « H-19 late link kept »): closed_dropped_side (a.Drop(b) with b
+# revoked, then re-admitted: within 1 s b holds no connection to a and a sees no PeerUp of b), closed_dropping_side (the
+# late connection is the dropping node's own: a holds the inbound circuit, b connected by Connect and wants nothing;
+# a.Drop(b): a closes it, no PeerUp either side), closed_drop_offsets (the Drop at 0, 5, 10, 20 and 40 ms after the
+# punch starts, the landing racing the circuit's removal: no connection and no PeerUp after 1 s, every offset),
+# closed_after_failed_connect (a Connect that fails or is cancelled leaves the counter at 0: a later late landing is
+# closed), closed_answerer_dial (HP1r2: the Drop after the initiator's SYNC, while the answerer's unbound punch dial,
+# delayed, is in flight: no connection and no PeerUp after 1 s). Kept arms (failure text « H-19 kept link closed »): the
+# direct connection stays and the session moves onto it — kept_wanted (b wants a), kept_live_circuit (the normal
+# upgrade), kept_renewed_circuit (a landing after a new circuit replaced the old one, H-6), kept_two_circuits (one of
+# two circuits closed, H-15), kept_invitation_connect (Connect to a peer not wanted, invitation path), kept_dial_loop,
+# kept_lan_sighting (a LAN sighting feeds Want), kept_upgrade_outbound_circuit_closed (a one-sided upgrade: a wants b,
+# b does not want a, the direct connection registers OUTBOUND at b while the circuit is held, then the last circuit
+# closes after the session moved off it (H-15 move): 5 s later the connection is still there and carries the session,
+# no PeerDown either side). (2) TestWantStopsAndDrop 40 runs, 0 failures (19 of 40 failed before:
+# P(40/40 | p = 0.475) ≈ 6e-12), as CI runs the package (no -race).
+id = "go"
+command = '''mkdir -p .task && timeout -k 10 300 ./scripts/heavy.sh go test -count=1 -race -timeout=270s -json -run '^TestUpgradeLateLinkClosed$' ./internal/transport/p2p/ > .task/hp1r-go.json 2>&1; a=$?; timeout -k 10 600 ./scripts/heavy.sh go test -count=40 -timeout=570s -json -run '^TestWantStopsAndDrop$' ./internal/transport/p2p/ > .task/hp1r-drop.json 2>&1; b=$?; python3 -I - "$a" "$b" <<'PY'
+import json, pathlib, sys
+arms = ["closed_dropped_side", "closed_dropping_side", "closed_drop_offsets", "closed_after_failed_connect", "closed_answerer_dial", "kept_wanted", "kept_live_circuit", "kept_renewed_circuit", "kept_two_circuits", "kept_invitation_connect", "kept_dial_loop", "kept_lan_sighting", "kept_upgrade_outbound_circuit_closed"]
+def events(path):
+    out = []
+    for line in pathlib.Path(path).read_text().splitlines():
+        try:
+            ev = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(ev, dict):
+            out.append(ev)
+    return out
+bad = [f"exit codes late {sys.argv[1]}, drop {sys.argv[2]}"] if sys.argv[1:] != ["0", "0"] else []
+evs = events(".task/hp1r-go.json")
+passed = {e["Test"] for e in evs if e.get("Action") == "pass" and e.get("Test")}
+bad += [f"missing or not passing: {n}" for n in ["TestUpgradeLateLinkClosed"] + [f"TestUpgradeLateLinkClosed/{a}" for a in arms] if n not in passed]
+for n in sorted({e["Test"] for e in evs if e.get("Action") == "fail" and e.get("Test")})[:3]:
+    said = [e["Output"].strip() for e in evs if e.get("Test") == n and e.get("Action") == "output" and "_test.go" in e.get("Output", "")]
+    print(f"{n}: {said[:2]}")
+drop = [e for e in events(".task/hp1r-drop.json") if e.get("Test") == "TestWantStopsAndDrop"]
+np, nf = sum(e.get("Action") == "pass" for e in drop), sum(e.get("Action") == "fail" for e in drop)
+if (np, nf) != (40, 0):
+    bad.append(f"TestWantStopsAndDrop: {np} passed, {nf} failed of 40")
+sys.exit(f"HP1r go: {bad[:12]}" if bad else 0)
+PY'''
+
+[[criteria]]
+# The Go mutant of H-19: MR1 (scripts/netsim/mutants.toml, block HP1r) is exactly the frozen entry (kind, package,
+# test, expect; step 2 adjusts its anchor only), its anchor applies once, and the mutant (the retention check removed
+# from ConnectedF) is caught by TestUpgradeLateLinkClosed failing with « H-19 late link kept » (never a build failure,
+# a timeout or another test).
+id = "mutant"
+command = '''timeout -k 10 30 python3 -I - <<'PY' && timeout -k 10 30 python3 -I scripts/netsim/mutants.py --check HP1r && timeout -k 10 600 ./scripts/heavy.sh python3 -I scripts/netsim/mutants.py HP1r MR1
+import sys, tomllib
+ms = {m["id"]: m for m in tomllib.load(open("scripts/netsim/mutants.toml", "rb"))["mutant"] if m.get("block") == "HP1r"}
+want = {"MR1": ("go", "./internal/transport/p2p/", "TestUpgradeLateLinkClosed", "H-19 late link kept")}
+bad = sorted(set(ms) ^ set(want))
+for i, (kind, pkg, test, expect) in want.items():
+    m = ms.get(i, {})
+    if (m.get("kind"), m.get("pkg"), m.get("test"), m.get("expect")) != (kind, pkg, test, expect) or not m.get("edit"):
+        bad.append(i)
+sys.exit(f"HP1r mutant entries differ from the frozen table: {bad}" if bad else 0)
+PY'''
+
+[[criteria]]
+# The documents: plan row H-19 states the rule, what is guaranteed and its limit (Codex's change), that no clean-up
+# runs when the last circuit closes and the residual, its proofs and mutants, and the model's scope (S18, the witness);
+# H-4's open note is closed onto H-19; spec §8.6 carries the
+# normative sentence « Connexion tardive (règle H-19) » and the model's new counts; ADR 0045's decision section has
+# the H-19 paragraph; the TLA+ README lists S18, the LinkLost configuration and M30.
+id = "docs"
+command = '''timeout -k 10 30 python3 -I - <<'PY'
+import pathlib, sys
+bad = []
+plan = pathlib.Path("docs/plans/2026-11-16-hp1-direct-upgrade.md").read_text()
+rows = {l.split("|")[1].strip(): l for l in plan.splitlines() if l.startswith("| H-")}
+r19, r4 = rows.get("H-19", ""), rows.get("H-4", "")
+for w in ["outbound", "`ConnectedF`", "`connecting` counter", "every exit", "before it accepts streams", "not « no stream ever »", "`NewStream` does not wait", "No clean-up when the last circuit closes", "Residual, stated", "S18 covers a landing without a circuit", "HP1rWitnessSurvives", "Inbound connections are not checked", "TestUpgradeLateLinkClosed", "TestWantStopsAndDrop", "MR1", "M30", "S18"]:
+    if w not in r19:
+        bad.append(f"plan row H-19 lacks {w!r}")
+if "open:" in r4 or "H-19" not in r4:
+    bad.append("plan row H-4 still has its open note or does not point to H-19")
+spec = pathlib.Path("docs/protocol/spec.md").read_text()
+i = spec.find("\n### 8.6 ")
+j = min([k for k in (spec.find("\n### ", i + 1), spec.find("\n## ", i + 1)) if k > 0] or [len(spec)])
+s86 = " ".join(spec[i:j].split()) if i >= 0 else ""
+for w in ["Connexion tardive (règle H-19)", "NE DOIT PAS garder une connexion directe", "avant d'y accepter le moindre flux", "reste quand il se ferme", "S1-S18", "M1-M30"]:
+    if w not in s86:
+        bad.append(f"spec §8.6 lacks {w!r}")
+adr = pathlib.Path("docs/adr/0045-direct-upgrade-retry.md").read_text()
+k, e = adr.find("\n## Decision\n"), adr.find("\n### Consequences\n")
+dec = " ".join(adr[k:e].split()) if 0 <= k < e else ""
+for w in ["Retention of a direct connection (H-19", "`ConnectedF`", "context.Background", "Rejected:", "No clean-up runs when the last circuit closes"]:
+    if w not in dec:
+        bad.append(f"ADR 0045 decision lacks {w!r}")
+readme = pathlib.Path("docs/protocol/tla/README.md").read_text()
+for w in ["`LinkBound` (S18)", "`DirectUpgradeLinkLost.cfg` (run `HP1rLinkLost`", "`HP1rLateLand` (M30", "`HP1rWitnessSurvives`", "S18 `LinkBound` covers a landing without a circuit"]:
+    if w not in readme:
+        bad.append(f"tla README lacks {w!r}")
+sys.exit(f"HP1r docs: {bad}" if bad else 0)
+PY'''
