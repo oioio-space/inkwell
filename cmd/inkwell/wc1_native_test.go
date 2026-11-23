@@ -56,12 +56,21 @@ type nativeStoreFault struct {
 func (f nativeStoreFault) Save(key []string, value []byte) error {
 	if len(key) >= 2 && (key[1] == "snapshot" || key[1] == "incremental") {
 		if _, err := os.Stat(f.marker); err == nil {
-			f.record("fault-at-store", f.mode)
 			switch f.mode {
 			case "disk":
+				f.record("fault-at-store", f.mode)
 				return unix.ENOSPC
 			case "store":
+				f.record("fault-at-store", f.mode)
 				<-make(chan struct{}) // the supervised process must exit with this write still stuck
+			default:
+				// A failing renderer leaves the store healthy: its last throttled
+				// write may carry the typed cut before the renderer stops.
+				err := f.KV.Save(key, value)
+				if err == nil {
+					f.record("cut-stored", f.mode)
+				}
+				return err
 			}
 		}
 	}
@@ -226,7 +235,7 @@ func runNativeChild(root string) int {
 	realWindow := d.window
 	d.window = func(ctx context.Context, s *session) int {
 		probe := closeProbe{observe: func(event string) { record(event, nil) }}
-		if mode == "disk" || mode == "store" {
+		if mode == "disk" || mode == "store" || mode == "hang" || mode == "crash" {
 			probe.wrapKV = func(kv bridge.KV) bridge.KV {
 				return nativeStoreFault{kv, mode, filepath.Join(root, "fault-armed"), record}
 			}
@@ -248,6 +257,7 @@ type nativeProcess struct {
 	exited     chan struct{}
 	waitErr    error
 	transcript int
+	seen       map[string]int // events read from the transcript, by name
 }
 
 func makeNativeProject(t *testing.T, root, projection string) {
@@ -322,7 +332,7 @@ func nativeProcessStart(t *testing.T, root, mode, scenario, request, proof strin
 	}
 	p := &nativeProcess{
 		cmd: cmd, root: root, log: out.Name(), input: json.NewEncoder(in), exited: make(chan struct{}),
-		scenario: scenario, proof: proof, request: request,
+		scenario: scenario, proof: proof, request: request, seen: make(map[string]int),
 	}
 	// Do not reread events of the old process on relaunch.
 	old, err := os.ReadFile(filepath.Join(root, "events.jsonl"))
@@ -377,6 +387,7 @@ func (p *nativeProcess) until(t *testing.T, bound time.Duration, events string) 
 				t.Fatal(err)
 			}
 			p.transcript++
+			p.seen[event.Event]++
 			if event.Event == "page-error" || event.Event == "native-error" {
 				t.Fatalf("app reported %s: %s", event.Event, event.Value)
 			}
@@ -467,6 +478,16 @@ func (p *nativeProcess) awaitNative(t *testing.T, mask int, bound time.Duration)
 		}
 	}
 	t.Fatalf("GTK view state = %d, expected mask %d", got, mask)
+}
+
+// closeFailed waits until the coordinator has aborted more than seen close
+// attempts. Any wait may read the event first, so until counts it.
+func (p *nativeProcess) closeFailed(t *testing.T, seen int, bound time.Duration) {
+	t.Helper()
+	end := time.Now().Add(bound)
+	for p.seen["close-failed"] <= seen {
+		p.until(t, time.Until(end), "close-failed")
+	}
 }
 
 func (p *nativeProcess) cleanExit(t *testing.T, bound time.Duration) int {
@@ -786,10 +807,8 @@ func TestWC1NativeRecovery(t *testing.T) {
 			p.ready(t)
 			p.seed(t, nativeProjection)
 			marker := filepath.Join(root, "fault-armed")
-			if tc.mode == "disk" || tc.mode == "store" {
-				if err := os.WriteFile(marker, []byte(tc.mode), 0o600); err != nil {
-					t.Fatal(err)
-				}
+			if err := os.WriteFile(marker, []byte(tc.mode), 0o600); err != nil {
+				t.Fatal(err)
 			}
 			want := p.inputCut(t, keys)
 			switch tc.mode {
@@ -801,6 +820,7 @@ func TestWC1NativeRecovery(t *testing.T) {
 				p.until(t, time.Second, "renderer-crashed")
 			}
 			requestRecovery := func() {
+				failures := p.seen["close-failed"]
 				keys.close(t, p, false)
 				if tc.mode == "crash" {
 					p.awaitNative(t, 4|8, time.Second)
@@ -810,7 +830,10 @@ func TestWC1NativeRecovery(t *testing.T) {
 					return
 				}
 				p.awaitNative(t, 2, time.Second)
-				p.awaitNative(t, 4|8, 5*time.Second)
+				// W-4's deadline runs from the close request, so the abort is
+				// awaited first; only the notice's presentation is then bounded.
+				p.closeFailed(t, failures, closeDeadline+time.Second)
+				p.awaitNative(t, 4|8, time.Second)
 			}
 			requestRecovery()
 			keys.press(t, 1) // Escape dismisses; it carries no consent.
@@ -829,7 +852,13 @@ func TestWC1NativeRecovery(t *testing.T) {
 				p.awaitNative(t, 4|16, time.Second)
 				keys.press(t, 57) // Space activates the focused destructive action.
 				p.cleanExit(t, 5*time.Second)
-				want = nativeProjection
+				// Force keeps exactly what the store holds: the typed cut only if
+				// the renderer stored it before it hung or crashed.
+				if p.seen["cut-stored"] == 0 {
+					want = nativeProjection
+				} else {
+					t.Logf("the %s renderer stored the typed cut before failing", tc.mode)
+				}
 			}
 			reopen := nativeProcessStart(t, root, "reopen", "", "", proof)
 			if got := reopen.ready(t); got.Text != want {

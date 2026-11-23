@@ -130,6 +130,7 @@ Les décisions qui demandent de la réflexion (conception, règle de protocole, 
 - `inkwell-hp1` and `inkwell-hp1m`: HP1 merged 2026-11-23, worktrees to remove after archiving → HP1
 - `inkwell-pu1` (branche `pu1`) et `inkwell-pu1m` (branche `pu1m`) → PU1 : fusionnés le 2026-11-22, à retirer
 - `inkwell-e2e1` (HEAD détachée) → E2E1
+- Working tree of `main`: WC1 native recovery flake fixed in `cmd/inkwell/wc1_native_test.go` and `cmd/inkwell/window_close.go` (the notice is awaited from the coordinator's `close-failed` event, not from a later origin. The expected text after Force follows what the store holds: `cut-stored`). Not committed yet; 0/150 after the fix, decision row of 2026-11-23 in `docs/autonomous-decisions.md` → WC1
 - `inkwell-wc1` (branche `wc1`, étape 1 relue, [porte WC1 gelée dans le worktree](gates/WC1.toml)) → WC1
 - `fix-main-ci` (locale et `origin`), `fix-flaky`, `fix-sav03-join3` (`origin`) → E2E1 (travail antérieur : à reprendre ou à supprimer dans E2E1)
 - `pc1b-held` (`73d0f4b`), `inkwell-pc1b` (branche `pc1b`) → PC1b

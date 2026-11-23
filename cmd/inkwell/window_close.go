@@ -485,6 +485,7 @@ func (c *closeCoordinator) abortLocked(a *closeAttempt, failure closeFrame) {
 	if c.pause != nil {
 		c.pause(false)
 	}
+	c.recordLocked("close-failed")
 	c.notifyLocked()
 }
 
