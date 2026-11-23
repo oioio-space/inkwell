@@ -229,7 +229,7 @@ func runNativeChild(root string) int {
 					status := application.InvokeSyncWithResult(func() int { return nativeViewStatus(window) })
 					record("native-state", status)
 				case "terminate-renderer":
-					if !application.InvokeSyncWithResult(func() bool { return nativeTerminateRenderer(window) }) {
+					if !application.InvokeSyncWithResult(func() bool { return terminateRenderer(window) }) {
 						record("native-error", "missing WebKitGTK renderer")
 					}
 				default:
@@ -249,7 +249,7 @@ func runNativeChild(root string) int {
 			Members: len(s.rt.Session.Members()),
 		})
 		probe := closeProbe{observe: func(event string) { record(event, nil) }}
-		if mode == "disk" || mode == "store" || mode == "hang" || mode == "crash" {
+		if mode == "disk" || mode == "store" || mode == "hang" || mode == "crash" || mode == "auto" {
 			probe.wrapKV = func(kv bridge.KV) bridge.KV {
 				return nativeStoreFault{kv, mode, filepath.Join(root, "fault-armed"), record}
 			}
@@ -689,9 +689,103 @@ func proofFile(t *testing.T) string {
 
 func assertProjection(t *testing.T, p *nativeProcess, want string) {
 	t.Helper()
-	b, err := os.ReadFile(filepath.Join(p.root, "docs/Project/main.typ"))
-	if err != nil || string(b) != want {
-		t.Fatalf("manual projection changed: %q, %v, want %q", b, err, want)
+	awaitProjection(t, p, want, 0)
+}
+
+// awaitProjection fails unless the project file holds want within bound.
+func awaitProjection(t *testing.T, p *nativeProcess, want string, bound time.Duration) {
+	t.Helper()
+	end := time.Now().Add(bound)
+	for {
+		b, err := os.ReadFile(filepath.Join(p.root, "docs/Project/main.typ"))
+		if err == nil && string(b) == want {
+			return
+		}
+		if !time.Now().Before(end) {
+			t.Fatalf("project file holds %q, %v, want %q", b, err, want)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// renderers lists the WebKit web processes the app process started, through
+// any sandbox launcher between them, as their /proc entries.
+func (p *nativeProcess) renderers(t *testing.T) []int {
+	t.Helper()
+	entries, err := os.ReadDir("/proc")
+	if err != nil {
+		t.Fatal(err)
+	}
+	parents := map[int][]int{}
+	for _, entry := range entries {
+		var pid int
+		if _, err := fmt.Sscan(entry.Name(), &pid); err != nil {
+			continue
+		}
+		if _, parent, ok := procState(pid); ok {
+			parents[parent] = append(parents[parent], pid)
+		}
+	}
+	var found []int
+	for queue := []int{p.cmd.Process.Pid}; len(queue) > 0; queue = queue[1:] {
+		for _, child := range parents[queue[0]] {
+			queue = append(queue, child)
+			if comm, err := os.ReadFile(fmt.Sprintf("/proc/%d/comm", child)); err == nil &&
+				strings.HasPrefix(string(comm), "WebKitWebProc") {
+				found = append(found, child)
+			}
+		}
+	}
+	return found
+}
+
+// procState reads a process's state letter and parent from /proc/<pid>/stat.
+func procState(pid int) (state string, parent int, ok bool) {
+	b, err := os.ReadFile(fmt.Sprintf("/proc/%d/stat", pid))
+	if err != nil {
+		return "", 0, false
+	}
+	// The command name is in parentheses and may itself hold spaces or parentheses.
+	fields := strings.Fields(string(b[strings.LastIndexByte(string(b), ')')+1:]))
+	if len(fields) < 2 {
+		return "", 0, false
+	}
+	if _, err := fmt.Sscan(fields[1], &parent); err != nil {
+		return "", 0, false
+	}
+	return fields[0], parent, true
+}
+
+// renderersGone fails unless every listed web process has ended within bound
+// of the app's exit: nothing the app gave up on may outlive it (W-6).
+func renderersGone(t *testing.T, pids []int, bound time.Duration) {
+	t.Helper()
+	end := time.Now().Add(bound)
+	for {
+		var alive []string
+		for _, pid := range pids {
+			if state, _, ok := procState(pid); ok && state != "Z" {
+				alive = append(alive, fmt.Sprintf("%d (%s)", pid, state))
+			}
+		}
+		if len(alive) == 0 {
+			return
+		}
+		if time.Now().After(end) {
+			t.Fatalf("WebKit renderers outlived the app by %s: %v", bound, alive)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// signalRenderers stops or continues the app's web processes, as the person did
+// in the R14 session (2026-11-23).
+func signalRenderers(t *testing.T, pids []int, sig unix.Signal) {
+	t.Helper()
+	for _, pid := range pids {
+		if err := unix.Kill(pid, sig); err != nil {
+			t.Fatalf("signal %v to renderer %d: %v", sig, pid, err)
+		}
 	}
 }
 
@@ -891,11 +985,17 @@ func waitSelection(t *testing.T, person *nativeProcess, count int, bound time.Du
 }
 
 func TestWC1NativeRecovery(t *testing.T) {
-	cases := []struct{ name, mode string }{
-		{"FullDiskRetry", "disk"},
-		{"HungStoreForce", "store"},
-		{"HungRendererForce", "hang"},
-		{"CrashedRendererForce", "crash"},
+	cases := []struct {
+		name, mode string
+		stop       bool // SIGSTOP the renderer right after the keystroke, as in the R14 session
+		retry      bool
+	}{
+		{name: "FullDiskRetry", mode: "disk", retry: true},
+		{name: "HungStoreForce", mode: "store"},
+		{name: "HungRendererForce", mode: "hang"},
+		{name: "CrashedRendererForce", mode: "crash"},
+		{name: "StoppedRendererRetry", mode: "auto", stop: true, retry: true},
+		{name: "StoppedRendererForce", mode: "auto", stop: true},
 	}
 	proof := proofFile(t)
 	for _, tc := range cases {
@@ -911,13 +1011,28 @@ func TestWC1NativeRecovery(t *testing.T) {
 				t.Fatal(err)
 			}
 			want := p.inputCut(t, keys)
-			switch tc.mode {
-			case "hang":
+			var stopped []int
+			switch {
+			case tc.mode == "hang":
 				p.send(t, "hang")
 				p.until(t, time.Second, "hang-armed")
-			case "crash":
+			case tc.mode == "crash":
 				p.send(t, "terminate-renderer")
 				p.until(t, time.Second, "renderer-crashed")
+			case tc.stop:
+				// Inside automatic saving's one-second pause: the file does not hold the key yet.
+				if stopped = p.renderers(t); len(stopped) == 0 {
+					t.Fatal("no WebKit renderer found under the app process")
+				}
+				signalRenderers(t, stopped, unix.SIGSTOP)
+				t.Cleanup(func() {
+					for _, pid := range stopped {
+						if comm, err := os.ReadFile(fmt.Sprintf("/proc/%d/comm", pid)); err == nil &&
+							strings.HasPrefix(string(comm), "WebKitWebProc") {
+							_ = unix.Kill(pid, unix.SIGKILL) // only the renderers this case stopped
+						}
+					}
+				})
 			}
 			requestRecovery := func() {
 				failures := p.seen["close-failed"]
@@ -939,32 +1054,55 @@ func TestWC1NativeRecovery(t *testing.T) {
 			keys.press(t, 1) // Escape dismisses; it carries no consent.
 			p.awaitNative(t, 1, time.Second)
 			requestRecovery()
-			if tc.mode == "disk" {
-				if err := os.Remove(marker); err != nil {
-					t.Fatal(err)
+			reopenMode := "reopen" // the Ctrl+S mode, whose file stays as it was
+			if tc.mode == "auto" {
+				reopenMode = "auto"
+			}
+			if tc.retry {
+				switch {
+				case tc.mode == "disk":
+					if err := os.Remove(marker); err != nil {
+						t.Fatal(err)
+					}
+				case tc.stop:
+					signalRenderers(t, stopped, unix.SIGCONT)
 				}
 				keys.press(t, 28) // Enter activates the focused default Retry.
 				p.cleanExit(t, 10*time.Second)
+				if tc.mode == "auto" {
+					// What the close kept is in the file too, not only in the store.
+					assertProjection(t, p, want)
+				}
 			} else {
 				keys.key(t, 42, true) // Shift-Tab moves from Retry to Force.
 				keys.press(t, 15)
 				keys.key(t, 42, false)
 				p.awaitNative(t, 4|16, time.Second)
+				renderers := p.renderers(t)
+				if len(renderers) == 0 && tc.mode != "crash" {
+					t.Fatal("no WebKit renderer found under the app process")
+				}
 				keys.press(t, 57) // Space activates the focused destructive action.
 				p.cleanExit(t, 5*time.Second)
+				renderersGone(t, renderers, time.Second)
 				// Force keeps exactly what the store holds: the typed cut only if
-				// the renderer stored it before it hung or crashed.
+				// the renderer stored it before it hung, stopped or crashed.
 				if p.seen["cut-stored"] == 0 {
 					want = nativeProjection
 				} else {
 					t.Logf("the %s renderer stored the typed cut before failing", tc.mode)
 				}
 			}
-			reopen := nativeProcessStart(t, root, "reopen", "", "", proof)
+			reopen := nativeProcessStart(t, root, reopenMode, "", "", proof)
 			if got := reopen.ready(t); got.Text != want {
 				t.Fatalf("recovered %q, expected %q", got.Text, want)
 			}
-			assertProjection(t, p, nativeProjection)
+			if reopenMode == "auto" {
+				// Opening in automatic saving writes the stored text to a file that lags it.
+				awaitProjection(t, p, want, 2*time.Second)
+			} else {
+				assertProjection(t, p, nativeProjection)
+			}
 		})
 	}
 }

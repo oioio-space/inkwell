@@ -24,6 +24,9 @@ type closeEditor struct {
 	started    bool // a page has been allowed to start editing, even if it disconnected
 	consumed   bool
 	crashed    bool
+	// abandoned: the permit was consumed under force before the page confirmed
+	// its cut, so nothing waits for this renderer any more (W-6).
+	abandoned bool
 }
 
 type closeCut struct {
@@ -101,6 +104,16 @@ func (c *closeCoordinator) forceExit() bool {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	return c.current != nil && c.current.approved && c.current.forced && c.lastEditorLocked()
+}
+
+// abandoned reports whether the window's consumed permit gave up on its
+// renderer. The close hook then ends that renderer before the window goes: a
+// hung or stopped web process would otherwise outlive the app (W-6).
+func (c *closeCoordinator) abandoned(id uint) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	editor := c.editors[id]
+	return editor != nil && editor.abandoned
 }
 
 func (c *closeCoordinator) editorClosed(id uint) bool {
@@ -204,6 +217,7 @@ func (c *closeCoordinator) requestWindow(id uint) bool {
 	if a := c.current; a != nil && a.approved && (!a.project || a.committed || a.forced) {
 		if cut := a.cuts[id]; cut != nil && cut.generation == editor.generation {
 			editor.consumed = true
+			editor.abandoned = a.forced && !cut.complete
 			c.notifyLocked()
 			return true
 		}

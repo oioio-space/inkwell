@@ -56,6 +56,9 @@ state. The concrete failures are R-E2E1-1 (last keys lost) and R-E2E2-1 (presenc
   documents when known. Go accepts replies only from the matching window, generation and
   attempt. On a matching failure Go immediately aborts under W-4 and issues no close permit.
   Manual save still leaves the text-file projection untouched and reopens with the unsaved marker.
+  Automatic saving also writes the projection before the save ACK, so the file holds what the
+  close kept, as a project change already does. A refused write keeps its banner and does not
+  fail the close, because the store holds the cut and opening writes it to the file again.
   Controlled reload or navigation of the editable webview uses the same save barrier before
   replacing the page. [Page save](../../frontend/src/workspace/workspace.svelte.ts#L371)
   · [Adapter ACK](../../frontend/src/store/GoStorageAdapter.ts#L103)
@@ -116,6 +119,8 @@ state. The concrete failures are R-E2E1-1 (last keys lost) and R-E2E2-1 (presenc
   distinct one-use authorization through W-1 without waiting for save, presence, renderer,
   store or network. Within 5 s of that action, destroy the target windows and, on quit or
   last-editor close, exit the process even if a synchronous store operation is stuck.
+  Before destroying a window whose page did not confirm its cut, end its renderer with
+  `webkit_web_view_terminate_web_process`, so no stopped or busy web process outlives the app.
   Duplicate close, deadline, dismissal and late ACK carry no consent. If this began as a
   project change, force closes the window or app and cancels the change.
   [UX rule 5](../ux-principles.md) · [Glossary](../glossary.md)
@@ -153,7 +158,6 @@ state. The concrete failures are R-E2E1-1 (last keys lost) and R-E2E2-1 (presenc
 - → REL1 A retired store request that never returns holds the replacement page's store queue.
   Preserve the accepted-request ordering in W-5 when adding recovery. The native
   « Fermer quand même » action still exits an app with a blocked store.
-- → WC1 Record the owner's recovery-dialog walkthrough before integration (R14).
 
 ## Post-review implementation
 
@@ -192,3 +196,22 @@ state. The concrete failures are R-E2E1-1 (last keys lost) and R-E2E2-1 (presenc
   to observe the WebKit termination before sending Alt+F4. It checks both close attempts
   against a one-second dialog bound. The other fault cases still check the saving banner
   and use the existing dialog bound. [WindowClose model](../protocol/tla/WindowClose.tla)
+- The owner's R14 session on 2026-11-23 (desktop build on GTK4 and WebKitGTK 6.0) confirmed
+  the three gestures. A normal close keeps the text. « Réessayer » after a stopped renderer
+  finishes the save and closes. « Fermer quand même » closes at once. It found two defects,
+  both reproduced in the native walk and fixed at their roots.
+  - The file lagged the document after a close in automatic saving. The close cut flushed
+    only the store, while a project change also flushed the projection. A close inside the
+    one-second pause left the key out of `main.typ` until the next open. `SAV-03c` (Playwright)
+    and `StoppedRendererRetry` (native, renderer stopped with SIGSTOP) failed on the old cut. The
+    W-2 cut now includes the projection in automatic saving.
+  - After « Fermer quand même », the renderer outlived the app. WebKitGTK exits a web process
+    whose UI connection closed from its main loop. Its watchdog aborts with `g_error` after 10 s
+    if that loop is busy, and a stopped process runs neither. `HungRendererForce` (busy loop)
+    and `StoppedRendererForce` found them alive after the app exited. The close hook now ends
+    a renderer that the force did not get a confirmation from, through
+    `webkit_web_view_terminate_web_process` (SIGKILL). The native cases check that no renderer
+    outlives the app.
+  [WebKit WebProcess watchdog](https://github.com/WebKit/WebKit/blob/main/Source/WebKit/WebProcess/WebProcess.cpp)
+  · [ProcessLauncherGLib terminate](https://github.com/WebKit/WebKit/blob/main/Source/WebKit/UIProcess/Launcher/glib/ProcessLauncherGLib.cpp)
+  · [terminate_web_process](https://webkitgtk.org/reference/webkitgtk/stable/method.WebView.terminate_web_process.html)

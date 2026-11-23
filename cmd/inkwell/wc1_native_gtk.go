@@ -36,7 +36,6 @@ type witnessGTK struct {
 	signalID        func(string, uintptr) uint32
 	emissionHook    func(uint32, uint32, uintptr, uintptr, uintptr) uintptr
 	removeHook      func(uint32, uintptr)
-	terminate       func(gtkObject)
 	closeRequest    uintptr
 	unrealize       uintptr
 	itemsChanged    uintptr
@@ -72,9 +71,6 @@ func loadWitnessGTK() (*witnessGTK, error) {
 		"g_signal_lookup": &g.signalID, "g_signal_add_emission_hook": &g.emissionHook,
 		"g_signal_remove_emission_hook": &g.removeHook,
 	}); err != nil {
-		return nil, err
-	}
-	if err := bindGTK(webkitLibrary, map[string]any{"webkit_web_view_terminate_web_process": &g.terminate}); err != nil {
 		return nil, err
 	}
 	g.closeRequest = purego.NewCallback(func(_ gtkObject, count uint32, values gtkObject, data uintptr) int32 {
@@ -205,17 +201,4 @@ func nativeViewStatus(window *application.WebviewWindow) int {
 		g.unref(dialog)
 	}
 	return status
-}
-
-func nativeTerminateRenderer(window *application.WebviewWindow) bool {
-	g, err := nativeWitnessGTK()
-	if err != nil || window.NativeWindow() == nil {
-		return false
-	}
-	view := g.webview(window.NativeWindow())
-	if view == nil {
-		return false
-	}
-	g.terminate(view)
-	return true
 }

@@ -37,6 +37,10 @@ func bindDesktopClose(ctx context.Context, app *application.App, window *applica
 			event.Cancel()
 		} else {
 			observeClose(ctx, "close-permit-consumed")
+			// Hooks run before Wails destroys the window, so the web view is still there.
+			if closer.abandoned(id) {
+				application.InvokeSync(func() { terminateRenderer(window) })
+			}
 		}
 	})
 	window.OnWindowEvent(events.Common.WindowClosing, func(*application.WindowEvent) {

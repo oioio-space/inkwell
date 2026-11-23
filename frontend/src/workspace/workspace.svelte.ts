@@ -381,10 +381,7 @@ class Workspace {
     let timer: ReturnType<typeof setTimeout> | undefined;
     try {
       await Promise.race([
-        Promise.all([
-          this.#repo?.flush(),
-          settings.saveMode === "manual" ? undefined : this.#projection?.flush(),
-        ]),
+        Promise.all([this.#repo?.flush(), this.#autoProjectionFlush()]),
         new Promise<never>((_, reject) => {
           timer = setTimeout(() => reject(new Error("flush deadline")), LEAVE_FLUSH_MS);
         }),
@@ -395,6 +392,11 @@ class Workspace {
     } finally {
       clearTimeout(timer);
     }
+  }
+
+  /** Writes the file now unless saving waits for Ctrl+S, where a departure leaves it as it is. */
+  #autoProjectionFlush(): Promise<void> | undefined {
+    return settings.saveMode === "manual" ? undefined : this.#projection?.flush();
   }
 
   private async closeBeforeRestart(): Promise<void> {
@@ -441,7 +443,9 @@ class Workspace {
       .map((handle) => handle.documentId);
     const pending = storage.pendingWrites();
     try {
-      await Promise.all([repo.flush(ready), pending]);
+      // In automatic saving the file is part of what a close keeps (WC1 W-2). Its write never
+      // rejects: a refused one keeps its banner, and the next open writes the stored text again.
+      await Promise.all([repo.flush(ready), pending, this.#autoProjectionFlush()]);
     } finally {
       signal.throwIfAborted();
     }

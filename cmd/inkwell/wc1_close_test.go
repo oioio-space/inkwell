@@ -333,6 +333,40 @@ func TestWC1W6CloseRecovery(t *testing.T) {
 			t.Fatal("W-6: force did not confer exactly one close permit")
 		}
 	})
+	t.Run("force gives up only on renderers that did not confirm", func(t *testing.T) {
+		synctest.Test(t, func(t *testing.T) {
+			f := newCloseFixture(t, 1, 2)
+			f.coordinator.requestAll()
+			a := f.frame(t, 1, "prepare")
+			f.frame(t, 2, "prepare")
+			f.confirm(2, a.Attempt) // window 1's page never answers
+			time.Sleep(closeDeadline)
+			f.frame(t, 1, "abort")
+			f.frame(t, 2, "abort")
+			f.coordinator.force(a.Attempt)
+			synctest.Wait()
+			if len(f.released) != 2 {
+				t.Fatalf("W-6: force released %d of 2 windows", len(f.released))
+			}
+			if !f.coordinator.requestWindow(1) || !f.coordinator.requestWindow(2) {
+				t.Fatal("W-6: force did not confer the close permits")
+			}
+			if !f.coordinator.abandoned(1) || f.coordinator.abandoned(2) {
+				t.Fatalf("W-6: abandoned renderers = %v, %v; want only the silent window's",
+					f.coordinator.abandoned(1), f.coordinator.abandoned(2))
+			}
+		})
+		synctest.Test(t, func(t *testing.T) {
+			f := newCloseFixture(t, 1)
+			f.coordinator.requestWindow(1)
+			a := f.frame(t, 1, "prepare")
+			f.confirm(1, a.Attempt)
+			f.releasedWindow(t, 1)
+			if !f.coordinator.requestWindow(1) || f.coordinator.abandoned(1) {
+				t.Fatal("W-6: a confirmed close gave up on its renderer")
+			}
+		})
+	})
 	t.Run("abort while the stream is full", func(t *testing.T) {
 		synctest.Test(t, func(t *testing.T) {
 			f := newCloseFixture(t, 1)

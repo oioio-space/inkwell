@@ -363,7 +363,8 @@ onMount(() => {
   const closeWalk =
     import.meta.env.VITE_E2E_OBSERVE === "1" &&
     new URLSearchParams(location.search).get("wc1Native");
-  if (closeWalk) settings.setSaveMode("manual");
+  // The native walk checks the Ctrl+S mode, and automatic saving where its mode says so.
+  if (closeWalk) settings.setSaveMode(closeWalk === "auto" ? "auto" : "manual");
   let nativeProbe: ReturnType<typeof nativeCloseProbe> | undefined;
   const closePage = new ClosePage({
     save: (signal) => workspace.saveForClose(signal),

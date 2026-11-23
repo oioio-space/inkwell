@@ -130,6 +130,18 @@ test("SAV-03b a keystroke typed just before the page goes survives it, whatever 
   await expect.poll(() => docText(page)).toBe(typed);
 });
 
+test("SAV-03c in automatic saving, a close right after a keystroke leaves the file holding it", async ({
+  browser,
+}) => {
+  const page = await auto(browser);
+  const before = await fileCaughtUp(page);
+  await typeAtEnd(page, " fermé");
+  // The close's save barrier runs well inside the one-second pause (WC1 W-2): once it has
+  // answered, the file already holds what the close keeps.
+  await prepareDeparture(page);
+  expect(readDisk(aliceFile())).toBe(`${before} fermé`);
+});
+
 test("EXT-01 EXT-12 a file changed outside is taken in, its lines are marked, Ctrl+Z and Annuler take it back", async ({
   browser,
 }) => {

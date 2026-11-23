@@ -68,6 +68,7 @@ type closeGTK struct {
 	isA               func(gtkObject, uintptr) int32
 	connect           func(gtkObject, string, uintptr, uintptr, uintptr, int32) uintptr
 	webviewType       func() uintptr
+	terminate         func(gtkObject)
 	onDismiss         uintptr
 	onRetry           uintptr
 	onForce           uintptr
@@ -122,7 +123,10 @@ func loadCloseGTK() (*closeGTK, error) {
 	}); err != nil {
 		return nil, err
 	}
-	if err := bindGTK(webkitLibrary, map[string]any{"webkit_web_view_get_type": &g.webviewType}); err != nil {
+	if err := bindGTK(webkitLibrary, map[string]any{
+		"webkit_web_view_get_type":              &g.webviewType,
+		"webkit_web_view_terminate_web_process": &g.terminate,
+	}); err != nil {
 		return nil, err
 	}
 
@@ -172,6 +176,25 @@ func (g *closeGTK) webview(window gtkObject) gtkObject {
 		}
 	}
 	return nil
+}
+
+// terminateRenderer ends the window's WebKit web process (SIGKILL, so a
+// stopped or busy one goes too) and reports whether there was a web view to
+// ask. Main thread only. A web process left behind would otherwise wait for a
+// main loop that never runs: WebKitGTK's own watchdog aborts a busy one after
+// 10 s and cannot run in a stopped one.
+// https://webkitgtk.org/reference/webkitgtk/stable/method.WebView.terminate_web_process.html
+func terminateRenderer(window *application.WebviewWindow) bool {
+	g, err := nativeCloseGTK()
+	if err != nil || window.NativeWindow() == nil {
+		return false
+	}
+	view := g.webview(window.NativeWindow())
+	if view == nil {
+		return false
+	}
+	g.terminate(view)
+	return true
 }
 
 func (g *closeGTK) showSaving(window gtkObject) gtkObject {
