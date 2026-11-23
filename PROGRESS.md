@@ -116,7 +116,7 @@ Placés après R1, et pourquoi : PT4 (décision du 2026-11-15 : les cinq défaut
 Les décisions qui demandent de la réflexion (conception, règle de protocole, compromis de sécurité, résiduel accepté ou refusé) se **débattent avec Codex avant d'être tranchées**, les deux avis consignés dans `docs/autonomous-decisions.md` (demande de l'utilisatrice, 2026-11-16) ; un appel ciblé par groupe de décisions, son quota est petit. Ce qui ne se négocie pas en route : la définition de « fini » et les invariants de `CLAUDE.md` ; on délègue au système ce qui est à lui (W64 : l'adversaire est un pair) ; on ne change jamais de projet à chaud (PC1) ; une preuve qui gêne ne s'affaiblit pas, elle se comprend (les quatre exécutions GitHub de SB2a1 ont chacune trouvé un vrai écart) ; les choix pris seuls vont dans `docs/autonomous-decisions.md` et lui sont montrés quand elle demande où on en est ; Codex avec parcimonie, pour ce que lui seul peut faire.
 
 **Travaux en cours (branches non fusionnées et worktrees ; `nom` → bloc ; vérifié par `mise run inventory`) :**
-- `ci.yml` run 45076934841 on `main` failed (`ci`: `TestLanAskAndAnswer`, a connected peer left with no sync stream and no opening; fixed locally, spec §8.7.4–8.7.5) → E2E3
+
 - `inkwell-ci2` (branch `ci2`): merged in 21eb2e9 (candidate run 45062448299 green), worktree to remove → CI2
 - `ci.yml` run 44933423541 on `main` failed in `ci-e2e`; `inkwell-e2e3` (branch `e2e3`) → E2E3
 - `ci.yml` run 43884324109 sur `main`, rouge (`ci`, `sidecars-arm64`) → SB2a1, E2E1 (ils la rendent verte)
