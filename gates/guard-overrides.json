@@ -1744,6 +1744,21 @@
       "id": "ff357fb48b908270365f2e2ba5f0b9ffd9e41b792bdb95e9f2ff50429a421f6c",
       "reason": "CI2 (docs/plans/2026-11-22-ci2-formal-shards.md): tla-check.sh adds opt-in TLA_SHARD dispatch and --list; the full run list, assertions, TLC arguments and mutant verdicts are unchanged.",
       "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "eb8d3b485e8e7568b1242685333ea6b4e47c7819393cf0426ac041727098c12c",
+      "reason": "HP1 reformalize item 3 (docs/plans/2026-11-23-hp1-reformalize.md in inkwell-hp1m): run_e2e builds the copied tree with -buildvcs=false; selection, verdict and matching rules unchanged.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "57fbf8487281e84cd1636d70be61373e558326701f37119924359757a74d1c59",
+      "reason": "Same change: the go build line gains -buildvcs=false; its timeout (900 s) is unchanged.",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "95bef13b0f1ec4951b03a01c1cb124122482545892a780b8cc69e9b010365e4f",
+      "reason": "mutants_test.py adds E2EBuildTest (every e2e build ignores parent repositories); existing tests unchanged.",
+      "decision": "docs/objectif-en-cours.md"
     }
   ]
 }

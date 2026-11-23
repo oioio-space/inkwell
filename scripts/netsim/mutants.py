@@ -145,7 +145,10 @@ def run_e2e(m, tree):
     bins.mkdir(exist_ok=True)
     for out_name, target, env in (("inkwell-server", "./cmd/inkwell", {}), ("inkwell-relay", "./cmd/inkwell-relay", {"CGO_ENABLED": "0"})):
         tags = ["-tags", "server"] if out_name == "inkwell-server" else []
-        rc, _ = sh(["./scripts/heavy.sh", "go", "build", *tags, "-o", str(bins / out_name), target], tree, env, log, timeout=900)
+        # The mutant tree is an rsync copy without .git: -buildvcs=false keeps the build from stamping, or failing on,
+        # whatever repository a parent directory holds (an empty /tmp/.git failed MN1 and MN2 with "error obtaining
+        # VCS status", 2026-11-23; the same class as scripts/pkg/selftest.sh, f5d2b55).
+        rc, _ = sh(["./scripts/heavy.sh", "go", "build", "-buildvcs=false", *tags, "-o", str(bins / out_name), target], tree, env, log, timeout=900)
         if rc:
             return False, f"go build of {out_name} failed (the mutant must compile)", log
     n = str(m["scenario"])

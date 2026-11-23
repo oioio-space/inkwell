@@ -110,3 +110,21 @@ class ExpectTest(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class E2EBuildTest(unittest.TestCase):
+    def test_builds_ignore_parent_repositories(self):
+        # The copied tree has no .git; a repository in a parent directory must not reach the build (W77, MN1/MN2).
+        run = runner(1)
+        orig = mutants.sh
+        mutants.sh = run
+        try:
+            import tempfile
+            with tempfile.TemporaryDirectory() as d:
+                mutants.run_e2e({"id": "MX", "edit": [{"file": "internal/x.go"}], "scenario": 9}, pathlib.Path(d))
+        finally:
+            mutants.sh = orig
+        builds = [c for c in run.calls if "build" in c and "go" in c]
+        self.assertTrue(builds)
+        for cmd in builds:
+            self.assertIn("-buildvcs=false", cmd)
