@@ -4,7 +4,7 @@ Patch: `docs/plans/2026-11-16-hp1-libp2p-directconnectcontext.patch` (`git diff`
 `oioio-space/go-libp2p@cae49c803966`, the pinned fork). **Landed in the fork at c37a183f** (2026-11-16, branch
 `inkwell/v0.51.0-nilfix`, commit `c37a183f1f1e0230d9df7b26f9644979f6f69da2`, the holepunch package passing under
 -race); `go.mod` pins it as `v0.51.1-0.20261116140521-c37a183f1f1e`, whose `p2p/protocol/holepunch` is identical to the
-local copy the block was developed on. The upstream issue and PR are not filed yet (not authorised).
+local copy the block was developed on. Filed upstream on 2026-11-23, after HP1 merged (the user's go-ahead): issue https://github.com/libp2p/go-libp2p/issues/3585, pull request https://github.com/libp2p/go-libp2p/pull/3586 (branch `holepunch-directconnect-context` of the fork, the commit cherry-picked onto upstream master 8582b880, v0.52.0; holepunch tests pass under -race). Same day: ping on #3576 (nil transport in `nonProxyAddr`, still unguarded on master) and support on #3547 (DCUtR destinations filtered to public addresses).
 
 To land it (integrator; steps 1 and 2 done on 2026-11-16, step 3 waits for the user's go-ahead):
 
