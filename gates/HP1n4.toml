@@ -1,0 +1,62 @@
+# Written 2026-11-23 at step 1, before the H-20/P-15 code; frozen after the cross-family review of the plan's spec and
+# gates (docs/plans/2026-11-23-hp1-reformalize.md §5, §7 change 1). Block HP1n4, an ADD-ON to block HP1's network
+# simulation (it supersedes nothing; HP1n, HP1n2 and HP1n3 stay as frozen): the crash variant of scenario 9. Why: the
+# environment hypothesis of plan §2, that a real relay keeps a crashed peer's circuit half-open for about 30 s
+# (quic-go DefaultIdleTimeout), can only be shown on a real stack; H-20 itself is proved on controlled time
+# (gates/HP1c.toml, MH23), so there is no netsim mutant for it. Rules: H-20 and P-15 (spec §8.6, §8.7.4).
+# Variant `crash` of scenario 9 (scripts/netsim/run.sh, frontend/e2e/netsim.spec.ts, written at step 2): bob's
+# process is killed with SIGKILL (no close reaches the relay or alice) and starts again on the same home and network
+# but a new UDP port, so the relay and alice see a new circuit while the old one stays open, dead.
+# Run last on the same candidate, after gates/HP1b.toml, HP1m, HP1r, HP1c, HP1n, HP1n2 and HP1n3 (plan §5 « Order »);
+# no gate runs another. Wall-clock criteria take the machine with `heavy.sh --exclusive`; INKWELL_PERF_LOAD_WAIT bounds
+# the wait for an idle machine, inside the cap. Prerequisite: the tree carries main's a153829 (-buildvcs=false in
+# mutants.py's run_e2e, plan §4), without which MN3's build fails on a stray /tmp/.git.
+# Caps (rule G-1): 240 + 1300 + 30 + 30 + 900 = 2500 s <= 2700 s.
+max_minutes = 45
+raw_results = ["docs/plans/2026-11-23-hp1-reformalize.md", "docs/protocol/tla/DirectUpgrade.tla", "docs/protocol/tla/Supersede.tla", "gates/HP1n4/*"]
+
+[[criteria]]
+# Scenario 9, variant crash, seeds 20771, 20772, 20773, once each, strict, clauses counted from bob's page readiness
+# after the restart: C1c the link bob sees is direct within 15 s; C2c texts typed on both sides after the restart
+# converge both ways within 15 s; C3c alice never shows bob away (no PeerDown at alice over the whole run: the dead
+# circuit is closed by P-15 only after the new connection's ACK, never before, plan §7 change 1) and bob's restart is
+# logged once. Every clause passes on every run. run.sh's own state is wiped at its start, so the three result files
+# are copied to .task/hp1n4-results right after it and only those copies are read.
+id = "netsim"
+command = '''rm -rf .task/hp1n4-results && mkdir -p .task/hp1n4-results && timeout -k 10 240 ./scripts/heavy.sh mise run e2e:build && { NETSIM_SCENARIOS=9 NETSIM_VARIANTS=crash NETSIM_SEEDS="20771 20772 20773" NETSIM_EXPECT=strict INKWELL_E2E_BROWSER=chromium INKWELL_PERF_LOAD_WAIT=180 timeout -k 10 1300 ./scripts/heavy.sh --exclusive ./scripts/netsim/run.sh; rc=$?; cp .task/netsim/results/9-crash-s2077[123].json .task/hp1n4-results/ 2>/dev/null; python3 -I - "$rc" <<'PY'
+import json, pathlib, sys
+need = {"C1c", "C2c", "C3c"}
+bad = []
+for seed in (20771, 20772, 20773):
+    p = pathlib.Path(f".task/hp1n4-results/9-crash-s{seed}.json")
+    if not p.exists():
+        bad.append(f"{p.name} missing")
+        continue
+    r = json.loads(p.read_text())
+    got = {c["id"] for c in r["clauses"]}
+    red = [f'{c["id"]} {c["status"]}: {c.get("measured", "")[:80]}' for c in r["clauses"] if c["status"] != "pass"]
+    if r.get("expect") != "strict" or not need <= got or red:
+        bad.append(f"{p.name}: expect {r.get('expect')}, missing {sorted(need - got)}, red {red}")
+if int(sys.argv[1]) or bad:
+    sys.exit(f"HP1n4 netsim: exit {sys.argv[1]}, {bad}")
+PY
+}'''
+
+[[criteria]]
+# MN3 (scripts/netsim/mutants.toml, block HP1n4) is exactly the frozen entry (kind e2e, scenario 9, variant crash,
+# clause C2c; step 2 adjusts its anchor only) and its anchor applies once; then, seed 20772, P-15 off (Supersede decides
+# nothing) turns C2c red: the session stays on the dead circuit for the relay's idle timeout (about 30-39 s measured,
+# plan §2), past C2c's 15 s. Caught by its clause, not by a crash or a timeout (mutants.py: a « fail » with an error is
+# a harness exception, not a catch).
+id = "netsim-mutants"
+command = '''timeout -k 10 30 python3 -I - <<'PY' && timeout -k 10 30 python3 -I scripts/netsim/mutants.py --check HP1n4 && NETSIM_MUTANT_SEED=20772 INKWELL_PERF_LOAD_WAIT=180 timeout -k 10 900 ./scripts/heavy.sh --exclusive python3 -I scripts/netsim/mutants.py HP1n4 MN3
+import sys, tomllib
+ms = {m["id"]: m for m in tomllib.load(open("scripts/netsim/mutants.toml", "rb"))["mutant"] if m.get("block") == "HP1n4"}
+want = {"MN3": ("e2e", 9, "crash", "C2c")}
+bad = sorted(set(ms) ^ set(want))
+for i, t in want.items():
+    m = ms.get(i, {})
+    if (m.get("kind"), m.get("scenario"), m.get("variant"), m.get("clause")) != t or not m.get("edit"):
+        bad.append(i)
+sys.exit(f"HP1n4 mutant entries differ from the frozen table: {bad}" if bad else 0)
+PY'''

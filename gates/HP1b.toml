@@ -1,0 +1,279 @@
+# Written 2026-11-23 at step 1 of the HP1 re-formalization, before its code; frozen after the cross-family review of
+# the plan's spec and gates (docs/plans/2026-11-23-hp1-reformalize.md §5, §7). SUPERSEDES gates/HP1.toml, which stays
+# frozen as history (method v2 rule 9: a contract change is stated, compared old/new and recorded, never an edit of a
+# frozen gate). Rigour: complete, as HP1.
+# What changes, and only that: in criterion `mutant-tool`, the frozen table points MH6 at the pure test
+# protocol/directup TestPolicyEpoch, same failure text « H-6 direct after the new circuit » (plan §3, recommendation
+# (a)). Why: the mutated line (policy.go, the stale-epoch check) is in the pure policy, and TestPolicyEpoch kills it
+# deterministically with that text; on the old integration path (TestUpgradeAfterRestartDuringAttempt) MH6 became
+# equivalent, since a stopped call and a stale epoch both discard the result, as the model's StaleIgnored/M2 says.
+# Old/new compared: `mutants.py HP1 MH6` with the new entry is caught (go test exit 1, TestPolicyEpoch failing with
+# the text), 2026-11-23; negative control: the sound tree passes TestPolicyEpoch (criterion `go`). Every other
+# criterion is byte-identical to gates/HP1.toml (its messages still read « HP1 », its reports are still gates/HP1/*):
+# `diff gates/HP1.toml gates/HP1b.toml` shows this header, raw_results and the MH6 tuple only.
+# The other gates of the block are unchanged and run on the same candidate after this one (plan §5 « Order »):
+# HP1m (MH1-MH22, MH6 now pure: it selects the block-HP1 entries of scripts/netsim/mutants.toml, this gate freezes
+# them), HP1r, HP1c, HP1n, HP1n2, HP1n3, HP1n4. No gate runs another.
+# Caps (rule G-1): 900 + 60 + 90 + 300 + 30 + 30 + 300 + 300 + 180 + 150 = 2340 s <= 2700 s.
+max_minutes = 45
+raw_results = ["docs/plans/2026-11-16-hp1-direct-upgrade.md", "docs/plans/2026-11-23-hp1-reformalize.md", "gates/HP1b/*", "docs/adr/0045-direct-upgrade-retry.md", "docs/protocol/tla/DirectUpgrade.tla", "docs/protocol/alloy/DirectUpgradeRoles.als", "gates/HP1/*"]
+
+[[criteria]]
+# Each rule row H-1..H-17 is in the plan, H-15's row reads « Adopted » (B1), the plan states the corrected worst case
+# (B3: ≤ 456 destinations ≈ 15.5 MB/h per node, ≤ 174 ≈ 5.9 MB/h per Byzantine member); spec §8.6 « Montée en direct » exists, in French,
+# with the peer-observable bounds of plan §5; §16 states them; §20.6 registers /libp2p/dcutr; the corpus
+# protocol/vectors/directup.json exists (vectors are top-level files of protocol/vectors, embedded by `*.json`); the
+# ADR's status line says accepted and not proposed.
+id = "docs"
+command = '''python3 -I - <<'PY'
+import json, pathlib, sys
+plan = pathlib.Path("docs/plans/2026-11-16-hp1-direct-upgrade.md").read_text()
+bad = [f"plan row H-{i}" for i in range(1, 18) if f"\n| H-{i} |" not in plan]
+row15 = [l for l in plan.splitlines() if l.startswith("| H-15 |")]
+if not row15 or not row15[0].startswith("| H-15 | Adopted") or "Proposed" in row15[0]:
+    bad.append("plan row H-15 does not read Adopted")
+flat = " ".join(plan.split())
+bad += [f"plan lacks the corrected worst case {w!r}" for w in ["456 destinations", "15.5 MB/h", "174 in any hour", "5.9 MB/h"] if w not in flat]
+spec = pathlib.Path("docs/protocol/spec.md").read_text()
+def section(head, ends):
+    i = spec.find(head)
+    if i < 0:
+        return None
+    j = min([k for k in (spec.find(e, i + len(head)) for e in ends) if k > 0] or [len(spec)])
+    return " ".join(spec[i:j].split())
+s86 = section("\n### 8.6 ", ["\n### ", "\n## "])
+if s86 is None:
+    bad.append("spec §8.6 missing")
+else:
+    if "Montée en direct" not in s86[:80]:
+        bad.append("spec §8.6 is not « Montée en direct »")
+    for w in ["/libp2p/dcutr", "NE DOIT PAS", "PEUT refuser", "un seul appel en cours", "12 appels", "45 rondes", "174 destinations", "non-membre", "16 min"]:
+        if w not in s86:
+            bad.append(f"spec §8.6 lacks {w!r}")
+s16 = section("\n## 16. ", ["\n## "])
+if s16 is None or "45 rondes" not in s16 or "174 destinations" not in s16:
+    bad.append("spec §16 does not state the HP1 bounds (45 rondes, 174 destinations)")
+s206 = section("\n### 20.6 ", ["\n### ", "\n## "])
+if s206 is None or "/libp2p/dcutr" not in s206:
+    bad.append("spec §20.6 does not register /libp2p/dcutr")
+try:
+    json.loads(pathlib.Path("protocol/vectors/directup.json").read_text())
+except (OSError, ValueError) as e:
+    bad.append(f"protocol/vectors/directup.json: {e}")
+adr = pathlib.Path("docs/adr/0045-direct-upgrade-retry.md")
+st = [l for l in adr.read_text().splitlines() if l.startswith("status:")] if adr.exists() else []
+if not st or "accepted" not in st[0] or "proposed" in st[0]:
+    bad.append("ADR 0045 missing or its status line is not accepted")
+sys.exit(f"HP1 docs: {bad}" if bad else 0)
+PY'''
+
+[[criteria]]
+# Plan §6 after B1-B4, B6: the seven DirectUpgrade configurations hold (six exhaustive with liveness, Byzantine
+# invariants only); the 30 mutant runs (M1-M29) and the 7 witnesses are each caught by the property their README row
+# names (scripts/tla-check.sh prints it in parentheses): 44 ✓, no ✗, and neither TwoCircuitsResolve nor a Residual run
+# (H-15 is adopted). Structure: each configuration lists the 17 invariants S1-S17, the six non-Byzantine ones the
+# properties Upgrades, BusyEnds and DupResolves, and TwoCircuits sets CrossCancel = TRUE (overlapping punches may fail).
+id = "tla"
+command = '''out=$(INKWELL_TLA_ONLY='^DirectUpgrade' INKWELL_PERF_LOAD_WAIT=180 timeout -k 10 900 ./scripts/heavy.sh --exclusive ./scripts/tla-check.sh 2>&1) || { echo "$out" | tail -40; exit 1; }
+[ "$(echo "$out" | grep -c '✓')" -eq 44 ] || { echo "want 44 ✓, got $(echo "$out" | grep -c '✓')"; exit 1; }
+! echo "$out" | grep -q '✗' || { echo "$out" | grep '✗'; exit 1; }
+! echo "$out" | grep -qE 'TwoCircuitsResolve|Residual' || { echo "a TwoCircuitsResolve or Residual run is still registered"; exit 1; }
+for n in DirectUpgradeHonest DirectUpgradeSilent DirectUpgradeTwoCircuits DirectUpgradeAnswerer DirectUpgradeTwoPeers DirectUpgradeLostPush; do
+  echo "$out" | grep -qxF -- "✓ $n: no error (exhaustive, liveness checked)" || { echo "sound configuration missing or failing: $n"; exit 1; }
+done
+echo "$out" | grep -qxF -- "✓ DirectUpgradeByzantine: no error (exhaustive, invariants)" || { echo "sound configuration missing or failing: DirectUpgradeByzantine"; exit 1; }
+while read -r m p; do
+  echo "$out" | grep -qxF -- "✓ DirectUpgrade$m: violation detected ($p)" || { echo "mutant or witness not caught by its named property: DirectUpgrade$m ($p)"; exit 1; }
+done <<'M'
+NoRetry Upgrades
+StaleApplied StaleIgnored
+StaleAppliedLive Upgrades
+BusyTakesToken BusyFree
+AnyPeer NoLaunchUnwanted
+OutboundPunch RoleOK
+LowerOnly Upgrades
+EpochRefills RoundBudget
+SchedulerOnly RoundBudget
+NoLocalReady NoLaunchUnready
+StopAtCap Upgrades
+NoCap GlobalCap
+WhileDirect NoLaunchDirect
+WhileInFlight OneCall
+GateAnyPeer NoRoundUnwanted
+NoDeadline BusyEnds
+EpochRefillsAttempts AttemptBudget
+RemoteGuard Upgrades
+AnyOrder BusyEnds
+PreDialFree DestBudget
+GaterAnyPeer NoDialUnwanted
+IdleIgnored NoLadderCallIdle
+StaySuspended Upgrades
+GrantFree AdmissionBudget
+H15Off Upgrades
+NoClose DupResolves
+NoAllowance NoUnallowedDial
+GaterNoLease NoUnallowedDial
+TicketAny NoTicketUnwanted
+PlaceLost Upgrades
+WitnessDirect NoDirect
+WitnessStale NoStaleResult
+WitnessBusy NoBusy
+WitnessSlow NoSlowStep
+WitnessGateRefusal NoGateRefusal
+WitnessWaitBehind NoWaitBehind
+WitnessCross NoCross
+M
+python3 -I - <<'PY'
+import pathlib, re, sys
+inv = ["OneCall", "NoLaunchUnwanted", "NoLaunchDirect", "RoleOK", "RoundBudget", "NoRoundUnwanted", "NoLaunchUnready", "StaleIgnored", "GlobalCap", "AttemptBudget", "BusyFree", "DestBudget", "NoDialUnwanted", "NoLadderCallIdle", "AdmissionBudget", "NoUnallowedDial", "NoTicketUnwanted"]
+props = ["Upgrades", "BusyEnds", "DupResolves"]
+bad = []
+for c in ["Honest", "Silent", "TwoCircuits", "Answerer", "TwoPeers", "LostPush", "Byzantine"]:
+    text = pathlib.Path(f"docs/protocol/tla/DirectUpgrade{c}.cfg").read_text()
+    m = re.search(r"^INVARIANTS?\n(.*?)(?=^[A-Z_]+\b|\Z)", text, re.M | re.S)
+    have = set(m.group(1).split()) if m else set()
+    bad += [f"{c}: invariant {i} missing" for i in inv if i not in have]
+    if c != "Byzantine":
+        m = re.search(r"^PROPERTIES?\n(.*?)(?=^[A-Z_]+\b|\Z)", text, re.M | re.S)
+        have = set(m.group(1).split()) if m else set()
+        bad += [f"{c}: property {p} missing" for p in props if p not in have]
+if not re.search(r"^\s*CrossCancel\s*=\s*TRUE\s*$", pathlib.Path("docs/protocol/tla/DirectUpgradeTwoCircuits.cfg").read_text(), re.M):
+    bad.append("TwoCircuits: CrossCancel is not TRUE")
+sys.exit(f"HP1 tla structure: {bad}" if bad else 0)
+PY'''
+
+[[criteria]]
+# H-3 (plan §3.4): the Alloy model of who initiates; its three checks hold, its two runs are satisfiable, and its five
+# mutants are caught (the whole Alloy suite runs: scripts/alloy_check.py has no filter, and a failure elsewhere fails here).
+id = "alloy"
+command = '''out=$(timeout -k 10 60 ./scripts/heavy.sh python3 -I scripts/alloy_check.py 2>&1) || { echo "$out" | tail -40; exit 1; }
+for l in "DirectUpgradeRoles.als check SomeEligibleAccepted: ok" "DirectUpgradeRoles.als check PunchNeedsInbound: ok" "DirectUpgradeRoles.als check AcceptedIsEligible: ok" "DirectUpgradeRoles.als run CrossedWithoutSameCounts: ok" "DirectUpgradeRoles.als run BothAccepted: ok"; do
+  echo "$out" | grep -qxF -- "$l" || { echo "missing: $l"; exit 1; }
+done
+[ "$(echo "$out" | grep -cxF -- 'mutant DirectUpgradeRoles.als -> SomeEligibleAccepted: caught')" -eq 3 ] || { echo "SomeEligibleAccepted: not 3 mutants caught"; exit 1; }
+for a in AcceptedIsEligible PunchNeedsInbound; do
+  echo "$out" | grep -qxF -- "mutant DirectUpgradeRoles.als -> $a: caught" || { echo "mutant not caught: $a"; exit 1; }
+done'''
+
+[[criteria]]
+# H-1..H-17 in Go, under -race with an explicit -timeout (Go names a stuck test): the pure policy protocol/directup
+# (nested module, run from protocol/) and the integration tests of internal/transport/p2p on controlled time
+# (synctest). Both runs succeed and every named test passes (go test -json events, not grep of -v text). H-15 is
+# asserted by TestUpgradeCrossedExchanges (its oracle: no DCUtR stream with two circuits, the higher PeerID's circuit
+# closed within 5 s); its overlap and both-fail figures are information only, copied to gates/HP1/CROSSED.md when logged.
+id = "go"
+command = '''mkdir -p .task && cd protocol && timeout -k 10 90 ../scripts/heavy.sh go test -count=1 -race -timeout=60s -json ./directup/ > ../.task/hp1-go-pure.json 2>&1; a=$?; cd .. && timeout -k 10 300 ./scripts/heavy.sh go test -count=1 -race -timeout=270s -json -run '^TestUpgrade' ./internal/transport/p2p/ > .task/hp1-go-sim.json 2>&1; b=$?; python3 -I - "$a" "$b" <<'PY'
+import json, pathlib, re, sys
+pure = ["TestPolicyActsOnlyWhenWantedAndRelayed", "TestPolicyLocalReadyIsAGuardRemoteReadyATrigger", "TestPolicyRoles", "TestPolicyOneCallInFlight", "TestSlotsFIFOWithLease", "TestPolicyEpoch", "TestClassify", "TestPolicyLadders", "TestPolicyEvents", "TestPolicyNoHopelessState", "TestAttemptBudget", "TestAddrFilterAndGater", "TestPolicySettle", "TestPolicyDirectUnwantClose", "TestNodeAdmissions", "TestPolicyActivity", "TestCorpus"]
+sim = ["TestUpgradeRelayOnlyMakesNoCall", "TestUpgradeAfterRestartBeforeHandler", "TestUpgradeNotBeforeLocalReady", "TestUpgradeTwoCircuits", "TestUpgradeOneCallInFlight", "TestUpgradeSlotsFIFO", "TestUpgradeAfterRestartDuringAttempt", "TestUpgradeHopelessIsCalm", "TestUpgradeAfterLongBlock", "TestUpgradeByzantineReconnect", "TestUpgradeGateRefusesSpam", "TestUpgradeDialsOnlyAdmitted", "TestUpgradeStaleDirectSettles", "TestUpgradeCloseDuringAttempt", "TestUpgradeCrossedExchanges", "TestUpgradeNodeTraffic", "TestUpgradeAnswererBehindQueue", "TestUpgradeIdleNoLadder"]
+def events(path):
+    out = []
+    for line in pathlib.Path(path).read_text().splitlines():
+        try:
+            ev = json.loads(line)
+        except ValueError:
+            continue
+        if isinstance(ev, dict):
+            out.append(ev)
+    return out
+bad = [f"exit codes pure {sys.argv[1]}, sim {sys.argv[2]}"] if sys.argv[1:] != ["0", "0"] else []
+crossed = []
+for path, names in ((".task/hp1-go-pure.json", pure), (".task/hp1-go-sim.json", sim)):
+    evs = events(path)
+    passed = {e["Test"] for e in evs if e.get("Action") == "pass" and e.get("Test")}
+    failed = sorted({e["Test"] for e in evs if e.get("Action") == "fail" and e.get("Test")})
+    bad += [f"missing or not passing: {n}" for n in names if n not in passed]
+    for n in failed[:3]:
+        said = [e["Output"].strip() for e in evs if e.get("Test") == n and e.get("Action") == "output" and "_test.go" in e.get("Output", "")]
+        print(f"{n}: {said[:2]}")
+    crossed += [e["Output"].strip() for e in evs if e.get("Test", "").startswith("TestUpgradeCrossedExchanges") and e.get("Action") == "output"]
+lines = [m.group(0) for l in crossed if (m := re.search(r"H-15 crossed offset=(\S+) runs=20 overlap=\d+ bothfail=\d+", l))]
+if lines:
+    pathlib.Path("gates/HP1").mkdir(exist_ok=True)
+    pathlib.Path("gates/HP1/CROSSED.md").write_text("# HP1 - TestUpgradeCrossedExchanges (H-15, information only)\n\nWritten by the gate's `go` criterion.\n\n" + "\n".join(f"- `{l}`" for l in lines) + "\n")
+sys.exit(f"HP1 go: {bad[:12]}" if bad else 0)
+PY'''
+
+[[criteria]]
+# The HP1 mutant entries are exactly the frozen table (kind, test, expect; scenario and clause for the netsim ones):
+# step 2 adjusts anchors only, never a test or its text. The runner's own tests pass and every anchor applies once.
+id = "mutant-tool"
+command = '''timeout -k 10 30 ./scripts/heavy.sh python3 -m unittest scripts/netsim/mutants_test.py && python3 -I - <<'PY' && timeout -k 10 30 python3 -I scripts/netsim/mutants.py --check HP1
+import sys, tomllib
+ms = {m["id"]: m for m in tomllib.load(open("scripts/netsim/mutants.toml", "rb"))["mutant"] if m.get("block") == "HP1"}
+P2P, DU = "./internal/transport/p2p/", "github.com/oioio-space/inkwell/protocol/directup"
+go = {
+    "MH1": (DU, "TestPolicyActsOnlyWhenWantedAndRelayed", "H-1 decision for a peer not wanted"),
+    "MH2": (P2P, "TestUpgradeNotBeforeLocalReady", "H-2 call before local ready"),
+    "MH3": (DU, "TestPolicyRoles", "H-3 punch without an inbound circuit"),
+    "MH4": (P2P, "TestUpgradeOneCallInFlight", "H-4 calls in flight"),
+    "MH5": (P2P, "TestUpgradeSlotsFIFO", "H-5 slots held"),
+    "MH6": (DU, "TestPolicyEpoch", "H-6 direct after the new circuit"),
+    "MH7": (DU, "TestClassify", "H-7 class"),
+    "MH8": (DU, "TestPolicyLadders", "H-8 slow ladder"),
+    "MH9": (DU, "TestPolicyEvents", "H-9 an event refilled a budget"),
+    "MH10": (P2P, "TestUpgradeAfterLongBlock", "H-10 direct after the block lifts"),
+    "MH11": (P2P, "TestUpgradeByzantineReconnect", "H-11 calls in an hour"),
+    "MH12": (P2P, "TestUpgradeDialsOnlyAdmitted", "H-12 dialled a stranger"),
+    "MH13": (P2P, "TestUpgradeGateRefusesSpam", "H-12 rounds with a stranger"),
+    "MH14": (P2P, "TestUpgradeStaleDirectSettles", "H-13 direct after settle"),
+    "MH15": (P2P, "TestUpgradeCloseDuringAttempt", "H-14 Close returned after"),
+    "MH16": (DU, "TestNodeAdmissions", "H-16 admissions"),
+    "MH17": (P2P, "TestUpgradeIdleNoLadder", "H-17 ladder call while idle"),
+    "MH18": (P2P, "TestUpgradeCrossedExchanges", "H-15 circuit not closed"),
+    "MH19": (P2P, "TestUpgradeNodeTraffic", "H-16 destinations"),
+    "MH20": (P2P, "TestUpgradeDialsOnlyAdmitted", "H-16 first direct dial without a grant"),
+    "MH21": (P2P, "TestUpgradeAnswererBehindQueue", "H-5 place lost"),
+    "MH22": (P2P, "TestUpgradeGateRefusesSpam", "H-12 ticket for a stranger"),
+}
+e2e = {"MN1": (9, "C1"), "MN2": (5, "C3a")}
+bad = sorted(set(ms) - set(go) - set(e2e))
+for i, (pkg, test, expect) in go.items():
+    m = ms.get(i, {})
+    if (m.get("kind"), m.get("pkg"), m.get("test"), m.get("expect")) != ("go", pkg, test, expect) or not m.get("edit"):
+        bad.append(i)
+for i, (scenario, clause) in e2e.items():
+    m = ms.get(i, {})
+    if (m.get("kind"), m.get("scenario"), m.get("clause")) != ("e2e", scenario, clause) or not m.get("edit"):
+        bad.append(i)
+sys.exit(f"HP1 mutant entries differ from the frozen table: {bad}" if bad else 0)
+PY'''
+
+[[criteria]]
+# Definition of done step 5: gremlins on protocol/directup, as scripts/block_done.py runs it (pinned v0.6.0, 4 workers,
+# coefficient 10, -count=1, memcap per test binary): a valid measurement (some mutant judged, ≤ 10 % timed out) and an
+# efficacy ≥ 95 %, or survivors justified in a « mutation protocol/directup » section of gates/HP1/SIMPLIFY.md.
+id = "mutation"
+command = '''timeout -k 10 300 python3 -I - <<'PY'
+import pathlib, sys
+sys.path.insert(0, "scripts")
+import block_done as bd
+rc, out = bd.stream(f"../scripts/heavy.sh {bd.gremlins()} unleash --workers 4 --timeout-coefficient 10 ./directup", bd.ROOT / "protocol", bd.MUTATION_ENV)
+if rc != 0:
+    sys.exit(f"HP1 mutation: gremlins exited {rc}")
+if why := bd.void_measurement(out):
+    sys.exit(f"HP1 mutation: void measurement: {why}")
+eff = bd.parse_efficacy(out)
+rep = pathlib.Path("gates/HP1/SIMPLIFY.md")
+justified = rep.exists() and "mutation protocol/directup" in rep.read_text()
+print(f"HP1 mutation protocol/directup: {eff:.1f}%{' (survivors justified)' if justified else ''}")
+sys.exit(0 if eff >= bd.MIN_EFFICACY or justified else f"HP1 mutation: efficacy {eff:.1f}% < {bd.MIN_EFFICACY}% and no justification")
+PY'''
+
+[[criteria]]
+# No regression, the packages HP1 touches and their consumers, inside rule G-1's budget. The whole of
+# internal/transport/p2p (every test: no test of it reads testing.Short, so -short would change nothing), cmd/inkwell-relay
+# and internal/app (they import it) run without -race, as CI runs the root module (`-short -timeout=8m`, no -race):
+# 92 s instead of 628 s under -race on a shared machine. The race detector stays on the code HP1 changes and the paths
+# around it: the 17 TestUpgrade* tests (criterion `go`), the simnet tests of the dial loop, relay, gate and RelayOnly
+# (sim_test.go) and the five race-targeted tests (links_race_test.go, probe_race_test.go), 78 s; plus
+# protocol/conformance, which runs the new corpus, under -race (70 s). What is left out: -race on the other existing p2p
+# tests (probe, bulk, address book), which HP1 does not change and which no CI job runs under -race either.
+# The netsim regression scenarios (1-4, 6, 7) are in gates/HP1n.toml.
+id = "regression"
+command = '''timeout -k 10 300 ./scripts/heavy.sh go test -count=1 -timeout=270s ./internal/transport/p2p/ ./cmd/inkwell-relay/ ./internal/app/ && timeout -k 10 180 ./scripts/heavy.sh go test -count=1 -race -timeout=150s -run '^(TestRelayThenDirect|TestPartitionThenHeal|TestRoamToNewAddress|TestRelayOnlyRefusesDirect|TestRelayOnlyGate|TestRelayAllowlist|TestLinkMetricsFollowPath|TestRuleLSendFailureResyncs|TestLinkProbeEndsWithItsConnection|TestLinkLevelIsTheSyncConnections|TestLinkLevelDropsSampleOfEndedSession|TestLinkProbeStaleOpenAttempt|TestSendHoldsTheWriterLockOfTheStreamItWritesOn)$' ./internal/transport/p2p/ && cd protocol && timeout -k 10 150 ../scripts/heavy.sh go test -count=1 -race -timeout=120s ./conformance/'''
+
+[[criteria]]
+# The /simplify review of the diff: the report exists and its « Diff : » line names a real base commit.
+id = "simplify-report"
+command = "grep -Eq '^Diff : [0-9a-f]{7,}[.][.]' gates/HP1/SIMPLIFY.md"
