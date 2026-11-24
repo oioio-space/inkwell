@@ -252,10 +252,27 @@ before R14 (§2.6, which now starts with the neighbours sheet). A seeded defect 
 synonym, a hand-rolled dialog, a 7 px gap, a moved view bar, a missing neighbour verdict) must turn its check red in the
 UX1-0 gate.
 
-## 3. Order of surfaces for UX1
+## 3. Order: from the whole to the element (owner, 2026-11-24)
 
-Aligned with « Cap à long terme » point 4 (UX1, then W65 with G1–G3, S13, EF1, FM1). Each step is one UX1 sub-block,
-committed before the next (method v2, rule 1).
+The owner asked for « la plus pratique, la plus soignée, la plus jolie, la plus performante, tout en gardant une
+simplicité ». The method is top-down, then back up in a loop, as the established methods do: Jesse James Garrett's five
+planes (strategy, scope, structure, skeleton, surface: each plane constrains the next, and polishing the surface first is
+the classic error; <https://www.jjg.net/elements/>), the Design Council's Double Diamond (diverge, converge, twice, with
+people in each round; <https://www.designcouncil.org.uk/our-resources/the-double-diamond/>), and the design systems of
+GNOME, Apple and Material (principles, tokens, components, templates; screens assembled from them, so coherence comes from
+construction, not from a check afterwards). Simplicity is the guard at every phase: design by subtraction (GNOME), one
+primary action per screen, and each phase ends with what it removed, not only what it added.
+
+| Phase | What is decided, for the whole application | Rules and checks | Output |
+|---|---|---|---|
+| UX1-0 | The proof harness, first, because every later phase is measured with it | EL-1…EL-14 (§2) | the harness, seeded defects red |
+| UX1-A | **Tasks and structure**: the five tasks of `docs/ux-principles.md` and spec §5 ranked by frequency; the map of every screen and how a person moves between them; what must be one gesture away and what may be two | rules 11, 20; Hick, Jakob | `docs/ux/structure.md`, reviewed blind, then with the owner |
+| UX1-B | **Screen grammar**: the same regions on every main screen, the hierarchy of actions (one primary per screen, secondary, overflow), the screen templates (document, list, settings, dialog, popover) | rules 12–16, EL-13 | the templates, each with its geometry check |
+| UX1-C | **The design system**: Adwaita tokens only, one component per role, the inventory of components, each with its states; duplicates merged, unused ones removed | rules 53–56, EL-9…EL-12 | the component inventory, every surface built from it |
+| UX1-D | **Each surface, element by element** (below): the per-element records of §2.2 against rules 11–58 — the final check, not the starting point | EL-1…EL-8, §2.5 | records at 100 %, defects as failing e2e tests then fixes |
+| UX1-E | **The loop**: each surface tested with the owner (R14: tasks, time, SEQ, recognition, beauty last), measured (UF-5 effort, PERF budgets), retouched; then the next surface | rule 51, EL-14 | SEQ and timings recorded; a surface is done only when the loop is quiet |
+
+The surfaces of UX1-D, in order (each one UX1 sub-block, committed before the next, method v2 rule 1):
 
 | Step | Surface | What it carries from PROGRESS | Why here |
 |---|---|---|---|
@@ -269,7 +286,8 @@ committed before the next (method v2, rule 1).
 | then | preview, sheet, presentation, versions and differences, first launch | W65 (G1, then T, V, D), S13, S1–S9 | their own blocks; the harness already covers them as they are built |
 
 UX1 stays « standard » rigour (no peer bytes): plan ≤ 2 pages per sub-block, gate ≤ 45 min. UX1-0 is « light »
-(tooling) but its gate includes a seeded duplicate, a seeded missing record and a seeded new element, each red.
+(tooling) but its gate includes a seeded duplicate, a seeded missing record and a seeded new element, each red. UX1-A,
+UX1-B and UX1-C are design phases: their outputs are reviewed blind and then by the owner before UX1-D starts.
 
 ## 4. Proposed additions to `docs/ux-principles.md` (French, to paste after « Système visuel »)
 
