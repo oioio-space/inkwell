@@ -2189,6 +2189,16 @@
       "id": "28b8093b9bdc75b48e1e942928604414646aced6a345c1fbb2aabac88f4c1276",
       "reason": "scripts/netsim/mutants_test.py: « timeout increased » — a new fake `run(cmd, cwd, env=None, log=None, timeout=1800)` in a test: its default parameter mirrors sh's signature and runs or waits for nothing; no real timeout changed",
       "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "7d99b0e4af4c7fb7d1f97fe9d12f045a17d47bce884aec15511831fb6802ad10",
+      "reason": "mise.toml: gate dependency changed: mise task test:py — adds scripts/port_worktree_test.py (scripts/port-worktree.sh ports a worktree by its diff against its own HEAD); every existing test unchanged",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "f2531a8ea4632e75db3cc7bde955dbb2693926bdcbc2e4bed53c9f1c8be570c5",
+      "reason": "mise.toml: timeout expression rewritten in test:py — only scripts/port_worktree_test.py is added to its unittest list; the 300 s and 120 s timeouts are unchanged",
+      "decision": "docs/objectif-en-cours.md"
     }
   ]
 }
