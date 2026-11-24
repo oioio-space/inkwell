@@ -275,9 +275,9 @@ l'effort le plus bas qui gardent la qualité, choisis explicitement à chaque la
 | Tâche | Exécutant | Modèle / effort |
 |-------|-----------|-----------------|
 | Brouillon de message de commit, tri de longs journaux, brouillon de traduction i18n | `scripts/llm.sh` (ordre : Groq → Cloudflare Workers AI → OpenRouter gratuit → OpenRouter payant ZDR ; traduction et rédaction : OpenRouter payant seul — ADR 0013 ; quotas : `mise run quotas`) ; texte mécanique seulement, jamais secret, sécurité, conception ni revue de code ; code de sortie 3 → Haiku | open-weight hébergé |
-| Revue adverse avant commit, revue de spécification ou de porte avant le gel, débat d'une décision de conception, second avis (sans tokens Claude) | Gemini : `agy -p … --output-format text` ; quota épuisé : `scripts/claude-or.sh -t pro` (OpenRouter payant, bloc complet ou décision qui le touche seulement) | Gemini gratuit (petit quota : une revue par diff final) ; OpenRouter ≤ 0,50 $ par point |
+| Revue adverse avant commit, revue de spécification ou de porte avant le gel, débat d'une décision de conception, second avis (sans tokens Claude) | Gemini : `agy -p … --output-format text` ; quota épuisé : `scripts/review-or.py` (OpenRouter payant, appel unique sur un dossier préparé, bloc complet ou décision qui le touche seulement) | Gemini gratuit (petit quota : une revue par diff final) ; OpenRouter ≤ 0,50 $ par point |
 | Implémentation guidée par une porte, sans crédit | `mise x -- bash scripts/opencode-free.sh -m <modèle> < consigne.md` (modèles gratuits OpenRouter ou Zen ; rtk injecté) | gratuit ; jamais de sécurité ; ne commite jamais |
-| Relecture critique d'une spécification de sécurité ou d'une ADR (crédit compté) | Gemini, puis `scripts/claude-or.sh -t pro` (≤ 0,50 $ par point, méthode v2) ; jamais Opus seul pour un bloc complet | un seul appel ciblé chacun |
+| Relecture critique d'une spécification de sécurité ou d'une ADR (crédit compté) | Gemini, puis `scripts/review-or.py` (≤ 0,50 $ par point, méthode v2) ; jamais Opus seul pour un bloc complet | un seul appel ciblé chacun |
 | Lancer les vérifications (lint, tests, ci, scans), corrections de format triviales | `quality-runner` | Haiku / low |
 | Docs, `PROGRESS.md`, messages de commit | `scribe` | Haiku / low |
 | Recherche de code ou de fichiers, « où est X » | `explorer` (ou `Explore` intégré) | Haiku / low |
@@ -288,8 +288,8 @@ l'effort le plus bas qui gardent la qualité, choisis explicitement à chaque la
 | Modèles TLA+ et Alloy, mutants (étape 1 d'un bloc) | `formal-modeler` | Opus / high |
 | Audit de sécurité approfondi | `security-auditor` | Opus / high (xhigh seulement pour l'audit final de release) |
 
-**OpenRouter, même règle :** chaque appel `scripts/claude-or.sh` choisit son niveau (`-t pro` pour une revue qui
-fait foi) et se mesure en coût réel avant et après (`openrouter.ai/api/v1/credits`).
+**OpenRouter, même règle :** une revue passe par `scripts/review-or.py` (jamais `scripts/claude-or.sh`, qui rend
+un résultat vide en revue), tout autre appel `scripts/claude-or.sh` choisit son niveau (`-t`) et se mesure en coût réel avant et après (`openrouter.ai/api/v1/credits`).
 
 **Sonnet ne fait pas foi (règle de l'utilisatrice, 2026-11-03) :** tout code écrit par Sonnet est relu par Opus
 avant fusion, et une revue qui compte pour une fusion ou une porte est faite par Opus (ou une autre famille forte),
@@ -328,7 +328,7 @@ jamais par Sonnet seul ; Sonnet et Haiku restent pour l'exécution mécanique (v
   porte de L3 et P2, alors ignorés, ont été perdus ainsi le 2026-11-08 ; les rapports `gates/*/*.md`
   sont désormais versionnés, seuls les journaux bruts restent ignorés. Une porte (`gate.py`) ne vide que
   les preuves de `gates/<lot>/` et garde ses `*.md` : son ancien `rmtree` avait effacé un rapport.
-- Les worktrees oubliés coûtent cher : 16 worktrees, dont 10 de séances anciennes, ont porté le démon d'indexation gortex à 14 Go et fait tuer des processus par le noyau (OOM global, 2026-11-12 ; gortex retiré le 2026-11-13, mais chaque worktree garde ses dépendances et ses binaires, environ 1 Go). Le worktree d'un bloc est retiré dès le bloc fusionné (règle ci-dessus d'abord, modifications non commitées archivées hors du dépôt) ; au plus un worktree par bloc actif, soit environ trois checkouts en tout (méthode v2, règle 1).
+- Les worktrees oubliés coûtent cher : 16 worktrees, dont 10 de séances anciennes, ont porté le démon d'indexation gortex à 14 Go et fait tuer des processus par le noyau (OOM global, 2026-11-12 ; gortex retiré le 2026-11-13, mais chaque worktree garde ses dépendances et ses binaires, environ 1 Go). Le worktree d'un bloc est retiré dès le bloc fusionné (règle ci-dessus d'abord, modifications non commitées archivées hors du dépôt) ; au plus un worktree par bloc actif, soit environ trois checkouts en tout (méthode v2, règle 1). Un worktree de bloc se crée avec `scripts/worktree.sh <bloc> [base]` (mise.toml approuvé, `mise.local.toml` lié, sidecars récupérés).
 - Simuler un flux d'E/S avec `io.BytesIO`, jamais un `MagicMock` dont `read()` rend toujours la même
   valeur : `shutil.copyfileobj` boucle sans fin (21 Go le 2026-11-08 ; `/tmp` est un tmpfs, donc en RAM).
 - Lancer l'application pour un test ou un parcours d'interface exige `INKWELL_DOCS` et les dossiers de profil pointés vers des dossiers temporaires, vérifiés non vides avant chaque lancement : une variable vide retombe sur les vrais documents (une reprise a été confirmée sur un document réel de l'utilisatrice le 2026-11-15, restaurée depuis l'archive).

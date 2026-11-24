@@ -45,7 +45,15 @@ No longer available (no credit left, owner, 2026-11-24): the second family is Ge
 - `mise x -- bash scripts/claude-or.sh -t pro|flash|haiku|sonnet|opus [-e effort] [-b max_usd] [-w dir] < prompt.md`:
   headless Claude Code billed to `OPENROUTER_API_KEY`; the project's hooks and rtk apply. Tiers and models are
   in the script's header. `-b` is only a runaway guard (it overprices non-Anthropic models). `:free` models fail tool
-  calling through this route.
+  calling through this route. Not for reviews: with DeepSeek V4 Pro its tool loop returned an empty result after 22
+  turns (2026-11-24).
+- `mise x -- python3 scripts/review-or.py BUNDLE OUT [--model M] [--reasoning N] [--max-tokens N]`: the cross-family
+  review on OpenRouter. One call with the curated bundle as a single user message (default
+  `deepseek/deepseek-v4-pro`, reasoning budget 14000 tokens, `max_tokens` 24000, `data_collection: deny`); writes the
+  review to OUT and prints the tokens, the real cost (`usage.cost`) and `finish_reason`. It exits 1 on an empty or cut
+  answer: never record such a run as a review. Give reasoning a token budget, never an effort: with effort high or
+  medium the model spent all of `max_tokens` thinking and answered nothing. Run it from a tree with
+  `mise.local.toml` (a worktree made by `scripts/worktree.sh` has the link).
 - `mise x -- bash scripts/claude-api.sh [-m model] [-t max_tokens] [-e effort] < prompt.md > answer.md`: one-shot
   call without tools, billed to `CLAUDE_API_KEY`; for a review of a curated bundle. Always pass an effort (the default
   is medium): without one, Opus can spend the whole token budget thinking.

@@ -32,6 +32,8 @@ command = "mise run gate -- <previous block>"
      model-based tests — the gate runs them.
    - Every test command is memory-capped (`heavy.sh` or a mise task), or `heavy-guard.sh` refuses it.
    - Keep the regression criterion on the previous block.
+   - A block that changes `docs/protocol/spec.md` runs the protocol module's tests (`cd protocol &&
+     ../scripts/heavy.sh timeout … go test ./...`): `scripts/gate.py` refuses its gate otherwise (rule G-2).
 3. Create `gates/<bloc>/SIMPLIFY.md` with this skeleton (filled at step 3, after implementation;
    `mise run done` requires it newer than every code change, and a `mutation <package>` section for
    any `protocol/*` package below 95 %):

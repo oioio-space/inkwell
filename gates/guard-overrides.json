@@ -2019,6 +2019,36 @@
       "id": "e5ab5868ae24354bd730ca677c6febca0256b71cc6ed91953c69626c4937afa0",
       "reason": "scripts/tla-check.sh: gate dependency changed — RF1 adds its RelayFanout runs (RF1* frozen by gates/RF1.toml, RFR* from the code review round: roster growth and its no-shed mutant), all in shard 1/3; every existing run, name, shard and expected verdict unchanged",
       "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "5bb7d54e7ed2ec269e4cac070b388d366a74c92545837e9e3af17ee1f6b49c4a",
+      "reason": "scripts/gate.py: gate dependency changed — CI3a rule G-2: a gate whose block changes docs/protocol/spec.md is refused at start unless a criterion runs the protocol module's tests (gates/legacy-no-spec-tests.txt, closed list); G-1's list reader shared, nothing else changed",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "c59e44ad549fc0374cbf4869e33bcbdcf4d22518335d7f83f29303a678affc22",
+      "reason": "scripts/gate.py: gate machinery changed — CI3a rule G-2 only adds a refusal before any criterion runs (stricter, never weaker); see scripts/gate_spec_tests_test.py",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "0e593f02efbfef5aff6c95efaff998f85d94c79e870aa2c15eab0f2cdbc1981f",
+      "reason": "scripts/gate_spec_tests_test.py: gate machinery changed — CI3a new test of rule G-2 (red and green gate fixtures, closed legacy list)",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "4f90461a775cc8940be280edf5aecb0cbb25f5c3e5c3a0cece11367e597b9be5",
+      "reason": "mise.toml: gate dependency changed: mise task test:py — CI3a adds scripts/gate_spec_tests_test.py (rule G-2), scripts/review_or_test.py, scripts/worktree_test.py, and runs scripts/gate-selftest.py and gate-guard.py --self-test, which no CI path ran (the self-test had been red since rule G-1); every existing test still runs",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "2024a45720906e7bfbda111d3f64cbca4b4d8aef988e1edf26aea4de2f61c14a",
+      "reason": "scripts/gate-selftest.py: gate dependency changed — CI3a: its fixture gates declare max_minutes (rule G-1) and live in a git repository on main (rule G-2), as a real gate does; its heavy-pool fixture drops the caller's held slot so it runs under heavy.sh; every assertion unchanged",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "9bb01bea32627af30375ab006a53871c710568426938669b33f35f12c62d4132",
+      "reason": "scripts/gate-selftest.py: gate machinery changed — CI3a fixtures brought up to rules G-1 and G-2 (red on main since G-1: « gates/T.toml has no max_minutes »); no assertion removed or relaxed",
+      "decision": "docs/objectif-en-cours.md"
     }
   ]
 }

@@ -26,6 +26,18 @@ os.environ.pop("INKWELL_GATE_PARENT", None)
 os.environ.pop("INKWELL_GATE_PARENT_OUT", None)
 
 
+# Every fixture gate declares what a real gate must: a deadline (rule G-1; its commands carry no `timeout` cap, so
+# their caps sum to 0 s) and a git repository whose merge-base with main tells which files the block changes (rule G-2).
+DEADLINE = "max_minutes = 1\n"
+
+
+def git_repo(root):
+    """Makes root a repository on main with everything committed, as the checkout a real gate runs in."""
+    for args in (("init", "-q", "-b", "main"), ("add", "-A"), ("commit", "-q", "--allow-empty", "-m", "base")):
+        subprocess.run(["git", "-c", "user.name=t", "-c", "user.email=t@t", *args], cwd=root, check=True,
+                       capture_output=True)
+
+
 def rejects(call, what):
     try:
         call()
@@ -43,12 +55,13 @@ with tempfile.TemporaryDirectory() as tmp:
     digest = hashlib.sha256((archive / "measurements.json").read_bytes()).hexdigest()
     (archive / "SHA256SUMS").write_text(digest + "  measurements.json\n")
     pins = {"2026-11-02": hashlib.sha256((archive / "SHA256SUMS").read_bytes()).hexdigest()}
+    git_repo(root)
 
     def run(lot="T"):
         return gate.run(lot, root, pins=pins, guard=False)
 
     config = root / "gates/T.toml"
-    config.write_text('[[criteria]]\nid="bad"\ncommand="echo failure; exit 7"\n[[criteria]]\nid="after"\ncommand="echo continued"\n')
+    config.write_text(DEADLINE + '[[criteria]]\nid="bad"\ncommand="echo failure; exit 7"\n[[criteria]]\nid="after"\ncommand="echo continued"\n')
     assert run() == 1
     m = json.loads((root / "gates/T.json").read_text())
     assert [e["status"] for e in m["criteria"]] == ["fail", "pass"]
@@ -56,7 +69,7 @@ with tempfile.TemporaryDirectory() as tmp:
         assert hashlib.sha256((root / path).read_bytes()).hexdigest() == digest
     # Stale files from an earlier run are removed, never hashed as evidence.
     (root / "gates/T/stale.txt").write_text("old evidence")
-    config.write_text('[[criteria]]\nid="ok"\ncommand="true"\n')
+    config.write_text(DEADLINE + '[[criteria]]\nid="ok"\ncommand="true"\n')
     assert run() == 0
     m = json.loads((root / "gates/T.json").read_text())
     assert len(m["criteria"]) == 1
@@ -65,7 +78,7 @@ with tempfile.TemporaryDirectory() as tmp:
     real_guard = gate.base_guard
     gate.base_guard = lambda root, stream, ref="main": {"status": "fail"}
     try:
-        config.write_text('[[criteria]]\nid="long"\ncommand="touch ran.marker"\n')
+        config.write_text(DEADLINE + '[[criteria]]\nid="long"\ncommand="touch ran.marker"\n')
         assert gate.run("T", root, pins=pins, guard=True) == 1
         m = json.loads((root / "gates/T.json").read_text())
         assert not (root / "ran.marker").exists(), "a criterion ran after the base guard failed"
@@ -82,41 +95,41 @@ with tempfile.TemporaryDirectory() as tmp:
                                      ("L2", "opening delivered in L2", 0),  # known lot lists it
                                      ("L3", "known lot without the criterion", 1),
                                      ("L9", "unknown lot", 1)]:
-        config.write_text(deferral % (target, reason))
+        config.write_text(DEADLINE + deferral % (target, reason))
         assert run() == expected, (target, reason)
         m = json.loads((root / "gates/T.json").read_text())
         assert len(m["deferrals"]) == (expected == 0)
         assert expected == 0 or m["criteria"][0]["problem"], m
     # An existing target toml takes precedence over the known list and must list the id.
     (root / "gates/L2.toml").write_text('[[criteria]]\nid="unrelated"\ncommand="true"\n')
-    config.write_text(deferral % ("L2", "opening delivered in L2"))
+    config.write_text(DEADLINE + deferral % ("L2", "opening delivered in L2"))
     assert run() == 1
     assert "does not list later" in json.loads((root / "gates/T.json").read_text())["criteria"][0]["problem"]
     (root / "gates/L2.toml").write_text('[[criteria]]\nid="later"\ncommand="true"\n')
     assert run() == 0
-    config.write_text('[[criteria]]\nid="bad"\ncommand="false"\n' + deferral % ("L2", "later"))
+    config.write_text(DEADLINE + '[[criteria]]\nid="bad"\ncommand="false"\n' + deferral % ("L2", "later"))
     assert run() == 1
-    config.write_text('[[criteria]]\nid="hidden-failure"\nstatus="deferred"\ntarget_lot="L2"\nreason="cannot waive a command"\ncommand="false"\n')
+    config.write_text(DEADLINE + '[[criteria]]\nid="hidden-failure"\nstatus="deferred"\ntarget_lot="L2"\nreason="cannot waive a command"\ncommand="false"\n')
     assert run() == 1
-    config.write_text('[[criteria]]\nid="declared-failure"\nstatus="fail"\ncommand="true"\n')
+    config.write_text(DEADLINE + '[[criteria]]\nid="declared-failure"\nstatus="fail"\ncommand="true"\n')
     assert run() == 1
     assert json.loads((root / "gates/T.json").read_text())["criteria"][0]["status"] == "fail"
 
     # Reviewed overrides are shown in full in the manifest.
     override = {"id": "0" * 64, "reason": "reviewed", "decision": "docs/objectif-en-cours.md"}
     (root / "gates/guard-overrides.json").write_text(json.dumps({"overrides": [override]}))
-    config.write_text('[[criteria]]\nid="ok"\ncommand="true"\n')
+    config.write_text(DEADLINE + '[[criteria]]\nid="ok"\ncommand="true"\n')
     assert run() == 0
     assert json.loads((root / "gates/T.json").read_text())["guard_overrides"] == [override]
 
     # A complete gate writes fresh evidence while the sealed archive is byte-identical.
     before = {p.name: p.read_bytes() for p in archive.iterdir()}
-    config.write_text('[[criteria]]\nid="fresh"\ncommand="echo fresh > \\"$INKWELL_PERF_OUT/measurements.json\\""\n')
+    config.write_text(DEADLINE + '[[criteria]]\nid="fresh"\ncommand="echo fresh > \\"$INKWELL_PERF_OUT/measurements.json\\""\n')
     assert run() == 0
     assert (root / "gates/T/measurements.json").read_text() == "fresh\n"
     assert {p.name: p.read_bytes() for p in archive.iterdir()} == before
     # A criterion that corrupts the archive fails the post-run check, never reseals.
-    config.write_text('[[criteria]]\nid="tamper"\ncommand="echo tampered > docs/perf/baseline/2026-11-02/measurements.json"\n')
+    config.write_text(DEADLINE + '[[criteria]]\nid="tamper"\ncommand="echo tampered > docs/perf/baseline/2026-11-02/measurements.json"\n')
     rejects(run, "archive mutation by criterion")
     assert (archive / "SHA256SUMS").read_bytes() == before["SHA256SUMS"]
     # Corruption must fail verification rather than update SHA256SUMS.
@@ -127,7 +140,7 @@ with tempfile.TemporaryDirectory() as tmp:
     rejects(run, "resealed archive")
     for name, data in before.items():
         (archive / name).write_bytes(data)
-    config.write_text('[[criteria]]\nid="ok"\ncommand="true"\n')
+    config.write_text(DEADLINE + '[[criteria]]\nid="ok"\ncommand="true"\n')
     assert run() == 0
     (root / "docs/perf/baseline/2026-12-01").mkdir()
     rejects(run, "unpinned archive")
@@ -175,7 +188,7 @@ def runner_repo(tmp, base_runner):
         shutil.copy(HERE / name, root / "scripts" / name)
     shutil.copytree(HERE.parent / "docs/perf/baseline", root / "docs/perf/baseline")
     (root / "gates").mkdir()
-    (root / "gates/T.toml").write_text('[[criteria]]\nid="ok"\ncommand="true"\n')
+    (root / "gates/T.toml").write_text(DEADLINE + '[[criteria]]\nid="ok"\ncommand="true"\n')
     real = (HERE / "gate.py").read_text()
     (root / "scripts/gate.py").write_text(base_runner(real))
     git("add", ".")
@@ -237,9 +250,14 @@ with tempfile.TemporaryDirectory() as tmp:
     (archive / "a").write_text("a")
     (archive / "SHA256SUMS").write_text(hashlib.sha256(b"a").hexdigest() + "  a\n")
     pins = {"2026-11-02": hashlib.sha256((archive / "SHA256SUMS").read_bytes()).hexdigest()}
+    git_repo(root)
+    # The fixture's heavy pool is its own (XDG_RUNTIME_DIR): a slot held by the caller (test:py runs this file under
+    # heavy.sh) is not one of it, or --exclusive would refuse as nested.
+    for name in ("INKWELL_HEAVY_HELD", "INKWELL_HEAVY_SLOT"):
+        os.environ.pop(name, None)
     os.environ.update(XDG_RUNTIME_DIR=tmp, INKWELL_PERF_MAX_LOAD="100000")
     for command, expected in [("true", 1), (f"{HEAVY} --exclusive true", 0)]:
-        (root / "gates/T.toml").write_text(f'[[criteria]]\nid="perf"\nexclusive=true\ncommand="{command}"\n')
+        (root / "gates/T.toml").write_text(DEADLINE + f'[[criteria]]\nid="perf"\nexclusive=true\ncommand="{command}"\n')
         assert gate.run("T", root, pins=pins, guard=False) == expected, command
     entry = json.loads((root / "gates/T.json").read_text())["criteria"][0]
     assert entry["exclusive"] is True and entry["exclusive_steps"][0]["load_before"], entry

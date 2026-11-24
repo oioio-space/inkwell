@@ -334,9 +334,7 @@ def criterion_caps(command):
 
 
 def legacy_gates(root):
-    path = root / LEGACY_NO_DEADLINE
-    lines = path.read_text().splitlines() if path.exists() else []
-    return {line.strip() for line in lines if line.strip() and not line.startswith("#")}
+    return listed_gates(root, LEGACY_NO_DEADLINE)
 
 
 def deadline_problem(lot, config, root):
@@ -348,6 +346,48 @@ def deadline_problem(lot, config, root):
     caps = sum(criterion_caps(c.get("command", "")) for c in config["criteria"])
     return None if caps <= limit else \
         f"the timeout caps of gates/{lot}.toml sum to {caps:g} s, past max_minutes = {config['max_minutes']} ({limit:g} s)"
+
+
+# Rule G-2 (block CI3a, 2026-11-24): a gate whose block changes the protocol specification runs the protocol module's
+# tests, whose TestLimitsMatchSpecification reads spec.md §16 (PU1d ran only the touched packages and missed it, fixed
+# by 64a16dc). The block's changes are the working tree against its merge-base with main. The gates written before the
+# rule are listed, and the list is closed.
+SPEC = "docs/protocol/spec.md"
+LEGACY_SPEC_TESTS = "gates/legacy-no-spec-tests.txt"
+PROTOCOL_TESTS = re.compile(r"TestLimitsMatchSpecification"
+                            r"|\bcd\s+(?:\./)?protocol\b.*\bgo\s+test\b.*\./\.\.\."
+                            r"|\bgo\s+-C\s+(?:\./)?protocol\s+test\b.*\./\.\.\.")
+
+
+def listed_gates(root, name):
+    path = root / name
+    lines = path.read_text().splitlines() if path.exists() else []
+    return {line.strip() for line in lines if line.strip() and not line.startswith("#")}
+
+
+def changed_files(root, ref="main"):
+    """Paths the block changes: the working tree against its merge-base with `ref`, or None when git cannot tell."""
+    try:
+        base = subprocess.run(["git", "merge-base", "HEAD", ref], cwd=root, capture_output=True, text=True,
+                              check=True).stdout.strip()
+        names = subprocess.run(["git", "diff", "--name-only", "--no-renames", base, "--"], cwd=root,
+                               capture_output=True, text=True, check=True).stdout
+    except (OSError, subprocess.CalledProcessError):
+        return None
+    return set(names.splitlines())
+
+
+def spec_tests_problem(lot, config, root):
+    """Why the gate may not start (its block changes spec.md and no criterion runs the protocol tests), or None."""
+    if lot in listed_gates(root, LEGACY_SPEC_TESTS):
+        return None
+    files = changed_files(root)
+    if files is None:
+        return f"cannot tell whether the block changes {SPEC}: git merge-base HEAD main failed"
+    if SPEC not in files or any(PROTOCOL_TESTS.search(c.get("command", "")) for c in config["criteria"]):
+        return None
+    return (f"the block changes {SPEC} but no criterion of gates/{lot}.toml runs the protocol module's tests "
+            f"(`cd protocol && … go test ./...` or TestLimitsMatchSpecification); see rule G-2 in scripts/gate.py")
 
 
 def process_groups(leader):
@@ -484,7 +524,7 @@ def run(lot, root=ROOT, pins=None, guard=True, resume=False):
     ids = [c["id"] for c in config["criteria"]]
     if len(set(ids)) != len(ids) or any(not NAME.fullmatch(i) for i in ids):
         raise ValueError("invalid or duplicate criterion IDs")
-    problem = deadline_problem(lot, config, root)
+    problem = deadline_problem(lot, config, root) or spec_tests_problem(lot, config, root)
     if problem:
         raise ValueError(problem)
     deadline = clock() + config["max_minutes"] * 60 if "max_minutes" in config else None
