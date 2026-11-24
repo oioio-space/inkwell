@@ -1,0 +1,172 @@
+# Written 2026-11-24 at step 1 of block SB2b-1g, before any code; frozen 2026-11-24 after the cross-family review of
+# the plan and of this gate (gates/SB2b1g/SPEC-REVIEW.md, DeepSeek V4 Pro, « accepter »; its finding 4 applied: five
+# first-attempt GitHub runs instead of three, a false pass under a one-in-two flake falls from 12.5 % to 3 %). Block SB2b-1g (complete: sandbox boundary). Rules S-11a (the watchdog's measure is memory.current
+# less the file cache, shmem and unevictable kept: dirty and writeback pages are left out like clean cache) and S-11b
+# (memory.max stays the hard backstop for everything left out; residual R-7). Why: GitHub's ci runner killed
+# TestBoundCountsDirtyFileCache as a bound violation (run 45384984242 attempt 1, signal=9 cause=local-limit): while a run
+# writes more than its bound to disk, dirty plus writeback fill the bound and the former measure sits on memory.high.
+# Plan docs/plans/2026-11-24-sb2b-1g-dirty-pages.md (threats T1-T5, kernel sources, ADR 0044 1g amendment text).
+# Go mutants MD1-MD7 (scripts/netsim/mutants.toml, block SB2b1g) are frozen here by their tuple only; their anchors are
+# step 2's code, so the entries are added at step 2 with exactly the tuples of criterion `mutants`.
+# No TLA+/Alloy model: the rule is a pure function of one memory.stat snapshot (plan §4, « Model »).
+# Rule G-2: the block does not change docs/protocol/spec.md. No gate runs another. The real-kernel witness takes the
+# machine with `heavy.sh --exclusive` (its spans are timing).
+# Caps (rule G-1): 30 + 180 + 300 + (30 + 30 + 900) + (900 + 300) + 120 + 10 = 2800 s <= 2820 s (max_minutes 47).
+max_minutes = 47
+raw_results = ["docs/plans/2026-11-24-sb2b-1g-dirty-pages.md", "docs/adr/0044-sandbox-tiers.md", "gates/SB2b1g/*"]
+
+[[criteria]]
+# The documents: ADR 0044 point 1g carries the 2026-11-24 amendment and no longer states the false premise; the S-11 row
+# of the SB2 plan names the new witnesses and no longer TestBoundCountsDirtyFileCache; the code comments no longer
+# carry the false figures. Red at step 1: the amendment text waits for the review (it is in the plan, §5).
+id = "docs"
+command = '''timeout -k 10 30 python3 -I - <<'PY'
+import pathlib, re, sys
+bad = []
+norm = lambda p: " ".join(pathlib.Path(p).read_text().split())
+adr = norm("docs/adr/0044-sandbox-tiers.md")
+for w in ["Amended 2026-11-24 (block SB2b-1g): dirty and writeback file pages are left out of the measure like clean cache", "`TestBoundSparesDirtyFileCache/{local_storage,held_heap_slow_storage}`", "a stalled device under a disk slot is residual R-7"]:
+    if w not in adr:
+        bad.append(f"ADR 0044 lacks {w[:60]!r}")
+for w in ["Writes stay ordinary runs: the kernel throttles a cgroup's dirtying", "less `file_dirty` and `file_writeback` (pages that wait on the run's own writes)"]:
+    if w in adr:
+        bad.append(f"ADR 0044 still states {w[:60]!r}")
+plan = pathlib.Path("docs/plans/2026-11-14-sb2-sandbox-tiers.md").read_text()
+row = next((l for l in plan.splitlines() if l.startswith("| S-11 |")), "")
+if "TestBoundSparesDirtyFileCache" not in row or "TestBoundCountsDirtyFileCache" in row or "`file_dirty`" in row:
+    bad.append("SB2 plan S-11 row not amended")
+for f in ["internal/sidecar/memory_linux.go", "internal/sidecar/bound_linux_test.go"]:
+    t = " ".join(" ".join(l.strip().removeprefix("//").strip() for l in pathlib.Path(f).read_text().splitlines()).split())
+    if re.search(r"throttles a cgroup's dirtying|69 to 102 MiB|dirty and writeback pages, which wait on writes", t):
+        bad.append(f"{f} keeps the false premise")
+if not pathlib.Path("docs/plans/2026-11-24-sb2b-1g-dirty-pages.md").exists():
+    bad.append("plan missing")
+sys.exit(f"SB2b1g docs: {bad}" if bad else 0)
+PY'''
+
+[[criteria]]
+# S-11a, pure (no kernel): TestUnreclaimableLeavesOutOnlyFileCache (dirty, writeback, both: left out; tmpfs, mlocked
+# kept; a stat without file, shmem or unevictable makes no decision; « S-11a dirty cache », « S-11 page cache ») and
+# TestMemoryWatchdogSparesFileCache (past memory.high for 10 × boundGrace: dirty file and writeback file not killed;
+# tmpfs and mlocked file killed). The subtest names state the expectation (dirty_left_out, dirty_file_spared…), so the
+# former expectation cannot pass under them. Red at step 1: those subtests are missing (today « dirty file » is
+# expected killed, and the dirty rows of the pure test are not subtests).
+id = "rules"
+command = '''mkdir -p .task && timeout -k 10 180 ./scripts/heavy.sh go test -count=1 -timeout=160s -json -run '^(TestUnreclaimableLeavesOutOnlyFileCache|TestMemoryWatchdogSparesFileCache)$' ./internal/sidecar/ > .task/sb2b1g-rules.json 2>&1; a=$?; python3 -I - "$a" <<'PY'
+import json, pathlib, sys
+evs = []
+for line in pathlib.Path(".task/sb2b1g-rules.json").read_text().splitlines():
+    try:
+        e = json.loads(line)
+    except ValueError:
+        continue
+    if isinstance(e, dict):
+        evs.append(e)
+bad = [] if sys.argv[1] == "0" else [f"go test exit {sys.argv[1]}"]
+passed = {e["Test"] for e in evs if e.get("Action") == "pass" and e.get("Test")}
+for n in ["TestUnreclaimableLeavesOutOnlyFileCache", "TestMemoryWatchdogSparesFileCache", "TestMemoryWatchdogSparesFileCache/dirty_file_spared", "TestMemoryWatchdogSparesFileCache/writeback_file_spared", "TestUnreclaimableLeavesOutOnlyFileCache/dirty_left_out", "TestUnreclaimableLeavesOutOnlyFileCache/writeback_left_out", "TestMemoryWatchdogSparesFileCache/tmpfs", "TestMemoryWatchdogSparesFileCache/mlocked_file"]:
+    if n not in passed:
+        bad.append(f"missing or not passing: {n}")
+for n in sorted({e["Test"] for e in evs if e.get("Action") == "fail" and e.get("Test")})[:4]:
+    said = [e["Output"].strip() for e in evs if e.get("Test") == n and e.get("Action") == "output" and "_test.go" in e.get("Output", "")]
+    print(f"{n}: {said[:2]}")
+sys.exit(f"SB2b1g rules: {bad}" if bad else 0)
+PY'''
+
+[[criteria]]
+# The real-kernel witness, alone on the machine: TestBoundSparesDirtyFileCache/local_storage (512 MiB written to a disk
+# file under the 128 MiB bound, unthrottled: the case GitHub's runner killed) and /held_heap_slow_storage (80 MiB of
+# mmap'd anonymous memory held, then 96 MiB written under the scope's io.max wbps=8 MB/s: red under the former rule in
+# 6 of 6 measured runs). Both complete with no bound outcome, no OOM kill and a high event. On this machine io is
+# delegated, so neither may skip. The former name is gone. Red at step 1: the test is missing.
+id = "witness"
+command = '''mkdir -p .task && INKWELL_PERF_LOAD_WAIT=120 timeout -k 10 300 ./scripts/heavy.sh --exclusive go test -count=1 -timeout=240s -json -run '^TestBoundSparesDirtyFileCache$' ./internal/sidecar/ > .task/sb2b1g-witness.json 2>&1; a=$?; python3 -I - "$a" <<'PY'
+import json, pathlib, sys
+evs = []
+for line in pathlib.Path(".task/sb2b1g-witness.json").read_text().splitlines():
+    try:
+        e = json.loads(line)
+    except ValueError:
+        continue
+    if isinstance(e, dict):
+        evs.append(e)
+bad = [] if sys.argv[1] == "0" else [f"go test exit {sys.argv[1]}"]
+passed = {e["Test"] for e in evs if e.get("Action") == "pass" and e.get("Test")}
+skipped = sorted({e["Test"] for e in evs if e.get("Action") == "skip" and e.get("Test")})
+if skipped:
+    bad.append(f"skipped: {skipped}")
+for n in ["TestBoundSparesDirtyFileCache/local_storage", "TestBoundSparesDirtyFileCache/held_heap_slow_storage"]:
+    if n not in passed:
+        bad.append(f"missing or not passing: {n}")
+if "TestBoundCountsDirtyFileCache" in pathlib.Path("internal/sidecar/bound_linux_test.go").read_text():
+    bad.append("TestBoundCountsDirtyFileCache still present")
+for n in sorted({e["Test"] for e in evs if e.get("Action") == "fail" and e.get("Test")})[:4]:
+    said = [e["Output"].strip() for e in evs if e.get("Test") == n and e.get("Action") == "output" and "_test.go" in e.get("Output", "")]
+    print(f"{n}: {said[:2]}")
+sys.exit(f"SB2b1g witness: {bad}" if bad else 0)
+PY'''
+
+[[criteria]]
+# The Go mutants of block SB2b1g are exactly the frozen table (kind, package, test, expect; step 2 adjusts anchors only)
+# and their anchors apply once; each is caught by its named test failing with its text (never a build failure, a
+# timeout or another test). MD1/MD2: dirty and writeback back in the kept set (the former rule), pure and real kernel;
+# MD3: writeback alone kept; MD4: shmem dropped (tmpfs escapes, T1); MD5: unevictable dropped (T5); MD6: a stat missing
+# a counter gives a usage; MD7: the whole file cache counted (the former MS20). No entry exists before step 2.
+id = "mutants"
+command = '''timeout -k 10 30 python3 -I - <<'PY' && timeout -k 10 30 python3 -I scripts/netsim/mutants.py --check SB2b1g && timeout -k 10 900 ./scripts/heavy.sh python3 -I scripts/netsim/mutants.py SB2b1g MD1 MD2 MD3 MD4 MD5 MD6 MD7
+import sys, tomllib
+ms = {m["id"]: m for m in tomllib.load(open("scripts/netsim/mutants.toml", "rb"))["mutant"] if m.get("block") == "SB2b1g"}
+S = "./internal/sidecar"
+want = {
+    "MD1": (S, "TestMemoryWatchdogSparesFileCache", "S-11a dirty cache"),
+    "MD2": (S, "TestBoundSparesDirtyFileCache", "S-11a dirty cache"),
+    "MD3": (S, "TestUnreclaimableLeavesOutOnlyFileCache", "S-11a dirty cache"),
+    "MD4": (S, "TestMemoryWatchdogSparesFileCache", "S-11 page cache"),
+    "MD5": (S, "TestMemoryWatchdogSparesFileCache", "S-11 page cache"),
+    "MD6": (S, "TestUnreclaimableLeavesOutOnlyFileCache", "S-11 page cache"),
+    "MD7": (S, "TestMemoryWatchdogSparesFileCache", "S-11 page cache"),
+}
+bad = sorted(set(ms) ^ set(want))
+for i, (pkg, test, expect) in want.items():
+    m = ms.get(i, {})
+    if (m.get("kind"), m.get("pkg"), m.get("test"), m.get("expect")) != ("go", pkg, test, expect) or not m.get("edit"):
+        bad.append(i)
+sys.exit(f"SB2b1g mutant entries differ from the frozen table: {sorted(set(bad))}" if bad else 0)
+PY'''
+
+[[criteria]]
+# No regression in what the block changes and in what consumes it, with the race detector as ci runs them: the sandbox
+# (internal/sidecar and its fetch subpackage), the engines that launch through it (internal/typst, internal/language),
+# and their consumers (internal/app, cmd/inkwell). Measured at step 1 on today's tree: 389 s and 84 s (caps about 2x).
+id = "regression"
+command = '''timeout -k 10 900 ./scripts/heavy.sh go test -count=1 -race -timeout=870s ./internal/sidecar/... ./internal/typst/... ./internal/language/... && timeout -k 10 300 ./scripts/heavy.sh go test -count=1 -race -timeout=280s ./internal/app/ ./cmd/inkwell/'''
+
+[[criteria]]
+# The system-dependent proof (CLAUDE.md « Pièges connus »: the defect was seen only on GitHub). gates/SB2b1g/GITHUB.md
+# lists five run ids (lines « run: N ») of .github/workflows/ci.yml, event workflow_dispatch, branch candidate/sb2b1g-*,
+# head SHA equal to this checkout's HEAD: each on its FIRST attempt (a rerun hides the flake that this block fixes) with
+# job ci successful (it runs TestBoundSparesDirtyFileCache/local_storage on the runner's own storage). Red at step 1:
+# no candidate yet.
+id = "github"
+command = '''timeout -k 10 120 python3 -I - "$(git rev-parse HEAD)" <<'PY'
+import json, pathlib, re, subprocess, sys
+head = sys.argv[1]
+p = pathlib.Path("gates/SB2b1g/GITHUB.md")
+ids = re.findall(r"^run: (\d+)$", p.read_text(), re.M) if p.exists() else []
+bad = [] if len(set(ids)) >= 5 else [f"want 5 run ids in {p}, got {len(set(ids))}"]
+api = lambda path: json.loads(subprocess.run(["gh", "api", path], capture_output=True, text=True, check=True).stdout)
+for i in sorted(set(ids)):
+    r = api(f"repos/oioio-space/inkwell/actions/runs/{i}")
+    if (r.get("path", "").split("@")[0], r.get("event"), r.get("head_sha"), r.get("run_attempt")) != (".github/workflows/ci.yml", "workflow_dispatch", head, 1) or not r.get("head_branch", "").startswith("candidate/sb2b1g-") or r.get("repository", {}).get("full_name") != "oioio-space/inkwell":
+        bad.append(f"run {i}: not a first-attempt ci dispatch of HEAD on candidate/sb2b1g-*")
+        continue
+    jobs = api(f"repos/oioio-space/inkwell/actions/runs/{i}/attempts/1/jobs")["jobs"]
+    if not any(j["name"] == "ci" and j["conclusion"] == "success" for j in jobs):
+        bad.append(f"run {i}: job ci not successful")
+sys.exit(f"SB2b1g github: {bad}" if bad else 0)
+PY'''
+
+[[criteria]]
+# The /simplify review of the diff: the report exists and its « Diff : » line names a real base commit.
+id = "simplify-report"
+command = "timeout -k 10 10 grep -Eq '^Diff : [0-9a-f]{7,}[.][.]' gates/SB2b1g/SIMPLIFY.md"
