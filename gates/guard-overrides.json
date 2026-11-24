@@ -2164,6 +2164,31 @@
       "id": "f09754641c0cf7ca46538660042829800bdcb6fa19dbec5aee686e5ce677c4d4",
       "reason": "scripts/perf/refbuild_test.py: gate machinery changed — PF1 adds one test (a deleted tracked placeholder fails closed, a restored one publishes); refbuild.py itself unchanged",
       "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "432bc34b3fb429714ff91d0a3f85217e033eb44e6b47425bb00c9459113b286d",
+      "reason": "scripts/netsim/mutants.py: gate dependency changed — EX0: an optional `name` field makes a Vitest mutant count as caught only when that exact test fails (stricter, opt-in: entries without it, e.g. SI1's 14 frozen mutants, behave as before)",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "ec680e9e5219782bbec79d32caf1f3a3438e9127461c506f82be354e0e3d1e01",
+      "reason": "scripts/netsim/mutants_test.py: gate dependency changed — EX0 adds six tests of the `name` field; no test removed or relaxed",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "3d2b45de79d2c469fe41c43457164e2406eda53f79a588f68e8b467c8a1c5861",
+      "reason": "scripts/netsim/mutants.py: timeout expression rewritten — EX0: only run_vitest's docstring line is extended (the `name` field); no timeout changes",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "522273f0950ee2404a67af300d2316a7e936ba96f3e5aa3a8e07ca67c83ee0da",
+      "reason": "scripts/netsim/mutants.py: timeout expression rewritten — EX0: run_vitest calls an injectable `run` (default sh) so tests can fake it; heavy.sh timeout 900 and the outer timeout=1000 are unchanged",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "28b8093b9bdc75b48e1e942928604414646aced6a345c1fbb2aabac88f4c1276",
+      "reason": "scripts/netsim/mutants_test.py: « timeout increased » — a new fake `run(cmd, cwd, env=None, log=None, timeout=1800)` in a test: its default parameter mirrors sh's signature and runs or waits for nothing; no real timeout changed",
+      "decision": "docs/objectif-en-cours.md"
     }
   ]
 }

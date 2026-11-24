@@ -11,6 +11,9 @@ Ids are scoped by their block: the runner and the gates select `block == B` firs
 in two blocks is harmless; the same id twice in one block is refused. An entry whose code is gone is kept with
 `retired = "reason"`: it is never run nor anchored, and a gate that names it is reported as not replayable.
 
+A `vitest` entry may name the exact title of the test it targets (`name`, block EX0): it is then caught only when
+that test fails, never by another test of the same file. Entries without `name` keep the file-wide rule (SI1).
+
 Modelled on scripts/alloy_check.py: each mutant of scripts/netsim/mutants.toml is a text
 substitution applied to a copy of the tree (never to the working tree); its scenario must turn
 the named clause red. The anchor must be found exactly once. Mutants run one after the other
@@ -122,19 +125,30 @@ def run_go(m, tree, run=None):
     return caught, f"go test exit {rc}" + ("" if caught or rc == 0 else " without a failing test (build error or timeout)"), log
 
 
-def run_vitest(m, tree):
+def run_vitest(m, tree, run=None):
     """One Vitest file of the frontend, run in the copy. Caught only by a real failing assertion:
-    a build or type error, an import error, a failed suite or a timeout is not a measured miss."""
+    a build or type error, an import error, a failed suite or a timeout is not a measured miss.
+    With `name`, only a failure of the test with that exact title is a catch: another rule's
+    test failing in the same file does not stand for it. `run` is the command runner (default
+    `sh`; tests inject one)."""
+    run = run or sh
     log = []
     report = tree / "frontend/.mutant-vitest.json"
     test = m["test"].removeprefix("frontend/")
-    rc, out = sh(["../scripts/heavy.sh", "timeout", "900", "pnpm", "--config.verifyDepsBeforeRun=false", "exec",
-                  "vitest", "run", "--configLoader", "runner", "--reporter=json", f"--outputFile={report}", test],
-                 tree / "frontend", log=log, timeout=1000)
+    rc, out = run(["../scripts/heavy.sh", "timeout", "900", "pnpm", "--config.verifyDepsBeforeRun=false", "exec",
+                   "vitest", "run", "--configLoader", "runner", "--reporter=json", f"--outputFile={report}", test],
+                  tree / "frontend", log=log, timeout=1000)
     if rc == 124 or not report.exists():
         return False, f"vitest exit {rc} without a report (timeout or crash)", log
     r = json.loads(report.read_text())
     failed = [a for f in r["testResults"] for a in f["assertionResults"] if a["status"] == "failed"]
+    name = m.get("name")
+    if name:
+        caught = any(a["title"] == name for a in failed)
+        detail = f"{name!r} failed" if caught else (
+            f"{name!r} did not fail; " + (f"another test failed: {failed[0]['title'][:80]}" if failed else
+                                         f"no failing assertion (vitest exit {rc})"))
+        return caught, detail, log
     caught = bool(failed)
     detail = f"{len(failed)} failing test(s): {failed[0]['title'][:80]}" if caught else (
         f"no failing assertion (vitest exit {rc}, {r.get('numFailedTestSuites', 0)} failed suite(s): build, type or import error?)"
@@ -189,6 +203,8 @@ def validate(mutants):
             bad.append(f"mutant {m['id']}: retired needs its reason (a non-empty text)")
         if "expect" in m and (m["kind"] != "go" or not m["expect"]):
             bad.append(f"mutant {m['id']}: expect is for a go mutant, and not empty")
+        if "name" in m and (m["kind"] != "vitest" or not isinstance(m["name"], str) or not m["name"].strip()):
+            bad.append(f"mutant {m['id']}: name is the title of a vitest test, and not empty")
         if m["kind"] not in ("go", "vitest", "e2e"):
             bad.append(f"mutant {m['id']}: unknown kind {m['kind']!r}")
         if m["kind"] == "e2e" and m["scenario"] == 8 and not m.get("variant"):

@@ -1,0 +1,331 @@
+# Written 2026-11-24 at step 1 of block EX0, before any code; frozen 2026-11-24 after two reviews: DeepSeek V4 Pro
+# (gates/EX0/SPEC-REVIEW.md, « accepter avec corrections », applied) and a blind Opus review (gates/EX0/REVIEW-2.md,
+# « accept with corrections »: 1 blocking and 3 major findings fixed at their root before this freeze).
+# EX0, slice 1: one registry of contributions, the file-type, viewer and grammar points, built-in types migrated onto it,
+# lazy entries, Go without a name table. Rigour: standard. Plan: docs/plans/2026-11-24-ex0-contribution-registry.md;
+# decision: docs/adr/0027-contribution-registry.md. Witnesses: gates/EX0/WITNESSES.md. Written before any production change.
+# Revised after the cross-family review gates/EX0/SPEC-REVIEW.md (findings 1-6; the integrator's decisions are in ADR 0027)
+# and the blind Opus review gates/EX0/REVIEW-2.md (findings 2-11).
+# Every long command is `timeout -k 10 N …/scripts/heavy.sh …` (the timeout covers the wait for a slot). No nested gate.
+# Caps: 30 + 30 + 480 + 150 + (120 + 30) + (20 + 300) + (200 + 240) + 600 + 30 = 2230 s <= 2700 s (rule G-1), each set
+# from a measured run (gates/EX0/WITNESSES.md). The order matters: `e2e` builds bin/inkwell-server and frontend/dist,
+# which `perf-start` measures.
+max_minutes = 45
+raw_results = ["docs/plans/2026-11-24-ex0-contribution-registry.md", "docs/adr/0027-contribution-registry.md", "gates/EX0/*"]
+
+[[criteria]]
+# The decision and its amendments are written: ADR 0027 with its sections, the plan's rule rows R-1..R-15, spec MF-14
+# no longer embeds the table in Go, the §4.4 target row `src/filetypes` is merged into `src/extensions`, AD-51 says it is
+# superseded, and the requirement rows U26 and N20 point at the plan.
+id = "docs"
+command = '''timeout -k 10 30 python3 -I - <<'PY'
+import pathlib, re, sys
+bad = []
+adr = pathlib.Path("docs/adr/0027-contribution-registry.md")
+text = adr.read_text() if adr.is_file() else ""
+if not re.search(r"^status: (proposed|accepted)\b", text, re.M):
+    bad.append("ADR 0027 absent or without status")
+bad += [f"ADR 0027 lacks {h!r}" for h in ("## Considered options", "## Decision", "### Never exposed", "### The file list Go sends is local", "### Confirmation") if h not in text.splitlines()]
+plan = pathlib.Path("docs/plans/2026-11-24-ex0-contribution-registry.md")
+rows = plan.read_text() if plan.is_file() else ""
+bad += [f"plan row R-{i}" for i in range(1, 16) if f"\n| R-{i} |" not in rows]
+spec = pathlib.Path("docs/architecture/spec.md").read_text()
+mf14 = spec[spec.index("- **MF-14**"):spec.index("- **MF-15**")]
+if "embarquée par Go" in mf14 or "ADR 0027" not in mf14:
+    bad.append("spec MF-14 still embeds the table in Go, or does not name ADR 0027")
+if re.search(r"^\| `src/filetypes` ", spec, re.M):
+    bad.append("spec §4.4 still has the src/filetypes target row")
+dec = pathlib.Path("docs/architecture/decisions.md").read_text()
+ad51 = dec[dec.index("### AD-51"):dec.index("### AD-52")]
+if "ADR 0027" not in ad51 or not re.search(r"[Rr]emplacée|superseded", ad51):
+    bad.append("AD-51 is not marked superseded by ADR 0027")
+req = pathlib.Path("docs/exigences.md").read_text()
+for rid in ("U26", "N20"):
+    row = next((l for l in req.splitlines() if l.startswith(f"| {rid} |")), "")
+    if "2026-11-24-ex0-contribution-registry.md" not in row:
+        bad.append(f"requirement {rid} does not point at the EX0 plan")
+sys.exit(f"EX0 docs: {bad}" if bad else 0)
+PY'''
+
+[[criteria]]
+# P-EXT-1, static part (review round 2, finding 4). Webview, every .ts and .svelte file outside tests and comment lines:
+# no identifier of the old lists, no extension literal or extension regex, no bare type id or format word in a string
+# literal (comparisons, arrays, `includes`, `endsWith("csv")`), and no name split on its dot (only the registry parses
+# names: frontend/src/extensions/ is exempt from that last rule only). The type-id reads that remain are listed by file
+# with the literals each may hold: EX0c moves them to the toolbar, menu and status points; client.ts is the LSP
+# language id of the closed Typst engine (K-7). Go: no name table in internal/project, no kind on the file list.
+id = "no-lists"
+command = '''timeout -k 10 30 python3 -I - <<'PY'
+import pathlib, re, sys
+ALLOWED = {  # file: (tag, literals it may hold)
+    "frontend/src/App.svelte": ("EX0c presentation", {"typst"}),
+    "frontend/src/editor/format/commands.ts": ("EX0c format bar", {"typst"}),
+    "frontend/src/editor/format/support.ts": ("EX0c format bar", {"typst", "markdown"}),
+    "frontend/src/editor/format/insert.ts": ("EX0c Insert menu", {"typst", "csv", "json", "yaml", "toml", "xml"}),
+    "frontend/src/editor/stats/words.ts": ("EX0c status: word count", {"typst", "markdown"}),
+    "frontend/src/editor/setup.ts": ("EX0c Typst writing help", {"typst"}),
+    "frontend/src/ui/shell/StatusBar.svelte": ("EX0c status: Typst problems", {"typst"}),
+    "frontend/src/ui/toolbar/InsertMenu.svelte": ("EX0c Insert menu", {"typst", "markdown", "csv", "tsv", "psv", "bibtex", "json", "yaml", "toml", "xml", "png", "jpeg", "gif", "webp", "svg", "bmp", "pdf"}),
+    "frontend/src/ui/toolbar/spec.ts": ("EX0c format bar", {"typst", "markdown"}),
+    "frontend/src/language/problems.svelte.ts": ("EX0c diagnostics source", {"csv"}),
+    "frontend/src/language/client.ts": ("K-7 LSP language id", {"typst"}),
+}
+WORDS = r"typst|typ|markdown|md|csv|tsv|psv|bib|bibtex|json|ya?ml|toml|xml|png|jpe?g|gif|webp|svg|bmp|pdf"
+ident = re.compile(r"\b(langOf|isTabular|FileKind|forLang|looksTabular)\b")
+dotted = re.compile(r"""["'`]\.(%s|markdown|tab|txt|cbor)["'`]""" % WORDS)
+regex = re.compile(r"\\\.\(?(%s|txt)\b" % WORDS)
+bare = re.compile(r"""["'`](%s)["'`]""" % WORDS)
+split = re.compile(r"""\b(split|lastIndexOf|indexOf)\(\s*["'`]\.["'`]\s*\)|\.extname\(""")
+bad = []
+for f in sorted([*pathlib.Path("frontend/src").rglob("*.ts"), *pathlib.Path("frontend/src").rglob("*.svelte")]):
+    s = f.as_posix()
+    if ".test." in f.name or "testkit" in f.name:
+        continue
+    tag, allowed = ALLOWED.get(s, ("", set()))
+    for n, line in enumerate(f.read_text().splitlines(), 1):
+        if line.lstrip().startswith(("//", "*", "/*", "<!--")):
+            continue
+        why = []
+        if ident.search(line):
+            why.append("old list")
+        if dotted.search(line) or regex.search(line):
+            why.append("extension")
+        extra = {w for w in bare.findall(line)} - allowed
+        if extra:
+            why.append("type id " + ",".join(sorted(extra)))
+        if split.search(line) and not s.startswith("frontend/src/extensions/"):
+            why.append("name split")
+        if why:
+            bad.append(f"{s}:{n} ({'; '.join(why)})")
+for f in sorted(pathlib.Path("internal/project").glob("*.go")):
+    t = f.read_text()
+    if not f.name.endswith("_test.go") and ("extKinds" in t or re.search(r"^type Kind\b", t, re.M)):
+        bad.append(f"{f.as_posix()}: name table or Kind")
+for f in sorted(pathlib.Path("internal/bridge").glob("*.go")):
+    if not f.name.endswith("_test.go") and "project.Kind" in f.read_text():
+        bad.append(f"{f.as_posix()}: project.Kind on the wire")
+sys.exit(f"EX0 no-lists: {len(bad)} sites: {bad}" if bad else 0)
+PY'''
+
+[[criteria]]
+# Biome, svelte-check and every Vitest test of the frontend (the touched modules and their consumers), from one JSON
+# report: the run succeeds and each named rule test of the plan (R-1..R-9, R-12..R-15) passed (absent or skipped fails).
+id = "frontend"
+command = '''set -eu
+mkdir -p .task/ex0
+rm -f .task/ex0/vitest.json
+rc=0
+(cd frontend && timeout -k 10 480 ../scripts/heavy.sh bash -c 'pnpm --config.verifyDepsBeforeRun=false exec biome check . && pnpm --config.verifyDepsBeforeRun=false exec svelte-check --tsconfig ./tsconfig.json && pnpm --config.verifyDepsBeforeRun=false exec vitest run --configLoader runner --reporter=json --outputFile=../.task/ex0/vitest.json') || rc=$?
+python3 -I - "$rc" <<'PY'
+import json, pathlib, sys
+need = [
+    "EX0 R-1 the registry is built from manifests without running code",
+    "EX0 R-2 a malformed manifest is refused with its reason",
+    "EX0 R-3 a claim already taken is refused in either order",
+    "EX0 R-4 resolution follows the order of ADR 0027",
+    "EX0 R-5 ui.native is refused to any origin but built-in",
+    "EX0 R-6 a viewer loads on first open, once, and falls back on failure",
+    "EX0 R-7 the essential extensions alone open every file",
+    "EX0 R-8 one folder adds a type and its grammar",
+    "EX0 R-9 the file list v2 decodes the shared vectors",
+    "EX0 R-12 a manifest cannot reach the object prototype",
+    "EX0 R-13 an entry cannot leave its extension's folder",
+    "EX0 R-14 a type without a viewer opens in the essential viewer of its storage",
+    "EX0 R-15 a table offers its grid and its text without running viewer code",
+]
+report = pathlib.Path(".task/ex0/vitest.json")
+results = [a for f in json.loads(report.read_text())["testResults"] for a in f["assertionResults"]] if report.is_file() else []
+status = {a["title"]: a["status"] for a in results}
+bad = {n: status.get(n, "absent") for n in need if status.get(n) != "passed"}
+failed = [a["fullName"] for a in results if a["status"] == "failed"]
+if bad or failed or sys.argv[1] != "0":
+    sys.exit(f"EX0 frontend: exit {sys.argv[1]}, rule tests {bad}, failed {failed[:20]}")
+PY'''
+
+[[criteria]]
+# R-9 in Go: the touched packages pass, and the two named tests pass (absent or skipped fails).
+id = "go"
+command = '''set -eu
+mkdir -p .task/ex0
+rc=0
+timeout -k 10 150 ./scripts/heavy.sh go test -count=1 -json ./internal/project ./internal/bridge > .task/ex0/go.jsonl || rc=$?
+python3 -I - "$rc" <<'PY'
+import json, pathlib, sys
+need = {"TestEX0FileListV2": "internal/bridge", "TestEX0ListReadsNoContent": "internal/project"}
+events = [json.loads(l) for l in pathlib.Path(".task/ex0/go.jsonl").read_text().splitlines() if l.startswith("{")]
+terminal = {(e.get("Package"), e.get("Test")): e["Action"] for e in events if e["Action"] in ("pass", "fail", "skip")}
+bad = {t: terminal.get(("github.com/oioio-space/inkwell/" + p, t), "absent") for t, p in need.items()}
+bad = {t: a for t, a in bad.items() if a != "pass"}
+failed = sorted({f"{p}.{t}" for (p, t), a in terminal.items() if a == "fail"})
+if bad or failed or sys.argv[1] != "0":
+    sys.exit(f"EX0 go: exit {sys.argv[1]}, named {bad}, failed {failed[:20]}")
+PY'''
+
+[[criteria]]
+# R-10 on the build artefact (review round 2, finding 2): built with sourcemaps, no chunk of the start closure
+# (index.html and App.svelte with their static imports) holds a source of what ADR 0027 rule 9 says leaves the start:
+# Markdown (@codemirror/lang-markdown, @lezer/markdown), the grid (src/ui/sheet/), the native entries of the lazy
+# built-ins. A JS chunk of the start closure without a sourcemap must be under 1 KiB (only Vite's generated
+# modulepreload polyfill is). The lazy entries are dynamic entries of their own, and the types csv, markdown and png are
+# not contributed at startup, so the check cannot pass with everything eager.
+id = "chunks"
+command = '''set -eu
+mkdir -p .task/ex0
+rm -rf .task/ex0/chunks
+(cd frontend && timeout -k 10 120 ../scripts/heavy.sh pnpm --config.verifyDepsBeforeRun=false exec vite build --configLoader runner --mode production --manifest --sourcemap --outDir ../.task/ex0/chunks --emptyOutDir) > .task/ex0/chunks.log 2>&1 || { tail -30 .task/ex0/chunks.log; exit 1; }
+timeout -k 10 30 python3 -I - <<'PY'
+import json, pathlib, sys
+out = pathlib.Path(".task/ex0/chunks")
+m = json.loads((out / ".vite/manifest.json").read_text())
+bad = []
+if "src/App.svelte" not in m:
+    bad.append("App.svelte is not a chunk of the build any more")
+seen, stack = set(), ["index.html", "src/App.svelte"]
+while stack:
+    k = stack.pop()
+    if k in m and k not in seen:
+        seen.add(k)
+        stack.extend(m[k].get("imports", []))
+start = sorted({m[k]["file"] for k in seen})
+mans = sorted(pathlib.Path("frontend/src/ext").glob("*/inkwell-plugin.json"))
+lazy_dirs, lazy_types = [], set()
+for f in mans:
+    man = json.loads(f.read_text())
+    if "startup" in man.get("activation", []):
+        continue
+    contributes = man.get("contributes", {})
+    lazy_types |= {t["id"] for t in contributes.get("fileTypes", [])}
+    if any(c.get("entry") for p in ("viewers", "grammars") for c in contributes.get(p, [])):
+        lazy_dirs.append(f"frontend/src/ext/{f.parent.name}/native/")
+    for point in ("viewers", "grammars"):
+        for c in contributes.get(point, []):
+            key = (f.parent / c["entry"]).relative_to("frontend").as_posix()
+            if key not in m or not m[key].get("isDynamicEntry"):
+                bad.append(f"{key}: not a dynamic chunk of its own")
+forbidden = ["@codemirror/lang-markdown/", "@lezer/markdown/", "frontend/src/ui/sheet/", *lazy_dirs]
+for file in start:
+    path = out / file
+    mp = out / (file + ".map")
+    if not mp.is_file():
+        if file.endswith(".js") and path.stat().st_size >= 1024:
+            bad.append(f"{file}: start chunk of {path.stat().st_size} bytes without a sourcemap")
+        continue
+    for src in json.loads(mp.read_text())["sources"]:
+        if any(x in src for x in forbidden):
+            bad.append(f"{file} holds {src.split('node_modules/')[-1]}")
+if not mans:
+    bad.append("no built-in manifest under frontend/src/ext")
+bad += [f"type {t} is contributed at startup or missing" for t in ("csv", "markdown", "png") if t not in lazy_types]
+sys.exit(f"EX0 chunks: {len(bad)} problems: {bad[:40]}" if bad else 0)
+PY'''
+
+[[criteria]]
+# Review findings 6 (round 1) and 3 (round 2): a rule test that asserts nothing must fail the gate. Block EX0's mutants
+# MX1..MX14 (scripts/netsim/mutants.toml, written at step 2 with the code) each break one rule; every vitest entry names
+# the exact title of its rule's test (`name`), so only that test failing is a catch (scripts/netsim/mutants.py); MX13 is
+# the Go encoder's, caught by TestEX0FileListV2 with its expect text. The manifest vectors exist (at least one valid and
+# one invalid), so R-2's loop cannot run over nothing.
+id = "mutants"
+command = '''set -eu
+timeout -k 10 20 python3 -I - <<'PY'
+import pathlib, re, sys, tomllib
+ms = {m["id"]: m for m in tomllib.load(open("scripts/netsim/mutants.toml", "rb"))["mutant"] if m.get("block") == "EX0"}
+rule = {"MX1": "R-1 ", "MX2": "R-12 ", "MX3": "R-3 ", "MX4": "R-4 ", "MX5": "R-5 ", "MX6": "R-13 ", "MX7": "R-6 ",
+        "MX8": "R-14 ", "MX9": "R-7 ", "MX10": "R-2 ", "MX11": "R-8 ", "MX12": "R-9 ", "MX14": "R-15 "}
+bad = []
+for i, tag in rule.items():
+    m = ms.get(i, {})
+    if (m.get("kind") != "vitest" or m.get("retired") or not m.get("test", "").startswith("frontend/src/")
+            or not m.get("name", "").startswith("EX0 " + tag)):
+        bad.append(i)
+g = ms.get("MX13", {})
+if g.get("kind") != "go" or g.get("test") != "TestEX0FileListV2" or not g.get("expect", "").startswith("R-9 "):
+    bad.append("MX13")
+for d in ("valid", "invalid"):
+    if not list(pathlib.Path("frontend/src/extensions/testdata/manifests", d).glob("*.json")):
+        bad.append(f"no vector in testdata/manifests/{d}/")
+sys.exit(f"EX0 mutants: entries or vectors missing or wrong: {bad}" if bad else 0)
+PY
+timeout -k 10 300 ./scripts/heavy.sh python3 -I scripts/netsim/mutants.py EX0'''
+
+[[criteria]]
+# R-11 and the migration, end to end in Chromium (WebKit runs in CI on push): the files open by type (FM-OPEN), two CSV
+# scenarios, EX0-E1 (which chunks load: main.typ none of the lazy ones, a CSV its grid, a Markdown file its grammar, read from
+# the requests the page makes) and EX0-E2 (PERF-EXT-VIEWER-CSV, scenario in the plan: app already running, page
+# reloaded and main.typ editable before each run, click in the file panel, marks ex0:open -> ex0:first-render read with
+# performance.getEntriesByName, 1 warm-up + 10 runs, nearest-rank p95 = the slowest of the 10, <= 200 ms). Exclusive slot for the timing; first attempt only, nothing skipped.
+id = "e2e"
+command = '''set -eu
+mkdir -p .task/ex0
+rm -f .task/ex0/e2e.json
+timeout -k 10 200 ./scripts/heavy.sh mise run e2e:build
+rc=0
+(cd frontend && PLAYWRIGHT_JSON_OUTPUT_NAME=../.task/ex0/e2e.json INKWELL_E2E_BROWSER=chromium timeout -k 10 240 ../scripts/heavy.sh --exclusive ./node_modules/.bin/playwright test files.spec.ts sheet.spec.ts ex0.spec.ts --grep "FM-OPEN-1|CSV-DIALECT|CSV-14|EX0-E1|EX0-E2" --reporter=json > /dev/null) || rc=$?
+python3 -I - "$rc" <<'PY'
+import json, pathlib, sys
+need = ["FM-OPEN-1", "CSV-DIALECT", "CSV-14", "EX0-E1", "EX0-E2"]
+p = pathlib.Path(".task/ex0/e2e.json")
+report = json.loads(p.read_text()) if p.is_file() else {"suites": [], "errors": ["no report"]}
+suites, ok, seen = list(report["suites"]), set(), set()
+while suites:
+    s = suites.pop()
+    suites.extend(s.get("suites", []))
+    for spec in s.get("specs", []):
+        tag = spec["title"].split()[0]
+        for t in spec["tests"]:
+            seen.add(tag)
+            if t["status"] == "expected" and [r["status"] for r in t["results"]] == ["passed"]:
+                ok.add(tag)
+miss = [n for n in need if n not in ok]
+if miss or report.get("errors") or sys.argv[1] != "0":
+    sys.exit(f"EX0 e2e: exit {sys.argv[1]}, not passing first time {miss}, seen {sorted(seen)}, errors {report.get('errors')}")
+PY'''
+exclusive = true
+
+[[criteria]]
+# R-11, start: the existing PERF-START (scripts/perf/baseline.py, ADR 0038) passes: paired against the merge-base build,
+# 80 judged pairs, upper bound of the ratio < 1.10, and the absolute budget. Its evidence goes to this gate's folder,
+# never to gates/L0. Blocked on main by the reference build deleting frontend/dist/.gitkeep (block PF1): kept as is.
+id = "perf-start"
+command = '''set -eu
+out="${INKWELL_PERF_OUT:-.task/ex0/perf}"
+mkdir -p "$out"
+INKWELL_PERF_OUT="$out" timeout -k 10 600 ./scripts/heavy.sh --exclusive python3 scripts/perf/baseline.py > "$out/baseline.log" 2>&1 || { tail -40 "$out/baseline.log"; exit 1; }
+python3 -I - "$out" <<'PY'
+import json, pathlib, subprocess, sys
+p = json.loads((pathlib.Path(sys.argv[1]) / "measurements.json").read_text())["PERF-START"]
+base = subprocess.check_output(["git", "merge-base", "HEAD", "main"], text=True).strip()
+bad = []
+bad += [] if p.get("status") == "pass" else [f"status {p.get('status')}"]
+bad += [] if p.get("design") == "paired-randomized" else ["design"]
+bad += [] if p.get("reference", {}).get("commit") == base else ["reference is not the merge-base"]
+v = p.get("verdict", {})
+bad += [] if v.get("status") == "pass" and v.get("pairs") == 80 and v.get("upper", 9) < 1.10 else ["verdict"]
+bad += [] if p.get("budget", {}).get("status") == "pass" else ["budget"]
+sys.exit("EX0 perf-start: " + ", ".join(bad) if bad else 0)
+PY'''
+exclusive = true
+
+[[criteria]]
+id = "simplify-report"
+command = '''timeout -k 10 30 python3 -I - <<'PY'
+import sys
+from pathlib import Path
+
+report = Path("gates/EX0/SIMPLIFY.md")
+if not report.is_file():
+    sys.exit("EX0 /simplify review evidence is absent")
+lines = report.read_text().splitlines()
+if not any(line.startswith("Reviewer: ") and line[10:].strip() for line in lines):
+    sys.exit("EX0 /simplify reviewer is absent")
+for heading in ("## Applied", "## Set aside", "## Verified"):
+    if heading not in lines:
+        sys.exit(f"EX0 /simplify review lacks {heading}")
+    body = []
+    for line in lines[lines.index(heading) + 1:]:
+        if line.startswith("## "):
+            break
+        body.append(line)
+    if not any(line.strip() for line in body):
+        sys.exit(f"EX0 /simplify review is empty under {heading}")
+PY'''

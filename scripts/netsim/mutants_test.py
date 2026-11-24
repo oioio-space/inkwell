@@ -2,6 +2,7 @@
 import json
 import pathlib
 import sys
+import tempfile
 import unittest
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
@@ -106,6 +107,45 @@ class ExpectTest(unittest.TestCase):
         self.assertEqual(mutants.validate([M]), [])
         self.assertTrue(mutants.validate([{**M, "expect": ""}]))
         self.assertTrue(mutants.validate([{**M, "kind": "vitest"}]))
+
+
+class VitestNameTest(unittest.TestCase):
+    """Block EX0, review round 2 finding 3: with `name`, only the named test failing is a catch."""
+    V = {"id": "MX", "block": "EX0", "kind": "vitest", "test": "frontend/src/extensions/registry.test.ts",
+         "name": "EX0 R-3 a claim already taken is refused in either order"}
+
+    def verdict(self, m, rc, *titles_status):
+        with tempfile.TemporaryDirectory() as d:
+            tree = pathlib.Path(d)
+            (tree / "frontend").mkdir()
+
+            def run(cmd, cwd, env=None, log=None, timeout=1800):
+                report = {"numFailedTestSuites": 0, "testResults": [{"assertionResults": [
+                    {"title": title, "status": status} for title, status in titles_status]}]}
+                (tree / "frontend/.mutant-vitest.json").write_text(json.dumps(report))
+                return rc, ""
+            return mutants.run_vitest(m, tree, run=run)[0]
+
+    def test_named_test_failing_is_a_catch(self):
+        self.assertTrue(self.verdict(self.V, 1, (self.V["name"], "failed"), ("EX0 R-4 other", "passed")))
+
+    def test_another_test_failing_is_not_a_catch(self):
+        self.assertFalse(self.verdict(self.V, 1, (self.V["name"], "passed"), ("EX0 R-4 other", "failed")))
+
+    def test_named_test_absent_is_not_a_catch(self):
+        self.assertFalse(self.verdict(self.V, 1, ("EX0 R-4 other", "failed")))
+
+    def test_a_title_that_only_contains_the_name_is_not_a_catch(self):
+        self.assertFalse(self.verdict(self.V, 1, (self.V["name"] + " and more", "failed")))
+
+    def test_entry_without_name_keeps_the_file_rule(self):
+        m = {k: v for k, v in self.V.items() if k != "name"}
+        self.assertTrue(self.verdict(m, 1, ("EX0 R-4 other", "failed")))
+
+    def test_validate_refuses_a_misplaced_or_empty_name(self):
+        self.assertEqual(mutants.validate([self.V]), [])
+        self.assertTrue(mutants.validate([{**self.V, "name": ""}]))
+        self.assertTrue(mutants.validate([{**M, "name": "TestX"}]))
 
 
 class E2EBuildTest(unittest.TestCase):
