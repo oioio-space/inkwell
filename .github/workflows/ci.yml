@@ -156,6 +156,8 @@ jobs:
       alloy: ${{ matrix.shard == 'alloy' && steps.alloy.outcome || '' }}
     env:
       MISE_TASK_RUN_AUTO_INSTALL: "false"
+      # CI3b: green verdicts keyed by the exact hash of their inputs (scripts/formal_cache.py), apart from the tools.
+      INKWELL_FORMAL_CACHE: ~/.cache/inkwell-formal-verdicts
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -167,6 +169,14 @@ jobs:
           path: ~/.cache/inkwell
           key: ${{ runner.os }}-formal-${{ matrix.shard == 'alloy' && 'alloy' || 'tla' }}-${{ hashFiles('scripts/tla-check.sh', 'scripts/alloy_check.py') }}
           restore-keys: ${{ runner.os }}-formal-${{ matrix.shard == 'alloy' && 'alloy' || 'tla' }}-
+      # A cache key is immutable: each run saves its own (run id) and restores the newest of its shard (prefix).
+      # Verdicts older than 7 days are rerun (INKWELL_FORMAL_CACHE_TTL_DAYS), so a stale one cannot live on.
+      - name: Restore the formal verdicts
+        uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/inkwell-formal-verdicts
+          key: ${{ runner.os }}-formal-verdicts-${{ matrix.shard }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: ${{ runner.os }}-formal-verdicts-${{ matrix.shard }}-
       # Only mise itself: the models need Java and Python, which the runner has; installing every tool would build
       # wails3, which needs GTK4 and WebKitGTK (run 43978292467).
       - uses: jdx/mise-action@b44d12e7d0d8ee7461bb893e1b1993500433185b # v5.2.7
@@ -180,6 +190,13 @@ jobs:
       - id: alloy
         if: matrix.shard == 'alloy'
         run: mise run alloy
+      # Saved even when a model failed: only green verdicts are ever written to the folder.
+      - name: Save the formal verdicts
+        if: always()
+        uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cache/inkwell-formal-verdicts
+          key: ${{ runner.os }}-formal-verdicts-${{ matrix.shard }}-${{ github.run_id }}-${{ github.run_attempt }}
   formal:
     needs: formal-checks
     if: always()

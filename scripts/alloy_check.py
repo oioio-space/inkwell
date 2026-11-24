@@ -5,6 +5,8 @@ Every `check` of a sound model must find no counterexample and every `run` must 
 Every mutant (a rule removed by a text substitution) must make its named assertion fail: proof that
 the assertion constrains the rule. The Alloy jar is pinned by SHA-256 and cached.
 """
+import ast
+import functools
 import hashlib
 import json
 import os
@@ -16,6 +18,7 @@ import tempfile
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parent))
 import fetch_pinned  # noqa: E402
+import formal_cache  # noqa: E402
 
 ROOT = pathlib.Path(__file__).resolve().parent.parent
 MODELS = ROOT / "docs/protocol/alloy"
@@ -105,27 +108,87 @@ def main():
         check(pathlib.Path(scratch))
 
 
+def verdict_key(text: str, args: list[str]):
+    """The verdict cache key of one Alloy execution (scripts/formal_cache.py), or None when bypassed or when an
+    opened module cannot be named exactly. The runner part is this whole file minus the MUTANTS list (runner_sha)."""
+    if formal_cache.disabled():
+        return None
+    try:
+        files = formal_cache.alloy_closure(MODELS, text)
+    except formal_cache.Unresolved as exc:
+        print(f"formal-cache: not cacheable: {exc}", file=sys.stderr)
+        return None
+    files["model"] = formal_cache.sha256(text.encode())
+    runner = runner_sha(pathlib.Path(__file__).read_text())
+    return formal_cache.key("alloy", files, JAR_SHA256, java_version(), runner, args)
+
+
+def runner_sha(source: str) -> str:
+    """SHA-256 of this runner's whole source minus the MUTANTS list, which is data: every function, constant and
+    import that runs or judges a check is in the key, and adding a mutant changes no other key (its own key holds its
+    mutated text and assertion)."""
+    lines = source.splitlines(keepends=True)
+    for node in ast.parse(source).body:
+        if isinstance(node, ast.Assign) and any(getattr(t, "id", None) == "MUTANTS" for t in node.targets):
+            del lines[node.lineno - 1:node.end_lineno]
+            break
+    else:
+        raise ValueError("alloy_check.py: no MUTANTS list")
+    return formal_cache.sha256("".join(lines).encode())
+
+
+@functools.cache
+def java_version():
+    return subprocess.run(["java", "-version"], capture_output=True, text=True).stderr
+
+
+def cached(key, label):
+    """Prints a reused verdict's lines and returns True on a hit."""
+    lines = formal_cache.get(key) if key else None
+    if lines is None:
+        return False
+    print("\n".join(lines))
+    print(formal_cache.reused_line(key, label))
+    return True
+
+
 def check(scratch: pathlib.Path):
     failures = []
     for model in sorted(MODELS.glob("*.als")):
+        text = model.read_text()
+        key = verdict_key(text, [f"model={model.name}"])
+        if cached(key, model.name):
+            continue
+        lines, green = [], True
         for name, (kind, solved) in run(model, scratch).items():
             ok = (not solved) if kind == "check" else solved
-            print(f"{model.name} {kind} {name}: {'ok' if ok else 'FAIL'}")
+            lines.append(f"{model.name} {kind} {name}: {'ok' if ok else 'FAIL'}")
+            print(lines[-1])
             if not ok:
+                green = False
                 failures.append(f"{model.name}:{name}")
+        if key and green and lines:
+            formal_cache.put(key, model.name, lines)
     for model, assertion, before, after in MUTANTS:
         text = (MODELS / model).read_text()
         if before not in text:
             failures.append(f"mutant {model}:{assertion}: anchor text not found")
             continue
+        mutated = text.replace(before, after, 1)
+        key = verdict_key(mutated, [f"mutant={model}", f"assertion={assertion}"])
+        if cached(key, f"mutant {model} -> {assertion}"):
+            continue
         with tempfile.TemporaryDirectory() as d:
             mutant = pathlib.Path(d) / model
-            mutant.write_text(text.replace(before, after, 1))
+            mutant.write_text(mutated)
             kind, solved = run(mutant, scratch)[assertion]
             caught = kind == "check" and solved
-            print(f"mutant {model} -> {assertion}: {'caught' if caught else 'NOT CAUGHT'}")
+            line = f"mutant {model} -> {assertion}: {'caught' if caught else 'NOT CAUGHT'}"
+            print(line)
             if not caught:
                 failures.append(f"mutant {model}:{assertion}")
+            elif key:
+                formal_cache.put(key, f"mutant {model} -> {assertion}", [line])
     if failures:
         sys.exit("alloy: " + ", ".join(failures))
 

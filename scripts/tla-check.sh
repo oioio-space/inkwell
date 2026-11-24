@@ -12,7 +12,14 @@
 #   TLA_SHARD=1/3 mise run tla   # run the same shard as GitHub CI
 #   INKWELL_TLA_XMX=1g INKWELL_TLA_WORKERS=2 mise run tla
 #   INKWELL_TLA_ONLY='^ProjectChange' ./scripts/tla-check.sh   # inner loop: only the runs whose name matches
+#   INKWELL_FORMAL_NO_CACHE=1 mise run tla   # rerun every model: no verdict reused (scripts/gate.py sets it)
+#
+# Verdict cache (block CI3b, scripts/formal_cache.py): a run whose inputs (model closure, cfg, the code of run()
+# below, the jar, Java, its arguments) are unchanged since a green verdict prints that verdict's ✓ line, then
+# « reused <key prefix>: <name> », without running TLC.
 set -euo pipefail
+# Functions inherited from the environment (exported), left out of the verdict cache's runner key (runner_sha, below).
+inherited_functions="$(declare -F)"
 
 root="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 dir="$root/docs/protocol/tla"
@@ -55,6 +62,7 @@ if ((!list)); then
 
   command -v java >/dev/null 2>&1 || die "java (11+) is required"
   command -v sha256sum >/dev/null 2>&1 || die "sha256sum is required"
+  java_version="$(java -version 2>&1)"
 
   mkdir -p "$cache" "$logs"
 
@@ -106,6 +114,27 @@ run() {
     printf '%s\n' "$name"
     return 0
   fi
+  # Verdict cache: on a hit the stored ✓ line is printed and TLC does not run; key stays empty when bypassed or when
+  # the inputs cannot be named exactly, and then nothing is stored.
+  local key="" cached ok=""
+  if [[ "${INKWELL_FORMAL_NO_CACHE:-0}" == 0 ]]; then
+    local args=(--arg "name=$name" --arg "expect=$expect" --arg "prop=$prop" --arg "workers=$workers")
+    # shellcheck disable=SC2154 # sim_seed, sim_depth and sim_traces are set per call as prefixes (below)
+    [[ "$expect" == simulate ]] && args+=(--arg "seed=$sim_seed" --arg "depth=$sim_depth" --arg "traces=$sim_traces")
+    set +e
+    cached="$(python3 -I "$root/scripts/formal_cache.py" tla-lookup --root "$dir" --module "$module" --cfg "$cfg" \
+      --jar-sha "$jar_sha" --java "$java_version" --runner-sha "$runner_sha" "${args[@]}")"
+    status=$?
+    set -e
+    if ((status == 0)); then
+      key="${cached%%$'\n'*}"
+      printf '%s\n' "${cached#*$'\n'}"
+      printf 'reused %s: %s\n' "${key:0:12}" "$name"
+      printf 'reused verdict %s (scripts/formal_cache.py)\n' "$key" >"$out"
+      return 0
+    fi
+    if ((status == 1)); then key="$cached"; else key=""; fi
+  fi
   metadir="$(mktemp -d -p "$metaroot")"
   # simulate: TLC's random simulation, fixed seed and depth, where no exhaustive run fits the budget (a second,
   # weaker check beside the exhaustive runs of smaller bounds; block HP1c2).
@@ -131,7 +160,7 @@ run() {
       tail -n 20 "$out" >&2
       fail=1
     else
-      printf '✓ %s: no error (exhaustive, liveness checked)\n' "$name"
+      ok="$(printf '✓ %s: no error (exhaustive, liveness checked)' "$name")"
     fi
   elif [[ "$expect" == simulate ]]; then
     if ((status != 0)) || grep -q '^Error:' "$out" || ! grep -q 'traces generated' "$out"; then
@@ -140,7 +169,7 @@ run() {
       fail=1
     else
       # shellcheck disable=SC2154 # sim_seed, sim_depth and sim_traces are set per call as prefixes (sim_seed=… run …, below)
-      printf '✓ %s: no error (simulation, seed %s, depth %s, %s traces per worker)\n' "$name" "$sim_seed" "$sim_depth" "$sim_traces"
+      ok="$(printf '✓ %s: no error (simulation, seed %s, depth %s, %s traces per worker)' "$name" "$sim_seed" "$sim_depth" "$sim_traces")"
     fi
   elif [[ "$expect" == safety ]]; then
     # A larger configuration of a model whose liveness a smaller sound configuration checks.
@@ -149,19 +178,31 @@ run() {
       tail -n 20 "$out" >&2
       fail=1
     else
-      printf '✓ %s: no error (exhaustive, invariants)\n' "$name"
+      ok="$(printf '✓ %s: no error (exhaustive, invariants)' "$name")"
     fi
   else
     if ((status == 12 || status == 13)) && grep -Eq 'Error: (Invariant|Temporal property) .* violated' "$out" \
        && { [[ -z "$prop" ]] || grep -Eq "Error: (Invariant|Temporal property) $prop (is|was) violated" "$out"; }; then
-      printf '✓ %s: violation detected%s\n' "$name" "${prop:+ ($prop)}"
+      ok="$(printf '✓ %s: violation detected%s' "$name" "${prop:+ ($prop)}")"
     else
       printf '✗ %s: mutant passed (exit %d) — the model no longer catches it\n' "$name" "$status" >&2
       tail -n 20 "$out" >&2
       fail=1
     fi
   fi
+  # Only a green verdict reaches here with ok set; a failure leaves ok empty and is never stored.
+  if [[ -n "$ok" ]]; then
+    printf '%s\n' "$ok"
+    if [[ -n "$key" ]]; then
+      printf '%s\n' "$ok" | python3 -I "$root/scripts/formal_cache.py" put "$key" "$name" \
+        || printf 'tla: verdict of %s not stored\n' "$name" >&2
+    fi
+  fi
 }
+# The verdict cache keys on every function this script defines (run and each helper it calls; `declare -f` prints
+# them in a stable order), not on the list of runs below: adding a model changes no other run's key.
+mapfile -t own_functions < <(comm -13 <(printf '%s\n' "$inherited_functions" | sort) <(declare -F | sort) | sed 's/^declare -f //')
+runner_sha="$(declare -f "${own_functions[@]}" | sha256sum | cut -d' ' -f1)"
 
 # Sound models (README tables): exhaustive, liveness included.
 run RepoGenSmall RepoGenSmall.cfg RepoGen sound

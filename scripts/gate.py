@@ -413,6 +413,13 @@ def signal_groups(groups, sig):
     return alive
 
 
+def criterion_env(out, cid, lot):
+    """A criterion's environment. INKWELL_FORMAL_NO_CACHE: a gate keeps its own full run of every formal model, never
+    a verdict reused from scripts/formal_cache.py (block CI3b)."""
+    return dict(os.environ, INKWELL_PERF_OUT=str(out), INKWELL_GATE_CRITERION=cid, INKWELL_GATE_PARENT=lot,
+                INKWELL_GATE_PARENT_OUT=str(out), INKWELL_FORMAL_NO_CACHE="1")
+
+
 def run_until(command, deadline, **kwargs):
     """Runs a criterion's shell command; returns its exit code, or None when the deadline (a clock() value) stopped
     it: SIGTERM to the groups of its tree, SIGKILL KILL_GRACE_SECONDS later. Without a deadline (a legacy gate) it
@@ -581,8 +588,7 @@ def run(lot, root=ROOT, pins=None, guard=True, resume=False):
         start = time.monotonic()
         with log.open("wb") as stream:
             code = run_until(c["command"], deadline, cwd=root, stdout=stream, stderr=subprocess.STDOUT,
-                             env=dict(os.environ, INKWELL_PERF_OUT=str(out), INKWELL_GATE_CRITERION=c["id"],
-                                      INKWELL_GATE_PARENT=lot, INKWELL_GATE_PARENT_OUT=str(out)))
+                             env=criterion_env(out, c["id"], lot))
         if code is None:
             # Interrupted: no record, as for any interrupted criterion; the rest is not run.
             stop_at_deadline(entries, c, log=str(log.relative_to(root)), duration_seconds=time.monotonic()-start)

@@ -2059,6 +2059,46 @@
       "id": "42a677a3fcc46ad19ccf560045f98094c62625972df565dc4948b486ed9da527",
       "reason": "scripts/deadcode.sh: gate dependency changed — LP1: the x/tools pin raised from v0.52.0 to v0.52.1-0.20261106145633-d407941a339a, which libp2p v0.52.0 requires; the check stays exact (never silently upgraded) and the audit finds no new unreachable exported function",
       "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "bcf09ee4ca6dc7ea1c1d2800bdbe636420f644b0c6a953615773ef742d01e9bb",
+      "reason": "mise.toml: gate dependency changed: mise task test:py — CI3b adds scripts/formal_cache_test.py (verdict cache: key, store, bypass, reuse); every existing test still runs",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "651e970b4625f9087c9d22942199ff1a8cbb9874bffcdeaf1bfbd44e29d2474d",
+      "reason": "mise.toml: test:py line rewritten only to insert scripts/formal_cache_test.py (CI3b); every timeout of the task is unchanged",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "dfbb691eaf23a7f7a697cf83940484ce6e74c999284e2af11b5727f655c6a7b5",
+      "reason": "scripts/alloy_check.py: gate dependency changed — CI3b verdict cache: a green verdict keyed by the exact hash of its inputs (runner: the whole file minus MUTANTS) is reused; a failure is never stored; bypassed entirely by INKWELL_FORMAL_NO_CACHE=1, which scripts/gate.py sets for every criterion, so gates still run every model (scripts/formal_cache_test.py)",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "9c0eacb8c10694ff59b9a9fd6dfb8e1b05ffda1b380f866034de4563febe885d",
+      "reason": "scripts/gate.py: gate dependency changed — CI3b: criterion_env adds INKWELL_FORMAL_NO_CACHE=1 to every criterion's environment (gates keep their own full formal run); the other variables unchanged",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "ac87466541af0ed87f0edd5afe96902848d0e91f63c073e83b6d1b4da3b00c8c",
+      "reason": "scripts/gate.py: gate machinery changed — CI3b: criterion_env only adds INKWELL_FORMAL_NO_CACHE=1 (stricter: no reused formal verdict inside a gate); see scripts/formal_cache_test.py GateBypass",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "c6f1858745574b94c90b0e524554e0b9de26dbd4928180c25fe259956db43147",
+      "reason": "scripts/tla-check.sh: gate dependency changed — CI3b verdict cache in run(), keyed on every function the script defines: same verdict rules and ✓ lines; a reused run prints its stored ✓ line then « reused <key>: <name> »; never used under INKWELL_FORMAL_NO_CACHE=1, which scripts/gate.py sets for every criterion",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "4f60e30722b1a91eb06020f85dc34f1b7c8e761f818851087e9250ebe85f26ec",
+      "reason": "mise.toml: gate dependency changed: mise task test:py — CI3b adds scripts/formal_cache_test.py to test:py, merged over LP1 (deadcode description) and CI3a; every existing test still runs",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "dac5d9243eba575091a96615fc8009374424cf299ff5be1247b948277aad56c6",
+      "reason": "mise.toml: timeout expression removed or rewritten in test:py — CI3b only adds scripts/formal_cache_test.py to its unittest list; the two timeouts (300 s for gate-selftest.py, 120 s for gate-guard.py --self-test) are unchanged",
+      "decision": "docs/objectif-en-cours.md"
     }
   ]
 }
