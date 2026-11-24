@@ -28,6 +28,7 @@ le récit de chaque bloc dans l'archive.
 | PR1 | présence correcte (W46 : départ, présence figée, couleurs ; R1) |
 | SI1c | en-tête stable et lisible, amende DS-3 de SI1b (R1) |
 | DU | mise à jour ciblée des dépendances pour R1 (`uuid` ≥ 11.1.1) |
+| PF1 | light, no gate: every frontend build keeps the tracked `frontend/dist/.gitkeep` (Vite plugin `distPlaceholder`), so the PERF-START reference build no longer dirties its worktree; decision in `docs/autonomous-decisions.md` (2026-11-24) |
 | Sans porte encore | PA, AA (audits), ST1, DG1, DG2, CP0 à CP5, LF0c, LF1, IM1, G-0b, G-0c, S13, N35, Fondations-extensibles |
 
 ## Lots suivants (MVP, dans l'ordre)

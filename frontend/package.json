@@ -6,8 +6,8 @@
   "license": "MPL-2.0",
   "scripts": {
     "dev": "vite",
-    "build:dev": "vite build --configLoader runner --minify false --mode development && node scripts/keep-dist.mjs",
-    "build": "vite build --configLoader runner --mode production && node scripts/keep-dist.mjs",
+    "build:dev": "vite build --configLoader runner --minify false --mode development",
+    "build": "vite build --configLoader runner --mode production",
     "check": "biome check . && svelte-check --tsconfig ./tsconfig.json && vitest run --configLoader runner",
     "fmt": "biome check --write .",
     "test": "vitest run --configLoader runner",

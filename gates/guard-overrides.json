@@ -2144,6 +2144,26 @@
       "id": "82a9fd5c1e39608e24c72072f20c4ee958443f4d546f776dc6c1865d432d946a",
       "reason": "scripts/netsim/mutants_test.py: gate dependency changed — MT1 adds CatalogueCheckTest (11 tests); no existing test removed or changed",
       "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "25c9ccad69c08539fcbec1b9f036de05761083628448f0eb0d4ea392c32a22eb",
+      "reason": "frontend/vite.config.ts: gate dependency changed — PF1 adds the build-only plugin distPlaceholder (emits the empty frontend/dist/.gitkeep with every bundle, so a build no longer deletes the tracked placeholder); bundle contents otherwise unchanged, dev server and Vitest unaffected (apply: build)",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "51f5faf4441606b72fd8b2b3ad024d436bd2bb1c4cafd3412f0e32646f805dc6",
+      "reason": "mise.toml: gate dependency changed: mise task e2e:build — PF1 drops the `touch ../.e2e-dist-next/.gitkeep`, now emitted by the vite build itself; same vite build, mode, flag, side-directory swap and every bound",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "7407c38c3470868d5ca612b72bc4910681d0d170335c844bfdc8c403d80cbd6c",
+      "reason": "scripts/perf/refbuild_test.py: gate dependency changed — PF1 adds test_build_output_dir_keeps_its_tracked_placeholder; no existing test removed or changed",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "f09754641c0cf7ca46538660042829800bdcb6fa19dbec5aee686e5ce677c4d4",
+      "reason": "scripts/perf/refbuild_test.py: gate machinery changed — PF1 adds one test (a deleted tracked placeholder fails closed, a restored one publishes); refbuild.py itself unchanged",
+      "decision": "docs/objectif-en-cours.md"
     }
   ]
 }

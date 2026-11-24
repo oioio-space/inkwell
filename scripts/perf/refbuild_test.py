@@ -269,6 +269,29 @@ class Reference(Fixture):
         newest = max(self.cache.iterdir(), key=lambda p: p.stat().st_mtime)
         self.assertFalse((newest / "tree").exists())
 
+    def test_build_output_dir_keeps_its_tracked_placeholder(self):
+        """Block PF1: the reference tracks frontend/dist/.gitkeep (the root package embeds frontend/dist) and its
+        frontend build empties dist. A build that deletes the placeholder dirties the reference and fails closed
+        (PERF-START could not run from a479283 on); a build that writes it back, as the frontend's own build does
+        since PF1 (frontend/src/build/distPlaceholder.ts), publishes. The vector builds with the tree's own vite
+        config, so the fix travels with the reference commit."""
+        (self.repo / ".gitignore").write_text("internal/sidecar/bin/*/*\nnode_modules\n/dist/*\n!/dist/.gitkeep\n")
+        (self.repo / "dist").mkdir()
+        (self.repo / "dist/.gitkeep").write_text("")
+        commit(self.repo, "v2")
+        empties = 'rm -rf dist && mkdir dist && echo app > dist/index.html'
+        deleting = (dict(name="frontend", argv=["sh", "-c", f'{empties}; cat VERSION > "$1"', "sh", "{out}"]),)
+        with self.assertRaises(refbuild.ReferenceBuildError) as cm:
+            self.ensure(vector=deleting)
+        self.assertIn("D dist/.gitkeep", str(cm.exception))
+        keeping = (dict(name="frontend", argv=["sh", "-c", f'{empties} && : > dist/.gitkeep; cat VERSION > "$1"',
+                                                "sh", "{out}"]),)
+        self.assertFalse(self.ensure(vector=keeping)["cache_hit"])
+        frontend = next(s for s in refbuild.VECTOR if s["name"] == "frontend")["argv"]
+        self.assertEqual(frontend[frontend.index("--dir") + 1], "frontend")
+        self.assertNotIn("--config", frontend)
+        self.assertNotIn("-c", frontend)
+
     def test_vector_regenerates_bindings_and_verifies_dependencies(self):
         """Both sides run every step: the frontend dependencies are installed against the lockfile (frozen), the
         Wails bindings are generated, whatever the tree already holds; the Go build keeps no VCS stamp."""
