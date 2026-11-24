@@ -2,7 +2,14 @@
 """Mutation check of the impaired-network tests. Development tool, never shipped.
 
 Usage: mutants.py [--check] BLOCK [MUTANT_ID...]   (mise run netsim:mutants -- NI0)
---check only verifies that every anchor is found exactly once and no edit is a no-op.
+       mutants.py --check                          (the whole catalogue)
+--check only verifies that every anchor is found exactly once and no edit is a no-op. Without a block it checks the
+whole catalogue: no id twice in one block, every anchor found unless the entry is retired, and every entry a gate
+names (gates/*.toml) present in its block.
+
+Ids are scoped by their block: the runner and the gates select `block == B` first, then ids within B, so the same id
+in two blocks is harmless; the same id twice in one block is refused. An entry whose code is gone is kept with
+`retired = "reason"`: it is never run nor anchored, and a gate that names it is reported as not replayable.
 
 Modelled on scripts/alloy_check.py: each mutant of scripts/netsim/mutants.toml is a text
 substitution applied to a copy of the tree (never to the working tree); its scenario must turn
@@ -12,6 +19,7 @@ the named clause red. The anchor must be found exactly once. Mutants run one aft
 import json
 import os
 import pathlib
+import re
 import shutil
 import signal
 import subprocess
@@ -177,6 +185,8 @@ def validate(mutants):
     """Static checks of the mutant list; return the problems found."""
     bad = []
     for m in mutants:
+        if "retired" in m and (not isinstance(m["retired"], str) or not m["retired"].strip()):
+            bad.append(f"mutant {m['id']}: retired needs its reason (a non-empty text)")
         if "expect" in m and (m["kind"] != "go" or not m["expect"]):
             bad.append(f"mutant {m['id']}: expect is for a go mutant, and not empty")
         if m["kind"] not in ("go", "vitest", "e2e"):
@@ -186,33 +196,151 @@ def validate(mutants):
     return bad
 
 
+def duplicate_ids(mutants):
+    """The (block, id) pairs written more than once: an id is unique within its block (the selection's scope)."""
+    seen, bad = set(), []
+    for m in mutants:
+        key = (m["block"], m["id"])
+        if key in seen:
+            bad.append(f"block {key[0]}: mutant id {key[1]} written twice")
+        seen.add(key)
+    return bad
+
+
+def anchor_problem(m, root=ROOT):
+    """Why the entry's edits do not apply to the code under root (None if they do, or if the entry is retired)."""
+    if m.get("retired"):
+        return None
+    with tempfile.TemporaryDirectory(prefix="netsim-check-") as d:
+        tree = pathlib.Path(d)
+        for e in m["edit"]:
+            if not e.get("create"):
+                src = root / e["file"]
+                if not src.exists():
+                    return f"{e['file']} does not exist"
+                dest = tree / e["file"]
+                dest.parent.mkdir(parents=True, exist_ok=True)
+                shutil.copy2(src, dest)
+        return apply(m["edit"], tree)
+
+
+def select(mutants, block, only):
+    """The entries of block to run (all of it, or the ids in only), and the refusals: a retired entry named."""
+    chosen, refused = [], []
+    for m in mutants:
+        if m["block"] != block or (only and m["id"] not in only):
+            continue
+        if m.get("retired"):
+            if only:
+                refused.append(f"mutant {m['id']} is retired: {m['retired']}")
+            continue
+        chosen.append(m)
+    return chosen, refused
+
+
+# What a gate's criterion names: the runner with a block and its ids, `m.get("block") == B` in an inline check, id
+# literals, `[f'MS{i}' for i in range(a, b)]` and `for i in $(seq -w a b) ... "id = \"P$i\""`.
+_RUNNER = re.compile(r"(?:mutants\.py(?:[ \t]+--check)?|netsim:mutants[ \t]+--)[ \t]+([A-Za-z0-9_-]+)((?:[ \t]+[A-Za-z0-9_-]+)*)")
+_BLOCK = re.compile(r"""get\(\s*["']block["']\s*\)\s*==\s*["']([A-Za-z0-9_-]+)["']""")
+_RANGE = re.compile(r"""f["']([A-Za-z0-9-]*)\{i\}["']\s+for\s+i\s+in\s+range\((\d+),\s*(\d+)\)""")
+_SEQ = re.compile(r'seq -w (\d+) (\d+)\).*?id = \\"([A-Za-z0-9-]*)\$i\\"', re.S)
+
+
+def criterion_refs(command):
+    """(blocks, ids) a criterion's command names, or None when it does not run nor read the catalogue."""
+    blocks, ids = set(), set()
+    for b, rest in _RUNNER.findall(command):
+        blocks.add(b)
+        ids.update(rest.split())
+    blocks.update(_BLOCK.findall(command))
+    if not blocks:
+        return None
+    for prefix, a, b in _RANGE.findall(command):
+        ids.update(f"{prefix}{i}" for i in range(int(a), int(b)))
+    for a, b, prefix in _SEQ.findall(command):
+        ids.update(f"{prefix}{i:0{len(b)}d}" for i in range(int(a), int(b) + 1))
+    ids.update(re.findall(r"\bM[A-Z]{0,2}\d+[a-z]?\b", command))
+    return blocks, ids
+
+
+def gate_problems(mutants, root=ROOT):
+    """Entries named by a gate and missing from the catalogue (refusals), and retired ones a gate names (notes).
+
+    A gate is checked once it has a result (gates/<lot>.json) or once its block has an entry: step 1 freezes a gate
+    before step 2 writes its entries.
+    """
+    by_block = {}
+    for m in mutants:
+        by_block.setdefault(m["block"], {})[m["id"]] = m
+    bad, notes = [], []
+    for gate in sorted((root / "gates").glob("*.toml")):
+        rel = gate.relative_to(root)
+        ran = (root / "gates" / f"{gate.stem}.json").exists()
+        for c in tomllib.loads(gate.read_text()).get("criteria", []):
+            refs = criterion_refs(c.get("command", ""))
+            if refs is None:
+                continue
+            blocks, ids = refs
+            if not ran and not any(b in by_block for b in blocks):
+                continue
+            where = f"{rel}: criterion {c.get('id')}"
+            for b in sorted(blocks):
+                if not any(not m.get("retired") for m in by_block.get(b, {}).values()):
+                    (notes if b in by_block else bad).append(
+                        f"{where} runs block {b}, " + ("all of whose entries are retired" if b in by_block else "which has no entry"))
+            for i in sorted(ids):
+                found = [by_block[b][i] for b in blocks if i in by_block.get(b, {})]
+                if not found:
+                    bad.append(f"{where} names mutant {i}, missing from block(s) {', '.join(sorted(blocks))}")
+                elif all(m.get("retired") for m in found):
+                    notes.append(f"{where} names {i}, retired (not replayable as frozen): {found[0]['retired']}")
+    return bad, notes
+
+
+def check_catalogue(mutants):
+    """`--check` without a block: every refusal of the whole catalogue, printed; return the exit code."""
+    problems = validate(mutants) + duplicate_ids(mutants)
+    for m in mutants:
+        err = anchor_problem(m)
+        if err:
+            problems.append(f"block {m['block']}: mutant {m['id']}: {err}")
+    bad, notes = gate_problems(mutants)
+    for n in notes:
+        print(f"note: {n}")
+    for p in problems + bad:
+        print(p)
+    retired = sum(1 for m in mutants if m.get("retired"))
+    print(f"netsim mutants: {len(mutants)} entries ({retired} retired), {len(problems) + len(bad)} problem(s)")
+    return 1 if problems or bad else 0
+
+
 def main():
     args = sys.argv[1:]
     check_only = "--check" in args
     args = [a for a in args if a != "--check"]
+    catalogue = tomllib.loads((ROOT / "scripts/netsim/mutants.toml").read_text())["mutant"]
     if not args:
+        if check_only:
+            sys.exit(check_catalogue(catalogue))
         sys.exit(__doc__)
     block, only = args[0], set(args[1:])
-    mutants = [m for m in tomllib.loads((ROOT / "scripts/netsim/mutants.toml").read_text())["mutant"]
-               if m["block"] == block and (not only or m["id"] in only)]
+    mutants, refused = select(catalogue, block, only)
+    for m in catalogue:
+        if m["block"] == block and m.get("retired") and not only:
+            print(f"mutant {m['id']}: retired, not run ({m['retired']})")
+    if refused:
+        sys.exit("netsim mutants: " + "; ".join(refused))
     if not mutants:
         sys.exit(f"netsim mutants: no mutant for block {block}")
-    problems = validate(mutants)
+    problems = validate(mutants) + duplicate_ids([m for m in catalogue if m["block"] == block])
     if problems:
         sys.exit("netsim mutants: " + "; ".join(problems))
     if check_only:  # anchors only, on a throwaway copy of each file: nothing is run
         for m in mutants:
-            with tempfile.TemporaryDirectory(prefix="netsim-check-") as d:
-                tree = pathlib.Path(d)
-                for e in m["edit"]:
-                    if not e.get("create"):
-                        dest = tree / e["file"]
-                        dest.parent.mkdir(parents=True, exist_ok=True)
-                        shutil.copy2(ROOT / e["file"], dest)
-                err = apply(m["edit"], tree)
-                print(f"mutant {m['id']}: {err or 'edits apply'}")
-                if err:
-                    problems.append(m["id"])
+            err = anchor_problem(m)
+            print(f"mutant {m['id']}: {err or 'edits apply'}")
+            if err:
+                problems.append(m["id"])
         sys.exit(1 if problems else 0)
     if any(m["kind"] == "e2e" for m in mutants):
         # Only the e2e mutants need the frontend bundle and the browser (go-only ones do not).

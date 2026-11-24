@@ -225,7 +225,7 @@ run = "./scripts/heavy.sh python3 scripts/alloy_check.py"
 
 [tasks.pregate]
 description = "Cheap checks (seconds, no test) to run before any gate, `done` or push: they failed 12 times inside long runs in one week (docs/reviews/2026-11-13-velocity-review.md)"
-depends = ["lint:lock", "lint:pinned", "lint:env", "lint:claude-md", "inventory", "arch", "deadcode", "lint", "lint:sh", "lint:yaml", "lint:actions"]
+depends = ["lint:lock", "lint:pinned", "lint:env", "lint:claude-md", "lint:mutants", "inventory", "arch", "deadcode", "lint", "lint:sh", "lint:yaml", "lint:actions"]
 run = "python3 scripts/gate.py --base-guard"
 
 [tasks.inventory]
@@ -250,7 +250,7 @@ depends = ["ci:checks", "fe:check", "formal"]
 
 [tasks."ci:checks"]
 description = "ci:core without the formal models and the frontend gate, which GitHub runs on their own runners (formal: about 25 min on a 4-vCPU runner; fe:check sharing the runner with test:ci ran 5 to 15 times slower, 2026-11-17)"
-depends = ["test:py", "lint:env", "lint:claude-md", "arch", "deadcode", "scan:secrets", "scan:code", "scan:sbom", "lint", "lint:sh", "lint:yaml", "lint:actions", "pkg:lint", "test:ci", "cover:check"]
+depends = ["test:py", "lint:env", "lint:claude-md", "lint:mutants", "arch", "deadcode", "scan:secrets", "scan:code", "scan:sbom", "lint", "lint:sh", "lint:yaml", "lint:actions", "pkg:lint", "test:ci", "cover:check"]
 
 [tasks.ci]
 description = "Everything CI must pass: ci:core and the impaired network simulation"
@@ -436,6 +436,10 @@ run = "INKWELL_E2E_BROWSER=chromium ./scripts/heavy.sh ./scripts/netsim/run.sh"
 description = "Impaired-network scenarios NI-1..NI-4 (netem, seeded; docs/plans/2026-11-08-netsim-impaired-plan.md): NETSIM_SCENARIOS (default 5 6 7 8), NETSIM_SEEDS (one run per seed; default: one seed from the date), NETSIM_EXPECT=characterize (default: declared known failures are reported, not blocking) or strict. Skips with the reason without netem/nftables (fails in CI)"
 depends = ["e2e:build"]
 run = "NETSIM_SCENARIOS=\"${NETSIM_SCENARIOS:-5 6 7 8}\" INKWELL_E2E_BROWSER=chromium ./scripts/heavy.sh ./scripts/netsim/run.sh"
+
+[tasks."lint:mutants"]
+description = "The mutant catalogue scripts/netsim/mutants.toml stays replayable (block MT1): no id twice in one block, every anchor found once in current code unless the entry is retired with its reason, and every entry a gate names present in its block (the PU1 commit a541db5 dropped SB2a1's MS1-MS22 unseen)"
+run = "python3 -I scripts/netsim/mutants.py --check"
 
 [tasks."netsim:mutants"]
 description = "Mutation check of the impaired-network tests: applies each mutant of scripts/netsim/mutants.toml to a copy of the tree, runs its scenario, requires its clause red (usage: -- NI0 [mutant id...]; --check validates the anchors only); builds the e2e bundle itself, only for e2e mutants; modelled on alloy_check.py"

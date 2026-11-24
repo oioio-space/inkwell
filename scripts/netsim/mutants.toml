@@ -248,10 +248,12 @@ kind = "e2e"
 scenario = 5
 clause = "C1"
 why = "hole punching disabled: the path never becomes direct"
+# Re-anchored 2026-11-24 (MT1): hole punching moved from libp2p.EnableHolePunching in relay.go to inkwell's own
+# DCUtR service (HP1, a0e40de), installed by punchServiceOption in node.go; same mutation: no hole punching at all.
 [[mutant.edit]]
-file = "internal/transport/p2p/relay.go"
-before = "opts = append(opts, libp2p.EnableHolePunching())"
-after = "_ = opts"
+file = "internal/transport/p2p/node.go"
+before = "\t\topts = append(opts, n.punchServiceOption())\n"
+after = "\t\t_ = opts\n"
 
 [[mutant]]
 id = "M7c"
@@ -310,8 +312,10 @@ clause = "rule L (a failed send resyncs the peer)"
 why = "a send that fails on a surviving connection resets the stream without announcing the peer down and up: the repo layer keeps its sync state and never resends the lost change"
 [[mutant.edit]]
 file = "internal/transport/p2p/stream.go"
-before = "n.outLost(ps, s, true, !canceled, nil)"
-after = "n.outLost(ps, s, true, false, nil)"
+# Re-anchored 2026-11-24 (MT1): sendFailed's outLost now takes (refused, resync, preferCircuit); same mutation: the
+# failed send does not resync.
+before = "n.outLost(ps, s, false, !canceled, false)"
+after = "n.outLost(ps, s, false, false, false)"
 
 [[mutant]]
 id = "SP1a"
@@ -878,8 +882,10 @@ clause = "D1 (SECCOMP_RET_KILL_PROCESS on ABI mismatch)"
 why = "an ABI mismatch returns EPERM instead of killing: no fail-stop"
 [[mutant.edit]]
 file = "internal/sidecar/seccomp_linux.go"
-before = "\t\teq(arch, 1, 0),\n\t\tstmt(unix.BPF_RET|unix.BPF_K, unix.SECCOMP_RET_KILL_PROCESS),\n\t\tstmt(unix.BPF_LD|unix.BPF_W|unix.BPF_ABS, 0),\n\t\t{Code: unix.BPF_JMP | unix.BPF_JSET | unix.BPF_K, K: 0x40000000, Jf: 1},\n\t\tstmt(unix.BPF_RET|unix.BPF_K, unix.SECCOMP_RET_KILL_PROCESS),"
-after = "\t\teq(arch, 1, 0),\n\t\tdeny,\n\t\tstmt(unix.BPF_LD|unix.BPF_W|unix.BPF_ABS, 0),\n\t\t{Code: unix.BPF_JMP | unix.BPF_JSET | unix.BPF_K, K: 0x40000000, Jf: 1},\n\t\tdeny,"
+# Re-anchored 2026-11-24 (MT1): SB2a1 (e86b0ab) rewrote the filter with bpf* helpers and per-architecture numbers;
+# same mutation: both ABI-mismatch kills (foreign audit arch, x32 number) return EPERM instead.
+before = "\t\tbpfEq(a.audit, 1, 0),\n\t\tbpfRet(unix.SECCOMP_RET_KILL_PROCESS),\n\t\treload,\n\t\tbpfSet(0x40000000, 0, 1), // x32 numbers on amd64\n\t\tbpfRet(unix.SECCOMP_RET_KILL_PROCESS),\n"
+after = "\t\tbpfEq(a.audit, 1, 0),\n\t\tdeny,\n\t\treload,\n\t\tbpfSet(0x40000000, 0, 1), // x32 numbers on amd64\n\t\tdeny,\n"
 
 [[mutant]]
 id = "SB1b-07"
@@ -969,8 +975,15 @@ clause = "ADR 0042 A1-A9 / gate SB1b"
 why = "Hard resident budget omitted"
 [[mutant.edit]]
 file = "internal/sidecar/scope_linux.go"
-before = "\t\t{\"memory.max\", strconv.FormatUint(resident, 10)},\n"
+# Re-anchored 2026-11-24 (MT1): memory.max now holds the backstop above the resident budget (memory.high, ADR 0044
+# point 1g); same mutation: the hard memory.max limit is not written (the second edit drops the now unused
+# backstop binding, so that the mutant compiles; memoryBackstop's own error is still checked).
+before = "\t\t{\"memory.max\", strconv.FormatUint(backstop, 10)},\n"
 after = ""
+[[mutant.edit]]
+file = "internal/sidecar/scope_linux.go"
+before = "\tbackstop, err := memoryBackstop(resident, uint64(pagesize))\n"
+after = "\t_, err := memoryBackstop(resident, uint64(pagesize))\n"
 
 [[mutant]]
 id = "SB1b-14"
@@ -1190,7 +1203,8 @@ clause = "ADR 0042 A1-A9 / gate SB1b"
 why = "Placement refusal returns an error instead of fallback"
 [[mutant.edit]]
 file = "internal/sidecar/run.go"
-before = "return run(ctx, originalSpec, prepareMount)"
+# Re-anchored 2026-11-24 (MT1): run takes the launch plan since SB2a1; same mutation: no fallback on a placement error.
+before = "return run(ctx, originalSpec, plan, prepareMount)"
 after = "return Output{},fmt.Errorf(\"placement failed: %w\",err)"
 
 [[mutant]]
@@ -1227,10 +1241,17 @@ pkg = "./internal/sidecar"
 test = "^(TestCoreSentinelSeccompPolicy|TestTargetCannotLowerCoreLimit)$"
 clause = "ADR 0042 A1-A9 / gate SB1b"
 why = "P1-a: prlimit64 can lower the pipe sentinel to zero"
+# Re-anchored 2026-11-24 (MT1): SB2a1 inlined coreLimitFilter into the filter (setrlimit, then prlimit64 next to the
+# S-1 pid check); same mutation as removing it: neither call is denied on RLIMIT_CORE. Each `deny` becomes `reload`
+# (one instruction for one, so no jump offset moves).
 [[mutant.edit]]
 file = "internal/sidecar/seccomp_linux.go"
-before = "f = coreLimitFilter(f, deny)"
-after = "// mutant: sentinel may be lowered"
+before = "bpfEq(unix.RLIMIT_CORE, 0, 1), deny, reload)"
+after = "bpfEq(unix.RLIMIT_CORE, 0, 1), reload, reload)"
+[[mutant.edit]]
+file = "internal/sidecar/seccomp_linux.go"
+before = "bpfLoad(argHigh(2)), bpfEq(0, 1, 0), deny,\n"
+after = "bpfLoad(argHigh(2)), bpfEq(0, 1, 0), reload,\n"
 
 [[mutant]]
 id = "SB1b-34"
@@ -1842,8 +1863,10 @@ why = "the ACK read is skipped: the peer is announced on NewStream's return, whi
 
 [[mutant.edit]]
 file = "internal/transport/p2p/stream.go"
-before = "\tif err != nil || (n.opts.skipAck && proto == ProtocolSync) {\n"
-after = "\tif err != nil || true {\n"
+# Re-anchored 2026-11-24 (MT1): openOnce now returns early on err by itself and then tests skipAck alone; same
+# mutation: the ACK read is skipped on every successful open.
+before = "\tif n.opts.skipAck && proto == ProtocolSync {\n"
+after = "\tif true {\n"
 
 [[mutant]]
 id = "MP2"
@@ -3218,3 +3241,346 @@ why = "the whole file cache counted (the former MS20): a run that only reads fil
 file = "internal/sidecar/memory_linux.go"
 before = "\tclean := file - min(kept, file)\n"
 after = "\tclean := uint64(0) * (file - min(kept, file))\n"
+
+# Block SB2a1 (plan docs/plans/2026-11-14-sb2-sandbox-tiers.md, SB2a1 rules): MS1..MS19, each a minimal change to the sandbox launch that
+# the named test must catch with the rule tag in its own events.
+# Restored 2026-11-24 (MT1) from a541db5^: the PU1 commit a541db5 dropped MS1..MS22 from this file, which left
+# gates/SB2a1.toml's `mutants` criterion red; the entries are byte-identical but MS22, retired below.
+
+[[mutant]]
+id = "MS1"
+block = "SB2a1"
+kind = "go"
+pkg = "./internal/sidecar"
+test = "TestDecideTierExhaustive"
+expect = "T-1 tier"
+clause = "T-1"
+why = "an F launch that failed (refused) still gives tier F"
+
+[[mutant.edit]]
+file = "internal/sidecar/tier_linux.go"
+before = "\tcase f.F == launchOK:\n\t\treturn tierF, nil"
+after = "\tcase f.F != launchInconclusive:\n\t\treturn tierF, nil"
+
+[[mutant]]
+id = "MS2"
+block = "SB2a1"
+kind = "go"
+pkg = "./internal/sidecar"
+test = "TestRefusalErrnoTable"
+expect = "T-2 errno"
+clause = "T-2"
+why = "EACCES is no longer classed as a namespace refusal"
+
+[[mutant.edit]]
+file = "internal/sidecar/tier_linux.go"
+before = "case unix.EPERM, unix.EACCES, unix.EINVAL:"
+after = "case unix.EPERM, unix.EINVAL:"
+
+[[mutant]]
+id = "MS3"
+block = "SB2a1"
+kind = "go"
+pkg = "./internal/sidecar"
+test = "TestProbeIsTheLaunch"
+expect = "T-3 probe is the launch"
+clause = "T-3"
+why = "the N launch never mounts /proc, so the probe no longer exercises the launch's steps"
+
+[[mutant.edit]]
+file = "internal/sidecar/launcher_linux.go"
+before = "unix.Mount(\"proc\", \"/proc\", \"proc\", unix.MS_NOSUID|unix.MS_NODEV|unix.MS_NOEXEC, \"\")"
+after = "error(nil)"
+
+[[mutant]]
+id = "MS4"
+block = "SB2a1"
+kind = "go"
+pkg = "./internal/sidecar"
+test = "TestLaunchVerifiesTier"
+expect = "T-4 verified"
+clause = "T-4"
+why = "the launch proceeds without comparing the report with the decided tier"
+
+[[mutant.edit]]
+file = "internal/sidecar/launch_linux.go"
+before = "\tif !ok {\n\t\treturn fmt.Errorf(\"sidecar: the launch reports"
+after = "\tif !ok && false {\n\t\treturn fmt.Errorf(\"sidecar: the launch reports"
+
+[[mutant]]
+id = "MS5"
+block = "SB2a1"
+kind = "go"
+pkg = "./internal/sidecar"
+test = "TestRunReturnsAfterCancel"
+expect = "T-5 deadline"
+clause = "T-5"
+why = "a cancelled context neither terminates the launcher nor bounds the wait: the run waits without a deadline"
+
+[[mutant.edit]]
+file = "internal/sidecar/run.go"
+before = "cmd.Cancel = func() error { return signalGroup(cmd.Process.Pid, syscall.SIGKILL) }"
+after = "cmd.Cancel = func() error { return nil }\n\tcmd.WaitDelay = 0"
+
+[[mutant]]
+id = "MS6"
+block = "SB2a1"
+kind = "go"
+pkg = "./internal/sidecar"
+test = "TestPlacementRefusedFallsBack"
+expect = "T-6 fallback"
+clause = "T-6"
+why = "the output slots are created again by the rlimit retry instead of once"
+
+[[mutant.edit]]
+file = "internal/sidecar/run.go"
+before = "originalSpec.slotsReady = true"
+after = "originalSpec.slotsReady = false"
+
+[[mutant]]
+id = "MS7"
+block = "SB2a1"
+kind = "go"
+pkg = "./internal/sidecar"
+test = "TestSeccompPrlimitPidZero"
+expect = "S-1 prlimit64"
+clause = "S-1"
+why = "the low word of the pid is no longer checked: prlimit64 on self, parent or pid 1 is allowed"
+
+[[mutant.edit]]
+file = "internal/sidecar/seccomp_linux.go"
+before = "bpfEq(a.prlimit64, 0, 14),\n\t\tbpfLoad(argLow(0)), bpfEq(0, 1, 0), deny,\n\t\tbpfLoad(argHigh(0))"
+after = "bpfEq(a.prlimit64, 0, 11),\n\t\tbpfLoad(argHigh(0))"
+
+[[mutant]]
+id = "MS8"
+block = "SB2a1"
+kind = "go"
+pkg = "./internal/sidecar"
+test = "TestSeccompNoProcessInF"
+expect = "S-2 no process"
+clause = "S-2"
+why = "tier F allows clone without CLONE_THREAD: a process can be created"
+
+[[mutant.edit]]
+file = "internal/sidecar/seccomp_linux.go"
+before = "f = append(f, bpfEq(a.clone, 0, 6),\n\t\t\tbpfLoad(argLow(0)), bpfSet(forbidden, 0, 1), deny,\n\t\t\tbpfSet(unix.CLONE_THREAD, 1, 0), deny,\n\t\t\treload)"
+after = "f = append(f, bpfEq(a.clone, 0, 4),\n\t\t\tbpfLoad(argLow(0)), bpfSet(forbidden, 0, 1), deny,\n\t\t\treload)"
+
+[[mutant]]
+id = "MS9"
+block = "SB2a1"
+kind = "go"
+pkg = "./internal/sidecar"
+test = "TestFiliation"
+expect = "S-4 parent check"
+clause = "S-4"
+why = "the launcher arms the parent-death signal but does not check that its parent is still the expected one"
+
+[[mutant.edit]]
+file = "internal/sidecar/launcher_linux.go"
+before = "\t\t\treturn errors.New(\"launching parent died\")"
+after = "\t\t\treturn nil"
+
+[[mutant]]
+id = "MS11"
+block = "SB2a1"
+kind = "go"
+pkg = "./internal/sidecar"
+test = "TestDescriptorsClosedBeforeExec"
+expect = "T-4 descriptors"
+clause = "T-4"
+why = "only descriptor 3 is closed on exec: the report pipe and others leak into the target"
+
+[[mutant.edit]]
+file = "internal/sidecar/launcher_linux.go"
+before = "unix.CloseRange(3, ^uint(0), unix.CLOSE_RANGE_CLOEXEC)"
+after = "unix.CloseRange(3, 3, unix.CLOSE_RANGE_CLOEXEC)"
+
+[[mutant]]
+id = "MS12"
+block = "SB2a1"
+kind = "go"
+pkg = "./internal/sidecar"
+test = "TestSeccompPrctlOptions"
+expect = "S-4 prctl"
+clause = "S-4"
+why = "PR_SET_PDEATHSIG is accepted in a descriptor's prctl list (second edit adds it to tinymist's)"
+
+[[mutant.edit]]
+file = "internal/sidecar/seccomp_linux.go"
+before = "\tif slices.Contains(p.prctl, unix.PR_SET_PDEATHSIG) {"
+after = "\tif slices.Contains(p.prctl, unix.PR_SET_PDEATHSIG) && false {"
+
+[[mutant.edit]]
+file = "internal/sidecar/program_linux.go"
+before = "prctl:     []uint32{unix.PR_SET_NAME},"
+after = "prctl:     []uint32{unix.PR_SET_NAME, unix.PR_SET_PDEATHSIG},"
+
+[[mutant]]
+id = "MS13"
+block = "SB2a1"
+kind = "go"
+pkg = "./internal/sidecar"
+test = "TestPerimeterF"
+expect = "S-5 perimeter"
+clause = "S-5"
+why = "poll, which the perimeter needs, is missing from the amd64 allow-list"
+
+[[mutant.edit]]
+file = "internal/sidecar/syscalls_amd64_linux.go"
+before = "\t7,   // poll\n"
+after = ""
+
+[[mutant]]
+id = "MS14"
+block = "SB2a1"
+kind = "go"
+pkg = "./internal/sidecar"
+test = "TestCloneThreeFallback"
+expect = "S-6 clone3"
+clause = "S-6"
+why = "clone3 answers EPERM instead of ENOSYS: libc does not fall back to clone, threads fail"
+
+[[mutant.edit]]
+file = "internal/sidecar/seccomp_linux.go"
+before = "bpfRet(unix.SECCOMP_RET_ERRNO|uint32(unix.ENOSYS))"
+after = "bpfRet(unix.SECCOMP_RET_ERRNO|uint32(unix.EPERM))"
+
+[[mutant]]
+id = "MS15"
+block = "SB2a1"
+kind = "go"
+pkg = "./internal/sidecar"
+test = "TestArm64Refused"
+expect = "S-7 arm64"
+clause = "S-7"
+why = "arm64 is accepted before SB2a2 has proven it"
+
+[[mutant.edit]]
+file = "internal/sidecar/tier_linux.go"
+before = "\tcase !slices.Contains(p.proven, f.Arch):"
+after = "\tcase !slices.Contains(p.proven, f.Arch) && f.Arch != \"arm64\":"
+
+[[mutant]]
+id = "MS16"
+block = "SB2a1"
+kind = "go"
+pkg = "./internal/sidecar"
+test = "TestFontFoldersExactlyThoseGiven"
+expect = "S-8 fonts"
+clause = "S-8"
+why = "the two-folder system font fallback is restored on top of the caller's list"
+
+[[mutant.edit]]
+file = "internal/sidecar/launch_linux.go"
+before = "\t\tReadPaths:    spec.ReadPaths,"
+after = "\t\tReadPaths:    append(slices.Clone(spec.ReadPaths), \"/usr/share/fonts\", \"/usr/local/share/fonts\"),"
+
+[[mutant]]
+id = "MS17"
+block = "SB2a1"
+kind = "go"
+pkg = "./internal/sidecar"
+test = "TestProtectedRefusedInF"
+expect = "S-9 protected"
+clause = "S-9"
+why = "a protected project is allowed in tier F"
+
+[[mutant.edit]]
+file = "internal/sidecar/tier_linux.go"
+before = "\tcase f.F == launchOK && f.Protected:"
+after = "\tcase false && f.Protected:"
+
+[[mutant]]
+id = "MS18"
+block = "SB2a1"
+kind = "go"
+pkg = "./internal/sidecar"
+test = "TestProgramFilterFollowsDescriptor"
+expect = "S-10 descriptor"
+clause = "S-10"
+why = "every program uses typst's ioctl list instead of its own descriptor's"
+
+[[mutant.edit]]
+file = "internal/sidecar/seccomp_linux.go"
+before = "f = onlyValues(f, a.ioctl, argLow(1), p.ioctl, deny)"
+after = "f = onlyValues(f, a.ioctl, argLow(1), programs[0].ioctl, deny)"
+
+[[mutant]]
+id = "MS19"
+block = "SB2a1"
+kind = "go"
+pkg = "./internal/sidecar"
+test = "TestBoundViolationIsNotAnOOMKill"
+expect = "S-11 no oom-kill"
+clause = "S-11"
+why = "the watchdog never acts: the bound is only reached at memory.max (a cgroup OOM kill)"
+
+[[mutant.edit]]
+file = "internal/sidecar/memory_linux.go"
+before = "\tif w.h.bounded || w.bound == 0 ||"
+after = "\tif w.h.bounded || true ||"
+
+# MS10 has no row in the plan's table (ids jump from MS9 to MS11, and the gate requires MS1..MS19): it covers the
+# T-4 handshake's fail-closed rule, whose test (TestHandshakeFailsClosed) is named in the plan.
+[[mutant]]
+id = "MS10"
+block = "SB2a1"
+kind = "go"
+pkg = "./internal/sidecar"
+test = "TestHandshakeFailsClosed"
+expect = "T-4 handshake"
+clause = "T-4"
+why = "a failed read of the tier report (eof, truncated) is ignored: the handshake does not fail closed"
+
+[[mutant.edit]]
+file = "internal/sidecar/launch_linux.go"
+before = "\tif err != nil {\n\t\treturn fmt.Errorf(\"sidecar: no tier report: %w\", err)\n\t}"
+after = "\tif err != nil && false {\n\t\treturn fmt.Errorf(\"sidecar: no tier report: %w\", err)\n\t}"
+
+[[mutant]]
+id = "MS20"
+block = "SB2a1"
+kind = "go"
+pkg = "./internal/sidecar"
+test = "TestMemoryWatchdogSparesFileCache"
+expect = "S-11 page cache"
+clause = "S-11"
+why = "the watchdog counts the file cache: a run that only reads files on slow storage is killed as a bound violation"
+
+[[mutant.edit]]
+file = "internal/sidecar/memory_linux.go"
+before = "\tclean := file - min(kept, file)\n"
+after = "\tclean := uint64(0) * (file - min(kept, file))\n"
+
+[[mutant]]
+id = "MS21"
+block = "SB2a1"
+kind = "go"
+pkg = "./internal/sidecar"
+test = "TestAddressLimitWaitsForExec"
+expect = "S-11 address limit"
+clause = "S-11"
+why = "RLIMIT_AS is set with the other limits, before seccomp and the handshake: the Go launcher runs under the target's address limit"
+
+[[mutant.edit]]
+file = "internal/sidecar/launcher_linux.go"
+before = "\tdebug.SetGCPercent(-1)\n"
+after = "\tdebug.SetGCPercent(-1)\n\tif c.Memory > 0 {\n\t\t_ = unix.Setrlimit(unix.RLIMIT_AS, &address)\n\t}\n"
+
+[[mutant]]
+id = "MS22"
+block = "SB2a1"
+kind = "go"
+pkg = "./internal/sidecar"
+test = "TestMemoryWatchdogSparesFileCache"
+expect = "S-11 page cache"
+clause = "S-11"
+why = "dirty file pages are left out of the watchdog's measure: a run holding dirty cache above its bound is only stopped at memory.max"
+retired = "SB2b-1g (279bc5b, ADR 0044 point 1g amended 2026-11-24) made this mutation the rule: dirty and writeback pages are left out of the measure by design, memory.max stays the backstop (S-11b). Nothing left to mutate; SB2b1g's MD1-MD7 cover the new rule."
+
+[[mutant.edit]]
+file = "internal/sidecar/memory_linux.go"
+before = "\tfile, kept := v[0], v[1]+v[2]+v[3]+v[4]\n"
+after = "\tfile, kept := v[0], v[1]+v[3]+v[4]\n"

@@ -2124,6 +2124,26 @@
       "id": "2fb3b2a89301c8e3d1203df8d4781ed965a1c20af5aedd34af035d57264d969d",
       "reason": "mise.toml: timeout expression removed or rewritten in test:py — only scripts/candidate_test.py is added to its unittest list; the timeouts (300 s gate-selftest.py, 120 s gate-guard.py --self-test) are unchanged",
       "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "5adfc7637a76fae5c48c9e7a2473a4b1510f5e0a72485c47dc044dacb430c4b1",
+      "reason": "mise.toml: gate dependency changed: mise task ci:checks — MT1 adds lint:mutants (mutants.py --check of the whole catalogue, 0.1 s) to its depends; nothing removed",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "764ea54fdb46b2d0d84917cecf320188fe3a2031c84b5654ccb1408ae3816c9b",
+      "reason": "mise.toml: gate dependency changed: mise task pregate — MT1 adds lint:mutants to its depends; nothing removed",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "729c4ce94558cc3f1b07b3b5b9f638c4784599e0fb4f21705b8eab82caa2963d",
+      "reason": "scripts/netsim/mutants.py: gate dependency changed — MT1: --check without a block checks the whole catalogue (duplicate id within a block, stale anchor unless retired, entry named by a gate missing), and a retired entry is never run; runners, catch rules and --check BLOCK output unchanged (gates SB2a1, RL1, PU1, PC1a replayed green)",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "82a9fd5c1e39608e24c72072f20c4ee958443f4d546f776dc6c1865d432d946a",
+      "reason": "scripts/netsim/mutants_test.py: gate dependency changed — MT1 adds CatalogueCheckTest (11 tests); no existing test removed or changed",
+      "decision": "docs/objectif-en-cours.md"
     }
   ]
 }
