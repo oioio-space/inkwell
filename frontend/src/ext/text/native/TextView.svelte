@@ -29,5 +29,5 @@ $effect.pre(() => {
 {#if handle}
   <Editor {handle} {me} {lang} {support} at={startOffset} />
 {:else if big}
-  <ReadOnlyText text={big.text} message={readOnlyReason} {support} />
+  <ReadOnlyText text={big.text} message={readOnlyReason} {support} at={startOffset} />
 {/if}

@@ -83,7 +83,11 @@ const opening = $derived(
 );
 /** The view shown: the one the person switched to (the text of a table), else the default. */
 const shown = $derived(
-  opening && (opening.alternatives.find((v) => v.id === viewChoice.viewer) ?? opening.viewer),
+  opening &&
+    (opening.alternatives.find(
+      (v) => v.id === viewChoice.viewerFor(workspace.project, workspace.current),
+    ) ??
+      opening.viewer),
 );
 const textEditor = registry.essentialViewer("text");
 /** A text shown by another viewer than the editor (a table's grid) brings its own status bar. */
@@ -93,6 +97,21 @@ const lang = $derived(formatLanguage(opening?.type.grammar));
 const openedText = $derived(
   workspace.opened?.text !== undefined ? { text: workspace.opened.text } : undefined,
 );
+
+/**
+ * After a switch of view, the keyboard goes to the view just shown (UX-EX0-4): the editor, or
+ * the grid, once it is in the page (its code and its parse may take a few frames).
+ */
+function focusShown() {
+  const until = performance.now() + 3000;
+  const step = () => {
+    const target =
+      shown === textEditor ? session.view : document.querySelector<HTMLElement>("[role=grid]");
+    if (target) target.focus();
+    else if (performance.now() < until) requestAnimationFrame(step);
+  };
+  void tick().then(() => requestAnimationFrame(step));
+}
 
 /** A text file that reads as a table is offered as one (never the main document, so not at start). */
 const offerTable = $derived(
@@ -108,11 +127,18 @@ function openAsTable() {
 
 /** Back to the file's default view (the grid) from another one, on the cell under the caret. */
 function showDefault() {
-  viewChoice.show(undefined, session.state?.selection.main.head);
+  viewChoice.show(
+    workspace.project,
+    workspace.current,
+    undefined,
+    session.state?.selection.main.head,
+  );
+  focusShown();
 }
 /** The text view of the file, the caret at `offset`. */
 function showText(offset: number) {
-  viewChoice.show(textEditor.id, offset);
+  viewChoice.show(workspace.project, workspace.current, textEditor.id, offset);
+  focusShown();
 }
 /** Only Typst and Markdown have a formatting bar; csv, bib and txt are just the editor. */
 const barLanguage = $derived(barLang(workspace.current));
@@ -458,7 +484,7 @@ onMount(() => {
       ready: started,
       closePage,
       prepare: async (signal) => {
-        viewChoice.show(undefined, undefined);
+        viewChoice.arrive();
         await workspace.refreshFiles(); // a file just made outside Inkwell may not be listed yet
         signal.throwIfAborted();
       },
@@ -539,7 +565,7 @@ onMount(() => {
 <!-- A presentation covers the window: what is under it neither takes keys nor focus. -->
 <div class="window" inert={presenting}>
   {#if sidebarOpen}
-    <Sidebar files={workspace.files} current={workspace.current} onOpen={(path, keepFocus) => { markOpen(path); viewChoice.show(undefined, undefined); void workspace.openFile(path).then(() => tick()).then(() => { if (keepFocus) return; if (session.view) session.focus(); else document.querySelector<HTMLElement>(".file-view, [role=grid]")?.focus(); }); }} />
+    <Sidebar files={workspace.files} current={workspace.current} onOpen={(path, keepFocus) => { markOpen(path); viewChoice.arrive(); void workspace.openFile(path).then(() => tick()).then(() => { if (keepFocus) return; if (session.view) session.focus(); else document.querySelector<HTMLElement>(".file-view, [role=grid]")?.focus(); }); }} />
   {/if}
   <div class="column">
     <HeaderBar

@@ -105,6 +105,8 @@ export interface Registry {
   loadedSupport(id: string): LanguageSupport | undefined;
   /** A contribution's entry module, loaded once whatever the number of callers. */
   load(c: Viewer | Grammar): Promise<unknown>;
+  /** Whether a viewer failed to load this session (its stand-in shows instead). */
+  hasFailed(viewer: Viewer): boolean;
   /**
    * The module of an opening's viewer. A viewer that fails to load is replaced by the essential
    * viewer of the content class, and `notify` is called once.
@@ -404,6 +406,7 @@ export function buildRegistry(
       return g ? loaded.get(g.id) : undefined;
     },
     load,
+    hasFailed: (viewer: Viewer) => substitutes.has(viewer),
     loadViewer,
   });
 }

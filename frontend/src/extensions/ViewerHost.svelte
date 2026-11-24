@@ -33,7 +33,7 @@ $effect.pre(() => {
   if (shown) return;
   let live = true;
   registry
-    .loadViewer({ ...opening, viewer: v }, () => notice.queue(t("viewer.failed"), "alert"))
+    .loadViewer({ ...opening, viewer: v }, () => notice.queue(t("viewer.failed"), "status"))
     .then(({ viewer: got, module }) => {
       const component = (module as ViewerModule).component as Shown["component"];
       const next = { viewer: got, component };

@@ -214,7 +214,12 @@ export function createEditor(
 export function createReadOnlyEditor(
   parent: HTMLElement,
   text: string,
-  { onState, onView, support }: Pick<EditorOptions, "onState" | "onView" | "support"> = {},
+  {
+    onState,
+    onView,
+    support,
+    at,
+  }: Pick<EditorOptions, "onState" | "onView" | "support" | "at"> = {},
 ): {
   setSupport: (support: LanguageSupport | undefined) => void;
   destroy: () => void;
@@ -223,6 +228,8 @@ export function createReadOnlyEditor(
   const view = new EditorView({
     parent,
     doc: text,
+    // The caret where the other view of the same file was (a table's cell), as the editor does.
+    ...(at !== undefined ? { selection: { anchor: Math.max(0, Math.min(at, text.length)) } } : {}),
     extensions: [
       cspNonce(),
       diagnosticMarks,

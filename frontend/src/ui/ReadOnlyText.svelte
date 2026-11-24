@@ -1,5 +1,6 @@
 <script lang="ts">
 import type { LanguageSupport } from "@codemirror/language";
+import { EditorView } from "@codemirror/view";
 import { untrack } from "svelte";
 import { createReadOnlyEditor } from "../editor/setup";
 import { megabytesOf, t } from "../i18n";
@@ -11,7 +12,14 @@ let {
   text,
   message,
   support,
-}: { text: string; message?: string | undefined; support?: LanguageSupport | undefined } = $props();
+  at,
+}: {
+  text: string;
+  message?: string | undefined;
+  support?: LanguageSupport | undefined;
+  /** Where the caret opens (switching from the table of the same file). */
+  at?: number | undefined;
+} = $props();
 let host: HTMLDivElement;
 let editor: ReturnType<typeof createReadOnlyEditor> | undefined;
 
@@ -20,7 +28,14 @@ $effect(() => {
   const made = untrack(() =>
     createReadOnlyEditor(host, shown, {
       support,
-      onView: (view) => (session.view = view),
+      ...(at !== undefined ? { at } : {}),
+      onView: (view) => {
+        session.view = view;
+        if (at === undefined) return;
+        view.dispatch({
+          effects: EditorView.scrollIntoView(view.state.selection.main.head, { y: "center" }),
+        });
+      },
       onState: session.note,
     }),
   );

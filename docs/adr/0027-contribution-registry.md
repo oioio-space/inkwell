@@ -234,7 +234,8 @@ different builds fail cleanly, and both are built together.
   slice 1: the generic icon.*
 - Should a per-file « open with » choice be remembered on this device only, or shared with the project?
   *Default applied in slice 1, the safer one: this device only, per project (`workspace/viewChoice.svelte.ts`,
-  local storage); nothing is shared with the other people.*
+  local storage); nothing is shared with the other people. The view chosen for a file (its text rather than its
+  table) is remembered the same way (UX-EX0-5, key `inkwell.viewWith`).*
 
 ### Confirmation
 

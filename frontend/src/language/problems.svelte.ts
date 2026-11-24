@@ -192,7 +192,8 @@ export class Problems {
   async jump(d: Problem) {
     if (d.stale) return;
     const ticket = this.#compilerTicket;
-    if (d.source === "csv") viewChoice.show(registry.essentialViewer("text").id, d.from);
+    if (d.source === "csv")
+      viewChoice.show(workspace.project, d.file, registry.essentialViewer("text").id, d.from);
     if (!workspace.files.some((file) => file.path === d.file)) await workspace.refreshFiles();
     await workspace.openFile(d.file);
     await tick();
