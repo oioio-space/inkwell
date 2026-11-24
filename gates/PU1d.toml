@@ -1,0 +1,268 @@
+# Written 2026-11-24 at step 1, before the P-16/P-17 code; frozen 2026-11-24 after the two cross-family
+# reviews (DeepSeek V4 Pro): the spec, gates/PU1d/SPEC-REVIEW.md, « accepter avec corrections », findings 1, 2 and 4
+# applied, 3 and 5 need no change; the gate, gates/PU1d/GATE-REVIEW.md, « accepter ». Block PU1d (complete: wire and state between peers). Rules P-16
+# (a failed session opening closes the connection it names, and only it; the opening runs on that connection from its
+# start) and P-17 (any other connection still open after that close opens the session, with no connectedness event).
+# Why: spec §8.7.4, the 13 `close_peer` vectors and the code closed every connection to the peer (ClosePeer) while
+# PeerUpAck.tla closes one; with two connections per peer since HP1 that closed a live direct connection, or P-15's
+# fallback, for the failure of another (plan docs/plans/2026-11-24-pu1d-close-scope.md §1-§2). Spec §8.7.4 « Portée d'un
+# échec (règle P-16) », §8.7.5, §8.7.6, §8.7.8, §8.7.9, §16.1; model docs/protocol/tla/CloseScope.tla (extends PeerUpAck
+# unedited); vectors protocol/vectors/syncack.json, syncorder.json.
+# Contract change (method v2 rule 9), recorded by the integrator: gates/PU1.toml `vectors` and gates/PU1b.toml `vectors`
+# pin the pre-PU1d digests of syncack.json and syncorder.json; this gate's `vectors` supersedes those two criteria only.
+# PU1b `pu1-model-untouched` and PU1c `frozen-untouched` stay green (PeerUpAck.tla is not edited), and PU1's `tla`
+# keeps its 19 ^PeerUpAck runs (this block's are named ^PU1d).
+# Go mutants (scripts/netsim/mutants.toml, block PU1d): MD1-MD3 are frozen here by their tuple and text only; their
+# anchors are step 2's code (openOut binding the opening to a named connection, its Close of that connection, the
+# reopening on a remaining one), and scripts/netsim/mutants.py has no deferred anchors: the entries are added at step 2
+# with exactly the tuples of criterion `mutants`. Step 2 adjusts anchors only, never a test or its text.
+# No gate runs another. Wall-clock criteria take the machine with `heavy.sh --exclusive`.
+# Caps (rule G-1): 30 + (360 + 30) + 120 + 300 + (30 + 30 + 360) + 300 + 300 + (240 + 600) = 2700 s <= 2700 s.
+max_minutes = 45
+raw_results = ["docs/plans/2026-11-24-pu1d-close-scope.md", "docs/protocol/tla/CloseScope.tla", "protocol/vectors/syncack.json", "protocol/vectors/syncorder.json", "gates/PU1d/*"]
+
+[[criteria]]
+# The documents: spec §8.7.4 carries P-16 (named connection, only it closed, MUST NOT close the others, Drop and the
+# node's close as the only peer-wide closes) and P-17 (any other connection still open after the close opens); §8.7.5
+# its rows in the review's wording; §8.7.6, §8.7.8 and the §16.1 row no longer close the peer on a failure; §8.7.9 names
+# the model; the TLA README has the CloseScope section with S6, S7, L3 and MC1-MC3; CHANGES.md the PU1d entry.
+id = "docs"
+command = '''timeout -k 10 30 python3 -I - <<'PY'
+import pathlib, sys
+bad = []
+spec = pathlib.Path("docs/protocol/spec.md").read_text()
+def section(head, ends):
+    i = spec.find(head)
+    if i < 0:
+        return ""
+    j = min([k for k in (spec.find(e, i + len(head)) for e in ends) if k > 0] or [len(spec)])
+    return " ".join(spec[i:j].split())
+s87 = section("\n### 8.7 ", ["\n### 8.8 ", "\n## "])
+for w in ["**8.7.4 Ouvreur (règles P-1, P-5, P-6, P-16, P-17).**", "Portée d'un échec (règle P-16, bloc PU1d)", "qu'il nomme avant l'ouverture", "Il ouvre le flux sur cette connexion même", "S7 `OpeningNamed`", "ferment cette connexion et elle seule", "NE DOIT PAS fermer pour cela ses autres connexions au pair (`ClosePeer`)", "toute autre connexion encore ouverte après la fermeture de celle de l'ouverture", "(règle P-17)", "S6 `CrossedIndependent`", "L3 `NeverStranded`", "MC3", "`tla/CloseScope.tla`", "Pair muet : 15 s, puis la connexion de l'ouverture est fermée (P-16)", "l'ouverture échoue, sa connexion est fermée (P-16)"]:
+    if " ".join(w.split()) not in s87:
+        bad.append(f"spec §8.7 lacks {w!r}")
+for w in ["| Fermé, pair connecté | nouvelle connexion, signalée ou non par un changement d'état du pair ; ou toute autre connexion encore ouverte après la fermeture de celle de l'ouverture | Ouverture sur cette connexion (P-17) |", "connexion nommée de l'ouverture fermée, elle seule (P-16)"]:
+    if w not in spec:
+        bad.append(f"spec §8.7.5 lacks {w!r}")
+for w in ["flux réinitialisé, `ClosePeer`, aucun événement", "15 s, puis `ClosePeer`", "l'ouverture échoue, `ClosePeer`", "ferme ses\nconnexions au pair (`ClosePeer`)"]:
+    if w in spec:
+        bad.append(f"spec still says {w!r}")
+s16 = section("\n### 16.1 ", ["\n### ", "\n## "])
+if "refus, violation ou délai : flux réinitialisé, sa connexion fermée, elle seule (P-16)" not in s16:
+    bad.append("spec §16.1 row of the sync ACK not aligned on P-16")
+readme = " ".join(pathlib.Path("docs/protocol/tla/README.md").read_text().split())
+for w in ["## CloseScope (block PU1d", "`CrossedIndependent` (S6, P-16)", "`OpeningNamed` (S7, P-16)", "`NeverStranded` (L3, P-17)", "`PU1dCloseScopeClosePeer` (MC1", "`PU1dCloseScopeOnEventOnly` (MC2", "`PU1dCloseScopeUnnamedOpen` (MC3", "`PU1dCloseScopeUnnamedCollateral`"]:
+    if w not in readme:
+        bad.append(f"tla README lacks {w!r}")
+if "# Bloc PU1d" not in pathlib.Path("docs/protocol/CHANGES.md").read_text():
+    bad.append("docs/protocol/CHANGES.md lacks the PU1d entry")
+sys.exit(f"PU1d docs: {bad}" if bad else 0)
+PY'''
+
+[[criteria]]
+# The model (README "CloseScope"): three sound runs (Any and Negotiated exhaustive invariants: PeerUpAck's S1-S4, S6, S7;
+# Live exhaustive with L3 NeverStranded and L2), four mutant runs each caught by its named property (MC1 ClosePeer ->
+# CrossedIndependent; MC2 OnEventOnly -> NeverStranded; MC3 UnnamedOpen -> OpeningNamed; MC3's consequence
+# UnnamedCollateral -> CrossedIndependent) and three witnesses reached: exactly 10 ✓, no ✗. Measured 2026-11-24: 139 s
+# (Any 33 s, Negotiated 83 s, Live 7 s, the seven others at most 3 s each, plus JVM starts and heavy.sh). Structure: the sound rule
+# operators of CloseScope.tla are the ones the mutants override; PeerUpAck.tla and PeerUpAckMutants.tla are
+# byte-identical to PU1's frozen commit c7c90c7 (as gates/PU1b.toml `pu1-model-untouched`).
+id = "tla"
+command = '''out=$(INKWELL_TLA_ONLY='^PU1d' INKWELL_PERF_LOAD_WAIT=120 timeout -k 10 360 ./scripts/heavy.sh --exclusive ./scripts/tla-check.sh 2>&1) || { echo "$out" | tail -40; exit 1; }
+[ "$(echo "$out" | grep -c '✓')" -eq 10 ] || { echo "want 10 ✓, got $(echo "$out" | grep -c '✓')"; echo "$out" | tail -20; exit 1; }
+! echo "$out" | grep -q '✗' || { echo "$out" | grep '✗'; exit 1; }
+echo "$out" | grep -qxF -- "✓ PU1dCloseScopeLive: no error (exhaustive, liveness checked)" || { echo "sound run missing or failing: PU1dCloseScopeLive"; exit 1; }
+for n in PU1dCloseScopeAny PU1dCloseScopeNegotiated; do
+  echo "$out" | grep -qxF -- "✓ $n: no error (exhaustive, invariants)" || { echo "safety run missing or failing: $n"; exit 1; }
+done
+while read -r m p; do
+  echo "$out" | grep -qxF -- "✓ PU1dCloseScope$m: violation detected ($p)" || { echo "mutant or witness not caught by its named property: $m ($p)"; exit 1; }
+done <<'M'
+ClosePeer CrossedIndependent
+OnEventOnly NeverStranded
+UnnamedOpen OpeningNamed
+UnnamedCollateral CrossedIndependent
+WitnessBeside NoFailBeside
+WitnessQuiet NoQuietOpen
+WitnessNeg NoUnreturnedFail
+M
+timeout -k 10 30 git diff --quiet c7c90c7 -- docs/protocol/tla/PeerUpAck.tla docs/protocol/tla/mutants/PeerUpAckMutants.tla || { echo "PeerUpAck.tla or its mutants changed"; exit 1; }
+python3 -I - <<'PY'
+import pathlib, re, sys
+t = pathlib.Path("docs/protocol/tla/CloseScope.tla").read_text()
+bad = [w for w in [r"^EXTENDS PeerUpAck$", r"^FailClose\(n, c\) == CloseC\(n, c\)$", r"^Names\(st\) == st\.c$", r"^OpenGuard\(n\) == TRUE$", r"^CrossedIndependent ==", r"^OpeningNamed ==", r"^NeverStranded =="] if not re.search(w, t, re.M)]
+sys.exit(f"CloseScope structure: {bad}" if bad else 0)
+PY'''
+
+[[criteria]]
+# The vectors (spec §8.7.9): syncack.json (34) and syncorder.json (20) are exactly step 1's corpus (digest of id,
+# decoder, input, context, events, expect, verdict, scope); no `close_peer` is left; the 13 changed vectors expect
+# `close_conn`. The reference protocol/syncack (TestCorpus), the conformance runner at CurrentStep (TestCorpus) and the
+# generator (TestGenerateMatchesCommittedCorpus) pass, every one of the 13 subtests among them. Red at step 1: the
+# reference still answers close_peer.
+id = "vectors"
+command = '''mkdir -p .task && cd protocol && timeout -k 10 120 ../scripts/heavy.sh go test -count=1 -timeout=100s -json -run '^(TestCorpus|TestGenerateMatchesCommittedCorpus)$' ./syncack/ ./conformance/ ./cmd/vectors/ > ../.task/pu1d-vectors.json 2>&1; a=$?; cd .. && python3 -I - "$a" <<'PY'
+import hashlib, json, pathlib, sys
+bad = [] if sys.argv[1] == "0" else [f"go test exit {sys.argv[1]}"]
+keep = ("id", "decoder", "input_hex", "context", "events", "expect", "verdict", "scope")
+want = {"syncack.json": (34, "dc6ced8357d63d4b4877aecf9cb8d98c044352e6b62809eaa4d76966221f6c74"), "syncorder.json": (20, "b91c14f1f2e4d0f7c5a4c317effc8a893b75df8aa36d2c2bd077c798257936a8")}
+changed = ["sync-ack-opener-eof", "sync-ack-opener-reset", "sync-ack-opener-bad-byte", "sync-ack-opener-byte-after", "sync-ack-opener-deadline", "sync-ack-opener-slow-negotiation", "sync-ack-opener-deadline-before-return", "sync-ack-opener-silent", "sync-ack-opener-reopen-refused", "sync-refusal-busy-out-of-budget", "sync-refusal-other-code", "sync-refusal-negotiation-code", "sync-refusal-eof"]
+vecs = {}
+for f, (n, h) in want.items():
+    raw = pathlib.Path(f"protocol/vectors/{f}").read_text()
+    d = json.loads(raw)
+    canon = json.dumps([{k: v[k] for k in keep if k in v} for v in d["vectors"]], sort_keys=True, ensure_ascii=False, separators=(",", ":"))
+    if (len(d["vectors"]), hashlib.sha256(canon.encode()).hexdigest()) != (n, h):
+        bad.append(f"{f} differs from step 1's corpus")
+    if "close_peer" in raw:
+        bad.append(f"{f} still has close_peer")
+    vecs.update({v["id"]: (f, v) for v in d["vectors"]})
+for i in changed:
+    if i not in vecs or "close_conn" not in json.dumps(vecs[i][1]):
+        bad.append(f"vector {i} missing or not close_conn")
+evs = []
+for line in pathlib.Path(".task/pu1d-vectors.json").read_text().splitlines():
+    try:
+        e = json.loads(line)
+    except ValueError:
+        continue
+    if isinstance(e, dict):
+        evs.append(e)
+passed = {(e.get("Package", ""), e["Test"]) for e in evs if e.get("Action") == "pass" and e.get("Test")}
+names = {t for _, t in passed}
+for pkg in ("protocol/syncack", "protocol/conformance"):
+    if not any(p.endswith(pkg) and t == "TestCorpus" for p, t in passed):
+        bad.append(f"{pkg} TestCorpus missing or not passing")
+if "TestGenerateMatchesCommittedCorpus" not in names:
+    bad.append("TestGenerateMatchesCommittedCorpus missing or not passing")
+for n in sorted({e["Test"] for e in evs if e.get("Action") == "fail" and e.get("Test")})[:3]:
+    said = [e["Output"].strip() for e in evs if e.get("Test") == n and e.get("Action") == "output" and "want close_conn" in e.get("Output", "")]
+    print(f"{n}: {len(said)} close_conn mismatches, e.g. {said[:1]}")
+sys.exit(f"PU1d vectors: {bad[:12]}" if bad else 0)
+PY'''
+
+[[criteria]]
+# P-16 and P-17 in Go, on controlled time (simnet inside testing/synctest, internal/transport/p2p, -race), plan §7.
+# Each assertion fails with its rule's text. (1) TestFailedOpeningClosesOnlyItsConnection: two connections, the
+# responder refuses the session stream on one: that connection closes, the other stays open and carries the
+# reopened session, no PeerDown nor PeerUp event (else « P-16 other connection closed »). (2)
+# TestDeadlineBeforeReturnClosesNamedConnection: negotiated path, the echo held past 15 s on one of two connections:
+# the opening names that connection from its start and closes it alone (else « P-16 unnamed opening »). (3)
+# TestDeadlineOnStalledCircuitKeepsDirect: session opening on a circuit whose relay stops forwarding while a direct
+# connection exists: the circuit closes at 15 s, the direct connection stays and carries the session (« P-16 other
+# connection closed »). (4) TestResetBeforeConnCloseKeepsOther (review finding 2): the responder resets the stream and
+# closes its connection, the reset reaching the opener before the close; the other connection stays (« P-16 other
+# connection closed »). (5) TestPeerRefusingEveryConnection: a peer that does not admit us refuses on both connections:
+# they close one by one, one opening each, then one PeerDown if announced, none otherwise (« P-16 refusal loop »). (6)
+# TestByteAfterAckClosesItsConnection: a byte after the ACK closes that connection only, the peer stays announced and
+# the session reopens on the other (« P-16 other connection closed »). (7) TestRemainingConnectionOpens: the session's
+# connection closes while another stays open, no connectedness event is emitted, the session reopens on the other
+# within one opening (« P-17 stranded »). Every named test runs and passes (go test -json events). Red at step 1: none
+# of them exists.
+id = "go"
+command = '''mkdir -p .task && timeout -k 10 300 ./scripts/heavy.sh go test -count=1 -race -timeout=280s -json -run '^(TestFailedOpeningClosesOnlyItsConnection|TestDeadlineBeforeReturnClosesNamedConnection|TestDeadlineOnStalledCircuitKeepsDirect|TestResetBeforeConnCloseKeepsOther|TestPeerRefusingEveryConnection|TestByteAfterAckClosesItsConnection|TestRemainingConnectionOpens)$' ./internal/transport/p2p/ > .task/pu1d-go.json 2>&1; a=$?; python3 -I - "$a" <<'PY'
+import json, pathlib, sys
+evs = []
+for line in pathlib.Path(".task/pu1d-go.json").read_text().splitlines():
+    try:
+        e = json.loads(line)
+    except ValueError:
+        continue
+    if isinstance(e, dict):
+        evs.append(e)
+bad = [] if sys.argv[1] == "0" else [f"go test exit {sys.argv[1]}"]
+passed = {e["Test"] for e in evs if e.get("Action") == "pass" and e.get("Test")}
+for n in ["TestFailedOpeningClosesOnlyItsConnection", "TestDeadlineBeforeReturnClosesNamedConnection", "TestDeadlineOnStalledCircuitKeepsDirect", "TestResetBeforeConnCloseKeepsOther", "TestPeerRefusingEveryConnection", "TestByteAfterAckClosesItsConnection", "TestRemainingConnectionOpens"]:
+    if n not in passed:
+        bad.append(f"missing or not passing: {n}")
+for n in sorted({e["Test"] for e in evs if e.get("Action") == "fail" and e.get("Test")})[:4]:
+    said = [e["Output"].strip() for e in evs if e.get("Test") == n and e.get("Action") == "output" and "_test.go" in e.get("Output", "")]
+    print(f"{n}: {said[:2]}")
+sys.exit(f"PU1d go: {bad[:12]}" if bad else 0)
+PY'''
+
+[[criteria]]
+# The Go mutants of block PU1d are exactly the frozen table (kind, package, test, expect; step 2 adjusts anchors only)
+# and their anchors apply once; then each is caught by its named test failing with its text (never a build failure, a
+# timeout or another test). MD1: ClosePeer back in openOut's failure path (P-16). MD2: the opening through the host's
+# NewStream again, the swarm choosing the connection (P-16's named connection). MD3: no reopening on a remaining
+# connection after the close (P-17). No entry exists before step 2 (header): the table check is red until then.
+id = "mutants"
+command = '''timeout -k 10 30 python3 -I - <<'PY' && timeout -k 10 30 python3 -I scripts/netsim/mutants.py --check PU1d && timeout -k 10 360 ./scripts/heavy.sh python3 -I scripts/netsim/mutants.py PU1d MD1 MD2 MD3
+import sys, tomllib
+ms = {m["id"]: m for m in tomllib.load(open("scripts/netsim/mutants.toml", "rb"))["mutant"] if m.get("block") == "PU1d"}
+P2P = "./internal/transport/p2p/"
+want = {
+    "MD1": (P2P, "TestFailedOpeningClosesOnlyItsConnection", "P-16 other connection closed"),
+    "MD2": (P2P, "TestDeadlineBeforeReturnClosesNamedConnection", "P-16 unnamed opening"),
+    "MD3": (P2P, "TestRemainingConnectionOpens", "P-17 stranded"),
+}
+bad = sorted(set(ms) ^ set(want))
+for i, (pkg, test, expect) in want.items():
+    m = ms.get(i, {})
+    if (m.get("kind"), m.get("pkg"), m.get("test"), m.get("expect")) != ("go", pkg, test, expect) or not m.get("edit"):
+        bad.append(i)
+sys.exit(f"PU1d mutant entries differ from the frozen table: {sorted(set(bad))}" if bad else 0)
+PY'''
+
+[[criteria]]
+# Definition of done step 5: gremlins on protocol/syncack, which PU1d touches (CloseConn, CloseConnAction), as
+# scripts/block_done.py runs it (pinned version, 4 workers, coefficient 10, -count=1, memcap per test binary): a valid
+# measurement (some mutant judged, <= 10 % timed out) and an efficacy >= 95 %, or survivors justified in a « mutation
+# protocol/syncack » section of gates/PU1d/SIMPLIFY.md.
+id = "mutation"
+command = '''timeout -k 10 300 python3 -I - <<'PY'
+import pathlib, sys
+sys.path.insert(0, "scripts")
+import block_done as bd
+rc, out = bd.stream(f"../scripts/heavy.sh {bd.gremlins()} unleash --workers 4 --timeout-coefficient 10 ./syncack", bd.ROOT / "protocol", bd.MUTATION_ENV)
+if rc != 0:
+    sys.exit(f"PU1d mutation: gremlins exited {rc}")
+if why := bd.void_measurement(out):
+    sys.exit(f"PU1d mutation: void measurement: {why}")
+eff = bd.parse_efficacy(out)
+rep = pathlib.Path("gates/PU1d/SIMPLIFY.md")
+justified = rep.exists() and "mutation protocol/syncack" in rep.read_text()
+print(f"PU1d mutation protocol/syncack: {eff:.1f}%{' (survivors justified)' if justified else ''}")
+sys.exit(0 if eff >= bd.MIN_EFFICACY or justified else f"PU1d mutation: efficacy {eff:.1f}% < {bd.MIN_EFFICACY}% and no justification")
+PY'''
+
+[[criteria]]
+# No regression in the packages PU1d touches and their direct consumer: the whole internal/transport/p2p package
+# (PU1's TestPeerUpAfterAck and TestPeerUpLatency, HP1c's TestUpgradeAfterCrashRestart and TestSupersedeKeepsLiveOlder,
+# E2E3's TestOpenWindow and TestLanAskAndAnswer among them) and internal/app, which wires the transport.
+id = "regression"
+command = '''timeout -k 10 300 ./scripts/heavy.sh go test -count=1 -timeout=270s ./internal/transport/p2p/ ./internal/app/'''
+
+[[criteria]]
+# The network scenario of the block (CLAUDE.md « Pièges connus »: a block touching sync contains its netsim scenario):
+# scenario 9, variant crash, seed 20771, strict. Two connections to bob coexist after his restart (the dead old circuit
+# and the new one), which is where P-16 decides what a failed opening closes. C1d bob's page shows « Synchronisé » and
+# his link is direct within 15 s of the restart; C2d texts typed on both sides converge both ways within 15 s; C3k
+# (block PC1b's successor of C3c) alice shows bob away at most once, inside bob's join restart window, and never at the
+# crash: closing the new connection for the failure of an opening on the dead one would show a PeerDown there. run.sh's
+# own state is wiped at its start, so the result is copied right after it and only the copy is read. Measured at step
+# 1: 21 s with the e2e build cached (C1d 6.5 s, C2d 7.0 s).
+id = "netsim"
+command = '''rm -rf .task/pu1d-results && mkdir -p .task/pu1d-results && timeout -k 10 240 ./scripts/heavy.sh mise run e2e:build && { NETSIM_SCENARIOS=9 NETSIM_VARIANTS=crash NETSIM_SEEDS="20771" NETSIM_EXPECT=strict INKWELL_E2E_BROWSER=chromium INKWELL_PERF_LOAD_WAIT=120 timeout -k 10 600 ./scripts/heavy.sh --exclusive ./scripts/netsim/run.sh; rc=$?; cp .task/netsim/results/9-crash-s20771.json .task/pu1d-results/ 2>/dev/null; python3 -I - "$rc" <<'PY'
+import json, pathlib, sys
+need = {"C1d", "C2d", "C3k"}
+p = pathlib.Path(".task/pu1d-results/9-crash-s20771.json")
+bad = []
+if not p.exists():
+    bad.append(f"{p.name} missing")
+else:
+    r = json.loads(p.read_text())
+    got = {c["id"] for c in r["clauses"]}
+    red = [f'{c["id"]} {c["status"]}: {c.get("measured", "")[:80]}' for c in r["clauses"] if c["status"] != "pass"]
+    if r.get("expect") != "strict" or not need <= got or red:
+        bad.append(f"{p.name}: expect {r.get('expect')}, missing {sorted(need - got)}, red {red}")
+if int(sys.argv[1]) or bad:
+    sys.exit(f"PU1d netsim: exit {sys.argv[1]}, {bad}")
+PY
+}'''
+
+[[criteria]]
+# The /simplify review of the diff: the report exists and its « Diff : » line names a real base commit.
+id = "simplify-report"
+command = "grep -Eq '^Diff : [0-9a-f]{7,}[.][.]' gates/PU1d/SIMPLIFY.md"
