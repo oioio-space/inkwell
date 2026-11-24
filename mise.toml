@@ -198,7 +198,7 @@ description = "Model-check the protocol models (TLC 1.8.0 pinned by SHA-256: Rep
 run = "./scripts/tla-check.sh"
 
 [tasks.deadcode]
-description = "Audit unreachable exported functions (x/tools v0.52.0 pinned in go.mod)"
+description = "Audit unreachable exported functions (x/tools pinned in go.mod, checked by scripts/deadcode.sh)"
 depends = ["sidecar:fetch"]
 run = "./scripts/deadcode.sh"
 

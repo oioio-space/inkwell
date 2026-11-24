@@ -2049,6 +2049,16 @@
       "id": "9bb01bea32627af30375ab006a53871c710568426938669b33f35f12c62d4132",
       "reason": "scripts/gate-selftest.py: gate machinery changed — CI3a fixtures brought up to rules G-1 and G-2 (red on main since G-1: « gates/T.toml has no max_minutes »); no assertion removed or relaxed",
       "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "40ea2fe35611bf512ba07022bc17fda893cd8c579dacfaa5501033cf808ecc9d",
+      "reason": "mise.toml: gate dependency changed: mise task deadcode — LP1: its description no longer names the x/tools version, which scripts/deadcode.sh checks; command unchanged",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "42a677a3fcc46ad19ccf560045f98094c62625972df565dc4948b486ed9da527",
+      "reason": "scripts/deadcode.sh: gate dependency changed — LP1: the x/tools pin raised from v0.52.0 to v0.52.1-0.20261106145633-d407941a339a, which libp2p v0.52.0 requires; the check stays exact (never silently upgraded) and the audit finds no new unreachable exported function",
+      "decision": "docs/objectif-en-cours.md"
     }
   ]
 }

@@ -2,9 +2,10 @@
 # Audit lot 1: exported functions unreachable from production command roots.
 set -euo pipefail
 cd "$(git rev-parse --show-toplevel)"
-# Pin to the same x/tools version as go.mod; never silently upgrade the analyzer.
+# Pin to the same x/tools version as go.mod; never silently upgrade the analyzer. Raised from v0.52.0 to
+# v0.52.1-0.20261106145633-d407941a339a with block LP1 (2026-11-24): libp2p v0.52.0 requires it.
 version="$(go list -m -f '{{.Version}}' golang.org/x/tools)"
-[[ "$version" == v0.52.0 ]] || { echo "deadcode: expected x/tools v0.52.0, got $version" >&2; exit 1; }
+[[ "$version" == v0.52.1-0.20261106145633-d407941a339a ]] || { echo "deadcode: expected x/tools v0.52.1-0.20261106145633-d407941a339a, got $version" >&2; exit 1; }
 raw="$(mktemp)"
 trap 'rm -f "$raw"' EXIT
 go run golang.org/x/tools/cmd/deadcode -json ./cmd/... > "$raw"
