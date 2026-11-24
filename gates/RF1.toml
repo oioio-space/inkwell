@@ -1,0 +1,301 @@
+# Written 2026-11-24 at step 1, before any RF1 code; revision 2 after the round-1 cross-family review of the spec and
+# gate (gates/RF1/SPEC-REVIEW.md, DeepSeek V4 Pro, « accepter avec corrections »: the token bucket modelled, the rate and
+# per-origin numbers computed, regression widened); frozen 2026-11-24 after round 2 (gates/RF1/GATE-REVIEW.md, « accepter »). Block RF1 (complete: trust and admission,
+# peer resources). Rules RF-1 (a circuit is charged to its relay's authenticated PeerID, never to the relay's IP; an
+# outbound connection to no origin), RF-2 (a member's or a configured relay's connection leaves every pending count at
+# its handshake), RF-3 (pending: 16 per relay origin, 8 per IP origin, 48 in all), RF-4 (15 s at most), RF-5 (a bucket of
+# 16 per origin, 1 per 5 s; a member's unpaid token is given back, nothing else), RF-6 (128 member connections either way,
+# 2 reserved per member, a third or fourth only from the rest; 2 per relay, 4 relays; plus the 48 pending: 184), RF-7
+# (relay: 128 circuits per peer, 64 reservations and connections per IP, 130 service streams per peer and direction).
+# Why: libp2p's connection limiter counts every circuit under its relay's IPv4 address, 8 at most, so the 8th member
+# behind one relay is refused both ways (plan §1; reproduced 2026-11-24 on df31531: 7 of 10 peers up). Spec §16.1 rows
+# « connexions », « connexions non vérifiées », « connexions par IP (membres) », « circuits par relais »; model
+# docs/protocol/tla/RelayFanout.tla; bounds in protocol/limits.go pinned by protocol/testdata/limits.json.
+# Go mutants (scripts/netsim/mutants.toml, block RF1): MG1-MG6 are frozen here by their tuple and text only; their
+# anchors are step 2's code, so the entries are added at step 2 with exactly the tuples of criterion `mutants`.
+# Step 2 adjusts anchors only, never a test or its text.
+# No gate runs another. Wall-clock criteria take the machine with `heavy.sh --exclusive`.
+# Caps (rule G-1): 30 + (360 + 30) + (180 + 60 + 30) + 300 + 420 + (30 + 30 + 600) + 300 + (300 + 120) + (240 + 600)
+# = 3630 s <= 3660 s (max_minutes 61).
+max_minutes = 61
+raw_results = ["docs/plans/2026-11-24-rf1-relay-fanout.md", "docs/protocol/tla/RelayFanout.tla", "gates/RF1/*"]
+
+[[criteria]]
+# The documents: spec §16.1 has the four rows (the circuit's origin is its relay's PeerID, never its IP; members out
+# of the per-origin counts; the member share; the bucket; the relay's bounds) and no longer promises « 128 entrantes,
+# 128 sortantes »; the QUIC windows row counts 184 connections; the TLA README has the RelayFanout section (S1-S9, L1,
+# MF1-MF13);
+# CHANGES.md has the RF1 entry. Red at step 1: the spec rows wait for the review (they are in the plan, §3).
+id = "docs"
+command = '''timeout -k 10 30 python3 -I - <<'PY'
+import pathlib, sys
+bad = []
+spec = pathlib.Path("docs/protocol/spec.md").read_text()
+i = spec.find("\n### 16.1 ")
+j = spec.find("\n### 16.2 ", i)
+s16 = spec[i:j] if i >= 0 and j > i else ""
+for w in ["| connexions | 2 par pair en régime, 4 au plus pendant un passage", "dont 2 réservées à chacun des 63 autres membres, une troisième ou une quatrième seulement sur le reste", "limites système et par sens de libp2p : 184", "| connexions non vérifiées (avant la poignée de main, ou non-membre identifié) | 16 par relais d'un circuit, désigné par son PeerID authentifié, jamais par son adresse IP ; 8 par adresse IPv4 (/32)", "48 en tout ; 15 s au plus", "seau de 16 jetons par origine, 1 de plus par 5 s", "lui est rendu à sa poignée de main s'il est encore dû", "| connexions par IP (membres) | aucune borne par adresse ni par relais", "| circuits par relais (relais inkwell) | 128 circuits par pair (64 × 2)", "184 connexions : 184 Mio des 256 Mio"]:
+    if w not in s16:
+        bad.append(f"spec §16.1 lacks {w!r}")
+if "128 entrantes, 128 sortantes au total" in s16:
+    bad.append("spec §16.1 still promises 128 inbound and 128 outbound")
+readme = " ".join(pathlib.Path("docs/protocol/tla/README.md").read_text().split())
+for w in ["## RelayFanout (block RF1", "`InJustified` (S6, RF-1, RF-2)", "`OutNeverRefused` (S7, RF-2, RF-6)", "`SharesKept` (S9, RF-6)", "`RF1RefundUnheld` (MF12", "`RF1WindowRefill` (MF13", "`MembersEventuallyUp` (L1, RF-2, RF-4)", "`RF1PerIPCount` (MF1", "`RF1OutboundCharged` (MF2", "`RF1NoDeadline` (MF3"]:
+    if w not in readme:
+        bad.append(f"tla README lacks {w!r}")
+if "# Bloc RF1" not in pathlib.Path("docs/protocol/CHANGES.md").read_text():
+    bad.append("docs/protocol/CHANGES.md lacks the RF1 entry")
+sys.exit(f"RF1 docs: {bad}" if bad else 0)
+PY'''
+
+[[criteria]]
+# The model (README "RelayFanout"): three sound runs, exhaustive with liveness (Flood: a stranger floods the members'
+# origin and a second one forever, a Byzantine member, the node dials; Inbound: members connect inbound only, a finite
+# stranger; Mixed: members behind a relay and behind a home router, the relay flooded), sixteen mutant runs each caught
+# by its named property (MF12 and MF13 are the token bucket's: a blind refund, round 1's fixed window) and seven
+# witnesses reached, the plan's residual among them: exactly 26 ✓, no ✗. Measured 2026-11-24: 77 s with the Alloy leg
+# (Flood 35 s). Structure: the sound rule operators of RelayFanout.tla are the ones the mutants override.
+id = "tla"
+command = '''out=$(INKWELL_TLA_ONLY='^RF1' INKWELL_PERF_LOAD_WAIT=120 timeout -k 10 360 ./scripts/heavy.sh --exclusive ./scripts/tla-check.sh 2>&1) || { echo "$out" | tail -40; exit 1; }
+[ "$(echo "$out" | grep -c '✓')" -eq 26 ] || { echo "want 26 ✓, got $(echo "$out" | grep -c '✓')"; echo "$out" | tail -20; exit 1; }
+! echo "$out" | grep -q '✗' || { echo "$out" | grep '✗'; exit 1; }
+for n in RF1Flood RF1Inbound RF1Mixed; do
+  echo "$out" | grep -qxF -- "✓ $n: no error (exhaustive, liveness checked)" || { echo "sound run missing or failing: $n"; exit 1; }
+done
+while read -r m p; do
+  echo "$out" | grep -qxF -- "✓ RF1$m: violation detected ($p)" || { echo "mutant or witness not caught by its named property: $m ($p)"; exit 1; }
+done <<'M'
+PerIPCount InJustified
+PerIPCountLive MembersEventuallyUp
+OutboundCharged OutNeverRefused
+OutboundStarved MembersEventuallyUp
+NoDeadline MembersEventuallyUp
+NoOriginQuota OriginBound
+NoGlobalQuota GlobalBound
+NoToken RateBound
+NoRefund MembersSpendNoRate
+SharedCap OutNeverRefused
+AuthShared AuthNeverRefused
+NoShare SharesKept
+NoMemberCap MemberCapBound
+RefundUnheld RateBound
+WindowRefill RateBound
+WitnessInRefused NoInRefusal
+WitnessRateRefused NoRateRefusal
+WitnessQuotaFull NoFullQuota
+WitnessPassage NoPassage
+WitnessSurplus NoSurplus
+WitnessByzRefused NoByzRefusal
+WitnessPaidPending NoPaidPending
+WitnessResidual MembersEventuallyUp
+M
+timeout -k 10 30 python3 -I - <<'PY'
+import pathlib, re, sys
+t = pathlib.Path("docs/protocol/tla/RelayFanout.tla").read_text()
+want = [r"^OriginLoad\(o\) == PendOn\(o\) ", r"^GlobalLoad == Pending ", r"^SysCap == MemberCap \+ Q ", r"^Room\(m\) == IF est\[m\] < 2 THEN EstAll < MemberCap ELSE est\[m\] < PerCap /\\ EstAll \+ Owed\(m\) < MemberCap$", r"^OutOK\(m\) == Room\(m\) /\\ Total < SysCap ", r"^AuthOK\(m\) == est\[m\] = 2 \\/ Room\(m\) ", r"^Expires == TRUE ", r"^UseOrigin == TRUE ", r"^UseGlobal == TRUE ", r"^UseToken == TRUE ", r"^RefillStep\(o\) ==", r"^RefundStep\(m\) ==", r"^RateBound ==", r"^SharesKept ==", r"^InJustified ==", r"^OutNeverRefused ==", r"^MembersEventuallyUp =="]
+bad = [w for w in want if not re.search(w, t, re.M)]
+sys.exit(f"RelayFanout structure: {bad}" if bad else 0)
+PY'''
+
+[[criteria]]
+# The pure ledger (protocol/admit: no I/O, time injected, nothing of inkwell outside the protocol module imported,
+# neither libp2p), each test at the bound, the bound + 1 and the recovery, failing with its rule's text:
+# TestOriginQuotaBound (16 pending from one relay origin and 8 from one IPv4 /32, the next refused, one closed:
+# admitted; « RF-3 origin quota »), TestGlobalQuotaBound (48 over several origins, the 49th refused, recovery; « RF-3
+# global quota »), TestRateBurstAndRefill (16 admissions, the 17th refused, admitted 5 s later; « RF-5 rate »),
+# TestMemberLeavesCounts (a member's handshake frees its origin's place at once; nine members behind one IP all
+# admitted; « RF-2 member still counted »), TestRefundOnlyUnpaid (a member's unpaid token comes back, one a period paid
+# does not; « RF-5 refund of a paid token »), TestPendingDeadline (an entry ends at 15 s, not before; « RF-4 deadline »),
+# TestMemberShareBound (2 reserved per member, a third or fourth only from the rest; 128 in all, the 129th refused,
+# recovery; « RF-6 member share »), TestPendingNeverUsesMemberRoom (48 pending and 128 members coexist; « RF-6 shared
+# capacity »), TestAdmitVectors (protocol/vectors/admit.json: a bound, bound + 1 and recovery case per rule),
+# TestLedgerModel (rapid: the ledger against a reference of RelayFanout's rules). Then FuzzLedger for 30 s (random
+# event sequences; the invariants S1-S5 and S9 hold after each event), and the import check. Red at step 1: the
+# package is missing.
+id = "admit"
+command = '''mkdir -p .task && cd protocol && timeout -k 10 180 ../scripts/heavy.sh go test -count=1 -timeout=160s -json -run '^(TestOriginQuotaBound|TestGlobalQuotaBound|TestRateBurstAndRefill|TestMemberLeavesCounts|TestRefundOnlyUnpaid|TestPendingDeadline|TestMemberShareBound|TestPendingNeverUsesMemberRoom|TestAdmitVectors|TestLedgerModel)$' ./admit/ > ../.task/rf1-admit.json 2>&1; a=$?; timeout -k 10 60 ../scripts/heavy.sh go test -count=1 -run '^$' -fuzz '^FuzzLedger$' -fuzztime 30s ./admit/ > ../.task/rf1-fuzz.log 2>&1; f=$?; d=$(timeout -k 10 30 go list -deps ./admit/ 2>&1); l=$?; cd .. && python3 -I - "$a" "$f" "$l" "$d" <<'PY'
+import json, pathlib, sys
+a, f, l, deps = sys.argv[1:5]
+bad = [] if a == "0" else [f"go test exit {a}"]
+if f != "0":
+    bad.append(f"FuzzLedger exit {f}: {pathlib.Path('.task/rf1-fuzz.log').read_text()[-300:]!r}")
+if l != "0":
+    bad.append(f"go list exit {l}")
+else:
+    forbidden = [x for x in deps.split() if x in ("net", "os", "os/exec", "syscall", "net/http", "io/fs") or x.startswith("github.com/libp2p/") or (x.startswith("github.com/oioio-space/inkwell/") and not x.startswith("github.com/oioio-space/inkwell/protocol"))]
+    if forbidden:
+        bad.append(f"protocol/admit imports {forbidden}")
+evs = []
+for line in pathlib.Path(".task/rf1-admit.json").read_text().splitlines():
+    try:
+        e = json.loads(line)
+    except ValueError:
+        continue
+    if isinstance(e, dict):
+        evs.append(e)
+passed = {e["Test"] for e in evs if e.get("Action") == "pass" and e.get("Test")}
+for n in ["TestOriginQuotaBound", "TestGlobalQuotaBound", "TestRateBurstAndRefill", "TestMemberLeavesCounts", "TestRefundOnlyUnpaid", "TestPendingDeadline", "TestMemberShareBound", "TestPendingNeverUsesMemberRoom", "TestAdmitVectors", "TestLedgerModel"]:
+    if n not in passed:
+        bad.append(f"missing or not passing: {n}")
+if not pathlib.Path("protocol/vectors/admit.json").exists():
+    bad.append("protocol/vectors/admit.json missing")
+sys.exit(f"RF1 admit: {bad[:14]}" if bad else 0)
+PY'''
+
+[[criteria]]
+# The fan-out in Go, on controlled time (simnet inside testing/synctest, internal/transport/p2p, -race), no per-IP
+# exception left in the harness. TestRelayFanOut10 and TestRelayFanOut17: N members reachable only through one relay
+# (17: above the old 16 circuits per peer and libp2p's burst of 16) all reach the node, half dialling it, half dialled
+# by it, within 60 s (« RF-1 circuit charged to relay IP »). TestHomeRouterNine: nine members behind one IPv4 address,
+# direct (« RF-2 member still counted »). TestStrangerFloodThroughRelay: strangers open circuits through the members'
+# relay as fast as it lets them: they never hold more than 8 pending places at the node, the node's dials to the
+# members still succeed and a member behind another origin still connects inbound (« RF-2 outbound starved », « RF-3
+# origin quota »). TestMemberShareKept: a Byzantine member opening connections as fast as it can holds 4 at most and
+# never one of another member's 2 reserved, every honest member still connects (« RF-6 member share »).
+# TestCircuitOriginIsRelayPeer: inbound and outbound circuit endpoints are charged to the relay's
+# PeerID, a direct one to its /32 or /56 (« RF-1 origin »). TestAdmissionForwardsResourceManager: the wrapper forwards
+# every method of network.ResourceManager, VerifySourceAddress included (« RF-6 wrapper drops a method »). Red at step 1:
+# the tests are missing and LiftRelayIPLimit is still in the harness.
+id = "go"
+command = '''mkdir -p .task && timeout -k 10 300 ./scripts/heavy.sh go test -count=1 -race -timeout=280s -json -run '^(TestRelayFanOut10|TestRelayFanOut17|TestHomeRouterNine|TestStrangerFloodThroughRelay|TestMemberShareKept|TestCircuitOriginIsRelayPeer|TestAdmissionForwardsResourceManager)$' ./internal/transport/p2p/ > .task/rf1-go.json 2>&1; a=$?; python3 -I - "$a" <<'PY'
+import json, pathlib, sys
+evs = []
+for line in pathlib.Path(".task/rf1-go.json").read_text().splitlines():
+    try:
+        e = json.loads(line)
+    except ValueError:
+        continue
+    if isinstance(e, dict):
+        evs.append(e)
+bad = [] if sys.argv[1] == "0" else [f"go test exit {sys.argv[1]}"]
+lifted = sorted(str(f) for f in pathlib.Path("internal/transport/p2p").glob("*.go") if "LiftRelayIPLimit" in f.read_text())
+if lifted:
+    bad.append(f"the harness still lifts the per-IP limit: {lifted}")
+passed = {e["Test"] for e in evs if e.get("Action") == "pass" and e.get("Test")}
+for n in ["TestRelayFanOut10", "TestRelayFanOut17", "TestHomeRouterNine", "TestStrangerFloodThroughRelay", "TestMemberShareKept", "TestCircuitOriginIsRelayPeer", "TestAdmissionForwardsResourceManager"]:
+    if n not in passed:
+        bad.append(f"missing or not passing: {n}")
+for n in sorted({e["Test"] for e in evs if e.get("Action") == "fail" and e.get("Test")})[:4]:
+    said = [e["Output"].strip() for e in evs if e.get("Test") == n and e.get("Action") == "output" and "_test.go" in e.get("Output", "")]
+    print(f"{n}: {said[:2]}")
+sys.exit(f"RF1 go: {bad[:12]}" if bad else 0)
+PY'''
+
+[[criteria]]
+# The §16.1 bounds in Go, each at the bound, the bound + 1 and the recovery (spec §16 intro), on controlled time:
+# TestNodeConnsBound (128 member connections all inbound, the 129th refused, one closed: the next admitted; the same
+# outbound; « RF-6 node connections »), TestRelayCircuitsPerPeerBound (128 circuits to one peer through the relay,
+# the 129th refused with RESOURCE_LIMIT_EXCEEDED, one closed: admitted; « RF-7 relay circuits »),
+# TestRelayReservationsPerIPBound (64 reservations from one IPv4 address, the 65th refused, one released: admitted;
+# « RF-7 relay reservations per IP »). Red at step 1: the tests are missing.
+id = "bounds"
+command = '''mkdir -p .task && timeout -k 10 420 ./scripts/heavy.sh go test -count=1 -timeout=400s -json -run '^(TestNodeConnsBound|TestRelayCircuitsPerPeerBound|TestRelayReservationsPerIPBound)$' ./internal/transport/p2p/ > .task/rf1-bounds.json 2>&1; a=$?; python3 -I - "$a" <<'PY'
+import json, pathlib, sys
+evs = []
+for line in pathlib.Path(".task/rf1-bounds.json").read_text().splitlines():
+    try:
+        e = json.loads(line)
+    except ValueError:
+        continue
+    if isinstance(e, dict):
+        evs.append(e)
+bad = [] if sys.argv[1] == "0" else [f"go test exit {sys.argv[1]}"]
+passed = {e["Test"] for e in evs if e.get("Action") == "pass" and e.get("Test")}
+for n in ["TestNodeConnsBound", "TestRelayCircuitsPerPeerBound", "TestRelayReservationsPerIPBound"]:
+    if n not in passed:
+        bad.append(f"missing or not passing: {n}")
+sys.exit(f"RF1 bounds: {bad}" if bad else 0)
+PY'''
+
+[[criteria]]
+# The Go mutants of block RF1 are exactly the frozen table (kind, package, test, expect; step 2 adjusts anchors only)
+# and their anchors apply once; then each is caught by its named test failing with its text (never a build failure, a
+# timeout or another test). MG1: the origin taken from the endpoint's first IP, libp2p's rule (RF-1). MG2: SetPeer
+# keeps a member's pending charge (RF-2). MG3: an outbound opening charged to the pending quota (RF-2). MG4:
+# relayMaxCircuits back to 16 (RF-7). MG5: libp2p's rate limiter left on, so the relay's members share one bucket
+# (RF-5). MG6: the member share off, a third connection checked against the total only (RF-6). No entry exists before
+# step 2: the table check is red until then.
+id = "mutants"
+command = '''timeout -k 10 30 python3 -I - <<'PY' && timeout -k 10 30 python3 -I scripts/netsim/mutants.py --check RF1 && timeout -k 10 600 ./scripts/heavy.sh python3 -I scripts/netsim/mutants.py RF1 MG1 MG2 MG3 MG4 MG5 MG6
+import sys, tomllib
+ms = {m["id"]: m for m in tomllib.load(open("scripts/netsim/mutants.toml", "rb"))["mutant"] if m.get("block") == "RF1"}
+P2P = "./internal/transport/p2p/"
+want = {
+    "MG1": (P2P, "TestRelayFanOut10", "RF-1 circuit charged to relay IP"),
+    "MG2": (P2P, "TestHomeRouterNine", "RF-2 member still counted"),
+    "MG3": (P2P, "TestStrangerFloodThroughRelay", "RF-2 outbound starved"),
+    "MG4": (P2P, "TestRelayFanOut17", "RF-7 relay circuits"),
+    "MG5": (P2P, "TestRelayFanOut17", "RF-5 rate shared by the relay's members"),
+    "MG6": (P2P, "TestMemberShareKept", "RF-6 member share"),
+}
+bad = sorted(set(ms) ^ set(want))
+for i, (pkg, test, expect) in want.items():
+    m = ms.get(i, {})
+    if (m.get("kind"), m.get("pkg"), m.get("test"), m.get("expect")) != ("go", pkg, test, expect) or not m.get("edit"):
+        bad.append(i)
+sys.exit(f"RF1 mutant entries differ from the frozen table: {sorted(set(bad))}" if bad else 0)
+PY'''
+
+[[criteria]]
+# Definition of done step 5: gremlins on protocol/admit, the new pure package, as scripts/block_done.py runs it
+# (pinned version, 4 workers, coefficient 10, -count=1, memcap per test binary): a valid measurement (some mutant
+# judged, <= 10 % timed out) and an efficacy >= 95 %, or survivors justified in a « mutation protocol/admit » section
+# of gates/RF1/SIMPLIFY.md. Red at step 1: the package is missing.
+id = "mutation"
+command = '''timeout -k 10 300 python3 -I - <<'PY'
+import pathlib, sys
+sys.path.insert(0, "scripts")
+import block_done as bd
+if not (bd.ROOT / "protocol" / "admit").is_dir():
+    sys.exit("RF1 mutation: protocol/admit is missing")
+rc, out = bd.stream(f"../scripts/heavy.sh {bd.gremlins()} unleash --workers 4 --timeout-coefficient 10 ./admit", bd.ROOT / "protocol", bd.MUTATION_ENV)
+if rc != 0:
+    sys.exit(f"RF1 mutation: gremlins exited {rc}")
+if why := bd.void_measurement(out):
+    sys.exit(f"RF1 mutation: void measurement: {why}")
+eff = bd.parse_efficacy(out)
+rep = pathlib.Path("gates/RF1/SIMPLIFY.md")
+justified = rep.exists() and "mutation protocol/admit" in rep.read_text()
+print(f"RF1 mutation protocol/admit: {eff:.1f}%{' (survivors justified)' if justified else ''}")
+sys.exit(0 if eff >= bd.MIN_EFFICACY or justified else f"RF1 mutation: efficacy {eff:.1f}% < {bd.MIN_EFFICACY}% and no justification")
+PY'''
+
+[[criteria]]
+# No regression in what RF1 changes and in every test that reads it (review round 1, item 4: PU1d's lesson): the
+# packages of the node and the relay and their consumers (internal/transport with its architecture test,
+# internal/transport/p2p with HP1's TestUpgradeSlotsFIFO and TestUpgradeNodeTraffic now without the per-IP exception,
+# internal/app which wires the transport, cmd/inkwell-relay which runs the relay), then the whole protocol module
+# (TestLimitsMatchSpecification reads spec §16 and protocol/testdata/limits.json; the conformance runner, the vector
+# generator). Red on today's tree for a reason outside RF1: PU1d left limits.json behind the §16.1 sync ACK row.
+id = "regression"
+command = '''timeout -k 10 300 ./scripts/heavy.sh go test -count=1 -timeout=270s ./internal/transport/ ./internal/transport/p2p/ ./internal/app/ ./cmd/inkwell-relay/ && cd protocol && timeout -k 10 120 ../scripts/heavy.sh go test -count=1 -timeout=100s ./...'''
+
+[[criteria]]
+# The network scenario of the block (CLAUDE.md « Pièges connus »): scenario 9, variant crash, seed 20771, strict, as
+# PU1d. Bob crashes and restarts behind his NAT: his dead circuit and the new one coexist at the relay and at alice,
+# so the new one must be admitted while the dead one still holds its place (RF-2, RF-4), with the real relay and NATs.
+# C1d bob's page shows « Synchronisé » and his link is direct within 15 s of the restart; C2d texts typed on both
+# sides converge both ways within 15 s; C3k alice shows bob away at most once, inside his join restart window.
+id = "netsim"
+command = '''rm -rf .task/rf1-results && mkdir -p .task/rf1-results && timeout -k 10 240 ./scripts/heavy.sh mise run e2e:build && { NETSIM_SCENARIOS=9 NETSIM_VARIANTS=crash NETSIM_SEEDS="20771" NETSIM_EXPECT=strict INKWELL_E2E_BROWSER=chromium INKWELL_PERF_LOAD_WAIT=120 timeout -k 10 600 ./scripts/heavy.sh --exclusive ./scripts/netsim/run.sh; rc=$?; cp .task/netsim/results/9-crash-s20771.json .task/rf1-results/ 2>/dev/null; python3 -I - "$rc" <<'PY'
+import json, pathlib, sys
+need = {"C1d", "C2d", "C3k"}
+p = pathlib.Path(".task/rf1-results/9-crash-s20771.json")
+bad = []
+if not p.exists():
+    bad.append(f"{p.name} missing")
+else:
+    r = json.loads(p.read_text())
+    got = {c["id"] for c in r["clauses"]}
+    red = [f'{c["id"]} {c["status"]}: {c.get("measured", "")[:80]}' for c in r["clauses"] if c["status"] != "pass"]
+    if r.get("expect") != "strict" or not need <= got or red:
+        bad.append(f"{p.name}: expect {r.get('expect')}, missing {sorted(need - got)}, red {red}")
+if int(sys.argv[1]) or bad:
+    sys.exit(f"RF1 netsim: exit {sys.argv[1]}, {bad}")
+PY
+}'''
+
+[[criteria]]
+# The /simplify review of the diff: the report exists and its « Diff : » line names a real base commit.
+id = "simplify-report"
+command = "grep -Eq '^Diff : [0-9a-f]{7,}[.][.]' gates/RF1/SIMPLIFY.md"
