@@ -16,12 +16,45 @@
     "constants": {}
   },
   {
-    "row": "| connexions | 2 par pair (passage) ; 128 entrantes, 128 sortantes au total (impl., 64 membres × 2) | — | refusée | à la fermeture d'une autre |",
+    "row": "| connexions | 2 par pair en régime, 4 au plus pendant un passage (circuit, direct, connexion supplantée en preuve P-15, appel croisé) ; membres : 128 en tout, dans un sens ou l'autre (impl.), dont 2 réservées à chacun des 63 autres membres, une troisième ou une quatrième seulement sur le reste ; un membre ajouté à la liste quand le reste est pris : le nœud ferme, juste assez pour que chaque part tienne, des connexions au-delà de la part propre (celles du membre le plus au-dessus de la sienne, la plus récente d'abord) ; relais configurés : 2 chacun, 4 relais au plus ; plus les connexions non vérifiées ; limites système et par sens de libp2p : 184 | 2 par membre | refusée | à la fermeture d'une autre |",
     "constants": {
-      "MaxConnectionsPerPeer": "2",
-      "MaxInboundConnections": "128",
-      "MaxOutboundConnections": "128",
-      "MaxConnectedMembers": "64"
+      "MaxConnectionsPerPeer": "4",
+      "MemberShareConnections": "2",
+      "MaxMemberConnections": "128",
+      "MaxConnectedMembers": "64",
+      "ConnectionsPerRelay": "2",
+      "MaxRelays": "4",
+      "MaxNodeConnections": "184"
+    }
+  },
+  {
+    "row": "| connexions non vérifiées (avant la poignée de main, ou non-membre identifié) | 16 par relais d'un circuit, désigné par son PeerID authentifié, jamais par son adresse IP ; 8 par adresse IPv4 (/32) ou préfixe IPv6 /56 (64 par /48) ; 48 en tout ; 15 s au plus ; admissions : seau de 16 jetons par origine, 1 de plus par 5 s ; le jeton d'un membre ou d'un relais configuré lui est rendu à sa poignée de main s'il est encore dû | par origine | refusée à l'ouverture | à la fermeture d'une connexion non vérifiée ; jeton suivant |",
+    "constants": {
+      "MaxPendingPerRelay": "16",
+      "MaxPendingPerIP": "8",
+      "PendingIPv4PrefixBits": "32",
+      "PendingIPv6PrefixBits": "56",
+      "PendingIPv6WidePrefixBits": "48",
+      "MaxPendingPerIPv6WidePrefix": "64",
+      "MaxPending": "48",
+      "PendingDeadline": "15000000000",
+      "AdmissionBurst": "16",
+      "AdmissionRefill": "5000000000"
+    }
+  },
+  {
+    "row": "| connexions par IP (membres) | aucune borne par adresse ni par relais pour une connexion authentifiée d'un membre ou d'un relais configuré, ni pour une connexion sortante (8 membres derrière une même box, 63 derrière un même relais) | — | — | — |",
+    "constants": {}
+  },
+  {
+    "row": "| circuits par relais (relais inkwell) | 128 circuits par pair (64 × 2) ; réservations 256, 64 par IP ; connexions 64 par IP ; flux du service par pair et par sens 130, 8 192 en tout ; avec une liste Allow, un pair absent de la liste est refusé à sa poignée de main (il ne peut ni réserver ni relier) | par pair | `RESOURCE_LIMIT_EXCEEDED` | à la fermeture d'un circuit |",
+    "constants": {
+      "RelayMaxCircuitsPerPeer": "128",
+      "RelayMaxReservations": "256",
+      "RelayReservationsPerIP": "64",
+      "RelayConnectionsPerIP": "64",
+      "RelayServiceStreamsPerPeer": "130",
+      "RelayServiceStreams": "8192"
     }
   },
   {
@@ -198,7 +231,7 @@
     }
   },
   {
-    "row": "| fenêtres QUIC | maximum de connexion ≥ maximum de flux + fenêtre initiale de flux + 1 Mio (go-libp2p v0.51.0 et quic-go v0.64.1 : 15 ≥ 10 + 0,125 + 1 Mio) ; fenêtres initiales réglées par le nœud (bloc PU1c, §8.7.3) : flux 128 Kio, connexion 1 Mio, avec (places × voies + 1) × fenêtre initiale de flux ≤ 3/4 × fenêtre initiale de connexion, soit (2 × 2 + 1) × 128 Kio = 640 Kio ≤ 768 Kio ; la fenêtre initiale de connexion est réservée au gestionnaire de ressources à l'ouverture de la connexion (128 connexions : 128 Mio des 256 Mio du nœud), ses hausses aussi (auto-ajustement gardé) ; coût : 1,25 Mio/s par flux à 100 ms d'aller-retour tant que sa fenêtre n'a pas grandi | — | démarrage refusé (porte P-QUIC) ; la construction échoue si l'inégalité ne tient plus ; réservation refusée : connexion refusée | — |",
+    "row": "| fenêtres QUIC | maximum de connexion ≥ maximum de flux + fenêtre initiale de flux + 1 Mio (go-libp2p v0.51.0 et quic-go v0.64.1 : 15 ≥ 10 + 0,125 + 1 Mio) ; fenêtres initiales réglées par le nœud (bloc PU1c, §8.7.3) : flux 128 Kio, connexion 1 Mio, avec (places × voies + 1) × fenêtre initiale de flux ≤ 3/4 × fenêtre initiale de connexion, soit (2 × 2 + 1) × 128 Kio = 640 Kio ≤ 768 Kio ; la fenêtre initiale de connexion est réservée au gestionnaire de ressources à l'ouverture de la connexion (184 connexions : 184 Mio des 256 Mio du nœud, bloc RF1 ; un circuit n'en réserve aucune), ses hausses aussi (auto-ajustement gardé) ; coût : 1,25 Mio/s par flux à 100 ms d'aller-retour tant que sa fenêtre n'a pas grandi | — | démarrage refusé (porte P-QUIC) ; la construction échoue si l'inégalité ne tient plus ; réservation refusée : connexion refusée | — |",
     "constants": {
       "QUICConnectionHeadroom": "1048576",
       "QUICMaxConnectionWindow": "15728640",

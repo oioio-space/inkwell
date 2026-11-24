@@ -12,7 +12,7 @@ Recorded on 2026-11-24, at step 1, before any RF1 code. The gate draft had been 
 | Criterion | Cap | Exit | Duration | Reason read in the output | Right reason? |
 |---|---|---|---|---|---|
 | `docs` | 30 s | 1 | 0 s | The ten §16.1 anchors are missing (share, 16/8/48, bucket, 184). The old « 128 entrantes, 128 sortantes au total » is still there. `CHANGES.md` has no RF1 entry. The TLA README anchors are present | **yes**: the rows are in plan §3 and enter the spec after review round 2 |
-| `tla` | 390 s | 0 | 68 s | 26 ✓, no ✗. Flood: 1,657,395 states, 163,866 distinct, depth 25, 35 s. Inbound: 9,331 states, 2,108 distinct, depth 16. Mixed: 406,549 states, 44,100 distinct, depth 20, 11 s. Liveness was checked in all three. MF1-MF13 are each caught by their named property, MF12 (blind refund) and MF13 (round 1's fixed window) by `RateBound`. The seven witnesses are reached, `WitnessResidual` among them [RF1]. The sound operators are in place | green as expected: the model is step 1's |
+| `tla` | 390 s | 0 | 68 s | 26 ✓, no ✗. Flood: 1,657,395 states, 163,866 distinct, depth 25, 35 s. Inbound: 9,331 states, 2,108 distinct, depth 16. Mixed: 406,549 states, 44,100 distinct, depth 20, 11 s. Liveness was checked in all three. MF1-MF13 are each caught by their named property, MF12 (blind refund) and MF13 (round 1's fixed window) by `RateBound`. The seven witnesses are reached, `WitnessResidual` among them → RLY1. The sound operators are in place | green as expected: the model is step 1's |
 | `admit` | 270 s | 1 | 0 s | `protocol/admit: directory not found`, `go list exit 1`, the ten named tests missing, `protocol/vectors/admit.json` missing | **yes**: step 2 writes the package, its vectors and `FuzzLedger` |
 | `go` | 300 s | 1 | 2 s | « the harness still lifts the per-IP limit » (`export_test.go`, `upgrade_sim_test.go`); the seven named tests are missing (`TestMemberShareKept` among them) | **yes**: step 2. The defect itself is reproduced below |
 | `bounds` | 420 s | 1 | 1 s | the three named tests are missing | **yes**: step 2 |
@@ -47,7 +47,7 @@ PU1d's gate `regression` did not run the protocol module, so the drift went unse
 
 ## The computations of plan §4 (review items 2 and 3)
 
-`gates/RF1/rf1_wave.py` (join wave) and `gates/RF1/rf1_recover.py` (recovery after a flood of every member) were run
+`docs/plans/2026-11-24-rf1/rf1_wave.py` (join wave) and `docs/plans/2026-11-24-rf1/rf1_recover.py` (recovery after a flood of every member) were run
 with `heavy.sh`, 5 seeds each; their output is in plan §4.
 - **Mesh wave, 64 members behind one relay:** with 8 per relay, 36.9 s at h = 2 s and 74.0 s at h = 4 s; with 16,
   10.4 s and 21.7 s. So the relay origin was raised to 16 (and the total to 48).
@@ -67,7 +67,7 @@ with `heavy.sh`, 5 seeds each; their output is in plan §4.
     caught).
   - Witnesses: `WitnessOutCap` dropped (no honest dial is refused any more); added `WitnessRateRefused` (the
     reviewer's case: strangers drain the bucket, and L1 still holds through the node's dials), `WitnessSurplus`,
-    `WitnessByzRefused`, `WitnessPaidPending` and `WitnessResidual` [RF1].
+    `WitnessByzRefused`, `WitnessPaidPending` and `WitnessResidual` → RLY1.
   - Runs went from 19 to 26.
 - **A mutant tried and dropped.** `NoShareStarved` (MF10 caught by `OutNeverRefused`) was vacuous with one Byzantine
   member at `PerCap` 4: three honest members at 2 and the Byzantine one at 4 make 8 < 9, so the honest dial is never
@@ -86,3 +86,19 @@ with `heavy.sh`, 5 seeds each; their output is in plan §4.
   (`MaxAtt <- Unbounded`) and unary minus needs `Integers`. They were not property violations.
 - **A fresh worktree.** `internal/app` needs `mise run sidecar:fetch` (pinned, download cache) in a new worktree, as
   in PU1d.
+
+## Code review, round 1 (recorded 2026-11-24, step 2)
+
+`gates/RF1/CODE-REVIEW.md` (« refuser »). Each finding has a named test (`gates/RF1/SIMPLIFY.md`, « Cross-family
+code review »), red on the code before its fix for the confirmed ones:
+- **Roster growth** (finding 1): `TestRosterGrowthShedsSurplus` red (« sheds 0 surplus connections, want 2 »). The
+  model gained the case: constant `Late`, variable `admitted`, action `AdmitLate` with `ShedStep`. The runs are kept
+  apart from the 26 the gate froze, under `INKWELL_TLA_ONLY='^RFR'`: `RFRGrowth` exhaustive, no error, liveness
+  included (25,453 states, 3,010 distinct, depth 16, 1 s); mutant `RFRNoShed` (MFR1, no shed) violates `SharesKept`
+  (trace of 5, `AdmitLate(3)` last). The 26 `^RF1` runs pass unchanged with `Late = {}`.
+- **Unlisted peer at an Allow-listed relay** (finding 2): `TestRelayUnlistedHoldsNoPlace` red before the gater change,
+  with the stranger holding 9 of its address's places. After the change: at most its one handshake's place.
+- **Open relay** (no `Allow`, the RLY1 residual, plan §4): the same test with the gater off measures 9 places at the
+  peak, each connection ending after about 45 s (one dial a second for six minutes, kept alive). → RLY1.
+- **Sweep mutants** (finding 3): `TestBucketsBoundedUnderChurn` kills the negation and the inversion of the sweep
+  condition; two variants stay equivalent.

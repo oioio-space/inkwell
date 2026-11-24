@@ -7,7 +7,6 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
-	"net/netip"
 	"slices"
 	"strings"
 	"sync"
@@ -17,7 +16,6 @@ import (
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
-	rcmgr "github.com/libp2p/go-libp2p/p2p/host/resource-manager"
 	"github.com/libp2p/go-libp2p/p2p/transport/quicreuse"
 	"github.com/libp2p/go-yamux/v5"
 	ma "github.com/multiformats/go-multiaddr"
@@ -495,16 +493,6 @@ func (n *Node) PunchTicket(to transport.PeerID) bool {
 	return n.pgate.slots.Queued(string(p)) || n.pgate.slots.Holds(string(p), time.Now())
 }
 
-// LiftRelayIPLimit lets the node of o hold up to n connections through the relay at relayIP (an IPv4
-// address of the simulated network), instead of libp2p's 8 per IPv4 address: every circuit through a relay
-// counts under the relay's address. Test harness only, for tests that need more than 7 relayed links on
-// one node; block RF1 fixes the limit in the product, and this exception proves no product capacity.
-func LiftRelayIPLimit(o *Options, relayIP string, n int) {
-	o.rcmgr = append(o.rcmgr, rcmgr.WithNetworkPrefixLimit(
-		[]rcmgr.NetworkPrefixLimit{{Network: netip.PrefixFrom(netip.MustParseAddr(relayIP), 32), ConnCount: n}}, nil,
-	))
-}
-
 // SelectAddrs returns the addresses of addrs a round may use (H-12), as the punch gate selects them.
 func SelectAddrs(addrs []ma.Multiaddr) []ma.Multiaddr { return selectAddrs(addrs) }
 
@@ -565,3 +553,12 @@ func SetOnUpgradeCall(o *Options, f func(to transport.PeerID, action string)) {
 		f(name, act.String())
 	}
 }
+
+// AdmitEvent is an opening (Peer empty) or a handshake the node's admission layer decided on (block RF1).
+type AdmitEvent = admitEvent
+
+// SetAdmitObserve makes the node of o tell f of each opening and handshake its admission layer decides on.
+func SetAdmitObserve(o *Options, f func(AdmitEvent)) { o.admitObserve = f }
+
+// SetRelayAdmitObserve makes the relay of o tell f of each opening and handshake its admission layer decides on.
+func SetRelayAdmitObserve(o *RelayOptions, f func(AdmitEvent)) { o.admitObserve = f }

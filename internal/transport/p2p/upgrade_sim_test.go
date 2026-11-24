@@ -270,10 +270,6 @@ func TestUpgradeSlotsFIFO(t *testing.T) {
 		inFlight, maxFlight := 0, 0
 		first := map[transport.PeerID]time.Time{}
 		oa := p2p.Options{Relays: relays}
-		// Ten relayed links on one node: libp2p's limit of 8 connections per IPv4 address counts every circuit
-		// under the relay's address. Lifted here for the test only (block RF1 fixes the product; this proves no
-		// product capacity).
-		p2p.LiftRelayIPLimit(&oa, relayIP, 64)
 		p2p.SetPuncher(&oa, func(ctx context.Context, to transport.PeerID) error {
 			mu.Lock()
 			inFlight++
@@ -907,10 +903,6 @@ func nodeTraffic(t *testing.T, members int) {
 		var calls callLog
 		oa := p2p.Options{Relays: relays}
 		p2p.SetPuncher(&oa, realPuncher(&calls, &a))
-		// Ten relayed links on one node: libp2p's limit of 8 connections per IPv4 address counts every circuit
-		// under the relay's address. Lifted here for the test only (block RF1 fixes the product; this proves no
-		// product capacity).
-		p2p.LiftRelayIPLimit(&oa, relayIP, 64)
 		a = nn.node(t, 1, oa)
 		aEnd.Store(a.end)
 		want := map[transport.PeerID][]string{}
@@ -1065,7 +1057,6 @@ func TestUpgradeAnswererBehindQueue(t *testing.T) {
 		relays := nn.relay(t, p2p.RelayOptions{})
 		nn.blockDirect(true)
 		oa := p2p.Options{Relays: relays}
-		p2p.LiftRelayIPLimit(&oa, relayIP, 64) // nine relayed links (block RF1 fixes the product's limit)
 		a := nn.node(t, 1, oa)
 		want := map[transport.PeerID][]string{}
 		var hogs []*rawMember

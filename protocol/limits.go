@@ -8,14 +8,65 @@ import "time"
 const Version = "0.1.0"
 
 const (
-	// MaxConnectionsPerPeer is the maximum number of simultaneous connections with one peer, during a handover (§16, connections row).
-	MaxConnectionsPerPeer = 2
-	// MaxInboundConnections is the maximum number of inbound connections in total (§16, connections row).
-	MaxInboundConnections = 128
-	// MaxOutboundConnections is the maximum number of outbound connections in total (§16, connections row).
-	MaxOutboundConnections = 128
+	// MaxConnectionsPerPeer is the maximum number of simultaneous connections with one member, during a passage:
+	// circuit, direct, a superseded connection awaiting its P-15 proof, a crossed dial (§16, connections row; RF-6).
+	MaxConnectionsPerPeer = 4
+	// MemberShareConnections is the number of member connections reserved for each member (§16, connections row;
+	// RF-6): a third or fourth connection comes only from what no member's share holds.
+	MemberShareConnections = 2
+	// MaxMemberConnections is the maximum number of member connections, in either direction (§16, connections row).
+	MaxMemberConnections = 128
 	// MaxConnectedMembers is the number of members the connection totals are sized for (§16, connections row).
 	MaxConnectedMembers = 64
+	// ConnectionsPerRelay is the number of connections kept for each configured relay (§16, connections row).
+	ConnectionsPerRelay = 2
+	// MaxRelays is the maximum number of configured relays (§16, connections row).
+	MaxRelays = 4
+	// MaxNodeConnections is libp2p's system and per-direction connection limit: member connections, the relays'
+	// connections and the pending ones, so that it never binds first (§16, connections row; RF-6).
+	MaxNodeConnections = MaxMemberConnections + MaxRelays*ConnectionsPerRelay + MaxPending
+	// MaxPendingPerRelay is the maximum number of unverified connections charged to one relay origin, named by the
+	// relay's authenticated PeerID (§16, unverified connections row; RF-1, RF-3).
+	MaxPendingPerRelay = 16
+	// MaxPendingPerIP is the maximum number of unverified connections charged to one IPv4 /32 or IPv6 /56 origin
+	// (§16, unverified connections row; RF-3).
+	MaxPendingPerIP = 8
+	// PendingIPv4PrefixBits is the prefix length of an IPv4 origin (§16, unverified connections row; RF-1).
+	PendingIPv4PrefixBits = 32
+	// PendingIPv6PrefixBits is the prefix length of an IPv6 origin (§16, unverified connections row; RF-1).
+	PendingIPv6PrefixBits = 56
+	// PendingIPv6WidePrefixBits is the prefix length of the wider IPv6 count (§16, unverified connections row).
+	PendingIPv6WidePrefixBits = 48
+	// MaxPendingPerIPv6WidePrefix is the maximum number of unverified connections per IPv6 /48 (§16, unverified
+	// connections row).
+	MaxPendingPerIPv6WidePrefix = 64
+	// MaxPending is the maximum number of unverified connections in all (§16, unverified connections row; RF-3).
+	MaxPending = 48
+	// PendingDeadline is how long an unverified connection holds its place at most (§16, unverified connections
+	// row; RF-4).
+	PendingDeadline = 15 * time.Second
+	// AdmissionBurst is the size of each origin's admission bucket (§16, unverified connections row; RF-5).
+	AdmissionBurst = 16
+	// AdmissionRefill is the period after which an origin's bucket gets one token back (§16, unverified connections
+	// row; RF-5).
+	AdmissionRefill = 5 * time.Second
+	// RelayMaxCircuitsPerPeer is the maximum number of circuits per peer at an inkwell relay, 64 × 2 (§16, relay
+	// circuits row; RF-7).
+	RelayMaxCircuitsPerPeer = 128
+	// RelayMaxReservations is the maximum number of reservations at an inkwell relay (§16, relay circuits row).
+	RelayMaxReservations = 256
+	// RelayReservationsPerIP is the maximum number of reservations per IP at an inkwell relay (§16, relay circuits
+	// row; RF-7).
+	RelayReservationsPerIP = 64
+	// RelayConnectionsPerIP is the maximum number of unverified connections per IP at an inkwell relay (§16, relay
+	// circuits row; RF-7).
+	RelayConnectionsPerIP = 64
+	// RelayServiceStreamsPerPeer is the maximum number of relay-service and hop/stop streams per peer and direction
+	// at an inkwell relay (§16, relay circuits row; RF-7).
+	RelayServiceStreamsPerPeer = 130
+	// RelayServiceStreams is the maximum number of relay-service streams in all, two per circuit of a full mesh of
+	// 64 members (§16, relay circuits row; RF-7).
+	RelayServiceStreams = 8192
 	// ControlStreams is the maximum number of CONTROL streams per peer and direction (§16, streams row).
 	ControlStreams = 1
 	// RepoStreams is the maximum number of REPO streams per peer and direction (§16, streams row).

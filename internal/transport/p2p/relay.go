@@ -24,6 +24,8 @@ import (
 	ma "github.com/multiformats/go-multiaddr"
 
 	"github.com/oioio-space/inkwell/internal/transport"
+	wire "github.com/oioio-space/inkwell/protocol"
+	"github.com/oioio-space/inkwell/protocol/admit"
 	"github.com/oioio-space/inkwell/protocol/linkprobe"
 )
 
@@ -31,13 +33,14 @@ import (
 // unless [RelayOptions.Listen] says otherwise.
 const DefaultRelayPort = 7419
 
-// Limits of the relay service. The libp2p defaults (2 minutes and 128 KiB per
-// relayed connection) suit hole punching, not synchronising, so a circuit is
-// unlimited here; the relay is bounded by how many it serves instead.
+// Limits of the relay service (spec §16.1, row « circuits par relais », RF-7). The libp2p defaults (2
+// minutes and 128 KiB per relayed connection) suit hole punching, not synchronising, so a circuit is
+// unlimited here; the relay is bounded by how many it serves instead: a circuit for each ordered pair of 64
+// members (two per member pair and direction), and 64 members behind one address.
 const (
-	relayMaxReservations      = 256
-	relayMaxCircuits          = 16
-	relayMaxReservationsPerIP = 8
+	relayMaxReservations      = wire.RelayMaxReservations
+	relayMaxCircuits          = wire.RelayMaxCircuitsPerPeer
+	relayMaxReservationsPerIP = wire.RelayReservationsPerIP
 	// A reservation is a connection that must stay open, so the connection
 	// manager is given room for all of them.
 	relayConnLow  = 600
@@ -75,6 +78,9 @@ type RelayOptions struct {
 	// extra is applied after the relay's own libp2p options; tests use it to
 	// run on a simulated network.
 	extra []libp2p.Option
+	// admitObserve, if not nil, is told of each opening and handshake the relay's admission layer decides on
+	// (tests of block RF1).
+	admitObserve func(admitEvent)
 	// Listen are the multiaddrs to listen on. Empty means QUIC on IPv4 and
 	// IPv6 and TCP, all at [DefaultRelayPort].
 	Listen []string
@@ -88,8 +94,10 @@ type RelayOptions struct {
 // returns nil then. It relays opaque, end-to-end encrypted bytes between
 // peers that cannot reach each other: it sees who talks to whom, never what.
 //
-// Circuits are not limited in time or volume; the relay serves 256 slots, 16
-// circuits per peer and 8 slots per IP address.
+// Circuits are not limited in time or volume; the relay serves 256 slots, 128
+// circuits per peer and 64 slots and connections per IP address (spec §16.1). With
+// Allow, a listed peer's connection leaves the count of its address at its
+// handshake (RF-2).
 func RunRelay(ctx context.Context, key ed25519.PrivateKey, o RelayOptions) error {
 	priv, err := privateKey(key)
 	if err != nil {
@@ -115,9 +123,16 @@ func RunRelay(ctx context.Context, key ed25519.PrivateKey, o RelayOptions) error
 			fmt.Sprintf("/ip4/0.0.0.0/tcp/%d", DefaultRelayPort),
 		}
 	}
-	rm, err := newRelayResourceManager()
+	rm, err := newRelayAdmission()
 	if err != nil {
 		return err
+	}
+	rm.observe = o.admitObserve
+	rm.classify = func(p peer.ID) admit.Class {
+		if acl.has(p) {
+			return admit.Member
+		}
+		return admit.Stranger
 	}
 	opts := []libp2p.Option{
 		libp2p.Identity(priv),
@@ -132,7 +147,10 @@ func RunRelay(ctx context.Context, key ed25519.PrivateKey, o RelayOptions) error
 		muxer(),
 		libp2p.ListenAddrStrings(listen...),
 		libp2p.ConnectionManager(cm),
-		libp2p.ConnectionGater(gate{BasicConnectionGater: base, admit: func(peer.ID) bool { return true }}),
+		// With Allow, a peer that is not listed may neither reserve nor connect (the circuit-v2 ACL is checked per
+		// HOP message only): its connection is closed at its handshake, so it holds none of its address's
+		// places (RF-7, RF-2), and no connection lingers until the connection manager trims above relayConnHigh.
+		libp2p.ConnectionGater(gate{BasicConnectionGater: base, admit: func(p peer.ID) bool { return acl == nil || acl.has(p) }}),
 		// A relay is a public server: no relay of its own, no reachability probe.
 		libp2p.DisableRelay(),
 		libp2p.ForceReachabilityPublic(),

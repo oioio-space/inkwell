@@ -616,3 +616,19 @@ fermait la connexion vivante pour l'échec d'une autre, et défaisait le chemin 
 | Un échec d'ouverture sur une connexion fermait toutes les connexions au pair | la connexion de l'ouverture seule est fermée (P-16) ; seuls `Drop` et la fermeture du nœud ferment tout | §8.7.4, §8.7.5, §8.7.6, §8.7.8, §16 |
 | Une connexion qui reste quand celle de la session se ferme n'émet aucun événement | elle ouvre son propre flux, comme une connexion nouvelle (P-17) | §8.7.4, §8.7.5 |
 | Preuves | vecteurs `syncack.json`, `syncorder.json` (issue et action `close_conn`) ; modèle `CloseScope`, qui étend `PeerUpAck` sans le modifier (S6, S7, L3, MC1-MC3, trois témoins) ; revue DeepSeek V4 Pro « accepter avec corrections » (`gates/PU1d/SPEC-REVIEW.md`), corrections 1, 2 et 4 appliquées | §8.7.9 |
+
+# Bloc RF1 : membres derrière un même relais ou une même adresse (2026-11-24, proposé)
+
+Constat (`PROGRESS.md`, RF1) : le gestionnaire de ressources de libp2p limite à 8 connexions simultanées par adresse
+IPv4 et compte chaque circuit sous l'adresse du relais (go-libp2p #2805) : au-delà de 7 membres derrière un même
+relais, le suivant est refusé dans les deux sens, contre les 64 membres du §16.1 ; reproduit le 2026-11-24 sur
+`df31531` (7 pairs sur 10). Plan : [2026-11-24-rf1-relay-fanout.md](../plans/2026-11-24-rf1-relay-fanout.md).
+
+| Constat | Changement | Où |
+|---|---|---|
+| Un circuit est compté sous l'adresse IP de son relais, avec la connexion au relais | avant sa poignée de main, une connexion entrante est comptée à son origine : le relais d'un circuit désigné par son PeerID authentifié, sinon son adresse ; une connexion sortante n'est comptée à aucune origine (RF-1) | §16.1 |
+| Les membres restent comptés par adresse après leur poignée de main | la connexion authentifiée d'un membre ou d'un relais configuré sort des comptes par origine (RF-2) ; quotas des connexions non vérifiées : 16 par relais, 8 par adresse, 48 en tout, 15 s au plus, seau de 16 jetons et 1 par 5 s, jeton rendu au membre s'il est encore dû (RF-3 à RF-5) | §16.1 |
+| « 128 entrantes, 128 sortantes » promis, 64 par sens dans le code ; un membre byzantin pouvait prendre la place des autres | 128 connexions de membres dans un sens ou l'autre, 2 réservées à chaque membre, une troisième ou une quatrième sur le reste ; 2 par relais configuré, 4 relais ; limites libp2p 184 (RF-6) ; fenêtres QUIC 184 Mio des 256 | §16.1 |
+| Relais : 16 circuits par pair, 8 réservations et connexions par adresse | 128 circuits par pair, 64 réservations et connexions par adresse, flux du service 130 par pair et par sens, 8 192 en tout (RF-7) ; avec une liste Allow, un pair absent de la liste est refusé à sa poignée de main | §16.1 |
+| Revue du code, tour 1 : un membre ajouté à la liste quand le reste est pris n'avait pas sa part | le nœud ferme, juste assez pour que chaque part tienne, des connexions au-delà de la part propre (le membre le plus au-dessus de la sienne, la plus récente d'abord) ; modèle `AdmitLate`, `RFRGrowth`, mutant `RFRNoShed` | §16.1, `tla/RelayFanout.tla` |
+| Preuves | modèle `RelayFanout` (S1-S9, L1, mutants MF1-MF13, sept témoins dont le résiduel) ; simulations des temps de jonction et de reprise (`docs/plans/2026-11-24-rf1/`) ; revues DeepSeek V4 Pro « accepter avec corrections » puis « accepter » (`gates/RF1/SPEC-REVIEW.md`, `gates/RF1/GATE-REVIEW.md`) | §16.1, `tla/RelayFanout.tla` |

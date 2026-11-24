@@ -1,0 +1,8353 @@
+{
+  "spec": "inkwell protocol",
+  "spec_version": "2.0.0-draft.11",
+  "generator": "docs/protocol/vectors/generate.go.txt (real codecs; proposed vectors use encoders written from spec.md)",
+  "vectors": [
+    {
+      "id": "admit-relay-origin-bound",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "bounds": {
+          "burst": 16,
+          "deadline_ms": 15000,
+          "members": 128,
+          "pending": 48,
+          "per_ip": 8,
+          "per_ipv6_48": 64,
+          "per_member": 4,
+          "per_relay": 16,
+          "per_relay_conns": 2,
+          "refill_ms": 5000,
+          "relays": 8,
+          "share": 2
+        }
+      },
+      "description": "16 connexions non vérifiées par relais (RF-3) ; la 17e est refusée (origin) ; une fermée et un jeton plus tard (5 s, celui de l'étrangère n'est pas rendu), la suivante passe.",
+      "decoder": "admit_ledger",
+      "verdict": "accept",
+      "scope": "transport",
+      "events": [
+        {
+          "at_ms": 0,
+          "conn": "c0",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c1",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c2",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c3",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c4",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c5",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c6",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c7",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c8",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c9",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c10",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c11",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c12",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c13",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c14",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c15",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "conn": "x",
+          "dir": "in",
+          "expect": "origin",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "conn": "y",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayB"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c0",
+          "op": "close"
+        },
+        {
+          "at_ms": 0,
+          "conn": "z",
+          "dir": "in",
+          "expect": "rate",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 5000,
+          "conn": "z2",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 5000,
+          "expect": {
+            "members": 0,
+            "origin_pending": 16,
+            "pending": 17,
+            "tokens": 0
+          },
+          "op": "check",
+          "origin": "relay:12D3KooWRelayA"
+        }
+      ]
+    },
+    {
+      "id": "admit-ip-origin-bound",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "bounds": {
+          "burst": 16,
+          "deadline_ms": 15000,
+          "members": 128,
+          "pending": 48,
+          "per_ip": 8,
+          "per_ipv6_48": 64,
+          "per_member": 4,
+          "per_relay": 16,
+          "per_relay_conns": 2,
+          "refill_ms": 5000,
+          "relays": 8,
+          "share": 2
+        }
+      },
+      "description": "8 connexions non vérifiées par adresse IPv4 /32 (RF-3) ; la 9e est refusée ; une fermée, la suivante passe 5 s plus tard.",
+      "decoder": "admit_ledger",
+      "verdict": "accept",
+      "scope": "transport",
+      "events": [
+        {
+          "at_ms": 0,
+          "conn": "c0",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2.2.9.1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c1",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2.2.9.1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c2",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2.2.9.1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c3",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2.2.9.1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c4",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2.2.9.1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c5",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2.2.9.1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c6",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2.2.9.1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c7",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2.2.9.1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "x",
+          "dir": "in",
+          "expect": "origin",
+          "op": "open",
+          "origin": "ip:2.2.9.1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "y",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2.2.9.2"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c3",
+          "op": "close"
+        },
+        {
+          "at_ms": 5000,
+          "conn": "z",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2.2.9.1"
+        }
+      ]
+    },
+    {
+      "id": "admit-ipv6-origin",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "bounds": {
+          "burst": 16,
+          "deadline_ms": 15000,
+          "members": 128,
+          "pending": 0,
+          "per_ip": 8,
+          "per_ipv6_48": 64,
+          "per_member": 4,
+          "per_relay": 16,
+          "per_relay_conns": 2,
+          "refill_ms": 5000,
+          "relays": 8,
+          "share": 2
+        }
+      },
+      "description": "Une adresse IPv6 est comptée à son /56 (8) et à son /48 (64) : huit /56 pleins remplissent le /48, le neuvième /56 est refusé (wide).",
+      "decoder": "admit_ledger",
+      "verdict": "accept",
+      "scope": "transport",
+      "events": [
+        {
+          "at_ms": 0,
+          "conn": "w0-0",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2001:db8:1:000::1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "w0-1",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2001:db8:1:000::1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "w0-2",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2001:db8:1:000::1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "w0-3",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2001:db8:1:000::1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "w0-4",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2001:db8:1:000::1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "w0-5",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2001:db8:1:000::1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "w0-6",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2001:db8:1:000::1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "w0-7",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2001:db8:1:000::1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "w1-0",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2001:db8:1:100::1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "w1-1",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2001:db8:1:100::1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "w1-2",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2001:db8:1:100::1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "w1-3",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2001:db8:1:100::1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "w1-4",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2001:db8:1:100::1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "w1-5",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2001:db8:1:100::1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "w1-6",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2001:db8:1:100::1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "w1-7",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2001:db8:1:100::1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "w2-0",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2001:db8:1:200::1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "w2-1",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2001:db8:1:200::1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "w2-2",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2001:db8:1:200::1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "w2-3",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2001:db8:1:200::1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "w2-4",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2001:db8:1:200::1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "w2-5",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2001:db8:1:200::1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "w2-6",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2001:db8:1:200::1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "w2-7",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2001:db8:1:200::1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "w3-0",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2001:db8:1:300::1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "w3-1",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2001:db8:1:300::1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "w3-2",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2001:db8:1:300::1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "w3-3",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2001:db8:1:300::1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "w3-4",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2001:db8:1:300::1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "w3-5",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2001:db8:1:300::1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "w3-6",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2001:db8:1:300::1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "w3-7",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2001:db8:1:300::1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "w4-0",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2001:db8:1:400::1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "w4-1",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2001:db8:1:400::1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "w4-2",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2001:db8:1:400::1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "w4-3",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2001:db8:1:400::1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "w4-4",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2001:db8:1:400::1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "w4-5",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2001:db8:1:400::1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "w4-6",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2001:db8:1:400::1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "w4-7",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2001:db8:1:400::1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "w5-0",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2001:db8:1:500::1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "w5-1",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2001:db8:1:500::1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "w5-2",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2001:db8:1:500::1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "w5-3",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2001:db8:1:500::1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "w5-4",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2001:db8:1:500::1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "w5-5",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2001:db8:1:500::1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "w5-6",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2001:db8:1:500::1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "w5-7",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2001:db8:1:500::1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "w6-0",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2001:db8:1:600::1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "w6-1",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2001:db8:1:600::1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "w6-2",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2001:db8:1:600::1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "w6-3",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2001:db8:1:600::1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "w6-4",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2001:db8:1:600::1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "w6-5",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2001:db8:1:600::1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "w6-6",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2001:db8:1:600::1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "w6-7",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2001:db8:1:600::1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "w7-0",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2001:db8:1:700::1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "w7-1",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2001:db8:1:700::1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "w7-2",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2001:db8:1:700::1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "w7-3",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2001:db8:1:700::1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "w7-4",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2001:db8:1:700::1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "w7-5",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2001:db8:1:700::1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "w7-6",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2001:db8:1:700::1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "w7-7",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2001:db8:1:700::1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "x",
+          "dir": "in",
+          "expect": "origin",
+          "op": "open",
+          "origin": "ip:2001:db8:1:700::2"
+        },
+        {
+          "at_ms": 0,
+          "conn": "y",
+          "dir": "in",
+          "expect": "wide",
+          "op": "open",
+          "origin": "ip:2001:db8:1:ff00::1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "z",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2001:db8:2::1"
+        }
+      ]
+    },
+    {
+      "id": "admit-global-bound",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "bounds": {
+          "burst": 16,
+          "deadline_ms": 15000,
+          "members": 128,
+          "pending": 48,
+          "per_ip": 8,
+          "per_ipv6_48": 64,
+          "per_member": 4,
+          "per_relay": 16,
+          "per_relay_conns": 2,
+          "refill_ms": 5000,
+          "relays": 8,
+          "share": 2
+        }
+      },
+      "description": "48 connexions non vérifiées en tout (RF-3), sur douze origines ; la 49e est refusée quelle que soit son origine (pending) ; une fermée, la suivante passe.",
+      "decoder": "admit_ledger",
+      "verdict": "accept",
+      "scope": "transport",
+      "events": [
+        {
+          "at_ms": 0,
+          "conn": "p0",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.0"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p1",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.0"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p2",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.0"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p3",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.0"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p4",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p5",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p6",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p7",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p8",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.2"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p9",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.2"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p10",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.2"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p11",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.2"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p12",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.3"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p13",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.3"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p14",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.3"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p15",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.3"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p16",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.4"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p17",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.4"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p18",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.4"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p19",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.4"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p20",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.5"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p21",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.5"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p22",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.5"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p23",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.5"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p24",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.6"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p25",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.6"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p26",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.6"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p27",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.6"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p28",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.7"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p29",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.7"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p30",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.7"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p31",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.7"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p32",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.8"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p33",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.8"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p34",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.8"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p35",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.8"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p36",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.9"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p37",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.9"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p38",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.9"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p39",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.9"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p40",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.10"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p41",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.10"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p42",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.10"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p43",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.10"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p44",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.11"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p45",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.11"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p46",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.11"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p47",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.11"
+        },
+        {
+          "at_ms": 0,
+          "conn": "x",
+          "dir": "in",
+          "expect": "pending",
+          "op": "open",
+          "origin": "ip:3.3.3.231"
+        },
+        {
+          "at_ms": 0,
+          "conn": "y",
+          "dir": "in",
+          "expect": "pending",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p7",
+          "op": "close"
+        },
+        {
+          "at_ms": 0,
+          "conn": "z",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "conn": "w",
+          "dir": "in",
+          "expect": "pending",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayB"
+        },
+        {
+          "at_ms": 0,
+          "expect": {
+            "members": 0,
+            "origin_pending": 1,
+            "pending": 48,
+            "tokens": 15
+          },
+          "op": "check",
+          "origin": "relay:12D3KooWRelayA"
+        }
+      ]
+    },
+    {
+      "id": "admit-deadline",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "bounds": {
+          "burst": 16,
+          "deadline_ms": 15000,
+          "members": 128,
+          "pending": 48,
+          "per_ip": 8,
+          "per_ipv6_48": 64,
+          "per_member": 4,
+          "per_relay": 16,
+          "per_relay_conns": 2,
+          "refill_ms": 5000,
+          "relays": 8,
+          "share": 2
+        }
+      },
+      "description": "Une connexion non vérifiée tient sa place 15 s au plus (RF-4) : à 14 999 ms l'origine est encore pleine, à 15 000 ms ses places sont libres.",
+      "decoder": "admit_ledger",
+      "verdict": "accept",
+      "scope": "transport",
+      "events": [
+        {
+          "at_ms": 0,
+          "conn": "c0",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2.2.9.1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c1",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2.2.9.1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c2",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2.2.9.1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c3",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2.2.9.1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c4",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2.2.9.1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c5",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2.2.9.1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c6",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2.2.9.1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c7",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2.2.9.1"
+        },
+        {
+          "at_ms": 14999,
+          "expect": {
+            "members": 0,
+            "origin_pending": 8,
+            "pending": 8,
+            "tokens": 10
+          },
+          "op": "check",
+          "origin": "ip:2.2.9.1"
+        },
+        {
+          "at_ms": 14999,
+          "conn": "x",
+          "dir": "in",
+          "expect": "origin",
+          "op": "open",
+          "origin": "ip:2.2.9.1"
+        },
+        {
+          "at_ms": 15000,
+          "expect": {
+            "members": 0,
+            "origin_pending": 0,
+            "pending": 0,
+            "tokens": 11
+          },
+          "op": "check",
+          "origin": "ip:2.2.9.1"
+        },
+        {
+          "at_ms": 15000,
+          "conn": "y",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2.2.9.1"
+        }
+      ]
+    },
+    {
+      "id": "admit-rate",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "bounds": {
+          "burst": 16,
+          "deadline_ms": 15000,
+          "members": 128,
+          "pending": 48,
+          "per_ip": 8,
+          "per_ipv6_48": 64,
+          "per_member": 4,
+          "per_relay": 16,
+          "per_relay_conns": 2,
+          "refill_ms": 5000,
+          "relays": 8,
+          "share": 2
+        }
+      },
+      "description": "Seau de 16 jetons par origine, 1 de plus par 5 s (RF-5) : 16 admissions (fermées aussitôt), la 17e est refusée (rate) jusqu'à 5 s ; un autre relais a son propre seau.",
+      "decoder": "admit_ledger",
+      "verdict": "accept",
+      "scope": "transport",
+      "events": [
+        {
+          "at_ms": 0,
+          "conn": "c0",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c0",
+          "op": "close"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c1",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c1",
+          "op": "close"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c2",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c2",
+          "op": "close"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c3",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c3",
+          "op": "close"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c4",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c4",
+          "op": "close"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c5",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c5",
+          "op": "close"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c6",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c6",
+          "op": "close"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c7",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c7",
+          "op": "close"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c8",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c8",
+          "op": "close"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c9",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c9",
+          "op": "close"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c10",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c10",
+          "op": "close"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c11",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c11",
+          "op": "close"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c12",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c12",
+          "op": "close"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c13",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c13",
+          "op": "close"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c14",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c14",
+          "op": "close"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c15",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c15",
+          "op": "close"
+        },
+        {
+          "at_ms": 0,
+          "conn": "x",
+          "dir": "in",
+          "expect": "rate",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "conn": "y",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayB"
+        },
+        {
+          "at_ms": 4999,
+          "conn": "x2",
+          "dir": "in",
+          "expect": "rate",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 5000,
+          "conn": "x3",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 5000,
+          "conn": "x4",
+          "dir": "in",
+          "expect": "rate",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 20000,
+          "expect": {
+            "members": 0,
+            "origin_pending": 0,
+            "pending": 0,
+            "tokens": 3
+          },
+          "op": "check",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 100000,
+          "expect": {
+            "members": 0,
+            "origin_pending": 0,
+            "pending": 0,
+            "tokens": 16
+          },
+          "op": "check",
+          "origin": "relay:12D3KooWRelayA"
+        }
+      ]
+    },
+    {
+      "id": "admit-outbound-uncharged",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "bounds": {
+          "burst": 16,
+          "deadline_ms": 15000,
+          "members": 128,
+          "pending": 48,
+          "per_ip": 8,
+          "per_ipv6_48": 64,
+          "per_member": 4,
+          "per_relay": 16,
+          "per_relay_conns": 2,
+          "refill_ms": 5000,
+          "relays": 8,
+          "share": 2
+        }
+      },
+      "description": "Une connexion sortante n'est comptée à aucune origine (RF-1, RF-2) : origine pleine et seau vide, le nœud ouvre encore vers un membre.",
+      "decoder": "admit_ledger",
+      "verdict": "accept",
+      "scope": "transport",
+      "events": [
+        {
+          "at_ms": 0,
+          "conn": "c0",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c1",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c2",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c3",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c4",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c5",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c6",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c7",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c8",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c9",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c10",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c11",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c12",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c13",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c14",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c15",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "conn": "x",
+          "dir": "in",
+          "expect": "origin",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m00"
+        },
+        {
+          "at_ms": 0,
+          "expect": {
+            "members": 1,
+            "origin_pending": 16,
+            "pending": 16,
+            "tokens": 0
+          },
+          "op": "check",
+          "origin": "relay:12D3KooWRelayA"
+        }
+      ]
+    },
+    {
+      "id": "admit-members-behind-one-ip",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "bounds": {
+          "burst": 16,
+          "deadline_ms": 15000,
+          "members": 128,
+          "pending": 48,
+          "per_ip": 8,
+          "per_ipv6_48": 64,
+          "per_member": 4,
+          "per_relay": 16,
+          "per_relay_conns": 2,
+          "refill_ms": 5000,
+          "relays": 8,
+          "share": 2
+        }
+      },
+      "description": "Neuf membres derrière une même box (RF-2) : chacun quitte le compte de l'adresse à sa poignée de main, son jeton rendu ; tous passent.",
+      "decoder": "admit_ledger",
+      "verdict": "accept",
+      "scope": "transport",
+      "events": [
+        {
+          "at_ms": 0,
+          "conn": "h0",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2.2.9.1"
+        },
+        {
+          "at_ms": 0,
+          "expect": {
+            "members": 0,
+            "origin_pending": 1,
+            "pending": 1,
+            "tokens": 15
+          },
+          "op": "check",
+          "origin": "ip:2.2.9.1"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "h0",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m00"
+        },
+        {
+          "at_ms": 10,
+          "conn": "h1",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2.2.9.1"
+        },
+        {
+          "at_ms": 10,
+          "expect": {
+            "members": 1,
+            "origin_pending": 1,
+            "pending": 1,
+            "tokens": 15
+          },
+          "op": "check",
+          "origin": "ip:2.2.9.1"
+        },
+        {
+          "at_ms": 10,
+          "class": "member",
+          "conn": "h1",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m01"
+        },
+        {
+          "at_ms": 20,
+          "conn": "h2",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2.2.9.1"
+        },
+        {
+          "at_ms": 20,
+          "expect": {
+            "members": 2,
+            "origin_pending": 1,
+            "pending": 1,
+            "tokens": 15
+          },
+          "op": "check",
+          "origin": "ip:2.2.9.1"
+        },
+        {
+          "at_ms": 20,
+          "class": "member",
+          "conn": "h2",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m02"
+        },
+        {
+          "at_ms": 30,
+          "conn": "h3",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2.2.9.1"
+        },
+        {
+          "at_ms": 30,
+          "expect": {
+            "members": 3,
+            "origin_pending": 1,
+            "pending": 1,
+            "tokens": 15
+          },
+          "op": "check",
+          "origin": "ip:2.2.9.1"
+        },
+        {
+          "at_ms": 30,
+          "class": "member",
+          "conn": "h3",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m03"
+        },
+        {
+          "at_ms": 40,
+          "conn": "h4",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2.2.9.1"
+        },
+        {
+          "at_ms": 40,
+          "expect": {
+            "members": 4,
+            "origin_pending": 1,
+            "pending": 1,
+            "tokens": 15
+          },
+          "op": "check",
+          "origin": "ip:2.2.9.1"
+        },
+        {
+          "at_ms": 40,
+          "class": "member",
+          "conn": "h4",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m04"
+        },
+        {
+          "at_ms": 50,
+          "conn": "h5",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2.2.9.1"
+        },
+        {
+          "at_ms": 50,
+          "expect": {
+            "members": 5,
+            "origin_pending": 1,
+            "pending": 1,
+            "tokens": 15
+          },
+          "op": "check",
+          "origin": "ip:2.2.9.1"
+        },
+        {
+          "at_ms": 50,
+          "class": "member",
+          "conn": "h5",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m05"
+        },
+        {
+          "at_ms": 60,
+          "conn": "h6",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2.2.9.1"
+        },
+        {
+          "at_ms": 60,
+          "expect": {
+            "members": 6,
+            "origin_pending": 1,
+            "pending": 1,
+            "tokens": 15
+          },
+          "op": "check",
+          "origin": "ip:2.2.9.1"
+        },
+        {
+          "at_ms": 60,
+          "class": "member",
+          "conn": "h6",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m06"
+        },
+        {
+          "at_ms": 70,
+          "conn": "h7",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2.2.9.1"
+        },
+        {
+          "at_ms": 70,
+          "expect": {
+            "members": 7,
+            "origin_pending": 1,
+            "pending": 1,
+            "tokens": 15
+          },
+          "op": "check",
+          "origin": "ip:2.2.9.1"
+        },
+        {
+          "at_ms": 70,
+          "class": "member",
+          "conn": "h7",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m07"
+        },
+        {
+          "at_ms": 80,
+          "conn": "h8",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2.2.9.1"
+        },
+        {
+          "at_ms": 80,
+          "expect": {
+            "members": 8,
+            "origin_pending": 1,
+            "pending": 1,
+            "tokens": 15
+          },
+          "op": "check",
+          "origin": "ip:2.2.9.1"
+        },
+        {
+          "at_ms": 80,
+          "class": "member",
+          "conn": "h8",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m08"
+        },
+        {
+          "at_ms": 100,
+          "expect": {
+            "members": 9,
+            "origin_pending": 0,
+            "pending": 0,
+            "tokens": 16
+          },
+          "op": "check",
+          "origin": "ip:2.2.9.1"
+        }
+      ]
+    },
+    {
+      "id": "admit-members-behind-one-relay",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "bounds": {
+          "burst": 16,
+          "deadline_ms": 15000,
+          "members": 128,
+          "pending": 48,
+          "per_ip": 8,
+          "per_ipv6_48": 64,
+          "per_member": 4,
+          "per_relay": 16,
+          "per_relay_conns": 2,
+          "refill_ms": 5000,
+          "relays": 8,
+          "share": 2
+        }
+      },
+      "description": "63 membres derrière un même relais (RF-2) : aucun ne reste compté au relais.",
+      "decoder": "admit_ledger",
+      "verdict": "accept",
+      "scope": "transport",
+      "events": [
+        {
+          "at_ms": 0,
+          "conn": "r0",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "r0",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m00"
+        },
+        {
+          "at_ms": 0,
+          "conn": "r1",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "r1",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m01"
+        },
+        {
+          "at_ms": 0,
+          "conn": "r2",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "r2",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m02"
+        },
+        {
+          "at_ms": 0,
+          "conn": "r3",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "r3",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m03"
+        },
+        {
+          "at_ms": 0,
+          "conn": "r4",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "r4",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m04"
+        },
+        {
+          "at_ms": 0,
+          "conn": "r5",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "r5",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m05"
+        },
+        {
+          "at_ms": 0,
+          "conn": "r6",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "r6",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m06"
+        },
+        {
+          "at_ms": 0,
+          "conn": "r7",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "r7",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m07"
+        },
+        {
+          "at_ms": 0,
+          "conn": "r8",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "r8",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m08"
+        },
+        {
+          "at_ms": 0,
+          "conn": "r9",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "r9",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m09"
+        },
+        {
+          "at_ms": 0,
+          "conn": "r10",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "r10",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m10"
+        },
+        {
+          "at_ms": 0,
+          "conn": "r11",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "r11",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m11"
+        },
+        {
+          "at_ms": 0,
+          "conn": "r12",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "r12",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m12"
+        },
+        {
+          "at_ms": 0,
+          "conn": "r13",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "r13",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m13"
+        },
+        {
+          "at_ms": 0,
+          "conn": "r14",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "r14",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m14"
+        },
+        {
+          "at_ms": 0,
+          "conn": "r15",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "r15",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m15"
+        },
+        {
+          "at_ms": 0,
+          "conn": "r16",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "r16",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m16"
+        },
+        {
+          "at_ms": 0,
+          "conn": "r17",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "r17",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m17"
+        },
+        {
+          "at_ms": 0,
+          "conn": "r18",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "r18",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m18"
+        },
+        {
+          "at_ms": 0,
+          "conn": "r19",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "r19",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m19"
+        },
+        {
+          "at_ms": 0,
+          "conn": "r20",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "r20",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m20"
+        },
+        {
+          "at_ms": 0,
+          "conn": "r21",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "r21",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m21"
+        },
+        {
+          "at_ms": 0,
+          "conn": "r22",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "r22",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m22"
+        },
+        {
+          "at_ms": 0,
+          "conn": "r23",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "r23",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m23"
+        },
+        {
+          "at_ms": 0,
+          "conn": "r24",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "r24",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m24"
+        },
+        {
+          "at_ms": 0,
+          "conn": "r25",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "r25",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m25"
+        },
+        {
+          "at_ms": 0,
+          "conn": "r26",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "r26",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m26"
+        },
+        {
+          "at_ms": 0,
+          "conn": "r27",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "r27",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m27"
+        },
+        {
+          "at_ms": 0,
+          "conn": "r28",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "r28",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m28"
+        },
+        {
+          "at_ms": 0,
+          "conn": "r29",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "r29",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m29"
+        },
+        {
+          "at_ms": 0,
+          "conn": "r30",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "r30",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m30"
+        },
+        {
+          "at_ms": 0,
+          "conn": "r31",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "r31",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m31"
+        },
+        {
+          "at_ms": 0,
+          "conn": "r32",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "r32",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m32"
+        },
+        {
+          "at_ms": 0,
+          "conn": "r33",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "r33",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m33"
+        },
+        {
+          "at_ms": 0,
+          "conn": "r34",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "r34",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m34"
+        },
+        {
+          "at_ms": 0,
+          "conn": "r35",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "r35",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m35"
+        },
+        {
+          "at_ms": 0,
+          "conn": "r36",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "r36",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m36"
+        },
+        {
+          "at_ms": 0,
+          "conn": "r37",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "r37",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m37"
+        },
+        {
+          "at_ms": 0,
+          "conn": "r38",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "r38",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m38"
+        },
+        {
+          "at_ms": 0,
+          "conn": "r39",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "r39",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m39"
+        },
+        {
+          "at_ms": 0,
+          "conn": "r40",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "r40",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m40"
+        },
+        {
+          "at_ms": 0,
+          "conn": "r41",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "r41",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m41"
+        },
+        {
+          "at_ms": 0,
+          "conn": "r42",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "r42",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m42"
+        },
+        {
+          "at_ms": 0,
+          "conn": "r43",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "r43",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m43"
+        },
+        {
+          "at_ms": 0,
+          "conn": "r44",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "r44",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m44"
+        },
+        {
+          "at_ms": 0,
+          "conn": "r45",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "r45",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m45"
+        },
+        {
+          "at_ms": 0,
+          "conn": "r46",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "r46",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m46"
+        },
+        {
+          "at_ms": 0,
+          "conn": "r47",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "r47",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m47"
+        },
+        {
+          "at_ms": 0,
+          "conn": "r48",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "r48",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m48"
+        },
+        {
+          "at_ms": 0,
+          "conn": "r49",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "r49",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m49"
+        },
+        {
+          "at_ms": 0,
+          "conn": "r50",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "r50",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m50"
+        },
+        {
+          "at_ms": 0,
+          "conn": "r51",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "r51",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m51"
+        },
+        {
+          "at_ms": 0,
+          "conn": "r52",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "r52",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m52"
+        },
+        {
+          "at_ms": 0,
+          "conn": "r53",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "r53",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m53"
+        },
+        {
+          "at_ms": 0,
+          "conn": "r54",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "r54",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m54"
+        },
+        {
+          "at_ms": 0,
+          "conn": "r55",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "r55",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m55"
+        },
+        {
+          "at_ms": 0,
+          "conn": "r56",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "r56",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m56"
+        },
+        {
+          "at_ms": 0,
+          "conn": "r57",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "r57",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m57"
+        },
+        {
+          "at_ms": 0,
+          "conn": "r58",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "r58",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m58"
+        },
+        {
+          "at_ms": 0,
+          "conn": "r59",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "r59",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m59"
+        },
+        {
+          "at_ms": 0,
+          "conn": "r60",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "r60",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m60"
+        },
+        {
+          "at_ms": 0,
+          "conn": "r61",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "r61",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m61"
+        },
+        {
+          "at_ms": 0,
+          "conn": "r62",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "r62",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m62"
+        },
+        {
+          "at_ms": 0,
+          "expect": {
+            "members": 63,
+            "origin_pending": 0,
+            "pending": 0,
+            "tokens": 16
+          },
+          "op": "check",
+          "origin": "relay:12D3KooWRelayA"
+        }
+      ]
+    },
+    {
+      "id": "admit-stranger-stays-counted",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "bounds": {
+          "burst": 16,
+          "deadline_ms": 15000,
+          "members": 128,
+          "pending": 48,
+          "per_ip": 8,
+          "per_ipv6_48": 64,
+          "per_member": 4,
+          "per_relay": 16,
+          "per_relay_conns": 2,
+          "refill_ms": 5000,
+          "relays": 8,
+          "share": 2
+        }
+      },
+      "description": "Un étranger identifié reste non vérifié jusqu'à sa fermeture (RF-3) ; un relais configuré sort des comptes comme un membre (RF-2).",
+      "decoder": "admit_ledger",
+      "verdict": "accept",
+      "scope": "transport",
+      "events": [
+        {
+          "at_ms": 0,
+          "conn": "s",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2.2.9.1"
+        },
+        {
+          "at_ms": 0,
+          "class": "stranger",
+          "conn": "s",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "stranger"
+        },
+        {
+          "at_ms": 0,
+          "expect": {
+            "members": 0,
+            "origin_pending": 1,
+            "pending": 1,
+            "tokens": 15
+          },
+          "op": "check",
+          "origin": "ip:2.2.9.1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "r",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:2.2.9.1"
+        },
+        {
+          "at_ms": 0,
+          "class": "relay",
+          "conn": "r",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "relay1"
+        },
+        {
+          "at_ms": 0,
+          "expect": {
+            "members": 0,
+            "origin_pending": 1,
+            "pending": 1,
+            "tokens": 15
+          },
+          "op": "check",
+          "origin": "ip:2.2.9.1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "s",
+          "op": "close"
+        },
+        {
+          "at_ms": 0,
+          "expect": {
+            "members": 0,
+            "origin_pending": 0,
+            "pending": 0,
+            "tokens": 15
+          },
+          "op": "check",
+          "origin": "ip:2.2.9.1"
+        }
+      ]
+    },
+    {
+      "id": "admit-refund-unpaid-only",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "bounds": {
+          "burst": 16,
+          "deadline_ms": 15000,
+          "members": 128,
+          "pending": 48,
+          "per_ip": 8,
+          "per_ipv6_48": 64,
+          "per_member": 4,
+          "per_relay": 16,
+          "per_relay_conns": 2,
+          "refill_ms": 5000,
+          "relays": 8,
+          "share": 2
+        }
+      },
+      "description": "Le jeton d'un membre lui est rendu à sa poignée de main s'il est encore dû, jamais un jeton qu'une période a payé (RF-5) : la plus ancienne dette est payée d'abord.",
+      "decoder": "admit_ledger",
+      "verdict": "accept",
+      "scope": "transport",
+      "events": [
+        {
+          "at_ms": 0,
+          "conn": "a",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "conn": "b",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 0,
+          "expect": {
+            "members": 0,
+            "origin_pending": 2,
+            "pending": 2,
+            "tokens": 14
+          },
+          "op": "check",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 5000,
+          "expect": {
+            "members": 0,
+            "origin_pending": 2,
+            "pending": 2,
+            "tokens": 15
+          },
+          "op": "check",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 5000,
+          "class": "member",
+          "conn": "a",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m00"
+        },
+        {
+          "at_ms": 5000,
+          "expect": {
+            "members": 1,
+            "origin_pending": 1,
+            "pending": 1,
+            "tokens": 15
+          },
+          "op": "check",
+          "origin": "relay:12D3KooWRelayA"
+        },
+        {
+          "at_ms": 5000,
+          "class": "member",
+          "conn": "b",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m01"
+        },
+        {
+          "at_ms": 5000,
+          "expect": {
+            "members": 2,
+            "origin_pending": 0,
+            "pending": 0,
+            "tokens": 16
+          },
+          "op": "check",
+          "origin": "relay:12D3KooWRelayA"
+        }
+      ]
+    },
+    {
+      "id": "admit-member-share",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "bounds": {
+          "burst": 16,
+          "deadline_ms": 15000,
+          "members": 128,
+          "pending": 48,
+          "per_ip": 8,
+          "per_ipv6_48": 64,
+          "per_member": 4,
+          "per_relay": 16,
+          "per_relay_conns": 2,
+          "refill_ms": 5000,
+          "relays": 8,
+          "share": 2
+        },
+        "roster": [
+          "m00",
+          "m01",
+          "m02",
+          "m03",
+          "m04",
+          "m05",
+          "m06",
+          "m07",
+          "m08",
+          "m09",
+          "m10",
+          "m11",
+          "m12",
+          "m13",
+          "m14",
+          "m15",
+          "m16",
+          "m17",
+          "m18",
+          "m19",
+          "m20",
+          "m21",
+          "m22",
+          "m23",
+          "m24",
+          "m25",
+          "m26",
+          "m27",
+          "m28",
+          "m29",
+          "m30",
+          "m31",
+          "m32",
+          "m33",
+          "m34",
+          "m35",
+          "m36",
+          "m37",
+          "m38",
+          "m39",
+          "m40",
+          "m41",
+          "m42",
+          "m43",
+          "m44",
+          "m45",
+          "m46",
+          "m47",
+          "m48",
+          "m49",
+          "m50",
+          "m51",
+          "m52",
+          "m53",
+          "m54",
+          "m55",
+          "m56",
+          "m57",
+          "m58",
+          "m59",
+          "m60",
+          "m61",
+          "m62",
+          "m63"
+        ]
+      },
+      "description": "128 connexions de membres, 2 réservées à chaque membre de la liste (RF-6) : la 129e est refusée (members), même pour un membre hors liste ; une fermée, le membre retrouve sa part.",
+      "decoder": "admit_ledger",
+      "verdict": "accept",
+      "scope": "transport",
+      "events": [
+        {
+          "at_ms": 0,
+          "conn": "o0",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o0",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m00"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o1",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o1",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m00"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o2",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o2",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m01"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o3",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o3",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m01"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o4",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o4",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m02"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o5",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o5",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m02"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o6",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o6",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m03"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o7",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o7",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m03"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o8",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o8",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m04"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o9",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o9",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m04"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o10",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o10",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m05"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o11",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o11",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m05"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o12",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o12",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m06"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o13",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o13",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m06"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o14",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o14",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m07"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o15",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o15",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m07"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o16",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o16",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m08"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o17",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o17",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m08"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o18",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o18",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m09"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o19",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o19",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m09"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o20",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o20",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m10"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o21",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o21",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m10"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o22",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o22",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m11"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o23",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o23",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m11"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o24",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o24",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m12"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o25",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o25",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m12"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o26",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o26",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m13"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o27",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o27",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m13"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o28",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o28",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m14"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o29",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o29",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m14"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o30",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o30",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m15"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o31",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o31",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m15"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o32",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o32",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m16"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o33",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o33",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m16"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o34",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o34",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m17"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o35",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o35",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m17"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o36",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o36",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m18"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o37",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o37",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m18"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o38",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o38",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m19"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o39",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o39",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m19"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o40",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o40",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m20"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o41",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o41",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m20"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o42",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o42",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m21"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o43",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o43",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m21"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o44",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o44",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m22"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o45",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o45",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m22"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o46",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o46",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m23"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o47",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o47",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m23"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o48",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o48",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m24"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o49",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o49",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m24"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o50",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o50",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m25"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o51",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o51",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m25"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o52",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o52",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m26"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o53",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o53",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m26"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o54",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o54",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m27"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o55",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o55",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m27"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o56",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o56",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m28"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o57",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o57",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m28"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o58",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o58",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m29"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o59",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o59",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m29"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o60",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o60",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m30"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o61",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o61",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m30"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o62",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o62",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m31"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o63",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o63",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m31"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o64",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o64",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m32"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o65",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o65",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m32"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o66",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o66",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m33"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o67",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o67",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m33"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o68",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o68",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m34"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o69",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o69",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m34"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o70",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o70",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m35"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o71",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o71",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m35"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o72",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o72",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m36"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o73",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o73",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m36"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o74",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o74",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m37"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o75",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o75",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m37"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o76",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o76",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m38"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o77",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o77",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m38"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o78",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o78",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m39"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o79",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o79",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m39"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o80",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o80",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m40"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o81",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o81",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m40"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o82",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o82",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m41"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o83",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o83",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m41"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o84",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o84",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m42"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o85",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o85",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m42"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o86",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o86",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m43"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o87",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o87",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m43"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o88",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o88",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m44"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o89",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o89",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m44"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o90",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o90",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m45"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o91",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o91",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m45"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o92",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o92",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m46"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o93",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o93",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m46"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o94",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o94",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m47"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o95",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o95",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m47"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o96",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o96",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m48"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o97",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o97",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m48"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o98",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o98",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m49"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o99",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o99",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m49"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o100",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o100",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m50"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o101",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o101",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m50"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o102",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o102",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m51"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o103",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o103",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m51"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o104",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o104",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m52"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o105",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o105",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m52"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o106",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o106",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m53"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o107",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o107",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m53"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o108",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o108",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m54"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o109",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o109",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m54"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o110",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o110",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m55"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o111",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o111",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m55"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o112",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o112",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m56"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o113",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o113",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m56"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o114",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o114",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m57"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o115",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o115",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m57"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o116",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o116",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m58"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o117",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o117",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m58"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o118",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o118",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m59"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o119",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o119",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m59"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o120",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o120",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m60"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o121",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o121",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m60"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o122",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o122",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m61"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o123",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o123",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m61"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o124",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o124",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m62"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o125",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o125",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m62"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o126",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o126",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m63"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o127",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o127",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m63"
+        },
+        {
+          "at_ms": 0,
+          "conn": "x",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "x",
+          "expect": "members",
+          "op": "identify",
+          "peer": "m00"
+        },
+        {
+          "at_ms": 0,
+          "conn": "y",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "y",
+          "expect": "members",
+          "op": "identify",
+          "peer": "outsider"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o127",
+          "op": "close"
+        },
+        {
+          "at_ms": 0,
+          "conn": "z",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "z",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m63"
+        },
+        {
+          "at_ms": 0,
+          "expect": {
+            "members": 128,
+            "origin_pending": 0,
+            "pending": 0,
+            "tokens": 16
+          },
+          "op": "check",
+          "origin": "relay:12D3KooWRelayA"
+        }
+      ]
+    },
+    {
+      "id": "admit-no-third-from-shares",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "bounds": {
+          "burst": 16,
+          "deadline_ms": 15000,
+          "members": 128,
+          "pending": 48,
+          "per_ip": 8,
+          "per_ipv6_48": 64,
+          "per_member": 4,
+          "per_relay": 16,
+          "per_relay_conns": 2,
+          "refill_ms": 5000,
+          "relays": 8,
+          "share": 2
+        },
+        "roster": [
+          "m00",
+          "m01",
+          "m02",
+          "m03",
+          "m04",
+          "m05",
+          "m06",
+          "m07",
+          "m08",
+          "m09",
+          "m10",
+          "m11",
+          "m12",
+          "m13",
+          "m14",
+          "m15",
+          "m16",
+          "m17",
+          "m18",
+          "m19",
+          "m20",
+          "m21",
+          "m22",
+          "m23",
+          "m24",
+          "m25",
+          "m26",
+          "m27",
+          "m28",
+          "m29",
+          "m30",
+          "m31",
+          "m32",
+          "m33",
+          "m34",
+          "m35",
+          "m36",
+          "m37",
+          "m38",
+          "m39",
+          "m40",
+          "m41",
+          "m42",
+          "m43",
+          "m44",
+          "m45",
+          "m46",
+          "m47",
+          "m48",
+          "m49",
+          "m50",
+          "m51",
+          "m52",
+          "m53",
+          "m54",
+          "m55",
+          "m56",
+          "m57",
+          "m58",
+          "m59",
+          "m60",
+          "m61",
+          "m62",
+          "m63"
+        ]
+      },
+      "description": "Toutes les parts dues : un membre a ses deux connexions et pas de troisième (RF-6, une troisième seulement sur le reste).",
+      "decoder": "admit_ledger",
+      "verdict": "accept",
+      "scope": "transport",
+      "events": [
+        {
+          "at_ms": 0,
+          "conn": "a",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "a",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m00"
+        },
+        {
+          "at_ms": 0,
+          "conn": "b",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "b",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m00"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "c",
+          "expect": "members",
+          "op": "identify",
+          "peer": "m00"
+        }
+      ]
+    },
+    {
+      "id": "admit-surplus-to-four",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "bounds": {
+          "burst": 16,
+          "deadline_ms": 15000,
+          "members": 128,
+          "pending": 48,
+          "per_ip": 8,
+          "per_ipv6_48": 64,
+          "per_member": 4,
+          "per_relay": 16,
+          "per_relay_conns": 2,
+          "refill_ms": 5000,
+          "relays": 8,
+          "share": 2
+        },
+        "roster": [
+          "m00",
+          "m01",
+          "m02",
+          "m03"
+        ]
+      },
+      "description": "Une liste de quatre membres : le reste permet à un membre une troisième et une quatrième connexion, jamais une cinquième (RF-6).",
+      "decoder": "admit_ledger",
+      "verdict": "accept",
+      "scope": "transport",
+      "events": [
+        {
+          "at_ms": 0,
+          "conn": "c0",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "c0",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m00"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c1",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "c1",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m00"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c2",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "c2",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m00"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c3",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "c3",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m00"
+        },
+        {
+          "at_ms": 0,
+          "conn": "c4",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "c4",
+          "expect": "members",
+          "op": "identify",
+          "peer": "m00"
+        }
+      ]
+    },
+    {
+      "id": "admit-relays",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "bounds": {
+          "burst": 16,
+          "deadline_ms": 15000,
+          "members": 128,
+          "pending": 48,
+          "per_ip": 8,
+          "per_ipv6_48": 64,
+          "per_member": 4,
+          "per_relay": 16,
+          "per_relay_conns": 2,
+          "refill_ms": 5000,
+          "relays": 8,
+          "share": 2
+        }
+      },
+      "description": "Relais configurés : 2 connexions chacun, 4 relais au plus (RF-6) ; une fermée, le relais en retrouve une.",
+      "decoder": "admit_ledger",
+      "verdict": "accept",
+      "scope": "transport",
+      "events": [
+        {
+          "at_ms": 0,
+          "conn": "r0-0",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "relay",
+          "conn": "r0-0",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "relay0"
+        },
+        {
+          "at_ms": 0,
+          "conn": "r0-1",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "relay",
+          "conn": "r0-1",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "relay0"
+        },
+        {
+          "at_ms": 0,
+          "conn": "r1-0",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "relay",
+          "conn": "r1-0",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "relay1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "r1-1",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "relay",
+          "conn": "r1-1",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "relay1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "r2-0",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "relay",
+          "conn": "r2-0",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "relay2"
+        },
+        {
+          "at_ms": 0,
+          "conn": "r2-1",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "relay",
+          "conn": "r2-1",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "relay2"
+        },
+        {
+          "at_ms": 0,
+          "conn": "r3-0",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "relay",
+          "conn": "r3-0",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "relay3"
+        },
+        {
+          "at_ms": 0,
+          "conn": "r3-1",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "relay",
+          "conn": "r3-1",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "relay3"
+        },
+        {
+          "at_ms": 0,
+          "conn": "x",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "relay",
+          "conn": "x",
+          "expect": "relays",
+          "op": "identify",
+          "peer": "relay0"
+        },
+        {
+          "at_ms": 0,
+          "conn": "y",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "relay",
+          "conn": "y",
+          "expect": "relays",
+          "op": "identify",
+          "peer": "relay9"
+        },
+        {
+          "at_ms": 0,
+          "conn": "r0-1",
+          "op": "close"
+        },
+        {
+          "at_ms": 0,
+          "conn": "z",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "relay",
+          "conn": "z",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "relay0"
+        }
+      ]
+    },
+    {
+      "id": "admit-pending-and-members-coexist",
+      "status": "proposed",
+      "enforce": "step-3",
+      "context": {
+        "bounds": {
+          "burst": 16,
+          "deadline_ms": 15000,
+          "members": 128,
+          "pending": 48,
+          "per_ip": 8,
+          "per_ipv6_48": 64,
+          "per_member": 4,
+          "per_relay": 16,
+          "per_relay_conns": 2,
+          "refill_ms": 5000,
+          "relays": 8,
+          "share": 2
+        }
+      },
+      "description": "48 connexions non vérifiées et 128 de membres coexistent (RF-6) : ni les unes ni les autres ne prennent la place des autres.",
+      "decoder": "admit_ledger",
+      "verdict": "accept",
+      "scope": "transport",
+      "events": [
+        {
+          "at_ms": 0,
+          "conn": "p0",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.0"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p1",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.0"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p2",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.0"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p3",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.0"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p4",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p5",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p6",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p7",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.1"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p8",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.2"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p9",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.2"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p10",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.2"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p11",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.2"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p12",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.3"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p13",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.3"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p14",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.3"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p15",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.3"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p16",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.4"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p17",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.4"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p18",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.4"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p19",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.4"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p20",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.5"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p21",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.5"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p22",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.5"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p23",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.5"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p24",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.6"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p25",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.6"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p26",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.6"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p27",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.6"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p28",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.7"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p29",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.7"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p30",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.7"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p31",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.7"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p32",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.8"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p33",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.8"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p34",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.8"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p35",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.8"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p36",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.9"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p37",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.9"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p38",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.9"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p39",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.9"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p40",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.10"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p41",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.10"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p42",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.10"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p43",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.10"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p44",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.11"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p45",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.11"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p46",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.11"
+        },
+        {
+          "at_ms": 0,
+          "conn": "p47",
+          "dir": "in",
+          "expect": "ok",
+          "op": "open",
+          "origin": "ip:3.3.0.11"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o0",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o0",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m00"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o1",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o1",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m00"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o2",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o2",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m01"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o3",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o3",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m01"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o4",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o4",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m02"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o5",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o5",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m02"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o6",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o6",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m03"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o7",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o7",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m03"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o8",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o8",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m04"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o9",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o9",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m04"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o10",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o10",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m05"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o11",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o11",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m05"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o12",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o12",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m06"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o13",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o13",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m06"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o14",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o14",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m07"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o15",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o15",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m07"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o16",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o16",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m08"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o17",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o17",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m08"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o18",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o18",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m09"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o19",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o19",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m09"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o20",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o20",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m10"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o21",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o21",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m10"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o22",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o22",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m11"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o23",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o23",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m11"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o24",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o24",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m12"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o25",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o25",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m12"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o26",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o26",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m13"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o27",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o27",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m13"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o28",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o28",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m14"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o29",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o29",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m14"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o30",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o30",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m15"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o31",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o31",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m15"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o32",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o32",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m16"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o33",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o33",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m16"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o34",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o34",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m17"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o35",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o35",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m17"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o36",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o36",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m18"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o37",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o37",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m18"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o38",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o38",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m19"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o39",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o39",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m19"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o40",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o40",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m20"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o41",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o41",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m20"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o42",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o42",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m21"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o43",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o43",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m21"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o44",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o44",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m22"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o45",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o45",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m22"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o46",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o46",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m23"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o47",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o47",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m23"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o48",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o48",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m24"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o49",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o49",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m24"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o50",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o50",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m25"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o51",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o51",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m25"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o52",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o52",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m26"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o53",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o53",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m26"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o54",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o54",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m27"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o55",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o55",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m27"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o56",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o56",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m28"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o57",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o57",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m28"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o58",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o58",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m29"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o59",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o59",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m29"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o60",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o60",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m30"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o61",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o61",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m30"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o62",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o62",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m31"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o63",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o63",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m31"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o64",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o64",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m32"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o65",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o65",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m32"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o66",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o66",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m33"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o67",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o67",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m33"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o68",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o68",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m34"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o69",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o69",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m34"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o70",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o70",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m35"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o71",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o71",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m35"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o72",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o72",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m36"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o73",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o73",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m36"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o74",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o74",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m37"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o75",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o75",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m37"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o76",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o76",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m38"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o77",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o77",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m38"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o78",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o78",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m39"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o79",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o79",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m39"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o80",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o80",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m40"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o81",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o81",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m40"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o82",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o82",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m41"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o83",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o83",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m41"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o84",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o84",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m42"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o85",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o85",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m42"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o86",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o86",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m43"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o87",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o87",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m43"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o88",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o88",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m44"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o89",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o89",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m44"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o90",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o90",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m45"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o91",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o91",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m45"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o92",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o92",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m46"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o93",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o93",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m46"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o94",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o94",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m47"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o95",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o95",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m47"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o96",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o96",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m48"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o97",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o97",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m48"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o98",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o98",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m49"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o99",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o99",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m49"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o100",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o100",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m50"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o101",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o101",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m50"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o102",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o102",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m51"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o103",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o103",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m51"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o104",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o104",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m52"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o105",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o105",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m52"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o106",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o106",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m53"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o107",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o107",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m53"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o108",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o108",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m54"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o109",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o109",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m54"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o110",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o110",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m55"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o111",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o111",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m55"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o112",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o112",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m56"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o113",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o113",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m56"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o114",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o114",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m57"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o115",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o115",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m57"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o116",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o116",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m58"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o117",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o117",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m58"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o118",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o118",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m59"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o119",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o119",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m59"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o120",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o120",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m60"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o121",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o121",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m60"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o122",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o122",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m61"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o123",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o123",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m61"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o124",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o124",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m62"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o125",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o125",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m62"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o126",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o126",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m63"
+        },
+        {
+          "at_ms": 0,
+          "conn": "o127",
+          "dir": "out",
+          "expect": "ok",
+          "op": "open"
+        },
+        {
+          "at_ms": 0,
+          "class": "member",
+          "conn": "o127",
+          "expect": "ok",
+          "op": "identify",
+          "peer": "m63"
+        },
+        {
+          "at_ms": 0,
+          "expect": {
+            "members": 128,
+            "origin_pending": 4,
+            "pending": 48,
+            "tokens": 12
+          },
+          "op": "check",
+          "origin": "ip:3.3.0.0"
+        }
+      ]
+    }
+  ]
+}

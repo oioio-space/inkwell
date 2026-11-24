@@ -19,6 +19,7 @@ import (
 	manet "github.com/multiformats/go-multiaddr/net"
 
 	"github.com/oioio-space/inkwell/internal/transport"
+	wire "github.com/oioio-space/inkwell/protocol"
 )
 
 // The address book is what a device last saw of each other member: the dialable addresses the
@@ -33,7 +34,7 @@ const MaxBookSize = 96 << 10
 
 const (
 	bookVersion    = 1
-	bookMaxPeers   = maxPeers // the member capacity of a project
+	bookMaxPeers   = wire.MaxConnectedMembers // the member capacity of a project
 	bookMaxAddrs   = 8
 	bookMaxAddrLen = 128
 	// bookMaxLAN bounds the unauthenticated (mDNS) addresses of an entry, in places of their own:

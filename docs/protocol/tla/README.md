@@ -1288,3 +1288,104 @@ spec's inequality adds one arriving or refused stream and divides by 1 − θ).
 
 Not modelled: real times — the temporal properties prove « eventually »; every bound (T = 250 ms, at once, 60 s, 30 s) is proved by Go arms on controlled time (`probe_period`, `wake_within_bound`, `immediate_when_first_and_up`, `interrupt_during_transition`, `matrix/*`) and by the vectors —, byte sizes (units), the auto-tuning of
 windows (the stated limit of P-13), the opener's retries (SyncOrder). Results: gates/PU1c/WITNESSES.md.
+
+## RelayFanout (block RF1, spec §16.1: members are never refused because others share their relay or their address; rules RF-1 to RF-6)
+
+Model: [RelayFanout.tla](RelayFanout.tla); plan [2026-11-24-rf1-relay-fanout.md](../../plans/2026-11-24-rf1-relay-fanout.md)
+(revision 2, after review round 1: the token bucket modelled, the member share added).
+
+The model has one node and the admission layer around its resource manager. An origin is what a pending inbound
+connection is charged to: a relay named by its authenticated PeerID (RF-1), or an IP subnet. The model treats both
+alike; the Go tests check how the origin is derived from an endpoint.
+
+- **Honest members.** A member opens inbound connections from its origin (`MemberOpen`). Each stays pending until its
+  handshake (`MemberAuth`), which makes it a member connection out of every pending count and removes its token
+  debt if still unpaid (RF-2, RF-5). A passage ends (`Settle`), and member connections close finitely often (`Close`).
+- **The node.** It dials its members (`XDial`). An outbound connection is a member connection from its start (RF-2).
+- **A Byzantine member.** It opens and closes authenticated connections at will, never fair (`ByzOpen`, `ByzClose`).
+- **A stranger.** Any number of PeerIDs behind each flooded origin, never fair, open pending connections (`AttOpen`).
+  Each one ends within the handshake deadline (`AttExpire`, weakly fair: RF-4).
+
+Quotas and capacity:
+- `P` pending connections per origin and `Q` in all (RF-3).
+- A token bucket of burst `B` per origin, one period at a time (`Refill`, weakly fair: time passes). The bucket is
+  kept as debts: unpaid stranger admissions `sd`, pending members' tokens `held`, and tokens never given back `od`.
+  A period pays any one debt, so every payment order is explored (RF-5). Ghost `g`, the strangers' admissions minus
+  the periods from its lowest point, gives `RateBound` as « at most `B + k` stranger admissions in any `k` periods ».
+- `MemberCap` member connections, of which 2 are each member's share. A member's third or fourth connection
+  (`PerCap`) only uses the surplus, never another member's unused share (RF-6).
+- The node's capacity is `MemberCap + Q`.
+
+`ev` records the last refusal, with the reasons the truth gives at that moment (`Why`). The truth operators are
+never overridden.
+
+Rule operators (overridden by the mutants):
+- `OriginLoad(o) == PendOn(o)` and `GlobalLoad == Pending`;
+- `Room(m)` (the share, then the surplus), `OutOK(m)` and `AuthOK(m)`;
+- `SysCap == MemberCap + Q`;
+- `RefillStep(o)` (one debt paid per period) and `RefundStep(m)` (only the member's own unpaid debt);
+- the switches `Expires`, `UseOrigin` and `UseToken`, all `TRUE`.
+
+| Property | Meaning |
+|---|---|
+| `OriginBound` (S1, RF-3) | one origin's strangers and pending members hold at most `P` places (the threat model: a flood through one relay) |
+| `GlobalBound` (S2, RF-3) | pending connections hold at most `Q` places |
+| `RateBound` (S3, RF-5) | at most `B + k` stranger admissions per origin in any `k` periods |
+| `MembersSpendNoRate` (S4, RF-5) | no member token stays missing after its handshake |
+| `MemberCapBound` (S5, RF-6) | member connections stay within `MemberCap` |
+| `InJustified` (S6, RF-1, RF-2) | a member's inbound opening is refused only for a reason the truth gives (load on its origin or in all, the rate, the member capacity), never because other members already hold connections through the same relay or address |
+| `OutNeverRefused` (S7, RF-2, RF-6) | the node's dial to an honest member is never refused: neither a stranger nor a Byzantine member can starve it |
+| `AuthNeverRefused` (S8, RF-6) | an honest member's authenticated handshake is never refused |
+| `SharesKept` (S9, RF-6) | every roster member's unused share stays free: a Byzantine member's surplus never takes it, and when the roster grows the node sheds surplus until it holds again |
+| `MembersEventuallyUp` (L1, RF-2, RF-4) | every honest member ends with a connection to the node and keeps one |
+
+`TypeOK` (the bucket between 0 and `B` included) is checked in every sound run.
+
+| Configuration | Run | What it covers | Result (TLC 1.8.0, 2 workers, 2026-11-24, `heavy.sh`) |
+|---|---|---|---|
+| `RelayFanoutFlood.cfg` | `RF1Flood` | three honest members behind origin 1, a Byzantine member, a stranger flooding origins 1 and 2 forever, the node dials; `P` 2, `Q` 3, `B` 2, `MemberCap` 9, `PerCap` 4; S1-S9, L1 | **exhaustive, no error**: 1,657,395 states, 163,866 distinct, depth 25, liveness included, 35 s |
+| `RelayFanoutInbound.cfg` | `RF1Inbound` | three members behind origin 1, inbound only, a stranger that opens two connections and stops; `MemberCap` 6; S1-S9, L1 | **exhaustive, no error**: 9,331 states, 2,108 distinct, depth 16, under 1 s |
+| `RelayFanoutGrowth.cfg` | `RFRGrowth` (review round, outside the gate's 26) | roster growth: member 3 joins the membership after the Byzantine member 4 took the surplus (`MemberCap` 8, three shares), no stranger; the node sheds what members hold above their own (`AdmitLate`, `ShedStep`: any such choice, the code's among them); S1-S9, L1 | **exhaustive, no error**: 25,453 states, 3,010 distinct, depth 16, liveness included, 1 s |
+| `RelayFanoutMixed.cfg` | `RF1Mixed` | four members, two behind a relay and two behind a home router, a stranger flooding the relay forever, the node dials; `Q` 4, `MemberCap` 9; S1-S9, L1 | **exhaustive, no error**: 406,549 states, 44,100 distinct, depth 20, 11 s |
+
+| Mutant (mutants/RelayFanoutMutants.tla) | Override | Caught by (trace length) |
+|---|---|---|
+| `RF1PerIPCount` (MF1, libp2p before RF1: every connection counted under its origin for its whole life, outbound ones and circuits under the relay's address) | `OriginLoad <- OriginLoadLibp2p`, `OutOK <- OutOKLibp2p` | `InJustified` (Flood, 4) |
+| `RF1PerIPCountLive` (MF1) | the same | `MembersEventuallyUp` (Inbound, 12: beyond `P` members behind one origin, the next never connects) |
+| `RF1OutboundCharged` (MF2, an outbound opening charged to the pending quota until its handshake) | `OutOK <- OutOKCharged` | `OutNeverRefused` (Flood, 5) |
+| `RF1OutboundStarved` (MF2) | the same | `MembersEventuallyUp` (Flood, 25: the stranger keeps the quota full) |
+| `RF1NoDeadline` (MF3, RF-4 off) | `Expires <- Off` | `MembersEventuallyUp` (Inbound, 13) |
+| `RF1NoOriginQuota` (MF4) | `UseOrigin <- Off` | `OriginBound` (Flood, 5) |
+| `RF1NoGlobalQuota` (MF5) | `UseGlobal <- Off` | `GlobalBound` (Flood, 5) |
+| `RF1NoToken` (MF6, RF-5 off) | `UseToken <- Off` | `RateBound` (Flood, 5) |
+| `RF1NoRefund` (MF7, a member's handshake keeps its token) | `RefundStep <- RefundNone` | `MembersSpendNoRate` (Flood, 3) |
+| `RF1SharedCap` (MF8, one capacity for members and pending connections, the product's 128 before RF1) | `SysCap <- SharedSysCap` | `OutNeverRefused` (Flood, 12) |
+| `RF1AuthShared` (MF9, a handshake checked against every connection, pending ones included) | `AuthOK <- AuthOKShared` | `AuthNeverRefused` (Flood, 13) |
+| `RF1NoShare` (MF10, a third or fourth connection checked against the total only) | `Room <- RoomNoShare` | `SharesKept` (Flood, 5: the Byzantine member takes an honest member's share) |
+| `RF1NoMemberCap` (MF11) | `Room <- RoomNoCap` | `MemberCapBound` (Flood, 14) |
+| `RF1RefundUnheld` (MF12, blind refund `tokens = min(B, tokens + 1)`: a token a period already paid is given back again) | `RefundStep <- RefundUnheld` | `RateBound` (Flood, 8) |
+| `RF1WindowRefill` (MF13, round 1's fixed window: a period refills the whole bucket) | `RefillStep <- RefillWindow` | `RateBound` (Flood, 8: up to `2B` across a boundary) |
+| `RFRNoShed` (MFR1, review round: no shed at a roster growth) | `ShedStep <- ShedNone` | `SharesKept` (Growth, 5: member 3 joins while the Byzantine member holds the surplus, and 3's share is not there) |
+| `RF1WitnessInRefused` (witness) | — | `NoInRefusal`: a member's inbound opening is refused under the flood (S6 is not vacuous) |
+| `RF1WitnessRateRefused` (witness) | — | `NoRateRefusal`: the stranger drains the members' bucket and a member is refused for the rate (review item 1's case; L1 holds through the node's dials) |
+| `RF1WitnessQuotaFull` (witness) | — | `NoFullQuota`: the stranger fills the pending quota |
+| `RF1WitnessPassage` (witness) | — | `NoPassage`: a member holds two connections |
+| `RF1WitnessSurplus` (witness) | — | `NoSurplus`: the Byzantine member uses the surplus |
+| `RF1WitnessByzRefused` (witness) | — | `NoByzRefusal`: the Byzantine member is refused once only shares are left (S9 bites) |
+| `RF1WitnessPaidPending` (witness) | — | `NoPaidPending`: a period pays a pending member's token before its handshake (MF12's state) |
+| `RF1WitnessResidual` (witness of the plan's residual → RLY1, its own constants: Inbound's with the stranger never stopping) | — | `MembersEventuallyUp`: inbound only and an endless flood on the members' origin deny them (L1 relies on the node's dials) |
+
+Twenty-six runs (`INKWELL_TLA_ONLY='^RF1'`): 77 s with the Alloy leg of `mise run formal` (2026-11-24, `heavy.sh`).
+The code review's round added two (`INKWELL_TLA_ONLY='^RFR'`, kept apart from the 26 that `gates/RF1.toml` froze):
+`RFRGrowth` and `RFRNoShed`. The constant `Late` (`{}` in every other configuration) and the variable `admitted` (the
+roster: `Owed` and `SharesKept` count its members only) model the membership growing.
+
+Not modelled:
+- how an origin is derived from an endpoint (a circuit's `/p2p/<relay>/p2p-circuit`, a /32 or /56): Go test
+  `TestCircuitOriginIsRelayPeer`, mutant MG1;
+- the remote end's own admission of the node's dial: each node runs the same rules (plan §4);
+- invitees admitted by the invitation window: they stay pending until closed, like a stranger;
+- a Byzantine member's own pending phase: it authenticates at once and gains nothing from it;
+- the relay's bounds (RF-7): Go tests at the bound;
+- real times (15 s, 5 s per token, the join and recovery times of plan §4): Go tests on controlled time and the
+  simulations `docs/plans/2026-11-24-rf1/rf1_wave.py` and `rf1_recover.py`.

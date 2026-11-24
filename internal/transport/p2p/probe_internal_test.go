@@ -23,9 +23,9 @@ func TestLinkProbeResourceLimits(t *testing.T) {
 		new             func() (network.ResourceManager, error)
 		inbound, outbou int
 	}{
-		{"node", newResourceManager, wire.LinkProbeInboundStreamsPerPeer, wire.LinkProbeOutboundStreamsPerPeer},
+		{"node", func() (network.ResourceManager, error) { return newNodeAdmission() }, wire.LinkProbeInboundStreamsPerPeer, wire.LinkProbeOutboundStreamsPerPeer},
 		// A relay only answers: it never opens a probe stream (spec §16.1).
-		{"relay", newRelayResourceManager, wire.LinkProbeInboundStreamsPerPeer, 0},
+		{"relay", func() (network.ResourceManager, error) { return newRelayAdmission() }, wire.LinkProbeInboundStreamsPerPeer, 0},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			rm, err := tc.new()

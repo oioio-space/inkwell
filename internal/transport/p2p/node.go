@@ -53,7 +53,9 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"math"
 	"net"
+	"net/netip"
 	"slices"
 	"strings"
 	"sync"
@@ -69,12 +71,15 @@ import (
 	rcmgr "github.com/libp2p/go-libp2p/p2p/host/resource-manager"
 	"github.com/libp2p/go-libp2p/p2p/net/conngater"
 	"github.com/libp2p/go-libp2p/p2p/net/connmgr"
+	circuitproto "github.com/libp2p/go-libp2p/p2p/protocol/circuitv2/proto"
+	relayv2 "github.com/libp2p/go-libp2p/p2p/protocol/circuitv2/relay"
 	"github.com/libp2p/go-libp2p/p2p/protocol/holepunch"
 	"github.com/libp2p/go-libp2p/p2p/protocol/ping"
 	"github.com/libp2p/go-libp2p/p2p/security/noise"
 	libp2pquic "github.com/libp2p/go-libp2p/p2p/transport/quic"
 	"github.com/libp2p/go-libp2p/p2p/transport/quicreuse"
 	"github.com/libp2p/go-libp2p/p2p/transport/tcp"
+	"github.com/libp2p/go-libp2p/x/rate"
 	ma "github.com/multiformats/go-multiaddr"
 	"github.com/quic-go/quic-go"
 	"go.uber.org/fx"
@@ -96,8 +101,7 @@ const (
 	// connection manager.
 	memberTag = "member"
 
-	// Resource limits (see newResourceManager).
-	maxPeers       = 64
+	// Resource limits (see newNodeAdmission); the connection limits are spec §16.1's (protocol/limits.go).
 	maxSyncStreams = 4
 	memoryLimit    = 256 << 20
 	fdLimit        = 1024
@@ -212,10 +216,9 @@ type Options struct {
 	// told when the answerer of a DCUtR round starts its punch dial (tests of H-19, block HP1r2).
 	noAutoPunch  bool
 	onAnswerDial func(peer.ID)
-	// rcmgr are extra options of the resource manager; tests use them to lift, in the simulated network
-	// only, libp2p's limit of 8 connections per IPv4 address for the relay's address (block RF1 fixes
-	// that limit for real; the exception proves no product capacity).
-	rcmgr []rcmgr.Option
+	// admitObserve, if not nil, is told of each opening and handshake the admission layer decides on
+	// (tests of block RF1).
+	admitObserve func(admitEvent)
 	// Relays are the relays to use, as multiaddrs ending in /p2p/<id>. With
 	// at least one, the node reserves a slot on them so that peers can reach
 	// it from any network, dials peers through them when it has no better
@@ -292,6 +295,7 @@ type peerState struct {
 // Node is a libp2p peer; it implements [transport.Transport].
 type Node struct {
 	h        host.Host
+	adm      *admission      // the resource manager's admission layer (block RF1)
 	ctx      context.Context // canceled by Close
 	sub      event.Subscription
 	addrSub  event.Subscription
@@ -432,10 +436,11 @@ func New(ctx context.Context, key ed25519.PrivateKey, o Options) (*Node, error) 
 	if !ok {
 		return nil, fmt.Errorf("p2p: peer id %q is not valid", local)
 	}
-	rm, err := resourceManagerWith(o.rcmgr...)
+	rm, err := newNodeAdmission()
 	if err != nil {
 		return nil, err
 	}
+	rm.observe = o.admitObserve
 	cm, err := connmgr.NewConnManager(connLow, connHigh)
 	if err != nil {
 		_ = rm.Close()
@@ -480,6 +485,7 @@ func New(ctx context.Context, key ed25519.PrivateKey, o Options) (*Node, error) 
 		},
 	}
 	n.circuit = circuitPrefixes(relays)
+	n.adm, rm.classify = rm, n.classOf
 	if len(relays) > 0 && !o.RelayOnly {
 		n.pgate = newPunchGate(n.member, time.Now())
 		n.pgate.announced = n.announced
@@ -676,24 +682,27 @@ func quicReuse(o Options) libp2p.Option {
 	}, o.quicReuse...)
 }
 
-// newResourceManager returns the libp2p resource manager with the limits of a
-// node: 64 peers (as inbound and outbound connections), 4 sync streams per
-// peer and 256 MiB of memory. The other limits are libp2p's, scaled to that
-// memory, and the bundled services (identify, ping, relay) keep their own,
-// except the ping streams per peer, which the liveness proofs of rule P-15 need.
-func newResourceManager() (network.ResourceManager, error) { return resourceManagerWith() }
-
-// resourceManagerWith is [newResourceManager] with extra options for the test harness.
-func resourceManagerWith(opts ...rcmgr.Option) (network.ResourceManager, error) {
+// newNodeAdmission returns the node's resource manager: the admission layer of spec §16.1 (block RF1,
+// admission.go) over libp2p's, whose system and per-direction connection limits are the sum of what the
+// layer admits (protocol.MaxNodeConnections: member connections, the relays' and the pending ones), so they
+// never bind first. The other limits: 4 sync streams per peer and 256 MiB of memory; libp2p's, scaled to that
+// memory, and the bundled services (identify, ping, relay) keep their own, except the ping streams per peer,
+// which the liveness proofs of rule P-15 need.
+func newNodeAdmission() (*admission, error) {
 	scaling := rcmgr.DefaultLimits
 	libp2p.SetDefaultServiceLimits(&scaling)
+	conns := rcmgr.ResourceLimits{
+		Conns:         wire.MaxNodeConnections,
+		ConnsInbound:  wire.MaxNodeConnections,
+		ConnsOutbound: wire.MaxNodeConnections,
+	}
+	system := conns
+	system.Memory = memoryLimit
 	limits := rcmgr.PartialLimitConfig{
-		System: rcmgr.ResourceLimits{
-			Memory:        memoryLimit,
-			Conns:         2 * maxPeers,
-			ConnsInbound:  maxPeers,
-			ConnsOutbound: maxPeers,
-		},
+		System: system,
+		// A connection is transient until its peer is set: the layer's pending ones, and an outbound one
+		// briefly.
+		Transient: conns,
 		ProtocolPeer: map[protocol.ID]rcmgr.ResourceLimits{
 			ProtocolSync: {
 				Streams:         maxSyncStreams,
@@ -721,12 +730,26 @@ func resourceManagerWith(opts ...rcmgr.Option) (network.ResourceManager, error) 
 			ping.ID: {StreamsInbound: pingStreams, StreamsOutbound: pingStreams, Streams: 2 * pingStreams},
 		},
 	}
-	cfg := limits.Build(scaling.Scale(memoryLimit, fdLimit))
-	rm, err := rcmgr.NewResourceManager(rcmgr.NewFixedLimiter(cfg), opts...)
+	inner, err := libp2pManager(limits.Build(scaling.Scale(memoryLimit, fdLimit)))
 	if err != nil {
 		return nil, fmt.Errorf("p2p: resource manager: %w", err)
 	}
-	return rm, nil
+	return newAdmission(inner, nodeAdmitConfig()), nil
+}
+
+// libp2pManager is libp2p's resource manager with cfg, its per-IP connection limiter and its connection rate
+// limiter switched off: the admission layer owns both (RF-1, RF-3, RF-5). Left on, they count every circuit
+// under its relay's IP address (go-libp2p #2805), and an endpoint with no IP would share one /56 rate bucket
+// (x/rate SubnetLimiter with a zero address).
+func libp2pManager(cfg rcmgr.ConcreteLimitConfig) (network.ResourceManager, error) {
+	unlimited := func(p string) []rcmgr.NetworkPrefixLimit {
+		return []rcmgr.NetworkPrefixLimit{{Network: netip.MustParsePrefix(p), ConnCount: math.MaxInt}}
+	}
+	opts := []rcmgr.Option{
+		rcmgr.WithNetworkPrefixLimit(unlimited("0.0.0.0/0"), unlimited("::/0")),
+		rcmgr.WithConnRateLimiters(&rate.Limiter{}),
+	}
+	return rcmgr.NewResourceManager(rcmgr.NewFixedLimiter(cfg), opts...)
 }
 
 // peerName returns the PeerID of p, if it is valid.
@@ -1157,19 +1180,41 @@ func probeStreamLimits(in, out int) rcmgr.ResourceLimits {
 	return rcmgr.ResourceLimits{Streams: limit(in + out), StreamsInbound: limit(in), StreamsOutbound: limit(out)}
 }
 
-// newRelayResourceManager is libp2p's default resource manager, with the link probe's limit: a
-// relay answers its clients (4 inbound streams per peer) and never opens a probe stream.
-func newRelayResourceManager() (network.ResourceManager, error) {
+// newRelayAdmission is the relay's resource manager: libp2p's default limits, with the link probe's limit (a
+// relay answers its clients, 4 inbound streams per peer, and never opens a probe stream) and the relay
+// service's (RF-7: 130 relay-service and hop/stop streams per peer and direction, a circuit's two and room for
+// a reservation; 8 192 in all, two for each of 64 × 63 circuits), in the admission layer: 64 connections per
+// IP address, where a peer of the relay's Allow list leaves the count at its handshake (RF-2, RF-7).
+func newRelayAdmission() (*admission, error) {
 	scaling := rcmgr.DefaultLimits
 	libp2p.SetDefaultServiceLimits(&scaling)
-	limits := rcmgr.PartialLimitConfig{ProtocolPeer: map[protocol.ID]rcmgr.ResourceLimits{
-		ProtocolProbe: probeStreamLimits(wire.LinkProbeInboundStreamsPerPeer, 0),
-	}}
-	rm, err := rcmgr.NewResourceManager(rcmgr.NewFixedLimiter(limits.Build(scaling.AutoScale())))
+	perPeer := rcmgr.ResourceLimits{
+		Streams:         2 * wire.RelayServiceStreamsPerPeer,
+		StreamsInbound:  wire.RelayServiceStreamsPerPeer,
+		StreamsOutbound: wire.RelayServiceStreamsPerPeer,
+	}
+	all := rcmgr.ResourceLimits{
+		Streams:         wire.RelayServiceStreams,
+		StreamsInbound:  wire.RelayServiceStreams,
+		StreamsOutbound: wire.RelayServiceStreams,
+	}
+	limits := rcmgr.PartialLimitConfig{
+		// Each circuit is two streams at the relay, besides the clients' own.
+		System:      rcmgr.ResourceLimits{Streams: 4 * wire.RelayServiceStreams, StreamsInbound: 2 * wire.RelayServiceStreams, StreamsOutbound: 2 * wire.RelayServiceStreams},
+		Service:     map[string]rcmgr.ResourceLimits{relayv2.ServiceName: all},
+		ServicePeer: map[string]rcmgr.ResourceLimits{relayv2.ServiceName: perPeer},
+		Protocol:    map[protocol.ID]rcmgr.ResourceLimits{circuitproto.ProtoIDv2Hop: all, circuitproto.ProtoIDv2Stop: all},
+		ProtocolPeer: map[protocol.ID]rcmgr.ResourceLimits{
+			ProtocolProbe:              probeStreamLimits(wire.LinkProbeInboundStreamsPerPeer, 0),
+			circuitproto.ProtoIDv2Hop:  perPeer,
+			circuitproto.ProtoIDv2Stop: perPeer,
+		},
+	}
+	inner, err := libp2pManager(limits.Build(scaling.AutoScale()))
 	if err != nil {
 		return nil, fmt.Errorf("p2p: relay resource manager: %w", err)
 	}
-	return rm, nil
+	return newAdmission(inner, relayAdmitConfig()), nil
 }
 
 // attachExisting starts the per-connection services on the connections that were there before the

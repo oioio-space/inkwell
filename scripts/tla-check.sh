@@ -95,7 +95,7 @@ run() {
     local assigned
     # Family totals and the headroom for InboundLifecycle are recorded in the CI2 plan.
     case "$name" in
-      RepoGen*|ConnCredit*|WriteBudget*|OISingleInstance*|SyncOrder*|InboundLifecycle*|HP1c[!S]*) assigned=1/3 ;;
+      RepoGen*|ConnCredit*|WriteBudget*|OISingleInstance*|SyncOrder*|InboundLifecycle*|HP1c[!S]*|RF1*|RFR*) assigned=1/3 ;;
       SendPath*|SP1*|SandboxScope*|ProjectChange*) assigned=2/3 ;;
       SyncIndicator*|LinkProbe*|DirectUpgrade*|HP1r*|HP1cSupersede*|PeerUpAck*|PU1d*) assigned=3/3 ;;
       *) die "no shard assigned to '$name'" ;;
@@ -450,6 +450,46 @@ WitnessKept NoKept
 WitnessBlocked NoBlocked
 WitnessTruncatedTail NoTruncatedTail
 WitnessExhausted NoCreditExhaustedFirst
+MUTANTS
+
+
+# RelayFanout (README "RelayFanout", block RF1, spec §16.1, rules RF-1 to RF-6): members leave the per-origin counts at
+# their handshake, a circuit is charged to its relay's PeerID, strangers' pending connections are bounded per origin,
+# in all and by a token bucket, they never use members' room, and a Byzantine member never takes another's share.
+# Flood, Inbound and Mixed check S1-S9 and liveness L1.
+run RF1Flood RelayFanoutFlood.cfg RelayFanout sound
+run RF1Inbound RelayFanoutInbound.cfg RelayFanout sound
+run RF1Mixed RelayFanoutMixed.cfg RelayFanout sound
+# Review round (roster growth, outside the 26 runs gates/RF1.toml froze): a member admitted after the surplus was
+# taken; the shed keeps SharesKept (RFRGrowth, with liveness), and without it SharesKept fails (RFRNoShed, MFR1).
+run RFRGrowth RelayFanoutGrowth.cfg RelayFanout sound
+run RFRNoShed mutants/RelayFanoutNoShed.cfg mutants/RelayFanoutMutants mutant SharesKept
+while read -r m prop; do
+  run "RF1$m" "mutants/RelayFanout$m.cfg" mutants/RelayFanoutMutants mutant "$prop"
+done <<'MUTANTS'
+PerIPCount InJustified
+PerIPCountLive MembersEventuallyUp
+OutboundCharged OutNeverRefused
+OutboundStarved MembersEventuallyUp
+NoDeadline MembersEventuallyUp
+NoOriginQuota OriginBound
+NoGlobalQuota GlobalBound
+NoToken RateBound
+NoRefund MembersSpendNoRate
+SharedCap OutNeverRefused
+AuthShared AuthNeverRefused
+NoShare SharesKept
+NoMemberCap MemberCapBound
+RefundUnheld RateBound
+WindowRefill RateBound
+WitnessInRefused NoInRefusal
+WitnessRateRefused NoRateRefusal
+WitnessQuotaFull NoFullQuota
+WitnessPassage NoPassage
+WitnessSurplus NoSurplus
+WitnessByzRefused NoByzRefusal
+WitnessPaidPending NoPaidPending
+WitnessResidual MembersEventuallyUp
 MUTANTS
 
 exit "$fail"

@@ -807,6 +807,9 @@ func generate(dir, casesPath string) {
 	// ---- superseded connection's liveness proof (spec §8.7.4, block HP1c, rule P-15) ----
 	write(root, "supersede.json", vectorFile{Vectors: supersedeVectors()})
 
+	// ---- admission of connections (spec §16.1, block RF1) ----
+	write(root, "admit.json", vectorFile{Vectors: admitVectors()})
+
 	// ---- directup (spec §8.6) ----
 	write(root, "directup.json", vectorFile{Vectors: directupVectors()})
 

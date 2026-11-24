@@ -135,6 +135,13 @@ func (n *Node) Want(peers map[transport.PeerID][]string) {
 	for _, id := range up { // outside mu: Admit and the peerstore are called
 		n.remember(id)
 	}
+	roster := make([]peer.ID, 0, len(parsed)) // the wanted members: whose shares admission reserves (RF-6)
+	for id := range parsed {
+		if n.member(id) {
+			roster = append(roster, id)
+		}
+	}
+	n.shedSurplus(n.adm.setRoster(roster))
 	for _, id := range unwanted { // still a member with a circuit: it keeps an upgrader (H-1)
 		n.memberUp(id)
 	}

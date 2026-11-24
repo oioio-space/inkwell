@@ -1,6 +1,7 @@
 package p2p_test
 
 import (
+	"cmp"
 	"context"
 	"encoding/binary"
 	"errors"
@@ -50,7 +51,11 @@ type natEnd struct {
 	internal string              // IP the node listens on
 	external string              // IP the others see
 	public   bool                // no firewall
+	port     int                 // the port the others see; 0 is simPort (a NAT that keeps the port)
 }
+
+// extAddr is the address the others see the end at.
+func (e *natEnd) extAddr() string { return fmt.Sprintf("%s:%d", e.external, cmp.Or(e.port, simPort)) }
 
 // natNet is a simulated UDP network; use it inside a synctest bubble.
 type natNet struct {
@@ -147,7 +152,7 @@ func (nn *natNet) RecvPacket(p *simnet.Packet) {
 	if nn.tap != nil {
 		nn.tap(src, dstExt)
 	}
-	p.From = udpAddr(fmt.Sprintf("%s:%d", src.external, simPort))
+	p.From = udpAddr(src.extAddr())
 	src.sent[dstExt] = struct{}{}
 	dst := nn.byExt[dstExt]
 	replied := dst.sentTo(p.From.String())
@@ -297,10 +302,10 @@ func (nn *natNet) roam(end *natEnd) {
 	nn.mu.Lock()
 	defer nn.mu.Unlock()
 	nn.nextIP++
-	delete(nn.byExt, fmt.Sprintf("%s:%d", end.external, simPort))
+	delete(nn.byExt, end.extAddr())
 	end.external = fmt.Sprintf("3.3.%d.1", nn.nextIP)
 	end.sent = make(map[string]struct{})
-	nn.byExt[fmt.Sprintf("%s:%d", end.external, simPort)] = end
+	nn.byExt[end.extAddr()] = end
 }
 
 // quic returns the libp2p option that puts QUIC on the end: the listening
@@ -348,7 +353,7 @@ func (nn *natNet) quicSocket(end *natEnd) []quicreuse.Option {
 			defer nn.mu.Unlock()
 			end.conn = c
 			nn.byInt[address.String()] = end
-			nn.byExt[fmt.Sprintf("%s:%d", end.external, simPort)] = end
+			nn.byExt[end.extAddr()] = end
 			return c, nil
 		}),
 	}
@@ -429,9 +434,9 @@ func (nn *natNet) nodeOn(t *testing.T, keySeed byte, end *natEnd, o p2p.Options,
 			}
 		}
 		nn.mu.Lock()
-		ext := end.external
+		ext, port := end.external, cmp.Or(end.port, simPort)
 		nn.mu.Unlock()
-		return append(out, ma.StringCast(fmt.Sprintf("/ip4/%s/udp/%d/quic-v1", ext, simPort)))
+		return append(out, ma.StringCast(fmt.Sprintf("/ip4/%s/udp/%d/quic-v1", ext, port)))
 	})
 	p2p.SetQUICReuse(&o, nn.quicSocket(end)...)
 	p2p.SetExtra(&o, append(nn.nodeSimOptions(end), extra...)...)

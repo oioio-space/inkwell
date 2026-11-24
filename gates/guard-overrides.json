@@ -2014,6 +2014,11 @@
       "id": "1db5b88f7fc045d2f51405452338f7121605d46b27b54818571bc0e0aff4e877",
       "reason": "scripts/tla-check.sh: gate dependency changed — PU1d adds its CloseScope runs (three sound runs, four mutants, three witnesses, named ^PU1d, shard 3/3); every existing run, its name, shard and expected verdict unchanged (PU1 keeps its 19 ^PeerUpAck runs)",
       "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "e5ab5868ae24354bd730ca677c6febca0256b71cc6ed91953c69626c4937afa0",
+      "reason": "scripts/tla-check.sh: gate dependency changed — RF1 adds its RelayFanout runs (RF1* frozen by gates/RF1.toml, RFR* from the code review round: roster growth and its no-shed mutant), all in shard 1/3; every existing run, name, shard and expected verdict unchanged",
+      "decision": "docs/objectif-en-cours.md"
     }
   ]
 }

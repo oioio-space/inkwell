@@ -3025,3 +3025,95 @@ why = "no reopening on a connection still open after the session's one closes: l
 file = "internal/transport/p2p/stream.go"
 before = "func (n *Node) reopenLocked(ps *peerState, preferCircuit bool) {\n\tn.startOpenLocked(ps, preferCircuit, nil)\n}\n"
 after = "func (n *Node) reopenLocked(*peerState, bool) {}\n"
+
+# Block RF1 (plan docs/plans/2026-11-24-rf1-relay-fanout.md, gate gates/RF1.toml criterion `mutants`): the tuples
+# (kind, pkg, test, expect) are frozen by the gate; only the anchors are step 2's.
+[[mutant]]
+id = "MG1"
+block = "RF1"
+kind = "go"
+pkg = "./internal/transport/p2p/"
+test = "TestRelayFanOut10"
+expect = "RF-1 circuit charged to relay IP"
+clause = "RF-1"
+why = "the origin is the endpoint's first IP, libp2p's rule: every circuit is charged to its relay's address"
+
+[[mutant.edit]]
+file = "internal/transport/p2p/admission.go"
+before = "\tif relay, ok := circuitRelay(endpoint); ok {\n"
+after = "\tif relay, ok := \"\", false; ok {\n"
+
+[[mutant]]
+id = "MG2"
+block = "RF1"
+kind = "go"
+pkg = "./internal/transport/p2p/"
+test = "TestHomeRouterNine"
+expect = "RF-2 member still counted"
+clause = "RF-2"
+why = "SetPeer keeps a member's pending charge: members behind one address hold its places until the deadline"
+
+[[mutant.edit]]
+file = "protocol/admit/ledger.go"
+before = "\tl.unpend(c, k)\n\tif b := l.bucketAt(now, k.origin); b != nil && b.refund(c)"
+after = "\tif b := l.bucketAt(now, k.origin); b != nil && b.refund(c)"
+
+[[mutant]]
+id = "MG3"
+block = "RF1"
+kind = "go"
+pkg = "./internal/transport/p2p/"
+test = "TestStrangerFloodThroughRelay"
+expect = "RF-2 outbound starved"
+clause = "RF-2"
+why = "an outbound opening is charged to the pending quota and the bucket of its relay: a stranger flood starves the node's own dials"
+
+[[mutant.edit]]
+file = "internal/transport/p2p/admission.go"
+before = "\td := admit.Outbound\n\tif dir == network.DirInbound {"
+after = "\td := admit.Inbound\n\tif dir == network.DirInbound {"
+
+[[mutant]]
+id = "MG4"
+block = "RF1"
+kind = "go"
+pkg = "./internal/transport/p2p/"
+test = "TestRelayFanOut17"
+expect = "RF-7 relay circuits"
+clause = "RF-7"
+why = "the relay's circuits per peer back to libp2p's 16: the 17th member behind the relay never reaches the node"
+
+[[mutant.edit]]
+file = "internal/transport/p2p/relay.go"
+before = "\trelayMaxCircuits          = wire.RelayMaxCircuitsPerPeer\n"
+after = "\trelayMaxCircuits          = 16\n"
+
+[[mutant]]
+id = "MG5"
+block = "RF1"
+kind = "go"
+pkg = "./internal/transport/p2p/"
+test = "TestRelayFanOut17"
+expect = "RF-5 rate shared by the relay's members"
+clause = "RF-5"
+why = "libp2p's connection rate limiter left on (0.2/s, burst 16 per /32): the relay's members share one bucket under its address"
+
+[[mutant.edit]]
+file = "internal/transport/p2p/node.go"
+before = "\t\trcmgr.WithConnRateLimiters(&rate.Limiter{}),\n"
+after = "\t\trcmgr.WithConnRateLimiters(&rate.Limiter{SubnetRateLimiter: rate.SubnetLimiter{IPv4SubnetLimits: []rate.SubnetLimit{{PrefixLength: 32, Limit: rate.Limit{RPS: 0.2, Burst: 16}}}, GracePeriod: time.Minute}}),\n"
+
+[[mutant]]
+id = "MG6"
+block = "RF1"
+kind = "go"
+pkg = "./internal/transport/p2p/"
+test = "TestMemberShareKept"
+expect = "RF-6 member share"
+clause = "RF-6"
+why = "the member share off: a third connection is checked against the total only, so a Byzantine member takes another member's reserved room"
+
+[[mutant.edit]]
+file = "protocol/admit/ledger.go"
+before = "\treturn l.nMember+l.owed(p) < l.cfg.Members\n"
+after = "\treturn l.nMember < l.cfg.Members\n"
