@@ -2114,6 +2114,16 @@
       "id": "40fb780d5fac71e512aa00c6c7f46bc99bd618e4bc11163d6567f8309999300d",
       "reason": "internal/sidecar/bound_linux_test.go: added test skip — SB2b-1g: held_heap_slow_storage skips under the race detector only (its launcher alone takes about 127 MiB of the 128 MiB bound); gates/SB2b1g.toml `witness` and mutant MD2 run it without -race and refuse any skip; local_storage still runs under -race",
       "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "ff07894db7397b6248172f0add35dd854f3ee350417591b599990157a58248e3",
+      "reason": "mise.toml: gate dependency changed: mise task test:py — adds scripts/candidate_test.py (scripts/candidate.sh: one candidate branch per GitHub run, all pushed in one push); every existing test and timeout unchanged",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "2fb3b2a89301c8e3d1203df8d4781ed965a1c20af5aedd34af035d57264d969d",
+      "reason": "mise.toml: timeout expression removed or rewritten in test:py — only scripts/candidate_test.py is added to its unittest list; the timeouts (300 s gate-selftest.py, 120 s gate-guard.py --self-test) are unchanged",
+      "decision": "docs/objectif-en-cours.md"
     }
   ]
 }
