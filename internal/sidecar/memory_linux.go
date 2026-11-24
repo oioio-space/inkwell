@@ -143,29 +143,30 @@ type memoryWatch struct {
 const boundGrace = 100 * time.Millisecond
 
 // unreclaimable is the part of a run's charge that reclaim cannot give back
-// without swap and without the run's cooperation: memory.current less the
-// clean, evictable page cache of files. memory.stat "file" holds tmpfs and
-// shared memory ("shmem"), dirty and writeback pages, which wait on writes,
-// and mlocked file pages ("unevictable"; it holds mlocked anonymous pages
-// too, which are then counted twice, on the side of the bound): all stay
-// counted. Clean mapped file pages are left out: reclaim unmaps them itself
-// (measured 2026-11-16: a run mapping a 512 MiB file under a 128 MiB bound
-// keeps 18 MiB unreclaimable). The page cache alone is not a bound violation,
-// even while it stays above memory.high: pages under read I/O cannot be
-// reclaimed until the I/O completes, and on storage at 200 MB/s or less a
-// plain read stays above the bound for 85 ms to 200 ms at a time (measured
-// 2026-11-16, ADR 0044 point 1g). What is left out is still charged: memory.max
-// stays its hard backstop.
+// without swap and without the run's cooperation (S-11a, ADR 0044 point 1g):
+// memory.current less the file cache, with tmpfs and shared memory ("shmem",
+// inside memory.stat "file") and mlocked file pages ("unevictable"; it holds
+// mlocked anonymous pages too, which are then counted twice, on the side of
+// the bound) kept. Clean, dirty and writeback file pages are left out: the
+// kernel's flushers write dirty pages back and reclaim then frees them, as it
+// frees pages under read I/O once the read completes; tmpfs pages are never
+// counted as dirty. Clean mapped pages are reclaimed by unmapping them. None
+// of these is a bound violation, even while they stay above memory.high: on
+// storage at 200 MB/s or less a plain read stays above the bound for 85 ms
+// to 200 ms at a time (measured 2026-11-16), and writing more than the bound
+// fills it with dirty and writeback pages (112 to 123 MiB under 128 MiB,
+// measured 2026-11-24). What is left out is still charged: memory.max stays
+// its hard backstop (S-11b).
 func unreclaimable(current uint64, stat map[string]uint64) (uint64, error) {
-	var v [5]uint64
-	for i, name := range [...]string{"file", "shmem", "file_dirty", "file_writeback", "unevictable"} {
+	var v [3]uint64
+	for i, name := range [...]string{"file", "shmem", "unevictable"} {
 		n, ok := stat[name]
 		if !ok {
 			return 0, fmt.Errorf("memory.stat has no %s", name)
 		}
 		v[i] = n
 	}
-	file, kept := v[0], v[1]+v[2]+v[3]+v[4]
+	file, kept := v[0], v[1]+v[2]
 	clean := file - min(kept, file)
 	return current - min(clean, current), nil
 }

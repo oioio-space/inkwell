@@ -59,7 +59,7 @@ ENV_SKIP = re.compile(
     r"mDNS|multicast|\broot\b|Getuid|symlink|symbolic link|hard link|link count|Windows|GOOS|platform|this OS"
     r"|Linux-only|kernel|Unix modes|socket|taken meanwhile|AppArmor|namespace|testing\.Short|INKWELL_PERF"
     r"|process\.env|browserName|skipIf|covered by Fuzz|privilege|parent-death|refuses removals|/proc\b"
-    r"|unavailable on this machine|refused on this machine|not delegated|block device|io controller", re.I)
+    r"|unavailable on this machine|refused on this machine|not delegated|block device|io controller|race detector", re.I)
 TEST_FILE = re.compile(r"(?:_test\.go|\.(?:spec|test)\.[cm]?[jt]sx?)$")
 
 PROPOSED_DAYS = 14

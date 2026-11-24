@@ -196,24 +196,39 @@ by `io.max`): uncapped (NVMe), the longest span above `memory.high` is 0 to 22 m
 7 to 9 MiB throughout. Storage at 200 MB/s or less (a hard disk, a USB stick, eMMC, a cloud disk) is ordinary.
 Rule: the watchdog's measure is `memory.current` less the file cache that reclaim can give back without the run's
 cooperation: `memory.stat` `file` less `shmem` (tmpfs and shared memory, inside `file`: « file: Amount of memory used
-to cache filesystem data, including tmpfs and shared memory », kernel cgroup-v2 documentation), less `file_dirty` and
-`file_writeback` (pages that wait on the run's own writes), less `unevictable` (mlocked pages; it holds mlocked
+to cache filesystem data, including tmpfs and shared memory », kernel cgroup-v2 documentation), less `unevictable` (mlocked pages; it holds mlocked
 anonymous pages too, which are then counted twice, on the side of the bound). Clean mapped file pages (`file_mapped`)
 are left out: reclaim unmaps and drops them itself — measured the same day, a run mapping and touching a 512 MiB file
 at 50 MB/s under a 128 MiB bound kept `file_mapped` at 112 MiB, `memory.current` at the bound and the measure at
 18 MiB, never above the bound; counting them would bring the false kill back for the fonts and packages typst maps.
-Writes stay ordinary runs: the kernel throttles a cgroup's dirtying to a share of its memory (writing 512 MiB, at full
-speed or at 50 MB/s, dirty plus writeback peaked at 69 to 102 MiB and the measure at 53 to 69 MiB). The 100 ms at
+The 100 ms at
 every check is kept for the moment between the two reads. A `memory.stat` lacking any of these counters makes no
 decision. Guarantee, stated exactly: the watchdog bounds what it measures; whatever it leaves out is still charged to
 the run, so `memory.max` is the hard backstop for it (a cgroup OOM kill, residual R-7). Neither is an absolute
 guarantee against every pressure from the host: the kernel can overshoot `memory.high` briefly, and I/O stalls delay
 both reclaim and the watchdog's kill. Witnesses: `TestUnreclaimableLeavesOutOnlyFileCache` and
 `TestMemoryWatchdogSparesFileCache` (the rule, on ordinary files: page cache and clean mapped pages spared; the same
-charge as tmpfs, dirty pages or an mlocked file mapping killed); `TestBoundSparesPageCache/slow_storage` (50 MB/s
+charge as tmpfs or an mlocked file mapping killed); `TestBoundSparesPageCache/slow_storage` (50 MB/s
 through the scope's `io.max` where the io controller is delegated; reproduced the runner's `signal=9
-cause=local-limit` under the former rule); `TestBoundCountsDirtyFileCache` (a run writing 512 MiB to a file on disk
-under the 128 MiB bound completes, no bound outcome, no OOM kill).
+cause=local-limit` under the former rule); `TestBoundSparesDirtyFileCache` (amendment below).
+
+Amended 2026-11-24 (block SB2b-1g): dirty and writeback file pages are left out of the measure like clean cache. The
+kernel's flushers write them back and reclaim then frees them, without the run's cooperation (kernel cgroup-v2
+documentation, Writeback; `mm/vmscan.c`: reclaim skips folios under writeback and throttles on it). The former premise,
+that the kernel throttles a cgroup's dirtying to a small share of its memory, was false: the per-memcg dirty threshold
+is `dirty_ratio` of the cgroup's file pages plus its headroom, about zero at the bound, and balance_dirty_pages treats
+it as a hard limit only when pausing the writer is not enough (`mm/page-writeback.c`). Measured 2026-11-24, writing
+512 MiB under a 128 MiB `memory.high`: dirty plus writeback reached 112 to 123 MiB and the former measure sat on the
+bound; GitHub's runner (kernel 7.0, ext4, io not delegated) killed the dirty-cache test as a bound violation (run
+45384984242, attempt 1). Counting them protected nothing: tmpfs pages are `shmem` and never `file_dirty`, and in tier N
+the only writable files are the output slots on the private tmpfs. Rule: the measure is `memory.current` less
+(`file` less `shmem` and `unevictable`); a `memory.stat` lacking one of these three makes no decision; `memory.max`
+stays the hard backstop for everything left out, and a stalled device under a disk slot is residual R-7. Witnesses:
+`TestUnreclaimableLeavesOutOnlyFileCache`, `TestMemoryWatchdogSparesFileCache/{dirty_file_spared,writeback_file_spared}`,
+`TestBoundSparesDirtyFileCache/{local_storage,held_heap_slow_storage}` (the second keeps 108 MiB of anonymous memory
+and writes 64 MiB through the scope's `io.max` at 8 MB/s: killed in 5 of 5 runs under the former rule, complete in
+5 of 5 under this one; it needs the io controller delegated and runs without the race detector, whose launcher alone
+takes tens of MiB of the bound).
 
 ### 1h. The address limit is set by the last raw system call before `execve` (2026-11-16)
 

@@ -3117,3 +3117,104 @@ why = "the member share off: a third connection is checked against the total onl
 file = "protocol/admit/ledger.go"
 before = "\treturn l.nMember+l.owed(p) < l.cfg.Members\n"
 after = "\treturn l.nMember < l.cfg.Members\n"
+
+# Block SB2b1g (plan docs/plans/2026-11-24-sb2b-1g-dirty-pages.md, rules S-11a and S-11b; gate gates/SB2b1g.toml,
+# criterion `mutants`): the watchdog's measure. The ids MD1-MD3 also exist in block PU1d; the runner selects by block.
+
+[[mutant]]
+id = "MD1"
+block = "SB2b1g"
+kind = "go"
+pkg = "./internal/sidecar"
+test = "TestMemoryWatchdogSparesFileCache"
+expect = "S-11a dirty cache"
+clause = "S-11a"
+why = "dirty and writeback pages back in the measure (the former rule): a run spilling its writes past the bound is killed"
+[[mutant.edit]]
+file = "internal/sidecar/memory_linux.go"
+before = "\tfile, kept := v[0], v[1]+v[2]\n"
+after = "\tfile, kept := v[0], v[1]+v[2]+stat[\"file_dirty\"]+stat[\"file_writeback\"]\n"
+
+[[mutant]]
+id = "MD2"
+block = "SB2b1g"
+kind = "go"
+pkg = "./internal/sidecar"
+test = "TestBoundSparesDirtyFileCache"
+expect = "S-11a dirty cache"
+clause = "S-11a"
+why = "the former rule on a real kernel: a run holding 108 MiB and writing 64 MiB at 8 MB/s is killed as a bound violation"
+[[mutant.edit]]
+file = "internal/sidecar/memory_linux.go"
+before = "\tfile, kept := v[0], v[1]+v[2]\n"
+after = "\tfile, kept := v[0], v[1]+v[2]+stat[\"file_dirty\"]+stat[\"file_writeback\"]\n"
+
+[[mutant]]
+id = "MD3"
+block = "SB2b1g"
+kind = "go"
+pkg = "./internal/sidecar"
+test = "TestUnreclaimableLeavesOutOnlyFileCache"
+expect = "S-11a dirty cache"
+clause = "S-11a"
+why = "writeback pages alone kept in the measure"
+[[mutant.edit]]
+file = "internal/sidecar/memory_linux.go"
+before = "\tfile, kept := v[0], v[1]+v[2]\n"
+after = "\tfile, kept := v[0], v[1]+v[2]+stat[\"file_writeback\"]\n"
+
+[[mutant]]
+id = "MD4"
+block = "SB2b1g"
+kind = "go"
+pkg = "./internal/sidecar"
+test = "TestMemoryWatchdogSparesFileCache"
+expect = "S-11 page cache"
+clause = "S-11a"
+why = "shmem left out with the file cache: a document filling tmpfs escapes the watchdog (T1)"
+[[mutant.edit]]
+file = "internal/sidecar/memory_linux.go"
+before = "\tfile, kept := v[0], v[1]+v[2]\n"
+after = "\tfile, kept := v[0], v[2]\n"
+
+[[mutant]]
+id = "MD5"
+block = "SB2b1g"
+kind = "go"
+pkg = "./internal/sidecar"
+test = "TestMemoryWatchdogSparesFileCache"
+expect = "S-11 page cache"
+clause = "S-11a"
+why = "mlocked pages left out with the file cache (T5)"
+[[mutant.edit]]
+file = "internal/sidecar/memory_linux.go"
+before = "\tfile, kept := v[0], v[1]+v[2]\n"
+after = "\tfile, kept := v[0], v[1]\n"
+
+[[mutant]]
+id = "MD6"
+block = "SB2b1g"
+kind = "go"
+pkg = "./internal/sidecar"
+test = "TestUnreclaimableLeavesOutOnlyFileCache"
+expect = "S-11 page cache"
+clause = "S-11a"
+why = "a memory.stat missing a counter of the measure still gives a usage"
+[[mutant.edit]]
+file = "internal/sidecar/memory_linux.go"
+before = "\t\tif !ok {\n\t\t\treturn 0, fmt.Errorf(\"memory.stat has no %s\", name)\n\t\t}\n"
+after = "\t\t_ = ok\n"
+
+[[mutant]]
+id = "MD7"
+block = "SB2b1g"
+kind = "go"
+pkg = "./internal/sidecar"
+test = "TestMemoryWatchdogSparesFileCache"
+expect = "S-11 page cache"
+clause = "S-11"
+why = "the whole file cache counted (the former MS20): a run that only reads files is killed"
+[[mutant.edit]]
+file = "internal/sidecar/memory_linux.go"
+before = "\tclean := file - min(kept, file)\n"
+after = "\tclean := uint64(0) * (file - min(kept, file))\n"

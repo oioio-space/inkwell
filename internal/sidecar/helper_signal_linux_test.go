@@ -172,23 +172,9 @@ func scopeAttackHelper(mode, arg string) int {
 		fmt.Printf("read=%d\n", n)
 		return 0
 	case "dirty": // write 512 MiB to the file arg without syncing, report the bytes written
-		f, err := os.OpenFile(arg, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600) // #nosec G304 -- test helper writing its test's declared output
-		if err != nil {
-			return 2
-		}
-		chunk := make([]byte, 1<<20)
-		_, _ = rand.NewChaCha8([32]byte{2}).Read(chunk)
-		n := 0
-		for range 512 {
-			w, err := f.Write(chunk)
-			n += w
-			if err != nil {
-				break
-			}
-		}
-		_ = f.Close()
-		fmt.Printf("wrote=%d\n", n)
-		return 0
+		return writeDirtyHolding(arg, 512, 0)
+	case "helddirty": // keep the anonymous memory at 108 MiB while writing 64 MiB to the file arg without syncing
+		return writeDirtyHolding(arg, 64, heldDirtyAnon)
 	case "resident":
 		for {
 			b, err := unix.Mmap(-1, 0, 8<<20, unix.PROT_READ|unix.PROT_WRITE, unix.MAP_PRIVATE|unix.MAP_ANON)
@@ -336,4 +322,75 @@ func scopeAttackHelper(mode, arg string) int {
 		return 0
 	}
 	return 2
+}
+
+// writeDirtyHolding writes mib MiB of incompressible data to path without
+// syncing and reports the bytes written: the pages stay dirty or under
+// writeback. With hold > 0 it keeps the process's resident anonymous memory at
+// hold meanwhile: a mapping outside the Go heap tops it up first, and is given
+// back as the runtime's own memory grows (larger under the race detector).
+func writeDirtyHolding(path string, mib int, hold uint64) int {
+	var b []byte
+	if hold > 0 {
+		own, err := rssAnon()
+		if err != nil || own >= hold {
+			return 2
+		}
+		if b, err = unix.Mmap(-1, 0, int(hold-own), unix.PROT_READ|unix.PROT_WRITE, unix.MAP_PRIVATE|unix.MAP_ANON); err != nil {
+			return 2
+		}
+		// Faulted in by the kernel, not by Go stores: the race detector
+		// would give each touched page shadow memory of its own.
+		if err := unix.Madvise(b, unix.MADV_POPULATE_WRITE); err != nil {
+			return 2
+		}
+	}
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600) // #nosec G304 -- test helper writing its test's declared output
+	if err != nil {
+		return 2
+	}
+	chunk := make([]byte, 1<<20)
+	_, _ = rand.NewChaCha8([32]byte{2}).Read(chunk)
+	n := 0
+	for range mib {
+		w, err := f.Write(chunk)
+		n += w
+		if err != nil {
+			break
+		}
+		if own, err := rssAnon(); err == nil && own > hold && len(b) > 0 {
+			give := min(int(own-hold+4095)&^4095, len(b))
+			_ = unix.Madvise(b[len(b)-give:], unix.MADV_DONTNEED)
+			b = b[:len(b)-give]
+		}
+	}
+	_ = f.Close()
+	runtime.KeepAlive(b)
+	fmt.Printf("wrote=%d\n", n)
+	return 0
+}
+
+// heldDirtyAnon is the anonymous memory the "helddirty" target keeps while it
+// writes: 20 MiB under its 128 MiB bound, so that only counting its dirty and
+// writeback pages takes the watchdog's measure past the bound.
+const heldDirtyAnon = 108 << 20
+
+// rssAnon is the process's resident anonymous memory (/proc/self/status).
+func rssAnon() (uint64, error) {
+	b, err := os.ReadFile("/proc/self/status")
+	if err != nil {
+		return 0, err
+	}
+	return statusBytes(string(b), "RssAnon:")
+}
+
+// statusBytes is the "NNN kB" field key of a /proc/<pid>/status text, in bytes.
+func statusBytes(status, key string) (uint64, error) {
+	for line := range strings.SplitSeq(status, "\n") {
+		if v, ok := strings.CutPrefix(line, key); ok {
+			kb, err := strconv.ParseUint(strings.TrimSuffix(strings.TrimSpace(v), " kB"), 10, 64)
+			return kb << 10, err
+		}
+	}
+	return 0, fmt.Errorf("no %s in the status", key)
 }

@@ -271,48 +271,62 @@ func TestUnreclaimableLeavesOutOnlyFileCache(t *testing.T) {
 			t.Errorf("S-11 page cache: %s: unreclaimable = %d, %v; want %d", c.name, got, err, c.want)
 		}
 	}
-	// Only clean, evictable file pages are left out: dirty and writeback pages
-	// wait on the run's own writes, unevictable ones (mlock) never go. Clean
-	// mapped pages are reclaimed by unmapping them, without the run.
+	// S-11a (2026-11-24): dirty and writeback file pages are file cache that
+	// the kernel's flushers write back and reclaim then frees, without the
+	// run: they are left out like clean pages. Unevictable ones (mlock) never
+	// go and stay counted; clean mapped pages are reclaimed by unmapping them.
 	for _, c := range []struct {
 		name                            string
+		rule                            string
 		dirty, writeback, unevict, mapd uint64
 		want                            uint64
 	}{
-		{"dirty", 100 * mib, 0, 0, 0, 110 * mib},
-		{"writeback", 0, 100 * mib, 0, 0, 110 * mib},
-		{"mlocked file mapping", 0, 0, 100 * mib, 100 * mib, 110 * mib},
-		{"clean mapped", 0, 0, 0, 190 * mib, 10 * mib},
-		{"all three", 60 * mib, 60 * mib, 60 * mib, 0, 190 * mib},
-		{"more kept than cache", 190 * mib, 190 * mib, 0, 0, 200 * mib},
+		{"dirty left out", "S-11a dirty cache", 100 * mib, 0, 0, 0, 10 * mib},
+		{"writeback left out", "S-11a dirty cache", 0, 100 * mib, 0, 0, 10 * mib},
+		{"dirty and writeback left out", "S-11a dirty cache", 190 * mib, 190 * mib, 0, 0, 10 * mib},
+		{"mlocked file mapping kept", "S-11 page cache", 0, 0, 100 * mib, 100 * mib, 110 * mib},
+		{"clean mapped left out", "S-11 page cache", 0, 0, 0, 190 * mib, 10 * mib},
+		{"only mlocked kept of all three", "S-11a dirty cache", 60 * mib, 60 * mib, 60 * mib, 0, 70 * mib},
+		// More kept than cache: the kept pages are clamped to the file cache, so nothing is left out.
+		{"more kept than cache", "S-11 page cache", 0, 0, 250 * mib, 0, 200 * mib},
 	} {
-		stat := map[string]uint64{"file": 190 * mib, "shmem": 0, "file_dirty": c.dirty, "file_writeback": c.writeback, "file_mapped": c.mapd, "unevictable": c.unevict}
-		got, err := unreclaimable(200*mib, stat)
-		if err != nil || got != c.want {
-			t.Errorf("S-11 page cache: %s: unreclaimable = %d, %v; want %d", c.name, got, err, c.want)
-		}
+		t.Run(c.name, func(t *testing.T) {
+			stat := map[string]uint64{"file": 190 * mib, "shmem": 0, "file_dirty": c.dirty, "file_writeback": c.writeback, "file_mapped": c.mapd, "unevictable": c.unevict}
+			got, err := unreclaimable(200*mib, stat)
+			if err != nil || got != c.want {
+				t.Errorf("%s: %s: unreclaimable = %d, %v; want %d", c.rule, c.name, got, err, c.want)
+			}
+		})
 	}
-	for _, stat := range []map[string]uint64{{"file": 1}, {"shmem": 1}, {}, {"file": 1, "shmem": 0, "file_dirty": 0, "file_writeback": 0}, {"file": 1, "shmem": 0, "unevictable": 0}} {
+	// file, shmem and unevictable are the measure: a stat without one of them
+	// makes no decision; dirty and writeback counters are no longer needed.
+	for _, stat := range []map[string]uint64{{"file": 1}, {"shmem": 1}, {}, {"file": 1, "shmem": 0, "file_dirty": 0, "file_writeback": 0}, {"file": 1, "unevictable": 0}, {"shmem": 0, "unevictable": 0}} {
 		if _, err := unreclaimable(1, stat); err == nil {
 			t.Errorf("S-11 page cache: memory.stat %v without every counter gave a usage", stat)
 		}
 	}
+	if got, err := unreclaimable(200*mib, map[string]uint64{"file": 190 * mib, "shmem": 0, "unevictable": 0}); err != nil || got != 10*mib {
+		t.Errorf("S-11a dirty cache: memory.stat without dirty or writeback counters: unreclaimable = %d, %v; want %d", got, err, 10*mib)
+	}
 }
 
-// S-11: past memory.high for longer than boundGrace, a run held up only by
-// its page cache is not killed; the same charge in tmpfs is.
+// S-11, S-11a: past memory.high for longer than boundGrace, a run held up
+// only by its page cache, clean, dirty or under writeback, is not killed; the
+// same charge in tmpfs or mlocked is.
 func TestMemoryWatchdogSparesFileCache(t *testing.T) {
 	const mib = 1 << 20
 	for _, c := range []struct {
 		name string
+		rule string
 		stat string
 		kill bool
 	}{
-		{"page cache", fmt.Sprintf("anon %d\nfile %d\nshmem 0\nfile_mapped %d\nfile_dirty 0\nfile_writeback 0\nunevictable 0\n", 10*mib, 190*mib, 190*mib), false},
-		{"tmpfs", fmt.Sprintf("anon %d\nfile %d\nshmem %d\nfile_mapped 0\nfile_dirty 0\nfile_writeback 0\nunevictable 0\n", 10*mib, 190*mib, 190*mib), true},
-		{"dirty file", fmt.Sprintf("anon %d\nfile %d\nshmem 0\nfile_mapped 0\nfile_dirty %d\nfile_writeback 0\nunevictable 0\n", 10*mib, 190*mib, 190*mib), true},
-		{"mlocked file", fmt.Sprintf("anon %d\nfile %d\nshmem 0\nfile_mapped %d\nfile_dirty 0\nfile_writeback 0\nunevictable %d\n", 10*mib, 190*mib, 190*mib, 190*mib), true},
-		{"no stat", "", false},
+		{"page cache", "S-11 page cache", fmt.Sprintf("anon %d\nfile %d\nshmem 0\nfile_mapped %d\nfile_dirty 0\nfile_writeback 0\nunevictable 0\n", 10*mib, 190*mib, 190*mib), false},
+		{"tmpfs", "S-11 page cache", fmt.Sprintf("anon %d\nfile %d\nshmem %d\nfile_mapped 0\nfile_dirty 0\nfile_writeback 0\nunevictable 0\n", 10*mib, 190*mib, 190*mib), true},
+		{"dirty file spared", "S-11a dirty cache", fmt.Sprintf("anon %d\nfile %d\nshmem 0\nfile_mapped 0\nfile_dirty %d\nfile_writeback 0\nunevictable 0\n", 10*mib, 190*mib, 190*mib), false},
+		{"writeback file spared", "S-11a dirty cache", fmt.Sprintf("anon %d\nfile %d\nshmem 0\nfile_mapped 0\nfile_dirty 0\nfile_writeback %d\nunevictable 0\n", 10*mib, 190*mib, 190*mib), false},
+		{"mlocked file", "S-11 page cache", fmt.Sprintf("anon %d\nfile %d\nshmem 0\nfile_mapped %d\nfile_dirty 0\nfile_writeback 0\nunevictable %d\n", 10*mib, 190*mib, 190*mib, 190*mib), true},
+		{"no stat", "S-11 page cache", "", false},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			dir := filepath.Dir(counterFile(t, "high 0\noom 0\noom_kill 0\n"))
@@ -336,7 +350,7 @@ func TestMemoryWatchdogSparesFileCache(t *testing.T) {
 			}
 			w.finish(int(unix.SIGKILL))
 			if killed != c.kill || w.h.bounded != c.kill {
-				t.Fatalf("S-11 page cache: killed=%v bounded=%v after %v above memory.high, want %v", killed, w.h.bounded, 10*boundGrace, c.kill)
+				t.Fatalf("%s: killed=%v bounded=%v after %v above memory.high, want %v", c.rule, killed, w.h.bounded, 10*boundGrace, c.kill)
 			}
 		})
 	}

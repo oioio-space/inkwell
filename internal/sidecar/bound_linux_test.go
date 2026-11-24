@@ -6,7 +6,6 @@ import (
 	"math/rand/v2"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -160,7 +159,7 @@ func TestBoundSparesPageCache(t *testing.T) {
 			m.beforeStart = func(r *cgroupRun) {
 				r.watch.beforeRead = func() { run, _ = readCounters(filepath.Join(r.path, "memory.events.local")) }
 				if device != "" {
-					throttle = throttleReads(r.session.path, device, c.rbps)
+					throttle = throttleIO(r.session.path, device, "rbps", c.rbps)
 				}
 			}
 			out, err := Run(t.Context(), s)
@@ -183,40 +182,69 @@ func TestBoundSparesPageCache(t *testing.T) {
 	}
 }
 
-// TestBoundCountsDirtyFileCache: dirty and writeback pages count against the
-// bound (ADR 0044 point 1g), and a run that writes four times its bound into a
-// regular file is still an ordinary run: the kernel throttles a cgroup's
-// dirtying to a share of its memory (dirty plus writeback peaked at 69 to
-// 102 MiB under a 128 MiB memory.high, the watchdog's measure at 53 to
-// 69 MiB, measured 2026-11-16), so it completes, with no bound outcome and
-// no OOM kill. The output is on disk, not the tier-N tmpfs (whose pages are
-// shmem and count anyway).
-func TestBoundCountsDirtyFileCache(t *testing.T) {
-	if !requireNScope(t) {
-		return
-	}
-	dir := pageCacheDir(t)
-	m := scopeManager(t)
-	path := filepath.Join(dir, "out")
-	s := residentSpec(t, m, "dirty:"+path)
-	s.Dir = dir
-	s.WatchDir, s.MaxDirBytes, s.WriteFiles, s.FileSizeLimit = dir, 1<<30, []string{"out"}, 1<<30
-	var run map[string]uint64
-	m.beforeStart = func(r *cgroupRun) {
-		r.watch.beforeRead = func() { run, _ = readCounters(filepath.Join(r.path, "memory.events.local")) }
-	}
-	out, err := runWithoutMount(t.Context(), s)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if out.Containment != "cgroup" {
-		t.Fatal("no delegated user scope or PID namespaces available")
-	}
-	if out.Signal != 0 || out.ExitCode != 0 || out.MemoryCause != MemoryNone || string(out.Stdout) != fmt.Sprintf("wrote=%d\n", 512<<20) {
-		t.Fatalf("S-11 page cache: dirty run: signal=%d exit=%d cause=%s stdout=%q stderr=%q, want a complete write and no bound", out.Signal, out.ExitCode, out.MemoryCause, out.Stdout, out.Stderr)
-	}
-	if run["high"] == 0 || run["oom_kill"] != 0 {
-		t.Fatalf("run counters %v: want the dirty cache to have reached memory.high, and no OOM kill", run)
+// TestBoundSparesDirtyFileCache: dirty and writeback file pages are left out
+// of the watchdog's measure (S-11a, ADR 0044 point 1g amended 2026-11-24), so
+// a run that writes more than its bound into a regular file is an ordinary run.
+// The kernel does not hold a cgroup's dirtying to a small share of its memory:
+// writing 512 MiB under a 128 MiB memory.high, dirty plus writeback reach 112
+// to 123 MiB and memory.current sits at the bound (measured 2026-11-24), and
+// GitHub's runner killed this run under the former measure, which counted
+// them. "held heap, slow storage" keeps its anonymous memory at 108 MiB and
+// writes 64 MiB under the scope's io.max at 8 MB/s: the former measure killed
+// it in 5 of 5 runs, S-11a let 5 of 5 complete (2026-11-24). Both complete,
+// with no bound outcome and no OOM kill. The output is on disk, not the
+// tier-N tmpfs (whose pages are shmem and count anyway).
+func TestBoundSparesDirtyFileCache(t *testing.T) {
+	for _, c := range []struct {
+		name, mode string
+		wrote      int
+		wbps       uint64
+	}{{"local storage", "dirty", 512 << 20, 0}, {"held heap slow storage", "helddirty", 64 << 20, 8 << 20}} {
+		t.Run(c.name, func(t *testing.T) {
+			if c.wbps > 0 && raceEnabled {
+				// The held memory is sized against the 128 MiB bound; under the
+				// race detector the run's launcher (this test binary) alone
+				// adds tens of MiB of anonymous memory to the run's cgroup.
+				t.Skip("held heap: the race detector's launcher memory leaves no room under the bound")
+			}
+			if !requireNScope(t) {
+				return
+			}
+			dir := pageCacheDir(t)
+			device := ""
+			if c.wbps > 0 {
+				device = blockDevice(t, dir)
+			}
+			m := scopeManager(t)
+			path := filepath.Join(dir, "out")
+			s := residentSpec(t, m, c.mode+":"+path)
+			s.Dir = dir
+			s.WatchDir, s.MaxDirBytes, s.WriteFiles, s.FileSizeLimit = dir, 1<<30, []string{"out"}, 1<<30
+			var run map[string]uint64
+			var throttle error
+			m.beforeStart = func(r *cgroupRun) {
+				r.watch.beforeRead = func() { run, _ = readCounters(filepath.Join(r.path, "memory.events.local")) }
+				if device != "" {
+					throttle = throttleIO(r.session.path, device, "wbps", c.wbps)
+				}
+			}
+			out, err := runWithoutMount(t.Context(), s)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if throttle != nil {
+				t.Skipf("io controller not delegated to the scope (%v): slow storage cannot be shown", throttle)
+			}
+			if out.Containment != "cgroup" {
+				t.Fatal("no delegated user scope or PID namespaces available")
+			}
+			if out.Signal != 0 || out.ExitCode != 0 || out.MemoryCause != MemoryNone || string(out.Stdout) != fmt.Sprintf("wrote=%d\n", c.wrote) {
+				t.Fatalf("S-11a dirty cache: dirty run: signal=%d exit=%d cause=%s stdout=%q stderr=%q, want a complete write and no bound", out.Signal, out.ExitCode, out.MemoryCause, out.Stdout, out.Stderr)
+			}
+			if run["high"] == 0 || run["oom_kill"] != 0 {
+				t.Fatalf("run counters %v: want the dirty cache to have reached memory.high, and no OOM kill", run)
+			}
+		})
 	}
 }
 
@@ -280,9 +308,9 @@ func blockDevice(t *testing.T, dir string) string {
 	return strings.TrimSpace(string(dev))
 }
 
-// throttleReads caps the read bandwidth of every process of the scope on
-// device, through the scope's io.max.
-func throttleReads(scope, device string, rbps uint64) error {
+// throttleIO caps one io.max key (rbps, wbps…) of every process of the scope
+// on device, through the scope's io.max.
+func throttleIO(scope, device, key string, limit uint64) error {
 	controllers, err := readValue(filepath.Join(scope, "cgroup.controllers"))
 	if err != nil {
 		return err
@@ -290,7 +318,7 @@ func throttleReads(scope, device string, rbps uint64) error {
 	if !containsWord(controllers, "io") {
 		return fmt.Errorf("controllers %q", controllers)
 	}
-	return writeValue(filepath.Join(scope, "io.max"), fmt.Sprintf("%s rbps=%d", device, rbps))
+	return writeValue(filepath.Join(scope, "io.max"), fmt.Sprintf("%s %s=%d", device, key, limit))
 }
 
 // writeEvicted writes size bytes to path, flushes them and drops them from
@@ -343,17 +371,11 @@ func raceAddressReserve(t *testing.T) uint64 {
 	if err != nil {
 		t.Fatal(err)
 	}
-	for line := range strings.SplitSeq(string(status), "\n") {
-		if v, ok := strings.CutPrefix(line, "VmPeak:"); ok {
-			kb, err := strconv.ParseUint(strings.TrimSuffix(strings.TrimSpace(v), " kB"), 10, 64)
-			if err != nil {
-				t.Fatal(err)
-			}
-			return kb << 10
-		}
+	peak, err := statusBytes(string(status), "VmPeak:")
+	if err != nil {
+		t.Fatalf("%v: %q", err, status)
 	}
-	t.Fatalf("no VmPeak in the helper's status: %q", status)
-	return 0
+	return peak
 }
 
 // requireUnitNotOOMKilled watches the session scope's unit for a while after

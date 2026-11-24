@@ -165,6 +165,11 @@ class SkipsTest(Base):
                                                  '\t\tt.Skipf("mDNS is not available here: %v", err)\n\t}\n'
                                                  '\tif testing.Short() {\n\t\tt.Skip("writes 40 MB")\n\t}\n}\n'), [])
 
+    def test_race_detector_skip_is_allowed(self):
+        # A build mode of the test run, like testing.Short (block SB2b-1g: a witness sized against a memory bound).
+        self.assertEqual(self.check("x_test.go", 'func TestA(t *testing.T) {\n\tif raceEnabled {\n'
+                                                 '\t\tt.Skip("the race detector leaves no room under the bound")\n\t}\n}\n'), [])
+
     def test_unknown_conditional_skip_is_reported(self):
         self.assertEqual(len(self.check("x_test.go", 'func T(t *testing.T) {\n\tif x {\n\t\tt.Skip("flaky")\n\t}\n}\n')), 1)
 

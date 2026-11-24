@@ -166,3 +166,16 @@ try:
 except OSError:
     pass
 ```
+
+## Step 2 (2026-11-24, working tree on 6a73087)
+
+Red first: under the former rule, the new subtests of `rules` failed with « S-11a dirty cache », and
+`TestBoundSparesDirtyFileCache/held_heap_slow_storage` was killed (`signal=9 cause=local-limit`) in 5 of 5 runs with
+the final helper (anonymous memory kept at 108 MiB, 64 MiB written at 8 MB/s through `io.max`). Under S-11a it
+completed in 5 of 5. The step-1 sizing (80 MiB held, 96 MiB written) killed the Go target in 0 of 3 runs, and 96 + 64
+in 1 of 3. Under `-race` the run's launcher alone fills the room (127 MiB of anon with nothing written): the subtest
+skips there, and `witness` and MD2 run without `-race`.
+
+Each criterion once on the final tree, except `github` (the integrator's): `docs` 0, `rules` 0 (5 s), `witness` 0
+(8 s), `mutants` 0 (MD1-MD7 all caught, 26 s), `regression` 0 (473 s: sidecar 392 s, typst 78 s, app 78 s),
+`simplify-report` 0.
