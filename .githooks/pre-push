@@ -16,12 +16,21 @@ cd "$repo_root"
 # shellcheck disable=SC2046 # one variable name per word, split on purpose
 unset $(git rev-parse --local-env-vars)
 
+# Git's pre-push stdin: one `<local ref> <local sha> <remote ref> <remote sha>` line per ref. A push that only
+# deletes remote refs (every local sha all zeros) sends no code, so there is nothing to check: deleting a merged
+# candidate branch ran the whole 30 min CI (2026-11-24). Any other input, empty included, runs the CI.
+refs="$(cat)"
+if [[ -n "$refs" ]] && ! awk '$2 !~ /^0+$/ { found = 1 } END { exit !found }' <<<"$refs"; then
+  printf '\033[34m▶ Pre-push: only remote refs deleted, no code pushed — nothing to check.\033[0m\n'
+  exit 0
+fi
+
 if command -v mise >/dev/null 2>&1 && [[ -f "$repo_root/mise.toml" ]]; then
   # Decide first (seconds): a run keeps the netsim in parallel with the other checks (`mise run ci`),
   # a skip runs everything else (`mise run ci:core`).
   # Exit 0 = run, 10 = skip; anything else (crash, python missing) runs: fail towards running.
   selector=0
-  python3 -I "$repo_root/scripts/netsim/affected.py" --pre-push || selector=$?
+  python3 -I "$repo_root/scripts/netsim/affected.py" --pre-push <<<"$refs" || selector=$?
   task=ci
   [[ $selector -eq 10 ]] && task=ci:core
   printf '\033[34m▶ Pre-push: running CI (mise run %s)…\033[0m\n' "$task"

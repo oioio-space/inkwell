@@ -2004,6 +2004,11 @@
       "id": "3b63746f86e34f319bbe6dd0bd500f9743009df9428ed562b145a6e57bbd32e2",
       "reason": "scripts/wc1-webkit.sh: gate dependency changed — CI3 /tmp leaks: the runtime folder goes under TMPDIR instead of a hardcoded /tmp path; the native suite unchanged",
       "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "6210917cb52326674319c8ba0201aa18726feaf9eb844b39d1eb8028ed403aab",
+      "reason": "mise.toml: gate dependency changed: mise task test:py — adds scripts/pre_push_hook_test.py (the pre-push hook skips the CI only for a push that deletes refs and sends no code); every existing test still runs",
+      "decision": "docs/objectif-en-cours.md"
     }
   ]
 }
