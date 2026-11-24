@@ -1,0 +1,16 @@
+{
+  "id": "bibtex",
+  "version": "1.0.0",
+  "contributes": {
+    "fileTypes": [
+      {
+        "id": "bibtex",
+        "label": "kind.bib",
+        "icon": "bib",
+        "extensions": [".bib"],
+        "mime": "application/x-bibtex",
+        "storage": "text"
+      }
+    ]
+  }
+}

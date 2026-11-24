@@ -1,0 +1,26 @@
+{
+  "id": "lab.notes",
+  "version": "0.3.1",
+  "essential": false,
+  "activation": ["onFileType:lab-notes", "onLanguage:lab"],
+  "contributes": {
+    "fileTypes": [
+      {
+        "id": "lab-notes",
+        "label": "Lab notes",
+        "icon": "text",
+        "extensions": [".lab", ".lab.txt"],
+        "filenames": ["Labfile"],
+        "shebangs": ["labrun"],
+        "mime": "text/x-lab",
+        "storage": "text",
+        "grammar": "lab",
+        "options": {
+          "delimiter": ";",
+          "fixed": true,
+          "width": 3
+        }
+      }
+    ]
+  }
+}

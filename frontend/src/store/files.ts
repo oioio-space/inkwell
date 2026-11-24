@@ -1,40 +1,27 @@
 /**
  * Payloads of the `store` stream's ListFiles and FileInfo operations (mirror of
  * internal/bridge/files.go; both are checked against internal/bridge/testdata/storestream.json).
- * Integers are big-endian. Both start with a version byte, so a webview and a Go side of
- * different ages fail cleanly instead of misreading each other.
+ * Integers are big-endian. Each starts with its own version byte, so a webview and a Go side of
+ * different ages fail cleanly instead of misreading each other. The file list carries no kind:
+ * what a file is comes from its name, in the webview's registry (ADR 0027).
  *
- *   file list: version u8 | count u32 | count × (kind u8 | flags u8 | size u64 | len u16 | path)
- *   file info: version u8 | flags u8 | eol u8 | len u8 | encoding
+ *   file list (version 2): version u8 | count u32 | count × (flags u8 | size u64 | len u16 | path)
+ *   file info (version 1): version u8 | flags u8 | eol u8 | len u8 | encoding
  */
 import { ProtocolError } from "./protocol";
 
-const FILES_VERSION = 1;
+const FILE_LIST_VERSION = 2;
+const FILE_INFO_VERSION = 1;
 const MAX_PATH = 0xffff;
-const ENTRY_HEAD = 12;
+const ENTRY_HEAD = 11;
 
 const textEncoder = new TextEncoder();
 const textDecoder = new TextDecoder("utf-8", { fatal: true });
-
-/** Kinds of project file, in the order of the Go type project.Kind. */
-export const FileKind = {
-  other: 0,
-  typst: 1,
-  markdown: 2,
-  text: 3,
-  csv: 4,
-  bib: 5,
-  image: 6,
-  pdf: 7,
-  data: 8,
-} as const;
-export type FileKind = (typeof FileKind)[keyof typeof FileKind];
 
 /** An entry of the project's file list. */
 export interface ProjectFile {
   /** Relative to the project folder, with forward slashes. */
   path: string;
-  kind: FileKind;
   size: number;
   /** The project's main document. */
   main: boolean;
@@ -68,7 +55,7 @@ function concat(pieces: Uint8Array[]): Uint8Array {
 /** Encodes the payload of a ListFiles response. */
 export function encodeFileList(files: ProjectFile[]): Uint8Array {
   const first = new Uint8Array(5);
-  first[0] = FILES_VERSION;
+  first[0] = FILE_LIST_VERSION;
   new DataView(first.buffer).setUint32(1, files.length);
   const pieces: Uint8Array[] = [first];
   for (const f of files) {
@@ -76,10 +63,9 @@ export function encodeFileList(files: ProjectFile[]): Uint8Array {
     if (path.length === 0 || path.length > MAX_PATH) throw new ProtocolError("bad file path");
     const head = new Uint8Array(ENTRY_HEAD);
     const view = new DataView(head.buffer);
-    head[0] = f.kind;
-    head[1] = f.main ? 1 : 0;
-    view.setBigUint64(2, BigInt(f.size));
-    view.setUint16(10, path.length);
+    head[0] = f.main ? 1 : 0;
+    view.setBigUint64(1, BigInt(f.size));
+    view.setUint16(9, path.length);
     pieces.push(head, path);
   }
   return concat(pieces);
@@ -87,30 +73,22 @@ export function encodeFileList(files: ProjectFile[]): Uint8Array {
 
 /** Decodes the payload of a ListFiles response. */
 export function decodeFileList(b: Uint8Array): ProjectFile[] {
-  if (b.length < 5 || b[0] !== FILES_VERSION) throw new ProtocolError("bad file list header");
+  if (b.length < 5 || b[0] !== FILE_LIST_VERSION) throw new ProtocolError("bad file list header");
   const count = new DataView(b.buffer, b.byteOffset, b.byteLength).getUint32(1);
   const out: ProjectFile[] = [];
   let at = 5;
   for (let i = 0; i < count; i++) {
     if (at + ENTRY_HEAD > b.length) throw new ProtocolError("truncated file entry");
     const view = new DataView(b.buffer, b.byteOffset + at, ENTRY_HEAD);
-    const kind = view.getUint8(0);
-    const flags = view.getUint8(1);
-    const size = view.getBigUint64(2);
-    const n = view.getUint16(10);
+    const flags = view.getUint8(0);
+    const size = view.getBigUint64(1);
+    const n = view.getUint16(9);
     at += ENTRY_HEAD;
-    if (
-      kind > FileKind.data ||
-      flags > 1 ||
-      size > BigInt(Number.MAX_SAFE_INTEGER) ||
-      n === 0 ||
-      at + n > b.length
-    ) {
+    if (flags > 1 || size > BigInt(Number.MAX_SAFE_INTEGER) || n === 0 || at + n > b.length) {
       throw new ProtocolError("bad file entry");
     }
     out.push({
       path: decodePath(b.subarray(at, at + n)),
-      kind: kind as FileKind,
       size: Number(size),
       main: flags === 1,
     });
@@ -133,7 +111,7 @@ export function encodeFileInfo(i: FileInfo): Uint8Array {
   const name = textEncoder.encode(i.encoding);
   if (name.length > 0xff) throw new ProtocolError("encoding name too long");
   const flags = (i.bom ? 1 : 0) | (i.mixed ? 2 : 0);
-  return concat([Uint8Array.from([FILES_VERSION, flags, i.eol, name.length]), name]);
+  return concat([Uint8Array.from([FILE_INFO_VERSION, flags, i.eol, name.length]), name]);
 }
 
 /** Decodes the payload of a FileInfo response. */
@@ -142,7 +120,7 @@ export function decodeFileInfo(b: Uint8Array): FileInfo {
   const eol = b[2] ?? 0;
   if (
     b.length < 4 ||
-    b[0] !== FILES_VERSION ||
+    b[0] !== FILE_INFO_VERSION ||
     flags > 3 ||
     eol > Eol.CR ||
     b.length !== 4 + (b[3] ?? 0)

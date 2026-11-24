@@ -1,30 +1,39 @@
 <script lang="ts">
+import type { LanguageSupport } from "@codemirror/language";
 import { untrack } from "svelte";
-import type { Lang } from "../editor/format";
 import { createReadOnlyEditor } from "../editor/setup";
 import { megabytesOf, t } from "../i18n";
 import Banner from "./Banner.svelte";
 import { session } from "./editorSession.svelte";
 
 /** A text too big for a document (ADR 0028): shown whole, read-only, in no Automerge document. */
-let { text, message, lang = "plain" }: { text: string; message?: string; lang?: Lang } = $props();
+let {
+  text,
+  message,
+  support,
+}: { text: string; message?: string | undefined; support?: LanguageSupport | undefined } = $props();
 let host: HTMLDivElement;
+let editor: ReturnType<typeof createReadOnlyEditor> | undefined;
 
 $effect(() => {
   const shown = text;
-  const editor = untrack(() =>
+  const made = untrack(() =>
     createReadOnlyEditor(host, shown, {
-      lang,
+      support,
       onView: (view) => (session.view = view),
       onState: session.note,
     }),
   );
+  editor = made;
   return () => {
-    editor.destroy();
+    made.destroy();
+    editor = undefined;
     session.view = undefined;
     session.state = undefined;
   };
 });
+// A grammar that loads after the text is shown colours it in place.
+$effect(() => editor?.setSupport(support));
 </script>
 
 <div class="wrap">

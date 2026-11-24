@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Session } from "../../bindings/github.com/oioio-space/inkwell/internal/app/index";
-import { FileKind } from "../store/files";
 import { notice } from "../ui/notice.svelte";
+import { viewChoice } from "./viewChoice.svelte";
 import { statusOf, workspace } from "./workspace.svelte";
 
 // The Wails runtime dials its host on import; the status logic never needs it.
@@ -33,8 +33,8 @@ describe("openFile", () => {
     const refresh = vi.spyOn(workspace, "refreshInfo").mockResolvedValue();
     const fetch = vi.spyOn(globalThis, "fetch").mockResolvedValue(new Response(null));
     workspace.files = [
-      { path: "main.typ", kind: FileKind.typst, size: 0, main: true },
-      { path: "notes.bin", kind: FileKind.other, size: 1, main: false },
+      { path: "main.typ", size: 0, main: true },
+      { path: "notes.bin", size: 1, main: false },
     ];
     await workspace.openFile("notes.bin");
     refresh.mockClear();
@@ -44,6 +44,84 @@ describe("openFile", () => {
     refresh.mockRestore();
     fetch.mockRestore();
     workspace.files = [];
+  });
+});
+
+describe("how a file opens (ADR 0027 rule 6)", () => {
+  it("bytes Go does not take as text open as the file card; a blob type is not read as text", async () => {
+    const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (url, init) => {
+      if (init?.method === "HEAD")
+        return new Response(null, { status: 200, headers: { ETag: '"1"' } });
+      return String(url).startsWith("/project-text")
+        ? new Response(null, { status: 415 })
+        : new Response("data:image/png;base64,", { status: 200 });
+    });
+    workspace.files = [
+      { path: "main.typ", size: 0, main: true },
+      { path: "blob.bin", size: 3, main: false },
+      { path: "data.csv", size: 3, main: false },
+      { path: "fig.png", size: 3, main: false },
+    ];
+    try {
+      await workspace.openFile("blob.bin");
+      expect([workspace.opened?.opening.type.id, workspace.opened?.opening.viewer.id]).toEqual([
+        "binary",
+        "files.card",
+      ]);
+      await workspace.openFile("data.csv");
+      expect(workspace.opened?.opening.notice).toBe("not-text");
+      await workspace.openFile("fig.png");
+      expect(workspace.opened?.opening.viewer.id).toBe("images.view");
+      expect(
+        fetch.mock.calls.some(
+          ([u, i]) =>
+            String(u).includes("fig.png") &&
+            !i?.method?.includes("HEAD") &&
+            String(u).startsWith("/project-text"),
+        ),
+      ).toBe(false);
+    } finally {
+      fetch.mockRestore();
+      await workspace.openFile("main.typ");
+      workspace.files = [];
+    }
+  });
+});
+
+describe("what a file is, once read (EX0 code review, findings 1, 9 and 11)", () => {
+  it("a text too big shows the info card; an unknown name read as text gets the text type", async () => {
+    const fetch = vi.spyOn(globalThis, "fetch").mockImplementation(async (url, init) => {
+      if (init?.method === "HEAD")
+        return new Response(null, { status: 200, headers: { ETag: '"1"' } });
+      if (String(url).includes("huge.log")) return new Response(null, { status: 413 });
+      return new Response("Copyright", { status: 200 });
+    });
+    workspace.files = [
+      { path: "main.typ", size: 0, main: true },
+      { path: "huge.log", size: 3, main: false },
+      { path: "LICENSE", size: 3, main: false },
+    ];
+    try {
+      await workspace.openFile("huge.log");
+      expect(workspace.opened?.failed).toBeUndefined();
+      expect(workspace.opened?.large).toBe(true);
+      expect(workspace.opened?.opening.viewer.id).toBe("files.card");
+      expect(workspace.fileTypeOf("LICENSE")).toBeUndefined();
+      await workspace.openFile("LICENSE");
+      expect(workspace.fileTypeOf("LICENSE")?.id).toBe("text");
+      expect(await workspace.readFile("LICENSE")).toBe("Copyright");
+      expect(await workspace.readFile("huge.log")).toBeUndefined();
+    } finally {
+      fetch.mockRestore();
+      await workspace.openFile("main.typ");
+      workspace.files = [];
+    }
+  });
+
+  it("the type the person chose for a file is the one everything reads", () => {
+    expect(workspace.fileTypeOf("notes.txt")?.id).toBe("text");
+    viewChoice.openAsTable(workspace.project, "notes.txt");
+    expect(workspace.fileTypeOf("notes.txt")?.id).toBe("csv");
   });
 });
 
@@ -59,8 +137,8 @@ describe("an open file changed outside Inkwell", () => {
     });
     try {
       workspace.files = [
-        { path: "main.typ", kind: FileKind.typst, size: 0, main: true },
-        { path: "notes.md", kind: FileKind.markdown, size: 3, main: false },
+        { path: "main.typ", size: 0, main: true },
+        { path: "notes.md", size: 3, main: false },
       ];
       await workspace.openFile("notes.md");
       expect(workspace.opened?.text).toBe("one");

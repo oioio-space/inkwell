@@ -1,0 +1,35 @@
+{
+  "id": "lab",
+  "version": "1.0.0",
+  "essential": true,
+  "activation": ["onFileType:lab-notes", "onLanguage:lab"],
+  "contributes": {
+    "fileTypes": [
+      {
+        "id": "lab-notes",
+        "label": "kind.text",
+        "icon": "data",
+        "extensions": [".lab"],
+        "storage": "text",
+        "grammar": "lab"
+      }
+    ],
+    "viewers": [
+      {
+        "id": "lab.view",
+        "fileTypes": ["lab-notes"],
+        "label": "kind.text",
+        "entry": "native/view.ts",
+        "capabilities": ["ui.native"]
+      }
+    ],
+    "grammars": [
+      {
+        "id": "lab",
+        "names": ["lab", "labnotes"],
+        "entry": "native/grammar.ts",
+        "capabilities": ["ui.native"]
+      }
+    ]
+  }
+}

@@ -895,6 +895,10 @@ principal au démarrage. Codex a refusé un correctif étroit : le modèle manqu
 
 ### AD-51 — Registre des types de fichiers
 
+- **Remplacée** par l'ADR 0027 (2026-11-24) : pas de table partagée par Go et TypeScript ; les
+  types sont des contributions de manifestes lus par le registre de la webview, et Go ne classe
+  plus les noms (« Go ne dépend pas du registre », AD-08, est gardé). Texte d'origine ci-dessous.
+
 - **Recommandation.** Une table de **données** (`filetypes.json`) embarquée par Go et importée
   par TypeScript, plus des modules d'éditeur chargés à la demande ; vecteurs partagés ; aucun
   `switch` ailleurs ; les types du cœur s'y inscrivent comme ceux d'un greffon (`AD-63`).

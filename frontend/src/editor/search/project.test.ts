@@ -1,6 +1,5 @@
 import { next as A } from "@automerge/automerge";
 import { describe, expect, it, vi } from "vitest";
-import { FileKind } from "../../store/files";
 import { findInProject, parseFilters, resolveHit } from "./project";
 import { compile, typst } from "./testkit";
 
@@ -91,20 +90,24 @@ describe("project search", () => {
 
   it("SRC-19 file filters apply and binaries are never read", async () => {
     const text = vi.fn(() => "needle");
-    const binary = (path: string, kind: FileKind) => ({ path, kind, text: vi.fn(() => "needle") });
-    const png = binary("fig/needle.png", FileKind.image);
-    const pdf = binary("out.pdf", FileKind.pdf);
-    const blob = binary("data.bin", FileKind.data);
+    const binary = (path: string) => ({ path, text: vi.fn(() => "needle") });
+    // Types kept as bytes (ADR 0027): never read.
+    const png = binary("fig/needle.png");
+    const pdf = binary("out.pdf");
+    const blob = binary("data.cbor");
+    // No type claims the name: read, and skipped when Go says its bytes are not text.
+    const unknown = { path: "blob.bin", text: vi.fn((): string | undefined => undefined) };
     const files = [
-      { path: "ch1.typ", kind: FileKind.typst, text },
-      { path: "notes/a.md", kind: FileKind.markdown, text },
-      { path: "brouillons/b.typ", kind: FileKind.typst, text },
-      { path: "x/brouillons/c.typ", kind: FileKind.typst, text },
-      { path: "mybrouillons/d.typ", kind: FileKind.typst, text },
-      { path: "refs.bib", kind: FileKind.bib, text },
+      { path: "ch1.typ", text },
+      { path: "notes/a.md", text },
+      { path: "brouillons/b.typ", text },
+      { path: "x/brouillons/c.typ", text },
+      { path: "mybrouillons/d.typ", text },
+      { path: "refs.bib", text },
       png,
       pdf,
       blob,
+      unknown,
     ];
     const m = compile("needle");
 
@@ -118,6 +121,8 @@ describe("project search", () => {
       "refs.bib",
     ]);
     for (const b of [png, pdf, blob]) expect(b.text).not.toHaveBeenCalled();
+    expect(unknown.text).toHaveBeenCalledOnce();
+    expect(all.scanned).toBe(6);
 
     const typOnly = await findInProject(files, m, "*.typ !brouillons/");
     expect(typOnly.files.map((f) => f.path)).toEqual(["ch1.typ", "mybrouillons/d.typ"]);

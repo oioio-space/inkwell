@@ -1,12 +1,5 @@
 import type { SocketLike } from "../net/WailsNetworkAdapter";
-import {
-  Eol,
-  encodeFileInfo,
-  encodeFileList,
-  type FileInfo,
-  FileKind,
-  type ProjectFile,
-} from "./files";
+import { Eol, encodeFileInfo, encodeFileList, type FileInfo, type ProjectFile } from "./files";
 import {
   decodeRequest,
   decodeWriteAt,
@@ -165,7 +158,6 @@ export class FakeGoStore {
       .sort(([a], [b]) => (a < b ? -1 : 1))
       .map(([path, data]) => ({
         path,
-        kind: path.endsWith(".typ") ? FileKind.typst : FileKind.text,
         size: data.length,
         main: path === "main.typ",
       }));

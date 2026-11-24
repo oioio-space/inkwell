@@ -8,6 +8,8 @@ import type { EditorView } from "@codemirror/view";
 class EditorSession {
   view = $state.raw<EditorView | undefined>();
   state = $state.raw<EditorState | undefined>();
+  /** Set by a view that is not the editor (the grid) while it shows: puts its caret at a text offset. */
+  placeAt = $state.raw<((offset: number) => void) | undefined>();
   /** How many times the person has acted on the editor (typed, selected, ran a command); others' edits do not count. */
   acts = 0;
 

@@ -640,7 +640,7 @@ rien de `frontend/src`.
 | `src/store` | adaptateur de stockage, projection, synchro externe, arbre, paliers | `net` (types), automerge |
 | `src/history` | modèle et analyse d'historique (Worker d'analyse) | `store` (types) |
 | `src/editor` | extensions CodeMirror ; éditeurs par type ; recherche ; mise en forme | `store`, `history` (types), `filetypes` |
-| `src/filetypes` *[cible, ADR 0027]* | registre : extension → type, icône, éditeur chargé à la demande, syntaxe des commentaires, palier | rien d'autre que ses modules |
+| `src/extensions` *[ADR 0027]* | registre des contributions : manifestes validés comme données, types de fichiers, vues, grammaires, chargeur unique des entrées | rien d'autre que ses modules ; les types de fichiers y sont un point d'extension |
 | `src/preview`, `src/present` | clients des Streams `preview` et `present` | `i18n` |
 | `src/ui` | composants Svelte | tout sauf `net`, `worker` et les Streams |
 | `src/i18n`, `src/theme` | chaînes fr/en ; jetons Adwaita | rien |
@@ -674,7 +674,7 @@ donnée (seulement des constantes, `ui/icons`). Vérifiées par Biome `noRestric
 | AC-15 | plus aucun `internal/trust` (alias) après l'étape 2 d'ADR 0034 | à ajouter (`AD-03`) |
 | FE-1 | `packages/protocol` n'importe rien de `src/` | Biome *[cible]* |
 | FE-2 | règles du §4.4 | Biome *[cible]* |
-| FE-3 | `src/ext/**` n'importe que `@inkwell/extension-api` et `src/ui/kit` | Biome *[cible, ADR 0039]* |
+| FE-3 | `src/ext/**` n'importe que `@inkwell/extension-api` et `src/ui/kit` ; seule exception (ADR 0027) : `src/ext/<nom>/native/**` d'une extension intégrée essentielle qui déclare `ui.native` | Biome *[cible, ADR 0039]* |
 | AC-16 | seul `internal/plugin/host` importe wazero, et il n'est lié que dans `cmd/inkwell-sandbox`, construit `CGO_ENABLED=0` sans Wails ; aucun paquet du noyau fermé (§15.3) n'importe `internal/plugin` | `arch-check.sh`, `go version -m` *[cible, ADR 0039]* |
 | AC-17 | seul `internal/milestone` importe go-git | `arch-check.sh` *[cible]* |
 | AC-18 | dans le code de production (hors `_test.go`, hors `cmd/sidecar-fetch`), **seul** `internal/sandbox` importe `os/exec` ou appelle `syscall.Exec`, `os.StartProcess`, `unix.Exec` — exception étroite : `cmd/inkwell-launch` appelle `unix.Exec` sur l'exécutable **installé** d'inkwell seulement (DG-2) ; aucun littéral de chemin absolu d'exécutable (`"/bin/…"`, `"/usr/bin/…"`, `"…\\System32\\…"`) ni nom de programme du système (`sh`, `setpriv`, `prlimit`, `unshare`, `mount`, `tar`, `git`, `pmset`, `diskutil`, `powershell`…) dans un appel de lancement | `arch-check.sh` (graphe d'imports + recherche des littéraux dans les paquets de production) *[cible, INV-14]* |
@@ -967,12 +967,14 @@ section définit le modèle qui manque. Décisions et preuves : `AD-46` à `AD-5
 
 **Types de fichiers** (ADR 0027 à rédiger, N20, U25, U26 ; `AD-51` à `AD-55`)
 
-- **MF-14** Un seul registre décrit chaque type ; sa partie données
-  (`filetypes.json` : extensions, noms de fichiers, type MIME, sorte `text | table | blob`,
-  vue, mode d'édition, langage de coloration, aperçu, icône, éditable, palier de taille) est
-  **embarquée par Go et importée par TypeScript** ; la partie code (éditeur, vue) est un module
-  TypeScript chargé à la demande. Aucun `switch` sur une extension ailleurs (AC à ajouter
-  avec ADR 0027).
+- **MF-14** Un seul registre décrit chaque type (ADR 0027, bloc EX0) : les manifestes
+  `inkwell-plugin.json` des extensions intégrées (`frontend/src/ext/<nom>/`) déclarent ses
+  données (extensions, noms de fichiers, interpréteurs, type MIME, stockage `text | blob`,
+  langage de coloration, icône, options de la vue) ; le registre de la webview
+  (`frontend/src/extensions/`) les lit comme données, sans exécuter de code, et charge à la
+  demande le code de la vue ou de la grammaire. Go ne tient aucune table de noms : la liste des
+  fichiers ne porte pas de sorte, et la classe du contenu (texte ou non) vient de la lecture
+  (MF-15). Aucun `switch` sur une extension ailleurs (critère `no-lists` de la porte EX0).
 
 | Type | Extensions (MIME) | Vérité | Vue, édition | Aperçu, compilation | Éditable |
 |---|---|---|---|---|---|

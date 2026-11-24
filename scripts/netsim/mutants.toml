@@ -3584,3 +3584,197 @@ retired = "SB2b-1g (279bc5b, ADR 0044 point 1g amended 2026-11-24) made this mut
 file = "internal/sidecar/memory_linux.go"
 before = "\tfile, kept := v[0], v[1]+v[2]+v[3]+v[4]\n"
 after = "\tfile, kept := v[0], v[1]+v[3]+v[4]\n"
+
+# Block EX0 (gates/EX0.toml, criterion `mutants`): each breaks one rule of the contribution registry, and only the
+# Vitest test of that rule, by its exact title (`name`), failing is a catch. MX13 is the Go encoder's.
+
+[[mutant]]
+id = "MX1"
+block = "EX0"
+kind = "vitest"
+test = "frontend/src/extensions/registry.test.ts"
+name = "EX0 R-1 the registry is built from manifests without running code"
+clause = "EX0 R-1"
+why = "building the registry loads an entry (the text editor's)"
+[[mutant.edit]]
+file = "frontend/src/extensions/registry.ts"
+before = "  const text = essential(TEXT_TYPE);\n"
+after = "  const text = essential(TEXT_TYPE);\n  void loader(text.viewer.folder, text.viewer.entry);\n"
+
+[[mutant]]
+id = "MX2"
+block = "EX0"
+kind = "vitest"
+test = "frontend/src/extensions/manifest.test.ts"
+name = "EX0 R-12 a manifest cannot reach the object prototype"
+clause = "EX0 R-12"
+why = "a __proto__ key is accepted at any depth"
+[[mutant.edit]]
+file = "frontend/src/extensions/manifest.ts"
+before = "    if (PROTO_KEYS.has(key)) fail(\"proto-key\", `${where}.${key}`);"
+after = "    if (PROTO_KEYS.has(key) && key !== \"__proto__\") fail(\"proto-key\", `${where}.${key}`);"
+
+[[mutant]]
+id = "MX3"
+block = "EX0"
+kind = "vitest"
+test = "frontend/src/extensions/registry.test.ts"
+name = "EX0 R-3 a claim already taken is refused in either order"
+clause = "EX0 R-3"
+why = "a claim already held is not refused: the later manifest overwrites it"
+[[mutant.edit]]
+file = "frontend/src/extensions/registry.ts"
+before = "    if (taken !== undefined) {"
+after = "    if (taken === \"\") {"
+
+[[mutant]]
+id = "MX4"
+block = "EX0"
+kind = "vitest"
+test = "frontend/src/extensions/registry.test.ts"
+name = "EX0 R-4 resolution follows the order of ADR 0027"
+clause = "EX0 R-4"
+why = "the longest suffix is tried before the whole name"
+[[mutant.edit]]
+file = "frontend/src/extensions/registry.ts"
+before = "    const whole = byName.get(lower);\n    if (whole) return whole;\n    // The longest"
+after = "    // The longest"
+[[mutant.edit]]
+file = "frontend/src/extensions/registry.ts"
+before = "    const word = hints.firstLine === undefined"
+after = "    const whole = byName.get(lower);\n    if (whole) return whole;\n    const word = hints.firstLine === undefined"
+
+[[mutant]]
+id = "MX5"
+block = "EX0"
+kind = "vitest"
+test = "frontend/src/extensions/registry.test.ts"
+name = "EX0 R-5 ui.native is refused to any origin but built-in"
+clause = "EX0 R-5"
+why = "the origin is read from the manifest instead of stamped by the loader"
+[[mutant.edit]]
+file = "frontend/src/extensions/manifest.ts"
+before = "    [\"id\", \"version\", \"essential\", \"activation\", \"contributes\"],"
+after = "    [\"id\", \"version\", \"essential\", \"activation\", \"contributes\", \"origin\"],"
+[[mutant.edit]]
+file = "frontend/src/extensions/manifest.ts"
+before = "  if (native && (source.origin !== \"builtin\" || !manifest.essential))"
+after = "  if (native && ((o.origin ?? source.origin) !== \"builtin\" || !manifest.essential))"
+
+[[mutant]]
+id = "MX6"
+block = "EX0"
+kind = "vitest"
+test = "frontend/src/extensions/manifest.test.ts"
+name = "EX0 R-13 an entry cannot leave its extension's folder"
+clause = "EX0 R-13"
+why = "an entry may hold a .. segment"
+[[mutant.edit]]
+file = "frontend/src/extensions/manifest.ts"
+before = "    segments.every((seg) => SEGMENT.test(seg) && seg !== \".\" && seg !== \"..\");"
+after = "    segments.every((seg) => SEGMENT.test(seg) && seg !== \".\");"
+
+[[mutant]]
+id = "MX7"
+block = "EX0"
+kind = "vitest"
+test = "frontend/src/extensions/registry.test.ts"
+name = "EX0 R-6 a viewer loads on first open, once, and falls back on failure"
+clause = "EX0 R-6"
+why = "entries are not memoized: every open loads its viewer again"
+[[mutant.edit]]
+file = "frontend/src/extensions/registry.ts"
+before = "    let p = loads.get(key);"
+after = "    let p: Promise<unknown> | undefined;"
+
+[[mutant]]
+id = "MX8"
+block = "EX0"
+kind = "vitest"
+test = "frontend/src/extensions/registry.test.ts"
+name = "EX0 R-14 a type without a viewer opens in the essential viewer of its storage"
+clause = "EX0 R-14"
+why = "a type without a viewer of its own gets no essential fallback"
+[[mutant.edit]]
+file = "frontend/src/extensions/registry.ts"
+before = "    const own = ownViewer(type) ?? essentialViewer(type.storage);"
+after = "    const own = ownViewer(type) as Viewer;"
+
+[[mutant]]
+id = "MX9"
+block = "EX0"
+kind = "vitest"
+test = "frontend/src/extensions/registry.test.ts"
+name = "EX0 R-7 the essential extensions alone open every file"
+clause = "EX0 R-7"
+why = "a disabled extension's types are kept"
+[[mutant.edit]]
+file = "frontend/src/extensions/registry.ts"
+before = "    if (disabled.has(m.id) && !m.essential) continue;"
+after = "    if (disabled.has(m.id) && !m.essential && disabled.size < 0) continue;"
+
+[[mutant]]
+id = "MX10"
+block = "EX0"
+kind = "vitest"
+test = "frontend/src/extensions/manifest.test.ts"
+name = "EX0 R-2 a malformed manifest is refused with its reason"
+clause = "EX0 R-2"
+why = "unknown keys are accepted"
+[[mutant.edit]]
+file = "frontend/src/extensions/manifest.ts"
+before = "    if (!allowed.includes(key)) fail(\"unknown-key\", `${where}.${key}`);"
+after = "    if (!allowed.includes(key) && allowed.length < 0) fail(\"unknown-key\", `${where}.${key}`);"
+
+[[mutant]]
+id = "MX11"
+block = "EX0"
+kind = "vitest"
+test = "frontend/src/extensions/registry.test.ts"
+name = "EX0 R-8 one folder adds a type and its grammar"
+clause = "EX0 R-8"
+why = "codeLanguages comes from a fixed list, not from the registry's grammars"
+[[mutant.edit]]
+file = "frontend/src/extensions/registry.ts"
+before = "      grammars.map((g) =>\n        LanguageDescription.of({"
+after = "      grammars\n        .filter((g) => g.id === \"typst\" || g.id === \"markdown\")\n        .map((g) =>\n        LanguageDescription.of({"
+
+[[mutant]]
+id = "MX12"
+block = "EX0"
+kind = "vitest"
+test = "frontend/src/store/files.test.ts"
+name = "EX0 R-9 the file list v2 decodes the shared vectors"
+clause = "EX0 R-9"
+why = "the file list decoder accepts version 1"
+[[mutant.edit]]
+file = "frontend/src/store/files.ts"
+before = "b[0] !== FILE_LIST_VERSION"
+after = "b[0] > FILE_LIST_VERSION"
+
+[[mutant]]
+id = "MX14"
+block = "EX0"
+kind = "vitest"
+test = "frontend/src/extensions/registry.test.ts"
+name = "EX0 R-15 a table offers its grid and its text without running viewer code"
+clause = "EX0 R-15"
+why = "a table's text editor is not offered as its alternative"
+[[mutant.edit]]
+file = "frontend/src/extensions/registry.ts"
+before = "      others.push(text.viewer);"
+after = "      void others;"
+
+[[mutant]]
+id = "MX13"
+block = "EX0"
+kind = "go"
+pkg = "./internal/bridge"
+test = "TestEX0FileListV2"
+expect = "R-9 "
+clause = "EX0 R-9"
+why = "the Go encoder writes the file list at version 1"
+[[mutant.edit]]
+file = "internal/bridge/files.go"
+before = "\tfileListVersion = 2"
+after = "\tfileListVersion = 1"

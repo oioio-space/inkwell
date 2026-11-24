@@ -1,0 +1,74 @@
+{
+  "id": "images",
+  "version": "1.0.0",
+  "essential": true,
+  "activation": [
+    "onFileType:png",
+    "onFileType:jpeg",
+    "onFileType:gif",
+    "onFileType:webp",
+    "onFileType:svg",
+    "onFileType:bmp"
+  ],
+  "contributes": {
+    "fileTypes": [
+      {
+        "id": "png",
+        "label": "kind.image",
+        "icon": "image",
+        "extensions": [".png"],
+        "mime": "image/png",
+        "storage": "blob"
+      },
+      {
+        "id": "jpeg",
+        "label": "kind.image",
+        "icon": "image",
+        "extensions": [".jpg", ".jpeg"],
+        "mime": "image/jpeg",
+        "storage": "blob"
+      },
+      {
+        "id": "gif",
+        "label": "kind.image",
+        "icon": "image",
+        "extensions": [".gif"],
+        "mime": "image/gif",
+        "storage": "blob"
+      },
+      {
+        "id": "webp",
+        "label": "kind.image",
+        "icon": "image",
+        "extensions": [".webp"],
+        "mime": "image/webp",
+        "storage": "blob"
+      },
+      {
+        "id": "svg",
+        "label": "kind.image",
+        "icon": "image",
+        "extensions": [".svg"],
+        "mime": "image/svg+xml",
+        "storage": "blob"
+      },
+      {
+        "id": "bmp",
+        "label": "kind.image",
+        "icon": "image",
+        "extensions": [".bmp"],
+        "mime": "image/bmp",
+        "storage": "blob"
+      }
+    ],
+    "viewers": [
+      {
+        "id": "images.view",
+        "fileTypes": ["png", "jpeg", "gif", "webp", "svg", "bmp"],
+        "label": "kind.image",
+        "entry": "native/image.ts",
+        "capabilities": ["ui.native"]
+      }
+    ]
+  }
+}

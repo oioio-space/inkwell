@@ -1,4 +1,5 @@
 import { mount } from "svelte";
+import { preloadStartup } from "./extensions/loader";
 import "./theme/tokens.css";
 import "./theme/adwaita.css";
 
@@ -12,6 +13,7 @@ if (import.meta.env.VITE_PERF_NATIVE === "1" && !isPublic) {
   const { installNativeEarly } = await import("./perf/nativeEarly");
   installNativeEarly(true);
 }
+if (!isPublic) preloadStartup();
 const { default: Root } = await (isPublic
   ? import("./present/PublicWindow.svelte")
   : import("./App.svelte"));

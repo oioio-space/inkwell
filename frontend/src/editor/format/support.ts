@@ -1,8 +1,10 @@
-import type { Lang } from "./lang";
 import { markdown } from "./markdown";
 import type { LangSyntax } from "./syntax";
 import type { Block, Feature, InsertItem } from "./types";
 import { typst } from "./typst";
+
+/** The markup language of a file, which decides what the formatting bar can do. */
+export type Lang = "typst" | "markdown" | "plain";
 
 /** The syntax tables of a language; plain text has none. */
 export function syntaxOf(lang: Lang): LangSyntax | undefined {
@@ -14,6 +16,14 @@ export function syntaxOf(lang: Lang): LangSyntax | undefined {
     default:
       return undefined;
   }
+}
+
+/**
+ * The formatting language of a file, from its type's grammar (ADR 0027): a grammar the bar has
+ * syntax tables for, else plain text.
+ */
+export function formatLanguage(grammar: string | undefined): Lang {
+  return grammar === "typst" || grammar === "markdown" ? grammar : "plain";
 }
 
 /** Whether the format can do this: the bar only shows what the file's format knows. */

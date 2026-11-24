@@ -1,14 +1,16 @@
 import { next as A } from "@automerge/automerge";
-import { FileKind } from "../../store/files";
+import { registry } from "../../extensions";
 import { type FindOptions, findAll, type Match, type Range } from "./find";
 import { escapeRegex, type Matcher } from "./query";
 import { DEFAULT_LIMIT } from "./scan";
 
-/** A project file as the search sees it. `text()` is only ever called for text kinds. */
+/**
+ * A project file as the search sees it. `text()` is never called for a type kept as bytes; it
+ * gives undefined when Go finds that the bytes are not text.
+ */
 export interface ProjectFileInput {
   path: string;
-  kind: FileKind;
-  text(): string | Promise<string>;
+  text(): string | undefined | Promise<string | undefined>;
 }
 
 /** Position of a hit in the live document, as Automerge cursors (they follow edits). */
@@ -49,17 +51,12 @@ export interface ProjectOptions {
   restrictTo?: ReadonlyMap<string, ReadonlySet<number>> | undefined;
 }
 
-const TEXT_KINDS: ReadonlySet<FileKind> = new Set([
-  FileKind.typst,
-  FileKind.markdown,
-  FileKind.text,
-  FileKind.csv,
-  FileKind.bib,
-]);
-
-/** Kinds whose text is searched; images, PDFs and data blobs are never read. */
-export function isSearchable(kind: FileKind): boolean {
-  return TEXT_KINDS.has(kind);
+/**
+ * Whether a file's text is searched: its type is stored as text, or no type claims its name (Go
+ * then reads it and refuses bytes that are not text). Images, PDFs and data blobs are never read.
+ */
+export function isSearchable(path: string): boolean {
+  return registry.typeOf(path)?.storage !== "blob";
 }
 
 // --- File filters: "*.typ *.md !drafts/" -----------------------------------------------
@@ -138,10 +135,11 @@ export async function findInProject(
   let scanned = 0;
   if (matcher.empty) return { files: out, total, scanned };
   for (const file of files) {
-    if (!isSearchable(file.kind) || !keep(file.path)) continue;
+    if (!isSearchable(file.path) || !keep(file.path)) continue;
     const lines = opts.restrictTo?.get(file.path);
     if (opts.restrictTo && !lines) continue;
     const text = await file.text();
+    if (text === undefined) continue;
     scanned++;
     let found = await findAll(text, matcher, { ...opts.range, limit, runner: opts.runner });
     const truncated = found.length >= limit;

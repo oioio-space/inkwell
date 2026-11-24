@@ -1,7 +1,7 @@
 <script lang="ts">
 import type { DocHandle } from "@automerge/automerge-repo";
 import { onDestroy, untrack } from "svelte";
-import { delimiterOf, type Start, startDialect } from "../../editor/csv/dialect";
+import { type Start, startDialect, type TableType } from "../../editor/csv/dialect";
 import { openCsv } from "../../editor/csv/open";
 import { patchWindow } from "../../editor/csv/patchWindow";
 import type { Delimiter } from "../../editor/csv/records";
@@ -10,6 +10,7 @@ import { t, tn } from "../../i18n";
 import { problems } from "../../language/problems.svelte";
 import { closeBuffer } from "../../workspace/closePage";
 import { type Doc, workspace } from "../../workspace/workspace.svelte";
+import { session } from "../editorSession.svelte";
 import Icon from "../icons/Icon.svelte";
 import type { IconName } from "../icons/paths";
 import Toast from "../Toast.svelte";
@@ -35,6 +36,7 @@ let {
   big,
   me,
   path,
+  table,
   readOnly = false,
   readOnlyReason,
   isLocked,
@@ -42,12 +44,14 @@ let {
   onshowtext,
 }: {
   /** The document holding the text; absent for a text too big for one (then `big`). */
-  handle?: DocHandle<Doc>;
+  handle?: DocHandle<Doc> | undefined;
   /** A text read from the disk, in no document: the sheet only reads it (ADR 0028). */
   big?: { text: string } | undefined;
   me: { id: string; name: string };
   path: string;
-  readOnly?: boolean;
+  /** What the file's type says about the table (its delimiter); undefined for none. */
+  table: TableType | undefined;
+  readOnly?: boolean | undefined;
   /** Shown instead of the reader-role wording when the sheet is read-only for another reason. */
   readOnlyReason?: string | undefined;
   isLocked?: SheetOptions["isLocked"];
@@ -89,6 +93,7 @@ $effect(() => {
   const h = handle;
   const b = big;
   const p = path;
+  const tab = table;
   let alive = true;
   let off: (() => void) | undefined;
   function start(c: SheetController, doc: DocHandle<Doc> | undefined) {
@@ -117,10 +122,10 @@ $effect(() => {
     if (!key) return;
     const port: DocPort = b ? plainPort(b.text) : handlePort(h as DocHandle<Doc>);
     const remembered = rememberedDelimiter(workspace.project, p);
-    const opening = startDialect(p, text, remembered);
+    const opening = startDialect(tab, text, remembered);
     contradiction = opening.contradiction;
     // Rescans (coming back from the text view) keep the person's choice, else follow the content.
-    const fixed = delimiterOf(p);
+    const fixed = tab?.fixed ? tab.delimiter : undefined;
     const hint = {
       ...(remembered ? { forced: remembered } : {}),
       ...(fixed ? { prefer: fixed } : {}),
@@ -197,6 +202,14 @@ $effect(() => {
   return () => clearTimeout(timer);
 });
 
+// The external-change toast's « Voir » puts the caret on the document's changed cell.
+$effect(() => {
+  if (!handle) return;
+  session.placeAt = (offset) => ctrl?.placeAtOffset(offset);
+  return () => {
+    session.placeAt = undefined;
+  };
+});
 onDestroy(() => presence?.stop());
 
 const DELIMITER_NAMES = {

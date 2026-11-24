@@ -4,71 +4,17 @@ import (
 	"cmp"
 	"errors"
 	"fmt"
-	"io"
 	"io/fs"
 	"os"
-	"path"
 	"slices"
 	"strconv"
 	"strings"
-	"unicode/utf8"
 )
-
-// Kind classifies a project file for the file list (icon, how to open it).
-type Kind uint8
-
-// The kinds. The numeric values are part of the store stream protocol.
-const (
-	// KindOther is a file Inkwell cannot show as text or as a known format.
-	KindOther Kind = iota
-	// KindTypst is a Typst source (.typ).
-	KindTypst
-	// KindMarkdown is a Markdown document (.md, .markdown).
-	KindMarkdown
-	// KindText is any other text, recognized by extension or by content.
-	KindText
-	// KindCSV is a table (.csv, .tsv).
-	KindCSV
-	// KindBib is a bibliography (.bib).
-	KindBib
-	// KindImage is a picture (.png, .jpg, .gif, .webp, .svg, ...).
-	KindImage
-	// KindPDF is a PDF document.
-	KindPDF
-	// KindData is structured data (.json, .yaml, .toml, .xml, ...).
-	KindData
-)
-
-// String returns the name used in the interface and the tests: "typst",
-// "markdown", "text", "csv", "bib", "image", "pdf", "data" or "other".
-func (k Kind) String() string {
-	switch k {
-	case KindTypst:
-		return "typst"
-	case KindMarkdown:
-		return "markdown"
-	case KindText:
-		return "text"
-	case KindCSV:
-		return "csv"
-	case KindBib:
-		return "bib"
-	case KindImage:
-		return "image"
-	case KindPDF:
-		return "pdf"
-	case KindData:
-		return "data"
-	}
-	return "other"
-}
 
 // File is an entry of the project's file list.
 type File struct {
 	// Path is relative to the project folder, with forward slashes.
 	Path string
-	// Kind says what the file is.
-	Kind Kind
 	// Size is its length in bytes.
 	Size int64
 	// Main is true for the project's main document, [MainFile].
@@ -76,21 +22,10 @@ type File struct {
 }
 
 const (
-	// sniffLen is how much of an unknown file is read to tell text from binary.
-	sniffLen = 4096
 	// maxListDepth bounds the recursion of [Project.List].
 	maxListDepth = 64
 	tmpSuffix    = ".tmp" // temporary files of store.WriteAtomic
 )
-
-var extKinds = map[string]Kind{
-	".typ": KindTypst, ".md": KindMarkdown, ".markdown": KindMarkdown, ".txt": KindText,
-	".csv": KindCSV, ".tsv": KindCSV, ".bib": KindBib, ".pdf": KindPDF,
-	".png": KindImage, ".jpg": KindImage, ".jpeg": KindImage, ".gif": KindImage,
-	".webp": KindImage, ".svg": KindImage, ".bmp": KindImage,
-	".json": KindData, ".yaml": KindData, ".yml": KindData, ".toml": KindData,
-	".xml": KindData, ".cbor": KindData,
-}
 
 // List returns the files of the project folder, not the folders: the main
 // document, the user's own files and nothing of Inkwell's (.inkwell/, files
@@ -99,8 +34,8 @@ var extKinds = map[string]Kind{
 // folder the sub-folders come first, then the files, each in natural order
 // ("ch2" before "ch10").
 //
-// The kind comes from the extension; a file without a known one is read
-// briefly to tell text from the rest.
+// Listing reads no file content: an entry is its path, its size and whether
+// it is the main document. What a file is, is the interface's to decide.
 func (p *Project) List() ([]File, error) {
 	var out []File
 	if err := p.listDir(p.root, "", 0, &out); err != nil {
@@ -156,7 +91,7 @@ func (p *Project) listDir(dir *os.Root, prefix string, depth int, out *[]File) e
 		if err != nil || !info.Mode().IsRegular() {
 			continue
 		}
-		files = append(files, File{Path: rel, Kind: p.kindOf(rel), Size: info.Size(), Main: rel == MainFile})
+		files = append(files, File{Path: rel, Size: info.Size(), Main: rel == MainFile})
 	}
 	*out = append(*out, files...)
 	return nil
@@ -220,47 +155,6 @@ func (p *Project) listSub(dir *os.Root, name, prefix string, depth int, out *[]F
 	return errors.Join(err, sub.Close())
 }
 
-// kindOf classifies rel by its extension, else by its content.
-func (p *Project) kindOf(rel string) Kind {
-	if k, ok := extKinds[strings.ToLower(path.Ext(rel))]; ok {
-		return k
-	}
-	if p.looksLikeText(rel) {
-		return KindText
-	}
-	return KindOther
-}
-
-// looksLikeText reads the start of rel and reports whether [Decode] accepts it.
-func (p *Project) looksLikeText(rel string) bool {
-	f, err := p.root.Open(rel)
-	if err != nil {
-		return false
-	}
-	defer func() { _ = f.Close() }() // read-only handle
-	head, err := io.ReadAll(io.LimitReader(f, sniffLen))
-	if err != nil {
-		return false
-	}
-	_, err = Decode(trimPartialRune(head))
-	return err == nil
-}
-
-// trimPartialRune drops a UTF-8 sequence cut by the end of b, so a truncated
-// read of a valid file is not mistaken for invalid UTF-8.
-func trimPartialRune(b []byte) []byte {
-	for i := 1; i <= min(utf8.UTFMax-1, len(b)); i++ {
-		c := b[len(b)-i]
-		if utf8.RuneStart(c) {
-			if c >= 0x80 && !utf8.FullRune(b[len(b)-i:]) {
-				return b[:len(b)-i]
-			}
-			break
-		}
-	}
-	return b
-}
-
 // naturalLess orders names with numbers inside by value ("ch2" < "ch10") and
 // ignores case, falling back to plain byte order so the order is total.
 func naturalLess(a, b string) bool {
@@ -307,16 +201,14 @@ func digitsEnd(s string, from int) int {
 	return from
 }
 
-// ReadImage returns a bounded image projection. Access stays inside os.Root and
+// ReadImage returns a bounded projection of the file rel, which the caller has
+// checked is an image by its name. Access stays inside os.Root and
 // excludes symlinks and private application files just like ReadText.
 func (p *Project) ReadImage(rel string) ([]byte, error) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if err := ValidatePath(rel); err != nil {
 		return nil, err
-	}
-	if extKinds[strings.ToLower(path.Ext(rel))] != KindImage {
-		return nil, errors.New("project: not an image")
 	}
 	if !listedPath(rel) {
 		return nil, fmt.Errorf("project: %s: %w", rel, fs.ErrNotExist)

@@ -14,6 +14,7 @@ import {
 } from "../../bindings/github.com/oioio-space/inkwell/internal/app/index";
 import { flushAllTyped } from "../editor/amSync";
 import type { Span } from "../editor/external";
+import { type FileType, type Opening, registry } from "../extensions";
 import type { Meta } from "../history/types";
 import { t } from "../i18n";
 import { links } from "../net/links.svelte";
@@ -32,7 +33,7 @@ import {
 import { type SocketLike, WailsNetworkAdapter } from "../net/WailsNetworkAdapter";
 import { type LeaveKind, markLeave } from "../restart/mark";
 import { ExternalSync, type Notice } from "../store/externalSync";
-import { type FileInfo, FileKind, type ProjectFile } from "../store/files";
+import type { FileInfo, ProjectFile } from "../store/files";
 import { ExternalEditError, GoStorageAdapter, NotTextError } from "../store/GoStorageAdapter";
 import { type SizeTier, sizeTier } from "../store/limits";
 import { type Projection, startProjection } from "../store/projection";
@@ -43,6 +44,7 @@ import { accessOf, type Member, type Standing } from "../ui/people/roster";
 import { flushCloseBuffers, pauseClosePresence, resumeClosePresence } from "./closePage";
 import { BootstrapLoader } from "./loader";
 import { observeSaveNow, observeSession, observeVariantHeads } from "./observe";
+import { viewChoice } from "./viewChoice.svelte";
 
 /** The project's text, and what the history keeps beside it (named versions, variants, actors). */
 export type Doc = { text: string; meta?: Meta };
@@ -91,7 +93,11 @@ export function assetFetch(url: string, method: "GET" | "HEAD" = "GET"): Promise
 /** How often an open file other than main.typ is checked for changes made outside Inkwell. */
 const WATCH_MS = 2000;
 
-type Opened = { text?: string; image?: string; failed?: boolean };
+/**
+ * A file other than the main document, as it opens: how (its type and viewer, ADR 0027), its text
+ * when Go read it as text, or that it could not be read.
+ */
+type Opened = { opening: Opening; text?: string; failed?: boolean; large?: boolean };
 /** The answers of `Session.InvitationState` (PC1b, rule J-8). */
 export type InvitationState = "open" | "used" | "expired";
 
@@ -225,32 +231,68 @@ class Workspace {
     void this.refreshInfo();
   }
 
-  /** Reads path for its view: an image, a text, or nothing (its card). */
+  /**
+   * Reads path for its view. Its type comes from its name; a type kept as bytes is not read here
+   * (its viewer reads what it needs), anything else is read as text, and what Go finds in the
+   * bytes decides how it opens (ADR 0027 rule 6).
+   */
   async #load(path: string): Promise<Opened> {
-    const file = this.files.find((file) => file.path === path);
-    if (file?.kind === FileKind.image) {
-      try {
-        const response = await assetFetch(`/project-image?path=${encodeURIComponent(path)}`);
-        if (!response.ok) throw new Error("image unavailable");
-        return { image: await response.text() };
-      } catch {
-        return { failed: true };
-      }
+    const choice = viewChoice.typeFor(this.project, path);
+    if (!registry.needsContent(path, { choice }))
+      return { opening: registry.open(path, { choice }) };
+    const read = await this.#readText(path);
+    if (typeof read === "object") {
+      const firstLine = read.text.slice(0, 512).split("\n", 1)[0];
+      const opening = registry.open(path, { choice, content: "text", firstLine });
+      this.#learn(path, opening);
+      return { opening, text: read.text };
     }
-    if (
-      [
-        FileKind.typst,
-        FileKind.markdown,
-        FileKind.text,
-        FileKind.csv,
-        FileKind.bib,
-        FileKind.data,
-      ].includes(file?.kind as (typeof FileKind)["typst"])
-    ) {
-      const text = await this.readFile(path);
-      return text === undefined ? { failed: true } : { text };
+    const opening = registry.open(path, { choice, content: "binary" });
+    if (read === "binary") this.#learn(path, opening);
+    if (read === "large") return { opening, large: true };
+    return read === "binary" ? { opening } : { opening, failed: true };
+  }
+
+  /**
+   * What Go found reading a project file as text: the text, "binary" when its bytes are not text,
+   * "large" when a text is over what a document holds, undefined when it cannot be read.
+   */
+  async #readText(path: string): Promise<{ text: string } | "binary" | "large" | undefined> {
+    try {
+      const response = await assetFetch(`/project-text?path=${encodeURIComponent(path)}`);
+      if (response.status === 415) return "binary";
+      if (response.status === 413) return "large";
+      return response.ok ? { text: await response.text() } : undefined;
+    } catch {
+      return undefined;
     }
-    return {};
+  }
+
+  /** The types Go's reading gave to names no type claims (a README is text once read). */
+  #known = $state.raw<ReadonlyMap<string, string>>(new Map());
+
+  #learn(path: string, opening: Opening): void {
+    if (registry.typeOf(path) || this.#known.get(path) === opening.type.id) return;
+    this.#known = new Map(this.#known).set(path, opening.type.id);
+  }
+
+  /**
+   * The type of a project file: the person's choice for it, else what its name says, else what
+   * reading it showed. Undefined for an unknown name not yet read (the generic icon).
+   */
+  fileTypeOf(path: string): FileType | undefined {
+    const choice = viewChoice.typeFor(this.project, path);
+    return registry.typeOf(path, { choice }) ?? registry.fileType(this.#known.get(path) ?? "");
+  }
+
+  /** An image of the project as a data URL (Go serves only its closed list of image types). */
+  async readImage(path: string): Promise<string | undefined> {
+    try {
+      const response = await assetFetch(`/project-image?path=${encodeURIComponent(path)}`);
+      return response.ok ? await response.text() : undefined;
+    } catch {
+      return undefined;
+    }
   }
 
   /** The version Go reports for path: null once it is gone, undefined when it cannot tell. */
@@ -816,7 +858,7 @@ class Workspace {
       const files = await this.#storage.listFiles();
       this.files = files.some((f) => f.path === MAIN_FILE)
         ? files
-        : [{ path: MAIN_FILE, kind: FileKind.typst, size: 0, main: true }, ...files];
+        : [{ path: MAIN_FILE, size: 0, main: true }, ...files];
     } catch (err) {
       console.warn("files:", err instanceof Error ? err.message : "failed");
     }
@@ -845,14 +887,10 @@ class Workspace {
     await this.#projection?.flush();
   }
 
-  /** The text of a project file as UTF-8 with LF; undefined if absent or not text. */
+  /** The text of a project file as UTF-8 with LF; undefined if absent, too large or not text. */
   async readFile(path: string): Promise<string | undefined> {
-    try {
-      const response = await assetFetch(`/project-text?path=${encodeURIComponent(path)}`);
-      return response.ok ? await response.text() : undefined;
-    } catch {
-      return undefined;
-    }
+    const read = await this.#readText(path);
+    return typeof read === "object" ? read.text : undefined;
   }
 
   /**

@@ -3,8 +3,6 @@ import { revealExternal } from "../editor/external";
 import { t, tn } from "../i18n";
 import { workspace } from "../workspace/workspace.svelte";
 import { session } from "./editorSession.svelte";
-import { sessions } from "./sheet/sessions";
-import { showsSheet } from "./sheet/viewMode.svelte";
 import Toast from "./Toast.svelte";
 
 /** How long the "taken in" toast stays: the lines remain marked, and Ctrl+Z still takes it back. */
@@ -24,8 +22,7 @@ async function resolve(action: () => Promise<void>) {
 
 function view() {
   const first = notice?.kind === "merged" ? notice.ranges[0] : undefined;
-  const sheet = workspace.handle ? sessions.get(workspace.handle) : undefined;
-  if (showsSheet(workspace.current) && sheet && first) sheet.placeAtOffset(first.from);
+  if (session.placeAt && first) session.placeAt(first.from);
   else if (session.view) revealExternal(session.view);
 }
 

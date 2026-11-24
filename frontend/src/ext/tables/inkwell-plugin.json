@@ -1,0 +1,54 @@
+{
+  "id": "tables",
+  "version": "1.0.0",
+  "essential": true,
+  "activation": ["onFileType:csv", "onFileType:tsv", "onFileType:psv"],
+  "contributes": {
+    "fileTypes": [
+      {
+        "id": "csv",
+        "label": "kind.csv",
+        "icon": "csv",
+        "extensions": [".csv"],
+        "mime": "text/csv",
+        "storage": "text",
+        "options": {
+          "delimiter": ","
+        }
+      },
+      {
+        "id": "tsv",
+        "label": "kind.csv",
+        "icon": "csv",
+        "extensions": [".tsv", ".tab"],
+        "mime": "text/tab-separated-values",
+        "storage": "text",
+        "options": {
+          "delimiter": "\t",
+          "fixed": true,
+          "quote": false
+        }
+      },
+      {
+        "id": "psv",
+        "label": "kind.csv",
+        "icon": "csv",
+        "extensions": [".psv"],
+        "storage": "text",
+        "options": {
+          "delimiter": "|",
+          "fixed": true
+        }
+      }
+    ],
+    "viewers": [
+      {
+        "id": "tables.grid",
+        "fileTypes": ["csv", "tsv", "psv"],
+        "label": "sheet.showTable",
+        "entry": "native/grid.ts",
+        "capabilities": ["ui.native"]
+      }
+    ]
+  }
+}

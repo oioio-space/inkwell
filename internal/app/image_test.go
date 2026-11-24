@@ -1,6 +1,7 @@
 package app_test
 
 import (
+	"bytes"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -11,11 +12,19 @@ import (
 
 	"github.com/oioio-space/inkwell/internal/app"
 	"github.com/oioio-space/inkwell/internal/project"
+	"github.com/oioio-space/inkwell/internal/store"
 )
 
 const tinyPNG = "\x89PNG\r\n\x1a\n"
 
 func imageServer(t *testing.T) (http.Handler, string) {
+	t.Helper()
+	h, token, _ := imageServerIn(t)
+	return h, token
+}
+
+// imageServerIn is [imageServer] with the project folder, for tests that add files.
+func imageServerIn(t *testing.T) (http.Handler, string, string) {
 	t.Helper()
 	dir := t.TempDir()
 	base, err := os.OpenRoot(dir)
@@ -28,14 +37,14 @@ func imageServer(t *testing.T) (http.Handler, string) {
 		t.Fatal(err)
 	}
 	t.Cleanup(func() { _ = proj.Close() })
-	for rel, body := range map[string]string{"pic.png": tinyPNG, "notes.txt": "hello", "data.bin": "xx", "pic.svg": "<svg onload=alert(1)/>", "pic.bmp": "BM", "pic.webp": "RIFF", "PIC.JPEG": "\xff\xd8"} {
+	for rel, body := range map[string]string{"pic.png": tinyPNG, "notes.txt": "hello", "data.bin": "xx", "blob.dat": "a\x00b", "pic.svg": "<svg onload=alert(1)/>", "pic.bmp": "BM", "pic.webp": "RIFF", "PIC.JPEG": "\xff\xd8"} {
 		if err := os.WriteFile(filepath.Join(dir, "p", rel), []byte(body), 0o600); err != nil {
 			t.Fatal(err)
 		}
 	}
 	token := app.NewAssetToken()
 	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusTeapot) })
-	return app.ProjectImages(proj, token, next), token
+	return app.ProjectImages(proj, token, next), token, filepath.Join(dir, "p")
 }
 
 func get(t *testing.T, h http.Handler, route, rel, token string, withToken bool) *httptest.ResponseRecorder {
@@ -104,6 +113,46 @@ func TestProjectImagesRefuse(t *testing.T) {
 		if got := get(t, h, tc.route, tc.rel, token, true).Code; got != http.StatusNotFound {
 			t.Errorf("%s: %s %q = %d, want 404", tc.name, tc.route, tc.rel, got)
 		}
+	}
+}
+
+// A listed file whose bytes are not text is told apart from a missing one: the
+// webview learns the content class when it reads the file (ADR 0027 rule 6).
+func TestProjectTextReportsBinaryContent(t *testing.T) {
+	h, token := imageServer(t)
+	if got := get(t, h, "/project-text", "blob.dat", token, true).Code; got != http.StatusUnsupportedMediaType {
+		t.Errorf("/project-text of binary content = %d, want 415", got)
+	}
+	if got := get(t, h, "/project-text", "absent.dat", token, true).Code; got != http.StatusNotFound {
+		t.Errorf("/project-text of a missing file = %d, want 404", got)
+	}
+}
+
+// Bytes that are not text are told so whatever the size, from their start; a
+// text over what a document holds gets its own status, not « missing » (EX0
+// code review, finding 1).
+func TestProjectTextOfBigFiles(t *testing.T) {
+	h, token, dir := imageServerIn(t)
+	big := int64(store.MaxValue) + 1<<20
+	// A sparse file: zeros, so binary from its first byte, and nothing written past it.
+	if err := os.WriteFile(filepath.Join(dir, "archive.zip"), []byte("PK\x03\x04\x00"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Truncate(filepath.Join(dir, "archive.zip"), big); err != nil {
+		t.Fatal(err)
+	}
+	if got := get(t, h, "/project-text", "archive.zip", token, true).Code; got != http.StatusUnsupportedMediaType {
+		t.Errorf("/project-text of a %d-byte binary file = %d, want 415", big, got)
+	}
+	// Text for its first 4 KiB, over the limit in all.
+	if err := os.WriteFile(filepath.Join(dir, "huge.log"), bytes.Repeat([]byte("line of text\n"), 400), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Truncate(filepath.Join(dir, "huge.log"), big); err != nil {
+		t.Fatal(err)
+	}
+	if got := get(t, h, "/project-text", "huge.log", token, true).Code; got != http.StatusRequestEntityTooLarge {
+		t.Errorf("/project-text of a %d-byte text = %d, want 413", big, got)
 	}
 }
 

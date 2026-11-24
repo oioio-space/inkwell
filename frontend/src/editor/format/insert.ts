@@ -1,4 +1,5 @@
 import { EditorSelection, type EditorState, type StateCommand, type Text } from "@codemirror/state";
+import { registry } from "../../extensions";
 import type { Lang } from "./lang";
 import { markdownDest, markdownLabel } from "./markdown";
 import { syntaxOf } from "./support";
@@ -58,11 +59,12 @@ function csvToMarkdown(rows: readonly (readonly string[])[], source: string): st
   ].join("\n");
 }
 
+/** Typst's reader for a data file, by its type (ADR 0027); any other file is read as a string. */
+const READERS = { csv: "csv", json: "json", yaml: "yaml", toml: "toml", xml: "xml" } as const;
+
 function dataLoader(path: string, name: string | undefined): string {
-  const ext = path.slice(path.lastIndexOf(".") + 1).toLowerCase();
-  const reader =
-    { csv: "csv", json: "json", yaml: "yaml", yml: "yaml", toml: "toml", xml: "xml" }[ext] ??
-    "read";
+  const type = registry.typeOf(path)?.id ?? "";
+  const reader = Object.hasOwn(READERS, type) ? READERS[type as keyof typeof READERS] : "read";
   const base = path.slice(path.lastIndexOf("/") + 1).replace(/\.[^.]*$/, "");
   const id = (name ?? base).replace(/[^A-Za-z0-9_-]/g, "-").replace(/^(?=[0-9-])/, "data-");
   return `#let ${id || "data"} = ${reader}("${typstString(path)}")`;

@@ -9,8 +9,9 @@ import {
   relativePath,
   supports,
 } from "../../editor/format";
+import { registry } from "../../extensions";
 import { type MessageKey, t } from "../../i18n";
-import { FileKind, type ProjectFile } from "../../store/files";
+import type { ProjectFile } from "../../store/files";
 import FileIcon from "../icons/FileIcon.svelte";
 import Icon from "../icons/Icon.svelte";
 import type { IconName } from "../icons/paths";
@@ -42,22 +43,14 @@ interface Entry {
   syntax: string;
   /** What the item asks for before it writes anything. */
   needs: "nothing" | "file" | "key";
-  kinds?: readonly FileKind[];
+  /** The file types it takes (ids of the registry); every file when absent. */
+  types?: readonly string[];
   /** Markdown's substitute for an item it lacks (a link to the file). */
   substitute?: true;
 }
 
-const ANY = [
-  FileKind.typst,
-  FileKind.markdown,
-  FileKind.text,
-  FileKind.csv,
-  FileKind.bib,
-  FileKind.image,
-  FileKind.pdf,
-  FileKind.data,
-  FileKind.other,
-] as const;
+/** The types an image or figure takes: every picture Typst reads, and PDF pages. */
+const PICTURES = ["png", "jpeg", "gif", "webp", "svg", "bmp", "pdf"] as const;
 
 const ENTRIES: readonly Entry[] = [
   {
@@ -66,7 +59,7 @@ const ENTRIES: readonly Entry[] = [
     icon: "image",
     syntax: "#image()",
     needs: "file",
-    kinds: [FileKind.image, FileKind.pdf],
+    types: PICTURES,
   },
   {
     item: "figure",
@@ -74,7 +67,7 @@ const ENTRIES: readonly Entry[] = [
     icon: "figure",
     syntax: "#figure()",
     needs: "file",
-    kinds: [FileKind.image, FileKind.pdf],
+    types: PICTURES,
   },
   {
     item: "include",
@@ -82,7 +75,7 @@ const ENTRIES: readonly Entry[] = [
     icon: "include",
     syntax: "#include",
     needs: "file",
-    kinds: [FileKind.typst],
+    types: ["typst"],
   },
   {
     item: "attach",
@@ -90,7 +83,6 @@ const ENTRIES: readonly Entry[] = [
     icon: "paperclip",
     syntax: "#pdf.attach()",
     needs: "file",
-    kinds: ANY,
   },
   {
     item: "csvTable",
@@ -98,7 +90,7 @@ const ENTRIES: readonly Entry[] = [
     icon: "csvtable",
     syntax: "csv()",
     needs: "file",
-    kinds: [FileKind.csv],
+    types: ["csv", "tsv", "psv"],
   },
   {
     item: "data",
@@ -106,7 +98,7 @@ const ENTRIES: readonly Entry[] = [
     icon: "data",
     syntax: "json()",
     needs: "file",
-    kinds: [FileKind.data],
+    types: ["json", "yaml", "toml", "xml", "cbor"],
   },
   {
     item: "bibliography",
@@ -114,7 +106,7 @@ const ENTRIES: readonly Entry[] = [
     icon: "book",
     syntax: "#bibliography()",
     needs: "file",
-    kinds: [FileKind.bib],
+    types: ["bibtex"],
   },
   {
     item: "link",
@@ -122,7 +114,6 @@ const ENTRIES: readonly Entry[] = [
     icon: "link",
     syntax: "[](…)",
     needs: "file",
-    kinds: ANY,
     substitute: true,
   },
   { item: "cite", group: "refs", icon: "cite", syntax: "@clé", needs: "key" },
@@ -163,7 +154,7 @@ const grouped = $derived(
 const MD_WORDING = new Set<string>(["csvTable"]);
 
 function wording(e: Entry, part: "" | ".desc"): string {
-  const own = MD_WORDING.has(e.item) && lang === "markdown" ? ".md" : "";
+  const own = MD_WORDING.has(e.item) && lang === "markdown" ? `.${lang}` : "";
   return t(`insert.${e.item}${own}${part}` as MessageKey);
 }
 
@@ -208,7 +199,7 @@ async function loadKeys(entry: Entry) {
     return;
   }
   const found: { key: string; hint: string }[] = [];
-  for (const f of files.filter((f) => f.kind === FileKind.bib)) {
+  for (const f of files.filter((f) => typeOf(f) === "bibtex")) {
     const text = await readFile(f.path);
     for (const key of text ? bibKeys(text) : []) found.push({ key, hint: f.path });
   }
@@ -239,8 +230,11 @@ function useKey(entry: Entry, key: string, close: (refocus?: boolean) => void) {
   close();
 }
 
+const typeOf = (f: ProjectFile) => registry.typeOf(f.path)?.id ?? "";
 const candidates = (entry: Entry) =>
-  files.filter((f) => entry.kinds?.includes(f.kind)).sort((a, b) => a.path.localeCompare(b.path));
+  files
+    .filter((f) => !entry.types || entry.types.includes(typeOf(f)))
+    .sort((a, b) => a.path.localeCompare(b.path));
 
 /** What to say when the project has no file of the kind an item needs. */
 function kindHint(entry: Entry): MessageKey {
@@ -314,7 +308,7 @@ function kindHint(entry: Entry): MessageKey {
         <div class="cap">{t("insert.choose")}</div>
         {#each candidates(entry) as f (f.path)}
           <button type="button" class="mi" role="menuitem" disabled={busy} onclick={() => pick(entry, f, close)}>
-            <FileIcon kind={f.kind} />
+            <FileIcon path={f.path} />
             <span class="text">{f.path}</span>
           </button>
         {:else}

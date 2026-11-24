@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/base64"
+	"errors"
 	"net/http"
 	"path"
 	"strconv"
@@ -84,7 +85,16 @@ func ProjectImages(p *project.Project, token string, next http.Handler) http.Han
 		}
 		if r.URL.Path == "/project-text" {
 			text, err := p.ReadProjectText(rel)
-			if err != nil {
+			switch {
+			case errors.Is(err, project.ErrBinary):
+				// The content class, told apart from a missing file (ADR 0027 rule 6).
+				w.WriteHeader(http.StatusUnsupportedMediaType)
+				return
+			case errors.Is(err, project.ErrTooLarge):
+				// Text, perhaps, but too big to show: its card says so, not « cannot be opened ».
+				w.WriteHeader(http.StatusRequestEntityTooLarge)
+				return
+			case err != nil:
 				http.NotFound(w, r)
 				return
 			}
@@ -94,13 +104,13 @@ func ProjectImages(p *project.Project, token string, next http.Handler) http.Han
 			_, _ = w.Write([]byte(text.Body))
 			return
 		}
-		data, err := p.ReadImage(rel)
-		if err != nil {
+		kind, ok := imageTypes[strings.ToLower(path.Ext(rel))]
+		if !ok {
 			http.NotFound(w, r)
 			return
 		}
-		kind, ok := imageTypes[strings.ToLower(path.Ext(rel))]
-		if !ok {
+		data, err := p.ReadImage(rel)
+		if err != nil {
 			http.NotFound(w, r)
 			return
 		}

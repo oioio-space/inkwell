@@ -1,7 +1,7 @@
 import type { EditorView } from "@codemirror/view";
 import { flushSync } from "svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { FileKind, type ProjectFile } from "../../store/files";
+import type { ProjectFile } from "../../store/files";
 import { workspace } from "../../workspace/workspace.svelte";
 import { session } from "../editorSession.svelte";
 import { cleanup, click, fakeEditor, fakeWidth, press, render } from "../testkit.svelte";
@@ -230,10 +230,10 @@ describe("formatting bar", () => {
 
 describe("Insert menu", () => {
   const files: ProjectFile[] = [
-    { path: "main.typ", kind: FileKind.typst, size: 0, main: true },
-    { path: "chapitres/ch1.typ", kind: FileKind.typst, size: 1, main: false },
-    { path: "data.xlsx", kind: FileKind.other, size: 1, main: false },
-    { path: "fig.png", kind: FileKind.image, size: 1, main: false },
+    { path: "main.typ", size: 0, main: true },
+    { path: "chapitres/ch1.typ", size: 1, main: false },
+    { path: "data.xlsx", size: 1, main: false },
+    { path: "fig.png", size: 1, main: false },
   ];
   const insertButton = (host: HTMLElement) =>
     [...host.querySelectorAll<HTMLButtonElement>('button[aria-haspopup="menu"]')].find((b) =>

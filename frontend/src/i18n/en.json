@@ -3,6 +3,7 @@
   "file.info": "No preview for this file type.",
   "file.loading": "Loading…",
   "file.unavailable": "This file cannot be opened.",
+  "file.notText": "This file does not hold text: it cannot be shown as such.",
   "file.gone": "{name} is no longer in the project: deleted or renamed outside Inkwell",
   "app.title": "Untitled",
   "status.alone": "On your own",
@@ -140,8 +141,8 @@
   "insert.attach.desc": "Travels inside the PDF without being shown (spreadsheet, source…)",
   "insert.csvTable": "Table from a CSV",
   "insert.csvTable.desc": "Stays linked: editing the CSV updates the table",
-  "insert.csvTable.md": "Table from a CSV",
-  "insert.csvTable.md.desc": "A frozen copy: insert it again if the CSV changes",
+  "insert.csvTable.markdown": "Table from a CSV",
+  "insert.csvTable.markdown.desc": "A frozen copy: insert it again if the CSV changes",
   "insert.data": "JSON, YAML or TOML data",
   "insert.data.desc": "Fills the text from a file",
   "insert.bibliography": "Bibliography",
@@ -808,5 +809,6 @@
   "open.summary.shown.one": "{count} file opened: {names}.",
   "open.summary.shown.other": "{count} files opened: {names}.",
   "open.notice.dropped.one": "{count} request to open left: too many at once.",
-  "open.notice.dropped.other": "{count} requests to open left: too many at once."
+  "open.notice.dropped.other": "{count} requests to open left: too many at once.",
+  "viewer.failed": "This view could not open: the file is shown as it is."
 }

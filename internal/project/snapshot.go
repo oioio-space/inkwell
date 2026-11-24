@@ -149,7 +149,7 @@ func (w *snapshotWalk) visit(name string, entry fs.DirEntry, walkErr error) erro
 }
 
 func (p *Project) snapshotRead(name string, info fs.FileInfo) ([]byte, error) {
-	file, err := p.root.Open(name)
+	file, err := openFile(p.root, name)
 	if err != nil {
 		return nil, err
 	}

@@ -1,0 +1,26 @@
+{
+  "id": "typst",
+  "version": "1.0.0",
+  "essential": true,
+  "activation": ["startup"],
+  "contributes": {
+    "fileTypes": [
+      {
+        "id": "typst",
+        "label": "kind.typst",
+        "icon": "typst",
+        "extensions": [".typ", ".typst"],
+        "storage": "text",
+        "grammar": "typst"
+      }
+    ],
+    "grammars": [
+      {
+        "id": "typst",
+        "names": ["typ", "typst"],
+        "entry": "native/typst.ts",
+        "capabilities": ["ui.native"]
+      }
+    ]
+  }
+}

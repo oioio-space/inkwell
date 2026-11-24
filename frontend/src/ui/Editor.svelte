@@ -5,6 +5,7 @@ const carets = new Map<string, number>();
 
 <script lang="ts">
 import type { DocHandle } from "@automerge/automerge-repo";
+import type { LanguageSupport } from "@codemirror/language";
 import { EditorView } from "@codemirror/view";
 import { untrack } from "svelte";
 import type { Lang } from "../editor/format";
@@ -19,11 +20,14 @@ let {
   handle,
   me,
   lang,
+  support,
   at,
 }: {
   handle: DocHandle<Doc>;
   me: { id: string; name: string };
   lang: Lang;
+  /** The grammar of the file's type, once loaded (ADR 0027). */
+  support?: LanguageSupport | undefined;
   /** Where to put the caret when it opens (switching from a table's grid to its text). */
   at?: number | undefined;
 } = $props();
@@ -35,6 +39,7 @@ let editor: ReturnType<typeof createEditor> | undefined;
 $effect(() => {
   const h = handle;
   const l = untrack(() => lang);
+  const g = untrack(() => support);
   const start = untrack(() => at) ?? carets.get(h.url);
   let mine: EditorView | undefined;
   editor = untrack(() =>
@@ -47,6 +52,7 @@ $effect(() => {
       },
       {
         lang: l,
+        support: g,
         ...(start !== undefined ? { at: start } : {}),
         onView: (view) => {
           mine = view;
@@ -76,7 +82,7 @@ $effect(() => {
   };
 });
 $effect(() => editor?.rename(me.name));
-$effect(() => editor?.setLang(lang));
+$effect(() => editor?.setLanguage(lang, support));
 // Until the rights are known, a reader, or a person who was disconnected (or whom the member list
 // does not name): the text is read, selected and copied, not typed in.
 $effect(() => editor?.setReadOnly(workspace.locked));

@@ -1,28 +1,23 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { FileKind, type ProjectFile } from "../../store/files";
+import type { ProjectFile } from "../../store/files";
 import { cleanup, click, render } from "../testkit.svelte";
 import Sidebar from "./Sidebar.svelte";
 import { buildTree, visibleNodes } from "./tree";
 
-const file = (path: string, kind: FileKind, main = false): ProjectFile => ({
-  path,
-  kind,
-  size: 1,
-  main,
-});
+const file = (path: string, main = false): ProjectFile => ({ path, size: 1, main });
 
 const project: ProjectFile[] = [
-  file("main.typ", FileKind.typst, true),
-  file("chapitres/10-fin.typ", FileKind.typst),
-  file("chapitres/2-milieu.typ", FileKind.typst),
-  file("figures/architecture.svg", FileKind.image),
-  file("notes.md", FileKind.markdown),
-  file("references.bib", FileKind.bib),
-  file("inventaire.csv", FileKind.csv),
-  file("lisez-moi.txt", FileKind.text),
-  file("plan.pdf", FileKind.pdf),
-  file("config.json", FileKind.data),
-  file("blob.bin", FileKind.other),
+  file("main.typ", true),
+  file("chapitres/10-fin.typ"),
+  file("chapitres/2-milieu.typ"),
+  file("figures/architecture.svg"),
+  file("notes.md"),
+  file("references.bib"),
+  file("inventaire.csv"),
+  file("lisez-moi.txt"),
+  file("plan.pdf"),
+  file("config.json"),
+  file("blob.bin"),
 ];
 
 afterEach(cleanup);

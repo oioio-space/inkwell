@@ -1,0 +1,27 @@
+{
+  "id": "text",
+  "version": "1.0.0",
+  "essential": true,
+  "activation": ["startup"],
+  "contributes": {
+    "fileTypes": [
+      {
+        "id": "text",
+        "label": "kind.text",
+        "icon": "text",
+        "extensions": [".txt"],
+        "mime": "text/plain",
+        "storage": "text"
+      }
+    ],
+    "viewers": [
+      {
+        "id": "text.editor",
+        "fileTypes": ["text"],
+        "label": "sheet.showText",
+        "entry": "native/editor.ts",
+        "capabilities": ["ui.native"]
+      }
+    ]
+  }
+}

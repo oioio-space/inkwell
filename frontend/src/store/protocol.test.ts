@@ -7,7 +7,6 @@ import {
   Eol,
   encodeFileInfo,
   encodeFileList,
-  FileKind,
 } from "./files";
 import {
   decodeRange,
@@ -60,9 +59,7 @@ describe("store protocol golden vectors (shared with Go)", () => {
         expect(hex(encodeResponse(resp))).toBe(v.wireHex);
         expect(decodeResponse(unhex(v.wireHex))).toEqual(resp);
       } else if (v.type === "filelist") {
-        const files = (
-          v.files as { path: string; kind: string; size: number; main: boolean }[]
-        ).map((f) => ({ ...f, kind: FileKind[f.kind as keyof typeof FileKind] }));
+        const files = v.files as { path: string; size: number; main: boolean }[];
         expect(hex(encodeFileList(files))).toBe(v.wireHex);
         expect(decodeFileList(unhex(v.wireHex))).toEqual(files);
       } else if (v.type === "fileinfo") {
@@ -151,21 +148,21 @@ describe("decoders reject malformed frames", () => {
 });
 
 describe("file payload decoders reject what Go would", () => {
-  // One-entry list: version, count 1, then kind | flags | size u64 | path length u16 | path.
-  const one = (kind: string, flags: string, size: string, len: string, path: string) =>
-    `0100000001${kind}${flags}${size}${len}${path}`;
+  // One-entry list (version 2): version, count 1, then flags | size u64 | path length u16 | path.
+  const one = (flags: string, size: string, len: string, path: string) =>
+    `0200000001${flags}${size}${len}${path}`;
   const zero = "0000000000000000";
   it.each([
     ["empty", ""],
-    ["bad version", "0200000000"],
-    ["count without entry", "0100000001"],
-    ["bad kind", one("63", "00", zero, "0001", "61")],
-    ["bad flags", one("01", "02", zero, "0001", "61")],
-    ["empty path", one("01", "00", zero, "0000", "")],
-    ["path past the end", one("01", "00", zero, "0005", "61")],
-    ["size over 2^53", one("01", "00", "0020000000000001", "0001", "61")],
-    ["invalid UTF-8 path", one("01", "00", zero, "0001", "ff")],
-    ["trailing bytes", "010000000009"],
+    ["version 1, with its kind byte", "0100000000"],
+    ["unknown version", "0300000000"],
+    ["count without entry", "0200000001"],
+    ["bad flags", one("02", zero, "0001", "61")],
+    ["empty path", one("00", zero, "0000", "")],
+    ["path past the end", one("00", zero, "0005", "61")],
+    ["size over 2^53", one("00", "0020000000000001", "0001", "61")],
+    ["invalid UTF-8 path", one("00", zero, "0001", "ff")],
+    ["trailing bytes", "020000000009"],
   ])("file list: %s", (_name, wire) => {
     expect(() => decodeFileList(unhex(wire))).toThrow(ProtocolError);
   });

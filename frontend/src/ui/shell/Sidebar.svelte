@@ -37,7 +37,7 @@ function toggle(path: string) {
             {@const open = !collapsed.has(node.path)}
             <button type="button" class="row folder" aria-expanded={open} onclick={() => toggle(node.path)}>
               <span class="chev" class:open><Icon name="right" size={12} /></span>
-              <FileIcon kind="folder" />
+              <FileIcon folder />
               <span class="name">{node.name}</span>
             </button>
           {:else}
@@ -58,7 +58,7 @@ function toggle(path: string) {
               }}
             >
               <span class="chev spacer"></span>
-              <FileIcon kind={node.file.kind} />
+              <FileIcon path={node.file.path} />
               <span class="name">{node.name}</span>
               {#if node.file.main}<span class="tag">{t("sidebar.main")}</span>{/if}
             </button>

@@ -3,7 +3,7 @@ import { next as A } from "@automerge/automerge";
 import { type DocHandle, type PeerId, Repo } from "@automerge/automerge-repo";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { FakeGoStore } from "./fakeStore";
-import { Eol, FileKind } from "./files";
+import { Eol } from "./files";
 import { ExternalEditError, GoStorageAdapter, NotTextError } from "./GoStorageAdapter";
 import { Op } from "./protocol";
 
@@ -154,8 +154,8 @@ describe("project files", () => {
     go.files.set("notes.txt", text("n"));
     go.info.set("notes.txt", { encoding: "windows-1252", eol: Eol.CRLF, bom: false, mixed: true });
     expect(await a.listFiles()).toEqual([
-      { path: "main.typ", kind: FileKind.typst, size: 4, main: true },
-      { path: "notes.txt", kind: FileKind.text, size: 1, main: false },
+      { path: "main.typ", size: 4, main: true },
+      { path: "notes.txt", size: 1, main: false },
     ]);
     expect(await a.fileInfo("main.typ")).toEqual({
       encoding: "utf-8",

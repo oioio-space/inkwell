@@ -1,9 +1,7 @@
-import { markdown, markdownLanguage } from "@codemirror/lang-markdown";
-import { HighlightStyle, LanguageSupport, syntaxHighlighting } from "@codemirror/language";
+import { HighlightStyle, type LanguageSupport, syntaxHighlighting } from "@codemirror/language";
 import type { Extension } from "@codemirror/state";
 import { tags } from "@lezer/highlight";
-import { typst_lezer, typstTags } from "codemirror-lang-typst/lezer";
-import type { Lang } from "./format";
+import { typstTags } from "codemirror-lang-typst/lezer";
 
 /**
  * The colours are CSS variables (`--hl-*` in theme/tokens.css): one Adwaita palette, light and
@@ -34,28 +32,7 @@ export const highlightStyle = HighlightStyle.define([
 
 const palette = syntaxHighlighting(highlightStyle);
 
-let typstSupport: LanguageSupport | undefined;
-/**
- * Typst through the package's Lezer parser, made incremental by our pinned patch
- * (frontend/patches/). The CSP would allow WASM ('wasm-unsafe-eval', for Automerge), but the
- * package's WASM entry gives no syntax tree and repaints the whole file's colours on the main
- * thread. Only the language is used: its bundled colours, Enter/indent services and linter would
- * change how typing behaves.
- */
-function typstLanguage(): LanguageSupport {
-  typstSupport ??= new LanguageSupport(typst_lezer().language);
-  return typstSupport;
-}
-
-/** The parser and colours for a language, ready to put in a Compartment. */
-export function languageExtension(lang: Lang): Extension {
-  switch (lang) {
-    case "typst":
-      return [typstLanguage(), palette];
-    case "markdown":
-      // GFM (tables, task lists, strikethrough); no Enter binding, the format keymap owns typing.
-      return [markdown({ base: markdownLanguage, addKeymap: false }), palette];
-    default:
-      return [];
-  }
+/** A grammar's parser with the colours, ready to put in a Compartment; nothing for plain text. */
+export function withPalette(support: LanguageSupport | undefined): Extension {
+  return support ? [support, palette] : [];
 }

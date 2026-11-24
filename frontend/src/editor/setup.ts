@@ -1,5 +1,6 @@
 import type { DocHandle } from "@automerge/automerge-repo";
 import { defaultKeymap, history, historyKeymap } from "@codemirror/commands";
+import type { LanguageSupport } from "@codemirror/language";
 import {
   Compartment,
   EditorState,
@@ -24,7 +25,7 @@ import { blameMarks } from "./blameMarks";
 import { changeGutter } from "./changeGutter";
 import { externalMarks } from "./external";
 import { formatKeymap, type Lang } from "./format";
-import { languageExtension } from "./highlight";
+import { withPalette } from "./highlight";
 import { localHistoryOnly } from "./localHistory";
 import { ownTyping } from "./ownTyping";
 import { type Person, presenceSync } from "./presence";
@@ -67,11 +68,12 @@ const theme = EditorView.theme({
 });
 
 /**
- * What depends on the file's language: its parser and colours, and the formatting keys (ahead
- * of the default keymap, which binds Mod-i to "select parent syntax").
+ * What depends on the file's language: its grammar's parser and colours (from the registry, ADR
+ * 0027), and the formatting keys (ahead of the default keymap, which binds Mod-i to "select
+ * parent syntax").
  */
-export const forLang = (lang: Lang): Extension => [
-  languageExtension(lang),
+export const languageOf = (lang: Lang, support?: LanguageSupport): Extension => [
+  withPalette(support),
   ...(lang === "typst" ? [writingHelp] : []),
   Prec.high(keymap.of(formatKeymap(lang))),
 ];
@@ -91,6 +93,8 @@ export function cspNonce() {
 /** What the shell needs from the editor: its language and a feed of its state. */
 export interface EditorOptions {
   lang?: Lang;
+  /** The grammar of the file's type, once loaded. */
+  support?: LanguageSupport | undefined;
   /**
    * Called with the new state at creation and after each change of text or selection, with the
    * transactions that made it (none at creation).
@@ -115,10 +119,10 @@ export function createEditor(
   handle: DocHandle<Doc>,
   me: { id: string; name: string },
   onPeople?: (people: Person[]) => void,
-  { lang = "plain", onState, onView, onUndoKey, onRefused, at }: EditorOptions = {},
+  { lang = "plain", support, onState, onView, onUndoKey, onRefused, at }: EditorOptions = {},
 ): {
   rename: (name: string) => void;
-  setLang: (lang: Lang) => void;
+  setLanguage: (lang: Lang, support: LanguageSupport | undefined) => void;
   setReadOnly: (on: boolean) => void;
   destroy: () => void;
 } {
@@ -138,7 +142,7 @@ export function createEditor(
     drawSelection(),
     highlightActiveLine(),
     EditorView.lineWrapping,
-    forLang(lang),
+    languageOf(lang, support),
     keymap.of([...defaultKeymap, ...historyKeymap]),
     externalMarks,
     blameMarks(),
@@ -168,7 +172,7 @@ export function createEditor(
       highlightActiveLine(),
       EditorView.lineWrapping,
       placeholder(t("editor.placeholder")),
-      language.of(forLang(lang)),
+      language.of(languageOf(lang, support)),
       access.of(readOnlyFacets(false)),
       Prec.highest(keymap.of([{ key: "Mod-z", run: () => onUndoKey?.() ?? false }])),
       keymap.of([...defaultKeymap, ...historyKeymap]),
@@ -192,7 +196,8 @@ export function createEditor(
   onState?.(view.state, []);
   return {
     rename: presence.rename,
-    setLang: (next) => view?.dispatch({ effects: language.reconfigure(forLang(next)) }),
+    setLanguage: (next, nextSupport) =>
+      view?.dispatch({ effects: language.reconfigure(languageOf(next, nextSupport)) }),
     setReadOnly: (on) => view?.dispatch({ effects: access.reconfigure(readOnlyFacets(on)) }),
     destroy: () => {
       presence.stop();
@@ -209,8 +214,12 @@ export function createEditor(
 export function createReadOnlyEditor(
   parent: HTMLElement,
   text: string,
-  { onState, onView, lang = "plain" }: Pick<EditorOptions, "onState" | "onView" | "lang"> = {},
-): { destroy: () => void } {
+  { onState, onView, support }: Pick<EditorOptions, "onState" | "onView" | "support"> = {},
+): {
+  setSupport: (support: LanguageSupport | undefined) => void;
+  destroy: () => void;
+} {
+  const language = new Compartment();
   const view = new EditorView({
     parent,
     doc: text,
@@ -219,7 +228,7 @@ export function createReadOnlyEditor(
       diagnosticMarks,
       lineNumbers(),
       EditorState.readOnly.of(true),
-      languageExtension(lang),
+      language.of(withPalette(support)),
       EditorView.lineWrapping,
       keymap.of(defaultKeymap),
       EditorView.contentAttributes.of({ "aria-label": t("editor.label"), "aria-readonly": "true" }),
@@ -231,5 +240,8 @@ export function createReadOnlyEditor(
   });
   onView?.(view);
   onState?.(view.state, []);
-  return { destroy: () => view.destroy() };
+  return {
+    setSupport: (next) => view.dispatch({ effects: language.reconfigure(withPalette(next)) }),
+    destroy: () => view.destroy(),
+  };
 }

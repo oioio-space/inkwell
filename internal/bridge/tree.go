@@ -20,8 +20,11 @@ func (e *TooLargeError) Error() string {
 	return fmt.Sprintf("file over the limit of %d bytes", e.Limit)
 }
 
-// Flags and sizes of the tree payload.
+// Version, flags and sizes of the tree payload and of the payloads that go
+// with it (referenced list, blob info).
 const (
+	// treeVersion is the first byte of those payloads.
+	treeVersion  = 1
 	flagTreeMain = 1 << 0 // entry: the project's main document
 	// treeHead is the fixed part of an entry: type, flags, size, path length.
 	treeHead = 1 + 1 + 8 + 2
@@ -64,7 +67,7 @@ func checkTreeEntry(e project.TreeEntry) error {
 // a path that is not portable comes through, for [project.Project.ApplyTree] to
 // refuse and report.
 func DecodeTree(b []byte) ([]project.TreeEntry, error) {
-	if len(b) < 5 || b[0] != filesVersion {
+	if len(b) < 5 || b[0] != treeVersion {
 		return nil, fmt.Errorf("%w: tree header", ErrMalformed)
 	}
 	count := binary.BigEndian.Uint32(b[1:])
@@ -120,13 +123,13 @@ func DecodeTree(b []byte) ([]project.TreeEntry, error) {
 //
 // rejected is the number of entries Go refused (hostile or colliding names).
 func EncodeTreeResult(rejected int) []byte {
-	b := []byte{filesVersion}
+	b := []byte{treeVersion}
 	return binary.BigEndian.AppendUint32(b, uint32(min(rejected, math.MaxUint32))) // #nosec G115 -- clamped.
 }
 
 // DecodeReferenced parses the data built by [EncodeReferenced].
 func DecodeReferenced(b []byte) ([][hashLen]byte, error) {
-	if len(b) < 5 || b[0] != filesVersion {
+	if len(b) < 5 || b[0] != treeVersion {
 		return nil, fmt.Errorf("%w: referenced header", ErrMalformed)
 	}
 	count := binary.BigEndian.Uint32(b[1:])
@@ -144,6 +147,6 @@ func DecodeReferenced(b []byte) ([][hashLen]byte, error) {
 //
 //	version u8 | hash (32 bytes) | size u64
 func EncodeBlobInfo(hash [hashLen]byte, size int64) []byte {
-	b := append([]byte{filesVersion}, hash[:]...)
+	b := append([]byte{treeVersion}, hash[:]...)
 	return binary.BigEndian.AppendUint64(b, uint64(max(size, 0))) // #nosec G115 -- clamped ≥ 0.
 }

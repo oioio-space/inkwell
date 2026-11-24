@@ -1,0 +1,48 @@
+{
+  "id": "data",
+  "version": "1.0.0",
+  "contributes": {
+    "fileTypes": [
+      {
+        "id": "json",
+        "label": "kind.data",
+        "icon": "data",
+        "extensions": [".json"],
+        "mime": "application/json",
+        "storage": "text"
+      },
+      {
+        "id": "yaml",
+        "label": "kind.data",
+        "icon": "data",
+        "extensions": [".yaml", ".yml"],
+        "mime": "application/yaml",
+        "storage": "text"
+      },
+      {
+        "id": "toml",
+        "label": "kind.data",
+        "icon": "data",
+        "extensions": [".toml"],
+        "mime": "application/toml",
+        "storage": "text"
+      },
+      {
+        "id": "xml",
+        "label": "kind.data",
+        "icon": "data",
+        "extensions": [".xml"],
+        "mime": "application/xml",
+        "storage": "text"
+      },
+      {
+        "id": "cbor",
+        "label": "kind.data",
+        "icon": "data",
+        "extensions": [".cbor"],
+        "mime": "application/cbor",
+        "storage": "blob"
+      }
+    ]
+  }
+}

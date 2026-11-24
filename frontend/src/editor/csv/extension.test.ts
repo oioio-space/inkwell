@@ -1,5 +1,12 @@
 import { describe, expect, it } from "vitest";
-import { looksTabular, startDialect } from "./dialect";
+import { registry } from "../../extensions";
+import { startDialect as start, tableType } from "./dialect";
+
+/** The dialect a file opens with, its table type from its name (ADR 0027). */
+const startDialect = (path: string, text: string, remembered?: "," | ";" | "\t" | "|") => {
+  const type = registry.typeOf(path);
+  return start(type && tableType(type.options, true), text, remembered);
+};
 
 const COMMA = "nom,qte\nA,1\nB,2\nC,3\n";
 const SEMICOLON = "nom;prix\nA;1,5\nB;2,5\nC;3,5\n";
@@ -55,11 +62,14 @@ describe("the extension chooses the starting dialect, the content confirms it (C
     expect(contradiction).toBeUndefined();
   });
 
-  it("a .txt that looks like a table is offered, read by detection, never reported", () => {
-    expect(looksTabular(TAB)).toBe(true);
-    expect(looksTabular(SEMICOLON)).toBe(true);
-    expect(looksTabular("Bonjour,\nceci est un texte\nsans tableau.\n")).toBe(false);
-    expect(looksTabular(SINGLE)).toBe(false);
+  it("a type the person chose is not reported against its name", () => {
+    const csv = registry.fileType("csv");
+    const table = csv && tableType(csv.options, false);
+    expect(start(table, TAB).dialect.delimiter).toBe("\t");
+    expect(start(table, TAB).contradiction).toBeUndefined();
+  });
+
+  it("a text opened as a table is read by detection, never reported", () => {
     const { dialect, contradiction } = startDialect("notes.txt", TAB);
     expect(dialect.delimiter).toBe("\t");
     expect(contradiction).toBeUndefined();

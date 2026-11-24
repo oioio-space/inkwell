@@ -30,7 +30,8 @@ let body: HTMLDivElement | undefined = $state();
 let sideCount = $state(0);
 let merge: MergeView | undefined;
 
-const isTable = $derived(/\.(csv|tsv)$/i.test(file));
+/** A table type (its manifest names a delimiter) shows its changes by cell too. */
+const isTable = $derived(workspace.fileTypeOf(file)?.options.delimiter !== undefined);
 const blame = $derived(req.attributed && history.isCurrent() ? history.analysis?.blame : undefined);
 const diff = $derived(
   req.session

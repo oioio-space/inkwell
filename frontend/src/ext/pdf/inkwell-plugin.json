@@ -1,0 +1,16 @@
+{
+  "id": "pdf",
+  "version": "1.0.0",
+  "contributes": {
+    "fileTypes": [
+      {
+        "id": "pdf",
+        "label": "kind.pdf",
+        "icon": "pdf",
+        "extensions": [".pdf"],
+        "mime": "application/pdf",
+        "storage": "blob"
+      }
+    ]
+  }
+}

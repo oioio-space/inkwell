@@ -1,5 +1,4 @@
 import { next as A } from "@automerge/automerge";
-import { FileKind } from "../../store/files";
 import { compileQuery, type Matcher, type QuerySpec } from "./query";
 import type { ReplaceTarget } from "./replace";
 
@@ -40,5 +39,5 @@ export class TestHandle implements ReplaceTarget {
 }
 
 export function typst(path: string, text: string) {
-  return { path, kind: FileKind.typst, text: () => text };
+  return { path, text: () => text };
 }

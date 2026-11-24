@@ -453,7 +453,7 @@ func (p *Project) OpenFile(rel string) (*os.File, fs.FileInfo, error) {
 	} else if !exists {
 		return nil, nil, fmt.Errorf("project: %q: %w", rel, fs.ErrNotExist)
 	}
-	f, err := p.root.Open(rel)
+	f, err := openFile(p.root, rel)
 	if err != nil {
 		return nil, nil, err
 	}
@@ -484,7 +484,7 @@ func (p *Project) hashDisk(rel string) (sum string, b3 [32]byte, exists bool, er
 	if exists, err = p.regular(rel); err != nil || !exists {
 		return "", b3, false, err
 	}
-	f, err := p.root.Open(rel)
+	f, err := openFile(p.root, rel)
 	if errors.Is(err, fs.ErrNotExist) {
 		return "", b3, false, nil
 	}

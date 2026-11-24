@@ -1,14 +1,15 @@
 import { describe, expect, it } from "vitest";
+import { registry } from "../../extensions";
 import { activeBlock, activeMarks } from "./active";
-import { langOf } from "./lang";
-import { supports } from "./support";
+import { formatLanguage, supports } from "./support";
 import { parse } from "./testkit";
 
 const marks = (marked: string, lang: "typst" | "markdown") =>
   [...activeMarks(parse(marked), lang)].sort();
 
-describe("langOf", () => {
-  it("reads the language from the extension", () => {
+describe("formatLanguage", () => {
+  it("reads the language from the file type's grammar", () => {
+    const langOf = (path: string) => formatLanguage(registry.typeOf(path)?.grammar);
     expect(langOf("chapitres/intro.typ")).toBe("typst");
     expect(langOf("A.TYP")).toBe("typst");
     expect(langOf("notes.md")).toBe("markdown");

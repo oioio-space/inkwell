@@ -16,7 +16,7 @@ import { ensureSyntaxTree, type Language, LanguageSupport } from "@codemirror/la
 import { EditorState, type Extension, StateEffect } from "@codemirror/state";
 import { NodeProp, type Parser, type PartialParse } from "@lezer/common";
 import { describe, expect, it } from "vitest";
-import { languageExtension } from "./highlight";
+import { languageExtension } from "./grammars.testkit";
 import { repeatTo, repoMarkdown, repoTypst } from "./highlight.testkit";
 
 const PERF = process.env.INKWELL_PERF === "1";

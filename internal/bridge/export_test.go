@@ -14,7 +14,7 @@ import (
 // DecodeFileInfo parses the payload built by [EncodeFileInfo]. It returns an
 // error wrapping [ErrMalformed] on an unknown version or any inconsistency.
 func DecodeFileInfo(b []byte) (FileInfo, error) {
-	if len(b) < 4 || b[0] != filesVersion || b[1]&^(flagBOM|flagMixed) != 0 ||
+	if len(b) < 4 || b[0] != fileInfoVersion || b[1]&^(flagBOM|flagMixed) != 0 ||
 		project.EOL(b[2]) > project.CR || len(b) != 4+int(b[3]) {
 		return FileInfo{}, fmt.Errorf("%w: file info", ErrMalformed)
 	}
@@ -26,26 +26,26 @@ func DecodeFileInfo(b []byte) (FileInfo, error) {
 // DecodeFileList parses the payload built by [EncodeFileList]. It returns an
 // error wrapping [ErrMalformed] on an unknown version or any inconsistency.
 func DecodeFileList(b []byte) ([]project.File, error) {
-	if len(b) < 5 || b[0] != filesVersion {
+	if len(b) < 5 || b[0] != fileListVersion {
 		return nil, fmt.Errorf("%w: file list header", ErrMalformed)
 	}
 	count := binary.BigEndian.Uint32(b[1:])
 	b = b[5:]
 	var out []project.File
 	for range count {
-		if len(b) < 12 {
+		if len(b) < 11 {
 			return nil, fmt.Errorf("%w: truncated file entry", ErrMalformed)
 		}
-		kind, flags := project.Kind(b[0]), b[1]
-		size := binary.BigEndian.Uint64(b[2:])
-		n := int(binary.BigEndian.Uint16(b[10:]))
-		b = b[12:]
-		if kind > project.KindData || flags&^flagMain != 0 || size > math.MaxInt64 ||
+		flags := b[0]
+		size := binary.BigEndian.Uint64(b[1:])
+		n := int(binary.BigEndian.Uint16(b[9:]))
+		b = b[11:]
+		if flags&^flagMain != 0 || size > math.MaxInt64 ||
 			n == 0 || len(b) < n || !utf8.Valid(b[:n]) {
 			return nil, fmt.Errorf("%w: bad file entry", ErrMalformed)
 		}
 		out = append(out, project.File{
-			Path: string(b[:n]), Kind: kind, Size: int64(size), Main: flags&flagMain != 0, // #nosec G115 -- checked.
+			Path: string(b[:n]), Size: int64(size), Main: flags&flagMain != 0, // #nosec G115 -- checked.
 		})
 		b = b[n:]
 	}
@@ -123,7 +123,7 @@ func EncodeWriteAt(point, text []byte) ([]byte, error) {
 
 // DecodeBlobInfo parses the payload built by [EncodeBlobInfo].
 func DecodeBlobInfo(b []byte) (hash [hashLen]byte, size int64, err error) {
-	if len(b) != 1+hashLen+8 || b[0] != filesVersion {
+	if len(b) != 1+hashLen+8 || b[0] != treeVersion {
 		return hash, 0, fmt.Errorf("%w: blob info", ErrMalformed)
 	}
 	copy(hash[:], b[1:])
@@ -136,7 +136,7 @@ func DecodeBlobInfo(b []byte) (hash [hashLen]byte, size int64, err error) {
 
 // DecodeTreeResult parses the payload built by [EncodeTreeResult].
 func DecodeTreeResult(b []byte) (rejected int, err error) {
-	if len(b) != 5 || b[0] != filesVersion {
+	if len(b) != 5 || b[0] != treeVersion {
 		return 0, fmt.Errorf("%w: tree result", ErrMalformed)
 	}
 	return int(binary.BigEndian.Uint32(b[1:])), nil
@@ -154,7 +154,7 @@ func EncodeReferenced(hashes [][hashLen]byte) ([]byte, error) {
 		return nil, fmt.Errorf("%w: %d referenced hashes", ErrMalformed, len(hashes))
 	}
 	b := make([]byte, 0, 5+len(hashes)*hashLen)
-	b = append(b, filesVersion)
+	b = append(b, treeVersion)
 	b = binary.BigEndian.AppendUint32(b, uint32(len(hashes))) // #nosec G115 -- bounded by the size check.
 	for _, h := range hashes {
 		b = append(b, h[:]...)
@@ -183,7 +183,7 @@ func EncodeTree(entries []project.TreeEntry) ([]byte, error) {
 		return nil, fmt.Errorf("%w: tree of %d bytes", ErrMalformed, size)
 	}
 	b := make([]byte, 0, size)
-	b = append(b, filesVersion)
+	b = append(b, treeVersion)
 	b = binary.BigEndian.AppendUint32(b, uint32(len(entries))) // #nosec G115 -- bounded by the size check.
 	for _, e := range entries {
 		var flags byte

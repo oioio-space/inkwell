@@ -1,14 +1,15 @@
 import type { StateCommand } from "@codemirror/state";
 import {
   type Block,
+  formatLanguage,
   insert,
   type Lang,
-  langOf,
   type Mark,
   setBlock,
   supports,
   toggleMark,
 } from "../../editor/format";
+import { registry } from "../../extensions";
 import type { MessageKey } from "../../i18n";
 import type { IconName } from "../icons/paths";
 
@@ -205,6 +206,6 @@ export function shortcutLabel(key: string): string {
 
 /** The language of a file that has a formatting bar; csv, bib, txt and the like have none. */
 export function barLang(path: string): Exclude<Lang, "plain"> | undefined {
-  const lang = langOf(path);
+  const lang = formatLanguage(registry.typeOf(path)?.grammar);
   return lang === "plain" ? undefined : lang;
 }

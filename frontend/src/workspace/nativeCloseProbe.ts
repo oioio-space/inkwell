@@ -3,7 +3,8 @@ import { tick } from "svelte";
 import { t } from "../i18n";
 import type { SocketLike } from "../net/WailsNetworkAdapter";
 import { session } from "../ui/editorSession.svelte";
-import { sheetView } from "../ui/sheet/viewMode.svelte";
+
+import { viewChoice } from "./viewChoice.svelte";
 import { workspace } from "./workspace.svelte";
 
 interface ProbeCommand {
@@ -113,7 +114,7 @@ export function nativeCloseProbe(mode: string, ready: Promise<unknown>) {
           break;
         }
         case "sheet":
-          sheetView.openAsTable("main.typ");
+          viewChoice.openAsTable(workspace.project, "main.typ");
           await tick();
           await waitFor(() => document.querySelector("#cell-2-2") !== null);
           send(command, inspect());

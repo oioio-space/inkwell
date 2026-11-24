@@ -1,0 +1,25 @@
+{
+  "id": "files",
+  "version": "1.0.0",
+  "essential": true,
+  "activation": ["onFileType:binary"],
+  "contributes": {
+    "fileTypes": [
+      {
+        "id": "binary",
+        "label": "kind.other",
+        "icon": "other",
+        "storage": "blob"
+      }
+    ],
+    "viewers": [
+      {
+        "id": "files.card",
+        "fileTypes": ["binary"],
+        "label": "kind.other",
+        "entry": "native/card.ts",
+        "capabilities": ["ui.native"]
+      }
+    ]
+  }
+}

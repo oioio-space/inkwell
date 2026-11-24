@@ -4,8 +4,8 @@ import { keymap } from "@codemirror/view";
 import { highlightTree, type Tag, tags } from "@lezer/highlight";
 import { typstTags } from "codemirror-lang-typst/lezer";
 import { describe, expect, it } from "vitest";
-import { highlightStyle, languageExtension } from "./highlight";
-import { forLang } from "./setup";
+import { forLang, languageExtension } from "./grammars.testkit";
+import { highlightStyle } from "./highlight";
 
 /** The text spans that carry the class of `tag`, in the document. */
 function styled(doc: string, lang: "typst" | "markdown", ...wanted: Tag[]): string[] {

@@ -8,10 +8,15 @@ import (
 	"github.com/oioio-space/inkwell/internal/project"
 )
 
-// filesVersion is the first byte of the OpListFiles and OpFileInfo payloads. A
-// layout change bumps it, so a webview and a Go side of different ages fail
-// cleanly instead of misreading each other.
-const filesVersion = 1
+// The first byte of the OpListFiles and OpFileInfo payloads. A layout change
+// bumps the constant of that payload alone, so a webview and a Go side of
+// different ages fail cleanly instead of misreading each other.
+const (
+	// fileListVersion is 2: version 1 carried a kind byte per entry, dropped
+	// when the interface took over classifying file names.
+	fileListVersion = 2
+	fileInfoVersion = 1
+)
 
 // Flags of a file list entry and of a file info payload.
 const (
@@ -22,30 +27,30 @@ const (
 
 // EncodeFileList serializes files as the payload of an OpListFiles response:
 //
-//	version u8 | count u32 | count × (kind u8 | flags u8 | size u64 | len u16 | path)
+//	version u8 | count u32 | count × (flags u8 | size u64 | len u16 | path)
 //
 // flags bit 0 is Main. It returns an error wrapping [ErrMalformed] if a file
 // is invalid or the result would not fit a frame.
 func EncodeFileList(files []project.File) ([]byte, error) {
 	size := 1 + 4
 	for _, f := range files {
-		if f.Size < 0 || f.Path == "" || len(f.Path) > math.MaxUint16 || f.Kind > project.KindData {
+		if f.Size < 0 || f.Path == "" || len(f.Path) > math.MaxUint16 {
 			return nil, fmt.Errorf("%w: file entry %q", ErrMalformed, f.Path)
 		}
-		size += 1 + 1 + 8 + 2 + len(f.Path)
+		size += 1 + 8 + 2 + len(f.Path)
 	}
 	if size > maxStoreWire-respHeaderLen {
 		return nil, fmt.Errorf("%w: file list of %d bytes", ErrMalformed, size)
 	}
 	b := make([]byte, 0, size)
-	b = append(b, filesVersion)
+	b = append(b, fileListVersion)
 	b = binary.BigEndian.AppendUint32(b, uint32(len(files))) // #nosec G115 -- size bounds the count.
 	for _, f := range files {
 		var flags byte
 		if f.Main {
 			flags |= flagMain
 		}
-		b = append(b, byte(f.Kind), flags)
+		b = append(b, flags)
 		b = binary.BigEndian.AppendUint64(b, uint64(f.Size))      // #nosec G115 -- checked ≥ 0.
 		b = binary.BigEndian.AppendUint16(b, uint16(len(f.Path))) // #nosec G115 -- checked ≤ MaxUint16.
 		b = append(b, f.Path...)
@@ -85,6 +90,6 @@ func EncodeFileInfo(i FileInfo) []byte {
 	if i.Mixed {
 		flags |= flagMixed
 	}
-	b := []byte{filesVersion, flags, byte(i.EOL), byte(len(i.Encoding))} // #nosec G115 -- the encoding names are short.
+	b := []byte{fileInfoVersion, flags, byte(i.EOL), byte(len(i.Encoding))} // #nosec G115 -- the encoding names are short.
 	return append(b, i.Encoding...)
 }

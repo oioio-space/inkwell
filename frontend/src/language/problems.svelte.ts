@@ -1,11 +1,12 @@
 import { EditorView } from "@codemirror/view";
 import { tick } from "svelte";
 import { flushTyped } from "../editor/amSync";
+import { registry } from "../extensions";
 import type { Diagnostic } from "../preview/protocol";
 import { settings } from "../store/settings.svelte";
 import { session } from "../ui/editorSession.svelte";
 import { history } from "../ui/history/history.svelte";
-import { sheetView } from "../ui/sheet/viewMode.svelte";
+import { viewChoice } from "../workspace/viewChoice.svelte";
 import { workspace } from "../workspace/workspace.svelte";
 import type { LanguageDiagnostic } from "./client";
 import {
@@ -191,7 +192,7 @@ export class Problems {
   async jump(d: Problem) {
     if (d.stale) return;
     const ticket = this.#compilerTicket;
-    if (d.source === "csv") sheetView.toText(d.from);
+    if (d.source === "csv") viewChoice.show(registry.essentialViewer("text").id, d.from);
     if (!workspace.files.some((file) => file.path === d.file)) await workspace.refreshFiles();
     await workspace.openFile(d.file);
     await tick();

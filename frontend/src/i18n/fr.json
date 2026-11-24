@@ -3,6 +3,7 @@
   "file.info": "Aucun aperçu pour ce type de fichier.",
   "file.loading": "Chargement…",
   "file.unavailable": "Ce fichier ne peut pas être ouvert.",
+  "file.notText": "Ce fichier ne contient pas du texte : il ne peut pas s'afficher comme tel.",
   "file.gone": "{name} n'est plus dans le projet : supprimé ou renommé en dehors d'Inkwell",
   "app.title": "Sans titre",
   "status.alone": "Seul",
@@ -140,8 +141,8 @@
   "insert.attach.desc": "Voyage dans le PDF sans s'afficher (tableur, source…)",
   "insert.csvTable": "Tableau depuis un CSV",
   "insert.csvTable.desc": "Reste lié : modifier le CSV met le tableau à jour",
-  "insert.csvTable.md": "Tableau depuis un CSV",
-  "insert.csvTable.md.desc": "Copie figée : à réinsérer si le CSV change",
+  "insert.csvTable.markdown": "Tableau depuis un CSV",
+  "insert.csvTable.markdown.desc": "Copie figée : à réinsérer si le CSV change",
   "insert.data": "Données JSON, YAML ou TOML",
   "insert.data.desc": "Remplit le texte à partir d'un fichier",
   "insert.bibliography": "Bibliographie",
@@ -808,5 +809,6 @@
   "open.summary.shown.one": "{count} fichier ouvert : {names}.",
   "open.summary.shown.other": "{count} fichiers ouverts : {names}.",
   "open.notice.dropped.one": "{count} demande d'ouverture laissée : trop à la fois.",
-  "open.notice.dropped.other": "{count} demandes d'ouverture laissées : trop à la fois."
+  "open.notice.dropped.other": "{count} demandes d'ouverture laissées : trop à la fois.",
+  "viewer.failed": "Cet affichage n'a pas pu s'ouvrir : le fichier s'affiche tel quel."
 }

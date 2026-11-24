@@ -45,9 +45,9 @@ func slicesContain(s []int, n int) bool {
 
 func sampleFiles() []project.File {
 	return []project.File{
-		{Path: "main.typ", Kind: project.KindText, Size: 12, Main: true},
-		{Path: "sub/é.png", Kind: project.KindData, Size: math.MaxInt64},
-		{Path: "z", Kind: 0, Size: 0},
+		{Path: "main.typ", Size: 12, Main: true},
+		{Path: "sub/é.png", Size: math.MaxInt64},
+		{Path: "z", Size: 0},
 	}
 }
 
@@ -71,8 +71,8 @@ func TestFileListStrictness(t *testing.T) {
 	}
 
 	// Entries, by hand: the limits of each field.
-	entry := func(kind, flags byte, size uint64, path string) []byte {
-		b := []byte{1, 0, 0, 0, 1, kind, flags}
+	entry := func(flags byte, size uint64, path string) []byte {
+		b := []byte{2, 0, 0, 0, 1, flags}
 		b = binary.BigEndian.AppendUint64(b, size)
 		b = binary.BigEndian.AppendUint16(b, uint16(len(path)))
 		return append(b, path...)
@@ -82,25 +82,23 @@ func TestFileListStrictness(t *testing.T) {
 		wire []byte
 		ok   bool
 	}{
-		{"plain", entry(0, 0, 5, "a"), true},
-		{"largest kind", entry(byte(project.KindData), 0, 5, "a"), true},
-		{"kind past the last", entry(byte(project.KindData)+1, 0, 5, "a"), false},
-		{"main flag", entry(0, 1, 5, "a"), true},
-		{"unknown flag", entry(0, 2, 5, "a"), false},
-		{"largest size", entry(0, 0, math.MaxInt64, "a"), true},
-		{"size over int64", entry(0, 0, math.MaxInt64+1, "a"), false},
-		{"empty path", entry(0, 0, 5, ""), false},
-		{"path not utf-8", entry(0, 0, 5, "\xff"), false},
+		{"plain", entry(0, 5, "a"), true},
+		{"main flag", entry(1, 5, "a"), true},
+		{"unknown flag", entry(2, 5, "a"), false},
+		{"largest size", entry(0, math.MaxInt64, "a"), true},
+		{"size over int64", entry(0, math.MaxInt64+1, "a"), false},
+		{"empty path", entry(0, 5, ""), false},
+		{"path not utf-8", entry(0, 5, "\xff"), false},
 	} {
 		if _, err := bridge.DecodeFileList(tc.wire); tc.ok != (err == nil) {
 			t.Errorf("DecodeFileList(%s) = %v, want accepted=%t", tc.name, err, tc.ok)
 		}
 	}
-	if _, err := bridge.DecodeFileList([]byte{2, 0, 0, 0, 0}); !errors.Is(err, bridge.ErrMalformed) {
-		t.Errorf("DecodeFileList(version 2) = %v, want ErrMalformed", err)
+	if _, err := bridge.DecodeFileList([]byte{1, 0, 0, 0, 0}); !errors.Is(err, bridge.ErrMalformed) {
+		t.Errorf("DecodeFileList(version 1) = %v, want ErrMalformed", err)
 	}
 	// A count that promises more than the bytes carry.
-	if _, err := bridge.DecodeFileList([]byte{1, 0xff, 0xff, 0xff, 0xff}); !errors.Is(err, bridge.ErrMalformed) {
+	if _, err := bridge.DecodeFileList([]byte{2, 0xff, 0xff, 0xff, 0xff}); !errors.Is(err, bridge.ErrMalformed) {
 		t.Errorf("DecodeFileList(count 2^32-1, no entries) = %v, want ErrMalformed", err)
 	}
 }
@@ -114,8 +112,6 @@ func TestEncodeFileListLimits(t *testing.T) {
 	}{
 		{"zero size", project.File{Path: "a", Size: 0}, true},
 		{"negative size", project.File{Path: "a", Size: -1}, false},
-		{"largest kind", project.File{Path: "a", Kind: project.KindData}, true},
-		{"unknown kind", project.File{Path: "a", Kind: project.KindData + 1}, false},
 		{"longest path", project.File{Path: long}, true},
 		{"path one byte too long", project.File{Path: long + "p"}, false},
 		{"empty path", project.File{}, false},
@@ -128,14 +124,14 @@ func TestEncodeFileListLimits(t *testing.T) {
 
 	// The whole list fits the frame limit exactly or not at all.
 	const limit = 64<<20 - 5 // maxStoreWire - respHeaderLen
-	perEntry := 12 + math.MaxUint16
+	perEntry := 11 + math.MaxUint16
 	n := (limit - 5) / perEntry
 	rest := limit - 5 - n*perEntry // what the last, shorter entry adds
 	files := make([]project.File, n, n+1)
 	for i := range files {
 		files[i] = project.File{Path: long}
 	}
-	files = append(files, project.File{Path: strings.Repeat("q", rest-12)})
+	files = append(files, project.File{Path: strings.Repeat("q", rest-11)})
 	enc, err := bridge.EncodeFileList(files)
 	if err != nil || len(enc) != limit {
 		t.Fatalf("EncodeFileList(exactly the limit) = %d bytes, %v; want %d, nil", len(enc), err, limit)

@@ -33,7 +33,9 @@ import (
 	"path"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/oioio-space/inkwell/internal/store"
 )
@@ -390,7 +392,7 @@ func (p *Project) readTextLocked(rel string) (Text, error) {
 	} else if !exists {
 		return Text{}, fmt.Errorf("project: %s: %w", rel, fs.ErrNotExist)
 	}
-	raw, err := readLimited(p.root, rel, store.MaxValue)
+	raw, err := readText(p.root, rel, store.MaxValue)
 	if err != nil {
 		return Text{}, err
 	}
@@ -570,7 +572,7 @@ func hashOf(data []byte) string {
 
 // readLimited reads the file name of r, refusing one larger than limit bytes.
 func readLimited(r *os.Root, name string, limit int64) ([]byte, error) {
-	f, err := r.Open(name)
+	f, err := openFile(r, name)
 	if err != nil {
 		return nil, err
 	}
@@ -623,4 +625,78 @@ func folderName(title string) string {
 		return DefaultTitle
 	}
 	return name
+}
+
+// sniffLen is how much of a file is decoded first to tell text from the rest,
+// whatever the file's size.
+const sniffLen = 4096
+
+// ErrTooLarge is returned when a file that may be text is over the size a
+// document holds; its bytes are not read past [sniffLen].
+var ErrTooLarge = errors.New("project: file too large")
+
+// readText reads name for decoding as text. The first [sniffLen] bytes are
+// decoded first: bytes that are not text give [ErrBinary] whatever the size,
+// so a big binary file is never read in full to learn what it is (ADR 0027
+// rule 6). A file that may be text but is over limit gives [ErrTooLarge].
+func readText(r *os.Root, name string, limit int64) ([]byte, error) {
+	f, err := openFile(r, name)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = f.Close() }() // read-only handle
+	info, err := f.Stat()
+	if err != nil {
+		return nil, err
+	}
+	head := make([]byte, min(sniffLen, max(info.Size(), 0)))
+	n, err := io.ReadFull(f, head)
+	if err != nil && !errors.Is(err, io.ErrUnexpectedEOF) {
+		return nil, err
+	}
+	head = head[:n]
+	prefix := head
+	if int64(n) < info.Size() {
+		prefix = trimPartialRune(head) // a rune cut by the prefix is not a binary byte
+	}
+	if _, err := Decode(prefix); errors.Is(err, ErrBinary) {
+		return nil, err
+	}
+	if info.Size() > limit {
+		return nil, fmt.Errorf("%w: %s is %d bytes, over the limit of %d", ErrTooLarge, name, info.Size(), limit)
+	}
+	rest, err := io.ReadAll(io.LimitReader(f, limit+1-int64(n)))
+	if err != nil {
+		return nil, err
+	}
+	return append(head, rest...), nil
+}
+
+// trimPartialRune drops a UTF-8 sequence cut at the end of b.
+func trimPartialRune(b []byte) []byte {
+	for i := 1; i <= min(utf8.UTFMax-1, len(b)); i++ {
+		c := b[len(b)-i]
+		if utf8.RuneStart(c) {
+			if c >= 0x80 && !utf8.FullRune(b[len(b)-i:]) {
+				return b[:len(b)-i]
+			}
+			break
+		}
+	}
+	return b
+}
+
+// openHook, when set by a test, is called with the name of every file the
+// project opens to read its content (folders are not counted). It lets a test
+// prove that an operation reads no content; production leaves it unset. An
+// atomic pointer, so a test that sets it races with no other test's reads.
+var openHook atomic.Pointer[func(name string)]
+
+// openFile opens the file name of r for reading, the one place a project file
+// is opened, so openHook sees every content read.
+func openFile(r *os.Root, name string) (*os.File, error) {
+	if hook := openHook.Load(); hook != nil {
+		(*hook)(name)
+	}
+	return r.Open(name)
 }

@@ -5,11 +5,12 @@ import { Flags, Stream, WailsSocket } from "@wailsio/runtime";
 import { onMount, tick, untrack } from "svelte";
 import { Session } from "../bindings/github.com/oioio-space/inkwell/internal/app/index";
 import { whenWritten } from "./editor/amSync";
-import { looksTabular } from "./editor/csv/dialect";
 import { markExternal } from "./editor/external";
-import { langOf } from "./editor/format";
+import { formatLanguage } from "./editor/format";
 import type { CursorState } from "./editor/presence";
-import { t } from "./i18n";
+import { activateStartup, registry } from "./extensions";
+import ViewerHost from "./extensions/ViewerHost.svelte";
+import { type MessageKey, t } from "./i18n";
 import { problemMarks } from "./language/marks";
 import { resolveRange, toOffset, toPosition } from "./language/positions";
 import { problems } from "./language/problems.svelte";
@@ -18,6 +19,7 @@ import { validFilePath } from "./net/admission";
 import { links } from "./net/links.svelte";
 import type { SocketLike } from "./net/WailsNetworkAdapter";
 import { profileNativeStage } from "./perf/nativeDispatch";
+import { markOpen } from "./perf/openMarks";
 import PresentBanner from "./present/PresentBanner.svelte";
 import PresentHost from "./present/PresentHost.svelte";
 import { presentSession } from "./present/session.svelte";
@@ -29,7 +31,6 @@ import { SaveError } from "./store/GoStorageAdapter";
 import { settings } from "./store/settings.svelte";
 import AboutDialog, { type BuildInfo } from "./ui/AboutDialog.svelte";
 import Banner from "./ui/Banner.svelte";
-import Editor from "./ui/Editor.svelte";
 import ExternalBanner from "./ui/ExternalBanner.svelte";
 import ExternalChangeToast from "./ui/ExternalChangeToast.svelte";
 import { session } from "./ui/editorSession.svelte";
@@ -43,11 +44,8 @@ import ProjectionBanner from "./ui/ProjectionBanner.svelte";
 import AccessBanner from "./ui/people/AccessBanner.svelte";
 import PeopleDialog from "./ui/people/PeopleDialog.svelte";
 import Preferences from "./ui/prefs/Preferences.svelte";
-import ReadOnlyText from "./ui/ReadOnlyText.svelte";
 import SealedBanner from "./ui/SealedBanner.svelte";
 import ShareDialog from "./ui/ShareDialog.svelte";
-import Sheet from "./ui/sheet/Sheet.svelte";
-import { sheetView, showsSheet } from "./ui/sheet/viewMode.svelte";
 import HeaderBar from "./ui/shell/HeaderBar.svelte";
 import Sidebar from "./ui/shell/Sidebar.svelte";
 import StatusBar from "./ui/shell/StatusBar.svelte";
@@ -58,6 +56,7 @@ import { ClosePage, closePublisher } from "./workspace/closePage";
 import { nativeCloseProbe } from "./workspace/nativeCloseProbe";
 import { observeDocText, observeHeads, observeLinks } from "./workspace/observe";
 import { OpenRequests } from "./workspace/openRequests";
+import { offersTable, viewChoice } from "./workspace/viewChoice.svelte";
 import { workspace } from "./workspace/workspace.svelte";
 
 let languageMounted = $state(false);
@@ -70,24 +69,53 @@ let aboutOpener = $state<HTMLElement | undefined>();
 let buildInfo = $state.raw<BuildInfo | undefined>();
 const me = $derived({ id: workspace.myId, name: workspace.myName });
 
-const lang = $derived(langOf(workspace.current));
-/** A table file shows as a spreadsheet, unless the person asked for its text. */
-const tabular = $derived(sheetView.tabular(workspace.current));
-/** A `.txt` that reads as a table is offered as one, never opened as one by itself. */
-const offerTable = $derived(
-  !tabular &&
-    /\.txt$/i.test(workspace.current) &&
-    looksTabular(workspace.opened?.text ?? workspace.handle?.doc()?.text ?? ""),
+// The text editor and Typst's grammar: the main document opens with them.
+activateStartup();
+const mainFile = $derived(workspace.current === "main.typ");
+/** How the open file opens (ADR 0027): the main document is text; another file as Go read it. */
+const opening = $derived(
+  mainFile
+    ? registry.open(workspace.current, {
+        choice: viewChoice.typeFor(workspace.project, workspace.current),
+        content: "text",
+      })
+    : workspace.opened?.opening,
 );
-const showSheet = $derived(showsSheet(workspace.current));
+/** The view shown: the one the person switched to (the text of a table), else the default. */
+const shown = $derived(
+  opening && (opening.alternatives.find((v) => v.id === viewChoice.viewer) ?? opening.viewer),
+);
+const textEditor = registry.essentialViewer("text");
+/** A text shown by another viewer than the editor (a table's grid) brings its own status bar. */
+const ownView = $derived(opening?.content === "text" && shown !== textEditor);
+const lang = $derived(formatLanguage(opening?.type.grammar));
+/** The text of a file read from the disk, one object per read (a grid keeps its session by it). */
+const openedText = $derived(
+  workspace.opened?.text !== undefined ? { text: workspace.opened.text } : undefined,
+);
 
-/** Back to the grid from the text view, on the cell under the caret. */
-function showTable() {
-  sheetView.toGrid(session.state?.selection.main.head);
+/** A text file that reads as a table is offered as one (never the main document, so not at start). */
+const offerTable = $derived(
+  !mainFile &&
+    workspace.opened !== undefined &&
+    offersTable(workspace.opened.opening, workspace.opened.text),
+);
+/** Opens the current file as a table from now on, on this device. */
+function openAsTable() {
+  viewChoice.openAsTable(workspace.project, workspace.current);
+  void workspace.openFile(workspace.current);
+}
+
+/** Back to the file's default view (the grid) from another one, on the cell under the caret. */
+function showDefault() {
+  viewChoice.show(undefined, session.state?.selection.main.head);
+}
+/** The text view of the file, the caret at `offset`. */
+function showText(offset: number) {
+  viewChoice.show(textEditor.id, offset);
 }
 /** Only Typst and Markdown have a formatting bar; csv, bib and txt are just the editor. */
 const barLanguage = $derived(barLang(workspace.current));
-const mainFile = $derived(workspace.current === "main.typ");
 const hasBar = $derived(mainFile && barLanguage !== undefined);
 const barVisible = $derived(hasBar && !workspace.big && settings.toolbarVisible(workspace.project));
 const sidebarOpen = $derived(settings.sidebarVisible(workspace.project));
@@ -287,7 +315,8 @@ $effect(() => {
 $effect(() => {
   const file = workspace.current;
   const text = workspace.opened?.text;
-  if (file !== "main.typ" && file.endsWith(".typ") && text !== undefined) language.open(file, text);
+  if (file !== "main.typ" && workspace.fileTypeOf(file)?.id === "typst" && text !== undefined)
+    language.open(file, text);
 });
 
 $effect(() => {
@@ -349,7 +378,7 @@ onMount(() => {
       }
     ).__inkwellInvite = (role) => Session.Invite(role);
     (globalThis as typeof globalThis & { __inkwellTestTable?: () => void }).__inkwellTestTable =
-      () => sheetView.openAsTable("main.typ");
+      () => viewChoice.openAsTable(workspace.project, "main.typ");
   }
   preview.start(() => Stream("preview") as unknown as SocketLike);
   configureLanguage(
@@ -429,7 +458,7 @@ onMount(() => {
       ready: started,
       closePage,
       prepare: async (signal) => {
-        sheetView.toGrid(undefined);
+        viewChoice.show(undefined, undefined);
         await workspace.refreshFiles(); // a file just made outside Inkwell may not be listed yet
         signal.throwIfAborted();
       },
@@ -510,7 +539,7 @@ onMount(() => {
 <!-- A presentation covers the window: what is under it neither takes keys nor focus. -->
 <div class="window" inert={presenting}>
   {#if sidebarOpen}
-    <Sidebar files={workspace.files} current={workspace.current} onOpen={(path, keepFocus) => { sheetView.toGrid(undefined); void workspace.openFile(path).then(() => tick()).then(() => { if (keepFocus) return; if (session.view) session.focus(); else document.querySelector<HTMLElement>(".file-view, [role=grid]")?.focus(); }); }} />
+    <Sidebar files={workspace.files} current={workspace.current} onOpen={(path, keepFocus) => { markOpen(path); viewChoice.show(undefined, undefined); void workspace.openFile(path).then(() => tick()).then(() => { if (keepFocus) return; if (session.view) session.focus(); else document.querySelector<HTMLElement>(".file-view, [role=grid]")?.focus(); }); }} />
   {/if}
   <div class="column">
     <HeaderBar
@@ -558,20 +587,15 @@ onMount(() => {
     <AccessBanner onAsk={() => (sharing = true)} />
     {#if offerTable}
       <div class="viewbar">
-        <button
-          type="button"
-          class="fb lbl"
-          data-sheet="open-table"
-          onclick={() => sheetView.openAsTable(workspace.current)}
-        >
+        <button type="button" class="fb lbl" data-sheet="open-table" onclick={openAsTable}>
           {t("sheet.openAsTable")}
         </button>
       </div>
     {/if}
-    {#if tabular && sheetView.text}
+    {#if opening && shown !== opening.viewer}
       <div class="viewbar">
-        <button type="button" class="fb lbl" data-sheet="table" onclick={showTable}>
-          {t("sheet.showTable")}
+        <button type="button" class="fb lbl" data-viewer={opening.viewer.id} onclick={showDefault}>
+          {t(opening.viewer.label as MessageKey)}
         </button>
       </div>
     {/if}
@@ -586,53 +610,61 @@ onMount(() => {
       <div class="pane side-source" class:projection={!mainFile}>
         {#if !mainFile}
           {#key workspace.current}
-            {#if workspace.opened?.text !== undefined}
-              {#if showSheet}
-                <Sheet big={{ text: workspace.opened.text }} {me} path={workspace.current} readOnly readOnlyReason={t("file.readOnly")} onshowtext={(offset) => sheetView.toText(offset)} />
-              {:else}
-                <ReadOnlyText text={workspace.opened.text} message={t("file.readOnly")} {lang} />
-              {/if}
-            {:else if workspace.opened?.image}
-              <div class="file-view" tabindex="-1"><img src={workspace.opened.image} alt={workspace.current} /></div>
-            {:else}
-              <div class="file-view" tabindex="-1" role="status"><h2>{workspace.current}</h2><p>{t(workspace.opened?.failed ? "file.unavailable" : workspace.opened ? "file.info" : "file.loading")}</p></div>
-            {/if}
-          {/key}
-        {:else if workspace.big}
-          {#key workspace.big}
-            {#if showSheet}
-              <Sheet
-                big={workspace.big}
-                {me}
+            {#if workspace.opened && shown}
+              <ViewerHost
+                viewer={shown}
+                opening={workspace.opened.opening}
                 path={workspace.current}
-                startOffset={sheetView.offset}
-                onshowtext={(offset) => sheetView.toText(offset)}
+                {lang}
+                {me}
+                big={openedText}
+                readOnly
+                readOnlyReason={t("file.readOnly")}
+                failed={workspace.opened.failed}
+                large={workspace.opened.large}
+                startOffset={viewChoice.offset}
+                onshowtext={showText}
+                readImage={(path) => workspace.readImage(path)}
               />
             {:else}
-              <ReadOnlyText text={workspace.big.text} />
+              <div class="file-view" tabindex="-1" role="status"><h2>{workspace.current}</h2><p>{t("file.loading")}</p></div>
             {/if}
+          {/key}
+        {:else if workspace.big && opening && shown}
+          {#key workspace.big}
+            <ViewerHost
+              viewer={shown}
+              {opening}
+              path={workspace.current}
+              {lang}
+              {me}
+              big={workspace.big}
+              startOffset={viewChoice.offset}
+              onshowtext={showText}
+              readImage={(path) => workspace.readImage(path)}
+            />
           {/key}
         {:else if workspace.waitingFor !== undefined}
           <JoinWaiting />
-        {:else if workspace.active}
+        {:else if workspace.active && opening && shown}
           {@const active = workspace.active}
           {#key active.url}
-            {#if showSheet}
-              <Sheet
-                handle={active}
-                {me}
-                path={workspace.current}
-                startOffset={sheetView.offset}
-                onshowtext={(offset) => sheetView.toText(offset)}
-              />
-            {:else}
-              <Editor handle={active} {me} {lang} at={tabular ? sheetView.offset : undefined} />
-            {/if}
+            <ViewerHost
+              viewer={shown}
+              {opening}
+              path={workspace.current}
+              {lang}
+              {me}
+              handle={active}
+              startOffset={viewChoice.offset}
+              onshowtext={showText}
+              readImage={(path) => workspace.readImage(path)}
+            />
           {/key}
         {/if}
       </div>
       <!-- While the document of a join is waited for there is nothing to preview (PC1b, J-2). -->
-      {#if mainFile && previewOpen && !showSheet && !presenting && !workspace.big && workspace.waitingFor === undefined}
+      {#if mainFile && previewOpen && !ownView && !presenting && !workspace.big && workspace.waitingFor === undefined}
         <div class="pane side-preview">
           <Preview
             onSourceJump={jumpFromPage}
@@ -645,7 +677,7 @@ onMount(() => {
         </div>
       {/if}
     </main>
-    {#if !showSheet}
+    {#if !ownView}
       <StatusBar
         {lang}
         status={workspace.status}
@@ -674,7 +706,6 @@ onMount(() => {
 <style>
  .projection { display: flex; flex-direction: column; }
  .file-view { flex: 1; min-height: 0; overflow: auto; padding: 24px; color: var(--fg-dim); background: var(--view-bg); }
- .file-view img { max-width: 100%; max-height: 100%; object-fit: contain; }
   .window {
     display: flex;
     height: 100vh;

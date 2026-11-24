@@ -1,0 +1,27 @@
+{
+  "id": "markdown",
+  "version": "1.0.0",
+  "essential": true,
+  "activation": ["onFileType:markdown", "onLanguage:markdown"],
+  "contributes": {
+    "fileTypes": [
+      {
+        "id": "markdown",
+        "label": "kind.markdown",
+        "icon": "markdown",
+        "extensions": [".md", ".markdown"],
+        "mime": "text/markdown",
+        "storage": "text",
+        "grammar": "markdown"
+      }
+    ],
+    "grammars": [
+      {
+        "id": "markdown",
+        "names": ["md", "markdown"],
+        "entry": "native/markdown.ts",
+        "capabilities": ["ui.native"]
+      }
+    ]
+  }
+}

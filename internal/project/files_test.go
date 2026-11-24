@@ -91,15 +91,6 @@ func TestList(t *testing.T) {
 		for _, f := range files {
 			got[f.Path] = f
 		}
-		for path, want := range map[string]Kind{
-			"main.typ": KindTypst, "chapters/ch1.typ": KindTypst, "readme.MD": KindMarkdown,
-			"data.csv": KindCSV, "refs.bib": KindBib, "fig.PNG": KindImage, "doc.pdf": KindPDF,
-			"conf.json": KindData, "LICENSE": KindText, "weights.bin": KindOther, "notes.txt": KindText,
-		} {
-			if got[path].Kind != want {
-				t.Errorf("Kind(%s) = %v, want %v", path, got[path].Kind, want)
-			}
-		}
 		if !got["main.typ"].Main || got["chapters/ch1.typ"].Main || got["main.typ"].Size != 4 {
 			t.Errorf("main.typ = %+v, chapters/ch1.typ = %+v", got["main.typ"], got["chapters/ch1.typ"])
 		}
@@ -216,7 +207,7 @@ func TestReadImageProjection(t *testing.T) {
 	put(t, p, "note.txt", "secret")
 	put(t, p, ".hidden.png", "image bytes")
 	put(t, p, "assets/.cache/pic.png", "image bytes")
-	for _, rel := range []string{"../pic.png", ".inkwell/private.png", "note.txt", ".hidden.png", "assets/.cache/pic.png"} {
+	for _, rel := range []string{"../pic.png", ".inkwell/private.png", ".hidden.png", "assets/.cache/pic.png"} {
 		if _, err := p.ReadImage(rel); err == nil {
 			t.Fatalf("accepted %s", rel)
 		}

@@ -75,63 +75,6 @@ func TestListFoldersFirstAndDepth(t *testing.T) {
 	}
 }
 
-// TestKindOfSniffsTruncatedRunes: a text file whose 4096-byte sniff window
-// ends inside a multi-byte character is still text; a really invalid one is not.
-func TestKindOfSniffsTruncatedRunes(t *testing.T) {
-	p := create(t, newBase(t), "p")
-	for cut, n := range map[string]int{"2-byte": 1, "3-byte": 2, "4-byte": 3} {
-		r := map[string]string{"2-byte": "é", "3-byte": "€", "4-byte": "😀"}[cut]
-		// Position the character so that only its first n... bytes are inside the window.
-		body := strings.Repeat("a", sniffLen-n) + r + "tail"
-		put(t, p, "cut-"+cut, body)
-	}
-	put(t, p, "bad", strings.Repeat("a", 100)+"\xff\xfe\xfd"+strings.Repeat("b", 100)+"\x00")
-	put(t, p, "binary", "\x00\x01\x02")
-	files, err := p.List()
-	if err != nil {
-		t.Fatal(err)
-	}
-	kinds := map[string]Kind{}
-	for _, f := range files {
-		kinds[f.Path] = f.Kind
-	}
-	for _, name := range []string{"cut-2-byte", "cut-3-byte", "cut-4-byte"} {
-		if kinds[name] != KindText {
-			t.Errorf("kind of %s = %v, want text (a rune cut by the sniff window)", name, kinds[name])
-		}
-	}
-	for _, name := range []string{"bad", "binary"} {
-		if kinds[name] != KindOther {
-			t.Errorf("kind of %s = %v, want other", name, kinds[name])
-		}
-	}
-}
-
-func TestTrimPartialRune(t *testing.T) {
-	for _, tc := range []struct {
-		name string
-		in   []byte
-		want []byte
-	}{
-		{"empty", nil, nil},
-		{"ascii", []byte("abc"), []byte("abc")},
-		{"complete 2-byte", []byte("aé"), []byte("aé")},
-		{"cut 2-byte", []byte("a\xc3"), []byte("a")},
-		{"cut 3-byte after 1", []byte("a\xe2"), []byte("a")},
-		{"cut 3-byte after 2", []byte("a\xe2\x82"), []byte("a")},
-		{"cut 4-byte after 3", []byte("a\xf0\x9f\x98"), []byte("a")},
-		{"complete 4-byte", []byte("a\U0001F600"), []byte("a\U0001F600")},
-		{"lone continuation", []byte("a\x80"), []byte("a\x80")},
-		{"invalid kept", []byte("a\xffb"), []byte("a\xffb")},
-		{"only a lead byte", []byte{0xc3}, nil},
-		{"four continuation bytes are not a cut", []byte{'a', 0x80, 0x80, 0x80, 0x80}, []byte{'a', 0x80, 0x80, 0x80, 0x80}},
-	} {
-		if got := trimPartialRune(tc.in); !bytes.Equal(got, tc.want) {
-			t.Errorf("%s: trimPartialRune(%q) = %q, want %q", tc.name, tc.in, got, tc.want)
-		}
-	}
-}
-
 func TestSyncPointSizeBoundary(t *testing.T) {
 	jsonString := func(n int) []byte { return append(append([]byte(`"`), bytes.Repeat([]byte("a"), n-2)...), '"') }
 	base := newBase(t)

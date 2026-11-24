@@ -20,7 +20,6 @@ import {
 } from "../../editor/search/replace";
 import type { SearchRunner } from "../../editor/search/runner";
 import { t } from "../../i18n";
-import type { FileKind } from "../../store/files";
 import {
   clearHistory,
   type HistoryEntry,
@@ -57,7 +56,7 @@ let {
   files: () => ProjectFileInput[];
   /** The open file and its selection, for "Ce fichier" / "Sélection". */
   current?: () =>
-    | { path: string; kind: FileKind; text: string; selection?: { from: number; to: number } }
+    | { path: string; text: string; selection?: { from: number; to: number } }
     | undefined;
   /** The open document of a file: hits get cursors and follow other people's edits. */
   anchor?: (path: string) => Doc | undefined;
@@ -213,15 +212,10 @@ async function runSearch(within?: SearchRun, keepNotice = false): Promise<Search
     } else {
       const cur = current?.();
       results = cur
-        ? await findInProject(
-            [{ path: cur.path, kind: cur.kind, text: () => cur.text }],
-            matcher,
-            "",
-            {
-              ...common,
-              range: scope === "selection" && cur.selection ? cur.selection : {},
-            },
-          )
+        ? await findInProject([{ path: cur.path, text: () => cur.text }], matcher, "", {
+            ...common,
+            range: scope === "selection" && cur.selection ? cur.selection : {},
+          })
         : { files: [], total: 0, scanned: 0 };
     }
     const run: SearchRun = {
@@ -290,7 +284,7 @@ function toggleRun(run: SearchRun) {
 
 async function textOf(path: string): Promise<string> {
   const f = files().find((x) => x.path === path);
-  if (f) return f.text();
+  if (f) return (await f.text()) ?? "";
   const cur = current?.();
   return cur?.path === path ? cur.text : "";
 }

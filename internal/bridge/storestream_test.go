@@ -33,7 +33,6 @@ type storeVector struct {
 	Key        []string
 	Files      []struct {
 		Path string `json:"path"`
-		Kind string `json:"kind"`
 		Size int64  `json:"size"`
 		Main bool   `json:"main"`
 	} `json:"files"`
@@ -57,12 +56,6 @@ var storeOps = map[string]bridge.StoreOp{
 	"Acknowledge": bridge.OpAcknowledge, "ListFiles": bridge.OpListFiles, "FileInfo": bridge.OpFileInfo,
 	"WriteProjectionAt": bridge.OpWriteProjectionAt, "ReadSyncPoint": bridge.OpReadSyncPoint, "SetSyncPoint": bridge.OpSetSyncPoint,
 	"Tree": bridge.OpTree, "Referenced": bridge.OpReferenced, "PutBlob": bridge.OpPutBlob,
-}
-
-var fileKinds = map[string]project.Kind{
-	"typst": project.KindTypst, "markdown": project.KindMarkdown, "text": project.KindText,
-	"csv": project.KindCSV, "bib": project.KindBib, "image": project.KindImage, "pdf": project.KindPDF,
-	"data": project.KindData, "other": project.KindOther,
 }
 
 var eols = map[string]project.EOL{"LF": project.LF, "CRLF": project.CRLF, "CR": project.CR}
@@ -138,7 +131,7 @@ func TestStoreVectors(t *testing.T) {
 			case "filelist":
 				var files []project.File
 				for _, f := range v.Files {
-					files = append(files, project.File{Path: f.Path, Kind: fileKinds[f.Kind], Size: f.Size, Main: f.Main})
+					files = append(files, project.File{Path: f.Path, Size: f.Size, Main: f.Main})
 				}
 				got, err := bridge.EncodeFileList(files)
 				if err != nil || !bytes.Equal(got, wire) {
@@ -394,7 +387,7 @@ func (s *fakeStorage) List() ([]project.File, error) {
 	defer s.mu.Unlock()
 	var out []project.File
 	for _, name := range slices.Sorted(maps.Keys(s.files)) {
-		out = append(out, project.File{Path: name, Kind: project.KindTypst, Size: int64(len(s.files[name])), Main: name == "main.typ"})
+		out = append(out, project.File{Path: name, Size: int64(len(s.files[name])), Main: name == "main.typ"})
 	}
 	return out, nil
 }
@@ -586,15 +579,14 @@ func TestStoreServerFiles(t *testing.T) {
 func TestDecodeFilesRejects(t *testing.T) {
 	for name, wire := range map[string][]byte{
 		"empty":               nil,
-		"bad version":         {2, 0, 0, 0, 0},
-		"count without entry": {1, 0, 0, 0, 1},
-		"bad kind":            {1, 0, 0, 0, 1, 99, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 'a'},
-		"bad flags":           {1, 0, 0, 0, 1, 1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 1, 'a'},
-		"empty path":          {1, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0},
-		"path past the end":   {1, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 5, 'a'},
-		"invalid UTF-8 path":  {1, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0xff},
-		"size over int64":     {1, 0, 0, 0, 1, 1, 0, 0x80, 0, 0, 0, 0, 0, 0, 0, 0, 1, 'a'},
-		"trailing bytes":      {1, 0, 0, 0, 0, 9},
+		"bad version":         {1, 0, 0, 0, 0},
+		"count without entry": {2, 0, 0, 0, 1},
+		"bad flags":           {2, 0, 0, 0, 1, 2, 0, 0, 0, 0, 0, 0, 0, 0, 1, 'a'},
+		"empty path":          {2, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 0},
+		"path past the end":   {2, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 5, 'a'},
+		"invalid UTF-8 path":  {2, 0, 0, 0, 1, 1, 0, 0, 0, 0, 0, 0, 0, 0, 1, 0xff},
+		"size over int64":     {2, 0, 0, 0, 1, 1, 0x80, 0, 0, 0, 0, 0, 0, 0, 0, 1, 'a'},
+		"trailing bytes":      {2, 0, 0, 0, 0, 9},
 	} {
 		if _, err := bridge.DecodeFileList(wire); !errors.Is(err, bridge.ErrMalformed) {
 			t.Errorf("DecodeFileList(%s) error = %v, want ErrMalformed", name, err)

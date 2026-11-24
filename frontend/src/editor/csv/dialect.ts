@@ -11,18 +11,33 @@ export interface Dialect {
   quote?: boolean | undefined;
 }
 
-/** A `.tsv` or `.tab` holds quotes as plain text: no cell is quoted unless the person turns it on. */
-export const quoteOf = (path: string): boolean => !/\.(tsv|tab)$/i.test(path);
-
-/** The delimiter a file name fixes (.tsv and .tab: tab, .psv: pipe); none for .csv and the rest. */
-export function delimiterOf(path: string): Delimiter | undefined {
-  if (/\.(tsv|tab)$/i.test(path)) return "\t";
-  if (/\.psv$/i.test(path)) return "|";
-  return undefined;
+/**
+ * What a table's file type says (the `options` of its manifest): the delimiter its name stands
+ * for, whether the name fixes it (a TSV is tab-separated; a CSV may use the semicolon of
+ * decimal-comma files), whether cells may be quoted, and whether the type comes from the name at
+ * all (a type the person chose says nothing about the content).
+ */
+export interface TableType {
+  delimiter: Delimiter;
+  fixed: boolean;
+  quote: boolean;
+  named: boolean;
 }
 
-/** What the extension says: the fixed delimiter, or the comma that `.csv` stands for. */
-export const expectedDelimiter = (path: string): Delimiter => delimiterOf(path) ?? ",";
+/** The table a file type's options describe; undefined when they name no delimiter. */
+export function tableType(
+  options: Readonly<Record<string, unknown>>,
+  named: boolean,
+): TableType | undefined {
+  const d = options.delimiter;
+  if (!DELIMITERS.some((x) => x === d)) return undefined;
+  return {
+    delimiter: d as Delimiter,
+    fixed: options.fixed === true,
+    quote: options.quote !== false,
+    named,
+  };
+}
 
 const SPACES = /[\s\u00a0\u202f]/g;
 const HAS_SPACE = /[\s\u00a0\u202f]/;
@@ -123,7 +138,7 @@ export function findDelimiter(text: string, prefer?: Delimiter): Delimiter | und
 }
 
 /** A text that reads as a table: worth offering as one (never forced). */
-export function looksTabular(text: string): boolean {
+export function readsAsTable(text: string): boolean {
   const d = findDelimiter(text);
   if (!d) return false;
   const rows = sample(text.slice(0, 200_000), d, 60).filter((r) => r.length > 1);
@@ -137,20 +152,23 @@ export interface Start {
 }
 
 /**
- * The dialect to open a file with. The extension gives the starting point, the content confirms
- * it: `.tsv` is tab, `.psv` pipe, `.csv` the comma, or the semicolon of decimal-comma files, or
- * whatever else detection finds. A table that is clearly written another way is read that way and
- * reported as a `contradiction`. `remembered` is the person's earlier choice for this file.
+ * The dialect to open a file with. The type gives the starting point, the content confirms it:
+ * TSV is tab, PSV pipe, CSV the comma, or the semicolon of decimal-comma files, or whatever else
+ * detection finds. A table that is clearly written another way is read that way and reported as a
+ * `contradiction` of what its name says. `remembered` is the person's earlier choice for this file.
  */
-export function startDialect(path: string, text: string, remembered?: Delimiter): Start {
-  const quote = quoteOf(path) ? {} : { quote: false as const };
+export function startDialect(
+  table: TableType | undefined,
+  text: string,
+  remembered?: Delimiter,
+): Start {
+  const quote = table?.quote === false ? { quote: false as const } : {};
   if (remembered) return { dialect: { ...detectDialect(text, remembered), ...quote } };
-  const expected = expectedDelimiter(path);
+  const expected = table?.delimiter ?? ",";
   const found = findDelimiter(text, expected);
   const dialect = { ...detectDialect(text, found ?? expected), ...quote };
-  const semicolonCsv = found === ";" && expected === "," && delimiterOf(path) === undefined;
-  const named = /\.(csv|tsv|tab|psv)$/i.test(path);
-  if (!named || !found || found === expected || semicolonCsv) return { dialect };
+  const semicolonCsv = found === ";" && expected === "," && !table?.fixed;
+  if (!table?.named || !found || found === expected || semicolonCsv) return { dialect };
   return { dialect, contradiction: { found, expected } };
 }
 
