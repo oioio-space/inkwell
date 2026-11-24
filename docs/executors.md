@@ -27,6 +27,9 @@ configuration, outside the repository. gortex (code navigation) was removed on 2
 
 ## Codex
 
+No longer available (no credit left, owner, 2026-11-24): the second family is Gemini, then OpenRouter (method v2,
+« When Codex is absent »). Kept for the record:
+
 - From a Claude session: the `codex` plugin (`/codex:rescue`, `/codex:review`, `/codex:adversarial-review`, agent
   `codex:codex-rescue`), always with an explicit `--model` and `--effort` (`CLAUDE.md`, « Codex, même règle »).
 - Standalone, or when Claude's quota is low: `codex exec -o report.md - < prompt.md`, detached and watched like any
@@ -70,7 +73,7 @@ fall back to the cheapest Claude tier. Never secrets, security, design or code r
 - `agy -p "<prompt>" --mode accept-edits --sandbox --effort high --model <model> --output-format text` (headless).
   Permissions for headless runs live in `~/.gemini/antigravity-cli/settings.json` (`permissions.allow`).
 - The free individual tier is small (a handful of tasks, reset about weekly) and `--effort` is rejected by some
-  models. Used as the third family for a complete-tier review when Codex is absent (method v2).
+  models. The second family since Codex is gone (2026-11-24); when its quota is out, OpenRouter (method v2).
 - Gemini CLI reads `GEMINI.md`, which imports `AGENTS.md`.
 
 ## A new machine

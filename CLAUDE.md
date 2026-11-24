@@ -94,10 +94,12 @@ opératoire :
   venus d'un pair, trois acteurs concurrents ou plus sur un état durable ; sinon « standard » (tests nommés, porte
   ≤ 45 min, plan ≤ 2 pages) ou « léger » (outillage, docs). Un plafond dépassé fait redécouper, jamais retirer
   une preuve indispensable.
-- **Revue d'une autre famille** (Codex) sur la spécification et la porte **avant le gel**, puis une sur le code
+- **Revue d'une autre famille** sur la spécification et la porte **avant le gel**, puis une sur le code
   après le smoke ; deux tours au plus, un constat majeur au troisième appelle une décision de conception, pas une
-  rustine. Codex absent : relecture Opus à l'aveugle avec liste de contrôle pour standard et léger ; un bloc complet
-  attend (Gemini, puis OpenRouter payant ≤ 0,50 $ par point de revue, 1 $ de réserve).
+  rustine. Codex n'est plus disponible (plus de crédit, 2026-11-24) : l'autre famille est Gemini (`agy`), puis
+  OpenRouter payant (≤ 0,50 $ par point de revue, 1 $ de réserve, alerte sous 2 $ de crédit) ; un bloc complet
+  l'attend toujours ; standard et léger : relecture Opus à l'aveugle avec liste de contrôle, plus Gemini quand son
+  quota gratuit le permet.
 - **Boucle :** boucle interne en minutes (tests des paquets touchés et de leurs consommateurs, tests nommés du
   défaut, `mutants.py --check`, le mutant Go concerné), smoke de 20 à 30 min, puis la porte figée **une seule
   fois** sur le candidat final.
@@ -273,27 +275,25 @@ l'effort le plus bas qui gardent la qualité, choisis explicitement à chaque la
 | Tâche | Exécutant | Modèle / effort |
 |-------|-----------|-----------------|
 | Brouillon de message de commit, tri de longs journaux, brouillon de traduction i18n | `scripts/llm.sh` (ordre : Groq → Cloudflare Workers AI → OpenRouter gratuit → OpenRouter payant ZDR ; traduction et rédaction : OpenRouter payant seul — ADR 0013 ; quotas : `mise run quotas`) ; texte mécanique seulement, jamais secret, sécurité, conception ni revue de code ; code de sortie 3 → Haiku | open-weight hébergé |
-| Revue adverse avant commit, revue de spécification ou de porte avant le gel, enquête sur un bogue, second avis (sans tokens Claude) ; pas d'implémentation tant que Claude est présent (méthode v2, « Codex, when present » : ordre de priorité et politique de quota) | Codex : agent `codex:codex-rescue`, `/codex:rescue`, `/codex:review`, `/codex:adversarial-review` | connexion ChatGPT (petit abonnement : appels courts, quota utilisé en entier) |
+| Revue adverse avant commit, revue de spécification ou de porte avant le gel, débat d'une décision de conception, second avis (sans tokens Claude) | Gemini : `agy -p … --output-format text` ; quota épuisé : `scripts/claude-or.sh -t pro` (OpenRouter payant, bloc complet ou décision qui le touche seulement) | Gemini gratuit (petit quota : une revue par diff final) ; OpenRouter ≤ 0,50 $ par point |
 | Implémentation guidée par une porte, sans crédit | `mise x -- bash scripts/opencode-free.sh -m <modèle> < consigne.md` (modèles gratuits OpenRouter ou Zen ; rtk injecté) | gratuit ; jamais de sécurité ; ne commite jamais |
-| Relecture critique d'une spécification de sécurité ou d'une ADR (crédit compté) | Codex (`/codex:adversarial-review`) ; absent : relecture Opus à l'aveugle, ou pour un bloc complet une autre famille via `scripts/claude-or.sh -t pro` (≤ 0,50 $ par point, méthode v2) | un seul appel ciblé chacun |
+| Relecture critique d'une spécification de sécurité ou d'une ADR (crédit compté) | Gemini, puis `scripts/claude-or.sh -t pro` (≤ 0,50 $ par point, méthode v2) ; jamais Opus seul pour un bloc complet | un seul appel ciblé chacun |
 | Lancer les vérifications (lint, tests, ci, scans), corrections de format triviales | `quality-runner` | Haiku / low |
 | Docs, `PROGRESS.md`, messages de commit | `scribe` | Haiku / low |
 | Recherche de code ou de fichiers, « où est X » | `explorer` (ou `Explore` intégré) | Haiku / low |
-| Écrire du Go et ses tests, refactorisations | `go-dev` | Sonnet / medium ; relu par Opus ou Codex avant fusion |
-| Relire un diff Go | `go-reviewer` en premier passage seulement ; la revue qui fait foi : session Opus ou Codex | Sonnet / medium, puis Opus / medium ou Codex |
+| Écrire du Go et ses tests, refactorisations | `go-dev` | Sonnet / medium ; relu par Opus avant fusion |
+| Relire un diff Go | `go-reviewer` en premier passage seulement ; la revue qui fait foi : session Opus | Sonnet / medium, puis Opus / medium |
 | Parcours d'interface comme une personne | `ux-tester` | Sonnet / medium (comme simplify) |
 | Algorithme nouveau, architecture | `architect` | Opus / high |
 | Modèles TLA+ et Alloy, mutants (étape 1 d'un bloc) | `formal-modeler` | Opus / high |
 | Audit de sécurité approfondi | `security-auditor` | Opus / high (xhigh seulement pour l'audit final de release) |
 
-**Codex, même règle :** chaque appel `/codex:*` ou `codex:codex-rescue` précise `--model` et
-`--effort` (mécanique → `--model spark`, `--effort low` ; `--profile openrouter-cheap` seulement en CLI
-`codex` ; code et revue → modèle par défaut, `--effort medium` ; diagnostic difficile → `--effort high`).
+**OpenRouter, même règle :** chaque appel `scripts/claude-or.sh` choisit son niveau (`-t pro` pour une revue qui
+fait foi) et se mesure en coût réel avant et après (`openrouter.ai/api/v1/credits`).
 
-**Sonnet ne fait pas foi (règle de l'utilisatrice, 2026-11-03) :** tout code écrit par Sonnet est relu par Opus (ou
-Codex) avant fusion, et une revue qui compte pour une fusion ou une porte est faite par Opus ou Codex, jamais par
-Sonnet seul ; Sonnet et Haiku restent pour l'exécution mécanique (vérifications, format, recherche). Lancement de chaque exécutant hors Claude Code (Codex en CLI, OpenRouter, opencode,
-Gemini), prérequis hors dépôt et pièges : `docs/executors.md`.
+**Sonnet ne fait pas foi (règle de l'utilisatrice, 2026-11-03) :** tout code écrit par Sonnet est relu par Opus
+avant fusion, et une revue qui compte pour une fusion ou une porte est faite par Opus (ou une autre famille forte),
+jamais par Sonnet seul ; Sonnet et Haiku restent pour l'exécution mécanique (vérifications, format, recherche). Lancement de chaque exécutant hors Claude Code (OpenRouter, opencode, Gemini), prérequis hors dépôt et pièges : `docs/executors.md`.
 
 **Boucle principale (Opus) :**
 - elle orchestre ; elle ne débogue pas, ne lit pas de journaux et ne résout pas de gros conflits : tout
