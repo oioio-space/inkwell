@@ -237,3 +237,105 @@ for the status and may redirect then.
 | 2026-11-24 | UX1 question 3, unavailable commands → UX1 | Hidden in context menus (they show what applies to the item); visible, greyed, with their reason, in bars and the main menu (the person learns the function exists and why it is off) | GNOME HIG and Apple HIG on menus; NN/g on disabled controls (explain why) | always hidden (functions undiscoverable); always greyed (cluttered context menus) |
 | 2026-11-24 | UX1 question 4, order → UX1 | UX1-0 first: the measuring tools (element inventory from the accessibility tree, EL-* checks, coherence checks) before judging screens, including the measuring part of W65's guards G2 and G3 | every element and its coherence with the others can only be judged once they can be measured; no screen is judged by eye alone (W82) | screens first (judged by eye, unrepeatable) |
 | 2026-11-24 | UX1 order: from the whole to the element → UX1 | UX1-0 (the proof harness), then A tasks and structure of the whole app, B screen grammar and templates, C the design system (Adwaita tokens, one component per role), D each surface element by element (the 48-rule grid as the final check), E the loop with the owner (R14) and measures; simplicity as the guard of every phase (design by subtraction, one primary action per screen, each phase lists what it removed) | the established methods go top-down then loop: Garrett's five planes (polishing the surface first is the classic error), the Design Council's Double Diamond, the design systems of GNOME, Apple and Material where coherence comes from construction; asked by the owner (« le plus pratique, soigné, joli, performant, tout en gardant une simplicité ») | element by element first, with coherence checked afterwards (polishes pieces that do not fit together) |
+| 2026-11-24 | UX1 plan consolidated → UX1 | One plan, `docs/plans/2026-11-24-ux1-interface-plan.md` (renamed from `…-ux1-element-audit.md`), written top to bottom: goal and arbitration, phases UX1-0 to E, rules 11–54, proof of inspection, extensibility, order, maintenance. Rules already stated elsewhere are removed (one command one identity = rule 14; one word = P30 and spec §6.4; one component = spec P2 and K-1; neighbours = spec K-3; parts of 20, 25, 26, 28, 36 = spec B-1, §4.2, §4.7, §4.8, §6.2), their checks kept; rules 22 and 50 follow « UX1 question 2 ». The W63 proposals attached to UF1 (P1–P6, P15, P22, P28) and P23, S2, S6 are built in UX1-C (UF1 keeps its fixtures UF-1, UF-2, UF-4, UF-8); HB1a/HB1b are built as UX1-1; P20 (palette) is EX0b, before UX1-0 | the owner asked for « un plan très cohérent, suivable et maintenable dans le temps », not a patchwork; top-down order (« UX1 order ») needs the design system before the surfaces, but UF1 and HB1 sat after UX1 in `PROGRESS.md`, so the header and the tokens would have been inspected, then rebuilt | keep the appended draft (rules twice, two orders); audit the header and tokens now and again after HB1 and UF1 (double work, the second audit unplanned) |
+| 2026-11-24 | What the owner decides → INV1 | The owner's decision (closed list) is recorded in `docs/design/decisions-utilisatrice.md`, « Décisions de pilotage »; the integrator's part: its wording in CLAUDE.md « Autonomie » (the existing rule, edited) and the procedure to retire a rule in « Cohérence de ce fichier » (reason and date where it lived, every citation removed, the integrator's memory updated) | one home per decision; a rule removed without its citations leaves dangling references | a second rule beside « Autonomie » |
+| 2026-11-24 | R1 acceptance and G-0b → R1 | A closed R1 acceptance list is written at the start of block R1 (it absorbs « Acceptation de R1 » of PROGRESS); G-0b (one document per file) moves before R1, into point 4 after FM1, with whatever part of ADR 0031 and ADR 0034 step 8 its spec shows it needs | a v1 where only the main document is editable is not « complete » (R1's goal); an open-ended acceptance cannot be closed | keep G-0b after R1 and announce the limit (the 2026-11-13 decision, now superseded); an open acceptance list |
+| 2026-11-24 | UX1 cost → UX1 | UX1-0 measures UX1's cost (elements, states, machine-filled share, reviewer minutes per deviation) and sets each UX1-D budget; the machine checks run on every element, a person reads only the deviations they report and the fields no machine fills; an all-green element gets « keep » from the check run | every element inspected (W82) is only affordable if the inspection is mostly mechanical; an unmeasured plan cannot be held to a budget | a hand-written record per element (cost unknown, likely weeks); sampling elements (breaks W82's « sans exception ») |
+| 2026-11-24 | Owner sessions (R14) → R1 | The owner's decision (sole tester, sessions by wave, a pending one blocks R1 not `main`) is recorded in `docs/design/decisions-utilisatrice.md`; the integrator's part: its one home, CLAUDE.md « Définition de fini » step 4, with method v2 and the UX1 plan pointing there | one home per rule | — |
+| 2026-11-24 | ADR 0028 and ADR 0029 → REL1 | Both « proposed » since 2026-10-26 are ratified in block REL1 (reliability; LF1 depends on 0028) | an ADR proposed for four weeks is an open item (INV1 check 4); REL1 is where their invariants get their gate | ratify now without the evidence REL1 produces; leave them proposed |
+| 2026-11-24 | One home per piece of tonight's requests → UX1, OBS1 | Single homes fixed: target sizes = design spec §2.5 and A-7 (ux rule 9 points there); format bar = spec P1 (ux rule 2 and coherence §4 point there); start-up budget = engineering §3 at 350 ms median / 400 ms p95 (ADR 0038 point 4); decision log = CLAUDE.md « Autonomie »; review tool = CLAUDE.md « OpenRouter, même règle »; neighbour light/dark review = spec K-3 (EL-14 its check); dialog button order = spec §4.8; « nothing leaves the device without an explicit gesture; local statistics allowed under the person's control » = ux rule 10; list of functions = the function tree of UX1-A; exigences rows stable, place and state updated (CLAUDE.md « Registre »); a line added to a French document is in French (CLAUDE.md « Cohérence de ce fichier »). Method v2 corrected: `research-grounding.sh` narrowed, not removed; `docs/objectif-en-cours.md` kept as the tools' registry, its stale « Lots suivants » list removed | the owner: « que ce ne soit pas un patchwork éparpillé partout »; each pair of places had already drifted (44 px vs 24/34/44; format bar « on selection » vs fixed; start-up < 1 s vs 350/400 ms) | keep the duplicates and add cross-references (drift continues) |
+| 2026-11-24 | UX1 plan fixes → UX1 | §1.3 orders the guides only; inside the spec P7 still yields to P1–P6; rule 28 names WC1's retry dialog as the exception to « on request » (a dialog answering the person's own gesture whose outcome comes later), listed in EL-6; plain language (W3C COGA objective 3) joins rule 36 rather than a new number; open items placed: UI across versions → UX1 (UX1-B), Adwaita token upkeep → new light block AW1, RTL and other languages → spec §11 Q7 with its reopening trigger | the audit found these three contradictions and four gaps; renumbering rules 11–54 would break every citation | a rule 55 (renumbering), leaving the gaps unfiled |
+| 2026-11-24 | OBS1 design → OBS1 | One registry point `metrics` (counter, duration, gauge, histogram; `free` or `opt-in` cost) plus on-demand debug providers; values limited to numbers, declared enums and taxonomy codes; store under the profile root (`INKWELL_HOME`, one profile per instance, ADR 0037), aggregated per day, written once a minute and on close, 400 days kept; typing speed opt-in; export with pseudonyms unless the person asks for names; one Go package `internal/obs` created by the block; standard rigour plus a security review | OpenTelemetry's instrument model without its SDK (no exporter, so nothing can be sent); architecture §11 O-4 already keeps in-memory counters; a year-long calendar needs a year | a full OpenTelemetry SDK (an exporter exists to send data, against rule 10); a per-event log (keystroke-level data, privacy and cost); storing stats in the project (they would sync) |
+| 2026-11-24 | Blind review of the integration → UX1, OBS1 | Applied: UF-1 and UF-2 fixtures built in UX1-0 and the UF-4 lint in UX1-C (taken from UF1, which keeps UF-8), since UX1 runs before UF1; UX1-0 enumerates the state sources that exist (no XState in `frontend/src` today), machines join as blocks build them; order EX0 → OBS1 → EX0b → EX0c, UX1 after EX0b, UX1-B after EX0c; UX1 and OBS1 reviews are standard-tier (blind Opus plus Gemini, never OpenRouter); no owner acceptance as an exit; the decisions of `docs/objectif-en-cours.md` moved to this file and to `docs/design/decisions-utilisatrice.md`; rules 11–54 keep one wording (plan §3.12, French), the tables keep source, reason and proof; OBS1 store under `INKWELL_HOME` | the review found inputs built after their consumer, a second review route, and decisions in three places | keep UF1 before UX1 (it sat in point 5, after R1 work); keep two wordings per rule |
+
+## Carried over from objectif-en-cours.md (2026-11-24)
+
+Moved verbatim, in French, when `docs/objectif-en-cours.md` was reduced to the tools' registry (one home per decision);
+the owner's own decisions of that section went to `docs/design/decisions-utilisatrice.md`.
+
+
+2026-11-22 — DEP1 : la tâche `test:py` ajoute les tests du verrou mise. Le reste de la tâche correspond exactement à la base de fusion. Le garde enregistre l'empreinte de cet ajout. [Preuves DEP1](plans/2026-11-22-dep1.md#locked-tool-installs-in-github-actions).
+
+Les spécifications sont acceptées (design rév. 7 + 7.1, architecture rév. 8.1 + 8.2) ; on ne les
+change plus que par une décision consignée dans `docs/architecture/decisions.md` ou
+`docs/design/decisions-utilisatrice.md`.
+
+2026-11-03 — décision technique (boucle extérieure), modèle de menace des portes : le garde anti-affaiblissement (`scripts/gate-guard.py`) protège contre un agent qui affaiblit une porte **par commodité ou par erreur** (test sauté, délai relevé, commande assouplie, exécuteur modifié), pas contre un agent délibérément malveillant ; il reste proportionné à la demande de l'utilisatrice (règles explicites et relisibles, dérogations revues, aucun bac à sable du dépôt ; `.git/info/exclude` hors périmètre). `mise run gate` exécute le `scripts/gate.py` de la base de fusion (copie temporaire, `python3 -I`), et celui-ci exécute le garde de la base de fusion hors du dépôt ; amorçage : si la base n'a pas d'exécuteur au protocole, celui de l'arbre tourne et le manifeste l'indique. Le garde protège aussi tout ce que les critères appellent : tâches mise, scripts et configurations d'outils, déterminés à partir des commandes de la base de fusion.
+
+2026-11-03 — décision de sécurité (spec §9.11, refuser plutôt qu'affaiblir) : la sonde des espaces de noms (`probeOutputMount`) a un délai de 5 s. Seul un refus **définitif** choisit le lancement sans espaces de noms et est mis en cache : `clone`/`unshare` ou la pose des correspondances d'identifiants refusés par EPERM, EINVAL ou ENOSPC (sysctl, AppArmor, noyau sans espaces de noms utilisateur), ou l'enfant de sonde qui reçoit l'une de ces erreurs en montant (code de sortie 120). Ce repli garde no_new_privs, les capacités retirées, les limites de ressources, Landlock et seccomp (tous deux obligatoires), mais n'a ni espace de noms utilisateur, montage, PID ou IPC, ni surcouche IPC. Un dépassement du délai ou toute autre erreur passagère refuse **ce** lancement (`ErrProbeInconclusive`, à réessayer), n'est jamais mis en cache comme « non pris en charge », et la sonde est relancée après un recul exponentiel (1 s à 30 s). Même traitement pour la sonde d'isolement réseau (`probeIsolation`) : un refus définitif laisse `NoNetwork` au seul proxy, un résultat non concluant refuse le lancement (et le moteur Typst). Tests : `TestOutputMountProbeHungChildRefusesLaunch`, `TestOutputMountProbeDefinitiveRefusalSelectsFallback`, `TestIsolationProbeHungChildRefusesLaunch`, `TestIsolationProbeDefinitiveRefusalSelectsFallback`.
+
+### Preuves L0 — 2026-11-02
+
+État vérifiable : `gates/L0.json` (critères pass/fail/deferred, reports séparés, raisons et lots cibles).
+Références, limites de validité et seuils : `docs/perf/baseline/2026-11-02/README.md`
+et `docs/perf/baseline/2026-11-02/thresholds.json`. Le registre N38 reste géré séparément.
+Le démarrage mesure l'application actuelle sans plugins, processus froid du build serveur
+jusqu'à l'éditeur Chromium utilisable ; navigateur pré-lancé, caches OS chauds : cette
+référence locale ne certifie pas une fenêtre native. PERF-TYPE est un proxy Chromium censuré,
+avec borne supérieure du p95, jamais une certification du p95 WebKitGTK natif.
+
+| Date | Décision |
+|---|---|
+| 2026-11-02 — décision technique (boucle extérieure) | PERF-START : application actuelle sans plugins ; chargement des plugins différé au lot Fondations-extensibles (Fondations extensibles), jamais compté réussi. |
+| 2026-11-02 — décision technique (boucle extérieure) | PERF-MEM : deferred: L2 ; ouverture réelle de plusieurs fichiers G-0 livrée en L2, ajoutée à sa porte. |
+| 2026-11-02 — décision technique (boucle extérieure) | PERF-TYPE : référence proxy Chromium, avec réserve de validité ; frappe → peinture WebKitGTK natif ajoutée à la porte L2. |
+| 2026-11-02 — décision technique (boucle extérieure) | PM-5 : Go, delta benchstat strictement > +5 % en temps ou allocs/op ET p < 0,05 ; latences e2e et mémoire : p95 de référence × 1,10. Seuils figés dans thresholds.json ; mémoire sans valeur tant que différée. regression-guard compare les nouvelles mesures ; L0 exige chargement et autotest. |
+| 2026-11-02 — décision technique (boucle extérieure) | PERF-RELAY-ALLOC: 1 alloc/op vs 0 target — to fix in a later perf lot ; 48 B/op ; cible zéro inchangée, échec connu conservé. |
+| 2026-11-02 — décision technique (boucle extérieure) | Critères pass, fail ou deferred ; deferred exige lot cible nommé et raison, liste séparée au manifeste. Tous les non-différés doivent passer ; autotests : report sans lot, sans raison et échec coexistant avec report. Un report ne masque jamais un échec. |
+| 2026-11-02 — décision technique (boucle extérieure) | Annulation de la modification N38 dans exigences.md ; état du lot consultable via gates/L0.json ici, sans modifier l'état du registre. |
+
+### Déviation connue L1 — audit de sécurité non approuvé
+
+Le sandbox redémarre depuis le binaire GUI cgo au lieu du binaire statique
+`inkwell-sandbox` prévu aux sections 9.5/9.10. Correction différée au lot
+**Fondations extensibles (plugin host needs the same static launcher)**.
+
+Décision L1 : les nouveaux tests IPC ignorent uniquement les protections absentes du
+ noyau (signal : ABI < 6 ; socket Unix par chemin : ABI < 9), comme demandé par
+ l'audit. Aucun test existant n'est ignoré. Sur ABI suffisante, un échec de
+ confinement reste bloquant. L'exception anti-affaiblissement est liée au contenu
+ exact du fichier de tests, et ne change aucun seuil ni aucune porte.
+
+### 2026-11-03 — décision technique
+
+Pour L1, l'analyse typée tourne maintenant nativement sur Linux avec cgo activé,
+avec les tags desktop (`production`) et `server`. Sur darwin et windows (amd64 et
+arm64), elle tourne maintenant avec `CGO_ENABLED=0` et les tags desktop.
+Une passe `go/parser` indépendante des tags parcourt les sources Go, y compris
+celles qui importent `C`, et interdit `C` et `os/exec` hors de l'allowlist
+`internal/sidecar` (les helpers de tests gardent leur exemption existante).
+Les fixtures négatives `testdata` ne sont pas du code applicatif.
+
+| Validation | Statut | Lot cible | Raison |
+| --- | --- | --- | --- |
+| Type-check complet avec cgo sur darwin/windows | deferred | Six plates-formes (N35) — CI natif par OS/arch | Nécessite les SDK et runners natifs par OS selon ADR 0003 ; la passe sans cgo ne valide pas ces fichiers. |
+| Validation des traces seccomp arm64 | deferred | Six plates-formes (N35) — CI natif par OS/arch | Nécessite un runner Linux arm64 natif ; une analyse statique ne prouve pas les appels réellement exécutés. |
+
+Ces reports ne sont jamais des passes et figurent séparément dans le manifeste L1.
+
+Précision darwin : Wails ne compile pas son package `application` sans cgo
+(même ses fichiers Go référencent les définitions natives exclues). Le root
+`cmd/inkwell` est donc couvert maintenant par la passe syntaxique ; son analyse
+typée complète relève explicitement du report cgo N35. Les autres packages
+restent analysés sans cgo ; aucune erreur de ceux-ci n'est ignorée.
+
+### 2026-11-07 — décision technique fournie par l’utilisatrice (lecture Claude, PERF-TYPE)
+
+> Spec reading (Claude decision, record it in docs/objectif-en-cours.md as a technical decision): spec.md:2568 "≤ 16 ms par image" is a per-frame budget (frame work/interval; no dropped or long frame), not input-to-next-vsync latency.
+
+> Use Event Timing to validate the oracle on the slow-layout positive control (which must exceed the threshold and must be detected), and use the handler/frame measurement for normal keystrokes.
+
+> You cannot open a window: write, unit-test, then give me the exact command; I run it on the host.
+
+Application : budget de travail par image **16 ms**, gestionnaire **4 ms**, aucune
+pause **>50 ms**, inchangés. L’attente du prochain rafraîchissement et les durées
+Event Timing sont des diagnostics séparés, pas des mesures du travail par image.
+Les intervalles réels sont conservés et les images manquées sont recherchées par
+rapport à la cadence observée ; aucune attente vsync n’est soustraite d’un budget
+de travail. L’oracle de travail d’image doit détecter le témoin lent, corroboré
+par Event Timing ; l’absence d’entrées rapides (seuil minimal 16 ms) n’est pas un
+échec d’oracle. Aucun témoin absent/manqué ne donne un succès.
+Le poste doit avoir l’écran allumé et déverrouillé ; le dialogue GNOME autorisant
+XTest peut voler le focus. Cette passe n’ouvre aucune fenêtre. L3 reste bloqué
+jusqu’à la nouvelle mesure native ; aucune optimisation ni réussite n’est déduite
+des seuls tests unitaires.

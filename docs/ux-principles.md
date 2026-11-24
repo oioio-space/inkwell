@@ -8,9 +8,11 @@ mesuré en tests utilisateurs à chaque étape.
 
 1. **Une fenêtre, trois zones** : Fichiers à gauche, éditeur au centre, aperçu à droite ;
    chaque zone se replie d'un geste et se souvient de son état par projet.
-2. **Le texte d'abord** : barre d'en-tête Adwaita (titre, état de synchro, avatars), c'est
-   tout. La barre de formatage apparaît sur la sélection ; les panneaux secondaires
-   partagent un tiroir à onglets à droite.
+2. **Le texte d'abord** : barre d'en-tête Adwaita (titre, état de synchro, avatars) ; les barres
+   présentes et la barre de mise en forme (fixe, repliable, choix de l'utilisatrice) sont fixées par
+   la [spec de design](design/spec.md), principe P1 et §3 (« La barre de mise en forme suit le choix de la
+   personne ») ; les panneaux secondaires partagent un
+   tiroir à onglets à droite.
 3. **Trois accès à tout** : clic, raccourci, palette (Ctrl/Cmd+Maj+P, et menu › « Rechercher une commande… ») qui affiche le
    raccourci ; Ctrl/Cmd+K reste « lien » (décision de cohérence C14, 2026-11-01).
 4. **Zéro jargon** : voir [glossaire](glossary.md).
@@ -22,9 +24,12 @@ mesuré en tests utilisateurs à chaque étape.
    reprises de la charte du PDF produit.
 8. **Première minute soignée** : nom, couleur, projet d'exemple ouvert, aperçu qui se met à
    jour dès la première frappe ; aucune question réseau avant le premier partage.
-9. **Clavier complet, lecteur d'écran, contraste** : focus visible, cibles de 44 px,
+9. **Clavier complet, lecteur d'écran, contraste** : focus visible, tailles de cible de la spec de design (A-7),
    `prefers-reduced-motion`, thème système.
-10. **Mesurer sans télémétrie** : tests en personne, jamais de collecte.
+10. **Rien ne quitte l'appareil sans un geste explicite** : aucune télémétrie, aucun envoi automatique ;
+    les statistiques locales sont permises, sous le contrôle de la personne (voir, exporter, effacer,
+    couper : `docs/plans/2026-11-24-obs1-observability.md`) ; l'interface se mesure par des tests en
+    personne. Seule place de cette règle : les autres textes y renvoient.
 
 ## Système visuel
 

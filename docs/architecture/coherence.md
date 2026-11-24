@@ -86,9 +86,13 @@ greffon (`importers`, `exporters`) peut l'offrir. Le reste de cet écart est not
 ## 4. Carte produit : chaque fonction à sa place
 
 Principe : **calme, l'écriture d'abord**. À l'ouverture : Fichiers à gauche, le texte, l'aperçu
-si la fenêtre est assez large ; **aucun tiroir ouvert** ; la barre de mise en forme se masque.
+si la fenêtre est assez large ; **aucun tiroir ouvert** ; la barre de mise en forme suit le choix de la personne
+(spec de design, P1 : fixe, repliable).
 Trois accès à toute action : menu, raccourci, palette. Rien d'affiché pour une fonction absente
-ou non installée.
+ou non installée. Le tableau ci-dessous donne les surfaces ; la liste des fonctions, chacune avec son
+écran, son emplacement et son rang, son bloc, ses exigences et son état, a une seule place à partir
+d'UX1-A : l'arbre des fonctions `docs/ux/functions.toml` (W85, [plan UX1](../plans/2026-11-24-ux1-interface-plan.md)
+UX1-A) → UX1.
 
 | Surface | Contenu | Surcharge constatée → simplification |
 |---|---|---|
@@ -106,7 +110,9 @@ ou non installée.
 ## 5. Phasage, sur les étapes de `PROGRESS.md`
 
 Chaque lot livre un usage complet ; qualité, clavier et reprise accompagnent chaque lot (pas en
-dernier). Une alpha Linux ne clôt ni N35, ni N37, ni L5.
+dernier). Une alpha Linux ne clôt ni N35, ni N37, ni L5. Les lots ci-dessous disent la valeur, le risque
+et la porte ; ils ne listent pas les fonctions une à une : à UX1-A, leur colonne « Exigences » se réduit
+aux identifiants et chaque fonction renvoie à son nœud de l'arbre des fonctions (W85) → UX1.
 
 ### MVP (alpha utile) — terminer les étapes 1 à 3, avec le minimum des étapes 5 et 6
 
@@ -114,6 +120,8 @@ WC1 belongs to **Collaborer sans perdre** and uses the existing editing and pres
 E2E3 verifies the existing invitation flow in **Collaborer sans perdre** and variant sharing in **Relire** → E2E3
 HP1 and HP1r upgrade the existing relayed connection in **Collaborer sans perdre** while keeping PU1's acceptance and inbound lifecycle rules. [Direct-upgrade rules](../plans/2026-11-16-hp1-direct-upgrade.md) → HP1
 DEP1 refreshes the build, release and dependency pins used by Distribution. The local `pregate` checks the tool lock for both Linux architectures. WAILS1 qualifies the existing native window and Streams used in Collaborer sans perdre. [Evidence and W48 scope](../plans/2026-11-22-dep1.md) → DEP1, WAILS1
+OBS1 ajoute un point de contribution (`metrics`) au registre des **Fondations extensibles** : chaque module ou greffon y déclare ses mesures et son état de débogage, gardés sur l'appareil ; ils sont lus plus tard dans **Première minute et secours** (rapport RP1, page de débogage) et par une page de statistiques personnelles (W86). [Plan d'observabilité](../plans/2026-11-24-obs1-observability.md) → OBS1
+UX1 inspecte chaque surface existante d'**Écrire et retrouver** et de **Première minute et secours** contre un seul jeu de règles, et les fonctions nouvelles entrent par le registre des **Fondations extensibles** (W82, W83, W84, W85). [Plan de l'interface](../plans/2026-11-24-ux1-interface-plan.md) → UX1
 
 | Lot | Exigences | Valeur | Risque traité | Porte |
 |---|---|---|---|---|
@@ -124,7 +132,7 @@ DEP1 refreshes the build, release and dependency pins used by Distribution. The 
 | Comprendre, corriger, produire | N28, N29 (socle), U4, U9, U15, U17, U18, L1 | erreurs cliquables, F8, complétion et survol de la charte, aperçu et PDF hors ligne | tinymist non branché | `problems.spec.ts`, `PERF-LSP` |
 | Première minute et secours | N17, N19, U31, U32 ; W40 R4 (accueil, nom et couleur, projet d'exemple, écran Projets avec « Rejoindre ») ; W44 (journaux de diagnostic, plantage repris, santé visible, « Copier le rapport » : `docs/plans/2026-11-09-diagnostics.md`) ; sauvegarde locale et restauration à côté ; aide embarquée ; fr et en | ne jamais avoir peur de perdre | confiance | tests en personne, Orca |
 | Revenir en arrière | N39 (voyager, restaurer, comparer, versions nommées), **après** les épingles des versions dans le ménage (HI-9) et la sémantique d'« Intégrer » (HI-6) | se tromper et revenir sans Git | perte perçue | e2e Historique |
-| Fondations extensibles | registre unique, extensions intégrées TypeScript (N21, N24 socle) ; W34 (portage mobile : étude, garder Typst derrière une interface) | ajouter sans « verrue » | réécriture plus tard | P-EXT-1, P-EXT-2 |
+| Fondations extensibles | registre unique, extensions intégrées TypeScript (N21, N24 socle) ; W86 (point `metrics` : mesures et état de débogage locaux, OBS1) ; W34 (portage mobile : étude, garder Typst derrière une interface) | ajouter sans « verrue » | réécriture plus tard | P-EXT-1, P-EXT-2 |
 
 ### v1 (première version générale) — finir les étapes 3 et 4, industrialiser 5 et 6
 

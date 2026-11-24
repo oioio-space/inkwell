@@ -12,11 +12,11 @@ Règles de travail : [../CLAUDE.md](../CLAUDE.md). Tout fichier ou dossier ajout
 | La finalité du produit | [conception.pdf](conception.pdf) | document d'origine |
 | Les demandes de l'utilisatrice et leur état | [exigences.md](exigences.md) | une ligne par exigence |
 | Ce qui reste à trancher | [open-questions.md](open-questions.md) | questions closes gardées avec leur lien |
-| Le registre des blocs lu par les outils, les décisions de pilotage en vigueur | [objectif-en-cours.md](objectif-en-cours.md) | bloc `gate-lots` lu par `scripts/gate.py` |
+| Le registre des blocs lu par les outils | [objectif-en-cours.md](objectif-en-cours.md) | bloc `gate-lots` lu par `scripts/gate.py` ; ni ordre, ni état, ni décision (`PROGRESS.md`, et les deux journaux ci-dessous) |
 | Comment on travaille (méthode, preuves) | [engineering-principles.md](engineering-principles.md), [plans/2026-11-12-method-v2.md](plans/2026-11-12-method-v2.md) | |
 | Lancer chaque exécutant IA (Codex, OpenRouter, opencode, Gemini), prérequis hors dépôt, pièges | [executors.md](executors.md) | point d'entrée des IA hors Claude : [../AGENTS.md](../AGENTS.md) |
-| Les choix tranchés en autonomie | [autonomous-decisions.md](autonomous-decisions.md) | décisions durables seulement |
-| Les choix produit de l'utilisatrice | [design/decisions-utilisatrice.md](design/decisions-utilisatrice.md) | |
+| Les choix tranchés en autonomie | [autonomous-decisions.md](autonomous-decisions.md) | ce qui y entre : `CLAUDE.md`, « Autonomie » |
+| Les choix de l'utilisatrice elle-même (produit et pilotage) | [design/decisions-utilisatrice.md](design/decisions-utilisatrice.md) | |
 | Les décisions d'architecture | [adr/](adr/) | MADR, numérotées |
 | Doutes et amendements aux spécifications acceptées | [architecture/decisions.md](architecture/decisions.md) | |
 | L'architecture (paquets, dépendances, frontières) | [architecture.md](architecture.md) → [architecture/](architecture/README.md) | spec, cohérence §5 (périmètre MVP/v1), traçabilité |

@@ -18,7 +18,7 @@ ailleurs ; elle y renvoie :
 | Des tests qui prouvent la règle, pas la couverture | `CLAUDE.md`, étapes 2 et 5 (TDD, mutation) |
 | Des budgets de performance chiffrés avant le code, puis mesurés | § 3 ; `CLAUDE.md`, « Performance mesurée » |
 | Sécurité et confidentialité pensées pour chaque fonction | § 4 ; agent `security-auditor` |
-| Ce qui arrive est observable : événements, santé visible | W44, `docs/plans/2026-11-09-diagnostics.md` |
+| Ce qui arrive est observable : événements, santé visible, mesures et état de débogage par module | W44, `docs/plans/2026-11-09-diagnostics.md` ; W86, `docs/plans/2026-11-24-obs1-observability.md` (OBS1) |
 | Le texte suffit pour que quelqu'un d'autre le refasse (liste vide de « ce qu'il faudrait deviner ») | pour le protocole : `docs/protocol/README.md`, point 10 ; pour le reste : la relecture du plan à l'étape 1 |
 | Quand ça devient difficile : on s'arrête, on reformalise, jamais de rustine | `CLAUDE.md`, « Discipline de modification » |
 
@@ -73,7 +73,7 @@ une relecture doit confirmer, pas découvrir. Avant toute relecture, l'auteur d'
 |---|---|
 | Une régression de performance se juge par comparaison appariée, entrelacée et aléatoire à la référence validée (merge-base), borne exacte unilatérale ; un budget absolu se certifie par statistique d'ordre ; une erreur d'environnement rend la mesure invalide et rejouée, jamais réussie ni régressée (ADR 0038) | bloc PB : `scripts/perf/paired.py`, `pbmodel_test.py`, porte `gates/PB.toml` |
 | Mesurer avant d'optimiser ; toute optimisation est prouvée par `benchstat` (`-count ≥ 10`) | `mise run bench:compare` ; paquets listés dans `HOT_PATHS:` (CLAUDE.md) |
-| Budgets explicites : frappe → affichage distant < 100 ms en LAN ; aperçu Typst < 300 ms après la dernière frappe ; démarrage < 1 s ; document de 50 000 opérations ouvert < 2 s | tests de charge et e2e (étapes 1, 3, 5) |
+| Budgets explicites : frappe → affichage distant < 100 ms en LAN ; aperçu Typst < 300 ms après la dernière frappe ; démarrage jusqu'à un éditeur utilisable : médiane ≤ 350 ms et p95 ≤ 400 ms (décision de l'utilisatrice du 2026-11-11, ADR 0038 point 4 ; seule place de ce budget, resserré par ST1) ; document de 50 000 opérations ouvert < 2 s | tests de charge et e2e (étapes 1, 3, 5) |
 | Pas d'allocation dans les boucles chaudes (relais d'updates, hachage de blobs) ; flux plutôt que `ReadAll` | `-benchmem` ; revue |
 | Concurrence bornée : chaque goroutine a une condition de sortie et un propriétaire ; `context` partout | skill `goroutine-leak-check` ; `go test -race` |
 | PGO (`default.pgo`) sur le binaire une fois un profil réel disponible | étape 6 |
@@ -98,10 +98,10 @@ une relecture doit confirmer, pas découvrir. Avant toute relecture, l'auteur d'
 | Règle | Preuve |
 |---|---|
 | Ce que l'interface affiche comme vrai (« Synchronisé », rôles, états) suit un modèle d'état formel | modèle TLA+ et test fast-check à modèle, mutants (`docs/plans/2026-11-09-ui-formal.md`, bloc SI1) |
-| Accessibilité WCAG 2.2 AA dans **chaque** spec Playwright, dialogues et popovers compris (UF-1) | fixture axe-core commune ; violation semée ⇒ rouge (bloc UF1) |
-| Ce qui doit être cliquable l'est : chaque élément interactif visible est la cible de son centre (UF-2) | invariant `elementFromPoint` dans la fixture ; mutant de recouvrement attrapé (bloc UF1) |
+| Accessibilité WCAG 2.2 AA dans **chaque** spec Playwright, dialogues et popovers compris (UF-1) | fixture axe-core commune ; violation semée ⇒ rouge (bloc UX1, UX1-0 ; reprise de UF1 le 2026-11-24) |
+| Ce qui doit être cliquable l'est : chaque élément interactif visible est la cible de son centre (UF-2) | invariant `elementFromPoint` dans la fixture ; mutant de recouvrement attrapé (bloc UX1, UX1-0 ; reprise de UF1 le 2026-11-24) |
 | Un parcours de plus de trois états est une machine XState v5, ses tests Playwright en sont générés (UF-3) | `xstate/graph` chemins les plus courts, assertions par état, mutant par machine (blocs UF2…) |
-| Composants Adwaita, jetons sémantiques seuls, aucune valeur brute (UF-4) | lint dans `fe:check` ; couleur brute semée ⇒ rouge (bloc UF1) |
+| Composants Adwaita, jetons sémantiques seuls, aucune valeur brute (UF-4) | lint dans `fe:check` ; couleur brute semée ⇒ rouge (bloc UX1, UX1-C ; reprise de UF1 le 2026-11-24) |
 | Effort borné pour les cinq tâches (créer, partager, relire, présenter, exporter) (UF-5) | comptes d'opérateurs et temps KLM par tâche, budgets figés ; étape ajoutée ⇒ rouge (bloc UF2) |
 | Simple à voir, rien d'inaccessible : budget de commandes visibles par vue ; chaque commande dans la palette et à deux pas au plus d'un menu (UF-6) | énumération du registre de commandes |
 | Annuler plutôt que confirmer (UF-7) | toute transition destructive d'une machine a son « Annuler » |

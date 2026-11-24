@@ -1,6 +1,6 @@
 # Diagnostics study: logs, crashes, health signals, local report (2026-11-09)
 
-Status: study only, nothing implemented. Written in English per CLAUDE.md. Scope: when someone's Inkwell crashes, degrades or misbehaves (network, sync, Typst, storage, UI), we must be able to see why, with no telemetry and no document data. Requirement to file: W44 (diagnostics), attached to
+Status: study only, nothing implemented. Written in English per CLAUDE.md. Scope: when someone's Inkwell crashes, degrades or misbehaves (network, sync, Typst, storage, UI), we must be able to see why, with no telemetry and no document data (the rule's one home: `docs/ux-principles.md` rule 10; local metrics: OBS1). Requirement to file: W44 (diagnostics), attached to
 the lot "Premiere minute et secours" of `docs/architecture/coherence.md` section 5, with the network-health part feeding W33 and the failure-class proofs feeding W36.
 
 Method note: the audit (section 1) is from the code at HEAD 05919a1 (file:line). The research (section 2) cites URLs from the author's knowledge of these projects; they were not re-fetched in this pass, so each is marked "verify" and must be re-read in the plan step (Research-first) before

@@ -127,7 +127,7 @@ l'application ([PROGRESS.md](../../PROGRESS.md)).
 | NG5 | Go qui lit ou fusionne Automerge | ADR 0002, 0011 |
 | NG6 | Téléchargement à l'exécution (sidecars, paquets Typst, polices) | ADR 0024 |
 | NG7 | Port réseau local pour le pont webview ↔ Go | ADR 0009 |
-| NG8 | Télémétrie ; tout envoi automatique de journaux | conception p. 15 |
+| NG8 | Télémétrie ; tout envoi automatique de journaux (règle : `docs/ux-principles.md` règle 10 ; statistiques locales permises, OBS1) | conception p. 15 |
 | NG9 | Consensus ou quorum (l'édition hors ligne passe avant ; l'auto-équivoque reste arbitrée par un admin) | ADR 0031 R1 |
 | NG10 | v2, hors de ce document sauf mention : brouillons **privés**, résumés par modèle, Tiptap, aperçu partagé pour un invité sans l'application, télécommande téléphone, `join` sans fenêtre, intégrer les changements d'un **autre projet** | conception p. 7, 38 ; `AD-34`, `AD-35`, `AD-96` |
 
@@ -2450,7 +2450,8 @@ peut pas épuiser la mémoire d'un autre.
   charge (`AD-15`). Il sert à rejouer un incident en simulation.
 - **O-4** Compteurs en mémoire (par pair : trames, refus, octets ; par Stream : crédits ;
   disque : latence de `fsync`) affichés dans « Détails techniques ». Rien ne quitte
-  l'appareil.
+  l'appareil (règle 10 de `docs/ux-principles.md`). Ils s'inscrivent au point `metrics` du registre
+  et sont agrégés par jour dans le profil : `docs/plans/2026-11-24-obs1-observability.md` (OBS1).
 - **O-5** Enregistreur de vol Go (`runtime/trace.FlightRecorder`, Go ≥ 1.25) armé à la
   demande et quand la boucle d'un acteur ne répond plus depuis 2 s ; la trace ne contient
   aucune donnée de document (aucune étiquette ni tâche nommée d'après un contenu).
@@ -2572,7 +2573,7 @@ référence sur le matériel de CI (amd64 et arm64), puis tenues.
 | relais d'un message dans Go (pont → session), ≤ 64 Kio | ≤ 50 µs, **0 allocation** | `BenchmarkRelay` | une goroutine par session, dépôts non bloquants |
 | hachage et vérification de blob | BLAKE3, blob de 64 Mio, cache chaud : ≥ 500 Mo/s par cœur sur amd64 (AVX2), ≥ 300 Mo/s sur arm64, à confirmer par la mesure de référence ; vérification Bao en flux | `BenchmarkPut/Read/Fetch` | `errgroup.SetLimit(GOMAXPROCS)` sur les groupes de 16 Kio |
 | écriture d'un incrément | ≤ 2 ms hors `fsync` ; `fsync` groupé ≤ 500 ms (D-8) | `BenchmarkWriteAtomic`, LazyFS | un travailleur par voie (≤ W+2) |
-| démarrage | fenêtre peinte ≤ 1 s ; dernier projet modifiable ≤ 1,5 s ; registre des extensions ≤ 10 ms (50 manifestes) ; préchauffage des greffons (H-4) seulement **après** « dernier projet modifiable », à priorité basse | `PERF-START` mesuré **avec six greffons épinglés**, `BenchmarkRegistryBuild` | travail lent après la peinture |
+| démarrage | éditeur utilisable : budget de `docs/engineering-principles.md` §3 ; fenêtre peinte ≤ 1 s ; dernier projet modifiable ≤ 1,5 s ; registre des extensions ≤ 10 ms (50 manifestes) ; préchauffage des greffons (H-4) seulement **après** « dernier projet modifiable », à priorité basse | `PERF-START` mesuré **avec six greffons épinglés**, `BenchmarkRegistryBuild` | travail lent après la peinture |
 | aperçu | ≤ 1 s complet (20 pages) ; ≤ 300 ms incrémental (`AD-26`) | `PERF-PREVIEW` | une compilation active, la précédente annulée |
 | service de langage | ≤ 100 ms (complétion, signature, survol) | `PERF-LSP` | réponses périmées jetées |
 | recherche dans le projet (10 000 fichiers) | premiers résultats ≤ 100 ms, fin ≤ 500 ms | `PERF-SEARCH` | `errgroup.SetLimit` sur les fichiers, résultats en flux |

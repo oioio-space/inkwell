@@ -138,7 +138,9 @@ les étapes 1 à 8 dans le même ordre :
 4. Vérifications rapides : lint, `fe:check`, `lint:env`, `lint:claude-md` ; puis `mise run formal`
    (TLA+, Alloy, mutants) ; puis les tests (Go, frontend, `test:py`) ; toute modification d'interface
    passe en plus par le skill `ux-walkthrough` (agent `ux-tester`), avant fusion et avant release, et toute
-   fonction visible par une courte séance avec l'utilisatrice devant l'application (SEQ consigné, R14).
+   fonction visible par une courte séance avec l'utilisatrice devant l'application (SEQ consigné, R14) ; elle
+   reste la seule testeuse (décision du 2026-11-24) : les séances se groupent par vague, une séance en attente
+   bloque R1, pas `main` (le bloc fusionne et sa séance est inscrite à la ligne R1 de `PROGRESS.md`).
 5. **Mutation** (gremlins) sur les paquets `protocol/*` touchés : efficacité ≥ 95 %, ou survivants
    justifiés comme équivalents dans `SIMPLIFY.md` (« mutation <paquet> »). Un test nomme la règle de
    la spec qu'il prouve ; l'utilité se mesure à la mutation, pas à la couverture.
@@ -155,7 +157,8 @@ les étapes 1 à 8 dans le même ordre :
    resté rouge sur `main` le 2026-11-12).
 
 **Registre des exigences :** chaque demande de l'utilisatrice est dans `docs/exigences.md` (date, où,
-état) — l'y ajouter dès qu'elle arrive, le mettre à jour à chaque fusion. Elle reçoit aussitôt **sa place
+état) — l'y ajouter dès qu'elle arrive ; une ligne est stable (sa demande et sa date ne se réécrivent pas),
+seuls son « où » et son état suivent chaque fusion. Elle reçoit aussitôt **sa place
 dans le plan global** : un lot de `docs/architecture/coherence.md` §5 (et sa place dans la liste ordonnée de `PROGRESS.md`),
 rattachée à un écran ou un mécanisme existant — jamais une tâche isolée ni une « verrue » (voir « Cohérence de
 l'interface »). Il en va de même de **tout point ouvert, où qu'il soit** (exigence non faite ; résiduel, report ou
@@ -171,13 +174,16 @@ long terme » ; branches et worktrees dans sa section « Travaux en cours »). `
 - tout ce qui est cité existe (tâches, chemins, agents, skills, hooks) ; un chemin à venir porte son
   échéance « (étape N) » ; `mise run lint:claude-md` le vérifie et fait partie de `ci` ;
 - ce qui est nouvellement écrit dans le projet (code, nouveaux docs, commits, rapports) est en anglais ;
-  les docs existantes restent en français (pas de traduction) ; les messages à l'utilisatrice sont en français ;
+  les docs existantes restent en français (pas de traduction), et ce qu'on y ajoute (une ligne de
+  `docs/exigences.md`, un paragraphe) suit la langue du document ; les messages à l'utilisatrice sont en français ;
+- retirer une règle : sa raison et la date restent en une ligne là où elle vivait, chacune de ses citations est
+  retirée (`grep` sur le dépôt, puis `mise run lint:claude-md`), et la mémoire de l'intégratrice est mise à jour ;
 - après la modification, relire le fichier entier pour les contradictions ; audit périodique avec
   `/claude-md-management:claude-md-improver`.
 
 ## Règles de travail
 
-**Autonomie (règle, 2026-11-12) :** avancer sans s'arrêter, en préférant toujours le choix d'ingénierie pérenne à la vitesse (ce qui évite de perdre du temps ou de créer des difficultés ensuite), en faisant soi-même les choix les plus pertinents dans les orientations déjà prises par le projet (règle d'or, définition de « fini », invariants) ; trancher soi-même tous les choix, produit compris, et consigner chacun dans `docs/autonomous-decisions.md` (date, choix, raison, alternatives) pour le lui présenter quand elle demande où on en est ; elle réoriente à ce moment-là ; enchaîner aussitôt sur le bloc suivant.
+**Autonomie (règle, 2026-11-12, bornée le 2026-11-24) :** avancer sans s'arrêter, en préférant toujours le choix d'ingénierie pérenne à la vitesse (ce qui évite de perdre du temps ou de créer des difficultés ensuite), en faisant soi-même les choix les plus pertinents dans les orientations déjà prises par le projet (règle d'or, définition de « fini », invariants) ; trancher soi-même tous les choix, produit compris, hors la liste fermée ci-dessous, et consigner chacun dans `docs/autonomous-decisions.md` (date, choix, raison, alternatives ; seule place des choix tranchés seule, ceux de l'utilisatrice elle-même allant dans `docs/design/decisions-utilisatrice.md`) pour le lui présenter quand elle demande où on en est ; elle réoriente à ce moment-là ; enchaîner aussitôt sur le bloc suivant. Elle seule décide, liste fermée (2026-11-24) : un acte irréversible ou public (étiquette publique, publication, push vers un dépôt extérieur au projet, texte envoyé en amont), une dépense d'argent au-delà des budgets déjà accordés (méthode v2), le retrait d'une garantie promise ; on le lui demande, en attendant on avance sur le reste.
 
 **Research-first :** fonder toute réponse technique non triviale sur des sources externes actuelles
 (WebSearch/WebFetch pour l'état de l'art, GitHub via `scripts/ghx.sh` pour l'existant, docs
@@ -194,7 +200,7 @@ jour depuis les notes officielles (`https://go.dev/doc/go1.N`) à chaque montée
 (`.golangci.yml`) refuse les idiomes dépassés.
 
 **Discipline de modification (d'après andrej-karpathy-skills, MIT) :**
-- énoncer ses hypothèses avant d'agir ; en cas de doute, vérifier dans le code ou demander ;
+- énoncer ses hypothèses avant d'agir ; en cas de doute, vérifier dans le code (on ne demande que ce que la liste fermée d'« Autonomie » réserve à l'utilisatrice) ;
 - modifications chirurgicales : chaque ligne changée se rattache à une exigence ou à une porte, pas de
   nettoyage opportuniste hors du périmètre (le `/simplify` porte sur le diff du lot) ;
 - critère de réussite vérifiable par une machine avant d'écrire du code (porte du lot, test) ;
@@ -214,8 +220,8 @@ Elle doit :
   onglets, bannières, toasts, popovers) ;
 - reprendre le même vocabulaire et les mêmes raccourcis ;
 - trouver sa place dans un panneau ou un menu existant avant d'en créer un ;
-- passer une revue de cohérence visuelle (captures clair et sombre, comparées aux écrans voisins)
-  avant la fusion ;
+- passer la revue de cohérence visuelle avant la fusion (règle K-3 de `docs/design/spec.md`, vérifiée par
+  UF-26 de `docs/engineering-principles.md` §5, à écrire en UX1-0) ;
 - respecter les règles de `docs/ux-principles.md` et leurs preuves exécutables (jetons Adwaita,
   accessibilité, cliquabilité, effort par tâche, parcours en machines à états) : `docs/engineering-principles.md` §5.
 
@@ -331,7 +337,7 @@ jamais par Sonnet seul ; Sonnet et Haiku restent pour l'exécution mécanique (v
 - Les worktrees oubliés coûtent cher : 16 worktrees, dont 10 de séances anciennes, ont porté le démon d'indexation gortex à 14 Go et fait tuer des processus par le noyau (OOM global, 2026-11-12 ; gortex retiré le 2026-11-13, mais chaque worktree garde ses dépendances et ses binaires, environ 1 Go). Le worktree d'un bloc est retiré dès le bloc fusionné (règle ci-dessus d'abord, modifications non commitées archivées hors du dépôt) ; au plus un worktree par bloc actif, soit environ trois checkouts en tout (méthode v2, règle 1). Un worktree de bloc se crée avec `scripts/worktree.sh <bloc> [base]` (mise.toml approuvé, `mise.local.toml` lié, sidecars récupérés).
 - Simuler un flux d'E/S avec `io.BytesIO`, jamais un `MagicMock` dont `read()` rend toujours la même
   valeur : `shutil.copyfileobj` boucle sans fin (21 Go le 2026-11-08 ; `/tmp` est un tmpfs, donc en RAM).
-- Lancer l'application pour un test ou un parcours d'interface exige `INKWELL_DOCS` et les dossiers de profil pointés vers des dossiers temporaires, vérifiés non vides avant chaque lancement : une variable vide retombe sur les vrais documents (une reprise a été confirmée sur un document réel de l'utilisatrice le 2026-11-15, restaurée depuis l'archive).
+- Lancer l'application pour un test ou un parcours d'interface exige `INKWELL_DOCS` et les dossiers de profil (`INKWELL_HOME`, où vivent aussi les statistiques locales d'OBS1) pointés vers des dossiers temporaires, vérifiés non vides avant chaque lancement : une variable vide retombe sur les vrais documents (une reprise a été confirmée sur un document réel de l'utilisatrice le 2026-11-15, restaurée depuis l'archive).
 - Une porte a une échéance (`max_minutes`, règle G-1 de `scripts/gate.py`) : la somme des plafonds `timeout` de ses critères doit y tenir, et un critère « toute la suite » n'y tient pas (`fe:check` prend 307 s seul) ; les anciennes portes sont listées dans `gates/legacy-no-deadline.txt`, liste fermée.
 - Au début de chaque session, regarder l'état de la CI GitHub de `main` (`gh run list --workflow ci.yml --branch main --limit 5`) : un `main` rouge passe avant tout bloc (le scénario 8 de la simulation de réseau a échoué 8 fois sur 15 pendant un jour sans être relevé, 2026-11-15) ; le cap et l'ordre des blocs sont dans `PROGRESS.md`, « Cap à long terme ».
 - Un échec n'est jamais attribué à la charge de la machine sans une reproduction au repos (`scripts/heavy.sh --exclusive`) : deux échecs ainsi classés le 2026-11-15 étaient de vrais défauts (le trafic de « claim », puis l'arrivée d'un appareil sous réseau dégradé).

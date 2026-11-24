@@ -285,14 +285,10 @@ sont nouveaux.
 | `--target-min` | 44px | dialogues, listes, lignes de préférences, accueil |
 | `--bar-header` · `--bar-tool` · `--bar-sub` · `--bar-status` · `--tab-height` | 47 · 46 · 40 · 36 · 34px | hauteurs des barres |
 
-**Écart explicite avec `ux-principles.md` (règle 9 : « cibles de 44px »).**
-- La spec suit la contrainte globale du plan T11, validée et postérieure aux principes :
-  « Cibles ≥ 34px dans les barres et ≥ 44px dans les dialogues ».
-- 34px est la taille des boutons de barre d'Adwaita.
-- Le plancher légal reste 24px.
-
-*Amendement de la règle 9, à confirmer par l'utilisatrice :* « cibles de 44px dans les
-dialogues et les listes, 34px dans les barres, jamais moins de 24px ».
+**Seule place des tailles de cible** : ces jetons et A-7 ; la règle 9 de `ux-principles.md` y renvoie
+(2026-11-24). Origine : la contrainte globale du plan T11 (« Cibles ≥ 34px dans les barres et ≥ 44px dans
+les dialogues ») ; 34px est la taille des boutons de barre d'Adwaita ; le plancher légal reste 24px ; P31 de
+l'étude du 2026-11-14 (44px pour une disposition tactile) s'y ajoute à UX1-C.
 
 ### 2.6 Rayons
 
@@ -790,7 +786,9 @@ Cela vaut pour la barre de mise en forme (`FormatBar.svelte`), la barre du table
   - `--dialog-bg`, `--radius-window`, `--shadow-dialog`, `::backdrop` `--backdrop` ;
   - en-tête : `<h2>` `--text-title-4`, bouton fermer de 44px ;
   - corps qui défile ;
-  - pied facultatif : Annuler à gauche, action à droite.
+  - pied facultatif : boutons dans l'ordre du système hôte, dessin Adwaita partout — Linux et macOS :
+    Annuler à gauche, action à droite ; Windows : action d'abord (décision « UX1 question 1 »,
+    2026-11-24, `docs/autonomous-decisions.md` ; seule place de cet ordre).
 - **Tailles :** `small` 380, `medium` 520, `large` 760, `wide` 1100px, plafonnées à
   `100vw − 32px`. Sous 560px, feuille en bas.
 - **Focus initial** (APG *Dialog (Modal)* [S5]) :
@@ -811,7 +809,7 @@ Cela vaut pour la barre de mise en forme (`FormatBar.svelte`), la barre du table
 ### 4.9 Confirmation (`AlertDialog`)
 
 - Réservée à l'irréversible pour les autres (P3).
-- Titre-question ; une phrase de conséquence ; Annuler, puis le verbe (`.destructive`). Le focus
+- Titre-question ; une phrase de conséquence ; Annuler et le verbe (`.destructive`), dans l'ordre du §4.8. Le focus
   initial est sur **Annuler** [S5].
 - **Variante en ligne**, sous une ligne de liste :
   - le focus DOIT aller sur sa phrase (`tabindex="-1"`, `role="group"` nommé) ;
@@ -3178,7 +3176,10 @@ personne choisie, par exemple une responsable.
 ## 5. Écrans et parcours
 
 Les cinq tâches de référence (`ux-principles.md`) sont : **créer, partager, relire, présenter,
-exporter**. Chaque parcours a son entrée, ses étapes, ses messages et sa sortie.
+exporter**. Chaque parcours a son entrée, ses étapes, ses messages et sa sortie. La liste des
+fonctions elle-même (chacune avec son écran, son emplacement, son bloc et son état) n'est pas ici :
+elle a une seule place, l'arbre des fonctions `docs/ux/functions.toml` (W85, écrit à UX1-A) ; ce
+chapitre décrit les écrans et les parcours, et y renvoie.
 
 ### 5.1 Premier lancement
 
@@ -3964,7 +3965,7 @@ Une règle sans assertion n'est pas finie.
 | §4.48 (N48) | soumettre, valider, refuser avec note, retirer ; badge dans la frise ; validation liée à la version exacte ; liste « À valider » ; statut affiché avant d'intégrer dans l'Original | `e2e/approval.spec.ts` (deux instances) | **à écrire** |
 | §5 parcours | cinq tâches chronométrées, personas | `docs/ux/walkthrough-*.md` | existant pour les personnes et la présentation (2026-10-26) ; à refaire |
 
-## 11. Décisions à confirmer par l'utilisatrice
+## 11. Décisions de design : tranchées et ouvertes
 
 **Ce qui est tranché depuis la rév. 4**, par la passe de cohérence de l'architecture (N36,
 `architecture/coherence.md`) :
@@ -3976,11 +3977,13 @@ Une règle sans assertion n'est pas finie.
   « ressources », « non synchronisé » ajoutés ; « jalon », « brouillon » et « fusionner » retirés
   (§6.20). `glossary.md` est mis à jour.
 
-Le reste du tableau **n'est pas ratifié** ; la règle 9 (cibles) reste en attente.
+Qui tranche le reste du tableau (depuis le 2026-11-24) : l'intégratrice, qui consigne chaque choix dans
+`docs/autonomous-decisions.md` (`CLAUDE.md`, « Autonomie ») ; seuls les points de la liste fermée de cette règle
+reviennent à l'utilisatrice. La règle 9 (cibles) est faite (Q9).
 
 Les deux revues convergent sur chacune de ces recommandations.
 
-| # | Question | Recommandation (*à confirmer par l'utilisatrice*) |
+| # | Question | Recommandation |
 |---|---|---|
 | Q1 | Ctrl+K : palette ou lien ? | Ctrl+K reste le **lien**. Palette sur **Ctrl+Maj+P**, plus « Rechercher une commande… » dans le menu. Amender la règle 3 de `ux-principles.md` (§4.24). |
 | Q2 | Le titre de la barre d'en-tête | Le **nom du projet** ; le fichier en sous-titre (HIG). |
@@ -3988,9 +3991,9 @@ Les deux revues convergent sur chacune de ces recommandations.
 | Q4 | Couleur de personne | Choisie à l'accueil ; créneau libre par défaut. **Le créneau du projet fait foi** ; la préférence locale est un souhait ; les collisions sont réconciliées par l'ordre de la liste signée (C-PERSON-2). |
 | Q5 | Recherche dans le projet | **Tranché** : une destination du **tiroir**, en cohérence avec B10 : la structure à gauche, le temps et les autres à droite (§3.1). |
 | Q6 | S'écarter de libadwaita pour l'anneau | Oui, 1.4.11 l'exige, avec la variante pour fond sombre. |
-| Q7 | Langues | fr et en, propriétés logiques dès maintenant, pas de RTL pour l'instant. |
+| Q7 | Langues | fr et en, propriétés logiques dès maintenant, pas de RTL pour l'instant. **À rouvrir** dès qu'une troisième langue entre dans les catalogues ou qu'une langue écrite de droite à gauche est demandée : miroir de la mise en page, icônes directionnelles, tests de l'arbre d'éléments d'UX1 dans cette langue → UX1. |
 | Q8 | Commentaires | **Décidé** (N47) : dans le périmètre, §4.27. Ancienne recommandation : | Hors de N17 ; onglet masqué ; un plan dédié et une ADR avant toute interface (§4.27). |
-| Q9 | Amendements de `ux-principles.md` | règle 3 et glossaire : **faits** (C14, §6.20) ; règle 9 (cibles, §2.5) : en attente ; règle 2 (barre de mise en forme fixe, T11) : correction à faire, notée dans `CHANGES.md` rév. 6. |
+| Q9 | Amendements de `ux-principles.md` | règle 3 et glossaire : **faits** (C14, §6.20) ; règles 2 (barre de mise en forme, P1) et 9 (cibles, §2.5 et A-7) : **faites** le 2026-11-24, elles renvoient ici. |
 | Q10 | Imprimer | Par l'export PDF et la boîte d'impression du système, sans raccourci (§5.12). |
 | Q11 | Fichiers de code | Ouverts **en lecture**, « Modifier » sur demande, mémorisé par fichier ; coloration avec les 10 jetons existants ; `language-data` paresseux, avec une liste blanche d'environ 25 langages (§4.28). |
 | Q13 | Thèmes (N22) | Thème et variante choisis séparément dans Apparence ; refus complet d'un thème qui échoue dans un mode ; aucun thème imposé par un projet (§2.10). |
