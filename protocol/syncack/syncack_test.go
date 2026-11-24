@@ -122,7 +122,7 @@ func TestOpener(t *testing.T) {
 	t.Run("up only on the ACK", func(t *testing.T) {
 		run(t, syncack.NewOpener(syncack.RoleSession, false),
 			step{open, syncack.None}, step{ret, syncack.None}, step{byteAt(100, 0x01), syncack.PeerUp},
-			step{byteAt(150, 0x02), syncack.ClosePeer})
+			step{byteAt(150, 0x02), syncack.CloseConn})
 	})
 	t.Run("reopen while announced", func(t *testing.T) {
 		run(t, syncack.NewOpener(syncack.RoleSession, true), step{open, syncack.None}, step{ret, syncack.None},
@@ -131,30 +131,30 @@ func TestOpener(t *testing.T) {
 	t.Run("refusals", func(t *testing.T) {
 		for _, op := range []syncack.Op{syncack.OpEOF, syncack.OpReset} {
 			run(t, syncack.NewOpener(syncack.RoleSession, false), step{open, syncack.None}, step{ret, syncack.None},
-				step{ev(op, 5), syncack.ClosePeer})
+				step{ev(op, 5), syncack.CloseConn})
 			run(t, syncack.NewOpener(syncack.RoleMove, true), step{open, syncack.None}, step{ret, syncack.None},
 				step{ev(op, 5), syncack.Abandon})
 		}
 		run(t, syncack.NewOpener(syncack.RoleSession, false), step{open, syncack.None}, step{ret, syncack.None},
-			step{byteAt(5, 0x00), syncack.ClosePeer})
+			step{byteAt(5, 0x00), syncack.CloseConn})
 		run(t, syncack.NewOpener(syncack.RoleMove, true), step{open, syncack.None}, step{ret, syncack.None},
 			step{byteAt(5, 0xff), syncack.Abandon})
 	})
 	t.Run("deadline before the return", func(t *testing.T) {
 		run(t, syncack.NewOpener(syncack.RoleSession, false), step{ev(syncack.OpOpen, 7), syncack.None},
-			step{ev(syncack.OpDeadline, 15007), syncack.ClosePeer})
+			step{ev(syncack.OpDeadline, 15007), syncack.CloseConn})
 		run(t, syncack.NewOpener(syncack.RoleSession, false), step{ev(syncack.OpOpen, 7), syncack.None},
-			step{ev(syncack.OpReturn, 15007), syncack.ClosePeer})
+			step{ev(syncack.OpReturn, 15007), syncack.CloseConn})
 	})
 	t.Run("one budget from the open", func(t *testing.T) {
 		run(t, syncack.NewOpener(syncack.RoleSession, false), step{ev(syncack.OpOpen, 1000), syncack.None},
 			step{ev(syncack.OpReturn, 11000), syncack.None}, step{byteAt(15999, 0x01), syncack.PeerUp})
 		run(t, syncack.NewOpener(syncack.RoleSession, false), step{ev(syncack.OpOpen, 1000), syncack.None},
-			step{ev(syncack.OpReturn, 11000), syncack.None}, step{byteAt(16000, 0x01), syncack.ClosePeer})
+			step{ev(syncack.OpReturn, 11000), syncack.None}, step{byteAt(16000, 0x01), syncack.CloseConn})
 		run(t, syncack.NewOpener(syncack.RoleMove, true), step{open, syncack.None}, step{ret, syncack.None},
 			step{byteAt(15000, 0x01), syncack.Abandon})
 		run(t, syncack.NewOpener(syncack.RoleMove, true), step{open, syncack.None}, step{ret, syncack.None},
-			step{byteAt(14999, 0x01), syncack.Swap}, step{byteAt(15000, 0x01), syncack.ClosePeer})
+			step{byteAt(14999, 0x01), syncack.Swap}, step{byteAt(15000, 0x01), syncack.CloseConn})
 	})
 	t.Run("connection lost", func(t *testing.T) {
 		run(t, syncack.NewOpener(syncack.RoleSession, false), step{open, syncack.None},
@@ -165,7 +165,7 @@ func TestOpener(t *testing.T) {
 			step{byteAt(3, 0x01), syncack.PeerUp}, step{ev(syncack.OpConnClosed, 4), syncack.Lost})
 		// After the deadline fired, the connection's loss is no news.
 		run(t, syncack.NewOpener(syncack.RoleSession, false), step{open, syncack.None},
-			step{ev(syncack.OpConnClosed, 15000), syncack.ClosePeer})
+			step{ev(syncack.OpConnClosed, 15000), syncack.CloseConn})
 	})
 	t.Run("out of order", func(t *testing.T) {
 		for _, steps := range [][]syncack.Event{
@@ -195,7 +195,7 @@ func TestOpener(t *testing.T) {
 
 func TestNames(t *testing.T) {
 	for o, want := range map[syncack.Outcome]string{
-		syncack.None: "none", syncack.PeerUp: "peer_up", syncack.ClosePeer: "close_peer", syncack.Lost: "lost",
+		syncack.None: "none", syncack.PeerUp: "peer_up", syncack.CloseConn: "close_conn", syncack.Lost: "lost",
 		syncack.Swap: "swap", syncack.Abandon: "abandon", syncack.Outcome(6): "outcome(6)", syncack.Outcome(99): "outcome(99)",
 	} {
 		if got := o.String(); got != want {

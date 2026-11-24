@@ -569,11 +569,11 @@
         "reset_code": 4098,
         "role": "session"
       },
-      "description": "Nouvel essai qui dépasserait les 15 s : ClosePeer (P-5).",
+      "description": "Nouvel essai qui dépasserait les 15 s : fermeture de la connexion de l'ouverture (P-5, P-16).",
       "decoder": "sync_refusal",
       "verdict": "accept",
       "expect": {
-        "action": "close_peer"
+        "action": "close_conn"
       },
       "scope": "transport"
     },
@@ -627,11 +627,11 @@
         "reset_code": 0,
         "role": "session"
       },
-      "description": "Réinitialisation d'un autre code : refus, ClosePeer (P-4).",
+      "description": "Réinitialisation d'un autre code : refus, fermeture de la connexion de l'ouverture (P-4, P-16).",
       "decoder": "sync_refusal",
       "verdict": "accept",
       "expect": {
-        "action": "close_peer"
+        "action": "close_conn"
       },
       "scope": "transport"
     },
@@ -646,11 +646,11 @@
         "reset_code": 4097,
         "role": "session"
       },
-      "description": "Code 0x1001 (négociation échouée) : refus.",
+      "description": "Code 0x1001 (négociation échouée) : refus, fermeture de la connexion de l'ouverture (P-16).",
       "decoder": "sync_refusal",
       "verdict": "accept",
       "expect": {
-        "action": "close_peer"
+        "action": "close_conn"
       },
       "scope": "transport"
     },
@@ -664,11 +664,11 @@
         "elapsed_ms": 100,
         "role": "session"
       },
-      "description": "Fin du flux avant l'accusé : refus, ClosePeer.",
+      "description": "Fin du flux avant l'accusé : refus, fermeture de la connexion de l'ouverture (P-16).",
       "decoder": "sync_refusal",
       "verdict": "accept",
       "expect": {
-        "action": "close_peer"
+        "action": "close_conn"
       },
       "scope": "transport"
     },

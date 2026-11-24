@@ -2,7 +2,7 @@
 # P-TLA (ADR 0034 step 3, docs/protocol/tla/README.md): fetch the pinned TLA+ tools
 # (tla2tools.jar SHA-256 checked, never committed) and model-check the models
 # (RepoGen, ConnCredit, SyncIndicator, WriteBudget, SendPath, LinkProbe, OISingleInstance, SandboxScope,
-# ProjectChange, DirectUpgrade, PeerUpAck, Supersede, SyncOrder, InboundLifecycle).
+# ProjectChange, DirectUpgrade, PeerUpAck, Supersede, CloseScope, SyncOrder, InboundLifecycle).
 #
 # Sound models must finish with no error; every mutant listed in the README must be
 # detected (a violation). The task fails if a sound model violates a property OR if a
@@ -97,7 +97,7 @@ run() {
     case "$name" in
       RepoGen*|ConnCredit*|WriteBudget*|OISingleInstance*|SyncOrder*|InboundLifecycle*|HP1c[!S]*) assigned=1/3 ;;
       SendPath*|SP1*|SandboxScope*|ProjectChange*) assigned=2/3 ;;
-      SyncIndicator*|LinkProbe*|DirectUpgrade*|HP1r*|HP1cSupersede*|PeerUpAck*) assigned=3/3 ;;
+      SyncIndicator*|LinkProbe*|DirectUpgrade*|HP1r*|HP1cSupersede*|PeerUpAck*|PU1d*) assigned=3/3 ;;
       *) die "no shard assigned to '$name'" ;;
     esac
     [[ "$assigned" == "$shard" ]] || return 0
@@ -388,6 +388,25 @@ WitnessLazyLate NotLazyLate
 WitnessBothUp NotBothUp
 WitnessMove NoMove
 WitnessLateFire NoLateFire
+MUTANTS
+
+# CloseScope (README "CloseScope", block PU1d, spec §8.7.4, rules P-16 and P-17): a failed session opening closes only
+# its named connection; any usable connection starts an opening. PeerUpAck itself unedited (gates/PU1b.toml, gates/PU1c.toml
+# pin it); named outside '^PeerUpAck' so that PU1's frozen count (19) stays. Any and Negotiated are invariants; Live checks
+# L3 and L2.
+run PU1dCloseScopeAny CloseScopeAny.cfg CloseScope safety
+run PU1dCloseScopeLive CloseScopeLive.cfg CloseScope sound
+run PU1dCloseScopeNegotiated CloseScopeNegotiated.cfg CloseScope safety
+while read -r m prop; do
+  run "PU1dCloseScope$m" "mutants/CloseScope$m.cfg" mutants/CloseScopeMutants mutant "$prop"
+done <<'MUTANTS'
+ClosePeer CrossedIndependent
+OnEventOnly NeverStranded
+WitnessBeside NoFailBeside
+UnnamedOpen OpeningNamed
+UnnamedCollateral CrossedIndependent
+WitnessQuiet NoQuietOpen
+WitnessNeg NoUnreturnedFail
 MUTANTS
 
 # SyncOrder (README "SyncOrder", block PU1b, spec §8.7.3-§8.7.4): the responder's order of a peer's inbound sync

@@ -110,10 +110,10 @@ func TestRefusal(t *testing.T) {
 		{"capped", syncack.RoleSession, true, ms(4000), 5, syncack.Retry, time.Second},
 		{"capped far", syncack.RoleSession, true, ms(4000), 60, syncack.Retry, time.Second},
 		{"in budget", syncack.RoleSession, true, ms(14949), 0, syncack.Retry, ms(50)},
-		{"out of budget", syncack.RoleSession, true, ms(14950), 0, syncack.ClosePeerAction, 0},
+		{"out of budget", syncack.RoleSession, true, ms(14950), 0, syncack.CloseConnAction, 0},
 		{"move", syncack.RoleMove, true, ms(100), 1, syncack.Retry, ms(100)},
 		{"move out of budget", syncack.RoleMove, true, ms(14990), 0, syncack.AbandonAction, 0},
-		{"refusal", syncack.RoleSession, false, 0, 0, syncack.ClosePeerAction, 0},
+		{"refusal", syncack.RoleSession, false, 0, 0, syncack.CloseConnAction, 0},
 		{"refusal move", syncack.RoleMove, false, 0, 0, syncack.AbandonAction, 0},
 	} {
 		t.Run(c.name, func(t *testing.T) {
@@ -126,7 +126,7 @@ func TestRefusal(t *testing.T) {
 	if syncack.BusyCode != 0x1002 {
 		t.Errorf("BusyCode = %#x, want 0x1002", syncack.BusyCode)
 	}
-	for a, want := range map[syncack.Action]string{syncack.Retry: "retry", syncack.ClosePeerAction: "close_peer", syncack.AbandonAction: "abandon", syncack.Action(3): "action(3)", syncack.Action(9): "action(9)"} {
+	for a, want := range map[syncack.Action]string{syncack.Retry: "retry", syncack.CloseConnAction: "close_conn", syncack.AbandonAction: "abandon", syncack.Action(3): "action(3)", syncack.Action(9): "action(9)"} {
 		if a.String() != want {
 			t.Errorf("Action(%d).String() = %q, want %q", a, a.String(), want)
 		}

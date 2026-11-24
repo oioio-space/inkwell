@@ -10,7 +10,6 @@ import (
 	"github.com/libp2p/go-libp2p/core/host"
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
-	"github.com/libp2p/go-libp2p/core/protocol"
 	ma "github.com/multiformats/go-multiaddr"
 )
 
@@ -21,13 +20,14 @@ func TestOutLostReleasesStreamBeforeReopen(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())
 		s := &retiringStream{}
 		opened := make(chan bool, 1)
+		// The replacement opens on the connection still open (P-17), through the connection itself (P-16).
+		live := &closableConn{open: func(ctx context.Context) (network.Stream, error) {
+			opened <- s.released.Load()
+			<-ctx.Done()
+			return nil, ctx.Err()
+		}}
 		n := &Node{ctx: ctx, proofs: newProofSet(), chg: make(chan struct{}), h: openRecordingHost{
-			net: &recordingNetwork{},
-			open: func(ctx context.Context) (network.Stream, error) {
-				opened <- s.released.Load()
-				<-ctx.Done()
-				return nil, ctx.Err()
-			},
+			net: &recordingNetwork{conns: []network.Conn{live}},
 		}}
 		defer func() {
 			n.mu.Lock()
@@ -37,7 +37,7 @@ func TestOutLostReleasesStreamBeforeReopen(t *testing.T) {
 			n.wg.Wait()
 		}()
 		ps := &peerState{connected: true, admitted: true, out: s}
-		n.outLost(ps, s, true, false, false)
+		n.outLost(ps, s, false, false, false) // lost, not refused: the stream is reopened
 		synctest.Wait()
 		select {
 		case released := <-opened:
@@ -66,22 +66,18 @@ func TestOpenOutConnectionLossPreservesReplacement(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())
 		firstOpen, loseFirst := make(chan struct{}), make(chan struct{})
 		replacementOpen := make(chan struct{})
-		net := &recordingNetwork{}
-		n := &Node{ctx: ctx, proofs: newProofSet(), chg: make(chan struct{}), h: openRecordingHost{
-			net: net,
-			open: func(ctx context.Context) (network.Stream, error) {
-				select {
-				case <-firstOpen:
-					close(replacementOpen)
-					<-ctx.Done()
-					return nil, ctx.Err()
-				default:
-					close(firstOpen)
-					<-loseFirst
-					return nil, &network.ConnError{Remote: true, ErrorCode: network.ConnGated}
-				}
-			},
+		orig := &closableConn{open: func(context.Context) (network.Stream, error) {
+			close(firstOpen)
+			<-loseFirst
+			return nil, &network.ConnError{Remote: true, ErrorCode: network.ConnGated}
 		}}
+		repl := &closableConn{open: func(ctx context.Context) (network.Stream, error) {
+			close(replacementOpen)
+			<-ctx.Done()
+			return nil, ctx.Err()
+		}}
+		net := &recordingNetwork{conns: []network.Conn{orig}}
+		n := &Node{ctx: ctx, proofs: newProofSet(), chg: make(chan struct{}), h: openRecordingHost{net: net}}
 		defer func() {
 			n.mu.Lock()
 			n.closed = true
@@ -91,14 +87,14 @@ func TestOpenOutConnectionLossPreservesReplacement(t *testing.T) {
 		}()
 
 		ps := &peerState{connected: true, admitted: true}
-		n.startOpenLocked(ps, false)
+		n.startOpenLocked(ps, false, nil)
 		<-firstOpen
 		// The original connection is gone. The replacement has already
 		// arrived while openOut still owns the opening.
-		net.conns = []network.Conn{openRecordingConn{}}
+		net.conns = []network.Conn{repl}
 		close(loseFirst)
 		synctest.Wait()
-		if net.closed {
+		if net.closed || repl.closed.Load() {
 			t.Fatal("the failed opening closed the replacement connection")
 		}
 		select {
@@ -110,38 +106,25 @@ func TestOpenOutConnectionLossPreservesReplacement(t *testing.T) {
 }
 
 // TestOpenOutLostWithoutStreamSparesReplacement: an opening whose connection is
-// lost before NewStream returns a stream fails with no connection error at all:
-// BasicHost.NewStream turns the swarm's network.ErrNoConn (every connection it
-// tried was closed) into errors.New("connection failed"). That is a lost
-// connection, not a refusal (spec §8.7.4, PeerUpAck.tla StreamLost): no
-// connection is closed, and a replacement that arrived meanwhile gets its own
-// opening. Seen 123 times in 125 failed openings of TestLanAskAndAnswer.
+// lost before NewStream returns a stream may fail with no connection error at
+// all (BasicHost.NewStream turned the swarm's network.ErrNoConn into
+// errors.New("connection failed"): 123 times in 125 failed openings of
+// TestLanAskAndAnswer). The opening named its connection (P-16), which is
+// closed: a lost connection, not a refusal (spec §8.7.4, PeerUpAck.tla
+// StreamLost). No connection is closed, and a replacement that arrived
+// meanwhile gets its own opening (P-17).
 func TestOpenOutLostWithoutStreamSparesReplacement(t *testing.T) {
 	synctest.Test(t, func(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())
 		firstOpen, loseFirst := make(chan struct{}), make(chan struct{})
 		replacementOpen := make(chan struct{})
-		orig, repl := &closableConn{}, &closableConn{}
+		orig, repl := lostAndReplacement(firstOpen, loseFirst, replacementOpen)
 		net := &recordingNetwork{conns: []network.Conn{orig}}
-		n := &Node{ctx: ctx, proofs: newProofSet(), chg: make(chan struct{}), h: openRecordingHost{
-			net: net,
-			open: func(ctx context.Context) (network.Stream, error) {
-				select {
-				case <-firstOpen:
-					close(replacementOpen)
-					<-ctx.Done()
-					return nil, ctx.Err()
-				default:
-					close(firstOpen)
-					<-loseFirst
-					return nil, errors.New("connection failed")
-				}
-			},
-		}}
+		n := &Node{ctx: ctx, proofs: newProofSet(), chg: make(chan struct{}), h: openRecordingHost{net: net}}
 		defer stopNode(n, cancel)
 
 		ps := &peerState{connected: true, admitted: true}
-		n.startOpenLocked(ps, false)
+		n.startOpenLocked(ps, false, nil)
 		<-firstOpen
 		orig.closed.Store(true)
 		net.conns = []network.Conn{repl}
@@ -173,28 +156,14 @@ func TestNewConnectionOpensWithoutConnectednessEvent(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())
 		firstOpen, loseFirst := make(chan struct{}), make(chan struct{})
 		replacementOpen := make(chan struct{})
-		orig, repl := &closableConn{}, &closableConn{}
+		orig, repl := lostAndReplacement(firstOpen, loseFirst, replacementOpen)
 		net := &recordingNetwork{conns: []network.Conn{orig}}
-		n := &Node{ctx: ctx, proofs: newProofSet(), chg: make(chan struct{}), peers: map[peer.ID]*peerState{}, h: openRecordingHost{
-			net: net,
-			open: func(ctx context.Context) (network.Stream, error) {
-				select {
-				case <-firstOpen:
-					close(replacementOpen)
-					<-ctx.Done()
-					return nil, ctx.Err()
-				default:
-					close(firstOpen)
-					<-loseFirst
-					return nil, errors.New("connection failed")
-				}
-			},
-		}}
+		n := &Node{ctx: ctx, proofs: newProofSet(), chg: make(chan struct{}), peers: map[peer.ID]*peerState{}, h: openRecordingHost{net: net}}
 		defer stopNode(n, cancel)
 
 		ps := &peerState{connected: true, admitted: true}
 		n.peers[ps.id] = ps
-		n.startOpenLocked(ps, false)
+		n.startOpenLocked(ps, false, nil)
 		<-firstOpen
 		orig.closed.Store(true)
 		net.conns = nil // lost, and no replacement yet
@@ -219,11 +188,31 @@ func stopNode(n *Node, cancel context.CancelFunc) {
 	n.wg.Wait()
 }
 
-// closableConn is a connection that records its close.
+// lostAndReplacement returns an original connection whose opening fails with
+// the host's "connection failed" once loseFirst is closed, and a replacement
+// whose opening blocks.
+func lostAndReplacement(firstOpen, loseFirst, replacementOpen chan struct{}) (orig, repl *closableConn) {
+	orig = &closableConn{open: func(context.Context) (network.Stream, error) {
+		close(firstOpen)
+		<-loseFirst
+		return nil, errors.New("connection failed")
+	}}
+	repl = &closableConn{open: func(ctx context.Context) (network.Stream, error) {
+		close(replacementOpen)
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}}
+	return orig, repl
+}
+
+// closableConn is a connection that records its close; its streams open with open.
 type closableConn struct {
 	network.Conn
 	closed atomic.Bool
+	open   func(context.Context) (network.Stream, error)
 }
+
+func (c *closableConn) NewStream(ctx context.Context) (network.Stream, error) { return c.open(ctx) }
 
 func (c *closableConn) IsClosed() bool { return c.closed.Load() }
 
@@ -251,18 +240,11 @@ func (n *recordingNetwork) ClosePeer(peer.ID) error {
 	return nil
 }
 
-type openRecordingConn struct{ network.Conn }
-
-func (openRecordingConn) IsClosed() bool { return false }
-
+// openRecordingHost is a host whose network the test sets; a session opening never calls its own NewStream (it
+// opens on the connection it names, spec §8.7.4 P-16), so the embedded nil host panics if one does.
 type openRecordingHost struct {
 	host.Host
-	net  network.Network
-	open func(context.Context) (network.Stream, error)
+	net network.Network
 }
 
 func (h openRecordingHost) Network() network.Network { return h.net }
-
-func (h openRecordingHost) NewStream(ctx context.Context, _ peer.ID, _ ...protocol.ID) (network.Stream, error) {
-	return h.open(ctx)
-}

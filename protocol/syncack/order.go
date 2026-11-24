@@ -110,13 +110,14 @@ type Action uint8
 const (
 	// Retry is to open again after the wait OnRefusal returns; the session and the connections are kept.
 	Retry Action = iota
-	// ClosePeerAction is to reset the stream and close the connections to the peer (a session opening).
-	ClosePeerAction
+	// CloseConnAction is to reset the stream and close the connection the opening runs on, and only it (a session
+	// opening, rule P-16).
+	CloseConnAction
 	// AbandonAction is to reset the stream; the session stays where it is (a move).
 	AbandonAction
 )
 
-var actionNames = [...]string{"retry", "close_peer", "abandon"}
+var actionNames = [...]string{"retry", "close_conn", "abandon"}
 
 // String returns the action's name in the vectors.
 func (a Action) String() string {
@@ -130,7 +131,7 @@ func (a Action) String() string {
 // capacity tells whether the reset carried BusyCode, elapsed is the time since the opening's first open, attempt the
 // refusals for capacity before this one. A refusal for capacity is retried after RetryMin doubled per attempt, at
 // most RetryMax, if the retry still falls within Budget; otherwise, and on any other refusal, a session opening
-// closes the peer and a move is abandoned.
+// closes its connection (P-16) and a move is abandoned.
 func OnRefusal(role Role, capacity bool, elapsed time.Duration, attempt int) (Action, time.Duration) {
 	if capacity {
 		wait := RetryMin
@@ -144,5 +145,5 @@ func OnRefusal(role Role, capacity bool, elapsed time.Duration, attempt int) (Ac
 	if role == RoleMove {
 		return AbandonAction, 0
 	}
-	return ClosePeerAction, 0
+	return CloseConnAction, 0
 }

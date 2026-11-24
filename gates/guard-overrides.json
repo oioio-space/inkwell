@@ -2009,6 +2009,11 @@
       "id": "6210917cb52326674319c8ba0201aa18726feaf9eb844b39d1eb8028ed403aab",
       "reason": "mise.toml: gate dependency changed: mise task test:py — adds scripts/pre_push_hook_test.py (the pre-push hook skips the CI only for a push that deletes refs and sends no code); every existing test still runs",
       "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "1db5b88f7fc045d2f51405452338f7121605d46b27b54818571bc0e0aff4e877",
+      "reason": "scripts/tla-check.sh: gate dependency changed — PU1d adds its CloseScope runs (three sound runs, four mutants, three witnesses, named ^PU1d, shard 3/3); every existing run, its name, shard and expected verdict unchanged (PU1 keeps its 19 ^PeerUpAck runs)",
+      "decision": "docs/objectif-en-cours.md"
     }
   ]
 }

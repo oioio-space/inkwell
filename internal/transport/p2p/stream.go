@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"slices"
 	"sync/atomic"
 	"time"
@@ -13,6 +14,8 @@ import (
 	"github.com/libp2p/go-libp2p/core/network"
 	"github.com/libp2p/go-libp2p/core/peer"
 	"github.com/libp2p/go-libp2p/core/protocol"
+	basichost "github.com/libp2p/go-libp2p/p2p/host/basic"
+	"github.com/libp2p/go-libp2p/p2p/protocol/identify"
 	"github.com/multiformats/go-multistream"
 
 	"github.com/oioio-space/inkwell/internal/transport"
@@ -27,8 +30,9 @@ import (
 //   - stream open and acknowledged by the peer (spec §8.7): PeerUp, once;
 //   - stream lost while connected: it is reopened silently when the loss comes
 //     from our side or from the connection (a Send that failed, a connection
-//     replaced by another), and the peer is disconnected when the remote
-//     reset a stream of a healthy connection, since it refuses us;
+//     replaced by another); when the remote refuses it on a healthy connection
+//     (a reset, a byte after its ACK), that connection alone is closed (spec
+//     §8.7.4, rule P-16) and the stream reopened on another one (P-17);
 //   - no stream and not connected: PeerDown, once, and the state is forgotten.
 
 // onConnectedness handles a libp2p connectedness change.
@@ -61,7 +65,7 @@ func (n *Node) onConnected(p peer.ID) {
 		n.peers[p] = ps
 	}
 	ps.connected, ps.admitted = true, admitted
-	n.startOpenLocked(ps, false)
+	n.startOpenLocked(ps, false, nil)
 	n.changedLocked()
 }
 
@@ -77,29 +81,34 @@ func (n *Node) onDisconnected(p peer.ID) {
 	n.changedLocked()
 }
 
-// startOpenLocked starts opening the outbound stream of ps if it needs one.
-// preferCircuit applies to recovery from the loss of a direct connection.
-func (n *Node) startOpenLocked(ps *peerState, preferCircuit bool) {
+// startOpenLocked starts opening the outbound stream of ps if it needs one. The
+// opening names its connection as it starts (spec §8.7.4, rule P-16; model
+// CloseScope S7 OpeningNamed): cause, the connection whose arrival causes it,
+// when there is one (sessionConn). With no connection open, none starts: the
+// peer's loss follows. preferCircuit applies to recovery from the loss of a
+// direct connection.
+func (n *Node) startOpenLocked(ps *peerState, preferCircuit bool, cause network.Conn) {
 	if n.closed || ps.out != nil || ps.opening || !ps.connected || !ps.admitted {
 		return
 	}
+	named := n.sessionConn(ps.id, preferCircuit, cause)
+	if named == nil {
+		return
+	}
 	ps.opening = true
-	n.wg.Go(func() { n.openOut(ps, preferCircuit) })
+	n.wg.Go(func() { n.openOut(ps, preferCircuit, named) })
 }
 
-// openOut opens the outbound stream of ps and waits for the peer's ACK, then
-// announces the peer if it is new (spec §8.7.4). A failed sync opening closes
-// the peer unless it was lost with its connection; a lost one is opened again
-// on a connection that survives, with the same route preference.
-func (n *Node) openOut(ps *peerState, preferCircuit bool) {
+// openOut opens the outbound stream of ps on named, the connection the opening
+// named as it started (startOpenLocked, rule P-16), waits for the peer's ACK,
+// then announces the peer if it is new (spec §8.7.4). A refusal, a violation or
+// the deadline closes named, and only it, even when no stream was obtained. A
+// lost opening closes nothing. Either way another connection still open opens
+// the stream again (P-17), with the same route preference.
+func (n *Node) openOut(ps *peerState, preferCircuit bool, named network.Conn) {
 	ctx, cancel := context.WithTimeout(n.ctx, openTimeout)
 	defer cancel()
-	var route func() network.Conn
-	if preferCircuit {
-		// A crossed punch can leave several direct connections closing at once.
-		// Look for a surviving circuit when the replacement actually opens.
-		route = func() network.Conn { return n.circuitTo(ps.id) }
-	}
+	route := func() network.Conn { return named }
 	before := n.h.Network().ConnsToPeer(ps.id)
 	s, on, err := n.openAcked(ctx, ps.id, ProtocolSync, syncack.RoleSession, false, route)
 	var sample linkSample
@@ -108,28 +117,25 @@ func (n *Node) openOut(ps *peerState, preferCircuit bool) {
 	}
 
 	n.mu.Lock()
-	ps.opening = false
 	if err == nil && (n.closed || !ps.connected) {
 		_ = s.Reset()
 		err = transport.ErrClosed
 	}
 	if err != nil {
-		closePeer := ps.connected && !n.closed
-		if closePeer && openingLost(err, on, before) {
-			// A surviving connection may have arrived while ps.opening
-			// prevented its own opening.
-			closePeer = false
-			if n.liveConn(ps.id) {
-				n.startOpenLocked(ps, preferCircuit)
-			}
+		if on != nil && ps.connected && !n.closed && !openingLost(err, on, before) {
+			// ps.opening is still held: no connection event starts an opening while on closes.
+			n.mu.Unlock()
+			_ = on.Close() // P-16: the named connection, never ClosePeer
+			n.mu.Lock()
 		}
+		ps.opening = false
+		// A surviving connection may also have arrived while ps.opening prevented its own opening.
+		n.reopenLocked(ps, preferCircuit)
 		n.settleLocked(ps)
 		n.mu.Unlock()
-		if closePeer {
-			_ = n.h.Network().ClosePeer(ps.id)
-		}
 		return
 	}
+	ps.opening = false
 	ps.out = s
 	announced := !ps.up
 	if announced {
@@ -169,9 +175,51 @@ func openingLost(err error, on network.Conn, before []network.Conn) bool {
 
 func isLive(c network.Conn) bool { return !c.IsClosed() }
 
-// liveConn reports whether a connection to p is open.
-func (n *Node) liveConn(p peer.ID) bool {
-	return slices.ContainsFunc(n.h.Network().ConnsToPeer(p), isLive)
+// reopenLocked opens the session of ps again on a connection still open to it,
+// if any (spec §8.7.4, rule P-17): closing or losing one connection among
+// several emits no connectedness event, so nothing else would, and every Send
+// to the peer would wait for ever.
+func (n *Node) reopenLocked(ps *peerState, preferCircuit bool) {
+	n.startOpenLocked(ps, preferCircuit, nil)
+}
+
+// sessionConn names the connection a session opening to p runs on, before it
+// starts (spec §8.7.4, rule P-16): with preferCircuit, the newest open circuit
+// (a crossed punch can leave several direct connections closing at once); else
+// cause, the connection whose arrival causes the opening, if still open; else
+// the one the swarm's own NewStream would take. nil if none is open.
+func (n *Node) sessionConn(p peer.ID, preferCircuit bool, cause network.Conn) network.Conn {
+	if preferCircuit {
+		if c := n.circuitTo(p); c != nil {
+			return c
+		}
+	}
+	if cause != nil && !cause.IsClosed() {
+		return cause
+	}
+	var best network.Conn
+	for _, c := range n.h.Network().ConnsToPeer(p) {
+		if !c.IsClosed() && (best == nil || betterConn(c, best)) {
+			best = c
+		}
+	}
+	return best
+}
+
+// betterConn is go-libp2p's swarm order (isBetterConn, p2p/net/swarm/swarm.go,
+// not exported): an unlimited connection, then a direct one, then the one with
+// more streams, then the later one.
+func betterConn(a, b network.Conn) bool {
+	if al, bl := a.Stat().Limited, b.Stat().Limited; al != bl {
+		return !al
+	}
+	if ad, bd := !isCircuit(a.RemoteMultiaddr()), !isCircuit(b.RemoteMultiaddr()); ad != bd {
+		return ad
+	}
+	if as, bs := len(a.GetStreams()), len(b.GetStreams()); as != bs {
+		return as > bs
+	}
+	return true
 }
 
 // openAcked opens a stream of protocol proto, an ordered lane, to p and reads
@@ -185,8 +233,8 @@ func (n *Node) liveConn(p peer.ID) bool {
 // refusal: the stream is opened again after a backoff, within the same budget,
 // the session and the connections untouched; when no retry fits in the budget,
 // the opening ends with the budget and the caller acts as on a refusal (spec
-// §8.7.4: a session opening closes the peer, a move is abandoned, a bulk send
-// fails). The connection the last attempt ran on is returned too: the routed
+// §8.7.4: a session opening closes its connection, a move is abandoned, a bulk
+// send fails). The connection the last attempt ran on is returned too: the routed
 // one, or the stream's; nil if the swarm chose and obtained no stream.
 func (n *Node) openAcked(ctx context.Context, p peer.ID, proto protocol.ID, role syncack.Role, direct bool, route func() network.Conn) (network.Stream, network.Conn, error) {
 	start := time.Now()
@@ -222,8 +270,8 @@ func isBusy(err error) bool {
 }
 
 // openOnce is one attempt of openAcked.
-// With conn, the attempt runs on conn; its failure is then conn's, so conn is
-// returned as the connection it ran on even without a stream.
+// With conn, the attempt runs on conn (openOn); its failure is then conn's, so
+// conn is returned as the connection it ran on even without a stream.
 func (n *Node) openOnce(ctx context.Context, p peer.ID, proto protocol.ID, direct bool, conn network.Conn) (network.Stream, network.Conn, error) {
 	ctx = network.WithAllowLimitedConn(ctx, "inkwell "+string(proto))
 	ctx = network.WithNoDial(ctx, "the peer is connected")
@@ -235,7 +283,7 @@ func (n *Node) openOnce(ctx context.Context, p peer.ID, proto protocol.ID, direc
 	if conn == nil {
 		s, err = n.h.NewStream(ctx, p, proto)
 	} else {
-		s, err = newStreamOn(ctx, conn, proto)
+		s, err = n.openOn(ctx, conn, proto)
 	}
 	if err != nil {
 		return nil, conn, err
@@ -270,7 +318,7 @@ func (n *Node) watchOut(ps *peerState, s network.Stream) {
 	// The remote writes nothing after its ACK; if it does, it is hostile.
 	m, err := s.Read(b[:])
 	lost := outEndedByConn(m, err, conn.IsClosed())
-	n.outLost(ps, s, lost, false, lost && !isCircuit(conn.RemoteMultiaddr()))
+	n.outLost(ps, s, !lost, false, lost && !isCircuit(conn.RemoteMultiaddr()))
 }
 
 // outEndedByConn reports whether an outbound stream that ended with n bytes
@@ -294,13 +342,14 @@ func outEndedByConn(n int, err error, connClosed bool) bool {
 	return connClosed
 }
 
-// outLost retires the outbound stream s of ps. With reopen, a new one is
-// opened if the peer is still connected; without, the peer is disconnected,
-// since a stream reset on a healthy connection means the remote refuses us.
-// With resync, a peer that was announced is announced down first and up again
-// when the new stream opens, so that the repo layer drops its sync state and
-// sends again what the lost stream carried (spec rule L).
-func (n *Node) outLost(ps *peerState, s network.Stream, reopen, resync, preferCircuit bool) {
+// outLost retires the outbound stream s of ps and opens a new one on a
+// connection still open (spec §8.7.4, rule P-17), the peer staying announced.
+// With refused, the remote refused s on a healthy connection (a reset or an end
+// after its ACK, a byte after it): that connection is closed first, and only it
+// (rule P-16). With resync, a peer that was announced is announced down first
+// and up again when the new stream opens, so that the repo layer drops its sync
+// state and sends again what the lost stream carried (spec rule L).
+func (n *Node) outLost(ps *peerState, s network.Stream, refused, resync, preferCircuit bool) {
 	n.mu.Lock()
 	if ps.out != s {
 		retiring := ps.retiring == s
@@ -320,28 +369,24 @@ func (n *Node) outLost(ps *peerState, s network.Stream, reopen, resync, preferCi
 	}
 	ps.out = nil
 	n.changedLocked()
-	if reopen {
-		if resync && ps.connected && !n.closed {
-			n.announceDownLocked(ps, true)
-		}
-		// Keep the state while the stream releases its resource manager slot.
-		// A connection event must not start the replacement during that reset.
-		ps.opening = true
-		n.mu.Unlock()
-		_ = s.Reset()
-		n.mu.Lock()
-		ps.opening = false
-		n.startOpenLocked(ps, preferCircuit)
+	if resync && ps.connected && !n.closed {
+		n.announceDownLocked(ps, true)
 	}
-	closePeer := !reopen && ps.connected && !n.closed
+	closeConn := refused && ps.connected && !n.closed
+	// Keep the state while the stream releases its resource manager slot (and
+	// its refused connection closes): a connection event must not start the
+	// replacement meanwhile, on that connection or before the slot is free.
+	ps.opening = true
+	n.mu.Unlock()
+	_ = s.Reset()
+	if closeConn {
+		_ = s.Conn().Close() // P-16: this connection, never ClosePeer
+	}
+	n.mu.Lock()
+	ps.opening = false
+	n.reopenLocked(ps, preferCircuit)
 	n.settleLocked(ps)
 	n.mu.Unlock()
-	if closePeer {
-		_ = n.h.Network().ClosePeer(ps.id)
-	}
-	if !reopen {
-		_ = s.Reset()
-	}
 }
 
 // settleLocked forgets ps, with a PeerDown if it was announced, once it has
@@ -506,7 +551,7 @@ func watchCancel(ctx context.Context) (canceled func() bool) {
 // Unless the caller canceled, the frame is lost for good: the peer is
 // announced down and up again (spec rule L, §5.5).
 func (n *Node) sendFailed(ctx context.Context, ps *peerState, s network.Stream, to transport.PeerID, err error, canceled bool) error {
-	n.outLost(ps, s, true, !canceled, false)
+	n.outLost(ps, s, false, !canceled, false)
 	if canceled {
 		err = ctx.Err()
 	}
@@ -515,11 +560,11 @@ func (n *Node) sendFailed(ctx context.Context, ps *peerState, s network.Stream, 
 
 // onConn handles a new libp2p connection of any kind. A relay that connects
 // again means the network is back, so the wanted peers are retried at once. A
-// connected peer with no stream opens one on it: libp2p emits no connectedness
-// change for a connection that replaces a lost one before the loss is reported
-// (it reads the connectedness when it emits), so no onConnected follows (spec
-// §8.7.4). A direct connection to a peer whose stream is relayed upgrades the
-// stream.
+// connected peer with no stream opens one on it (spec §8.7.4, rules P-16 and
+// P-17): libp2p emits no connectedness change for a connection that replaces a
+// lost one before the loss is reported (it reads the connectedness when it
+// emits), so no onConnected follows. A direct connection to a peer whose stream
+// is relayed upgrades the stream.
 func (n *Node) onConn(c network.Conn) {
 	p := c.RemotePeer()
 	if _, relay := n.relays[p]; relay {
@@ -529,7 +574,7 @@ func (n *Node) onConn(c network.Conn) {
 	n.mu.Lock()
 	ps := n.peers[p]
 	if ps != nil {
-		n.startOpenLocked(ps, false)
+		n.startOpenLocked(ps, false, c)
 	}
 	n.mu.Unlock()
 	if ps != nil && !isCircuit(c.RemoteMultiaddr()) {
@@ -598,24 +643,89 @@ func (n *Node) moveOut(ps *peerState, old network.Stream, c network.Conn) {
 	moved = n.swapOut(ps, old, s)
 }
 
+// openOn opens a stream of proto on the connection c as BasicHost.NewStream
+// does on the connection the swarm picks (go-libp2p p2p/host/basic): it waits
+// for identify on c, then opens optimistically when the peer is known to speak
+// proto, and negotiates otherwise. Bound to c, the opening names its connection
+// from its start, a failure before any stream included (spec §8.7.4, P-16).
+func (n *Node) openOn(ctx context.Context, c network.Conn, proto protocol.ID) (network.Stream, error) {
+	s, err := c.NewStream(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if h, ok := n.h.(interface{ IDService() identify.IDService }); ok {
+		select {
+		case <-h.IDService().IdentifyWait(c):
+		case <-ctx.Done():
+			_ = s.ResetWithError(network.StreamProtocolNegotiationFailed)
+			return nil, fmt.Errorf("identify failed to complete: %w", ctx.Err())
+		}
+	}
+	if known, _ := n.h.Peerstore().SupportsProtocols(c.RemotePeer(), proto); len(known) == 0 {
+		if err := negotiate(ctx, s, proto); err != nil {
+			return nil, err
+		}
+		_ = n.h.Peerstore().AddProtocols(c.RemotePeer(), proto) // as the host does; not critical
+		return s, nil
+	}
+	if err := s.SetProtocol(proto); err != nil {
+		_ = s.Reset()
+		return nil, err
+	}
+	return &lazyStream{Stream: s, rw: multistream.NewMSSelect(s, proto)}, nil
+}
+
+// lazyStream is a stream whose multistream-select header goes out with its
+// first write or read (go-libp2p's basichost streamWrapper, not exported).
+type lazyStream struct {
+	network.Stream
+	rw io.ReadWriteCloser
+}
+
+func (s *lazyStream) Read(b []byte) (int, error)  { return s.rw.Read(b) }
+func (s *lazyStream) Write(b []byte) (int, error) { return s.rw.Write(b) }
+
+// Close bounds the wait for the handshake, as the host's wrapper does.
+func (s *lazyStream) Close() error {
+	_ = s.SetReadDeadline(time.Now().Add(basichost.DefaultNegotiationTimeout))
+	return s.rw.Close()
+}
+
+// CloseWrite flushes the handshake first; its error shows on the next read.
+func (s *lazyStream) CloseWrite() error {
+	if f, ok := s.rw.(interface{ Flush() error }); ok {
+		_ = f.Flush()
+	}
+	return s.Stream.CloseWrite()
+}
+
 // newStreamOn opens a stream of protocol pid on the connection c, which the
-// host's NewStream cannot be told to use.
+// host's NewStream cannot be told to use, negotiating the protocol.
 func newStreamOn(ctx context.Context, c network.Conn, pid protocol.ID) (network.Stream, error) {
 	s, err := c.NewStream(ctx)
 	if err != nil {
 		return nil, err
 	}
-	if err := s.SetProtocol(pid); err != nil {
-		_ = s.Reset()
+	if err := negotiate(ctx, s, pid); err != nil {
 		return nil, err
 	}
+	return s, nil
+}
+
+// negotiate selects pid on the new stream s with multistream-select, within
+// ctx; s is reset on failure.
+func negotiate(ctx context.Context, s network.Stream, pid protocol.ID) error {
+	if err := s.SetProtocol(pid); err != nil {
+		_ = s.Reset()
+		return err
+	}
 	stop := context.AfterFunc(ctx, func() { _ = s.Reset() })
-	err = multistream.SelectProtoOrFail(pid, s)
+	err := multistream.SelectProtoOrFail(pid, s)
 	if !stop() || err != nil {
 		_ = s.Reset()
-		return nil, cmp.Or(err, ctx.Err())
+		return cmp.Or(err, ctx.Err())
 	}
-	return s, nil
+	return nil
 }
 
 // swapOut replaces old with its acknowledged successor s. If old was lost

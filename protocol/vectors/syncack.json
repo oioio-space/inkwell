@@ -303,7 +303,7 @@
         "peer_announced": false,
         "role": "session"
       },
-      "description": "Fin du flux sans accusé : ClosePeer, aucun PeerUp (H-19 : connexion fermée par le pair).",
+      "description": "Fin du flux sans accusé : refus, fermeture de la connexion du flux seule (P-16), aucun PeerUp (H-19 : connexion fermée par le pair).",
       "decoder": "sync_ack_opener",
       "verdict": "accept",
       "scope": "transport",
@@ -320,7 +320,7 @@
         },
         {
           "at_ms": 40,
-          "expect": "close_peer",
+          "expect": "close_conn",
           "op": "eof"
         }
       ]
@@ -334,7 +334,7 @@
         "peer_announced": false,
         "role": "session"
       },
-      "description": "Réinitialisation sans accusé (pair qui ne nous admet pas) : ClosePeer, aucun PeerUp.",
+      "description": "Réinitialisation sans accusé (pair qui ne nous admet pas) : refus, fermeture de la connexion du flux (P-16), aucun PeerUp.",
       "decoder": "sync_ack_opener",
       "verdict": "accept",
       "scope": "transport",
@@ -351,7 +351,7 @@
         },
         {
           "at_ms": 100,
-          "expect": "close_peer",
+          "expect": "close_conn",
           "op": "reset"
         }
       ]
@@ -396,7 +396,7 @@
         "peer_announced": false,
         "role": "session"
       },
-      "description": "Octet faux : violation, ClosePeer, aucun PeerUp.",
+      "description": "Octet faux : violation, fermeture de la connexion du flux (P-16), aucun PeerUp.",
       "decoder": "sync_ack_opener",
       "verdict": "accept",
       "scope": "transport",
@@ -414,7 +414,7 @@
         {
           "at_ms": 100,
           "byte_hex": "02",
-          "expect": "close_peer",
+          "expect": "close_conn",
           "op": "byte"
         }
       ]
@@ -428,7 +428,7 @@
         "peer_announced": false,
         "role": "session"
       },
-      "description": "Accusé puis un octet : PeerUp puis violation, ClosePeer.",
+      "description": "Accusé puis un octet : PeerUp puis violation, fermeture de la connexion du flux (P-16).",
       "decoder": "sync_ack_opener",
       "verdict": "accept",
       "scope": "transport",
@@ -452,7 +452,7 @@
         {
           "at_ms": 200,
           "byte_hex": "01",
-          "expect": "close_peer",
+          "expect": "close_conn",
           "op": "byte"
         }
       ]
@@ -498,7 +498,7 @@
         "peer_announced": false,
         "role": "session"
       },
-      "description": "Accusé à 15 000 ms : le délai est déjà écoulé, ClosePeer (P-5).",
+      "description": "Accusé à 15 000 ms : le délai est déjà écoulé, fermeture de la connexion du flux (P-5, P-16).",
       "decoder": "sync_ack_opener",
       "verdict": "accept",
       "scope": "transport",
@@ -516,7 +516,7 @@
         {
           "at_ms": 15000,
           "byte_hex": "01",
-          "expect": "close_peer",
+          "expect": "close_conn",
           "op": "byte"
         }
       ]
@@ -530,7 +530,7 @@
         "peer_announced": false,
         "role": "session"
       },
-      "description": "Négociation lente (retour à 10 s) puis accusé à 15 s : un seul délai pour l'ouverture et l'accusé, ClosePeer (P-5).",
+      "description": "Négociation lente (retour à 10 s) puis accusé à 15 s : un seul délai pour l'ouverture et l'accusé, fermeture de la connexion du flux (P-5, P-16).",
       "decoder": "sync_ack_opener",
       "verdict": "accept",
       "scope": "transport",
@@ -548,7 +548,7 @@
         {
           "at_ms": 15000,
           "byte_hex": "01",
-          "expect": "close_peer",
+          "expect": "close_conn",
           "op": "byte"
         }
       ]
@@ -594,7 +594,7 @@
         "peer_announced": false,
         "role": "session"
       },
-      "description": "Ouverture sans retour pendant 15 s : ClosePeer.",
+      "description": "Ouverture sans retour pendant 15 s : fermeture de la connexion de l'ouverture (P-16).",
       "decoder": "sync_ack_opener",
       "verdict": "accept",
       "scope": "transport",
@@ -606,7 +606,7 @@
         },
         {
           "at_ms": 15000,
-          "expect": "close_peer",
+          "expect": "close_conn",
           "op": "deadline"
         }
       ]
@@ -620,7 +620,7 @@
         "peer_announced": false,
         "role": "session"
       },
-      "description": "Pair muet après le retour : ClosePeer à 15 s, aucun PeerUp.",
+      "description": "Pair muet après le retour : fermeture de la connexion du flux à 15 s, aucun PeerUp.",
       "decoder": "sync_ack_opener",
       "verdict": "accept",
       "scope": "transport",
@@ -637,7 +637,7 @@
         },
         {
           "at_ms": 15000,
-          "expect": "close_peer",
+          "expect": "close_conn",
           "op": "deadline"
         }
       ]
@@ -683,7 +683,7 @@
         "peer_announced": true,
         "role": "session"
       },
-      "description": "Flux rouvert refusé : ClosePeer (PeerDown suivra la fermeture).",
+      "description": "Flux rouvert refusé : fermeture de sa connexion ; la session se rouvre sur une autre connexion utilisable, sinon PeerDown suit la fermeture (P-16, P-17).",
       "decoder": "sync_ack_opener",
       "verdict": "accept",
       "scope": "transport",
@@ -700,7 +700,7 @@
         },
         {
           "at_ms": 100,
-          "expect": "close_peer",
+          "expect": "close_conn",
           "op": "reset"
         }
       ]

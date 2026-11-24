@@ -84,12 +84,12 @@ func syncOrderVectors() []vector {
 		soRefusal("sync-refusal-busy-doubled", "Troisième refus pour capacité : attente doublée (400 ms).", "session", busy, 2000, 3, "retry", 400),
 		soRefusal("sync-refusal-busy-capped", "Attente plafonnée à 1 s.", "session", busy, 4000, 6, "retry", 1000),
 		soRefusal("sync-refusal-busy-in-budget", "Nouvel essai qui tient dans les 15 s de l'ouverture.", "session", busy, 14949, 0, "retry", 50),
-		soRefusal("sync-refusal-busy-out-of-budget", "Nouvel essai qui dépasserait les 15 s : ClosePeer (P-5).", "session", busy, 14950, 0, "close_peer", 0),
+		soRefusal("sync-refusal-busy-out-of-budget", "Nouvel essai qui dépasserait les 15 s : fermeture de la connexion de l'ouverture (P-5, P-16).", "session", busy, 14950, 0, "close_conn", 0),
 		soRefusal("sync-refusal-busy-move", "Passage au direct refusé pour capacité : nouvel essai, session inchangée.", "move", busy, 100, 1, "retry", 100),
 		soRefusal("sync-refusal-busy-move-out-of-budget", "Passage au direct, budget épuisé : abandon.", "move", busy, 14990, 0, "abandon", 0),
-		soRefusal("sync-refusal-other-code", "Réinitialisation d'un autre code : refus, ClosePeer (P-4).", "session", 0, 100, 0, "close_peer", 0),
-		soRefusal("sync-refusal-negotiation-code", "Code 0x1001 (négociation échouée) : refus.", "session", 0x1001, 100, 0, "close_peer", 0),
-		soRefusal("sync-refusal-eof", "Fin du flux avant l'accusé : refus, ClosePeer.", "session", nil, 100, 0, "close_peer", 0),
+		soRefusal("sync-refusal-other-code", "Réinitialisation d'un autre code : refus, fermeture de la connexion de l'ouverture (P-4, P-16).", "session", 0, 100, 0, "close_conn", 0),
+		soRefusal("sync-refusal-negotiation-code", "Code 0x1001 (négociation échouée) : refus, fermeture de la connexion de l'ouverture (P-16).", "session", 0x1001, 100, 0, "close_conn", 0),
+		soRefusal("sync-refusal-eof", "Fin du flux avant l'accusé : refus, fermeture de la connexion de l'ouverture (P-16).", "session", nil, 100, 0, "close_conn", 0),
 		soRefusal("sync-refusal-other-move", "Passage au direct refusé (autre code) : abandon.", "move", 0, 100, 0, "abandon", 0),
 	}
 }

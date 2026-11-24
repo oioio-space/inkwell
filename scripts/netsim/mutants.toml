@@ -2978,3 +2978,50 @@ why = "the inviter records each outage as begun 30 s before the connection was l
 file = "internal/transport/p2p/linkstat.go"
 before = "\ts.downAt, s.seen = now, now\n"
 after = "\ts.downAt, s.seen = now.Add(-30*time.Second), now\n"
+
+# PU1d, the scope of a failed sync opening (spec §8.7.4 « Portée d'un échec », rules P-16 and P-17; plan
+# docs/plans/2026-11-24-pu1d-close-scope.md; gate gates/PU1d.toml, criterion `mutants`, whose tuples these are).
+[[mutant]]
+id = "MD1"
+block = "PU1d"
+kind = "go"
+pkg = "./internal/transport/p2p/"
+test = "TestFailedOpeningClosesOnlyItsConnection"
+expect = "P-16 other connection closed"
+clause = "P-16"
+why = "ClosePeer back in openOut's failure path: the refusal of the opening on one connection closes the peer's other connection too"
+
+[[mutant.edit]]
+file = "internal/transport/p2p/stream.go"
+before = "\t\t\t_ = on.Close() // P-16: the named connection, never ClosePeer\n"
+after = "\t\t\t_ = n.h.Network().ClosePeer(ps.id)\n"
+
+[[mutant]]
+id = "MD2"
+block = "PU1d"
+kind = "go"
+pkg = "./internal/transport/p2p/"
+test = "TestDeadlineBeforeReturnClosesNamedConnection"
+expect = "P-16 unnamed opening"
+clause = "P-16"
+why = "the session opening goes through the host's NewStream again, the swarm choosing its connection: a deadline before NewStream returns names no connection, so the one the opening ran on is not closed"
+
+[[mutant.edit]]
+file = "internal/transport/p2p/stream.go"
+before = "\troute := func() network.Conn { return named }\n"
+after = "\troute := func() network.Conn { return nil }\n"
+
+[[mutant]]
+id = "MD3"
+block = "PU1d"
+kind = "go"
+pkg = "./internal/transport/p2p/"
+test = "TestRemainingConnectionOpens"
+expect = "P-17 stranded"
+clause = "P-17"
+why = "no reopening on a connection still open after the session's one closes: libp2p emits no connectedness event, so the peer stays connected with no stream"
+
+[[mutant.edit]]
+file = "internal/transport/p2p/stream.go"
+before = "func (n *Node) reopenLocked(ps *peerState, preferCircuit bool) {\n\tn.startOpenLocked(ps, preferCircuit, nil)\n}\n"
+after = "func (n *Node) reopenLocked(*peerState, bool) {}\n"

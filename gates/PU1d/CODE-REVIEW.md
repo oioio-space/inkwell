@@ -1,0 +1,15 @@
+# PU1d cross-family code review (DeepSeek V4 Pro via OpenRouter, one-shot curated bundle, 2026-11-24). Real cost 0.079 USD (33,717 prompt / 28,911 completion tokens); a first call capped at 16,000 output tokens spent them all on reasoning and returned no text (0.084 USD).
+
+Verdict : accepter avec corrections
+
+1. [majeur, confiance moyenne] (D) `preferCircuit` peut garder l’ouverture sur un circuit ouvert mais mourant alors qu’un direct est vivant. Trace : flux direct perdu → `watchOut` appelle `outLost(..., preferCircuit=true)` (stream.go:332,398) ; `sessionConn` renvoie `circuitTo(p)` avant même de regarder un direct possible (stream.go:203-206). Si le circuit est noirci mais non fermé, `openAcked` bloque jusqu’au délai de 15 s (stream.go:106), et un direct arrivé pendant l’ouverture ne peut pas ouvrir car `ps.opening` est vrai (stream.go:88-93,588). Le direct n’est utilisé qu’après fermeture du circuit sur deadline (stream.go:129-137) puis `reopenLocked` (stream.go:191-194). Fix : dans `sessionConn`, en mode `preferCircuit`, ne choisir le circuit que s’il n’existe pas de connexion directe live ; ajouter un test circuit préféré + direct vivant.
+
+2. [mineur, confiance moyenne] (A) Pas de deadlock, double close, fuite de goroutine/stream ou boucle de réouverture détectés : les fermetures sont hors `n.mu` (stream.go:131-133,393-395) et `ps.opening` sérialise les ouvertures (stream.go:88-93). Le seul impact concurrence/indisponibilité est le point 1.
+
+3. [mineur, confiance moyenne] (B/P-16) Aucun `ClosePeer` ne subsiste dans les chemins session (`on.Close`, `s.Conn().Close`, stream.go:132,394). Mais `openOut` peut démarrer sans connexion nommée : `named==nil` → `err=errNoConn`, `on==nil` (stream.go:109-116). Il n’y a alors rien à fermer, donc pas de violation P-16, mais cela contredit l’invariant `on ≠ NoConn` demandé par la spec-review. Fix : ne lancer `startOpenLocked` que si `liveConn(p)`, ou ne pas passer un état d’ouverture sans connexion.
+
+4. [mineur, confiance haute] (C/P-17) Aucun échouage de pair restant trouvé : `reopenLocked` relance si une connexion live demeure (stream.go:191-194). Les réouvertures après refus/violation passent `resync=false` (stream.go:332), donc pas de `PeerDown`/`PeerUp` surnuméraires ; seul `sendFailed` resynchronise (stream.go:383-384,565), hors P-16.
+
+5. [mineur, confiance moyenne] (E) Les sept tests et MD1-MD3 couvrent bien P-16/P-17 fonctionnels, mais aucun n’exerce le scénario du point 1 (`preferCircuit=true` avec relais mourant et direct vivant). Une implémentation cassée sur H-20/P-15 pourrait passer les tests actuels. Fix : ajouter le test + un mutant ciblant `sessionConn`.
+
+6. [mineur, confiance haute] (F) `protocol/syncack` renvoie `close_conn` de façon cohérente avec P-16 ; le renommage `ClosePeer`→`CloseConn` est mécanique (syncack.go:239, order.go:115-145). Rien d’incohérent trouvé pour les vecteurs.

@@ -1847,23 +1847,46 @@ quic-go n'agrandit alors la fenêtre de connexion que si le gestionnaire de ress
 cette connexion peut attendre ce consommateur (une indépendance garantie demanderait d'isoler les voies dans le
 transport).
 
-**8.7.4 Ouvreur (règles P-1, P-5, P-6).** Un nœud NE DOIT annoncer un pair (`PeerUp`, Annexe A.1)
+**8.7.4 Ouvreur (règles P-1, P-5, P-6, P-16, P-17).** Un nœud NE DOIT annoncer un pair (`PeerUp`, Annexe A.1)
 qu'après avoir lu son accusé sur le flux sortant qui porte la session, que l'ouverture ait été
 négociée ou optimiste. L'ouverture du flux et la lecture de l'accusé partagent **un seul** délai de 15 s, compté depuis
 l'ouverture et non relancé au retour de l'ouverture (une négociation lente suivie d'un accusé tardif
 n'a pas 15 s de plus) ;
-à son terme, ou sur un refus ou une violation, le nœud réinitialise le flux et ferme ses
-connexions au pair (`ClosePeer`), sans aucun événement. La perte de la connexion qui porte l'ouverture
+à son terme, ou sur un refus ou une violation, le nœud réinitialise le flux et ferme **la connexion qui le porte, et
+elle seule** (règle P-16), sans aucun événement. La perte de la connexion qui porte l'ouverture
 n'est pas un refus. L'ouverture est perdue quand son erreur est celle de la connexion, quand la connexion du
 flux obtenu est fermée, ou, sans flux obtenu, quand toutes les connexions au pair présentes à son début sont
 fermées (libp2p le rapporte alors par un « connection failed » qui ne nomme aucune connexion) : le flux se termine
-sans `ClosePeer` ni événement, et une autre connexion utilisable au pair ouvre son propre flux (action `StreamLost`
+sans fermeture ni événement, et une autre connexion utilisable au pair ouvre son propre flux (action `StreamLost`
 de `tla/PeerUpAck.tla` ; bloc E2E3, défauts vus par `TestOpenWindow` et `TestLanAskAndAnswer` le 2026-11-22). Une
 connexion qui arrive vers un pair connecté sans flux de session ni ouverture en cours ouvre ce flux, qu'un
-changement d'état du pair soit signalé ou non : libp2p lit l'état du pair au moment d'émettre, si bien qu'une
-connexion qui en remplace une perdue avant que la perte soit signalée n'émet aucun événement (action `StartOpen`,
-permise dès qu'une connexion est utilisable). Sans cela, le pair resterait connecté sans flux ni ouverture, et tout
-envoi vers lui attendrait sans fin.
+changement d'état du pair soit signalé ou non, et il en va de même de toute autre connexion encore ouverte après la
+fermeture de celle de l'ouverture ou du flux de la session (règle P-17) : libp2p lit l'état du pair au moment d'émettre, si bien qu'une
+connexion qui en remplace une perdue avant que la perte soit signalée n'émet aucun événement, et la fermeture d'une
+connexion parmi plusieurs n'en émet pas non plus (action `StartOpen`, permise dès qu'une connexion est utilisable ;
+propriété L3 `NeverStranded` de `tla/CloseScope.tla`). Sans cela, le pair resterait connecté sans flux ni ouverture,
+et tout envoi vers lui attendrait sans fin.
+
+**Portée d'un échec (règle P-16, bloc PU1d).** Le nœud ouvre le flux de la session sur une connexion **précise**,
+qu'il nomme avant l'ouverture : celle dont l'arrivée cause l'ouverture, sinon celle que libp2p choisirait. Il ouvre
+le flux sur cette connexion même (un flux de la connexion, non un flux du pair dont la pile choisit la connexion), si
+bien qu'un échec survenu avant que l'ouverture rende un flux (délai, négociation refusée) nomme toujours la connexion
+à fermer (propriété S7 `OpeningNamed`) ; un nœud qui ne la connaîtrait pas ne pourrait que les fermer toutes. Un refus,
+une violation ou la fin du délai de cette ouverture, ou du flux de la session une fois accusé (octet après l'accusé,
+fin ou réinitialisation par le pair sur une connexion vivante), ferment cette connexion et elle seule ; le nœud NE
+DOIT PAS fermer pour cela ses autres connexions au pair (`ClosePeer`). Une autre connexion utilisable ouvre alors son
+propre flux (P-17), sans événement ; sans autre connexion, la fermeture mène à `PeerDown` si le pair était annoncé.
+Seuls le retrait de l'admission (le pair n'est plus admis : `Drop`) et la fermeture du nœud ferment toutes les connexions au pair.
+Raison : l'accusé ne prouve l'acceptation que d'un flux sur une connexion (P-4) ; son absence ne prouve rien de plus.
+Un délai écoulé peut venir du chemin (circuit d'un relais qui ne transmet plus, connexion morte que libp2p préfère
+parce qu'elle porte le plus de flux, §8.6) et non du pair ; un tiers (le relais) ou une connexion morte ne doivent
+pas faire fermer une connexion directe vivante, obtenue au prix d'appels DCUtR comptés (§8.6). La connexion plus
+ancienne gardée comme chemin de repli par P-15 ne sert que si l'échec de l'ouverture sur la plus récente la laisse
+ouverte. Deux ouvertures croisées restent indépendantes (§8.7.5) : l'échec de la sienne ne ferme jamais une autre connexion
+qui porte la session accusée du pair (propriété S6 `CrossedIndependent`). Un refus dû au pair lui-même (il ne nous
+admet pas, il ne parle pas `/inkwell/sync/2.0.0`) se répète sur chaque connexion : elles se ferment une à une, une
+ouverture chacune, au plus autant que de connexions au pair (deux en régime, §16.1) ; un pair byzantin ne fait fermer
+que ses propres connexions, comme avant.
 
 **Connexion supplantée (règle P-15).** Quand une connexion vers un pair s'enregistre et est gardée (H-19), chaque
 connexion plus ancienne encore ouverte vers ce pair DOIT prouver qu'elle vit. Le nœud ouvre, sur cette connexion
@@ -1898,8 +1921,8 @@ passage au direct) : une réinitialisation avant l'accusé portant le code `0x10
 capacité** : le nœud réinitialise son flux, garde sa session et ses connexions et rouvre après une
 attente (50 ms, doublée, 1 s au plus), dans le même délai de 15 s compté depuis la première ouverture ;
 toute autre réinitialisation avant l'accusé, ou la fin du flux, est un **refus**. Portée des
-fermetures : un refus, une violation ou la fin du délai (refus pour capacité compris) ferment les
-connexions au pair (`ClosePeer`) **pour l'ouverture du flux de la session ou d'un flux rouvert** ;
+fermetures : un refus, une violation ou la fin du délai (refus pour capacité compris) ferment la
+connexion de l'ouverture, et elle seule (P-16), **pour l'ouverture du flux de la session ou d'un flux rouvert** ;
 **pour un passage au direct**, les mêmes causes n'abandonnent que le passage (flux réinitialisé,
 session inchangée, aucun événement, ci-dessous et §8.7.5) ; un refus pour capacité ne ferme jamais
 rien par lui-même. Un flux rouvert alors que le pair est déjà
@@ -1915,12 +1938,12 @@ s'entend donc après ce remplacement.
 | Ouvreur, flux de la session | Entrée | Sortie, action |
 |---|---|---|
 | Ouverture | retour de l'ouverture | Attente (rien d'annoncé) |
-| Ouverture, Attente | échec, refus, violation, 15 s écoulées | Fermé : flux réinitialisé, `ClosePeer`, aucun événement |
+| Ouverture, Attente | échec, refus, violation, 15 s écoulées | Fermé : flux réinitialisé, connexion nommée de l'ouverture fermée, elle seule (P-16), aucun événement ; ouverture sur toute autre connexion encore ouverte après la fermeture de celle de l'ouverture (P-17) |
 | Ouverture, Attente | connexion de l'ouverture perdue | Fermé : flux terminé, sans `ClosePeer` ni événement ; ouverture sur une autre connexion utilisable s'il y en a une |
-| Fermé, pair connecté | nouvelle connexion, signalée ou non par un changement d'état du pair | Ouverture sur cette connexion |
+| Fermé, pair connecté | nouvelle connexion, signalée ou non par un changement d'état du pair ; ou toute autre connexion encore ouverte après la fermeture de celle de l'ouverture | Ouverture sur cette connexion (P-17) |
 | Attente | réinitialisation `0x1002` (capacité) | Ouverture d'un nouveau flux après l'attente, dans les 15 s ; session inchangée |
 | Attente | `0x01` | Ouvert : `PeerUp` si le pair n'était pas annoncé |
-| Ouvert | octet reçu | violation : `ClosePeer` (existant) |
+| Ouvert | octet reçu ; fin ou réinitialisation par le pair, connexion vivante | violation ou refus : flux réinitialisé, sa connexion fermée, elle seule (P-16) ; ouverture sur une autre connexion utilisable (P-17), le pair reste annoncé |
 | Ouvert | flux perdu, connexion vivante | Ouverture d'un nouveau flux (le pair reste annoncé) |
 | Ouvert | connexion du flux fermée faute de preuve (P-15) | comme « flux perdu » : ouverture sur une connexion utilisable, sans événement |
 | tout état | plus de connexion ni de flux | `PeerDown` si le pair était annoncé |
@@ -1935,7 +1958,7 @@ Deux ouvertures croisées sont indépendantes : chaque côté accuse le flux de 
 (8.7.3). Redémarrage d'une connexion : tout recommence sur la nouvelle, aucune mémoire d'accusé.
 
 **8.7.6 Erreurs et débit.** Valeur fausse, octet de trop : violation, comme ci-dessus. Pair muet :
-15 s, puis `ClosePeer`. Inondation : un accusé par flux, et les flux sync par pair restent bornés
+15 s, puis la connexion de l'ouverture est fermée (P-16) ; muet sur chacune, il les perd une à une, 15 s chacune. Inondation : un accusé par flux, et les flux sync par pair restent bornés
 par le gestionnaire de ressources (4 par pair), dont deux au plus tiennent une place dans l'ordre
 (§8.7.3) ; un pair qui ouvre puis réinitialise des flux en boucle ne garde ni place ni attente :
 chaque flux parti sans trame quitte l'ordre aussitôt ; l'accusé n'est jamais répété ni rejoué (il vit
@@ -1955,7 +1978,7 @@ admis reçoit une réinitialisation, comme avant.
 **8.7.8 Interopérabilité.** L'identifiant passe de `/inkwell/sync/1.0.0` à `/inkwell/sync/2.0.0`
 (changement incompatible, §1.4) ; `1.0.0` n'est plus servi ni ouvert (bascule nette : aucune
 version publiée ne le parle). Face à un appareil qui ne connaît que `1.0.0`, multistream-select
-répond `na` : l'ouverture échoue, `ClosePeer`, aucun événement. Le flux vrac (§8.1) ne s'ouvre
+répond `na` : l'ouverture échoue, sa connexion est fermée (P-16), aucun événement. Le flux vrac (§8.1) ne s'ouvre
 qu'après `PeerUp` ; depuis le bloc PU1c il porte le même accusé (`/inkwell/bulk/2.0.0`). Dans la session 2.0 (§5, §11.1), le HELLO du pair joue ce rôle :
 un nœud n'entre pas en Actif au retour de l'ouverture d'un flux, seulement sur des HELLO valides.
 
@@ -1983,6 +2006,11 @@ décision de référence `syncack.Supersede`, fuzzée (`FuzzSupersede`) ; modèl
 `PeerUpAck` sans le modifier : `SupersededBounded`, `LiveKept`, `FallbackKept`, `NeverCloseSole`, vivacité
 `SessionLeavesDead`, mutants MS1–MS4 (aucune preuve, fermeture à l'échéance quelle que soit la réponse, fermeture
 sans attendre l'accusé de la nouvelle connexion, fermeture de la seule connexion), trois témoins.
+Portée d'un échec et ouvertures sans événement (bloc PU1d, P-16, P-17) : vecteurs `syncack.json` et `syncorder.json`
+(issue `close_conn`, action `close_conn`) ; modèle `tla/CloseScope.tla`, qui étend `PeerUpAck` sans le modifier :
+S6 `CrossedIndependent`, S7 `OpeningNamed`, vivacité L3 `NeverStranded`, mutants MC1 (`ClosePeer` sur un échec), MC2
+(ouverture seulement sur un changement d'état du pair) et MC3 (connexion nommée seulement au retour de l'ouverture),
+trois témoins.
 
 ## 9. Couche dépôt : messages automerge-repo
 
@@ -2396,7 +2424,7 @@ de `protocol` ; un test par ligne vérifie la borne, la borne + 1 et la reprise.
 | trame sync | 98 304 o | — | violation | Tenu |
 | flux sync entrants par pair (§8.7.3) | 2 places dans l'ordre ; refus pour capacité : code `0x1002` ; nouvel essai après 50 ms, doublé jusqu'à 1 s, dans les 15 s de l'ouverture ; attente de son tour 60 s | par pair (toutes connexions, toutes générations) | flux réinitialisé avec le code, sans `ClosePeer` ; l'ouvreur réessaie, session inchangée | une place rendue (flux lu jusqu'à sa fin, ou parti sans trame) |
 | cycle de vie d'un flux entrant, sync et vrac (§8.7.3, §8.1) | un seul lecteur ; deux voies ordonnées (sync, vrac), 2 places par pair et par voie ; vrac : accusé `0x01` et refus pour capacité `0x1002` comme sync ; en attente, sonde d'un octet au plus, essai suivant 250 ms au plus après le précédent, 256 o gardés au plus ; tour et annonce vus en 250 ms au plus ; budget de réception pris seulement à partir du tour | par pair et par voie | réinitialisation vue en 250 ms au plus, fin sans octet non lu aussitôt, fin derrière des octets non lus à son tour ; bloqué sur le budget : libéré par de la place rendue, la perte de sa connexion ou la fermeture du nœud | place rendue (flux lu jusqu'à sa fin, ou parti sans trame) |
-| accusé de session sync (§8.7) | 1 octet `0x01` ; ouverture et accusé en 15 s ; écriture de l'accusé en 15 s | par flux | refus ou violation : flux réinitialisé, `ClosePeer`, aucun événement | nouvelle connexion |
+| accusé de session sync (§8.7) | 1 octet `0x01` ; ouverture et accusé en 15 s ; écriture de l'accusé en 15 s | par flux | refus, violation ou délai : flux réinitialisé, sa connexion fermée, elle seule (P-16), aucun événement | autre connexion utilisable (P-17), ou nouvelle connexion |
 | connexion supplantée (§8.7.4, P-15) | preuve de vie : un ping de 32 o (`/ipfs/ping/1.0.0`) sur chaque connexion plus ancienne, au plus une preuve en cours par connexion ; réponse attendue en 5 s (`T_vie`, deux fois l'aller-retour « mauvais » de §8.5.7) | par connexion | sans preuve : fermée à l'accusé d'un flux sync sur une connexion plus récente, jamais la plus récente ni la seule ; ses flux finissent comme perdus avec elle, sans `ClosePeer` ni événement | nouvelle connexion |
 | trame vrac | 1 065 005 o | — | violation | Tenu |
 | salon | requête 4096 o / 10 s ; réponse 262 144 o ; traitement 3 min | — | flux fermé | nouvelle requête |

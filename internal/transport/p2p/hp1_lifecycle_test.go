@@ -22,17 +22,14 @@ func TestReopenChoosesLiveConnectionAfterReset(t *testing.T) {
 		ctx, cancel := context.WithCancel(t.Context())
 		lost := &lifecycleConn{closed: true}
 		circuit := &lifecycleConn{addr: ma.StringCast("/p2p-circuit")}
-		fresh := &lifecycleConn{}
-		nw := &lifecycleNetwork{conns: []network.Conn{lost, circuit}}
 		opened := make(chan struct{})
-		n := &Node{ctx: ctx, proofs: newProofSet(), chg: make(chan struct{}), h: lifecycleHost{
-			openRecordingHost: openRecordingHost{open: func(ctx context.Context) (network.Stream, error) {
-				close(opened)
-				<-ctx.Done()
-				return nil, ctx.Err()
-			}},
-			nw: nw,
+		fresh := &lifecycleConn{open: func(ctx context.Context) (network.Stream, error) {
+			close(opened)
+			<-ctx.Done()
+			return nil, ctx.Err()
 		}}
+		nw := &lifecycleNetwork{conns: []network.Conn{lost, circuit}}
+		n := &Node{ctx: ctx, proofs: newProofSet(), chg: make(chan struct{}), h: lifecycleHost{nw: nw}}
 		defer func() {
 			n.mu.Lock()
 			n.closed = true
@@ -249,12 +246,16 @@ type lifecycleConn struct {
 	addr   ma.Multiaddr
 	closed bool
 	opens  int
+	open   func(context.Context) (network.Stream, error) // nil: the connection is closed
 }
 
 func (c *lifecycleConn) RemoteMultiaddr() ma.Multiaddr { return c.addr }
 func (c *lifecycleConn) IsClosed() bool                { return c.closed }
-func (c *lifecycleConn) NewStream(context.Context) (network.Stream, error) {
+func (c *lifecycleConn) NewStream(ctx context.Context) (network.Stream, error) {
 	c.opens++
+	if c.open != nil {
+		return c.open(ctx)
+	}
 	return nil, errors.New("connection closed")
 }
 

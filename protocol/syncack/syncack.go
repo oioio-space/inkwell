@@ -129,8 +129,9 @@ const (
 	None Outcome = iota
 	// PeerUp announces the peer (and the stream carries the session).
 	PeerUp
-	// ClosePeer resets the stream and closes the connections to the peer, with no event.
-	ClosePeer
+	// CloseConn resets the stream and closes the connection it runs on, and only it, with no event (spec
+	// §8.7.4, rule P-16): the opening names that connection from its start, so the close always knows it.
+	CloseConn
 	// Lost is the connection's loss, handled as any other (PeerDown if announced).
 	Lost
 	// Swap replaces the session's stream by the move's, with no event.
@@ -139,7 +140,7 @@ const (
 	Abandon
 )
 
-var outcomeNames = [...]string{"none", "peer_up", "close_peer", "lost", "swap", "abandon"}
+var outcomeNames = [...]string{"none", "peer_up", "close_conn", "lost", "swap", "abandon"}
 
 // String returns the outcome's name in the vectors.
 func (o Outcome) String() string {
@@ -201,7 +202,7 @@ func (o *Opener) Step(e Event) (Outcome, error) {
 	case OpByte:
 		switch {
 		case o.st == stOpen: // the responder writes nothing after the ACK
-			return o.end(ClosePeer)
+			return o.end(CloseConn)
 		case o.st == stWaiting && e.Byte == Ack:
 			o.st = stOpen
 			return o.accepted(), nil
@@ -210,7 +211,7 @@ func (o *Opener) Step(e Event) (Outcome, error) {
 		}
 	case OpEOF, OpReset:
 		if o.st == stOpen { // the remote ended our stream on a live connection: it refuses us
-			return o.end(ClosePeer)
+			return o.end(CloseConn)
 		}
 		return o.end(o.refused())
 	case OpConnClosed:
@@ -235,12 +236,13 @@ func (o *Opener) end(out Outcome) (Outcome, error) {
 	return out, nil
 }
 
-// refused is the outcome of an opening that fails: a refusal, a violation or the deadline.
+// refused is the outcome of an opening that fails: a refusal, a violation or the deadline (P-16: its
+// connection is closed, not the peer).
 func (o *Opener) refused() Outcome {
 	if o.role == RoleMove {
 		return Abandon
 	}
-	return ClosePeer
+	return CloseConn
 }
 
 // accepted is the outcome of the ACK.

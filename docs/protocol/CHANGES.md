@@ -602,3 +602,17 @@ changements, appliqués).
 | Une connexion supplantée n'était jamais mise à l'épreuve : un circuit mort restait préféré environ 30 s | preuve de vie (ping de 32 o) de chaque connexion plus ancienne, `T_vie` = 5 s ; sans preuve, fermeture une fois un flux sync accusé sur une connexion plus récente, jamais la plus récente ni la seule ; une réponse garde la connexion (P-15) ; la règle des doublons attend la fin des preuves (H-15) | §8.6, §8.7.4, §8.7.5, §16 |
 | Revue du code (étape 2) : une défaillance locale de la preuve se lisait comme le silence du pair ; une preuve finie restait « en cours » pour la règle des doublons ; une fermeture décidée restait exécutée après la perte de la connexion plus récente | une preuve qui n'atteint pas le pair ne donne aucun verdict (état `void`) ; une preuve finie sans réponse ne retient plus la règle des doublons et son circuit n'y compte plus ; la fermeture se décide sur les connexions telles qu'elles sont quand elle a lieu (P-15, H-15) | §8.6, §8.7.4 |
 | Preuves | vecteurs `supersede.json`, décision `syncack.Supersede` fuzzée ; modèles `DirectUpgrade` (S19, S20, M31, M32, trois témoins) et `Supersede`, qui étend `PeerUpAck` sans le modifier (MS1–MS4, trois témoins) | §8.6, §8.7.9 |
+
+# Bloc PU1d : portée d'un échec d'ouverture (2026-11-24, proposé)
+
+Constat (`PROGRESS.md`, PU1d) : §8.7.4, les vecteurs `close_peer` et le code fermaient toutes les connexions au pair
+(`ClosePeer`) sur un refus, une violation ou la fin du délai, quand `tla/PeerUpAck.tla` ne ferme que la connexion de
+l'ouverture. Depuis HP1, un pair a souvent deux connexions (circuit et direct, ancienne et nouvelle) : `ClosePeer`
+fermait la connexion vivante pour l'échec d'une autre, et défaisait le chemin de repli de P-15. Plan :
+[2026-11-24-pu1d-close-scope.md](../plans/2026-11-24-pu1d-close-scope.md).
+
+| Constat | Changement | Où |
+|---|---|---|
+| Un échec d'ouverture sur une connexion fermait toutes les connexions au pair | la connexion de l'ouverture seule est fermée (P-16) ; seuls `Drop` et la fermeture du nœud ferment tout | §8.7.4, §8.7.5, §8.7.6, §8.7.8, §16 |
+| Une connexion qui reste quand celle de la session se ferme n'émet aucun événement | elle ouvre son propre flux, comme une connexion nouvelle (P-17) | §8.7.4, §8.7.5 |
+| Preuves | vecteurs `syncack.json`, `syncorder.json` (issue et action `close_conn`) ; modèle `CloseScope`, qui étend `PeerUpAck` sans le modifier (S6, S7, L3, MC1-MC3, trois témoins) ; revue DeepSeek V4 Pro « accepter avec corrections » (`gates/PU1d/SPEC-REVIEW.md`), corrections 1, 2 et 4 appliquées | §8.7.9 |

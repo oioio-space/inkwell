@@ -1089,6 +1089,54 @@ vectors `supersede_middle_acked`, `supersede_dead_middle_acked_keeps_older`, `su
 that answers on a connection it no longer uses (it keeps only its own connection open), real timings (the Go tests of
 plan §2).
 
+## CloseScope (block PU1d, spec §8.7.4: a failed opening closes only the connection it names, rules P-16 and P-17)
+
+Model: [CloseScope.tla](CloseScope.tla); plan [2026-11-24-pu1d-close-scope.md](../../plans/2026-11-24-pu1d-close-scope.md).
+It EXTENDS `PeerUpAck` and leaves it byte for byte as frozen by `gates/PU1b.toml` and `gates/PU1c.toml`, as Supersede
+does. PeerUpAck already closes only the connection a failed session opening ran on (`CloseC` in `RecvReset` and
+`Timeout`; their comments still say « ClosePeer », written before PU1d) and already lets any usable connection start an
+opening (`StartOpen`), on a connection it picks. This module restates the two session-stream failure branches with
+`CloseNamed` (`RecvResetSession`, `TimeoutSession`: the named connection closed by `FailClose`, or, unnamed, all of
+them by `CloseAll`, the code before PU1d; the other branches are PeerUpAck's own, selected by
+`out' = out`), guards `StartOpen` with `OpenGuard`, and runs every other action unchanged (`Keep`). `evt[n]` abstracts
+libp2p's connectedness event: raised on the edge from no usable connection to one, dropped with the last, consumed by an
+opening; it is kept until consumed, kinder to MC2 than libp2p (an event that finds an opening in progress is lost in
+inkwell's `onConnected`). `Moves = FALSE` (a move's failure closes nothing either way: PU1's runs), `CrashBy` as in
+Supersede. Violations (a wrong byte, a byte after the ACK) are not modelled: same rule, carried by the vectors.
+
+Rule operators (overridden by the mutants): `FailClose(n, c) == CloseC(n, c)` (P-16), `Names(st) == st.c` (P-16: the
+opening names the connection it runs on from its start, `network.Conn.NewStream`), `OpenGuard(n) == TRUE` (P-17).
+
+| Property | Meaning |
+|---|---|
+| `CrossedIndependent` (S6, P-16) | a failed session opening never closes another connection that carries the peer's acknowledged session (§8.7.5: two crossed openings are independent) |
+| `OpeningNamed` (S7, P-16) | an opening in flight, NewStream not returned included, always names the connection it runs on (review finding 1) |
+| `NeverStranded` (L3, P-17) | a node that admits its peer, holds a usable connection and has no session stream and none opening does not stay so |
+
+PeerUpAck's `TypeOK`, `UpAfterAccept`, `SessionOnAccepted`, `NoUpOnRefused` and `Budget`, and `TypeS`, are checked in
+both runs.
+
+| Configuration | Run | What it covers | Result (TLC 1.8.0, 2 workers, 2026-11-24, `heavy.sh`) |
+|---|---|---|---|
+| `CloseScopeAny.cfg` | `PU1dCloseScopeAny` (safety) | two connections both sides keep, lazy path, a Drop/re-admission, no move, any timing (a deadline on an honest exchange: a stalled relay, a dead link); S1-S4, S6, S7 | **exhaustive, no error**: 7,407,601 states, 1,345,391 distinct, depth 34, 33-41 s |
+| `CloseScopeNegotiated.cfg` | `PU1dCloseScopeNegotiated` (safety) | two connections, the negotiated path (protocol not cached: NewStream returns after the echo, a deadline may fire before), two openings per node, no Drop, no move, any timing; S1-S4, S6, S7 | **exhaustive, no error**: 17,257,071 states, 2,484,923 distinct, depth 37, 1 min 23 s (with Any's Drop: 116,425,537 states, 14,766,859 distinct, depth 38, 9 min, no error, run once) |
+| `CloseScopeLive.cfg` | `PU1dCloseScopeLive` | b's side of one connection may close without a knowing (a crash), honest timing, time passes; S1-S4, S6, S7, L3, L2 `OpenResolves` | **exhaustive, no error**: 63,469 states, 19,957 distinct, depth 28, liveness included, 11 s |
+
+| Mutant (mutants/CloseScopeMutants.tla) | Override | Caught by |
+|---|---|---|
+| `PU1dCloseScopeClosePeer` (MC1, P-16 off: `ClosePeer` on a refusal or the deadline, spec and code before PU1d) | `FailClose <- FailClosePeer` | `CrossedIndependent` (Any: a's opening on a connection b has not registered yet times out, and ClosePeer closes the one carrying b's acknowledged session; depth 13) |
+| `PU1dCloseScopeOnEventOnly` (MC2, P-17 off: an opening starts only on a connectedness event, inkwell before the lobby fix of 2026-11-23) | `OpenGuard <- OpenOnEvent` | `NeverStranded` (Live: the session's connection is lost, the remaining one emits no event, both nodes stay with no stream; depth 16) |
+| `PU1dCloseScopeUnnamedOpen` (MC3, review finding 1: the connection named only when NewStream returns, host.NewStream as in today's code) | `Names <- NamesAtReturn` | `OpeningNamed` (Negotiated; depth 4) |
+| `PU1dCloseScopeUnnamedCollateral` (MC3's consequence) | `Names <- NamesAtReturn` | `CrossedIndependent` (Negotiated: a deadline before the return names no connection, so the node closes them all, the peer's session one included; depth 14) |
+| `PU1dCloseScopeWitnessBeside` (witness) | — | `NoFailBeside`: a session opening fails while the peer's acknowledged session runs on another connection (Any; S6 is not vacuous) |
+| `PU1dCloseScopeWitnessQuiet` (witness) | — | `NoQuietOpen`: an opening starts with no connectedness event pending (Live; the state MC2 strands) |
+| `PU1dCloseScopeWitnessNeg` (witness) | — | `NoUnreturnedFail`: a session opening fails before NewStream returns (Negotiated; S7 is not vacuous) |
+
+Not modelled: the responder's reset on a connection it is closing (§8.7.3 step 3; PeerUpAck sends nothing then), whose
+race with the close made a closing connection's reset read as a refusal: under P-16 the two readings close the same
+connection (review finding 2; Go test `TestResetBeforeConnCloseKeepsOther`, step 2); the reopening's real timings (Go
+tests of the plan). Ten runs (`INKWELL_TLA_ONLY='^PU1d'`): 139 s with `heavy.sh` (2026-11-24).
+
 ## WindowClose (WC1)
 
 [WC1 window-close contract](../../plans/2026-11-21-wc1-window-close.md) refines the close aspect
