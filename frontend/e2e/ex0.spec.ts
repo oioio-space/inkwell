@@ -137,7 +137,15 @@ test("EX0-E2 PERF-EXT-VIEWER-CSV opens a 1 MiB table within budget", async ({ br
       `PERF-EXT-VIEWER-CSV ms: ${sorted.map((v) => v.toFixed(1)).join(" ")}; p95 ${p95.toFixed(1)}`,
     );
     expect(values).toHaveLength(10);
-    expect(p95).toBeLessThanOrEqual(200);
+    // The budget is a wall-clock claim about an idle machine: it is asserted where the run holds
+    // the machine alone (`scripts/heavy.sh --exclusive`, as the gate's e2e criterion runs it). In a
+    // shared slot (CI's runner, a local `mise run e2e`) the value is reported, not judged.
+    if (process.env.INKWELL_HEAVY_SLOT === "all") {
+      expect(p95).toBeLessThanOrEqual(200);
+    } else {
+      const description = `p95 ${p95.toFixed(1)} ms in a shared slot`;
+      test.info().annotations.push({ type: "perf-unjudged", description });
+    }
   } finally {
     rmSync(file, { force: true });
     await page.context().close();

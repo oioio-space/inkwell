@@ -228,14 +228,15 @@ different builds fail cleanly, and both are built together.
   (raw manifests through one parser, content class and SVG, alternative viewers without code, grammars cut to Typst and
   Markdown with the rest in EX0d, start sources checked by sourcemap, one version byte per payload).
 
-### Open (product, with the user)
+### Decided with the user (2026-11-24)
 
-- An unknown-extension text file shows the generic icon until it is opened: acceptable? *Default applied in
-  slice 1: the generic icon.*
-- Should a per-file « open with » choice be remembered on this device only, or shared with the project?
-  *Default applied in slice 1, the safer one: this device only, per project (`workspace/viewChoice.svelte.ts`,
-  local storage); nothing is shared with the other people. The view chosen for a file (its text rather than its
-  table) is remembered the same way (UX-EX0-5, key `inkwell.viewWith`).*
+- Icons: a file whose type is known from its name or extension shows its icon at once; only a name the registry
+  does not know shows the generic icon, until its first read tells text from binary.
+- Views: each person chooses the view of each file in their own Inkwell (table or text for a CSV), remembered on
+  their device, per project, never shared with the other people (`workspace/viewChoice.svelte.ts`, key
+  `inkwell.viewWith`).
+- Editing a file other than the main document (a CSV as text or as a table) waits for G-0b, which makes every
+  project file editable; no CSV-only exception (the integrator's choice, left to him by the user).
 
 ### Confirmation
 

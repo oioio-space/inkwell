@@ -14,7 +14,13 @@ if (import.meta.env.VITE_PERF_NATIVE === "1" && !isPublic) {
   installNativeEarly(true);
 }
 if (!isPublic) preloadStartup();
-const { default: Root } = await (isPublic
-  ? import("./present/PublicWindow.svelte")
-  : import("./App.svelte"));
+// One loader per root, never `cond ? import(a) : import(b)`: Vite wraps each import() in a preload
+// call whose dependency list (the chunk's CSS) is filled in after the minifier ran, and the
+// minifier folds the two identical-looking calls of a conditional into one, which then carries
+// App's list for both branches (the public window got App's CSS and not its own, 2026-11-24).
+const roots = {
+  public: () => import("./present/PublicWindow.svelte"),
+  app: () => import("./App.svelte"),
+};
+const { default: Root } = await roots[isPublic ? "public" : "app"]();
 mount(Root, { target });

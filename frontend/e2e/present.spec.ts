@@ -75,6 +75,15 @@ test("PRS-31 PRS-32 PRS-40 the public window follows the presenter, and shows on
   // biome-ignore lint/performance/useDomNodeTextContent: Playwright's Locator.innerText(), not a DOM node property
   expect(await pub.locator("body").innerText()).not.toMatch(/Souriez|Notes|Commentaire/);
   await expect(pub.getByTestId("notes")).toHaveCount(0);
+  // The public window loads its own code and style, never the editor's (App's chunk and its CSS).
+  expect(
+    await pub.evaluate(() =>
+      performance
+        .getEntriesByType("resource")
+        .map((r) => r.name)
+        .filter((n) => /\/App[-.][^/]*\.(js|css)(\?|$)/.test(n)),
+    ),
+  ).toEqual([]);
 
   // The person puts the window where they want and makes it full screen: a button that shows while
   // the mouse moves, and F11. At rest the window is the slide alone.
