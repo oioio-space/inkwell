@@ -66,7 +66,9 @@ def forward(text: str, rel: str) -> str:
             pieces, i = [], 0
             for m in re.finditer(re.escape(a), line):
                 before = line[: m.start()]
-                if SKIP.search(before[-24:]) or line[m.end():].lstrip().startswith("as const"):
+                # `expect(langOf(…)).toBe("typst")` expects a formatting language (EX0c3r), not a type id.
+                expected = "langOf(" in before and before.rstrip().endswith("toBe(")
+                if (SKIP.search(before[-24:]) and not expected) or line[m.end():].lstrip().startswith("as const"):
                     continue
                 pieces += [line[i:m.start()], b]
                 i = m.end()
