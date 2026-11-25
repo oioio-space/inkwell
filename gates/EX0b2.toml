@@ -1,0 +1,297 @@
+# Written 2026-11-25 at step 1 of block EX0b2, before any code; revised after its blind Opus review (gates/EX0b2/REVIEW.md,
+# « accept with corrections »: 4 major, all applied); frozen 2026-11-25.
+# EX0b2: the command palette, its ranker (ordered match classes, UX1 rule 48) and the shortcuts window, on EX0b1's
+# registry. Rigour: standard. Plan: docs/plans/2026-11-25-ex0b2-palette.md (from docs/plans/2026-11-25-ex0b-commands.md
+# §7). Witnesses: gates/EX0b2/WITNESSES.md.
+# Every long command is `timeout -k 10 N …/scripts/heavy.sh …` (the timeout covers the wait for a slot). No nested gate:
+# `no-hard-keys` runs one criterion's command of gates/EX0b1.toml, not that gate.
+# Caps: 30 + 30 + 30 + (120 + 30) + 480 + (20 + 300) + (200 + 300) + 420 + 600 + 30 = 2590 s <= 2700 s (rule G-1). The
+# order matters: `e2e` builds bin/inkwell-server and frontend/dist, which `e2e-webkit` and `perf-start` use.
+max_minutes = 45
+raw_results = ["docs/plans/2026-11-25-ex0b2-palette.md", "docs/plans/2026-11-25-ex0b-commands.md", "gates/EX0b2/*"]
+
+[[criteria]]
+# The plan is written (rules P-1..P-10, at most two pages) and the EX0b plan's §7 points at it; spec §8.2's rows
+# « Palette » and « Raccourcis » are « fait » with their command ids (EX0b1's C-7 then compares their chords with the
+# registry); §4.24 is no longer « à créer »; §4.26 names `app.shortcuts` and AdwShortcutsDialog (GtkShortcutsWindow is
+# deprecated since GTK 4.18); ux-principles rule 3 still gives the palette's chord, menu item and shown shortcut;
+# PROGRESS's EX0b2 line points at the plan; typo tolerance is filed « → EX0b3 » with its line (review, open question 1);
+# rule 48 still orders the palette.
+id = "docs"
+command = '''timeout -k 10 30 python3 -I - <<'PY'
+import pathlib, sys
+bad = []
+plan = pathlib.Path("docs/plans/2026-11-25-ex0b2-palette.md")
+text = plan.read_text() if plan.is_file() else ""
+bad += [f"plan row P-{i}" for i in range(1, 11) if f"\n| P-{i} |" not in text]
+if len(text.splitlines()) > 110:
+    bad.append(f"plan is {len(text.splitlines())} lines, over two pages")
+ex0b = pathlib.Path("docs/plans/2026-11-25-ex0b-commands.md").read_text()
+if "## 7. EX0b2" not in ex0b or "2026-11-25-ex0b2-palette.md" not in ex0b[ex0b.index("## 7. EX0b2"):]:
+    bad.append("EX0b plan §7 does not point at the EX0b2 plan")
+spec = pathlib.Path("docs/design/spec.md").read_text()
+s82 = spec[spec.index("### 8.2 "):spec.index("### 8.3 ")]
+for action, cid in (("Palette", "app.palette"), ("Raccourcis", "app.shortcuts")):
+    row = next(([c.strip() for c in l.strip().strip("|").split("|")] for l in s82.splitlines() if l.startswith(f"| {action} |")), None)
+    if row is None or len(row) != 5 or not row[4].startswith("fait") or f"`{cid}`" not in row[4]:
+        bad.append(f"spec 8.2 row {action!r} is not « fait (`{cid}`) »")
+if "### 4.24 Palette de commandes (*à créer*)" in spec:
+    bad.append("spec 4.24 still « à créer »")
+prog = pathlib.Path("PROGRESS.md").read_text().splitlines()
+line = next((l for l in prog if l.lstrip().startswith("- **EX0b2**")), "")
+if "2026-11-25-ex0b2-palette.md" not in line:
+    bad.append("PROGRESS EX0b2 line absent or not pointing at the plan")
+s426 = spec[spec.index("### 4.26 "):spec.index("### 4.27 ")]
+if "`app.shortcuts`" not in s426 or "AdwShortcutsDialog" not in s426 or "GtkShortcutsWindow" in s426:
+    bad.append("spec 4.26 does not name `app.shortcuts` and AdwShortcutsDialog (or still GtkShortcutsWindow)")
+ux = pathlib.Path("docs/ux-principles.md").read_text().splitlines()
+r3 = next((" ".join([l] + ux[i + 1:i + 2]) for i, l in enumerate(ux) if l.startswith("3. **Trois accès")), "")
+if not ("Maj+P" in r3 and "Rechercher une commande" in r3 and "raccourci" in r3):
+    bad.append("ux-principles rule 3 no longer names the palette, its chord, its menu item and its shown shortcut")
+if "→ EX0b3" not in text or not any(l.lstrip().startswith("- **EX0b3**") for l in prog):
+    bad.append("typo tolerance not filed as → EX0b3 with its PROGRESS line")
+u = pathlib.Path("docs/plans/2026-11-24-ux1-interface-plan.md").read_text().splitlines()
+i48 = next((i for i, l in enumerate(u) if l.startswith("48. ")), None)
+r48 = "" if i48 is None else " ".join([u[i48]] + [l for l in u[i48 + 1:i48 + 4] if l.startswith("    ")])
+if not ("récentes" in r48 and "qualité" in r48 and "départage" in r48):
+    bad.append("UX1 rule 48 no longer orders the palette")
+sys.exit(f"EX0b2 docs: {bad}" if bad else 0)
+PY'''
+
+[[criteria]]
+# One source for chords and labels still (spec §8.2): EX0b1's `no-hard-keys` command, read from gates/EX0b1.toml and
+# run as written, now also over the palette and the shortcuts window (no chord literal, no hand-made shortcut label).
+# A regression guard: green on today's tree.
+id = "no-hard-keys"
+command = '''timeout -k 10 30 python3 -I - <<'PY'
+import subprocess, sys, tomllib
+c = next(c for c in tomllib.load(open("gates/EX0b1.toml", "rb"))["criteria"] if c["id"] == "no-hard-keys")
+sys.exit(subprocess.run(["sh", "-c", c["command"]]).returncode)
+PY'''
+
+[[criteria]]
+# P-8's count is complete (review finding 3): the ranker compares text only in its own counted loops. rank.ts exists,
+# exports `rankStats`, and outside comments holds no built-in text search (`includes`, `indexOf`, `lastIndexOf`,
+# `startsWith`, `endsWith`, `search`, `match`, `matchAll`), no `RegExp` and no regular-expression literal. Folding lives
+# in fold.ts (counted by P-1); ordering labels with the collator is not a text search.
+id = "ranker-lint"
+command = '''timeout -k 10 30 python3 -I - <<'PY'
+import pathlib, re, sys
+f = pathlib.Path("frontend/src/ui/command/rank.ts")
+if not f.is_file():
+    sys.exit("EX0b2 ranker-lint: frontend/src/ui/command/rank.ts is absent")
+bad = []
+src = f.read_text()
+if not re.search(r"export\s+(const|let)\s+rankStats\b", src):
+    bad.append("rank.ts does not export rankStats")
+src = re.sub(r"/\*.*?\*/", "", src, flags=re.S)
+banned = re.compile(r"\.(includes|indexOf|lastIndexOf|startsWith|endsWith|search|match|matchAll)\s*\(|\bRegExp\b")
+literal = re.compile(r"(?:^|[=(,:\[!&|?{};]|\breturn)\s*/(?![/*\s])")
+for n, line in enumerate(src.splitlines(), 1):
+    code = re.sub(r"(^|\s)//.*$", "", line)
+    if banned.search(code) or literal.search(code):
+        bad.append(f"rank.ts:{n}: {line.strip()[:80]}")
+sys.exit(f"EX0b2 ranker-lint: {bad}" if bad else 0)
+PY'''
+
+[[criteria]]
+# Both components are lazy (plan §1, « Entry points »): a production Vite build with its manifest; Palette.svelte and
+# ShortcutsWindow.svelte are dynamic entries of their own; no start chunk (the static closure of index.html and
+# App.svelte) holds either of them nor the ranker, read from each start chunk's sourcemap. E2's fixture extension of
+# 1 000 commands (`e2e-many`, e2e build only) is in no file of the production build.
+id = "chunks"
+command = '''set -eu
+mkdir -p .task/ex0b2
+rm -rf .task/ex0b2/chunks
+(cd frontend && timeout -k 10 120 ../scripts/heavy.sh pnpm --config.verifyDepsBeforeRun=false exec vite build --configLoader runner --mode production --manifest --sourcemap --outDir ../.task/ex0b2/chunks --emptyOutDir) > .task/ex0b2/chunks.log 2>&1 || { tail -30 .task/ex0b2/chunks.log; exit 1; }
+timeout -k 10 30 python3 -I - <<'PY'
+import json, pathlib, sys
+out = pathlib.Path(".task/ex0b2/chunks")
+m = json.loads((out / ".vite/manifest.json").read_text())
+bad = []
+lazy = ["src/ui/command/Palette.svelte", "src/ui/command/ShortcutsWindow.svelte"]
+bad += [f"{k}: not a dynamic chunk of its own" for k in lazy if not m.get(k, {}).get("isDynamicEntry")]
+seen, stack = set(), ["index.html", "src/App.svelte"]
+while stack:
+    k = stack.pop()
+    if k in m and k not in seen:
+        seen.add(k)
+        stack.extend(m[k].get("imports", []))
+if "src/App.svelte" not in seen:
+    bad.append("App.svelte is not a chunk of the build any more")
+forbidden = ["frontend/src/ui/command/Palette.svelte", "frontend/src/ui/command/ShortcutsWindow.svelte", "frontend/src/ui/command/rank.ts"]
+for file in sorted({m[k]["file"] for k in seen}):
+    path, mp = out / file, out / (file + ".map")
+    if not mp.is_file():
+        if file.endswith(".js") and path.stat().st_size >= 1024:
+            bad.append(f"{file}: start chunk without a sourcemap")
+        continue
+    bad += [f"{file} holds {s}" for s in json.loads(mp.read_text())["sources"] if any(s.endswith(x) for x in forbidden)]
+bad += [f"{f.relative_to(out)} holds the e2e fixture" for f in out.rglob("*") if f.is_file() and f.suffix in (".js", ".json", ".html") and b'"e2e-many.' in f.read_bytes()]
+sys.exit(f"EX0b2 chunks: {bad}" if bad else 0)
+PY'''
+
+[[criteria]]
+# Biome, svelte-check and every Vitest test of the frontend, from one JSON report: the run succeeds and each named
+# rule test of the plan (P-1..P-10) passed (absent or skipped fails).
+id = "frontend"
+command = '''set -eu
+mkdir -p .task/ex0b2
+rm -f .task/ex0b2/vitest.json
+rc=0
+(cd frontend && timeout -k 10 480 ../scripts/heavy.sh bash -c 'pnpm --config.verifyDepsBeforeRun=false exec biome check . && pnpm --config.verifyDepsBeforeRun=false exec svelte-check --tsconfig ./tsconfig.json && pnpm --config.verifyDepsBeforeRun=false exec vitest run --configLoader runner --reporter=json --outputFile=../.task/ex0b2/vitest.json') || rc=$?
+python3 -I - "$rc" <<'PY'
+import json, pathlib, sys
+need = [
+    "EX0b2 P-1 text is folded once: accents, case, ligatures and spaces",
+    "EX0b2 P-2 a query matches a label or a synonym by its start, its word starts or as one piece, never scattered",
+    "EX0b2 P-3 available first, then match quality, then recency, then the label",
+    "EX0b2 P-4 recent commands are this device's last palette runs, kept and read safely",
+    "EX0b2 P-5 an unavailable command is greyed with its reason and Enter only announces it",
+    "EX0b2 P-6 the palette is an APG combobox with its count announced and at most 50 rows",
+    "EX0b2 P-7 Enter gives the focus back to where it was, then runs there; Escape runs nothing",
+    "EX0b2 P-8 ranking 1 000 commands stays within its counted bound",
+    "EX0b2 P-9 the shortcuts window lists every chord in force on this system, hers marked",
+    "EX0b2 P-10 the palette and the shortcuts window open from their commands, menus and chords, loaded on first use",
+]
+report = pathlib.Path(".task/ex0b2/vitest.json")
+results = [a for f in json.loads(report.read_text())["testResults"] for a in f["assertionResults"]] if report.is_file() else []
+status = {a["title"]: a["status"] for a in results}
+bad = {n: status.get(n, "absent") for n in need if status.get(n) != "passed"}
+failed = [a["fullName"] for a in results if a["status"] == "failed"]
+if bad or failed or sys.argv[1] != "0":
+    sys.exit(f"EX0b2 frontend: exit {sys.argv[1]}, rule tests {bad}, failed {failed[:20]}")
+PY'''
+
+[[criteria]]
+# A rule test that asserts nothing must fail the gate. Block EX0b2's mutants MP1..MP10 (scripts/netsim/mutants.toml,
+# written at step 2 with the code) each break one rule; each entry names the exact title of its rule's test (`name`),
+# so only that test failing is a catch (MP8 replaces KMP by a naive search, caught by the counted bound on the
+# 64-character query « a…ab » only).
+id = "mutants"
+command = '''set -eu
+timeout -k 10 20 python3 -I - <<'PY'
+import sys, tomllib
+ms = {m["id"]: m for m in tomllib.load(open("scripts/netsim/mutants.toml", "rb"))["mutant"] if m.get("block") == "EX0b2"}
+bad = []
+for i in range(1, 11):
+    m = ms.get(f"MP{i}", {})
+    if (m.get("kind") != "vitest" or m.get("retired") or not m.get("test", "").startswith("frontend/src/")
+            or not m.get("name", "").startswith(f"EX0b2 P-{i} ")):
+        bad.append(f"MP{i}")
+sys.exit(f"EX0b2 mutants: entries missing or wrong: {bad}" if bad else 0)
+PY
+timeout -k 10 300 ./scripts/heavy.sh python3 -I scripts/netsim/mutants.py EX0b2'''
+
+[[criteria]]
+# End to end in Chromium, first attempt only, nothing skipped: EX0b2-E1 (palette, from the text and from the main menu),
+# EX0b2-E2 (PERF-PALETTE with the e2e build's 1 000 fixture commands, architecture §15.4: first open <= 200 ms; slowest
+# of 10 warm opens and of 10 one-letter queries <= 50 ms, read from performance marks), EX0b2-E3
+# (shortcuts window), and the EX0b1 scenarios whose keys and menu the palette shares. Exclusive slot for the timing.
+id = "e2e"
+command = '''set -eu
+mkdir -p .task/ex0b2
+rm -f .task/ex0b2/e2e.json
+timeout -k 10 200 ./scripts/heavy.sh mise run e2e:build
+rc=0
+(cd frontend && PLAYWRIGHT_JSON_OUTPUT_NAME=../.task/ex0b2/e2e.json INKWELL_E2E_BROWSER=chromium timeout -k 10 300 ../scripts/heavy.sh --exclusive ./node_modules/.bin/playwright test ex0b2.spec.ts ex0b1.spec.ts shell.spec.ts save.spec.ts --grep "EX0b2-E[123]|EX0b1-E[12]|UI-02|UI-03|SAV-03b" --reporter=json > /dev/null) || rc=$?
+python3 -I - "$rc" .task/ex0b2/e2e.json <<'PY'
+import json, pathlib, sys
+need = ["EX0b2-E1", "EX0b2-E2", "EX0b2-E3", "EX0b1-E1", "EX0b1-E2", "UI-02", "UI-03", "SAV-03b"]
+p = pathlib.Path(sys.argv[2])
+report = json.loads(p.read_text()) if p.is_file() else {"suites": [], "errors": ["no report"]}
+suites, tests = list(report["suites"]), []
+while suites:
+    s = suites.pop()
+    suites.extend(s.get("suites", []))
+    for spec in s.get("specs", []):
+        for t in spec["tests"]:
+            tests.append((spec["title"], t["status"] == "expected" and [r["status"] for r in t["results"]] == ["passed"]))
+bad = {}
+for n in need:
+    mine = [ok for title, ok in tests if title == n or title.startswith(n + " ") or title.startswith(n + ":")]
+    if not mine or not all(mine):
+        bad[n] = "absent" if not mine else "not passing first time"
+if bad or report.get("errors") or sys.argv[1] != "0":
+    sys.exit(f"EX0b2 e2e: exit {sys.argv[1]}, {bad}, errors {report.get('errors')}")
+PY'''
+exclusive = true
+
+[[criteria]]
+# PERF-PALETTE and the palette in WebKit (the engine of the Linux build is WebKitGTK; architecture §15.4 asks both
+# engines): EX0b2-E1 and EX0b2-E2 under `mise run e2e:webkit` (Playwright's WebKit in its official container), first
+# attempt only. Exclusive slot: the nested heavy.sh of the task reuses it.
+id = "e2e-webkit"
+command = '''set -eu
+mkdir -p .task/ex0b2
+rm -f .task/ex0b2/e2e-webkit.json
+rc=0
+PLAYWRIGHT_JSON_OUTPUT_NAME="$PWD/.task/ex0b2/e2e-webkit.json" timeout -k 10 420 ./scripts/heavy.sh --exclusive mise run e2e:webkit -- ex0b2.spec.ts --grep "EX0b2-E[12]" --reporter=json > /dev/null || rc=$?
+python3 -I - "$rc" .task/ex0b2/e2e-webkit.json <<'PY'
+import json, pathlib, sys
+need = ["EX0b2-E1", "EX0b2-E2"]
+p = pathlib.Path(sys.argv[2])
+report = json.loads(p.read_text()) if p.is_file() else {"suites": [], "errors": ["no report"]}
+suites, tests = list(report["suites"]), []
+while suites:
+    s = suites.pop()
+    suites.extend(s.get("suites", []))
+    for spec in s.get("specs", []):
+        for t in spec["tests"]:
+            tests.append((spec["title"], t["status"] == "expected" and [r["status"] for r in t["results"]] == ["passed"]))
+bad = {}
+for n in need:
+    mine = [ok for title, ok in tests if title == n or title.startswith(n + " ")]
+    if not mine or not all(mine):
+        bad[n] = "absent" if not mine else "not passing first time"
+if bad or report.get("errors") or sys.argv[1] != "0":
+    sys.exit(f"EX0b2 e2e-webkit: exit {sys.argv[1]}, {bad}, errors {report.get('errors')}")
+PY'''
+exclusive = true
+
+[[criteria]]
+# Start unchanged, a regression guard (green on the unchanged tree): PERF-START (scripts/perf/baseline.py, ADR 0038),
+# paired against the merge-base build, 80 judged pairs, upper bound of the ratio < 1.10, and the absolute budget.
+id = "perf-start"
+command = '''set -eu
+out="${INKWELL_PERF_OUT:-.task/ex0b2/perf}"
+mkdir -p "$out"
+INKWELL_PERF_OUT="$out" timeout -k 10 600 ./scripts/heavy.sh --exclusive python3 scripts/perf/baseline.py > "$out/baseline.log" 2>&1 || { tail -40 "$out/baseline.log"; exit 1; }
+python3 -I - "$out" <<'PY'
+import json, pathlib, subprocess, sys
+p = json.loads((pathlib.Path(sys.argv[1]) / "measurements.json").read_text())["PERF-START"]
+base = subprocess.check_output(["git", "merge-base", "HEAD", "main"], text=True).strip()
+bad = []
+bad += [] if p.get("status") == "pass" else [f"status {p.get('status')}"]
+bad += [] if p.get("design") == "paired-randomized" else ["design"]
+bad += [] if p.get("reference", {}).get("commit") == base else ["reference is not the merge-base"]
+v = p.get("verdict", {})
+bad += [] if v.get("status") == "pass" and v.get("pairs") == 80 and v.get("upper", 9) < 1.10 else ["verdict"]
+bad += [] if p.get("budget", {}).get("status") == "pass" else ["budget"]
+sys.exit("EX0b2 perf-start: " + ", ".join(bad) if bad else 0)
+PY'''
+exclusive = true
+
+[[criteria]]
+id = "simplify-report"
+command = '''timeout -k 10 30 python3 -I - <<'PY'
+import sys
+from pathlib import Path
+
+report = Path("gates/EX0b2/SIMPLIFY.md")
+if not report.is_file():
+    sys.exit("EX0b2 /simplify review evidence is absent")
+lines = report.read_text().splitlines()
+if not any(line.startswith("Reviewer: ") and line[10:].strip() for line in lines):
+    sys.exit("EX0b2 /simplify reviewer is absent")
+for heading in ("## Applied", "## Set aside", "## Verified"):
+    if heading not in lines:
+        sys.exit(f"EX0b2 /simplify review lacks {heading}")
+    body = []
+    for line in lines[lines.index(heading) + 1:]:
+        if line.startswith("## "):
+            break
+        body.append(line)
+    if not any(line.strip() for line in body):
+        sys.exit(f"EX0b2 /simplify review is empty under {heading}")
+PY'''

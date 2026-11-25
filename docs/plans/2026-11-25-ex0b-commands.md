@@ -133,12 +133,6 @@ the last keystroke (C-9); macOS and Windows checked as data only (C-3, C-6, C-7)
 
 ## 7. EX0b2: palette and shortcuts window (own gate, after EX0b1, before UX1-0)
 
-Palette (`ui/command/Palette.svelte`, ranker `rank.ts`; `app.palette` Ctrl+Maj+P, ⇧⌘P; main menu « Rechercher une
-commande… »): APG combobox, count in a `status` region (spec §4.24); folded text (NFD without marks, lower case), label and
-synonyms; order by rule 48 of the UX1 plan; unavailable commands greyed with their reason, Enter on one announces the
-reason and runs nothing; ≤ 50 rows drawn; Enter restores the focus taken at opening, then runs. Shortcuts window
-(`ui/command/ShortcutsWindow.svelte`; `app.shortcuts` Ctrl+?, ⌥⌘/, Ctrl+Maj+?; « Raccourcis clavier »): every effective
-binding of this system, her replacements marked. Both lazy (criterion `chunks`). PERF-PALETTE (§15.4, ≤ 50 ms with
-1 000 commands) in Chromium and WebKit, plus a deterministic bound: ranking 1 000 synthetic commands costs at most
-k × Σ(label + synonym length) character comparisons and draws ≤ 50 rows, counted in Vitest, so the 1 000 case is
-proven without a test hook.
+Rewritten into its own plan: [2026-11-25-ex0b2-palette.md](2026-11-25-ex0b2-palette.md) (gate `gates/EX0b2.toml`,
+witnesses `gates/EX0b2/WITNESSES.md`): the palette, its ranker (ordered match classes, rule 48), the shortcuts window,
+PERF-PALETTE in Chromium and WebKit, a counted bound on 1 000 commands, both components lazy (criterion `chunks`).
