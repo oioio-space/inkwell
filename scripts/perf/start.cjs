@@ -2,10 +2,17 @@
 // slot of a plan written by scripts/perf/paired.py, the two sides interleaved in the plan's order.
 //   node scripts/perf/start.cjs --plan <plan.json>
 // For each slot: nothing may listen on the port; open a page, launch the side's binary in a fresh cgroup with its
-// home and documents directory, poll /health every 20 ms, load the page, wait for `.cm-content`; record the
+// home and documents directory, wait for its readiness line, load the page, wait for `.cm-content`; record the
 // duration, the exit status, the tail of stderr, the load average and the CPU and IO pressure over the slot
 // (diagnostics, never a verdict input); kill, await exit, empty and remove the cgroup, close the page, idle for
 // cool_ms.
+// The duration is taken from the measured program's own events, never from a polling interval of the driver
+// (block PF2, ADR 0038 amendment 2026-11-25): ms = ready_ms + page_ms, where ready_ms runs from the spawn to the
+// arrival of the server's readiness line on stderr (READY_LINE, written by Wails right after its listener is bound),
+// and page_ms is the page's own time, from its time origin (the navigation's start) to the first moment
+// `.cm-content` is visible, marked by an init script (markEditor) that watches the DOM. The driver's own latency
+// between the readiness line and the navigation's start is not counted; wall_ms (spawn to the driver seeing the
+// editor through Playwright's polled waitFor) is kept as a diagnostic only.
 // Per-sample interference (plan section 18): each start also records the CPU time that the rest of the machine
 // used during its window, outside the run's cgroup, which holds this driver, the browser and the start's own
 // cgroup (cpu.cjs: window_ms, bg_cpu_ms, bg_share in CPUs; app_cpu_ms and leftover from the start's cgroup).
@@ -39,6 +46,38 @@ const listening = (port) => new Promise((resolve) => {
 
 const delta = (a, b) => (a === null || b === null ? null : b - a);
 
+// The readiness event: the line Wails' server mode logs once its listener is bound, before it serves
+// (pkg/application/application_server.go, `Server mode starting`); a connection made after it waits in the backlog.
+const READY_LINE = (port) => new RegExp(`Server mode starting address=127\\.0\\.0\\.1:${port}(?!\\d)`);
+const EDITOR = '.cm-content';
+const EDITOR_MARK = 'perf-start:editor';
+
+// Page init script, run in every document before its own scripts: marks EDITOR_MARK, on the page's clock, the first
+// time the editor is visible as Playwright's waitFor judges it (a non-empty box, `visibility: visible`). A mutation
+// is checked in its own callback (a forced layout, no frame alignment); an editor attached without a box yet is
+// watched by a ResizeObserver until it gets one.
+function markEditor({selector, mark}) {
+  const visible = (el) => {
+    const box = el.getBoundingClientRect();
+    return box.width > 0 && box.height > 0 && getComputedStyle(el).visibility === 'visible';
+  };
+  let sized = null;
+  const check = () => {
+    const el = document.querySelector(selector);
+    if (!el) return;
+    if (visible(el)) {
+      performance.mark(mark);
+      dom.disconnect();
+      sized?.disconnect();
+    } else if (!sized) {
+      sized = new ResizeObserver(check);
+      sized.observe(el);
+    }
+  };
+  const dom = new MutationObserver(check);
+  dom.observe(document, {childList: true, subtree: true, attributes: true});
+}
+
 // The decision after one measured start of a slot: 'keep', 'retry', 'stop-cap' or 'stop-tries'. The twin of
 // paired.slot_step; both are checked against testdata/slot-rule.json. `tries` counts this start, `discarded` the
 // invalid starts of the run before it; `rule` is the plan (bg_share_max, invalid_max, max_tries).
@@ -51,6 +90,7 @@ function slotStep(bgShare, tries, discarded, planned, rule) {
 async function slotRun(browser, plan, slot, order, hz, run, attempt) {
   const record = {index: slot.index, pair: slot.pair, side: slot.side, warmup: slot.warmup, order, ms: null, ready: false,
     exit: null, stderr: '', load: cpu.load1(), cpu_pressure_us: null, io_pressure_us: null,
+    ready_ms: null, page_ms: null, wall_ms: null,
     window_ms: null, bg_cpu_ms: null, bg_share: null, app_cpu_ms: null, leftover: null, valid: true};
   const cpu0 = cpu.pressure('cpu'), io0 = cpu.pressure('io');
   fs.mkdirSync(slot.home, {recursive: true});
@@ -58,6 +98,10 @@ async function slotRun(browser, plan, slot, order, hz, run, attempt) {
   const cgroup = cpu.startCgroup(run, slot.index, attempt);
   const [command, args] = cpu.launcher(cgroup, slot.bin);
   const page = await browser.newPage();
+  await page.addInitScript(markEditor, {selector: EDITOR, mark: EDITOR_MARK});
+  const readyLine = READY_LINE(plan.port);
+  let readyAt = null, onReady;
+  const ready = new Promise((r) => { onReady = r; });
   const opened = cpu.snapshot(run);
   const start = performance.now();
   const child = spawn(command, args, {
@@ -66,15 +110,18 @@ async function slotRun(browser, plan, slot, order, hz, run, attempt) {
     stdio: ['ignore', 'ignore', 'pipe']});
   let exited = false, status = null;
   const exit = new Promise((r) => child.once('close', (code, signal) => { exited = true; status = {code, signal}; r(); }));
-  child.once('error', (e) => { record.stderr += String(e); exited = true; status = {code: null, signal: null}; });
-  child.stderr.on('data', (d) => { record.stderr = (record.stderr + d).slice(-STDERR_TAIL); });
-  let fault = null;
+  child.once('error', (e) => { record.stderr += String(e); exited = true; status = {code: null, signal: null}; onReady(false); });
+  child.stderr.on('data', (d) => {
+    const seen = record.stderr + d;  // the line may straddle two chunks
+    record.stderr = seen.slice(-STDERR_TAIL);
+    if (readyAt === null && readyLine.test(seen)) { readyAt = performance.now(); onReady(true); }
+  });
+  exit.then(() => onReady(false));
+  let fault = null, timer;
   try {
-    const deadline = start + plan.ready_timeout_ms;
-    while (!record.ready && !exited && performance.now() < deadline) {
-      try { record.ready = (await fetch(`http://127.0.0.1:${plan.port}/health`)).ok; } catch { /* not listening yet */ }
-      if (!record.ready) await sleep(20);
-    }
+    record.ready = await Promise.race([ready,
+      new Promise((r) => { timer = setTimeout(() => r(false), plan.ready_timeout_ms); })]);
+    clearTimeout(timer);
     if (!record.ready) {
       const busy = /address already in use/i.test(record.stderr);
       const joined = !(exited && status?.code === cpu.LAUNCH_FAILED);
@@ -83,9 +130,14 @@ async function slotRun(browser, plan, slot, order, hz, run, attempt) {
           exited ? `server exited before ready (${JSON.stringify(status)})` : 'server not ready in time'};
     } else {
       await page.goto(`http://127.0.0.1:${plan.port}`);
-      await page.locator('.cm-content').waitFor();
-      record.ms = performance.now() - start;
+      await page.locator(EDITOR).waitFor();
+      record.wall_ms = performance.now() - start;
       Object.assign(record, cpu.background(opened, cpu.snapshot(run, {opening: false}), hz));
+      record.ready_ms = readyAt - start;
+      record.page_ms = await page.evaluate((m) => performance.getEntriesByName(m)[0]?.startTime ?? null, EDITOR_MARK);
+      if (record.page_ms === null) throw new Error(`the page did not mark ${EDITOR_MARK}`);
+      record.ms = record.ready_ms + record.page_ms;
+      if (!(record.ms <= record.wall_ms)) throw new Error(`start ${record.ms} ms after the driver saw it (${record.wall_ms} ms)`);
     }
   } catch (e) {
     fault = {kind: 'not-ready', side: slot.side, index: slot.index, detail: String(e)};
@@ -183,6 +235,6 @@ async function main() {
   write();
 }
 
-module.exports = {slotStep};
+module.exports = {slotStep, READY_LINE};
 
 if (require.main === module) main().catch((e) => { console.error(e); process.exitCode = 1; });

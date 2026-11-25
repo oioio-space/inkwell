@@ -58,8 +58,9 @@ class Base(unittest.TestCase):
 
 
 class FakeServer(Base):
-    def fake(self, side, delay=BASE_MS, noise=0, crash=False, record=None):
+    def fake(self, side, delay=BASE_MS, noise=0, crash=False, record=None, editor_ms=None, silent=False):
         flags = f"--delay-ms {delay} --noise-ms {noise}" + (" --crash" if crash else "")
+        flags += (f" --editor-ms {editor_ms}" if editor_ms is not None else "") + (" --silent" if silent else "")
         flags += f" --record {record}" if record else ""
         return script(self.root / "bin" / side / "inkwell-server", f'exec python3 {FAKE} {flags} --self "$0"')
 
@@ -136,6 +137,28 @@ class FakeServer(Base):
         for var in ("INKWELL_SERVER_PORT", "INKWELL_RENDEZVOUS", "INKWELL_HOME", "INKWELL_DOCS"):
             self.assertEqual({len(s["env"][var]) for s in starts}, {len(starts[0]["env"][var])}, var)
         self.assertNotEqual(by_side["a"][0]["env"]["INKWELL_HOME"], by_side["b"][0]["env"]["INKWELL_HOME"])
+
+    # ── Timing on the program's own events (block PF2) ──────────────────────────────────────────
+
+    def test_the_editor_is_timed_on_the_pages_clock(self):
+        """The page inserts the editor 100 ms or 160 ms after its script starts: both fall between two retries of
+        Playwright's waitFor (cumulative 70 and 170 ms), which saw them in the same poll; the page's mark keeps the
+        60 ms between them. Every start is ready_ms + page_ms, within the driver's own wall time."""
+        raw, _ = self.drive(self.fake("a", editor_ms=100), self.fake("b", editor_ms=160), bg_share_max=None)
+        self.assertIsNone(raw["fault"], raw["fault"])
+        side = {x: sorted(s["page_ms"] for s in raw["slots"] if s["side"] == x) for x in "ab"}
+        self.assertTrue(all(ms >= 100 for ms in side["a"]) and all(ms >= 160 for ms in side["b"]), side)
+        self.assertAlmostEqual(side["b"][2] - side["a"][2], 60, delta=6)  # medians of the 4 starts per side
+        for s in raw["slots"]:
+            self.assertAlmostEqual(s["ms"], s["ready_ms"] + s["page_ms"], places=6)
+            self.assertGreater(s["ready_ms"], BASE_MS)
+            self.assertLessEqual(s["ms"], s["wall_ms"])
+
+    def test_no_readiness_line_is_not_ready(self):
+        """A server that listens without its readiness line is never measured: there is no polling fallback."""
+        raw, _ = self.drive(self.fake("a", silent=True), self.fake("b", silent=True), bg_share_max=None,
+                            ready_timeout_ms=1500)
+        self.assertEqual((raw["fault"]["kind"], raw["fault"]["detail"]), ("not-ready", "server not ready in time"))
 
     # ── Per-sample interference (plan « Per-sample interference ») ────────────────────────────────
 

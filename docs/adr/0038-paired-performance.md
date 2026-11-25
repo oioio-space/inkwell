@@ -91,6 +91,29 @@ option whose error rates are exact under any drift (derivation: plan section 3.3
    among its reasons. Focus taken by the product is not a fault: a window of the measured process or of one of its
    descendants that takes the focus, or a focus moved inside the page, is a failure.
 
+   **Amendment (2026-11-25, block PF2): a start is timed on the measured program's own events.** What a start
+   measures is unchanged (a cold process to a usable editor, `.cm-content` visible as Playwright judges it); how it
+   is read changes. The driver used to time the start on its own clock at the end of Playwright's `waitFor`, which
+   retries at 0, 20, 50, 100, 100 ms (`retryWithProgressAndBackoff`, playwright-core 1.64.1), after a `/health`
+   poll every 20 ms: the starts fell on a few modes 20 and 50 ms apart (about 245, 265 and 315 ms), and an A/A run
+   of one binary against itself was "invalid: imprecise" (half-width 4.1 to 4.7 %, six runs in EX0b, 4.19 % again
+   in PF2). A start is now `ready_ms + page_ms`: `ready_ms` from the spawn to the arrival of the server's own
+   readiness line on stderr (Wails' `Server mode starting address=…`, written once its listener is bound), and
+   `page_ms` on the page's clock, from its time origin (the navigation's start) to the first moment `.cm-content`
+   is visible, marked by a page init script that watches the DOM. The driver's latency between the line and the
+   navigation's start is not counted; its polled wall time is kept as a diagnostic (`wall_ms`) and must be at
+   least the start. No threshold, size or verdict rule changes. A server that listens without the line is not
+   ready (no polling fallback). Measured A/A at rest, same binary: half-width 4.19, 4.13 and 3.98 % before, 1.27 % after
+   (one attempt, unimodal starts, sd 5.4 ms). Set aside: a 1 ms readiness poll (still driver latency, and its CPU lands in the
+   start's window); epoch sums across processes (`performance.timeOrigin + now()` in Node and in the page: both are
+   anchored on the wall clock, which NTP may step); a mark written by the application (the reference build, the
+   merge-base, lacks it, so the two sides would be timed differently until it reaches every reference). Sources:
+   W3C High Resolution Time (time origin of a document = the start of its navigation,
+   https://www.w3.org/TR/hr-time-3/#dfn-time-origin), Navigation Timing Level 2 (`startTime` 0,
+   https://www.w3.org/TR/navigation-timing-2/), Wails v3.0.0 `pkg/application/application_server.go` (the line
+   follows `net.Listen`), playwright-core 1.64.1 `retryWithProgressAndBackoff`. Proof: `paired_test.py` (`Timing`) and `paired_e2e_test.py`
+   (`test_the_editor_is_timed_on_the_pages_clock`, `test_no_readiness_line_is_not_ready`).
+
 ### Consequences
 
 - Good: machine drift and outliers no longer fail unrelated work: 0 false regressions in 3000 simulated runs in each of

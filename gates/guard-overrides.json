@@ -2199,6 +2199,41 @@
       "id": "f2531a8ea4632e75db3cc7bde955dbb2693926bdcbc2e4bed53c9f1c8be570c5",
       "reason": "mise.toml: timeout expression rewritten in test:py — only scripts/port_worktree_test.py is added to its unittest list; the 300 s and 120 s timeouts are unchanged",
       "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "a2fa2bd2c0605ce1bf36d6cefa5b78ffca23c45e754505d2c9474904069a64b6",
+      "reason": "PF2: two driver tests added (editor timed on the page's clock, no readiness line is not ready); no test removed or weakened",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "0fb86768a26d6321529c0fbe71aacb44b9ccdb1a569169f89ff82fb65da60b58",
+      "reason": "PF2: two driver tests added (editor timed on the page's clock, no readiness line is not ready); no test removed or weakened",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "d9a70b2ba1d46d0da6686647248ac193805bf91808bb1d9fc2aa4302c083d967",
+      "reason": "PF2: Timing tests added (readiness line, duration from the program's events); no test removed or weakened",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "413d25c281b4e66fed655aee3daf2bff83700d018757912d276e679c0fee792c",
+      "reason": "PF2: Timing tests added (readiness line, duration from the program's events); no test removed or weakened",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "016c33689f3234829a9cb80f38f27b9ed940ee575a20cb85fc6041ab8b6dd5d0",
+      "reason": "PF2: PERF-START timed on the measured program's own events (server readiness line on stderr, page mark of the visible editor) instead of the driver's waitFor and 20 ms /health polling, which put A/A starts on modes and made them invalid as imprecise; criteria and thresholds unchanged (ADR 0038 amendment 2026-11-25)",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "76129c09e8627c301d665ebf88179904c3afad40472b720c2db003f84ce51b16",
+      "reason": "PF2: the /health polling loop and its deadline are replaced by the readiness event raced against the same plan.ready_timeout_ms; the bound is unchanged",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "4974f4d0e2ee3bfc1dd514c88bfa14018611413c6e918f70adec32d0668d15fe",
+      "reason": "PF2: the fake server writes the Wails readiness line, and gains --editor-ms and --silent for the driver timing tests",
+      "decision": "docs/objectif-en-cours.md"
     }
   ]
 }

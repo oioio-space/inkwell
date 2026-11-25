@@ -274,6 +274,32 @@ class Interference(unittest.TestCase):
             self.assertNotRegex(f.read(), r"\b1\.5\b|\b0\.2\b")
 
 
+class Timing(unittest.TestCase):
+    """Block PF2: a start is timed from the measured program's own events, never from the driver's polling."""
+
+    driver = os.path.join(HERE, "start.cjs")
+
+    def ready(self, port, line):
+        code = f"console.log(require({json.dumps(self.driver)}).READY_LINE({port}).test({json.dumps(line)}))"
+        return subprocess.run(["node", "-e", code], capture_output=True, text=True, check=True).stdout.strip() == "true"
+
+    def test_readiness_is_the_wails_listening_line(self):
+        """The event is the line Wails v3 server mode logs right after net.Listen, for this port only."""
+        line = "1:04AM INF Server mode starting address=127.0.0.1:18555"  # as bin/inkwell-server writes it
+        self.assertTrue(self.ready(18555, line))
+        self.assertFalse(self.ready(1855, line))
+        self.assertFalse(self.ready(18555, line + "0"))
+        self.assertFalse(self.ready(18555, "1:04AM INF Server mode enabled (built with -tags server)"))
+
+    def test_duration_is_the_programs_own_events(self):
+        """No readiness poll, and the duration is ready_ms + page_ms, not a driver clock read after waitFor."""
+        with open(self.driver) as f:
+            src = f.read()
+        self.assertNotIn("/health", src)
+        self.assertIn("record.ms = record.ready_ms + record.page_ms;", src)
+        self.assertEqual(src.count("record.ms ="), 1)
+
+
 class Accounting(unittest.TestCase):
     """Plan section 18.1: the measured set is a cgroup; no cgroup accounting, no verdict."""
 
