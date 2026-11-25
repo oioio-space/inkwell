@@ -2294,6 +2294,11 @@
       "id": "ab7fd19627f7464b705772148a5a5f2ae6ff732e65d8d01f180b2f9401192ced",
       "reason": "scripts/netsim/mutants_test.py: injected fake runners with the same signature and default as the file's other fakes (timeout=1800 is a parameter default, nothing waits on it)",
       "decision": "docs/plans/2026-11-25-ex0c2-panels-grid.md"
+    },
+    {
+      "id": "96a81074010e8e5ff11e14b558438fa9997a77349ad719a612a73a83388bf81f",
+      "reason": "mise.toml e2e:webkit: after its 60 s wait for the WebKit container it now stops with « container not ready » instead of carrying on, so a container that never started no longer reads as a test failure (EX0c3 pre-freeze review, minor 8); the wait itself is unchanged",
+      "decision": "docs/plans/2026-11-25-ex0c3-insert-format.md"
     }
   ]
 }

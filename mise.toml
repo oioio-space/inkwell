@@ -415,7 +415,10 @@ podman run -d --rm --name "$name" --network host --ipc host --init \
   "mcr.microsoft.com/playwright:v$version-noble" \
   npx -y "playwright@$version" run-server --port "$port" --host 127.0.0.1 >/dev/null
 trap 'podman rm -f "$name" >/dev/null 2>&1 || true' EXIT
-for _ in $(seq 60); do (exec 3<>/dev/tcp/127.0.0.1/$port) 2>/dev/null && break; sleep 1; done
+ready=
+for _ in $(seq 60); do (exec 3<>/dev/tcp/127.0.0.1/$port) 2>/dev/null && { ready=1; break; }; sleep 1; done
+# A container that never answers is no test failure: stop and say so (EX0c3 review minor 8).
+[ -n "$ready" ] || { echo "e2e:webkit: container not ready: nothing listens on 127.0.0.1:$port after 60 s" >&2; podman logs "$name" 2>&1 | tail -20 >&2; exit 1; }
 INKWELL_E2E_BROWSER=webkit INKWELL_E2E_WS="ws://127.0.0.1:$port/" ../scripts/heavy.sh pnpm exec playwright test "$@"
 """
 
