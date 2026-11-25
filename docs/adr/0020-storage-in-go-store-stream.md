@@ -62,6 +62,41 @@ Go peut aussi pousser `ExternalChange{nom}` (id 0).
 `FuzzStoreRequest`, vecteurs partagés Go/TypeScript (`testdata/storestream.json`), e2e
 `persistence.spec.ts`.
 
+## Amendement du 2026-11-25 (bloc RT1) : une seule page vivante possède le store
+
+Statut : proposé (étape 1 de RT1), accepté à la fusion de RT1. Plan :
+[2026-11-25-rt1-root-kept.md](../plans/2026-11-25-rt1-root-kept.md), règles C-1 et C-2.
+
+**Problème.** `Serve` remplace la connexion précédente sans le lui dire : la page remplacée voit
+une simple fermeture, et sa requête suivante (le `refresh()` périodique de `App.svelte`) rouvre un
+stream qui remplace à son tour la page récente, au milieu de son chargement. Ce va-et-vient a fait
+échouer le chargement du document enregistré et remplacer la racine du projet (exécution GitHub
+45542633229). Dans l'application de bureau, seule la fenêtre principale ouvre `store` (la fenêtre
+publique n'ouvre que `present`, `restart.html` aucun stream), et Wails retire lui-même l'ancienne
+génération d'une page rechargée (410) ; deux pages vivantes n'existent que dans la construction
+`server` (un contexte de navigateur par session Wails : e2e, netsim, un second onglet).
+
+**Décision.** La page la plus récente gagne, et la perdante le sait et ne revient pas :
+- C-1 : avant de fermer une connexion remplacée, `Serve` lui pousse `StatusSuperseded` (id 0,
+  statut 9, sans charge ; vecteur `superseded push`) ;
+- C-2 : un `GoStorageAdapter` qui le reçoit devient terminal : ses requêtes en attente et à venir
+  échouent (`StoreSupersededError`), il ne se reconnecte jamais, et la page le dit une fois
+  (`store.openElsewhere`).
+
+**Conséquence assumée.** Les modifications d'une page remplacée qui n'étaient pas encore
+enregistrées sont perdues pour cette page : ses écritures en attente échouent et ne sont jamais
+renvoyées. Cela n'arrive qu'en construction `server` (deux contextes de navigateur vivants sur un
+même profil) ; dans l'application de bureau, Wails a déjà retiré l'ancienne page d'une fenêtre
+rechargée.
+
+**Écartées.** « La plus ancienne gagne » (refuser un nouveau stream tant qu'un autre vit) casse le
+rechargement en construction `server`, où l'ancienne page peut encore être attachée. Web Locks ou
+BroadcastChannel ne relient que des onglets d'un même navigateur, pas deux contextes ni deux
+moteurs : Go reste le seul arbitre.
+
+**Confirmation.** `TestRT1C1SupersededToldBeforeClose`, `TestStoreVectors`, Vitest « RT1 C-2 … »,
+e2e « RT1-E2E … » de `persistence.spec.ts` (WebKit et Chromium : la page remplacée ne rouvre aucun stream `store`), mutants MR5, MR9 et MR12. Fusion après une exécution GitHub verte de `scripts/candidate.sh RT1`.
+
 ## Plus d'informations
 
 [Plan de l'étape 2, tâche 9](../plans/2026-10-25-etape-2-reseau.md) ·

@@ -1,0 +1,188 @@
+# Written 2026-11-25 at step 1 of block RT1, before any code; revised the same day after the blind pre-freeze review
+# (gates/RT1/REVIEW.md, « freeze after fixes », every finding applied). RT1: a project's root is replaced only when Go
+# proves the saved document absent from storage; any other failure retries (an interrupted read, once) or reports, and
+# never writes; one live page owns the store (a superseded page is told and stays down). Rigour: standard. Plan:
+# docs/plans/2026-11-25-rt1-root-kept.md (rules A-1..A-4, B-1..B-3, C-1, C-2, E-1); store-stream rule: ADR 0020,
+# amendment of 2026-11-25; witnesses: gates/RT1/WITNESSES.md. Merge condition (plan §2): a green GitHub run of
+# `scripts/candidate.sh RT1` as well as this gate. Every long command is `timeout -k 10 N ./scripts/heavy.sh …` (the
+# cap covers the wait for a slot); the e2e criterion takes the machine (`--exclusive`), its nested capped calls reuse
+# that slot. No nested gate. To freeze: each command run once red for the right reason, then the header says FROZEN.
+max_minutes = 45
+raw_results = ["docs/plans/2026-11-25-rt1-root-kept.md", "docs/adr/0020-storage-in-go-store-stream.md", "gates/RT1/*"]
+
+[[criteria]]
+# Documents: each rule has its row in the plan and the merge condition is stated, the ADR 0020 amendment is accepted and
+# states the dropped edits of a superseded page, the two sentences exist in fr.json, the shared vector of C-1 is there
+# with its exact wire, and the residuals are filed (R-RT1-1 under E2E1, R-RT1-2..4 under RT2).
+id = "docs"
+command = '''timeout -k 10 20 python3 -I - <<'PY'
+import json, pathlib, re, sys
+plan = pathlib.Path("docs/plans/2026-11-25-rt1-root-kept.md").read_text()
+bad = [f"plan row {r}" for r in ("A-1", "A-2", "A-3", "A-4", "B-1", "B-2", "B-3", "C-1", "C-2", "E-1")
+       if not re.search(rf"^\| {r} \|", plan, re.M)]
+bad += [] if "scripts/candidate.sh RT1" in plan else ["plan: no candidate.sh merge condition"]
+adr = pathlib.Path("docs/adr/0020-storage-in-go-store-stream.md").read_text()
+part = adr.split("## Amendement du 2026-11-25 (bloc RT1)", 1)
+if len(part) != 2:
+    bad.append("ADR 0020 has no RT1 amendment")
+else:
+    if not re.search(r"^Statut : accepté", part[1], re.M):
+        bad.append("ADR 0020 RT1 amendment not accepted")
+    if "**Conséquence assumée.**" not in part[1]:
+        bad.append("ADR 0020 RT1 amendment does not state the dropped edits")
+fr = json.load(open("frontend/src/i18n/fr.json"))
+bad += [f"fr.json {k}" for k in ("start.rootUnreadable", "store.openElsewhere") if not fr.get(k)]
+vec = {v["name"]: v for v in json.load(open("internal/bridge/testdata/storestream.json"))}
+s = vec.get("superseded push", {})
+if (s.get("status"), s.get("wireHex"), s.get("id")) != ("Superseded", "0000000009", 0):
+    bad.append(f"vector superseded push: {s or 'absent'}")
+progress = pathlib.Path("PROGRESS.md").read_text()
+if not re.search(r"R-RT1-1.*E2E1|E2E1.*R-RT1-1", progress):
+    bad.append("PROGRESS.md does not file R-RT1-1 under E2E1")
+rt2 = next((l for l in progress.splitlines() if l.lstrip().startswith("- **RT2**")), "")
+bad += [f"PROGRESS.md RT2 does not hold {r}" for r in ("R-RT1-2", "R-RT1-3", "R-RT1-4") if r not in rt2]
+sys.exit(f"RT1 docs: {bad}" if bad else 0)
+PY'''
+
+[[criteria]]
+# A-1..A-4 and C-2 in the webview: Biome, svelte-check and every Vitest test, from one JSON report; the run succeeds and
+# each named rule test passed (absent or skipped fails).
+id = "frontend"
+command = '''set -eu
+mkdir -p .task/rt1
+rm -f .task/rt1/vitest.json
+rc=0
+(cd frontend && timeout -k 10 420 ../scripts/heavy.sh bash -c 'pnpm --config.verifyDepsBeforeRun=false exec biome check . && pnpm --config.verifyDepsBeforeRun=false exec svelte-check --tsconfig ./tsconfig.json && pnpm --config.verifyDepsBeforeRun=false exec vitest run --configLoader runner --reporter=json --outputFile=../.task/rt1/vitest.json') || rc=$?
+python3 -I - "$rc" <<'PY'
+import json, pathlib, sys
+need = [
+    "RT1 A-1 a failed load of a stored root never creates a document nor records a root",
+    "RT1 A-1 a failed load whose storage state is unknown never creates a document nor records a root",
+    "RT1 A-1 a RootState call that rejects never creates a document nor records a root",
+    "RT1 A-1 an empty or invalid saved root is absent: one document is created and recorded",
+    "RT1 A-2 a read cut by a stream close is sent again, once, on the next stream",
+    "RT1 A-2 a write cut by a stream close is never sent again",
+    "RT1 A-3 a root proven absent is replaced through ReplaceMissingRoot before any SetRootURL",
+    "RT1 A-4 a start that cannot open a stored root writes nothing and says so",
+    "RT1 C-2 a superseded adapter fails every request and never reconnects",
+    "RT1 C-2 a superseded page says once that Inkwell is open elsewhere",
+]
+report = pathlib.Path(".task/rt1/vitest.json")
+results = [a for f in json.loads(report.read_text())["testResults"] for a in f["assertionResults"]] if report.is_file() else []
+status = {a["title"]: a["status"] for a in results}
+bad = {n: status.get(n, "absent") for n in need if status.get(n) != "passed"}
+failed = [a["fullName"] for a in results if a["status"] == "failed"]
+if bad or failed or sys.argv[1] != "0":
+    sys.exit(f"RT1 frontend: exit {sys.argv[1]}, rule tests {bad}, failed {failed[:20]}")
+PY'''
+
+[[criteria]]
+# B-1..B-3 in internal/project (project.go, where the root is written), the B-3 clause of Session.stored and C-1 in Go:
+# the touched packages and their consumer pass, and every named test passes (absent or skipped fails). TestStoreVectors
+# reads the new vector.
+id = "go"
+command = '''set -eu
+mkdir -p .task/rt1
+rc=0
+timeout -k 10 240 ./scripts/heavy.sh go test -count=1 -race -json ./internal/app ./internal/bridge ./internal/project > .task/rt1/go.jsonl || rc=$?
+python3 -I - "$rc" <<'PY'
+import json, pathlib, sys
+need = {
+    "TestRT1B1SetRootURLNeverReplaces": "internal/project",
+    "TestRT1B2ReplaceMissingRootOnlyWhenAbsent": "internal/project",
+    "TestRT1B3UnknownIsNeverAbsent": "internal/project",
+    "TestRT1B3JoinRefusedWhileRootUnknown": "internal/app",
+    "TestRT1C1SupersededToldBeforeClose": "internal/bridge",
+    "TestStoreVectors": "internal/bridge",
+}
+events = [json.loads(l) for l in pathlib.Path(".task/rt1/go.jsonl").read_text().splitlines() if l.startswith("{")]
+terminal = {(e.get("Package"), e.get("Test")): e["Action"] for e in events if e["Action"] in ("pass", "fail", "skip")}
+bad = {t: terminal.get(("github.com/oioio-space/inkwell/" + p, t), "absent") for t, p in need.items()}
+bad = {t: a for t, a in bad.items() if a != "pass"}
+failed = sorted({f"{p}.{t}" for (p, t), a in terminal.items() if a == "fail"})
+if bad or failed or sys.argv[1] != "0":
+    sys.exit(f"RT1 go: exit {sys.argv[1]}, named {bad}, failed {failed[:20]}")
+PY'''
+
+[[criteria]]
+# Each rule test fails when its rule breaks. Block RT1's mutants (scripts/netsim/mutants.toml, written at step 2 with
+# the code; plan section 4): the vitest entries' `name` is the exact title of their rule test, the go entries name their
+# rule's test with an `expect` text starting with the rule id, so only that test failing is a catch.
+id = "mutants"
+command = '''set -eu
+timeout -k 10 20 python3 -I - <<'PY'
+import sys, tomllib
+ms = {m["id"]: m for m in tomllib.load(open("scripts/netsim/mutants.toml", "rb"))["mutant"] if m.get("block") == "RT1" and not m.get("retired")}
+vitest = {
+    "MR1": "RT1 A-1 a failed load of a stored root never creates a document nor records a root",
+    "MR2": "RT1 A-1 a failed load whose storage state is unknown never creates a document nor records a root",
+    "MR3": "RT1 A-2 a read cut by a stream close is sent again, once, on the next stream",
+    "MR4": "RT1 A-3 a root proven absent is replaced through ReplaceMissingRoot before any SetRootURL",
+    "MR5": "RT1 C-2 a superseded adapter fails every request and never reconnects",
+    "MR10": "RT1 A-1 a RootState call that rejects never creates a document nor records a root",
+    "MR11": "RT1 A-4 a start that cannot open a stored root writes nothing and says so",
+    "MR12": "RT1 C-2 a superseded page says once that Inkwell is open elsewhere",
+    "MR14": "RT1 A-2 a write cut by a stream close is never sent again",
+}
+go = {"MR6": ("TestRT1B1SetRootURLNeverReplaces", "B-1"), "MR7": ("TestRT1B2ReplaceMissingRootOnlyWhenAbsent", "B-2"),
+      "MR8": ("TestRT1B3UnknownIsNeverAbsent", "B-3"), "MR9": ("TestRT1C1SupersededToldBeforeClose", "C-1"),
+      "MR13": ("TestRT1B3JoinRefusedWhileRootUnknown", "B-3")}
+bad = [i for i, n in vitest.items() if i not in ms or ms[i].get("kind") != "vitest" or ms[i].get("name") != n
+       or not ms[i].get("test", "").startswith("frontend/src/")]
+bad += [i for i, (t, r) in go.items() if i not in ms or ms[i].get("kind") != "go" or ms[i].get("test") != t
+        or not ms[i].get("expect", "").startswith(r + " ")]
+sys.exit(f"RT1 mutant entries missing or malformed: {bad}" if bad else 0)
+PY
+timeout -k 10 800 ./scripts/heavy.sh python3 -I scripts/netsim/mutants.py RT1'''
+
+[[criteria]]
+# E-1, on the machine alone: the candidate is built once, then persistence.spec.ts runs under Chromium and under WebKit
+# (the Playwright container, as `mise run e2e:webkit`), retries 0: RT1-E2E 15 times (it forces the race every run: the
+# deterministic proof of C-1 and C-2 end to end) and the original flow 20 times (the statistical check: at the rate
+# measured before the fix under WebKit, 1 in 15, 20 runs all pass with probability (14/15)^20 ≈ 0.25 per engine).
+# Playwright's exit codes are kept; each JSON report must hold zero errors and zero unexpected, flaky or skipped results,
+# and its title with exactly its count of expected results. Cost measured at step 1 on this machine: the original flow
+# 3.6 s a run (Chromium), 11 s (WebKit); a stub of RT1-E2E failing at its last assertion 12.9 s (Chromium), 14-15 s
+# (WebKit). Estimate ≈ 300 s Chromium + 460 s WebKit + ≤ 180 s build ≈ 940 s, under the 1200 s cap (≈ 22 % margin).
+id = "e2e"
+command = '''set -u
+mkdir -p .task/rt1
+rm -f .task/rt1/e2e-*.json .task/rt1/e2e-rc
+timeout -k 10 1200 ./scripts/heavy.sh --exclusive bash -c '
+  mise run e2e:build >/dev/null || exit 90
+  old="survives"; new="RT1-E2E"
+  for spec in "old:20:$old" "new:15:$new"; do
+    IFS=: read -r tag n grep <<< "$spec"
+    (cd frontend && INKWELL_E2E_BROWSER=chromium PLAYWRIGHT_JSON_OUTPUT_NAME=../.task/rt1/e2e-chromium-$tag.json ./node_modules/.bin/playwright test e2e/persistence.spec.ts -g "$grep" --repeat-each=$n --retries=0 --reporter=json >/dev/null); echo "chromium-$tag $?" >> .task/rt1/e2e-rc
+    PLAYWRIGHT_JSON_OUTPUT_NAME=$PWD/.task/rt1/e2e-webkit-$tag.json mise run --skip-deps e2e:webkit -- e2e/persistence.spec.ts -g "$grep" --repeat-each=$n --retries=0 --reporter=json >/dev/null; echo "webkit-$tag $?" >> .task/rt1/e2e-rc
+  done'
+rc=$?
+python3 -I - "$rc" <<'PY'
+import json, pathlib, sys
+title = {"old": ("what is typed lands in main.typ and survives a fresh browser and a second process", 20),
+         "new": ("RT1-E2E a page replaced by a fresher one stops and the saved document stays the project's root", 15)}
+f = pathlib.Path(".task/rt1/e2e-rc")
+rcs = dict(l.split() for l in f.read_text().splitlines()) if f.is_file() else {}
+out = []
+for engine in ("chromium", "webkit"):
+    for tag, (name, n) in title.items():
+        key = f"{engine}-{tag}"; p = pathlib.Path(f".task/rt1/e2e-{key}.json")
+        if not p.is_file():
+            out.append(f"{key}: no report (exit {rcs.get(key, '?')})"); continue
+        r = json.loads(p.read_text()); st = r.get("stats", {}); runs = []
+        stack = list(r.get("suites", []))
+        while stack:
+            x = stack.pop(); stack += x.get("suites", [])
+            for sp in x.get("specs", []):
+                if sp["title"] == name:
+                    runs += [t["status"] for t in sp["tests"]]
+        got = runs.count("expected")
+        if rcs.get(key) != "0" or r.get("errors") or st.get("unexpected") or st.get("flaky") or st.get("skipped") or got != n:
+            out.append(f"{key}: exit {rcs.get(key, '?')}, errors {len(r.get('errors', []))}, stats {st}, expected {got} of {n}")
+if out or sys.argv[1] != "0":
+    sys.exit(f"RT1 e2e: exit {sys.argv[1]}; " + "; ".join(out))
+PY'''
+
+[[criteria]]
+id = "simplify-report"
+command = "test -s gates/RT1/SIMPLIFY.md"
