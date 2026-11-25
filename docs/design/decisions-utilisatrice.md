@@ -268,3 +268,9 @@ Constat : la première frappe acceptée jusqu'à 50 ms couvre forcément plus d'
 - **Froid :** la règle des rafraîchissements manqués est remplacée par les seuils de démarrage déjà décidés (gestionnaire p95 ≤ 50 ms, travail d'image p95 ≤ 50 ms, pause ≤ 70 ms). Les rafraîchissements manqués à froid restent **publiés en diagnostic**.
 - **Chaud :** inchangé (gestionnaire p95 ≤ 8 ms, objectif 4 ms ; travail d'image ≤ 16 ms ; manqués de l'éditeur pas significativement plus que la frappe à vide ; pause ≤ 50 ms).
 - **Fusion de L3 : 3 mesures réussies sur 3**, d'affilée, sur le code final.
+
+## Langues de l'interface (W88, 2026-11-25)
+
+- **Langues livrées :** « fais le meilleur choix, un nombre de langues adapté pour que la majorité des gens puissent l'utiliser ». Le choix précis (quelles langues, d'après la population qui les lit et l'usage d'un ordinateur de bureau) est tranché dans le plan `docs/plans/2026-11-25-i18n1-languages.md` et consigné dans `docs/autonomous-decisions.md`.
+- **Plateforme publique de traduction (Weblate ou autre) :** non, pas pour l'instant.
+- **Traductions produites par machine sans relecture par une personne de la langue :** oui (2026-11-25, après reformulation), avec les trois garde-fous proposés : un second modèle relit chaque traduction, la mention « traduction automatique » dans le choix de la langue, un moyen simple de signaler une erreur.
