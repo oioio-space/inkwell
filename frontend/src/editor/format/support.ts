@@ -39,3 +39,7 @@ export function supports(lang: Lang, feature: Feature): boolean {
 
 /** A fence line opens or closes a fenced code block (Typst raw block, Markdown code block). */
 export const isFence = (text: string): boolean => /^[ \t]{0,3}```/.test(text);
+
+/** What a feature writes in a language, shown beside its button or heading level. */
+export const hintOf = (lang: Lang, feature: string): string | undefined =>
+  syntaxOf(lang)?.hints[feature as Feature];

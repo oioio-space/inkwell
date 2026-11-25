@@ -38,3 +38,38 @@ export function activeBlock(state: EditorState, lang: Lang): Block {
   if (fenceAt(state.doc, line.number)) return "codeblock";
   return syntax.classify(line.text).block;
 }
+
+const MARKS: ReadonlySet<string> = new Set<Mark>([
+  "bold",
+  "italic",
+  "underline",
+  "strike",
+  "code",
+  "link",
+]);
+/** The blocks a bar button stands for (a heading is the heading menu's, a paragraph is none). */
+const TOGGLED_BLOCKS: ReadonlySet<string> = new Set<Block>([
+  "codeblock",
+  "ul",
+  "ol",
+  "task",
+  "quote",
+]);
+
+/**
+ * Whether a feature's button shows pressed at the caret: a mark that applies, the block the caret
+ * is in; undefined for what is no toggle (a formula, a table are insertions).
+ */
+export function featureState(
+  state: EditorState,
+  lang: Lang,
+): (feature: string) => boolean | undefined {
+  const marks = activeMarks(state, lang);
+  const block = activeBlock(state, lang);
+  return (feature) =>
+    MARKS.has(feature)
+      ? marks.has(feature as Mark)
+      : TOGGLED_BLOCKS.has(feature)
+        ? block === feature
+        : undefined;
+}

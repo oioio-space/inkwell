@@ -1,6 +1,7 @@
 <script lang="ts">
 import { onDestroy } from "svelte";
 import { t } from "../i18n";
+import LocationBar from "../ui/command/LocationBar.svelte";
 import Icon from "../ui/icons/Icon.svelte";
 import {
   clampZoom,
@@ -9,25 +10,23 @@ import {
   PX_PER_PT,
   scrollTarget,
   stack,
-  stepZoom,
   visiblePages,
 } from "./layout";
 import { preview } from "./preview.svelte";
+import { fitPreview, previewZoom } from "./zoom.svelte";
 
 /**
  * The right-hand pane: the pages of the compiled document, drawn lazily as they come into view.
  * Each page is an image (see svg.ts), never markup. A click on a page asks the shell to put the
- * caret where that page's text comes from.
+ * caret where that page's text comes from. Its tools are the `preview/toolbar` location (EX0c1)
+ * around the fixed widget of the zoom level, which sets the fit as `typst.preview-fit` does.
  */
 let {
   onSourceJump,
-  onCursorJump,
   onDetails,
 }: {
   /** The person clicked at (x, y) points of `page`. */
   onSourceJump: (page: number, x: number, y: number) => void;
-  /** The person asked for the page of the caret. */
-  onCursorJump: () => void;
   /** The person asked for details of a refused sandbox, with this button (opens the About dialog). */
   onDetails?: (from: HTMLElement) => void;
 } = $props();
@@ -39,7 +38,9 @@ let scroller: HTMLDivElement | undefined = $state();
 let viewW = $state(0);
 let viewH = $state(0);
 let scrollTop = $state(0);
-let mode = $state<"fit" | number>("fit");
+// Each pane opens fitted to its width.
+previewZoom.mode = "fit";
+const mode = $derived(previewZoom.mode);
 let markShown = $state(0);
 
 const known = $derived(preview.pages.get(1) ?? [...preview.pages.values()][0]);
@@ -61,6 +62,9 @@ const numbers = $derived(
     : [],
 );
 const percent = $derived(Math.round(zoom * 100));
+$effect(() => {
+  previewZoom.current = zoom;
+});
 const showStale = $derived(preview.failure !== undefined && preview.pageCount > 0);
 
 // What is in view decides what Go renders; what fills the view is the current page.
@@ -90,10 +94,6 @@ function onScroll(e: Event) {
   scrollTop = (e.currentTarget as HTMLElement).scrollTop;
 }
 
-function setZoom(z: number | "fit") {
-  mode = z === "fit" ? "fit" : clampZoom(z);
-}
-
 function pageClick(e: MouseEvent, n: number) {
   if (e.detail === 0) return onSourceJump(n, 0, 0); // the keyboard: the top of the page
   const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
@@ -108,32 +108,19 @@ const packages = $derived(preview.failure?.packages.join(", ") ?? "");
 
 <section class="preview" aria-label={t("preview.label")}>
   <div class="tools" role="group" aria-label={t("preview.tools")}>
-    <button type="button" class="fb" aria-label={t("preview.zoomOut")} title={t("preview.zoomOut")} onclick={() => setZoom(stepZoom(zoom, -1))}>
-      <Icon name="minus" />
-    </button>
+    <LocationBar location="preview/toolbar" groups={["zoom-out"]} />
     <button
       type="button"
       class="fb lbl zoom"
+      data-el="preview.fit"
       aria-label={t("preview.zoomFitLabel", { percent })}
       title={t("preview.zoomFit")}
       aria-pressed={mode === "fit"}
-      onclick={() => setZoom("fit")}
+      onclick={fitPreview}
     >
       <span data-testid="zoom">{percent} %</span>
     </button>
-    <button type="button" class="fb" aria-label={t("preview.zoomIn")} title={t("preview.zoomIn")} onclick={() => setZoom(stepZoom(zoom, 1))}>
-      <Icon name="plus" />
-    </button>
-    <button
-      type="button"
-      class="fb"
-      aria-label={t("preview.jumpToCursor")}
-      title={t("preview.jumpToCursor")}
-      disabled={preview.pageCount === 0}
-      onclick={onCursorJump}
-    >
-      <Icon name="target" />
-    </button>
+    <LocationBar location="preview/toolbar" groups={["zoom-in", "navigate", "extensions"]} />
     <span class="sp"></span>
     {#if preview.compiling}
       <span class="busy" aria-live="polite">{t("preview.compiling")}</span>

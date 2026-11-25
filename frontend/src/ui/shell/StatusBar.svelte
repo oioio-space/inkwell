@@ -1,27 +1,20 @@
 <script lang="ts">
 import type { EditorState } from "@codemirror/state";
 import type { Lang } from "../../editor/format";
-import { cursorPosition } from "../../editor/stats/position";
-import { stats as computeStats, type Stats } from "../../editor/stats/stats";
-import { run } from "../../extensions/commands";
-import { t, tn } from "../../i18n";
-import { problems } from "../../language/problems.svelte";
-import { preview } from "../../preview/preview.svelte";
+import { statusOf } from "../../extensions/commands";
+import { t } from "../../i18n";
 import type { Diagnostic } from "../../preview/protocol";
 import type { FileInfo } from "../../store/files";
 import type { Status } from "../../workspace/workspace.svelte";
-import Icon from "../icons/Icon.svelte";
-import EncodingMenu from "../popover/EncodingMenu.svelte";
-import MenuButton from "../popover/MenuButton.svelte";
-import StatsPopover from "../popover/StatsPopover.svelte";
-import ZoomMenu from "../popover/ZoomMenu.svelte";
-import { count } from "./count";
-import { whenIdle } from "./idle";
+import StatusMore from "../command/StatusMore.svelte";
+import StatusSlot from "../command/StatusSlot.svelte";
+import { type StatusBarProps, statusLayout } from "../command/status.svelte";
 
 /**
- * People and sync on the left; on the right the problems of the document (the list opens from
- * them), the page shown in the preview, the caret position, the word count (statistics open
- * from it), the file's encoding when it is unusual, and its language.
+ * The status bar: the `status` point of the registry (EX0c1). Who is here on the left; on the
+ * right, by their groups' fixed order, the problems, the page of the preview, the unsaved text,
+ * the caret, the words, the zoom, the encoding and the language, then the extensions' items
+ * (3 at most, the rest in ⋯). What shows is each item's `when` on the live context.
  */
 let {
   lang,
@@ -29,156 +22,44 @@ let {
   peerCount,
   editorState,
   info,
-  showPage = false,
   ofMain = true,
-  hasText = true,
   onProblem = () => {},
   problemsNav = false,
   unsaved = false,
 }: {
   lang: Lang;
   status: Status;
-  /** People connected besides this one. */
   peerCount: number;
   editorState: EditorState | undefined;
   info: FileInfo | undefined;
-  /** Says "Page X sur Y": true while the preview is shown. */
-  showPage?: boolean;
-  /** The open file is main.typ: only then do its problems and pages apply. */
+  /** The open file is main.typ: only then do its problems apply (outside the main window). */
   ofMain?: boolean;
-  /** The open file shows text: a picture or an info card has no caret, words or language. */
-  hasText?: boolean;
-  /** The person chose a problem in the list: go to its place. */
   onProblem?: (d: Diagnostic) => void;
-  /** The counter steps through the problems (`app.problem-next`): the main window's status bar. */
   problemsNav?: boolean;
-  /** The text is not in the file yet (saving with Ctrl+S, or a write that failed). */
   unsaved?: boolean;
 } = $props();
 
-let statsOpen = $state(false);
-let problemsOpen = $state(false);
-let computed = $state.raw<Stats | undefined>();
-
-const position = $derived(editorState ? cursorPosition(editorState) : { line: 1, column: 1 });
-const words = $derived(computed ? count(computed.words, "mot") : "…");
-const language = $derived(t(`lang.${lang}`));
-const errors = $derived(problemsNav ? problems.errors : preview.errors);
-const warnings = $derived(problemsNav ? problems.warnings : preview.warnings);
-const problemsName = $derived(
-  errors + warnings === 0
-    ? t("problems.none")
-    : [
-        errors > 0 ? tn("problems.errors", errors) : "",
-        warnings > 0 ? tn("problems.warnings", warnings) : "",
-      ]
-        .filter(Boolean)
-        .join(", "),
-);
-
-// Statistics are computed when the browser is idle, from the (immutable) state they started at.
-$effect(() => {
-  const s = editorState;
-  if (!s) return;
-  return whenIdle(() => {
-    const { from, to } = s.selection.main;
-    computed = computeStats(s.doc.toString(), lang, { from, to });
-  });
+let width = $state(1200);
+const bar: StatusBarProps = $derived({
+  lang,
+  status,
+  peerCount,
+  editorState,
+  info,
+  onProblem,
+  problemsNav,
+  unsaved,
+  ofMain,
 });
+/** Squeezed by the side panels (640 px or less), the extensions' items go to ⋯ (L-4). */
+const layout = $derived(statusLayout(statusOf(), width <= 640));
 </script>
 
-<footer class="bot" aria-label={t("status.bar")}>
-  <span class="people" data-status={status}>
-    <span class="dot" aria-hidden="true"></span>
-    {peerCount === 0 ? t(status === "connecting" ? "status.connecting" : "status.alone") : tn("people.count", peerCount + 1)}
-  </span>
+<footer class="bot" aria-label={t("status.bar")} bind:clientWidth={width}>
+  {#each layout.start as item (item.id)}<StatusSlot {item} {bar} />{/each}
   <span class="sp"></span>
-  {#if problemsNav}
-  <!-- The problems are the compilation's: a Typst file takes part in it, a note or a picture does not (UX-L2-1). -->
-  {#if hasText && lang === "typst" && (preview.hasResult || problems.entries.length > 0)}
-    <button type="button" class="fb" title={t("problems.hint")} aria-label={`${t("problems.label")} : ${t("problems.next")}, ${problemsName}`} data-cmd="app.problem-next" onclick={(event) => event.shiftKey ? problems.show() : run("app.problem-next")} oncontextmenu={(event) => {event.preventDefault();problems.show();}}>
-      <span class="problems" data-testid="problems" data-errors={problems.errors} data-warnings={problems.warnings}>
-        {#if problems.errors + problems.warnings === 0}
-          <Icon name="check" size={13} /><span class="ptext">{t("problems.none")}</span>
-        {:else}
-          {#if problems.errors > 0}<span class="n err"><Icon name="fail" size={13} />{problems.errors}</span>{/if}
-          {#if problems.warnings > 0}<span class="n warn"><Icon name="warn" size={13} />{problems.warnings}</span>{/if}
-        {/if}
-      </span>
-    </button>
-  {/if}
-  {:else}
-  {#if ofMain && preview.hasResult}
-    <MenuButton
-      bind:open={problemsOpen}
-      up
-      align="end"
-      width={460}
-      label={t("problems.label")}
-      name={`${t("problems.label")} : ${problemsName}`}
-    >
-      {#snippet trigger()}
-        <span class="problems" data-testid="problems" data-errors={preview.errors} data-warnings={preview.warnings}>
-          {#if preview.errors + preview.warnings === 0}
-            <Icon name="check" size={13} /><span class="ptext">{t("problems.none")}</span>
-          {:else}
-            {#if preview.errors > 0}<span class="n err"><Icon name="fail" size={13} />{preview.errors}</span>{/if}
-            {#if preview.warnings > 0}<span class="n warn"><Icon name="warn" size={13} />{preview.warnings}</span>{/if}
-          {/if}
-        </span>
-      {/snippet}
-      {#snippet children({ close })}
-        {#if preview.diagnostics.length === 0}
-          <p class="none">{t("problems.empty")}</p>
-        {/if}
-        {#each preview.diagnostics as d, i (i)}
-          <button
-            type="button"
-            class="mi two problem"
-            role="menuitem"
-            data-severity={d.severity}
-            disabled={d.line === undefined}
-            onclick={() => {
-              close(false);
-              onProblem(d);
-            }}
-          >
-            <Icon name={d.severity === "error" ? "fail" : "warn"} size={14} />
-            <span class="text">
-              {d.message.split("\n")[0]}
-              {#if d.line !== undefined}
-                <span class="sub">{t("problems.where", { file: d.file ?? "", line: d.line })}</span>
-              {/if}
-            </span>
-          </button>
-        {/each}
-        {#if preview.truncated}<p class="none">{t("problems.more")}</p>{/if}
-      {/snippet}
-    </MenuButton>
-  {/if}
-  {/if}
-  {#if ofMain && showPage && preview.pageCount > 0}
-    <span class="fb page" data-testid="page-indicator">
-      {t("status.page", { page: Math.max(1, preview.currentPage), total: preview.pageCount })}
-    </span>
-  {/if}
-  {#if unsaved}
-    <span class="fb unsaved" data-testid="unsaved" title={t("save.unsaved.hint")}>{t("save.unsaved")}</span>
-  {/if}
-  {#if hasText}
-    <span class="fb pos" data-testid="position">{t("status.position", { line: position.line, column: position.column })}</span>
-    <MenuButton bind:open={statsOpen} role="dialog" up align="end" label={t("stats.title")}>
-      {#snippet trigger()}<span data-testid="words">{words}</span>{/snippet}
-      {#snippet children()}
-        {#if computed}
-          <StatsPopover stats={computed} />
-        {/if}
-      {/snippet}
-    </MenuButton>
-  {/if}
-  <ZoomMenu />
-  <EncodingMenu {info} />
-  {#if hasText}<span class="fb lang" data-testid="language">{language}</span>{/if}
+  {#each layout.end as item (item.id)}<StatusSlot {item} {bar} />{/each}
+  {#if layout.more.length > 0}<StatusMore items={layout.more} />{/if}
 </footer>
 
 <style>
@@ -216,57 +97,17 @@ $effect(() => {
   .sp {
     flex: 1;
   }
-  .people {
-    display: inline-flex;
-    align-items: center;
-    gap: 7px;
-    padding: 0 10px;
-  }
-  .dot {
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    background: var(--fg-dim);
-  }
-  [data-status="synced"] .dot {
-    background: var(--success);
-  }
-  [data-status="checking"] .dot,
-  [data-status="sending"] .dot {
-    background: var(--accent-bg);
-  }
-  [data-status="behind"] .dot {
-    background: var(--warning);
-  }
-  .problems {
-    display: inline-flex;
-    align-items: center;
-    gap: 10px;
-    font-size: 12.5px;
-  }
-  /* In a narrow window the tick says it: the words come back with the room. */
+  /* Each group's narrow-width rule (manifest.ts STATUS). In a narrow window the tick says it:
+     the words come back with the room. */
   @media (max-width: 900px) {
-    .ptext {
+    .bot :global([data-narrow="text"] .ptext) {
       display: none;
     }
   }
   /* Squeezed by the side panels, the bar keeps what matters: the rest would overlap. */
   @container (max-width: 640px) {
-    .bot :global(.fb.page),
-    .bot :global(.fb.lang) {
+    .bot :global([data-narrow="hide"] > *) {
       display: none;
     }
-  }
-  .problems .n {
-    display: inline-flex;
-    align-items: center;
-    gap: 4px;
-    font-variant-numeric: tabular-nums;
-  }
-  .problems .err {
-    color: var(--error);
-  }
-  .problems .warn {
-    color: var(--warning);
   }
 </style>

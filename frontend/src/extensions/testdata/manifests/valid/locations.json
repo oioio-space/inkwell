@@ -1,0 +1,43 @@
+{
+  "id": "sample",
+  "version": "1.0.0",
+  "contributes": {
+    "fileTypes": [
+      {
+        "id": "sample",
+        "label": "Sample",
+        "icon": "text",
+        "extensions": [".smp"],
+        "storage": "text"
+      }
+    ],
+    "commands": [
+      {
+        "id": "sample.go",
+        "label": "Go",
+        "category": "navigate"
+      }
+    ],
+    "menus": [
+      {
+        "command": "sample.go",
+        "location": "format",
+        "group": "extensions",
+        "order": 10,
+        "when": "bold in formats"
+      },
+      {
+        "command": "sample.go",
+        "location": "main",
+        "group": "extensions",
+        "order": 10
+      },
+      {
+        "command": "sample.go",
+        "location": "preview/toolbar",
+        "group": "navigate",
+        "order": 20
+      }
+    ]
+  }
+}

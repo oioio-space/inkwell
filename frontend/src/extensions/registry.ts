@@ -12,15 +12,17 @@ import {
   type DebugContribution,
   type FileTypeContribution,
   type GrammarContribution,
+  type GroupSpec,
+  locationOf,
   ManifestError,
   type ManifestSource,
-  MENU_GROUPS,
   type MenuContribution,
   type MetricContribution,
   type Origin,
-  PROTECTED_GROUPS,
   parseManifest,
   parseMetric,
+  STATUS,
+  type StatusContribution,
   type Storage,
   type ViewerContribution,
 } from "./manifest";
@@ -54,6 +56,7 @@ export interface Viewer extends ViewerContribution, Owned {}
 export interface Grammar extends GrammarContribution, Owned {}
 export interface Command extends CommandContribution, Owned {}
 export interface MenuItem extends MenuContribution, Owned {}
+export interface StatusItem extends StatusContribution, Owned {}
 export interface DebugProvider extends DebugContribution, Owned {}
 /** A metric of a manifest, or one Go declares in code (`go`), which has no folder. */
 export interface Metric extends MetricContribution {
@@ -146,8 +149,15 @@ export interface Registry {
   readonly keybindings: readonly Binding[];
   /** The bindings in force on a system, with the person's own (`user`) applied. */
   bindings(system: System, user?: readonly UserBinding[]): Resolution;
-  /** A menu's items in their fixed groups, then by `order`, then by extension. */
-  menu(location: MenuContribution["location"]): readonly MenuItem[];
+  /**
+   * A location's items in its groups' fixed order, then by `order`, extension and command:
+   * indexed once at build, the same array at every call (L-9).
+   */
+  menu(location: string): readonly MenuItem[];
+  /** The status bar's items: start side then end, each in its groups' fixed order (L-7). */
+  readonly status: readonly StatusItem[];
+  /** A status item's entry module, loaded once; its `status[id]` is the item's component. */
+  loadStatus(item: StatusItem): Promise<unknown>;
   /** A command's entry module, loaded once; undefined for a command without one. */
   loadCommand(c: Command): Promise<unknown> | undefined;
   /** A command's entry module if it has already loaded. */
@@ -201,6 +211,7 @@ function claimsOf(m: ReturnType<typeof parseManifest>): string[] {
     ...c.viewers.map((v) => `viewer ${v.id}`),
     ...c.grammars.flatMap((g) => [`grammar ${g.id}`, ...g.names.map((n) => `grammar name ${n}`)]),
     ...c.commands.map((x) => `command ${x.id}`),
+    ...c.status.map((x) => `status ${x.id}`),
     ...c.metrics.map((x) => `metric ${x.id}`),
     ...c.debug.map((x) => `debug ${x.id}`),
   ];
@@ -263,6 +274,7 @@ export function buildRegistry(
   const grammars: Grammar[] = [];
   const commands: Command[] = [];
   const menus: MenuItem[] = [];
+  const status: StatusItem[] = [];
   const keybindings: Binding[] = [];
   const metrics: Metric[] = [];
   const debug: DebugProvider[] = [];
@@ -341,21 +353,40 @@ export function buildRegistry(
     for (const x of m.contributes.metrics)
       metrics.push(freeze({ ...x, extension: m.id, from: "manifest" as const }));
     for (const x of m.contributes.debug) debug.push(freeze({ ...x, ...owned }));
+    // A protected group is the core's, a reserved location has no host yet: another origin's
+    // item there is kept out and listed (ND-3); a built-in's was refused with its manifest.
+    const keptOut = (x: MenuContribution): string | undefined => {
+      const spec = locationOf(x.location);
+      if (source.origin === "builtin" || !spec) return undefined;
+      if (spec.reserved !== undefined) return `reserved location ${x.location}`;
+      return spec.groups.find((g) => g.id === x.group)?.protected
+        ? `protected group ${x.group}`
+        : undefined;
+    };
     for (const x of m.contributes.menus) {
-      // The groups of the project and of the application are the core's (§15.13).
-      if (source.origin !== "builtin" && PROTECTED_GROUPS.has(x.group))
+      const why = keptOut(x);
+      if (why)
         refused.push(
-          freeze({
-            folder: source.folder,
-            reason: `protected group ${x.group}`,
-            with: Object.freeze([x.command]),
-          }),
+          freeze({ folder: source.folder, reason: why, with: Object.freeze([x.command]) }),
         );
       else menus.push(freeze({ ...x, ...owned }));
     }
+    for (const x of m.contributes.status) status.push(freeze({ ...x, ...owned }));
   }
 
   const commandById = new Map(commands.map((x) => [x.id, x]));
+  // A status item's click runs a command of any extension: one that no manifest gives is refused.
+  const shownStatus = status.filter((x) => {
+    if (x.command === undefined || commandById.has(x.command)) return true;
+    refused.push(
+      freeze({
+        folder: x.folder,
+        reason: `unknown command ${x.command}`,
+        with: Object.freeze([x.id]),
+      }),
+    );
+    return false;
+  });
   const known = new Set(commandById.keys());
   // Each system's defaults are resolved when first asked, once: a start resolves only its own.
   const defaults = new Map<System, Resolution>();
@@ -367,13 +398,44 @@ export function buildRegistry(
     }
     return r;
   };
-  const groupOf = (x: MenuItem) => MENU_GROUPS.indexOf(x.group);
-  const menuItems = Object.freeze(
-    [...menus].sort(
-      (a, b) =>
-        groupOf(a) - groupOf(b) ||
-        a.order - b.order ||
-        (a.extension < b.extension ? -1 : a.extension > b.extension ? 1 : 0),
+  const cmp = (a: string, b: string) => (a < b ? -1 : a > b ? 1 : 0);
+  /** Fixed group places, then `order`, extension and command: never the build order (L-2). */
+  const placed = <T extends { group: string; order: number; extension: string }>(
+    items: readonly T[],
+    groups: readonly GroupSpec[],
+    name: (x: T) => string,
+  ): readonly T[] => {
+    const at = (x: T) => groups.findIndex((g) => g.id === x.group);
+    return Object.freeze(
+      [...items].sort(
+        (a, b) =>
+          at(a) - at(b) ||
+          a.order - b.order ||
+          cmp(a.extension, b.extension) ||
+          cmp(name(a), name(b)),
+      ),
+    );
+  };
+  const grouped = new Map<string, MenuItem[]>();
+  for (const x of menus) {
+    const list = grouped.get(x.location);
+    if (list) list.push(x);
+    else grouped.set(x.location, [x]);
+  }
+  const byLocation = new Map<string, readonly MenuItem[]>(
+    [...grouped].map(([loc, items]) => [
+      loc,
+      placed(items, locationOf(loc)?.groups ?? [], (x) => x.command),
+    ]),
+  );
+  const noItems: readonly MenuItem[] = Object.freeze([]);
+  const statusItems = Object.freeze(
+    (Object.keys(STATUS) as (keyof typeof STATUS)[]).flatMap((side) =>
+      placed(
+        shownStatus.filter((x) => x.side === side),
+        STATUS[side].groups,
+        (x) => x.id,
+      ),
     ),
   );
 
@@ -460,7 +522,7 @@ export function buildRegistry(
   };
 
   const loads = new Map<string, Promise<unknown>>();
-  const load = (c: Viewer | Grammar | DebugProvider): Promise<unknown> => {
+  const load = (c: Viewer | Grammar | DebugProvider | StatusItem): Promise<unknown> => {
     const key = `${c.origin}:${c.folder}/${c.entry}`;
     let p = loads.get(key);
     if (!p) {
@@ -573,8 +635,9 @@ export function buildRegistry(
     keybindings: Object.freeze(keybindings),
     bindings: (system: System, user: readonly UserBinding[] = []) =>
       user.length === 0 ? defaultsOf(system) : resolve(keybindings, system, user, known),
-    menu: (location: MenuContribution["location"]) =>
-      menuItems.filter((x) => x.location === location),
+    menu: (location: string) => byLocation.get(location) ?? noItems,
+    status: statusItems,
+    loadStatus: (item: StatusItem) => load(item),
     loadCommand,
     loadedCommand: (c: Command) => commandModules.get(`${c.origin}:${c.folder}/${c.entry}`),
     extensions: Object.freeze(extensions),

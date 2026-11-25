@@ -30,7 +30,8 @@
         "when": "canPresent",
         "unavailable": "cmd.present.unavailable",
         "entry": "native/commands.ts",
-        "capabilities": ["ui.native"]
+        "capabilities": ["ui.native"],
+        "icon": "present"
       },
       {
         "id": "typst.present-here",
@@ -59,10 +60,40 @@
       },
       {
         "id": "typst.jump-to-preview",
-        "label": "cmd.jump-to-preview",
+        "label": "preview.jumpToCursor",
         "category": "navigate",
         "when": "fileType == typst",
         "unavailable": "cmd.typst.unavailable",
+        "entry": "native/commands.ts",
+        "capabilities": ["ui.native"],
+        "icon": "target"
+      },
+      {
+        "id": "typst.preview-zoom-out",
+        "label": "preview.zoomOut",
+        "icon": "minus",
+        "category": "view",
+        "when": "main && previewOpen",
+        "unavailable": "cmd.previewClosed.unavailable",
+        "entry": "native/commands.ts",
+        "capabilities": ["ui.native"]
+      },
+      {
+        "id": "typst.preview-zoom-in",
+        "label": "preview.zoomIn",
+        "icon": "plus",
+        "category": "view",
+        "when": "main && previewOpen",
+        "unavailable": "cmd.previewClosed.unavailable",
+        "entry": "native/commands.ts",
+        "capabilities": ["ui.native"]
+      },
+      {
+        "id": "typst.preview-fit",
+        "label": "preview.fitCommand",
+        "category": "view",
+        "when": "main && previewOpen",
+        "unavailable": "cmd.previewClosed.unavailable",
         "entry": "native/commands.ts",
         "capabilities": ["ui.native"]
       },
@@ -100,6 +131,54 @@
         "location": "main",
         "group": "document",
         "order": 40
+      },
+      {
+        "command": "typst.present",
+        "location": "header/end",
+        "group": "view",
+        "order": 20,
+        "when": "canPresent && fileType == typst"
+      },
+      {
+        "command": "typst.preview-zoom-out",
+        "location": "preview/toolbar",
+        "group": "zoom-out",
+        "order": 10
+      },
+      {
+        "command": "typst.preview-zoom-in",
+        "location": "preview/toolbar",
+        "group": "zoom-in",
+        "order": 10
+      },
+      {
+        "command": "typst.jump-to-preview",
+        "location": "preview/toolbar",
+        "group": "navigate",
+        "order": 10
+      }
+    ],
+    "status": [
+      {
+        "id": "typst.problems",
+        "label": "problems.label",
+        "side": "end",
+        "group": "problems",
+        "order": 10,
+        "when": "fileType == typst",
+        "command": "app.problem-next",
+        "entry": "native/status.ts",
+        "capabilities": ["ui.native"]
+      },
+      {
+        "id": "typst.page",
+        "label": "status.item.page",
+        "side": "end",
+        "group": "preview",
+        "order": 10,
+        "when": "main && previewOpen",
+        "entry": "native/status.ts",
+        "capabilities": ["ui.native"]
       }
     ],
     "keybindings": [

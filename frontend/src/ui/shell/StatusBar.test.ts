@@ -1,10 +1,31 @@
 import { afterEach, describe, expect, it } from "vitest";
+import { registry } from "../../extensions";
+import { setLive } from "../../extensions/live.svelte";
 import { Eol, type FileInfo } from "../../store/files";
 import { encodingLabel, needsIndicator } from "../popover/encoding";
 import { cleanup, click, fakeEditor, render } from "../testkit.svelte";
 import StatusBar from "./StatusBar.svelte";
 
+void registry;
+
 afterEach(cleanup);
+
+/** What the window says about the open file, read by the items' `when` (EX0c1). */
+function live(
+  lang: string,
+  extra: {
+    hasText?: boolean | undefined;
+    ofMain?: boolean | undefined;
+    showPage?: boolean | undefined;
+  },
+) {
+  setLive({
+    fileType: lang === "plain" ? "text" : lang,
+    text: extra.hasText ?? true,
+    main: extra.ofMain ?? true,
+    previewOpen: extra.showPage ?? false,
+  });
+}
 
 const utf8: FileInfo = { encoding: "utf-8", eol: Eol.LF, bom: false, mixed: false };
 const idle = () => new Promise((r) => setTimeout(r, 120));
@@ -15,6 +36,7 @@ const mountBar = (
   lang: "typst" | "markdown" | "plain" = "typst",
 ) => {
   const editor = fakeEditor(marked);
+  live(lang, {});
   const host = render(StatusBar, {
     lang,
     status: "alone",

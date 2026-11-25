@@ -1,0 +1,26 @@
+{
+  "id": "sample",
+  "version": "1.0.0",
+  "essential": true,
+  "contributes": {
+    "commands": [
+      {
+        "id": "sample.go",
+        "label": "Go",
+        "category": "edit"
+      }
+    ],
+    "status": [
+      {
+        "id": "sample.count",
+        "label": "S",
+        "side": "end",
+        "group": "extensions",
+        "order": 1,
+        "entry": "native/status.ts",
+        "capabilities": ["ui.native"],
+        "command": "other.nowhere"
+      }
+    ]
+  }
+}

@@ -53,6 +53,10 @@ export const CONTEXT_KEYS = {
   reviewOpen: BOOL,
   canPresent: BOOL,
   canReturn: BOOL,
+  /** The open file shows text: a caret, words, a language (EX0c1, the status bar). */
+  text: BOOL,
+  /** The open file is the project's main document. */
+  main: BOOL,
 } as const satisfies Record<string, KeyType>;
 
 export type ContextKey = keyof typeof CONTEXT_KEYS;
@@ -72,6 +76,8 @@ export interface Context {
   reviewOpen: boolean;
   canPresent: boolean;
   canReturn: boolean;
+  text: boolean;
+  main: boolean;
 }
 
 /** The context of a window where nothing is open. */
@@ -88,6 +94,8 @@ export const emptyContext = (): Context => ({
   reviewOpen: false,
   canPresent: false,
   canReturn: false,
+  text: false,
+  main: false,
 });
 
 export type When =

@@ -1,17 +1,17 @@
 <script lang="ts">
-import { availability, menuOf } from "../../extensions/commands";
 import { t } from "../../i18n";
 import { statusLabel } from "../../net/syncLabel";
 import type { Status } from "../../workspace/workspace.svelte";
-import CommandButton from "../command/CommandButton.svelte";
-import CommandMenuItem from "../command/CommandMenuItem.svelte";
+import LocationBar from "../command/LocationBar.svelte";
+import LocationMenu from "../command/LocationMenu.svelte";
 import Icon from "../icons/Icon.svelte";
 import PeopleStack from "../PeopleStack.svelte";
-import MenuButton from "../popover/MenuButton.svelte";
 
 /**
- * The header bar: the panels' toggles, presenting, people and sharing as commands of the registry
- * (ADR 0027), and the main menu drawn from its `menus` (groups view, project, document, app).
+ * The header bar (EX0c1): the `header/start` location, then the sync state; the title; the
+ * `header/end` location around its fixed widgets (view, ‹people›, document, review, ‹main menu›,
+ * today's order);
+ * the main menu is the `main` location. Every button is a command of the registry (ADR 0027).
  */
 let {
   title,
@@ -36,15 +36,11 @@ let {
   me: { id: string; name: string };
   peers: string[];
 } = $props();
-
-let menuOpen = $state(false);
-const canPresent = $derived(availability("typst.present").ok);
-const groups = $derived(menuOpen ? menuOf("main") : []);
 </script>
 
 <header class="hb">
   <div class="start">
-    <CommandButton id="app.sidebar"><Icon name="side" /></CommandButton>
+    <LocationBar location="header/start" />
     <span class="status" data-status={status} role="status">
       <span class="dot" aria-hidden="true"></span>{statusLabel(status, sending, slow)}
     </span>
@@ -54,24 +50,12 @@ const groups = $derived(menuOpen ? menuOf("main") : []);
     <small>{#if unsaved}<span class="unsaved" data-testid="unsaved-dot" role="img" aria-label={t("save.unsaved")} title={t("save.unsaved")}></span>{/if}{subtitle}</small>
   </div>
   <div class="end">
-    <CommandButton id="app.preview"><Icon name="eye" /></CommandButton>
-    {#if canPresent}
-      <CommandButton id="typst.present" testid="present-start"><Icon name="present" /></CommandButton>
-    {/if}
+    <LocationBar location="header/end" groups={["view"]} />
     <PeopleStack {me} {peers} />
-    <CommandButton id="app.share" class="sug">{t("share.button")}</CommandButton>
-    <CommandButton id="app.review" testid="history-toggle"><Icon name="branch" /></CommandButton>
-    <MenuButton bind:open={menuOpen} label={t("menu.main")} name={t("menu.main")} align="end" width={300}>
+    <LocationBar location="header/end" groups={["document", "review"]} />
+    <LocationMenu location="main" label={t("menu.main")} name={t("menu.main")}>
       {#snippet trigger()}<Icon name="menu" />{/snippet}
-      {#snippet children({ close })}
-        {#each groups as g, i (g.group)}
-          {#if i > 0}<div class="sep" role="separator"></div>{/if}
-          {#each g.items as c (c.id)}
-            <CommandMenuItem id={c.id} {close} />
-          {/each}
-        {/each}
-      {/snippet}
-    </MenuButton>
+    </LocationMenu>
   </div>
 </header>
 

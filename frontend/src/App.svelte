@@ -9,7 +9,7 @@ import { markExternal } from "./editor/external";
 import { formatLanguage, formatsOf } from "./editor/format";
 import type { CursorState } from "./editor/presence";
 import { activateStartup, registry, warmCommands } from "./extensions";
-import { configure, installKeys } from "./extensions/commands";
+import { configure, installKeys, locationShows, menuOf, statusOf } from "./extensions/commands";
 import { setLive } from "./extensions/live.svelte";
 import ViewerHost from "./extensions/ViewerHost.svelte";
 import { type MessageKey, t } from "./i18n";
@@ -37,6 +37,7 @@ import AboutDialog, { type BuildInfo } from "./ui/AboutDialog.svelte";
 import Banner from "./ui/Banner.svelte";
 import CommandDialogs from "./ui/command/CommandDialogs.svelte";
 import { dialogShell } from "./ui/command/dialogs.svelte";
+import FormatBar from "./ui/command/FormatBar.svelte";
 import ExternalBanner from "./ui/ExternalBanner.svelte";
 import ExternalChangeToast from "./ui/ExternalChangeToast.svelte";
 import { session } from "./ui/editorSession.svelte";
@@ -56,8 +57,6 @@ import HeaderBar from "./ui/shell/HeaderBar.svelte";
 import Sidebar from "./ui/shell/Sidebar.svelte";
 import StatusBar from "./ui/shell/StatusBar.svelte";
 import { showStartupNotice } from "./ui/startupNotice";
-import FormatBar from "./ui/toolbar/FormatBar.svelte";
-import { barLang } from "./ui/toolbar/spec";
 import { ClosePage, closePublisher } from "./workspace/closePage";
 import { nativeCloseProbe } from "./workspace/nativeCloseProbe";
 import { observeDocText, observeHeads, observeLinks } from "./workspace/observe";
@@ -146,14 +145,13 @@ function showText(offset: number) {
   viewChoice.show(workspace.project, workspace.current, textEditor.id, offset);
   focusShown();
 }
-/** Only Typst and Markdown have a formatting bar; csv, bib and txt are just the editor. */
-const barLanguage = $derived(barLang(workspace.current));
-const hasBar = $derived(mainFile && barLanguage !== undefined);
+/** A file whose formats show an item of the `format` location has a bar (L-6); csv, bib, txt none. */
+const hasBar = $derived(mainFile && locationShows("format", { formats: formatsOf(lang) }));
 const barVisible = $derived(hasBar && !workspace.big && settings.toolbarVisible(workspace.project));
 const sidebarOpen = $derived(settings.sidebarVisible(workspace.project));
 const previewOpen = $derived(settings.previewVisible(workspace.project));
-/** Only a Typst document is presented: its pages are the slides. */
-const canPresent = $derived(mainFile && lang === "typst");
+/** The main document is presented: its pages are the slides (Present is Typst's, its `when`). */
+const canPresent = $derived(mainFile);
 /** The presentation takes the preview's place: it is the one that asks Go for pages. */
 const presenting = $derived(presentSession.current !== undefined);
 
@@ -329,6 +327,8 @@ $effect(() => {
     reviewOpen: history.open,
     canPresent,
     canReturn: workspace.canReturn && !workspace.leaving,
+    main: mainFile,
+    text: mainFile || workspace.opened?.text !== undefined,
   });
 });
 
@@ -442,6 +442,13 @@ onMount(() => {
       () => viewChoice.openAsTable(workspace.project, "main.typ");
     (globalThis as typeof globalThis & { __inkwellSaves?: () => number }).__inkwellSaves = () =>
       saves;
+    // What a location shows now, by the registry (EX0c1-E1, E2): its items, or the status bar's.
+    (
+      globalThis as typeof globalThis & { __inkwellLocation?: (location: string) => string[] }
+    ).__inkwellLocation = (location) =>
+      location === "status"
+        ? statusOf().map((x) => x.id)
+        : menuOf(location).flatMap((g) => g.items.map((c) => c.id));
   }
   preview.start(() => Stream("preview") as unknown as SocketLike);
   configureLanguage(
@@ -616,9 +623,9 @@ onMount(() => {
       {me}
       peers={workspace.peers}
     />
-    {#if barVisible && session.state && barLanguage}
+    {#if barVisible && session.state && lang !== "plain"}
       <FormatBar
-        lang={barLanguage}
+        {lang}
         editorState={session.state}
         target={session.view?.dom}
         run={session.run}
@@ -712,7 +719,6 @@ onMount(() => {
         <div class="pane side-preview">
           <Preview
             onSourceJump={jumpFromPage}
-            onCursorJump={jumpFromCursor}
             onDetails={(from) => {
               aboutOpener = from;
               about = true;
@@ -728,9 +734,7 @@ onMount(() => {
         peerCount={workspace.peers.length}
         editorState={session.state}
         info={workspace.fileInfo}
-        showPage={previewOpen}
         ofMain={mainFile}
-        hasText={mainFile || workspace.opened?.text !== undefined}
         onProblem={jumpToProblem}
         problemsNav
         {unsaved}

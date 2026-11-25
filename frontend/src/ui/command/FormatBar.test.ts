@@ -1,17 +1,24 @@
 import type { EditorView } from "@codemirror/view";
 import { flushSync } from "svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { formatHandlers, formatsOf } from "../../editor/format";
+import { formatHandlers, formatLanguage, formatsOf } from "../../editor/format";
 import { registry } from "../../extensions";
-import { registerSurface } from "../../extensions/commands";
+import { locationShows, menuOf, registerSurface, useRegistry } from "../../extensions/commands";
 import { setLive } from "../../extensions/live.svelte";
 import type { ProjectFile } from "../../store/files";
 import { workspace } from "../../workspace/workspace.svelte";
 import { session } from "../editorSession.svelte";
 import { cleanup, click, fakeEditor, fakeWidth, press, render } from "../testkit.svelte";
+import { visibleCount } from "../toolbar/layout";
 import FormatBar from "./FormatBar.svelte";
-import { visibleCount } from "./layout";
-import { barLang, itemsFor } from "./spec";
+
+/** The bar's items for a language: the `format` location for its formats (EX0c1). */
+const itemsFor = (lang: "typst" | "markdown" | "plain") => {
+  useRegistry(registry, { system: "linux" });
+  return menuOf("format", { formats: formatsOf(lang) }).flatMap((g, group) =>
+    g.items.map((c) => ({ id: c.id.slice(c.id.indexOf(".") + 1), group })),
+  );
+};
 
 const noFiles: ProjectFile[] = [];
 const mountBar = (
@@ -74,11 +81,17 @@ describe("formatting bar", () => {
   });
 
   it("UI-01 follows the file: Typst bar, then Markdown bar, then none for a csv", () => {
-    expect(barLang("x.typ")).toBe("typst");
-    expect(barLang("x.md")).toBe("markdown");
-    expect(barLang("x.csv")).toBeUndefined();
-    expect(barLang("refs.bib")).toBeUndefined();
-    expect(barLang("notes.txt")).toBeUndefined();
+    // A file has a bar when its formats show an item of the `format` location (EX0c1, L-6).
+    useRegistry(registry, { system: "linux" });
+    const shows = (name: string) =>
+      locationShows("format", {
+        formats: formatsOf(formatLanguage(registry.typeOf(name)?.grammar)),
+      });
+    expect(shows("x.typ")).toBe(true);
+    expect(shows("x.md")).toBe(true);
+    expect(shows("x.csv")).toBe(false);
+    expect(shows("refs.bib")).toBe(false);
+    expect(shows("notes.txt")).toBe(false);
 
     const typst = mountBar("a‸", "typst").host;
     expect(names(typst)).toContain("underline");

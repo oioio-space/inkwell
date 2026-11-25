@@ -45,7 +45,7 @@ so a lazy item never moves the layout.
 |---|---|---|---|
 | `main` | view, insert, export, **project**, document, extensions, **app** (spec §4.31 row 2; GNOME keeps Preferences, Shortcuts, About last) | — | EX0b1, groups EX0c1 |
 | `header/start` | **panels** (icon), then ‹sync state› | — | EX0c1 |
-| `header/end` | **view** (icon), **document** (label suggested), ‹people›, **review** (icon), ‹main menu› | — | EX0c1 |
+| `header/end` | **view** (icon), ‹people›, **document** (label suggested), **review** (icon), ‹main menu› (today's order, kept) | — | EX0c1 |
 | `format` | ‹heading menu›, marks, inline, blocks, objects, extensions (all icon; none protected: no Undo, Redo or save state here), ‹Insert› | ⋯ by width | EX0c1 |
 | `format/heading` | paragraph, headings (label) | — | EX0c1 |
 | `status/zoom` | zoom (label) | — | EX0c1 |
@@ -115,8 +115,9 @@ EX0b1-E2, UI-02…UI-07 (UI-06: axe in both themes), UI-11 (screenshots), ER-1�
 
 ## 4. Performance, gate, risks
 
-Start: PERF-START paired against `main` (ADR 0038), a regression guard; the status entries of `startup` essentials are
-warmed with the registry; the bar's height is fixed. Gate (max 45 min): `docs`, `no-hard-locations` (no command placed
+Start: PERF-START paired against `main` (ADR 0038), a regression guard; the built-ins' status entries are imported
+with the first screen, never as chunks of their own, and the manifests ship without their JSON whitespace (Vite plugin
+`src/build/compactManifests.ts`, code review 2026-11-25); the bar's height is fixed. Gate (max 45 min): `docs`, `no-hard-locations` (no command placed
 in markup, no bar, tab list or context menu outside its host, no bar table, the points filled, EX0's type-id lint with
 its list narrowed), `frontend`, `mutants`, `e2e`, `e2e-webkit`, `perf-start`, `simplify-report`. Risks: a lazy status
 item flashing in (fixed height, L-9), the overflow at narrow widths (UI-05 on both engines), the problems counter's

@@ -1,16 +1,17 @@
 import { flushSync } from "svelte";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { formatHandlers, formatsOf } from "../../editor/format";
+import Zoom from "../../ext/app/native/status/Zoom.svelte";
 import { registry } from "../../extensions";
 import * as commands from "../../extensions/commands";
 import { ariaKeys } from "../../extensions/keys";
 import { setLive } from "../../extensions/live.svelte";
 import { emptyContext } from "../../extensions/when";
 import { workspace } from "../../workspace/workspace.svelte";
-import ZoomMenu from "../popover/ZoomMenu.svelte";
 import HeaderBar from "../shell/HeaderBar.svelte";
 import { cleanup, click, fakeEditor, fakeWidth, render } from "../testkit.svelte";
-import FormatBar from "../toolbar/FormatBar.svelte";
+import FormatBar from "./FormatBar.svelte";
+import type { StatusBarProps } from "./status.svelte";
 
 // The spy every control must reach: `run()` with its command's id, through no other path.
 vi.mock("../../extensions/commands", async (original) => {
@@ -59,6 +60,8 @@ describe("EX0b1 controls bound to commands", () => {
     setLive({
       ...emptyContext(),
       canPresent: true,
+      // Present is Typst's (its item's `when`, EX0c1).
+      fileType: "typst",
       hasToolbar: true,
       toolbarVisible: true,
       previewOpen: true,
@@ -167,8 +170,9 @@ describe("EX0b1 controls bound to commands", () => {
     restore();
     cleanup();
 
-    // The zoom menu of the status bar.
-    const zoom = render(ZoomMenu, {});
+    // The zoom menu of the status bar (its item, EX0c1).
+    const item = registry.status.find((x) => x.id === "app.zoom");
+    const zoom = render(Zoom, { item, bar: {} as StatusBarProps });
     click(zoom.querySelector('button[aria-haspopup="menu"]') as HTMLElement);
     const steps = [...document.querySelectorAll<HTMLElement>('[role="menu"] [data-cmd]')];
     expect(steps.map((s) => s.dataset.cmd)).toEqual([

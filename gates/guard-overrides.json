@@ -2254,6 +2254,21 @@
       "id": "7b2a2ea8280b2f3212f5afabcea56bd136c8e9245b0392b9e6094adb9c7612eb",
       "reason": "frontend/e2e/persistence.spec.ts: no timeout raised; the new RT1-E2E test repeats the spec's existing 10 s wait (await expect.poll(() => docText(fresh), { timeout: 10_000 }).toBe(text)), which the guard sees as a second occurrence of the line",
       "decision": "docs/plans/2026-11-25-rt1-root-kept.md"
+    },
+    {
+      "id": "240a25a827c17018ebda1d6900743192937f24ec21bc0bc6ddc32ecd19834357",
+      "reason": "frontend/src/ui/toolbar/FormatBar.test.ts moved to frontend/src/ui/command/FormatBar.test.ts with the formatting bar it tests (EX0c1: the bar became a host of the `format` location in ui/command/); every test kept, its tables now read from the registry",
+      "decision": "docs/plans/2026-11-25-ex0c-locations.md"
+    },
+    {
+      "id": "5cc3d8c51caf084fdbdfb224407e14e99c5236fc50d92255718107fb3e10ee43",
+      "reason": "the same move: the idle wait `await new Promise((r) => setTimeout(r, #))` is unchanged in frontend/src/ui/command/FormatBar.test.ts",
+      "decision": "docs/plans/2026-11-25-ex0c-locations.md"
+    },
+    {
+      "id": "4850405583e7f48a80ac0d4c19d6a4841b2648b52fe3fdfa43bf2cbd3f46e8b2",
+      "reason": "frontend/vite.config.ts: one plugin added, compactManifests (src/build/compactManifests.ts, tested), which hands the bundle the built-ins' manifests without their JSON whitespace; a manifest that is not JSON is left unchanged, so the registry refuses it as before (EX0c1 code review)",
+      "decision": "docs/plans/2026-11-25-ex0c-locations.md"
     }
   ]
 }

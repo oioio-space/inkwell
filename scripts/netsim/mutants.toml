@@ -3935,9 +3935,11 @@ test = "frontend/src/extensions/commands.test.ts"
 name = "EX0b1 C-10 the main menu is drawn from the registry in its fixed groups"
 clause = "EX0b1 C-10"
 why = "the menu's fixed group order is ignored (items sorted by order only)"
+# Re-anchored by EX0c1 (2026-11-25): the main menu's sort became the one sort of every location
+# (`placed`, the group's place in `LOCATIONS`); the same rule, the same mutation.
 [[mutant.edit]]
 file = "frontend/src/extensions/registry.ts"
-before = "groupOf(a) - groupOf(b) ||"
+before = "at(a) - at(b) ||"
 after = "0 ||"
 
 [[mutant]]
@@ -4620,3 +4622,125 @@ why = "`app.shortcuts` opens the palette"
 file = "frontend/src/ext/app/native/commands.ts"
 before = '"app.shortcuts": ({ shell }) => shell.shortcuts(),'
 after = '"app.shortcuts": ({ shell }) => shell.palette(),'
+
+# Block EX0c1 (plan docs/plans/2026-11-25-ex0c-locations.md §3): one mutant per rule L-1..L-9; each `name`
+# is the exact title the gate's `frontend` criterion requires.
+[[mutant]]
+id = "ML1"
+block = "EX0c1"
+kind = "vitest"
+test = "frontend/src/ui/command/locations.test.ts"
+name = "EX0c1 L-1 a malformed location, group or status item is refused with its reason"
+clause = "EX0c1 L-1"
+why = "a group of another location is accepted"
+[[mutant.edit]]
+file = "frontend/src/extensions/manifest.ts"
+before = "  const spec = groups.find((g) => g.id === group);"
+after = "  const spec = groups.find((g) => g.id === group) ?? Object.values(LOCATIONS).flatMap((l) => l.groups as readonly GroupSpec[]).find((g) => g.id === group);"
+
+[[mutant]]
+id = "ML2"
+block = "EX0c1"
+kind = "vitest"
+test = "frontend/src/ui/command/locations.test.ts"
+name = "EX0c1 L-2 a location keeps the core's groups at their fixed places, then order, extension and command"
+clause = "EX0c1 L-2"
+why = "ties between one extension's items are left in build order (no command id)"
+[[mutant.edit]]
+file = "frontend/src/extensions/registry.ts"
+before = '''          cmp(a.extension, b.extension) ||
+          cmp(name(a), name(b)),'''
+after = "          cmp(a.extension, b.extension),"
+
+[[mutant]]
+id = "ML3"
+block = "EX0c1"
+kind = "vitest"
+test = "frontend/src/ui/command/locations.test.ts"
+name = "EX0c1 L-3 an item's when hides it and its command's when greys it, both read from the live context"
+clause = "EX0c1 L-3"
+why = "an item is shown whatever its `when`"
+[[mutant.edit]]
+file = "frontend/src/extensions/commands.ts"
+before = "    if (!c || !evalWhen(item.when, ctx)) continue;"
+after = "    if (!c) continue;"
+
+[[mutant]]
+id = "ML4"
+block = "EX0c1"
+kind = "vitest"
+test = "frontend/src/ui/command/locations.test.ts"
+name = "EX0c1 L-4 what does not fit goes to the overflow menu in the same order, and nothing is lost"
+clause = "EX0c1 L-4"
+why = "an overflowing status item is dropped instead of going to ⋯"
+[[mutant.edit]]
+file = "frontend/src/ui/command/status.svelte.ts"
+before = "      out.more.push(x);"
+after = ""
+
+[[mutant]]
+id = "ML5"
+block = "EX0c1"
+kind = "vitest"
+test = "frontend/src/ui/command/locations.test.ts"
+name = "EX0c1 L-5 the header bar is drawn from its two locations around the core's fixed widgets"
+clause = "EX0c1 L-5"
+why = "the header bar's end groups are reversed (review before document)"
+[[mutant.edit]]
+file = "frontend/src/extensions/manifest.ts"
+before = '''      { id: "document", ...locked, look: "suggested" },
+      { id: "review", ...locked, ...icon },'''
+after = '''      { id: "review", ...locked, ...icon },
+      { id: "document", ...locked, look: "suggested" },'''
+
+[[mutant]]
+id = "ML6"
+block = "EX0c1"
+kind = "vitest"
+test = "frontend/src/ui/command/locations.test.ts"
+name = "EX0c1 L-6 the formatting bar is the format location of the open file's formats, or no bar"
+clause = "EX0c1 L-6"
+why = "a location with no item that shows still has a bar (`hasToolbar`)"
+[[mutant.edit]]
+file = "frontend/src/extensions/commands.ts"
+before = "  menuOf(location, extra).length > 0;"
+after = "  menuOf(location, extra).length >= 0;"
+
+[[mutant]]
+id = "ML7"
+block = "EX0c1"
+kind = "vitest"
+test = "frontend/src/ui/command/locations.test.ts"
+name = "EX0c1 L-7 the status bar is drawn from the status point, by side and group, the core's first"
+clause = "EX0c1 L-7"
+why = "a status item's side is ignored: every item goes to the end"
+[[mutant.edit]]
+file = "frontend/src/ui/command/status.svelte.ts"
+before = "    out[x.side].push(x);"
+after = "    out.end.push(x);"
+
+[[mutant]]
+id = "ML8"
+block = "EX0c1"
+kind = "vitest"
+test = "frontend/src/ui/command/locations.test.ts"
+name = "EX0c1 L-8 the preview's tools and the zoom menu are locations, each zoom acting on its own surface"
+clause = "EX0c1 L-8"
+why = "the preview's zoom-in runs the text zoom"
+[[mutant.edit]]
+file = "frontend/src/ext/typst/native/commands.ts"
+before = '''  "typst.preview-zoom-in": () => stepPreviewZoom(1),'''
+after = '''  "typst.preview-zoom-in": ({ shell }) => shell.zoom("in"),'''
+
+[[mutant]]
+id = "ML9"
+block = "EX0c1"
+kind = "vitest"
+test = "frontend/src/ui/command/locations.test.ts"
+name = "EX0c1 L-9 locations cost nothing at start: indexed once at build, drawn without an extension call"
+clause = "EX0c1 L-9"
+why = "`menu(loc)` builds a new array at each call"
+[[mutant.edit]]
+file = "frontend/src/extensions/registry.ts"
+before = "    menu: (location: string) => byLocation.get(location) ?? noItems,"
+after = "    menu: (location: string) => [...(byLocation.get(location) ?? noItems)],"

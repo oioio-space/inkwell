@@ -78,11 +78,152 @@ export const CATEGORIES = [
   "app",
 ] as const;
 export type Category = (typeof CATEGORIES)[number];
-export const MENU_LOCATIONS = ["main"] as const;
-/** The main menu's groups, in their fixed order (spec §4.2); `project` and `app` are protected. */
-export const MENU_GROUPS = ["view", "project", "document", "app"] as const;
-export const PROTECTED_GROUPS: ReadonlySet<string> = new Set(["project", "app"]);
-export type MenuGroup = (typeof MENU_GROUPS)[number];
+/**
+ * A group of a location (EX0c1): its place is fixed by the table, never by a contribution. A
+ * protected group takes items of an essential built-in only (§15.13 « intouchable »); `look` is
+ * how its items are drawn: the command's icon, its label, or its label as the suggested action.
+ */
+export interface GroupSpec {
+  readonly id: string;
+  readonly protected?: true;
+  readonly look?: "icon" | "label" | "suggested";
+}
+
+/**
+ * A place where commands show (plan EX0c §1): its groups in their fixed order, what happens to
+ * what does not fit, and, for a location whose host is not built yet, the block that builds it
+ * (`reserved`: a built-in item there is refused, another origin's is kept out and listed).
+ */
+export interface LocationSpec {
+  readonly groups: readonly GroupSpec[];
+  readonly overflow?: "width" | "submenu";
+  readonly reserved?: string;
+}
+
+const icon = { look: "icon" } as const;
+const locked = { protected: true } as const;
+/** The context menus of §15.13, reserved for UX1-D: the core's items, then the extensions'. */
+const contextMenu = {
+  groups: [{ id: "core", ...locked }, { id: "extensions" }],
+  overflow: "submenu",
+  reserved: "UX1-D",
+} as const;
+
+/** The closed table of every location (spec §4.31, architecture §15.13), hosted or reserved. */
+export const LOCATIONS = {
+  main: {
+    groups: [
+      { id: "view" },
+      { id: "insert" },
+      { id: "export" },
+      { id: "project", ...locked },
+      { id: "document" },
+      { id: "extensions" },
+      { id: "app", ...locked },
+    ],
+  },
+  "header/start": { groups: [{ id: "panels", ...locked, ...icon }] },
+  "header/end": {
+    groups: [
+      { id: "view", ...locked, ...icon },
+      { id: "document", ...locked, look: "suggested" },
+      { id: "review", ...locked, ...icon },
+    ],
+  },
+  format: {
+    groups: [
+      { id: "marks", ...icon },
+      { id: "inline", ...icon },
+      { id: "blocks", ...icon },
+      { id: "objects", ...icon },
+      { id: "extensions", ...icon },
+    ],
+    overflow: "width",
+  },
+  "format/heading": { groups: [{ id: "paragraph" }, { id: "headings" }] },
+  "status/zoom": { groups: [{ id: "zoom" }] },
+  "preview/toolbar": {
+    groups: [
+      { id: "zoom-out", ...icon },
+      { id: "zoom-in", ...icon },
+      { id: "navigate", ...icon },
+      { id: "extensions", ...icon },
+    ],
+  },
+  "grid/toolbar": {
+    groups: [
+      { id: "history", ...locked, ...icon },
+      { id: "structure", ...icon },
+      { id: "sort", ...icon },
+      { id: "filter", ...icon },
+      { id: "freeze", ...icon },
+      { id: "extensions", ...icon },
+    ],
+    overflow: "width",
+    reserved: "EX0c2",
+  },
+  "grid/context": {
+    groups: [
+      { id: "clipboard" },
+      { id: "structure" },
+      { id: "sort" },
+      { id: "freeze" },
+      { id: "extensions" },
+    ],
+    overflow: "submenu",
+    reserved: "EX0c2",
+  },
+  view: { groups: [{ id: "viewers" }, { id: "extensions" }], reserved: "EX0c2" },
+  "history/toolbar": {
+    groups: [{ id: "navigate" }, { id: "colour" }, { id: "extensions" }],
+    reserved: "EX0c2",
+  },
+  "diff/toolbar": {
+    groups: [{ id: "close", ...locked }, { id: "mode" }, { id: "navigate" }, { id: "extensions" }],
+    reserved: "EX0c2",
+  },
+  insert: {
+    groups: [{ id: "blocks" }, { id: "files" }, { id: "data" }, { id: "extensions" }],
+    reserved: "EX0c3",
+  },
+  "editor/context": { ...contextMenu },
+  "files/context": { ...contextMenu },
+  "tabs/context": { ...contextMenu },
+  "preview/context": { ...contextMenu },
+  "people/context": { ...contextMenu },
+  "link/context": { ...contextMenu },
+} as const satisfies Record<string, LocationSpec>;
+
+export type Location = keyof typeof LOCATIONS;
+export const locationOf = (id: string): LocationSpec | undefined =>
+  Object.hasOwn(LOCATIONS, id) ? (LOCATIONS as Record<string, LocationSpec>)[id] : undefined;
+
+/**
+ * What a status group does when room runs out (today's rules of the bar, now per group): `text`
+ * drops its words in a window of 900 px or less (`@media`), `hide` leaves a bar of 640 px or less
+ * (`@container`), `more` shows 3 items, then ⋯, and all of them in ⋯ at 640 px.
+ */
+export interface StatusGroupSpec extends GroupSpec {
+  readonly narrow?: "text" | "hide" | "more";
+}
+
+/** The status bar's two sides and their groups, in their fixed order (plan EX0c §1). */
+export const STATUS = {
+  start: { groups: [{ id: "presence", ...locked }] },
+  end: {
+    groups: [
+      { id: "problems", narrow: "text" },
+      { id: "preview", narrow: "hide" },
+      { id: "save", ...locked },
+      { id: "caret" },
+      { id: "file" },
+      { id: "type", narrow: "hide" },
+      { id: "extensions", narrow: "more" },
+    ],
+  },
+} as const satisfies Record<string, { groups: readonly StatusGroupSpec[] }>;
+
+export type StatusSide = keyof typeof STATUS;
 
 export type OptionValue = string | number | boolean;
 
@@ -148,11 +289,30 @@ export interface CommandContribution {
 
 export interface MenuContribution {
   readonly command: string;
-  readonly location: (typeof MENU_LOCATIONS)[number];
-  readonly group: MenuGroup;
+  readonly location: Location;
+  /** One of its location's groups. */
+  readonly group: string;
   readonly order: number;
   /** When the item is shown at all. */
   readonly when?: When | undefined;
+}
+
+/**
+ * An item of the status bar (EX0c1): code, since the core's items show live values; built-ins
+ * only until EXT1. Its entry exports `status[id]`, the item's component.
+ */
+export interface StatusContribution {
+  readonly id: string;
+  /** i18n key: its name in the ⋯ menu, and the start of its tooltip « X : … ». */
+  readonly label: string;
+  readonly side: StatusSide;
+  readonly group: string;
+  readonly order: number;
+  readonly when?: When | undefined;
+  /** What a click runs. */
+  readonly command?: string | undefined;
+  readonly entry: string;
+  readonly capabilities: readonly string[];
 }
 
 export interface KeybindingContribution {
@@ -222,6 +382,7 @@ export interface Contributes {
   readonly grammars: readonly GrammarContribution[];
   readonly commands: readonly CommandContribution[];
   readonly menus: readonly MenuContribution[];
+  readonly status: readonly StatusContribution[];
   readonly keybindings: readonly KeybindingContribution[];
   readonly metrics: readonly MetricContribution[];
   readonly debug: readonly DebugContribution[];
@@ -275,7 +436,11 @@ export type Reason =
   /** A metric without a finite bound. */
   | "unbounded"
   /** A metric whose unit does not go with its kind. */
-  | "inconsistent";
+  | "inconsistent"
+  /** A built-in that is not essential placing an item in a protected group (§15.13). */
+  | "protected"
+  /** A built-in placing an item in a location whose host is not built yet. */
+  | "reserved";
 
 /** A manifest that is refused, with the reason and where in it. */
 export class ManifestError extends Error {
@@ -570,7 +735,34 @@ function command(
   });
 }
 
-function menu(v: unknown, where: string, own: ReadonlySet<string>): MenuContribution {
+/** What a built-in may not do with a group: a protected one is an essential built-in's alone. */
+function placeGroup(
+  groups: readonly GroupSpec[],
+  value: unknown,
+  where: string,
+  source: ManifestSource,
+  essential: boolean,
+): string {
+  const group = string(value, where, MAX_WORD);
+  const spec = groups.find((g) => g.id === group);
+  if (!spec) return fail("bad-value", where);
+  // Another origin's item is kept out by the registry and listed (ND-3); a built-in is a bug.
+  if (spec.protected && source.origin === "builtin" && !essential) fail("protected", where);
+  return group;
+}
+
+function order(v: unknown, where: string): number {
+  if (!Number.isInteger(v) || (v as number) < 0 || (v as number) > 999) fail("bad-value", where);
+  return v as number;
+}
+
+function menu(
+  v: unknown,
+  where: string,
+  own: ReadonlySet<string>,
+  source: ManifestSource,
+  essential: boolean,
+): MenuContribution {
   const o = object(
     v,
     where,
@@ -580,18 +772,56 @@ function menu(v: unknown, where: string, own: ReadonlySet<string>): MenuContribu
   const cmd = commandId(o.command, `${where}.command`);
   if (!own.has(cmd)) fail("not-own", `${where}.command`);
   const location = string(o.location, `${where}.location`, MAX_WORD);
-  if (!(MENU_LOCATIONS as readonly string[]).includes(location))
-    fail("bad-value", `${where}.location`);
-  const group = string(o.group, `${where}.group`, MAX_WORD);
-  if (!(MENU_GROUPS as readonly string[]).includes(group)) fail("bad-value", `${where}.group`);
-  if (!Number.isInteger(o.order) || (o.order as number) < 0 || (o.order as number) > 999)
-    fail("bad-value", `${where}.order`);
+  const spec = locationOf(location);
+  if (!spec) return fail("bad-value", `${where}.location`);
+  if (spec.reserved !== undefined && source.origin === "builtin")
+    fail("reserved", `${where}.location`);
   return frozen({
     command: cmd,
-    location: location as MenuContribution["location"],
-    group: group as MenuGroup,
-    order: o.order as number,
+    location: location as Location,
+    group: placeGroup(spec.groups, o.group, `${where}.group`, source, essential),
+    order: order(o.order, `${where}.order`),
     when: when(o.when, `${where}.when`),
+  });
+}
+
+function statusItem(
+  v: unknown,
+  where: string,
+  source: ManifestSource,
+  owner: string,
+  essential: boolean,
+): StatusContribution {
+  const o = object(
+    v,
+    where,
+    ["id", "label", "side", "group", "order", "when", "command", "entry", "capabilities"],
+    ["id", "label", "side", "group", "order", "entry", "capabilities"],
+  );
+  const sid = commandId(o.id, `${where}.id`);
+  if (!isOwn(sid, owner)) fail("not-own", `${where}.id`);
+  // Code outside the built-ins runs only through the plugin host (EXT1), as for commands.
+  if (source.origin !== "builtin") fail("bad-entry", `${where}.entry`);
+  const side = string(o.side, `${where}.side`, MAX_WORD);
+  if (!Object.hasOwn(STATUS, side)) fail("bad-value", `${where}.side`);
+  const caps = capabilities(o.capabilities, `${where}.capabilities`);
+  if (!caps.includes(NATIVE)) fail("missing-key", `${where}.capabilities`);
+  return frozen({
+    id: sid,
+    label: string(o.label, `${where}.label`, MAX_LABEL),
+    side: side as StatusSide,
+    group: placeGroup(
+      STATUS[side as StatusSide].groups,
+      o.group,
+      `${where}.group`,
+      source,
+      essential,
+    ),
+    order: order(o.order, `${where}.order`),
+    when: when(o.when, `${where}.when`),
+    command: o.command === undefined ? undefined : commandId(o.command, `${where}.command`),
+    entry: entry(o.entry, `${where}.entry`, source),
+    capabilities: caps,
   });
 }
 
@@ -798,7 +1028,17 @@ export function parseManifest(source: ManifestSource): Manifest {
   const c = object(
     o.contributes,
     "manifest.contributes",
-    ["fileTypes", "viewers", "grammars", "commands", "menus", "keybindings", "metrics", "debug"],
+    [
+      "fileTypes",
+      "viewers",
+      "grammars",
+      "commands",
+      "menus",
+      "status",
+      "keybindings",
+      "metrics",
+      "debug",
+    ],
     [],
   );
   const owner = id(o.id, "manifest.id");
@@ -806,10 +1046,11 @@ export function parseManifest(source: ManifestSource): Manifest {
     command(x, at, source, owner),
   );
   const own = new Set(commands.map((x) => x.id));
+  const essential = o.essential === true;
   const manifest = frozen({
     id: owner,
     version,
-    essential: o.essential === true,
+    essential,
     activation: list(o.activation, "manifest.activation", 64, activation),
     contributes: frozen({
       fileTypes: list(c.fileTypes, "manifest.contributes.fileTypes", 64, fileType),
@@ -820,7 +1061,12 @@ export function parseManifest(source: ManifestSource): Manifest {
         grammar(x, at, source),
       ),
       commands,
-      menus: list(c.menus, "manifest.contributes.menus", 64, (x, at) => menu(x, at, own)),
+      menus: list(c.menus, "manifest.contributes.menus", 64, (x, at) =>
+        menu(x, at, own, source, essential),
+      ),
+      status: list(c.status, "manifest.contributes.status", 32, (x, at) =>
+        statusItem(x, at, source, owner, essential),
+      ),
       keybindings: list(c.keybindings, "manifest.contributes.keybindings", 128, (x, at) =>
         keybinding(x, at, source, own),
       ),
@@ -836,6 +1082,7 @@ export function parseManifest(source: ManifestSource): Manifest {
     ...manifest.contributes.viewers,
     ...manifest.contributes.grammars,
     ...manifest.contributes.commands,
+    ...manifest.contributes.status,
   ].some((x) => x.capabilities.includes(NATIVE));
   if (native && (source.origin !== "builtin" || !manifest.essential))
     fail("native-refused", "manifest");

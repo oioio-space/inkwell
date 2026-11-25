@@ -163,6 +163,24 @@ const INSERTS: InsertItem[] = [
 ];
 
 export const typst: LangSyntax = {
+  hints: {
+    bold: "*texte*",
+    italic: "_texte_",
+    underline: "#underline[texte]",
+    strike: "#strike[texte]",
+    link: '#link("url")[texte]',
+    code: "`texte`",
+    codeblock: "```bash … ```",
+    formula: "$ x^2 $",
+    ul: "- texte",
+    ol: "+ texte",
+    quote: "#quote[texte]",
+    table: "#table(columns: 2, …)",
+    h1: "=",
+    h2: "==",
+    h3: "===",
+    h4: "====",
+  },
   marks,
   blocks: new Set(BLOCKS),
   inserts: new Set(INSERTS),

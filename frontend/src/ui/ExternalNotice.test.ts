@@ -1,5 +1,6 @@
 import { flushSync } from "svelte";
 import { afterEach, describe, expect, it, vi } from "vitest";
+import { registry } from "../extensions";
 import { workspace } from "../workspace/workspace.svelte";
 import ExternalBanner from "./ExternalBanner.svelte";
 import ExternalChangeToast from "./ExternalChangeToast.svelte";
@@ -152,6 +153,8 @@ describe("notices about outside changes", () => {
 });
 
 describe("unsaved indicators (SAV-02)", () => {
+  // The status bar's items are the registry's (EX0c1).
+  void registry;
   it("shows « Non enregistré » in the status bar and a dot before the file name", () => {
     const editor = fakeEditor("a‸");
     const bar = render(StatusBar, {

@@ -1,5 +1,8 @@
 import { flushSync } from "svelte";
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from "vitest";
+import { registry } from "../extensions";
+import { configure, type Shell } from "../extensions/commands";
+import { setLive } from "../extensions/live.svelte";
 import { cleanup, click, render } from "../ui/testkit.svelte";
 import Preview from "./Preview.svelte";
 import { preview } from "./preview.svelte";
@@ -46,10 +49,19 @@ afterEach(() => {
   vi.restoreAllMocks();
 });
 
+// The tools are the `preview/toolbar` location (EX0c1): their commands' entries load first, and
+// « go to the cursor » asks the shell, as its key does.
+beforeAll(async () => {
+  for (const c of registry.commands.filter((x) => x.extension === "typst"))
+    await registry.loadCommand(c);
+});
+
 const mount = (over: Record<string, unknown> = {}) => {
   const onSourceJump = vi.fn();
   const onCursorJump = vi.fn();
-  const host = render(Preview, { onSourceJump, onCursorJump, ...over });
+  configure({ shell: { jumpToPreview: onCursorJump } as unknown as Shell });
+  setLive({ fileType: "typst", main: true, previewOpen: true });
+  const host = render(Preview, { onSourceJump, ...over });
   return { host, onSourceJump, onCursorJump };
 };
 
@@ -144,11 +156,11 @@ describe("Preview pane", () => {
     const percent = () => host.querySelector('[data-testid="zoom"]')?.textContent;
     const fit = percent();
     expect(fit).toMatch(/^\d+ %$/);
-    click(host.querySelector('button[aria-label="Agrandir"]') as HTMLElement);
+    click(host.querySelector('button[aria-label="Agrandir l\'aperçu"]') as HTMLElement);
     const bigger = Number.parseInt(percent() ?? "0", 10);
     expect(bigger).toBeGreaterThan(Number.parseInt(fit ?? "0", 10));
-    click(host.querySelector('button[aria-label="Réduire"]') as HTMLElement);
-    click(host.querySelector('button[aria-label="Réduire"]') as HTMLElement);
+    click(host.querySelector('button[aria-label="Réduire l\'aperçu"]') as HTMLElement);
+    click(host.querySelector('button[aria-label="Réduire l\'aperçu"]') as HTMLElement);
     expect(Number.parseInt(percent() ?? "0", 10)).toBeLessThan(bigger);
     const fitButton = host.querySelector('button[title="Ajuster à la largeur"]') as HTMLElement;
     // WCAG 2.5.3 (label in name): the spoken name starts with the visible percentage.
@@ -273,12 +285,12 @@ describe("Preview pane", () => {
     expect(host.querySelector(".notice")?.textContent).toContain("@preview/zz:1.0.0");
   });
 
-  it("PRV-87 'go to the cursor' needs a document, then asks the shell", () => {
+  it("PRV-87 'go to the cursor' asks the shell, as its key does (typst.jump-to-preview)", () => {
     const { host, onCursorJump } = mount();
     const button = host.querySelector(
-      'button[aria-label="Aller à l\'endroit du curseur"]',
+      'button[aria-label="Montrer le curseur dans l\'aperçu"]',
     ) as HTMLButtonElement;
-    expect(button.disabled).toBe(true);
+    expect(button.dataset.cmd).toBe("typst.jump-to-preview");
     preview.receive(result());
     flushSync();
     click(button);

@@ -29,7 +29,8 @@ const shot = (page: Page, name: string, dark: boolean) =>
 test.beforeEach(() => test.setTimeout(90_000));
 
 const drawer = (p: Page) => p.getByTestId("history-drawer");
-const toggle = (p: Page) => p.getByTestId("history-toggle");
+// The review toggle is `app.review` of the header bar (EX0c1: its testid gave way to its data-cmd).
+const toggle = (p: Page) => p.locator('header [data-cmd="app.review"]');
 
 async function openDrawer(p: Page) {
   if (!(await drawer(p).isVisible())) await toggle(p).click();

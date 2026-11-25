@@ -28,7 +28,8 @@
         "category": "view",
         "toggled": "previewOpen",
         "entry": "native/commands.ts",
-        "capabilities": ["ui.native"]
+        "capabilities": ["ui.native"],
+        "icon": "eye"
       },
       {
         "id": "app.sidebar",
@@ -36,7 +37,8 @@
         "category": "view",
         "toggled": "sidebarOpen",
         "entry": "native/commands.ts",
-        "capabilities": ["ui.native"]
+        "capabilities": ["ui.native"],
+        "icon": "side"
       },
       {
         "id": "app.review",
@@ -44,7 +46,8 @@
         "category": "view",
         "toggled": "reviewOpen",
         "entry": "native/commands.ts",
-        "capabilities": ["ui.native"]
+        "capabilities": ["ui.native"],
+        "icon": "branch"
       },
       {
         "id": "app.fullscreen",
@@ -250,6 +253,116 @@
         "location": "main",
         "group": "app",
         "order": 20
+      },
+      {
+        "command": "app.sidebar",
+        "location": "header/start",
+        "group": "panels",
+        "order": 10
+      },
+      {
+        "command": "app.preview",
+        "location": "header/end",
+        "group": "view",
+        "order": 10
+      },
+      {
+        "command": "app.share",
+        "location": "header/end",
+        "group": "document",
+        "order": 10
+      },
+      {
+        "command": "app.review",
+        "location": "header/end",
+        "group": "review",
+        "order": 10
+      },
+      {
+        "command": "app.zoom-out",
+        "location": "status/zoom",
+        "group": "zoom",
+        "order": 10
+      },
+      {
+        "command": "app.zoom-in",
+        "location": "status/zoom",
+        "group": "zoom",
+        "order": 20
+      },
+      {
+        "command": "app.zoom-reset",
+        "location": "status/zoom",
+        "group": "zoom",
+        "order": 30
+      }
+    ],
+    "status": [
+      {
+        "id": "app.presence",
+        "label": "status.item.presence",
+        "side": "start",
+        "group": "presence",
+        "order": 10,
+        "entry": "native/status.ts",
+        "capabilities": ["ui.native"]
+      },
+      {
+        "id": "app.unsaved",
+        "label": "save.unsaved",
+        "side": "end",
+        "group": "save",
+        "order": 10,
+        "entry": "native/status.ts",
+        "capabilities": ["ui.native"]
+      },
+      {
+        "id": "app.position",
+        "label": "status.item.position",
+        "side": "end",
+        "group": "caret",
+        "order": 10,
+        "when": "text",
+        "entry": "native/status.ts",
+        "capabilities": ["ui.native"]
+      },
+      {
+        "id": "app.words",
+        "label": "status.item.words",
+        "side": "end",
+        "group": "caret",
+        "order": 20,
+        "when": "text",
+        "entry": "native/status.ts",
+        "capabilities": ["ui.native"]
+      },
+      {
+        "id": "app.zoom",
+        "label": "zoom.menu",
+        "side": "end",
+        "group": "file",
+        "order": 10,
+        "entry": "native/status.ts",
+        "capabilities": ["ui.native"]
+      },
+      {
+        "id": "app.encoding",
+        "label": "encoding.menu",
+        "side": "end",
+        "group": "file",
+        "order": 20,
+        "entry": "native/status.ts",
+        "capabilities": ["ui.native"]
+      },
+      {
+        "id": "app.language",
+        "label": "status.item.language",
+        "side": "end",
+        "group": "type",
+        "order": 10,
+        "when": "text",
+        "entry": "native/status.ts",
+        "capabilities": ["ui.native"]
       }
     ],
     "keybindings": [

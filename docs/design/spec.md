@@ -1786,6 +1786,17 @@ Inspiré du bouton unifié de Firefox (version 109) [S16] ; architecture §15.13
   « Stockage distant » et « Miroir lisible » sont réunis (ligne 18). Les surfaces de §15.13 sont
   dans les lignes 2, 4, 5, 10 et 21. Une contradiction avec l'architecture se règle en faveur
   de §15, puis cette table est corrigée.
+- **Emplacements (EX0c1, plan `docs/plans/2026-11-25-ex0c-locations.md`)** : une seule table fermée
+  (`LOCATIONS`, `frontend/src/extensions/manifest.ts`) donne à chaque emplacement ses groupes dans
+  un ordre fixe, ceux qui sont protégés, son débordement et, s'il n'a pas encore d'hôte, le bloc qui
+  le construira (réservé). Hébergés par EX0c1 : `header/start` et `header/end` (barre d'en-tête :
+  le panneau de gauche, puis l'état de synchronisation ; à droite, dans cet ordre, l'aperçu et
+  Présenter, les personnes, Partager, Relire, puis le menu principal), `format` et
+  `format/heading` (barre de mise en forme et menu des titres), `status/zoom` (menu du zoom),
+  `preview/toolbar` (outils de l'aperçu, autour du niveau de zoom) ; la barre d'état est le point
+  `status` (côtés, groupes, règle de chaque groupe quand la place manque). Réservés : la grille, la
+  barre de vue, l'historique et les différences (EX0c2), Insérer (EX0c3), les menus contextuels
+  (UX1-D).
 - **Cadre d'une vue libre** (`ui.canvas`, iframe isolée) :
   - un cadre fourni par Inkwell, avec la ligne d'attribution ;
   - il reçoit les jetons **du thème actif** ;

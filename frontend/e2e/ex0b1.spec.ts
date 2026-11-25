@@ -101,7 +101,7 @@ test("EX0b1-E1 keys run their commands: the last letter saved, a held Ctrl+S onc
   }
   await expect.poll(() => docText(alice), { timeout: 20_000 }).toContain("trois B");
   const drawer = alice.getByTestId("history-drawer");
-  if (!(await drawer.isVisible())) await alice.getByTestId("history-toggle").click();
+  if (!(await drawer.isVisible())) await alice.locator('header [data-cmd="app.review"]').click();
   await alice
     .getByRole("listbox", { name: "Moments de l'historique" })
     .getByRole("option", { name: /^Bob/ })

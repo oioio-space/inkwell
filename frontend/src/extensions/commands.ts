@@ -8,8 +8,8 @@ import { lang, type MessageKey, t } from "../i18n";
 import type { Active } from "./bindings";
 import { ariaKeys, currentSystem, eventChord, mayBeChord, renderChord, type System } from "./keys";
 import { keymap, live } from "./live.svelte";
-import { DELEGABLE } from "./manifest";
-import type { Command, Registry, Viewer } from "./registry";
+import { DELEGABLE, type Origin } from "./manifest";
+import type { Command, Registry, StatusItem, Viewer } from "./registry";
 import { type Context, evalWhen, type Focus } from "./when";
 
 /** What the application offers a built-in command's entry (`shell`, ext/app/native/commands.ts). */
@@ -208,14 +208,20 @@ function context(surface: Surface | undefined, field: boolean): Context {
 const toSurface = (target: Element | Surface | undefined) =>
   target === undefined ? undefined : "kind" in target ? target : surfaceAt(target);
 
-/** A command's text (label, reason, keyword): an i18n key read in this language for a built-in. */
-export const textOf = (c: Command, text: string): string =>
+/**
+ * A contribution's text (a command's label, reason or keyword, a status item's name): an i18n key
+ * read in this language for a built-in, the text itself for any other origin.
+ */
+export const textOf = (c: { readonly origin: Origin }, text: string): string =>
   c.origin === "builtin" ? t(text as MessageKey) : text;
 
 /** The command's label, read in this language for a built-in. */
 export function labelOf(c: Command): string {
   return textOf(c, c.label);
 }
+
+/** A command's name within its extension (`format.bold` → `bold`): the feature a bar item is. */
+export const nameOf = (id: string): string => id.slice(id.indexOf(".") + 1);
 
 /** A command's chords in force on this system, the first one shown. */
 export const chordsOf = (id: string): readonly string[] => {
@@ -410,11 +416,17 @@ export function onKeydown(e: KeyboardEvent): void {
   }
 }
 
-/** A menu's items shown now (their `when`), in their groups' fixed order. */
-export function menuOf(location: "main"): { group: string; items: Command[] }[] {
+/**
+ * A location's items shown now (their `when`), by group in the location's fixed order. `extra`
+ * overrides the live context (the formatting bar asks about the formats of its own file).
+ */
+export function menuOf(
+  location: string,
+  extra: Partial<Context> = {},
+): { group: string; items: Command[] }[] {
   const r = registry;
   if (!r) return [];
-  const ctx = context(undefined, false);
+  const ctx = { ...context(undefined, false), ...extra };
   const groups: { group: string; items: Command[] }[] = [];
   for (const item of r.menu(location)) {
     const c = r.command(item.command);
@@ -424,6 +436,18 @@ export function menuOf(location: "main"): { group: string; items: Command[] }[] 
     else groups.push({ group: item.group, items: [c] });
   }
   return groups;
+}
+
+/** Whether a location shows anything in that context (no formatting bar without an item, L-6). */
+export const locationShows = (location: string, extra: Partial<Context> = {}): boolean =>
+  menuOf(location, extra).length > 0;
+
+/** The status bar's items shown now (their `when`), start side first, in their groups' order. */
+export function statusOf(): readonly StatusItem[] {
+  const r = registry;
+  if (!r) return [];
+  const ctx = context(undefined, false);
+  return r.status.filter((x) => evalWhen(x.when, ctx));
 }
 
 const escapes = new Set<() => void>();

@@ -3,6 +3,7 @@ import { svelte } from "@sveltejs/vite-plugin-svelte";
 import wails from "@wailsio/runtime/plugins/vite";
 import type { Plugin } from "vite";
 import { defineConfig } from "vitest/config";
+import { compactManifests } from "./src/build/compactManifests";
 import { distPlaceholder } from "./src/build/distPlaceholder";
 
 // Production keeps the strict CSP from index.html; only the dev server relaxes it for
@@ -34,7 +35,7 @@ export default defineConfig({
   },
   // Workers are ES modules too: the Automerge wasm loads with a top-level await.
   worker: { format: "es" },
-  plugins: [svelte(), wails("./bindings"), devCsp(), distPlaceholder()],
+  plugins: [compactManifests(), svelte(), wails("./bindings"), devCsp(), distPlaceholder()],
   // Component tests mount Svelte components in happy-dom: they need the browser build. Outside
   // tests, leave Vite's default conditions alone (an empty list would drop "browser").
   resolve: {

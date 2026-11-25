@@ -254,6 +254,35 @@ Apple's keyboard guidelines, CodeMirror 6.43 `runHandlers` (links in the plan's 
   disabled). `Mod-Alt-0` is gone (G-98: a heading's chord again makes a paragraph); Ctrl+Alt+J became Ctrl+Shift+J and
   the grid's Ctrl+Alt+- is gone (K-7).
 
+### Menu locations and status items (EX0c1)
+
+Decided 2026-11-25 (plan `docs/plans/2026-11-25-ex0c-locations.md`, gate `gates/EX0c1.toml`, review
+`gates/EX0c1/REVIEW.md`). Sources: VS Code's `menus` locations and `group@order`, `submenus`, `viewsContainers`
+and its status bar guidelines; the GNOME HIG for header bars and utility panes; architecture §15.13.
+
+- **Toolbars are locations of `menus`**, not a point of their own (VS Code `editor/title`): one closed table,
+  `LOCATIONS` (`extensions/manifest.ts`), gives each location its groups in a fixed order, which are protected (an
+  essential built-in's alone), how each group's items look (`icon`, `label`, `suggested`), its overflow, and for a
+  location with no host yet the block that builds it (`reserved`). The header bar's end keeps today's order: view,
+  ‹people›, document, review, ‹main menu› (‹…› a fixed widget of the host). The table has 19 locations: `main`,
+  `header/start`, `header/end`, `format`, `format/heading`, `status/zoom`, `preview/toolbar` are hosted; the
+  grid's, the view bar's, the history's and the differences' (EX0c2), `insert` (EX0c3) and the six context menus
+  of §15.13 (UX1-D) are reserved. A built-in that breaks a rule is refused with its manifest (`protected`,
+  `reserved`); another origin's item is kept out and listed (ND-3).
+- **Order**: the groups' fixed places, then `order`, extension id, command id, never the build order; a
+  location's items are indexed once at build and `menu(loc)` returns the same frozen array at each call.
+  **When**: an item's `when` hides it, its command's `when` greys it; the context gains `text` and `main`.
+- **The `status` point**: `id`, `label` (its name in ⋯ and its tooltip), `side`, `group`, `order`, `when`,
+  `command`, `entry` (its module's `status[id]`, `ui.native`, built-ins only until EXT1). The groups (`STATUS`) carry
+  today's narrow-width rules: `problems` drops its words at 900 px, `preview` and `type` leave a bar of 640 px,
+  `extensions` shows 3 items then ⋯. The core's nine items live in `ext/app` and `ext/typst`; a status id is a claim
+  like the others, and an item whose `command` no manifest gives is kept out and listed. The built-ins' status
+  entries load with the first screen (`extensions/statusEntries.ts`), never as chunks of their own (review).
+- A bar item is a command and a place: its icon, label and chord are its command's (the formatting commands name
+  glyph icons, `glyph-bold`); the syntax hints are the language's syntax tables. The preview has its own zoom
+  commands (`typst.preview-zoom-out`, `-in`, `-fit`, `when: main && previewOpen`, labelled « … l'aperçu »), so the
+  text's « Zoom » keeps its meaning and no two commands of the palette share a label.
+
 ### Metrics and debug state (OBS1)
 
 Decided 2026-11-25 (plan `docs/plans/2026-11-24-obs1-observability.md`, gate `gates/OBS1.toml`, review

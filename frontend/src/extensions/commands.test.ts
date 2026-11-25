@@ -8,6 +8,8 @@ import { insert } from "../editor/format/insert";
 import en from "../i18n/en.json";
 import fr from "../i18n/fr.json";
 import { requestSignature } from "../language/extension";
+import { clampZoom, stepZoom } from "../preview/layout";
+import { previewZoom } from "../preview/zoom.svelte";
 import { gridHandlers } from "../ui/sheet/commands";
 import { readUserBindings } from "./bindings";
 import {
@@ -35,6 +37,7 @@ import { setLive } from "./live.svelte";
 import { builtinSources, globLoader } from "./loader";
 import {
   DELEGABLE,
+  LOCATIONS,
   ManifestError,
   type ManifestSource,
   type Origin,
@@ -260,7 +263,11 @@ describe("EX0b1 commands, menus and keybindings", () => {
         ...(c.toggled ? [c.toggled] : []),
       ]),
       ...r.keybindings.flatMap((b) => (b.when ? keysOf(b.when) : [])),
-      ...r.menu("main").flatMap((m) => (m.when ? keysOf(m.when) : [])),
+      // Every location's items and the status bar's (EX0c1) read the context too.
+      ...Object.keys(LOCATIONS).flatMap((loc) =>
+        r.menu(loc).flatMap((m) => (m.when ? keysOf(m.when) : [])),
+      ),
+      ...r.status.flatMap((x) => (x.when ? keysOf(x.when) : [])),
     ]);
     expect([...used].sort()).toEqual(Object.keys(CONTEXT_KEYS).sort());
   });
@@ -655,6 +662,8 @@ describe("EX0b1 commands, menus and keybindings", () => {
       sheet?: string[];
       text?: string;
       extra?: () => void;
+      /** What a command that is neither the shell's nor a surface's changed (the preview's zoom). */
+      check?: () => void;
     };
     const TABLE: Record<string, Row> = {
       "app.save": { shell: "save" },
@@ -692,6 +701,27 @@ describe("EX0b1 commands, menus and keybindings", () => {
       "typst.present-public": { shell: "present(public)" },
       "typst.export": { shell: "exportPdf" },
       "typst.jump-to-preview": { shell: "jumpToPreview" },
+      "typst.preview-zoom-out": {
+        extra: () => {
+          setLive({ main: true, previewOpen: true });
+          Object.assign(previewZoom, { mode: "fit", current: 1 });
+        },
+        check: () => expect(previewZoom.mode).toBe(clampZoom(stepZoom(1, -1))),
+      },
+      "typst.preview-zoom-in": {
+        extra: () => {
+          setLive({ main: true, previewOpen: true });
+          Object.assign(previewZoom, { mode: "fit", current: 1 });
+        },
+        check: () => expect(previewZoom.mode).toBe(clampZoom(stepZoom(1, 1))),
+      },
+      "typst.preview-fit": {
+        extra: () => {
+          setLive({ main: true, previewOpen: true });
+          Object.assign(previewZoom, { mode: 2, current: 2 });
+        },
+        check: () => expect(previewZoom.mode).toBe("fit"),
+      },
       "typst.signature-help": { target: editor },
       "tables.fill-down": { target: gridEl, sheet: ["fillDown"] },
       "tables.fill-right": { target: gridEl, sheet: ["fillRight"] },
@@ -739,6 +769,7 @@ describe("EX0b1 commands, menus and keybindings", () => {
           id,
           text: id === "app.redo" ? "xun mot" : row.text,
         });
+      row.check?.();
       if (id === "typst.signature-help")
         expect(vi.mocked(requestSignature)).toHaveBeenCalledWith(view, true);
       else expect(vi.mocked(requestSignature), id).not.toHaveBeenCalled();
@@ -1086,7 +1117,7 @@ describe("EX0b1 commands, menus and keybindings", () => {
     const clauses = sources
       .map((s) => JSON.parse(s.text) as { contributes: Record<string, { when?: string }[]> })
       .flatMap((m) =>
-        ["commands", "menus", "keybindings"].flatMap((p) =>
+        ["commands", "menus", "status", "keybindings"].flatMap((p) =>
           (m.contributes[p] ?? []).filter((x) => x.when),
         ),
       );

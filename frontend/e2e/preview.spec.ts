@@ -162,7 +162,7 @@ test("PRV-105 jumps both ways between the source and the preview", async ({ brow
   // Caret in the third chapter, then "go to the cursor": the preview scrolls there and marks it.
   await editor(page).click();
   await page.keyboard.press("ControlOrMeta+End");
-  await page.getByRole("button", { name: "Aller à l'endroit du curseur" }).click();
+  await page.getByRole("button", { name: "Montrer le curseur dans l'aperçu" }).click();
   await expect(page.locator("[data-page='3'] .mark")).toBeVisible(SLOW);
   await expect(indicator(page)).toHaveText("Page 3 sur 3");
 

@@ -8,91 +8,104 @@
         "label": "fmt.bold",
         "category": "format",
         "when": "bold in formats && !readOnly",
-        "unavailable": "cmd.format.unavailable"
+        "unavailable": "cmd.format.unavailable",
+        "icon": "glyph-bold"
       },
       {
         "id": "format.italic",
         "label": "fmt.italic",
         "category": "format",
         "when": "italic in formats && !readOnly",
-        "unavailable": "cmd.format.unavailable"
+        "unavailable": "cmd.format.unavailable",
+        "icon": "glyph-italic"
       },
       {
         "id": "format.underline",
         "label": "fmt.underline",
         "category": "format",
         "when": "underline in formats && !readOnly",
-        "unavailable": "cmd.format.unavailable"
+        "unavailable": "cmd.format.unavailable",
+        "icon": "glyph-underline"
       },
       {
         "id": "format.strike",
         "label": "fmt.strike",
         "category": "format",
         "when": "strike in formats && !readOnly",
-        "unavailable": "cmd.format.unavailable"
+        "unavailable": "cmd.format.unavailable",
+        "icon": "glyph-strike"
       },
       {
         "id": "format.link",
         "label": "fmt.link",
         "category": "format",
         "when": "link in formats && !readOnly",
-        "unavailable": "cmd.format.unavailable"
+        "unavailable": "cmd.format.unavailable",
+        "icon": "link"
       },
       {
         "id": "format.code",
         "label": "fmt.code",
         "category": "format",
         "when": "code in formats && !readOnly",
-        "unavailable": "cmd.format.unavailable"
+        "unavailable": "cmd.format.unavailable",
+        "icon": "code"
       },
       {
         "id": "format.codeblock",
         "label": "fmt.codeblock",
         "category": "format",
         "when": "codeblock in formats && !readOnly",
-        "unavailable": "cmd.format.unavailable"
+        "unavailable": "cmd.format.unavailable",
+        "icon": "codeblock"
       },
       {
         "id": "format.formula",
         "label": "fmt.formula",
         "category": "format",
         "when": "formula in formats && !readOnly",
-        "unavailable": "cmd.format.unavailable"
+        "unavailable": "cmd.format.unavailable",
+        "icon": "glyph-formula"
       },
       {
         "id": "format.ul",
         "label": "fmt.ul",
         "category": "format",
         "when": "ul in formats && !readOnly",
-        "unavailable": "cmd.format.unavailable"
+        "unavailable": "cmd.format.unavailable",
+        "icon": "ul"
       },
       {
         "id": "format.ol",
         "label": "fmt.ol",
         "category": "format",
         "when": "ol in formats && !readOnly",
-        "unavailable": "cmd.format.unavailable"
+        "unavailable": "cmd.format.unavailable",
+        "icon": "ol"
       },
       {
         "id": "format.task",
         "label": "fmt.task",
         "category": "format",
         "when": "task in formats && !readOnly",
-        "unavailable": "cmd.format.unavailable"
+        "unavailable": "cmd.format.unavailable",
+        "icon": "task"
       },
       {
         "id": "format.quote",
         "label": "fmt.quote",
         "category": "format",
         "when": "quote in formats && !readOnly",
-        "unavailable": "cmd.format.unavailable"
+        "unavailable": "cmd.format.unavailable",
+        "icon": "quote"
       },
       {
         "id": "format.table",
         "label": "fmt.table",
         "category": "format",
         "when": "table in formats && !readOnly",
-        "unavailable": "cmd.format.unavailable"
+        "unavailable": "cmd.format.unavailable",
+        "icon": "table"
       },
       {
         "id": "format.h1",
@@ -128,6 +141,133 @@
         "category": "format",
         "when": "paragraph in formats && !readOnly",
         "unavailable": "cmd.format.unavailable"
+      }
+    ],
+    "menus": [
+      {
+        "command": "format.bold",
+        "location": "format",
+        "group": "marks",
+        "order": 10,
+        "when": "bold in formats"
+      },
+      {
+        "command": "format.italic",
+        "location": "format",
+        "group": "marks",
+        "order": 20,
+        "when": "italic in formats"
+      },
+      {
+        "command": "format.underline",
+        "location": "format",
+        "group": "marks",
+        "order": 30,
+        "when": "underline in formats"
+      },
+      {
+        "command": "format.strike",
+        "location": "format",
+        "group": "marks",
+        "order": 40,
+        "when": "strike in formats"
+      },
+      {
+        "command": "format.link",
+        "location": "format",
+        "group": "inline",
+        "order": 50,
+        "when": "link in formats"
+      },
+      {
+        "command": "format.code",
+        "location": "format",
+        "group": "inline",
+        "order": 60,
+        "when": "code in formats"
+      },
+      {
+        "command": "format.codeblock",
+        "location": "format",
+        "group": "inline",
+        "order": 70,
+        "when": "codeblock in formats"
+      },
+      {
+        "command": "format.formula",
+        "location": "format",
+        "group": "inline",
+        "order": 80,
+        "when": "formula in formats"
+      },
+      {
+        "command": "format.ul",
+        "location": "format",
+        "group": "blocks",
+        "order": 90,
+        "when": "ul in formats"
+      },
+      {
+        "command": "format.ol",
+        "location": "format",
+        "group": "blocks",
+        "order": 100,
+        "when": "ol in formats"
+      },
+      {
+        "command": "format.task",
+        "location": "format",
+        "group": "blocks",
+        "order": 110,
+        "when": "task in formats"
+      },
+      {
+        "command": "format.quote",
+        "location": "format",
+        "group": "blocks",
+        "order": 120,
+        "when": "quote in formats"
+      },
+      {
+        "command": "format.table",
+        "location": "format",
+        "group": "objects",
+        "order": 130,
+        "when": "table in formats"
+      },
+      {
+        "command": "format.paragraph",
+        "location": "format/heading",
+        "group": "paragraph",
+        "order": 10
+      },
+      {
+        "command": "format.h1",
+        "location": "format/heading",
+        "group": "headings",
+        "order": 10,
+        "when": "h1 in formats"
+      },
+      {
+        "command": "format.h2",
+        "location": "format/heading",
+        "group": "headings",
+        "order": 20,
+        "when": "h2 in formats"
+      },
+      {
+        "command": "format.h3",
+        "location": "format/heading",
+        "group": "headings",
+        "order": 30,
+        "when": "h3 in formats"
+      },
+      {
+        "command": "format.h4",
+        "location": "format/heading",
+        "group": "headings",
+        "order": 40,
+        "when": "h4 in formats"
       }
     ],
     "keybindings": [

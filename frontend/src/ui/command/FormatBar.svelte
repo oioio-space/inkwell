@@ -1,23 +1,25 @@
 <script lang="ts">
 import type { EditorState, StateCommand } from "@codemirror/state";
-import { activeBlock, activeMarks, type Lang } from "../../editor/format";
+import { featureState, formatsOf, hintOf, type Lang } from "../../editor/format";
+import { menuOf, nameOf } from "../../extensions/commands";
 import { t } from "../../i18n";
 import type { ProjectFile } from "../../store/files";
 import { workspace } from "../../workspace/workspace.svelte";
-import CommandMenuItem from "../command/CommandMenuItem.svelte";
 import Icon from "../icons/Icon.svelte";
 import MenuButton from "../popover/MenuButton.svelte";
+import InsertMenu from "../toolbar/InsertMenu.svelte";
+import { visibleCount } from "../toolbar/layout";
 import BarButton from "./BarButton.svelte";
+import CommandIcon from "./CommandIcon.svelte";
+import CommandMenuItem from "./CommandMenuItem.svelte";
 import HeadingMenu from "./HeadingMenu.svelte";
-import InsertMenu from "./InsertMenu.svelte";
-import { visibleCount } from "./layout";
-import { type BarItem, commandOf, itemsFor } from "./spec";
 
 /**
- * The formatting bar of a file: what the format can write, as buttons that follow the caret
- * (aria-pressed), a heading menu, the Insert menu, and a "⋯" menu for what does not fit. Each
- * button and item runs its `format.*` command on the editor (`target`) through the registry.
- * Plain text files get no bar (the caller does not render it).
+ * The formatting bar of a file: the `format` location (EX0c1) for the formats its language
+ * writes, between the core's heading menu and Insert. Buttons follow the caret (aria-pressed);
+ * what does not fit goes to a "⋯" menu, in the same order. Each runs its command on the editor
+ * (`target`) through the registry. A file whose formats show no item gets no bar (the caller
+ * asks `locationShows`).
  */
 let {
   lang,
@@ -32,7 +34,7 @@ let {
   editorState: EditorState;
   /** The editor the commands act on (its surface). */
   target: Element | undefined;
-  /** Runs an insertion of the Insert menu on the editor (EX0c moves it onto commands). */
+  /** Runs an insertion of the Insert menu on the editor (EX0c3 moves it onto commands). */
   run: (command: StateCommand) => boolean;
   files: readonly ProjectFile[];
   currentFile: string;
@@ -42,7 +44,11 @@ let {
 let width = $state(1200);
 let moreOpen = $state(false);
 
-const items = $derived(itemsFor(lang));
+const items = $derived(
+  menuOf("format", { formats: formatsOf(lang) }).flatMap((g, group) =>
+    g.items.map((command) => ({ command, group, feature: nameOf(command.id) })),
+  ),
+);
 const count = $derived(
   visibleCount(
     items.map((i) => i.group),
@@ -51,13 +57,7 @@ const count = $derived(
 );
 const shown = $derived(items.slice(0, count));
 const hidden = $derived(items.slice(count));
-const marks = $derived(activeMarks(editorState, lang));
-const block = $derived(activeBlock(editorState, lang));
-
-function pressed(item: BarItem): boolean | undefined {
-  if (!item.toggle) return undefined;
-  return "mark" in item.toggle ? marks.has(item.toggle.mark) : block === item.toggle.block;
-}
+const pressed = $derived(featureState(editorState, lang));
 
 const languageName = $derived(t(`lang.${lang}`));
 /** A reader, or a disconnected person: every button would do nothing, so none is offered. */
@@ -72,17 +72,15 @@ const locked = $derived(workspace.locked);
   inert={locked}
   class:locked
 >
-  <HeadingMenu {lang} {block} {target} />
+  <HeadingMenu {lang} {editorState} {target} />
   <span class="gap"></span>
-  {#each shown as item, i (item.id)}
+  {#each shown as item, i (item.command.id)}
     {#if i > 0 && shown[i - 1]?.group !== item.group}<span class="gap"></span>{/if}
     <BarButton
-      id={item.id}
-      command={commandOf(item)}
-      icon={item.icon}
-      glyph={item.glyph}
-      syntax={item.syntax[lang]}
-      pressed={pressed(item)}
+      command={item.command}
+      feature={item.feature}
+      hint={hintOf(lang, item.feature)}
+      pressed={pressed(item.feature)}
       {target}
     />
   {/each}
@@ -90,11 +88,9 @@ const locked = $derived(workspace.locked);
     <MenuButton bind:open={moreOpen} label={t("fmt.more")} name={t("fmt.more")} width={260} align="start">
       {#snippet trigger()}<Icon name="more" />{/snippet}
       {#snippet children({ close })}
-        {#each hidden as item (item.id)}
-          <CommandMenuItem id={commandOf(item)} {close} {target} checked={pressed(item)} refocus data-bar={item.id}>
-            {#snippet lead()}
-              {#if item.icon}<Icon name={item.icon} />{:else}<span class="glyph" aria-hidden="true">{item.glyph}</span>{/if}
-            {/snippet}
+        {#each hidden as item (item.command.id)}
+          <CommandMenuItem id={item.command.id} {close} {target} checked={pressed(item.feature)} refocus data-bar={item.feature}>
+            {#snippet lead()}<CommandIcon icon={item.command.icon} lead />{/snippet}
           </CommandMenuItem>
         {/each}
       {/snippet}
@@ -123,11 +119,5 @@ const locked = $derived(workspace.locked);
   .gap {
     width: 10px;
     flex: none;
-  }
-  .glyph {
-    display: inline-grid;
-    place-items: center;
-    width: 16px;
-    font: 15px / 1 var(--font-serif);
   }
 </style>

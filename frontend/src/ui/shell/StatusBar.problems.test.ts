@@ -1,11 +1,32 @@
 import { flushSync } from "svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { registry } from "../../extensions";
+import { setLive } from "../../extensions/live.svelte";
 import { preview } from "../../preview/preview.svelte";
 import { problem, result } from "../../preview/testkit";
 import { cleanup, click, fakeEditor, render } from "../testkit.svelte";
 import StatusBar from "./StatusBar.svelte";
 
+void registry;
+
 afterEach(cleanup);
+
+/** What the window says about the open file, read by the items' `when` (EX0c1). */
+function live(
+  lang: string,
+  extra: {
+    hasText?: boolean | undefined;
+    ofMain?: boolean | undefined;
+    showPage?: boolean | undefined;
+  },
+) {
+  setLive({
+    fileType: lang === "plain" ? "text" : lang,
+    text: extra.hasText ?? true,
+    main: extra.ofMain ?? true,
+    previewOpen: extra.showPage ?? false,
+  });
+}
 beforeEach(() => {
   preview.hasResult = false;
   preview.diagnostics = [];
@@ -16,6 +37,15 @@ beforeEach(() => {
 
 const mountBar = (props: Record<string, unknown> = {}) => {
   const editor = fakeEditor("a‸");
+  const { hasText, ofMain, showPage, ...rest } = { lang: "typst", ...props } as Record<
+    string,
+    unknown
+  >;
+  live(rest.lang as string, {
+    hasText: hasText as boolean | undefined,
+    ofMain: ofMain as boolean | undefined,
+    showPage: showPage as boolean | undefined,
+  });
   return render(StatusBar, {
     lang: "typst",
     status: "alone",
@@ -24,7 +54,8 @@ const mountBar = (props: Record<string, unknown> = {}) => {
       return editor.state;
     },
     info: undefined,
-    ...props,
+    ...rest,
+    ...(ofMain === undefined ? {} : { ofMain }),
   });
 };
 

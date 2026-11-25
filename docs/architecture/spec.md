@@ -3585,7 +3585,7 @@ passage de mise en page à chaque compilation) appariées au texte par leurs mot
   l'entrée la plus proche. Défilement : recherche dichotomique dans l'index du volet meneur →
   segment → position cible. Coût O(log n) par image, aucun appel à Go.
 - **SY-4 Clic et curseur** : clic dans l'aperçu → `jumpFromClick` (une requête) ou table → curseur et
-  ligne visibles dans l'éditeur ; commande « Montrer dans l'aperçu » et « Suivre le texte »
+  ligne visibles dans l'éditeur ; commande « Montrer le curseur dans l'aperçu » et « Suivre le texte »
   (**activé par défaut**) → marque brève sur la page. Le texte d'un autre fichier ouvre ce fichier (SY-6).
 - **SY-5 Pas de boucle : la dernière action de la personne gagne.** Chaque volet note ses entrées
   **humaines** (molette, toucher, clavier, glissé de la barre, déplacement du curseur) : le volet

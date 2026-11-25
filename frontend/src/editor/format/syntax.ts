@@ -1,5 +1,5 @@
 import { leadRun, trailRun } from "./text";
-import type { Block, InsertItem, Mark } from "./types";
+import type { Block, Feature, InsertItem, Mark } from "./types";
 
 // What a language contributes to the format commands. Everything here is pure string work on
 // one line at a time; the commands turn the answers into CodeMirror transactions.
@@ -66,6 +66,8 @@ export interface LangSyntax {
   classify(line: string): LineClass;
   /** The prefix of a block; `n` is the 1-based position in a numbered list. */
   prefix(block: Block, n: number): string;
+  /** What each feature writes, shown beside its button or heading level (the bar's hints). */
+  hints: Readonly<Partial<Record<Feature, string>>>;
 }
 
 /** Nothing to peel: the selection wraps no delimiters. */

@@ -139,6 +139,24 @@ const BLOCKS: Block[] = [
 const INSERTS: InsertItem[] = ["image", "csvTable", "footnote", "link", "table", "formula"];
 
 export const markdown: LangSyntax = {
+  hints: {
+    bold: "**texte**",
+    italic: "*texte*",
+    strike: "~~texte~~",
+    link: "[texte](url)",
+    code: "`texte`",
+    codeblock: "```bash … ```",
+    formula: "$x^2$",
+    ul: "- texte",
+    ol: "1. texte",
+    task: "- [ ] texte",
+    quote: "> texte",
+    table: "| a | b |",
+    h1: "#",
+    h2: "##",
+    h3: "###",
+    h4: "####",
+  },
   marks,
   blocks: new Set(BLOCKS),
   inserts: new Set(INSERTS),

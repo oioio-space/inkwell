@@ -15,7 +15,24 @@ const MANIFESTS = import.meta.glob<string>("../ext/*/inkwell-plugin.json", {
   eager: true,
 });
 // `native/` holds the code that reaches the editor (FE-3), `debug/` the debug providers' reads.
-const ENTRIES: Importers = import.meta.glob(["../ext/*/native/*.ts", "../ext/*/debug/*.ts"]);
+// The status bar's entries are imported with the first screen (extensions/statusEntries.ts), never
+// here: a dynamic import would make each its own chunk, split from the application's.
+const ENTRIES: Importers = import.meta.glob([
+  "../ext/*/native/*.ts",
+  "../ext/*/debug/*.ts",
+  "!../ext/*/native/status.ts",
+]);
+/**
+ * The status entries' names, so a manifest can only name a file of its folder: read as text (two
+ * index files of a few hundred bytes), which imports no code and makes no chunk.
+ */
+const STATUS_FILES = import.meta.glob("../ext/*/native/status.ts", {
+  query: "?raw",
+  import: "default",
+  eager: true,
+});
+const NO_IMPORT = () =>
+  Promise.reject(new Error("a status entry is imported with the first screen"));
 
 /** `<root>/<folder>/<rest>` → [folder, rest]. */
 function split(key: string, root: string): [string, string] | undefined {
@@ -31,7 +48,10 @@ function split(key: string, root: string): [string, string] | undefined {
  */
 export function builtinSources(
   manifests: Record<string, string> = MANIFESTS,
-  entries: Importers = ENTRIES,
+  entries: Importers = {
+    ...ENTRIES,
+    ...Object.fromEntries(Object.keys(STATUS_FILES).map((k) => [k, NO_IMPORT])),
+  },
   root = "../ext/",
 ): ManifestSource[] {
   const files = new Map<string, Set<string>>();
