@@ -1180,15 +1180,22 @@ func TestStorageWriteBeforeFinishJoinLandsOrIsRefused(t *testing.T) {
 				_, err := p.Load([]string{key})
 				return err == nil
 			}
-			landed, r := inRepo(d.proj), replies[write]
+			landed := inRepo(d.proj)
+			r, answered := replies[write]
 			switch {
 			case inRepo(openFolder(t, joined)):
 				t.Errorf("N-16 no lost write: the write %q is under the joined project", key)
-			case landed && r.Status != bridge.StatusOK:
-				t.Errorf("N-16 no lost write: %q landed without its reply (%+v)", key, r)
-			case !landed && (r.ID != write || r.Status != bridge.StatusError || string(r.Payload) != bridge.ReasonLeaving):
+			case landed && (!answered || r.Status != bridge.StatusOK):
+				t.Errorf("N-16 no lost write: %q landed without its reply (%+v, %v)", key, r, answered)
+			case !landed && answered && (r.Status != bridge.StatusError || string(r.Payload) != bridge.ReasonLeaving):
 				t.Errorf("N-16 no lost write: %q is absent from the storage and was answered %+v, want refused %q", key, r, bridge.ReasonLeaving)
+			case !landed && !answered && ctx.Err() == nil:
+				t.Errorf("N-16 no lost write: %q is absent from the storage, unanswered, and its stream is still open", key)
 			}
+			// Not landed, not answered, stream ended: the drain closed the stream before it read the
+			// write or before its refusal was out; the page's adapter fails every pending write at the
+			// end-of-stream and reports it as refused (onLeaving, Vitest « RT1 A-2 a write cut by a
+			// stream close is never sent again »), as TestStorageWriteBeforeRequestLandsOrIsRefused.
 			if point == "not taken" && landed {
 				t.Errorf("N-16 a write not taken before FinishJoin is refused: %q landed", key)
 			}
