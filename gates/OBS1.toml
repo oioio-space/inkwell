@@ -1,0 +1,321 @@
+# Written 2026-11-24 at step 1 of block OBS1, before any code; revised 2026-11-25 after the blind Opus review
+# (gates/OBS1/REVIEW.md, « accept with corrections », 3 major findings answered at their root); frozen 2026-11-25
+# (standard tier: the blind Opus review is the spec review; Gemini, quota exhausted, reviews the code after the smoke).
+# OBS1: one `metrics` point of the contribution registry, a local daily store under INKWELL_HOME, nothing sent or
+# synced, zero cost when unused. Rigour: standard. Plan: docs/plans/2026-11-24-obs1-observability.md (rules M, V, T, S,
+# P, Z of its section 4); witnesses: gates/OBS1/WITNESSES.md.
+# Every long command is `timeout -k 10 N …/scripts/heavy.sh …` (the timeout covers the wait for a slot). No nested gate.
+# Caps: 30 + 420 + 180 + (10 + 120 + 30) + 30 + (20 + 300) + 1200 + 300 + 30 = 2670 s <= 2700 s (rule G-1), each set
+# from a measured run (gates/OBS1/WITNESSES.md). `bench` and `perf-start` are exclusive: they wait for an idle machine.
+max_minutes = 45
+raw_results = ["docs/plans/2026-11-24-obs1-observability.md", "gates/OBS1/*"]
+
+[[criteria]]
+# The decision is written: the plan's rule rows, ADR 0027 names the `metrics` point and the plan, spec O-4 and W86 point
+# at the plan, and the slice's cuts have their OBS2 line in PROGRESS.md.
+id = "docs"
+command = '''timeout -k 10 30 python3 -I - <<'PY'
+import pathlib, re, sys
+bad = []
+plan = pathlib.Path("docs/plans/2026-11-24-obs1-observability.md").read_text()
+rows = ["M-1", "M-2", "M-3", "V-1", "V-2", "V-3", "T-1", "T-2", "S-1", "S-2", "S-3",
+        "P-1", "P-2", "P-3", "P-4", "P-5", "P-6", "Z-1", "Z-2", "Z-4", "Z-5", "Z-6"]
+bad += [f"plan row {r}" for r in rows if f"\n| {r} |" not in plan]
+adr = pathlib.Path("docs/adr/0027-contribution-registry.md").read_text()
+if not re.search(r"`metrics`", adr) or "2026-11-24-obs1-observability.md" not in adr:
+    bad.append("ADR 0027 does not name the `metrics` point and the OBS1 plan")
+spec = pathlib.Path("docs/architecture/spec.md").read_text()
+o4 = spec[spec.index("- **O-4**"):spec.index("- **O-5**")]
+if "2026-11-24-obs1-observability.md" not in o4:
+    bad.append("spec O-4 does not point at the OBS1 plan")
+req = next((l for l in pathlib.Path("docs/exigences.md").read_text().splitlines() if l.startswith("| W86 |")), "")
+if "2026-11-24-obs1-observability.md" not in req:
+    bad.append("W86 does not point at the OBS1 plan")
+obs2 = next((l for l in pathlib.Path("PROGRESS.md").read_text().splitlines() if l.lstrip().startswith("- **OBS2**")), "")
+bad += [f"OBS2 line lacks {w!r}" for w in ("noms", "vitesse de frappe", "rétention", "RP1") if w not in obs2]
+sys.exit(f"OBS1 docs: {bad}" if bad else 0)
+PY'''
+
+[[criteria]]
+# Biome, svelte-check and every Vitest test of the frontend, from one JSON report: the run succeeds and each named rule
+# test of the plan (M-1..M-3, V-1, T-1, T-2, P-3, Z-2, Z-4) passed (absent or skipped fails).
+id = "frontend"
+command = '''set -eu
+mkdir -p .task/obs1
+rm -f .task/obs1/vitest.json
+rc=0
+(cd frontend && timeout -k 10 420 ../scripts/heavy.sh bash -c 'pnpm --config.verifyDepsBeforeRun=false exec biome check . && pnpm --config.verifyDepsBeforeRun=false exec svelte-check --tsconfig ./tsconfig.json && pnpm --config.verifyDepsBeforeRun=false exec vitest run --configLoader runner --reporter=json --outputFile=../.task/obs1/vitest.json') || rc=$?
+python3 -I - "$rc" <<'PY'
+import json, pathlib, sys
+need = [
+    "OBS1 M-1 a metrics or debug contribution is validated like the other points",
+    "OBS1 M-2 a free-text, unbounded, unknown-enum or inconsistent field is refused",
+    "OBS1 M-3 a metric id already taken is refused in either order",
+    "OBS1 V-1 every debug read passes the value rule",
+    "OBS1 T-1 words written count only the person's own edits, mapped through remote ones, at a cost per transaction independent of the document size",
+    "OBS1 T-2 active time stops after 60 s without an edit",
+    "OBS1 P-3 a webview session sends nothing but the person's edits",
+    "OBS1 Z-2 typing makes no bridge call until the flush",
+    "OBS1 Z-4 a debug provider runs only when read",
+]
+report = pathlib.Path(".task/obs1/vitest.json")
+results = [a for f in json.loads(report.read_text())["testResults"] for a in f["assertionResults"]] if report.is_file() else []
+status = {a["title"]: a["status"] for a in results}
+bad = {n: status.get(n, "absent") for n in need if status.get(n) != "passed"}
+failed = [a["fullName"] for a in results if a["status"] == "failed"]
+if bad or failed or sys.argv[1] != "0":
+    sys.exit(f"OBS1 frontend: exit {sys.argv[1]}, rule tests {bad}, failed {failed[:20]}")
+PY'''
+
+[[criteria]]
+# The Go rules: the touched packages and their consumers pass, and every named test passes (absent or skipped fails).
+id = "go"
+command = '''set -eu
+mkdir -p .task/obs1
+rc=0
+timeout -k 10 180 ./scripts/heavy.sh go test -count=1 -json ./internal/obs/... ./internal/app ./internal/transport/... > .task/obs1/go.jsonl || rc=$?
+python3 -I - "$rc" <<'PY'
+import json, pathlib, sys
+need = {
+    "TestOBS1V2DeclareAndBatchValueRule": "internal/obs", "TestOBS1V3DebugSnapshotRedacted": "internal/obs",
+    "TestOBS1S1DailyAggregation": "internal/obs", "TestOBS1S2CrashLosesAtMostOneInterval": "internal/obs",
+    "TestOBS1S3RetentionAndBound": "internal/obs", "TestOBS1P1SeededSessionHoldsNothingPrivate": "internal/obs",
+    "TestOBS1P2StoreOutsideProjects": "internal/obs", "TestOBS1P4ExportOnlyAskedOutsideProjects": "internal/obs",
+    "TestOBS1P5EraseRemovesKey": "internal/obs", "TestOBS1P6SwitchOffWritesNothing": "internal/obs",
+    "TestOBS1Z1AddIsFree": "internal/obs", "TestOBS1P3NothingLeaves": "internal/app",
+    "TestOBS1Z5LinkCountersSummedOnRead": "internal/transport/mux",
+}
+events = [json.loads(l) for l in pathlib.Path(".task/obs1/go.jsonl").read_text().splitlines() if l.startswith("{")]
+terminal = {(e.get("Package"), e.get("Test")): e["Action"] for e in events if e["Action"] in ("pass", "fail", "skip")}
+bad = {t: terminal.get(("github.com/oioio-space/inkwell/" + p, t), "absent") for t, p in need.items()}
+bad = {t: a for t, a in bad.items() if a != "pass"}
+failed = sorted({f"{p}.{t}" for (p, t), a in terminal.items() if a == "fail"})
+if bad or failed or sys.argv[1] != "0":
+    sys.exit(f"OBS1 go: exit {sys.argv[1]}, named {bad}, failed {failed[:20]}")
+PY'''
+
+[[criteria]]
+# P-1, judged by the gate and not only by the test. The gate draws the seeds (text, keystrokes, file name, path, an
+# Automerge-like document id, a peer id, a distinctive expected count) and passes them with -args; the seeded session
+# writes its profile (INKWELL_HOME), the pseudonymous export and the network debug snapshot to .task/obs1/privacy. The
+# gate then reads stats/key: no file outside `key` holds the key, and no file holds a seed or sha256(document id), in raw,
+# JSON-escaped, percent-encoded, hex, base64 at three alignments, UTF-16 LE or BE form; the export's document keys are
+# exactly HMAC-SHA-256(key, id)[:8] in hex; the store holds the expected count, so an empty store cannot pass.
+id = "privacy"
+command = '''set -eu
+rm -rf .task/obs1/privacy
+mkdir -p .task/obs1/privacy
+timeout -k 10 10 python3 -I - <<'PY'
+import json, pathlib, secrets
+b58 = "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz"
+r = lambda n, a=b58: "".join(secrets.choice(a) for _ in range(n))
+seeds = {"text": "canary " + r(16), "keystrokes": "kq" + r(14).lower(), "file_name": "Mémoire-" + r(10) + ".typ",
+         "path": "chapitres/" + r(10) + "/notes.typ", "document_id": r(28), "peer_id": "12D3KooW" + r(44),
+         "expect_count": 100000 + secrets.randbelow(800000) * 1 + 7}
+pathlib.Path(".task/obs1/privacy/seeds.json").write_text(json.dumps(seeds, ensure_ascii=False))
+PY
+timeout -k 10 120 ./scripts/heavy.sh go test -count=1 -run '^TestOBS1P1SeededSessionHoldsNothingPrivate$' ./internal/obs -args -obs1-seeds="$PWD/.task/obs1/privacy/seeds.json" -obs1-privacy-out="$PWD/.task/obs1/privacy"
+timeout -k 10 30 python3 -I - <<'PY'
+import base64, hashlib, hmac, json, pathlib, sys, urllib.parse
+out = pathlib.Path(".task/obs1/privacy")
+seeds = json.loads((out / "seeds.json").read_text())
+stats = out / "profile" / "stats"
+bad = []
+key = (stats / "key").read_bytes() if (stats / "key").is_file() else b""
+if len(key) != 32:
+    bad.append(f"stats/key holds {len(key)} bytes, not 32")
+doc = seeds["document_id"].encode()
+private = {k: seeds[k].encode() for k in ("text", "keystrokes", "file_name", "path", "document_id", "peer_id")}
+private["sha256(document_id)"] = hashlib.sha256(doc).digest()[:8]
+private["key"] = key
+def b64_forms(b):
+    found = set()
+    for k in range(3):  # b starts at byte k of a 3-byte group: keep the characters made of b's bits only
+        enc = base64.b64encode(b"\0" * k + b + b"\0\0").decode()
+        core = enc[-(-8 * k // 6):8 * (k + len(b)) // 6]
+        found |= {core, core.replace("+", "-").replace("/", "_")}
+    return found
+def forms(b):
+    s = b.decode("utf-8", "replace")
+    text = {s, json.dumps(s)[1:-1], urllib.parse.quote(s), urllib.parse.quote(s, safe=""), b.hex(), b.hex().upper()}
+    text |= b64_forms(b)
+    raw = {b} | {x.encode() for x in text if len(x) >= 6} | {s.encode("utf-16-le"), s.encode("utf-16-be")}
+    return [x for x in raw if len(x) >= 6]
+def scan(f):
+    data = f.read_bytes()
+    low = data.lower()
+    return [f"{f.relative_to(out)} holds {k}" for k, v in private.items()
+            if v and not (k == "key" and f == stats / "key") and any(x in data or x.lower() in low for x in forms(v))]
+files = sorted(p for p in (out / "profile").rglob("*") if p.is_file()) + [out / n for n in ("export.json", "debug.json")]
+for f in files:
+    bad += scan(f) if f.is_file() else [f"{f.relative_to(out)} absent"]
+days = [p for p in stats.glob("v1/*.json")]
+if not days or not any(str(seeds["expect_count"]) in p.read_text() for p in days):
+    bad.append("no day file holds the seeded count")
+if (out / "export.json").is_file() and key:
+    want = hmac.new(key, doc, hashlib.sha256).digest()[:8].hex()
+    keys = {r.get("k") for r in json.loads((out / "export.json").read_text()).get("records", []) if r.get("k") != "app"}
+    if keys != {want}:
+        bad.append(f"export document keys {sorted(map(str, keys))} are not exactly HMAC(key, id)[:8] = {want}")
+sys.exit(f"OBS1 privacy: {bad}" if bad else 0)
+PY'''
+
+[[criteria]]
+# P-3, static half. Go: internal/obs reaches no network, transport, invitation, bridge or protocol code. Webview: the
+# modules of src/obs and src/ext/activity, and every module importing src/obs, hold no runtime import (side-effect and
+# dynamic ones included; `import type` is erased and allowed) of network, transport or CRDT code, import from the Wails
+# bindings nothing but `StatsService`, and call no network API. The dynamic halves are TestOBS1P3NothingLeaves (`go`)
+# and the Vitest P-3 (`frontend`).
+id = "local-only"
+command = '''set -eu
+timeout -k 10 30 python3 -I - <<'PY'
+import pathlib, re, subprocess, sys
+bad = []
+r = subprocess.run(["go", "list", "-deps", "./internal/obs/..."], capture_output=True, text=True)
+deps = r.stdout.split()
+if r.returncode or not deps:
+    bad.append(f"go list ./internal/obs/... failed: {r.stderr.strip()[:200]}")
+banned = re.compile(r"^(net|net/http|crypto/tls|github\.com/libp2p/.*|github\.com/psanford/wormhole-william.*"
+                     r"|github\.com/oioio-space/inkwell/(internal/(transport|invite|bridge)|protocol)(/.*)?)$")
+bad += [f"internal/obs reaches {d}" for d in deps if banned.match(d)]
+root = pathlib.Path("frontend/src")
+code = [p for p in [*root.rglob("*.ts"), *root.rglob("*.svelte")] if ".test." not in p.name and "testkit" not in p.name]
+own = [p for p in code if p.is_relative_to(root / "obs") or p.is_relative_to(root / "ext" / "activity")]
+if not any(p.is_relative_to(root / "obs") for p in own):
+    bad.append("frontend/src/obs has no module")
+if not any(p.is_relative_to(root / "ext" / "activity") for p in own):
+    bad.append("frontend/src/ext/activity has no module")
+stmt = re.compile(r"""(?ms)^\s*import\s+(type\s+)?([^;'"]*?)\s*from\s*["']([^"']+)["']|^\s*import\s*["']([^"']+)["']|import\(\s*["']([^"']+)["']\s*\)|^\s*export\s+(type\s+)?[^;'"]*?\s*from\s*["']([^"']+)["']""")
+def specs(text):
+    for m in stmt.finditer(text):
+        if m.group(3):
+            yield bool(m.group(1)), m.group(2), m.group(3)
+        elif m.group(4) or m.group(5):
+            yield False, "", m.group(4) or m.group(5)
+        else:
+            yield bool(m.group(6)), "*", m.group(7)
+def resolves_to_obs(f, spec):
+    if not spec.startswith("."):
+        return False
+    target = (f.parent / spec).resolve()
+    return target.is_relative_to((root / "obs").resolve())
+importers = [f for f in code if f not in own and any(resolves_to_obs(f, s) for _, _, s in specs(f.read_text()))]
+api = re.compile(r"\b(fetch|WebSocket|XMLHttpRequest|sendBeacon|EventSource|RTCPeerConnection)\s*\(|\bnew\s+(WebSocket|EventSource|RTCPeerConnection)\b")
+net = re.compile(r"(^|/)net(/|$)|automerge|@libp2p|(^|/)transport(/|$)|WailsNetworkAdapter|amSync")
+for f in own + importers:
+    text = f.read_text()
+    for type_only, names, spec in specs(text):
+        if type_only:
+            continue
+        if "/bindings/" in spec:
+            got = {n.strip().split(" as ")[0] for n in names.strip("{} \n").split(",") if n.strip()}
+            if got != {"StatsService"}:
+                bad.append(f"{f}: imports {sorted(got) or 'everything'} from the bindings")
+        elif net.search(spec):
+            bad.append(f"{f}: imports {spec}")
+    for n, line in enumerate(text.splitlines(), 1):
+        if not line.lstrip().startswith(("//", "*")) and api.search(line):
+            bad.append(f"{f}:{n}: network API")
+sys.exit(f"OBS1 local-only: {bad}" if bad else 0)
+PY'''
+
+[[criteria]]
+# Each rule test must fail when its rule breaks. Block OBS1's mutants (scripts/netsim/mutants.toml, written at step 2
+# with the code) each break one rule; a vitest entry's `name` equals one of the `frontend` criterion's exact titles, a go
+# entry names its rule's test with an `expect` text, so only that test failing is a catch.
+id = "mutants"
+command = '''set -eu
+timeout -k 10 20 python3 -I - <<'PY'
+import re, sys, tomllib
+gate = tomllib.load(open("gates/OBS1.toml", "rb"))
+front = next(c["command"] for c in gate["criteria"] if c["id"] == "frontend")
+titles = {t: t.split()[1] for t in re.findall(r'"(OBS1 [A-Z]-\d [^"]+)"', front)}
+ms = [m for m in tomllib.load(open("scripts/netsim/mutants.toml", "rb"))["mutant"] if m.get("block") == "OBS1" and not m.get("retired")]
+go = {"V-2": "TestOBS1V2DeclareAndBatchValueRule", "V-3": "TestOBS1V3DebugSnapshotRedacted",
+      "S-1": "TestOBS1S1DailyAggregation", "S-2": "TestOBS1S2CrashLosesAtMostOneInterval",
+      "S-3": "TestOBS1S3RetentionAndBound", "P-1": "TestOBS1P1SeededSessionHoldsNothingPrivate",
+      "P-2": "TestOBS1P2StoreOutsideProjects", "P-3": "TestOBS1P3NothingLeaves",
+      "P-4": "TestOBS1P4ExportOnlyAskedOutsideProjects", "P-5": "TestOBS1P5EraseRemovesKey",
+      "P-6": "TestOBS1P6SwitchOffWritesNothing", "Z-1": "TestOBS1Z1AddIsFree", "Z-5": "TestOBS1Z5LinkCountersSummedOnRead"}
+seen_v, seen_g = set(), set()
+for m in ms:
+    if m.get("kind") == "vitest" and m.get("name") in titles and m.get("test", "").startswith("frontend/src/"):
+        seen_v.add(titles[m["name"]])
+    elif m.get("kind") == "go" and m.get("test") in go.values() and m.get("expect"):
+        seen_g.add(next(r for r, t in go.items() if t == m["test"]))
+missing = sorted((set(titles.values()) - seen_v) | {f"go {r}" for r in set(go) - seen_g})
+if len(titles) != 9:
+    missing.append(f"the frontend criterion lists {len(titles)} titles, not 9")
+sys.exit(f"OBS1 mutants: no named mutant for rules {missing}" if missing else 0)
+PY
+timeout -k 10 300 ./scripts/heavy.sh python3 -I scripts/netsim/mutants.py OBS1'''
+
+[[criteria]]
+# Z-5: benchstat on the HOT_PATHS packages, merge-base against this tree in one session (scripts/perf/regression.py:
+# 20 interleaved processes per side, count 1 each, -benchmem, a significant worsening of sec/op or allocs/op > 5 % at
+# p < 0.05 confirmed by a fresh session fails). A package the block touches (or whose dependencies it touches) is
+# enforced; the others are measured and informational. Evidence in this gate's folder.
+id = "bench"
+command = '''set -eu
+rm -rf .task/obs1/perf-ab
+mkdir -p .task/obs1
+timeout -k 10 1200 ./scripts/heavy.sh --exclusive python3 scripts/perf/regression.py --bench --output .task/obs1/perf-ab > .task/obs1/bench.log 2>&1 || { tail -40 .task/obs1/bench.log; exit 1; }
+python3 -I - <<'PY'
+import json, pathlib, re, subprocess, sys
+s = json.loads(pathlib.Path(".task/obs1/perf-ab/session.json").read_text())
+hot = re.search(r"^HOT_PATHS: (.+)$", pathlib.Path("CLAUDE.md").read_text(), re.M)[1].split()
+got = {p["package"]: p for p in s["packages"]}
+bad = [f"{p} not measured" for p in hot if p not in got]
+bad += [f"{p}: {r['comparison']}" for p, r in got.items() if not r["informational"] and r["comparison"] == "regression"]
+base = subprocess.check_output(["git", "merge-base", "HEAD", "main"], text=True).strip()
+bad += [] if s.get("merge_base") == base else ["not measured against the merge-base"]
+sys.exit(f"OBS1 bench: {bad}" if bad else 0)
+PY'''
+exclusive = true
+
+[[criteria]]
+# Z-6: the existing PERF-START (scripts/perf/baseline.py, ADR 0038): paired against the merge-base build, 80 judged
+# pairs, upper bound of the ratio < 1.10, and the absolute budget. Evidence in this gate's task folder, never gates/L0.
+id = "perf-start"
+command = '''set -eu
+out="${INKWELL_PERF_OUT:-.task/obs1/perf}"
+mkdir -p "$out"
+INKWELL_PERF_OUT="$out" timeout -k 10 300 ./scripts/heavy.sh --exclusive python3 scripts/perf/baseline.py > "$out/baseline.log" 2>&1 || { tail -40 "$out/baseline.log"; exit 1; }
+python3 -I - "$out" <<'PY'
+import json, pathlib, subprocess, sys
+p = json.loads((pathlib.Path(sys.argv[1]) / "measurements.json").read_text())["PERF-START"]
+base = subprocess.check_output(["git", "merge-base", "HEAD", "main"], text=True).strip()
+bad = []
+bad += [] if p.get("status") == "pass" else [f"status {p.get('status')}"]
+bad += [] if p.get("design") == "paired-randomized" else ["design"]
+bad += [] if p.get("reference", {}).get("commit") == base else ["reference is not the merge-base"]
+v = p.get("verdict", {})
+bad += [] if v.get("status") == "pass" and v.get("pairs") == 80 and v.get("upper", 9) < 1.10 else ["verdict"]
+bad += [] if p.get("budget", {}).get("status") == "pass" else ["budget"]
+sys.exit("OBS1 perf-start: " + ", ".join(bad) if bad else 0)
+PY'''
+exclusive = true
+
+[[criteria]]
+id = "simplify-report"
+command = '''timeout -k 10 30 python3 -I - <<'PY'
+import sys
+from pathlib import Path
+
+report = Path("gates/OBS1/SIMPLIFY.md")
+if not report.is_file():
+    sys.exit("OBS1 /simplify review evidence is absent")
+lines = report.read_text().splitlines()
+if not any(line.startswith("Reviewer: ") and line[10:].strip() for line in lines):
+    sys.exit("OBS1 /simplify reviewer is absent")
+for heading in ("## Applied", "## Set aside", "## Verified"):
+    if heading not in lines:
+        sys.exit(f"OBS1 /simplify review lacks {heading}")
+    body = []
+    for line in lines[lines.index(heading) + 1:]:
+        if line.startswith("## "):
+            break
+        body.append(line)
+    if not any(line.strip() for line in body):
+        sys.exit(f"OBS1 /simplify review is empty under {heading}")
+PY'''
