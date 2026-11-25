@@ -14,6 +14,8 @@ export interface OwnedKey {
   readonly linux: readonly string[];
   readonly mac: readonly string[];
   readonly win: readonly string[];
+  /** An i18n key: the shortcuts window lists the key under « Écrire » (never a bare cursor move). */
+  readonly label?: string;
 }
 
 type Row = readonly [map: string, name: string, linux: string[], mac: string[], win: string[]];
@@ -272,15 +274,30 @@ export const GRID_KEYS: readonly OwnedKey[] = [
     ...same(["PageUp", "PageDown", "Shift+PageUp", "Shift+PageDown"]),
   },
   { name: "grid.walk", scope: "grid", ...same(["Enter", "Shift+Enter", "Tab", "Shift+Tab"]) },
-  { name: "grid.edit", scope: "grid", ...same(["F2", "Space"]) },
-  { name: "grid.newline-in-cell", scope: "grid", ...same(["Alt+Enter"]) },
+  { name: "grid.edit", scope: "grid", ...same(["F2", "Space"]), label: "keys.cell-edit" },
+  {
+    name: "grid.newline-in-cell",
+    scope: "grid",
+    ...same(["Alt+Enter"]),
+    label: "keys.cell-newline",
+  },
   { name: "grid.cancel", scope: "grid", ...same(["Escape"]) },
-  { name: "grid.clear", scope: "grid", ...same(["Delete", "Backspace"]) },
-  { name: "grid.context-menu", scope: "grid", ...same(["ContextMenu", "Shift+F10"]) },
-  { name: "grid.filter", scope: "grid", ...same(["Alt+ArrowDown"]) },
-  { name: "grid.select-columns", scope: "grid", ...mod(["Ctrl+Space"]) },
-  { name: "grid.select-rows", scope: "grid", ...same(["Shift+Space"]) },
-  { name: "grid.select-all", scope: "grid", ...mod(["Ctrl+a"]) },
+  { name: "grid.clear", scope: "grid", ...same(["Delete", "Backspace"]), label: "keys.cell-clear" },
+  {
+    name: "grid.context-menu",
+    scope: "grid",
+    ...same(["ContextMenu", "Shift+F10"]),
+    label: "keys.cell-menu",
+  },
+  { name: "grid.filter", scope: "grid", ...same(["Alt+ArrowDown"]), label: "keys.cell-list" },
+  {
+    name: "grid.select-columns",
+    scope: "grid",
+    ...mod(["Ctrl+Space"]),
+    label: "keys.select-columns",
+  },
+  { name: "grid.select-rows", scope: "grid", ...same(["Shift+Space"]), label: "keys.select-rows" },
+  { name: "grid.select-all", scope: "grid", ...mod(["Ctrl+a"]), label: "keys.select-all" },
   { name: "grid.undo", scope: "grid", ...mod(["Ctrl+z"]) },
   { name: "grid.redo", scope: "grid", ...mod(["Ctrl+Shift+z", "Ctrl+y"]) },
 ];
@@ -299,6 +316,20 @@ export const WRITING_HELP_KEYS: readonly OwnedKey[] = [
   { name: "writingHelp.close", scope: "editor", ...same(["Escape"]) },
 ];
 
+/** The editor keys the shortcuts window shows under « Écrire », by CodeMirror's name. */
+const EDITOR_LABELS: Readonly<Record<string, string>> = {
+  selectAll: "keys.select-all",
+  selectLine: "keys.select-line",
+  indentMore: "keys.indent-more",
+  indentLess: "keys.indent-less",
+  toggleComment: "keys.comment",
+  deleteLine: "keys.delete-line",
+  moveLineUp: "keys.move-line-up",
+  moveLineDown: "keys.move-line-down",
+  copyLineUp: "keys.copy-line-up",
+  copyLineDown: "keys.copy-line-down",
+};
+
 /** CodeMirror's rows as owned keys of the editor, and the writing help's. */
 export const EDITOR_KEYS: readonly OwnedKey[] = [
   ...CODEMIRROR_ROWS.map(([, name, linux, mac, win]) => ({
@@ -307,6 +338,7 @@ export const EDITOR_KEYS: readonly OwnedKey[] = [
     linux,
     mac,
     win,
+    ...(EDITOR_LABELS[name] ? { label: EDITOR_LABELS[name] } : {}),
   })),
   ...WRITING_HELP_KEYS,
 ];

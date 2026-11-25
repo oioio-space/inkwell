@@ -30,6 +30,9 @@ export interface Shell {
   present(how: "start" | "here" | "public"): void;
   jumpToPreview(): void;
   fullscreen(): void;
+  /** The command palette and the shortcuts window (EX0b2, ui/command/dialogs.svelte.ts). */
+  palette(): void;
+  shortcuts(): void;
 }
 
 /** Where a command acts: a mounted view that declared it, by its kind. */
@@ -201,9 +204,13 @@ function context(surface: Surface | undefined, field: boolean): Context {
 const toSurface = (target: Element | Surface | undefined) =>
   target === undefined ? undefined : "kind" in target ? target : surfaceAt(target);
 
+/** A command's text (label, reason, keyword): an i18n key read in this language for a built-in. */
+export const textOf = (c: Command, text: string): string =>
+  c.origin === "builtin" ? t(text as MessageKey) : text;
+
 /** The command's label, read in this language for a built-in. */
 export function labelOf(c: Command): string {
-  return c.origin === "builtin" ? t(c.label as MessageKey) : c.label;
+  return textOf(c, c.label);
 }
 
 /** A command's chords in force on this system, the first one shown. */
@@ -227,7 +234,42 @@ export function availability(
   if (!c) return { ok: false };
   const ok = evalWhen(c.when, context(toSurface(target), false));
   if (ok || c.unavailable === undefined) return { ok };
-  return { ok, reason: c.origin === "builtin" ? t(c.unavailable as MessageKey) : c.unavailable };
+  return { ok, reason: textOf(c, c.unavailable) };
+}
+
+/**
+ * Whether a command can run on a target now: its `when` holds, and the target's surface or the
+ * command's entry handles it (a surface-only command, undo or find, is greyed where no surface
+ * declares it). Every refusal has a reason: its `unavailable`, else a general one (EX0b2 P-5).
+ */
+export function runnable(id: string, target?: Element | Surface): { ok: boolean; reason: string } {
+  const c = registry?.command(id);
+  const { ok, reason } = availability(id, target);
+  if (ok && c && canHandle(c, toSurface(target))) return { ok: true, reason: "" };
+  const own = ok && c?.unavailable !== undefined ? textOf(c, c.unavailable) : reason;
+  return { ok: false, reason: own ?? t("cmd.unavailable.here") };
+}
+
+/** Says a text to the person, as a greyed command's reason is said (the application's announcer). */
+export function announce(text: string): void {
+  hooks.announce(text);
+}
+
+/** The registry commands come from, for what lists them (the palette, the shortcuts window). */
+export const commandRegistry = (): Registry | undefined => registry;
+
+/** A command's bindings in force on this system, delegated and personal ones included. */
+export const activeOf = (id: string): readonly Active[] => {
+  void keymap.version;
+  return tables().byCommand.get(id) ?? [];
+};
+
+/** The last focused element inside a surface, while it is in the page: where a menu returns. */
+let lastSurface: Element | undefined;
+export const returnTarget = (): Element | undefined =>
+  lastSurface?.isConnected ? lastSurface : undefined;
+function noteFocus(e: FocusEvent): void {
+  if (e.target instanceof Element && surfaceAt(e.target)) lastSurface = e.target;
 }
 
 /** Whether a toggle command is on (its `toggled` key). */
@@ -316,6 +358,7 @@ function canHandle(c: Command, surface: Surface | undefined): boolean {
  * its command and takes the key; anything else goes on untouched.
  */
 export function onKeydown(e: KeyboardEvent): void {
+  if (e.key === "Escape") for (const f of [...escapes]) f();
   if (!mayBeChord(e) || !registry) return;
   commandStats.lookups++;
   if (hooks.blocked()) return;
@@ -372,8 +415,23 @@ export function menuOf(location: "main"): { group: string; items: Command[] }[] 
   return groups;
 }
 
-/** Installs the listener on a window; returns its removal. */
+const escapes = new Set<() => void>();
+
+/**
+ * Calls `fn` at each Escape pressed in the window, through the one key listener (a dialog whose
+ * chunk is still loading is then dropped, EX0b2); returns its removal.
+ */
+export function onEscape(fn: () => void): () => void {
+  escapes.add(fn);
+  return () => escapes.delete(fn);
+}
+
+/** Installs the listener on a window, and the note of the last focused surface; returns their removal. */
 export function installKeys(win: Window = window): () => void {
   win.addEventListener("keydown", onKeydown, true);
-  return () => win.removeEventListener("keydown", onKeydown, true);
+  win.addEventListener("focusin", noteFocus, true);
+  return () => {
+    win.removeEventListener("keydown", onKeydown, true);
+    win.removeEventListener("focusin", noteFocus, true);
+  };
 }

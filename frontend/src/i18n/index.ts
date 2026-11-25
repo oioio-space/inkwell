@@ -10,9 +10,13 @@ export const lang: "fr" | "en" = navigator.language.toLowerCase().startsWith("en
 const plurals = new Intl.PluralRules(lang);
 const numbers = new Intl.NumberFormat(lang);
 
+/** The message for key in a given language (the palette folds its labels per language). */
+export const textIn = (language: "fr" | "en", key: MessageKey): string =>
+  catalogs[language]?.[key] ?? fr[key];
+
 /** Returns the message for key, with {placeholders} filled from vars. */
 export function t(key: MessageKey, vars: Record<string, string | number> = {}): string {
-  const template = catalogs[lang]?.[key] ?? fr[key];
+  const template = textIn(lang, key);
   return template.replace(/\{(\w+)\}/g, (_, name: string) => String(vars[name] ?? `{${name}}`));
 }
 

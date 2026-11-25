@@ -4,6 +4,7 @@
  */
 import { readUserBindings } from "./bindings";
 import { useRegistry } from "./commands";
+import { manySources } from "./e2eMany";
 import { builtinSources, globLoader } from "./loader";
 import { buildRegistry, type Registry } from "./registry";
 
@@ -19,7 +20,10 @@ export { BINARY_TYPE, TEXT_TYPE } from "./registry";
 
 // Timed for the start's budget (PERF-START, ADR 0038): `inkwell:registry` in the page's measures.
 performance.mark("inkwell:registry:start");
-export const registry: Registry = buildRegistry(builtinSources(), globLoader());
+export const registry: Registry = buildRegistry(
+  [...builtinSources(), ...(import.meta.env.VITE_E2E_OBSERVE === "1" ? manySources() : [])],
+  globLoader(),
+);
 for (const r of registry.refused) console.error(`extension ${r.folder} refused: ${r.reason}`);
 
 /** The person's own keybindings on this device (UX1-5 edits them); unreadable means none. */

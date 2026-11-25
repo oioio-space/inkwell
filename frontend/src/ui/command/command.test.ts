@@ -97,11 +97,13 @@ describe("EX0b1 controls bound to commands", () => {
       "app.toolbar",
       "app.preview",
       "app.fullscreen",
+      "app.palette",
       "typst.present",
       "typst.present-here",
       "typst.present-public",
       "typst.export",
       "app.preferences",
+      "app.shortcuts",
       "app.about",
     ]);
     expect(items[0]?.getAttribute("role")).toBe("menuitemcheckbox");

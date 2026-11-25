@@ -22,4 +22,6 @@ export const commands: CommandModule["commands"] = {
   "app.zoom-in": ({ shell }) => shell.zoom("in"),
   "app.zoom-out": ({ shell }) => shell.zoom("out"),
   "app.zoom-reset": ({ shell }) => shell.zoom("reset"),
+  "app.palette": ({ shell }) => shell.palette(),
+  "app.shortcuts": ({ shell }) => shell.shortcuts(),
 };

@@ -35,6 +35,8 @@ import { settings } from "./store/settings.svelte";
 import { zoom } from "./store/zoom.svelte";
 import AboutDialog, { type BuildInfo } from "./ui/AboutDialog.svelte";
 import Banner from "./ui/Banner.svelte";
+import CommandDialogs from "./ui/command/CommandDialogs.svelte";
+import { dialogShell } from "./ui/command/dialogs.svelte";
 import ExternalBanner from "./ui/ExternalBanner.svelte";
 import ExternalChangeToast from "./ui/ExternalChangeToast.svelte";
 import { session } from "./ui/editorSession.svelte";
@@ -306,6 +308,7 @@ configure({
       void jumpFromCursor();
     },
     fullscreen: () => void toggleFullscreen(document),
+    ...dialogShell,
   },
   // What was typed is in the document before any command acts on it (a save keeps the last letter).
   beforeCommand: () => flushAllTyped(),
@@ -742,6 +745,7 @@ onMount(() => {
 <Preferences bind:open={preferences} />
 <NoticeToast />
 <AboutDialog bind:open={about} info={buildInfo} opener={aboutOpener} />
+<CommandDialogs />
 <ExternalChangeToast />
 
 <style>

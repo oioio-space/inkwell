@@ -71,12 +71,15 @@
         "id": "app.return",
         "label": "join.return",
         "category": "document",
+        "when": "canReturn",
+        "unavailable": "cmd.return.unavailable",
         "entry": "native/commands.ts",
         "capabilities": ["ui.native"]
       },
       {
         "id": "app.preferences",
         "label": "menu.preferences",
+        "keywords": ["kw.settings"],
         "category": "app",
         "entry": "native/commands.ts",
         "capabilities": ["ui.native"]
@@ -107,6 +110,7 @@
       {
         "id": "app.zoom-in",
         "label": "zoom.in",
+        "keywords": ["kw.zoom"],
         "category": "view",
         "repeat": true,
         "entry": "native/commands.ts",
@@ -115,6 +119,7 @@
       {
         "id": "app.zoom-out",
         "label": "zoom.out",
+        "keywords": ["kw.zoom"],
         "category": "view",
         "repeat": true,
         "entry": "native/commands.ts",
@@ -123,6 +128,7 @@
       {
         "id": "app.zoom-reset",
         "label": "zoom.reset",
+        "keywords": ["kw.zoom"],
         "category": "view",
         "entry": "native/commands.ts",
         "capabilities": ["ui.native"]
@@ -130,46 +136,68 @@
       {
         "id": "app.undo",
         "label": "cmd.undo",
+        "unavailable": "cmd.undo.unavailable",
         "category": "edit"
       },
       {
         "id": "app.redo",
         "label": "cmd.redo",
+        "unavailable": "cmd.undo.unavailable",
         "category": "edit"
       },
       {
         "id": "app.find",
         "label": "cmd.find",
+        "unavailable": "cmd.find.unavailable",
         "category": "edit"
       },
       {
         "id": "app.replace",
         "label": "cmd.replace",
+        "unavailable": "cmd.find.unavailable",
         "category": "edit"
       },
       {
         "id": "app.find-next",
         "label": "cmd.find-next",
+        "unavailable": "cmd.find.unavailable",
         "category": "navigate",
         "repeat": true
       },
       {
         "id": "app.find-previous",
         "label": "cmd.find-previous",
+        "unavailable": "cmd.find.unavailable",
         "category": "navigate",
         "repeat": true
       },
       {
         "id": "app.next-change",
         "label": "cmd.next-change",
+        "unavailable": "cmd.change.unavailable",
         "category": "navigate",
         "repeat": true
       },
       {
         "id": "app.previous-change",
         "label": "cmd.previous-change",
+        "unavailable": "cmd.change.unavailable",
         "category": "navigate",
         "repeat": true
+      },
+      {
+        "id": "app.palette",
+        "label": "cmd.palette",
+        "category": "app",
+        "entry": "native/commands.ts",
+        "capabilities": ["ui.native"]
+      },
+      {
+        "id": "app.shortcuts",
+        "label": "cmd.shortcuts",
+        "category": "app",
+        "entry": "native/commands.ts",
+        "capabilities": ["ui.native"]
       }
     ],
     "menus": [
@@ -200,10 +228,22 @@
         "when": "canReturn"
       },
       {
+        "command": "app.palette",
+        "location": "main",
+        "group": "project",
+        "order": 90
+      },
+      {
         "command": "app.preferences",
         "location": "main",
         "group": "app",
         "order": 10
+      },
+      {
+        "command": "app.shortcuts",
+        "location": "main",
+        "group": "app",
+        "order": 15
       },
       {
         "command": "app.about",
@@ -213,6 +253,20 @@
       }
     ],
     "keybindings": [
+      {
+        "command": "app.palette",
+        "linux": ["Ctrl+Shift+p"],
+        "mac": ["Shift+Meta+p"],
+        "win": ["Ctrl+Shift+p"],
+        "scope": "window"
+      },
+      {
+        "command": "app.shortcuts",
+        "linux": ["Ctrl+?"],
+        "mac": ["Alt+Meta+/"],
+        "win": ["Ctrl+?"],
+        "scope": "window"
+      },
       {
         "command": "app.save",
         "linux": ["Ctrl+s"],

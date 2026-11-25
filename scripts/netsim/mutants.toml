@@ -3877,7 +3877,7 @@ clause = "EX0b1 C-6"
 why = "a grid key (Ctrl+A, select all) is missing from the table"
 [[mutant.edit]]
 file = "frontend/src/extensions/keytables.ts"
-before = "  { name: \"grid.select-all\", scope: \"grid\", ...mod([\"Ctrl+a\"]) },\n"
+before = "  { name: \"grid.select-all\", scope: \"grid\", ...mod([\"Ctrl+a\"]), label: \"keys.select-all\" },\n"
 after = ""
 
 [[mutant]]
@@ -4471,3 +4471,152 @@ why = "a cut write is sent again too"
 file = "frontend/src/store/GoStorageAdapter.ts"
 before = "const reply = write\n      ? sent"
 after = "const reply = false\n      ? sent"
+
+# Block EX0b2 (command palette, ranker, shortcuts window; gates/EX0b2.toml, criterion `mutants`): each breaks one
+# rule of docs/plans/2026-11-25-ex0b2-palette.md §2 and is caught by that rule's test, by its exact title (`name`).
+
+[[mutant]]
+id = "MP1"
+block = "EX0b2"
+kind = "vitest"
+test = "frontend/src/ui/command/palette.test.ts"
+name = "EX0b2 P-1 text is folded once: accents, case, ligatures and spaces"
+clause = "EX0b2 P-1"
+why = "the marks are kept: « Écrire » no longer folds to « ecrire »"
+[[mutant.edit]]
+file = "frontend/src/ui/command/fold.ts"
+before = '''    .replace(/\p{M}+/gu, "")
+'''
+after = ''
+
+[[mutant]]
+id = "MP2"
+block = "EX0b2"
+kind = "vitest"
+test = "frontend/src/ui/command/palette.test.ts"
+name = "EX0b2 P-2 a query matches a label or a synonym by its start, its word starts or as one piece, never scattered"
+clause = "EX0b2 P-2"
+why = "query words match label words in any order (the word index restarts for each)"
+[[mutant.edit]]
+file = "frontend/src/ui/command/rank.ts"
+before = '''  for (const w of words) {
+    let found = false;'''
+after = '''  for (const w of words) {
+    j = 0;
+    let found = false;'''
+
+[[mutant]]
+id = "MP3"
+block = "EX0b2"
+kind = "vitest"
+test = "frontend/src/ui/command/palette.test.ts"
+name = "EX0b2 P-3 available first, then match quality, then recency, then the label"
+clause = "EX0b2 P-3"
+why = "a recent command goes before every class: recency before match quality"
+[[mutant.edit]]
+file = "frontend/src/ui/command/rank.ts"
+before = 'const b = bucket(opts.available(entry.item), cls);'
+after = 'const b = bucket(opts.available(entry.item), r >= 0 ? 0 : cls);'
+
+[[mutant]]
+id = "MP4"
+block = "EX0b2"
+kind = "vitest"
+test = "frontend/src/ui/command/palette.test.ts"
+name = "EX0b2 P-4 recent commands are this device's last palette runs, kept and read safely"
+clause = "EX0b2 P-4"
+why = "a run is appended at the end of the recents instead of moved to the front"
+[[mutant.edit]]
+file = "frontend/src/ui/command/recent.ts"
+before = 'const next = [id, ...stored().filter((x) => x !== id)]'
+after = 'const next = [...stored().filter((x) => x !== id), id]'
+
+[[mutant]]
+id = "MP5"
+block = "EX0b2"
+kind = "vitest"
+test = "frontend/src/ui/command/palette.test.ts"
+name = "EX0b2 P-5 an unavailable command is greyed with its reason and Enter only announces it"
+clause = "EX0b2 P-5"
+why = "availability is read against the palette's own field instead of the target"
+[[mutant.edit]]
+file = "frontend/src/ui/command/Palette.svelte"
+before = 'runnable(e.item.id, goal)'
+after = 'runnable(e.item.id, field)'
+
+[[mutant]]
+id = "MP6"
+block = "EX0b2"
+kind = "vitest"
+test = "frontend/src/ui/command/palette.test.ts"
+name = "EX0b2 P-6 the palette is an APG combobox with its count announced and at most 50 rows"
+clause = "EX0b2 P-6"
+why = "the rows drawn are always the first 50, not a window around the active row"
+[[mutant.edit]]
+file = "frontend/src/ui/command/Palette.svelte"
+before = 'Math.min(Math.max(0, active - WINDOW / 2), Math.max(0, order.length - WINDOW))'
+after = '0'
+
+[[mutant]]
+id = "MP7"
+block = "EX0b2"
+kind = "vitest"
+test = "frontend/src/ui/command/palette.test.ts"
+name = "EX0b2 P-7 Enter gives the focus back to where it was, then runs there; Escape runs nothing"
+clause = "EX0b2 P-7"
+why = "the opener is the target even when it has left the page (a menu item gone with its menu)"
+[[mutant.edit]]
+file = "frontend/src/ui/command/dialogs.svelte.ts"
+before = '''    opener.isConnected &&
+'''
+after = ''
+
+[[mutant]]
+id = "MP8"
+block = "EX0b2"
+kind = "vitest"
+test = "frontend/src/ui/command/palette.test.ts"
+name = "EX0b2 P-8 ranking 1 000 commands stays within its counted bound"
+clause = "EX0b2 P-8"
+why = "KMP is replaced by a naive search restarting at each position"
+[[mutant.edit]]
+file = "frontend/src/ui/command/rank.ts"
+before = '''  if (m > t.length) return false;
+  let k = 0;'''
+after = '''  if (m > t.length) return false;
+  for (let at = 0; at + m <= t.length; at++) {
+    let i = 0;
+    for (; i < m; i++) {
+      rankStats.comparisons++;
+      if (t[at + i] !== q.s[i]) break;
+    }
+    if (i === m) return true;
+  }
+  return false;
+  let k = 0;'''
+
+[[mutant]]
+id = "MP9"
+block = "EX0b2"
+kind = "vitest"
+test = "frontend/src/ui/command/shortcuts.test.ts"
+name = "EX0b2 P-9 the shortcuts window lists every chord in force on this system, hers marked"
+clause = "EX0b2 P-9"
+why = "her own bindings are not marked « personnalisé »"
+[[mutant.edit]]
+file = "frontend/src/ui/command/shortcuts.ts"
+before = 'if (a.mine) marks.add'
+after = 'if (false && a.mine) marks.add'
+
+[[mutant]]
+id = "MP10"
+block = "EX0b2"
+kind = "vitest"
+test = "frontend/src/ui/command/dialogs.test.ts"
+name = "EX0b2 P-10 the palette and the shortcuts window open from their commands, menus and chords, loaded on first use"
+clause = "EX0b2 P-10"
+why = "`app.shortcuts` opens the palette"
+[[mutant.edit]]
+file = "frontend/src/ext/app/native/commands.ts"
+before = '"app.shortcuts": ({ shell }) => shell.shortcuts(),'
+after = '"app.shortcuts": ({ shell }) => shell.palette(),'

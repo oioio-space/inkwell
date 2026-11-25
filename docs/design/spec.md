@@ -1314,7 +1314,7 @@ clone la projection Git de l'historique (HI-5 : dépôt reconstructible, jamais 
 - **Lecteur d'écran :** « Diapositive n sur N : titre », en `status`.
 - **Questions** (prise de main) : bandeau-question dans la vue présentateur (L-8).
 
-### 4.24 Palette de commandes (*à créer*)
+### 4.24 Palette de commandes (`app.palette`, EX0b2)
 
 - **Raccourci :** **Ctrl+Maj+P**, et le menu principal › « Rechercher une commande… »
   (recommandation Q1, *à confirmer*). Ctrl+K reste le lien.
@@ -1328,6 +1328,8 @@ clone la projection Git de l'historique (HI-5 : dépôt reconstructible, jamais 
 - **Clavier :** ↑ ↓, Entrée exécute, Échap ferme.
 - **Lecteur d'écran :** le nombre de résultats est annoncé en `status`.
 - La liste vient du **registre unique des commandes** (§8.2), avec ses raccourcis.
+- Classement (classes de correspondance ordonnées, puis récence, puis libellé ; règle 48 d'UX1) et
+  disponibilité selon la cible : `docs/plans/2026-11-25-ex0b2-palette.md`.
 - « Aller au fichier » (Ctrl+P) en est un mode : le préfixe est implicite, la liste contient
   les fichiers.
 
@@ -1383,8 +1385,10 @@ des onglets, et cette section est la proposition de design pour cette décision)
 - Le guide est **embarqué**, hors ligne. Une page par tâche de référence : créer, partager,
   relire, présenter, exporter. Plus « Écrire en Typst » et « Écrire en Markdown » (syntaxe en
   regard du bouton de la barre), et le glossaire de l'interface.
-- Menu › **Raccourcis clavier** (Ctrl+?) : une fenêtre de raccourcis, comme
-  `GtkShortcutsWindow`, générée depuis le registre (§8.2), avec une recherche.
+- Menu › **Raccourcis clavier** (Ctrl+?, commande `app.shortcuts`, EX0b2) : une fenêtre de
+  raccourcis sur le modèle d'`AdwShortcutsDialog` (libadwaita 1.8, qui remplace la fenêtre de
+  raccourcis de GTK, dépréciée depuis GTK 4.18), générée depuis le registre (§8.2) et
+  `keytables.ts`, avec une recherche ; une section par catégorie, puis « Écrire ».
 - Chaque écran vide et chaque message d'erreur PEUT pointer vers sa page d'aide (« En savoir
   plus »).
 
@@ -3742,7 +3746,7 @@ et la personne peut lui en donner une (Préférences › Écriture › Raccourci
 | Titres 1 à 4 | Ctrl+1 / Ctrl+2 / Ctrl+3 / Ctrl+4 | ⌘1 / ⌘2 / ⌘3 / ⌘4 | Ctrl+1 / Ctrl+2 / Ctrl+3 / Ctrl+4 | fait (`format.h1`, `format.h2`, `format.h3`, `format.h4`) |
 | Paragraphe | **le même raccourci de titre, une seconde fois** (Ctrl+2 sur un titre de niveau 2 le rend paragraphe) | idem (⌘2) | idem | fait (`format.h2` une seconde fois ; `format.paragraph` dans le menu des titres ; `Mod-Alt-0` retiré, G-98) |
 | Barre de mise en forme | Ctrl+Maj+T | ⇧⌘T | Ctrl+Maj+T | fait (`app.toolbar`) |
-| Palette | Ctrl+Maj+P | ⇧⌘P | Ctrl+Maj+P | à faire |
+| Palette | Ctrl+Maj+P | ⇧⌘P | Ctrl+Maj+P | fait (`app.palette`) |
 | Aller au fichier | Ctrl+P | **⇧⌘O** (⌘P : Imprimer, convention) | Ctrl+P | à faire |
 | Imprimer… | — (menu) | **⌘P** | — (menu) | à faire |
 | Aller à la ligne | Ctrl+G | **⌘L** (⌘G : suivant) | Ctrl+G | à faire |
@@ -3781,7 +3785,7 @@ et la personne peut lui en donner une (Préférences › Écriture › Raccourci
 | Projets | Ctrl+O | ⌘O | Ctrl+O | à faire |
 | Préférences | Ctrl+, | ⌘, | Ctrl+, | fait (`app.preferences`) |
 | Aide | F1 | **délégué au système** : le menu Aide de macOS porte ⇧⌘? ; Inkwell ne capture pas la touche (K-6) | F1 | à faire |
-| Raccourcis | Ctrl+? | ⌥⌘/ | Ctrl+Maj+? | à faire |
+| Raccourcis | Ctrl+? | ⌥⌘/ | Ctrl+Maj+? | fait (`app.shortcuts`) |
 | Plein écran | F11 | ⌃⌘F | F11 | fait (`app.fullscreen`) |
 | Exporter | — (après l'audit du registre, C14) | — | — | à faire |
 

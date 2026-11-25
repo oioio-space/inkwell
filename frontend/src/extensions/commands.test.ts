@@ -673,6 +673,8 @@ describe("EX0b1 commands, menus and keybindings", () => {
       "app.zoom-in": { shell: "zoom(in)" },
       "app.zoom-out": { shell: "zoom(out)" },
       "app.zoom-reset": { shell: "zoom(reset)" },
+      "app.palette": { shell: "palette" },
+      "app.shortcuts": { shell: "shortcuts" },
       "app.undo": {
         target: editor,
         text: "un mot",
@@ -1027,9 +1029,9 @@ describe("EX0b1 commands, menus and keybindings", () => {
     expect(groups.map((g) => g.group)).toEqual(["view", "project", "document", "app"]);
     expect(groups.map((g) => g.items.map((c) => c.id))).toEqual([
       ["app.toolbar", "app.preview", "app.fullscreen"],
-      ["app.return"],
+      ["app.return", "app.palette"],
       ["typst.present", "typst.present-here", "typst.present-public", "typst.export"],
-      ["app.preferences", "app.about"],
+      ["app.preferences", "app.shortcuts", "app.about"],
     ]);
     // Within a group: by order, then by extension.
     const item = (id: string, group: string, order: number) => ({
