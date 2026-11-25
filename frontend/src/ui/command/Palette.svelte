@@ -5,7 +5,7 @@ import {
   commandRegistry,
   labelOf,
   run,
-  runnable,
+  runnableOn,
   shortcutOf,
 } from "../../extensions/commands";
 import type { Command } from "../../extensions/registry";
@@ -39,7 +39,8 @@ const registry = commandRegistry();
 const entries = registry ? paletteEntries(registry, lang) : undefined;
 // Read once per opening, never per keystroke (P-5).
 const avail = new Map<string, { ok: boolean; reason: string }>();
-for (const e of entries?.entries ?? []) avail.set(e.item.id, runnable(e.item.id, goal));
+const runnableHere = runnableOn(goal);
+for (const e of entries?.entries ?? []) avail.set(e.item.id, runnableHere(e.item.id));
 const recents = new Map(
   readRecents((id) => registry?.command(id) !== undefined).map((id, i) => [id, i]),
 );

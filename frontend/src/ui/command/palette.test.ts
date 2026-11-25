@@ -553,4 +553,22 @@ describe("EX0b2 command palette", () => {
     }
     expect(rankStats.folds).toBe(0);
   });
+
+  it("PAL1 one opening over 1 000 commands builds the context once, not once per command", async () => {
+    // Each context copies the live state; built per command, it made a warm opening O(commands x
+    // keys) and failed PERF-PALETTE's 50 ms on GitHub's WebKit runner (run 45601671496).
+    const r = buildRegistry([...builtinSources(), ...manySources()], globLoader());
+    expect(r.commands.length).toBeGreaterThanOrEqual(1000);
+    commands.useRegistry(r, { system: "linux" });
+    const editor = surfaceChild("editor");
+    editor.focus();
+    for (let i = 0; i < 3; i++) {
+      const before = commands.commandStats.contexts;
+      await openPalette();
+      expect(commands.commandStats.contexts - before, `opening ${i}`).toBe(1);
+      closeDialog();
+      flushSync();
+      editor.focus();
+    }
+  });
 });

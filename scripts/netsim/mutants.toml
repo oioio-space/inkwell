@@ -4541,8 +4541,8 @@ clause = "EX0b2 P-5"
 why = "availability is read against the palette's own field instead of the target"
 [[mutant.edit]]
 file = "frontend/src/ui/command/Palette.svelte"
-before = 'runnable(e.item.id, goal)'
-after = 'runnable(e.item.id, field)'
+before = 'runnableOn(goal)'
+after = 'runnableOn(field)'
 
 [[mutant]]
 id = "MP6"

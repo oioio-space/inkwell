@@ -1,6 +1,18 @@
-import { type Browser, expect, type Page } from "@playwright/test";
+import { type Browser, expect, type Page, test } from "@playwright/test";
 
 export const editor = (p: Page) => p.locator(".cm-content");
+
+/**
+ * A wall-clock budget is a claim about an idle machine (decision of commit b240aeb, 2026-11-24): it
+ * is judged only where the run holds the machine alone (`scripts/heavy.sh --exclusive` sets
+ * INKWELL_HEAVY_SLOT=all, as the gates' e2e criteria run them), so a gate still fails on it. In a
+ * shared slot (GitHub's runner, a local `mise run e2e`) the measure is reported as a `perf-unjudged`
+ * annotation, and the test's functional assertions stay.
+ */
+export function judgeBudget(report: string, judge: () => void): void {
+  if (process.env.INKWELL_HEAVY_SLOT === "all") judge();
+  else test.info().annotations.push({ type: "perf-unjudged", description: report });
+}
 
 /** Runs the same page-side barrier as desktop close before a controlled WebKit departure. */
 export async function prepareDeparture(page: Page): Promise<void> {

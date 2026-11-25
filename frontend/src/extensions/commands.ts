@@ -81,8 +81,11 @@ let built = false;
 let byChord = new Map<string, Active[]>();
 let byCommand = new Map<string, Active[]>();
 
-/** Lookups made by the listener (C-12: none for a typed character). */
-export const commandStats = { lookups: 0 };
+/**
+ * Lookups made by the listener (C-12: none for a typed character), and contexts built (each a copy
+ * of the live state: one per palette opening, never one per command, PERF-PALETTE).
+ */
+export const commandStats = { lookups: 0, contexts: 0 };
 
 /** Sets the registry commands come from, the system and the person's bindings. */
 export function useRegistry(
@@ -198,6 +201,7 @@ function isField(node: EventTarget | null): boolean {
 }
 
 function context(surface: Surface | undefined, field: boolean): Context {
+  commandStats.contexts++;
   return { ...live, focus: surface?.kind ?? "other", field };
 }
 
@@ -238,16 +242,23 @@ export function availability(
 }
 
 /**
- * Whether a command can run on a target now: its `when` holds, and the target's surface or the
+ * Whether each command can run on a target now: its `when` holds, and the target's surface or the
  * command's entry handles it (a surface-only command, undo or find, is greyed where no surface
  * declares it). Every refusal has a reason: its `unavailable`, else a general one (EX0b2 P-5).
+ * The target's surface and the context are read once for all the commands asked (the palette's
+ * opening), never once per command: each read copies the live state (PERF-PALETTE).
  */
-export function runnable(id: string, target?: Element | Surface): { ok: boolean; reason: string } {
-  const c = registry?.command(id);
-  const { ok, reason } = availability(id, target);
-  if (ok && c && canHandle(c, toSurface(target))) return { ok: true, reason: "" };
-  const own = ok && c?.unavailable !== undefined ? textOf(c, c.unavailable) : reason;
-  return { ok: false, reason: own ?? t("cmd.unavailable.here") };
+export function runnableOn(
+  target?: Element | Surface,
+): (id: string) => { ok: boolean; reason: string } {
+  const surface = toSurface(target);
+  const ctx = context(surface, false);
+  return (id) => {
+    const c = registry?.command(id);
+    if (c && evalWhen(c.when, ctx) && canHandle(c, surface)) return { ok: true, reason: "" };
+    const reason = c?.unavailable === undefined ? undefined : textOf(c, c.unavailable);
+    return { ok: false, reason: reason ?? t("cmd.unavailable.here") };
+  };
 }
 
 /** Says a text to the person, as a greyed command's reason is said (the application's announcer). */

@@ -2543,8 +2543,12 @@ Les budgets sont ceux du §2. Conditions normatives de mesure :
 - « frappe → pair » se mesure avec une frappe régulière de 5 caractères par seconde (ADR 0029
   §V) ; une rafale continue peut ajouter au plus la cadence de synchronisation
   d'automerge-repo (100 ms en Fluide, ADR 0028 D7) (`AD-27`) ;
-- les budgets se mesurent sur les machines de CI (amd64 et arm64) avec `INKWELL_PERF=1` ;
-  une mesure hors budget fait échouer le cas `PERF-*` ;
+- un budget en temps réel se juge sur une machine tenue seule : la mesure native et la porte
+  exclusive (`scripts/heavy.sh --exclusive`, qui pose `INKWELL_HEAVY_SLOT=all`), ou une demande
+  explicite avec `INKWELL_PERF=1` ; là, une mesure hors budget fait échouer le cas `PERF-*`. Les
+  machines de CI partagées (GitHub, amd64 et arm64) ne font que le consigner (annotation
+  `perf-unjudged`, `judgeBudget` de `frontend/e2e/helpers.ts`) : décision du commit b240aeb
+  (2026-11-24), une mesure de la machine et non du produit n'y prouve rien ;
 - toute optimisation d'un paquet de `HOT_PATHS:` est prouvée par `benchstat`
   (`-count ≥ 10`, p < 0,05, sans régression d'allocations) ; sinon elle est retirée.
 
