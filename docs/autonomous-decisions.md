@@ -340,3 +340,4 @@ Le poste doit avoir l’écran allumé et déverrouillé ; le dialogue GNOME aut
 XTest peut voler le focus. Cette passe n’ouvre aucune fenêtre. L3 reste bloqué
 jusqu’à la nouvelle mesure native ; aucune optimisation ni réussite n’est déduite
 des seuls tests unitaires.
+| 2026-11-25 | Order EX0b1 before OBS1's code → EX0b1, OBS1 | EX0b1's code starts now (its gate frozen, 57d093c); OBS1 finishes its spec, blind review and freeze meanwhile, and its code starts on a main that already holds EX0b1 | method v2 rule 1 (one block in implementation at a time); both blocks extend the same registry files (manifest validator, registry.ts), so coding them in parallel would conflict; EX0b1 was ready first | OBS1's code first (EX0b1's frozen gate would wait idle); both in parallel (conflicts in the registry) |
