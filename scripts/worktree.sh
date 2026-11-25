@@ -2,7 +2,9 @@
 # A block's worktree, usable at once (block CI3a, 2026-11-24): `../inkwell-<block>` on a new branch `<block>` from
 # [base] (default main), its mise.toml trusted, the main tree's untracked mise.local.toml (API keys) linked in (a
 # symlink, checked to stay ignored by git: a secret is never copied into the tree), and the pinned sidecars fetched
-# (`mise run sidecar:fetch`). Prints the path on its last line.
+# (`mise run sidecar:fetch`), then the pinned tools, the frontend's packages and the Wails bindings (`mise install`,
+# `mise run fe:install`, `mise run fe:bindings`: without them a worktree's frontend criteria failed on a missing biome,
+# node_modules and bindings, OBS1 2026-11-25). Prints the path on its last line.
 # Usage: scripts/worktree.sh <block> [base]
 # Without it a new worktree failed three ways: mise refused its untrusted mise.toml, scripts/claude-or.sh and
 # scripts/review-or.py found no OPENROUTER_API_KEY (exit 3), internal/app tests failed on « typst.gz is not in this
@@ -41,6 +43,6 @@ else
   echo "worktree: no $secrets: no API keys in $path (OpenRouter reviews exit 3)" >&2
 fi
 
-(cd "$path" && mise run sidecar:fetch)
+(cd "$path" && mise run sidecar:fetch && mise install && mise run fe:install && mise run fe:bindings)
 created=
 echo "$path"

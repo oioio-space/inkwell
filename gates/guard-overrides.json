@@ -2234,6 +2234,16 @@
       "id": "4974f4d0e2ee3bfc1dd514c88bfa14018611413c6e918f70adec32d0668d15fe",
       "reason": "PF2: the fake server writes the Wails readiness line, and gains --editor-ms and --silent for the driver timing tests",
       "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "ea87e403bb45b249b6b96feebe1a91b0adde6537c7f48a2eea3d46d6daa8eb4a",
+      "reason": "scripts/worktree.sh: gate dependency changed — CI3: a new worktree also gets the pinned tools, the frontend packages and the Wails bindings (mise install, fe:install, fe:bindings); without them a worktree frontend criterion failed on a missing biome, node_modules and bindings (OBS1, 2026-11-25)",
+      "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "54e5de471e7e40ff2af31d03e8e82716987c66329dbb3f01b120f7cbfc6c3f4d",
+      "reason": "scripts/worktree_test.py: gate dependency changed — expects the three added setup calls; no test removed or relaxed",
+      "decision": "docs/objectif-en-cours.md"
     }
   ]
 }

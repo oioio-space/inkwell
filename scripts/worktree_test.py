@@ -68,7 +68,10 @@ class Worktree(unittest.TestCase):
         self.assertEqual(git(self.path, "status", "--porcelain", "--untracked-files=all"), "", "git sees nothing new")
         self.assertEqual(self.calls(), [f"{self.main}|trust --quiet {self.path}/mise.toml",
                                         f"{self.main}|trust --quiet {self.path}/mise.local.toml",
-                                        f"{self.path}|run sidecar:fetch"])
+                                        f"{self.path}|run sidecar:fetch",
+                                        f"{self.path}|install",
+                                        f"{self.path}|run fe:install",
+                                        f"{self.path}|run fe:bindings"])
 
     def test_from_another_worktree_lands_beside_the_main_tree(self):
         self.assertEqual(self.run_script("B1").returncode, 0)
