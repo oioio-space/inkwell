@@ -240,14 +240,12 @@ class PlaywrightCapsAndSignalsTest(unittest.TestCase):
         import subprocess
         child = subprocess.Popen(["sleep", "30"], start_new_session=True)
         mutants.CHILDREN.add(child.pid)
-        with tempfile.TemporaryDirectory() as d:
-            copy = pathlib.Path(d) / "tree"
-            with self.assertRaises(SystemExit) as stop:
-                with tempfile.TemporaryDirectory(dir=d) as inner:
-                    copy = pathlib.Path(inner)
-                    mutants.on_signal(signal.SIGTERM, None)
-            self.assertEqual(stop.exception.code, 128 + signal.SIGTERM)
-            self.assertFalse(copy.exists())
+        with self.assertRaises(SystemExit) as stop:
+            with tempfile.TemporaryDirectory() as inner:
+                copy = pathlib.Path(inner)
+                mutants.on_signal(signal.SIGTERM, None)
+        self.assertEqual(stop.exception.code, 128 + signal.SIGTERM)
+        self.assertFalse(copy.exists())
         self.assertIsNotNone(child.wait(timeout=5))
         self.assertNotIn(child.pid, mutants.CHILDREN)
 

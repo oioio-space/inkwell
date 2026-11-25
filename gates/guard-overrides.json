@@ -2286,8 +2286,8 @@
       "decision": "docs/plans/2026-11-25-ex0c2-panels-grid.md"
     },
     {
-      "id": "9a0342c0d469c5269e17702ea7676a2386e5198109e576bcfa412e584edbd452",
-      "reason": "scripts/netsim/mutants_test.py: PlaywrightKindTest and PlaywrightCapsAndSignalsTest, the playwright kind's Python tests (catch rule, caps under 240 s, signal kills and unwinds), EX0c2",
+      "id": "37598412ac013e6b4153a79b90d79d9f3d81044771d2c4cb564af826e8567612",
+      "reason": "scripts/netsim/mutants_test.py: PlaywrightKindTest and PlaywrightCapsAndSignalsTest, the playwright kind's Python tests (catch rule, caps under 240 s, signal kills and unwinds), EX0c2; the signal test no longer picks its temporary directory (dir=), which scripts/scratch_guard_test.py forbids in a test, found by the push's test:py",
       "decision": "docs/plans/2026-11-25-ex0c2-panels-grid.md"
     },
     {
