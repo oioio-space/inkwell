@@ -7,9 +7,10 @@ import { installKeys } from "../../extensions/commands";
 import { entryDiff } from "../../history/diffview";
 import type { HDoc } from "../../history/types";
 import { workspace } from "../../workspace/workspace.svelte";
+import PanelSide from "../command/PanelSide.svelte";
+import { loadSide } from "../command/panels.svelte";
 import { cleanup, render } from "../testkit.svelte";
 import DiffView from "./DiffView.svelte";
-import HistoryDrawer from "./HistoryDrawer.svelte";
 import { history } from "./history.svelte";
 
 const members = vi.hoisted(() => ({ role: "writer" }));
@@ -34,6 +35,12 @@ const labels = (host: HTMLElement) =>
   [...host.querySelectorAll("button")].map((b) => b.textContent?.trim());
 const button = (host: HTMLElement, text: string) =>
   [...host.querySelectorAll("button")].find((b) => b.textContent?.trim() === text);
+
+/** The drawer, Relire: the end side of the `panels` point (EX0c2), its bodies loaded. */
+async function drawer(): Promise<HTMLElement> {
+  await loadSide("end");
+  return render(PanelSide, { side: "end" });
+}
 
 async function open(role: "writer" | "reader") {
   members.role = "writer"; // the snapshot loaded at attach must not decide
@@ -74,7 +81,7 @@ afterEach(() => {
 describe("the history drawer", () => {
   it("HIS-09 a reader sees the history and compares; going back, merging and forking are disabled with the reason", async () => {
     await open("reader");
-    const host = render(HistoryDrawer, {});
+    const host = await drawer();
     history.selected = history.rows.find((r) => r.kind === "session")?.key;
     flushSync();
     expect(button(host, "Comparer avec maintenant")?.disabled).toBe(false);
@@ -91,7 +98,7 @@ describe("the history drawer", () => {
 
   it("a writer can go back, with no reason in the way", async () => {
     await open("writer");
-    const host = render(HistoryDrawer, {});
+    const host = await drawer();
     history.selected = history.rows.find((r) => r.kind === "session")?.key;
     flushSync();
     expect(button(host, "Revenir à cette version")?.disabled).toBe(false);

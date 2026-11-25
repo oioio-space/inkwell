@@ -21,8 +21,8 @@
     "menus": [
       {
         "command": "sample.go",
-        "location": "grid/context",
-        "group": "sort",
+        "location": "insert",
+        "group": "blocks",
         "order": 1
       }
     ]

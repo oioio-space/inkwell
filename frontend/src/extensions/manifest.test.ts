@@ -91,7 +91,11 @@ describe("manifest", () => {
       });
     }
     for (const v of valid) {
-      const parsed = parseManifest(source(v.text));
+      // A valid vector's entries are files of its folder (a panel's, EX0c2), as the loader's glob gives them.
+      const files = new Set(
+        [...v.text.matchAll(/"entry":\s*"([^"]+)"/g)].map((m) => m[1] as string),
+      );
+      const parsed = parseManifest(source(v.text, { files }));
       // Accepted unchanged: the defaults fill only what the vector left out.
       const raw = JSON.parse(v.text) as Record<string, unknown>;
       expect(parsed.id).toBe(raw.id);

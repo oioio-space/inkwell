@@ -48,7 +48,8 @@ location, so the palette, the bar and the menu show one name and one chord per a
   5.4 ms in Chromium, 8 ms in the WebKit container (5 starts each, `gates/EX0c2/WITNESSES.md`).
 - **Focus:** opening a side by its toggle or pointer leaves the focus where it is (today); a tab chosen with the keys
   takes it (APG); closing a side that holds the focus gives it to `returnTarget()` (EX0b1) or the shown view, never to
-  `body`. `openPanel(id)` (shell) opens the side and selects the panel: problems' `show()` and `history.show()` use it.
+  `body`. `openPanel(id)` (shell) opens the side and selects the panel: problems' `show()` uses it; `history.show()` toggles
+  the drawer as before (the preview swap) and selects its panel.
 - **Built-ins:** `app.files` (start, the file tree, `Sidebar.svelte` body), `app.problems`, `app.history`,
   `app.comments`, `app.activity` (end, 10–40, today's tabs and names). `DiffView` and `ApplyDialog` leave the drawer for
   a host mounted with the shell (a dialog never waits on a body).
@@ -63,7 +64,9 @@ location, so the palette, the bar and the menu show one name and one chord per a
 | `history/toolbar` | ‹since›, ‹legend›, ‹colour› (radio pick), seen, extensions | — | `HistoryBars.svelte:139-157` |
 | `diff/toolbar` | ‹mode› (radio pick, text only), navigate, extensions; ‹close› stays the dialog's header | — | `DiffView.svelte:175-191` |
 
-The width overflow moves from `FormatBar` into `LocationBar` (the EX0c1 residual, taken here [EX0c2]), used by both bars. The context-menu host
+The width overflow is one function for every bar (`fitCount`, `ui/toolbar/layout.ts`; the EX0c1 residual, taken here
+[EX0c2]): the grid's bar host (`ui/command/LocationToolbar.svelte`) and the formatting bar both use it, the formatting
+bar keeping its own frame for its heading menu and Insert. The context-menu host
 (`ui/command/LocationMenuAt.svelte`, from `ui/sheet/ContextMenu.svelte`) draws any `overflow: "submenu"` location at a
 point: separators between groups, `CommandMenuItem`s (a toggle as `menuitemcheckbox`), APG keys, focus on the first
 item, Escape back to the opener; past 8 extension items, one « Extensions » item with `aria-haspopup="menu"` and
@@ -104,7 +107,9 @@ SHEET-FREEZE and SHEET-BIG `:684`, a substring match, pass unchanged); the conte
 « Figer jusqu'à la sélection »; « Changement précédent / suivant » read « Différence précédente / suivante ». Chords:
 the context menu shows each command's own chord (`CommandMenuItem`); Ctrl++ and Ctrl+- belong to `tables.insert-cells`
 and `tables.delete-cells` (insert or delete rows, or columns when whole columns are selected), so they leave
-« Insérer une ligne au-dessus » and « Supprimer les lignes » and stay in the palette and the shortcuts window.
+« Insérer une ligne au-dessus » and « Supprimer les lignes » and stay in the palette and the shortcuts window;
+« Suppr » leaves « Effacer le contenu » (a bare key is no chord, EX0b1). Cut, copy and paste show their chords, the
+browser's own (`delegated: "system"`).
 `ownView` (`App.svelte:99,718,730`) becomes a viewer field `ownStatus` (`tables.grid`: draws its own status bar).
 
 ## 4. Rules (test titles in the gate; each has a mutant caught by that title only, `scripts/netsim/mutants.toml`)
@@ -120,13 +125,13 @@ and `tables.delete-cells` (insert or delete rows, or columns when whole columns 
 | P-7 | grid menu = `grid/context`: item `when` hides, a toggle is `menuitemcheckbox`; keys: Up/Down wrap, Home/End, Enter and Space run, Escape and Tab close with the focus back on the grid | MV7 item `when` not read |
 | P-8 | « Extensions » past 8: 8 inline, 9 one submenu item, Right in, Left out, order kept | MV8 9 drawn inline |
 | P-9 | view bar = `view` around ‹default› and ‹offer›, no type id: the default viewer only while another shows, so a grid has no view bar; `ownStatus` from the viewer | MV9 the default viewer offered while it is shown |
-| P-10 | history strip and difference bar from their locations; `unseen`, `changes`; no two palette labels equal | MV10 `changes` true for a table |
+| P-10 | history strip and difference bar from their locations; `unseen`, `changes`; no two palette labels equal | MV10 the next difference does not read `changes` |
 | P-11 | cost: panels and locations indexed once at build (`panels(side)` the same array), a closed side imports nothing | MV11 `panels(side)` rebuilt |
 
 End to end, Chromium and WebKit: `EX0c2-E1` in the grid's bar, its context menu, the view bar, the history strip, the
 difference bar and both sides' tab lists, every button, menu item and tab is its location's or point's resolved item
 in order, or a fixed widget whose `data-fixed` is in a closed list (`show-text`, `default-viewer`, `offer-table`,
-`since`, `legend`, `colour`, `diff-mode`); any other control fails with « stray », and the gate's MV13 (a button added
+`since`, `legend`, `colour`, `diff-mode`; `extensions-submenu`, past 8 items, is the host's own); any other control fails with « stray », and the gate's MV13 (a button added
 to the grid's bar; `scripts/netsim/mutants.toml`, new kind `playwright` with `spec`, `grep`, `project`, implemented in
 `mutants.py` with its `--check` and a `test:py` test at step 2 [EX0c2]) must make it fail; read-only greys and hides; `EX0c2-E2` the
 drawer's tabs by keyboard (arrows, Home/End, focus back on close), its code fetched at idle, no frame with an empty

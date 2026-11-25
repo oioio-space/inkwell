@@ -1,5 +1,5 @@
 <script lang="ts">
-import type { Snippet } from "svelte";
+import { type Snippet, tick } from "svelte";
 import { availability, cmdAttrs, isOn, run, shortcutOf } from "../../extensions/commands";
 import Icon from "../icons/Icon.svelte";
 
@@ -18,6 +18,7 @@ let {
   checked,
   role,
   lead,
+  onrun,
   class: cls = "",
   ...rest
 }: {
@@ -37,13 +38,15 @@ let {
   role?: "menuitemradio" | undefined;
   /** An icon or glyph before the label. */
   lead?: Snippet;
+  /** After the menu closed and the command ran (the grid's bar gives the grid its focus back). */
+  onrun?: (() => void) | undefined;
   class?: string;
   [key: `data-${string}`]: string | undefined;
 } = $props();
 
 const attrs = $derived(cmdAttrs(id));
 const state = $derived(availability(id, target));
-const on = $derived(checked ?? isOn(id));
+const on = $derived(checked ?? isOn(id, target));
 const chord = $derived(shortcutOf(id));
 const label = $derived(attrs["aria-label"] ?? id);
 </script>
@@ -66,6 +69,8 @@ const label = $derived(attrs["aria-label"] ?? id);
     close(refocus ?? on !== undefined);
     // A radio item already chosen stays chosen: the same level again would make a paragraph.
     if (role !== "menuitemradio" || !on) run(id, target);
+    // Once the menu is gone from the page: what takes the focus then keeps it.
+    if (onrun) void tick().then(onrun);
   }}
 >
   {@render lead?.()}

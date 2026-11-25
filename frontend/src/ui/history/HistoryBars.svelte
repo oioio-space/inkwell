@@ -21,10 +21,12 @@ import { PICK, showWritten, type Written } from "../../editor/blameMarks";
 import { showChanges } from "../../editor/changeGutter";
 import { changeMarks, resolver } from "../../history/gutter";
 import { stamp } from "../../history/stamp";
+import { setLive } from "../../extensions/live.svelte";
 import { t, tn } from "../../i18n";
 import { zoom } from "../../store/zoom.svelte";
 import { workspace } from "../../workspace/workspace.svelte";
 import Banner from "../Banner.svelte";
+import LocationBar from "../command/LocationBar.svelte";
 import { history } from "./history.svelte";
 
 /**
@@ -126,6 +128,11 @@ $effect(() => {
   return () => window.removeEventListener("wheel", onWheel);
 });
 
+// « Marquer tout comme vu » (`app.mark-seen`) runs while the strip has marks to show (`unseen`).
+$effect(() => {
+  setLive({ unseen: !workspace.variant && count > 0 });
+});
+
 const sinceText = $derived(history.sinceAt ? stamp(history.sinceAt, false, "") : "");
 </script>
 
@@ -138,8 +145,8 @@ const sinceText = $derived(history.sinceAt ? stamp(history.sinceAt, false, "") :
   </Banner>
 {:else if count > 0}
   <div class="strip" data-testid="change-strip">
-    <span class="since">{t("history.since", { when: sinceText })}</span>
-    <span class="legend" aria-label={t("history.legend")}>
+    <span class="since" data-fixed="since">{t("history.since", { when: sinceText })}</span>
+    <span class="legend" aria-label={t("history.legend")} data-fixed="legend">
       {#if history.colorBy === "type"}
         <span><i class="sq added"></i>{t("history.mark.added")}</span>
         <span><i class="sq modified"></i>{t("history.mark.modified")}</span>
@@ -149,11 +156,11 @@ const sinceText = $derived(history.sinceAt ? stamp(history.sinceAt, false, "") :
       {/if}
     </span>
     <span class="sp"></span>
-    <div class="tg" role="radiogroup" aria-label={t("history.colorby")}>
+    <div class="tg" role="radiogroup" aria-label={t("history.colorby")} data-fixed="colour">
       <button type="button" role="radio" aria-checked={history.colorBy === "type"} onclick={() => (history.colorBy = "type")}>{t("history.colorby.type")}</button>
       <button type="button" role="radio" aria-checked={history.colorBy === "person"} onclick={() => (history.colorBy = "person")}>{t("history.colorby.person")}</button>
     </div>
-    <button type="button" class="btn" onclick={() => history.markSeen()}>{t("history.seen")}</button>
+    <LocationBar location="history/toolbar" labelClass="btn" />
   </div>
 {/if}
 

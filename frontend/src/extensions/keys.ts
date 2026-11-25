@@ -183,8 +183,12 @@ export function eventChord(
     formatChord({ ctrl: e.ctrlKey, alt: e.altKey, shift, meta: e.metaKey, key });
   const base = BASE[e.keyCode];
   const digit = base !== undefined && e.keyCode >= 48 && e.keyCode <= 57;
+  // Shift held, yet the key typed its own base (« h » for Shift+H, Caps Lock on): Shift typed
+  // nothing, so it is part of the chord, and Ctrl+Shift+h comes before Ctrl+h.
+  const capsShift = isChar && e.shiftKey && base !== undefined && name === base && !digit;
   const candidates = [
     ...(isChar && digit ? [make(base, e.shiftKey)] : []),
+    ...(capsShift ? [make(base, true)] : []),
     make(name, !isChar && e.shiftKey),
   ];
   if (isChar) {

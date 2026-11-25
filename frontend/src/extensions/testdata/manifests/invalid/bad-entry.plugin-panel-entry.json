@@ -1,0 +1,25 @@
+{
+  "id": "sample",
+  "version": "1.0.0",
+  "essential": false,
+  "contributes": {
+    "commands": [
+      {
+        "id": "sample.go",
+        "label": "Go",
+        "category": "edit"
+      }
+    ],
+    "panels": [
+      {
+        "id": "sample.notes",
+        "label": "Notes",
+        "side": "end",
+        "order": 50,
+        "icon": "quote",
+        "entry": "native/panels.ts",
+        "capabilities": ["ui.native"]
+      }
+    ]
+  }
+}

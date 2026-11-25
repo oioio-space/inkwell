@@ -148,6 +148,122 @@ class VitestNameTest(unittest.TestCase):
         self.assertTrue(mutants.validate([{**M, "name": "TestX"}]))
 
 
+class PlaywrightKindTest(unittest.TestCase):
+    """Block EX0c2 (review minor 9): a `playwright` entry is caught only when its own test fails, with its text."""
+    P = {"id": "MV13", "block": "EX0c2", "kind": "playwright", "spec": "frontend/e2e/ex0c2.spec.ts",
+         "grep": "EX0c2-E1", "project": "chromium", "error": "stray",
+         "edit": [{"file": "frontend/src/x.svelte", "before": "a", "after": "b"}]}
+
+    @staticmethod
+    def report(*runs):
+        """A Playwright JSON report: one spec per (title, status, error text)."""
+        return {"suites": [{"title": "ex0c2.spec.ts", "specs": [
+            {"title": title, "tests": [{"results": [{"status": status, "errors": [{"message": err}] if err else []}]}]}
+            for title, status, err in runs]}]}
+
+    def verdict(self, m, rc, *runs, build_rc=0):
+        with tempfile.TemporaryDirectory() as d:
+            tree = pathlib.Path(d)
+            (tree / "frontend").mkdir()
+            calls = []
+
+            def run(cmd, cwd, env=None, log=None, timeout=1800):
+                calls.append((cmd, env or {}))
+                if any("playwright" in c for c in cmd):
+                    out = pathlib.Path(env["PLAYWRIGHT_JSON_OUTPUT_NAME"])
+                    out.write_text(json.dumps(self.report(*runs)))
+                    return rc, ""
+                return build_rc, ""
+            caught = mutants.run_playwright(m, tree, run=run)[0]
+            self.calls = calls
+            return caught
+
+    def test_its_test_failing_with_its_text_is_a_catch(self):
+        self.assertTrue(self.verdict(self.P, 1, ("EX0c2-E1 the bars", "failed", "a stray control: button")))
+        tested = [c for c in self.calls if any("playwright" in x for x in c[0])]
+        self.assertEqual(tested[0][1]["INKWELL_E2E_BROWSER"], "chromium")
+        self.assertIn("e2e/ex0c2.spec.ts", tested[0][0])
+        self.assertEqual(tested[0][0][tested[0][0].index("--grep") + 1], "EX0c2-E1")
+
+    def test_a_failure_without_its_text_is_not_a_catch(self):
+        self.assertFalse(self.verdict(self.P, 1, ("EX0c2-E1 the bars", "failed", "timeout waiting for the grid")))
+
+    def test_another_test_failing_is_not_a_catch(self):
+        self.assertFalse(self.verdict(self.P, 1, ("EX0c2-E1 the bars", "passed", ""), ("EX0c2-E2 keys", "failed", "stray")))
+
+    def test_no_such_test_is_not_a_catch(self):
+        self.assertFalse(self.verdict(self.P, 1, ("EX0c2-E2 keys", "failed", "stray")))
+
+    def test_a_build_failure_is_not_a_catch(self):
+        self.assertFalse(self.verdict(self.P, 0, ("EX0c2-E1 the bars", "failed", "stray"), build_rc=1))
+
+    def test_builds_ignore_parent_repositories(self):
+        self.verdict(self.P, 1, ("EX0c2-E1 the bars", "failed", "stray"))
+        builds = [c for c, _ in self.calls if "go" in c and "build" in c]
+        self.assertEqual(len(builds), 2)
+        for cmd in builds:
+            self.assertIn("-buildvcs=false", cmd)
+
+    def test_validate_wants_its_fields_and_only_on_its_kind(self):
+        self.assertEqual(mutants.validate([self.P]), [])
+        for field in ("spec", "grep", "project"):
+            self.assertTrue(mutants.validate([{k: v for k, v in self.P.items() if k != field}]), field)
+        self.assertTrue(mutants.validate([{**self.P, "spec": "e2e/x.spec.ts"}]))
+        self.assertTrue(mutants.validate([{**self.P, "project": "firefox"}]))
+        self.assertTrue(mutants.validate([{**M, "grep": "EX0c2-E1"}]))
+
+
+class PlaywrightCapsAndSignalsTest(unittest.TestCase):
+    """EX0c2 review: the playwright kind's inner caps sit below the gate's 240 s, and a signal leaves nothing behind."""
+
+    def test_every_inner_cap_is_below_the_gate_and_so_is_their_sum(self):
+        caps = []
+
+        def run(cmd, cwd, env=None, log=None, timeout=1800):
+            caps.append(timeout)
+            for i, c in enumerate(cmd):
+                if c == "timeout" and i + 1 < len(cmd):
+                    caps.append(int(cmd[i + 1]))
+            return 1, ""
+        with tempfile.TemporaryDirectory() as d:
+            tree = pathlib.Path(d)
+            (tree / "frontend").mkdir()
+            mutants.run_playwright(PlaywrightKindTest.P, tree, run=lambda *a, **k: (run(*a, **k)[0] - 1, ""))
+            mutants.run_playwright(PlaywrightKindTest.P, tree, run=run)
+        self.assertTrue(caps)
+        self.assertLess(max(caps), mutants.PLAYWRIGHT_BUDGET)
+        self.assertLessEqual(mutants.PLAYWRIGHT_BUDGET, 240)
+        self.assertLess(sum(mutants.PLAYWRIGHT_CAPS.values()), 240)
+
+    def test_a_signal_kills_the_children_and_unwinds_so_the_copy_goes(self):
+        import signal
+        import subprocess
+        child = subprocess.Popen(["sleep", "30"], start_new_session=True)
+        mutants.CHILDREN.add(child.pid)
+        with tempfile.TemporaryDirectory() as d:
+            copy = pathlib.Path(d) / "tree"
+            with self.assertRaises(SystemExit) as stop:
+                with tempfile.TemporaryDirectory(dir=d) as inner:
+                    copy = pathlib.Path(inner)
+                    mutants.on_signal(signal.SIGTERM, None)
+            self.assertEqual(stop.exception.code, 128 + signal.SIGTERM)
+            self.assertFalse(copy.exists())
+        self.assertIsNotNone(child.wait(timeout=5))
+        self.assertNotIn(child.pid, mutants.CHILDREN)
+
+    def test_main_installs_the_handler_for_sigterm_and_sigint(self):
+        import signal
+        seen = {}
+        orig = signal.signal
+        try:
+            signal.signal = lambda sig, h: seen.setdefault(sig, h)
+            mutants.install_signals()
+        finally:
+            signal.signal = orig
+        self.assertIs(seen.get(signal.SIGTERM), mutants.on_signal)
+        self.assertIs(seen.get(signal.SIGINT), mutants.on_signal)
+
+
 class E2EBuildTest(unittest.TestCase):
     def test_builds_ignore_parent_repositories(self):
         # The copied tree has no .git; a repository in a parent directory must not reach the build (W77, MN1/MN2).

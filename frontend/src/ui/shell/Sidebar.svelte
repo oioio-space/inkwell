@@ -6,7 +6,10 @@ import FileIcon from "../icons/FileIcon.svelte";
 import Icon from "../icons/Icon.svelte";
 import { buildTree, visibleNodes } from "./tree";
 
-/** The project's files as a tree; folders fold, the main document is marked. */
+/**
+ * The project's files as a tree; folders fold, the main document is marked. The body of the left
+ * side's panel `app.files` (EX0c2): the side (ui/command/PanelSide.svelte) draws its frame.
+ */
 let {
   files,
   current,
@@ -27,8 +30,7 @@ function toggle(path: string) {
 }
 </script>
 
-<aside class="side" aria-label={t("sidebar.label")}>
-  <div class="head"><h2>{t("sidebar.title")}</h2></div>
+<div class="head"><h2>{t("sidebar.title")}</h2></div>
   <nav aria-label={t("sidebar.files")}>
     <ul>
       {#each nodes as node (node.path)}
@@ -67,18 +69,8 @@ function toggle(path: string) {
       {/each}
     </ul>
   </nav>
-</aside>
 
 <style>
-  .side {
-    box-sizing: border-box;
-    display: flex;
-    flex-direction: column;
-    width: 264px;
-    min-height: 0;
-    background: var(--sidebar-bg);
-    box-shadow: inset -1px 0 var(--card-shade);
-  }
   .head {
     display: grid;
     place-items: center;

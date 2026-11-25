@@ -6,22 +6,21 @@ import { openCsv } from "../../editor/csv/open";
 import { patchWindow } from "../../editor/csv/patchWindow";
 import type { Delimiter } from "../../editor/csv/records";
 import { type DocPort, handlePort, plainPort, SheetDoc } from "../../editor/csv/sheetDoc";
-import { shortcutOf, surface } from "../../extensions/commands";
+import { surface } from "../../extensions/commands";
 import type { Viewer } from "../../extensions/registry";
 import { t, tn } from "../../i18n";
 import { problems } from "../../language/problems.svelte";
 import { closeBuffer } from "../../workspace/closePage";
 import { type Doc, workspace } from "../../workspace/workspace.svelte";
+import LocationMenuAt from "../command/LocationMenuAt.svelte";
+import LocationToolbar from "../command/LocationToolbar.svelte";
 import { session } from "../editorSession.svelte";
 import Icon from "../icons/Icon.svelte";
-import type { IconName } from "../icons/paths";
 import Toast from "../Toast.svelte";
-import ContextMenu from "./ContextMenu.svelte";
 import { gridHandlers } from "./commands";
 import FilterMenu from "./FilterMenu.svelte";
 import FindBar from "./FindBar.svelte";
 import Grid from "./Grid.svelte";
-import type { MenuItem } from "./menu";
 import PasteDialog from "./PasteDialog.svelte";
 import { sheetPresence } from "./presence";
 import { rememberDelimiter, rememberedDelimiter } from "./remember";
@@ -80,7 +79,26 @@ const handlers = gridHandlers({
   ctrl: () => ctrl,
   find: (replace) => (finding = { replace }),
   step: () => findBar?.step,
+  copy: (cut) => void menuCopy(cut),
+  paste: (valuesOnly) => void menuPaste(valuesOnly),
+  filter: openFilter,
+  autofit,
 });
+/**
+ * What the grid says of itself to its commands (EX0c2 P-6): its own read-only state (the reader
+ * role, a lock, a file too big), a sort or filter that locks the rows, a filter, frozen panes.
+ */
+const gridState = () => {
+  const c = ctrl;
+  if (!c) return { readOnly: true };
+  return {
+    readOnly: c.readOnly,
+    gridLocked: c.structureLocked,
+    gridFiltered: c.filtered,
+    gridFrozen: c.pinnedRows > 0 || c.pinnedCols > 0,
+  };
+};
+let sheetEl: HTMLElement | undefined = $state();
 let gridHost: HTMLDivElement | undefined = $state();
 let presence: ReturnType<typeof sheetPresence> | undefined;
 
@@ -242,92 +260,23 @@ function chooseDelimiter(delimiter: Delimiter) {
 
 const focusGrid = () => gridHost?.querySelector<HTMLElement>('[role="grid"]')?.focus();
 
-type Btn = {
-  id: string;
-  icon: IconName;
-  label: string;
-  run: () => void;
-  off?: boolean;
-  on?: boolean;
-};
-
-const groups = $derived.by((): Btn[][] => {
+/** The filter menu of the active column (`tables.filter`), at its header's button. */
+function openFilter() {
   const c = ctrl;
-  if (!c) return [];
-  const ro = c.readOnly;
-  const locked = c.structureLocked;
-  return [
-    [
-      { id: "undo", icon: "undo", label: t("sheet.undo"), run: () => c.undo(), off: ro },
-      { id: "redo", icon: "redo", label: t("sheet.redo"), run: () => c.redo(), off: ro },
-    ],
-    [
-      {
-        id: "rowAdd",
-        icon: "rowadd",
-        label: t("sheet.insertRow"),
-        run: () => c.insertRows("above"),
-        off: ro || locked,
-      },
-      {
-        id: "rowDel",
-        icon: "rowdel",
-        label: t("sheet.deleteRow"),
-        run: () => c.deleteRows(),
-        off: ro,
-      },
-      {
-        id: "colAdd",
-        icon: "coladd",
-        label: t("sheet.insertCol"),
-        run: () => c.insertCols("left"),
-        off: ro,
-      },
-      {
-        id: "colDel",
-        icon: "coldel",
-        label: t("sheet.deleteCol"),
-        run: () => c.deleteCols(),
-        off: ro,
-      },
-    ],
-    [
-      {
-        id: "sortAsc",
-        icon: "sortasc",
-        label: t("sheet.sortAsc"),
-        run: () => c.sortBy(c.active.c, 1),
-      },
-      {
-        id: "sortDesc",
-        icon: "sortdesc",
-        label: t("sheet.sortDesc"),
-        run: () => c.sortBy(c.active.c, -1),
-      },
-      {
-        id: "filter",
-        icon: "filter",
-        label: t("sheet.filter"),
-        run: () => {
-          const el = gridHost?.querySelector<HTMLElement>(
-            `[data-colhead="${c.active.c}"] .filterbtn`,
-          );
-          if (el) filter = { col: c.active.c, anchor: el };
-        },
-        on: c.filtered,
-      },
-    ],
-    [
-      {
-        id: "freeze",
-        icon: "freeze",
-        label: c.pinnedRows || c.pinnedCols ? t("sheet.unfreeze") : t("sheet.freeze"),
-        run: () => (c.pinnedRows || c.pinnedCols ? c.unfreeze() : c.freezeToSelection()),
-        on: c.pinnedRows > 0 || c.pinnedCols > 0,
-      },
-    ],
-  ];
-});
+  if (!c) return;
+  const el = gridHost?.querySelector<HTMLElement>(`[data-colhead="${c.active.c}"] .filterbtn`);
+  if (el) filter = { col: c.active.c, anchor: el };
+}
+
+/** Fits the selected columns' widths to their contents (`tables.autofit`). */
+function autofit() {
+  const c = ctrl;
+  const canvas = document.createElement("canvas").getContext("2d");
+  if (!c || !canvas) return;
+  canvas.font = "13px sans-serif";
+  for (let k = c.primary.c0; k <= c.primary.c1; k++)
+    c.autofit(k, (s) => canvas.measureText(s).width);
+}
 
 // ---- clipboard from menus (the keyboard goes through the grid's own events) ----
 async function menuCopy(cut: boolean) {
@@ -381,93 +330,6 @@ async function menuPaste(valuesOnly: boolean) {
   }
 }
 
-const menuItems = $derived.by((): MenuItem[] => {
-  const c = ctrl;
-  if (!c) return [];
-  const ro = c.readOnly;
-  const items: MenuItem[] = [];
-  if (!ro)
-    items.push({
-      label: t("sheet.cut"),
-      icon: "copy",
-      shortcut: "Ctrl+X",
-      run: () => void menuCopy(true),
-    });
-  items.push({
-    label: t("sheet.copy"),
-    icon: "copy",
-    shortcut: "Ctrl+C",
-    run: () => void menuCopy(false),
-  });
-  if (!ro) {
-    items.push({ label: t("sheet.paste"), shortcut: "Ctrl+V", run: () => void menuPaste(false) });
-    items.push({
-      label: t("sheet.pasteValues"),
-      shortcut: "Ctrl+Maj+V",
-      run: () => void menuPaste(true),
-    });
-    items.push({ separator: true, label: "" });
-    items.push({
-      label: t("sheet.insertRowAbove"),
-      icon: "rowadd",
-      shortcut: shortcutOf("tables.insert-cells"),
-      disabled: c.structureLocked,
-      run: () => c.insertRows("above"),
-    });
-    items.push({
-      label: t("sheet.insertRowBelow"),
-      icon: "rowadd",
-      disabled: c.structureLocked,
-      run: () => c.insertRows("below"),
-    });
-    items.push({
-      label: t("sheet.insertColLeft"),
-      icon: "coladd",
-      run: () => c.insertCols("left"),
-    });
-    items.push({
-      label: t("sheet.insertColRight"),
-      icon: "coladd",
-      run: () => c.insertCols("right"),
-    });
-    items.push({
-      label: t("sheet.deleteRows"),
-      icon: "rowdel",
-      shortcut: shortcutOf("tables.delete-cells"),
-      run: () => c.deleteRows(),
-    });
-    items.push({ label: t("sheet.deleteCols"), icon: "coldel", run: () => c.deleteCols() });
-    items.push({
-      label: t("sheet.duplicateRow"),
-      disabled: c.structureLocked,
-      run: () => c.duplicateRow(),
-    });
-    items.push({ label: t("sheet.clear"), shortcut: "Suppr", run: () => c.clear() });
-  }
-  items.push({ separator: true, label: "" });
-  const col = c.active.c;
-  items.push({ label: t("sheet.sortAsc"), icon: "sortasc", run: () => c.sortBy(col, 1) });
-  items.push({ label: t("sheet.sortDesc"), icon: "sortdesc", run: () => c.sortBy(col, -1) });
-  items.push({
-    label: t("sheet.filterByValue"),
-    icon: "filter",
-    run: () => c.setFilter(col, { values: new Set([c.value(c.active.r, col)]) }),
-  });
-  items.push({ separator: true, label: "" });
-  items.push({ label: t("sheet.freezeHere"), icon: "freeze", run: () => c.freezeToSelection() });
-  items.push({
-    label: t("sheet.autofit"),
-    run: () => {
-      const canvas = document.createElement("canvas").getContext("2d");
-      if (!canvas) return;
-      canvas.font = "13px sans-serif";
-      for (let k = c.primary.c0; k <= c.primary.c1; k++)
-        c.autofit(k, (s) => canvas.measureText(s).width);
-    },
-  });
-  return items;
-});
-
 // ---- the name box and the contents bar ----
 let nameDraft = $state<string | undefined>();
 function nameKey(e: KeyboardEvent) {
@@ -515,7 +377,7 @@ const totalRows = $derived.by(() => {
 });
 </script>
 
-<section class="sheet" aria-label={t("sheet.region")} use:surface={{ kind: "grid", handlers, ...(viewer ? { viewer } : {}) }}>
+<section class="sheet" aria-label={t("sheet.region")} bind:this={sheetEl} use:surface={{ kind: "grid", handlers, state: gridState, ...(viewer ? { viewer } : {}) }}>
   {#if failure}
     <div class="banner err" role="alert">
       <span>{t("sheet.openFailed")}</span>
@@ -527,38 +389,21 @@ const totalRows = $derived.by(() => {
       <progress max="1" value={progress}></progress>
     </div>
   {:else}
-    <div class="toolbar" role="toolbar" aria-label={t("sheet.toolbar")}>
-      {#each groups as group, gi (gi)}
-        {#if gi > 0}<span class="vsep" aria-hidden="true"></span>{/if}
-        {#each group as b (b.id)}
-          <button
-            type="button"
-            class="fb"
-            data-sheet={b.id}
-            aria-label={b.label}
-            title={b.label}
-            aria-pressed={b.on}
-            disabled={b.off}
-            onmousedown={(e) => e.preventDefault()}
-            onclick={() => {
-              b.run();
-              if (b.id !== "filter") focusGrid();
-            }}
-          >
-            <Icon name={b.icon} />
-          </button>
-        {/each}
-      {/each}
-      <span class="grow"></span>
-      <button
-        type="button"
-        class="fb lbl"
-        data-sheet="text"
-        onclick={() => onshowtext(ctrl?.textOffset ?? 0)}
-      >
-        <Icon name="code" /><span>{t("sheet.showText")}</span>
-      </button>
-    </div>
+    <LocationToolbar
+      location="grid/toolbar"
+      label={t("sheet.toolbar")}
+      target={sheetEl}
+      after={() => {
+        // The grid takes its focus back, unless the command opened its filter menu.
+        if (!filter) focusGrid();
+      }}
+    >
+      {#snippet end()}
+        <button type="button" class="fb lbl" data-fixed="show-text" onclick={() => onshowtext(ctrl?.textOffset ?? 0)}>
+          <Icon name="code" /><span>{t("sheet.showText")}</span>
+        </button>
+      {/snippet}
+    </LocationToolbar>
     <div class="formula">
       <input
         class="namebox"
@@ -640,7 +485,7 @@ const totalRows = $derived.by(() => {
       <FilterMenu {ctrl} col={filter.col} anchor={filter.anchor} onclose={() => { filter = undefined; focusGrid(); }} />
     {/if}
     {#if context}
-      <ContextMenu x={context.x} y={context.y} items={menuItems} label={t("sheet.contextMenu")} onclose={() => { context = undefined; focusGrid(); }} />
+      <LocationMenuAt location="grid/context" x={context.x} y={context.y} label={t("sheet.contextMenu")} target={sheetEl} onclose={() => { context = undefined; focusGrid(); }} />
     {/if}
     {#if ctrl.pending}
       <PasteDialog
@@ -670,23 +515,6 @@ const totalRows = $derived.by(() => {
     height: 100%;
     min-height: 0;
     background: var(--view-bg);
-  }
-  .toolbar {
-    display: flex;
-    align-items: center;
-    gap: 2px;
-    min-height: 40px;
-    padding: 3px 6px;
-    background: var(--headerbar-bg);
-    box-shadow: 0 1px var(--shade);
-    position: relative;
-    z-index: 5;
-  }
-  .vsep {
-    width: 1px;
-    height: 20px;
-    margin: 0 6px;
-    background: var(--shade);
   }
   .grow {
     flex: 1;

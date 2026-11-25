@@ -1,0 +1,36 @@
+{
+  "id": "sample",
+  "version": "1.0.0",
+  "essential": true,
+  "contributes": {
+    "fileTypes": [],
+    "commands": [
+      {
+        "id": "sample.go",
+        "label": "Go",
+        "category": "edit"
+      }
+    ],
+    "panels": [
+      {
+        "id": "sample.notes",
+        "label": "Notes",
+        "side": "end",
+        "order": 50,
+        "icon": "quote",
+        "entry": "native/panels.ts",
+        "capabilities": ["ui.native"]
+      },
+      {
+        "id": "sample.outline",
+        "label": "Outline",
+        "side": "start",
+        "order": 20,
+        "icon": "quote",
+        "entry": "native/panels.ts",
+        "capabilities": ["ui.native"],
+        "when": "text"
+      }
+    ]
+  }
+}

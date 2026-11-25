@@ -14,16 +14,19 @@ let {
   location,
   groups,
   target,
+  labelClass = "fb lbl",
 }: {
   location: string;
   groups?: readonly string[];
-  /** The surface the commands act on. */
+  /** The surface the commands act on, and whose state greys and hides them. */
   target?: Element | undefined;
+  /** How a `label` item is drawn where it sits (the history strip's buttons are `btn`). */
+  labelClass?: string;
 } = $props();
 
 const spec = $derived(locationOf(location));
 const shown = $derived(
-  menuOf(location).filter((g) => groups === undefined || groups.includes(g.group)),
+  menuOf(location, {}, target).filter((g) => groups === undefined || groups.includes(g.group)),
 );
 const look = (group: string) => spec?.groups.find((g) => g.id === group)?.look ?? "icon";
 </script>
@@ -33,7 +36,7 @@ const look = (group: string) => spec?.groups.find((g) => g.id === group)?.look ?
     {#if look(g.group) === "icon"}
       <CommandButton id={c.id} {target}><CommandIcon icon={c.icon} /></CommandButton>
     {:else}
-      <CommandButton id={c.id} {target} class={look(g.group) === "suggested" ? "sug" : "fb lbl"}>{labelOf(c)}</CommandButton>
+      <CommandButton id={c.id} {target} class={look(g.group) === "suggested" ? "sug" : labelClass}>{labelOf(c)}</CommandButton>
     {/if}
   {/each}
 {/each}

@@ -62,8 +62,28 @@
           "tables.fill-right",
           "tables.insert-today",
           "tables.insert-cells",
-          "tables.delete-cells"
-        ]
+          "tables.delete-cells",
+          "tables.cut",
+          "tables.copy",
+          "tables.paste",
+          "tables.paste-values",
+          "tables.insert-row-above",
+          "tables.insert-row-below",
+          "tables.insert-col-left",
+          "tables.insert-col-right",
+          "tables.delete-rows",
+          "tables.delete-cols",
+          "tables.duplicate-row",
+          "tables.clear",
+          "tables.sort-asc",
+          "tables.sort-desc",
+          "tables.filter",
+          "tables.filter-by-value",
+          "tables.freeze",
+          "tables.unfreeze",
+          "tables.autofit"
+        ],
+        "ownStatus": true
       }
     ],
     "commands": [
@@ -101,6 +121,326 @@
         "category": "edit",
         "when": "!field",
         "unavailable": "cmd.tables.unavailable"
+      },
+      {
+        "id": "tables.cut",
+        "label": "sheet.cut",
+        "icon": "copy",
+        "category": "edit",
+        "when": "!readOnly",
+        "unavailable": "cmd.tables.readOnly"
+      },
+      {
+        "id": "tables.copy",
+        "label": "sheet.copy",
+        "icon": "copy",
+        "category": "edit",
+        "unavailable": "cmd.tables.here"
+      },
+      {
+        "id": "tables.paste",
+        "label": "sheet.paste",
+        "category": "edit",
+        "when": "!readOnly",
+        "unavailable": "cmd.tables.readOnly"
+      },
+      {
+        "id": "tables.paste-values",
+        "label": "sheet.pasteValues",
+        "category": "edit",
+        "when": "!readOnly",
+        "unavailable": "cmd.tables.readOnly"
+      },
+      {
+        "id": "tables.insert-row-above",
+        "label": "sheet.insertRowAbove",
+        "icon": "rowadd",
+        "category": "edit",
+        "when": "!readOnly && !gridLocked",
+        "unavailable": "cmd.tables.structure"
+      },
+      {
+        "id": "tables.insert-row-below",
+        "label": "sheet.insertRowBelow",
+        "icon": "rowadd",
+        "category": "edit",
+        "when": "!readOnly && !gridLocked",
+        "unavailable": "cmd.tables.structure"
+      },
+      {
+        "id": "tables.insert-col-left",
+        "label": "sheet.insertColLeft",
+        "icon": "coladd",
+        "category": "edit",
+        "when": "!readOnly",
+        "unavailable": "cmd.tables.readOnly"
+      },
+      {
+        "id": "tables.insert-col-right",
+        "label": "sheet.insertColRight",
+        "icon": "coladd",
+        "category": "edit",
+        "when": "!readOnly",
+        "unavailable": "cmd.tables.readOnly"
+      },
+      {
+        "id": "tables.delete-rows",
+        "label": "sheet.deleteRows",
+        "icon": "rowdel",
+        "category": "edit",
+        "when": "!readOnly",
+        "unavailable": "cmd.tables.readOnly"
+      },
+      {
+        "id": "tables.delete-cols",
+        "label": "sheet.deleteCols",
+        "icon": "coldel",
+        "category": "edit",
+        "when": "!readOnly",
+        "unavailable": "cmd.tables.readOnly"
+      },
+      {
+        "id": "tables.duplicate-row",
+        "label": "sheet.duplicateRow",
+        "category": "edit",
+        "when": "!readOnly && !gridLocked",
+        "unavailable": "cmd.tables.structure"
+      },
+      {
+        "id": "tables.clear",
+        "label": "sheet.clear",
+        "category": "edit",
+        "when": "!readOnly",
+        "unavailable": "cmd.tables.readOnly"
+      },
+      {
+        "id": "tables.sort-asc",
+        "label": "sheet.sortAsc",
+        "icon": "sortasc",
+        "category": "edit",
+        "unavailable": "cmd.tables.here"
+      },
+      {
+        "id": "tables.sort-desc",
+        "label": "sheet.sortDesc",
+        "icon": "sortdesc",
+        "category": "edit",
+        "unavailable": "cmd.tables.here"
+      },
+      {
+        "id": "tables.filter",
+        "label": "sheet.filter",
+        "icon": "filter",
+        "category": "edit",
+        "toggled": "gridFiltered",
+        "unavailable": "cmd.tables.here"
+      },
+      {
+        "id": "tables.filter-by-value",
+        "label": "sheet.filterByValue",
+        "icon": "filter",
+        "category": "edit",
+        "unavailable": "cmd.tables.here"
+      },
+      {
+        "id": "tables.freeze",
+        "label": "sheet.freeze",
+        "icon": "freeze",
+        "category": "edit",
+        "unavailable": "cmd.tables.here"
+      },
+      {
+        "id": "tables.unfreeze",
+        "label": "sheet.unfreeze",
+        "icon": "freeze",
+        "category": "edit",
+        "when": "gridFrozen",
+        "unavailable": "cmd.tables.unfrozen",
+        "toggled": "gridFrozen"
+      },
+      {
+        "id": "tables.autofit",
+        "label": "sheet.autofit",
+        "category": "edit",
+        "unavailable": "cmd.tables.here"
+      }
+    ],
+    "menus": [
+      {
+        "command": "tables.insert-row-above",
+        "location": "grid/toolbar",
+        "group": "structure",
+        "order": 10
+      },
+      {
+        "command": "tables.delete-rows",
+        "location": "grid/toolbar",
+        "group": "structure",
+        "order": 20
+      },
+      {
+        "command": "tables.insert-col-left",
+        "location": "grid/toolbar",
+        "group": "structure",
+        "order": 30
+      },
+      {
+        "command": "tables.delete-cols",
+        "location": "grid/toolbar",
+        "group": "structure",
+        "order": 40
+      },
+      {
+        "command": "tables.sort-asc",
+        "location": "grid/toolbar",
+        "group": "sort",
+        "order": 10
+      },
+      {
+        "command": "tables.sort-desc",
+        "location": "grid/toolbar",
+        "group": "sort",
+        "order": 20
+      },
+      {
+        "command": "tables.filter",
+        "location": "grid/toolbar",
+        "group": "sort",
+        "order": 30
+      },
+      {
+        "command": "tables.freeze",
+        "location": "grid/toolbar",
+        "group": "freeze",
+        "order": 10,
+        "when": "!gridFrozen"
+      },
+      {
+        "command": "tables.unfreeze",
+        "location": "grid/toolbar",
+        "group": "freeze",
+        "order": 20,
+        "when": "gridFrozen"
+      },
+      {
+        "command": "tables.cut",
+        "location": "grid/context",
+        "group": "clipboard",
+        "order": 10,
+        "when": "!readOnly"
+      },
+      {
+        "command": "tables.copy",
+        "location": "grid/context",
+        "group": "clipboard",
+        "order": 20
+      },
+      {
+        "command": "tables.paste",
+        "location": "grid/context",
+        "group": "clipboard",
+        "order": 30,
+        "when": "!readOnly"
+      },
+      {
+        "command": "tables.paste-values",
+        "location": "grid/context",
+        "group": "clipboard",
+        "order": 40,
+        "when": "!readOnly"
+      },
+      {
+        "command": "tables.insert-row-above",
+        "location": "grid/context",
+        "group": "structure",
+        "order": 10,
+        "when": "!readOnly"
+      },
+      {
+        "command": "tables.insert-row-below",
+        "location": "grid/context",
+        "group": "structure",
+        "order": 20,
+        "when": "!readOnly"
+      },
+      {
+        "command": "tables.insert-col-left",
+        "location": "grid/context",
+        "group": "structure",
+        "order": 30,
+        "when": "!readOnly"
+      },
+      {
+        "command": "tables.insert-col-right",
+        "location": "grid/context",
+        "group": "structure",
+        "order": 40,
+        "when": "!readOnly"
+      },
+      {
+        "command": "tables.delete-rows",
+        "location": "grid/context",
+        "group": "structure",
+        "order": 50,
+        "when": "!readOnly"
+      },
+      {
+        "command": "tables.delete-cols",
+        "location": "grid/context",
+        "group": "structure",
+        "order": 60,
+        "when": "!readOnly"
+      },
+      {
+        "command": "tables.duplicate-row",
+        "location": "grid/context",
+        "group": "structure",
+        "order": 70,
+        "when": "!readOnly"
+      },
+      {
+        "command": "tables.clear",
+        "location": "grid/context",
+        "group": "structure",
+        "order": 80,
+        "when": "!readOnly"
+      },
+      {
+        "command": "tables.sort-asc",
+        "location": "grid/context",
+        "group": "sort",
+        "order": 10
+      },
+      {
+        "command": "tables.sort-desc",
+        "location": "grid/context",
+        "group": "sort",
+        "order": 20
+      },
+      {
+        "command": "tables.filter-by-value",
+        "location": "grid/context",
+        "group": "sort",
+        "order": 30
+      },
+      {
+        "command": "tables.freeze",
+        "location": "grid/context",
+        "group": "freeze",
+        "order": 10
+      },
+      {
+        "command": "tables.unfreeze",
+        "location": "grid/context",
+        "group": "freeze",
+        "order": 20,
+        "when": "gridFrozen"
+      },
+      {
+        "command": "tables.autofit",
+        "location": "grid/context",
+        "group": "freeze",
+        "order": 30
       }
     ],
     "keybindings": [
@@ -140,6 +480,38 @@
         "win": ["Ctrl+-"],
         "scope": "grid",
         "masks": ["app.zoom-out"]
+      },
+      {
+        "command": "tables.cut",
+        "linux": ["Ctrl+x"],
+        "mac": ["Meta+x"],
+        "win": ["Ctrl+x"],
+        "scope": "grid",
+        "delegated": "system"
+      },
+      {
+        "command": "tables.copy",
+        "linux": ["Ctrl+c"],
+        "mac": ["Meta+c"],
+        "win": ["Ctrl+c"],
+        "scope": "grid",
+        "delegated": "system"
+      },
+      {
+        "command": "tables.paste",
+        "linux": ["Ctrl+v"],
+        "mac": ["Meta+v"],
+        "win": ["Ctrl+v"],
+        "scope": "grid",
+        "delegated": "system"
+      },
+      {
+        "command": "tables.paste-values",
+        "linux": ["Ctrl+Shift+v"],
+        "mac": ["Shift+Meta+v"],
+        "win": ["Ctrl+Shift+v"],
+        "scope": "grid",
+        "delegated": "system"
       }
     ]
   }

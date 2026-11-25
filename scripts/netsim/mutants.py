@@ -14,6 +14,12 @@ in two blocks is harmless; the same id twice in one block is refused. An entry w
 A `vitest` entry may name the exact title of the test it targets (`name`, block EX0): it is then caught only when
 that test fails, never by another test of the same file. Entries without `name` keep the file-wide rule (SI1).
 
+A `playwright` entry (block EX0c2) mutates the frontend and proves an end-to-end test sees it: `spec` (a file of
+frontend/e2e/), `grep` (the start of the test's title), `project` (the browser, chromium or webkit) and optionally
+`error` (a text each failure must say). The copy's frontend and server are built, the spec runs there alone, and it
+is caught only when every run of the tests whose title starts with `grep` failed (with `error`, when given): a build
+failure, a timeout, no such test or a passing one is not a catch.
+
 Modelled on scripts/alloy_check.py: each mutant of scripts/netsim/mutants.toml is a text
 substitution applied to a copy of the tree (never to the working tree); its scenario must turn
 the named clause red. The anchor must be found exactly once. Mutants run one after the other
@@ -65,11 +71,33 @@ def apply(edits, tree: pathlib.Path):
     return None
 
 
+# The process groups started by `sh` and not yet finished: a signal kills them (`on_signal`).
+CHILDREN = set()
+
+
+def on_signal(signum, _frame):
+    """SIGTERM or SIGINT (the gate's timeout, Ctrl+C): kill every running child's process group, then unwind, so each
+    `with tempfile.TemporaryDirectory()` removes its copy of the tree."""
+    for pid in list(CHILDREN):
+        try:
+            os.killpg(pid, signal.SIGKILL)
+        except ProcessLookupError:
+            pass
+        CHILDREN.discard(pid)
+    raise SystemExit(128 + signum)
+
+
+def install_signals():
+    for sig in (signal.SIGTERM, signal.SIGINT):
+        signal.signal(sig, on_signal)
+
+
 def sh(cmd, cwd, env=None, log=None, timeout=1800):
     """Run cmd (own process group, killed at the timeout); return (exit code, output). 124 = timeout."""
     full = {**os.environ, **(env or {})}
     proc = subprocess.Popen(cmd, cwd=cwd, env=full, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
                             text=True, start_new_session=True)
+    CHILDREN.add(proc.pid)
     try:
         out, _ = proc.communicate(timeout=timeout)
         rc = proc.returncode
@@ -77,6 +105,8 @@ def sh(cmd, cwd, env=None, log=None, timeout=1800):
         os.killpg(proc.pid, signal.SIGKILL)
         out, _ = proc.communicate()
         rc = 124
+    finally:
+        CHILDREN.discard(proc.pid)
     if log is not None:
         log.append(out[-3000:])
     return rc, out
@@ -156,23 +186,35 @@ def run_vitest(m, tree, run=None):
     return caught, detail, log
 
 
-def run_e2e(m, tree):
-    log = []
-    if any(e["file"].startswith("frontend/") for e in m["edit"]):
-        rc, _ = sh(["pnpm", "--config.verifyDepsBeforeRun=false", "run", "build"], tree / "frontend",
-                   {"VITE_E2E_OBSERVE": "1"}, log, timeout=900)
+def build_tree(tree, run, log, frontend=True, caps=None):
+    """Build what a browser test of the copy runs: its frontend (when asked) and its two Go binaries, into tree/bin.
+    Return (bin directory, None), or (None, the reason the build failed). `caps` gives each step's limit in seconds
+    (the playwright kind's, under its gate's); the e2e kind keeps 900 s each."""
+    caps = caps or {"frontend": 900, "inkwell-server": 900, "inkwell-relay": 900}
+    if frontend:
+        rc, _ = run(["pnpm", "--config.verifyDepsBeforeRun=false", "run", "build"], tree / "frontend",
+                    {"VITE_E2E_OBSERVE": "1"}, log, timeout=caps["frontend"])
         if rc:
-            return False, f"frontend build failed (exit {rc})", log
+            return None, f"frontend build failed (exit {rc})"
     bins = tree / "bin"
     bins.mkdir(exist_ok=True)
-    for out_name, target, env in (("inkwell-server", "./cmd/inkwell", {}), ("inkwell-relay", "./cmd/inkwell-relay", {"CGO_ENABLED": "0"})):
-        tags = ["-tags", "server"] if out_name == "inkwell-server" else []
+    for out_name, target, env, tags in (("inkwell-server", "./cmd/inkwell", {}, ["-tags", "server"]),
+                                        ("inkwell-relay", "./cmd/inkwell-relay", {"CGO_ENABLED": "0"}, [])):
         # The mutant tree is an rsync copy without .git: -buildvcs=false keeps the build from stamping, or failing on,
         # whatever repository a parent directory holds (an empty /tmp/.git failed MN1 and MN2 with "error obtaining
         # VCS status", 2026-11-23; the same class as scripts/pkg/selftest.sh, f5d2b55).
-        rc, _ = sh(["./scripts/heavy.sh", "go", "build", "-buildvcs=false", *tags, "-o", str(bins / out_name), target], tree, env, log, timeout=900)
+        rc, _ = run(["./scripts/heavy.sh", "go", "build", "-buildvcs=false", *tags, "-o", str(bins / out_name), target],
+                    tree, env, log, timeout=caps[out_name])
         if rc:
-            return False, f"go build of {out_name} failed (the mutant must compile)", log
+            return None, f"go build of {out_name} failed (the mutant must compile)"
+    return bins, None
+
+
+def run_e2e(m, tree):
+    log = []
+    bins, err = build_tree(tree, sh, log, frontend=any(e["file"].startswith("frontend/") for e in m["edit"]))
+    if err:
+        return False, err, log
     n = str(m["scenario"])
     variant = m.get("variant", "")
     env = {"NETSIM_BIN_DIR": str(bins), "NETSIM_SCENARIOS": n, "NETSIM_SEEDS": SEED,
@@ -195,6 +237,13 @@ def run_e2e(m, tree):
     return caught, f"{m['clause']} is {c['status']}: {c['measured'][:160]}", log
 
 
+PLAYWRIGHT_FIELDS = ("spec", "grep", "project")
+# The playwright kind runs under its gate's 240 s (gates/EX0c2.toml, `e2e-mutant`): each step's limit, all four
+# together under it, so a slow step fails here with its reason rather than by the gate's kill.
+PLAYWRIGHT_BUDGET = 240
+PLAYWRIGHT_CAPS = {"frontend": 50, "inkwell-server": 50, "inkwell-relay": 50, "test": 80}
+
+
 def validate(mutants):
     """Static checks of the mutant list; return the problems found."""
     bad = []
@@ -205,11 +254,65 @@ def validate(mutants):
             bad.append(f"mutant {m['id']}: expect is for a go mutant, and not empty")
         if "name" in m and (m["kind"] != "vitest" or not isinstance(m["name"], str) or not m["name"].strip()):
             bad.append(f"mutant {m['id']}: name is the title of a vitest test, and not empty")
-        if m["kind"] not in ("go", "vitest", "e2e"):
+        if m["kind"] not in ("go", "vitest", "e2e", "playwright"):
             bad.append(f"mutant {m['id']}: unknown kind {m['kind']!r}")
+        if m["kind"] == "playwright":
+            for field in PLAYWRIGHT_FIELDS:
+                if not isinstance(m.get(field), str) or not m[field].strip():
+                    bad.append(f"mutant {m['id']}: a playwright entry needs {field} (a non-empty text)")
+            if isinstance(m.get("spec"), str) and not m["spec"].startswith("frontend/e2e/"):
+                bad.append(f"mutant {m['id']}: spec is a file of frontend/e2e/")
+            if m.get("project") not in (None, "chromium", "webkit"):
+                bad.append(f"mutant {m['id']}: project is chromium or webkit")
+        elif any(field in m for field in ("spec", "grep", "project", "error")):
+            bad.append(f"mutant {m['id']}: spec, grep, project and error are for a playwright entry")
         if m["kind"] == "e2e" and m["scenario"] == 8 and not m.get("variant"):
             bad.append(f"mutant {m['id']}: scenario 8 needs a variant (editor or reader)")
     return bad
+
+
+def playwright_caught(report, grep, error=None):
+    """(caught, detail) from a Playwright JSON report: every run of the tests whose title starts with `grep` failed,
+    and, with `error`, each failure says it. No such test, one passing, or a report without results is not a catch."""
+    suites, runs = list(report.get("suites", [])), []
+    while suites:
+        s = suites.pop()
+        suites.extend(s.get("suites", []))
+        for spec in s.get("specs", []):
+            if spec.get("title", "").startswith(grep):
+                for t in spec.get("tests", []):
+                    runs += [(r.get("status"), json.dumps(r.get("errors", []), ensure_ascii=False))
+                             for r in t.get("results", [])]
+    if not runs:
+        return False, f"no test titled {grep!r} ran"
+    if not all(st in ("failed", "timedOut") for st, _ in runs):
+        return False, f"{grep!r} passed ({[st for st, _ in runs]})"
+    if error and not all(error in e for _, e in runs):
+        return False, f"{grep!r} failed without saying {error!r}"
+    return True, f"{grep!r} failed" + (f" with {error!r}" if error else "")
+
+
+def run_playwright(m, tree, run=None):
+    """Build the copy's frontend and server, run the entry's spec there in its browser; caught as `playwright_caught`.
+    `run` is the command runner (default `sh`; tests inject one)."""
+    run = run or sh
+    log = []
+    _, err = build_tree(tree, run, log, caps=PLAYWRIGHT_CAPS)
+    if err:
+        return False, err, log
+    report = tree / ".task/mutant-playwright.json"
+    report.parent.mkdir(parents=True, exist_ok=True)
+    report.unlink(missing_ok=True)
+    rc, _ = run(["../scripts/heavy.sh", "timeout", str(PLAYWRIGHT_CAPS["test"] - 5), "./node_modules/.bin/playwright", "test", m["spec"].removeprefix("frontend/"), "--grep", m["grep"],
+                 "--retries=0", "--reporter=json"], tree / "frontend",
+                {"INKWELL_E2E_BROWSER": m["project"], "PLAYWRIGHT_JSON_OUTPUT_NAME": str(report)}, log=log,
+                timeout=PLAYWRIGHT_CAPS["test"])
+    if rc == 124:
+        return False, "timeout (not a failing test)", log
+    if not report.exists():
+        return False, f"no Playwright report (exit {rc})", log
+    caught, detail = playwright_caught(json.loads(report.read_text()), m["grep"], m.get("error"))
+    return caught, detail, log
 
 
 def duplicate_ids(mutants):
@@ -331,6 +434,7 @@ def check_catalogue(mutants):
 
 
 def main():
+    install_signals()
     args = sys.argv[1:]
     check_only = "--check" in args
     args = [a for a in args if a != "--check"]
@@ -373,8 +477,10 @@ def main():
                 print(f"mutant {m['id']}: {err}")
                 failures.append(m["id"])
                 continue
-            caught, detail, log = {"go": run_go, "vitest": run_vitest, "e2e": run_e2e}[m["kind"]](m, tree)
-            target = m.get("clause") or m.get("expect")  # a Go mutant names its failure text, a netsim one its clause
+            caught, detail, log = {"go": run_go, "vitest": run_vitest, "e2e": run_e2e,
+                                   "playwright": run_playwright}[m["kind"]](m, tree)
+            # A Go mutant names its failure text, a netsim one its clause, a Playwright one its test.
+            target = m.get("clause") or m.get("expect") or m.get("grep")
             print(f"mutant {m['id']} -> {target}: {'caught' if caught else 'NOT CAUGHT'} ({detail})", flush=True)
             if not caught:
                 failures.append(m["id"])

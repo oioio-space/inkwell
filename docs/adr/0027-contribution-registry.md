@@ -283,6 +283,39 @@ and its status bar guidelines; the GNOME HIG for header bars and utility panes; 
   commands (`typst.preview-zoom-out`, `-in`, `-fit`, `when: main && previewOpen`, labelled « … l'aperçu »), so the
   text's « Zoom » keeps its meaning and no two commands of the palette share a label.
 
+### Panels, the grid and the secondary bars (EX0c2)
+
+Decided 2026-11-25 (plan `docs/plans/2026-11-25-ex0c2-panels-grid.md`, gate `gates/EX0c2.toml`, review
+`gates/EX0c2/REVIEW.md`). Sources: VS Code's `viewsContainers` and `views`, `submenus`; the GNOME HIG for utility
+panes and view switchers; the WAI-ARIA APG tabs and menu patterns (links in the plan's prior art).
+
+- **The `panels` point**: `id` (a claim, `panel <id>`), `label`, `side` (`start`, `end`, the closed table `SIDES`
+  with each side's label and toggle command), `order`, `when`, `icon`, `entry` (its module's `panels[id]`, `ui.native`,
+  built-ins only until EXT1). A side's panels are ordered as a location's items (core first, then `order`, extension,
+  id) and indexed once at build (`panels(side)`, the same frozen array). The host (`ui/command/PanelSide.svelte`)
+  draws one panel alone and two or more as an APG tab list (named, roving focus, arrows wrap, Home, End, automatic
+  activation, every panel mounted and the others hidden); it draws a side only once its bodies are loaded. The left
+  side's entries load with the first screen (`extensions/panelEntries.ts`); the drawer's (`native/drawer.ts`) at
+  idle after the first paint. Opening a side keeps the focus; closing it while it holds the focus gives the focus back
+  (`returnTarget()`). The core opens a panel by name with `openPanel` (the problems counter, a passage's history).
+- **A surface says its own state** (`Surface.state`): the context of a command, a toggle and an item's `when` is the
+  live context with the targeted surface's keys over it. The grid says its own `readOnly` (the reader role, a lock, a
+  file too big), `gridLocked`, `gridFiltered`, `gridFrozen`; the diff view `changes`. The history strip sets
+  `unseen`. Read-only stays where it was: on the command's `when` (the bar greys) and on the context menu items'
+  `when` (the menu hides); `gridLocked` only on the command's.
+- **Hosted**: `grid/toolbar` (`ui/command/LocationToolbar.svelte`, its overflow by width with `fitCount`),
+  `grid/context` (`ui/command/LocationMenuAt.svelte`, a location as a menu at a point, APG keys, the extensions'
+  group as an « Extensions » submenu past 8 items; the six context menus of UX1-D reuse it), `view`,
+  `history/toolbar`, `diff/toolbar`. A pick of a value is no command (as EX0c1's encoding): the default viewer, the
+  table offer, the marks' colour and the diff mode are fixed widgets of their hosts, so the table lost the groups
+  `viewers`, `colour`, `mode` and `close`, and `grid/toolbar` its separate `filter` group (one group, as the bar was).
+- **Commands**: the grid's 19 (`tables.*`, the menu's precise names; freeze always at the selection, `tables.unfreeze`
+  only while frozen), `app.mark-seen` (« Marquer tout comme vu »); `app.undo`, `app.redo` greyed when read-only,
+  `app.next-change`, `app.previous-change` when there is a change. A viewer says it draws its own status bar
+  (`ownStatus`), so no code compares viewers to decide it.
+- **Mutants** gain the `playwright` kind (`spec`, `grep`, `project`, `error`): an end-to-end test must see a
+  frontend mutation (EX0c2-E1 a stray button in the grid's bar).
+
 ### Metrics and debug state (OBS1)
 
 Decided 2026-11-25 (plan `docs/plans/2026-11-24-obs1-observability.md`, gate `gates/OBS1.toml`, review

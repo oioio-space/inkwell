@@ -7,9 +7,9 @@
 import { lang, type MessageKey, t } from "../i18n";
 import type { Active } from "./bindings";
 import { ariaKeys, currentSystem, eventChord, mayBeChord, renderChord, type System } from "./keys";
-import { keymap, live } from "./live.svelte";
-import { DELEGABLE, type Origin } from "./manifest";
-import type { Command, Registry, StatusItem, Viewer } from "./registry";
+import { keymap, type LiveContext, live } from "./live.svelte";
+import { DELEGABLE, type Origin, type Side } from "./manifest";
+import type { Command, Panel, Registry, StatusItem, Viewer } from "./registry";
 import { type Context, evalWhen, type Focus } from "./when";
 
 /** What the application offers a built-in command's entry (`shell`, ext/app/native/commands.ts). */
@@ -33,6 +33,8 @@ export interface Shell {
   /** The command palette and the shortcuts window (EX0b2, ui/command/dialogs.svelte.ts). */
   palette(): void;
   shortcuts(): void;
+  /** Every change mark of the text is seen (the history strip, EX0c2). */
+  markSeen(): void;
 }
 
 /** Where a command acts: a mounted view that declared it, by its kind. */
@@ -42,6 +44,11 @@ export interface Surface {
   readonly handlers: ReadonlyMap<string, Handler>;
   /** The editor's view, for a text surface (typed loosely: no CodeMirror here). */
   readonly view?: (() => unknown) | undefined;
+  /**
+   * What the surface knows of itself, over the shell's live context (EX0c2): the grid says its
+   * own read-only state, a lock, a filter, frozen panes; the diff view whether it has changes.
+   */
+  readonly state?: (() => Partial<LiveContext>) | undefined;
 }
 
 /** A surface's handler; `false` says it declined. */
@@ -142,7 +149,7 @@ export function registerSurface(
   element: Element,
   kind: Surface["kind"],
   handlers: Readonly<Record<string, Handler>>,
-  opts: { viewer?: Viewer; view?: () => unknown } = {},
+  opts: { viewer?: Viewer; view?: () => unknown; state?: () => Partial<LiveContext> } = {},
 ): () => void {
   const allowed = (id: string) =>
     opts.viewer ? opts.viewer.commands.includes(id) : DELEGABLE.has(id);
@@ -151,7 +158,10 @@ export function registerSurface(
     if (allowed(id)) map.set(id, h);
     else console.error(`surface ${opts.viewer?.id ?? kind}: ${id} is not declared`);
   }
-  surfaces.set(element, Object.freeze({ kind, element, handlers: map, view: opts.view }));
+  surfaces.set(
+    element,
+    Object.freeze({ kind, element, handlers: map, view: opts.view, state: opts.state }),
+  );
   return () => surfaces.delete(element);
 }
 
@@ -163,12 +173,14 @@ export function surface(
     handlers: Readonly<Record<string, Handler>>;
     viewer?: Viewer;
     view?: () => unknown;
+    state?: () => Partial<LiveContext>;
   },
 ): { update(next: typeof params): void; destroy(): void } {
   const add = (p: typeof params) =>
     registerSurface(node, p.kind, p.handlers, {
       ...(p.viewer ? { viewer: p.viewer } : {}),
       ...(p.view ? { view: p.view } : {}),
+      ...(p.state ? { state: p.state } : {}),
     });
   let remove = add(params);
   return {
@@ -200,9 +212,10 @@ function isField(node: EventTarget | null): boolean {
   );
 }
 
+/** The live context, with what the targeted surface says of itself over it (EX0c2 P-6). */
 function context(surface: Surface | undefined, field: boolean): Context {
   commandStats.contexts++;
-  return { ...live, focus: surface?.kind ?? "other", field };
+  return { ...live, ...surface?.state?.(), focus: surface?.kind ?? "other", field };
 }
 
 const toSurface = (target: Element | Surface | undefined) =>
@@ -289,10 +302,14 @@ function noteFocus(e: FocusEvent): void {
   if (e.target instanceof Element && surfaceAt(e.target)) lastSurface = e.target;
 }
 
-/** Whether a toggle command is on (its `toggled` key). */
-export function isOn(id: string): boolean | undefined {
+/** Whether a toggle command is on (its `toggled` key), on a target that may say it itself. */
+export function isOn(id: string, target?: Element | Surface): boolean | undefined {
   const key = registry?.command(id)?.toggled;
-  return key === undefined ? undefined : (live as unknown as Record<string, unknown>)[key] === true;
+  if (key === undefined) return undefined;
+  const own = toSurface(target)?.state?.() as Record<string, unknown> | undefined;
+  const value =
+    own && Object.hasOwn(own, key) ? own[key] : (live as unknown as Record<string, unknown>)[key];
+  return value === true;
 }
 
 /**
@@ -402,10 +419,12 @@ export function onKeydown(e: KeyboardEvent): void {
     const c = registry.command(a.command);
     if (!c || !evalWhen(a.when, ctx) || !canHandle(c, surface)) continue;
     const available = evalWhen(c.when, ctx);
-    // A surface's chord that cannot act goes on to the surface (Ctrl+U in Markdown is
-    // CodeMirror's); a window chord is the application's either way: taken, and its reason said
-    // (F5 on a file that is not Typst must not reach the webview's own reload).
-    if (!available && a.scope !== "window") continue;
+    // A text's chord that cannot act goes on to the text (Ctrl+U in Markdown is CodeMirror's: the
+    // text's keymap is open, its languages add keys). Any other chord is the application's: taken,
+    // and its reason said. A window's (F5 on a file that is not Typst must not reach the webview's
+    // own reload), and a grid's or a diff's, whose own keys are a closed table (F7 with no change
+    // must not reach the webview's caret browsing, EX0c2 review).
+    if (!available && a.scope === "editor") continue;
     e.preventDefault();
     e.stopPropagation();
     // A held key repeats only a command made for it (zoom, next change); Ctrl+S saves once.
@@ -418,15 +437,17 @@ export function onKeydown(e: KeyboardEvent): void {
 
 /**
  * A location's items shown now (their `when`), by group in the location's fixed order. `extra`
- * overrides the live context (the formatting bar asks about the formats of its own file).
+ * overrides the live context (the formatting bar asks about the formats of its own file); a
+ * `target` surface adds what it says of itself (the grid's menu hides by the grid's read-only).
  */
 export function menuOf(
   location: string,
   extra: Partial<Context> = {},
+  target?: Element | Surface,
 ): { group: string; items: Command[] }[] {
   const r = registry;
   if (!r) return [];
-  const ctx = { ...context(undefined, false), ...extra };
+  const ctx = { ...context(toSurface(target), false), ...extra };
   const groups: { group: string; items: Command[] }[] = [];
   for (const item of r.menu(location)) {
     const c = r.command(item.command);
@@ -448,6 +469,14 @@ export function statusOf(): readonly StatusItem[] {
   if (!r) return [];
   const ctx = context(undefined, false);
   return r.status.filter((x) => evalWhen(x.when, ctx));
+}
+
+/** A side's panels shown now (their `when`), in the side's order (EX0c2). */
+export function panelsOf(side: Side): readonly Panel[] {
+  const r = registry;
+  if (!r) return [];
+  const ctx = context(undefined, false);
+  return r.panels(side).filter((p) => evalWhen(p.when, ctx));
 }
 
 const escapes = new Set<() => void>();

@@ -15,6 +15,7 @@ let {
   describedby,
   keepFocus = false,
   pressed,
+  onrun,
   children,
   ...rest
 }: {
@@ -29,6 +30,8 @@ let {
   keepFocus?: boolean;
   /** Pressed by what the surface shows (bold at the caret), for a command that is no toggle. */
   pressed?: boolean | undefined;
+  /** After a click ran the command (the grid's bar gives the grid its focus back). */
+  onrun?: (() => void) | undefined;
   children: Snippet;
   /** `data-*` attributes the surrounding view needs (`data-bar`). */
   [key: `data-${string}`]: string | undefined;
@@ -36,7 +39,7 @@ let {
 
 const attrs = $derived(cmdAttrs(id));
 const state = $derived(availability(id, target));
-const toggled = $derived(isOn(id));
+const toggled = $derived(isOn(id, target));
 const on = $derived(pressed ?? toggled);
 </script>
 
@@ -54,7 +57,10 @@ const on = $derived(pressed ?? toggled);
   onmousedown={(e) => {
     if (keepFocus) e.preventDefault();
   }}
-  onclick={() => run(id, target)}
+  onclick={() => {
+    run(id, target);
+    onrun?.();
+  }}
 >
   {@render children()}
 </button>

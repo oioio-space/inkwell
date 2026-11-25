@@ -139,12 +139,16 @@
       {
         "id": "app.undo",
         "label": "cmd.undo",
+        "icon": "undo",
+        "when": "!readOnly",
         "unavailable": "cmd.undo.unavailable",
         "category": "edit"
       },
       {
         "id": "app.redo",
         "label": "cmd.redo",
+        "icon": "redo",
+        "when": "!readOnly",
         "unavailable": "cmd.undo.unavailable",
         "category": "edit"
       },
@@ -177,6 +181,7 @@
       {
         "id": "app.next-change",
         "label": "cmd.next-change",
+        "when": "changes",
         "unavailable": "cmd.change.unavailable",
         "category": "navigate",
         "repeat": true
@@ -184,6 +189,7 @@
       {
         "id": "app.previous-change",
         "label": "cmd.previous-change",
+        "when": "changes",
         "unavailable": "cmd.change.unavailable",
         "category": "navigate",
         "repeat": true
@@ -199,6 +205,15 @@
         "id": "app.shortcuts",
         "label": "cmd.shortcuts",
         "category": "app",
+        "entry": "native/commands.ts",
+        "capabilities": ["ui.native"]
+      },
+      {
+        "id": "app.mark-seen",
+        "label": "cmd.mark-seen",
+        "category": "view",
+        "when": "unseen",
+        "unavailable": "cmd.mark-seen.unavailable",
         "entry": "native/commands.ts",
         "capabilities": ["ui.native"]
       }
@@ -295,6 +310,36 @@
         "location": "status/zoom",
         "group": "zoom",
         "order": 30
+      },
+      {
+        "command": "app.undo",
+        "location": "grid/toolbar",
+        "group": "history",
+        "order": 10
+      },
+      {
+        "command": "app.redo",
+        "location": "grid/toolbar",
+        "group": "history",
+        "order": 20
+      },
+      {
+        "command": "app.mark-seen",
+        "location": "history/toolbar",
+        "group": "seen",
+        "order": 10
+      },
+      {
+        "command": "app.previous-change",
+        "location": "diff/toolbar",
+        "group": "navigate",
+        "order": 10
+      },
+      {
+        "command": "app.next-change",
+        "location": "diff/toolbar",
+        "group": "navigate",
+        "order": 20
       }
     ],
     "status": [
@@ -362,6 +407,53 @@
         "order": 10,
         "when": "text",
         "entry": "native/status.ts",
+        "capabilities": ["ui.native"]
+      }
+    ],
+    "panels": [
+      {
+        "id": "app.files",
+        "label": "sidebar.title",
+        "side": "start",
+        "order": 10,
+        "icon": "folder",
+        "entry": "native/panels.ts",
+        "capabilities": ["ui.native"]
+      },
+      {
+        "id": "app.problems",
+        "label": "problems.tab",
+        "side": "end",
+        "order": 10,
+        "icon": "warn",
+        "entry": "native/drawer.ts",
+        "capabilities": ["ui.native"]
+      },
+      {
+        "id": "app.history",
+        "label": "history.tab.history",
+        "side": "end",
+        "order": 20,
+        "icon": "branch",
+        "entry": "native/drawer.ts",
+        "capabilities": ["ui.native"]
+      },
+      {
+        "id": "app.comments",
+        "label": "history.tab.comments",
+        "side": "end",
+        "order": 30,
+        "icon": "quote",
+        "entry": "native/drawer.ts",
+        "capabilities": ["ui.native"]
+      },
+      {
+        "id": "app.activity",
+        "label": "history.tab.activity",
+        "side": "end",
+        "order": 40,
+        "icon": "outline",
+        "entry": "native/drawer.ts",
         "capabilities": ["ui.native"]
       }
     ],

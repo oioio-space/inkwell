@@ -273,7 +273,7 @@ test("W58a-UX-1c keyboard only: banner action, dialog, Esc, focus return; locked
       }),
     );
     // review / history panel
-    await page.getByRole("button", { name: "Afficher Relire" }).click();
+    await page.getByRole("button", { name: "Relire", exact: true }).click();
     await page.waitForTimeout(800);
     await shot(page, "s1-review-panel-light");
     log(
@@ -307,7 +307,7 @@ test("W58a-UX-1d history entry actions while read-only", async ({ browser }) => 
     page.setDefaultTimeout(3000);
     await page.goto(url(CAROL_PORT));
     await expect(banner(page)).toBeVisible({ timeout: 30_000 });
-    await page.getByRole("button", { name: "Afficher Relire" }).click();
+    await page.getByRole("button", { name: "Relire", exact: true }).click();
     await page.waitForTimeout(800);
     await shot(page, "s1-history-open-light");
     await page.mouse.click(1100, 270);
@@ -378,7 +378,7 @@ test("W58a-UX-1e other write doors while read-only", async ({ browser }) => {
     await shot(page, "s1-people-light");
     log("PEOPLE", await page.locator("body").innerText());
     await page.keyboard.press("Escape");
-    await page.getByRole("button", { name: "Afficher Relire" }).click();
+    await page.getByRole("button", { name: "Relire", exact: true }).click();
     for (const tab of ["Commentaires", "Activité"]) {
       await page
         .getByRole("tab", { name: tab })

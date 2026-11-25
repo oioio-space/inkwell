@@ -4744,3 +4744,177 @@ why = "`menu(loc)` builds a new array at each call"
 file = "frontend/src/extensions/registry.ts"
 before = "    menu: (location: string) => byLocation.get(location) ?? noItems,"
 after = "    menu: (location: string) => [...(byLocation.get(location) ?? noItems)],"
+
+# Block EX0c2 (plan docs/plans/2026-11-25-ex0c2-panels-grid.md §4): each breaks one rule P-n; `name` is the exact title
+# the gate's `frontend` criterion requires (MV12 is P-6's second). MV13 is the `playwright` kind: a button that no
+# location gives, added to the grid's bar, which EX0c2-E1 must name « stray » (gate criterion `e2e-mutant`).
+[[mutant]]
+id = "MV1"
+block = "EX0c2"
+kind = "vitest"
+test = "frontend/src/ui/command/panels.test.ts"
+name = "EX0c2 P-1 a malformed panel is refused with its reason"
+clause = "EX0c2 P-1"
+why = "an unknown side is accepted"
+[[mutant.edit]]
+file = "frontend/src/extensions/manifest.ts"
+before = "  if (!Object.hasOwn(SIDES, side)) fail(\"bad-value\", `${where}.side`);"
+after = "  if (side === \"\") fail(\"bad-value\", `${where}.side`);"
+
+[[mutant]]
+id = "MV2"
+block = "EX0c2"
+kind = "vitest"
+test = "frontend/src/ui/command/panels.test.ts"
+name = "EX0c2 P-2 a side keeps the core's panels first, then order, extension and id; one panel draws no tab list"
+clause = "EX0c2 P-2"
+why = "ties between one extension's panels are left in build order (no panel id)"
+[[mutant.edit]]
+file = "frontend/src/extensions/registry.ts"
+before = "          (y) => y.x.id,"
+after = "          () => \"\","
+
+[[mutant]]
+id = "MV3"
+block = "EX0c2"
+kind = "vitest"
+test = "frontend/src/ui/command/panels.test.ts"
+name = "EX0c2 P-3 a side's tab list follows the WAI-ARIA tabs pattern"
+clause = "EX0c2 P-3"
+why = "ArrowRight on the last tab does not wrap"
+[[mutant.edit]]
+file = "frontend/src/ui/command/PanelSide.svelte"
+before = "  ArrowRight: (at, n) => (at + 1) % n,"
+after = "  ArrowRight: (at, n) => Math.min(at + 1, n - 1),"
+
+[[mutant]]
+id = "MV4"
+block = "EX0c2"
+kind = "vitest"
+test = "frontend/src/ui/command/panels.test.ts"
+name = "EX0c2 P-4 panel bodies load with their side: the start side at start, the end side at idle after the first paint, a panel shown only once loaded"
+clause = "EX0c2 P-4"
+why = "the drawer's entry is imported with the first screen"
+[[mutant.edit]]
+file = "frontend/src/extensions/panelEntries.ts"
+before = "import.meta.glob(\"../ext/*/native/panels.ts\", {"
+after = "import.meta.glob([\"../ext/*/native/panels.ts\", \"../ext/*/native/drawer.ts\"], {"
+
+[[mutant]]
+id = "MV5"
+block = "EX0c2"
+kind = "vitest"
+test = "frontend/src/ui/command/panels.test.ts"
+name = "EX0c2 P-5 opening a side keeps the focus, closing it gives the focus back, openPanel selects"
+clause = "EX0c2 P-5"
+why = "closing a side that holds the focus leaves it on the page"
+[[mutant.edit]]
+file = "frontend/src/ui/command/PanelSide.svelte"
+before = "    if (!lost) return;"
+after = "    return;"
+
+[[mutant]]
+id = "MV6"
+block = "EX0c2"
+kind = "vitest"
+test = "frontend/src/ui/command/bars.test.ts"
+name = "EX0c2 P-6 the grid's bar is its location, greyed and pressed from the grid's own state, the focus kept on the grid, overflowing by width"
+clause = "EX0c2 P-6"
+why = "`gridLocked` is not read by « Insérer une ligne au-dessus »"
+[[mutant.edit]]
+file = "frontend/src/ext/tables/inkwell-plugin.json"
+before = "        \"id\": \"tables.insert-row-above\",\n        \"label\": \"sheet.insertRowAbove\",\n        \"icon\": \"rowadd\",\n        \"category\": \"edit\",\n        \"when\": \"!readOnly && !gridLocked\","
+after = "        \"id\": \"tables.insert-row-above\",\n        \"label\": \"sheet.insertRowAbove\",\n        \"icon\": \"rowadd\",\n        \"category\": \"edit\",\n        \"when\": \"!readOnly\","
+
+[[mutant]]
+id = "MV7"
+block = "EX0c2"
+kind = "vitest"
+test = "frontend/src/ui/command/bars.test.ts"
+name = "EX0c2 P-7 the grid's context menu is its location, its items hidden by their when, its keys those of the menu pattern"
+clause = "EX0c2 P-7"
+why = "an item's `when` is not read"
+[[mutant.edit]]
+file = "frontend/src/extensions/commands.ts"
+before = "    if (!c || !evalWhen(item.when, ctx)) continue;"
+after = "    if (!c) continue;"
+
+[[mutant]]
+id = "MV8"
+block = "EX0c2"
+kind = "vitest"
+test = "frontend/src/ui/command/bars.test.ts"
+name = "EX0c2 P-8 past 8 extension items a context menu groups them in an Extensions submenu"
+clause = "EX0c2 P-8"
+why = "nine extension items are drawn inline"
+[[mutant.edit]]
+file = "frontend/src/ui/command/LocationMenuAt.svelte"
+before = "const SUBMENU_AFTER = 8;"
+after = "const SUBMENU_AFTER = 9;"
+
+[[mutant]]
+id = "MV9"
+block = "EX0c2"
+kind = "vitest"
+test = "frontend/src/ui/command/bars.test.ts"
+name = "EX0c2 P-9 the view bar offers the type's default viewer only while another viewer is shown"
+clause = "EX0c2 P-9"
+why = "the default viewer is offered while it is shown"
+[[mutant.edit]]
+file = "frontend/src/ui/command/ViewBar.svelte"
+before = "  defaultViewer && shown && shown !== defaultViewer ? defaultViewer : undefined,"
+after = "  defaultViewer,"
+
+[[mutant]]
+id = "MV10"
+block = "EX0c2"
+kind = "vitest"
+test = "frontend/src/ui/command/bars.test.ts"
+name = "EX0c2 P-10 the history strip and the difference bar are their locations, one name per command"
+clause = "EX0c2 P-10"
+why = "the next difference does not read `changes`"
+[[mutant.edit]]
+file = "frontend/src/ext/app/inkwell-plugin.json"
+before = "        \"id\": \"app.next-change\",\n        \"label\": \"cmd.next-change\",\n        \"when\": \"changes\",\n"
+after = "        \"id\": \"app.next-change\",\n        \"label\": \"cmd.next-change\",\n"
+
+[[mutant]]
+id = "MV11"
+block = "EX0c2"
+kind = "vitest"
+test = "frontend/src/ui/command/panels.test.ts"
+name = "EX0c2 P-11 panels cost nothing at start: indexed once at build, a closed side imports nothing"
+clause = "EX0c2 P-11"
+why = "`panels(side)` builds a new array at each call"
+[[mutant.edit]]
+file = "frontend/src/extensions/registry.ts"
+before = "    panels: (side: Side) => bySide.get(side) ?? Object.freeze([]),"
+after = "    panels: (side: Side) => Object.freeze([...(bySide.get(side) ?? [])]),"
+
+[[mutant]]
+id = "MV12"
+block = "EX0c2"
+kind = "vitest"
+test = "frontend/src/ui/command/bars.test.ts"
+name = "EX0c2 P-6 the grid's bar is its location, greyed and pressed from the grid's own state, the focus kept on the grid, overflowing by width"
+clause = "EX0c2 P-6"
+why = "`readOnly` is read from the workspace, not from the grid itself (a file too big, the reader role)"
+[[mutant.edit]]
+file = "frontend/src/extensions/commands.ts"
+before = "  return { ...live, ...surface?.state?.(), focus: surface?.kind ?? \"other\", field };"
+after = "  return { ...surface?.state?.(), ...live, focus: surface?.kind ?? \"other\", field };"
+
+[[mutant]]
+id = "MV13"
+block = "EX0c2"
+kind = "playwright"
+spec = "frontend/e2e/ex0c2.spec.ts"
+grep = "EX0c2-E1"
+project = "chromium"
+error = "stray"
+clause = "EX0c2-E1"
+why = "a button that no location gives sits in the grid's bar"
+[[mutant.edit]]
+file = "frontend/src/ui/command/LocationToolbar.svelte"
+before = "<div class=\"toolbar\" role=\"toolbar\" aria-label={label} bind:clientWidth={width}>"
+after = "<div class=\"toolbar\" role=\"toolbar\" aria-label={label} bind:clientWidth={width}>\n  <button type=\"button\" class=\"fb\">x</button>"

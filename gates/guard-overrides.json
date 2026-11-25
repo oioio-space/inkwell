@@ -2269,6 +2269,31 @@
       "id": "4850405583e7f48a80ac0d4c19d6a4841b2648b52fe3fdfa43bf2cbd3f46e8b2",
       "reason": "frontend/vite.config.ts: one plugin added, compactManifests (src/build/compactManifests.ts, tested), which hands the bundle the built-ins' manifests without their JSON whitespace; a manifest that is not JSON is left unchanged, so the registry refuses it as before (EX0c1 code review)",
       "decision": "docs/plans/2026-11-25-ex0c-locations.md"
+    },
+    {
+      "id": "8fe126740e0d5b8af4d08351999429197987be08f86f2d48e73a1e7849dffcdb",
+      "reason": "scripts/netsim/mutants.py: the `playwright` mutant kind (EX0c2, one mutant registry): validate's fields, playwright_caught, run_playwright with PLAYWRIGHT_CAPS under its gate's 240 s; the SIGTERM/SIGINT handler that kills the children and unwinds (code review); the e2e kind's build moved into the shared build_tree",
+      "decision": "docs/plans/2026-11-25-ex0c2-panels-grid.md"
+    },
+    {
+      "id": "a4e0f9a81220d988d739adc4267ccd0013b84ea72e32cf66e70cfae7454be436",
+      "reason": "scripts/netsim/mutants.py: the frontend build moved into build_tree; its limit is now a parameter: 900 s for the e2e kind as before, PLAYWRIGHT_CAPS (50 s) for the playwright kind, below its gate's 240 s (code review)",
+      "decision": "docs/plans/2026-11-25-ex0c2-panels-grid.md"
+    },
+    {
+      "id": "7d3e8b47caae5bd3e7c9f1606312e707af38593108974b59f18bd4d40f1b44ea",
+      "reason": "scripts/netsim/mutants.py: the go builds moved into build_tree; their limit is a parameter: 900 s for the e2e kind as before, 50 s each for the playwright kind (code review)",
+      "decision": "docs/plans/2026-11-25-ex0c2-panels-grid.md"
+    },
+    {
+      "id": "9a0342c0d469c5269e17702ea7676a2386e5198109e576bcfa412e584edbd452",
+      "reason": "scripts/netsim/mutants_test.py: PlaywrightKindTest and PlaywrightCapsAndSignalsTest, the playwright kind's Python tests (catch rule, caps under 240 s, signal kills and unwinds), EX0c2",
+      "decision": "docs/plans/2026-11-25-ex0c2-panels-grid.md"
+    },
+    {
+      "id": "ab7fd19627f7464b705772148a5a5f2ae6ff732e65d8d01f180b2f9401192ced",
+      "reason": "scripts/netsim/mutants_test.py: injected fake runners with the same signature and default as the file's other fakes (timeout=1800 is a parameter default, nothing waits on it)",
+      "decision": "docs/plans/2026-11-25-ex0c2-panels-grid.md"
     }
   ]
 }

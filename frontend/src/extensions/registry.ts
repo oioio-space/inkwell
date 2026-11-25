@@ -19,8 +19,11 @@ import {
   type MenuContribution,
   type MetricContribution,
   type Origin,
+  type PanelContribution,
   parseManifest,
   parseMetric,
+  SIDES,
+  type Side,
   STATUS,
   type StatusContribution,
   type Storage,
@@ -57,6 +60,7 @@ export interface Grammar extends GrammarContribution, Owned {}
 export interface Command extends CommandContribution, Owned {}
 export interface MenuItem extends MenuContribution, Owned {}
 export interface StatusItem extends StatusContribution, Owned {}
+export interface Panel extends PanelContribution, Owned {}
 export interface DebugProvider extends DebugContribution, Owned {}
 /** A metric of a manifest, or one Go declares in code (`go`), which has no folder. */
 export interface Metric extends MetricContribution {
@@ -158,6 +162,13 @@ export interface Registry {
   readonly status: readonly StatusItem[];
   /** A status item's entry module, loaded once; its `status[id]` is the item's component. */
   loadStatus(item: StatusItem): Promise<unknown>;
+  /**
+   * A side's panels: the core's first, then `order`, extension and id, never the build order;
+   * indexed once at build, the same array at every call (EX0c2 P-2, P-11).
+   */
+  panels(side: Side): readonly Panel[];
+  /** A panel's entry module, loaded once; its `panels[id]` is the body's component. */
+  loadPanel(p: Panel): Promise<unknown>;
   /** A command's entry module, loaded once; undefined for a command without one. */
   loadCommand(c: Command): Promise<unknown> | undefined;
   /** A command's entry module if it has already loaded. */
@@ -212,6 +223,7 @@ function claimsOf(m: ReturnType<typeof parseManifest>): string[] {
     ...c.grammars.flatMap((g) => [`grammar ${g.id}`, ...g.names.map((n) => `grammar name ${n}`)]),
     ...c.commands.map((x) => `command ${x.id}`),
     ...c.status.map((x) => `status ${x.id}`),
+    ...c.panels.map((x) => `panel ${x.id}`),
     ...c.metrics.map((x) => `metric ${x.id}`),
     ...c.debug.map((x) => `debug ${x.id}`),
   ];
@@ -275,6 +287,7 @@ export function buildRegistry(
   const commands: Command[] = [];
   const menus: MenuItem[] = [];
   const status: StatusItem[] = [];
+  const panels: Panel[] = [];
   const keybindings: Binding[] = [];
   const metrics: Metric[] = [];
   const debug: DebugProvider[] = [];
@@ -372,6 +385,7 @@ export function buildRegistry(
       else menus.push(freeze({ ...x, ...owned }));
     }
     for (const x of m.contributes.status) status.push(freeze({ ...x, ...owned }));
+    for (const x of m.contributes.panels) panels.push(freeze({ ...x, ...owned }));
   }
 
   const commandById = new Map(commands.map((x) => [x.id, x]));
@@ -437,6 +451,31 @@ export function buildRegistry(
         (x) => x.id,
       ),
     ),
+  );
+
+  // A side has no groups: the core's (an essential built-in's) panels come first, then the rest.
+  const core = new Set(
+    extensions.filter((e) => e.origin === "builtin" && e.essential).map((e) => e.id),
+  );
+  const sideGroups: readonly GroupSpec[] = [{ id: "core" }, { id: "extensions" }];
+  const bySide = new Map<Side, readonly Panel[]>(
+    (Object.keys(SIDES) as Side[]).map((side) => [
+      side,
+      Object.freeze(
+        placed(
+          panels
+            .filter((x) => x.side === side)
+            .map((x) => ({
+              x,
+              group: core.has(x.extension) ? "core" : "extensions",
+              order: x.order,
+              extension: x.extension,
+            })),
+          sideGroups,
+          (y) => y.x.id,
+        ).map((y) => y.x),
+      ),
+    ]),
   );
 
   const byId = new Map(fileTypes.map((t) => [t.id, t]));
@@ -522,11 +561,15 @@ export function buildRegistry(
   };
 
   const loads = new Map<string, Promise<unknown>>();
-  const load = (c: Viewer | Grammar | DebugProvider | StatusItem): Promise<unknown> => {
+  const load = (c: Viewer | Grammar | DebugProvider | StatusItem | Panel): Promise<unknown> => {
     const key = `${c.origin}:${c.folder}/${c.entry}`;
     let p = loads.get(key);
     if (!p) {
-      p = loader(c.folder, c.entry);
+      // A failed load is not kept: the next ask tries again (a drawer's panel, EX0c2 review).
+      p = loader(c.folder, c.entry).catch((error: unknown) => {
+        loads.delete(key);
+        throw error;
+      });
       loads.set(key, p);
     }
     return p;
@@ -638,6 +681,8 @@ export function buildRegistry(
     menu: (location: string) => byLocation.get(location) ?? noItems,
     status: statusItems,
     loadStatus: (item: StatusItem) => load(item),
+    panels: (side: Side) => bySide.get(side) ?? Object.freeze([]),
+    loadPanel: (p: Panel) => load(p),
     loadCommand,
     loadedCommand: (c: Command) => commandModules.get(`${c.origin}:${c.folder}/${c.entry}`),
     extensions: Object.freeze(extensions),

@@ -48,7 +48,10 @@ const source = (text: string, origin: Origin = "builtin", folder = "sample"): Ma
   origin,
   folder,
   text,
-  files: new Set(text.includes('"status"') ? ["native/status.ts"] : []),
+  files: new Set([
+    ...(text.includes('"status"') ? ["native/status.ts"] : []),
+    ...(text.includes('"panels"') ? ["native/panels.ts"] : []),
+  ]),
 });
 function verdict(s: ManifestSource): string {
   try {
@@ -176,7 +179,7 @@ describe("EX0c1 locations and the status point", () => {
         manifest("plug", {
           menus: [
             item("plug.go", "header/end", "view", 1),
-            item("plug.go", "grid/context", "sort", 1),
+            item("plug.go", "insert", "blocks", 1),
             item("plug.go", "format", "extensions", 1),
           ],
         }),
@@ -186,14 +189,18 @@ describe("EX0c1 locations and the status point", () => {
     ]);
     expect(r.refused).toEqual([
       { folder: "plug", reason: "protected group view", with: ["plug.go"] },
-      { folder: "plug", reason: "reserved location grid/context", with: ["plug.go"] },
+      { folder: "plug", reason: "reserved location insert", with: ["plug.go"] },
     ]);
     expect(ids(r, "format")).toContain("plug.go");
     expect(ids(r, "header/end")).not.toContain("plug.go");
-    // Every location of the plan is in the closed table, the reserved ones with their block.
+    // Every location of the plan is in the closed table, the reserved ones with their block; EX0c2
+    // hosts the grid's, the view bar's, the history's and the differences'.
     expect(Object.keys(LOCATIONS)).toHaveLength(19);
+    const reserved = (loc: string) =>
+      (LOCATIONS as Record<string, { reserved?: string }>)[loc]?.reserved;
     for (const loc of ["grid/toolbar", "grid/context", "view", "history/toolbar", "diff/toolbar"])
-      expect((LOCATIONS as Record<string, { reserved?: string }>)[loc]?.reserved).toBe("EX0c2");
+      expect(reserved(loc), loc).toBeUndefined();
+    expect(reserved("insert")).toBe("EX0c3");
   });
 
   it("EX0c1 L-2 a location keeps the core's groups at their fixed places, then order, extension and command", () => {

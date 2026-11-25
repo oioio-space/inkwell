@@ -150,17 +150,16 @@ export const LOCATIONS = {
       { id: "extensions", ...icon },
     ],
   },
+  // EX0c2: the grid's bar ends with ‹show text›; sort holds the filter, as the bar did (one group).
   "grid/toolbar": {
     groups: [
       { id: "history", ...locked, ...icon },
       { id: "structure", ...icon },
       { id: "sort", ...icon },
-      { id: "filter", ...icon },
       { id: "freeze", ...icon },
       { id: "extensions", ...icon },
     ],
     overflow: "width",
-    reserved: "EX0c2",
   },
   "grid/context": {
     groups: [
@@ -171,16 +170,21 @@ export const LOCATIONS = {
       { id: "extensions" },
     ],
     overflow: "submenu",
-    reserved: "EX0c2",
   },
-  view: { groups: [{ id: "viewers" }, { id: "extensions" }], reserved: "EX0c2" },
+  // A pick is no command (EX0c1's encoding): ‹default›, ‹offer›, ‹colour›, ‹mode› and ‹close›
+  // are fixed widgets of their hosts, so only what runs a command is a group.
+  view: { groups: [{ id: "extensions", look: "label" }] },
   "history/toolbar": {
-    groups: [{ id: "navigate" }, { id: "colour" }, { id: "extensions" }],
-    reserved: "EX0c2",
+    groups: [
+      { id: "seen", look: "label" },
+      { id: "extensions", look: "label" },
+    ],
   },
   "diff/toolbar": {
-    groups: [{ id: "close", ...locked }, { id: "mode" }, { id: "navigate" }, { id: "extensions" }],
-    reserved: "EX0c2",
+    groups: [
+      { id: "navigate", look: "label" },
+      { id: "extensions", look: "label" },
+    ],
   },
   insert: {
     groups: [{ id: "blocks" }, { id: "files" }, { id: "data" }, { id: "extensions" }],
@@ -225,6 +229,18 @@ export const STATUS = {
 
 export type StatusSide = keyof typeof STATUS;
 
+/**
+ * The window's two sides that hold panels (EX0c2): each named by its label (the side's and its
+ * tab list's accessible name) and opened by its toggle command. The left one affects the main view
+ * (the files), the right one is subordinate to it (Relire), as the GNOME HIG puts utility panes.
+ */
+export const SIDES = {
+  start: { label: "sidebar.label", toggle: "app.sidebar" },
+  end: { label: "review.title", toggle: "app.review" },
+} as const;
+
+export type Side = keyof typeof SIDES;
+
 export type OptionValue = string | number | boolean;
 
 export interface FileTypeContribution {
@@ -255,6 +271,8 @@ export interface ViewerContribution {
   readonly capabilities: readonly string[];
   /** The commands its surface handles: its extension's own, or {@link DELEGABLE} ones. */
   readonly commands: readonly string[];
+  /** It draws its own status bar: the shell's and the preview stand aside (the grid, EX0c2). */
+  readonly ownStatus: boolean;
 }
 
 export interface GrammarContribution {
@@ -311,6 +329,25 @@ export interface StatusContribution {
   readonly when?: When | undefined;
   /** What a click runs. */
   readonly command?: string | undefined;
+  readonly entry: string;
+  readonly capabilities: readonly string[];
+}
+
+/**
+ * A panel of a side (EX0c2, VS Code's `views` in a `viewsContainers`): a tab of the drawer, or the
+ * left side's body. Code, like a status item; built-ins only until EXT1. Its entry exports
+ * `panels[id]`, the body's component.
+ */
+export interface PanelContribution {
+  readonly id: string;
+  /** i18n key: the tab's name and the panel's accessible name. */
+  readonly label: string;
+  readonly side: Side;
+  readonly order: number;
+  /** When its tab shows at all. */
+  readonly when?: When | undefined;
+  /** A name in the icon set, for where its name does not fit. */
+  readonly icon: string;
   readonly entry: string;
   readonly capabilities: readonly string[];
 }
@@ -383,6 +420,7 @@ export interface Contributes {
   readonly commands: readonly CommandContribution[];
   readonly menus: readonly MenuContribution[];
   readonly status: readonly StatusContribution[];
+  readonly panels: readonly PanelContribution[];
   readonly keybindings: readonly KeybindingContribution[];
   readonly metrics: readonly MetricContribution[];
   readonly debug: readonly DebugContribution[];
@@ -635,11 +673,13 @@ function viewer(
   const o = object(
     v,
     where,
-    ["id", "fileTypes", "label", "entry", "capabilities", "commands"],
+    ["id", "fileTypes", "label", "entry", "capabilities", "commands", "ownStatus"],
     ["id", "fileTypes", "label", "entry"],
   );
   const types = list(o.fileTypes, `${where}.fileTypes`, 64, (x, at) => id(x, at));
   if (types.length === 0) fail("missing-key", `${where}.fileTypes`);
+  if (o.ownStatus !== undefined && typeof o.ownStatus !== "boolean")
+    fail("bad-type", `${where}.ownStatus`);
   return frozen({
     id: id(o.id, `${where}.id`),
     fileTypes: types,
@@ -652,6 +692,7 @@ function viewer(
     }),
     entry: entry(o.entry, `${where}.entry`, source),
     capabilities: capabilities(o.capabilities, `${where}.capabilities`),
+    ownStatus: o.ownStatus === true,
   });
 }
 
@@ -820,6 +861,38 @@ function statusItem(
     order: order(o.order, `${where}.order`),
     when: when(o.when, `${where}.when`),
     command: o.command === undefined ? undefined : commandId(o.command, `${where}.command`),
+    entry: entry(o.entry, `${where}.entry`, source),
+    capabilities: caps,
+  });
+}
+
+function panel(
+  v: unknown,
+  where: string,
+  source: ManifestSource,
+  owner: string,
+): PanelContribution {
+  const o = object(
+    v,
+    where,
+    ["id", "label", "side", "order", "when", "icon", "entry", "capabilities"],
+    ["id", "label", "side", "order", "icon", "entry", "capabilities"],
+  );
+  const pid = commandId(o.id, `${where}.id`);
+  if (!isOwn(pid, owner)) fail("not-own", `${where}.id`);
+  // Code outside the built-ins runs only through the plugin host (EXT1), as for status items.
+  if (source.origin !== "builtin") fail("bad-entry", `${where}.entry`);
+  const side = string(o.side, `${where}.side`, MAX_WORD);
+  if (!Object.hasOwn(SIDES, side)) fail("bad-value", `${where}.side`);
+  const caps = capabilities(o.capabilities, `${where}.capabilities`);
+  if (!caps.includes(NATIVE)) fail("missing-key", `${where}.capabilities`);
+  return frozen({
+    id: pid,
+    label: string(o.label, `${where}.label`, MAX_LABEL),
+    side: side as Side,
+    order: order(o.order, `${where}.order`),
+    when: when(o.when, `${where}.when`),
+    icon: id(o.icon, `${where}.icon`),
     entry: entry(o.entry, `${where}.entry`, source),
     capabilities: caps,
   });
@@ -1035,6 +1108,7 @@ export function parseManifest(source: ManifestSource): Manifest {
       "commands",
       "menus",
       "status",
+      "panels",
       "keybindings",
       "metrics",
       "debug",
@@ -1067,6 +1141,9 @@ export function parseManifest(source: ManifestSource): Manifest {
       status: list(c.status, "manifest.contributes.status", 32, (x, at) =>
         statusItem(x, at, source, owner, essential),
       ),
+      panels: list(c.panels, "manifest.contributes.panels", 16, (x, at) =>
+        panel(x, at, source, owner),
+      ),
       keybindings: list(c.keybindings, "manifest.contributes.keybindings", 128, (x, at) =>
         keybinding(x, at, source, own),
       ),
@@ -1083,6 +1160,7 @@ export function parseManifest(source: ManifestSource): Manifest {
     ...manifest.contributes.grammars,
     ...manifest.contributes.commands,
     ...manifest.contributes.status,
+    ...manifest.contributes.panels,
   ].some((x) => x.capabilities.includes(NATIVE));
   if (native && (source.origin !== "builtin" || !manifest.essential))
     fail("native-refused", "manifest");

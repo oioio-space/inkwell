@@ -618,10 +618,10 @@ describe("EX0b1 commands, menus and keybindings", () => {
     const gridEl = document.createElement("div");
     document.body.append(gridEl);
     const sheet: string[] = [];
-    const ctrl = new Proxy({ zoom: 1 } as Record<string, unknown>, {
+    const ctrl = new Proxy({ zoom: 1, active: { r: 1, c: 2 } } as Record<string, unknown>, {
       get: (o, name) =>
-        name === "zoom"
-          ? o.zoom
+        name === "zoom" || name === "active"
+          ? o[name]
           : (...args: unknown[]) =>
               sheet.push(args.length ? `${String(name)}(${args.join(",")})` : String(name)),
     });
@@ -633,15 +633,24 @@ describe("EX0b1 commands, menus and keybindings", () => {
         ctrl: () => ctrl as never,
         find: (replace) => sheet.push(`find(${replace})`),
         step: () => (stepping ? (d) => sheet.push(`step(${d})`) : undefined),
+        copy: (cut) => sheet.push(`copy(${cut})`),
+        paste: (valuesOnly) => sheet.push(`paste(${valuesOnly})`),
+        filter: () => sheet.push("filter"),
+        autofit: () => sheet.push("autofit"),
       }),
       { viewer: r.viewers.find((v) => v.id === "tables.grid") as never },
     );
     const diffEl = document.createElement("div");
     document.body.append(diffEl);
-    registerSurface(diffEl, "diff", {
-      "app.next-change": () => sheet.push("go(1)"),
-      "app.previous-change": () => sheet.push("go(-1)"),
-    });
+    registerSurface(
+      diffEl,
+      "diff",
+      {
+        "app.next-change": () => sheet.push("go(1)"),
+        "app.previous-change": () => sheet.push("go(-1)"),
+      },
+      { state: () => ({ changes: true }) },
+    );
     setLive({
       formats: formatsOf("typst"),
       readOnly: false,
@@ -684,6 +693,7 @@ describe("EX0b1 commands, menus and keybindings", () => {
       "app.zoom-reset": { shell: "zoom(reset)" },
       "app.palette": { shell: "palette" },
       "app.shortcuts": { shell: "shortcuts" },
+      "app.mark-seen": { shell: "markSeen", extra: () => setLive({ unseen: true }) },
       "app.undo": {
         target: editor,
         text: "un mot",
@@ -728,6 +738,33 @@ describe("EX0b1 commands, menus and keybindings", () => {
       "tables.insert-today": { target: gridEl, sheet: ["insertToday"] },
       "tables.insert-cells": { target: gridEl, sheet: ["insertAtSelection"] },
       "tables.delete-cells": { target: gridEl, sheet: ["deleteAtSelection"] },
+      // The grid's bar and context menu (EX0c2).
+      "tables.cut": { target: gridEl, sheet: ["copy(true)"] },
+      "tables.copy": { target: gridEl, sheet: ["copy(false)"] },
+      "tables.paste": { target: gridEl, sheet: ["paste(false)"] },
+      "tables.paste-values": { target: gridEl, sheet: ["paste(true)"] },
+      "tables.insert-row-above": { target: gridEl, sheet: ["insertRows(above)"] },
+      "tables.insert-row-below": { target: gridEl, sheet: ["insertRows(below)"] },
+      "tables.insert-col-left": { target: gridEl, sheet: ["insertCols(left)"] },
+      "tables.insert-col-right": { target: gridEl, sheet: ["insertCols(right)"] },
+      "tables.delete-rows": { target: gridEl, sheet: ["deleteRows"] },
+      "tables.delete-cols": { target: gridEl, sheet: ["deleteCols"] },
+      "tables.duplicate-row": { target: gridEl, sheet: ["duplicateRow"] },
+      "tables.clear": { target: gridEl, sheet: ["clear"] },
+      "tables.sort-asc": { target: gridEl, sheet: ["sortBy(2,1)"] },
+      "tables.sort-desc": { target: gridEl, sheet: ["sortBy(2,-1)"] },
+      "tables.filter": { target: gridEl, sheet: ["filter"] },
+      "tables.filter-by-value": {
+        target: gridEl,
+        sheet: ["value(1,2)", "setFilter(2,[object Object])"],
+      },
+      "tables.freeze": { target: gridEl, sheet: ["freezeToSelection"] },
+      "tables.unfreeze": {
+        target: gridEl,
+        sheet: ["unfreeze"],
+        extra: () => setLive({ gridFrozen: true }),
+      },
+      "tables.autofit": { target: gridEl, sheet: ["autofit"] },
       "format.bold": { target: editor, text: own(toggleMark("typst", "bold")) },
       "format.italic": { target: editor, text: own(toggleMark("typst", "italic")) },
       "format.underline": { target: editor, text: own(toggleMark("typst", "underline")) },
@@ -867,7 +904,13 @@ describe("EX0b1 commands, menus and keybindings", () => {
       { "format.bold": () => ran.push("bold"), "format.underline": () => ran.push("underline") },
       { viewer: r.essentialViewer("text") },
     );
-    registerSurface(diff, "diff", { "app.next-change": () => ran.push("next") });
+    // A difference with a change to go to (`changes`, the diff view's own state, EX0c2).
+    registerSurface(
+      diff,
+      "diff",
+      { "app.next-change": () => ran.push("next") },
+      { state: () => ({ changes: true }) },
+    );
     setLive({ formats: formatsOf("markdown") });
     const bold = key({ key: "b", keyCode: 66, ctrlKey: true });
     editor.dispatchEvent(bold);
@@ -973,7 +1016,12 @@ describe("EX0b1 commands, menus and keybindings", () => {
       const diffDialog = document.createElement("dialog");
       diffDialog.setAttribute("open", "");
       document.body.append(diffDialog);
-      registerSurface(diffDialog, "diff", { "app.next-change": () => ran.push("modal next") });
+      registerSurface(
+        diffDialog,
+        "diff",
+        { "app.next-change": () => ran.push("modal next") },
+        { state: () => ({ changes: true }) },
+      );
       document.body.dispatchEvent(key({ key: "F7", keyCode: 118 }));
       expect(ran.at(-1)).toBe("modal next");
       const save = key({ key: "s", keyCode: 83, ctrlKey: true });
@@ -1149,5 +1197,46 @@ describe("EX0b1 commands, menus and keybindings", () => {
       editor.dispatchEvent(key({ key: k }));
     expect(commandStats.lookups - lookups).toBe(0);
     expect(whenStats.evaluated - evaluated).toBe(0);
+  });
+});
+
+describe("EX0c2 review fixes", () => {
+  it("F7 where there is no change to go to is taken and says why, never left to the webview", () => {
+    useRegistry(buildRegistry(builtinSources(), globLoader()), { system: "linux" });
+    const announced: string[] = [];
+    configure({ announce: (text) => announced.push(text) });
+    removeKeys = installKeys();
+    const ran: string[] = [];
+    for (const changes of [false, true]) {
+      const dialog = document.createElement("div");
+      dialog.tabIndex = 0;
+      document.body.append(dialog);
+      registerSurface(
+        dialog,
+        "diff",
+        { "app.next-change": () => ran.push("next") },
+        { state: () => ({ changes }) },
+      );
+      const f7 = key({ key: "F7", keyCode: 118 });
+      dialog.dispatchEvent(f7);
+      expect(f7.defaultPrevented, `changes ${changes}`).toBe(true);
+      dialog.remove();
+    }
+    expect(ran).toEqual(["next"]);
+    expect(announced).toEqual([fr["cmd.change.unavailable"]]);
+  });
+
+  it("Caps Lock on: Ctrl+Shift with a lowercase letter is the Shift chord even when the plain one is bound", () => {
+    const both = (c: string) => c === "Ctrl+h" || c === "Ctrl+Shift+h";
+    // Ctrl+Shift+H opens Relire, Ctrl+H is Replace: Caps Lock makes the letter « h ».
+    expect(
+      eventChord(key({ key: "h", keyCode: 72, ctrlKey: true, shiftKey: true }), "linux", both),
+    ).toBe("Ctrl+Shift+h");
+    expect(
+      eventChord(key({ key: "H", keyCode: 72, ctrlKey: true, shiftKey: true }), "linux", both),
+    ).toBe("Ctrl+Shift+h");
+    // Caps Lock without Shift: « H » is still the plain chord.
+    expect(eventChord(key({ key: "H", keyCode: 72, ctrlKey: true }), "linux", both)).toBe("Ctrl+h");
+    expect(eventChord(key({ key: "h", keyCode: 72, ctrlKey: true }), "linux", both)).toBe("Ctrl+h");
   });
 });

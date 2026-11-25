@@ -9,10 +9,17 @@ import { markExternal } from "./editor/external";
 import { formatLanguage, formatsOf } from "./editor/format";
 import type { CursorState } from "./editor/presence";
 import { activateStartup, registry, warmCommands } from "./extensions";
-import { configure, installKeys, locationShows, menuOf, statusOf } from "./extensions/commands";
+import {
+  configure,
+  installKeys,
+  locationShows,
+  menuOf,
+  panelsOf,
+  statusOf,
+} from "./extensions/commands";
 import { setLive } from "./extensions/live.svelte";
 import ViewerHost from "./extensions/ViewerHost.svelte";
-import { type MessageKey, t } from "./i18n";
+import { t } from "./i18n";
 import { problemMarks } from "./language/marks";
 import { resolveRange, toOffset, toPosition } from "./language/positions";
 import { problems } from "./language/problems.svelte";
@@ -21,7 +28,6 @@ import { validFilePath } from "./net/admission";
 import { links } from "./net/links.svelte";
 import type { SocketLike } from "./net/WailsNetworkAdapter";
 import { profileNativeStage } from "./perf/nativeDispatch";
-import { markOpen } from "./perf/openMarks";
 import { toggleFullscreen } from "./present/fullscreen";
 import PresentBanner from "./present/PresentBanner.svelte";
 import PresentHost from "./present/PresentHost.svelte";
@@ -38,11 +44,15 @@ import Banner from "./ui/Banner.svelte";
 import CommandDialogs from "./ui/command/CommandDialogs.svelte";
 import { dialogShell } from "./ui/command/dialogs.svelte";
 import FormatBar from "./ui/command/FormatBar.svelte";
+import PanelSide from "./ui/command/PanelSide.svelte";
+import { configurePanels } from "./ui/command/panelSelection.svelte";
+import { prefetchSide } from "./ui/command/panels.svelte";
+import ViewBar from "./ui/command/ViewBar.svelte";
 import ExternalBanner from "./ui/ExternalBanner.svelte";
 import ExternalChangeToast from "./ui/ExternalChangeToast.svelte";
 import { session } from "./ui/editorSession.svelte";
 import HistoryBars, { keepCaret } from "./ui/history/HistoryBars.svelte";
-import HistoryDrawer from "./ui/history/HistoryDrawer.svelte";
+import HistoryDialogs from "./ui/history/HistoryDialogs.svelte";
 import { history } from "./ui/history/history.svelte";
 import JoinWaiting from "./ui/JoinWaiting.svelte";
 import NoticeToast from "./ui/NoticeToast.svelte";
@@ -54,7 +64,6 @@ import Preferences from "./ui/prefs/Preferences.svelte";
 import SealedBanner from "./ui/SealedBanner.svelte";
 import ShareDialog from "./ui/ShareDialog.svelte";
 import HeaderBar from "./ui/shell/HeaderBar.svelte";
-import Sidebar from "./ui/shell/Sidebar.svelte";
 import StatusBar from "./ui/shell/StatusBar.svelte";
 import { showStartupNotice } from "./ui/startupNotice";
 import { ClosePage, closePublisher } from "./workspace/closePage";
@@ -95,8 +104,8 @@ const shown = $derived(
       opening.viewer),
 );
 const textEditor = registry.essentialViewer("text");
-/** A text shown by another viewer than the editor (a table's grid) brings its own status bar. */
-const ownView = $derived(opening?.content === "text" && shown !== textEditor);
+/** A viewer that draws its own status bar (the grid, `ownStatus`): the shell's and the preview stand aside. */
+const viewerStatus = $derived(shown?.ownStatus === true);
 const lang = $derived(formatLanguage(opening?.type.grammar));
 /** The text of a file read from the disk, one object per read (a grid keeps its session by it). */
 const openedText = $derived(
@@ -286,6 +295,7 @@ configure({
     togglePreview,
     toggleSidebar,
     toggleReview: () => history.toggle(),
+    markSeen: () => history.markSeen(),
     share: () => (sharing = true),
     people: () => (people = true),
     exportPdf: () => void exportPdf(),
@@ -312,6 +322,13 @@ configure({
   beforeCommand: () => flushAllTyped(),
   announce: (text) => notice.show(text, "status"),
   blocked: () => workspace.closing || presenting,
+});
+
+// A side opens on a panel (`openPanel`): the files by their setting, the drawer as the counter's
+// Shift+click always opened it (no preview swap: that is the toggle's).
+configurePanels({
+  start: () => settings.setSidebarVisible(workspace.project, true),
+  end: () => (history.open = true),
 });
 
 // What `when` clauses read (extensions/when.ts): the open file and the panels.
@@ -444,11 +461,19 @@ onMount(() => {
       saves;
     // What a location shows now, by the registry (EX0c1-E1, E2): its items, or the status bar's.
     (
-      globalThis as typeof globalThis & { __inkwellLocation?: (location: string) => string[] }
-    ).__inkwellLocation = (location) =>
+      globalThis as typeof globalThis & {
+        __inkwellLocation?: (location: string, target?: string) => string[];
+      }
+    ).__inkwellLocation = (location, target?: string) =>
       location === "status"
         ? statusOf().map((x) => x.id)
-        : menuOf(location).flatMap((g) => g.items.map((c) => c.id));
+        : menuOf(location, {}, (target && document.querySelector(target)) || undefined).flatMap(
+            (g) => g.items.map((c) => c.id),
+          );
+    // A side's panels now, by the registry (EX0c2-E1).
+    (
+      globalThis as typeof globalThis & { __inkwellPanels?: (side: "start" | "end") => string[] }
+    ).__inkwellPanels = (side) => panelsOf(side).map((p) => p.id);
   }
   preview.start(() => Stream("preview") as unknown as SocketLike);
   configureLanguage(
@@ -459,6 +484,8 @@ onMount(() => {
   languageMounted = true;
   const removeKeys = installKeys();
   warmCommands();
+  // The drawer's code at idle after the first paint: its first opening waits on nothing (EX0c2).
+  prefetchSide("end");
   let nativePerfStop: (() => void) | undefined;
   let mounted = true;
   const closeWalk =
@@ -610,7 +637,7 @@ onMount(() => {
 <!-- A presentation covers the window: what is under it neither takes keys nor focus. -->
 <div class="window" inert={presenting}>
   {#if sidebarOpen}
-    <Sidebar files={workspace.files} current={workspace.current} onOpen={(path, keepFocus) => { markOpen(path); viewChoice.arrive(); void workspace.openFile(path).then(() => tick()).then(() => { if (keepFocus) return; if (session.view) session.focus(); else document.querySelector<HTMLElement>(".file-view, [role=grid]")?.focus(); }); }} />
+    <PanelSide side="start" />
   {/if}
   <div class="column">
     <HeaderBar
@@ -636,20 +663,13 @@ onMount(() => {
     {/if}
     <SealedBanner />
     <AccessBanner onAsk={() => (sharing = true)} />
-    {#if offerTable}
-      <div class="viewbar">
-        <button type="button" class="fb lbl" data-sheet="open-table" onclick={openAsTable}>
-          {t("sheet.openAsTable")}
-        </button>
-      </div>
-    {/if}
-    {#if opening && shown !== opening.viewer}
-      <div class="viewbar">
-        <button type="button" class="fb lbl" data-viewer={opening.viewer.id} onclick={showDefault}>
-          {t(opening.viewer.label as MessageKey)}
-        </button>
-      </div>
-    {/if}
+    <ViewBar
+      offer={offerTable}
+      onoffer={openAsTable}
+      defaultViewer={opening?.viewer}
+      {shown}
+      ondefault={showDefault}
+    />
     <ProjectionBanner />
     {#if workspace.tier === "large" && !workspace.big}
       <Banner role="status">{t("limit.slow")}</Banner>
@@ -715,7 +735,7 @@ onMount(() => {
         {/if}
       </div>
       <!-- While the document of a join is waited for there is nothing to preview (PC1b, J-2). -->
-      {#if mainFile && previewOpen && !ownView && !presenting && !workspace.big && workspace.waitingFor === undefined}
+      {#if mainFile && previewOpen && !viewerStatus && !presenting && !workspace.big && workspace.waitingFor === undefined}
         <div class="pane side-preview">
           <Preview
             onSourceJump={jumpFromPage}
@@ -727,7 +747,7 @@ onMount(() => {
         </div>
       {/if}
     </main>
-    {#if !ownView}
+    {#if !viewerStatus}
       <StatusBar
         {lang}
         status={workspace.status}
@@ -741,7 +761,8 @@ onMount(() => {
       />
     {/if}
   </div>
-  <HistoryDrawer />
+  {#if history.open}<PanelSide side="end" />{/if}
+  <HistoryDialogs />
 </div>
 <PresentHost onExit={leftPresentation} />
 <ShareDialog bind:open={sharing} />
@@ -795,13 +816,5 @@ onMount(() => {
       max-width: none;
       z-index: 5;
     }
-  }
-  .viewbar {
-    display: flex;
-    align-items: center;
-    min-height: 40px;
-    padding: 3px 6px;
-    background: var(--headerbar-bg);
-    box-shadow: 0 1px var(--shade);
   }
 </style>

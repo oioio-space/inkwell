@@ -42,8 +42,8 @@ import { settings } from "../../store/settings.svelte";
 import { lastVisit, myActors, rememberActor, saveVisit } from "../../store/visit";
 import { observeClaims } from "../../workspace/observe";
 import { workspace } from "../../workspace/workspace.svelte";
+import { PANEL, selectPanel } from "../command/panelSelection.svelte";
 
-export type Tab = "problems" | "history" | "comments" | "activity";
 export type ColorBy = "type" | "person";
 
 /** What the differences window shows: two texts, and the history that explains them. */
@@ -87,7 +87,6 @@ const HIDDEN = new Set(["version", "variant", "merge", "claim"]);
 
 class HistoryState {
   open = $state(false);
-  tab = $state<Tab>("history");
   colorBy = $state<ColorBy>("type");
   showWho = $state(false);
   showAbandoned = $state(false);
@@ -460,7 +459,7 @@ class HistoryState {
   /** Opens the drawer on one entry (a click on a coloured passage of the text). */
   show(sessionId: string): void {
     if (!this.open) this.toggle();
-    this.tab = "history";
+    selectPanel(PANEL.history);
     this.filters = { ...NO_FILTER };
     this.selected = `s:${sessionId}`;
   }

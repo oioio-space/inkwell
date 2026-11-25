@@ -4,8 +4,8 @@ import { flushTyped } from "../editor/amSync";
 import { registry } from "../extensions";
 import type { Diagnostic } from "../preview/protocol";
 import { settings } from "../store/settings.svelte";
+import { openPanel, PANEL } from "../ui/command/panelSelection.svelte";
 import { session } from "../ui/editorSession.svelte";
-import { history } from "../ui/history/history.svelte";
 import { viewChoice } from "../workspace/viewChoice.svelte";
 import { workspace } from "../workspace/workspace.svelte";
 import type { LanguageDiagnostic } from "./client";
@@ -173,9 +173,9 @@ export class Problems {
     this.#compilerTicket++;
     this.sources = this.sources.map((d) => (d.source === "compiler" ? { ...d, stale: true } : d));
   }
+  /** Opens the drawer on the problems (a Shift+click or the context gesture on the counter). */
   show() {
-    history.open = true;
-    history.tab = "problems";
+    openPanel(PANEL.problems);
   }
   next(reverse = false) {
     const active = this.entries.filter((d) => !d.stale);

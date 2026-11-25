@@ -12,6 +12,7 @@ import { summarize } from "../../history/summary";
 import { sessionAt } from "../../history/track";
 import { t, tn } from "../../i18n";
 import { workspace } from "../../workspace/workspace.svelte";
+import LocationBar from "../command/LocationBar.svelte";
 import Icon from "../icons/Icon.svelte";
 import DiffInline from "./DiffInline.svelte";
 import { type DiffRequest, history } from "./history.svelte";
@@ -127,7 +128,8 @@ $effect(() => {
   };
 });
 
-async function go(step: 1 | -1) {
+/** Goes to the next or previous change (`app.next-change`, `app.previous-change`, the bar's). */
+async function stepChange(step: 1 | -1) {
   if (total === 0) return;
   current = (current + step + total) % total;
   await tick();
@@ -148,19 +150,22 @@ async function go(step: 1 | -1) {
 
 /** The diff view is a surface of its own: F7 and Shift+F7 (`app.next-change`, `-previous`) step. */
 const changeKeys = {
-  "app.next-change": () => void go(1),
-  "app.previous-change": () => void go(-1),
+  "app.next-change": () => void stepChange(1),
+  "app.previous-change": () => void stepChange(-1),
 };
 
 function close() {
   history.diff = undefined;
 }
 
+/** Whether there is a change to go to (`changes`, EX0c2): a text with at least one. */
+const diffState = () => ({ changes: !isTable && total > 0 });
+
 const csvLabel = (v: string | undefined) =>
   v === undefined || v === "" ? t("diff.cell.empty") : v;
 </script>
 
-<dialog bind:this={dialog} use:surface={{ kind: "diff", handlers: changeKeys }} onclose={close} aria-labelledby="diff-title" data-testid="diff-view">
+<dialog bind:this={dialog} use:surface={{ kind: "diff", handlers: changeKeys, state: diffState }} onclose={close} aria-labelledby="diff-title" data-testid="diff-view">
   <header>
     <div class="head">
       <h2 id="diff-title">{req.title}</h2>
@@ -177,17 +182,12 @@ const csvLabel = (v: string | undefined) =>
 
   <div class="bar">
     {#if !isTable}
-      <div class="tg" role="radiogroup" aria-label={t("diff.mode")}>
+      <div class="tg" role="radiogroup" aria-label={t("diff.mode")} data-fixed="diff-mode">
         <button type="button" role="radio" aria-checked={mode === "inline"} onclick={() => { mode = "inline"; current = 0; }}>{t("diff.mode.inline")}</button>
         <button type="button" role="radio" aria-checked={mode === "side"} onclick={() => { mode = "side"; }}>{t("diff.mode.side")}</button>
       </div>
       <span class="sp"></span>
-      <button type="button" class="fb lbl" onclick={() => go(-1)} disabled={total === 0} title={t("diff.prev.hint")}>
-        {t("diff.prev")}
-      </button>
-      <button type="button" class="fb lbl" onclick={() => go(1)} disabled={total === 0} title={t("diff.next.hint")}>
-        {t("diff.next")}
-      </button>
+      <LocationBar location="diff/toolbar" target={dialog} />
     {/if}
   </div>
   <p class="info" role="status" aria-live="polite" data-testid="diff-info">{isTable ? tn("diff.cells", cells.length) : info}</p>

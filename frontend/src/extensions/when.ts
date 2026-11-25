@@ -57,6 +57,16 @@ export const CONTEXT_KEYS = {
   text: BOOL,
   /** The open file is the project's main document. */
   main: BOOL,
+  /** The grid's rows cannot change while a sort or a filter shows (EX0c2, the grid's own state). */
+  gridLocked: BOOL,
+  /** The grid shows a filter. */
+  gridFiltered: BOOL,
+  /** The grid has frozen rows or columns. */
+  gridFrozen: BOOL,
+  /** The text has change marks not yet seen (the history strip). */
+  unseen: BOOL,
+  /** The open difference is a text with at least one change to go to. */
+  changes: BOOL,
 } as const satisfies Record<string, KeyType>;
 
 export type ContextKey = keyof typeof CONTEXT_KEYS;
@@ -78,6 +88,11 @@ export interface Context {
   canReturn: boolean;
   text: boolean;
   main: boolean;
+  gridLocked: boolean;
+  gridFiltered: boolean;
+  gridFrozen: boolean;
+  unseen: boolean;
+  changes: boolean;
 }
 
 /** The context of a window where nothing is open. */
@@ -96,6 +111,11 @@ export const emptyContext = (): Context => ({
   canReturn: false,
   text: false,
   main: false,
+  gridLocked: false,
+  gridFiltered: false,
+  gridFrozen: false,
+  unseen: false,
+  changes: false,
 });
 
 export type When =

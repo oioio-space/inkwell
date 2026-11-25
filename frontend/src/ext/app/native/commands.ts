@@ -24,4 +24,5 @@ export const commands: CommandModule["commands"] = {
   "app.zoom-reset": ({ shell }) => shell.zoom("reset"),
   "app.palette": ({ shell }) => shell.palette(),
   "app.shortcuts": ({ shell }) => shell.shortcuts(),
+  "app.mark-seen": ({ shell }) => shell.markSeen(),
 };
