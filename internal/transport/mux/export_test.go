@@ -10,3 +10,6 @@ func GateCount(t transport.Transport) (gates int, counter int32) {
 	defer m.gmu.RUnlock()
 	return len(m.gates), m.ngates.Load()
 }
+
+// FlushAt is how many sent bytes a send buffer may hold back.
+const FlushAt = flushAt

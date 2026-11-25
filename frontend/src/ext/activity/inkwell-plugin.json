@@ -1,0 +1,66 @@
+{
+  "id": "activity",
+  "version": "1.0.0",
+  "contributes": {
+    "metrics": [
+      {
+        "id": "activity.words",
+        "kind": "volume",
+        "unit": "words",
+        "scope": "document",
+        "label": "metric.words",
+        "max": 1000000
+      },
+      {
+        "id": "activity.active",
+        "kind": "duration",
+        "unit": "ms",
+        "scope": "document",
+        "label": "metric.active",
+        "max": 86400000
+      },
+      {
+        "id": "activity.opened",
+        "kind": "counter",
+        "unit": "count",
+        "scope": "document",
+        "label": "metric.opened",
+        "max": 100000
+      },
+      {
+        "id": "activity.open-time",
+        "kind": "duration",
+        "unit": "ms",
+        "scope": "document",
+        "label": "metric.openTime",
+        "max": 86400000
+      },
+      {
+        "id": "activity.received",
+        "kind": "counter",
+        "unit": "count",
+        "scope": "document",
+        "label": "metric.received",
+        "max": 10000000
+      }
+    ],
+    "debug": [
+      {
+        "id": "activity.network",
+        "label": "debug.network",
+        "entry": "debug/network.ts",
+        "fields": {
+          "links": "number",
+          "kind": ["lan", "direct", "relayed"],
+          "rttMs": "number",
+          "downs": "number",
+          "resyncs": "number",
+          "lastDownMs": "number",
+          "sent": "number",
+          "received": "number",
+          "opened": "number"
+        }
+      }
+    ]
+  }
+}

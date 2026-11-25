@@ -16,6 +16,7 @@ import (
 	"unicode"
 
 	"github.com/oioio-space/inkwell/internal/bridge"
+	"github.com/oioio-space/inkwell/internal/obs"
 	"github.com/oioio-space/inkwell/internal/project"
 	"github.com/oioio-space/inkwell/internal/sidecar"
 	"github.com/oioio-space/inkwell/internal/typst"
@@ -115,6 +116,29 @@ type PreviewOptions struct {
 	Choose func(name string) (string, error)
 	// Log receives diagnostics, never document contents. Nil discards them.
 	Log *slog.Logger
+	// Meter counts the compilations, their failures by kind and their time
+	// for the local statistics; nil counts nothing.
+	Meter *obs.Meter
+}
+
+// failKinds are the failure kinds as the statistics split them (enum words).
+var failKinds = []string{
+	"errors", "package", "nomain", "timeout", "memory", "toolarge", "unsafe",
+	"unavailable", "blocked", "sandbox", "protected", "retry", "internal",
+}
+
+// previewMeter is what the preview counts for the local statistics.
+type previewMeter struct {
+	compilations, failures *obs.Counter
+	time                   *obs.Duration
+}
+
+func newPreviewMeter(m *obs.Meter) previewMeter {
+	return previewMeter{
+		compilations: m.Counter(obs.Descriptor{ID: "preview.compilations", Scope: obs.ScopeApp, Label: "metric.preview.compilations", Max: 1 << 30}),
+		failures:     m.Counter(obs.Descriptor{ID: "preview.failures", Scope: obs.ScopeApp, Label: "metric.preview.failures", Max: 1 << 30, Values: failKinds}),
+		time:         m.Duration(obs.Descriptor{ID: "preview.time", Scope: obs.ScopeApp, Label: "metric.preview.time", Max: 1 << 40}),
+	}
 }
 
 // Preview compiles the open project each time its files change and streams the
@@ -128,6 +152,7 @@ type Preview struct {
 	now      func() time.Time
 	engine   func() (Compiler, error)
 
+	stats  previewMeter
 	ctx    context.Context
 	stop   context.CancelFunc
 	wg     sync.WaitGroup
@@ -208,7 +233,7 @@ type deckCache struct {
 // NewPreview returns a preview of the project in o.Root. Nothing runs until the
 // sources change or a webview attaches ([Preview.Serve]).
 func NewPreview(o PreviewOptions) *Preview {
-	p := &Preview{opt: o, log: o.Log, debounce: o.Debounce, now: o.Now, win: window{1, 4}}
+	p := &Preview{opt: o, log: o.Log, debounce: o.Debounce, now: o.Now, win: window{1, 4}, stats: newPreviewMeter(o.Meter)}
 	if p.log == nil {
 		p.log = slog.New(slog.DiscardHandler)
 	}
@@ -383,6 +408,7 @@ func (p *Preview) compile(ctx context.Context, run compilation) {
 		}
 	}
 	var res *typst.Result
+	started := time.Now()
 	eng, err := p.engine()
 	if err == nil {
 		res, err = eng.Compile(ctx, typst.Project{Root: root}, p.opt.Main, opts...)
@@ -392,6 +418,8 @@ func (p *Preview) compile(ctx context.Context, run compilation) {
 	if ctx.Err() != nil {
 		return // superseded or closing: a newer compilation will answer
 	}
+	p.stats.compilations.Add(1)
+	p.stats.time.Observe(time.Since(started))
 	msg := PreviewMessage{Type: "result", Seq: run.seq, Rev: run.srcGen, First: run.win.first, PageCount: run.pageCount}
 	snap := snapshot{srcGen: run.srcGen, ok: err == nil}
 	if res != nil {
@@ -414,6 +442,9 @@ func (p *Preview) compile(ctx context.Context, run compilation) {
 		}
 	}
 	msg.Failure = failureOf(err)
+	if msg.Failure != nil {
+		p.stats.failures.AddBy(strings.ToLower(msg.Failure.Kind), 1)
+	}
 	switch {
 	case msg.Failure != nil && msg.Failure.Kind == FailBlocked:
 		// The compiler was under attack: nothing it produced reaches the

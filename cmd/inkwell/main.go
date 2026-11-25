@@ -70,8 +70,11 @@ func liveDeps(configure func(*application.App, *application.WebviewWindow)) deps
 			choose := func(name string) (string, error) {
 				return wails.Load().Dialog.SaveFile().SetFilename(name).AddFilter("PDF", "*.pdf").PromptForSingleSelection()
 			}
+			chooseStats := func(name string) (string, error) {
+				return wails.Load().Dialog.SaveFile().SetFilename(name).AddFilter("JSON", "*.json").PromptForSingleSelection()
+			}
 			if dir := os.Getenv(exportDirEnv); dir != "" {
-				choose = app.DirChooser(dir)
+				choose, chooseStats = app.DirChooser(dir), app.DirChooser(dir)
 			}
 			return app.Start(ctx, home, app.Options{
 				Log:           log,
@@ -80,6 +83,7 @@ func liveDeps(configure func(*application.App, *application.WebviewWindow)) deps
 				LAN:           os.Getenv(lanEnv) == "1",
 				RendezvousURL: os.Getenv(rendezvousEnv),
 				ExportChoose:  choose,
+				StatsChoose:   chooseStats,
 				AfterChange:   afterChange,
 				CanRestart:    canRestart,
 			})
@@ -143,6 +147,7 @@ func runWindow(ctx context.Context, s *session, log *slog.Logger, wailsApp *atom
 			application.NewService(app.NewProjects(proj, rt.Files)),
 			application.NewService(app.NewPreviewService(rt.Preview)),
 			application.NewService(app.NewPresentService(winService)),
+			application.NewService(rt.Stats),
 		},
 		Assets: application.AssetOptions{
 			Handler: app.ProjectImages(proj, assetToken, application.AssetFileServerFS(inkwell.Assets)),

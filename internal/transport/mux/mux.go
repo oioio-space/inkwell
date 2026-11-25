@@ -78,13 +78,16 @@ type muxer struct {
 	gates    map[transport.PeerID]*gate    // peers with a large message being sent
 	partials map[transport.PeerID]*partial // reader goroutine only
 	order    []*sub                        // subs in the order they were asked for
-	bufs     sync.Pool                     // *[]byte send buffers, for frames of at most maxPooled bytes
-	res      Reserver                      // t, if it has a budget
-	held     int                           // capacity of partials; reader goroutine only
-	msgID    atomic.Uint32
-	ngates   atomic.Int32 // len(gates), readable without gmu
-	gmu      sync.RWMutex // guards gates
-	once     sync.Once
+	bufs     sync.Pool                     // *sendBuf send buffers, for frames of at most maxPooled bytes
+	links    links                         // the traffic of each peer, see [Traffic]
+	// recvLinks caches the links the reader goroutine counts into; reader goroutine only.
+	recvLinks map[transport.PeerID]*link
+	res       Reserver // t, if it has a budget
+	held      int      // capacity of partials; reader goroutine only
+	msgID     atomic.Uint32
+	ngates    atomic.Int32 // len(gates), readable without gmu
+	gmu       sync.RWMutex // guards gates
+	once      sync.Once
 }
 
 // Split returns a sub-transport for each of channels, over t. Sub-transports
@@ -106,7 +109,10 @@ func Split(t transport.Transport, channels ...byte) map[byte]transport.Transport
 
 		gates:    make(map[transport.PeerID]*gate),
 		partials: make(map[transport.PeerID]*partial),
+
+		recvLinks: make(map[transport.PeerID]*link),
 	}
+	m.bufs.New = func() any { return newSendBuf(&m.links) }
 	out := make(map[byte]transport.Transport, len(channels))
 	for _, c := range channels {
 		if _, dup := m.subs[c]; dup || c == fragChannel {
@@ -160,8 +166,11 @@ func (m *muxer) run() {
 			return
 		}
 		if ev.Kind != transport.Message {
-			if ev.Kind == transport.PeerDown {
+			switch ev.Kind {
+			case transport.PeerDown:
 				m.drop(ev.Peer)
+			case transport.PeerUp:
+				m.recvLink(ev.Peer).opened.Add(1)
 			}
 			for _, s := range m.order {
 				if !s.q.push(m.ctx, ev) {
@@ -173,6 +182,7 @@ func (m *muxer) run() {
 		if len(ev.Payload) == 0 {
 			continue
 		}
+		m.recvLink(ev.Peer).recv.Add(uint64(len(ev.Payload))) // #nosec G115 -- a length.
 		if ev.Payload[0] == fragChannel {
 			if !m.reassemble(ev.Peer, ev.Payload) {
 				return
@@ -234,20 +244,19 @@ func (s *sub) Send(ctx context.Context, to transport.PeerID, payload []byte) err
 	}
 	// The underlying Send does not retain the frame, so its buffer is reused.
 	bp := s.m.getBuf()
-	*bp = s.frame((*bp)[:0], payload)
-	err := s.m.t.Send(ctx, to, *bp)
+	bp.b = s.frame(bp.b[:0], payload)
+	err := s.m.t.Send(ctx, to, bp.b)
+	if a := bp.acc; err == nil && a.ready(to) {
+		a.n += uint64(len(bp.b)) // the common case, inlined: no call, no atomic
+	} else if err == nil {
+		a.add(to, len(bp.b))
+	}
 	s.m.bufs.Put(bp)
 	return err
 }
 
 // getBuf returns a pooled send buffer.
-func (m *muxer) getBuf() *[]byte {
-	bp, _ := m.bufs.Get().(*[]byte)
-	if bp == nil {
-		bp = new([]byte)
-	}
-	return bp
-}
+func (m *muxer) getBuf() *sendBuf { return m.bufs.Get().(*sendBuf) }
 
 // frame appends the channel byte and payload to buf.
 func (s *sub) frame(buf, payload []byte) []byte {

@@ -200,12 +200,12 @@ func (s *sub) sendFragmented(ctx context.Context, to transport.PeerID, payload [
 	defer m.bufs.Put(bp)
 	for off := 0; off < len(payload); off += fragSize {
 		chunk := payload[off:min(off+fragSize, len(payload))]
-		buf := append(append((*bp)[:0], fragChannel), s.ch)
+		buf := append(append(bp.b[:0], fragChannel), s.ch)
 		buf = binary.BigEndian.AppendUint32(buf, id)
 		buf = binary.BigEndian.AppendUint32(buf, uint32(len(payload))) // #nosec G115 -- ≤ MaxFrame.
 		buf = binary.BigEndian.AppendUint32(buf, uint32(off))          // #nosec G115 -- < len(payload).
 		buf = append(buf, chunk...)
-		*bp = buf
+		bp.b = buf
 		if err := g.acquire(ctx, true); err != nil {
 			return err
 		}
@@ -214,6 +214,7 @@ func (s *sub) sendFragmented(ctx context.Context, to transport.PeerID, payload [
 		if err != nil {
 			return err
 		}
+		bp.acc.add(to, len(buf))
 	}
 	return nil
 }

@@ -13,8 +13,10 @@ import (
 	"github.com/oioio-space/inkwell/internal/bridge"
 	"github.com/oioio-space/inkwell/internal/identity"
 	"github.com/oioio-space/inkwell/internal/invite"
+	"github.com/oioio-space/inkwell/internal/obs"
 	"github.com/oioio-space/inkwell/internal/project"
 	"github.com/oioio-space/inkwell/internal/transport"
+	"github.com/oioio-space/inkwell/internal/transport/mux"
 	"github.com/oioio-space/inkwell/internal/transport/p2p"
 )
 
@@ -131,6 +133,9 @@ type Options struct {
 	// ExportChoose asks the person where to save an exported PDF (see
 	// [PreviewOptions.Choose]); nil turns the export off.
 	ExportChoose func(name string) (string, error)
+	// StatsChoose asks the person, in a native save dialog, where to export
+	// the statistics (see [obs.Options.Choose]); nil turns that export off.
+	StatsChoose func(name string) (string, error)
 	// AfterChange is set when this process image was started by the restart of a project
 	// change: [Session.StartupNotice] then says, once, how it went.
 	AfterChange bool
@@ -160,12 +165,17 @@ type Runtime struct {
 	// Bridge is drained by a project change before anything is written (rule N-16): the store
 	// and net servers of the webview use it.
 	Bridge *bridge.Drain
+	// Stats is the service of the local statistics, bound to the frontend.
+	Stats *StatsService
 
-	wiring *Wiring
-	inv    *invites
-	chg    *change
-	cancel context.CancelFunc
-	files  sync.WaitGroup
+	wiring    *Wiring
+	inv       *invites
+	chg       *change
+	cancel    context.CancelFunc
+	files     sync.WaitGroup
+	statsLoop sync.WaitGroup
+	// closeStats writes the last minute's statistics and releases their store, once.
+	closeStats func() error
 	// closeBook releases the address book's directory, once the node is closed.
 	closeBook func() error
 }
@@ -215,7 +225,9 @@ func Start(ctx context.Context, home *os.Root, o Options) (*Runtime, error) {
 		return nil, errors.Join(err, store.close(), closeBook())
 	}
 	w := Wire(ctx, node, dev, list, adm, WiringOptions{Log: log, Save: store.save})
-	files, err := NewFiles(o.Project, node.Bulk(), FilesOptions{
+	// The blobs' lane, its bytes counted per link for the statistics like the channels'.
+	bulk := mux.Counted(node.Bulk())
+	files, err := NewFiles(o.Project, bulk, FilesOptions{
 		Allowed: w.isActive, // an active member: connected, admitted, and not suspended
 		Drop:    w.drop,
 		Log:     log,
@@ -239,15 +251,30 @@ func Start(ctx context.Context, home *os.Root, o Options) (*Runtime, error) {
 	fctx, cancel := context.WithCancel(ctx)
 	// Acquire this process's snapshot lease and reclaim abandoned sessions at startup.
 	_, _ = sourceSnapshotPool()
+	meter := new(obs.Meter)
 	pv := NewPreview(PreviewOptions{
 		Snapshot: func(ctx context.Context) (SourceSnapshot, error) { return snapshotProject(ctx, o.Project) },
 		Root:     o.Project.Path(),
 		Title:    func() string { return o.Project.Meta().Title },
 		Choose:   o.ExportChoose,
 		Log:      log,
+		Meter:    meter,
 	})
 	files.SetOnWrite(pv.Changed)
-	r := &Runtime{Node: node, Session: s, Repo: w.Repo(), Files: files, Preview: pv, Bridge: s.chg.drain, wiring: w, inv: inv, chg: s.chg, cancel: cancel, closeBook: closeBook}
+	nm := newNetMeter(meter)
+	// The local statistics live in the profile folder, outside the project (rule P-2); the
+	// application works without them.
+	st, err := obs.Open(home.Name(), obs.Options{Meter: meter, Choose: o.StatsChoose, Projects: func() []string { return []string{o.Project.Path()} }})
+	if err != nil {
+		log.Warn("opening the statistics", "err", err)
+		st = nil
+	}
+	r := &Runtime{Node: node, Session: s, Repo: w.Repo(), Files: files, Preview: pv, Bridge: s.chg.drain, Stats: NewStatsService(st, func() []obs.LinkState { return w.linkStates(bulk) }), wiring: w, inv: inv, chg: s.chg, cancel: cancel, closeBook: closeBook}
+	r.closeStats = func() error { return nil }
+	if st != nil {
+		r.closeStats = sync.OnceValue(st.Close)
+		r.statsLoop.Go(func() { runStats(fctx, st, nm, func() []obs.LinkState { return w.linkStates(bulk) }, log) })
+	}
 	r.files.Go(func() {
 		if err := files.Run(fctx); fctx.Err() == nil && !errors.Is(err, transport.ErrClosed) {
 			log.Error("blob service stopped", "err", err)
@@ -263,9 +290,11 @@ func (r *Runtime) Close() error {
 	r.cancel()
 	r.Preview.Close()
 	r.files.Wait()
+	r.statsLoop.Wait()
+	serr := r.closeStats()
 	werr := r.wiring.Close()
 	r.inv.stop()
 	ferr := r.Files.Close()
 	cerr := r.inv.finishChange(r.chg)
-	return errors.Join(werr, ferr, cerr, r.inv.close(), r.closeBook()) // in this order
+	return errors.Join(serr, werr, ferr, cerr, r.inv.close(), r.closeBook()) // in this order
 }

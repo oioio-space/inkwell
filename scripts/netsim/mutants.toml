@@ -3965,3 +3965,317 @@ why = "typing keys (no Ctrl, Alt or Meta, not a function key) reach a lookup"
 file = "frontend/src/extensions/commands.ts"
 before = "  if (!mayBeChord(e) || !registry) return;"
 after = "  if (!registry) return;"
+
+# Block OBS1 (plan docs/plans/2026-11-24-obs1-observability.md §4): one mutant per rule; a vitest entry's
+# `name` is the exact title the gate's `frontend` criterion requires, a go entry expects its test's own message.
+
+[[mutant]]
+id = "OB1"
+block = "OBS1"
+kind = "vitest"
+test = "frontend/src/extensions/metrics.test.ts"
+name = "OBS1 M-1 a metrics or debug contribution is validated like the other points"
+clause = "OBS1 M-1"
+why = "a metric may take another extension's id"
+[[mutant.edit]]
+file = "frontend/src/extensions/manifest.ts"
+before = "  if (!isOwn(mid, owner)) fail(\"not-own\", `${where}.id`);\n"
+after = ""
+
+[[mutant]]
+id = "OB2"
+block = "OBS1"
+kind = "vitest"
+test = "frontend/src/extensions/metrics.test.ts"
+name = "OBS1 M-2 a free-text, unbounded, unknown-enum or inconsistent field is refused"
+clause = "OBS1 M-2"
+why = "a unit that does not go with its kind is accepted"
+[[mutant.edit]]
+file = "frontend/src/extensions/manifest.ts"
+before = "  if (!METRIC_UNITS[kind as MetricKind].includes(unit)) fail(\"inconsistent\", `${where}.unit`);\n"
+after = ""
+
+[[mutant]]
+id = "OB3"
+block = "OBS1"
+kind = "vitest"
+test = "frontend/src/extensions/metrics.test.ts"
+name = "OBS1 M-3 a metric id already taken is refused in either order"
+clause = "OBS1 M-3"
+why = "a manifest metric keeps an id Go holds"
+[[mutant.edit]]
+file = "frontend/src/extensions/registry.ts"
+before = "    if (!taken.has(m.id)) return true;\n"
+after = "    return true;\n"
+
+[[mutant]]
+id = "OB4"
+block = "OBS1"
+kind = "vitest"
+test = "frontend/src/extensions/metrics.test.ts"
+name = "OBS1 V-1 every debug read passes the value rule"
+clause = "OBS1 V-1"
+why = "a negative, NaN or infinite number passes rule V"
+[[mutant.edit]]
+file = "frontend/src/extensions/values.ts"
+before = "if (type === \"number\") return typeof v === \"number\" && Number.isFinite(v) && v >= 0;"
+after = "if (type === \"number\") return typeof v === \"number\";"
+
+[[mutant]]
+id = "OB5"
+block = "OBS1"
+kind = "vitest"
+test = "frontend/src/ext/activity/activity.test.ts"
+name = "OBS1 T-1 words written count only the person's own edits, mapped through remote ones, at a cost per transaction independent of the document size"
+clause = "OBS1 T-1"
+why = "every change counts as the person's, remote ones included"
+[[mutant.edit]]
+file = "frontend/src/ext/activity/index.ts"
+before = "          if (isOwn(tr)) {"
+after = "          if (tr.docChanged) {"
+
+[[mutant]]
+id = "OB6"
+block = "OBS1"
+kind = "vitest"
+test = "frontend/src/ext/activity/activity.test.ts"
+name = "OBS1 T-2 active time stops after 60 s without an edit"
+clause = "OBS1 T-2"
+why = "a gap of more than a minute counts as active"
+[[mutant.edit]]
+file = "frontend/src/ext/activity/active.ts"
+before = "if (gap > 0 && gap <= IDLE_MS) this.#active += gap;"
+after = "if (gap > 0) this.#active += gap;"
+
+[[mutant]]
+id = "OB7"
+block = "OBS1"
+kind = "vitest"
+test = "frontend/src/obs/obs.test.ts"
+name = "OBS1 P-3 a webview session sends nothing but the person's edits"
+clause = "OBS1 P-3"
+why = "the flushed batch also leaves by a network call"
+[[mutant.edit]]
+file = "frontend/src/obs/session.ts"
+before = "      await this.backend.Flush(batch);\n"
+after = "      await this.backend.Flush(batch);\n      void globalThis.fetch?.(\"/stats\", { method: \"POST\", body: JSON.stringify(batch) });\n"
+
+[[mutant]]
+id = "OB8"
+block = "OBS1"
+kind = "vitest"
+test = "frontend/src/ext/activity/activity.test.ts"
+name = "OBS1 Z-2 typing makes no bridge call until the flush"
+clause = "OBS1 Z-2"
+why = "each delta is handed to Go as it is added"
+[[mutant.edit]]
+file = "frontend/src/obs/session.ts"
+before = "    } else this.#pending.set(key, { m: id, doc, v, n });\n"
+after = "    } else this.#pending.set(key, { m: id, doc, v, n });\n    void this.flush();\n"
+
+[[mutant]]
+id = "OB9"
+block = "OBS1"
+kind = "vitest"
+test = "frontend/src/extensions/metrics.test.ts"
+name = "OBS1 Z-4 a debug provider runs only when read"
+clause = "OBS1 Z-4"
+why = "a debug provider's entry is loaded when the registry is built"
+[[mutant.edit]]
+file = "frontend/src/extensions/registry.ts"
+before = "  const readDebug = async (p: DebugProvider): Promise<DebugRead> => {\n"
+after = "  for (const p of debug) void load(p);\n  const readDebug = async (p: DebugProvider): Promise<DebugRead> => {\n"
+
+[[mutant]]
+id = "OB10"
+block = "OBS1"
+kind = "go"
+pkg = "./internal/obs"
+test = "TestOBS1V2DeclareAndBatchValueRule"
+expect = "want a refusal"
+clause = "OBS1 V-2"
+why = "a negative, fractional or unbounded value passes"
+[[mutant.edit]]
+file = "internal/obs/obs.go"
+before = "\tcase !count(x.V, d.Max):"
+after = "\tcase math.IsNaN(x.V):"
+
+[[mutant]]
+id = "OB11"
+block = "OBS1"
+kind = "go"
+pkg = "./internal/obs"
+test = "TestOBS1V3DebugSnapshotRedacted"
+expect = "snapshot holds"
+clause = "OBS1 V-3"
+why = "the snapshot keeps the raw peer id"
+[[mutant.edit]]
+file = "internal/obs/debug.go"
+before = "\t\t\tPeer:       pseudonym(salt, l.Peer),"
+after = "\t\t\tPeer:       l.Peer,"
+
+[[mutant]]
+id = "OB12"
+block = "OBS1"
+kind = "go"
+pkg = "./internal/obs"
+test = "TestOBS1S1DailyAggregation"
+expect = "a 30 h measure is stored as"
+clause = "OBS1 S-1"
+why = "a delta without a measure count is counted as one measure"
+[[mutant.edit]]
+file = "internal/obs/store.go"
+before = "\tn := uint64(x.N) // explicit: the later parts of a split measure carry none\n"
+after = "\tn := max(uint64(x.N), 1)\n"
+
+[[mutant]]
+id = "OB13"
+block = "OBS1"
+kind = "go"
+pkg = "./internal/obs"
+test = "TestOBS1S2CrashLosesAtMostOneInterval"
+expect = "the next run holds"
+clause = "OBS1 S-2"
+why = "a restart forgets the day written before the crash"
+[[mutant.edit]]
+file = "internal/obs/store.go"
+before = "\tif b, err := r.ReadFile(dayFile(s.day)); err == nil {\n\t\ts.load(b)\n\t}\n"
+after = ""
+
+[[mutant]]
+id = "OB14"
+block = "OBS1"
+kind = "go"
+pkg = "./internal/obs"
+test = "TestOBS1S3RetentionAndBound"
+expect = "want false"
+clause = "OBS1 S-3"
+why = "old days are never removed"
+[[mutant.edit]]
+file = "internal/obs/store.go"
+before = "ok && err == nil && day < cutoff {"
+after = "ok && err == nil && day < cutoff[:0] {"
+
+[[mutant]]
+id = "OB15"
+block = "OBS1"
+kind = "go"
+pkg = "./internal/obs"
+test = "TestOBS1P1SeededSessionHoldsNothingPrivate"
+expect = "is not HMAC(key, id)[:8]"
+clause = "OBS1 P-1"
+why = "a document is keyed by an unkeyed hash of its id"
+[[mutant.edit]]
+file = "internal/obs/store.go"
+before = "\t\tk.k = pseudonym(s.key, x.Doc)"
+after = "\t\tk.k = pseudonym(nil, x.Doc)"
+
+[[mutant]]
+id = "OB16"
+block = "OBS1"
+kind = "go"
+pkg = "./internal/obs"
+test = "TestOBS1P2StoreOutsideProjects"
+expect = "want ErrNoHome"
+clause = "OBS1 P-2"
+why = "an empty profile folder is not refused"
+[[mutant.edit]]
+file = "internal/obs/store.go"
+before = "\tif home == \"\" {\n\t\treturn nil, ErrNoHome\n\t}\n"
+after = ""
+
+[[mutant]]
+id = "OB17"
+block = "OBS1"
+kind = "go"
+pkg = "./internal/app"
+test = "TestOBS1P3NothingLeaves"
+expect = "carries the"
+clause = "OBS1 P-3"
+why = "the minute's statistics are also sent to the connected peers"
+[[mutant.edit]]
+file = "internal/app/stats.go"
+before = "\t\"crypto/rand\"\n"
+after = "\t\"crypto/rand\"\n\t\"encoding/json\"\n"
+[[mutant.edit]]
+file = "internal/app/stats.go"
+before = "\tbyPeer := map[transport.PeerID]*obs.LinkState{}\n"
+after = "\tleak = func(b []byte) {\n\t\tfor _, p := range w.raw.Peers() {\n\t\t\t_ = w.trustCh.Send(w.ctx, p, b)\n\t\t}\n\t}\n\tbyPeer := map[transport.PeerID]*obs.LinkState{}\n"
+[[mutant.edit]]
+file = "internal/app/stats.go"
+before = "\t\tif err := st.Flush(); err != nil {\n"
+after = "\t\tif days, err := st.Days(); err == nil && leak != nil {\n\t\t\tb, _ := json.Marshal(days)\n\t\t\tleak(b)\n\t\t}\n\t\tif err := st.Flush(); err != nil {\n"
+[[mutant.edit]]
+file = "internal/app/stats.go"
+before = "const statsEvery = time.Minute\n"
+after = "const statsEvery = time.Minute\n\nvar leak func([]byte)\n"
+
+[[mutant]]
+id = "OB18"
+block = "OBS1"
+kind = "go"
+pkg = "./internal/obs"
+test = "TestOBS1P4ExportOnlyAskedOutsideProjects"
+expect = "want ErrInsideProject"
+clause = "OBS1 P-4"
+why = "an export inside an open project is written"
+[[mutant.edit]]
+file = "internal/obs/store.go"
+before = "\tinside, err := s.insideProject(abs)\n\tif err != nil || inside {"
+after = "\tinside, err := s.insideProject(abs)\n\tif err != nil || inside && false {"
+
+[[mutant]]
+id = "OB19"
+block = "OBS1"
+kind = "go"
+pkg = "./internal/obs"
+test = "TestOBS1P5EraseRemovesKey"
+expect = "the old one"
+clause = "OBS1 P-5"
+why = "erasing keeps the key in memory and writes it again"
+[[mutant.edit]]
+file = "internal/obs/store.go"
+before = "\ts.key, s.keySaved = newKey(), false\n"
+after = "\ts.keySaved = false\n"
+
+[[mutant]]
+id = "OB20"
+block = "OBS1"
+kind = "go"
+pkg = "./internal/obs"
+test = "TestOBS1P6SwitchOffWritesNothing"
+expect = "want only the setting"
+clause = "OBS1 P-6"
+why = "switched off, the day is still written"
+[[mutant.edit]]
+file = "internal/obs/store.go"
+before = "\tif !s.enabled || !s.dirty {"
+after = "\tif !s.dirty {"
+
+[[mutant]]
+id = "OB21"
+block = "OBS1"
+kind = "go"
+pkg = "./internal/obs"
+test = "TestOBS1Z1AddIsFree"
+expect = "allocates"
+clause = "OBS1 Z-1"
+why = "a duration's Add formats its value"
+[[mutant.edit]]
+file = "internal/obs/meter.go"
+before = "\t\td.in.add(\"\", uint64(t.Milliseconds()), 1)"
+after = "\t\td.in.add(fmt.Sprint(t), uint64(t.Milliseconds()), 1)"
+
+[[mutant]]
+id = "OB22"
+block = "OBS1"
+kind = "go"
+pkg = "./internal/transport/mux"
+test = "TestOBS1Z5LinkCountersSummedOnRead"
+expect = "want exactly"
+clause = "OBS1 Z-5"
+why = "received bytes are not counted on their link"
+[[mutant.edit]]
+file = "internal/transport/mux/mux.go"
+before = "\t\tm.recvLink(ev.Peer).recv.Add(uint64(len(ev.Payload))) // #nosec G115 -- a length.\n"
+after = ""

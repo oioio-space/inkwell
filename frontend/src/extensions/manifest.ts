@@ -169,6 +169,53 @@ export interface KeybindingContribution {
   readonly delegated?: Delegated | undefined;
 }
 
+export const METRIC_KINDS = ["counter", "duration", "volume"] as const;
+export type MetricKind = (typeof METRIC_KINDS)[number];
+/** The units each kind may be measured in (plan OBS1 §2): events, milliseconds, an amount. */
+export const METRIC_UNITS: Readonly<Record<MetricKind, readonly string[]>> = {
+  counter: ["count"],
+  duration: ["ms"],
+  volume: ["bytes", "words"],
+};
+export const METRIC_SCOPES = ["app", "document"] as const;
+/** The largest bound: the largest integer a number holds exactly. */
+export const MAX_METRIC = Number.MAX_SAFE_INTEGER;
+
+/**
+ * A metric (plan OBS1 §2): data only. Its values are numbers that pass rule V; it may be split
+ * by a closed set of `values` (a failure's class), never by free text.
+ */
+export interface MetricContribution {
+  /** `<extension>.<name>`, the extension being the manifest's own. */
+  readonly id: string;
+  readonly kind: MetricKind;
+  readonly unit: string;
+  readonly scope: (typeof METRIC_SCOPES)[number];
+  /** An i18n key for a built-in. */
+  readonly label: string;
+  /** The most one flush may add, an integer from 1 to {@link MAX_METRIC}. */
+  readonly max: number;
+  readonly values: readonly string[];
+}
+
+/** What a field of a debug read may hold: a number, a boolean, a diagnostics code or an enum. */
+export type FieldType = "number" | "boolean" | "code" | readonly string[];
+
+/**
+ * A debug provider (plan OBS1 §2): its module exports `read()`, which returns a flat record of
+ * values. It runs only when its state is read, and every read passes rule V against `fields`.
+ */
+export interface DebugContribution {
+  readonly id: string;
+  readonly label: string;
+  readonly entry: string;
+  /**
+   * The value of each field, by name. A key of a read names its field whole or after a
+   * pseudonym or an index (`<link>.kind` is the field `kind`, extensions/values.ts).
+   */
+  readonly fields: Readonly<Record<string, FieldType>>;
+}
+
 export interface Contributes {
   readonly fileTypes: readonly FileTypeContribution[];
   readonly viewers: readonly ViewerContribution[];
@@ -176,6 +223,8 @@ export interface Contributes {
   readonly commands: readonly CommandContribution[];
   readonly menus: readonly MenuContribution[];
   readonly keybindings: readonly KeybindingContribution[];
+  readonly metrics: readonly MetricContribution[];
+  readonly debug: readonly DebugContribution[];
 }
 
 export interface Manifest {
@@ -220,7 +269,13 @@ export type Reason =
   /** A chord that is not in the written form, or that its system forbids (spec §8.2). */
   | "bad-chord"
   | "forbidden-chord"
-  | "bad-when";
+  | "bad-when"
+  /** A metric or debug field that would hold text (rule V). */
+  | "free-text"
+  /** A metric without a finite bound. */
+  | "unbounded"
+  /** A metric whose unit does not go with its kind. */
+  | "inconsistent";
 
 /** A manifest that is refused, with the reason and where in it. */
 export class ManifestError extends Error {
@@ -624,6 +679,98 @@ function activation(v: unknown, where: string): string {
   return s;
 }
 
+/** A debug field's name, as Go's JSON writes it (`rttMs`). */
+const FIELD = /^[a-z][A-Za-z0-9]*$/;
+/** An enum word: what a metric's or a field's declared values are made of. */
+const ENUM_WORD = /^[a-z][a-z0-9_-]*$/;
+/** Field types that would let text through: refused by name, with their reason. */
+const TEXT_TYPES = new Set(["text", "string", "any"]);
+
+function enumValues(v: unknown, where: string): readonly string[] {
+  if (typeof v === "string" && TEXT_TYPES.has(v)) fail("free-text", where);
+  return list(v, where, 64, (x, at) => {
+    const s = string(x, at, 32);
+    if (!ENUM_WORD.test(s)) fail("free-text", at);
+    return s;
+  });
+}
+
+/**
+ * A metric. Its id is its manifest's own; `max` is required, finite and an integer: a metric
+ * that could add without bound is refused as `unbounded`.
+ */
+export function parseMetric(v: unknown, where: string, owner: string): MetricContribution {
+  const o = object(
+    v,
+    where,
+    ["id", "kind", "unit", "scope", "label", "max", "values"],
+    ["id", "kind", "unit", "scope", "label"],
+  );
+  const mid = commandId(o.id, `${where}.id`);
+  if (!isOwn(mid, owner)) fail("not-own", `${where}.id`);
+  const kind = string(o.kind, `${where}.kind`, MAX_WORD);
+  if (!(METRIC_KINDS as readonly string[]).includes(kind)) fail("bad-value", `${where}.kind`);
+  const unit = string(o.unit, `${where}.unit`, MAX_WORD);
+  if (!Object.values(METRIC_UNITS).some((units) => units.includes(unit)))
+    fail("bad-value", `${where}.unit`);
+  if (!METRIC_UNITS[kind as MetricKind].includes(unit)) fail("inconsistent", `${where}.unit`);
+  const scope = string(o.scope, `${where}.scope`, MAX_WORD);
+  if (!(METRIC_SCOPES as readonly string[]).includes(scope)) fail("bad-value", `${where}.scope`);
+  if (typeof o.max !== "number" || !Number.isFinite(o.max) || o.max > MAX_METRIC)
+    fail("unbounded", `${where}.max`);
+  const max = o.max as number;
+  if (!Number.isInteger(max) || max < 1) fail("bad-value", `${where}.max`);
+  return frozen({
+    id: mid,
+    kind: kind as MetricKind,
+    unit,
+    scope: scope as MetricContribution["scope"],
+    label: string(o.label, `${where}.label`, MAX_LABEL),
+    max,
+    values: enumValues(o.values, `${where}.values`),
+  });
+}
+
+function fieldType(v: unknown, where: string): FieldType {
+  if (v === "number" || v === "boolean" || v === "code") return v;
+  if (typeof v === "string")
+    return TEXT_TYPES.has(v) ? fail("free-text", where) : fail("bad-value", where);
+  const values = enumValues(v, where);
+  if (values.length === 0) fail("bad-value", where);
+  return values;
+}
+
+function debugProvider(
+  v: unknown,
+  where: string,
+  source: ManifestSource,
+  owner: string,
+): DebugContribution {
+  const o = object(
+    v,
+    where,
+    ["id", "label", "entry", "fields"],
+    ["id", "label", "entry", "fields"],
+  );
+  const did = commandId(o.id, `${where}.id`);
+  if (!isOwn(did, owner)) fail("not-own", `${where}.id`);
+  const f = object(o.fields, `${where}.fields`, Object.keys(o.fields ?? {}), []);
+  const names = Object.keys(f);
+  if (names.length === 0) fail("missing-key", `${where}.fields`);
+  if (names.length > 64) fail("too-many", `${where}.fields`);
+  const fields: Record<string, FieldType> = {};
+  for (const name of names) {
+    if (!FIELD.test(name) || name.length > MAX_ID) fail("bad-id", `${where}.fields.${name}`);
+    fields[name] = fieldType(f[name], `${where}.fields.${name}`);
+  }
+  return frozen({
+    id: did,
+    label: string(o.label, `${where}.label`, MAX_LABEL),
+    entry: entry(o.entry, `${where}.entry`, source),
+    fields: frozen(fields),
+  });
+}
+
 /**
  * Parses and checks a manifest. Throws a {@link ManifestError} naming the reason. `ui.native` is
  * accepted only from a built-in that is also essential, and a built-in folder that holds code
@@ -651,7 +798,7 @@ export function parseManifest(source: ManifestSource): Manifest {
   const c = object(
     o.contributes,
     "manifest.contributes",
-    ["fileTypes", "viewers", "grammars", "commands", "menus", "keybindings"],
+    ["fileTypes", "viewers", "grammars", "commands", "menus", "keybindings", "metrics", "debug"],
     [],
   );
   const owner = id(o.id, "manifest.id");
@@ -677,6 +824,12 @@ export function parseManifest(source: ManifestSource): Manifest {
       keybindings: list(c.keybindings, "manifest.contributes.keybindings", 128, (x, at) =>
         keybinding(x, at, source, own),
       ),
+      metrics: list(c.metrics, "manifest.contributes.metrics", 64, (x, at) =>
+        parseMetric(x, at, owner),
+      ),
+      debug: list(c.debug, "manifest.contributes.debug", 16, (x, at) =>
+        debugProvider(x, at, source, owner),
+      ),
     }),
   });
   const native = [
@@ -686,7 +839,12 @@ export function parseManifest(source: ManifestSource): Manifest {
   ].some((x) => x.capabilities.includes(NATIVE));
   if (native && (source.origin !== "builtin" || !manifest.essential))
     fail("native-refused", "manifest");
-  if (source.origin === "builtin" && source.files.size > 0 && !native)
+  // Only the `native/` folder is the carve-out: a debug provider's `debug/` module reads only.
+  if (
+    source.origin === "builtin" &&
+    [...source.files].some((f) => f.startsWith("native/")) &&
+    !native
+  )
     fail("native-unused", "manifest");
   return manifest;
 }

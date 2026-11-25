@@ -835,5 +835,18 @@
   "cmd.format.unavailable": "Not available for this file, or it is read-only",
   "cmd.present.unavailable": "Only a Typst document can be presented",
   "cmd.typst.unavailable": "Only in a Typst file",
-  "cmd.tables.unavailable": "Not while typing in a cell"
+  "cmd.tables.unavailable": "Not while typing in a cell",
+  "metric.words": "Words written",
+  "metric.active": "Time spent writing",
+  "metric.opened": "Openings",
+  "metric.openTime": "Time open",
+  "metric.received": "Changes received",
+  "metric.dropped": "Values not kept",
+  "metric.network.sent": "Data sent",
+  "metric.network.received": "Data received",
+  "metric.network.connections": "Connections",
+  "metric.preview.compilations": "Layouts",
+  "metric.preview.failures": "Failed layouts",
+  "metric.preview.time": "Layout time",
+  "debug.network": "Network"
 }

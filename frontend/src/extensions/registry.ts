@@ -9,18 +9,22 @@ import { type Binding, type Resolution, resolve, type UserBinding } from "./bind
 import type { System } from "./keys";
 import {
   type CommandContribution,
+  type DebugContribution,
   type FileTypeContribution,
   type GrammarContribution,
   ManifestError,
   type ManifestSource,
   MENU_GROUPS,
   type MenuContribution,
+  type MetricContribution,
   type Origin,
   PROTECTED_GROUPS,
   parseManifest,
+  parseMetric,
   type Storage,
   type ViewerContribution,
 } from "./manifest";
+import { checkRead, type DebugRead } from "./values";
 
 /** What Go found when it read a file as text: decodable text, or not (MF-15). */
 export type ContentClass = "text" | "binary";
@@ -50,7 +54,22 @@ export interface Viewer extends ViewerContribution, Owned {}
 export interface Grammar extends GrammarContribution, Owned {}
 export interface Command extends CommandContribution, Owned {}
 export interface MenuItem extends MenuContribution, Owned {}
-export type { Binding };
+export interface DebugProvider extends DebugContribution, Owned {}
+/** A metric of a manifest, or one Go declares in code (`go`), which has no folder. */
+export interface Metric extends MetricContribution {
+  readonly extension: string;
+  readonly from: "manifest" | "go";
+}
+/** The metrics of the manifests and of Go together, and the ones refused for it. */
+export interface MetricsView {
+  readonly metrics: readonly Metric[];
+  readonly refused: readonly Refusal[];
+}
+/** What a debug provider's entry exports. */
+export interface DebugModule {
+  read(): unknown;
+}
+export type { Binding, DebugRead };
 
 /** A manifest the registry did not take, and why. */
 export interface Refusal {
@@ -133,6 +152,21 @@ export interface Registry {
   loadCommand(c: Command): Promise<unknown> | undefined;
   /** A command's entry module if it has already loaded. */
   loadedCommand(c: Command): unknown;
+  /** The metrics of the manifests, with Go's if they were given at build. */
+  readonly metrics: readonly Metric[];
+  metric(id: string): Metric | undefined;
+  /**
+   * The metrics with Go's own descriptors (M-3): one whose id another holds is refused, Go's
+   * being the core's, whether Go's arrive before the registry is built or after.
+   */
+  withGoMetrics(descriptors: readonly unknown[]): MetricsView;
+  readonly debug: readonly DebugProvider[];
+  /**
+   * Runs a debug provider (its entry is loaded on the first read, and nothing runs it
+   * otherwise, Z-4) and passes its record through rule V (V-1): a value that breaks it is
+   * dropped and counted, and a provider that fails reads as empty.
+   */
+  readDebug(p: DebugProvider): Promise<DebugRead>;
 }
 
 function freeze<T extends object>(fields: T): Readonly<T> {
@@ -167,7 +201,48 @@ function claimsOf(m: ReturnType<typeof parseManifest>): string[] {
     ...c.viewers.map((v) => `viewer ${v.id}`),
     ...c.grammars.flatMap((g) => [`grammar ${g.id}`, ...g.names.map((n) => `grammar name ${n}`)]),
     ...c.commands.map((x) => `command ${x.id}`),
+    ...c.metrics.map((x) => `metric ${x.id}`),
+    ...c.debug.map((x) => `debug ${x.id}`),
   ];
+}
+
+/**
+ * Merges Go's metric descriptors into the manifests' metrics: each is checked like a manifest's
+ * (its extension is its id's first word), and a manifest metric whose id Go holds is refused.
+ */
+function mergeGoMetrics(
+  own: readonly Metric[],
+  folderOf: ReadonlyMap<string, string>,
+  descriptors: readonly unknown[],
+): MetricsView {
+  const refused: Refusal[] = [];
+  const go: Metric[] = [];
+  for (const [i, d] of descriptors.entries()) {
+    const id = (d as { id?: unknown } | null)?.id;
+    const extension = typeof id === "string" ? id.slice(0, Math.max(0, id.indexOf("."))) : "";
+    try {
+      const m = parseMetric(d, `go.metrics[${i}]`, extension);
+      if (go.some((x) => x.id === m.id)) throw new ManifestError("bad-id", `go.metrics[${i}].id`);
+      go.push(freeze({ ...m, extension, from: "go" as const }));
+    } catch (error) {
+      refused.push(
+        freeze({ folder: "go", reason: error instanceof ManifestError ? error.reason : "invalid" }),
+      );
+    }
+  }
+  const taken = new Set(go.map((x) => x.id));
+  const kept = own.filter((m) => {
+    if (!taken.has(m.id)) return true;
+    refused.push(
+      freeze({
+        folder: folderOf.get(m.extension) ?? m.extension,
+        reason: `conflict on metric ${m.id}`,
+        with: Object.freeze(["go", m.extension]),
+      }),
+    );
+    return false;
+  });
+  return freeze({ metrics: Object.freeze([...go, ...kept]), refused: Object.freeze(refused) });
 }
 
 /**
@@ -178,7 +253,7 @@ function claimsOf(m: ReturnType<typeof parseManifest>): string[] {
 export function buildRegistry(
   sources: readonly ManifestSource[],
   loader: EntryLoader,
-  opts: { disabled?: Iterable<string> } = {},
+  opts: { disabled?: Iterable<string>; goMetrics?: readonly unknown[] } = {},
 ): Registry {
   const disabled = new Set(opts.disabled ?? []);
   const holder = new Map<string, string>();
@@ -189,6 +264,8 @@ export function buildRegistry(
   const commands: Command[] = [];
   const menus: MenuItem[] = [];
   const keybindings: Binding[] = [];
+  const metrics: Metric[] = [];
+  const debug: DebugProvider[] = [];
   const refused: Refusal[] = [];
   // Every manifest is parsed first: any failure, even one that is not a refusal (a stack overflow,
   // a throwing source), refuses that manifest alone, and the essential extensions are known before
@@ -261,6 +338,9 @@ export function buildRegistry(
     for (const g of m.contributes.grammars) grammars.push(freeze({ ...g, ...owned }));
     for (const x of m.contributes.commands) commands.push(freeze({ ...x, ...owned }));
     for (const x of m.contributes.keybindings) keybindings.push(freeze({ ...x, ...owned }));
+    for (const x of m.contributes.metrics)
+      metrics.push(freeze({ ...x, extension: m.id, from: "manifest" as const }));
+    for (const x of m.contributes.debug) debug.push(freeze({ ...x, ...owned }));
     for (const x of m.contributes.menus) {
       // The groups of the project and of the application are the core's (§15.13).
       if (source.origin !== "builtin" && PROTECTED_GROUPS.has(x.group))
@@ -380,7 +460,7 @@ export function buildRegistry(
   };
 
   const loads = new Map<string, Promise<unknown>>();
-  const load = (c: Viewer | Grammar): Promise<unknown> => {
+  const load = (c: Viewer | Grammar | DebugProvider): Promise<unknown> => {
     const key = `${c.origin}:${c.folder}/${c.entry}`;
     let p = loads.get(key);
     if (!p) {
@@ -447,6 +527,24 @@ export function buildRegistry(
     }
   };
 
+  const folderOf = new Map(extensions.map((e) => [e.id, e.folder]));
+  const view = mergeGoMetrics(metrics, folderOf, opts.goMetrics ?? []);
+  refused.push(...view.refused);
+  const metricById = new Map(view.metrics.map((x) => [x.id, x]));
+
+  // A debug provider's entry is loaded on its first read only, once like any entry.
+  const readDebug = async (p: DebugProvider): Promise<DebugRead> => {
+    let read: DebugRead;
+    try {
+      read = checkRead(await ((await load(p)) as DebugModule).read(), p.fields);
+    } catch {
+      console.warn(`debug ${p.id}: the read failed`);
+      return Object.freeze({ values: Object.freeze(Object.create(null)), dropped: 1 });
+    }
+    if (read.dropped > 0) console.warn(`debug ${p.id}: ${read.dropped} values broke rule V`);
+    return read;
+  };
+
   const commandLoads = new Map<string, Promise<unknown>>();
   const commandModules = new Map<string, unknown>();
   const loadCommand = (c: Command): Promise<unknown> | undefined => {
@@ -464,6 +562,12 @@ export function buildRegistry(
   };
 
   return freeze({
+    metrics: view.metrics,
+    metric: (id: string) => metricById.get(id),
+    withGoMetrics: (descriptors: readonly unknown[]) =>
+      mergeGoMetrics(metrics, folderOf, [...(opts.goMetrics ?? []), ...descriptors]),
+    debug: Object.freeze(debug),
+    readDebug,
     commands: Object.freeze(commands),
     command: (id: string) => commandById.get(id),
     keybindings: Object.freeze(keybindings),

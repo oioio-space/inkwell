@@ -16,6 +16,7 @@ import {
   lineNumbers,
   placeholder,
 } from "@codemirror/view";
+import { activity } from "../ext/activity";
 import { t } from "../i18n";
 import { writingHelp } from "../language/extension";
 import { diagnosticMarks } from "../language/marks";
@@ -186,6 +187,8 @@ export function createEditor(
         else onState?.(u.state, u.transactions);
       }),
       amSync({ handle, path: ["text"], ...(onRefused ? { onRefused } : {}) }),
+      // The person's own words and active time, for the local statistics (OBS1): no bridge call.
+      activity(handle.documentId),
       remoteCursors(),
       presence.extension,
       theme,

@@ -14,7 +14,8 @@ const MANIFESTS = import.meta.glob<string>("../ext/*/inkwell-plugin.json", {
   import: "default",
   eager: true,
 });
-const ENTRIES: Importers = import.meta.glob("../ext/*/native/*.ts");
+// `native/` holds the code that reaches the editor (FE-3), `debug/` the debug providers' reads.
+const ENTRIES: Importers = import.meta.glob(["../ext/*/native/*.ts", "../ext/*/debug/*.ts"]);
 
 /** `<root>/<folder>/<rest>` → [folder, rest]. */
 function split(key: string, root: string): [string, string] | undefined {

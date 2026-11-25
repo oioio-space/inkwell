@@ -254,6 +254,27 @@ Apple's keyboard guidelines, CodeMirror 6.43 `runHandlers` (links in the plan's 
   disabled). `Mod-Alt-0` is gone (G-98: a heading's chord again makes a paragraph); Ctrl+Alt+J became Ctrl+Shift+J and
   the grid's Ctrl+Alt+- is gone (K-7).
 
+### Metrics and debug state (OBS1)
+
+Decided 2026-11-25 (plan `docs/plans/2026-11-24-obs1-observability.md`, gate `gates/OBS1.toml`, review
+`gates/OBS1/REVIEW.md`). Source: the OpenTelemetry metrics API (synchronous instruments called inline, observable ones
+read only when observed), never its SDK: no exporter exists.
+
+- **Two points, the same validator** (`extensions/manifest.ts`): `metrics` (`<extension>.<name>`; `kind` `counter`,
+  `duration` or `volume` with a consistent `unit`, `count`, `ms`, `bytes` or `words`; `scope` `app` or `document`; a
+  required finite integer bound `max`, else `unbounded`; optional closed `values`, a free-text type refused as
+  `free-text`) and `debug` (`id`, `label`, `entry`, and `fields`, each `number`, `boolean`, `code` or a closed list). A
+  metric id is a claim like the others; Go declares its own metrics in code (`internal/obs`), and the registry's
+  `withGoMetrics` merges them, a manifest metric whose id Go holds being refused whether Go's descriptors come before
+  the registry is built or after.
+- **Rule V** (`extensions/values.ts`, `internal/obs`): a value is a finite number ≥ 0, a boolean, a declared enum value
+  or a code of the diagnostics taxonomy; never text. A debug provider's `read()` returns a flat record that passes
+  rule V field by field (a value that breaks it is dropped and counted); its entry, under the extension's `debug/`
+  folder, is loaded on the first read only. The `native/` folder alone is the FE-3 carve-out, so a `debug/` module
+  needs no `ui.native`.
+- New built-in: `ext/activity` (data, its counting module imported by the editor's setup, its network provider in
+  `debug/network.ts`). The values go to Go's `StatsService` once a minute; nothing is sent or synchronised.
+
 ## Consequences
 
 - Good: one place for every type, icon, viewer and grammar; a new type is one folder (manifest plus, if it brings code,
