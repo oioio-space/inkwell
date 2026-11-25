@@ -5,12 +5,18 @@
  * Entries are loaded on demand, once each, through the loader it was given.
  */
 import { LanguageDescription, type LanguageSupport } from "@codemirror/language";
+import { type Binding, type Resolution, resolve, type UserBinding } from "./bindings";
+import type { System } from "./keys";
 import {
+  type CommandContribution,
   type FileTypeContribution,
   type GrammarContribution,
   ManifestError,
   type ManifestSource,
+  MENU_GROUPS,
+  type MenuContribution,
   type Origin,
+  PROTECTED_GROUPS,
   parseManifest,
   type Storage,
   type ViewerContribution,
@@ -42,6 +48,9 @@ interface Owned {
 export interface FileType extends FileTypeContribution, Owned {}
 export interface Viewer extends ViewerContribution, Owned {}
 export interface Grammar extends GrammarContribution, Owned {}
+export interface Command extends CommandContribution, Owned {}
+export interface MenuItem extends MenuContribution, Owned {}
+export type { Binding };
 
 /** A manifest the registry did not take, and why. */
 export interface Refusal {
@@ -112,6 +121,18 @@ export interface Registry {
    * viewer of the content class, and `notify` is called once.
    */
   loadViewer(opening: Opening, notify: () => void): Promise<{ viewer: Viewer; module: unknown }>;
+  readonly commands: readonly Command[];
+  command(id: string): Command | undefined;
+  /** Every keybinding as declared, in build order. */
+  readonly keybindings: readonly Binding[];
+  /** The bindings in force on a system, with the person's own (`user`) applied. */
+  bindings(system: System, user?: readonly UserBinding[]): Resolution;
+  /** A menu's items in their fixed groups, then by `order`, then by extension. */
+  menu(location: MenuContribution["location"]): readonly MenuItem[];
+  /** A command's entry module, loaded once; undefined for a command without one. */
+  loadCommand(c: Command): Promise<unknown> | undefined;
+  /** A command's entry module if it has already loaded. */
+  loadedCommand(c: Command): unknown;
 }
 
 function freeze<T extends object>(fields: T): Readonly<T> {
@@ -145,6 +166,7 @@ function claimsOf(m: ReturnType<typeof parseManifest>): string[] {
     ]),
     ...c.viewers.map((v) => `viewer ${v.id}`),
     ...c.grammars.flatMap((g) => [`grammar ${g.id}`, ...g.names.map((n) => `grammar name ${n}`)]),
+    ...c.commands.map((x) => `command ${x.id}`),
   ];
 }
 
@@ -164,6 +186,9 @@ export function buildRegistry(
   const fileTypes: FileType[] = [];
   const viewers: Viewer[] = [];
   const grammars: Grammar[] = [];
+  const commands: Command[] = [];
+  const menus: MenuItem[] = [];
+  const keybindings: Binding[] = [];
   const refused: Refusal[] = [];
   // Every manifest is parsed first: any failure, even one that is not a refusal (a stack overflow,
   // a throwing source), refuses that manifest alone, and the essential extensions are known before
@@ -234,7 +259,43 @@ export function buildRegistry(
     for (const t of m.contributes.fileTypes) fileTypes.push(freeze({ ...t, ...owned }));
     for (const v of m.contributes.viewers) viewers.push(freeze({ ...v, ...owned }));
     for (const g of m.contributes.grammars) grammars.push(freeze({ ...g, ...owned }));
+    for (const x of m.contributes.commands) commands.push(freeze({ ...x, ...owned }));
+    for (const x of m.contributes.keybindings) keybindings.push(freeze({ ...x, ...owned }));
+    for (const x of m.contributes.menus) {
+      // The groups of the project and of the application are the core's (§15.13).
+      if (source.origin !== "builtin" && PROTECTED_GROUPS.has(x.group))
+        refused.push(
+          freeze({
+            folder: source.folder,
+            reason: `protected group ${x.group}`,
+            with: Object.freeze([x.command]),
+          }),
+        );
+      else menus.push(freeze({ ...x, ...owned }));
+    }
   }
+
+  const commandById = new Map(commands.map((x) => [x.id, x]));
+  const known = new Set(commandById.keys());
+  // Each system's defaults are resolved when first asked, once: a start resolves only its own.
+  const defaults = new Map<System, Resolution>();
+  const defaultsOf = (system: System): Resolution => {
+    let r = defaults.get(system);
+    if (!r) {
+      r = resolve(keybindings, system, [], known);
+      defaults.set(system, r);
+    }
+    return r;
+  };
+  const groupOf = (x: MenuItem) => MENU_GROUPS.indexOf(x.group);
+  const menuItems = Object.freeze(
+    [...menus].sort(
+      (a, b) =>
+        groupOf(a) - groupOf(b) ||
+        a.order - b.order ||
+        (a.extension < b.extension ? -1 : a.extension > b.extension ? 1 : 0),
+    ),
+  );
 
   const byId = new Map(fileTypes.map((t) => [t.id, t]));
   const byName = new Map(
@@ -386,7 +447,32 @@ export function buildRegistry(
     }
   };
 
+  const commandLoads = new Map<string, Promise<unknown>>();
+  const commandModules = new Map<string, unknown>();
+  const loadCommand = (c: Command): Promise<unknown> | undefined => {
+    if (c.entry === undefined) return undefined;
+    const key = `${c.origin}:${c.folder}/${c.entry}`;
+    let p = commandLoads.get(key);
+    if (!p) {
+      p = loader(c.folder, c.entry).then((m) => {
+        commandModules.set(key, m);
+        return m;
+      });
+      commandLoads.set(key, p);
+    }
+    return p;
+  };
+
   return freeze({
+    commands: Object.freeze(commands),
+    command: (id: string) => commandById.get(id),
+    keybindings: Object.freeze(keybindings),
+    bindings: (system: System, user: readonly UserBinding[] = []) =>
+      user.length === 0 ? defaultsOf(system) : resolve(keybindings, system, user, known),
+    menu: (location: MenuContribution["location"]) =>
+      menuItems.filter((x) => x.location === location),
+    loadCommand,
+    loadedCommand: (c: Command) => commandModules.get(`${c.origin}:${c.folder}/${c.entry}`),
     extensions: Object.freeze(extensions),
     fileTypes: Object.freeze(fileTypes),
     viewers: Object.freeze(viewers),

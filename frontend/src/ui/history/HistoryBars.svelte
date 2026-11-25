@@ -1,6 +1,22 @@
-<script lang="ts">
+<script module lang="ts">
 import { EditorView } from "@codemirror/view";
-import { tick, untrack } from "svelte";
+import { tick } from "svelte";
+import { session } from "../editorSession.svelte";
+
+/** After the text zoom changed: the caret stays in sight (the zoom keys are `app.zoom-*`). */
+export async function keepCaret(): Promise<void> {
+  await tick();
+  const view = session.view;
+  if (!view) return;
+  view.requestMeasure();
+  view.dispatch({
+    effects: EditorView.scrollIntoView(view.state.selection.main.head, { y: "nearest" }),
+  });
+}
+</script>
+
+<script lang="ts">
+import { untrack } from "svelte";
 import { PICK, showWritten, type Written } from "../../editor/blameMarks";
 import { showChanges } from "../../editor/changeGutter";
 import { changeMarks, resolver } from "../../history/gutter";
@@ -9,13 +25,12 @@ import { t, tn } from "../../i18n";
 import { zoom } from "../../store/zoom.svelte";
 import { workspace } from "../../workspace/workspace.svelte";
 import Banner from "../Banner.svelte";
-import { session } from "../editorSession.svelte";
 import { history } from "./history.svelte";
 
 /**
  * What the history adds around the editor: the strip « Depuis votre dernière visite », the banner
  * when a variant is being edited, and the page-wide wiring (marks in the margin, « Qui a écrit
- * quoi », the zoom keys). It draws nothing when there is nothing to say.
+ * quoi », the text zoom and Ctrl+wheel). It draws nothing when there is nothing to say.
  */
 let count = $state(0);
 
@@ -97,29 +112,6 @@ $effect(() => {
   return () => document.documentElement.style.removeProperty("--text-zoom");
 });
 
-async function keepCaret() {
-  await tick();
-  const view = session.view;
-  if (!view) return;
-  view.requestMeasure();
-  view.dispatch({
-    effects: EditorView.scrollIntoView(view.state.selection.main.head, { y: "nearest" }),
-  });
-}
-
-function onKey(e: KeyboardEvent) {
-  // The sheet keeps its own zoom: what it already handled is left alone.
-  if (e.defaultPrevented) return;
-  if (!(e.ctrlKey || e.metaKey) || e.altKey) return;
-  const p = workspace.project;
-  if (e.key === "=" || e.key === "+") zoom.in(p);
-  else if (e.key === "-" || e.key === "_") zoom.out(p);
-  else if (e.key === "0") zoom.reset(p);
-  else return;
-  e.preventDefault();
-  void keepCaret();
-}
-
 $effect(() => {
   const onWheel = (e: WheelEvent) => {
     if (!(e.ctrlKey || e.metaKey)) return;
@@ -136,8 +128,6 @@ $effect(() => {
 
 const sinceText = $derived(history.sinceAt ? stamp(history.sinceAt, false, "") : "");
 </script>
-
-<svelte:window onkeydown={onKey} />
 
 {#if workspace.variant}
   <Banner role="status">

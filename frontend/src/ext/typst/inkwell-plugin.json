@@ -21,6 +21,116 @@
         "entry": "native/typst.ts",
         "capabilities": ["ui.native"]
       }
+    ],
+    "commands": [
+      {
+        "id": "typst.present",
+        "label": "present.start",
+        "category": "present",
+        "when": "canPresent",
+        "unavailable": "cmd.present.unavailable",
+        "entry": "native/commands.ts",
+        "capabilities": ["ui.native"]
+      },
+      {
+        "id": "typst.present-here",
+        "label": "present.startHere",
+        "category": "present",
+        "when": "canPresent",
+        "unavailable": "cmd.present.unavailable",
+        "entry": "native/commands.ts",
+        "capabilities": ["ui.native"]
+      },
+      {
+        "id": "typst.present-public",
+        "label": "present.showPublic",
+        "category": "present",
+        "when": "canPresent",
+        "unavailable": "cmd.present.unavailable",
+        "entry": "native/commands.ts",
+        "capabilities": ["ui.native"]
+      },
+      {
+        "id": "typst.export",
+        "label": "menu.export",
+        "category": "document",
+        "entry": "native/commands.ts",
+        "capabilities": ["ui.native"]
+      },
+      {
+        "id": "typst.jump-to-preview",
+        "label": "cmd.jump-to-preview",
+        "category": "navigate",
+        "when": "fileType == typst",
+        "unavailable": "cmd.typst.unavailable",
+        "entry": "native/commands.ts",
+        "capabilities": ["ui.native"]
+      },
+      {
+        "id": "typst.signature-help",
+        "label": "cmd.signature-help",
+        "category": "edit",
+        "when": "focus == editor && fileType == typst",
+        "unavailable": "cmd.typst.unavailable",
+        "entry": "native/commands.ts",
+        "capabilities": ["ui.native"]
+      }
+    ],
+    "menus": [
+      {
+        "command": "typst.present",
+        "location": "main",
+        "group": "document",
+        "order": 10
+      },
+      {
+        "command": "typst.present-here",
+        "location": "main",
+        "group": "document",
+        "order": 20
+      },
+      {
+        "command": "typst.present-public",
+        "location": "main",
+        "group": "document",
+        "order": 30
+      },
+      {
+        "command": "typst.export",
+        "location": "main",
+        "group": "document",
+        "order": 40
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "typst.present",
+        "linux": ["F5"],
+        "mac": ["Alt+Meta+p"],
+        "win": ["F5"],
+        "scope": "window"
+      },
+      {
+        "command": "typst.present-here",
+        "linux": ["Shift+F5"],
+        "mac": ["Alt+Shift+Meta+p"],
+        "win": ["Shift+F5"],
+        "scope": "window"
+      },
+      {
+        "command": "typst.jump-to-preview",
+        "linux": ["Ctrl+Shift+j"],
+        "mac": ["Shift+Meta+j"],
+        "win": ["Ctrl+Shift+j"],
+        "scope": "window"
+      },
+      {
+        "command": "typst.signature-help",
+        "linux": ["Ctrl+Shift+Space"],
+        "mac": ["Shift+Meta+Space"],
+        "win": ["Ctrl+Shift+Space"],
+        "scope": "editor"
+      }
     ]
   }
 }

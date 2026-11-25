@@ -60,7 +60,7 @@ describe("registry", () => {
     expect(loader.calls).toBe(0);
     expect(registry.refused).toEqual([]);
     expect(registry.extensions.map((e) => e.folder)).toEqual(sources.map((s) => s.folder));
-    expect(sources.length).toBe(9);
+    expect(sources.length).toBe(11);
     // Any failure to read a manifest refuses that manifest alone (code review, finding 5).
     const broken = {
       origin: "builtin" as const,
@@ -72,7 +72,7 @@ describe("registry", () => {
     };
     const survived = buildRegistry([...sources, broken], counting());
     expect(survived.refused).toEqual([{ folder: "broken", reason: "invalid" }]);
-    expect(survived.extensions.length).toBe(9);
+    expect(survived.extensions.length).toBe(11);
     // Every built-in validates through the one parser, and its labels are messages of the UI.
     for (const s of sources) {
       const m = parseManifest(s);

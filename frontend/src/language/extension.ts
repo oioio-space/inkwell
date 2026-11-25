@@ -127,14 +127,8 @@ export const writingHelp = [
   autocompletion({ override: [complete], maxRenderedOptions: 50 }),
   helpState,
   hoverTooltip(requestHover, { hoverTime: 500 }),
+  // Ctrl+Shift+Space is the registry's `typst.signature-help` (ext/typst/native/commands.ts).
   keymap.of([
-    {
-      key: "Mod-Shift-Space",
-      run: (view) => {
-        void requestSignature(view, true);
-        return true;
-      },
-    },
     {
       key: "Escape",
       run: (view) => {

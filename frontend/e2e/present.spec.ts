@@ -184,7 +184,7 @@ test("PRS-33 PRS-35 PRS-36 PRS-37 PRS-39 one machine pilots another; control is 
 
   // Bob's machine is the audience view; Alice pilots it from hers.
   await bob.getByRole("button", { name: "Menu principal" }).click();
-  await bob.getByTestId("present-as-public").click();
+  await bob.locator('[data-cmd="typst.present-public"]').click();
   await expect(bob.getByTestId("public-overlay")).toBeVisible();
   await expect(bob.getByText("En attente de la présentation…")).toBeVisible();
   await present(alice);
@@ -274,7 +274,7 @@ test("PRS-37 the presenter disappears: the audience view keeps the slide, says s
   await expect(bob.getByTestId("page-indicator")).toHaveText(/sur 4/, SLOW);
 
   await bob.getByRole("button", { name: "Menu principal" }).click();
-  await bob.getByTestId("present-as-public").click();
+  await bob.locator('[data-cmd="typst.present-public"]').click();
   await present(alice);
   await alice.keyboard.press("ArrowRight");
   const shows = bob.getByTestId("public-overlay").locator("img");

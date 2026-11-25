@@ -4,7 +4,7 @@
  * loader, not the manifest, stamps their origin. Entries are a lazy glob: each is a chunk of its
  * own, imported only when the registry asks for it.
  */
-import { type ManifestSource, parseManifest } from "./manifest";
+import type { ManifestSource } from "./manifest";
 import type { EntryLoader } from "./registry";
 
 type Importers = Record<string, () => Promise<unknown>>;
@@ -67,20 +67,27 @@ export function globLoader(entries: Importers = ENTRIES, root = "../ext/"): Entr
 
 /**
  * Starts loading the entries of the built-ins activated at `startup` (the text editor, Typst's
- * grammar) as the page starts, alongside the application's own chunk rather than after it. The
- * registry's later load of the same entry gets the same module.
+ * grammar) as the page starts, alongside the application's own chunk
+ * rather than after it. Only a hint: the manifest is read loosely here and checked by the registry,
+ * which gets the same module when it loads the entry; an entry outside the glob is never imported.
  */
 export function preloadStartup(): void {
   for (const source of builtinSources()) {
-    let manifest: ReturnType<typeof parseManifest>;
+    let raw: { activation?: unknown; contributes?: Record<string, unknown> };
     try {
-      manifest = parseManifest(source);
+      raw = JSON.parse(source.text);
     } catch {
       continue; // the registry refuses it, and says so
     }
-    if (!manifest.activation.includes("startup")) continue;
-    const { viewers, grammars } = manifest.contributes;
-    for (const c of [...viewers, ...grammars])
-      void ENTRIES[`../ext/${source.folder}/${c.entry}`]?.().catch(() => undefined);
+    if (!Array.isArray(raw.activation) || !raw.activation.includes("startup")) continue;
+    const entries = new Set<unknown>();
+    // Command entries wait for an idle page (`warmCommands`): the first paint does not need them.
+    for (const point of ["viewers", "grammars"]) {
+      const list = raw.contributes?.[point];
+      if (Array.isArray(list)) for (const c of list) entries.add((c as { entry?: unknown })?.entry);
+    }
+    for (const entry of entries)
+      if (typeof entry === "string")
+        void ENTRIES[`../ext/${source.folder}/${entry}`]?.().catch(() => undefined);
   }
 }

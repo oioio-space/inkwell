@@ -1,6 +1,10 @@
 import type { EditorView } from "@codemirror/view";
 import { flushSync } from "svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { formatHandlers, formatsOf } from "../../editor/format";
+import { registry } from "../../extensions";
+import { registerSurface } from "../../extensions/commands";
+import { setLive } from "../../extensions/live.svelte";
 import type { ProjectFile } from "../../store/files";
 import { workspace } from "../../workspace/workspace.svelte";
 import { session } from "../editorSession.svelte";
@@ -17,11 +21,19 @@ const mountBar = (
   currentFile = lang === "typst" ? "main.typ" : "notes.md",
 ) => {
   const editor = fakeEditor(marked);
+  // The editor's surface, as Editor.svelte declares it: the bar's commands act there.
+  const target = document.createElement("div");
+  document.body.append(target);
+  registerSurface(target, "editor", formatHandlers(lang, editor.run), {
+    viewer: registry.essentialViewer("text"),
+  });
+  setLive({ formats: formatsOf(lang), readOnly: false });
   const host = render(FormatBar, {
     lang,
     get editorState() {
       return editor.state;
     },
+    target,
     run: editor.run,
     files,
     currentFile,
@@ -216,7 +228,7 @@ describe("formatting bar", () => {
     const tip = (host: HTMLElement, id: string) =>
       host.querySelector(`#tip-${id}`)?.textContent?.replace(/\s+/g, " ").trim();
     expect(tip(typst, "bold")).toBe("Gras *texte* Ctrl+B");
-    expect(tip(typst, "strike")).toBe("Barré #strike[texte] Ctrl+⇧+X");
+    expect(tip(typst, "strike")).toBe("Barré #strike[texte] Ctrl+Maj+X");
     expect(button(typst, "bold")?.getAttribute("aria-describedby")).toBe("tip-bold");
     expect(typst.querySelector("#tip-bold")?.getAttribute("role")).toBe("tooltip");
     cleanup();

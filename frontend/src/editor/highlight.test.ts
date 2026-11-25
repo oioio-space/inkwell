@@ -4,6 +4,7 @@ import { keymap } from "@codemirror/view";
 import { highlightTree, type Tag, tags } from "@lezer/highlight";
 import { typstTags } from "codemirror-lang-typst/lezer";
 import { describe, expect, it } from "vitest";
+import { formatHandlers, formatsOf } from "./format";
 import { forLang, languageExtension } from "./grammars.testkit";
 import { highlightStyle } from "./highlight";
 
@@ -93,6 +94,8 @@ describe("language swap", () => {
   });
 
   it("swaps the formatting keys with the language (Ctrl+U underlines in Typst only)", () => {
+    // The keys are the registry's (`format.*`, EX0b1): the language decides which ones hold, through
+    // the `formats` of the `when` context; the editor's compartment binds none of them any more.
     const bound = (s: EditorState) =>
       s
         .facet(keymap)
@@ -100,10 +103,12 @@ describe("language swap", () => {
         .some((b) => b.key === "Mod-u");
     const language = new Compartment();
     let state = EditorState.create({ doc: "a", extensions: language.of(forLang("typst")) });
-    expect(bound(state)).toBe(true);
+    expect(bound(state)).toBe(false);
+    expect(formatsOf("typst").has("underline")).toBe(true);
     state = state.update({ effects: language.reconfigure(forLang("markdown")) }).state;
     expect(bound(state)).toBe(false);
-    state = state.update({ effects: language.reconfigure(forLang("typst")) }).state;
-    expect(bound(state)).toBe(true);
+    expect(formatsOf("markdown").has("underline")).toBe(false);
+    expect(Object.keys(formatHandlers("markdown", () => true))).not.toContain("format.underline");
+    expect(Object.keys(formatHandlers("typst", () => true))).toContain("format.underline");
   });
 });

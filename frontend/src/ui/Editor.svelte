@@ -6,9 +6,12 @@ const carets = new Map<string, number>();
 <script lang="ts">
 import type { DocHandle } from "@automerge/automerge-repo";
 import type { LanguageSupport } from "@codemirror/language";
+import type { StateCommand } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { untrack } from "svelte";
-import type { Lang } from "../editor/format";
+import { type Lang, textHandlers } from "../editor/format";
+import { registry } from "../extensions";
+import { surface } from "../extensions/commands";
 import { createEditor } from "../editor/setup";
 import { megabytesOf, t } from "../i18n";
 import { MAX_GROWN_CHARS } from "../store/limits";
@@ -82,13 +85,25 @@ $effect(() => {
   };
 });
 $effect(() => editor?.rename(me.name));
+
+/** The view of this editor, while it is mounted. */
+const view = () => (host ? EditorView.findFromDOM(host.querySelector<HTMLElement>(".cm-editor") ?? host) : null) ?? undefined;
+const runOn = (command: StateCommand) => {
+  const v = view();
+  if (!v) return false;
+  const done = command(v);
+  v.focus();
+  return done;
+};
+/** The text surface (`text.editor`): formatting, undo and redo, on this editor. */
+const handlers = $derived(textHandlers(lang, runOn, () => workspace.undoWithKey()));
 $effect(() => editor?.setLanguage(lang, support));
 // Until the rights are known, a reader, or a person who was disconnected (or whom the member list
 // does not name): the text is read, selected and copied, not typed in.
 $effect(() => editor?.setReadOnly(workspace.locked));
 </script>
 
-<div class="page" bind:this={host}></div>
+<div class="page" bind:this={host} use:surface={{ kind: "editor", handlers, viewer: registry.essentialViewer("text"), view }}></div>
 
 <style>
   /* The source reads like the page it becomes: quiet chrome, the text in its own view. */

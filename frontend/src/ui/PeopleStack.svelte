@@ -1,24 +1,15 @@
 <script lang="ts">
+import { cmdAttrs, run } from "../extensions/commands";
 import { t } from "../i18n";
 import { workspace } from "../workspace/workspace.svelte";
 import { personColor, personIndex } from "./people";
 
-let {
-  me,
-  peers,
-  onOpen,
-}: { me: { id: string; name: string }; peers: string[]; onOpen: () => void } = $props();
+/** The people of the project as a stack of initials: a button that opens « Personnes » (`app.people`). */
+let { me, peers }: { me: { id: string; name: string }; peers: string[] } = $props();
 const initial = (s: string) => s.trim().charAt(0).toUpperCase() || "?";
 </script>
 
-<button
-  type="button"
-  class="open"
-  aria-label={t("people.open")}
-  title={t("people.title")}
-  data-testid="people-open"
-  onclick={onOpen}
->
+<button type="button" class="open" {...cmdAttrs("app.people")} data-testid="people-open" onclick={() => run("app.people")}>
 <ul class="stack" aria-label={t("people.label", { count: peers.length + 1 })}>
   {#each peers as peer (peer)}
     {@const name = workspace.names[peer] ?? ""}

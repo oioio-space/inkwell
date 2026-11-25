@@ -3728,35 +3728,35 @@ et la personne peut lui en donner une (Préférences › Écriture › Raccourci
 
 | Action | Linux (GNOME) | macOS | Windows | État |
 |---|---|---|---|---|
-| Enregistrer (mode Ctrl+S) | Ctrl+S | ⌘S | Ctrl+S | fait (ctrlKey ou metaKey, `App.svelte:128`) |
-| Rechercher | Ctrl+F | ⌘F | Ctrl+F | codé, non branché |
-| Remplacer | Ctrl+H | **⌥⌘F** (⌘H masque l'application) | Ctrl+H | codé, non branché |
+| Enregistrer (mode Ctrl+S) | Ctrl+S | ⌘S | Ctrl+S | fait (`app.save`) |
+| Rechercher | Ctrl+F | ⌘F | Ctrl+F | codé, non branché dans le texte (UX1-2) ; branché dans le tableur (`app.find`) |
+| Remplacer | Ctrl+H | **⌥⌘F** (⌘H masque l'application) | Ctrl+H | codé, non branché dans le texte (UX1-2) ; branché dans le tableur (`app.replace`) |
 | Rechercher dans le projet | Ctrl+Maj+F | ⇧⌘F | Ctrl+Maj+F | codé, non branché |
-| Occurrence suivante, précédente | F3 / Maj+F3 | **⌘G / ⇧⌘G** (convention du système) | F3 / Maj+F3 | codé |
-| Gras, italique, souligné | Ctrl+B, I, U | ⌘B, ⌘I, ⌘U | Ctrl+B, I, U | fait |
-| Barré | Ctrl+Maj+X | ⇧⌘X | Ctrl+Maj+X | fait |
-| Code en ligne | Ctrl+E | **⌃⌘E** (⌘E : « utiliser la sélection pour chercher ») | Ctrl+E | fait (Linux) |
-| Bloc de code | Ctrl+Maj+E | ⇧⌘E | Ctrl+Maj+E | fait |
-| Formule | Ctrl+M | **⇧⌘M** (⌘M réduit la fenêtre) | Ctrl+M | fait (Linux) |
-| Lien | Ctrl+K | ⌘K | Ctrl+K | fait |
-| Titres 1 à 4 | Ctrl+1…4 | ⌘1…4 | Ctrl+1…4 | fait |
-| Paragraphe | **le même raccourci de titre, une seconde fois** (Ctrl+2 sur un titre de niveau 2 le rend paragraphe) | idem (⌘2) | idem | à faire : retirer `Mod-Alt-0` (`editor/format/keymap.ts:22`, G-98) |
-| Barre de mise en forme | Ctrl+Maj+T | ⇧⌘T | Ctrl+Maj+T | fait |
+| Occurrence suivante, précédente | F3 / Maj+F3 | **⌘G / ⇧⌘G** (convention du système) | F3 / Maj+F3 | codé dans le texte (UX1-2) ; branché dans le tableur (`app.find-next`, `app.find-previous`) |
+| Gras, italique, souligné | Ctrl+B / Ctrl+I / Ctrl+U | ⌘B / ⌘I / ⌘U | Ctrl+B / Ctrl+I / Ctrl+U | fait (`format.bold`, `format.italic`, `format.underline`) |
+| Barré | Ctrl+Maj+X | ⇧⌘X | Ctrl+Maj+X | fait (`format.strike`) |
+| Code en ligne | Ctrl+E | **⌃⌘E** (⌘E : « utiliser la sélection pour chercher ») | Ctrl+E | fait (`format.code`) |
+| Bloc de code | Ctrl+Maj+E | ⇧⌘E | Ctrl+Maj+E | fait (`format.codeblock`) |
+| Formule | Ctrl+M | **⇧⌘M** (⌘M réduit la fenêtre) | Ctrl+M | fait (`format.formula`) |
+| Lien | Ctrl+K | ⌘K | Ctrl+K | fait (`format.link`) |
+| Titres 1 à 4 | Ctrl+1 / Ctrl+2 / Ctrl+3 / Ctrl+4 | ⌘1 / ⌘2 / ⌘3 / ⌘4 | Ctrl+1 / Ctrl+2 / Ctrl+3 / Ctrl+4 | fait (`format.h1`, `format.h2`, `format.h3`, `format.h4`) |
+| Paragraphe | **le même raccourci de titre, une seconde fois** (Ctrl+2 sur un titre de niveau 2 le rend paragraphe) | idem (⌘2) | idem | fait (`format.h2` une seconde fois ; `format.paragraph` dans le menu des titres ; `Mod-Alt-0` retiré, G-98) |
+| Barre de mise en forme | Ctrl+Maj+T | ⇧⌘T | Ctrl+Maj+T | fait (`app.toolbar`) |
 | Palette | Ctrl+Maj+P | ⇧⌘P | Ctrl+Maj+P | à faire |
 | Aller au fichier | Ctrl+P | **⇧⌘O** (⌘P : Imprimer, convention) | Ctrl+P | à faire |
 | Imprimer… | — (menu) | **⌘P** | — (menu) | à faire |
 | Aller à la ligne | Ctrl+G | **⌘L** (⌘G : suivant) | Ctrl+G | à faire |
 | Sommaire, filtrer | Ctrl+Maj+O | **⌥⇧⌘O** | Ctrl+Maj+O | à faire |
-| Problème suivant, précédent | F8 / Maj+F8 | **⌘' / ⇧⌘'** | F8 / Maj+F8 | à faire |
+| Problème suivant, précédent | F8 / Maj+F8 | **⌘' / ⇧⌘'** | F8 / Maj+F8 | fait (`app.problem-next`, `app.problem-previous`) |
 | Corrections rapides | Alt+Entrée | ⌥↩ | Alt+Entrée | à faire |
 | Suggestions (complétion) | Ctrl+Espace (**à confirmer par un e2e WebKitGTK avec IBus actif**) ; repli Alt+/ | **⌥Échap** (« Compléter » du système de texte ; ⌃Espace change la source de saisie) | Ctrl+Espace ; repli Ctrl+J (une méthode de saisie chinoise peut prendre Ctrl+Espace) | à faire |
-| Aide sur la fonction | Ctrl+Maj+Espace | ⇧⌘Espace | Ctrl+Maj+Espace | à faire |
+| Aide sur la fonction | Ctrl+Maj+Espace | ⇧⌘Espace | Ctrl+Maj+Espace | fait (`typst.signature-help`) |
 | Aller à la définition | F12 | **⌃⌘J** | F12 | à faire |
-| Panneau de gauche | F9 | **⌥⌘S** (la convention du Finder pour la barre latérale) | F9 | à faire |
-| Relire (tiroir) | Ctrl+Maj+H | ⇧⌘H | Ctrl+Maj+H | à faire |
+| Panneau de gauche | F9 | **⌥⌘S** (la convention du Finder pour la barre latérale) | F9 | fait (`app.sidebar`) |
+| Relire (tiroir) | Ctrl+Maj+H | ⇧⌘H | Ctrl+Maj+H | fait (`app.review`) |
 | Versions | — (Relire › Versions, ou palette) | — | — | **retiré** (était Ctrl+Alt+H, soit ⌥⌘H « Masquer les autres ») |
 | Enregistrer une version | Ctrl+Maj+S | **⌃⌘S** (⇧⌘S : Dupliquer ; ⌥⌘S : barre latérale) | Ctrl+Maj+S | à faire |
-| Source → aperçu | Ctrl+Maj+J | ⇧⌘J | Ctrl+Maj+J | à faire (était Ctrl+Alt+J) |
+| Source → aperçu | Ctrl+Maj+J | ⇧⌘J | Ctrl+Maj+J | fait (`typst.jump-to-preview` ; était Ctrl+Alt+J) |
 | Demander à l'IA | — (menu contextuel, palette ; assignable) | — | — | **retiré** (était Ctrl+Alt+I) |
 | Mode concentration | Ctrl+Maj+D | ⇧⌘D | Ctrl+Maj+D | à faire (était Ctrl+Alt+F) |
 | Commenter (texte et cellule) | Ctrl+Maj+M | **⇧⌘K** (Pages, Numbers ; masque « effacer la ligne » de CodeMirror, `Prec.high`) | Ctrl+Maj+M | à faire (N47) |
@@ -3772,17 +3772,17 @@ et la personne peut lui en donner une (Préférences › Écriture › Raccourci
 | Onglet n | Alt+1…9 | — (⌥1 tape un caractère) | — (Alt+chiffre : touches d'accès) | à faire |
 | Navigation arrière, avant | Alt+← / Alt+→ (priorité sur `cursorSyntaxLeft/Right` de CodeMirror) | **⌃⌘← / ⌃⌘→** (⌘[ et ⌘] indentent dans CodeMirror) | Alt+← / Alt+→ | à faire |
 | Renommer | F2 | ↩ sur la ligne de Fichiers (convention du Finder) ; F2 | F2 | à faire |
-| Présenter / depuis ici | F5 / Maj+F5 | **⌥⌘P / ⇧⌥⌘P** (Keynote) | F5 / Maj+F5 | fait (F5) |
-| Différence suivante | F7 / Maj+F7 | ⌥⌘↓ / ⌥⌘↑ | F7 / Maj+F7 | fait (F7) |
-| Zoom du texte | Ctrl+= / Ctrl+- / Ctrl+0 | ⌘= / ⌘- / ⌘0 | Ctrl+= / Ctrl+- / Ctrl+0 | fait |
+| Présenter / depuis ici | F5 / Maj+F5 | **⌥⌘P / ⌥⇧⌘P** (Keynote) | F5 / Maj+F5 | fait (`typst.present`, `typst.present-here`) |
+| Différence suivante | F7 / Maj+F7 | ⌥⌘↓ / ⌥⌘↑ | F7 / Maj+F7 | fait (`app.next-change`, `app.previous-change`) |
+| Zoom du texte | Ctrl+= / Ctrl+- / Ctrl+0 | ⌘= / ⌘- / ⌘0 | Ctrl+= / Ctrl+- / Ctrl+0 | fait (`app.zoom-in`, `app.zoom-out`, `app.zoom-reset` ; Ctrl+Maj+- aussi pour réduire ; dans la grille, le zoom est le sien, Ctrl+- y supprime des cellules et le zoom arrière s'y fait par Ctrl+Maj+- ou Ctrl+molette, Ctrl+Alt+- est retiré, K-7 ; pas pendant la saisie d'une cellule) |
 | Menu principal | F10 | — (barre de menus du système) | F10 | à faire |
 | Menu contextuel | Maj+F10, touche Menu | ⌃clic ; Maj+F10 | Maj+F10, touche Menu | tableur seulement |
 | Zones | F6 / Maj+F6 | **⌘F6 / ⇧⌘F6** (⌃F6 est réservé à la navigation au clavier du système) | F6 / Maj+F6 | à faire |
 | Projets | Ctrl+O | ⌘O | Ctrl+O | à faire |
-| Préférences | Ctrl+, | ⌘, | Ctrl+, | à faire |
+| Préférences | Ctrl+, | ⌘, | Ctrl+, | fait (`app.preferences`) |
 | Aide | F1 | **délégué au système** : le menu Aide de macOS porte ⇧⌘? ; Inkwell ne capture pas la touche (K-6) | F1 | à faire |
 | Raccourcis | Ctrl+? | ⌥⌘/ | Ctrl+Maj+? | à faire |
-| Plein écran | F11 | ⌃⌘F | F11 | à faire |
+| Plein écran | F11 | ⌃⌘F | F11 | fait (`app.fullscreen`) |
 | Exporter | — (après l'audit du registre, C14) | — | — | à faire |
 
 **Raccourcis réservés, par système.** Le registre ne les prend jamais, et le test K-6 tourne avec
@@ -3791,7 +3791,7 @@ la table de **chaque** système.
 | Linux (GNOME, GTK 4, IBus, WebKitGTK) [S2] [S25] | macOS [S30] | Windows [S31] |
 |---|---|---|
 | Super+… ; Alt+Tab ; Alt+F2 ; Alt+F4 ; Alt+F7 ; Alt+F8 ; Alt+F10 ; Alt+Espace ; Ctrl+Alt+Suppr ; Ctrl+Alt+T (Ubuntu) ; Ctrl+Alt+flèches ; Impr, Maj+Impr, Alt+Impr | ⌘H, **⌥⌘H** ; ⌘M, ⌥⌘M ; ⌘Q ; ⌘Tab ; ⌘` ; ⌘Espace, ⌥⌘Espace ; **⌃Espace, ⌃⌥Espace** (source de saisie) ; ⌃⌘Espace (émojis) ; ⌥⌘Échap ; ⇧⌘3, ⇧⌘4, ⇧⌘5 ; ⌃⌘Q ; ⇧⌘Q, ⌥⇧⌘Q ; ⇧⌘? (aide du système) ; ⌃↑, ⌃↓, ⌃←, ⌃→ (Mission Control) ; ⌥⌘8, ⌥⌘= et ⌥⌘- (zoom d'accessibilité) ; ⌘F5 (VoiceOver) ; F11 ; ⌃F1 à ⌃F8 (navigation au clavier du système) ; ⌃⌘D (définition du mot) ; ⌥⌘T (barre d'outils des applications de texte) | **toute combinaison Ctrl+Alt** (AltGr) ; **Alt+lettre ou chiffre** (touches d'accès) ; Win+… (dont Win+. émojis, Win+Espace saisie) ; Alt+Tab ; Alt+F4 ; Alt+Espace ; Ctrl+Échap ; Ctrl+Maj+Échap ; Ctrl+Alt+Suppr ; Maj+Alt (langue de saisie) |
-| Ctrl+. et Ctrl+; (émojis de GTK 4) ; Ctrl+Maj+U (saisie Unicode) ; Ctrl+Maj+I (inspecteur web, s'il est activé) ; **Ctrl+Espace à risque** (IBus) | | Ctrl+Espace **à risque** (méthode de saisie chinoise) |
+| Ctrl+. et Ctrl+; (émojis de GTK 4, **dans un champ de texte** : réservés aux contextes « fenêtre » et « texte », pas à la grille, dont Ctrl+; insère la date) ; Ctrl+Maj+U (saisie Unicode) ; Ctrl+Maj+I (inspecteur web, s'il est activé) ; **Ctrl+Espace à risque** (IBus) | | Ctrl+Espace **à risque** (méthode de saisie chinoise) |
 
 **K-6.** Le registre DOIT refuser, par un test **sur chacun des trois systèmes** :
 - deux actions sur un même raccourci dans un même contexte ;
@@ -3802,9 +3802,13 @@ la table de **chaque** système.
 - Alt+alphanumérique sous Windows.
 
 **Clavier de l'éditeur (CodeMirror) : collisions et règles** (Fable R9-M1). Inkwell installe le
-clavier par défaut de CodeMirror (`defaultKeymap`, `historyKeymap`, `searchKeymap`,
-`editor/setup.ts:127`). Le registre d'Inkwell est installé en **`Prec.high`**. Pour le contexte
-« texte », le test K-6 traite ces trois claviers comme une **quatrième table réservée** : toute
+clavier par défaut de CodeMirror (`defaultKeymap`, `historyKeymap`, `editor/setup.ts`) et celui de
+la complétion (`completionKeymap`, `language/extension.ts`) ; `@codemirror/search` n'est pas installé.
+Le registre d'Inkwell ne passe pas par les claviers de CodeMirror : un seul écouteur `keydown` en
+**phase de capture** (`frontend/src/extensions/commands.ts`, EX0b1) agit avant l'éditeur ; dans le
+tableau ci-dessous, « `Prec.high` » se lit « le registre passe d'abord » (`masks`). Pour le contexte
+« texte », le test K-6 traite ces claviers et les touches propres aux composants (la grille, APG)
+comme une **quatrième table réservée** (`frontend/src/extensions/keytables.ts`) : toute
 liaison qui touche le registre est **résolue ici**, soit parce que le registre change, soit parce
 que la liaison est **masquée sciemment** et listée ci-dessous (⇧⌘K `deleteLine`, Ctrl+I
 `selectParentSyntax`, Ctrl+M `toggleTabFocusMode`, …). Une collision absente du tableau fait échouer K-6.

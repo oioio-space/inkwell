@@ -2,6 +2,8 @@ import { next as A } from "@automerge/automerge";
 import { Repo } from "@automerge/automerge-repo";
 import { flushSync } from "svelte";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import "../../extensions";
+import { installKeys } from "../../extensions/commands";
 import { entryDiff } from "../../history/diffview";
 import type { HDoc } from "../../history/types";
 import { workspace } from "../../workspace/workspace.svelte";
@@ -145,11 +147,17 @@ describe("the differences window", () => {
     await Promise.resolve();
     flushSync();
     expect(host.querySelector(".cm-mergeView")).toBeTruthy();
-    window.dispatchEvent(new KeyboardEvent("keydown", { key: "F7" }));
+    // The keys reach the registry's one listener from inside the window (`app.next-change`).
+    const removeKeys = installKeys();
+    const inside = host.querySelector("[data-testid=diff-info]") as HTMLElement;
+    inside.dispatchEvent(new KeyboardEvent("keydown", { key: "F7", bubbles: true }));
     flushSync();
     expect(info()).toContain("Changement 2 sur 2");
-    window.dispatchEvent(new KeyboardEvent("keydown", { key: "F7", shiftKey: true }));
+    inside.dispatchEvent(
+      new KeyboardEvent("keydown", { key: "F7", shiftKey: true, bubbles: true }),
+    );
     flushSync();
+    removeKeys();
     expect(info()).toContain("Changement 1 sur 2");
   });
 

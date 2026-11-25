@@ -1,0 +1,31 @@
+{
+  "id": "sample",
+  "version": "1.0.0",
+  "contributes": {
+    "fileTypes": [
+      {
+        "id": "sample",
+        "label": "Sample",
+        "icon": "text",
+        "extensions": [".smp"],
+        "storage": "text"
+      }
+    ],
+    "commands": [
+      {
+        "id": "sample.go",
+        "label": "Go",
+        "category": "navigate"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "sample.go",
+        "linux": ["Ctrl+g", "Ctrl+Shift+g", "Ctrl+j", "Ctrl+Shift+j"],
+        "mac": ["Meta+g"],
+        "win": ["Ctrl+g"],
+        "scope": "window"
+      }
+    ]
+  }
+}

@@ -2,16 +2,17 @@ import type { SheetController } from "./sheet.svelte";
 
 export interface KeyHelpers {
   pageRows: number;
-  zoomReset: () => void;
   openFilter: () => void;
   openContext: () => void;
-  openFind: (replace: boolean) => void;
 }
 
 /**
- * The grid's keyboard, after Excel's: arrows move, Ctrl+arrows jump to the edge of the data,
- * Shift extends; Enter and Tab walk down and right (inside a selection they cycle in it);
- * F2 or typing edits; Delete clears. Returns true when the key was handled. Copy, cut and
+ * The grid's own keys, after Excel's and the WAI-ARIA grid pattern (each listed in
+ * extensions/keytables.ts, `GRID_KEYS`): arrows move, Ctrl+arrows jump to the edge of the data,
+ * Shift extends; Enter and Tab walk down and right (inside a selection they cycle in it); F2 or
+ * typing edits; Delete clears; Ctrl+A selects all; Ctrl+Z and Ctrl+Y are the delegated undo and
+ * redo. Find, fill, insert, delete and zoom are commands of the registry (ext/tables, ext/app),
+ * run by the one key listener before this. Returns true when the key was handled. Copy, cut and
  * paste are left to the browser, which turns them into clipboard events.
  */
 export function gridKey(ctrl: SheetController, e: KeyboardEvent, h: KeyHelpers): boolean {
@@ -25,7 +26,8 @@ export function gridKey(ctrl: SheetController, e: KeyboardEvent, h: KeyHelpers):
   };
   const a = arrows[key];
   if (a) {
-    if (e.altKey && key === "ArrowDown") {
+    if (e.altKey) {
+      if (key !== "ArrowDown" || mod || e.shiftKey) return false;
       h.openFilter();
       return true;
     }
@@ -33,6 +35,9 @@ export function gridKey(ctrl: SheetController, e: KeyboardEvent, h: KeyHelpers):
     else ctrl.move(a[0], a[1], e.shiftKey);
     return true;
   }
+  // Only the chords of the table take a modifier: any other is left to whoever binds it.
+  if (e.altKey) return false;
+  if (mod && !["Home", "End", " "].includes(key) && key.length !== 1) return false;
   switch (key) {
     case "Home":
       if (mod) ctrl.select(0, 0, e.shiftKey);
@@ -61,10 +66,8 @@ export function gridKey(ctrl: SheetController, e: KeyboardEvent, h: KeyHelpers):
       ctrl.walk(0, e.shiftKey ? -1 : 1);
       return true;
     }
-    case "F3":
-      h.openFind(false);
-      return true;
     case "F2":
+      if (e.shiftKey) return false; // Shift+F2 is a cell's comment (spec §8.2, N47)
       ctrl.startEdit();
       return true;
     case "Escape":
@@ -86,6 +89,7 @@ export function gridKey(ctrl: SheetController, e: KeyboardEvent, h: KeyHelpers):
       return false;
     case " ": {
       const p = ctrl.primary;
+      if (mod && e.shiftKey) return false;
       if (mod) ctrl.selectColumns(p.c0, p.c1);
       else if (e.shiftKey) ctrl.selectRows(p.r0, p.r1);
       else {
@@ -97,13 +101,8 @@ export function gridKey(ctrl: SheetController, e: KeyboardEvent, h: KeyHelpers):
   }
   if (mod) {
     switch (key.toLowerCase()) {
-      case "f":
-        h.openFind(false);
-        return true;
-      case "h":
-        h.openFind(true);
-        return true;
       case "a":
+        if (e.shiftKey) return false;
         ctrl.selectAll();
         return true;
       case "z":
@@ -111,30 +110,8 @@ export function gridKey(ctrl: SheetController, e: KeyboardEvent, h: KeyHelpers):
         else ctrl.undo();
         return true;
       case "y":
+        if (e.shiftKey) return false;
         ctrl.redo();
-        return true;
-      case "d":
-        ctrl.fillDown();
-        return true;
-      case "r":
-        ctrl.fillRight();
-        return true;
-      case ";":
-        ctrl.insertToday();
-        return true;
-      case "+":
-        ctrl.insertAtSelection();
-        return true;
-      case "=":
-        if (e.shiftKey) ctrl.insertAtSelection();
-        else ctrl.setZoom(ctrl.zoom + 0.1);
-        return true;
-      case "-":
-        if (e.altKey) ctrl.setZoom(ctrl.zoom - 0.1);
-        else ctrl.deleteAtSelection();
-        return true;
-      case "0":
-        h.zoomReset();
         return true;
       default:
         return false;

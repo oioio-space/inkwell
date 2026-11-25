@@ -4,22 +4,25 @@ import { activeBlock, activeMarks, type Lang } from "../../editor/format";
 import { t } from "../../i18n";
 import type { ProjectFile } from "../../store/files";
 import { workspace } from "../../workspace/workspace.svelte";
+import CommandMenuItem from "../command/CommandMenuItem.svelte";
 import Icon from "../icons/Icon.svelte";
 import MenuButton from "../popover/MenuButton.svelte";
 import BarButton from "./BarButton.svelte";
 import HeadingMenu from "./HeadingMenu.svelte";
 import InsertMenu from "./InsertMenu.svelte";
 import { visibleCount } from "./layout";
-import { type BarItem, itemsFor, shortcutLabel } from "./spec";
+import { type BarItem, commandOf, itemsFor } from "./spec";
 
 /**
  * The formatting bar of a file: what the format can write, as buttons that follow the caret
- * (aria-pressed), a heading menu, the Insert menu, and a "⋯" menu for what does not fit.
+ * (aria-pressed), a heading menu, the Insert menu, and a "⋯" menu for what does not fit. Each
+ * button and item runs its `format.*` command on the editor (`target`) through the registry.
  * Plain text files get no bar (the caller does not render it).
  */
 let {
   lang,
   editorState,
+  target,
   run,
   files,
   currentFile,
@@ -27,6 +30,9 @@ let {
 }: {
   lang: Exclude<Lang, "plain">;
   editorState: EditorState;
+  /** The editor the commands act on (its surface). */
+  target: Element | undefined;
+  /** Runs an insertion of the Insert menu on the editor (EX0c moves it onto commands). */
   run: (command: StateCommand) => boolean;
   files: readonly ProjectFile[];
   currentFile: string;
@@ -66,19 +72,18 @@ const locked = $derived(workspace.locked);
   inert={locked}
   class:locked
 >
-  <HeadingMenu {lang} {block} {run} />
+  <HeadingMenu {lang} {block} {target} />
   <span class="gap"></span>
   {#each shown as item, i (item.id)}
     {#if i > 0 && shown[i - 1]?.group !== item.group}<span class="gap"></span>{/if}
     <BarButton
       id={item.id}
-      label={t(item.label)}
+      command={commandOf(item)}
       icon={item.icon}
       glyph={item.glyph}
       syntax={item.syntax[lang]}
-      shortcut={item.key ? shortcutLabel(item.key) : undefined}
       pressed={pressed(item)}
-      onclick={() => run(item.command(lang))}
+      {target}
     />
   {/each}
   {#if hidden.length > 0}
@@ -86,22 +91,11 @@ const locked = $derived(workspace.locked);
       {#snippet trigger()}<Icon name="more" />{/snippet}
       {#snippet children({ close })}
         {#each hidden as item (item.id)}
-          {@const on = pressed(item)}
-          <button
-            type="button"
-            class="mi"
-            role={on === undefined ? "menuitem" : "menuitemcheckbox"}
-            aria-checked={on}
-            data-bar={item.id}
-            onclick={() => {
-              run(item.command(lang));
-              close();
-            }}
-          >
-            {#if item.icon}<Icon name={item.icon} />{:else}<span class="glyph" aria-hidden="true">{item.glyph}</span>{/if}
-            <span>{t(item.label)}</span>
-            {#if item.key}<span class="k">{shortcutLabel(item.key)}</span>{/if}
-          </button>
+          <CommandMenuItem id={commandOf(item)} {close} {target} checked={pressed(item)} refocus data-bar={item.id}>
+            {#snippet lead()}
+              {#if item.icon}<Icon name={item.icon} />{:else}<span class="glyph" aria-hidden="true">{item.glyph}</span>{/if}
+            {/snippet}
+          </CommandMenuItem>
         {/each}
       {/snippet}
     </MenuButton>

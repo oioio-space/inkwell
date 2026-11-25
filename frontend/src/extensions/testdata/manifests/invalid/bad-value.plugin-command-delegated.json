@@ -1,0 +1,30 @@
+{
+  "id": "sample",
+  "version": "1.0.0",
+  "contributes": {
+    "fileTypes": [
+      {
+        "id": "sample",
+        "label": "Sample",
+        "icon": "text",
+        "extensions": [".smp"],
+        "storage": "text"
+      }
+    ],
+    "commands": [
+      {
+        "id": "sample.go",
+        "label": "Go",
+        "category": "navigate"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "sample.go",
+        "mac": ["Meta+?"],
+        "scope": "window",
+        "delegated": "system"
+      }
+    ]
+  }
+}

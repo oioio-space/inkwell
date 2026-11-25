@@ -1,20 +1,22 @@
 <script lang="ts">
-import type { StateCommand } from "@codemirror/state";
-import { type Block, type Lang, setBlock } from "../../editor/format";
+import type { Block, Lang } from "../../editor/format";
 import { t } from "../../i18n";
+import CommandMenuItem from "../command/CommandMenuItem.svelte";
 import Icon from "../icons/Icon.svelte";
 import MenuButton from "../popover/MenuButton.svelte";
-import { HEADING_SYNTAX, HEADINGS, shortcutLabel } from "./spec";
+import { HEADING_SYNTAX, HEADINGS } from "./spec";
 
+/** The paragraph style at the caret, and the menu that sets it (`format.paragraph`, `format.h1`…). */
 let {
   lang,
   block,
-  run,
+  target,
 }: {
   lang: Exclude<Lang, "plain">;
   /** The block type at the caret: the menu shows the level it is at. */
   block: Block;
-  run: (command: StateCommand) => boolean;
+  /** The editor the commands act on. */
+  target?: Element | undefined;
 } = $props();
 
 let open = $state(false);
@@ -36,36 +38,26 @@ const current = $derived(level ? t(`heading.${level}`) : t("heading.paragraph"))
     <Icon name="down" size={12} />
   {/snippet}
   {#snippet children({ close })}
-    <button
-      type="button"
-      class="mi"
+    <CommandMenuItem
+      id="format.paragraph"
+      {close}
+      {target}
       role="menuitemradio"
-      aria-checked={!level}
-      onclick={() => {
-        run(setBlock(lang, "paragraph"));
-        close();
-      }}
-    >
-      <span>{t("heading.paragraph")}</span>
-      {#if !level}<Icon name="check" />{/if}
-      <span class="k mono">{t("heading.paragraph.syntax")} · {shortcutLabel("Mod-Alt-0")}</span>
-    </button>
+      checked={!level}
+      class="para"
+      detail={t("heading.paragraph.syntax")}
+    />
     <div class="sep"></div>
     {#each HEADINGS as h, i (h)}
-      <button
-        type="button"
-        class="mi lvl lvl-{i + 1}"
+      <CommandMenuItem
+        id="format.{h}"
+        {close}
+        {target}
         role="menuitemradio"
-        aria-checked={level === h}
-        onclick={() => {
-          run(setBlock(lang, h));
-          close();
-        }}
-      >
-        <span>{t(`heading.${h}`)}</span>
-        {#if level === h}<Icon name="check" />{/if}
-        <span class="k mono">{HEADING_SYNTAX[lang][h]} · {shortcutLabel(`Mod-${i + 1}`)}</span>
-      </button>
+        checked={level === h}
+        class="lvl lvl-{i + 1}"
+        detail={HEADING_SYNTAX[lang][h]}
+      />
     {/each}
   {/snippet}
 </MenuButton>
@@ -75,24 +67,25 @@ const current = $derived(level ? t(`heading.${level}`) : t("heading.paragraph"))
     width: 132px;
     justify-content: space-between;
   }
-  .lvl {
+  :global(.mi.lvl) {
     font-weight: 700;
     min-height: 34px;
   }
-  .lvl-1 {
+  :global(.mi.lvl-1) {
     font-size: 18px;
     min-height: 38px;
   }
-  .lvl-2 {
+  :global(.mi.lvl-2) {
     font-size: 16px;
   }
-  .lvl-3 {
+  :global(.mi.lvl-3) {
     font-size: 15px;
   }
-  .lvl .k {
+  :global(.mi.lvl .k) {
     font-weight: 400;
   }
-  .mi :global(.ico) {
+  :global(.mi.para .ico),
+  :global(.mi.lvl .ico) {
     color: var(--accent);
   }
 </style>

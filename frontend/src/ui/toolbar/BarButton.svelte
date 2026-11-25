@@ -1,52 +1,47 @@
 <script lang="ts">
+import { cmdAttrs, shortcutOf } from "../../extensions/commands";
+import CommandButton from "../command/CommandButton.svelte";
 import Icon from "../icons/Icon.svelte";
 import type { IconName } from "../icons/paths";
 import type { BarId } from "./spec";
 
 /**
- * A flat button of the formatting bar. Its tooltip says what it does, the syntax it writes and
- * its shortcut ("Gras `*texte*` Ctrl+B"); `pressed` is only given by toggles.
+ * A flat button of the formatting bar, bound to its `format.*` command. Its tooltip says what it
+ * does, the syntax it writes and this system's chord ("Gras `*texte*` Ctrl+B"); `pressed` is only
+ * given by toggles.
  */
 let {
   id,
-  label,
+  command,
   icon,
   glyph,
   syntax,
-  shortcut,
   pressed,
-  onclick,
+  target,
 }: {
   id: BarId;
-  label: string;
+  command: string;
   icon?: IconName | undefined;
   glyph?: string | undefined;
   syntax?: string | undefined;
-  shortcut?: string | undefined;
   pressed?: boolean | undefined;
-  onclick: () => void;
+  /** The editor the command acts on. */
+  target?: Element | undefined;
 } = $props();
 
 const tipId = $derived(`tip-${id}`);
+const shortcut = $derived(shortcutOf(command));
+const label = $derived(cmdAttrs(command)["aria-label"] ?? command);
 </script>
 
 <span class="tipwrap">
-  <button
-    type="button"
-    class="fb"
-    data-bar={id}
-    aria-label={label}
-    aria-pressed={pressed}
-    aria-describedby={tipId}
-    onmousedown={(e) => e.preventDefault()}
-    {onclick}
-  >
+  <CommandButton id={command} {target} data-bar={id} describedby={tipId} keepFocus pressed={pressed ?? undefined}>
     {#if icon}
       <Icon name={icon} />
     {:else}
       <span class="glyph g-{id}" aria-hidden="true">{glyph}</span>
     {/if}
-  </button>
+  </CommandButton>
   <span class="tip" role="tooltip" id={tipId}>
     <b>{label}</b>
     {#if syntax}<code>{syntax}</code>{/if}

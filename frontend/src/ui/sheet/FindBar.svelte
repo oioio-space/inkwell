@@ -84,10 +84,15 @@ function key(e: KeyboardEvent) {
   if (e.key === "Escape") {
     e.preventDefault();
     onclose();
-  } else if (e.key === "Enter" || e.key === "F3") {
+  } else if (e.key === "Enter") {
     e.preventDefault();
     go(at + (e.shiftKey ? -1 : 1));
   }
+}
+
+/** The next or previous match (F3, Shift+F3: `app.find-next`, `-previous`, through the grid). */
+export function step(direction: 1 | -1) {
+  go(at + direction);
 }
 
 const MODES: {

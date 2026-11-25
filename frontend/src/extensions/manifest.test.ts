@@ -83,7 +83,9 @@ describe("manifest", () => {
     expect(valid.length).toBeGreaterThan(0);
     for (const v of invalid) {
       const reason = v.name.slice(0, v.name.indexOf("."));
-      expect({ vector: v.name, reason: verdict(source(v.text)) }).toEqual({
+      // A vector about a plugin's limits is read as a plugin's (`plugin-` in its name).
+      const origin = v.name.includes("plugin-") ? "plugin" : "builtin";
+      expect({ vector: v.name, reason: verdict(source(v.text, { origin })) }).toEqual({
         vector: v.name,
         reason,
       });

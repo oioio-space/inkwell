@@ -8,6 +8,9 @@ import {
   Projects,
   Session,
 } from "../../bindings/github.com/oioio-space/inkwell/internal/app/index";
+import { registry } from "../extensions";
+import { configure, type Shell, useRegistry } from "../extensions/commands";
+import { setLive } from "../extensions/live.svelte";
 import fr from "../i18n/fr.json";
 import { withMutant } from "../mutant";
 import { encodeEnvelope, encodeRoles, Kind } from "../net/envelope";
@@ -1441,45 +1444,43 @@ describe("PC1 a join restarts Inkwell (J-1, J-2)", () => {
     await workspace.openStart();
     expect(workspace.canReturn, "J-9 the way back after a join survives a relaunch").toBe(true);
 
-    const menu = (canReturn: boolean, onReturn: () => void) => {
+    // The header bar's menu is the registry's (EX0b1): « Revenir à mon document » is `app.return`, shown
+    // when `canReturn` holds, and runs the shell's way back.
+    const menu = async (canReturn: boolean, onReturn: () => void) => {
+      useRegistry(registry, { system: "linux" });
+      configure({ shell: { returnToPrevious: onReturn } as unknown as Shell });
+      await registry.loadCommand(registry.command("app.return") as never);
+      setLive({ canReturn });
       const host = render(HeaderBar, {
         title: "Inkwell",
         subtitle: "main.typ",
         status: "alone",
         me: { id: "me", name: "Moi" },
         peers: [],
-        sidebarOpen: true,
-        toolbarVisible: true,
-        canToggleToolbar: true,
-        previewOpen: true,
-        onShare: () => {},
-        onPeople: () => {},
-        onToggleSidebar: () => {},
-        onToggleToolbar: () => {},
-        onPreferences: () => {},
-        onTogglePreview: () => {},
-        onExport: () => {},
-        onAbout: () => {},
-        canReturn,
-        onReturn,
       });
       click(host.querySelector(`button[aria-label="${fr["menu.main"]}"]`) as HTMLElement);
       flushSync();
-      return [...host.querySelectorAll("[role=menuitem]")] as HTMLElement[];
+      return [...document.querySelectorAll("[role=menuitem]")] as HTMLElement[];
     };
     const onReturn = vi.fn();
-    const items = menu(true, onReturn);
+    const items = await menu(true, onReturn);
     const back = items.find((i) => text(i) === fr["join.return"]);
     expect(back, "J-9 the main menu offers « Revenir à mon document »").toBeDefined();
+    // The project's group comes before the document's (the view's toggles and full screen are above).
+    const firstDocumentAction = items.findIndex((i) => text(i).startsWith(fr["menu.export"]));
+    expect(firstDocumentAction).toBeGreaterThan(0);
     expect(
       items.indexOf(back as HTMLElement),
       "J-9 the way back comes before the document's actions",
-    ).toBe(0);
+    ).toBeLessThan(firstDocumentAction);
+    expect(items.slice(0, items.indexOf(back as HTMLElement)).map((i) => i.dataset.cmd)).toEqual([
+      "app.fullscreen",
+    ]);
     click(back as HTMLElement);
     expect(onReturn).toHaveBeenCalledTimes(1);
     cleanup();
     expect(
-      menu(false, onReturn).some((i) => text(i) === fr["join.return"]),
+      (await menu(false, onReturn)).some((i) => text(i) === fr["join.return"]),
       "no way back without a previous document",
     ).toBe(false);
     workspace.canReturn = false;

@@ -24,7 +24,7 @@ import { amSync } from "./amSync";
 import { blameMarks } from "./blameMarks";
 import { changeGutter } from "./changeGutter";
 import { externalMarks } from "./external";
-import { formatKeymap, type Lang } from "./format";
+import type { Lang } from "./format";
 import { withPalette } from "./highlight";
 import { localHistoryOnly } from "./localHistory";
 import { ownTyping } from "./ownTyping";
@@ -69,13 +69,12 @@ const theme = EditorView.theme({
 
 /**
  * What depends on the file's language: its grammar's parser and colours (from the registry, ADR
- * 0027), and the formatting keys (ahead of the default keymap, which binds Mod-i to "select
- * parent syntax").
+ * 0027) and Typst's writing help. The formatting keys are the registry's (`format.*`, run by the
+ * one key listener of extensions/commands.ts before the editor sees the key).
  */
 export const languageOf = (lang: Lang, support?: LanguageSupport): Extension => [
   withPalette(support),
   ...(lang === "typst" ? [writingHelp] : []),
-  Prec.high(keymap.of(formatKeymap(lang))),
 ];
 
 /** A reader or a disconnected person: the text can be read, selected and copied, not typed in. */
@@ -174,6 +173,7 @@ export function createEditor(
       placeholder(t("editor.placeholder")),
       language.of(languageOf(lang, support)),
       access.of(readOnlyFacets(false)),
+      // The delegated `app.undo` (ext/app): the editor's own key, asked first about outside edits.
       Prec.highest(keymap.of([{ key: "Mod-z", run: () => onUndoKey?.() ?? false }])),
       keymap.of([...defaultKeymap, ...historyKeymap]),
       externalMarks,

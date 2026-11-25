@@ -3,6 +3,7 @@ import type { EditorState } from "@codemirror/state";
 import type { Lang } from "../../editor/format";
 import { cursorPosition } from "../../editor/stats/position";
 import { stats as computeStats, type Stats } from "../../editor/stats/stats";
+import { run } from "../../extensions/commands";
 import { t, tn } from "../../i18n";
 import { problems } from "../../language/problems.svelte";
 import { preview } from "../../preview/preview.svelte";
@@ -32,7 +33,7 @@ let {
   ofMain = true,
   hasText = true,
   onProblem = () => {},
-  onNextProblem,
+  problemsNav = false,
   unsaved = false,
 }: {
   lang: Lang;
@@ -49,7 +50,8 @@ let {
   hasText?: boolean;
   /** The person chose a problem in the list: go to its place. */
   onProblem?: (d: Diagnostic) => void;
-  onNextProblem?: ((reverse?: boolean) => void) | undefined;
+  /** The counter steps through the problems (`app.problem-next`): the main window's status bar. */
+  problemsNav?: boolean;
   /** The text is not in the file yet (saving with Ctrl+S, or a write that failed). */
   unsaved?: boolean;
 } = $props();
@@ -61,8 +63,8 @@ let computed = $state.raw<Stats | undefined>();
 const position = $derived(editorState ? cursorPosition(editorState) : { line: 1, column: 1 });
 const words = $derived(computed ? count(computed.words, "mot") : "…");
 const language = $derived(t(`lang.${lang}`));
-const errors = $derived(onNextProblem ? problems.errors : preview.errors);
-const warnings = $derived(onNextProblem ? problems.warnings : preview.warnings);
+const errors = $derived(problemsNav ? problems.errors : preview.errors);
+const warnings = $derived(problemsNav ? problems.warnings : preview.warnings);
 const problemsName = $derived(
   errors + warnings === 0
     ? t("problems.none")
@@ -91,10 +93,10 @@ $effect(() => {
     {peerCount === 0 ? t(status === "connecting" ? "status.connecting" : "status.alone") : tn("people.count", peerCount + 1)}
   </span>
   <span class="sp"></span>
-  {#if onNextProblem}
+  {#if problemsNav}
   <!-- The problems are the compilation's: a Typst file takes part in it, a note or a picture does not (UX-L2-1). -->
   {#if hasText && lang === "typst" && (preview.hasResult || problems.entries.length > 0)}
-    <button type="button" class="fb" title={t("problems.hint")} aria-label={`${t("problems.label")} : ${t("problems.next")}, ${problemsName}`} onclick={(event) => event.shiftKey ? problems.show() : onNextProblem?.()} oncontextmenu={(event) => {event.preventDefault();problems.show();}}>
+    <button type="button" class="fb" title={t("problems.hint")} aria-label={`${t("problems.label")} : ${t("problems.next")}, ${problemsName}`} data-cmd="app.problem-next" onclick={(event) => event.shiftKey ? problems.show() : run("app.problem-next")} oncontextmenu={(event) => {event.preventDefault();problems.show();}}>
       <span class="problems" data-testid="problems" data-errors={problems.errors} data-warnings={problems.warnings}>
         {#if problems.errors + problems.warnings === 0}
           <Icon name="check" size={13} /><span class="ptext">{t("problems.none")}</span>

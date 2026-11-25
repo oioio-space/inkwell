@@ -2,8 +2,8 @@ import { undo } from "@codemirror/commands";
 import { EditorState } from "@codemirror/state";
 import { describe, expect, it } from "vitest";
 import { setBlock, toggleMark } from "./commands";
+import { formatHandlers } from "./handlers";
 import { insert } from "./insert";
-import { formatKeymap } from "./keymap";
 import type { Lang } from "./lang";
 import { supports } from "./support";
 import { apply, parse, run, show } from "./testkit";
@@ -89,8 +89,9 @@ describe("marks", () => {
     const result = run(parse("un ⟨mot⟩"), toggleMark("markdown", "underline"));
     expect(result.ran).toBe(false);
     expect(result.dispatched).toBe(0);
-    expect(formatKeymap("markdown").some((b) => b.key === "Mod-u")).toBe(false);
-    expect(formatKeymap("typst").some((b) => b.key === "Mod-u")).toBe(true);
+    // No handler in Markdown: Ctrl+U goes on to CodeMirror (extensions/commands.ts).
+    expect(Object.keys(formatHandlers("markdown", () => true))).not.toContain("format.underline");
+    expect(Object.keys(formatHandlers("typst", () => true))).toContain("format.underline");
   });
 
   it("FMT-09 Typst underline and strike are function calls", () => {
@@ -327,32 +328,43 @@ describe("FMT-21 read-only", () => {
     expect(run(state, toggleMark("plain", "bold")).ran).toBe(false);
     expect(run(state, setBlock("plain", "h1")).ran).toBe(false);
     expect(run(state, insert("plain", "link", { url: "u" })).ran).toBe(false);
-    expect(formatKeymap("plain")).toEqual([]);
+    expect(formatHandlers("plain", () => true)).toEqual({});
   });
 });
 
-describe("keymap", () => {
-  it("binds the documented shortcuts to working commands", () => {
-    const keys = formatKeymap("typst");
-    expect(keys.map((k) => k.key)).toEqual([
-      "Mod-b",
-      "Mod-i",
-      "Mod-u",
-      "Mod-Shift-x",
-      "Mod-e",
-      "Mod-Shift-e",
-      "Mod-k",
-      "Mod-m",
-      "Mod-1",
-      "Mod-2",
-      "Mod-3",
-      "Mod-4",
-      "Mod-Alt-0",
-    ]);
-    const bindingFor = (key: string) => keys.find((k) => k.key === key)?.run;
+describe("format handlers", () => {
+  it("the handlers are the language's format commands, bold edits the text, and a heading's chord again makes a paragraph", () => {
     let state = parse("un ⟨mot⟩");
     const view = { state, dispatch: (tr: { state: EditorState }) => (state = tr.state) };
-    bindingFor("Mod-b")?.(view as never);
+    const handlers = formatHandlers("typst", (command) => {
+      view.state = state;
+      return command(view as never);
+    });
+    expect(Object.keys(handlers)).toEqual([
+      "format.bold",
+      "format.italic",
+      "format.underline",
+      "format.strike",
+      "format.link",
+      "format.code",
+      "format.codeblock",
+      "format.formula",
+      "format.ul",
+      "format.ol",
+      "format.quote",
+      "format.table",
+      "format.h1",
+      "format.h2",
+      "format.h3",
+      "format.h4",
+      "format.paragraph",
+    ]);
+    handlers["format.bold"]?.();
     expect(show(state)).toBe("un *⟨mot⟩*");
+    state = parse("Titre‸");
+    handlers["format.h2"]?.();
+    expect(show(state)).toBe("== Titre‸");
+    handlers["format.h2"]?.();
+    expect(show(state)).toBe("Titre‸");
   });
 });

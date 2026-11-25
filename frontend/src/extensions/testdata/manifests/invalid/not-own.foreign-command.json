@@ -1,0 +1,24 @@
+{
+  "id": "sample",
+  "version": "1.0.0",
+  "contributes": {
+    "fileTypes": [
+      {
+        "id": "sample",
+        "label": "Sample",
+        "icon": "text",
+        "extensions": [".smp"],
+        "storage": "text"
+      }
+    ],
+    "viewers": [
+      {
+        "id": "sample.view",
+        "fileTypes": ["sample"],
+        "label": "Sample",
+        "entry": "native/view.ts",
+        "commands": ["typst.present"]
+      }
+    ]
+  }
+}

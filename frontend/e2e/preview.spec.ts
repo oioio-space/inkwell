@@ -86,7 +86,7 @@ test("PRV-101 an error shows in the status bar and jumps to its line; the previe
   await expect(problems(page)).toContainText("Aucun problème", SLOW);
   await expect(page.locator(".notice")).toHaveCount(0);
   // Relire remains open after navigation, unlike the former transient menu.
-  await page.getByRole("button", { name: "Masquer Relire" }).click();
+  await page.getByRole("button", { name: "Relire", exact: true, pressed: true }).click();
   await clear(page);
 });
 
@@ -175,9 +175,9 @@ test("PRV-105 jumps both ways between the source and the preview", async ({ brow
   await page.mouse.click(box.x + box.width / 3, box.y + 140); // in the paragraph under the title
   await expect(position(page)).toHaveText(/^Ligne 2, colonne 1$/, SLOW);
 
-  // The same from the keyboard: Ctrl+Alt+J.
+  // The same from the keyboard: Ctrl+Shift+J (`typst.jump-to-preview`; Ctrl+Alt is never bound, K-7).
   await page.keyboard.press("ControlOrMeta+End");
-  await page.keyboard.press("ControlOrMeta+Alt+j");
+  await page.keyboard.press("ControlOrMeta+Shift+j");
   await expect(page.locator("[data-page='3'] .mark")).toBeVisible(SLOW);
   await clear(page);
 });
@@ -216,14 +216,14 @@ test("PRV-107 hiding the preview keeps the problems in the status bar, and the c
   const page = await open(browser, ALICE_URL);
   await write(page, "= Titre\n#inconnu()");
   await expect(problems(page)).toHaveAttribute("aria-label", /1 erreur/, SLOW);
-  await page.getByRole("button", { name: "Masquer l'aperçu" }).click();
+  await page.getByRole("button", { name: "Aperçu", exact: true, pressed: true }).click();
   await expect(page.getByRole("region", { name: "Aperçu" })).toHaveCount(0);
   await expect(indicator(page)).toHaveCount(0);
   await expect(problems(page)).toHaveAttribute("aria-label", /1 erreur/);
   await page.reload();
   await expect(editor(page)).toBeVisible();
   await expect(page.getByRole("region", { name: "Aperçu" })).toHaveCount(0);
-  await page.getByRole("button", { name: "Afficher l'aperçu" }).click();
+  await page.getByRole("button", { name: "Aperçu", exact: true, pressed: false }).click();
   await expect(page.getByRole("region", { name: "Aperçu" })).toBeVisible();
   await clear(page);
 });

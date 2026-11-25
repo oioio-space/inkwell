@@ -20,7 +20,29 @@
         "fileTypes": ["text"],
         "label": "sheet.showText",
         "entry": "native/editor.ts",
-        "capabilities": ["ui.native"]
+        "capabilities": ["ui.native"],
+        "commands": [
+          "app.undo",
+          "app.redo",
+          "format.bold",
+          "format.italic",
+          "format.underline",
+          "format.strike",
+          "format.link",
+          "format.code",
+          "format.codeblock",
+          "format.formula",
+          "format.ul",
+          "format.ol",
+          "format.task",
+          "format.quote",
+          "format.table",
+          "format.h1",
+          "format.h2",
+          "format.h3",
+          "format.h4",
+          "format.paragraph"
+        ]
       }
     ]
   }

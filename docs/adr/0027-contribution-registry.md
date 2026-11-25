@@ -208,6 +208,52 @@ No module of `src/net` reads it, nothing writes it to Automerge, to IndexedDB or
 `Kind`), and no peer message carries it. So no data needs migrating; the version byte makes a webview and a Go side of
 different builds fail cleanly, and both are built together.
 
+### Commands, menus and keybindings (EX0b1)
+
+Decided 2026-11-25 (plan `docs/plans/2026-11-25-ex0b-commands.md`, gate `gates/EX0b1.toml`, review
+`gates/EX0b1/REVIEW.md`). Sources: VS Code's contribution points and `when` clauses, Zed's key bindings, GNOME's and
+Apple's keyboard guidelines, CodeMirror 6.43 `runHandlers` (links in the plan's prior art).
+
+- **Three points, one validator** (`extensions/manifest.ts`): `commands` (`<extension>.<name>`, closed category, `when`
+  with a required `unavailable` reason, `toggled` boolean key, `repeat`, an `entry` only for a built-in until EXT1),
+  `menus` (location `main`, groups `view`, `project`, `document`, `app` in that fixed order; `project` and `app` are the
+  core's, §15.13) and `keybindings` (the manifest's own commands only; `linux`, `mac`, `win` written separately, at most
+  three chords each, no `Mod`; scope `window`, `editor`, `grid` or `diff`; `masks` for built-ins only; `delegated`
+  `system` or `widget`: shown, never captured). A viewer's `commands` hold its extension's own ids or the closed
+  delegable list (`DELEGABLE`: undo, redo, zoom, find, next difference, and the built-in `format.*` commands, which act
+  on whichever text surface is targeted); save, presenting or the palette are never a viewer's (review major 1).
+- **`when`** (`extensions/when.ts`): a closed context (`focus`, `field`, `fileType`, `formats`, `readOnly`, `hasToolbar`,
+  `toolbarVisible`, `previewOpen`, `sidebarOpen`, `reviewOpen`, `canPresent`, `canReturn`, each used by a built-in),
+  `!` > `&&` > `||`, `==`, `!=`, `<value> in formats`; no regular expression; ≤ 256 characters, depth ≤ 8; parsed
+  once with the manifest and evaluated as a tree (CSP).
+- **Chords** (`extensions/keys.ts`): `Ctrl+Alt+Shift+Meta+<key>`; a character typed with Shift carries no `Shift`.
+  Refused on its system: Ctrl+Alt; Alt (± Shift) on a key that types, on macOS and Windows; Super or Windows chords on
+  Linux and Windows; the reserved table of spec §8.2 (GTK's Ctrl+. and Ctrl+; only where text is typed: the `window` and
+  `editor` scopes); in `window` scope the field-editing keys; a bare key unless a function key; and a command on a
+  function key with no macOS chord off the function keys (K-7, Fn on a laptop). The event is read as CodeMirror reads
+  it (the key, then `base[keyCode]` under a modifier, then the shifted name), with AltGr, Option and composition giving
+  no chord. Each system shows its own form (« Ctrl+Maj+? », « ⇧⌘? »); the system is Wails' `environment.OS`.
+- **Conflicts** (`extensions/bindings.ts`): decided at build, never by order. Between built-ins on one chord in
+  overlapping scopes the later is refused naming both, unless the narrower one names the other in `masks`; another
+  origin's binding stays inactive and is listed (ND-3); a chord of a key owned by others (`extensions/keytables.ts`:
+  CodeMirror's keymaps recomputed by a test from the installed packages, the grid's keys, the unwired search keys) is
+  taken only by naming it; a mask hiding nothing on every system is refused. The person's bindings
+  (`inkwell.keybindings` on this device) replace the defaults and switch off a default on their chord; they are checked
+  like the defaults.
+- **Running** (`extensions/commands.ts`): `run(id, target?)` evaluates `when` (else announces `unavailable` and runs
+  nothing), writes the pending text (`flushAllTyped`), then calls the target surface's handler (a mounted view
+  registered with `registerSurface`, limited to what its viewer declares) or the command's entry with the shell and the
+  captured surface. One capture-phase `keydown` listener does nothing while the window closes, a presentation covers it
+  or a dialog is open outside the target; leaves at once without Ctrl, Alt or Meta unless a function key (no lookup
+  while typing); takes the key only when a binding is in force there, its `when` holds and a handler exists; a held key
+  repeats only a `repeat` command.
+- **Identity**: `cmdAttrs(id)` (`data-cmd`, name, title « Label (chord) », `aria-keyshortcuts`); `CommandButton` and
+  `CommandMenuItem` draw it and click through `run()`; a toggle keeps one label and says its state with `aria-pressed`
+  or `aria-checked`; the header bar's main menu is the registry's `menus`.
+- New built-ins: `ext/app` (essential, its entry `native/commands.ts` asks the shell) and `ext/format` (data only, can be
+  disabled). `Mod-Alt-0` is gone (G-98: a heading's chord again makes a paragraph); Ctrl+Alt+J became Ctrl+Shift+J and
+  the grid's Ctrl+Alt+- is gone (K-7).
+
 ## Consequences
 
 - Good: one place for every type, icon, viewer and grammar; a new type is one folder (manifest plus, if it brings code,

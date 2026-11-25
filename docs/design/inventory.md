@@ -132,7 +132,7 @@
 | G-57 | M | Écrans vides en texte seul, sans action | HIG *Placeholders*, Nielsen 9 | `HistoryDrawer.svelte:207`, `:213`, `PeopleDialog.svelte:101`, `Preview.svelte:193-201` | `StatusPage` |
 | G-58 | M | Pas d'aide ni de fenêtre des raccourcis | Nielsen 10, 3.2.6 | aucun composant | §4.26 |
 | G-61 | M | « fusion », « Fusionner », « fusionnée » | §6.4, glossaire (« merge ») | `i18n/fr.json:549`, `:618`, `:621`, `:622`, `:656`, `:663` | « Intégrer la variante » |
-| G-63 | m | Pas de registre unique des commandes ; doublons de raccourcis non testés | K-6, Nielsen 5 | raccourcis répartis entre `App.svelte:127-148`, `ui/toolbar/spec.ts`, `editor/format/keymap.ts`, `editor/search/keymap.ts` | §8.2 |
+| G-63 | m | Pas de registre unique des commandes ; doublons de raccourcis non testés | K-6, Nielsen 5 | raccourcis répartis entre `App.svelte:127-148`, `ui/toolbar/spec.ts`, `editor/format/keymap.ts`, `editor/search/keymap.ts` | §8.2 ; fait en EX0b1 (registre unique : `extensions/commands.ts`, `keytables.ts`) |
 
 ### 2.5 Types de fichiers et code (N20)
 
@@ -205,8 +205,8 @@ Ces fonctions n'existent pas encore. Chaque ligne nomme ce que le code devra mon
 
 | # | Grav. | Écart | Norme | Preuve | Correction |
 |---|---|---|---|---|---|
-| G-98 | M | `Mod-Alt-0` (paragraphe) est une combinaison Ctrl+Alt : sous Windows, elle tape un caractère (AltGr) | Microsoft UX Guide « Don't use Ctrl+Alt » [S31] | `editor/format/keymap.ts:22` | le raccourci de titre, une seconde fois, rend paragraphe (§8.2) |
-| G-99 | M | Sous macOS, `Mod-m` (formule) donnerait ⌘M (réduire la fenêtre) et `Mod-e` (code) ⌘E (utiliser la sélection pour chercher) ; le registre traduit `Mod` en Cmd sans table par système | Apple, raccourcis du Mac [S30] ; K-7 | `editor/format/keymap.ts:14`, `:17` ; `ui/toolbar/spec.ts:106`, `:126` | liaisons macOS explicites ⌃⌘E et ⇧⌘M (§8.2) |
+| G-98 | M | `Mod-Alt-0` (paragraphe) est une combinaison Ctrl+Alt : sous Windows, elle tape un caractère (AltGr) | Microsoft UX Guide « Don't use Ctrl+Alt » [S31] | `editor/format/keymap.ts:22` | le raccourci de titre, une seconde fois, rend paragraphe (§8.2) ; fait en EX0b1 (`format.h2` une seconde fois, `Mod-Alt-0` retiré) |
+| G-99 | M | Sous macOS, `Mod-m` (formule) donnerait ⌘M (réduire la fenêtre) et `Mod-e` (code) ⌘E (utiliser la sélection pour chercher) ; le registre traduit `Mod` en Cmd sans table par système | Apple, raccourcis du Mac [S30] ; K-7 | `editor/format/keymap.ts:14`, `:17` ; `ui/toolbar/spec.ts:106`, `:126` | liaisons macOS explicites ⌃⌘E et ⇧⌘M (§8.2) ; fait en EX0b1 (liaisons écrites par système, sans `Mod`) |
 | G-100 | M | Texte secondaire en `--fg-dim` sur survol : raccourcis des menus à 4,22:1 sur un popover sombre | 1.4.3 ; Codex R5-B1 | `theme/adwaita.css` (`.mi .k` en `--fg-dim`, `.mi:hover` en `--hover-bg`) | `--fg-dim-on-state` |
 | G-101 | m | L'icône de l'historique est une branche | N39 (zéro imagerie de Git) | `ui/shell/HeaderBar.svelte:126` (`<Icon name="branch" />`) | `clock` (§8.3) |
 

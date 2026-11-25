@@ -3778,3 +3778,190 @@ why = "the Go encoder writes the file list at version 1"
 file = "internal/bridge/files.go"
 before = "\tfileListVersion = 2"
 after = "\tfileListVersion = 1"
+
+# Block EX0b1 (commands, menus and keybindings; gates/EX0b1.toml, criterion `mutants`): each breaks one rule of
+# docs/plans/2026-11-25-ex0b-commands.md §5 and is caught only by that rule's test, by its exact title (`name`).
+
+[[mutant]]
+id = "MK1"
+block = "EX0b1"
+kind = "vitest"
+test = "frontend/src/extensions/commands.test.ts"
+name = "EX0b1 C-1 a malformed command, menu or keybinding is refused with its reason"
+clause = "EX0b1 C-1"
+why = "`Mod` is accepted as a modifier (read as Ctrl)"
+[[mutant.edit]]
+file = "frontend/src/extensions/keys.ts"
+before = "  let rest = text;\n"
+after = "  let rest = text.replace(/^Mod\\+/, \"Ctrl+\");\n"
+
+[[mutant]]
+id = "MK2"
+block = "EX0b1"
+kind = "vitest"
+test = "frontend/src/extensions/commands.test.ts"
+name = "EX0b1 C-2 a when clause is checked against the closed context and evaluated by its table"
+clause = "EX0b1 C-2"
+why = "`||` binds before `&&`"
+[[mutant.edit]]
+file = "frontend/src/extensions/when.ts"
+before = "while (peek() === \"&&\") {"
+after = "while (peek() === \"@@\") {"
+[[mutant.edit]]
+file = "frontend/src/extensions/when.ts"
+before = "while (peek() === \"||\") {"
+after = "while (peek() === \"&&\") {"
+[[mutant.edit]]
+file = "frontend/src/extensions/when.ts"
+before = "while (peek() === \"@@\") {"
+after = "while (peek() === \"||\") {"
+[[mutant.edit]]
+file = "frontend/src/extensions/when.ts"
+before = "{ op: \"&&\", args }"
+after = "{ op: \"@@\", args }"
+[[mutant.edit]]
+file = "frontend/src/extensions/when.ts"
+before = "{ op: \"||\", args }"
+after = "{ op: \"&&\", args }"
+[[mutant.edit]]
+file = "frontend/src/extensions/when.ts"
+before = "{ op: \"@@\", args }"
+after = "{ op: \"||\", args }"
+
+[[mutant]]
+id = "MK3"
+block = "EX0b1"
+kind = "vitest"
+test = "frontend/src/extensions/commands.test.ts"
+name = "EX0b1 C-3 a reserved or forbidden chord is refused on each system"
+clause = "EX0b1 C-3"
+why = "the macOS Option rule is skipped (only Windows' access keys are refused)"
+[[mutant.edit]]
+file = "frontend/src/extensions/keys.ts"
+before = "if (system !== \"linux\" && c.alt && !c.ctrl && !c.meta && printable(c.key))"
+after = "if (system === \"win\" && c.alt && !c.ctrl && !c.meta && printable(c.key))"
+
+[[mutant]]
+id = "MK4"
+block = "EX0b1"
+kind = "vitest"
+test = "frontend/src/extensions/commands.test.ts"
+name = "EX0b1 C-4 a taken chord is refused in either order and never taken from the core"
+clause = "EX0b1 C-4"
+why = "a later binding on a taken chord overwrites the earlier one instead of being refused"
+[[mutant.edit]]
+file = "frontend/src/extensions/bindings.ts"
+before = "      if (clash) {\n"
+after = "      if (clash) {\n        active.splice(active.indexOf(clash), 1);\n        active.push({ command: b.command, chord, scope: b.scope, when: b.when, at });\n        continue;\n"
+
+[[mutant]]
+id = "MK5"
+block = "EX0b1"
+kind = "vitest"
+test = "frontend/src/extensions/commands.test.ts"
+name = "EX0b1 C-5 the person's own bindings win and are checked like the defaults"
+clause = "EX0b1 C-5"
+why = "the defaults are applied after hers: a command she rebinds keeps its default chord"
+[[mutant.edit]]
+file = "frontend/src/extensions/bindings.ts"
+before = "    if (rebound.has(a.command)) return false;\n"
+after = ""
+
+[[mutant]]
+id = "MK6"
+block = "EX0b1"
+kind = "vitest"
+test = "frontend/src/extensions/keytables.test.ts"
+name = "EX0b1 C-6 every key owned by the editor or a widget is in one table and resolved by name"
+clause = "EX0b1 C-6"
+why = "a grid key (Ctrl+A, select all) is missing from the table"
+[[mutant.edit]]
+file = "frontend/src/extensions/keytables.ts"
+before = "  { name: \"grid.select-all\", scope: \"grid\", ...mod([\"Ctrl+a\"]) },\n"
+after = ""
+
+[[mutant]]
+id = "MK7"
+block = "EX0b1"
+kind = "vitest"
+test = "frontend/src/extensions/commands.test.ts"
+name = "EX0b1 C-7 every built-in command is complete on the three systems and does its own job"
+clause = "EX0b1 C-7"
+why = "two handlers of ext/app are swapped (the left panel and the preview)"
+[[mutant.edit]]
+file = "frontend/src/ext/app/native/commands.ts"
+before = "\"app.sidebar\": ({ shell }) => shell.toggleSidebar(),"
+after = "\"app.sidebar\": ({ shell }) => shell.toggleXPreview(),"
+[[mutant.edit]]
+file = "frontend/src/ext/app/native/commands.ts"
+before = "\"app.preview\": ({ shell }) => shell.togglePreview(),"
+after = "\"app.preview\": ({ shell }) => shell.toggleSidebar(),"
+[[mutant.edit]]
+file = "frontend/src/ext/app/native/commands.ts"
+before = "shell.toggleXPreview()"
+after = "shell.togglePreview()"
+
+[[mutant]]
+id = "MK8"
+block = "EX0b1"
+kind = "vitest"
+test = "frontend/src/extensions/commands.test.ts"
+name = "EX0b1 C-8 a key runs the command its chord names in the focused context, and nothing else"
+clause = "EX0b1 C-8"
+why = "the key's base (`base[keyCode]`) is not tried: AZERTY digits and Cyrillic letters lose their chords"
+[[mutant.edit]]
+file = "frontend/src/extensions/keys.ts"
+before = "  const base = BASE[e.keyCode];\n"
+after = "  const base: string | undefined = undefined;\n"
+
+[[mutant]]
+id = "MK9"
+block = "EX0b1"
+kind = "vitest"
+test = "frontend/src/extensions/commands.test.ts"
+name = "EX0b1 C-9 a command runs on the surface the key was pressed in, after the pending text is written"
+clause = "EX0b1 C-9"
+why = "`run()` skips the flush of pending text before the handler"
+[[mutant.edit]]
+file = "frontend/src/extensions/commands.ts"
+before = "  hooks.beforeCommand();\n"
+after = ""
+
+[[mutant]]
+id = "MK10"
+block = "EX0b1"
+kind = "vitest"
+test = "frontend/src/extensions/commands.test.ts"
+name = "EX0b1 C-10 the main menu is drawn from the registry in its fixed groups"
+clause = "EX0b1 C-10"
+why = "the menu's fixed group order is ignored (items sorted by order only)"
+[[mutant.edit]]
+file = "frontend/src/extensions/registry.ts"
+before = "groupOf(a) - groupOf(b) ||"
+after = "0 ||"
+
+[[mutant]]
+id = "MK11"
+block = "EX0b1"
+kind = "vitest"
+test = "frontend/src/ui/command/command.test.ts"
+name = "EX0b1 C-11 every control bound to a command carries its id, the registry's identity and runs through run()"
+clause = "EX0b1 C-11"
+why = "a control's `data-cmd` is dropped from the identity"
+[[mutant.edit]]
+file = "frontend/src/extensions/commands.ts"
+before = "    \"data-cmd\": id,\n    \"aria-label\": name,"
+after = "    \"aria-label\": name,"
+
+[[mutant]]
+id = "MK12"
+block = "EX0b1"
+kind = "vitest"
+test = "frontend/src/extensions/commands.test.ts"
+name = "EX0b1 C-12 commands cost nothing at start nor while typing"
+clause = "EX0b1 C-12"
+why = "typing keys (no Ctrl, Alt or Meta, not a function key) reach a lookup"
+[[mutant.edit]]
+file = "frontend/src/extensions/commands.ts"
+before = "  if (!mayBeChord(e) || !registry) return;"
+after = "  if (!registry) return;"

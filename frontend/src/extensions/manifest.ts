@@ -8,6 +8,17 @@
  * whole names, interpreter words), and a value that looks like a pattern is refused.
  */
 
+import {
+  chordProblem,
+  type Delegated,
+  isFunctionKey,
+  parseChord,
+  SCOPES,
+  type Scope,
+  SYSTEMS,
+} from "./keys";
+import { CONTEXT_KEYS, type ContextKey, parseWhen, type When, WhenError } from "./when";
+
 /** Who loaded a manifest. The loader stamps it; a manifest cannot claim one. */
 export type Origin = "builtin" | "plugin" | "project";
 
@@ -16,6 +27,62 @@ export type Storage = "text" | "blob";
 
 /** The capability that lets a built-in reach the editor's internals (X-3, the typing path). */
 export const NATIVE = "ui.native";
+
+/**
+ * The core commands a viewer may handle on its own surface besides its extension's own (review
+ * major 1): what acts on the focused view (undo, zoom, find, the next difference) and the
+ * built-in formatting commands, which act on whichever text view is the target. Save, the
+ * palette or a presentation are never a viewer's.
+ */
+export const DELEGABLE: ReadonlySet<string> = new Set([
+  "app.undo",
+  "app.redo",
+  "app.zoom-in",
+  "app.zoom-out",
+  "app.zoom-reset",
+  "app.find",
+  "app.replace",
+  "app.find-next",
+  "app.find-previous",
+  "app.next-change",
+  "app.previous-change",
+  ...[
+    "bold",
+    "italic",
+    "underline",
+    "strike",
+    "link",
+    "code",
+    "codeblock",
+    "formula",
+    "ul",
+    "ol",
+    "task",
+    "quote",
+    "table",
+    "h1",
+    "h2",
+    "h3",
+    "h4",
+    "paragraph",
+  ].map((f) => `format.${f}`),
+]);
+
+export const CATEGORIES = [
+  "document",
+  "edit",
+  "format",
+  "view",
+  "navigate",
+  "present",
+  "app",
+] as const;
+export type Category = (typeof CATEGORIES)[number];
+export const MENU_LOCATIONS = ["main"] as const;
+/** The main menu's groups, in their fixed order (spec §4.2); `project` and `app` are protected. */
+export const MENU_GROUPS = ["view", "project", "document", "app"] as const;
+export const PROTECTED_GROUPS: ReadonlySet<string> = new Set(["project", "app"]);
+export type MenuGroup = (typeof MENU_GROUPS)[number];
 
 export type OptionValue = string | number | boolean;
 
@@ -45,6 +112,8 @@ export interface ViewerContribution {
   /** A relative path inside the extension's folder. */
   readonly entry: string;
   readonly capabilities: readonly string[];
+  /** The commands its surface handles: its extension's own, or {@link DELEGABLE} ones. */
+  readonly commands: readonly string[];
 }
 
 export interface GrammarContribution {
@@ -56,10 +125,57 @@ export interface GrammarContribution {
   readonly capabilities: readonly string[];
 }
 
+export interface CommandContribution {
+  /** `<extension>.<name>`, the extension being the manifest's own. */
+  readonly id: string;
+  /** i18n keys for a built-in. */
+  readonly label: string;
+  readonly tooltip?: string | undefined;
+  readonly keywords: readonly string[];
+  readonly icon?: string | undefined;
+  readonly category: Category;
+  /** When it can run; the person is told `unavailable` otherwise. */
+  readonly when?: When | undefined;
+  readonly unavailable?: string | undefined;
+  /** A boolean context key: the command is a toggle, shown pressed or checked by it. */
+  readonly toggled?: ContextKey | undefined;
+  /** A held key runs it again (zoom, next change, next problem). */
+  readonly repeat: boolean;
+  /** The module that handles it when no surface does; built-ins only until EXT1. */
+  readonly entry?: string | undefined;
+  readonly capabilities: readonly string[];
+}
+
+export interface MenuContribution {
+  readonly command: string;
+  readonly location: (typeof MENU_LOCATIONS)[number];
+  readonly group: MenuGroup;
+  readonly order: number;
+  /** When the item is shown at all. */
+  readonly when?: When | undefined;
+}
+
+export interface KeybindingContribution {
+  /** One of this manifest's own commands. */
+  readonly command: string;
+  /** Up to three chords per system, the first one shown; none is no binding there. */
+  readonly linux: readonly string[];
+  readonly mac: readonly string[];
+  readonly win: readonly string[];
+  readonly scope: Scope;
+  readonly when?: When | undefined;
+  /** Built-ins only: the command or owned key (keytables.ts) this binding hides in its scope. */
+  readonly masks: readonly string[];
+  readonly delegated?: Delegated | undefined;
+}
+
 export interface Contributes {
   readonly fileTypes: readonly FileTypeContribution[];
   readonly viewers: readonly ViewerContribution[];
   readonly grammars: readonly GrammarContribution[];
+  readonly commands: readonly CommandContribution[];
+  readonly menus: readonly MenuContribution[];
+  readonly keybindings: readonly KeybindingContribution[];
 }
 
 export interface Manifest {
@@ -98,7 +214,13 @@ export type Reason =
   | "pattern"
   | "bad-entry"
   | "native-refused"
-  | "native-unused";
+  | "native-unused"
+  /** A command, menu item, binding or viewer naming a command that is not its manifest's. */
+  | "not-own"
+  /** A chord that is not in the written form, or that its system forbids (spec §8.2). */
+  | "bad-chord"
+  | "forbidden-chord"
+  | "bad-when";
 
 /** A manifest that is refused, with the reason and where in it. */
 export class ManifestError extends Error {
@@ -284,11 +406,16 @@ function fileType(v: unknown, where: string): FileTypeContribution {
   });
 }
 
-function viewer(v: unknown, where: string, source: ManifestSource): ViewerContribution {
+function viewer(
+  v: unknown,
+  where: string,
+  source: ManifestSource,
+  owner: string,
+): ViewerContribution {
   const o = object(
     v,
     where,
-    ["id", "fileTypes", "label", "entry", "capabilities"],
+    ["id", "fileTypes", "label", "entry", "capabilities", "commands"],
     ["id", "fileTypes", "label", "entry"],
   );
   const types = list(o.fileTypes, `${where}.fileTypes`, 64, (x, at) => id(x, at));
@@ -297,8 +424,171 @@ function viewer(v: unknown, where: string, source: ManifestSource): ViewerContri
     id: id(o.id, `${where}.id`),
     fileTypes: types,
     label: string(o.label, `${where}.label`, MAX_LABEL),
+    // Before the entry: a viewer taking another extension's command is refused for that first.
+    commands: list(o.commands, `${where}.commands`, 64, (x, at) => {
+      const c = commandId(x, at);
+      if (!isOwn(c, owner) && !DELEGABLE.has(c)) fail("not-own", at);
+      return c;
+    }),
     entry: entry(o.entry, `${where}.entry`, source),
     capabilities: capabilities(o.capabilities, `${where}.capabilities`),
+  });
+}
+
+const COMMAND_ID = /^[a-z][a-z0-9-]*\.[a-z][a-z0-9-]*$/;
+const isOwn = (command: string, owner: string) => command.startsWith(`${owner}.`);
+
+function commandId(v: unknown, where: string): string {
+  const s = string(v, where, MAX_ID);
+  if (!COMMAND_ID.test(s)) fail("bad-id", where);
+  return s;
+}
+
+function when(v: unknown, where: string): When | undefined {
+  if (v === undefined) return undefined;
+  try {
+    return parseWhen(string(v, where, 1024));
+  } catch (error) {
+    if (error instanceof WhenError) return fail("bad-when", where);
+    throw error;
+  }
+}
+
+function command(
+  v: unknown,
+  where: string,
+  source: ManifestSource,
+  owner: string,
+): CommandContribution {
+  const o = object(
+    v,
+    where,
+    [
+      "id",
+      "label",
+      "tooltip",
+      "keywords",
+      "icon",
+      "category",
+      "when",
+      "unavailable",
+      "toggled",
+      "repeat",
+      "entry",
+      "capabilities",
+    ],
+    ["id", "label", "category"],
+  );
+  const cid = commandId(o.id, `${where}.id`);
+  if (!isOwn(cid, owner)) fail("not-own", `${where}.id`);
+  const category = string(o.category, `${where}.category`, MAX_WORD);
+  if (!(CATEGORIES as readonly string[]).includes(category)) fail("bad-value", `${where}.category`);
+  const condition = when(o.when, `${where}.when`);
+  if (condition !== undefined && o.unavailable === undefined)
+    fail("missing-key", `${where}.unavailable`);
+  let toggled: ContextKey | undefined;
+  if (o.toggled !== undefined) {
+    const key = string(o.toggled, `${where}.toggled`, MAX_WORD);
+    if (!Object.hasOwn(CONTEXT_KEYS, key) || CONTEXT_KEYS[key as ContextKey].kind !== "bool")
+      fail("bad-value", `${where}.toggled`);
+    toggled = key as ContextKey;
+  }
+  if (o.repeat !== undefined && typeof o.repeat !== "boolean") fail("bad-type", `${where}.repeat`);
+  // Code outside the built-ins runs only through the plugin host (EXT1): none is taken yet.
+  if (o.entry !== undefined && source.origin !== "builtin") fail("bad-entry", `${where}.entry`);
+  return frozen({
+    id: cid,
+    label: string(o.label, `${where}.label`, MAX_LABEL),
+    tooltip: o.tooltip === undefined ? undefined : string(o.tooltip, `${where}.tooltip`, MAX_LABEL),
+    keywords: list(o.keywords, `${where}.keywords`, 8, (x, at) => string(x, at, MAX_LABEL)),
+    icon: o.icon === undefined ? undefined : id(o.icon, `${where}.icon`),
+    category: category as Category,
+    when: condition,
+    unavailable:
+      o.unavailable === undefined
+        ? undefined
+        : string(o.unavailable, `${where}.unavailable`, MAX_LABEL),
+    toggled,
+    repeat: o.repeat === true,
+    entry: o.entry === undefined ? undefined : entry(o.entry, `${where}.entry`, source),
+    capabilities: capabilities(o.capabilities, `${where}.capabilities`),
+  });
+}
+
+function menu(v: unknown, where: string, own: ReadonlySet<string>): MenuContribution {
+  const o = object(
+    v,
+    where,
+    ["command", "location", "group", "order", "when"],
+    ["command", "location", "group", "order"],
+  );
+  const cmd = commandId(o.command, `${where}.command`);
+  if (!own.has(cmd)) fail("not-own", `${where}.command`);
+  const location = string(o.location, `${where}.location`, MAX_WORD);
+  if (!(MENU_LOCATIONS as readonly string[]).includes(location))
+    fail("bad-value", `${where}.location`);
+  const group = string(o.group, `${where}.group`, MAX_WORD);
+  if (!(MENU_GROUPS as readonly string[]).includes(group)) fail("bad-value", `${where}.group`);
+  if (!Number.isInteger(o.order) || (o.order as number) < 0 || (o.order as number) > 999)
+    fail("bad-value", `${where}.order`);
+  return frozen({
+    command: cmd,
+    location: location as MenuContribution["location"],
+    group: group as MenuGroup,
+    order: o.order as number,
+    when: when(o.when, `${where}.when`),
+  });
+}
+
+function keybinding(
+  v: unknown,
+  where: string,
+  source: ManifestSource,
+  own: ReadonlySet<string>,
+): KeybindingContribution {
+  const o = object(
+    v,
+    where,
+    ["command", "linux", "mac", "win", "scope", "when", "masks", "delegated"],
+    ["command", "scope"],
+  );
+  const cmd = commandId(o.command, `${where}.command`);
+  if (!own.has(cmd)) fail("not-own", `${where}.command`);
+  const scope = string(o.scope, `${where}.scope`, MAX_WORD) as Scope;
+  if (!SCOPES.includes(scope)) fail("bad-value", `${where}.scope`);
+  let delegated: Delegated | undefined;
+  if (o.delegated !== undefined) {
+    const d = string(o.delegated, `${where}.delegated`, MAX_WORD);
+    if (d !== "system" && d !== "widget") fail("bad-value", `${where}.delegated`);
+    // Like `masks`: only the core says a chord is the system's or a widget's, never captured.
+    if (source.origin !== "builtin") fail("bad-value", `${where}.delegated`);
+    delegated = d as Delegated;
+  }
+  const chords = Object.fromEntries(
+    SYSTEMS.map((system) => [
+      system,
+      list(o[system], `${where}.${system}`, 3, (x, at) => {
+        const chord = string(x, at, MAX_WORD);
+        const problem = chordProblem(chord, system, scope, delegated);
+        if (problem === "bad-chord") fail("bad-chord", at);
+        if (problem !== undefined) fail("forbidden-chord", at);
+        return chord;
+      }),
+    ]),
+  ) as Record<(typeof SYSTEMS)[number], readonly string[]>;
+  // K-7: a function key wants Fn on a Mac laptop, so a command on one has a macOS chord without.
+  const fkey = (c: string) => isFunctionKey(parseChord(c).key);
+  if ([...chords.linux, ...chords.win].some(fkey) && !chords.mac.some((c) => !fkey(c)))
+    fail("forbidden-chord", `${where}.mac`);
+  const masks = list(o.masks, `${where}.masks`, 8, (x, at) => string(x, at, MAX_ID));
+  if (masks.length > 0 && source.origin !== "builtin") fail("bad-value", `${where}.masks`);
+  return frozen({
+    command: cmd,
+    ...chords,
+    scope,
+    when: when(o.when, `${where}.when`),
+    masks,
+    delegated,
   });
 }
 
@@ -319,7 +609,7 @@ function grammar(v: unknown, where: string, source: ManifestSource): GrammarCont
   });
 }
 
-/** `startup`, `onFileType:<id>` or `onLanguage:<grammar>`. */
+/** `startup`, `onFileType:<id>`, `onLanguage:<grammar>` or `onCommand:<command>`. */
 function activation(v: unknown, where: string): string {
   const s = string(v, where, MAX_ID + 16);
   const [event, arg, extra] = s.split(":");
@@ -327,7 +617,9 @@ function activation(v: unknown, where: string): string {
     extra === undefined &&
     (event === "startup"
       ? arg === undefined
-      : (event === "onFileType" || event === "onLanguage") && !!arg && ID.test(arg));
+      : event === "onCommand"
+        ? !!arg && COMMAND_ID.test(arg)
+        : (event === "onFileType" || event === "onLanguage") && !!arg && ID.test(arg));
   if (!ok) fail("bad-value", where);
   return s;
 }
@@ -356,25 +648,42 @@ export function parseManifest(source: ManifestSource): Manifest {
   if (!VERSION.test(version)) fail("bad-value", "manifest.version");
   if (o.essential !== undefined && typeof o.essential !== "boolean")
     fail("bad-type", "manifest.essential");
-  const c = object(o.contributes, "manifest.contributes", ["fileTypes", "viewers", "grammars"], []);
+  const c = object(
+    o.contributes,
+    "manifest.contributes",
+    ["fileTypes", "viewers", "grammars", "commands", "menus", "keybindings"],
+    [],
+  );
+  const owner = id(o.id, "manifest.id");
+  const commands = list(c.commands, "manifest.contributes.commands", 128, (x, at) =>
+    command(x, at, source, owner),
+  );
+  const own = new Set(commands.map((x) => x.id));
   const manifest = frozen({
-    id: id(o.id, "manifest.id"),
+    id: owner,
     version,
     essential: o.essential === true,
     activation: list(o.activation, "manifest.activation", 64, activation),
     contributes: frozen({
       fileTypes: list(c.fileTypes, "manifest.contributes.fileTypes", 64, fileType),
       viewers: list(c.viewers, "manifest.contributes.viewers", 16, (x, at) =>
-        viewer(x, at, source),
+        viewer(x, at, source, owner),
       ),
       grammars: list(c.grammars, "manifest.contributes.grammars", 16, (x, at) =>
         grammar(x, at, source),
       ),
+      commands,
+      menus: list(c.menus, "manifest.contributes.menus", 64, (x, at) => menu(x, at, own)),
+      keybindings: list(c.keybindings, "manifest.contributes.keybindings", 128, (x, at) =>
+        keybinding(x, at, source, own),
+      ),
     }),
   });
-  const native = [...manifest.contributes.viewers, ...manifest.contributes.grammars].some((x) =>
-    x.capabilities.includes(NATIVE),
-  );
+  const native = [
+    ...manifest.contributes.viewers,
+    ...manifest.contributes.grammars,
+    ...manifest.contributes.commands,
+  ].some((x) => x.capabilities.includes(NATIVE));
   if (native && (source.origin !== "builtin" || !manifest.essential))
     fail("native-refused", "manifest");
   if (source.origin === "builtin" && source.files.size > 0 && !native)

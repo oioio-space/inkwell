@@ -411,7 +411,8 @@ machine vérifie qu'aucun n'en manque (EL-1).
     sans animation.
 
 **Leçons des autres éditeurs**
-48. La palette montre d'abord les commandes récentes.
+48. Sans saisie, la palette montre d'abord les commandes récentes ; avec une saisie, la qualité de la correspondance
+    passe d'abord, la récence départage les égales (EX0b2).
 49. Le défilement « machine à écrire » n'est jamais actif par défaut ni pendant une sélection.
 50. Un bouton à icône seule n'existe que dans les barres, pour une icône universelle (rechercher, annuler, rétablir,
     fermer, menu), avec infobulle et nom accessible ; toute autre commande montre son libellé ; la reconnaissance est

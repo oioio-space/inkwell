@@ -1,12 +1,18 @@
 <script lang="ts">
+import { availability, menuOf } from "../../extensions/commands";
 import { t } from "../../i18n";
 import { statusLabel } from "../../net/syncLabel";
 import type { Status } from "../../workspace/workspace.svelte";
+import CommandButton from "../command/CommandButton.svelte";
+import CommandMenuItem from "../command/CommandMenuItem.svelte";
 import Icon from "../icons/Icon.svelte";
 import PeopleStack from "../PeopleStack.svelte";
 import MenuButton from "../popover/MenuButton.svelte";
-import { shortcutLabel } from "../toolbar/spec";
 
+/**
+ * The header bar: the panels' toggles, presenting, people and sharing as commands of the registry
+ * (ADR 0027), and the main menu drawn from its `menus` (groups view, project, document, app).
+ */
 let {
   title,
   subtitle,
@@ -16,24 +22,6 @@ let {
   slow = false,
   me,
   peers,
-  sidebarOpen,
-  toolbarVisible,
-  canToggleToolbar,
-  previewOpen,
-  historyOpen = false,
-  onToggleHistory = () => {},
-  onShare,
-  onPeople,
-  onToggleSidebar,
-  onToggleToolbar,
-  onPreferences,
-  onTogglePreview,
-  onExport,
-  onAbout,
-  canPresent = false,
-  onPresent = () => {},
-  canReturn = false,
-  onReturn = () => {},
 }: {
   title: string;
   /** The file being edited, under the title. */
@@ -47,51 +35,16 @@ let {
   slow?: boolean;
   me: { id: string; name: string };
   peers: string[];
-  sidebarOpen: boolean;
-  toolbarVisible: boolean;
-  /** False for files that have no formatting bar. */
-  canToggleToolbar: boolean;
-  /** Whether the preview pane is shown. */
-  previewOpen: boolean;
-  /** Whether the history drawer is shown. */
-  historyOpen?: boolean;
-  onToggleHistory?: () => void;
-  onShare: () => void;
-  /** Opens the « Personnes » panel. */
-  onPeople: () => void;
-  onToggleSidebar: () => void;
-  onToggleToolbar: () => void;
-  onPreferences: () => void;
-  onTogglePreview: () => void;
-  /** "Exporter en PDF". */
-  onExport: () => void;
-  onAbout: () => void;
-  /** A Typst document can be presented. */
-  canPresent?: boolean;
-  /** "Présenter" (from the first slide), from this slide, or only as the audience view of this screen. */
-  onPresent?: (how: "start" | "here" | "public") => void;
-  /** This folder was made by a join and the document open before it is still there (PC1b, J-9). */
-  canReturn?: boolean;
-  /** « Revenir à mon document ». */
-  onReturn?: () => void;
 } = $props();
 
 let menuOpen = $state(false);
+const canPresent = $derived(availability("typst.present").ok);
+const groups = $derived(menuOpen ? menuOf("main") : []);
 </script>
 
 <header class="hb">
   <div class="start">
-    <button
-      type="button"
-      class="fb"
-      class:on={sidebarOpen}
-      aria-pressed={sidebarOpen}
-      aria-label={t(sidebarOpen ? "sidebar.hide" : "sidebar.show")}
-      title={t(sidebarOpen ? "sidebar.hide" : "sidebar.show")}
-      onclick={onToggleSidebar}
-    >
-      <Icon name="side" />
-    </button>
+    <CommandButton id="app.sidebar"><Icon name="side" /></CommandButton>
     <span class="status" data-status={status} role="status">
       <span class="dot" aria-hidden="true"></span>{statusLabel(status, sending, slow)}
     </span>
@@ -101,128 +54,22 @@ let menuOpen = $state(false);
     <small>{#if unsaved}<span class="unsaved" data-testid="unsaved-dot" role="img" aria-label={t("save.unsaved")} title={t("save.unsaved")}></span>{/if}{subtitle}</small>
   </div>
   <div class="end">
-    <button
-      type="button"
-      class="fb"
-      class:on={previewOpen}
-      aria-pressed={previewOpen}
-      aria-label={t(previewOpen ? "preview.hide" : "preview.show")}
-      title={t(previewOpen ? "preview.hide" : "preview.show")}
-      onclick={onTogglePreview}
-    >
-      <Icon name="eye" />
-    </button>
+    <CommandButton id="app.preview"><Icon name="eye" /></CommandButton>
     {#if canPresent}
-      <button
-        type="button"
-        class="fb"
-        aria-label={t("present.start")}
-        title="{t('present.start')} ({shortcutLabel('F5')})"
-        data-testid="present-start"
-        onclick={() => onPresent("start")}
-      >
-        <Icon name="present" />
-      </button>
+      <CommandButton id="typst.present" testid="present-start"><Icon name="present" /></CommandButton>
     {/if}
-    <PeopleStack {me} {peers} onOpen={onPeople} />
-    <button type="button" class="sug" onclick={onShare}>{t("share.button")}</button>
-    <button
-      type="button"
-      class="fb"
-      class:on={historyOpen}
-      aria-pressed={historyOpen}
-      aria-label={t(historyOpen ? "review.hide" : "review.show")}
-      title={t(historyOpen ? "review.hide" : "review.show")}
-      data-testid="history-toggle"
-      onclick={onToggleHistory}
-    >
-      <Icon name="branch" />
-    </button>
+    <PeopleStack {me} {peers} />
+    <CommandButton id="app.share" class="sug">{t("share.button")}</CommandButton>
+    <CommandButton id="app.review" testid="history-toggle"><Icon name="branch" /></CommandButton>
     <MenuButton bind:open={menuOpen} label={t("menu.main")} name={t("menu.main")} align="end" width={300}>
       {#snippet trigger()}<Icon name="menu" />{/snippet}
       {#snippet children({ close })}
-        {#if canToggleToolbar}
-          <button
-            type="button"
-            class="mi"
-            role="menuitemcheckbox"
-            aria-checked={toolbarVisible}
-            onclick={() => {
-              onToggleToolbar();
-              close();
-            }}
-          >
-            <span>{t("menu.toolbar")}</span>
-            <span class="k">{shortcutLabel("Mod-Shift-t")}</span>
-            <span class="tick" class:off={!toolbarVisible}><Icon name="check" size={14} /></span>
-          </button>
-        {/if}
-        <button
-          type="button"
-          class="mi"
-          role="menuitemcheckbox"
-          aria-checked={previewOpen}
-          onclick={() => {
-            onTogglePreview();
-            close();
-          }}
-        >
-          <span>{t("menu.preview")}</span>
-          <span class="tick" class:off={!previewOpen}><Icon name="check" size={14} /></span>
-        </button>
-        <!-- The « Projet » group of the design (spec §4.2) comes before the document's actions. -->
-        {#if canReturn}
-          <button type="button" class="mi" role="menuitem" onclick={() => { close(false); onReturn(); }}>
-            <span>{t("join.return")}</span>
-          </button>
-        {/if}
-        {#if canPresent}
-          <button type="button" class="mi" role="menuitem" onclick={() => { close(false); onPresent("start"); }}>
-            <span>{t("present.start")}</span>
-            <span class="k">{shortcutLabel("F5")}</span>
-          </button>
-          <button type="button" class="mi" role="menuitem" onclick={() => { close(false); onPresent("here"); }}>
-            <span>{t("present.startHere")}</span>
-            <span class="k">{shortcutLabel("Shift-F5")}</span>
-          </button>
-          <button type="button" class="mi" role="menuitem" data-testid="present-as-public" onclick={() => { close(false); onPresent("public"); }}>
-            <span>{t("present.showPublic")}</span>
-          </button>
-        {/if}
-        <button
-          type="button"
-          class="mi"
-          role="menuitem"
-          onclick={() => {
-            close(false);
-            onExport();
-          }}
-        >
-          <span>{t("menu.export")}</span>
-        </button>
-        <div class="sep" role="separator"></div>
-        <button
-          type="button"
-          class="mi"
-          role="menuitem"
-          onclick={() => {
-            close(false);
-            onPreferences();
-          }}
-        >
-          <span>{t("menu.preferences")}</span>
-        </button>
-        <button
-          type="button"
-          class="mi"
-          role="menuitem"
-          onclick={() => {
-            close(false);
-            onAbout();
-          }}
-        >
-          <span>{t("menu.about")}</span>
-        </button>
+        {#each groups as g, i (g.group)}
+          {#if i > 0}<div class="sep" role="separator"></div>{/if}
+          {#each g.items as c (c.id)}
+            <CommandMenuItem id={c.id} {close} />
+          {/each}
+        {/each}
       {/snippet}
     </MenuButton>
   </div>
@@ -248,16 +95,6 @@ let menuOpen = $state(false);
   }
   .end {
     justify-content: flex-end;
-  }
-  .tick {
-    margin-inline-start: auto;
-    display: inline-flex;
-  }
-  .tick.off {
-    visibility: hidden;
-  }
-  .mi .k + .tick {
-    margin-inline-start: 8px;
   }
   .ttl {
     text-align: center;

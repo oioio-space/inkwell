@@ -37,7 +37,7 @@ describe("status bar: problems and pages", () => {
   });
 
   it("UX-L2-1 a note does not wear the compilation's problems; a Typst file does", () => {
-    const props = { hasText: true, onNextProblem: () => {} };
+    const props = { hasText: true, problemsNav: true };
     preview.receive(result());
     expect(
       mountBar({ ...props, lang: "markdown" }).querySelector('[data-testid="problems"]'),

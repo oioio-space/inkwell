@@ -1,0 +1,12 @@
+# gitleaks configuration (2026-11-25). The default rules stay whole; one narrow allowlist only.
+# Gate reports gates/<block>.json map each evidence file to its SHA-256 digest; a file whose name holds « key »
+# (e.g. gates/EX0b1/no-hard-keys.log) made generic-api-key read the 64-hex digest as a key (EX0b1's commit). A
+# SHA-256 digest of evidence is not a secret: a line allowed only when it is exactly such an entry ("gates/<path>": "<64 hex>"),
+# wherever it appears; any other line of those reports is scanned as usual (checked on a planted key, 2026-11-25).
+[extend]
+useDefault = true
+
+[[allowlists]]
+description = "SHA-256 digests of gate evidence files in gates/<block>.json"
+regexTarget = "line"
+regexes = ['''^\s*"gates/[^"]+": "[0-9a-f]{64}",?$''']

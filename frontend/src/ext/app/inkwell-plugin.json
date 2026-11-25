@@ -1,0 +1,353 @@
+{
+  "id": "app",
+  "version": "1.0.0",
+  "essential": true,
+  "activation": ["startup"],
+  "contributes": {
+    "commands": [
+      {
+        "id": "app.save",
+        "label": "cmd.save",
+        "category": "document",
+        "entry": "native/commands.ts",
+        "capabilities": ["ui.native"]
+      },
+      {
+        "id": "app.toolbar",
+        "label": "menu.toolbar",
+        "category": "view",
+        "when": "hasToolbar",
+        "unavailable": "cmd.toolbar.unavailable",
+        "toggled": "toolbarVisible",
+        "entry": "native/commands.ts",
+        "capabilities": ["ui.native"]
+      },
+      {
+        "id": "app.preview",
+        "label": "menu.preview",
+        "category": "view",
+        "toggled": "previewOpen",
+        "entry": "native/commands.ts",
+        "capabilities": ["ui.native"]
+      },
+      {
+        "id": "app.sidebar",
+        "label": "cmd.sidebar",
+        "category": "view",
+        "toggled": "sidebarOpen",
+        "entry": "native/commands.ts",
+        "capabilities": ["ui.native"]
+      },
+      {
+        "id": "app.review",
+        "label": "cmd.review",
+        "category": "view",
+        "toggled": "reviewOpen",
+        "entry": "native/commands.ts",
+        "capabilities": ["ui.native"]
+      },
+      {
+        "id": "app.fullscreen",
+        "label": "cmd.fullscreen",
+        "category": "view",
+        "entry": "native/commands.ts",
+        "capabilities": ["ui.native"]
+      },
+      {
+        "id": "app.share",
+        "label": "share.button",
+        "category": "document",
+        "entry": "native/commands.ts",
+        "capabilities": ["ui.native"]
+      },
+      {
+        "id": "app.people",
+        "label": "people.open",
+        "category": "document",
+        "entry": "native/commands.ts",
+        "capabilities": ["ui.native"]
+      },
+      {
+        "id": "app.return",
+        "label": "join.return",
+        "category": "document",
+        "entry": "native/commands.ts",
+        "capabilities": ["ui.native"]
+      },
+      {
+        "id": "app.preferences",
+        "label": "menu.preferences",
+        "category": "app",
+        "entry": "native/commands.ts",
+        "capabilities": ["ui.native"]
+      },
+      {
+        "id": "app.about",
+        "label": "menu.about",
+        "category": "app",
+        "entry": "native/commands.ts",
+        "capabilities": ["ui.native"]
+      },
+      {
+        "id": "app.problem-next",
+        "label": "problems.next",
+        "category": "navigate",
+        "repeat": true,
+        "entry": "native/commands.ts",
+        "capabilities": ["ui.native"]
+      },
+      {
+        "id": "app.problem-previous",
+        "label": "cmd.problem-previous",
+        "category": "navigate",
+        "repeat": true,
+        "entry": "native/commands.ts",
+        "capabilities": ["ui.native"]
+      },
+      {
+        "id": "app.zoom-in",
+        "label": "zoom.in",
+        "category": "view",
+        "repeat": true,
+        "entry": "native/commands.ts",
+        "capabilities": ["ui.native"]
+      },
+      {
+        "id": "app.zoom-out",
+        "label": "zoom.out",
+        "category": "view",
+        "repeat": true,
+        "entry": "native/commands.ts",
+        "capabilities": ["ui.native"]
+      },
+      {
+        "id": "app.zoom-reset",
+        "label": "zoom.reset",
+        "category": "view",
+        "entry": "native/commands.ts",
+        "capabilities": ["ui.native"]
+      },
+      {
+        "id": "app.undo",
+        "label": "cmd.undo",
+        "category": "edit"
+      },
+      {
+        "id": "app.redo",
+        "label": "cmd.redo",
+        "category": "edit"
+      },
+      {
+        "id": "app.find",
+        "label": "cmd.find",
+        "category": "edit"
+      },
+      {
+        "id": "app.replace",
+        "label": "cmd.replace",
+        "category": "edit"
+      },
+      {
+        "id": "app.find-next",
+        "label": "cmd.find-next",
+        "category": "navigate",
+        "repeat": true
+      },
+      {
+        "id": "app.find-previous",
+        "label": "cmd.find-previous",
+        "category": "navigate",
+        "repeat": true
+      },
+      {
+        "id": "app.next-change",
+        "label": "cmd.next-change",
+        "category": "navigate",
+        "repeat": true
+      },
+      {
+        "id": "app.previous-change",
+        "label": "cmd.previous-change",
+        "category": "navigate",
+        "repeat": true
+      }
+    ],
+    "menus": [
+      {
+        "command": "app.toolbar",
+        "location": "main",
+        "group": "view",
+        "order": 10,
+        "when": "hasToolbar"
+      },
+      {
+        "command": "app.preview",
+        "location": "main",
+        "group": "view",
+        "order": 20
+      },
+      {
+        "command": "app.fullscreen",
+        "location": "main",
+        "group": "view",
+        "order": 30
+      },
+      {
+        "command": "app.return",
+        "location": "main",
+        "group": "project",
+        "order": 10,
+        "when": "canReturn"
+      },
+      {
+        "command": "app.preferences",
+        "location": "main",
+        "group": "app",
+        "order": 10
+      },
+      {
+        "command": "app.about",
+        "location": "main",
+        "group": "app",
+        "order": 20
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "app.save",
+        "linux": ["Ctrl+s"],
+        "mac": ["Meta+s"],
+        "win": ["Ctrl+s"],
+        "scope": "window"
+      },
+      {
+        "command": "app.toolbar",
+        "linux": ["Ctrl+Shift+t"],
+        "mac": ["Shift+Meta+t"],
+        "win": ["Ctrl+Shift+t"],
+        "scope": "window"
+      },
+      {
+        "command": "app.sidebar",
+        "linux": ["F9"],
+        "mac": ["Alt+Meta+s"],
+        "win": ["F9"],
+        "scope": "window"
+      },
+      {
+        "command": "app.review",
+        "linux": ["Ctrl+Shift+h"],
+        "mac": ["Shift+Meta+h"],
+        "win": ["Ctrl+Shift+h"],
+        "scope": "window"
+      },
+      {
+        "command": "app.fullscreen",
+        "linux": ["F11"],
+        "mac": ["Ctrl+Meta+f"],
+        "win": ["F11"],
+        "scope": "window"
+      },
+      {
+        "command": "app.preferences",
+        "linux": ["Ctrl+,"],
+        "mac": ["Meta+,"],
+        "win": ["Ctrl+,"],
+        "scope": "window"
+      },
+      {
+        "command": "app.problem-next",
+        "linux": ["F8"],
+        "mac": ["Meta+'"],
+        "win": ["F8"],
+        "scope": "window"
+      },
+      {
+        "command": "app.problem-previous",
+        "linux": ["Shift+F8"],
+        "mac": ["Shift+Meta+'"],
+        "win": ["Shift+F8"],
+        "scope": "window"
+      },
+      {
+        "command": "app.zoom-in",
+        "linux": ["Ctrl+=", "Ctrl++"],
+        "mac": ["Meta+=", "Meta++"],
+        "win": ["Ctrl+=", "Ctrl++"],
+        "scope": "window"
+      },
+      {
+        "command": "app.zoom-out",
+        "linux": ["Ctrl+-", "Ctrl+_"],
+        "mac": ["Meta+-", "Meta+_"],
+        "win": ["Ctrl+-", "Ctrl+_"],
+        "scope": "window"
+      },
+      {
+        "command": "app.zoom-reset",
+        "linux": ["Ctrl+0"],
+        "mac": ["Meta+0"],
+        "win": ["Ctrl+0"],
+        "scope": "window"
+      },
+      {
+        "command": "app.undo",
+        "linux": ["Ctrl+z"],
+        "mac": ["Meta+z"],
+        "win": ["Ctrl+z"],
+        "scope": "window",
+        "delegated": "widget"
+      },
+      {
+        "command": "app.redo",
+        "linux": ["Ctrl+y", "Ctrl+Shift+z"],
+        "mac": ["Shift+Meta+z"],
+        "win": ["Ctrl+y"],
+        "scope": "window",
+        "delegated": "widget"
+      },
+      {
+        "command": "app.find",
+        "linux": ["Ctrl+f"],
+        "mac": ["Meta+f"],
+        "win": ["Ctrl+f"],
+        "scope": "grid"
+      },
+      {
+        "command": "app.replace",
+        "linux": ["Ctrl+h"],
+        "mac": ["Alt+Meta+f"],
+        "win": ["Ctrl+h"],
+        "scope": "grid"
+      },
+      {
+        "command": "app.find-next",
+        "linux": ["F3"],
+        "mac": ["Meta+g"],
+        "win": ["F3"],
+        "scope": "grid"
+      },
+      {
+        "command": "app.find-previous",
+        "linux": ["Shift+F3"],
+        "mac": ["Shift+Meta+g"],
+        "win": ["Shift+F3"],
+        "scope": "grid"
+      },
+      {
+        "command": "app.next-change",
+        "linux": ["F7"],
+        "mac": ["Alt+Meta+ArrowDown"],
+        "win": ["F7"],
+        "scope": "diff"
+      },
+      {
+        "command": "app.previous-change",
+        "linux": ["Shift+F7"],
+        "mac": ["Alt+Meta+ArrowUp"],
+        "win": ["Shift+F7"],
+        "scope": "diff"
+      }
+    ]
+  }
+}

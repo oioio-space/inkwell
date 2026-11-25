@@ -4,11 +4,13 @@ import { Presence } from "@automerge/automerge-repo";
 import { Flags, Stream, WailsSocket } from "@wailsio/runtime";
 import { onMount, tick, untrack } from "svelte";
 import { Session } from "../bindings/github.com/oioio-space/inkwell/internal/app/index";
-import { whenWritten } from "./editor/amSync";
+import { flushAllTyped, whenWritten } from "./editor/amSync";
 import { markExternal } from "./editor/external";
-import { formatLanguage } from "./editor/format";
+import { formatLanguage, formatsOf } from "./editor/format";
 import type { CursorState } from "./editor/presence";
-import { activateStartup, registry } from "./extensions";
+import { activateStartup, registry, warmCommands } from "./extensions";
+import { configure, installKeys } from "./extensions/commands";
+import { setLive } from "./extensions/live.svelte";
 import ViewerHost from "./extensions/ViewerHost.svelte";
 import { type MessageKey, t } from "./i18n";
 import { problemMarks } from "./language/marks";
@@ -20,6 +22,7 @@ import { links } from "./net/links.svelte";
 import type { SocketLike } from "./net/WailsNetworkAdapter";
 import { profileNativeStage } from "./perf/nativeDispatch";
 import { markOpen } from "./perf/openMarks";
+import { toggleFullscreen } from "./present/fullscreen";
 import PresentBanner from "./present/PresentBanner.svelte";
 import PresentHost from "./present/PresentHost.svelte";
 import { presentSession } from "./present/session.svelte";
@@ -29,12 +32,13 @@ import Preview from "./preview/Preview.svelte";
 import { preview } from "./preview/preview.svelte";
 import { SaveError } from "./store/GoStorageAdapter";
 import { settings } from "./store/settings.svelte";
+import { zoom } from "./store/zoom.svelte";
 import AboutDialog, { type BuildInfo } from "./ui/AboutDialog.svelte";
 import Banner from "./ui/Banner.svelte";
 import ExternalBanner from "./ui/ExternalBanner.svelte";
 import ExternalChangeToast from "./ui/ExternalChangeToast.svelte";
 import { session } from "./ui/editorSession.svelte";
-import HistoryBars from "./ui/history/HistoryBars.svelte";
+import HistoryBars, { keepCaret } from "./ui/history/HistoryBars.svelte";
 import HistoryDrawer from "./ui/history/HistoryDrawer.svelte";
 import { history } from "./ui/history/history.svelte";
 import JoinWaiting from "./ui/JoinWaiting.svelte";
@@ -268,34 +272,62 @@ $effect(() => {
   };
 });
 
-function onKey(e: KeyboardEvent) {
-  if (workspace.closing) return;
-  if (e.key === "F8" && !e.ctrlKey && !e.metaKey && !e.altKey) {
-    e.preventDefault();
-    problems.next(e.shiftKey);
-    return;
-  }
-  if ((e.ctrlKey || e.metaKey) && !e.shiftKey && !e.altKey && e.key.toLowerCase() === "s") {
-    e.preventDefault();
-    void workspace.save();
-    return;
-  }
-  if (e.key === "F5" && !e.ctrlKey && !e.metaKey && !e.altKey) {
-    e.preventDefault();
-    present(e.shiftKey ? "here" : "start");
-    return;
-  }
-  if ((e.ctrlKey || e.metaKey) && e.altKey && e.key.toLowerCase() === "j") {
-    e.preventDefault();
-    if (!previewOpen) togglePreview();
-    void jumpFromCursor();
-    return;
-  }
-  if ((e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "t") {
-    e.preventDefault();
-    if (hasBar) toggleToolbar();
-  }
-}
+// The commands of the registry (ext/app, ext/typst) act through the shell: what the header bar,
+// the main menu and the window's keys did by hand before EX0b1. One key listener runs them all.
+/** How many times `app.save` ran (EX0b1-E1: a held Ctrl+S saves once), for the end-to-end tests only. */
+let saves = 0;
+configure({
+  shell: {
+    save: () => {
+      saves++;
+      void workspace.save();
+    },
+    toggleToolbar,
+    togglePreview,
+    toggleSidebar,
+    toggleReview: () => history.toggle(),
+    share: () => (sharing = true),
+    people: () => (people = true),
+    exportPdf: () => void exportPdf(),
+    preferences: () => (preferences = true),
+    about: () => {
+      aboutOpener = undefined;
+      about = true;
+    },
+    returnToPrevious: () => void workspace.returnToPrevious(),
+    problem: (reverse) => problems.next(reverse),
+    zoom: (step) => {
+      zoom[step](workspace.project);
+      void keepCaret();
+    },
+    present,
+    jumpToPreview: () => {
+      if (!previewOpen) togglePreview();
+      void jumpFromCursor();
+    },
+    fullscreen: () => void toggleFullscreen(document),
+  },
+  // What was typed is in the document before any command acts on it (a save keeps the last letter).
+  beforeCommand: () => flushAllTyped(),
+  announce: (text) => notice.show(text, "status"),
+  blocked: () => workspace.closing || presenting,
+});
+
+// What `when` clauses read (extensions/when.ts): the open file and the panels.
+$effect(() => {
+  setLive({
+    fileType: opening?.type.id ?? "",
+    formats: formatsOf(lang),
+    readOnly: !mainFile || workspace.locked,
+    hasToolbar: hasBar,
+    toolbarVisible: barVisible,
+    previewOpen,
+    sidebarOpen,
+    reviewOpen: history.open,
+    canPresent,
+    canReturn: workspace.canReturn && !workspace.leaving,
+  });
+});
 
 async function refresh() {
   await Promise.all([workspace.refreshFiles(), workspace.refreshInfo()]);
@@ -405,6 +437,8 @@ onMount(() => {
     ).__inkwellInvite = (role) => Session.Invite(role);
     (globalThis as typeof globalThis & { __inkwellTestTable?: () => void }).__inkwellTestTable =
       () => viewChoice.openAsTable(workspace.project, "main.typ");
+    (globalThis as typeof globalThis & { __inkwellSaves?: () => number }).__inkwellSaves = () =>
+      saves;
   }
   preview.start(() => Stream("preview") as unknown as SocketLike);
   configureLanguage(
@@ -413,6 +447,8 @@ onMount(() => {
     () => workspace.current,
   );
   languageMounted = true;
+  const removeKeys = installKeys();
+  warmCommands();
   let nativePerfStop: (() => void) | undefined;
   let mounted = true;
   const closeWalk =
@@ -548,6 +584,7 @@ onMount(() => {
   }, 4000);
   return () => {
     mounted = false;
+    removeKeys();
     workspace.authorizeProjectLeave = undefined;
     openRequests.stop();
     nativeProbe?.stop();
@@ -559,8 +596,6 @@ onMount(() => {
   };
 });
 </script>
-
-<svelte:window onkeydown={onKey} />
 
 <!-- A presentation covers the window: what is under it neither takes keys nor focus. -->
 <div class="window" inert={presenting}>
@@ -577,32 +612,12 @@ onMount(() => {
       slow={workspace.syncSlow}
       {me}
       peers={workspace.peers}
-      {sidebarOpen}
-      toolbarVisible={barVisible}
-      canToggleToolbar={hasBar}
-      {previewOpen}
-      historyOpen={history.open}
-      onToggleHistory={() => history.toggle()}
-      onShare={() => (sharing = true)}
-      onPeople={() => (people = true)}
-      onToggleSidebar={toggleSidebar}
-      onToggleToolbar={toggleToolbar}
-      onPreferences={() => (preferences = true)}
-      onTogglePreview={togglePreview}
-      onExport={exportPdf}
-      onAbout={() => {
-        aboutOpener = undefined;
-        about = true;
-      }}
-      {canPresent}
-      onPresent={present}
-      canReturn={workspace.canReturn && !workspace.leaving}
-      onReturn={() => void workspace.returnToPrevious()}
     />
     {#if barVisible && session.state && barLanguage}
       <FormatBar
         lang={barLanguage}
         editorState={session.state}
+        target={session.view?.dom}
         run={session.run}
         files={workspace.files}
         currentFile={workspace.current}
@@ -714,7 +729,7 @@ onMount(() => {
         ofMain={mainFile}
         hasText={mainFile || workspace.opened?.text !== undefined}
         onProblem={jumpToProblem}
-        onNextProblem={(reverse)=>problems.next(reverse)}
+        problemsNav
         {unsaved}
       />
     {/if}

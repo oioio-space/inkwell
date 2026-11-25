@@ -1,5 +1,6 @@
 <script lang="ts">
 import { tableType } from "../../../editor/csv/dialect";
+import { registry } from "../../../extensions";
 import type { NativeViewerProps } from "../../../extensions/context";
 import Sheet from "../../../ui/sheet/Sheet.svelte";
 
@@ -17,6 +18,7 @@ let {
 }: NativeViewerProps = $props();
 // A type the person chose says nothing about the content: nothing is reported against its name.
 const table = $derived(tableType(opening.type.options, !opening.chosen));
+const viewer = registry.viewers.find((v) => v.id === "tables.grid");
 </script>
 
-<Sheet {handle} {big} {me} {path} {table} {readOnly} {readOnlyReason} {startOffset} {onshowtext} />
+<Sheet {handle} {big} {me} {path} {table} {readOnly} {readOnlyReason} {startOffset} {onshowtext} {viewer} />

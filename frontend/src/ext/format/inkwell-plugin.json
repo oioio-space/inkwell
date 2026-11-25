@@ -1,0 +1,223 @@
+{
+  "id": "format",
+  "version": "1.0.0",
+  "contributes": {
+    "commands": [
+      {
+        "id": "format.bold",
+        "label": "fmt.bold",
+        "category": "format",
+        "when": "bold in formats && !readOnly",
+        "unavailable": "cmd.format.unavailable"
+      },
+      {
+        "id": "format.italic",
+        "label": "fmt.italic",
+        "category": "format",
+        "when": "italic in formats && !readOnly",
+        "unavailable": "cmd.format.unavailable"
+      },
+      {
+        "id": "format.underline",
+        "label": "fmt.underline",
+        "category": "format",
+        "when": "underline in formats && !readOnly",
+        "unavailable": "cmd.format.unavailable"
+      },
+      {
+        "id": "format.strike",
+        "label": "fmt.strike",
+        "category": "format",
+        "when": "strike in formats && !readOnly",
+        "unavailable": "cmd.format.unavailable"
+      },
+      {
+        "id": "format.link",
+        "label": "fmt.link",
+        "category": "format",
+        "when": "link in formats && !readOnly",
+        "unavailable": "cmd.format.unavailable"
+      },
+      {
+        "id": "format.code",
+        "label": "fmt.code",
+        "category": "format",
+        "when": "code in formats && !readOnly",
+        "unavailable": "cmd.format.unavailable"
+      },
+      {
+        "id": "format.codeblock",
+        "label": "fmt.codeblock",
+        "category": "format",
+        "when": "codeblock in formats && !readOnly",
+        "unavailable": "cmd.format.unavailable"
+      },
+      {
+        "id": "format.formula",
+        "label": "fmt.formula",
+        "category": "format",
+        "when": "formula in formats && !readOnly",
+        "unavailable": "cmd.format.unavailable"
+      },
+      {
+        "id": "format.ul",
+        "label": "fmt.ul",
+        "category": "format",
+        "when": "ul in formats && !readOnly",
+        "unavailable": "cmd.format.unavailable"
+      },
+      {
+        "id": "format.ol",
+        "label": "fmt.ol",
+        "category": "format",
+        "when": "ol in formats && !readOnly",
+        "unavailable": "cmd.format.unavailable"
+      },
+      {
+        "id": "format.task",
+        "label": "fmt.task",
+        "category": "format",
+        "when": "task in formats && !readOnly",
+        "unavailable": "cmd.format.unavailable"
+      },
+      {
+        "id": "format.quote",
+        "label": "fmt.quote",
+        "category": "format",
+        "when": "quote in formats && !readOnly",
+        "unavailable": "cmd.format.unavailable"
+      },
+      {
+        "id": "format.table",
+        "label": "fmt.table",
+        "category": "format",
+        "when": "table in formats && !readOnly",
+        "unavailable": "cmd.format.unavailable"
+      },
+      {
+        "id": "format.h1",
+        "label": "heading.h1",
+        "category": "format",
+        "when": "h1 in formats && !readOnly",
+        "unavailable": "cmd.format.unavailable"
+      },
+      {
+        "id": "format.h2",
+        "label": "heading.h2",
+        "category": "format",
+        "when": "h2 in formats && !readOnly",
+        "unavailable": "cmd.format.unavailable"
+      },
+      {
+        "id": "format.h3",
+        "label": "heading.h3",
+        "category": "format",
+        "when": "h3 in formats && !readOnly",
+        "unavailable": "cmd.format.unavailable"
+      },
+      {
+        "id": "format.h4",
+        "label": "heading.h4",
+        "category": "format",
+        "when": "h4 in formats && !readOnly",
+        "unavailable": "cmd.format.unavailable"
+      },
+      {
+        "id": "format.paragraph",
+        "label": "heading.paragraph",
+        "category": "format",
+        "when": "paragraph in formats && !readOnly",
+        "unavailable": "cmd.format.unavailable"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "format.bold",
+        "linux": ["Ctrl+b"],
+        "mac": ["Meta+b"],
+        "win": ["Ctrl+b"],
+        "scope": "editor"
+      },
+      {
+        "command": "format.italic",
+        "linux": ["Ctrl+i"],
+        "mac": ["Meta+i"],
+        "win": ["Ctrl+i"],
+        "scope": "editor",
+        "masks": ["selectParentSyntax"]
+      },
+      {
+        "command": "format.underline",
+        "linux": ["Ctrl+u"],
+        "mac": ["Meta+u"],
+        "win": ["Ctrl+u"],
+        "scope": "editor",
+        "masks": ["undoSelection"]
+      },
+      {
+        "command": "format.strike",
+        "linux": ["Ctrl+Shift+x"],
+        "mac": ["Shift+Meta+x"],
+        "win": ["Ctrl+Shift+x"],
+        "scope": "editor"
+      },
+      {
+        "command": "format.code",
+        "linux": ["Ctrl+e"],
+        "mac": ["Ctrl+Meta+e"],
+        "win": ["Ctrl+e"],
+        "scope": "editor"
+      },
+      {
+        "command": "format.codeblock",
+        "linux": ["Ctrl+Shift+e"],
+        "mac": ["Shift+Meta+e"],
+        "win": ["Ctrl+Shift+e"],
+        "scope": "editor"
+      },
+      {
+        "command": "format.link",
+        "linux": ["Ctrl+k"],
+        "mac": ["Meta+k"],
+        "win": ["Ctrl+k"],
+        "scope": "editor"
+      },
+      {
+        "command": "format.formula",
+        "linux": ["Ctrl+m"],
+        "mac": ["Shift+Meta+m"],
+        "win": ["Ctrl+m"],
+        "scope": "editor",
+        "masks": ["toggleTabFocusMode"]
+      },
+      {
+        "command": "format.h1",
+        "linux": ["Ctrl+1"],
+        "mac": ["Meta+1"],
+        "win": ["Ctrl+1"],
+        "scope": "editor"
+      },
+      {
+        "command": "format.h2",
+        "linux": ["Ctrl+2"],
+        "mac": ["Meta+2"],
+        "win": ["Ctrl+2"],
+        "scope": "editor"
+      },
+      {
+        "command": "format.h3",
+        "linux": ["Ctrl+3"],
+        "mac": ["Meta+3"],
+        "win": ["Ctrl+3"],
+        "scope": "editor"
+      },
+      {
+        "command": "format.h4",
+        "linux": ["Ctrl+4"],
+        "mac": ["Meta+4"],
+        "win": ["Ctrl+4"],
+        "scope": "editor"
+      }
+    ]
+  }
+}

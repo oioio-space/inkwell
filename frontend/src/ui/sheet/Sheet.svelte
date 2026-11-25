@@ -6,6 +6,8 @@ import { openCsv } from "../../editor/csv/open";
 import { patchWindow } from "../../editor/csv/patchWindow";
 import type { Delimiter } from "../../editor/csv/records";
 import { type DocPort, handlePort, plainPort, SheetDoc } from "../../editor/csv/sheetDoc";
+import { shortcutOf, surface } from "../../extensions/commands";
+import type { Viewer } from "../../extensions/registry";
 import { t, tn } from "../../i18n";
 import { problems } from "../../language/problems.svelte";
 import { closeBuffer } from "../../workspace/closePage";
@@ -15,6 +17,7 @@ import Icon from "../icons/Icon.svelte";
 import type { IconName } from "../icons/paths";
 import Toast from "../Toast.svelte";
 import ContextMenu from "./ContextMenu.svelte";
+import { gridHandlers } from "./commands";
 import FilterMenu from "./FilterMenu.svelte";
 import FindBar from "./FindBar.svelte";
 import Grid from "./Grid.svelte";
@@ -42,6 +45,7 @@ let {
   isLocked,
   startOffset,
   onshowtext,
+  viewer,
 }: {
   /** The document holding the text; absent for a text too big for one (then `big`). */
   handle?: DocHandle<Doc> | undefined;
@@ -58,6 +62,8 @@ let {
   /** Where the text view had its caret, to open on the matching cell. */
   startOffset?: number | undefined;
   onshowtext: (offset: number) => void;
+  /** The viewer showing it (`tables.grid`): the commands its surface may handle. */
+  viewer?: Viewer | undefined;
 } = $props();
 
 let ctrl = $state.raw<SheetController | undefined>();
@@ -68,6 +74,13 @@ let contradiction = $state<Start["contradiction"]>();
 let filter = $state<{ col: number; anchor: HTMLElement } | undefined>();
 let context = $state<{ x: number; y: number } | undefined>();
 let finding = $state<{ replace: boolean } | undefined>();
+let findBar = $state<{ step(direction: 1 | -1): void } | undefined>();
+
+const handlers = gridHandlers({
+  ctrl: () => ctrl,
+  find: (replace) => (finding = { replace }),
+  step: () => findBar?.step,
+});
 let gridHost: HTMLDivElement | undefined = $state();
 let presence: ReturnType<typeof sheetPresence> | undefined;
 
@@ -397,7 +410,7 @@ const menuItems = $derived.by((): MenuItem[] => {
     items.push({
       label: t("sheet.insertRowAbove"),
       icon: "rowadd",
-      shortcut: "Ctrl++",
+      shortcut: shortcutOf("tables.insert-cells"),
       disabled: c.structureLocked,
       run: () => c.insertRows("above"),
     });
@@ -420,7 +433,7 @@ const menuItems = $derived.by((): MenuItem[] => {
     items.push({
       label: t("sheet.deleteRows"),
       icon: "rowdel",
-      shortcut: "Ctrl+-",
+      shortcut: shortcutOf("tables.delete-cells"),
       run: () => c.deleteRows(),
     });
     items.push({ label: t("sheet.deleteCols"), icon: "coldel", run: () => c.deleteCols() });
@@ -502,7 +515,7 @@ const totalRows = $derived.by(() => {
 });
 </script>
 
-<section class="sheet" aria-label={t("sheet.region")}>
+<section class="sheet" aria-label={t("sheet.region")} use:surface={{ kind: "grid", handlers, ...(viewer ? { viewer } : {}) }}>
   {#if failure}
     <div class="banner err" role="alert">
       <span>{t("sheet.openFailed")}</span>
@@ -609,10 +622,10 @@ const totalRows = $derived.by(() => {
         {ctrl}
         oncontext={(x, y) => (context = { x, y })}
         onfilter={(col, anchor) => (filter = { col, anchor })}
-        onfind={(replace) => (finding = { replace })}
       />
       {#if finding}
         <FindBar
+          bind:this={findBar}
           {ctrl}
           withReplace={finding.replace}
           onclose={() => {

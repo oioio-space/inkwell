@@ -18,12 +18,10 @@ let {
   ctrl,
   oncontext,
   onfilter,
-  onfind,
 }: {
   ctrl: SheetController;
   oncontext: (x: number, y: number) => void;
   onfilter: (col: number, anchor: HTMLElement) => void;
-  onfind: (replace: boolean) => void;
 } = $props();
 
 let scroller: HTMLDivElement | undefined = $state();
@@ -491,8 +489,6 @@ function keydown(e: KeyboardEvent) {
   plainPaste = (e.ctrlKey || e.metaKey) && e.shiftKey && e.key.toLowerCase() === "v";
   const done = gridKey(ctrl, e, {
     pageRows: Math.max(1, Math.floor((viewH - topH) / rowH) - 1),
-    zoomReset: () => ctrl.setZoom(1),
-    openFind: onfind,
     openFilter: () => {
       const el = scroller?.querySelector<HTMLElement>(
         `[data-colhead="${ctrl.active.c}"] .filterbtn`,

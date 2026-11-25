@@ -47,7 +47,99 @@
         "fileTypes": ["csv", "tsv", "psv"],
         "label": "sheet.showTable",
         "entry": "native/grid.ts",
-        "capabilities": ["ui.native"]
+        "capabilities": ["ui.native"],
+        "commands": [
+          "app.find",
+          "app.replace",
+          "app.find-next",
+          "app.find-previous",
+          "app.zoom-in",
+          "app.zoom-out",
+          "app.zoom-reset",
+          "app.undo",
+          "app.redo",
+          "tables.fill-down",
+          "tables.fill-right",
+          "tables.insert-today",
+          "tables.insert-cells",
+          "tables.delete-cells"
+        ]
+      }
+    ],
+    "commands": [
+      {
+        "id": "tables.fill-down",
+        "label": "cmd.fill-down",
+        "category": "edit",
+        "when": "!field",
+        "unavailable": "cmd.tables.unavailable"
+      },
+      {
+        "id": "tables.fill-right",
+        "label": "cmd.fill-right",
+        "category": "edit",
+        "when": "!field",
+        "unavailable": "cmd.tables.unavailable"
+      },
+      {
+        "id": "tables.insert-today",
+        "label": "cmd.insert-today",
+        "category": "edit",
+        "when": "!field",
+        "unavailable": "cmd.tables.unavailable"
+      },
+      {
+        "id": "tables.insert-cells",
+        "label": "cmd.insert-cells",
+        "category": "edit",
+        "when": "!field",
+        "unavailable": "cmd.tables.unavailable"
+      },
+      {
+        "id": "tables.delete-cells",
+        "label": "cmd.delete-cells",
+        "category": "edit",
+        "when": "!field",
+        "unavailable": "cmd.tables.unavailable"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "tables.fill-down",
+        "linux": ["Ctrl+d"],
+        "mac": ["Meta+d"],
+        "win": ["Ctrl+d"],
+        "scope": "grid"
+      },
+      {
+        "command": "tables.fill-right",
+        "linux": ["Ctrl+r"],
+        "mac": ["Meta+r"],
+        "win": ["Ctrl+r"],
+        "scope": "grid"
+      },
+      {
+        "command": "tables.insert-today",
+        "linux": ["Ctrl+;"],
+        "mac": ["Meta+;"],
+        "win": ["Ctrl+;"],
+        "scope": "grid"
+      },
+      {
+        "command": "tables.insert-cells",
+        "linux": ["Ctrl++"],
+        "mac": ["Meta++"],
+        "win": ["Ctrl++"],
+        "scope": "grid",
+        "masks": ["app.zoom-in"]
+      },
+      {
+        "command": "tables.delete-cells",
+        "linux": ["Ctrl+-"],
+        "mac": ["Meta+-"],
+        "win": ["Ctrl+-"],
+        "scope": "grid",
+        "masks": ["app.zoom-out"]
       }
     ]
   }

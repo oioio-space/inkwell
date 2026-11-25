@@ -1,0 +1,22 @@
+{
+  "id": "sample",
+  "version": "1.0.0",
+  "contributes": {
+    "fileTypes": [
+      {
+        "id": "sample",
+        "label": "Sample",
+        "icon": "text",
+        "extensions": [".smp"],
+        "storage": "text"
+      }
+    ],
+    "commands": [
+      {
+        "id": "other.go",
+        "label": "Go",
+        "category": "navigate"
+      }
+    ]
+  }
+}

@@ -4,6 +4,7 @@ import { EditorState } from "@codemirror/state";
 import { EditorView } from "@codemirror/view";
 import { tick } from "svelte";
 import { cspNonce } from "../../editor/setup";
+import { surface } from "../../extensions/commands";
 import { cellDiff } from "../../history/csvdiff";
 import { compareTexts, entryDiff, type Frag } from "../../history/diffview";
 import { moveSections, stamp } from "../../history/stamp";
@@ -145,12 +146,11 @@ async function go(step: 1 | -1) {
   }
 }
 
-function onKey(e: KeyboardEvent) {
-  if (e.key === "F7") {
-    e.preventDefault();
-    void go(e.shiftKey ? -1 : 1);
-  }
-}
+/** The diff view is a surface of its own: F7 and Shift+F7 (`app.next-change`, `-previous`) step. */
+const changeKeys = {
+  "app.next-change": () => void go(1),
+  "app.previous-change": () => void go(-1),
+};
 
 function close() {
   history.diff = undefined;
@@ -160,9 +160,7 @@ const csvLabel = (v: string | undefined) =>
   v === undefined || v === "" ? t("diff.cell.empty") : v;
 </script>
 
-<svelte:window onkeydown={onKey} />
-
-<dialog bind:this={dialog} onclose={close} aria-labelledby="diff-title" data-testid="diff-view">
+<dialog bind:this={dialog} use:surface={{ kind: "diff", handlers: changeKeys }} onclose={close} aria-labelledby="diff-title" data-testid="diff-view">
   <header>
     <div class="head">
       <h2 id="diff-title">{req.title}</h2>

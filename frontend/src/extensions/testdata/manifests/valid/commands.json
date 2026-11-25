@@ -1,0 +1,59 @@
+{
+  "id": "sample",
+  "version": "1.0.0",
+  "contributes": {
+    "fileTypes": [
+      {
+        "id": "sample",
+        "label": "Sample",
+        "icon": "text",
+        "extensions": [".smp"],
+        "storage": "text"
+      }
+    ],
+    "commands": [
+      {
+        "id": "sample.go",
+        "label": "Go",
+        "category": "navigate",
+        "when": "focus == editor && !readOnly",
+        "unavailable": "Not here",
+        "repeat": true
+      },
+      {
+        "id": "sample.panel",
+        "label": "Panel",
+        "tooltip": "Shows the panel",
+        "keywords": ["side"],
+        "icon": "side",
+        "category": "view",
+        "toggled": "sidebarOpen"
+      }
+    ],
+    "menus": [
+      {
+        "command": "sample.panel",
+        "location": "main",
+        "group": "view",
+        "order": 500,
+        "when": "!field"
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "sample.go",
+        "linux": ["Ctrl+Shift+g", "F6"],
+        "mac": ["Shift+Meta+g"],
+        "win": ["Ctrl+Shift+g"],
+        "scope": "editor",
+        "when": "fileType == sample"
+      },
+      {
+        "command": "sample.panel",
+        "mac": ["Meta+?"],
+        "scope": "window",
+        "delegated": "system"
+      }
+    ]
+  }
+}
