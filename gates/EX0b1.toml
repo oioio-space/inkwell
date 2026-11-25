@@ -1,0 +1,272 @@
+# Written 2026-11-25 at step 1 of block EX0b1, before any code; frozen 2026-11-25 after a blind Opus review
+# (gates/EX0b1/REVIEW.md, « accept with corrections »: 6 major, all applied) and perf-start green at rest after PF2. First version `gates/EX0b.toml`
+# (2026-11-25), split on the blind review into EX0b1 (this gate) and EX0b2 (palette and shortcuts window, own gate).
+# EX0b1: the `commands`, `menus` and `keybindings` points, `run()`, one key listener, today's commands, main menu and
+# shortcuts migrated onto them. Rigour: standard. Plan: docs/plans/2026-11-25-ex0b-commands.md; decision: ADR 0027,
+# section « Commands, menus and keybindings (EX0b1) ». Witnesses: gates/EX0b1/WITNESSES.md.
+# Every long command is `timeout -k 10 N …/scripts/heavy.sh …` (the timeout covers the wait for a slot). No nested gate.
+# Caps: 30 + 30 + 480 + (20 + 300) + (200 + 360) + 600 + 30 = 2050 s <= 2700 s (rule G-1). The order matters: `e2e`
+# builds bin/inkwell-server and frontend/dist, which `perf-start` measures.
+max_minutes = 45
+raw_results = ["docs/plans/2026-11-25-ex0b-commands.md", "docs/adr/0027-contribution-registry.md", "gates/EX0b1/*"]
+
+[[criteria]]
+# The decision and its amendments are written: ADR 0027 has its EX0b1 section, the plan its rule rows C-1..C-12; spec
+# §8.2: every row « fait » names its command id (the C-7 test compares the chords), and the registry is installed by a
+# capture-phase listener, no longer « en Prec.high »; rule 48 of the UX1 plan orders the palette (no query: recent
+# first; a query: match quality first, recency as tie-break); G-63, G-98 and G-99 name EX0b1; PROGRESS has an EX0b1 and
+# an EX0b2 line pointing at the plan, and the UX1 line carries UX-EX0b-1 (the review button's icon and label).
+id = "docs"
+command = '''timeout -k 10 30 python3 -I - <<'PY'
+import pathlib, re, sys
+bad = []
+adr = pathlib.Path("docs/adr/0027-contribution-registry.md").read_text()
+if "### Commands, menus and keybindings (EX0b1)" not in adr.splitlines():
+    bad.append("ADR 0027 lacks its EX0b1 section")
+plan = pathlib.Path("docs/plans/2026-11-25-ex0b-commands.md")
+rows = plan.read_text() if plan.is_file() else ""
+bad += [f"plan row C-{i}" for i in range(1, 13) if f"\n| C-{i} |" not in rows]
+if "## 7. EX0b2" not in rows:
+    bad.append("plan lacks its EX0b2 section")
+spec = pathlib.Path("docs/design/spec.md").read_text()
+s82 = spec[spec.index("### 8.2 "):spec.index("### 8.3 ")]
+for line in s82.splitlines():
+    cells = [c.strip() for c in line.strip().strip("|").split("|")]
+    if len(cells) == 5 and cells[4].startswith("fait"):
+        ids = [x for x in re.findall(r"`([^`]+)`", cells[4]) if re.fullmatch(r"[a-z][a-z0-9-]*\.[a-z][a-z0-9-]*", x)]
+        if not ids:
+            bad.append(f"spec 8.2 row {cells[0]!r} names no command id")
+if "installé en **`Prec.high`**" in s82 or "phase de capture" not in s82:
+    bad.append("spec 8.2 still installs the registry in Prec.high, or does not name the capture listener")
+ux1 = pathlib.Path("docs/plans/2026-11-24-ux1-interface-plan.md").read_text()
+u = ux1.splitlines()
+i48 = next((i for i, l in enumerate(u) if l.startswith("48. ")), None)
+r48 = "" if i48 is None else " ".join([u[i48]] + [l for l in u[i48 + 1:i48 + 4] if l.startswith("    ")])
+if not ("récentes" in r48 and "qualité" in r48 and "départage" in r48):
+    bad.append("UX1 rule 48 does not order the palette (recent first without a query; quality first with one)")
+inv = pathlib.Path("docs/design/inventory.md").read_text()
+for gid in ("G-63", "G-98", "G-99"):
+    row = next((l for l in inv.splitlines() if l.startswith(f"| {gid} |")), "")
+    if "EX0b1" not in row:
+        bad.append(f"inventory {gid} does not name EX0b1")
+prog = pathlib.Path("PROGRESS.md").read_text().splitlines()
+for block in ("EX0b1", "EX0b2"):
+    line = next((l for l in prog if l.lstrip().startswith(f"- **{block}**")), "")
+    if "2026-11-25-ex0b-commands.md" not in line:
+        bad.append(f"PROGRESS {block} line absent or not pointing at the plan")
+if not any(l.lstrip().startswith("- **UX1**") and "UX-EX0b-1" in l for l in prog):
+    bad.append("PROGRESS UX1 line lacks UX-EX0b-1")
+sys.exit(f"EX0b1 docs: {bad}" if bad else 0)
+PY'''
+
+[[criteria]]
+# One source for chords and menus (spec §8.2). Webview, every .ts and .svelte outside tests, testkits and comment
+# lines: no CodeMirror-style chord literal, function-key literal, modifier test, window keydown handler, hand-made
+# shortcut label or platform guess, except the exact literals and kinds listed per file. In frontend/src/extensions/ only
+# the data tables (`keytables.ts`) are exempt; `keys.ts` may read modifiers and `commands.ts` installs the one listener.
+# The grid's keyboard holds only its widget keys (exact `case` literals); the header bar draws no menu item; the points
+# are filled (it cannot pass by deleting keys).
+id = "no-hard-keys"
+command = '''timeout -k 10 30 python3 -I - <<'PY'
+import json, pathlib, re, sys
+ALLOWED = {  # file: (tag, kinds it may hold, exact chord or function-key literals it may hold)
+    "frontend/src/extensions/keys.ts": ("chord of an event", {"mod"}, set()),
+    "frontend/src/extensions/commands.ts": ("the one key listener", {"window"}, set()),
+    "frontend/src/editor/amSync.ts": ("typing path: flush before any key", {"mod", "window"}, set()),
+    "frontend/src/editor/setup.ts": ("delegated undo (widget), = app.undo by C-6", {"chord"}, {"Mod-z"}),
+    "frontend/src/editor/search/keymap.ts": ("UX1-2: search keys, unwired, in keytables.ts", {"chord", "fkey"}, {"Mod-f", "Mod-h", "Mod-Shift-f", "F3", "F4"}),
+    "frontend/src/ui/search/SearchPanel.svelte": ("UX1-2: search panel, not mounted", {"fkey"}, {"F3", "F4"}),
+    "frontend/src/perf/native.ts": ("perf harness", {"mod"}, set()),
+    "frontend/src/perf/typingCheck.ts": ("perf harness, pointer", {"mod"}, set()),
+    "frontend/src/present/keys.ts": ("presentation mode (modal)", {"mod"}, set()),
+    "frontend/src/present/present.svelte.ts": ("presentation mode (modal)", {"mod"}, set()),
+    "frontend/src/present/public.svelte.ts": ("presentation mode (modal)", {"mod"}, set()),
+    "frontend/src/present/PresentHost.svelte": ("presentation mode (modal)", {"mod", "window"}, set()),
+    "frontend/src/present/PublicWindow.svelte": ("audience window: F11 full screen", {"mod", "fkey", "window"}, {"F11"}),
+    "frontend/src/ui/sheet/keys.ts": ("APG grid keys of keytables.ts; delegated undo", {"mod", "fkey"}, {"F2", "F10"}),
+    "frontend/src/ui/sheet/Grid.svelte": ("APG grid: pointer selection, Alt+Enter in a cell, Ctrl+wheel, plain paste", {"mod"}, set()),
+    "frontend/src/ui/history/HistoryBars.svelte": ("Ctrl+wheel zoom (pointer)", {"mod"}, set()),
+}
+PATTERNS = {
+    "chord": re.compile(r"""["'`]((?:Mod|Ctrl|Cmd|Alt|Meta|Shift)-[^"'`]*)["'`]"""),
+    "fkey": re.compile(r"""["'`](F(?:[1-9]|1[0-2]))["'`]"""),
+    "mod": re.compile(r"\b(ctrlKey|metaKey|altKey)\b"),
+    "window": re.compile(r"""(<svelte:window\s[^>]*onkeydown|addEventListener\(\s*["']keydown)"""),
+    "label": re.compile(r"\b(shortcutLabel|isMac)\b|(navigator\.platform)"),
+}
+bad = []
+src = pathlib.Path("frontend/src")
+for f in sorted([*src.rglob("*.ts"), *src.rglob("*.svelte")]):
+    s = f.as_posix()
+    if ".test." in f.name or "testkit" in f.name or s == "frontend/src/extensions/keytables.ts":
+        continue
+    tag, kinds, literals = ALLOWED.get(s, ("", set(), set()))
+    for n, line in enumerate(f.read_text().splitlines(), 1):
+        if line.lstrip().startswith(("//", "*", "/*", "<!--")):
+            continue
+        hits = []
+        for k, p in PATTERNS.items():
+            for m in p.finditer(line):
+                if k not in kinds or (k in ("chord", "fkey") and m.group(1) not in literals):
+                    hits.append(f"{k} {m.group(0)}")
+        if hits:
+            bad.append(f"{s}:{n} ({'; '.join(hits)})")
+keys = pathlib.Path("frontend/src/ui/sheet/keys.ts").read_text()
+GRID = {"Home", "End", "PageDown", "PageUp", "Enter", "Tab", "F2", "Escape", "Delete", "Backspace", "ContextMenu", "F10", " ", "a", "z", "y"}
+bad += [f"ui/sheet/keys.ts: case {c!r} is not a widget key" for c in re.findall(r'case\s+"([^"]*)"\s*:', keys) if c not in GRID]
+if 'role="menuitem' in pathlib.Path("frontend/src/ui/shell/HeaderBar.svelte").read_text():
+    bad.append("HeaderBar.svelte draws menu items itself")
+commands, chords = set(), {}
+for m in sorted(pathlib.Path("frontend/src/ext").glob("*/inkwell-plugin.json")):
+    c = json.loads(m.read_text()).get("contributes", {})
+    commands |= {x.get("id") for x in c.get("commands", [])}
+    for b in c.get("keybindings", []):
+        chords.setdefault(b.get("command"), set()).update(k for k in ("linux", "mac", "win") if b.get(k))
+need = ("app.save", "app.toolbar", "app.zoom-in", "format.bold", "typst.present")
+bad += [f"{i}: missing or without a chord on each system" for i in need if i not in commands or chords.get(i) != {"linux", "mac", "win"}]
+if len(chords) < 40:
+    bad.append(f"only {len(chords)} commands have chords")
+sys.exit(f"EX0b1 no-hard-keys: {len(bad)} problems: {bad[:120]}" if bad else 0)
+PY'''
+
+[[criteria]]
+# Biome, svelte-check and every Vitest test of the frontend, from one JSON report: the run succeeds and each named
+# rule test of the plan (C-1..C-12) passed (absent or skipped fails).
+id = "frontend"
+command = '''set -eu
+mkdir -p .task/ex0b1
+rm -f .task/ex0b1/vitest.json
+rc=0
+(cd frontend && timeout -k 10 480 ../scripts/heavy.sh bash -c 'pnpm --config.verifyDepsBeforeRun=false exec biome check . && pnpm --config.verifyDepsBeforeRun=false exec svelte-check --tsconfig ./tsconfig.json && pnpm --config.verifyDepsBeforeRun=false exec vitest run --configLoader runner --reporter=json --outputFile=../.task/ex0b1/vitest.json') || rc=$?
+python3 -I - "$rc" <<'PY'
+import json, pathlib, sys
+need = [
+    "EX0b1 C-1 a malformed command, menu or keybinding is refused with its reason",
+    "EX0b1 C-2 a when clause is checked against the closed context and evaluated by its table",
+    "EX0b1 C-3 a reserved or forbidden chord is refused on each system",
+    "EX0b1 C-4 a taken chord is refused in either order and never taken from the core",
+    "EX0b1 C-5 the person's own bindings win and are checked like the defaults",
+    "EX0b1 C-6 every key owned by the editor or a widget is in one table and resolved by name",
+    "EX0b1 C-7 every built-in command is complete on the three systems and does its own job",
+    "EX0b1 C-8 a key runs the command its chord names in the focused context, and nothing else",
+    "EX0b1 C-9 a command runs on the surface the key was pressed in, after the pending text is written",
+    "EX0b1 C-10 the main menu is drawn from the registry in its fixed groups",
+    "EX0b1 C-11 every control bound to a command carries its id, the registry's identity and runs through run()",
+    "EX0b1 C-12 commands cost nothing at start nor while typing",
+]
+report = pathlib.Path(".task/ex0b1/vitest.json")
+results = [a for f in json.loads(report.read_text())["testResults"] for a in f["assertionResults"]] if report.is_file() else []
+status = {a["title"]: a["status"] for a in results}
+bad = {n: status.get(n, "absent") for n in need if status.get(n) != "passed"}
+failed = [a["fullName"] for a in results if a["status"] == "failed"]
+if bad or failed or sys.argv[1] != "0":
+    sys.exit(f"EX0b1 frontend: exit {sys.argv[1]}, rule tests {bad}, failed {failed[:20]}")
+PY'''
+
+[[criteria]]
+# A rule test that asserts nothing must fail the gate. Block EX0b1's mutants MK1..MK12 (scripts/netsim/mutants.toml,
+# written at step 2 with the code) each break one rule; each entry names the exact title of its rule's test (`name`), so
+# only that test failing is a catch (MK7 swaps two built-in handlers). The command vectors exist, valid and invalid,
+# among them a viewer declaring a foreign id, a binding of another manifest's command and a plugin command with an entry.
+id = "mutants"
+command = '''set -eu
+timeout -k 10 20 python3 -I - <<'PY'
+import pathlib, sys, tomllib
+ms = {m["id"]: m for m in tomllib.load(open("scripts/netsim/mutants.toml", "rb"))["mutant"] if m.get("block") == "EX0b1"}
+bad = []
+for i in range(1, 13):
+    m = ms.get(f"MK{i}", {})
+    if (m.get("kind") != "vitest" or m.get("retired") or not m.get("test", "").startswith("frontend/src/")
+            or not m.get("name", "").startswith(f"EX0b1 C-{i} ")):
+        bad.append(f"MK{i}")
+root = pathlib.Path("frontend/src/extensions/testdata/manifests")
+if not list((root / "valid").glob("*command*.json")):
+    bad.append("no command vector in valid/")
+for word in ("foreign-command", "other-manifest-binding", "plugin-command-entry"):
+    if not list((root / "invalid").glob(f"*{word}*.json")):
+        bad.append(f"no invalid vector *{word}*")
+sys.exit(f"EX0b1 mutants: entries or vectors missing or wrong: {bad}" if bad else 0)
+PY
+timeout -k 10 300 ./scripts/heavy.sh python3 -I scripts/netsim/mutants.py EX0b1'''
+
+[[criteria]]
+# End to end in Chromium, first attempt only, nothing skipped: the two EX0b1 scenarios (frontend/e2e/ex0b1.spec.ts:
+# keys, held keys and the last keystroke saved; data-cmd census) and the scenarios whose keys, menu or zoom move onto
+# the registry. Exclusive slot.
+id = "e2e"
+command = '''set -eu
+mkdir -p .task/ex0b1
+rm -f .task/ex0b1/e2e.json
+timeout -k 10 200 ./scripts/heavy.sh mise run e2e:build
+rc=0
+(cd frontend && PLAYWRIGHT_JSON_OUTPUT_NAME=../.task/ex0b1/e2e.json INKWELL_E2E_BROWSER=chromium timeout -k 10 360 ../scripts/heavy.sh --exclusive ./node_modules/.bin/playwright test ex0b1.spec.ts save.spec.ts shell.spec.ts problems.spec.ts preview.spec.ts history.spec.ts sheet.spec.ts present.spec.ts --grep "EX0b1-E[12]|SAV-02|SAV-03b|UI-02|UI-03|UI-04|ER-1–4|PRV-105|B2 text zoom|SHEET-KEY|SHEET-ROWS|PRS-06" --reporter=json > /dev/null) || rc=$?
+python3 -I - "$rc" .task/ex0b1/e2e.json <<'PY'
+import json, pathlib, sys
+need = ["EX0b1-E1", "EX0b1-E2", "SAV-02", "SAV-03b", "UI-02", "UI-03", "UI-04", "ER-1–4", "PRV-105", "B2 text zoom",
+        "SHEET-KEY", "SHEET-ROWS", "PRS-06"]
+p = pathlib.Path(sys.argv[2])
+report = json.loads(p.read_text()) if p.is_file() else {"suites": [], "errors": ["no report"]}
+suites, tests = list(report["suites"]), []
+while suites:
+    s = suites.pop()
+    suites.extend(s.get("suites", []))
+    for spec in s.get("specs", []):
+        for t in spec["tests"]:
+            tests.append((spec["title"], t["status"] == "expected" and [r["status"] for r in t["results"]] == ["passed"]))
+bad = {}
+for n in need:
+    mine = [ok for title, ok in tests if title == n or title.startswith(n + " ") or title.startswith(n + ":")]
+    if not mine or not all(mine):
+        bad[n] = "absent" if not mine else "not passing first time"
+if bad or report.get("errors") or sys.argv[1] != "0":
+    sys.exit(f"EX0b1 e2e: exit {sys.argv[1]}, {bad}, errors {report.get('errors')}")
+PY'''
+exclusive = true
+
+[[criteria]]
+# Start unchanged, a regression guard (green on the unchanged tree): the existing PERF-START (scripts/perf/baseline.py,
+# ADR 0038), paired against the merge-base build, 80 judged pairs, upper bound of the ratio < 1.10, and the absolute
+# budget. Its evidence goes to this gate's folder.
+id = "perf-start"
+command = '''set -eu
+out="${INKWELL_PERF_OUT:-.task/ex0b1/perf}"
+mkdir -p "$out"
+INKWELL_PERF_OUT="$out" timeout -k 10 600 ./scripts/heavy.sh --exclusive python3 scripts/perf/baseline.py > "$out/baseline.log" 2>&1 || { tail -40 "$out/baseline.log"; exit 1; }
+python3 -I - "$out" <<'PY'
+import json, pathlib, subprocess, sys
+p = json.loads((pathlib.Path(sys.argv[1]) / "measurements.json").read_text())["PERF-START"]
+base = subprocess.check_output(["git", "merge-base", "HEAD", "main"], text=True).strip()
+bad = []
+bad += [] if p.get("status") == "pass" else [f"status {p.get('status')}"]
+bad += [] if p.get("design") == "paired-randomized" else ["design"]
+bad += [] if p.get("reference", {}).get("commit") == base else ["reference is not the merge-base"]
+v = p.get("verdict", {})
+bad += [] if v.get("status") == "pass" and v.get("pairs") == 80 and v.get("upper", 9) < 1.10 else ["verdict"]
+bad += [] if p.get("budget", {}).get("status") == "pass" else ["budget"]
+sys.exit("EX0b1 perf-start: " + ", ".join(bad) if bad else 0)
+PY'''
+exclusive = true
+
+[[criteria]]
+id = "simplify-report"
+command = '''timeout -k 10 30 python3 -I - <<'PY'
+import sys
+from pathlib import Path
+
+report = Path("gates/EX0b1/SIMPLIFY.md")
+if not report.is_file():
+    sys.exit("EX0b1 /simplify review evidence is absent")
+lines = report.read_text().splitlines()
+if not any(line.startswith("Reviewer: ") and line[10:].strip() for line in lines):
+    sys.exit("EX0b1 /simplify reviewer is absent")
+for heading in ("## Applied", "## Set aside", "## Verified"):
+    if heading not in lines:
+        sys.exit(f"EX0b1 /simplify review lacks {heading}")
+    body = []
+    for line in lines[lines.index(heading) + 1:]:
+        if line.startswith("## "):
+            break
+        body.append(line)
+    if not any(line.strip() for line in body):
+        sys.exit(f"EX0b1 /simplify review is empty under {heading}")
+PY'''
