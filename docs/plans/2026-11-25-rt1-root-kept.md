@@ -1,6 +1,6 @@
 # RT1 — a project's root is kept unless storage proves it absent
 
-Status: **step 1 (specify), 2026-11-25**. Rigour: standard (local data of the person, no peer bytes; one live page).
+Status: **gate frozen 2026-11-25 (`2eacd24`), step 2 implemented; merge after a green candidate run (§2)**. Rigour: standard (local data of the person, no peer bytes; one live page).
 Gate `gates/RT1.toml`, witnesses `gates/RT1/WITNESSES.md`. Place: `PROGRESS.md`, « Cap à long terme », point 1, before
 any other block. Store-stream rule: amendment « RT1 » of ADR 0020.
 
@@ -42,7 +42,7 @@ who opens a second tab. The fix still holds for the desktop: a Go storage read e
 | A-4 | A start that cannot open a stored root writes nothing, keeps the editor locked and says so (`notice`, role `alert`, key `start.rootUnreadable`: nothing was changed, restart Inkwell). | Vitest |
 | B-1 | `project.SetRootURL(url)` (`internal/project/project.go:304`) records a root only when none is recorded or `url` equals it; otherwise `ErrRootRecorded`, `project.json` untouched. `Projects.SetRootURL` only forwards. | Go |
 | B-2 | `project.ReplaceMissingRoot(old, new)` replaces, under the project's lock, only when the recorded root is `old` and its state is `absent`. | Go |
-| B-3 | `project.RootState(url)` → `stored` (a `snapshot` or `incremental` chunk under its id), `absent` (none, or `url` empty or not a valid root URL) or `unknown` (a `LoadRange` error: corrupt, I/O), never `absent` on an error. `Session.stored` (`internal/app/join.go:518`, CompleteJoin) uses it: `unknown` refuses the join. `Projects.RootState()` is the binding. | Go |
+| B-3 | `project.RootState(url)` → `stored` (a `snapshot` or `incremental` chunk under its id), `absent` (none, or `url` empty or not a valid root URL) or `unknown` (a `LoadRange` error: corrupt, I/O; or quarantine holds a chunk of it, its file name keeping the document id), never `absent` on an error. `Session.stored` (`internal/app/join.go:518`, CompleteJoin) uses it: `unknown` refuses the join. `Projects.RootState()` is the binding. | Go |
 | C-1 | `StoreServer.Serve`, replacing a live stream, first pushes `StatusSuperseded` (id 0, status 9, empty payload) to it, then closes it. Shared vector `superseded push` (status `Superseded`, wire `0000000009`) in `internal/bridge/testdata/storestream.json`, read by `TestStoreVectors` and `protocol.test.ts`. | Go + vector |
 | C-2 | An adapter that receives `StatusSuperseded` is terminal: pending and later requests fail with `StoreSupersededError`, it never reconnects, and the page shows `store.openElsewhere` once, however many requests fail after. Only one live page owns the store. | Vitest |
 | E-1 | `RT1-E2E` proves C-1 and C-2 end to end: page 1 keeps issuing store requests while a fresh page starts; page 1 shows `store.openElsewhere` and opens no store stream afterwards (its `POST /wails/stream/send` naming `store`, counted as in `e2e/bridgeTap.ts`), the fresh page shows the saved text, and `project.json`'s `rootUrl` is unchanged. The original persistence flow is repeated under WebKit and Chromium. | e2e |
@@ -88,8 +88,10 @@ only after a green GitHub run of its candidate, `scripts/candidate.sh RT1` (`ci-
 - **R-RT1-1 → E2E1**: W58a-E2E under WebKit (`frontend/e2e/foreign-project.spec.ts:106`, passed on retry): the local
   caret jumped to 0 as the host's remote caret appeared. Suspect `frontend/src/editor/remoteCursors.ts`, unproven
   (0 in 16 at rest); a separate defect, not a store-stream effect.
-- **R-RT1-2 → RT2**: a stored but corrupt document (no healthy backup, `unknown` for good) locks every start (A-4):
-  no data is lost, but the person has no way forward inside Inkwell.
+- **R-RT1-2 → RT2**: a corrupt document with no healthy backup stays locked and is reported, never replaced: its
+  damaged chunks go to `quarantine/` under a name that keeps the document id, and `RootState` answers `unknown`
+  while quarantine holds it (review M1), so every start says `start.rootUnreadable` (A-4). RT2 gives the person a
+  way forward inside Inkwell (restore from quarantine or from a peer, or start anew on request).
 - **R-RT1-3 → RT2**: the join retry loop (`frontend/src/workspace/workspace.svelte.ts:681-688`) calls `find()` again
   after a failed read, which never settles in the same Repo (§1.3); A-2 makes a cut read rare, not impossible.
 - **R-RT1-4 → RT2**: a root absent locally may still live at peers of a joined project; B-2 replaces it as today.

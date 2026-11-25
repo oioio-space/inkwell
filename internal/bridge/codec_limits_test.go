@@ -555,7 +555,7 @@ func TestEnvelopeLimitsAreExact(t *testing.T) {
 
 func TestStoreCodecStrictness(t *testing.T) {
 	// Responses: any length from the header up, every status to the last.
-	for status := bridge.StatusOK; status <= bridge.StatusTooLarge; status++ {
+	for status := bridge.StatusOK; status <= bridge.StatusSuperseded; status++ {
 		enc, err := bridge.EncodeStoreResponse(bridge.StoreResponse{ID: 7, Status: status, Payload: []byte("p")})
 		if err != nil {
 			t.Fatal(err)
@@ -564,10 +564,10 @@ func TestStoreCodecStrictness(t *testing.T) {
 			t.Errorf("round trip of status %d = %+v, %v", status, got, err)
 		}
 	}
-	if _, err := bridge.EncodeStoreResponse(bridge.StoreResponse{Status: bridge.StatusTooLarge + 1}); !errors.Is(err, bridge.ErrMalformed) {
+	if _, err := bridge.EncodeStoreResponse(bridge.StoreResponse{Status: bridge.StatusSuperseded + 1}); !errors.Is(err, bridge.ErrMalformed) {
 		t.Errorf("EncodeStoreResponse(status past the last) = %v, want ErrMalformed", err)
 	}
-	if _, err := bridge.DecodeStoreResponse([]byte{0, 0, 0, 1, byte(bridge.StatusTooLarge) + 1}); !errors.Is(err, bridge.ErrMalformed) {
+	if _, err := bridge.DecodeStoreResponse([]byte{0, 0, 0, 1, byte(bridge.StatusSuperseded) + 1}); !errors.Is(err, bridge.ErrMalformed) {
 		t.Errorf("DecodeStoreResponse(status past the last) = %v, want ErrMalformed", err)
 	}
 	if got, err := bridge.DecodeStoreResponse([]byte{0, 0, 0, 1, 0}); err != nil || len(got.Payload) != 0 {

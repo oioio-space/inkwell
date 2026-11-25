@@ -583,6 +583,8 @@
   "foreign.takeOver.failed": "Le document n'a pas pu être repris. Rien n'a changé.",
   "change.flushFailed": "Le document n'a pas pu être enregistré. Rien n'a changé.",
   "change.restartFailed": "Inkwell s'est fermé sans pouvoir redémarrer. Ouvrez-le de nouveau.",
+  "start.rootUnreadable": "Le document enregistré n'a pas pu être ouvert. Rien n'a été modifié : relancez Inkwell.",
+  "store.openElsewhere": "Inkwell est ouvert dans une autre fenêtre : celle-ci s'est arrêtée. Continuez dans l'autre fenêtre.",
   "foreign.joinWaiting": "Invitation acceptée. Vous pourrez écrire dès que la liste des personnes de ce document sera arrivée.",
   "join.restart.note": "Inkwell va redémarrer pour ouvrir ce document.",
   "join.restart.kept": "Votre document actuel est conservé.",

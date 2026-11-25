@@ -64,7 +64,7 @@ Go peut aussi pousser `ExternalChange{nom}` (id 0).
 
 ## Amendement du 2026-11-25 (bloc RT1) : une seule page vivante possède le store
 
-Statut : proposé (étape 1 de RT1), accepté à la fusion de RT1. Plan :
+Statut : accepté le 2026-11-25 (bloc RT1, sa porte verte ; fusion après l’exécution GitHub de sa branche candidate). Plan :
 [2026-11-25-rt1-root-kept.md](../plans/2026-11-25-rt1-root-kept.md), règles C-1 et C-2.
 
 **Problème.** `Serve` remplace la connexion précédente sans le lui dire : la page remplacée voit

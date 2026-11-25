@@ -455,3 +455,22 @@ func TestConcurrentSaves(t *testing.T) {
 	}
 	wg.Wait()
 }
+
+// RT1 rule B-3 (docs/plans/2026-11-25-rt1-root-kept.md): a value moved to quarantine keeps the first component of its
+// key (the document id), so the project can tell a damaged document from an absent one.
+func TestRT1QuarantineKeepsDocumentID(t *testing.T) {
+	kv, r := openKV(t)
+	key := []string{"doc1", "snapshot", "h"}
+	mustSave(t, kv, key, "precious text")
+	mustSave(t, kv, []string{"doc", "snapshot", "h"}, "another document")
+	flipBit(t, r, key, headerLen+2)
+	if _, err := kv.Load(key); !errors.Is(err, ErrCorrupt) {
+		t.Fatalf("Load(corrupted) = %v, want ErrCorrupt", err)
+	}
+	for id, want := range map[string]bool{"doc1": true, "doc": false, "doc2": false, "h": false} {
+		got, err := kv.Quarantined(id)
+		if err != nil || got != want {
+			t.Errorf("B-3 Quarantined(%q) = %v, %v; want %v", id, got, err, want)
+		}
+	}
+}

@@ -45,6 +45,25 @@ export class NotTextError extends StoreError {
   }
 }
 
+/** A request lost because the store stream ended before Go answered it. */
+export class StreamClosedError extends StoreError {
+  override name = "StreamClosedError";
+  constructor() {
+    super("store stream closed");
+  }
+}
+
+/**
+ * A request refused because a newer page took the store (ADR 0020, RT1 rule C-2): this page never
+ * reconnects.
+ */
+export class StoreSupersededError extends StoreError {
+  override name = "StoreSupersededError";
+  constructor() {
+    super("store superseded");
+  }
+}
+
 /** A write refused because the project file was edited outside Inkwell and not yet acknowledged. */
 export class ExternalEditError extends StoreError {
   override name = "ExternalEditError";
@@ -89,6 +108,9 @@ export class GoStorageAdapter implements StorageAdapterInterface {
   #writes = new Set<Promise<Response>>();
   #external = new Set<(rel: string) => void>();
   #leaving = new Set<() => void>();
+  #superseded = new Set<() => void>();
+  /** Set once Go said a newer page took the store: every request fails from then on (rule C-2). */
+  #gone = false;
   #nextId = 0;
 
   constructor(open: () => SocketLike) {
@@ -224,6 +246,15 @@ export class GoStorageAdapter implements StorageAdapterInterface {
     return () => this.#leaving.delete(cb);
   }
 
+  /**
+   * Calls `cb` once when Go says a newer page took the store (ADR 0020, RT1 rule C-2). Returns an
+   * unsubscribe.
+   */
+  onSuperseded(cb: () => void): () => void {
+    this.#superseded.add(cb);
+    return () => this.#superseded.delete(cb);
+  }
+
   /** Closes the stream; requests still waiting fail. */
   close(): void {
     const conn = this.#conn;
@@ -233,6 +264,7 @@ export class GoStorageAdapter implements StorageAdapterInterface {
   }
 
   #connect(): Promise<SocketLike> {
+    if (this.#gone) return Promise.reject(new StoreSupersededError());
     if (this.#conn) return this.#conn;
     const socket = this.#open();
     socket.binaryType = "arraybuffer";
@@ -241,9 +273,10 @@ export class GoStorageAdapter implements StorageAdapterInterface {
       socket.onclose = () => {
         if (this.#conn === conn) this.#conn = undefined; // the next request reconnects
         const lostWrite = [...this.#pending.values()].some((p) => p.write);
-        this.#failAll(new StoreError("store stream closed"));
+        const closed = new StreamClosedError();
+        this.#failAll(closed);
         if (lostWrite) for (const cb of this.#leaving) cb();
-        reject(new StoreError("store stream closed"));
+        reject(closed);
       };
     });
     socket.onmessage = (ev) => this.#receive(new Uint8Array(ev.data as ArrayBuffer));
@@ -266,6 +299,12 @@ export class GoStorageAdapter implements StorageAdapterInterface {
       if (r.status === Status.External) {
         const name = textDecoder.decode(r.payload);
         for (const cb of this.#external) cb(name);
+      } else if (r.status === Status.Superseded && !this.#gone) {
+        this.#gone = true;
+        this.#failAll(new StoreSupersededError());
+        const told = [...this.#superseded];
+        this.#superseded.clear(); // said once: the page never reconnects
+        for (const cb of told) cb();
       }
       return;
     }
@@ -283,8 +322,18 @@ export class GoStorageAdapter implements StorageAdapterInterface {
   }
 
   #call(op: Op, key: string[], data: Uint8Array = new Uint8Array()): Promise<Response> {
-    const reply = this.#request(op, key, data);
-    if (WRITES.has(op)) {
+    // A read cut by a stream close is sent again, once, on the next stream: it is idempotent, and
+    // automerge-repo's find() never settles after one failed read (RT1 rule A-2). A write is never
+    // sent again: onLeaving reports it as not saved.
+    const write = WRITES.has(op);
+    const sent = this.#request(op, key, data);
+    const reply = write
+      ? sent
+      : sent.catch((err: unknown) => {
+          if (err instanceof StreamClosedError) return this.#request(op, key, data);
+          throw err;
+        });
+    if (write) {
       this.#writes.add(reply);
       const remove = () => this.#writes.delete(reply);
       void reply.then(remove, remove);

@@ -57,6 +57,8 @@ export const REASON_LEAVING = "leaving";
  * second carries the 1-based line of the first invalid byte as a u32. EditedOutside answers
  * WriteProjection for a file changed outside Inkwell and not yet acknowledged. TooLarge answers
  * PutBlob for a file over the size limit of a blob: its payload is the limit in bytes, as a u64.
+ * Superseded is pushed with id 0 and no payload to a page whose stream a newer page replaced: it stays
+ * down (ADR 0020, RT1 amendment).
  */
 export const Status = {
   OK: 0,
@@ -68,6 +70,7 @@ export const Status = {
   InvalidText: 6,
   EditedOutside: 7,
   TooLarge: 8,
+  Superseded: 9,
 } as const;
 export type Status = (typeof Status)[keyof typeof Status];
 
@@ -209,7 +212,7 @@ export function encodeResponse(r: Response): Uint8Array {
 export function decodeResponse(b: Uint8Array): Response {
   if (b.length < 5) throw new ProtocolError("short response");
   const status = b[4] as number;
-  if (status > Status.TooLarge) throw new ProtocolError(`unknown status ${status}`);
+  if (status > Status.Superseded) throw new ProtocolError(`unknown status ${status}`);
   return { id: readU32(b, 0), status: status as Status, payload: b.subarray(5) };
 }
 

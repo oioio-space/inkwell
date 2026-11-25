@@ -65,6 +65,7 @@ var storeStatuses = map[string]bridge.StoreStatus{
 	"Error": bridge.StatusError, "External": bridge.StatusExternal,
 	"Binary": bridge.StatusBinary, "InvalidText": bridge.StatusInvalidText,
 	"EditedOutside": bridge.StatusEditedOutside, "TooLarge": bridge.StatusTooLarge,
+	"Superseded": bridge.StatusSuperseded,
 }
 
 func unhex(t *testing.T, s string) []byte {

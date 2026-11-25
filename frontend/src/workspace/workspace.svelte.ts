@@ -44,6 +44,7 @@ import { accessOf, type Member, type Standing } from "../ui/people/roster";
 import { flushCloseBuffers, pauseClosePresence, resumeClosePresence } from "./closePage";
 import { BootstrapLoader } from "./loader";
 import { observeSaveNow, observeSession, observeVariantHeads } from "./observe";
+import { watchSuperseded } from "./superseded";
 import { viewChoice } from "./viewChoice.svelte";
 
 /** The project's text, and what the history keeps beside it (named versions, variants, actors). */
@@ -578,6 +579,8 @@ class Workspace {
     // Go took a project change while this page still wrote: the write is refused, never lost in
     // silence (PC1, rule N-16).
     storage.onLeaving(() => notice.show(t("change.flushFailed"), "alert"));
+    // A newer page took the store: this one stays down and says so, once (ADR 0020, RT1 rule C-2).
+    watchSuperseded(storage);
     this.#storage = storage;
     this.#storeStarted = true;
     const repo = new Repo({
@@ -644,10 +647,30 @@ class Workspace {
         await this.open(saved);
         return;
       } catch {
-        // The saved document is gone from the project folder: start a fresh one.
+        // A failed load says nothing of storage: only Go, which holds it, can tell (rule A-1).
       }
     }
-    await this.open(repo.create<Doc>({ text: "" }).url);
+    // An empty root has no document to lose; any other is replaced only once Go proves it absent.
+    const state = saved ? await Projects.RootState().catch(() => "unknown") : "absent";
+    if (generation !== this.#generation) return;
+    // The saved document is still stored, or Go cannot tell: nothing is written (rule A-4).
+    const unreadable = () => notice.show(t("start.rootUnreadable"), "alert");
+    if (state !== "absent") {
+      unreadable();
+      return;
+    }
+    const fresh = repo.create<Doc>({ text: "" }).url;
+    if (saved) {
+      try {
+        await Projects.ReplaceMissingRoot(saved, fresh); // before open() records it (rule A-3)
+      } catch {
+        // Go refused: the root stays, and the document made to replace it goes with its chunks.
+        repo.delete(fresh);
+        unreadable();
+        return;
+      }
+    }
+    await this.open(fresh);
   }
 
   /**

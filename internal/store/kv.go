@@ -295,13 +295,34 @@ func (k *KV) recover(name string, key []string, cause error) ([]byte, error) {
 	return nil, fmt.Errorf("store: %v quarantined, no intact backup: %w", key, cause)
 }
 
+// quarantine moves the damaged file name of key to quarantine/, named
+// "<first component>~<random>-<last component>": "~" is no key character, so the
+// first component (the document id of automerge-repo's keys) stays readable for
+// [KV.Quarantined] (RT1 rule B-3).
 func (k *KV) quarantine(name string, key []string) error {
 	if err := k.r.MkdirAll(quarantineDir, 0o700); err != nil {
 		return err
 	}
 	last := key[len(key)-1]
-	target := path.Join(quarantineDir, rand.Text()[:8]+"-"+last[:min(len(last), 64)])
+	target := path.Join(quarantineDir, key[0]+leafSuffix+rand.Text()[:8]+"-"+last[:min(len(last), 64)])
 	return k.r.Rename(name, target)
+}
+
+// Quarantined reports whether quarantine/ holds a damaged value whose key began
+// with first: a document whose chunks were damaged is not absent, even once none
+// is left in the store (RT1 rule B-3).
+func (k *KV) Quarantined(first string) (bool, error) {
+	k.mu.Lock()
+	defer k.mu.Unlock()
+	names, err := k.dirNames(quarantineDir)
+	if errors.Is(err, fs.ErrNotExist) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("store: list %s: %w", quarantineDir, err)
+	}
+	prefix := first + leafSuffix
+	return slices.ContainsFunc(names, func(n string) bool { return strings.HasPrefix(n, prefix) }), nil
 }
 
 // dirNames returns the sorted names of the entries of directory dir.

@@ -762,12 +762,15 @@ describe("PC1 the page leaves its context before the request (N-15)", () => {
     read.catch(() => undefined);
     await vi.waitFor(() => expect(store.log.at(-1)?.[1]).toBe("held"));
     store.dropConnections();
+    // RT1 rule A-2: a read cut by the stream is sent again, once, on the next stream; cut again, it fails.
+    await vi.waitFor(() => expect(store.log.filter(([, k]) => k === "held")).toHaveLength(2));
+    store.dropConnections();
     await expect(read).rejects.toThrow("store stream closed");
     expect(refused, "a read lost with the stream is no lost write").not.toHaveBeenCalled();
 
     const write = storage.save(["b"], new Uint8Array([2]));
     write.catch(() => undefined);
-    await vi.waitFor(() => expect(store.log.filter(([, k]) => k === "held")).toHaveLength(2));
+    await vi.waitFor(() => expect(store.log.filter(([, k]) => k === "held")).toHaveLength(3));
     store.dropConnections();
     await expect(write).rejects.toThrow("store stream closed");
     expect(refused, "N-16 a write without its reply is reported").toHaveBeenCalledTimes(1);
@@ -775,7 +778,7 @@ describe("PC1 the page leaves its context before the request (N-15)", () => {
     // The page's own close is no refusal.
     const own = storage.save(["c"], new Uint8Array([3]));
     own.catch(() => undefined);
-    await vi.waitFor(() => expect(store.log.filter(([, k]) => k === "held")).toHaveLength(3));
+    await vi.waitFor(() => expect(store.log.filter(([, k]) => k === "held")).toHaveLength(4));
     storage.close();
     await expect(own).rejects.toThrow("store closed");
     expect(refused).toHaveBeenCalledTimes(1);

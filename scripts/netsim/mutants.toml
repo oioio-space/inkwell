@@ -4279,3 +4279,195 @@ why = "received bytes are not counted on their link"
 file = "internal/transport/mux/mux.go"
 before = "\t\tm.recvLink(ev.Peer).recv.Add(uint64(len(ev.Payload))) // #nosec G115 -- a length.\n"
 after = ""
+
+[[mutant]]
+id = "MR1"
+block = "RT1"
+kind = "vitest"
+test = "frontend/src/workspace/rootKept.test.ts"
+name = "RT1 A-1 a failed load of a stored root never creates a document nor records a root"
+clause = "RT1 A-1"
+why = "the start creates on any failed load, without asking Go"
+[[mutant.edit]]
+file = "frontend/src/workspace/workspace.svelte.ts"
+before = "const state = saved ? await Projects.RootState().catch(() => \"unknown\") : \"absent\";"
+after = "const state = \"absent\";"
+
+[[mutant]]
+id = "MR2"
+block = "RT1"
+kind = "vitest"
+test = "frontend/src/workspace/rootKept.test.ts"
+name = "RT1 A-1 a failed load whose storage state is unknown never creates a document nor records a root"
+clause = "RT1 A-1"
+why = "unknown is taken for absent"
+[[mutant.edit]]
+file = "frontend/src/workspace/workspace.svelte.ts"
+before = "if (state !== \"absent\") {"
+after = "if (state !== \"absent\" && state !== \"unknown\") {"
+
+[[mutant]]
+id = "MR3"
+block = "RT1"
+kind = "vitest"
+test = "frontend/src/store/rootKept.test.ts"
+name = "RT1 A-2 a read cut by a stream close is sent again, once, on the next stream"
+clause = "RT1 A-2"
+why = "a cut read is not sent again"
+[[mutant.edit]]
+file = "frontend/src/store/GoStorageAdapter.ts"
+before = "if (err instanceof StreamClosedError) return this.#request(op, key, data);"
+after = "if (err instanceof StreamClosedError) throw err;"
+
+[[mutant]]
+id = "MR4"
+block = "RT1"
+kind = "vitest"
+test = "frontend/src/workspace/rootKept.test.ts"
+name = "RT1 A-3 a root proven absent is replaced through ReplaceMissingRoot before any SetRootURL"
+clause = "RT1 A-3"
+why = "the absent path records the fresh root with SetRootURL"
+[[mutant.edit]]
+file = "frontend/src/workspace/workspace.svelte.ts"
+before = "await Projects.ReplaceMissingRoot(saved, fresh);"
+after = "await Projects.SetRootURL(fresh);"
+
+[[mutant]]
+id = "MR5"
+block = "RT1"
+kind = "vitest"
+test = "frontend/src/store/rootKept.test.ts"
+name = "RT1 C-2 a superseded adapter fails every request and never reconnects"
+clause = "RT1 C-2"
+why = "the adapter reconnects after the superseded notice"
+[[mutant.edit]]
+file = "frontend/src/store/GoStorageAdapter.ts"
+before = "    if (this.#gone) return Promise.reject(new StoreSupersededError());\n"
+after = ""
+
+[[mutant]]
+id = "MR6"
+block = "RT1"
+kind = "go"
+pkg = "./internal/project/"
+test = "TestRT1B1SetRootURLNeverReplaces"
+expect = "B-1 "
+clause = "RT1 B-1"
+why = "SetRootURL accepts another root"
+[[mutant.edit]]
+file = "internal/project/project.go"
+before = "\tif p.m.RootURL != \"\" && p.m.RootURL != url {\n\t\treturn ErrRootRecorded"
+after = "\tif false {\n\t\treturn ErrRootRecorded"
+
+[[mutant]]
+id = "MR7"
+block = "RT1"
+kind = "go"
+pkg = "./internal/project/"
+test = "TestRT1B2ReplaceMissingRootOnlyWhenAbsent"
+expect = "B-2 "
+clause = "RT1 B-2"
+why = "ReplaceMissingRoot skips the state check"
+[[mutant.edit]]
+file = "internal/project/project.go"
+before = "if p.m.RootURL != old || p.RootState(old) != RootAbsent {"
+after = "if p.m.RootURL != old {"
+
+[[mutant]]
+id = "MR8"
+block = "RT1"
+kind = "go"
+pkg = "./internal/project/"
+test = "TestRT1B3UnknownIsNeverAbsent"
+expect = "B-3 "
+clause = "RT1 B-3"
+why = "a storage error is taken for absent"
+[[mutant.edit]]
+file = "internal/project/project.go"
+before = "\t\tif err != nil {\n\t\t\treturn RootUnknown"
+after = "\t\tif err != nil {\n\t\t\treturn RootAbsent"
+
+[[mutant]]
+id = "MR9"
+block = "RT1"
+kind = "go"
+pkg = "./internal/bridge/"
+test = "TestRT1C1SupersededToldBeforeClose"
+expect = "C-1 "
+clause = "RT1 C-1"
+why = "the retired page is closed without the superseded notice"
+[[mutant.edit]]
+file = "internal/bridge/storestream.go"
+before = "\t\ts.tell(prev)\n"
+after = ""
+
+[[mutant]]
+id = "MR10"
+block = "RT1"
+kind = "vitest"
+test = "frontend/src/workspace/rootKept.test.ts"
+name = "RT1 A-1 a RootState call that rejects never creates a document nor records a root"
+clause = "RT1 A-1"
+why = "a failed RootState call is read as absent"
+[[mutant.edit]]
+file = "frontend/src/workspace/workspace.svelte.ts"
+before = ".catch(() => \"unknown\")"
+after = ".catch(() => \"absent\")"
+
+[[mutant]]
+id = "MR11"
+block = "RT1"
+kind = "vitest"
+test = "frontend/src/workspace/rootKept.test.ts"
+name = "RT1 A-4 a start that cannot open a stored root writes nothing and says so"
+clause = "RT1 A-4"
+why = "the start says nothing when it cannot open a stored root"
+[[mutant.edit]]
+file = "frontend/src/workspace/workspace.svelte.ts"
+before = "const unreadable = () => notice.show(t(\"start.rootUnreadable\"), \"alert\");"
+after = "const unreadable = () => {};"
+
+[[mutant]]
+id = "MR12"
+block = "RT1"
+kind = "vitest"
+test = "frontend/src/store/rootKept.test.ts"
+name = "RT1 C-2 a superseded page says once that Inkwell is open elsewhere"
+clause = "RT1 C-2"
+why = "the superseded notice is said again at each failed request"
+[[mutant.edit]]
+file = "frontend/src/store/GoStorageAdapter.ts"
+before = "    if (this.#gone) return Promise.reject(new StoreSupersededError());\n"
+after = "    if (this.#gone) {\n      for (const cb of this.#superseded) cb();\n      return Promise.reject(new StoreSupersededError());\n    }\n"
+
+[[mutant.edit]]
+file = "frontend/src/store/GoStorageAdapter.ts"
+before = "        this.#superseded.clear(); // said once: the page never reconnects\n"
+after = ""
+
+[[mutant]]
+id = "MR13"
+block = "RT1"
+kind = "go"
+pkg = "./internal/app/"
+test = "TestRT1B3JoinRefusedWhileRootUnknown"
+expect = "B-3 "
+clause = "RT1 B-3"
+why = "the join reads an unreadable storage as holding the root"
+[[mutant.edit]]
+file = "internal/app/join.go"
+before = "return s.proj.RootState(url) == project.RootStored"
+after = "return s.proj.RootState(url) != project.RootAbsent"
+
+[[mutant]]
+id = "MR14"
+block = "RT1"
+kind = "vitest"
+test = "frontend/src/store/rootKept.test.ts"
+name = "RT1 A-2 a write cut by a stream close is never sent again"
+clause = "RT1 A-2"
+why = "a cut write is sent again too"
+[[mutant.edit]]
+file = "frontend/src/store/GoStorageAdapter.ts"
+before = "const reply = write\n      ? sent"
+after = "const reply = false\n      ? sent"

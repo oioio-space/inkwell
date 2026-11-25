@@ -260,6 +260,10 @@ type windowHost interface {
 // backupsKept is how many project backups are kept (one per launch).
 const backupsKept = 10
 
+// The store stream offers a retired page the superseded notice without blocking (RT1 rule C-1):
+// the Wails stream must keep its TrySend.
+var _ bridge.TrySender = (*application.StreamConn)(nil)
+
 // openProject opens the project of the first argument of this launch when it is a project of the
 // user's Inkwell folder (R2), else the most recent one, creating an untitled one on first launch
 // (R1).

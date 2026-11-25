@@ -59,12 +59,27 @@ func (s *Projects) Current() ProjectInfo {
 }
 
 // SetRootURL records the automerge URL of the project's document, once the
-// webview has created it.
+// webview has created it. Another root than the recorded one is refused (RT1 rule B-1).
 func (s *Projects) SetRootURL(url string) error {
 	if !validRootURL(url) {
 		return errBadRootURL
 	}
 	return s.p.SetRootURL(url)
+}
+
+// RootState says what the storage holds of the recorded root document: "stored", "absent" or
+// "unknown" (RT1 rule B-3). The start replaces a root only on "absent".
+func (s *Projects) RootState() string {
+	return string(s.p.RootState(s.p.Meta().RootURL))
+}
+
+// ReplaceMissingRoot replaces the recorded root old with url, only once the storage proves old
+// absent (RT1 rule B-2).
+func (s *Projects) ReplaceMissingRoot(old, url string) error {
+	if !validRootURL(url) {
+		return errBadRootURL
+	}
+	return s.p.ReplaceMissingRoot(old, url)
 }
 
 // validRootURL accepts "automerge:" followed by a base58 document id.

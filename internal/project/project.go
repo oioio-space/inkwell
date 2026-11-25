@@ -65,6 +65,25 @@ var (
 	// ErrSyncPoint is returned for a sync point that is not JSON or is over
 	// [MaxSyncPoint] bytes.
 	ErrSyncPoint = errors.New("project: invalid sync point")
+	// ErrRootRecorded refuses [Project.SetRootURL] for another root than the recorded one: only
+	// [Project.ReplaceMissingRoot] replaces a root (RT1 rule B-1).
+	ErrRootRecorded = errors.New("project: another root is recorded")
+	// ErrRootNotMissing refuses [Project.ReplaceMissingRoot] when the recorded root is not the one
+	// named or its document is not proven absent (RT1 rule B-2).
+	ErrRootNotMissing = errors.New("project: the recorded root is not proven absent")
+)
+
+// RootState says what the storage holds of a root document (RT1 rule B-3).
+type RootState string
+
+// The root states.
+const (
+	// RootStored means a snapshot or an incremental chunk of the document is stored.
+	RootStored RootState = "stored"
+	// RootAbsent means none is: the URL is empty, not a valid root, or nothing is stored under it.
+	RootAbsent RootState = "absent"
+	// RootUnknown means the storage could not be read (a damaged chunk, quarantined or not, an I/O error).
+	RootUnknown RootState = "unknown"
 )
 
 // Meta identifies a project.
@@ -298,15 +317,65 @@ func (p *Project) Meta() Meta {
 	return p.m.Meta
 }
 
-// SetRootURL records the automerge URL of the project's root document. It is refused with
-// [ErrPendingJoin] while the project waits for the root of a join: only [Project.CompleteJoin]
-// records that one.
+// SetRootURL records the automerge URL of the project's root document when none is recorded, and
+// accepts the recorded one again. Another root is refused with [ErrRootRecorded], whatever the
+// storage holds: only [Project.ReplaceMissingRoot] replaces a root (RT1 rule B-1). It is refused
+// with [ErrPendingJoin] while the project waits for the root of a join: only
+// [Project.CompleteJoin] records that one.
 func (p *Project) SetRootURL(url string) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.m.PendingJoin != nil {
 		return ErrPendingJoin
 	}
+	if p.m.RootURL != "" && p.m.RootURL != url {
+		return ErrRootRecorded
+	}
+	return p.setRootLocked(url)
+}
+
+// ReplaceMissingRoot replaces the recorded root old with url, only when old is the recorded root
+// and its document is proven absent from the storage ([RootAbsent]); otherwise it is refused with
+// [ErrRootNotMissing] and project.json is untouched (RT1 rule B-2). The check and the write hold
+// the project's lock; the page that asks is the only writer of chunks (ADR 0020, RT1 amendment).
+func (p *Project) ReplaceMissingRoot(old, url string) error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	if p.m.PendingJoin != nil {
+		return ErrPendingJoin
+	}
+	if p.m.RootURL != old || p.RootState(old) != RootAbsent {
+		return ErrRootNotMissing
+	}
+	return p.setRootLocked(url)
+}
+
+// RootState says what the storage holds of the document url: [RootStored], [RootAbsent], or
+// [RootUnknown] when it cannot be read or quarantine holds a damaged chunk of it, which is never
+// taken for absent (RT1 rule B-3).
+func (p *Project) RootState(url string) RootState {
+	id, ok := strings.CutPrefix(url, "automerge:")
+	if !ok || store.ValidPrefix([]string{id}) != nil {
+		return RootAbsent // nothing can be stored under a key that is not one
+	}
+	for _, kind := range []string{"snapshot", "incremental"} {
+		entries, err := p.LoadRange([]string{id, kind})
+		if len(entries) > 0 {
+			return RootStored
+		}
+		if err != nil {
+			return RootUnknown
+		}
+	}
+	// A chunk damaged and quarantined, by this read or an earlier one, is no proof of absence:
+	// the start would replace the document otherwise (RT1 review M1).
+	if damaged, err := p.Quarantined(id); damaged || err != nil {
+		return RootUnknown
+	}
+	return RootAbsent
+}
+
+func (p *Project) setRootLocked(url string) error {
 	old := p.m.RootURL
 	p.m.RootURL = url
 	if err := p.saveLocked(); err != nil {

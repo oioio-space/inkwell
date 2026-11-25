@@ -2244,6 +2244,16 @@
       "id": "54e5de471e7e40ff2af31d03e8e82716987c66329dbb3f01b120f7cbfc6c3f4d",
       "reason": "scripts/worktree_test.py: gate dependency changed — expects the three added setup calls; no test removed or relaxed",
       "decision": "docs/objectif-en-cours.md"
+    },
+    {
+      "id": "4a6f262e70a0841b7b75ca383b5d43f9f30af7cd7421260c28ffafc813f7875c",
+      "reason": "frontend/e2e/persistence.spec.ts: no timeout raised; the new RT1-E2E test repeats the spec's existing 10 s wait (await expect.poll(onDisk, { timeout: 10_000 }).toBe(text)), which the guard sees as a second occurrence of the line",
+      "decision": "docs/plans/2026-11-25-rt1-root-kept.md"
+    },
+    {
+      "id": "7b2a2ea8280b2f3212f5afabcea56bd136c8e9245b0392b9e6094adb9c7612eb",
+      "reason": "frontend/e2e/persistence.spec.ts: no timeout raised; the new RT1-E2E test repeats the spec's existing 10 s wait (await expect.poll(() => docText(fresh), { timeout: 10_000 }).toBe(text)), which the guard sees as a second occurrence of the line",
+      "decision": "docs/plans/2026-11-25-rt1-root-kept.md"
     }
   ]
 }

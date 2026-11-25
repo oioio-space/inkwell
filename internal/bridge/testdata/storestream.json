@@ -42,6 +42,12 @@
     "wireHex": "00000000046d61696e2e747970"
   },
   {
+    "name": "superseded push",
+    "type": "response",
+    "id": 0, "status": "Superseded", "payloadHex": "",
+    "wireHex": "0000000009"
+  },
+  {
     "name": "range payload with one entry",
     "type": "range",
     "entries": [{"key": ["d", "k"], "dataHex": "76"}],

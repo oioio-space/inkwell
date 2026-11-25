@@ -26,6 +26,15 @@ function mainTyp(): string {
 
 const onDisk = () => (existsSync(mainTyp()) ? readFileSync(mainTyp(), "utf8") : undefined);
 
+/** What the page says once a fresher page took the store (RT1 rule C-2), as the catalogue words it. */
+const openElsewhere: string = JSON.parse(
+  readFileSync(join(import.meta.dirname, "..", "src", "i18n", "fr.json"), "utf8"),
+)["store.openElsewhere"];
+
+/** The root project.json records: the document the project is. */
+const recordedRoot = (): string =>
+  JSON.parse(readFileSync(join(mainTyp(), "..", ".inkwell", "project.json"), "utf8")).rootUrl;
+
 async function type(p: Page, text: string) {
   await editor(p).click();
   await p.keyboard.press("ControlOrMeta+a");
@@ -62,4 +71,52 @@ test("what is typed lands in main.typ and survives a fresh browser and a second 
   } finally {
     await stopInstance(restarted);
   }
+});
+
+test("RT1-E2E a page replaced by a fresher one stops and the saved document stays the project's root", async ({
+  browser,
+}) => {
+  // Rules C-1 and C-2 end to end (plan 2026-11-25-rt1-root-kept.md, E-1): the first page refreshes its file list
+  // every 4 s; once a fresher page took the store, it is told so and never opens the store stream again, so the
+  // fresher page's start is never cut and the saved document stays the project's root.
+  const text = `= Racine gardée ${Date.now()}`;
+  const first = await (await browser.newContext({ locale: "fr-FR" })).newPage();
+  await first.goto(`http://127.0.0.1:${PORT}/`);
+  await expect(editor(first)).toBeVisible();
+  await type(first, text);
+  await expect.poll(onDisk, { timeout: 10_000 }).toBe(text);
+  const root = recordedRoot();
+  expect(root).toMatch(/^automerge:/);
+
+  // Each store stream a page opens is one « open » frame (kind 1) naming it (@wailsio/runtime, stream.js).
+  let opens = 0;
+  first.on("request", (r) => {
+    const h = r.headers();
+    if (
+      r.url().endsWith("/wails/stream/send") &&
+      h["x-wails-stream-name"] === "store" &&
+      h["x-wails-stream-kind"] === "1"
+    ) {
+      opens++;
+    }
+  });
+
+  const fresh = await (await browser.newContext({ locale: "fr-FR" })).newPage();
+  await fresh.goto(`http://127.0.0.1:${PORT}/`);
+  await expect(editor(fresh)).toBeVisible();
+  await expect.poll(() => docText(fresh), { timeout: 10_000 }).toBe(text);
+  await expect(first.locator(".toast")).toHaveText(openElsewhere);
+  const seen = opens;
+
+  // Two refreshes of the first page later: it opened no store stream, and nothing replaced the root.
+  await first.waitForTimeout(9_000);
+  expect(opens - seen, "C-2 the replaced page never reconnects").toBe(0);
+  expect(opens, "C-2 the replaced page opened no store stream after it was replaced").toBe(0);
+  expect(recordedRoot()).toBe(root);
+  await expect(first.locator(".toast")).toHaveText(openElsewhere);
+  // The fresher page still owns the store: what it types is saved.
+  const more = `${text} suite`;
+  await type(fresh, more);
+  await expect.poll(onDisk, { timeout: 10_000 }).toBe(more);
+  expect(recordedRoot()).toBe(root);
 });

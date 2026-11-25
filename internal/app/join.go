@@ -514,15 +514,10 @@ func (s *Session) CompleteJoin(url, peer string) error {
 }
 
 // stored reports whether the storage of the open project holds a chunk of the document url: a
-// snapshot or an incremental change, as the storage adapter of the page saves them.
+// snapshot or an incremental change, as the storage adapter of the page saves them. A storage that
+// cannot be read holds nothing proven (RT1 rule B-3).
 func (s *Session) stored(url string) bool {
-	id := strings.TrimPrefix(url, "automerge:")
-	for _, kind := range []string{"snapshot", "incremental"} {
-		if entries, err := s.proj.LoadRange([]string{id, kind}); err == nil && len(entries) > 0 {
-			return true
-		}
-	}
-	return false
+	return s.proj.RootState(url) == project.RootStored
 }
 
 // returnedFile, in .inkwell of the folder a person returned to, tells its next start that the

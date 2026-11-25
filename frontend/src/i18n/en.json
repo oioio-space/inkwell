@@ -583,6 +583,8 @@
   "foreign.takeOver.failed": "The document could not be taken over. Nothing has changed.",
   "change.flushFailed": "The document could not be saved. Nothing has changed.",
   "change.restartFailed": "Inkwell closed without being able to restart. Open it again.",
+  "start.rootUnreadable": "The saved document could not be opened. Nothing was changed: restart Inkwell.",
+  "store.openElsewhere": "Inkwell is open in another window: this one has stopped. Carry on in the other window.",
   "foreign.joinWaiting": "Invitation accepted. You will be able to write as soon as the list of people of this document has arrived.",
   "join.restart.note": "Inkwell will restart to open this document.",
   "join.restart.kept": "Your current document is kept.",

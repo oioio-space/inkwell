@@ -167,18 +167,19 @@ func TestLatest(t *testing.T) {
 	if err := base.Chtimes("fresh/.inkwell/project.json", recent, recent); err != nil {
 		t.Fatal(err)
 	}
-	if err := old.SetRootURL("automerge:new"); err != nil {
+	// A recorded root changes only once proven absent (RT1 rule B-1): "automerge:abc" holds nothing here.
+	if err := old.ReplaceMissingRoot("automerge:abc", "automerge:new"); err != nil {
 		t.Fatal(err)
 	}
 	if got, err := Latest(base); err != nil || got != old.Dir() {
-		t.Errorf("Latest after SetRootURL = %q, %v; want %q", got, err, old.Dir())
+		t.Errorf("Latest after ReplaceMissingRoot = %q, %v; want %q", got, err, old.Dir())
 	}
 }
 
-func TestSetRootURL(t *testing.T) {
+func TestReplaceMissingRootPersists(t *testing.T) {
 	base := newBase(t)
 	p := create(t, base, "p")
-	if err := p.SetRootURL("automerge:other"); err != nil {
+	if err := p.ReplaceMissingRoot("automerge:abc", "automerge:other"); err != nil {
 		t.Fatal(err)
 	}
 	q, err := Open(base, "p")
@@ -187,7 +188,7 @@ func TestSetRootURL(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = q.Close() })
 	if got := q.Meta().RootURL; got != "automerge:other" {
-		t.Errorf("RootURL after reopen = %q", got)
+		t.Errorf("RootURL after ReplaceMissingRoot and reopen = %q", got)
 	}
 }
 

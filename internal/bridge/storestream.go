@@ -10,6 +10,7 @@ import (
 	"strings"
 	"sync"
 	"syscall"
+	"time"
 
 	"github.com/oioio-space/inkwell/internal/project"
 	"github.com/oioio-space/inkwell/internal/store"
@@ -138,10 +139,13 @@ const (
 	// StatusTooLarge means the file is over the size limit of a blob; the
 	// payload is the limit in bytes, as a u64.
 	StatusTooLarge
+	// StatusSuperseded is pushed with id 0 and no payload to a stream a newer page replaced, just
+	// before it is closed: that page stays down (ADR 0020, RT1 rule C-1).
+	StatusSuperseded
 )
 
 // maxStatus is the last status a frame may carry.
-const maxStatus = StatusTooLarge
+const maxStatus = StatusSuperseded
 
 // StoreRequest is one decoded request of the store stream.
 type StoreRequest struct {
@@ -362,8 +366,23 @@ type StoreServer struct {
 type storeSession struct {
 	c    Conn
 	done chan struct{}
-	mu   sync.Mutex // orders the initial notices, live pushes and replies
+	// turn orders the initial notices, live pushes and replies: a one-slot channel rather than a
+	// mutex, so that [StoreServer.tell] can wait for it with a bound.
+	turn chan struct{}
 }
+
+func (c *storeSession) lock()   { c.turn <- struct{}{} }
+func (c *storeSession) unlock() { <-c.turn }
+
+// TrySender is a [Conn] that can offer a frame without waiting, as the Wails stream's TrySend:
+// the store stream uses it for the superseded notice (see [StoreServer.Serve], RT1 rule C-1).
+type TrySender interface {
+	TrySend(b []byte) error
+}
+
+// supersedeWait bounds how long a newer page waits for the retired one's turn to offer it the
+// superseded notice (see [StoreServer.tell]).
+const supersedeWait = time.Second
 
 // NewStoreServer returns a server over the three storage consumers.
 // Document bytes are never logged.
@@ -391,9 +410,39 @@ func (s *StoreServer) NotifyExternal(rel string) {
 
 // send writes r to cur, logging a failure.
 func (s *StoreServer) send(cur *storeSession, r StoreResponse) {
-	cur.mu.Lock()
-	defer cur.mu.Unlock()
+	cur.lock()
+	defer cur.unlock()
 	s.sendLocked(cur, r)
+}
+
+// tell pushes the superseded notice to the retired page prev before it is closed (RT1 rule C-1),
+// without ever blocking on it: it waits at most [supersedeWait] for prev's turn (a reply being
+// written), then offers the frame with TrySend. A page that reads nothing any more (abandoned, its
+// buffer full) is closed without the notice; it would not read it.
+func (s *StoreServer) tell(prev *storeSession) {
+	select {
+	case prev.turn <- struct{}{}:
+	default: // a reply is being written: wait for it, within the bound
+		timer := time.NewTimer(supersedeWait)
+		defer timer.Stop()
+		select {
+		case prev.turn <- struct{}{}:
+		case <-timer.C:
+			return // a Send to prev is stuck
+		}
+	}
+	defer prev.unlock()
+	ts, ok := prev.c.(TrySender)
+	if !ok || prev.c.Context().Err() != nil {
+		return
+	}
+	b, err := EncodeStoreResponse(StoreResponse{Status: StatusSuperseded})
+	if err == nil {
+		err = ts.TrySend(b)
+	}
+	if err != nil {
+		s.log.Warn("store stream: superseded notice not sent", "err", err)
+	}
 }
 
 func (s *StoreServer) sendLocked(cur *storeSession, r StoreResponse) {
@@ -422,8 +471,7 @@ func (s *StoreServer) Serve(c Conn) {
 		return // the session is leaving: the stream is closed (rule N-16)
 	}
 	defer detach()
-	cur := &storeSession{c: c, done: make(chan struct{})}
-	cur.mu.Lock() // pushes wait until the pending notices are out
+	cur := &storeSession{c: c, done: make(chan struct{}), turn: make(chan struct{}, 1)}
 	s.mu.Lock()
 	prev := s.cur
 	s.cur = cur
@@ -437,11 +485,17 @@ func (s *StoreServer) Serve(c Conn) {
 		s.mu.Unlock()
 	}()
 	if prev != nil {
-		// Close wakes a Receive or Send on the retired page. A frame already
+		// The retired page is told first, so that it stops instead of reconnecting and replacing
+		// this one in turn (RT1 rule C-1). Close then wakes its Receive or Send; a frame already
 		// returned by Receive still runs to completion before we serve this page.
+		s.tell(prev)
 		closeConn(prev.c)
 		<-prev.done
 	}
+	// Taken only now: while this page waited for the previous one, a newer page may have replaced
+	// it and must find its turn free to tell it so (RT1 review m2). A push that came meanwhile may
+	// arrive twice, being pending too.
+	cur.lock() // later pushes wait until the pending notices are out
 	s.mu.Lock()
 	notices := make([]string, 0, len(s.pending))
 	for rel := range s.pending {
@@ -451,7 +505,7 @@ func (s *StoreServer) Serve(c Conn) {
 	for _, rel := range notices {
 		s.sendLocked(cur, StoreResponse{Status: StatusExternal, Payload: []byte(rel)})
 	}
-	cur.mu.Unlock()
+	cur.unlock()
 
 	for c.Context().Err() == nil {
 		b, err := c.Receive()

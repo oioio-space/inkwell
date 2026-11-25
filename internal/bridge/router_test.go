@@ -50,6 +50,19 @@ func (c *fakeConn) Send(b []byte) error {
 	}
 }
 
+// TrySend is Send without the wait, as the Wails stream's: a full buffer refuses the frame.
+func (c *fakeConn) TrySend(b []byte) error {
+	if err := c.ctx.Err(); err != nil {
+		return err
+	}
+	select {
+	case c.sent <- b:
+		return nil
+	default:
+		return errors.New("fake conn: buffer full")
+	}
+}
+
 func (c *fakeConn) Receive() ([]byte, error) {
 	select {
 	case b := <-c.in:

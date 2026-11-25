@@ -134,7 +134,7 @@ describe("encodeRequest rejects what Go would", () => {
 describe("decoders reject malformed frames", () => {
   it("short response", () => expect(() => decodeResponse(unhex("000000"))).toThrow(ProtocolError));
   it("unknown status", () => {
-    expect(() => decodeResponse(unhex("0000000109"))).toThrow(ProtocolError);
+    expect(() => decodeResponse(unhex("000000010a"))).toThrow(ProtocolError);
   });
   it.each([
     ["empty", ""],
@@ -185,7 +185,8 @@ describe("file payload decoders reject what Go would", () => {
     expect(decodeResponse(unhex("000000070600000003")).status).toBe(Status.InvalidText);
     expect(decodeResponse(unhex("0000000807")).status).toBe(Status.EditedOutside);
     expect(decodeResponse(unhex("00000009080000000000000400")).status).toBe(Status.TooLarge);
-    expect(() => decodeResponse(unhex("0000000109"))).toThrow(ProtocolError);
+    expect(decodeResponse(unhex("0000000009")).status).toBe(Status.Superseded);
+    expect(() => decodeResponse(unhex("000000010a"))).toThrow(ProtocolError);
   });
 });
 
@@ -227,7 +228,7 @@ describe("path keys and the new operations", () => {
     expect(decodeResponse(unhex("0000001008")).status).toBe(Status.TooLarge);
     expect(decodeTooLarge(limit)).toBe(100 * 1024 * 1024);
     expect(() => decodeTooLarge(unhex("0000"))).toThrow(ProtocolError);
-    expect(() => decodeResponse(unhex("0000000109"))).toThrow(ProtocolError);
+    expect(() => decodeResponse(unhex("000000010a"))).toThrow(ProtocolError);
   });
 });
 

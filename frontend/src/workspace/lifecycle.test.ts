@@ -52,6 +52,7 @@ vi.mock("../store/GoStorageAdapter", () => ({
   GoStorageAdapter: class {
     onExternal() {}
     onLeaving() {}
+    onSuperseded() {}
     close() {}
   },
 }));

@@ -55,6 +55,12 @@ export class FakeGoStore {
     for (const s of this.#sockets) s.deliver(0, Status.External, textEncoder.encode(name));
   }
 
+  /** Tells every open connection a newer page replaced it, then closes it, as Go's Serve does (RT1 rule C-1). */
+  supersede(): void {
+    for (const s of this.#sockets) s.deliver(0, Status.Superseded, new Uint8Array());
+    this.dropConnections();
+  }
+
   /** Closes every connection from the Go side. */
   dropConnections(): void {
     for (const s of this.#sockets) s.close();
