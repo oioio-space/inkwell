@@ -1,0 +1,352 @@
+# Written 2026-11-25 at step 1 of block EX0c1, before any code; not yet frozen (blind review first).
+# EX0c1: the closed table of menu locations (groups in fixed order, protected groups, overflow, reserved locations for
+# UX1-B), the `status` point, and the shell's bars moved onto them: header bar, formatting bar and its heading menu,
+# status bar, zoom menu, the preview's tools; the type-id reads they absorb. Rigour: standard. Plan:
+# docs/plans/2026-11-25-ex0c-locations.md (split at step 1 into EX0c1, EX0c2, EX0c3); decision: ADR 0027, section
+# « Menu locations and status items (EX0c1) ». Witnesses: gates/EX0c1/WITNESSES.md.
+# Every long command is `timeout -k 10 N …/scripts/heavy.sh …` (the timeout covers the wait for a slot). No nested gate:
+# `no-hard-locations` carries its own narrowed copy of EX0's type-id lint, not that gate.
+# Caps: 30 + 30 + 480 + (20 + 300) + (200 + 360) + 420 + 600 + 30 = 2470 s <= 2700 s (rule G-1). The order matters:
+# `e2e` builds bin/inkwell-server and frontend/dist, which `e2e-webkit` and `perf-start` use.
+max_minutes = 45
+raw_results = ["docs/plans/2026-11-25-ex0c-locations.md", "docs/adr/0027-contribution-registry.md", "gates/EX0c1/*"]
+
+[[criteria]]
+# The decision is written: ADR 0027 has its EX0c1 section; the plan its rule rows L-1..L-9 and its EX0c2/EX0c3 section;
+# spec §4.31 names every location EX0c1 hosts; PROGRESS has the EX0c1, EX0c2 and EX0c3 lines pointing at the plan; the
+# requirement W83 names EX0c1.
+id = "docs"
+command = '''timeout -k 10 30 python3 -I - <<'PY'
+import pathlib, sys
+bad = []
+adr = pathlib.Path("docs/adr/0027-contribution-registry.md").read_text()
+if "### Menu locations and status items (EX0c1)" not in adr.splitlines():
+    bad.append("ADR 0027 lacks its EX0c1 section")
+plan = pathlib.Path("docs/plans/2026-11-25-ex0c-locations.md")
+rows = plan.read_text() if plan.is_file() else ""
+bad += [f"plan row L-{i}" for i in range(1, 10) if f"\n| L-{i} |" not in rows]
+if "## 5. EX0c2 and EX0c3" not in rows:
+    bad.append("plan lacks its EX0c2/EX0c3 section")
+spec = pathlib.Path("docs/design/spec.md").read_text()
+s431 = spec[spec.index("### 4.31 "):spec.index("### 4.32 ")]
+bad += [f"spec 4.31 does not name `{loc}`" for loc in ("header/start", "header/end", "format", "format/heading",
+        "status/zoom", "preview/toolbar") if f"`{loc}`" not in s431]
+prog = pathlib.Path("PROGRESS.md").read_text().splitlines()
+for block in ("EX0c1", "EX0c2", "EX0c3"):
+    line = next((l for l in prog if l.lstrip().startswith(f"- **{block}**")), "")
+    if "2026-11-25-ex0c-locations.md" not in line:
+        bad.append(f"PROGRESS {block} line absent or not pointing at the plan")
+req = pathlib.Path("docs/exigences.md").read_text()
+row = next((l for l in req.splitlines() if l.startswith("| W83 |")), "")
+if "EX0c1" not in row:
+    bad.append("requirement W83 does not name EX0c1")
+sys.exit(f"EX0c1 docs: {bad}" if bad else 0)
+PY'''
+
+[[criteria]]
+# One source for where a command shows (spec §4.31, architecture §15.13). Webview, every .ts and .svelte outside tests,
+# testkits and comment lines: no command id placed in markup or code (`<CommandButton id="…">`, `<CommandMenuItem
+# id="…">`, `id="format.{…}"`, `data-cmd="…"`, a registry call on a literal id), no toolbar, tab list, menu, context
+# menu or menu button outside the location hosts (`ui/command/`) and the native items of built-ins (`ext/*/native/`),
+# except the files listed with their tag (EX0c2, EX0c3, widgets that pick a value); the bar tables are gone. The points
+# are filled (it cannot pass by deleting the bars). Then EX0's type-id lint with its list narrowed: the status bar,
+# the bar's spec and the presentation leave it; App.svelte keeps only the K-7 line that opens a Typst file.
+id = "no-hard-locations"
+command = '''timeout -k 10 30 python3 -I - <<'PY'
+import json, pathlib, re, sys
+ALLOWED = {  # file: (tag, kinds it may hold)
+    "frontend/src/ui/PeopleStack.svelte": ("protected header widget, its own app.people", {"place"}),
+    "frontend/src/ui/popover/EncodingMenu.svelte": ("value picker, not commands", {"surface"}),
+    "frontend/src/ui/sheet/SheetStatus.svelte": ("value pickers, not commands", {"surface"}),
+    "frontend/src/ui/sheet/Sheet.svelte": ("EX0c2 grid toolbar and context menu", {"surface", "place"}),
+    "frontend/src/ui/sheet/Grid.svelte": ("EX0c2 grid context menu", {"surface"}),
+    "frontend/src/ui/sheet/ContextMenu.svelte": ("EX0c2 grid context menu", {"surface"}),
+    "frontend/src/ui/sheet/FilterMenu.svelte": ("value picker of a column", {"surface"}),
+    "frontend/src/ui/history/HistoryDrawer.svelte": ("EX0c2 drawer tabs (panels)", {"surface"}),
+    "frontend/src/ui/toolbar/InsertMenu.svelte": ("EX0c3 Insert menu", {"surface"}),
+}
+PATTERNS = {
+    "place": re.compile(r"""<Command(?:Button|MenuItem)\b[^>]*\bid=(?:["']|\{\s*["'`])|\bid=["'][a-z][a-z0-9-]*\.[a-z{]|data-cmd=["']|\b(?:run|shortcutOf|cmdAttrs|availability|runnable|isOn|labelOf|chordsOf)\(\s*["'`][a-z][a-z0-9-]*\.[a-z0-9-]+"""),
+    "surface": re.compile(r"""role=["'](?:toolbar|tablist|menu)["']|<ContextMenu\b|\boncontextmenu=|<MenuButton\b"""),
+    "table": re.compile(r"\b(BAR_ITEMS|itemsFor|barLang|BarId|HEADING_SYNTAX|HEADINGS)\b"),
+}
+bad = []
+src = pathlib.Path("frontend/src")
+for f in sorted([*src.rglob("*.ts"), *src.rglob("*.svelte")]):
+    s = f.as_posix()
+    if ".test." in f.name or "testkit" in f.name or "/testdata/" in s:
+        continue
+    host = s.startswith("frontend/src/ui/command/") or re.match(r"frontend/src/ext/[^/]+/native/", s)
+    tag, kinds = ALLOWED.get(s, ("", set()))
+    for n, line in enumerate(f.read_text().splitlines(), 1):
+        if line.lstrip().startswith(("//", "*", "/*", "<!--")):
+            continue
+        hits = [f"{k} {m.group(0)[:40]}" for k, p in PATTERNS.items() for m in p.finditer(line)
+                if k not in kinds and not (host and k == "surface")]
+        if hits:
+            bad.append(f"{s}:{n} ({'; '.join(hits)})")
+ids_all = set()
+for m in sorted(pathlib.Path("frontend/src/ext").glob("*/inkwell-plugin.json")):
+    j = json.loads(m.read_text())
+    ids_all |= {x.get("id") for x in j.get("contributes", {}).get("commands", [])}
+exts = {m.parent.name for m in pathlib.Path("frontend/src/ext").glob("*/inkwell-plugin.json")}
+lit = re.compile(r"""["'`]((%s)\.(?:[a-z0-9-]+|\$\{))""" % "|".join(sorted(exts)))
+PLACING = ("frontend/src/App.svelte", "frontend/src/ui/shell/", "frontend/src/ui/toolbar/", "frontend/src/ui/popover/",
+           "frontend/src/preview/")
+for f in sorted([*src.rglob("*.ts"), *src.rglob("*.svelte")]):
+    s = f.as_posix()
+    if ".test." in f.name or "testkit" in f.name or not s.startswith(PLACING):
+        continue
+    for n, line in enumerate(f.read_text().splitlines(), 1):
+        if line.lstrip().startswith(("//", "*", "/*", "<!--")):
+            continue
+        hits = [m.group(1) for m in lit.finditer(line) if m.group(1) in ids_all or m.group(1).endswith("${")]
+        if hits:
+            bad.append(f"{s}:{n} (command id in code {','.join(hits)})")
+mts = pathlib.Path("frontend/src/extensions/manifest.ts").read_text()
+for loc in ("main", "header/start", "header/end", "format", "format/heading", "status/zoom", "preview/toolbar", "grid/toolbar",
+            "grid/context", "view", "history/toolbar", "diff/toolbar", "insert", "editor/context", "files/context",
+            "tabs/context", "preview/context", "people/context", "link/context"):
+    if not re.search(r"""["']?%s["']?\s*:\s*\{""" % re.escape(loc), mts):
+        bad.append(f"LOCATIONS lacks {loc}")
+if "reserved" not in mts or not all(f'"{g}"' in mts for g in ("insert", "export", "extensions")):
+    bad.append("LOCATIONS has no reserved mark, or main lacks the insert, export, extensions groups")
+for path, keys in {"frontend/src/preview/Preview.svelte": ("preview.zoomOut", "preview.zoomIn", "preview.jumpToCursor"),
+                   "frontend/src/ui/shell/StatusBar.svelte": ('data-testid="position"', 'data-testid="words"',
+                   'data-testid="page-indicator"', 'data-testid="unsaved"', 'data-testid="language"', 'data-testid="problems"')}.items():
+    text = pathlib.Path(path).read_text()
+    bad += [f"{path}: still draws {k}" for k in keys if k in text]
+menus, status, icons = {}, {}, {}
+for m in sorted(pathlib.Path("frontend/src/ext").glob("*/inkwell-plugin.json")):
+    c = json.loads(m.read_text()).get("contributes", {})
+    for x in c.get("menus", []):
+        menus.setdefault(x.get("location"), []).append(x)
+    for x in c.get("status", []):
+        status[x.get("id")] = x
+    for x in c.get("commands", []):
+        icons[x.get("id")] = x.get("icon")
+ids = lambda loc: {x.get("command") for x in menus.get(loc, [])}
+need = {"header/start": {"app.sidebar"}, "header/end": {"app.preview", "typst.present", "app.share", "app.review"},
+        "format/heading": {"format.paragraph", "format.h1", "format.h2", "format.h3", "format.h4"},
+        "status/zoom": {"app.zoom-out", "app.zoom-in", "app.zoom-reset"},
+        "preview/toolbar": {"typst.preview-zoom-out", "typst.preview-zoom-in", "typst.jump-to-preview"}}
+bad += [f"location {loc} lacks {sorted(want - ids(loc))}" for loc, want in need.items() if not want <= ids(loc)]
+bar = {f"format.{b}" for b in ("bold", "italic", "underline", "strike", "link", "code", "codeblock", "formula", "ul", "ol", "task", "quote", "table")}
+bad += [f"location format lacks {sorted(bar - ids('format'))}"] if not bar <= ids("format") else []
+bad += [f"{c}: no icon" for c in sorted(bar | {"app.sidebar", "app.preview", "typst.present", "app.review",
+        "typst.preview-zoom-out", "typst.preview-zoom-in", "typst.jump-to-preview"}) if not icons.get(c)]
+present = [x for x in menus.get("header/end", []) if x.get("command") == "typst.present"]
+if not present or present[0].get("when") != "canPresent && fileType == typst":
+    bad.append("typst.present in header/end: when is not exactly 'canPresent && fileType == typst'")
+STATUS = {  # id: (side, group, exact when or None)
+    "app.presence": ("start", "presence", None), "typst.problems": ("end", "problems", "fileType == typst"),
+    "typst.page": ("end", "preview", "main && previewOpen"), "app.unsaved": ("end", "save", None),
+    "app.position": ("end", "caret", "text"), "app.words": ("end", "caret", "text"), "app.zoom": ("end", "file", None),
+    "app.encoding": ("end", "file", None), "app.language": ("end", "type", "text")}
+for i, (side, group, when) in STATUS.items():
+    x = status.get(i)
+    got = None if x is None else (x.get("side"), x.get("group"), x.get("when"))
+    if got != (side, group, when) or not (x or {}).get("label"):
+        bad.append(f"status item {i}: {got}, want {(side, group, when)} and a label")
+# EX0's type-id lint (gates/EX0.toml, no-lists), its list narrowed by EX0c1.
+TYPED = {  # file: (tag, literals it may hold, and the only lines that may hold them)
+    "frontend/src/App.svelte": ("K-7 the Typst engine opens a Typst file", {"typst"}, r"language\.open|fileTypeOf"),
+    "frontend/src/editor/format/commands.ts": ("EX0c3 format language", {"typst"}, ""),
+    "frontend/src/editor/format/support.ts": ("EX0c3 format language", {"typst", "markdown"}, ""),
+    "frontend/src/editor/format/insert.ts": ("EX0c3 Insert menu", {"typst", "csv", "json", "yaml", "toml", "xml"}, ""),
+    "frontend/src/editor/stats/words.ts": ("EX0c3 word stripping", {"typst", "markdown"}, ""),
+    "frontend/src/editor/setup.ts": ("EX0c3 Typst writing help", {"typst"}, ""),
+    "frontend/src/ui/toolbar/InsertMenu.svelte": ("EX0c3 Insert menu", {"typst", "markdown", "csv", "tsv", "psv", "bibtex", "json", "yaml", "toml", "xml", "png", "jpeg", "gif", "webp", "svg", "bmp", "pdf"}, ""),
+    "frontend/src/language/problems.svelte.ts": ("EX0c3 diagnostics source", {"csv"}, ""),
+    "frontend/src/language/client.ts": ("K-7 LSP language id", {"typst"}, ""),
+}
+WORDS = r"typst|typ|markdown|md|csv|tsv|psv|bib|bibtex|json|ya?ml|toml|xml|png|jpe?g|gif|webp|svg|bmp|pdf"
+bare = re.compile(r"""["'`](%s)["'`]""" % WORDS)
+for f in sorted([*src.rglob("*.ts"), *src.rglob("*.svelte")]):
+    s = f.as_posix()
+    if ".test." in f.name or "testkit" in f.name or "/testdata/" in s:
+        continue
+    tag, allowed, only = TYPED.get(s, ("", set(), ""))
+    for n, line in enumerate(f.read_text().splitlines(), 1):
+        if line.lstrip().startswith(("//", "*", "/*", "<!--")):
+            continue
+        found = set(bare.findall(line))
+        extra = found - allowed if not only or re.search(only, line) else found
+        if extra:
+            bad.append(f"{s}:{n} (type id {','.join(sorted(extra))})")
+sys.exit(f"EX0c1 no-hard-locations: {len(bad)} problems: {bad[:120]}" if bad else 0)
+PY'''
+
+[[criteria]]
+# Biome, svelte-check and every Vitest test of the frontend, from one JSON report: the run succeeds and each named
+# rule test of the plan (L-1..L-9) passed (absent or skipped fails).
+id = "frontend"
+command = '''set -eu
+mkdir -p .task/ex0c1
+rm -f .task/ex0c1/vitest.json
+rc=0
+(cd frontend && timeout -k 10 480 ../scripts/heavy.sh bash -c 'pnpm --config.verifyDepsBeforeRun=false exec biome check . && pnpm --config.verifyDepsBeforeRun=false exec svelte-check --tsconfig ./tsconfig.json && pnpm --config.verifyDepsBeforeRun=false exec vitest run --configLoader runner --reporter=json --outputFile=../.task/ex0c1/vitest.json') || rc=$?
+python3 -I - "$rc" <<'PY'
+import json, pathlib, sys
+need = [
+    "EX0c1 L-1 a malformed location, group or status item is refused with its reason",
+    "EX0c1 L-2 a location keeps the core's groups at their fixed places, then order, extension and command",
+    "EX0c1 L-3 an item's when hides it and its command's when greys it, both read from the live context",
+    "EX0c1 L-4 what does not fit goes to the overflow menu in the same order, and nothing is lost",
+    "EX0c1 L-5 the header bar is drawn from its two locations around the core's fixed widgets",
+    "EX0c1 L-6 the formatting bar is the format location of the open file's formats, or no bar",
+    "EX0c1 L-7 the status bar is drawn from the status point, by side and group, the core's first",
+    "EX0c1 L-8 the preview's tools and the zoom menu are locations, each zoom acting on its own surface",
+    "EX0c1 L-9 locations cost nothing at start: indexed once at build, drawn without an extension call",
+]
+report = pathlib.Path(".task/ex0c1/vitest.json")
+results = [a for f in json.loads(report.read_text())["testResults"] for a in f["assertionResults"]] if report.is_file() else []
+status = {a["title"]: a["status"] for a in results}
+bad = {n: status.get(n, "absent") for n in need if status.get(n) != "passed"}
+failed = [a["fullName"] for a in results if a["status"] == "failed"]
+if bad or failed or sys.argv[1] != "0":
+    sys.exit(f"EX0c1 frontend: exit {sys.argv[1]}, rule tests {bad}, failed {failed[:20]}")
+PY'''
+
+[[criteria]]
+# A rule test that asserts nothing must fail the gate. Block EX0c1's mutants ML1..ML9 (scripts/netsim/mutants.toml,
+# written at step 2 with the code, plan §3) each break one rule; each entry names the exact title of its rule's test
+# (`name`), so only that test failing is a catch. The location vectors exist, valid and invalid.
+id = "mutants"
+command = '''set -eu
+timeout -k 10 20 python3 -I - <<'PY'
+import pathlib, sys, tomllib
+ms = {m["id"]: m for m in tomllib.load(open("scripts/netsim/mutants.toml", "rb"))["mutant"] if m.get("block") == "EX0c1"}
+bad = []
+for i in range(1, 10):
+    m = ms.get(f"ML{i}", {})
+    if (m.get("kind") != "vitest" or m.get("retired") or not m.get("test", "").startswith("frontend/src/")
+            or not m.get("name", "").startswith(f"EX0c1 L-{i} ")):
+        bad.append(f"ML{i}")
+root = pathlib.Path("frontend/src/extensions/testdata/manifests")
+if not list((root / "valid").glob("*location*.json")):
+    bad.append("no location vector in valid/")
+for word in ("unknown-location", "foreign-group", "protected-group", "plugin-status-entry", "reserved-location"):
+    if not list((root / "invalid").glob(f"*{word}*.json")):
+        bad.append(f"no invalid vector *{word}*")
+sys.exit(f"EX0c1 mutants: entries or vectors missing or wrong: {bad}" if bad else 0)
+PY
+timeout -k 10 300 ./scripts/heavy.sh python3 -I scripts/netsim/mutants.py EX0c1'''
+
+[[criteria]]
+# End to end in Chromium, first attempt only, nothing skipped: EX0c1-E1 (every [data-cmd] of the header bar, the
+# formatting bar and the preview's tools is its location's resolved list, in order; a Markdown file has no underline, a
+# CSV no bar, 800 px fills ⋯; every button and menu item of those regions is a resolved item or a named fixed widget)
+# and EX0c1-E2 (the status bar's items for main.typ, a note and a picture, its layout at 640 px; the zoom menu steps),
+# and the scenarios whose bars, menu, status, header helpers, axe audit or screenshots the locations touch. Exclusive.
+id = "e2e"
+command = '''set -eu
+mkdir -p .task/ex0c1
+rm -f .task/ex0c1/e2e.json
+timeout -k 10 200 ./scripts/heavy.sh mise run e2e:build
+rc=0
+(cd frontend && PLAYWRIGHT_JSON_OUTPUT_NAME=../.task/ex0c1/e2e.json INKWELL_E2E_BROWSER=chromium timeout -k 10 360 ../scripts/heavy.sh --exclusive ./node_modules/.bin/playwright test ex0c1.spec.ts ex0b1.spec.ts shell.spec.ts problems.spec.ts preview.spec.ts history.spec.ts present.spec.ts ux/l2.spec.ts sheet.spec.ts join.spec.ts --grep "EX0c1-E[12]|EX0b1-E2|UI-0[2-7]|UI-11|ER-1–4|PRV-10[0157]|B2 text zoom|PRS-(06|31|33|37)|UX-L2-1|SHEET-FREEZE|JOIN-3" --reporter=json > /dev/null) || rc=$?
+python3 -I - "$rc" .task/ex0c1/e2e.json <<'PY'
+import json, pathlib, sys
+need = ["EX0c1-E1", "EX0c1-E2", "EX0b1-E2", "UI-02", "UI-03", "UI-04", "UI-05", "UI-06", "UI-07", "UI-11", "ER-1–4",
+        "PRV-100", "PRV-101", "PRV-105", "PRV-107", "B2 text zoom", "PRS-06", "PRS-31", "PRS-33", "PRS-37", "UX-L2-1",
+        "SHEET-FREEZE", "JOIN-3"]
+p = pathlib.Path(sys.argv[2])
+report = json.loads(p.read_text()) if p.is_file() else {"suites": [], "errors": ["no report"]}
+suites, tests = [(s, "") for s in report["suites"]], []
+while suites:
+    s, outer = suites.pop()
+    title = outer if s["title"].endswith(".ts") else (outer + " " + s["title"]).strip()
+    suites.extend((x, title) for x in s.get("suites", []))
+    for spec in s.get("specs", []):
+        for t in spec["tests"]:
+            ok = t["status"] == "expected" and [r["status"] for r in t["results"]] == ["passed"]
+            tests.append(((title + " " + spec["title"]).strip(), spec["title"], ok))
+bad = {}
+for n in need:  # the test's own title, or its describe title followed by it (UI-11)
+    mine = [ok for full, own, ok in tests if any(x == n or x.startswith(n + " ") or x.startswith(n + ":") for x in (full, own))]
+    if not mine or not all(mine):
+        bad[n] = "absent" if not mine else "not passing first time"
+if bad or report.get("errors") or sys.argv[1] != "0":
+    sys.exit(f"EX0c1 e2e: exit {sys.argv[1]}, {bad}, errors {report.get('errors')}")
+PY'''
+exclusive = true
+
+[[criteria]]
+# The visible locations in WebKit (the engine of the Linux build is WebKitGTK): EX0c1-E1, EX0c1-E2 and UI-05 (the
+# overflow at 800 px) under `mise run e2e:webkit` (Playwright's WebKit in its official container), first attempt only.
+# Exclusive slot: the nested heavy.sh of the task reuses it.
+id = "e2e-webkit"
+command = '''set -eu
+mkdir -p .task/ex0c1
+rm -f .task/ex0c1/e2e-webkit.json
+rc=0
+PLAYWRIGHT_JSON_OUTPUT_NAME="$PWD/.task/ex0c1/e2e-webkit.json" timeout -k 10 420 ./scripts/heavy.sh --exclusive mise run e2e:webkit -- ex0c1.spec.ts shell.spec.ts --grep "EX0c1-E[12]|UI-05" --reporter=json > /dev/null || rc=$?
+python3 -I - "$rc" .task/ex0c1/e2e-webkit.json <<'PY'
+import json, pathlib, sys
+need = ["EX0c1-E1", "EX0c1-E2", "UI-05"]
+p = pathlib.Path(sys.argv[2])
+report = json.loads(p.read_text()) if p.is_file() else {"suites": [], "errors": ["no report"]}
+suites, tests = list(report["suites"]), []
+while suites:
+    s = suites.pop()
+    suites.extend(s.get("suites", []))
+    for spec in s.get("specs", []):
+        for t in spec["tests"]:
+            tests.append((spec["title"], t["status"] == "expected" and [r["status"] for r in t["results"]] == ["passed"]))
+bad = {}
+for n in need:
+    mine = [ok for title, ok in tests if title == n or title.startswith(n + " ")]
+    if not mine or not all(mine):
+        bad[n] = "absent" if not mine else "not passing first time"
+if bad or report.get("errors") or sys.argv[1] != "0":
+    sys.exit(f"EX0c1 e2e-webkit: exit {sys.argv[1]}, {bad}, errors {report.get('errors')}")
+PY'''
+exclusive = true
+
+[[criteria]]
+# Start unchanged, a regression guard (green on the unchanged tree): PERF-START (scripts/perf/baseline.py, ADR 0038),
+# paired against the merge-base build, 80 judged pairs, upper bound of the ratio < 1.10, and the absolute budget.
+id = "perf-start"
+command = '''set -eu
+out="${INKWELL_PERF_OUT:-.task/ex0c1/perf}"
+mkdir -p "$out"
+INKWELL_PERF_OUT="$out" timeout -k 10 600 ./scripts/heavy.sh --exclusive python3 scripts/perf/baseline.py > "$out/baseline.log" 2>&1 || { tail -40 "$out/baseline.log"; exit 1; }
+python3 -I - "$out" <<'PY'
+import json, pathlib, subprocess, sys
+p = json.loads((pathlib.Path(sys.argv[1]) / "measurements.json").read_text())["PERF-START"]
+base = subprocess.check_output(["git", "merge-base", "HEAD", "main"], text=True).strip()
+bad = []
+bad += [] if p.get("status") == "pass" else [f"status {p.get('status')}"]
+bad += [] if p.get("design") == "paired-randomized" else ["design"]
+bad += [] if p.get("reference", {}).get("commit") == base else ["reference is not the merge-base"]
+v = p.get("verdict", {})
+bad += [] if v.get("status") == "pass" and v.get("pairs") == 80 and v.get("upper", 9) < 1.10 else ["verdict"]
+bad += [] if p.get("budget", {}).get("status") == "pass" else ["budget"]
+sys.exit("EX0c1 perf-start: " + ", ".join(bad) if bad else 0)
+PY'''
+exclusive = true
+
+[[criteria]]
+id = "simplify-report"
+command = '''timeout -k 10 30 python3 -I - <<'PY'
+import sys
+from pathlib import Path
+
+report = Path("gates/EX0c1/SIMPLIFY.md")
+if not report.is_file():
+    sys.exit("EX0c1 /simplify review evidence is absent")
+lines = report.read_text().splitlines()
+if not any(line.startswith("Reviewer: ") and line[10:].strip() for line in lines):
+    sys.exit("EX0c1 /simplify reviewer is absent")
+for heading in ("## Applied", "## Set aside", "## Verified"):
+    if heading not in lines:
+        sys.exit(f"EX0c1 /simplify review lacks {heading}")
+    body = []
+    for line in lines[lines.index(heading) + 1:]:
+        if line.startswith("## "):
+            break
+        body.append(line)
+    if not any(line.strip() for line in body):
+        sys.exit(f"EX0c1 /simplify review is empty under {heading}")
+PY'''
