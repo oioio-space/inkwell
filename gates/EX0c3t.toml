@@ -1,0 +1,614 @@
+# Supersedes gates/EX0c3s.toml as a whole (2026-11-28, integrator's decision; the third and last of this block).
+# Third freeze defect, found with 11 of 12 criteria green: the plan makes plain text `undefined`, so the codemod's
+# PLAIN is undefined, and StatusBar.test.ts's `lang = TYPST` default parameter turns mountBar(…, PLAIN) into Typst.
+# What changed: StatusBar.test.ts's NAMED entry gains the mountBar signature (an optional rest element, so an explicit
+# PLAIN stays undefined). Every other criterion is byte-identical to gates/EX0c3s.toml. Lesson recorded in the plan's
+# SIMPLIFY.md: a `mechanical` criterion is frozen only after the codemod has run against the implemented contract.
+# Supersedes gates/EX0c3r.toml as a whole (2026-11-28, integrator's decision; EX0c3r superseded gates/EX0c3.toml).
+# Second freeze defect, found at step 2 and re-thought rather than patched: with `Lang` an object (the plan's design,
+# kept after counting both designs: as objects, 309 codemod sites leave 3 lines to edit by hand; as strings, ~300),
+# two StatusBar test fixtures passed the constant where a type-id string is read (`fileType`), so the `fileType ==
+# typst` items stayed hidden, and C-7's thirteen insert rows need one shared fixture line to assert that each command
+# runs (not « nothing happens »). What changed: NAMED gains the `fileType` edit in StatusBar.test.ts and
+# StatusBar.problems.test.ts, and C-7's added-line pattern admits the `inserts` fixture; `rest.lang as LangArg` needs
+# no entry (the reverse maps LangArg back to string). Every other criterion is byte-identical to gates/EX0c3r.toml.
+# Supersedes gates/EX0c3.toml as a whole (2026-11-25, integrator's decision, as PU1d superseded PU1's vector criteria).
+# Freeze defect: three test edits that the new contract requires (the formatting language is the registry's object,
+# no longer a name) were missing from `mechanical`'s NAMED list, so `mechanical` and `no-hard-locations` (which forbids
+# `formatLanguage` in the sources) could not both pass. What changed: NAMED gains `active.test.ts` (the import, the
+# describe title and the subject of `langOf`), `FormatBar.test.ts` (:4, :88) and `locations.test.ts:110`; every other
+# criterion is byte-identical to gates/EX0c3.toml, and the paths under .task/ex0c3 keep their names.
+# Written 2026-11-25 at step 1 of block EX0c3, before any code; not yet frozen (blind review first).
+# EX0c3: the Insert menu as the `insert` location (thirteen `format.insert-*` commands, groups with captions), the
+# formatting language as the `format` entry of a grammar (syntax tables, cleanup pairs, quote wrapping, word stripping,
+# insertion renderers; `accepts` and `readers` in the manifests), and the last type-id reads, K-7 alone left.
+# Rigour: standard. Plan: docs/plans/2026-11-25-ex0c3-insert-format.md; decision: ADR 0027, section « The Insert menu
+# and the formatting language (EX0c3) ». Witnesses: gates/EX0c3/WITNESSES.md. Shape and pitfalls from
+# gates/EX0c2.toml and its REVIEW.md and SIMPLIFY.md; `lint` and `test-py` added because EX0c2's push failed on them.
+# Every long command is `timeout -k 10 N …/scripts/heavy.sh …` (the timeout covers the wait for a slot). No nested gate:
+# `no-hard-locations` carries its own copy of EX0c2's lint, narrowed to what EX0c3 leaves.
+# Caps: 30 + 30 + 300 + 120 + 480 + 30 + (20 + 300) + (20 + 240) + (200 + 420) + 150 + 300 + 30 = 2670 s <= 2700 s
+# (rule G-1). The order matters: `e2e-mutant` mutates and builds a throwaway copy only (mutants.py); `e2e` then builds
+# bin/inkwell-server and frontend/dist from the restored tree, which `e2e-webkit` and `perf-start` use.
+max_minutes = 45
+raw_results = ["docs/plans/2026-11-25-ex0c3-insert-format.md", "docs/adr/0027-contribution-registry.md", "gates/EX0c3/*"]
+
+[[criteria]]
+# The decision is written: ADR 0027 has its EX0c3 section; the plan its rule rows F-1..F-7 and its site list; spec
+# §4.31 names, on lines that say EX0c3, the `insert` location and the `format` entry; PROGRESS's EX0c3 line points at
+# the plan; the requirement W83 names the plan.
+id = "docs"
+command = '''timeout -k 10 30 python3 -I - <<'PY'
+import pathlib, sys
+bad = []
+adr = pathlib.Path("docs/adr/0027-contribution-registry.md").read_text()
+if "### The Insert menu and the formatting language (EX0c3)" not in adr.splitlines():
+    bad.append("ADR 0027 lacks its EX0c3 section")
+plan = pathlib.Path("docs/plans/2026-11-25-ex0c3-insert-format.md")
+rows = plan.read_text() if plan.is_file() else ""
+bad += [f"plan row F-{i}" for i in range(1, 8) if f"\n| F-{i} |" not in rows]
+if "## Sites" not in rows:
+    bad.append("plan lacks its site list")
+spec = pathlib.Path("docs/design/spec.md").read_text()
+s431 = spec[spec.index("### 4.31 "):spec.index("### 4.32 ")]
+ex = "\n".join(l for l in s431.splitlines() if "EX0c3" in l)
+bad += [f"spec 4.31 has no EX0c3 line naming `{w}`" for w in ("insert", "format") if f"`{w}`" not in ex]
+prog = pathlib.Path("PROGRESS.md").read_text().splitlines()
+line = next((l for l in prog if l.lstrip().startswith("- **EX0c3**")), "")
+if "2026-11-25-ex0c3-insert-format.md" not in line:
+    bad.append("PROGRESS EX0c3 line absent or not pointing at the plan")
+req = pathlib.Path("docs/exigences.md").read_text()
+row = next((l for l in req.splitlines() if l.startswith("| W83 |")), "")
+if "2026-11-25-ex0c3-insert-format.md" not in row:
+    bad.append("requirement W83 does not name the EX0c3 plan")
+sys.exit(f"EX0c3 docs: {bad}" if bad else 0)
+PY'''
+
+[[criteria]]
+# One source for where a command shows and for what a language writes. EX0c2's lint (no command placed in markup or
+# code, no toolbar, tab list, menu or side outside the hosts `ui/command/` and `ext/*/native/`), its allow-list
+# narrowed: the Insert menu leaves it (its host is `ui/command/InsertMenu.svelte`); the tables keyed by a language
+# (the Insert host's `ENTRIES`, `MD_SYNTAX`, `MD_WORDING`, `PICTURES`, `READERS`, `EMPTY_PAIRS`, `syntaxOf`, `formatLanguage`) and the
+# old modules are gone; the points are filled (it cannot pass by deleting the menu): the `insert` location hosted with
+# today's groups and their captions, its thirteen commands with today's labels and `when`, the `inserts` context key,
+# the eager format entries, the Typst and Markdown grammars' `format` with `label`, `accepts` (today's lists) and
+# Typst's `readers`, the language's name on the grammar (`label`); keywords « insérer » / « insert »; no two command
+# labels read the same in French or English, case-insensitive (the palette); a big file is read-only in the context.
+# Then EX0's type-id lint with K-7 alone: a quoted type id, an object key named after one (at a line's start or after
+# `{` or `,`), or a `lang.` key built by a template or `+`, only in `language/client.ts`.
+id = "no-hard-locations"
+command = '''timeout -k 10 30 python3 -I - <<'PY'
+import json, pathlib, re, sys
+ALLOWED = {  # file: (tag, kinds it may hold)
+    "frontend/src/ui/PeopleStack.svelte": ("protected header widget, its own app.people", {"place"}),
+    "frontend/src/ui/popover/EncodingMenu.svelte": ("value picker, not commands", {"surface"}),
+    "frontend/src/ui/sheet/SheetStatus.svelte": ("value pickers, not commands", {"surface"}),
+    "frontend/src/ui/sheet/Grid.svelte": ("selects under the pointer, then opens grid/context", {"surface"}),
+    "frontend/src/ui/sheet/FilterMenu.svelte": ("value picker of a column", {"surface"}),
+    "frontend/src/present/PresenterView.svelte": ("the presenter's notes column, not a side", {"surface"}),
+}
+PATTERNS = {
+    "place": re.compile(r"""<Command(?:Button|MenuItem)\b[^>]*\bid=(?:["']|\{\s*["'`])|\bid=["'][a-z][a-z0-9-]*\.[a-z{]|data-cmd=["']|\b(?:run|shortcutOf|cmdAttrs|availability|runnable|isOn|labelOf|chordsOf|openPanel)\(\s*["'`][a-z][a-z0-9-]*\.[a-z0-9-]+"""),
+    "surface": re.compile(r"""role=["'](?:toolbar|tablist|tab|tabpanel|menu)["']|<ContextMenu\b|\boncontextmenu=|<MenuButton\b|<aside\b|class=["'][^"']*\bviewbar\b"""),
+    "table": re.compile(r"\b(BAR_ITEMS|itemsFor|barLang|BarId|HEADING_SYNTAX|HEADINGS|menuItems|ownView|MD_SYNTAX|MD_WORDING|PICTURES|READERS|EMPTY_PAIRS|syntaxOf|formatLanguage)\b"),
+}
+bad = []
+src = pathlib.Path("frontend/src")
+files = sorted([*src.rglob("*.ts"), *src.rglob("*.svelte")])
+for f in files:
+    s = f.as_posix()
+    if ".test." in f.name or "testkit" in f.name or "/testdata/" in s:
+        continue
+    host = s.startswith("frontend/src/ui/command/") or re.match(r"frontend/src/ext/[^/]+/native/", s)
+    tag, kinds = ALLOWED.get(s, ("", set()))
+    for n, line in enumerate(f.read_text().splitlines(), 1):
+        if line.lstrip().startswith(("//", "*", "/*", "<!--")):
+            continue
+        hits = [f"{k} {m.group(0)[:40]}" for k, p in PATTERNS.items() for m in p.finditer(line)
+                if k not in kinds and not (host and k == "surface")]
+        if hits:
+            bad.append(f"{s}:{n} ({'; '.join(hits)})")
+ids_all, manifests = set(), {}
+for m in sorted(pathlib.Path("frontend/src/ext").glob("*/inkwell-plugin.json")):
+    manifests[m.parent.name] = json.loads(m.read_text())
+    ids_all |= {x.get("id") for x in manifests[m.parent.name].get("contributes", {}).get("commands", [])}
+lit = re.compile(r"""["'`]((%s)\.(?:[a-z0-9-]+|\$\{))""" % "|".join(sorted(manifests)))
+handler_key = re.compile(r"""^\s*["'][a-z][a-z0-9-]*\.[a-z0-9-]+["']\s*:""")
+PLACING = ("frontend/src/App.svelte", "frontend/src/ui/shell/", "frontend/src/ui/toolbar/", "frontend/src/ui/popover/",
+           "frontend/src/preview/", "frontend/src/ui/sheet/", "frontend/src/ui/history/", "frontend/src/language/")
+for f in files:
+    s = f.as_posix()
+    if ".test." in f.name or "testkit" in f.name or not s.startswith(PLACING):
+        continue
+    for n, line in enumerate(f.read_text().splitlines(), 1):
+        if line.lstrip().startswith(("//", "*", "/*", "<!--")) or handler_key.match(line):
+            continue
+        hits = [m.group(1) for m in lit.finditer(line) if m.group(1) in ids_all or m.group(1).endswith("${")]
+        if hits:
+            bad.append(f"{s}:{n} (command id in code {','.join(hits)})")
+DRAWS = {  # what the old drawings held (EX0c2's, then EX0c3's)
+    "frontend/src/ui/sheet/Sheet.svelte": ('role="toolbar"', "data-sheet=", 't("sheet.undo")', "<ContextMenu", "problems.csv("),
+    "frontend/src/App.svelte": ('class="viewbar"', 'data-sheet="open-table"', "<Sidebar", "textEditor &&", "shown !== textEditor", 'lang !== "plain"'),
+    "frontend/src/ui/history/HistoryDrawer.svelte": ('role="tablist"', 'role="tab"', "const tabs"),
+    "frontend/src/ui/history/HistoryBars.svelte": ("history.markSeen()", 't("history.seen")'),
+    "frontend/src/ui/history/DiffView.svelte": ("go(-1)", "go(1)", 't("diff.prev")', 't("diff.next")'),
+    "frontend/src/ui/history/history.svelte.ts": ('this.tab = "history"',),
+    "frontend/src/language/problems.svelte.ts": ('history.tab = "problems"', "csv("),
+    "frontend/src/ui/shell/Sidebar.svelte": ("<aside",),
+    "frontend/src/ui/command/FormatBar.svelte": ("lang.${", "../toolbar/InsertMenu"),
+    "frontend/src/ext/app/native/status/Language.svelte": ("lang.${",),
+    "frontend/src/editor/setup.ts": ("lang ===",),
+    "frontend/src/ui/command/InsertMenu.svelte": ("const ENTRIES", "types: ["),  # the host keeps no item table
+}
+for path, keys in DRAWS.items():
+    p = pathlib.Path(path)
+    text = p.read_text() if p.is_file() else ""
+    bad += [f"{path}: still holds {k}" for k in keys if k in text]
+for gone in ("frontend/src/ui/sheet/ContextMenu.svelte", "frontend/src/ui/sheet/menu.ts",
+             "frontend/src/ui/toolbar/InsertMenu.svelte", "frontend/src/editor/format/typst.ts",
+             "frontend/src/editor/format/markdown.ts"):
+    if pathlib.Path(gone).exists():
+        bad.append(f"{gone} still exists")
+for must in ("frontend/src/ui/command/InsertMenu.svelte", "frontend/src/ext/typst/native/format.ts",
+             "frontend/src/ext/markdown/native/format.ts"):
+    if not pathlib.Path(must).is_file():
+        bad.append(f"{must} absent")
+mts = pathlib.Path("frontend/src/extensions/manifest.ts").read_text()
+if re.search(r'reserved: "EX0c[23]"', mts):
+    bad.append("LOCATIONS still reserves locations for EX0c2 or EX0c3")
+ins = mts[mts.index("  insert: {"):] if "  insert: {" in mts else ""
+ins = ins[:ins.index("\n  },")] if "\n  }," in ins else ins
+grp = re.findall(r'id: "([a-z-]+)"', ins)
+if grp != ["files", "refs", "layout", "extensions"]:
+    bad.append(f"LOCATIONS.insert groups are {grp}, want files, refs, layout, extensions")
+bad += [f"LOCATIONS.insert group {g} has no caption insert.group.{g}" for g in ("files", "refs", "layout")
+        if f'caption: "insert.group.{g}"' not in ins]
+fe = pathlib.Path("frontend/src/extensions/formatEntries.ts")
+if not fe.is_file() or "eager: true" not in fe.read_text():
+    bad.append("extensions/formatEntries.ts (eager built-in format entries) absent")
+whn = pathlib.Path("frontend/src/extensions/when.ts").read_text()
+keys = whn[whn.index("CONTEXT_KEYS"):whn.index("} as const satisfies")]
+if not re.search(r"\binserts:", keys):
+    bad.append("context key inserts absent")
+menus, cmds, grammars = {}, {}, {}
+for name, j in manifests.items():
+    c = j.get("contributes", {})
+    for x in c.get("menus", []):
+        menus.setdefault(x.get("location"), []).append(x)
+    for x in c.get("commands", []):
+        cmds[x.get("id")] = x
+    for x in c.get("grammars", []):
+        grammars[x.get("id")] = x
+ITEMS = {  # command suffix: (Insert item, group)
+    "image": ("image", "files"), "figure": ("figure", "files"), "include": ("include", "files"),
+    "attach": ("attach", "files"), "csv-table": ("csvTable", "files"), "data": ("data", "files"),
+    "bibliography": ("bibliography", "files"), "file-link": ("link", "files"), "cite": ("cite", "refs"),
+    "ref": ("ref", "refs"), "footnote": ("footnote", "refs"), "outline": ("outline", "layout"),
+    "pagebreak": ("pagebreak", "layout"),
+}
+placed = {x.get("command"): x for x in menus.get("insert", [])}
+fr = json.loads(pathlib.Path("frontend/src/i18n/fr.json").read_text())
+for suffix, (item, group) in ITEMS.items():
+    cid = f"format.insert-{suffix}"
+    c, p = cmds.get(cid) or {}, placed.get(cid) or {}
+    want_item = f"{item} in inserts" if item != "link" else "link in inserts && !(attach in inserts)"
+    # Review minor 6: the Insert host is the shell's, so a step needs no bar; a big file is read-only, so the
+    # reason is the format commands' one (« Indisponible pour ce fichier ou en lecture seule »), never a bar's.
+    want_cmd = f"{item} in inserts && !readOnly"
+    if c.get("label") != f"insert.{item}" or c.get("when") != want_cmd or c.get("unavailable") != "cmd.format.unavailable":
+        bad.append(f"{cid}: label, when or reason not as plan §2 ({c.get('label')}, {c.get('when')})")
+    if fr.get(f"insert.{item}.desc") and c.get("tooltip") != f"insert.{item}.desc":
+        bad.append(f"{cid}: tooltip is not insert.{item}.desc")
+    if "kw.insert" not in c.get("keywords", []):  # review minor 4
+        bad.append(f"{cid}: keywords lack kw.insert")
+    if p.get("group") != group or p.get("when") != want_item:
+        bad.append(f"insert item {cid}: group {p.get('group')}, when {p.get('when')}; want {group}, {want_item}")
+orders = [placed.get(f"format.insert-{s}", {}).get("order", -1) for s in ITEMS]
+if orders != sorted(orders) or len(set(orders)) != len(orders):
+    bad.append(f"insert items not in today's order: {orders}")
+PICT = ["png", "jpeg", "gif", "webp", "svg", "bmp", "pdf"]
+FORMAT = {  # review major 2: the language's name is the grammar's `label`, the format holds formatting only
+    "typst": ("lang.typst", {"image": PICT, "figure": PICT, "include": ["typst"], "csvTable": ["csv", "tsv", "psv"],
+              "data": ["json", "yaml", "toml", "xml", "cbor"], "bibliography": ["bibtex"]},
+              {"csv": "csv", "json": "json", "yaml": "yaml", "toml": "toml", "xml": "xml"}),
+    "markdown": ("lang.markdown", {"image": PICT, "csvTable": ["csv", "tsv", "psv"]}, None),
+}
+for g, (label, accepts, readers) in FORMAT.items():
+    gr = grammars.get(g) or {}
+    f = gr.get("format") or {}
+    if gr.get("label") != label or "label" in f or f.get("entry") != "native/format.ts" or f.get("accepts") != accepts \
+            or (readers is not None and f.get("readers") != readers):
+        bad.append(f"grammar {g}: not label {label} with a format of entry native/format.ts and today's accepts/readers")
+en = json.loads(pathlib.Path("frontend/src/i18n/en.json").read_text())
+if "insérer" not in fr.get("kw.insert", "").lower() or "insert" not in en.get("kw.insert", "").lower():
+    bad.append("kw.insert does not hold « insérer » (fr) and « insert » (en)")
+for lang, table in (("fr", fr), ("en", en)):  # review minor 4: both languages, case-insensitive
+    texts = {}
+    for cid, c in cmds.items():
+        texts.setdefault(table.get(c.get("label", ""), c.get("label", "")).casefold(), []).append(cid)
+    bad += [f"{lang} palette label « {t} » shared by {sorted(v)}" for t, v in texts.items() if len(v) > 1]
+# Review minor 6: no bar reason, the dead Markdown label gone (its description through the entry's `describe`).
+for lang, table in (("fr", fr), ("en", en)):
+    bad += [f"{lang} still has {k}" for k in ("cmd.insert.needsBar", "insert.csvTable.markdown") if k in table]
+mdf = pathlib.Path("frontend/src/ext/markdown/native/format.ts")
+if "insert.csvTable.markdown.desc" not in (mdf.read_text() if mdf.is_file() else ""):
+    bad.append("Markdown's format entry does not describe csvTable with insert.csvTable.markdown.desc")
+app = pathlib.Path("frontend/src/App.svelte").read_text()
+if not re.search(r"^\s*readOnly: [^\n]*workspace\.big", app, re.M):
+    bad.append("App.svelte: the context's readOnly does not say a big file is read-only")
+TYPED = {  # file: (tag, literals it may hold, and the only lines that may hold them)
+    "frontend/src/language/client.ts": ("K-7 the Typst engine's LSP: its language id and served type", {"typst"}, ""),
+    "frontend/src/ui/icons/paths.ts": ("icon names (a manifest's `icon`), not type reads", set(), ""),
+    # The widened key rule's one other hit: the clipboard's tab-separated payload, a field name, not a type read.
+    "frontend/src/ui/sheet/sheet.svelte.ts": ("clipboard payload field", {"tsv"}, r"\btsv: (?:string\b|toTsv\()"),
+}
+WORDS = r"typst|typ|markdown|md|csv|tsv|psv|bib|bibtex|json|ya?ml|toml|xml|png|jpe?g|gif|webp|svg|bmp|pdf"
+bare = re.compile(r"""["'`](%s)["'`]""" % WORDS)
+# Review minor 7: a key at a line's start or after `{` or `,`, and `lang.` built by `${…}` or by `+`.
+key = re.compile(r"""(?:^|[{,])\s*["']?(%s)["']?\s*:(?!:)""" % WORDS)
+tmpl = re.compile(r"""`lang\.\$\{|["'`]lang\.["'`]\s*\+""")
+for f in files:
+    s = f.as_posix()
+    if ".test." in f.name or "testkit" in f.name or "/testdata/" in s:
+        continue
+    tag, allowed, only = TYPED.get(s, ("", set(), ""))
+    in_style = False
+    for n, line in enumerate(f.read_text().splitlines(), 1):
+        if "<style" in line:
+            in_style = True
+        if "</style>" in line:
+            in_style = False
+            continue
+        if in_style or line.lstrip().startswith(("//", "*", "/*", "<!--")):
+            continue
+        found = set(bare.findall(line))
+        if s != "frontend/src/ui/icons/paths.ts":
+            found |= set(key.findall(line))
+        extra = found - allowed if not only or re.search(only, line) else found
+        if tmpl.search(line) and s not in TYPED:
+            extra.add("lang.${…}")
+        if extra:
+            bad.append(f"{s}:{n} (type id {','.join(sorted(extra))})")
+sys.exit(f"EX0c3 no-hard-locations: {len(bad)} problems: {bad[:200]}" if bad else 0)
+PY'''
+
+[[criteria]]
+# The Go and repository lint the push runs (gofmt, vet, golangci-lint, build; `scripts/lint.sh`): EX0c2 passed its
+# gate without it and failed at the push. A guard: green on the unchanged tree.
+id = "lint"
+command = '''timeout -k 10 300 ./scripts/heavy.sh mise run lint'''
+
+[[criteria]]
+# The Python tests of the tooling (`mise run test:py`, each suite inside heavy.sh): this block adds MI8 to
+# scripts/netsim/mutants.toml, read by mutants_test.py and the catalogue checks; EX0c2's push failed on test:py.
+# A guard: green on the unchanged tree.
+id = "test-py"
+command = '''timeout -k 10 120 mise run test:py'''
+
+[[criteria]]
+# Biome, svelte-check and every Vitest test of the frontend, from one JSON report: the run succeeds and each named
+# rule test of the plan (F-1..F-7) passed (absent or skipped fails).
+id = "frontend"
+command = '''set -eu
+mkdir -p .task/ex0c3
+rm -f .task/ex0c3/vitest.json
+rc=0
+(cd frontend && timeout -k 10 480 ../scripts/heavy.sh bash -c 'pnpm --config.verifyDepsBeforeRun=false exec biome check . && pnpm --config.verifyDepsBeforeRun=false exec svelte-check --tsconfig ./tsconfig.json && pnpm --config.verifyDepsBeforeRun=false exec vitest run --configLoader runner --reporter=json --outputFile=../.task/ex0c3/vitest.json') || rc=$?
+python3 -I - "$rc" <<'PY'
+import json, pathlib, sys
+need = [
+    "EX0c3 F-1 a malformed format entry is refused with its reason",
+    "EX0c3 F-2 the formatting language is its grammar's format entry, plain text without one",
+    "EX0c3 F-3 a language's quote wrapping, cleanup pairs and word stripping come from its entry",
+    "EX0c3 F-4 the Insert menu is the insert location, its groups captioned, its items hidden by their when",
+    "EX0c3 F-5 an Insert item inserts at once or opens its step, the picker listing the types its language accepts",
+    "EX0c3 F-6 type ids are read only at K-7: the writing help, a viewer's problems and Typst's data readers",
+    "EX0c3 F-7 format entries and the insert location cost nothing more at start: indexed once at build",
+]
+report = pathlib.Path(".task/ex0c3/vitest.json")
+results = [a for f in json.loads(report.read_text())["testResults"] for a in f["assertionResults"]] if report.is_file() else []
+status = {a["title"]: a["status"] for a in results}
+bad = {n: status.get(n, "absent") for n in need if status.get(n) != "passed"}
+failed = [a["fullName"] for a in results if a["status"] == "failed"]
+if bad or failed or sys.argv[1] != "0":
+    sys.exit(f"EX0c3 frontend: exit {sys.argv[1]}, rule tests {bad}, failed {failed[:20]}")
+PY'''
+
+[[criteria]]
+# The codemod lives in scripts/codemods/ because a gate run empties gates/EX0c3/ of everything but its .md reports.
+# Review major 1: the ~325 lines of test edits that pass TYPST, MARKDOWN and PLAIN instead of the names are proved
+# mechanical. scripts/codemods/ex0c3_type_literals.py writes them; this criterion carries its own reverse, frozen with the gate. Every
+# test file that existed at the merge-base and differs now is either one of the codemod's FILES, whose reverse must
+# give the merge-base text back (formatting-blind: whitespace and trailing commas), or listed in NAMED with the exact
+# edits declared here, applied to the merge-base text before the comparison. Every such file keeps its set of test
+# titles; no base test file is deleted. Then the `frontend` run (before this) passed at least the merge-base's 1513.
+id = "mechanical"
+command = '''timeout -k 10 30 python3 -I - <<'PY'
+import json, pathlib, re, subprocess, sys
+base = subprocess.check_output(["git", "merge-base", "HEAD", "main"], text=True).strip()
+show = lambda path: subprocess.run(["git", "show", f"{base}:{path}"], capture_output=True, text=True).stdout
+listed = subprocess.check_output(["git", "ls-tree", "-r", "--name-only", base, "frontend/src"], text=True).split()
+tests = [f for f in listed if f.endswith(".test.ts")]
+cm = pathlib.Path("scripts/codemods/ex0c3_type_literals.py")
+FILES = {"frontend/src/" + f for f in re.findall(r'^\s+"([^"]+\.test\.ts)",$', cm.read_text(), re.M)} if cm.is_file() else set()
+NAMED = {  # file: (exact substitutions on the merge-base text, the added lines allowed)
+    "frontend/src/ui/command/locations.test.ts": ([  # L-1's reserved case leaves `insert`, now hosted (EX0c2's precedent)
+        ('item("plug.go", "insert", "blocks", 1)', 'item("plug.go", "editor/context", "extensions", 1)'),
+        ('reason: "reserved location insert"', 'reason: "reserved location editor/context"'),
+        ('"history/toolbar", "diff/toolbar"])', '"history/toolbar", "diff/toolbar", "insert"])'),
+        ('expect(reserved("insert")).toBe("EX0c3");', 'expect(reserved("editor/context")).toBe("UX1-D");'),
+        # The status context's language is the registry's object (EX0c3r): the codemod's TYPST, no `as const`.
+        ('lang: "typst" as const,', 'lang: "typst",'),
+    ], None),
+    # EX0c3r: the formatting language is the registry's (Typst's, Markdown's, none for plain), no longer a name; every
+    # case is kept, only the subject changes. The eight `toBe` lines take the testkit's TYPST, MARKDOWN and PLAIN.
+    "frontend/src/editor/format/active.test.ts": ([
+        ('import { formatLanguage, supports } from "./support";', 'import { supports } from "./support";'),
+        ('describe("formatLanguage", () => {', 'describe("the formatting language of a file", () => {'),
+        ("const langOf = (path: string) => formatLanguage(registry.typeOf(path)?.grammar);",
+         "const langOf = (path: string) => registry.format(registry.typeOf(path)?.grammar);"),
+    ], None),
+    "frontend/src/ui/command/FormatBar.test.ts": ([
+        ('import { formatHandlers, formatLanguage, formatsOf } from "../../editor/format";',
+         'import { formatHandlers, formatsOf } from "../../editor/format";'),
+        ("formats: formatsOf(formatLanguage(registry.typeOf(name)?.grammar)),",
+         "formats: formatsOf(registry.format(registry.typeOf(name)?.grammar)),"),
+    ], None),
+    "frontend/src/extensions/commands.test.ts": ([], r'^\s*(?:"format\.insert-[a-z-]+": \{.*\},|const inserts = \(\) => setLive\(\{ inserts: "typst"\.syntax\.inserts \}\);)$'),  # C-7: one row per new command, and their shared fixture (reversed form)
+    "frontend/src/ui/shell/StatusBar.test.ts": ([('fileType: lang === "plain" ? "text" : lang,', 'fileType: lang === "plain" ? "text" : lang.id,'),
+        ('  lang: "typst" | "markdown" | "plain" = "typst",\n) => {\n  const editor = fakeEditor(marked);',
+         '  ...langs: ["typst" | "markdown" | "plain"?]\n) => {\n  const lang = langs.length ? langs[0] : "typst";\n  const editor = fakeEditor(marked);')], None),
+    "frontend/src/ui/shell/StatusBar.problems.test.ts": ([('fileType: lang === "plain" ? "text" : lang,', 'fileType: lang === "plain" ? "text" : lang.id,')], None),
+    "frontend/src/extensions/context.test.ts": ([('lang: "plain" as const,', "lang: undefined,")], None),
+}
+NAMES = ["TYPST", "MARKDOWN", "PLAIN", "AnyLang", "TestLang", "LangArg"]
+BACK = [("AnyLang", '"typst" | "markdown" | "plain"'), ("TestLang", '"typst" | "markdown"'), ("LangArg", "string"),
+        ("PLAIN", '"plain"'), ("MARKDOWN", '"markdown"'), ("TYPST", '"typst"')]
+WORD = lambda n: re.compile(r"(?<![\w$-])%s(?![\w$-])" % re.escape(n))
+def strip(m):
+    kept = [x.strip() for x in m.group(1).split(",") if x.strip() and x.strip().removeprefix("type ").strip() not in NAMES]
+    return "" if not kept else "import { %s } from %s;%s" % (", ".join(kept), m.group(2), m.group(3))
+def reverse(text):
+    text = re.sub(r'import \{([^}]*)\} from ("(?:\./|(?:\.\./)+editor/format/)testkit");(\n?)', strip, text)
+    for a, b in BACK:
+        text = WORD(a).sub(b, text)
+    return text
+def norm(t):
+    """Formatting-blind outside strings and comments: whitespace dropped, a trailing comma before a closer dropped."""
+    out, i, n = [], 0, len(t)
+    while i < n:
+        c = t[i]
+        if c in "\"'`":
+            j = i + 1
+            while j < n and t[j] != c:
+                j += 2 if t[j] == "\\" else 1
+            out.append(t[i:j + 1])
+            i = j + 1
+        elif t.startswith("//", i):
+            j = t.find("\n", i)
+            j = n if j < 0 else j
+            out.append(re.sub(r"\s+", "", t[i:j]))
+            i = j
+        elif t.startswith("/*", i):
+            j = t.find("*/", i + 2)
+            j = n if j < 0 else j + 2
+            out.append(re.sub(r"\s+", "", t[i:j]))
+            i = j
+        elif c.isspace():
+            i += 1
+        else:
+            out.append(c)
+            i += 1
+    return re.sub(r",(?=[)\]}>])", "", "".join(out))
+TITLE = re.compile(r"\b(?:it|test)(?:\.(?:each\([^)]*\)|skip|only|todo|fails))*\(\s*([\"'`])((?:\\.|(?!\1).)*)\1")
+bad, changed = [], 0
+for f in tests:
+    p = pathlib.Path(f)
+    old = show(f)
+    if not p.is_file():
+        bad.append(f"{f}: deleted")
+        continue
+    new = p.read_text()
+    if new == old:
+        continue
+    changed += 1
+    if {m.group(2) for m in TITLE.finditer(new)} != {m.group(2) for m in TITLE.finditer(old)}:
+        bad.append(f"{f}: its test titles changed")
+    if f not in FILES and f not in NAMED:
+        bad.append(f"{f}: changed, neither the codemod's nor a named edit")
+        continue
+    if f in FILES and any(WORD(n).search(old) for n in NAMES):
+        bad.append(f"{f}: holds a codemod name at the merge-base")
+        continue
+    subs, added = NAMED.get(f, ([], None))
+    want = old
+    for a, b in subs:
+        if want.count(a) != 1:
+            bad.append(f"{f}: named edit {a!r} not found once at the merge-base")
+        want = want.replace(a, b)
+    got = reverse(new) if f in FILES else new
+    if added:
+        got = "\n".join(l for l in got.splitlines() if not re.match(added, l))
+    if norm(got) != norm(want):
+        bad.append(f"{f}: not mechanical (its reverse differs from the merge-base)")
+report = pathlib.Path(".task/ex0c3/vitest.json")
+passed = json.loads(report.read_text())["numPassedTests"] if report.is_file() else 0
+if passed < 1513:
+    bad.append(f"vitest passed {passed} < 1513 (no frontend report, or tests lost)")
+if len(FILES) != 17:
+    bad.append(f"scripts/codemods/ex0c3_type_literals.py lists {len(FILES)} FILES, the plan 17")
+if changed == 0:
+    bad.append("no test file carries the codemod yet")
+sys.exit(f"EX0c3 mechanical: {len(bad)} problems ({changed} test files changed): {bad[:40]}" if bad else 0)
+PY'''
+
+[[criteria]]
+# A rule test that asserts nothing must fail the gate. Block EX0c3's vitest mutants MI1..MI7 and MI9 (MI8 is `e2e-mutant`'s)
+# (scripts/netsim/mutants.toml, written at step 2 with the code, plan §4) each break one rule; each entry names the
+# exact title of its rule's test (`name`), so only that test failing is a catch. The format vectors exist, valid and
+# invalid.
+id = "mutants"
+command = '''set -eu
+timeout -k 10 20 python3 -I - <<'PY'
+import pathlib, sys, tomllib
+ms = {m["id"]: m for m in tomllib.load(open("scripts/netsim/mutants.toml", "rb"))["mutant"] if m.get("block") == "EX0c3"}
+bad = []
+RULE = {f"MI{i}": i for i in range(1, 8)} | {"MI9": 6}  # MI9: the writing help for every type (review minor 7)
+for mid, i in RULE.items():
+    m = ms.get(mid, {})
+    if (m.get("kind") != "vitest" or m.get("retired") or not m.get("test", "").startswith("frontend/src/")
+            or not m.get("name", "").startswith(f"EX0c3 F-{i} ")):
+        bad.append(mid)
+root = pathlib.Path("frontend/src/extensions/testdata/manifests")
+if not list((root / "valid").glob("*format*.json")):
+    bad.append("no format vector in valid/")
+for word in ("plugin-format-entry", "grammar-no-label", "format-bad-accepts", "format-bad-reader"):
+    if not list((root / "invalid").glob(f"*{word}*.json")) and not list((root / "refused").glob(f"*{word}*.json")):
+        bad.append(f"no invalid or refused vector *{word}*")
+sys.exit(f"EX0c3 mutants: entries or vectors missing or wrong: {bad}" if bad else 0)
+PY
+timeout -k 10 300 ./scripts/heavy.sh python3 -I scripts/netsim/mutants.py EX0c3 MI1 MI2 MI3 MI4 MI5 MI6 MI7 MI9'''
+
+[[criteria]]
+# EX0c3-E1 must catch a hard-coded menu item: MI8 (kind `playwright`, EX0c2's) adds one `menuitem` without `data-cmd`
+# or `data-fixed` inside the Insert host; mutants.py applies it on its throwaway copy, builds that copy, runs the spec
+# there and counts it caught when EX0c3-E1 fails with « stray ». Exclusive: a browser and a server.
+id = "e2e-mutant"
+command = '''set -eu
+timeout -k 10 20 python3 -I - <<'PY'
+import sys, tomllib
+ms = [m for m in tomllib.load(open("scripts/netsim/mutants.toml", "rb"))["mutant"] if m.get("id") == "MI8"]
+m = ms[0] if len(ms) == 1 else {}
+after = "".join(e.get("after", "") for e in m.get("edit", []))
+files = {e.get("file") for e in m.get("edit", [])}
+ok = (m.get("block") == "EX0c3" and m.get("kind") == "playwright" and not m.get("retired")
+      and m.get("spec") == "frontend/e2e/ex0c3.spec.ts" and m.get("grep") == "EX0c3-E1" and m.get("project") == "chromium"
+      and m.get("error") == "stray" and files == {"frontend/src/ui/command/InsertMenu.svelte"}
+      and 'role="menuitem"' in after and "data-cmd" not in after and "data-fixed" not in after)
+sys.exit(0 if ok else "EX0c3 e2e-mutant: MI8 (kind playwright: spec ex0c3.spec.ts, grep EX0c3-E1, project chromium, error stray, a stray menuitem in ui/command/InsertMenu.svelte) absent or malformed in scripts/netsim/mutants.toml")
+PY
+timeout -k 10 240 ./scripts/heavy.sh --exclusive python3 -I scripts/netsim/mutants.py EX0c3 MI8'''
+exclusive = true
+
+[[criteria]]
+# End to end in Chromium, first attempt only, nothing skipped: EX0c3-E1 (every item of the Insert menu for main.typ and
+# a Markdown note is the location's resolved item in order or a named fixed widget; names kept, each item named by its
+# label and described by its description and syntax; no bar for a CSV; the
+# palette's insert commands) and EX0c3-E2 (insertions in Typst and Markdown, the pickers' types, cite without a
+# bibliography, the status bar's language and words), and the scenarios whose bar, menus, palette, names, axe audit,
+# screenshots, words, writing help, cleanup or problems EX0c3 touches. None of them needs an environment variable
+# (witnesses). Exclusive.
+id = "e2e"
+command = '''set -eu
+mkdir -p .task/ex0c3
+rm -f .task/ex0c3/e2e.json
+timeout -k 10 200 ./scripts/heavy.sh mise run e2e:build
+rc=0
+(cd frontend && PLAYWRIGHT_JSON_OUTPUT_NAME=../.task/ex0c3/e2e.json INKWELL_E2E_BROWSER=chromium timeout -k 10 420 ../scripts/heavy.sh --exclusive ./node_modules/.bin/playwright test ex0c3.spec.ts ex0c2.spec.ts ex0c1.spec.ts ex0b1.spec.ts ex0b2.spec.ts shell.spec.ts format.spec.ts problems.spec.ts sheet.spec.ts ex0.spec.ts ux/s7.spec.ts ux/l2.spec.ts ux/l3.spec.ts --grep "EX0c3-E[12]|EX0c2-E1|EX0c1-E[12]|EX0b1-E[12]|EX0b2-E[13]|UI-0[2356]|UI-1[12]|UX-S7-1|FMT-29|N29|UX-L3-4|CSV-EDGE-04|EX0-E1|UX-L2-1" --reporter=json > /dev/null) || rc=$?
+python3 -I - "$rc" .task/ex0c3/e2e.json <<'PY'
+import json, pathlib, sys
+need = ["EX0c3-E1", "EX0c3-E2", "EX0c2-E1", "EX0c1-E1", "EX0c1-E2", "EX0b1-E1", "EX0b1-E2", "EX0b2-E1", "EX0b2-E3",
+        "UI-02", "UI-03", "UI-05", "UI-06", "UI-11", "UI-12", "UX-S7-1", "FMT-29", "N29", "UX-L3-4", "CSV-EDGE-04",
+        "EX0-E1", "UX-L2-1"]
+p = pathlib.Path(sys.argv[2])
+report = json.loads(p.read_text()) if p.is_file() else {"suites": [], "errors": ["no report"]}
+suites, tests = [(s, "") for s in report["suites"]], []
+while suites:
+    s, outer = suites.pop()
+    title = outer if s["title"].endswith(".ts") else (outer + " " + s["title"]).strip()
+    suites.extend((x, title) for x in s.get("suites", []))
+    for spec in s.get("specs", []):
+        for t in spec["tests"]:
+            ok = t["status"] == "expected" and [r["status"] for r in t["results"]] == ["passed"]
+            tests.append(((title + " " + spec["title"]).strip(), spec["title"], ok))
+bad = {}
+for n in need:  # the test's own title or its describe path starts with the id, or the describe ends « (id) »
+    mine = [ok for full, own, ok in tests
+            if any(x == n or x.startswith((n + " ", n + ":", n + ",")) for x in (full, own)) or f"({n})" in full]
+    if not mine or not all(mine):
+        bad[n] = "absent" if not mine else "not passing first time"
+if bad or report.get("errors") or sys.argv[1] != "0":
+    sys.exit(f"EX0c3 e2e: exit {sys.argv[1]}, {bad}, errors {report.get('errors')}")
+PY'''
+exclusive = true
+
+[[criteria]]
+# The Insert menu and the bar in WebKit (the engine of the Linux build is WebKitGTK): EX0c3-E1, EX0c3-E2 and UI-05
+# (the bar's overflow beside Insert) under `mise run e2e:webkit` (Playwright's WebKit in its official container), first
+# attempt only; the task stops with « container not ready » when its container does not answer in 60 s (review
+# minor 8). Exclusive slot: the nested heavy.sh of the task reuses it.
+id = "e2e-webkit"
+command = '''set -eu
+mkdir -p .task/ex0c3
+rm -f .task/ex0c3/e2e-webkit.json
+rc=0
+PLAYWRIGHT_JSON_OUTPUT_NAME="$PWD/.task/ex0c3/e2e-webkit.json" timeout -k 10 150 ./scripts/heavy.sh --exclusive mise run e2e:webkit -- ex0c3.spec.ts shell.spec.ts --grep "EX0c3-E[12]|UI-05" --reporter=json > /dev/null || rc=$?
+python3 -I - "$rc" .task/ex0c3/e2e-webkit.json <<'PY'
+import json, pathlib, sys
+need = ["EX0c3-E1", "EX0c3-E2", "UI-05"]
+p = pathlib.Path(sys.argv[2])
+report = json.loads(p.read_text()) if p.is_file() else {"suites": [], "errors": ["no report"]}
+suites, tests = list(report["suites"]), []
+while suites:
+    s = suites.pop()
+    suites.extend(s.get("suites", []))
+    for spec in s.get("specs", []):
+        for t in spec["tests"]:
+            tests.append((spec["title"], t["status"] == "expected" and [r["status"] for r in t["results"]] == ["passed"]))
+bad = {}
+for n in need:
+    mine = [ok for title, ok in tests if title == n or title.startswith(n + " ")]
+    if not mine or not all(mine):
+        bad[n] = "absent" if not mine else "not passing first time"
+if bad or report.get("errors") or sys.argv[1] != "0":
+    sys.exit(f"EX0c3 e2e-webkit: exit {sys.argv[1]}, {bad}, errors {report.get('errors')}")
+PY'''
+exclusive = true
+
+[[criteria]]
+# Start unchanged, a regression guard (green on the unchanged tree): PERF-START (scripts/perf/baseline.py, ADR 0038),
+# paired against the merge-base build, 80 judged pairs, upper bound of the ratio < 1.10, and the absolute budget. The
+# format entries replace static imports of the start closure, so the start keeps its cost.
+id = "perf-start"
+command = '''set -eu
+out="${INKWELL_PERF_OUT:-.task/ex0c3/perf}"
+mkdir -p "$out"
+INKWELL_PERF_OUT="$out" timeout -k 10 300 ./scripts/heavy.sh --exclusive python3 scripts/perf/baseline.py > "$out/baseline.log" 2>&1 || { tail -40 "$out/baseline.log"; exit 1; }
+python3 -I - "$out" <<'PY'
+import json, pathlib, subprocess, sys
+p = json.loads((pathlib.Path(sys.argv[1]) / "measurements.json").read_text())["PERF-START"]
+base = subprocess.check_output(["git", "merge-base", "HEAD", "main"], text=True).strip()
+bad = []
+bad += [] if p.get("status") == "pass" else [f"status {p.get('status')}"]
+bad += [] if p.get("design") == "paired-randomized" else ["design"]
+bad += [] if p.get("reference", {}).get("commit") == base else ["reference is not the merge-base"]
+v = p.get("verdict", {})
+bad += [] if v.get("status") == "pass" and v.get("pairs") == 80 and v.get("upper", 9) < 1.10 else ["verdict"]
+bad += [] if p.get("budget", {}).get("status") == "pass" else ["budget"]
+sys.exit("EX0c3 perf-start: " + ", ".join(bad) if bad else 0)
+PY'''
+exclusive = true
+
+[[criteria]]
+id = "simplify-report"
+command = '''timeout -k 10 30 python3 -I - <<'PY'
+import sys
+from pathlib import Path
+
+report = Path("gates/EX0c3/SIMPLIFY.md")
+if not report.is_file():
+    sys.exit("EX0c3 /simplify review evidence is absent")
+lines = report.read_text().splitlines()
+if not any(line.startswith("Reviewer: ") and line[10:].strip() for line in lines):
+    sys.exit("EX0c3 /simplify reviewer is absent")
+for heading in ("## Applied", "## Set aside", "## Verified"):
+    if heading not in lines:
+        sys.exit(f"EX0c3 /simplify review lacks {heading}")
+    body = []
+    for line in lines[lines.index(heading) + 1:]:
+        if line.startswith("## "):
+            break
+        body.append(line)
+    if not any(line.strip() for line in body):
+        sys.exit(f"EX0c3 /simplify review is empty under {heading}")
+PY'''
